@@ -53,65 +53,73 @@ export default async function handler(req) {
   }
 
   try {
-    // Fonte PRIMÁRIA: AMOSTRAS DE MERCADO (indice_amostras — pesquisa web + backfill),
-    // ponderadas por recência. É o que a GERAÇÃO (api/indice-mercado) grava — sem ler aqui,
-    // a região recém-gerada continuava aparecendo como "não mapeada" (bug do "gerou e não
-    // mostra"). Fallback: mediana do ACERVO (indice_bidpro_regiao) p/ regiões sem amostras.
-    const pond = await rpc('indice_regiao_ponderado', {
-      p_cidade_norm: cidadeNorm, p_uf: uf, p_bairro_norm: bairroNorm, p_lat: lat, p_lng: lng, p_tipo: tipo,
-    });
-    let regiao = null;
-    if (pond && (Number(pond.venda_m2) > 0 || Number(pond.locacao_m2) > 0)) {
-      regiao = {
-        fonte: 'mercado',
-        venda_m2: pond.venda_m2,
-        aluguel_m2: pond.locacao_m2 != null ? pond.locacao_m2 : (Number(pond.venda_m2) > 0 ? Math.round(pond.venda_m2 * 0.004 * 100) / 100 : null),
-        n_amostras: (pond.n_venda || 0) + (pond.n_locacao || 0),
-        nivel: Number(pond.nivel) === 1 ? 'rua' : Number(pond.nivel) === 2 ? 'grid' : 'cidade',
-        nivel_label: Number(pond.nivel) === 1 ? 'rua/condomínio (~250 m)' : Number(pond.nivel) === 2 ? 'bairro e adjacências (~1 km)' : 'cidade',
-        bairro_norm: bairroNorm || null,
-      };
-    } else {
-      const acervo = await rpc('indice_bidpro_regiao', {
-        p_cidade_norm: cidadeNorm, p_uf: uf, p_bairro: bairroNorm, p_lat: null, p_lng: null, p_tipo: tipo,
-      });
-      if (acervo && (Number(acervo.venda_m2) > 0 || Number(acervo.aluguel_m2) > 0)) regiao = { fonte: 'acervo', ...acervo };
-    }
-    const valorizacao = await rpc('indice_valorizacao_anual', {
-      p_cidade_norm: cidadeNorm, p_uf: uf, p_tipo: tipo, p_bairro_norm: bairroNorm, p_especie: 'venda', p_anos: 6,
-    });
-
-    // AMOSTRAS (rastreabilidade + gráfico): comparáveis de mercado que embasam o índice
-    // do segmento na cidade — portal (fonte), preço, área e data. Alimentam a "relação
-    // dos imóveis da amostra" e um gráfico de valorização por ano derivado das PRÓPRIAS
-    // amostras (mais permissivo que a RPC, que exige muitas amostras/ano e some em região
-    // com histórico curto). Lidos com service key (RLS não bloqueia leitura interna).
-    const restGet = async (q) => {
+    // COERÊNCIA (pedido do dono): o VALOR, a COMPOSIÇÃO (lista) e o GRÁFICO saem da MESMA
+    // base e do MESMO recorte da região — as amostras de mercado com FONTE REAL
+    // (indice_amostra: anúncios/revendas capturados pelos relatórios). Assim o número
+    // reflete exatamente os comparáveis mostrados, e o dono confere a composição. Só cai
+    // no ponderado-com-geo (indice_amostras) / acervo quando a região não tem amostras.
+    const restGet = async (path, q) => {
       try {
-        const r = await fetch(`${SUPABASE_URL}/rest/v1/indice_amostra?${q}`, { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` } });
+        const r = await fetch(`${SUPABASE_URL}/rest/v1/${path}?${q}`, { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` } });
         return r.ok ? await r.json().catch(() => []) : [];
       } catch { return []; }
     };
-    // Defesa em LEITURA anti-leilão (a base já é limpa na gravação; isto cobre legado):
-    // exclui comparáveis cuja fonte indica leilão/Caixa — não entram na lista nem no gráfico.
+    // Defesa em LEITURA anti-leilão (a base já é limpa na gravação; cobre legado).
     const FONTE_LEILAO = /leil[ãa]o|arremat|hasta.?p[uú]bl|\bcef\b|caixa\s*econ|aliena[çc]|extrajud|retomad|venda\s*direta|megaleil|zukerman|foreclos/i;
     const semLeilao = (arr) => (Array.isArray(arr) ? arr : []).filter(a => !FONTE_LEILAO.test(String(a.fonte || '')));
     const filtro = `cidade_norm=eq.${encodeURIComponent(cidadeNorm)}&uf=eq.${uf}&tipo=eq.${encodeURIComponent(tipo)}`;
-    const [amostrasRaw, amostrasVendaRaw] = await Promise.all([
-      restGet(`${filtro}&select=especie,valor_m2,valor_total,area_m2,data_ref,fonte,criado_em&order=data_ref.desc,criado_em.desc&limit=30`),
-      restGet(`${filtro}&especie=eq.venda&valor_m2=gte.200&valor_m2=lte.50000&select=valor_m2,data_ref,fonte&order=data_ref.desc&limit=500`),
-    ]);
-    const amostras = semLeilao(amostrasRaw).slice(0, 20);
-    const amostrasVenda = semLeilao(amostrasVendaRaw);
-    // Agrega por ANO (mediana R$/m² de venda) — base do gráfico. Aparece com >=2 amostras/ano.
+
+    // Amostras de mercado da REGIÃO solicitada (venda + locação), sem leilão.
+    const regSamples = semLeilao(await restGet('indice_amostra',
+      `${filtro}&valor_m2=gte.200&valor_m2=lte.50000&select=especie,valor_m2,valor_total,area_m2,data_ref,fonte,criado_em&order=data_ref.desc,criado_em.desc&limit=800`));
+    const num = (arr) => arr.map(Number).filter(v => v > 0).sort((a, b) => a - b);
+    const vendaVals = num(regSamples.filter(a => a.especie === 'venda').map(a => a.valor_m2));
+    const locVals   = num(regSamples.filter(a => a.especie === 'locacao').map(a => a.valor_m2));
+    const pct = (arr, p) => (arr.length ? arr[Math.min(arr.length - 1, Math.floor(p * arr.length))] : null);
+    const mediana = (arr) => { if (!arr.length) return null; const m = Math.floor(arr.length / 2); return arr.length % 2 ? arr[m] : Math.round((arr[m - 1] + arr[m]) / 2); };
+
+    let regiao = null;
+    if (vendaVals.length >= 4 || locVals.length >= 4) {
+      const vMed = mediana(vendaVals);
+      regiao = {
+        fonte: 'mercado',
+        venda_m2: vMed,
+        aluguel_m2: locVals.length ? mediana(locVals) : (vMed ? Math.round(vMed * 0.004 * 100) / 100 : null),
+        n_amostras: vendaVals.length + locVals.length,
+        nivel: 'cidade',
+        nivel_label: 'cidade (composição de mercado)',
+        bairro_norm: bairroNorm || null,
+        // BANDAS DE PADRÃO (percentis de R$/m² de venda): popular (p25) · médio (p50) · alto
+        // (p75). Uma referência de ALTO PADRÃO deve olhar a banda "alto", não a mediana geral.
+        bandas: vendaVals.length >= 6 ? { popular: pct(vendaVals, 0.25), medio: pct(vendaVals, 0.50), alto: pct(vendaVals, 0.75) } : null,
+      };
+    } else {
+      // Fallback (região sem amostras de mercado): ponderado com geo → acervo.
+      const pond = await rpc('indice_regiao_ponderado', { p_cidade_norm: cidadeNorm, p_uf: uf, p_bairro_norm: bairroNorm, p_lat: lat, p_lng: lng, p_tipo: tipo });
+      if (pond && (Number(pond.venda_m2) > 0 || Number(pond.locacao_m2) > 0)) {
+        regiao = { fonte: 'mercado', venda_m2: pond.venda_m2,
+          aluguel_m2: pond.locacao_m2 != null ? pond.locacao_m2 : (Number(pond.venda_m2) > 0 ? Math.round(pond.venda_m2 * 0.004 * 100) / 100 : null),
+          n_amostras: (pond.n_venda || 0) + (pond.n_locacao || 0),
+          nivel: Number(pond.nivel) === 1 ? 'rua' : Number(pond.nivel) === 2 ? 'grid' : 'cidade',
+          nivel_label: Number(pond.nivel) === 1 ? 'rua/condomínio (~250 m)' : Number(pond.nivel) === 2 ? 'bairro e adjacências (~1 km)' : 'cidade',
+          bairro_norm: bairroNorm || null };
+      } else {
+        const acervo = await rpc('indice_bidpro_regiao', { p_cidade_norm: cidadeNorm, p_uf: uf, p_bairro: bairroNorm, p_lat: null, p_lng: null, p_tipo: tipo });
+        if (acervo && (Number(acervo.venda_m2) > 0 || Number(acervo.aluguel_m2) > 0)) regiao = { fonte: 'acervo', ...acervo };
+      }
+    }
+    const valorizacao = await rpc('indice_valorizacao_anual', { p_cidade_norm: cidadeNorm, p_uf: uf, p_tipo: tipo, p_bairro_norm: bairroNorm, p_especie: 'venda', p_anos: 6 });
+
+    // LISTA (rastreabilidade) + GRÁFICO por ano — da MESMA base regSamples (coerentes com o valor).
+    const amostras = regSamples.slice(0, 20);
     const porAno = {};
-    for (const a of amostrasVenda) {
+    for (const a of regSamples) {
+      if (a.especie !== 'venda') continue;
       const y = String(a.data_ref || '').slice(0, 4);
       if (/^\d{4}$/.test(y) && Number(a.valor_m2) > 0) (porAno[y] ||= []).push(Number(a.valor_m2));
     }
-    const mediana = (arr) => { const s = arr.slice().sort((x, y) => x - y); const m = Math.floor(s.length / 2); return s.length % 2 ? s[m] : Math.round((s[m - 1] + s[m]) / 2); };
     const amostras_ano = Object.keys(porAno).sort()
-      .map(y => ({ ano: Number(y), n: porAno[y].length, m2: mediana(porAno[y]) }))
+      .map(y => ({ ano: Number(y), n: porAno[y].length, m2: mediana(porAno[y].slice().sort((a, b) => a - b)) }))
       .filter(p => p.n >= 2 && p.m2 > 0);
 
     const mapeado = !!regiao;

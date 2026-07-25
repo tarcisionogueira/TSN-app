@@ -106,6 +106,15 @@ ${cabecalhoBidPro({
 </div>
 ${yieldAa != null ? `<div class="av" style="font-size:12px;color:#334155;margin-top:10px;">Rentabilidade bruta de locação estimada: <b>${yieldAa.toFixed(2)}% ao ano</b> (aluguel/m² × 12 ÷ preço de venda/m²).</div>` : ''}
 
+${(reg.bandas && (Number(reg.bandas.popular) > 0 || Number(reg.bandas.alto) > 0)) ? `
+<h2>Padrão — R$/m² de venda por faixa</h2>
+<div class="grid2 av" style="grid-template-columns:1fr 1fr 1fr;">
+  <div class="card"><div style="font-size:10.5px;font-weight:800;color:#64748b;">POPULAR</div><div class="big" style="font-size:19px;color:#0f172a;">${Number(reg.bandas.popular) > 0 ? brl(reg.bandas.popular) + '<span style="font-size:11px;font-weight:700;">/m²</span>' : '—'}</div></div>
+  <div class="card"><div style="font-size:10.5px;font-weight:800;color:#64748b;">MÉDIO</div><div class="big" style="font-size:19px;color:#0f172a;">${Number(reg.bandas.medio) > 0 ? brl(reg.bandas.medio) + '<span style="font-size:11px;font-weight:700;">/m²</span>' : '—'}</div></div>
+  <div class="card"><div style="font-size:10.5px;font-weight:800;color:#64748b;">ALTO PADRÃO</div><div class="big" style="font-size:19px;color:#0f172a;">${Number(reg.bandas.alto) > 0 ? brl(reg.bandas.alto) + '<span style="font-size:11px;font-weight:700;">/m²</span>' : '—'}</div></div>
+</div>
+<div class="av" style="font-size:10.5px;color:#94a3b8;margin-top:6px;">Um imóvel de ALTO PADRÃO deve ser comparado à faixa "alto", não à mediana da cidade. Faixas = percentis (p25 · p50 · p75) do R$/m² de venda das amostras da região.</div>` : ''}
+
 ${valorHtml}
 
 ${samplesHtml}

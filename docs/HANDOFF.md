@@ -57,6 +57,14 @@
 2. **Padrão do imóvel (popular × alto padrão).** O mercadológico já usa **Nível 1 = mesmo condomínio** (padrão certo quando há anúncios internos) + ajuste por "padrão construtivo", mas não CLASSIFICAVA o tier nem rejeitava comparável de padrão diferente. **Fix (`promptMercado`):** nova REGRA obrigatória — identifica o **padrão** (popular/médio/médio-alto/alto/luxo) pelo condomínio/endereço/área e usa SÓ comparáveis do MESMO padrão (descarta R$/m² muito distante do tier; em alto padrão com poucos anúncios internos, prefere mesmo-padrão na cidade a "próximo porém inferior"). Novo campo `consolidado.padraoImovel` + citado no comentário.
 3. **PENDENTE (proposta ao dono):** o ÍNDICE regional ainda é média por cidade/segmento (mistura padrões) — estruturalmente ele não sabe o padrão de um endereço sozinho (quem identifica é o mercadológico). Enhancement proposto: **bandas de padrão** no índice (percentis popular/médio/alto de R$/m²) para não julgar um alto padrão pela mediana da cidade. Precisa do ok do dono (mudança de design).
 
+## ✅ COMEÇAR AQUI (25/07 — sessão 9: índice coerente por região + bandas de padrão)
+> Deploy `main`. Pedido do dono: bandas de padrão + confirmar que o índice/relatório agrega a composição de preços da REGIÃO solicitada.
+
+- **Descoberta (coerência):** havia DUAS tabelas — `indice_amostra` (singular, fonte REAL, dos relatórios) e `indice_amostras` (plural, geo, fonte sintética, do indice-mercado). A RPC `indice_regiao_ponderado` lia a PLURAL; a lista/gráfico/limpeza que fiz eram na SINGULAR → **valor e composição vinham de fontes diferentes** (ex.: Feira de Santana Casa: valor exibido 3.190 via fallback, mas as amostras mostradas medianas 2.638). Divergência = o oposto de rastreável.
+- **Fix (`indice-consulta.js`):** o índice passa a calcular **valor + lista + gráfico + bandas da MESMA base** (`indice_amostra`, fonte real), escopada à região (cidade+uf+tipo), sem leilão. Valor = **mediana** das amostras de venda (robusta a outliers de padrão). Fallback (ponderado com geo → acervo) só quando a região não tem amostras de mercado. Agora o número reflete exatamente os comparáveis mostrados.
+- **Bandas de PADRÃO** (`regiao.bandas` = percentis p25/p50/p75 de R$/m² de venda): popular · médio · alto. Feira de Santana Casa: **popular R$ 2.472 · médio R$ 2.638 · alto R$ 4.749** — um imóvel ALTO PADRÃO (ex.: Laguneville) deve olhar a faixa "alto" (~R$ 4.749), ~2× a mediana. Exibidas na tela do Índice (`IndiceConsulta.jsx`) e no PDF (`IndicePDF.jsx`).
+- **Laguneville:** NÃO é imóvel do acervo (foi uma consulta ao Índice) → não há mercadológico dele p/ regenerar. O ÍNDICE dele agora reflete o alto padrão. Para um MERCADOLÓGICO alto-padrão do endereço, roda-se a análise manual (já padrão-aware).
+
 ## 📋 PRÓXIMOS PASSOS / PENDÊNCIAS (revisão 25/07 — para resolver com o dono)
 
 **A) Posso tocar (alguns precisam de go-ahead por custo/CI):**

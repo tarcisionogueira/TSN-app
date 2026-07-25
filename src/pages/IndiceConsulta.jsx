@@ -212,6 +212,17 @@ export default function IndiceConsulta() {
                 <div style={{ fontSize: 22, fontWeight: 900, color: '#7c3aed', marginTop: 4 }}>{Number(reg.aluguel_m2) > 0 ? `${brl(reg.aluguel_m2)}/m²·mês` : 'em formação'}</div>
               </div>
             </div>
+            {reg.bandas && (Number(reg.bandas.popular) > 0 || Number(reg.bandas.alto) > 0) && (
+              <div style={{ marginTop: 12, background: 'white', borderRadius: 12, padding: '12px 16px' }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#334155', marginBottom: 8 }}>PADRÃO — R$/m² de venda por faixa</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+                  <div><div style={{ fontSize: 10, color: '#64748b' }}>Popular</div><div style={{ fontSize: 15, fontWeight: 800, color: '#0f172a' }}>{Number(reg.bandas.popular) > 0 ? brl(reg.bandas.popular) : '—'}</div></div>
+                  <div><div style={{ fontSize: 10, color: '#64748b' }}>Médio</div><div style={{ fontSize: 15, fontWeight: 800, color: '#0f172a' }}>{Number(reg.bandas.medio) > 0 ? brl(reg.bandas.medio) : '—'}</div></div>
+                  <div><div style={{ fontSize: 10, color: '#64748b' }}>Alto padrão</div><div style={{ fontSize: 15, fontWeight: 800, color: '#0f172a' }}>{Number(reg.bandas.alto) > 0 ? brl(reg.bandas.alto) : '—'}</div></div>
+                </div>
+                <div style={{ fontSize: 10.5, color: '#94a3b8', marginTop: 6 }}>Imóvel de alto padrão deve ser comparado à faixa "alto", não à mediana da cidade.</div>
+              </div>
+            )}
           </div>
 
           <button
