@@ -121,6 +121,14 @@
 - **Dados reais (17 perfis):** 12 explorador (grátis) · 2 assessorado + 2 top2 (pagos, não inadimplentes → em dia) · 1 admin (interno, fora da lista). **Esperado no painel:** 16 assinantes · 4 pagantes · 12 grátis · 4 em dia.
 - **Obs.:** Pausado/Teste seguem 0 até plugar o status da assinatura no Asaas/MP (ainda sem campo próprio). A coluna `perfis.plano` está órfã (sempre 'gratuito') — candidata a limpeza/uso futuro.
 
+## ✅ COMEÇAR AQUI (25/07 — sessão 16: parceiro grátis indica, mas só saca sendo pagante)
+> Deploy `main`. Build (vite) OK. Regra do dono: quem aceita ser parceiro pode indicar; se for Explorador (grátis) pode virar parceiro, mas deve ser SINALIZADO que precisa ser pagante para ter direito a RECEBER; e o aceite deve orientar completar o cadastro (PIX etc.).
+
+- **Trava de negócio (`api/saque.js`):** `podeReceber(role)` = tier pago (top2/assessorado/clube + anuais) OU equipe (admin/analista/advogado/consultor/afiliado/leiloeiro). GET retorna `precisa_assinatura` e `saque_habilitado` passa a exigir `!precisa_assinatura`; POST bloqueia com 403 e mensagem clara se não pode receber. Explorador/grátis indica e acumula, mas não saca até assinar.
+- **`Comissoes.jsx`:** lê `precisa_assinatura`; quando true, aviso roxo "Você pode indicar, mas para RECEBER precisa de assinatura ativa" + botão "Ver planos e assinar" + saque desabilitado. O gate de cadastro (`faltando`: nome/CPF/telefone/chave PIX) continua.
+- **`HomeCliente.jsx` (box Programa de Parceiros):** já-parceiro NÃO pagante vê aviso ⚠️ "para RECEBER precisa de assinatura ativa" + botões **Assinar** e **Configurar meu PIX**; pagante vê atalho "Configurar meu PIX para receber". (O texto do convite já dizia que grátis pode indicar mas precisa de assinatura para receber.)
+- **Dúvida do dono — "Pausado / período de teste":** *Pausado* = assinatura temporariamente suspensa no gateway (cobrança em espera, não cancelada); *período de teste (trial)* = janela grátis inicial antes da 1ª cobrança. Hoje BidPro **não** expõe esses estados (sem campo próprio) → ficam 0. Se não usarmos trial, dá para **esconder** o card Pausado até plugar o status do Asaas/MP (a decidir com o dono).
+
 ## 📋 PRÓXIMOS PASSOS / PENDÊNCIAS (revisão 25/07 — para resolver com o dono)
 
 **A) Posso tocar (alguns precisam de go-ahead por custo/CI):**

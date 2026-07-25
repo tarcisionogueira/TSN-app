@@ -46,6 +46,14 @@ async function rpc(fn, args) {
 const roleFor = async (id) => (await db(`perfis?id=eq.${id}&select=role`)).data?.[0]?.role || null;
 const saldoDe = async (id) => Number((await db(`saldo_usuarios?user_id=eq.${id}&select=saldo_disponivel`)).data?.[0]?.saldo_disponivel || 0);
 
+// DIREITO DE RECEBER (regra do dono): qualquer cliente pode ser PARCEIRO e indicar, mas só tem
+// direito a RECEBER (sacar) as comissões quem é PAGANTE (plano pago) — ou quem é EQUIPE/
+// profissional (admin/analista/advogado/consultor/afiliado/leiloeiro, que recebem por função).
+// Um Explorador (grátis) indica normalmente; para sacar, precisa de uma assinatura ativa.
+const PLANOS_PAGOS = ['top2', 'top2_anual', 'assessorado', 'assessorado_anual', 'clube', 'clube_anual'];
+const ROLES_EQUIPE = ['admin', 'analista', 'advogado', 'consultor', 'afiliado', 'leiloeiro'];
+const podeReceber = (role) => PLANOS_PAGOS.includes(role) || ROLES_EQUIPE.includes(role);
+
 // ── Janela de saque (fuso America/Bahia, UTC−3 sem horário de verão) ──────────
 // Regra: solicitações são avulsas e ilimitadas durante a semana; o PAGAMENTO sai
 // só às sextas, com CORTE ao meio-dia — o que entra até sexta 12h cai naquela
@@ -131,8 +139,12 @@ export default async function handler(req) {
     if (!(perfil.cpf && String(perfil.cpf).trim()) && !perfil.cpf_hash) faltando.push('CPF');
     if (!perfil.telefone || !String(perfil.telefone).trim()) faltando.push('telefone');
     if (!perfil.chave_pix || !String(perfil.chave_pix).trim()) faltando.push('chave PIX');
+    // Explorador/grátis pode indicar, mas só recebe (saca) sendo pagante. Sinaliza p/ a UI.
+    const precisaAssinatura = !podeReceber(role);
     // Data da próxima liberação (sexta 12:00 Bahia) para exibir na tela do profissional.
-    return json({ saldo, extrato, proxima_liberacao: proximaLiberacao().toISOString(), saque_habilitado: faltando.length === 0, faltando });
+    return json({ saldo, extrato, proxima_liberacao: proximaLiberacao().toISOString(),
+      precisa_assinatura: precisaAssinatura,
+      saque_habilitado: faltando.length === 0 && !precisaAssinatura, faltando });
   }
 
   // ── POST: solicitar saque ────────────────────────────────────────────────
@@ -140,6 +152,9 @@ export default async function handler(req) {
     let body; try { body = await req.json(); } catch { return json({ error: 'JSON inválido' }, 400); }
     const valor = Math.round(Number(body.valor) * 100) / 100;
     if (!valor || valor <= 0) return json({ error: 'Valor inválido' }, 400);
+    // Trava de negócio (regra do dono): só saca quem tem DIREITO A RECEBER (pagante ou equipe).
+    // Explorador/grátis pode indicar e acumular, mas precisa assinar para liberar o saque.
+    if (!podeReceber(role)) return json({ error: 'Para RECEBER suas comissões é preciso ter uma assinatura ativa (plano pago). Você pode indicar normalmente — assine para liberar o saque.' }, 403);
 
     // Checagem de saldo/PIX + inserção do lançamento é ATÔMICA no banco
     // (serializada por usuário) — elimina a corrida read-then-write que

@@ -225,6 +225,19 @@ export default function HomeCliente() {
                 {copiado ? <><Check size={15} /> Link copiado!</> : <><Copy size={15} /> Copiar meu link</>}
               </button>
               <div style={{ fontSize: 10.5, color: '#94a3b8', lineHeight: 1.5 }}>Sua recompensa é creditada automaticamente quando o indicado assina um plano. Você aceitou as regras do Programa.</div>
+              {!ehPagoCliente && (
+                <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 10, padding: '10px 12px' }}>
+                  <div style={{ fontSize: 11.5, color: '#9a3412', lineHeight: 1.55, fontWeight: 700 }}>⚠️ Para RECEBER as comissões você precisa de uma assinatura ativa</div>
+                  <div style={{ fontSize: 11, color: '#9a3412', lineHeight: 1.55, marginTop: 2 }}>Pode indicar normalmente — as comissões acumulam e o saque libera quando você assinar um plano pago.</div>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+                    <button onClick={() => nav('/planos')} style={{ padding: '7px 14px', background: '#7c3aed', color: 'white', border: 'none', borderRadius: 8, fontWeight: 800, fontSize: 12, cursor: 'pointer' }}>Assinar</button>
+                    <button onClick={() => nav('/comissoes')} style={{ padding: '7px 14px', background: 'white', color: '#7c3aed', border: '1px solid #ddd6fe', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>Configurar meu PIX</button>
+                  </div>
+                </div>
+              )}
+              {ehPagoCliente && (
+                <button onClick={() => nav('/comissoes')} style={{ alignSelf: 'flex-start', background: 'none', border: 'none', color: '#7c3aed', fontWeight: 700, fontSize: 11.5, cursor: 'pointer', padding: 0, textDecoration: 'underline' }}>Configurar meu PIX para receber →</button>
+              )}
             </>
           ) : (
             <>
