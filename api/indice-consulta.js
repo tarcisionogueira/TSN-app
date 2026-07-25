@@ -80,8 +80,36 @@ export default async function handler(req) {
     const valorizacao = await rpc('indice_valorizacao_anual', {
       p_cidade_norm: cidadeNorm, p_uf: uf, p_tipo: tipo, p_bairro_norm: bairroNorm, p_especie: 'venda', p_anos: 6,
     });
+
+    // AMOSTRAS (rastreabilidade + gráfico): comparáveis de mercado que embasam o índice
+    // do segmento na cidade — portal (fonte), preço, área e data. Alimentam a "relação
+    // dos imóveis da amostra" e um gráfico de valorização por ano derivado das PRÓPRIAS
+    // amostras (mais permissivo que a RPC, que exige muitas amostras/ano e some em região
+    // com histórico curto). Lidos com service key (RLS não bloqueia leitura interna).
+    const restGet = async (q) => {
+      try {
+        const r = await fetch(`${SUPABASE_URL}/rest/v1/indice_amostra?${q}`, { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` } });
+        return r.ok ? await r.json().catch(() => []) : [];
+      } catch { return []; }
+    };
+    const filtro = `cidade_norm=eq.${encodeURIComponent(cidadeNorm)}&uf=eq.${uf}&tipo=eq.${encodeURIComponent(tipo)}`;
+    const [amostras, amostrasVenda] = await Promise.all([
+      restGet(`${filtro}&select=especie,valor_m2,valor_total,area_m2,data_ref,fonte,criado_em&order=data_ref.desc,criado_em.desc&limit=20`),
+      restGet(`${filtro}&especie=eq.venda&valor_m2=gte.200&valor_m2=lte.50000&select=valor_m2,data_ref&order=data_ref.desc&limit=500`),
+    ]);
+    // Agrega por ANO (mediana R$/m² de venda) — base do gráfico. Aparece com >=2 amostras/ano.
+    const porAno = {};
+    for (const a of (Array.isArray(amostrasVenda) ? amostrasVenda : [])) {
+      const y = String(a.data_ref || '').slice(0, 4);
+      if (/^\d{4}$/.test(y) && Number(a.valor_m2) > 0) (porAno[y] ||= []).push(Number(a.valor_m2));
+    }
+    const mediana = (arr) => { const s = arr.slice().sort((x, y) => x - y); const m = Math.floor(s.length / 2); return s.length % 2 ? s[m] : Math.round((s[m - 1] + s[m]) / 2); };
+    const amostras_ano = Object.keys(porAno).sort()
+      .map(y => ({ ano: Number(y), n: porAno[y].length, m2: mediana(porAno[y]) }))
+      .filter(p => p.n >= 2 && p.m2 > 0);
+
     const mapeado = !!regiao;
-    return new Response(JSON.stringify({ ok: true, mapeado, regiao, valorizacao: valorizacao || null }), { status: 200, headers });
+    return new Response(JSON.stringify({ ok: true, mapeado, regiao, valorizacao: valorizacao || null, amostras: Array.isArray(amostras) ? amostras : [], amostras_ano }), { status: 200, headers });
   } catch (e) {
     return new Response(JSON.stringify({ error: e.message || 'Falha na consulta' }), { status: 500, headers });
   }

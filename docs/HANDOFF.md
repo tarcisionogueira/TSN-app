@@ -44,6 +44,12 @@
 
 > ✅ **DEPLOYADO + CONFIRMADO EM PRODUÇÃO (25/07):** merge na `main` (`0f369f6`) → deploy Vercel READY. Regeração forçada (workflow `testar-analise-amostras.yml`, admin) + enricher CEF (`enriquecer-datas-cef.yml`). **Resultados:** MEGA Itaboraí → parecer 12.584 chars, `faltando=[]`; GRUPOLANCE Rio Claro → parecer 13.838 chars, `faltando=[]` (os 2 ativos que davam "faltam documentos" com doc no bucket, resolvidos); **2ª praça capturada em 93 imóveis CEF** (ex.: ALPHAVIEW Barueri 550k→**330k**, 07/08, 40% off — exatamente o print do dono); Cliente 360 logando `relatorio_documental_ok`. Os inativos/leilão-passado seguem "faltam documentos" (correto). Enricher CEF cobre o resto do acervo nas próximas rodadas (hora em hora).
 
+## ✅ COMEÇAR AQUI (25/07 — sessão 7: relatório do Índice com gráfico + rastreabilidade)
+> Branch/main: deploy. Pedido do dono (com print do PDF): (1) o **gráfico** de valorização não aparecia; (2) mostrar a **relação dos imóveis da amostra** com **descrição, portal e data de inclusão** (rastreabilidade).
+
+- **Gráfico sumia (raiz):** a RPC `indice_valorizacao_anual` exige muitas amostras/ano e sumia em região com histórico curto (ex.: Feira de Santana Casa: 2024=3 amostras, 2025=75 → série curta). **Fix:** `api/indice-consulta.js` agora retorna `amostras_ano` (mediana R$/m² de venda por ano, derivada das próprias amostras, aparece com ≥2 amostras/ano) e o `IndicePDF.jsx` desenha um **gráfico de BARRAS** (como na tela) a partir dela, com % período/ano.
+- **Rastreabilidade:** `indice-consulta` também retorna `amostras` (20 comparáveis recentes do segmento/cidade: `especie,valor_m2,valor_total,area_m2,data_ref,fonte,criado_em`). O `IndicePDF` ganhou a seção **"Relação dos imóveis da amostra"** — tabela com **descrição** (venda/locação · área · R$), **R$/m²**, **portal** (o `fonte`, ex.: OLX/ZAP/VivaReal/LeilaoImovel-CEF) e **data** (mês/ano do anúncio + "capt." = quando entrou na base). Leitura interna via service key (RLS não bloqueia).
+
 ## 📋 PRÓXIMOS PASSOS / PENDÊNCIAS (revisão 25/07 — para resolver com o dono)
 
 **A) Posso tocar (alguns precisam de go-ahead por custo/CI):**

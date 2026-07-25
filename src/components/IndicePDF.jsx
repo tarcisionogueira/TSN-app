@@ -21,15 +21,16 @@ export const ESTILOS_INDICE = `
   .big{font-size:26px;font-weight:900;line-height:1.1;margin-top:4px;}
   pre{white-space:pre-wrap;font-family:'Inter',sans-serif;font-size:11.5px;color:#334155;margin:0;line-height:1.7;}
   table{width:100%;border-collapse:collapse;margin-top:6px;}
-  th,td{font-size:11px;text-align:right;padding:6px 8px;border-bottom:1px solid #eef2f7;}
-  th:first-child,td:first-child{text-align:left;}
-  th{color:#475569;font-weight:800;text-transform:uppercase;font-size:9.5px;letter-spacing:.5px;}
+  th,td{font-size:10.5px;text-align:left;padding:5px 7px;border-bottom:1px solid #eef2f7;vertical-align:top;}
+  th{color:#475569;font-weight:800;text-transform:uppercase;font-size:9px;letter-spacing:.5px;}
+  td.num,th.num{text-align:right;white-space:nowrap;}
   .foot{margin-top:22px;padding-top:10px;border-top:1px solid #e2e8f0;font-size:9.5px;color:#94a3b8;line-height:1.55;}
 ` + ESTILOS_CABECALHO;
 
 // Corpo (conteúdo do <body>). form = { cidade, uf, bairro, condominio, tipo }; reg =
-// { venda_m2, aluguel_m2, n_amostras, nivel, nivel_label, bairro_norm }; vz = valorização.
-export function corpoIndice({ form = {}, reg = {}, vz = null, solicitante = {} }) {
+// { venda_m2, aluguel_m2, n_amostras, nivel, nivel_label }; amostrasAno = [{ano,n,m2}]
+// (gráfico); amostras = [{especie,valor_m2,valor_total,area_m2,data_ref,fonte,criado_em}].
+export function corpoIndice({ form = {}, reg = {}, amostras = [], amostrasAno = [], solicitante = {} }) {
   const tipoLabel = TIPO_LABEL[form.tipo] || form.tipo || '';
   const local = [form.condominio, form.bairro, form.cidade].filter(Boolean).join(' · ') + (form.uf ? `/${form.uf}` : '');
   const nivelLabel = reg.nivel_label || (reg.nivel === 'bairro' ? 'bairro' : reg.nivel === 'grid' ? 'microrregião (~1 km)' : 'cidade');
@@ -37,12 +38,48 @@ export function corpoIndice({ form = {}, reg = {}, vz = null, solicitante = {} }
   const aluguel = Number(reg.aluguel_m2) || 0;
   const yieldAa = (venda > 0 && aluguel > 0) ? (aluguel * 12 / venda * 100) : null;
 
-  const valorHtml = (Array.isArray(vz?.serie) && vz.serie.length >= 2) ? `
-<h2>Valorização (venda R$/m²)</h2>
-<div class="av" style="font-size:11.5px;color:#334155;margin-bottom:4px;">Período ${esc(vz.ano_inicial)}–${esc(vz.ano_final)}: <b style="color:${Number(vz.valorizacao_periodo_pct) >= 0 ? '#166534' : '#991b1b'};">${Number(vz.valorizacao_periodo_pct) >= 0 ? '+' : ''}${Number(vz.valorizacao_periodo_pct).toFixed(1)}%</b> no total · ${Number(vz.valorizacao_aa_pct).toFixed(1)}% ao ano.</div>
-<table class="av"><thead><tr><th>Ano</th><th>R$/m² (venda)</th><th>Amostras</th></tr></thead><tbody>
-${vz.serie.map(p => `<tr><td>${esc(p.ano)}</td><td>${brl(p.m2)}</td><td>${esc(p.n)}</td></tr>`).join('')}
-</tbody></table>` : '';
+  // GRÁFICO de valorização (barras) — derivado das amostras por ano (aparece com >=2 anos).
+  const serie = (Array.isArray(amostrasAno) ? amostrasAno : []).filter(p => p && Number(p.m2) > 0);
+  const valorHtml = (() => {
+    if (serie.length < 2) return '';
+    const max = Math.max(...serie.map(p => Number(p.m2))) || 1;
+    const p0 = Number(serie[0].m2), pN = Number(serie[serie.length - 1].m2);
+    const anos = Number(serie[serie.length - 1].ano) - Number(serie[0].ano);
+    const periodoPct = ((pN / p0) - 1) * 100;
+    const aaPct = anos > 0 ? (Math.pow(pN / p0, 1 / anos) - 1) * 100 : periodoPct;
+    const cor = periodoPct >= 0 ? '#166534' : '#991b1b';
+    const barras = serie.map(p => {
+      const h = Math.max(8, Math.round((Number(p.m2) / max) * 92));
+      return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:3px;">`
+        + `<div style="font-size:9.5px;font-weight:800;color:#065f46;">${brl(p.m2)}</div>`
+        + `<div style="width:100%;max-width:54px;height:${h}px;border-radius:5px 5px 0 0;background:linear-gradient(180deg,#34d399,#059669);"></div>`
+        + `<div style="font-size:10px;font-weight:700;color:#334155;">${esc(p.ano)}</div>`
+        + `<div style="font-size:8.5px;color:#94a3b8;">${esc(p.n)} am.</div></div>`;
+    }).join('');
+    return `
+<h2>Valorização (R$/m² de venda por ano)</h2>
+<div class="av" style="font-size:11.5px;color:#334155;margin-bottom:8px;">Período ${esc(serie[0].ano)}–${esc(serie[serie.length - 1].ano)}: <b style="color:${cor};">${periodoPct >= 0 ? '+' : ''}${periodoPct.toFixed(1)}%</b> no total · ${aaPct.toFixed(1)}% ao ano. <span style="color:#94a3b8;">(amostras podem ser poucas nos anos iniciais)</span></div>
+<div class="av" style="display:flex;align-items:flex-end;gap:12px;height:130px;border-bottom:1px solid #e2e8f0;padding-bottom:2px;">${barras}</div>`;
+  })();
+
+  // RELAÇÃO DOS IMÓVEIS DA AMOSTRA (rastreabilidade): descrição, portal (fonte) e data.
+  const MES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+  const mesAno = (d) => { const m = String(d || '').match(/(\d{4})-(\d{2})/); return m ? `${MES[+m[2] - 1] || m[2]}/${m[1]}` : esc(d || ''); };
+  const dataCurta = (d) => { const m = String(d || '').match(/(\d{4})-(\d{2})-(\d{2})/); return m ? `${m[3]}/${m[2]}/${m[1].slice(2)}` : ''; };
+  const amRows = (Array.isArray(amostras) ? amostras : []).slice(0, 16).map(a => {
+    const loc = a.especie === 'locacao';
+    const area = Number(a.area_m2) > 0 ? `${Math.round(a.area_m2)} m²` : '—';
+    const total = Number(a.valor_total) > 0 ? brl(a.valor_total) + (loc ? '/mês' : '') : '—';
+    const m2 = Number(a.valor_m2) > 0 ? brl(a.valor_m2) + (loc ? '/m²·mês' : '/m²') : '—';
+    return `<tr><td>${loc ? 'Locação' : 'Venda'} · ${area} · ${total}</td>`
+      + `<td class="num">${m2}</td>`
+      + `<td>${esc(String(a.fonte || '—').slice(0, 60))}</td>`
+      + `<td class="num">${mesAno(a.data_ref)}${a.criado_em ? `<br><span style="color:#94a3b8;font-weight:400;">capt. ${dataCurta(a.criado_em)}</span>` : ''}</td></tr>`;
+  }).join('');
+  const samplesHtml = amRows ? `
+<h2>Relação dos imóveis da amostra (rastreabilidade)</h2>
+<div class="av" style="font-size:10px;color:#94a3b8;margin-bottom:6px;">Comparáveis de mercado (anúncios e revendas) do segmento na cidade que embasam o índice. "Data" = período de referência do anúncio; "capt." = quando entrou na base BidPro.</div>
+<table class="av"><thead><tr><th>Descrição</th><th class="num">R$/m²</th><th>Portal (fonte)</th><th class="num">Data</th></tr></thead><tbody>${amRows}</tbody></table>` : '';
 
   return `
 ${cabecalhoBidPro({
@@ -70,6 +107,8 @@ ${cabecalhoBidPro({
 ${yieldAa != null ? `<div class="av" style="font-size:12px;color:#334155;margin-top:10px;">Rentabilidade bruta de locação estimada: <b>${yieldAa.toFixed(2)}% ao ano</b> (aluguel/m² × 12 ÷ preço de venda/m²).</div>` : ''}
 
 ${valorHtml}
+
+${samplesHtml}
 
 <h2>O que é o Índice BidPro</h2>
 <pre class="av">O Índice BidPro é a referência própria de preço por metro quadrado (venda e locação) por microrregião, consolidada das análises de mercado da plataforma: anúncios ativos com data e revendas confirmadas, ponderados por recência e proximidade (rua/condomínio, microrregião de cerca de 1 km ou cidade). Não inclui preços de leilão/arremate, para não contaminar a base. É uma referência de mercado para orientar a decisão, não uma avaliação formal.</pre>

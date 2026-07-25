@@ -215,7 +215,7 @@ export default function IndiceConsulta() {
           </div>
 
           <button
-            onClick={() => gerarIndicePDF({ form, reg, vz, solicitante: { nome, role: effectiveRole } })}
+            onClick={() => gerarIndicePDF({ form, reg, amostras: res?.amostras || [], amostrasAno: res?.amostras_ano || [], solicitante: { nome, role: effectiveRole } })}
             style={{ alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 20px', background: '#0D2A54', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 14, cursor: 'pointer' }}>
             <FileText size={16} /> Gerar relatório do Índice (PDF)
           </button>
