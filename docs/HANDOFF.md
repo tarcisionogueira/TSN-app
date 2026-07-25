@@ -94,6 +94,12 @@
 - **Regra preservada:** o VALOR do imóvel-alvo continua saindo só do MESMO tipo/padrão (sessões 8–9). A colheita é byproduct que decanta na base — acelera o cruzamento do mínimo de 8 (mais cache hits) e a composição temporal dos outros segmentos.
 - **Migração `indice_amostra_origem_relatorio_regiao.sql` (aplicada):** estende o CHECK de `origem` p/ incluir `relatorio_regiao` (auditável via `select origem,count(*) from indice_amostra group by origem`). Dedup index NÃO inclui `tipo` (inclui cidade/uf/especie/valor/fonte/data) — colisão entre tipos é improvável e só descarta duplicata exata.
 
+## ✅ COMEÇAR AQUI (25/07 — sessão 13: aviso de login Google em PWA/navegador embutido)
+> Deploy `main`. Build (vite) OK. O dono não conseguia logar com Google no celular ("Algo deu errado" no 2FA do Google, print de `accounts.google.com` dentro de navegador embutido). Causa: o Google BLOQUEIA a verificação em duas etapas em navegadores embutidos (Instagram/FB/etc.) e, em PWA standalone/iOS, o OAuth abre num navegador sobreposto e o retorno perde a sessão (storage isolado) — não é bug do BidPro (o `signInWithOAuth` está correto).
+
+- **`src/pages/Login.jsx`:** detecção client-only `ambienteFragilGoogle` (`display-mode: standalone` OU `navigator.standalone` OU UA de app embutido: FBAN/FBAV/Instagram/Line/Twitter/LinkedInApp/Snapchat/Pinterest/MicroMessenger/WhatsApp/GSA). Quando true, mostra um aviso ⚠️ acima do botão do Google (nos modos login E cadastro): "o Google pode falhar no 2FA — prefira e-mail e senha, ou abra www.bidprobrasil.com.br no Safari/Chrome". O e-mail/senha já era o caminho visualmente primário (fica acima do divisor). Sem mudança no fluxo OAuth em si.
+- **Workaround imediato p/ o dono:** entrar por e-mail/senha (funciona 100% dentro do PWA) ou abrir no Safari/Chrome de verdade. No iPhone, PWA standalone real só instala pelo Safari (não pelo Chrome).
+
 ## 📋 PRÓXIMOS PASSOS / PENDÊNCIAS (revisão 25/07 — para resolver com o dono)
 
 **A) Posso tocar (alguns precisam de go-ahead por custo/CI):**

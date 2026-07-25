@@ -61,6 +61,19 @@ export default function Login() {
   const [modo, setModo] = useState(modoParam === 'cadastro' || planoEscolhido ? 'cadastro' : 'login'); // 'login' | 'cadastro' | 'sucesso' | 'recuperar' | 'recuperar_sucesso'
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  // Ambientes onde o login com Google costuma FALHAR no 2FA: o Google BLOQUEIA navegadores
+  // embutidos (Instagram/Facebook/etc.) e, em PWA instalado (standalone) / iOS, o OAuth abre num
+  // navegador sobreposto e o retorno "perde" a sessão (armazenamento isolado). Nesses casos
+  // orientamos o e-mail/senha (funciona 100% ali) ou abrir no Safari/Chrome. Detecção client-only.
+  const [ambienteFragilGoogle] = useState(() => {
+    try {
+      if (typeof window === 'undefined') return false;
+      const ua = navigator.userAgent || '';
+      const standalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+      const inApp = /(FBAN|FBAV|FB_IAB|Instagram|Line\/|Twitter|LinkedInApp|Snapchat|Pinterest|MicroMessenger|WhatsApp|GSA\/)/i.test(ua);
+      return !!(standalone || inApp);
+    } catch { return false; }
+  });
   const [erro, setErro] = useState('');
   const [emailNaoConfirmado, setEmailNaoConfirmado] = useState(false);
   const [reenviando, setReenviando] = useState(false);
@@ -418,6 +431,11 @@ export default function Login() {
               <span style={{ fontSize: 12, color: '#94a3b8', whiteSpace: 'nowrap' }}>ou continue com</span>
               <div style={{ flex: 1, height: 1, background: '#e2e8f0' }}/>
             </div>
+            {ambienteFragilGoogle && (
+              <div style={{ margin: '4px 0 10px', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 8, padding: '9px 12px', fontSize: 11.5, color: '#9a3412', lineHeight: 1.5 }}>
+                ⚠️ Neste app instalado (ou navegador de outro app) o Google pode falhar na <b>verificação em duas etapas</b>. Prefira <b>e-mail e senha</b> acima — ou abra <b>www.bidprobrasil.com.br</b> no Safari/Chrome.
+              </div>
+            )}
             <button type="button" onClick={handleGoogle} disabled={googleLoading}
               style={{ width: '100%', padding: '11px', border: '1px solid #e2e8f0', borderRadius: 10, background: 'white', color: '#374151', fontWeight: 600, fontSize: 14, cursor: googleLoading ? 'not-allowed' : 'pointer', opacity: googleLoading ? 0.6 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
               <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.2l6.8-6.8C35.7 2.4 30.2 0 24 0 14.7 0 6.8 5.5 3 13.5l7.9 6.1C12.8 13.6 17.9 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v8.5h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4.1 7.1-10.1 7.1-17z"/><path fill="#FBBC05" d="M10.9 28.4A14.4 14.4 0 0 1 9.5 24c0-1.5.3-3 .8-4.4L2.4 13.5A23.9 23.9 0 0 0 0 24c0 3.8.9 7.4 2.4 10.5l8.5-6.1z"/><path fill="#34A853" d="M24 48c6.2 0 11.4-2 15.2-5.5l-7.5-5.8c-2 1.4-4.6 2.2-7.7 2.2-6.1 0-11.2-4.1-13.1-9.6l-7.9 6.1C6.8 42.5 14.7 48 24 48z"/></svg>
@@ -593,6 +611,11 @@ export default function Login() {
               <span style={{ fontSize: 12, color: '#94a3b8', whiteSpace: 'nowrap' }}>ou cadastre-se com</span>
               <div style={{ flex: 1, height: 1, background: '#e2e8f0' }}/>
             </div>
+            {ambienteFragilGoogle && (
+              <div style={{ margin: '4px 0 10px', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 8, padding: '9px 12px', fontSize: 11.5, color: '#9a3412', lineHeight: 1.5 }}>
+                ⚠️ Neste app instalado (ou navegador de outro app) o Google pode falhar na <b>verificação em duas etapas</b>. Prefira o cadastro por <b>e-mail e senha</b> acima — ou abra <b>www.bidprobrasil.com.br</b> no Safari/Chrome.
+              </div>
+            )}
             <button type="button" onClick={handleGoogle} disabled={googleLoading}
               style={{ width: '100%', padding: '11px', border: '1px solid #e2e8f0', borderRadius: 10, background: 'white', color: '#374151', fontWeight: 600, fontSize: 14, cursor: googleLoading ? 'not-allowed' : 'pointer', opacity: googleLoading ? 0.6 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
               <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.2l6.8-6.8C35.7 2.4 30.2 0 24 0 14.7 0 6.8 5.5 3 13.5l7.9 6.1C12.8 13.6 17.9 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v8.5h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4.1 7.1-10.1 7.1-17z"/><path fill="#FBBC05" d="M10.9 28.4A14.4 14.4 0 0 1 9.5 24c0-1.5.3-3 .8-4.4L2.4 13.5A23.9 23.9 0 0 0 0 24c0 3.8.9 7.4 2.4 10.5l8.5-6.1z"/><path fill="#34A853" d="M24 48c6.2 0 11.4-2 15.2-5.5l-7.5-5.8c-2 1.4-4.6 2.2-7.7 2.2-6.1 0-11.2-4.1-13.1-9.6l-7.9 6.1C6.8 42.5 14.7 48 24 48z"/></svg>
