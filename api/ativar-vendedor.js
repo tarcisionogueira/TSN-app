@@ -38,7 +38,9 @@ export default async function handler(req, res) {
   if (!conv) return res.status(404).json({ error: 'Convite inválido ou desativado.' });
   if (conv.expira_em && new Date(conv.expira_em) < new Date()) return res.status(410).json({ error: 'Convite expirado.' });
 
-  const tipo = conv.tipo === 'consultor' ? 'consultor' : 'afiliado';
+  // Consultor APOSENTADO (o MLM/Programa de Parceiros o substitui): qualquer convite — mesmo
+  // um legado com tipo='consultor' — passa a ativar como AFILIADO (só comissão, sem carteira).
+  const tipo = 'afiliado';
   const pct = Math.max(0, Math.min(100, Number(conv.comissao_pct) || 0));
 
   // Gera código de indicação se ainda não tiver (RPC já existente).

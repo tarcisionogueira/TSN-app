@@ -154,6 +154,14 @@
 - **`/comissoes` liberado:** antes era `roles=['admin','consultor','analista','advogado']` (parceiro pagante comum NÃO via as próprias comissões/PIX). Agora é autenticado (a página/‌API são escopadas ao user.id) — necessário para o MLM.
 - **Consultor APOSENTADO:** rota `/consultor` → **redireciona para `/minha-rede`**; botão "🤝 Comercial" removido do menu (desktop+mobile). `/afiliado` segue ativo (papel distinto). **Pendente (seguro, à parte):** parar de EMITIR novos convites de consultor no Admin e decidir a migração de quem já é `role='consultor'` (não mexi no role p/ não quebrar RLS/comissões existentes).
 
+## ✅ COMEÇAR AQUI (25/07 — sessão 20: aposentadoria completa do Consultor)
+> Deploy `main` · migração via MCP. Fecha a aposentadoria do papel Consultor pedida na sessão 19: (a) parar de conceder e (b) migrar quem já tem — feito com cuidado e reversível.
+
+- **Diagnóstico:** `is_equipe()` = analista/advogado/admin (consultor NÃO está). Consultor desbloqueia acesso de STAFF (ler análises/casos/leads/etc.) por várias policies — retirá-lo é justamente tirar esse acesso. **Contagem real: 0 consultores** (role/vendedor_tipo/convites todos 0) → migração é no-op hoje.
+- **(a) Parar de conceder:** `ROLES_DISPONIVEIS` (Admin) perdeu 'consultor' (dropdown de papel não oferece mais); botão "habilitar venda" força **afiliado** (sem opção consultor); `api/ativar-vendedor.js` coage qualquer convite (mesmo legado tipo='consultor') para **afiliado**.
+- **(b) Migração idempotente (`aposentar_consultor_migra_parceiro.sql`, aplicada):** `role='consultor'` → `explorador` PRESERVANDO link/rede (indicado_por, codigo_indicacao) e saldo/comissões; grandfather do `parceiro_aceite_em` (mantém acesso à Minha Rede/Comissões); `vendedor_tipo consultor→afiliado`; desativa convites de consultor pendentes. Afetou **0 linhas** agora; blinda qualquer legado.
+- **Reversível:** como não havia consultores, nada mudou de fato; se um dia precisar reativar o papel, é só re-adicionar 'consultor' aos pontos acima. Policies/labels que citam 'consultor' foram MANTIDAS (não quebram nada; só não há mais quem tenha o papel).
+
 ## 📋 PRÓXIMOS PASSOS / PENDÊNCIAS (revisão 25/07 — para resolver com o dono)
 
 **A) Posso tocar (alguns precisam de go-ahead por custo/CI):**

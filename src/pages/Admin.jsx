@@ -12,8 +12,9 @@ const FEEDBACK_KEY = 'tsn_feedback_email';
 
 // Papéis REAIS do sistema (planos_config + papéis de equipe/leiloeiro).
 // 'top1' foi removido (Investidor Pro é 'top2'); 'leiloeiro' incluído (portal do parceiro).
+// 'consultor' APOSENTADO (substituído pelo MLM/Programa de Parceiros) — não é mais atribuível.
 const ROLES_DISPONIVEIS = [
-  'admin','explorador','top2','assessorado','clube','consultor','afiliado','analista','advogado','leiloeiro',
+  'admin','explorador','top2','assessorado','clube','afiliado','analista','advogado','leiloeiro',
 ];
 
 // ─── styles ──────────────────────────────────────────────────────────────────
@@ -953,9 +954,8 @@ function UsuariosTab() {
                                   style={{ padding: '5px 10px', background: '#fdf2f8', border: '1px solid #fbcfe8', borderRadius: 6, fontSize: 11, fontWeight: 700, color: '#db2777', cursor: 'pointer' }}
                                   title="Habilita a capacidade de vender nesta conta (mantém o plano/função). Cliente pagante continua cliente e também ganha comissão."
                                   onClick={async () => {
-                                    const tipo = window.prompt('Habilitar venda como? Digite "afiliado" (só comissão) ou "consultor" (com carteira):', 'afiliado');
-                                    if (tipo === null) return;
-                                    const t = tipo.trim().toLowerCase() === 'consultor' ? 'consultor' : 'afiliado';
+                                    // Consultor aposentado (MLM o substitui): habilita venda só como AFILIADO (só comissão).
+                                    const t = 'afiliado';
                                     const v = window.prompt(`Comissão de ${u.nome || 'membro'} sobre as vendas pelo link dele (%):`, '10');
                                     if (v === null) return;
                                     const pct = Math.max(0, Math.min(100, Number(String(v).replace(',', '.')) || 0));
