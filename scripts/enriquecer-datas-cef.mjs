@@ -67,6 +67,23 @@ function extrairDataLeilao(txt) {
   return new Date(Math.min(...futuras)).toISOString().slice(0, 10);
 }
 
+// Extrai as DUAS praças do leilão SFI/extrajudicial da Caixa (valor + data de cada).
+// Ex.: "Valor mínimo de venda 1º Leilão: R$ 550.000,00" / "2º Leilão: R$ 330.000,00";
+// "Data do 1º Leilão - 03/08/2026". Leilão único/licitação → 2ª praça vem null.
+function extrairPracasCEF(txt) {
+  const vazio = { data1: null, data2: null, valor1: null, valor2: null };
+  if (!txt) return vazio;
+  const brNum = (s) => { const n = Number(String(s).replace(/\./g, '').replace(',', '.')); return isFinite(n) && n > 0 ? n : null; };
+  const dataDe = (rx) => { const m = rx.exec(txt); if (!m) return null; const yy = m[3].length === 2 ? '20' + m[3] : m[3]; const t = Date.parse(`${yy}-${m[2]}-${m[1]}`); return isNaN(t) ? null : new Date(t).toISOString().slice(0, 10); };
+  const valorDe = (rx) => { const m = rx.exec(txt); return m ? brNum(m[1]) : null; };
+  return {
+    valor1: valorDe(/valor\s+m[íi]nimo\s+de\s+venda\s+1[ºo°]?\s*leil[ãa]o\s*[:\-–]?\s*R?\$?\s*([\d.]+,\d{2})/i),
+    valor2: valorDe(/valor\s+m[íi]nimo\s+de\s+venda\s+2[ºo°]?\s*leil[ãa]o\s*[:\-–]?\s*R?\$?\s*([\d.]+,\d{2})/i),
+    data1: dataDe(/data\s+do\s+1[ºo°]?\s*leil[ãa]o\s*[-–:]?\s*(\d{2})\/(\d{2})\/(\d{2,4})/i),
+    data2: dataDe(/data\s+do\s+2[ºo°]?\s*leil[ãa]o\s*[-–:]?\s*(\d{2})\/(\d{2})\/(\d{2,4})/i),
+  };
+}
+
 // Extrai a URL do "Baixar edital e anexos". O controle da Caixa NÃO é um <a href>
 // simples (diagnóstico: âncoras com pdf/edital no href = []); vem via onclick (ex.:
 // window.open('/editais/...pdf')) ou action de <form>. Esta função RODA NO NAVEGADOR
@@ -195,12 +212,12 @@ async function buscarCandidatos() {
   const out = [];
   while (out.length < LIMITE) {
     const { data, error } = await supabase.from('imoveis_leilao')
-      .select('id, link_edital, url_lote, ficha_cef')
+      .select('id, link_edital, url_lote, ficha_cef, valor_minimo, valor_avaliacao, valor_minimo_2')
       .eq('fonte', 'CEF').eq('ativo', true)
-      // Precisa de enriquecimento se falta a DATA, o EDITAL REAL (PDF em /editais/)
-      // ou a FICHA técnica. Uma única visita à página captura os três (data +
-      // edital + ficha), sem custo extra.
-      .or('data_leilao.is.null,link_edital.is.null,link_edital.not.ilike.*/editais/*,ficha_cef.is.null')
+      // Precisa de enriquecimento se falta a DATA, o EDITAL REAL (PDF em /editais/),
+      // a FICHA técnica OU a 2ª PRAÇA (valor_minimo_2). Uma única visita à página
+      // captura tudo (data + 2ª praça + edital + ficha), sem custo extra.
+      .or('data_leilao.is.null,link_edital.is.null,link_edital.not.ilike.*/editais/*,ficha_cef.is.null,valor_minimo_2.is.null')
       .not('modalidade', 'ilike', '%venda%direta%')
       .not('url_lote', 'is', null)
       .order('enriquecido_em', { ascending: true, nullsFirst: true })
@@ -259,8 +276,18 @@ async function main() {
       } else {
         errosSeguidos = 0;
         const patch = { enriquecido_em: new Date().toISOString() };
-        const d = extrairDataLeilao(txt);
+        // 2ª PRAÇA (SFI/extrajudicial): captura valor + data da 1ª e 2ª praça na MESMA
+        // visita. A 1ª praça continua em data_leilao/valor_minimo (do CSV); a 2ª (quase
+        // sempre a oportunidade real, mais barata) vai para data_leilao_2/valor_minimo_2.
+        const pr = extrairPracasCEF(txt);
+        const d = pr.data1 || extrairDataLeilao(txt);
         if (d) { patch.data_leilao = d; ok++; } else semData++;
+        if (pr.data2) patch.data_leilao_2 = pr.data2;
+        // Só grava a 2ª praça se for MENOR que a avaliação e diferente da 1ª (senão é
+        // leilão de praça única e não há 2ª praça real).
+        if (pr.valor2 && pr.valor2 !== pr.valor1 && (!im.valor_avaliacao || pr.valor2 < Number(im.valor_avaliacao))) {
+          patch.valor_minimo_2 = pr.valor2;
+        }
         // Best-effort ADICIONAL: captura o link do edital/anexos. Só grava quando
         // acha algo confiável E o registro ainda não tem link_edital — nunca
         // sobrescreve um valor bom com null. Não interfere na data nem no disjuntor.

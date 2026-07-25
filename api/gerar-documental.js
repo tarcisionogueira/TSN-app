@@ -37,6 +37,15 @@ function sb(path, opts = {}) {
     headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json', ...(opts.headers || {}) },
   });
 }
+// LOG DE ATIVIDADE (Cliente 360) — best-effort, nunca bloqueia. Antes só o mercado
+// registrava; sem isto, falhas do DOCUMENTAL ficavam invisíveis no Cliente 360.
+async function logAtividade(userId, evento, detalhe, meta) {
+  try {
+    if (!userId) return;
+    await sb('rpc/registrar_atividade', { method: 'POST', body: JSON.stringify({
+      p_user_id: userId, p_evento: evento, p_detalhe: detalhe || null, p_meta: meta || {} }) });
+  } catch { /* log é best-effort */ }
+}
 // O agente que aprende com os relatórios SINALIZA anomalias (ex.: CNJ sem retorno) para a
 // verificação de saúde — sem custo, sem gerar relatório. Idempotente por (tipo, imóvel).
 async function registrarAnomalia(tipo, fonte, imovelId, campo, detalhe) {
@@ -546,7 +555,32 @@ export default async function handler(req, res) {
   })();
 
   const base = { user_id: ownerId, imovel_id: String(imovelId), titulo: titulo || im.endereco || null, cidade: im.cidade || null, estado: im.estado || null, imovel: imovel || null, inputs: body.inputs || null, data_leilao: dataLeilao };
-  await upsertDoc({ ...base, status: 'gerando', erro: null, result: null });
+
+  // PRESERVAÇÃO DE RELATÓRIO (raiz do "relatório sumiu"): carrega o result ANTERIOR.
+  // Uma REGERAÇÃO cuja leitura de documentos falhe transitoriamente (teto Bright Data,
+  // 403 da Caixa, URL assinada expirada) NÃO pode rebaixar um parecer BOM já emitido
+  // para o estado "faltam documentos". Guardamos o anterior e, nos GATES de semDocs
+  // abaixo, se já havia um relatório bom, ele é preservado em vez de sobrescrito.
+  let resultadoAnterior = null;
+  try {
+    const [ant] = await (await sb(`analises_documental?user_id=eq.${ownerId}&imovel_id=eq.${encodeURIComponent(String(imovelId))}&select=result&limit=1`)).json();
+    resultadoAnterior = ant?.result || null;
+  } catch { /* best-effort */ }
+  const tinhaRelatorioBom = !!(resultadoAnterior && typeof resultadoAnterior === 'object'
+    && !resultadoAnterior.precisaDocumentos && typeof resultadoAnterior.parecer === 'string'
+    && resultadoAnterior.parecer.trim().length > 200);
+  // Se já havia um relatório BOM, uma regeração que leu 0 docs preserva o parecer,
+  // para o loop (regen_motivo=null) e loga a anomalia. Retorna o result preservado.
+  const preservarSeBom = async (faltandoAgora) => {
+    if (!tinhaRelatorioBom) return null;
+    await upsertDoc({ ...base, status: 'concluida', erro: null, result: resultadoAnterior, regen_motivo: null });
+    registrarAnomalia('documental_regen_leitura_zero', row?.fonte, imovelId, 'documentos',
+      `Regeração leu 0 documentos (faltaria: ${(faltandoAgora || []).join(', ')}); relatório anterior PRESERVADO (não rebaixado a "faltam documentos").`).catch(() => {});
+    return resultadoAnterior;
+  };
+
+  // Mantém o result ANTERIOR visível durante a regeração (não zera o relatório bom).
+  await upsertDoc({ ...base, status: 'gerando', erro: null, result: resultadoAnterior });
 
   // Orçamento da fase de COLETA (leitura de docs + CNJ): capado em 165s para SOBRAR
   // tempo para a IA (extração) + consultas de fontes + gravação, tudo dentro do
@@ -749,7 +783,9 @@ export default async function handler(req, res) {
       // sozinha (emCaptura): aí o cron re-roda a geração e, com a matrícula já baixada, emite o
       // laudo completo e o vício some. Quando NÃO auto-resolve (anexar manual), fica null (estado
       // final — sem gastar IA à toa).
+      { const _pres = await preservarSeBom(semDocs.faltando); if (_pres) return _pres; }
       await upsertDoc({ ...base, status: 'concluida', erro: null, result: semDocs, regen_motivo: emCaptura ? 'matricula_nao_lida' : null });
+      await logAtividade(ownerId, 'relatorio_documental_faltam_docs', String(semDocs.motivo || '').slice(0, 180), { imovel_id: String(imovelId), faltando: semDocs.faltando });
       // APRENDIZADO PERSISTENTE (sobrevive à regeração, que sobrescreve o result):
       // se TÍNHAMOS o(s) documento(s) no bucket e a leitura voltou 0, é falha de
       // LEITURA (arquivo ilegível/assinatura, não "doc ainda não capturado"). Registra
@@ -1266,7 +1302,9 @@ export default async function handler(req, res) {
       // sozinha (emCaptura): aí o cron re-roda a geração e, com a matrícula já baixada, emite o
       // laudo completo e o vício some. Quando NÃO auto-resolve (anexar manual), fica null (estado
       // final — sem gastar IA à toa).
+      { const _pres = await preservarSeBom(semDocs.faltando); if (_pres) return _pres; }
       await upsertDoc({ ...base, status: 'concluida', erro: null, result: semDocs, regen_motivo: emCaptura ? 'matricula_nao_lida' : null });
+      await logAtividade(ownerId, 'relatorio_documental_faltam_docs', String(semDocs.motivo || '').slice(0, 180), { imovel_id: String(imovelId), faltando: semDocs.faltando });
       // APRENDIZADO PERSISTENTE (sobrevive à regeração, que sobrescreve o result):
       // se TÍNHAMOS o(s) documento(s) no bucket e a leitura voltou 0, é falha de
       // LEITURA (arquivo ilegível/assinatura, não "doc ainda não capturado"). Registra
@@ -1335,6 +1373,7 @@ export default async function handler(req, res) {
       modalidade_indefinida: !im.modalidade,
     };
     await upsertDoc({ ...base, status: 'concluida', erro: null, result, regen_motivo: vicioRegen(qualDoc), regen_em: new Date().toISOString() });
+    await logAtividade(ownerId, 'relatorio_documental_ok', `Documental concluído (risco ${result.nivelRisco || '?'})`, { imovel_id: String(imovelId), nivelRisco: result.nivelRisco, alertasAntifraude: (result.antifraude?.alertas || []).length });
     // Cobra o CRÉDITO quando esta geração usou crédito (cota mensal esgotada). Só aqui, no
     // sucesso REAL (com laudo) — os caminhos de "faltam documentos" estornam a cota e não
     // cobram. Débito = custo real medido × multiplicador; nunca negativa (já pré-autorizado).
@@ -1563,6 +1602,7 @@ export default async function handler(req, res) {
     const timeout = String(e?.message) === 'tempo_limite' || /abort|timed? *out|timeout/i.test(String(e?.message));
     const msg = timeout ? 'A geração excedeu o tempo limite do servidor. Costuma ser temporário: tente novamente.' : String(e?.message || e);
     await upsertDoc({ ...base, status: 'erro', erro: msg });
+    await logAtividade(ownerId, 'relatorio_documental_erro', msg.slice(0, 180), { imovel_id: String(imovelId), timeout });
     // Estorna a cota consumida (não cobra por análise que falhou).
     if (cota && cota.ok && cota.tipo) {
       try { await sb('rpc/estornar_documental_por', { method: 'POST', body: JSON.stringify({ p_user_id: user.id, p_tipo: cota.tipo }) }); } catch { /* estorno best-effort */ }

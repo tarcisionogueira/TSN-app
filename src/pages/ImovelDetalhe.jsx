@@ -760,6 +760,7 @@ export default function ImovelDetalhe() {
           descontoPercentual: data.desconto_percentual, areaM2: data.area_m2, descricao: data.descricao,
           urlLote: data.url_lote || data.link_edital || data.link_regras_venda, linkEdital: data.link_edital, linkMatricula: data.link_matricula, linkRegrasVenda: data.link_regras_venda,
           foto: data.link_foto, leiloeiro: data.leiloeiro, dataLeilao: data.data_leilao,
+          valorMinimo2: data.valor_minimo_2 ?? null, dataLeilao2: data.data_leilao_2 ?? null,
           pagamento: [data.forma_pagamento], fonte: data.fonte, fonteId: data.fonte_id,
           numeroEdital: data.numero_edital, numeroMatricula: data.numero_matricula,
           numeroProcesso: data.numero_processo, anexos: data.anexos || null, enriquecidoEm: data.enriquecido_em,
@@ -1174,9 +1175,20 @@ export default function ImovelDetalhe() {
               </h2>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 16 }}>
                 <div style={{ background: '#f8fafc', borderRadius: 12, padding: '16px' }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Lance mínimo</div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>{imovel.valorMinimo2 ? 'Lance mínimo (1ª praça)' : 'Lance mínimo'}</div>
                   <div style={{ fontSize: 22, fontWeight: 900, color: '#111111' }}>{fmtBRL(imovel.valorMinimo)}</div>
+                  {imovel.valorMinimo2 && imovel.dataLeilao && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>a partir de {fmtData(imovel.dataLeilao, imovel.modalidade)}</div>}
                 </div>
+                {imovel.valorMinimo2 && (
+                  <div style={{ background: '#dcfce7', borderRadius: 12, padding: '16px' }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#15803d', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Lance mínimo (2ª praça)</div>
+                    <div style={{ fontSize: 22, fontWeight: 900, color: '#15803d' }}>{fmtBRL(imovel.valorMinimo2)}</div>
+                    <div style={{ fontSize: 11, color: '#15803d', marginTop: 4 }}>
+                      {imovel.valorAvaliacao > 0 && `${Math.round((1 - imovel.valorMinimo2 / imovel.valorAvaliacao) * 100)}% abaixo da avaliação`}
+                      {imovel.dataLeilao2 && ` · ${fmtData(imovel.dataLeilao2, imovel.modalidade)}`}
+                    </div>
+                  </div>
+                )}
                 {imovel.valorAvaliacao && (
                   <div style={{ background: '#f8fafc', borderRadius: 12, padding: '16px' }}>
                     <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Avaliação</div>
@@ -1257,8 +1269,14 @@ export default function ImovelDetalhe() {
               </h2>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <Clock size={16} color="#64748b" />
-                <span style={{ fontSize: 15, fontWeight: 600, color: '#334155' }}>{fmtData(imovel.dataLeilao, imovel.modalidade)}</span>
+                <span style={{ fontSize: 15, fontWeight: 600, color: '#334155' }}>{fmtData(imovel.dataLeilao, imovel.modalidade)}{imovel.valorMinimo2 ? ' (1ª praça)' : ''}</span>
               </div>
+              {imovel.valorMinimo2 && imovel.dataLeilao2 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
+                  <Clock size={16} color="#15803d" />
+                  <span style={{ fontSize: 15, fontWeight: 600, color: '#15803d' }}>{fmtData(imovel.dataLeilao2, imovel.modalidade)} (2ª praça · {fmtBRL(imovel.valorMinimo2)})</span>
+                </div>
+              )}
               {!imovel.dataLeilao && (
                 <div style={{ fontSize: 12.5, color: '#64748b', marginTop: 8, lineHeight: 1.5, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px 12px' }}>
                   ℹ️ {explicacaoData(imovel.modalidade)}

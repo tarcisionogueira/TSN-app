@@ -26,6 +26,14 @@ function sb(path, opts = {}) {
     headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json', ...(opts.headers || {}) },
   });
 }
+// LOG DE ATIVIDADE (Cliente 360) — best-effort. Dá visibilidade a falhas do LAUDO.
+async function logAtividade(userId, evento, detalhe, meta) {
+  try {
+    if (!userId) return;
+    await sb('rpc/registrar_atividade', { method: 'POST', body: JSON.stringify({
+      p_user_id: userId, p_evento: evento, p_detalhe: detalhe || null, p_meta: meta || {} }) });
+  } catch { /* best-effort */ }
+}
 async function upsertLaudo(row) {
   await sb('analises_laudo?on_conflict=user_id,imovel_id', {
     method: 'POST',
@@ -297,6 +305,7 @@ export default async function handler(req, res) {
       tem_lacunas_criticas: Array.isArray(cq.lacunasCriticas) && cq.lacunasCriticas.length > 0,
     };
     await upsertLaudo({ ...baseRow, status: 'concluida', erro: null, result, regen_motivo: vicioRegen(qualLaudo), regen_em: new Date().toISOString() });
+    await logAtividade(ownerId, 'relatorio_laudo_ok', `Laudo de viabilidade: ${result.veredito}`, { imovel_id: String(imovelId), veredito: result.veredito });
     await aprenderNaEmissao(sb, { agente: 'laudo', imovel: { id: imovelId, cidade: im.cidade, estado: im.estado, tipo: im.tipo, modalidade: imovel?.modalidade },
       corpus: { veredito: result.veredito, confianca_mercado: cq.confiancaMercadologico ?? null, confianca_documental: cq.confiancaDocumental ?? null },
       qualidade: qualLaudo });
@@ -308,6 +317,7 @@ export default async function handler(req, res) {
     const timeout = String(e?.message) === 'tempo_limite';
     const msg = timeout ? 'A geração excedeu o tempo limite do servidor. Costuma ser temporário: tente novamente.' : String(e?.message || e);
     await upsertLaudo({ ...baseRow, status: 'erro', erro: msg });
+    await logAtividade(ownerId, 'relatorio_laudo_erro', msg.slice(0, 180), { imovel_id: String(imovelId), timeout });
     res.status(timeout ? 504 : 500).json({ error: timeout ? 'Tempo limite ao gerar o laudo' : 'Falha ao gerar o laudo de viabilidade', detalhe: msg });
   }
 }
