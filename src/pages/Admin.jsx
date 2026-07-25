@@ -537,19 +537,19 @@ function EbooksTab() {
                 ) : (
                   <div style={{ width: 60, height: 90, borderRadius: 6, border: '1px dashed #cbd5e1', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: 20, flexShrink: 0 }}>📖</div>
                 )}
-                <div style={{ flex: 1 }}>
+                <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   <UploadMidia kind="capa" onDone={url => setForm({ ...form, capa_url: url })} />
-                  <input style={{ ...S.input, marginTop: 8 }} value={form.capa_url || ''} onChange={e => setForm({ ...form, capa_url: e.target.value })} placeholder="ou cole uma URL de imagem" />
+                  {form.capa_url && <button type="button" onClick={() => setForm({ ...form, capa_url: '' })} style={{ ...S.btn('outline'), padding: '6px 10px', fontSize: 11 }}>Remover</button>}
                 </div>
               </div>
             </div>
             <div style={{ marginBottom: 14 }}>
-              <label style={S.label}>Arquivo do eBook (PDF) — abre no leitor estilo Kindle</label>
+              <label style={S.label}>Arquivo do eBook (PDF) — anexado e armazenado no sistema; abre no leitor estilo Kindle</label>
               <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
                 <UploadMidia kind="pdf" onDone={url => setForm({ ...form, arquivo_url: url })} />
-                {form.arquivo_url && <span style={{ fontSize: 12, color: '#059669', fontWeight: 700 }}>✓ arquivo definido</span>}
+                {form.arquivo_url && <span style={{ fontSize: 12, color: '#059669', fontWeight: 700 }}>✓ arquivo anexado</span>}
+                {form.arquivo_url && <button type="button" onClick={() => setForm({ ...form, arquivo_url: '' })} style={{ ...S.btn('outline'), padding: '6px 10px', fontSize: 11 }}>Remover</button>}
               </div>
-              <input style={{ ...S.input, marginTop: 8 }} value={form.arquivo_url || ''} onChange={e => setForm({ ...form, arquivo_url: e.target.value })} placeholder="ou cole uma URL de PDF (Drive etc.)" />
             </div>
             <div style={{ marginBottom: 16 }}>
               <PlanosGratisSelector valor={form.planos_gratis} onChange={v => setForm({ ...form, planos_gratis: v })} />
