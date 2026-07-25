@@ -1,5 +1,11 @@
 * { box-sizing: border-box; }
 body { font-family: 'Inter', sans-serif; background: #f1f5f9; margin: 0; }
+/* Trava a ROLAGEM/ZOOM HORIZONTAL no mobile: se algum elemento passar da largura da tela,
+   o celular fazia "zoom out" e a tela vinha desformatada (menu ☰ cortado). `overflow-x: clip`
+   no container do app impede isso SEM criar scroll container — o header `position: sticky`
+   continua funcionando (ao contrário de `hidden`). Tabelas largas (Admin) têm scroll próprio
+   (overflow-x:auto no wrapper), então não são afetadas. */
+#root { overflow-x: clip; }
 @media print {
   @page { margin: 8mm; size: A4 portrait; }
   body, html { background: white !important; margin: 0 !important; padding: 0 !important; }
