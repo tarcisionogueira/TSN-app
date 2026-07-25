@@ -111,6 +111,16 @@
 - **Leitor (`EbookPage.jsx`):** `isPdf` passou a casar `.pdf` seguido de `?`/`#`/fim (a URL ASSINADA termina em `?token=...`) — senão o leitor não reconheceria o PDF do Storage.
 - **Ação do dono:** as capas ATUAIS (links do Drive) continuam em branco até **reenviar a imagem** pelo Admin (Membros → editar e-book/curso → “Enviar imagem (PNG/JPG)”). O mesmo para trocar o PDF pelo upload.
 
+## ✅ COMEÇAR AQUI (25/07 — sessão 15: painel de Assinaturas mostrava tudo 0)
+> Deploy `main`. Build (vite) OK. O dono: Financeiro › Assinaturas mostrava 0 assinantes/0 pagantes e todos os status zerados, mesmo havendo usuários grátis E pagos.
+
+- **Raiz (erro de API silenciado):** `AbaAssinaturas` (`src/pages/AdminFinanceiro.jsx`) fazia `perfis.select('… email …')`, mas `perfis` **NÃO tem coluna `email`** (fica em auth.users) → PostgREST 400 → `data=null` → 0 em tudo. O `.then` não checava `error`.
+- **2º bug:** o `select` não trazia `role` e `statusAssinante` classificava "pago" por `p.plano` — mas `plano` é **sempre 'gratuito'** (default legado); o tier real está no `role` (top2/assessorado/clube + anuais). Então todos cairiam em "grátis".
+- **3º bug:** o filtro `.in('role', ['explorador','top2','assessorado','clube'])` **excluía os anuais** (top2_anual etc.).
+- **Fix:** removido `email` do select; adicionado `role`; filtro passou a `ROLES_ASSINANTE` (explorador + 6 tiers pagos mensais/anuais); `.then` agora checa `error` (console.error); `statusAssinante` classifica pago por `role` (ou plano); lista mostra o tier por `role` (`TIER_LABEL`) em vez do enganoso `plano='gratuito'`; nome de exibição sem o `email` inexistente.
+- **Dados reais (17 perfis):** 12 explorador (grátis) · 2 assessorado + 2 top2 (pagos, não inadimplentes → em dia) · 1 admin (interno, fora da lista). **Esperado no painel:** 16 assinantes · 4 pagantes · 12 grátis · 4 em dia.
+- **Obs.:** Pausado/Teste seguem 0 até plugar o status da assinatura no Asaas/MP (ainda sem campo próprio). A coluna `perfis.plano` está órfã (sempre 'gratuito') — candidata a limpeza/uso futuro.
+
 ## 📋 PRÓXIMOS PASSOS / PENDÊNCIAS (revisão 25/07 — para resolver com o dono)
 
 **A) Posso tocar (alguns precisam de go-ahead por custo/CI):**

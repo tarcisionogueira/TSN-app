@@ -12,6 +12,16 @@ const fmt = (v) => Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigit
 // inativa. Pausado/Teste grátis: hoje sem campo próprio — virão do status da
 // assinatura no Asaas (por ora ficam zerados, prontos p/ o dado). Grátis = Explorador.
 const PLANOS_PAGOS = ['top2', 'top2_anual', 'assessorado', 'assessorado_anual', 'clube', 'clube_anual'];
+// Papéis que são ASSINANTES (cliente): grátis (explorador) + todos os tiers pagos, mensais e
+// ANUAIS. Papéis internos (admin/analista/advogado/consultor/afiliado/leiloeiro) ficam de fora.
+const ROLES_ASSINANTE = ['explorador', ...PLANOS_PAGOS];
+// Rótulo do tier a partir do `role` (a coluna `plano` é sempre 'gratuito' e enganaria).
+const TIER_LABEL = {
+  explorador: 'Explorador (grátis)',
+  top2: 'Investidor Pro', top2_anual: 'Investidor Pro (anual)',
+  assessorado: 'Assessoria', assessorado_anual: 'Assessoria (anual)',
+  clube: 'Leilão Club', clube_anual: 'Leilão Club (anual)',
+};
 const DIAS_ATRASO_MAX = Number(20); // ≤ este nº de dias inadimplente = "em atraso"; acima = "vencida"
 
 const STATUS_ASSIN = {
@@ -25,7 +35,9 @@ const STATUS_ASSIN = {
 
 function statusAssinante(p) {
   if (p.ativo === false) return 'cancelada';
-  const pago = PLANOS_PAGOS.includes(p.plano);
+  // O TIER pago é a fonte de verdade no `role` (top2/assessorado/clube e anuais); a coluna
+  // `plano` hoje fica sempre 'gratuito' (default legado). Considera pago por role OU plano.
+  const pago = PLANOS_PAGOS.includes(p.role) || PLANOS_PAGOS.includes(p.plano);
   if (!pago) return 'gratis'; // Explorador / sem plano pago (não é assinatura ativa)
   if (p.inadimplente_desde) {
     const dias = Math.floor((Date.now() - new Date(p.inadimplente_desde).getTime()) / 86400000);
@@ -316,11 +328,18 @@ export function AbaAssinaturas() {
   const [filtro, setFiltro] = useState(null);
 
   useEffect(() => {
+    // `perfis` NÃO tem coluna `email` (o e-mail fica em auth.users) — incluí-la fazia o
+    // PostgREST devolver 400 e, sem checar `error`, o painel mostrava tudo 0. `role` é
+    // necessário para classificar o tier (a coluna `plano` é sempre 'gratuito').
     supabase.from('perfis')
-      .select('id, nome, email, plano, plano_ciclo, plano_vencimento, plano_pago_em, inadimplente_desde, ativo, created_at')
-      .in('role', ['explorador', 'top2', 'assessorado', 'clube'])
+      .select('id, nome, role, plano, plano_ciclo, plano_vencimento, plano_pago_em, inadimplente_desde, ativo, created_at')
+      .in('role', ROLES_ASSINANTE)
       .order('created_at', { ascending: false })
-      .then(({ data }) => { setAssinantes((data || []).map(p => ({ ...p, _status: statusAssinante(p) }))); setLoading(false); });
+      .then(({ data, error }) => {
+        if (error) console.error('[assinaturas] erro ao ler perfis:', error.message);
+        setAssinantes((data || []).map(p => ({ ...p, _status: statusAssinante(p) })));
+        setLoading(false);
+      });
   }, []);
 
   const dataBR = (d) => d ? new Date(d).toLocaleDateString('pt-BR') : '—';
@@ -361,8 +380,8 @@ export function AbaAssinaturas() {
           return (
             <div key={a.id} style={{ padding: '14px 22px', borderBottom: '1px solid #f8fafc', display: 'flex', alignItems: 'center', gap: 12 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 14, fontWeight: 600, color: '#111', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.nome || a.email || '—'}</div>
-                <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>{a.plano || 'sem plano'}{a.plano_ciclo ? ` · ${a.plano_ciclo}` : ''}</div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: '#111', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.nome || '—'}</div>
+                <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>{TIER_LABEL[a.role] || a.plano || 'sem plano'}{a.plano_ciclo ? ` · ${a.plano_ciclo}` : ''}</div>
               </div>
               <div style={{ textAlign: 'right', fontSize: 11.5, color: '#64748b', minWidth: 92 }}>
                 <div>vence {dataBR(a.plano_vencimento)}</div>
