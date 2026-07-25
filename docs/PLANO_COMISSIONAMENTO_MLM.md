@@ -266,3 +266,34 @@ alinha pagamento a mérito de construção. ✅
    (0 uplines) → migração de risco ~zero.
 3. Front (fase 2): mostrar rank + progresso ("faltam X diretos para Fundador") na aba Parceiros/Minha Rede.
 4. Cron mensal: `recalcular_ranks()` + `distribuir_pool_rank()` (go-live do pool).
+
+### 12.6 Ajuste 25/07 (tarde) — venda direta = mesmo % por produto? + catálogo enxuto
+**Decisões do dono nesta rodada:**
+- **`pacote` (Pacote de Cursos R$ 497) REMOVIDO** do `planos_config` (0 dependências — nenhum perfil,
+  cobrança, contrato ou histórico apontava p/ ele). Serão criados **produtos individuais** depois
+  (novo catálogo de produtos digitais — modelar tabela `produtos` quando chegar a hora).
+- **Assessoria (R$ 6.000)** e **Leilão Club (R$ 60.000)** ficam. Racional do dono: a **IA transformou
+  o trabalho manual em margem**; advogados/peritos são pagos pelos **10% de honorário de êxito, que
+  NÃO são repassados/comissionados**; o Leilão Club terá **cursos que o próprio dono ensina** (produto
+  real). Logo a **entrada é praticamente margem** → dá p/ comissionar generosamente. Filosofia:
+  *"quanto mais gente na plataforma e todos ganhando bem, melhor."*
+
+**Resposta à pergunta "venda direta é o mesmo % em tudo?":** SIM — modelo **unificado** nos 3 produtos
+pagos (Investidor Pro, Assessoria, Leilão Club), mesma escala de venda direta + mesmo repasse
+multinível (§12.2). O **alto ticket** já torna o valor absoluto atrativo (é o incentivo p/ vender).
+**Duas travas obrigatórias:**
+1. **Base de comissão = valor de ENTRADA.** Honorário de êxito (10%) e recarga **fora** da base.
+2. **Cadência do Leilão Club** (comissão **uma vez na venda** vs **recorrente**) precisa ser confirmada
+   antes do go-live — num ticket de R$ 60k a diferença é enorme (recorrente comporia demais).
+
+**Catálogo pago atual (base de comissão = entrada):**
+| Produto | key | Entrada | Venda direta (10%→15% p/ faixa) | Multinível (até 10%) | Máx. total 25% |
+|---|---|--:|--:|--:|--:|
+| Investidor Pro | `top2` | R$ 89,90/mês | R$ 8,99 → 13,49 | até R$ 8,99 | R$ 22,48 |
+| Assessoria | `assessorado` | R$ 6.000 | R$ 600 → 900 | até R$ 600 | R$ 1.500 |
+| Leilão Club | `clube` | R$ 60.000 | R$ 6.000 → 9.000 | até R$ 6.000 | R$ 15.000 |
+
+**Conflito a resolver na migração:** hoje `planos_config.comissao_pct` = **10%** em top2/assessorado/clube
+(um "flat 10%" por plano) que **não conversa** com os trilhos `comissao_regras` (multinível). O **novo
+modelo (venda direta escalonada + repasse por distância com trava de profundidade) SUBSTITUI** o flat
+10%; a migração deve zerar/realinhar `comissao_pct` p/ não pagar por dois caminhos.
