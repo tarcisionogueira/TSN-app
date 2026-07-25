@@ -92,14 +92,20 @@ export default async function handler(req) {
         return r.ok ? await r.json().catch(() => []) : [];
       } catch { return []; }
     };
+    // Defesa em LEITURA anti-leilão (a base já é limpa na gravação; isto cobre legado):
+    // exclui comparáveis cuja fonte indica leilão/Caixa — não entram na lista nem no gráfico.
+    const FONTE_LEILAO = /leil[ãa]o|arremat|hasta.?p[uú]bl|\bcef\b|caixa\s*econ|aliena[çc]|extrajud|retomad|venda\s*direta|megaleil|zukerman|foreclos/i;
+    const semLeilao = (arr) => (Array.isArray(arr) ? arr : []).filter(a => !FONTE_LEILAO.test(String(a.fonte || '')));
     const filtro = `cidade_norm=eq.${encodeURIComponent(cidadeNorm)}&uf=eq.${uf}&tipo=eq.${encodeURIComponent(tipo)}`;
-    const [amostras, amostrasVenda] = await Promise.all([
-      restGet(`${filtro}&select=especie,valor_m2,valor_total,area_m2,data_ref,fonte,criado_em&order=data_ref.desc,criado_em.desc&limit=20`),
-      restGet(`${filtro}&especie=eq.venda&valor_m2=gte.200&valor_m2=lte.50000&select=valor_m2,data_ref&order=data_ref.desc&limit=500`),
+    const [amostrasRaw, amostrasVendaRaw] = await Promise.all([
+      restGet(`${filtro}&select=especie,valor_m2,valor_total,area_m2,data_ref,fonte,criado_em&order=data_ref.desc,criado_em.desc&limit=30`),
+      restGet(`${filtro}&especie=eq.venda&valor_m2=gte.200&valor_m2=lte.50000&select=valor_m2,data_ref,fonte&order=data_ref.desc&limit=500`),
     ]);
+    const amostras = semLeilao(amostrasRaw).slice(0, 20);
+    const amostrasVenda = semLeilao(amostrasVendaRaw);
     // Agrega por ANO (mediana R$/m² de venda) — base do gráfico. Aparece com >=2 amostras/ano.
     const porAno = {};
-    for (const a of (Array.isArray(amostrasVenda) ? amostrasVenda : [])) {
+    for (const a of amostrasVenda) {
       const y = String(a.data_ref || '').slice(0, 4);
       if (/^\d{4}$/.test(y) && Number(a.valor_m2) > 0) (porAno[y] ||= []).push(Number(a.valor_m2));
     }

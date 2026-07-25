@@ -64,6 +64,9 @@ Retorne SOMENTE JSON válido, sem texto fora do JSON:
 
 // Monta as amostras (venda e locação) no formato do ingerir_amostras_indice, com fonte_ref
 // determinístico (dedup entre re-buscas): regiao|tipo|natureza|valorM2|area.
+// Guarda DETERMINÍSTICA anti-leilão (o LLM às vezes inclui um comparável de leilão/Caixa
+// apesar do prompt; o preço fica 30–60% abaixo e contamina o índice). Barra pela fonte.
+const FONTE_LEILAO = /leil[ãa]o|arremat|hasta.?p[uú]bl|\bcef\b|caixa\s*econ|aliena[çc]|extrajud|retomad|venda\s*direta|megaleil|zukerman|foreclos/i;
 function montarAmostras(mercado, ctx) {
   const out = [];
   const base = { cidade_norm: ctx.cidadeNorm, uf: ctx.uf, bairro_norm: ctx.bairroNorm || null, lat: ctx.lat, lng: ctx.lng, tipo: ctx.tipo, origem: 'pesquisa_web' };
@@ -72,12 +75,12 @@ function montarAmostras(mercado, ctx) {
     const bloco = mercado?.[`nivel${nivel}`] || {};
     for (const v of (bloco.vendas || [])) {
       const vm = Number(v?.valorM2);
-      if (vm > 0) out.push({ ...base, natureza: 'venda', valor_m2: vm, area_m2: v?.area || null, nivel, data_anuncio: dataOk(v?.data),
+      if (vm > 0 && !FONTE_LEILAO.test(String(v?.fonte || ''))) out.push({ ...base, natureza: 'venda', valor_m2: vm, area_m2: v?.area || null, nivel, data_anuncio: dataOk(v?.data),
         fonte_ref: `web|${ctx.cidadeNorm}|${ctx.tipo}|venda|${Math.round(vm)}|${Math.round(Number(v?.area) || 0)}|${dataOk(v?.data) || ''}` });
     }
     for (const l of (bloco.locacoes || [])) {
       const am = Number(l?.aluguelM2);
-      if (am > 0 && am < 500) out.push({ ...base, natureza: 'locacao', valor_m2: am, area_m2: l?.area || null, nivel, data_anuncio: dataOk(l?.data),
+      if (am > 0 && am < 500 && !FONTE_LEILAO.test(String(l?.fonte || ''))) out.push({ ...base, natureza: 'locacao', valor_m2: am, area_m2: l?.area || null, nivel, data_anuncio: dataOk(l?.data),
         fonte_ref: `web|${ctx.cidadeNorm}|${ctx.tipo}|locacao|${am}|${Math.round(Number(l?.area) || 0)}|${dataOk(l?.data) || ''}` });
     }
   }

@@ -184,6 +184,13 @@ async function lerIndiceBidPro(imDb, segmento = 'apartamento') {
   } catch { return null; }
 }
 
+// Guarda DETERMINÍSTICA anti-leilão: mesmo o prompt mandando descartar leilão, o LLM às
+// vezes inclui um comparável de leilão/Caixa (ex.: "LeilaoImovel / CEF", "... / CEF"),
+// cujo preço fica 30–60% abaixo e CONTAMINA o índice (derruba o R$/m² da região). Aqui
+// barramos pela FONTE antes de gravar — não confia só no prompt.
+const FONTE_LEILAO = /leil[ãa]o|arremat|hasta.?p[uú]bl|\bcef\b|caixa\s*econ|aliena[çc]|extrajud|retomad|venda\s*direta|megaleil|zukerman|foreclos/i;
+const ehFonteLeilao = (f) => FONTE_LEILAO.test(String(f || ''));
+
 // Grava as amostras DATADAS deste relatório em indice_amostra (base da valorização por
 // ano e da recência real). Só residencial, poison-resistente (dados da pesquisa). O prompt
 // já descarta leilão das amostras → arremate NUNCA entra aqui. Dedup pelo índice único.
@@ -198,14 +205,14 @@ async function gravarAmostrasIndice(imDb, mercado, imovelId, segmento = 'apartam
     const rows = [];
     for (const s of vendas) {
       const m2 = Number(s?.valorM2);
-      if (!(m2 >= 200 && m2 <= 50000)) continue;
+      if (!(m2 >= 200 && m2 <= 50000) || ehFonteLeilao(s?.fonte)) continue;
       rows.push({ cidade_norm: imDb.cidade_norm, uf, bairro_norm: '', geo_grid: '', tipo: segmento,
         especie: 'venda', valor_m2: Math.round(m2), valor_total: Number(s?.valor) || null, area_m2: Number(s?.m2) || null,
         data_ref: dref(s?.data), fonte: (s?.fonte ? String(s.fonte).slice(0, 200) : null), origem: 'relatorio', imovel_id: String(imovelId || '') });
     }
     for (const s of locs) {
       const mensal = Number(s?.valorMensal); const area = Number(s?.m2);
-      if (!(mensal > 0)) continue;
+      if (!(mensal > 0) || ehFonteLeilao(s?.fonte)) continue;
       const vm2 = area > 0 ? Math.round((mensal / area) * 100) / 100 : null;
       rows.push({ cidade_norm: imDb.cidade_norm, uf, bairro_norm: '', geo_grid: '', tipo: segmento,
         especie: 'locacao', valor_m2: (vm2 && vm2 >= 1 && vm2 <= 1000) ? vm2 : null, valor_total: mensal, area_m2: area || null,
@@ -434,6 +441,17 @@ imóvel retomado. Esses preços ficam 30–60% abaixo do mercado e CONTAMINAM a 
 (R$/m²). Compare só com o MERCADO LIVRE de venda normal. Outlier muito abaixo dos demais, sem
 justificativa, também deve ser descartado como provável leilão disfarçado.
 
+REGRA OBRIGATÓRIA — PADRÃO DO IMÓVEL (comparar SEMELHANTE com SEMELHANTE): identifique o
+PADRÃO do imóvel avaliado — popular/econômico, médio, médio-alto, alto padrão ou luxo — a
+partir do CONDOMÍNIO/empreendimento${nomeCondominio ? ` "${nomeCondominio}"` : ''}, do endereço,
+da área e do acabamento típico da região. Use SOMENTE comparáveis do MESMO padrão: um
+condomínio FECHADO / de ALTO PADRÃO NÃO se compara a casas populares de rua (e vice-versa) —
+mesmo tipo e mesma cidade, o padrão muda o R$/m² em várias vezes. Se um comparável tiver
+R$/m² muito distante do padrão do imóvel (ex.: cerca de metade, ou o dobro), é de OUTRO
+padrão: DESCARTE. Em empreendimento de alto padrão com poucos anúncios internos, prefira
+comparáveis do MESMO padrão na cidade/região a comparáveis apenas PRÓXIMOS porém de padrão
+inferior. Informe o padrão em "consolidado.padraoImovel" e explique-o no "comentario".
+
 OBJETIVO: reunir o MÁXIMO de amostras possível. Faça várias buscas em fontes diferentes.
 
 ═══ NÍVEL 1 — COMPARATIVOS DIRETOS (mesmo condomínio/endereço) ═══
@@ -473,7 +491,7 @@ Retorne APENAS este JSON (sem markdown):
 {
   "nivel1": { "descricao": "", "vendas": [{"descricao":"","valor":0,"m2":0,"valorM2":0,"fonte":"","data":"AAAA-MM"}], "locacoes": [{"descricao":"","valorMensal":0,"fonte":"","data":"AAAA-MM"}], "precoMedioM2": 0, "precoMinM2": 0, "precoMaxM2": 0, "aluguelMedio": 0, "totalAmostras": 0, "disponiveis": true },
   "nivel2": { "descricao": "", "vendas": [{"descricao":"","valor":0,"m2":0,"valorM2":0,"fonte":"","data":"AAAA-MM"}], "locacoes": [{"descricao":"","valorMensal":0,"fonte":"","data":"AAAA-MM"}], "precoMedioM2": 0, "precoMinM2": 0, "precoMaxM2": 0, "aluguelMedio": 0, "totalAmostras": 0 },
-  "consolidado": { "precoMedioM2": 0, "aluguelMedio": 0, "yieldBruto": 0, "yieldLiquido": 0, "valorEstimadoImovel": 0, "unidadeValor": "m2_privativo|m2_construido|m2_terreno|hectare|unidade", "areaConsiderada": 0, "baseCalculo": "(explique a conta: ex.: 'R$ 10.980/m² privativo × 30 m²' ou 'R$ 45.000/ha × 120 ha terra nua + R$ 200k benfeitorias' ou 'construção 90 m² × R$ 4.000 + terreno excedente 300 m² × R$ 800')", "terrenoExcedente": { "haExcedente": false, "areaExcedenteM2": 0, "valorTerrenoExcedente": 0 }, "descontoArremate": null },
+  "consolidado": { "precoMedioM2": 0, "aluguelMedio": 0, "yieldBruto": 0, "yieldLiquido": 0, "valorEstimadoImovel": 0, "unidadeValor": "m2_privativo|m2_construido|m2_terreno|hectare|unidade", "areaConsiderada": 0, "baseCalculo": "(explique a conta: ex.: 'R$ 10.980/m² privativo × 30 m²' ou 'R$ 45.000/ha × 120 ha terra nua + R$ 200k benfeitorias' ou 'construção 90 m² × R$ 4.000 + terreno excedente 300 m² × R$ 800')", "padraoImovel": "popular|medio|medio_alto|alto|luxo", "terrenoExcedente": { "haExcedente": false, "areaExcedenteM2": 0, "valorTerrenoExcedente": 0 }, "descontoArremate": null },
   "referenciaFipeZap": { "encontrado": true, "precoMedioM2": 0, "valorizacao12m": 0, "mesReferencia": "AAAA-MM", "localidade": "", "fonte": "" },
   "zoneamento": { "encontrado": false, "zona": "", "resumoUso": "", "fonte": "", "ondeObter": "" },
   "comentario": "Análise qualitativa de 3-4 frases comparando os dois níveis, a tendência e a ADERÊNCIA da média dos anúncios ao FipeZAP (se divergirem >15%, explique por quê)."
