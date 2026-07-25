@@ -162,6 +162,15 @@
 - **(b) Migração idempotente (`aposentar_consultor_migra_parceiro.sql`, aplicada):** `role='consultor'` → `explorador` PRESERVANDO link/rede (indicado_por, codigo_indicacao) e saldo/comissões; grandfather do `parceiro_aceite_em` (mantém acesso à Minha Rede/Comissões); `vendedor_tipo consultor→afiliado`; desativa convites de consultor pendentes. Afetou **0 linhas** agora; blinda qualquer legado.
 - **Reversível:** como não havia consultores, nada mudou de fato; se um dia precisar reativar o papel, é só re-adicionar 'consultor' aos pontos acima. Policies/labels que citam 'consultor' foram MANTIDAS (não quebram nada; só não há mais quem tenha o papel).
 
+## ✅ COMEÇAR AQUI (25/07 — sessão 21: revisão LGPD dos termos frente à estrutura (MLM/rede/chargeback))
+> Deploy `main`. O dono pediu para revisar os termos/LGPD (site + aceite de pagamento + aceite de parceiro) frente à estrutura atual, para proteger a empresa.
+
+- **Lacunas encontradas:** (1) Política de Privacidade não citava o Programa de Parceiros nem que um parceiro **vê nome+cidade da rede** (compartilhamento entre usuários), a **chave PIX**, comissões e o **dossiê de chargeback (IP/dispositivo)**. (2) Termo de Parceiro cláusula 8 dizia "você não trata dados de terceiros" — desatualizada (agora visualiza a rede); cláusula 4 não refletia "em dia **na data da cobrança**".
+- **`Privacidade.jsx`:** seção 1 agora inclui chave PIX + vínculo de indicação; parágrafo novo sobre **metadados anti-fraude/chargeback** (IP/dispositivo, legítimo interesse — Art. 7º IX e Art. 10); **nova seção 4 "Programa de Parceiros e rede de indicações"** (base legal, **minimização**: parceiro vê só nome+cidade, nunca contato; **corresponsabilidade** do parceiro — Art. 42+; admin vê p/ gestão); retenção agora cita documentos de leilão arquivados. Seções renumeradas.
+- **Termo de Parceiro (`TERMO_PARCEIRO`, `HomeCliente.jsx`):** cláusula 4 reescrita (comissão devida só se em dia **na data da cobrança**; perde o mês fora de dia, recupera nos meses em dia; vínculo permanece; chargeback desconta no seguinte); cláusula 8 reescrita (vê só nome+cidade da rede, **corresponsável**, proibido usar p/ outra finalidade; metadados anti-fraude). **Versão v2→v3-2026-07.**
+- **Aceite no pagamento (Checkout):** é checkbox com links para Termos + Privacidade — como os documentos foram atualizados, o aceite já referencia a versão nova (sem mudança estrutural).
+- **Pendente (o dono decide):** papéis operacionais (advogado/leiloeiro/…) **não vendem mais** (só analista mantém função de colaborador); todos recebem via Programa de Parceiros sendo **pagantes** (link + MLM). É mudança de regra de negócio — plano a confirmar antes de mexer no papel/vendedor_tipo.
+
 ## 📋 PRÓXIMOS PASSOS / PENDÊNCIAS (revisão 25/07 — para resolver com o dono)
 
 **A) Posso tocar (alguns precisam de go-ahead por custo/CI):**
