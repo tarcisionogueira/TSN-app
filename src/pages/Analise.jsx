@@ -15,6 +15,7 @@ import { loadImoveis, saveImoveis, generateId } from '../utils/storage';
 import { useAuth } from '../contexts/AuthContext';
 import { useAnalises } from '../contexts/AnalisesContext';
 import { supabase } from '../utils/supabase';
+import { assinarAnexos } from '../utils/docUrl';
 import TabelaAmortizacao from '../components/TabelaAmortizacao';
 import { gerarPDF } from '../components/RelatorioPDF';
 import { gerarLaudoPDF } from '../components/LaudoPDF';
@@ -220,7 +221,8 @@ export default function Analise() {
         .select('id,tipo,nome,url,criado_em')
         .eq('imovel_id', idImovel)
         .in('tipo', ['matricula', 'edital', 'regras_venda', 'laudo', 'proposta', 'auto_arrematacao', 'carta_arrematacao', 'contrato_banco', 'escritura', 'boleto_sinal', 'boleto_aquisicao', 'matricula_registrada', 'outro']);
-      if (!cancel) setDocsLeiloeiro(data || []);
+      // Re-assina os docs guardados (o url gravado é signed de 1h e expira).
+      if (!cancel) setDocsLeiloeiro(await assinarAnexos(data || []));
     })();
     return () => { cancel = true; };
   }, [imovelInicial]);

@@ -8,6 +8,7 @@ import ScoreRisco from '../components/ScoreRisco';
 import { fmtBRL, fmtData, MODAL_LABEL, explicacaoData } from '../utils/format';
 import { scoreBidPro, scoreLabel } from '../utils/score';
 import { caixaMatriculaUrl, caixaRegrasVendaUrl } from '../utils/caixa';
+import { assinarAnexos } from '../utils/docUrl';
 import { formatarDescricaoImovel } from '../utils/descricao';
 import { fotoCandidatos } from '../utils/foto';
 
@@ -845,9 +846,18 @@ export default function ImovelDetalhe() {
     // Inclui 'laudo' e 'outro': leiloeiros com URL OPACA (ex.: SUPERBID) têm o
     // edital/matrícula salvos como 'outro' — sem isso o PDF capturado ficava
     // invisível e o cliente só via o link do site. Mostramos TODO doc capturado.
-    supabase.from('imovel_anexos').select('tipo,nome,url').eq('imovel_id', imovel.id)
-      .in('tipo', ['matricula', 'edital', 'regras_venda', 'laudo', 'outro']).not('storage_path', 'is', null)
-      .then(({ data }) => { if (!cancel) setAnexosDocs(data || []); });
+    (async () => {
+      const { data } = await supabase.from('imovel_anexos').select('id,tipo,nome,url').eq('imovel_id', imovel.id)
+        .in('tipo', ['matricula', 'edital', 'regras_venda', 'laudo', 'outro']).not('storage_path', 'is', null);
+      if (cancel) return;
+      const lista = Array.isArray(data) ? data : [];
+      if (!lista.length) { setAnexosDocs([]); return; }
+      // O `url` gravado é uma signed URL de 1h (gerar-documental) que EXPIRA →
+      // depois disso o link abria 404 mesmo com o arquivo salvo no bucket. Re-assina
+      // EM LOTE (uma chamada) pelo /api/doc-url; em falha mantém o url guardado.
+      const frescos = await assinarAnexos(lista);
+      if (!cancel) setAnexosDocs(frescos);
+    })();
     return () => { cancel = true; };
   }, [imovel?.id]);
 
