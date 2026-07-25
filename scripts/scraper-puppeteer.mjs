@@ -125,7 +125,7 @@ async function salvarImoveis(imoveis, fonte) {
     try {
       const { data } = await supabase
         .from('imoveis_leilao')
-        .select('fonte_id, anexos, link_matricula, link_regras_venda')
+        .select('fonte_id, anexos, link_matricula, link_regras_venda, link_edital')
         .in('fonte_id', fonteIds.slice(i, i + 150));
       for (const r of data || []) existentes.set(r.fonte_id, r);
     } catch (e) { console.log(`  [${fonte}] merge-docs lookup erro: ${String(e.message).slice(0, 80)}`); }
@@ -194,6 +194,11 @@ async function salvarImoveis(imoveis, fonte) {
       // Preserva links de documento do backfill quando o scrape do dia não os traz.
       if (prev.link_matricula && !im.link_matricula) row.link_matricula = prev.link_matricula;
       if (prev.link_regras_venda && !im.link_regras_venda) row.link_regras_venda = prev.link_regras_venda;
+      // link_edital idem: o scrape do dia (listagem) muitas vezes NÃO traz o edital (ou traz só a
+      // página do lote), enquanto a captura dedicada (ex.: matricula-cef grava o PDF do edital).
+      // Sem preservar, o scrape diário zerava o edital capturado → o nº de docs "flutuava" entre
+      // rodadas e re-baixava à toa. Agora só sobrescreve quando o dia traz um edital novo.
+      if (prev.link_edital && !im.link_edital) row.link_edital = prev.link_edital;
     }
     return row;
   });

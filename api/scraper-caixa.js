@@ -311,6 +311,33 @@ async function uploadFoto(fotoUrl, fonteId, supabaseUrl, serviceKey) {
 }
 
 async function upsertBatch(rows, supabaseUrl, serviceKey) {
+  // Preserva documentos já capturados. O CSV da Caixa NÃO traz a matrícula (link_matricula
+  // sai null) e o edital vem só às vezes (às vezes só o rótulo, não a URL). Como o upsert por
+  // (fonte,fonte_id) sobrescreve a linha, cada rodada ZERAVA o que a captura dedicada
+  // (matricula-cef) havia gravado → o nº de docs "flutuava" entre rodadas e re-baixava à toa.
+  // Aqui carregamos os links já existentes e só deixamos o CSV sobrescrever quando ele traz
+  // um valor novo (o dia é a fonte da verdade; o que ele não traz, preservamos).
+  const fonteIds = rows.map(r => r.fonte_id).filter(Boolean);
+  if (fonteIds.length) {
+    try {
+      const inList = fonteIds.join(',');
+      const r = await fetch(
+        `${supabaseUrl}/rest/v1/imoveis_leilao?fonte=eq.caixa&fonte_id=in.(${inList})&select=fonte_id,link_edital,link_regras_venda,link_matricula`,
+        { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } }
+      );
+      if (r.ok) {
+        const prevMap = new Map();
+        for (const e of await r.json()) prevMap.set(e.fonte_id, e);
+        for (const row of rows) {
+          const prev = row.fonte_id ? prevMap.get(row.fonte_id) : null;
+          if (!prev) continue;
+          if (!row.link_edital && prev.link_edital) row.link_edital = prev.link_edital;
+          if (!row.link_regras_venda && prev.link_regras_venda) row.link_regras_venda = prev.link_regras_venda;
+          if (!row.link_matricula && prev.link_matricula) row.link_matricula = prev.link_matricula;
+        }
+      }
+    } catch { /* best-effort: se a consulta falhar, segue o upsert sem preservar neste lote */ }
+  }
   const res = await fetch(
     `${supabaseUrl}/rest/v1/imoveis_leilao?on_conflict=fonte,fonte_id`,
     {
