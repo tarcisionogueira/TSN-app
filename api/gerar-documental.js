@@ -18,6 +18,7 @@ import { aprenderNaEmissao, vicioRegen } from './_aprendizado.js';
 import { consultarComunicaDJEN, consultarCNDT, consultarCNIB, consultarProtestos } from './_laudo-fontes.js';
 import { consultarCertidoesFiscais } from './_certidoes-fontes.js';
 import { geocodificarCascata, coordValida, rankNivel } from './_geo.js';
+import { urlDocumento } from './_storage.js';
 import { hostExternoSeguro } from './_allowed-hosts.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -551,8 +552,12 @@ export default async function handler(req, res) {
     };
     // 1º: anexos guardados no storage (capturados por navegador ou enviados pela equipe).
     try {
-      const manuais = await (await sb(`imovel_anexos?imovel_id=eq.${encodeURIComponent(String(imovelId))}&order=criado_em.desc&select=tipo,nome,url&limit=10`)).json();
-      for (const a of (Array.isArray(manuais) ? manuais : [])) add(a.url, a.nome || (a.tipo ? a.tipo[0].toUpperCase() + a.tipo.slice(1) : 'Anexo'), a.tipo);
+      const manuais = await (await sb(`imovel_anexos?imovel_id=eq.${encodeURIComponent(String(imovelId))}&order=criado_em.desc&select=tipo,nome,url,storage_path&limit=10`)).json();
+      // Assina SOB DEMANDA pelo storage_path: o `url` gravado é signed de 1h e
+      // EXPIRA — servi-lo direto fazia a IA falhar em ler a NOSSA cópia e cair no
+      // re-download da fonte volátil (desperdício + menos confiável). urlDocumento
+      // re-assina a cópia que já temos (economia) e cai no url legado só sem path.
+      for (const a of (Array.isArray(manuais) ? manuais : [])) add(await urlDocumento(a), a.nome || (a.tipo ? a.tipo[0].toUpperCase() + a.tipo.slice(1) : 'Anexo'), a.tipo);
     } catch { /* segue com os do lote */ }
     // 2º: anexos capturados no scrape (jsonb do lote). Leilão JUDICIAL costuma ter
     // MUITOS anexos (auto de penhora/avaliação, laudo, decisão, certidões, ata) —

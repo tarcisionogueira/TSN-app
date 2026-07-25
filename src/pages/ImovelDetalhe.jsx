@@ -8,6 +8,7 @@ import ScoreRisco from '../components/ScoreRisco';
 import { fmtBRL, fmtData, MODAL_LABEL, explicacaoData } from '../utils/format';
 import { scoreBidPro, scoreLabel } from '../utils/score';
 import { caixaMatriculaUrl, caixaRegrasVendaUrl } from '../utils/caixa';
+import { assinarAnexos } from '../utils/docUrl';
 import { formatarDescricaoImovel } from '../utils/descricao';
 import { fotoCandidatos } from '../utils/foto';
 
@@ -853,20 +854,8 @@ export default function ImovelDetalhe() {
       if (!lista.length) { setAnexosDocs([]); return; }
       // O `url` gravado é uma signed URL de 1h (gerar-documental) que EXPIRA →
       // depois disso o link abria 404 mesmo com o arquivo salvo no bucket. Re-assina
-      // na hora pelo anexo_id (o endpoint respeita o RLS). Se não houver sessão ou
-      // a assinatura falhar, cai no url guardado (melhor esforço).
-      const t = await token().catch(() => null);
-      const frescos = t ? await Promise.all(lista.map(async (a) => {
-        try {
-          const rr = await fetch('/api/doc-url', {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ anexo_id: a.id }),
-          });
-          if (rr.ok) { const { url } = await rr.json(); if (url) return { ...a, url }; }
-        } catch { /* mantém o url guardado */ }
-        return a;
-      })) : lista;
+      // EM LOTE (uma chamada) pelo /api/doc-url; em falha mantém o url guardado.
+      const frescos = await assinarAnexos(lista);
       if (!cancel) setAnexosDocs(frescos);
     })();
     return () => { cancel = true; };

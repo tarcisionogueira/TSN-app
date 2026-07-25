@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
+import { assinarAnexos } from '../utils/docUrl';
 import { apiCall } from '../utils/apiCall';
 import { useIsMobile } from '../utils/useIsMobile';
 import AgendarReuniao from '../components/AgendarReuniao';
@@ -221,7 +222,8 @@ function AnaliseAutomatica({ casoId, imovelId, relatorioInicial, onConcluido, li
       .select('id,tipo,nome,url,criado_em')
       .eq('imovel_id', imovelId)
       .in('tipo', ['matricula', 'edital', 'regras_venda', 'outro']);
-    setAnexos(data || []);
+    // Re-assina os docs guardados (o url gravado é signed de 1h e expira).
+    setAnexos(await assinarAnexos(data || []));
   }, [imovelId]);
 
   useEffect(() => { carregarAnexos(); }, [carregarAnexos]);
