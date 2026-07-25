@@ -9,6 +9,7 @@ export const config = { runtime: 'edge' };
 
 import { getUser, unauthorized } from './_auth.js';
 import { checkRateLimit, getIP, rateLimitedResponse } from './_rate-limit.js';
+import { composicaoTemporal, avisoFrescor } from './_indice-composicao.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -78,9 +79,27 @@ export default async function handler(req) {
     const pct = (arr, p) => (arr.length ? arr[Math.min(arr.length - 1, Math.floor(p * arr.length))] : null);
     const mediana = (arr) => { if (!arr.length) return null; const m = Math.floor(arr.length / 2); return arr.length % 2 ? arr[m] : Math.round((arr[m - 1] + arr[m]) / 2); };
 
+    // GRÁFICO por ano (curva) — mediana R$/m² de venda por ano, das próprias amostras.
+    // Calculado ANTES do valor: a composição temporal usa essa curva para a taxa de projeção.
+    const porAno = {};
+    for (const a of regSamples) {
+      if (a.especie !== 'venda') continue;
+      const y = String(a.data_ref || '').slice(0, 4);
+      if (/^\d{4}$/.test(y) && Number(a.valor_m2) > 0) (porAno[y] ||= []).push(Number(a.valor_m2));
+    }
+    const amostras_ano = Object.keys(porAno).sort()
+      .map(y => ({ ano: Number(y), n: porAno[y].length, m2: mediana(porAno[y].slice().sort((a, b) => a - b)) }))
+      .filter(p => p.n >= 2 && p.m2 > 0);
+
+    // COMPOSIÇÃO TEMPORAL (pedido do dono): períodos de 4 meses, quantitativo total e valor
+    // RECENTE quando há amostra nova; senão PROJETA os anúncios antigos p/ hoje pela curva da região.
+    const vendaSamplesReais = regSamples.filter(a => a.especie === 'venda').map(a => ({ valor_m2: a.valor_m2, data_ref: a.data_ref }));
+    const comp = composicaoTemporal(vendaSamplesReais, amostras_ano, Date.now());
+
     let regiao = null;
     if (vendaVals.length >= 4 || locVals.length >= 4) {
-      const vMed = mediana(vendaVals);
+      // Valor de venda = composição temporal (recente OU projetado p/ hoje); locação segue mediana.
+      const vMed = (comp.valor_m2 != null ? comp.valor_m2 : mediana(vendaVals));
       regiao = {
         fonte: 'mercado',
         venda_m2: vMed,
@@ -89,6 +108,14 @@ export default async function handler(req) {
         nivel: 'cidade',
         nivel_label: 'cidade (composição de mercado)',
         bairro_norm: bairroNorm || null,
+        // COMPOSIÇÃO TEMPORAL — frescor + projeção + quantitativo (pedido do dono).
+        total_anuncios: comp.total_anuncios,
+        n_recentes: comp.n_recentes,
+        projetado: comp.projetado,
+        sem_amostras_recentes: comp.sem_amostras_recentes,
+        taxa_aa: comp.taxa_aa,
+        base_periodos: comp.base_periodos,
+        periodos: comp.periodos,
         // BANDAS DE PADRÃO (percentis de R$/m² de venda): popular (p25) · médio (p50) · alto
         // (p75). Uma referência de ALTO PADRÃO deve olhar a banda "alto", não a mediana geral.
         bandas: vendaVals.length >= 6 ? { popular: pct(vendaVals, 0.25), medio: pct(vendaVals, 0.50), alto: pct(vendaVals, 0.75) } : null,
@@ -110,20 +137,15 @@ export default async function handler(req) {
     }
     const valorizacao = await rpc('indice_valorizacao_anual', { p_cidade_norm: cidadeNorm, p_uf: uf, p_tipo: tipo, p_bairro_norm: bairroNorm, p_especie: 'venda', p_anos: 6 });
 
-    // LISTA (rastreabilidade) + GRÁFICO por ano — da MESMA base regSamples (coerentes com o valor).
+    // LISTA (rastreabilidade) — da MESMA base regSamples (coerente com o valor). O gráfico por
+    // ano (amostras_ano) e os períodos de 4 meses (comp.periodos) já foram calculados acima.
     const amostras = regSamples.slice(0, 20);
-    const porAno = {};
-    for (const a of regSamples) {
-      if (a.especie !== 'venda') continue;
-      const y = String(a.data_ref || '').slice(0, 4);
-      if (/^\d{4}$/.test(y) && Number(a.valor_m2) > 0) (porAno[y] ||= []).push(Number(a.valor_m2));
-    }
-    const amostras_ano = Object.keys(porAno).sort()
-      .map(y => ({ ano: Number(y), n: porAno[y].length, m2: mediana(porAno[y].slice().sort((a, b) => a - b)) }))
-      .filter(p => p.n >= 2 && p.m2 > 0);
 
     const mapeado = !!regiao;
-    return new Response(JSON.stringify({ ok: true, mapeado, regiao, valorizacao: valorizacao || null, amostras: Array.isArray(amostras) ? amostras : [], amostras_ano }), { status: 200, headers });
+    // aviso de frescor/projeção só quando o VALOR veio da composição temporal (ramo de mercado);
+    // no fallback (ponderado/acervo) o número não é projeção, então não confunde o usuário.
+    const aviso = (regiao && regiao.periodos) ? avisoFrescor(comp) : null;
+    return new Response(JSON.stringify({ ok: true, mapeado, regiao, valorizacao: valorizacao || null, amostras: Array.isArray(amostras) ? amostras : [], amostras_ano, periodos: (regiao && regiao.periodos) ? comp.periodos : [], aviso }), { status: 200, headers });
   } catch (e) {
     return new Response(JSON.stringify({ error: e.message || 'Falha na consulta' }), { status: 500, headers });
   }

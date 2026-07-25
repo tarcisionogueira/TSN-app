@@ -197,6 +197,12 @@ export default function IndiceConsulta() {
 
       {res && res.mapeado && reg && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {res.aviso && (
+            <div style={{ borderRadius: 12, border: '1px solid #fed7aa', background: '#fff7ed', padding: '12px 16px', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+              <span style={{ fontSize: 16, lineHeight: 1 }}>⏳</span>
+              <div style={{ fontSize: 12, color: '#9a3412', lineHeight: 1.5 }}>{res.aviso}</div>
+            </div>
+          )}
           <div style={{ borderRadius: 14, border: '1px solid #c7d2fe', background: '#eef2ff', padding: '16px 20px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 14, fontWeight: 800, color: '#111' }}>{form.cidade}/{form.uf}{reg.bairro_norm ? ` · ${form.bairro}` : ''}</span>
@@ -204,8 +210,9 @@ export default function IndiceConsulta() {
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div style={{ background: 'white', borderRadius: 12, padding: '14px 16px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#0D63DB', fontSize: 11, fontWeight: 700 }}><Home size={13} /> VENDA</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#0D63DB', fontSize: 11, fontWeight: 700 }}><Home size={13} /> VENDA{reg.projetado ? <span style={{ marginLeft: 6, fontSize: 9, fontWeight: 800, padding: '1px 6px', borderRadius: 999, background: '#fff7ed', color: '#c2410c' }}>PROJETADO</span> : null}</div>
                 <div style={{ fontSize: 22, fontWeight: 900, color: '#0D63DB', marginTop: 4 }}>{Number(reg.venda_m2) > 0 ? `${brl(reg.venda_m2)}/m²` : '—'}</div>
+                {Number(reg.total_anuncios) > 0 && <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 3 }}>{reg.total_anuncios} anúncio(s) · {reg.n_recentes || 0} recente(s)</div>}
               </div>
               <div style={{ background: 'white', borderRadius: 12, padding: '14px 16px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#7c3aed', fontSize: 11, fontWeight: 700 }}><Building2 size={13} /> LOCAÇÃO</div>
@@ -223,10 +230,25 @@ export default function IndiceConsulta() {
                 <div style={{ fontSize: 10.5, color: '#94a3b8', marginTop: 6 }}>Imóvel de alto padrão deve ser comparado à faixa "alto", não à mediana da cidade.</div>
               </div>
             )}
+            {Array.isArray(reg.periodos) && reg.periodos.length >= 1 && (
+              <div style={{ marginTop: 12, background: 'white', borderRadius: 12, padding: '12px 16px' }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#334155', marginBottom: 8 }}>COMPOSIÇÃO POR PERÍODO (venda R$/m², a cada 4 meses)</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {reg.periodos.slice(-6).map((p, i) => (
+                    <div key={i} style={{ flex: '1 1 90px', minWidth: 90, background: '#f8fafc', borderRadius: 8, padding: '8px 10px' }}>
+                      <div style={{ fontSize: 10, color: '#64748b' }}>{p.label}</div>
+                      <div style={{ fontSize: 14, fontWeight: 800, color: '#0f172a' }}>{Number(p.m2) > 0 ? brl(p.m2) : '—'}</div>
+                      <div style={{ fontSize: 9.5, color: '#94a3b8' }}>{p.n} anúncio(s)</div>
+                    </div>
+                  ))}
+                </div>
+                {reg.taxa_aa != null && <div style={{ fontSize: 10.5, color: '#94a3b8', marginTop: 6 }}>Valorização estimada da região: ~{reg.taxa_aa}% a.a. (curva do Índice BidPro).</div>}
+              </div>
+            )}
           </div>
 
           <button
-            onClick={() => gerarIndicePDF({ form, reg, amostras: res?.amostras || [], amostrasAno: res?.amostras_ano || [], solicitante: { nome, role: effectiveRole } })}
+            onClick={() => gerarIndicePDF({ form, reg, amostras: res?.amostras || [], amostrasAno: res?.amostras_ano || [], aviso: res?.aviso || null, periodos: reg?.periodos || [], solicitante: { nome, role: effectiveRole } })}
             style={{ alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 20px', background: '#0D2A54', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 14, cursor: 'pointer' }}>
             <FileText size={16} /> Gerar relatório do Índice (PDF)
           </button>

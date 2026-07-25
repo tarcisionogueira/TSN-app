@@ -9,6 +9,7 @@ import { anthropicFetch } from './_claude.js';
 import { custoRespostaClaude } from './_uso.js';
 import { resumoAprendizadoTexto } from './_arremate-aprendizado.js';
 import { ehCidadeTemporada, motivoTemporada } from './_temporada.js';
+import { composicaoTemporal, avisoFrescor } from './_indice-composicao.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -287,6 +288,28 @@ async function lerValorizacao(imDb, segmento = 'apartamento') {
     if (!r.ok) return null;
     const v = await r.json().catch(() => null);
     return (v && Array.isArray(v.serie) && v.serie.length >= 2) ? v : null;
+  } catch { return null; }
+}
+
+// COMPOSIÇÃO TEMPORAL da região p/ o mercadológico (mesma matemática do Índice): períodos de
+// 4 meses, quantitativo e valor RECENTE quando há amostra nova; senão PROJETA os anúncios
+// antigos p/ hoje pela curva da própria região. Base = indice_amostra (venda, sem leilão).
+async function lerComposicaoRegiao(imDb, segmento = 'apartamento') {
+  try {
+    if (!imDb?.cidade_norm || !imDb?.estado) return null;
+    const uf = String(imDb.estado).toUpperCase();
+    const filtro = `cidade_norm=eq.${encodeURIComponent(imDb.cidade_norm)}&uf=eq.${uf}&tipo=eq.${encodeURIComponent(segmento)}&especie=eq.venda&valor_m2=gte.200&valor_m2=lte.50000`;
+    const r = await sb(`indice_amostra?${filtro}&select=valor_m2,data_ref,fonte&order=data_ref.desc&limit=600`);
+    if (!r.ok) return null;
+    const j = await r.json().catch(() => []);
+    const rows = (Array.isArray(j) ? j : []).filter(a => Number(a.valor_m2) > 0 && !ehFonteLeilao(a.fonte));
+    if (rows.length < 4) return null; // sem base suficiente na região
+    // Curva por ano (mediana R$/m² de venda) para a taxa de projeção.
+    const porAno = {};
+    for (const a of rows) { const y = String(a.data_ref || '').slice(0, 4); if (/^\d{4}$/.test(y)) (porAno[y] ||= []).push(Number(a.valor_m2)); }
+    const med = (arr) => { const s = arr.slice().sort((x, y) => x - y); const m = Math.floor(s.length / 2); return s.length % 2 ? s[m] : Math.round((s[m - 1] + s[m]) / 2); };
+    const amostrasAno = Object.keys(porAno).sort().map(y => ({ ano: Number(y), n: porAno[y].length, m2: med(porAno[y]) })).filter(p => p.n >= 2 && p.m2 > 0);
+    return composicaoTemporal(rows, amostrasAno, Date.now());
   } catch { return null; }
 }
 
@@ -905,6 +928,12 @@ export default async function handler(req, res) {
       // Amostras datadas (valorização/recência) + curva de valorização por ano no relatório.
       await gravarAmostrasIndice(imDb, mercado, imovelId, segIdx);
       mercado.valorizacao = await lerValorizacao(imDb, segIdx);
+      // COMPOSIÇÃO TEMPORAL da base própria (pedido do dono): períodos de 4 meses, quantitativo
+      // e valor recente/projetado a hoje. Lê DEPOIS de gravar as amostras deste relatório (entram
+      // na composição). Serve p/ confrontar a avaliação com o valor de mercado por período e p/
+      // avisar quem gerou o relatório quando não há anúncio recente na região.
+      mercado.indiceComposicao = await lerComposicaoRegiao(imDb, segIdx);
+      mercado.avisoFrescor = avisoFrescor(mercado.indiceComposicao);
     }
 
     // FALLBACK ÍNDICE BIDPRO (regra do dono): sem comparativos ATIVOS de mercado na região agora

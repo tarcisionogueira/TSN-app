@@ -2797,6 +2797,36 @@ export default function Analise() {
                 );
               })()}
 
+              {/* Composição por período (4 meses) + frescor: valor recente OU projetado p/ hoje pela curva */}
+              {mercado.indiceComposicao && Array.isArray(mercado.indiceComposicao.periodos) && mercado.indiceComposicao.periodos.length >= 1 && (() => {
+                const comp = mercado.indiceComposicao;
+                return (
+                  <div style={{ borderRadius:12, border:'1px solid #c7d2fe', background:'#f8faff', padding:'12px 16px' }}>
+                    {mercado.avisoFrescor && (
+                      <div style={{ display:'flex', gap:8, alignItems:'flex-start', marginBottom:10, padding:'8px 12px', borderRadius:8, background:'#fff7ed', border:'1px solid #fed7aa' }}>
+                        <span style={{ fontSize:14, lineHeight:1 }}>⏳</span>
+                        <span style={{ fontSize:11, color:'#9a3412', lineHeight:1.5 }}>{mercado.avisoFrescor}</span>
+                      </div>
+                    )}
+                    <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8, flexWrap:'wrap' }}>
+                      <span style={{ fontSize:12, fontWeight:800, color:'#111' }}>Composição por período (venda R$/m²)</span>
+                      <span style={{ fontSize:10.5, color:'#64748b' }}>a cada 4 meses · {comp.total_anuncios || 0} anúncio(s) · {comp.n_recentes || 0} recente(s)</span>
+                      {comp.projetado && <span style={{ marginLeft:'auto', fontSize:10, fontWeight:800, padding:'2px 8px', borderRadius:999, background:'#fff7ed', color:'#c2410c' }}>VALOR PROJETADO</span>}
+                    </div>
+                    <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
+                      {comp.periodos.slice(-6).map((p, i) => (
+                        <div key={i} style={{ flex:'1 1 90px', minWidth:90, background:'white', borderRadius:8, padding:'8px 10px', border:'1px solid #eef2f7' }}>
+                          <div style={{ fontSize:10, color:'#64748b' }}>{p.label}</div>
+                          <div style={{ fontSize:14, fontWeight:800, color:'#0f172a' }}>{Number(p.m2) > 0 ? `R$ ${fmt(p.m2)}` : '—'}</div>
+                          <div style={{ fontSize:9.5, color:'#94a3b8' }}>{p.n} anúncio(s)</div>
+                        </div>
+                      ))}
+                    </div>
+                    {comp.taxa_aa != null && <div style={{ fontSize:10.5, color:'#6366f1', marginTop:8, lineHeight:1.5 }}>Valorização estimada da região: ~{comp.taxa_aa}% a.a. (curva do Índice BidPro).{comp.projetado ? ' O valor de mercado exibido é projetado para hoje a partir dos anúncios de períodos anteriores.' : ''}</div>}
+                  </div>
+                );
+              })()}
+
               {/* Valorização BidPro — curva de preço/m² por ano (base própria de amostras datadas) */}
               {Array.isArray(mercado.valorizacao?.serie) && mercado.valorizacao.serie.length >= 2 && (() => {
                 const vz = mercado.valorizacao;
