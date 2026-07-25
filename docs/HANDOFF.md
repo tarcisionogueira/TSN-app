@@ -129,6 +129,14 @@
 - **`HomeCliente.jsx` (box Programa de Parceiros):** já-parceiro NÃO pagante vê aviso ⚠️ "para RECEBER precisa de assinatura ativa" + botões **Assinar** e **Configurar meu PIX**; pagante vê atalho "Configurar meu PIX para receber". (O texto do convite já dizia que grátis pode indicar mas precisa de assinatura para receber.)
 - **Dúvida do dono — "Pausado / período de teste":** *Pausado* = assinatura temporariamente suspensa no gateway (cobrança em espera, não cancelada); *período de teste (trial)* = janela grátis inicial antes da 1ª cobrança. Hoje BidPro **não** expõe esses estados (sem campo próprio) → ficam 0. Se não usarmos trial, dá para **esconder** o card Pausado até plugar o status do Asaas/MP (a decidir com o dono).
 
+## ✅ COMEÇAR AQUI (25/07 — sessão 17: comissão de rede exige assinatura EM DIA na data da cobrança)
+> Migração via MCP (banco). Regra do dono: a comissão só é DEVIDA ao upline que está com a assinatura EM DIA **na data em que o indicado (e a rede abaixo) é cobrado** — não basta ser pagante/vender; tem que estar preparado antes, em dia na data da cobrança.
+
+- **Onde nascia a comissão:** webhook de pagamento (`api/_webhook-core.js`) → RPC `distribuir_comissao_rede` (sobe a árvore `indicado_por`, N níveis de `comissao_regras`).
+- **Antes:** exigia só `eh_pagante(role)` + `parceiro_aceite_em`. Um `top2` **inadimplente** ainda receberia.
+- **Correção (`comissao_rede_elegivel_em_dia_na_cobranca.sql`, aplicada):** a elegibilidade por nível agora exige, ALÉM de pagante+aceite, **assinatura EM DIA na data (current_date = data da cobrança)**: `ativo` (não cancelado) + `inadimplente_desde IS NULL` + `plano_vencimento` nulo ou futuro. Quem **não** está em dia é **PULADO** — a comissão sobe para o próximo upline elegível (compressão dinâmica mantida). Vale para todos os níveis (a rede abaixo). Idempotência por pagamento+nível preservada.
+- **Interação com o saque (sessão 16):** agora há duas travas — **acúmulo** (só credita quem está em dia na cobrança) e **saque** (só saca quem é pagante/equipe). Efeito: quem não mantém a assinatura em dia não acumula nem saca. **Ponto p/ o dono decidir:** um parceiro que ACUMULOU estando em dia e depois cair (churn) — hoje o saque fica travado até reassinar. Se preferir que ele mantenha o saldo já ganho, eu relaxo a trava de saque (a de acúmulo continua). *(Obs.: conta cortesia — role pago sem vencimento/sem inadimplência — é tratada como "em dia"; para excluir cortesias precisaríamos de um flag "pago via gateway".)*
+
 ## 📋 PRÓXIMOS PASSOS / PENDÊNCIAS (revisão 25/07 — para resolver com o dono)
 
 **A) Posso tocar (alguns precisam de go-ahead por custo/CI):**
