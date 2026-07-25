@@ -12,9 +12,10 @@ const FEEDBACK_KEY = 'tsn_feedback_email';
 
 // Papéis REAIS do sistema (planos_config + papéis de equipe/leiloeiro).
 // 'top1' foi removido (Investidor Pro é 'top2'); 'leiloeiro' incluído (portal do parceiro).
-// 'consultor' APOSENTADO (substituído pelo MLM/Programa de Parceiros) — não é mais atribuível.
+// 'consultor' e 'afiliado' (venda avulsa) APOSENTADOS — substituídos pelo MLM/Programa de
+// Parceiros (todos ganham sendo pagantes em dia + link). Não são mais atribuíveis.
 const ROLES_DISPONIVEIS = [
-  'admin','explorador','top2','assessorado','clube','afiliado','analista','advogado','leiloeiro',
+  'admin','explorador','top2','assessorado','clube','analista','advogado','leiloeiro',
 ];
 
 // ─── styles ──────────────────────────────────────────────────────────────────
@@ -941,32 +942,9 @@ function UsuariosTab() {
                                   💰 Êxito
                                 </button>
                               )}
-                              {['consultor','afiliado'].includes(u.role) && (
-                                <button
-                                  style={{ padding: '5px 10px', background: '#fce7f3', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, color: '#db2777', cursor: 'pointer' }}
-                                  title="% de comissão sobre as vendas que vierem pelo link deste consultor/afiliado"
-                                  onClick={() => abrirComissaoAfiliado(u)}>
-                                  🔗 Comissão
-                                </button>
-                              )}
-                              {u.role !== 'admin' && (
-                                <button
-                                  style={{ padding: '5px 10px', background: '#fdf2f8', border: '1px solid #fbcfe8', borderRadius: 6, fontSize: 11, fontWeight: 700, color: '#db2777', cursor: 'pointer' }}
-                                  title="Habilita a capacidade de vender nesta conta (mantém o plano/função). Cliente pagante continua cliente e também ganha comissão."
-                                  onClick={async () => {
-                                    // Consultor aposentado (MLM o substitui): habilita venda só como AFILIADO (só comissão).
-                                    const t = 'afiliado';
-                                    const v = window.prompt(`Comissão de ${u.nome || 'membro'} sobre as vendas pelo link dele (%):`, '10');
-                                    if (v === null) return;
-                                    const pct = Math.max(0, Math.min(100, Number(String(v).replace(',', '.')) || 0));
-                                    let codigo = null;
-                                    try { const { data } = await supabase.rpc('gerar_codigo_indicacao', { p_id: u.id }); codigo = data; } catch { /* segue */ }
-                                    const { error } = await supabase.from('perfis').update({ vendedor_tipo: t, comissao_afiliado_pct: pct, comissionamento_bloqueado: false }).eq('id', u.id);
-                                    window.alert(error ? ('Erro: ' + error.message) : `Venda habilitada como ${t} (${pct}%)${codigo ? `, código ${codigo}` : ''}. A pessoa mantém o plano/função atual.`);
-                                  }}>
-                                  📣 Habilitar venda
-                                </button>
-                              )}
+                              {/* "Venda avulsa" (afiliado / % sobre vendas do link) APOSENTADA: todos
+                                  ganham só pelo Programa de Parceiros (MLM: pagante em dia + link). Os
+                                  botões "Comissão" e "Habilitar venda" foram removidos. */}
                             </div>
                           )}
                         </td>

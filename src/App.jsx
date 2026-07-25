@@ -286,7 +286,7 @@ function MainLayout() {
           {/* Consultor APOSENTADO (o MLM/Programa de Parceiros o substitui): a rota redireciona
               para Minha Rede. /afiliado segue ativo (papel profissional distinto). */}
           <Route path="/consultor" element={<Navigate to="/minha-rede" replace />} />
-          <Route path="/afiliado" element={<PrivateRoute><Consultor /></PrivateRoute>} />
+          <Route path="/afiliado" element={<Navigate to="/minha-rede" replace />} />
           <Route path="/minha-rede" element={<PrivateRoute><MinhaRede /></PrivateRoute>} />
           <Route path="/ativar-vendedor/:token" element={<AtivarVendedor />} />
           <Route path="/contratos" element={<PrivateRoute><Contratos /></PrivateRoute>} />

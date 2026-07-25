@@ -31,6 +31,11 @@ export default async function handler(req, res) {
   const user = await getUser(req);
   if (!user) return res.status(401).json({ error: 'Faça login para ativar a venda na sua conta.' });
 
+  // VENDA AVULSA (afiliado/consultor) ENCERRADA — substituída pelo Programa de Parceiros (MLM).
+  // Nenhum convite ativa mais o papel de vendedor; todos ganham indicando e sendo pagantes.
+  return res.status(410).json({ error: 'O programa de venda avulsa foi encerrado. Participe do Programa de Parceiros na sua conta — indique com seu link e receba as comissões sendo assinante em dia.' });
+  /* eslint-disable no-unreachable */
+
   const token = String((req.body || {}).token || '').trim();
   if (!token) return res.status(400).json({ error: 'Convite ausente.' });
 
