@@ -86,6 +86,14 @@
 - **Mercadológico (`api/gerar-analise.js`):** `lerComposicaoRegiao(imDb, segIdx)` lê a base própria (indice_amostra, venda, sem leilão) DEPOIS de gravar as amostras deste relatório e anexa `mercado.indiceComposicao` + `mercado.avisoFrescor`. `Analise.jsx` renderiza o banner de frescor + selo PROJETADO + composição por período abaixo do bloco "Índice BidPro". Assim o relatório confronta a avaliação com o valor de mercado por período e avisa quando não há anúncio recente.
 - **Coerência com pedidos anteriores:** leilão continua excluído (`ehFonteLeilao`); mesma normalização de bairro/grid da sessão 10. A janela de 4 meses reaproveita o conceito do `MERCADO_CACHE_DIAS=120`.
 
+## ✅ COMEÇAR AQUI (25/07 — sessão 12: máximo de referências por tipo + colheita de OUTRAS tipologias)
+> Deploy `main`. Build (vite) OK · `node --check` OK · migração via MCP. Pedido do dono: mesmo com o mínimo de 8 (cache), o mercadológico deve trazer o MÁXIMO de referências por tipo; e como "a IA pode trazer tudo e filtrar", aproveitar a MESMA busca para semear as OUTRAS tipologias da região. Decisão do dono: colher **todas as 3 outras** tipologias + **implementar agora**.
+
+- **Máximo por tipo (`promptMercado`):** reforço "traga TODAS as amostras coerentes do tipo-alvo (não corte a lista), só depois filtre padrão/leilão"; `max_tokens` 8.000 → **11.000** p/ caber mais amostras + o novo bloco.
+- **Colheita oportunista (`outrasTipologias`):** a IA retorna, num bloco separado, os comparáveis de **VENDA que já viu** de apto/casa/terreno/comercial (menos o tipo-alvo), até ~12 por tipo, SEM buscas dedicadas, sem leilão. `gravarOutrasTipologias()` grava no Índice desses segmentos no **nível CIDADE** (`bairro_norm`/`geo_grid` VAZIOS de propósito — o quarteirão do alvo não vale p/ uma casa do outro lado da cidade), `origem='relatorio_regiao'`, teto 15/segmento, dedup pelo índice único. Só em busca FRESCA (`!reaproveitado`); o bloco é apagado do `result` persistido (fica enxuto). **NUNCA entra no valor do relatório atual** — só na base do Índice. Log `[outras-tipologias]` mede o ganho.
+- **Regra preservada:** o VALOR do imóvel-alvo continua saindo só do MESMO tipo/padrão (sessões 8–9). A colheita é byproduct que decanta na base — acelera o cruzamento do mínimo de 8 (mais cache hits) e a composição temporal dos outros segmentos.
+- **Migração `indice_amostra_origem_relatorio_regiao.sql` (aplicada):** estende o CHECK de `origem` p/ incluir `relatorio_regiao` (auditável via `select origem,count(*) from indice_amostra group by origem`). Dedup index NÃO inclui `tipo` (inclui cidade/uf/especie/valor/fonte/data) — colisão entre tipos é improvável e só descarta duplicata exata.
+
 ## 📋 PRÓXIMOS PASSOS / PENDÊNCIAS (revisão 25/07 — para resolver com o dono)
 
 **A) Posso tocar (alguns precisam de go-ahead por custo/CI):**

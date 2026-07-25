@@ -231,6 +231,39 @@ async function gravarAmostrasIndice(imDb, mercado, imovelId, segmento = 'apartam
   } catch { /* aprendizado é best-effort: nunca bloqueia o relatório */ }
 }
 
+// COLHEITA DE OUTRAS TIPOLOGIAS (aproveitamento da MESMA busca — pedido do dono): a IA lista em
+// mercado.outrasTipologias os comparáveis de VENDA que JÁ VIU de outros segmentos (apto/casa/
+// terreno/comercial) na mesma cidade, SEM buscas dedicadas. Semeamos o Índice desses segmentos
+// no nível CIDADE (bairro/grid VAZIOS de propósito: o quarteirão do imóvel-alvo NÃO vale para
+// uma casa do outro lado da cidade), sem leilão, com teto por segmento. Uma busca paga passa a
+// semear vários segmentos. NUNCA entra no valor do relatório atual (só na base do Índice).
+const OUTRAS_SEGS = ['apartamento', 'casa', 'terreno', 'comercial'];
+const TETO_OUTRA_SEG = 15;
+async function gravarOutrasTipologias(imDb, outras, imovelId, segAlvo = '') {
+  try {
+    if (!imDb?.cidade_norm || !imDb?.estado || !outras || typeof outras !== 'object') return 0;
+    const uf = String(imDb.estado).toUpperCase();
+    const nowMes = new Date().toISOString().slice(0, 7);
+    const dref = (d) => (/^\d{4}-\d{2}$/.test(String(d || '')) ? `${d}-01` : `${nowMes}-01`);
+    const rows = [];
+    for (const seg of OUTRAS_SEGS) {
+      if (seg === segAlvo) continue; // o tipo-alvo já foi gravado por gravarAmostrasIndice (com geo)
+      const lista = Array.isArray(outras[seg]) ? outras[seg].slice(0, TETO_OUTRA_SEG) : [];
+      for (const s of lista) {
+        const m2 = Number(s?.valorM2);
+        if (!(m2 >= 200 && m2 <= 50000) || ehFonteLeilao(s?.fonte)) continue; // só venda de mercado
+        rows.push({ cidade_norm: imDb.cidade_norm, uf, bairro_norm: '', geo_grid: '', tipo: seg,
+          especie: 'venda', valor_m2: Math.round(m2), valor_total: Number(s?.valor) || null, area_m2: Number(s?.m2) || null,
+          data_ref: dref(s?.data), fonte: (s?.fonte ? String(s.fonte).slice(0, 200) : null), origem: 'relatorio_regiao', imovel_id: String(imovelId || '') });
+      }
+    }
+    if (!rows.length) return 0;
+    await sb('indice_amostra', { method: 'POST', headers: { Prefer: 'return=minimal,resolution=ignore-duplicates' }, body: JSON.stringify(rows) });
+    console.log('[outras-tipologias]', JSON.stringify({ imovel: String(imovelId), n: rows.length, cidade: imDb.cidade_norm }));
+    return rows.length;
+  } catch { return 0; }
+}
+
 // REAPROVEITAMENTO POR REGIÃO (cache do mercadológico). Quando a microrregião já tem uma
 // amostra DENSA e RECENTE de VENDA na base própria (indice_amostra, capturada por relatórios
 // anteriores, SEM leilão), reaproveitamos esses comparáveis REAIS em vez de refazer a pesquisa
@@ -529,7 +562,9 @@ padrão: DESCARTE. Em empreendimento de alto padrão com poucos anúncios intern
 comparáveis do MESMO padrão na cidade/região a comparáveis apenas PRÓXIMOS porém de padrão
 inferior. Informe o padrão em "consolidado.padraoImovel" e explique-o no "comentario".
 
-OBJETIVO: reunir o MÁXIMO de amostras possível. Faça várias buscas em fontes diferentes.
+OBJETIVO: reunir o MÁXIMO de amostras possível do tipo-alvo (${tipoImovel}). Faça várias buscas
+em fontes diferentes e TRAGA TODAS as amostras coerentes que encontrar (não corte a lista para
+"resumir": quanto mais comparáveis do MESMO tipo/padrão, melhor a média). Só depois filtre padrão/leilão.
 
 ═══ NÍVEL 1 — COMPARATIVOS DIRETOS (mesmo condomínio/endereço) ═══
 Busque o máximo de anúncios de venda E locação DENTRO do mesmo condomínio/edifício ou
@@ -564,12 +599,21 @@ hectares OU unidades) e "baseCalculo" (a conta em texto). Para imóvel com TERRE
 a construção + o terreno excedente e detalhe em "terrenoExcedente". Se a área da métrica não for
 confiável (ex.: veio a área TOTAL no lugar da privativa), DIGA no "comentario" e seja conservador.
 
+═══ COLHEITA DE OUTRAS TIPOLOGIAS (aproveitamento — NÃO gaste buscas dedicadas) ═══
+Ao pesquisar o tipo-alvo, você INEVITAVELMENTE verá anúncios de OUTRAS tipologias na MESMA
+cidade (apartamento, casa, terreno, comercial). NÃO os use no cálculo do imóvel-alvo. Mas, para
+não desperdiçar a pesquisa, LISTE em "outrasTipologias" os de VENDA que você JÁ VIU (sem buscas
+dedicadas a eles), até ~12 por tipo, com R$/m² e data. Regras: apenas VENDA; NÃO repita o
+tipo-alvo (${tipoImovel}); EXCLUA leilão/venda direta; só o que apareceu de fato (não invente).
+Isso alimenta o Índice BidPro dos outros segmentos da região — economia da mesma busca.
+
 Retorne APENAS este JSON (sem markdown):
 {
   "nivel1": { "descricao": "", "vendas": [{"descricao":"","valor":0,"m2":0,"valorM2":0,"fonte":"","data":"AAAA-MM"}], "locacoes": [{"descricao":"","valorMensal":0,"fonte":"","data":"AAAA-MM"}], "precoMedioM2": 0, "precoMinM2": 0, "precoMaxM2": 0, "aluguelMedio": 0, "totalAmostras": 0, "disponiveis": true },
   "nivel2": { "descricao": "", "vendas": [{"descricao":"","valor":0,"m2":0,"valorM2":0,"fonte":"","data":"AAAA-MM"}], "locacoes": [{"descricao":"","valorMensal":0,"fonte":"","data":"AAAA-MM"}], "precoMedioM2": 0, "precoMinM2": 0, "precoMaxM2": 0, "aluguelMedio": 0, "totalAmostras": 0 },
   "consolidado": { "precoMedioM2": 0, "aluguelMedio": 0, "yieldBruto": 0, "yieldLiquido": 0, "valorEstimadoImovel": 0, "unidadeValor": "m2_privativo|m2_construido|m2_terreno|hectare|unidade", "areaConsiderada": 0, "baseCalculo": "(explique a conta: ex.: 'R$ 10.980/m² privativo × 30 m²' ou 'R$ 45.000/ha × 120 ha terra nua + R$ 200k benfeitorias' ou 'construção 90 m² × R$ 4.000 + terreno excedente 300 m² × R$ 800')", "padraoImovel": "popular|medio|medio_alto|alto|luxo", "terrenoExcedente": { "haExcedente": false, "areaExcedenteM2": 0, "valorTerrenoExcedente": 0 }, "descontoArremate": null },
   "referenciaFipeZap": { "encontrado": true, "precoMedioM2": 0, "valorizacao12m": 0, "mesReferencia": "AAAA-MM", "localidade": "", "fonte": "" },
+  "outrasTipologias": { "apartamento": [{"valorM2":0,"valor":0,"m2":0,"fonte":"","data":"AAAA-MM"}], "casa": [], "terreno": [], "comercial": [] },
   "zoneamento": { "encontrado": false, "zona": "", "resumoUso": "", "fonte": "", "ondeObter": "" },
   "comentario": "Análise qualitativa de 3-4 frases comparando os dois níveis, a tendência e a ADERÊNCIA da média dos anúncios ao FipeZAP (se divergirem >15%, explique por quê)."
 }`;
@@ -815,7 +859,7 @@ export default async function handler(req, res) {
       const buscarMercado = async (msBudget) => {
         try {
           const mData = await anthropic({
-            model: MODEL, max_tokens: 8000,
+            model: MODEL, max_tokens: 11000, // + espaço p/ trazer o MÁXIMO de amostras do tipo-alvo + o bloco outrasTipologias
             tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: maxWeb }],
             system: `Você é um perito avaliador imobiliário sênior. Busque o MÁXIMO de amostras possível, SEMPRE do mesmo tipo (${mercadoInputs.tipoImovel}). Retorne apenas JSON válido.`,
             messages: [{ role: 'user', content: promptMercado(mercadoInputs) + cacheTxt }],
@@ -934,6 +978,15 @@ export default async function handler(req, res) {
       // avisar quem gerou o relatório quando não há anúncio recente na região.
       mercado.indiceComposicao = await lerComposicaoRegiao(imDb, segIdx);
       mercado.avisoFrescor = avisoFrescor(mercado.indiceComposicao);
+    }
+
+    // COLHEITA de outras tipologias (aproveitamento da busca): semeia o Índice dos OUTROS
+    // segmentos da região com o que a IA já viu (nível cidade, sem leilão). Só em busca FRESCA
+    // (o reaproveitado não traz esse bloco). Independe do segmento-alvo (mesmo p/ alvo rural,
+    // semeia apto/casa/terreno/comercial da cidade). Best-effort, nunca bloqueia o relatório.
+    if (!reaproveitado && mercado.outrasTipologias) {
+      try { await gravarOutrasTipologias(imDb, mercado.outrasTipologias, imovelId, segmentoIndice(mercadoInputs.tipoImovel || imovel?.tipo)); } catch { /* best-effort */ }
+      try { delete mercado.outrasTipologias; } catch { /* mantém enxuto o result persistido */ }
     }
 
     // FALLBACK ÍNDICE BIDPRO (regra do dono): sem comparativos ATIVOS de mercado na região agora
