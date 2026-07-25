@@ -22,6 +22,22 @@
 > Checagem rápida a qualquer momento: `select public.auditoria_seguranca();` → `0 crítico / 0 atenção` = íntegro.
 > **Auditorias ofensivas completas: 15/07/2026 (×2).** Total de correções: 15 (1ª rodada) + escalonamento por convite (CRÍTICO) + IDOR do MP (ALTO) + escala. Refazer a ofensiva quando entrarem rotas/pagamento/RLS novos (a Rotina mensal já faz isso sozinha).
 
+## ✅ COMEÇAR AQUI (25/07 — sessão 3: armazenamento de docs para TODOS os leiloeiros)
+> Branch: `claude/bidprobrasil-handoff-storage-qzm1mc`. Migração aplicada via MCP; código na branch. Segurança **0/0** no início.
+
+**Pedido do dono:** "ampliar o armazenamento que configuramos no último handoff dos documentos para todos os leiloeiros que temos, inclusive os próximos que conectarmos." Responde a pergunta que o #263 (arquivamento proativo) deixou em aberto ("confirmar se quer arquivar mais fontes gratuitas") — a resposta é **todas**.
+
+**Feito (`supabase/migrations/arquivar_docs_todos_leiloeiros.sql`):**
+1. **Default de `leiloeiro_conhecimento.arquivar_docs` → `true`.** Todo leiloeiro **futuro** (auto-registrado pelo `registrarConhecimento`, que faz upsert sem nunca tocar nessa coluna) **nasce arquivando**. Fecha o "inclusive os próximos que conectarmos" sem precisar lembrar de ligar na mão.
+2. **Flag ligada para TODAS as fontes atuais** (`update ... where custo is not null` → 24 fontes). Só a pseudo-fonte interna **`SUPORTE`** (custo null, não é leiloeiro) ficou de fora. As gratuitas estáveis que eram **link-only** (MEGA/PESTANA/GRUPOLANCE/ZUK/BIASI/FRAZAO/WEBLEILOES/VIP/LEILOTECH/LEILOFY/SODRE) agora arquivam.
+3. **Comentário do cron `enfileirar-documentos.yml`** atualizado (não é mais "fontes instáveis"; agora "todos os leiloeiros").
+
+**Impacto medido antes de aplicar:** **~1.979** imóveis ativos novos a arquivar (têm link mas sem cópia no bucket). **Custo de captura = R$ 0** — todas são `gratis`/sem anti-bot → resolvem no CAMINHO 1 (fetch direto) do `captura-documentos.mjs`; Bright Data (pago) só dispara quando o navegador é BLOQUEADO, o que não ocorre nessas fontes. **Storage:** era 2.754 arquivos / **5,29 GB** (~2 MB/arquivo) → projeção **~11 GB**, folgado nos **100 GB** do Pro.
+
+**Guardas que continuam corretas mesmo com a flag em todos** (no `enfileirar_docs_arquivar()`): **CEF** fica de fora (pipeline próprio — matrícula = URL estática, edital = coletivo por leilão); **`docs_status='esperado'`** (SUPERBID/SBID9/SBID21/SOLD/VENDASGOV — a fonte não publica o doc no lote) é pulado. Se qualquer 'esperado' passar a publicar, a flag JÁ ligada faz o arquivamento entrar sozinho.
+
+**Fila semeada:** `enfileirar_docs_arquivar()` chamado 2× → **~2.074** imóveis na `documentos_fila`. O `captura-documentos.yml` (a cada 30 min, 40/run) drena em ~1 dia; o `enfileirar-documentos.yml` (diário 10 UTC, 1000/run) mantém em dia daqui pra frente. **Validar no próximo ciclo:** `select count(*) from imovel_anexos a join imoveis_leilao il on il.id=a.imovel_id where a.storage_path is not null and il.fonte in ('MEGA','PESTANA','GRUPOLANCE','ZUK','BIASI','FRAZAO','WEBLEILOES','VIP','LEILOTECH','LEILOFY','SODRE');` deve subir; e `select count(*) from documentos_fila where status='pendente';` deve cair.
+
 ## ✅ COMEÇAR AQUI (25/07 — sessão 2: qualidade de dados que o cliente vê)
 > PR #261 em `main`. 4 problemas relatados pelo dono, investigados com 3 agentes em paralelo + queries; todos corrigidos na raiz.
 

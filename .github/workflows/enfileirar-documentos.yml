@@ -31,10 +31,13 @@ jobs:
             -H "Content-Type: application/json" \
             -d "{\"p_limite\": $LIMITE}" -w "\nHTTP %{http_code}\n"
 
-      - name: Chamar RPC enfileirar_docs_arquivar (fontes instáveis)
-        # Arquivamento proativo: guarda no bucket o PDF de imóveis de fontes que quebram
-        # (pago/misto/baixa qualidade) enquanto o link ainda está vivo. O mesmo job de
-        # captura genérica drena a fila. CEF fica de fora (pipeline próprio).
+      - name: Chamar RPC enfileirar_docs_arquivar (todos os leiloeiros)
+        # Arquivamento proativo: guarda no bucket o PDF de imóveis de TODA fonte de leilão
+        # (flag leiloeiro_conhecimento.arquivar_docs, ligada p/ todos + default true nos
+        # futuros) enquanto o link ainda está vivo. Fonte gratuita resolve pelo fetch
+        # direto (grátis); Bright Data só quando o navegador é bloqueado. O mesmo job de
+        # captura genérica drena a fila. CEF e fontes docs_status='esperado' ficam de fora
+        # (guardas no RPC: pipeline próprio / a fonte não publica o documento).
         env:
           SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
