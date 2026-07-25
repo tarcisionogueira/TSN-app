@@ -149,6 +149,27 @@ export default function Planos() {
 
       <div style={{ maxWidth: 1100, margin: '0 auto', padding: '0 20px 80px' }}>
 
+        {/* Gatilho de preço (passo 8): contagem regressiva quando há aumento AGENDADO do
+            Investidor Pro. Converte antes da virada ("assine agora e trave o preço"). */}
+        {(() => {
+          const p = PLANOS.top2;
+          const venc = p?.precoVigencia ? new Date(p.precoVigencia) : null;
+          if (!p?.precoAgendado || !venc || isNaN(venc.getTime()) || venc <= new Date()) return null;
+          const dataFmt = venc.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
+          return (
+            <div style={{ maxWidth: 920, margin: '0 auto 20px', background: 'linear-gradient(135deg,#fef3c7,#fde68a)', border: '1px solid #f59e0b', borderRadius: 14, padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 22 }}>⏳</span>
+              <div style={{ flex: 1, minWidth: 220 }}>
+                <div style={{ fontSize: 14.5, fontWeight: 800, color: '#92400e' }}>
+                  O Investidor Pro passa de {fmtR(p.preco)} para {p.precoAgendadoLabel}/mês em {dataFmt}.
+                </div>
+                <div style={{ fontSize: 12.5, color: '#b45309', marginTop: 2 }}>
+                  Assine agora e <strong>trave {fmtR(p.preco)}/mês</strong> enquanto sua assinatura ficar ativa. No plano anual, você garante o preço por 12 meses.
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* ── 2 Planos principais: Explorador + Investidor Pro ── */}
         <div className="grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1.6fr', gap: 20, maxWidth: 920, margin: '0 auto 64px', alignItems: 'stretch' }}>
