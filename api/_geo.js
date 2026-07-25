@@ -78,6 +78,17 @@ export function coordValida(lat, lng, estado, cidade, maxKm = 80) {
   return true;
 }
 
+// Nível REAL do resultado: quando o Nominatim não acha o endereço "sujo" (Lt/Qd/Apto)
+// de uma cidade pequena, ele devolve o CENTRO do município. Esse ponto passa no
+// coordValida (está na UF certa) e era rotulado 'endereco' só porque o INPUT tinha
+// número → pino "exato" no centro da cidade (a queixa "pino longe do imóvel"). Se o
+// resultado caiu ~em cima do centróide IBGE, rebaixa para 'cidade' (aproximado).
+export function nivelReal(nivelBase, lat, lng, cidade, estado) {
+  const cen = centroideIBGE(cidade, estado);
+  if (cen && haversineKm(lat, lng, cen.lat, cen.lng) < 0.25) return 'cidade';
+  return nivelBase;
+}
+
 // Extrai "logradouro + número" do endereço bagunçado do CEF.
 // "Rua Raposos, N. 548, Cs 01 Lt 22 Qd 58"  -> { via:'Rua Raposos', numero:'548' }
 // "Rua 20, N. S/n"                           -> { via:'Rua 20',     numero:'' }
@@ -312,7 +323,7 @@ export async function geocodificarCascata(im, { deadline = Infinity, sleepMs = 1
   if (via && Date.now() < deadline) {
     const street = [via, numero].filter(Boolean).join(' ');
     const c = aceita(await nominatimEstruturado({ street, city: cidade, state: ufNome }));
-    if (c) return { ...c, nivel: numero ? 'endereco' : 'rua' };
+    if (c) return { ...c, nivel: nivelReal(numero ? 'endereco' : 'rua', c.lat, c.lng, cidade, estado) };
     await pausa();
     // Recuperação via Correios: canoniza o logradouro e tenta de novo.
     if (Date.now() < deadline) {
@@ -321,7 +332,7 @@ export async function geocodificarCascata(im, { deadline = Infinity, sleepMs = 1
         cepEnc = via2.cep || null;
         const street2 = [via2.logradouro, numero].filter(Boolean).join(' ');
         const c2 = aceita(await nominatimEstruturado({ street: street2, city: cidade, state: ufNome }));
-        if (c2) return { ...c2, nivel: numero ? 'endereco' : 'rua', cep: cepEnc };
+        if (c2) return { ...c2, nivel: nivelReal(numero ? 'endereco' : 'rua', c2.lat, c2.lng, cidade, estado), cep: cepEnc };
         await pausa();
       }
     }
@@ -330,7 +341,7 @@ export async function geocodificarCascata(im, { deadline = Infinity, sleepMs = 1
     if (Date.now() < deadline) {
       const ql = [[via, numero].filter(Boolean).join(' '), bairro, cidade, ufNome, 'Brasil'].filter(Boolean).join(', ');
       const cl = aceita(await nominatimTextoLivre(ql));
-      if (cl) return { ...cl, nivel: numero ? 'endereco' : 'rua', cep: cepEnc };
+      if (cl) return { ...cl, nivel: nivelReal(numero ? 'endereco' : 'rua', cl.lat, cl.lng, cidade, estado), cep: cepEnc };
       await pausa();
     }
   }
