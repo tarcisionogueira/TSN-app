@@ -139,12 +139,13 @@ export default async function handler(req) {
     if (!(perfil.cpf && String(perfil.cpf).trim()) && !perfil.cpf_hash) faltando.push('CPF');
     if (!perfil.telefone || !String(perfil.telefone).trim()) faltando.push('telefone');
     if (!perfil.chave_pix || !String(perfil.chave_pix).trim()) faltando.push('chave PIX');
-    // Explorador/grátis pode indicar, mas só recebe (saca) sendo pagante. Sinaliza p/ a UI.
-    const precisaAssinatura = !podeReceber(role);
+    // Flag INFORMATIVO (não bloqueia o saque): quem não está em plano pago não GANHA comissões
+    // novas (a origem já filtra por "em dia na cobrança"); pode sacar o que já acumulou.
+    const naoGanhaNovas = !podeReceber(role);
     // Data da próxima liberação (sexta 12:00 Bahia) para exibir na tela do profissional.
     return json({ saldo, extrato, proxima_liberacao: proximaLiberacao().toISOString(),
-      precisa_assinatura: precisaAssinatura,
-      saque_habilitado: faltando.length === 0 && !precisaAssinatura, faltando });
+      nao_ganha_novas: naoGanhaNovas,
+      saque_habilitado: faltando.length === 0, faltando });
   }
 
   // ── POST: solicitar saque ────────────────────────────────────────────────
@@ -152,9 +153,9 @@ export default async function handler(req) {
     let body; try { body = await req.json(); } catch { return json({ error: 'JSON inválido' }, 400); }
     const valor = Math.round(Number(body.valor) * 100) / 100;
     if (!valor || valor <= 0) return json({ error: 'Valor inválido' }, 400);
-    // Trava de negócio (regra do dono): só saca quem tem DIREITO A RECEBER (pagante ou equipe).
-    // Explorador/grátis pode indicar e acumular, mas precisa assinar para liberar o saque.
-    if (!podeReceber(role)) return json({ error: 'Para RECEBER suas comissões é preciso ter uma assinatura ativa (plano pago). Você pode indicar normalmente — assine para liberar o saque.' }, 403);
+    // SEM trava por assinatura no SAQUE: a elegibilidade da comissão é decidida na ORIGEM
+    // (distribuir_comissao_rede só credita no mês em que o parceiro está em dia na data da
+    // cobrança). Logo, o que está no saldo já foi legitimamente ganho — pode ser sacado.
 
     // Checagem de saldo/PIX + inserção do lançamento é ATÔMICA no banco
     // (serializada por usuário) — elimina a corrida read-then-write que

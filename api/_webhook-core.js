@@ -162,9 +162,22 @@ export async function suspenderPlanoDireto({ userId, gateway }) {
 // afiliado ficava com a comissão MESMO com o pagamento estornado — fraude: indicar
 // → comissão vira 'disponivel' → chargeback/reembolso → sacar. Idempotente por
 // origem_id (não estorna duas vezes o mesmo pagamento).
-export async function estornarComissao({ gatewayPaymentId, gateway }) {
+export async function estornarComissao({ gatewayPaymentId, gateway, motivo = 'chargeback' }) {
   if (!gatewayPaymentId) return { skipped: 'sem_payment_id' };
+  const motivoTxt = motivo === 'reembolso' ? 'reembolso' : 'chargeback';
   try {
+    // Cliente (indicado) que gerou a reversão — para SINALIZAR no relatório QUEM contestou
+    // e que foi CHARGEBACK. O valor negativo desconta do saldo (fica negativo se já sacado →
+    // abate no PAGAMENTO SEGUINTE, como o dono pediu).
+    let clienteNome = '';
+    try {
+      const { data: com } = await supabase.from('comissoes')
+        .select('cliente_id').eq('gateway_payment_id', gatewayPaymentId).eq('gateway', 'rede').limit(1).maybeSingle();
+      if (com?.cliente_id) {
+        const { data: cli } = await supabase.from('perfis').select('nome').eq('id', com.cliente_id).maybeSingle();
+        clienteNome = (cli?.nome || '').trim();
+      }
+    } catch { /* sem nome: segue com descrição genérica */ }
     // Comissão MULTINÍVEL: um pagamento gera N lançamentos (origem_id = <pay>-n1..n5). Reverte
     // TODOS os níveis, cada um idempotente por um origem_id de estorno próprio.
     const { data: lancs } = await supabase.from('saldo_lancamentos')
@@ -179,13 +192,14 @@ export async function estornarComissao({ gatewayPaymentId, gateway }) {
         await supabase.from('saldo_lancamentos').insert({
           user_id: l.user_id, tipo: 'estorno_comissao', valor: -Number(l.valor),
           origem_tipo: l.origem_tipo || 'assinatura', origem_id: estOid,
-          descricao: `Estorno de comissão de rede (${gateway}) — pagamento revertido`, status: 'disponivel',
+          descricao: `Estorno de comissão — ${motivoTxt.toUpperCase()}${clienteNome ? ` do cliente ${clienteNome}` : ''} (${gateway}); descontado do saldo/pagamento seguinte`, status: 'disponivel',
         });
         estornado += Number(l.valor);
       }
     }
-    // Cancela as comissoes de rede deste pagamento (registro do relatório).
-    await supabase.from('comissoes').update({ status: 'cancelado' })
+    // Cancela as comissoes de rede deste pagamento e REGISTRA o motivo + o cliente no relatório.
+    await supabase.from('comissoes').update({ status: 'cancelado',
+      referencia: `Cancelada por ${motivoTxt}${clienteNome ? ` do cliente ${clienteNome}` : ''}` })
       .eq('gateway_payment_id', gatewayPaymentId).eq('gateway', 'rede').neq('status', 'cancelado');
     if (!lancs || lancs.length === 0) return { skipped: 'sem_comissao' };
     return { ok: true, estornado };
@@ -366,7 +380,7 @@ export async function processarChargeback({ valor, descricao, email, gatewayCust
 
   // Estorna a comissão de afiliado deste pagamento (o dinheiro voltou → a comissão
   // não é mais devida). Evita "refund + comissão paga" (perda dupla).
-  try { await estornarComissao({ gatewayPaymentId, gateway }); } catch (_) {}
+  try { await estornarComissao({ gatewayPaymentId, gateway, motivo: 'chargeback' }); } catch (_) {}
 
   // Alerta a equipe
   alertarErro(

@@ -43,7 +43,7 @@ export default function Comissoes() {
   const [showSaqueForm, setShowSaqueForm] = useState(false);
   const [proximaLiberacao, setProximaLiberacao] = useState(null); // data da próxima sexta de pagamento
   const [faltandoSaque, setFaltandoSaque] = useState([]); // campos do cadastro que faltam p/ liberar saque
-  const [precisaAssinatura, setPrecisaAssinatura] = useState(false); // grátis: indica, mas só saca sendo pagante
+  const [naoGanhaNovas, setNaoGanhaNovas] = useState(false); // sem plano pago em dia: pode sacar o acumulado, mas não ganha novas comissões
 
   const [cfinConfig, setCfinConfig] = useState({});  // config financeira por gateway
 
@@ -69,7 +69,7 @@ export default function Comissoes() {
       setExtrato(Array.isArray(sq.extrato) ? sq.extrato : []);
       setProximaLiberacao(sq.proxima_liberacao || null);
       setFaltandoSaque(Array.isArray(sq.faltando) ? sq.faltando : []);
-      setPrecisaAssinatura(!!sq.precisa_assinatura);
+      setNaoGanhaNovas(!!sq.nao_ganha_novas);
     } catch { setSaldoApi(0); setExtrato([]); }
     const k = p?.chave_pix || '';
     setPixKey(k);
@@ -222,19 +222,19 @@ export default function Comissoes() {
                 </div>
               )}
             </div>
-            {(() => { const liberado = totalDisponivel > 0 && faltandoSaque.length === 0 && !precisaAssinatura; return (
+            {(() => { const liberado = totalDisponivel > 0 && faltandoSaque.length === 0; return (
             <button onClick={() => setShowSaqueForm(p => !p)} disabled={!liberado}
-              title={precisaAssinatura ? 'Assine um plano pago para liberar o saque' : (faltandoSaque.length > 0 ? `Complete o cadastro: falta ${faltandoSaque.join(', ')}` : undefined)}
+              title={faltandoSaque.length > 0 ? `Complete o cadastro: falta ${faltandoSaque.join(', ')}` : undefined}
               style={{ padding: '9px 18px', background: liberado ? '#0D63DB' : '#e2e8f0', color: liberado ? 'white' : '#94a3b8', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: liberado ? 'pointer' : 'default' }}>
               Solicitar saque
             </button>
             ); })()}
           </div>
-          {precisaAssinatura && (
+          {naoGanhaNovas && (
             <div style={{ marginTop: 8, background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: 8, padding: '10px 12px' }}>
-              <div style={{ fontSize: 12, fontWeight: 800, color: '#6d28d9', marginBottom: 4 }}>💜 Você pode indicar, mas para RECEBER precisa de uma assinatura ativa</div>
-              <div style={{ fontSize: 11.5, color: '#7c3aed', lineHeight: 1.55 }}>Suas indicações continuam vinculadas a você e as comissões vão se acumulando. Para liberar o saque, assine um plano pago.</div>
-              <button onClick={() => { window.location.hash = '#/planos'; }} style={{ marginTop: 8, padding: '8px 16px', background: '#7c3aed', color: 'white', border: 'none', borderRadius: 8, fontWeight: 800, fontSize: 12.5, cursor: 'pointer' }}>Ver planos e assinar →</button>
+              <div style={{ fontSize: 12, fontWeight: 800, color: '#6d28d9', marginBottom: 4 }}>💜 Você pode indicar e sacar o que já acumulou</div>
+              <div style={{ fontSize: 11.5, color: '#7c3aed', lineHeight: 1.55 }}>Para GANHAR novas comissões, sua assinatura precisa estar <strong>em dia na data da cobrança</strong> dos seus indicados. Nos meses em que estiver em dia, você recebe normalmente.</div>
+              <button onClick={() => { window.location.hash = '#/planos'; }} style={{ marginTop: 8, padding: '8px 16px', background: '#7c3aed', color: 'white', border: 'none', borderRadius: 8, fontWeight: 800, fontSize: 12.5, cursor: 'pointer' }}>Ver planos →</button>
             </div>
           )}
           {faltandoSaque.length > 0 && (
