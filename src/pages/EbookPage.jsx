@@ -50,7 +50,9 @@ export default function EbookPage() {
   // Arquivos do Google Drive vêm como link de COMPARTILHAMENTO (não .pdf) — tratamos como
   // PDF embutível (iframe /preview) para o leitor funcionar; download direto via /uc.
   const isDrive = !!driveId(pdfUrl);
-  const isPdf = pdfUrl ? (pdfUrl.toLowerCase().endsWith('.pdf') || isDrive) : false;
+  // ".pdf" pode estar antes de uma query (URL ASSINADA do Storage: ".../arquivo.pdf?token=...")
+  // — por isso casamos ".pdf" seguido de ?, # ou fim, não só endsWith.
+  const isPdf = pdfUrl ? (/\.pdf(\?|#|$)/i.test(pdfUrl) || isDrive) : false;
   const embedUrl = isDrive ? drivePreview(pdfUrl) : pdfUrl;
   const baixarUrl = isDrive ? driveDownload(pdfUrl) : pdfUrl;
 

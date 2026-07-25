@@ -89,10 +89,58 @@ const PLANOS_ACESSO = [
 ];
 
 function defaultCurso() {
-  return { titulo: '', subtitulo: '', descricao: '', emoji: '📚', cor: '#0D63DB', nivel: 'Iniciante', categoria: 'Fundamentos', preco: '', gratuito: false, destaque: false, comissao_pct: 30, planos_gratis: [], modulos: [] };
+  return { titulo: '', subtitulo: '', descricao: '', emoji: '📚', capa_url: '', cor: '#0D63DB', nivel: 'Iniciante', categoria: 'Fundamentos', preco: '', gratuito: false, destaque: false, comissao_pct: 30, planos_gratis: [], modulos: [] };
 }
 function defaultModulo(idx) { return { _key: String(Date.now() + idx), titulo: '', aulas: [] }; }
 function defaultAula() { return { _key: String(Date.now() + Math.random()), titulo: '', duracao: '', video_url: '', descricao: '', gratis: false }; }
+
+// Upload de mídia da Área de Membros para o STORAGE do Supabase (substitui os links do
+// Google Drive, que bloqueiam hotlink de imagem → capa em branco). Capa (imagem) → bucket
+// PÚBLICO `membros-capas` (renderiza direto no <img>, cacheável). PDF do ebook → bucket
+// PRIVADO `documentos` + URL assinada de longa duração (só quem tem direito recebe o link
+// pela RPC de entitlement). Devolve a URL final pronta para salvar em capa_url/arquivo_url.
+function UploadMidia({ kind, onDone, small }) {
+  const inputRef = useRef(null);
+  const [busy, setBusy] = useState(false);
+  const [erro, setErro] = useState('');
+  const cfg = kind === 'pdf'
+    ? { bucket: 'documentos', prefix: 'ebooks', accept: 'application/pdf', maxMB: 60, rot: 'Enviar PDF' }
+    : { bucket: 'membros-capas', prefix: 'capas', accept: 'image/png,image/jpeg,image/webp', maxMB: 8, rot: 'Enviar imagem (PNG/JPG)' };
+  async function enviar(file) {
+    if (!file) return;
+    setErro('');
+    if (file.size > cfg.maxMB * 1024 * 1024) { setErro(`Arquivo grande demais (máx ${cfg.maxMB} MB).`); return; }
+    setBusy(true);
+    try {
+      const ext = (file.name.split('.').pop() || (kind === 'pdf' ? 'pdf' : 'jpg')).toLowerCase();
+      const path = `${cfg.prefix}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+      const { error } = await supabase.storage.from(cfg.bucket).upload(path, file, { upsert: false, contentType: file.type || undefined });
+      if (error) throw error;
+      let url;
+      if (kind === 'pdf') {
+        const { data: signed, error: e2 } = await supabase.storage.from('documentos').createSignedUrl(path, 60 * 60 * 24 * 3650); // ~10 anos
+        if (e2) throw e2;
+        url = signed?.signedUrl;
+      } else {
+        url = supabase.storage.from('membros-capas').getPublicUrl(path).data.publicUrl;
+      }
+      if (!url) throw new Error('URL vazia');
+      onDone(url, file.name);
+    } catch (e) { setErro('Falha ao enviar: ' + (e.message || 'tente novamente')); }
+    setBusy(false);
+  }
+  return (
+    <div style={{ display: 'inline-flex', flexDirection: 'column', gap: 4 }}>
+      <input ref={inputRef} type="file" accept={cfg.accept} style={{ display: 'none' }}
+        onChange={e => { enviar(e.target.files?.[0]); e.target.value = ''; }} />
+      <button type="button" onClick={() => inputRef.current?.click()} disabled={busy}
+        style={{ padding: small ? '6px 10px' : '8px 14px', border: '1px dashed #0D63DB', borderRadius: 8, background: '#eff6ff', color: '#0D63DB', fontWeight: 700, fontSize: small ? 11 : 12, cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1, whiteSpace: 'nowrap' }}>
+        {busy ? 'Enviando…' : `⬆ ${cfg.rot}`}
+      </button>
+      {erro && <span style={{ color: '#dc2626', fontSize: 10.5 }}>{erro}</span>}
+    </div>
+  );
+}
 
 function CursosTab() {
   const [cursos, setCursos] = useState([]);
@@ -144,7 +192,7 @@ function CursosTab() {
     setSaving(true);
     try {
       const { modulos, _aulaCount, ...rest } = form;
-      const cursoPayload = { titulo: rest.titulo, subtitulo: rest.subtitulo || '', descricao: rest.descricao || '', emoji: rest.emoji || '📚', cor: rest.cor || '#0D63DB', nivel: rest.nivel || 'Iniciante', categoria: rest.categoria || 'Fundamentos', preco: Number(rest.preco) || 0, gratuito: rest.gratuito || false, destaque: rest.destaque || false, comissao_pct: Number(rest.comissao_pct) || 30, planos_gratis: Array.isArray(rest.planos_gratis) ? rest.planos_gratis : [], ativo: rest.ativo !== false };
+      const cursoPayload = { titulo: rest.titulo, subtitulo: rest.subtitulo || '', descricao: rest.descricao || '', emoji: rest.emoji || '📚', capa_url: rest.capa_url || null, cor: rest.cor || '#0D63DB', nivel: rest.nivel || 'Iniciante', categoria: rest.categoria || 'Fundamentos', preco: Number(rest.preco) || 0, gratuito: rest.gratuito || false, destaque: rest.destaque || false, comissao_pct: Number(rest.comissao_pct) || 30, planos_gratis: Array.isArray(rest.planos_gratis) ? rest.planos_gratis : [], ativo: rest.ativo !== false };
 
       let cursoId;
       if (modal === 'new') {
@@ -247,6 +295,23 @@ function CursosTab() {
             </div>
 
             <div style={{ marginBottom: 14 }}>
+              <label style={S.label}>Capa (imagem PNG/JPG) — miniatura do curso na Área de Membros (opcional; sem capa usa o emoji)</label>
+              <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                {form.capa_url ? (
+                  <img src={form.capa_url} alt="capa" style={{ width: 80, height: 120, objectFit: 'cover', borderRadius: 8, border: '1px solid #e2e8f0', flexShrink: 0 }} />
+                ) : (
+                  <div style={{ width: 80, height: 120, borderRadius: 8, border: '1px dashed #cbd5e1', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28, flexShrink: 0 }}>{form.emoji || '📚'}</div>
+                )}
+                <div style={{ flex: 1 }}>
+                  <UploadMidia kind="capa" onDone={url => setForm({ ...form, capa_url: url })} />
+                  {form.capa_url && (
+                    <button type="button" onClick={() => setForm({ ...form, capa_url: '' })} style={{ ...S.btn('outline'), marginLeft: 8, padding: '6px 10px', fontSize: 11 }}>Remover capa</button>
+                  )}
+                  <input style={{ ...S.input, marginTop: 8 }} value={form.capa_url || ''} onChange={e => setForm({ ...form, capa_url: e.target.value })} placeholder="ou cole uma URL de imagem" />
+                </div>
+              </div>
+            </div>
+            <div style={{ marginBottom: 14 }}>
               <label style={S.label}>Subtítulo</label>
               <input style={S.input} value={form.subtitulo || ''} onChange={e => setForm({ ...form, subtitulo: e.target.value })} />
             </div>
@@ -308,7 +373,7 @@ function CursosTab() {
                         <input style={{ ...S.input, flex: 1 }} placeholder="Duração (ex: 8:30)" value={a.duracao} onChange={e => updateAula(m._key, a._key, 'duracao', e.target.value)} />
                         <button style={{ ...S.btn('danger'), padding: '6px 10px' }} onClick={() => removeAula(m._key, a._key)}>✕</button>
                       </div>
-                      <input style={{ ...S.input, marginBottom: 6 }} placeholder="URL do vídeo (YouTube, Vimeo, Panda Video, MP4...)" value={a.video_url} onChange={e => updateAula(m._key, a._key, 'video_url', e.target.value)} />
+                      <input style={{ ...S.input, marginBottom: 6 }} placeholder="URL do vídeo (YouTube, Bunny Stream, Vimeo, Panda...)" value={a.video_url} onChange={e => updateAula(m._key, a._key, 'video_url', e.target.value)} />
                       <input style={{ ...S.input, marginBottom: 6 }} placeholder="Descrição da aula" value={a.descricao} onChange={e => updateAula(m._key, a._key, 'descricao', e.target.value)} />
                       <label style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 6, color: '#475569' }}>
                         <input type="checkbox" checked={a.gratis} onChange={e => updateAula(m._key, a._key, 'gratis', e.target.checked)} /> Aula gratuita (preview)
@@ -465,12 +530,26 @@ function EbooksTab() {
               <textarea style={{ ...S.input, height: 72, resize: 'vertical' }} value={form.descricao || ''} onChange={e => setForm({ ...form, descricao: e.target.value })} />
             </div>
             <div style={{ marginBottom: 14 }}>
-              <label style={S.label}>URL da capa (imagem) — aparece como miniatura na Área de Membros</label>
-              <input style={S.input} value={form.capa_url || ''} onChange={e => setForm({ ...form, capa_url: e.target.value })} placeholder="https://... (link da imagem da capa)" />
+              <label style={S.label}>Capa (imagem PNG/JPG) — miniatura na Área de Membros</label>
+              <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                {form.capa_url ? (
+                  <img src={form.capa_url} alt="capa" style={{ width: 60, height: 90, objectFit: 'cover', borderRadius: 6, border: '1px solid #e2e8f0', flexShrink: 0 }} />
+                ) : (
+                  <div style={{ width: 60, height: 90, borderRadius: 6, border: '1px dashed #cbd5e1', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: 20, flexShrink: 0 }}>📖</div>
+                )}
+                <div style={{ flex: 1 }}>
+                  <UploadMidia kind="capa" onDone={url => setForm({ ...form, capa_url: url })} />
+                  <input style={{ ...S.input, marginTop: 8 }} value={form.capa_url || ''} onChange={e => setForm({ ...form, capa_url: e.target.value })} placeholder="ou cole uma URL de imagem" />
+                </div>
+              </div>
             </div>
             <div style={{ marginBottom: 14 }}>
-              <label style={S.label}>URL do arquivo (PDF) — abre no leitor estilo Kindle</label>
-              <input style={S.input} value={form.arquivo_url || ''} onChange={e => setForm({ ...form, arquivo_url: e.target.value })} placeholder="https://... (link do PDF no Drive)" />
+              <label style={S.label}>Arquivo do eBook (PDF) — abre no leitor estilo Kindle</label>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                <UploadMidia kind="pdf" onDone={url => setForm({ ...form, arquivo_url: url })} />
+                {form.arquivo_url && <span style={{ fontSize: 12, color: '#059669', fontWeight: 700 }}>✓ arquivo definido</span>}
+              </div>
+              <input style={{ ...S.input, marginTop: 8 }} value={form.arquivo_url || ''} onChange={e => setForm({ ...form, arquivo_url: e.target.value })} placeholder="ou cole uma URL de PDF (Drive etc.)" />
             </div>
             <div style={{ marginBottom: 16 }}>
               <PlanosGratisSelector valor={form.planos_gratis} onChange={v => setForm({ ...form, planos_gratis: v })} />

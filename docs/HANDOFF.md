@@ -100,6 +100,17 @@
 - **`src/pages/Login.jsx`:** detecção client-only `ambienteFragilGoogle` (`display-mode: standalone` OU `navigator.standalone` OU UA de app embutido: FBAN/FBAV/Instagram/Line/Twitter/LinkedInApp/Snapchat/Pinterest/MicroMessenger/WhatsApp/GSA). Quando true, mostra um aviso ⚠️ acima do botão do Google (nos modos login E cadastro): "o Google pode falhar no 2FA — prefira e-mail e senha, ou abra www.bidprobrasil.com.br no Safari/Chrome". O e-mail/senha já era o caminho visualmente primário (fica acima do divisor). Sem mudança no fluxo OAuth em si.
 - **Workaround imediato p/ o dono:** entrar por e-mail/senha (funciona 100% dentro do PWA) ou abrir no Safari/Chrome de verdade. No iPhone, PWA standalone real só instala pelo Safari (não pelo Chrome).
 
+## ✅ COMEÇAR AQUI (25/07 — sessão 14: capas e arquivos da Área de Membros no Storage)
+> Deploy `main`. Build (vite) OK · migração via MCP. O dono: a capa do e-book vinha em branco; pediu capa (PNG/JPG) e arquivo do e-book **armazenados no banco** (Storage), para capas de ebooks/cursos/aulas sempre disponíveis; vídeos por YouTube ou Bunny.
+
+- **Raiz da capa em branco:** `capa_url` guardava um **link do Google Drive** e o `driveImage()` tentava servir como imagem, mas o Drive **bloqueia hotlink** → `<img>` vazio.
+- **Migração `membros_capas_bucket_e_curso_capa.sql` (aplicada):** bucket **público** `membros-capas` (capas: leitura pública, upload só admin via policies em storage.objects) + coluna `capa_url` em `cursos_admin` (ebooks_admin já tinha).
+- **Admin (`src/pages/Admin.jsx`):** componente `UploadMidia` — capa (imagem) → `membros-capas` público (retorna publicUrl); PDF do e-book → `documentos` privado + **URL assinada ~10 anos** (só quem tem direito recebe via a RPC `obter_arquivo_ebook` que já existe). Editor de e-book ganhou upload de **capa** + **PDF** (com preview e fallback de URL manual); editor de **curso** ganhou upload de **capa** (preview; sem capa usa o emoji). Placeholder do vídeo da aula agora cita **Bunny Stream**.
+- **Vídeo já OK:** `Curso.jsx > videoEmbed()` já suporta **YouTube, Bunny Stream, Vimeo, Panda** (embed externo) — nada a fazer, só confirmado.
+- **Aulas:** a "capa" da aula é a própria miniatura do vídeo (YouTube/Bunny) → não precisa de imagem separada (decisão registrada).
+- **Leitor (`EbookPage.jsx`):** `isPdf` passou a casar `.pdf` seguido de `?`/`#`/fim (a URL ASSINADA termina em `?token=...`) — senão o leitor não reconheceria o PDF do Storage.
+- **Ação do dono:** as capas ATUAIS (links do Drive) continuam em branco até **reenviar a imagem** pelo Admin (Membros → editar e-book/curso → “Enviar imagem (PNG/JPG)”). O mesmo para trocar o PDF pelo upload.
+
 ## 📋 PRÓXIMOS PASSOS / PENDÊNCIAS (revisão 25/07 — para resolver com o dono)
 
 **A) Posso tocar (alguns precisam de go-ahead por custo/CI):**
