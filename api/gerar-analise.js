@@ -194,10 +194,17 @@ const ehFonteLeilao = (f) => FONTE_LEILAO.test(String(f || ''));
 // Grava as amostras DATADAS deste relatório em indice_amostra (base da valorização por
 // ano e da recência real). Só residencial, poison-resistente (dados da pesquisa). O prompt
 // já descarta leilão das amostras → arremate NUNCA entra aqui. Dedup pelo índice único.
+// Normalização de bairro (igual ao _bairro_norm do banco) e grid ~1km ('lat.dd,lng.dd')
+// — para escopar as amostras por LOCALIDADE e permitir o reaproveitamento por bairro/grid.
+const _norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+const geoGridDe = (lat, lng) => (Number.isFinite(Number(lat)) && Number.isFinite(Number(lng))) ? `${Number(lat).toFixed(2)},${Number(lng).toFixed(2)}` : '';
+
 async function gravarAmostrasIndice(imDb, mercado, imovelId, segmento = 'apartamento') {
   try {
     if (!imDb?.cidade_norm || !imDb?.estado) return;
     const uf = String(imDb.estado).toUpperCase();
+    const bairroNorm = _norm(imDb.bairro);          // localidade da amostra (do imóvel analisado)
+    const geoGrid = geoGridDe(imDb.latitude, imDb.longitude);
     const nowMes = new Date().toISOString().slice(0, 7);
     const dref = (d) => (/^\d{4}-\d{2}$/.test(String(d || '')) ? `${d}-01` : `${nowMes}-01`);
     const vendas = [...(mercado.nivel1?.vendas || []), ...(mercado.nivel2?.vendas || [])];
@@ -206,7 +213,7 @@ async function gravarAmostrasIndice(imDb, mercado, imovelId, segmento = 'apartam
     for (const s of vendas) {
       const m2 = Number(s?.valorM2);
       if (!(m2 >= 200 && m2 <= 50000) || ehFonteLeilao(s?.fonte)) continue;
-      rows.push({ cidade_norm: imDb.cidade_norm, uf, bairro_norm: '', geo_grid: '', tipo: segmento,
+      rows.push({ cidade_norm: imDb.cidade_norm, uf, bairro_norm: bairroNorm, geo_grid: geoGrid, tipo: segmento,
         especie: 'venda', valor_m2: Math.round(m2), valor_total: Number(s?.valor) || null, area_m2: Number(s?.m2) || null,
         data_ref: dref(s?.data), fonte: (s?.fonte ? String(s.fonte).slice(0, 200) : null), origem: 'relatorio', imovel_id: String(imovelId || '') });
     }
@@ -214,13 +221,60 @@ async function gravarAmostrasIndice(imDb, mercado, imovelId, segmento = 'apartam
       const mensal = Number(s?.valorMensal); const area = Number(s?.m2);
       if (!(mensal > 0) || ehFonteLeilao(s?.fonte)) continue;
       const vm2 = area > 0 ? Math.round((mensal / area) * 100) / 100 : null;
-      rows.push({ cidade_norm: imDb.cidade_norm, uf, bairro_norm: '', geo_grid: '', tipo: segmento,
+      rows.push({ cidade_norm: imDb.cidade_norm, uf, bairro_norm: bairroNorm, geo_grid: geoGrid, tipo: segmento,
         especie: 'locacao', valor_m2: (vm2 && vm2 >= 1 && vm2 <= 1000) ? vm2 : null, valor_total: mensal, area_m2: area || null,
         data_ref: dref(s?.data), fonte: (s?.fonte ? String(s.fonte).slice(0, 200) : null), origem: 'relatorio', imovel_id: String(imovelId || '') });
     }
     if (!rows.length) return;
     await sb('indice_amostra', { method: 'POST', headers: { Prefer: 'return=minimal,resolution=ignore-duplicates' }, body: JSON.stringify(rows) });
   } catch { /* aprendizado é best-effort: nunca bloqueia o relatório */ }
+}
+
+// REAPROVEITAMENTO POR REGIÃO (cache do mercadológico). Quando a microrregião já tem uma
+// amostra DENSA e RECENTE de VENDA na base própria (indice_amostra, capturada por relatórios
+// anteriores, SEM leilão), reaproveitamos esses comparáveis REAIS em vez de refazer a pesquisa
+// web cara toda vez. Escopo do MAIS FINO ao mais amplo: bairro_norm → grid (~1 km) → cidade —
+// para no 1º nível com densidade suficiente. Devolve só HIT com >= MIN amostras e recência
+// <= DIAS. Não substitui a IA: injeta os comparáveis no prompt como ÂNCORA e permite reduzir a
+// busca web (5 → 2 usos), deixando a IA só complementar lacunas (padrão, anúncio ativo).
+// Thresholds e liga/desliga por env (MERCADO_CACHE / MERCADO_CACHE_MIN / MERCADO_CACHE_DIAS).
+async function amostrasRegiaoCache(imDb, segmento = 'apartamento') {
+  try {
+    if (!imDb?.cidade_norm || !imDb?.estado) return null;
+    const MIN = Math.max(4, Number(process.env.MERCADO_CACHE_MIN || 8));   // densidade mínima p/ confiar
+    const DIAS = Math.max(15, Number(process.env.MERCADO_CACHE_DIAS || 120)); // recência máx. das amostras
+    const uf = String(imDb.estado).toUpperCase();
+    const bairroNorm = _norm(imDb.bairro);
+    const geoGrid = geoGridDe(imDb.latitude, imDb.longitude);
+    const desde = new Date(Date.now() - DIAS * 24 * 3600 * 1000).toISOString();
+    const baseFiltro = `cidade_norm=eq.${encodeURIComponent(imDb.cidade_norm)}&uf=eq.${uf}&tipo=eq.${encodeURIComponent(segmento)}&especie=eq.venda&valor_m2=gte.200&valor_m2=lte.50000&criado_em=gte.${desde}`;
+    const cols = 'select=valor_m2,valor_total,area_m2,data_ref,fonte,bairro_norm,geo_grid,criado_em&order=criado_em.desc&limit=400';
+    const buscar = async (extra) => {
+      try {
+        const r = await sb(`indice_amostra?${baseFiltro}${extra}&${cols}`);
+        if (!r.ok) return [];
+        const j = await r.json().catch(() => []);
+        return (Array.isArray(j) ? j : []).filter(a => Number(a.valor_m2) > 0 && !ehFonteLeilao(a.fonte));
+      } catch { return []; }
+    };
+    // MAIS FINO → mais amplo; para no 1º nível com densidade suficiente.
+    let nivel = '', arr = [];
+    if (bairroNorm) { const a = await buscar(`&bairro_norm=eq.${encodeURIComponent(bairroNorm)}`); if (a.length >= MIN) { nivel = 'bairro'; arr = a; } }
+    if (!nivel && geoGrid) { const a = await buscar(`&geo_grid=eq.${encodeURIComponent(geoGrid)}`); if (a.length >= MIN) { nivel = 'grid'; arr = a; } }
+    if (!nivel) { const a = await buscar(''); if (a.length >= MIN) { nivel = 'cidade'; arr = a; } }
+    if (!nivel) return null;
+    const m2s = arr.map(a => Number(a.valor_m2)).filter(v => v > 0).sort((a, b) => a - b);
+    const mediana = m2s.length ? (m2s.length % 2 ? m2s[(m2s.length - 1) / 2] : Math.round((m2s[m2s.length / 2 - 1] + m2s[m2s.length / 2]) / 2)) : 0;
+    // Bloco de TEXTO p/ o prompt: comparáveis reais já capturados na região (âncora).
+    const linhas = arr.slice(0, 40).map(a => {
+      const ar = Number(a.area_m2) > 0 ? ` · ${Math.round(a.area_m2)} m²` : '';
+      const vt = Number(a.valor_total) > 0 ? ` · R$${Math.round(a.valor_total).toLocaleString('pt-BR')}` : '';
+      const ft = a.fonte ? ` · ${String(a.fonte).slice(0, 60)}` : '';
+      return `- ${Math.round(a.valor_m2).toLocaleString('pt-BR')} R$/m²${ar}${vt}${ft} (ref ${String(a.data_ref || '').slice(0, 7)})`;
+    }).join('\n');
+    const text = `\n\nBASE PRÓPRIA DA REGIÃO (Índice BidPro — ${arr.length} comparáveis de VENDA do MESMO tipo já capturados no nível ${nivel}, SEM leilão; mediana ${Math.round(mediana).toLocaleString('pt-BR')} R$/m²). Use estes comparáveis REAIS como ÂNCORA principal e complemente com no MÁXIMO 1–2 buscas web só para preencher lacunas (padrão do imóvel, anúncios ativos recentes). NÃO ignore esta base nem invente números fora dela:\n${linhas}`;
+    return { hit: true, nivel, n: arr.length, mediana, text };
+  } catch { return null; }
 }
 
 // Valorização por ano (mediana de R$/m² de VENDA) da microrregião — vai no relatório
@@ -713,6 +767,23 @@ export default async function handler(req, res) {
       mercado = { ...recente.mercado, reaproveitado: true, pesquisaEm: recente.em };
       reaproveitado = true;
     } else {
+      // REAPROVEITAMENTO POR REGIÃO (gate por env MERCADO_CACHE, default OFF). Se a microrregião
+      // já tem amostra densa e recente de VENDA na base própria (indice_amostra, sem leilão),
+      // injetamos esses comparáveis REAIS no prompt e reduzimos a busca web de 5 → 2 usos — a IA
+      // ancora na base e só complementa lacunas (padrão/anúncio ativo). Assim a região "aquecida"
+      // não paga a pesquisa cara toda vez. Liga/mede a economia com MERCADO_CACHE=1 (o console
+      // grava hit/miss + nível + nº de comparáveis por relatório). Rural fica fora (régua de ha).
+      const segCache = segmentoIndice(mercadoInputs.tipoImovel || imovel?.tipo);
+      let cacheReg = null;
+      if (process.env.MERCADO_CACHE === '1' && segCache !== 'rural') {
+        try {
+          const [imReg] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=cidade_norm,estado,bairro,latitude,longitude&limit=1`)).json();
+          cacheReg = await amostrasRegiaoCache(imReg, segCache);
+        } catch { cacheReg = null; }
+      }
+      const maxWeb = cacheReg?.hit ? 2 : 5;
+      const cacheTxt = cacheReg?.hit ? cacheReg.text : '';
+      console.log('[mercado-cache]', JSON.stringify({ on: process.env.MERCADO_CACHE === '1', hit: !!cacheReg?.hit, nivel: cacheReg?.nivel || null, n: cacheReg?.n || 0, maxWeb, imovel: String(imovelId) }));
       // A busca de mercado (web search, até 5 buscas) é a etapa lenta. UMA tentativa por
       // chamada (retries:0) com timeout = tempo RESTANTE reservando o parecer — assim duas
       // buscas NUNCA somam mais que o orçamento. Se a chamada abortar/falhar, devolve
@@ -722,9 +793,9 @@ export default async function handler(req, res) {
         try {
           const mData = await anthropic({
             model: MODEL, max_tokens: 8000,
-            tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }],
+            tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: maxWeb }],
             system: `Você é um perito avaliador imobiliário sênior. Busque o MÁXIMO de amostras possível, SEMPRE do mesmo tipo (${mercadoInputs.tipoImovel}). Retorne apenas JSON válido.`,
-            messages: [{ role: 'user', content: promptMercado(mercadoInputs) }],
+            messages: [{ role: 'user', content: promptMercado(mercadoInputs) + cacheTxt }],
           }, true, { retries: 0, timeoutMs: Math.max(45000, msBudget), noFallback: true });
           const m = parseJSON(extractText(mData)) || {};
           m.precoMedioM2 = m.consolidado?.precoMedioM2 || m.nivel2?.precoMedioM2 || 0;
