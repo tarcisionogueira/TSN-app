@@ -22,6 +22,15 @@
 > Checagem rápida a qualquer momento: `select public.auditoria_seguranca();` → `0 crítico / 0 atenção` = íntegro.
 > **Auditorias ofensivas completas: 15/07/2026 (×2).** Total de correções: 15 (1ª rodada) + escalonamento por convite (CRÍTICO) + IDOR do MP (ALTO) + escala. Refazer a ofensiva quando entrarem rotas/pagamento/RLS novos (a Rotina mensal já faz isso sozinha).
 
+## ✅ COMEÇAR AQUI (25/07 — sessão 5: correções de rumo do dono sobre a sessão 4)
+> Branch: `claude/bidprobrasil-handoff-storage-qzm1mc`. Build (vite) OK · `node --check` OK. Três ajustes pedidos após a sessão 4.
+
+1. **Relatório do ÍNDICE — nova peça COMERCIAL (marketing) na tela do Índice.** O 1º relatório (mercadológico) já APRENDE com o Índice (semeia+lê+injeta — confirmado). Novo: botão **"Gerar relatório do Índice (PDF)"** em `src/pages/IndiceConsulta.jsx` → `src/components/IndicePDF.jsx` (novo). Gera, client-side (mesmo padrão `imprimirHtml`+`cabecalhoBidPro`), uma peça **com identidade BidPro completa** para o endereço/bairro/cidade consultado: venda e locação R$/m², rentabilidade bruta, curva de valorização por ano, metodologia e marca. Uso comercial p/ advogados/peritos/corretores. Sem endpoint novo (usa o `res` já buscado de `/api/indice-consulta`).
+
+2. **Legitimidade do leilão — SEPARADA por modalidade (`api/gerar-documental.js`).** Antes o antifraude aplicava CNJ a tudo. Agora: **JUDICIAL** → valida o processo no CNJ (dígito verificador + DataJud); **EXTRAJUDICIAL** (Lei 9.514, sem processo) → orienta conferir o lote no **site OFICIAL do leiloeiro** (`url_lote`/`link_edital`, agora no SELECT). **Ambos** → o parecer recomenda reunião com analista + encaminhamento ao jurídico (reforçado no prompt e no `result.antifraude.recomendacao`; o rodapé do PDF já dizia). `ehJudicial` reusa a var da linha ~611.
+
+3. **Certidões — agora a do PORTAL (não da plataforma), ao FINAL do relatório.** O dono não quer a página fabricada pela BidPro; quer a **certidão como o portal devolveu**, visualizável, ao fim do documental/jurídico. `salvarComprovante` passou a guardar o **retorno fiel do portal** sanitizado (remove `<script>`/`<base>`/`<link>`/`<iframe>` → não re-hidrata ao vivo, fim da "tela de digitação"; JSON de portal-SPA vira `<pre>` legível) com 1 linha de proveniência. Nova seção **"Certidões das consultas (documentos do portal)"** ao FINAL do `DocumentalPDF.jsx` (`result.certidoesDocumentos`); no web (`Analise.jsx`) o link virou "Ver certidão do portal". **Limite honesto:** CNDT é server-rendered (pega a certidão real); CNIB/CENPROT são SPA+captcha → às vezes só a resposta de dados chega; o oficial definitivo fica com o jurídico (alinha com o item 2).
+
 ## ✅ COMEÇAR AQUI (25/07 — sessão 4: Índice→viabilidade, antifraude documental, certidões, +leiloeiros)
 > Branch: `claude/bidprobrasil-handoff-storage-qzm1mc`. Build (vite) OK · `node --check` OK nos `api/`. Segurança **0/0**. 4 pedidos do dono; investigados com 3 agentes em paralelo + queries.
 

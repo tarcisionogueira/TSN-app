@@ -148,45 +148,35 @@ function cnjValido(numero) {
   } catch { return false; }
 }
 
-// HTML → texto puro (sem <script>/<style>/tags): retrato SEGURO do que o portal
-// público devolveu, para embutir no comprovante sem executar nada.
-function textoDeHtml(html) {
-  return String(html || '')
-    .replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>').replace(/&quot;/gi, '"')
-    .replace(/\s+/g, ' ').trim();
-}
 const escHtml = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
-// Salva o COMPROVANTE de uma consulta pública e devolve uma URL assinada. ANTES
-// guardávamos o HTML CRU do portal (SPA/JSF com captcha) e o front injetava um <base>
-// no domínio do órgão para renderizar — o que fazia o portal RE-HIDRATAR AO VIVO e
-// mostrar a TELA DE DIGITAÇÃO em vez da prova. Agora geramos um comprovante PRÓPRIO da
-// BidPro: página estática, SEM script e SEM <base>, com o RESULTADO da consulta + um
-// retrato em texto do retorno do portal (transparência). meta = { chave, titulo,
-// portalUrl }; fonte = objeto da consulta (resumo/dados/comprovanteHtml).
+// Salva a CERTIDÃO/COMPROVANTE COMO O PORTAL DEVOLVEU (documento oficial do órgão, NÃO
+// uma página fabricada pela plataforma) e devolve uma URL assinada. Apenas SANITIZA para
+// visualização estática segura: remove <script>, <base> e recursos externos (link/iframe)
+// que buscariam o domínio do órgão AO VIVO — era isso que fazia o portal re-hidratar e
+// mostrar a TELA DE DIGITAÇÃO em vez do documento. Uma linha de proveniência (origem +
+// data) vai no topo. meta = { chave, titulo, portalUrl }; fonte = { comprovanteHtml, ... }.
 async function salvarComprovante(imovelId, meta, fonte) {
   try {
-    const capturado = textoDeHtml(fonte?.comprovanteHtml || '').slice(0, 6000);
-    if (capturado.length < 40) return null; // shell vazio → nada a comprovar
+    const bruto = String(fonte?.comprovanteHtml || '');
+    if (bruto.length < 120) return null;
+    const ehJson = /^\s*[[{]/.test(bruto);
+    let corpo;
+    if (ehJson) {
+      // Portal SPA que responde por API (sem página imprimível): mostra o retorno legível.
+      corpo = `<pre style="white-space:pre-wrap;word-break:break-word;font-family:ui-monospace,monospace;font-size:12px;color:#0f172a;padding:12px 16px;">${escHtml(bruto.slice(0, 200000))}</pre>`;
+    } else {
+      corpo = bruto
+        .replace(/<script[\s\S]*?<\/script>/gi, '')
+        .replace(/<base\b[^>]*>/gi, '')
+        .replace(/<link\b[^>]*>/gi, '')                 // CSS externo do órgão → não carrega ao vivo
+        .replace(/<iframe\b[\s\S]*?<\/iframe>/gi, '')
+        .slice(0, 1_800_000);
+    }
     const quando = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
-    const resumo = fonte?.resumo || fonte?.situacao || 'Consulta realizada';
-    const alerta = /⚠️|positiv|encontrad|possui|constam?\b|indisponibil|protestad|d[ée]bito/i.test(resumo) && !/sem\s|nada\s+consta|n[ãa]o\s|negativa/i.test(resumo);
-    const cor = alerta ? '#b91c1c' : '#047857';
     const titulo = meta?.titulo || 'Consulta pública';
-    const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Comprovante — ${escHtml(titulo)}</title></head>`
-      + `<body style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;margin:0;background:#f1f5f9;color:#0f172a;"><div style="max-width:760px;margin:0 auto;padding:24px;">`
-      + `<div style="background:#0f2f6b;color:#fff;padding:16px 20px;border-radius:12px 12px 0 0;"><div style="font-size:12px;opacity:.85;letter-spacing:.5px;">BIDPRO BRASIL · COMPROVANTE DE CONSULTA</div><div style="font-size:19px;font-weight:800;margin-top:2px;">${escHtml(titulo)}</div></div>`
-      + `<div style="background:#fff;padding:20px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 12px 12px;">`
-      + `<div style="font-size:15px;font-weight:800;color:${cor};">${escHtml(resumo)}</div>`
-      + `<div style="font-size:12.5px;color:#64748b;margin-top:6px;">Consulta automática realizada pela plataforma em ${escHtml(quando)} (horário de Brasília).</div>`
-      + `<div style="margin:16px 0;height:1px;background:#e2e8f0;"></div>`
-      + `<details><summary style="cursor:pointer;font-size:12.5px;font-weight:700;color:#334155;">Ver o retorno do portal público (transparência)</summary>`
-      + `<pre style="white-space:pre-wrap;word-break:break-word;font-size:11px;color:#475569;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px;margin-top:10px;max-height:360px;overflow:auto;">${escHtml(capturado)}</pre></details>`
-      + (meta?.portalUrl ? `<div style="font-size:11.5px;color:#94a3b8;margin-top:16px;">Para emitir a certidão OFICIAL (com validade jurídica; exige o preenchimento e o captcha do próprio órgão), acesse o portal público: <a href="${escHtml(meta.portalUrl)}" target="_blank" rel="noopener noreferrer" style="color:#1e40af;">${escHtml(meta.portalUrl)}</a></div>` : '')
-      + `</div><div style="text-align:center;font-size:10.5px;color:#94a3b8;margin-top:14px;">Documento gerado automaticamente pela BidPro Brasil. Não substitui a certidão oficial do órgão.</div>`
-      + `</div></body></html>`;
+    const proveniencia = `<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;font-size:11px;color:#64748b;padding:8px 16px;border-bottom:1px solid #e2e8f0;background:#f8fafc;">Documento obtido do portal público — ${escHtml(titulo)}${meta?.portalUrl ? ` (${escHtml(meta.portalUrl)})` : ''} · consulta automática em ${escHtml(quando)} (horário de Brasília).</div>`;
+    const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escHtml(titulo)}</title></head><body style="margin:0;">${proveniencia}${corpo}</body></html>`;
     const buffer = Buffer.from(html.slice(0, 2_000_000), 'utf8');
     const storagePath = `comprovantes/${imovelId}/${Date.now()}_${String(meta?.chave || 'fonte').replace(/[^a-z0-9]/gi, '')}.html`;
     const up = await storage(`object/${BUCKET}/${storagePath}`, { method: 'POST', headers: { 'Content-Type': 'text/html; charset=utf-8', 'x-upsert': 'true' }, body: buffer });
@@ -541,7 +531,7 @@ export default async function handler(req, res) {
   // Carrega os documentos do lote do banco (fonte da verdade).
   let row = null;
   try {
-    const [r] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=tipo,endereco,cidade,estado,modalidade,fonte,fonte_id,link_edital,link_matricula,link_regras_venda,anexos,numero_processo,ficha_cef,data_leilao,area_m2,valor_avaliacao,matricula_checada_em&limit=1`)).json();
+    const [r] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=tipo,endereco,cidade,estado,modalidade,fonte,fonte_id,url_lote,link_edital,link_matricula,link_regras_venda,anexos,numero_processo,ficha_cef,data_leilao,area_m2,valor_avaliacao,matricula_checada_em&limit=1`)).json();
     row = r || null;
   } catch { /* segue com o que veio no body */ }
 
@@ -799,12 +789,25 @@ export default async function handler(req, res) {
       const [lc] = await (await sb(`leiloeiro_conhecimento?fonte=eq.${encodeURIComponent(String(row?.fonte || ''))}&select=fonte,plataforma,custo,qualidade&limit=1`)).json();
       fonteInfo = lc || null;
     } catch { /* best-effort */ }
+    // Classificação da modalidade (reaproveitada no bloco antifraude final): a
+    // verificação de legitimidade é DIFERENTE por tipo — JUDICIAL confere o processo no
+    // CNJ; EXTRAJUDICIAL (Lei 9.514, sem processo) confere o lote no SITE do leiloeiro.
+    // ehJudicial já vem de cima (linha ~611). Aqui só derivo o EXTRAjudicial e o link oficial.
+    const modStr = String(im.modalidade || row?.modalidade || '').toLowerCase();
+    const ehExtrajudicial = !ehJudicial && /extrajud|9\.?514|consolida|fiduci|venda.?direta|direta/.test(modStr);
     const procDigitsPre = String(procNum || '').replace(/\D/g, '');
-    if (row?.fonte || procDigitsPre.length === 20) {
+    const linkOficial = row?.url_lote || row?.link_edital || null;
+    if (row?.fonte || procDigitsPre.length === 20 || ehExtrajudicial) {
       const antifraudeHint = [
-        'VERIFICAÇÃO DE PROCEDÊNCIA (anti-golpe — comente no parecer SE algo não fechar):',
-        row?.fonte ? `- Origem do lote: ${row.fonte}${fonteInfo ? ` (${fonteInfo.plataforma || 'plataforma integrada'}), fonte reconhecida e monitorada pela BidPro.` : ', fonte NÃO reconhecida pela plataforma — trate a idoneidade do leiloeiro como diligência a confirmar (registro na Junta Comercial e no tribunal).'}` : '',
-        procDigitsPre.length === 20 ? `- Processo ${procDigitsPre}: dígito verificador CNJ ${cnjValido(procDigitsPre) ? 'VÁLIDO' : 'INVÁLIDO (número possivelmente incorreto ou forjado)'}; DataJud ${temProc ? 'CONFIRMOU o processo' : 'NÃO localizou o processo (confirmar no tribunal antes do lance)'}.` : '',
+        'VERIFICAÇÃO DE LEGITIMIDADE (anti-golpe — comente no parecer SE algo não fechar e SEMPRE recomende, ao final, reunião com um analista BidPro e o encaminhamento ao jurídico antes do lance):',
+        row?.fonte ? `- Origem do lote: ${row.fonte}${fonteInfo ? ` (${fonteInfo.plataforma || 'plataforma integrada'}), leiloeiro/fonte reconhecido e monitorado pela BidPro.` : ', fonte NÃO reconhecida pela plataforma — trate a idoneidade do leiloeiro como diligência a confirmar (registro na Junta Comercial e no site oficial).'}` : '',
+        // JUDICIAL → existência do processo no CNJ. EXTRAJUDICIAL → conferir no site do leiloeiro.
+        (ehJudicial || procDigitsPre.length === 20)
+          ? (procDigitsPre.length === 20
+              ? `- Leilão judicial · Processo ${procDigitsPre}: dígito verificador CNJ ${cnjValido(procDigitsPre) ? 'VÁLIDO' : 'INVÁLIDO (número possivelmente incorreto ou forjado)'}; DataJud ${temProc ? 'CONFIRMOU o processo' : 'NÃO localizou o processo (confirmar no tribunal antes do lance)'}.`
+              : '- Leilão judicial sem número de processo no padrão CNJ nos documentos — confirmar o processo no tribunal antes do lance.')
+          : '',
+        ehExtrajudicial ? `- Leilão extrajudicial (Lei 9.514, sem processo judicial): a legitimidade se confere no SITE OFICIAL do leiloeiro${linkOficial ? ` (${linkOficial})` : ''} — confirme que o lote, o edital e o leiloeiro constam lá antes de qualquer lance ou pagamento.` : '',
       ].filter(Boolean).join('\n');
       content.push({ type: 'text', text: antifraudeHint });
     }
@@ -1019,19 +1022,27 @@ export default async function handler(req, res) {
     const procAF = String(procFontes || '').replace(/\D/g, '');
     const temNumCNJ = procAF.length === 20;
     const dvOk = temNumCNJ ? cnjValido(procAF) : null;
-    const ehExtrajudicial = /extrajud|9\.?514|consolida|fiduci/i.test(String(im.modalidade || row?.modalidade || ''));
     const riscosAntifraude = [];
-    if (row?.fonte && !fonteInfo) riscosAntifraude.push({ categoria: 'Procedência do leiloeiro', severidade: 'alerta', descricao: `A origem do lote ("${row.fonte}") não está na base de leiloeiros integrados e monitorados da plataforma. Confirme a idoneidade do leiloeiro (registro na Junta Comercial/JUCESP e no tribunal) antes de qualquer lance ou pagamento.`, constaNaDoc: false });
-    if (temNumCNJ && dvOk === false) riscosAntifraude.push({ categoria: 'Número do processo', severidade: 'alerta', descricao: `O número do processo informado (${procAF}) não passou na validação do dígito verificador do padrão CNJ. Pode estar digitado errado ou ser inválido: confirme o número real no tribunal antes de prosseguir.`, constaNaDoc: false });
-    if (temNumCNJ && dvOk && cnj && !temProc) riscosAntifraude.push({ categoria: 'Existência do processo', severidade: 'alerta', descricao: `O processo tem número válido, mas não foi localizado no DataJud (CNJ). Pode ser defasagem do sistema, mas também é sinal de alerta: confirme a existência do processo no tribunal antes do lance.`, constaNaDoc: false });
+    // (1) PROCEDÊNCIA do leiloeiro — vale para AMBAS as modalidades.
+    if (row?.fonte && !fonteInfo) riscosAntifraude.push({ categoria: 'Procedência do leiloeiro', severidade: 'alerta', descricao: `A origem do lote ("${row.fonte}") não está na base de leiloeiros integrados e monitorados da plataforma. Confirme a idoneidade do leiloeiro (registro na Junta Comercial/JUCESP e no site oficial) antes de qualquer lance ou pagamento.`, constaNaDoc: false });
+    // (2) LEGITIMIDADE — JUDICIAL: existência do processo no CNJ (DV + DataJud).
+    if (ehJudicial || temNumCNJ) {
+      if (temNumCNJ && dvOk === false) riscosAntifraude.push({ categoria: 'Número do processo', severidade: 'alerta', descricao: `O número do processo informado (${procAF}) não passou na validação do dígito verificador do padrão CNJ. Pode estar digitado errado ou ser inválido: confirme o número real no tribunal antes de prosseguir.`, constaNaDoc: false });
+      else if (temNumCNJ && dvOk && cnj && !temProc) riscosAntifraude.push({ categoria: 'Existência do processo', severidade: 'alerta', descricao: `O processo tem número válido, mas não foi localizado no DataJud (CNJ). Pode ser defasagem do sistema, mas também é sinal de alerta: confirme a existência do processo no tribunal antes do lance.`, constaNaDoc: false });
+      else if (ehJudicial && !temNumCNJ) riscosAntifraude.push({ categoria: 'Processo judicial', severidade: 'alerta', descricao: `Leilão judicial sem número de processo no padrão CNJ nos documentos lidos. Confirme o processo no tribunal antes do lance.`, constaNaDoc: false });
+    }
+    // (2') LEGITIMIDADE — EXTRAJUDICIAL: não há processo; a checagem é no SITE do leiloeiro.
+    if (ehExtrajudicial) riscosAntifraude.push({ categoria: 'Legitimidade do leilão (extrajudicial)', severidade: 'informativo', descricao: `Leilão extrajudicial (sem processo judicial). Confirme que este lote consta no site OFICIAL do leiloeiro${linkOficial ? ` (${linkOficial})` : ''} e que o edital e o leiloeiro conferem, antes de qualquer lance ou pagamento.`, constaNaDoc: false });
     const antifraude = {
       fonte: row?.fonte || null,
       fonteReconhecida: row?.fonte ? !!fonteInfo : null,
       plataforma: fonteInfo?.plataforma || null,
+      modalidade: ehJudicial ? 'judicial' : (ehExtrajudicial ? 'extrajudicial' : 'indefinida'),
       processoNumero: temNumCNJ ? procAF : null,
       processoDvCNJValido: dvOk,
       processoConfirmadoDataJud: temNumCNJ ? temProc : null,
-      extrajudicialSemProcesso: ehExtrajudicial && !temNumCNJ,
+      verificarNoSiteDoLeiloeiro: ehExtrajudicial ? (linkOficial || true) : false,
+      recomendacao: 'Recomendamos reunião com um analista BidPro e o encaminhamento ao jurídico antes de qualquer lance.',
       alertas: riscosAntifraude.map(r => r.descricao),
       verificadoEm: new Date().toISOString(),
     };
@@ -1270,10 +1281,19 @@ export default async function handler(req, res) {
       return semDocs;
     }
 
+    // Certidões CAPTURADAS (o documento COMO O PORTAL DEVOLVEU) — vão ao FINAL do
+    // relatório documental/jurídico, visualizáveis. Só as que renderam um documento.
+    const CERT_TITULO = { cndt: 'Débitos Trabalhistas (CNDT / TST)', cnib: 'Indisponibilidade de Bens (CNIB)', protestos: 'Protestos em Cartório (CENPROT)' };
+    const certidoesDocumentos = Object.entries(CERT_TITULO)
+      .map(([k, titulo]) => ({ titulo, f: fx?.[k] }))
+      .filter(x => x.f && x.f.comprovanteUrl)
+      .map(x => ({ titulo: x.titulo, resumo: x.f.resumo || '', url: x.f.comprovanteUrl }));
+
     const result = {
       extracao: parsed.extracao || null,
       riscos: rlist,
       antifraude,
+      certidoesDocumentos,
       pontosAtencao,
       faltando,
       paginaLeiloeiro,

@@ -84,10 +84,22 @@ export function corpoDocumental({ imovel: d = {}, parecer: P = {}, bidscore: sb 
     return `<div style="display:flex;gap:9px;align-items:flex-start;margin-bottom:7px;">
       <span style="color:${cor};font-weight:900;width:12px;flex-shrink:0;">${ic}</span>
       <div><div style="font-size:11.5px;font-weight:700;color:#111;">${esc(c.label)}</div>
-      <div style="font-size:11px;color:#64748b;line-height:1.5;">${esc(c.detalhe)}</div>
-      ${c.comprovante ? `<div style="font-size:10px;margin-top:2px;">📄 <a href="${esc(c.comprovante)}" style="color:#1e3a8a;">Ver comprovante da consulta</a></div>` : ''}</div>
+      <div style="font-size:11px;color:#64748b;line-height:1.5;">${esc(c.detalhe)}</div></div>
     </div>`;
   }).join('')}
+</div>` : '';
+
+  // Certidões CAPTURADAS (o documento como o portal devolveu) — SEÇÃO FINAL, visualizável.
+  const certDocs = Array.isArray(P.certidoesDocumentos) ? P.certidoesDocumentos.filter(c => c && c.url) : [];
+  const certidoesDocsHtml = certDocs.length ? `
+<div class="av" style="border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc;padding:14px 16px;margin-top:14px;page-break-inside:avoid;">
+  <div style="font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:0.5px;color:#475569;margin-bottom:4px;">Certidões das consultas (documentos do portal)</div>
+  <div style="font-size:10px;color:#94a3b8;margin-bottom:10px;">Documentos obtidos diretamente dos portais públicos (CNDT, CNIB, CENPROT). Clique para visualizar.</div>
+  ${certDocs.map(c => `<div style="border-top:1px solid #eef2f7;padding:7px 0;">
+    <div style="font-size:11.5px;font-weight:700;color:#0f172a;">${esc(c.titulo)}</div>
+    ${c.resumo ? `<div style="font-size:10.5px;color:#475569;">${esc(c.resumo)}</div>` : ''}
+    <div style="font-size:10px;margin-top:2px;">📄 <a href="${esc(c.url)}" style="color:#1e3a8a;">Ver certidão do portal</a></div>
+  </div>`).join('')}
 </div>` : '';
 
   // Raio-X (condensado)
@@ -171,6 +183,7 @@ ${raioXHtml}
 ${parecerHtml}
 ${lacunasHtml}
 ${certidoesHtml}
+${certidoesDocsHtml}
 
 <div class="foot av">
   Esta análise documental e processual é gerada com apoio de inteligência artificial, a partir dos documentos disponíveis e de consultas públicas. Pode conter imprecisões e não substitui a análise de um profissional nem a verificação presencial. Recomendamos agendar a reunião com um analista BidPro e, uma vez aprovado, o laudo jurídico definitivo por advogado antes de qualquer lance.

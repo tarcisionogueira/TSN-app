@@ -1771,7 +1771,7 @@ export default function Analise() {
                             </div>
                             <div style={{ fontSize:11.5, color:'#64748b', lineHeight:1.5 }}>{c.detalhe}</div>
                             {c.comprovante && (
-                              <a href={c.comprovante} target="_blank" rel="noopener noreferrer" onClick={(e) => verComprovante(e, c.comprovante)} style={{ display:'inline-flex', alignItems:'center', gap:4, marginTop:3, fontSize:11, fontWeight:700, color:'#1e3a8a', textDecoration:'none' }}>📄 Ver comprovante da consulta</a>
+                              <a href={c.comprovante} target="_blank" rel="noopener noreferrer" onClick={(e) => verComprovante(e, c.comprovante)} style={{ display:'inline-flex', alignItems:'center', gap:4, marginTop:3, fontSize:11, fontWeight:700, color:'#1e3a8a', textDecoration:'none' }}>📄 Ver certidão do portal</a>
                             )}
                           </div>
                         </div>

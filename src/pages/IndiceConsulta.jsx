@@ -1,8 +1,9 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MapPin, TrendingUp, Search, Home, Building2 } from 'lucide-react';
+import { MapPin, TrendingUp, Search, Home, Building2, FileText } from 'lucide-react';
 import { apiCall } from '../utils/apiCall';
 import EnderecoAutocomplete from '../components/EnderecoAutocomplete';
+import { gerarIndicePDF } from '../components/IndicePDF';
 import { useAuth } from '../contexts/AuthContext';
 
 // Quem pode GERAR o índice de uma região nova (o servidor é a fonte da verdade — isto é só UI).
@@ -16,7 +17,7 @@ const brl = (v) => 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { maximumFract
 // aponta para gerar (recurso dos planos pagos).
 export default function IndiceConsulta() {
   const nav = useNavigate();
-  const { effectiveRole } = useAuth();
+  const { effectiveRole, nome } = useAuth();
   const podeGerar = PODE_GERAR.includes(effectiveRole);
   // nivelConsulta: 'rua' (endereço+nº → condomínio/≤250m) · 'bairro' · 'cidade'.
   const [form, setForm] = React.useState({ cidade: '', uf: 'SP', bairro: '', tipo: 'apartamento', lat: null, lng: null, endereco: '', condominio: '', numero: '', nivelConsulta: '' });
@@ -211,6 +212,15 @@ export default function IndiceConsulta() {
                 <div style={{ fontSize: 22, fontWeight: 900, color: '#7c3aed', marginTop: 4 }}>{Number(reg.aluguel_m2) > 0 ? `${brl(reg.aluguel_m2)}/m²·mês` : 'em formação'}</div>
               </div>
             </div>
+          </div>
+
+          <button
+            onClick={() => gerarIndicePDF({ form, reg, vz, solicitante: { nome, role: effectiveRole } })}
+            style={{ alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 20px', background: '#0D2A54', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 14, cursor: 'pointer' }}>
+            <FileText size={16} /> Gerar relatório do Índice (PDF)
+          </button>
+          <div style={{ fontSize: 11, color: '#94a3b8', marginTop: -8 }}>
+            Peça com a marca BidPro para compartilhar com clientes (advogados, peritos, corretores).
           </div>
 
           {Array.isArray(vz?.serie) && vz.serie.length >= 2 && (() => {
