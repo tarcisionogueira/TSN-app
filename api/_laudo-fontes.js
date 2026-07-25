@@ -83,7 +83,7 @@ export async function consultarCNDT(doc) {
 // matrícula, ex.: AV-9/AV-16). CRÍTICO antes de arrematar — pode bloquear o
 // registro. Portal com captcha → tentativa via Bright Data; resposta não
 // reconhecida vira pendência 48h (NUNCA afirma "livre" no escuro).
-const diligenciaCNIB = () => ({ ok: false, instavel: false, diligencia: true, erro: 'Indisponibilidade de bens: consulta pública sem retorno automático conclusivo agora — a verificação entra na validação do analista e do jurídico antes do lance.' });
+const diligenciaCNIB = () => ({ ok: false, instavel: false, diligencia: true, erro: 'Indisponibilidade de bens (CNIB): a certidão oficial deve ser emitida pelo ADVOGADO (portal com captcha, não sai automaticamente pela plataforma) — entra na diligência do jurídico antes do lance.' });
 export async function consultarCNIB(doc) {
   const d = soDigitos(doc);
   if (d.length !== 11 && d.length !== 14) return { ok: false, instavel: false, erro: 'documento inválido' };
@@ -109,7 +109,9 @@ export async function consultarCNIB(doc) {
       ok: true, instavel: false,
       resumo: qtd > 0 ? `⚠️ Indisponibilidade de bens ENCONTRADA (${qtd} registro(s)) — bloqueia/atrasa o registro; checar antes de arrematar` : 'Sem indisponibilidade de bens (CNIB)',
       dados: { total: qtd, tem_indisponibilidade: qtd > 0 },
-      comprovanteHtml: txt,
+      // Sem comprovanteHtml de propósito: o CNIB é SPA com captcha e a certidão OFICIAL
+      // não sai de forma confiável pela plataforma → a emissão fica como DILIGÊNCIA DO
+      // ADVOGADO (o resumo acima é só um indicativo preliminar).
     };
   } catch (e) { console.warn(`[CNIB] erro ${e?.message}`); return diligenciaCNIB(); }
 }
@@ -117,7 +119,7 @@ export async function consultarCNIB(doc) {
 // ── CENPROT — Protestos em cartório (nacional) ─────────────────────────────────
 // Protestos no CPF/CNPJ do vendedor → solvência. Portal com captcha/login →
 // tentativa via Bright Data; senão, pendência 48h.
-const diligenciaCENPROT = () => ({ ok: false, instavel: false, diligencia: true, erro: 'Protestos em cartório: consulta pública sem retorno automático conclusivo agora — a verificação entra na validação do analista e do jurídico antes do lance.' });
+const diligenciaCENPROT = () => ({ ok: false, instavel: false, diligencia: true, erro: 'Protestos em cartório (CENPROT): a certidão oficial deve ser emitida pelo ADVOGADO (portal com captcha, não sai automaticamente pela plataforma) — entra na diligência do jurídico antes do lance.' });
 export async function consultarProtestos(doc) {
   const d = soDigitos(doc);
   if (d.length !== 11 && d.length !== 14) return { ok: false, instavel: false, erro: 'documento inválido' };
@@ -142,7 +144,9 @@ export async function consultarProtestos(doc) {
       ok: true, instavel: false,
       resumo: qtd > 0 ? `⚠️ ${qtd} protesto(s) encontrado(s)` : 'Sem protestos (CENPROT)',
       dados: { total: qtd },
-      comprovanteHtml: txt,
+      // Sem comprovanteHtml de propósito: o CENPROT é SPA com captcha e a certidão
+      // OFICIAL não sai de forma confiável pela plataforma → a emissão fica como
+      // DILIGÊNCIA DO ADVOGADO (o resumo acima é só um indicativo preliminar).
     };
   } catch (e) { console.warn(`[CENPROT] erro ${e?.message}`); return diligenciaCENPROT(); }
 }

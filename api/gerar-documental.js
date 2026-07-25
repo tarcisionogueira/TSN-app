@@ -1281,8 +1281,22 @@ export default async function handler(req, res) {
       return semDocs;
     }
 
+    // CNIB e CENPROT não saem de forma confiável pela plataforma (portais SPA com
+    // captcha) → a certidão OFICIAL é DILIGÊNCIA DO ADVOGADO. Garante que entrem na lista
+    // de "certidões a gerar antes do lance" como recomendação, sem depender da IA.
+    try {
+      const rec = (parsed.raioX && Array.isArray(parsed.raioX.certidoesRecomendadas)) ? parsed.raioX.certidoesRecomendadas : [];
+      const add = [];
+      if (!rec.some(c => /cnib|indisponibil/i.test(`${c?.nome || ''} ${c?.orgao || ''}`)))
+        add.push({ nome: 'CNIB — Indisponibilidade de bens', orgao: 'indisponibilidade.org.br (CNIB)', online: true, motivo: 'A certidão oficial deve ser emitida pelo advogado (o portal exige captcha e não sai automaticamente pela plataforma). Aponta se há indisponibilidade que bloqueia o registro do imóvel.' });
+      if (!rec.some(c => /cenprot|protesto/i.test(`${c?.nome || ''} ${c?.orgao || ''}`)))
+        add.push({ nome: 'CENPROT — Protestos em cartório', orgao: 'CENPROT nacional (resolve.cenprot.org.br)', online: true, motivo: 'A certidão oficial deve ser emitida pelo advogado (portal com captcha). Aponta protestos no nome do executado/vendedor (solvência).' });
+      if (add.length) { parsed.raioX = parsed.raioX || {}; parsed.raioX.certidoesRecomendadas = [...rec, ...add]; }
+    } catch { /* best-effort */ }
+
     // Certidões CAPTURADAS (o documento COMO O PORTAL DEVOLVEU) — vão ao FINAL do
-    // relatório documental/jurídico, visualizáveis. Só as que renderam um documento.
+    // relatório documental/jurídico, visualizáveis. Só as que renderam um documento
+    // (hoje, na prática, apenas o CNDT — CNIB/CENPROT viram diligência do advogado acima).
     const CERT_TITULO = { cndt: 'Débitos Trabalhistas (CNDT / TST)', cnib: 'Indisponibilidade de Bens (CNIB)', protestos: 'Protestos em Cartório (CENPROT)' };
     const certidoesDocumentos = Object.entries(CERT_TITULO)
       .map(([k, titulo]) => ({ titulo, f: fx?.[k] }))

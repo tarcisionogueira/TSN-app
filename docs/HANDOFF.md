@@ -29,7 +29,25 @@
 
 2. **Legitimidade do leilão — SEPARADA por modalidade (`api/gerar-documental.js`).** Antes o antifraude aplicava CNJ a tudo. Agora: **JUDICIAL** → valida o processo no CNJ (dígito verificador + DataJud); **EXTRAJUDICIAL** (Lei 9.514, sem processo) → orienta conferir o lote no **site OFICIAL do leiloeiro** (`url_lote`/`link_edital`, agora no SELECT). **Ambos** → o parecer recomenda reunião com analista + encaminhamento ao jurídico (reforçado no prompt e no `result.antifraude.recomendacao`; o rodapé do PDF já dizia). `ehJudicial` reusa a var da linha ~611.
 
-3. **Certidões — agora a do PORTAL (não da plataforma), ao FINAL do relatório.** O dono não quer a página fabricada pela BidPro; quer a **certidão como o portal devolveu**, visualizável, ao fim do documental/jurídico. `salvarComprovante` passou a guardar o **retorno fiel do portal** sanitizado (remove `<script>`/`<base>`/`<link>`/`<iframe>` → não re-hidrata ao vivo, fim da "tela de digitação"; JSON de portal-SPA vira `<pre>` legível) com 1 linha de proveniência. Nova seção **"Certidões das consultas (documentos do portal)"** ao FINAL do `DocumentalPDF.jsx` (`result.certidoesDocumentos`); no web (`Analise.jsx`) o link virou "Ver certidão do portal". **Limite honesto:** CNDT é server-rendered (pega a certidão real); CNIB/CENPROT são SPA+captcha → às vezes só a resposta de dados chega; o oficial definitivo fica com o jurídico (alinha com o item 2).
+3. **Certidões — a do PORTAL (não da plataforma), ao FINAL do relatório; CNIB/CENPROT viram diligência do ADVOGADO.** O dono não quer página fabricada pela BidPro; quer a **certidão como o portal devolveu**, visualizável, ao fim do documental/jurídico. `salvarComprovante` guarda o **retorno fiel do portal** sanitizado (remove `<script>`/`<base>`/`<link>`/`<iframe>` → não re-hidrata ao vivo, fim da "tela de digitação"). Nova seção **"Certidões das consultas (documentos do portal)"** ao FINAL do `DocumentalPDF.jsx` (`result.certidoesDocumentos`). **DECISÃO do dono (sessão 5b):** como **CNIB e CENPROT** são SPA+captcha e a certidão oficial **não sai de forma confiável** pela plataforma, foram **RETIRADOS** da captura (sem `comprovanteHtml` em `api/_laudo-fontes.js`) e **recomendados como diligência do ADVOGADO** — injetados em `certidoesRecomendadas` ("Certidões a gerar antes do lance") + mensagem de diligência reforçada. **Só o CNDT** (server-rendered, sai de fato) permanece como certidão capturada do portal.
+
+## 📋 PRÓXIMOS PASSOS / PENDÊNCIAS (revisão 25/07 — para resolver com o dono)
+
+**A) Posso tocar (alguns precisam de go-ahead por custo/CI):**
+1. **Mais leiloeiros (backlog TRT-15).** Construir scraper novo exige recon VIVO na CI (dev bloqueado) e **consome Bright Data (teto 450/sem)**. Ordem de melhor retorno: (1) SUPORTE tenant enum (cunha/vinco), (2) cluster **Vlance /v3/** (verdeamarelo+sudeste+capitalvalor+sanches), (3) alfaleiloes/destak. → **precisa go-ahead** (custo).
+2. **Validar arquivamento de docs (sessão 3).** A fila (~2 mil) escoa a 40/30min; conferir no próximo ciclo pelas queries do bloco "sessão 3" (contagem de `imovel_anexos` das 11 fontes ↑ e `documentos_fila` pendente ↓).
+3. **Regenerar 1 caso JUDICIAL + 1 EXTRAJUDICIAL** para conferir o antifraude por modalidade e a certidão CNDT ao final (posso forçar quando o dono quiser).
+4. **Índice sob demanda p/ ADMIN quando a região não está mapeada** (evolução antiga pedida): disparar a pesquisa e estabelecer o valor na hora. → posso implementar.
+5. **(Descartado, salvo pedido)** captura pós-captcha de CNIB/CENPROT via render Bright Data — decidido virar diligência do advogado.
+
+**B) Depende do DONO (painel/assinatura — ver `docs/PENDENCIAS_DONO.md`):**
+1. **Asaas** — reativar webhook (grátis, rápido). Depois eu reconcilio.
+2. **Upstash Redis** — rate-limit global (grátis). Depois eu confirmo pelos logs.
+3. **PECINI** — rodar 1 vez a captura de docs na CI (grátis) → eu confirmo cobertura.
+4. **R2 (backup DR)** — criar bucket + 4 env vars + colar a cláusula LGPD na Política.
+5. **Ranks / plano de carreira** — nomear os ranks, validar percentuais + % do pool, e **agendar os crons mensais** (`recalcular_ranks` + `distribuir_pool_rank`).
+6. **Quando crescer o pago** — Resend (plano), Supabase (compute + read replica). *(Leaked-password já ligado.)*
+7. **Preço agendado 01/10** (49,90→89,90 / anual 899) — já configurado; só monitorar o gatilho.
 
 ## ✅ COMEÇAR AQUI (25/07 — sessão 4: Índice→viabilidade, antifraude documental, certidões, +leiloeiros)
 > Branch: `claude/bidprobrasil-handoff-storage-qzm1mc`. Build (vite) OK · `node --check` OK nos `api/`. Segurança **0/0**. 4 pedidos do dono; investigados com 3 agentes em paralelo + queries.
