@@ -215,7 +215,10 @@ export async function processarConfirmado({ valor, descricao, email, gatewayCust
     [campoId]: gatewayCustomerId || undefined,
   };
   if (mapeado) {
-    update.plano = mapeado.plano;
+    // NÃO gravar `plano`: a coluna tem check constraint (gratuito|analista|gestor) e
+    // planoKey 'top2'/'clube'/'assessorado' a VIOLA → o update inteiro falhava (throw),
+    // deixando o cliente PAGO sem acesso (bug ativo no caminho Asaas / fallback, que usa
+    // este processarConfirmado). O TIER mora em `role` — mesma correção do ativarPlanoDireto.
     update.role = (cliente.role_anterior && cliente.inadimplente_desde)
       ? cliente.role_anterior
       : mapeado.role;
