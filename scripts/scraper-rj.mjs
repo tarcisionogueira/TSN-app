@@ -17,6 +17,7 @@
  */
 import { createClient } from '@supabase/supabase-js';
 import { fetchViaBrightData, brightDataDisponivel } from '../api/_brightdata.js';
+import { fetchHeadless, fecharHeadless } from './lib/fetch-residencial.mjs';
 import { extrairGenerico, extrairData, checarQualidade } from './lib/scraper-core.mjs';
 import { registrarConhecimento, qualidadeColeta } from './lib/conhecimento.mjs';
 
@@ -34,6 +35,11 @@ const supabase = createClient(SB_URL, SB_KEY);
 
 // Busca crua via Web Unlocker (com teto de custo). Retorna o corpo (HTML/XML) ou null.
 async function bd(url, { timeoutMs = 60000 } = {}) {
+  if (process.env.RJ_HEADLESS === '1') {   // runner residencial: Chromium real (passa Cloudflare de IP residencial), SEM Bright Data
+    const h = await fetchHeadless(url, { timeoutMs });
+    if (DEBUG) console.log(`  headless ${url} → ${h ? h.length + ' bytes' : 'null'}`);
+    return h;
+  }
   const r = await fetchViaBrightData(url, { proposito: 'rj', timeoutMs });
   if (!r) { if (DEBUG) console.log(`  bd ${url} → null (teto/config)`); return null; }
   const body = await r.text().catch(() => null);
@@ -263,4 +269,6 @@ async function main() {
   });
 }
 
-main().catch(e => { console.error(e); process.exit(1); });
+main()
+  .then(() => fecharHeadless().finally(() => process.exit(0)))
+  .catch(e => { console.error(e); fecharHeadless().finally(() => process.exit(1)); });

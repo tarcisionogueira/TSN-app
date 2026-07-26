@@ -35,22 +35,26 @@ gastar cota. A frequência é do `cron` (2x/semana) — não roda a cada acesso.
 |---|---|---|---|
 | **Vlance** (verdeamarelo/sudeste/capitalvalor) | — | client-side (staff) | ✅ **feito** |
 | **SOLEON** (calil/vegas/3torres) | ~150 | runner residencial (fetch direto, sem CF) | ✅ **no runner** (`SOLEON_NO_BD=1`) |
-| **LJUD** (agregador, ~40 leiloeiros) | ~180 (o maior) | client-side SE tiver API CORS-aberta | 🟡 **recon** (rodar o mapper — ver playbook) |
-| **GESTAOLEILOES** (granado/vinco/…) | ~150 | runner residencial **headless** (tem Cloudflare) | ⏳ tier headless |
-| **RJ Leilões** | ~120 | runner residencial **headless** (100% Cloudflare) | ⏳ tier headless |
-| **radar / docs** | 250 / 150 | — (autocomplete-geo / download de PDF) | manter (propósito distinto) |
+| **LJUD** + MEGA/ZUK/GRUPOLANCE/SUPERBID/SODRÉ/FRAZÃO | ~0 | `scraper-puppeteer.mjs` já usa **navegador real** (0 BD) | ✅ **já grátis** (na própria CI) |
+| **GESTAOLEILOES** (granado/vinco/…) | ~150 | runner residencial **headless** (`GESTAO_HEADLESS=1`) | ✅ **no runner** |
+| **RJ Leilões** | ~120 | runner residencial **headless** (`RJ_HEADLESS=1`) | ✅ **no runner** |
+| **radar / docs** | 250 / 150 | — (autocomplete-geo / download de PDF) | manter (propósito distinto, baixo volume) |
 
 ## 🗺️ Próximos passos para ZERAR o Bright Data
-1. **[DONO, 30s] Recon do LJUD** (maior economia): rode o mapper (`docs/RECON_LEILOEIROS_PLAYBOOK.md`)
-   em `leiloesjudiciais.com.br`. Se aparecer uma chamada `/api/...` JSON e o fetch cross-origin
-   funcionar de `bidprobrasil.com.br` → me avise que eu ligo o LJUD no **client-side** (como o Vlance)
-   → corta a MAIOR sub-cota.
-2. **[DONO] Subir o runner residencial** (setup acima) → já zera **SOLEON** (fetch direto).
-3. **[CLAUDE] Tier headless** no runner (Playwright/Chromium local) p/ **GESTAOLEILOES** e **RJ**
-   (Cloudflare) — quando você pedir; roda residencial, grátis.
-4. **[CLAUDE] Confirmar Vlance** na 1ª coleta client-side (o que entrou no acervo).
-5. **docs/radar**: avaliar caso a caso — `docs` (PDF) e `radar` (geo) não são listagem de lote;
-   podem seguir com BD (baixo volume) ou migrar sob demanda.
+Praticamente **tudo já está resolvido no código** — falta só ATIVAR o runner residencial:
+1. **[DONO] Subir o runner residencial** (setup acima) — ao rodar, zera **SOLEON** (direto) +
+   **GESTAOLEILOES** e **RJ** (Chromium headless). É o único passo que falta para o BD chegar a ~0.
+   `npm ci` já instala o Chromium do puppeteer (o headless usa ele).
+2. **[DONO] 1ª rodada de validação:** rode `scripts/runner-residencial.sh` na mão uma vez e confira o
+   `bidpro-runner.log` — as fontes devem gravar sem tocar no Bright Data. (Não deu p/ testar daqui: o
+   egress deste ambiente é bloqueado e o Cloudflare exige IP residencial + navegador real.) Se GESTAO/RJ
+   não passarem o Cloudflare de primeira, me manda o log que eu ajusto a espera/heurística do headless.
+3. **[CLAUDE] Confirmar Vlance** na 1ª coleta client-side (o que entrou no acervo) — na próxima sessão.
+4. **docs/radar**: `docs` (PDF) e `radar` (geo) não são listagem de lote; ficam com BD (baixo volume) —
+   é o "resíduo" que o dono aceitou como último caso.
 
-**Resultado ao fim:** Vlance (client-side) + SOLEON/GESTAO/RJ (runner residencial) + LJUD (client-side
-se tiver API) → **BD só para o resíduo** (docs/radar), como o dono pediu.
+**Já grátis sem runner:** LJUD, MEGA, ZUK, GRUPOLANCE, SUPERBID, SODRÉ, FRAZÃO — o `scraper-puppeteer.mjs`
+já usa navegador real (0 Bright Data) na própria CI. **Vlance** — client-side (staff).
+
+**Resultado ao ativar o runner:** Vlance (client-side) + LJUD/MEGA/ZUK/… (puppeteer CI) + SOLEON/GESTAO/RJ
+(runner residencial) → **Bright Data só para o resíduo** `docs`/`radar`, exatamente como você pediu.

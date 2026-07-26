@@ -30,12 +30,18 @@ echo "===== [$(date)] runner residencial ====="
 echo "[$(date)] SOLEON…"
 SOLEON_NO_BD=1 SOLEON_DRYRUN=0 node scripts/scraper-soleon.mjs || echo "  (soleon falhou — segue)"
 
-# Vlance (verdeamarelo, sudeste, capitalvalor) — opcional aqui (já coletado client-side pelo staff).
-# Descomente para redundância residencial:
+# GESTAOLEILOES (granado/vinco/…) — Cloudflare: Chromium real (puppeteer) de IP residencial passa,
+# SEM Bright Data. GESTAO_DRYRUN=0 grava; GESTAO_HEADLESS=1 usa o navegador em vez do BD.
+echo "[$(date)] GESTAOLEILOES (headless)…"
+GESTAO_HEADLESS=1 GESTAO_DRYRUN=0 node scripts/scraper-gestao.mjs || echo "  (gestao falhou — segue)"
+
+# RJ Leilões — 100% Cloudflare: idem, Chromium real residencial.
+echo "[$(date)] RJ (headless)…"
+RJ_HEADLESS=1 node scripts/scraper-rj.mjs || echo "  (rj falhou — segue)"
+
+# Vlance (verdeamarelo/sudeste/capitalvalor) — opcional (já coletado client-side pelo staff).
+# Descomente para redundância residencial (precisa python3 + requests):
 # echo "[$(date)] Vlance…"
 # python3 scripts/scraper_vlance.py --supabase || echo "  (vlance falhou — segue)"
-
-# GESTAOLEILOES / RJ (Cloudflare) — AINDA precisam de Bright Data OU Chromium headless residencial.
-# Ver o roadmap em docs/RUNNER_RESIDENCIAL.md (tier headless). Não incluídos aqui por padrão.
 
 echo "[$(date)] fim."

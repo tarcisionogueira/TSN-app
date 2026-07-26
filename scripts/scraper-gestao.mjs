@@ -27,6 +27,7 @@ import { createClient } from '@supabase/supabase-js';
 import { fetchViaBrightData, brightDataDisponivel } from '../api/_brightdata.js';
 import { checarQualidade, normalizarData } from './lib/scraper-core.mjs';
 import { registrarConhecimento, qualidadeColeta } from './lib/conhecimento.mjs';
+import { fetchHeadless, fecharHeadless } from './lib/fetch-residencial.mjs';
 
 // vincoleiloes.com.br: recon 26/07 confirmou o MESMO back-office (leilao.php?idLeilao=N +
 // CDN d335luupugsy2.cloudfront.net) — entra no cluster (dedup global por idLote cuida de sobreposição).
@@ -46,6 +47,9 @@ const supabase = createClient(SB_URL, SB_KEY);
 
 // Busca via Web Unlocker e DECODIFICA windows-1252 (o back-office serve latin1).
 async function bd(url, { timeoutMs = 60000 } = {}) {
+  if (process.env.GESTAO_HEADLESS === '1') {   // runner residencial: Chromium real já decodifica o charset (sem mojibake) e passa Cloudflare, SEM Bright Data
+    return await fetchHeadless(url, { timeoutMs });
+  }
   const r = await fetchViaBrightData(url, { proposito: 'gestao', timeoutMs });
   if (!r || !r.ok) return null;
   try {
@@ -322,4 +326,6 @@ async function main() {
   });
 }
 
-main().catch(e => { console.error(e); process.exit(1); });
+main()
+  .then(() => fecharHeadless().finally(() => process.exit(0)))
+  .catch(e => { console.error(e); fecharHeadless().finally(() => process.exit(1)); });
