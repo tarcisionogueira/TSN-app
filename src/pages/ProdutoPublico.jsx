@@ -3,6 +3,7 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../utils/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { driveImage } from '../utils/driveUrl';
+import { apiCall } from '../utils/apiCall';
 
 export default function ProdutoPublico({ tipo }) {
   const { id } = useParams();
@@ -14,6 +15,9 @@ export default function ProdutoPublico({ tipo }) {
   const [aulas, setAulas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [comprouAvulso, setComprouAvulso] = useState(false);
+  const [comprando, setComprando] = useState(false);
+  const [aguardando, setAguardando] = useState(false);
+  const [erroCompra, setErroCompra] = useState('');
 
   // Persiste código de referência do consultor
   useEffect(() => {
@@ -27,6 +31,35 @@ export default function ProdutoPublico({ tipo }) {
       .select('id').eq('user_id', user.id).eq('produto_tipo', tipo).eq('produto_id', id).eq('status', 'ativo')
       .then(({ data }) => { if (data?.length > 0) setComprouAvulso(true); });
   }, [user, id, produto, tipo]);
+
+  // Enquanto aguarda o pagamento (aba do Asaas aberta), faz polling da compra → libera sozinho.
+  useEffect(() => {
+    if (!aguardando || !user || !id) return;
+    const t = setInterval(async () => {
+      const { data } = await supabase.from('compras_produtos')
+        .select('id').eq('user_id', user.id).eq('produto_tipo', tipo).eq('produto_id', id).eq('status', 'ativo').limit(1);
+      if (data?.length) { setComprouAvulso(true); setAguardando(false); }
+    }, 5000);
+    return () => clearInterval(t);
+  }, [aguardando, user, id, tipo]);
+
+  // Compra AVULSA: cria a cobrança única no Asaas (com o parceiro do ?ref) e abre o link.
+  async function comprar() {
+    if (!user) { nav(`/login?modo=cadastro&produto=${tipo}:${id}${ref ? `&ref=${ref}` : ''}`); return; }
+    setErroCompra(''); setComprando(true);
+    try {
+      const refCod = ref || sessionStorage.getItem('tsn_ref_codigo') || '';
+      const nome = user.user_metadata?.nome || user.user_metadata?.full_name || '';
+      const r = await apiCall('/api/asaas', { method: 'POST', body: JSON.stringify({ action: 'criar_cobranca_avulsa', produto_tipo: tipo, produto_id: id, ref: refCod, nome, email: user.email }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || j?.error) throw new Error(j?.error === 'gratuito' ? 'Este produto é gratuito para você.' : (j?.error || 'Falha ao iniciar a compra'));
+      if (j.ja_tem) { setComprouAvulso(true); return; }
+      if (j.linkPagamento) { window.open(j.linkPagamento, '_blank', 'noopener'); setAguardando(true); }
+      else throw new Error('Não foi possível gerar o pagamento.');
+    } catch (e) {
+      setErroCompra(e?.message || 'Erro ao comprar');
+    } finally { setComprando(false); }
+  }
 
   useEffect(() => {
     async function load() {
@@ -152,12 +185,34 @@ export default function ProdutoPublico({ tipo }) {
                     : '⭐ Disponível para assinantes Investidor Pro'}
                 </div>
                 {user ? (
-                  /* JÁ LOGADO e sem acesso → assinar o plano que inclui todo o acervo
-                     (a assinatura é o caminho de pagamento ativo hoje). */
-                  <button onClick={() => nav(`/checkout?plano=top2${ref ? `&ref=${ref}` : ''}`)}
-                    style={{ width: '100%', padding: '15px', background: cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: 'pointer', marginBottom: 10 }}>
-                    Assinar e desbloquear →
-                  </button>
+                  <>
+                    {isPago ? (
+                      /* Compra AVULSA do item (não precisa assinar) */
+                      <button onClick={comprar} disabled={comprando || aguardando}
+                        style={{ width: '100%', padding: '15px', background: cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: (comprando || aguardando) ? 'default' : 'pointer', marginBottom: 10, opacity: (comprando || aguardando) ? 0.7 : 1 }}>
+                        {comprando ? 'Abrindo pagamento…' : aguardando ? 'Aguardando pagamento…' : `Comprar por R$ ${Number(produto.preco).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                      </button>
+                    ) : (
+                      <button onClick={() => nav(`/checkout?plano=top2${ref ? `&ref=${ref}` : ''}`)}
+                        style={{ width: '100%', padding: '15px', background: cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: 'pointer', marginBottom: 10 }}>
+                        Assinar Investidor Pro →
+                      </button>
+                    )}
+                    {isPago && (
+                      <button onClick={() => nav(`/checkout?plano=top2${ref ? `&ref=${ref}` : ''}`)}
+                        style={{ width: '100%', padding: '12px', background: 'white', color: '#374151', border: '1px solid #e2e8f0', borderRadius: 12, fontWeight: 600, fontSize: 14, cursor: 'pointer', marginBottom: 12 }}>
+                        Ou assine e desbloqueie todo o acervo
+                      </button>
+                    )}
+                    {aguardando && (
+                      <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '10px 12px', fontSize: 12.5, color: '#92400e', marginBottom: 8 }}>
+                        Finalize o pagamento na aba que abriu. Esta página libera o acesso sozinha assim que o Asaas confirmar.
+                      </div>
+                    )}
+                    {erroCompra && (
+                      <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '10px 12px', fontSize: 12.5, color: '#b91c1c', marginBottom: 8 }}>{erroCompra}</div>
+                    )}
+                  </>
                 ) : (
                   <>
                     <button onClick={() => nav(`/login?modo=cadastro&produto=${tipo}:${id}${isPago ? '' : `&plano=top2`}${ref ? `&ref=${ref}` : ''}`)}
@@ -170,9 +225,11 @@ export default function ProdutoPublico({ tipo }) {
                     </button>
                   </>
                 )}
-                <div style={{ textAlign: 'center', fontSize: 12, color: '#94a3b8', marginTop: 4 }}>
-                  Incluído no plano <strong>Investidor Pro</strong>
-                </div>
+                {!isPago && (
+                  <div style={{ textAlign: 'center', fontSize: 12, color: '#94a3b8', marginTop: 4 }}>
+                    Incluído no plano <strong>Investidor Pro</strong>
+                  </div>
+                )}
               </>
             )}
 

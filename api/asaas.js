@@ -212,6 +212,51 @@ export default async function handler(req, res) {
       });
     }
 
+    // ── Compra AVULSA de produto (ebook/curso) — pagamento ÚNICO hospedado no Asaas ──
+    // Fluxo do dono: parceiro vende o produto individual (link ?ref=CÓDIGO). O comprador
+    // ganha só o PRODUTO (sem assinar). A cobrança leva externalReference = compras_produtos.id
+    // p/ o webhook casar e ativar (confirmar_compra_produto) + creditar comissão do parceiro.
+    if (action === 'criar_cobranca_avulsa') {
+      const { produto_tipo, produto_id, ref, nome, email } = body;
+      if (!['ebook', 'curso'].includes(produto_tipo) || !produto_id) {
+        return res.status(400).json({ error: 'Produto inválido' });
+      }
+      const SB = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+      const SVC = process.env.SUPABASE_SERVICE_KEY;
+      // 1) Inicia a compra (valida ativo+pago, barra quem já tem acesso, grava parceiro/%, cria 'pendente')
+      const iniRes = await fetch(`${SB}/rest/v1/rpc/comprar_produto_iniciar`, {
+        method: 'POST',
+        headers: { apikey: SVC, Authorization: `Bearer ${SVC}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ p_user_id: authUser.id, p_produto_tipo: produto_tipo, p_produto_id: produto_id, p_ref: ref || null }),
+      });
+      const ini = iniRes.ok ? await iniRes.json() : null;
+      if (!ini?.ok) return res.status(400).json({ error: ini?.erro || 'nao_iniciado' });
+      if (ini.ja_tem) return res.status(200).json({ ja_tem: true });
+
+      // 2) Customer Asaas (reusa por email; falha de busca ≠ inexistência)
+      const cpf = await cpfAutenticado(authUser.id, body.cpf);
+      const searchRes = await fetch(`${ASAAS_URL}/customers?email=${encodeURIComponent(email)}`, { headers: { 'access_token': API_KEY } });
+      if (!searchRes.ok) throw new Error(`asaas_customer_search_${searchRes.status}`);
+      const searchData = await searchRes.json();
+      let customerId = searchData.data?.[0]?.id;
+      if (!customerId) {
+        const customer = await asaasPost('/customers', { name: nome || email, email, cpfCnpj: cpf?.replace(/\D/g, '') || undefined });
+        customerId = customer.id;
+      }
+
+      // 3) Cobrança ÚNICA marcada com o compra_id → o webhook ativa e credita a comissão
+      const cobranca = await asaasPost('/payments', {
+        customer: customerId,
+        billingType: 'UNDEFINED',
+        value: Number(ini.valor),
+        dueDate: new Date().toISOString().split('T')[0],
+        description: String(ini.titulo || 'Produto BidPro').slice(0, 120),
+        externalReference: ini.compra_id,
+      });
+      auditLog({ acao: 'compra_produto_iniciada', user_id: authUser.id, ip, detalhes: { produto_tipo, produto_id, compra_id: ini.compra_id, customerId }, sucesso: true });
+      return res.status(200).json({ linkPagamento: cobranca.invoiceUrl || cobranca.bankSlipUrl, paymentId: cobranca.id, compra_id: ini.compra_id, valor: ini.valor });
+    }
+
     // ── Upgrade / Downgrade de plano ──
     if (action === 'gerenciar_assinatura') {
       const { email, plano } = body;

@@ -19,6 +19,23 @@ const EVENTOS_CHARGEBACK = [
   'CHARGEBACK',
 ];
 
+// Compra AVULSA de produto: o pagamento carrega externalReference = compras_produtos.id
+// (uuid). Esse caminho é 100% separado do de PLANO (nunca eleva role): ativa a compra e
+// credita a comissão do parceiro via RPC service-role.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const SB_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+const SB_SVC = process.env.SUPABASE_SERVICE_KEY;
+async function rpcProduto(fn, payload) {
+  try {
+    const r = await fetch(`${SB_URL}/rest/v1/rpc/${fn}`, {
+      method: 'POST',
+      headers: { apikey: SB_SVC, Authorization: `Bearer ${SB_SVC}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload), signal: AbortSignal.timeout(10000),
+    });
+    return r.ok ? await r.json() : { ok: false, http: r.status };
+  } catch (e) { return { ok: false, erro: String(e?.message || e) }; }
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
 
@@ -91,8 +108,17 @@ export default async function handler(req, res) {
     gatewayPaymentId:  pagReal.id,
   };
 
+  // Produto avulso? externalReference = compras_produtos.id (uuid). Roteia para o
+  // fluxo de PRODUTO (nunca para o de plano) — não pode elevar assinatura.
+  const extRef = String(pagReal.externalReference || '').trim();
+  const ehProduto = UUID_RE.test(extRef);
+
   try {
     if (tipo === 'PAYMENT_CONFIRMED' || tipo === 'PAYMENT_RECEIVED') {
+      if (ehProduto) {
+        const result = await rpcProduto('confirmar_compra_produto', { p_compra_id: extRef, p_gateway: 'asaas', p_gateway_payment_id: pagReal.id });
+        return res.status(200).json({ ok: true, produto: result });
+      }
       const result = await processarConfirmado(contexto);
       return res.status(200).json(result);
     }
@@ -108,6 +134,10 @@ export default async function handler(req, res) {
       return res.status(200).json(result);
     }
     if (EVENTOS_CHARGEBACK.includes(tipo)) {
+      if (ehProduto) {
+        const result = await rpcProduto('estornar_compra_produto', { p_gateway_payment_id: pagReal.id });
+        return res.status(200).json({ ok: true, produto_estorno: result });
+      }
       const result = await processarChargeback({
         ...contexto,
         gatewaySubscriptionId: pag?.subscription || null,
