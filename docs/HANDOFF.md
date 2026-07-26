@@ -63,6 +63,19 @@
     `saque_pendente` **24,96**. Hoje é **domingo** → pagamento sai só **sexta (31/07, 12h Bahia)** — o admin libera em
     Prestação de contas (`pagar`/`pagar_todos`), ou **recusa** p/ devolver ao saldo da empresa. Fluxo íntegro
     ponta a ponta.
+21. **⚠️ GAP tributário achado + buraco fechado — GATE PJ no saque (anti-interposição).** O dono apontou: o saque de
+    parceiro deveria exigir **cadastrar a PJ + carregar documentos + verificar se o parceiro é sócio** (plano §12.9).
+    O que existia: `solicitar_saque_ledger` só conferia os **3 campos de texto** (cnpj/razao_social/pj_chave_pix)
+    PREENCHIDOS — **sem** checar `pj_validada_em` (coluna existia, sem uso), **sem** upload de documento, **sem**
+    verificação de sócio, **sem** NF. **Não havia dano realizado** (nenhum parceiro externo tem saldo sacável hoje:
+    só 2 lançamentos de comissão, ambos p/ a empresa/dono; o saque do dono foi via PIX pessoal, sem tocar no gate PJ).
+    **Fix imediato (feito):** a RPC agora **bloqueia** o saque do parceiro-cliente enquanto `pj_validada_em IS NULL`
+    (mensagem `pj_pendente`), e `api/saque.js` GET reflete (`pj_pendente`/`saque_habilitado`). Validado: parceiro com
+    os 3 campos mas sem validação → bloqueado (nada gravado). Migração `saque_gate_pj_validada.sql`.
+    **FALTA construir (fluxo completo — depende de decisão do dono, ver §12.9):** (a) **cadastro da PJ + upload** de
+    cartão CNPJ/contrato social + **anexo da NF** no pedido de saque; (b) **verificação de sócio** (CPF no quadro
+    societário) — manual (equipe confere) ou **automática** via API (ReceitaWS/Serpro, custo); (c) tela do **admin p/
+    validar a PJ** (setar `pj_validada_em`); (d) painel de **teto MEI**. Contador/advogado definem NF/CNAE e provisão.
 
 ### Sessão 8e — parte 8 (PAYOUT ligado: bônus infinito + CHECK + cron do recálculo) ⚠️ paga de verdade
 15. **Payout do MLM LIGADO** (`payout_bonus_infinito_e_check_comissoes.sql`, `api/ranks-recalc-cron.js`, `_webhook-core`).

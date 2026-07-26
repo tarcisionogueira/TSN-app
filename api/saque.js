@@ -133,7 +133,7 @@ export default async function handler(req) {
     const extrato = (await db(`saldo_lancamentos?user_id=eq.${user.id}&order=criado_em.desc&limit=200&select=*`)).data || [];
     // Pré-requisitos do saque: cadastro completo (nome, CPF, telefone, chave PIX).
     // Aponta o que falta para o profissional liberar o saque (espelha a RPC).
-    const perfil = (await db(`perfis?id=eq.${user.id}&select=nome,cpf,cpf_hash,telefone,chave_pix,cnpj,razao_social,pj_chave_pix`)).data?.[0] || {};
+    const perfil = (await db(`perfis?id=eq.${user.id}&select=nome,cpf,cpf_hash,telefone,chave_pix,cnpj,razao_social,pj_chave_pix,pj_validada_em`)).data?.[0] || {};
     const ehParceiroCliente = PLANOS_PAGOS.includes(role);
     const faltando = [];
     if (!perfil.nome || !String(perfil.nome).trim()) faltando.push('nome');
@@ -149,13 +149,17 @@ export default async function handler(req) {
     } else {
       if (!perfil.chave_pix || !String(perfil.chave_pix).trim()) faltando.push('chave PIX');
     }
+    // GATE PJ (anti-interposição): o parceiro-cliente só saca com a empresa VALIDADA pela equipe
+    // (cartão CNPJ/contrato social + CPF no quadro societário + NF) — espelha o gate da RPC.
+    // Enquanto pendente, o saldo acumula mas o saque fica bloqueado (crédito condicionado).
+    const pjPendente = ehParceiroCliente && !perfil.pj_validada_em;
     // Flag INFORMATIVO (não bloqueia o saque): quem não está em plano pago não GANHA comissões
     // novas (a origem já filtra por "em dia na cobrança"); pode sacar o que já acumulou.
     const naoGanhaNovas = !podeReceber(role);
     // Data da próxima liberação (sexta 12:00 Bahia) para exibir na tela do profissional.
     return json({ saldo, extrato, proxima_liberacao: proximaLiberacao().toISOString(),
-      nao_ganha_novas: naoGanhaNovas,
-      saque_habilitado: faltando.length === 0, faltando });
+      nao_ganha_novas: naoGanhaNovas, pj_pendente: pjPendente,
+      saque_habilitado: faltando.length === 0 && !pjPendente, faltando });
   }
 
   // ── POST: solicitar saque ────────────────────────────────────────────────
