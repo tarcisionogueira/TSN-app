@@ -74,9 +74,32 @@ export default async function handler(req) {
     const ehSintetica = (a) => FONTE_SINTETICA.test(String(a.fonte || ''));
     const filtro = `cidade_norm=eq.${encodeURIComponent(cidadeNorm)}&uf=eq.${uf}&tipo=eq.${encodeURIComponent(tipo)}`;
 
-    // Amostras de mercado da REGIÃO solicitada (venda + locação), sem leilão.
-    const regSamples = semLeilao(await restGet('indice_amostra',
-      `${filtro}&valor_m2=gte.200&valor_m2=lte.50000&select=especie,valor_m2,valor_total,area_m2,data_ref,fonte,criado_em&order=data_ref.desc,criado_em.desc&limit=800`));
+    // Amostras de mercado da REGIÃO solicitada (venda + locação), sem leilão. Traz o geo (bairro/
+    // grid/lat/lng) para o recorte por RAIO.
+    const regCidade = semLeilao(await restGet('indice_amostra',
+      `${filtro}&valor_m2=gte.200&valor_m2=lte.50000&select=especie,valor_m2,valor_total,area_m2,data_ref,fonte,criado_em,bairro_norm,geo_grid,lat,lng&order=data_ref.desc,criado_em.desc&limit=800`));
+
+    // RECORTE POR RAIO (pedido do dono — classificar a ~250m, rua/condomínio). Com coordenada na
+    // consulta, prioriza as amostras REAIS mais próximas: ≤250 m (rua) → ≤1 km (microrregião) →
+    // cidade, usando o 1º nível com amostras de VENDA suficientes. Amostras sem lat/lng (legado/seed
+    // de cidade) só contam no nível cidade → sem regressão. Distância equirretangular (m), como no ponderado.
+    const MIN_GEO = 6;
+    let nivelGeo = 'cidade';
+    let regSamples = regCidade;
+    if (lat != null && lng != null) {
+      const distM = (aLat, aLng) => (Number.isFinite(+aLat) && Number.isFinite(+aLng))
+        ? 111320 * Math.sqrt(Math.pow(+aLat - lat, 2) + Math.pow((+aLng - lng) * Math.cos(lat * Math.PI / 180), 2)) : null;
+      const nivelDe = (a) => {
+        const d = distM(a.lat, a.lng);
+        if ((d != null && d <= 250) || (bairroNorm && a.bairro_norm && a.bairro_norm === bairroNorm)) return 1;
+        if (d != null && d <= 1000) return 2;
+        return 3;
+      };
+      const marc = regCidade.map(a => ({ a, nv: nivelDe(a) }));
+      const vendaAte = (nv) => marc.filter(x => x.nv <= nv && x.a.especie === 'venda').length;
+      const escolhido = vendaAte(1) >= MIN_GEO ? 1 : (vendaAte(2) >= MIN_GEO ? 2 : 3);
+      if (escolhido < 3) { regSamples = marc.filter(x => x.nv <= escolhido).map(x => x.a); nivelGeo = escolhido === 1 ? 'rua' : 'grid'; }
+    }
     const num = (arr) => arr.map(Number).filter(v => v > 0).sort((a, b) => a - b);
     const vendaVals = num(regSamples.filter(a => a.especie === 'venda').map(a => a.valor_m2));
     const locVals   = num(regSamples.filter(a => a.especie === 'locacao').map(a => a.valor_m2));
@@ -115,8 +138,8 @@ export default async function handler(req) {
         venda_m2: vMed,
         aluguel_m2: locVals.length ? mediana(locVals) : (vMed ? Math.round(vMed * 0.004 * 100) / 100 : null),
         n_amostras: vendaVals.length + locVals.length,
-        nivel: 'cidade',
-        nivel_label: 'cidade (composição de mercado)',
+        nivel: nivelGeo,
+        nivel_label: nivelGeo === 'rua' ? 'rua/condomínio (~250 m)' : nivelGeo === 'grid' ? 'microrregião (~1 km)' : 'cidade (composição de mercado)',
         bairro_norm: bairroNorm || null,
         // COMPOSIÇÃO TEMPORAL — frescor + projeção + quantitativo (pedido do dono).
         total_anuncios: comp.total_anuncios,

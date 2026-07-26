@@ -206,6 +206,9 @@ async function gravarAmostrasIndice(imDb, mercado, imovelId, segmento = 'apartam
     const uf = String(imDb.estado).toUpperCase();
     const bairroNorm = _norm(imDb.bairro);          // localidade da amostra (do imóvel analisado)
     const geoGrid = geoGridDe(imDb.latitude, imDb.longitude);
+    // Coordenada do imóvel-alvo → guardada em cada amostra p/ o recorte por RAIO (~250m) no Índice.
+    const latA = Number.isFinite(Number(imDb.latitude)) ? Number(imDb.latitude) : null;
+    const lngA = Number.isFinite(Number(imDb.longitude)) ? Number(imDb.longitude) : null;
     const nowMes = new Date().toISOString().slice(0, 7);
     const dref = (d) => (/^\d{4}-\d{2}$/.test(String(d || '')) ? `${d}-01` : `${nowMes}-01`);
     const vendas = [...(mercado.nivel1?.vendas || []), ...(mercado.nivel2?.vendas || [])];
@@ -214,7 +217,7 @@ async function gravarAmostrasIndice(imDb, mercado, imovelId, segmento = 'apartam
     for (const s of vendas) {
       const m2 = Number(s?.valorM2);
       if (!(m2 >= 200 && m2 <= 50000) || ehFonteLeilao(s?.fonte)) continue;
-      rows.push({ cidade_norm: imDb.cidade_norm, uf, bairro_norm: bairroNorm, geo_grid: geoGrid, tipo: segmento,
+      rows.push({ cidade_norm: imDb.cidade_norm, uf, bairro_norm: bairroNorm, geo_grid: geoGrid, lat: latA, lng: lngA, tipo: segmento,
         especie: 'venda', valor_m2: Math.round(m2), valor_total: Number(s?.valor) || null, area_m2: Number(s?.m2) || null,
         data_ref: dref(s?.data), fonte: (s?.fonte ? String(s.fonte).slice(0, 200) : null), origem: 'relatorio', imovel_id: String(imovelId || '') });
     }
@@ -222,7 +225,7 @@ async function gravarAmostrasIndice(imDb, mercado, imovelId, segmento = 'apartam
       const mensal = Number(s?.valorMensal); const area = Number(s?.m2);
       if (!(mensal > 0) || ehFonteLeilao(s?.fonte)) continue;
       const vm2 = area > 0 ? Math.round((mensal / area) * 100) / 100 : null;
-      rows.push({ cidade_norm: imDb.cidade_norm, uf, bairro_norm: bairroNorm, geo_grid: geoGrid, tipo: segmento,
+      rows.push({ cidade_norm: imDb.cidade_norm, uf, bairro_norm: bairroNorm, geo_grid: geoGrid, lat: latA, lng: lngA, tipo: segmento,
         especie: 'locacao', valor_m2: (vm2 && vm2 >= 1 && vm2 <= 1000) ? vm2 : null, valor_total: mensal, area_m2: area || null,
         data_ref: dref(s?.data), fonte: (s?.fonte ? String(s.fonte).slice(0, 200) : null), origem: 'relatorio', imovel_id: String(imovelId || '') });
     }
