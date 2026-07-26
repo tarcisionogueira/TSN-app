@@ -175,10 +175,9 @@ CLÁUSULA 5ª — PRAZO E INDEPENDÊNCIA
 ${CLAUSULAS_COMUNS}`;
 }
 
-// ─── TEMPLATE: ASSESSORADO (CLIENTE da Assessoria de Arrematação) ────────────
-// Base: contrato do cliente Rafael (Drive). Aqui a EMPRESA é a CONTRATADA e o CLIENTE é a
-// CONTRATANTE (inverso dos contratos de equipe). NÃO usa a cláusula SCP (o cliente PAGA, não
-// recebe). [VALOR_SERVICO] é preenchido no momento da geração conforme o preço do plano.
+// ─── (DESATIVADO) TEMPLATE: ASSESSORADO ─────────────────────────────────────
+// O contrato REAL do assessorado/clube vive em api/auto-contrato.js (fluxo do checkout,
+// com os valores atuais do plano). A função abaixo NÃO está registrada em TEMPLATES.
 
 export function templateAssessorado() {
   return `CONTRATO DE PRESTAÇÃO DE SERVIÇOS DE ASSESSORIA PARA ARREMATAÇÃO EM LEILÕES
@@ -234,6 +233,5 @@ Assinatura eletrônica válida nos termos da MP 2.200-2/2001 e Lei 14.063/2020.`
 export const TEMPLATES = {
   consultor:   { gerar: templateConsultor,   titulo: 'Contrato de Consultoria e Afiliação — BidPro Brasil', tipo: 'servico' },
   analista:    { gerar: templateAnalista,    titulo: 'Contrato de Análise de Imóveis — BidPro Brasil',       tipo: 'servico' },
-  advogado:    { gerar: templateAdvogado,    titulo: 'Contrato de Serviços Jurídicos — BidPro Brasil',        tipo: 'servico' },
-  assessorado: { gerar: templateAssessorado, titulo: 'Contrato de Assessoria para Arrematação — BidPro Brasil', tipo: 'servico' },
+  advogado:  { gerar: templateAdvogado,  titulo: 'Contrato de Serviços Jurídicos — BidPro Brasil',        tipo: 'servico' },
 };

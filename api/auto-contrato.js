@@ -7,53 +7,59 @@ import { alertarErro } from './_error-alert.js';
 
 const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 
-const TEMPLATE_ASSESSORADO = `CONTRATO DE ASSESSORIA PARA AQUISIÇÃO DE IMÓVEL EM LEILÃO
+const TEMPLATE_ASSESSORADO = `CONTRATO DE PRESTAÇÃO DE SERVIÇOS DE ASSESSORIA PARA ARREMATAÇÃO EM LEILÕES
 
-CONTRATANTE: NOGUEIRA EMPREENDIMENTOS LTDA, pessoa jurídica de direito privado, inscrita no CNPJ nº 02.311.492/0001-61, com sede na cidade de Feira de Santana, Estado da Bahia, doravante denominada simplesmente CONTRATANTE.
+CONTRATADA (ASSESSORIA): NOGUEIRA EMPREENDIMENTOS LTDA, inscrita no CNPJ nº 02.311.492/0001-61, com sede em Feira de Santana/BA, representada por TARCISIO DE SOUZA NOGUEIRA DE ARAUJO, brasileiro, empresário, inscrito no CPF nº 042.293.535-29.
 
-CONTRATADO: [NOME DO SIGNATÁRIO], inscrito no CPF nº [CPF/CNPJ DO SIGNATÁRIO], residente em [ENDEREÇO DO SIGNATÁRIO], doravante denominado simplesmente CONTRATADO.
+CONTRATANTE (CLIENTE): [NOME DO SIGNATÁRIO], inscrito(a) no CPF/CNPJ nº [CPF/CNPJ DO SIGNATÁRIO], residente e domiciliado(a) em [ENDEREÇO DO SIGNATÁRIO].
 
-As partes acima qualificadas têm entre si justo e contratado o seguinte:
+Pelo presente instrumento particular, as partes acima qualificadas celebram o presente Contrato de Prestação de Serviços de Assessoria, que se regerá pelas cláusulas e condições a seguir:
 
-CLÁUSULA 1ª — DO OBJETO
-O presente contrato tem por objeto a prestação de serviços de assessoria pela CONTRATANTE ao CONTRATADO para identificação, análise de viabilidade, análise jurídica, acompanhamento e suporte na aquisição de 1 (um) imóvel por meio de leilão judicial ou extrajudicial, com prazo de até 12 (doze) meses a contar da assinatura para a conclusão da arrematação. Os serviços ora contratados não incluem mentoria ou treinamento.
+CLÁUSULA PRIMEIRA — DO OBJETO E ESCOPO
+1.1. O objeto deste contrato é a prestação de serviços técnicos de assessoria e representação especializada para a aquisição de bens através de leilões (judiciais ou extrajudiciais) pela CONTRATADA em favor da CONTRATANTE, referente a 1 (um) imóvel, com prazo de até 12 (doze) meses a contar da assinatura para a conclusão da arrematação. Os serviços não incluem mentoria ou treinamento.
+1.2. O escopo abrange: Triagem e Avaliação (análise técnica e jurídica preliminar dos editais, processos, débitos ocultos e viabilidade mercadológica, sugerindo oportunidades seguras); Habilitação (análise documental e cadastramento junto aos leiloeiros oficiais); Arremate (execução da estratégia de lances e representação no leilão); Resolução Processual (acompanhamento até a Carta de Arrematação); e Posse (diligências para a imissão na posse do bem).
+1.3. No ato da imissão na posse, a CONTRATANTE deverá indicar representante próprio de sua confiança para acompanhar o Oficial de Justiça no recebimento do bem.
+1.4. O acompanhamento presencial por especialista da CONTRATADA na imissão, se solicitado, gera custos adicionais (deslocamento, hospedagem e alimentação), arcados integralmente pela CONTRATANTE.
 
-CLÁUSULA 2ª — DOS SERVIÇOS INCLUSOS
-A assessoria compreende: (a) análise de viabilidade econômica e financeira do imóvel; (b) análise do edital e da matrícula do imóvel; (c) levantamento de riscos jurídicos e ônus reais; (d) cálculo do teto de lance e estratégia de disputa; (e) acompanhamento do leilão; (f) suporte pós-arrematação até a regularização documental.
+CLÁUSULA SEGUNDA — DAS EXCLUSÕES DE ESCOPO
+2.1. Este contrato não cobre reforma, reparo, limpeza, modificação, transporte ou descaracterização do bem arrematado.
+2.2. A entrega do bem dar-se-á no estado em que se encontra (cláusula ad corpus e "as is" inerente aos leilões); serviços físicos no bem constituem operação distinta, mediante nova contratação e orçamento à parte.
 
-CLÁUSULA 3ª — DAS OBRIGAÇÕES DO CONTRATADO
-O CONTRATADO obriga-se a: (a) fornecer informações verídicas sobre sua capacidade de investimento; (b) disponibilizar os documentos necessários à análise; (c) tomar as decisões de lance e aquisição com plena autonomia, sendo de sua exclusiva responsabilidade o resultado do investimento; (d) assinar o presente instrumento em até 30 (trinta) dias a contar do envio do link de assinatura, sob pena de cancelamento do serviço e estorno do valor pago.
+CLÁUSULA TERCEIRA — DA REMUNERAÇÃO E HONORÁRIOS
+3.1. Pelos serviços iniciais de assessoria (referentes a 1 imóvel), a CONTRATANTE pagará à CONTRATADA, conforme a modalidade escolhida no ato da contratação: (a) R$ 6.000,00 (seis mil reais) parcelados em 12 (doze) parcelas mensais de R$ 500,00 (quinhentos reais); ou (b) R$ 4.800,00 (quatro mil e oitocentos reais) em pagamento único à vista, com 20% (vinte por cento) de desconto sobre o total parcelado. O pagamento é feito via PIX/cartão em favor da NOGUEIRA EMPREENDIMENTOS LTDA.
+3.2. A título de honorários de êxito na arrematação, a CONTRATANTE pagará o percentual fixo de 10% (dez por cento) sobre o valor final da arrematação do bem, independentemente da modalidade de pagamento escolhida.
+3.3. Fica estipulado o valor mínimo de R$ 5.000,00 (cinco mil reais) a título de honorários de êxito, caso o percentual de 10% resulte em montante inferior.
+3.4. O pagamento dos honorários de êxito deverá ser feito de forma simultânea ao pagamento da comissão do leiloeiro e da arrematação, seja a aquisição à vista ou financiada/hipotecada/parcelada.
+3.5. Os honorários não se confundem com a comissão do leiloeiro, custas processuais, taxas, impostos (ITBI, IPVA etc.) ou despesas de remoção, de exclusiva responsabilidade da CONTRATANTE.
+3.6. Na modalidade hipotecada (parcelamento do leilão judicial), o escopo ordinário limita-se ao arremate e imissão na posse; o acompanhamento das parcelas mensais dependerá de profissional próprio da CONTRATANTE ou de contratação complementar com a CONTRATADA.
 
-CLÁUSULA 4ª — DO VALOR E FORMA DE PAGAMENTO
-Os serviços de assessoria são remunerados conforme modalidade escolhida pelo CONTRATADO no ato da contratação: (a) R$ 6.000,00 (seis mil reais) parcelados em 12 (doze) parcelas mensais de R$ 500,00 (quinhentos reais), com vencimento no dia 10 de cada mês a contar da assinatura; ou (b) R$ 4.800,00 (quatro mil e oitocentos reais) em pagamento único à vista, com 20% de desconto sobre o total parcelado. Sobre o imóvel arrematado incidem honorários de êxito de 10% (dez por cento) sobre o valor do lance, devidos no momento da arrematação, independentemente da modalidade de pagamento escolhida.
+CLÁUSULA QUARTA — DO PRAZO E CANCELAMENTO
+4.1. Este contrato vigorará por até 12 (doze) meses a contar da assinatura, prazo máximo para a conclusão da arrematação. Não havendo arrematação nesse período por razões imputáveis à CONTRATANTE, o contrato encerra-se sem devolução dos valores pagos.
+4.2. A CONTRATANTE deverá assinar este instrumento em até 30 (trinta) dias a contar do envio do link de assinatura, sob pena de cancelamento do serviço e estorno do valor pago.
+4.3. A rescisão imotivada por qualquer das partes, mediante aviso prévio de 30 (trinta) dias, sujeita a parte que lhe der causa à multa de 10% (dez por cento) sobre o valor total do contrato.
 
-CLÁUSULA 5ª — DO PRAZO
-O presente contrato vigorará pelo prazo de até 12 (doze) meses a contar da data de assinatura, sendo este o prazo máximo para a conclusão da arrematação. Não havendo arrematação dentro desse período por razões imputáveis ao CONTRATADO, o contrato encerrar-se-á sem devolução dos valores pagos. Qualquer das partes poderá rescindir antecipadamente mediante aviso prévio de 30 (trinta) dias, respondendo a parte que der causa à rescisão imotivada pelo pagamento de multa de 10% (dez por cento) sobre o valor total do contrato.
+CLÁUSULA QUINTA — DOS RISCOS INERENTES AOS LEILÕES
+5.1. A CONTRATANTE tem ciência de que arrematações em leilões, sobretudo judiciais, têm natureza resolúvel e estão sujeitas a contestações, embargos ou recursos de terceiros (Art. 903 do CPC), podendo o leilão ser suspenso, invalidado ou cancelado por decisão judicial superveniente.
+5.2. A CONTRATADA atua com rigor técnico na triagem e análise de riscos (curadoria); o cancelamento por fatos alheios à sua atuação diligente é risco inerente ao negócio e não configura falha na prestação do serviço.
+5.3. Cancelada, desfeita ou invalidada a arrematação por decisão judicial ou administrativa após o arremate, sem dolo ou culpa comprovada da CONTRATADA, os serviços de habilitação, estratégia, representação, arremate e acompanhamento inicial serão considerados efetivamente prestados.
 
-CLÁUSULA 6ª — DA CONFIDENCIALIDADE E LGPD
-As partes obrigam-se a manter sigilo sobre todas as informações confidenciais trocadas durante a execução deste contrato. O tratamento de dados pessoais dar-se-á em conformidade com a Lei nº 13.709/2018 (LGPD), limitando-se ao estritamente necessário para a execução dos serviços.
+CLÁUSULA SEXTA — DA ANTICORRUPÇÃO E DA PREVENÇÃO À LAVAGEM DE DINHEIRO
+6.1. As Partes conhecem e cumprem a Lei nº 12.846/2013 (Anticorrupção), comprometendo-se a não praticar suborno, fraude ou oferta de vantagem indevida a agentes públicos, juízes, leiloeiros ou terceiros.
+6.2. A CONTRATANTE cumpre as normas de prevenção à lavagem de dinheiro (Lei nº 9.613/1998) e atesta, sob as penas da lei, que todos os recursos utilizados na operação (lance, comissão, taxas, impostos e honorários) têm origem lícita e declarada, obrigando-se a comprová-la sempre que solicitado.
+6.3. A violação a esta cláusula autoriza a rescisão imediata por justa causa, sem devolução de valores pagos, com honorários devidos integralmente e comunicação aos órgãos competentes (COAF, Ministério Público).
 
-CLÁUSULA 7ª — DA RESCISÃO E PENALIDADES
-O não pagamento de qualquer parcela devida, ou o descumprimento de qualquer cláusula, poderá ensejar rescisão motivada, com cobrança de multa de 10% (dez por cento) sobre o saldo devedor, sem prejuízo das perdas e danos apurados. Notificações e comunicações entre as partes serão realizadas pelos dados de contato informados no momento da assinatura.
+CLÁUSULA SÉTIMA — DA CONFIDENCIALIDADE, PROPRIEDADE INTELECTUAL E LGPD
+7.1. As estratégias de arrematação e análises jurídicas da CONTRATADA são protegidas por sigilo profissional e direitos intelectuais.
+7.2. As Partes observam a Lei nº 13.709/2018 (LGPD), resguardando as informações financeiras e pessoais trocadas na operação, limitadas ao estritamente necessário para a execução dos serviços.
 
-CLÁUSULA 8ª — DO FORO
-Fica eleita a Comarca de Feira de Santana/BA para dirimir quaisquer dúvidas ou litígios decorrentes deste contrato, com renúncia expressa a qualquer outro, por mais privilegiado que seja.
+CLÁUSULA OITAVA — DO FORO
+8.1. As Partes elegem o foro da Comarca de Feira de Santana/BA para dirimir controvérsias, renunciando a qualquer outro por mais privilegiado que seja.
 
-Feira de Santana, _____ de _____________ de 20____.
+E, por estarem justas e contratadas, as partes assinam o presente instrumento digitalmente, com apontamento de testemunha. Assinatura eletrônica válida nos termos da MP 2.200-2/2001 e Lei 14.063/2020.
 
-CONTRATANTE:
-NOGUEIRA EMPREENDIMENTOS LTDA
-CNPJ 02.311.492/0001-61
+CONTRATADA: NOGUEIRA EMPREENDIMENTOS LTDA — CNPJ 02.311.492/0001-61
 
-_______________________________________
-Assinatura
-
-CONTRATADO:
-[NOME DO SIGNATÁRIO]
-[CPF/CNPJ DO SIGNATÁRIO]
-
-_______________________________________
-Assinatura`;
+CONTRATANTE: [NOME DO SIGNATÁRIO] — CPF/CNPJ [CPF/CNPJ DO SIGNATÁRIO]`;
 
 const TEMPLATE_CLUBE = `CONTRATO DE ADESÃO AO CLUBE DE NEGÓCIOS BIDPRO BRASIL
 
