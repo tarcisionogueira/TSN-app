@@ -2,6 +2,7 @@ import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { HashRouter, Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom';
 import { trackPageView } from './utils/gtag';
 import { supabase } from './utils/supabase';
+import { dispararColetaClienteStaff } from './utils/coletaCliente';
 import { useAuth, AuthProvider } from './contexts/AuthContext';
 import { PlanosProvider } from './contexts/PlanosContext';
 import { AnalisesProvider } from './contexts/AnalisesContext';
@@ -247,6 +248,14 @@ function MainLayout() {
       try { localStorage.removeItem('bidpro_inad_avisos'); sessionStorage.removeItem('bidpro_inad_sessao'); } catch {}
     }
   }, [isLoggedIn, inadimplenteDias]);
+
+  // Coleta client-side dos leiloeiros Vlance (só STAFF, do IP REAL — economiza Bright Data).
+  // Deferida e silenciosa; o gate no servidor garante ~2x/semana e 1 disparo por janela.
+  useEffect(() => {
+    if (!isLoggedIn || !user?.id || !['admin', 'analista', 'advogado'].includes(role)) return;
+    const t = setTimeout(() => { dispararColetaClienteStaff(); }, 5000);
+    return () => clearTimeout(t);
+  }, [isLoggedIn, role, user?.id]);
 
   if (isLoggedIn && !loading && !ativo) return <ContaInativa />;
   if (isLoggedIn && !loading) {
