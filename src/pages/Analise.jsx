@@ -2861,6 +2861,53 @@ export default function Analise() {
                 );
               })()}
 
+              {/* PERFIL DA REGIÃO — atratividade e valorização (explica o R$/m² da microrregião) */}
+              {mercado.perfilRegiao && (mercado.perfilRegiao.tier || mercado.perfilRegiao.motivos || (mercado.perfilRegiao.atratividades || []).filter(Boolean).length > 0) && (() => {
+                const pr = mercado.perfilRegiao;
+                const tierLabel = { valorizado_alto: 'Região valorizada', intermediario: 'Região intermediária', valorizado_baixo: 'Região menos valorizada' }[pr.tier] || '';
+                const tierColor = { valorizado_alto: '#059669', intermediario: '#d97706', valorizado_baixo: '#dc2626' }[pr.tier] || '#0D63DB';
+                const atr = (pr.atratividades || []).filter(Boolean);
+                const fra = (pr.fragilidades || []).filter(Boolean);
+                return (
+                  <div style={{ borderRadius: 12, border: '1px solid #dbeafe', background: '#f8fafc', padding: '12px 16px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+                      <MapPin size={14} color={tierColor} />
+                      <span style={{ fontSize: 12, fontWeight: 800, color: '#111' }}>Perfil da região (atratividade e valorização)</span>
+                      {tierLabel && <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 800, padding: '2px 10px', borderRadius: 999, background: '#fff', border: `1px solid ${tierColor}`, color: tierColor }}>{tierLabel}</span>}
+                    </div>
+                    {pr.motivos && <div style={{ fontSize: 12, color: '#334155', lineHeight: 1.6, marginBottom: (atr.length || fra.length) ? 8 : 0 }}>{pr.motivos}</div>}
+                    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 10 }}>
+                      {atr.length > 0 && <div><div style={{ fontSize: 10, fontWeight: 800, color: '#059669', textTransform: 'uppercase', marginBottom: 4 }}>Atratividades</div><ul style={{ margin: 0, paddingLeft: 16, fontSize: 11.5, color: '#334155', lineHeight: 1.6 }}>{atr.map((a, i) => <li key={i}>{a}</li>)}</ul></div>}
+                      {fra.length > 0 && <div><div style={{ fontSize: 10, fontWeight: 800, color: '#dc2626', textTransform: 'uppercase', marginBottom: 4 }}>Fragilidades</div><ul style={{ margin: 0, paddingLeft: 16, fontSize: 11.5, color: '#334155', lineHeight: 1.6 }}>{fra.map((a, i) => <li key={i}>{a}</li>)}</ul></div>}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* SEGURANÇA PÚBLICA — dados OFICIAIS, factual (não rótulo subjetivo) */}
+              {mercado.segurancaPublica && (mercado.segurancaPublica.encontrado || mercado.segurancaPublica.recomendacao) && (() => {
+                const sp = mercado.segurancaPublica;
+                return (
+                  <div style={{ borderRadius: 12, border: '1px solid #e2e8f0', background: '#fff', padding: '12px 16px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
+                      <ShieldAlert size={14} color="#64748b" />
+                      <span style={{ fontSize: 12, fontWeight: 800, color: '#111' }}>Segurança pública da região (dados oficiais)</span>
+                      {sp.periodo && <span style={{ marginLeft: 'auto', fontSize: 10.5, color: '#94a3b8' }}>{sp.periodo}</span>}
+                    </div>
+                    {sp.encontrado ? (
+                      <div style={{ fontSize: 12, color: '#334155', lineHeight: 1.6 }}>
+                        {sp.nivel && <div><strong>Nível:</strong> {sp.nivel}</div>}
+                        {sp.indicadores && <div>{sp.indicadores}</div>}
+                        {sp.tendencia && <div><strong>Tendência:</strong> {sp.tendencia}</div>}
+                        {sp.fonte && <div style={{ fontSize: 10.5, color: '#94a3b8', marginTop: 4 }}>Fonte: {sp.fonte}</div>}
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: 11.5, color: '#64748b', lineHeight: 1.6 }}>Sem indicador oficial confiável para a microrregião. {sp.recomendacao || 'Recomenda-se diligência local (visita ao local e consulta de ocorrências da região).'}</div>
+                    )}
+                  </div>
+                );
+              })()}
+
               {/* ═══════════ BANDA 3 — AMOSTRAS E COMPARATIVOS (recolhível) ═══════════ */}
               {/* A "muita informação" ficava aberta o tempo todo e poluía. Agora as amostras
                   brutas vêm num <details> fechado por padrão — o resumo/refs ficam à vista e

@@ -610,6 +610,22 @@ dedicadas a eles), até ~12 por tipo, com R$/m² e data. Regras: apenas VENDA; N
 tipo-alvo (${tipoImovel}); EXCLUA leilão/venda direta; só o que apareceu de fato (não invente).
 Isso alimenta o Índice BidPro dos outros segmentos da região — economia da mesma busca.
 
+═══ PERFIL DA REGIÃO (atratividade e valorização — explica o R$/m² da microrregião) ═══
+Com base na sua pesquisa, classifique a REGIÃO (bairro/microrregião) do imóvel dentro de ${cidade}/${estado}:
+- "tier": se está entre as MAIS valorizadas, INTERMEDIÁRIAS ou MENOS valorizadas da cidade (valorizado_alto|intermediario|valorizado_baixo);
+- "atratividades": fatores POSITIVOS reais que puxam o valor (infraestrutura, comércio, transporte/mobilidade, escolas/saúde, áreas verdes/orla, novos empreendimentos, baixa vacância);
+- "fragilidades": fatores que PESAM (risco de enchente, ruído, proximidade de indústria/insalubre, difícil acesso, saturação);
+- "motivos": 1–2 frases explicando POR QUE a região é mais/menos valorizada (sustenta o ajuste vs. a mediana da cidade — casa com o padrão do imóvel).
+Use o que aparecer na pesquisa (portais, imobiliárias locais, notícias). NÃO invente: sem base, deixe "tier":"" e explique a limitação em "motivos".
+
+═══ SEGURANÇA PÚBLICA DA REGIÃO (dados OFICIAIS — factual, NUNCA rótulo subjetivo) ═══
+Traga um perfil de segurança pública da região SOMENTE de FONTES OFICIAIS (Secretaria de Segurança
+Pública do estado/SSP, ISP-RJ, Atlas da Violência/IPEA, dados municipais) — citando a FONTE e o PERÍODO.
+Reporte indicadores FACTUAIS (ex.: faixa/tendência de índices de criminalidade da região ou município),
+JAMAIS um juízo do tipo "bairro perigoso". Se NÃO houver dado oficial confiável para a região, marque
+"encontrado": false e recomende diligência local (visita ao local, consulta de ocorrências) — não invente
+nem estime. É diligência de investidor sobre a REGIÃO, não juízo de valor sobre quem mora nela.
+
 Retorne APENAS este JSON (sem markdown):
 {
   "nivel1": { "descricao": "", "vendas": [{"descricao":"","valor":0,"m2":0,"valorM2":0,"fonte":"","data":"AAAA-MM"}], "locacoes": [{"descricao":"","valorMensal":0,"fonte":"","data":"AAAA-MM"}], "precoMedioM2": 0, "precoMinM2": 0, "precoMaxM2": 0, "aluguelMedio": 0, "totalAmostras": 0, "disponiveis": true },
@@ -618,6 +634,8 @@ Retorne APENAS este JSON (sem markdown):
   "referenciaFipeZap": { "encontrado": true, "precoMedioM2": 0, "valorizacao12m": 0, "mesReferencia": "AAAA-MM", "localidade": "", "fonte": "" },
   "outrasTipologias": { "apartamento": [{"valorM2":0,"valor":0,"m2":0,"fonte":"","data":"AAAA-MM"}], "casa": [], "terreno": [], "comercial": [] },
   "zoneamento": { "encontrado": false, "zona": "", "resumoUso": "", "fonte": "", "ondeObter": "" },
+  "perfilRegiao": { "tier": "valorizado_alto|intermediario|valorizado_baixo|", "atratividades": [""], "fragilidades": [""], "motivos": "" },
+  "segurancaPublica": { "encontrado": false, "nivel": "", "indicadores": "", "tendencia": "", "fonte": "", "periodo": "", "recomendacao": "" },
   "comentario": "Análise qualitativa de 3-4 frases comparando os dois níveis, a tendência e a ADERÊNCIA da média dos anúncios ao FipeZAP (se divergirem >15%, explique por quê)."
 }`;
 }
