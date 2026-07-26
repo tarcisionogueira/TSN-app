@@ -13,7 +13,10 @@ const brl = (v) => 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { maximumFract
 const TIPO_LABEL = { apartamento: 'Apartamento', casa: 'Casa / condomínio', terreno: 'Terreno / área', comercial: 'Comercial / industrial' };
 
 export const ESTILOS_INDICE = `
-  body{font-family:'Inter',sans-serif;font-size:12px;color:#0f172a;padding:22px;line-height:1.6;background:white;margin:0;-webkit-font-smoothing:antialiased;}
+  body{font-family:'Inter',sans-serif;font-size:12px;color:#0f172a;padding:22px;line-height:1.6;background:white;margin:0;-webkit-font-smoothing:antialiased;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  /* Sem print-color-adjust:exact o navegador NÃO imprime cor de fundo → as barras do gráfico
+     (background) sumiam no PDF gerado. Força a impressão de fundos em TODOS os elementos. */
+  *{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
   @media print{body{padding:0;}@page{margin:9mm;size:A4;}.av{page-break-inside:avoid;}}
   h2{font-size:13px;font-weight:900;text-transform:uppercase;border-bottom:2px solid #e2e8f0;padding-bottom:4px;margin:18px 0 10px;}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
@@ -52,7 +55,7 @@ export function corpoIndice({ form = {}, reg = {}, amostras = [], amostrasAno = 
       const h = Math.max(8, Math.round((Number(p.m2) / max) * 92));
       return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:3px;">`
         + `<div style="font-size:9.5px;font-weight:800;color:#065f46;">${brl(p.m2)}</div>`
-        + `<div style="width:100%;max-width:54px;height:${h}px;border-radius:5px 5px 0 0;background:linear-gradient(180deg,#34d399,#059669);"></div>`
+        + `<div style="width:100%;max-width:54px;height:${h}px;border-radius:5px 5px 0 0;background:#059669;background:linear-gradient(180deg,#34d399,#059669);-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>`
         + `<div style="font-size:10px;font-weight:700;color:#334155;">${esc(p.ano)}</div>`
         + `<div style="font-size:8.5px;color:#94a3b8;">${esc(p.n)} am.</div></div>`;
     }).join('');

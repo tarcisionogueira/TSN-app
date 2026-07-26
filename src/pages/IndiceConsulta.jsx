@@ -286,6 +286,43 @@ export default function IndiceConsulta() {
             );
           })()}
 
+          {Array.isArray(res?.amostras) && res.amostras.length > 0 && (
+            <div style={{ background: 'white', borderRadius: 12, padding: '14px 16px', border: '1px solid #eef2f7' }}>
+              <div style={{ fontSize: 13, fontWeight: 800, color: '#0f172a' }}>Relação dos imóveis da amostra (rastreabilidade)</div>
+              <div style={{ fontSize: 11, color: '#94a3b8', margin: '4px 0 10px' }}>Comparáveis de mercado (anúncios e revendas) do segmento que embasam o índice. "Data" = referência do anúncio; "capt." = quando entrou na base BidPro.</div>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                  <thead>
+                    <tr style={{ color: '#475569' }}>
+                      <th style={{ textAlign: 'left', padding: '6px 8px', borderBottom: '1px solid #eef2f7', fontSize: 9.5, textTransform: 'uppercase', letterSpacing: .5 }}>Descrição</th>
+                      <th style={{ textAlign: 'right', padding: '6px 8px', borderBottom: '1px solid #eef2f7', fontSize: 9.5, textTransform: 'uppercase', letterSpacing: .5 }}>R$/m²</th>
+                      <th style={{ textAlign: 'left', padding: '6px 8px', borderBottom: '1px solid #eef2f7', fontSize: 9.5, textTransform: 'uppercase', letterSpacing: .5 }}>Portal (fonte)</th>
+                      <th style={{ textAlign: 'right', padding: '6px 8px', borderBottom: '1px solid #eef2f7', fontSize: 9.5, textTransform: 'uppercase', letterSpacing: .5 }}>Data</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {res.amostras.slice(0, 16).map((a, i) => {
+                      const loc = a.especie === 'locacao';
+                      const area = Number(a.area_m2) > 0 ? `${Math.round(a.area_m2)} m²` : '—';
+                      const total = Number(a.valor_total) > 0 ? brl(a.valor_total) + (loc ? '/mês' : '') : '—';
+                      const m2 = Number(a.valor_m2) > 0 ? brl(a.valor_m2) + (loc ? '/m²·mês' : '/m²') : '—';
+                      const mm = String(a.data_ref || '').match(/(\d{4})-(\d{2})/);
+                      const dataRef = mm ? `${['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'][+mm[2] - 1] || mm[2]}/${mm[1]}` : '';
+                      return (
+                        <tr key={i}>
+                          <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9' }}>{loc ? 'Locação' : 'Venda'} · {area} · {total}</td>
+                          <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', textAlign: 'right', whiteSpace: 'nowrap' }}>{m2}</td>
+                          <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9' }}>{String(a.fonte || '—').slice(0, 60)}</td>
+                          <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', textAlign: 'right', whiteSpace: 'nowrap' }}>{dataRef}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
           <div style={{ fontSize: 11, color: '#94a3b8', lineHeight: 1.5 }}>
             Base própria BidPro (anúncios de venda/locação e revendas confirmadas, com data). Não inclui preços de leilão/arremate. Referência de mercado — não é avaliação formal.
           </div>
