@@ -309,7 +309,7 @@ export default function MinhaRede() {
             )}
             {bonusInf > 0 && (
               <div style={{ fontSize: 12.5, color: '#5b21b6', lineHeight: 1.55, marginBottom: 12, background: '#f5f3ff', border: '1px solid #ddd6fe', borderRadius: 10, padding: '10px 12px' }}>
-                💎 Liderança ({rankNome}): + <strong>bônus infinito de {bonusInf}%</strong> sobre TODA a sua rede + pool.
+                💎 Liderança ({rankNome}): + <strong>bônus infinito de {bonusInf}%</strong> sobre TODA a sua rede.
               </div>
             )}
 

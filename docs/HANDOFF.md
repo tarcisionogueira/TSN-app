@@ -32,6 +32,27 @@
 ### Sessão 8e — parte 2 (sem beco de acesso + anúncio por e-mail)
 4. **Sem "acesso restrito" de beco — bloqueado vai p/ AQUISIÇÃO.** `EbookPage` (não logado/sem acesso) agora manda o usuário à **página do produto** (`/#/p/ebook/:id`) mostrando preço + opções, em vez de "acesso restrito → ver planos". **Bug de rota corrigido:** `/p/ebook/:id` era sombreado pelo `/p/:tipo/:id` (ProdutoLanding, que NÃO trata ebook → "Produto não encontrado") — adicionei rota estática no router de topo (App.jsx) → agora renderiza o `ProdutoPublico`. `ProdutoPublico`: usuário **já logado** sem acesso agora vai ao checkout (`/checkout?plano=top2` — "Assinar e desbloquear"), não mais p/ `/login`.
    - ⚠️ **PENDENTE (decisão do dono, mexe em pagamento):** a **compra AVULSA por item** (pagar só aquele ebook/curso, ex.: R$14,90) NÃO está conectada ao gateway — existe só o scaffold `api/registrar-compra-produto.js` (cria `compras_produtos` **pendente**; ativação só viria de webhook de pagamento, que não trata produto). Hoje o caminho de pagamento que FUNCIONA é **assinar o plano** (inclui o acervo). Para vender por item de verdade: checkout aceitar `?ebook=/?curso=` + cobrança única MP/Asaas + webhook→`ativo`. (Perguntei o modelo; o dono interrompeu — segui com "assinatura desbloqueia", que já roda.)
+### Sessão 8e — parte 9 (pool 2% OFF + empresa como patrocinadora + termo PJ conferido) ✅ validado
+16. **Rateio de 2% do POOL DESLIGADO — FEITO** (pedido do dono). O repasse já é gradual sobre TODA a rede via
+    **bônus infinito** (diferencial das faixas de liderança, parte 8) — o pool fechado virou redundante. `update
+    rank_config set pool_pct=0`; texto do painel `MinhaRede.jsx` deixou de citar "+ pool" (agora "…sobre TODA a sua
+    rede."). `distribuir_pool_rank` fica no banco mas não distribui nada (pct=0). Migração
+    `mlm_pool_off_empresa_sponsor.sql`.
+17. **Vendas SEM indicante = vendas da EMPRESA (o dono) — FEITO.** Nova coluna `rank_config.empresa_uid` (setada p/
+    o uid do dono). No `distribuir_comissao_rede`, o nó empresa é **sempre elegível** (`if v_cur = v_empresa or
+    (eh_pagante…)`) — recebe o repasse mesmo sendo admin/não-assinante, e o SALDO **fica retido** (saque exige PJ).
+    Alinhados os **2 Investidor Pro sem upline** (Neuma + Alessandra) sob o dono (`indicado_por = empresa_uid`).
+    **Validação:** rodei `distribuir_comissao_rede` p/ as duas (R$49,90 cada) → **saldo da empresa/dono = R$24,96**
+    (2 × 25% de R$49,90), creditado e retido. Fluxo de comissionamento confirmado ponta a ponta.
+18. **Termo de aceite do parceiro — RECEBER exige PJ: CONFERIDO e corrigido.** O dono disse "já tínhamos ajustado
+    isso nos termos"; ao verificar, o §5 ainda pedia **CPF+PIX** (pessoa física). Corrigi o `TERMO_PARCEIRO`
+    (`HomeCliente.jsx`) p/ **B2B/PJ**: §2 "(nome, CPF, telefone). Para RECEBER, é necessário cadastrar uma empresa
+    (pessoa jurídica) — ver item 5."; §5 reescrito (pagamento à **conta de uma EMPRESA (pessoa jurídica), mediante
+    nota fiscal**; cadastra **CNPJ, razão social e chave PIX**; pode **abrir um MEI**; sem PJ o saldo apurado fica
+    **retido**); §6 "pagos à sua empresa contra nota fiscal". Versão `v4-2026-07` → **`v5-2026-07`** (re-aceite).
+    `npm run build` OK · `auditoria_seguranca()=0/0`. **A avaliar (não bloqueia):** auto-atribuir à empresa toda
+    assinatura futura SEM indicante (hoje só os 2 existentes foram alinhados à mão).
+
 ### Sessão 8e — parte 8 (PAYOUT ligado: bônus infinito + CHECK + cron do recálculo) ⚠️ paga de verdade
 15. **Payout do MLM LIGADO** (`payout_bonus_infinito_e_check_comissoes.sql`, `api/ranks-recalc-cron.js`, `_webhook-core`).
     (a) **CHECK da `comissoes` corrigido** (aceita `rede_nN`/`infinito`/`venda_direta`) — era o landmine que fazia o
