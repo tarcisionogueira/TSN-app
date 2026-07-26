@@ -296,59 +296,42 @@ export default function MinhaRede() {
 
           {/* Corpo */}
           <div style={{ padding: '16px 20px' }}>
-            {nivel?.tem_rank ? (
-              <>
-                <div style={{ fontSize: 12.5, color: '#334155', lineHeight: 1.6, marginBottom: 10 }}>
-                  Você ganha <strong style={{ color: '#084BA6' }}>{indicacaoPct}%</strong> sobre cada pagamento de quem você trouxe (assinaturas) — enquanto sua assinatura estiver em dia.
-                </div>
-                <div style={{ fontSize: 12.5, color: '#334155', lineHeight: 1.55, marginBottom: nivel?.proximo ? 16 : 0, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 12px' }}>
-                  🛒 <strong>Vendas da loja</strong> (ebooks/cursos): você ganha a <strong>comissão de cada produto</strong> quando alguém compra pelo seu link — o percentual aparece no próprio produto ao <em>Compartilhar para vender</em>.
-                </div>
-                {bonusInf > 0 && (
-                  <div style={{ fontSize: 12.5, color: '#5b21b6', lineHeight: 1.55, marginBottom: nivel?.proximo ? 16 : 0, background: '#f5f3ff', border: '1px solid #ddd6fe', borderRadius: 10, padding: '10px 12px' }}>
-                    💎 Você é <strong>liderança</strong> ({rankNome}): ganha um <strong>bônus infinito de {bonusInf}%</strong> sobre a produção de toda a sua rede + participação no pool.
-                  </div>
-                )}
-                {nivel?.proximo ? (
-                  <>
-                    <div style={{ fontSize: 12.5, fontWeight: 800, color: '#334155', marginBottom: 12 }}>
-                      Para subir a <span style={{ color: '#0D63DB' }}>{nivel.proximo.nome}</span>, você precisa formar na sua rede direta:
-                    </div>
-                    <Progresso
-                      label={`${nivel.proximo.req_pernas} ${nivel.proximo.sub_nome}${nivel.proximo.req_pernas > 1 ? 's' : ''} (indicados diretos que subiram de nível)`}
-                      atual={nivel.proximo.tem || 0} alvo={nivel.proximo.req_pernas} faltam={nivel.proximo.faltam} />
-                    {Number(nivel.proximo.bonus_infinito_pct) > 0 && (
-                      <div style={{ fontSize: 11.5, color: '#334155', lineHeight: 1.55, background: '#eff6ff', border: '1px solid #dbeafe', borderRadius: 10, padding: '9px 12px', marginTop: 2 }}>
-                        💎 <strong>{nivel.proximo.nome}</strong> é faixa de <strong>liderança</strong>: além do bônus de equipe, ganha um <strong>bônus infinito de {Number(nivel.proximo.bonus_infinito_pct)}%</strong> sobre a produção de <strong>toda</strong> a sua rede + participação no pool.
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <div style={{ fontSize: 13, color: '#059669', fontWeight: 800, marginTop: 4 }}>🏆 Você chegou ao nível máximo. Parabéns!</div>
-                )}
-              </>
-            ) : (
-              <div style={{ fontSize: 13, color: '#475569', lineHeight: 1.65 }}>
-                {naoGanhaNovas
-                  ? <>Você já pode indicar. Para <strong>desbloquear seus ganhos e seu nível</strong>, tenha uma assinatura ativa e faça sua primeira indicação paga.</>
-                  : <>Faça sua <strong>primeira indicação paga</strong> para desbloquear o nível <strong>Pioneiro</strong> e começar a ganhar <strong>{indicacaoPct}%</strong> por indicação.</>}
+            {/* Quanto ganho ao fazer uma VENDA (sempre) */}
+            <div style={{ fontSize: 12.5, color: '#334155', lineHeight: 1.6, marginBottom: 12 }}>
+              Quando você vende, ganha <strong style={{ color: '#084BA6' }}>{nivel?.venda_pct ?? 25}%</strong> sobre a assinatura de quem você trouxe, e a <strong>comissão do produto</strong> nas vendas da loja (ebooks/cursos).
+            </div>
+
+            {/* Da minha EQUIPE (se o meu nível já libera) */}
+            {nivel?.tem_rank && Number(nivel?.equipe?.pct_total) > 0 && (
+              <div style={{ fontSize: 12.5, color: '#334155', lineHeight: 1.55, marginBottom: 12, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 12px' }}>
+                👥 <strong>Da sua equipe</strong>: como <strong>{rankNome}</strong>, você também ganha <strong>{Number(nivel.equipe.pct_total)}%</strong> sobre as vendas da equipe que você formou (até {nivel.equipe.niveis} {nivel.equipe.niveis > 1 ? 'gerações' : 'geração'}).
+              </div>
+            )}
+            {bonusInf > 0 && (
+              <div style={{ fontSize: 12.5, color: '#5b21b6', lineHeight: 1.55, marginBottom: 12, background: '#f5f3ff', border: '1px solid #ddd6fe', borderRadius: 10, padding: '10px 12px' }}>
+                💎 Liderança ({rankNome}): + <strong>bônus infinito de {bonusInf}%</strong> sobre TODA a sua rede + pool.
               </div>
             )}
 
-            {/* Trilha de níveis */}
-            {Array.isArray(nivel?.trilha) && nivel.trilha.length > 0 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 16, flexWrap: 'wrap' }}>
-                {nivel.trilha.map((t, i) => (
-                  <React.Fragment key={t.nome}>
-                    {i > 0 && <ChevronRight size={12} color="#cbd5e1" />}
-                    <span style={{ fontSize: 10.5, fontWeight: 800, padding: '3px 9px', borderRadius: 999,
-                      background: t.atingido ? '#0D63DB' : '#f1f5f9', color: t.atingido ? 'white' : '#94a3b8' }}>
-                      {t.nome}
-                    </span>
-                  </React.Fragment>
-                ))}
+            {/* PRÓXIMO nível — apenas o imediatamente seguinte */}
+            {nivel?.proximo ? (
+              <div style={{ borderTop: '1px solid #eef2f7', paddingTop: 14 }}>
+                <div style={{ fontSize: 11, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>Próximo nível</div>
+                <div style={{ fontSize: 16, fontWeight: 900, color: '#0D63DB', marginBottom: 12 }}>{nivel.proximo.nome}</div>
+                <Progresso
+                  label={`${nivel.proximo.req_pernas} ${nivel.proximo.sub_nome}${nivel.proximo.req_pernas > 1 ? 's' : ''} na sua rede direta`}
+                  atual={nivel.proximo.tem || 0} alvo={nivel.proximo.req_pernas} faltam={nivel.proximo.faltam} />
+                <div style={{ fontSize: 12.5, color: '#334155', lineHeight: 1.55, marginTop: 6, background: '#eff6ff', border: '1px solid #dbeafe', borderRadius: 10, padding: '9px 12px' }}>
+                  {Number(nivel.proximo.equipe_pct_total) > 0
+                    ? <>Ao chegar em <strong>{nivel.proximo.nome}</strong>, você passa a ganhar <strong>{Number(nivel.proximo.equipe_pct_total)}%</strong> sobre as vendas da equipe (até {nivel.proximo.equipe_niveis} {nivel.proximo.equipe_niveis > 1 ? 'gerações' : 'geração'}){Number(nivel.proximo.equipe_delta_pct) > 0 ? <> — <strong>+{Number(nivel.proximo.equipe_delta_pct)}%</strong> a mais que hoje</> : null}</>
+                    : <>Ao chegar em <strong>{nivel.proximo.nome}</strong>, você <strong>desbloqueia seus ganhos</strong> e começa a receber os <strong>{nivel?.venda_pct ?? 25}%</strong> por indicação</>}
+                  {Number(nivel.proximo.bonus_infinito_pct) > 0 ? <>, e entra na <strong>liderança</strong> com <strong>bônus infinito de {Number(nivel.proximo.bonus_infinito_pct)}%</strong> sobre toda a rede</> : null}.
+                </div>
               </div>
-            )}
+            ) : nivel?.tem_rank ? (
+              <div style={{ fontSize: 13, color: '#059669', fontWeight: 800, marginTop: 4 }}>🏆 Você chegou ao nível máximo. Parabéns!</div>
+            ) : null}
+
           </div>
         </div>
       )}
