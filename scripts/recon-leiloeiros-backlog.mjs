@@ -56,11 +56,38 @@ async function bdFetch(url, timeoutMs = 60000) {
   return { status: r.status, html: await r.text().catch(() => '') };
 }
 
+// Linguagem/framework do site (pista para o scraper). Detecta por assinaturas no HTML — o
+// Bright Data /request não devolve headers (Server/X-Powered-By), então inferimos do corpo.
+function detectarStack(html) {
+  const s = [];
+  const add = (cond, nome) => { if (cond && !s.includes(nome)) s.push(nome); };
+  add(/wp-content|wp-json|wp-includes/i.test(html), 'WordPress(PHP)');
+  add(/\/v3\/js\/vlance\/|vlance/i.test(html), 'Vlance(PHP+jQuery SPA)');
+  add(/laravel|csrf-token|laravel_session|XSRF-TOKEN/i.test(html), 'Laravel(PHP)');
+  add(/\.php\b|PHPSESSID/i.test(html), 'PHP');
+  add(/id=["']__NEXT_DATA__["']|\/_next\//i.test(html), 'Next.js(React)');
+  add(/window\.__NUXT__|\/_nuxt\//i.test(html), 'Nuxt(Vue)');
+  add(/data-v-[0-9a-f]{6,}|__vue__|vue(?:\.min)?\.js/i.test(html), 'Vue');
+  add(/data-reactroot|react-dom(?:\.production)?(?:\.min)?\.js/i.test(html), 'React');
+  add(/ng-version=|angular(?:\.min)?\.js/i.test(html), 'Angular');
+  add(/__VIEWSTATE|asp\.net|\.aspx/i.test(html), 'ASP.NET');
+  add(/jquery[.\-]?\d|jquery(?:\.min)?\.js/i.test(html), 'jQuery');
+  return s;
+}
+
 function classificar(html) {
   const plats = PLATAFORMAS.filter(p => p.re.test(html)).map(p => p.nome);
   const next = /id=["']__NEXT_DATA__["']/.test(html);
   const nuxt = /window\.__NUXT__/.test(html);
-  const apis = [...new Set((html.match(/["'`](\/(?:api|v\d|graphql)\/[^"'`\s]{2,60})["'`]/gi) || []).map(s => s.replace(/["'`]/g, '')))].slice(0, 10);
+  const stack = detectarStack(html);
+  // APIs internas: /api/ ou /core/api/ em QUALQUER posição do caminho (o Vlance usa
+  // /core/api/get-lotes, que escapava do regex ancorado em /api/) + endpoints por AÇÃO
+  // (get-lotes, get-leiloes, buscar/listar). Muitas só aparecem no JS runtime → ver o playbook.
+  const apis = [...new Set([
+    ...(html.match(/["'`](\/[a-z0-9\-/]*\/(?:api|core\/api)\/[a-z0-9\-_/]{2,50})["'`]/gi) || []),
+    ...(html.match(/["'`](\/(?:api|v\d|graphql)\/[^"'`\s]{2,60})["'`]/gi) || []),
+    ...(html.match(/["'`](\/[a-z0-9\-/]*(?:get-lotes|get-leiloes|buscar-?lotes?|listar-?lotes?|lotes?-?json)[a-z0-9\-_/]{0,30})["'`]/gi) || []),
+  ].map(s => s.replace(/["'`]/g, '')))].slice(0, 14);
   const jsonEnd = [...new Set((html.match(/\/[a-z0-9\-/]*(?:busca|search|lotes?|catalog|imove\w*|produtos?)[a-z0-9\-/]*\.json/gi) || []))].slice(0, 6);
   const cdns = [...new Set((html.match(/https?:\/\/([a-z0-9.\-]+\.(?:s3[.\-][a-z0-9.\-]*amazonaws\.com|cloudfront\.net|[a-z0-9\-]*cdn[a-z0-9\-.]*))/gi) || []).map(s => s.replace(/^https?:\/\//, '')))].slice(0, 8);
   const scripts = [...new Set((html.match(/<script[^>]+src=["']([^"']+)["']/gi) || []).map(s => (s.match(/src=["']([^"']+)/i) || [])[1]).filter(u => u && /leilo|lote|catalog|plataforma|cdn|static/i.test(u)))].slice(0, 10);
@@ -68,7 +95,7 @@ function classificar(html) {
   const cloudflare = /just a moment|challenge-platform|cf-chl|cf-mitigated/i.test(html);
   const titulo = ((html.match(/<title>([^<]*)<\/title>/i) || [])[1] || '').replace(/\s+/g, ' ').trim();
   const generator = (html.match(/<meta[^>]+name=["']generator["'][^>]+content=["']([^"']+)/i) || [])[1] || '';
-  return { plats, next, nuxt, apis, jsonEnd, cdns, scripts, loteLinks, cloudflare, titulo, generator };
+  return { plats, next, nuxt, stack, apis, jsonEnd, cdns, scripts, loteLinks, cloudflare, titulo, generator };
 }
 
 (async () => {
@@ -88,13 +115,14 @@ function classificar(html) {
       console.log(`\n════ ${dom}  → HTTP ${status}  len=${html.length}${c.cloudflare ? '  (challenge)' : ''}`);
       console.log(`   título: ${c.titulo}`);
       if (c.generator) console.log(`   generator: ${c.generator}`);
+      console.log(`   STACK/linguagem: ${c.stack.length ? c.stack.join(' · ') : '— (não identificada no HTML)'}`);
       console.log(`   PLATAFORMA(s): ${c.plats.length ? c.plats.join(' | ') : '— (independente?)'}  next=${c.next} nuxt=${c.nuxt}`);
       if (c.apis.length) console.log(`   APIs: ${JSON.stringify(c.apis)}`);
       if (c.jsonEnd.length) console.log(`   JSON: ${JSON.stringify(c.jsonEnd)}`);
       if (c.cdns.length) console.log(`   CDNs: ${JSON.stringify(c.cdns)}`);
       if (c.scripts.length) console.log(`   scripts: ${JSON.stringify(c.scripts)}`);
       if (c.loteLinks.length) console.log(`   links lote: ${JSON.stringify(c.loteLinks)}`);
-      resumo.push({ dom, status, plats: c.plats, next: c.next, nuxt: c.nuxt, hasApi: c.apis.length > 0 || c.jsonEnd.length > 0, cloudflare: c.cloudflare });
+      resumo.push({ dom, status, plats: c.plats, stack: c.stack, apis: c.apis, next: c.next, nuxt: c.nuxt, hasApi: c.apis.length > 0 || c.jsonEnd.length > 0, cloudflare: c.cloudflare });
     } catch (e) {
       console.log(`\n════ ${dom}  → ERRO: ${String(e.message).slice(0, 120)}`);
       resumo.push({ dom, status: 'ERRO', erro: String(e.message).slice(0, 80) });
@@ -110,5 +138,8 @@ function classificar(html) {
   for (const [k, doms] of Object.entries(porPlat).sort((a, b) => b[1].length - a[1].length)) {
     console.log(`  ${k} (${doms.length}): ${doms.join(', ')}`);
   }
+  console.log('\n💡 SPA (next/nuxt/Vue/Vlance) sem APIs no HTML? As chamadas JSON só aparecem em');
+  console.log('   RUNTIME. Mapeie no navegador (console + grampo fetch/XHR) — ver docs/RECON_LEILOEIROS_PLAYBOOK.md');
+  console.log('   (o Vlance foi mapeado assim: POST /core/api/get-lotes body=page=N).');
   console.log(`\nJSON:\n${JSON.stringify(resumo)}`);
 })();
