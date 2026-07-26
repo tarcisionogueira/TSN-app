@@ -57,6 +57,14 @@ async function bd(url, { timeoutMs = 60000 } = {}) {
 // Página válida? (o back-office às vezes devolve 200 com um stub minúsculo/challenge).
 const paginaOk = h => !!h && h.length > 5000 && /lotePadrao|Total de lotes|idLote/i.test(h);
 
+// Home resiliente: tenta o apex e, se vier vazio (apex que redireciona p/ www e o Web Unlocker
+// não segue — caso do vinco), tenta www.<dominio>. Barato: o 2º fetch só dispara quando o 1º falha.
+async function fetchHome(dom) {
+  let h = await bd(`https://${dom}/`);
+  if (!h && !/^www\./i.test(dom)) h = await bd(`https://www.${dom}/`);
+  return h;
+}
+
 function inferirTipo(txt = '') {
   const t = txt.toLowerCase();
   if (/apartament|apto|flat|kitnet|studio|unidade aut/.test(t)) return 'apartamento';
@@ -245,7 +253,7 @@ async function debugRecon() {
   console.log('🔎 GESTÃO RECON — enumeração + 1 evento parseado por domínio\n');
   for (const dom of DOMINIOS) {
     console.log(`\n════ ${dom}`);
-    const home = await bd(`https://${dom}/`);
+    const home = await fetchHome(dom);
     if (!home) { console.log('  home não veio (challenge/teto).'); continue; }
     const ids = extrairIdLeiloes(home);
     console.log(`  home ${home.length} bytes · idLeilao (${ids.length}): ${JSON.stringify(ids.slice(0, 15))}`);
@@ -272,7 +280,7 @@ async function main() {
   const eventos = [];
   const vistos = new Set();
   for (const dom of DOMINIOS) {
-    const home = await bd(`https://${dom}/`);
+    const home = await fetchHome(dom);
     if (!home) { console.log(`  [${dom}] home não veio.`); continue; }
     const ids = extrairIdLeiloes(home).filter(id => !vistos.has(`${dom}:${id}`));
     for (const id of ids) { vistos.add(`${dom}:${id}`); eventos.push({ dom, id }); }
