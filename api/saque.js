@@ -132,13 +132,22 @@ export default async function handler(req) {
     const extrato = (await db(`saldo_lancamentos?user_id=eq.${user.id}&order=criado_em.desc&limit=200&select=*`)).data || [];
     // Pré-requisitos do saque: cadastro completo (nome, CPF, telefone, chave PIX).
     // Aponta o que falta para o profissional liberar o saque (espelha a RPC).
-    const perfil = (await db(`perfis?id=eq.${user.id}&select=nome,cpf,cpf_hash,telefone,chave_pix`)).data?.[0] || {};
+    const perfil = (await db(`perfis?id=eq.${user.id}&select=nome,cpf,cpf_hash,telefone,chave_pix,cnpj,razao_social,pj_chave_pix`)).data?.[0] || {};
+    const ehParceiroCliente = PLANOS_PAGOS.includes(role);
     const faltando = [];
     if (!perfil.nome || !String(perfil.nome).trim()) faltando.push('nome');
     // CPF: presente se houver texto claro (legado) OU o hash (cpf-set cifra e zera o texto).
     if (!(perfil.cpf && String(perfil.cpf).trim()) && !perfil.cpf_hash) faltando.push('CPF');
     if (!perfil.telefone || !String(perfil.telefone).trim()) faltando.push('telefone');
-    if (!perfil.chave_pix || !String(perfil.chave_pix).trim()) faltando.push('chave PIX');
+    // Parceiro-cliente recebe via PJ (B2B): exige empresa (CNPJ, razão social, PIX da empresa) —
+    // espelha a RPC solicitar_saque_ledger. Equipe operacional recebe via PIX pessoal.
+    if (ehParceiroCliente) {
+      if (!perfil.cnpj || !String(perfil.cnpj).trim()) faltando.push('empresa (CNPJ)');
+      if (!perfil.razao_social || !String(perfil.razao_social).trim()) faltando.push('razão social');
+      if (!perfil.pj_chave_pix || !String(perfil.pj_chave_pix).trim()) faltando.push('PIX da empresa');
+    } else {
+      if (!perfil.chave_pix || !String(perfil.chave_pix).trim()) faltando.push('chave PIX');
+    }
     // Flag INFORMATIVO (não bloqueia o saque): quem não está em plano pago não GANHA comissões
     // novas (a origem já filtra por "em dia na cobrança"); pode sacar o que já acumulou.
     const naoGanhaNovas = !podeReceber(role);
