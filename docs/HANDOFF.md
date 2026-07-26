@@ -50,8 +50,19 @@
     (pessoa jurídica) — ver item 5."; §5 reescrito (pagamento à **conta de uma EMPRESA (pessoa jurídica), mediante
     nota fiscal**; cadastra **CNPJ, razão social e chave PIX**; pode **abrir um MEI**; sem PJ o saldo apurado fica
     **retido**); §6 "pagos à sua empresa contra nota fiscal". Versão `v4-2026-07` → **`v5-2026-07`** (re-aceite).
-    `npm run build` OK · `auditoria_seguranca()=0/0`. **A avaliar (não bloqueia):** auto-atribuir à empresa toda
-    assinatura futura SEM indicante (hoje só os 2 existentes foram alinhados à mão).
+    `npm run build` OK · `auditoria_seguranca()=0/0`.
+19. **Auto-atribuição à empresa de TODA venda futura sem indicante — FEITO.** Em vez de alinhar à mão, o
+    `distribuir_comissao_rede` agora, ANTES de subir a árvore, roteia o comprador sob a empresa quando `indicado_por
+    is null` (idempotente; nunca sobrescreve upline existente; nunca auto-atribui a empresa a si mesma). Como está no
+    **motor**, cobre todos os gateways (MP/Asaas) + reconciliação de uma vez. Validado: rodei a função p/ um perfil
+    sem upline → ficou `indicado_por = empresa` e a empresa recebeu 25% (nível 1); dado de teste **limpo** depois.
+    `auditoria=0/0`. Migração atualizada (`mlm_pool_off_empresa_sponsor.sql`).
+20. **SAQUE — fluxo verificado (o dono solicitou R$24,96).** `solicitar_saque_ledger` validou cadastro (o dono é
+    `admin`/equipe → PIX **pessoal**, não PJ; PJ vale p/ parceiro-cliente pagante), travou por advisory lock,
+    conferiu saldo e inseriu o lançamento `saque` −24,96 status `solicitado`. Estado: `saldo_disponivel` 24,96 → **0**,
+    `saque_pendente` **24,96**. Hoje é **domingo** → pagamento sai só **sexta (31/07, 12h Bahia)** — o admin libera em
+    Prestação de contas (`pagar`/`pagar_todos`), ou **recusa** p/ devolver ao saldo da empresa. Fluxo íntegro
+    ponta a ponta.
 
 ### Sessão 8e — parte 8 (PAYOUT ligado: bônus infinito + CHECK + cron do recálculo) ⚠️ paga de verdade
 15. **Payout do MLM LIGADO** (`payout_bonus_infinito_e_check_comissoes.sql`, `api/ranks-recalc-cron.js`, `_webhook-core`).

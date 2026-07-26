@@ -5,6 +5,9 @@
 --     empresa é sempre elegível no distribuir (ganha o repasse mesmo sendo admin/não-assinante).
 --     O saldo fica retido para a empresa (saque exige PJ). Alinhamento dos 2 Investidor Pro sem
 --     upline p/ o dono é DADO (feito à parte), não migração.
+-- (4) AUTO-ATRIBUIÇÃO: toda venda paga FUTURA sem indicante passa a ser rooteada sob a empresa
+--     automaticamente dentro do distribuir_comissao_rede (não só os 2 já existentes). Ver bloco
+--     no início da função.
 
 update public.rank_config set pool_pct = 0 where id = 1;
 
@@ -28,6 +31,15 @@ begin
   if p_comprador is null or coalesce(p_valor,0) <= 0
      or p_tipo not in ('assinatura','produto','venda_direta') or coalesce(p_gateway_payment_id,'') = ''
   then return jsonb_build_object('ok', false, 'erro', 'parametros'); end if;
+
+  -- (4) AUTO-ATRIBUIÇÃO À EMPRESA: venda SEM indicante = venda da empresa (o dono). Na 1ª
+  --     venda paga sem upline, raiz o comprador sob a empresa para o repasse fluir p/ ela
+  --     (saldo retido até PJ). Idempotente (só quando indicado_por é null) e nunca auto-atribui
+  --     a empresa a si mesma. Aqui (no motor) cobre TODOS os gateways/reconciliação de uma vez.
+  if v_empresa is not null and p_comprador <> v_empresa then
+    update public.perfis set indicado_por = v_empresa
+     where id = p_comprador and indicado_por is null;
+  end if;
 
   select indicado_por into v_cur from public.perfis where id = p_comprador;
   while v_cur is not null and v_hops < 30 loop
