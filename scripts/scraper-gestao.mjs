@@ -28,8 +28,10 @@ import { fetchViaBrightData, brightDataDisponivel } from '../api/_brightdata.js'
 import { checarQualidade, normalizarData } from './lib/scraper-core.mjs';
 import { registrarConhecimento, qualidadeColeta } from './lib/conhecimento.mjs';
 
+// vincoleiloes.com.br: recon 26/07 confirmou o MESMO back-office (leilao.php?idLeilao=N +
+// CDN d335luupugsy2.cloudfront.net) — entra no cluster (dedup global por idLote cuida de sobreposição).
 const DOMINIOS = (process.env.GESTAO_DOMINIOS ||
-  'granadoleiloes.com.br,lancenoleilao.com.br,extrajustleiloes.com.br,lancetotal.com.br')
+  'granadoleiloes.com.br,lancenoleilao.com.br,extrajustleiloes.com.br,lancetotal.com.br,vincoleiloes.com.br')
   .split(',').map(s => s.trim()).filter(Boolean);
 const MAX_EVENTOS = Number(process.env.GESTAO_MAX_EVENTOS || 25);
 const DRYRUN = process.env.GESTAO_DRYRUN !== '0';
