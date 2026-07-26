@@ -162,13 +162,32 @@ export default async function handler(req, res) {
       requer_assinatura: true,
       criado_por: userId || null,
       assinante_email: emailUsuario || null,
+      plano_key: planoKey,
+      produto_tipo: 'plano',
     })
-    .select('token')
+    .select('token, id')
     .single();
 
   if (error || !data) {
     console.error('auto-contrato insert error:', error);
     return res.status(500).json({ error: 'Erro ao criar contrato' });
+  }
+
+  // ENFORCEMENT: cria o "contrato pendente" que BLOQUEIA o acesso à plataforma até a assinatura
+  // (lido por ContratoObrigatorio). Prazo de 30 dias (aviso dispensável); após, bloqueio de tela
+  // cheia. Idempotente: não duplica se já houver um pendente 'aguardando' deste plano p/ o usuário.
+  if (userId) {
+    try {
+      const { data: jaPend } = await supabase.from('contratos_pendentes')
+        .select('id').eq('user_id', userId).eq('produto_id', planoKey).eq('status', 'aguardando').maybeSingle();
+      if (!jaPend) {
+        const expira = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+        await supabase.from('contratos_pendentes').insert({
+          user_id: userId, produto_tipo: 'plano', produto_id: planoKey,
+          contrato_link_id: data.id, status: 'aguardando', expira_em: expira,
+        });
+      }
+    } catch (e) { console.error('auto-contrato pendente:', e.message); }
   }
 
   const origin = req.headers.origin || `https://${req.headers.host}`;

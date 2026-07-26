@@ -83,6 +83,14 @@ export default async function handler(req) {
     return new Response(JSON.stringify({ error: 'Falha ao registrar assinatura', detalhe: txt.slice(0, 200) }), { status: 500, headers });
   }
 
+  // ENFORCEMENT: libera o acesso — marca o "contrato pendente" (que bloqueia a plataforma via
+  // ContratoObrigatorio) como assinado. Best-effort: não falha a assinatura se isto falhar.
+  sb(`contratos_pendentes?contrato_link_id=eq.${contrato.id}&status=eq.aguardando`, {
+    method: 'PATCH',
+    headers: { Prefer: 'return=minimal' },
+    body: JSON.stringify({ status: 'assinado', assinado_em }),
+  }).catch(() => {});
+
   // Trilha de auditoria (best-effort)
   sb('audit_logs', {
     method: 'POST',
