@@ -20,6 +20,7 @@ function salvarProgressoLocal(id, feito) {
 function getPlano() { return localStorage.getItem('tsn_plano_membro') || 'explorador'; }
 
 const PLANOS_PAGOS = ['top2','assessorado','clube','analista','consultor','advogado','admin'];
+const MAT_ICON = { excel: '📊', word: '📝', ppt: '📽️', pdf: '📄', link: '🔗' };
 
 function podeAssistir(licao, plano, comprouAvulso = false, planosGratis = []) {
   if (licao.gratis) return true;                 // amostra grátis (preview)
@@ -70,7 +71,7 @@ export default function Curso() {
       const modMap = {};
       (as || []).forEach(a => {
         const m = a.modulo || 'Módulo 1';
-        (modMap[m] = modMap[m] || []).push({ id: a.id, titulo: a.titulo || '', duracao: a.duracao || '', gratis: !!a.gratis, descricao: a.descricao || '', video_url: a.video_url || '' });
+        (modMap[m] = modMap[m] || []).push({ id: a.id, titulo: a.titulo || '', duracao: a.duracao || '', gratis: !!a.gratis, descricao: a.descricao || '', video_url: a.video_url || '', materiais: Array.isArray(a.materiais) ? a.materiais : [] });
       });
       setCursoDb({
         id: c.id, titulo: c.titulo, subtitulo: c.subtitulo || '', descricao: c.descricao || '',
@@ -410,17 +411,20 @@ export default function Curso() {
                     <p style={{ margin:0, fontSize:14, color:'#334155', lineHeight:1.8 }}>{licaoAtiva.descricao}</p>
                   </div>
 
-                  {/* Material de apoio */}
-                  <div style={{ marginTop:16 }}>
-                    <div style={{ fontSize:12, fontWeight:700, color:'#475569', textTransform:'uppercase', marginBottom:10 }}>Material de apoio</div>
-                    <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-                      {['📄 Slides da aula', '📊 Planilha de cálculo', '📋 Checklist PDF'].map(m=>(
-                        <div key={m} style={{ padding:'7px 12px', background:'#f1f5f9', borderRadius:8, fontSize:12, color:'#475569', fontWeight:500, cursor:'pointer', border:'1px solid #e2e8f0' }}>
-                          {m}
-                        </div>
-                      ))}
+                  {/* Material de apoio — só se a aula tiver algo anexado (senão, nada) */}
+                  {Array.isArray(licaoAtiva.materiais) && licaoAtiva.materiais.length > 0 && (
+                    <div style={{ marginTop:16 }}>
+                      <div style={{ fontSize:12, fontWeight:700, color:'#475569', textTransform:'uppercase', marginBottom:10 }}>Material de apoio</div>
+                      <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+                        {licaoAtiva.materiais.map((mt, i) => (
+                          <a key={i} href={mt.url} target="_blank" rel="noreferrer" download
+                            style={{ padding:'8px 14px', background:'#f1f5f9', borderRadius:8, fontSize:12, color:'#334155', fontWeight:600, border:'1px solid #e2e8f0', textDecoration:'none', display:'inline-flex', alignItems:'center', gap:6 }}>
+                            {MAT_ICON[mt.tipo] || '🔗'} {mt.nome || 'Material'}
+                          </a>
+                        ))}
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               </div>
             ) : (
@@ -487,20 +491,22 @@ export default function Curso() {
                 Acesse todas as {todasLicoes.length} aulas do curso <strong>{curso.titulo}</strong> e muito mais.
               </p>
             </div>
-            <div style={{ display:'flex', flexDirection:'column', gap:10, marginBottom:20 }}>
-              {[
-                { p:'essencial', label:'Plano Essencial, R$ 97/mês', desc:'Fundamentos completos' },
-                { p:'profissional', label:'Plano Profissional, R$ 297/mês', desc:'Todos os cursos + novidades', destaque:true },
-              ].map(({p:pk,label,desc,destaque})=>(
-                <button key={pk} onClick={()=>{ localStorage.setItem('tsn_plano_membro',pk); setShowUpgrade(false); window.location.reload(); }}
-                  style={{ padding:'14px 18px', border:`2px solid ${destaque?'#7c3aed':'#e2e8f0'}`, borderRadius:12, background:destaque?'#ede9fe':'white', cursor:'pointer', textAlign:'left' }}>
-                  <div style={{ fontWeight:700, color:destaque?'#7c3aed':'#111111', fontSize:14 }}>{label}</div>
-                  <div style={{ fontSize:12, color:'#64748b', marginTop:2 }}>{desc}</div>
+            <div style={{ display:'flex', flexDirection:'column', gap:10, marginBottom:16 }}>
+              {/* Comprar SÓ o curso (avulso) — só cursos do banco com preço */}
+              {cursoDb && Number(curso.preco || 0) > 0 && (
+                <button onClick={()=>{ setShowUpgrade(false); nav(`/p/curso/${id}`); }}
+                  style={{ padding:'14px 18px', border:'none', borderRadius:12, background:'#7c3aed', color:'white', cursor:'pointer', textAlign:'center', fontWeight:800, fontSize:15 }}>
+                  Comprar este curso — R$ {Number(curso.preco).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} →
                 </button>
-              ))}
+              )}
+              {/* Assinar um plano que inclui o acervo */}
+              <button onClick={()=>{ setShowUpgrade(false); nav('/planos'); }}
+                style={{ padding:'13px 18px', border:'2px solid #e2e8f0', borderRadius:12, background:'white', color:'#111111', cursor:'pointer', textAlign:'center', fontWeight:700, fontSize:14 }}>
+                Ver planos que incluem este curso →
+              </button>
             </div>
             <p style={{ margin:0, fontSize:11, color:'#94a3b8', textAlign:'center' }}>
-              Simulação local, integração Asaas em breve para pagamento real.
+              Comprando o curso, o acesso é liberado assim que o pagamento é confirmado.
             </p>
           </div>
         </div>

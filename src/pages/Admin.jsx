@@ -94,7 +94,7 @@ function defaultCurso() {
   return { titulo: '', subtitulo: '', descricao: '', emoji: '📚', capa_url: '', cor: '#0D63DB', nivel: 'Iniciante', categoria: 'Fundamentos', preco: '', gratuito: false, destaque: false, comissao_pct: 30, planos_gratis: [], modulos: [] };
 }
 function defaultModulo(idx) { return { _key: String(Date.now() + idx), titulo: '', aulas: [] }; }
-function defaultAula() { return { _key: String(Date.now() + Math.random()), titulo: '', duracao: '', video_url: '', descricao: '', gratis: false }; }
+function defaultAula() { return { _key: String(Date.now() + Math.random()), titulo: '', duracao: '', video_url: '', descricao: '', gratis: false, materiais: [] }; }
 
 // Upload de mídia da Área de Membros para o STORAGE do Supabase (substitui os links do
 // Google Drive, que bloqueiam hotlink de imagem → capa em branco). Capa (imagem) → bucket
@@ -107,6 +107,8 @@ function UploadMidia({ kind, onDone, small }) {
   const [erro, setErro] = useState('');
   const cfg = kind === 'pdf'
     ? { bucket: 'documentos', prefix: 'ebooks', accept: 'application/pdf', maxMB: 60, rot: 'Enviar PDF' }
+    : kind === 'material'
+    ? { bucket: 'documentos', prefix: 'materiais', accept: '.pdf,.xls,.xlsx,.doc,.docx,.ppt,.pptx,.csv,.txt,application/pdf', maxMB: 40, rot: 'Anexar arquivo' }
     : { bucket: 'membros-capas', prefix: 'capas', accept: 'image/png,image/jpeg,image/webp', maxMB: 8, rot: 'Enviar imagem (PNG/JPG)' };
   async function enviar(file) {
     if (!file) return;
@@ -116,8 +118,11 @@ function UploadMidia({ kind, onDone, small }) {
     const nome = (file.name || '').toLowerCase();
     const ehImagem = (file.type || '').startsWith('image/') || /\.(png|jpe?g|webp|gif)$/.test(nome);
     const ehPdf = (file.type || '') === 'application/pdf' || /\.pdf$/.test(nome);
+    const ehDoc = ehPdf || /\.(xls|xlsx|doc|docx|ppt|pptx|csv|txt)$/.test(nome)
+      || /(sheet|word|excel|officedocument|presentation|csv|text)/.test(file.type || '');
     if (kind === 'pdf' && !ehPdf) { setErro('Envie um arquivo PDF.'); return; }
-    if (kind !== 'pdf' && !ehImagem) { setErro('A capa precisa ser uma IMAGEM (PNG, JPG ou WEBP) — não um PDF.'); return; }
+    if (kind === 'material' && !ehDoc) { setErro('Envie PDF, Excel, Word, PPT, CSV ou TXT.'); return; }
+    if (kind === 'capa' && !ehImagem) { setErro('A capa precisa ser uma IMAGEM (PNG, JPG ou WEBP) — não um PDF.'); return; }
     if (file.size > cfg.maxMB * 1024 * 1024) { setErro(`Arquivo grande demais (máx ${cfg.maxMB} MB).`); return; }
     setBusy(true);
     try {
@@ -126,7 +131,7 @@ function UploadMidia({ kind, onDone, small }) {
       const { error } = await supabase.storage.from(cfg.bucket).upload(path, file, { upsert: false, contentType: file.type || undefined });
       if (error) throw error;
       let url;
-      if (kind === 'pdf') {
+      if (kind === 'pdf' || kind === 'material') {
         const { data: signed, error: e2 } = await supabase.storage.from('documentos').createSignedUrl(path, 60 * 60 * 24 * 3650); // ~10 anos
         if (e2) throw e2;
         url = signed?.signedUrl;
@@ -147,6 +152,49 @@ function UploadMidia({ kind, onDone, small }) {
         {busy ? 'Enviando…' : `⬆ ${cfg.rot}`}
       </button>
       {erro && <span style={{ color: '#dc2626', fontSize: 10.5 }}>{erro}</span>}
+    </div>
+  );
+}
+
+// Deriva o tipo (ícone) do material pelo nome/URL do arquivo.
+function matTipo(nomeOuUrl) {
+  const s = String(nomeOuUrl || '').toLowerCase();
+  if (/\.(xls|xlsx|csv)(\?|#|$)/.test(s)) return 'excel';
+  if (/\.(docx?)(\?|#|$)/.test(s)) return 'word';
+  if (/\.(pptx?)(\?|#|$)/.test(s)) return 'ppt';
+  if (/\.pdf(\?|#|$)/.test(s)) return 'pdf';
+  return 'link';
+}
+const MAT_ICON = { excel: '📊', word: '📝', ppt: '📽️', pdf: '📄', link: '🔗' };
+
+// Editor de material de apoio POR AULA: lista + adicionar via link ou upload (PDF/Office).
+function MateriaisEditor({ materiais, onAdd, onRemove }) {
+  const [nome, setNome] = useState('');
+  const [url, setUrl] = useState('');
+  function addLink() {
+    const u = url.trim(); if (!u) return;
+    const nm = nome.trim() || u.replace(/^https?:\/\//, '').slice(0, 40);
+    onAdd({ nome: nm, url: u, tipo: matTipo(u) });
+    setNome(''); setUrl('');
+  }
+  return (
+    <div style={{ marginTop: 8, borderTop: '1px dashed #e2e8f0', paddingTop: 8 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', marginBottom: 6 }}>
+        Material de apoio <span style={{ fontWeight: 400 }}>(opcional — PDF/Excel/Word/link; vira botão na aula)</span>
+      </div>
+      {(materiais || []).map((mt, i) => (
+        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'white', border: '1px solid #e2e8f0', borderRadius: 6, padding: '5px 8px', marginBottom: 4 }}>
+          <span>{MAT_ICON[mt.tipo] || '🔗'}</span>
+          <span style={{ flex: 1, fontSize: 12, color: '#334155', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{mt.nome || mt.url}</span>
+          <button type="button" onClick={() => onRemove(i)} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 14 }}>✕</button>
+        </div>
+      ))}
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginTop: 4 }}>
+        <input value={nome} onChange={e => setNome(e.target.value)} placeholder="Nome (ex: Planilha)" style={{ ...S.input, flex: 1, minWidth: 110, padding: '6px 8px', fontSize: 12 }} />
+        <input value={url} onChange={e => setUrl(e.target.value)} placeholder="Colar link (opcional)" style={{ ...S.input, flex: 2, minWidth: 150, padding: '6px 8px', fontSize: 12 }} />
+        <button type="button" onClick={addLink} style={{ ...S.btn('outline'), padding: '6px 10px', fontSize: 11 }}>+ Link</button>
+        <UploadMidia kind="material" small onDone={(u, fn) => onAdd({ nome: fn || 'Arquivo', url: u, tipo: matTipo(fn || u) })} />
+      </div>
     </div>
   );
 }
@@ -179,7 +227,7 @@ function CursosTab() {
     (aulas || []).forEach((a, i) => {
       const mod = a.modulo || 'Módulo 1';
       if (!modulosMap[mod]) modulosMap[mod] = { _key: mod + i, titulo: mod, aulas: [] };
-      modulosMap[mod].aulas.push({ _key: a.id, titulo: a.titulo || '', duracao: a.duracao || '', video_url: a.video_url || '', descricao: a.descricao || '', gratis: a.gratis || false });
+      modulosMap[mod].aulas.push({ _key: a.id, titulo: a.titulo || '', duracao: a.duracao || '', video_url: a.video_url || '', descricao: a.descricao || '', gratis: a.gratis || false, materiais: Array.isArray(a.materiais) ? a.materiais : [] });
     });
     setForm({ ...c, modulos: Object.values(modulosMap) });
     setModal('edit');
@@ -235,7 +283,7 @@ function CursosTab() {
       const rows = [];
       (modulos || []).forEach((m, mi) => {
         (m.aulas || []).forEach((a, ai) => {
-          rows.push({ curso_id: cursoId, modulo: m.titulo || `Módulo ${mi + 1}`, titulo: a.titulo || '', descricao: a.descricao || '', video_url: a.video_url || '', duracao: a.duracao || '', gratis: a.gratis || false, ordem: mi * 100 + ai });
+          rows.push({ curso_id: cursoId, modulo: m.titulo || `Módulo ${mi + 1}`, titulo: a.titulo || '', descricao: a.descricao || '', video_url: a.video_url || '', duracao: a.duracao || '', gratis: a.gratis || false, materiais: Array.isArray(a.materiais) ? a.materiais : [], ordem: mi * 100 + ai });
         });
       });
       if (rows.length) {
@@ -256,6 +304,8 @@ function CursosTab() {
   function removeModulo(key) { setForm(f => ({ ...f, modulos: f.modulos.filter(m => m._key !== key) })); }
   function addAula(mkey) { setForm(f => ({ ...f, modulos: f.modulos.map(m => m._key === mkey ? { ...m, aulas: [...m.aulas, defaultAula()] } : m) })); }
   function updateAula(mkey, akey, field, val) { setForm(f => ({ ...f, modulos: f.modulos.map(m => m._key !== mkey ? m : { ...m, aulas: m.aulas.map(a => a._key === akey ? { ...a, [field]: val } : a) }) })); }
+  function addMaterial(mkey, akey, mat) { setForm(f => ({ ...f, modulos: f.modulos.map(m => m._key !== mkey ? m : { ...m, aulas: m.aulas.map(a => a._key === akey ? { ...a, materiais: [...(a.materiais || []), mat] } : a) }) })); }
+  function removeMaterial(mkey, akey, idx) { setForm(f => ({ ...f, modulos: f.modulos.map(m => m._key !== mkey ? m : { ...m, aulas: m.aulas.map(a => a._key === akey ? { ...a, materiais: (a.materiais || []).filter((_, i) => i !== idx) } : a) }) })); }
   function removeAula(mkey, akey) { setForm(f => ({ ...f, modulos: f.modulos.map(m => m._key !== mkey ? m : { ...m, aulas: m.aulas.filter(a => a._key !== akey) }) })); }
 
   return (
@@ -405,6 +455,9 @@ function CursosTab() {
                       <label style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 6, color: '#475569' }}>
                         <input type="checkbox" checked={a.gratis} onChange={e => updateAula(m._key, a._key, 'gratis', e.target.checked)} /> Aula gratuita (preview)
                       </label>
+                      <MateriaisEditor materiais={a.materiais || []}
+                        onAdd={mat => addMaterial(m._key, a._key, mat)}
+                        onRemove={idx => removeMaterial(m._key, a._key, idx)} />
                     </div>
                   ))}
 
