@@ -175,8 +175,65 @@ CLÁUSULA 5ª — PRAZO E INDEPENDÊNCIA
 ${CLAUSULAS_COMUNS}`;
 }
 
+// ─── TEMPLATE: ASSESSORADO (CLIENTE da Assessoria de Arrematação) ────────────
+// Base: contrato do cliente Rafael (Drive). Aqui a EMPRESA é a CONTRATADA e o CLIENTE é a
+// CONTRATANTE (inverso dos contratos de equipe). NÃO usa a cláusula SCP (o cliente PAGA, não
+// recebe). [VALOR_SERVICO] é preenchido no momento da geração conforme o preço do plano.
+
+export function templateAssessorado() {
+  return `CONTRATO DE PRESTAÇÃO DE SERVIÇOS DE ASSESSORIA PARA ARREMATAÇÃO EM LEILÕES
+
+CONTRATADA (ASSESSORIA): ${EMPRESA.razao}, inscrita no CNPJ nº ${EMPRESA.cnpj}, com sede em ${EMPRESA.cidade}/${EMPRESA.uf}, representada por TARCISIO DE SOUZA NOGUEIRA DE ARAUJO, brasileiro, empresário, inscrito no CPF nº 042.293.535-29.
+
+CONTRATANTE (CLIENTE): [NOME_SIGNATÁRIO], inscrito(a) no CPF nº [CPF_SIGNATÁRIO], RG nº [RG_SIGNATÁRIO], residente e domiciliado(a) em [ENDEREÇO_SIGNATÁRIO], [CIDADE_UF_SIGNATÁRIO], CEP [CEP_SIGNATÁRIO].
+
+Pelo presente instrumento particular, as partes acima qualificadas celebram o presente Contrato de Prestação de Serviços de Assessoria, que se regerá pelas cláusulas e condições a seguir:
+
+CLÁUSULA PRIMEIRA — DO OBJETO E ESCOPO
+1.1. O objeto deste contrato é a prestação de serviços técnicos de assessoria e representação especializada para a aquisição de bens através de leilões (judiciais ou extrajudiciais) pela CONTRATADA em favor da CONTRATANTE.
+1.2. O escopo abrange: Triagem e Avaliação (análise técnica e jurídica preliminar dos editais, processos, débitos ocultos e viabilidade mercadológica, sugerindo oportunidades seguras); Habilitação (análise documental e cadastramento junto aos leiloeiros oficiais); Arremate (execução da estratégia de lances combinada e representação no leilão); Resolução Processual (acompanhamento dos trâmites até a Carta de Arrematação); e Posse (diligências para a imissão na posse do bem).
+1.3. No ato da imissão na posse, a CONTRATANTE deverá indicar representante próprio de sua confiança para acompanhar o Oficial de Justiça no recebimento do bem.
+1.4. O acompanhamento presencial por especialista da CONTRATADA na imissão, se solicitado, gera custos adicionais (deslocamento, hospedagem e alimentação), arcados integralmente pela CONTRATANTE.
+
+CLÁUSULA SEGUNDA — DAS EXCLUSÕES DE ESCOPO
+2.1. Este contrato não cobre reforma, reparo, limpeza, modificação, transporte ou descaracterização do bem arrematado.
+2.2. A entrega do bem dar-se-á no estado em que se encontra (cláusula ad corpus e "as is" inerente aos leilões); serviços físicos no bem constituem operação distinta, mediante nova contratação e orçamento à parte.
+
+CLÁUSULA TERCEIRA — DA REMUNERAÇÃO E HONORÁRIOS
+3.1. Pelos serviços iniciais de assessoria (referentes a 1 imóvel), a CONTRATANTE pagará à CONTRATADA o valor de [VALOR_SERVICO], de forma imediata à assinatura deste contrato, via PIX em favor da ${EMPRESA.razao} (chave CNPJ nº ${EMPRESA.cnpj}).
+3.2. A título de honorários de êxito na arrematação, a CONTRATANTE pagará o percentual fixo de 10% (dez por cento) sobre o valor final da arrematação do bem.
+3.3. Fica estipulado o valor mínimo de R$ 5.000,00 (cinco mil reais) a título de honorários de êxito, caso o percentual de 10% resulte em montante inferior.
+3.4. O pagamento dos honorários de êxito deverá ser feito de forma simultânea ao pagamento da comissão do leiloeiro e da arrematação, seja a aquisição à vista ou financiada/hipotecada/parcelada.
+3.5. Os honorários não se confundem com a comissão do leiloeiro, custas processuais, taxas, impostos (ITBI, IPVA etc.) ou despesas de remoção, de exclusiva responsabilidade da CONTRATANTE.
+3.6. Na modalidade hipotecada (parcelamento do leilão judicial), o escopo ordinário limita-se ao arremate e imissão na posse; o acompanhamento das parcelas mensais dependerá de profissional próprio da CONTRATANTE ou de contratação complementar com a CONTRATADA.
+
+CLÁUSULA QUARTA — DOS RISCOS INERENTES AOS LEILÕES E DO CANCELAMENTO
+4.1. A CONTRATANTE tem ciência de que arrematações em leilões, sobretudo judiciais, têm natureza resolúvel e estão sujeitas a contestações, embargos ou recursos de terceiros (Art. 903 do CPC), podendo o leilão ser suspenso, invalidado ou cancelado por decisão judicial superveniente.
+4.2. A CONTRATADA atua com rigor técnico na triagem e análise de riscos (curadoria); o cancelamento por fatos alheios à sua atuação diligente é risco inerente ao negócio e não configura falha na prestação do serviço.
+4.3. Cancelada, desfeita ou invalidada a arrematação por decisão judicial ou administrativa após o arremate, sem dolo ou culpa comprovada da CONTRATADA, os serviços de habilitação, estratégia, representação, arremate e acompanhamento inicial serão considerados efetivamente prestados.
+
+CLÁUSULA QUINTA — DA ANTICORRUPÇÃO E DA PREVENÇÃO À LAVAGEM DE DINHEIRO
+5.1. As Partes conhecem e cumprem a Lei nº 12.846/2013 (Anticorrupção), comprometendo-se a não praticar suborno, fraude ou oferta de vantagem indevida a agentes públicos, juízes, leiloeiros ou terceiros.
+5.2. A CONTRATANTE cumpre as normas de prevenção à lavagem de dinheiro (Lei nº 9.613/1998).
+5.3. A CONTRATANTE atesta, sob as penas da lei, que todos os recursos utilizados na operação (lance, comissão, taxas, impostos e honorários) têm origem lícita e declarada.
+5.4. A CONTRATANTE obriga-se a comprovar, sempre que solicitado, a regularidade e a trilha financeira dos recursos utilizados.
+5.5. A violação a esta cláusula autoriza a rescisão imediata por justa causa, sem devolução de valores pagos, com honorários devidos integralmente e comunicação aos órgãos competentes (COAF, Ministério Público).
+
+CLÁUSULA SEXTA — DA PROPRIEDADE INTELECTUAL, SIGILO E LGPD
+6.1. As estratégias de arrematação e análises jurídicas da CONTRATADA são protegidas por sigilo profissional e direitos intelectuais.
+6.2. As Partes observam a Lei nº 13.709/2018 (LGPD), resguardando as informações financeiras e pessoais trocadas na operação.
+
+CLÁUSULA SÉTIMA — DO FORO
+7.1. As Partes elegem o foro da Comarca de ${EMPRESA.foro} para dirimir controvérsias, renunciando a qualquer outro por mais privilegiado que seja.
+
+E, por estarem justas e contratadas, as partes assinam o presente instrumento digitalmente, com apontamento de testemunha.
+
+Assinatura eletrônica válida nos termos da MP 2.200-2/2001 e Lei 14.063/2020.`;
+}
+
 export const TEMPLATES = {
-  consultor: { gerar: templateConsultor, titulo: 'Contrato de Consultoria e Afiliação — BidPro Brasil', tipo: 'servico' },
-  analista:  { gerar: templateAnalista,  titulo: 'Contrato de Análise de Imóveis — BidPro Brasil',       tipo: 'servico' },
-  advogado:  { gerar: templateAdvogado,  titulo: 'Contrato de Serviços Jurídicos — BidPro Brasil',        tipo: 'servico' },
+  consultor:   { gerar: templateConsultor,   titulo: 'Contrato de Consultoria e Afiliação — BidPro Brasil', tipo: 'servico' },
+  analista:    { gerar: templateAnalista,    titulo: 'Contrato de Análise de Imóveis — BidPro Brasil',       tipo: 'servico' },
+  advogado:    { gerar: templateAdvogado,    titulo: 'Contrato de Serviços Jurídicos — BidPro Brasil',        tipo: 'servico' },
+  assessorado: { gerar: templateAssessorado, titulo: 'Contrato de Assessoria para Arrematação — BidPro Brasil', tipo: 'servico' },
 };

@@ -344,6 +344,7 @@ export default function Perfil() {
   // LGPD states
   const [baixando, setBaixando] = useState(false);
   const [mostrarConfirmacaoExclusao, setMostrarConfirmacaoExclusao] = useState(false);
+  const [confirmarExclusaoFinal, setConfirmarExclusaoFinal] = useState(false); // Explorador: passou da tela de retenção
   const [textoConfirmacao, setTextoConfirmacao] = useState('');
   const [excluindo, setExcluindo] = useState(false);
   const [lgpdErro, setLgpdErro] = useState(null);
@@ -1234,7 +1235,7 @@ export default function Perfil() {
               {baixando ? 'Exportando...' : 'Baixar meus dados'}
             </button>
             <button
-              onClick={() => { setMostrarConfirmacaoExclusao(v => !v); setTextoConfirmacao(''); setLgpdErro(null); }}
+              onClick={() => { setMostrarConfirmacaoExclusao(v => !v); setTextoConfirmacao(''); setConfirmarExclusaoFinal(false); setLgpdErro(null); }}
               style={{
                 padding: '10px 18px',
                 background: 'white',
@@ -1250,46 +1251,83 @@ export default function Perfil() {
           </div>
 
           {mostrarConfirmacaoExclusao && (
-            <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 8, padding: 16 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: '#991b1b', marginBottom: 8 }}>Tem certeza? Esta ação é irreversível.</div>
-              <p style={{ fontSize: 12, color: '#7f1d1d', margin: '0 0 12px', lineHeight: 1.6 }}>
-                Seus dados pessoais serão anonimizados. Registros financeiros são mantidos por 5 anos por obrigação legal. Você será desconectado imediatamente.
-              </p>
-              <div style={{ marginBottom: 10 }}>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#991b1b', marginBottom: 6 }}>
-                  Digite <strong>EXCLUIR</strong> para confirmar:
-                </label>
-                <input
-                  type="text"
-                  value={textoConfirmacao}
-                  onChange={e => setTextoConfirmacao(e.target.value)}
-                  placeholder="EXCLUIR"
-                  style={{ padding: '8px 12px', border: '1px solid #fca5a5', borderRadius: 6, fontSize: 13, width: '100%', boxSizing: 'border-box', outline: 'none' }}
-                />
+            ROLES_PAGANTES.includes(role) ? (
+              /* PAGANTE: dificulta a exclusão — precisa cancelar o plano antes (vira Explorador) */
+              <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: 16 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#92400e', marginBottom: 6 }}>Cancele seu plano antes de excluir</div>
+                <p style={{ fontSize: 12.5, color: '#a16207', margin: '0 0 12px', lineHeight: 1.6 }}>
+                  Você tem um plano ativo. Antes de excluir, <strong>cancele o plano e volte ao Explorador (gratuito)</strong> — sem cobrança, mantendo sua conta, histórico e análises. Na maioria das vezes é tudo o que você precisa.
+                </p>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  <button onClick={() => { setMostrarConfirmacaoExclusao(false); setCancelMsg(null); setCancelModal(true); }}
+                    style={{ padding: '9px 18px', background: '#059669', color: 'white', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+                    Cancelar plano (continuar como Explorador)
+                  </button>
+                  <button onClick={() => setMostrarConfirmacaoExclusao(false)}
+                    style={{ padding: '9px 18px', background: 'white', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+                    Voltar
+                  </button>
+                </div>
               </div>
-              <div style={{ display: 'flex', gap: 10 }}>
-                <button
-                  onClick={excluirConta}
-                  disabled={textoConfirmacao !== 'EXCLUIR' || excluindo}
-                  style={{
-                    padding: '9px 18px',
-                    background: textoConfirmacao === 'EXCLUIR' ? '#dc2626' : '#94a3b8',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: 8,
-                    fontSize: 13,
-                    fontWeight: 700,
-                    cursor: textoConfirmacao === 'EXCLUIR' && !excluindo ? 'pointer' : 'not-allowed',
-                  }}>
-                  {excluindo ? 'Excluindo...' : 'Confirmar exclusão'}
+            ) : !confirmarExclusaoFinal ? (
+              /* EXPLORADOR (gratuito): tela de retenção com gatilho forte para NÃO excluir */
+              <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: 18 }}>
+                <div style={{ fontSize: 15, fontWeight: 800, color: '#084BA6', marginBottom: 6 }}>Espere — sua conta é gratuita 🎯</div>
+                <p style={{ fontSize: 13, color: '#1e3a8a', margin: '0 0 14px', lineHeight: 1.65 }}>
+                  Não há <strong>nenhuma cobrança</strong>. Mantendo sua conta (custo R$ 0), você continua acompanhando as <strong>oportunidades de leilão nas suas regiões de interesse</strong> — suas buscas salvas seguem te avisando quando surgir um bom imóvel. É assim que muita gente encontra o negócio que transforma o patrimônio.
+                </p>
+                <button onClick={() => { setMostrarConfirmacaoExclusao(false); setConfirmarExclusaoFinal(false); }}
+                  style={{ padding: '12px 22px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 800, cursor: 'pointer', width: '100%', marginBottom: 12 }}>
+                  Quero manter minha conta gratuita
                 </button>
-                <button
-                  onClick={() => { setMostrarConfirmacaoExclusao(false); setTextoConfirmacao(''); }}
-                  style={{ padding: '9px 18px', background: 'white', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
-                  Cancelar
+                <button onClick={() => setConfirmarExclusaoFinal(true)}
+                  style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: 12, fontWeight: 600, cursor: 'pointer', textDecoration: 'underline', padding: 0, lineHeight: 1.5, textAlign: 'left' }}>
+                  Não tenho interesse em aumentar meu patrimônio com leilão. Quero excluir minha conta
                 </button>
               </div>
-            </div>
+            ) : (
+              /* Confirmação final da exclusão (anonimização) */
+              <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 8, padding: 16 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#991b1b', marginBottom: 8 }}>Tem certeza? Esta ação é irreversível.</div>
+                <p style={{ fontSize: 12, color: '#7f1d1d', margin: '0 0 12px', lineHeight: 1.6 }}>
+                  Seus dados pessoais serão anonimizados. Registros financeiros são mantidos por 5 anos por obrigação legal. Você será desconectado imediatamente.
+                </p>
+                <div style={{ marginBottom: 10 }}>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#991b1b', marginBottom: 6 }}>
+                    Digite <strong>EXCLUIR</strong> para confirmar:
+                  </label>
+                  <input
+                    type="text"
+                    value={textoConfirmacao}
+                    onChange={e => setTextoConfirmacao(e.target.value)}
+                    placeholder="EXCLUIR"
+                    style={{ padding: '8px 12px', border: '1px solid #fca5a5', borderRadius: 6, fontSize: 13, width: '100%', boxSizing: 'border-box', outline: 'none' }}
+                  />
+                </div>
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button
+                    onClick={excluirConta}
+                    disabled={textoConfirmacao !== 'EXCLUIR' || excluindo}
+                    style={{
+                      padding: '9px 18px',
+                      background: textoConfirmacao === 'EXCLUIR' ? '#dc2626' : '#94a3b8',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: 8,
+                      fontSize: 13,
+                      fontWeight: 700,
+                      cursor: textoConfirmacao === 'EXCLUIR' && !excluindo ? 'pointer' : 'not-allowed',
+                    }}>
+                    {excluindo ? 'Excluindo...' : 'Confirmar exclusão'}
+                  </button>
+                  <button
+                    onClick={() => { setMostrarConfirmacaoExclusao(false); setConfirmarExclusaoFinal(false); setTextoConfirmacao(''); }}
+                    style={{ padding: '9px 18px', background: 'white', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+                    Voltar
+                  </button>
+                </div>
+              </div>
+            )
           )}
         </div>
         </>)}
