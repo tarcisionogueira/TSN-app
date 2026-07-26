@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Play, Lock, CheckCircle2, Clock, BookOpen, ChevronLeft,
-  ChevronDown, ChevronUp, Award, Crown, ArrowRight, ArrowLeft, ChevronRight,
+  ChevronDown, ChevronUp, Award, Crown, ArrowRight, ArrowLeft, ChevronRight, Share2,
 } from 'lucide-react';
 import { supabase } from '../utils/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -21,10 +21,13 @@ function getPlano() { return localStorage.getItem('tsn_plano_membro') || 'explor
 
 const PLANOS_PAGOS = ['top2','assessorado','clube','analista','consultor','advogado','admin'];
 
-function podeAssistir(licao, plano, comprouAvulso = false) {
-  if (licao.gratis) return true;
-  if (comprouAvulso) return true;
-  return PLANOS_PAGOS.includes(plano);
+function podeAssistir(licao, plano, comprouAvulso = false, planosGratis = []) {
+  if (licao.gratis) return true;                 // amostra grátis (preview)
+  if (comprouAvulso) return true;                // comprou o curso avulso
+  if (PLANOS_PAGOS.includes(plano)) return true; // plano pago / equipe
+  // "Grátis por classe de assinante" definido no cadastro do curso (planos_gratis)
+  if (Array.isArray(planosGratis) && (planosGratis.includes(plano) || (plano === 'top2' && planosGratis.includes('top2_anual')))) return true;
+  return false;
 }
 
 // Converte a "URL do vídeo" da aula no player certo. Recomendado: URL de EMBED
@@ -47,9 +50,38 @@ export default function Curso() {
   const { id } = useParams();
   const nav = useNavigate();
   const { user, role } = useAuth();
-  const curso = CURSOS.find(c => c.id === id);
+  // Curso ESTÁTICO (slug legado, ex. 'onboarding') OU do BANCO (cursos_admin, uuid).
+  // O estático vence quando o id bate; senão, carrega do banco (destrava os cursos
+  // criados no admin + honra o planos_gratis do cadastro).
+  const cursoStatic = CURSOS.find(c => c.id === id);
+  const [cursoDb, setCursoDb] = useState(null);
+  const [carregandoCurso, setCarregandoCurso] = useState(false);
+  const curso = cursoStatic || cursoDb;
   // Role from auth takes precedence over localStorage fallback
   const plano = role || getPlano();
+
+  useEffect(() => {
+    if (cursoStatic || !id) return;
+    setCarregandoCurso(true); setCursoDb(null);
+    (async () => {
+      const { data: c } = await supabase.from('cursos_admin').select('*').eq('id', id).eq('ativo', true).single();
+      if (!c) { setCarregandoCurso(false); return; }
+      const { data: as } = await supabase.from('aulas_admin').select('*').eq('curso_id', id).order('ordem');
+      const modMap = {};
+      (as || []).forEach(a => {
+        const m = a.modulo || 'Módulo 1';
+        (modMap[m] = modMap[m] || []).push({ id: a.id, titulo: a.titulo || '', duracao: a.duracao || '', gratis: !!a.gratis, descricao: a.descricao || '', video_url: a.video_url || '' });
+      });
+      setCursoDb({
+        id: c.id, titulo: c.titulo, subtitulo: c.subtitulo || '', descricao: c.descricao || '',
+        emoji: c.emoji || '📚', cor: c.cor || '#0D63DB', duracao: c.duracao || '',
+        aulas: (as || []).length, preco: Number(c.preco || 0), gratuito: !!c.gratuito,
+        planos_gratis: Array.isArray(c.planos_gratis) ? c.planos_gratis : [],
+        modulos: Object.entries(modMap).map(([titulo, licoes]) => ({ titulo, licoes })),
+      });
+      setCarregandoCurso(false);
+    })();
+  }, [id, cursoStatic]);
 
   // progresso: { [aula_id]: true }
   const [progresso, setProgresso] = useState(getProgressoLocal());
@@ -117,14 +149,15 @@ export default function Curso() {
   // ── Abrir na primeira aula disponível ──────────────────────────────────────
   useEffect(() => {
     if (curso) {
-      const emProgresso = todasLicoes.find(l => !progresso[l.id] && podeAssistir(l, plano, comprouAvulso));
+      const emProgresso = todasLicoes.find(l => !progresso[l.id] && podeAssistir(l, plano, comprouAvulso, curso?.planos_gratis));
       const primeiraGratis = todasLicoes.find(l => l.gratis);
       setLicaoAtiva(emProgresso || primeiraGratis || todasLicoes[0]);
       setVideoProgress(0);
       setVideoPlaying(false);
     }
+  // Também dispara quando o curso do BANCO termina de carregar (curso: null → objeto).
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
+  }, [id, !!curso]);
 
   // Reset autoSaved flag when changing lesson
   useEffect(() => { autoSavedRef.current = false; setVideoProgress(0); setVideoPlaying(false); }, [licaoAtiva?.id]);
@@ -151,6 +184,14 @@ export default function Curso() {
     return () => clearInterval(videoTimerRef.current);
   }, [videoPlaying, licaoAtiva, salvarProgresso]);
 
+  if (!curso && carregandoCurso) {
+    return (
+      <div style={{ maxWidth:800, margin:'120px auto', textAlign:'center', padding:20, color:'#94a3b8' }}>
+        Carregando curso…
+      </div>
+    );
+  }
+
   if (!curso) {
     return (
       <div style={{ maxWidth:800, margin:'80px auto', textAlign:'center', padding:20 }}>
@@ -163,7 +204,7 @@ export default function Curso() {
     );
   }
 
-  const podeVer = licaoAtiva ? podeAssistir(licaoAtiva, plano, comprouAvulso) : false;
+  const podeVer = licaoAtiva ? podeAssistir(licaoAtiva, plano, comprouAvulso, curso?.planos_gratis) : false;
 
   const marcarConcluida = (lid) => {
     salvarProgresso(lid, true);
@@ -178,7 +219,7 @@ export default function Curso() {
   };
 
   const irParaLicao = (lic) => {
-    if (!podeAssistir(lic, plano, comprouAvulso)) { setShowUpgrade(true); return; }
+    if (!podeAssistir(lic, plano, comprouAvulso, curso?.planos_gratis)) { setShowUpgrade(true); return; }
     setLicaoAtiva(lic);
     setVideoProgress(0);
     setVideoPlaying(false);
@@ -209,6 +250,8 @@ export default function Curso() {
             <span><Clock size={11}/> {curso.duracao}</span>
             <span><BookOpen size={11}/> {curso.aulas} aulas</span>
           </div>
+          {/* Parceiro: link de venda do curso (só cursos do banco, pagos) */}
+          {cursoDb && Number(curso.preco || 0) > 0 && user && <CompartilharCurso cursoId={curso.id}/>}
         </div>
 
         {/* Barra de progresso geral */}
@@ -246,7 +289,7 @@ export default function Curso() {
               {modulosAbertos[mi] && mod.licoes.map((lic) => {
                 const ativa = licaoAtiva?.id === lic.id;
                 const feita = progresso[lic.id];
-                const pode = podeAssistir(lic, plano);
+                const pode = podeAssistir(lic, plano, comprouAvulso, curso?.planos_gratis);
                 return (
                   <button key={lic.id} onClick={()=>irParaLicao(lic)}
                     style={{ width:'100%', padding:'10px 16px 10px 24px', border:'none', borderBottom:'1px solid #f8fafc', background:ativa?curso.cor+'12':'white', cursor:'pointer', display:'flex', alignItems:'center', gap:10, textAlign:'left', transition:'background 0.15s' }}
@@ -463,5 +506,38 @@ export default function Curso() {
         </div>
       )}
     </div>
+  );
+}
+
+// Parceiro: gera/reaproveita o código de indicação e copia o link de venda do curso
+// (/#/p/curso/:id?ref=CÓDIGO). Quem comprar por esse link gera comissão para o parceiro.
+function CompartilharCurso({ cursoId }) {
+  const { user } = useAuth();
+  const [copiado, setCopiado] = useState(false);
+  const [busy, setBusy] = useState(false);
+  if (!user) return null;
+  async function gerarECopiar() {
+    setBusy(true);
+    try {
+      let { data: perfil } = await supabase.from('perfis').select('codigo_indicacao').eq('id', user.id).single();
+      let codigo = perfil?.codigo_indicacao;
+      if (!codigo) {
+        await supabase.rpc('gerar_codigo_indicacao', { p_id: user.id });
+        const { data: p2 } = await supabase.from('perfis').select('codigo_indicacao').eq('id', user.id).single();
+        codigo = p2?.codigo_indicacao;
+      }
+      const link = `${window.location.origin}/#/p/curso/${cursoId}${codigo ? `?ref=${codigo}` : ''}`;
+      let ok = false;
+      try { await navigator.clipboard.writeText(link); ok = true; } catch { /* clipboard bloqueado */ }
+      if (ok) { setCopiado(true); setTimeout(() => setCopiado(false), 2500); }
+      else window.prompt('Copie o link de venda:', link);
+    } catch { /* silencioso */ }
+    finally { setBusy(false); }
+  }
+  return (
+    <button onClick={gerarECopiar} disabled={busy}
+      style={{ marginTop:14, width:'100%', padding:'9px 12px', background:'rgba(255,255,255,0.14)', color:'white', border:'1px solid rgba(255,255,255,0.25)', borderRadius:8, fontWeight:700, fontSize:12, cursor: busy?'default':'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
+      <Share2 size={13}/> {copiado ? '✓ Link copiado!' : busy ? 'Gerando…' : 'Compartilhar para vender'}
+    </button>
   );
 }

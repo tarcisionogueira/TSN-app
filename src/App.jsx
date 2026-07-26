@@ -357,10 +357,11 @@ export default function App() {
           <Route path="/leiloeiro" element={<PrivateRoute roles={['leiloeiro','admin']}><LeiloeiroPortal /></PrivateRoute>} />
           <Route path="/festa" element={<Festa />} />
           <Route path="/c/:token" element={<ContratoLink />} />
-          {/* Página PÚBLICA do eBook (preço + aquisição). Precisa estar no router de
-              TOPO senão o /p/:tipo/:id (ProdutoLanding, sem tratamento de ebook) a
-              sombreava → "Produto não encontrado". A rota estática vence a dinâmica. */}
+          {/* Páginas PÚBLICAS de eBook/Curso (preço + aquisição). Precisam estar no router
+              de TOPO senão o /p/:tipo/:id (ProdutoLanding, sem tratamento) as sombreava →
+              "Produto não encontrado". A rota estática vence a dinâmica. */}
           <Route path="/p/ebook/:id" element={<ProdutoPublico tipo="ebook" />} />
+          <Route path="/p/curso/:id" element={<ProdutoPublico tipo="curso" />} />
           <Route path="/p/:tipo/:id" element={<ProdutoLanding />} />
           <Route path="*" element={<MainLayout />} />
         </Routes>
