@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight, Sun, Moon, Minus, Plus, Download, BookOpen }
 import { supabase } from '../utils/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { driveImage, driveId, drivePreview, driveDownload } from '../utils/driveUrl';
+import PdfReader from '../components/PdfReader';
 
 export default function EbookPage() {
   const { id } = useParams();
@@ -41,9 +42,15 @@ export default function EbookPage() {
       .then(({ data }) => { if (data?.length > 0) setComprouAvulso(true); });
   }, [user, id, ebook]);
 
-  const temPlano = user && ['top2','assessorado','clube','consultor','analista','advogado','admin'].includes(role);
+  const roleEff = role || 'explorador';
+  const temPlano = user && ['top2','assessorado','clube','consultor','analista','advogado','admin'].includes(roleEff);
   const ehGratuito = ebook && Number(ebook.preco || 0) === 0;
-  const podeAcessar = user && (temPlano || ehGratuito || comprouAvulso);
+  // Acesso grátis definido pelo admin no cadastro do produto (chips "Planos com acesso grátis").
+  const naListaGratis = ebook && Array.isArray(ebook.planos_gratis) && (
+    ebook.planos_gratis.includes(roleEff) ||
+    (roleEff === 'top2' && ebook.planos_gratis.includes('top2_anual'))
+  );
+  const podeAcessar = user && (temPlano || ehGratuito || comprouAvulso || naListaGratis);
 
   // A URL do arquivo vem da RPC de entitlement (não do registro público).
   const pdfUrl = arquivoUrl;
@@ -203,9 +210,16 @@ export default function EbookPage() {
               <Download size={14}/> Baixar PDF
             </a>
           </div>
-          <iframe src={embedUrl} title={ebook.titulo}
-            sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
-            style={{ width:'100%', minHeight:'70vh', height:'calc(100vh - 130px)', border:'none', display:'block', background: paper }}/>
+          {isDrive ? (
+            /* Google Drive: o /preview renderiza bem em iframe (mesmo no mobile). */
+            <iframe src={embedUrl} title={ebook.titulo}
+              sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-downloads"
+              style={{ width:'100%', minHeight:'70vh', height:'calc(100vh - 130px)', border:'none', display:'block', background: paper }}/>
+          ) : (
+            /* PDF assinado do Storage: pdf.js desenha os bytes em canvas —
+               funciona em desktop e mobile/PWA (o iframe do Storage é bloqueado). */
+            <PdfReader url={pdfUrl} baixarUrl={baixarUrl} paper={paper}/>
+          )}
         </div>
       ) : pdfUrl ? (
         /* Não é PDF — mostra preview e botão download */
