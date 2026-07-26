@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Sun, Moon, Minus, Plus, Download, BookOpen } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Sun, Moon, Minus, Plus, Download, BookOpen, Share2 } from 'lucide-react';
 import { supabase } from '../utils/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { driveImage, driveId, drivePreview, driveDownload } from '../utils/driveUrl';
@@ -133,6 +133,10 @@ export default function EbookPage() {
               ) : (
                 <AcessoBloqueado nav={nav} ebook={ebook}/>
               )}
+
+              {/* Parceiro: compartilha o link de VENDA (com o código dele) — vende o
+                  eBook avulso sem precisar dar acesso à plataforma. */}
+              {Number(ebook.preco || 0) > 0 && <CompartilharVender ebookId={ebook.id}/>}
             </div>
           </div>
         </div>
@@ -254,6 +258,47 @@ export default function EbookPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// Botão de PARCEIRO: gera (ou reaproveita) o código de indicação do usuário logado e
+// copia o link público de venda do eBook — /#/p/ebook/:id?ref=CÓDIGO. Quem comprar por
+// esse link gera comissão para o parceiro (comissao_pct do produto).
+function CompartilharVender({ ebookId }) {
+  const { user } = useAuth();
+  const [copiado, setCopiado] = useState(false);
+  const [busy, setBusy] = useState(false);
+  if (!user) return null;
+
+  async function gerarECopiar() {
+    setBusy(true);
+    try {
+      let { data: perfil } = await supabase.from('perfis').select('codigo_indicacao').eq('id', user.id).single();
+      let codigo = perfil?.codigo_indicacao;
+      if (!codigo) {
+        await supabase.rpc('gerar_codigo_indicacao', { p_id: user.id });
+        const { data: p2 } = await supabase.from('perfis').select('codigo_indicacao').eq('id', user.id).single();
+        codigo = p2?.codigo_indicacao;
+      }
+      const link = `${window.location.origin}/#/p/ebook/${ebookId}${codigo ? `?ref=${codigo}` : ''}`;
+      let ok = false;
+      try { await navigator.clipboard.writeText(link); ok = true; } catch { /* clipboard bloqueado */ }
+      if (ok) { setCopiado(true); setTimeout(() => setCopiado(false), 2500); }
+      else { window.prompt('Copie o link de venda:', link); }
+    } catch { /* silencioso */ }
+    finally { setBusy(false); }
+  }
+
+  return (
+    <div style={{ marginTop:16, paddingTop:16, borderTop:'1px solid #eef2f7' }}>
+      <button onClick={gerarECopiar} disabled={busy}
+        style={{ width:'100%', padding:'11px 18px', background:'#f8fafc', color:'#334155', border:'1px solid #e2e8f0', borderRadius:10, fontWeight:700, fontSize:14, cursor: busy?'default':'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
+        <Share2 size={16}/> {copiado ? '✓ Link de venda copiado!' : busy ? 'Gerando…' : 'Compartilhar para vender'}
+      </button>
+      <p style={{ fontSize:11.5, color:'#94a3b8', textAlign:'center', margin:'8px 0 0' }}>
+        Ganhe comissão indicando este eBook — o link já vai com o seu código de parceiro.
+      </p>
     </div>
   );
 }
