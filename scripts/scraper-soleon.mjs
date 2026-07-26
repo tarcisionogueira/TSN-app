@@ -81,6 +81,10 @@ async function fetchTenant(url, { timeoutMs = 45000 } = {}) {
       if (html && !ehChallenge(html)) return { html, via: 'gratis' };
     }
   } catch { /* cai p/ Bright Data */ }
+  // Runner RESIDENCIAL (SOLEON_NO_BD=1): o fetch direto já funciona do IP residencial (o SOLEON
+  // bloqueia só datacenter, não tem Cloudflare) → NUNCA cair no Bright Data. Pula a página se
+  // por acaso o direto falhar (evita gasto surpresa de BD numa coleta que deveria ser grátis).
+  if (process.env.SOLEON_NO_BD === '1') return { html: null, via: 'sem-bd' };
   const bd = await fetchViaBrightData(url, { proposito: 'soleon', timeoutMs });
   if (!bd || !bd.ok) return { html: null, via: 'bloqueado' };
   const html = await bd.text().catch(() => null);
