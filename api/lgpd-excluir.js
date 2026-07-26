@@ -39,6 +39,10 @@ export default async function handler(req) {
         nome: '[removido]',
         cpf: null,
         telefone: null,
+        chave_pix: null,       // dado financeiro pessoal (PIX)
+        cnpj: null,            // PJ do parceiro (B2B) — LGPD
+        razao_social: null,
+        pj_chave_pix: null,
         memoria_ia: null,
         ativo: false,
       }),
