@@ -8,6 +8,8 @@
  * Substitui os fluxos paralelos (saques/mp_saques/saldos_profissionais).
  */
 import { getAuthUser, unauthorized, forbidden } from './_auth.js';
+import { cpfDoRegistro } from './_cpf.js';
+import { verificarSocioQSA } from './_pj-socio.js';
 
 export const config = { runtime: 'edge' };
 
@@ -45,6 +47,21 @@ async function rpc(fn, args) {
 
 const roleFor = async (id) => (await db(`perfis?id=eq.${id}&select=role`)).data?.[0]?.role || null;
 const saldoDe = async (id) => Number((await db(`saldo_usuarios?user_id=eq.${id}&select=saldo_disponivel`)).data?.[0]?.saldo_disponivel || 0);
+
+// Saques do parceiro que já foram ACEITOS (liberados p/ pagamento ou pagos). O 1º saque pode
+// liberar pela automação (CPF no QSA); do 2º em diante, validação manual obrigatória.
+const countSaquesAceitos = async (id) =>
+  ((await db(`saldo_lancamentos?user_id=eq.${id}&tipo=eq.saque&status=in.(solicitado,sacado)&select=id`)).data || []).length;
+
+// Abre um chamado de supervisão/validação do saque (analista + dono veem no Atendimento).
+async function abrirChamadoSaquePJ(user, perfil, valor, titulo) {
+  try {
+    await db('chamados', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({
+      user_id: user.id, user_email: user.email || null, user_nome: perfil?.nome || null,
+      titulo: `${titulo} (R$ ${Number(valor).toFixed(2)})`, segmento: 'saque_pj', status: 'aguardando_atendente',
+    }) });
+  } catch { /* o chamado é auxiliar — não bloqueia a solicitação de saque */ }
+}
 
 // DIREITO DE RECEBER (regra do dono): qualquer cliente pode ser PARCEIRO e indicar, mas só tem
 // direito a RECEBER (sacar) as comissões quem é PAGANTE (plano pago) — ou quem é EQUIPE/
@@ -98,7 +115,10 @@ export default async function handler(req) {
       const corte = corteHojeBahia();
       const hojeSexta = ehSexta();
       for (const p of pendentes) p.elegivel_hoje = hojeSexta && new Date(p.criado_em) <= corte;
-      return json({ saldos, pendentes, hoje_sexta: hojeSexta, proxima_liberacao: proximaLiberacao().toISOString() });
+      // Fila de saques de parceiro AGUARDANDO validação da PJ (analista/dono liberam ou reprovam
+      // após conferir contrato social + quadro societário). Não é pagável enquanto não aprovado.
+      const em_validacao_pj = (await db("saldo_lancamentos?status=eq.aguardando_pj&tipo=eq.saque&order=criado_em.asc&select=id,user_id,valor,descricao,criado_em,perfis(nome,role,cnpj,razao_social,pj_chave_pix,pj_validada_via,identidade_validada)")).data || [];
+      return json({ saldos, pendentes, em_validacao_pj, hoje_sexta: hojeSexta, proxima_liberacao: proximaLiberacao().toISOString() });
     }
 
     // Analítico de UM beneficiário: cada crédito (honorário/comissão) com o valor da
@@ -167,24 +187,84 @@ export default async function handler(req) {
     let body; try { body = await req.json(); } catch { return json({ error: 'JSON inválido' }, 400); }
     const valor = Math.round(Number(body.valor) * 100) / 100;
     if (!valor || valor <= 0) return json({ error: 'Valor inválido' }, 400);
-    // SEM trava por assinatura no SAQUE: a elegibilidade da comissão é decidida na ORIGEM
-    // (distribuir_comissao_rede só credita no mês em que o parceiro está em dia na data da
-    // cobrança). Logo, o que está no saldo já foi legitimamente ganho — pode ser sacado.
 
-    // Checagem de saldo/PIX + inserção do lançamento é ATÔMICA no banco
-    // (serializada por usuário) — elimina a corrida read-then-write que
-    // permitia dois saques simultâneos zerarem o mesmo saldo.
-    const r = await rpc('solicitar_saque_ledger', { p_user_id: user.id, p_valor: valor });
+    const ehParceiroCliente = PLANOS_PAGOS.includes(role);
+
+    // Equipe operacional (admin/analista/…): PIX pessoal, sem gate de PJ — fluxo original.
+    // Checagem de saldo/PIX + inserção é ATÔMICA no banco (advisory lock por usuário).
+    if (!ehParceiroCliente) {
+      const r = await rpc('solicitar_saque_ledger', { p_user_id: user.id, p_valor: valor });
+      if (!r.ok) return json({ error: 'Erro ao solicitar saque', detail: r.data }, 500);
+      if (!r.data?.ok) return json({ error: r.data?.error || 'Não foi possível solicitar o saque' }, 400);
+      return json({ ok: true, saldo_restante: r.data.saldo_restante }, 201);
+    }
+
+    // ── Parceiro-cliente: fluxo B2B com validação da PJ (anti-interposição) ──
+    const perfil = (await db(`perfis?id=eq.${user.id}&select=nome,cpf,cpf_enc,cnpj,razao_social,pj_chave_pix,pj_validada_em,identidade_validada`)).data?.[0] || {};
+
+    // KYC obrigatório (selfie + documento) antes de qualquer saque de parceiro.
+    if (!perfil.identidade_validada) {
+      return json({ error: 'Conclua a verificação de identidade (selfie + documento) antes de sacar.', kyc_pendente: true }, 422);
+    }
+    // Empresa (PJ) cadastrada.
+    const faltaPJ = [];
+    if (!perfil.cnpj || !String(perfil.cnpj).trim()) faltaPJ.push('empresa (CNPJ)');
+    if (!perfil.razao_social || !String(perfil.razao_social).trim()) faltaPJ.push('razão social');
+    if (!perfil.pj_chave_pix || !String(perfil.pj_chave_pix).trim()) faltaPJ.push('PIX da empresa');
+    if (faltaPJ.length) return json({ error: `Cadastre a empresa para sacar. Falta: ${faltaPJ.join(', ')}.`, faltando: faltaPJ, pj_incompleta: true }, 422);
+
+    // 1º saque pode liberar pela AUTOMAÇÃO (CPF do parceiro no quadro societário/Receita, grátis);
+    // do 2º saque em diante, SEMPRE validação MANUAL (analista/dono).
+    const primeiroSaque = (await countSaquesAceitos(user.id)) === 0;
+    let autoOk = !!perfil.pj_validada_em;
+    if (primeiroSaque && !autoOk) {
+      try {
+        const cpf = await cpfDoRegistro(perfil);
+        const v = await verificarSocioQSA({ cnpj: perfil.cnpj, cpf, nome: perfil.nome });
+        if (v.matched) { await rpc('registrar_pj_validacao_auto', { p_user_id: user.id, p_snapshot: v.snapshot }); autoOk = true; }
+      } catch { autoOk = false; } // fail-closed → conferência manual
+    }
+
+    if (primeiroSaque && autoOk) {
+      const r = await rpc('solicitar_saque_ledger', { p_user_id: user.id, p_valor: valor });
+      if (!r.ok || !r.data?.ok) return json({ error: r.data?.error || 'Não foi possível solicitar o saque', detail: r.data }, 400);
+      await abrirChamadoSaquePJ(user, perfil, valor, 'Saque de parceiro liberado pela automação (CPF confere no quadro societário) — supervisão');
+      return json({ ok: true, saldo_restante: r.data.saldo_restante, via: 'auto_qsa' }, 201);
+    }
+
+    // Validação MANUAL: reserva como 'aguardando_pj' (não pagável) e abre chamado p/ analista + dono.
+    const r = await rpc('solicitar_saque_pj_pendente', { p_user_id: user.id, p_valor: valor });
     if (!r.ok) return json({ error: 'Erro ao solicitar saque', detail: r.data }, 500);
-    if (!r.data?.ok) return json({ error: r.data?.error || 'Não foi possível solicitar o saque' }, 400);
-    return json({ ok: true, saldo_restante: r.data.saldo_restante }, 201);
+    if (!r.data?.ok) return json({ error: r.data?.error || 'Não foi possível solicitar o saque', faltando: r.data?.faltando, kyc_pendente: r.data?.kyc_pendente }, 400);
+    await abrirChamadoSaquePJ(user, perfil, valor, primeiroSaque
+      ? 'Saque de parceiro — CPF não confirmado no quadro societário; conferir contrato social e liberar/reprovar'
+      : 'Saque de parceiro (2º+) — validação manual obrigatória; conferir documentação e liberar/reprovar');
+    return json({ ok: true, em_validacao: true, saldo_restante: r.data.saldo_restante }, 201);
   }
 
-  // ── PATCH: admin paga (só sexta) — em massa ou individual — ou recusa ─────
+  // ── PATCH: validação da PJ (analista/dono) + pagamento (admin, só sexta) ──
   if (req.method === 'PATCH') {
-    if (role !== 'admin') return forbidden();
     let body; try { body = await req.json(); } catch { body = {}; }
     const acao = body.acao;
+
+    // Validação MANUAL do saque de parceiro (2º+ ou 1º sem match automático).
+    // Analista (funcionário) OU dono (admin, supervisiona e pode assumir) liberam ou reprovam.
+    if (acao === 'aprovar_pj' || acao === 'reprovar_pj') {
+      if (role !== 'admin' && role !== 'analista') return forbidden();
+      const idv = url.searchParams.get('id');
+      if (!idv || !/^\d+$/.test(idv)) return json({ error: 'id inválido' }, 400);
+      if (acao === 'aprovar_pj') {
+        const r = await rpc('aprovar_saque_pj', { p_lanc_id: Number(idv), p_validador: user.id, p_via: 'manual' });
+        if (!r.ok || !r.data?.ok) return json({ error: r.data?.error || 'Erro ao aprovar' }, 400);
+        return json({ ok: true });
+      }
+      const r = await rpc('reprovar_saque_pj', { p_lanc_id: Number(idv), p_motivo: String(body.motivo || '') });
+      if (!r.ok || !r.data?.ok) return json({ error: r.data?.error || 'Erro ao reprovar' }, 400);
+      return json({ ok: true });
+    }
+
+    // Pagamento do saque é só do admin.
+    if (role !== 'admin') return forbidden();
 
     // Liberar TODOS os elegíveis de uma vez (sexta + até o corte de 12h).
     if (acao === 'pagar_todos') {
