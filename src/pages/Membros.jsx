@@ -58,6 +58,18 @@ function EbookCover({ titulo }) {
   );
 }
 
+// Capa do ebook: imagem quando há capa_url VÁLIDA; se faltar OU a imagem falhar (URL quebrada —
+// ex.: um PDF enviado por engano no campo da capa), cai no EbookCover (nunca deixa caixa branca).
+function EbookCapa({ capa, titulo }) {
+  const [erro, setErro] = useState(false);
+  if (!capa || erro) return <EbookCover titulo={titulo} />;
+  return (
+    <img src={driveImage(capa)} alt={titulo}
+      style={{ width:'100%', height:'100%', objectFit:'cover', display:'block', background:'#f1f5f9' }}
+      onError={() => setErro(true)} />
+  );
+}
+
 export default function Membros() {
   const nav = useNavigate();
   const { user, role } = useAuth();
@@ -350,13 +362,7 @@ export default function Membros() {
                 {/* Capa com moldura clara (destaca a arte, como na vitrine) */}
                 <div style={{ padding:'16px 16px 10px', background:'linear-gradient(180deg,#f8fafc,#fff)', display:'flex', justifyContent:'center' }}>
                   <div style={{ width:'72%', aspectRatio:'2/3', borderRadius:6, overflow:'hidden', boxShadow:'0 6px 16px rgba(15,23,42,0.18)' }}>
-                    {eb.capa_url ? (
-                      <img src={driveImage(eb.capa_url)} alt={eb.titulo}
-                        style={{ width:'100%', height:'100%', objectFit:'cover', display:'block', background:'#f1f5f9' }}
-                        onError={e=>{ e.currentTarget.style.display='none'; }}/>
-                    ) : (
-                      <EbookCover titulo={eb.titulo}/>
-                    )}
+                    <EbookCapa capa={eb.capa_url} titulo={eb.titulo}/>
                   </div>
                 </div>
                 <div style={{ padding:'0 14px 14px', display:'flex', flexDirection:'column', gap:5, flex:1 }}>

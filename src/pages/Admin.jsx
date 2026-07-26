@@ -111,6 +111,13 @@ function UploadMidia({ kind, onDone, small }) {
   async function enviar(file) {
     if (!file) return;
     setErro('');
+    // Valida o TIPO de verdade: o accept do <input> é só uma DICA — no mobile/PWA dá p/ escolher
+    // "todos os arquivos" e mandar um PDF na capa (foi o que aconteceu → capa em branco no <img>).
+    const nome = (file.name || '').toLowerCase();
+    const ehImagem = (file.type || '').startsWith('image/') || /\.(png|jpe?g|webp|gif)$/.test(nome);
+    const ehPdf = (file.type || '') === 'application/pdf' || /\.pdf$/.test(nome);
+    if (kind === 'pdf' && !ehPdf) { setErro('Envie um arquivo PDF.'); return; }
+    if (kind !== 'pdf' && !ehImagem) { setErro('A capa precisa ser uma IMAGEM (PNG, JPG ou WEBP) — não um PDF.'); return; }
     if (file.size > cfg.maxMB * 1024 * 1024) { setErro(`Arquivo grande demais (máx ${cfg.maxMB} MB).`); return; }
     setBusy(true);
     try {
