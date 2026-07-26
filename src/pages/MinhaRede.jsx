@@ -216,8 +216,7 @@ export default function MinhaRede() {
 
   const rankNome = nivel?.rank_atual?.nome;
   const indicacaoPct = nivel?.comissao_indicacao_pct ?? 25;
-  const atualDepth = nivel?.rank_atual?.max_nivel;   // níveis de rede em que ganha hoje
-  const proxDepth = nivel?.proximo?.max_nivel;        // e no próximo rank
+  const bonusInf = Number(nivel?.rank_atual?.bonus_infinito_pct || 0); // > 0 = faixa de liderança
 
   return (
     <div style={{ maxWidth: 820, margin: '0 auto', padding: '28px 20px', display: 'flex', flexDirection: 'column', gap: 18 }}>
@@ -305,16 +304,22 @@ export default function MinhaRede() {
                 <div style={{ fontSize: 12.5, color: '#334155', lineHeight: 1.55, marginBottom: nivel?.proximo ? 16 : 0, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 12px' }}>
                   🛒 <strong>Vendas da loja</strong> (ebooks/cursos): você ganha a <strong>comissão de cada produto</strong> quando alguém compra pelo seu link — o percentual aparece no próprio produto ao <em>Compartilhar para vender</em>.
                 </div>
+                {bonusInf > 0 && (
+                  <div style={{ fontSize: 12.5, color: '#5b21b6', lineHeight: 1.55, marginBottom: nivel?.proximo ? 16 : 0, background: '#f5f3ff', border: '1px solid #ddd6fe', borderRadius: 10, padding: '10px 12px' }}>
+                    💎 Você é <strong>liderança</strong> ({rankNome}): ganha um <strong>bônus infinito de {bonusInf}%</strong> sobre a produção de toda a sua rede + participação no pool.
+                  </div>
+                )}
                 {nivel?.proximo ? (
                   <>
                     <div style={{ fontSize: 12.5, fontWeight: 800, color: '#334155', marginBottom: 12 }}>
-                      Para subir ao nível <span style={{ color: '#0D63DB' }}>{nivel.proximo.nome}</span>, complete:
+                      Para subir a <span style={{ color: '#0D63DB' }}>{nivel.proximo.nome}</span>, você precisa formar na sua rede direta:
                     </div>
-                    <Progresso label="Indicados pagantes" atual={nivel.metricas?.diretos_pagantes || 0} alvo={(nivel.metricas?.diretos_pagantes || 0) + nivel.proximo.faltam_diretos} faltam={nivel.proximo.faltam_diretos} />
-                    <Progresso label="Pessoas na sua rede" atual={nivel.metricas?.rede_pagante || 0} alvo={(nivel.metricas?.rede_pagante || 0) + nivel.proximo.faltam_rede} faltam={nivel.proximo.faltam_rede} />
-                    {proxDepth && atualDepth && proxDepth > atualDepth && (
+                    <Progresso
+                      label={`${nivel.proximo.req_pernas} ${nivel.proximo.sub_nome}${nivel.proximo.req_pernas > 1 ? 's' : ''} (indicados diretos que subiram de nível)`}
+                      atual={nivel.proximo.tem || 0} alvo={nivel.proximo.req_pernas} faltam={nivel.proximo.faltam} />
+                    {Number(nivel.proximo.bonus_infinito_pct) > 0 && (
                       <div style={{ fontSize: 11.5, color: '#334155', lineHeight: 1.55, background: '#eff6ff', border: '1px solid #dbeafe', borderRadius: 10, padding: '9px 12px', marginTop: 2 }}>
-                        🔓 Ao chegar em <strong>{nivel.proximo.nome}</strong>, seus repasses passam a contar <strong>{proxDepth} níveis</strong> da sua rede (hoje: {atualDepth}) — você ganha também sobre as vendas dos indicados dos seus indicados.
+                        💎 <strong>{nivel.proximo.nome}</strong> é faixa de <strong>liderança</strong>: além do bônus de equipe, ganha um <strong>bônus infinito de {Number(nivel.proximo.bonus_infinito_pct)}%</strong> sobre a produção de <strong>toda</strong> a sua rede + participação no pool.
                       </div>
                     )}
                   </>

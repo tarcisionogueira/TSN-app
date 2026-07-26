@@ -376,6 +376,37 @@ Fontes lidas no Drive (originais, não de memória): **Manual de Procedimentos**
   linguagem do próprio Conselheiro ("Bonificação por Formação de Equipes"). Faixas = **"Níveis"**.
 - **Visão de nível na MESMA página** (painel que expande no "Minha Rede"), não em rota separada.
 
+### 12.8.1 IMPLEMENTADO 26/07 — graduação por DUPLICAÇÃO + faixas "Guardiões" (`ranks_guardioes_graduacao.sql`)
+O dono validou que subir SÓ contando pagantes estava errado → agora é **graduação recursiva** (Conselheiro):
+cada nível exige **N indicados DIRETOS que ELES MESMOS atingiram o nível anterior** (duplicação), em linhas
+diretas distintas. Nomes escolhidos pelo dono (evitar "diamante"): **Pioneiro→Fundador→Mestre→Mentor→
+Embaixador→Guardião→Patrono→Lenda**.
+
+| Ordem | Nível | Sobe com (indicados diretos que subiram) | Bônus infinito |
+|---|---|---|---|
+| 1 | Pioneiro | 1 indicado direto pagante ativo | — |
+| 2 | Fundador | 2 Pioneiros | — |
+| 3 | Mestre | 2 Fundadores | — |
+| 4 | Mentor | 2 Mestres | — |
+| 5 | Embaixador | 3 Mentores | — |
+| 6 | **Guardião** | 5 Embaixadores | **0,5%** ∞ + pool |
+| 7 | **Patrono** | 2 Guardiões | **1,0%** ∞ + pool |
+| 8 | **Lenda** | 3 Patronos | **1,5%** ∞ + pool |
+
+`comissao_ranks` ganhou `req_pernas`/`req_sub_ordem`/`bonus_infinito_pct`. `rank_do_parceiro` agora lê o
+`rank_key` dos **filhos diretos**; `recalcular_ranks` roda um **fixpoint bottom-up** (cada UPDATE = 1 passada
+síncrona; ≤15 passadas) + **carência de 2 meses** p/ queda. `meu_nivel` mostra o rank oficial (stored) + progresso
+por graduação ("faltam 2 Fundadores para Mestre"). Painel `MinhaRede.jsx` atualizado (1 barra de graduação +
+selo de liderança/bônus infinito). Algoritmo validado com árvore sintética antes do deploy. `auditoria_seguranca()=0/0`.
+
+**FALTA (payout — caminho ainda NÃO-live, separado e cuidadoso):**
+1. **Cron do `recalcular_ranks`** (mensal) — hoje só roda quando chamado; sem agendamento o rank fica estático
+   entre execuções. Rodei 1× no deploy. (Pendência já listada no §11.)
+2. **`distribuir_comissao_rede`: pagar o BÔNUS INFINITO** das faixas de liderança (0,5/1,0/1,5% sobre toda a
+   rede) — só a config existe; o rateio ainda não paga o infinito.
+3. **LANDMINE do CHECK da `comissoes`** (§ registrada no HANDOFF 8e): `tipo IN ('afiliado','honorario')` mas o
+   motor grava `rede_nN` → violaria. Corrigir antes de ligar o payout multinível de rede.
+
 ### 12.9 Ajuste 26/07 (3) — envelope jurídico: parceiro PJ + saque condicionado (a VALIDAR)
 > Decisão de planejamento (dono). **NÃO é parecer** — depende de contador + advogado tributarista
 > antes do go-live (afastamento de INSS/vínculo, formato da NF, provisão do saldo, modelo de crédito

@@ -32,6 +32,20 @@
 ### Sessão 8e — parte 2 (sem beco de acesso + anúncio por e-mail)
 4. **Sem "acesso restrito" de beco — bloqueado vai p/ AQUISIÇÃO.** `EbookPage` (não logado/sem acesso) agora manda o usuário à **página do produto** (`/#/p/ebook/:id`) mostrando preço + opções, em vez de "acesso restrito → ver planos". **Bug de rota corrigido:** `/p/ebook/:id` era sombreado pelo `/p/:tipo/:id` (ProdutoLanding, que NÃO trata ebook → "Produto não encontrado") — adicionei rota estática no router de topo (App.jsx) → agora renderiza o `ProdutoPublico`. `ProdutoPublico`: usuário **já logado** sem acesso agora vai ao checkout (`/checkout?plano=top2` — "Assinar e desbloquear"), não mais p/ `/login`.
    - ⚠️ **PENDENTE (decisão do dono, mexe em pagamento):** a **compra AVULSA por item** (pagar só aquele ebook/curso, ex.: R$14,90) NÃO está conectada ao gateway — existe só o scaffold `api/registrar-compra-produto.js` (cria `compras_produtos` **pendente**; ativação só viria de webhook de pagamento, que não trata produto). Hoje o caminho de pagamento que FUNCIONA é **assinar o plano** (inclui o acervo). Para vender por item de verdade: checkout aceitar `?ebook=/?curso=` + cobrança única MP/Asaas + webhook→`ativo`. (Perguntei o modelo; o dono interrompeu — segui com "assinatura desbloqueia", que já roda.)
+### Sessão 8e — parte 7 (RANKS: graduação por duplicação "Guardiões" — modelo Conselheiro)
+14. **Subir de nível agora exige GRADUAÇÕES abaixo (não mais só pagantes) — FEITO.** O dono apontou que contar
+    pagantes estava errado; virou **duplicação recursiva** (Clube Conselheiro): cada nível pede **N indicados
+    DIRETOS que ELES MESMOS subiram** ao nível anterior. Nomes (dono): **Pioneiro→Fundador→Mestre→Mentor→
+    Embaixador→Guardião→Patrono→Lenda** (topo evita "diamante"). Regras: Fundador=2 Pioneiros · Mestre=2 Fundadores ·
+    Mentor=2 Mestres · Embaixador=3 Mentores · Guardião=5 Embaixadores · Patrono=2 Guardiões · Lenda=3 Patronos.
+    `comissao_ranks`+`req_pernas/req_sub_ordem/bonus_infinito_pct`; `rank_do_parceiro` lê filhos diretos;
+    `recalcular_ranks` = **fixpoint bottom-up** + carência 2m; `meu_nivel` mostra progresso por graduação.
+    `MinhaRede.jsx` atualizado (barra de graduação + selo de liderança/bônus infinito). Migração
+    `ranks_guardioes_graduacao.sql`, algoritmo validado com árvore sintética, `auditoria=0/0`, recalculado 1×.
+    **FALTA (payout, NÃO-live):** (a) **cron mensal** do `recalcular_ranks` (hoje estático entre execuções);
+    (b) `distribuir_comissao_rede` pagar o **bônus infinito** das faixas de liderança; (c) corrigir o **CHECK da
+    `comissoes`** (landmine 8e) antes de ligar o payout de rede. Ver `PLANO_COMISSIONAMENTO_MLM.md` §12.8.1.
+
 ### Sessão 8e — parte 6 (tela de indicações: fim do "pisca" do link + painel de nível)
 12. **Bug do link "pisca" (grande→pequeno) — CORRIGIDO.** `MinhaRede.jsx`: o link nascia com o `uid` (longo) e trocava pro `codigo_indicacao` (curto) ao carregar. Agora **gera o código antes de exibir** (RPC `gerar_codigo_indicacao` se faltar) e só mostra o link quando `codigoPronto` (placeholder "Gerando seu link…" enquanto isso). Sem troca visível.
 13. **Painel "Seu nível" enriquecido + visível p/ admin.** Antes era `!isAdmin` (o dono não via). Agora mostra sempre e traz: nível atual + **% por indicação** (assinatura, flat `rank_config`), **linha da LOJA** (vendas de ebook/curso pagam o `comissao_pct` do produto), **próximo nível** (nome + "o que falta": indicados pagantes/rede) e **o que desbloqueia** (profundidade da rede — `max_nivel`: hoje X → Y níveis). RPC `meu_nivel()` passou a devolver `proximo.max_nivel` (`supabase/migrations/meu_nivel_proximo_max_nivel.sql`, auditoria 0/0). Ranks: Pioneiro→Fundador→Mestre→Mentor→Embaixador→Lenda.
