@@ -259,17 +259,23 @@ export default function EbookPage() {
 }
 
 function AcessoBloqueado({ nav, ebook }) {
-  const gratis = !ebook.preco || Number(ebook.preco) === 0;
+  const preco = Number(ebook.preco || 0);
+  const gratis = preco === 0;
+  const precoLabel = preco > 0 ? `R$ ${preco.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '';
+  // Quem não tem acesso NÃO leva um beco "acesso restrito": é levado à página de
+  // aquisição do eBook (mostra o preço e as opções de compra/assinatura).
   return (
     <div style={{ textAlign:'center', padding:'20px' }}>
       <div style={{ fontSize:48, marginBottom:16 }}>🔒</div>
-      <h3 style={{ color:'#111111', marginBottom:8 }}>Acesso restrito</h3>
-      <p style={{ color:'#64748b', marginBottom:24, maxWidth:360, margin:'0 auto 24px' }}>
-        {gratis ? 'Faça login para acessar este material.' : 'Este eBook requer um plano pago.'}
+      <h3 style={{ color:'#111111', marginBottom:8 }}>{gratis ? 'Faça login para ler' : 'Adquira este eBook'}</h3>
+      <p style={{ color:'#64748b', marginBottom:24, maxWidth:380, margin:'0 auto 24px' }}>
+        {gratis
+          ? 'Este material é liberado após o login.'
+          : `Acesse por ${precoLabel} ou incluído no plano Investidor Pro.`}
       </p>
-      <button onClick={() => nav(gratis ? '/login' : '/planos')}
-        style={{ padding:'11px 28px', background:'#0D63DB', color:'white', border:'none', borderRadius:10, fontWeight:700, cursor:'pointer' }}>
-        {gratis ? 'Fazer login' : 'Ver planos'}
+      <button onClick={() => nav(gratis ? '/login' : `/p/ebook/${ebook.id}`)}
+        style={{ padding:'12px 30px', background:'#0D63DB', color:'white', border:'none', borderRadius:10, fontWeight:700, fontSize:15, cursor:'pointer' }}>
+        {gratis ? 'Fazer login' : 'Ver opções de acesso →'}
       </button>
     </div>
   );

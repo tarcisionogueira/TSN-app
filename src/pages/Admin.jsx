@@ -157,6 +157,7 @@ function CursosTab() {
   const [modal, setModal] = useState(null);
   const [form, setForm] = useState(defaultCurso());
   const [saving, setSaving] = useState(false);
+  const [anunciando, setAnunciando] = useState(null);
 
   const loadCursos = useCallback(async () => {
     setLoading(true);
@@ -194,6 +195,22 @@ function CursosTab() {
   async function toggleAtivo(id, ativo) {
     await supabase.from('cursos_admin').update({ ativo: !ativo }).eq('id', id);
     loadCursos();
+  }
+
+  // E-mail de apresentação do curso p/ a base (botão → página do produto c/ aquisição).
+  async function anunciar(c) {
+    if (!c?.id) return;
+    if (!window.confirm(`Enviar e-mail de apresentação do curso "${c.titulo}" para a base de clientes?\n\nCada cliente recebe um resumo + botão que abre a página do curso com as opções de aquisição.`)) return;
+    setAnunciando(c.id);
+    try {
+      const r = await apiCall('/api/anunciar-produto', { method: 'POST', body: JSON.stringify({ tipo: 'curso', id: c.id }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || j?.error) throw new Error(j?.error || `HTTP ${r.status}`);
+      alert(`✅ Anúncio enviado!\n\nDestinatários: ${j.destinatarios ?? 0}\nEnviados: ${j.enviados ?? 0}${j.falhas ? `\nFalhas: ${j.falhas}` : ''}${j.sem_email ? `\nSem e-mail cadastrado: ${j.sem_email}` : ''}`);
+    } catch (err) {
+      alert('Erro ao anunciar: ' + (err?.message || err));
+    }
+    setAnunciando(null);
   }
 
   async function saveForm() {
@@ -272,6 +289,7 @@ function CursosTab() {
                         <div style={{ display: 'flex', gap: 6 }}>
                           <button style={S.btn('outline')} onClick={() => openEdit(c)}>Editar</button>
                           <button style={S.btn('outline')} onClick={() => toggleAtivo(c.id, c.ativo)}>{c.ativo ? 'Desativar' : 'Ativar'}</button>
+                          {c.ativo && <button style={S.btn('outline')} disabled={anunciando === c.id} onClick={() => anunciar(c)} title="Enviar e-mail de apresentação para os clientes">{anunciando === c.id ? 'Enviando…' : '📣 Anunciar'}</button>}
                           <button style={S.btn('danger')} onClick={() => deleteCurso(c.id)}>Deletar</button>
                         </div>
                       </td>
@@ -444,6 +462,7 @@ function EbooksTab() {
   const [modal, setModal] = useState(null);
   const [form, setForm] = useState(defaultEbook());
   const [saving, setSaving] = useState(false);
+  const [anunciando, setAnunciando] = useState(null);
 
   const loadEbooks = useCallback(async () => {
     setLoading(true);
@@ -461,6 +480,23 @@ function EbooksTab() {
     if (!window.confirm('Deletar este eBook?')) return;
     await supabase.from('ebooks_admin').delete().eq('id', id);
     loadEbooks();
+  }
+
+  // Dispara e-mail de APRESENTAÇÃO do eBook p/ a base de clientes (botão que abre a
+  // página do produto com as opções de aquisição). Só clientes recebem (nunca equipe).
+  async function anunciar(e) {
+    if (!e?.id) return;
+    if (!window.confirm(`Enviar e-mail de apresentação do eBook "${e.titulo}" para a base de clientes?\n\nCada cliente recebe um resumo + botão que abre a página do produto com as opções de aquisição.`)) return;
+    setAnunciando(e.id);
+    try {
+      const r = await apiCall('/api/anunciar-produto', { method: 'POST', body: JSON.stringify({ tipo: 'ebook', id: e.id }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || j?.error) throw new Error(j?.error || `HTTP ${r.status}`);
+      alert(`✅ Anúncio enviado!\n\nDestinatários: ${j.destinatarios ?? 0}\nEnviados: ${j.enviados ?? 0}${j.falhas ? `\nFalhas: ${j.falhas}` : ''}${j.sem_email ? `\nSem e-mail cadastrado: ${j.sem_email}` : ''}`);
+    } catch (err) {
+      alert('Erro ao anunciar: ' + (err?.message || err));
+    }
+    setAnunciando(null);
   }
 
   async function toggleAtivo(id, ativo) {
@@ -515,6 +551,7 @@ function EbooksTab() {
                         <div style={{ display: 'flex', gap: 6 }}>
                           <button style={S.btn('outline')} onClick={() => openEdit(e)}>Editar</button>
                           <button style={S.btn('outline')} onClick={() => toggleAtivo(e.id, e.ativo)}>{e.ativo ? 'Desativar' : 'Ativar'}</button>
+                          {e.ativo && <button style={S.btn('outline')} disabled={anunciando === e.id} onClick={() => anunciar(e)} title="Enviar e-mail de apresentação para os clientes">{anunciando === e.id ? 'Enviando…' : '📣 Anunciar'}</button>}
                           <button style={S.btn('danger')} onClick={() => deleteEbook(e.id)}>Deletar</button>
                         </div>
                       </td>
