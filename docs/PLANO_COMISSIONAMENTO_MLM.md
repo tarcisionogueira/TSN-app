@@ -375,3 +375,39 @@ Fontes lidas no Drive (originais, não de memória): **Manual de Procedimentos**
   "venda direta") e **"Bônus de Equipe"** (em vez de "comissionamento multinível") — espelha a
   linguagem do próprio Conselheiro ("Bonificação por Formação de Equipes"). Faixas = **"Níveis"**.
 - **Visão de nível na MESMA página** (painel que expande no "Minha Rede"), não em rota separada.
+
+### 12.9 Ajuste 26/07 (3) — envelope jurídico: parceiro PJ + saque condicionado (a VALIDAR)
+> Decisão de planejamento (dono). **NÃO é parecer** — depende de contador + advogado tributarista
+> antes do go-live (afastamento de INSS/vínculo, formato da NF, provisão do saldo, modelo de crédito
+> condicionado). Descartada a **SCP** para este uso (fragilidade: repasse semanal do bruto ≠
+> distribuição de lucro → risco de reclassificação; peso operacional por sócio). Rota escolhida:
+> **parceiro = PJ, comissão B2B contra nota** — acaba a variação PF/PJ e transfere a responsabilidade
+> tributária ao parceiro, que é o objetivo.
+
+**Fluxo em 2 estágios:**
+1. **Virar parceiro (fricção zero):** aceita o programa → link → **indica e ACUMULA saldo** sem exigir
+   PJ para começar.
+2. **Sacar (gate):** exige **CNPJ do qual o parceiro é sócio** + **conta bancária da PJ** + **NF**.
+   O saldo visível "a receber" vira o **incentivo** para regularizar (endowment). Legítimo: o direito
+   ao crédito existe; o *exercício* (saque) é condicionado — e isso deve estar claro nos Termos.
+
+**Regras que sustentam o gate (senão fura):**
+1. **CPF do parceiro deve constar no quadro societário do CNPJ** informado (anti-interposição) —
+   validar no cadastro (cartão CNPJ / consulta de sócios).
+2. **Conta que recebe = da PJ** (não CPF) — caracteriza B2B.
+3. **Pagamento contra NF de serviço** (código/CNAE e formato: contador define). v1: parceiro **anexa
+   a NF** no pedido de saque.
+4. **Teto do MEI (~R$ 81 mil/ano):** painel alerta quando o acumulado projetar estouro → migrar p/ ME.
+5. **Política do saldo:** acumula; definir se **expira** (ex.: some após X meses) ou é perpétuo —
+   contabilmente é **passivo** (a pagar) e precisa de **provisão**.
+6. **Termos claros:** "condição de pagamento", não retenção arbitrária.
+
+**No sistema (planejado):**
+- `perfis`: + `cnpj`, `razao_social`, `pj_validada_em`, dados bancários da PJ.
+- `Comissoes.jsx` + `/api/saque`: **gate** — bloqueia saque sem CNPJ validado; mostra saldo acumulado
+  + CTA "Cadastre sua empresa para sacar"; **upload da NF** no pedido.
+- Estender o caminho de saldo/saque (hoje só admin/consultor/analista/advogado) para **parceiros
+  pagantes** — pendência já conhecida do MLM.
+
+**Pendência de ação:** redigir **brief de 1 página** para contador/advogado decidirem
+(PJ/MEI B2B vs SCP vs intermediação) com as 6 regras acima + teto MEI + provisão do saldo.
