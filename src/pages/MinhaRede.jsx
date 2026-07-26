@@ -186,6 +186,22 @@ export default function MinhaRede() {
     </div>
   );
 
+  // Barra de progresso rumo ao próximo nível (atual/alvo, com "faltam N").
+  const Progresso = ({ label, atual, alvo, faltam }) => {
+    const pct = alvo > 0 ? Math.min(100, Math.round((atual / alvo) * 100)) : 0;
+    return (
+      <div style={{ marginBottom: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontSize: 11.5, fontWeight: 700, color: '#475569', marginBottom: 5 }}>
+          <span>{label}</span>
+          <span>{atual}/{alvo}{faltam > 0 ? <span style={{ color: '#0D63DB' }}> · faltam {faltam}</span> : <span style={{ color: '#059669' }}> ✓</span>}</span>
+        </div>
+        <div style={{ height: 9, background: '#e2e8f0', borderRadius: 999, overflow: 'hidden' }}>
+          <div style={{ width: `${pct}%`, height: '100%', background: 'linear-gradient(90deg, #0D63DB, #084BA6)', borderRadius: 999, transition: 'width .4s' }} />
+        </div>
+      </div>
+    );
+  };
+
   const rankNome = nivel?.rank_atual?.nome;
   const indicacaoPct = nivel?.comissao_indicacao_pct ?? 25;
 
@@ -237,60 +253,69 @@ export default function MinhaRede() {
         </button>
       </div>
 
-      {/* SEU NÍVEL — Comissão de Indicação + progresso (o esquema de níveis fica sob o capô) */}
+      {/* SEU NÍVEL — hero com gradiente + comissão por indicação em destaque + progresso pro próximo */}
       {!isAdmin && (
-        <div style={{ ...card, background: 'linear-gradient(180deg,#f6faff 0%, #ffffff 60%)', border: '1px solid #dbeafe' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-            <Sparkles size={18} color="#0D63DB" />
-            <div style={{ fontSize: 15, fontWeight: 800, color: '#111' }}>Seu Nível</div>
+        <div style={{ ...card, padding: 0, overflow: 'hidden', border: '1px solid #dbeafe' }}>
+          {/* Hero */}
+          <div style={{ background: 'linear-gradient(135deg, #0D63DB 0%, #084BA6 100%)', color: 'white', padding: '18px 20px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 11.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.6, opacity: 0.92 }}>
+              <Sparkles size={15} /> Seu nível
+            </div>
+            {nivel?.tem_rank ? (
+              <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginTop: 8, gap: 10, flexWrap: 'wrap' }}>
+                <div style={{ fontSize: 27, fontWeight: 900, lineHeight: 1 }}>{rankNome}</div>
+                <div style={{ textAlign: 'center', background: 'rgba(255,255,255,0.16)', borderRadius: 12, padding: '6px 14px' }}>
+                  <div style={{ fontSize: 22, fontWeight: 900, lineHeight: 1 }}>{indicacaoPct}%</div>
+                  <div style={{ fontSize: 10, opacity: 0.92, fontWeight: 700, marginTop: 2 }}>por indicação</div>
+                </div>
+              </div>
+            ) : (
+              <div style={{ fontSize: 19, fontWeight: 900, marginTop: 8 }}>Comece a construir 🚀</div>
+            )}
           </div>
 
-          {nivel?.tem_rank ? (
-            <>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
-                <div style={{ fontSize: 22, fontWeight: 900, color: '#084BA6' }}>{rankNome}</div>
-                <div style={{ fontSize: 12.5, color: '#64748b', fontWeight: 600 }}>seu nível atual</div>
-              </div>
-              <div style={{ background: '#eff6ff', borderRadius: 10, padding: '12px 14px', marginTop: 10 }}>
-                <div style={{ fontSize: 13, color: '#084BA6', fontWeight: 700 }}>
-                  💸 Comissão de Indicação: <span style={{ fontSize: 16, fontWeight: 900 }}>{indicacaoPct}%</span>
+          {/* Corpo */}
+          <div style={{ padding: '16px 20px' }}>
+            {nivel?.tem_rank ? (
+              <>
+                <div style={{ fontSize: 12.5, color: '#334155', lineHeight: 1.6, marginBottom: nivel?.proximo ? 16 : 0 }}>
+                  Você ganha <strong style={{ color: '#084BA6' }}>{indicacaoPct}%</strong> sobre cada pagamento de quem você trouxe — enquanto sua assinatura estiver em dia.
                 </div>
-                <div style={{ fontSize: 11.5, color: '#0D63DB', marginTop: 2 }}>sobre cada pagamento de quem você trouxe — enquanto seguir ativo.</div>
+                {nivel?.proximo ? (
+                  <>
+                    <div style={{ fontSize: 12.5, fontWeight: 800, color: '#334155', marginBottom: 12 }}>
+                      Falta pouco para <span style={{ color: '#0D63DB' }}>{nivel.proximo.nome}</span>:
+                    </div>
+                    <Progresso label="Indicados pagantes" atual={nivel.metricas?.diretos_pagantes || 0} alvo={(nivel.metricas?.diretos_pagantes || 0) + nivel.proximo.faltam_diretos} faltam={nivel.proximo.faltam_diretos} />
+                    <Progresso label="Pessoas na sua rede" atual={nivel.metricas?.rede_pagante || 0} alvo={(nivel.metricas?.rede_pagante || 0) + nivel.proximo.faltam_rede} faltam={nivel.proximo.faltam_rede} />
+                  </>
+                ) : (
+                  <div style={{ fontSize: 13, color: '#059669', fontWeight: 800, marginTop: 4 }}>🏆 Você chegou ao nível máximo. Parabéns!</div>
+                )}
+              </>
+            ) : (
+              <div style={{ fontSize: 13, color: '#475569', lineHeight: 1.65 }}>
+                {naoGanhaNovas
+                  ? <>Você já pode indicar. Para <strong>desbloquear seus ganhos e seu nível</strong>, tenha uma assinatura ativa e faça sua primeira indicação paga.</>
+                  : <>Faça sua <strong>primeira indicação paga</strong> para desbloquear o nível <strong>Pioneiro</strong> e começar a ganhar <strong>{indicacaoPct}%</strong> por indicação.</>}
               </div>
-              {nivel?.proximo ? (
-                <div style={{ fontSize: 12.5, color: '#334155', marginTop: 12, lineHeight: 1.6 }}>
-                  <strong>Para chegar a {nivel.proximo.nome}:</strong>{' '}
-                  {nivel.proximo.faltam_diretos > 0 && <>faltam <strong>{nivel.proximo.faltam_diretos}</strong> indicado(s) pagante(s)</>}
-                  {nivel.proximo.faltam_diretos > 0 && nivel.proximo.faltam_rede > 0 && ' e '}
-                  {nivel.proximo.faltam_rede > 0 && <><strong>{nivel.proximo.faltam_rede}</strong> na sua rede</>}
-                  {nivel.proximo.faltam_diretos === 0 && nivel.proximo.faltam_rede === 0 && 'você já bateu os requisitos — atualiza no próximo ciclo!'}
-                </div>
-              ) : (
-                <div style={{ fontSize: 12.5, color: '#059669', marginTop: 12, fontWeight: 700 }}>🏆 Você está no nível máximo. Parabéns!</div>
-              )}
-            </>
-          ) : (
-            <div style={{ fontSize: 13, color: '#475569', lineHeight: 1.6 }}>
-              {naoGanhaNovas
-                ? <>Você já pode indicar e formar sua equipe. Para <strong>desbloquear seus ganhos e seu nível</strong>, tenha uma assinatura ativa e faça sua primeira indicação paga.</>
-                : <>Faça sua <strong>primeira indicação paga</strong> para desbloquear o nível <strong>Pioneiro</strong> e começar a ganhar sua Comissão de Indicação.</>}
-            </div>
-          )}
+            )}
 
-          {/* Trilha de níveis percorrida */}
-          {Array.isArray(nivel?.trilha) && nivel.trilha.length > 0 && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 14, flexWrap: 'wrap' }}>
-              {nivel.trilha.map((t, i) => (
-                <React.Fragment key={t.nome}>
-                  {i > 0 && <ChevronRight size={13} color="#cbd5e1" />}
-                  <span style={{ fontSize: 11, fontWeight: 800, padding: '3px 9px', borderRadius: 999,
-                    background: t.atingido ? '#0D63DB' : '#f1f5f9', color: t.atingido ? 'white' : '#94a3b8' }}>
-                    {t.nome}
-                  </span>
-                </React.Fragment>
-              ))}
-            </div>
-          )}
+            {/* Trilha de níveis */}
+            {Array.isArray(nivel?.trilha) && nivel.trilha.length > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 16, flexWrap: 'wrap' }}>
+                {nivel.trilha.map((t, i) => (
+                  <React.Fragment key={t.nome}>
+                    {i > 0 && <ChevronRight size={12} color="#cbd5e1" />}
+                    <span style={{ fontSize: 10.5, fontWeight: 800, padding: '3px 9px', borderRadius: 999,
+                      background: t.atingido ? '#0D63DB' : '#f1f5f9', color: t.atingido ? 'white' : '#94a3b8' }}>
+                      {t.nome}
+                    </span>
+                  </React.Fragment>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
