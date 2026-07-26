@@ -57,6 +57,7 @@ export default function MinhaRede() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [codigo, setCodigo] = useState('');
+  const [codigoPronto, setCodigoPronto] = useState(false); // evita o "pisca": só mostra o link quando o código curto carregou
   const [copiado, setCopiado] = useState(false);
   const [expandido, setExpandido] = useState({});
   const [rootId, setRootId] = useState(null); // admin: ver a rede de outro parceiro
@@ -112,11 +113,22 @@ export default function MinhaRede() {
     } catch { /* mantém zeros */ }
     try {
       const { data: p } = await supabase.from('perfis').select('codigo_indicacao, cnpj, razao_social, pj_chave_pix').eq('id', uid).maybeSingle();
-      if (p?.codigo_indicacao) setCodigo(p.codigo_indicacao);
+      let cod = p?.codigo_indicacao;
+      // Garante o código CURTO antes de exibir o link (senão o link mostrava o uid longo
+      // e "piscava" para o código quando carregava). Gera se ainda não existir.
+      if (!cod) {
+        try {
+          await supabase.rpc('gerar_codigo_indicacao', { p_id: uid });
+          const { data: p2 } = await supabase.from('perfis').select('codigo_indicacao').eq('id', uid).maybeSingle();
+          cod = p2?.codigo_indicacao;
+        } catch { /* mantém o fallback do uid */ }
+      }
+      if (cod) setCodigo(cod);
       const temPj = !!(p?.cnpj);
       setPj({ cnpj: p?.cnpj || '', razao_social: p?.razao_social || '', pj_chave_pix: p?.pj_chave_pix || '' });
       setPjSalva(temPj);
     } catch { /* ignora */ }
+    finally { setCodigoPronto(true); }
   }, [uid]);
   useEffect(() => { carregarMeu(); }, [carregarMeu]);
 
@@ -204,6 +216,8 @@ export default function MinhaRede() {
 
   const rankNome = nivel?.rank_atual?.nome;
   const indicacaoPct = nivel?.comissao_indicacao_pct ?? 25;
+  const atualDepth = nivel?.rank_atual?.max_nivel;   // níveis de rede em que ganha hoje
+  const proxDepth = nivel?.proximo?.max_nivel;        // e no próximo rank
 
   return (
     <div style={{ maxWidth: 820, margin: '0 auto', padding: '28px 20px', display: 'flex', flexDirection: 'column', gap: 18 }}>
@@ -244,17 +258,24 @@ export default function MinhaRede() {
         </div>
       )}
 
-      {/* Link de indicação */}
+      {/* Link de indicação — só renderiza quando o código curto está pronto (sem "pisca") */}
       <div style={card}>
         <div style={{ fontSize: 13, fontWeight: 800, color: '#334155', marginBottom: 8 }}>Seu link de indicação</div>
-        <div style={{ background: '#eff6ff', border: '1px solid #dbeafe', borderRadius: 10, padding: '10px 12px', fontSize: 12, color: '#084BA6', wordBreak: 'break-all', fontFamily: 'monospace', marginBottom: 10 }}>{linkDisplay}</div>
-        <button onClick={copiar} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 18px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 13, cursor: 'pointer' }}>
-          {copiado ? <><Check size={16} /> Link copiado!</> : <><Copy size={16} /> Copiar meu link</>}
-        </button>
+        {!codigoPronto ? (
+          <div style={{ background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 12px', fontSize: 12, color: '#94a3b8', marginBottom: 10 }}>Gerando seu link…</div>
+        ) : (
+          <>
+            <div style={{ background: '#eff6ff', border: '1px solid #dbeafe', borderRadius: 10, padding: '10px 12px', fontSize: 12, color: '#084BA6', wordBreak: 'break-all', fontFamily: 'monospace', marginBottom: 10 }}>{linkDisplay}</div>
+            <button onClick={copiar} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 18px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 13, cursor: 'pointer' }}>
+              {copiado ? <><Check size={16} /> Link copiado!</> : <><Copy size={16} /> Copiar meu link</>}
+            </button>
+          </>
+        )}
       </div>
 
-      {/* SEU NÍVEL — hero com gradiente + comissão por indicação em destaque + progresso pro próximo */}
-      {!isAdmin && (
+      {/* SEU NÍVEL — hero + comissões (indicação e loja) + progresso pro próximo. Mostra
+          também para o admin (o dono quer ver a mesma visão do parceiro). */}
+      {(
         <div style={{ ...card, padding: 0, overflow: 'hidden', border: '1px solid #dbeafe' }}>
           {/* Hero */}
           <div style={{ background: 'linear-gradient(135deg, #0D63DB 0%, #084BA6 100%)', color: 'white', padding: '18px 20px' }}>
@@ -278,16 +299,24 @@ export default function MinhaRede() {
           <div style={{ padding: '16px 20px' }}>
             {nivel?.tem_rank ? (
               <>
-                <div style={{ fontSize: 12.5, color: '#334155', lineHeight: 1.6, marginBottom: nivel?.proximo ? 16 : 0 }}>
-                  Você ganha <strong style={{ color: '#084BA6' }}>{indicacaoPct}%</strong> sobre cada pagamento de quem você trouxe — enquanto sua assinatura estiver em dia.
+                <div style={{ fontSize: 12.5, color: '#334155', lineHeight: 1.6, marginBottom: 10 }}>
+                  Você ganha <strong style={{ color: '#084BA6' }}>{indicacaoPct}%</strong> sobre cada pagamento de quem você trouxe (assinaturas) — enquanto sua assinatura estiver em dia.
+                </div>
+                <div style={{ fontSize: 12.5, color: '#334155', lineHeight: 1.55, marginBottom: nivel?.proximo ? 16 : 0, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 12px' }}>
+                  🛒 <strong>Vendas da loja</strong> (ebooks/cursos): você ganha a <strong>comissão de cada produto</strong> quando alguém compra pelo seu link — o percentual aparece no próprio produto ao <em>Compartilhar para vender</em>.
                 </div>
                 {nivel?.proximo ? (
                   <>
                     <div style={{ fontSize: 12.5, fontWeight: 800, color: '#334155', marginBottom: 12 }}>
-                      Falta pouco para <span style={{ color: '#0D63DB' }}>{nivel.proximo.nome}</span>:
+                      Para subir ao nível <span style={{ color: '#0D63DB' }}>{nivel.proximo.nome}</span>, complete:
                     </div>
                     <Progresso label="Indicados pagantes" atual={nivel.metricas?.diretos_pagantes || 0} alvo={(nivel.metricas?.diretos_pagantes || 0) + nivel.proximo.faltam_diretos} faltam={nivel.proximo.faltam_diretos} />
                     <Progresso label="Pessoas na sua rede" atual={nivel.metricas?.rede_pagante || 0} alvo={(nivel.metricas?.rede_pagante || 0) + nivel.proximo.faltam_rede} faltam={nivel.proximo.faltam_rede} />
+                    {proxDepth && atualDepth && proxDepth > atualDepth && (
+                      <div style={{ fontSize: 11.5, color: '#334155', lineHeight: 1.55, background: '#eff6ff', border: '1px solid #dbeafe', borderRadius: 10, padding: '9px 12px', marginTop: 2 }}>
+                        🔓 Ao chegar em <strong>{nivel.proximo.nome}</strong>, seus repasses passam a contar <strong>{proxDepth} níveis</strong> da sua rede (hoje: {atualDepth}) — você ganha também sobre as vendas dos indicados dos seus indicados.
+                      </div>
+                    )}
                   </>
                 ) : (
                   <div style={{ fontSize: 13, color: '#059669', fontWeight: 800, marginTop: 4 }}>🏆 Você chegou ao nível máximo. Parabéns!</div>

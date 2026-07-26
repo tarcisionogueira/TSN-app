@@ -10,6 +10,16 @@
 
 ## 🟢 Fazer agora — grátis e rápido
 
+### 0. ⭐ TESTAR a compra AVULSA da loja (ebook/curso) — no computador
+- **Por quê:** o checkout avulso (Mercado Pago + Asaas) foi para produção nesta sessão; falta um teste real de ponta a ponta (o dono pediu para testar mais tarde).
+- **Passos:**
+  1. Use uma conta **SEM acesso** (explorador — não admin nem assinante; senão o fluxo devolve "você já tem acesso" e **não cobra**).
+  2. *(Opcional p/ gastar pouco)* baixe o preço do ebook de teste para ~R$ 1 na aba **Configurações**.
+  3. Em **Membros** abra o ebook → **"Comprar por R$X"** (ou a página `/#/p/ebook/:id`) → pague no MP/Asaas.
+  4. Confira que a tela **libera sozinha** e aparece **"Ler eBook"**.
+- **Pré-req:** webhook do Asaas/MP apontando p/ `/api/asaas-webhook` e `/api/mp-webhook` (os mesmos das assinaturas).
+- **Depois que fizer:** me avisa o resultado (ou cole `select status,gateway,pago_em from compras_produtos order by criado_em desc limit 1;`) que eu confirmo pelos logs/banco e ajusto se precisar. Se comprou por link `?ref=CÓDIGO`, a comissão do parceiro aparece em `saldo_lancamentos` (origem_tipo `produto`).
+
 ### 1. Asaas — terminar o webhook (gateway de backup do Mercado Pago)
 - **Por quê:** a fila do Asaas está pausada; o token já está na Vercel, falta o lado do painel.
 - **Passos (painel Asaas → Configurações → Integrações → Webhooks):**
