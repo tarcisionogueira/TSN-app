@@ -326,3 +326,52 @@ modelo (venda direta escalonada + repasse por distância com trava de profundida
    - **Estrutura percorrida por nível**: a cada faixa alcançada, mostra o caminho já feito + o próximo
      passo. (O repasse multinível fica "sob o capô" — não é o que se vende na porta.)
    - Fonte dos números: `rede_metricas_parceiro()` / `rank_do_parceiro()` já existentes.
+
+### 12.8 Ajuste 26/07 (2) — COMPARAÇÃO com o Clube Conselheiro + nome/linguagem/layout
+Fontes lidas no Drive (originais, não de memória): **Manual de Procedimentos** (id `1G2OD5K9...`) e
+**Plano de Negócios "ModeloVendaDiretaReformulado – Jun/2020"** (id `1kmfj61D...`).
+
+**Números REAIS do Clube Conselheiro:**
+- **Venda direta:** **25%** de cada parcela paga pelo associado que o consultor trouxe (recorrente, a
+  cada pagamento). **Ajuste tributário: CNPJ = 25%, CPF = 20%** (a diferença cobre o INSS — pagar a um
+  CPF gera +20% INSS patronal + 11% retido). Base = valor pago pelo associado; **piso: ≥1 indicação
+  válida paga e ainda ativa (até 6 meses)** para receber QUALQUER coisa.
+- **Bônus multinível (por graduação — a graduação governa a PROFUNDIDADE):**
+
+  | Graduação | Profundidade | N1 | N2 | N3 | N4 | N5 | TOTAL |
+  |---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
+  | Bronze | 1 nível | 4% | — | — | — | — | 4% |
+  | Prata | 2 níveis | 4% | 3% | — | — | — | 7% |
+  | Esmeralda | 3 níveis | 4% | 3% | 2% | — | — | 9% |
+  | Ouro | 4 níveis | 4% | 3% | 2% | 2% | — | 11% |
+  | Rubi | 5 níveis | 4% | 3% | 2% | 2% | 1% | 12% |
+  | Diamante+ | ∞ | +0,5% a +1,5% sobre TODA a rede (bônus infinito) | | | | | |
+
+  Base do bônus = **produtividade líquida** (faturamento − impostos) da equipe. **N1 do bônus incide
+  sobre a produção da EQUIPE (downline), separado dos 25% da venda direta própria** — não há
+  duplo-pagamento sobre a mesma venda.
+- **Qualificação RECURSIVA (duplicação):** Bronze = 2 diretos que viraram CACC ativos; Prata = 2
+  diretos que viraram Bronze; Ouro = 2 diretos Prata; Esmeralda = 2 diretos Ouro; Rubi = 3 diretos
+  Ouro; Diamante = 5 diretos Ouro; Duplo/Conselheiro = +Diamantes em pernas. (Qualifica por ter
+  diretos que ELES MESMOS subiram — força duplicação, não contagem crua.)
+- **Reconhecimento:** prêmios NÃO-dinheiro por graduação (PIN, iPhone, viagem, carro popular→luxo) +
+  verba de premiação por faturamento. Pagamento das bonificações: até ~5 dias úteis após fechar o mês.
+
+**COMPARAÇÃO com o que desenhamos (§12.2):**
+| Dimensão | Clube Conselheiro | Nossa proposta atual | Recomendação |
+|---|---|---|---|
+| Venda direta | **25% FIXO** (20% CPF) | 10%→15% escalonado | **Migrar p/ FIXO ~20%** (mais simples e generoso; 20% já é a taxa CPF do Conselheiro e embute o INSS) |
+| Multinível N1 | 4% (sobre a EQUIPE) | — (N1 era a venda direta) | **Separar limpo**: 25/20% venda direta própria + bônus 4/3/2/2/1% sobre a equipe |
+| Multinível shape | 4/3/2/2/1 (máx 6 níveis, 12%) | 3/2/1,5/1/1/0,5/0,5/0,25/0,25 (10 níveis, 10%) | **Adotar 4/3/2/2/1** (mais simples, testado, cauda menor) |
+| Rank governa profundidade | **SIM** (Bronze 1→Rubi 5) | SIM (era o núcleo) | ✅ **igual** — nosso mecanismo confere |
+| Qualificação | **Recursiva** (2 diretos que subiram) | Contagem crua (N diretos + N rede) | Começar simples (contagem) e evoluir p/ duplicação |
+| Piso de entrada | ≥1 indicação paga ativa (6m) | ≥1 direto pagante ativo | ✅ **igual** |
+| Infinito/pool | Bônus Diamante 0,5–1,5% ∞ | Pool 2% fechado | Manter pool; avaliar bônus de topo depois |
+| Tributo (INSS) | CPF 20% / CNPJ 25% | não tratado | **Tratar**: default 20% (CPF) e 25% p/ parceiro CNPJ |
+
+**Decisões de nome/linguagem/layout (dono, 26/07):**
+- **Nome público da parceria = "BidPro Brasil"** (substitui "Parceiro TSN").
+- **Simplificar os termos técnicos** na tela do parceiro: usar **"Comissão de Indicação"** (em vez de
+  "venda direta") e **"Bônus de Equipe"** (em vez de "comissionamento multinível") — espelha a
+  linguagem do próprio Conselheiro ("Bonificação por Formação de Equipes"). Faixas = **"Níveis"**.
+- **Visão de nível na MESMA página** (painel que expande no "Minha Rede"), não em rota separada.
