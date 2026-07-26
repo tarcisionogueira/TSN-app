@@ -121,13 +121,19 @@ export default function MinhaRede() {
 
   async function salvarPj() {
     setSalvandoPj(true); setMsgPj(null);
+    const cnpjDigits = (pj.cnpj || '').replace(/\D/g, '');
     const payload = {
-      cnpj: (pj.cnpj || '').trim(),
+      cnpj: cnpjDigits,
       razao_social: (pj.razao_social || '').trim(),
       pj_chave_pix: (pj.pj_chave_pix || '').trim(),
+      pj_validada_em: new Date().toISOString(),
     };
-    if (!payload.cnpj || !payload.razao_social || !payload.pj_chave_pix) {
-      setMsgPj({ tipo: 'erro', txt: 'Preencha CNPJ, razão social e a chave PIX da empresa.' });
+    if (cnpjDigits.length !== 14) {
+      setMsgPj({ tipo: 'erro', txt: 'CNPJ inválido — informe os 14 dígitos.' });
+      setSalvandoPj(false); return;
+    }
+    if (!payload.razao_social || !payload.pj_chave_pix) {
+      setMsgPj({ tipo: 'erro', txt: 'Preencha a razão social e a chave PIX da empresa.' });
       setSalvandoPj(false); return;
     }
     const { error } = await supabase.from('perfis').update(payload).eq('id', uid);

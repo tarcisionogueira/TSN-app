@@ -91,7 +91,8 @@ export default async function handler(req) {
       if (role !== 'admin') return forbidden();
       const saldos = (await db('saldo_usuarios?select=*&order=saldo_disponivel.desc')).data || [];
       // Embute o solicitante (nome/papel/PIX) para a conferência do admin.
-      const pendentes = (await db("saldo_lancamentos?status=eq.solicitado&order=criado_em.asc&select=*,perfis(nome,role,chave_pix)")).data || [];
+      // Embute dados de pagamento: PIX pessoal (equipe) OU PIX da empresa (parceiro-cliente B2B).
+      const pendentes = (await db("saldo_lancamentos?status=eq.solicitado&order=criado_em.asc&select=*,perfis(nome,role,chave_pix,cnpj,razao_social,pj_chave_pix)")).data || [];
       // Marca quais solicitações já passaram do corte (elegíveis para a liberação de HOJE,
       // se hoje for sexta) — o admin vê o que pode pagar nesta sexta.
       const corte = corteHojeBahia();
