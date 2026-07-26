@@ -566,21 +566,8 @@ export default function Calculadora() {
             </div>
           )}
 
-          {/* Link de afiliado, consultores e admin */}
-          {linkAfiliado && (
-            <div style={{ background: '#ecfdf5', borderRadius: 16, border: '1px solid #a7f3d0', padding: 18 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, color: '#065f46', marginBottom: 8, fontSize: 13 }}>
-                <Share2 size={15} /> Seu link de afiliado para a calculadora
-              </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <input readOnly value={linkAfiliado} style={{ ...inp, fontSize: 12, background: 'white' }} />
-                <button onClick={copiarLink}
-                  style={{ padding: '0 14px', background: '#059669', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap' }}>
-                  {copiado ? <><Check size={14} /> Copiado</> : <><Copy size={14} /> Copiar</>}
-                </button>
-              </div>
-            </div>
-          )}
+          {/* (Removido) Link de afiliado da calculadora — captação de marketing fica fora do
+              Programa de Parceiros; a indicação do parceiro é feita pelo link em "Indicações". */}
         </div>
       </div>
 
