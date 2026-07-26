@@ -297,3 +297,32 @@ multinível (§12.2). O **alto ticket** já torna o valor absoluto atrativo (é 
 (um "flat 10%" por plano) que **não conversa** com os trilhos `comissao_regras` (multinível). O **novo
 modelo (venda direta escalonada + repasse por distância com trava de profundidade) SUBSTITUI** o flat
 10%; a migração deve zerar/realinhar `comissao_pct` p/ não pagar por dois caminhos.
+
+### 12.7 Ajuste 26/07 — cadência, remoção da config antiga e TELA DO PARCEIRO
+**Definições finais do dono (fecha o modelo comercial):**
+- **Cadência = conforme recebimento.** Todo produto comissiona **quando a empresa recebe**: assinatura
+  recorrente paga a **cada pagamento**; **pagamento falhou → não comissiona**. Resolve a dúvida do
+  Leilão Club (§12.6): se recorrente, paga por período recebido; risco de composição some porque a
+  comissão só existe se a receita entrou. **Idempotência por pagamento** (1 evento de cobrança = 1
+  distribuição) é obrigatória.
+- **Travas 1 e 2 (§12.6): APROVADAS.** Base = entrada; honorário de êxito/recarga fora; multinível
+  sobre a entrada com trava de profundidade por rank.
+- **Escala unificada 10%→15% por faixa: APROVADA** nos 3 produtos pagos.
+- **Remover a config de comissão da tela do admin.** Os campos `comissao_pct` / `comissao_total_pct` /
+  `comissao_admin_pct` / `comissao_analista_pct` / `comissao_advogado_pct` / `comissao_consultor_pct`
+  de `planos_config` **saem da UI e são neutralizados** — a **venda direta + multinível (este modelo)
+  vira a fonte única**. `honorarios_exito_pct` **permanece** (paga advogado/perito; não comissiona).
+
+**TELA DO PARCEIRO — spec (a construir):**
+1. **Página de apresentação comercial** (o que o parceiro vê primeiro; **NÃO** expõe o esquema
+   multinível completo — nada de "10 níveis/percentuais por distância"):
+   - Propósito: *"transformar vidas através do investimento em leilões"*; ao indicar, o parceiro
+     **ganha boas comissões** levando um **serviço de alta qualidade** para **ajudar o próximo**.
+   - Tom aspiracional/missão, não "ganhe dinheiro recrutando".
+2. **Números e funções já alinhados** (o que já existe: link de indicação, indicados, ganhos, saque).
+3. **Visão interna de nível (campo ou tela interna):**
+   - **Nível atual** (faixa: Pioneiro→Lenda) e **quanto ganha de venda direta** (% da faixa dele).
+   - **O que falta para o próximo nível** (ex.: "faltam 2 diretos pagantes e 5 na rede p/ Fundador").
+   - **Estrutura percorrida por nível**: a cada faixa alcançada, mostra o caminho já feito + o próximo
+     passo. (O repasse multinível fica "sob o capô" — não é o que se vende na porta.)
+   - Fonte dos números: `rede_metricas_parceiro()` / `rank_do_parceiro()` já existentes.
