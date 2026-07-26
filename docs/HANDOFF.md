@@ -22,6 +22,14 @@
 > Checagem rápida a qualquer momento: `select public.auditoria_seguranca();` → `0 crítico / 0 atenção` = íntegro.
 > **Auditorias ofensivas completas: 15/07/2026 (×2).** Total de correções: 15 (1ª rodada) + escalonamento por convite (CRÍTICO) + IDOR do MP (ALTO) + escala. Refazer a ofensiva quando entrarem rotas/pagamento/RLS novos (a Rotina mensal já faz isso sozinha).
 
+## ✅ COMEÇAR AQUI (26/07 — sessão 8d: perfil de bairro + segurança pública no mercadológico + leiloeiros vinco/Vlance)
+> Deploy `main`. Build (vite) OK · `node --check` OK. Duas ideias do dono p/ auxiliar o 250m + continuar os leiloeiros.
+
+1. **Perfil da região + segurança pública no mercadológico (`gerar-analise.js` + `Analise.jsx`) — DEPLOYADO.** A MESMA busca web do mercadológico passa a devolver: (a) **perfilRegiao** = tier de valorização (mais/menos valorizada na cidade) + atratividades + fragilidades + motivos (explica o R$/m² da microrregião, contexto do 250m); (b) **segurancaPublica** = FACTUAL, só de fontes OFICIAIS (SSP/ISP/Atlas da Violência) citando fonte+período, NUNCA "bairro perigoso"; sem dado marca `encontrado:false` + recomenda diligência (mesma regra anti-alucinação do zoneamento). Persistem no `result.mercado` (gravado inteiro). Ambas renderizadas na tela após a Valorização. *Follow-up: levar as 2 ao PDF do mercadológico (hoje só na tela).*
+2. **Leiloeiros — vinco (cluster GESTAOLEILOES):** adicionado ao `DOMINIOS` default; 1º teste deu "home não veio" → o apex redireciona p/ www e o Web Unlocker não seguiu. **Fix:** `fetchHome(dom)` tenta apex→www (`scraper-gestao.mjs`). **Re-validar** com um DEBUG run (`scraper-gestao.yml` debug=1 dominios=vinco) e, se a home vier + enumerar idLeilao, um run dryrun=0 p/ gravar. Se ainda falhar, vinco precisa render-mode.
+3. **Leiloeiros — Vlance (verdeamarelo/sudeste/capitalvalor/destak):** recon-deep mostrou o listing `/leilao/index/imoveis` **JS-rendered (SPA)** — HTML cru só tem shell + "ative seu javascript", ZERO lotes/R$/área. **Não dá pra raspar o HTML:** o scraper precisa da **API JSON** que `/v3/js/vlance/lotes/paginacaoLotes.js` chama (achar o endpoint) OU render de browser (Bright Data). É um build dedicado (próximo passo: recon do paginacaoLotes.js p/ o endpoint de dados).
+4. **Bright Data nesta sessão:** ~11 requests (recon-1=8, recon-deep=2, vinco≈1) — folgado no teto 450/sem.
+
 ## ✅ COMEÇAR AQUI (26/07 — sessão 8c: Índice — raio 250m na base real + gráfico no PDF + relação na tela + recon leiloeiros)
 > Deploy `main`. Build (vite) OK · `node --check` OK · migração via MCP. Pedidos do dono após ver o PDF de Barueri.
 
