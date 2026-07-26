@@ -199,14 +199,15 @@ export default function HomeCliente() {
         </div>
       </div>
 
-      {/* Coluna lateral: Programa de Parceiros — só libera o link após o TERMO DE ACEITE */}
-      {info.indica && (
-        <div style={{ background: 'white', border: '2px solid #ddd6fe', borderRadius: 18, padding: '20px 20px', display: 'flex', flexDirection: 'column', gap: 12, position: 'sticky', top: 88 }}>
+      {/* Coluna lateral: Programa de Parceiros — só libera o link após o TERMO DE ACEITE.
+          NÃO aparece para admin. A observação de "assinatura em dia" mora na tela Indicações. */}
+      {info.indica && effectiveRole !== 'admin' && (
+        <div style={{ background: 'white', border: '2px solid #bfdbfe', borderRadius: 18, padding: '20px 20px', display: 'flex', flexDirection: 'column', gap: 12, position: 'sticky', top: 88 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Gift size={18} color="#7c3aed" />
-            <div style={{ fontSize: 15, fontWeight: 900, color: '#5b21b6' }}>Programa de Parceiros</div>
+            <Gift size={18} color="#0D63DB" />
+            <div style={{ fontSize: 15, fontWeight: 900, color: '#084BA6' }}>Programa de Parceiros</div>
           </div>
-          <div style={{ fontSize: 12.5, color: '#4c1d95', lineHeight: 1.65 }}>
+          <div style={{ fontSize: 12.5, color: '#1e3a8a', lineHeight: 1.65 }}>
             {ehPagoCliente ? (
               <>Indique investidores para a BidPro e <strong>ganhe indicando</strong>: quando alguém da sua rede assina um plano, você é recompensado — enquanto sua assinatura estiver ativa.</>
             ) : (
@@ -217,36 +218,24 @@ export default function HomeCliente() {
           {aceite ? (
             <>
               {/* Já é parceiro → selo de pertencimento + link liberado */}
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, alignSelf: 'flex-start', background: '#f5f3ff', border: '1px solid #ddd6fe', borderRadius: 999, padding: '4px 11px', fontSize: 11, fontWeight: 800, color: '#6d28d9' }}>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, alignSelf: 'flex-start', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 999, padding: '4px 11px', fontSize: 11, fontWeight: 800, color: '#084BA6' }}>
                 <ShieldCheck size={12} /> Parceiro desde {(() => { try { return new Date(aceite).toLocaleDateString('pt-BR'); } catch { return 'hoje'; } })()}
               </div>
-              <div style={{ background: '#faf5ff', border: '1px solid #ede9fe', borderRadius: 10, padding: '10px 12px', fontSize: 11.5, color: '#6d28d9', wordBreak: 'break-all', fontFamily: 'monospace' }}>{linkDisplay}</div>
-              <button onClick={copiarLink} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '11px', background: '#7c3aed', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 13, cursor: 'pointer' }}>
+              <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '10px 12px', fontSize: 11.5, color: '#084BA6', wordBreak: 'break-all', fontFamily: 'monospace' }}>{linkDisplay}</div>
+              <button onClick={copiarLink} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '11px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 13, cursor: 'pointer' }}>
                 {copiado ? <><Check size={15} /> Link copiado!</> : <><Copy size={15} /> Copiar meu link</>}
               </button>
               <div style={{ fontSize: 10.5, color: '#94a3b8', lineHeight: 1.5 }}>Sua recompensa é creditada automaticamente quando o indicado assina um plano. Você aceitou as regras do Programa.</div>
-              {!ehPagoCliente && (
-                <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 10, padding: '10px 12px' }}>
-                  <div style={{ fontSize: 11.5, color: '#9a3412', lineHeight: 1.55, fontWeight: 700 }}>⚠️ Para GANHAR comissões, mantenha a assinatura em dia</div>
-                  <div style={{ fontSize: 11, color: '#9a3412', lineHeight: 1.55, marginTop: 2 }}>A comissão de cada indicado é sua se, na <strong>data da cobrança</strong> dele, sua assinatura estiver em dia. Você indica sempre e saca o que já ganhou — assine para voltar a receber as próximas.</div>
-                  <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
-                    <button onClick={() => nav('/planos')} style={{ padding: '7px 14px', background: '#7c3aed', color: 'white', border: 'none', borderRadius: 8, fontWeight: 800, fontSize: 12, cursor: 'pointer' }}>Assinar</button>
-                    <button onClick={() => nav('/comissoes')} style={{ padding: '7px 14px', background: 'white', color: '#7c3aed', border: '1px solid #ddd6fe', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>Configurar meu PIX</button>
-                  </div>
-                </div>
-              )}
-              {ehPagoCliente && (
-                <button onClick={() => nav('/comissoes')} style={{ alignSelf: 'flex-start', background: 'none', border: 'none', color: '#7c3aed', fontWeight: 700, fontSize: 11.5, cursor: 'pointer', padding: 0, textDecoration: 'underline' }}>Configurar meu PIX para receber →</button>
-              )}
+              <button onClick={() => nav('/minha-rede')} style={{ alignSelf: 'flex-start', background: 'none', border: 'none', color: '#0D63DB', fontWeight: 700, fontSize: 11.5, cursor: 'pointer', padding: 0, textDecoration: 'underline' }}>Abrir Indicações (nível, ganhos e saque) →</button>
             </>
           ) : (
             <>
               {/* Ainda não é parceiro → convite + aceite */}
-              <div style={{ background: '#f5f3ff', border: '1px dashed #c4b5fd', borderRadius: 10, padding: '11px 13px', fontSize: 11.5, color: '#6d28d9', lineHeight: 1.6 }}>
+              <div style={{ background: '#eff6ff', border: '1px dashed #93c5fd', borderRadius: 10, padding: '11px 13px', fontSize: 11.5, color: '#084BA6', lineHeight: 1.6 }}>
                 Para indicar e receber, ative sua participação e <strong>aceite as regras</strong> do Programa. Leva 10 segundos.
               </div>
               <button onClick={() => { setConcordo(false); setShowTermo(true); }} disabled={aceite === undefined}
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '11px', background: aceite === undefined ? '#c4b5fd' : '#7c3aed', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 13, cursor: aceite === undefined ? 'default' : 'pointer' }}>
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '11px', background: aceite === undefined ? '#93c5fd' : '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 13, cursor: aceite === undefined ? 'default' : 'pointer' }}>
                 <Gift size={15} /> Quero ser parceiro
               </button>
               <div style={{ fontSize: 10.5, color: '#94a3b8', lineHeight: 1.5 }}>Traz segurança para você e para a BidPro: você indica de acordo com as regras.</div>

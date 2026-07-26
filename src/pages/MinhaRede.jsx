@@ -212,6 +212,22 @@ export default function MinhaRede() {
         </div>
       </div>
 
+      {/* Aviso: só GANHA comissão quem tem assinatura ativa — aparece só p/ quem ainda NÃO atende
+          o requisito (não-pagante); some quando assina. Nunca para admin. */}
+      {!isAdmin && naoGanhaNovas && (
+        <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 12, padding: '14px 16px' }}>
+          <div style={{ fontSize: 13, color: '#9a3412', fontWeight: 800 }}>⚠️ Para GANHAR comissões, mantenha a assinatura em dia</div>
+          <div style={{ fontSize: 12, color: '#9a3412', lineHeight: 1.55, marginTop: 4 }}>
+            A comissão de cada indicado é sua se, na <strong>data da cobrança</strong> dele, sua assinatura estiver em dia.
+            Você indica sempre e saca o que já ganhou — <strong>assine para voltar a receber</strong> as próximas.
+          </div>
+          <button onClick={() => { window.location.hash = '#/planos'; }}
+            style={{ marginTop: 10, padding: '9px 18px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 8, fontWeight: 800, fontSize: 13, cursor: 'pointer' }}>
+            Assinar
+          </button>
+        </div>
+      )}
+
       {/* Link de indicação */}
       <div style={card}>
         <div style={{ fontSize: 13, fontWeight: 800, color: '#334155', marginBottom: 8 }}>Seu link de indicação</div>
