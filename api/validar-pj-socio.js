@@ -37,11 +37,22 @@ export default async function handler(req) {
   const user = await getAuthUser(req);
   if (!user) return unauthorized();
 
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/perfis?id=eq.${user.id}&select=nome,cpf,cpf_enc,cnpj,razao_social,pj_validada_em`, {
+  let body = {}; try { body = await req.json(); } catch { body = {}; }
+
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/perfis?id=eq.${user.id}&select=nome,cpf,cpf_enc,cnpj,razao_social,pj_validada_em,role`, {
     headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` },
   });
   const perfil = (await res.json())?.[0];
   if (!perfil) return json({ ok: false, error: 'Perfil não encontrado' }, 404);
+
+  // MODO DIAGNÓSTICO (só admin): testa a consulta REAL à Receita com qualquer CNPJ+CPF,
+  // sem gravar nada — serve para validar a integração com dados reais.
+  if (perfil.role === 'admin' && body && body.cnpj && body.cpf) {
+    const r = await verificarSocioQSA({ cnpj: String(body.cnpj), cpf: String(body.cpf), nome: String(body.nome || '') });
+    return json({ ok: r.ok, diagnostico: true, matched: r.matched, motivo: r.motivo, fonte: r.fonte,
+      socios: (r.socios || []).map((s) => ({ nome: s.nome, cpf_masc: s.cpf_masc })) });
+  }
+
   if (perfil.pj_validada_em) return json({ ok: true, matched: true, ja_validada: true });
   if (!perfil.cnpj || !String(perfil.cnpj).trim()) return json({ ok: false, error: 'Cadastre o CNPJ da empresa primeiro.' }, 400);
 

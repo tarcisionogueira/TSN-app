@@ -83,8 +83,10 @@ export async function verificarSocioQSA({ cnpj, cpf, nome }) {
   if (!qsa) return { ok: false, matched: false, motivo: 'Não foi possível consultar a Receita agora — enviado para conferência manual.' };
 
   const alvo = (qsa.socios || []).find((s) => {
-    const socioMeio = so_digitos(s.cpf_masc); // do "***DDDDDD**" sobram os 6 dígitos do meio
-    return socioMeio.length >= 6 && socioMeio.slice(-6) === meio6 && nomesBatem(nome, s.nome);
+    const raw = String(s.cpf_masc || '');
+    const socioMeio = so_digitos(raw); // do "***DDDDDD**" sobram exatamente os 6 dígitos do meio
+    const ehCpfMascarado = raw.includes('*') && socioMeio.length === 6; // ignora sócio PJ (CNPJ) e formatos estranhos
+    return ehCpfMascarado && socioMeio === meio6 && nomesBatem(nome, s.nome);
   });
 
   const snapshot = {

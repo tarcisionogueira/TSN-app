@@ -62,6 +62,15 @@
     pedido de saque (hoje o contrato social cobre a prova de sócio; NF fica p/ o contador definir CNAE);
     (d) API paga de QSA/biometria (opcional, se quiser tempo-real/oficial). **SMOKE TEST em produção do
     match QSA (dono/parceiro real).**
+25. **Validação REAL da Receita + KYC com opção de foto (26/07, pedido do dono).** (a) **Diagnóstico
+    admin** no `validar-pj-socio.js`: admin pode POSTar `{cnpj,cpf,nome}` e ver o resultado REAL da consulta
+    ao QSA **sem gravar** — UI em Admin → Prestação de contas ("Testar consulta à Receita"). Serve para validar
+    a integração com dados reais em produção (o sandbox de dev é bloqueado por política de egress — não é bug de
+    código). (b) **Matcher endurecido** (`_pj-socio.js`): só casa sócio cujo `cnpj_cpf_do_socio` é CPF mascarado
+    (`***DDDDDD**`, 6 dígitos) — ignora sócio PJ. (c) **KYC com opção de documento**: selfie **segurando o
+    documento** (câmera) + documento (frente) com **Anexar arquivo OU Tirar foto**; ambos arquivados em
+    `usuario_docs` (`kyc_selfie`/`kyc_documento`) e visíveis na fila de validação do admin. **Fluxo: código no
+    branch/preview p/ o dono validar ANTES de promover a main.**
 
 ### Sessão 8e — parte 9 (pool 2% OFF + empresa como patrocinadora + termo PJ conferido) ✅ validado
 16. **Rateio de 2% do POOL DESLIGADO — FEITO** (pedido do dono). O repasse já é gradual sobre TODA a rede via

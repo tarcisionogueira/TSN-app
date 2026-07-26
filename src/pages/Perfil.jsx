@@ -447,6 +447,8 @@ export default function Perfil() {
   const [savingPj, setSavingPj] = useState(false);
   const [verificandoPj, setVerificandoPj] = useState(false);
   const [kycBusy, setKycBusy] = useState(false);
+  const [docBusy, setDocBusy] = useState(false);
+  const [docEnviado, setDocEnviado] = useState(false);
   const maskCnpj = (v) => (v || '').replace(/\D/g, '').slice(0, 14)
     .replace(/(\d{2})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2')
     .replace(/(\d{3})(\d)/, '$1/$2').replace(/(\d{4})(\d{1,2})$/, '$1-$2');
@@ -521,34 +523,54 @@ export default function Perfil() {
     setVerificandoPj(false);
   }
 
+  // Armazena um arquivo no bucket privado 'documentos' + registra em usuario_docs (auditoria).
+  const dataUrlDe = (file) => new Promise((resolve, reject) => { const fr = new FileReader(); fr.onload = () => resolve(fr.result); fr.onerror = reject; fr.readAsDataURL(file); });
+  async function armazenarDoc(file, tipo, prefixo) {
+    const ext = ((file.name || '').split('.').pop() || 'jpg').toLowerCase();
+    const path = `pj/${user.id}/${prefixo}-${Date.now()}.${ext}`;
+    const { error: upErr } = await supabase.storage.from('documentos').upload(path, file, { upsert: false });
+    if (upErr) throw upErr;
+    const { data: signed } = await supabase.storage.from('documentos').createSignedUrl(path, 60 * 60 * 24 * 3650);
+    await supabase.from('usuario_docs').insert({ user_id: user.id, tipo, nome: file.name || `${prefixo}.${ext}`, url: signed?.signedUrl || path, tamanho_kb: Math.round((file.size || 0) / 1024) });
+  }
+
   // Upload do contrato social (evidência de sócio) → bucket privado 'documentos' + usuario_docs.
   async function uploadContratoSocial(file) {
     if (!file) return;
     setPjMsg(null);
     try {
-      const ext = (file.name.split('.').pop() || 'pdf').toLowerCase();
-      const path = `pj/${user.id}/contrato-social-${Date.now()}.${ext}`;
-      const { error: upErr } = await supabase.storage.from('documentos').upload(path, file, { upsert: false });
-      if (upErr) throw upErr;
-      const { data: signed } = await supabase.storage.from('documentos').createSignedUrl(path, 60 * 60 * 24 * 3650);
-      await supabase.from('usuario_docs').insert({ user_id: user.id, tipo: 'pj_contrato_social', nome: file.name, url: signed?.signedUrl || path, tamanho_kb: Math.round(file.size / 1024) });
+      await armazenarDoc(file, 'pj_contrato_social', 'contrato-social');
       setPjMsg({ tipo: 'sucesso', texto: 'Contrato social anexado. A equipe usará na conferência.' });
     } catch (e) { setPjMsg({ tipo: 'erro', texto: e.message || 'Erro ao anexar o contrato.' }); }
   }
 
-  // KYC: selfie + documento → /api/validar-selfie (servidor grava identidade_validada).
-  async function fazerKYC(file) {
+  // SELFIE segurando o documento → armazena (auditoria) + /api/validar-selfie (servidor grava
+  // identidade_validada quando rosto E documento aparecem na foto).
+  async function enviarSelfiePJ(file) {
     if (!file) return;
     setKycBusy(true); setPjMsg(null);
     try {
-      const dataUrl = await new Promise((resolve, reject) => { const fr = new FileReader(); fr.onload = () => resolve(fr.result); fr.onerror = reject; fr.readAsDataURL(file); });
+      try { await armazenarDoc(file, 'kyc_selfie', 'kyc-selfie'); } catch { /* validação segue mesmo sem guardar */ }
+      const dataUrl = await dataUrlDe(file);
       const r = await apiCall('/api/validar-selfie', { method: 'POST', body: JSON.stringify({ imagem: dataUrl }) });
       const d = await r.json().catch(() => ({}));
       if (d.ok) setPjMsg({ tipo: 'sucesso', texto: '✓ Identidade verificada.' });
-      else setPjMsg({ tipo: 'aviso', texto: d.mensagem || 'Foto recebida — a equipe fará a conferência.' });
+      else setPjMsg({ tipo: 'aviso', texto: d.mensagem || 'Foto recebida — a equipe fará a conferência manual.' });
       carregarPJ();
-    } catch { setPjMsg({ tipo: 'erro', texto: 'Erro no envio da verificação.' }); }
+    } catch { setPjMsg({ tipo: 'erro', texto: 'Erro no envio da selfie.' }); }
     setKycBusy(false);
+  }
+
+  // DOCUMENTO (frente do RG/CNH) — anexar arquivo OU tirar foto na hora. Cópia legível p/ auditoria.
+  async function enviarDocumento(file) {
+    if (!file) return;
+    setDocBusy(true); setPjMsg(null);
+    try {
+      await armazenarDoc(file, 'kyc_documento', 'kyc-documento');
+      setDocEnviado(true);
+      setPjMsg({ tipo: 'sucesso', texto: 'Documento recebido.' });
+    } catch (e) { setPjMsg({ tipo: 'erro', texto: e.message || 'Erro ao enviar o documento.' }); }
+    setDocBusy(false);
   }
 
   // CPF: só é digitado UMA vez. Grava cifrado (cpf-set) e passa a ser reusado em
@@ -1048,14 +1070,29 @@ export default function Perfil() {
                   <div style={{ fontSize: 11.5, fontWeight: 700, color: '#b45309', marginBottom: 8 }}>⏳ Empresa ainda não validada — o saldo fica retido até a validação.</div>
                 ) : null}
 
-                <div style={{ fontSize: 11.5, fontWeight: 700, color: '#334155', marginBottom: 4 }}>1) Verificação de identidade (selfie + documento)</div>
+                <div style={{ fontSize: 11.5, fontWeight: 700, color: '#334155', marginBottom: 4 }}>1) Verificação de identidade</div>
                 {pj.identidade_validada ? (
-                  <span style={{ fontSize: 11.5, color: '#16a34a', fontWeight: 700 }}>✓ Identidade verificada</span>
+                  <span style={{ fontSize: 11.5, color: '#16a34a', fontWeight: 700 }}>✓ Identidade verificada{docEnviado ? ' · documento recebido' : ''}</span>
                 ) : (
-                  <label style={{ fontSize: 11.5, color: '#0D63DB', fontWeight: 700, cursor: 'pointer' }}>
-                    {kycBusy ? 'Enviando…' : '📷 Enviar selfie + documento'}
-                    <input type="file" accept="image/*" capture="user" style={{ display: 'none' }} disabled={kycBusy} onChange={e => fazerKYC(e.target.files?.[0])} />
-                  </label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <div style={{ fontSize: 11, color: '#64748b' }}>a) Selfie <strong>segurando o documento</strong> (rosto + documento na mesma foto)</div>
+                    <label style={{ fontSize: 11.5, color: '#0D63DB', fontWeight: 700, cursor: 'pointer' }}>
+                      {kycBusy ? 'Enviando…' : '📷 Tirar selfie'}
+                      <input type="file" accept="image/*" capture="user" style={{ display: 'none' }} disabled={kycBusy} onChange={e => enviarSelfiePJ(e.target.files?.[0])} />
+                    </label>
+                    <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>b) Documento (frente do RG/CNH) — anexe um arquivo <strong>ou</strong> tire a foto na hora</div>
+                    <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+                      <label style={{ fontSize: 11.5, color: '#0D63DB', fontWeight: 700, cursor: 'pointer' }}>
+                        {docBusy ? 'Enviando…' : '📎 Anexar arquivo'}
+                        <input type="file" accept="image/*,application/pdf" style={{ display: 'none' }} disabled={docBusy} onChange={e => enviarDocumento(e.target.files?.[0])} />
+                      </label>
+                      <label style={{ fontSize: 11.5, color: '#0D63DB', fontWeight: 700, cursor: 'pointer' }}>
+                        📷 Tirar foto
+                        <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }} disabled={docBusy} onChange={e => enviarDocumento(e.target.files?.[0])} />
+                      </label>
+                      {docEnviado && <span style={{ fontSize: 11.5, color: '#16a34a', fontWeight: 700 }}>✓ documento recebido</span>}
+                    </div>
+                  </div>
                 )}
 
                 <div style={{ fontSize: 11.5, fontWeight: 700, color: '#334155', margin: '10px 0 4px' }}>2) Dados da empresa (você deve ser sócio)</div>

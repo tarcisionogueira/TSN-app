@@ -7670,6 +7670,7 @@ function PrestacaoContasTab() {
   const [pendentes, setPendentes] = React.useState([]);
   const [emValidacaoPJ, setEmValidacaoPJ] = React.useState([]); // saques de parceiro aguardando validação da PJ
   const [docsPJ, setDocsPJ] = React.useState({}); // user_id -> docs (contrato social etc.)
+  const [diag, setDiag] = React.useState({ cnpj: '', cpf: '', nome: '', loading: false, res: null }); // teste real da consulta Receita
   const [loading, setLoading] = React.useState(true);
   const [processando, setProcessando] = React.useState({});
   const [msg, setMsg] = React.useState(null);
@@ -7762,13 +7763,25 @@ function PrestacaoContasTab() {
     setProcessando(p => ({ ...p, [`pj-${id}`]: false }));
   };
 
+  // Teste REAL da integração com a Receita: consulta o quadro societário do CNPJ e diz se o CPF
+  // consta (sem gravar nada). Serve para validar a integração com dados reais em produção.
+  const testarReceita = async () => {
+    if (!diag.cnpj || !diag.cpf) { setMsg({ tipo: 'erro', txt: 'Informe CNPJ e CPF para o teste.' }); return; }
+    setDiag(d => ({ ...d, loading: true, res: null }));
+    try {
+      const res = await apiCall('/api/validar-pj-socio', { method: 'POST', body: JSON.stringify({ cnpj: diag.cnpj, cpf: diag.cpf, nome: diag.nome }) });
+      const data = await res.json();
+      setDiag(d => ({ ...d, loading: false, res: data }));
+    } catch { setDiag(d => ({ ...d, loading: false, res: { ok: false, motivo: 'Erro na consulta à Receita.' } })); }
+  };
+
   // Documentos enviados pelo parceiro (contrato social etc.) para a conferência.
   const verDocsPJ = async (userId) => {
     if (docsPJ[userId]) { setDocsPJ(d => { const n = { ...d }; delete n[userId]; return n; }); return; }
     setDocsPJ(d => ({ ...d, [userId]: { loading: true } }));
     try {
       const { data } = await supabase.from('usuario_docs').select('tipo,nome,url,criado_em')
-        .eq('user_id', userId).in('tipo', ['pj_contrato_social', 'pj_nota_fiscal']).order('criado_em', { ascending: false });
+        .eq('user_id', userId).in('tipo', ['pj_contrato_social', 'pj_nota_fiscal', 'kyc_selfie', 'kyc_documento']).order('criado_em', { ascending: false });
       setDocsPJ(d => ({ ...d, [userId]: { loading: false, docs: Array.isArray(data) ? data : [] } }));
     } catch { setDocsPJ(d => ({ ...d, [userId]: { loading: false, docs: [] } })); }
   };
@@ -7830,6 +7843,34 @@ function PrestacaoContasTab() {
         )}
       </div>
 
+      {/* Teste REAL da consulta à Receita (quadro societário) — valida a integração com dados reais */}
+      <div style={S2.card}>
+        <div style={{ fontWeight: 800, fontSize: 15, color: '#111', marginBottom: 4 }}>Testar consulta à Receita (quadro societário)</div>
+        <div style={{ fontSize: 12, color: '#64748b', marginBottom: 12 }}>Consulta REAL na Receita (dado aberto, grátis) e diz se o CPF consta como sócio do CNPJ. Não grava nada — é só para validar a integração.</div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <input value={diag.cnpj} onChange={e => setDiag(d => ({ ...d, cnpj: e.target.value }))} placeholder="CNPJ" style={{ padding: '8px 10px', border: '1px solid #cbd5e1', borderRadius: 8, fontSize: 13, minWidth: 150 }} />
+          <input value={diag.cpf} onChange={e => setDiag(d => ({ ...d, cpf: e.target.value }))} placeholder="CPF do sócio" style={{ padding: '8px 10px', border: '1px solid #cbd5e1', borderRadius: 8, fontSize: 13, minWidth: 140 }} />
+          <input value={diag.nome} onChange={e => setDiag(d => ({ ...d, nome: e.target.value }))} placeholder="Nome do sócio" style={{ padding: '8px 10px', border: '1px solid #cbd5e1', borderRadius: 8, fontSize: 13, minWidth: 160, flex: 1 }} />
+          <button onClick={testarReceita} disabled={diag.loading} style={{ padding: '8px 16px', background: '#0D63DB', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{diag.loading ? 'Consultando…' : 'Consultar'}</button>
+        </div>
+        {diag.res && (
+          <div style={{ marginTop: 12, background: diag.res.matched ? '#f0fdf4' : '#fffbeb', border: `1px solid ${diag.res.matched ? '#bbf7d0' : '#fde68a'}`, borderRadius: 10, padding: '10px 12px' }}>
+            <div style={{ fontSize: 13, fontWeight: 800, color: diag.res.matched ? '#15803d' : '#b45309' }}>
+              {diag.res.matched ? '✓ CPF consta no quadro societário (validaria automaticamente)' : '✕ CPF/nome não confere — iria para conferência manual'}
+            </div>
+            {diag.res.motivo && <div style={{ fontSize: 12, color: '#475569', marginTop: 2 }}>{diag.res.motivo}{diag.res.fonte ? ` · fonte: ${diag.res.fonte}` : ''}</div>}
+            {Array.isArray(diag.res.socios) && diag.res.socios.length > 0 && (
+              <div style={{ marginTop: 8 }}>
+                <div style={{ fontSize: 11.5, fontWeight: 700, color: '#334155', marginBottom: 3 }}>Sócios retornados pela Receita:</div>
+                {diag.res.socios.map((s, i) => (
+                  <div key={i} style={{ fontSize: 11.5, color: '#475569' }}>• {s.nome} <span style={{ color: '#94a3b8' }}>({s.cpf_masc})</span></div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* Validação da PJ do parceiro (anti-interposição) — 1º saque sem match automático ou 2º+ */}
       <div style={{ ...S2.card, border: emValidacaoPJ.length ? '1px solid #fde68a' : '1px solid #e2e8f0' }}>
         <div style={{ fontWeight: 800, fontSize: 15, color: '#111', marginBottom: 4 }}>
@@ -7861,7 +7902,7 @@ function PrestacaoContasTab() {
                     <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px dashed #fcd34d' }}>
                       {dp.loading ? <span style={{ fontSize: 12, color: '#94a3b8' }}>Carregando…</span>
                         : (dp.docs && dp.docs.length) ? dp.docs.map((d, i) => (
-                          <a key={i} href={d.url} target="_blank" rel="noreferrer" style={{ display: 'block', fontSize: 12, color: '#0D63DB', fontWeight: 700, marginBottom: 4 }}>📎 {d.tipo === 'pj_contrato_social' ? 'Contrato social' : d.tipo}: {d.nome}</a>
+                          <a key={i} href={d.url} target="_blank" rel="noreferrer" style={{ display: 'block', fontSize: 12, color: '#0D63DB', fontWeight: 700, marginBottom: 4 }}>📎 {({ pj_contrato_social: 'Contrato social', pj_nota_fiscal: 'Nota fiscal', kyc_selfie: 'Selfie c/ documento', kyc_documento: 'Documento (frente)' }[d.tipo]) || d.tipo}: {d.nome}</a>
                         )) : <span style={{ fontSize: 12, color: '#dc2626' }}>Nenhum documento anexado — reprovar e pedir o contrato social.</span>}
                     </div>
                   )}
