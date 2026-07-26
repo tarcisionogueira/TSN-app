@@ -37,7 +37,10 @@ export default function Termos() {
         <h2 style={h2}>7. Propriedade intelectual e uso aceitável</h2>
         <p>Os relatórios, análises, cursos e materiais disponibilizados são de propriedade da BidPro Brasil e destinam-se ao uso pessoal do assinante — é vedada a revenda, redistribuição ou uso comercial sem autorização. O usuário compromete-se a não realizar coleta automatizada (scraping), engenharia reversa, uso indevido de credenciais ou qualquer atividade que comprometa a segurança e o funcionamento da plataforma. Ao enviar documentos (editais, matrículas, certidões), o usuário declara ter direito de fazê-lo e autoriza seu processamento para gerar as análises contratadas.</p>
 
-        <h2 style={h2}>8. Contato</h2>
+        <h2 style={h2}>8. Programa de Parceiros (indicação)</h2>
+        <p>Assinantes ativos podem aderir ao Programa de Parceiros da BidPro Brasil para indicar novas pessoas e ser recompensados por indicações efetivamente pagas e não estornadas, nas condições do <strong>Termo de Adesão do Programa</strong> (aceito à parte) e da Política de Privacidade. A recompensa não incide sobre honorários de êxito nem sobre recarga de créditos. Os pagamentos ao parceiro são realizados a uma <strong>pessoa jurídica (PJ)</strong> da qual ele seja sócio, mediante nota fiscal — o parceiro é o único responsável pelos tributos sobre os valores que receber. Ao visualizar dados de seus indicados, o parceiro atua como <strong>corresponsável</strong> pelo tratamento (LGPD), utilizando-os apenas para o relacionamento comercial legítimo com o próprio indicado.</p>
+
+        <h2 style={h2}>9. Contato</h2>
         <p>Dúvidas sobre estes termos podem ser enviadas para <a href="mailto:privacidade@bidprobrasil.com.br" style={{ color: '#0D63DB', fontWeight: 700 }}>privacidade@bidprobrasil.com.br</a>.</p>
       </div>
     </div>

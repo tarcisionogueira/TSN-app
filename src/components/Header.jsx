@@ -333,10 +333,8 @@ export default function Header() {
                     // sub-abas de Meu Perfil (Assinatura / Parceiros). O extrato completo
                     // de comissões fica a um clique dentro da aba Parceiros.
                     { path: '/perfil', label: 'Meu Perfil', icon: User },
-                    { path: '/painel', label: 'Meu Painel', icon: LayoutDashboard },
                     ...(ehEquipe ? [{ path: '/comissoes', label: 'Comissões', icon: DollarSign }] : []),
                     { path: '/contratos', label: 'Meus Contratos', icon: FileText },
-                    { path: '/chamados', label: 'Meus Chamados', icon: MessageSquare },
                   ].map(item => (
                     <button key={item.path} onClick={() => { nav(item.path); setShowUserMenu(false); }}
                       style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer', color: '#334155', fontSize: 13, fontWeight: 600, borderRadius: 8, textAlign: 'left' }}
