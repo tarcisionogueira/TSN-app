@@ -70,8 +70,10 @@ As APIs são **por tenant** (cada domínio serve os SEUS lotes na MESMA rota):
   nm_statuslote, imovel_id, fotos[], nm_leiloeiro`.
 - Headers: `X-Requested-With: XMLHttpRequest`, `Referer` same-origin, cookies (visitar 1 página antes).
 - **403 em IP de datacenter** → rodar de IP residencial (grátis) OU Bright Data render (pago) na CI.
-- Implementação de referência: `scripts/scraper_verde_amarelo.py` (standalone CSV/JSON). Para ONBOARD
-  no acervo, versão Node multi-tenant (padrão `scraper-soleon.mjs`) gravando fonte `VLANCE`.
+- Implementação: `scripts/scraper_vlance.py` — **multi-tenant** (parametrizado por `--dominios`;
+  default verdeamarelo+sudeste+capitalvalor) + **ingestão opcional no acervo** (`--supabase` →
+  upsert `imoveis_leilao` fonte `VLANCE`, dedup por `fonte_id`, pula simulação/encerrados).
+  Rodar de IP residencial (a API dá 403 em datacenter → CI só com Bright Data).
 
 ### Outras plataformas já resolvidas (ver os scripts)
 - **Gestão de Leilões (PHP, server-rendered)**: `leilao.php?idLeilao=N` = evento multi-lote inline, latin1.
