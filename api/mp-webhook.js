@@ -12,6 +12,23 @@ import { enviarEmail } from './_email.js';
 
 const MP_BASE = 'https://api.mercadopago.com';
 
+// Compra AVULSA de produto: o pagamento herda external_reference = compras_produtos.id
+// (uuid) da preferência. Caminho 100% separado do de PLANO (external_reference tem pipe
+// 'userId|plano') — nunca eleva role; ativa a compra + credita a comissão do parceiro.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const _SB_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+const _SB_SVC = process.env.SUPABASE_SERVICE_KEY;
+async function rpcProduto(fn, payload) {
+  try {
+    const r = await fetch(`${_SB_URL}/rest/v1/rpc/${fn}`, {
+      method: 'POST',
+      headers: { apikey: _SB_SVC, Authorization: `Bearer ${_SB_SVC}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload), signal: AbortSignal.timeout(10000),
+    });
+    return r.ok ? await r.json() : { ok: false, http: r.status };
+  } catch (e) { return { ok: false, erro: String(e?.message || e) }; }
+}
+
 // Retorna:
 //   'ok'         → assinatura válida (secret configurado e HMAC confere)
 //   'sem_secret' → MP_WEBHOOK_SECRET não configurado (não bloqueia: cada evento é
@@ -183,13 +200,25 @@ export default async function handler(req, res) {
     servico: (pagamento.metadata?.tipo === 'servico'),
   };
 
+  // Produto avulso? external_reference é o uuid da compra (sem pipe).
+  const extRefMp = String(pagamento.external_reference || '').trim();
+  const ehProdutoMp = UUID_RE.test(extRefMp);
+
   try {
     let result;
     if (status === 'approved') {
+      if (ehProdutoMp) {
+        result = await rpcProduto('confirmar_compra_produto', { p_compra_id: extRefMp, p_gateway: 'mercadopago', p_gateway_payment_id: String(pagamento.id) });
+        return res.status(200).json({ ok: true, produto: result });
+      }
       result = await processarConfirmado(contexto);
     } else if (status === 'rejected' || status === 'cancelled') {
       result = await processarRecusado({ ...contexto, motivo: pagamento.status_detail || status });
     } else if (status === 'charged_back') {
+      if (ehProdutoMp) {
+        result = await rpcProduto('estornar_compra_produto', { p_gateway_payment_id: String(pagamento.id) });
+        return res.status(200).json({ ok: true, produto_estorno: result });
+      }
       result = await processarChargeback({
         ...contexto,
         evento: 'charged_back',

@@ -220,6 +220,38 @@ async function criarPreferenciaSimples({ titulo, valor, email, nome, cpf, userId
 }
 
 /**
+ * Compra AVULSA de produto (ebook/curso) via Checkout Pro (redirect hospedado).
+ * Inicia a compra (RPC), marca a preferência com external_reference = compra_id
+ * (uuid) → o webhook casa como PRODUTO e ativa + credita a comissão do parceiro.
+ * Preço SEMPRE do servidor (RPC lê o cadastro), nunca do cliente.
+ */
+async function criarPreferenciaProduto({ produto_tipo, produto_id, ref, email, nome, cpf, userId }) {
+  if (!['ebook', 'curso'].includes(produto_tipo) || !produto_id) throw new Error('Produto inválido');
+  const iniRes = await fetch(`${SB_URL}/rest/v1/rpc/comprar_produto_iniciar`, {
+    method: 'POST',
+    headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ p_user_id: userId, p_produto_tipo: produto_tipo, p_produto_id: produto_id, p_ref: ref || null }),
+  });
+  const ini = iniRes.ok ? await iniRes.json() : null;
+  if (!ini?.ok) throw new Error(ini?.erro || 'nao_iniciado');
+  if (ini.ja_tem) return { ja_tem: true };
+
+  const back = `${BASE_URL}/#/p/${produto_tipo}/${produto_id}`;
+  const pref = await mpPost('/checkout/preferences', {
+    items: [{ id: String(produto_id), title: String(ini.titulo || 'Produto BidPro').slice(0, 250), quantity: 1, currency_id: 'BRL', unit_price: Number(ini.valor) }],
+    payer: { name: nome, email, identification: cpf ? { type: 'CPF', number: cpf.replace(/\D/g, '') } : undefined },
+    back_urls: { success: `${back}?pago=1`, pending: `${back}?pago=pending`, failure: `${back}?pago=fail` },
+    auto_return: 'approved',
+    notification_url: WEBHOOK,
+    statement_descriptor: 'BIDPRO BRASIL',
+    external_reference: ini.compra_id,               // uuid → webhook trata como PRODUTO
+    expires: false,
+    metadata: { tipo: 'produto', compra_id: ini.compra_id, user_id: userId },
+  });
+  return { preferenceId: pref.id, initPoint: pref.init_point, sandboxPoint: pref.sandbox_init_point, compra_id: ini.compra_id, valor: ini.valor };
+}
+
+/**
  * Cria assinatura recorrente (Preapproval) para planos mensais.
  * MP cobra automaticamente todo mês no cartão salvo.
  */
@@ -371,6 +403,7 @@ export default async function handler(req) {
     let result;
     switch (action) {
       case 'criar_preferencia':  result = await criarPreferencia(params);   break;
+      case 'criar_preferencia_produto': result = await criarPreferenciaProduto(params); break;
       case 'criar_assinatura':   result = await criarAssinatura(params);    break;
       case 'criar_assinatura_transparente': result = await criarAssinaturaTransparente(params); break;
       case 'verificar':          result = await verificar(params);           break;

@@ -43,18 +43,38 @@ export default function ProdutoPublico({ tipo }) {
     return () => clearInterval(t);
   }, [aguardando, user, id, tipo]);
 
-  // Compra AVULSA: cria a cobrança única no Asaas (com o parceiro do ?ref) e abre o link.
+  // Compra AVULSA (com o parceiro do ?ref): tenta Mercado Pago primeiro (Checkout Pro),
+  // com fallback ao Asaas — mesma preferência de gateway do checkout de assinatura.
   async function comprar() {
     if (!user) { nav(`/login?modo=cadastro&produto=${tipo}:${id}${ref ? `&ref=${ref}` : ''}`); return; }
     setErroCompra(''); setComprando(true);
     try {
       const refCod = ref || sessionStorage.getItem('tsn_ref_codigo') || '';
       const nome = user.user_metadata?.nome || user.user_metadata?.full_name || '';
-      const r = await apiCall('/api/asaas', { method: 'POST', body: JSON.stringify({ action: 'criar_cobranca_avulsa', produto_tipo: tipo, produto_id: id, ref: refCod, nome, email: user.email }) });
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok || j?.error) throw new Error(j?.error === 'gratuito' ? 'Este produto é gratuito para você.' : (j?.error || 'Falha ao iniciar a compra'));
-      if (j.ja_tem) { setComprouAvulso(true); return; }
-      if (j.linkPagamento) { window.open(j.linkPagamento, '_blank', 'noopener'); setAguardando(true); }
+      const payload = { produto_tipo: tipo, produto_id: id, ref: refCod, nome, email: user.email };
+      let link = null, jaTem = false;
+
+      // 1) Mercado Pago (Checkout Pro hospedado)
+      try {
+        const r = await apiCall('/api/mp', { method: 'POST', body: JSON.stringify({ action: 'criar_preferencia_produto', ...payload }) });
+        const j = await r.json().catch(() => ({}));
+        if (r.ok && !j?.error) {
+          if (j.ja_tem) jaTem = true;
+          else link = j.initPoint || j.sandboxPoint || null;
+        }
+      } catch { /* cai no Asaas */ }
+
+      // 2) Asaas (fallback ou gateway único)
+      if (!jaTem && !link) {
+        const r = await apiCall('/api/asaas', { method: 'POST', body: JSON.stringify({ action: 'criar_cobranca_avulsa', ...payload }) });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok || j?.error) throw new Error(j?.error === 'gratuito' ? 'Este produto é gratuito para você.' : (j?.error || 'Falha ao iniciar a compra'));
+        if (j.ja_tem) jaTem = true;
+        else link = j.linkPagamento || null;
+      }
+
+      if (jaTem) { setComprouAvulso(true); return; }
+      if (link) { window.open(link, '_blank', 'noopener'); setAguardando(true); }
       else throw new Error('Não foi possível gerar o pagamento.');
     } catch (e) {
       setErroCompra(e?.message || 'Erro ao comprar');
