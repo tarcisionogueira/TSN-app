@@ -68,6 +68,10 @@ export default async function handler(req) {
     // Defesa em LEITURA anti-leilão (a base já é limpa na gravação; cobre legado).
     const FONTE_LEILAO = /leil[ãa]o|arremat|hasta.?p[uú]bl|\bcef\b|caixa\s*econ|aliena[çc]|extrajud|retomad|venda\s*direta|megaleil|zukerman|foreclos/i;
     const semLeilao = (arr) => (Array.isArray(arr) ? arr : []).filter(a => !FONTE_LEILAO.test(String(a.fonte || '')));
+    // Fontes SINTÉTICAS/agregadas (não são um anúncio real): FipeZAP, "média (da) cidade", índice,
+    // valor estimado. Entravam como uma amostra na composição por período e distorciam a mediana.
+    const FONTE_SINTETICA = /fipezap|m[ée]dia\s*(da\s*)?cidade|[íi]ndice\s*bidpro|valor\s*estimad|sint[ée]tic/i;
+    const ehSintetica = (a) => FONTE_SINTETICA.test(String(a.fonte || ''));
     const filtro = `cidade_norm=eq.${encodeURIComponent(cidadeNorm)}&uf=eq.${uf}&tipo=eq.${encodeURIComponent(tipo)}`;
 
     // Amostras de mercado da REGIÃO solicitada (venda + locação), sem leilão.
@@ -83,7 +87,7 @@ export default async function handler(req) {
     // Calculado ANTES do valor: a composição temporal usa essa curva para a taxa de projeção.
     const porAno = {};
     for (const a of regSamples) {
-      if (a.especie !== 'venda') continue;
+      if (a.especie !== 'venda' || ehSintetica(a)) continue;
       const y = String(a.data_ref || '').slice(0, 4);
       if (/^\d{4}$/.test(y) && Number(a.valor_m2) > 0) (porAno[y] ||= []).push(Number(a.valor_m2));
     }
@@ -91,10 +95,16 @@ export default async function handler(req) {
       .map(y => ({ ano: Number(y), n: porAno[y].length, m2: mediana(porAno[y].slice().sort((a, b) => a - b)) }))
       .filter(p => p.n >= 2 && p.m2 > 0);
 
+    // BANDA CENTRAL (p25–p75) dos R$/m² de venda REAIS (sem leilão e sem sintéticas) da região —
+    // usada para estabilizar a composição por período contra a bimodalidade popular × alto padrão.
+    const vendaReaisVals = num(regSamples.filter(a => a.especie === 'venda' && !ehSintetica(a)).map(a => a.valor_m2));
+    const bandaCentral = vendaReaisVals.length >= 6 ? { lo: pct(vendaReaisVals, 0.25), hi: pct(vendaReaisVals, 0.75) } : null;
+
     // COMPOSIÇÃO TEMPORAL (pedido do dono): períodos de 4 meses, quantitativo total e valor
     // RECENTE quando há amostra nova; senão PROJETA os anúncios antigos p/ hoje pela curva da região.
-    const vendaSamplesReais = regSamples.filter(a => a.especie === 'venda').map(a => ({ valor_m2: a.valor_m2, data_ref: a.data_ref }));
-    const comp = composicaoTemporal(vendaSamplesReais, amostras_ano, Date.now());
+    // Amostras REAIS (sem sintéticas) + banda central (padrão consistente no tempo).
+    const vendaSamplesReais = regSamples.filter(a => a.especie === 'venda' && !ehSintetica(a)).map(a => ({ valor_m2: a.valor_m2, data_ref: a.data_ref }));
+    const comp = composicaoTemporal(vendaSamplesReais, amostras_ano, Date.now(), bandaCentral);
 
     let regiao = null;
     if (vendaVals.length >= 4 || locVals.length >= 4) {
@@ -118,7 +128,7 @@ export default async function handler(req) {
         periodos: comp.periodos,
         // BANDAS DE PADRÃO (percentis de R$/m² de venda): popular (p25) · médio (p50) · alto
         // (p75). Uma referência de ALTO PADRÃO deve olhar a banda "alto", não a mediana geral.
-        bandas: vendaVals.length >= 6 ? { popular: pct(vendaVals, 0.25), medio: pct(vendaVals, 0.50), alto: pct(vendaVals, 0.75) } : null,
+        bandas: vendaReaisVals.length >= 6 ? { popular: pct(vendaReaisVals, 0.25), medio: pct(vendaReaisVals, 0.50), alto: pct(vendaReaisVals, 0.75) } : null,
       };
     } else {
       // Fallback (região sem amostras de mercado): ponderado com geo → acervo.

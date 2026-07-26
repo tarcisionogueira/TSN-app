@@ -22,6 +22,16 @@
 > Checagem rápida a qualquer momento: `select public.auditoria_seguranca();` → `0 crítico / 0 atenção` = íntegro.
 > **Auditorias ofensivas completas: 15/07/2026 (×2).** Total de correções: 15 (1ª rodada) + escalonamento por convite (CRÍTICO) + IDOR do MP (ALTO) + escala. Refazer a ofensiva quando entrarem rotas/pagamento/RLS novos (a Rotina mensal já faz isso sozinha).
 
+## ✅ COMEÇAR AQUI (26/07 — sessão 8b: composição por período do Índice oscilando (bimodalidade de padrão))
+> Deploy `main`. Build (vite) OK · `node --check` OK. Dono apontou (print Barueri/SP apto): a **composição por período** despencava em set–dez/2025 (R$ 3.878) entre vizinhos ~R$ 8.700; suspeita de poluição/mistura de tipos.
+
+- **Diagnóstico (dados do banco):** NÃO é mistura de tipo nem leilão. É **bimodalidade de PADRÃO** — Barueri mistura apto popular (~R$2.6k–4k/m², 45–58m²) e médio/alto (~R$8.9k–18k/m²), ~5× de spread no MESMO balde. A mediana de cada janela de 4 meses "virava" conforme o período pegou baratos ou luxo (set–dez/2025 = 9 populares × 5 altos → 3.878; mai–ago/2025 e mai–ago/2026 = maioria alto → ~7–8,7k). Poluição menor: linhas sintéticas **"FipeZAP (média cidade)"** contadas como anúncio.
+- **Fix (aprovado pelo dono — "banda central + tira sintéticas"):**
+  - `api/_indice-composicao.js`: `composicaoTemporal` ganhou 4º param `banda` (p25–p75). A **mediana** de cada período (e o valor) passa a olhar só o **padrão CENTRAL**; o **quantitativo (n) mantém TODOS** os anúncios. Fallback: se um período não tem nada na banda, usa a mediana de todos (nunca null). Backward-compatible (chamador sem banda = comportamento antigo → mercadológico intacto).
+  - `api/indice-consulta.js`: filtro `FONTE_SINTETICA` (fipezap/média cidade/índice/estimado) removido da composição, da curva por ano e das bandas de padrão; `bandaCentral` = p25–p75 dos R$/m² de venda REAIS; passado à composição.
+  - **Validado nos dados reais + teste do helper:** set–dez/2025 **3.878 → 8.888** (alinhado aos vizinhos), n preservado, sintéticas fora. Série deixa de "virar".
+- **Follow-up (não feito, baixa prioridade):** ligar a MESMA banda no mercadológico (`gerar-analise.js lerComposicaoRegiao`) — hoje passa 3 args (sem banda), então segue como antes; herda o fix quando quiser.
+
 ## ✅ COMEÇAR AQUI (26/07 — sessão 8: ritual de saúde + achado de segurança + lixo institucional no documental)
 > Branch: `claude/system-health-check-894pgq`. Build (vite) OK · `node --check` OK · migrações via MCP. Sessão = ritual de abertura (saúde + relação imóveis/docs + Cliente 360), com 2 correções na raiz.
 

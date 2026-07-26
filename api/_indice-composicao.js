@@ -61,7 +61,7 @@ export function taxaAnualDaCurva(amostrasAno) {
  * @param {number} nowMs                                            Date.now() do chamador
  * @returns objeto de composição (valor recente OU projetado + períodos + quantitativo + avisos)
  */
-export function composicaoTemporal(vendaSamples, amostrasAno, nowMs) {
+export function composicaoTemporal(vendaSamples, amostrasAno, nowMs, banda) {
   const rows = (vendaSamples || [])
     .map(s => ({ m2: Number(s.valor_m2) || 0, dref: s.data_ref }))
     .filter(r => r.m2 > 0);
@@ -70,7 +70,16 @@ export function composicaoTemporal(vendaSamples, amostrasAno, nowMs) {
     return { total_anuncios: 0, n_recentes: 0, periodos: [], valor_m2: null, projetado: false, sem_amostras_recentes: true, taxa_aa: null, base_periodos: null };
   }
 
-  // Períodos (buckets de 4 meses) — mediana + contagem por janela, do mais antigo ao mais novo.
+  // BANDA CENTRAL (p25–p75 de R$/m² da região). A cidade mistura PADRÕES (popular × alto) e a
+  // mediana de um balde de 4 meses "virava" conforme o período pegou anúncios baratos ou de luxo
+  // (ex.: Barueri set–dez/2025 despencava por pegar 9 populares × 5 altos). Com a banda, a mediana
+  // de cada período (e o valor) olha só o PADRÃO CENTRAL → série comparável no tempo. O QUANTITATIVO
+  // (n) segue mostrando TODOS os anúncios do período. Sem banda (chamador antigo) → comportamento igual.
+  const inBand = (banda && banda.lo > 0 && banda.hi >= banda.lo) ? (v => v >= banda.lo && v <= banda.hi) : null;
+  const trim = (vals) => { if (!inBand) return vals; const f = vals.filter(inBand); return f.length ? f : vals; };
+
+  // Períodos (buckets de 4 meses) — n = TODOS os anúncios do período (quantitativo honesto);
+  // mediana = só os da banda central (fallback: todos, se o período não tem nenhum na banda).
   const byB = {};
   for (const r of rows) {
     const b = bucketDe(r.dref);
@@ -78,11 +87,13 @@ export function composicaoTemporal(vendaSamples, amostrasAno, nowMs) {
     (byB[b.idx] ||= { ...b, vals: [] }).vals.push(r.m2);
   }
   const periodos = Object.values(byB).sort((a, b) => a.idx - b.idx)
-    .map(b => ({ label: b.label, ano: b.ano, n: b.vals.length, m2: medianaNum(b.vals) }));
+    .map(b => ({ label: b.label, ano: b.ano, n: b.vals.length, m2: medianaNum(trim(b.vals)) }));
 
-  // Amostras recentes (dentro da janela de 4 meses).
+  // Valor: também na banda central (fallback: todas as linhas se a banda esvaziar a região).
+  const rowsVal = (() => { if (!inBand) return rows; const f = rows.filter(r => inBand(r.m2)); return f.length ? f : rows; })();
+  // Amostras recentes (dentro da janela de 4 meses) — já na banda central.
   const corte = nowMs - JANELA_DIAS * 24 * 3600 * 1000;
-  const recentes = rows.filter(r => drefMs(r.dref) >= corte);
+  const recentes = rowsVal.filter(r => drefMs(r.dref) >= corte);
   const taxa = taxaAnualDaCurva(amostrasAno);
 
   let valor_m2, projetado = false, sem_recentes = false, base_periodos = null;
@@ -93,7 +104,7 @@ export function composicaoTemporal(vendaSamples, amostrasAno, nowMs) {
     sem_recentes = true;
     if (taxa != null) {
       // Sem recentes → PROJETA cada anúncio p/ hoje pela taxa a.a. da região e tira a mediana.
-      const proj = rows.map(r => {
+      const proj = rowsVal.map(r => {
         const anos = Math.max(0, Math.min(6, (nowMs - drefMs(r.dref)) / (365 * 24 * 3600 * 1000)));
         return r.m2 * Math.pow(1 + taxa, anos);
       });
@@ -103,7 +114,7 @@ export function composicaoTemporal(vendaSamples, amostrasAno, nowMs) {
       base_periodos = anos.length ? (Math.min(...anos) === Math.max(...anos) ? `${anos[0]}` : `${Math.min(...anos)}–${Math.max(...anos)}`) : null;
     } else {
       // Sem curva confiável p/ projetar → mediana geral, SEM projeção (fica sinalizado como sem recentes).
-      valor_m2 = medianaNum(rows.map(r => r.m2));
+      valor_m2 = medianaNum(rowsVal.map(r => r.m2));
     }
   }
 
