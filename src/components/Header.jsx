@@ -158,6 +158,8 @@ export default function Header() {
       .then(({ data }) => setEhParceiro(!!data?.parceiro_aceite_em)).catch(() => {});
   }, [user?.id]);
   const mostrarRede = ehParceiro || effectiveRole === 'admin';
+  // "Comissões" (extrato operacional) só p/ a equipe; o parceiro-cliente vê os ganhos em Indicações.
+  const ehEquipe = ['admin', 'consultor', 'analista', 'advogado'].includes(effectiveRole);
   const abrirInstalarApp = () => window.dispatchEvent(new Event('tsn:pwa-install'));
 
   const ROLES_CALC = ['explorador', 'top2', 'assessorado', 'clube', 'consultor', 'analista', 'advogado', 'admin'];
@@ -170,6 +172,7 @@ export default function Header() {
     { path: '/buscar', label: 'Leilões', icon: Search, tourId: 'leiloes' },
     { path: '/indice', label: 'Índice BidPro', icon: MapPin, tourId: 'indice' },
     { path: '/membros', label: 'Área de Membros', icon: GraduationCap, tourId: 'membros' },
+    ...(mostrarRede ? [{ path: '/minha-rede', label: 'Indicações', icon: Briefcase, tourId: 'indicacoes' }] : []),
     ...(ROLES_CALC.includes(effectiveRole) ? [{ path: '/calculadora', label: 'Calculadora', icon: Calculator, tourId: 'calculadora' }] : []),
   ];
   // Enquanto auth carrega: mostra links públicos para evitar flash.
@@ -331,7 +334,7 @@ export default function Header() {
                     // de comissões fica a um clique dentro da aba Parceiros.
                     { path: '/perfil', label: 'Meu Perfil', icon: User },
                     { path: '/painel', label: 'Meu Painel', icon: LayoutDashboard },
-                    ...(mostrarRede ? [{ path: '/minha-rede', label: 'Minha Rede', icon: Network }, { path: '/comissoes', label: 'Comissões', icon: DollarSign }] : []),
+                    ...(ehEquipe ? [{ path: '/comissoes', label: 'Comissões', icon: DollarSign }] : []),
                     { path: '/contratos', label: 'Meus Contratos', icon: FileText },
                     { path: '/chamados', label: 'Meus Chamados', icon: MessageSquare },
                   ].map(item => (
@@ -391,17 +394,11 @@ export default function Header() {
               🏛️ Leiloeiro Parceiro
             </button>
           )}
-          {mostrarRede && (
-            <>
-              <button onClick={() => { nav('/minha-rede'); setOpen(false); }}
-                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: 'none', borderRadius: 8, background: 'transparent', color: '#c4b5fd', fontWeight: 700, fontSize: 14, cursor: 'pointer', textAlign: 'left' }}>
-                <Network size={16} /> Minha Rede
-              </button>
-              <button onClick={() => { nav('/comissoes'); setOpen(false); }}
-                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: 'none', borderRadius: 8, background: 'transparent', color: '#c4b5fd', fontWeight: 700, fontSize: 14, cursor: 'pointer', textAlign: 'left' }}>
-                <DollarSign size={16} /> Comissões
-              </button>
-            </>
+          {ehEquipe && (
+            <button onClick={() => { nav('/comissoes'); setOpen(false); }}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: 'none', borderRadius: 8, background: 'transparent', color: '#93c5fd', fontWeight: 700, fontSize: 14, cursor: 'pointer', textAlign: 'left' }}>
+              <DollarSign size={16} /> Comissões
+            </button>
           )}
           {effectiveRole === 'afiliado' && (
             <button onClick={() => { nav('/afiliado'); setOpen(false); }}

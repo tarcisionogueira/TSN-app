@@ -283,8 +283,12 @@ export async function processarConfirmado({ valor, descricao, email, gatewayCust
   // Idempotente por pagamento+nível dentro de distribuir_comissao_rede.
   if (mapeado && gatewayPaymentId) {
     try {
+      // Trilho por produto: alto ticket (Assessoria/Leilão Club) usa 'venda_direta' — indicação
+      // REDUZIDA (protege a eficiência); os demais (Investidor Pro) usam 'assinatura' (atrativo).
+      const p_tipo = ['assessorado', 'assessorado_anual', 'clube', 'clube_anual'].includes(mapeado.plano)
+        ? 'venda_direta' : 'assinatura';
       const { data: dist } = await supabase.rpc('distribuir_comissao_rede', {
-        p_comprador: cliente.id, p_tipo: 'assinatura', p_valor: valor, p_gateway_payment_id: gatewayPaymentId,
+        p_comprador: cliente.id, p_tipo, p_valor: valor, p_gateway_payment_id: gatewayPaymentId,
       });
       if (dist && dist.ok === false) console.warn(`[${gateway}] comissao_rede:`, JSON.stringify(dist).slice(0, 200));
     } catch (e) {

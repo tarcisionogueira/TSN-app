@@ -1,13 +1,14 @@
-// PROGRAMA DE PARCEIROS — BidPro Brasil. Aqui o parceiro: (1) vê a apresentação comercial e
-// pega seu link; (2) acompanha SEU NÍVEL (Comissão de Indicação + o que falta p/ subir); (3) vê o
-// saldo a receber e, para SACAR, cadastra a PJ que vai receber (modelo B2B); (4) vê a ÁRVORE de
-// indicações (LGPD: só nome e cidade). O esquema de níveis fica "sob o capô" — nada de jargão de
-// "multinível" na porta. Números do nível vêm da RPC `meu_nivel` (auth.uid — só o próprio).
+// PROGRAMA DE PARCEIROS — BidPro Brasil. Esta aba só aparece DEPOIS que a pessoa aceita ser
+// parceira, então é uma tela de BOAS-VINDAS + explicação (não um convite). O parceiro: (1) pega
+// seu link; (2) acompanha SEU NÍVEL (Comissão de Indicação + o que falta p/ subir); (3) vê o saldo
+// a receber e, para SACAR, cadastra a PJ que vai receber (B2B); (4) vê seus indicados — no NÍVEL 1
+// (venda direta dele) com contato; da rede abaixo (venda dos indicados dele) só nome e cidade (LGPD).
+// Tema: azul BidPro (#0D63DB / #084BA6). Números do nível vêm da RPC `meu_nivel` (auth.uid).
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
 import { apiCall } from '../utils/apiCall';
-import { Users, Copy, Check, ChevronRight, ChevronDown, Award, Search, Network, Wallet, Building2, Lock, ArrowRight, Sparkles } from 'lucide-react';
+import { Users, Copy, Check, ChevronRight, ChevronDown, Award, Search, Wallet, Building2, Lock, ArrowRight, Sparkles, Phone, Mail } from 'lucide-react';
 
 const card = { background: 'white', border: '1px solid #e2e8f0', borderRadius: 16, padding: '18px 20px' };
 const fmtBRL = (v) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -16,23 +17,30 @@ function Nodo({ nodo, filhosDe, expandido, toggle, nivel }) {
   const filhos = filhosDe(nodo.id);
   const temFilhos = filhos.length > 0;
   const aberto = expandido[nodo.id] !== false; // aberto por padrão
+  const temContato = !!(nodo.telefone || nodo.email); // só vem no nível 1 (venda direta)
   return (
-    <div style={{ marginLeft: nivel === 0 ? 0 : 18, borderLeft: nivel === 0 ? 'none' : '1px solid #ede9fe', paddingLeft: nivel === 0 ? 0 : 12 }}>
+    <div style={{ marginLeft: nivel === 0 ? 0 : 18, borderLeft: nivel === 0 ? 'none' : '1px solid #dbeafe', paddingLeft: nivel === 0 ? 0 : 12 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 0' }}>
         {temFilhos ? (
-          <button onClick={() => toggle(nodo.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#7c3aed', display: 'flex', padding: 0 }}>
+          <button onClick={() => toggle(nodo.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#0D63DB', display: 'flex', padding: 0 }}>
             {aberto ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
           </button>
         ) : <span style={{ width: 16, display: 'inline-block' }} />}
-        <div style={{ width: 30, height: 30, borderRadius: '50%', background: nodo.parceiro ? '#7c3aed' : '#e2e8f0', color: nodo.parceiro ? 'white' : '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, flexShrink: 0 }}>
+        <div style={{ width: 30, height: 30, borderRadius: '50%', background: nodo.parceiro ? '#0D63DB' : '#e2e8f0', color: nodo.parceiro ? 'white' : '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, flexShrink: 0 }}>
           {(nodo.nome || '?')[0].toUpperCase()}
         </div>
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ fontSize: 13.5, fontWeight: 700, color: '#111', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {nodo.nome}
-            {nodo.parceiro && <span style={{ marginLeft: 6, fontSize: 9.5, fontWeight: 800, color: '#6d28d9', background: '#f5f3ff', borderRadius: 999, padding: '1px 7px' }}>PARCEIRO</span>}
+            {nodo.parceiro && <span style={{ marginLeft: 6, fontSize: 9.5, fontWeight: 800, color: '#084BA6', background: '#eff6ff', borderRadius: 999, padding: '1px 7px' }}>PARCEIRO</span>}
           </div>
           <div style={{ fontSize: 11.5, color: '#94a3b8' }}>{nodo.cidade_uf || 'cidade não informada'}{Number(nodo.n_indicados) > 0 ? ` · ${nodo.n_indicados} indicado${nodo.n_indicados > 1 ? 's' : ''}` : ''}</div>
+          {temContato && (
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 11.5, color: '#0D63DB', fontWeight: 600, marginTop: 2 }}>
+              {nodo.telefone && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Phone size={11} />{nodo.telefone}</span>}
+              {nodo.email && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Mail size={11} />{nodo.email}</span>}
+            </div>
+          )}
         </div>
       </div>
       {temFilhos && aberto && filhos.map(f => (
@@ -179,20 +187,20 @@ export default function MinhaRede() {
   );
 
   const rankNome = nivel?.rank_atual?.nome;
-  const indicacaoPct = nivel?.comissao_indicacao_pct ?? 20;
+  const indicacaoPct = nivel?.comissao_indicacao_pct ?? 25;
 
   return (
     <div style={{ maxWidth: 820, margin: '0 auto', padding: '28px 20px', display: 'flex', flexDirection: 'column', gap: 18 }}>
-      {/* Apresentação comercial — missão, sem jargão de "multinível" */}
-      <div style={{ background: 'linear-gradient(135deg, #7c3aed 0%, #4c1d95 100%)', borderRadius: 18, padding: '26px 24px', color: 'white' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}><Network size={22} /><div style={{ fontSize: 22, fontWeight: 900 }}>Seja Parceiro BidPro Brasil</div></div>
+      {/* BOAS-VINDAS — esta aba só aparece após o aceite; é acolhimento + explicação (sem jargão) */}
+      <div style={{ background: 'linear-gradient(135deg, #0D63DB 0%, #084BA6 100%)', borderRadius: 18, padding: '26px 24px', color: 'white' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}><Sparkles size={22} /><div style={{ fontSize: 22, fontWeight: 900 }}>Bem-vindo(a) ao Programa de Parceiros BidPro Brasil</div></div>
         <div style={{ fontSize: 15, fontWeight: 800, marginTop: 12, lineHeight: 1.4 }}>
           Transforme vidas através do investimento em leilões.
         </div>
         <div style={{ fontSize: 13.5, opacity: 0.95, marginTop: 8, lineHeight: 1.6 }}>
           Um bom leilão muda a vida de quem compra bem — e de quem mostra o caminho. Ao indicar, você leva
           um serviço de alta qualidade para quem quer investir com segurança e é <strong>bem recompensado
-          por cada pessoa que ajuda a entrar nesse mundo</strong>.
+          por cada pessoa que ajuda a entrar nesse mundo</strong>. Abaixo estão seu link, seu nível e seus ganhos.
         </div>
         <div style={{ display: 'flex', gap: 16, marginTop: 16, flexWrap: 'wrap' }}>
           {['Você indica', 'A pessoa é bem cuidada', 'Você é recompensado'].map((t, i) => (
@@ -207,31 +215,31 @@ export default function MinhaRede() {
       {/* Link de indicação */}
       <div style={card}>
         <div style={{ fontSize: 13, fontWeight: 800, color: '#334155', marginBottom: 8 }}>Seu link de indicação</div>
-        <div style={{ background: '#faf5ff', border: '1px solid #ede9fe', borderRadius: 10, padding: '10px 12px', fontSize: 12, color: '#6d28d9', wordBreak: 'break-all', fontFamily: 'monospace', marginBottom: 10 }}>{linkDisplay}</div>
-        <button onClick={copiar} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 18px', background: '#7c3aed', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 13, cursor: 'pointer' }}>
+        <div style={{ background: '#eff6ff', border: '1px solid #dbeafe', borderRadius: 10, padding: '10px 12px', fontSize: 12, color: '#084BA6', wordBreak: 'break-all', fontFamily: 'monospace', marginBottom: 10 }}>{linkDisplay}</div>
+        <button onClick={copiar} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 18px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 13, cursor: 'pointer' }}>
           {copiado ? <><Check size={16} /> Link copiado!</> : <><Copy size={16} /> Copiar meu link</>}
         </button>
       </div>
 
       {/* SEU NÍVEL — Comissão de Indicação + progresso (o esquema de níveis fica sob o capô) */}
       {!isAdmin && (
-        <div style={{ ...card, background: 'linear-gradient(180deg,#fbfaff 0%, #ffffff 60%)', border: '1px solid #ede9fe' }}>
+        <div style={{ ...card, background: 'linear-gradient(180deg,#f6faff 0%, #ffffff 60%)', border: '1px solid #dbeafe' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-            <Sparkles size={18} color="#7c3aed" />
+            <Sparkles size={18} color="#0D63DB" />
             <div style={{ fontSize: 15, fontWeight: 800, color: '#111' }}>Seu Nível</div>
           </div>
 
           {nivel?.tem_rank ? (
             <>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
-                <div style={{ fontSize: 22, fontWeight: 900, color: '#6d28d9' }}>{rankNome}</div>
+                <div style={{ fontSize: 22, fontWeight: 900, color: '#084BA6' }}>{rankNome}</div>
                 <div style={{ fontSize: 12.5, color: '#64748b', fontWeight: 600 }}>seu nível atual</div>
               </div>
-              <div style={{ background: '#f5f3ff', borderRadius: 10, padding: '12px 14px', marginTop: 10 }}>
-                <div style={{ fontSize: 13, color: '#4c1d95', fontWeight: 700 }}>
+              <div style={{ background: '#eff6ff', borderRadius: 10, padding: '12px 14px', marginTop: 10 }}>
+                <div style={{ fontSize: 13, color: '#084BA6', fontWeight: 700 }}>
                   💸 Comissão de Indicação: <span style={{ fontSize: 16, fontWeight: 900 }}>{indicacaoPct}%</span>
                 </div>
-                <div style={{ fontSize: 11.5, color: '#7c3aed', marginTop: 2 }}>sobre cada pagamento de quem você trouxe — enquanto seguir ativo.</div>
+                <div style={{ fontSize: 11.5, color: '#0D63DB', marginTop: 2 }}>sobre cada pagamento de quem você trouxe — enquanto seguir ativo.</div>
               </div>
               {nivel?.proximo ? (
                 <div style={{ fontSize: 12.5, color: '#334155', marginTop: 12, lineHeight: 1.6 }}>
@@ -248,7 +256,7 @@ export default function MinhaRede() {
           ) : (
             <div style={{ fontSize: 13, color: '#475569', lineHeight: 1.6 }}>
               {naoGanhaNovas
-                ? <>Você já pode indicar e formar sua rede. Para <strong>desbloquear seus ganhos e seu nível</strong>, tenha uma assinatura ativa e faça sua primeira indicação paga.</>
+                ? <>Você já pode indicar e formar sua equipe. Para <strong>desbloquear seus ganhos e seu nível</strong>, tenha uma assinatura ativa e faça sua primeira indicação paga.</>
                 : <>Faça sua <strong>primeira indicação paga</strong> para desbloquear o nível <strong>Pioneiro</strong> e começar a ganhar sua Comissão de Indicação.</>}
             </div>
           )}
@@ -260,7 +268,7 @@ export default function MinhaRede() {
                 <React.Fragment key={t.nome}>
                   {i > 0 && <ChevronRight size={13} color="#cbd5e1" />}
                   <span style={{ fontSize: 11, fontWeight: 800, padding: '3px 9px', borderRadius: 999,
-                    background: t.atingido ? '#7c3aed' : '#f1f5f9', color: t.atingido ? 'white' : '#94a3b8' }}>
+                    background: t.atingido ? '#0D63DB' : '#f1f5f9', color: t.atingido ? 'white' : '#94a3b8' }}>
                     {t.nome}
                   </span>
                 </React.Fragment>
@@ -341,13 +349,13 @@ export default function MinhaRede() {
       {/* Admin: ver a rede de outro parceiro */}
       {isAdmin && (
         <div style={card}>
-          <div style={{ fontSize: 12, fontWeight: 800, color: '#334155', marginBottom: 8 }}>👑 Admin — ver a rede de um parceiro</div>
+          <div style={{ fontSize: 12, fontWeight: 800, color: '#334155', marginBottom: 8 }}>👑 Admin — ver os indicados de um parceiro</div>
           <div style={{ position: 'relative' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, border: '1px solid #e2e8f0', borderRadius: 10, padding: '8px 12px' }}>
               <Search size={15} color="#94a3b8" />
               <input value={busca} onChange={e => buscarParceiro(e.target.value)} placeholder="Buscar por nome…"
                 style={{ border: 'none', outline: 'none', flex: 1, fontSize: 13, color: '#111', background: 'transparent' }} />
-              {(rootId) && <button onClick={() => { setRootId(null); setRootNome(''); setBusca(''); setResultados([]); }} style={{ fontSize: 11, color: '#7c3aed', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 700 }}>ver a minha</button>}
+              {(rootId) && <button onClick={() => { setRootId(null); setRootNome(''); setBusca(''); setResultados([]); }} style={{ fontSize: 11, color: '#0D63DB', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 700 }}>ver a minha</button>}
             </div>
             {resultados.length > 0 && (
               <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'white', border: '1px solid #e2e8f0', borderRadius: 10, marginTop: 4, boxShadow: '0 8px 24px rgba(0,0,0,0.1)', zIndex: 10, overflow: 'hidden' }}>
@@ -361,31 +369,32 @@ export default function MinhaRede() {
               </div>
             )}
           </div>
-          {rootNome && <div style={{ fontSize: 12, color: '#6d28d9', marginTop: 8, fontWeight: 700 }}>Exibindo a rede de: {rootNome}</div>}
+          {rootNome && <div style={{ fontSize: 12, color: '#084BA6', marginTop: 8, fontWeight: 700 }}>Exibindo os indicados de: {rootNome}</div>}
         </div>
       )}
 
       {/* Números */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
-        <Stat n={diretos} label="Indicados diretos" cor="#7c3aed" />
-        <Stat n={rede.length} label="Rede total" cor="#0D63DB" />
+        <Stat n={diretos} label="Indicados diretos" cor="#0D63DB" />
+        <Stat n={rede.length} label="Rede total" cor="#084BA6" />
         <Stat n={parceirosRede} label="Viraram parceiros" cor="#059669" />
       </div>
 
-      {/* Árvore */}
+      {/* Seus indicados */}
       <div style={card}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-          <Users size={18} color="#7c3aed" />
-          <div style={{ fontSize: 15, fontWeight: 800, color: '#111' }}>Árvore de indicações</div>
+          <Users size={18} color="#0D63DB" />
+          <div style={{ fontSize: 15, fontWeight: 800, color: '#111' }}>Seus indicados</div>
         </div>
         <div style={{ fontSize: 11.5, color: '#94a3b8', marginBottom: 12, lineHeight: 1.5 }}>
-          Por privacidade (LGPD), mostramos apenas <strong>nome e cidade</strong> de cada pessoa da sua rede — nunca telefone, e-mail ou contato.
+          Seus <strong>indicados diretos</strong> aparecem com <strong>contato</strong> — foi a sua venda direta. Já a
+          rede abaixo deles (as vendas dos seus indicados) aparece só com <strong>nome e cidade</strong>, por privacidade (LGPD).
         </div>
         {loading ? (
-          <div style={{ padding: 24, textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>Carregando sua rede…</div>
+          <div style={{ padding: 24, textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>Carregando seus indicados…</div>
         ) : !raiz || rede.length === 0 ? (
           <div style={{ padding: 24, textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
-            Você ainda não tem indicados. Compartilhe seu link acima para começar a formar sua rede.
+            Você ainda não tem indicados. Compartilhe seu link acima para começar.
           </div>
         ) : (
           <div>{filhosDe(raiz.id).map(f => (
