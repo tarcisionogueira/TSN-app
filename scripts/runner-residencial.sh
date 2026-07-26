@@ -1,19 +1,14 @@
 #!/usr/bin/env bash
 # Runner RESIDENCIAL — roda os scrapers de leiloeiro de um IP RESIDENCIAL (grátis, sem Bright Data).
-# Muitos sites bloqueiam só IP de datacenter (CI/Vercel) → de casa o fetch direto funciona.
-# Agendar via cron 2x/SEMANA (a frequência é controlada aqui, não a cada acesso).
+# Muitos sites bloqueiam só IP de datacenter (CI/Vercel) → de casa o navegador/fetch funciona.
 #
-# Setup (uma vez):
-#   1) git clone do repo (ou copie a pasta scripts/) numa máquina residencial sempre ligada.
-#   2) npm ci   (instala deps dos scrapers .mjs)
-#   3) crie ~/.bidpro-runner.env com:
-#        VITE_SUPABASE_URL=https://zuwfiwokkdytvjixiwac.supabase.co
-#        SUPABASE_SERVICE_KEY=<service key — Supabase > Settings > API>
-#   4) chmod +x scripts/runner-residencial.sh
-#   5) crontab -e  e adicione (seg e qui, 08:00):
-#        0 8 * * 1,4  /CAMINHO/TSN-app/scripts/runner-residencial.sh >> $HOME/bidpro-runner.log 2>&1
+# ANTI-BLOQUEIO (concorrência de um mesmo IP): 3 camadas —
+#   1) SEQUENCIAL: uma fonte por vez (nunca vários sites ao mesmo tempo pelo mesmo IP);
+#   2) flock: trava de instância única (a mesma máquina não roda dois runners em paralelo);
+#   3) gate no banco (coleta_cliente_claim/concluir): 2x/semana por fonte + trava de 15 min +
+#      coordenação ENTRE MÁQUINAS (duas máquinas/staff nunca raspam a mesma fonte ao mesmo tempo).
 #
-# Ver docs/RUNNER_RESIDENCIAL.md para detalhes e o roadmap de zerar o Bright Data.
+# Setup e roadmap: docs/RUNNER_RESIDENCIAL.md. Agendar 2x/semana via cron (ex.: seg e qui).
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
 [ -f "$HOME/.bidpro-runner.env" ] && { set -a; . "$HOME/.bidpro-runner.env"; set +a; }
@@ -23,25 +18,37 @@ if [ -z "${SUPABASE_SERVICE_KEY:-}" ] || [ -z "${VITE_SUPABASE_URL:-}" ]; then
   exit 1
 fi
 
+# (2) Trava de INSTÂNCIA ÚNICA na máquina: se já há um runner rodando, sai sem duplicar.
+exec 9>"$HOME/.bidpro-runner.lock"
+if command -v flock >/dev/null 2>&1; then
+  flock -n 9 || { echo "[$(date)] já há um runner em execução nesta máquina — saindo."; exit 0; }
+fi
+
 echo "===== [$(date)] runner residencial ====="
 
-# SOLEON (calil, vegas, 3torres) — sem Cloudflare: fetch direto do IP residencial = grátis.
-# SOLEON_NO_BD=1 garante que NUNCA cai no Bright Data (pula a página se o direto falhar).
-echo "[$(date)] SOLEON…"
-SOLEON_NO_BD=1 SOLEON_DRYRUN=0 node scripts/scraper-soleon.mjs || echo "  (soleon falhou — segue)"
+# rodar <FONTE> <comando...> : só executa se o GATE liberar (2x/semana, sem overlap); conclui no sucesso.
+rodar() {
+  local fonte="$1"; shift
+  if node scripts/coleta-gate.mjs claim "$fonte"; then
+    if "$@"; then
+      node scripts/coleta-gate.mjs concluir "$fonte"
+    else
+      echo "  ($fonte falhou — NÃO concluído; o gate retenta em ~15 min / próxima janela)"
+    fi
+    sleep 5   # respiro entre fontes (uma de cada vez, IP tranquilo)
+  fi
+}
 
-# GESTAOLEILOES (granado/vinco/…) — Cloudflare: Chromium real (puppeteer) de IP residencial passa,
-# SEM Bright Data. GESTAO_DRYRUN=0 grava; GESTAO_HEADLESS=1 usa o navegador em vez do BD.
-echo "[$(date)] GESTAOLEILOES (headless)…"
-GESTAO_HEADLESS=1 GESTAO_DRYRUN=0 node scripts/scraper-gestao.mjs || echo "  (gestao falhou — segue)"
+# SOLEON (calil/vegas/3torres) — sem Cloudflare: fetch direto do IP residencial = grátis (SOLEON_NO_BD).
+rodar SOLEON env SOLEON_NO_BD=1 SOLEON_DRYRUN=0 node scripts/scraper-soleon.mjs
+
+# GESTAOLEILOES (granado/vinco/…) — Cloudflare: Chromium real (puppeteer) de IP residencial, sem BD.
+rodar GESTAO env GESTAO_HEADLESS=1 GESTAO_DRYRUN=0 node scripts/scraper-gestao.mjs
 
 # RJ Leilões — 100% Cloudflare: idem, Chromium real residencial.
-echo "[$(date)] RJ (headless)…"
-RJ_HEADLESS=1 node scripts/scraper-rj.mjs || echo "  (rj falhou — segue)"
+rodar RJ env RJ_HEADLESS=1 node scripts/scraper-rj.mjs
 
-# Vlance (verdeamarelo/sudeste/capitalvalor) — opcional (já coletado client-side pelo staff).
-# Descomente para redundância residencial (precisa python3 + requests):
-# echo "[$(date)] Vlance…"
-# python3 scripts/scraper_vlance.py --supabase || echo "  (vlance falhou — segue)"
+# Vlance — já coletado client-side pelo staff (mesmo gate 'VLANCE'); descomente só p/ redundância:
+# rodar VLANCE python3 scripts/scraper_vlance.py --supabase
 
 echo "[$(date)] fim."

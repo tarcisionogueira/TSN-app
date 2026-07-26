@@ -13,6 +13,19 @@ direto funciona. Duas vias grátis, nesta ordem, antes do BD:
    residencial), agendado por `cron` 2x/semana. Resolve fontes **sem Cloudflare** com fetch direto,
    e as **com Cloudflare** com Chromium headless (tier abaixo).
 
+## Anti-bloqueio (concorrência do mesmo IP)
+Vários scrapers/máquinas usando o mesmo IP ao mesmo tempo dispararia anti-bot. Três camadas evitam isso:
+1. **Sequencial** — o wrapper roda **uma fonte por vez** (nunca vários sites em paralelo pelo mesmo IP);
+   `flock` garante **instância única** por máquina (dois runners não rodam juntos).
+2. **Gate no banco** (`coleta_cliente_claim/concluir`) — **2x/semana por fonte**, trava de 15 min e
+   **coordenação entre máquinas**: se duas máquinas (ou o client-side) tentarem a mesma fonte, só uma
+   passa; a outra pula. Sem overlap → sem bloqueio por concorrência.
+3. **Paceamento** — jitter (0,6–1,8 s) antes de cada requisição headless; o cookie do Cloudflare
+   (`cf_clearance`) persiste entre páginas → as requisições seguintes quase não são desafiadas.
+
+*(O client-side do staff também é gate-coordenado: mesmo com vários staff logados, só **um** coleta por
+janela — e cada um usa o próprio IP residencial, então não há sobrecarga de um único IP.)*
+
 ## Setup do runner (uma vez)
 1. Numa máquina residencial sempre ligada: `git clone` do repo (ou copie `scripts/`), depois `npm ci`.
 2. Crie `~/.bidpro-runner.env`:

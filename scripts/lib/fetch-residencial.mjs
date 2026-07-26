@@ -26,6 +26,10 @@ const ehChallenge = (h) => /just a moment|challenge-platform|cf-chl|cf-mitigated
 export async function fetchHeadless(url, { timeoutMs = 60000, esperaMs = 4000 } = {}) {
   let page;
   try {
+    // Respiro com jitter ANTES de cada requisição: paceia o IP residencial (evita rajada que
+    // dispara anti-bot). O cookie do Cloudflare (cf_clearance) persiste no contexto padrão do
+    // browser entre páginas → as requisições seguintes quase não são desafiadas.
+    await new Promise((r) => setTimeout(r, 600 + Math.floor(Math.random() * 1200)));
     const b = await browser();
     page = await b.newPage();
     await page.setUserAgent(UA);
