@@ -1783,7 +1783,6 @@ function ConfigTab() {
             cobrar: p.assinatura,
             assinatura: p.assinatura,
             ativo: p.ativo,
-            comissao_pct: Number(p.comissao_pct) || 0,
             requer_contrato: p.requer_contrato,
             atualizado_em: new Date().toISOString(),
           }).eq('plano_key', p._id);
@@ -1793,7 +1792,6 @@ function ConfigTab() {
             desconto_vista_pct: Number(p.desconto_vista_pct) || 0,
             assinatura: p.assinatura,
             ativo: p.ativo,
-            comissao_pct: Number(p.comissao_pct) || 0,
             requer_contrato: p.requer_contrato,
           }).eq('id', p._id);
         } else if (p._tipo === 'ebook') {
@@ -1802,7 +1800,6 @@ function ConfigTab() {
             desconto_vista_pct: Number(p.desconto_vista_pct) || 0,
             assinatura: p.assinatura,
             ativo: p.ativo,
-            comissao_pct: Number(p.comissao_pct) || 0,
           }).eq('id', p._id);
         }
       }));
@@ -1863,7 +1860,7 @@ function ConfigTab() {
 
   const fmtPreco = (v) => v != null ? `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—';
   const fmtBRL = v => v != null ? `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—';
-  const COLS = '2fr 110px 140px 90px 70px 80px 90px';
+  const COLS = '2fr 110px 140px 90px 70px 90px';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -1882,7 +1879,7 @@ function ConfigTab() {
           <div style={{ overflowX: 'auto' }}>
             {/* Header */}
             <div style={{ display: 'grid', gridTemplateColumns: COLS, gap: 8, padding: '6px 8px', borderBottom: '2px solid #e2e8f0', minWidth: 700 }}>
-              {['Produto', 'Valor R$', 'Desc. à vista %', 'Assinatura', 'Ativo', 'Comissão %', 'Contrato'].map(h => (
+              {['Produto', 'Valor R$', 'Desc. à vista %', 'Assinatura', 'Ativo', 'Contrato'].map(h => (
                 <div key={h} style={{ fontSize: 10, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: 0.5 }}>{h}</div>
               ))}
             </div>
@@ -1961,15 +1958,7 @@ function ConfigTab() {
                       style={{ width: 18, height: 18, cursor: 'pointer', accentColor: '#10b981' }} />
                   </div>
 
-                  {/* Col 6: Comissão % */}
-                  <div>
-                    <input type="number" min="0" max="100" step="0.5"
-                      value={r.comissao_pct ?? 0}
-                      onChange={e => updateRow(r._id, r._tipo, 'comissao_pct', e.target.value)}
-                      style={{ ...S.input, padding: '6px 8px', fontSize: 13, width: '100%' }} />
-                  </div>
-
-                  {/* Col 7: Contrato — só EXIBE/VISUALIZA o contrato atribuído pela
+                  {/* Col 6: Contrato — só EXIBE/VISUALIZA o contrato atribuído pela
                       tela de Contratos (a criação não acontece mais aqui). */}
                   <div>
                     {(() => {
