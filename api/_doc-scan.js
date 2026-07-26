@@ -16,6 +16,12 @@ const HOST_RUIDO = /(google-analytics|googletagmanager|gstatic|googleapis|cookie
 // Extensões de documento que nos interessam.
 const RE_DOC_EXT = /\.(pdf|docx?|xlsx?|odt|rtf)(?:[?#]|$)/i;
 const RE_IMG_EXT = /\.(jpe?g|png|webp|gif|avif|svg)(?:[?#]|$)/i;
+// Documentos INSTITUCIONAIS/corporativos do site do leiloeiro que NÃO são do lote e
+// aparecem em TODA página (rodapé/config global) — ex.: o "Relatório de Transparência e
+// Igualdade Salarial" (Lei 14.611/2023) do SUPERBID vazava como anexo em centenas de
+// lotes e poluía o laudo documental ("já lemos …"). Cirúrgico: só rótulos claramente
+// corporativos — não pega edital/matrícula/laudo/proposta/regras do lote.
+const RE_DOC_INSTITUCIONAL = /igualdade.?salarial|transpar[êe]ncia.?(e.?)?(igualdade|salarial)|quem.?somos|trabalhe.?conosco|c[óo]digo.?de.?(conduta|[ée]tica)|governan[çc]a.?corporativa|rela[çc][õo]es.?com.?investidores/i;
 // Palavras-chave de documento no caminho/nome/âncora. laudo (avaliação) e proposta
 // viraram tipos PRÓPRIOS: o laudo de avaliação traz o valor oficial e impacta o
 // mercadológico; o modelo de proposta é o documento de venda parcelada.
@@ -60,6 +66,7 @@ function absolutizar(href, baseUrl) {
 function ehDocumento(url, label) {
   if (!url || HOST_RUIDO.test(url)) return false;
   if (RE_IMG_EXT.test(url)) return false;
+  if (RE_DOC_INSTITUCIONAL.test(`${url} ${label || ''}`)) return false; // ruído corporativo do site, não do lote
   if (RE_DOC_EXT.test(url)) return true;                       // arquivo .pdf/.doc… → sempre
   const alvo = `${url} ${label || ''}`;
   // Sem extensão de arquivo: só aceita se a URL/âncora cita explicitamente um doc
