@@ -441,6 +441,15 @@ export default function Perfil() {
   const [msgSaque, setMsgSaque] = useState(null);
   const [proximaLiberacao, setProximaLiberacao] = useState(null); // data da próxima sexta de pagamento
   const [faltandoSaque, setFaltandoSaque] = useState([]); // campos do cadastro que faltam p/ liberar saque
+  const [pjPendente, setPjPendente] = useState(false);    // parceiro: PJ ainda não validada → saque bloqueado
+  const [pj, setPj] = useState({ cnpj: '', razao_social: '', pj_chave_pix: '', pj_validada_em: null, pj_validada_via: null, identidade_validada: false });
+  const [pjMsg, setPjMsg] = useState(null);
+  const [savingPj, setSavingPj] = useState(false);
+  const [verificandoPj, setVerificandoPj] = useState(false);
+  const [kycBusy, setKycBusy] = useState(false);
+  const maskCnpj = (v) => (v || '').replace(/\D/g, '').slice(0, 14)
+    .replace(/(\d{2})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d)/, '$1/$2').replace(/(\d{4})(\d{1,2})$/, '$1-$2');
 
   // "sexta-feira, 18/07" — data calculada no servidor (fuso Bahia) e devolvida pela API.
   const fmtLiberacao = (iso) => {
@@ -457,7 +466,18 @@ export default function Perfil() {
         setSaldoSaque(Number(data.saldo || 0));
         setProximaLiberacao(data.proxima_liberacao || null);
         setFaltandoSaque(Array.isArray(data.faltando) ? data.faltando : []);
+        setPjPendente(!!data.pj_pendente);
       }
+    } catch { /* ignora */ }
+  };
+
+  // Dados da empresa (PJ) do parceiro — para o card de cadastro/validação do saque B2B.
+  const carregarPJ = async () => {
+    try {
+      const { data } = await supabase.from('perfis')
+        .select('cnpj,razao_social,pj_chave_pix,pj_validada_em,pj_validada_via,identidade_validada')
+        .eq('id', user.id).maybeSingle();
+      if (data) setPj((p) => ({ ...p, ...data }));
     } catch { /* ignora */ }
   };
 
@@ -470,7 +490,66 @@ export default function Perfil() {
   useEffect(() => {
     if (!ehParceiro) return;
     supabase.rpc('relatorio_comissoes_rede').then(({ data }) => { if (data && !data.erro) setRelRede(data); }).catch(() => {});
+    carregarPJ();
   }, [ehParceiro, user.id]); // eslint-disable-line
+
+  // Salva os dados da empresa (PJ). cnpj/razao/pix não são campos protegidos → update direto.
+  async function salvarPJ() {
+    const cnpjDigits = (pj.cnpj || '').replace(/\D/g, '');
+    if (cnpjDigits && cnpjDigits.length !== 14) { setPjMsg({ tipo: 'erro', texto: 'CNPJ deve ter 14 dígitos.' }); return; }
+    setSavingPj(true); setPjMsg(null);
+    try {
+      const { error } = await supabase.from('perfis').update({
+        cnpj: pj.cnpj || null, razao_social: pj.razao_social || null, pj_chave_pix: pj.pj_chave_pix || null,
+      }).eq('id', user.id);
+      if (error) throw error;
+      setPjMsg({ tipo: 'sucesso', texto: 'Dados da empresa salvos.' });
+      carregarSaldo();
+    } catch (e) { setPjMsg({ tipo: 'erro', texto: e.message || 'Erro ao salvar.' }); }
+    setSavingPj(false);
+  }
+
+  // Verificação automática (grátis): confere se o CPF consta no quadro societário do CNPJ (Receita).
+  async function verificarPJAuto() {
+    setVerificandoPj(true); setPjMsg(null);
+    try {
+      const r = await apiCall('/api/validar-pj-socio', { method: 'POST', body: JSON.stringify({}) });
+      const d = await r.json().catch(() => ({}));
+      if (d.matched) { setPjMsg({ tipo: 'sucesso', texto: '✓ Empresa validada — você consta no quadro societário.' }); carregarPJ(); carregarSaldo(); }
+      else setPjMsg({ tipo: 'aviso', texto: d.motivo || 'Não foi possível confirmar automaticamente. Anexe o contrato social — a equipe fará a conferência manual no seu 1º saque.' });
+    } catch { setPjMsg({ tipo: 'erro', texto: 'Erro na verificação. Tente novamente.' }); }
+    setVerificandoPj(false);
+  }
+
+  // Upload do contrato social (evidência de sócio) → bucket privado 'documentos' + usuario_docs.
+  async function uploadContratoSocial(file) {
+    if (!file) return;
+    setPjMsg(null);
+    try {
+      const ext = (file.name.split('.').pop() || 'pdf').toLowerCase();
+      const path = `pj/${user.id}/contrato-social-${Date.now()}.${ext}`;
+      const { error: upErr } = await supabase.storage.from('documentos').upload(path, file, { upsert: false });
+      if (upErr) throw upErr;
+      const { data: signed } = await supabase.storage.from('documentos').createSignedUrl(path, 60 * 60 * 24 * 3650);
+      await supabase.from('usuario_docs').insert({ user_id: user.id, tipo: 'pj_contrato_social', nome: file.name, url: signed?.signedUrl || path, tamanho_kb: Math.round(file.size / 1024) });
+      setPjMsg({ tipo: 'sucesso', texto: 'Contrato social anexado. A equipe usará na conferência.' });
+    } catch (e) { setPjMsg({ tipo: 'erro', texto: e.message || 'Erro ao anexar o contrato.' }); }
+  }
+
+  // KYC: selfie + documento → /api/validar-selfie (servidor grava identidade_validada).
+  async function fazerKYC(file) {
+    if (!file) return;
+    setKycBusy(true); setPjMsg(null);
+    try {
+      const dataUrl = await new Promise((resolve, reject) => { const fr = new FileReader(); fr.onload = () => resolve(fr.result); fr.onerror = reject; fr.readAsDataURL(file); });
+      const r = await apiCall('/api/validar-selfie', { method: 'POST', body: JSON.stringify({ imagem: dataUrl }) });
+      const d = await r.json().catch(() => ({}));
+      if (d.ok) setPjMsg({ tipo: 'sucesso', texto: '✓ Identidade verificada.' });
+      else setPjMsg({ tipo: 'aviso', texto: d.mensagem || 'Foto recebida — a equipe fará a conferência.' });
+      carregarPJ();
+    } catch { setPjMsg({ tipo: 'erro', texto: 'Erro no envio da verificação.' }); }
+    setKycBusy(false);
+  }
 
   // CPF: só é digitado UMA vez. Grava cifrado (cpf-set) e passa a ser reusado em
   // pagamentos e saques. Depois de salvo, o campo vira somente-leitura (mascarado).
@@ -505,11 +584,16 @@ export default function Perfil() {
       const res = await apiCall('/api/saque', { method: 'POST', body: JSON.stringify({ valor }) });
       const data = await res.json();
       if (res.ok) {
-        const lib = fmtLiberacao(proximaLiberacao);
-        setMsgSaque({ tipo: 'sucesso', texto: `Saque solicitado! Liberação ${lib ? `na ${lib}` : 'na próxima sexta'}. Saldo restante: ${fmtBRL(data.saldo_restante)}` });
+        if (data.em_validacao) {
+          setMsgSaque({ tipo: 'sucesso', texto: 'Saque solicitado e enviado para conferência da equipe (validação da empresa). Você será avisado quando for liberado.' });
+        } else {
+          const lib = fmtLiberacao(proximaLiberacao);
+          setMsgSaque({ tipo: 'sucesso', texto: `Saque solicitado! ${data.via === 'auto_qsa' ? 'Empresa validada automaticamente. ' : ''}Liberação ${lib ? `na ${lib}` : 'na próxima sexta'}. Saldo restante: ${fmtBRL(data.saldo_restante)}` });
+        }
         setValorSaque('');
         setShowSaqueForm(false);
         carregarSaldo();
+        if (ehParceiro) carregarPJ();
       } else {
         setMsgSaque({ tipo: 'erro', texto: data.error || 'Erro ao solicitar saque.' });
       }
@@ -954,6 +1038,47 @@ export default function Perfil() {
                 </div>
               )}
             </div>
+
+            {ehParceiro && (
+              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
+                <div style={{ fontSize: 12, fontWeight: 800, color: '#334155', marginBottom: 8 }}>Empresa (PJ) e verificação — necessário para sacar</div>
+                {pj.pj_validada_em ? (
+                  <div style={{ fontSize: 11.5, fontWeight: 700, color: '#16a34a', marginBottom: 8 }}>✓ Empresa validada ({pj.pj_validada_via === 'auto_qsa' ? 'automática' : 'manual'}).</div>
+                ) : pjPendente ? (
+                  <div style={{ fontSize: 11.5, fontWeight: 700, color: '#b45309', marginBottom: 8 }}>⏳ Empresa ainda não validada — o saldo fica retido até a validação.</div>
+                ) : null}
+
+                <div style={{ fontSize: 11.5, fontWeight: 700, color: '#334155', marginBottom: 4 }}>1) Verificação de identidade (selfie + documento)</div>
+                {pj.identidade_validada ? (
+                  <span style={{ fontSize: 11.5, color: '#16a34a', fontWeight: 700 }}>✓ Identidade verificada</span>
+                ) : (
+                  <label style={{ fontSize: 11.5, color: '#0D63DB', fontWeight: 700, cursor: 'pointer' }}>
+                    {kycBusy ? 'Enviando…' : '📷 Enviar selfie + documento'}
+                    <input type="file" accept="image/*" capture="user" style={{ display: 'none' }} disabled={kycBusy} onChange={e => fazerKYC(e.target.files?.[0])} />
+                  </label>
+                )}
+
+                <div style={{ fontSize: 11.5, fontWeight: 700, color: '#334155', margin: '10px 0 4px' }}>2) Dados da empresa (você deve ser sócio)</div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <input value={pj.cnpj || ''} onChange={e => setPj(p => ({ ...p, cnpj: maskCnpj(e.target.value) }))} placeholder="CNPJ" style={{ ...inputStyle, flex: 1, minWidth: 150 }} />
+                  <input value={pj.razao_social || ''} onChange={e => setPj(p => ({ ...p, razao_social: e.target.value }))} placeholder="Razão social" style={{ ...inputStyle, flex: 1, minWidth: 150 }} />
+                </div>
+                <input value={pj.pj_chave_pix || ''} onChange={e => setPj(p => ({ ...p, pj_chave_pix: e.target.value }))} placeholder="Chave PIX da empresa (de preferência o CNPJ)" style={{ ...inputStyle, width: '100%', marginTop: 8 }} />
+                <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+                  <button onClick={salvarPJ} disabled={savingPj} style={{ padding: '8px 14px', background: '#111111', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>{savingPj ? 'Salvando…' : 'Salvar empresa'}</button>
+                  <button onClick={verificarPJAuto} disabled={verificandoPj} style={{ padding: '8px 14px', background: '#0D63DB', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>{verificandoPj ? 'Verificando…' : 'Verificar automaticamente (Receita)'}</button>
+                </div>
+
+                <div style={{ fontSize: 11.5, fontWeight: 700, color: '#334155', margin: '10px 0 4px' }}>3) Contrato social (comprova que você é sócio)</div>
+                <label style={{ fontSize: 11.5, color: '#0D63DB', fontWeight: 700, cursor: 'pointer' }}>
+                  📎 Anexar contrato social
+                  <input type="file" accept="application/pdf,image/*" style={{ display: 'none' }} onChange={e => uploadContratoSocial(e.target.files?.[0])} />
+                </label>
+
+                <div style={{ fontSize: 11, color: '#64748b', marginTop: 10, lineHeight: 1.6 }}>O <strong>1º saque</strong> pode ser liberado automaticamente se o seu CPF constar no quadro societário do CNPJ; os <strong>seguintes</strong> passam por conferência manual da equipe.</div>
+                {pjMsg && <div style={{ marginTop: 8, fontSize: 11.5, fontWeight: 700, color: pjMsg.tipo === 'sucesso' ? '#16a34a' : pjMsg.tipo === 'aviso' ? '#b45309' : '#dc2626' }}>{pjMsg.texto}</div>}
+              </div>
+            )}
 
             <div style={{ display: 'flex', gap: 10 }}>
               <button onClick={() => { setShowSaqueForm(v => !v); setMsgSaque(null); }}

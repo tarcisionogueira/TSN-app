@@ -32,6 +32,37 @@
 ### Sessão 8e — parte 2 (sem beco de acesso + anúncio por e-mail)
 4. **Sem "acesso restrito" de beco — bloqueado vai p/ AQUISIÇÃO.** `EbookPage` (não logado/sem acesso) agora manda o usuário à **página do produto** (`/#/p/ebook/:id`) mostrando preço + opções, em vez de "acesso restrito → ver planos". **Bug de rota corrigido:** `/p/ebook/:id` era sombreado pelo `/p/:tipo/:id` (ProdutoLanding, que NÃO trata ebook → "Produto não encontrado") — adicionei rota estática no router de topo (App.jsx) → agora renderiza o `ProdutoPublico`. `ProdutoPublico`: usuário **já logado** sem acesso agora vai ao checkout (`/checkout?plano=top2` — "Assinar e desbloquear"), não mais p/ `/login`.
    - ⚠️ **PENDENTE (decisão do dono, mexe em pagamento):** a **compra AVULSA por item** (pagar só aquele ebook/curso, ex.: R$14,90) NÃO está conectada ao gateway — existe só o scaffold `api/registrar-compra-produto.js` (cria `compras_produtos` **pendente**; ativação só viria de webhook de pagamento, que não trata produto). Hoje o caminho de pagamento que FUNCIONA é **assinar o plano** (inclui o acervo). Para vender por item de verdade: checkout aceitar `?ebook=/?curso=` + cobrança única MP/Asaas + webhook→`ativo`. (Perguntei o modelo; o dono interrompeu — segui com "assinatura desbloqueia", que já roda.)
+### Sessão 8e — parte 10 (SAQUE do parceiro: validação de PJ/sócio ponta a ponta) ✅ construído
+> Continuação do GAP tributário (parte 9 item 21). O dono definiu o fluxo: KYC (selfie+doc) no
+> onboarding + IA/consulta valida sócio + 1º saque automático, 2º+ manual via atendimento; termos
+> transferem a responsabilidade ao parceiro. Custo: **QSA por dado aberto da Receita = grátis**
+> (mais barato que IA ler o contrato); selfie reusa o que já existe (Claude Vision, centavos).
+22. **Verificação de sócio (anti-interposição) via QSA GRÁTIS.** `api/_pj-socio.js` cruza o CPF do
+    parceiro com o **quadro societário** do CNPJ (BrasilAPI/minhareceita — dado aberto, grátis; QSA
+    mascara o CPF nos 6 dígitos do meio → casamos por esses 6 + nome; **fail-closed**: dúvida →
+    manual). `api/validar-pj-socio.js` valida e marca `pj_validada_em` (via='auto_qsa'). Lógica de
+    match testada com mock (match, nome divergente, CPF ausente). ⚠️ o sandbox de dev **não** alcança
+    a Receita (proxy 403) — **smoke test em produção**: 1 parceiro real com CNPJ do qual é sócio.
+23. **Saque do parceiro — 1º auto / 2º+ manual.** `api/saque.js` POST (parceiro-cliente): exige
+    **KYC** (`identidade_validada`, via `/api/validar-selfie` já existente) + **PJ cadastrada**; 1º
+    saque libera pela automação (CPF no QSA) e, do 2º em diante, **sempre** validação MANUAL —
+    reserva `aguardando_pj` (não pagável) e abre **chamado `saque_pj`** p/ analista+dono. RPCs:
+    `solicitar_saque_pj_pendente`, `aprovar_saque_pj`, `reprovar_saque_pj`, `registrar_pj_validacao_auto`
+    (migração `saque_pj_validacao_socio_qsa.sql`; colunas `pj_validada_via/por/socio_qsa`). PATCH ganhou
+    `aprovar_pj`/`reprovar_pj` (admin **ou** analista). **Validado no banco:** reserva→aprovar→pagável;
+    reprovar→devolve saldo. `auditoria=0/0`.
+24. **Frontend.** Perfil.jsx (parceiro): card "Empresa (PJ) e verificação" — KYC (selfie+doc), campos
+    CNPJ/razão/PIX-PJ (salváveis: não são campos protegidos), **anexo do contrato social** (bucket
+    `documentos`→`usuario_docs` tipo `pj_contrato_social`), botão "Verificar automaticamente (Receita)",
+    e status validada/pendente. Admin → Financeiro → Prestação de contas: fila **"Validação de saque —
+    empresa (PJ)"** com dados da PJ + ver documentos + **Aprovar/Reprovar**. Termos do parceiro **v6**.
+    **FALTA (follow-up, não bloqueia):** (a) botão Aprovar/Reprovar também dentro do **Atendimento**
+    (analista) — hoje a fila de ação fica na Prestação de contas (dono); o chamado abre p/ o analista ver;
+    (b) **selfie no CHECKOUT de alto ticket** (só liguei no saque do parceiro); (c) **anexo da NF** no
+    pedido de saque (hoje o contrato social cobre a prova de sócio; NF fica p/ o contador definir CNAE);
+    (d) API paga de QSA/biometria (opcional, se quiser tempo-real/oficial). **SMOKE TEST em produção do
+    match QSA (dono/parceiro real).**
+
 ### Sessão 8e — parte 9 (pool 2% OFF + empresa como patrocinadora + termo PJ conferido) ✅ validado
 16. **Rateio de 2% do POOL DESLIGADO — FEITO** (pedido do dono). O repasse já é gradual sobre TODA a rede via
     **bônus infinito** (diferencial das faixas de liderança, parte 8) — o pool fechado virou redundante. `update

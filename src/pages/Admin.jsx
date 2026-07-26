@@ -7668,6 +7668,8 @@ function FinanceiroTab() {
 function PrestacaoContasTab() {
   const [saldos, setSaldos] = React.useState([]);
   const [pendentes, setPendentes] = React.useState([]);
+  const [emValidacaoPJ, setEmValidacaoPJ] = React.useState([]); // saques de parceiro aguardando validação da PJ
+  const [docsPJ, setDocsPJ] = React.useState({}); // user_id -> docs (contrato social etc.)
   const [loading, setLoading] = React.useState(true);
   const [processando, setProcessando] = React.useState({});
   const [msg, setMsg] = React.useState(null);
@@ -7699,9 +7701,10 @@ function PrestacaoContasTab() {
       const data = await res.json();
       setSaldos(Array.isArray(data.saldos) ? data.saldos : []);
       setPendentes(Array.isArray(data.pendentes) ? data.pendentes : []);
+      setEmValidacaoPJ(Array.isArray(data.em_validacao_pj) ? data.em_validacao_pj : []);
       setHojeSexta(!!data.hoje_sexta);
       setProximaLib(data.proxima_liberacao || null);
-    } catch { setSaldos([]); setPendentes([]); }
+    } catch { setSaldos([]); setPendentes([]); setEmValidacaoPJ([]); }
     await carregarReembolsos();
     setLoading(false);
   }, [carregarReembolsos]);
@@ -7737,6 +7740,37 @@ function PrestacaoContasTab() {
       else setMsg({ tipo: 'erro', txt: data.error || 'Erro ao liberar.' });
     } catch { setMsg({ tipo: 'erro', txt: 'Erro ao liberar.' }); }
     setPagandoTodos(false);
+  };
+
+  // Validação da PJ de um saque de parceiro (anti-interposição). Aprovar libera p/ pagamento;
+  // reprovar cancela e devolve o saldo (motivo vai para o SAC do parceiro).
+  const validarPJ = async (id, tipo) => {
+    let motivo = '';
+    if (tipo === 'reprovar_pj') {
+      motivo = window.prompt('Motivo da reprovação (será exibido ao parceiro):', 'Documentação insuficiente — reenviar contrato social legível');
+      if (motivo === null) return;
+    } else if (!window.confirm('Confirmar que a documentação foi conferida e o parceiro é sócio da empresa? Isto libera o saque para pagamento.')) {
+      return;
+    }
+    setMsg(null); setProcessando(p => ({ ...p, [`pj-${id}`]: true }));
+    try {
+      const res = await apiCall(`/api/saque?id=${id}`, { method: 'PATCH', body: JSON.stringify({ acao: tipo, motivo }) });
+      const data = await res.json();
+      if (res.ok) { setMsg({ tipo: 'ok', txt: tipo === 'aprovar_pj' ? 'PJ validada — saque liberado para pagamento.' : 'Saque reprovado e saldo devolvido.' }); await carregar(); }
+      else setMsg({ tipo: 'erro', txt: data.error || 'Erro ao processar.' });
+    } catch { setMsg({ tipo: 'erro', txt: 'Erro ao processar.' }); }
+    setProcessando(p => ({ ...p, [`pj-${id}`]: false }));
+  };
+
+  // Documentos enviados pelo parceiro (contrato social etc.) para a conferência.
+  const verDocsPJ = async (userId) => {
+    if (docsPJ[userId]) { setDocsPJ(d => { const n = { ...d }; delete n[userId]; return n; }); return; }
+    setDocsPJ(d => ({ ...d, [userId]: { loading: true } }));
+    try {
+      const { data } = await supabase.from('usuario_docs').select('tipo,nome,url,criado_em')
+        .eq('user_id', userId).in('tipo', ['pj_contrato_social', 'pj_nota_fiscal']).order('criado_em', { ascending: false });
+      setDocsPJ(d => ({ ...d, [userId]: { loading: false, docs: Array.isArray(data) ? data : [] } }));
+    } catch { setDocsPJ(d => ({ ...d, [userId]: { loading: false, docs: [] } })); }
   };
 
   // Abre/fecha o analítico venda→repasse de um beneficiário (para conferência).
@@ -7792,6 +7826,48 @@ function PrestacaoContasTab() {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+      </div>
+
+      {/* Validação da PJ do parceiro (anti-interposição) — 1º saque sem match automático ou 2º+ */}
+      <div style={{ ...S2.card, border: emValidacaoPJ.length ? '1px solid #fde68a' : '1px solid #e2e8f0' }}>
+        <div style={{ fontWeight: 800, fontSize: 15, color: '#111', marginBottom: 4 }}>
+          Validação de saque — empresa (PJ) {emValidacaoPJ.length > 0 && <span style={{ fontSize: 12, fontWeight: 800, color: '#b45309', background: '#fffbeb', borderRadius: 999, padding: '1px 8px', marginLeft: 6 }}>{emValidacaoPJ.length}</span>}
+        </div>
+        <div style={{ fontSize: 12, color: '#64748b', marginBottom: 14 }}>Confira o contrato social e se o CPF do parceiro consta no quadro societário do CNPJ. Aprovar libera o saque para pagamento; reprovar devolve o saldo e orienta o reenvio.</div>
+        {emValidacaoPJ.length === 0 ? (
+          <div style={{ textAlign: 'center', color: '#94a3b8', padding: '14px 0', fontSize: 13 }}>Nenhum saque aguardando validação de PJ.</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {emValidacaoPJ.map(p => {
+              const perf = p.perfis || {};
+              const dp = docsPJ[p.user_id];
+              return (
+                <div key={p.id} style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '12px 14px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10 }}>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: 14, color: '#111' }}>{perf.nome || '—'} · {fmtBRL(Math.abs(p.valor))}</div>
+                      <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>CNPJ: {perf.cnpj || '—'} · {perf.razao_social || 'razão social não informada'}</div>
+                      <div style={{ fontSize: 11.5, color: '#64748b', marginTop: 2 }}>PIX PJ: {perf.pj_chave_pix || '—'} · KYC: {perf.identidade_validada ? '✓ verificado' : '✕ pendente'} · pedido {new Date(p.criado_em).toLocaleDateString('pt-BR')}</div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <button onClick={() => verDocsPJ(p.user_id)} style={{ padding: '7px 12px', background: '#f1f5f9', color: '#334155', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>{dp ? 'Ocultar docs' : 'Ver documentos'}</button>
+                      <button onClick={() => validarPJ(p.id, 'aprovar_pj')} disabled={processando[`pj-${p.id}`]} style={{ padding: '7px 16px', background: '#059669', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>Aprovar</button>
+                      <button onClick={() => validarPJ(p.id, 'reprovar_pj')} disabled={processando[`pj-${p.id}`]} style={{ padding: '7px 12px', background: '#fee2e2', color: '#b91c1c', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>Reprovar</button>
+                    </div>
+                  </div>
+                  {dp && (
+                    <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px dashed #fcd34d' }}>
+                      {dp.loading ? <span style={{ fontSize: 12, color: '#94a3b8' }}>Carregando…</span>
+                        : (dp.docs && dp.docs.length) ? dp.docs.map((d, i) => (
+                          <a key={i} href={d.url} target="_blank" rel="noreferrer" style={{ display: 'block', fontSize: 12, color: '#0D63DB', fontWeight: 700, marginBottom: 4 }}>📎 {d.tipo === 'pj_contrato_social' ? 'Contrato social' : d.tipo}: {d.nome}</a>
+                        )) : <span style={{ fontSize: 12, color: '#dc2626' }}>Nenhum documento anexado — reprovar e pedir o contrato social.</span>}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
