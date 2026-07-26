@@ -178,11 +178,12 @@ export async function estornarComissao({ gatewayPaymentId, gateway, motivo = 'ch
         clienteNome = (cli?.nome || '').trim();
       }
     } catch { /* sem nome: segue com descrição genérica */ }
-    // Comissão MULTINÍVEL: um pagamento gera N lançamentos (origem_id = <pay>-n1..n5). Reverte
-    // TODOS os níveis, cada um idempotente por um origem_id de estorno próprio.
+    // Comissão MULTINÍVEL + BÔNUS INFINITO: um pagamento gera N lançamentos (origem_id =
+    // <pay>-n1..n5 da rede e <pay>-inf1..N da liderança). Reverte TODOS, cada um idempotente
+    // por um origem_id de estorno próprio.
     const { data: lancs } = await supabase.from('saldo_lancamentos')
       .select('id, user_id, valor, origem_id, origem_tipo')
-      .eq('tipo', 'comissao_rede').like('origem_id', `${gatewayPaymentId}-n%`);
+      .in('tipo', ['comissao_rede', 'comissao_infinito']).like('origem_id', `${gatewayPaymentId}-%`);
     let estornado = 0;
     for (const l of (lancs || [])) {
       const estOid = `estorno-${l.origem_id}`;

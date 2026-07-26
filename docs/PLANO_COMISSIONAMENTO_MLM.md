@@ -399,13 +399,20 @@ síncrona; ≤15 passadas) + **carência de 2 meses** p/ queda. `meu_nivel` most
 por graduação ("faltam 2 Fundadores para Mestre"). Painel `MinhaRede.jsx` atualizado (1 barra de graduação +
 selo de liderança/bônus infinito). Algoritmo validado com árvore sintética antes do deploy. `auditoria_seguranca()=0/0`.
 
-**FALTA (payout — caminho ainda NÃO-live, separado e cuidadoso):**
-1. **Cron do `recalcular_ranks`** (mensal) — hoje só roda quando chamado; sem agendamento o rank fica estático
-   entre execuções. Rodei 1× no deploy. (Pendência já listada no §11.)
-2. **`distribuir_comissao_rede`: pagar o BÔNUS INFINITO** das faixas de liderança (0,5/1,0/1,5% sobre toda a
-   rede) — só a config existe; o rateio ainda não paga o infinito.
-3. **LANDMINE do CHECK da `comissoes`** (§ registrada no HANDOFF 8e): `tipo IN ('afiliado','honorario')` mas o
-   motor grava `rede_nN` → violaria. Corrigir antes de ligar o payout multinível de rede.
+### 12.8.2 PAYOUT LIGADO 26/07 (`payout_bonus_infinito_e_check_comissoes.sql`) — ⚠️ agora paga de verdade
+1. **CHECK da `comissoes` corrigido** — aceita `rede_n1..n8`, `infinito`, `origem='venda_direta'`. Era o landmine
+   que fazia o motor falhar em silêncio (tabelas vazias). Validado com insert de teste (rede_n1/rede_n5/infinito).
+2. **Bônus infinito no `distribuir_comissao_rede`** — faixas de liderança (Guardião 0,5% / Patrono 1,0% / Lenda
+   1,5%) ganham um **diferencial** (compressão: total ≤ % do topo) sobre a produção de TODA a rede, sem trava de
+   profundidade (loop até 30 hops). Lançamento próprio (`tipo='infinito'` na comissoes, `comissao_infinito` no
+   ledger, `origem_id=<pay>-infN`). `estornarComissao` (chargeback) reverte rede **+ infinito**.
+3. **Cron mensal** `api/ranks-recalc-cron.js` (`vercel.json`: `0 6 1 * *`) roda `recalcular_ranks` 1×/mês.
+
+**⚠️ CONSEQUÊNCIA (validar):** o repasse de rede agora está **LIVE** — cada pagamento de assinatura com upline
+elegível (pagante + aceite + em dia) credita comissões via `_webhook-core.processarConfirmado`. Hoje sem cadeias
+de indicação entre os pagantes → 0 impacto imediato; **testar** com uma assinatura indicada antes de escalar.
+Ainda a AVALIAR (não bloqueia): rateio do **pool 2%** (`distribuir_pool_rank`) e a migração venda-direta p/ 20/25%
+FIXO (§12.8).
 
 ### 12.9 Ajuste 26/07 (3) — envelope jurídico: parceiro PJ + saque condicionado (a VALIDAR)
 > Decisão de planejamento (dono). **NÃO é parecer** — depende de contador + advogado tributarista

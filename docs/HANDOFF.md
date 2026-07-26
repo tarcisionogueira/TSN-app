@@ -32,6 +32,17 @@
 ### Sessão 8e — parte 2 (sem beco de acesso + anúncio por e-mail)
 4. **Sem "acesso restrito" de beco — bloqueado vai p/ AQUISIÇÃO.** `EbookPage` (não logado/sem acesso) agora manda o usuário à **página do produto** (`/#/p/ebook/:id`) mostrando preço + opções, em vez de "acesso restrito → ver planos". **Bug de rota corrigido:** `/p/ebook/:id` era sombreado pelo `/p/:tipo/:id` (ProdutoLanding, que NÃO trata ebook → "Produto não encontrado") — adicionei rota estática no router de topo (App.jsx) → agora renderiza o `ProdutoPublico`. `ProdutoPublico`: usuário **já logado** sem acesso agora vai ao checkout (`/checkout?plano=top2` — "Assinar e desbloquear"), não mais p/ `/login`.
    - ⚠️ **PENDENTE (decisão do dono, mexe em pagamento):** a **compra AVULSA por item** (pagar só aquele ebook/curso, ex.: R$14,90) NÃO está conectada ao gateway — existe só o scaffold `api/registrar-compra-produto.js` (cria `compras_produtos` **pendente**; ativação só viria de webhook de pagamento, que não trata produto). Hoje o caminho de pagamento que FUNCIONA é **assinar o plano** (inclui o acervo). Para vender por item de verdade: checkout aceitar `?ebook=/?curso=` + cobrança única MP/Asaas + webhook→`ativo`. (Perguntei o modelo; o dono interrompeu — segui com "assinatura desbloqueia", que já roda.)
+### Sessão 8e — parte 8 (PAYOUT ligado: bônus infinito + CHECK + cron do recálculo) ⚠️ paga de verdade
+15. **Payout do MLM LIGADO** (`payout_bonus_infinito_e_check_comissoes.sql`, `api/ranks-recalc-cron.js`, `_webhook-core`).
+    (a) **CHECK da `comissoes` corrigido** (aceita `rede_nN`/`infinito`/`venda_direta`) — era o landmine que fazia o
+    motor falhar em silêncio; validado com insert de teste. (b) **Bônus infinito** no `distribuir_comissao_rede`:
+    Guardião 0,5% / Patrono 1,0% / Lenda 1,5% — diferencial (total ≤ % do topo) sobre TODA a rede, sem trava de
+    profundidade; `estornarComissao` reverte rede **+ infinito** no chargeback. (c) **Cron mensal**
+    `ranks-recalc-cron` (`0 6 1 * *`) roda o `recalcular_ranks`. `auditoria=0/0`.
+    **⚠️ Agora o repasse de rede é LIVE:** cada assinatura com upline elegível credita comissão (via
+    `processarConfirmado`). Sem cadeias de indicação hoje → 0 impacto imediato; **o dono valida** com 1 assinatura
+    indicada. A avaliar (não bloqueia): rateio do **pool 2%** (`distribuir_pool_rank`) e venda-direta 20/25% fixo.
+
 ### Sessão 8e — parte 7 (RANKS: graduação por duplicação "Guardiões" — modelo Conselheiro)
 14. **Subir de nível agora exige GRADUAÇÕES abaixo (não mais só pagantes) — FEITO.** O dono apontou que contar
     pagantes estava errado; virou **duplicação recursiva** (Clube Conselheiro): cada nível pede **N indicados

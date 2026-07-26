@@ -55,6 +55,7 @@
     { "path": "/api/regenerar-relatorios-cron",   "schedule": "0 */6 * * *"  },
     { "path": "/api/radar-editais-cron",          "schedule": "0 */4 * * *"  },
     { "path": "/api/backup-r2-cron",              "schedule": "40 4 * * *"   },
-    { "path": "/api/aplicar-precos-agendados-cron","schedule": "5 0 * * *"    }
+    { "path": "/api/aplicar-precos-agendados-cron","schedule": "5 0 * * *"    },
+    { "path": "/api/ranks-recalc-cron",           "schedule": "0 6 1 * *"    }
   ]
 }
