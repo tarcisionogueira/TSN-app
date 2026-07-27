@@ -401,9 +401,103 @@ export function AbaAssinaturas() {
 
 // ── Página standalone /admin/financeiro — mantida para deep-link (ex.: links do Dashboard).
 // Reusa exatamente os mesmos componentes do hub Financeiro do painel admin (sem duplicar UI).
+// ── Síntese: REAL recebido (mensalidades × vendas, dinheiro que entrou/saiu) × PROJEÇÃO (MRR).
+// Lê /api/financeiro-resumo (tabelas locais — econômico). Enche conforme webhook/backfill rodam.
+export function SinteseFinanceira() {
+  const [d, setD] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [erro, setErro] = useState(null);
+  useEffect(() => {
+    let vivo = true;
+    (async () => {
+      try {
+        const res = await apiCall('/api/financeiro-resumo?meses=6');
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'erro');
+        if (vivo) setD(data);
+      } catch (e) { if (vivo) setErro(e.message || 'Erro ao carregar'); }
+      finally { if (vivo) setLoading(false); }
+    })();
+    return () => { vivo = false; };
+  }, []);
+
+  if (loading) return <div style={{ color: '#94a3b8', fontSize: 14 }}>Carregando…</div>;
+  if (erro) return <div style={{ color: '#dc2626', fontSize: 14 }}>Erro: {erro}</div>;
+  if (!d) return null;
+
+  const m = d.mes_atual || {};
+  const a = d.assinantes || {};
+  const entradas = Number(m.mensalidades || 0) + Number(m.vendas || 0);
+  const resultado = entradas - Number(m.saidas || 0);
+  const serie = Array.isArray(d.serie) ? d.serie : [];
+  const maxSerie = Math.max(1, ...serie.map(s => Number(s.mensalidades || 0) + Number(s.vendas || 0)));
+  const semDados = serie.every(s => (Number(s.mensalidades || 0) + Number(s.vendas || 0)) === 0);
+
+  const Card = ({ titulo, valor, cor, sub, tag }) => (
+    <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '16px 18px', flex: '1 1 200px', minWidth: 180 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b' }}>{titulo}</div>
+        {tag && <span style={{ fontSize: 9.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.4, color: tag === 'real' ? '#059669' : '#0D63DB', background: tag === 'real' ? '#f0fdf4' : '#eff6ff', borderRadius: 999, padding: '1px 7px' }}>{tag === 'real' ? 'realizado' : 'projeção'}</span>}
+      </div>
+      <div style={{ fontSize: 22, fontWeight: 900, color: cor || '#111', marginTop: 6 }}>{valor}</div>
+      {sub && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{sub}</div>}
+    </div>
+  );
+
+  return (
+    <div>
+      <div style={{ fontSize: 13, fontWeight: 800, color: '#334155', marginBottom: 10 }}>Situação atual — dinheiro que entrou e saiu</div>
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 8 }}>
+        <Card titulo="Entradas do mês" valor={`R$ ${fmt(entradas)}`} cor="#059669" tag="real" sub={`Mensalidades R$ ${fmt(m.mensalidades)} + Vendas R$ ${fmt(m.vendas)}`} />
+        <Card titulo="Saídas do mês" valor={`R$ ${fmt(m.saidas)}`} cor="#dc2626" tag="real" sub="Repasses pagos" />
+        <Card titulo="Resultado do mês" valor={`R$ ${fmt(resultado)}`} cor={resultado >= 0 ? '#059669' : '#dc2626'} tag="real" sub="Entradas − Saídas" />
+      </div>
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 22 }}>
+        <Card titulo="Mensalidades recebidas" valor={`R$ ${fmt(m.mensalidades)}`} cor="#0D63DB" tag="real" sub="Assinaturas (recorrente)" />
+        <Card titulo="Vendas avulsas recebidas" valor={`R$ ${fmt(m.vendas)}`} cor="#7c3aed" tag="real" sub="Cursos, produtos, serviços" />
+        <Card titulo="A pagar (fila de saque)" valor={`R$ ${fmt(m.a_pagar)}`} cor="#d97706" tag="real" sub="Solicitações aguardando" />
+        <Card titulo="Comissões acumuladas" valor={`R$ ${fmt(d.saldo_a_pagar_total)}`} cor="#334155" tag="real" sub="Saldo de todos os parceiros" />
+      </div>
+
+      <div style={{ fontSize: 13, fontWeight: 800, color: '#334155', marginBottom: 10 }}>Projeção — cenário se todos efetivarem</div>
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 22 }}>
+        <Card titulo="MRR projetado" valor={`R$ ${fmt(a.mrr_projetado)}`} cor="#0D63DB" tag="proj" sub="Se todas as assinaturas ativas seguirem" />
+        <Card titulo="Assinantes ativos" valor={a.ativos ?? 0} cor="#111" tag="real" sub="Assinaturas autorizadas" />
+        <Card titulo="Inadimplentes" valor={d.inadimplentes ?? 0} cor="#dc2626" tag="real" sub="Cobrança em atraso" />
+      </div>
+
+      <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '18px 20px' }}>
+        <div style={{ fontSize: 13, fontWeight: 800, color: '#334155', marginBottom: 4 }}>Receita por mês (recebido)</div>
+        <div style={{ display: 'flex', gap: 14, fontSize: 11, color: '#64748b', marginBottom: 14 }}>
+          <span><span style={{ display: 'inline-block', width: 10, height: 10, background: '#0D63DB', borderRadius: 2, marginRight: 4 }} />Mensalidades</span>
+          <span><span style={{ display: 'inline-block', width: 10, height: 10, background: '#7c3aed', borderRadius: 2, marginRight: 4 }} />Vendas</span>
+        </div>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', height: 160, overflowX: 'auto' }}>
+          {serie.map(s => {
+            const men = Number(s.mensalidades || 0), ven = Number(s.vendas || 0), tot = men + ven;
+            const h = Math.round((tot / maxSerie) * 130);
+            const hMen = tot > 0 ? Math.round((men / tot) * h) : 0;
+            return (
+              <div key={s.mes} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, minWidth: 44 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: '#334155', height: 12 }}>{tot > 0 ? `R$ ${fmt(tot)}` : ''}</div>
+                <div title={`Mensalidades R$ ${fmt(men)} · Vendas R$ ${fmt(ven)}`} style={{ width: 34, height: Math.max(h, 2), borderRadius: '4px 4px 0 0', overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', background: '#eef2f7' }}>
+                  <div style={{ height: h - hMen, background: '#7c3aed' }} />
+                  <div style={{ height: hMen, background: '#0D63DB' }} />
+                </div>
+                <div style={{ fontSize: 10, color: '#94a3b8' }}>{s.mes?.slice(5)}/{s.mes?.slice(2, 4)}</div>
+              </div>
+            );
+          })}
+        </div>
+        {semDados && <div style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 10 }}>Sem dados ainda — enche conforme os pagamentos entram (webhook) e o backfill semanal roda.</div>}
+      </div>
+    </div>
+  );
+}
+
 export default function AdminFinanceiro() {
   const navigate = useNavigate();
-  const [aba, setAba] = useState('caixa'); // 'caixa' (fluxo) | 'assinaturas'
+  const [aba, setAba] = useState('sintese'); // 'sintese' | 'caixa' (fluxo) | 'assinaturas'
 
   return (
     <div style={{ minHeight: '100vh', background: '#f1f5f9', padding: '0 0 60px' }}>
@@ -419,7 +513,7 @@ export default function AdminFinanceiro() {
       <div style={{ maxWidth: 900, margin: '0 auto', padding: '32px 20px' }}>
         {/* Seletor de visão: Fluxo de caixa × Assinaturas */}
         <div style={{ display: 'flex', gap: 4, marginBottom: 24, background: '#e2e8f0', padding: 4, borderRadius: 10, width: 'fit-content' }}>
-          {[['caixa', '💰 Fluxo de caixa'], ['assinaturas', '👥 Assinaturas']].map(([k, label]) => (
+          {[['sintese', '📊 Síntese'], ['caixa', '💰 Fluxo de caixa'], ['assinaturas', '👥 Assinaturas']].map(([k, label]) => (
             <button key={k} onClick={() => setAba(k)}
               style={{ padding: '8px 18px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 700,
                 background: aba === k ? '#fff' : 'transparent', color: aba === k ? '#0D63DB' : '#64748b',
@@ -429,6 +523,7 @@ export default function AdminFinanceiro() {
           ))}
         </div>
 
+        {aba === 'sintese' && <SinteseFinanceira />}
         {aba === 'assinaturas' && <AbaAssinaturas />}
         {aba === 'caixa' && <FinanceiroCaixa />}
       </div>
