@@ -37,7 +37,10 @@ const FONTES_CRITICAS = ['CEF', 'MEGA', 'SUPERBID', 'SOLD', 'ZUK', 'SODRE', 'FRA
 // disparava um falso "coleta parada" toda semana — o monitor lia o acervo da semana
 // anterior ANTES de o run novo terminar. 9d dá folga sobre 1 ciclo semanal e ainda pega
 // um run inteiro PULADO (frescor > 9d = scraper realmente parou).
-const FONTES_SEM_SAUDE = { PECINI: 9, RJLEILOES: 9 };
+// Inclui as fontes GRÁTIS servidas por scrapers próprios (Bright Data via GitHub Actions) que
+// NÃO escreviam fonte_saude e eram ponto-cego: GESTAOLEILOES (qui), CALIL/VEGAS/TORRES3 (plataforma
+// SOLEON, seg). Frescor pelo acervo (imoveis_leilao.atualizado_em). 9d cobre a cadência semanal.
+const FONTES_SEM_SAUDE = { PECINI: 9, RJLEILOES: 9, GESTAOLEILOES: 9, CALIL: 9, VEGAS: 9, TORRES3: 9 };
 // Frescor máximo tolerado (h) para as fontes grátis que reportam saúde (Seção A).
 // Elas rodam 2x/semana — seg e qui (cron '1,4' em scraper.yml e leiloeiros-puppeteer.yml).
 // O MAIOR gap NORMAL é quinta→segunda = 96h; com este monitor às 11h UTC e o scrape às
@@ -167,6 +170,24 @@ async function handler(req) {
       problemas.push({ fonte, tipo: 'coleta parada (silenciosa)', detalhe: `acervo sem atualização há ${idadeD.toFixed(0)}d — scraper próprio não reporta saúde` });
     }
   }
+
+  // B2) GATE da coleta GRÁTIS/residencial (coleta_cliente): fonte ATIVA que nunca coletou
+  //     (ultima_em nulo) ou parou além do intervalo previsto. Era ponto-cego total (o monitor lia
+  //     só fonte_saude/acervo). Hoje cobre o VLANCE (client-side puro, que não grava fonte_saude
+  //     nem tem workflow) — assim a falha silenciosa da via residencial fica VISÍVEL/alertada.
+  try {
+    const { data: gate } = await supabase
+      .from('coleta_cliente').select('fonte,ultima_em,intervalo_horas,ativo').eq('ativo', true);
+    for (const g of gate || []) {
+      if (!g.ultima_em) {
+        problemas.push({ fonte: g.fonte, tipo: 'coleta grátis nunca concluiu', detalhe: 'via residencial/client-side sem nenhuma coleta bem-sucedida (ultima_em nulo)' });
+      } else {
+        const idadeH = (agoraMs - new Date(g.ultima_em).getTime()) / 3600000;
+        const tol = (Number(g.intervalo_horas) || 84) * 1.5; // 1,5× o intervalo previsto = folga
+        if (idadeH > tol) problemas.push({ fonte: g.fonte, tipo: 'coleta grátis parada', detalhe: `via residencial sem coleta há ${idadeH.toFixed(0)}h (intervalo ${g.intervalo_horas}h)` });
+      }
+    }
+  } catch { /* aditivo: nunca derruba o monitor */ }
 
   // C) LINHA DE BASE (docs/BASELINE_CAPTURA_LEILOEIROS.md): o scraper roda mas REGREDIU —
   //    acervo encolheu abaixo do piso, ou um campo que vinha alto sumiu. Pega a degradação

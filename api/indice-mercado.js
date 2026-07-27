@@ -54,7 +54,7 @@ const promptIndice = ({ endereco, condominio, tipo, cidade, uf }) => {
   const todos = tipo === 'todos';
   const alvo = todos ? 'de TODOS os tipos (apartamento, casa, terreno, comercial)' : `para o imóvel do tipo "${tipo}"`;
   const regraTipo = todos
-    ? '- Cubra os 4 tipos (apartamento, casa, terreno, comercial). Em CADA amostra informe "tipo": um de apartamento|casa|terreno|comercial.'
+    ? '- Cubra os 4 tipos (apartamento, casa, terreno, comercial). Em CADA amostra informe "tipo": exatamente um de apartamento|casa|terreno|comercial (sem variações). Traga no MÁXIMO 6 amostras por tipo por nível (não estoure o limite da resposta).'
     : `- SÓ o MESMO TIPO (${tipo}). Descarte tipos diferentes.`;
   const campoTipo = todos ? '"tipo":"apartamento",' : '';
   return `Você é um perito avaliador imobiliário. Pesquise o MERCADO LIVRE de VENDA e LOCAÇÃO ${alvo} em ${endereco || cidade}, ${cidade}/${uf}, em DOIS NÍVEIS:
@@ -81,10 +81,20 @@ const FONTE_LEILAO = /leil[ãa]o|arremat|hasta.?p[uú]bl|\bcef\b|caixa\s*econ|al
 function montarAmostras(mercado, ctx) {
   const out = [];
   const dataOk = (d) => (/^\d{4}-\d{2}/.test(String(d || '')) ? String(d).slice(0, 7) + '-01' : null);
-  // Em "todos", o tipo vem de CADA amostra (a IA classificou); no modo single, é o tipo do ctx.
-  const tipoDe = (s) => ctx.todos
-    ? (SEG_TIPOS.includes(String(s?.tipo || '').toLowerCase()) ? String(s.tipo).toLowerCase() : null)
-    : ctx.tipo;
+  // Em "todos", o tipo vem de CADA amostra (a IA classificou) — TOLERANTE a variações de rótulo
+  // ("Apto", "Casa/condomínio", "Terreno/área", "Loja/galpão"): mapeia por palavra-chave para os 4
+  // canônicos. O matching ESTRITO derrubava toda amostra cujo rótulo não fosse exatamente 1 dos 4
+  // (causa do "gerou 0 amostras"). No modo single, é o tipo do ctx.
+  const canonTipo = (t) => {
+    const s = String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    if (/apart|apto|\bap\b|flat|kitn|studio|loft/.test(s)) return 'apartamento';
+    if (/casa|sobrado|condomin|residenc|geminad/.test(s)) return 'casa';
+    if (/terren|lote|\barea\b|gleba|chacara|sitio|fazend|rural/.test(s)) return 'terreno';
+    if (/comerci|industri|loja|\bsala\b|galp|ponto|escritor|predio|barrac/.test(s)) return 'comercial';
+    if (SEG_TIPOS.includes(s)) return s;
+    return null;
+  };
+  const tipoDe = (s) => ctx.todos ? canonTipo(s?.tipo) : ctx.tipo;
   const linha = (s, natureza, vm2) => ({ cidade_norm: ctx.cidadeNorm, uf: ctx.uf, bairro_norm: ctx.bairroNorm || null,
     lat: ctx.lat, lng: ctx.lng, tipo: tipoDe(s), origem: 'pesquisa_web', natureza, valor_m2: vm2, area_m2: s?.area || null });
   for (const nivel of [1, 2]) {
@@ -147,7 +157,7 @@ export default async function handler(req, res) {
     const r = await anthropicFetch({
       method: 'POST', headers,
       body: JSON.stringify({
-        model: MODEL, max_tokens: 6000,
+        model: MODEL, max_tokens: todos ? 8000 : 6000,   // "todos" retorna 4 tipos → JSON maior (evita truncar)
         tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }],
         system: `Perito avaliador. ${todos ? 'Cubra os 4 tipos (apartamento, casa, terreno, comercial) e marque o "tipo" de CADA amostra.' : 'Só ' + tipo + '.'} Só mercado livre (descarte leilão). Retorne apenas JSON válido.`,
         messages: [{ role: 'user', content: promptIndice({ endereco: body.endereco, condominio: body.condominio, tipo, cidade: body.cidade, uf }) }],
