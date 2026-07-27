@@ -198,6 +198,9 @@ const ehFonteLeilao = (f) => FONTE_LEILAO.test(String(f || ''));
 // Normalização de bairro (igual ao _bairro_norm do banco) e grid ~1km ('lat.dd,lng.dd')
 // — para escopar as amostras por LOCALIDADE e permitir o reaproveitamento por bairro/grid.
 const _norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+// cidade_norm no formato do banco (imoveis_leilao/indice_amostra): minúsculas, sem acento e SEM
+// separadores (ex.: "São Bernardo" → "saobernardo"). Difere do _norm, que mantém espaço (usado p/ bairro).
+const _cidadeNorm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
 const geoGridDe = (lat, lng) => (Number.isFinite(Number(lat)) && Number.isFinite(Number(lng))) ? `${Number(lat).toFixed(2)},${Number(lng).toFixed(2)}` : '';
 
 async function gravarAmostrasIndice(imDb, mercado, imovelId, segmento = 'apartamento') {
@@ -992,6 +995,16 @@ export default async function handler(req, res) {
     // ÍNDICE POR SEGMENTO: apto/casa (m² privativo), terreno (m² de terreno), comercial (régua
     // própria). Cada segmento tem sua base — NÃO se misturam. Rural é R$/ha (fora do índice/m²).
     // O terreno usa a ÁREA DE TERRENO (não a construída) para o R$/m².
+    // FALLBACK DE REGIÃO (não desperdiçar a busca): se o lote não está mais no imoveis_leilao
+    // (removido pela limpeza) OU veio de atribuição manual, imDb fica sem cidade_norm e a colheita
+    // no índice seria PULADA — a pesquisa cara viraria lixo. Reconstrói a região (nível cidade) a
+    // partir do que o próprio relatório carrega (cidade/estado do corpo, bairro/coords do snapshot).
+    if (!imDb?.cidade_norm && (cidade || imovel?.cidade)) {
+      imDb = { ...(imDb || {}), cidade_norm: _cidadeNorm(cidade || imovel?.cidade),
+        estado: estado || imovel?.estado || imDb?.estado || '',
+        bairro: imDb?.bairro || imovel?.bairro || null,
+        latitude: imDb?.latitude ?? imovel?.lat ?? null, longitude: imDb?.longitude ?? imovel?.lng ?? null };
+    }
     mercado.indiceBidPro = null;
     const segIdx = segmentoIndice(mercadoInputs.tipoImovel || imovel?.tipo);
     const areaTerreno = Number(mercadoInputs.areaTerrenoM2) || 0;
