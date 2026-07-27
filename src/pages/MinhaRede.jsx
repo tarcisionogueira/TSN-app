@@ -13,6 +13,18 @@ import { Users, Copy, Check, ChevronRight, ChevronDown, Award, Search, Wallet, B
 const card = { background: 'white', border: '1px solid #e2e8f0', borderRadius: 16, padding: '18px 20px' };
 const fmtBRL = (v) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
+// Plural correto dos nomes de rank em pt-BR (evita "Fundadors"/"Guardiãos"):
+// terminação -ão → -ões (Guardião→Guardiões); -r → -res (Fundador→Fundadores);
+// vogal → +s (Pioneiro→Pioneiros, Mestre→Mestres). Frases (ex.: "indicado pagante ativo")
+// só entram no nível 1, que sempre pede 1 → nunca pluralizam.
+const pluralRank = (nome, n) => {
+  const s = String(nome || '');
+  if (Number(n) <= 1) return s;
+  if (/ão$/i.test(s)) return s.replace(/ão$/i, 'ões');
+  if (/r$/i.test(s)) return s + 'es';
+  return s + 's';
+};
+
 function Nodo({ nodo, filhosDe, expandido, toggle, nivel }) {
   const filhos = filhosDe(nodo.id);
   const temFilhos = filhos.length > 0;
@@ -338,12 +350,12 @@ export default function MinhaRede() {
                   </div>
                   {/* Chip do que passa a receber — o "carrot" do desafio */}
                   <div style={{ textAlign: 'center', background: '#eff6ff', border: '1px solid #dbeafe', borderRadius: 10, padding: '6px 14px' }}>
-                    <div style={{ fontSize: 19, fontWeight: 900, color: '#084BA6', lineHeight: 1 }}>{Number(nivel.proximo.equipe_pct_total) > 0 ? `${Number(nivel.proximo.equipe_pct_total)}%` : `${indicacaoPct}%`}</div>
-                    <div style={{ fontSize: 9.5, color: '#64748b', fontWeight: 700, marginTop: 2 }}>{Number(nivel.proximo.equipe_pct_total) > 0 ? 'da equipe' : 'por indicação'}</div>
+                    <div style={{ fontSize: 19, fontWeight: 900, color: '#084BA6', lineHeight: 1 }}>{Number(nivel.proximo.equipe_delta_pct) > 0 ? `+${Number(nivel.proximo.equipe_delta_pct)}%` : Number(nivel.proximo.bonus_infinito_pct) > 0 ? `+${Number(nivel.proximo.bonus_infinito_pct)}%` : Number(nivel.proximo.equipe_pct_total) > 0 ? `${Number(nivel.proximo.equipe_pct_total)}%` : `${indicacaoPct}%`}</div>
+                    <div style={{ fontSize: 9.5, color: '#64748b', fontWeight: 700, marginTop: 2 }}>{Number(nivel.proximo.equipe_delta_pct) > 0 ? 'a mais da equipe' : Number(nivel.proximo.bonus_infinito_pct) > 0 ? 'bônus infinito' : Number(nivel.proximo.equipe_pct_total) > 0 ? 'da equipe' : 'por indicação'}</div>
                   </div>
                 </div>
                 <Progresso
-                  label={`${nivel.proximo.req_pernas} ${nivel.proximo.sub_nome}${nivel.proximo.req_pernas > 1 ? 's' : ''} na sua rede direta`}
+                  label={`${nivel.proximo.req_pernas} ${pluralRank(nivel.proximo.sub_nome, nivel.proximo.req_pernas)} na sua rede direta`}
                   atual={nivel.proximo.tem || 0} alvo={nivel.proximo.req_pernas} faltam={nivel.proximo.faltam} />
                 <div style={{ fontSize: 12.5, color: '#334155', lineHeight: 1.55, marginTop: 6, background: '#eff6ff', border: '1px solid #dbeafe', borderRadius: 10, padding: '9px 12px' }}>
                   {Number(nivel.proximo.equipe_pct_total) > 0
@@ -407,7 +419,7 @@ export default function MinhaRede() {
                     <div style={{ fontSize: 11.5, color: '#64748b', marginTop: 3, lineHeight: 1.5 }}>
                       {t.ordem === 1
                         ? <>Meta: <strong>{t.req_pernas} {t.req_sub_nome}</strong></>
-                        : <>Meta: <strong>{t.req_pernas} {t.req_sub_nome}{t.req_pernas > 1 ? 's' : ''}</strong> na sua rede direta</>}
+                        : <>Meta: <strong>{t.req_pernas} {pluralRank(t.req_sub_nome, t.req_pernas)}</strong> na sua rede direta</>}
                     </div>
                     <div style={{ fontSize: 11.5, color: destaque ? '#334155' : '#94a3b8', marginTop: 2 }}>
                       <strong>{t.indicacao_pct}%</strong> por indicação
