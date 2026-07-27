@@ -115,9 +115,8 @@ def pedir(session, method, base, path, data=None, tentativas=4):
                 r = bd_request(url, method=method, data=data)
             else:
                 r = session.post(url, data=data, timeout=30) if method == "POST" else session.get(url, timeout=30)
-            if r.status_code >= 500:
-                raise requests.HTTPError(f"HTTP {r.status_code}")
-            r.raise_for_status()
+            if not r.ok:
+                raise requests.HTTPError(f"HTTP {r.status_code}: {str(getattr(r, 'text', ''))[:300]}")
             return r.json()
         except Exception as e:  # noqa: BLE001
             if i == tentativas - 1:
