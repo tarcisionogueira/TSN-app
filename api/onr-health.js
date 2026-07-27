@@ -11,6 +11,7 @@ export const config = { runtime: 'edge' };
 
 import { getSession, invalidateSession, onrAjax } from './_onr.js';
 import { enviarAlertaOnr } from './_onr-alert.js';
+import { verificarCapacidadeOnr } from './_onr-certidao.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -29,8 +30,8 @@ async function buscarUltimoEstado() {
   } catch { return null; }
 }
 
-/** Salva resultado do healthcheck no Supabase */
-async function salvarEstado(ok, detalhe) {
+/** Salva resultado do healthcheck no Supabase (servico configurável) */
+async function salvarEstado(ok, detalhe, servico = 'onr_digital') {
   if (!SUPABASE_URL || !SERVICE_KEY) return;
   try {
     await fetch(`${SUPABASE_URL}/rest/v1/system_health`, {
@@ -42,7 +43,7 @@ async function salvarEstado(ok, detalhe) {
         Prefer: 'return=minimal',
       },
       body: JSON.stringify({
-        servico:   'onr_digital',
+        servico,
         ok,
         detalhe,
         criado_em: new Date().toISOString(),
@@ -113,6 +114,25 @@ export default async function handler(req) {
   }
 
   await salvarEstado(ok, detalhe);
+
+  // Capacidade da conta (informativo, não afeta o status do healthcheck): confere
+  // se a conta ACESSA a Certidão Digital de matrícula (leitura) e o Registro Online
+  // pós-arrematação. Grava em system_health (servico='onr_capacidade') para o dono
+  // ver o veredito sem rodar nada. Só roda quando o login foi OK.
+  if (ok) {
+    try {
+      const cookie = await getSession();
+      const cap = await verificarCapacidadeOnr(cookie);
+      const resumo = {
+        certidao_leitura: cap.certidao_matricula_leitura?.veredito || null,
+        registro_pos_arrematacao: cap.registro_pos_arrematacao?.veredito || null,
+      };
+      const acessivel = resumo.certidao_leitura === 'ACESSIVEL' || resumo.registro_pos_arrematacao === 'ACESSIVEL';
+      await salvarEstado(acessivel, JSON.stringify(resumo), 'onr_capacidade');
+    } catch (e) {
+      await salvarEstado(false, `erro capacidade: ${e.message}`, 'onr_capacidade');
+    }
+  }
 
   // Alerta apenas se falhou E (última vez estava ok OU nunca rodou antes)
   if (!ok && tipoAlerta) {

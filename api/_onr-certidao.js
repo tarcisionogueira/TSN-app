@@ -150,3 +150,54 @@ export async function tentarCertidaoAuto({ uf, cidade, matricula, cartorio } = {
   // Capacidade ainda não confirmada pela sonda em produção — não fabricar pedido.
   return { disponivel: false, motivo: 'pendente_confirmacao_sonda' };
 }
+
+// ─── Verificação de CAPACIDADE da conta ONR ──────────────────────────────────
+// Usada pela sonda (api/onr-certidao-probe.js) e pelo monitor (api/onr-health.js).
+// Responde, com a sessão autenticada, se a nossa conta ACESSA cada serviço.
+
+export const ONR_SERVICOS = [
+  { chave: 'certidao_matricula_leitura', url: ONR_LINKS.certidaoDigital, servico: '(a) Certidão Digital de matrícula' },
+  { chave: 'registro_pos_arrematacao',   url: ONR_LINKS.registroOnline,  servico: '(b) Abertura/registro de matrícula' },
+  { chave: 'saec',                       url: ONR_LINKS.saec,            servico: 'SAEC (atendimento eletrônico)' },
+];
+
+/** Classifica uma página ONR autenticada em veredito de acesso. */
+export function analisarPaginaOnr(status, location, html) {
+  const loc = (location || '').toLowerCase();
+  const body = (html || '').toLowerCase();
+  const redirecionouLogin = /facesso|login|autentic/.test(loc);
+  const acessoNegado = /acesso negado|não autorizado|nao autorizado|sem permiss|não possui|nao possui/.test(body);
+  const temSeletorLocal = /<select[^>]*(uf|estado|cidade|munic)/i.test(html || '') || /selecione.*(estado|uf|cidade)/i.test(body);
+  const mencionaServico = /(matr[íi]cula|certid[ãa]o|registro)/i.test(body);
+  const formAcessivel = (status === 200) && !redirecionouLogin && !acessoNegado && (temSeletorLocal || mencionaServico);
+
+  let veredito;
+  if (redirecionouLogin) veredito = 'SESSAO_INVALIDA_OU_SEM_ACESSO';
+  else if (acessoNegado)  veredito = 'ACESSO_NEGADO';
+  else if (formAcessivel) veredito = 'ACESSIVEL';
+  else if (status === 200) veredito = 'RESPONDEU_200_VERIFICAR_MANUAL';
+  else veredito = `HTTP_${status}`;
+
+  return { veredito, http: status, redirecionou_para: location || null, acesso_negado: acessoNegado, form_acessivel: formAcessivel };
+}
+
+/** Faz um GET autenticado de cada serviço ONR e retorna o veredito por serviço. */
+export async function verificarCapacidadeOnr(cookie) {
+  const out = {};
+  for (const alvo of ONR_SERVICOS) {
+    try {
+      const res = await fetch(alvo.url, {
+        headers: { Cookie: cookie, 'User-Agent': 'Mozilla/5.0 (compatible; BidProBrasil/1.0)', Referer: `${ONR}/` },
+        redirect: 'manual',
+        signal: AbortSignal.timeout(15000),
+      });
+      const status = res.status;
+      const location = res.headers.get('location');
+      const html = status === 200 ? await res.text() : '';
+      out[alvo.chave] = { servico: alvo.servico, url: alvo.url, ...analisarPaginaOnr(status, location, html) };
+    } catch (e) {
+      out[alvo.chave] = { servico: alvo.servico, url: alvo.url, veredito: 'ERRO_REDE', detalhe: e.message };
+    }
+  }
+  return out;
+}
