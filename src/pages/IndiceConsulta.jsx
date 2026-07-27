@@ -11,6 +11,8 @@ const PODE_GERAR = ['admin', 'top2', 'assessorado', 'clube', 'analista', 'advoga
 
 const UFS = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'];
 const brl = (v) => 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { maximumFractionDigits: 0 });
+const SEG_TIPOS = ['apartamento', 'casa', 'terreno', 'comercial'];
+const TIPO_LABEL = { apartamento: 'Apartamento', casa: 'Casa / condomínio', terreno: 'Terreno / área', comercial: 'Comercial / industrial' };
 
 // Consulta do Índice BidPro — o preço do m² (venda E locação) por cidade/bairro, mais a
 // valorização por ano. Só LEITURA do que já está mapeado (grátis). Região não mapeada →
@@ -35,7 +37,18 @@ export default function IndiceConsulta() {
   }, []);
 
   // Consulta o índice de uma localidade (objeto form) e devolve o resultado {mapeado,...}.
+  // Em "todos os tipos": consulta os 4 tipos (leitura grátis, em paralelo) e devolve {todos, porTipo}.
   const consultarDe = async (f) => {
+    if (f.tipo === 'todos') {
+      const porTipo = await Promise.all(SEG_TIPOS.map(async (t) => {
+        try {
+          const r = await apiCall('/api/indice-consulta', { method: 'POST', body: JSON.stringify({ ...f, tipo: t }) });
+          const d = await r.json();
+          return { tipo: t, ...(r.ok ? d : { mapeado: false }) };
+        } catch { return { tipo: t, mapeado: false }; }
+      }));
+      return { todos: true, porTipo };
+    }
     const r = await apiCall('/api/indice-consulta', { method: 'POST', body: JSON.stringify(f) });
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || 'Falha na consulta');
@@ -146,8 +159,10 @@ export default function IndiceConsulta() {
         </>)}
         <label style={{ flex: isMobile ? '1 1 100%' : '0 0 168px' }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 4 }}>Tipo</div>
-          <select value={form.tipo} onChange={e => setForm(f => ({ ...f, tipo: e.target.value }))}
+          <select value={form.tipo}
+            onChange={e => { const nf = { ...form, tipo: e.target.value }; setForm(nf); if (nf.cidade && nf.uf) autoConsultar(nf); }}
             style={{ width: '100%', padding: '10px 8px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 14, background: 'white', boxSizing: 'border-box' }}>
+            <option value="todos">Todos os tipos</option>
             <option value="apartamento">Apartamento</option>
             <option value="casa">Casa / condomínio</option>
             <option value="terreno">Terreno / área</option>
@@ -167,7 +182,59 @@ export default function IndiceConsulta() {
 
       {erro && <div style={{ background: '#fef2f2', color: '#b91c1c', padding: 12, borderRadius: 10, fontSize: 13, marginBottom: 16 }}>{erro}</div>}
 
-      {res && !res.mapeado && (
+      {res && res.todos && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ fontSize: 14, fontWeight: 800, color: '#111' }}>Índice por tipo — {localLabel || `${form.cidade}/${form.uf}`}</div>
+          {res.porTipo.some(t => !t.mapeado) && (
+            <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 12, padding: '12px 16px' }}>
+              <div style={{ fontSize: 13, color: '#78350f', lineHeight: 1.5, marginBottom: podeGerar ? 10 : 0 }}>
+                {res.porTipo.filter(t => !t.mapeado).map(t => TIPO_LABEL[t.tipo]).join(', ')} ainda sem índice aqui.
+                {podeGerar ? ' Uma única pesquisa cobre todos os tipos.' : ' Nos planos pagos você gera na hora.'}
+              </div>
+              {gerMsg && <div style={{ fontSize: 12.5, color: '#92400e', background: '#fef3c7', borderRadius: 8, padding: '8px 10px', marginBottom: 10 }}>{gerMsg}</div>}
+              {podeGerar ? (
+                <button onClick={gerar} disabled={gerando}
+                  style={{ padding: '9px 16px', background: gerando ? '#94a3b8' : '#d97706', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 13, cursor: gerando ? 'wait' : 'pointer' }}>
+                  {gerando ? 'Pesquisando o mercado…' : '⚡ Gerar todos os tipos (1 pesquisa)'}
+                </button>
+              ) : (
+                <button onClick={() => nav('/planos')} style={{ padding: '9px 16px', background: '#d97706', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 13, cursor: 'pointer' }}>Ver planos</button>
+              )}
+              {podeGerar && effectiveRole !== 'admin' && <div style={{ fontSize: 11, color: '#a16207', marginTop: 8 }}>Consome 1 do seu limite mensal de índice (uma pesquisa cobre os 4 tipos).</div>}
+            </div>
+          )}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10 }}>
+            {res.porTipo.map((t) => {
+              const r = t.regiao;
+              const ok = t.mapeado && r;
+              return (
+                <div key={t.tipo} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 12, padding: '14px 16px' }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 800, color: '#0f172a', marginBottom: 8 }}>{TIPO_LABEL[t.tipo]}</div>
+                  {ok ? (
+                    <>
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                        <span style={{ fontSize: 10, color: '#0D63DB', fontWeight: 700 }}>VENDA</span>
+                        <span style={{ fontSize: 17, fontWeight: 900, color: '#0D63DB' }}>{Number(r.venda_m2) > 0 ? `${brl(r.venda_m2)}/m²` : '—'}</span>
+                        {r.projetado ? <span style={{ fontSize: 8.5, fontWeight: 800, padding: '1px 5px', borderRadius: 999, background: '#fff7ed', color: '#c2410c' }}>PROJ.</span> : null}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginTop: 4 }}>
+                        <span style={{ fontSize: 10, color: '#7c3aed', fontWeight: 700 }}>LOCAÇÃO</span>
+                        <span style={{ fontSize: 14, fontWeight: 800, color: '#7c3aed' }}>{Number(r.aluguel_m2) > 0 ? `${brl(r.aluguel_m2)}/m²·mês` : 'em formação'}</span>
+                      </div>
+                      <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 6 }}>{r.n_amostras || 0} amostra(s)</div>
+                    </>
+                  ) : (
+                    <div style={{ fontSize: 12.5, color: '#94a3b8' }}>Sem índice ainda</div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ fontSize: 11, color: '#94a3b8' }}>Escolha um tipo específico acima para ver composição por período, faixas de padrão e valorização.</div>
+        </div>
+      )}
+
+      {res && !res.todos && !res.mapeado && (
         <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 14, padding: '18px 20px' }}>
           <div style={{ fontSize: 15, fontWeight: 800, color: '#92400e', marginBottom: 6 }}>
             Ainda não mapeamos {form.nivelConsulta === 'rua' ? (form.condominio ? 'este condomínio' : 'esta rua') : form.nivelConsulta === 'bairro' ? 'este bairro' : 'esta cidade'}
@@ -195,7 +262,7 @@ export default function IndiceConsulta() {
         </div>
       )}
 
-      {res && res.mapeado && reg && (
+      {res && !res.todos && res.mapeado && reg && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {res.aviso && (
             <div style={{ borderRadius: 12, border: '1px solid #fed7aa', background: '#fff7ed', padding: '12px 16px', display: 'flex', gap: 10, alignItems: 'flex-start' }}>

@@ -168,13 +168,23 @@ export default async function handler(req, res) {
   const MAX_PARECER = 2;
   try {
     const q = `analises_mercado?status=eq.concluida&result->>parecer=eq.&regen_tentativas=lt.${MAX_PARECER}`
-      + `&order=updated_at.asc&limit=${LOTE}&select=user_id,imovel_id,titulo,cidade,estado,imovel,inputs,result,regen_tentativas`;
+      + `&order=updated_at.asc&limit=${LOTE}&select=user_id,imovel_id,titulo,cidade,estado,imovel,inputs,result,regen_tentativas,cota_estornada`;
     const rows = await (await sb(q)).json();
     if (Array.isArray(rows)) {
       await Promise.allSettled(rows.map(async (r) => {
         if (!r?.inputs?.mercadoInputs) return;          // sem inputs originais não dá p/ regerar
         if (r?.result?.mercadoVazio === true) return;   // mercado genuinamente vazio: outro branch
         if ((r?.result?.parecer || '').trim().length >= 200) return; // guarda: só parecer em branco
+        // ESTORNO DA COTA (regra do dono: relatório que não funcionou bem devolve a cota). 1x por
+        // relatório (cota_estornada). estornar_analise_por('mensal') é NO-OP p/ quem não foi cobrado
+        // (count 0 ou mês diferente) → seguro chamar sem checar papel. Não bloqueia a regeração.
+        if (!r.cota_estornada) {
+          try {
+            await sb(`rpc/estornar_analise_por`, { method: 'POST', body: JSON.stringify({ p_user_id: r.user_id, p_tipo: 'mensal' }) });
+            await sb(`analises_mercado?user_id=eq.${encodeURIComponent(String(r.user_id))}&imovel_id=eq.${encodeURIComponent(String(r.imovel_id))}`, {
+              method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ cota_estornada: true }) });
+          } catch { /* estorno best-effort */ }
+        }
         try {
           await sb(`analises_mercado?user_id=eq.${encodeURIComponent(String(r.user_id))}&imovel_id=eq.${encodeURIComponent(String(r.imovel_id))}`, {
             method: 'PATCH', headers: { Prefer: 'return=minimal' },
