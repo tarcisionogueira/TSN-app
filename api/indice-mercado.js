@@ -66,6 +66,7 @@ ${regraTipo}
 - SÓ MERCADO LIVRE: descarte QUALQUER leilão, praça, venda direta bancária/Caixa, alienação fiduciária, extrajudicial/judicial ou retomado (preços 30–60% abaixo contaminam o índice).
 - Priorize anúncios RECENTES (≤12 meses). Capture a data de cada amostra.
 - Faça várias buscas (ZAP, VivaReal, OLX, Quinto Andar, Imovelweb, Chaves na Mão e imobiliárias LOCAIS de ${cidade}).
+- Mesmo em CIDADE PEQUENA há anúncios: pesquise "${cidade} ${uf}" + o tipo nesses portais e TRAGA o que encontrar — NÃO retorne listas vazias se existir qualquer anúncio real de mercado (venda/locação). Terreno costuma ter R$/m² BAIXO (ex.: 100–400 R$/m²): isso é normal, capture assim mesmo.
 
 Para CADA amostra capture: ${todos ? 'tipo (apartamento|casa|terreno|comercial); ' : ''}valorM2 (R$/m² de VENDA) nas vendas; aluguelM2 (R$/m²/mês) nas locações; area (m²); data (formato "AAAA-MM"); fonte (portal ou imobiliária).
 

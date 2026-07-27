@@ -1267,8 +1267,17 @@ export default async function handler(req, res) {
     // ficou 'outro' (URL opaca, ex.: SUPERBID) — combinada com o tipo já classificado.
     const da = parsed.documentosAnalisados || {};
     const isVendaDiretaDoc = /venda_direta/i.test(String(row?.modalidade || ''));
-    const leuEdital = !!da.edital || lidos.some(l => ['edital', 'regras_venda'].includes(tipoLido(l))) || !!body?.textoEdital;
+    const ehCaixaFonteDoc = /caixa|cef/i.test(row?.fonte || '');
     const leuMatriculaFinal = !!da.matricula || leuMatricula;
+    // CAIXA VENDA ONLINE: o documento que rege a compra é a "REGRA DE VENDA ONLINE" PADRONIZADA
+    // (venda-imoveis.caixa.gov.br/.../comocomprar.pdf), NÃO um edital por lote. Esse PDF genérico
+    // às vezes falha o fetch (403/Bright Data) e a IA não confirma leitura do "edital" → o gate
+    // travava um relatório com a MATRÍCULA (a peça crítica) já lida, pedindo um edital que não
+    // existe para venda online. Para CEF, matrícula lida + as regras padronizadas (que o prompt já
+    // conhece) satisfazem o gate: não bloqueamos por edital inexistente. Se a IA LEU um edital real
+    // (leilão SFI com edital fetchável), ele conta normalmente (da.edital) e nada muda.
+    const leuEdital = !!da.edital || lidos.some(l => ['edital', 'regras_venda'].includes(tipoLido(l))) || !!body?.textoEdital
+      || (ehCaixaFonteDoc && leuMatriculaFinal);
     const faltando = [];
     if (!leuMatriculaFinal) faltando.push('matricula');
     if (!leuEdital) faltando.push(isVendaDiretaDoc ? 'regras_venda' : 'edital');
