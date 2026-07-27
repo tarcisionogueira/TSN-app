@@ -1,0 +1,42 @@
+name: Scraper VLANCE (Bright Data)
+
+# A API Vlance (verdeamarelo / sudeste / capitalvalor — mesma API JSON) responde 403 em IP de
+# datacenter (CI/Vercel) e a coleta client-side (navegador do staff) falha por CORS/site. Fallback
+# autorizado pelo dono: RESIDENCIAL primeiro; se falhar, BRIGHT DATA. Este job é o Bright Data —
+# server-side, confiável e verificável — para o VLANCE nunca ficar zerado.
+# Agendado 2x/semana (seg/qui), como as demais fontes grátis, + disparo manual.
+on:
+  schedule:
+    - cron: '30 12 * * 1,4'   # 2x/semana (seg e qui), 12:30 UTC — após o scraper principal
+  workflow_dispatch:
+    inputs:
+      dryrun:
+        description: '1 = não grava (só lista); 0 = grava'
+        required: false
+        default: '0'
+
+jobs:
+  scraper-vlance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Instalar dependências
+        run: pip install requests
+      - name: Rodar scraper VLANCE
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          BRIGHTDATA_API_TOKEN: ${{ secrets.BRIGHTDATA_API_TOKEN }}
+          BRIGHTDATA_ZONE: ${{ secrets.BRIGHTDATA_ZONE }}
+        run: |
+          if [ "${{ github.event.inputs.dryrun }}" = "1" ]; then
+            python3 scripts/scraper_vlance.py --ignorar-robots
+          else
+            python3 scripts/scraper_vlance.py --supabase --ignorar-robots
+          fi

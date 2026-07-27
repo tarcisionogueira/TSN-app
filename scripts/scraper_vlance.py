@@ -31,7 +31,7 @@ import sys
 import time
 import unicodedata
 from datetime import datetime, timezone
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlencode
 from urllib.robotparser import RobotFileParser
 
 import requests
@@ -86,11 +86,35 @@ def inferir_tipo(cat, sub, titulo):
     return "outros"
 
 
+# Bright Data Web Unlocker: a API Vlance dá 403 em IP de datacenter (CI/Vercel). Com
+# BRIGHTDATA_API_TOKEN/ZONE no ambiente, roteamos as chamadas pela Web Unlocker (/request,
+# format=raw → devolve o corpo cru da fonte = o JSON). Sem os envs, cai no fetch DIRETO (uso
+# local, IP residencial da máquina do dono). Suporta GET (get-leiloes) e POST (get-lotes page=N).
+BD_TOKEN = os.environ.get("BRIGHTDATA_API_TOKEN")
+BD_ZONE = os.environ.get("BRIGHTDATA_ZONE")
+USA_BD = bool(BD_TOKEN and BD_ZONE)
+
+
+def bd_request(url, method="GET", data=None, timeout=60):
+    payload = {"zone": BD_ZONE, "url": url, "method": method, "format": "raw"}
+    if data is not None:
+        payload["data"] = urlencode(data)
+        payload["headers"] = {"Content-Type": "application/x-www-form-urlencoded"}
+    return requests.post(
+        "https://api.brightdata.com/request",
+        headers={"Authorization": f"Bearer {BD_TOKEN}", "Content-Type": "application/json"},
+        json=payload, timeout=timeout,
+    )
+
+
 def pedir(session, method, base, path, data=None, tentativas=4):
     url = urljoin(base, path)
     for i in range(tentativas):
         try:
-            r = session.post(url, data=data, timeout=30) if method == "POST" else session.get(url, timeout=30)
+            if USA_BD:
+                r = bd_request(url, method=method, data=data)
+            else:
+                r = session.post(url, data=data, timeout=30) if method == "POST" else session.get(url, timeout=30)
             if r.status_code >= 500:
                 raise requests.HTTPError(f"HTTP {r.status_code}")
             r.raise_for_status()
