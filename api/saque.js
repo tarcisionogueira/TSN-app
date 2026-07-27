@@ -48,11 +48,6 @@ async function rpc(fn, args) {
 const roleFor = async (id) => (await db(`perfis?id=eq.${id}&select=role`)).data?.[0]?.role || null;
 const saldoDe = async (id) => Number((await db(`saldo_usuarios?user_id=eq.${id}&select=saldo_disponivel`)).data?.[0]?.saldo_disponivel || 0);
 
-// Saques do parceiro que já foram ACEITOS (liberados p/ pagamento ou pagos). O 1º saque pode
-// liberar pela automação (CPF no QSA); do 2º em diante, validação manual obrigatória.
-const countSaquesAceitos = async (id) =>
-  ((await db(`saldo_lancamentos?user_id=eq.${id}&tipo=eq.saque&status=in.(solicitado,sacado)&select=id`)).data || []).length;
-
 // Abre um chamado de supervisão/validação do saque (analista + dono veem no Atendimento).
 async function abrirChamadoSaquePJ(user, perfil, valor, titulo) {
   try {
@@ -153,7 +148,7 @@ export default async function handler(req) {
     const extrato = (await db(`saldo_lancamentos?user_id=eq.${user.id}&order=criado_em.desc&limit=200&select=*`)).data || [];
     // Pré-requisitos do saque: cadastro completo (nome, CPF, telefone, chave PIX).
     // Aponta o que falta para o profissional liberar o saque (espelha a RPC).
-    const perfil = (await db(`perfis?id=eq.${user.id}&select=nome,cpf,cpf_hash,telefone,chave_pix,cnpj,razao_social,pj_chave_pix,pj_validada_em`)).data?.[0] || {};
+    const perfil = (await db(`perfis?id=eq.${user.id}&select=nome,cpf,cpf_hash,telefone,chave_pix,cnpj,razao_social,pj_chave_pix,pj_validada_em,pj_revalidacao_pendente,pj_revalidacao_motivo`)).data?.[0] || {};
     const ehParceiroCliente = PLANOS_PAGOS.includes(role);
     const faltando = [];
     if (!perfil.nome || !String(perfil.nome).trim()) faltando.push('nome');
@@ -172,13 +167,15 @@ export default async function handler(req) {
     // GATE PJ (anti-interposição): o parceiro-cliente só saca com a empresa VALIDADA pela equipe
     // (cartão CNPJ/contrato social + CPF no quadro societário + NF) — espelha o gate da RPC.
     // Enquanto pendente, o saldo acumula mas o saque fica bloqueado (crédito condicionado).
-    const pjPendente = ehParceiroCliente && !perfil.pj_validada_em;
+    const pjPendente = ehParceiroCliente && (!perfil.pj_validada_em || !!perfil.pj_revalidacao_pendente);
     // Flag INFORMATIVO (não bloqueia o saque): quem não está em plano pago não GANHA comissões
     // novas (a origem já filtra por "em dia na cobrança"); pode sacar o que já acumulou.
     const naoGanhaNovas = !podeReceber(role);
     // Data da próxima liberação (sexta 12:00 Bahia) para exibir na tela do profissional.
     return json({ saldo, extrato, proxima_liberacao: proximaLiberacao().toISOString(),
       nao_ganha_novas: naoGanhaNovas, pj_pendente: pjPendente,
+      pj_revalidar: ehParceiroCliente && !!perfil.pj_revalidacao_pendente,
+      pj_revalidacao_motivo: perfil.pj_revalidacao_motivo || null,
       saque_habilitado: faltando.length === 0 && !pjPendente, faltando });
   }
 
@@ -200,7 +197,7 @@ export default async function handler(req) {
     }
 
     // ── Parceiro-cliente: fluxo B2B com validação da PJ (anti-interposição) ──
-    const perfil = (await db(`perfis?id=eq.${user.id}&select=nome,cpf,cpf_enc,cnpj,razao_social,pj_chave_pix,pj_validada_em,identidade_validada`)).data?.[0] || {};
+    const perfil = (await db(`perfis?id=eq.${user.id}&select=nome,cpf,cpf_enc,cnpj,razao_social,pj_chave_pix,pj_validada_em,identidade_validada,pj_revalidacao_pendente,pj_revalidacao_motivo`)).data?.[0] || {};
 
     // KYC obrigatório (selfie + documento) antes de qualquer saque de parceiro.
     if (!perfil.identidade_validada) {
@@ -213,19 +210,34 @@ export default async function handler(req) {
     if (!perfil.pj_chave_pix || !String(perfil.pj_chave_pix).trim()) faltaPJ.push('PIX da empresa');
     if (faltaPJ.length) return json({ error: `Cadastre a empresa para sacar. Falta: ${faltaPJ.join(', ')}.`, faltando: faltaPJ, pj_incompleta: true }, 422);
 
-    // 1º saque pode liberar pela AUTOMAÇÃO (CPF do parceiro no quadro societário/Receita, grátis);
-    // do 2º saque em diante, SEMPRE validação MANUAL (analista/dono).
-    const primeiroSaque = (await countSaquesAceitos(user.id)) === 0;
-    let autoOk = !!perfil.pj_validada_em;
-    if (primeiroSaque && !autoOk) {
-      try {
-        const cpf = await cpfDoRegistro(perfil);
-        const v = await verificarSocioQSA({ cnpj: perfil.cnpj, cpf, nome: perfil.nome });
-        if (v.matched) { await rpc('registrar_pj_validacao_auto', { p_user_id: user.id, p_snapshot: v.snapshot }); autoOk = true; }
-      } catch { autoOk = false; } // fail-closed → conferência manual
+    // REVALIDAÇÃO pendente: a reconferência periódica (cron mensal) detectou divergência no
+    // quadro societário/CNPJ. Segura o repasse ('aguardando_pj') e manda o parceiro atualizar
+    // os dados do CNPJ no Perfil — o "popup" volta a aparecer lá.
+    if (perfil.pj_revalidacao_pendente) {
+      const r = await rpc('solicitar_saque_pj_pendente', { p_user_id: user.id, p_valor: valor });
+      if (!r.ok) return json({ error: 'Erro ao solicitar saque', detail: r.data }, 500);
+      if (!r.data?.ok) return json({ error: r.data?.error || 'Não foi possível solicitar o saque', faltando: r.data?.faltando, kyc_pendente: r.data?.kyc_pendente }, 400);
+      await abrirChamadoSaquePJ(user, perfil, valor, `Saque retido — revalidação da PJ pendente (${perfil.pj_revalidacao_motivo || 'divergência no quadro societário'}); parceiro deve atualizar os dados do CNPJ`);
+      return json({ ok: true, em_validacao: true, pj_revalidar: true, motivo: perfil.pj_revalidacao_motivo || null, saldo_restante: r.data.saldo_restante }, 201);
     }
 
-    if (primeiroSaque && autoOk) {
+    // Empresa JÁ validada e sem pendência de revalidação → saca direto, sem revalidar a cada saque.
+    if (perfil.pj_validada_em) {
+      const r = await rpc('solicitar_saque_ledger', { p_user_id: user.id, p_valor: valor });
+      if (!r.ok || !r.data?.ok) return json({ error: r.data?.error || 'Não foi possível solicitar o saque', detail: r.data }, 400);
+      return json({ ok: true, saldo_restante: r.data.saldo_restante }, 201);
+    }
+
+    // 1ª validação do cadastro: tenta a AUTOMAÇÃO (CPF do parceiro no quadro societário/QSA da
+    // Receita, grátis). Match → valida e libera; sem match → conferência manual (analista/dono).
+    let autoOk = false;
+    try {
+      const cpf = await cpfDoRegistro(perfil);
+      const v = await verificarSocioQSA({ cnpj: perfil.cnpj, cpf, nome: perfil.nome });
+      if (v.matched) { await rpc('registrar_pj_validacao_auto', { p_user_id: user.id, p_snapshot: v.snapshot }); autoOk = true; }
+    } catch { autoOk = false; } // fail-closed → conferência manual
+
+    if (autoOk) {
       const r = await rpc('solicitar_saque_ledger', { p_user_id: user.id, p_valor: valor });
       if (!r.ok || !r.data?.ok) return json({ error: r.data?.error || 'Não foi possível solicitar o saque', detail: r.data }, 400);
       await abrirChamadoSaquePJ(user, perfil, valor, 'Saque de parceiro liberado pela automação (CPF confere no quadro societário) — supervisão');
@@ -236,9 +248,7 @@ export default async function handler(req) {
     const r = await rpc('solicitar_saque_pj_pendente', { p_user_id: user.id, p_valor: valor });
     if (!r.ok) return json({ error: 'Erro ao solicitar saque', detail: r.data }, 500);
     if (!r.data?.ok) return json({ error: r.data?.error || 'Não foi possível solicitar o saque', faltando: r.data?.faltando, kyc_pendente: r.data?.kyc_pendente }, 400);
-    await abrirChamadoSaquePJ(user, perfil, valor, primeiroSaque
-      ? 'Saque de parceiro — CPF não confirmado no quadro societário; conferir contrato social e liberar/reprovar'
-      : 'Saque de parceiro (2º+) — validação manual obrigatória; conferir documentação e liberar/reprovar');
+    await abrirChamadoSaquePJ(user, perfil, valor, 'Saque de parceiro — CPF não confirmado no quadro societário; conferir contrato social e liberar/reprovar');
     return json({ ok: true, em_validacao: true, saldo_restante: r.data.saldo_restante }, 201);
   }
 

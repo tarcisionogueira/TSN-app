@@ -442,7 +442,7 @@ export default function Perfil() {
   const [proximaLiberacao, setProximaLiberacao] = useState(null); // data da próxima sexta de pagamento
   const [faltandoSaque, setFaltandoSaque] = useState([]); // campos do cadastro que faltam p/ liberar saque
   const [pjPendente, setPjPendente] = useState(false);    // parceiro: PJ ainda não validada → saque bloqueado
-  const [pj, setPj] = useState({ cnpj: '', razao_social: '', pj_chave_pix: '', pj_validada_em: null, pj_validada_via: null, identidade_validada: false });
+  const [pj, setPj] = useState({ cnpj: '', razao_social: '', pj_chave_pix: '', pj_validada_em: null, pj_validada_via: null, identidade_validada: false, pj_revalidacao_pendente: false, pj_revalidacao_motivo: null });
   const [pjMsg, setPjMsg] = useState(null);
   const [savingPj, setSavingPj] = useState(false);
   const [verificandoPj, setVerificandoPj] = useState(false);
@@ -478,7 +478,7 @@ export default function Perfil() {
   const carregarPJ = async () => {
     try {
       const { data } = await supabase.from('perfis')
-        .select('cnpj,razao_social,pj_chave_pix,pj_validada_em,pj_validada_via,identidade_validada')
+        .select('cnpj,razao_social,pj_chave_pix,pj_validada_em,pj_validada_via,identidade_validada,pj_revalidacao_pendente,pj_revalidacao_motivo')
         .eq('id', user.id).maybeSingle();
       if (data) setPj((p) => ({ ...p, ...data }));
     } catch { /* ignora */ }
@@ -1068,7 +1068,11 @@ export default function Perfil() {
             {ehParceiro && (
               <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
                 <div style={{ fontSize: 12, fontWeight: 800, color: '#334155', marginBottom: 8 }}>Empresa (PJ) e verificação — necessário para sacar</div>
-                {pj.pj_validada_em ? (
+                {pj.pj_revalidacao_pendente ? (
+                  <div style={{ fontSize: 11.5, fontWeight: 700, color: '#b45309', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '8px 10px', marginBottom: 8 }}>
+                    ⚠️ Revalidação necessária — {pj.pj_revalidacao_motivo || 'os dados da sua empresa divergiram na reconferência periódica'}. Atualize o CNPJ/razão social abaixo e clique em <strong>“Verificar automaticamente (Receita)”</strong> para liberar novos repasses. O saldo fica retido até lá.
+                  </div>
+                ) : pj.pj_validada_em ? (
                   <div style={{ fontSize: 11.5, fontWeight: 700, color: '#16a34a', marginBottom: 8 }}>✓ Empresa validada ({pj.pj_validada_via === 'auto_qsa' ? 'automática' : 'manual'}).</div>
                 ) : pjPendente ? (
                   <div style={{ fontSize: 11.5, fontWeight: 700, color: '#b45309', marginBottom: 8 }}>⏳ Empresa ainda não validada — o saldo fica retido até a validação.</div>

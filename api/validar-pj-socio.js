@@ -39,7 +39,7 @@ export default async function handler(req) {
 
   let body = {}; try { body = await req.json(); } catch { body = {}; }
 
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/perfis?id=eq.${user.id}&select=nome,cpf,cpf_enc,cnpj,razao_social,pj_validada_em,role`, {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/perfis?id=eq.${user.id}&select=nome,cpf,cpf_enc,cnpj,razao_social,pj_validada_em,pj_revalidacao_pendente,role`, {
     headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` },
   });
   const perfil = (await res.json())?.[0];
@@ -53,7 +53,9 @@ export default async function handler(req) {
       socios: (r.socios || []).map((s) => ({ nome: s.nome, cpf_masc: s.cpf_masc })) });
   }
 
-  if (perfil.pj_validada_em) return json({ ok: true, matched: true, ja_validada: true });
+  // Já validada e SEM pendência de revalidação → nada a fazer. Se houver revalidação pendente
+  // (reconferência periódica divergiu), reprocessa a consulta para tentar limpar a pendência.
+  if (perfil.pj_validada_em && !perfil.pj_revalidacao_pendente) return json({ ok: true, matched: true, ja_validada: true });
   if (!perfil.cnpj || !String(perfil.cnpj).trim()) return json({ ok: false, error: 'Cadastre o CNPJ da empresa primeiro.' }, 400);
 
   const cpf = await cpfDoRegistro(perfil);
