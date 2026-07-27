@@ -549,6 +549,29 @@ ${atividade ? `<h2>Atividade recente</h2><table><thead><tr><th>Data</th><th>Even
             )}
           </div>
 
+          {/* Navegação e cliques (clickstream) — o que o usuário fez no site; diagnóstico de falhas */}
+          <div style={card}>
+            <div style={{ ...label, marginBottom: 8 }}>Navegação e cliques ({(dados.navegacao || []).length}) — diagnóstico (últimos 30 dias)</div>
+            {(dados.navegacao || []).length === 0 ? <div style={{ fontSize: 12, color: '#94a3b8' }}>Sem navegação registrada ainda.</div> : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 5, maxHeight: 320, overflowY: 'auto' }}>
+                {dados.navegacao.map((n, i) => {
+                  const meta = { pageview: { rot: 'Tela', cor: '#64748b' }, click: { rot: 'Clique', cor: '#0D63DB' }, api_erro: { rot: 'Falha API', cor: '#dc2626' } }[n.tipo] || { rot: n.tipo, cor: '#64748b' };
+                  return (
+                    <div key={i} style={{ fontSize: 12, color: '#334155', display: 'flex', justifyContent: 'space-between', gap: 8, borderTop: i ? '1px solid #f1f5f9' : 'none', paddingTop: i ? 5 : 0 }}>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
+                        <span style={{ color: meta.cor, fontWeight: 700 }}>{meta.rot}</span>
+                        {n.alvo ? <span> · {n.alvo}</span> : ''}
+                        {n.rota ? <span style={{ color: '#94a3b8' }}> · {n.rota}</span> : ''}
+                        {n.detalhe ? <span style={{ color: '#b45309' }}> · {n.detalhe}</span> : ''}
+                      </span>
+                      <span style={{ flexShrink: 0, color: '#94a3b8' }}>{dataHoraBR(n.criado_em)}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
           {/* Buscas recentes (intenções) */}
           <div style={card}>
             <div style={{ ...label, marginBottom: 8 }}>Buscas recentes ({(dados.buscas || []).length})</div>
@@ -655,7 +678,14 @@ ${atividade ? `<h2>Atividade recente</h2><table><thead><tr><th>Data</th><th>Even
                       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.assunto || '(sem assunto)'}</span>
                       {e.status === 'falha' && <span style={{ fontSize: 9.5, fontWeight: 700, padding: '2px 6px', borderRadius: 20, background: '#fee2e2', color: '#b91c1c', flexShrink: 0 }}>falhou</span>}
                     </span>
-                    <span style={{ flexShrink: 0, color: '#94a3b8' }}>{dataHoraBR(e.enviado_em)}</span>
+                    <span style={{ flexShrink: 0, display: 'flex', gap: 6, alignItems: 'center' }}>
+                      {e.aberto_em
+                        ? <span title={`Lido em ${dataHoraBR(e.aberto_em)}`} style={{ fontSize: 9.5, fontWeight: 700, padding: '2px 6px', borderRadius: 20, background: '#f0fdf4', color: '#15803d' }}>✓ lido</span>
+                        : e.entregue_em
+                          ? <span title={`Entregue em ${dataHoraBR(e.entregue_em)}`} style={{ fontSize: 9.5, fontWeight: 700, padding: '2px 6px', borderRadius: 20, background: '#eff6ff', color: '#0D63DB' }}>entregue</span>
+                          : null}
+                      <span style={{ color: '#94a3b8' }}>{dataHoraBR(e.enviado_em)}</span>
+                    </span>
                   </div>
                 ))}
               </div>

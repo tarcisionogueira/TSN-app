@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { registrarEvento } from './tracker.js';
 
 /**
  * Wrapper para fetch das APIs internas.
@@ -17,5 +18,10 @@ export async function apiCall(path, options = {}) {
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  return fetch(path, { ...options, headers });
+  const res = await fetch(path, { ...options, headers });
+  // Diagnóstico (Cliente 360): registra falhas de API sem alterar o retorno.
+  if (!res.ok) {
+    try { registrarEvento('api_erro', { alvo: String(path).split('?')[0].slice(0, 120), detalhe: `HTTP ${res.status}` }); } catch { /* ignora */ }
+  }
+  return res;
 }

@@ -7,6 +7,7 @@ import 'leaflet.markercluster/dist/MarkerCluster.Default.css'
 import './index.css'
 import { registrarServiceWorker } from './utils/push.js'
 import { reportarErroCliente, instalarCapturaErros, ehErroDeChunk, recarregarPorChunkStale, recarregarComGuarda, houveChunkRecente } from './utils/reportarErro.js'
+import { instalarTracker } from './utils/tracker.js'
 
 // Registra o service worker em produção
 if (import.meta.env.PROD) {
@@ -17,6 +18,9 @@ if (import.meta.env.PROD) {
 // ErrorBoundary de render não pega — para a saúde do sistema enxergar QUALQUER quebra
 // que atinja o usuário, não só a de RLS.
 instalarCapturaErros();
+
+// Rastreamento de atividade (navegação + cliques) para o Cliente 360 — diagnóstico de falhas.
+instalarTracker();
 
 class RootErrorBoundary extends React.Component {
   constructor(props) { super(props); this.state = { error: null, chunk: false }; }

@@ -85,7 +85,7 @@ async function handler(req) {
         if (!r.error && r.data?.ok) {
           revertidos++;
           if (email) { try { await enviarEmail({ from: FROM, to: email, subject: 'Saldo revertido por abandono — BidPro Brasil',
-            html: `<p>Olá!</p><p>Seu saldo de <strong>${fmtBRL(saldo)}</strong> foi revertido por abandono: a divergência cadastral da sua empresa não foi resolvida em 90 dias, mesmo após 3 avisos, conforme os Termos de Uso (Seção 8).</p><p>Se foi engano, fale com o suporte que reavaliamos.</p><p>BidPro Brasil</p>` }); } catch { /* não bloqueia */ } }
+            html: `<p>Olá!</p><p>Seu saldo de <strong>${fmtBRL(saldo)}</strong> foi revertido por abandono: a divergência cadastral da sua empresa não foi resolvida em 90 dias, mesmo após 3 avisos, conforme os Termos de Uso (Seção 8).</p><p>Se foi engano, fale com o suporte que reavaliamos.</p><p>BidPro Brasil</p>`, meta: { tipo: 'abandono_reversao', userId: p.id } }); } catch { /* não bloqueia */ } }
         }
         continue;
       }
@@ -101,7 +101,7 @@ async function handler(req) {
       avisos++;
       if (email) {
         const e = emailAviso(nivel, saldo, restam);
-        try { await enviarEmail({ from: FROM, to: email, subject: e.subject, html: e.html }); } catch { /* não bloqueia */ }
+        try { await enviarEmail({ from: FROM, to: email, subject: e.subject, html: e.html, meta: { tipo: `abandono_aviso_${nivel}`, userId: p.id } }); } catch { /* não bloqueia */ }
       }
     }
   } catch (e) {
