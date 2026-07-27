@@ -15,8 +15,10 @@
  *
  * Escopo: documental e laudo (vícios regeneráveis por regen_motivo) + MERCADO que falhou por
  * TIMEOUT (transitório) — este é re-tentado UMA vez com orçamento fresco (self-heal), para o
- * cliente não ficar com um 'erro' preso sem reagir. Os vícios de valor do mercado (avaliação/
- * mínimo ausentes) seguem se auto-corrigindo no garantirValores a cada geração.
+ * cliente não ficar com um 'erro' preso sem reagir + MERCADO que CONCLUIU com PARECER EM BRANCO
+ * e mercado NÃO-vazio (o valorMercado veio, mas a redação do parecer falhou silenciosamente —
+ * bug do erro de API engolido; o cliente vê "relatório" sem o parecer). Os vícios de valor do
+ * mercado (avaliação/mínimo ausentes) seguem se auto-corrigindo no garantirValores a cada geração.
  * Autorizado por CRON_SECRET (Bearer). Registrado no vercel.json.
  */
 export const config = { runtime: 'nodejs', maxDuration: 30 };
@@ -154,6 +156,45 @@ export default async function handler(req, res) {
     }
   } catch { /* self-heal best-effort: nunca derruba o cron */ }
   out.analises_mercado_vazio = mktVazio;
+
+  // SELF-HEAL do PARECER VAZIO: relatório que CONCLUIU com valorMercado (mercado NÃO-vazio) mas
+  // com o PARECER em branco — assinatura do bug do erro de API silenciado na REDAÇÃO do parecer
+  // (a busca de mercado deu certo; a chamada de texto falhou sem lançar → parecer ''). O cliente
+  // fica com um "relatório" concluído sem o parecer. O branch de mercadoVazio NÃO pega (aqui
+  // mercadoVazio != true). Regenera do snapshot gravado (inputs.mercadoInputs), SEM cobrar cota
+  // (isCron). SEM janela de idade — o predicado se auto-limpa: ao preencher o parecer o relatório
+  // sai do filtro; se não der para regerar (sem inputs) bate o teto e para (economia).
+  let mktParecer = 0;
+  const MAX_PARECER = 2;
+  try {
+    const q = `analises_mercado?status=eq.concluida&result->>parecer=eq.&regen_tentativas=lt.${MAX_PARECER}`
+      + `&order=updated_at.asc&limit=${LOTE}&select=user_id,imovel_id,titulo,cidade,estado,imovel,inputs,result,regen_tentativas`;
+    const rows = await (await sb(q)).json();
+    if (Array.isArray(rows)) {
+      await Promise.allSettled(rows.map(async (r) => {
+        if (!r?.inputs?.mercadoInputs) return;          // sem inputs originais não dá p/ regerar
+        if (r?.result?.mercadoVazio === true) return;   // mercado genuinamente vazio: outro branch
+        if ((r?.result?.parecer || '').trim().length >= 200) return; // guarda: só parecer em branco
+        try {
+          await sb(`analises_mercado?user_id=eq.${encodeURIComponent(String(r.user_id))}&imovel_id=eq.${encodeURIComponent(String(r.imovel_id))}`, {
+            method: 'PATCH', headers: { Prefer: 'return=minimal' },
+            body: JSON.stringify({ regen_tentativas: (r.regen_tentativas || 0) + 1, regen_em: new Date().toISOString() }),
+          });
+        } catch { /* segue mesmo assim */ }
+        await fetch(`${BASE}/api/gerar-analise`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-cron-secret': CRON_SECRET },
+          body: JSON.stringify({
+            imovelId: r.imovel_id, paraUserId: r.user_id, titulo: r.titulo, cidade: r.cidade, estado: r.estado,
+            imovel: r.imovel || null, mercadoInputs: r.inputs.mercadoInputs, parecerInputs: r.inputs.parecerInputs,
+          }),
+          signal: AbortSignal.timeout(9000),
+        }).catch(() => {});
+        mktParecer++;
+      }));
+    }
+  } catch { /* self-heal best-effort: nunca derruba o cron */ }
+  out.analises_mercado_parecer_vazio = mktParecer;
 
   res.status(200).json({ ok: true, regenerados: out });
 }
