@@ -20,15 +20,20 @@
 
 ## Requisitos para ser defensável (implementados no sistema)
 
-1. **Cláusula expressa nos Termos** aceita pelo parceiro (texto sugerido abaixo). ⬅️ pendente
-2. **Aviso prévio** antes de qualquer perda — o cron avisa aos **60 dias** e só reverte a
-   partir de **90 dias E ≥15 dias após o aviso** (`api/saldo-abandono-cron.js`).
-3. **Gatilho objetivo e evitável** — basta o parceiro **sacar** ou **atualizar os dados** para
-   zerar o relógio.
+1. **Cláusula expressa nos Termos** aceita pelo parceiro. ✅ **Feito** — Termos de Uso, Seção
+   **8.1** (`src/pages/Termos.jsx`), "Crédito condicionado e caducidade por inatividade".
+2. **Aviso prévio (3 avisos) antes de qualquer perda** — o gatilho é a **divergência cadastral**
+   (revalidação pendente). O cron (`api/saldo-abandono-cron.js`) envia: **Aviso 1 imediato** (1º
+   ciclo após a identificação), **Aviso 2 aos ~30 dias**, **Aviso 3 aos ~60 dias**, cobrando a
+   atualização e lembrando a cláusula. Reversão só aos **90 dias** com os 3 avisos enviados.
+3. **Gatilho objetivo e evitável** — basta o parceiro **atualizar os dados / revalidar** ou
+   **sacar** para zerar o relógio (`marcar_revalidacao_pj` limpa a cadência).
 4. **Reversibilidade** — a reversão é um lançamento (`caducidade_abandono`) que o admin pode
    estornar com um crédito compensatório (`reverter_saldo_abandono`).
-5. **Trilha de auditoria** — `abandono_avisado_em`, `abandono_em`, lançamento com motivo/data.
-6. **Trava de segurança** — execução gated por `ABANDONO_ATIVO=true`; desligado por padrão.
+5. **Trilha de auditoria** — `abandono_inicio_em`, `abandono_avisos`, `abandono_avisado_em`,
+   `abandono_em`, e o lançamento com motivo/data.
+6. **Trava de segurança** — os **avisos rodam sempre** (reforço do resguardo). A **reversão**
+   (tirar o dinheiro) é gated por `ABANDONO_ATIVO=true`; desligada por padrão.
 
 ## Cláusula sugerida para os Termos (revisar com advogado)
 
