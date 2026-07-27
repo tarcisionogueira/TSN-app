@@ -7,7 +7,7 @@
  *   MP_WEBHOOK_SECRET     — secret configurado no painel MP (X-Signature header)
  */
 import crypto from 'crypto';
-import { processarConfirmado, processarVencido, processarRecusado, processarChargeback, eventoJaProcessado, ativarPlanoDireto, suspenderPlanoDireto } from './_webhook-core.js';
+import { processarConfirmado, processarVencido, processarRecusado, processarChargeback, processarReembolso, eventoJaProcessado, removerEventoProcessado, ativarPlanoDireto, suspenderPlanoDireto } from './_webhook-core.js';
 import { enviarEmail } from './_email.js';
 
 const MP_BASE = 'https://api.mercadopago.com';
@@ -256,6 +256,12 @@ export default async function handler(req, res) {
     if (status === 'approved') {
       if (ehProdutoMp) {
         result = await rpcProduto('confirmar_compra_produto', { p_compra_id: extRefMp, p_gateway: 'mercadopago', p_gateway_payment_id: String(pagamento.id) });
+        if (result && result.ok === false) {
+          // Efeito falhou → desmarca a idempotência e devolve 5xx p/ o MP reenviar (senão a
+          // compra ficaria presa em 'pendente' e a comissão nunca creditaria — sem reconciliação).
+          await removerEventoProcessado({ gateway: 'mercadopago', gatewayPaymentId: pagamento.id, evento: status });
+          return res.status(502).json({ error: 'confirmar_compra_produto_falhou', detalhe: result });
+        }
         return res.status(200).json({ ok: true, produto: result });
       }
       result = await processarConfirmado(contexto);
@@ -264,6 +270,10 @@ export default async function handler(req, res) {
     } else if (status === 'charged_back') {
       if (ehProdutoMp) {
         result = await rpcProduto('estornar_compra_produto', { p_gateway_payment_id: String(pagamento.id) });
+        if (result && result.ok === false) {
+          await removerEventoProcessado({ gateway: 'mercadopago', gatewayPaymentId: pagamento.id, evento: status });
+          return res.status(502).json({ error: 'estornar_compra_produto_falhou', detalhe: result });
+        }
         return res.status(200).json({ ok: true, produto_estorno: result });
       }
       result = await processarChargeback({
@@ -272,6 +282,20 @@ export default async function handler(req, res) {
         motivo: pagamento.status_detail || 'charged_back',
         raw: { id: pagamento.id, status, status_detail: pagamento.status_detail },
       });
+    } else if (status === 'refunded' || status === 'partially_refunded') {
+      // Reembolso: estorna a comissão de rede e (no total) suspende o acesso. Antes caía no
+      // 'ignored' → a comissão ficava paga sobre dinheiro devolvido (perda dupla / fraude).
+      const parcial = status === 'partially_refunded';
+      if (ehProdutoMp) {
+        if (parcial) return res.status(200).json({ ok: true, ignorado: 'reembolso_parcial_produto' });
+        result = await rpcProduto('estornar_compra_produto', { p_gateway_payment_id: String(pagamento.id) });
+        if (result && result.ok === false) {
+          await removerEventoProcessado({ gateway: 'mercadopago', gatewayPaymentId: pagamento.id, evento: status });
+          return res.status(502).json({ error: 'estornar_compra_produto_falhou', detalhe: result });
+        }
+        return res.status(200).json({ ok: true, produto_estorno: result });
+      }
+      result = await processarReembolso({ ...contexto, suspender: !parcial });
     } else {
       // pending, in_process, authorized — aguardar próxima notificação
       return res.status(200).json({ ok: true, ignored: status });
@@ -279,6 +303,8 @@ export default async function handler(req, res) {
     return res.status(200).json(result);
   } catch (e) {
     console.error('[mp-webhook]', e.message);
+    // Efeito falhou após a marca de idempotência → desmarca p/ o MP reenviar.
+    await removerEventoProcessado({ gateway: 'mercadopago', gatewayPaymentId: pagamento.id, evento: status });
     return res.status(500).json({ error: 'Erro interno' });
   }
 }

@@ -112,9 +112,15 @@ export function AuthProvider({ children }) {
       setCadastroIncompleto(p.cadastroIncompleto ?? false); setNome(p.nome || '');
       setPlanoLegado(p.planoLegado ?? false);
     };
+    // Link de recuperação de senha abre uma sessão de RECOVERY. Não aplicar a expiração de
+    // 24h nesse contexto — senão o signOut derrubava a sessão de recovery e o RedefinirSenha
+    // mostrava "link inválido/expirado" (atingindo justamente quem não acessava há tempos).
+    const ehRecovery = typeof window !== 'undefined' && (
+      /type=recovery/.test(window.location.href) || /redefinir-senha|recuperar|reset/i.test(window.location.hash)
+    );
     supabase.auth.getSession().then(({ data }) => {
       const u = data.session?.user ?? null;
-      if (u && isSessionExpired()) {
+      if (u && isSessionExpired() && !ehRecovery) {
         supabase.auth.signOut();
         localStorage.removeItem(LAST_ACTIVITY_KEY);
         localStorage.removeItem(PERFIL_CACHE_KEY);
@@ -140,6 +146,9 @@ export function AuthProvider({ children }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       const u = session?.user ?? null;
       setUser(u);
+      // Recuperação de senha conta como atividade → não deixa a expiração de 24h derrubar
+      // a sessão de recovery recém-criada pelo link do e-mail.
+      if (event === 'PASSWORD_RECOVERY') updateActivity();
       // Limpeza do modo suporte no logout (não usa supabase → pode ser síncrono).
       if (event === 'SIGNED_OUT') {
         sessionStorage.removeItem(IMPERSONATE_KEY);

@@ -43,6 +43,20 @@ export async function eventoJaProcessado({ gateway, gatewayPaymentId, evento }) 
   return false;
 }
 
+// Remove a marca de idempotência (gateway, payment_id, evento). Usar quando o EFEITO do
+// evento FALHOU depois da marca ter sido gravada: sem isso, o reenvio do gateway seria
+// deduplicado e o efeito (ativação/estorno) nunca completaria. Best-effort.
+export async function removerEventoProcessado({ gateway, gatewayPaymentId, evento }) {
+  if (!gatewayPaymentId || !evento) return;
+  try {
+    await supabase.from('webhook_eventos_processados')
+      .delete()
+      .eq('gateway', gateway)
+      .eq('gateway_payment_id', String(gatewayPaymentId))
+      .eq('evento', evento);
+  } catch (e) { console.error(`[${gateway}] remover idempotência:`, e?.message || e); }
+}
+
 // ── Mapeamento valor → plano ──────────────────────────────────────────────────
 // Atualizar aqui quando mudar preços. Tolerância de ±1% ou ±R$1 (o que for maior).
 function dentroFaixa(valor, alvo, tol = 1) {
@@ -394,6 +408,25 @@ export async function processarChargeback({ valor, descricao, email, gatewayCust
   ).catch(() => {});
 
   return { ok: true, chargeback: true, defesa: aceite ? 'dossie_pronto' : 'sem_evidencia' };
+}
+
+// ── REEMBOLSO (refund) ────────────────────────────────────────────────────────
+// Diferente de chargeback (que é DISPUTA e abre dossiê de defesa): reembolso é o estorno
+// voluntário/administrativo. O dinheiro voltou → a comissão de rede daquele pagamento não é
+// mais devida (senão: indicar → comissão vira 'disponivel' → reembolso → sacar = fraude).
+// `suspender` (padrão true no reembolso TOTAL) rebaixa o acesso; no PARCIAL fica false
+// (o cliente pagou a maior parte) — a reconciliação re-ativa se a assinatura seguir ativa.
+export async function processarReembolso({ valor, email, gatewayCustomerId, gatewayPaymentId, gateway, suspender = true }) {
+  if (suspender) {
+    try { await processarVencido({ gatewayCustomerId, email, gateway }); } catch (_) { /* não bloqueia o estorno */ }
+  }
+  let estorno = null;
+  try { estorno = await estornarComissao({ gatewayPaymentId, gateway, motivo: 'reembolso' }); } catch (e) { estorno = { erro: e?.message || String(e) }; }
+  alertarErro(
+    `↩️ Reembolso processado (${gateway}) — ${email || gatewayPaymentId} — R$ ${Number(valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}. Comissão de rede estornada${suspender ? '; acesso suspenso' : ' (reembolso parcial — acesso mantido)'}.`,
+    { gatewayPaymentId },
+  ).catch(() => {});
+  return { ok: true, reembolso: true, suspenso: suspender, estorno };
 }
 
 async function setExpiracaoDocumentos(userId) {

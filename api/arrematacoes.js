@@ -65,7 +65,15 @@ async function distribuirHonorarios(arr) {
     }));
 
   if (lancamentos.length) {
-    await dbFetch('saldo_lancamentos', { method: 'POST', body: JSON.stringify(lancamentos), headers: { Prefer: 'return=minimal' } });
+    const ins = await dbFetch('saldo_lancamentos', { method: 'POST', body: JSON.stringify(lancamentos), headers: { Prefer: 'return=minimal' } });
+    // 409/23505 = lançamentos já existem (índice único parcial uq_saldo_credito_origem) →
+    // idempotente, conta como sucesso. Qualquer OUTRA falha NÃO pode marcar 'distribuido':
+    // a guarda de idempotência (topo) impediria o reprocesso e a equipe nunca receberia o
+    // honorário. Deixa pendente (status intacto) para o próximo PATCH de finalização retentar.
+    const jaCreditado = ins.status === 409 || (ins.data && typeof ins.data === 'object' && ins.data.code === '23505');
+    if (!ins.ok && !jaCreditado) {
+      return { erro: 'falha_ao_creditar', status: ins.status, distribuido: false };
+    }
   }
   const total = lancamentos.reduce((s, l) => s + l.valor, 0);
   await dbFetch(`arrematacoes?id=eq.${arr.id}`, {

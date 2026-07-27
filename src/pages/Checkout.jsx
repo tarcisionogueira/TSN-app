@@ -114,6 +114,7 @@ export default function Checkout() {
   const jaConfirmouRef = React.useRef(false);
   const assinandoRef = React.useRef(false); // trava anti-duplo-clique na assinatura
   const cancelouAnterioresRef = React.useRef(false); // idempotência do cancelamento de assinaturas anteriores
+  const iniciandoRef = React.useRef(false); // trava anti-duplo-clique no botão "Ir para pagamento"
 
   // Limpa o formulário inline ao trocar de plano (evita dados do plano anterior).
   useEffect(() => {
@@ -494,13 +495,22 @@ export default function Checkout() {
 
   const iniciarPagamento = async () => {
     if (!perfilFaturamentoOk) return;
-    try { await salvarDadosFaturamento(); } catch { /* não bloqueia o pagamento por falha ao gravar */ }
-    if (ehMudanca) return mudarPlano();
-    if (planoKey === 'assessorado') return setShowPagamento(true);
-    // Investidor Pro mensal (recorrente): checkout transparente inline (cartão
-    // coletado no BidPro). O anual (valor único) segue pelo fluxo de link.
-    if (planoKey === 'top2' && modalidade !== 'anual') return setShowPagamento(true);
-    return gerarLink();
+    // Trava anti-duplo-clique SÍNCRONA (ref): o handler faz awaits (salvar faturamento) ANTES
+    // de qualquer setLoading, então dois cliques rápidos passariam ambos e gerariam duas
+    // preferências/assinaturas no gateway. O ref bloqueia na hora (state async não bloquearia).
+    if (iniciandoRef.current) return;
+    iniciandoRef.current = true;
+    try {
+      try { await salvarDadosFaturamento(); } catch { /* não bloqueia o pagamento por falha ao gravar */ }
+      if (ehMudanca) return await mudarPlano();
+      if (planoKey === 'assessorado') return setShowPagamento(true);
+      // Investidor Pro mensal (recorrente): checkout transparente inline (cartão
+      // coletado no BidPro). O anual (valor único) segue pelo fluxo de link.
+      if (planoKey === 'top2' && modalidade !== 'anual') return setShowPagamento(true);
+      return await gerarLink();
+    } finally {
+      iniciandoRef.current = false;
+    }
   };
 
   // Mudança de plano: já assina um plano pago e escolheu outro plano recorrente

@@ -52,13 +52,19 @@ export default async function handler(req, res) {
 
   const subCache = new Map();     // subId → tem pagamento pago?
   const subCanceladas = new Set();
-  let vistos = 0, assinaturasCanceladas = 0, cobrancasRemovidas = 0, avulsasRemovidas = 0, ignoradasPagas = 0;
+  let vistos = 0, assinaturasCanceladas = 0, cobrancasRemovidas = 0, avulsasRemovidas = 0, ignoradasPagas = 0, indeterminados = 0;
   const erros = [];
 
+  // Retorna true (tem pago) / false (zero pagos confirmado) / null (consulta FALHOU).
+  // Fail-closed: só cachea um resultado REAL — nunca cachea (nem age sobre) uma consulta
+  // que falhou, para não cancelar pagante por instabilidade transitória do Asaas.
   const subTemPagamento = async (subId) => {
     if (subCache.has(subId)) return subCache.get(subId);
-    const d = await asaasGet(`/payments?subscription=${subId}&limit=100`);
-    const pago = (d?.data || []).some(p => STATUS_PAGO.has(p.status));
+    const r = await asaas(`/payments?subscription=${subId}&limit=100`);
+    if (!r.ok) return null;                       // consulta falhou → indeterminado
+    const d = await r.json().catch(() => null);
+    if (!d || !Array.isArray(d.data)) return null; // resposta inesperada → indeterminado
+    const pago = d.data.some(p => STATUS_PAGO.has(p.status));
     subCache.set(subId, pago);
     return pago;
   };
@@ -77,8 +83,12 @@ export default async function handler(req, res) {
 
           if (p.subscription) {
             // Cliente ativo (já pagou alguma cobrança dessa assinatura) → não mexe:
-            // a cobrança pendente é a mensalidade legítima, não um abandono.
-            if (await subTemPagamento(p.subscription)) { ignoradasPagas++; continue; }
+            // a cobrança pendente é a mensalidade legítima, não um abandono. FAIL-CLOSED:
+            // se a consulta ao Asaas falhou (null), não dá para confirmar abandono → pula
+            // e reavalia no próximo ciclo (nunca cancela pagante por instabilidade da API).
+            const temPg = await subTemPagamento(p.subscription);
+            if (temPg === null) { indeterminados++; continue; }
+            if (temPg) { ignoradasPagas++; continue; }
             // Abandono: cancela a assinatura inteira (para de gerar cobranças).
             if (!subCanceladas.has(p.subscription)) {
               const dr = await asaas(`/subscriptions/${p.subscription}`, { method: 'DELETE' });
@@ -107,6 +117,6 @@ export default async function handler(req, res) {
 
   res.status(200).json({
     ok: true, vistos, assinaturasCanceladas, cobrancasRemovidas, avulsasRemovidas,
-    ignoradasPagas, erros: erros.slice(0, 20),
+    ignoradasPagas, indeterminados, erros: erros.slice(0, 20),
   });
 }

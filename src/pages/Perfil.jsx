@@ -282,31 +282,32 @@ export default function Perfil() {
     if (!file) return;
     setSelfieLoading(true); setSelfieMsg(null);
     try {
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        const imagem = e.target.result;
-        const { data: { session } } = await supabase.auth.getSession();
-        const res = await fetch('/api/validar-selfie', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
-          body: JSON.stringify({ imagem }),
-        });
-        const json = await res.json();
-        // A persistência de identidade_validada/pendente é feita NO SERVIDOR (service
-        // key) por /api/validar-selfie — o cliente não escreve mais esses campos (o
-        // trigger de perfis os bloqueia). Aqui só reflete o resultado retornado.
-        if (json.ok) {
-          setIdentValidada(true); setIdentPendente(false);
-          setSelfieMsg({ ok: true, texto: 'Identidade verificada com sucesso!' });
-        } else {
-          setIdentPendente(true);
-          setSelfieMsg({ ok: false, texto: json.mensagem || 'Foto não aprovada. Nossa equipe irá revisar.' });
-        }
-        setSelfieLoading(false);
-      };
-      reader.readAsDataURL(file);
+      // A leitura do arquivo é AGUARDADA (dataUrlDe) em vez de ficar num reader.onload
+      // não-esperado — antes, uma rejeição dentro do onload (ex.: res.json() sobre um 500
+      // em HTML) era não-tratada e o setSelfieLoading(false) nunca rodava → botão travado.
+      const imagem = await dataUrlDe(file);
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/api/validar-selfie', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ imagem }),
+      });
+      const json = await res.json().catch(() => ({}));
+      // A persistência de identidade_validada/pendente é feita NO SERVIDOR (service key)
+      // por /api/validar-selfie — o cliente só reflete o resultado.
+      if (res.ok && json.ok) {
+        setIdentValidada(true); setIdentPendente(false);
+        setSelfieMsg({ ok: true, texto: 'Identidade verificada com sucesso!' });
+      } else if (json.indisponivel) {
+        // Serviço fora no momento: NÃO marca pendente (o servidor não persistiu nada).
+        setSelfieMsg({ ok: false, texto: 'Verificação temporariamente indisponível. Tente novamente em instantes.' });
+      } else {
+        setIdentPendente(true);
+        setSelfieMsg({ ok: false, texto: json.mensagem || 'Foto não aprovada. Nossa equipe irá revisar.' });
+      }
     } catch {
       setSelfieMsg({ ok: false, texto: 'Erro ao enviar a foto. Tente novamente.' });
+    } finally {
       setSelfieLoading(false);
     }
   };
@@ -519,7 +520,10 @@ export default function Perfil() {
     try {
       const r = await apiCall('/api/validar-pj-socio', { method: 'POST', body: JSON.stringify({}) });
       const d = await r.json().catch(() => ({}));
-      if (d.matched) { setPjMsg({ tipo: 'sucesso', texto: '✓ Empresa validada — você consta no quadro societário.' }); carregarPJ(); carregarSaldo(); }
+      // Sem checar r.ok, um 400 ("Cadastre o CNPJ da empresa primeiro." em d.error) caía no
+      // fallback de "conferência manual" — orientação errada. Mostra a mensagem real.
+      if (!r.ok) { setPjMsg({ tipo: 'erro', texto: d.error || d.motivo || 'Não foi possível verificar agora. Tente novamente.' }); }
+      else if (d.matched) { setPjMsg({ tipo: 'sucesso', texto: '✓ Empresa validada — você consta no quadro societário.' }); carregarPJ(); carregarSaldo(); }
       else setPjMsg({ tipo: 'aviso', texto: d.motivo || 'Não foi possível confirmar automaticamente. Anexe o contrato social — a equipe fará a conferência manual no seu 1º saque.' });
     } catch { setPjMsg({ tipo: 'erro', texto: 'Erro na verificação. Tente novamente.' }); }
     setVerificandoPj(false);
@@ -533,7 +537,10 @@ export default function Perfil() {
     const { error: upErr } = await supabase.storage.from('documentos').upload(path, file, { upsert: false });
     if (upErr) throw upErr;
     const { data: signed } = await supabase.storage.from('documentos').createSignedUrl(path, 60 * 60 * 24 * 3650);
-    await supabase.from('usuario_docs').insert({ user_id: user.id, tipo, nome: file.name || `${prefixo}.${ext}`, url: signed?.signedUrl || path, tamanho_kb: Math.round((file.size || 0) / 1024) });
+    // Checa o insert: sem isso, uma falha (ex.: RLS) mostrava "documento recebido" mas o
+    // servidor nunca via o doc → o KYC nunca concluía (selfie retornava falta_documento).
+    const { error: insErr } = await supabase.from('usuario_docs').insert({ user_id: user.id, tipo, nome: file.name || `${prefixo}.${ext}`, url: signed?.signedUrl || path, tamanho_kb: Math.round((file.size || 0) / 1024) });
+    if (insErr) throw insErr;
   }
 
   // Upload do contrato social (evidência de sócio) → bucket privado 'documentos' + usuario_docs.

@@ -173,7 +173,8 @@ function PagamentoPIX({ servico, onConfirmado, onVoltar }) {
       return;
     }
     try {
-      const data = await apiCall('/api/mp-verificar-pix', {
+      // apiCall devolve o Response CRU — é preciso checar res.ok e ler o JSON.
+      const res = await apiCall('/api/mp-verificar-pix', {
         method: 'POST',
         body: JSON.stringify({
           paymentId: paymentId || undefined,
@@ -181,6 +182,8 @@ function PagamentoPIX({ servico, onConfirmado, onVoltar }) {
           referencia: `tsn-${user?.id}-${servico.id}`,
         }),
       });
+      if (!res.ok) return; // falha transitória → tenta de novo no próximo ciclo do polling
+      const data = await res.json().catch(() => null);
       if (data?.confirmado) {
         clearInterval(pollingRef.current);
         setEtapa('confirmado');
@@ -405,7 +408,10 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false }
       const pmData = await pmRes.json();
       const metodoPagamentoId = pmData.results?.[0]?.id || 'visa';
 
-      const data = await apiCall('/api/mp-checkout', {
+      // apiCall devolve o Response CRU: checar res.ok e ler o JSON. Antes o código lia
+      // Response.status (o código HTTP) como se fosse o status do pagamento → nunca batia
+      // 'approved' e caía em "não aprovado" mesmo com o cartão já cobrado (cobrança dupla).
+      const res = await apiCall('/api/mp-checkout', {
         method: 'POST',
         body: JSON.stringify({
           valor: totalFinal,
@@ -415,6 +421,8 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false }
           dadosCartao: { token: token.id, parcelas, metodoPagamentoId },
         }),
       });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Não foi possível processar o pagamento. Tente novamente.');
 
       if (data?.status === 'approved' || data?.status === 'authorized') {
         onConfirmado(data.paymentId);
@@ -422,10 +430,12 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false }
       }
       if (data?.status === 'in_process' && data?.paymentId) {
         pollingRef.current = setInterval(async () => {
-          const check = await apiCall('/api/mp-verificar-pix', {
+          const checkRes = await apiCall('/api/mp-verificar-pix', {
             method: 'POST',
             body: JSON.stringify({ paymentId: data.paymentId }),
           });
+          if (!checkRes.ok) return;
+          const check = await checkRes.json().catch(() => null);
           if (check?.confirmado) { clearInterval(pollingRef.current); onConfirmado(data.paymentId); }
         }, 8000);
         setErro('Pagamento em análise. Aguarde...');

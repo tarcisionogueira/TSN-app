@@ -97,12 +97,21 @@ async function handler(req) {
       else if (jaAvisou < 3 && dias >= AVISO3_DIAS) nivel = 3;
       if (nivel === 0) continue;
 
+      // Só AVANÇA o contador quando o aviso REALMENTE foi enviado. Antes, o nível era gravado
+      // ANTES do envio e ignorando o resultado — uma falha de envio (ou parceiro sem e-mail)
+      // consumia o aviso sem o parceiro saber, e a reversão de saldo (que exige jaAvisou>=3)
+      // agia sobre avisos FANTASMA. Sem e-mail ou envio falho → não conta; reenvia no próximo
+      // ciclo. (enviarEmail devolve {ok:true} no sucesso e {ok:false} em falha.)
+      if (!email) continue;
+      const e = emailAviso(nivel, saldo, restam);
+      let enviado = false;
+      try {
+        const envio = await enviarEmail({ from: FROM, to: email, subject: e.subject, html: e.html, meta: { tipo: `abandono_aviso_${nivel}`, userId: p.id } });
+        enviado = envio?.ok === true;
+      } catch { enviado = false; }
+      if (!enviado) continue;
       await supabase.from('perfis').update({ abandono_avisos: nivel, abandono_avisado_em: new Date().toISOString() }).eq('id', p.id);
       avisos++;
-      if (email) {
-        const e = emailAviso(nivel, saldo, restam);
-        try { await enviarEmail({ from: FROM, to: email, subject: e.subject, html: e.html, meta: { tipo: `abandono_aviso_${nivel}`, userId: p.id } }); } catch { /* não bloqueia */ }
-      }
     }
   } catch (e) {
     return new Response(JSON.stringify({ error: e.message }), { status: 500 });

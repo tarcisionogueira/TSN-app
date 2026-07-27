@@ -58,6 +58,13 @@ export default function Login() {
   }
 
   const produtoParam = params.get('produto') || ''; // tipo:id ex: curso:abc123
+  // Destino da página do produto (ebook/curso) a partir de ?produto=tipo:id.
+  const destinoProduto = (pp) => {
+    const i = String(pp || '').indexOf(':');
+    if (i <= 0) return '';
+    const t = pp.slice(0, i), id = pp.slice(i + 1);
+    return (id && (t === 'ebook' || t === 'curso')) ? `/p/${t}/${id}` : '';
+  };
   const [modo, setModo] = useState(modoParam === 'cadastro' || planoEscolhido ? 'cadastro' : 'login'); // 'login' | 'cadastro' | 'sucesso' | 'recuperar' | 'recuperar_sucesso'
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
@@ -265,8 +272,14 @@ export default function Login() {
       sessionStorage.removeItem('tsn_plano_pendente');
       const promoPendente = promoParam || sessionStorage.getItem('tsn_promo_pendente') || '';
       sessionStorage.removeItem('tsn_promo_pendente');
+      // Funil de produto pago: quem veio de /p/ebook|curso/:id ("Já tenho conta, Entrar" ou
+      // "Comprar agora") chega com ?produto=tipo:id. Antes esse param era ignorado no redirect
+      // e o visitante caía na Home, perdendo a intenção de compra. Volta para a página do produto.
+      const destProduto = destinoProduto(produtoParam);
       if (produtoRedirect) {
         nav(produtoRedirect);
+      } else if (destProduto) {
+        nav(destProduto);
       } else if (planoPendente) {
         nav(`/checkout?plano=${planoPendente}${promoPendente ? `&promo=${promoPendente}` : ''}`);
       } else if (nextParam) {
@@ -321,6 +334,10 @@ export default function Login() {
       if (planoEscolhido) {
         sessionStorage.setItem('tsn_plano_pendente', planoEscolhido);
       }
+      // Preserva a intenção de PRODUTO (ebook/curso) → após confirmar o e-mail e entrar,
+      // o usuário volta à página do produto para comprar, em vez de cair na Home.
+      const destProdCad = destinoProduto(produtoParam);
+      if (destProdCad) sessionStorage.setItem('tsn_redirect_produto', destProdCad);
       setModo('sucesso');
     } catch (err) {
       setErro(traduzErroAuth(err.message));
@@ -582,7 +599,9 @@ export default function Login() {
                   <div style={{ fontSize: 12, color: '#78350f', marginBottom: 10 }}>
                     {cpfCheck.ehBeneficio
                       ? 'Entre na sua conta e faça upgrade do plano para acessar este conteúdo.'
-                      : 'Entre na sua conta para concluir a compra e vincular o produto ao seu acesso.'}
+                      : (produtoParam || planoEscolhido)
+                        ? 'Entre na sua conta para concluir a compra e vincular o produto ao seu acesso.'
+                        : 'Se essa conta é sua, entre por ela. Para criar uma conta nova, o CPF é opcional — deixe o campo em branco para continuar.'}
                   </div>
                   <button type="button"
                     onClick={() => {
@@ -598,7 +617,7 @@ export default function Login() {
                 </div>
               )}
               {erro && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#dc2626' }}>{erro}</div>}
-              <button type="submit" disabled={loading || !aceite || cpfCheck?.temConta || emailDuplicado}
+              <button type="submit" disabled={loading || !aceite || emailDuplicado || ((produtoParam || planoEscolhido) && cpfCheck?.temConta)}
                 style={{ width: '100%', padding: '12px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: (loading || !aceite) ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: (loading || !aceite) ? 0.6 : 1 }}>
                 {loading
                   ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Criando conta...</>

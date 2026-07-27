@@ -142,25 +142,39 @@ export default function MinhaRede() {
   async function salvarPj() {
     setSalvandoPj(true); setMsgPj(null);
     const cnpjDigits = (pj.cnpj || '').replace(/\D/g, '');
-    const payload = {
-      cnpj: cnpjDigits,
-      razao_social: (pj.razao_social || '').trim(),
-      pj_chave_pix: (pj.pj_chave_pix || '').trim(),
-      pj_validada_em: new Date().toISOString(),
-    };
     if (cnpjDigits.length !== 14) {
       setMsgPj({ tipo: 'erro', txt: 'CNPJ inválido — informe os 14 dígitos.' });
       setSalvandoPj(false); return;
     }
+    const payload = {
+      cnpj: cnpjDigits,
+      razao_social: (pj.razao_social || '').trim(),
+      pj_chave_pix: (pj.pj_chave_pix || '').trim(),
+      pj_dados_atualizados_em: new Date().toISOString(),
+    };
     if (!payload.razao_social || !payload.pj_chave_pix) {
       setMsgPj({ tipo: 'erro', txt: 'Preencha a razão social e a chave PIX da empresa.' });
       setSalvandoPj(false); return;
     }
+    // SEGURANÇA (anti-interposição): o cliente NÃO valida a própria PJ. Grava só os dados
+    // (cnpj/razão/pix — campos não protegidos) e pede a verificação de sócio ao servidor
+    // (QSA da Receita). O saque só libera quando o backend confirmar pj_validada_em — nunca
+    // por este update do cliente (o trigger reverte pj_validada_em de qualquer forma).
     const { error } = await supabase.from('perfis').update(payload).eq('id', uid);
-    if (error) setMsgPj({ tipo: 'erro', txt: 'Erro ao salvar os dados da empresa.' });
-    else { setPjSalva(true); setMsgPj({ tipo: 'ok', txt: 'Empresa cadastrada! Você já pode solicitar o saque.' }); carregarMeu(); }
+    if (error) { setMsgPj({ tipo: 'erro', txt: 'Erro ao salvar os dados da empresa.' }); setSalvandoPj(false); return; }
+    setPjSalva(true);
+    let validada = false;
+    try {
+      const r = await apiCall('/api/validar-pj-socio', { method: 'POST', body: JSON.stringify({}) });
+      const d = await r.json().catch(() => ({}));
+      validada = r.ok && !!d?.matched;
+    } catch { /* rede fora → segue como pendente; a equipe valida no 1º saque */ }
+    setMsgPj(validada
+      ? { tipo: 'ok', txt: '✓ Empresa validada — você já pode solicitar o saque.' }
+      : { tipo: 'ok', txt: 'Empresa cadastrada. Estamos verificando se você consta como sócio na Receita; se não confirmar, a equipe valida no seu 1º saque.' });
+    await carregarMeu();
     setSalvandoPj(false);
-    setTimeout(() => setMsgPj(null), 4000);
+    setTimeout(() => setMsgPj(null), 6000);
   }
 
   async function solicitarSaque() {

@@ -8,7 +8,9 @@ import {
   processarVencido,
   processarRecusado,
   processarChargeback,
+  processarReembolso,
   eventoJaProcessado,
+  removerEventoProcessado,
 } from './_webhook-core.js';
 
 const EVENTOS_CHARGEBACK = [
@@ -18,6 +20,12 @@ const EVENTOS_CHARGEBACK = [
   'PAYMENT_DISPUTE',
   'CHARGEBACK',
 ];
+
+// Reembolso (refund) — antes caíam em "ignorados": a comissão de rede NÃO era estornada e
+// o plano NÃO era suspenso (refund + comissão paga = perda dupla / fraude). Total suspende;
+// parcial só estorna a comissão (cliente pagou a maior parte).
+const EVENTOS_REEMBOLSO_TOTAL = ['PAYMENT_REFUNDED'];
+const EVENTOS_REEMBOLSO_PARCIAL = ['PAYMENT_PARTIALLY_REFUNDED'];
 
 // Compra AVULSA de produto: o pagamento carrega externalReference = compras_produtos.id
 // (uuid). Esse caminho é 100% separado do de PLANO (nunca eleva role): ativa a compra e
@@ -117,6 +125,13 @@ export default async function handler(req, res) {
     if (tipo === 'PAYMENT_CONFIRMED' || tipo === 'PAYMENT_RECEIVED') {
       if (ehProduto) {
         const result = await rpcProduto('confirmar_compra_produto', { p_compra_id: extRef, p_gateway: 'asaas', p_gateway_payment_id: pagReal.id });
+        if (result && result.ok === false) {
+          // Efeito falhou → desmarca a idempotência e devolve 5xx para o Asaas REENVIAR.
+          // Sem isso a compra ficaria presa em 'pendente' e a comissão nunca creditaria
+          // (não há cron de reconciliação de compras_produtos).
+          await removerEventoProcessado({ gateway: 'asaas', gatewayPaymentId: pagReal.id, evento: tipo });
+          return res.status(502).json({ error: 'confirmar_compra_produto_falhou', detalhe: result });
+        }
         return res.status(200).json({ ok: true, produto: result });
       }
       const result = await processarConfirmado(contexto);
@@ -136,6 +151,10 @@ export default async function handler(req, res) {
     if (EVENTOS_CHARGEBACK.includes(tipo)) {
       if (ehProduto) {
         const result = await rpcProduto('estornar_compra_produto', { p_gateway_payment_id: pagReal.id });
+        if (result && result.ok === false) {
+          await removerEventoProcessado({ gateway: 'asaas', gatewayPaymentId: pagReal.id, evento: tipo });
+          return res.status(502).json({ error: 'estornar_compra_produto_falhou', detalhe: result });
+        }
         return res.status(200).json({ ok: true, produto_estorno: result });
       }
       const result = await processarChargeback({
@@ -147,10 +166,29 @@ export default async function handler(req, res) {
       });
       return res.status(200).json(result);
     }
+    // Reembolso (refund): estorna a comissão de rede e (no total) suspende o acesso.
+    if (EVENTOS_REEMBOLSO_TOTAL.includes(tipo) || EVENTOS_REEMBOLSO_PARCIAL.includes(tipo)) {
+      const parcial = EVENTOS_REEMBOLSO_PARCIAL.includes(tipo);
+      if (ehProduto) {
+        // Produto é one-shot: só estorna no reembolso TOTAL.
+        if (parcial) return res.status(200).json({ ok: true, ignorado: 'reembolso_parcial_produto' });
+        const result = await rpcProduto('estornar_compra_produto', { p_gateway_payment_id: pagReal.id });
+        if (result && result.ok === false) {
+          await removerEventoProcessado({ gateway: 'asaas', gatewayPaymentId: pagReal.id, evento: tipo });
+          return res.status(502).json({ error: 'estornar_compra_produto_falhou', detalhe: result });
+        }
+        return res.status(200).json({ ok: true, produto_estorno: result });
+      }
+      const result = await processarReembolso({ ...contexto, suspender: !parcial });
+      return res.status(200).json(result);
+    }
     // Eventos ignorados (PAYMENT_CREATED, etc.)
     return res.status(200).json({ ok: true, ignored: tipo });
   } catch (e) {
     console.error('[asaas-webhook]', e.message);
+    // O efeito falhou APÓS a marca de idempotência → desmarca para o Asaas reenviar
+    // (senão o reenvio seria deduplicado e o efeito nunca completaria).
+    await removerEventoProcessado({ gateway: 'asaas', gatewayPaymentId: pagReal.id, evento: tipo });
     return res.status(500).json({ error: 'Erro interno no webhook' });
   }
 }
