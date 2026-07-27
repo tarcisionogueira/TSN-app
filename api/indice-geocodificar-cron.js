@@ -26,11 +26,11 @@ function sb(path, opts = {}) {
   });
 }
 
-// marca a amostra: com coordenada (sucesso) ou só geocod_em (falha) — nos dois casos sai da fila
-// (o índice parcial filtra por geocod_em is null), então cada amostra é tentada UMA vez.
+// marca a amostra: com coordenada + NÍVEL de precisão (posição efetiva vs aproximada) ou só
+// geocod_em (falha) — nos dois casos sai da fila (índice parcial filtra geocod_em null): 1 tentativa.
 async function marcar(id, coords) {
   const body = coords
-    ? { lat: coords.lat, lng: coords.lng, geocod_em: new Date().toISOString(), ...(coords.cep ? { cep: coords.cep } : {}) }
+    ? { lat: coords.lat, lng: coords.lng, geo_nivel: coords.nivel || null, geocod_em: new Date().toISOString(), ...(coords.cep ? { cep: coords.cep } : {}) }
     : { geocod_em: new Date().toISOString() };
   const res = await sb(`indice_amostras?id=eq.${id}`, {
     method: 'PATCH', body: JSON.stringify(body), headers: { Prefer: 'return=minimal' },
@@ -45,9 +45,10 @@ export default async function handler(req, res) {
   const deadline = Date.now() + 250000; // folga sob o maxDuration de 300s
   const lote = Math.min(200, Math.max(10, Number(req.query?.lote) || 120));
 
-  // Amostras SEM coordenada e ainda não tentadas que têm CEP ou endereço (sinal p/ nível rua).
+  // Amostras SEM coordenada e ainda não tentadas que têm CEP, endereço OU condomínio (sinais que a
+  // cascata usa p/ chegar a nível rua/edifício). bairro-only fica de fora (já é nível 1 sem coord).
   const r = await sb(
-    `indice_amostras?select=id,cidade_norm,uf,bairro_norm,cep,endereco&lat=is.null&geocod_em=is.null&or=(cep.not.is.null,endereco.not.is.null)&order=criado_em.desc&limit=${lote}`
+    `indice_amostras?select=id,cidade_norm,uf,bairro_norm,cep,endereco,condominio&lat=is.null&geocod_em=is.null&or=(cep.not.is.null,endereco.not.is.null,condominio.not.is.null)&order=criado_em.desc&limit=${lote}`
   );
   if (!r.ok) { res.status(502).json({ error: 'Falha ao listar', detalhe: (await r.text().catch(() => '')).slice(0, 200) }); return; }
   const amostras = await r.json();
@@ -59,12 +60,12 @@ export default async function handler(req, res) {
 
   for (const a of amostras) {
     if (Date.now() > deadline) { out.interrompido = true; break; }
-    const key = `${a.cep || ''}|${a.endereco || ''}|${a.bairro_norm || ''}|${a.cidade_norm || ''}|${a.uf || ''}`;
+    const key = `${a.cep || ''}|${a.endereco || ''}|${a.condominio || ''}|${a.bairro_norm || ''}|${a.cidade_norm || ''}|${a.uf || ''}`;
     let coords = null;
     if (cache.has(key)) { coords = cache.get(key); out.cache_hits++; }
     else {
       coords = await geocodificarCascata(
-        { endereco: a.endereco || '', bairro: a.bairro_norm || '', cidade: a.cidade_norm || '', estado: a.uf || '', cep: a.cep || '' },
+        { endereco: a.endereco || '', condominio: a.condominio || '', bairro: a.bairro_norm || '', cidade: a.cidade_norm || '', estado: a.uf || '', cep: a.cep || '' },
         { permitirPago: false, sleepMs: 1100, deadline },
       ).catch(() => null);
       cache.set(key, coords);

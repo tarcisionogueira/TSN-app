@@ -284,8 +284,9 @@ export async function geocoderPago(enderecoCompleto) {
  * ou null. `sleepMs`=0 desliga as pausas (uso on-demand de 1 imóvel).
  */
 export async function geocodificarCascata(im, { deadline = Infinity, sleepMs = 1100, permitirPago = true } = {}) {
-  const { endereco, bairro, cidade, estado, cep } = im;
+  const { endereco, bairro, cidade, estado, cep, condominio } = im;
   const ufNome = UFS[String(estado || '').trim().toUpperCase()]?.nome || estado;
+  const cond = String(condominio || '').trim();
   // Tolerância ao centróide do município POR PRECISÃO. Antes era 80 km fixo — frouxo
   // demais: um BAIRRO homônimo em OUTRO município (ex.: "Vila N. Sra. de Fátima" de
   // São Vicente caindo a 55 km, perto de Barueri) passava e o imóvel aparecia na
@@ -296,8 +297,13 @@ export async function geocodificarCascata(im, { deadline = Infinity, sleepMs = 1
 
   // Nível 0 — GOOGLE (mais preciso no Brasil). Endereço completo em texto; o Google
   // lida bem com "Lt/Qd/Apto" e nomes de condomínio. Validado contra o IBGE.
+  // TRIAGEM DO SINAL: o anúncio às vezes dá só o CONDOMÍNIO/empreendimento (prédio nomeado),
+  // às vezes a rua sem número, às vezes o endereço completo. O condomínio nomeado é uma âncora
+  // tão precisa quanto (ou mais que) "rua sem número" → entra na FRENTE da string do Google e
+  // ganha um passo próprio no Nominatim (POI). Assim, com o que houver, atribuímos a MELHOR posição.
   const { via, numero } = parseLogradouro(endereco);
   const enderecoGoogle = [
+    cond || null,
     [via, numero].filter(Boolean).join(', ') || endereco,
     bairro, cidade, estado ? `${estado}` : '', cep ? `CEP ${cep}` : '', 'Brasil',
   ].filter(Boolean).join(', ');
@@ -316,6 +322,16 @@ export async function geocodificarCascata(im, { deadline = Infinity, sleepMs = 1
   if (permitirPago && Date.now() < deadline) {
     const p = aceita(await geocoderPago(enderecoGoogle), 55);
     if (p) return { ...p, cep: cep || null };
+  }
+
+  // Nível 0.6 — CONDOMÍNIO como POI (grátis): o Nominatim texto-livre acha prédios/condomínios
+  // nomeados do OSM. Só entra quando o anúncio deu o nome do empreendimento; precisão ~rua
+  // (edifício). Vem antes do logradouro porque um prédio nomeado é âncora melhor que rua s/nº.
+  if (cond.length >= 3 && Date.now() < deadline) {
+    const qc = [cond, bairro, cidade, ufNome, 'Brasil'].filter(Boolean).join(', ');
+    const cc = aceita(await nominatimTextoLivre(qc));
+    if (cc) return { ...cc, nivel: 'rua', cep: cep || null };
+    await pausa();
   }
 
   // Nível 1 — logradouro + número (estruturado + validação IBGE).

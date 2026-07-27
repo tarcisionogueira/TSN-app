@@ -78,10 +78,10 @@ ${regraTipo}
 - Informe o BAIRRO de cada amostra (essencial para classificar a cidade por região).${cidadeInteira ? ' TRAGA amostras de bairros DIFERENTES.' : ''}
 - Mesmo em CIDADE PEQUENA há anúncios: pesquise "${cidade} ${uf}" + o tipo nesses portais e TRAGA o que encontrar — NÃO retorne listas vazias se existir qualquer anúncio real de mercado (venda/locação). Terreno costuma ter R$/m² BAIXO (ex.: 100–400 R$/m²): isso é normal, capture assim mesmo.
 
-Para CADA amostra capture: ${todos ? 'tipo (apartamento|casa|terreno|comercial); ' : ''}bairro (nome do bairro do imóvel); endereco (logradouro + número, SE o anúncio mostrar — ajuda a posicionar no mapa); cep (só os dígitos, se houver); valorM2 (R$/m² de VENDA) nas vendas; aluguelM2 (R$/m²/mês) nas locações; area (m²); data (formato "AAAA-MM"); fonte (portal ou imobiliária).
+Para CADA amostra capture o MÁXIMO de referência de localização que o anúncio der (traga o que houver — não invente): ${todos ? 'tipo (apartamento|casa|terreno|comercial); ' : ''}bairro (nome do bairro); condominio (nome do condomínio/empreendimento/edifício, se o anúncio citar — âncora precisa); endereco (logradouro + número; ou só o logradouro se não houver número); cep (só os dígitos, se houver); valorM2 (R$/m² de VENDA) nas vendas; aluguelM2 (R$/m²/mês) nas locações; area (m²); data (formato "AAAA-MM"); fonte (portal ou imobiliária).
 
 Retorne SOMENTE JSON válido, sem texto fora do JSON:
-{"nivel1":{"vendas":[{${campoTipo}"bairro":"","endereco":"","cep":"","valorM2":0,"area":0,"data":"AAAA-MM","fonte":""}],"locacoes":[{${campoTipo}"bairro":"","endereco":"","cep":"","aluguelM2":0,"area":0,"data":"AAAA-MM","fonte":""}]},"nivel2":{"vendas":[],"locacoes":[]}}`;
+{"nivel1":{"vendas":[{${campoTipo}"bairro":"","condominio":"","endereco":"","cep":"","valorM2":0,"area":0,"data":"AAAA-MM","fonte":""}],"locacoes":[{${campoTipo}"bairro":"","condominio":"","endereco":"","cep":"","aluguelM2":0,"area":0,"data":"AAAA-MM","fonte":""}]},"nivel2":{"vendas":[],"locacoes":[]}}`;
 };
 
 // Monta as amostras (venda e locação) no formato do ingerir_amostras_indice, com fonte_ref
@@ -114,9 +114,10 @@ function montarAmostras(mercado, ctx) {
   // a resolução por 250m. Quando a consulta já tem coordenada (endereço), lat/lng vêm do ctx.
   const cepDe = (s) => (String(s?.cep || '').replace(/\D/g, '').slice(0, 8) || null);
   const endDe = (s) => (String(s?.endereco || '').trim().slice(0, 180) || null);
+  const condDe = (s) => (String(s?.condominio || '').trim().slice(0, 140) || null);
   const linha = (s, natureza, vm2) => ({ cidade_norm: ctx.cidadeNorm, uf: ctx.uf, bairro_norm: bairroDe(s),
     lat: ctx.lat, lng: ctx.lng, tipo: tipoDe(s), origem: 'pesquisa_web', natureza, valor_m2: vm2, area_m2: s?.area || null,
-    cep: cepDe(s), endereco: endDe(s) });
+    cep: cepDe(s), endereco: endDe(s), condominio: condDe(s) });
   for (const nivel of [1, 2]) {
     const bloco = mercado?.[`nivel${nivel}`] || {};
     for (const v of (bloco.vendas || [])) {
