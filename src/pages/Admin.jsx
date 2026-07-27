@@ -7679,6 +7679,7 @@ function PrestacaoContasTab() {
   const [proximaLib, setProximaLib] = React.useState(null);
   const [pagandoTodos, setPagandoTodos] = React.useState(false);
   const [analitico, setAnalitico] = React.useState({}); // user_id -> { loading, linhas, total } (aberto)
+  const [recibo, setRecibo] = React.useState({}); // lancamento_id -> { desc, url, uploading } (comprovante do repasse)
 
   const fmtBRL = v => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const fmtLib = (iso) => { if (!iso) return null; try { return new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit' }).format(new Date(iso)); } catch { return null; } };
@@ -7712,11 +7713,28 @@ function PrestacaoContasTab() {
 
   React.useEffect(() => { carregar(); }, [carregar]);
 
-  const acao = async (id, acaoTipo) => {
+  // Anexa o comprovante da transferência (ex.: PIX do Mercado Pago) ao repasse — bucket privado.
+  const anexarComprovante = async (id, file) => {
+    if (!file) return;
+    setRecibo(r => ({ ...r, [id]: { ...r[id], uploading: true } }));
+    try {
+      const ext = ((file.name || '').split('.').pop() || 'pdf').toLowerCase();
+      const path = `comprovantes/${id}-${Date.now()}.${ext}`;
+      const { error } = await supabase.storage.from('documentos').upload(path, file, { upsert: false });
+      if (error) throw error;
+      const { data: signed } = await supabase.storage.from('documentos').createSignedUrl(path, 60 * 60 * 24 * 3650);
+      setRecibo(r => ({ ...r, [id]: { ...r[id], uploading: false, url: signed?.signedUrl || path } }));
+    } catch {
+      setRecibo(r => ({ ...r, [id]: { ...r[id], uploading: false } }));
+      setMsg({ tipo: 'erro', txt: 'Erro ao anexar o comprovante.' });
+    }
+  };
+
+  const acao = async (id, acaoTipo, extra = {}) => {
     setMsg(null);
     setProcessando(p => ({ ...p, [id]: true }));
     try {
-      const res = await apiCall(`/api/saque?id=${id}`, { method: 'PATCH', body: JSON.stringify({ acao: acaoTipo }) });
+      const res = await apiCall(`/api/saque?id=${id}`, { method: 'PATCH', body: JSON.stringify({ acao: acaoTipo, ...extra }) });
       const data = await res.json();
       if (res.ok) {
         setMsg({ tipo: 'ok', txt: acaoTipo === 'pagar' ? 'Saque marcado como pago.' : 'Saque recusado.' });
@@ -7961,7 +7979,7 @@ function PrestacaoContasTab() {
                       style={{ padding: '7px 14px', background: an ? '#0D63DB' : '#eff6ff', color: an ? 'white' : '#0D63DB', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
                       Analítico
                     </button>
-                    <button onClick={() => acao(p.id, 'pagar')} disabled={processando[p.id]}
+                    <button onClick={() => acao(p.id, 'pagar', { comprovante_url: recibo[p.id]?.url, descricao: recibo[p.id]?.desc })} disabled={processando[p.id]}
                       style={{ padding: '7px 18px', background: processando[p.id] ? '#94a3b8' : '#059669', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
                       Pagar
                     </button>
@@ -7970,6 +7988,17 @@ function PrestacaoContasTab() {
                       Recusar
                     </button>
                   </div>
+                </div>
+
+                {/* Recibo do repasse: descrição breve + comprovante do Mercado Pago (anexados ao Pagar) */}
+                <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <input placeholder="Descrição do pagamento (ex.: repasse comissões — jun/26)" value={recibo[p.id]?.desc || ''}
+                    onChange={e => setRecibo(r => ({ ...r, [p.id]: { ...r[p.id], desc: e.target.value } }))}
+                    style={{ flex: 1, minWidth: 200, padding: '6px 10px', border: '1px solid #cbd5e1', borderRadius: 8, fontSize: 12 }} />
+                  <label style={{ fontSize: 11.5, color: recibo[p.id]?.url ? '#16a34a' : '#0D63DB', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                    {recibo[p.id]?.uploading ? 'Enviando…' : recibo[p.id]?.url ? '✓ Comprovante anexado' : '📎 Anexar comprovante do MP'}
+                    <input type="file" accept="application/pdf,image/*" style={{ display: 'none' }} onChange={e => anexarComprovante(p.id, e.target.files?.[0])} />
+                  </label>
                 </div>
 
                 {/* Analítico venda → repasse do beneficiário */}

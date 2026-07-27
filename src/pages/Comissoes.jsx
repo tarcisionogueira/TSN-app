@@ -392,6 +392,14 @@ export default function Comissoes() {
                       <div>
                         <div style={{ fontWeight: 700, fontSize: 14, color: '#111111' }}>{TIPO_LABEL[e.tipo] || e.tipo}</div>
                         <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{e.descricao} · {fmtData(e.criado_em)}</div>
+                        {e.status === 'sacado' && (e.comprovante_desc || e.comprovante_url) && (
+                          <div style={{ fontSize: 11, marginTop: 3 }}>
+                            {e.comprovante_desc && <span style={{ color: '#334155' }}>Recibo: {e.comprovante_desc}</span>}
+                            {e.comprovante_url && (
+                              <a href={e.comprovante_url} target="_blank" rel="noreferrer" style={{ color: '#0D63DB', fontWeight: 700, marginLeft: e.comprovante_desc ? 8 : 0 }}>ver comprovante ↗</a>
+                            )}
+                          </div>
+                        )}
                       </div>
                       <div style={{ textAlign: 'right' }}>
                         <div style={{ fontWeight: 800, fontSize: 14, color: negativo ? '#ef4444' : '#16a34a' }}>

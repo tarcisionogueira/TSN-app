@@ -273,8 +273,10 @@ export default async function handler(req) {
     if (acao === 'pagar_todos') {
       if (!ehSexta()) return json({ error: 'Pagamentos de saque são processados apenas às sextas-feiras.' }, 422);
       const corteISO = corteHojeBahia().toISOString();
+      const patch = { status: 'sacado', pago_em: new Date().toISOString(), pago_por: user.id };
+      if (body.descricao) patch.comprovante_desc = String(body.descricao).slice(0, 500);
       const r = await db(`saldo_lancamentos?status=eq.solicitado&criado_em=lte.${encodeURIComponent(corteISO)}`, {
-        method: 'PATCH', body: JSON.stringify({ status: 'sacado' }), headers: { Prefer: 'return=representation' },
+        method: 'PATCH', body: JSON.stringify(patch), headers: { Prefer: 'return=representation' },
       });
       if (!r.ok) return json({ error: 'Erro ao liberar pagamentos', detail: r.data }, 500);
       const pagos = Array.isArray(r.data) ? r.data.length : 0;
@@ -295,8 +297,11 @@ export default async function handler(req) {
       if (new Date(alvo.criado_em) > corteHojeBahia()) {
         return json({ error: 'Solicitação feita após o corte de sexta (12h). Entra na liberação da próxima sexta.' }, 422);
       }
+      const patch = { status: 'sacado', pago_em: new Date().toISOString(), pago_por: user.id };
+      if (body.comprovante_url) patch.comprovante_url = String(body.comprovante_url).slice(0, 2000);
+      if (body.descricao) patch.comprovante_desc = String(body.descricao).slice(0, 500);
       const r = await db(`saldo_lancamentos?id=eq.${id}&status=eq.solicitado`, {
-        method: 'PATCH', body: JSON.stringify({ status: 'sacado' }), headers: { Prefer: 'return=minimal' },
+        method: 'PATCH', body: JSON.stringify(patch), headers: { Prefer: 'return=minimal' },
       });
       if (!r.ok) return json({ error: 'Erro ao marcar pago' }, 500);
       return json({ ok: true });
