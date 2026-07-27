@@ -279,12 +279,16 @@ async function amostrasRegiaoCache(imDb, segmento = 'apartamento') {
   try {
     if (!imDb?.cidade_norm || !imDb?.estado) return null;
     const MIN = Math.max(4, Number(process.env.MERCADO_CACHE_MIN || 8));   // densidade mínima p/ confiar
-    const DIAS = Math.max(15, Number(process.env.MERCADO_CACHE_DIAS || 120)); // recência máx. das amostras
+    // FRESCOR PELO QUADRIMESTRE DO DADO (data_ref = data do anúncio), não por quando foi capturado
+    // (criado_em). Regra do dono: "se o quadrimestre for mais distante da data atual, refaz a busca".
+    // 120 dias ~ 1 quadrimestre. Sem ≥MIN amostras DATADAS nesse período → miss → o chamador refaz a
+    // pesquisa COMPLETA (atualiza o índice p/ todos); com densidade recente → reusa (não desperdiça).
+    const DIAS = Math.max(15, Number(process.env.MERCADO_CACHE_DIAS || 120));
     const uf = String(imDb.estado).toUpperCase();
     const bairroNorm = _norm(imDb.bairro);
     const geoGrid = geoGridDe(imDb.latitude, imDb.longitude);
-    const desde = new Date(Date.now() - DIAS * 24 * 3600 * 1000).toISOString();
-    const baseFiltro = `cidade_norm=eq.${encodeURIComponent(imDb.cidade_norm)}&uf=eq.${uf}&tipo=eq.${encodeURIComponent(segmento)}&especie=eq.venda&valor_m2=gte.200&valor_m2=lte.50000&criado_em=gte.${desde}`;
+    const desde = new Date(Date.now() - DIAS * 24 * 3600 * 1000).toISOString().slice(0, 10); // data_ref é DATE
+    const baseFiltro = `cidade_norm=eq.${encodeURIComponent(imDb.cidade_norm)}&uf=eq.${uf}&tipo=eq.${encodeURIComponent(segmento)}&especie=eq.venda&valor_m2=gte.200&valor_m2=lte.50000&data_ref=gte.${desde}`;
     const cols = 'select=valor_m2,valor_total,area_m2,data_ref,fonte,bairro_norm,geo_grid,criado_em&order=criado_em.desc&limit=400';
     const buscar = async (extra) => {
       try {
@@ -861,15 +865,17 @@ export default async function handler(req, res) {
       mercado = { ...recente.mercado, reaproveitado: true, pesquisaEm: recente.em };
       reaproveitado = true;
     } else {
-      // REAPROVEITAMENTO POR REGIÃO (gate por env MERCADO_CACHE, default OFF). Se a microrregião
-      // já tem amostra densa e recente de VENDA na base própria (indice_amostra, sem leilão),
+      // REAPROVEITAMENTO POR REGIÃO — LIGADO POR PADRÃO (regra do dono: "todo dado deve ser
+      // aproveitado, evita desperdício"; desliga só com MERCADO_CACHE=0). Se a microrregião já tem
+      // amostra densa e do QUADRIMESTRE ATUAL de VENDA na base própria (indice_amostra, sem leilão),
       // injetamos esses comparáveis REAIS no prompt e reduzimos a busca web de 5 → 2 usos — a IA
-      // ancora na base e só complementa lacunas (padrão/anúncio ativo). Assim a região "aquecida"
-      // não paga a pesquisa cara toda vez. Liga/mede a economia com MERCADO_CACHE=1 (o console
-      // grava hit/miss + nível + nº de comparáveis por relatório). Rural fica fora (régua de ha).
+      // ancora na base e só complementa lacunas (padrão/anúncio ativo). Se o dado mais recente for de
+      // quadrimestre distante, amostrasRegiaoCache devolve miss → busca COMPLETA (5) = refaz/atualiza.
+      // Vale igual para dono e cliente (mesmo código). Rural fica fora (régua de ha).
       const segCache = segmentoIndice(mercadoInputs.tipoImovel || imovel?.tipo);
       let cacheReg = null;
-      if (process.env.MERCADO_CACHE === '1' && segCache !== 'rural') {
+      const cacheLigado = process.env.MERCADO_CACHE !== '0';
+      if (cacheLigado && segCache !== 'rural') {
         try {
           const [imReg] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=cidade_norm,estado,bairro,latitude,longitude&limit=1`)).json();
           cacheReg = await amostrasRegiaoCache(imReg, segCache);
@@ -877,7 +883,7 @@ export default async function handler(req, res) {
       }
       const maxWeb = cacheReg?.hit ? 2 : 5;
       const cacheTxt = cacheReg?.hit ? cacheReg.text : '';
-      console.log('[mercado-cache]', JSON.stringify({ on: process.env.MERCADO_CACHE === '1', hit: !!cacheReg?.hit, nivel: cacheReg?.nivel || null, n: cacheReg?.n || 0, maxWeb, imovel: String(imovelId) }));
+      console.log('[mercado-cache]', JSON.stringify({ on: cacheLigado, hit: !!cacheReg?.hit, nivel: cacheReg?.nivel || null, n: cacheReg?.n || 0, maxWeb, imovel: String(imovelId) }));
       // A busca de mercado (web search, até 5 buscas) é a etapa lenta. UMA tentativa por
       // chamada (retries:0) com timeout = tempo RESTANTE reservando o parecer — assim duas
       // buscas NUNCA somam mais que o orçamento. Se a chamada abortar/falhar, devolve
