@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Briefcase, Search, LayoutDashboard, Home, Menu, X, ChevronRight, GraduationCap, User, LogOut, Tag, MessageSquare, FileText, Eye, Calculator, HelpCircle, Headphones, DollarSign, Download, MapPin, Network } from 'lucide-react';
+import { Briefcase, Search, LayoutDashboard, Home, Menu, X, ChevronRight, GraduationCap, User, LogOut, Tag, MessageSquare, FileText, Eye, Calculator, HelpCircle, Headphones, DollarSign, Download, MapPin, Network, Wallet } from 'lucide-react';
 import TourGuiado, { TOUR_KEY_EXPORT as TOUR_KEY } from './TourGuiado';
 import AnalisesMenu from './AnalisesMenu';
 import { useAuth } from '../contexts/AuthContext';
@@ -333,6 +333,7 @@ export default function Header() {
                     // sub-abas de Meu Perfil (Assinatura / Parceiros). O extrato completo
                     // de comissões fica a um clique dentro da aba Parceiros.
                     { path: '/perfil', label: 'Meu Perfil', icon: User },
+                    { path: '/creditos', label: 'Meus Créditos', icon: Wallet },
                     ...(ehEquipe ? [{ path: '/comissoes', label: 'Comissões', icon: DollarSign }] : []),
                     { path: '/contratos', label: 'Meus Contratos', icon: FileText },
                   ].map(item => (

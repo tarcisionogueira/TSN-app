@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, BarChart3, GraduationCap, Home as HomeIcon, Gift, Copy, Check, ArrowRight, TrendingUp, Calendar, ShieldCheck, Gavel } from 'lucide-react';
+import { Search, BarChart3, GraduationCap, Home as HomeIcon, Gift, Copy, Check, ArrowRight, TrendingUp, Calendar, ShieldCheck, Gavel, Wallet } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
 import TriagemPerfil from '../components/TriagemPerfil';
@@ -164,6 +164,7 @@ export default function HomeCliente() {
           <Acao Icon={Search} titulo="Buscar leilões" desc="Encontre imóveis em todo o Brasil e analise oportunidades." cor="#0D63DB" onClick={() => nav('/buscar')} />
           <Acao Icon={BarChart3} titulo="Minhas Análises" desc="Retome seus relatórios e agende com o analista." cor="#0d9488" onClick={() => nav('/analises')} />
           <Acao Icon={HomeIcon} titulo="Meu Portfólio" desc="Acompanhe seus imóveis, aportes e resultados." cor="#7c3aed" onClick={() => nav('/painel')} />
+          <Acao Icon={Wallet} titulo="Meus Créditos" desc="Consultas disponíveis, bônus e saldo — tudo num lugar." cor="#0891b2" onClick={() => nav('/creditos')} />
           <Acao Icon={GraduationCap} titulo="Área de Membros" desc="Cursos, eBooks e materiais para arrematar com segurança." cor="#059669" onClick={() => nav('/membros')} />
           {(effectiveRole === 'assessorado' || effectiveRole === 'assessorado_anual' || effectiveRole === 'clube' || effectiveRole === 'clube_anual') && (
             <Acao Icon={Calendar} titulo="Agendar com o time" desc="Marque sua reunião de assessoria/mentoria." cor="#d97706" onClick={() => nav('/painel')} />

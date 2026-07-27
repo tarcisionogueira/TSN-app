@@ -757,6 +757,7 @@ function UsuariosTab() {
   const [atribLoad, setAtribLoad] = useState(false);
   const [exito, setExito] = useState(null); // editor do % de êxito INDIVIDUAL do membro da equipe
   const [comAfiliado, setComAfiliado] = useState(null); // editor do % de comissão do afiliado/consultor (modal)
+  const [conceder, setConceder] = useState(null); // modal: conceder consultas extras (bônus) ao cliente
 
   // Abre o editor do % de êxito individual deste membro (advogado/analista/consultor).
   // O admin sempre recebe o saldo (total − soma dos envolvidos), então não tem editor aqui.
@@ -805,6 +806,29 @@ function UsuariosTab() {
   const verComo = (u) => {
     iniciarSuporte({ id: u.id, nome: u.nome || u.cpf, role: u.role || 'explorador' });
     navSup('/'); // entra na Home por plano do cliente (não mais no Portfólio antigo)
+  };
+
+  // Conceder consultas EXTRAS (bônus) ao cliente sem que ele coloque crédito — o bônus é
+  // consumido depois da cota mensal (RPC admin_conceder_cota, gated a admin/analista no banco).
+  const abrirConceder = (u) => setConceder({ user: u, mercado: '', documental: '', indice: '', motivo: '', saving: false, msg: '' });
+  const salvarConceder = async () => {
+    if (!conceder?.user) return;
+    const m = Math.max(0, parseInt(conceder.mercado || '0', 10) || 0);
+    const d = Math.max(0, parseInt(conceder.documental || '0', 10) || 0);
+    const i = Math.max(0, parseInt(conceder.indice || '0', 10) || 0);
+    if (m + d + i === 0) { setConceder(c => ({ ...c, msg: 'Informe ao menos 1 consulta.' })); return; }
+    setConceder(c => ({ ...c, saving: true, msg: '' }));
+    try {
+      const { data, error } = await supabase.rpc('admin_conceder_cota', {
+        p_user_id: conceder.user.id, p_mercado: m, p_documental: d, p_indice: i, p_motivo: conceder.motivo || null,
+      });
+      if (error || !data?.ok) {
+        const emsg = data?.erro === 'sem_permissao' ? 'Sem permissão.' : (error?.message || 'Erro ao conceder.');
+        setConceder(c => ({ ...c, saving: false, msg: emsg }));
+      } else {
+        setConceder(c => ({ ...c, saving: false, msg: 'ok', concedido: data.concedido }));
+      }
+    } catch { setConceder(c => ({ ...c, saving: false, msg: 'Erro ao conceder.' })); }
   };
 
   const [planosCfg, setPlanosCfg] = useState([]);
@@ -1014,6 +1038,12 @@ function UsuariosTab() {
                             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                               <button style={S.btn('outline')} onClick={() => { setEditingId(u.id); setNewRole(u.role || 'explorador'); }}>Alterar role</button>
                               <button style={S.btn('outline')} onClick={() => verComo(u)} title="Entrar na conta do usuário (modo suporte)">👁 Ver como</button>
+                              <button
+                                style={{ padding: '5px 10px', background: '#fef3c7', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, color: '#92400e', cursor: 'pointer' }}
+                                onClick={() => abrirConceder(u)}
+                                title="Dar consultas extras (mercadológico/documental/índice) a este cliente sem que ele coloque crédito">
+                                🎁 Conceder consultas
+                              </button>
                               <button
                                 style={{ padding: '5px 10px', background: ativo ? '#fee2e2' : '#dcfce7', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, color: ativo ? '#dc2626' : '#166534', cursor: 'pointer' }}
                                 onClick={() => toggleAtivo(u)}>
@@ -1290,6 +1320,52 @@ function UsuariosTab() {
                 <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                   <button onClick={() => setComAfiliado(null)} disabled={comAfiliado.saving} style={{ padding: '8px 16px', background: '#f1f5f9', color: '#64748b', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Fechar</button>
                   <button onClick={salvarComissaoAfiliado} disabled={comAfiliado.saving} style={{ padding: '8px 16px', background: '#db2777', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: comAfiliado.saving ? 'default' : 'pointer' }}>{comAfiliado.saving ? 'Salvando…' : 'Salvar'}</button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal — Conceder consultas extras (bônus) ao cliente sem crédito */}
+      {conceder && (
+        <div onClick={() => !conceder.saving && setConceder(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: 'white', borderRadius: 16, padding: 22, width: '100%', maxWidth: 440, maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ fontWeight: 800, fontSize: 15, color: '#111', marginBottom: 2 }}>🎁 Conceder consultas — {conceder.user?.nome || conceder.user?.cpf || 'Cliente'}</div>
+            <div style={{ fontSize: 12, color: '#64748b', marginBottom: 14, lineHeight: 1.5 }}>
+              Dá consultas <strong>extras</strong> a este cliente sem que ele coloque crédito. O bônus é usado <strong>depois</strong> da cota mensal do plano e não expira no fim do mês.
+            </div>
+            {conceder.msg === 'ok' ? (
+              <>
+                <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '12px 14px', fontSize: 13, color: '#166534', fontWeight: 700, marginBottom: 14 }}>
+                  Concedido: {[conceder.concedido?.mercado ? `${conceder.concedido.mercado} mercadológico(s)` : null, conceder.concedido?.documental ? `${conceder.concedido.documental} documental(is)` : null, conceder.concedido?.indice ? `${conceder.concedido.indice} índice` : null].filter(Boolean).join(' + ')}.
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <button onClick={() => setConceder(null)} style={{ padding: '8px 16px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Fechar</button>
+                </div>
+              </>
+            ) : (
+              <>
+                {[
+                  { k: 'mercado', label: 'Relatórios Mercadológicos' },
+                  { k: 'documental', label: 'Relatórios Documentais' },
+                  { k: 'indice', label: 'Consultas ao Índice' },
+                ].map(f => (
+                  <div key={f.k} style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: '#475569' }}>{f.label}</div>
+                    <input type="number" min="0" max="100" placeholder="0" value={conceder[f.k]}
+                      onChange={e => setConceder(x => ({ ...x, [f.k]: e.target.value, msg: '' }))}
+                      style={{ width: 80, padding: '7px 8px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, fontWeight: 700, textAlign: 'right' }} />
+                  </div>
+                ))}
+                <input type="text" placeholder="Motivo (opcional) — ex.: cortesia, correção" value={conceder.motivo}
+                  onChange={e => setConceder(x => ({ ...x, motivo: e.target.value, msg: '' }))}
+                  style={{ width: '100%', padding: '8px 10px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, marginTop: 4, marginBottom: 12, boxSizing: 'border-box' }} />
+                {conceder.msg && conceder.msg !== 'ok' && <div style={{ fontSize: 12.5, color: '#dc2626', marginBottom: 10 }}>{conceder.msg}</div>}
+                <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                  <button onClick={() => setConceder(null)} disabled={conceder.saving} style={{ padding: '8px 16px', background: '#f1f5f9', color: '#64748b', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
+                  <button onClick={salvarConceder} disabled={conceder.saving} style={{ padding: '8px 16px', background: '#d97706', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: conceder.saving ? 'default' : 'pointer' }}>{conceder.saving ? 'Concedendo…' : 'Conceder'}</button>
                 </div>
               </>
             )}

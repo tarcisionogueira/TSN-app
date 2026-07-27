@@ -59,6 +59,7 @@ const ProdutoLanding = lazy(() => import('./pages/ProdutoLanding'));
 const ProdutoPublico = lazy(() => import('./pages/ProdutoPublico'));
 const CancelarAlertas = lazy(() => import('./pages/CancelarAlertas'));
 const Perfil = lazy(() => import('./pages/Perfil'));
+const Creditos = lazy(() => import('./pages/Creditos'));
 const Comissoes = lazy(() => import('./pages/Comissoes'));
 const Caso = lazy(() => import('./pages/Caso'));
 const CriarContrato = lazy(() => import('./pages/CriarContrato'));
@@ -308,6 +309,7 @@ function MainLayout() {
           <Route path="/membros/ebook/:id" element={<PrivateRoute><EbookPage /></PrivateRoute>} />
           <Route path="/chamados" element={<PrivateRoute><MeusChamados /></PrivateRoute>} />
           <Route path="/perfil" element={<PrivateRoute><Perfil /></PrivateRoute>} />
+          <Route path="/creditos" element={<PrivateRoute><Creditos /></PrivateRoute>} />
           {/* Comissões: qualquer usuário autenticado vê as PRÓPRIAS comissões/saldo/PIX (o
               MLM abrange clientes pagantes, não só equipe). A página é escopada ao user.id. */}
           <Route path="/comissoes" element={<PrivateRoute><Comissoes /></PrivateRoute>} />
