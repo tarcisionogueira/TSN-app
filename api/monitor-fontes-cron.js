@@ -40,7 +40,7 @@ const FONTES_CRITICAS = ['CEF', 'MEGA', 'SUPERBID', 'SOLD', 'ZUK', 'SODRE', 'FRA
 // Inclui as fontes GRÁTIS servidas por scrapers próprios (Bright Data via GitHub Actions) que
 // NÃO escreviam fonte_saude e eram ponto-cego: GESTAOLEILOES (qui), CALIL/VEGAS/TORRES3 (plataforma
 // SOLEON, seg). Frescor pelo acervo (imoveis_leilao.atualizado_em). 9d cobre a cadência semanal.
-const FONTES_SEM_SAUDE = { PECINI: 9, RJLEILOES: 9, GESTAOLEILOES: 9, CALIL: 9, VEGAS: 9, TORRES3: 9 };
+const FONTES_SEM_SAUDE = { PECINI: 9, RJLEILOES: 9, GESTAOLEILOES: 9, CALIL: 9, VEGAS: 9, TORRES3: 9, VLANCE: 9 };
 // Frescor máximo tolerado (h) para as fontes grátis que reportam saúde (Seção A).
 // Elas rodam 2x/semana — seg e qui (cron '1,4' em scraper.yml e leiloeiros-puppeteer.yml).
 // O MAIOR gap NORMAL é quinta→segunda = 96h; com este monitor às 11h UTC e o scrape às
