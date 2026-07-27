@@ -448,7 +448,8 @@ export default function Perfil() {
   const [verificandoPj, setVerificandoPj] = useState(false);
   const [kycBusy, setKycBusy] = useState(false);
   const [docBusy, setDocBusy] = useState(false);
-  const [docEnviado, setDocEnviado] = useState(false);
+  const [docFotos, setDocFotos] = useState({ frente: false, verso: false });
+  const [docArquivo, setDocArquivo] = useState(false);
   const maskCnpj = (v) => (v || '').replace(/\D/g, '').slice(0, 14)
     .replace(/(\d{2})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2')
     .replace(/(\d{3})(\d)/, '$1/$2').replace(/(\d{4})(\d{1,2})$/, '$1-$2');
@@ -544,33 +545,36 @@ export default function Perfil() {
     } catch (e) { setPjMsg({ tipo: 'erro', texto: e.message || 'Erro ao anexar o contrato.' }); }
   }
 
-  // SELFIE segurando o documento → armazena (auditoria) + /api/validar-selfie (servidor grava
-  // identidade_validada quando rosto E documento aparecem na foto).
-  async function enviarSelfiePJ(file) {
-    if (!file) return;
-    setKycBusy(true); setPjMsg(null);
-    try {
-      try { await armazenarDoc(file, 'kyc_selfie', 'kyc-selfie'); } catch { /* validação segue mesmo sem guardar */ }
-      const dataUrl = await dataUrlDe(file);
-      const r = await apiCall('/api/validar-selfie', { method: 'POST', body: JSON.stringify({ imagem: dataUrl }) });
-      const d = await r.json().catch(() => ({}));
-      if (d.ok) setPjMsg({ tipo: 'sucesso', texto: '✓ Identidade verificada.' });
-      else setPjMsg({ tipo: 'aviso', texto: d.mensagem || 'Foto recebida — a equipe fará a conferência manual.' });
-      carregarPJ();
-    } catch { setPjMsg({ tipo: 'erro', texto: 'Erro no envio da selfie.' }); }
-    setKycBusy(false);
-  }
-
-  // DOCUMENTO (frente do RG/CNH) — anexar arquivo OU tirar foto na hora. Cópia legível p/ auditoria.
-  async function enviarDocumento(file) {
+  // DOCUMENTO de identificação. Por FOTO: frente + verso (ex.: CNH/RG físico). Por ARQUIVO:
+  // um único arquivo (ex.: CNH digital em PDF). Guardado no acervo (auditoria).
+  async function enviarDocKYC(file, subtipo) {
     if (!file) return;
     setDocBusy(true); setPjMsg(null);
     try {
-      await armazenarDoc(file, 'kyc_documento', 'kyc-documento');
-      setDocEnviado(true);
-      setPjMsg({ tipo: 'sucesso', texto: 'Documento recebido.' });
+      const tipo = subtipo === 'arquivo' ? 'kyc_documento' : `kyc_documento_${subtipo}`;
+      await armazenarDoc(file, tipo, `kyc-doc-${subtipo}`);
+      if (subtipo === 'arquivo') setDocArquivo(true);
+      else setDocFotos((d) => ({ ...d, [subtipo]: true }));
+      setPjMsg({ tipo: 'sucesso', texto: subtipo === 'arquivo' ? 'Arquivo do documento recebido.' : `Foto do documento (${subtipo}) recebida.` });
     } catch (e) { setPjMsg({ tipo: 'erro', texto: e.message || 'Erro ao enviar o documento.' }); }
     setDocBusy(false);
+  }
+
+  // SELFIE do ROSTO — conclui o KYC. O servidor só marca identidade_validada se o DOCUMENTO
+  // (frente/verso ou arquivo) já estiver enviado. Guarda a selfie p/ auditoria.
+  async function enviarRostoKYC(file) {
+    if (!file) return;
+    setKycBusy(true); setPjMsg(null);
+    try {
+      try { await armazenarDoc(file, 'kyc_selfie', 'kyc-rosto'); } catch { /* validação segue mesmo sem guardar */ }
+      const dataUrl = await dataUrlDe(file);
+      const r = await apiCall('/api/validar-selfie', { method: 'POST', body: JSON.stringify({ imagem: dataUrl, tipo: 'rosto' }) });
+      const d = await r.json().catch(() => ({}));
+      if (d.ok) setPjMsg({ tipo: 'sucesso', texto: '✓ Identidade verificada.' });
+      else setPjMsg({ tipo: 'aviso', texto: d.mensagem || 'Selfie recebida — a equipe fará a conferência.' });
+      carregarPJ();
+    } catch { setPjMsg({ tipo: 'erro', texto: 'Erro no envio da selfie.' }); }
+    setKycBusy(false);
   }
 
   // CPF: só é digitado UMA vez. Grava cifrado (cpf-set) e passa a ser reusado em
@@ -1072,26 +1076,30 @@ export default function Perfil() {
 
                 <div style={{ fontSize: 11.5, fontWeight: 700, color: '#334155', marginBottom: 4 }}>1) Verificação de identidade</div>
                 {pj.identidade_validada ? (
-                  <span style={{ fontSize: 11.5, color: '#16a34a', fontWeight: 700 }}>✓ Identidade verificada{docEnviado ? ' · documento recebido' : ''}</span>
+                  <span style={{ fontSize: 11.5, color: '#16a34a', fontWeight: 700 }}>✓ Identidade verificada</span>
                 ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <div style={{ fontSize: 11, color: '#64748b' }}>a) Selfie <strong>segurando o documento</strong> (rosto + documento na mesma foto)</div>
-                    <label style={{ fontSize: 11.5, color: '#0D63DB', fontWeight: 700, cursor: 'pointer' }}>
-                      {kycBusy ? 'Enviando…' : '📷 Tirar selfie'}
-                      <input type="file" accept="image/*" capture="user" style={{ display: 'none' }} disabled={kycBusy} onChange={e => enviarSelfiePJ(e.target.files?.[0])} />
-                    </label>
-                    <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>b) Documento (frente do RG/CNH) — anexe um arquivo <strong>ou</strong> tire a foto na hora</div>
-                    <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
-                      <label style={{ fontSize: 11.5, color: '#0D63DB', fontWeight: 700, cursor: 'pointer' }}>
-                        {docBusy ? 'Enviando…' : '📎 Anexar arquivo'}
-                        <input type="file" accept="image/*,application/pdf" style={{ display: 'none' }} disabled={docBusy} onChange={e => enviarDocumento(e.target.files?.[0])} />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div style={{ fontSize: 11, color: '#64748b' }}>a) Documento de identificação — por <strong>foto (frente e verso)</strong> ou anexe o <strong>arquivo</strong> (ex.: CNH digital)</div>
+                    <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
+                      <label style={{ fontSize: 11.5, color: docFotos.frente ? '#16a34a' : '#0D63DB', fontWeight: 700, cursor: 'pointer' }}>
+                        📷 Foto frente{docFotos.frente ? ' ✓' : ''}
+                        <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }} disabled={docBusy} onChange={e => enviarDocKYC(e.target.files?.[0], 'frente')} />
                       </label>
-                      <label style={{ fontSize: 11.5, color: '#0D63DB', fontWeight: 700, cursor: 'pointer' }}>
-                        📷 Tirar foto
-                        <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }} disabled={docBusy} onChange={e => enviarDocumento(e.target.files?.[0])} />
+                      <label style={{ fontSize: 11.5, color: docFotos.verso ? '#16a34a' : '#0D63DB', fontWeight: 700, cursor: 'pointer' }}>
+                        📷 Foto verso{docFotos.verso ? ' ✓' : ''}
+                        <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }} disabled={docBusy} onChange={e => enviarDocKYC(e.target.files?.[0], 'verso')} />
                       </label>
-                      {docEnviado && <span style={{ fontSize: 11.5, color: '#16a34a', fontWeight: 700 }}>✓ documento recebido</span>}
+                      <span style={{ fontSize: 11, color: '#94a3b8' }}>ou</span>
+                      <label style={{ fontSize: 11.5, color: docArquivo ? '#16a34a' : '#0D63DB', fontWeight: 700, cursor: 'pointer' }}>
+                        📎 Anexar arquivo{docArquivo ? ' ✓' : ''}
+                        <input type="file" accept="image/*,application/pdf" style={{ display: 'none' }} disabled={docBusy} onChange={e => enviarDocKYC(e.target.files?.[0], 'arquivo')} />
+                      </label>
                     </div>
+                    <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>b) Selfie do <strong>rosto</strong> (conclui — envie o documento antes)</div>
+                    <label style={{ fontSize: 11.5, color: '#0D63DB', fontWeight: 700, cursor: 'pointer' }}>
+                      {kycBusy ? 'Enviando…' : '📷 Tirar selfie do rosto'}
+                      <input type="file" accept="image/*" capture="user" style={{ display: 'none' }} disabled={kycBusy} onChange={e => enviarRostoKYC(e.target.files?.[0])} />
+                    </label>
                   </div>
                 )}
 

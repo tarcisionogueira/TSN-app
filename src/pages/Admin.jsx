@@ -7781,7 +7781,7 @@ function PrestacaoContasTab() {
     setDocsPJ(d => ({ ...d, [userId]: { loading: true } }));
     try {
       const { data } = await supabase.from('usuario_docs').select('tipo,nome,url,criado_em')
-        .eq('user_id', userId).in('tipo', ['pj_contrato_social', 'pj_nota_fiscal', 'kyc_selfie', 'kyc_documento']).order('criado_em', { ascending: false });
+        .eq('user_id', userId).in('tipo', ['pj_contrato_social', 'pj_nota_fiscal', 'kyc_selfie', 'kyc_documento', 'kyc_documento_frente', 'kyc_documento_verso']).order('criado_em', { ascending: false });
       setDocsPJ(d => ({ ...d, [userId]: { loading: false, docs: Array.isArray(data) ? data : [] } }));
     } catch { setDocsPJ(d => ({ ...d, [userId]: { loading: false, docs: [] } })); }
   };
@@ -7902,7 +7902,7 @@ function PrestacaoContasTab() {
                     <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px dashed #fcd34d' }}>
                       {dp.loading ? <span style={{ fontSize: 12, color: '#94a3b8' }}>Carregando…</span>
                         : (dp.docs && dp.docs.length) ? dp.docs.map((d, i) => (
-                          <a key={i} href={d.url} target="_blank" rel="noreferrer" style={{ display: 'block', fontSize: 12, color: '#0D63DB', fontWeight: 700, marginBottom: 4 }}>📎 {({ pj_contrato_social: 'Contrato social', pj_nota_fiscal: 'Nota fiscal', kyc_selfie: 'Selfie c/ documento', kyc_documento: 'Documento (frente)' }[d.tipo]) || d.tipo}: {d.nome}</a>
+                          <a key={i} href={d.url} target="_blank" rel="noreferrer" style={{ display: 'block', fontSize: 12, color: '#0D63DB', fontWeight: 700, marginBottom: 4 }}>📎 {({ pj_contrato_social: 'Contrato social', pj_nota_fiscal: 'Nota fiscal', kyc_selfie: 'Selfie (rosto)', kyc_documento: 'Documento (arquivo)', kyc_documento_frente: 'Documento (frente)', kyc_documento_verso: 'Documento (verso)' }[d.tipo]) || d.tipo}: {d.nome}</a>
                         )) : <span style={{ fontSize: 12, color: '#dc2626' }}>Nenhum documento anexado — reprovar e pedir o contrato social.</span>}
                     </div>
                   )}

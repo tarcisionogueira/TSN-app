@@ -67,9 +67,11 @@
     ao QSA **sem gravar** — UI em Admin → Prestação de contas ("Testar consulta à Receita"). Serve para validar
     a integração com dados reais em produção (o sandbox de dev é bloqueado por política de egress — não é bug de
     código). (b) **Matcher endurecido** (`_pj-socio.js`): só casa sócio cujo `cnpj_cpf_do_socio` é CPF mascarado
-    (`***DDDDDD**`, 6 dígitos) — ignora sócio PJ. (c) **KYC com opção de documento**: selfie **segurando o
-    documento** (câmera) + documento (frente) com **Anexar arquivo OU Tirar foto**; ambos arquivados em
-    `usuario_docs` (`kyc_selfie`/`kyc_documento`) e visíveis na fila de validação do admin. **Fluxo: código no
+    (`***DDDDDD**`, 6 dígitos) — ignora sócio PJ. (c) **KYC (formato final)**: foto **só do rosto** + **documento** por **foto frente+verso**
+    (ex.: CNH física) **OU** **arquivo** (ex.: CNH digital PDF). A selfie do rosto **conclui** o KYC no
+    servidor só quando o documento já foi enviado (`validar-selfie` tipo='rosto' checa `usuario_docs`).
+    Arquivados em `usuario_docs` (`kyc_selfie`/`kyc_documento`/`kyc_documento_frente`/`_verso`) e visíveis
+    na fila de validação do admin. **Fluxo: código no
     branch/preview p/ o dono validar ANTES de promover a main.**
 
 ### Sessão 8e — parte 9 (pool 2% OFF + empresa como patrocinadora + termo PJ conferido) ✅ validado

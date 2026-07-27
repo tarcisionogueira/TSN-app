@@ -131,6 +131,21 @@ Responda SOMENTE com o JSON, sem texto adicional.`;
     // Checagem por tipo — usa campo "ok" diretamente
     if (usaTipo) {
       if (parsed.ok === true) {
+        // KYC do parceiro: a selfie do ROSTO conclui a identidade, MAS só se o DOCUMENTO
+        // (frente/verso por foto, ou o arquivo da CNH digital) já estiver no acervo.
+        if (tipo === 'rosto') {
+          let temDoc = false;
+          try {
+            const docs = await fetch(`${SUPABASE_URL}/rest/v1/usuario_docs?user_id=eq.${user.id}&tipo=in.(kyc_documento,kyc_documento_frente)&select=id&limit=1`,
+              { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` } }).then(r => r.json());
+            temDoc = Array.isArray(docs) && docs.length > 0;
+          } catch { temDoc = false; }
+          if (temDoc) {
+            await marcarIdentidade(user.id, { identidade_validada: true, identidade_validada_em: new Date().toISOString(), identidade_pendente: false });
+            return new Response(JSON.stringify({ ok: true, mensagem: 'Identidade verificada com sucesso.', detalhes: parsed }), { status: 200 });
+          }
+          return new Response(JSON.stringify({ ok: false, falta_documento: true, mensagem: 'Rosto aprovado. Agora envie o documento (frente e verso, ou o arquivo da CNH digital) para concluir.', detalhes: parsed }), { status: 200 });
+        }
         return new Response(JSON.stringify({
           ok: true,
           mensagem: 'Verificação concluída com sucesso.',
