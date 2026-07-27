@@ -29,6 +29,18 @@ async function rpcProduto(fn, payload) {
   } catch (e) { return { ok: false, erro: String(e?.message || e) }; }
 }
 
+// Espelho local (financeiro) — upsert idempotente via PostgREST. Fire-and-forget: nunca
+// derruba o fluxo do webhook (o pagamento/plano já foi tratado; isto é só o registro).
+async function upsertTabela(tabela, conflito, obj) {
+  try {
+    await fetch(`${_SB_URL}/rest/v1/${tabela}?on_conflict=${conflito}`, {
+      method: 'POST',
+      headers: { apikey: _SB_SVC, Authorization: `Bearer ${_SB_SVC}`, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },
+      body: JSON.stringify(obj), signal: AbortSignal.timeout(10000),
+    });
+  } catch (e) { console.error('[mp-webhook] upsert', tabela, e?.message); }
+}
+
 // Retorna:
 //   'ok'         → assinatura válida (secret configurado e HMAC confere)
 //   'sem_secret' → MP_WEBHOOK_SECRET não configurado (não bloqueia: cada evento é
@@ -103,12 +115,13 @@ export default async function handler(req, res) {
     if (!ACCESS_TOKEN) return res.status(500).json({ error: 'MP_ACCESS_TOKEN não configurado' });
     try {
       let preapproval = null;
+      let ap = null;
       let cobrancaRecusada = false;
       if (tipo === 'subscription_preapproval') {
         preapproval = await mpGet(`/preapproval/${dataId}`);
       } else {
         // Cobrança recorrente: 'processed' = paga; 'rejected' = falhou.
-        const ap = await mpGet(`/authorized_payments/${dataId}`);
+        ap = await mpGet(`/authorized_payments/${dataId}`);
         const st = ap?.status;
         if (st !== 'processed' && st !== 'rejected') return res.status(200).json({ ok: true, status: st || null });
         cobrancaRecusada = (st === 'rejected');
@@ -117,6 +130,23 @@ export default async function handler(req, res) {
       if (!preapproval) return res.status(200).json({ ok: true, erro: 'preapproval não encontrado' });
       const [userId, planoKey] = String(preapproval.external_reference || '').split('|');
       if (!userId) return res.status(200).json({ ok: true, status: preapproval.status });
+
+      // Espelho local (financeiro). mp_assinaturas = estado da assinatura (para contar
+      // assinantes ativos); a cobrança recorrente PROCESSADA vira uma "mensalidade recebida"
+      // em mp_pagamentos (origem='recorrente'). Idempotente por id; não bloqueia o fluxo.
+      await upsertTabela('mp_assinaturas', 'mp_assinatura_id', {
+        mp_assinatura_id: String(preapproval.id || dataId), user_id: userId || null,
+        plano_key: planoKey || null, status: preapproval.status || null,
+        dados_mp: preapproval, atualizado_em: new Date().toISOString(),
+      });
+      if (tipo === 'subscription_authorized_payment' && ap && ap.status === 'processed') {
+        await upsertTabela('mp_pagamentos', 'mp_payment_id', {
+          mp_payment_id: String(ap.payment?.id || ap.id), user_id: userId || null, plano_key: planoKey || null,
+          valor: ap.transaction_amount ?? ap.payment?.transaction_amount ?? null, status: 'approved',
+          metodo: 'recorrente', origem: 'recorrente', external_ref: preapproval.external_reference || null,
+          dados_mp: ap, atualizado_em: new Date().toISOString(),
+        });
+      }
 
       // Idempotência POR TRANSIÇÃO: o preapproval_id se repete durante todo o
       // ciclo de vida da assinatura. Chavear só por (id, tipo) fazia o evento de
@@ -180,6 +210,23 @@ export default async function handler(req, res) {
   }
 
   const status = pagamento.status;
+
+  // Espelho local do pagamento (financeiro) — todas as transições de status. Recorrente vs
+  // avulso pelo operation_type do MP. Idempotente por mp_payment_id; roda antes do corte de
+  // idempotência para refletir pending→approved→charged_back. Não bloqueia o fluxo.
+  {
+    const ext = String(pagamento.external_reference || '').trim();
+    const [refUser, refPlano] = ext.includes('|') ? ext.split('|') : [];
+    await upsertTabela('mp_pagamentos', 'mp_payment_id', {
+      mp_payment_id: String(pagamento.id),
+      user_id: refUser || pagamento.metadata?.user_id || pagamento.metadata?.userId || null,
+      plano_key: refPlano || pagamento.metadata?.planoKey || null,
+      valor: pagamento.transaction_amount ?? null, status,
+      status_detalhe: pagamento.status_detail || null, metodo: pagamento.payment_method_id || null,
+      external_ref: ext || null, origem: pagamento.operation_type === 'recurring_payment' ? 'recorrente' : 'avulso',
+      dados_mp: pagamento, atualizado_em: new Date().toISOString(),
+    });
+  }
 
   // Idempotência: o MP reenvia a mesma notificação. Se já tratamos este
   // (pagamento, status), responde OK sem reprocessar.

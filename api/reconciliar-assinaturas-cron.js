@@ -51,6 +51,13 @@ async function handler(req) {
         const [userId, planoKey] = String(sub.external_reference || '').split('|');
         if (!userId || !planoKey) continue;
         verificados++;
+        // Espelho local (financeiro): mantém mp_assinaturas em dia + backfilla o histórico.
+        try {
+          await supabase.from('mp_assinaturas').upsert({
+            mp_assinatura_id: String(sub.id), user_id: userId, plano_key: planoKey,
+            status: sub.status || null, dados_mp: sub, atualizado_em: new Date().toISOString(),
+          }, { onConflict: 'mp_assinatura_id' });
+        } catch { /* espelho — não bloqueia a reconciliação */ }
         const { data: perfil } = await supabase.from('perfis').select('role, inadimplente_desde').eq('id', userId).maybeSingle();
         // Órfão: assinatura autorizada no MP, mas o cliente segue no Explorador
         // (e não é suspensão por inadimplência). Reativa o plano contratado.
@@ -76,6 +83,13 @@ async function handler(req) {
         for (const sub of results) {
           const [userId, planoKey] = String(sub.external_reference || '').split('|');
           if (!userId || !planoKey) continue;
+          // Espelho local (financeiro): reflete cancelamento/pausa em mp_assinaturas.
+          try {
+            await supabase.from('mp_assinaturas').upsert({
+              mp_assinatura_id: String(sub.id), user_id: userId, plano_key: planoKey,
+              status: sub.status || null, dados_mp: sub, atualizado_em: new Date().toISOString(),
+            }, { onConflict: 'mp_assinatura_id' });
+          } catch { /* espelho — não bloqueia */ }
           // Período pago ainda vigente → mantém acesso. Sem data confiável, não
           // rebaixa (conservador: o webhook é o caminho primário).
           const fim = sub.next_payment_date ? new Date(sub.next_payment_date) : null;
