@@ -8,8 +8,15 @@ let contador = 0;          // teto por sessão (anti-flood + economia)
 const TETO = 200;
 let timer = null;
 
+// Nunca deixa TOKEN de auth virar "rota": no fluxo implícito do Supabase com HashRouter, a URL
+// pós-login (magic link/OAuth/recuperação) vem como #access_token=...&refresh_token=... — isso é
+// SEGREDO e não pode ir para o log (o pageview dispara antes do Supabase limpar o hash).
+const RE_TOKEN_URL = /(access_token|refresh_token|provider_token|provider_refresh_token|id_token|[?&#]token=|[?&]code=)/i;
 function rotaAtual() {
-  try { return ((location.hash.split('?')[0].replace(/^#/, '')) || location.pathname || '').slice(0, 200); } catch { return ''; }
+  try {
+    if (RE_TOKEN_URL.test(location.hash) || RE_TOKEN_URL.test(location.search)) return '/(auth-redirect)';
+    return ((location.hash.split('?')[0].replace(/^#/, '')) || location.pathname || '').slice(0, 200);
+  } catch { return ''; }
 }
 function rotuloDe(el) {
   try {

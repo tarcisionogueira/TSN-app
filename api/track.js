@@ -12,6 +12,11 @@ const SB = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const KEY = process.env.SUPABASE_SERVICE_KEY;
 const TIPOS = new Set(['pageview', 'click', 'api_erro']);
 
+// Defesa em profundidade: NUNCA persistir token/segredo no log de atividade, mesmo que um cliente
+// antigo/adulterado mande (ex.: #access_token=... do fluxo implícito, ou um JWT eyJ...). Redige.
+const RE_SEGREDO = /(access_token|refresh_token|provider_token|provider_refresh_token|id_token|[?&#]token=|[?&]code=|eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,})/i;
+const redigir = (s) => { const v = String(s || ''); return RE_SEGREDO.test(v) ? '(redigido)' : v; };
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') { res.status(405).end(); return; }
   try {
@@ -27,9 +32,9 @@ export default async function handler(req, res) {
       .filter((e) => e && TIPOS.has(e.tipo))
       .map((e) => ({
         user_id: userId, role: role || null, tipo: e.tipo,
-        rota: (String(e.rota || '').slice(0, 200)) || null,
-        alvo: (String(e.alvo || '').slice(0, 200)) || null,
-        detalhe: (String(e.detalhe || '').slice(0, 300)) || null,
+        rota: (redigir(e.rota).slice(0, 200)) || null,
+        alvo: (redigir(e.alvo).slice(0, 200)) || null,
+        detalhe: (redigir(e.detalhe).slice(0, 300)) || null,
       }));
     if (rows.length) {
       await fetch(`${SB}/rest/v1/eventos_atividade`, {
