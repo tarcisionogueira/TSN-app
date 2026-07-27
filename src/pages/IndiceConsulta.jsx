@@ -314,6 +314,30 @@ export default function IndiceConsulta() {
             )}
           </div>
 
+          {/* MAPA DA CIDADE POR BAIRRO — quando a consulta é da cidade (sem bairro/rua), mostra o
+              R$/m² de cada bairro já mapeado; bairro com poucos dados cai na média da cidade. */}
+          {Array.isArray(res.regioes) && res.regioes.length > 0 && (
+            <div style={{ borderRadius: 14, border: '1px solid #e2e8f0', background: '#fff', padding: '16px 20px' }}>
+              <div style={{ fontSize: 12, fontWeight: 800, color: '#0D63DB', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 2 }}>
+                Mapa da cidade por bairro ({TIPO_LABEL[form.tipo] || form.tipo})
+              </div>
+              <div style={{ fontSize: 11.5, color: '#64748b', marginBottom: 10 }}>
+                R$/m² de venda por bairro (≥3 amostras). Bairro ainda sem dados suficientes usa a média da cidade.
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 8 }}>
+                {res.regioes.map((b, i) => (
+                  <div key={i} style={{ background: '#f8fafc', borderRadius: 10, padding: '10px 12px' }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: '#0f172a', textTransform: 'capitalize' }}>{b.bairro_norm}</div>
+                    <div style={{ fontSize: 15, fontWeight: 900, color: '#0D63DB', marginTop: 2 }}>{Number(b.venda_m2) > 0 ? `${brl(b.venda_m2)}/m²` : '—'}</div>
+                    <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>
+                      {Number(b.aluguel_m2 ?? b.locacao_m2) > 0 ? `loc. ${brl(b.aluguel_m2 ?? b.locacao_m2)}/m² · ` : ''}{(b.n_venda || 0) + (b.n_locacao || 0)} amostra(s)
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <button
             onClick={() => gerarIndicePDF({ form, reg, amostras: res?.amostras || [], amostrasAno: res?.amostras_ano || [], aviso: res?.aviso || null, periodos: reg?.periodos || [], solicitante: { nome, role: effectiveRole } })}
             style={{ alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 20px', background: '#0D2A54', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 14, cursor: 'pointer' }}>

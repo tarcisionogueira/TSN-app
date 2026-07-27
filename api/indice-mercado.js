@@ -50,28 +50,38 @@ function parseJSON(txt) {
 
 // Um imóvel "todos" faz UMA busca ampla cobrindo os 4 tipos (economia do dono: "puxar tudo o
 // que tiver anunciado e a IA só filtra e organiza a cada raio"), com o tipo em CADA amostra.
-const promptIndice = ({ endereco, condominio, tipo, cidade, uf }) => {
+const promptIndice = ({ endereco, condominio, bairro, tipo, cidade, uf }) => {
   const todos = tipo === 'todos';
+  // Sem rua/condomínio/bairro → MAPEAR A CIDADE INTEIRA (o dono: "pega uma cidade, traz tudo o
+  // que estiver anunciado e a IA filtra/organiza por região"). Cada amostra leva seu BAIRRO, então
+  // uma única busca de cidade semeia vários bairros — a resolução por 250m/bairro vem daí.
+  const cidadeInteira = !endereco && !condominio && !bairro;
   const alvo = todos ? 'de TODOS os tipos (apartamento, casa, terreno, comercial)' : `para o imóvel do tipo "${tipo}"`;
   const regraTipo = todos
     ? '- Cubra os 4 tipos (apartamento, casa, terreno, comercial). Em CADA amostra informe "tipo": exatamente um de apartamento|casa|terreno|comercial (sem variações). Traga no MÁXIMO 6 amostras por tipo por nível (não estoure o limite da resposta).'
     : `- SÓ o MESMO TIPO (${tipo}). Descarte tipos diferentes.`;
   const campoTipo = todos ? '"tipo":"apartamento",' : '';
-  return `Você é um perito avaliador imobiliário. Pesquise o MERCADO LIVRE de VENDA e LOCAÇÃO ${alvo} em ${endereco || cidade}, ${cidade}/${uf}, em DOIS NÍVEIS:
-- NÍVEL 1: ${condominio ? `MESMO condomínio/empreendimento "${condominio}" (ou o quarteirão)` : 'mesmo condomínio/rua'} — raio de ~250m do endereço.
-- NÍVEL 2: bairro e adjacências (~1km).
+  const niveis = cidadeInteira
+    ? `- NÍVEL 1: bairros CENTRAIS / mais valorizados de ${cidade}.
+- NÍVEL 2: DEMAIS bairros de ${cidade}.
+Como NÃO há endereço/bairro específico, MAPEIE A CIDADE INTEIRA: traga amostras de VÁRIOS bairros diferentes (não concentre num só) para cobrir a cidade.`
+    : `- NÍVEL 1: ${condominio ? `MESMO condomínio/empreendimento "${condominio}" (ou o quarteirão)` : bairro ? `bairro "${bairro}"` : 'mesmo condomínio/rua'} — raio de ~250m${endereco ? ' do endereço' : ''}.
+- NÍVEL 2: ${bairro ? `bairros vizinhos a "${bairro}"` : 'bairro e adjacências'} (~1km).`;
+  return `Você é um perito avaliador imobiliário. Pesquise o MERCADO LIVRE de VENDA e LOCAÇÃO ${alvo} em ${endereco || bairro || cidade}, ${cidade}/${uf}, em DOIS NÍVEIS:
+${niveis}
 
 REGRAS:
 ${regraTipo}
 - SÓ MERCADO LIVRE: descarte QUALQUER leilão, praça, venda direta bancária/Caixa, alienação fiduciária, extrajudicial/judicial ou retomado (preços 30–60% abaixo contaminam o índice).
 - Priorize anúncios RECENTES (≤12 meses). Capture a data de cada amostra.
 - Faça várias buscas (ZAP, VivaReal, OLX, Quinto Andar, Imovelweb, Chaves na Mão e imobiliárias LOCAIS de ${cidade}).
+- Informe o BAIRRO de cada amostra (essencial para classificar a cidade por região).${cidadeInteira ? ' TRAGA amostras de bairros DIFERENTES.' : ''}
 - Mesmo em CIDADE PEQUENA há anúncios: pesquise "${cidade} ${uf}" + o tipo nesses portais e TRAGA o que encontrar — NÃO retorne listas vazias se existir qualquer anúncio real de mercado (venda/locação). Terreno costuma ter R$/m² BAIXO (ex.: 100–400 R$/m²): isso é normal, capture assim mesmo.
 
-Para CADA amostra capture: ${todos ? 'tipo (apartamento|casa|terreno|comercial); ' : ''}valorM2 (R$/m² de VENDA) nas vendas; aluguelM2 (R$/m²/mês) nas locações; area (m²); data (formato "AAAA-MM"); fonte (portal ou imobiliária).
+Para CADA amostra capture: ${todos ? 'tipo (apartamento|casa|terreno|comercial); ' : ''}bairro (nome do bairro do imóvel); valorM2 (R$/m² de VENDA) nas vendas; aluguelM2 (R$/m²/mês) nas locações; area (m²); data (formato "AAAA-MM"); fonte (portal ou imobiliária).
 
 Retorne SOMENTE JSON válido, sem texto fora do JSON:
-{"nivel1":{"vendas":[{${campoTipo}"valorM2":0,"area":0,"data":"AAAA-MM","fonte":""}],"locacoes":[{${campoTipo}"aluguelM2":0,"area":0,"data":"AAAA-MM","fonte":""}]},"nivel2":{"vendas":[],"locacoes":[]}}`;
+{"nivel1":{"vendas":[{${campoTipo}"bairro":"","valorM2":0,"area":0,"data":"AAAA-MM","fonte":""}],"locacoes":[{${campoTipo}"bairro":"","aluguelM2":0,"area":0,"data":"AAAA-MM","fonte":""}]},"nivel2":{"vendas":[],"locacoes":[]}}`;
 };
 
 // Monta as amostras (venda e locação) no formato do ingerir_amostras_indice, com fonte_ref
@@ -96,19 +106,22 @@ function montarAmostras(mercado, ctx) {
     return null;
   };
   const tipoDe = (s) => ctx.todos ? canonTipo(s?.tipo) : ctx.tipo;
-  const linha = (s, natureza, vm2) => ({ cidade_norm: ctx.cidadeNorm, uf: ctx.uf, bairro_norm: ctx.bairroNorm || null,
+  // BAIRRO por AMOSTRA (a IA classifica cada anúncio): é o que permite MAPEAR a cidade por região
+  // a partir de UMA busca. Sem o bairro da amostra, cai no bairro do contexto (consulta de bairro).
+  const bairroDe = (s) => norm(s?.bairro) || ctx.bairroNorm || null;
+  const linha = (s, natureza, vm2) => ({ cidade_norm: ctx.cidadeNorm, uf: ctx.uf, bairro_norm: bairroDe(s),
     lat: ctx.lat, lng: ctx.lng, tipo: tipoDe(s), origem: 'pesquisa_web', natureza, valor_m2: vm2, area_m2: s?.area || null });
   for (const nivel of [1, 2]) {
     const bloco = mercado?.[`nivel${nivel}`] || {};
     for (const v of (bloco.vendas || [])) {
-      const vm = Number(v?.valorM2); const tp = tipoDe(v);
+      const vm = Number(v?.valorM2); const tp = tipoDe(v); const brr = bairroDe(v) || '';
       if (tp && vm > 0 && !FONTE_LEILAO.test(String(v?.fonte || ''))) out.push({ ...linha(v, 'venda', vm), nivel, data_anuncio: dataOk(v?.data),
-        fonte_ref: `web|${ctx.cidadeNorm}|${tp}|venda|${Math.round(vm)}|${Math.round(Number(v?.area) || 0)}|${dataOk(v?.data) || ''}` });
+        fonte_ref: `web|${ctx.cidadeNorm}|${brr}|${tp}|venda|${Math.round(vm)}|${Math.round(Number(v?.area) || 0)}|${dataOk(v?.data) || ''}` });
     }
     for (const l of (bloco.locacoes || [])) {
-      const am = Number(l?.aluguelM2); const tp = tipoDe(l);
+      const am = Number(l?.aluguelM2); const tp = tipoDe(l); const brr = bairroDe(l) || '';
       if (tp && am > 0 && am < 500 && !FONTE_LEILAO.test(String(l?.fonte || ''))) out.push({ ...linha(l, 'locacao', am), nivel, data_anuncio: dataOk(l?.data),
-        fonte_ref: `web|${ctx.cidadeNorm}|${tp}|locacao|${am}|${Math.round(Number(l?.area) || 0)}|${dataOk(l?.data) || ''}` });
+        fonte_ref: `web|${ctx.cidadeNorm}|${brr}|${tp}|locacao|${am}|${Math.round(Number(l?.area) || 0)}|${dataOk(l?.data) || ''}` });
     }
   }
   return out;
@@ -161,7 +174,7 @@ export default async function handler(req, res) {
         model: MODEL, max_tokens: todos ? 8000 : 6000,   // "todos" retorna 4 tipos → JSON maior (evita truncar)
         tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }],
         system: `Perito avaliador. ${todos ? 'Cubra os 4 tipos (apartamento, casa, terreno, comercial) e marque o "tipo" de CADA amostra.' : 'Só ' + tipo + '.'} Só mercado livre (descarte leilão). Retorne apenas JSON válido.`,
-        messages: [{ role: 'user', content: promptIndice({ endereco: body.endereco, condominio: body.condominio, tipo, cidade: body.cidade, uf }) }],
+        messages: [{ role: 'user', content: promptIndice({ endereco: body.endereco, condominio: body.condominio, bairro: body.bairro, tipo, cidade: body.cidade, uf }) }],
       }),
     }, { retries: 0, timeoutMs: 100000, noFallback: true });
     if (!r.ok) throw new Error(`anthropic_http_${r.status}`);
@@ -190,13 +203,22 @@ export default async function handler(req, res) {
 
   // TODOS OS TIPOS: uma única busca ampla semeou os 4 tipos → apresenta POR TIPO. Sucesso = pelo
   // menos um tipo com amostras. Cobra 1 crédito (economia: 1 pesquisa cobre tudo).
+  // Sem rua/bairro → é consulta de CIDADE: devolvemos também a classificação POR BAIRRO (mapa da
+  // cidade por região). Bairro com poucos dados não entra aqui e cai na média (nível 3) do ponderado.
+  const cidadeAmpla = !bairroNorm && lat == null && lng == null;
+  const regioesDe = async (t) => {
+    if (!cidadeAmpla) return [];
+    const r = await rpc('indice_bairros_cidade', { p_cidade_norm: cidadeNorm, p_uf: uf, p_tipo: t });
+    return Array.isArray(r) ? r : [];
+  };
+
   if (todos) {
     const porTipo = [];
     for (const t of SEG_TIPOS) {
       const p = await rpc('indice_regiao_ponderado', { p_cidade_norm: cidadeNorm, p_uf: uf, p_bairro_norm: bairroNorm, p_lat: lat, p_lng: lng, p_tipo: t });
       if (p && p.venda_m2 != null) porTipo.push({ tipo: t, nivel: p.nivel, venda_m2: p.venda_m2,
         aluguel_m2: p.locacao_m2 != null ? p.locacao_m2 : Math.round(p.venda_m2 * 0.004 * 100) / 100,
-        n_amostras: (p.n_venda || 0) + (p.n_locacao || 0) });
+        n_amostras: (p.n_venda || 0) + (p.n_locacao || 0), regioes: await regioesDe(t) });
     }
     if (!porTipo.length) { res.status(200).json({ ok: true, gerado: false, motivo: 'sem_amostras', inseridas }); return; }
     const cota = await cobrar();
@@ -211,6 +233,6 @@ export default async function handler(req, res) {
   res.status(200).json({
     ok: true, gerado: true, fonte: 'mercado', nivel: pond.nivel,
     venda_m2: pond.venda_m2, aluguel_m2: pond.locacao_m2 != null ? pond.locacao_m2 : Math.round(pond.venda_m2 * 0.004 * 100) / 100,
-    n_amostras: (pond.n_venda || 0) + (pond.n_locacao || 0), inseridas, cota,
+    n_amostras: (pond.n_venda || 0) + (pond.n_locacao || 0), inseridas, regioes: await regioesDe(tipo), cota,
   });
 }

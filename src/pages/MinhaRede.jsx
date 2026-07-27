@@ -372,11 +372,11 @@ export default function MinhaRede() {
         </div>
       )}
 
-      {/* SUA TRILHA DE CARREIRA — estrutura completa revelada progressivamente. Conquistados em
-          azul (check), atual em destaque ("VOCÊ ESTÁ AQUI"), próximo em foco (com progresso),
-          futuros em silhueta esmaecida (cadeado). O mapa fica VISÍVEL (o desafio à vista), mas o
-          detalhe "acende" conforme você conquista. Dados de meu_nivel().trilha. */}
-      {Array.isArray(nivel?.trilha) && nivel.trilha.length > 0 && (
+      {/* SUA TRILHA DE CARREIRA — mostra APENAS o nível atual ("VOCÊ ESTÁ AQUI") e o próximo
+          ("PRÓXIMA CONQUISTA"). Os níveis futuros ficam ocultos de propósito: o parceiro os
+          descobre à medida que se gradua (menos ansiedade, mais foco no próximo passo). Dados
+          de meu_nivel().trilha (filtramos por estado 'atual'|'proximo'). */}
+      {Array.isArray(nivel?.trilha) && nivel.trilha.some(t => t.estado === 'atual' || t.estado === 'proximo') && (
         <div style={{ ...card, padding: 0, overflow: 'hidden' }}>
           <div style={{ padding: '16px 20px 6px' }}>
             <div style={{ fontSize: 11.5, fontWeight: 800, color: '#0D63DB', textTransform: 'uppercase', letterSpacing: 0.6, display: 'flex', alignItems: 'center', gap: 7 }}>
@@ -387,13 +387,13 @@ export default function MinhaRede() {
             </div>
           </div>
           <div style={{ padding: '6px 20px 4px' }}>
-            {nivel.trilha.map((t, i) => {
+            {nivel.trilha.filter(t => t.estado === 'atual' || t.estado === 'proximo').map((t, i, arr) => {
               const conquistado = t.estado === 'conquistado';
               const atual = t.estado === 'atual';
               const proximo = t.estado === 'proximo';
               const bloqueado = t.estado === 'bloqueado';
               const destaque = atual || proximo;
-              const ultimo = i === nivel.trilha.length - 1;
+              const ultimo = i === arr.length - 1;
               return (
                 <div key={t.ordem} style={{ display: 'flex', gap: 12, alignItems: 'stretch' }}>
                   {/* Marcador + conector */}

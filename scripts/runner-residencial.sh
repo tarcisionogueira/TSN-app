@@ -48,7 +48,10 @@ rodar GESTAO env GESTAO_HEADLESS=1 GESTAO_DRYRUN=0 node scripts/scraper-gestao.m
 # RJ Leilões — 100% Cloudflare: idem, Chromium real residencial.
 rodar RJ env RJ_HEADLESS=1 node scripts/scraper-rj.mjs
 
-# Vlance — já coletado client-side pelo staff (mesmo gate 'VLANCE'); descomente só p/ redundância:
-# rodar VLANCE python3 scripts/scraper_vlance.py --supabase
+# Vlance (verdeamarelo/sudeste/capitalvalor) — API JSON que dá 403 em datacenter, mas do IP
+# RESIDENCIAL o fetch DIRETO funciona e é GRÁTIS. VLANCE_NO_BD=1 = 100% residencial (sem Bright
+# Data); se preferir BD como rede de segurança quando a casa também falhar, tire o VLANCE_NO_BD
+# e exporte BRIGHTDATA_API_TOKEN/ZONE no ~/.bidpro-runner.env.
+rodar VLANCE env VLANCE_NO_BD=1 python3 scripts/scraper_vlance.py --supabase --ignorar-robots
 
 echo "[$(date)] fim."

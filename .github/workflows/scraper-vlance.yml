@@ -34,9 +34,13 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           BRIGHTDATA_API_TOKEN: ${{ secrets.BRIGHTDATA_API_TOKEN }}
           BRIGHTDATA_ZONE: ${{ secrets.BRIGHTDATA_ZONE }}
+          # CI = datacenter → o direto sempre dá 403; força Bright Data e não desperdiça tentativa.
+          VLANCE_FORCE_BD: '1'
         run: |
+          # FALLBACK: se o runner RESIDENCIAL do dono já atualizou o VLANCE nas últimas 48h,
+          # pula e não gasta Bright Data. Só coleta quando o residencial não rodou (rede de segurança).
           if [ "${{ github.event.inputs.dryrun }}" = "1" ]; then
             python3 scripts/scraper_vlance.py --ignorar-robots
           else
-            python3 scripts/scraper_vlance.py --supabase --ignorar-robots
+            python3 scripts/scraper_vlance.py --supabase --ignorar-robots --pular-se-fresco 48
           fi

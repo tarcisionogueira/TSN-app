@@ -178,7 +178,13 @@ export default async function handler(req) {
     // aviso de frescor/projeção só quando o VALOR veio da composição temporal (ramo de mercado);
     // no fallback (ponderado/acervo) o número não é projeção, então não confunde o usuário.
     const aviso = (regiao && regiao.periodos) ? avisoFrescor(comp) : null;
-    return new Response(JSON.stringify({ ok: true, mapeado, regiao, valorizacao: valorizacao || null, amostras: Array.isArray(amostras) ? amostras : [], amostras_ano, periodos: (regiao && regiao.periodos) ? comp.periodos : [], aviso }), { status: 200, headers });
+    // MAPA DA CIDADE POR REGIÃO: quando é consulta de CIDADE (sem bairro/coordenadas), devolve o
+    // R$/m² ponderado de cada BAIRRO já mapeado (>=3 amostras). Bairro fino cai na média (nível 3).
+    const cidadeAmpla = !bairroNorm && lat == null && lng == null;
+    const regioes = cidadeAmpla
+      ? await rpc('indice_bairros_cidade', { p_cidade_norm: cidadeNorm, p_uf: uf, p_tipo: tipo }).then(r => Array.isArray(r) ? r : []).catch(() => [])
+      : [];
+    return new Response(JSON.stringify({ ok: true, mapeado, regiao, valorizacao: valorizacao || null, amostras: Array.isArray(amostras) ? amostras : [], amostras_ano, periodos: (regiao && regiao.periodos) ? comp.periodos : [], aviso, regioes }), { status: 200, headers });
   } catch (e) {
     return new Response(JSON.stringify({ error: e.message || 'Falha na consulta' }), { status: 500, headers });
   }

@@ -18,8 +18,14 @@ Uso:
 
 Ingestão no BidPro (--supabase): upsert em imoveis_leilao por fonte_id (dedup, idempotente).
 Requer env SUPABASE_URL (ou VITE_SUPABASE_URL) e SUPABASE_SERVICE_KEY. Pula lotes de
-SIMULAÇÃO/TESTE e lotes não-ativos. Rode da sua máquina (IP residencial): a API dá 403 em
-IP de datacenter (por isso não roda na CI sem Bright Data). Respeita robots.txt por padrão.
+SIMULAÇÃO/TESTE e lotes não-ativos. Respeita robots.txt por padrão.
+
+REDE (residencial primeiro, Bright Data só como fallback — economia):
+  A API Vlance dá 403 em IP de DATACENTER (CI/Vercel). Rodando da máquina do dono (IP
+  RESIDENCIAL) o fetch DIRETO funciona e é GRÁTIS. Se o direto for bloqueado e houver
+  BRIGHTDATA_API_TOKEN/ZONE no ambiente, cai na Web Unlocker (fallback). Ver pedir().
+  --pular-se-fresco HORAS: se o acervo VLANCE já foi atualizado nas últimas HORAS (ex.: o
+  runner residencial já rodou hoje), NÃO coleta de novo — evita gastar Bright Data à toa na CI.
 """
 
 import argparse
@@ -30,7 +36,7 @@ import re
 import sys
 import time
 import unicodedata
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from urllib.parse import urljoin, urlencode
 from urllib.robotparser import RobotFileParser
 
@@ -86,13 +92,19 @@ def inferir_tipo(cat, sub, titulo):
     return "outros"
 
 
-# Bright Data Web Unlocker: a API Vlance dá 403 em IP de datacenter (CI/Vercel). Com
-# BRIGHTDATA_API_TOKEN/ZONE no ambiente, roteamos as chamadas pela Web Unlocker (/request,
-# format=raw → devolve o corpo cru da fonte = o JSON). Sem os envs, cai no fetch DIRETO (uso
-# local, IP residencial da máquina do dono). Suporta GET (get-leiloes) e POST (get-lotes page=N).
+# ESTRATÉGIA — RESIDENCIAL PRIMEIRO, BRIGHT DATA SÓ COMO FALLBACK (economia, decisão do dono):
+#   1) tenta DIRETO (IP da máquina que roda o scraper — de casa/residencial isso é GRÁTIS);
+#   2) se o direto for BLOQUEADO (403/anti-bot — típico de IP de datacenter/CI) E houver
+#      BRIGHTDATA_API_TOKEN/ZONE no ambiente, cai na Web Unlocker (/request, format=raw → devolve
+#      o corpo cru da fonte = o JSON). Assim: da máquina do dono custa $0; na CI (datacenter) o
+#      Bright Data entra só como rede de segurança pra fonte nunca zerar.
+# Overrides: VLANCE_FORCE_BD=1 pula o direto (datacenter conhecido → não desperdiça tentativa);
+#            VLANCE_NO_BD=1 desliga o Bright Data (economia máxima — runner 100% residencial).
 BD_TOKEN = os.environ.get("BRIGHTDATA_API_TOKEN")
 BD_ZONE = os.environ.get("BRIGHTDATA_ZONE")
 USA_BD = bool(BD_TOKEN and BD_ZONE)
+FORCE_BD = os.environ.get("VLANCE_FORCE_BD", "").lower() in ("1", "true", "sim")
+NO_BD = os.environ.get("VLANCE_NO_BD", "").lower() in ("1", "true", "sim")
 
 
 def bd_request(url, method="GET", data=None, timeout=60):
@@ -108,22 +120,53 @@ def bd_request(url, method="GET", data=None, timeout=60):
     )
 
 
+def _eh_bloqueio_ip(err):
+    """403/401/429/503 ou erro de conexão → bloqueio de IP/anti-bot: não adianta reTENTAR o
+    mesmo modo, parte pro fallback (Bright Data)."""
+    m = str(err)
+    return any(c in m for c in ("HTTP 403", "HTTP 401", "HTTP 429", "HTTP 503")) or isinstance(
+        err, (requests.ConnectionError,)
+    )
+
+
+def _uma_chamada(session, method, url, data, via_bd):
+    if via_bd:
+        r = bd_request(url, method=method, data=data)
+    else:
+        r = session.post(url, data=data, timeout=30) if method == "POST" else session.get(url, timeout=30)
+    if not r.ok:
+        raise requests.HTTPError(f"HTTP {r.status_code}: {str(getattr(r, 'text', ''))[:300]}")
+    return r.json()
+
+
 def pedir(session, method, base, path, data=None, tentativas=4):
     url = urljoin(base, path)
-    for i in range(tentativas):
-        try:
-            if USA_BD:
-                r = bd_request(url, method=method, data=data)
-            else:
-                r = session.post(url, data=data, timeout=30) if method == "POST" else session.get(url, timeout=30)
-            if not r.ok:
-                raise requests.HTTPError(f"HTTP {r.status_code}: {str(getattr(r, 'text', ''))[:300]}")
-            return r.json()
-        except Exception as e:  # noqa: BLE001
-            if i == tentativas - 1:
-                print(f"  ! {method} {path} falhou: {e}", file=sys.stderr)
-                return None
-            time.sleep(2 ** (i + 1))
+    # Modos em ordem: DIRETO (residencial) → BRIGHT DATA (fallback). FORCE_BD pula o direto;
+    # NO_BD tira o Bright Data. Se nada configurado, tenta o direto mesmo assim.
+    modos = []
+    if not FORCE_BD:
+        modos.append(False)                 # direto (residencial, grátis)
+    if USA_BD and not NO_BD:
+        modos.append(True)                  # Bright Data (fallback)
+    if not modos:
+        modos = [False]
+    ultimo_erro = None
+    for idx, via_bd in enumerate(modos):
+        tem_fallback = idx < len(modos) - 1
+        rotulo = "Bright Data" if via_bd else "direto"
+        for i in range(tentativas):
+            try:
+                return _uma_chamada(session, method, url, data, via_bd)
+            except Exception as e:  # noqa: BLE001
+                ultimo_erro = e
+                # bloqueio de IP no DIRETO com fallback disponível → não reTENTA; vai pro Bright Data já
+                if tem_fallback and _eh_bloqueio_ip(e):
+                    print(f"  · {method} {path} {rotulo} bloqueado ({e}); fallback → Bright Data…", file=sys.stderr)
+                    break
+                if i == tentativas - 1:
+                    break
+                time.sleep(2 ** (i + 1))
+    print(f"  ! {method} {path} falhou (todos os modos): {ultimo_erro}", file=sys.stderr)
     return None
 
 
@@ -244,6 +287,30 @@ def eh_ingerivel(lote):
     return True
 
 
+def vlance_fresco_ha(horas):
+    """True se o acervo VLANCE já foi atualizado nas últimas `horas` (ex.: runner residencial já
+    coletou hoje) → a CI pode PULAR e não gastar Bright Data. Falha de rede → None (não pula)."""
+    url = os.environ.get("SUPABASE_URL") or os.environ.get("VITE_SUPABASE_URL")
+    key = os.environ.get("SUPABASE_SERVICE_KEY")
+    if not url or not key:
+        return None
+    corte = datetime.now(timezone.utc) - timedelta(hours=horas)
+    endpoint = (f"{url.rstrip('/')}/rest/v1/imoveis_leilao"
+                f"?fonte=eq.VLANCE&atualizado_em=gt.{corte.isoformat()}&select=id&limit=1")
+    try:
+        r = requests.get(endpoint, headers={
+            "apikey": key, "Authorization": f"Bearer {key}", "Prefer": "count=exact",
+        }, timeout=30)
+        if not r.ok:
+            return None
+        # content-range: "0-0/N" (N = total que casa o filtro)
+        cr = r.headers.get("content-range", "")
+        total = int(cr.split("/")[-1]) if "/" in cr else len(r.json() or [])
+        return total > 0
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def upsert_supabase(rows):
     url = os.environ.get("SUPABASE_URL") or os.environ.get("VITE_SUPABASE_URL")
     key = os.environ.get("SUPABASE_SERVICE_KEY")
@@ -279,7 +346,17 @@ def main():
     ap.add_argument("--delay", type=float, default=1.5, help="Segundos entre requisições.")
     ap.add_argument("--out", default=".", help="Diretório de saída (CSV/JSON).")
     ap.add_argument("--ignorar-robots", action="store_true")
+    ap.add_argument("--pular-se-fresco", type=float, default=0, metavar="HORAS",
+                    help="Se o acervo VLANCE já foi atualizado nas últimas HORAS, não coleta "
+                         "(evita gastar Bright Data na CI quando o runner residencial já rodou).")
     args = ap.parse_args()
+
+    if args.supabase and args.pular_se_fresco > 0:
+        fresco = vlance_fresco_ha(args.pular_se_fresco)
+        if fresco:
+            print(f"↷ acervo VLANCE já atualizado nas últimas {args.pular_se_fresco:g}h "
+                  f"(residencial já coletou) — pulando para não gastar Bright Data.")
+            return
 
     dominios = [d.strip() for d in args.dominios.split(",") if d.strip()]
     todos_lotes, rows_acervo = [], []
