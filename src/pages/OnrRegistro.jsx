@@ -4,6 +4,7 @@ import { supabase } from '../utils/supabase';
 import { apiCall } from '../utils/apiCall';
 import { useAuth } from '../contexts/AuthContext';
 import { ChevronLeft, FileText, CheckCircle2, Clock, AlertCircle, ExternalLink, Upload, Loader2, Info } from 'lucide-react';
+import CertidaoMatriculaHelper from '../components/CertidaoMatriculaHelper';
 
 // Documentos necessários para registro pós-arrematação
 const DOCS_REGISTRO = [
@@ -352,6 +353,16 @@ export default function OnrRegistro() {
               </div>
             );
           })}
+
+          {/* Ajuda: obter a Certidão de Matrícula atualizada direto no ONR */}
+          <div style={{ marginTop: 4 }}>
+            <CertidaoMatriculaHelper
+              uf={form.cartorio_uf}
+              cidade={form.cartorio_cidade}
+              matricula={form.matricula_numero}
+              titulo="Não tem a certidão de matrícula atualizada? Obtenha no ONR"
+            />
+          </div>
         </div>
       )}
 
