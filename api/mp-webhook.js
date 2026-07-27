@@ -179,7 +179,15 @@ export default async function handler(req, res) {
 
       // SUCESSO: assinatura autorizada ou cobrança recorrente aprovada → ativa/renova.
       if (preapproval.status === 'authorized' && planoKey) {
-        const result = await ativarPlanoDireto({ userId, planoKey, gateway: 'mercadopago' });
+        // Comissão SÓ mediante pagamento recebido: uma cobrança recorrente PROCESSADA
+        // (subscription_authorized_payment + ap.status='processed') é dinheiro que ENTROU →
+        // carrega a cobrança p/ o motor comissionar cada mensalidade. A mera autorização do
+        // mandato (subscription_preapproval, sem ap) passa cobranca=null → ativa sem comissão.
+        // Usa ap.payment.id (não ap.id) p/ idempotência e alinhamento com o estorno.
+        const cobranca = (tipo === 'subscription_authorized_payment' && ap?.status === 'processed' && ap?.payment?.id)
+          ? { gatewayPaymentId: String(ap.payment.id), valor: ap.transaction_amount ?? ap.payment?.transaction_amount }
+          : null;
+        const result = await ativarPlanoDireto({ userId, planoKey, gateway: 'mercadopago', cobranca });
         return res.status(200).json(result);
       }
       return res.status(200).json({ ok: true, status: preapproval.status });

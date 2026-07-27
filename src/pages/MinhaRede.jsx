@@ -224,6 +224,7 @@ export default function MinhaRede() {
         <div style={{ height: 9, background: '#e2e8f0', borderRadius: 999, overflow: 'hidden' }}>
           <div style={{ width: `${pct}%`, height: '100%', background: 'linear-gradient(90deg, #0D63DB, #084BA6)', borderRadius: 999, transition: 'width .4s' }} />
         </div>
+        <div style={{ fontSize: 10.5, color: '#0D63DB', fontWeight: 800, marginTop: 4, textAlign: 'right' }}>{pct}%</div>
       </div>
     );
   };
@@ -330,8 +331,17 @@ export default function MinhaRede() {
             {/* PRÓXIMO nível — apenas o imediatamente seguinte */}
             {nivel?.proximo ? (
               <div style={{ borderTop: '1px solid #eef2f7', paddingTop: 14 }}>
-                <div style={{ fontSize: 11, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>Próximo nível</div>
-                <div style={{ fontSize: 16, fontWeight: 900, color: '#0D63DB', marginBottom: 12 }}>{nivel.proximo.nome}</div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5 }}>Próximo nível</div>
+                    <div style={{ fontSize: 18, fontWeight: 900, color: '#0D63DB' }}>{nivel.proximo.nome}</div>
+                  </div>
+                  {/* Chip do que passa a receber — o "carrot" do desafio */}
+                  <div style={{ textAlign: 'center', background: '#eff6ff', border: '1px solid #dbeafe', borderRadius: 10, padding: '6px 14px' }}>
+                    <div style={{ fontSize: 19, fontWeight: 900, color: '#084BA6', lineHeight: 1 }}>{Number(nivel.proximo.equipe_pct_total) > 0 ? `${Number(nivel.proximo.equipe_pct_total)}%` : `${indicacaoPct}%`}</div>
+                    <div style={{ fontSize: 9.5, color: '#64748b', fontWeight: 700, marginTop: 2 }}>{Number(nivel.proximo.equipe_pct_total) > 0 ? 'da equipe' : 'por indicação'}</div>
+                  </div>
+                </div>
                 <Progresso
                   label={`${nivel.proximo.req_pernas} ${nivel.proximo.sub_nome}${nivel.proximo.req_pernas > 1 ? 's' : ''} na sua rede direta`}
                   atual={nivel.proximo.tem || 0} alvo={nivel.proximo.req_pernas} faltam={nivel.proximo.faltam} />
@@ -346,6 +356,81 @@ export default function MinhaRede() {
               <div style={{ fontSize: 13, color: '#059669', fontWeight: 800, marginTop: 4 }}>🏆 Você chegou ao nível máximo. Parabéns!</div>
             ) : null}
 
+          </div>
+        </div>
+      )}
+
+      {/* SUA TRILHA DE CARREIRA — estrutura completa revelada progressivamente. Conquistados em
+          azul (check), atual em destaque ("VOCÊ ESTÁ AQUI"), próximo em foco (com progresso),
+          futuros em silhueta esmaecida (cadeado). O mapa fica VISÍVEL (o desafio à vista), mas o
+          detalhe "acende" conforme você conquista. Dados de meu_nivel().trilha. */}
+      {Array.isArray(nivel?.trilha) && nivel.trilha.length > 0 && (
+        <div style={{ ...card, padding: 0, overflow: 'hidden' }}>
+          <div style={{ padding: '16px 20px 6px' }}>
+            <div style={{ fontSize: 11.5, fontWeight: 800, color: '#0D63DB', textTransform: 'uppercase', letterSpacing: 0.6, display: 'flex', alignItems: 'center', gap: 7 }}>
+              <Award size={16} /> Sua trilha de carreira
+            </div>
+            <div style={{ fontSize: 12.5, color: '#64748b', marginTop: 4, lineHeight: 1.5 }}>
+              Cada nível conquistado libera o próximo — e quanto mais alto, mais você ganha da equipe que formou.
+            </div>
+          </div>
+          <div style={{ padding: '6px 20px 4px' }}>
+            {nivel.trilha.map((t, i) => {
+              const conquistado = t.estado === 'conquistado';
+              const atual = t.estado === 'atual';
+              const proximo = t.estado === 'proximo';
+              const bloqueado = t.estado === 'bloqueado';
+              const destaque = atual || proximo;
+              const ultimo = i === nivel.trilha.length - 1;
+              return (
+                <div key={t.ordem} style={{ display: 'flex', gap: 12, alignItems: 'stretch' }}>
+                  {/* Marcador + conector */}
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                    <div style={{ width: 30, height: 30, borderRadius: '50%', flexShrink: 0,
+                      background: (conquistado || atual) ? 'linear-gradient(135deg,#0D63DB,#084BA6)' : proximo ? '#fff' : '#f1f5f9',
+                      border: proximo ? '2px solid #0D63DB' : bloqueado ? '1.5px dashed #cbd5e1' : 'none',
+                      boxShadow: atual ? '0 0 0 4px rgba(13,99,219,0.15)' : 'none',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      color: (conquistado || atual) ? '#fff' : proximo ? '#0D63DB' : '#94a3b8' }}>
+                      {conquistado ? <Check size={16} /> : bloqueado ? <Lock size={13} /> : <span style={{ fontSize: 12.5, fontWeight: 900 }}>{t.ordem}</span>}
+                    </div>
+                    {!ultimo && <div style={{ width: 2, flex: 1, minHeight: 16, background: conquistado ? '#0D63DB' : '#e2e8f0' }} />}
+                  </div>
+                  {/* Conteúdo do nível */}
+                  <div style={{ paddingBottom: 16, opacity: bloqueado ? 0.55 : 1, flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: 14.5, fontWeight: 900, color: destaque ? '#0D63DB' : '#111' }}>{t.nome}</span>
+                      {atual && <span style={{ fontSize: 9, fontWeight: 800, color: '#fff', background: '#0D63DB', padding: '2px 7px', borderRadius: 20 }}>VOCÊ ESTÁ AQUI</span>}
+                      {proximo && <span style={{ fontSize: 9, fontWeight: 800, color: '#0D63DB', background: '#eff6ff', padding: '2px 7px', borderRadius: 20 }}>PRÓXIMA CONQUISTA</span>}
+                      {Number(t.bonus_infinito_pct) > 0 && <span style={{ fontSize: 9, fontWeight: 800, color: '#5b21b6', background: '#f5f3ff', padding: '2px 7px', borderRadius: 20 }}>💎 Liderança</span>}
+                    </div>
+                    <div style={{ fontSize: 11.5, color: '#64748b', marginTop: 3, lineHeight: 1.5 }}>
+                      {t.ordem === 1
+                        ? <>Meta: <strong>{t.req_pernas} {t.req_sub_nome}</strong></>
+                        : <>Meta: <strong>{t.req_pernas} {t.req_sub_nome}{t.req_pernas > 1 ? 's' : ''}</strong> na sua rede direta</>}
+                    </div>
+                    <div style={{ fontSize: 11.5, color: destaque ? '#334155' : '#94a3b8', marginTop: 2 }}>
+                      <strong>{t.indicacao_pct}%</strong> por indicação
+                      {Number(t.equipe_pct_total) > 0 && <> · <strong>{Number(t.equipe_pct_total)}%</strong> da equipe (até {t.equipe_niveis} ger.)</>}
+                      {Number(t.bonus_infinito_pct) > 0 && <> · <strong>+{Number(t.bonus_infinito_pct)}%</strong> infinito</>}
+                    </div>
+                    {proximo && nivel?.proximo && (
+                      <div style={{ marginTop: 7 }}>
+                        <div style={{ height: 7, background: '#e2e8f0', borderRadius: 999, overflow: 'hidden' }}>
+                          <div style={{ width: `${nivel.proximo.progresso_pct || 0}%`, height: '100%', background: 'linear-gradient(90deg,#0D63DB,#084BA6)', borderRadius: 999, transition: 'width .4s' }} />
+                        </div>
+                        <div style={{ fontSize: 10.5, color: '#0D63DB', fontWeight: 800, marginTop: 3 }}>
+                          {nivel.proximo.progresso_pct || 0}% · {nivel.proximo.tem || 0}/{nivel.proximo.req_pernas}{nivel.proximo.faltam > 0 ? ` · faltam ${nivel.proximo.faltam}` : ' ✓'}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ fontSize: 10.5, color: '#94a3b8', margin: '0 20px', padding: '10px 0 16px', borderTop: '1px solid #f1f5f9', lineHeight: 1.55 }}>
+            Os percentuais valem para <strong>assinatura (recorrente)</strong> e <strong>loja (produto, compra única)</strong>. Venda direta de imóvel usa tabela própria ({Number(nivel?.indicacao_por_tipo?.venda_direta ?? 10)}% no 1º nível). A comissão é sempre <strong>mediante o pagamento recebido</strong>.
           </div>
         </div>
       )}

@@ -122,7 +122,7 @@ export async function buscarCliente({ gatewayCustomerId, email, gateway }) {
 // ── ATIVAÇÃO DIRETA POR REFERÊNCIA (assinaturas transparentes) ────────────────
 // As assinaturas (preapproval) informam o plano no external_reference
 // (`userId|planoKey`), então ativamos direto — sem adivinhar o plano pelo valor.
-export async function ativarPlanoDireto({ userId, planoKey, gateway }) {
+export async function ativarPlanoDireto({ userId, planoKey, gateway, cobranca = null }) {
   if (!userId || !planoKey) return { skipped: 'sem_referencia' };
   // O TIER fica no `role` (top2/clube/…). NÃO gravar em `plano`: essa coluna tem
   // check constraint (gratuito|analista|gestor) e planoKey='top2' a VIOLAVA →
@@ -146,6 +146,26 @@ export async function ativarPlanoDireto({ userId, planoKey, gateway }) {
     await supabase.rpc('registrar_preco_contratado', { p_user_id: userId, p_plano_key: planoKey });
   } catch (e) {
     console.error(`[${gateway}] registrar_preco_contratado:`, e.message);
+  }
+
+  // COMISSÃO DE REDE — repasse MEDIANTE PAGAMENTO (regra do dono: sem pagamento, sem repasse).
+  // Só comissiona quando esta ativação carrega uma cobrança RECEBIDA de verdade
+  // (cobranca.gatewayPaymentId + valor>0): a mensalidade recorrente PROCESSADA. A mera
+  // autorização da assinatura (sem pagamento) e a reconciliação de role passam cobranca=null
+  // → NÃO comissionam. Idempotente por (payment_id, nível) na RPC; usa o MESMO id do estorno
+  // (chargeback/reembolso reverte por origem_id LIKE '{payment_id}-%'). try/catch NÃO relança
+  // (mantém a ativação; o ramo de assinatura não desmarca a idempotência do evento).
+  if (cobranca?.gatewayPaymentId && Number(cobranca.valor) > 0) {
+    try {
+      const p_tipo = ['assessorado', 'assessorado_anual', 'clube', 'clube_anual'].includes(planoKey)
+        ? 'venda_direta' : 'assinatura';
+      const { data: dist } = await supabase.rpc('distribuir_comissao_rede', {
+        p_comprador: userId, p_tipo, p_valor: Number(cobranca.valor), p_gateway_payment_id: String(cobranca.gatewayPaymentId),
+      });
+      if (dist && dist.ok === false) console.warn(`[${gateway}] comissao_rede (recorrente):`, JSON.stringify(dist).slice(0, 200));
+    } catch (e) {
+      console.error(`[${gateway}] comissao_rede (recorrente):`, e.message);
+    }
   }
   return { ok: true, plano: planoKey };
 }

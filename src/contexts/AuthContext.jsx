@@ -184,6 +184,15 @@ export function AuthProvider({ children }) {
           }
           // Push automático (só 1x por navegador).
           try { ativarPushAutomatico(() => session); } catch (_) {}
+          // Coleta client-side (IP residencial do STAFF) — dispara no LOGIN, independente da
+          // ROTA. Antes só rodava num useEffect do MainLayout, que NÃO monta em /admin (onde o
+          // staff trabalha) → nunca disparava. Aqui roda em SIGNED_IN (login novo) e
+          // INITIAL_SESSION (reabertura do app/PWA com sessão). Só staff; o gate 2x/semana +
+          // a trava de sessão em coletaCliente cuidam da frequência. import() dinâmico p/ não
+          // rodar para cliente comum nem inflar o chunk principal.
+          if (['admin', 'analista', 'advogado'].includes(p.role)) {
+            import('../utils/coletaCliente').then(m => m?.dispararColetaClienteStaff?.()).catch(() => {});
+          }
           const ref = sessionStorage.getItem('tsn_ref_codigo');
           if (ref) {
             // vincular_upline: QUALQUER usuário pode ser o indicador (antes só consultor);

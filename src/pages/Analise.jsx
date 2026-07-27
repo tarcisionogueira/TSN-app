@@ -346,7 +346,11 @@ export default function Analise() {
   // Documental também roda em SEGUNDO PLANO no servidor (/api/gerar-documental):
   // o "gerando"/"pronto" derivam do contexto (persistente, vale entre devices).
   const gerandoDocumental = docEntry?.status === 'gerando';
-  const [relMercadoGerado, setRelMercadoGerado] = useState(false);
+  // Derivado do contexto (persistente), igual ao documental. Antes era useState(false) LOCAL
+  // que só virava true nesta sessão ao observar o mercado — com documental-sem-mercado ficava
+  // false para sempre e as duas metades do gate liam fontes diferentes. Agora leem a MESMA
+  // fonte de verdade, então o card reflete o estado real ao reabrir.
+  const relMercadoGerado = analiseEntry?.status === 'concluida' && !!analiseEntry?.result;
   // "concluida" com precisaDocumentos NÃO é pronto — ainda está capturando/faltando
   // documentos. Separar os dois estados evita a incoerência "Pronto na lista / abre
   // Preparando ainda" (o mesmo status precisa valer em TODA a tela).
@@ -836,7 +840,6 @@ export default function Analise() {
     if (r.valorMercado) up('valorMercado', r.valorMercado);
     if (r.valorLocacao) up('valorLocacao', r.valorLocacao);
     if (r.parecer) { setParecer(r.parecer); setD(p => ({ ...p, parecer: r.parecer })); }
-    setRelMercadoGerado(true);
     carregarCota(); // a geração consumiu cota no servidor, atualiza os contadores
     showMsg('Relatório Mercadológico + Viabilidade pronto!');
   }, [analiseEntry?.status, analiseEntry?.updatedAt, analiseImovelId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1555,8 +1558,8 @@ export default function Analise() {
               <div style={{ display:'grid', gridTemplateColumns: isMobile?'1fr':'1fr 1fr', gap:14 }}>
                 {[
                   { k:'mercado', cor:'#0d9488', bg:'#f0fdfa', Icon:BarChart3, titulo:'Mercadológico + Viabilidade Financeira', desc:'Avaliação de mercado (níveis 1 e 2), estrutura de custos, cenários, ROI/ROE e teto de lance.', ok:relMercadoGerado, gerando:gerandoMercado, fn:gerarRelMercado, block: analisesBloqueado, seqBloqueado:false, ordem:1 },
-                  { k:'documental', cor:'#1e3a8a', bg:'#eef2ff', Icon:Scale, titulo:'Análise Documental + Processo', desc:'Leitura do edital/matrícula (ônus e gravames) e consulta do processo no CNJ + certidões fiscais.', ok:relDocumentalGerado, gerando:gerandoDocumental, preparando:relDocumentalPreparando, fn:gerarRelDocumental, block:false, seqBloqueado: !relMercadoGerado, planoBloqueado: ROLES_SEM_DOCUMENTAL.includes(role), ordem:2 },
-                  { k:'laudo', cor:'#111111', bg:'#f1f5f9', Icon:Award, titulo:'Laudo de Viabilidade (Parecer Final)', desc:'Consolida os dois relatórios acima num veredito de defesa (aprovado/condicional/reprovado), com condições e diligências. Não reprocessa fontes, sintetiza o que já foi gerado.', ok:relLaudoGerado, gerando:gerandoLaudo, fn:gerarRelLaudo, block:false, seqBloqueado: !ambosRelatorios, planoBloqueado: ROLES_SEM_DOCUMENTAL.includes(role), ordem:3 },
+                  { k:'documental', cor:'#1e3a8a', bg:'#eef2ff', Icon:Scale, titulo:'Análise Documental + Processo', desc:'Leitura do edital/matrícula (ônus e gravames) e consulta do processo no CNJ + certidões fiscais.', ok:relDocumentalGerado, gerando:gerandoDocumental, preparando:relDocumentalPreparando, fn:gerarRelDocumental, block:false, seqBloqueado: !relMercadoGerado && !relDocumentalGerado, planoBloqueado: ROLES_SEM_DOCUMENTAL.includes(role), ordem:2 },
+                  { k:'laudo', cor:'#111111', bg:'#f1f5f9', Icon:Award, titulo:'Laudo de Viabilidade (Parecer Final)', desc:'Consolida os dois relatórios acima num veredito de defesa (aprovado/condicional/reprovado), com condições e diligências. Não reprocessa fontes, sintetiza o que já foi gerado.', ok:relLaudoGerado, gerando:gerandoLaudo, fn:gerarRelLaudo, block:false, seqBloqueado: !ambosRelatorios && !relLaudoGerado, planoBloqueado: ROLES_SEM_DOCUMENTAL.includes(role), ordem:3 },
                 ].map(c => {
                   const travado = c.gerando || c.preparando || c.block || c.seqBloqueado || c.planoBloqueado;
                   return (

@@ -49,21 +49,33 @@ async function coletarTenant(dom) {
  * Dispara a coleta (só STAFF, 1x por sessão). Chama o gate; se estiver na hora, coleta do IP do
  * staff e envia. Só envia se ALCANÇOU ao menos um site (evita fechar o gate por falha de rede).
  */
+let emAndamento = false; // trava em memória: evita 2 disparos concorrentes (ex.: AuthContext + MainLayout)
+
 export async function dispararColetaClienteStaff() {
-  try { if (sessionStorage.getItem(SESSAO_KEY)) return; sessionStorage.setItem(SESSAO_KEY, '1'); } catch { /* */ }
   try {
+    if (emAndamento) return;                                   // já rodando neste load → não duplica
+    try { if (sessionStorage.getItem(SESSAO_KEY)) return; } catch { /* */ }
+    emAndamento = true;
+
     const chk = await apiCall('/api/coleta-cliente', { method: 'GET' });
     if (!chk.ok) return;
     const cfg = await chk.json().catch(() => null);
-    if (!cfg?.devida || !Array.isArray(cfg.tenants)) return;   // não é a hora, ou não é staff
+    if (!cfg?.devida || !Array.isArray(cfg.tenants)) {
+      try { sessionStorage.setItem(SESSAO_KEY, '1'); } catch { /* */ } // não é a hora/staff → não re-checa nesta sessão
+      return;
+    }
 
     const coletas = [];
     for (const dom of cfg.tenants) coletas.push(await coletarTenant(dom));
-    if (!coletas.some((c) => c.alcancado)) return;             // não alcançou nada → não fecha o gate (retenta em 15 min)
+    // Não alcançou nenhum site → NÃO marca a sessão: assim um novo login/reabertura reTENTA
+    // (o gate 2x/semana do servidor segue protegendo contra excesso).
+    if (!coletas.some((c) => c.alcancado)) return;
 
     await apiCall('/api/coleta-cliente', {
       method: 'POST',
       body: JSON.stringify({ coletas: coletas.map(({ dominio, lotes, leiloes }) => ({ dominio, lotes, leiloes })) }),
     });
+    try { sessionStorage.setItem(SESSAO_KEY, '1'); } catch { /* */ } // concluiu (mesmo com 0 gravados) → marca a sessão
   } catch { /* nunca atrapalha o usuário */ }
+  finally { emAndamento = false; }
 }
