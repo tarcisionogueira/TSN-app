@@ -98,7 +98,8 @@ USA_BD = bool(BD_TOKEN and BD_ZONE)
 def bd_request(url, method="GET", data=None, timeout=60):
     payload = {"zone": BD_ZONE, "url": url, "method": method, "format": "raw"}
     if data is not None:
-        payload["data"] = urlencode(data)
+        # A Web Unlocker /request usa o campo "body" (não "data") para o corpo do POST.
+        payload["body"] = urlencode(data)
         payload["headers"] = {"Content-Type": "application/x-www-form-urlencoded"}
     return requests.post(
         "https://api.brightdata.com/request",
