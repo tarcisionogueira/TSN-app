@@ -504,6 +504,7 @@ export default function Perfil() {
     try {
       const { error } = await supabase.from('perfis').update({
         cnpj: pj.cnpj || null, razao_social: pj.razao_social || null, pj_chave_pix: pj.pj_chave_pix || null,
+        pj_dados_atualizados_em: new Date().toISOString(), // reseta o relógio de abandono (90d)
       }).eq('id', user.id);
       if (error) throw error;
       setPjMsg({ tipo: 'sucesso', texto: 'Dados da empresa salvos.' });
