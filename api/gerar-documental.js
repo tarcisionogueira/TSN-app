@@ -502,6 +502,26 @@ export default async function handler(req, res) {
     } catch { /* mantém o próprio */ }
   }
 
+  // ── GATE DE ORIGEM: documental NOVO exige mercadológico concluído ───────────
+  // Raiz dos ~20 documentais órfãos (documental sem mercadológico): o fluxo normal de usuário
+  // não exigia o mercadológico. Exigimos aqui, no servidor (à prova de burla pela API). ISENTA:
+  // cron (self-heal/regeração) e onBehalf (admin/analista gerando p/ o cliente na atribuição de
+  // arremate). NÃO bloqueia REGERAÇÃO: se já há QUALQUER linha de documental deste (owner,imóvel),
+  // passa — o gate só vale na 1ª geração.
+  if (!isCron && !onBehalf) {
+    try {
+      const jaDoc = await (await sb(`analises_documental?user_id=eq.${ownerId}&imovel_id=eq.${encodeURIComponent(String(imovelId))}&select=imovel_id&limit=1`)).json();
+      const documentalNovo = !(Array.isArray(jaDoc) && jaDoc.length);
+      if (documentalNovo) {
+        const mkt = await (await sb(`analises_mercado?user_id=eq.${ownerId}&imovel_id=eq.${encodeURIComponent(String(imovelId))}&status=eq.concluida&select=imovel_id&limit=1`)).json();
+        if (!(Array.isArray(mkt) && mkt.length > 0)) {
+          res.status(409).json({ error: 'Gere primeiro o Relatório Mercadológico deste imóvel. A Análise Documental e Jurídica complementa o mercadológico e só é liberada depois dele.', precisaMercado: true });
+          return;
+        }
+      }
+    } catch { /* fail-open só em falha de infra: não trava quem tem direito */ }
+  }
+
   // ── Cota documental NO SERVIDOR (anti-abuso do custo de IA) ─────────────────
   // Mesmo padrão do mercadológico (gerar-analise): cobra só em análise NOVA deste
   // imóvel; re-gerar/atualizar o mesmo não recobra. Explorador já foi barrado

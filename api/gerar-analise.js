@@ -345,7 +345,13 @@ async function lerComposicaoRegiao(imDb, segmento = 'apartamento') {
     for (const a of rows) { const y = String(a.data_ref || '').slice(0, 4); if (/^\d{4}$/.test(y)) (porAno[y] ||= []).push(Number(a.valor_m2)); }
     const med = (arr) => { const s = arr.slice().sort((x, y) => x - y); const m = Math.floor(s.length / 2); return s.length % 2 ? s[m] : Math.round((s[m - 1] + s[m]) / 2); };
     const amostrasAno = Object.keys(porAno).sort().map(y => ({ ano: Number(y), n: porAno[y].length, m2: med(porAno[y]) })).filter(p => p.n >= 2 && p.m2 > 0);
-    return composicaoTemporal(rows, amostrasAno, Date.now());
+    // BANDA CENTRAL (p25–p75) — MESMA contramedida do Índice (indice-consulta.js). Sem ela o
+    // mercadológico usava a mediana CRUA e a composição por período "virava" com a bimodalidade
+    // popular×alto (ex.: Barueri set–dez/2025 = R$3.990). A banda estabiliza a série no tempo.
+    const m2Ord = rows.map(a => Number(a.valor_m2)).filter(v => v > 0).sort((x, y) => x - y);
+    const pctl = (arr, p) => (arr.length ? arr[Math.min(arr.length - 1, Math.floor(p * arr.length))] : null);
+    const bandaCentral = m2Ord.length >= 6 ? { lo: pctl(m2Ord, 0.25), hi: pctl(m2Ord, 0.75) } : null;
+    return composicaoTemporal(rows, amostrasAno, Date.now(), bandaCentral);
   } catch { return null; }
 }
 

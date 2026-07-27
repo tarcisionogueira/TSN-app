@@ -76,18 +76,32 @@ export function composicaoTemporal(vendaSamples, amostrasAno, nowMs, banda) {
   // de cada período (e o valor) olha só o PADRÃO CENTRAL → série comparável no tempo. O QUANTITATIVO
   // (n) segue mostrando TODOS os anúncios do período. Sem banda (chamador antigo) → comportamento igual.
   const inBand = (banda && banda.lo > 0 && banda.hi >= banda.lo) ? (v => v >= banda.lo && v <= banda.hi) : null;
-  const trim = (vals) => { if (!inBand) return vals; const f = vals.filter(inBand); return f.length ? f : vals; };
+
+  // Valor de referência do PADRÃO CENTRAL da região (mediana dos R$/m² na banda p25–p75). Serve
+  // de FALLBACK COMPARÁVEL para um período sem amostra suficiente no padrão central — senão a
+  // mediana CRUA daquele balde (ex.: só populares) fazia a série "cair pela metade e recuperar",
+  // como o dono viu em Barueri set–dez/2025 (R$3.990 entre vizinhos de ~R$8.000).
+  const centralVals = inBand ? rows.map(r => r.m2).filter(inBand) : rows.map(r => r.m2);
+  const centralM2 = medianaNum(centralVals.length ? centralVals : rows.map(r => r.m2));
 
   // Períodos (buckets de 4 meses) — n = TODOS os anúncios do período (quantitativo honesto);
-  // mediana = só os da banda central (fallback: todos, se o período não tem nenhum na banda).
+  // mediana = só os da banda central. Se o período NÃO tem ≥2 no padrão central, usa o valor
+  // central da REGIÃO (comparável) e marca fora_padrao — nunca mostra a mediana crua de outliers.
   const byB = {};
   for (const r of rows) {
     const b = bucketDe(r.dref);
     if (!b) continue;
     (byB[b.idx] ||= { ...b, vals: [] }).vals.push(r.m2);
   }
-  const periodos = Object.values(byB).sort((a, b) => a.idx - b.idx)
-    .map(b => ({ label: b.label, ano: b.ano, n: b.vals.length, m2: medianaNum(trim(b.vals)) }));
+  const periodos = Object.values(byB).sort((a, b) => a.idx - b.idx).map(b => {
+    const inb = inBand ? b.vals.filter(inBand) : b.vals;
+    const usaBucket = inb.length >= 2;
+    return {
+      label: b.label, ano: b.ano, n: b.vals.length,
+      m2: usaBucket ? medianaNum(inb) : (centralM2 != null ? centralM2 : medianaNum(b.vals)),
+      fora_padrao: !usaBucket && b.vals.length > 0,
+    };
+  });
 
   // Valor: também na banda central (fallback: todas as linhas se a banda esvaziar a região).
   const rowsVal = (() => { if (!inBand) return rows; const f = rows.filter(r => inBand(r.m2)); return f.length ? f : rows; })();
