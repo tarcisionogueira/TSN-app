@@ -210,21 +210,14 @@ export default async function handler(req) {
     if (!perfil.pj_chave_pix || !String(perfil.pj_chave_pix).trim()) faltaPJ.push('PIX da empresa');
     if (faltaPJ.length) return json({ error: `Cadastre a empresa para sacar. Falta: ${faltaPJ.join(', ')}.`, faltando: faltaPJ, pj_incompleta: true }, 422);
 
-    // REVALIDAÇÃO pendente: a reconferência periódica (cron mensal) detectou divergência no
-    // quadro societário/CNPJ. Segura o repasse ('aguardando_pj') e manda o parceiro atualizar
-    // os dados do CNPJ no Perfil — o "popup" volta a aparecer lá.
-    if (perfil.pj_revalidacao_pendente) {
-      const r = await rpc('solicitar_saque_pj_pendente', { p_user_id: user.id, p_valor: valor });
-      if (!r.ok) return json({ error: 'Erro ao solicitar saque', detail: r.data }, 500);
-      if (!r.data?.ok) return json({ error: r.data?.error || 'Não foi possível solicitar o saque', faltando: r.data?.faltando, kyc_pendente: r.data?.kyc_pendente }, 400);
-      await abrirChamadoSaquePJ(user, perfil, valor, `Saque retido — revalidação da PJ pendente (${perfil.pj_revalidacao_motivo || 'divergência no quadro societário'}); parceiro deve atualizar os dados do CNPJ`);
-      return json({ ok: true, em_validacao: true, pj_revalidar: true, motivo: perfil.pj_revalidacao_motivo || null, saldo_restante: r.data.saldo_restante }, 201);
-    }
-
-    // Empresa JÁ validada e sem pendência de revalidação → saca direto, sem revalidar a cada saque.
+    // Empresa JÁ validada → tenta sacar direto. O gate de REVALIDAÇÃO vive na RPC: se a
+    // reconferência periódica divergiu, ela devolve {pj_revalidar} e NÃO reserva nada — o
+    // saldo a receber ACUMULA e não expira; o parceiro atualiza o CNPJ e revalida para liberar
+    // (o retido paga junto com os ganhos futuros). Bloqueia o SAQUE, nunca o crédito.
     if (perfil.pj_validada_em) {
       const r = await rpc('solicitar_saque_ledger', { p_user_id: user.id, p_valor: valor });
-      if (!r.ok || !r.data?.ok) return json({ error: r.data?.error || 'Não foi possível solicitar o saque', detail: r.data }, 400);
+      if (!r.ok) return json({ error: 'Erro ao solicitar saque', detail: r.data }, 500);
+      if (!r.data?.ok) return json({ error: r.data.error || 'Não foi possível solicitar o saque', pj_revalidar: !!r.data.pj_revalidar, pj_pendente: !!r.data.pj_pendente, faltando: r.data.faltando }, 422);
       return json({ ok: true, saldo_restante: r.data.saldo_restante }, 201);
     }
 
