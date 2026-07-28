@@ -2,3 +2,7 @@
 -- Marcado por /api/boas-vindas quando o e-mail é enviado (no 1º login, qualquer caminho
 -- de cadastro). Aplicado em produção via MCP; auditoria_seguranca() seguiu 0/0.
 alter table public.perfis add column if not exists boas_vindas_em timestamptz;
+
+-- Backfill: contas JÁ existentes são marcadas como "já recebeu" para NÃO dispararem o
+-- e-mail de boas-vindas/aviso no próximo login (só cadastros futuros recebem).
+update public.perfis set boas_vindas_em = now() where boas_vindas_em is null;
