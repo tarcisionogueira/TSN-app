@@ -170,17 +170,41 @@ async function semearIndiceBidPro(imDb, precoM2, aluguelM2, nAmostras, segmento 
     });
   } catch { /* semeadura best-effort */ }
 }
+// Central ROBUSTO por padrão (mediana + bandas p25/p50/p75) da base própria (indice_amostra
+// singular, por-tipo plausível, sem leilão). Evita o número BLENDADO (média sobre padrões
+// misturados) que o fallback do relatório usava — mesma correção do card do índice.
+async function centralIndiceRegiao(imDb, segmento = 'apartamento') {
+  try {
+    if (!imDb?.cidade_norm || !imDb?.estado) return null;
+    const uf = String(imDb.estado).toUpperCase();
+    const r = await sb(`indice_amostra?cidade_norm=eq.${encodeURIComponent(imDb.cidade_norm)}&uf=eq.${uf}&tipo=eq.${encodeURIComponent(segmento)}&especie=eq.venda&${faixaVendaQ(segmento)}&select=valor_m2,fonte&limit=800`);
+    if (!r.ok) return null;
+    const j = await r.json().catch(() => []);
+    const vals = (Array.isArray(j) ? j : []).filter(a => Number(a.valor_m2) > 0 && !ehFonteLeilao(a.fonte)).map(a => Number(a.valor_m2)).sort((x, y) => x - y);
+    if (vals.length < 4) return null;
+    const pct = (p) => vals[Math.min(vals.length - 1, Math.floor(p * vals.length))];
+    return { venda_m2: Math.round(pct(0.50)), bandas: { popular: Math.round(pct(0.25)), medio: Math.round(pct(0.50)), alto: Math.round(pct(0.75)) }, n: vals.length };
+  } catch { return null; }
+}
 async function lerIndiceBidPro(imDb, segmento = 'apartamento') {
   try {
     if (!imDb?.cidade_norm || !imDb?.estado) return null;
-    const r = await sb('rpc/indice_bidpro_regiao', {
-      method: 'POST',
-      body: JSON.stringify({
-        p_cidade_norm: imDb.cidade_norm, p_uf: imDb.estado, p_bairro: imDb.bairro || '',
-        p_lat: imDb.latitude ?? null, p_lng: imDb.longitude ?? null, p_tipo: segmento,
-      }),
-    });
-    const j = await r.json().catch(() => null);
+    let j = null;
+    try {
+      const r = await sb('rpc/indice_bidpro_regiao', {
+        method: 'POST',
+        body: JSON.stringify({
+          p_cidade_norm: imDb.cidade_norm, p_uf: imDb.estado, p_bairro: imDb.bairro || '',
+          p_lat: imDb.latitude ?? null, p_lng: imDb.longitude ?? null, p_tipo: segmento,
+        }),
+      });
+      j = await r.json().catch(() => null);
+    } catch { j = null; }
+    // PREFERE a MEDIANA aparada por tipo (base própria) — corrige o preço BLENDADO do fallback
+    // (Alphaville×popular ~R$6.921 que não servia a ninguém). Mantém aluguel/nível do RPC. Só cai
+    // no número blendado quando não há amostra própria suficiente (< 4).
+    const central = await centralIndiceRegiao(imDb, segmento);
+    if (central) return { venda_m2: central.venda_m2, aluguel_m2: Number(j?.aluguel_m2) || 0, nivel: j?.nivel || 'cidade', bandas: central.bandas };
     return (j && (Number(j.venda_m2) > 0 || Number(j.aluguel_m2) > 0)) ? j : null;
   } catch { return null; }
 }
@@ -191,6 +215,14 @@ async function lerIndiceBidPro(imDb, segmento = 'apartamento') {
 // barramos pela FONTE antes de gravar — não confia só no prompt.
 const FONTE_LEILAO = /leil[ãa]o|arremat|hasta.?p[uú]bl|\bcef\b|caixa\s*econ|aliena[çc]|extrajud|retomad|venda\s*direta|megaleil|zukerman|foreclos/i;
 const ehFonteLeilao = (f) => FONTE_LEILAO.test(String(f || ''));
+
+// Faixa PLAUSÍVEL de R$/m² de VENDA por TIPO — espelha public.indice_plausivel. Barra outlier E
+// não descarta TERRENO legítimo (R$/m² baixo, ex.: R$150), que o piso plano de 200 rejeitava.
+// Usada em TODAS as escritas/leituras do índice no relatório (antes usavam 200–50000 fixo).
+const FAIXA_VENDA_TIPO = { apartamento: [800, 60000], casa: [600, 50000], comercial: [400, 80000], terreno: [20, 20000] };
+const faixaVenda = (tipo) => FAIXA_VENDA_TIPO[String(tipo || '').toLowerCase()] || [200, 200000];
+const vendaPlausivelTipo = (tipo, v) => { const [lo, hi] = faixaVenda(tipo); const n = Number(v); return n >= lo && n <= hi; };
+const faixaVendaQ = (tipo) => { const [lo, hi] = faixaVenda(tipo); return `valor_m2=gte.${lo}&valor_m2=lte.${hi}`; };
 
 // Grava as amostras DATADAS deste relatório em indice_amostra (base da valorização por
 // ano e da recência real). Só residencial, poison-resistente (dados da pesquisa). O prompt
@@ -219,7 +251,7 @@ async function gravarAmostrasIndice(imDb, mercado, imovelId, segmento = 'apartam
     const rows = [];
     for (const s of vendas) {
       const m2 = Number(s?.valorM2);
-      if (!(m2 >= 200 && m2 <= 50000) || ehFonteLeilao(s?.fonte)) continue;
+      if (!vendaPlausivelTipo(segmento, m2) || ehFonteLeilao(s?.fonte)) continue; // faixa por tipo (terreno não é cortado)
       rows.push({ cidade_norm: imDb.cidade_norm, uf, bairro_norm: bairroNorm, geo_grid: geoGrid, lat: latA, lng: lngA, tipo: segmento,
         especie: 'venda', valor_m2: Math.round(m2), valor_total: Number(s?.valor) || null, area_m2: Number(s?.m2) || null,
         data_ref: dref(s?.data), fonte: (s?.fonte ? String(s.fonte).slice(0, 200) : null), origem: 'relatorio', imovel_id: String(imovelId || '') });
@@ -257,7 +289,7 @@ async function gravarOutrasTipologias(imDb, outras, imovelId, segAlvo = '') {
       const lista = Array.isArray(outras[seg]) ? outras[seg].slice(0, TETO_OUTRA_SEG) : [];
       for (const s of lista) {
         const m2 = Number(s?.valorM2);
-        if (!(m2 >= 200 && m2 <= 50000) || ehFonteLeilao(s?.fonte)) continue; // só venda de mercado
+        if (!vendaPlausivelTipo(seg, m2) || ehFonteLeilao(s?.fonte)) continue; // só venda de mercado, faixa por tipo
         rows.push({ cidade_norm: imDb.cidade_norm, uf, bairro_norm: '', geo_grid: '', tipo: seg,
           especie: 'venda', valor_m2: Math.round(m2), valor_total: Number(s?.valor) || null, area_m2: Number(s?.m2) || null,
           data_ref: dref(s?.data), fonte: (s?.fonte ? String(s.fonte).slice(0, 200) : null), origem: 'relatorio_regiao', imovel_id: String(imovelId || '') });
@@ -291,7 +323,7 @@ async function amostrasRegiaoCache(imDb, segmento = 'apartamento') {
     const bairroNorm = _norm(imDb.bairro);
     const geoGrid = geoGridDe(imDb.latitude, imDb.longitude);
     const desde = new Date(Date.now() - DIAS * 24 * 3600 * 1000).toISOString().slice(0, 10); // data_ref é DATE
-    const baseFiltro = `cidade_norm=eq.${encodeURIComponent(imDb.cidade_norm)}&uf=eq.${uf}&tipo=eq.${encodeURIComponent(segmento)}&especie=eq.venda&valor_m2=gte.200&valor_m2=lte.50000&data_ref=gte.${desde}`;
+    const baseFiltro = `cidade_norm=eq.${encodeURIComponent(imDb.cidade_norm)}&uf=eq.${uf}&tipo=eq.${encodeURIComponent(segmento)}&especie=eq.venda&${faixaVendaQ(segmento)}&data_ref=gte.${desde}`;
     const cols = 'select=valor_m2,valor_total,area_m2,data_ref,fonte,bairro_norm,geo_grid,criado_em&order=criado_em.desc&limit=400';
     const buscar = async (extra) => {
       try {
@@ -341,7 +373,7 @@ async function lerComposicaoRegiao(imDb, segmento = 'apartamento') {
   try {
     if (!imDb?.cidade_norm || !imDb?.estado) return null;
     const uf = String(imDb.estado).toUpperCase();
-    const filtro = `cidade_norm=eq.${encodeURIComponent(imDb.cidade_norm)}&uf=eq.${uf}&tipo=eq.${encodeURIComponent(segmento)}&especie=eq.venda&valor_m2=gte.200&valor_m2=lte.50000`;
+    const filtro = `cidade_norm=eq.${encodeURIComponent(imDb.cidade_norm)}&uf=eq.${uf}&tipo=eq.${encodeURIComponent(segmento)}&especie=eq.venda&${faixaVendaQ(segmento)}`;
     const r = await sb(`indice_amostra?${filtro}&select=valor_m2,data_ref,fonte&order=data_ref.desc&limit=600`);
     if (!r.ok) return null;
     const j = await r.json().catch(() => []);
