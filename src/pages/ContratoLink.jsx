@@ -5,6 +5,7 @@ import { supabase } from '../utils/supabase';
 import { useIsMobile } from '../utils/useIsMobile';
 import { formatCpf, formatCnpj } from '../utils/cnpjCep';
 import EnderecoAutocomplete from '../components/EnderecoAutocomplete';
+import { gerarContratoPDF } from '../components/ContratoPDF';
 
 const DOCS_LABELS = {
   foto_doc: 'Foto do documento de identidade (RG ou CNH)',
@@ -274,33 +275,9 @@ export default function ContratoLink() {
     setEtapa('ok');
   };
 
-  // Comprovante em texto: contrato + situação das assinaturas (quem assinou / quem falta).
-  const baixarComprovante = () => {
-    if (!contrato) return;
-    const linhas = [
-      'COMPROVANTE DE CONTRATO — BidPro Brasil',
-      `Título: ${contrato.titulo}`,
-      '',
-      '──────────────────────────────────────',
-      contrato.conteudo || (contrato.arquivo_url ? `Documento anexo: ${contrato.arquivo_url}` : ''),
-      '──────────────────────────────────────',
-      '',
-      'ASSINATURAS E VALIDADE JURÍDICA',
-      'Assinado eletronicamente nos termos da MP 2.200-2/2001 (ICP-Brasil) e da Lei 14.063/2020.',
-      ...(roster.length
-        ? roster.map(p => `- ${p.nome}: ${p.assinou ? 'ASSINOU' + (p.assinado_em ? ' em ' + new Date(p.assinado_em).toLocaleString('pt-BR') : '') : 'PENDENTE'}${p.requer_testemunha ? ` · testemunha: ${p.testemunha_assinou ? 'assinou' : 'pendente'}` : ''}`)
-        : ['- (situação indisponível)']),
-    ];
-    if (contrato.dados_signatario?.cpf) linhas.push(`Seu CPF: ${contrato.dados_signatario.cpf}`);
-    if (contrato.dados_signatario?.cnpj) linhas.push(`Seu CNPJ: ${contrato.dados_signatario.cnpj}`);
-    if (contrato.assinante_ip) linhas.push(`Seu IP de origem: ${contrato.assinante_ip}`);
-    if (contrato.assinatura_hash) linhas.push('', `Código de verificação (SHA-256): ${contrato.assinatura_hash}`);
-    const blob = new Blob([linhas.join('\n')], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = `contrato-${String(contrato.token || '').slice(0, 8)}.txt`;
-    a.click(); URL.revokeObjectURL(url);
-  };
+  // Baixa o DOCUMENTO assinado (contrato + manifesto de assinaturas com os elementos de validade
+  // jurídica NO PRÓPRIO documento) via impressão → "Salvar como PDF". Substitui o antigo .txt.
+  const baixarDocumento = () => gerarContratoPDF({ contrato, roster });
 
   if (loading) return (
     <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#111111' }}>
@@ -395,7 +372,7 @@ export default function ContratoLink() {
                 <strong style={{ color:'#94a3b8' }}>Código de verificação (SHA-256):</strong> {contrato.assinatura_hash}
               </div>
             )}
-            <button onClick={baixarComprovante} style={{ marginTop:16, display:'flex', alignItems:'center', gap:7, padding:'10px 16px', background:'#0D63DB', color:'white', border:'none', borderRadius:9, fontWeight:700, fontSize:13, cursor:'pointer' }}>
+            <button onClick={baixarDocumento} style={{ marginTop:16, display:'flex', alignItems:'center', gap:7, padding:'10px 16px', background:'#0D63DB', color:'white', border:'none', borderRadius:9, fontWeight:700, fontSize:13, cursor:'pointer' }}>
               <Download size={15} /> Baixar documento assinado
             </button>
           </div>
