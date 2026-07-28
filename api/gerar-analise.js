@@ -53,6 +53,46 @@ export function extractText(data) {
   if (!data?.content) return '';
   return data.content.filter(c => c.type === 'text').map(c => c.text).join('\n');
 }
+// SALVAMENTO de JSON TRUNCADO (causa-raiz do "relatório sem amostras" em cidade grande): quando
+// a IA encontra MUITAS amostras, a resposta pode estourar o max_tokens e ser cortada no meio →
+// o JSON fica inválido e o parse estrito jogava TUDO fora (0 amostras), mesmo com nivel1/nivel2
+// (que vêm PRIMEIRO no schema) já completos. Aqui recuperamos o objeto até o último elemento
+// COMPLETO, fechando os colchetes/chaves abertos e descartando só a cauda truncada (a colheita
+// ampla, que vem por último). Best-effort: só roda quando o parse normal falha; devolve null se
+// não der para salvar. Trata strings/escapes para não fechar dentro de um texto.
+function repairTruncatedJSON(text) {
+  const start = text.indexOf('{');
+  if (start < 0) return null;
+  const s = text.slice(start);
+  let inStr = false, esc = false, lastComplete = -1;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (ch === '\\') esc = true;
+      else if (ch === '"') inStr = false;
+      continue;
+    }
+    if (ch === '"') inStr = true;
+    else if (ch === '}' || ch === ']') lastComplete = i; // fim de uma estrutura completa
+  }
+  if (lastComplete < 0) return null;
+  let cand = s.slice(0, lastComplete + 1).replace(/,\s*$/, '');
+  // Recalcula os delimitadores abertos no candidato e fecha na ordem inversa.
+  const stack = [];
+  let inS = false, es = false;
+  for (let i = 0; i < cand.length; i++) {
+    const ch = cand[i];
+    if (inS) { if (es) es = false; else if (ch === '\\') es = true; else if (ch === '"') inS = false; continue; }
+    if (ch === '"') inS = true;
+    else if (ch === '{') stack.push('}');
+    else if (ch === '[') stack.push(']');
+    else if (ch === '}' || ch === ']') stack.pop();
+  }
+  while (stack.length) cand += stack.pop();
+  try { return JSON.parse(cand); } catch { return null; }
+}
+
 export function parseJSON(text) {
   if (!text) return null;
   const clean = text.trim();
@@ -61,6 +101,9 @@ export function parseJSON(text) {
   if (md) { try { return JSON.parse(md[1].trim()); } catch {} }
   const obj = clean.match(/\{[\s\S]*\}/);
   if (obj) { try { return JSON.parse(obj[0]); } catch {} }
+  // Resposta truncada (estourou o max_tokens) → recupera o que veio completo (nivel1/nivel2).
+  const salvo = repairTruncatedJSON(clean);
+  if (salvo) return salvo;
   return null;
 }
 
@@ -703,8 +746,10 @@ Isso alimenta o Índice BidPro dos outros segmentos da região — economia da m
 ═══ COLHEITA AMPLA — MESMO TIPO EM TODA A CIDADE (compõe o Índice) ═══
 Ao pesquisar (grandes portais E imobiliárias LOCAIS), você verá MUITOS anúncios do MESMO tipo
 (${tipoImovel}) em OUTROS bairros da cidade, fora da vizinhança do imóvel-alvo. NÃO os use no
-valor do imóvel-alvo, MAS liste em "outrosBairros" o MÁXIMO que encontrar (sem buscas dedicadas),
-CADA UM com o seu "bairro" — isso alimenta o Índice da cidade/estado (composição por bairro).
+valor do imóvel-alvo, MAS liste em "outrosBairros" ATÉ 25 (sem buscas dedicadas; NÃO passe de 25
+para a resposta não estourar o limite e ser cortada), CADA UM com o seu "bairro" — isso alimenta o
+Índice da cidade/estado (composição por bairro). PRIORIDADE ABSOLUTA: preencha nivel1/nivel2 por
+completo ANTES de "outrosBairros"; se faltar espaço, corte "outrosBairros", nunca os níveis 1/2.
 Apenas VENDA, mesmo tipo (${tipoImovel}), SEM leilão; o "bairro" de cada amostra é OBRIGATÓRIO.
 
 ═══ PERFIL DA REGIÃO (atratividade e valorização — explica o R$/m² da microrregião) ═══
