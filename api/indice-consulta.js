@@ -208,7 +208,10 @@ export default async function handler(req) {
     const regioes = cidadeAmpla
       ? await rpc('indice_bairros_cidade', { p_cidade_norm: cidadeNorm, p_uf: uf, p_tipo: tipo }).then(r => Array.isArray(r) ? r : []).catch(() => [])
       : [];
-    return new Response(JSON.stringify({ ok: true, mapeado, regiao, valorizacao: valorizacao || null, amostras: Array.isArray(amostras) ? amostras : [], amostras_ano, periodos: (regiao && regiao.periodos) ? comp.periodos : [], aviso, regioes }), { status: 200, headers });
+    // COMPOSIÇÃO por NÍVEL (localidade ≤250m · bairro · cidade · estado) triada por tipologia e
+    // padrão — responde "quantas amostras em cada dimensão" no card do índice.
+    const composicao = await rpc('indice_composicao', { p_cidade_norm: cidadeNorm, p_uf: uf, p_bairro_norm: bairroNorm, p_lat: lat, p_lng: lng, p_tipo: tipo }).catch(() => null);
+    return new Response(JSON.stringify({ ok: true, mapeado, regiao, valorizacao: valorizacao || null, amostras: Array.isArray(amostras) ? amostras : [], amostras_ano, periodos: (regiao && regiao.periodos) ? comp.periodos : [], aviso, regioes, composicao }), { status: 200, headers });
   } catch (e) {
     return new Response(JSON.stringify({ error: e.message || 'Falha na consulta' }), { status: 500, headers });
   }

@@ -304,6 +304,25 @@ export default function IndiceConsulta() {
                 <div style={{ fontSize: 10.5, color: '#94a3b8', marginTop: 6 }}>Imóvel de alto padrão deve ser comparado à faixa "alto", não à mediana da cidade.</div>
               </div>
             )}
+            {res.composicao && (
+              <div style={{ marginTop: 12, background: 'white', borderRadius: 12, padding: '12px 16px' }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#334155', marginBottom: 8 }}>COMPOSIÇÃO — amostras por dimensão</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(108px, 1fr))', gap: 10 }}>
+                  <div><div style={{ fontSize: 10, color: '#64748b' }}>Localidade (≤250m)</div><div style={{ fontSize: 16, fontWeight: 800, color: '#0f172a' }}>{res.composicao.localidade?.n ?? 0}</div></div>
+                  <div><div style={{ fontSize: 10, color: '#64748b' }}>Bairro</div><div style={{ fontSize: 16, fontWeight: 800, color: '#0f172a' }}>{res.composicao.bairro?.n ?? 0}</div></div>
+                  <div><div style={{ fontSize: 10, color: '#64748b' }}>Cidade{res.composicao.cidade?.n_bairros ? ` · ${res.composicao.cidade.n_bairros} bairro(s)` : ''}</div><div style={{ fontSize: 16, fontWeight: 800, color: '#0f172a' }}>{res.composicao.cidade?.n ?? 0}</div></div>
+                  <div><div style={{ fontSize: 10, color: '#64748b' }}>Estado{res.composicao.estado?.n_cidades ? ` · ${res.composicao.estado.n_cidades} cidade(s)` : ''}</div><div style={{ fontSize: 16, fontWeight: 800, color: '#0f172a' }}>{res.composicao.estado?.n ?? 0}</div></div>
+                </div>
+                <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginTop: 10, fontSize: 11, color: '#334155' }}>
+                  {res.composicao.por_tipo && Object.keys(res.composicao.por_tipo).length > 0 && (
+                    <div><span style={{ color: '#64748b', fontWeight: 700 }}>Por tipo na cidade: </span>{Object.entries(res.composicao.por_tipo).map(([k, n]) => `${k} ${n}`).join(' · ')}</div>
+                  )}
+                  {res.composicao.por_padrao && (
+                    <div><span style={{ color: '#64748b', fontWeight: 700 }}>Por padrão: </span>popular {res.composicao.por_padrao.popular || 0} · médio {res.composicao.por_padrao.medio || 0} · alto {res.composicao.por_padrao.alto || 0}</div>
+                  )}
+                </div>
+              </div>
+            )}
             {Array.isArray(reg.periodos) && reg.periodos.length >= 1 && (
               <div style={{ marginTop: 12, background: 'white', borderRadius: 12, padding: '12px 16px' }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: '#334155', marginBottom: 8 }}>COMPOSIÇÃO POR PERÍODO (venda R$/m², a cada 4 meses)</div>

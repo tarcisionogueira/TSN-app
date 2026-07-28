@@ -1,0 +1,5 @@
+-- COMPOSIÇÃO do índice por NÍVEL (localidade ≤250m · bairro · cidade · estado — no estado também
+-- quantas cidades), TRIADA por tipologia e por nível de PADRÃO (terços popular/médio/alto). Base:
+-- indice_amostra (venda), plausível por tipo. Usada no card do índice (indice-consulta → composicao).
+-- Aplicada via MCP em produção; ver definição vigente com pg_get_functiondef('public.indice_composicao(...)').
+-- (função completa aplicada em prod.)
