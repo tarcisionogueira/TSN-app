@@ -6,8 +6,10 @@
 // horários de pico; sem espelho, um 429 zerava os pontos próximos da tela inteira.
 // Tentamos as demais antes de desistir.
 const OVERPASS_MIRRORS = [
+  'https://overpass.kumi.systems/api/interpreter',   // costuma ser o mais rápido/estável
   'https://overpass-api.de/api/interpreter',
-  'https://overpass.kumi.systems/api/interpreter',
+  'https://overpass.osm.ch/api/interpreter',
+  'https://overpass.openstreetmap.ru/api/interpreter',
   'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
 ];
 const RAIO = 4000; // metros
@@ -37,7 +39,8 @@ function classifica(tags) {
 /** Consulta o Overpass e retorna o ponto mais próximo de cada categoria. */
 export async function consultarProximidades(lat, lng) {
   const blocos = CATEGORIAS.flatMap(c => c.tags.map(([k, v]) => `nwr["${k}"="${v}"](around:${RAIO},${lat},${lng});`)).join('');
-  const query = `[out:json][timeout:25];(${blocos});out center tags;`;
+  // timeout curto no Overpass (12s) para caber vários espelhos dentro do orçamento de 35s do cliente.
+  const query = `[out:json][timeout:12];(${blocos});out center tags;`;
   // Tenta cada espelho em sequência; só lança se TODOS falharem (aí o chamador
   // responde com erro/retry, não com "vazio").
   let data = null, ultimoErro = 'sem resposta';
@@ -47,7 +50,8 @@ export async function consultarProximidades(lat, lng) {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: 'data=' + encodeURIComponent(query),
-        signal: AbortSignal.timeout(20000),
+        // 9s por espelho: se falhar, ainda dá tempo de tentar os próximos antes do abort de 35s do cliente.
+        signal: AbortSignal.timeout(9000),
       });
       if (!res.ok) { ultimoErro = `overpass ${res.status}`; continue; }
       data = await res.json();

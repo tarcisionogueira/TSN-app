@@ -171,13 +171,18 @@ export default function Calculadora() {
       .then(({ data }) => { if (data?.codigo_indicacao) setCodigoRef(data.codigo_indicacao); });
   }, [user, role]);
 
-  // Judicial: ao mudar para judicial, ajusta defaults do CPC 895
+  // Ajusta os defaults conforme a origem:
+  //  • JUDICIAL (CPC 895): 25% de entrada + 30 parcelas, sem juros.
+  //  • EXTRAJUDICIAL (financiamento bancário): entrada/sinal padrão de 5% (decisão do dono) —
+  //    antes ficava em 25%, o que inflava a "necessidade de caixa no ato" para ~45% do arremate
+  //    (irreal). Com 5%, o caixa no ato fica realista (5% sinal + custos).
   useEffect(() => {
     if (origem === 'judicial') {
       setSinal(25);
       setPrazoMeses(30);
       setCet(0);   // CPC 895 não tem juros (correção pelo IPCA/SELIC a critério do juiz)
     } else {
+      setSinal(5);
       setPrazoMeses(360);
       setCet(15);
     }
