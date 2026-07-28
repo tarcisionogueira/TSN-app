@@ -47,6 +47,11 @@ export default function Contratos() {
   const [loading, setLoading] = useState(true);
   const [aberto, setAberto] = useState(null);
 
+  // Roster de assinantes (ver quem já assinou) — modal dedicado, à parte do fluxo de assinatura.
+  const [partesDe, setPartesDe] = useState(null);   // contrato cujo roster está aberto
+  const [partes, setPartes] = useState([]);
+  const [partesLoad, setPartesLoad] = useState(false);
+
   // campos de assinatura
   const [assinatura, setAssinatura] = useState('');
   const [cpfAssinante, setCpfAssinante] = useState('');
@@ -93,6 +98,31 @@ export default function Contratos() {
     setNomeTest(''); setCpfTest(''); setAssinaturaTest('');
     setGeo(null); setGeoStatus('idle');
     setErro('');
+  };
+
+  // Abre o roster: quem são as partes do contrato e se cada uma já assinou. Multi-parte vem da
+  // RPC get_partes_contrato (agrega as linhas do grupo, driblando a RLS que só deixa ver a própria).
+  // Contrato antigo sem grupo: mostra a própria linha.
+  const verAssinantes = async (c) => {
+    setPartesDe(c); setPartes([]); setPartesLoad(true);
+    try {
+      if (c.contrato_grupo_id) {
+        const { data } = await supabase.rpc('get_partes_contrato', { p_grupo_id: c.contrato_grupo_id });
+        setPartes(Array.isArray(data) ? data : []);
+      } else {
+        setPartes([{
+          id: c.id,
+          nome: c.dados_signatario?.nome || c.dados_signatario?.razao_social || c.assinante_email,
+          email: c.assinante_email,
+          assinou: c.status === 'assinado',
+          assinado_em: c.assinado_em,
+          requer_testemunha: !!c.requer_testemunha,
+          testemunha_assinou: !!c.testemunha_em,
+          nome_testemunha: c.nome_testemunha,
+        }]);
+      }
+    } catch { setPartes([]); }
+    setPartesLoad(false);
   };
 
   const buscarGeo = async () => {
@@ -232,6 +262,10 @@ export default function Contratos() {
                   {si.label}
                 </span>
                 <div style={{ display: 'flex', gap: 8 }}>
+                  <button onClick={() => verAssinantes(c)}
+                    style={{ padding: isMobile ? '10px 12px' : '8px 14px', background: '#f1f5f9', color: '#475569', border: 'none', borderRadius: 8, fontWeight: 600, fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, minHeight: 44 }}>
+                    <Users size={13} /> Assinantes
+                  </button>
                   {c.status === 'assinado' && (
                     <button onClick={() => baixarComprovante(c)}
                       style={{ padding: isMobile ? '10px 12px' : '8px 14px', background: '#f1f5f9', color: '#475569', border: 'none', borderRadius: 8, fontWeight: 600, fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, minHeight: 44 }}>
@@ -389,6 +423,54 @@ export default function Contratos() {
                 </button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal dedicado: partes do contrato e status de assinatura de cada uma */}
+      {partesDe && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.6)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+          onClick={e => e.target === e.currentTarget && setPartesDe(null)}>
+          <div style={{ background: 'white', borderRadius: 18, width: '100%', maxWidth: isMobile ? '100%' : 520, maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 60px rgba(0,0,0,0.3)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '18px 22px', borderBottom: '1px solid #f1f5f9' }}>
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: '#111111', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Users size={17} color="#0D63DB" /> Assinantes
+              </h3>
+              <button onClick={() => setPartesDe(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}><X size={20} /></button>
+            </div>
+            <div style={{ padding: '14px 22px 20px', overflowY: 'auto' }}>
+              <div style={{ fontSize: 12.5, color: '#64748b', marginBottom: 14 }}>{partesDe.titulo}</div>
+              {partesLoad ? (
+                <div style={{ color: '#94a3b8', fontSize: 13, padding: '8px 0' }}>Carregando…</div>
+              ) : partes.length === 0 ? (
+                <div style={{ color: '#94a3b8', fontSize: 13, padding: '8px 0' }}>Não foi possível carregar as partes deste contrato.</div>
+              ) : (
+                <>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: '#475569', marginBottom: 10 }}>
+                    {partes.filter(p => p.assinou).length} de {partes.length} já {partes.filter(p => p.assinou).length === 1 ? 'assinou' : 'assinaram'}
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {partes.map(p => (
+                      <div key={p.id || p.email} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '10px 12px', background: '#f8fafc', border: '1px solid #f1f5f9', borderRadius: 10 }}>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontWeight: 700, fontSize: 13.5, color: '#111111', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.nome}</div>
+                          <div style={{ fontSize: 11.5, color: '#94a3b8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.email}</div>
+                          {p.requer_testemunha && (
+                            <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>
+                              Testemunha: {p.testemunha_assinou ? `assinou${p.nome_testemunha ? ` (${p.nome_testemunha})` : ''}` : 'pendente'}
+                            </div>
+                          )}
+                        </div>
+                        <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 20, background: p.assinou ? '#dcfce7' : '#fef3c7', color: p.assinou ? '#059669' : '#d97706', display: 'flex', alignItems: 'center', gap: 4 }}>
+                          {p.assinou ? <CheckCircle2 size={12} /> : <Clock size={12} />}
+                          {p.assinou ? (p.assinado_em ? `Assinou ${new Date(p.assinado_em).toLocaleDateString('pt-BR')}` : 'Assinou') : 'Pendente'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
       )}

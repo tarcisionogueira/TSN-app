@@ -1253,6 +1253,14 @@ export default async function handler(req, res) {
     // 2) Laudo (parecer). Carrega os docs do lote para o parecer poder dizer se os
     // débitos informados já constam na documentação (ou apontar onde buscar).
     let parecer = '';
+    // DIAGNÓSTICO DO PARECER (persiste no result para diagnóstico pelo banco): a CAUSA-RAIZ do
+    // "relatório concluído mas em branco" era o erro da REDAÇÃO do parecer ser ENGOLIDO no catch
+    // vazio (erro de API silenciado) → parecer '' sem pista do motivo, e o self-heal do cron
+    // re-tentava contra o MESMO bug, queimando as tentativas sem nunca preencher. Agora: (a)
+    // registramos POR QUE o parecer saiu vazio (sem inputs / sem orçamento / erro de API), e
+    // (b) RE-TENTAMOS a redação, já que a busca de mercado (a etapa CARA) já foi paga — não
+    // desperdiça o custo por causa de um 429/overloaded transitório.
+    const parecerDiag = { tinhaInputs: !!parecerInputs?.d, restanteInicio: Math.round(restante()), tentativas: 0 };
     // Só gera o parecer se ainda houver orçamento (a pesquisa de mercado é a etapa cara e já
     // rodou). Sem tempo, ENTREGA o relatório de mercado SEM o parecer — melhor que estourar o
     // deadline e perder TUDO. O parecer curto (regen) pode vir depois.
@@ -1287,14 +1295,34 @@ export default async function handler(req, res) {
         try { aprendizadoMercado += await resumoAprendizadoTexto(imovel?.modalidade || null); } catch { /* best-effort */ }
         // Corpus coletivo da MESMA região/tipo (aprendizado das emissões anteriores).
         try { aprendizadoMercado += await corpusDaRegiao(imovel?.estado || null, imovel?.tipo || null); } catch { /* best-effort */ }
-        const pData = await anthropic({
-          model: MODEL, max_tokens: 8000,
-          system: 'Você é gestor sênior da BidPro Brasil. Redija um parecer MERCADOLÓGICO e de VIABILIDADE FINANCEIRA. Não faça análise jurídica (CNJ, gravames, diligências) — isso é de outros relatórios. EXCEÇÃO: os débitos/encargos informados que serão assumidos DEVEM constar (são custo da operação), com a indicação de onde confirmá-los. Preciso e persuasivo. Nunca use markdown nem asteriscos. Nunca use travessão (o caractere "—"); escreva com vírgula, ponto ou dois-pontos. Apenas texto simples.' + aprendizadoMercado,
-          messages: [{ role: 'user', content: promptParecer(pInp, parecerInputs.metricas || {}, mercado, docs) }],
-        }, false, { retries: 0, timeoutMs: Math.min(55000, restante() - 12000), noFallback: true });
-        parecer = extractText(pData);
-      } catch { /* laudo é complementar */ }
+        const sysParecer = 'Você é gestor sênior da BidPro Brasil. Redija um parecer MERCADOLÓGICO e de VIABILIDADE FINANCEIRA. Não faça análise jurídica (CNJ, gravames, diligências) — isso é de outros relatórios. EXCEÇÃO: os débitos/encargos informados que serão assumidos DEVEM constar (são custo da operação), com a indicação de onde confirmá-los. Preciso e persuasivo. Nunca use markdown nem asteriscos. Nunca use travessão (o caractere "—"); escreva com vírgula, ponto ou dois-pontos. Apenas texto simples.' + aprendizadoMercado;
+        const conteudoParecer = promptParecer(pInp, parecerInputs.metricas || {}, mercado, docs);
+        // RE-TENTA a redação: até 2 tentativas enquanto houver orçamento. Um 429/overloaded/timeout
+        // do Anthropic (retries:0) não pode mais deixar o parecer vazio de forma definitiva. A causa
+        // da última falha fica em parecerDiag.erro (não é mais engolida).
+        for (let tent = 1; tent <= 2 && !parecer && restante() > 18000; tent++) {
+          parecerDiag.tentativas = tent;
+          try {
+            const pData = await anthropic({
+              model: MODEL, max_tokens: 8000,
+              system: sysParecer,
+              messages: [{ role: 'user', content: conteudoParecer }],
+            }, false, { retries: 0, timeoutMs: Math.min(60000, restante() - 12000), noFallback: true });
+            parecer = extractText(pData);
+            parecerDiag.len = parecer.length;
+            if (!parecer) parecerDiag.erro = 'resposta_sem_texto';
+          } catch (e) {
+            parecerDiag.erro = String(e?.message || e || '').slice(0, 160);
+            console.error(`[parecer] falha na redação (tentativa ${tent}) imovel ${imovelId}:`, parecerDiag.erro);
+          }
+        }
+      } catch (e) { parecerDiag.erroSetup = String(e?.message || e || '').slice(0, 160); }
+    } else {
+      parecerDiag.erro = !parecerInputs?.d ? 'sem_parecerInputs' : 'sem_orcamento';
     }
+    // Anexa o diagnóstico ao mercado (vai dentro do result salvo) — torna trivial diagnosticar
+    // pelo banco por que um parecer específico saiu vazio, sem depender de logs da Vercel.
+    if (mercado && typeof mercado === 'object') mercado.__diagParecer = parecerDiag;
 
     // Lembrete fixo (não-IA): a análise é apoio e não substitui a verificação
     // presencial. Recomenda visitar o imóvel ou ver um similar com corretor.

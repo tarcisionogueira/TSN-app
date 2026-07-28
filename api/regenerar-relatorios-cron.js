@@ -127,12 +127,13 @@ export default async function handler(req, res) {
   // eternamente num mercado GENUINAMENTE raso (imóvel atípico sem comparáveis): passado o teto,
   // fica como "não estimado" (estado final correto). Ao PREENCHER, o flag some e para sozinho.
   let mktVazio = 0;
-  const MAX_VAZIO = 6;                 // QUALIDADE em 1º lugar (decisão do dono): persiste re-gerando
-                                       // em background (a cada 6h) por ~36h até entregar com amostras,
-                                       // dentro do teto de 24-48h que o dono definiu. Cada tentativa
-                                       // agora é mais assertiva (pause_turn + salvamento + índice
-                                       // semeando), então converge sem re-gastar à toa; ao preencher,
-                                       // o flag some e para sozinho.
+  const MAX_VAZIO = 4;                 // BALANÇO qualidade × economia (novo pedido do dono): re-gera em
+                                       // background (a cada 6h) por ~24h — alinhado ao TETO de 24h que o
+                                       // dono definiu — até entregar com amostras. Antes eram 6 (~36h),
+                                       // o que re-gastava busca web à toa em praça genuinamente rasa.
+                                       // Cada tentativa é mais assertiva (pause_turn cap 8 + salvamento
+                                       // + índice semeando), então converge sem desperdício; ao
+                                       // preencher, o flag some e para sozinho.
   const idade48 = new Date(agora - 48 * 3600 * 1000).toISOString();
   try {
     const q = `analises_mercado?status=eq.concluida&result->>mercadoVazio=eq.true&regen_tentativas=lt.${MAX_VAZIO}`
@@ -172,9 +173,13 @@ export default async function handler(req, res) {
   // sai do filtro; se não der para regerar (sem inputs) bate o teto e para (economia).
   let mktParecer = 0;
   const MAX_PARECER = 2;
+  // Lote MAIOR que os demais: a regeração do parecer REUSA a pesquisa de mercado recente
+  // (mercadoRecente/reaproveitado) — não repaga web search — então é BARATA e pode limpar o
+  // backlog de "parecer em branco" num só run em vez de arrastar por vários ciclos.
+  const LOTE_PARECER = 8;
   try {
     const q = `analises_mercado?status=eq.concluida&result->>parecer=eq.&regen_tentativas=lt.${MAX_PARECER}`
-      + `&order=updated_at.asc&limit=${LOTE}&select=user_id,imovel_id,titulo,cidade,estado,imovel,inputs,result,regen_tentativas,cota_estornada`;
+      + `&order=updated_at.asc&limit=${LOTE_PARECER}&select=user_id,imovel_id,titulo,cidade,estado,imovel,inputs,result,regen_tentativas,cota_estornada`;
     const rows = await (await sb(q)).json();
     if (Array.isArray(rows)) {
       await Promise.allSettled(rows.map(async (r) => {

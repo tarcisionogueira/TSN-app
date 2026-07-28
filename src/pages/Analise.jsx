@@ -175,14 +175,17 @@ export default function Analise() {
   const carregarCota = React.useCallback(async () => {
     if (!user || semLimite) return;
     const { data, error } = await supabase.from('perfis')
-      .select('analises_mes, analises_count, bonus_mercado').eq('id', user.id).single();
+      .select('analises_mes, analises_count, amostra_mercado_usadas, bonus_mercado').eq('id', user.id).single();
     if (error || !data) return;
-    const count = data.analises_mes === mesAtual() ? (data.analises_count || 0) : 0;
+    // EXPLORADOR: contador de AMOSTRA VITALÍCIA (não reseta por mês). Demais planos: cota mensal.
+    const count = role === 'explorador'
+      ? (data.amostra_mercado_usadas || 0)
+      : (data.analises_mes === mesAtual() ? (data.analises_count || 0) : 0);
     const bonus = data.bonus_mercado || 0;
     setAnalisesUsadas(count);
     setAnalisesBonus(bonus);
-    // Bloqueia só quando estourou o limite mensal E não há bônus por cima
-    // (espelha consumir_analise_por: consome o mensal primeiro, bônus como excedente).
+    // Bloqueia só quando estourou o limite E não há bônus por cima
+    // (espelha consumir_analise_por: consome o principal primeiro, bônus como excedente).
     setAnalisesBloqueado(count >= limiteRole && bonus <= 0);
   }, [role, user, semLimite, limiteRole]);
 
@@ -996,6 +999,11 @@ export default function Analise() {
   }, [docEntry?.status, docEntry?.updatedAt, analiseImovelId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const ambosRelatorios = relMercadoGerado && relDocumentalGerado;
+  // Gate do AGENDAMENTO com o analista: só após os TRÊS relatórios concluídos (Mercadológico +
+  // Documental + Laudo de Viabilidade). Antes usava `ambosRelatorios` (só 2) e liberava o
+  // agendamento no 2º relatório. NÃO reutilizar `ambosRelatorios` aqui: ele libera a GERAÇÃO do
+  // Laudo (que exige só os 2 anteriores) — por isso é uma variável separada.
+  const relatoriosConcluidos = relMercadoGerado && relDocumentalGerado && relLaudoGerado;
 
   // ─── Relatório 3: Laudo de Viabilidade (Agente de Defesa / parecer final) ───
   // Consolida os DOIS relatórios anteriores num veredito. Roda no servidor
@@ -1028,7 +1036,7 @@ export default function Analise() {
   // cliente para lá — o Caso cria/abre o caso deste imóvel e mostra o agendamento.
   // Isso substitui o antigo stub (flags locais + "marcar realizada" pelo cliente).
   const irParaAcompanhamento = () => {
-    if (!ambosRelatorios) { showMsg('Gere os dois relatórios antes de agendar.', 'error'); return; }
+    if (!relatoriosConcluidos) { showMsg('Gere os três relatórios (Mercadológico, Documental e Laudo de Viabilidade) antes de agendar.', 'error'); return; }
     const imv = imovelInicial || {
       id: d.id, endereco: d.endereco, cidade: d.cidade, estado: d.estado,
       valorMinimo: d.valorArrematacao, valorAvaliacao: d.valorAvaliacao, modalidade: d.origem,
@@ -1245,16 +1253,20 @@ export default function Analise() {
         <div style={{ padding:'10px 16px', borderRadius:10, background: analisesBloqueado ? '#fee2e2' : role === 'explorador' ? '#eff6ff' : '#fef3c7', color: analisesBloqueado ? '#dc2626' : role === 'explorador' ? '#084BA6' : '#92400e', fontSize:12, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
           <span>{analisesBloqueado
             ? (role === 'explorador'
-                ? `🔒 Você usou suas ${limiteRole} análises do mês. Faça upgrade para continuar.`
+                ? `🔒 Você usou seus ${limiteRole} relatórios de amostra. Compre créditos para gerar mais.`
                 : `🔒 Limite de ${limiteRole} análises mensais atingido.`)
             : role === 'explorador'
-              ? `📊 Análises mercadológicas este mês: ${analisesUsadas}/${limiteRole}${analisesBonus > 0 ? ` (+${analisesBonus} bônus)` : ''}`
+              ? `📊 Relatórios de amostra: ${analisesUsadas}/${limiteRole}${analisesBonus > 0 ? ` (+${analisesBonus} bônus)` : ''}`
               : `📊 Análises este mês: ${analisesUsadas}/${limiteRole}`
           }</span>
           {analisesBloqueado && (
-            <button onClick={() => setUpgrade({ tipo:'cota', titulo:null })} style={{ padding:'6px 14px', background:'#dc2626', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', whiteSpace:'nowrap' }}>
-              Fazer upgrade
-            </button>
+            role === 'explorador'
+              ? <button onClick={() => nav('/creditos')} style={{ padding:'6px 14px', background:'#dc2626', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', whiteSpace:'nowrap' }}>
+                  Comprar créditos
+                </button>
+              : <button onClick={() => setUpgrade({ tipo:'cota', titulo:null })} style={{ padding:'6px 14px', background:'#dc2626', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', whiteSpace:'nowrap' }}>
+                  Fazer upgrade
+                </button>
           )}
         </div>
       )}
@@ -1470,14 +1482,14 @@ export default function Analise() {
           {/* Reunião com analista → acompanhamento (fluxo real no Caso: agenda o
               horário, o analista dá o parecer e só então libera o jurídico). */}
           <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-            <button onClick={irParaAcompanhamento} disabled={!ambosRelatorios}
-              title={!ambosRelatorios ? 'Gere os dois relatórios para liberar' : ''}
-              style={{ width:'100%', padding:'11px', background: !ambosRelatorios ? '#e2e8f0' : '#0D63DB', color: !ambosRelatorios ? '#94a3b8' : 'white', border:'none', borderRadius:12, fontWeight:700, fontSize:13, cursor: !ambosRelatorios ? 'default' : 'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
+            <button onClick={irParaAcompanhamento} disabled={!relatoriosConcluidos}
+              title={!relatoriosConcluidos ? 'Gere os três relatórios para liberar' : ''}
+              style={{ width:'100%', padding:'11px', background: !relatoriosConcluidos ? '#e2e8f0' : '#0D63DB', color: !relatoriosConcluidos ? '#94a3b8' : 'white', border:'none', borderRadius:12, fontWeight:700, fontSize:13, cursor: !relatoriosConcluidos ? 'default' : 'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
               <Calendar size={15}/> Agendar reunião com analista
             </button>
             <div style={{ fontSize:10, color:'#94a3b8', textAlign:'center', lineHeight:1.4 }}>
-              {!ambosRelatorios
-                ? 'Disponível após gerar os dois relatórios.'
+              {!relatoriosConcluidos
+                ? 'Disponível após gerar os três relatórios (Mercadológico, Documental e Laudo de Viabilidade).'
                 : 'Você escolhe o horário; após a reunião o analista dá o parecer e libera o jurídico.'}
             </div>
           </div>
@@ -1895,14 +1907,14 @@ export default function Analise() {
               <div style={{ flex:1, minWidth:0 }}>
                 <div style={{ fontSize:14, fontWeight:900, color:'#5b21b6', marginBottom:4 }}>Antes de dar o lance, valide com um especialista</div>
                 <div style={{ fontSize:12.5, color:'#4c1d95', lineHeight:1.7, marginBottom:12 }}>
-                  Arrematar é uma <strong>operação de risco</strong> e deve ser conduzida profissionalmente. Com os dois relatórios prontos, <strong>agende uma reunião com um analista BidPro</strong> para revisar a operação, tirar dúvidas e decidir com segurança.
+                  Arrematar é uma <strong>operação de risco</strong> e deve ser conduzida profissionalmente. Com os três relatórios prontos, <strong>agende uma reunião com um analista BidPro</strong> para revisar a operação, tirar dúvidas e decidir com segurança.
                 </div>
-                <button onClick={irParaAcompanhamento} disabled={!ambosRelatorios}
-                  title={!ambosRelatorios ? 'Gere também o relatório Mercadológico para liberar' : ''}
-                  style={{ padding:'11px 18px', background: !ambosRelatorios?'#cbd5e1':'#7c3aed', color:'white', border:'none', borderRadius:10, fontWeight:800, fontSize:13, cursor:!ambosRelatorios?'default':'pointer', display:'inline-flex', alignItems:'center', gap:8 }}>
+                <button onClick={irParaAcompanhamento} disabled={!relatoriosConcluidos}
+                  title={!relatoriosConcluidos ? 'Gere o Laudo de Viabilidade para liberar' : ''}
+                  style={{ padding:'11px 18px', background: !relatoriosConcluidos?'#cbd5e1':'#7c3aed', color:'white', border:'none', borderRadius:10, fontWeight:800, fontSize:13, cursor:!relatoriosConcluidos?'default':'pointer', display:'inline-flex', alignItems:'center', gap:8 }}>
                   <Calendar size={15}/> Agendar reunião com analista
                 </button>
-                {!ambosRelatorios && <div style={{ fontSize:11, color:'#7c3aed', marginTop:8 }}>Gere também o relatório Mercadológico + Viabilidade para liberar o agendamento.</div>}
+                {!relatoriosConcluidos && <div style={{ fontSize:11, color:'#7c3aed', marginTop:8 }}>Gere os três relatórios (Mercadológico, Documental e Laudo de Viabilidade) para liberar o agendamento.</div>}
               </div>
             </div>
           )}

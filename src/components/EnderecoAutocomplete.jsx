@@ -11,9 +11,11 @@ import { apiCall } from '../utils/apiCall';
  * A chave do Google fica no servidor (proxy /api/endereco-autocomplete). sessiontoken
  * agrupa a busca + o detalhe numa única sessão de cobrança do Google (economia).
  *
- * Props: onSelect(endereco), placeholder, defaultValue, disabled, inputStyle.
+ * Props: onSelect(endereco), onType(textoDigitado), placeholder, defaultValue, disabled, inputStyle.
+ * onType (opcional) recebe o texto CRU a cada tecla — para casos em que o valor digitado à mão
+ * também precisa valer (ex.: contrato, onde o endereço é obrigatório mesmo sem escolher a sugestão).
  */
-export default function EnderecoAutocomplete({ onSelect, placeholder = 'Digite o endereço (rua e número)…', defaultValue = '', disabled = false, inputStyle = {} }) {
+export default function EnderecoAutocomplete({ onSelect, onType, placeholder = 'Digite o endereço (rua e número)…', defaultValue = '', disabled = false, inputStyle = {} }) {
   const [q, setQ] = React.useState(defaultValue);
   const [sugestoes, setSugestoes] = React.useState([]);
   const [aberto, setAberto] = React.useState(false);
@@ -75,7 +77,7 @@ export default function EnderecoAutocomplete({ onSelect, placeholder = 'Digite o
         <MapPin size={16} color="#94a3b8" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
         <input
           value={q} disabled={disabled}
-          onChange={(e) => { setQ(e.target.value); buscar(e.target.value); }}
+          onChange={(e) => { setQ(e.target.value); buscar(e.target.value); onType?.(e.target.value); }}
           onFocus={() => { if (sugestoes.length) setAberto(true); }}
           onKeyDown={onKey}
           placeholder={placeholder}

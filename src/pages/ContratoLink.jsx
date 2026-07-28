@@ -4,6 +4,7 @@ import { CheckCircle2, AlertCircle, Loader2, ShieldCheck, Camera, Upload, FileTe
 import { supabase } from '../utils/supabase';
 import { useIsMobile } from '../utils/useIsMobile';
 import { formatCpf, formatCnpj } from '../utils/cnpjCep';
+import EnderecoAutocomplete from '../components/EnderecoAutocomplete';
 
 const DOCS_LABELS = {
   foto_doc: 'Foto do documento de identidade (RG ou CNH)',
@@ -207,7 +208,7 @@ export default function ContratoLink() {
     { label:'RG', name:'rg', required:true },
     { label:'E-mail', name:'email', type:'email', required:true },
     { label:'Telefone / WhatsApp', name:'telefone', required:true },
-    { label:'Endereço completo (com número)', name:'endereco', required:true, placeholder: PLACEHOLDER_END },
+    { label:'Endereço completo (com número)', name:'endereco', required:true, placeholder: PLACEHOLDER_END, autocomplete:true },
   ];
   const camposPJ = [
     { label:'Razão social', name:'razao_social', required:true },
@@ -217,7 +218,7 @@ export default function ContratoLink() {
     { label:'Cargo do representante', name:'cargo', required:true },
     { label:'E-mail corporativo', name:'email', type:'email', required:true },
     { label:'Telefone', name:'telefone', required:true },
-    { label:'Endereço completo da sede (com número)', name:'endereco', required:true, placeholder: PLACEHOLDER_END },
+    { label:'Endereço completo da sede (com número)', name:'endereco', required:true, placeholder: PLACEHOLDER_END, autocomplete:true },
   ];
   const campos = tipoPessoa === 'pf' ? camposPF : camposPJ;
 
@@ -474,7 +475,29 @@ export default function ContratoLink() {
                 </button>
               </div>
               <div style={{ display:'flex', flexDirection:'column', gap:12, marginBottom:20 }}>
-                {campos.map(c => <Campo key={c.name} {...c} value={dados[c.name]||''} onChange={onChange} />)}
+                {campos.map(c => c.autocomplete ? (
+                  // Mesmo autocomplete de endereço do Índice (Google Places via proxy). onType mantém
+                  // o texto digitado à mão valendo (endereço obrigatório mesmo sem escolher sugestão);
+                  // onSelect grava o endereço completo estruturado quando a pessoa escolhe da lista.
+                  <div key={c.name}>
+                    <label style={lbl}>{c.label}{c.required && ' *'}</label>
+                    <EnderecoAutocomplete
+                      placeholder={c.placeholder}
+                      defaultValue={dados[c.name] || ''}
+                      inputStyle={{ background:'#ffffff', color:'#111111', border:'1px solid #e2e8f0', borderRadius:9 }}
+                      onType={(t) => up(c.name, t)}
+                      onSelect={(end) => {
+                        const built = [
+                          [end.logradouro, end.numero].filter(Boolean).join(', '),
+                          [end.bairro, [end.cidade, end.uf].filter(Boolean).join('/'), end.cep].filter(Boolean).join(', '),
+                        ].filter(Boolean).join(' - ');
+                        up(c.name, end.formatado || built);
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <Campo key={c.name} {...c} value={dados[c.name]||''} onChange={onChange} />
+                ))}
               </div>
               <button onClick={() => setEtapa('revisar')} disabled={!podeProsseguir()}
                 style={{ width:'100%', padding:'13px', background:'#0D63DB', color:'white', border:'none', borderRadius:10, fontWeight:700, fontSize:14, cursor:'pointer', opacity:podeProsseguir()?1:0.5 }}>

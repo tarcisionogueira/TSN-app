@@ -56,10 +56,36 @@ export default async function handler(req) {
   }
 
   // 1. Valida que o caso pertence ao cliente
-  const casoRes = await sb(`casos?id=eq.${caso_id}&select=id,cliente_id,analista_id,imovel_endereco`);
+  const casoRes = await sb(`casos?id=eq.${caso_id}&select=id,cliente_id,analista_id,imovel_endereco,imovel_id`);
   const [caso] = await casoRes.json();
   if (!caso || caso.cliente_id !== user.id) {
     return new Response(JSON.stringify({ error: 'Caso não encontrado ou sem permissão' }), { status: 403 });
+  }
+
+  // 1.5. GATE: a reunião com o analista só é liberada com os TRÊS relatórios concluídos
+  // (Mercadológico + Documental + Laudo de Viabilidade). O gate do front (Analise.jsx) é
+  // burlável por POST direto, então revalidamos no servidor. Aplica só à 1ª reunião — a 2ª é a
+  // aprovação pós-análise, já dentro do fluxo assistido. Paridade com o front: documental/laudo
+  // só contam quando NÃO estão pendentes (precisaDocumentos/precisaRelatorios != true).
+  if (Number(reuniao_numero) === 1 && caso.imovel_id) {
+    const enc = encodeURIComponent(caso.imovel_id);
+    const uid = encodeURIComponent(user.id);
+    try {
+      const [mR, dR, lR] = await Promise.all([
+        sb(`analises_mercado?user_id=eq.${uid}&imovel_id=eq.${enc}&status=eq.concluida&select=imovel_id&limit=1`),
+        sb(`analises_documental?user_id=eq.${uid}&imovel_id=eq.${enc}&status=eq.concluida&select=result&limit=1`),
+        sb(`analises_laudo?user_id=eq.${uid}&imovel_id=eq.${enc}&status=eq.concluida&select=result&limit=1`),
+      ]);
+      const [m, d2, l] = await Promise.all([mR.json(), dR.json(), lR.json()]);
+      const mercadoOk = Array.isArray(m) && m.length > 0;
+      const docOk = Array.isArray(d2) && d2.length > 0 && d2[0]?.result?.precisaDocumentos !== true;
+      const laudoOk = Array.isArray(l) && l.length > 0 && l[0]?.result?.precisaRelatorios !== true;
+      if (!(mercadoOk && docOk && laudoOk)) {
+        return new Response(JSON.stringify({ error: 'É necessário gerar os três relatórios (Mercadológico, Documental e Laudo de Viabilidade) antes de agendar a reunião com o analista.' }), { status: 403 });
+      }
+    } catch {
+      return new Response(JSON.stringify({ error: 'Não foi possível validar seus relatórios agora. Tente novamente em instantes.' }), { status: 503 });
+    }
   }
 
   // 2. Busca e reserva o slot atomicamente (usa update com condição disponivel=true)
