@@ -244,6 +244,12 @@ export default function MinhaRede() {
   const rankNome = nivel?.rank_atual?.nome;
   const indicacaoPct = nivel?.comissao_indicacao_pct ?? 25;
   const bonusInf = Number(nivel?.rank_atual?.bonus_infinito_pct || 0); // > 0 = faixa de liderança
+  // Fechamento MENSAL do nível (dia 1) — data anunciada. O cron ranks-recalc-cron roda
+  // recalcular_ranks em "0 6 1 * *"; promoção/queda passam a valer a partir dessa conferência.
+  const proximaConferencia = (() => {
+    const d = new Date();
+    return new Date(d.getFullYear(), d.getMonth() + 1, 1).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
+  })();
 
   return (
     <div style={{ maxWidth: 820, margin: '0 auto', padding: '28px 20px', display: 'flex', flexDirection: 'column', gap: 18 }}>
@@ -362,6 +368,9 @@ export default function MinhaRede() {
                     ? <>Ao chegar em <strong>{nivel.proximo.nome}</strong>, você passa a ganhar <strong>{Number(nivel.proximo.equipe_pct_total)}%</strong> sobre as vendas da equipe (até {nivel.proximo.equipe_niveis} {nivel.proximo.equipe_niveis > 1 ? 'gerações' : 'geração'}){Number(nivel.proximo.equipe_delta_pct) > 0 ? <> — <strong>+{Number(nivel.proximo.equipe_delta_pct)}%</strong> a mais que hoje</> : null}</>
                     : <>Ao chegar em <strong>{nivel.proximo.nome}</strong>, você <strong>desbloqueia seus ganhos</strong> e começa a receber os <strong>{nivel?.venda_pct ?? 25}%</strong> por indicação</>}
                   {Number(nivel.proximo.bonus_infinito_pct) > 0 ? <>, e entra na <strong>liderança</strong> com <strong>bônus infinito de {Number(nivel.proximo.bonus_infinito_pct)}%</strong> sobre toda a rede</> : null}.
+                </div>
+                <div style={{ fontSize: 11, color: '#64748b', marginTop: 8, lineHeight: 1.5 }}>
+                  📅 O nível é confirmado no <strong>fechamento mensal</strong> (dia 1) — próxima conferência: <strong>{proximaConferencia}</strong>.
                 </div>
               </div>
             ) : nivel?.tem_rank ? (
