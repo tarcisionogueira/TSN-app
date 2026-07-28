@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Play, CheckCircle2, BookOpen, Star,
-  ChevronRight, Crown, Search, AlertTriangle,
+  ChevronRight, Crown, Search, AlertTriangle, Share2, Check,
 } from 'lucide-react';
 import { CATEGORIAS, PLANOS, PACOTE } from '../data/cursos';
 import { driveImage } from '../utils/driveUrl';
@@ -89,6 +89,23 @@ export default function Membros() {
   const [planos, setPlanos] = useState(PLANOS);
   // Preço do PACOTE de cursos AO VIVO do admin (planos_config.pacote); estático como fallback.
   const [precoPacote, setPrecoPacote] = useState(PACOTE.preco);
+  // PARCEIRO: mostra o botão "Compartilhar / vender" nos cursos e ebooks, gerando um LINK DE
+  // AFILIADO reutilizável (mesmo link p/ quantas pessoas quiser) vinculado ao parceiro pelo
+  // codigo_indicacao. A venda pelo link (/p/{tipo}/{id}?ref=) já atribui o comprador ao parceiro.
+  const [ehParceiro, setEhParceiro] = useState(false);
+  const [meuCodigo, setMeuCodigo] = useState('');
+  useEffect(() => {
+    if (!user?.id) { setEhParceiro(false); return; }
+    supabase.from('perfis').select('parceiro_aceite_em, codigo_indicacao').eq('id', user.id).maybeSingle()
+      .then(async ({ data }) => {
+        const parceiro = !!data?.parceiro_aceite_em || role === 'admin';
+        setEhParceiro(parceiro);
+        if (!parceiro) return;
+        let cod = data?.codigo_indicacao;
+        if (!cod) { try { await supabase.rpc('gerar_codigo_indicacao', { p_id: user.id }); const { data: p2 } = await supabase.from('perfis').select('codigo_indicacao').eq('id', user.id).maybeSingle(); cod = p2?.codigo_indicacao; } catch { /* fallback no uid */ } }
+        setMeuCodigo(cod || user.id);
+      }).catch(() => {});
+  }, [user?.id, role]);
 
   // Carregar cursos, aulas e ebooks
   useEffect(() => {
@@ -162,6 +179,26 @@ export default function Membros() {
     localStorage.setItem('tsn_plano_membro', p);
     setPlano(p);
     setShowPlanos(false);
+  };
+
+  // Botão de LINK DE AFILIADO por produto (só parceiro). O link é REUTILIZÁVEL — o codigo_indicacao
+  // é fixo do parceiro, serve para infinitas pessoas. Leva à página pública /p/{tipo}/{id}?ref=…,
+  // que atribui o comprador ao parceiro. stopPropagation p/ não abrir o card ao clicar no botão.
+  const CompartilharProduto = ({ tipo, id, nome }) => {
+    const [copiado, setCopiado] = useState(false);
+    if (!ehParceiro) return null;
+    const url = `${window.location.origin}/#/p/${tipo}/${id}?ref=${meuCodigo || user?.id || ''}`;
+    const compartilhar = (e) => {
+      e.stopPropagation();
+      if (navigator.share) { navigator.share({ title: 'BidPro Brasil', text: `Conheça: ${nome}`, url }).catch(() => {}); }
+      else { navigator.clipboard?.writeText(url); setCopiado(true); setTimeout(() => setCopiado(false), 1800); }
+    };
+    return (
+      <button onClick={compartilhar}
+        style={{ marginTop: 8, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '7px 10px', border: '1px solid #bfdbfe', background: copiado ? '#dcfce7' : '#eff6ff', color: copiado ? '#166534' : '#0D63DB', borderRadius: 8, fontSize: 11.5, fontWeight: 700, cursor: 'pointer' }}>
+        {copiado ? <><Check size={13} /> Link copiado</> : <><Share2 size={13} /> Compartilhar / vender</>}
+      </button>
+    );
   };
 
   return (
@@ -339,6 +376,7 @@ export default function Membros() {
                     {Number(c.preco) > 0 ? `R$ ${Number(c.preco).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'Grátis'}
                   </div>
                 )}
+                <CompartilharProduto tipo="curso" id={c.id} nome={c.titulo} />
               </div>
             </div>
           );
@@ -372,6 +410,7 @@ export default function Membros() {
                     <span style={{ fontSize:13, fontWeight:900, color:ac.cor }}>{ac.txt}</span>
                     <span style={{ fontSize:11, fontWeight:800, color:'#b45309', background:'#fef3c7', padding:'3px 9px', borderRadius:6, whiteSpace:'nowrap' }}>Ler eBook →</span>
                   </div>
+                  <CompartilharProduto tipo="ebook" id={eb.id} nome={eb.titulo} />
                 </div>
               </div>
               );
