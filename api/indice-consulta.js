@@ -172,6 +172,9 @@ export default async function handler(req) {
           n_amostras: (pond.n_venda || 0) + (pond.n_locacao || 0),
           nivel: Number(pond.nivel) === 1 ? 'rua' : Number(pond.nivel) === 2 ? 'grid' : 'cidade',
           nivel_label: Number(pond.nivel) === 1 ? 'rua/condomínio (~250 m)' : Number(pond.nivel) === 2 ? 'bairro e adjacências (~1 km)' : 'cidade',
+          // BANDAS de padrão do ponderado (popular/médio/alto) — antes o fallback mostrava só um
+          // número; cidades mapeadas pelo botão "Gerar índice" (tabela plural) caíam aqui sem faixa.
+          bandas: Number(pond.venda_pop) > 0 ? { popular: pond.venda_pop, medio: pond.venda_med, alto: pond.venda_alto } : null,
           bairro_norm: bairroNorm || null };
       } else {
         const acervo = await rpc('indice_bidpro_regiao', { p_cidade_norm: cidadeNorm, p_uf: uf, p_bairro: bairroNorm, p_lat: null, p_lng: null, p_tipo: tipo });
