@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import { CheckCircle2, AlertCircle, Loader2, ShieldCheck, Camera, Upload, FileText, ExternalLink } from 'lucide-react';
 import { supabase } from '../utils/supabase';
 import { useIsMobile } from '../utils/useIsMobile';
-import { buscarCep } from '../utils/cnpjCep';
+import { buscarCep, formatCpf, formatCnpj } from '../utils/cnpjCep';
 
 const DOCS_LABELS = {
   foto_doc: 'Foto do documento de identidade (RG ou CNH)',
@@ -161,6 +161,7 @@ export default function ContratoLink() {
   const [erro, setErro] = useState('');
   const [etapa, setEtapa] = useState('tipo'); // tipo → dados → revisar → ok
   const [tipoPessoa, setTipoPessoa] = useState('');
+  const [docId, setDocId] = useState(''); // CPF/CNPJ digitado na identificação (auto-detecta PF/PJ)
   const [dados, setDados] = useState({});
   const [assinatura, setAssinatura] = useState('');
   const [enviando, setEnviando] = useState(false);
@@ -439,24 +440,40 @@ export default function ContratoLink() {
                 <span>Autorizo o uso dos meus dados para a assinatura eletrônica deste contrato (LGPD art. 7º, I e V).</span>
               </label>
 
-              <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-                {[
-                  { key:'pf', emoji:'👤', titulo:'Pessoa Física', sub:'CPF, RG e dados pessoais' },
-                  { key:'pj', emoji:'🏢', titulo:'Pessoa Jurídica', sub:'CNPJ e dados da empresa' },
-                ].map(({ key, emoji, titulo, sub }) => (
-                  <button key={key} onClick={() => { if (!lgpdAceite) return; setTipoPessoa(key); setEtapa('dados'); }}
-                    disabled={!lgpdAceite}
-                    style={{ padding:'16px', border:'1px solid #334155', borderRadius:12, background:'#111111', cursor:lgpdAceite?'pointer':'not-allowed', textAlign:'left', display:'flex', alignItems:'center', gap:14, opacity:lgpdAceite?1:0.4, transition:'all 0.15s' }}
-                    onMouseEnter={e => { if (!lgpdAceite) return; e.currentTarget.style.borderColor='#3b82f6'; e.currentTarget.style.background='rgba(59,130,246,0.1)'; }}
-                    onMouseLeave={e => { e.currentTarget.style.borderColor='#334155'; e.currentTarget.style.background='#111111'; }}>
-                    <span style={{ fontSize:28 }}>{emoji}</span>
-                    <div>
-                      <div style={{ fontWeight:800, color:'white', fontSize:14 }}>{titulo}</div>
-                      <div style={{ fontSize:12, color:'#64748b', marginTop:2 }}>{sub}</div>
-                    </div>
-                  </button>
-                ))}
-              </div>
+              {/* Sem escolher PF/PJ: a pessoa digita o DOCUMENTO e o sistema detecta sozinho —
+                  11 dígitos = CPF (pede RG e dados pessoais); 14 = CNPJ (pede razão social, sócio…). */}
+              {(() => {
+                const digs = docId.replace(/\D/g, '');
+                const tipoDet = digs.length === 14 ? 'pj' : (digs.length === 11 ? 'pf' : null);
+                const mascara = digs.length > 11 ? formatCnpj(docId) : formatCpf(docId);
+                const continuar = () => {
+                  if (!lgpdAceite || !tipoDet) return;
+                  setTipoPessoa(tipoDet);
+                  up(tipoDet === 'pj' ? 'cnpj' : 'cpf', mascara); // já leva o documento p/ a próxima etapa
+                  setEtapa('dados');
+                };
+                return (
+                  <div>
+                    <label style={lbl}>CPF ou CNPJ *</label>
+                    <input value={mascara} onChange={e => setDocId(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') continuar(); }}
+                      placeholder="Digite seu CPF (pessoa física) ou o CNPJ (empresa)"
+                      inputMode="numeric" autoFocus disabled={!lgpdAceite}
+                      style={{ ...inp, opacity: lgpdAceite ? 1 : 0.5 }} />
+                    {tipoDet ? (
+                      <div style={{ marginTop: 8, fontSize: 12, fontWeight: 700, color: '#34d399', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        ✓ {tipoDet === 'pf' ? 'Pessoa Física — a seguir pediremos RG e seus dados' : 'Pessoa Jurídica — a seguir pediremos razão social e dados do sócio'}
+                      </div>
+                    ) : digs.length > 0 ? (
+                      <div style={{ marginTop: 8, fontSize: 11.5, color: '#94a3b8' }}>Continue digitando: CPF tem 11 dígitos; CNPJ tem 14.</div>
+                    ) : null}
+                    <button onClick={continuar} disabled={!lgpdAceite || !tipoDet}
+                      style={{ marginTop: 18, width: '100%', padding: '13px', background: (lgpdAceite && tipoDet) ? '#0D63DB' : '#334155', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 14, cursor: (lgpdAceite && tipoDet) ? 'pointer' : 'not-allowed', opacity: (lgpdAceite && tipoDet) ? 1 : 0.6 }}>
+                      Continuar →
+                    </button>
+                  </div>
+                );
+              })()}
             </div>
           )}
 
