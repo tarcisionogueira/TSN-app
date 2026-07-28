@@ -83,7 +83,10 @@ export default async function handler(req, res) {
   // Usa o MESMO helper dos outros crons (aceita os dois cabeçalhos) — garante que a Vercel autentica.
   if (!isCronAuthorized(req)) { res.status(401).json({ error: 'não autorizado' }); return; }
   if (!CLAUDE_KEY || !SUPABASE_URL || !SERVICE_KEY) { res.status(500).json({ error: 'serviço indisponível' }); return; }
-  if (process.env.INDICE_REFORCO === '0') { res.status(200).json({ ok: true, desligado: true }); return; }
+  // DESLIGADO POR PADRÃO (decisão do dono: evitar custo proativo ~US$300/mês). A base é alimentada
+  // ORGANICAMENTE a cada relatório/índice gerado (busca já arrojada). Para LIGAR o reforço proativo
+  // (backfill das cidades magras), definir a env INDICE_REFORCO=1 no painel Vercel.
+  if (process.env.INDICE_REFORCO !== '1') { res.status(200).json({ ok: true, desligado: true, nota: 'reforço proativo OFF (custo). Ligue com INDICE_REFORCO=1.' }); return; }
 
   const LOTE = Math.max(1, Math.min(6, Number(process.env.INDICE_REFORCO_LOTE || 3)));
   const DIAS = Math.max(1, Number(process.env.INDICE_REFORCO_DIAS || 14));

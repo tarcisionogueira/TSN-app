@@ -40,6 +40,9 @@ function RelatorioCard({ icone: Icone, nome, dados }) {
       <div style={{ display: 'flex', gap: 14, marginBottom: 10 }}>
         <div><div style={{ fontSize: 22, fontWeight: 900, color: '#111' }}>{d.total || 0}</div><div style={label}>gerados</div></div>
         <div><div style={{ fontSize: 22, fontWeight: 900, color: '#15803d' }}>{d.concluidas ?? 0}</div><div style={label}>concluídos</div></div>
+        {((d.com_erro || 0) + (d.vazias || 0)) > 0 && (
+          <div><div style={{ fontSize: 22, fontWeight: 900, color: '#dc2626' }}>{(d.com_erro || 0) + (d.vazias || 0)}</div><div style={label}>{(d.vazias || 0) > 0 ? 'vazio/erro' : 'com erro'}</div></div>
+        )}
       </div>
       {(d.latest || []).length > 0 ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
@@ -597,7 +600,7 @@ ${atividade ? `<h2>Atividade recente</h2><table><thead><tr><th>Data</th><th>Even
             {(dados.navegacao || []).length === 0 ? <div style={{ fontSize: 12, color: '#94a3b8' }}>Sem navegação registrada ainda.</div> : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 5, maxHeight: 320, overflowY: 'auto' }}>
                 {dados.navegacao.map((n, i) => {
-                  const meta = { pageview: { rot: 'Tela', cor: '#64748b' }, click: { rot: 'Clique', cor: '#0D63DB' }, api_erro: { rot: 'Falha API', cor: '#dc2626' } }[n.tipo] || { rot: n.tipo, cor: '#64748b' };
+                  const meta = { pageview: { rot: 'Tela', cor: '#64748b' }, click: { rot: 'Clique', cor: '#0D63DB' }, api_erro: { rot: 'Falha API', cor: '#dc2626' }, api_vazio: { rot: 'Sem resultado', cor: '#b45309' } }[n.tipo] || { rot: n.tipo, cor: '#64748b' };
                   return (
                     <div key={i} style={{ fontSize: 12, color: '#334155', display: 'flex', justifyContent: 'space-between', gap: 8, borderTop: i ? '1px solid #f1f5f9' : 'none', paddingTop: i ? 5 : 0 }}>
                       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>

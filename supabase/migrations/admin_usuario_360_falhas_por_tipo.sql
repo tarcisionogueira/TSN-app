@@ -1,0 +1,4 @@
+-- Cliente 360 (P0-1): admin_usuario_360 passa a devolver, por tipo de relatório, 'com_erro'
+-- (status='erro') e 'vazias' (mercadoVazio) — antes o vazio/erro ficava escondido dentro de
+-- 'concluidas' e o card por-usuário pintava a falha como sucesso. Aplicada via MCP em produção.
+-- (função completa aplicada em prod; ver definição vigente com pg_get_functiondef.)
