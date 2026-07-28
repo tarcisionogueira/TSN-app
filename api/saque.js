@@ -58,6 +58,12 @@ async function abrirChamadoSaquePJ(user, perfil, valor, titulo) {
   } catch { /* o chamado é auxiliar — não bloqueia a solicitação de saque */ }
 }
 
+// Log de atividade do SAQUE (Cliente 360) — ação FINANCEIRA que antes era invisível na linha
+// do tempo (só aparecia indireta em saldo_lancamentos). Best-effort: nunca afeta a solicitação.
+async function logSaque(userId, evento, detalhe, meta = {}) {
+  try { await rpc('registrar_atividade', { p_user_id: userId, p_evento: evento, p_detalhe: detalhe, p_meta: meta }); } catch { /* best-effort */ }
+}
+
 // DIREITO DE RECEBER (regra do dono): qualquer cliente pode ser PARCEIRO e indicar, mas só tem
 // direito a RECEBER (sacar) as comissões quem é PAGANTE (plano pago) — ou quem é EQUIPE/
 // profissional (admin/analista/advogado/consultor/afiliado/leiloeiro, que recebem por função).
@@ -193,6 +199,7 @@ export default async function handler(req) {
       const r = await rpc('solicitar_saque_ledger', { p_user_id: user.id, p_valor: valor });
       if (!r.ok) return json({ error: 'Erro ao solicitar saque', detail: r.data }, 500);
       if (!r.data?.ok) return json({ error: r.data?.error || 'Não foi possível solicitar o saque' }, 400);
+      await logSaque(user.id, 'saque', `Saque solicitado — R$ ${valor.toFixed(2)}`, { valor });
       return json({ ok: true, saldo_restante: r.data.saldo_restante }, 201);
     }
 
@@ -218,6 +225,7 @@ export default async function handler(req) {
       const r = await rpc('solicitar_saque_ledger', { p_user_id: user.id, p_valor: valor });
       if (!r.ok) return json({ error: 'Erro ao solicitar saque', detail: r.data }, 500);
       if (!r.data?.ok) return json({ error: r.data.error || 'Não foi possível solicitar o saque', pj_revalidar: !!r.data.pj_revalidar, pj_pendente: !!r.data.pj_pendente, faltando: r.data.faltando }, 422);
+      await logSaque(user.id, 'saque', `Saque solicitado — R$ ${valor.toFixed(2)}`, { valor });
       return json({ ok: true, saldo_restante: r.data.saldo_restante }, 201);
     }
 
@@ -234,6 +242,7 @@ export default async function handler(req) {
       const r = await rpc('solicitar_saque_ledger', { p_user_id: user.id, p_valor: valor });
       if (!r.ok || !r.data?.ok) return json({ error: r.data?.error || 'Não foi possível solicitar o saque', detail: r.data }, 400);
       await abrirChamadoSaquePJ(user, perfil, valor, 'Saque de parceiro liberado pela automação (CPF confere no quadro societário) — supervisão');
+      await logSaque(user.id, 'saque', `Saque de parceiro solicitado — R$ ${valor.toFixed(2)} (validação automática QSA)`, { valor, via: 'auto_qsa' });
       return json({ ok: true, saldo_restante: r.data.saldo_restante, via: 'auto_qsa' }, 201);
     }
 
@@ -242,6 +251,7 @@ export default async function handler(req) {
     if (!r.ok) return json({ error: 'Erro ao solicitar saque', detail: r.data }, 500);
     if (!r.data?.ok) return json({ error: r.data?.error || 'Não foi possível solicitar o saque', faltando: r.data?.faltando, kyc_pendente: r.data?.kyc_pendente }, 400);
     await abrirChamadoSaquePJ(user, perfil, valor, 'Saque de parceiro — CPF não confirmado no quadro societário; conferir contrato social e liberar/reprovar');
+    await logSaque(user.id, 'saque', `Saque de parceiro solicitado — R$ ${valor.toFixed(2)} (em validação manual da PJ)`, { valor, em_validacao: true });
     return json({ ok: true, em_validacao: true, saldo_restante: r.data.saldo_restante }, 201);
   }
 

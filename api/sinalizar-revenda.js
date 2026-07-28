@@ -92,6 +92,16 @@ export default async function handler(req) {
       amostra = true;
     }
 
+    // Log de atividade (Cliente 360) — best-effort, mesmo padrão do sinalizar-arremate.
+    // Antes a revenda NÃO era logada (o Cliente 360 tinha o rótulo "Revenda sinalizada" mas
+    // nenhum escritor) → sumia da linha do tempo do usuário.
+    try {
+      await sb('rpc/registrar_atividade', { method: 'POST', body: JSON.stringify({
+        p_user_id: user.id, p_evento: 'revenda',
+        p_detalhe: `Revenda registrada — R$ ${Math.round(valor).toLocaleString('pt-BR')}${valorM2 ? ` (R$ ${valorM2.toLocaleString('pt-BR')}/m²)` : ''}`,
+        p_meta: { imovel_id: iid, valor, valor_m2: valorM2, amostra } }) });
+    } catch { /* log best-effort */ }
+
     return new Response(JSON.stringify({ ok: true, valor_m2: valorM2, area, amostra }), { status: 200, headers });
   } catch (e) {
     return new Response(JSON.stringify({ error: e.message || 'Falha ao registrar revenda' }), { status: 500, headers });

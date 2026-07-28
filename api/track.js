@@ -10,7 +10,9 @@ import { getUser, getUserRoleById } from './_auth.js';
 
 const SB = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const KEY = process.env.SUPABASE_SERVICE_KEY;
-const TIPOS = new Set(['pageview', 'click', 'api_erro']);
+// api_vazio = ação-chave (relatório) que voltou SEM estimativa — o dono quer ver isso no 360
+// (era enviado pelo apiCall.js mas caía fora da allowlist e sumia silenciosamente).
+const TIPOS = new Set(['pageview', 'click', 'api_erro', 'api_vazio']);
 
 // Defesa em profundidade: NUNCA persistir token/segredo no log de atividade, mesmo que um cliente
 // antigo/adulterado mande (ex.: #access_token=... do fluxo implícito, ou um JWT eyJ...). Redige.
