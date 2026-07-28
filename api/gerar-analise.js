@@ -1040,13 +1040,29 @@ export default async function handler(req, res) {
       const RESERVA_PARECER = 55000; // guarda p/ o parecer + a escrita final
       const buscarMercado = async (msBudget, webUses = maxWeb) => {
         try {
-          const mData = await anthropic({
-            model: MODEL, max_tokens: 16000, // espaço p/ o MÁXIMO de amostras do tipo-alvo + outrasTipologias + outrosBairros (colheita ampla)
-            tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: webUses }],
-            system: `Você é um perito avaliador imobiliário sênior. Busque o MÁXIMO de amostras possível, SEMPRE do mesmo tipo (${mercadoInputs.tipoImovel}). Retorne apenas JSON válido.`,
-            messages: [{ role: 'user', content: promptMercado(mercadoInputs) + cacheTxt + fontesTxt }],
-          }, true, { retries: 0, timeoutMs: Math.max(45000, msBudget), noFallback: true });
-          const m = parseJSON(extractText(mData)) || {};
+          // CAUSA-RAIZ do "sem amostras" em cidade grande (BH 28/07): com web_search, os BLOCOS de
+          // RESULTADO da busca contam no output e, em cidade grande, consumiam o max_tokens ANTES de
+          // o modelo escrever o JSON → resposta SEM bloco de texto → parse vazio. Dois consertos:
+          //  (1) max_tokens 16000→32000 (folga p/ os resultados da busca + o JSON final);
+          //  (2) tratar stop_reason='pause_turn' (a busca server-side PAUSA em pesquisas longas e
+          //      espera o turno ser devolvido p/ CONTINUAR — sem isso o modelo nunca emite o JSON).
+          const messages = [{ role: 'user', content: promptMercado(mercadoInputs) + cacheTxt + fontesTxt }];
+          let mData, stop, cont = 0;
+          do {
+            mData = await anthropic({
+              model: MODEL, max_tokens: 32000,
+              tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: webUses }],
+              system: `Você é um perito avaliador imobiliário sênior. Busque o MÁXIMO de amostras possível, SEMPRE do mesmo tipo (${mercadoInputs.tipoImovel}). Retorne apenas JSON válido.`,
+              messages,
+            }, true, { retries: 0, timeoutMs: Math.max(45000, msBudget), noFallback: true });
+            stop = mData?.stop_reason;
+            if (stop === 'pause_turn' && Array.isArray(mData.content)) {
+              messages.push({ role: 'assistant', content: mData.content }); // devolve o turno pausado p/ continuar
+              cont++;
+            }
+          } while (stop === 'pause_turn' && cont < 4 && restante() > RESERVA_PARECER + 12000);
+          const txt = extractText(mData);
+          const m = parseJSON(txt) || {};
           m.precoMedioM2 = m.consolidado?.precoMedioM2 || m.nivel2?.precoMedioM2 || 0;
           m.aluguelMedio = m.consolidado?.aluguelMedio || 0;
           m.yieldBruto = m.consolidado?.yieldBruto || 0;
@@ -1054,6 +1070,8 @@ export default async function handler(req, res) {
           m.vendas = m.nivel2?.vendas || [];
           m.locacoes = m.nivel2?.locacoes || [];
           m.pesquisaEm = new Date().toISOString();
+          // Diagnóstico PERSISTIDO (fica no result mesmo quando vazio) p/ validar o fluxo pelo banco.
+          m.__diag = { stop: stop || null, blocos: Array.isArray(mData?.content) ? mData.content.length : 0, textoLen: txt.length, out_tokens: mData?.usage?.output_tokens || 0, buscas: webUses, continuou: cont };
           return m;
         } catch (e) { return { __falhou: true, __erroApi: String(e?.message || e || '').slice(0, 120) }; } // abort/timeout/erro → o chamador trata
       };
