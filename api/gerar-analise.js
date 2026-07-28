@@ -892,11 +892,11 @@ export default async function handler(req, res) {
       // buscas NUNCA somam mais que o orçamento. Se a chamada abortar/falhar, devolve
       // { __falhou:true } (o chamador decide re-tentar ou marcar transitório p/ self-heal).
       const RESERVA_PARECER = 55000; // guarda p/ o parecer + a escrita final
-      const buscarMercado = async (msBudget) => {
+      const buscarMercado = async (msBudget, webUses = maxWeb) => {
         try {
           const mData = await anthropic({
-            model: MODEL, max_tokens: 11000, // + espaço p/ trazer o MÁXIMO de amostras do tipo-alvo + o bloco outrasTipologias
-            tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: maxWeb }],
+            model: MODEL, max_tokens: 14000, // + espaço p/ trazer o MÁXIMO de amostras do tipo-alvo + o bloco outrasTipologias
+            tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: webUses }],
             system: `Você é um perito avaliador imobiliário sênior. Busque o MÁXIMO de amostras possível, SEMPRE do mesmo tipo (${mercadoInputs.tipoImovel}). Retorne apenas JSON válido.`,
             messages: [{ role: 'user', content: promptMercado(mercadoInputs) + cacheTxt }],
           }, true, { retries: 0, timeoutMs: Math.max(45000, msBudget), noFallback: true });
@@ -915,9 +915,11 @@ export default async function handler(req, res) {
       // 1ª busca: guarda a reserva do parecer E ~80s p/ uma 2ª tentativa (uma busca que TRAVA
       // aborta antes e a re-tentativa costuma concluir — 2 ataques mais curtos > 1 longo).
       mercado = await buscarMercado(Math.min(135000, restante() - RESERVA_PARECER - 80000));
-      // Re-tenta se (vazio OU falhou) E ainda há orçamento p/ outra busca + parecer.
+      // Re-tenta se (vazio OU falhou) E ainda há orçamento. A 2ª tentativa é ESTREITA (menos
+      // buscas web = mais rápida): numa cidade grande a busca ampla estoura o tempo e volta VAZIA;
+      // um ataque curto (≤3 buscas) costuma CONCLUIR e trazer amostras em vez de nada.
       if ((semAmostras(mercado) || mercado.__falhou) && restante() > RESERVA_PARECER + 40000) {
-        mercado = await buscarMercado(Math.min(110000, restante() - RESERVA_PARECER));
+        mercado = await buscarMercado(Math.min(110000, restante() - RESERVA_PARECER), Math.min(maxWeb, 3));
       }
       // A busca FALHOU (abort/timeout/erro), não é "mercado vazio de verdade": trata como
       // TRANSITÓRIO → grava 'erro' com tempo_limite e o self-heal (cron) re-tenta com orçamento

@@ -221,6 +221,13 @@ export default function IndiceConsulta() {
                         <span style={{ fontSize: 10, color: '#7c3aed', fontWeight: 700 }}>LOCAÇÃO</span>
                         <span style={{ fontSize: 14, fontWeight: 800, color: '#7c3aed' }}>{Number(r.aluguel_m2) > 0 ? `${brl(r.aluguel_m2)}/m²·mês` : 'em formação'}</span>
                       </div>
+                      {r.bandas && Number(r.bandas.popular) > 0 && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
+                          <span title="padrão popular (p25)" style={{ fontSize: 9.5, fontWeight: 700, color: '#0369a1', background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: 5, padding: '1px 5px' }}>pop. {brl(r.bandas.popular)}</span>
+                          <span title="padrão médio (p50)" style={{ fontSize: 9.5, fontWeight: 700, color: '#334155', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 5, padding: '1px 5px' }}>méd. {brl(r.bandas.medio)}</span>
+                          <span title="padrão alto (p75)" style={{ fontSize: 9.5, fontWeight: 700, color: '#7c3aed', background: '#f5f3ff', border: '1px solid #ddd6fe', borderRadius: 5, padding: '1px 5px' }}>alto {brl(r.bandas.alto)}</span>
+                        </div>
+                      )}
                       <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 6 }}>{r.n_amostras || 0} amostra(s)</div>
                     </>
                   ) : (

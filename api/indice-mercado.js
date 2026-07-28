@@ -7,7 +7,7 @@
  * Cobrança: cota mensal do plano (limite_ia 'indice') e, esgotada, CRÉDITO (custo real × mult).
  * Explorador só VISUALIZA (não gera). Node runtime — a busca web é lenta.
  */
-export const config = { runtime: 'nodejs', maxDuration: 120 };
+export const config = { runtime: 'nodejs', maxDuration: 250 };
 
 import { getUser } from './_auth.js';
 import { anthropicFetch } from './_claude.js';
@@ -58,8 +58,8 @@ const promptIndice = ({ endereco, condominio, bairro, tipo, cidade, uf }) => {
   const cidadeInteira = !endereco && !condominio && !bairro;
   const alvo = todos ? 'de TODOS os tipos (apartamento, casa, terreno, comercial)' : `para o imóvel do tipo "${tipo}"`;
   const regraTipo = todos
-    ? '- Cubra os 4 tipos (apartamento, casa, terreno, comercial). Em CADA amostra informe "tipo": exatamente um de apartamento|casa|terreno|comercial (sem variações). Traga no MÁXIMO 6 amostras por tipo por nível (não estoure o limite da resposta).'
-    : `- SÓ o MESMO TIPO (${tipo}). Descarte tipos diferentes.`;
+    ? '- Cubra os 4 tipos (apartamento, casa, terreno, comercial). Em CADA amostra informe "tipo": exatamente um de apartamento|casa|terreno|comercial (sem variações). Traga o MÁXIMO de amostras REAIS que encontrar (idealmente 12 a 18 por tipo por nível) — quanto mais anúncios ativos, mais fiel o índice. NÃO resuma nem corte a lista.'
+    : `- SÓ o MESMO TIPO (${tipo}). Descarte tipos diferentes. Traga o MÁXIMO de amostras REAIS (idealmente 20 a 30 por nível) — não resuma nem limite a lista; quanto mais anúncios ativos, melhor o índice.`;
   const campoTipo = todos ? '"tipo":"apartamento",' : '';
   const niveis = cidadeInteira
     ? `- NÍVEL 1: bairros CENTRAIS / mais valorizados de ${cidade}.
@@ -74,7 +74,7 @@ REGRAS:
 ${regraTipo}
 - SÓ MERCADO LIVRE: descarte QUALQUER leilão, praça, venda direta bancária/Caixa, alienação fiduciária, extrajudicial/judicial ou retomado (preços 30–60% abaixo contaminam o índice).
 - Priorize anúncios RECENTES (≤12 meses). Capture a data de cada amostra.
-- Faça várias buscas (ZAP, VivaReal, OLX, Quinto Andar, Imovelweb, Chaves na Mão e imobiliárias LOCAIS de ${cidade}).
+- SEJA ARROJADO: faça VÁRIAS buscas nos portais e VÁRIAS PÁGINAS de resultados (ZAP, VivaReal, OLX, Quinto Andar, Imovelweb, Chaves na Mão, Loft, e imobiliárias LOCAIS de ${cidade}). Percorra faixas de preço/tamanho DIFERENTES para não trazer só um padrão — pegue do POPULAR ao ALTO padrão da cidade.
 - Informe o BAIRRO de cada amostra (essencial para classificar a cidade por região).${cidadeInteira ? ' TRAGA amostras de bairros DIFERENTES.' : ''}
 - Mesmo em CIDADE PEQUENA há anúncios: pesquise "${cidade} ${uf}" + o tipo nesses portais e TRAGA o que encontrar — NÃO retorne listas vazias se existir qualquer anúncio real de mercado (venda/locação). Terreno costuma ter R$/m² BAIXO (ex.: 100–400 R$/m²): isso é normal, capture assim mesmo.
 
@@ -178,12 +178,12 @@ export default async function handler(req, res) {
     const r = await anthropicFetch({
       method: 'POST', headers,
       body: JSON.stringify({
-        model: MODEL, max_tokens: todos ? 8000 : 6000,   // "todos" retorna 4 tipos → JSON maior (evita truncar)
-        tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }],
+        model: MODEL, max_tokens: todos ? 16000 : 12000,   // busca arrojada → muitas amostras → JSON maior (evita truncar)
+        tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 8 }],
         system: `Perito avaliador. ${todos ? 'Cubra os 4 tipos (apartamento, casa, terreno, comercial) e marque o "tipo" de CADA amostra.' : 'Só ' + tipo + '.'} Só mercado livre (descarte leilão). Retorne apenas JSON válido.`,
         messages: [{ role: 'user', content: promptIndice({ endereco: body.endereco, condominio: body.condominio, bairro: body.bairro, tipo, cidade: body.cidade, uf }) }],
       }),
-    }, { retries: 0, timeoutMs: 100000, noFallback: true });
+    }, { retries: 0, timeoutMs: 200000, noFallback: true });
     if (!r.ok) throw new Error(`anthropic_http_${r.status}`);
     const data = await r.json();
     try { custoMicro = custoRespostaClaude(MODEL, data?.usage); } catch { /* medição best-effort */ }
