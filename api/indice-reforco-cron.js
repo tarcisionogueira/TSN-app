@@ -17,12 +17,12 @@
 export const config = { runtime: 'nodejs', maxDuration: 300 };
 
 import { anthropicFetch } from './_claude.js';
+import { isCronAuthorized } from './_auth.js';
 import { norm, extractText, parseJSON, promptIndice, montarAmostras } from './_indice-core.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
 const CLAUDE_KEY   = process.env.CLAUDE_KEY;
-const CRON_SECRET  = process.env.CRON_SECRET;
 const MODEL = 'claude-sonnet-4-6';
 
 async function rpc(name, body) {
@@ -79,9 +79,9 @@ async function reforcarCidade(cidade, uf) {
 }
 
 export default async function handler(req, res) {
-  // Só o agendador da Vercel (ou o dono via header) dispara.
-  const secret = req.headers['x-cron-secret'] || String(req.headers['authorization'] || '').replace(/^Bearer\s+/i, '');
-  if (!CRON_SECRET || secret !== CRON_SECRET) { res.status(401).json({ error: 'não autorizado' }); return; }
+  // Só o agendador da Vercel (Authorization: Bearer CRON_SECRET) ou o dono (x-cron-secret) dispara.
+  // Usa o MESMO helper dos outros crons (aceita os dois cabeçalhos) — garante que a Vercel autentica.
+  if (!isCronAuthorized(req)) { res.status(401).json({ error: 'não autorizado' }); return; }
   if (!CLAUDE_KEY || !SUPABASE_URL || !SERVICE_KEY) { res.status(500).json({ error: 'serviço indisponível' }); return; }
   if (process.env.INDICE_REFORCO === '0') { res.status(200).json({ ok: true, desligado: true }); return; }
 
