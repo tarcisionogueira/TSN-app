@@ -1390,13 +1390,9 @@ export default function Perfil() {
 
           {ROLES_PAGANTES.includes(role) && (
             <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
-              <div style={{ fontSize: 13, color: '#166534', lineHeight: 1.6, marginBottom: 10 }}>
-                Só quer <strong>parar de pagar</strong>? Você não precisa excluir a conta — <strong>cancele o plano</strong> e continue como <strong>Explorador</strong> (acesso gratuito), mantendo seu histórico e análises.
+              <div style={{ fontSize: 13, color: '#166534', lineHeight: 1.6 }}>
+                Só quer <strong>parar de pagar</strong>? Você não precisa excluir a conta — use <strong>“Cancelar assinatura paga”</strong> abaixo e continue como <strong>Explorador</strong> (gratuito), mantendo seu histórico e análises.
               </div>
-              <button onClick={() => { setCancelMsg(null); setCancelModal(true); }}
-                style={{ padding: '10px 18px', background: '#059669', color: 'white', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
-                Cancelar plano (continuar como Explorador)
-              </button>
             </div>
           )}
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: mostrarConfirmacaoExclusao ? 16 : 0 }}>
@@ -1417,7 +1413,12 @@ export default function Perfil() {
               {baixando ? 'Exportando...' : 'Baixar meus dados'}
             </button>
             <button
-              onClick={() => { setMostrarConfirmacaoExclusao(v => !v); setTextoConfirmacao(''); setConfirmarExclusaoFinal(false); setLgpdErro(null); }}
+              onClick={() => {
+                // Pagante: a ação primária é CANCELAR A ASSINATURA (vira Explorador, mantém a
+                // conta). A exclusão total (LGPD) fica disponível depois, já como Explorador.
+                if (ROLES_PAGANTES.includes(role)) { setCancelMsg(null); setCancelModal(true); }
+                else { setMostrarConfirmacaoExclusao(v => !v); setTextoConfirmacao(''); setConfirmarExclusaoFinal(false); setLgpdErro(null); }
+              }}
               style={{
                 padding: '10px 18px',
                 background: 'white',
@@ -1428,7 +1429,7 @@ export default function Perfil() {
                 fontWeight: 700,
                 cursor: 'pointer',
               }}>
-              Excluir minha conta
+              {ROLES_PAGANTES.includes(role) ? 'Cancelar assinatura paga' : 'Excluir minha conta'}
             </button>
           </div>
 

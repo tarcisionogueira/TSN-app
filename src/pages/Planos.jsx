@@ -148,7 +148,7 @@ export default function Planos() {
     return 'contratar';
   };
   // Downgrade/cancelamento é gerido em Meu Perfil › Assinatura (não refaz cobrança aqui).
-  const irDowngrade = () => nav('/perfil');
+  const irDowngrade = () => nav('/perfil?aba=assinatura');
 
   const CheckItem = ({ txt, light, off }) => (
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, opacity: off ? 0.65 : 1 }}>
