@@ -154,8 +154,14 @@ export default function Header() {
   const [ehParceiro, setEhParceiro] = useState(false);
   React.useEffect(() => {
     if (!user?.id) { setEhParceiro(false); return; }
-    supabase.from('perfis').select('parceiro_aceite_em').eq('id', user.id).maybeSingle()
+    const carregar = () => supabase.from('perfis').select('parceiro_aceite_em').eq('id', user.id).maybeSingle()
       .then(({ data }) => setEhParceiro(!!data?.parceiro_aceite_em)).catch(() => {});
+    carregar();
+    // Re-lê ao ACEITAR a parceria (evento disparado por ConviteParceiro/HomeCliente) — mostra
+    // "Indicações" NA HORA, sem depender de novo login. Antes só relia no user.id mudar.
+    const h = () => carregar();
+    window.addEventListener('tsn:parceiro-atualizado', h);
+    return () => window.removeEventListener('tsn:parceiro-atualizado', h);
   }, [user?.id]);
   const mostrarRede = ehParceiro || effectiveRole === 'admin';
   // "Comissões" (extrato operacional) só p/ a equipe; o parceiro-cliente vê os ganhos em Indicações.

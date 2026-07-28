@@ -100,7 +100,7 @@ export default function HomeCliente() {
     setAceitando(true);
     try {
       const { data, error } = await supabase.rpc('aceitar_parceria', { p_versao: TERMO_PARCEIRO_VERSAO });
-      if (!error) { setAceite(data || new Date().toISOString()); setShowTermo(false); nav('/minha-rede'); }
+      if (!error) { setAceite(data || new Date().toISOString()); setShowTermo(false); window.dispatchEvent(new Event('tsn:parceiro-atualizado')); nav('/minha-rede'); }
     } finally { setAceitando(false); }
   };
 

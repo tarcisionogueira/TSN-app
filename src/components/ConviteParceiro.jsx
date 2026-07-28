@@ -88,7 +88,13 @@ export default function ConviteParceiro({ maxWidth = 1100, style }) {
     setAceitando(true);
     try {
       const { data, error } = await supabase.rpc('aceitar_parceria', { p_versao: TERMO_PARCEIRO_VERSAO });
-      if (!error) { setAceite(data || new Date().toISOString()); setShowTermo(false); nav('/minha-rede'); }
+      if (!error) {
+        setAceite(data || new Date().toISOString()); setShowTermo(false);
+        // Avisa o Header (mostra "Indicações" na hora) e o modal de KYC do parceiro (pede
+        // selfie+documento). Sem isto, o menu só atualizava no próximo login.
+        window.dispatchEvent(new Event('tsn:parceiro-atualizado'));
+        nav('/minha-rede');
+      }
     } finally { setAceitando(false); }
   };
 
