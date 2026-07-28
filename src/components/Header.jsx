@@ -246,7 +246,7 @@ export default function Header() {
           ficavam POR BAIXO do relógio/bateria no iPhone. O fundo #111 do header preenche a
           faixa da status bar; fora de iPhone com notch o inset é 0 (sem efeito). */}
       <div style={{ background: '#111111', borderBottom: '1px solid #111111' }}>
-      <div style={{ maxWidth: 1280, margin: '0 auto', padding: '0 20px', height: 62, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <div style={{ maxWidth: 1280, margin: '0 auto', padding: '8px 20px', minHeight: 62, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, boxSizing: 'border-box' }}>
 
         {/* Logo */}
         <button onClick={() => nav('/')} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
@@ -254,7 +254,7 @@ export default function Header() {
         </button>
 
         {/* Nav desktop */}
-        <nav style={{ display: 'flex', gap: 4, alignItems: 'center' }} className="hide-mobile">
+        <nav style={{ display: 'flex', gap: 4, rowGap: 6, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end', minWidth: 0 }} className="hide-mobile">
           {links.map(l => (
             <button key={l.path} onClick={() => nav(l.path)}
               data-tour={l.tourId}
