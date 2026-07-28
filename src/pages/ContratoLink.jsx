@@ -298,20 +298,22 @@ export default function ContratoLink() {
   // COMPLETAR pontos de autenticação (dispositivo/localização) de uma assinatura já feita ANTES de
   // o sistema capturá-los. Não re-assina, não altera assinatura/hash/carimbo originais.
   const [completando, setCompletando] = useState(false);
+  const [completado, setCompletado] = useState(false);
   const completarDados = async () => {
     setCompletando(true);
     try {
-      const geo = await capturarGeo();
+      const geo = await capturarGeo(); // best-effort: no desktop costuma ser negado/indisponível
       const resp = await fetch('/api/complementar-assinatura', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token, geo }),
       });
       const out = await resp.json().catch(() => ({}));
-      if (resp.ok && out.ok) {
+      if (resp.ok && (out.ok || out.jaCompleto)) {
+        setCompletado(true); // feedback imediato — o dispositivo já foi registrado (geo é opcional)
         const { data } = await supabase.rpc('get_contrato_por_token', { p_token: token });
         const c = Array.isArray(data) ? data[0] : data; if (c) setContrato(c);
       } else { alert(out.error || 'Não foi possível completar os dados.'); }
-    } catch { alert('Não foi possível completar os dados.'); }
+    } catch { alert('Não foi possível completar os dados. Verifique a conexão e tente novamente.'); }
     setCompletando(false);
   };
 
@@ -409,16 +411,27 @@ export default function ContratoLink() {
               </div>
             )}
             {/* Assinaturas antigas, sem dispositivo/localização: o próprio signatário completa agora,
-                sem re-assinar (não altera assinatura/hash/carimbo originais). */}
-            {contrato.status === 'assinado' && (!contrato.assinante_user_agent || !contrato.assinante_geo) && (
-              <div style={{ marginTop:14, padding:'12px 14px', background:'rgba(234,179,8,0.08)', border:'1px solid rgba(234,179,8,0.3)', borderRadius:10 }}>
-                <div style={{ fontSize:12.5, color:'#eab308', fontWeight:700, marginBottom:8 }}>Complete os dados de autenticação deste documento (dispositivo e localização).</div>
-                <button onClick={completarDados} disabled={completando}
-                  style={{ display:'flex', alignItems:'center', gap:7, padding:'9px 15px', background: completando ? '#334155' : '#eab308', color: completando ? '#94a3b8' : '#111', border:'none', borderRadius:9, fontWeight:800, fontSize:13, cursor: completando ? 'default' : 'pointer' }}>
-                  {completando ? 'Registrando…' : 'Completar dados de autenticação'}
-                </button>
-              </div>
-            )}
+                sem re-assinar (não altera assinatura/hash/carimbo originais). A LOCALIZAÇÃO é
+                best-effort (no desktop costuma ser negada) — o DISPOSITIVO já basta para completar. */}
+            {contrato.status === 'assinado' && (() => {
+              const jaComplementou = completado || !!contrato.dados_complementados_em;
+              const falta = !contrato.assinante_user_agent || !contrato.assinante_geo;
+              if (jaComplementou) return (
+                <div style={{ marginTop:14, padding:'10px 14px', background:'rgba(52,211,153,0.08)', border:'1px solid rgba(52,211,153,0.3)', borderRadius:10, fontSize:12.5, color:'#34d399', fontWeight:600 }}>
+                  ✓ Dados de autenticação registrados{!contrato.assinante_geo ? ' — localização não disponível neste dispositivo (dispositivo e IP registrados).' : '.'}
+                </div>
+              );
+              if (!falta) return null;
+              return (
+                <div style={{ marginTop:14, padding:'12px 14px', background:'rgba(234,179,8,0.08)', border:'1px solid rgba(234,179,8,0.3)', borderRadius:10 }}>
+                  <div style={{ fontSize:12.5, color:'#eab308', fontWeight:700, marginBottom:8 }}>Complete os dados de autenticação deste documento (dispositivo e localização).</div>
+                  <button onClick={completarDados} disabled={completando}
+                    style={{ display:'flex', alignItems:'center', gap:7, padding:'9px 15px', background: completando ? '#334155' : '#eab308', color: completando ? '#94a3b8' : '#111', border:'none', borderRadius:9, fontWeight:800, fontSize:13, cursor: completando ? 'default' : 'pointer' }}>
+                    {completando ? 'Registrando…' : 'Completar dados de autenticação'}
+                  </button>
+                </div>
+              );
+            })()}
             <button onClick={baixarDocumento} style={{ marginTop:16, display:'flex', alignItems:'center', gap:7, padding:'10px 16px', background:'#0D63DB', color:'white', border:'none', borderRadius:9, fontWeight:700, fontSize:13, cursor:'pointer' }}>
               <Download size={15} /> Baixar documento assinado
             </button>
