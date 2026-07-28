@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import { CheckCircle2, AlertCircle, Loader2, ShieldCheck, Camera, Upload, FileText, ExternalLink } from 'lucide-react';
 import { supabase } from '../utils/supabase';
 import { useIsMobile } from '../utils/useIsMobile';
-import { buscarCep, formatCpf, formatCnpj } from '../utils/cnpjCep';
+import { formatCpf, formatCnpj } from '../utils/cnpjCep';
 
 const DOCS_LABELS = {
   foto_doc: 'Foto do documento de identidade (RG ou CNH)',
@@ -197,28 +197,17 @@ export default function ContratoLink() {
 
   const up = (k, v) => setDados(p => ({ ...p, [k]: v }));
   const onChange = e => up(e.target.name, e.target.value);
-  // Auto-preenchimento por CEP (ViaCEP), igual às outras telas (Perfil/Checkout): ao sair do
-  // campo CEP, preenche CIDADE/ESTADO e o ENDEREÇO (só se ainda estiver vazio — não sobrescreve
-  // o que a pessoa já digitou, ex.: número/complemento). Falha silenciosa se o CEP não existir.
-  const preencherPorCep = async (cepRaw) => {
-    const info = await buscarCep(String(cepRaw || ''));
-    if (!info) return;
-    setDados(p => ({
-      ...p,
-      endereco: (p.endereco && p.endereco.trim()) ? p.endereco : [info.logradouro, info.bairro].filter(Boolean).join(', '),
-      cidade_estado: (info.municipio && info.uf) ? `${info.municipio}/${info.uf}` : (p.cidade_estado || ''),
-    }));
-  };
 
+  // Endereço em UM campo só (pedido do dono, como no Índice): a pessoa digita o endereço completo
+  // COM número/bairro/cidade-UF num único campo, em vez de 3 (endereço + cidade/estado + CEP).
+  const PLACEHOLDER_END = 'Rua, número, complemento, bairro, cidade/UF';
   const camposPF = [
     { label:'Nome completo', name:'nome', required:true },
     { label:'CPF', name:'cpf', required:true, placeholder:'000.000.000-00' },
     { label:'RG', name:'rg', required:true },
     { label:'E-mail', name:'email', type:'email', required:true },
     { label:'Telefone / WhatsApp', name:'telefone', required:true },
-    { label:'Endereço completo', name:'endereco', required:true },
-    { label:'Cidade / Estado', name:'cidade_estado', required:true },
-    { label:'CEP', name:'cep', required:false },
+    { label:'Endereço completo (com número)', name:'endereco', required:true, placeholder: PLACEHOLDER_END },
   ];
   const camposPJ = [
     { label:'Razão social', name:'razao_social', required:true },
@@ -228,9 +217,7 @@ export default function ContratoLink() {
     { label:'Cargo do representante', name:'cargo', required:true },
     { label:'E-mail corporativo', name:'email', type:'email', required:true },
     { label:'Telefone', name:'telefone', required:true },
-    { label:'Endereço da sede', name:'endereco', required:true },
-    { label:'Cidade / Estado', name:'cidade_estado', required:true },
-    { label:'CEP', name:'cep', required:false },
+    { label:'Endereço completo da sede (com número)', name:'endereco', required:true, placeholder: PLACEHOLDER_END },
   ];
   const campos = tipoPessoa === 'pf' ? camposPF : camposPJ;
 
@@ -487,8 +474,7 @@ export default function ContratoLink() {
                 </button>
               </div>
               <div style={{ display:'flex', flexDirection:'column', gap:12, marginBottom:20 }}>
-                {campos.map(c => <Campo key={c.name} {...c} value={dados[c.name]||''} onChange={onChange}
-                  onBlur={c.name === 'cep' ? (e) => preencherPorCep(e.target.value) : undefined} />)}
+                {campos.map(c => <Campo key={c.name} {...c} value={dados[c.name]||''} onChange={onChange} />)}
               </div>
               <button onClick={() => setEtapa('revisar')} disabled={!podeProsseguir()}
                 style={{ width:'100%', padding:'13px', background:'#0D63DB', color:'white', border:'none', borderRadius:10, fontWeight:700, fontSize:14, cursor:'pointer', opacity:podeProsseguir()?1:0.5 }}>
