@@ -1017,10 +1017,15 @@ export default async function handler(req, res) {
       // aborta antes e a re-tentativa costuma concluir — 2 ataques mais curtos > 1 longo).
       mercado = await buscarMercado(Math.min(135000, restante() - RESERVA_PARECER - 80000));
       // Re-tenta se (vazio OU falhou) E ainda há orçamento. A 2ª tentativa é ESTREITA (menos
-      // buscas web = mais rápida): numa cidade grande a busca ampla estoura o tempo e volta VAZIA;
-      // um ataque curto (≤3 buscas) costuma CONCLUIR e trazer amostras em vez de nada.
+      // buscas web = mais rápida). Regra por CAUSA (incidente BH/RJ 28/07 — cidade grande SEM base
+      // própria: a busca ampla travava, a 2ª de 3 buscas TAMBÉM travava → tela de erro):
+      //  • 1ª TRAVOU (__falhou) → 2ª vai RÁPIDA (1 busca web). Uma única busca quase sempre CONCLUI
+      //    e devolve um R$/m² de referência: entrega uma estimativa APURADA preliminar (e SEMEIA o
+      //    Índice p/ as próximas) em vez de "tente novamente". A busca AMPLA já foi a 1ª tentativa.
+      //  • 1ª veio VAZIA mas concluiu (praça fina) → 2ª média (≤3 buscas) tenta achar amostra.
       if ((semAmostras(mercado) || mercado.__falhou) && restante() > RESERVA_PARECER + 40000) {
-        mercado = await buscarMercado(Math.min(110000, restante() - RESERVA_PARECER), Math.min(maxWeb, 3));
+        const usos = mercado.__falhou ? 1 : Math.min(maxWeb, 3);
+        mercado = await buscarMercado(Math.min(110000, restante() - RESERVA_PARECER), usos);
       }
       // A busca FALHOU (abort/timeout/erro), não é "mercado vazio de verdade": trata como
       // TRANSITÓRIO → grava 'erro' com tempo_limite e o self-heal (cron) re-tenta com orçamento
