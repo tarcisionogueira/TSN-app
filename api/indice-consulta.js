@@ -179,6 +179,17 @@ export default async function handler(req) {
       } else {
         const acervo = await rpc('indice_bidpro_regiao', { p_cidade_norm: cidadeNorm, p_uf: uf, p_bairro: bairroNorm, p_lat: null, p_lng: null, p_tipo: tipo });
         if (acervo && (Number(acervo.venda_m2) > 0 || Number(acervo.aluguel_m2) > 0)) regiao = { fonte: 'acervo', ...acervo };
+        else {
+          // ÚLTIMO nível do cascata (250m → 1km → cidade → ESTADO): referência ampla do estado
+          // quando a cidade ainda não tem base própria. Fica EXPLÍCITO que é do estado.
+          const est = await rpc('indice_estado_ponderado', { p_uf: uf, p_tipo: tipo });
+          if (est && Number(est.venda_m2) > 0) regiao = { fonte: 'estado',
+            venda_m2: Number(est.venda_med) > 0 ? est.venda_med : est.venda_m2,
+            aluguel_m2: Number(est.venda_m2) > 0 ? Math.round(est.venda_m2 * 0.004 * 100) / 100 : null,
+            n_amostras: est.n_venda || 0, nivel: 'estado', nivel_label: `estado ${uf} (referência ampla)`,
+            bandas: Number(est.venda_pop) > 0 ? { popular: est.venda_pop, medio: est.venda_med, alto: est.venda_alto } : null,
+            bairro_norm: null };
+        }
       }
     }
     const valorizacao = await rpc('indice_valorizacao_anual', { p_cidade_norm: cidadeNorm, p_uf: uf, p_tipo: tipo, p_bairro_norm: bairroNorm, p_especie: 'venda', p_anos: 6 });

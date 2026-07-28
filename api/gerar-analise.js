@@ -205,7 +205,17 @@ async function lerIndiceBidPro(imDb, segmento = 'apartamento') {
     // no número blendado quando não há amostra própria suficiente (< 4).
     const central = await centralIndiceRegiao(imDb, segmento);
     if (central) return { venda_m2: central.venda_m2, aluguel_m2: Number(j?.aluguel_m2) || 0, nivel: j?.nivel || 'cidade', bandas: central.bandas };
-    return (j && (Number(j.venda_m2) > 0 || Number(j.aluguel_m2) > 0)) ? j : null;
+    if (j && (Number(j.venda_m2) > 0 || Number(j.aluguel_m2) > 0)) return j;
+    // ÚLTIMO nível do cascata: ESTADO (referência ampla majorada) quando a cidade não tem base
+    // própria — dá um valor de referência em vez de nada (deixa EXPLÍCITO que é do estado).
+    try {
+      const re = await sb('rpc/indice_estado_ponderado', { method: 'POST', body: JSON.stringify({ p_uf: imDb.estado, p_tipo: segmento }) });
+      const e = await re.json().catch(() => null);
+      if (e && Number(e.venda_m2) > 0) return {
+        venda_m2: Number(e.venda_med) > 0 ? Number(e.venda_med) : Number(e.venda_m2), aluguel_m2: 0, nivel: 'estado',
+        bandas: Number(e.venda_pop) > 0 ? { popular: e.venda_pop, medio: e.venda_med, alto: e.venda_alto } : null };
+    } catch { /* sem base no estado ainda */ }
+    return null;
   } catch { return null; }
 }
 
