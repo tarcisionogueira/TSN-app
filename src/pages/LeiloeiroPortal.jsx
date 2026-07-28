@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
 import { Copy, Check, Gavel, BarChart3, Link2, Settings, RefreshCw, AlertCircle } from 'lucide-react';
+import ConviteParceiro from '../components/ConviteParceiro';
 
 export default function LeiloeiroPortal() {
   const { user, role } = useAuth();
@@ -81,6 +82,9 @@ export default function LeiloeiroPortal() {
           🔨 Leiloeiro Oficial
         </div>
       </div>
+
+      {/* Programa de Parceiros — opt-in do leiloeiro (vira parceiro / pega o link de venda) */}
+      <ConviteParceiro maxWidth={900} style={{ margin: '0 0 24px' }} />
 
       {/* KPIs */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 16, marginBottom: 32 }}>

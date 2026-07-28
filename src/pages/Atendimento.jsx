@@ -3,6 +3,7 @@ import { MessageCircle, CheckCircle2, Send, Paperclip, Bot, Loader2, UserCheck, 
 import { supabase } from '../utils/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { apiCall } from '../utils/apiCall';
+import ConviteParceiro from '../components/ConviteParceiro';
 
 const STATUS_CFG = {
   aberto:               { label: 'Aberto',             cor: '#10b981', bg: '#d1fae5' },
@@ -175,6 +176,9 @@ export default function Atendimento() {
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '310px 1fr', gap: 20, maxWidth: 1200, margin: '0 auto', padding: '24px 20px', minHeight: 'calc(100vh - 140px)', alignItems: 'start' }}>
+
+      {/* Programa de Parceiros — opt-in da equipe (vira parceiro / pega o link de venda) */}
+      <div style={{ gridColumn: '1 / -1' }}><ConviteParceiro maxWidth={1160} style={{ margin: 0 }} /></div>
 
       {/* ===== SIDEBAR — FILA ===== */}
       <div>

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Check, Shield, Zap, Users, ChevronDown, ChevronUp, Star, ArrowRight } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Check, Shield, Zap, Users, ChevronDown, ChevronUp, Star, ArrowRight, Share2 } from 'lucide-react';
+import { supabase } from '../utils/supabase';
 import { PLANOS as PLANOS_STATIC } from '../data/cursos';
 import { useAuth } from '../contexts/AuthContext';
 import { fetchPlanosComConfig } from '../utils/planosConfig';
@@ -24,6 +25,10 @@ export default function Planos() {
   const [faqAberto, setFaqAberto] = useState(null);
   const [periodo, setPeriodo] = useState('mensal');
   const [dv, setDv] = useState({ open: false, nome: '', email: user?.email || '', tel: '', msg: '', enviando: false, ok: false, erro: '' });
+  const [searchParams] = useSearchParams();
+  const [souParceiro, setSouParceiro] = useState(false);   // parceiro_aceite_em preenchido
+  const [meuCodigo, setMeuCodigo] = useState('');           // codigo_indicacao curto p/ o link de venda
+  const [copiadoKey, setCopiadoKey] = useState(null);       // feedback do "Compartilhar" por plano
 
   const enviarDuvida = async () => {
     setDv(d => ({ ...d, enviando: true, erro: '' }));
@@ -42,6 +47,63 @@ export default function Planos() {
   };
 
   useEffect(() => { fetchPlanosComConfig().then(setPLANOS); }, []);
+
+  // Captura a INDICAÇÃO do link de venda do parceiro (?ref=CODE) e a persiste — antes
+  // Planos NÃO capturava, então o ref se perdia ao ir p/ o checkout/cadastro e o parceiro
+  // não recebia o crédito. O cadastro (AuthContext) consome tsn_ref_codigo no signup.
+  useEffect(() => {
+    const ref = searchParams.get('ref');
+    if (ref) { try { sessionStorage.setItem('tsn_ref_codigo', ref); } catch { /* ignore */ } }
+  }, [searchParams]);
+
+  // Deep-link do plano que o parceiro compartilhou (?plano=KEY): rola até o card.
+  useEffect(() => {
+    const alvo = searchParams.get('plano');
+    if (!alvo) return;
+    const t = setTimeout(() => {
+      const el = document.getElementById(`plano-${alvo.replace('_anual', '')}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.style.transition = 'box-shadow .3s'; el.style.boxShadow = '0 0 0 3px #0D63DB';
+        setTimeout(() => { el.style.boxShadow = ''; }, 2200);
+      }
+    }, 500);
+    return () => clearTimeout(t);
+  }, [searchParams, PLANOS]);
+
+  // Só parceiros (parceiro_aceite_em) veem o botão "Compartilhar"; carrega o código curto
+  // do link de venda (gera se ainda não existir, como faz a tela Minha Rede).
+  useEffect(() => {
+    if (!user?.id) { setSouParceiro(false); return; }
+    let vivo = true;
+    (async () => {
+      try {
+        const { data: p } = await supabase.from('perfis').select('parceiro_aceite_em, codigo_indicacao').eq('id', user.id).maybeSingle();
+        if (!vivo) return;
+        setSouParceiro(!!p?.parceiro_aceite_em);
+        let cod = p?.codigo_indicacao;
+        if (!cod && p?.parceiro_aceite_em) {
+          try { await supabase.rpc('gerar_codigo_indicacao', { p_id: user.id }); const { data: p2 } = await supabase.from('perfis').select('codigo_indicacao').eq('id', user.id).maybeSingle(); cod = p2?.codigo_indicacao; } catch { /* fallback no uid */ }
+        }
+        if (vivo && cod) setMeuCodigo(cod);
+      } catch { /* mantém não-parceiro */ }
+    })();
+    return () => { vivo = false; };
+  }, [user?.id]);
+
+  // Compartilha o link de venda do plano (leva a indicação do parceiro): usa o Web Share
+  // nativo no celular/PWA e cai para copiar no desktop.
+  const compartilharPlano = (key) => {
+    const base = `${window.location.origin}${window.location.pathname.replace(/\/$/, '')}`;
+    const url = `${base}#/planos?ref=${meuCodigo || user?.id || ''}&plano=${key}`;
+    const nome = PLANOS[key]?.nome || 'BidPro Brasil';
+    if (navigator.share) {
+      navigator.share({ title: 'BidPro Brasil', text: `Conheça o plano ${nome} da BidPro Brasil`, url }).catch(() => {});
+    } else {
+      try { navigator.clipboard?.writeText(url); } catch { /* ignore */ }
+      setCopiadoKey(key); setTimeout(() => setCopiadoKey(k => (k === key ? null : k)), 2000);
+    }
+  };
 
   // Formata um valor; usado para totais/economias derivados do planos_config.
   const fmtR = (v) => 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -120,6 +182,19 @@ export default function Planos() {
     );
   };
 
+  // Botão "Compartilhar este plano" — só aparece para PARCEIROS. Gera o link de venda
+  // do plano com a indicação embutida (?ref=...&plano=...).
+  const BotaoCompartilhar = ({ planoKey, dark }) => {
+    if (!souParceiro) return null;
+    const copiado = copiadoKey === planoKey;
+    return (
+      <button onClick={() => compartilharPlano(planoKey)}
+        style={{ width: '100%', marginTop: 10, padding: '10px', border: dark ? '1px solid rgba(255,255,255,0.35)' : '1px solid #cbd5e1', borderRadius: 10, background: 'transparent', color: dark ? '#e0f2fe' : '#334155', fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+        {copiado ? <><Check size={14} /> Link copiado</> : <><Share2 size={14} /> Compartilhar este plano</>}
+      </button>
+    );
+  };
+
   return (
     <div style={{ background: '#f8fafc', minHeight: '100vh' }}>
 
@@ -175,7 +250,7 @@ export default function Planos() {
         <div className="grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1.6fr', gap: 20, maxWidth: 920, margin: '0 auto 64px', alignItems: 'stretch' }}>
 
           {/* Explorador */}
-          <div style={{ background: 'white', borderRadius: 20, border: atual('explorador') ? '2px solid #0D63DB' : '1px solid #e2e8f0', padding: '32px 28px', display: 'flex', flexDirection: 'column', boxShadow: '0 4px 20px rgba(0,0,0,0.06)' }}>
+          <div id="plano-explorador" style={{ background: 'white', borderRadius: 20, border: atual('explorador') ? '2px solid #0D63DB' : '1px solid #e2e8f0', padding: '32px 28px', display: 'flex', flexDirection: 'column', boxShadow: '0 4px 20px rgba(0,0,0,0.06)' }}>
             <div style={{ display: 'inline-block', alignSelf: 'flex-start', background: '#eef2ff', color: '#1e293b', fontSize: 12.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1.2, padding: '5px 12px', borderRadius: 8, marginBottom: 12 }}>Explorador</div>
             <div style={{ fontSize: 48, fontWeight: 900, color: '#111', marginBottom: 2 }}>Grátis</div>
             <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 28 }}>Sem cartão de crédito</div>
@@ -190,10 +265,11 @@ export default function Planos() {
               style={{ width: '100%', padding: '14px', border: 'none', borderRadius: 12, background: atual('explorador') ? '#f1f5f9' : '#111', color: atual('explorador') ? '#94a3b8' : 'white', fontWeight: 800, fontSize: 15, cursor: atual('explorador') ? 'default' : 'pointer' }}>
               {atual('explorador') ? 'Seu plano atual' : 'Começar grátis →'}
             </button>
+            <BotaoCompartilhar planoKey="explorador" />
           </div>
 
           {/* Investidor Pro */}
-          <div style={{ background: 'linear-gradient(145deg, #084BA6 0%, #0a3d8f 100%)', borderRadius: 20, border: '2px solid #3b82f6', padding: '32px 32px', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden', boxShadow: '0 12px 40px rgba(37,99,235,0.35)' }}>
+          <div id="plano-top2" style={{ background: 'linear-gradient(145deg, #084BA6 0%, #0a3d8f 100%)', borderRadius: 20, border: '2px solid #3b82f6', padding: '32px 32px', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden', boxShadow: '0 12px 40px rgba(37,99,235,0.35)' }}>
             <div style={{ position: 'absolute', top: -40, right: -40, width: 160, height: 160, borderRadius: '50%', background: 'rgba(255,255,255,0.04)' }} />
             <div style={{ position: 'absolute', top: 20, right: 20, background: '#fbbf24', color: '#78350f', fontSize: 10, fontWeight: 800, padding: '4px 14px', borderRadius: 20, textTransform: 'uppercase', letterSpacing: 0.5, display: 'flex', alignItems: 'center', gap: 4 }}>
               <Star size={9} fill="#78350f" /> Mais popular
@@ -239,6 +315,7 @@ export default function Planos() {
               style={{ width: '100%', padding: '14px', border: 'none', borderRadius: 12, background: atual('top2') ? 'rgba(255,255,255,0.15)' : 'white', color: atual('top2') ? '#93c5fd' : '#084BA6', fontWeight: 800, fontSize: 15, cursor: atual('top2') ? 'default' : 'pointer', boxShadow: atual('top2') ? 'none' : '0 4px 16px rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
               {atual('top2') ? 'Seu plano atual' : <><span>Assinar Investidor Pro</span> <ArrowRight size={16} /></>}
             </button>
+            <BotaoCompartilhar planoKey="top2" dark />
           </div>
         </div>
 
@@ -268,7 +345,7 @@ export default function Planos() {
 
             {/* Assessoria */}
             {ativoPlano('assessorado') && (
-            <div style={{ background: 'white', borderRadius: 20, border: atual('assessorado') ? '2px solid #d97706' : '1px solid #fed7aa', padding: '32px 28px', display: 'flex', flexDirection: 'column', boxShadow: '0 4px 24px rgba(217,119,6,0.08)' }}>
+            <div id="plano-assessorado" style={{ background: 'white', borderRadius: 20, border: atual('assessorado') ? '2px solid #d97706' : '1px solid #fed7aa', padding: '32px 28px', display: 'flex', flexDirection: 'column', boxShadow: '0 4px 24px rgba(217,119,6,0.08)' }}>
               <div style={{ display: 'inline-block', alignSelf: 'flex-start', background: '#fff7ed', color: '#c2410c', fontSize: 12.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1.2, padding: '5px 12px', borderRadius: 8, marginBottom: 12 }}>Assessoria</div>
               <PrecoComercial planoKey="assessorado" />
               <div style={{ fontSize: 13, color: '#64748b', marginBottom: 20 }}>1 arrematação · pagamento único</div>
@@ -282,12 +359,13 @@ export default function Planos() {
                 style={{ width: '100%', padding: '14px', border: 'none', borderRadius: 12, background: atual('assessorado') ? '#f1f5f9' : '#d97706', color: atual('assessorado') ? '#94a3b8' : 'white', fontWeight: 800, fontSize: 15, cursor: atual('assessorado') ? 'default' : 'pointer', boxShadow: atual('assessorado') ? 'none' : '0 4px 14px rgba(217,119,6,0.35)' }}>
                 {atual('assessorado') ? 'Seu plano atual' : 'Contratar assessoria →'}
               </button>
+              <BotaoCompartilhar planoKey="assessorado" />
             </div>
             )}
 
             {/* Leilão Club */}
             {ativoPlano('clube') && (
-            <div style={{ background: 'linear-gradient(145deg, #0f172a 0%, #1e1b4b 100%)', borderRadius: 20, border: '2px solid #6366f1', padding: '32px 28px', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden', boxShadow: '0 8px 40px rgba(99,102,241,0.3)' }}>
+            <div id="plano-clube" style={{ background: 'linear-gradient(145deg, #0f172a 0%, #1e1b4b 100%)', borderRadius: 20, border: '2px solid #6366f1', padding: '32px 28px', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden', boxShadow: '0 8px 40px rgba(99,102,241,0.3)' }}>
               <div style={{ position: 'absolute', top: -30, right: -30, width: 150, height: 150, borderRadius: '50%', background: 'rgba(99,102,241,0.08)' }} />
               <div style={{ position: 'absolute', top: 20, right: 20, background: '#4f46e5', color: 'white', fontSize: 10, fontWeight: 800, padding: '4px 12px', borderRadius: 20, textTransform: 'uppercase', letterSpacing: 0.5 }}>
                 Nível máximo
@@ -304,6 +382,7 @@ export default function Planos() {
                 style={{ width: '100%', padding: '14px', border: 'none', borderRadius: 12, background: atual('clube') ? 'rgba(255,255,255,0.1)' : '#6366f1', color: atual('clube') ? '#a5b4fc' : 'white', fontWeight: 800, fontSize: 15, cursor: atual('clube') ? 'default' : 'pointer', boxShadow: atual('clube') ? 'none' : '0 4px 20px rgba(99,102,241,0.45)' }}>
                 {atual('clube') ? 'Seu plano atual' : 'Entrar no Clube →'}
               </button>
+              <BotaoCompartilhar planoKey="clube" dark />
             </div>
             )}
           </div>
