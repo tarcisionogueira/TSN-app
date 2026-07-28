@@ -10,6 +10,7 @@ import { custoRespostaClaude } from './_uso.js';
 import { resumoAprendizadoTexto } from './_arremate-aprendizado.js';
 import { ehCidadeTemporada, motivoTemporada } from './_temporada.js';
 import { composicaoTemporal, avisoFrescor } from './_indice-composicao.js';
+import { geocodificarCascata, rankNivel, coordValida } from './_geo.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -244,6 +245,28 @@ const _norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀
 // separadores (ex.: "São Bernardo" → "saobernardo"). Difere do _norm, que mantém espaço (usado p/ bairro).
 const _cidadeNorm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
 const geoGridDe = (lat, lng) => (Number.isFinite(Number(lat)) && Number.isFinite(Number(lng))) ? `${Number(lat).toFixed(2)},${Number(lng).toFixed(2)}` : '';
+
+// TRIANGULAÇÃO DO IMÓVEL-ALVO (pedido do dono): quando a coordenada do imóvel é IMPRECISA (nível
+// bairro/cidade/nula), o raio de 250m/1km do relatório ancora num centroide errado. Aqui, NO
+// MOMENTO do relatório, re-triangulamos pelo ENDEREÇO + CEP (Correios/ViaCEP) + IBGE — a cascata
+// GRÁTIS de _geo.js (sem Google) — para obter uma âncora melhor e PERSISTIMOS a coord (conserta o
+// índice e os próximos relatórios). Reusa exatamente o motor do geocodificar-imovel. Best-effort,
+// time-boxed; nunca bloqueia o relatório. Se já está preciso (rua/endereço), não mexe.
+async function ancorarImovel(imovelId, deadline) {
+  try {
+    const [im] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=id,endereco,bairro,cidade,estado,latitude,longitude,geocod_nivel,cep,condominio:nomecondominio&limit=1`)).json();
+    if (!im) return null;
+    const nivelAtual = im.geocod_nivel || (im.latitude != null ? 'cidade' : null);
+    const atualValida = im.latitude != null && coordValida(Number(im.latitude), Number(im.longitude), im.estado, im.cidade);
+    if (atualValida && rankNivel(nivelAtual) >= rankNivel('rua')) return { nivel: nivelAtual, alterado: false }; // já preciso
+    const coords = await geocodificarCascata(im, { sleepMs: 0, permitirPago: false, deadline });
+    if (coords && coordValida(coords.lat, coords.lng, im.estado, im.cidade) && (!atualValida || rankNivel(coords.nivel) > rankNivel(nivelAtual))) {
+      await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ latitude: coords.lat, longitude: coords.lng, geocod_nivel: coords.nivel }) });
+      return { nivel: coords.nivel, alterado: true };
+    }
+    return { nivel: nivelAtual, alterado: false };
+  } catch { return null; }
+}
 
 async function gravarAmostrasIndice(imDb, mercado, imovelId, segmento = 'apartamento') {
   try {
@@ -887,6 +910,14 @@ export default async function handler(req, res) {
   // ANEXOS (não só a página do lote) — corrige avaliação zerada e valor sentinela; o que não
   // confirmar vira anomalia. Limitada a uma fração do orçamento p/ não roubar tempo do mercado.
   try { await garantirValores(String(imovelId), Date.now() + Math.min(30000, Math.max(0, restante() - 235000))); } catch { /* nunca bloqueia o relatório */ }
+
+  // Triangula o imóvel-alvo (endereço+CEP+IBGE, grátis) se a coord for imprecisa — âncora do raio
+  // de 250m/1km. Grava a coord melhor (durável). Time-boxed; roda ANTES da busca para o recorte por
+  // raio já usar a âncora certa. Só re-geocodifica os ~27% imprecisos (os precisos passam direto).
+  try {
+    const anc = await ancorarImovel(String(imovelId), Date.now() + Math.min(12000, Math.max(0, restante() - 225000)));
+    if (anc?.alterado) console.log('[ancora]', JSON.stringify({ imovel: String(imovelId), nivel: anc.nivel }));
+  } catch { /* nunca bloqueia o relatório */ }
 
   await upsertAnalise({ ...base, status: 'gerando', erro: null, result: null });
 
