@@ -112,7 +112,6 @@ export default async function handler(req, res) {
         arquivo_nome: arquivoNome ? sanitizeText(arquivoNome, 200) : null,
         tipo_contrato: tipo || 'servico',
         status: 'aguardando_assinatura',
-        requer_assinatura: true,
         criado_por: user.id,
         verificacao_identidade: verificacaoIdentidade || 'nenhuma',
         docs_extras_exigidos: docsExtrasExigidos || [],
