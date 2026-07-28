@@ -2864,6 +2864,26 @@ export default function Analise() {
                 );
               })()}
 
+              {/* PADRÃO DO IMÓVEL — popular/médio/alto (comparar SEMELHANTE com SEMELHANTE) */}
+              {mercado?.consolidado?.padraoImovel && (() => {
+                const meta = {
+                  popular:    { label: 'Popular / econômico', cor: '#0369a1', bg: '#f0f9ff', bd: '#bae6fd' },
+                  medio:      { label: 'Médio',               cor: '#334155', bg: '#f1f5f9', bd: '#e2e8f0' },
+                  medio_alto: { label: 'Médio-alto',          cor: '#6d28d9', bg: '#f5f3ff', bd: '#ddd6fe' },
+                  alto:       { label: 'Alto padrão',         cor: '#6d28d9', bg: '#f5f3ff', bd: '#ddd6fe' },
+                  luxo:       { label: 'Luxo',                cor: '#b45309', bg: '#fffbeb', bd: '#fde68a' },
+                }[String(mercado.consolidado.padraoImovel).toLowerCase()];
+                if (!meta) return null;
+                return (
+                  <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', borderRadius:12, border:`1px solid ${meta.bd}`, background:meta.bg, padding:'10px 16px' }}>
+                    <Home size={14} color={meta.cor} />
+                    <span style={{ fontSize:12, fontWeight:800, color:'#111' }}>Padrão do imóvel</span>
+                    <span style={{ fontSize:11, fontWeight:800, padding:'2px 10px', borderRadius:999, background:'#fff', border:`1px solid ${meta.cor}`, color:meta.cor }}>{meta.label}</span>
+                    <span style={{ fontSize:10.5, color:'#64748b', flexBasis:'100%' }}>A avaliação compara SÓ imóveis do mesmo padrão (semelhante com semelhante): dentro do mesmo tipo e cidade, o padrão altera o R$/m² em várias vezes.</span>
+                  </div>
+                );
+              })()}
+
               {/* PERFIL DA REGIÃO — atratividade e valorização (explica o R$/m² da microrregião) */}
               {mercado.perfilRegiao && (mercado.perfilRegiao.tier || mercado.perfilRegiao.motivos || (mercado.perfilRegiao.atratividades || []).filter(Boolean).length > 0) && (() => {
                 const pr = mercado.perfilRegiao;
