@@ -62,6 +62,7 @@ export default function CriarContrato() {
   const [produtos, setProdutos] = useState([]);   // [{ chave, tipo, id, nome }]
   const [produtoSel, setProdutoSel] = useState(''); // "tipo:chave"
   const [linksGerados, setLinksGerados] = useState([]); // resultado: [{nome,email,url}]
+  const [copiadoIdx, setCopiadoIdx] = useState(null);   // feedback "Copiado!" por link
 
   const addSignatario = () => setSignatarios(s => s.length < 10 ? [...s, { nome: '', email: '' }] : s);
   const setSign = (i, campo, v) => setSignatarios(s => s.map((x, j) => j === i ? { ...x, [campo]: v } : x));
@@ -537,7 +538,7 @@ export default function CriarContrato() {
                     <div style={{ fontSize: 13, fontWeight: 700, color: '#111' }}>{l.nome || l.email}</div>
                     <div style={{ fontSize: 11.5, color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.url}</div>
                   </div>
-                  <button onClick={() => { navigator.clipboard?.writeText(l.url); }} style={{ padding: '7px 12px', background: '#eff6ff', color: '#0D63DB', border: '1px solid #bfdbfe', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>Copiar link</button>
+                  <button onClick={() => { navigator.clipboard?.writeText(l.url); setCopiadoIdx(i); setTimeout(() => setCopiadoIdx(c => c === i ? null : c), 1800); }} style={{ padding: '7px 12px', background: copiadoIdx === i ? '#dcfce7' : '#eff6ff', color: copiadoIdx === i ? '#166534' : '#0D63DB', border: `1px solid ${copiadoIdx === i ? '#86efac' : '#bfdbfe'}`, borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>{copiadoIdx === i ? '✓ Copiado!' : 'Copiar link'}</button>
                 </div>
               ))}
             </div>

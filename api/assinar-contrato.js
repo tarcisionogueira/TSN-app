@@ -1,5 +1,7 @@
 export const config = { runtime: 'edge' };
 
+import { enviarEmail } from './_email.js';
+
 // Finalização da assinatura eletrônica de contrato (link público).
 // Feito no servidor para ter prova jurídica idônea (Lei 14.063/2020):
 //  - IP capturado no servidor (x-forwarded-for), não confiável se vindo do cliente
@@ -42,7 +44,7 @@ export default async function handler(req) {
   const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null;
 
   // Carrega o contrato pelo token (service key — ignora RLS)
-  const r = await sb(`contratos_link?token=eq.${encodeURIComponent(token)}&select=id,conteudo,status,expira_em`);
+  const r = await sb(`contratos_link?token=eq.${encodeURIComponent(token)}&select=id,conteudo,status,expira_em,titulo,criado_por,assinante_email,contrato_grupo_id`);
   const rows = await r.json().catch(() => []);
   const contrato = Array.isArray(rows) ? rows[0] : null;
   if (!contrato) return new Response(JSON.stringify({ error: 'Contrato não encontrado' }), { status: 404, headers });
@@ -97,6 +99,48 @@ export default async function handler(req) {
     headers: { Prefer: 'return=minimal' },
     body: JSON.stringify({ acao: 'contrato_assinado', ip, sucesso: true, detalhes: { contrato_id: contrato.id, token, hash } }),
   }).catch(() => {});
+
+  // NOTIFICA a cada assinatura (pedido do dono): avisa quem CRIOU o contrato que uma parte
+  // assinou e, quando TODAS as partes do grupo assinam, que o contrato está completo. Também
+  // registra na linha do tempo (Cliente 360). Tudo best-effort — nunca bloqueia a assinatura.
+  try {
+    const quem = dados?.nome || dados?.razao_social || contrato.assinante_email || 'Uma parte';
+    const titulo = contrato.titulo || 'Contrato';
+    const gid = contrato.contrato_grupo_id;
+    // Situação do grupo: quantas partes já assinaram / total.
+    let assinadas = 1, total = 1;
+    if (gid) {
+      const gr = await sb(`contratos_link?contrato_grupo_id=eq.${encodeURIComponent(gid)}&select=status`).then(x => x.json()).catch(() => []);
+      if (Array.isArray(gr) && gr.length) { total = gr.length; assinadas = gr.filter(x => x.status === 'assinado').length; }
+    }
+    const completo = assinadas >= total;
+    // E-mail do criador (equipe) p/ notificar.
+    let criadorEmail = null, criadorNome = null;
+    if (contrato.criado_por) {
+      const p = await sb(`perfis?id=eq.${encodeURIComponent(contrato.criado_por)}&select=email,nome`).then(x => x.json()).catch(() => []);
+      criadorEmail = p?.[0]?.email || null; criadorNome = p?.[0]?.nome || null;
+    }
+    if (criadorEmail) {
+      const origin = req.headers.get('origin') || process.env.APP_ORIGIN || 'https://bidprobrasil.com.br';
+      await enviarEmail({
+        to: criadorEmail,
+        subject: completo ? `✅ Contrato totalmente assinado: ${titulo}` : `✍️ Assinatura registrada (${assinadas}/${total}): ${titulo}`,
+        html: `<p>Olá${criadorNome ? ' ' + criadorNome : ''}!</p>
+               <p><strong>${quem}</strong> assinou o contrato <strong>${titulo}</strong>.</p>
+               <p>Progresso: <strong>${assinadas} de ${total}</strong> parte(s) assinaram.${completo ? ' O contrato está <strong>totalmente assinado</strong>.' : ''}</p>
+               <p><a href="${origin}#/contratos" style="display:inline-block;padding:10px 18px;background:#0D63DB;color:#fff;border-radius:8px;text-decoration:none;font-weight:700">Ver contratos</a></p>
+               <p>BidPro Brasil</p>`,
+        meta: { tipo: 'contrato' },
+      }).catch(() => {});
+      // Linha do tempo (Cliente 360) do criador.
+      sb('rpc/registrar_atividade', { method: 'POST', body: JSON.stringify({
+        p_user_id: contrato.criado_por,
+        p_evento: completo ? 'contrato_assinado_completo' : 'contrato_assinado_parcial',
+        p_detalhe: `${quem} assinou "${titulo}" (${assinadas}/${total})`,
+        p_meta: { contrato_id: contrato.id, grupo_id: gid, assinadas, total },
+      }) }).catch(() => {});
+    }
+  } catch { /* notificação é best-effort */ }
 
   return new Response(JSON.stringify({ ok: true, assinado_em, hash }), { status: 200, headers });
 }

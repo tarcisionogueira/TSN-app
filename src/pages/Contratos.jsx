@@ -303,7 +303,7 @@ export default function Contratos() {
                 </div>
 
               /* ── Aguardando assinatura ── */
-              ) : aberto.requer_assinatura && ['aguardando','aguardando_assinatura'].includes(aberto.status) ? (
+              ) : ['aguardando','aguardando_assinatura'].includes(aberto.status) ? (
                 <div>
                   {/* CPF */}
                   <div style={S.secao}>
