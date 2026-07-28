@@ -11,6 +11,7 @@ import TourGuia from './components/TourGuia';
 import ContratoObrigatorio from './components/ContratoObrigatorio';
 import CompletarCadastroModal from './components/CompletarCadastroModal';
 import KycParceiroModal from './components/KycParceiroModal';
+import ToastRelatorioPronto from './components/ToastRelatorioPronto';
 import ChatSuporte from './components/ChatSuporte';
 import SugestaoImovel from './components/SugestaoImovel';
 import PwaInstall from './components/PwaInstall.jsx';
@@ -270,6 +271,7 @@ function MainLayout() {
       {user && <ContratoObrigatorio userId={user.id} />}
       {user && <CompletarCadastroModal />}
       {user && <KycParceiroModal />}
+      {user && <ToastRelatorioPronto />}
       {isLoggedIn && <SugestaoImovel />}
       <ChatSuporte />
       <main style={{ flex: 1 }}>
