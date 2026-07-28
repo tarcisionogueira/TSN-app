@@ -45,6 +45,12 @@ export default async function handler(req) {
   // distintas). Default apartamento (o mais consultado). Rural fica fora (régua de hectare).
   const SEGS = ['apartamento', 'casa', 'terreno', 'comercial'];
   const tipo = SEGS.includes(String(body.tipo || '').toLowerCase()) ? String(body.tipo).toLowerCase() : 'apartamento';
+  // Faixa PLAUSÍVEL de R$/m² de VENDA por TIPO — barra outlier que distorcia a mediana/bandas do
+  // índice (ex.: terreno mal-rotulado como apto a R$260/m², ou área errada). Locação (R$/m²/mês)
+  // usa 1–500. Mesma régua da RPC public.indice_plausivel (índice coerente entre leitura e escrita).
+  const VFAIXA = ({ apartamento: [800, 60000], casa: [600, 50000], comercial: [400, 80000], terreno: [20, 20000] })[tipo] || [200, 200000];
+  const vendaPlausivel = (v) => { const n = Number(v); return n >= VFAIXA[0] && n <= VFAIXA[1]; };
+  const amostraPlausivel = (a) => a.especie === 'locacao' ? (Number(a.valor_m2) >= 1 && Number(a.valor_m2) <= 500) : vendaPlausivel(a.valor_m2);
   // Coordenadas do endereço/condomínio → o índice ponderado resolve o Nível 1 (≤250 m) e o
   // Nível 2 (~1 km) por raio, como no mercadológico. Sem lat/lng, cai no bairro/cidade (texto).
   const lat = Number.isFinite(+body.lat) ? +body.lat : null;
@@ -76,8 +82,12 @@ export default async function handler(req) {
 
     // Amostras de mercado da REGIÃO solicitada (venda + locação), sem leilão. Traz o geo (bairro/
     // grid/lat/lng) para o recorte por RAIO.
+    // Busca ARROJADA (teto 2000, era 800) + faixa ampla p/ INCLUIR locação (R$/m²/mês ~1–500,
+    // antes barrada pelo piso 200 → locação caía num sintético 0,4%). A plausibilidade POR TIPO
+    // (venda) e por natureza (locação) é aplicada em JS logo abaixo — tira o outlier da conta.
     const regCidade = semLeilao(await restGet('indice_amostra',
-      `${filtro}&valor_m2=gte.200&valor_m2=lte.50000&select=especie,valor_m2,valor_total,area_m2,data_ref,fonte,criado_em,bairro_norm,geo_grid,lat,lng&order=data_ref.desc,criado_em.desc&limit=800`));
+      `${filtro}&valor_m2=gte.1&valor_m2=lte.200000&select=especie,valor_m2,valor_total,area_m2,data_ref,fonte,criado_em,bairro_norm,geo_grid,lat,lng&order=data_ref.desc,criado_em.desc&limit=2000`))
+      .filter(amostraPlausivel);
 
     // RECORTE POR RAIO (pedido do dono — classificar a ~250m, rua/condomínio). Com coordenada na
     // consulta, prioriza as amostras REAIS mais próximas: ≤250 m (rua) → ≤1 km (microrregião) →
