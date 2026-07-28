@@ -34,6 +34,12 @@ const ESTILOS_CONTRATO = `
   .assimg{max-height:72px;border:1px solid #e2e8f0;border-radius:6px;background:#fff;padding:4px;margin-top:8px;display:block;}
   .hash{font-size:10.5px;color:#64748b;word-break:break-all;margin-top:14px;padding-top:12px;border-top:1px solid #e2e8f0;}
   .foot{margin-top:24px;font-size:10px;color:#94a3b8;text-align:center;border-top:1px solid #e2e8f0;padding-top:12px;}
+  .log{margin-top:20px;}
+  .log h3{font-size:12px;font-weight:800;color:#334155;text-transform:uppercase;letter-spacing:0.5px;margin:0 0 8px;}
+  .logitem{font-size:11.5px;color:#475569;padding:5px 0;border-bottom:1px dashed #eef2f7;line-height:1.5;}
+  .logitem b{color:#111;}
+  .verif{margin-top:18px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;font-size:11px;color:#334155;line-height:1.8;word-break:break-all;}
+  .verif .lbl{color:#64748b;font-weight:700;}
 `;
 
 export function gerarContratoPDF({ contrato, roster = [] } = {}) {
@@ -80,9 +86,24 @@ export function gerarContratoPDF({ contrato, roster = [] } = {}) {
     </div>`;
   }).join('');
 
-  const hash = contrato.assinatura_hash
-    ? `<div class="hash"><b>Código de verificação (SHA-256):</b> ${esc(contrato.assinatura_hash)}</div>`
-    : '';
+  // HISTÓRICO (log de eventos), no padrão ZapSign: criação + cada assinatura com data/hora GMT-03:00
+  // (e IP do próprio signatário). Base = carimbos do servidor gravados em contratos_link.
+  const logItens = [];
+  if (contrato.criado_em) logItens.push(`<div class="logitem"><b>Documento criado</b> — ${esc(dataHora(contrato.criado_em))} (GMT-03:00)</div>`);
+  partes.filter((p) => p.assinou && p.assinado_em).forEach((p) => {
+    logItens.push(`<div class="logitem"><b>Assinado por ${esc(p.nome)}</b> — ${esc(dataHora(p.assinado_em))} (GMT-03:00)${p.eu && contrato.assinante_ip ? ` · IP ${esc(contrato.assinante_ip)}` : ''}</div>`);
+  });
+  if (contrato.testemunha_em) logItens.push(`<div class="logitem"><b>Testemunha assinou</b>${contrato.nome_testemunha ? ' (' + esc(contrato.nome_testemunha) + ')' : ''} — ${esc(dataHora(contrato.testemunha_em))} (GMT-03:00)</div>`);
+
+  // VERIFICAÇÃO (padrão ZapSign): hash de integridade + código de verificação (token) + URL de
+  // autenticidade para conferir o documento online.
+  const origin = (typeof window !== 'undefined' && window.location?.origin) || 'https://www.bidprobrasil.com.br';
+  const verUrl = contrato.token ? `${origin}/#/c/${esc(contrato.token)}` : '';
+  const verif = `<div class="verif">
+    ${contrato.assinatura_hash ? `<div><span class="lbl">Hash do documento (SHA-256):</span> ${esc(contrato.assinatura_hash)}</div>` : ''}
+    ${contrato.token ? `<div><span class="lbl">Código de verificação:</span> ${esc(contrato.token)}</div>` : ''}
+    ${verUrl ? `<div><span class="lbl">Autenticidade:</span> consulte este documento em ${verUrl}</div>` : ''}
+  </div>`;
 
   const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">
 <title>Contrato - ${esc(titulo)}</title>
@@ -92,11 +113,12 @@ export function gerarContratoPDF({ contrato, roster = [] } = {}) {
   <h1>${esc(titulo)}</h1>
   ${corpoDoc}
   <div class="quebra man">
-    <h2>Manifesto de Assinaturas</h2>
-    <div class="legal">Este documento foi assinado eletronicamente pelas partes abaixo, com validade jurídica nos termos da Medida Provisória nº 2.200-2/2001 (ICP-Brasil) e da Lei nº 14.063/2020. A integridade do conteúdo é assegurada pelo código de verificação (hash SHA-256) ao final; qualquer alteração no texto do contrato invalida as assinaturas.</div>
+    <h2>Página de Assinaturas</h2>
+    <div class="legal">Este documento foi assinado eletronicamente pelas partes abaixo, com validade jurídica nos termos da Medida Provisória nº 2.200-2/2001 (ICP-Brasil) e da Lei nº 14.063/2020. A integridade do conteúdo é assegurada pelo hash SHA-256 abaixo; qualquer alteração no texto do contrato invalida as assinaturas.</div>
     ${blocosPartes}
-    ${hash}
-    <div class="foot">Documento gerado por BidPro Brasil. Assinaturas eletrônicas registradas com carimbo de data/hora do servidor e endereço IP de origem.</div>
+    <div class="log"><h3>Histórico do documento</h3>${logItens.join('') || '<div class="logitem">Sem eventos registrados.</div>'}</div>
+    ${verif}
+    <div class="foot">Documento gerado por BidPro Brasil. Assinaturas eletrônicas registradas com carimbo de data/hora do servidor (GMT-03:00) e endereço IP de origem.</div>
   </div>
 </body></html>`;
 
