@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { CheckCircle2, AlertCircle, Loader2, ShieldCheck, Camera, Upload, FileText, ExternalLink } from 'lucide-react';
 import { supabase } from '../utils/supabase';
 import { useIsMobile } from '../utils/useIsMobile';
+import { buscarCep } from '../utils/cnpjCep';
 
 const DOCS_LABELS = {
   foto_doc: 'Foto do documento de identidade (RG ou CNH)',
@@ -93,11 +94,11 @@ function CapturaImagem({ id, label, onChange, valor }) {
 const inp = { width:'100%', padding:'10px 13px', border:'1px solid #e2e8f0', borderRadius:9, fontSize:14, background:'white', color:'#111111', boxSizing:'border-box' };
 const lbl = { fontSize:12, fontWeight:700, color:'#94a3b8', display:'block', marginBottom:5, textTransform:'uppercase', letterSpacing:0.5 };
 
-function Campo({ label, name, value, onChange, type='text', required=false, placeholder='' }) {
+function Campo({ label, name, value, onChange, onBlur, type='text', required=false, placeholder='' }) {
   return (
     <div>
       <label style={lbl}>{label}{required && ' *'}</label>
-      <input type={type} name={name} value={value} onChange={onChange} required={required} placeholder={placeholder} style={inp} />
+      <input type={type} name={name} value={value} onChange={onChange} onBlur={onBlur} required={required} placeholder={placeholder} style={inp} />
     </div>
   );
 }
@@ -195,6 +196,18 @@ export default function ContratoLink() {
 
   const up = (k, v) => setDados(p => ({ ...p, [k]: v }));
   const onChange = e => up(e.target.name, e.target.value);
+  // Auto-preenchimento por CEP (ViaCEP), igual às outras telas (Perfil/Checkout): ao sair do
+  // campo CEP, preenche CIDADE/ESTADO e o ENDEREÇO (só se ainda estiver vazio — não sobrescreve
+  // o que a pessoa já digitou, ex.: número/complemento). Falha silenciosa se o CEP não existir.
+  const preencherPorCep = async (cepRaw) => {
+    const info = await buscarCep(String(cepRaw || ''));
+    if (!info) return;
+    setDados(p => ({
+      ...p,
+      endereco: (p.endereco && p.endereco.trim()) ? p.endereco : [info.logradouro, info.bairro].filter(Boolean).join(', '),
+      cidade_estado: (info.municipio && info.uf) ? `${info.municipio}/${info.uf}` : (p.cidade_estado || ''),
+    }));
+  };
 
   const camposPF = [
     { label:'Nome completo', name:'nome', required:true },
@@ -457,7 +470,8 @@ export default function ContratoLink() {
                 </button>
               </div>
               <div style={{ display:'flex', flexDirection:'column', gap:12, marginBottom:20 }}>
-                {campos.map(c => <Campo key={c.name} {...c} value={dados[c.name]||''} onChange={onChange} />)}
+                {campos.map(c => <Campo key={c.name} {...c} value={dados[c.name]||''} onChange={onChange}
+                  onBlur={c.name === 'cep' ? (e) => preencherPorCep(e.target.value) : undefined} />)}
               </div>
               <button onClick={() => setEtapa('revisar')} disabled={!podeProsseguir()}
                 style={{ width:'100%', padding:'13px', background:'#0D63DB', color:'white', border:'none', borderRadius:10, fontWeight:700, fontSize:14, cursor:'pointer', opacity:podeProsseguir()?1:0.5 }}>

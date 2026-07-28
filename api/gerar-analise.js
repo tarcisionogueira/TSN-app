@@ -1023,11 +1023,12 @@ export default async function handler(req, res) {
           cacheReg = await amostrasRegiaoCache(imReg, segCache);
         } catch { cacheReg = null; }
       }
-      // CUSTO (pedido do dono: não gerar despesa à toa): cada busca web traz RESULTADOS que contam
-      // como tokens de ENTRADA (caro — ~500k tokens_in/dia). 7 buscas numa cidade grande eram o
-      // maior gasto E ainda estouravam o limite (relatório vazio). 5 cobre portais + imobiliárias
-      // locais com folga, ~30% mais barato e com MENOS chance de estourar. Com cache, 2 basta.
-      const maxWeb = cacheReg?.hit ? 2 : 5;
+      // QUALIDADE em 1º lugar (decisão do dono: "a busca deve ser apurada; pode demorar mais, mas
+      // tem que entregar com qualidade"). 7 buscas cobrem grandes portais + imobiliárias LOCAIS +
+      // colheita ampla. O que causava o "sem amostras" NÃO era o número de buscas e sim a resposta
+      // ser cortada/pausada — resolvido no pause_turn + max_tokens 32k + salvamento de JSON. Com
+      // cache denso da praça, 2 bastam (barato e igualmente apurado, pois ancora na base própria).
+      const maxWeb = cacheReg?.hit ? 2 : 7;
       const cacheTxt = cacheReg?.hit ? cacheReg.text : '';
       // FONTES LOCAIS já conhecidas da praça (revalidação ORGÂNICA): injeta as imobiliárias locais
       // vistas recentemente para a IA ir direto COLHER (economiza a busca de descoberta). Best-effort.
@@ -1064,7 +1065,7 @@ export default async function handler(req, res) {
               messages.push({ role: 'assistant', content: mData.content }); // devolve o turno pausado p/ continuar
               cont++;
             }
-          } while (stop === 'pause_turn' && cont < 2 && restante() > RESERVA_PARECER + 12000);
+          } while (stop === 'pause_turn' && cont < 3 && restante() > RESERVA_PARECER + 12000);
           const txt = extractText(mData);
           const m = parseJSON(txt) || {};
           m.precoMedioM2 = m.consolidado?.precoMedioM2 || m.nivel2?.precoMedioM2 || 0;
@@ -1091,7 +1092,7 @@ export default async function handler(req, res) {
       //    Índice p/ as próximas) em vez de "tente novamente". A busca AMPLA já foi a 1ª tentativa.
       //  • 1ª veio VAZIA mas concluiu (praça fina) → 2ª média (≤3 buscas) tenta achar amostra.
       if ((semAmostras(mercado) || mercado.__falhou) && restante() > RESERVA_PARECER + 40000) {
-        const usos = mercado.__falhou ? 1 : Math.min(maxWeb, 2);
+        const usos = mercado.__falhou ? 1 : Math.min(maxWeb, 3);
         mercado = await buscarMercado(Math.min(110000, restante() - RESERVA_PARECER), usos);
       }
       // A busca FALHOU (abort/timeout/erro), não é "mercado vazio de verdade": trata como

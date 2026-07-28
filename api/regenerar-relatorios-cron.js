@@ -126,10 +126,12 @@ export default async function handler(req, res) {
   // eternamente num mercado GENUINAMENTE raso (imóvel atípico sem comparáveis): passado o teto,
   // fica como "não estimado" (estado final correto). Ao PREENCHER, o flag some e para sozinho.
   let mktVazio = 0;
-  const MAX_VAZIO = 3;                 // CUSTO: cada re-tentativa gasta busca web paga. 3 pega a
-                                       // emptiness transitória sem torrar dinheiro num mercado que
-                                       // segue vazio (antes 8 → até 8 buscas caras num relatório que
-                                       // nunca preenchia). Passado o teto, fica "não estimado".
+  const MAX_VAZIO = 6;                 // QUALIDADE em 1º lugar (decisão do dono): persiste re-gerando
+                                       // em background (a cada 6h) por ~36h até entregar com amostras,
+                                       // dentro do teto de 24-48h que o dono definiu. Cada tentativa
+                                       // agora é mais assertiva (pause_turn + salvamento + índice
+                                       // semeando), então converge sem re-gastar à toa; ao preencher,
+                                       // o flag some e para sozinho.
   const idade48 = new Date(agora - 48 * 3600 * 1000).toISOString();
   try {
     const q = `analises_mercado?status=eq.concluida&result->>mercadoVazio=eq.true&regen_tentativas=lt.${MAX_VAZIO}`
