@@ -181,6 +181,11 @@ export function AuthProvider({ children }) {
             // "Cannot destructure property 'logUso' of 'undefined'" na /analise).
             // Optional chaining + .catch tornam o log de acesso à prova de falha.
             import('../utils/logUso').then(m => m?.logUso?.(u.id, 'login')).catch(() => {});
+            // Boas-vindas UNIVERSAL: dispara 1x por conta (idempotente no servidor por
+            // perfis.boas_vindas_em). Só no SIGNED_IN (login novo, inclui o 1º acesso após
+            // qualquer cadastro: grátis, pago, normal, Google, convite) — não no
+            // INITIAL_SESSION (reabertura). Best-effort, não bloqueia o login.
+            fetch('/api/boas-vindas', { method: 'POST', headers: { Authorization: `Bearer ${session?.access_token || ''}` } }).catch(() => {});
           }
           // Push automático (só 1x por navegador).
           try { ativarPushAutomatico(() => session); } catch (_) {}
