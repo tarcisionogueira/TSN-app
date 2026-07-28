@@ -1052,6 +1052,18 @@ export default async function handler(req, res) {
       mercado.comentario = `Não encontramos anúncios comparáveis ATIVOS de ${rotSeg} para ${mercadoInputs.cidade || 'esta localidade'} no momento; a estimativa usa o Índice BidPro (base própria por microrregião e segmento, R$ ${Math.round(indiceVenda).toLocaleString('pt-BR')}/m²${mercado.indiceBidPro?.nivel ? `, nível ${mercado.indiceBidPro.nivel}` : ''}) como referência. É uma referência interna consolidada das análises da plataforma, não um comparativo de anúncio ao vivo.`;
     }
 
+    // "NÃO SE REPITA" (incidente BH 28/07): busca web INSTÁVEL (timeout/abort) E o Índice NÃO
+    // cobriu (sem valor) NÃO pode virar um relatório em BRANCO salvo como 'concluida' — o cliente
+    // via um relatório vazio e o self-heal de TIMEOUT nem pegava (status errado). Aqui usamos o
+    // buscaInstavel (antes era variável MORTA): tratamos como falha TRANSITÓRIA → lança
+    // tempo_limite → o catch salva 'erro', devolve 504 "tente novamente", estorna a cota, e o
+    // self-heal re-tenta com orçamento fresco. Cliente 360 passa a registrar ERRO (não sucesso
+    // vazio). Mercado GENUINAMENTE vazio (busca OK, 0 anúncios reais) NÃO cai aqui: buscaInstavel
+    // é false → segue como 'concluida'/não estimado, como antes.
+    if (buscaInstavel && !(Number(valorMercado) > 0) && !(Number(precoM2) > 0)) {
+      const e = new Error('tempo_limite'); e.detalhe = erroApiBusca || 'busca instável'; throw e;
+    }
+
     // CLASSIFICAÇÃO DE INTENÇÃO (revenda/locação/temporada) — consta no relatório e vira defesa no
     // parecer. Desconto pela avaliação confirmada (avalDb) × lance mínimo; yield do mercado ou índice.
     const vminImovel = Number(imDb?.valor_minimo) || 0;
@@ -1176,7 +1188,7 @@ export default async function handler(req, res) {
       ? 'A pesquisa de mercado demorou mais que o tempo limite do servidor. Costuma ser temporário: tente gerar novamente.'
       : String(e?.message || e);
     await upsertAnalise({ ...base, status: 'erro', erro: msg });
-    try { await logAtividade(ownerId, 'relatorio_mercado_erro', String(msg).slice(0, 200), { imovelId: String(imovelId), cidade: cidade || null, timeout, ator: user.id }); } catch { /* log best-effort */ }
+    try { await logAtividade(ownerId, 'relatorio_mercado_erro', String(msg).slice(0, 200), { imovelId: String(imovelId), cidade: cidade || null, timeout, erroApi: e?.detalhe || null, ator: user.id }); } catch { /* log best-effort */ }
     // Estorna a cota consumida (não cobra por análise que falhou; evita cobrança
     // dupla na re-tentativa, já que 'erro' não conta como concluída em isNovo).
     if (cota && cota.ok && cota.tipo) {
