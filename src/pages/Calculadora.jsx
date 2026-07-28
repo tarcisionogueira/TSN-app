@@ -112,7 +112,13 @@ export default function Calculadora() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ cpf: leadCpf, email: leadEmail }),
       });
-      const d = await res.json();
+      if (!res.ok) {
+        // Não confiar em corpo de erro como se fosse "sem conta" (roteava errado no 429/5xx).
+        setLeadMsg(res.status === 429 ? 'Muitas tentativas. Aguarde um instante e tente de novo.' : 'Não foi possível verificar agora. Tente novamente.');
+        setLeadEnviando(false);
+        return;
+      }
+      const d = await res.json().catch(() => ({}));
       if (ref) sessionStorage.setItem('tsn_ref_codigo', ref);
       if (d.temConta) {
         // Já tem conta → vai para login

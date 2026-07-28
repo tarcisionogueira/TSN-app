@@ -18,21 +18,23 @@ function sb(path, opts = {}) {
 async function checkRateLimit(ip) {
   if (!ip) return false; // sem IP, permite (ambiente dev)
   const window = new Date(Date.now() - 60_000).toISOString(); // últimos 60s
-  const res = await sb(
-    `verificar_cpf_rate?ip=eq.${encodeURIComponent(ip)}&criado_em=gte.${window}&select=id`
-  ).catch(() => null);
-  if (!res?.ok) return false; // tabela não existe ainda, permite
-  const rows = await res.json().catch(() => []);
-  if (Array.isArray(rows) && rows.length >= 6) return true; // bloqueado
-
-  // Registra nova tentativa (fire-and-forget)
-  sb('verificar_cpf_rate', {
+  // Registra a tentativa PRIMEIRO e AGUARDA. No Edge, trabalho não-aguardado antes de
+  // devolver o Response não tem execução garantida — o insert era fire-and-forget e a
+  // linha quase nunca era gravada, então o teto de 6/min/IP ficava furável (enumeração
+  // de CPF/e-mail). Aguardar garante o registro; inserir ANTES de contar também reduz a
+  // corrida read-then-write. A tabela vive no banco → o limite é cross-instância (não
+  // depende de instância quente nem de Upstash).
+  await sb('verificar_cpf_rate', {
     method: 'POST',
     body: JSON.stringify({ ip }),
     headers: { Prefer: 'return=minimal' },
   }).catch(() => {});
-
-  return false;
+  const res = await sb(
+    `verificar_cpf_rate?ip=eq.${encodeURIComponent(ip)}&criado_em=gte.${window}&select=id`
+  ).catch(() => null);
+  if (!res?.ok) return false; // infra de rate-limit indisponível → fail-open (não bloqueia tráfego legítimo)
+  const rows = await res.json().catch(() => []);
+  return Array.isArray(rows) && rows.length > 6; // > 6 (inclui a tentativa atual) = bloqueado
 }
 
 export default async function handler(req) {
