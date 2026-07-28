@@ -97,7 +97,10 @@ export default function Planos() {
     const base = `${window.location.origin}${window.location.pathname.replace(/\/$/, '')}`;
     const url = `${base}#/planos?ref=${meuCodigo || user?.id || ''}&plano=${key}`;
     const nome = PLANOS[key]?.nome || 'BidPro Brasil';
-    if (navigator.share) {
+    // Compartilhamento nativo só em CELULAR/tablet; no DESKTOP a folha de apps confundia →
+    // no desktop apenas COPIA o link.
+    const usarShareNativo = !!navigator.share && (navigator.maxTouchPoints || 0) > 0;
+    if (usarShareNativo) {
       navigator.share({ title: 'BidPro Brasil', text: `Conheça o plano ${nome} da BidPro Brasil`, url }).catch(() => {});
     } else {
       try { navigator.clipboard?.writeText(url); } catch { /* ignore */ }

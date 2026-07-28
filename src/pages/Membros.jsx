@@ -190,7 +190,10 @@ export default function Membros() {
     const url = `${window.location.origin}/#/p/${tipo}/${id}?ref=${meuCodigo || user?.id || ''}`;
     const compartilhar = (e) => {
       e.stopPropagation();
-      if (navigator.share) { navigator.share({ title: 'BidPro Brasil', text: `Conheça: ${nome}`, url }).catch(() => {}); }
+      // Só usa o compartilhamento nativo (folha de apps) em CELULAR/tablet; no DESKTOP isso abria
+      // um seletor de app estranho → no desktop apenas COPIA o link (mais previsível).
+      const usarShareNativo = !!navigator.share && (navigator.maxTouchPoints || 0) > 0;
+      if (usarShareNativo) { navigator.share({ title: 'BidPro Brasil', text: `Conheça: ${nome}`, url }).catch(() => {}); }
       else { navigator.clipboard?.writeText(url); setCopiado(true); setTimeout(() => setCopiado(false), 1800); }
     };
     return (
