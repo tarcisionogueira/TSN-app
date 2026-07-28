@@ -73,6 +73,8 @@ export default async function handler(req, res) {
     conteudo: conteudoDireto, emailAssinante, verificacaoIdentidade, arquivosReferencia, geradoPorIA,
     // Reformulação: multi-signatário + atribuição a plano/produto + testemunha + partes
     signatarios, planoKey, produtoTipo, produtoId, partes, requerTestemunha,
+    // Atribuição a uma ARREMATAÇÃO (o documento assinado aparece nos docs do arremate)
+    arremateImovelId, arremateUserId,
   } = req.body || {};
 
   // Normaliza a lista de signatários: um LINK POR ASSINANTE (cada um assina o seu).
@@ -124,6 +126,9 @@ export default async function handler(req, res) {
         produto_id: produtoId ? sanitizeText(produtoId, 60) : null,
         partes: partesLimpa,
         contrato_grupo_id: grupoId,
+        // Vínculo com a arrematação (opcional): surge nos documentos do arremate quando assinado.
+        arremate_imovel_id: arremateImovelId ? sanitizeText(String(arremateImovelId), 200) : null,
+        arremate_user_id: /^[0-9a-f-]{36}$/i.test(String(arremateUserId || '')) ? arremateUserId : null,
       };
 
       // Uma linha (token/link) por signatário. testemunha_token vem do DEFAULT do banco.

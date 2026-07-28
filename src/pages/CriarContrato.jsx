@@ -212,6 +212,10 @@ export default function CriarContrato() {
         planoKey: prod?.tipo === 'plano' ? prod.chave : null,
         produtoTipo: prod?.tipo || null,
         produtoId: prod?.id || null,
+        // Atribuição a uma ARREMATAÇÃO (quando o contrato é criado a partir de um arremate):
+        // ao concluir, o documento assinado aparece nos documentos daquela arrematação.
+        arremateImovelId: _preState.arremateImovelId || null,
+        arremateUserId: _preState.arremateUserId || null,
         // Modo assinar: arquivo. Modo gerar: texto.
         arquivoUrl: modo === 'assinar' ? arquivoUrl : null,
         arquivoNome: modo === 'assinar' ? arquivoDoc?.name : null,
