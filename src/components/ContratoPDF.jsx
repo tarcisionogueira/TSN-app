@@ -48,12 +48,16 @@ export function gerarContratoPDF({ contrato, roster = [] } = {}) {
   const origin = (typeof window !== 'undefined' && window.location?.origin) || 'https://www.bidprobrasil.com.br';
   const verUrl = contrato.token ? `${origin}/#/c/${esc(contrato.token)}` : '';
 
-  // Corpo do documento: texto do contrato, ou o arquivo anexo (imagem embutida / link).
+  // Corpo do documento: texto do contrato, ou o arquivo anexo. A URL do arquivo é ASSINADA
+  // (…/object/sign/…?token=…) → termina em querystring, não na extensão; por isso detectamos o
+  // tipo pelo NOME do arquivo (ou pela extensão antes de ?/#), senão a imagem caía como "link".
+  const nomeArq = contrato.arquivo_nome || contrato.arquivo_url || '';
+  const ehImg = /\.(jpe?g|png|gif|webp)($|\?|#)/i.test(nomeArq) || /\.(jpe?g|png|gif|webp)($|\?|#)/i.test(contrato.arquivo_url || '');
   let corpoDoc;
-  if (contrato.arquivo_url && /\.(jpg|jpeg|png|gif|webp)$/i.test(contrato.arquivo_url)) {
+  if (contrato.arquivo_url && ehImg) {
     corpoDoc = `<img src="${esc(contrato.arquivo_url)}" style="max-width:100%;border:1px solid #e2e8f0;border-radius:8px;" alt="Documento" />`;
   } else if (contrato.arquivo_url) {
-    corpoDoc = `<p class="corpo">Documento anexo: <a href="${esc(contrato.arquivo_url)}">${esc(contrato.arquivo_nome || contrato.arquivo_url)}</a></p>`;
+    corpoDoc = `<p class="corpo">Documento anexo: <a href="${esc(contrato.arquivo_url)}">${esc(contrato.arquivo_nome || 'documento')}</a><br/><span style="font-size:11px;color:#64748b;">(abra o link para visualizar o documento original assinado)</span></p>`;
   } else {
     corpoDoc = `<div class="corpo">${esc(contrato.conteudo || '')}</div>`;
   }

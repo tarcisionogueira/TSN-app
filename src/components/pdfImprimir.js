@@ -28,8 +28,20 @@ export function imprimirHtml(html, nomeArquivoBruto) {
         else alert('Não foi possível abrir a impressão. Verifique o bloqueador de pop-ups.');
       } finally { limpar(); }
     };
-    // Espera o conteúdo/CSS assentar antes de chamar print.
-    setTimeout(imprimir, 500);
+    // Espera o conteúdo/CSS assentar E as imagens carregarem (ex.: documento anexo em imagem
+    // embutido) antes de imprimir — senão o print dispara com a imagem ainda em branco. Teto 4s.
+    const imgs = Array.from(doc.images || []);
+    const pend = imgs.filter((im) => !im.complete);
+    if (!pend.length) { setTimeout(imprimir, 500); }
+    else {
+      let feito = false, restantes = pend.length;
+      const go = () => { if (feito) return; feito = true; imprimir(); };
+      pend.forEach((im) => {
+        const done = () => { if (--restantes <= 0) go(); };
+        im.addEventListener('load', done); im.addEventListener('error', done);
+      });
+      setTimeout(go, 4000);
+    }
   } catch {
     limpar();
     alert('Não foi possível gerar o PDF neste navegador.');

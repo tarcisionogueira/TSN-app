@@ -365,11 +365,20 @@ export default function ContratoLink() {
             <div style={{ fontSize:11, color:'#475569', fontWeight:700, textTransform:'uppercase', letterSpacing:1, marginBottom:10 }}>
               {contrato.arquivo_url ? 'Documento' : 'Conteúdo do contrato'}
             </div>
-            {contrato.arquivo_url ? (
-              contrato.arquivo_url.match(/\.(jpg|jpeg|png|gif|webp)$/i)
-                ? <img src={contrato.arquivo_url} alt="Documento" style={{ width:'100%', borderRadius:10, maxHeight:560, objectFit:'contain', background:'#0f172a' }} />
-                : <a href={contrato.arquivo_url} target="_blank" rel="noreferrer" style={{ display:'flex', alignItems:'center', gap:8, padding:'14px 18px', background:'rgba(96,165,250,0.1)', border:'1px solid rgba(96,165,250,0.3)', borderRadius:10, color:'#60a5fa', fontWeight:700, fontSize:14, textDecoration:'none' }}><ExternalLink size={16} /> Abrir documento</a>
-            ) : (
+            {contrato.arquivo_url ? (() => {
+              // URL assinada (termina em ?token=…) → detecta o tipo pelo NOME do arquivo (ou pela
+              // extensão antes de ?/#). Imagem embute <img>; PDF/texto embute <iframe>; outros ficam
+              // no link. Sempre com "Abrir em nova aba".
+              const nome = contrato.arquivo_nome || contrato.arquivo_url || '';
+              const ehImg = /\.(jpe?g|png|gif|webp)($|\?|#)/i.test(nome) || /\.(jpe?g|png|gif|webp)($|\?|#)/i.test(contrato.arquivo_url);
+              const ehPdfTxt = /\.(pdf|txt|html?)($|\?|#)/i.test(nome) || /\.(pdf|txt|html?)($|\?|#)/i.test(contrato.arquivo_url);
+              const link = (
+                <a href={contrato.arquivo_url} target="_blank" rel="noreferrer" style={{ display:'inline-flex', alignItems:'center', gap:8, marginTop:10, padding:'10px 16px', background:'rgba(96,165,250,0.1)', border:'1px solid rgba(96,165,250,0.3)', borderRadius:10, color:'#60a5fa', fontWeight:700, fontSize:13.5, textDecoration:'none' }}><ExternalLink size={16} /> Abrir em nova aba{contrato.arquivo_nome ? ` (${contrato.arquivo_nome})` : ''}</a>
+              );
+              if (ehImg) return <><img src={contrato.arquivo_url} alt="Documento" style={{ width:'100%', borderRadius:10, maxHeight:640, objectFit:'contain', background:'#fff' }} />{link}</>;
+              if (ehPdfTxt) return <><iframe src={contrato.arquivo_url} title="Documento" style={{ width:'100%', height:'72vh', border:'1px solid #1e293b', borderRadius:10, background:'#fff' }} />{link}</>;
+              return <div>{link}</div>;
+            })() : (
               <div style={{ whiteSpace:'pre-wrap', fontSize:13.5, lineHeight:1.9, color:'#cbd5e1', background:'#0f172a', borderRadius:12, padding:'20px 22px', border:'1px solid #1e293b' }}>
                 {contrato.conteudo}
               </div>
@@ -511,14 +520,22 @@ export default function ContratoLink() {
                 <FileText size={20} color="#60a5fa" />
                 <span style={{ fontSize:14, color:'#e2e8f0', fontWeight:700 }}>{contrato.arquivo_nome || 'Documento'}</span>
               </div>
-              {contrato.arquivo_url.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? (
-                <img src={contrato.arquivo_url} alt="Documento" style={{ width:'100%', borderRadius:8, maxHeight:400, objectFit:'contain' }} />
-              ) : (
-                <a href={contrato.arquivo_url} target="_blank" rel="noreferrer"
-                  style={{ display:'flex', alignItems:'center', gap:8, padding:'14px 18px', background:'rgba(96,165,250,0.1)', border:'1px solid rgba(96,165,250,0.3)', borderRadius:10, color:'#60a5fa', fontWeight:700, fontSize:14, textDecoration:'none' }}>
-                  <ExternalLink size={16} /> Abrir documento para leitura
-                </a>
-              )}
+              {(() => {
+                // URL assinada → tipo pelo NOME do arquivo (ou extensão antes de ?/#). Imagem embute;
+                // PDF/texto embute iframe; outros ficam no link. Sempre com link p/ abrir em nova aba.
+                const nome = contrato.arquivo_nome || contrato.arquivo_url || '';
+                const ehImg = /\.(jpe?g|png|gif|webp)($|\?|#)/i.test(nome) || /\.(jpe?g|png|gif|webp)($|\?|#)/i.test(contrato.arquivo_url);
+                const ehPdfTxt = /\.(pdf|txt|html?)($|\?|#)/i.test(nome) || /\.(pdf|txt|html?)($|\?|#)/i.test(contrato.arquivo_url);
+                const link = (
+                  <a href={contrato.arquivo_url} target="_blank" rel="noreferrer"
+                    style={{ display:'inline-flex', alignItems:'center', gap:8, marginTop:10, padding:'12px 18px', background:'rgba(96,165,250,0.1)', border:'1px solid rgba(96,165,250,0.3)', borderRadius:10, color:'#60a5fa', fontWeight:700, fontSize:14, textDecoration:'none' }}>
+                    <ExternalLink size={16} /> Abrir em nova aba
+                  </a>
+                );
+                if (ehImg) return <><img src={contrato.arquivo_url} alt="Documento" style={{ width:'100%', borderRadius:8, maxHeight:520, objectFit:'contain', background:'#fff' }} />{link}</>;
+                if (ehPdfTxt) return <><iframe src={contrato.arquivo_url} title="Documento" style={{ width:'100%', height:'60vh', border:'1px solid #1f2937', borderRadius:8, background:'#fff' }} />{link}</>;
+                return <div>{link}</div>;
+              })()}
               <p style={{ margin:'12px 0 0', fontSize:12, color:'#64748b', lineHeight:1.6 }}>
                 Leia o documento antes de prosseguir para a assinatura.
               </p>
