@@ -39,6 +39,8 @@
 
 **5. AGENDAR ANALISTA — gate p/ 3 relatórios (`Analise.jsx` + `api/agendar-reuniao.js`).** Liberava no 2º relatório (`ambosRelatorios` = mercado+documental). Agora exige os TRÊS (inclui Laudo). Front: nova var `relatoriosConcluidos` (NÃO reusei `ambosRelatorios`, que libera a GERAÇÃO do laudo). Backend: `agendar-reuniao` conta os 3 tipos concluídos do imóvel na 1ª reunião (403 se faltar) — o gate do front era burlável por POST direto.
 
+**6. CONTRATO ASSINADO — modo LEITURA em vez de dead-end (`ContratoLink.jsx`).** Antes, reabrir um link já assinado dava "Link indisponível" (beco sem saída), e a tela "Contrato assinado!" não mostrava a situação das partes. Agora: (a) link já assinado → **modo leitura** (não é mais erro): mostra o LAYOUT do documento + o roster das partes (quem assinou / quem falta + data + testemunha) + "Baixar documento" (comprovante em texto). (b) A tela de sucesso ganhou o botão "Ver contrato e quem já assinou". Como o signatário pode ser ANÔNIMO (só o token), criei a RPC token-gated **`get_partes_por_token(p_token)`** (SECURITY DEFINER, anon, na allowlist do auditor; e-mail de terceiro MASCARADO, nunca CPF/KYC). Migração `get_partes_por_token.sql` (inclui a atualização do `auditoria_seguranca()` p/ a allowlist). `auditoria_seguranca()` = **0 crítico / 0 atenção**.
+
 ---
 
 ## ✅ COMEÇAR AQUI (28/07 — sessão 13: CHECAGEM COMPLETA DO SISTEMA / assessor handoff)

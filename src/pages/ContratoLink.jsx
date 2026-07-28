@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import { CheckCircle2, AlertCircle, Loader2, ShieldCheck, Camera, Upload, FileText, ExternalLink } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Loader2, ShieldCheck, Camera, Upload, FileText, ExternalLink, Download, Clock } from 'lucide-react';
 import { supabase } from '../utils/supabase';
 import { useIsMobile } from '../utils/useIsMobile';
 import { formatCpf, formatCnpj } from '../utils/cnpjCep';
@@ -172,6 +172,8 @@ export default function ContratoLink() {
   const [testemunha, setTestemunha] = useState({ nome: '', cpf: '' });
   const [assinaturaTest, setAssinaturaTest] = useState(null); // dataURL da assinatura da testemunha
   const [copiadoT, setCopiadoT] = useState(false); // feedback ao copiar o link da testemunha
+  const [jaAssinado, setJaAssinado] = useState(false); // link reaberto/concluído → modo LEITURA (não dead-end)
+  const [roster, setRoster] = useState([]); // partes do contrato + status de assinatura (via token)
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
   const testemunhaUrl = contrato?.requer_testemunha && contrato?.testemunha_token ? `${origin}/#/t/${contrato.testemunha_token}` : null;
   const conteudoRef = useRef(null);
@@ -189,12 +191,24 @@ export default function ContratoLink() {
       .then(({ data, error }) => {
         const c = Array.isArray(data) ? data[0] : data;
         if (error || !c) setErro('Contrato não encontrado ou link inválido.');
-        else if (c.status === 'assinado') setErro('Este contrato já foi assinado.');
+        // Já assinado NÃO é mais dead-end: carrega em modo LEITURA (ver o contrato + quem
+        // assinou/falta + baixar). Antes caía num "Link indisponível" sem saída. Precede a
+        // checagem de expiração (contrato assinado é válido mesmo após a janela de assinatura).
+        else if (c.status === 'assinado') { setContrato(c); setJaAssinado(true); }
         else if (c.status === 'expirado' || new Date(c.expira_em) < new Date()) setErro('Este link expirou.');
         else setContrato(c);
         setLoading(false);
       });
   }, [token]);
+
+  // Situação das partes (quem já assinou / quem falta) — via TOKEN (funciona logado ou anônimo).
+  // Refaz após assinar (etapa muda) para refletir a nova assinatura na tela de leitura.
+  useEffect(() => {
+    if (!token || !contrato) return;
+    supabase.rpc('get_partes_por_token', { p_token: token })
+      .then(({ data }) => setRoster(Array.isArray(data) ? data : []))
+      .catch(() => {});
+  }, [token, contrato, etapa]);
 
   const up = (k, v) => setDados(p => ({ ...p, [k]: v }));
   const onChange = e => up(e.target.name, e.target.value);
@@ -260,6 +274,30 @@ export default function ContratoLink() {
     setEtapa('ok');
   };
 
+  // Comprovante em texto: contrato + situação das assinaturas (quem assinou / quem falta).
+  const baixarComprovante = () => {
+    if (!contrato) return;
+    const linhas = [
+      'COMPROVANTE DE CONTRATO — BidPro Brasil',
+      `Título: ${contrato.titulo}`,
+      '',
+      '──────────────────────────────────────',
+      contrato.conteudo || (contrato.arquivo_url ? `Documento anexo: ${contrato.arquivo_url}` : ''),
+      '──────────────────────────────────────',
+      '',
+      'ASSINATURAS',
+      ...(roster.length
+        ? roster.map(p => `- ${p.nome}: ${p.assinou ? 'ASSINOU' + (p.assinado_em ? ' em ' + new Date(p.assinado_em).toLocaleString('pt-BR') : '') : 'PENDENTE'}${p.requer_testemunha ? ` · testemunha: ${p.testemunha_assinou ? 'assinou' : 'pendente'}` : ''}`)
+        : ['- (situação indisponível)']),
+    ];
+    if (contrato.assinatura_hash) linhas.push('', `Hash SHA-256 (sua assinatura): ${contrato.assinatura_hash}`);
+    const blob = new Blob([linhas.join('\n')], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `contrato-${String(contrato.token || '').slice(0, 8)}.txt`;
+    a.click(); URL.revokeObjectURL(url);
+  };
+
   if (loading) return (
     <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#111111' }}>
       <Loader2 size={32} color="#60a5fa" style={{ animation:'spin 1s linear infinite' }} />
@@ -275,6 +313,73 @@ export default function ContratoLink() {
       </div>
     </div>
   );
+
+  // MODO LEITURA: link já assinado (reaberto) OU clique em "Ver contrato e assinaturas" na tela de
+  // sucesso. Mostra o layout do documento + quais partes já assinaram / faltam + baixar. Funciona
+  // para signatário anônimo (dados vêm por token via get_partes_por_token).
+  if (jaAssinado && contrato) {
+    const totAssin = roster.filter(p => p.assinou).length;
+    const completo = roster.length > 0 && totAssin === roster.length;
+    return (
+      <div style={{ minHeight:'100vh', background:'#111111', fontFamily:"'Inter',sans-serif", paddingTop:'env(safe-area-inset-top,0px)' }}>
+        <div style={{ padding:isMobile?'16px':'22px 28px', display:'flex', alignItems:'center', gap:12, borderBottom:'1px solid #1e293b' }}>
+          <div style={{ width:32, height:32, background:'#0D63DB', borderRadius:8, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+            <ShieldCheck size={18} color="white" />
+          </div>
+          <div style={{ minWidth:0 }}>
+            <div style={{ fontSize:11, color:'#60a5fa', fontWeight:700, textTransform:'uppercase', letterSpacing:1 }}>BidPro Brasil, Contrato Digital</div>
+            <div style={{ fontSize:15, fontWeight:800, color:'white', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{contrato.titulo}</div>
+          </div>
+        </div>
+
+        <div style={{ maxWidth:820, width:'100%', margin:'0 auto', padding:isMobile?'16px':'26px 24px', display:'flex', flexDirection:'column', gap:18, boxSizing:'border-box' }}>
+          {/* Situação geral */}
+          <div style={{ padding:'14px 18px', borderRadius:12, background: completo ? 'rgba(52,211,153,0.1)' : 'rgba(234,179,8,0.1)', border:`1px solid ${completo ? 'rgba(52,211,153,0.35)' : 'rgba(234,179,8,0.35)'}`, display:'flex', alignItems:'center', gap:10 }}>
+            {completo ? <CheckCircle2 size={20} color="#34d399" /> : <Clock size={20} color="#eab308" />}
+            <div style={{ color: completo ? '#34d399' : '#eab308', fontWeight:800, fontSize:14 }}>
+              {completo ? 'Contrato totalmente assinado' : `Aguardando assinaturas${roster.length ? ` — ${totAssin} de ${roster.length} assinaram` : ''}`}
+            </div>
+          </div>
+
+          {/* Partes e assinaturas */}
+          <div style={{ background:'#0f172a', border:'1px solid #1e293b', borderRadius:12, padding:'16px 18px' }}>
+            <div style={{ fontSize:12, fontWeight:800, color:'#94a3b8', textTransform:'uppercase', letterSpacing:1, marginBottom:12 }}>Partes e assinaturas</div>
+            {roster.length === 0 ? (
+              <div style={{ color:'#64748b', fontSize:13 }}>Carregando situação…</div>
+            ) : roster.map((p, i) => (
+              <div key={i} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:10, padding:'9px 0', borderTop: i ? '1px solid #1e293b' : 'none' }}>
+                <div style={{ minWidth:0 }}>
+                  <div style={{ fontSize:14, fontWeight:700, color:'white', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{p.nome}{p.eu ? ' (você)' : ''}</div>
+                  {p.requer_testemunha && <div style={{ fontSize:11.5, color:'#64748b' }}>Testemunha: {p.testemunha_assinou ? 'assinou' : 'pendente'}</div>}
+                </div>
+                <span style={{ flexShrink:0, fontSize:11.5, fontWeight:700, padding:'4px 11px', borderRadius:20, background: p.assinou ? 'rgba(52,211,153,0.15)' : 'rgba(234,179,8,0.15)', color: p.assinou ? '#34d399' : '#eab308', display:'flex', alignItems:'center', gap:5 }}>
+                  {p.assinou ? <CheckCircle2 size={13} /> : <Clock size={13} />}
+                  {p.assinou ? (p.assinado_em ? `Assinou ${new Date(p.assinado_em).toLocaleDateString('pt-BR')}` : 'Assinou') : 'Pendente'}
+                </span>
+              </div>
+            ))}
+            <button onClick={baixarComprovante} style={{ marginTop:14, display:'flex', alignItems:'center', gap:7, padding:'10px 16px', background:'#0D63DB', color:'white', border:'none', borderRadius:9, fontWeight:700, fontSize:13, cursor:'pointer' }}>
+              <Download size={15} /> Baixar documento
+            </button>
+          </div>
+
+          {/* Documento (layout da página) */}
+          <div style={{ fontSize:11, color:'#475569', fontWeight:700, textTransform:'uppercase', letterSpacing:1 }}>
+            {contrato.arquivo_url ? 'Documento' : 'Conteúdo do contrato'}
+          </div>
+          {contrato.arquivo_url ? (
+            contrato.arquivo_url.match(/\.(jpg|jpeg|png|gif|webp)$/i)
+              ? <img src={contrato.arquivo_url} alt="Documento" style={{ width:'100%', borderRadius:10, maxHeight:560, objectFit:'contain', background:'#0f172a' }} />
+              : <a href={contrato.arquivo_url} target="_blank" rel="noreferrer" style={{ display:'flex', alignItems:'center', gap:8, padding:'14px 18px', background:'rgba(96,165,250,0.1)', border:'1px solid rgba(96,165,250,0.3)', borderRadius:10, color:'#60a5fa', fontWeight:700, fontSize:14, textDecoration:'none' }}><ExternalLink size={16} /> Abrir documento</a>
+          ) : (
+            <div style={{ whiteSpace:'pre-wrap', fontSize:13.5, lineHeight:1.9, color:'#cbd5e1', background:'#0f172a', borderRadius:12, padding:'20px 22px', border:'1px solid #1e293b' }}>
+              {contrato.conteudo}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   if (etapa === 'ok') return (
     <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#111111', padding:20 }}>
@@ -301,6 +406,10 @@ export default function ContratoLink() {
             </div>
           </div>
         )}
+        <button onClick={() => setJaAssinado(true)}
+          style={{ marginTop:20, width:'100%', padding:'12px', background:'#0D63DB', color:'white', border:'none', borderRadius:10, fontWeight:800, fontSize:14, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
+          <FileText size={16} /> Ver contrato e quem já assinou
+        </button>
       </div>
     </div>
   );
