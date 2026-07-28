@@ -440,6 +440,21 @@ export default function Header() {
               ⚙️ Admin
             </button>
           )}
+          {/* Itens da CONTA — antes só existiam no dropdown do avatar (desktop), então no celular
+              não havia como chegar em Meu Perfil, Meus Créditos e Meus Contratos. */}
+          {user && (<>
+            <div style={{ height: 1, background: '#1e293b', margin: '6px 0' }} />
+            {[
+              { path: '/perfil', label: 'Meu Perfil', icon: User },
+              { path: '/creditos', label: 'Meus Créditos', icon: Wallet },
+              { path: '/contratos', label: 'Meus Contratos', icon: FileText },
+            ].map(item => (
+              <button key={item.path} onClick={() => { nav(item.path); setOpen(false); }}
+                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: 'none', borderRadius: 8, background: active(item.path) ? '#084BA6' : 'transparent', color: active(item.path) ? 'white' : '#94a3b8', fontWeight: 600, fontSize: 14, cursor: 'pointer', textAlign: 'left' }}>
+                <item.icon size={16} /> {item.label}
+              </button>
+            ))}
+          </>)}
           {podeInstalar && (
             <button onClick={() => { abrirInstalarApp(); setOpen(false); }}
               style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: 'none', borderRadius: 8, background: 'transparent', color: '#60a5fa', fontWeight: 700, fontSize: 14, cursor: 'pointer', textAlign: 'left' }}>
