@@ -669,7 +669,7 @@ Busque o máximo de anúncios (mesmo tipo) no bairro e adjacências (~1km). Meta
 
 FONTES (grandes portais): ZAP, VivaReal, OLX, Quinto Andar, Imovelweb, Loft, 123i, Chaves na Mão, Net Imóveis. Cruze várias.
 
-FONTES LOCAIS (OBRIGATÓRIO — frequentemente MAIS confiáveis): além dos grandes portais, busque também ANÚNCIOS DE IMOBILIÁRIAS DA PRÓPRIA CIDADE de ${cidade}/${estado}. Pesquise por "imobiliária ${cidade}", "imóveis à venda ${cidade}" (e o bairro, se houver) e abra os sites das imobiliárias locais — os anúncios delas costumam refletir MELHOR o preço praticado na praça e podem ser COMPLEMENTARES ou até DECISIVOS na composição do valor. Inclua essas amostras nos níveis 1/2 com "fonte" = nome da imobiliária local, e dê PESO ao menos igual ao dos grandes portais quando forem recentes e do mesmo tipo/microrregião.
+FONTES LOCAIS (OBRIGATÓRIO — frequentemente MAIS confiáveis): além dos grandes portais, busque também ANÚNCIOS DE IMOBILIÁRIAS DA PRÓPRIA CIDADE de ${cidade}/${estado}. Pesquise por "imobiliária ${cidade}", "imóveis à venda ${cidade}" (e o bairro, se houver) e abra os sites das imobiliárias locais — os anúncios delas costumam refletir MELHOR o preço praticado na praça e podem ser COMPLEMENTARES ou até DECISIVOS na composição do valor. Inclua essas amostras nos níveis 1/2 com "fonte" = nome da imobiliária local, e dê PESO ao menos igual ao dos grandes portais quando forem recentes e do mesmo tipo/microrregião. Ao final, liste em "fontesLocais" as imobiliárias LOCAIS que você usou/encontrou (nome + url do site) — nós memorizamos e reusamos nas próximas análises desta praça.
 
 DATA DO ANÚNCIO: para CADA amostra, capture a data no campo "data" (formato "AAAA-MM"; senão "recente").
 RECÊNCIA (IMPORTANTE): priorize FORTEMENTE anúncios do ANO CORRENTE e dos últimos ~12 meses. EVITE anúncios com mais de ~18 meses, a menos que não haja recentes suficientes — o preço muda rápido. Na média, dê MENOS peso às amostras antigas. Se a maioria das amostras for antiga (ex.: de anos anteriores), diga isso EXPLICITAMENTE no "comentario" e trate a estimativa como menos precisa (alargue precoMinM2/precoMaxM2).
@@ -731,6 +731,7 @@ Retorne APENAS este JSON (sem markdown):
   "referenciaFipeZap": { "encontrado": true, "precoMedioM2": 0, "valorizacao12m": 0, "mesReferencia": "AAAA-MM", "localidade": "", "fonte": "" },
   "outrasTipologias": { "apartamento": [{"valorM2":0,"valor":0,"m2":0,"fonte":"","data":"AAAA-MM"}], "casa": [], "terreno": [], "comercial": [] },
   "outrosBairros": [{"bairro":"","valorM2":0,"valor":0,"m2":0,"fonte":"","data":"AAAA-MM"}],
+  "fontesLocais": [{"nome":"","url":""}],
   "zoneamento": { "encontrado": false, "zona": "", "resumoUso": "", "fonte": "", "ondeObter": "" },
   "perfilRegiao": { "tier": "valorizado_alto|intermediario|valorizado_baixo|", "atratividades": [""], "fragilidades": [""], "motivos": "" },
   "segurancaPublica": { "encontrado": false, "nivel": "", "indicadores": "", "tendencia": "", "fonte": "", "periodo": "", "recomendacao": "" },
@@ -979,6 +980,13 @@ export default async function handler(req, res) {
       }
       const maxWeb = cacheReg?.hit ? 2 : 7; // sem cache (praça fina) → mais buscas p/ cobrir portais + imobiliárias LOCAIS + colheita ampla
       const cacheTxt = cacheReg?.hit ? cacheReg.text : '';
+      // FONTES LOCAIS já conhecidas da praça (revalidação ORGÂNICA): injeta as imobiliárias locais
+      // vistas recentemente para a IA ir direto COLHER (economiza a busca de descoberta). Best-effort.
+      let fontesTxt = '';
+      try {
+        const fl = await (await sb('rpc/fontes_locais_frescas', { method: 'POST', body: JSON.stringify({ p_cidade_norm: _norm(cidade), p_uf: String(estado || '').toUpperCase() }) })).json();
+        if (Array.isArray(fl) && fl.length) fontesTxt = `\n\nIMOBILIÁRIAS LOCAIS JÁ CONHECIDAS de ${cidade}/${estado} (comece por elas: abra os sites e colha anúncios do tipo-alvo; ADICIONE as novas que encontrar em "fontesLocais"):\n` + fl.map(f => `- ${f.nome || f.url} (${f.url})`).join('\n');
+      } catch { /* best-effort */ }
       console.log('[mercado-cache]', JSON.stringify({ on: cacheLigado, hit: !!cacheReg?.hit, nivel: cacheReg?.nivel || null, n: cacheReg?.n || 0, maxWeb, imovel: String(imovelId) }));
       // A busca de mercado (web search, até 5 buscas) é a etapa lenta. UMA tentativa por
       // chamada (retries:0) com timeout = tempo RESTANTE reservando o parecer — assim duas
@@ -991,7 +999,7 @@ export default async function handler(req, res) {
             model: MODEL, max_tokens: 16000, // espaço p/ o MÁXIMO de amostras do tipo-alvo + outrasTipologias + outrosBairros (colheita ampla)
             tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: webUses }],
             system: `Você é um perito avaliador imobiliário sênior. Busque o MÁXIMO de amostras possível, SEMPRE do mesmo tipo (${mercadoInputs.tipoImovel}). Retorne apenas JSON válido.`,
-            messages: [{ role: 'user', content: promptMercado(mercadoInputs) + cacheTxt }],
+            messages: [{ role: 'user', content: promptMercado(mercadoInputs) + cacheTxt + fontesTxt }],
           }, true, { retries: 0, timeoutMs: Math.max(45000, msBudget), noFallback: true });
           const m = parseJSON(extractText(mData)) || {};
           m.precoMedioM2 = m.consolidado?.precoMedioM2 || m.nivel2?.precoMedioM2 || 0;
@@ -1112,6 +1120,9 @@ export default async function handler(req, res) {
       mercado.indiceBidPro = await lerIndiceBidPro(imDb, segIdx);
       // Amostras datadas (valorização/recência) + curva de valorização por ano no relatório.
       await gravarAmostrasIndice(imDb, mercado, imovelId, segIdx);
+      // FONTES LOCAIS vistas neste relatório → registro da praça (revalidação orgânica: ult_visto=now,
+      // vezes+1). Empresas que somem param de aparecer e envelhecem sozinhas; novas entram aqui.
+      try { if (Array.isArray(mercado.fontesLocais) && mercado.fontesLocais.length) await sb('rpc/registrar_fontes_locais', { method: 'POST', body: JSON.stringify({ p_cidade_norm: _norm(cidade), p_uf: String(estado || '').toUpperCase(), p_fontes: mercado.fontesLocais }) }); } catch { /* best-effort */ }
       mercado.valorizacao = await lerValorizacao(imDb, segIdx);
       // COMPOSIÇÃO TEMPORAL da base própria (pedido do dono): períodos de 4 meses, quantitativo
       // e valor recente/projetado a hoje. Lê DEPOIS de gravar as amostras deste relatório (entram
