@@ -385,9 +385,12 @@ export default function Header() {
       </div>
       </div>
 
-      {/* Mobile menu */}
+      {/* Mobile menu — ROLÁVEL e limitado à altura da tela (dvh) para que TODAS as opções fiquem
+          acessíveis mesmo em telas menores / com muitos itens (admin). Sem isto, os itens de baixo
+          (Admin, Sair) caíam abaixo da dobra e não havia como rolar até eles. paddingBottom com
+          safe-area para o último item não ficar sob o indicador de home do iPhone. */}
       {open && (
-        <div style={{ background: '#111111', borderTop: '1px solid #111111', padding: '12px 20px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <div style={{ background: '#111111', borderTop: '1px solid #111111', padding: '12px 20px', display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 'calc(100dvh - 56px - env(safe-area-inset-top, 0px))', overflowY: 'auto', WebkitOverflowScrolling: 'touch', paddingBottom: 'calc(16px + env(safe-area-inset-bottom, 0px))' }}>
           {links.map(l => (
             <button key={l.path} onClick={() => { nav(l.path); setOpen(false); }}
               style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: 'none', borderRadius: 8, background: active(l.path) ? '#084BA6' : 'transparent', color: active(l.path) ? 'white' : '#94a3b8', fontWeight: 600, fontSize: 14, cursor: 'pointer', textAlign: 'left' }}>
