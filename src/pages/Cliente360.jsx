@@ -282,6 +282,7 @@ ${atividade ? `<h2>Atividade recente</h2><table><thead><tr><th>Data</th><th>Even
               ['Relat. documental', stats.relatorios?.documental, '#059669'],
               ['Relat. laudo', stats.relatorios?.laudo, '#059669'],
               ['Clientes c/ erro', stats.clientes_com_erro, stats.clientes_com_erro > 0 ? '#dc2626' : '#059669'],
+              ['Relat. falha (24h)', stats.relatorios_falha_24h, stats.relatorios_falha_24h > 0 ? '#dc2626' : '#059669'],
             ].map(([l, v, c]) => (
               <div key={l} style={{ background: '#f8fafc', borderRadius: 10, padding: '10px 12px' }}>
                 <div style={{ fontSize: 22, fontWeight: 900, color: c }}>{v ?? 0}</div>
@@ -317,6 +318,26 @@ ${atividade ? `<h2>Atividade recente</h2><table><thead><tr><th>Data</th><th>Even
                 <div><div style={{ ...label, marginBottom: 5 }}>Tipos mais buscados</div>
                   <div style={{ fontSize: 12, color: '#334155' }}>{stats.top_tipos.map((t) => `${t.tipo_imovel} (${t.n})`).join(' · ')}</div></div>
               )}
+            </div>
+          )}
+          {/* FALHAS DE RELATÓRIO (24h) — o que quebrou, em qual cidade e POR QUÊ (causa da API).
+              Torna visível de relance uma falha como a de hoje (BH/Goiânia, busca abortada). */}
+          {stats.falhas_recentes?.length > 0 && (
+            <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '10px 12px' }}>
+              <div style={{ ...label, marginBottom: 6, color: '#b91c1c' }}>Relatórios que falharam (24h) — {stats.relatorios_falha_24h} evento(s) · o que quebrou e por quê</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {stats.falhas_recentes.map((f, i) => {
+                  const evRot = { relatorio_mercado_vazio: 'Mercado vazio', relatorio_mercado_erro: 'Erro mercado', relatorio_documental_erro: 'Erro documental', relatorio_documental_faltam_docs: 'Faltam docs', relatorio_laudo_erro: 'Erro laudo' }[f.evento] || f.evento;
+                  return (
+                    <div key={i} style={{ fontSize: 11.5, color: '#7f1d1d', display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
+                        <b>{f.n}×</b> {evRot}{f.cidade ? ` · ${f.cidade}` : ''} · <span style={{ color: '#b45309' }}>{f.motivo}</span>
+                      </span>
+                      <span style={{ flexShrink: 0, color: '#94a3b8' }}>{dataBR(f.ultimo)}</span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>
@@ -533,15 +554,36 @@ ${atividade ? `<h2>Atividade recente</h2><table><thead><tr><th>Data</th><th>Even
               <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
                 {dados.atividade.map((a, i) => {
                   const ev = a.evento || '';
-                  const cor = ev.includes('erro') ? '#dc2626' : (ev.includes('vazio') ? '#b45309' : '#059669');
-                  const rot = { relatorio_mercado_ok: 'Relatório mercadológico', relatorio_mercado_vazio: 'Mercado não estimado', relatorio_mercado_erro: 'Erro no relatório', arremate: 'Arremate sinalizado', revenda: 'Revenda sinalizada' }[ev] || ev;
+                  const ehErro = /erro$/.test(ev);
+                  const ehPendencia = /(vazio|faltam_docs)$/.test(ev);
+                  const cor = ehErro ? '#dc2626' : (ehPendencia ? '#b45309' : '#059669');
+                  const rot = {
+                    relatorio_mercado_ok: 'Relatório mercadológico', relatorio_mercado_vazio: 'Mercado não estimado', relatorio_mercado_erro: 'Erro no relatório mercadológico',
+                    relatorio_documental_ok: 'Relatório documental', relatorio_documental_erro: 'Erro no documental', relatorio_documental_faltam_docs: 'Documental: faltam documentos',
+                    relatorio_laudo_ok: 'Laudo / conclusão', relatorio_laudo_erro: 'Erro no laudo',
+                    arremate: 'Arremate sinalizado', revenda: 'Revenda sinalizada',
+                  }[ev] || ev;
+                  // Diagnóstico (o que o dono pediu: PORQUÊ · FONTE · IMPACTO · qual imóvel) —
+                  // vem do meta do log; só surfaça quando é FALHA/pendência (não polui os OK).
+                  const m = a.meta || {};
+                  const diag = [];
+                  if (ehErro || ehPendencia) {
+                    if (m.erroApi) diag.push(`Causa: ${String(m.erroApi).slice(0, 90)}`);
+                    if (m.fonte) diag.push(`Fonte: ${m.fonte}`);
+                    if (m.comparaveis != null) diag.push(`Comparáveis: ${m.comparaveis}`);
+                    if (m.cidade) diag.push(`Cidade: ${m.cidade}`);
+                    if (m.imovelId) diag.push(`Imóvel: ${String(m.imovelId).slice(0, 8)}`);
+                  }
                   return (
-                    <div key={i} style={{ fontSize: 12, color: '#334155', display: 'flex', justifyContent: 'space-between', gap: 8, borderTop: i ? '1px solid #f1f5f9' : 'none', paddingTop: i ? 5 : 0 }}>
-                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        <span style={{ color: cor, fontWeight: 700 }}>{rot}</span>
-                        {a.detalhe ? <span style={{ color: '#64748b' }}> · {a.detalhe}</span> : ''}
-                      </span>
-                      <span style={{ flexShrink: 0, color: '#94a3b8' }}>{dataBR(a.criado_em)}</span>
+                    <div key={i} style={{ fontSize: 12, color: '#334155', borderTop: i ? '1px solid #f1f5f9' : 'none', paddingTop: i ? 5 : 0 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
+                          <span style={{ color: cor, fontWeight: 700 }}>{rot}</span>
+                          {a.detalhe ? <span style={{ color: '#64748b' }}> · {a.detalhe}</span> : ''}
+                        </span>
+                        <span style={{ flexShrink: 0, color: '#94a3b8' }}>{dataBR(a.criado_em)}</span>
+                      </div>
+                      {diag.length > 0 && <div style={{ fontSize: 10.5, color: '#94a3b8', marginTop: 2, whiteSpace: 'normal' }}>{diag.join(' · ')}</div>}
                     </div>
                   );
                 })}
