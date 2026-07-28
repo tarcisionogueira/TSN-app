@@ -31,10 +31,15 @@ export default async function handler(req) {
 
   let body;
   try { body = await req.json(); } catch { return new Response(JSON.stringify({ error: 'JSON inválido' }), { status: 400, headers }); }
-  const { token, tipo_pessoa, dados, assinatura, docs_identidade, testemunha } = body || {};
+  const { token, tipo_pessoa, dados, assinatura, docs_identidade, testemunha, geo } = body || {};
   if (!token || !assinatura || !dados) {
     return new Response(JSON.stringify({ error: 'Dados de assinatura incompletos' }), { status: 400, headers });
   }
+  // Pontos de autenticação (padrão ZapSign): dispositivo pelo user-agent do SERVIDOR (mais confiável
+  // que o enviado pelo cliente); localização aproximada só se o cliente consentiu (navigator.geolocation).
+  const userAgent = req.headers.get('user-agent')?.slice(0, 400) || null;
+  const geoOk = geo && Number.isFinite(Number(geo.lat)) && Number.isFinite(Number(geo.lng))
+    ? { lat: Number(geo.lat), lng: Number(geo.lng) } : null;
   // Formato estrito do token (o default do banco é hex de 40 chars) — evita valores
   // gigantes/caracteres inesperados injetados no filtro PostgREST deste endpoint público.
   if (!/^[A-Za-z0-9_-]{8,128}$/.test(String(token))) {
@@ -69,6 +74,8 @@ export default async function handler(req) {
       assinatura,
       assinado_em,
       assinante_ip: ip,
+      assinante_user_agent: userAgent,
+      assinante_geo: geoOk,
       assinatura_hash: hash,
       docs_identidade: docs_identidade || null,
       // Testemunha (quando o contrato exige assinatura de testemunha)

@@ -7,6 +7,19 @@ import { formatCpf, formatCnpj } from '../utils/cnpjCep';
 import EnderecoAutocomplete from '../components/EnderecoAutocomplete';
 import { gerarContratoPDF } from '../components/ContratoPDF';
 
+// Localização aproximada (best-effort, com consentimento) — ponto de autenticação no padrão ZapSign.
+// Nunca bloqueia a assinatura: se negar/expirar, segue sem geo.
+function capturarGeo() {
+  return new Promise((resolve) => {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) return resolve(null);
+    navigator.geolocation.getCurrentPosition(
+      (p) => resolve({ lat: p.coords.latitude, lng: p.coords.longitude }),
+      () => resolve(null),
+      { timeout: 7000, maximumAge: 60000 }
+    );
+  });
+}
+
 const DOCS_LABELS = {
   foto_doc: 'Foto do documento de identidade (RG ou CNH)',
   selfie: 'Selfie (foto do rosto)',
@@ -259,13 +272,16 @@ export default function ContratoLink() {
     // concluir, recebe um LINK para encaminhar à sua testemunha (assina remotamente).
 
     setEnviando(true);
+    // Ponto de autenticação (ZapSign): localização aproximada, best-effort. O dispositivo (user-agent)
+    // e o IP são capturados no servidor. Nada disso bloqueia a assinatura.
+    const geo = await capturarGeo();
     // Finaliza no servidor: IP, carimbo de tempo e hash (incluindo o conteúdo do
     // contrato) são gerados de forma autoritativa — não confiáveis se vindos do cliente.
     try {
       const resp = await fetch('/api/assinar-contrato', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, tipo_pessoa: tipoPessoa, dados, assinatura, docs_identidade: imagensIdentidade, testemunha: null }),
+        body: JSON.stringify({ token, tipo_pessoa: tipoPessoa, dados, assinatura, docs_identidade: imagensIdentidade, testemunha: null, geo }),
       });
       const out = await resp.json().catch(() => ({}));
       if (!resp.ok || !out.ok) { alert('Erro ao assinar: ' + (out.error || 'tente novamente')); setEnviando(false); return; }
@@ -278,6 +294,26 @@ export default function ContratoLink() {
   // Baixa o DOCUMENTO assinado (contrato + manifesto de assinaturas com os elementos de validade
   // jurídica NO PRÓPRIO documento) via impressão → "Salvar como PDF". Substitui o antigo .txt.
   const baixarDocumento = () => gerarContratoPDF({ contrato, roster });
+
+  // COMPLETAR pontos de autenticação (dispositivo/localização) de uma assinatura já feita ANTES de
+  // o sistema capturá-los. Não re-assina, não altera assinatura/hash/carimbo originais.
+  const [completando, setCompletando] = useState(false);
+  const completarDados = async () => {
+    setCompletando(true);
+    try {
+      const geo = await capturarGeo();
+      const resp = await fetch('/api/complementar-assinatura', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, geo }),
+      });
+      const out = await resp.json().catch(() => ({}));
+      if (resp.ok && out.ok) {
+        const { data } = await supabase.rpc('get_contrato_por_token', { p_token: token });
+        const c = Array.isArray(data) ? data[0] : data; if (c) setContrato(c);
+      } else { alert(out.error || 'Não foi possível completar os dados.'); }
+    } catch { alert('Não foi possível completar os dados.'); }
+    setCompletando(false);
+  };
 
   if (loading) return (
     <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#111111' }}>
@@ -370,6 +406,17 @@ export default function ContratoLink() {
             {contrato.assinatura_hash && (
               <div style={{ marginTop:14, paddingTop:12, borderTop:'1px solid #1e293b', fontSize:11, color:'#64748b', wordBreak:'break-all' }}>
                 <strong style={{ color:'#94a3b8' }}>Código de verificação (SHA-256):</strong> {contrato.assinatura_hash}
+              </div>
+            )}
+            {/* Assinaturas antigas, sem dispositivo/localização: o próprio signatário completa agora,
+                sem re-assinar (não altera assinatura/hash/carimbo originais). */}
+            {contrato.status === 'assinado' && (!contrato.assinante_user_agent || !contrato.assinante_geo) && (
+              <div style={{ marginTop:14, padding:'12px 14px', background:'rgba(234,179,8,0.08)', border:'1px solid rgba(234,179,8,0.3)', borderRadius:10 }}>
+                <div style={{ fontSize:12.5, color:'#eab308', fontWeight:700, marginBottom:8 }}>Complete os dados de autenticação deste documento (dispositivo e localização).</div>
+                <button onClick={completarDados} disabled={completando}
+                  style={{ display:'flex', alignItems:'center', gap:7, padding:'9px 15px', background: completando ? '#334155' : '#eab308', color: completando ? '#94a3b8' : '#111', border:'none', borderRadius:9, fontWeight:800, fontSize:13, cursor: completando ? 'default' : 'pointer' }}>
+                  {completando ? 'Registrando…' : 'Completar dados de autenticação'}
+                </button>
               </div>
             )}
             <button onClick={baixarDocumento} style={{ marginTop:16, display:'flex', alignItems:'center', gap:7, padding:'10px 16px', background:'#0D63DB', color:'white', border:'none', borderRadius:9, fontWeight:700, fontSize:13, cursor:'pointer' }}>

@@ -72,11 +72,16 @@ export function gerarContratoPDF({ contrato, roster = [] } = {}) {
     const meu = !!p.eu;
     const pontos = [];
     if (meu) {
+      if (ds.telefone) pontos.push(`<div>Telefone: ${esc(ds.telefone)}</div>`);
       if (ds.email) pontos.push(`<div>E-mail: ${esc(ds.email)}</div>`);
       if (ds.cpf) pontos.push(`<div>CPF: ${esc(ds.cpf)}</div>`);
       if (ds.cnpj) pontos.push(`<div>CNPJ: ${esc(ds.cnpj)}</div>`);
-      if (contrato.assinante_ip) pontos.push(`<div>IP: ${esc(contrato.assinante_ip)}</div>`);
       pontos.push('<div>Nível de segurança: assinatura eletrônica (manuscrita em tela), com carimbo de data/hora do servidor</div>');
+      const g = contrato.assinante_geo;
+      if (g && Number.isFinite(Number(g.lat)) && Number.isFinite(Number(g.lng))) pontos.push(`<div>Localização aproximada: ${esc(Number(g.lat).toFixed(6))}, ${esc(Number(g.lng).toFixed(6))}</div>`);
+      if (contrato.assinante_ip) pontos.push(`<div>IP: ${esc(contrato.assinante_ip)}</div>`);
+      if (contrato.assinante_user_agent) pontos.push(`<div>Dispositivo: ${esc(contrato.assinante_user_agent)}</div>`);
+      if (contrato.dados_complementados_em) pontos.push(`<div style="color:#94a3b8;">(dispositivo/localização complementados em ${esc(dataHora(contrato.dados_complementados_em))})</div>`);
     }
     if (p.requer_testemunha) pontos.push(`<div>Testemunha: ${p.testemunha_assinou ? 'assinou' : 'pendente'}${meu && contrato.nome_testemunha ? ' — ' + esc(contrato.nome_testemunha) : ''}</div>`);
     const img = meu && contrato.assinatura ? `<img class="assimg" src="${esc(contrato.assinatura)}" alt="assinatura" />` : '';
