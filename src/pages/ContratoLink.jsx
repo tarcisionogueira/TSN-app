@@ -285,12 +285,16 @@ export default function ContratoLink() {
       contrato.conteudo || (contrato.arquivo_url ? `Documento anexo: ${contrato.arquivo_url}` : ''),
       '──────────────────────────────────────',
       '',
-      'ASSINATURAS',
+      'ASSINATURAS E VALIDADE JURÍDICA',
+      'Assinado eletronicamente nos termos da MP 2.200-2/2001 (ICP-Brasil) e da Lei 14.063/2020.',
       ...(roster.length
         ? roster.map(p => `- ${p.nome}: ${p.assinou ? 'ASSINOU' + (p.assinado_em ? ' em ' + new Date(p.assinado_em).toLocaleString('pt-BR') : '') : 'PENDENTE'}${p.requer_testemunha ? ` · testemunha: ${p.testemunha_assinou ? 'assinou' : 'pendente'}` : ''}`)
         : ['- (situação indisponível)']),
     ];
-    if (contrato.assinatura_hash) linhas.push('', `Hash SHA-256 (sua assinatura): ${contrato.assinatura_hash}`);
+    if (contrato.dados_signatario?.cpf) linhas.push(`Seu CPF: ${contrato.dados_signatario.cpf}`);
+    if (contrato.dados_signatario?.cnpj) linhas.push(`Seu CNPJ: ${contrato.dados_signatario.cnpj}`);
+    if (contrato.assinante_ip) linhas.push(`Seu IP de origem: ${contrato.assinante_ip}`);
+    if (contrato.assinatura_hash) linhas.push('', `Código de verificação (SHA-256): ${contrato.assinatura_hash}`);
     const blob = new Blob([linhas.join('\n')], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -341,41 +345,60 @@ export default function ContratoLink() {
             </div>
           </div>
 
-          {/* Partes e assinaturas */}
-          <div style={{ background:'#0f172a', border:'1px solid #1e293b', borderRadius:12, padding:'16px 18px' }}>
-            <div style={{ fontSize:12, fontWeight:800, color:'#94a3b8', textTransform:'uppercase', letterSpacing:1, marginBottom:12 }}>Partes e assinaturas</div>
-            {roster.length === 0 ? (
-              <div style={{ color:'#64748b', fontSize:13 }}>Carregando situação…</div>
-            ) : roster.map((p, i) => (
-              <div key={i} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:10, padding:'9px 0', borderTop: i ? '1px solid #1e293b' : 'none' }}>
-                <div style={{ minWidth:0 }}>
-                  <div style={{ fontSize:14, fontWeight:700, color:'white', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{p.nome}{p.eu ? ' (você)' : ''}</div>
-                  {p.requer_testemunha && <div style={{ fontSize:11.5, color:'#64748b' }}>Testemunha: {p.testemunha_assinou ? 'assinou' : 'pendente'}</div>}
-                </div>
-                <span style={{ flexShrink:0, fontSize:11.5, fontWeight:700, padding:'4px 11px', borderRadius:20, background: p.assinou ? 'rgba(52,211,153,0.15)' : 'rgba(234,179,8,0.15)', color: p.assinou ? '#34d399' : '#eab308', display:'flex', alignItems:'center', gap:5 }}>
-                  {p.assinou ? <CheckCircle2 size={13} /> : <Clock size={13} />}
-                  {p.assinou ? (p.assinado_em ? `Assinou ${new Date(p.assinado_em).toLocaleDateString('pt-BR')}` : 'Assinou') : 'Pendente'}
-                </span>
+          {/* Documento (o layout da página) */}
+          <div>
+            <div style={{ fontSize:11, color:'#475569', fontWeight:700, textTransform:'uppercase', letterSpacing:1, marginBottom:10 }}>
+              {contrato.arquivo_url ? 'Documento' : 'Conteúdo do contrato'}
+            </div>
+            {contrato.arquivo_url ? (
+              contrato.arquivo_url.match(/\.(jpg|jpeg|png|gif|webp)$/i)
+                ? <img src={contrato.arquivo_url} alt="Documento" style={{ width:'100%', borderRadius:10, maxHeight:560, objectFit:'contain', background:'#0f172a' }} />
+                : <a href={contrato.arquivo_url} target="_blank" rel="noreferrer" style={{ display:'flex', alignItems:'center', gap:8, padding:'14px 18px', background:'rgba(96,165,250,0.1)', border:'1px solid rgba(96,165,250,0.3)', borderRadius:10, color:'#60a5fa', fontWeight:700, fontSize:14, textDecoration:'none' }}><ExternalLink size={16} /> Abrir documento</a>
+            ) : (
+              <div style={{ whiteSpace:'pre-wrap', fontSize:13.5, lineHeight:1.9, color:'#cbd5e1', background:'#0f172a', borderRadius:12, padding:'20px 22px', border:'1px solid #1e293b' }}>
+                {contrato.conteudo}
               </div>
-            ))}
-            <button onClick={baixarComprovante} style={{ marginTop:14, display:'flex', alignItems:'center', gap:7, padding:'10px 16px', background:'#0D63DB', color:'white', border:'none', borderRadius:9, fontWeight:700, fontSize:13, cursor:'pointer' }}>
-              <Download size={15} /> Baixar documento
-            </button>
+            )}
           </div>
 
-          {/* Documento (layout da página) */}
-          <div style={{ fontSize:11, color:'#475569', fontWeight:700, textTransform:'uppercase', letterSpacing:1 }}>
-            {contrato.arquivo_url ? 'Documento' : 'Conteúdo do contrato'}
-          </div>
-          {contrato.arquivo_url ? (
-            contrato.arquivo_url.match(/\.(jpg|jpeg|png|gif|webp)$/i)
-              ? <img src={contrato.arquivo_url} alt="Documento" style={{ width:'100%', borderRadius:10, maxHeight:560, objectFit:'contain', background:'#0f172a' }} />
-              : <a href={contrato.arquivo_url} target="_blank" rel="noreferrer" style={{ display:'flex', alignItems:'center', gap:8, padding:'14px 18px', background:'rgba(96,165,250,0.1)', border:'1px solid rgba(96,165,250,0.3)', borderRadius:10, color:'#60a5fa', fontWeight:700, fontSize:14, textDecoration:'none' }}><ExternalLink size={16} /> Abrir documento</a>
-          ) : (
-            <div style={{ whiteSpace:'pre-wrap', fontSize:13.5, lineHeight:1.9, color:'#cbd5e1', background:'#0f172a', borderRadius:12, padding:'20px 22px', border:'1px solid #1e293b' }}>
-              {contrato.conteudo}
+          {/* AO FINAL DO DOCUMENTO: assinaturas + validade jurídica (o que a MP 2.200-2/2001 e a Lei
+              14.063/2020 pedem: identificação dos signatários, data/hora, IP e código de integridade). */}
+          <div style={{ background:'#0f172a', border:'1px solid #1e293b', borderRadius:12, padding:'18px 20px' }}>
+            <div style={{ fontSize:12, fontWeight:800, color:'#94a3b8', textTransform:'uppercase', letterSpacing:1, marginBottom:6 }}>Assinaturas e validade jurídica</div>
+            <div style={{ fontSize:12, color:'#64748b', lineHeight:1.7, marginBottom:14 }}>
+              Documento assinado eletronicamente nos termos da MP 2.200-2/2001 (ICP-Brasil) e da Lei 14.063/2020. A integridade é garantida pelo código de verificação (hash SHA-256) abaixo; qualquer alteração no texto invalida a assinatura.
             </div>
-          )}
+            {roster.length === 0 ? (
+              <div style={{ color:'#64748b', fontSize:13 }}>Carregando…</div>
+            ) : roster.map((p, i) => (
+              <div key={i} style={{ padding:'11px 0', borderTop: i ? '1px solid #1e293b' : 'none' }}>
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:10 }}>
+                  <div style={{ fontSize:14, fontWeight:700, color:'white', minWidth:0, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{p.nome}{p.eu ? ' (você)' : ''}</div>
+                  <span style={{ flexShrink:0, fontSize:11.5, fontWeight:700, padding:'4px 11px', borderRadius:20, background: p.assinou ? 'rgba(52,211,153,0.15)' : 'rgba(234,179,8,0.15)', color: p.assinou ? '#34d399' : '#eab308', display:'flex', alignItems:'center', gap:5 }}>
+                    {p.assinou ? <CheckCircle2 size={13} /> : <Clock size={13} />}
+                    {p.assinou ? 'Assinou' : 'Pendente'}
+                  </span>
+                </div>
+                <div style={{ fontSize:11.5, color:'#64748b', lineHeight:1.7, marginTop:4 }}>
+                  {p.assinou && p.assinado_em && <div>Assinado em {new Date(p.assinado_em).toLocaleString('pt-BR')}</div>}
+                  {p.requer_testemunha && <div>Testemunha: {p.testemunha_assinou ? 'assinou' : 'pendente'}</div>}
+                  {p.eu && contrato.status === 'assinado' && (<>
+                    {contrato.dados_signatario?.cpf && <div>CPF: {contrato.dados_signatario.cpf}</div>}
+                    {contrato.dados_signatario?.cnpj && <div>CNPJ: {contrato.dados_signatario.cnpj}</div>}
+                    {contrato.assinante_ip && <div>IP de origem: {contrato.assinante_ip}</div>}
+                  </>)}
+                </div>
+              </div>
+            ))}
+            {contrato.assinatura_hash && (
+              <div style={{ marginTop:14, paddingTop:12, borderTop:'1px solid #1e293b', fontSize:11, color:'#64748b', wordBreak:'break-all' }}>
+                <strong style={{ color:'#94a3b8' }}>Código de verificação (SHA-256):</strong> {contrato.assinatura_hash}
+              </div>
+            )}
+            <button onClick={baixarComprovante} style={{ marginTop:16, display:'flex', alignItems:'center', gap:7, padding:'10px 16px', background:'#0D63DB', color:'white', border:'none', borderRadius:9, fontWeight:700, fontSize:13, cursor:'pointer' }}>
+              <Download size={15} /> Baixar documento assinado
+            </button>
+          </div>
         </div>
       </div>
     );

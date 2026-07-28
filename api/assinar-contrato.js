@@ -140,6 +140,34 @@ export default async function handler(req) {
         p_meta: { contrato_id: contrato.id, grupo_id: gid, assinadas, total },
       }) }).catch(() => {});
     }
+
+    // ENTREGA DO DOCUMENTO ASSINADO (pedido do dono): quando TODAS as partes assinaram, CADA parte
+    // recebe por e-mail o link do documento devidamente assinado (abre em modo leitura pelo token,
+    // sem precisar de conta). Vale para grupo (várias partes) e para contrato de parte única.
+    if (completo) {
+      const origin = req.headers.get('origin') || process.env.APP_ORIGIN || 'https://bidprobrasil.com.br';
+      let partes = [];
+      if (gid) {
+        partes = await sb(`contratos_link?contrato_grupo_id=eq.${encodeURIComponent(gid)}&select=assinante_email,token`).then(x => x.json()).catch(() => []);
+      } else {
+        partes = [{ assinante_email: contrato.assinante_email, token }];
+      }
+      if (Array.isArray(partes)) {
+        await Promise.all(partes.filter(p => p?.assinante_email && p?.token).map(p =>
+          enviarEmail({
+            to: p.assinante_email,
+            subject: `📄 Documento assinado por todas as partes: ${titulo}`,
+            html: `<p>Olá!</p>
+                   <p>O contrato <strong>${titulo}</strong> foi assinado por TODAS as partes e agora tem validade jurídica (MP 2.200-2/2001 e Lei 14.063/2020).</p>
+                   <p>Acesse o documento devidamente assinado, com as informações de assinatura ao final:</p>
+                   <p><a href="${origin}#/c/${p.token}" style="display:inline-block;padding:11px 20px;background:#0D63DB;color:#fff;border-radius:8px;text-decoration:none;font-weight:700">Ver documento assinado</a></p>
+                   <p>Ou copie o link: ${origin}#/c/${p.token}</p>
+                   <p>BidPro Brasil</p>`,
+            meta: { tipo: 'contrato' },
+          }).catch(() => {})
+        ));
+      }
+    }
   } catch { /* notificação é best-effort */ }
 
   return new Response(JSON.stringify({ ok: true, assinado_em, hash }), { status: 200, headers });

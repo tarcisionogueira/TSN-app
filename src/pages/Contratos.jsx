@@ -266,12 +266,6 @@ export default function Contratos() {
                     style={{ padding: isMobile ? '10px 12px' : '8px 14px', background: '#f1f5f9', color: '#475569', border: 'none', borderRadius: 8, fontWeight: 600, fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, minHeight: 44 }}>
                     <Users size={13} /> Assinantes
                   </button>
-                  {c.status === 'assinado' && (
-                    <button onClick={() => baixarComprovante(c)}
-                      style={{ padding: isMobile ? '10px 12px' : '8px 14px', background: '#f1f5f9', color: '#475569', border: 'none', borderRadius: 8, fontWeight: 600, fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, minHeight: 44 }}>
-                      <Download size={13} /> Comprovante
-                    </button>
-                  )}
                   <button onClick={() => nav(`/c/${c.token}`)}
                     style={{ padding: isMobile ? '12px 16px' : '8px 16px', background: aguardando ? '#0D63DB' : '#f1f5f9', color: aguardando ? 'white' : '#475569', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer', minHeight: 44, width: isMobile ? '100%' : 'auto' }}>
                     {aguardando ? 'Ler e assinar' : 'Visualizar'}
