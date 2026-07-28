@@ -97,7 +97,7 @@ export async function buscarCliente({ gatewayCustomerId, email, gateway }) {
     const campo = gateway === 'mercadopago' ? 'mp_id' : 'asaas_id';
     const { data } = await supabase
       .from('perfis')
-      .select('id, indicado_por, comissionado_por, role, role_anterior, inadimplente_desde')
+      .select('id, indicado_por, comissionado_por, role, role_anterior, inadimplente_desde, plano_pago_em')
       .eq(campo, gatewayCustomerId)
       .maybeSingle();
     if (data) return data;
@@ -109,7 +109,7 @@ export async function buscarCliente({ gatewayCustomerId, email, gateway }) {
     if (userId) {
       const { data } = await supabase
         .from('perfis')
-        .select('id, indicado_por, comissionado_por, role, role_anterior, inadimplente_desde')
+        .select('id, indicado_por, comissionado_por, role, role_anterior, inadimplente_desde, plano_pago_em')
         .eq('id', userId)
         .maybeSingle();
       if (data) return data;
@@ -272,6 +272,16 @@ export async function processarConfirmado({ valor, descricao, email, gatewayCust
       ? cliente.role_anterior
       : mapeado.role;
     if (cliente.role_anterior && cliente.inadimplente_desde) update.role_anterior = null;
+    // Garantia de 7 dias (CDC art. 49): ancora plano_pago_em na 1ª ativação paga —
+    // MESMO critério do ativarPlanoDireto. Sem isto, quem paga via Asaas ou plano ANUAL
+    // avulso (ambos caem NESTE caminho, não no ativarPlanoDireto) ficava com
+    // plano_pago_em=null e tinha o reembolso de 7 dias NEGADO indevidamente
+    // (garantia-cancelar.js: dentro7 = null → reembolso:false). Renovação/reativação
+    // (já pagante OU já ancorado) não reinicia a janela.
+    const PAGANTES = ['top2', 'assessorado', 'clube', 'top2_anual', 'assessorado_anual', 'clube_anual'];
+    if (!cliente.plano_pago_em && !PAGANTES.includes(cliente.role)) {
+      update.plano_pago_em = new Date().toISOString();
+    }
   }
 
   const { error } = await supabase.from('perfis').update(update).eq('id', cliente.id);
