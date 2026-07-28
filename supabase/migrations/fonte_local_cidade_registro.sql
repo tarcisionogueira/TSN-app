@@ -1,0 +1,6 @@
+-- REGISTRO DE FONTES LOCAIS por praça (imobiliárias locais) com revalidação ORGÂNICA: cada relatório
+-- marca ult_visto=now das fontes que usou; a leitura (fontes_locais_frescas) só devolve as vistas nos
+-- últimos N dias — empresas que fecham envelhecem sozinhas, SEM cron de manutenção. O relatório injeta
+-- as conhecidas (economiza busca de descoberta) e registra novas (registrar_fontes_locais, dedup por
+-- domínio). Aplicada via MCP em produção; ver definições vigentes com pg_get_functiondef.
+-- (tabela fonte_local_cidade + funções fontes_locais_frescas / registrar_fontes_locais aplicadas em prod.)
