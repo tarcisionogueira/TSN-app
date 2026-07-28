@@ -11,6 +11,7 @@ export const config = { runtime: 'nodejs' };
 
 import { checkRateLimit } from './_rate-limit.js';
 import { hashCpf, encryptCpf, validarCPF } from './_cpf.js';
+import { enviarEmail } from './_email.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -81,6 +82,31 @@ export default async function handler(req, res) {
       });
     } catch { /* best-effort; app tolera ausência de perfil */ }
   }
+
+  // E-mail de boas-vindas + AVISO anti-"squatting" (decisão do dono): o cadastro grátis é
+  // instantâneo (sem etapa de confirmação), então avisamos o dono do endereço que a conta
+  // foi criada. Se não foi ele, pode ASSUMIR o acesso via "Esqueci minha senha" (o link de
+  // redefinição só chega no e-mail dele) ou falar com o suporte. Best-effort: nunca derruba
+  // o cadastro se o envio falhar.
+  try {
+    const loginUrl = `${origin}/#/login`;
+    const primeiroNome = nome.split(' ')[0] || 'Investidor';
+    await enviarEmail({
+      to: email,
+      subject: 'Bem-vindo(a) à BidPro Brasil — sua conta grátis foi criada',
+      html: `<div style="font-family:Arial,Helvetica,sans-serif;max-width:520px;margin:0 auto;color:#1e293b">
+        <h2 style="color:#0D63DB;margin:0 0 12px">Olá, ${primeiroNome}! 👋</h2>
+        <p style="font-size:15px;line-height:1.6">Sua conta <strong>grátis (Explorador)</strong> na BidPro Brasil foi criada e já está ativa. Você pode buscar leilões em todo o Brasil, usar a calculadora de arrematação e acessar os materiais gratuitos.</p>
+        <p style="margin:20px 0"><a href="${loginUrl}" style="background:#0D63DB;color:#fff;text-decoration:none;padding:11px 22px;border-radius:8px;font-weight:700;display:inline-block">Acessar minha conta</a></p>
+        <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:12px 16px;font-size:13px;line-height:1.6;color:#9a3412">
+          <strong>Não reconhece este cadastro?</strong> Se não foi você quem criou esta conta, alguém pode ter usado o seu e-mail. Você pode assumir o acesso em <a href="${loginUrl}" style="color:#9a3412;font-weight:700">${loginUrl.replace(/^https?:\/\//, '')}</a> usando <strong>"Esqueci minha senha"</strong> (o link de redefinição só chega neste e-mail), ou responder a esta mensagem que ajudamos.
+        </div>
+        <p style="font-size:12px;color:#94a3b8;margin-top:20px">BidPro Brasil — Leilão &amp; Investimentos</p>
+      </div>`,
+      text: `Olá, ${primeiroNome}!\n\nSua conta grátis (Explorador) na BidPro Brasil foi criada e já está ativa. Acesse em ${loginUrl}.\n\nNão reconhece este cadastro? Se não foi você, alguém pode ter usado o seu e-mail. Assuma o acesso em ${loginUrl} usando "Esqueci minha senha" (o link só chega neste e-mail), ou responda a esta mensagem.\n\nBidPro Brasil — Leilão & Investimentos`,
+      meta: { tipo: 'boas_vindas_gratis', user_id: userId },
+    });
+  } catch { /* best-effort — nunca derruba o cadastro */ }
 
   return res.status(200).json({ ok: true, userId });
 }
