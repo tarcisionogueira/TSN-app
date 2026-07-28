@@ -138,6 +138,18 @@ export default function Planos() {
 
   const atual = (key) => user && (key === role || `${key}_anual` === role);
 
+  // Posição do plano na escada (p/ rotular a CTA como atual/upgrade/downgrade quando logado).
+  const RANK = { explorador: 0, top2: 1, top2_anual: 1, assessorado: 2, assessorado_anual: 2, clube: 3, clube_anual: 3 };
+  const meuRank = user ? (RANK[role] ?? -1) : -1; // -1 = visitante ou papel sem plano de cliente (equipe)
+  // Retorna 'atual' | 'downgrade' | 'contratar' para o card `key`.
+  const ctaTipo = (key) => {
+    if (atual(key)) return 'atual';
+    if (meuRank >= 0 && RANK[key] < meuRank) return 'downgrade';
+    return 'contratar';
+  };
+  // Downgrade/cancelamento é gerido em Meu Perfil › Assinatura (não refaz cobrança aqui).
+  const irDowngrade = () => nav('/perfil');
+
   const CheckItem = ({ txt, light, off }) => (
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, opacity: off ? 0.65 : 1 }}>
       <div style={{ width: 18, height: 18, borderRadius: '50%', background: off ? '#f1f5f9' : light ? 'rgba(134,239,172,0.2)' : '#dcfce7', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2 }}>
@@ -261,9 +273,9 @@ export default function Planos() {
               {['Busca de leilões em todo o Brasil', '3 relatórios Mercadológicos + Viabilidade/mês', 'Calculadora de Arrematação', 'Cursos e materiais gratuitos', 'Acesso ao site do leiloeiro'].map(t => <CheckItem key={t} txt={t} />)}
               <CheckItem txt="Análise Documental e Jurídica (Investidor Pro)" off />
             </div>
-            <button onClick={() => nav('/checkout?plano=explorador')} disabled={atual('explorador')}
+            <button onClick={() => ctaTipo('explorador') === 'downgrade' ? irDowngrade() : nav('/checkout?plano=explorador')} disabled={atual('explorador')}
               style={{ width: '100%', padding: '14px', border: 'none', borderRadius: 12, background: atual('explorador') ? '#f1f5f9' : '#111', color: atual('explorador') ? '#94a3b8' : 'white', fontWeight: 800, fontSize: 15, cursor: atual('explorador') ? 'default' : 'pointer' }}>
-              {atual('explorador') ? 'Seu plano atual' : 'Começar grátis →'}
+              {atual('explorador') ? 'Seu plano atual' : ctaTipo('explorador') === 'downgrade' ? 'Fazer downgrade' : 'Começar grátis →'}
             </button>
             <BotaoCompartilhar planoKey="explorador" />
           </div>
@@ -311,9 +323,9 @@ export default function Planos() {
                 'Relatórios adicionais por crédito (sem limite)',
               ].map(t => <CheckItem key={t} txt={t} light />)}
             </div>
-            <button onClick={() => nav('/checkout?plano=top2')} disabled={atual('top2')}
+            <button onClick={() => ctaTipo('top2') === 'downgrade' ? irDowngrade() : nav('/checkout?plano=top2')} disabled={atual('top2')}
               style={{ width: '100%', padding: '14px', border: 'none', borderRadius: 12, background: atual('top2') ? 'rgba(255,255,255,0.15)' : 'white', color: atual('top2') ? '#93c5fd' : '#084BA6', fontWeight: 800, fontSize: 15, cursor: atual('top2') ? 'default' : 'pointer', boxShadow: atual('top2') ? 'none' : '0 4px 16px rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-              {atual('top2') ? 'Seu plano atual' : <><span>Assinar Investidor Pro</span> <ArrowRight size={16} /></>}
+              {atual('top2') ? 'Seu plano atual' : ctaTipo('top2') === 'downgrade' ? 'Fazer downgrade' : <><span>Assinar Investidor Pro</span> <ArrowRight size={16} /></>}
             </button>
             <BotaoCompartilhar planoKey="top2" dark />
           </div>
@@ -355,9 +367,9 @@ export default function Planos() {
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 11, marginBottom: 28 }}>
                 {['Tudo do Investidor Pro', 'Análise jurídica e estratégia de lance', 'Acompanhamento até a imissão de posse', 'Suporte com documentação pós-arrematação', 'Registro do imóvel via plataforma (ONR)', '12 meses de acesso · extensível até a posse'].map(t => <CheckItem key={t} txt={t} />)}
               </div>
-              <button onClick={() => ir('assessorado')} disabled={atual('assessorado')}
+              <button onClick={() => ctaTipo('assessorado') === 'downgrade' ? irDowngrade() : ir('assessorado')} disabled={atual('assessorado')}
                 style={{ width: '100%', padding: '14px', border: 'none', borderRadius: 12, background: atual('assessorado') ? '#f1f5f9' : '#d97706', color: atual('assessorado') ? '#94a3b8' : 'white', fontWeight: 800, fontSize: 15, cursor: atual('assessorado') ? 'default' : 'pointer', boxShadow: atual('assessorado') ? 'none' : '0 4px 14px rgba(217,119,6,0.35)' }}>
-                {atual('assessorado') ? 'Seu plano atual' : 'Contratar assessoria →'}
+                {atual('assessorado') ? 'Seu plano atual' : ctaTipo('assessorado') === 'downgrade' ? 'Fazer downgrade' : 'Contratar assessoria →'}
               </button>
               <BotaoCompartilhar planoKey="assessorado" />
             </div>

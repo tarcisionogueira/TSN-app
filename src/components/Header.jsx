@@ -176,10 +176,11 @@ export default function Header() {
     ...(ROLES_CALC.includes(effectiveRole) ? [{ path: '/calculadora', label: 'Calculadora', icon: Calculator, tourId: 'calculadora' }] : []),
   ];
   // Enquanto auth carrega: mostra links públicos para evitar flash.
-  // Logado: NÃO mostra "Planos" no topo — a gestão de assinatura (incl. upgrade/
-  // downgrade) mora em Meu Perfil › Assinatura. "Planos" segue no topo só p/ visitante.
+  // Logado: mantém "Planos" no topo (pedido do dono) — a tela de planos mostra o plano
+  // ATUAL + upgrade/downgrade contextual. A gestão de assinatura detalhada segue em
+  // Meu Perfil › Assinatura.
   const links = (!loading && user)
-    ? [linksPublicos[0], ...linksPrivados]
+    ? [linksPublicos[0], { path: '/planos', label: 'Planos', icon: Tag, tourId: 'planos' }, ...linksPrivados]
     : linksPublicos;
 
   // Tour guiado de "primeiros passos" removido a pedido do dono — no lugar entrará
