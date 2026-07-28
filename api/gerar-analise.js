@@ -1065,7 +1065,7 @@ export default async function handler(req, res) {
               messages.push({ role: 'assistant', content: mData.content }); // devolve o turno pausado p/ continuar
               cont++;
             }
-          } while (stop === 'pause_turn' && cont < 3 && restante() > RESERVA_PARECER + 12000);
+          } while (stop === 'pause_turn' && cont < 8 && restante() > RESERVA_PARECER + 12000);
           const txt = extractText(mData);
           const m = parseJSON(txt) || {};
           m.precoMedioM2 = m.consolidado?.precoMedioM2 || m.nivel2?.precoMedioM2 || 0;

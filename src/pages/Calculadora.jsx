@@ -231,8 +231,13 @@ export default function Calculadora() {
   const rendaLiquidaMensal = vAluguel;
   // Capital de aquisição (sem o carrego do flip, que aqui é custo recorrente do hold).
   const capitalAquisicao = Math.max(0, m.capitalMobilizado - m.custoCarrrego);
-  const yieldLiquidoAnual = capitalAquisicao > 0 ? (rendaLiquidaMensal * 12 / capitalAquisicao) * 100 : 0;
-  const paybackMesesAluguel = rendaLiquidaMensal > 0 ? capitalAquisicao / rendaLiquidaMensal : null;
+  // FINANCIADO: o aluguel SERVE o financiamento. O que de fato sobra (ou falta) no seu caixa por
+  // mês é aluguel − parcela. Antes o rendimento usava o aluguel BRUTO ÷ entrada, ignorando a
+  // parcela → mostrava um yield alto (ex.: 24,7%) num imóvel que na verdade é caixa NEGATIVO.
+  const parcelaFin = isAVista ? 0 : (m.parcelaMedia || 0);
+  const fluxoMensalCaixa = rendaLiquidaMensal - parcelaFin; // pode ser negativo (você banca a diferença)
+  const yieldLiquidoAnual = capitalAquisicao > 0 ? (fluxoMensalCaixa * 12 / capitalAquisicao) * 100 : 0;
+  const paybackMesesAluguel = fluxoMensalCaixa > 0 ? capitalAquisicao / fluxoMensalCaixa : null;
   // Fluxo hold → TIR e múltiplo. IPTU/condomínio ZERADOS aqui: são pagos pelo
   // inquilino, então o caixa do dono é só o aluguel (+ venda ao fim do horizonte).
   const fl = useMemo(() => fluxoLocacao({ ...inputs, iptuMensal: 0, condominioMensal: 0 }, (Number(horizonteAnos) || 1) * 12), [inputs, horizonteAnos]);
@@ -241,14 +246,15 @@ export default function Calculadora() {
   const multiploAluguel = fl.capital > 0 ? retornoTotalAluguel / fl.capital : null;
   // Teto de lance p/ aluguel: maior arremate que mantém o yield líquido ≥ meta.
   const tetoAluguel = useMemo(() => {
-    const rendaAnual = rendaLiquidaMensal * 12;
-    if (rendaAnual <= 0) return 0;
+    if (rendaLiquidaMensal <= 0) return 0;
     let low = 0, high = (vMerc || 0) * 1.5 || 1e9, t = 0;
     for (let i = 0; i < 50; i++) {
       const mid = (low + high) / 2;
       const mm = calcularMetricasCenario(inputs, mid, isAVista);
       const cap = Math.max(0, mm.capitalMobilizado - mm.custoCarrrego);
-      const y = cap > 0 ? (rendaAnual / cap) * 100 : 0;
+      // Yield LÍQUIDO de caixa (aluguel − parcela do financiamento nesse lance), coerente com o card.
+      const netAnual = (rendaLiquidaMensal - (isAVista ? 0 : (mm.parcelaMedia || 0))) * 12;
+      const y = cap > 0 ? (netAnual / cap) * 100 : 0;
       if (y >= (Number(metaYield) || 0)) { t = mid; low = mid; } else { high = mid; }
     }
     return t;
@@ -466,7 +472,7 @@ export default function Calculadora() {
                 <TrendingUp size={16} color="#7c3aed" /> Projeção de aluguel (renda + valorização)
               </div>
               <Linha label="Desconto sobre a avaliação" valor={vAval > 0 ? fmtPct(descontoAvaliacao, 2) : '—'} cor={descontoAvaliacao > 0 ? '#059669' : '#dc2626'} />
-              <Linha label="Total investido" valor={`R$ ${fmt(capitalAquisicao, 2)}`} sublabel="Arremate + custos do leilão + dívidas/reforma" destaque />
+              <Linha label="Total investido" valor={`R$ ${fmt(capitalAquisicao, 2)}`} sublabel={isAVista ? 'Arremate + custos do leilão + dívidas/reforma' : 'Entrada + custos do leilão + dívidas/reforma (o resto é financiado)'} destaque />
               <Linha label="Aluguel por mês (livre para você)" valor={vAluguel > 0 ? `R$ ${fmt(vAluguel, 2)}` : '—'} destaque cor="#059669" sublabel="IPTU e condomínio ficam com o inquilino" />
               {/* Fluxo de caixa mensal quando FINANCIA e ALUGA: a parcela precisa ser
                   coberta pelo aluguel. Sem isto, o cliente não conseguia validar. */}
@@ -485,8 +491,8 @@ export default function Calculadora() {
                 </>
               )}
               <div style={{ marginTop: 4 }} />
-              <Linha label="Rendimento por ano" valor={fmtPct(yieldLiquidoAnual, 2)} destaque cor={yieldLiquidoAnual >= 0 ? '#059669' : '#dc2626'} sublabel="Aluguel de 12 meses dividido pelo total investido" />
-              <Linha label="Tempo p/ o aluguel pagar o que investiu" valor={paybackMesesAluguel ? `${Math.ceil(paybackMesesAluguel)} meses (~${(paybackMesesAluguel / 12).toFixed(1)} anos)` : '—'} />
+              <Linha label="Rendimento por ano" valor={fmtPct(yieldLiquidoAnual, 2)} destaque cor={yieldLiquidoAnual >= 0 ? '#059669' : '#dc2626'} sublabel={isAVista ? 'Aluguel de 12 meses ÷ total investido' : 'Caixa livre (aluguel − parcela) de 12 meses ÷ total investido'} />
+              <Linha label="Tempo p/ o aluguel pagar o que investiu" valor={paybackMesesAluguel ? `${Math.ceil(paybackMesesAluguel)} meses (~${(paybackMesesAluguel / 12).toFixed(1)} anos)` : (isAVista ? '—' : 'O aluguel não cobre a parcela')} />
               <div style={{ margin: '10px 0 4px', padding: '12px 14px', background: '#f5f3ff', borderRadius: 10, border: '1px solid #ddd6fe' }}>
                 <div style={{ fontSize: 10, fontWeight: 800, color: '#6d28d9', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>Ganho total em {horizonteAnos} anos (aluguel + venda no final)</div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>

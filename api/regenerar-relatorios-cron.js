@@ -86,12 +86,13 @@ export default async function handler(req, res) {
     out[tabela] = rows.length;
   }
 
-  // SELF-HEAL do MERCADO: relatório que falhou por TIMEOUT (transitório) é re-tentado UMA vez
-  // (teto 1 = economia) com orçamento fresco. O gerador de mercado exige mercadoInputs → relemos
-  // do `inputs` gravado na própria linha. Mesma janela de assentamento/corte dos demais.
+  // SELF-HEAL do MERCADO: relatório que falhou por TIMEOUT (transitório) é re-tentado com orçamento
+  // fresco. QUALIDADE em 1º lugar (decisão do dono): persiste até 4 tentativas (a cada 6h ≈ 24h) —
+  // antes parava após 1 e o cliente ficava com "erro" preso. Cada tentativa é mais assertiva
+  // (pause_turn cap 8 + salvamento + índice semeando). Relê mercadoInputs do `inputs` da linha.
   let mktRetry = 0;
   try {
-    const q = `analises_mercado?status=eq.erro&erro=ilike.*tempo*limite*&regen_tentativas=lt.1`
+    const q = `analises_mercado?status=eq.erro&erro=ilike.*tempo*limite*&regen_tentativas=lt.4`
       + `&updated_at=lt.${encodeURIComponent(settle)}&updated_at=gt.${encodeURIComponent(janela)}`
       + `&order=updated_at.asc&limit=${LOTE}&select=user_id,imovel_id,titulo,cidade,estado,imovel,inputs,regen_tentativas`;
     const rows = await (await sb(q)).json();
