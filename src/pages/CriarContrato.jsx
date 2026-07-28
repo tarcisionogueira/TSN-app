@@ -532,15 +532,31 @@ export default function CriarContrato() {
           </p>
           {linksGerados.length > 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 520, margin: '0 auto 24px', textAlign: 'left' }}>
-              {linksGerados.map((l, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10 }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: '#111' }}>{l.nome || l.email}</div>
-                    <div style={{ fontSize: 11.5, color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.url}</div>
+              {linksGerados.map((l, i) => {
+                const Copiar = ({ url, k }) => (
+                  <button onClick={() => { navigator.clipboard?.writeText(url); setCopiadoIdx(k); setTimeout(() => setCopiadoIdx(c => c === k ? null : c), 1800); }} style={{ padding: '7px 12px', background: copiadoIdx === k ? '#dcfce7' : '#eff6ff', color: copiadoIdx === k ? '#166534' : '#0D63DB', border: `1px solid ${copiadoIdx === k ? '#86efac' : '#bfdbfe'}`, borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>{copiadoIdx === k ? '✓ Copiado!' : 'Copiar link'}</button>
+                );
+                return (
+                  <div key={i} style={{ padding: '10px 14px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: '#111' }}>{l.nome || l.email}</div>
+                        <div style={{ fontSize: 11.5, color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.url}</div>
+                      </div>
+                      <Copiar url={l.url} k={i} />
+                    </div>
+                    {l.testemunhaUrl && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8, paddingTop: 8, borderTop: '1px dashed #e2e8f0' }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: '#0D63DB' }}>🔗 Link da testemunha desta parte</div>
+                          <div style={{ fontSize: 11.5, color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.testemunhaUrl}</div>
+                        </div>
+                        <Copiar url={l.testemunhaUrl} k={`t${i}`} />
+                      </div>
+                    )}
                   </div>
-                  <button onClick={() => { navigator.clipboard?.writeText(l.url); setCopiadoIdx(i); setTimeout(() => setCopiadoIdx(c => c === i ? null : c), 1800); }} style={{ padding: '7px 12px', background: copiadoIdx === i ? '#dcfce7' : '#eff6ff', color: copiadoIdx === i ? '#166534' : '#0D63DB', border: `1px solid ${copiadoIdx === i ? '#86efac' : '#bfdbfe'}`, borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>{copiadoIdx === i ? '✓ Copiado!' : 'Copiar link'}</button>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
           <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>

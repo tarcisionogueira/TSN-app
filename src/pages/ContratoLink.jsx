@@ -168,6 +168,9 @@ export default function ContratoLink() {
   const [imagensIdentidade, setImagensIdentidade] = useState({}); // { foto_doc: dataUrl, selfie: dataUrl, ... }
   const [testemunha, setTestemunha] = useState({ nome: '', cpf: '' });
   const [assinaturaTest, setAssinaturaTest] = useState(null); // dataURL da assinatura da testemunha
+  const [copiadoT, setCopiadoT] = useState(false); // feedback ao copiar o link da testemunha
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  const testemunhaUrl = contrato?.requer_testemunha && contrato?.testemunha_token ? `${origin}/#/t/${contrato.testemunha_token}` : null;
   const conteudoRef = useRef(null);
 
   const setImagem = useCallback((id, val) => {
@@ -235,11 +238,8 @@ export default function ContratoLink() {
     for (const doc of extrasObrig) {
       if (!imagensIdentidade[doc]) { alert(`Envie: ${DOCS_LABELS[doc]}`); return; }
     }
-    // Testemunha (quando o contrato exige)
-    if (contrato?.requer_testemunha) {
-      if (!testemunha.nome.trim() || testemunha.cpf.replace(/\D/g, '').length !== 11) { alert('Informe o nome e o CPF da testemunha.'); return; }
-      if (!assinaturaTest) { alert('A testemunha precisa assinar no campo de assinatura da testemunha.'); return; }
-    }
+    // Testemunha: NÃO é coletada aqui. Quando o contrato exige, a parte assina sozinha e, ao
+    // concluir, recebe um LINK para encaminhar à sua testemunha (assina remotamente).
 
     setEnviando(true);
     // Finaliza no servidor: IP, carimbo de tempo e hash (incluindo o conteúdo do
@@ -248,8 +248,7 @@ export default function ContratoLink() {
       const resp = await fetch('/api/assinar-contrato', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, tipo_pessoa: tipoPessoa, dados, assinatura, docs_identidade: imagensIdentidade,
-          testemunha: contrato?.requer_testemunha ? { nome: testemunha.nome.trim(), cpf: testemunha.cpf.replace(/\D/g, ''), assinatura: assinaturaTest } : null }),
+        body: JSON.stringify({ token, tipo_pessoa: tipoPessoa, dados, assinatura, docs_identidade: imagensIdentidade, testemunha: null }),
       });
       const out = await resp.json().catch(() => ({}));
       if (!resp.ok || !out.ok) { alert('Erro ao assinar: ' + (out.error || 'tente novamente')); setEnviando(false); return; }
@@ -286,6 +285,20 @@ export default function ContratoLink() {
         <div style={{ marginTop:24, padding:'14px 18px', background:'rgba(52,211,153,0.1)', border:'1px solid rgba(52,211,153,0.3)', borderRadius:10, fontSize:13, color:'#34d399', textAlign:'left', lineHeight:1.8 }}>
           <strong>Registrado em:</strong> {new Date().toLocaleString('pt-BR')}
         </div>
+        {testemunhaUrl && (
+          <div style={{ marginTop:16, padding:'16px 18px', background:'rgba(13,99,219,0.12)', border:'1px solid rgba(96,165,250,0.4)', borderRadius:10, textAlign:'left' }}>
+            <div style={{ fontSize:13.5, fontWeight:800, color:'#bfdbfe', marginBottom:6 }}>Falta a sua testemunha assinar</div>
+            <div style={{ fontSize:12.5, color:'#94a3b8', lineHeight:1.6, marginBottom:10 }}>Encaminhe o link abaixo à sua testemunha (WhatsApp, e-mail…). Ela vai preencher nome, CPF e assinar na tela.</div>
+            <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+              <input readOnly value={testemunhaUrl} onFocus={e => e.target.select()}
+                style={{ flex:1, minWidth:0, padding:'9px 11px', borderRadius:8, border:'1px solid #334155', background:'#1e293b', color:'#e2e8f0', fontSize:12 }} />
+              <button onClick={() => { navigator.clipboard?.writeText(testemunhaUrl); setCopiadoT(true); setTimeout(() => setCopiadoT(false), 1800); }}
+                style={{ flexShrink:0, padding:'9px 14px', background: copiadoT ? '#065f46' : '#0D63DB', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12.5, cursor:'pointer' }}>
+                {copiadoT ? '✓ Copiado!' : 'Copiar link'}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -494,17 +507,11 @@ export default function ContratoLink() {
                 <AssinaturaCanvas onChange={setAssinatura} />
               </div>
 
-              {/* Testemunha (quando o contrato exige) */}
+              {/* Testemunha por LINK: a parte NÃO coleta a testemunha aqui. Ao concluir a sua
+                  assinatura, aparece um link para encaminhar à sua testemunha (ver tela final). */}
               {contrato?.requer_testemunha && (
-                <div style={{ marginBottom:18, padding:'14px 16px', border:'1px solid #334155', borderRadius:12, background:'#0f172a' }}>
-                  <div style={{ fontSize:13, fontWeight:800, color:'#cbd5e1', marginBottom:10 }}>Assinatura da testemunha</div>
-                  <div style={{ display:'flex', gap:10, flexWrap:'wrap', marginBottom:12 }}>
-                    <input value={testemunha.nome} onChange={e => setTestemunha(t => ({ ...t, nome: e.target.value }))} placeholder="Nome da testemunha"
-                      style={{ flex:2, minWidth:180, padding:'10px 12px', borderRadius:9, border:'1px solid #334155', background:'#1e293b', color:'#e2e8f0', fontSize:13 }} />
-                    <input value={testemunha.cpf} onChange={e => setTestemunha(t => ({ ...t, cpf: e.target.value }))} placeholder="CPF da testemunha" inputMode="numeric"
-                      style={{ flex:1, minWidth:140, padding:'10px 12px', borderRadius:9, border:'1px solid #334155', background:'#1e293b', color:'#e2e8f0', fontSize:13 }} />
-                  </div>
-                  <AssinaturaCanvas onChange={setAssinaturaTest} />
+                <div style={{ marginBottom:18, padding:'12px 16px', border:'1px solid #334155', borderRadius:12, background:'#0f172a', fontSize:12.5, color:'#94a3b8', lineHeight:1.6 }}>
+                  <strong style={{ color:'#cbd5e1' }}>Este contrato exige uma testemunha.</strong> Assine agora normalmente; ao concluir, você receberá um link para encaminhar à SUA testemunha (ela preenche nome, CPF e assina). O contrato fica completo quando os dois assinarem.
                 </div>
               )}
 

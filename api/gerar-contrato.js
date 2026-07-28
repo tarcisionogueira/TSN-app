@@ -126,15 +126,20 @@ export default async function handler(req, res) {
         contrato_grupo_id: grupoId,
       };
 
-      // Uma linha (token/link) por signatário.
+      // Uma linha (token/link) por signatário. testemunha_token vem do DEFAULT do banco.
       const rows = listaSign.map(s => ({ ...base, assinante_email: s.email }));
-      const { data, error } = await supabase.from('contratos_link').insert(rows).select('token, assinante_email');
+      const { data, error } = await supabase.from('contratos_link').insert(rows).select('token, assinante_email, testemunha_token');
       if (error || !data?.length) return res.status(500).json({ error: 'Erro ao salvar contrato' });
 
-      // Casa cada token com o nome/email e envia o link por e-mail a cada parte.
+      // Casa cada token com o nome/email e envia o link por e-mail a cada parte. Quando o contrato
+      // EXIGE testemunha, cada parte recebe também o LINK DA SUA TESTEMUNHA para encaminhar (a
+      // testemunha preenche nome/CPF e assina remotamente — não precisa estar junto da parte).
       const links = data.map(row => {
         const nome = listaSign.find(s => s.email === row.assinante_email)?.nome || null;
-        return { nome, email: row.assinante_email, token: row.token, url: `${origin}#/c/${row.token}` };
+        return {
+          nome, email: row.assinante_email, token: row.token, url: `${origin}#/c/${row.token}`,
+          testemunhaUrl: (requerTestemunha && row.testemunha_token) ? `${origin}#/t/${row.testemunha_token}` : null,
+        };
       });
       await Promise.all(links.map(l =>
         enviarEmail({
@@ -142,7 +147,9 @@ export default async function handler(req, res) {
           subject: `Contrato para assinatura: ${tituloFinal}`,
           html: `<p>Olá${l.nome ? ' ' + l.nome : ''}!</p><p>Você tem um contrato para revisar e assinar: <strong>${tituloFinal}</strong>.</p>
                  <p><a href="${l.url}" style="display:inline-block;padding:11px 20px;background:#0D63DB;color:#fff;border-radius:8px;text-decoration:none;font-weight:700">Abrir e assinar</a></p>
-                 <p>Ou copie o link: ${l.url}</p><p>BidPro Brasil</p>`,
+                 <p>Ou copie o link: ${l.url}</p>
+                 ${l.testemunhaUrl ? `<hr style="border:none;border-top:1px solid #e2e8f0;margin:18px 0"/><p><strong>Este contrato exige uma testemunha.</strong> Após assinar, encaminhe o link abaixo à SUA testemunha (ela preenche nome, CPF e assina):</p><p>${l.testemunhaUrl}</p>` : ''}
+                 <p>BidPro Brasil</p>`,
           meta: { tipo: 'contrato' },
         }).catch(() => {})
       ));

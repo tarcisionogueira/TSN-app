@@ -55,6 +55,7 @@ const ConviteLeiloeiro = lazy(() => import('./pages/ConviteLeiloeiro'));
 const LeiloeiroPortal = lazy(() => import('./pages/LeiloeiroPortal'));
 const EbookPage = lazy(() => import('./pages/EbookPage'));
 const ContratoLink = lazy(() => import('./pages/ContratoLink'));
+const TestemunhaLink = lazy(() => import('./pages/TestemunhaLink'));
 const ProdutoLanding = lazy(() => import('./pages/ProdutoLanding'));
 const ProdutoPublico = lazy(() => import('./pages/ProdutoPublico'));
 const CancelarAlertas = lazy(() => import('./pages/CancelarAlertas'));
@@ -354,6 +355,7 @@ export default function App() {
           <Route path="/leiloeiro" element={<PrivateRoute roles={['leiloeiro','admin']}><LeiloeiroPortal /></PrivateRoute>} />
           <Route path="/festa" element={<Festa />} />
           <Route path="/c/:token" element={<ContratoLink />} />
+          <Route path="/t/:token" element={<TestemunhaLink />} />
           {/* Páginas PÚBLICAS de eBook/Curso (preço + aquisição). Precisam estar no router
               de TOPO senão o /p/:tipo/:id (ProdutoLanding, sem tratamento) as sombreava →
               "Produto não encontrado". A rota estática vence a dinâmica. */}
