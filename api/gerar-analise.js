@@ -272,7 +272,8 @@ async function gravarAmostrasIndice(imDb, mercado, imovelId, segmento = 'apartam
   try {
     if (!imDb?.cidade_norm || !imDb?.estado) return;
     const uf = String(imDb.estado).toUpperCase();
-    const bairroNorm = _norm(imDb.bairro);          // localidade da amostra (do imóvel analisado)
+    const bairroNorm = _norm(imDb.bairro);          // bairro do imóvel-alvo (fallback)
+    const bDe = (s) => _norm(s?.bairro) || bairroNorm;   // bairro POR AMOSTRA (a IA marca cada uma)
     const geoGrid = geoGridDe(imDb.latitude, imDb.longitude);
     // Coordenada do imóvel-alvo → guardada em cada amostra p/ o recorte por RAIO (~250m) no Índice.
     const latA = Number.isFinite(Number(imDb.latitude)) ? Number(imDb.latitude) : null;
@@ -285,7 +286,7 @@ async function gravarAmostrasIndice(imDb, mercado, imovelId, segmento = 'apartam
     for (const s of vendas) {
       const m2 = Number(s?.valorM2);
       if (!vendaPlausivelTipo(segmento, m2) || ehFonteLeilao(s?.fonte)) continue; // faixa por tipo (terreno não é cortado)
-      rows.push({ cidade_norm: imDb.cidade_norm, uf, bairro_norm: bairroNorm, geo_grid: geoGrid, lat: latA, lng: lngA, tipo: segmento,
+      rows.push({ cidade_norm: imDb.cidade_norm, uf, bairro_norm: bDe(s), geo_grid: geoGrid, lat: latA, lng: lngA, tipo: segmento,
         especie: 'venda', valor_m2: Math.round(m2), valor_total: Number(s?.valor) || null, area_m2: Number(s?.m2) || null,
         data_ref: dref(s?.data), fonte: (s?.fonte ? String(s.fonte).slice(0, 200) : null), origem: 'relatorio', imovel_id: String(imovelId || '') });
     }
@@ -293,9 +294,20 @@ async function gravarAmostrasIndice(imDb, mercado, imovelId, segmento = 'apartam
       const mensal = Number(s?.valorMensal); const area = Number(s?.m2);
       if (!(mensal > 0) || ehFonteLeilao(s?.fonte)) continue;
       const vm2 = area > 0 ? Math.round((mensal / area) * 100) / 100 : null;
-      rows.push({ cidade_norm: imDb.cidade_norm, uf, bairro_norm: bairroNorm, geo_grid: geoGrid, lat: latA, lng: lngA, tipo: segmento,
+      rows.push({ cidade_norm: imDb.cidade_norm, uf, bairro_norm: bDe(s), geo_grid: geoGrid, lat: latA, lng: lngA, tipo: segmento,
         especie: 'locacao', valor_m2: (vm2 && vm2 >= 1 && vm2 <= 1000) ? vm2 : null, valor_total: mensal, area_m2: area || null,
         data_ref: dref(s?.data), fonte: (s?.fonte ? String(s.fonte).slice(0, 200) : null), origem: 'relatorio', imovel_id: String(imovelId || '') });
+    }
+    // COLHEITA AMPLA — MESMO TIPO em OUTROS bairros (pedido do dono: "extrair o máximo mesmo fora
+    // da localidade e marcar pelo bairro para ir compondo cidade/estado"). Vai à base com o bairro
+    // de CADA amostra, nível CIDADE (sem grid/coord do alvo — são de outros bairros); geocodifica
+    // depois pelo bairro (cron gratuito). NUNCA entra no valor do imóvel-alvo, só no Índice.
+    for (const s of (mercado.outrosBairros || [])) {
+      const m2 = Number(s?.valorM2); const b = _norm(s?.bairro);
+      if (!b || !vendaPlausivelTipo(segmento, m2) || ehFonteLeilao(s?.fonte)) continue;
+      rows.push({ cidade_norm: imDb.cidade_norm, uf, bairro_norm: b, geo_grid: '', lat: null, lng: null, tipo: segmento,
+        especie: 'venda', valor_m2: Math.round(m2), valor_total: Number(s?.valor) || null, area_m2: Number(s?.m2) || null,
+        data_ref: dref(s?.data), fonte: (s?.fonte ? String(s.fonte).slice(0, 200) : null), origem: 'relatorio_regiao', imovel_id: String(imovelId || '') });
     }
     if (!rows.length) return;
     await sb('indice_amostra', { method: 'POST', headers: { Prefer: 'return=minimal,resolution=ignore-duplicates' }, body: JSON.stringify(rows) });
@@ -688,6 +700,13 @@ dedicadas a eles), até ~12 por tipo, com R$/m² e data. Regras: apenas VENDA; N
 tipo-alvo (${tipoImovel}); EXCLUA leilão/venda direta; só o que apareceu de fato (não invente).
 Isso alimenta o Índice BidPro dos outros segmentos da região — economia da mesma busca.
 
+═══ COLHEITA AMPLA — MESMO TIPO EM TODA A CIDADE (compõe o Índice) ═══
+Ao pesquisar (grandes portais E imobiliárias LOCAIS), você verá MUITOS anúncios do MESMO tipo
+(${tipoImovel}) em OUTROS bairros da cidade, fora da vizinhança do imóvel-alvo. NÃO os use no
+valor do imóvel-alvo, MAS liste em "outrosBairros" o MÁXIMO que encontrar (sem buscas dedicadas),
+CADA UM com o seu "bairro" — isso alimenta o Índice da cidade/estado (composição por bairro).
+Apenas VENDA, mesmo tipo (${tipoImovel}), SEM leilão; o "bairro" de cada amostra é OBRIGATÓRIO.
+
 ═══ PERFIL DA REGIÃO (atratividade e valorização — explica o R$/m² da microrregião) ═══
 Com base na sua pesquisa, classifique a REGIÃO (bairro/microrregião) do imóvel dentro de ${cidade}/${estado}:
 - "tier": se está entre as MAIS valorizadas, INTERMEDIÁRIAS ou MENOS valorizadas da cidade (valorizado_alto|intermediario|valorizado_baixo);
@@ -706,11 +725,12 @@ nem estime. É diligência de investidor sobre a REGIÃO, não juízo de valor s
 
 Retorne APENAS este JSON (sem markdown):
 {
-  "nivel1": { "descricao": "", "vendas": [{"descricao":"","valor":0,"m2":0,"valorM2":0,"fonte":"","data":"AAAA-MM"}], "locacoes": [{"descricao":"","valorMensal":0,"fonte":"","data":"AAAA-MM"}], "precoMedioM2": 0, "precoMinM2": 0, "precoMaxM2": 0, "aluguelMedio": 0, "totalAmostras": 0, "disponiveis": true },
-  "nivel2": { "descricao": "", "vendas": [{"descricao":"","valor":0,"m2":0,"valorM2":0,"fonte":"","data":"AAAA-MM"}], "locacoes": [{"descricao":"","valorMensal":0,"fonte":"","data":"AAAA-MM"}], "precoMedioM2": 0, "precoMinM2": 0, "precoMaxM2": 0, "aluguelMedio": 0, "totalAmostras": 0 },
+  "nivel1": { "descricao": "", "vendas": [{"bairro":"","descricao":"","valor":0,"m2":0,"valorM2":0,"fonte":"","data":"AAAA-MM"}], "locacoes": [{"bairro":"","descricao":"","valorMensal":0,"fonte":"","data":"AAAA-MM"}], "precoMedioM2": 0, "precoMinM2": 0, "precoMaxM2": 0, "aluguelMedio": 0, "totalAmostras": 0, "disponiveis": true },
+  "nivel2": { "descricao": "", "vendas": [{"bairro":"","descricao":"","valor":0,"m2":0,"valorM2":0,"fonte":"","data":"AAAA-MM"}], "locacoes": [{"bairro":"","descricao":"","valorMensal":0,"fonte":"","data":"AAAA-MM"}], "precoMedioM2": 0, "precoMinM2": 0, "precoMaxM2": 0, "aluguelMedio": 0, "totalAmostras": 0 },
   "consolidado": { "precoMedioM2": 0, "aluguelMedio": 0, "yieldBruto": 0, "yieldLiquido": 0, "valorEstimadoImovel": 0, "unidadeValor": "m2_privativo|m2_construido|m2_terreno|hectare|unidade", "areaConsiderada": 0, "baseCalculo": "(explique a conta: ex.: 'R$ 10.980/m² privativo × 30 m²' ou 'R$ 45.000/ha × 120 ha terra nua + R$ 200k benfeitorias' ou 'construção 90 m² × R$ 4.000 + terreno excedente 300 m² × R$ 800')", "padraoImovel": "popular|medio|medio_alto|alto|luxo", "terrenoExcedente": { "haExcedente": false, "areaExcedenteM2": 0, "valorTerrenoExcedente": 0 }, "descontoArremate": null },
   "referenciaFipeZap": { "encontrado": true, "precoMedioM2": 0, "valorizacao12m": 0, "mesReferencia": "AAAA-MM", "localidade": "", "fonte": "" },
   "outrasTipologias": { "apartamento": [{"valorM2":0,"valor":0,"m2":0,"fonte":"","data":"AAAA-MM"}], "casa": [], "terreno": [], "comercial": [] },
+  "outrosBairros": [{"bairro":"","valorM2":0,"valor":0,"m2":0,"fonte":"","data":"AAAA-MM"}],
   "zoneamento": { "encontrado": false, "zona": "", "resumoUso": "", "fonte": "", "ondeObter": "" },
   "perfilRegiao": { "tier": "valorizado_alto|intermediario|valorizado_baixo|", "atratividades": [""], "fragilidades": [""], "motivos": "" },
   "segurancaPublica": { "encontrado": false, "nivel": "", "indicadores": "", "tendencia": "", "fonte": "", "periodo": "", "recomendacao": "" },
@@ -957,7 +977,7 @@ export default async function handler(req, res) {
           cacheReg = await amostrasRegiaoCache(imReg, segCache);
         } catch { cacheReg = null; }
       }
-      const maxWeb = cacheReg?.hit ? 2 : 5;
+      const maxWeb = cacheReg?.hit ? 2 : 7; // sem cache (praça fina) → mais buscas p/ cobrir portais + imobiliárias LOCAIS + colheita ampla
       const cacheTxt = cacheReg?.hit ? cacheReg.text : '';
       console.log('[mercado-cache]', JSON.stringify({ on: cacheLigado, hit: !!cacheReg?.hit, nivel: cacheReg?.nivel || null, n: cacheReg?.n || 0, maxWeb, imovel: String(imovelId) }));
       // A busca de mercado (web search, até 5 buscas) é a etapa lenta. UMA tentativa por
@@ -968,7 +988,7 @@ export default async function handler(req, res) {
       const buscarMercado = async (msBudget, webUses = maxWeb) => {
         try {
           const mData = await anthropic({
-            model: MODEL, max_tokens: 14000, // + espaço p/ trazer o MÁXIMO de amostras do tipo-alvo + o bloco outrasTipologias
+            model: MODEL, max_tokens: 16000, // espaço p/ o MÁXIMO de amostras do tipo-alvo + outrasTipologias + outrosBairros (colheita ampla)
             tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: webUses }],
             system: `Você é um perito avaliador imobiliário sênior. Busque o MÁXIMO de amostras possível, SEMPRE do mesmo tipo (${mercadoInputs.tipoImovel}). Retorne apenas JSON válido.`,
             messages: [{ role: 'user', content: promptMercado(mercadoInputs) + cacheTxt }],
