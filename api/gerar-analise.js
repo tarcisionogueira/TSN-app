@@ -1374,9 +1374,20 @@ export default async function handler(req, res) {
       const m = result.mercado || {};
       const fonte = m.fonteEstimativa === 'indice_bidpro' ? 'índice' : 'mercado ao vivo';
       const nComp = (m.nivel1?.vendas?.length || 0) + (m.nivel2?.vendas?.length || 0);
-      await logAtividade(ownerId, mercadoVazio ? 'relatorio_mercado_vazio' : 'relatorio_mercado_ok',
-        mercadoVazio ? `Sem estimativa de mercado${m.__erroApi ? ` (API: ${m.__erroApi})` : ' (sem comparáveis ativos)'}` : `Mercado estimado por ${fonte}${valorMercado ? ` — R$ ${Math.round(valorMercado).toLocaleString('pt-BR')}` : ''}`,
-        { imovelId: String(imovelId), cidade: cidade || null, fonte, comparaveis: nComp, valorMercado: valorMercado || null, erroApi: m.__erroApi || null, reaproveitado: !!result.reaproveitado, ator: user.id });
+      // ENTREGA INCOMPLETA: mercado veio, mas o PARECER saiu vazio (a redação falhou). Antes isso
+      // ia para o 360 como 'relatorio_mercado_ok' — a falha ficava INVISÍVEL para diagnóstico. Agora
+      // é um evento próprio (relatorio_parecer_vazio) com o motivo (__diagParecer), rastreável no
+      // Cliente 360. O self-heal do cron re-gera; o evento fica como trilha do que aconteceu.
+      const dp = m.__diagParecer || null;
+      const semParecer = !mercadoVazio && !(result.parecer || '').trim();
+      const evento = mercadoVazio ? 'relatorio_mercado_vazio' : semParecer ? 'relatorio_parecer_vazio' : 'relatorio_mercado_ok';
+      const detalhe = mercadoVazio
+        ? `Sem estimativa de mercado${m.__erroApi ? ` (API: ${m.__erroApi})` : ' (sem comparáveis ativos)'}`
+        : semParecer
+          ? `Entrega incompleta: mercado OK${valorMercado ? ` (R$ ${Math.round(valorMercado).toLocaleString('pt-BR')})` : ''} mas SEM parecer — motivo: ${dp?.erro || dp?.erroSetup || 'desconhecido'}${dp?.tentativas ? ` (${dp.tentativas} tentativa(s))` : ''}`
+          : `Mercado estimado por ${fonte}${valorMercado ? ` — R$ ${Math.round(valorMercado).toLocaleString('pt-BR')}` : ''}`;
+      await logAtividade(ownerId, evento, detalhe,
+        { imovelId: String(imovelId), cidade: cidade || null, fonte, comparaveis: nComp, valorMercado: valorMercado || null, erroApi: m.__erroApi || null, parecerDiag: dp, reaproveitado: !!result.reaproveitado, ator: user.id });
     } catch { /* log best-effort */ }
 
     // SEGURANÇA: NÃO realimentar o score do CARD do catálogo com valores desta análise.
