@@ -218,7 +218,7 @@ export default function Header() {
   const nomeUsuario = user?.user_metadata?.nome || user?.email?.split('@')[0] || 'Usuário';
 
   return (
-    <header style={{ position: 'sticky', top: 0, zIndex: 1100 }}>
+    <header style={{ position: 'sticky', top: 0, zIndex: 1100, background: '#111111', paddingTop: 'env(safe-area-inset-top)' }}>
       {/* Banner do modo suporte */}
       {impersonate && (
         <div style={{ background: '#d97706', color: 'white', padding: '7px 20px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, fontSize: 13, fontWeight: 600, flexWrap: 'wrap' }}>
@@ -239,11 +239,12 @@ export default function Header() {
           </button>
         </div>
       )}
-      {/* paddingTop com o safe-area: como o index.html usa viewport-fit=cover + status bar
-          translúcida, sem isto a barra do logo/menu ficava POR BAIXO do relógio/bateria no
-          iPhone (não dava p/ clicar). O fundo #111 preenche a faixa da status bar e o conteúdo
-          de 62px desce para baixo dela. Fora de iPhone com notch o inset é 0 (sem efeito). */}
-      <div style={{ background: '#111111', borderBottom: '1px solid #111111', paddingTop: 'env(safe-area-inset-top)' }}>
+      {/* O safe-area (env(safe-area-inset-top)) foi movido para o <header> externo acima, de
+          modo que os banners de modo-suporte / simulação de role (com os botões "Sair do modo
+          suporte" / "Voltar ao Admin") também desçam para baixo da status bar — antes eles
+          ficavam POR BAIXO do relógio/bateria no iPhone. O fundo #111 do header preenche a
+          faixa da status bar; fora de iPhone com notch o inset é 0 (sem efeito). */}
+      <div style={{ background: '#111111', borderBottom: '1px solid #111111' }}>
       <div style={{ maxWidth: 1280, margin: '0 auto', padding: '0 20px', height: 62, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
 
         {/* Logo */}

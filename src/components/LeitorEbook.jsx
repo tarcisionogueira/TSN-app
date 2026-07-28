@@ -28,9 +28,11 @@ export default function LeitorEbook({ ebook, onClose }) {
       position: 'fixed', inset: 0, zIndex: 2000, background: 'rgba(15,23,42,0.92)',
       display: 'flex', flexDirection: 'column',
     }}>
-      {/* Barra superior */}
+      {/* Barra superior — overlay fullscreen (fixed inset:0) cobre a barra de status;
+          paddingTop com env(safe-area-inset-top) evita que título/Baixar/✕ fiquem atrás dela. */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px',
+        paddingTop: 'calc(12px + env(safe-area-inset-top, 0px))',
         background: '#111111', color: 'white', flexShrink: 0,
       }}>
         <BookOpen size={18} color="#818cf8" />

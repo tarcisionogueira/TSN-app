@@ -122,8 +122,9 @@ export default function ProdutoPublico({ tipo }) {
 
   return (
     <div style={{ minHeight: '100vh', background: '#111111', padding: '0 0 60px' }}>
-      {/* Header */}
-      <div style={{ borderBottom: '1px solid #111111', padding: '16px 32px', display: 'flex', alignItems: 'center', gap: 12 }}>
+      {/* Header — paddingTop com env(safe-area-inset-top) (rota fora do MainLayout) p/ a
+          marca não ficar sob a barra de status no PWA iOS. */}
+      <div style={{ borderBottom: '1px solid #111111', padding: '16px 32px', paddingTop: 'calc(16px + env(safe-area-inset-top, 0px))', display: 'flex', alignItems: 'center', gap: 12 }}>
         <div style={{ background: '#0D63DB', borderRadius: 10, padding: 8, fontSize: 18 }}>🏢</div>
         <div>
           <div style={{ fontWeight: 900, fontSize: 14, color: 'white', letterSpacing: 1 }}>BIDPRO BRASIL</div>

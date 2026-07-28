@@ -50,7 +50,10 @@ function InputBRL({ value, onChange, disabled, placeholder, style }) {
 
 const S = {
   page: { minHeight: '100vh', background: '#f1f5f9', fontFamily: "'Inter', sans-serif" },
-  header: { background: '#111111', color: '#fff', padding: '0 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 56 },
+  // paddingTop + height com env(safe-area-inset-top): no PWA iOS (viewport-fit=cover +
+  // status bar black-translucent) o conteúdo começa SOB a barra de status; sem isto o
+  // título e o botão "Voltar ao app" ficavam atrás do relógio/bateria e não dava p/ clicar.
+  header: { background: '#111111', color: '#fff', padding: '0 24px', paddingTop: 'env(safe-area-inset-top, 0px)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 'calc(56px + env(safe-area-inset-top, 0px))' },
   headerTitle: { fontSize: 18, fontWeight: 700, letterSpacing: '-0.5px' },
   body: { padding: '24px 20px', maxWidth: 1100, margin: '0 auto' },
   tabs: { display: 'flex', gap: 4, marginBottom: 24, flexWrap: 'wrap' },

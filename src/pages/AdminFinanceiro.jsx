@@ -501,8 +501,9 @@ export default function AdminFinanceiro() {
 
   return (
     <div style={{ minHeight: '100vh', background: '#f1f5f9', padding: '0 0 60px' }}>
-      {/* Header */}
-      <div style={{ background: '#111111', padding: '20px 32px', display: 'flex', alignItems: 'center', gap: 16 }}>
+      {/* Header — paddingTop com env(safe-area-inset-top) p/ o botão "Voltar" não ficar
+          atrás da barra de status no PWA iOS (viewport-fit=cover + status bar translúcida). */}
+      <div style={{ background: '#111111', padding: '20px 32px', paddingTop: 'calc(20px + env(safe-area-inset-top, 0px))', display: 'flex', alignItems: 'center', gap: 16 }}>
         <button onClick={() => navigate('/admin')}
           style={{ background: 'none', border: '1px solid #374151', color: '#94a3b8', borderRadius: 8, padding: '6px 14px', cursor: 'pointer', fontSize: 13 }}>
           ← Voltar

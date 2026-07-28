@@ -61,8 +61,10 @@ export default function LeiloeiroPortal() {
     </div>
   );
 
+  // Rota fora do MainLayout (sem o Header compartilhado): paddingTop com
+  // env(safe-area-inset-top) p/ o título não ficar sob a barra de status no PWA iOS.
   return (
-    <div style={{ maxWidth: 900, margin: '0 auto', padding: '32px 20px 80px' }}>
+    <div style={{ maxWidth: 900, margin: '0 auto', padding: '32px 20px 80px', paddingTop: 'calc(32px + env(safe-area-inset-top, 0px))' }}>
 
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 32 }}>
