@@ -4066,13 +4066,18 @@ function diagnosticoCaptacao(atual, anterior) {
   ];
   for (const c of campos) {
     const p = pct(atual[c.k]);
-    if (p >= c.lim) continue;
     const antP = anterior ? pct(anterior[c.k]) : null;
-    const caiu = antP != null && (antP - p) >= 25;
-    problemas.push({
-      causa: `${c.nome} presente em só ${p}% dos lotes${caiu ? ` (era ${antP}%)` : ''}.`,
-      acao: `Revisar o ${c.dica} do scraper desta fonte.`,
-    });
+    // 0/nulo = métrica NÃO medida por esta fonte (ex.: a CEF não reporta valor_pct/uf_pct/link_pct)
+    // — isso NÃO é "0% dos lotes". Só sinaliza quando: (a) a métrica está medida mas BAIXA
+    // (0 < p < limite), ou (b) houve REGRESSÃO (vinha de um patamar alto e caiu). Antes qualquer 0
+    // virava alarme falso (era o caso da Caixa com 29 mil imóveis marcada como "0% de valor").
+    const medida = atual[c.k] != null && p > 0;
+    const caiu = antP != null && antP >= 40 && (antP - p) >= 25;
+    if (medida && p < c.lim) {
+      problemas.push({ causa: `${c.nome} presente em só ${p}% dos lotes${caiu ? ` (era ${antP}%)` : ''}.`, acao: `Revisar o ${c.dica} do scraper desta fonte.` });
+    } else if (caiu) {
+      problemas.push({ causa: `${c.nome} caiu de ${antP}% para ${p}% dos lotes.`, acao: `Revisar o ${c.dica} do scraper desta fonte.` });
+    }
   }
 
   // Fallback: fonte marcada com atenção pelo próprio scraper, mas sem um padrão de
@@ -4102,7 +4107,7 @@ function ScrapersMonitor() {
     // de base para o diagnóstico determinístico apontar regressão/tendência).
     supabase.from('fonte_saude')
       .select('fonte,total,status,valor_pct,uf_pct,link_pct,foto_pct,estrategia,motivo,executado_em')
-      .order('executado_em', { ascending: false }).limit(120)
+      .order('executado_em', { ascending: false }).limit(400)
       .then(({ data }) => {
         const ult = {}, ant = {};
         (data || []).forEach(l => {
@@ -4117,7 +4122,14 @@ function ScrapersMonitor() {
     : st === 'degradado' ? { cor: '#d97706', bg: '#fefce8', icone: '⚠️' }
     : st === 'falhou' ? { cor: '#dc2626', bg: '#fef2f2', icone: '❌' }
     : { cor: '#94a3b8', bg: '#f8fafc', icone: '⏸' };
-  const problemas = FONTES_LEILAO.filter(f => ['degradado', 'falhou'].includes(saude[f.fonte]?.status));
+  // MOSTRA TODAS as fontes que reportaram saúde (não só as 7 fixas) — o acervo real tem muito mais
+  // leiloeiros. Usa FONTES_LEILAO só para o nome/cor amigável; o resto entra com o código da fonte.
+  const META = Object.fromEntries(FONTES_LEILAO.map(f => [f.fonte, f]));
+  const nomeFonte = (code) => META[code]?.nome || (code.charAt(0) + code.slice(1).toLowerCase());
+  const corFonte = (code) => META[code]?.cor || '#94a3b8';
+  const fontes = Array.from(new Set([...FONTES_LEILAO.map(f => f.fonte), ...Object.keys(saude)]))
+    .sort((a, b) => (Number(saude[b]?.total) || 0) - (Number(saude[a]?.total) || 0));
+  const problemas = fontes.filter(code => ['degradado', 'falhou'].includes(saude[code]?.status));
 
   return (
     <div style={S.card}>
@@ -4131,7 +4143,8 @@ function ScrapersMonitor() {
       </div>
       {loading ? <p style={{ fontSize: 13, color: '#94a3b8' }}>Carregando...</p> : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {FONTES_LEILAO.map(f => {
+          {fontes.map(code => {
+            const f = { fonte: code, nome: nomeFonte(code), cor: corFonte(code) };
             const s = saude[f.fonte];
             const e = estilo(s?.status);
             const diag = diagnosticoCaptacao(s, prev[f.fonte]);
@@ -6105,7 +6118,7 @@ function ScrapersTab() {
     // Saúde/qualidade: última execução por fonte (monitor de regressão)
     supabase.from('fonte_saude')
       .select('fonte,total,status,valor_pct,uf_pct,link_pct,foto_pct,estrategia,motivo,executado_em')
-      .order('executado_em', { ascending: false }).limit(120)
+      .order('executado_em', { ascending: false }).limit(400)
       .then(({ data }) => {
         const ult = {}, prev = {};
         // Dados vêm do mais recente ao mais antigo: 1ª ocorrência = última coleta,
