@@ -26,22 +26,58 @@ Vários scrapers/máquinas usando o mesmo IP ao mesmo tempo dispararia anti-bot.
 *(O client-side do staff também é gate-coordenado: mesmo com vários staff logados, só **um** coleta por
 janela — e cada um usa o próprio IP residencial, então não há sobrecarga de um único IP.)*
 
-## Setup do runner (uma vez)
-1. Numa máquina residencial sempre ligada: `git clone` do repo (ou copie `scripts/`), depois `npm ci`.
-2. Crie `~/.bidpro-runner.env`:
-   ```
-   VITE_SUPABASE_URL=https://zuwfiwokkdytvjixiwac.supabase.co
-   SUPABASE_SERVICE_KEY=<service key — Supabase > Settings > API>
-   ```
-3. `chmod +x scripts/runner-residencial.sh`
-4. `crontab -e` e adicione (seg e qui, 08:00 — **2x/semana**):
-   ```
-   0 8 * * 1,4  /CAMINHO/TSN-app/scripts/runner-residencial.sh >> $HOME/bidpro-runner.log 2>&1
-   ```
-5. Confira o `~/bidpro-runner.log` após a 1ª rodada (deve dizer `via: gratis`, sem Bright Data).
+## ✅ PASSO A PASSO PARA LIGAR O RUNNER (ativação)
 
-O `SOLEON_NO_BD=1` (já no wrapper) **garante zero BD**: se o direto falhar, pula a página em vez de
-gastar cota. A frequência é do `cron` (2x/semana) — não roda a cada acesso.
+### Pré-requisitos (na máquina residencial)
+- Uma máquina **num IP residencial**, **sempre ligada** no horário do cron (PC/Mac/Raspberry Pi ou
+  VPS de IP residencial — **não** serve VPS de datacenter: o objetivo é justamente o IP de casa).
+- **git** + **Node 18+** (roda os scrapers `.mjs` e instala o Chromium do puppeteer) + **Python 3**
+  (só para o Vlance — `scraper_vlance.py`). Bash com `flock` (Linux tem; no macOS o script apenas
+  pula a trava de instância única, sem problema).
+
+### Passos
+1. **Clonar e instalar** (uma vez):
+   ```bash
+   git clone https://github.com/tarcisionogueira/tsn-app.git
+   cd tsn-app
+   npm ci        # instala tb. o Chromium do puppeteer (headless de GESTAO/RJ)
+   pip3 install requests   # dependência do scraper_vlance.py (Vlance)
+   ```
+2. **Credenciais** — crie `~/.bidpro-runner.env` e proteja o arquivo (contém a SERVICE KEY):
+   ```bash
+   cat > ~/.bidpro-runner.env <<'EOF'
+   VITE_SUPABASE_URL=https://zuwfiwokkdytvjixiwac.supabase.co
+   SUPABASE_SERVICE_KEY=<service key — Supabase > Settings > API > service_role>
+   EOF
+   chmod 600 ~/.bidpro-runner.env    # só o seu usuário lê (a service key é sensível)
+   ```
+   > Não comite esse arquivo. A **service_role key** dá acesso total ao banco.
+3. **Permissão de execução**: `chmod +x scripts/runner-residencial.sh`
+4. **Teste manual (validação da 1ª rodada)** — rode UMA vez na mão e leia o log:
+   ```bash
+   ./scripts/runner-residencial.sh 2>&1 | tee ~/bidpro-runner.log
+   ```
+   Esperado: cada fonte (SOLEON, GESTAO, RJ, VLANCE) grava **sem tocar no Bright Data**. Se GESTAO/RJ
+   não passarem o Cloudflare de primeira, me mande o `~/bidpro-runner.log` que eu ajusto a espera/heurística.
+5. **Agendar no cron** (seg e qui, 08:00 — casa com o gate de 2x/semana):
+   ```bash
+   crontab -e
+   # adicione (troque /CAMINHO pelo caminho real do repo):
+   0 8 * * 1,4  /CAMINHO/tsn-app/scripts/runner-residencial.sh >> $HOME/bidpro-runner.log 2>&1
+   ```
+6. **DEPOIS de validar (passo que zera o Bright Data)** — desligar os workflows **pagos** da CI para
+   não gastarem BD em paralelo com o runner. Me avise que eu comento os `cron:` de
+   `scraper-soleon.yml`, `scraper-gestao.yml`, `scraper-rj.yml`, `scraper-pecini.yml` e
+   `scraper-vlance.yml` (deixando `workflow_dispatch` como reserva manual). **Não desligue** os
+   grátis (`scraper.yml` CEF e `leiloeiros-puppeteer.yml`) — esses não usam BD e já rodam diários.
+
+O `SOLEON_NO_BD=1` / `*_HEADLESS=1` (já no wrapper) **garantem zero BD**: se o direto/headless falhar,
+pula a página em vez de gastar cota. A frequência é do `cron` + do gate no banco (2x/semana) — não roda
+a cada acesso.
+
+> **Quer as fontes pagas mais frequentes que 2x/semana?** O limite é o gate `coleta_cliente_claim`
+> (hardcoded 2x/sem). Posso relaxar para 3x/sem ou diário e ajustar o cron — recomendo validar em
+> 2x/semana primeiro (menos risco de anti-bot no seu IP) e subir depois.
 
 ## Estado por fonte (o que já está grátis e o que falta)
 | Fonte | BD/sem hoje | Via grátis | Status |
