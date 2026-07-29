@@ -91,11 +91,15 @@ export default function Planos() {
     return () => { vivo = false; };
   }, [user?.id]);
 
-  // Compartilha o link de venda do plano (leva a indicação do parceiro): usa o Web Share
-  // nativo no celular/PWA e cai para copiar no desktop.
+  // Compartilha o link de venda do plano (leva a indicação do parceiro).
+  // Aponta para a TELA ESPECÍFICA do plano (/checkout?plano=KEY) — igual aos ebooks/cursos,
+  // que abrem a página do produto. Antes abria a LISTA de planos (/planos?plano=KEY), que só
+  // rolava até o card; o cliente caía na tela genérica, não na do produto comercializado.
+  // O /checkout é público: apresenta o plano e faz o cadastro/pagamento inline para quem
+  // ainda não tem conta (visitante que recebeu o link do parceiro), preservando o ?ref=.
   const compartilharPlano = (key) => {
-    const base = `${window.location.origin}${window.location.pathname.replace(/\/$/, '')}`;
-    const url = `${base}#/planos?ref=${meuCodigo || user?.id || ''}&plano=${key}`;
+    const cod = meuCodigo || user?.id || '';
+    const url = `${window.location.origin}/#/checkout?plano=${key}${cod ? `&ref=${cod}` : ''}`;
     // COPIA o link DIRETO (pedido do dono: sem abrir a folha de compartilhamento do sistema).
     (async () => {
       try {
