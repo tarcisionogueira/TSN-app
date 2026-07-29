@@ -46,6 +46,15 @@ export default function MinhasAnalises() {
       });
   }, [effectiveUserId]);
 
+  // Imóveis JÁ arrematados (fonte da verdade = tabela arrematados) — quando arrematado, some o
+  // botão de AÇÃO "Arrematei" e aparece o ESTADO "Arrematado".
+  const [arrematadosSet, setArrematadosSet] = React.useState(new Set());
+  React.useEffect(() => {
+    if (!effectiveUserId) return;
+    supabase.from('arrematados').select('imovel_id').eq('user_id', effectiveUserId)
+      .then(({ data }) => setArrematadosSet(new Set((data || []).map(r => String(r.imovel_id)).filter(Boolean))));
+  }, [effectiveUserId]);
+
   const itens = React.useMemo(() => {
     const by = {};
     const push = (a, tipo) => {
@@ -180,6 +189,10 @@ export default function MinhasAnalises() {
           {itens.map(a => {
             const s = statusGeral(a);
             const chips = chipsDe(a);
+            const caso = casosPorImovel[String(a.imovelId)];
+            // JÁ arrematado: tem registro em arrematados, já sinalizou, ou o caso passou do arremate.
+            const jaArr = arrematadosSet.has(String(a.imovelId)) || !!sinalizados[a.imovelId]
+              || ['segunda_reuniao', 'arrematado', 'pos_arrematacao', 'procuracao_assinada', 'honorarios_pagos'].includes(caso?.status_etapa);
             return (
               <div key={a.imovelId} onClick={() => abrir(a)}
                 style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 14px', background: 'white', border: '1px solid #e2e8f0', borderRadius: 14, cursor: 'pointer', transition: 'box-shadow .15s, border-color .15s' }}
@@ -203,19 +216,26 @@ export default function MinhasAnalises() {
                     ))}
                   </div>
                 </div>
-                {casosPorImovel[String(a.imovelId)] && (
-                  <button onClick={(e) => { e.stopPropagation(); nav('/caso/' + casosPorImovel[String(a.imovelId)].id); }}
+                {caso ? (
+                  <button onClick={(e) => { e.stopPropagation(); nav('/caso/' + caso.id); }}
                     title="Abrir acompanhamento com a equipe"
                     style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', background: '#f5f3ff', color: '#7c3aed', border: '1px solid #ddd6fe', borderRadius: 10, fontWeight: 700, fontSize: 12, cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap' }}>
-                    <Briefcase size={13} /> {ETAPA_CURTA[casosPorImovel[String(a.imovelId)].status_etapa] || 'Acompanhamento'}
+                    <Briefcase size={13} /> {ETAPA_CURTA[caso.status_etapa] || 'Acompanhamento'}
+                  </button>
+                ) : jaArr && (
+                  <button onClick={(e) => { e.stopPropagation(); nav('/arrematados'); }}
+                    title="Imóvel arrematado — abrir em Meus Arrematados"
+                    style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', background: '#f5f3ff', color: '#7c3aed', border: '1px solid #ddd6fe', borderRadius: 10, fontWeight: 700, fontSize: 12, cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                    <Briefcase size={13} /> Arrematado
                   </button>
                 )}
-                {(tresProntos(a) || sinalizados[a.imovelId]) && (
+                {/* "Arrematei" é AÇÃO de sinalizar — some quando o imóvel já está arrematado. */}
+                {!jaArr && tresProntos(a) && (
                 <button onClick={(e) => sinalizarArremate(e, a)}
-                  disabled={!!sinalizados[a.imovelId] || sinalizando === a.imovelId}
+                  disabled={sinalizando === a.imovelId}
                   title="Confirmo que arrematei este imóvel (mantém os documentos)"
-                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', background: '#ecfdf5', color: '#059669', border: '1px solid #a7f3d0', borderRadius: 10, fontWeight: 700, fontSize: 12, cursor: sinalizados[a.imovelId] ? 'default' : 'pointer', flexShrink: 0, whiteSpace: 'nowrap' }}>
-                  <Trophy size={13} /> {sinalizados[a.imovelId] ? 'Arrematado ✓' : (sinalizando === a.imovelId ? 'Enviando…' : 'Arrematei')}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', background: '#ecfdf5', color: '#059669', border: '1px solid #a7f3d0', borderRadius: 10, fontWeight: 700, fontSize: 12, cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                  <Trophy size={13} /> {sinalizando === a.imovelId ? 'Enviando…' : 'Arrematei'}
                 </button>
                 )}
                 <button onClick={(e) => { e.stopPropagation(); if (window.confirm('Remover esta análise? Os relatórios mercadológico, documental e laudo deste imóvel serão apagados e não há como desfazer.')) remover(a.imovelId); }} title="Remover" style={{ background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer', fontSize: 20, lineHeight: 1, padding: 4, flexShrink: 0 }}>×</button>

@@ -10,6 +10,30 @@
 import { imprimirHtml } from './pdfImprimir';
 import { mascararDoc, mascararEmail, mascararTel } from '../utils/cnpjCep';
 
+// Renderiza as páginas de um PDF (URL) em imagens (dataURL) via pdf.js — para EMBUTIR o documento
+// original no PDF final (documento + manifesto juntos). Antes um upload em PDF virava só um LINK e
+// o arquivo assinado saía SEM o documento (só o manifesto). Lazy-import: só carrega o pdf.js aqui.
+async function pdfParaImagens(url) {
+  try {
+    const pdfjs = await import('pdfjs-dist');
+    try { const w = await import('pdfjs-dist/build/pdf.worker.min.mjs?url'); pdfjs.GlobalWorkerOptions.workerSrc = w.default; } catch { /* usa worker padrão */ }
+    const pdf = await pdfjs.getDocument({ url }).promise;
+    const imgs = [];
+    const N = Math.min(pdf.numPages, 40); // teto de segurança
+    for (let i = 1; i <= N; i++) {
+      const page = await pdf.getPage(i);
+      const viewport = page.getViewport({ scale: 2 }); // resolução boa p/ impressão
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.floor(viewport.width);
+      canvas.height = Math.floor(viewport.height);
+      await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+      imgs.push(canvas.toDataURL('image/jpeg', 0.85));
+    }
+    try { pdf.destroy(); } catch { /* noop */ }
+    return imgs;
+  } catch { return null; }
+}
+
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const dataHora = (iso) => { try { return new Date(iso).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }); } catch { return iso || ''; } };
 
@@ -27,6 +51,8 @@ const ESTILOS_CONTRATO = `
   /* Documento anexo em imagem: cabe em UMA página (cap de altura) — antes, sem limite, uma
      digitalização A4 alta não cabia sob o cabeçalho e ia inteira para a página 2. */
   .docimg{display:block;margin:0 auto;max-width:100%;max-height:242mm;border:1px solid #e2e8f0;border-radius:8px;}
+  .docpage{page-break-after:always;}
+  .docpage:last-of-type{page-break-after:auto;}
   .quebra{page-break-before:always;}
   .man h2{font-size:14px;font-weight:900;border-bottom:1px solid #e2e8f0;padding-bottom:6px;margin:0 0 8px;}
   .rhead{font-size:11px;color:#334155;line-height:1.7;margin-bottom:9px;}
@@ -46,7 +72,7 @@ const ESTILOS_CONTRATO = `
   .pagefoot{position:fixed;bottom:4mm;left:8mm;right:8mm;text-align:center;font-size:8px;line-height:1.3;color:#94a3b8;word-break:break-all;}
 `;
 
-export function gerarContratoPDF({ contrato, roster = [] } = {}) {
+export async function gerarContratoPDF({ contrato, roster = [] } = {}) {
   if (!contrato) { alert('Documento indisponível.'); return; }
   const ds = contrato.dados_signatario || {};
   const titulo = contrato.titulo || 'Contrato';
@@ -61,9 +87,14 @@ export function gerarContratoPDF({ contrato, roster = [] } = {}) {
   const ehImg = /\.(jpe?g|png|gif|webp)($|\?|#)/i.test(nomeArq) || /\.(jpe?g|png|gif|webp)($|\?|#)/i.test(contrato.arquivo_url || '');
   let corpoDoc;
   if (contrato.arquivo_url && ehImg) {
-    corpoDoc = `<img class="docimg" src="${esc(contrato.arquivo_url)}" alt="Documento" />`;
+    corpoDoc = `<div class="docpage"><img class="docimg" src="${esc(contrato.arquivo_url)}" alt="Documento" /></div>`;
   } else if (contrato.arquivo_url) {
-    corpoDoc = `<p class="corpo">Documento anexo: <a href="${esc(contrato.arquivo_url)}">${esc(contrato.arquivo_nome || 'documento')}</a><br/><span style="font-size:11px;color:#64748b;">(abra o link para visualizar o documento original assinado)</span></p>`;
+    // PDF anexo: EMBUTE as páginas do documento (renderizadas via pdf.js) — o arquivo final traz
+    // o DOCUMENTO + o manifesto juntos. Se a renderização falhar, cai no link (nunca quebra).
+    const imagens = await pdfParaImagens(contrato.arquivo_url);
+    corpoDoc = (imagens && imagens.length)
+      ? imagens.map((src) => `<div class="docpage"><img class="docimg" src="${src}" alt="Documento" /></div>`).join('')
+      : `<p class="corpo">Documento anexo: <a href="${esc(contrato.arquivo_url)}">${esc(contrato.arquivo_nome || 'documento')}</a><br/><span style="font-size:11px;color:#64748b;">(abra o link para visualizar o documento original assinado)</span></p>`;
   } else {
     corpoDoc = `<div class="corpo">${esc(contrato.conteudo || '')}</div>`;
   }

@@ -217,6 +217,31 @@ export default function Contratos() {
     setSavingParte(false);
   };
   const copiarTexto = (t) => { if (t) { navigator.clipboard?.writeText(t); alert('Link copiado.'); } };
+  // VER DOCUMENTO: abre DIRETO o arquivo com as assinaturas que existem (documento + manifesto).
+  // Não assinado → sai não assinado; 1 de 2 → mostra parcial; todos → todas as assinaturas.
+  const verDocumento = async (g) => {
+    let roster = [];
+    try {
+      if (g.rep.contrato_grupo_id) {
+        const { data } = await supabase.rpc('get_partes_contrato', { p_grupo_id: g.rep.contrato_grupo_id });
+        roster = Array.isArray(data) ? data : [];
+      }
+    } catch { /* segue sem roster (cai no fallback do PDF) */ }
+    if (isAdmin && g.linhas?.length) {
+      roster = g.linhas.map(l => ({
+        nome: l.dados_signatario?.nome || l.dados_signatario?.razao_social || l.assinante_email,
+        assinou: l.status === 'assinado' || !!l.assinado_em, assinado_em: l.assinado_em, _full: true,
+        dados_signatario: l.dados_signatario, assinatura: l.assinatura, assinante_ip: l.assinante_ip,
+        assinante_geo: l.assinante_geo, assinante_user_agent: l.assinante_user_agent,
+        dados_complementados_em: l.dados_complementados_em, token: l.token, email: l.assinante_email,
+        assinatura_testemunha: l.assinatura_testemunha, nome_testemunha: l.nome_testemunha,
+        requer_testemunha: !!l.requer_testemunha, testemunha_assinou: !!l.testemunha_em,
+      }));
+    } else {
+      roster = roster.map(p => ({ ...p, eu: p.email === user?.email }));
+    }
+    try { await gerarContratoPDF({ contrato: g.rep, roster }); } catch { alert('Não foi possível gerar o documento.'); }
+  };
   const baixarComAssinaturas = () => {
     if (!detalhe?._grupo) return;
     const rosterFull = detalhe._grupo.linhas.map(l => ({
@@ -335,15 +360,23 @@ export default function Contratos() {
                     style={{ padding: isMobile ? '10px 12px' : '8px 14px', background: '#f1f5f9', color: '#475569', border: 'none', borderRadius: 8, fontWeight: 600, fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, minHeight: 44 }}>
                     <Users size={13} /> Assinantes
                   </button>
-                  {isAdmin ? (
-                    <button onClick={() => abrirDetalhe(g)}
+                  {/* Cliente aguardando a PRÓPRIA assinatura → assinar. Senão, abre o documento
+                      com as assinaturas DIRETO (sem tela intermediária). */}
+                  {!isAdmin && aguardando ? (
+                    <button onClick={() => nav(`/c/${c.token}`)}
                       style={{ padding: isMobile ? '12px 16px' : '8px 16px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer', minHeight: 44 }}>
-                      Abrir / gerir
+                      Ler e assinar
                     </button>
                   ) : (
-                    <button onClick={() => aguardando ? nav(`/c/${c.token}`) : abrir(c)}
-                      style={{ padding: isMobile ? '12px 16px' : '8px 16px', background: aguardando ? '#0D63DB' : '#f1f5f9', color: aguardando ? 'white' : '#475569', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer', minHeight: 44 }}>
-                      {aguardando ? 'Ler e assinar' : 'Visualizar'}
+                    <button onClick={() => verDocumento(g)}
+                      style={{ padding: isMobile ? '12px 16px' : '8px 16px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer', minHeight: 44 }}>
+                      Ver documento
+                    </button>
+                  )}
+                  {isAdmin && (
+                    <button onClick={() => abrirDetalhe(g)}
+                      style={{ padding: isMobile ? '12px 16px' : '8px 16px', background: '#f1f5f9', color: '#475569', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer', minHeight: 44 }}>
+                      Gerir
                     </button>
                   )}
                 </div>
