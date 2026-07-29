@@ -8552,6 +8552,9 @@ function MarketingTab() {
   const [oportunidades, setOportunidades] = useState([]);
   const [alertas, setAlertas] = useState([]);
   const [funil, setFunil] = useState(null); // captação por origem (RPC admin_funil_captacao)
+  const [gastos, setGastos] = useState([]); // lançamentos de investimento (marketing_gastos)
+  const [gastoForm, setGastoForm] = useState({ data: '', canal: 'Google Ads', valor: '', observacao: '' });
+  const [gastoBusy, setGastoBusy] = useState(false);
 
   const carregar = useCallback(async () => {
     setLoading(true);
@@ -8648,6 +8651,12 @@ function MarketingTab() {
       const { data: fun } = await supabase.rpc('admin_funil_captacao', { p_inicio: thirtyDaysAgo, p_fim: dataFimISO });
       setFunil(fun || null);
 
+      // Investimento em anúncios no período (lançado pelo admin) → CAC/ROAS por canal.
+      const { data: gs } = await supabase.from('marketing_gastos').select('*')
+        .gte('data', thirtyDaysAgo.slice(0, 10)).lte('data', dataFimISO.slice(0, 10))
+        .order('data', { ascending: false });
+      setGastos(gs || []);
+
     } catch (e) {
       console.error('MarketingTab error:', e);
     }
@@ -8656,12 +8665,33 @@ function MarketingTab() {
 
   useEffect(() => { carregar(); }, [carregar]);
 
+  const salvarGasto = async () => {
+    const v = Number(String(gastoForm.valor).replace(/\./g, '').replace(',', '.')) || Number(gastoForm.valor);
+    if (!v || v <= 0) { alert('Informe o valor investido (ex.: 350,00).'); return; }
+    setGastoBusy(true);
+    const { error } = await supabase.from('marketing_gastos').insert({
+      data: gastoForm.data || new Date().toISOString().slice(0, 10),
+      canal: gastoForm.canal, valor: v, observacao: gastoForm.observacao?.trim() || null,
+    });
+    setGastoBusy(false);
+    if (error) { alert('Erro ao lançar: ' + error.message); return; }
+    setGastoForm(f => ({ data: '', canal: f.canal, valor: '', observacao: '' }));
+    carregar();
+  };
+  const excluirGasto = async (id) => {
+    if (!window.confirm('Excluir este lançamento de investimento?')) return;
+    await supabase.from('marketing_gastos').delete().eq('id', id);
+    carregar();
+  };
+
   function exportarCSV() {
     const d = new Date().toLocaleDateString('pt-BR');
     const linhas = [
       `Relatório de Marketing BidPro Brasil - ${d}`, '',
       '=== CAPTAÇÃO POR ORIGEM ===', 'Canal,Cadastros,Engajados,Contrataram,Receita',
       ...(funil?.canais || []).map(c => `${c.canal},${c.cadastros},${c.engajados},${c.contratantes},${Number(c.receita || 0).toFixed(2)}`), '',
+      '=== INVESTIMENTO EM ANÚNCIOS ===', 'Data,Canal,Valor,Observação',
+      ...gastos.map(g => `${g.data},${g.canal},${Number(g.valor || 0).toFixed(2)},${(g.observacao || '').replace(/,/g, ';')}`), '',
       '=== BUSCAS ===', 'Cidade,Total Buscas',
       ...buscas.cidades.map(([c, n]) => `${c},${n}`), '',
       'Estado,Total Buscas',
@@ -8770,20 +8800,36 @@ function MarketingTab() {
         {sectionHeader('Captação por origem', 'Funil do período: cadastros → engajados (viram imóveis) → contratações pagas → receita, pelo canal de aquisição')}
         {(() => {
           const fmtR = v => 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-          const canais = funil?.canais || [];
           const t = funil?.totais || {};
           const recentes = funil?.recentes || [];
           const CORES_CANAL = { 'Google Ads': '#4285F4', 'Meta Ads': '#0866FF', 'Indicação (parceiro)': '#7c3aed', 'Orgânico / Direto': '#059669' };
           const corCanal = c => CORES_CANAL[c] || '#d97706';
+          // Cruza o funil com o INVESTIMENTO lançado no período → CAC por assinante e ROAS
+          // por canal (a métrica de economia: quanto custou cada assinante pago e o retorno).
+          const gastoCanal = {};
+          (gastos || []).forEach(g => { gastoCanal[g.canal] = (gastoCanal[g.canal] || 0) + Number(g.valor || 0); });
+          const gastoTotal = Object.values(gastoCanal).reduce((a, b) => a + b, 0);
+          const canaisMap = {};
+          (funil?.canais || []).forEach(c => { canaisMap[c.canal] = { ...c }; });
+          Object.keys(gastoCanal).forEach(canal => {
+            if (!canaisMap[canal]) canaisMap[canal] = { canal, cadastros: 0, engajados: 0, contratantes: 0, receita: 0 };
+          });
+          const canais = Object.values(canaisMap).map(c => ({ ...c, gasto: gastoCanal[c.canal] || 0 }))
+            .sort((a, b) => (b.cadastros - a.cadastros) || (b.receita - a.receita));
+          const kpis = [
+            { label: 'Cadastros no período', value: t.cadastros ?? 0, color: '#0D63DB' },
+            { label: 'Engajados (viram imóveis)', value: t.engajados ?? 0, color: '#7c3aed' },
+            { label: 'Contrataram (pagaram)', value: t.contratantes ?? 0, color: '#059669' },
+            { label: 'Receita no período', value: fmtR(t.receita), color: '#d97706' },
+          ];
+          if (gastoTotal > 0) {
+            kpis.push({ label: 'Investimento em anúncios', value: fmtR(gastoTotal), color: '#dc2626' });
+            kpis.push({ label: 'ROAS geral (receita/gasto)', value: `${(Number(t.receita || 0) / gastoTotal).toFixed(2)}×`, color: Number(t.receita || 0) >= gastoTotal ? '#059669' : '#dc2626' });
+          }
           return (
             <>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12, marginBottom: 18 }}>
-                {[
-                  { label: 'Cadastros no período', value: t.cadastros ?? 0, color: '#0D63DB' },
-                  { label: 'Engajados (viram imóveis)', value: t.engajados ?? 0, color: '#7c3aed' },
-                  { label: 'Contrataram (pagaram)', value: t.contratantes ?? 0, color: '#059669' },
-                  { label: 'Receita no período', value: fmtR(t.receita), color: '#d97706' },
-                ].map(k => (
+                {kpis.map(k => (
                   <div key={k.label} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '14px 18px' }}>
                     <div style={{ fontSize: 22, fontWeight: 900, color: k.color }}>{k.value}</div>
                     <div style={kpiLabel}>{k.label}</div>
@@ -8791,9 +8837,9 @@ function MarketingTab() {
                 ))}
               </div>
               {canais.length === 0 ? (
-                <div style={{ color: '#94a3b8', fontSize: 13 }}>Sem cadastros no período selecionado.</div>
+                <div style={{ color: '#94a3b8', fontSize: 13, marginBottom: 14 }}>Sem cadastros no período selecionado.</div>
               ) : (
-                <div style={{ overflowX: 'auto', marginBottom: recentes.length ? 18 : 0 }}>
+                <div style={{ overflowX: 'auto', marginBottom: 18 }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                     <thead>
                       <tr style={{ textAlign: 'left', color: '#64748b', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
@@ -8803,12 +8849,15 @@ function MarketingTab() {
                         <th style={{ padding: '8px 10px', textAlign: 'right' }}>Contrataram</th>
                         <th style={{ padding: '8px 10px', textAlign: 'right' }}>Conversão</th>
                         <th style={{ padding: '8px 10px', textAlign: 'right' }}>Receita</th>
+                        <th style={{ padding: '8px 10px', textAlign: 'right' }}>Gasto</th>
+                        <th style={{ padding: '8px 10px', textAlign: 'right' }}>CAC/assinante</th>
+                        <th style={{ padding: '8px 10px', textAlign: 'right' }}>ROAS</th>
                       </tr>
                     </thead>
                     <tbody>
                       {canais.map(c => (
                         <tr key={c.canal} style={{ borderTop: '1px solid #f1f5f9' }}>
-                          <td style={{ padding: '9px 10px', fontWeight: 700, color: '#111111' }}>
+                          <td style={{ padding: '9px 10px', fontWeight: 700, color: '#111111', whiteSpace: 'nowrap' }}>
                             <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: corCanal(c.canal), marginRight: 8 }} />
                             {c.canal}
                           </td>
@@ -8819,12 +8868,58 @@ function MarketingTab() {
                             {c.cadastros > 0 ? `${((c.contratantes / c.cadastros) * 100).toFixed(1)}%` : '—'}
                           </td>
                           <td style={{ padding: '9px 10px', textAlign: 'right', fontWeight: 700, color: '#111111' }}>{fmtR(c.receita)}</td>
+                          <td style={{ padding: '9px 10px', textAlign: 'right', color: c.gasto > 0 ? '#dc2626' : '#94a3b8' }}>{c.gasto > 0 ? fmtR(c.gasto) : '—'}</td>
+                          <td style={{ padding: '9px 10px', textAlign: 'right', color: '#64748b' }}>
+                            {c.gasto > 0 ? (c.contratantes > 0 ? fmtR(c.gasto / c.contratantes) : 'sem assinante') : '—'}
+                          </td>
+                          <td style={{ padding: '9px 10px', textAlign: 'right', fontWeight: 700, color: c.gasto > 0 ? (Number(c.receita) >= c.gasto ? '#059669' : '#dc2626') : '#94a3b8' }}>
+                            {c.gasto > 0 ? `${(Number(c.receita || 0) / c.gasto).toFixed(2)}×` : '—'}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
               )}
+
+              {/* Lançar investimento — alimenta o CAC/ROAS acima. Manual e rápido (30s/semana);
+                  a automação por API de LEITURA pode substituir depois sem mudar a tela. */}
+              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '14px 16px', marginBottom: recentes.length ? 18 : 0 }}>
+                <div style={{ fontWeight: 700, fontSize: 13, color: '#111111', marginBottom: 10 }}>Lançar investimento em anúncios</div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <input type="date" value={gastoForm.data} onChange={e => setGastoForm(f => ({ ...f, data: e.target.value }))}
+                    style={{ fontSize: 12, padding: '7px 10px', border: '1px solid #e2e8f0', borderRadius: 8, color: '#111111' }} />
+                  <select value={gastoForm.canal} onChange={e => setGastoForm(f => ({ ...f, canal: e.target.value }))}
+                    style={{ fontSize: 12, padding: '7px 10px', border: '1px solid #e2e8f0', borderRadius: 8, color: '#111111', background: 'white' }}>
+                    {['Google Ads', 'Meta Ads', 'Outro'].map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                  <input value={gastoForm.valor} inputMode="decimal" placeholder="Valor (R$)"
+                    onChange={e => setGastoForm(f => ({ ...f, valor: e.target.value }))}
+                    style={{ fontSize: 12, padding: '7px 10px', border: '1px solid #e2e8f0', borderRadius: 8, width: 110, color: '#111111' }} />
+                  <input value={gastoForm.observacao} placeholder="Observação (opcional — ex.: campanha X, semana 1)"
+                    onChange={e => setGastoForm(f => ({ ...f, observacao: e.target.value }))}
+                    style={{ fontSize: 12, padding: '7px 10px', border: '1px solid #e2e8f0', borderRadius: 8, flex: 1, minWidth: 180, color: '#111111' }} />
+                  <button onClick={salvarGasto} disabled={gastoBusy}
+                    style={{ fontSize: 12, fontWeight: 700, padding: '8px 18px', background: gastoBusy ? '#94a3b8' : '#0D63DB', color: 'white', border: 'none', borderRadius: 8, cursor: gastoBusy ? 'default' : 'pointer' }}>
+                    {gastoBusy ? 'Lançando…' : '+ Lançar'}
+                  </button>
+                </div>
+                {gastos.length > 0 && (
+                  <div style={{ marginTop: 10 }}>
+                    {gastos.slice(0, 8).map(g => (
+                      <div key={g.id} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12, padding: '5px 0', borderTop: '1px solid #f1f5f9', color: '#475569' }}>
+                        <span style={{ color: '#94a3b8' }}>{g.data ? new Date(g.data + 'T12:00:00').toLocaleDateString('pt-BR') : ''}</span>
+                        <span style={{ fontWeight: 700, color: corCanal(g.canal) }}>{g.canal}</span>
+                        {g.observacao && <span style={{ color: '#94a3b8' }}>· {g.observacao}</span>}
+                        <span style={{ marginLeft: 'auto', fontWeight: 700, color: '#111111' }}>{fmtR(g.valor)}</span>
+                        <button onClick={() => excluirGasto(g.id)} title="Excluir lançamento"
+                          style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 14, padding: '0 2px' }}>✕</button>
+                      </div>
+                    ))}
+                    {gastos.length > 8 && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>+ {gastos.length - 8} lançamentos no período</div>}
+                  </div>
+                )}
+              </div>
               {recentes.length > 0 && (
                 <div>
                   <div style={{ fontWeight: 700, fontSize: 14, color: '#111111', marginBottom: 8 }}>Últimas contratações</div>
