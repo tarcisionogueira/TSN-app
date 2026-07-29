@@ -2643,12 +2643,53 @@ function ContratosTab() {
   const [arquivoNome, setArquivoNome] = useState('');
   const [arquivoUploading, setArquivoUploading] = useState(false);
 
+  // ATRIBUIÇÃO do documento a um usuário/arrematação (mesmo após assinado; avulso = sem vínculo).
+  const [atrUserBusca, setAtrUserBusca] = useState('');
+  const [atrUserRes, setAtrUserRes] = useState([]);
+  const [atrUser, setAtrUser] = useState(null);          // {id, nome}
+  const [atrArrematacoes, setAtrArrematacoes] = useState([]);
+  const [atrBusy, setAtrBusy] = useState(false);
+
   const load = useCallback(async () => {
     setLoading(true);
     const { data } = await supabase.from('contratos_link').select('*, kyc_incluido, kyc_fotos').order('criado_em', { ascending: false });
     setContratosLink((data || []).filter(c => c.status !== 'cancelado'));
     setLoading(false);
   }, []);
+
+  // Busca de usuário + suas arrematações para atribuir o documento (o vínculo faz o documento
+  // aparecer nos documentos/anexos da arrematação do usuário e entrar no que a IA lê/aprende).
+  const buscarUsuarioAtr = async (q) => {
+    setAtrUserBusca(q); setAtrUser(null); setAtrArrematacoes([]);
+    if (q.trim().length < 2) { setAtrUserRes([]); return; }
+    const { data } = await supabase.from('perfis').select('id, nome').ilike('nome', `%${q.trim()}%`).limit(8);
+    setAtrUserRes(Array.isArray(data) ? data : []);
+  };
+  const escolherUsuarioAtr = async (u) => {
+    setAtrUser(u); setAtrUserBusca(u.nome || '(sem nome)'); setAtrUserRes([]);
+    const { data } = await supabase.from('arrematados').select('id, imovel_id, titulo, cidade, estado').eq('user_id', u.id).order('created_at', { ascending: false });
+    setAtrArrematacoes(Array.isArray(data) ? data : []);
+  };
+  const aplicarAtribuicao = async (patch, msgOk) => {
+    if (!detalhe) return;
+    setAtrBusy(true);
+    try {
+      const q = detalhe.contrato_grupo_id
+        ? supabase.from('contratos_link').update(patch).eq('contrato_grupo_id', detalhe.contrato_grupo_id)
+        : supabase.from('contratos_link').update(patch).eq('id', detalhe.id);
+      const { error } = await q;
+      if (error) throw error;
+      setDetalhe(d => (d ? { ...d, ...patch } : d));
+      setAtrUser(null); setAtrUserBusca(''); setAtrArrematacoes([]);
+      await load();
+      if (msgOk) alert(msgOk);
+    } catch { alert('Não foi possível atualizar a atribuição (verifique a permissão).'); }
+    setAtrBusy(false);
+  };
+  const atribuirArrematacao = (a) => aplicarAtribuicao(
+    { arremate_user_id: atrUser.id, arremate_imovel_id: a.imovel_id },
+    'Documento atribuído. Ele aparece agora nos documentos da arrematação do usuário e entra no aprendizado da IA.');
+  const tornarAvulso = () => aplicarAtribuicao({ arremate_user_id: null, arremate_imovel_id: null });
 
   useEffect(() => { load(); }, [load]);
 
@@ -3257,6 +3298,45 @@ function ContratosTab() {
                 {detalhe.assinatura_hash && <div style={{ fontSize:10, color:'#15803d', wordBreak:'break-all', marginTop:4 }}>Hash: {detalhe.assinatura_hash}</div>}
               </div>
             )}
+
+            {/* ATRIBUIÇÃO — vincula o documento (mesmo já assinado) a um usuário e à arrematação
+                dele. Vinculado, ele aparece nos documentos/anexos do arremate do usuário e entra
+                no que a IA de arremates lê/aprende. Sem vínculo = documento avulso. */}
+            <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:10, padding:'12px 14px', marginBottom:14 }}>
+              <div style={{ fontSize:12, fontWeight:800, color:'#334155', marginBottom:6 }}>🔗 Atribuição a uma arrematação</div>
+              {detalhe.arremate_imovel_id ? (
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:10, flexWrap:'wrap' }}>
+                  <span style={{ fontSize:12, color:'#166534', fontWeight:700 }}>✓ Atribuído (imóvel {String(detalhe.arremate_imovel_id).slice(0,8)}…) — aparece nos documentos do arremate do usuário.</span>
+                  <button style={{ ...S.btn('outline'), fontSize:11, padding:'5px 10px' }} disabled={atrBusy} onClick={tornarAvulso}>Tornar avulso</button>
+                </div>
+              ) : (
+                <>
+                  <div style={{ fontSize:11.5, color:'#64748b', marginBottom:8 }}>Documento avulso. Para vincular a um usuário e à arrematação dele (mesmo já assinado), busque o usuário:</div>
+                  <div style={{ position:'relative', marginBottom: (atrUser && atrArrematacoes.length) ? 8 : 0 }}>
+                    <input value={atrUserBusca} onChange={e => buscarUsuarioAtr(e.target.value)} placeholder="Buscar usuário por nome…" style={{ ...S.input }} />
+                    {atrUserRes.length > 0 && !atrUser && (
+                      <div style={{ position:'absolute', top:'100%', left:0, right:0, background:'white', border:'1px solid #e2e8f0', borderRadius:8, marginTop:4, boxShadow:'0 8px 24px rgba(0,0,0,0.1)', zIndex:10, overflow:'hidden' }}>
+                        {atrUserRes.map(u => (
+                          <button key={u.id} onClick={() => escolherUsuarioAtr(u)} style={{ display:'block', width:'100%', textAlign:'left', padding:'8px 12px', border:'none', background:'white', cursor:'pointer', fontSize:13, color:'#334155' }}>{u.nome || '(sem nome)'}</button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  {atrUser && (atrArrematacoes.length ? (
+                    <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                      <div style={{ fontSize:11, color:'#64748b' }}>Arrematações de {atrUser.nome}:</div>
+                      {atrArrematacoes.map(a => (
+                        <button key={a.id} disabled={atrBusy} onClick={() => atribuirArrematacao(a)} style={{ ...S.btn('outline'), justifyContent:'flex-start', textAlign:'left', fontSize:12 }}>
+                          {a.titulo || a.imovel_id}{a.cidade ? ` · ${a.cidade}/${a.estado || ''}` : ''}
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{ fontSize:12, color:'#94a3b8' }}>Esse usuário ainda não tem arrematações cadastradas.</div>
+                  ))}
+                </>
+              )}
+            </div>
 
             <div style={{ display:'flex', justifyContent:'space-between', gap:8, flexWrap:'wrap' }}>
               <button style={{ ...S.btn('danger') }} onClick={() => detalhe._grupo && excluirGrupo(detalhe._grupo)}>Excluir documento</button>
