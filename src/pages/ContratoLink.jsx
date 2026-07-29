@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { CheckCircle2, AlertCircle, Loader2, ShieldCheck, Camera, Upload, FileText, ExternalLink, Download, Clock, ChevronLeft } from 'lucide-react';
 import { supabase } from '../utils/supabase';
 import { useIsMobile } from '../utils/useIsMobile';
-import { formatCpf, formatCnpj } from '../utils/cnpjCep';
+import { formatCpf, formatCnpj, validarCpf, validarCnpj, validarEmail } from '../utils/cnpjCep';
 import EnderecoAutocomplete from '../components/EnderecoAutocomplete';
 import { gerarContratoPDF } from '../components/ContratoPDF';
 
@@ -206,6 +206,19 @@ export default function ContratoLink() {
     setImagensIdentidade(p => val ? { ...p, [id]: val } : Object.fromEntries(Object.entries(p).filter(([k]) => k !== id)));
   }, []);
 
+  // RASTREIO DO FUNIL DE ASSINATURA (pedido do dono: "o Cliente 360 deve rastrear o fluxo"). O
+  // signatário é ANÔNIMO (sem sessão → o tracker do app não o pega), então mandamos eventos leves
+  // (aberto/etapa) ao servidor, que os registra na linha do tempo de QUEM CRIOU o contrato.
+  // Fire-and-forget — nunca atrapalha nem atrasa a assinatura.
+  const rastrear = useCallback((evento, extra) => {
+    try {
+      fetch('/api/assinar-contrato', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, keepalive: true,
+        body: JSON.stringify({ evento, token, ...(extra || {}) }),
+      }).catch(() => {});
+    } catch { /* best-effort */ }
+  }, [token]);
+
   useEffect(() => {
     if (!token) return;
     // Acesso público ao contrato SÓ pelo token exato, via RPC SECURITY DEFINER
@@ -220,10 +233,15 @@ export default function ContratoLink() {
         // checagem de expiração (contrato assinado é válido mesmo após a janela de assinatura).
         else if (c.status === 'assinado') { setContrato(c); setJaAssinado(true); }
         else if (c.status === 'expirado' || new Date(c.expira_em) < new Date()) setErro('Este link expirou.');
-        else setContrato(c);
+        else { setContrato(c); rastrear('aberto'); } // funil: link de assinatura aberto
         setLoading(false);
       });
-  }, [token]);
+  }, [token, rastrear]);
+
+  // Funil: avançou para a etapa de dados / revisão (assinatura). Sinaliza onde as pessoas param.
+  useEffect(() => {
+    if (contrato && !jaAssinado && (etapa === 'dados' || etapa === 'revisar')) rastrear('etapa', { etapa });
+  }, [etapa]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Situação das partes (quem já assinou / quem falta) — via TOKEN (funciona logado ou anônimo).
   // Refaz após assinar (etapa muda) para refletir a nova assinatura na tela de leitura.
@@ -240,13 +258,17 @@ export default function ContratoLink() {
   // Endereço em UM campo só (pedido do dono, como no Índice): a pessoa digita o endereço completo
   // COM número/bairro/cidade-UF num único campo, em vez de 3 (endereço + cidade/estado + CEP).
   const PLACEHOLDER_END = 'Rua, número, complemento, bairro, cidade/UF';
+  // PRIVACIDADE (pedido do dono — exposição no segmento de leilões): o ENDEREÇO deixa de ser
+  // obrigatório e não vai para o documento/relatório. A LOCALIZAÇÃO APROXIMADA (geolocalização
+  // no momento da assinatura) + IP + dispositivo + carimbo de tempo já autenticam a presença
+  // (Lei 14.063/2020 e MP 2.200-2/2001), sem expor o endereço residencial completo do assinante.
   const camposPF = [
     { label:'Nome completo', name:'nome', required:true },
     { label:'CPF', name:'cpf', required:true, placeholder:'000.000.000-00' },
     { label:'RG', name:'rg', required:true },
     { label:'E-mail', name:'email', type:'email', required:true },
     { label:'Telefone / WhatsApp', name:'telefone', required:true },
-    { label:'Endereço completo (com número)', name:'endereco', required:true, placeholder: PLACEHOLDER_END, autocomplete:true },
+    { label:'Endereço (opcional)', name:'endereco', required:false, placeholder: PLACEHOLDER_END, autocomplete:true },
   ];
   const camposPJ = [
     { label:'Razão social', name:'razao_social', required:true },
@@ -256,11 +278,24 @@ export default function ContratoLink() {
     { label:'Cargo do representante', name:'cargo', required:true },
     { label:'E-mail corporativo', name:'email', type:'email', required:true },
     { label:'Telefone', name:'telefone', required:true },
-    { label:'Endereço completo da sede (com número)', name:'endereco', required:true, placeholder: PLACEHOLDER_END, autocomplete:true },
+    { label:'Endereço da sede (opcional)', name:'endereco', required:false, placeholder: PLACEHOLDER_END, autocomplete:true },
   ];
   const campos = tipoPessoa === 'pf' ? camposPF : camposPJ;
 
-  const podeProsseguir = () => campos.filter(c => c.required).every(c => (dados[c.name] || '').trim().length > 0);
+  // Campos que ainda faltam OU estão inválidos (CPF/CNPJ com dígito errado, e-mail malformado).
+  // Usado para (a) desabilitar o botão e (b) DIZER o que falta — evita o "botão cinza mudo".
+  const camposFaltando = () => {
+    const faltam = [];
+    for (const c of campos.filter(x => x.required)) {
+      if (!(dados[c.name] || '').trim()) faltam.push(c.label.replace(' *', ''));
+    }
+    if ((dados.cpf || '').trim() && !validarCpf(dados.cpf)) faltam.push('CPF válido');
+    if ((dados.cpf_representante || '').trim() && !validarCpf(dados.cpf_representante)) faltam.push('CPF do representante válido');
+    if ((dados.cnpj || '').trim() && !validarCnpj(dados.cnpj)) faltam.push('CNPJ válido');
+    if ((dados.email || '').trim() && !validarEmail(dados.email)) faltam.push('e-mail válido');
+    return faltam;
+  };
+  const podeProsseguir = () => camposFaltando().length === 0;
 
   const assinar = async () => {
     if (!assinatura) { alert('Por favor, assine no campo de assinatura.'); return; }
@@ -280,6 +315,15 @@ export default function ContratoLink() {
     }
     // Testemunha: NÃO é coletada aqui. Quando o contrato exige, a parte assina sozinha e, ao
     // concluir, recebe um LINK para encaminhar à sua testemunha (assina remotamente).
+
+    // GUARDA DE TAMANHO: assinatura + fotos de KYC são dataURLs base64; juntas podem estourar o
+    // limite de corpo do Edge (~4 MB) e o POST falhava com um "tente novamente" sem explicação.
+    // Detecta antes e orienta a reduzir as fotos, em vez de travar em silêncio.
+    const tamanhoAprox = (assinatura?.length || 0) + Object.values(imagensIdentidade).reduce((s, v) => s + (typeof v === 'string' ? v.length : 0), 0);
+    if (tamanhoAprox > 3_700_000) {
+      alert('As imagens enviadas (documento/selfie) estão muito grandes. Refaça as fotos com resolução menor ou envie arquivos mais leves e tente de novo.');
+      return;
+    }
 
     setEnviando(true);
     // Ponto de autenticação (ZapSign): localização aproximada, best-effort. O dispositivo (user-agent)
@@ -700,10 +744,21 @@ export default function ContratoLink() {
                   <Campo key={c.name} {...c} value={dados[c.name]||''} onChange={onChange} />
                 ))}
               </div>
-              <button onClick={() => setEtapa('revisar')} disabled={!podeProsseguir()}
-                style={{ width:'100%', padding:'13px', background:'#0D63DB', color:'white', border:'none', borderRadius:10, fontWeight:700, fontSize:14, cursor:'pointer', opacity:podeProsseguir()?1:0.5 }}>
-                Próximo: Revisar e assinar →
-              </button>
+              {/* Botão SEMPRE clicável: em vez de ficar cinza e "mudo", ao clicar incompleto ele
+                  DIZ o que falta (campo vazio ou CPF/CNPJ/e-mail inválido). */}
+              {(() => { const faltam = camposFaltando(); return (
+                <>
+                  {faltam.length > 0 && (
+                    <div style={{ marginBottom:10, fontSize:12, color:'#f59e0b', background:'rgba(245,158,11,0.1)', border:'1px solid rgba(245,158,11,0.3)', borderRadius:9, padding:'9px 12px' }}>
+                      Falta preencher: {faltam.join(', ')}.
+                    </div>
+                  )}
+                  <button onClick={() => { const f = camposFaltando(); if (f.length) { alert('Antes de continuar, verifique: ' + f.join(', ') + '.'); return; } setEtapa('revisar'); }}
+                    style={{ width:'100%', padding:'13px', background:'#0D63DB', color:'white', border:'none', borderRadius:10, fontWeight:700, fontSize:14, cursor:'pointer', opacity: faltam.length?0.7:1 }}>
+                    Próximo: Revisar e assinar →
+                  </button>
+                </>
+              ); })()}
             </div>
           )}
 

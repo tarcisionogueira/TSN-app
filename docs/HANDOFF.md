@@ -22,7 +22,22 @@
 > Checagem rápida a qualquer momento: `select public.auditoria_seguranca();` → `0 crítico / 0 atenção` = íntegro.
 > **Auditorias ofensivas completas: 15/07/2026 (×2).** Total de correções: 15 (1ª rodada) + escalonamento por convite (CRÍTICO) + IDOR do MP (ALTO) + escala. Refazer a ofensiva quando entrarem rotas/pagamento/RLS novos (a Rotina mensal já faz isso sozinha).
 
-## ✅ COMEÇAR AQUI (29/07 — sessão 16: certidões podadas + admin contratos + rascunho de cursos/ebooks + filtros lapidados)
+## ✅ COMEÇAR AQUI (29/07 — sessão 17: KYC no suporte + CSP do documento + fluxo de assinatura + privacidade dos assinantes)
+> MESMA branch. `npm run build` OK.
+
+**A. KYC do parceiro aparecia no MODO SUPORTE (`src/components/KycParceiroModal.jsx`).** O admin em suporte via a conta de um cliente e o popup "Verifique sua identidade / Você entrou no Programa de Parceiros" surgia — mas era o flag do PRÓPRIO admin (aderiu 24/07, sem identidade validada), pois o bypass usava `effectiveRole` (que no suporte vira o papel do cliente). Corrigido: usa o papel REAL (`role`) + **não aparece com `impersonate`** (suporte). Confirmado no banco que o cliente (Matheus) tem `parceiro_aceite_em=null` (nunca aderiu).
+
+**B. Documento não renderizava (CSP) — `vercel.json`.** O `frame-src` só permitia daily.co/mercadopago — **não o Supabase**. O documento (PDF) é um `<iframe>` para o Storage → bloqueado em TODO lugar (assinatura do signatário, modal admin, leitura). Corrigido: `frame-src 'self' blob: https://*.daily.co https://*.mercadopago.com https://*.supabase.co`. (Imagens funcionavam por `img-src https:`.) Upload de contrato passou a gravar `contentType` explícito.
+
+**C. Fluxo de assinatura refinado (`src/pages/ContratoLink.jsx`, `api/assinar-contrato.js`).** (1) botão "Próximo" da etapa de dados **sempre clicável** e DIZ o que falta (campo vazio ou CPF/CNPJ/e-mail inválido) — fim do "botão cinza mudo"; (2) **validação de dígito** de CPF/CNPJ + e-mail (`validarCpf/validarCnpj/validarEmail` em `utils/cnpjCep.js`); (3) **guarda de tamanho** do payload (assinatura+fotos base64 > 3,7 MB → mensagem clara em vez de "tente novamente" do limite do Edge); (4) **rastreio anônimo do funil** — `ContratoLink` manda eventos leves `aberto`/`etapa` para `assinar-contrato` (branch `evento`), que registra `contrato_link_aberto`/`contrato_link_etapa` + os ERROS (`contrato_assinatura_erro`) na linha do tempo de quem criou o contrato (Cliente 360) — antes só o sucesso era rastreado; agora dá para ver onde o signatário para.
+
+**D. PRIVACIDADE dos assinantes (LGPD / exposição no segmento de leilões) — `ContratoLink.jsx`, `ContratoPDF.jsx`, `utils/cnpjCep.js`.** (i) **Endereço deixou de ser obrigatório** e NÃO vai para o documento — a presença é autenticada por **localização aproximada (geo) + IP + dispositivo + carimbo de tempo** (Lei 14.063/2020 + MP 2.200-2/2001), sem expor o endereço residencial. (ii) No **Relatório de Assinaturas** (ContratoPDF), CPF/CNPJ, e-mail e telefone saem **mascarados** (`mascararDoc/Email/Tel`); o **registro completo fica na plataforma** (RLS), disponível às partes e à Justiça — consta na nota legal do próprio documento. ⚠️ **Confirmar com o JURÍDICO** se o nível de mascaramento atende à prática do escritório (não é aconselhamento jurídico).
+
+**E. Endereço errado no topo do arremate (dado):** o imóvel atribuído manualmente ao Matheus (fonte `atribuido_manual`, id `8ddec600…`) tinha `titulo`="RUA MARCELLA BOIRON CARDOSO, 141, ALAGOINHAS/BA" (endereço de pessoa, provável do comprovante da Ana Paula), enquanto os campos estruturados + o boleto "Imovel_Fsa" apontam **Feira de Santana**. Corrigido `titulo` no imóvel e no arremate para "Rua H, lote 45, quadra 04, Loteamento Residencial Parque da Cidade — Feira de Santana/BA". Causa: `atribuir-arremate.js` grava o `titulo` do que a equipe digita na atribuição (conferir no formulário).
+
+---
+
+## ✅ Sessão 16 (29/07): certidões podadas + admin contratos + rascunho de cursos/ebooks + filtros lapidados
 > MESMA branch. `npm run build` OK; `auditoria_seguranca()` = **0 crítico / 0 atenção** (nenhum objeto novo de banco nesta sessão).
 
 **A. DOCUMENTAL/JURÍDICO — precisa de estágios? NÃO (verificado).** Diferente do mercadológico (várias buscas web abertas → pause_turn → timeout), o documental já tem deadlines escalonados (165s coleta / 275s fallbacks / 285s hard) e a chamada de IA pesada é uma EXTRAÇÃO de PDFs (visão/OCR) que precisa dos docs juntos — não é o mesmo padrão de risco. O **laudo (3º relatório)** é 1 chamada leve consolidando texto (maxDuration 180s, sem web/PDF) — também NÃO precisa de estágios.

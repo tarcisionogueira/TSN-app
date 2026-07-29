@@ -8,6 +8,7 @@
 // Gerado no cliente a partir do que o token expõe: dados COMPLETOS do próprio signatário +
 // situação das DEMAIS partes (nome + data), sem vazar CPF/IP/assinatura de terceiros. Retroativo.
 import { imprimirHtml } from './pdfImprimir';
+import { mascararDoc, mascararEmail, mascararTel } from '../utils/cnpjCep';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const dataHora = (iso) => { try { return new Date(iso).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }); } catch { return iso || ''; } };
@@ -87,12 +88,15 @@ export function gerarContratoPDF({ contrato, roster = [] } = {}) {
     const pToken = full ? p.token : (meu ? contrato.token : null);
     const pAssTest = full ? p.assinatura_testemunha : (meu ? contrato.assinatura_testemunha : null);
     const pNomeTest = full ? p.nome_testemunha : (meu ? contrato.nome_testemunha : null);
+    // PRIVACIDADE (LGPD / exposição no segmento de leilões): os pontos de autenticação exibem os
+    // dados MASCARADOS (o registro completo fica na plataforma, disponível às partes e à Justiça).
+    // Endereço NÃO é exibido — a presença é autenticada pela localização aproximada + IP + dispositivo.
     const pontos = [];
     if (detalhar) {
-      if (pds.telefone) pontos.push(`<div>Telefone: ${esc(pds.telefone)}</div>`);
-      if (pds.email || p.email) pontos.push(`<div>E-mail: ${esc(pds.email || p.email)}</div>`);
-      if (pds.cpf) pontos.push(`<div>CPF: ${esc(pds.cpf)}</div>`);
-      if (pds.cnpj) pontos.push(`<div>CNPJ: ${esc(pds.cnpj)}</div>`);
+      if (pds.telefone) pontos.push(`<div>Telefone: ${esc(mascararTel(pds.telefone))}</div>`);
+      if (pds.email || p.email) pontos.push(`<div>E-mail: ${esc(mascararEmail(pds.email || p.email))}</div>`);
+      if (pds.cpf) pontos.push(`<div>CPF: ${esc(mascararDoc(pds.cpf))}</div>`);
+      if (pds.cnpj) pontos.push(`<div>CNPJ: ${esc(mascararDoc(pds.cnpj))}</div>`);
       if (p.assinou) pontos.push('<div>Nível de segurança: assinatura eletrônica (manuscrita em tela), com carimbo de data/hora do servidor</div>');
       if (pGeo && Number.isFinite(Number(pGeo.lat)) && Number.isFinite(Number(pGeo.lng))) pontos.push(`<div>Localização aproximada: ${esc(Number(pGeo.lat).toFixed(6))}, ${esc(Number(pGeo.lng).toFixed(6))}</div>`);
       if (pIp) pontos.push(`<div>IP: ${esc(pIp)}</div>`);
@@ -133,7 +137,7 @@ export function gerarContratoPDF({ contrato, roster = [] } = {}) {
       <div><b>Assinaturas:</b> ${totAssin} de ${total}</div>
       <div class="muted">Datas e horários em UTC-03:00 (America/Sao_Paulo).</div>
     </div>
-    <div class="legal"><span class="cert">INTEGRIDADE CERTIFICADA.</span> Assinaturas eletrônicas têm validade legal, conforme a MP nº 2.200-2/2001 (ICP-Brasil) e a Lei nº 14.063/2020. A integridade é assegurada pelo hash SHA-256 acima; qualquer alteração no texto do contrato invalida as assinaturas.${verUrl ? ` Confira a autenticidade deste documento em ${verUrl}.` : ''}${numero ? ` Este relatório é parte integrante do documento nº ${esc(numero)}.` : ''}</div>
+    <div class="legal"><span class="cert">INTEGRIDADE CERTIFICADA.</span> Assinaturas eletrônicas têm validade legal, conforme a MP nº 2.200-2/2001 (ICP-Brasil) e a Lei nº 14.063/2020. A integridade é assegurada pelo hash SHA-256 acima; qualquer alteração no texto do contrato invalida as assinaturas.${verUrl ? ` Confira a autenticidade deste documento em ${verUrl}.` : ''}${numero ? ` Este relatório é parte integrante do documento nº ${esc(numero)}.` : ''} Para proteção dos assinantes (LGPD, Lei nº 13.709/2018), os dados pessoais são exibidos de forma parcial; o registro completo (incluindo os pontos de autenticação) é mantido pela plataforma e disponibilizado às partes e às autoridades competentes mediante solicitação.</div>
     ${blocosPartes}
   </div>
 </body></html>`;

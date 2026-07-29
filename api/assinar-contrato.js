@@ -31,7 +31,31 @@ export default async function handler(req) {
 
   let body;
   try { body = await req.json(); } catch { return new Response(JSON.stringify({ error: 'JSON inválido' }), { status: 400, headers }); }
-  const { token, tipo_pessoa, dados, assinatura, docs_identidade, testemunha, geo } = body || {};
+  const { token, tipo_pessoa, dados, assinatura, docs_identidade, testemunha, geo, evento } = body || {};
+
+  // FUNIL DE ASSINATURA (rastreio anônimo): corpo só com { evento, token } — o signatário não tem
+  // sessão, então registramos "abriu o link"/"avançou etapa" na linha do tempo de QUEM CRIOU o
+  // contrato (Cliente 360). Não é assinatura; valida só o token e retorna. Best-effort.
+  if (evento && !assinatura) {
+    if (!token || !/^[A-Za-z0-9_-]{8,128}$/.test(String(token))) return new Response(JSON.stringify({ ok: false }), { status: 200, headers });
+    try {
+      const rr = await sb(`contratos_link?token=eq.${encodeURIComponent(token)}&select=id,titulo,criado_por`);
+      const cc = (await rr.json().catch(() => []))?.[0];
+      if (cc?.criado_por) {
+        const mapa = { aberto: 'contrato_link_aberto', etapa: 'contrato_link_etapa' };
+        sb('rpc/registrar_atividade', { method: 'POST', body: JSON.stringify({
+          p_user_id: cc.criado_por,
+          p_evento: mapa[evento] || 'contrato_link_evento',
+          p_detalhe: evento === 'aberto'
+            ? `Link de "${cc.titulo || 'contrato'}" aberto pelo signatário`
+            : `Signatário avançou para "${body.etapa || ''}" em "${cc.titulo || 'contrato'}"`,
+          p_meta: { contrato_id: cc.id, evento, etapa: body.etapa || null },
+        }) }).catch(() => {});
+      }
+    } catch { /* best-effort */ }
+    return new Response(JSON.stringify({ ok: true, tracked: true }), { status: 200, headers });
+  }
+
   if (!token || !assinatura || !dados) {
     return new Response(JSON.stringify({ error: 'Dados de assinatura incompletos' }), { status: 400, headers });
   }
