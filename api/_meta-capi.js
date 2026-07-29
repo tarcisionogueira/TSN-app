@@ -39,7 +39,7 @@ export function purchaseEventId(userId, planoBase, date = new Date()) {
   return `pur_${userId}_${planoBase || 'plano'}_${dia}`;
 }
 
-export async function enviarPurchaseCapi({ userId, email, valor, planoBase, gateway, eventId } = {}) {
+export async function enviarPurchaseCapi({ userId, email, valor, planoBase, gateway, eventId, testCode } = {}) {
   if (!capiAtivo() || !userId) return { skipped: capiAtivo() ? 'sem_user' : 'capi_inativo' };
   const user_data = {};
   const ext = sha256(userId); if (ext) user_data.external_id = ext;
@@ -54,7 +54,9 @@ export async function enviarPurchaseCapi({ userId, email, valor, planoBase, gate
     user_data,
     custom_data: { currency: 'BRL', value: Number(valor) || 0, ...(planoBase ? { content_name: planoBase } : {}) },
   };
-  const body = { data: [evento], ...(TEST_CODE ? { test_event_code: TEST_CODE } : {}) };
+  // testCode por chamada (diagnóstico) tem prioridade sobre a env META_CAPI_TEST_CODE.
+  const codigoTeste = (testCode || TEST_CODE || '').trim();
+  const body = { data: [evento], ...(codigoTeste ? { test_event_code: codigoTeste } : {}) };
   try {
     const r = await fetch(
       `https://graph.facebook.com/${API_VER}/${PIXEL_ID}/events?access_token=${encodeURIComponent(TOKEN)}`,
