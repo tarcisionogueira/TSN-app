@@ -106,6 +106,19 @@ export function AuthProvider({ children }) {
   const [roleSimulado, setRoleSimulado] = useState(() => sessionStorage.getItem(SIM_ROLE_KEY) || null);
 
   useEffect(() => {
+    // Captura GLOBAL da indicação do parceiro (?ref=), venha ANTES ou DEPOIS do # (HashRouter).
+    // Antes cada página capturava por conta própria e a Landing/início NÃO capturava — então o
+    // link GERAL do parceiro (que aponta p/ o início, para o visitante navegar e assinar) perdia
+    // a indicação. Aqui persiste 1x, cedo, para QUALQUER ponto de entrada; o bloco SIGNED_IN
+    // abaixo consome via vincular_upline no cadastro. O código é FIXO do parceiro → o MESMO link
+    // vincula quantas pessoas clicarem (todas atribuídas a quem indicou).
+    try {
+      const pegaRef = (qs) => { try { return new URLSearchParams(qs).get('ref'); } catch { return null; } };
+      const h = window.location.hash || '';
+      const iq = h.indexOf('?');
+      const ref = pegaRef(window.location.search) || (iq >= 0 ? pegaRef(h.slice(iq)) : null);
+      if (ref) sessionStorage.setItem('tsn_ref_codigo', ref);
+    } catch { /* ignore */ }
     // Verificar expiração de 24h na carga inicial
     const aplicarPerfil = (p) => {
       setRole(p.role); setAtivo(p.ativo); setInad(p.inadimplenteDias);

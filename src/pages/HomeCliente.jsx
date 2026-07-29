@@ -66,9 +66,11 @@ export default function HomeCliente() {
   }, [effectiveUserId, info.limite]);
 
   const restantes = info.limite != null ? Math.max(0, info.limite - usadas) : null;
-  // Link de parceiro ENXUTO: usa o código curto de indicação (…?ref=ABC123) em vez do UUID cru.
-  // Enquanto o código não carrega, cai no id (também aceito por vincular_upline) — link nunca quebra.
-  const linkIndicacao = `${window.location.origin}${window.location.pathname.replace(/\/$/, '')}#/planos?ref=${refCodigo || effectiveUserId || ''}`;
+  // Link GERAL do parceiro → tela de INÍCIO do site (o visitante entra, navega, vê os produtos e
+  // vem a assinar). Usa o código curto de indicação (…?ref=ABC123) em vez do UUID cru; enquanto o
+  // código não carrega, cai no id (também aceito por vincular_upline) — o link nunca quebra. A
+  // indicação é capturada globalmente (AuthContext) e vincula ao parceiro quantas pessoas clicarem.
+  const linkIndicacao = `${window.location.origin}${window.location.pathname.replace(/\/$/, '')}#/?ref=${refCodigo || effectiveUserId || ''}`;
   const linkDisplay = linkIndicacao.replace(/^https?:\/\/(www\.)?/, ''); // exibição sem https://www.
   const copiarLink = () => { navigator.clipboard?.writeText(linkIndicacao); setCopiado(true); setTimeout(() => setCopiado(false), 2000); };
 

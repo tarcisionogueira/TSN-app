@@ -93,7 +93,11 @@ export default function MinhaRede() {
   const [msgSaque, setMsgSaque] = useState(null);
   const [sacando, setSacando] = useState(false);
 
-  const linkIndicacao = `${window.location.origin}${window.location.pathname.replace(/\/$/, '')}#/planos?ref=${codigo || uid || ''}`;
+  // Link GERAL do parceiro → tela de INÍCIO do site (o visitante entra, navega, vê os produtos e
+  // vem a assinar). A indicação (?ref=) é capturada globalmente (AuthContext) e vincula quem
+  // clicar, quantas pessoas forem, ao parceiro. (A venda DIRETA de um produto específico usa os
+  // links por produto: ebook/curso em /p/... e planos em /checkout?plano=...)
+  const linkIndicacao = `${window.location.origin}${window.location.pathname.replace(/\/$/, '')}#/?ref=${codigo || uid || ''}`;
   const linkDisplay = linkIndicacao.replace(/^https?:\/\/(www\.)?/, '');
   const copiar = () => { navigator.clipboard?.writeText(linkIndicacao); setCopiado(true); setTimeout(() => setCopiado(false), 2000); };
   const fmtLib = (iso) => { try { return new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit' }).format(new Date(iso)); } catch { return null; } };
