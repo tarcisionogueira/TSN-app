@@ -450,7 +450,7 @@ export default function CriarContrato() {
               <input type="checkbox" checked={requerTestemunha} onChange={e => setRequerTestemunha(e.target.checked)} style={{ marginTop: 2 }} />
               <div>
                 <div style={{ fontSize: 13, fontWeight: 700, color: '#111111' }}>Exigir assinatura de testemunha</div>
-                <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>Na assinatura, será solicitado o nome, CPF e a assinatura de uma testemunha.</div>
+                <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>Ao final da assinatura da parte, o sistema disponibiliza um link para ela <strong>compartilhar com a sua testemunha</strong>, que preenche nome, CPF e assina. O contrato só fica completo quando os dois assinarem.</div>
               </div>
             </label>
 

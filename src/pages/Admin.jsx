@@ -3362,7 +3362,7 @@ function ContratosTab() {
                   <input type="checkbox" checked={reqTestemunhaDoc} onChange={e => setReqTestemunhaDoc(e.target.checked)} style={{ width:16, height:16, accentColor:'#0D63DB', marginTop:2 }} />
                   <div>
                     <div style={{ fontSize:13, fontWeight:700, color:'#111111' }}>Exigir assinatura de testemunha</div>
-                    <div style={{ fontSize:11, color:'#64748b', marginTop:2 }}>A parte assina normalmente e, ao concluir, recebe um link para encaminhar à SUA testemunha (ela preenche nome, CPF e assina). O contrato só fica completo quando os dois assinarem.</div>
+                    <div style={{ fontSize:11, color:'#64748b', marginTop:2 }}>Ao final da assinatura da parte, o sistema disponibiliza um link para ela <strong>compartilhar com a sua testemunha</strong>. A testemunha abre o link, preenche nome e CPF e assina. O contrato só fica completo quando a parte e a testemunha assinarem.</div>
                   </div>
                 </label>
 
