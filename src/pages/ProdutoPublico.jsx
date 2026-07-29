@@ -122,54 +122,61 @@ export default function ProdutoPublico({ tipo }) {
     return acc;
   }, {});
 
+  const irInicio = () => nav('/'); // '/' resolve p/ HOME (logado) ou LANDING (deslogado)
+
   return (
-    <div style={{ minHeight: '100vh', background: '#111111', padding: '0 0 60px' }}>
-      {/* Header — paddingTop com env(safe-area-inset-top) (rota fora do MainLayout) p/ a
-          marca não ficar sob a barra de status no PWA iOS. */}
-      <div style={{ borderBottom: '1px solid #111111', padding: '16px 32px', paddingTop: 'calc(16px + env(safe-area-inset-top, 0px))', display: 'flex', alignItems: 'center', gap: 12 }}>
-        <div style={{ background: '#0D63DB', borderRadius: 10, padding: 8, fontSize: 18 }}>🏢</div>
+    <div style={{ minHeight: '100vh', background: '#f3f4f6', color: '#111111' }}>
+      {/* Header — logo CLICÁVEL (→ início) + botão de navegação de volta à plataforma. Antes a
+          página não tinha nenhuma forma de voltar. paddingTop com safe-area (rota fora do MainLayout). */}
+      <header style={{ background: '#0f172a', padding: '12px 20px', paddingTop: 'calc(12px + env(safe-area-inset-top, 0px))', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, position: 'sticky', top: 0, zIndex: 20 }}>
+        <button onClick={irInicio} title="Ir para o início" style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+          <span style={{ background: '#0D63DB', color: '#fff', fontWeight: 900, fontSize: 18, width: 34, height: 34, borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>B</span>
+          <span style={{ textAlign: 'left' }}>
+            <span style={{ display: 'block', fontWeight: 900, fontSize: 14, color: '#fff', letterSpacing: 0.5 }}>BidPro Brasil</span>
+            <span style={{ display: 'block', fontSize: 9.5, color: '#94a3b8', letterSpacing: 1.5, textTransform: 'uppercase' }}>Leilão & Investimentos</span>
+          </span>
+        </button>
+        <button onClick={irInicio} style={{ background: 'rgba(255,255,255,0.1)', color: '#fff', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 9, padding: '8px 14px', fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+          {user ? '🏠 Ir para o início' : '← Voltar ao site'}
+        </button>
+      </header>
+
+      <div style={{ maxWidth: 1040, margin: '0 auto', padding: '32px 20px 60px', display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 360px', gap: 36, alignItems: 'start', boxSizing: 'border-box' }} className="produto-grid">
+
+        {/* Coluna esquerda, apresentação (estilo Amazon: capa inteira, título, autor, "sobre") */}
         <div>
-          <div style={{ fontWeight: 900, fontSize: 14, color: 'white', letterSpacing: 1 }}>BIDPRO BRASIL</div>
-          <div style={{ fontSize: 10, color: '#475569', letterSpacing: 2, textTransform: 'uppercase' }}>Leilão & Investimentos</div>
-        </div>
-      </div>
+          {/* Capa em card branco, INTEIRA (objectFit contain) — antes cortava o topo da imagem. */}
+          <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e5e7eb', padding: 20, display: 'flex', justifyContent: 'center', marginBottom: 24, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+            {produto.capa_url
+              ? <img src={driveImage(produto.capa_url)} alt={produto.titulo} style={{ maxWidth: '100%', maxHeight: 440, objectFit: 'contain', borderRadius: 8 }} />
+              : <div style={{ width: '100%', height: 280, borderRadius: 8, background: `linear-gradient(135deg, ${cor} 0%, ${cor}88 100%)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 72 }}>{tipo === 'curso' ? produto.emoji || '🎓' : '📖'}</div>}
+          </div>
 
-      <div style={{ maxWidth: 960, margin: '0 auto', padding: '48px 20px', display: 'grid', gridTemplateColumns: 'minmax(0,1.2fr) minmax(0,1fr)', gap: 32, alignItems: 'start' }} className="produto-grid">
-
-        {/* Coluna esquerda, apresentação */}
-        <div style={{ color: 'white' }}>
-          {/* Capa */}
-          {produto.capa_url && (
-            <img src={driveImage(produto.capa_url)} alt={produto.titulo}
-              style={{ width: '100%', borderRadius: 16, marginBottom: 28, objectFit: 'cover', maxHeight: 280 }} />
-          )}
-          {!produto.capa_url && (
-            <div style={{ width: '100%', height: 200, borderRadius: 16, marginBottom: 28, background: `linear-gradient(135deg, ${cor} 0%, ${cor}88 100%)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 64 }}>
-              {tipo === 'curso' ? produto.emoji || '🎓' : '📖'}
+          <div style={{ fontSize: 11, fontWeight: 800, color: cor, textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 8 }}>{tipo === 'curso' ? 'Curso' : 'eBook'}</div>
+          <h1 style={{ fontSize: 28, fontWeight: 900, lineHeight: 1.25, margin: '0 0 6px', color: '#111111' }}>{produto.titulo}</h1>
+          <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 16 }}>por <strong style={{ color: '#0D63DB' }}>BidPro Brasil</strong></div>
+          {produto.subtitulo && <p style={{ color: '#374151', fontSize: 15, fontWeight: 600, margin: '0 0 16px' }}>{produto.subtitulo}</p>}
+          {produto.descricao && (
+            <div style={{ marginBottom: 24 }}>
+              <div style={{ fontSize: 13, fontWeight: 800, color: '#111111', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8, borderBottom: '1px solid #e5e7eb', paddingBottom: 6 }}>Sobre este {tipo === 'curso' ? 'curso' : 'eBook'}</div>
+              <p style={{ color: '#374151', fontSize: 14.5, lineHeight: 1.8, margin: 0, whiteSpace: 'pre-wrap' }}>{produto.descricao}</p>
             </div>
           )}
-
-          <div style={{ fontSize: 11, fontWeight: 800, color: cor, textTransform: 'uppercase', letterSpacing: 2, marginBottom: 10 }}>
-            {tipo === 'curso' ? 'Curso' : 'eBook'} · {isPago ? `R$ ${Number(produto.preco).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'Gratuito com assinatura'}
-          </div>
-          <h1 style={{ fontSize: 30, fontWeight: 900, lineHeight: 1.2, margin: '0 0 14px' }}>{produto.titulo}</h1>
-          {produto.subtitulo && <p style={{ color: '#60a5fa', fontSize: 15, fontWeight: 600, margin: '0 0 16px' }}>{produto.subtitulo}</p>}
-          {produto.descricao && <p style={{ color: '#94a3b8', fontSize: 14, lineHeight: 1.8, margin: '0 0 28px' }}>{produto.descricao}</p>}
 
           {/* Conteúdo do curso */}
           {tipo === 'curso' && aulas.length > 0 && (
             <div>
-              <div style={{ fontSize: 12, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 }}>
-                Conteúdo do curso, {aulas.length} aulas
+              <div style={{ fontSize: 13, fontWeight: 800, color: '#111111', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 12, borderBottom: '1px solid #e5e7eb', paddingBottom: 6 }}>
+                Conteúdo do curso · {aulas.length} aulas
               </div>
               {Object.entries(modulos).map(([mod, licoes]) => (
-                <div key={mod} style={{ marginBottom: 16 }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: '#475569', marginBottom: 6, padding: '6px 10px', background: '#111111', borderRadius: 6 }}>{mod}</div>
+                <div key={mod} style={{ marginBottom: 14 }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 700, color: '#374151', marginBottom: 4, padding: '7px 10px', background: '#eef2f7', borderRadius: 6 }}>{mod}</div>
                   {licoes.map((l, i) => (
-                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', fontSize: 13, color: '#94a3b8' }}>
-                      <span style={{ fontSize: 11, color: l.gratis ? '#10b981' : '#475569' }}>{l.gratis ? '▶ Grátis' : '🔒'}</span>
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 10px', fontSize: 13, color: '#4b5563', borderBottom: '1px solid #f3f4f6' }}>
+                      <span style={{ fontSize: 11, color: l.gratis ? '#059669' : '#9ca3af' }}>{l.gratis ? '▶ Grátis' : '🔒'}</span>
                       <span>{l.titulo}</span>
-                      {l.duracao && <span style={{ marginLeft: 'auto', fontSize: 11, color: '#475569' }}>{l.duracao}</span>}
+                      {l.duracao && <span style={{ marginLeft: 'auto', fontSize: 11, color: '#9ca3af' }}>{l.duracao}</span>}
                     </div>
                   ))}
                 </div>
@@ -178,13 +185,13 @@ export default function ProdutoPublico({ tipo }) {
           )}
         </div>
 
-        {/* Coluna direita, CTA */}
-        <div style={{ position: 'sticky', top: 24 }}>
-          <div style={{ background: 'white', borderRadius: 20, padding: '32px 28px' }}>
-            <div style={{ fontSize: 34, fontWeight: 900, color: '#111111', marginBottom: 4 }}>
+        {/* Coluna direita, CTA (buy box estilo Amazon) */}
+        <div style={{ position: 'sticky', top: 88 }}>
+          <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e5e7eb', padding: '26px 24px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+            <div style={{ fontSize: 32, fontWeight: 900, color: '#111111', marginBottom: 2 }}>
               {isPago ? `R$ ${Number(produto.preco).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'Gratuito'}
             </div>
-            <div style={{ fontSize: 13, color: '#64748b', marginBottom: 24 }}>
+            <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 22 }}>
               {isPago ? 'Pagamento único' : 'Incluído na assinatura Investidor Pro'}
             </div>
 
