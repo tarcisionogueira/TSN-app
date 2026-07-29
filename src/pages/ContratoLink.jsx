@@ -479,25 +479,13 @@ export default function ContratoLink() {
             {/* Assinaturas antigas, sem dispositivo/localização: o próprio signatário completa agora,
                 sem re-assinar (não altera assinatura/hash/carimbo originais). A LOCALIZAÇÃO é
                 best-effort (no desktop costuma ser negada) — o DISPOSITIVO já basta para completar. */}
-            {contrato.status === 'assinado' && (() => {
-              const jaComplementou = completado || !!contrato.dados_complementados_em;
-              const falta = !contrato.assinante_user_agent || !contrato.assinante_geo;
-              if (jaComplementou) return (
-                <div style={{ marginTop:14, padding:'10px 14px', background:'rgba(52,211,153,0.08)', border:'1px solid rgba(52,211,153,0.3)', borderRadius:10, fontSize:12.5, color:'#34d399', fontWeight:600 }}>
-                  ✓ Dados de autenticação registrados{!contrato.assinante_geo ? ' — localização não disponível neste dispositivo (dispositivo e IP registrados).' : '.'}
-                </div>
-              );
-              if (!falta) return null;
-              return (
-                <div style={{ marginTop:14, padding:'12px 14px', background:'rgba(234,179,8,0.08)', border:'1px solid rgba(234,179,8,0.3)', borderRadius:10 }}>
-                  <div style={{ fontSize:12.5, color:'#eab308', fontWeight:700, marginBottom:8 }}>Complete os dados de autenticação deste documento (dispositivo e localização).</div>
-                  <button onClick={completarDados} disabled={completando}
-                    style={{ display:'flex', alignItems:'center', gap:7, padding:'9px 15px', background: completando ? '#334155' : '#eab308', color: completando ? '#94a3b8' : '#111', border:'none', borderRadius:9, fontWeight:800, fontSize:13, cursor: completando ? 'default' : 'pointer' }}>
-                    {completando ? 'Registrando…' : 'Completar dados de autenticação'}
-                  </button>
-                </div>
-              );
-            })()}
+            {/* Pontos de autenticação (dispositivo, IP e — quando disponível — localização) são
+                capturados AUTOMATICAMENTE no momento da assinatura. Sem botão de completar depois. */}
+            {contrato.status === 'assinado' && (
+              <div style={{ marginTop:14, padding:'10px 14px', background:'rgba(52,211,153,0.08)', border:'1px solid rgba(52,211,153,0.3)', borderRadius:10, fontSize:12.5, color:'#34d399', fontWeight:600 }}>
+                ✓ Assinatura registrada com data/hora, dispositivo e IP{contrato.assinante_geo ? ' e localização' : ''} — capturados automaticamente na assinatura.
+              </div>
+            )}
             <button onClick={baixarDocumento} style={{ marginTop:16, display:'flex', alignItems:'center', gap:7, padding:'10px 16px', background:'#0D63DB', color:'white', border:'none', borderRadius:9, fontWeight:700, fontSize:13, cursor:'pointer' }}>
               <Download size={15} /> Baixar documento assinado
             </button>

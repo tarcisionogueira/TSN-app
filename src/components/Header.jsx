@@ -137,7 +137,7 @@ const ROLE_LABELS_STATIC = {
 export default function Header() {
   const nav = useNavigate();
   const loc = useLocation();
-  const { user, role, effectiveRole, loading, impersonate, encerrarSuporte, roleSimulado, simularRole } = useAuth();
+  const { user, role, effectiveRole, effectiveUserId, loading, impersonate, encerrarSuporte, roleSimulado, simularRole } = useAuth();
   const planosCtx = usePlanos();
   const [open, setOpen] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -152,18 +152,23 @@ export default function Header() {
   }, []);
   // "Minha Rede" só aparece no menu depois que o usuário ACEITA ser parceiro (ou é admin).
   const [ehParceiro, setEhParceiro] = useState(false);
+  // IMPORTANTE: usa effectiveUserId (a conta EFETIVA) — no MODO SUPORTE, reflete o CLIENTE que está
+  // sendo visto, não o admin. Antes lia user.id (o admin, que é parceiro), então "Indicações"
+  // aparecia para um cliente que NÃO aceitou a parceria enquanto o admin dava suporte.
+  const alvoParceria = effectiveUserId || user?.id;
   React.useEffect(() => {
-    if (!user?.id) { setEhParceiro(false); return; }
-    const carregar = () => supabase.from('perfis').select('parceiro_aceite_em').eq('id', user.id).maybeSingle()
+    if (!alvoParceria) { setEhParceiro(false); return; }
+    const carregar = () => supabase.from('perfis').select('parceiro_aceite_em').eq('id', alvoParceria).maybeSingle()
       .then(({ data }) => setEhParceiro(!!data?.parceiro_aceite_em)).catch(() => {});
     carregar();
     // Re-lê ao ACEITAR a parceria (evento disparado por ConviteParceiro/HomeCliente) — mostra
-    // "Indicações" NA HORA, sem depender de novo login. Antes só relia no user.id mudar.
+    // "Indicações" NA HORA, sem depender de novo login.
     const h = () => carregar();
     window.addEventListener('tsn:parceiro-atualizado', h);
     return () => window.removeEventListener('tsn:parceiro-atualizado', h);
-  }, [user?.id]);
-  const mostrarRede = ehParceiro || effectiveRole === 'admin';
+  }, [alvoParceria]);
+  // "Indicações" só quando a conta EFETIVA aceitou a parceria (ou é admin de verdade, fora de suporte).
+  const mostrarRede = ehParceiro || (effectiveRole === 'admin' && !impersonate);
   // "Comissões" (extrato operacional) só p/ a equipe; o parceiro-cliente vê os ganhos em Indicações.
   const ehEquipe = ['admin', 'consultor', 'analista', 'advogado'].includes(effectiveRole);
   const abrirInstalarApp = () => window.dispatchEvent(new Event('tsn:pwa-install'));

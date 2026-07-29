@@ -43,7 +43,7 @@ function MarcaBP({ size = 30, quadrado = true }) {
 }
 
 export default function ChatSuporte() {
-  const { user, effectiveRole, isLoggedIn } = useAuth();
+  const { user, role, effectiveRole, isLoggedIn, impersonate } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [view, setView] = useState('lista'); // 'lista' | 'novo' | 'conversa'
   const [listaChamados, setListaChamados] = useState([]);
@@ -69,7 +69,9 @@ export default function ChatSuporte() {
   const naoLidasRef = useRef(0);
 
   const nomeUsuario = user?.user_metadata?.nome || user?.email?.split('@')[0] || 'Cliente';
-  const ehCliente = !STAFF_ROLES.includes(effectiveRole); // saudação proativa e badge só p/ clientes
+  // Usa o papel REAL (não o efetivo): no MODO SUPORTE o admin assume o papel do cliente, mas o chat
+  // NÃO deve aparecer (é o admin, não o cliente). ehCliente também exclui suporte.
+  const ehCliente = !STAFF_ROLES.includes(role) && !impersonate;
 
   useEffect(() => { msgEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [mensagens]);
   useEffect(() => {
@@ -197,9 +199,9 @@ export default function ChatSuporte() {
     return () => { clearTimeout(avisoTimer.current); clearTimeout(fecharTimer.current); };
   }, [ticket?.id]);
 
-  // Apenas CLIENTES (pedido do dono). Equipe/admin respondem pela tela Atendimento; o admin,
-  // se quiser ver o widget, pode usar a simulação de papel (vira cliente e o FAB aparece).
-  if (!isLoggedIn || STAFF_ROLES.includes(effectiveRole)) return null;
+  // Apenas CLIENTES (pelo papel REAL) e NUNCA em modo suporte (o admin assumindo a conta de um
+  // cliente não deve ver/abrir o chat). Equipe/admin respondem pela tela Atendimento.
+  if (!isLoggedIn || impersonate || STAFF_ROLES.includes(role)) return null;
 
   // Lista TODOS os atendimentos do cliente (abertos e finalizados)
   async function carregarLista() {
