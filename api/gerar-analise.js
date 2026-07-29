@@ -1164,6 +1164,34 @@ export default async function handler(req, res) {
     if (anc?.alterado) console.log('[ancora]', JSON.stringify({ imovel: String(imovelId), nivel: anc.nivel }));
   } catch { /* nunca bloqueia o relatório */ }
 
+  // ENDEREÇO RICO PARA A BUSCA (pedido do dono: "o endereço não foi consultado na documentação/
+  // descrição — impacta a precisão"). O scraper às vezes deixa `endereco` com LIXO ("praça Valor
+  // inicial R$…") e o BAIRRO real fica só no TÍTULO/descrição (ex.: MEGA: "Apartamento 59 m² -
+  // Vila Nossa Senhora de Fátima - Guarulhos - SP"). Aqui, no SERVIDOR, montamos o melhor endereço
+  // (rua válida + bairro do título + cidade/UF) + nome do condomínio, para o Nível 1/2 da busca não
+  // ficar genérico ("cidade"). Best-effort; nunca bloqueia.
+  try {
+    const [imA] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=endereco,bairro,cidade,estado,titulo,descricao,nomecondominio&limit=1`)).json();
+    if (imA && mercadoInputs) {
+      const lixo = /valor\s*inicial|lance\s*m[íi]nimo|avalia[çc]|r\$|^\s*\d+\s*$/i;
+      const ruaOk = (e) => { const s = String(e || '').trim(); return s.length >= 6 && /[a-zà-ú]{3}/i.test(s) && !lixo.test(s); };
+      const cid = imA.cidade || cidade || '';
+      const est = imA.estado || estado || '';
+      let bairro = String(imA.bairro || '').trim();
+      if (!bairro && imA.titulo) { // extrai o bairro do título: "Tipo 00 m² - BAIRRO - Cidade - UF"
+        const segs = String(imA.titulo).split(/\s+[-–—]\s+/).map(s => s.trim()).filter(Boolean);
+        const ehTipoArea = (s) => /m²|m2|apartamento|casa|terreno|\blote\b|sala|loja|gal[pnã]|comercial|ch[aá]cara|s[íi]tio|fazenda|vaga|garagem|im[óo]vel|\d/i.test(s);
+        const cand = segs.find(s => s && !ehTipoArea(s) && _norm(s) !== _norm(cid) && !/^[a-z]{2}$/i.test(s));
+        if (cand) bairro = cand;
+      }
+      const rua = ruaOk(imA.endereco) ? String(imA.endereco).trim() : '';
+      const partes = [rua, bairro, cid].filter(Boolean);
+      if (rua || bairro) mercadoInputs.endereco = partes.join(', ') + (est ? `/${est}` : '');
+      if (!mercadoInputs.nomeCondominio && imA.nomecondominio) mercadoInputs.nomeCondominio = imA.nomecondominio;
+      console.log('[endereco-busca]', JSON.stringify({ imovel: String(imovelId), rua: !!rua, bairro: bairro || null, usado: mercadoInputs.endereco }));
+    }
+  } catch { /* enriquecimento é best-effort */ }
+
   // Reseta a barra de evolução ao começar (não herda o progresso de uma geração anterior):
   // Etapa A (comparáveis) já entra como 'gerando'; B (contexto) e o parecer ficam 'pendente'.
   await upsertAnalise({ ...base, status: 'gerando', erro: null, result: null, progresso: {

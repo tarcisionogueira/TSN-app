@@ -19,16 +19,29 @@ export default async function handler(req, res) {
   if (!isCronAuthorized(req)) return res.status(401).json({ error: 'Não autorizado' });
   if (!SUPABASE_URL || !SERVICE_KEY) return res.status(500).json({ error: 'Supabase não configurado' });
 
-  const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/desativar_imoveis_cef_vencidos`, {
+  const rpc = (fn, body) => fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
     method: 'POST',
     headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ margem: `${MARGEM_HORAS} hours` }),
+    body: JSON.stringify(body || {}),
   });
+
+  // 1) CEF (sweep por estado, já existente).
+  const r = await rpc('desativar_imoveis_cef_vencidos', { margem: `${MARGEM_HORAS} hours` });
   if (!r.ok) {
     const detalhe = await r.text().catch(() => '');
-    return res.status(500).json({ error: 'Falha ao desativar vencidos', detalhe: detalhe.slice(0, 300) });
+    return res.status(500).json({ error: 'Falha ao desativar vencidos (CEF)', detalhe: detalhe.slice(0, 300) });
   }
   const desativados = await r.json().catch(() => 0);
-  console.log('[limpar-imoveis-stale]', JSON.stringify({ desativados, margem_horas: MARGEM_HORAS }));
-  return res.status(200).json({ ok: true, desativados });
+
+  // 2) LEILOEIROS (novo): desativa o que saiu do site (não veio no último scrape da fonte). Guarda
+  // anti-regressão embutida na RPC (pula fonte com remoção > 40% = scrape degradado). Best-effort:
+  // uma falha aqui não derruba o resultado do CEF.
+  let leiloeiro = null;
+  try {
+    const r2 = await rpc('desativar_imoveis_leiloeiro_stale', { margem: '36 hours', teto_pct: 0.40 });
+    leiloeiro = r2.ok ? await r2.json().catch(() => null) : { erro: (await r2.text().catch(() => '')).slice(0, 200) };
+  } catch (e) { leiloeiro = { erro: String(e?.message || e).slice(0, 200) }; }
+
+  console.log('[limpar-imoveis-stale]', JSON.stringify({ desativados, margem_horas: MARGEM_HORAS, leiloeiro }));
+  return res.status(200).json({ ok: true, desativados, leiloeiro });
 }

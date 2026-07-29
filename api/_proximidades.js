@@ -41,24 +41,25 @@ export async function consultarProximidades(lat, lng) {
   const blocos = CATEGORIAS.flatMap(c => c.tags.map(([k, v]) => `nwr["${k}"="${v}"](around:${RAIO},${lat},${lng});`)).join('');
   // timeout curto no Overpass (12s) para caber vários espelhos dentro do orçamento de 35s do cliente.
   const query = `[out:json][timeout:12];(${blocos});out center tags;`;
-  // Tenta cada espelho em sequência; só lança se TODOS falharem (aí o chamador
-  // responde com erro/retry, não com "vazio").
-  let data = null, ultimoErro = 'sem resposta';
-  for (const endpoint of OVERPASS_MIRRORS) {
-    try {
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: 'data=' + encodeURIComponent(query),
-        // 9s por espelho: se falhar, ainda dá tempo de tentar os próximos antes do abort de 35s do cliente.
-        signal: AbortSignal.timeout(9000),
-      });
-      if (!res.ok) { ultimoErro = `overpass ${res.status}`; continue; }
-      data = await res.json();
-      break;
-    } catch (e) { ultimoErro = String(e?.message || e); }
+  // Tenta os espelhos EM PARALELO: o PRIMEIRO que responder OK vence (Promise.any). Antes era
+  // sequencial (até 5×9s = ~45s → estourava o abort de 35s do cliente e "não carregava"). Agora a
+  // latência é a do espelho mais RÁPIDO; só lança se TODOS falharem (aí o chamador dá erro/retry).
+  const tentarEspelho = (endpoint) => fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: 'data=' + encodeURIComponent(query),
+    signal: AbortSignal.timeout(13000),
+  }).then(async (res) => {
+    if (!res.ok) throw new Error(`overpass ${res.status}`);
+    return res.json();
+  });
+  let data = null;
+  try {
+    data = await Promise.any(OVERPASS_MIRRORS.map(tentarEspelho));
+  } catch (e) {
+    const errs = (e && Array.isArray(e.errors)) ? e.errors.map(x => String(x?.message || x)).join('; ') : String(e?.message || e);
+    throw new Error(errs || 'overpass indisponível');
   }
-  if (!data) throw new Error(ultimoErro);
   const melhores = {};
   for (const el of (data.elements || [])) {
     const plat = el.lat ?? el.center?.lat, plng = el.lon ?? el.center?.lon;

@@ -15,7 +15,10 @@ import { consultarProximidades } from './_proximidades.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
-const LOTE = Number(process.env.PROXIMIDADES_LOTE || 12);
+// Com os espelhos do Overpass agora em PARALELO (_proximidades.js), cada imóvel resolve em ~3-5s
+// (antes até ~45s em sequência) → dá p/ processar um lote MAIOR dentro dos 300s e pré-carregar
+// muito mais (menos "não carregou" na hora que o usuário abre). Ajustável por env.
+const LOTE = Number(process.env.PROXIMIDADES_LOTE || 40);
 
 function sb(path, opts = {}) {
   return fetch(`${SUPABASE_URL}/rest/v1/${path}`, {

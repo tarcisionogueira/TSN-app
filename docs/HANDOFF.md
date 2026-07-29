@@ -22,7 +22,20 @@
 > Checagem rápida a qualquer momento: `select public.auditoria_seguranca();` → `0 crítico / 0 atenção` = íntegro.
 > **Auditorias ofensivas completas: 15/07/2026 (×2).** Total de correções: 15 (1ª rodada) + escalonamento por convite (CRÍTICO) + IDOR do MP (ALTO) + escala. Refazer a ofensiva quando entrarem rotas/pagamento/RLS novos (a Rotina mensal já faz isso sozinha).
 
-## ✅ COMEÇAR AQUI (29/07 — sessão 17: KYC no suporte + CSP do documento + fluxo de assinatura + privacidade dos assinantes)
+## ✅ COMEÇAR AQUI (29/07 — sessão 18: precisão do endereço no relatório + frescor do acervo + proximidades)
+> MESMA branch. `auditoria_seguranca()` = **0/0**.
+
+**A. RELATÓRIO usava endereço GENÉRICO (impacta a precisão) — `api/gerar-analise.js`.** O scraper (MEGA) deixou LIXO em `endereco` ("praça Valor inicial R$, 166") e o BAIRRO real ("Vila Nossa Senhora de Fátima") ficou só no TÍTULO → a busca recebia só "cidade". Agora, no servidor (antes da busca), montamos o endereço rico: descarta `endereco` com lixo (valor inicial/R$/lance), extrai o BAIRRO do título ("Tipo m² - BAIRRO - Cidade - UF") quando a coluna `bairro` está vazia, e compõe rua+bairro+cidade/UF + nome do condomínio. Zero custo de IA. (Rua exata do edital/matrícula fica como melhoria futura — mais cara.)
+
+**B. FREQUÊNCIA do scraper: grátis 2x/sem → DIÁRIO.** `scraper.yml` (CEF, ~7 min) e `leiloeiros-puppeteer.yml` (cluster MEGA/ZUK/SUPERBID/LJUD/SOLD/SODRE/FRAZAO/BIASI/BB/GRUPOLANCE/VENDASGOV, ~80 min, 0 Bright Data) passaram para `0 9/10 * * *`. Custo = só minutos de GitHub Actions (cluster ~2.400 min/mês no diário — se a franquia apertar, baixar p/ dia-sim-dia-não). Fontes PAGAS (SOLEON/GESTAO/RJ/PECINI, 1x/sem via Bright Data) NÃO mexidas — caminho é ativar o runner residencial (`docs/RUNNER_RESIDENCIAL.md`, pendência do dono) para zerar o BD e liberar frequência.
+
+**C. SWEEP de vencidos dos LEILOEIROS (novo) — RPC `desativar_imoveis_leiloeiro_stale` + `api/limpar-imoveis-stale-cron.js`.** Antes só a CEF era limpa → leilões de leiloeiro vencidos ficavam no ar. A RPC desativa o que NÃO veio no ÚLTIMO scrape da própria fonte (respeita cadência diária x semanal). GUARDAS: ignora CEF/internos; só fontes com scrape recente (≤10d) e concluído (>2h); **pula fonte com remoção > 40%** (scrape degradado — proteção anti-BIASI). service_role-only. Roda no cron diário existente (`0 5 * * *`). Dry-run inicial: desativaria ~34 (CALIL 20, SODRE 13, RJ 1) e pulou PECINI 88%/VEGAS 48%/VENDASGOV 50%.
+
+**D. PROXIMIDADES mais confiáveis (não usa IA, custo 0) — `api/_proximidades.js` + `enriquecer-proximidades.js`.** Os 5 espelhos do Overpass passaram a ser tentados EM PARALELO (`Promise.any` — o mais rápido vence; antes era sequência de até ~45s que estourava o abort de 35s do cliente). O cron de pré-carga subiu de 12 → 40 imóveis/execução (cada um agora resolve em ~3-5s). Confirmado: proximidades = OpenStreetMap/Overpass grátis, sem IA. Triangulação do relatório (`ancorarImovel`) = cascata grátis (ViaCEP/IBGE/Nominatim), sem Google, melhora bairro→rua e grava de volta.
+
+---
+
+## ✅ Sessão 17 (29/07): KYC no suporte + CSP do documento + fluxo de assinatura + privacidade dos assinantes
 > MESMA branch. `npm run build` OK.
 
 **A. KYC do parceiro aparecia no MODO SUPORTE (`src/components/KycParceiroModal.jsx`).** O admin em suporte via a conta de um cliente e o popup "Verifique sua identidade / Você entrou no Programa de Parceiros" surgia — mas era o flag do PRÓPRIO admin (aderiu 24/07, sem identidade validada), pois o bypass usava `effectiveRole` (que no suporte vira o papel do cliente). Corrigido: usa o papel REAL (`role`) + **não aparece com `impersonate`** (suporte). Confirmado no banco que o cliente (Matheus) tem `parceiro_aceite_em=null` (nunca aderiu).
