@@ -975,25 +975,21 @@ export default function ImovelDetalhe() {
     ? (isVendaDireta ? 'Regras de venda online' : 'Edital')
     : 'Acessar leiloeiro';
   const temNumerosRef = !!(imovel.numeroEdital || imovel.numeroMatricula || imovel.numeroProcesso);
-  // LIMPEZA DA LISTA (pedido do dono: "fica repetitivo"): (1) tira boilerplate do leiloeiro que
-  // não é documento do imóvel (política de privacidade, termos, modelo de proposta, "como
-  // arrematar"…); (2) dedup por NOME (mesmo doc não repete); (3) não repete na lista do leiloeiro
-  // o que já saiu como oficial (matrícula/edital) OU como documento capturado.
-  const ehRuidoDoc = (a) => {
-    const s = `${a?.tipo || ''} ${a?.nome || ''}`.toLowerCase();
-    return /pol[íi]tica de privacidade|privacidade|termos? de (uso|servi)|cookies?|\blgpd\b|modelo de proposta|proposta parcelada|parcelamento e proposta|como (dar|arrematar|fazer|participar|comprar|dar um lance)|passo a passo|tutorial|manual do|cadastr|regulamento (da|do) (plataforma|site|leiloeiro)|d[úu]vidas frequentes|\bfaq\b/i.test(s);
-  };
+  // SEM REPETIÇÃO (pedido do dono: "todos os anexos que o leiloeiro disponibiliza devem constar,
+  // mas apenas 1x"). Mantém TODOS os anexos (inclusive proposta/parcelamento etc.), mas: (1) dedup
+  // por NOME dentro de cada lista; (2) a lista do leiloeiro não repete o que já saiu como OFICIAL
+  // (matrícula/edital) nem o que já está em "Documentos do lote" (capturado no nosso Storage).
   const chaveNome = (a) => String(a?.nome || '').toLowerCase().replace(/\s+/g, ' ').trim();
   const dedupDocs = (arr) => { const seen = new Set(); const out = []; for (const a of arr) { const k = chaveNome(a) || a.url; if (seen.has(k)) continue; seen.add(k); out.push(a); } return out; };
   const urlsOficiais = new Set([matriculaUrl, regrasEditalUrl].filter(Boolean));
   // Documentos capturados no nosso Storage (PDF de alta qualidade) — a fonte mais confiável; vêm primeiro.
   const anexosCapturados = dedupDocs((Array.isArray(anexosDocs) ? anexosDocs : [])
-    .filter(a => a && a.url && !urlsOficiais.has(a.url) && !ehRuidoDoc(a)));
+    .filter(a => a && a.url && !urlsOficiais.has(a.url)));
   const chavesCap = new Set(anexosCapturados.flatMap(a => [chaveNome(a), a.url]).filter(Boolean));
-  // Anexos vasculhados na página do leiloeiro: só o que NÃO é oficial, NÃO é ruído e NÃO repete
-  // um documento já capturado (por nome ou url).
+  // Anexos vasculhados na página do leiloeiro: só o que NÃO é oficial e NÃO repete um documento
+  // já capturado (por nome ou url) — assim cada anexo aparece 1× só.
   const anexosLeiloeiro = dedupDocs((Array.isArray(imovel.anexos) ? imovel.anexos : [])
-    .filter(a => a && a.url && !urlsOficiais.has(a.url) && !ehRuidoDoc(a)
+    .filter(a => a && a.url && !urlsOficiais.has(a.url)
       && !(chaveNome(a) && chavesCap.has(chaveNome(a))) && !chavesCap.has(a.url)));
   const temCardDocumentos = !!matriculaUrl || !!regrasEditalUrl || temNumerosRef || anexosLeiloeiro.length > 0 || anexosCapturados.length > 0;
   const TIPO_DOC_LABEL = { matricula: 'Matrícula', edital: 'Edital', regras: 'Regras de venda', regras_venda: 'Regras de venda', laudo: 'Laudo de avaliação', outro: 'Documento', anexo: 'Anexo' };
