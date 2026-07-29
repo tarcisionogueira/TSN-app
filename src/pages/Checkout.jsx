@@ -8,6 +8,7 @@ import { PLANOS as PLANOS_STATIC } from '../data/cursos';
 import { supabase } from '../utils/supabase';
 import { fetchPlanosComConfig } from '../utils/planosConfig';
 import { apiCall } from '../utils/apiCall';
+import { salvarRef } from '../utils/ref';
 import { TERMOS_VERSAO } from '../utils/termos';
 import PagamentoServico from '../components/PagamentoServico';
 import { ESTADOS_UF } from '../data/cidades';
@@ -86,7 +87,7 @@ export default function Checkout() {
 
   // Persiste o código de referência do consultor
   useEffect(() => {
-    if (refCode) sessionStorage.setItem('tsn_ref_codigo', refCode);
+    if (refCode) salvarRef(refCode); // persiste com janela de 30 dias
   }, [refCode]);
 
   const [loading, setLoading] = useState(false);

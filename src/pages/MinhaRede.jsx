@@ -76,6 +76,15 @@ export default function MinhaRede() {
   const [rootNome, setRootNome] = useState('');
   const [busca, setBusca] = useState('');
   const [resultados, setResultados] = useState([]);
+  // Admin — reconciliação: atribuir um cliente (indicado) a um parceiro manualmente.
+  const [recCli, setRecCli] = useState(null);        // {id, nome} cliente escolhido
+  const [recCliBusca, setRecCliBusca] = useState('');
+  const [recCliRes, setRecCliRes] = useState([]);
+  const [recPar, setRecPar] = useState(null);        // {id, nome} parceiro escolhido
+  const [recParBusca, setRecParBusca] = useState('');
+  const [recParRes, setRecParRes] = useState([]);
+  const [recMsg, setRecMsg] = useState(null);
+  const [recSalvando, setRecSalvando] = useState(false);
 
   // Nível + financeiro (do próprio parceiro)
   const [nivel, setNivel] = useState(null);           // retorno de meu_nivel()
@@ -153,6 +162,30 @@ export default function MinhaRede() {
     if (!isAdmin || q.trim().length < 2) { setResultados([]); return; }
     const { data } = await supabase.from('perfis').select('id, nome').ilike('nome', `%${q.trim()}%`).limit(8);
     setResultados(Array.isArray(data) ? data : []);
+  };
+
+  // Admin — reconciliação: busca genérica de perfis (cliente OU parceiro) por nome.
+  const buscarPerfil = async (q, setRes) => {
+    if (!isAdmin || q.trim().length < 2) { setRes([]); return; }
+    const { data } = await supabase.from('perfis').select('id, nome').ilike('nome', `%${q.trim()}%`).limit(8);
+    setRes(Array.isArray(data) ? data : []);
+  };
+  const atribuirIndicado = async () => {
+    if (!recCli?.id || !recPar?.id) { setRecMsg({ tipo: 'erro', txt: 'Escolha o cliente e o parceiro.' }); return; }
+    setRecSalvando(true); setRecMsg(null);
+    try {
+      const { data, error } = await supabase.rpc('admin_atribuir_indicado', { p_cliente: recCli.id, p_parceiro: recPar.id });
+      if (error) throw error;
+      if (data === true) {
+        setRecMsg({ tipo: 'ok', txt: `✓ ${recCli.nome} agora está vinculado(a) a ${recPar.nome}.` });
+        setRecCli(null); setRecPar(null); setRecCliBusca(''); setRecParBusca('');
+        carregar(); // atualiza a rede exibida
+      } else {
+        setRecMsg({ tipo: 'erro', txt: 'Não foi possível atribuir (evita auto-indicação e ciclos). Confira a escolha.' });
+      }
+    } catch { setRecMsg({ tipo: 'erro', txt: 'Erro ao atribuir. Tente novamente.' }); }
+    setRecSalvando(false);
+    setTimeout(() => setRecMsg(null), 6000);
   };
 
   async function salvarPj() {
@@ -552,6 +585,61 @@ export default function MinhaRede() {
             )}
           </div>
           {rootNome && <div style={{ fontSize: 12, color: '#084BA6', marginTop: 8, fontWeight: 700 }}>Exibindo os indicados de: {rootNome}</div>}
+        </div>
+      )}
+
+      {/* Admin — reconciliar indicação: atribuir manualmente um cliente ao parceiro que o indicou.
+          Recupera indicações que se perderam (cliente entrou por link antigo sem registrar o parceiro). */}
+      {isAdmin && (
+        <div style={card}>
+          <div style={{ fontSize: 12, fontWeight: 800, color: '#334155', marginBottom: 4 }}>👑 Admin — atribuir um indicado a um parceiro</div>
+          <div style={{ fontSize: 11.5, color: '#94a3b8', marginBottom: 10, lineHeight: 1.5 }}>
+            Reconciliação manual: escolha o <strong>cliente</strong> e o <strong>parceiro</strong> que o indicou.
+            Útil quando a indicação se perdeu (link antigo). Impede auto-indicação e ciclos.
+          </div>
+          {/* Cliente */}
+          <div style={{ position: 'relative', marginBottom: 8 }}>
+            <div style={{ fontSize: 10.5, fontWeight: 800, color: '#64748b', marginBottom: 3 }}>CLIENTE (indicado)</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, border: '1px solid #e2e8f0', borderRadius: 10, padding: '8px 12px' }}>
+              <Search size={15} color="#94a3b8" />
+              <input value={recCliBusca} onChange={e => { setRecCli(null); setRecCliBusca(e.target.value); buscarPerfil(e.target.value, setRecCliRes); }} placeholder="Buscar cliente por nome…"
+                style={{ border: 'none', outline: 'none', flex: 1, fontSize: 13, color: '#111', background: 'transparent' }} />
+            </div>
+            {recCliRes.length > 0 && !recCli && (
+              <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'white', border: '1px solid #e2e8f0', borderRadius: 10, marginTop: 4, boxShadow: '0 8px 24px rgba(0,0,0,0.1)', zIndex: 10, overflow: 'hidden' }}>
+                {recCliRes.map(r => (
+                  <button key={r.id} onClick={() => { setRecCli(r); setRecCliBusca(r.nome); setRecCliRes([]); }}
+                    style={{ display: 'block', width: '100%', textAlign: 'left', padding: '9px 12px', border: 'none', background: 'white', cursor: 'pointer', fontSize: 13, color: '#334155' }}>
+                    {r.nome}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          {/* Parceiro */}
+          <div style={{ position: 'relative', marginBottom: 10 }}>
+            <div style={{ fontSize: 10.5, fontWeight: 800, color: '#64748b', marginBottom: 3 }}>PARCEIRO (quem indicou)</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, border: '1px solid #e2e8f0', borderRadius: 10, padding: '8px 12px' }}>
+              <Search size={15} color="#94a3b8" />
+              <input value={recParBusca} onChange={e => { setRecPar(null); setRecParBusca(e.target.value); buscarPerfil(e.target.value, setRecParRes); }} placeholder="Buscar parceiro por nome…"
+                style={{ border: 'none', outline: 'none', flex: 1, fontSize: 13, color: '#111', background: 'transparent' }} />
+            </div>
+            {recParRes.length > 0 && !recPar && (
+              <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'white', border: '1px solid #e2e8f0', borderRadius: 10, marginTop: 4, boxShadow: '0 8px 24px rgba(0,0,0,0.1)', zIndex: 10, overflow: 'hidden' }}>
+                {recParRes.map(r => (
+                  <button key={r.id} onClick={() => { setRecPar(r); setRecParBusca(r.nome); setRecParRes([]); }}
+                    style={{ display: 'block', width: '100%', textAlign: 'left', padding: '9px 12px', border: 'none', background: 'white', cursor: 'pointer', fontSize: 13, color: '#334155' }}>
+                    {r.nome}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <button onClick={atribuirIndicado} disabled={recSalvando || !recCli || !recPar}
+            style={{ padding: '9px 16px', background: (recCli && recPar) ? '#0D63DB' : '#cbd5e1', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: (recCli && recPar && !recSalvando) ? 'pointer' : 'default' }}>
+            {recSalvando ? 'Atribuindo…' : 'Atribuir ao parceiro'}
+          </button>
+          {recMsg && <div style={{ marginTop: 8, fontSize: 12, fontWeight: 700, color: recMsg.tipo === 'ok' ? '#059669' : '#dc2626' }}>{recMsg.txt}</div>}
         </div>
       )}
 

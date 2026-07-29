@@ -6,6 +6,7 @@ import { trackCadastro } from '../utils/gtag';
 import { Briefcase, Eye, EyeOff, Loader2, CheckCircle2 } from 'lucide-react';
 import { apiCall } from '../utils/apiCall';
 import { buscarTodasCidades } from '../data/cidades';
+import { salvarRef, lerRef } from '../utils/ref';
 
 const inp = {
   width: '100%', padding: '11px 14px', border: '1px solid #e2e8f0', borderRadius: 10,
@@ -27,16 +28,13 @@ export default function Login() {
   const conviteParam = params.get('convite')?.toUpperCase() || '';
   const modoParam = params.get('modo');
   const nextParam = params.get('next') || '';
-  const [refCodigo] = useState(() => {
-    const stored = sessionStorage.getItem('tsn_ref_codigo') || '';
-    return refParam || stored;
-  });
+  const [refCodigo] = useState(() => refParam || lerRef());
 
   const conviteEquipeParam = params.get('convite_equipe') || '';
 
   // Persiste o ref e convite em sessionStorage
   useEffect(() => {
-    if (refParam) sessionStorage.setItem('tsn_ref_codigo', refParam);
+    if (refParam) salvarRef(refParam); // persiste com janela de 30 dias
     if (conviteParam) sessionStorage.setItem('tsn_convite_codigo', conviteParam);
     if (conviteEquipeParam) sessionStorage.setItem('tsn_convite_equipe', conviteEquipeParam);
   }, [refParam, conviteParam, conviteEquipeParam]);
@@ -196,7 +194,7 @@ export default function Login() {
     try {
       if (planoEscolhido) sessionStorage.setItem('tsn_plano_pendente', planoEscolhido);
       // Salva ref antes do redirect OAuth (sessionStorage pode ser limpo em alguns browsers)
-      if (refCodigo) sessionStorage.setItem('tsn_ref_codigo', refCodigo);
+      if (refCodigo) salvarRef(refCodigo); // persiste antes do redirect OAuth (janela de 30 dias)
       // O fluxo OAuth NÃO passa pelo handleLogin, então calculamos aqui o destino
       // pós-login (plano/checkout, next ou produto) e o AuthContext o consome.
       const produtoRedirect = sessionStorage.getItem('tsn_redirect_produto');

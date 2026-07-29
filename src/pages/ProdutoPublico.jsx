@@ -4,6 +4,7 @@ import { supabase } from '../utils/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { driveImage } from '../utils/driveUrl';
 import { apiCall } from '../utils/apiCall';
+import { salvarRef, lerRef } from '../utils/ref';
 
 export default function ProdutoPublico({ tipo }) {
   const { id } = useParams();
@@ -21,7 +22,7 @@ export default function ProdutoPublico({ tipo }) {
 
   // Persiste código de referência do consultor
   useEffect(() => {
-    if (ref) sessionStorage.setItem('tsn_ref_codigo', ref);
+    if (ref) salvarRef(ref); // persiste com janela de 30 dias
   }, [ref]);
 
   // Verifica compra avulsa para produtos pagos
@@ -49,7 +50,7 @@ export default function ProdutoPublico({ tipo }) {
     if (!user) { nav(`/login?modo=cadastro&produto=${tipo}:${id}${ref ? `&ref=${ref}` : ''}`); return; }
     setErroCompra(''); setComprando(true);
     try {
-      const refCod = ref || sessionStorage.getItem('tsn_ref_codigo') || '';
+      const refCod = ref || lerRef();
       const nome = user.user_metadata?.nome || user.user_metadata?.full_name || '';
       const payload = { produto_tipo: tipo, produto_id: id, ref: refCod, nome, email: user.email };
       let link = null, jaTem = false;

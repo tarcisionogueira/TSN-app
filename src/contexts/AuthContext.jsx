@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../utils/supabase';
 import { ativarPushAutomatico } from '../utils/push';
+import { salvarRef, lerRef, limparRef } from '../utils/ref';
 
 const AuthContext = createContext(null);
 
@@ -117,7 +118,7 @@ export function AuthProvider({ children }) {
       const h = window.location.hash || '';
       const iq = h.indexOf('?');
       const ref = pegaRef(window.location.search) || (iq >= 0 ? pegaRef(h.slice(iq)) : null);
-      if (ref) sessionStorage.setItem('tsn_ref_codigo', ref);
+      if (ref) salvarRef(ref); // localStorage + janela de 30 dias (sobrevive a fechar a aba)
     } catch { /* ignore */ }
     // Verificar expiração de 24h na carga inicial
     const aplicarPerfil = (p) => {
@@ -216,12 +217,12 @@ export function AuthProvider({ children }) {
             // sem gastar BD a cada abertura. Rede de 7 dias = cron semanal dessas fontes na CI.
             fetch('/api/coleta-oportunista', { method: 'POST', headers: { Authorization: `Bearer ${session?.access_token || ''}` } }).catch(() => {});
           }
-          const ref = sessionStorage.getItem('tsn_ref_codigo');
+          const ref = lerRef(); // localStorage c/ janela de 30 dias (+ compat sessionStorage antigo)
           if (ref) {
             // vincular_upline: QUALQUER usuário pode ser o indicador (antes só consultor);
             // aceita o id do link (?ref=<id>) ou um código de indicação. Grava indicado_por.
             try { await supabase.rpc('vincular_upline', { p_ref: ref }); } catch (_) {}
-            sessionStorage.removeItem('tsn_ref_codigo');
+            limparRef();
           }
           const convite = sessionStorage.getItem('tsn_convite_codigo');
           if (convite) {

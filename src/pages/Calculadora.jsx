@@ -4,6 +4,7 @@ import { Calculator, Gavel, TrendingUp, Target, Lock, Share2, Copy, Check, Info 
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
 import { calcularMetricasCenario, calcularTetoLance, fluxoLocacao, calcularTIR, fmt, fmtPct } from '../utils/calculos';
+import { salvarRef, lerRef } from '../utils/ref';
 
 const ROLES_COM_ACESSO = ['top2', 'assessorado', 'clube', 'consultor', 'analista', 'advogado', 'admin'];
 
@@ -91,7 +92,7 @@ export default function Calculadora() {
   // Captura e persiste o código de referência do consultor
   const refAtualUrl = searchParams.get('ref') || '';
   useEffect(() => {
-    if (refAtualUrl) sessionStorage.setItem('tsn_ref_codigo', refAtualUrl);
+    if (refAtualUrl) salvarRef(refAtualUrl); // persiste com janela de 30 dias
   }, [refAtualUrl]);
 
   // Mini formulário de captura do lead (quando vem de link de consultor)
@@ -106,7 +107,7 @@ export default function Calculadora() {
     setLeadEnviando(true);
     setLeadMsg('');
     try {
-      const ref = refAtualUrl || sessionStorage.getItem('tsn_ref_codigo') || '';
+      const ref = refAtualUrl || lerRef();
       const res = await fetch('/api/verificar-cpf', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -119,7 +120,7 @@ export default function Calculadora() {
         return;
       }
       const d = await res.json().catch(() => ({}));
-      if (ref) sessionStorage.setItem('tsn_ref_codigo', ref);
+      if (ref) salvarRef(ref);
       if (d.temConta) {
         // Já tem conta → vai para login
         nav(`/login?email=${encodeURIComponent(leadEmail)}${ref ? `&ref=${ref}` : ''}`);
@@ -592,7 +593,7 @@ export default function Calculadora() {
       {(() => {
         const r = effectiveRole || role;
         const isPago = ['top2','assessorado','clube','consultor','analista','advogado','admin'].includes(r);
-        const refAtivo = refAtualUrl || sessionStorage.getItem('tsn_ref_codigo') || '';
+        const refAtivo = refAtualUrl || lerRef();
         const temRef = !!refAtivo;
 
         if (isPago) return null;

@@ -5,6 +5,7 @@ import { supabase } from '../utils/supabase';
 import { PLANOS as PLANOS_STATIC } from '../data/cursos';
 import { useAuth } from '../contexts/AuthContext';
 import { fetchPlanosComConfig } from '../utils/planosConfig';
+import { salvarRef } from '../utils/ref';
 
 // FAQs montados com os valores reais do planos_config (evita valores fixos
 // divergentes). Os labels de preço chegam já formatados.
@@ -53,7 +54,7 @@ export default function Planos() {
   // não recebia o crédito. O cadastro (AuthContext) consome tsn_ref_codigo no signup.
   useEffect(() => {
     const ref = searchParams.get('ref');
-    if (ref) { try { sessionStorage.setItem('tsn_ref_codigo', ref); } catch { /* ignore */ } }
+    if (ref) salvarRef(ref); // persiste com janela de 30 dias
   }, [searchParams]);
 
   // Deep-link do plano que o parceiro compartilhou (?plano=KEY): rola até o card.
