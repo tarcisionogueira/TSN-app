@@ -6,4 +6,4 @@ Disallow: /#/painel
 Disallow: /#/checkout
 Disallow: /#/convite-equipe
 
-Sitemap: https://bidprobrasil.com.br/sitemap.xml
+Sitemap: https://www.bidprobrasil.com.br/sitemap.xml
