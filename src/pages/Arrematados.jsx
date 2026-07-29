@@ -47,13 +47,10 @@ function StatOp({ label, valor, cor, sub }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Tela do arremate (dedicada): números da operação + Lançamentos + Documentos
 // ─────────────────────────────────────────────────────────────────────────────
-function Detalhe({ arr, onBack, onChange, soLeitura, permitirAnexo = !soLeitura, permitirVincular = false }) {
+function Detalhe({ arr, onBack, onChange, soLeitura, permitirAnexo = !soLeitura }) {
   const [aba, setAba] = React.useState(arr._abaInicial || 'lancamentos');
   // Contratos VINCULADOS a esta arrematação (aparecem junto dos documentos, mesmo assinados).
-  const [contratosVinc, setContratosVinc] = React.useState([]);
-  const [vincSel, setVincSel] = React.useState('');       // id do contrato escolhido p/ vincular
-  const [vincOpcoes, setVincOpcoes] = React.useState([]); // contratos ainda não vinculados
-  const [vincBusy, setVincBusy] = React.useState(false);
+  const [contratosVinc, setContratosVinc] = React.useState([]); // só LEITURA (vincular é no módulo de Contratos)
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
   const [lancs, setLancs] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
@@ -124,35 +121,8 @@ function Detalhe({ arr, onBack, onChange, soLeitura, permitirAnexo = !soLeitura,
   }, [arr.imovel_id, arr.user_id]);
   React.useEffect(() => { carregarContratos(); }, [carregarContratos]);
 
-  // Opções para VINCULAR (staff): contratos visíveis ao usuário ainda não vinculados a arremate.
-  const carregarOpcoesVinc = React.useCallback(async () => {
-    if (!permitirVincular) return;
-    const { data } = await supabase.from('contratos_link')
-      .select('id,titulo,status,contrato_grupo_id')
-      .is('arremate_imovel_id', null).neq('status', 'cancelado')
-      .order('criado_em', { ascending: false }).limit(100);
-    const vistos = new Set(); const uniq = [];
-    (Array.isArray(data) ? data : []).forEach(c => { const k = c.contrato_grupo_id || c.id; if (!vistos.has(k)) { vistos.add(k); uniq.push(c); } });
-    setVincOpcoes(uniq);
-  }, [permitirVincular]);
-  React.useEffect(() => { if (aba === 'documentos') carregarOpcoesVinc(); }, [aba, carregarOpcoesVinc]);
-
-  const vincularContrato = async () => {
-    if (!vincSel || !arr.imovel_id || !arr.user_id) return;
-    setVincBusy(true);
-    try {
-      const alvo = vincOpcoes.find(c => c.id === vincSel);
-      const patch = { arremate_imovel_id: arr.imovel_id, arremate_user_id: arr.user_id };
-      const { error } = alvo?.contrato_grupo_id
-        ? await supabase.from('contratos_link').update(patch).eq('contrato_grupo_id', alvo.contrato_grupo_id)
-        : await supabase.from('contratos_link').update(patch).eq('id', vincSel);
-      if (error) throw error;
-      setVincSel('');
-      await carregarContratos();
-      await carregarOpcoesVinc();
-    } catch { alert('Não foi possível vincular o contrato (verifique se você tem permissão).'); }
-    setVincBusy(false);
-  };
+  // A ATRIBUIÇÃO de contrato a uma arrematação é feita EXCLUSIVAMENTE no módulo de Contratos
+  // (Admin → detalhe do documento → "Atribuir a uma arrematação"). Aqui é só LEITURA.
 
   // Números da operação: avaliação (imóvel) + valor de mercado (relatório concluído).
   React.useEffect(() => {
@@ -428,18 +398,6 @@ function Detalhe({ arr, onBack, onChange, soLeitura, permitirAnexo = !soLeitura,
                     ))}
                   </div>
                 )}
-                {permitirVincular && vincOpcoes.length > 0 && (
-                  <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
-                    <select value={vincSel} onChange={e => setVincSel(e.target.value)} style={{ ...inp, flex: 1, minWidth: 200 }}>
-                      <option value="">Vincular um contrato existente…</option>
-                      {vincOpcoes.map(c => <option key={c.id} value={c.id}>{(c.titulo || 'Contrato')}{c.status === 'assinado' ? ' (assinado)' : ''}</option>)}
-                    </select>
-                    <button onClick={vincularContrato} disabled={!vincSel || vincBusy}
-                      style={{ padding: '9px 16px', background: (!vincSel || vincBusy) ? '#e2e8f0' : '#0D63DB', color: (!vincSel || vincBusy) ? '#94a3b8' : 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: (!vincSel || vincBusy) ? 'default' : 'pointer' }}>
-                      {vincBusy ? 'Vinculando…' : 'Vincular'}
-                    </button>
-                  </div>
-                )}
               </div>
             </>
           )}
@@ -535,8 +493,6 @@ export default function Arrematados() {
   // ANEXAR docs complementares: o dono (fora do modo suporte) OU quem está no suporte (staff).
   // O upload-anexo já autoriza staff no servidor; aqui liberamos a UI no modo suporte.
   const permitirAnexo = !impersonate || ehStaff;
-  // VINCULAR contrato à arrematação é ação de gestão: staff (inclui suporte). Cliente só visualiza.
-  const permitirVincular = ehStaff || !!impersonate;
   const { analises, documentais } = useAnalises();
   const uid = effectiveUserId || user?.id || null;
   const [arrematados, setArrematados] = React.useState([]);
@@ -628,7 +584,7 @@ export default function Arrematados() {
   return (
     <div style={{ maxWidth: 900, margin: '0 auto', padding: isMobile ? '16px 12px' : '28px 20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
       {sel ? (
-        <Detalhe arr={sel} soLeitura={soLeitura} permitirAnexo={permitirAnexo} permitirVincular={permitirVincular} onBack={() => { setSel(null); carregar(); }} onChange={(u) => { setSel(u); setArrematados(prev => prev.map(a => a.id === u.id ? u : a)); }} />
+        <Detalhe arr={sel} soLeitura={soLeitura} permitirAnexo={permitirAnexo} onBack={() => { setSel(null); carregar(); }} onChange={(u) => { setSel(u); setArrematados(prev => prev.map(a => a.id === u.id ? u : a)); }} />
       ) : (
       <>
       <div>
