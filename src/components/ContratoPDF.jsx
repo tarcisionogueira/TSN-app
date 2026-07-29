@@ -146,5 +146,7 @@ export function gerarContratoPDF({ contrato, roster = [] } = {}) {
   </div>
 </body></html>`;
 
-  imprimirHtml(html, `Contrato - ${titulo}`);
+  // Nome do arquivo no "Salvar como PDF": nome do contrato + situação (Assinado / Aguardando
+  // assinaturas) — pedido do dono. Antes o arquivo saía com o título da SPA (nome do site).
+  imprimirHtml(html, `${titulo} - ${completo ? 'Assinado' : 'Aguardando assinaturas'}`);
 }
