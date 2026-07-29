@@ -8,6 +8,7 @@ import './index.css'
 import { registrarServiceWorker } from './utils/push.js'
 import { reportarErroCliente, instalarCapturaErros, ehErroDeChunk, recarregarPorChunkStale, recarregarComGuarda, houveChunkRecente } from './utils/reportarErro.js'
 import { instalarTracker } from './utils/tracker.js'
+import { initMetaPixel, capturarMarketing } from './utils/marketing.js'
 
 // Registra o service worker em produção
 if (import.meta.env.PROD) {
@@ -21,6 +22,11 @@ instalarCapturaErros();
 
 // Rastreamento de atividade (navegação + cliques) para o Cliente 360 — diagnóstico de falhas.
 instalarTracker();
+
+// Marketing: liga o Meta Pixel (se VITE_META_PIXEL_ID existir) e captura a atribuição do anúncio
+// (gclid/fbclid/utm) que trouxe o visitante — consumida no cadastro p/ medir a captação por origem.
+initMetaPixel();
+capturarMarketing();
 
 class RootErrorBoundary extends React.Component {
   constructor(props) { super(props); this.state = { error: null, chunk: false }; }

@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../utils/supabase';
 import { ativarPushAutomatico } from '../utils/push';
 import { salvarRef, lerRef, limparRef } from '../utils/ref';
+import { lerMarketing } from '../utils/marketing';
 
 const AuthContext = createContext(null);
 
@@ -228,6 +229,9 @@ export function AuthProvider({ children }) {
           // não são pelo link dos parceiros são para o meu usuário"). Idempotente — só preenche se
           // indicado_por ainda for NULL, então nunca sobrepõe a indicação de parceiro gravada acima.
           try { await supabase.rpc('vincular_owner_default'); } catch (_) {}
+          // ATRIBUIÇÃO de marketing (gclid/fbclid/utm) capturada na chegada → grava 1x (first-touch)
+          // para casar a captação com a origem paga (Google Ads / Meta).
+          try { const mkt = lerMarketing(); if (mkt) await supabase.rpc('registrar_marketing', { p: mkt }); } catch (_) {}
           const convite = sessionStorage.getItem('tsn_convite_codigo');
           if (convite) {
             try { await supabase.rpc('usar_convite', { p_codigo: convite }); } catch (_) {}
