@@ -15,7 +15,7 @@ import { anthropicFetch } from './_claude.js';
 import { custoRespostaClaude } from './_uso.js';
 import { buscarProcessosCNJ } from './_cnj.js';
 import { aprenderNaEmissao, vicioRegen } from './_aprendizado.js';
-import { consultarComunicaDJEN, consultarCNDT, consultarCNIB, consultarProtestos } from './_laudo-fontes.js';
+import { consultarComunicaDJEN } from './_laudo-fontes.js';
 import { consultarCertidoesFiscais } from './_certidoes-fontes.js';
 import { geocodificarCascata, coordValida, rankNivel } from './_geo.js';
 import { urlDocumento } from './_storage.js';
@@ -1104,14 +1104,17 @@ export default async function handler(req, res) {
     };
     let fontesTxt = '', fontesExternas = null;
     try {
-      const [djen, cndt, cnib, prot, cert] = await Promise.all([
+      // CONSULTAS AUTOMÁTICAS = só as que o sistema traz SOZINHO e de GRAÇA (decisão do dono):
+      // DJEN/Comunica CNJ + certidões FISCAIS (Receita/PGFN/FGTS). CNDT (trabalhista), CNIB
+      // (indisponibilidade) e CENPROT (protesto) foram REMOVIDOS — dependem de portal pago
+      // (Bright Data) + captcha, não saem sozinhos e ficavam "pendentes/diligência" para sempre;
+      // saíram da lista E da apresentação. A indisponibilidade/penhora relevante continua vindo da
+      // leitura da MATRÍCULA pela IA (grátis), sem consulta paga.
+      const [djen, cert] = await Promise.all([
         procFontes ? consultarComunicaDJEN(procFontes).catch(() => null) : null,
-        docOk ? consultarCNDT(execDoc).catch(() => null) : null,
-        docOk ? consultarCNIB(execDoc).catch(() => null) : null,
-        docOk ? consultarProtestos(execDoc).catch(() => null) : null,
         docOk ? consultarCertidoesFiscais(execDoc).catch(() => null) : null,
       ]);
-      fontesExternas = { djen, cndt, cnib, protestos: prot, certidoes: cert };
+      fontesExternas = { djen, certidoes: cert };
       // Comprovantes: gera um comprovante PRÓPRIO (estático, sem script) de cada fonte
       // e guarda só a URL (a prova que o cliente abre). Nunca deixa o HTML cru no result
       // nem linka o portal ao vivo (era a causa da "tela de digitação").
@@ -1129,9 +1132,6 @@ export default async function handler(req, res) {
       }
       const linhas = [];
       if (djen?.ok) linhas.push(`• Andamentos (DJEN/Comunica CNJ): ${djen.resumo}`);
-      if (cndt?.ok) linhas.push(`• Débitos trabalhistas (CNDT): ${cndt.resumo}`);
-      if (cnib?.ok) linhas.push(`• Indisponibilidade de bens (CNIB): ${cnib.resumo}`);
-      if (prot?.ok) linhas.push(`• Protestos (CENPROT): ${prot.resumo}`);
       if (cert?.resumo) linhas.push(`• Certidões fiscais (Receita/PGFN/FGTS): ${cert.resumo}`);
       if (!docOk) {
         // Diligência ACIONÁVEL: diz ONDE obter a matrícula com a qualificação (CPF).
@@ -1139,7 +1139,7 @@ export default async function handler(req, res) {
         const ondeObter = (fc.oficio || fc.comarca || fc.matricula)
           ? ` Obtenha a matrícula atualizada${fc.oficio ? ` no ${String(fc.oficio).replace(/^0+/, '') || fc.oficio}º Ofício de Registro de Imóveis` : ''}${fc.comarca ? ` da comarca de ${fc.comarca}` : ''}${fc.matricula ? `, matrícula nº ${fc.matricula}` : ''} — ela traz o CPF/CNPJ do proprietário/executado.`
           : ' Obtenha a matrícula atualizada no Cartório de Registro de Imóveis com a qualificação completa das partes (CPF/CNPJ).';
-        linhas.push(`• CPF/CNPJ do executado/proprietário não localizado nos documentos${execNome ? ` (parte identificada: ${execNome})` : ''} — certidões por documento (CNDT/CNIB/CENPROT/fiscais) não realizadas.${ondeObter}`);
+        linhas.push(`• CPF/CNPJ do executado/proprietário não localizado nos documentos${execNome ? ` (parte identificada: ${execNome})` : ''} — certidões fiscais por documento não realizadas.${ondeObter}`);
       }
       if (linhas.length) fontesTxt = `\n\n§ SEÇÃO: CERTIDÕES E FONTES EXTERNAS\n\n${linhas.join('\n')}\n\nConsultas públicas automáticas — confirme em certidão oficial atualizada antes do lance.`;
     } catch { /* fontes externas nunca derrubam o laudo */ }
@@ -1178,9 +1178,8 @@ export default async function handler(req, res) {
           : (procFontes ? 'Aguardando o DataJud (pode ter lag).'
             : (cnjViaNome ? `Nenhum processo localizado no CNJ para "${execNome}".` : 'Sem nº de processo nem nome da parte nos documentos para consultar.')) },
       stItem('Andamentos processuais (DJEN/Comunica CNJ)', fx.djen, 'Sem nº de processo para consultar.', 'comunica.pje.jus.br (Comunica CNJ) com o nº do processo'),
-      stItem('Débitos trabalhistas (CNDT/BNDT)', fx.cndt, 'Sem CPF/CNPJ do executado nos documentos.', 'cndt.tst.jus.br'),
-      stItem('Indisponibilidade de bens (CNIB)', fx.cnib, 'Sem CPF/CNPJ do executado nos documentos.', 'indisponibilidade.org.br'),
-      stItem('Protestos em cartório (CENPROT)', fx.protestos, 'Sem CPF/CNPJ do executado nos documentos.', 'o CENPROT do estado (ex.: protesto.com.br)'),
+      // CNDT / CNIB / CENPROT removidos do checklist automático (portal pago + captcha, não saem
+      // sozinhos) — não faz sentido mostrar como consulta do sistema. Ficam a cargo do jurídico.
       { label: 'Certidões fiscais (Receita/PGFN/FGTS)',
         status: fx.certidoes?.resumo ? 'feito' : (docOk ? 'pendente' : 'na'),
         detalhe: fx.certidoes?.resumo || (docOk ? 'Aguardando as fontes fiscais.' : 'Sem CPF/CNPJ do executado nos documentos.'),
@@ -1256,7 +1255,7 @@ export default async function handler(req, res) {
         p.push('§ SEÇÃO: REGISTRO DO IMÓVEL', `Matrícula ${exx.numeroMatricula || '(número a confirmar)'}${exx.cartorio ? `, ${exx.cartorio}` : ''}${exx.comarca ? `, comarca de ${exx.comarca}` : ''}.`);
       }
       p.push('§ SEÇÃO: DILIGÊNCIAS PENDENTES', !docOk
-        ? 'Não foi possível extrair o CPF/CNPJ do proprietário/executado dos documentos disponíveis, então as certidões pessoais (trabalhista, indisponibilidade, protestos e fiscais) ainda não foram feitas. Veja abaixo onde obter a matrícula com a qualificação das partes.'
+        ? 'Não foi possível extrair o CPF/CNPJ do proprietário/executado dos documentos disponíveis, então as certidões fiscais (Receita/PGFN/FGTS) ainda não foram feitas. Veja abaixo onde obter a matrícula com a qualificação das partes.'
         : 'As consultas foram feitas com base no CPF/CNPJ identificado; confira os apontamentos na seção de certidões abaixo.');
       p.push('Recomendamos revisar este caso com um analista antes de dar o lance.');
       parecerBase = p.join('\n\n');
@@ -1348,27 +1347,13 @@ export default async function handler(req, res) {
       return semDocs;
     }
 
-    // CNIB e CENPROT não saem de forma confiável pela plataforma (portais SPA com
-    // captcha) → a certidão OFICIAL é DILIGÊNCIA DO ADVOGADO. Garante que entrem na lista
-    // de "certidões a gerar antes do lance" como recomendação, sem depender da IA.
-    try {
-      const rec = (parsed.raioX && Array.isArray(parsed.raioX.certidoesRecomendadas)) ? parsed.raioX.certidoesRecomendadas : [];
-      const add = [];
-      if (!rec.some(c => /cnib|indisponibil/i.test(`${c?.nome || ''} ${c?.orgao || ''}`)))
-        add.push({ nome: 'CNIB — Indisponibilidade de bens', orgao: 'indisponibilidade.org.br (CNIB)', online: true, motivo: 'A certidão oficial deve ser emitida pelo advogado (o portal exige captcha e não sai automaticamente pela plataforma). Aponta se há indisponibilidade que bloqueia o registro do imóvel.' });
-      if (!rec.some(c => /cenprot|protesto/i.test(`${c?.nome || ''} ${c?.orgao || ''}`)))
-        add.push({ nome: 'CENPROT — Protestos em cartório', orgao: 'CENPROT nacional (resolve.cenprot.org.br)', online: true, motivo: 'A certidão oficial deve ser emitida pelo advogado (portal com captcha). Aponta protestos no nome do executado/vendedor (solvência).' });
-      if (add.length) { parsed.raioX = parsed.raioX || {}; parsed.raioX.certidoesRecomendadas = [...rec, ...add]; }
-    } catch { /* best-effort */ }
+    // CNDT / CNIB / CENPROT NÃO são mais forçados na lista de "certidões a gerar antes do lance"
+    // (decisão do dono: portal pago + captcha, o sistema não traz sozinho → fora da apresentação).
+    // Se a IA julgar relevante para o caso, ela mesma pode recomendar em raioX.certidoesRecomendadas.
 
-    // Certidões CAPTURADAS (o documento COMO O PORTAL DEVOLVEU) — vão ao FINAL do
-    // relatório documental/jurídico, visualizáveis. Só as que renderam um documento
-    // (hoje, na prática, apenas o CNDT — CNIB/CENPROT viram diligência do advogado acima).
-    const CERT_TITULO = { cndt: 'Débitos Trabalhistas (CNDT / TST)', cnib: 'Indisponibilidade de Bens (CNIB)', protestos: 'Protestos em Cartório (CENPROT)' };
-    const certidoesDocumentos = Object.entries(CERT_TITULO)
-      .map(([k, titulo]) => ({ titulo, f: fx?.[k] }))
-      .filter(x => x.f && x.f.comprovanteUrl)
-      .map(x => ({ titulo: x.titulo, resumo: x.f.resumo || '', url: x.f.comprovanteUrl }));
+    // Certidões CAPTURADAS pelo portal: sem CNDT/CNIB/CENPROT (removidos), fica vazio — o front
+    // omite a seção automaticamente. Mantido como array p/ compatibilidade do result.
+    const certidoesDocumentos = [];
 
     const result = {
       extracao: parsed.extracao || null,

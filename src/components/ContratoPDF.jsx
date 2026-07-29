@@ -71,32 +71,44 @@ export function gerarContratoPDF({ contrato, roster = [] } = {}) {
   const completo = total > 0 && totAssin === total;
 
   // Cartão por signatário no padrão ZapSign ("Assinado via …", nome, data/hora, Token, assinatura,
-  // "Pontos de autenticação"). Dados completos só do próprio (p.eu); dos demais, nome + status + data.
+  // "Pontos de autenticação"). Dados completos: do próprio (p.eu, vindo de contrato.*) OU de CADA
+  // parte quando o chamador passa o roster COMPLETO (p._full — caso do admin, que tem acesso às
+  // linhas inteiras). Sem esses, mostra só nome + status + data (visão do signatário sobre os outros).
   const blocosPartes = partes.map((p) => {
     const meu = !!p.eu;
+    const full = p._full === true; // roster com dados completos por parte (admin)
+    const detalhar = meu || full;
+    const pds = full ? (p.dados_signatario || {}) : ds;
+    const pAssinatura = full ? p.assinatura : (meu ? contrato.assinatura : null);
+    const pIp = full ? p.assinante_ip : (meu ? contrato.assinante_ip : null);
+    const pGeo = full ? p.assinante_geo : (meu ? contrato.assinante_geo : null);
+    const pUa = full ? p.assinante_user_agent : (meu ? contrato.assinante_user_agent : null);
+    const pComplEm = full ? p.dados_complementados_em : (meu ? contrato.dados_complementados_em : null);
+    const pToken = full ? p.token : (meu ? contrato.token : null);
+    const pAssTest = full ? p.assinatura_testemunha : (meu ? contrato.assinatura_testemunha : null);
+    const pNomeTest = full ? p.nome_testemunha : (meu ? contrato.nome_testemunha : null);
     const pontos = [];
-    if (meu) {
-      if (ds.telefone) pontos.push(`<div>Telefone: ${esc(ds.telefone)}</div>`);
-      if (ds.email) pontos.push(`<div>E-mail: ${esc(ds.email)}</div>`);
-      if (ds.cpf) pontos.push(`<div>CPF: ${esc(ds.cpf)}</div>`);
-      if (ds.cnpj) pontos.push(`<div>CNPJ: ${esc(ds.cnpj)}</div>`);
-      pontos.push('<div>Nível de segurança: assinatura eletrônica (manuscrita em tela), com carimbo de data/hora do servidor</div>');
-      const g = contrato.assinante_geo;
-      if (g && Number.isFinite(Number(g.lat)) && Number.isFinite(Number(g.lng))) pontos.push(`<div>Localização aproximada: ${esc(Number(g.lat).toFixed(6))}, ${esc(Number(g.lng).toFixed(6))}</div>`);
-      if (contrato.assinante_ip) pontos.push(`<div>IP: ${esc(contrato.assinante_ip)}</div>`);
-      if (contrato.assinante_user_agent) pontos.push(`<div>Dispositivo: ${esc(contrato.assinante_user_agent)}</div>`);
-      if (contrato.dados_complementados_em) pontos.push(`<div style="color:#94a3b8;">(dispositivo/localização complementados em ${esc(dataHora(contrato.dados_complementados_em))})</div>`);
+    if (detalhar) {
+      if (pds.telefone) pontos.push(`<div>Telefone: ${esc(pds.telefone)}</div>`);
+      if (pds.email || p.email) pontos.push(`<div>E-mail: ${esc(pds.email || p.email)}</div>`);
+      if (pds.cpf) pontos.push(`<div>CPF: ${esc(pds.cpf)}</div>`);
+      if (pds.cnpj) pontos.push(`<div>CNPJ: ${esc(pds.cnpj)}</div>`);
+      if (p.assinou) pontos.push('<div>Nível de segurança: assinatura eletrônica (manuscrita em tela), com carimbo de data/hora do servidor</div>');
+      if (pGeo && Number.isFinite(Number(pGeo.lat)) && Number.isFinite(Number(pGeo.lng))) pontos.push(`<div>Localização aproximada: ${esc(Number(pGeo.lat).toFixed(6))}, ${esc(Number(pGeo.lng).toFixed(6))}</div>`);
+      if (pIp) pontos.push(`<div>IP: ${esc(pIp)}</div>`);
+      if (pUa) pontos.push(`<div>Dispositivo: ${esc(pUa)}</div>`);
+      if (pComplEm) pontos.push(`<div style="color:#94a3b8;">(dispositivo/localização complementados em ${esc(dataHora(pComplEm))})</div>`);
     }
-    if (p.requer_testemunha) pontos.push(`<div>Testemunha: ${p.testemunha_assinou ? 'assinou' : 'pendente'}${meu && contrato.nome_testemunha ? ' — ' + esc(contrato.nome_testemunha) : ''}</div>`);
-    const img = meu && contrato.assinatura ? `<img class="assimg" src="${esc(contrato.assinatura)}" alt="assinatura" />` : '';
-    const imgT = meu && contrato.assinatura_testemunha ? `<div class="srow" style="margin-top:6px;"><b>Assinatura da testemunha:</b></div><img class="assimg" src="${esc(contrato.assinatura_testemunha)}" alt="assinatura testemunha" />` : '';
+    if (p.requer_testemunha) pontos.push(`<div>Testemunha: ${p.testemunha_assinou ? 'assinou' : 'pendente'}${pNomeTest ? ' — ' + esc(pNomeTest) : ''}</div>`);
+    const img = pAssinatura ? `<img class="assimg" src="${esc(pAssinatura)}" alt="assinatura" />` : '';
+    const imgT = pAssTest ? `<div class="srow" style="margin-top:6px;"><b>Assinatura da testemunha:</b></div><img class="assimg" src="${esc(pAssTest)}" alt="assinatura testemunha" />` : '';
     return `<div class="signer">
       <div class="via">Assinado via BidPro Brasil</div>
-      <div class="sname">${esc(p.nome)}${meu ? '' : ''}</div>
+      <div class="sname">${esc(p.nome)}</div>
       <div class="srow"><b>Status:</b> ${p.assinou ? 'Assinado' : 'Pendente'}</div>
       ${p.assinou && p.assinado_em ? `<div class="srow"><b>Data e hora da assinatura:</b> ${esc(dataHora(p.assinado_em))}</div>` : ''}
-      ${meu && contrato.token ? `<div class="srow"><b>Token:</b> ${esc(contrato.token)}</div>` : ''}
-      ${meu ? `<div class="srow" style="margin-top:6px;"><b>Assinatura:</b></div>${img || '<div class="srow">(assinatura manuscrita registrada)</div>'}` : ''}
+      ${detalhar && pToken ? `<div class="srow"><b>Token:</b> ${esc(pToken)}</div>` : ''}
+      ${detalhar && p.assinou ? `<div class="srow" style="margin-top:6px;"><b>Assinatura:</b></div>${img || '<div class="srow">(assinatura manuscrita registrada)</div>'}` : ''}
       ${imgT}
       ${pontos.length ? `<div class="auth"><b>Pontos de autenticação:</b>${pontos.join('')}</div>` : ''}
     </div>`;

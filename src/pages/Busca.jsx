@@ -67,7 +67,7 @@ const TIPO_LABEL = { casa:'Casa', apartamento:'Apartamento', terreno:'Terreno/Lo
 const INTENCAO_OPTS = [
   ['revenda',   '🔁 Revenda',   'Maior margem de flip (desconto ≥ 30%)'],
   ['locacao',   '🏠 Locação',   'Residencial para renda de aluguel'],
-  ['temporada', '🏖️ Temporada', 'Residencial em litoral / turístico'],
+  ['temporada', '🏖️ Temporada', 'Residencial em destino turístico/sazonal (praia, serra, termas, histórica, parques)'],
 ];
 const TIPOS_RESIDENCIAL = ['apartamento', 'casa', 'imovel'];              // locação/temporada
 const TIPOS_LIQUIDOS    = ['apartamento', 'casa', 'comercial', 'imovel']; // revenda (flip)
@@ -93,6 +93,15 @@ const CIDADES_TEMPORADA = [
   'guaratuba','matinhos','pontaldoparana',
   // RN / CE
   'natal','extremoz','fortaleza','aquiraz','caucaia','beberibe',
+  // TEMPORADA NÃO É SÓ PRAIA (espelha api/_temporada.js): termas, serra/inverno, históricas, parques.
+  // TERMAS / ÁGUAS
+  'caldasnovas','rioquente','pocosdecaldas','saolourenco','caxambu','cambuquira','aguasdelindoia','lindoia','serranegra','aguasdesaopedro','olimpia',
+  // SERRA / INVERNO
+  'gramado','canela','bentogoncalves','novapetropolis','saofranciscodepaula','cambaradosul','camposdojordao','camanducaia','itatiaia','teresopolis','novafriburgo','petropolis','domingosmartins','urubici','saojoaquim','bomjardimdaserra',
+  // HISTÓRICAS / PATRIMÔNIO
+  'ouropreto','mariana','tiradentes','saojoaodelrei','diamantina','congonhas','olinda','saoluis','alcantara','goias','pirenopolis','vassouras',
+  // PARQUES / NATUREZA / AVENTURA
+  'fozdoiguacu','bonito','brotas','socorro','altoparaisodegoias','capitolio','lencois','barreirinhas','jijocadejericoacoara',
 ];
 // Traduz a intenção para as restrições de tipo/desconto que ambos os caminhos (query direta e
 // RPC de raio) entendem. Interseção com os tipos já escolhidos pelo usuário; se ficar vazia,

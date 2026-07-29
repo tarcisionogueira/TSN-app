@@ -506,7 +506,7 @@ async function lerComposicaoRegiao(imDb, segmento = 'apartamento') {
 // CLASSIFICAÇÃO DE INTENÇÃO — o mesmo objetivo dos filtros da busca (revenda/locação/temporada),
 // agora DENTRO do relatório: diz para QUÊ o imóvel é bom (um, vários ou os três) e POR QUÊ.
 // Alimenta a defesa do parecer e o aprendizado. Critérios ancorados nos dados que já temos.
-function classificarIntencao({ baseTipo, desconto, yieldBruto, cidadeNorm }) {
+function classificarIntencao({ baseTipo, desconto, yieldBruto, cidadeNorm, turismoSazonal }) {
   const residencial = baseTipo === 'residencial';
   const liquido = baseTipo === 'residencial' || baseTipo === 'comercial';
   const cls = { revenda: false, locacao: false, temporada: false, motivos: {} };
@@ -514,14 +514,24 @@ function classificarIntencao({ baseTipo, desconto, yieldBruto, cidadeNorm }) {
     cls.revenda = true;
     cls.motivos.revenda = `Desconto de ${Math.round(desconto)}% frente à avaliação: margem de revenda (flip) saudável e boa liquidez do tipo.`;
   }
+  // LOCAÇÃO: piso de yield elevado para 1% AO MÊS (= 12% a.a. bruto) — decisão do dono.
+  // yieldBruto aqui é ANUAL (aluguel×12/valor×100); 12% a.a. ≈ 1% do valor por mês.
   const y = Number(yieldBruto) || 0;
-  if (residencial && y >= 6) {
+  if (residencial && y >= 12) {
     cls.locacao = true;
-    cls.motivos.locacao = `Yield bruto de locação ~${y.toFixed(1)}% a.a.: renda de aluguel atrativa para o perfil de renda.`;
+    cls.motivos.locacao = `Yield bruto de locação ~${y.toFixed(1)}% a.a. (~${(y / 12).toFixed(2)}% ao mês): renda de aluguel atrativa (piso de 1% ao mês).`;
   }
-  if (residencial && ehCidadeTemporada(cidadeNorm)) {
+  // TEMPORADA: destino turístico/SAZONAL — não só litoral. Duas fontes (decisão do dono
+  // "veja nas classificações das buscas mercadológicas"): (1) lista curada `_temporada.js`
+  // (praia, termas, serra/inverno, histórica, parques); (2) o sinal turístico que a IA leu da
+  // região na busca (perfilRegiao.turismoSazonal) — pega destinos fora da lista, com o TIPO.
+  const ts = turismoSazonal && (turismoSazonal.e === true || turismoSazonal.e === 'sim') ? turismoSazonal : null;
+  if (residencial && (ehCidadeTemporada(cidadeNorm) || ts)) {
     cls.temporada = true;
-    cls.motivos.temporada = motivoTemporada(cidadeNorm) || 'Cidade de destino turístico: potencial de aluguel por temporada (curta duração).';
+    const TIPO_LABEL = { praia: 'litoral/praia', historica: 'cidade histórica', serra_inverno: 'serra / inverno', termas_aguas: 'termas / águas', parques_natureza: 'parques / natureza', campo_verao: 'campo / veraneio', religioso: 'turismo religioso' };
+    cls.motivos.temporada = motivoTemporada(cidadeNorm)
+      || (ts ? `Destino turístico e sazonal${ts.tipo ? ` (${TIPO_LABEL[ts.tipo] || ts.tipo})` : ''}: ${ts.motivo || 'potencial de aluguel por temporada (curta duração)'}.`
+            : 'Cidade de destino turístico: potencial de aluguel por temporada (curta duração).');
   }
   cls.algum = cls.revenda || cls.locacao || cls.temporada;
   return cls;
@@ -922,6 +932,7 @@ Classifique a REGIÃO (bairro/microrregião) do imóvel dentro de ${cidade}/${es
 - "atratividades": fatores POSITIVOS reais que puxam o valor (infraestrutura, comércio, transporte, escolas/saúde, áreas verdes/orla, novos empreendimentos);
 - "fragilidades": fatores que PESAM (risco de enchente, ruído, proximidade de indústria, difícil acesso, saturação);
 - "motivos": 1–2 frases explicando POR QUE a região é mais/menos valorizada.
+- "turismoSazonal": a cidade ${cidade}/${estado} é um DESTINO TURÍSTICO e SAZONAL com demanda real de aluguel por TEMPORADA/curta duração (Airbnb)? Considere TODOS os tipos: litoral/praia, cidade HISTÓRICA (patrimônio), SERRA/INVERNO, TERMAS/águas, PARQUES/natureza/aventura, campo/veraneio, turismo religioso. Preencha { "e": true|false, "tipo": "praia|historica|serra_inverno|termas_aguas|parques_natureza|campo_verao|religioso", "motivo": "1 frase objetiva" }. Só marque "e": true se a cidade tiver vocação turística REAL e sazonalidade (não uma cidade comum). Sem certeza, "e": false.
 Sem base, deixe "tier":"" e explique a limitação em "motivos".
 
 ═══ SEGURANÇA PÚBLICA DA REGIÃO (dados OFICIAIS — factual, NUNCA rótulo subjetivo) ═══
@@ -947,7 +958,7 @@ Retorne APENAS este JSON (sem markdown):
   "outrasTipologias": { "apartamento": [{"valorM2":0,"valor":0,"m2":0,"fonte":"","data":"AAAA-MM"}], "casa": [], "terreno": [], "comercial": [] },
   "outrosBairros": [{"bairro":"","valorM2":0,"valor":0,"m2":0,"fonte":"","data":"AAAA-MM"}],
   "zoneamento": { "encontrado": false, "zona": "", "resumoUso": "", "fonte": "", "ondeObter": "" },
-  "perfilRegiao": { "tier": "valorizado_alto|intermediario|valorizado_baixo|", "atratividades": [""], "fragilidades": [""], "motivos": "" },
+  "perfilRegiao": { "tier": "valorizado_alto|intermediario|valorizado_baixo|", "atratividades": [""], "fragilidades": [""], "motivos": "", "turismoSazonal": { "e": false, "tipo": "praia|historica|serra_inverno|termas_aguas|parques_natureza|campo_verao|religioso", "motivo": "" } },
   "segurancaPublica": { "encontrado": false, "nivel": "", "indicadores": "", "tendencia": "", "fonte": "", "periodo": "", "recomendacao": "" }
 }`;
 }
@@ -1483,7 +1494,7 @@ export default async function handler(req, res) {
     const yieldParaCls = Number(mercado.yieldBruto) > 0 ? Number(mercado.yieldBruto)
       : (Number(mercado.indiceBidPro?.aluguel_m2) > 0 && Number(mercado.indiceBidPro?.venda_m2) > 0
         ? Number(mercado.indiceBidPro.aluguel_m2) * 12 / Number(mercado.indiceBidPro.venda_m2) * 100 : 0);
-    mercado.classificacaoIntencao = classificarIntencao({ baseTipo, desconto: descontoImovel, yieldBruto: yieldParaCls, cidadeNorm: imDb?.cidade_norm });
+    mercado.classificacaoIntencao = classificarIntencao({ baseTipo, desconto: descontoImovel, yieldBruto: yieldParaCls, cidadeNorm: imDb?.cidade_norm, turismoSazonal: mercado.perfilRegiao?.turismoSazonal });
 
     // 2) Laudo (parecer). Carrega os docs do lote para o parecer poder dizer se os
     // débitos informados já constam na documentação (ou apontar onde buscar).

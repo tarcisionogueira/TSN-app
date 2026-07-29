@@ -73,6 +73,64 @@ const MOTIVO = {
   aquiraz: 'Aquiraz (CE): Porto das Dunas / Beach Park, um dos maiores polos de resort do Nordeste.',
   caucaia: 'Caucaia (CE): praia do Cumbuco, kitesurfe e turismo internacional.',
   beberibe: 'Beberibe (CE): Morro Branco e falésias, destino de praia cearense.',
+  // ─────────────────────────────────────────────────────────────────────────
+  // TEMPORADA NÃO É SÓ PRAIA (decisão do dono): turismo SAZONAL também inclui
+  // cidades históricas, serra/inverno, termas/águas e parques/natureza. Lista
+  // curada por categoria (cidade_norm validado no acervo). O relatório ainda
+  // classifica temporada TAMBÉM pelo sinal turístico da busca de mercado (IA),
+  // então destinos fora desta lista também são pegos no parecer.
+  // — TERMAS / ÁGUAS (turismo o ano todo, pico no verão/inverno) —
+  caldasnovas: 'Caldas Novas (GO): maior estância hidrotermal do mundo, parques aquáticos e ocupação alta o ano todo.',
+  rioquente: 'Rio Quente (GO): resorts de águas termais, destino turístico sazonal consolidado.',
+  pocosdecaldas: 'Poços de Caldas (MG): estância hidromineral clássica, turismo e eventos o ano todo.',
+  saolourenco: 'São Lourenço (MG): Circuito das Águas mineiro, turismo de bem-estar.',
+  caxambu: 'Caxambu (MG): águas minerais e turismo histórico do sul de Minas.',
+  cambuquira: 'Cambuquira (MG): estância hidromineral do Circuito das Águas.',
+  aguasdelindoia: 'Águas de Lindóia (SP): estância hidromineral e climática, turismo de temporada.',
+  lindoia: 'Lindóia (SP): águas minerais e turismo de descanso.',
+  serranegra: 'Serra Negra (SP): estância climática do Circuito das Águas paulista.',
+  aguasdesaopedro: 'Águas de São Pedro (SP): estância hidromineral, turismo de saúde.',
+  olimpia: 'Olímpia (SP): polo de parques aquáticos termais (Thermas), forte demanda de temporada.',
+  // — SERRA / INVERNO —
+  gramado: 'Gramado (RS): principal destino de serra/inverno do país (Natal Luz), ocupação sazonal altíssima.',
+  canela: 'Canela (RS): serra gaúcha, turismo o ano todo e alta temporada de inverno.',
+  bentogoncalves: 'Bento Gonçalves (RS): Vale dos Vinhedos, enoturismo e alta procura sazonal.',
+  novapetropolis: 'Nova Petrópolis (RS): serra gaúcha, turismo de inverno.',
+  saofranciscodepaula: 'São Francisco de Paula (RS): Campos de Cima da Serra, frio e turismo rural.',
+  cambaradosul: 'Cambará do Sul (RS): cânions (Itaimbezinho), ecoturismo e frio.',
+  camposdojordao: 'Campos do Jordão (SP): "Suíça brasileira", inverno de altíssima demanda e diárias elevadas.',
+  camanducaia: 'Camanducaia / Monte Verde (MG): vila serrana de inverno, forte turismo de temporada.',
+  itatiaia: 'Itatiaia (RJ): Penedo e Parque Nacional, serra e inverno na divisa RJ/MG.',
+  teresopolis: 'Teresópolis (RJ): serra fluminense, clima ameno e turismo de temporada.',
+  novafriburgo: 'Nova Friburgo (RJ): serra fluminense, frio e turismo de descanso.',
+  petropolis: 'Petrópolis (RJ): "Cidade Imperial", turismo histórico e de serra.',
+  domingosmartins: 'Domingos Martins (ES): região serrana capixaba (Pedra Azul), turismo de inverno.',
+  urubici: 'Urubici (SC): serra catarinense, neve no inverno e ecoturismo.',
+  saojoaquim: 'São Joaquim (SC): maior incidência de neve do país, turismo de inverno.',
+  bomjardimdaserra: 'Bom Jardim da Serra (SC): Serra do Rio do Rastro, frio e ecoturismo.',
+  // — HISTÓRICAS / PATRIMÔNIO —
+  ouropreto: 'Ouro Preto (MG): patrimônio da humanidade, turismo histórico o ano todo.',
+  mariana: 'Mariana (MG): cidade histórica mineira, turismo cultural.',
+  tiradentes: 'Tiradentes (MG): destino histórico-gastronômico de alta procura (eventos), diárias elevadas.',
+  saojoaodelrei: 'São João del-Rei (MG): cidade histórica e ferroviária, turismo cultural.',
+  diamantina: 'Diamantina (MG): patrimônio da humanidade no Vale do Jequitinhonha.',
+  congonhas: 'Congonhas (MG): Santuário do Bom Jesus (Aleijadinho), turismo religioso-cultural.',
+  olinda: 'Olinda (PE): centro histórico patrimônio da humanidade, turismo o ano todo.',
+  saoluis: 'São Luís (MA): centro histórico patrimônio da humanidade, turismo cultural.',
+  alcantara: 'Alcântara (MA): conjunto histórico colonial, turismo cultural.',
+  goias: 'Goiás (GO): "Cidade de Goiás", patrimônio da humanidade, turismo histórico.',
+  pirenopolis: 'Pirenópolis (GO): cidade histórica e cachoeiras, forte turismo de fim de semana.',
+  vassouras: 'Vassouras (RJ): Vale do Café, casarões históricos e turismo cultural.',
+  // — PARQUES / NATUREZA / AVENTURA —
+  fozdoiguacu: 'Foz do Iguaçu (PR): Cataratas do Iguaçu, um dos maiores fluxos turísticos do país.',
+  bonito: 'Bonito (MS): ecoturismo de referência (grutas, flutuação), alta procura sazonal.',
+  brotas: 'Brotas (SP): capital paulista do turismo de aventura (rafting/cachoeiras).',
+  socorro: 'Socorro (SP): turismo de aventura acessível, forte demanda de fim de semana.',
+  altoparaisodegoias: 'Alto Paraíso de Goiás (GO): Chapada dos Veadeiros, ecoturismo.',
+  capitolio: 'Capitólio (MG): "Mar de Minas" (cânions/Furnas), destino em forte alta.',
+  lencois: 'Lençóis (BA): portal da Chapada Diamantina, ecoturismo e base histórica.',
+  barreirinhas: 'Barreirinhas (MA): portal dos Lençóis Maranhenses, turismo de natureza.',
+  jijocadejericoacoara: 'Jijoca de Jericoacoara (CE): Jericoacoara, dunas e praia de apelo internacional.',
 };
 export const CIDADES_TEMPORADA = new Set(Object.keys(MOTIVO));
 

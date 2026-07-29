@@ -23,7 +23,8 @@ export default function EbookPage() {
     if (!id) return;
     // Metadados só — NUNCA arquivo_url (vem por RPC de entitlement abaixo).
     supabase.from('ebooks_admin').select('id, titulo, descricao, capa_url, gratuito, ativo, preco, comissao_pct, assinatura, planos_gratis, criado_em').eq('id', id).single()
-      .then(({ data }) => { setEbook(data); setLoading(false); });
+      // RASCUNHO não é público: eBook inativo (incompleto) não abre pela URL (só no painel admin).
+      .then(({ data }) => { setEbook(data && data.ativo ? data : null); setLoading(false); });
   }, [id]);
 
   // A URL do arquivo vem SÓ da RPC de entitlement server-side (obter_arquivo_ebook):

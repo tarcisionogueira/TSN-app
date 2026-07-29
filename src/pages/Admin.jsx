@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlanos, PlanosProvider } from '../contexts/PlanosContext';
 import { useNavigate } from 'react-router-dom';
@@ -6,6 +6,7 @@ import { supabase } from '../utils/supabase';
 import { apiCall } from '../utils/apiCall';
 import { extrairDadosDocumento, consolidarDocsImovel } from '../utils/claude';
 import { FinanceiroCaixa, AbaAssinaturas } from './AdminFinanceiro';
+import { gerarContratoPDF } from '../components/ContratoPDF';
 
 export const DEFAULT_FEEDBACK_EMAIL = 'tarcisioaraujo@reimob.com.br';
 const FEEDBACK_KEY = 'tsn_feedback_email';
@@ -243,7 +244,33 @@ function CursosTab() {
     loadCursos();
   }
 
+  // COMPLETUDE p/ publicar um CURSO (decisão do dono: incompleto NÃO vai para a loja/área de
+  // membros — fica rascunho só do admin). Exige título + descrição + link de vídeo em ≥1 aula.
+  function faltamCampos(f) {
+    const faltam = [];
+    if (!String(f?.titulo || '').trim()) faltam.push('título');
+    if (!String(f?.descricao || '').trim()) faltam.push('descrição');
+    const temVideo = (f?.modulos || []).some(m => (m?.aulas || []).some(a => String(a?.video_url || '').trim()));
+    if (!temVideo) faltam.push('link de vídeo em ao menos uma aula');
+    return faltam;
+  }
   async function toggleAtivo(id, ativo) {
+    // Ao PUBLICAR (ativar), bloqueia se o cadastro estiver incompleto (evita curso vazio na loja).
+    // Checa direto no banco (não depende do estado em memória).
+    if (!ativo) {
+      try {
+        const [{ data: c }, { data: as }] = await Promise.all([
+          supabase.from('cursos_admin').select('titulo,descricao').eq('id', id).single(),
+          supabase.from('aulas_admin').select('video_url').eq('curso_id', id),
+        ]);
+        const temVideo = (as || []).some(a => String(a?.video_url || '').trim());
+        const faltam = [];
+        if (!String(c?.titulo || '').trim()) faltam.push('título');
+        if (!String(c?.descricao || '').trim()) faltam.push('descrição');
+        if (!temVideo) faltam.push('link de vídeo em ao menos uma aula');
+        if (faltam.length) return alert(`Não é possível publicar: faltam ${faltam.join(', ')}. Complete o cadastro e tente de novo.`);
+      } catch { /* se a checagem falhar, não bloqueia (fail-open) */ }
+    }
     await supabase.from('cursos_admin').update({ ativo: !ativo }).eq('id', id);
     loadCursos();
   }
@@ -265,11 +292,15 @@ function CursosTab() {
   }
 
   async function saveForm() {
-    if (!form.titulo.trim()) return alert('Informe o título do curso.');
+    if (!form.titulo.trim()) return alert('Informe o título do curso (você pode salvar como rascunho e concluir depois).');
     setSaving(true);
     try {
       const { modulos, _aulaCount, ...rest } = form;
-      const cursoPayload = { titulo: rest.titulo, subtitulo: rest.subtitulo || '', descricao: rest.descricao || '', emoji: rest.emoji || '📚', capa_url: rest.capa_url || null, cor: rest.cor || '#0D63DB', nivel: rest.nivel || 'Iniciante', categoria: rest.categoria || 'Fundamentos', preco: Number(rest.preco) || 0, gratuito: rest.gratuito || false, destaque: rest.destaque || false, comissao_pct: Number(rest.comissao_pct) || 30, planos_gratis: Array.isArray(rest.planos_gratis) ? rest.planos_gratis : [], ativo: rest.ativo !== false };
+      // RASCUNHO x PUBLICADO: se faltar algo essencial, salva como RASCUNHO (ativo=false) —
+      // não vai para a loja/área de membros; fica só para o admin concluir depois.
+      const faltam = faltamCampos(form);
+      const completo = faltam.length === 0;
+      const cursoPayload = { titulo: rest.titulo, subtitulo: rest.subtitulo || '', descricao: rest.descricao || '', emoji: rest.emoji || '📚', capa_url: rest.capa_url || null, cor: rest.cor || '#0D63DB', nivel: rest.nivel || 'Iniciante', categoria: rest.categoria || 'Fundamentos', preco: Number(rest.preco) || 0, gratuito: rest.gratuito || false, destaque: rest.destaque || false, comissao_pct: Number(rest.comissao_pct) || 30, planos_gratis: Array.isArray(rest.planos_gratis) ? rest.planos_gratis : [], ativo: completo ? (rest.ativo !== false) : false };
 
       let cursoId;
       if (modal === 'new') {
@@ -296,6 +327,7 @@ function CursosTab() {
 
       await loadCursos();
       setModal(null);
+      if (!completo) alert(`Salvo como RASCUNHO (não publicado). Faltam: ${faltam.join(', ')}. Complete e ative para publicar na loja/área de membros.`);
     } catch (e) {
       alert('Erro ao salvar: ' + e.message);
     }
@@ -555,16 +587,36 @@ function EbooksTab() {
     setAnunciando(null);
   }
 
+  // COMPLETUDE p/ publicar um EBOOK: título + descrição + capa + arquivo (PDF). Incompleto = rascunho.
+  function faltamCamposEbook(f) {
+    const faltam = [];
+    if (!String(f?.titulo || '').trim()) faltam.push('título');
+    if (!String(f?.descricao || '').trim()) faltam.push('descrição');
+    if (!String(f?.capa_url || '').trim()) faltam.push('capa');
+    if (!String(f?.arquivo_url || '').trim()) faltam.push('arquivo (PDF)');
+    return faltam;
+  }
   async function toggleAtivo(id, ativo) {
+    if (!ativo) { // vai PUBLICAR → checa completude no banco
+      try {
+        const { data: e } = await supabase.from('ebooks_admin').select('titulo,descricao,capa_url,arquivo_url').eq('id', id).single();
+        const faltam = faltamCamposEbook(e);
+        if (faltam.length) return alert(`Não é possível publicar: faltam ${faltam.join(', ')}. Complete o cadastro e tente de novo.`);
+      } catch { /* fail-open */ }
+    }
     await supabase.from('ebooks_admin').update({ ativo: !ativo }).eq('id', id);
     loadEbooks();
   }
 
   async function saveForm() {
-    if (!form.titulo.trim()) return alert('Informe o título.');
+    if (!form.titulo.trim()) return alert('Informe o título (você pode salvar como rascunho e concluir depois).');
     setSaving(true);
     try {
-      const payload = { titulo: form.titulo, descricao: form.descricao || '', capa_url: form.capa_url || '', arquivo_url: form.arquivo_url || '', preco: Number(form.preco) || 0, planos_gratis: Array.isArray(form.planos_gratis) ? form.planos_gratis : [], ativo: form.ativo !== false };
+      // RASCUNHO x PUBLICADO: incompleto (sem capa/descrição/PDF) salva como rascunho (ativo=false)
+      // — não aparece na loja/área de membros; fica só para o admin concluir depois.
+      const faltam = faltamCamposEbook(form);
+      const completo = faltam.length === 0;
+      const payload = { titulo: form.titulo, descricao: form.descricao || '', capa_url: form.capa_url || '', arquivo_url: form.arquivo_url || '', preco: Number(form.preco) || 0, planos_gratis: Array.isArray(form.planos_gratis) ? form.planos_gratis : [], ativo: completo ? (form.ativo !== false) : false };
       if (modal === 'new') {
         const { error } = await supabase.from('ebooks_admin').insert(payload);
         if (error) throw error;
@@ -574,6 +626,7 @@ function EbooksTab() {
       }
       await loadEbooks();
       setModal(null);
+      if (!completo) alert(`Salvo como RASCUNHO (não publicado). Faltam: ${faltam.join(', ')}. Complete e ative para publicar na loja/área de membros.`);
     } catch (e) {
       alert('Erro: ' + e.message);
     }
@@ -2550,7 +2603,11 @@ function ContratosTab() {
 
   // Modal em 3 etapas: null (fechado) | 1 (descrever) | 2 (revisar) | 3 (link gerado)
   const [step, setStep] = useState(null);
-  const [detalhe, setDetalhe] = useState(null); // contrato aberto para ver
+  const [detalhe, setDetalhe] = useState(null); // contrato (linha representante do grupo) aberto para ver
+  const [roster, setRoster] = useState([]);     // partes do contrato aberto (get_partes_contrato)
+  const [rosterLoad, setRosterLoad] = useState(false);
+  const [editParte, setEditParte] = useState(null); // { id, nome, cpf, email } em edição
+  const [savingParte, setSavingParte] = useState(false);
 
   // Etapa 1
   const [templateSelecionado, setTemplateSelecionado] = useState(null);
@@ -2781,6 +2838,116 @@ function ContratosTab() {
     load();
   }
 
+  // AGRUPA por contrato (multi-parte = várias linhas com o mesmo contrato_grupo_id → UMA linha
+  // na tabela). Ordena as partes de forma estável e calcula um status agregado.
+  const contratosAgrupados = useMemo(() => {
+    const grupos = new Map();
+    for (const cl of contratosLink) {
+      const gid = cl.contrato_grupo_id || cl.id;
+      if (!grupos.has(gid)) grupos.set(gid, { gid, rep: cl, linhas: [] });
+      const g = grupos.get(gid);
+      g.linhas.push(cl);
+      // representante = a linha mais recente (a lista já vem criado_em desc → a 1ª)
+    }
+    return Array.from(grupos.values()).map(g => {
+      const total = g.linhas.length;
+      const assinados = g.linhas.filter(l => l.status === 'assinado' || l.assinado_em).length;
+      const statusAgg = assinados >= total ? 'assinado' : 'aguardando';
+      return { ...g, total, assinados, statusAgg };
+    });
+  }, [contratosLink]);
+
+  // Abre o detalhe e carrega as PARTES do grupo (roster) — reusa a RPC get_partes_contrato
+  // (equipe autorizada). Sem grupo, monta o roster da própria linha.
+  async function abrirDetalhe(grupo) {
+    const rep = grupo.rep;
+    setDetalhe({ ...rep, _grupo: grupo });
+    setEditParte(null);
+    setRoster([]);
+    setRosterLoad(true);
+    try {
+      let partes = [];
+      if (rep.contrato_grupo_id) {
+        const { data } = await supabase.rpc('get_partes_contrato', { p_grupo_id: rep.contrato_grupo_id });
+        partes = Array.isArray(data) ? data : [];
+      }
+      if (!partes.length) {
+        // fallback: uma linha só (ou RPC vazia) → monta do que temos em mãos
+        partes = grupo.linhas.map(l => ({
+          id: l.id, nome: l.dados_signatario?.nome || l.dados_signatario?.razao_social || null,
+          email: l.assinante_email || l.dados_signatario?.email || null,
+          assinou: l.status === 'assinado' || !!l.assinado_em, assinado_em: l.assinado_em || null,
+          requer_testemunha: !!l.requer_testemunha, testemunha_assinou: !!l.testemunha_em,
+        }));
+      }
+      setRoster(partes);
+    } catch { setRoster([]); }
+    setRosterLoad(false);
+  }
+
+  // EXCLUIR o documento inteiro (todas as partes do grupo).
+  async function excluirGrupo(grupo) {
+    if (!window.confirm(`Excluir DEFINITIVAMENTE este documento${grupo.total > 1 ? ` e as ${grupo.total} partes` : ''}? Não dá para desfazer.`)) return;
+    try {
+      if (grupo.rep.contrato_grupo_id) await supabase.from('contratos_link').delete().eq('contrato_grupo_id', grupo.rep.contrato_grupo_id);
+      else await supabase.from('contratos_link').delete().eq('id', grupo.rep.id);
+    } catch (e) { alert('Erro ao excluir: ' + (e?.message || e)); return; }
+    setDetalhe(null);
+    load();
+  }
+
+  // ALTERAR dados de um signatário (nome/cpf/e-mail). Só para quem AINDA NÃO assinou — mexer
+  // depois de assinado quebraria a integridade da assinatura.
+  async function salvarSignatario() {
+    if (!editParte?.id) return;
+    setSavingParte(true);
+    try {
+      const linha = (detalhe?._grupo?.linhas || []).find(l => l.id === editParte.id) || {};
+      const dados = { ...(linha.dados_signatario || {}) };
+      if (editParte.nome != null) dados.nome = editParte.nome;
+      if (editParte.cpf != null) dados.cpf = editParte.cpf;
+      const patch = { dados_signatario: dados };
+      if (editParte.email != null) patch.assinante_email = editParte.email;
+      const { error } = await supabase.from('contratos_link').update(patch).eq('id', editParte.id);
+      if (error) throw error;
+      // Atualização otimista local (evita re-fetch com estado defasado) + reload da tabela ao fundo.
+      const parteId = editParte.id, novo = { nome: editParte.nome, email: editParte.email };
+      setRoster(rs => rs.map(x => x.id === parteId ? { ...x, nome: novo.nome, email: novo.email } : x));
+      setDetalhe(d => d && d._grupo ? { ...d, _grupo: { ...d._grupo, linhas: d._grupo.linhas.map(l => l.id === parteId ? { ...l, dados_signatario: dados, assinante_email: patch.assinante_email ?? l.assinante_email } : l) } } : d);
+      setEditParte(null);
+      load();
+    } catch (e) { alert('Erro ao alterar: ' + (e?.message || e)); }
+    setSavingParte(false);
+  }
+
+  // VISUALIZAR o documento COM as assinaturas de TODAS as partes. O admin tem acesso às linhas
+  // inteiras (assinatura, IP, geo, dispositivo) → monta um roster COMPLETO (_full) para o PDF
+  // renderizar os pontos de autenticação de cada signatário (não só do "eu").
+  function baixarComAssinaturas() {
+    if (!detalhe) return;
+    const linhas = detalhe._grupo?.linhas || [detalhe];
+    const rosterFull = linhas.map(l => ({
+      nome: l.dados_signatario?.nome || l.dados_signatario?.razao_social || l.assinante_email || '—',
+      email: l.assinante_email || l.dados_signatario?.email || null,
+      assinou: l.status === 'assinado' || !!l.assinado_em,
+      assinado_em: l.assinado_em || null,
+      dados_signatario: l.dados_signatario || null,
+      token: l.token || null,
+      assinatura: l.assinatura || null,
+      assinante_ip: l.assinante_ip || null,
+      assinante_geo: l.assinante_geo || null,
+      assinante_user_agent: l.assinante_user_agent || null,
+      dados_complementados_em: l.dados_complementados_em || null,
+      requer_testemunha: !!l.requer_testemunha,
+      testemunha_assinou: !!l.testemunha_em,
+      nome_testemunha: l.nome_testemunha || null,
+      assinatura_testemunha: l.assinatura_testemunha || null,
+      _full: true,
+    }));
+    try { gerarContratoPDF({ contrato: detalhe, roster: rosterFull }); }
+    catch (e) { alert('Não foi possível gerar o documento: ' + (e?.message || e)); }
+  }
+
   const ST_LINK = {
     aguardando: ['Aguardando assinatura', '#d97706'],
     assinado:   ['Assinado', '#059669'],
@@ -2868,14 +3035,14 @@ function ContratosTab() {
     <div>
       {/* Cabeçalho */}
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
-        <h2 style={{ fontSize:18, fontWeight:700, color:'#111111', margin:0 }}>Contratos ({contratosLink.length})</h2>
+        <h2 style={{ fontSize:18, fontWeight:700, color:'#111111', margin:0 }}>Contratos ({contratosAgrupados.length})</h2>
         <button style={S.btn('primary')} onClick={abrirModal}>🔗 Novo contrato com link</button>
       </div>
 
       {/* Tabela */}
       <div style={S.card}>
         {loading ? <p style={{ color:'#94a3b8', textAlign:'center', padding:32 }}>Carregando...</p>
-          : contratosLink.length === 0
+          : contratosAgrupados.length === 0
           ? <p style={{ color:'#94a3b8', textAlign:'center', padding:32, fontSize:13 }}>Nenhum contrato gerado ainda. Clique em "Novo contrato com link" para começar.</p>
           : (
             <div style={{ overflowX:'auto' }}>
@@ -2891,32 +3058,33 @@ function ContratosTab() {
                   <th style={S.th}>Ações</th>
                 </tr></thead>
                 <tbody>
-                  {contratosLink.map(cl => {
-                    const [lbl, cor] = ST_LINK[cl.status] || ST_LINK.aguardando;
+                  {contratosAgrupados.map(g => {
+                    const cl = g.rep;
+                    const [lbl, cor] = ST_LINK[g.statusAgg] || ST_LINK.aguardando;
                     const linkUrl = `${window.location.href.split('#')[0]}#/c/${cl.token}`;
                     const sig = cl.dados_signatario;
-                    const nomeContratado = sig ? (sig.nome || sig.razao_social || '—') : (cl.status === 'aguardando' ? 'Aguardando preenchimento' : '—');
+                    const nomeContratado = g.total > 1
+                      ? `${g.total} signatários · ${g.assinados}/${g.total} assinaram`
+                      : (sig ? (sig.nome || sig.razao_social || '—') : (cl.status === 'aguardando' ? 'Aguardando preenchimento' : '—'));
                     return (
-                      <tr key={cl.id}>
+                      <tr key={g.gid}>
                         <td style={S.td}><strong>{cl.titulo}</strong></td>
                         <td style={S.td}>{TIPO_LABEL[cl.tipo_contrato] || cl.tipo_contrato}</td>
                         <td style={{ ...S.td, fontSize:11 }}>Nogueira Empreendimentos</td>
                         <td style={{ ...S.td, fontSize:11 }}>{nomeContratado}</td>
-                        <td style={S.td}><span style={{ padding:'2px 10px', borderRadius:999, fontSize:12, fontWeight:700, background:cor+'20', color:cor }}>{lbl}</span></td>
+                        <td style={S.td}>
+                          <span style={{ padding:'2px 10px', borderRadius:999, fontSize:12, fontWeight:700, background:cor+'20', color:cor }}>{lbl}</span>
+                          {g.total > 1 && <span style={{ fontSize:10, color:'#94a3b8', marginLeft:6 }}>{g.assinados}/{g.total}</span>}
+                        </td>
                         <td style={{ ...S.td, fontSize:11 }}>{new Date(cl.criado_em).toLocaleDateString('pt-BR')}</td>
                         <td style={{ ...S.td, fontSize:11 }}>{new Date(cl.expira_em).toLocaleDateString('pt-BR')}</td>
                         <td style={S.td}>
                           <div style={{ display:'flex', gap:5, flexWrap:'wrap' }}>
-                            <button style={{ ...S.btn('outline'), fontSize:11, padding:'4px 10px' }} onClick={() => setDetalhe(cl)}>Ver</button>
-                            {cl.status === 'aguardando' && (
+                            <button style={{ ...S.btn('outline'), fontSize:11, padding:'4px 10px' }} onClick={() => abrirDetalhe(g)}>Ver</button>
+                            {g.total === 1 && cl.status === 'aguardando' && (
                               <button style={{ ...S.btn('outline'), fontSize:11, padding:'4px 10px' }} onClick={() => { navigator.clipboard.writeText(linkUrl); alert('Link copiado!'); }}>Copiar link</button>
                             )}
-                            {cl.status === 'aguardando' && (
-                              <button style={{ ...S.btn('danger'), fontSize:11, padding:'4px 10px' }} onClick={() => cancelarLink(cl.id)}>Cancelar</button>
-                            )}
-                            {(cl.status === 'cancelado' || cl.status === 'expirado') && (
-                              <button style={{ ...S.btn('danger'), fontSize:11, padding:'4px 10px' }} onClick={() => excluirLink(cl.id)}>Excluir</button>
-                            )}
+                            <button style={{ ...S.btn('danger'), fontSize:11, padding:'4px 10px' }} onClick={() => excluirGrupo(g)}>Excluir</button>
                           </div>
                         </td>
                       </tr>
@@ -2940,24 +3108,63 @@ function ContratosTab() {
               <button onClick={() => setDetalhe(null)} style={{ background:'none', border:'none', cursor:'pointer', fontSize:20, color:'#94a3b8' }}>×</button>
             </div>
 
-            {/* Partes */}
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:16 }}>
-              <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:10, padding:'12px 14px' }}>
-                <div style={{ fontSize:10, fontWeight:700, color:'#16a34a', textTransform:'uppercase', marginBottom:4 }}>Contratante</div>
-                <div style={{ fontSize:13, fontWeight:700, color:'#111111' }}>Nogueira Empreendimentos</div>
+            {/* Contratante */}
+            <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:10, padding:'12px 14px', marginBottom:12 }}>
+              <div style={{ fontSize:10, fontWeight:700, color:'#16a34a', textTransform:'uppercase', marginBottom:4 }}>Contratante</div>
+              <div style={{ fontSize:13, fontWeight:700, color:'#111111' }}>Nogueira Empreendimentos</div>
+            </div>
+
+            {/* SIGNATÁRIOS (roster) — quem assinou / quem falta, com link, edição e status */}
+            <div style={{ border:'1px solid #bfdbfe', borderRadius:10, padding:'12px 14px', marginBottom:16, background:'#f8fbff' }}>
+              <div style={{ fontSize:10, fontWeight:700, color:'#0D63DB', textTransform:'uppercase', marginBottom:8, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                <span>Signatários {roster.length ? `(${roster.filter(p => p.assinou).length}/${roster.length} assinaram)` : ''}</span>
+                {rosterLoad && <span style={{ color:'#94a3b8', fontWeight:600, textTransform:'none' }}>carregando…</span>}
               </div>
-              <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:10, padding:'12px 14px' }}>
-                <div style={{ fontSize:10, fontWeight:700, color:'#0D63DB', textTransform:'uppercase', marginBottom:4 }}>Contratado</div>
-                {detalhe.dados_signatario ? (
-                  <>
-                    <div style={{ fontSize:13, fontWeight:700, color:'#111111' }}>{detalhe.dados_signatario.nome || detalhe.dados_signatario.razao_social}</div>
-                    <div style={{ fontSize:11, color:'#475569' }}>{detalhe.dados_signatario.cpf || detalhe.dados_signatario.cnpj}</div>
-                    <div style={{ fontSize:11, color:'#475569' }}>{detalhe.dados_signatario.email}</div>
-                  </>
-                ) : (
-                  <div style={{ fontSize:12, color:'#94a3b8', fontStyle:'italic' }}>Aguardando preenchimento pelo signatário</div>
-                )}
-              </div>
+              {!rosterLoad && roster.length === 0 && (
+                <div style={{ fontSize:12, color:'#94a3b8', fontStyle:'italic' }}>Aguardando preenchimento pelo signatário.</div>
+              )}
+              {roster.map((p, i) => {
+                const linha = (detalhe._grupo?.linhas || []).find(l => l.id === p.id);
+                const tokenLinha = linha?.token;
+                const linkP = tokenLinha ? `${window.location.href.split('#')[0]}#/c/${tokenLinha}` : null;
+                const emEdicao = editParte?.id === p.id;
+                return (
+                  <div key={p.id || i} style={{ borderTop: i ? '1px solid #e2e8f0' : 'none', padding:'8px 0' }}>
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+                      <div style={{ minWidth:0 }}>
+                        <div style={{ fontSize:13, fontWeight:700, color:'#111111' }}>{p.nome || <span style={{ color:'#94a3b8', fontStyle:'italic', fontWeight:500 }}>Aguardando preenchimento</span>}</div>
+                        {p.email && <div style={{ fontSize:11, color:'#475569' }}>{p.email}</div>}
+                      </div>
+                      <span style={{ padding:'2px 8px', borderRadius:999, fontSize:11, fontWeight:700, background:(p.assinou?'#059669':'#d97706')+'20', color:p.assinou?'#059669':'#d97706' }}>
+                        {p.assinou ? `✓ Assinou${p.assinado_em ? ' · '+new Date(p.assinado_em).toLocaleDateString('pt-BR') : ''}` : 'Pendente'}
+                      </span>
+                    </div>
+                    {p.requer_testemunha && (
+                      <div style={{ fontSize:10.5, color:'#64748b', marginTop:2 }}>Testemunha: {p.testemunha_assinou ? '✓ assinou' : 'pendente'}</div>
+                    )}
+                    <div style={{ display:'flex', gap:6, marginTop:6, flexWrap:'wrap' }}>
+                      {linkP && !p.assinou && (
+                        <button style={{ ...S.btn('outline'), fontSize:10.5, padding:'3px 8px' }} onClick={() => { navigator.clipboard.writeText(linkP); alert('Link do signatário copiado!'); }}>Copiar link</button>
+                      )}
+                      {!p.assinou && p.id && !emEdicao && (
+                        <button style={{ ...S.btn('outline'), fontSize:10.5, padding:'3px 8px' }} onClick={() => setEditParte({ id:p.id, nome:(linha?.dados_signatario?.nome)||p.nome||'', cpf:(linha?.dados_signatario?.cpf)||'', email:(linha?.assinante_email)||p.email||'' })}>Alterar dados</button>
+                      )}
+                      {p.assinou && <span style={{ fontSize:10.5, color:'#94a3b8' }}>Assinado — dados travados (integridade da assinatura).</span>}
+                    </div>
+                    {emEdicao && (
+                      <div style={{ marginTop:8, background:'#fff', border:'1px solid #e2e8f0', borderRadius:8, padding:'10px 12px', display:'grid', gap:6 }}>
+                        <input placeholder="Nome" value={editParte.nome} onChange={e => setEditParte(v => ({ ...v, nome:e.target.value }))} style={{ ...S.input, padding:'6px 8px', fontSize:12 }} />
+                        <input placeholder="CPF/CNPJ" value={editParte.cpf} onChange={e => setEditParte(v => ({ ...v, cpf:e.target.value }))} style={{ ...S.input, padding:'6px 8px', fontSize:12 }} />
+                        <input placeholder="E-mail" value={editParte.email} onChange={e => setEditParte(v => ({ ...v, email:e.target.value }))} style={{ ...S.input, padding:'6px 8px', fontSize:12 }} />
+                        <div style={{ display:'flex', gap:6, justifyContent:'flex-end' }}>
+                          <button style={{ ...S.btn('outline'), fontSize:11, padding:'4px 10px' }} onClick={() => setEditParte(null)} disabled={savingParte}>Cancelar</button>
+                          <button style={{ ...S.btn('primary'), fontSize:11, padding:'4px 10px' }} onClick={salvarSignatario} disabled={savingParte}>{savingParte ? 'Salvando…' : 'Salvar'}</button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
 
             {/* Conteúdo */}
@@ -3000,8 +3207,12 @@ function ContratosTab() {
               </div>
             )}
 
-            <div style={{ display:'flex', justifyContent:'flex-end' }}>
-              <button style={S.btn('outline')} onClick={() => setDetalhe(null)}>Fechar</button>
+            <div style={{ display:'flex', justifyContent:'space-between', gap:8, flexWrap:'wrap' }}>
+              <button style={{ ...S.btn('danger') }} onClick={() => detalhe._grupo && excluirGrupo(detalhe._grupo)}>Excluir documento</button>
+              <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+                <button style={S.btn('primary')} onClick={baixarComAssinaturas}>Visualizar com assinaturas</button>
+                <button style={S.btn('outline')} onClick={() => setDetalhe(null)}>Fechar</button>
+              </div>
             </div>
           </div>
         </div>

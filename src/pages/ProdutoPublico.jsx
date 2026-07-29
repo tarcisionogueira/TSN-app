@@ -83,8 +83,10 @@ export default function ProdutoPublico({ tipo }) {
 
   useEffect(() => {
     async function load() {
+      // RASCUNHO não é público: só produtos ATIVOS abrem na página pública (o incompleto
+      // fica de rascunho no painel admin, fora da loja/links).
       if (tipo === 'curso') {
-        const { data: c } = await supabase.from('cursos_admin').select('*').eq('id', id).single();
+        const { data: c } = await supabase.from('cursos_admin').select('*').eq('id', id).eq('ativo', true).single();
         if (c) {
           const { data: as } = await supabase.from('aulas_admin').select('titulo, modulo, duracao, gratis').eq('curso_id', id).order('ordem');
           setAulas(as || []);
@@ -95,7 +97,7 @@ export default function ProdutoPublico({ tipo }) {
         // do PDF pago). O arquivo é entregue só na leitura, para quem tem acesso.
         const { data: e } = await supabase.from('ebooks_admin')
           .select('id, titulo, descricao, capa_url, preco, gratuito, ativo')
-          .eq('id', id).single();
+          .eq('id', id).eq('ativo', true).single();
         setProduto(e);
       }
       setLoading(false);
