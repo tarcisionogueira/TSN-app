@@ -197,6 +197,11 @@ export function AuthProvider({ children }) {
           // rodar para cliente comum nem inflar o chunk principal.
           if (['admin', 'analista', 'advogado'].includes(p.role)) {
             import('../utils/coletaCliente').then(m => m?.dispararColetaClienteStaff?.()).catch(() => {});
+            // Coleta OPORTUNISTA das fontes PAGAS (SOLEON/GESTAO/RJ/PECINI, Bright Data): dispara o
+            // scraper na NUVEM ao abrir o app, mas o servidor só dispara se já passou o espaçamento
+            // (~20h, gate atômico) — quem acessa todo dia mantém as pagas frescas sem PC ligado e
+            // sem gastar BD a cada abertura. Rede de 7 dias = cron semanal dessas fontes na CI.
+            fetch('/api/coleta-oportunista', { method: 'POST', headers: { Authorization: `Bearer ${session?.access_token || ''}` } }).catch(() => {});
           }
           const ref = sessionStorage.getItem('tsn_ref_codigo');
           if (ref) {

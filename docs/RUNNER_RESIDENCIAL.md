@@ -1,5 +1,14 @@
 # 🏠 Runner residencial + roadmap para ZERAR o Bright Data
 
+> ⚡ **ATUALIZAÇÃO (sessão 18): coleta OPORTUNISTA ao abrir o app.** Agora, quando o STAFF abre o
+> app (celular ou PC), o servidor dispara na NUVEM os scrapers das fontes pagas (SOLEON/GESTAO/RJ/
+> PECINI) **respeitando um espaçamento de ~20h** (gate atômico `coleta_oportunista_claim` +
+> `api/coleta-oportunista.js`, acionado no login pelo `AuthContext`). Quem acessa todo dia mantém
+> essas fontes frescas **sem PC ligado e sem app aberto o tempo todo**, e sem gastar Bright Data a
+> cada abertura. A **rede de segurança dos 7 dias** = os workflows dessas fontes já rodam 1x/semana
+> na CI (dispara mesmo que ninguém abra o app). **Isso usa Bright Data** (na nuvem). O runner
+> residencial abaixo continua sendo o caminho para **ZERAR** o Bright Data — é OPCIONAL agora.
+
 > Objetivo do dono: economizar a cota do Bright Data (BD) rodando as buscas de **IP real** (grátis),
 > deixando o BD só como **último caso**. Frequência: **máx. 2x/semana** por fonte.
 
