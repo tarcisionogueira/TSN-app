@@ -15,30 +15,35 @@ const dataHora = (iso) => { try { return new Date(iso).toLocaleString('pt-BR', {
 
 const ESTILOS_CONTRATO = `
   *{box-sizing:border-box;}
-  @page{margin:16mm 12mm 22mm;}
-  body{font-family:'Inter',Arial,sans-serif;color:#111;line-height:1.6;font-size:12.5px;}
-  .cab{display:flex;align-items:center;gap:12px;border-bottom:2px solid #0D63DB;padding-bottom:14px;margin-bottom:20px;}
-  .cab .logo{width:32px;height:32px;background:#0D63DB;border-radius:8px;flex-shrink:0;}
-  .cab .tit{font-size:16px;font-weight:900;}
-  .cab .sub{font-size:10px;color:#0D63DB;font-weight:700;letter-spacing:1px;text-transform:uppercase;}
-  h1{font-size:18px;font-weight:900;margin:0 0 12px;}
-  .corpo{white-space:pre-wrap;font-size:12.5px;line-height:1.85;color:#1e293b;}
+  @page{margin:11mm 12mm 16mm;}
+  body{font-family:'Inter',Arial,sans-serif;color:#111;line-height:1.55;font-size:12.5px;}
+  /* Cabeçalho COMPACTO — o título fica só aqui (antes havia um <h1> repetindo o mesmo título,
+     empurrando o conteúdo e ajudando a gerar uma 1ª página quase em branco). */
+  .cab{display:flex;align-items:center;gap:10px;border-bottom:2px solid #0D63DB;padding-bottom:8px;margin-bottom:12px;}
+  .cab .logo{width:26px;height:26px;background:#0D63DB;border-radius:7px;flex-shrink:0;}
+  .cab .tit{font-size:16px;font-weight:900;line-height:1.15;}
+  .cab .sub{font-size:9.5px;color:#0D63DB;font-weight:700;letter-spacing:1px;text-transform:uppercase;}
+  .corpo{white-space:pre-wrap;font-size:12.5px;line-height:1.8;color:#1e293b;}
+  /* Documento anexo em imagem: cabe em UMA página (cap de altura) — antes, sem limite, uma
+     digitalização A4 alta não cabia sob o cabeçalho e ia inteira para a página 2. */
+  .docimg{display:block;margin:0 auto;max-width:100%;max-height:242mm;border:1px solid #e2e8f0;border-radius:8px;}
   .quebra{page-break-before:always;}
-  .man h2{font-size:15px;font-weight:900;border-bottom:1px solid #e2e8f0;padding-bottom:8px;margin:0 0 12px;}
-  .rhead{font-size:11.5px;color:#334155;line-height:1.9;margin-bottom:14px;}
+  .man h2{font-size:14px;font-weight:900;border-bottom:1px solid #e2e8f0;padding-bottom:6px;margin:0 0 8px;}
+  .rhead{font-size:11px;color:#334155;line-height:1.7;margin-bottom:9px;}
   .rhead b{color:#111;}
-  .rhead .muted{color:#64748b;font-size:10.5px;margin-top:4px;}
-  .legal{font-size:10.5px;color:#475569;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:11px 13px;margin-bottom:18px;line-height:1.65;word-break:break-word;}
+  .rhead .muted{color:#64748b;font-size:10px;margin-top:3px;}
+  .legal{font-size:9.5px;color:#475569;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 11px;margin-bottom:12px;line-height:1.55;word-break:break-word;}
   .legal .cert{font-weight:800;color:#15803d;letter-spacing:0.3px;}
-  .signer{border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px;margin-bottom:12px;page-break-inside:avoid;}
-  .signer .via{font-size:10px;color:#0D63DB;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;}
-  .signer .sname{font-size:15px;font-weight:800;letter-spacing:2px;}
-  .signer .srow{font-size:11.5px;color:#334155;margin-top:4px;}
+  /* Cartão do signatário COMPACTO — cabem vários por página (antes, um por página). */
+  .signer{border:1px solid #e2e8f0;border-radius:9px;padding:9px 12px;margin-bottom:8px;page-break-inside:avoid;}
+  .signer .via{font-size:9.5px;color:#0D63DB;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px;}
+  .signer .sname{font-size:13px;font-weight:800;letter-spacing:1px;}
+  .signer .srow{font-size:11px;color:#334155;margin-top:2px;}
   .signer .srow b{color:#111;}
-  .assimg{max-height:70px;border:1px solid #e2e8f0;border-radius:6px;background:#fff;padding:4px;margin-top:6px;display:block;}
-  .auth{margin-top:8px;padding-top:8px;border-top:1px dashed #e2e8f0;font-size:11px;color:#475569;line-height:1.8;}
+  .assimg{max-height:56px;border:1px solid #e2e8f0;border-radius:6px;background:#fff;padding:3px;margin-top:4px;display:block;}
+  .auth{margin-top:6px;padding-top:6px;border-top:1px dashed #e2e8f0;font-size:10px;color:#475569;line-height:1.65;}
   .auth b{color:#111;}
-  .pagefoot{position:fixed;bottom:5mm;left:8mm;right:8mm;text-align:center;font-size:8px;line-height:1.35;color:#94a3b8;word-break:break-all;}
+  .pagefoot{position:fixed;bottom:4mm;left:8mm;right:8mm;text-align:center;font-size:8px;line-height:1.3;color:#94a3b8;word-break:break-all;}
 `;
 
 export function gerarContratoPDF({ contrato, roster = [] } = {}) {
@@ -56,7 +61,7 @@ export function gerarContratoPDF({ contrato, roster = [] } = {}) {
   const ehImg = /\.(jpe?g|png|gif|webp)($|\?|#)/i.test(nomeArq) || /\.(jpe?g|png|gif|webp)($|\?|#)/i.test(contrato.arquivo_url || '');
   let corpoDoc;
   if (contrato.arquivo_url && ehImg) {
-    corpoDoc = `<img src="${esc(contrato.arquivo_url)}" style="max-width:100%;border:1px solid #e2e8f0;border-radius:8px;" alt="Documento" />`;
+    corpoDoc = `<img class="docimg" src="${esc(contrato.arquivo_url)}" alt="Documento" />`;
   } else if (contrato.arquivo_url) {
     corpoDoc = `<p class="corpo">Documento anexo: <a href="${esc(contrato.arquivo_url)}">${esc(contrato.arquivo_nome || 'documento')}</a><br/><span style="font-size:11px;color:#64748b;">(abra o link para visualizar o documento original assinado)</span></p>`;
   } else {
@@ -124,7 +129,6 @@ export function gerarContratoPDF({ contrato, roster = [] } = {}) {
 <style>${ESTILOS_CONTRATO}</style></head><body>
   <div class="pagefoot">BidPro Brasil · Documento nº ${esc(numero)}${contrato.assinatura_hash ? ` · Hash SHA-256: ${esc(contrato.assinatura_hash)}` : ''} · assinado eletronicamente (MP 2.200-2/2001 · Lei 14.063/2020)</div>
   <div class="cab"><div class="logo"></div><div><div class="sub">BidPro Brasil, Contrato Digital</div><div class="tit">${esc(titulo)}</div></div></div>
-  <h1>${esc(titulo)}</h1>
   ${corpoDoc}
   <div class="quebra man">
     <h2>Relatório de Assinaturas</h2>

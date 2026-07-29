@@ -224,6 +224,10 @@ export function AuthProvider({ children }) {
             try { await supabase.rpc('vincular_upline', { p_ref: ref }); } catch (_) {}
             limparRef();
           }
+          // Sem link de parceiro → upline PADRÃO é o dono (pedido do dono: "todos que entraram e
+          // não são pelo link dos parceiros são para o meu usuário"). Idempotente — só preenche se
+          // indicado_por ainda for NULL, então nunca sobrepõe a indicação de parceiro gravada acima.
+          try { await supabase.rpc('vincular_owner_default'); } catch (_) {}
           const convite = sessionStorage.getItem('tsn_convite_codigo');
           if (convite) {
             try { await supabase.rpc('usar_convite', { p_codigo: convite }); } catch (_) {}
