@@ -38,7 +38,7 @@ const ESTILOS_CONTRATO = `
   .assimg{max-height:70px;border:1px solid #e2e8f0;border-radius:6px;background:#fff;padding:4px;margin-top:6px;display:block;}
   .auth{margin-top:8px;padding-top:8px;border-top:1px dashed #e2e8f0;font-size:11px;color:#475569;line-height:1.8;}
   .auth b{color:#111;}
-  .pagefoot{position:fixed;bottom:6mm;left:0;right:0;text-align:center;font-size:8.5px;color:#94a3b8;}
+  .pagefoot{position:fixed;bottom:5mm;left:8mm;right:8mm;text-align:center;font-size:8px;line-height:1.35;color:#94a3b8;word-break:break-all;}
 `;
 
 export function gerarContratoPDF({ contrato, roster = [] } = {}) {
@@ -122,7 +122,7 @@ export function gerarContratoPDF({ contrato, roster = [] } = {}) {
 <title>Contrato - ${esc(titulo)}</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap" rel="stylesheet">
 <style>${ESTILOS_CONTRATO}</style></head><body>
-  <div class="pagefoot">BidPro Brasil ${esc(numero)} · Documento assinado eletronicamente, conforme MP 2.200-2/2001 e Lei 14.063/2020.</div>
+  <div class="pagefoot">BidPro Brasil · Documento nº ${esc(numero)}${contrato.assinatura_hash ? ` · Hash SHA-256: ${esc(contrato.assinatura_hash)}` : ''} · assinado eletronicamente (MP 2.200-2/2001 · Lei 14.063/2020)</div>
   <div class="cab"><div class="logo"></div><div><div class="sub">BidPro Brasil, Contrato Digital</div><div class="tit">${esc(titulo)}</div></div></div>
   <h1>${esc(titulo)}</h1>
   ${corpoDoc}
