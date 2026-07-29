@@ -2948,6 +2948,19 @@ function ContratosTab() {
     catch (e) { alert('Não foi possível gerar o documento: ' + (e?.message || e)); }
   }
 
+  // Cópia robusta (com fallback quando navigator.clipboard não está disponível) + feedback.
+  function copiarTexto(txt) {
+    if (!txt) { alert('Link indisponível para esta parte.'); return; }
+    const fallback = () => {
+      try { const ta = document.createElement('textarea'); ta.value = txt; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); alert('Link copiado!'); }
+      catch { window.prompt('Copie o link de assinatura:', txt); }
+    };
+    try {
+      if (navigator.clipboard?.writeText) navigator.clipboard.writeText(txt).then(() => alert('Link copiado!'), fallback);
+      else fallback();
+    } catch { fallback(); }
+  }
+
   const ST_LINK = {
     aguardando: ['Aguardando assinatura', '#d97706'],
     assinado:   ['Assinado', '#059669'],
@@ -3063,6 +3076,9 @@ function ContratosTab() {
                     const [lbl, cor] = ST_LINK[g.statusAgg] || ST_LINK.aguardando;
                     const linkUrl = `${window.location.href.split('#')[0]}#/c/${cl.token}`;
                     const sig = cl.dados_signatario;
+                    // Documento ENVIADO (não gerado por IA) = a plataforma só COLETA assinaturas →
+                    // NÃO há "contratante" (Nogueira). Contrato gerado por IA tem a Nogueira como parte.
+                    const ehColeta = !!cl.arquivo_url || cl.gerado_por_ia === false;
                     const nomeContratado = g.total > 1
                       ? `${g.total} signatários · ${g.assinados}/${g.total} assinaram`
                       : (sig ? (sig.nome || sig.razao_social || '—') : (cl.status === 'aguardando' ? 'Aguardando preenchimento' : '—'));
@@ -3070,7 +3086,7 @@ function ContratosTab() {
                       <tr key={g.gid}>
                         <td style={S.td}><strong>{cl.titulo}</strong></td>
                         <td style={S.td}>{TIPO_LABEL[cl.tipo_contrato] || cl.tipo_contrato}</td>
-                        <td style={{ ...S.td, fontSize:11 }}>Nogueira Empreendimentos</td>
+                        <td style={{ ...S.td, fontSize:11 }}>{ehColeta ? <span style={{ color:'#94a3b8' }}>— <span style={{ fontSize:10 }}>(coleta de assinaturas)</span></span> : 'Nogueira Empreendimentos'}</td>
                         <td style={{ ...S.td, fontSize:11 }}>{nomeContratado}</td>
                         <td style={S.td}>
                           <span style={{ padding:'2px 10px', borderRadius:999, fontSize:12, fontWeight:700, background:cor+'20', color:cor }}>{lbl}</span>
@@ -3082,7 +3098,7 @@ function ContratosTab() {
                           <div style={{ display:'flex', gap:5, flexWrap:'wrap' }}>
                             <button style={{ ...S.btn('outline'), fontSize:11, padding:'4px 10px' }} onClick={() => abrirDetalhe(g)}>Ver</button>
                             {g.total === 1 && cl.status === 'aguardando' && (
-                              <button style={{ ...S.btn('outline'), fontSize:11, padding:'4px 10px' }} onClick={() => { navigator.clipboard.writeText(linkUrl); alert('Link copiado!'); }}>Copiar link</button>
+                              <button style={{ ...S.btn('outline'), fontSize:11, padding:'4px 10px' }} onClick={() => copiarTexto(linkUrl)}>Copiar link</button>
                             )}
                             <button style={{ ...S.btn('danger'), fontSize:11, padding:'4px 10px' }} onClick={() => excluirGrupo(g)}>Excluir</button>
                           </div>
@@ -3108,11 +3124,18 @@ function ContratosTab() {
               <button onClick={() => setDetalhe(null)} style={{ background:'none', border:'none', cursor:'pointer', fontSize:20, color:'#94a3b8' }}>×</button>
             </div>
 
-            {/* Contratante */}
-            <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:10, padding:'12px 14px', marginBottom:12 }}>
-              <div style={{ fontSize:10, fontWeight:700, color:'#16a34a', textTransform:'uppercase', marginBottom:4 }}>Contratante</div>
-              <div style={{ fontSize:13, fontWeight:700, color:'#111111' }}>Nogueira Empreendimentos</div>
-            </div>
+            {/* Contratante — só quando o contrato foi GERADO pela plataforma (IA). Documento ENVIADO
+                é só COLETA de assinaturas: a Nogueira não é parte. */}
+            {(detalhe.arquivo_url || detalhe.gerado_por_ia === false) ? (
+              <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:10, padding:'10px 14px', marginBottom:12 }}>
+                <div style={{ fontSize:12, color:'#64748b' }}>📄 Documento enviado — a plataforma apenas <strong>coleta as assinaturas</strong> das partes designadas (sem contratante).</div>
+              </div>
+            ) : (
+              <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:10, padding:'12px 14px', marginBottom:12 }}>
+                <div style={{ fontSize:10, fontWeight:700, color:'#16a34a', textTransform:'uppercase', marginBottom:4 }}>Contratante</div>
+                <div style={{ fontSize:13, fontWeight:700, color:'#111111' }}>Nogueira Empreendimentos</div>
+              </div>
+            )}
 
             {/* SIGNATÁRIOS (roster) — quem assinou / quem falta, com link, edição e status */}
             <div style={{ border:'1px solid #bfdbfe', borderRadius:10, padding:'12px 14px', marginBottom:16, background:'#f8fbff' }}>
@@ -3124,7 +3147,9 @@ function ContratosTab() {
                 <div style={{ fontSize:12, color:'#94a3b8', fontStyle:'italic' }}>Aguardando preenchimento pelo signatário.</div>
               )}
               {roster.map((p, i) => {
-                const linha = (detalhe._grupo?.linhas || []).find(l => l.id === p.id);
+                const linhasG = detalhe._grupo?.linhas || [];
+                const linha = linhasG.find(l => l.id === p.id)
+                  || (p.email && linhasG.find(l => (l.assinante_email || l.dados_signatario?.email) === p.email));
                 const tokenLinha = linha?.token;
                 const linkP = tokenLinha ? `${window.location.href.split('#')[0]}#/c/${tokenLinha}` : null;
                 const emEdicao = editParte?.id === p.id;
@@ -3143,8 +3168,8 @@ function ContratosTab() {
                       <div style={{ fontSize:10.5, color:'#64748b', marginTop:2 }}>Testemunha: {p.testemunha_assinou ? '✓ assinou' : 'pendente'}</div>
                     )}
                     <div style={{ display:'flex', gap:6, marginTop:6, flexWrap:'wrap' }}>
-                      {linkP && !p.assinou && (
-                        <button style={{ ...S.btn('outline'), fontSize:10.5, padding:'3px 8px' }} onClick={() => { navigator.clipboard.writeText(linkP); alert('Link do signatário copiado!'); }}>Copiar link</button>
+                      {!p.assinou && (
+                        <button style={{ ...S.btn('outline'), fontSize:10.5, padding:'3px 8px' }} onClick={() => copiarTexto(linkP)}>Copiar link</button>
                       )}
                       {!p.assinou && p.id && !emEdicao && (
                         <button style={{ ...S.btn('outline'), fontSize:10.5, padding:'3px 8px' }} onClick={() => setEditParte({ id:p.id, nome:(linha?.dados_signatario?.nome)||p.nome||'', cpf:(linha?.dados_signatario?.cpf)||'', email:(linha?.assinante_email)||p.email||'' })}>Alterar dados</button>
@@ -3167,10 +3192,28 @@ function ContratosTab() {
               })}
             </div>
 
-            {/* Conteúdo */}
-            <div style={{ background:'#f8fafc', borderRadius:10, border:'1px solid #e2e8f0', padding:'14px 16px', maxHeight:300, overflowY:'auto', marginBottom:16 }}>
-              <div style={{ fontSize:13, color:'#111111', lineHeight:1.8, whiteSpace:'pre-wrap' }}>{detalhe.conteudo}</div>
-            </div>
+            {/* Documento / Conteúdo — se houver arquivo ENVIADO, mostra o documento embutido (o
+                mesmo que o signatário vê) + botão para abrir em nova aba. Senão, o texto do contrato. */}
+            {detalhe.arquivo_url ? (() => {
+              const nome = detalhe.arquivo_nome || detalhe.arquivo_url || '';
+              const ehImg = /\.(jpe?g|png|gif|webp)($|\?|#)/i.test(nome) || /\.(jpe?g|png|gif|webp)($|\?|#)/i.test(detalhe.arquivo_url);
+              return (
+                <div style={{ marginBottom:16 }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:8, marginBottom:8, flexWrap:'wrap' }}>
+                    <div style={{ fontSize:11, fontWeight:700, color:'#64748b', textTransform:'uppercase', letterSpacing:0.5 }}>Documento</div>
+                    <button style={{ ...S.btn('outline'), fontSize:11, padding:'4px 10px' }}
+                      onClick={() => window.open(detalhe.arquivo_url, '_blank', 'noopener')}>Abrir em nova aba{detalhe.arquivo_nome ? ` (${detalhe.arquivo_nome})` : ''}</button>
+                  </div>
+                  {ehImg
+                    ? <img src={detalhe.arquivo_url} alt="Documento" style={{ width:'100%', borderRadius:10, maxHeight:520, objectFit:'contain', background:'#fff', border:'1px solid #e2e8f0' }} />
+                    : <iframe src={detalhe.arquivo_url} title="Documento" style={{ width:'100%', height:'55vh', border:'1px solid #e2e8f0', borderRadius:10, background:'#fff' }} />}
+                </div>
+              );
+            })() : (
+              <div style={{ background:'#f8fafc', borderRadius:10, border:'1px solid #e2e8f0', padding:'14px 16px', maxHeight:300, overflowY:'auto', marginBottom:16 }}>
+                <div style={{ fontSize:13, color:'#111111', lineHeight:1.8, whiteSpace:'pre-wrap' }}>{detalhe.conteudo}</div>
+              </div>
+            )}
 
             {/* KYC fotos + resultado da verificação por IA */}
             {detalhe.kyc_incluido && detalhe.kyc_fotos && (
