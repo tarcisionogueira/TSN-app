@@ -19,7 +19,33 @@ export function trackPageView(path) {
   metaTrack('PageView');
 }
 
-export function trackCadastro(email) {
+// ── Enhanced Conversions (Google Ads) ─────────────────────────────────────────
+// Fornece dados primários (e-mail/telefone/nome/endereço) ao gtag para o Google
+// CASAR a conversão com a conta do usuário — melhora a medição igual o CAPI fez no
+// Meta, mas client-side (o gtag HASHEIA no navegador antes de enviar). Só tem efeito
+// se "Conversões otimizadas" (método Tag do Google) estiver LIGADO na conta Google Ads;
+// sem isso é ignorado — seguro deixar sempre. Chamado junto das conversões (cadastro/compra).
+function setUserDataGoogle(ud) {
+  if (!ud || !ud.email) return;
+  const dados = { email: String(ud.email).trim().toLowerCase() };
+  if (ud.phone) dados.phone_number = String(ud.phone).replace(/[^\d+]/g, '');
+  const nome = String(ud.nome || '').trim();
+  if (nome) {
+    const partes = nome.split(/\s+/);
+    dados.address = {
+      first_name: partes[0] || '',
+      last_name: partes.slice(1).join(' ') || '',
+      country: 'BR',
+    };
+    if (ud.cidade) dados.address.city = String(ud.cidade).trim();
+    if (ud.uf) dados.address.region = String(ud.uf).trim();
+    if (ud.cep) dados.address.postal_code = String(ud.cep).replace(/\D/g, '');
+  }
+  gtag('set', 'user_data', dados);
+}
+
+export function trackCadastro(email, nome) {
+  setUserDataGoogle({ email, nome });
   gtag('event', 'sign_up', { method: 'email', send_to: AW_ID });
   gtag('event', 'conversion', { send_to: CONV_CADASTRO });
   metaTrack('CompleteRegistration');
@@ -32,7 +58,9 @@ export function trackCheckoutIniciado(plano, valor) {
 
 // eventID (opcional): id determinístico compartilhado com o servidor (Meta CAPI) para
 // DEDUPLICAR a conversão — mesmo id no navegador e no webhook = 1 Purchase, não 2.
-export function trackPlanContratado(plano, valor, eventID) {
+// userData (opcional): e-mail/nome/endereço p/ Enhanced Conversions do Google Ads.
+export function trackPlanContratado(plano, valor, eventID, userData) {
+  setUserDataGoogle(userData);
   gtag('event', 'purchase', { currency: 'BRL', value: valor, transaction_id: eventID || Date.now(), items: [{ item_name: plano }], send_to: AW_ID });
   gtag('event', 'conversion', { send_to: CONV_PLANO, value: valor, currency: 'BRL' });
   metaTrack('Purchase', { currency: 'BRL', value: valor, content_name: plano }, eventID);

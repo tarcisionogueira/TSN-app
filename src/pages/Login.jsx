@@ -327,7 +327,7 @@ export default function Login() {
         setEmailDuplicado(true);
         throw new Error('Este e-mail já está cadastrado. Faça login ou recupere a senha.');
       }
-      trackCadastro(form.email);
+      trackCadastro(form.email, form.nome);
       // Preserva o plano na URL de confirmação de email (HashRouter usa /#/)
       if (planoEscolhido) {
         sessionStorage.setItem('tsn_plano_pendente', planoEscolhido);

@@ -240,7 +240,9 @@ export default function Checkout() {
       const base = String(planoApiKey || planoKey || '').replace(/_(anual|vista|mensal)$/i, '');
       const dia = new Date().toISOString().slice(0, 10).replace(/-/g, '');
       const eventID = user?.id ? `pur_${user.id}_${base}_${dia}` : undefined;
-      trackPlanContratado(planoApiKey || planoKey, Number(plano?.preco) || 0, eventID);
+      // Enhanced Conversions (Google): dados primários do titular p/ casar a conversão.
+      const userData = { email: user?.email, nome: nomeFat || user?.user_metadata?.nome, cidade: end.cidade, uf: end.uf, cep: end.cep };
+      trackPlanContratado(planoApiKey || planoKey, Number(plano?.preco) || 0, eventID, userData);
     } catch { /* nunca bloqueia o fluxo */ }
   }, [pago]);
 
