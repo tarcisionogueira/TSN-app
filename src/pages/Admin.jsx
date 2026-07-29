@@ -2669,7 +2669,11 @@ function ContratosTab() {
     try {
       const ext = (file.name.split('.').pop() || 'pdf').toLowerCase();
       const path = `contratos-docs/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-      const { data, error } = await supabase.storage.from('documentos').upload(path, file, { upsert: false });
+      // contentType EXPLÍCITO: sem ele o Storage pode servir como octet-stream → o PDF NÃO
+      // renderiza embutido (iframe fica quebrado) e o navegador força download. Fixa por extensão.
+      const CT = { pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', txt: 'text/plain', html: 'text/html', htm: 'text/html' };
+      const contentType = file.type || CT[ext] || 'application/octet-stream';
+      const { data, error } = await supabase.storage.from('documentos').upload(path, file, { upsert: false, contentType });
       if (error) throw error;
       const { data: signed } = await supabase.storage.from('documentos').createSignedUrl(data.path, 60 * 60 * 24 * 365);
       setArquivoUrl(signed?.signedUrl || '');

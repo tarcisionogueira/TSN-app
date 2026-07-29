@@ -16,7 +16,10 @@ const ADIAR_KEY = 'tsn_kyc_parceiro_adiado';
 const dataUrlDe = (file) => new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsDataURL(file); });
 
 export default function KycParceiroModal() {
-  const { user, effectiveRole, cadastroIncompleto } = useAuth();
+  // `role` = papel REAL do logado; `impersonate` = modo suporte (admin vendo a conta de outro).
+  // NÃO usar effectiveRole aqui: no suporte ele vira o papel do CLIENTE, então o bypass de admin
+  // falhava e o popup do PRÓPRIO admin (que aderiu ao programa) aparecia SOBRE a conta do cliente.
+  const { user, role, impersonate, cadastroIncompleto } = useAuth();
   const [estado, setEstado] = useState(null); // null=carregando | 'pedir' | 'ok'
   const [docEnviado, setDocEnviado] = useState(false);
   const [docBusy, setDocBusy] = useState(false);
@@ -27,7 +30,9 @@ export default function KycParceiroModal() {
   const selfieRef = React.useRef();
 
   useEffect(() => {
-    if (!user?.id || effectiveRole === 'admin') { setEstado('ok'); return; }
+    // Admin (papel real) nunca é cobrado; no modo suporte o popup não aparece (é ação pessoal do
+    // cliente — e os documentos iriam para a conta errada). Só o próprio usuário, na sua sessão.
+    if (!user?.id || role === 'admin' || impersonate) { setEstado('ok'); return; }
     let vivo = true;
     supabase.from('perfis').select('parceiro_aceite_em, identidade_validada, identidade_pendente')
       .eq('id', user.id).maybeSingle()
@@ -42,10 +47,11 @@ export default function KycParceiroModal() {
         .then(({ data }) => setEstado((!!data?.parceiro_aceite_em && !data?.identidade_validada && !data?.identidade_pendente) ? 'pedir' : 'ok')).catch(() => {}); };
     window.addEventListener('tsn:parceiro-atualizado', h);
     return () => { vivo = false; window.removeEventListener('tsn:parceiro-atualizado', h); };
-  }, [user?.id, effectiveRole]);
+  }, [user?.id, role, impersonate]);
 
   // Não briga com o popup de cadastro base (nome/cidade/telefone): deixa aquele terminar antes.
-  if (estado !== 'pedir' || adiado || cadastroIncompleto || !user) return null;
+  // E nunca aparece no modo suporte (impersonate) — o admin está só visualizando a conta do cliente.
+  if (estado !== 'pedir' || adiado || cadastroIncompleto || !user || impersonate) return null;
 
   async function armazenarDoc(file, tipo, prefixo) {
     const ext = ((file.name || '').split('.').pop() || 'jpg').toLowerCase();

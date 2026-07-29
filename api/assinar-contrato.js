@@ -53,10 +53,26 @@ export default async function handler(req) {
   const rows = await r.json().catch(() => []);
   const contrato = Array.isArray(rows) ? rows[0] : null;
   if (!contrato) return new Response(JSON.stringify({ error: 'Contrato não encontrado' }), { status: 404, headers });
+  // RASTREIO DO FLUXO (pedido do dono: "o Cliente 360 deve rastrear para avaliar o fluxo"). O
+  // signatário é ANÔNIMO (sem sessão → o tracker do app não o pega); então registramos os ERROS
+  // de assinatura na linha do tempo de QUEM CRIOU o contrato — assim o struggle fica VISÍVEL no
+  // Cliente 360 (antes, só o SUCESSO era registrado; falhas sumiam). Best-effort, nunca bloqueia.
+  const trackErro = (motivo, extra) => {
+    try {
+      if (!contrato?.criado_por) return;
+      sb('rpc/registrar_atividade', { method: 'POST', body: JSON.stringify({
+        p_user_id: contrato.criado_por, p_evento: 'contrato_assinatura_erro',
+        p_detalhe: `Assinante não conseguiu assinar "${contrato.titulo || 'contrato'}": ${motivo}`,
+        p_meta: { contrato_id: contrato.id, token, motivo, ...(extra || {}) },
+      }) }).catch(() => {});
+    } catch { /* best-effort */ }
+  };
   if (!['aguardando', 'aguardando_assinatura'].includes(contrato.status)) {
+    trackErro('contrato não está mais disponível', { status: contrato.status });
     return new Response(JSON.stringify({ error: 'Este contrato não está mais disponível para assinatura' }), { status: 409, headers });
   }
   if (contrato.expira_em && new Date(contrato.expira_em) < new Date()) {
+    trackErro('link expirado', { expira_em: contrato.expira_em });
     return new Response(JSON.stringify({ error: 'Link de assinatura expirado' }), { status: 410, headers });
   }
 
@@ -89,6 +105,7 @@ export default async function handler(req) {
   });
   if (!patch.ok) {
     const txt = await patch.text().catch(() => '');
+    trackErro('falha ao gravar a assinatura', { detalhe: txt.slice(0, 160) });
     return new Response(JSON.stringify({ error: 'Falha ao registrar assinatura', detalhe: txt.slice(0, 200) }), { status: 500, headers });
   }
 
