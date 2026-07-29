@@ -8551,6 +8551,7 @@ function MarketingTab() {
   const [sdrData, setSdrData] = useState({ leadsStatus: {}, leadsPorProduto: [], semanas: [], total: 0, convertidos: 0 });
   const [oportunidades, setOportunidades] = useState([]);
   const [alertas, setAlertas] = useState([]);
+  const [funil, setFunil] = useState(null); // captação por origem (RPC admin_funil_captacao)
 
   const carregar = useCallback(async () => {
     setLoading(true);
@@ -8642,6 +8643,11 @@ function MarketingTab() {
       const { data: alertasRaw } = await supabase.from('alertas_email').select('*, perfis(email)').order('total_enviados', { ascending: false });
       setAlertas(alertasRaw || []);
 
+      // ── Seção 6: Funil de captação por origem (Meta/Google/UTM/indicação → cadastro →
+      // engajou → CONTRATOU, com receita) — agregado no servidor, respeita o período.
+      const { data: fun } = await supabase.rpc('admin_funil_captacao', { p_inicio: thirtyDaysAgo, p_fim: dataFimISO });
+      setFunil(fun || null);
+
     } catch (e) {
       console.error('MarketingTab error:', e);
     }
@@ -8654,6 +8660,8 @@ function MarketingTab() {
     const d = new Date().toLocaleDateString('pt-BR');
     const linhas = [
       `Relatório de Marketing BidPro Brasil - ${d}`, '',
+      '=== CAPTAÇÃO POR ORIGEM ===', 'Canal,Cadastros,Engajados,Contrataram,Receita',
+      ...(funil?.canais || []).map(c => `${c.canal},${c.cadastros},${c.engajados},${c.contratantes},${Number(c.receita || 0).toFixed(2)}`), '',
       '=== BUSCAS ===', 'Cidade,Total Buscas',
       ...buscas.cidades.map(([c, n]) => `${c},${n}`), '',
       'Estado,Total Buscas',
@@ -8753,8 +8761,87 @@ function MarketingTab() {
           ))}
         </div>
         <div style={{ background: '#eff6ff', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: '#0D63DB' }}>
-          ℹ️ Status "Inativo" no Google Ads é normal até o primeiro cadastro/assinatura ser disparado. Acesse <strong>tsn-app-two.vercel.app</strong> para ativar a tag de page_view.
+          ℹ️ Status "Inativo" no Google Ads é normal até o primeiro cadastro/assinatura ser disparado. Acesse <strong>www.bidprobrasil.com.br</strong> para ativar a tag de page_view.
         </div>
+      </div>
+
+      {/* Captação por origem — de onde vem quem se CADASTRA e quem PAGA (first-touch) */}
+      <div style={{ ...S.card, borderRadius: 16, marginBottom: 20 }}>
+        {sectionHeader('Captação por origem', 'Funil do período: cadastros → engajados (viram imóveis) → contratações pagas → receita, pelo canal de aquisição')}
+        {(() => {
+          const fmtR = v => 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+          const canais = funil?.canais || [];
+          const t = funil?.totais || {};
+          const recentes = funil?.recentes || [];
+          const CORES_CANAL = { 'Google Ads': '#4285F4', 'Meta Ads': '#0866FF', 'Indicação (parceiro)': '#7c3aed', 'Orgânico / Direto': '#059669' };
+          const corCanal = c => CORES_CANAL[c] || '#d97706';
+          return (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12, marginBottom: 18 }}>
+                {[
+                  { label: 'Cadastros no período', value: t.cadastros ?? 0, color: '#0D63DB' },
+                  { label: 'Engajados (viram imóveis)', value: t.engajados ?? 0, color: '#7c3aed' },
+                  { label: 'Contrataram (pagaram)', value: t.contratantes ?? 0, color: '#059669' },
+                  { label: 'Receita no período', value: fmtR(t.receita), color: '#d97706' },
+                ].map(k => (
+                  <div key={k.label} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '14px 18px' }}>
+                    <div style={{ fontSize: 22, fontWeight: 900, color: k.color }}>{k.value}</div>
+                    <div style={kpiLabel}>{k.label}</div>
+                  </div>
+                ))}
+              </div>
+              {canais.length === 0 ? (
+                <div style={{ color: '#94a3b8', fontSize: 13 }}>Sem cadastros no período selecionado.</div>
+              ) : (
+                <div style={{ overflowX: 'auto', marginBottom: recentes.length ? 18 : 0 }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                    <thead>
+                      <tr style={{ textAlign: 'left', color: '#64748b', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        <th style={{ padding: '8px 10px' }}>Canal</th>
+                        <th style={{ padding: '8px 10px', textAlign: 'right' }}>Cadastros</th>
+                        <th style={{ padding: '8px 10px', textAlign: 'right' }}>Engajados</th>
+                        <th style={{ padding: '8px 10px', textAlign: 'right' }}>Contrataram</th>
+                        <th style={{ padding: '8px 10px', textAlign: 'right' }}>Conversão</th>
+                        <th style={{ padding: '8px 10px', textAlign: 'right' }}>Receita</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {canais.map(c => (
+                        <tr key={c.canal} style={{ borderTop: '1px solid #f1f5f9' }}>
+                          <td style={{ padding: '9px 10px', fontWeight: 700, color: '#111111' }}>
+                            <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: corCanal(c.canal), marginRight: 8 }} />
+                            {c.canal}
+                          </td>
+                          <td style={{ padding: '9px 10px', textAlign: 'right' }}>{c.cadastros}</td>
+                          <td style={{ padding: '9px 10px', textAlign: 'right' }}>{c.engajados}</td>
+                          <td style={{ padding: '9px 10px', textAlign: 'right', fontWeight: 700, color: c.contratantes > 0 ? '#059669' : '#94a3b8' }}>{c.contratantes}</td>
+                          <td style={{ padding: '9px 10px', textAlign: 'right', color: '#64748b' }}>
+                            {c.cadastros > 0 ? `${((c.contratantes / c.cadastros) * 100).toFixed(1)}%` : '—'}
+                          </td>
+                          <td style={{ padding: '9px 10px', textAlign: 'right', fontWeight: 700, color: '#111111' }}>{fmtR(c.receita)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {recentes.length > 0 && (
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 14, color: '#111111', marginBottom: 8 }}>Últimas contratações</div>
+                  {recentes.map((r, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0', borderTop: i ? '1px solid #f1f5f9' : 'none', fontSize: 13, flexWrap: 'wrap' }}>
+                      <span style={{ fontWeight: 700, color: '#111111' }}>{r.nome}</span>
+                      <span style={{ background: '#eff6ff', color: '#0D63DB', fontSize: 11, fontWeight: 700, padding: '2px 10px', borderRadius: 20 }}>{r.plano}</span>
+                      <span style={{ fontSize: 11, color: 'white', fontWeight: 700, padding: '2px 10px', borderRadius: 20, background: corCanal(r.canal) }}>{r.canal}</span>
+                      <span style={{ marginLeft: 'auto', color: '#059669', fontWeight: 700 }}>{fmtR(r.valor)}</span>
+                      <span style={{ color: '#94a3b8', fontSize: 12 }}>{r.data ? new Date(r.data).toLocaleDateString('pt-BR') : ''}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          );
+        })()}
       </div>
 
       {/* Seção 1: Buscas */}
