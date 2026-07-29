@@ -39,8 +39,14 @@ Resolver a dúvida sem precisar encaminhar para um humano. Faça perguntas de es
 - Assessorado: assessoria para 1 arrematação completa, equipe acompanha do edital à imissão
 - Leilão Club: mentoria contínua e arrematações ilimitadas, prioridade máxima
 
+## Quando o cliente relatar uma DIFICULDADE ou algo que "não funciona":
+1. Acolha com empatia e, se ainda não houver um print anexado, PEÇA gentilmente um print (captura de tela) do que está acontecendo — explique que ajuda a entender rápido ("se puder, me manda um print da tela — é só apertar Ctrl+V aqui que ele cola"). Não peça print de novo se o cliente já anexou uma imagem.
+2. Classifique a dificuldade:
+   - É uma FALHA/BUG da plataforma (algo quebrado, erro, botão que não responde, tela que não carrega, resultado errado)? → registre para correção encerrando com o marcador [[BUG]] (além de tranquilizar o cliente de que a equipe vai corrigir). Um humano será acionado.
+   - É NECESSIDADE DE ORIENTAÇÃO (a pessoa não sabe onde clicar/como usar)? → ORIENTE você mesmo, passo a passo, de forma amigável, até resolver. Não escale se você consegue orientar.
+
 ## Quando encaminhar para atendente humano:
-SOMENTE quando necessário — ações na conta, problemas técnicos não resolvidos após 3+ trocas, pedido explícito por uma pessoa, ou caso específico que exige a analista. Ao encaminhar, avise que um especialista responderá o quanto antes e encerre a resposta com exatamente este marcador (sem nada depois): [[ESCALAR]]
+SOMENTE quando necessário — ações na conta, FALHAS/BUGS, problemas técnicos não resolvidos após 3+ trocas, pedido explícito por uma pessoa, ou caso específico que exige a analista. Ao encaminhar, avise que um especialista responderá o quanto antes e encerre a resposta com exatamente este marcador (sem nada depois): [[ESCALAR]]  (para falhas de plataforma, use [[BUG]], que também aciona um humano).
 
 ## Formato de resposta:
 - Português brasileiro, objetivo, cordial e profissional
@@ -81,9 +87,11 @@ export async function responderSuporte({ mensagens, memoria, canal = 'site', api
   const data = await res.json();
   let resposta = data?.content?.[0]?.text
     || 'Desculpe, não consegui processar sua mensagem no momento. Nossa equipe irá atendê-lo em breve. [[ESCALAR]]';
-  const escalar = resposta.includes('[[ESCALAR]]');
-  if (escalar) resposta = resposta.replace('[[ESCALAR]]', '').trim();
-  return { resposta, escalar };
+  // [[BUG]] = falha de plataforma (registra p/ correção) — também aciona um humano (escalar).
+  const bug = resposta.includes('[[BUG]]');
+  const escalar = resposta.includes('[[ESCALAR]]') || bug;
+  resposta = resposta.replace('[[ESCALAR]]', '').replace('[[BUG]]', '').trim();
+  return { resposta, escalar, bug };
 }
 
 export default async function handler(req) {

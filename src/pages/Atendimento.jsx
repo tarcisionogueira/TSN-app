@@ -265,7 +265,10 @@ export default function Atendimento() {
                   onMouseEnter={e => { if (!ativo) e.currentTarget.style.background = '#f8fafc'; }}
                   onMouseLeave={e => { if (!ativo) e.currentTarget.style.background = 'none'; }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: '#111111', lineHeight: 1.3, flex: 1, marginRight: 6 }}>{c.titulo}</span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: '#111111', lineHeight: 1.3, flex: 1, marginRight: 6 }}>
+                      {c.tipo === 'bug' && <span title="Possível falha sinalizada pela IA — verificar/corrigir" style={{ marginRight: 4 }}>🐞</span>}
+                      {c.titulo}
+                    </span>
                     <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 8px', borderRadius: 10, background: s.bg, color: s.cor, whiteSpace: 'nowrap' }}>{s.label}</span>
                   </div>
                   <div style={{ fontSize: 11, color: '#64748b', display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>

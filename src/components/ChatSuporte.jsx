@@ -57,18 +57,26 @@ export default function ChatSuporte() {
   const [anexos, setAnexos] = useState([]);
   const [precisaAtendente, setPrecisaAtendente] = useState(false);
   const [memoriaIA, setMemoriaIA] = useState('');
+  const [naoLidas, setNaoLidas] = useState(0); // respostas de atendente ainda não vistas (badge do FAB)
   const fileRef = useRef();
   const msgEndRef = useRef();
   const avisoTimer = useRef(null);
   const fecharTimer = useRef(null);
   const avisouInatividade = useRef(false);
+  const pularCarregarLista = useRef(false); // saudação proativa abre direto numa conversa
+  const saudacaoChecada = useRef(false);
+  const isOpenRef = useRef(false);   // valor atual p/ closures do realtime
+  const naoLidasRef = useRef(0);
 
   const nomeUsuario = user?.user_metadata?.nome || user?.email?.split('@')[0] || 'Cliente';
+  const ehCliente = !STAFF_ROLES.includes(effectiveRole); // saudação proativa e badge só p/ clientes
 
   useEffect(() => { msgEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [mensagens]);
   useEffect(() => {
     if (isOpen && user) {
-      carregarLista();
+      // A saudação proativa já montou a conversa — não recarrega a lista por cima dela.
+      if (pularCarregarLista.current) pularCarregarLista.current = false;
+      else carregarLista();
       supabase.from('perfis').select('memoria_ia').eq('id', user.id).single()
         .then(({ data }) => { if (data?.memoria_ia) setMemoriaIA(data.memoria_ia); });
     }
@@ -79,6 +87,52 @@ export default function ChatSuporte() {
     window.addEventListener('tsn:open-chat', handler);
     return () => window.removeEventListener('tsn:open-chat', handler);
   }, []);
+
+  useEffect(() => { isOpenRef.current = isOpen; }, [isOpen]);
+  useEffect(() => { naoLidasRef.current = naoLidas; }, [naoLidas]);
+
+  // Badge "respondido": conta respostas de atendente ainda não vistas.
+  const atualizarNaoLidas = useCallback(async () => {
+    if (!user?.id || !ehCliente) return;
+    const { data } = await supabase.rpc('suporte_respostas_nao_lidas');
+    setNaoLidas(Number(data) || 0);
+  }, [user?.id, ehCliente]);
+  useEffect(() => { atualizarNaoLidas(); }, [atualizarNaoLidas]);
+
+  // Realtime nos chamados do próprio cliente: ao chegar resposta de atendente, atualiza o
+  // badge e — se o widget estiver fechado — ABRE sinalizando que foi respondido (pedido do dono).
+  useEffect(() => {
+    if (!user?.id || !ehCliente) return;
+    const ch = supabase.channel(`fab-${user.id}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'chamados', filter: `user_id=eq.${user.id}` }, async () => {
+        const antes = naoLidasRef.current;
+        const { data } = await supabase.rpc('suporte_respostas_nao_lidas');
+        const agora = Number(data) || 0;
+        setNaoLidas(agora);
+        if (agora > antes && !isOpenRef.current) {
+          const { data: cs } = await supabase.from('chamados').select('*').eq('user_id', user.id)
+            .order('atualizado_em', { ascending: false, nullsFirst: false }).limit(1);
+          if (cs?.[0]) { pularCarregarLista.current = true; setIsOpen(true); abrirChamado(cs[0]); }
+          else setIsOpen(true);
+        }
+      })
+      .subscribe();
+    return () => supabase.removeChannel(ch);
+  }, [user?.id, ehCliente]);
+
+  // Saudação PROATIVA mensal (só cliente): ao abrir o app, no máx. 1×/30 dias, o assistente
+  // se apresenta e pergunta como está sendo a experiência / se há dificuldade.
+  useEffect(() => {
+    if (!isLoggedIn || !ehCliente || !user?.id || saudacaoChecada.current) return;
+    saudacaoChecada.current = true;
+    (async () => {
+      const { data } = await supabase.from('perfis').select('suporte_saudacao_em').eq('id', user.id).maybeSingle();
+      const last = data?.suporte_saudacao_em ? new Date(data.suporte_saudacao_em).getTime() : 0;
+      if (Date.now() - last > 30 * 24 * 60 * 60 * 1000) {
+        setTimeout(() => { saudacaoProativa(); }, 4500); // deixa a página assentar antes de abrir
+      }
+    })();
+  }, [isLoggedIn, ehCliente, user?.id]);
 
   useEffect(() => {
     if (!ticket) return;
@@ -143,7 +197,9 @@ export default function ChatSuporte() {
     return () => { clearTimeout(avisoTimer.current); clearTimeout(fecharTimer.current); };
   }, [ticket?.id]);
 
-  if (!isLoggedIn || STAFF_ROLES.includes(effectiveRole)) return null;
+  // Aparece para TODOS os logados (inclui admin/equipe, p/ ver e testar o atendimento).
+  // A saudação proativa e o badge de "respondido" só valem para CLIENTES (ehCliente).
+  if (!isLoggedIn) return null;
 
   // Lista TODOS os atendimentos do cliente (abertos e finalizados)
   async function carregarLista() {
@@ -169,6 +225,32 @@ export default function ChatSuporte() {
     setPrecisaAtendente(false);
     setView('conversa');
     setCarregando(false);
+    resetTimers();
+    // Marca como visto pelo cliente → limpa o badge de "respondido" deste chamado.
+    supabase.from('chamados').update({ cliente_visto_em: new Date().toISOString() }).eq('id', c.id)
+      .then(() => atualizarNaoLidas());
+  }
+
+  // Saudação proativa mensal: cria um chamado 'proativo' com a mensagem de apresentação da IA
+  // e abre o widget direto nessa conversa (amigável, sem exigir nada do cliente).
+  async function saudacaoProativa() {
+    if (!user?.id) return;
+    const { data: novo } = await supabase.from('chamados').insert({
+      user_id: user.id, user_email: user.email, user_nome: nomeUsuario,
+      titulo: 'Como está sendo sua experiência?', segmento: segmentoDoRole(effectiveRole), origem: 'proativo',
+    }).select().single();
+    if (!novo) return;
+    const saud = `Oi, ${nomeUsuario}! 👋 Sou o assistente virtual da BidPro Brasil. Passei para saber: está gostando de navegar pela plataforma? Está conseguindo achar tudo que precisa, ou esbarrou em alguma dificuldade?\n\nSe algo não estiver funcionando como esperado, me conta (pode colar um print aqui com Ctrl+V que eu ajudo na hora 🙂). E sempre que precisar, é só clicar neste botãozinho aqui embaixo que eu te atendo.`;
+    const { data: msg } = await supabase.from('chamados_mensagens').insert({
+      chamado_id: novo.id, autor_tipo: 'ia', autor_nome: 'BidPro Assistente', conteudo: saud, anexos: [],
+    }).select().single();
+    await supabase.from('perfis').update({ suporte_saudacao_em: new Date().toISOString() }).eq('id', user.id);
+    pularCarregarLista.current = true;
+    setTicket(novo);
+    setMensagens(msg ? [msg] : []);
+    setPrecisaAtendente(false);
+    setView('conversa');
+    setIsOpen(true);
     resetTimers();
   }
 
@@ -221,7 +303,7 @@ export default function ChatSuporte() {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mensagens: msgs, memoria: memoriaIA }),
       });
-      const { resposta, escalar } = await res.json();
+      const { resposta, escalar, bug } = await res.json();
       if (resposta) {
         await supabase.from('chamados_mensagens').insert({
           chamado_id: tk.id, autor_tipo: 'ia',
@@ -229,8 +311,11 @@ export default function ChatSuporte() {
         });
         if (escalar) {
           setPrecisaAtendente(true);
-          // Marca no chamado que precisa de atendente
-          await supabase.from('chamados').update({ atualizado_em: new Date().toISOString() }).eq('id', tk.id);
+          // Falha detectada → marca o chamado como 'bug' (aparece sinalizado no Atendimento p/
+          // correção); caso contrário só atualiza para reordenar a fila.
+          await supabase.from('chamados').update({
+            ...(bug ? { tipo: 'bug' } : {}), atualizado_em: new Date().toISOString(),
+          }).eq('id', tk.id);
         }
       }
     } catch (_) {
@@ -314,6 +399,12 @@ export default function ChatSuporte() {
           style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 9990, height: 58, borderRadius: 999, background: '#111111', color: 'white', border: '1px solid #1f2937', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 0, padding: 0, overflow: 'hidden', boxShadow: '0 8px 24px rgba(17,17,17,0.28)', transition: 'gap 0.2s, padding 0.2s, box-shadow 0.2s, transform 0.15s' }}
           onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 12px 30px rgba(17,17,17,0.36)'; e.currentTarget.style.gap = '10px'; e.currentTarget.style.paddingRight = '20px'; const lbl = e.currentTarget.querySelector('[data-fab-label]'); if (lbl) { lbl.style.maxWidth = '120px'; lbl.style.opacity = '1'; } }}
           onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(17,17,17,0.28)'; e.currentTarget.style.gap = '0px'; e.currentTarget.style.paddingRight = '0px'; const lbl = e.currentTarget.querySelector('[data-fab-label]'); if (lbl) { lbl.style.maxWidth = '0px'; lbl.style.opacity = '0'; } }}>
+          {/* Badge de resposta nova (atendente respondeu e o cliente ainda não viu) */}
+          {naoLidas > 0 && (
+            <span style={{ position: 'absolute', top: -3, right: -3, minWidth: 20, height: 20, padding: '0 5px', borderRadius: 999, background: '#ef4444', color: 'white', fontSize: 11, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #111111', zIndex: 1 }}>
+              {naoLidas}
+            </span>
+          )}
           {/* Disco com a marca + indicador online */}
           <span style={{ position: 'relative', width: 58, height: 58, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             <MarcaBP size={30} />
