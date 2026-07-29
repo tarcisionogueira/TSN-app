@@ -7,6 +7,7 @@ import { apiCall } from '../utils/apiCall';
 import { extrairDadosDocumento, consolidarDocsImovel } from '../utils/claude';
 import { FinanceiroCaixa, AbaAssinaturas } from './AdminFinanceiro';
 import { gerarContratoPDF } from '../components/ContratoPDF';
+import Contratos from './Contratos'; // tela ÚNICA de contratos (mesma de "Meus Contratos", modo admin)
 
 export const DEFAULT_FEEDBACK_EMAIL = 'tarcisioaraujo@reimob.com.br';
 const FEEDBACK_KEY = 'tsn_feedback_email';
@@ -9974,7 +9975,7 @@ export default function Admin() {
         {tab === 'Dashboard'      && <DashboardTab irParaTab={mudarTab} />}
         {tab === 'Cursos'         && <CursosTab />}
         {tab === 'eBooks'         && <EbooksTab />}
-        {tab === 'Contratos'      && <ContratosTab />}
+        {tab === 'Contratos'      && <Contratos />}
         {tab === 'Promoções'      && <PromoTab />}
         {tab === 'Convites'       && <ConvitesTab />}
         {tab === 'Usuários'       && <UsuariosTab />}
