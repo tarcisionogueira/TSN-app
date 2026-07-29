@@ -2,7 +2,7 @@ name: Scraper Diário de Leilões
 
 on:
   schedule:
-    - cron: '0 9 * * 1,4'  # 2x/semana (seg e qui), 9h UTC — fonte grátis
+    - cron: '0 9 * * *'  # DIÁRIO, 9h UTC — CEF (CSV grátis, ~7 min/run). Era 2x/semana; leilões venciam antes do próximo scrape.
   workflow_dispatch:       # Permite rodar manualmente (e via botão do Admin → /api/trigger-scraper)
     inputs:
       ufs:

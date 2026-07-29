@@ -2,7 +2,7 @@ name: Leiloeiros — Scraper Puppeteer Diário
 
 on:
   schedule:
-    - cron: '0 10 * * 1,4'   # 2x/semana (seg e qui), 10h UTC — após o CEF; fontes grátis
+    - cron: '0 10 * * *'   # DIÁRIO, 10h UTC — após o CEF; fontes GRÁTIS (puppeteer, ~80 min/run, 0 Bright Data). Era 2x/semana; leilões venciam antes do próximo scrape.
   workflow_dispatch:
     inputs:
       fontes:
