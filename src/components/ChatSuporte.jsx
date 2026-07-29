@@ -197,9 +197,9 @@ export default function ChatSuporte() {
     return () => { clearTimeout(avisoTimer.current); clearTimeout(fecharTimer.current); };
   }, [ticket?.id]);
 
-  // Aparece para TODOS os logados (inclui admin/equipe, p/ ver e testar o atendimento).
-  // A saudação proativa e o badge de "respondido" só valem para CLIENTES (ehCliente).
-  if (!isLoggedIn) return null;
+  // Apenas CLIENTES (pedido do dono). Equipe/admin respondem pela tela Atendimento; o admin,
+  // se quiser ver o widget, pode usar a simulação de papel (vira cliente e o FAB aparece).
+  if (!isLoggedIn || STAFF_ROLES.includes(effectiveRole)) return null;
 
   // Lista TODOS os atendimentos do cliente (abertos e finalizados)
   async function carregarLista() {

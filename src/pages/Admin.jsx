@@ -2627,6 +2627,7 @@ function ContratosTab() {
   const [savingLink, setSavingLink] = useState(false);
 
   const [kycIncluido, setKycIncluido] = useState(false);
+  const [reqTestemunhaDoc, setReqTestemunhaDoc] = useState(false); // documento pronto: exigir testemunha (link próprio p/ a parte encaminhar)
   const [kycFotos, setKycFotos] = useState({ selfie_rosto: null, doc_frente: null, doc_verso: null, doc_digital: null, selfie_doc: null });
   // Documento: 'fisico' (frente + verso) | 'digital' (CNH-e / RG digital)
   const [kycModalidade, setKycModalidade] = useState('fisico');
@@ -2655,7 +2656,7 @@ function ContratosTab() {
     setTitulo(''); setTipo('servico'); setDescricao('');
     setArquivos([]); setConteudo(''); setPerguntas([]); setRespostas({});
     setLinkGerado(''); setTemplateSelecionado(null);
-    setKycIncluido(false); setKycFotos({ selfie_rosto: null, doc_frente: null, doc_verso: null, doc_digital: null, selfie_doc: null });
+    setKycIncluido(false); setReqTestemunhaDoc(false); setKycFotos({ selfie_rosto: null, doc_frente: null, doc_verso: null, doc_digital: null, selfie_doc: null });
     setKycModalidade('fisico'); setKycSelfieSegurando(false); setVerificandoKyc(false);
     setModo(null); setArquivoUrl(''); setArquivoNome(''); setArquivoUploading(false);
     setStep(0); // etapa 0 = escolher o modo (IA ou documento pronto)
@@ -2821,6 +2822,9 @@ function ContratosTab() {
       kyc_incluido: kycIncluido,
       kyc_fotos: kycFotosFinal,
       verificacao_kyc: verificacaoKyc,
+      // Documento pronto também pode exigir testemunha: a parte assina e, ao concluir, recebe
+      // um link (/#/t/<testemunha_token>, gerado por DEFAULT no banco) para encaminhar à testemunha.
+      requer_testemunha: ehAssinar ? reqTestemunhaDoc : false,
     }).select().single();
     setSavingLink(false);
     if (error || !data) { alert('Erro ao gerar link: ' + (error?.message || 'tente novamente')); return; }
@@ -3351,6 +3355,16 @@ function ContratosTab() {
                     </div>
                   )}
                 </div>
+
+                {/* Exigir testemunha: a parte assina e, ao concluir, recebe um link para
+                    encaminhar à SUA testemunha (mesmo fluxo do contrato gerado por IA). */}
+                <label style={{ display:'flex', alignItems:'flex-start', gap:10, cursor:'pointer', padding:'12px 14px', borderRadius:10, border:`1px solid ${reqTestemunhaDoc ? '#0D63DB' : '#e2e8f0'}`, background: reqTestemunhaDoc ? '#eff6ff' : '#f8fafc', marginBottom:16 }}>
+                  <input type="checkbox" checked={reqTestemunhaDoc} onChange={e => setReqTestemunhaDoc(e.target.checked)} style={{ width:16, height:16, accentColor:'#0D63DB', marginTop:2 }} />
+                  <div>
+                    <div style={{ fontSize:13, fontWeight:700, color:'#111111' }}>Exigir assinatura de testemunha</div>
+                    <div style={{ fontSize:11, color:'#64748b', marginTop:2 }}>A parte assina normalmente e, ao concluir, recebe um link para encaminhar à SUA testemunha (ela preenche nome, CPF e assina). O contrato só fica completo quando os dois assinarem.</div>
+                  </div>
+                </label>
 
                 {renderKyc()}
 
