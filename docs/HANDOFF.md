@@ -22,6 +22,33 @@
 > Checagem rápida a qualquer momento: `select public.auditoria_seguranca();` → `0 crítico / 0 atenção` = íntegro.
 > **Auditorias ofensivas completas: 15/07/2026 (×2).** Total de correções: 15 (1ª rodada) + escalonamento por convite (CRÍTICO) + IDOR do MP (ALTO) + escala. Refazer a ofensiva quando entrarem rotas/pagamento/RLS novos (a Rotina mensal já faz isso sozinha).
 
+## 🔎 EM VALIDAÇÃO COM O DONO (29/07) — re-arquitetar a BUSCA do mercadológico em ESTÁGIOS
+> O dono relatou timeout recorrente em cidade sem base própria (Resende/RJ) e levantou a hipótese
+> (CONFIRMADA) de que o mercadológico busca "várias coisas ao mesmo tempo" e estoura o tempo.
+>
+> **Como é HOJE:** UMA única chamada de IA (`promptMercado` em `api/gerar-analise.js`) com a
+> ferramenta `web_search` (até 7 buscas) pede, no MESMO turno: (1) comparáveis nível 1 (mesmo
+> condomínio/rua) venda+locação; (2) comparáveis nível 2 (~1km) venda+locação; (3) imobiliárias
+> locais; (4) FipeZAP (preço/m² + valorização 12m); (5) zoneamento oficial; (6) padrão do imóvel;
+> (7) perfil da região (tier/atratividades/fragilidades); (8) segurança pública (fontes oficiais);
+> (9) colheita de OUTRAS tipologias p/ semear o índice; (10) colheita AMPLA de outros bairros (até
+> 25) p/ compor o índice; (11) consolidado (valor/yield/base de cálculo); (12) comentário. Isso faz
+> o modelo disparar MUITAS buscas → `pause_turn` repetido → em praça sem cushion, estoura os 300s →
+> `tempo_limite` → status 'erro'. As coletas ACESSÓRIAS (zoneamento/segurança/colheita p/ índice)
+> competem pelo orçamento das ESSENCIAIS (comparáveis).
+>
+> **Proposta (a validar):** separar em ESTÁGIOS com timeout INDEPENDENTE, cada um sua chamada:
+> A) ESSENCIAL — comparáveis venda+locação (nível 1+2) + preço/m² (prioridade, entrega mesmo se o
+> resto falhar); B) REFERÊNCIA — FipeZAP + valorização (best-effort, timeout curto, pula se estourar);
+> C) CONTEXTO — perfil da região + segurança + zoneamento (best-effort, pula); D) COLHEITA p/ índice
+> (outras tipologias + outros bairros) — FORA do caminho crítico (background/depois); E) PARECER (já
+> separado). Cost×benefício: hoje 1 chamada tudo-ou-nada (falha = todas as buscas pagas + nada
+> entregue); estagiado banca o essencial cedo e só gasta nos acessórios se sobrar orçamento →
+> menos re-geração por timeout + entrega confiável. STOPGAP oferecido: quando mesmo o essencial
+> falhar por timeout, entregar "não estimado" (retryable) em vez de "erro" seco (hoje L1240 lança
+> tempo_limite de propósito — reverter isso é o stopgap). AGUARDA o dono validar prioridades (ex.:
+> segurança pública é essencial ou acessória?) antes de implementar.
+
 ## ✅ COMEÇAR AQUI (28/07 — sessão 14: causa-raiz do "relatório sem dados" + rastreio no 360 + 4 correções de produto)
 > Continuação da sessão 13, MESMA branch `claude/assessor-handoff-system-check-sswll2`, promovida a `main` por fast-forward. Deploys desta sessão: `0cc5bd1` (calculadora + proximidades), `02bc4e6` (parecer + contrato + Explorador + agendar), e o commit de rastreio do parecer no 360 (topo do log). `auditoria_seguranca()` = **0 crítico / 0 atenção** ao final.
 
