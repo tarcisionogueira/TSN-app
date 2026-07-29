@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useParams } from 'react-router-dom';
-import { CheckCircle2, AlertCircle, Loader2, ShieldCheck, Camera, Upload, FileText, ExternalLink, Download, Clock } from 'lucide-react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { CheckCircle2, AlertCircle, Loader2, ShieldCheck, Camera, Upload, FileText, ExternalLink, Download, Clock, ChevronLeft } from 'lucide-react';
 import { supabase } from '../utils/supabase';
 import { useIsMobile } from '../utils/useIsMobile';
 import { formatCpf, formatCnpj } from '../utils/cnpjCep';
@@ -170,7 +170,17 @@ function AssinaturaCanvas({ onChange }) {
 
 export default function ContratoLink() {
   const { token } = useParams();
+  const nav = useNavigate();
   const isMobile = useIsMobile();
+  // Sempre há como SAIR desta tela (o dono não conseguia voltar e tinha que fechar o app): volta
+  // à tela anterior se houver histórico, senão vai para o início.
+  const voltar = () => { try { if (window.history.length > 1) nav(-1); else nav('/'); } catch { nav('/'); } };
+  const BotaoVoltar = ({ fixed = false }) => (
+    <button onClick={voltar} title="Voltar"
+      style={{ ...(fixed ? { position: 'fixed', top: 'calc(12px + env(safe-area-inset-top,0px))', left: 12, zIndex: 50 } : {}), display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px', background: 'rgba(30,41,59,0.92)', color: '#e2e8f0', border: '1px solid #334155', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+      <ChevronLeft size={16} /> Voltar
+    </button>
+  );
   const [contrato, setContrato] = useState(null);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState('');
@@ -325,10 +335,12 @@ export default function ContratoLink() {
 
   if (erro) return (
     <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#111111', padding:20 }}>
+      <BotaoVoltar fixed />
       <div style={{ textAlign:'center', maxWidth:420 }}>
         <AlertCircle size={52} color="#f87171" style={{ margin:'0 auto 20px' }} />
         <h2 style={{ color:'white', marginBottom:8 }}>Link indisponível</h2>
         <p style={{ color:'#94a3b8' }}>{erro}</p>
+        <button onClick={() => nav('/')} style={{ marginTop:20, padding:'10px 20px', background:'#0D63DB', color:'white', border:'none', borderRadius:10, fontWeight:700, fontSize:14, cursor:'pointer' }}>Ir para o início</button>
       </div>
     </div>
   );
@@ -342,6 +354,7 @@ export default function ContratoLink() {
     return (
       <div style={{ minHeight:'100vh', background:'#111111', fontFamily:"'Inter',sans-serif", paddingTop:'env(safe-area-inset-top,0px)' }}>
         <div style={{ padding:isMobile?'16px':'22px 28px', display:'flex', alignItems:'center', gap:12, borderBottom:'1px solid #1e293b' }}>
+          <BotaoVoltar />
           <div style={{ width:32, height:32, background:'#0D63DB', borderRadius:8, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
             <ShieldCheck size={18} color="white" />
           </div>
@@ -452,6 +465,7 @@ export default function ContratoLink() {
 
   if (etapa === 'ok') return (
     <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#111111', padding:20 }}>
+      <BotaoVoltar fixed />
       <div style={{ textAlign:'center', maxWidth:480, background:'#111111', borderRadius:20, padding:'48px 32px', border:'1px solid #334155' }}>
         <CheckCircle2 size={72} color="#34d399" style={{ margin:'0 auto 24px' }} />
         <h2 style={{ color:'white', marginBottom:8, fontWeight:900, fontSize:26 }}>Contrato assinado!</h2>
@@ -489,6 +503,7 @@ export default function ContratoLink() {
     <div style={{ minHeight:'100vh', background:'#111111', fontFamily:"'Inter',sans-serif", display:'flex', flexDirection:'column' }}>
       {/* Barra de título */}
       <div style={{ background:'#111111', borderBottom:'1px solid #111111', padding:isMobile ? '14px 16px' : '16px 28px', display:'flex', alignItems:'center', gap:12, flexShrink:0 }}>
+        <BotaoVoltar />
         <div style={{ width:32, height:32, background:'#0D63DB', borderRadius:8, display:'flex', alignItems:'center', justifyContent:'center' }}>
           <ShieldCheck size={18} color="white" />
         </div>
