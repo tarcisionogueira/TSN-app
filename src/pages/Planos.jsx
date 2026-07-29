@@ -96,16 +96,14 @@ export default function Planos() {
   const compartilharPlano = (key) => {
     const base = `${window.location.origin}${window.location.pathname.replace(/\/$/, '')}`;
     const url = `${base}#/planos?ref=${meuCodigo || user?.id || ''}&plano=${key}`;
-    const nome = PLANOS[key]?.nome || 'BidPro Brasil';
-    // Compartilhamento nativo só em CELULAR/tablet; no DESKTOP a folha de apps confundia →
-    // no desktop apenas COPIA o link.
-    const usarShareNativo = !!navigator.share && (navigator.maxTouchPoints || 0) > 0;
-    if (usarShareNativo) {
-      navigator.share({ title: 'BidPro Brasil', text: `Conheça o plano ${nome} da BidPro Brasil`, url }).catch(() => {});
-    } else {
-      try { navigator.clipboard?.writeText(url); } catch { /* ignore */ }
-      setCopiadoKey(key); setTimeout(() => setCopiadoKey(k => (k === key ? null : k)), 2000);
-    }
+    // COPIA o link DIRETO (pedido do dono: sem abrir a folha de compartilhamento do sistema).
+    (async () => {
+      try {
+        if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(url);
+        else { const ta = document.createElement('textarea'); ta.value = url; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); }
+      } catch { window.prompt('Copie o link:', url); }
+    })();
+    setCopiadoKey(key); setTimeout(() => setCopiadoKey(k => (k === key ? null : k)), 2000);
   };
 
   // Formata um valor; usado para totais/economias derivados do planos_config.

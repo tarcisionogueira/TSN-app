@@ -188,13 +188,15 @@ export default function Membros() {
     const [copiado, setCopiado] = useState(false);
     if (!ehParceiro) return null;
     const url = `${window.location.origin}/#/p/${tipo}/${id}?ref=${meuCodigo || user?.id || ''}`;
-    const compartilhar = (e) => {
+    const compartilhar = async (e) => {
       e.stopPropagation();
-      // Só usa o compartilhamento nativo (folha de apps) em CELULAR/tablet; no DESKTOP isso abria
-      // um seletor de app estranho → no desktop apenas COPIA o link (mais previsível).
-      const usarShareNativo = !!navigator.share && (navigator.maxTouchPoints || 0) > 0;
-      if (usarShareNativo) { navigator.share({ title: 'BidPro Brasil', text: `Conheça: ${nome}`, url }).catch(() => {}); }
-      else { navigator.clipboard?.writeText(url); setCopiado(true); setTimeout(() => setCopiado(false), 1800); }
+      // COPIA o link DIRETO (pedido do dono: nada de abrir a folha de compartilhamento do
+      // sistema — fica melhor colar onde quiser). Fallback p/ navegadores sem clipboard API.
+      try {
+        if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(url);
+        else { const ta = document.createElement('textarea'); ta.value = url; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); }
+        setCopiado(true); setTimeout(() => setCopiado(false), 1800);
+      } catch { window.prompt('Copie o link de venda:', url); }
     };
     return (
       <button onClick={compartilhar}
