@@ -438,6 +438,19 @@ async function coletarMegaPagina(page) {
       const agora = new Date().toISOString();
       const dataLeilao = datas.find(d => d >= agora) || datas[0] || null;
 
+      // PRAÇAS EMPARELHADAS (1ª/2ª) — regra do dono: "quando há próxima praça, trazer as datas E
+      // valores". Cada bloco .card-instance carrega título ("1ª Praça"), valor e data DA MESMA
+      // praça. ADITIVO e DEFENSIVO: se a estrutura não existir, `pracas` fica [] e o mapeamento
+      // segue o fluxo antigo (valores/dataLeilao) — zero regressão de captura.
+      const pracas = Array.from(card.querySelectorAll('.card-instance')).map(ci => {
+        const dEl = ci.querySelector('[class*="instance-date"]');
+        return {
+          titulo: norm(ci.querySelector('.card-instance-title')?.textContent) || '',
+          valor: toNum(ci.querySelector('.card-instance-value')?.textContent),
+          data: dEl ? parseData(dEl.textContent) : null,
+        };
+      }).filter(p => p.valor > 0);
+
       out.push({
         id: cont.getAttribute('data-key'),
         href,
@@ -447,6 +460,7 @@ async function coletarMegaPagina(page) {
           || norm(card.querySelector('.card-locality')?.textContent),
         instTitle: norm(card.querySelector('.card-instance-title')?.textContent),
         valores,
+        pracas,
         dataLeilao,
         foto: card.querySelector('.card-image')?.getAttribute('data-bg')
           || card.querySelector('img')?.getAttribute('src') || null,
@@ -462,6 +476,21 @@ function mapearMega(c) {
   const valAval = Math.max(...valores);   // 1ª praça ≈ avaliação
   const valMin = Math.min(...valores);    // última praça = piso/lance mínimo
   if (!valMin) return null;
+
+  // 2ª PRAÇA (ADITIVO): com as praças emparelhadas, guardamos a OUTRA praça (a que não é o
+  // lance mínimo já em valor_minimo) + a data dela em valor_minimo_2/data_leilao_2, para o
+  // detalhe do imóvel e o relatório exibirem/projetarem sobre as duas praças. NÃO mexemos em
+  // valor_avaliacao/valor_minimo/data_leilao (min/max/próxima) → desconto e filtros do catálogo
+  // ficam idênticos; o relatório escolhe a praça mais descontada lendo as duas colunas.
+  let valorMinimo2 = null, dataLeilao2 = null;
+  try {
+    const ps = (c.pracas || []).filter(p => p && p.valor > 0);
+    if (ps.length >= 2) {
+      const ord = [...ps].sort((a, b) => a.valor - b.valor); // asc: [mais barata, ..., mais cara]
+      const maisBarata = ord[0], outra = ord[ord.length - 1];
+      if (outra.valor > maisBarata.valor) { valorMinimo2 = outra.valor; dataLeilao2 = outra.data || null; }
+    }
+  } catch { /* aditivo: nunca quebra a captura */ }
 
   let cidade = '', estado = '';
   const loc = (c.localidade || '').match(/^(.*?),?\s*([A-Z]{2})\s*$/);
@@ -491,6 +520,8 @@ function mapearMega(c) {
     endereco: '',
     valor_avaliacao: valAval,
     valor_minimo: valMin,
+    valor_minimo_2: valorMinimo2,
+    data_leilao_2: dataLeilao2,
     area_m2: area || 0,
     descricao: [c.titulo, c.numero, c.instTitle].filter(Boolean).join(' — ').slice(0, 500),
     link_edital: c.href,

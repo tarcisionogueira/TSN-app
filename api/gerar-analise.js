@@ -39,6 +39,27 @@ async function upsertAnalise(row) {
     body: JSON.stringify({ ...row, updated_at: new Date().toISOString() }),
   });
 }
+// BARRA DE EVOLUÇÃO (pedido do dono: "coloque uma barra de evolução que a cada resposta vai
+// preenchendo ou sinalizando que foi concluída"). Grava o progresso das ETAPAS da geração na
+// coluna `progresso` da linha 'gerando' (chave user_id+imovel_id) — com CONTAGEM ISOLADA por
+// etapa. O front lê enquanto faz o polling e preenche a barra a cada etapa concluída. É
+// best-effort: nunca bloqueia nem atrasa a geração (um PATCH curto entre as chamadas caras).
+const PROG_LABELS = {
+  comparaveis: 'Comparáveis de mercado (venda e locação)',
+  contexto: 'Contexto da região (FipeZAP, zoneamento, perfil, segurança)',
+  parecer: 'Parecer de viabilidade',
+};
+async function marcarProgresso(imovelId, ownerId, etapas) {
+  try {
+    if (!ownerId || !imovelId) return;
+    const norm = (etapas || []).map(e => ({ key: e.key, label: PROG_LABELS[e.key] || e.key, status: e.status || 'pendente', n: (e.n ?? null) }));
+    await sb(`analises_mercado?user_id=eq.${ownerId}&imovel_id=eq.${encodeURIComponent(String(imovelId))}`, {
+      method: 'PATCH',
+      headers: { Prefer: 'return=minimal' },
+      body: JSON.stringify({ progresso: { etapas: norm, atualizadoEm: new Date().toISOString() } }),
+    });
+  } catch { /* progresso é best-effort */ }
+}
 // LOG DE ATIVIDADE (Cliente 360) — best-effort, nunca bloqueia o relatório. Registra o
 // movimento (relatório ok/erro) com o MOTIVO, para diagnóstico (ex.: "sem créditos").
 async function logAtividade(userId, evento, detalhe, meta) {
@@ -784,6 +805,153 @@ Retorne APENAS este JSON (sem markdown):
 }`;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// BUSCA EM ETAPAS (pedido do dono: separar as chamadas da IA em blocos com CONTAGENS e TEMPOS
+// INDEPENDENTES — "várias coisas ao mesmo tempo sobrecarregam e estouram o tempo, o relatório
+// vem incompleto e com amostras inconsistentes"). O promptMercado (mega-prompt único) segue
+// exportado para o A/B (ab-mercadologica.js), mas a GERAÇÃO REAL agora usa DUAS chamadas:
+//   • ETAPA A — promptComparaveis (ESSENCIAL): tudo que sustenta o VALOR — níveis 1/2 de venda e
+//     locação, consolidado (valorEstimadoImovel), fontes locais. Recebe o maior orçamento de
+//     tempo e de buscas web; é a etapa que NÃO pode falhar.
+//   • ETAPA B — promptContexto (BEST-EFFORT): FipeZAP, zoneamento, perfil da região, segurança
+//     pública, outras tipologias e outros bairros (semeiam o Índice). Roda com tempo/ buscas
+//     PRÓPRIOS e curtos; se falhar/estourar, o relatório entrega assim mesmo com a Etapa A.
+// Assim um contexto lento nunca mais derruba (ou esvazia) o relatório inteiro.
+// ─────────────────────────────────────────────────────────────────────────────
+export function promptComparaveis({ endereco, tipoImovel, areaM2, cidade, estado, nomeCondominio }) {
+  return `Você é um perito avaliador imobiliário. Realize a PESQUISA DE COMPARÁVEIS em DOIS NÍVEIS para o imóvel:
+- Tipo: ${tipoImovel}, ${areaM2 ? areaM2 + 'm²' : 'área não informada'}
+- Endereço: ${endereco}, ${cidade}/${estado}
+${nomeCondominio ? `- Condomínio: ${nomeCondominio}` : ''}
+
+FOCO DESTA ETAPA: SÓ comparáveis de venda e locação + o valor consolidado. NÃO gaste buscas com
+FipeZAP, zoneamento, segurança ou perfil da região (isso é pedido numa etapa separada).
+
+REGRA OBRIGATÓRIA — MESMO TIPO: considere SOMENTE imóveis do MESMO TIPO (${tipoImovel}).
+Descarte qualquer amostra de tipo diferente. Compare sempre ${tipoImovel} com ${tipoImovel}.
+
+MÉTODO DE AVALIAÇÃO POR TIPO (DIRECIONE a avaliação pelo tipo "${tipoImovel}" — cada tipo tem
+uma BASE DE CÁLCULO e itens próprios; usar a régua errada gera valor irreal):
+- Apartamento / unidade em CONDOMÍNIO: preço por m² PRIVATIVO de aptos do mesmo condomínio/edifício e região; ajuste por andar, nº de VAGAS, estado, lazer.
+- Casa de rua (urbana): preço por m² CONSTRUÍDO da região/padrão (o terreno padrão já está embutido no comparável de casas); ajuste por padrão construtivo, idade e garagem.
+- Imóvel com TERRENO EXCEDENTE (edificação em lote MUITO acima do padrão da quadra): avalie a CONSTRUÇÃO por m² construído E SOME, À PARTE, a ÁREA DE TERRENO EXCEDENTE (o que passa do padrão) por R$/m² de TERRENO. NUNCA multiplique o R$/m² de construção pela área total do lote. Considere potencial de desmembramento/incorporação (zoneamento).
+- Terreno / lote urbano: preço por m² de TERRENO (nunca de construção); considere ZONEAMENTO/coeficiente de aproveitamento (potencial construtivo), frente, esquina e topografia.
+- Áreas / GLEBAS (grande porte): por m² OU por hectare conforme o porte; considere potencial de PARCELAMENTO/loteamento, infraestrutura e restrições ambientais.
+- Comercial (sala, loja, conjunto): preço por m² COMERCIAL na mesma vocação/região; considere ponto/fluxo, vaga e potencial de LOCAÇÃO (cap rate comercial).
+- Galpão / INDÚSTRIA / logística: preço por m² de área CONSTRUÍDA do galpão (+ terreno quando relevante), considerando PÉ-DIREITO, docas, piso/carga, ZONEAMENTO industrial, acesso rodoviário e energia; comparáveis de galpões, JAMAIS residenciais.
+- Rural (FAZENDA, sítio, chácara): avalie por HECTARE (terra nua) + BENFEITORIAS à parte, considerando aptidão do solo (lavoura/pasto), recursos hídricos, CAR/georreferenciamento, culturas e acesso; comparáveis RURAIS (por ha) da região.
+- Vaga de garagem / box: por UNIDADE, com comparáveis de vagas/boxes da região.
+- Atípico/especial (posto, hotel, imóvel de uso específico, terreno de marinha): mercado RASO. Busque o tipo específico; sem ao menos 3–4 amostras coerentes, diga EXPLICITAMENTE que a estimativa é apenas INDICATIVA, alargue a faixa (precoMinM2/precoMaxM2) e recomende laudo presencial. NUNCA force média residencial num imóvel atípico/rural.
+Se o tipo exigir outra unidade que não o m² de construção (rural por hectare, terreno por m² de lote, vaga por unidade), use essa unidade em precoMedioM2, informe em "consolidado.unidadeValor" e explique a conta em "consolidado.baseCalculo".
+
+REGRA OBRIGATÓRIA — NADA DE LEILÃO NA AMOSTRA: descarte QUALQUER anúncio de leilão, praça,
+hasta pública, venda direta bancária/Caixa, alienação fiduciária, extrajudicial/judicial ou
+imóvel retomado. Esses preços ficam 30–60% abaixo do mercado e CONTAMINAM a média e o mínimo
+(R$/m²). Compare só com o MERCADO LIVRE de venda normal. Outlier muito abaixo dos demais, sem
+justificativa, também deve ser descartado como provável leilão disfarçado.
+
+REGRA OBRIGATÓRIA — PADRÃO DO IMÓVEL (comparar SEMELHANTE com SEMELHANTE): identifique o
+PADRÃO do imóvel avaliado — popular/econômico, médio, médio-alto, alto padrão ou luxo — a
+partir do CONDOMÍNIO/empreendimento${nomeCondominio ? ` "${nomeCondominio}"` : ''}, do endereço,
+da área e do acabamento típico da região. Use SOMENTE comparáveis do MESMO padrão: um
+condomínio FECHADO / de ALTO PADRÃO NÃO se compara a casas populares de rua (e vice-versa) —
+mesmo tipo e mesma cidade, o padrão muda o R$/m² em várias vezes. Se um comparável tiver
+R$/m² muito distante do padrão do imóvel (ex.: cerca de metade, ou o dobro), é de OUTRO
+padrão: DESCARTE. Em empreendimento de alto padrão com poucos anúncios internos, prefira
+comparáveis do MESMO padrão na cidade/região a comparáveis apenas PRÓXIMOS porém de padrão
+inferior. Informe o padrão em "consolidado.padraoImovel" e explique-o no "comentario".
+
+OBJETIVO: reunir o MÁXIMO de amostras possível do tipo-alvo (${tipoImovel}). Faça várias buscas
+em fontes diferentes e TRAGA TODAS as amostras coerentes que encontrar (não corte a lista para
+"resumir": quanto mais comparáveis do MESMO tipo/padrão, melhor a média). Só depois filtre padrão/leilão.
+
+═══ NÍVEL 1 — COMPARATIVOS DIRETOS (mesmo condomínio/endereço) ═══
+Busque o máximo de anúncios de venda E locação DENTRO do mesmo condomínio/edifício ou
+na mesma rua. Se NÃO encontrar ao menos 5 amostras, EXPANDA o raio para ~250m ao redor
+do endereço para complementar (mantendo o mesmo tipo de imóvel). Meta: 8+ vendas e 5+ locações.
+
+═══ NÍVEL 2 — VIZINHANÇA (bairro e adjacências, ~1km) ═══
+Busque o máximo de anúncios (mesmo tipo) no bairro e adjacências (~1km). Meta: 15+ vendas e 8+ locações.
+
+FONTES (grandes portais): ZAP, VivaReal, OLX, Quinto Andar, Imovelweb, Loft, 123i, Chaves na Mão, Net Imóveis. Cruze várias.
+
+FONTES LOCAIS (OBRIGATÓRIO — frequentemente MAIS confiáveis): além dos grandes portais, busque também ANÚNCIOS DE IMOBILIÁRIAS DA PRÓPRIA CIDADE de ${cidade}/${estado}. Pesquise por "imobiliária ${cidade}", "imóveis à venda ${cidade}" (e o bairro, se houver) e abra os sites das imobiliárias locais — os anúncios delas costumam refletir MELHOR o preço praticado na praça e podem ser COMPLEMENTARES ou até DECISIVOS na composição do valor. Inclua essas amostras nos níveis 1/2 com "fonte" = nome da imobiliária local, e dê PESO ao menos igual ao dos grandes portais quando forem recentes e do mesmo tipo/microrregião. Ao final, liste em "fontesLocais" as imobiliárias LOCAIS que você usou/encontrou (nome + url do site) — nós memorizamos e reusamos nas próximas análises desta praça.
+
+DATA DO ANÚNCIO: para CADA amostra, capture a data no campo "data" (formato "AAAA-MM"; senão "recente").
+RECÊNCIA (IMPORTANTE): priorize FORTEMENTE anúncios do ANO CORRENTE e dos últimos ~12 meses. EVITE anúncios com mais de ~18 meses, a menos que não haja recentes suficientes — o preço muda rápido. Na média, dê MENOS peso às amostras antigas. Se a maioria das amostras for antiga (ex.: de anos anteriores), diga isso EXPLICITAMENTE no "comentario" e trate a estimativa como menos precisa (alargue precoMinM2/precoMaxM2).
+
+VALOR ESTIMADO DO IMÓVEL (OBRIGATÓRIO — é o número que sustenta o relatório): em
+"consolidado.valorEstimadoImovel" calcule o valor de mercado CONSERVADOR do imóvel pelo MÉTODO
+DO TIPO acima (não apenas preço/m² × área quando o tipo não for por m² privativo). Preencha também
+"unidadeValor", "areaConsiderada" (a medida que multiplicou: m² privativo/construído/terreno OU
+hectares OU unidades) e "baseCalculo" (a conta em texto). Para imóvel com TERRENO EXCEDENTE, some
+a construção + o terreno excedente e detalhe em "terrenoExcedente". Se a área da métrica não for
+confiável (ex.: veio a área TOTAL no lugar da privativa), DIGA no "comentario" e seja conservador.
+
+Retorne APENAS este JSON (sem markdown):
+{
+  "nivel1": { "descricao": "", "vendas": [{"bairro":"","descricao":"","valor":0,"m2":0,"valorM2":0,"fonte":"","data":"AAAA-MM"}], "locacoes": [{"bairro":"","descricao":"","valorMensal":0,"fonte":"","data":"AAAA-MM"}], "precoMedioM2": 0, "precoMinM2": 0, "precoMaxM2": 0, "aluguelMedio": 0, "totalAmostras": 0, "disponiveis": true },
+  "nivel2": { "descricao": "", "vendas": [{"bairro":"","descricao":"","valor":0,"m2":0,"valorM2":0,"fonte":"","data":"AAAA-MM"}], "locacoes": [{"bairro":"","descricao":"","valorMensal":0,"fonte":"","data":"AAAA-MM"}], "precoMedioM2": 0, "precoMinM2": 0, "precoMaxM2": 0, "aluguelMedio": 0, "totalAmostras": 0 },
+  "consolidado": { "precoMedioM2": 0, "aluguelMedio": 0, "yieldBruto": 0, "yieldLiquido": 0, "valorEstimadoImovel": 0, "unidadeValor": "m2_privativo|m2_construido|m2_terreno|hectare|unidade", "areaConsiderada": 0, "baseCalculo": "(explique a conta: ex.: 'R$ 10.980/m² privativo × 30 m²' ou 'R$ 45.000/ha × 120 ha terra nua + R$ 200k benfeitorias' ou 'construção 90 m² × R$ 4.000 + terreno excedente 300 m² × R$ 800')", "padraoImovel": "popular|medio|medio_alto|alto|luxo", "terrenoExcedente": { "haExcedente": false, "areaExcedenteM2": 0, "valorTerrenoExcedente": 0 }, "descontoArremate": null },
+  "fontesLocais": [{"nome":"","url":""}],
+  "comentario": "Análise qualitativa de 3-4 frases comparando os dois níveis, a tendência e a coerência da média (se as amostras forem antigas/poucas, DIGA e alargue a faixa)."
+}`;
+}
+
+export function promptContexto({ endereco, tipoImovel, areaM2, cidade, estado, nomeCondominio }) {
+  return `Você é um perito avaliador imobiliário. Traga o CONTEXTO e as REFERÊNCIAS da região do imóvel:
+- Tipo: ${tipoImovel}, ${areaM2 ? areaM2 + 'm²' : 'área não informada'}
+- Endereço: ${endereco}, ${cidade}/${estado}
+${nomeCondominio ? `- Condomínio: ${nomeCondominio}` : ''}
+
+Esta etapa é COMPLEMENTAR (os comparáveis de valor já foram coletados à parte). NUNCA invente:
+sem fonte confiável, marque "encontrado": false. Seja RÁPIDO e objetivo.
+
+═══ REFERÊNCIA INDEPENDENTE — ÍNDICE FipeZAP ═══
+Busque o Índice FipeZAP mais recente para ${cidade}/${estado}: preço médio de VENDA por m²
+(residencial), e a VALORIZAÇÃO acumulada em 12 meses da cidade. É uma referência oficial
+independente da média de anúncios. Se não achar a cidade, use a região metropolitana/capital
+mais próxima e sinalize em "fonte". Se não houver dado confiável, marque "encontrado": false.
+
+═══ ZONEAMENTO URBANO (uso do solo) ═══
+Consulte o ZONEAMENTO OFICIAL do endereço no órgão municipal (Plano Diretor / Lei de Uso e Ocupação do Solo; em capitais use o GIS oficial: GeoSampa/SP, Data.Rio, IPPUC/Curitiba, BHMap/PBH etc.). Informe a ZONA e o que ela permite (residencial/comercial/misto; e gabarito/coeficiente de aproveitamento se constar) SOMENTE se achar em FONTE OFICIAL — e cite a fonte. Se NÃO houver fonte oficial confiável, marque "encontrado": false e diga exatamente ONDE obter. NUNCA invente ou especule a zona.
+
+═══ PERFIL DA REGIÃO (atratividade e valorização) ═══
+Classifique a REGIÃO (bairro/microrregião) do imóvel dentro de ${cidade}/${estado}:
+- "tier": se está entre as MAIS valorizadas, INTERMEDIÁRIAS ou MENOS valorizadas da cidade (valorizado_alto|intermediario|valorizado_baixo);
+- "atratividades": fatores POSITIVOS reais que puxam o valor (infraestrutura, comércio, transporte, escolas/saúde, áreas verdes/orla, novos empreendimentos);
+- "fragilidades": fatores que PESAM (risco de enchente, ruído, proximidade de indústria, difícil acesso, saturação);
+- "motivos": 1–2 frases explicando POR QUE a região é mais/menos valorizada.
+Sem base, deixe "tier":"" e explique a limitação em "motivos".
+
+═══ SEGURANÇA PÚBLICA DA REGIÃO (dados OFICIAIS — factual, NUNCA rótulo subjetivo) ═══
+Traga um perfil de segurança pública da região SOMENTE de FONTES OFICIAIS (SSP do estado, ISP-RJ,
+Atlas da Violência/IPEA, dados municipais) — citando a FONTE e o PERÍODO. Reporte indicadores
+FACTUAIS, JAMAIS um juízo do tipo "bairro perigoso". Sem dado oficial confiável, marque
+"encontrado": false e recomende diligência local. Não invente nem estime.
+
+═══ COLHEITA DE OUTRAS TIPOLOGIAS (aproveitamento — NÃO gaste buscas dedicadas) ═══
+Ao pesquisar o contexto, você verá anúncios de OUTRAS tipologias na MESMA cidade. LISTE em
+"outrasTipologias" os de VENDA que JÁ VIU (sem buscas dedicadas), até ~12 por tipo, com R$/m² e
+data. Apenas VENDA; NÃO repita o tipo-alvo (${tipoImovel}); EXCLUA leilão/venda direta; só o que
+apareceu de fato. Isso alimenta o Índice BidPro dos outros segmentos da região.
+
+═══ COLHEITA AMPLA — MESMO TIPO EM OUTROS BAIRROS (compõe o Índice) ═══
+Liste em "outrosBairros" ATÉ 25 anúncios do MESMO tipo (${tipoImovel}) em OUTROS bairros da cidade
+(sem buscas dedicadas; não passe de 25), CADA UM com o seu "bairro" — alimenta o Índice da
+cidade/estado. Apenas VENDA, mesmo tipo, SEM leilão; o "bairro" de cada amostra é OBRIGATÓRIO.
+
+Retorne APENAS este JSON (sem markdown):
+{
+  "referenciaFipeZap": { "encontrado": true, "precoMedioM2": 0, "valorizacao12m": 0, "mesReferencia": "AAAA-MM", "localidade": "", "fonte": "" },
+  "outrasTipologias": { "apartamento": [{"valorM2":0,"valor":0,"m2":0,"fonte":"","data":"AAAA-MM"}], "casa": [], "terreno": [], "comercial": [] },
+  "outrosBairros": [{"bairro":"","valorM2":0,"valor":0,"m2":0,"fonte":"","data":"AAAA-MM"}],
+  "zoneamento": { "encontrado": false, "zona": "", "resumoUso": "", "fonte": "", "ondeObter": "" },
+  "perfilRegiao": { "tier": "valorizado_alto|intermediario|valorizado_baixo|", "atratividades": [""], "fragilidades": [""], "motivos": "" },
+  "segurancaPublica": { "encontrado": false, "nivel": "", "indicadores": "", "tendencia": "", "fonte": "", "periodo": "", "recomendacao": "" }
+}`;
+}
+
 // BASE DE CÁLCULO por tipo de imóvel (direciona a avaliação — ver docs/AVALIACAO_POR_TIPO.md).
 // Só as bases por m² PRIVATIVO ('residencial'/'comercial') sofrem a guarda de coerência
 // área-total×privativa; terreno/rural/indústria/unidade têm métrica própria (m² de terreno,
@@ -985,12 +1153,26 @@ export default async function handler(req, res) {
     if (anc?.alterado) console.log('[ancora]', JSON.stringify({ imovel: String(imovelId), nivel: anc.nivel }));
   } catch { /* nunca bloqueia o relatório */ }
 
-  await upsertAnalise({ ...base, status: 'gerando', erro: null, result: null });
+  // Reseta a barra de evolução ao começar (não herda o progresso de uma geração anterior):
+  // Etapa A (comparáveis) já entra como 'gerando'; B (contexto) e o parecer ficam 'pendente'.
+  await upsertAnalise({ ...base, status: 'gerando', erro: null, result: null, progresso: {
+    etapas: [
+      { key: 'comparaveis', label: PROG_LABELS.comparaveis, status: 'gerando', n: null },
+      { key: 'contexto', label: PROG_LABELS.contexto, status: 'pendente', n: null },
+      { key: 'parecer', label: PROG_LABELS.parecer, status: 'pendente', n: null },
+    ], atualizadoEm: new Date().toISOString(),
+  } });
 
   const prazo = new Promise((_, rej) => setTimeout(() => rej(new Error('tempo_limite')), Math.max(20000, restante())));
 
   try {
     const { result, valorMercado, avalDb, vminImovel } = await Promise.race([prazo, (async () => {
+    // BARRA DE EVOLUÇÃO — estado local das etapas; `flush()` persiste na coluna progresso a cada
+    // transição (best-effort). Uma etapa concluída mostra a CONTAGEM (n) de amostras/itens dela.
+    const prog = { comparaveis: { status: 'gerando', n: null }, contexto: { status: 'pendente', n: null }, parecer: { status: 'pendente', n: null } };
+    const flush = () => marcarProgresso(imovelId, ownerId, [
+      { key: 'comparaveis', ...prog.comparaveis }, { key: 'contexto', ...prog.contexto }, { key: 'parecer', ...prog.parecer },
+    ]);
     // 1) Mercado — reaproveita pesquisa recente do mesmo imóvel (se houver), senão busca.
     // INVALIDAÇÃO type-aware: uma pesquisa antiga (anterior à avaliação por tipo) NÃO traz
     // consolidado.valorEstimadoImovel/baseCalculo. Para bases por m² construído/privativo
@@ -1006,6 +1188,11 @@ export default async function handler(req, res) {
     if (reusoValido) {
       mercado = { ...recente.mercado, reaproveitado: true, pesquisaEm: recente.em };
       reaproveitado = true;
+      // Reaproveitou pesquisa recente: as duas etapas de busca já estão "prontas" (vieram do cache).
+      const nReuso = ((mercado.nivel1?.vendas?.length || 0) + (mercado.nivel1?.locacoes?.length || 0) + (mercado.nivel2?.vendas?.length || 0) + (mercado.nivel2?.locacoes?.length || 0)) || null;
+      prog.comparaveis = { status: 'concluido', n: nReuso };
+      prog.contexto = { status: 'concluido', n: null };
+      await flush();
     } else {
       // REAPROVEITAMENTO POR REGIÃO — LIGADO POR PADRÃO (regra do dono: "todo dado deve ser
       // aproveitado, evita desperdício"; desliga só com MERCADO_CACHE=0). Se a microrregião já tem
@@ -1024,11 +1211,11 @@ export default async function handler(req, res) {
         } catch { cacheReg = null; }
       }
       // QUALIDADE em 1º lugar (decisão do dono: "a busca deve ser apurada; pode demorar mais, mas
-      // tem que entregar com qualidade"). 7 buscas cobrem grandes portais + imobiliárias LOCAIS +
-      // colheita ampla. O que causava o "sem amostras" NÃO era o número de buscas e sim a resposta
-      // ser cortada/pausada — resolvido no pause_turn + max_tokens 32k + salvamento de JSON. Com
-      // cache denso da praça, 2 bastam (barato e igualmente apurado, pois ancora na base própria).
-      const maxWeb = cacheReg?.hit ? 2 : 7;
+      // tem que entregar com qualidade"). Agora em DUAS etapas com buscas SEPARADAS: a Etapa A
+      // (comparáveis, essencial) leva o grosso das buscas; a Etapa B (contexto) é enxuta. Com cache
+      // denso da praça, poucas buscas bastam (ancora na base própria).
+      const maxWebA = cacheReg?.hit ? 2 : 6; // comparáveis (venda/locação + valor) — o essencial
+      const maxWebB = cacheReg?.hit ? 1 : 3; // contexto (FipeZAP/zoneamento/perfil/segurança) — leve
       const cacheTxt = cacheReg?.hit ? cacheReg.text : '';
       // FONTES LOCAIS já conhecidas da praça (revalidação ORGÂNICA): injeta as imobiliárias locais
       // vistas recentemente para a IA ir direto COLHER (economiza a busca de descoberta). Best-effort.
@@ -1037,72 +1224,97 @@ export default async function handler(req, res) {
         const fl = await (await sb('rpc/fontes_locais_frescas', { method: 'POST', body: JSON.stringify({ p_cidade_norm: _norm(cidade), p_uf: String(estado || '').toUpperCase() }) })).json();
         if (Array.isArray(fl) && fl.length) fontesTxt = `\n\nIMOBILIÁRIAS LOCAIS JÁ CONHECIDAS de ${cidade}/${estado} (comece por elas: abra os sites e colha anúncios do tipo-alvo; ADICIONE as novas que encontrar em "fontesLocais"):\n` + fl.map(f => `- ${f.nome || f.url} (${f.url})`).join('\n');
       } catch { /* best-effort */ }
-      console.log('[mercado-cache]', JSON.stringify({ on: cacheLigado, hit: !!cacheReg?.hit, nivel: cacheReg?.nivel || null, n: cacheReg?.n || 0, maxWeb, imovel: String(imovelId) }));
-      // A busca de mercado (web search, até 5 buscas) é a etapa lenta. UMA tentativa por
-      // chamada (retries:0) com timeout = tempo RESTANTE reservando o parecer — assim duas
-      // buscas NUNCA somam mais que o orçamento. Se a chamada abortar/falhar, devolve
-      // { __falhou:true } (o chamador decide re-tentar ou marcar transitório p/ self-heal).
+      console.log('[mercado-cache]', JSON.stringify({ on: cacheLigado, hit: !!cacheReg?.hit, nivel: cacheReg?.nivel || null, n: cacheReg?.n || 0, maxWebA, maxWebB, imovel: String(imovelId) }));
+      // Cada ETAPA é uma chamada com timeout PRÓPRIO (retries:0). UMA etapa nunca soma tempo com
+      // a outra — o orçamento é fatiado. pause_turn tratado (a busca server-side pausa em pesquisas
+      // longas). max_tokens 32k dá folga p/ os blocos de resultado + o JSON final (a causa do "sem
+      // amostras" em cidade grande era a resposta ser cortada, não o nº de buscas). { __falhou } em
+      // abort/timeout/erro → o chamador decide re-tentar ou tratar como transitório (self-heal).
       const RESERVA_PARECER = 55000; // guarda p/ o parecer + a escrita final
-      const buscarMercado = async (msBudget, webUses = maxWeb) => {
+      const buscarEtapa = async ({ prompt, sistema, msBudget, webUses, pauseCap = 8, minReserva = RESERVA_PARECER + 12000 }) => {
         try {
-          // CAUSA-RAIZ do "sem amostras" em cidade grande (BH 28/07): com web_search, os BLOCOS de
-          // RESULTADO da busca contam no output e, em cidade grande, consumiam o max_tokens ANTES de
-          // o modelo escrever o JSON → resposta SEM bloco de texto → parse vazio. Dois consertos:
-          //  (1) max_tokens 16000→32000 (folga p/ os resultados da busca + o JSON final);
-          //  (2) tratar stop_reason='pause_turn' (a busca server-side PAUSA em pesquisas longas e
-          //      espera o turno ser devolvido p/ CONTINUAR — sem isso o modelo nunca emite o JSON).
-          const messages = [{ role: 'user', content: promptMercado(mercadoInputs) + cacheTxt + fontesTxt }];
-          let mData, stop, cont = 0;
+          const messages = [{ role: 'user', content: prompt }];
+          let data, stop, cont = 0;
           do {
-            mData = await anthropic({
+            data = await anthropic({
               model: MODEL, max_tokens: 32000,
               tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: webUses }],
-              system: `Você é um perito avaliador imobiliário sênior. Busque o MÁXIMO de amostras possível, SEMPRE do mesmo tipo (${mercadoInputs.tipoImovel}). Retorne apenas JSON válido.`,
+              system: sistema,
               messages,
-            }, true, { retries: 0, timeoutMs: Math.max(45000, msBudget), noFallback: true });
-            stop = mData?.stop_reason;
-            if (stop === 'pause_turn' && Array.isArray(mData.content)) {
-              messages.push({ role: 'assistant', content: mData.content }); // devolve o turno pausado p/ continuar
-              cont++;
-            }
-          } while (stop === 'pause_turn' && cont < 8 && restante() > RESERVA_PARECER + 12000);
-          const txt = extractText(mData);
-          const m = parseJSON(txt) || {};
-          m.precoMedioM2 = m.consolidado?.precoMedioM2 || m.nivel2?.precoMedioM2 || 0;
-          m.aluguelMedio = m.consolidado?.aluguelMedio || 0;
-          m.yieldBruto = m.consolidado?.yieldBruto || 0;
-          m.yieldLiquido = m.consolidado?.yieldLiquido || 0;
-          m.vendas = m.nivel2?.vendas || [];
-          m.locacoes = m.nivel2?.locacoes || [];
-          m.pesquisaEm = new Date().toISOString();
+            }, true, { retries: 0, timeoutMs: Math.max(30000, msBudget), noFallback: true });
+            stop = data?.stop_reason;
+            if (stop === 'pause_turn' && Array.isArray(data.content)) { messages.push({ role: 'assistant', content: data.content }); cont++; }
+          } while (stop === 'pause_turn' && cont < pauseCap && restante() > minReserva);
+          const txt = extractText(data);
+          const parsed = parseJSON(txt) || {};
           // Diagnóstico PERSISTIDO (fica no result mesmo quando vazio) p/ validar o fluxo pelo banco.
-          m.__diag = { stop: stop || null, blocos: Array.isArray(mData?.content) ? mData.content.length : 0, textoLen: txt.length, out_tokens: mData?.usage?.output_tokens || 0, buscas: webUses, continuou: cont };
-          return m;
-        } catch (e) { return { __falhou: true, __erroApi: String(e?.message || e || '').slice(0, 120) }; } // abort/timeout/erro → o chamador trata
+          parsed.__diag = { stop: stop || null, blocos: Array.isArray(data?.content) ? data.content.length : 0, textoLen: txt.length, out_tokens: data?.usage?.output_tokens || 0, buscas: webUses, continuou: cont };
+          return parsed;
+        } catch (e) { return { __falhou: true, __erroApi: String(e?.message || e || '').slice(0, 120) }; }
       };
-      const semAmostras = (m) => ((m.vendas?.length || 0) + (m.locacoes?.length || 0)) === 0 && !(m.precoMedioM2 > 0);
-      // 1ª busca: guarda a reserva do parecer E ~80s p/ uma 2ª tentativa (uma busca que TRAVA
-      // aborta antes e a re-tentativa costuma concluir — 2 ataques mais curtos > 1 longo).
-      mercado = await buscarMercado(Math.min(135000, restante() - RESERVA_PARECER - 80000));
-      // Re-tenta se (vazio OU falhou) E ainda há orçamento. A 2ª tentativa é ESTREITA (menos
-      // buscas web = mais rápida). Regra por CAUSA (incidente BH/RJ 28/07 — cidade grande SEM base
-      // própria: a busca ampla travava, a 2ª de 3 buscas TAMBÉM travava → tela de erro):
-      //  • 1ª TRAVOU (__falhou) → 2ª vai RÁPIDA (1 busca web). Uma única busca quase sempre CONCLUI
-      //    e devolve um R$/m² de referência: entrega uma estimativa APURADA preliminar (e SEMEIA o
-      //    Índice p/ as próximas) em vez de "tente novamente". A busca AMPLA já foi a 1ª tentativa.
-      //  • 1ª veio VAZIA mas concluiu (praça fina) → 2ª média (≤3 buscas) tenta achar amostra.
-      if ((semAmostras(mercado) || mercado.__falhou) && restante() > RESERVA_PARECER + 40000) {
-        const usos = mercado.__falhou ? 1 : Math.min(maxWeb, 3);
-        mercado = await buscarMercado(Math.min(110000, restante() - RESERVA_PARECER), usos);
+
+      // ── ETAPA A — COMPARÁVEIS (ESSENCIAL): venda + locação (níveis 1/2) + valor consolidado ──
+      const sysComp = `Você é um perito avaliador imobiliário sênior. Busque o MÁXIMO de amostras possível, SEMPRE do mesmo tipo (${mercadoInputs.tipoImovel}). Retorne apenas JSON válido.`;
+      const promptA = promptComparaveis(mercadoInputs) + cacheTxt + fontesTxt;
+      // 1ª busca: reserva o parecer, ~55s p/ a Etapa B (contexto) e ~35s p/ uma 2ª tentativa da A.
+      let compar = await buscarEtapa({ prompt: promptA, sistema: sysComp, msBudget: Math.min(135000, restante() - RESERVA_PARECER - 90000), webUses: maxWebA });
+      const semAmostrasA = (m) => (((m?.nivel1?.vendas?.length || 0) + (m?.nivel1?.locacoes?.length || 0) + (m?.nivel2?.vendas?.length || 0) + (m?.nivel2?.locacoes?.length || 0)) === 0) && !(Number(m?.consolidado?.precoMedioM2) > 0);
+      // Re-tenta se (vazio OU falhou) E ainda há orçamento. Falhou → 1 busca (quase sempre conclui e
+      // dá um R$/m² de referência); vazio-mas-concluiu (praça fina) → ≤3 buscas. A ampla já foi a 1ª.
+      if ((compar.__falhou || semAmostrasA(compar)) && restante() > RESERVA_PARECER + 55000) {
+        const usos = compar.__falhou ? 1 : Math.min(maxWebA, 3);
+        compar = await buscarEtapa({ prompt: promptA, sistema: sysComp, msBudget: Math.min(100000, restante() - RESERVA_PARECER - 30000), webUses: usos });
       }
-      // A busca FALHOU (abort/timeout/erro), não é "mercado vazio de verdade": trata como
-      // TRANSITÓRIO → grava 'erro' com tempo_limite e o self-heal (cron) re-tenta com orçamento
-      // fresco. Um mercado genuinamente vazio (JSON válido sem amostras) SEGUE e vira relatório.
-      // NÃO derruba aqui: mesmo instável (__falhou) OU vazia, ainda podemos entregar o relatório
-      // pelo ÍNDICE BIDPRO (base própria) mais abaixo. A decisão de transitório só vem se o
-      // Índice NÃO cobrir (aí o self-heal re-tenta comparáveis reais).
-      if (mercado.__falhou) mercado = { vendas: [], locacoes: [], precoMedioM2: 0, pesquisaEm: new Date().toISOString(), __instavel: true, __erroApi: mercado.__erroApi || '' };
+      // Monta o `mercado` a partir da Etapa A (mesmos campos derivados de antes). Se a A FALHOU
+      // (abort/timeout — não "vazio de verdade"), vira TRANSITÓRIO (__instavel): o Índice BidPro/
+      // self-heal assume mais abaixo; não derruba aqui. Vazio genuíno (JSON ok, 0 anúncio) segue.
+      if (compar.__falhou) {
+        mercado = { vendas: [], locacoes: [], precoMedioM2: 0, pesquisaEm: new Date().toISOString(), __instavel: true, __erroApi: compar.__erroApi || '' };
+        prog.comparaveis = { status: 'erro', n: 0 };
+      } else {
+        mercado = compar;
+        mercado.precoMedioM2 = mercado.consolidado?.precoMedioM2 || mercado.nivel2?.precoMedioM2 || 0;
+        mercado.aluguelMedio = mercado.consolidado?.aluguelMedio || 0;
+        mercado.yieldBruto = mercado.consolidado?.yieldBruto || 0;
+        mercado.yieldLiquido = mercado.consolidado?.yieldLiquido || 0;
+        mercado.vendas = mercado.nivel2?.vendas || [];
+        mercado.locacoes = mercado.nivel2?.locacoes || [];
+        mercado.pesquisaEm = new Date().toISOString();
+        const nA = (mercado.nivel1?.vendas?.length || 0) + (mercado.nivel1?.locacoes?.length || 0) + (mercado.nivel2?.vendas?.length || 0) + (mercado.nivel2?.locacoes?.length || 0);
+        prog.comparaveis = { status: 'concluido', n: nA };
+      }
+      prog.contexto = { status: mercado.__instavel ? 'pulado' : 'gerando', n: null };
+      await flush();
+
+      // ── ETAPA B — CONTEXTO (BEST-EFFORT): FipeZAP, zoneamento, perfil, segurança, tipologias ──
+      // Só roda se a A NÃO falhou (se falhou, vamos ao Índice/transitório — o contexto seria inútil)
+      // E se ainda há orçamento além do parecer. Timeout e buscas PRÓPRIOS e curtos: se falhar/
+      // estourar, o relatório entrega assim mesmo com os comparáveis da Etapa A (nunca mais esvazia).
+      if (!mercado.__instavel && restante() > RESERVA_PARECER + 30000) {
+        const ctx = await buscarEtapa({
+          prompt: promptContexto(mercadoInputs),
+          sistema: 'Você é um perito avaliador imobiliário. Traga referências e contexto da região SÓ de fontes confiáveis; nunca invente (sem base, "encontrado": false). Retorne apenas JSON válido.',
+          msBudget: Math.min(55000, restante() - RESERVA_PARECER - 8000), webUses: maxWebB, pauseCap: 4, minReserva: RESERVA_PARECER + 8000,
+        });
+        if (ctx && !ctx.__falhou) {
+          for (const k of ['referenciaFipeZap', 'zoneamento', 'perfilRegiao', 'segurancaPublica', 'outrasTipologias', 'outrosBairros']) {
+            if (ctx[k] != null) mercado[k] = ctx[k];
+          }
+          mercado.__diagContexto = ctx.__diag || null;
+          const nB = (mercado.outrosBairros?.length || 0) + Object.values(mercado.outrasTipologias || {}).reduce((s, a) => s + (Array.isArray(a) ? a.length : 0), 0);
+          prog.contexto = { status: 'concluido', n: nB };
+        } else {
+          mercado.__diagContexto = { falhou: true, erro: ctx?.__erroApi || 'sem_resposta' };
+          prog.contexto = { status: 'erro', n: null }; // best-effort: NÃO derruba o relatório
+        }
+      } else if (!mercado.__instavel) {
+        prog.contexto = { status: 'pulado', n: null }; // sem orçamento p/ o contexto
+      }
+      await flush();
     }
+    // Parecer entra em geração (a barra sinaliza a última etapa). Best-effort.
+    prog.parecer = { status: 'gerando', n: null };
+    await flush();
     const buscaInstavel = !!mercado.__instavel;
     const erroApiBusca = mercado.__erroApi || '';
 
@@ -1116,7 +1328,7 @@ export default async function handler(req, res) {
     let avalDb = 0, fonteDb = '', areaFonte = 'informada';
     let imDb = null; // reusado depois para semear/ler o Índice BidPro da microrregião
     try {
-      [imDb] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=fonte,valor_avaliacao,valor_minimo,area_m2,ficha_juridica,cidade_norm,estado,bairro,latitude,longitude&limit=1`)).json();
+      [imDb] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=fonte,valor_avaliacao,valor_minimo,valor_minimo_2,data_leilao,data_leilao_2,area_m2,ficha_juridica,cidade_norm,estado,bairro,latitude,longitude&limit=1`)).json();
       const n = Number(imDb?.valor_avaliacao) || 0;
       const vminDb = Number(imDb?.valor_minimo) || 0;
       const sentinela = [999999999, 99999999, 9999999999, 111111111, 123456789].includes(n);
@@ -1241,9 +1453,32 @@ export default async function handler(req, res) {
       const e = new Error('tempo_limite'); e.detalhe = erroApiBusca || 'busca instável'; throw e;
     }
 
+    // PRAÇA DE REFERÊNCIA (regra do dono: "no relatório deve fazer em relação à praça MAIS
+    // DESCONTADA as projeções"). O imóvel pode ter 1ª e 2ª praça (valor_minimo/data_leilao e
+    // valor_minimo_2/data_leilao_2). Escolhemos o MENOR lance entre as praças cuja DATA ainda
+    // esteja no FUTURO (uma praça já encerrada não vale como oportunidade); se nenhuma tiver
+    // data futura conhecida, cai no menor lance disponível; por fim, no valor_minimo. Robusto a
+    // qual coluna guarda a 1ª/2ª (fontes divergem): decide pelo valor, não pela posição.
+    const escolherPraca = () => {
+      const agora = new Date().toISOString().slice(0, 10);
+      const futuraOuSemData = (d) => !d || String(d).slice(0, 10) >= agora;
+      const cand = [
+        { valor: Number(imDb?.valor_minimo) || 0, data: imDb?.data_leilao || null },
+        { valor: Number(imDb?.valor_minimo_2) || 0, data: imDb?.data_leilao_2 || null },
+      ].filter(p => p.valor > 0);
+      if (!cand.length) return { valor: 0, data: null, qual: 'nenhuma' };
+      const futuras = cand.filter(p => futuraOuSemData(p.data));
+      const pool = futuras.length ? futuras : cand; // sem futura conhecida → considera todas
+      const melhor = pool.reduce((a, b) => (b.valor < a.valor ? b : a));
+      const temDuas = cand.length === 2 && cand[0].valor !== cand[1].valor;
+      const ehMaisDescontada = temDuas && melhor.valor === Math.min(cand[0].valor, cand[1].valor);
+      return { valor: melhor.valor, data: melhor.data, qual: temDuas ? (ehMaisDescontada ? '2a_praca' : '1a_praca') : 'unica', temDuas };
+    };
+    const pracaRef = escolherPraca();
+    mercado.pracaReferencia = pracaRef; // consta no relatório (qual praça sustentou as projeções)
     // CLASSIFICAÇÃO DE INTENÇÃO (revenda/locação/temporada) — consta no relatório e vira defesa no
-    // parecer. Desconto pela avaliação confirmada (avalDb) × lance mínimo; yield do mercado ou índice.
-    const vminImovel = Number(imDb?.valor_minimo) || 0;
+    // parecer. Desconto pela avaliação confirmada (avalDb) × lance da PRAÇA MAIS DESCONTADA (futura).
+    const vminImovel = pracaRef.valor || Number(imDb?.valor_minimo) || 0;
     const descontoImovel = (avalDb > 0 && vminImovel > 0 && avalDb >= vminImovel) ? (1 - vminImovel / avalDb) * 100 : 0;
     const yieldParaCls = Number(mercado.yieldBruto) > 0 ? Number(mercado.yieldBruto)
       : (Number(mercado.indiceBidPro?.aluguel_m2) > 0 && Number(mercado.indiceBidPro?.venda_m2) > 0
@@ -1323,6 +1558,10 @@ export default async function handler(req, res) {
     // Anexa o diagnóstico ao mercado (vai dentro do result salvo) — torna trivial diagnosticar
     // pelo banco por que um parecer específico saiu vazio, sem depender de logs da Vercel.
     if (mercado && typeof mercado === 'object') mercado.__diagParecer = parecerDiag;
+    // Fecha a barra de evolução: parecer concluído (ou erro/pulado). O status 'concluida' logo
+    // abaixo é o sinal final p/ o front; esta marca deixa a última etapa cheia por um instante.
+    prog.parecer = { status: (parecer && parecer.trim()) ? 'concluido' : (parecerInputs?.d ? 'erro' : 'pulado'), n: null };
+    await flush();
 
     // Lembrete fixo (não-IA): a análise é apoio e não substitui a verificação
     // presencial. Recomenda visitar o imóvel ou ver um similar com corretor.

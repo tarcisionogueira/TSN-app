@@ -35,6 +35,7 @@ const rowToEntry = (r) => {
     imovel: r.imovel || null, status, result: r.result || null, erro,
     startedAt: r.created_at ? Date.parse(r.created_at) : Date.now(),
     updatedAt,
+    progresso: r.progresso || null, // barra de evolução das etapas (só mercadológico)
     dataLeilao: r.data_leilao || null, // p/ calcular a expiração do relatório na tela
   };
 };

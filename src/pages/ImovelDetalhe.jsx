@@ -1174,21 +1174,45 @@ export default function ImovelDetalhe() {
                 <Banknote size={18} color="#0D63DB" /> Valores
               </h2>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 16 }}>
-                <div style={{ background: '#f8fafc', borderRadius: 12, padding: '16px' }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>{imovel.valorMinimo2 ? 'Lance mínimo (1ª praça)' : 'Lance mínimo'}</div>
-                  <div style={{ fontSize: 22, fontWeight: 900, color: '#111111' }}>{fmtBRL(imovel.valorMinimo)}</div>
-                  {imovel.valorMinimo2 && imovel.dataLeilao && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>a partir de {fmtData(imovel.dataLeilao, imovel.modalidade)}</div>}
-                </div>
-                {imovel.valorMinimo2 && (
-                  <div style={{ background: '#dcfce7', borderRadius: 12, padding: '16px' }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: '#15803d', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Lance mínimo (2ª praça)</div>
-                    <div style={{ fontSize: 22, fontWeight: 900, color: '#15803d' }}>{fmtBRL(imovel.valorMinimo2)}</div>
-                    <div style={{ fontSize: 11, color: '#15803d', marginTop: 4 }}>
-                      {imovel.valorAvaliacao > 0 && `${Math.round((1 - imovel.valorMinimo2 / imovel.valorAvaliacao) * 100)}% abaixo da avaliação`}
-                      {imovel.dataLeilao2 && ` · ${fmtData(imovel.dataLeilao2, imovel.modalidade)}`}
-                    </div>
-                  </div>
-                )}
+                {(() => {
+                  // DUAS PRAÇAS: as fontes divergem em qual coluna guarda a 1ª/2ª (judicial x CEF).
+                  // Ordenamos por VALOR — 1ª praça = maior; 2ª praça = menor (mais descontada) — e
+                  // pareamos cada valor com a SUA data, para o rótulo ficar sempre correto.
+                  const vMin = Number(imovel.valorMinimo) || 0;
+                  const vMin2 = Number(imovel.valorMinimo2) || 0;
+                  const temDuas = vMin > 0 && vMin2 > 0 && vMin !== vMin2;
+                  if (!temDuas) {
+                    return (
+                      <div style={{ background: '#f8fafc', borderRadius: 12, padding: '16px' }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Lance mínimo</div>
+                        <div style={{ fontSize: 22, fontWeight: 900, color: '#111111' }}>{fmtBRL(imovel.valorMinimo)}</div>
+                        {imovel.dataLeilao && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>a partir de {fmtData(imovel.dataLeilao, imovel.modalidade)}</div>}
+                      </div>
+                    );
+                  }
+                  const pares = [
+                    { valor: vMin, data: imovel.dataLeilao },
+                    { valor: vMin2, data: imovel.dataLeilao2 },
+                  ].sort((a, b) => b.valor - a.valor);
+                  const p1 = pares[0], p2 = pares[1];
+                  return (
+                    <>
+                      <div style={{ background: '#f8fafc', borderRadius: 12, padding: '16px' }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Lance mínimo (1ª praça)</div>
+                        <div style={{ fontSize: 22, fontWeight: 900, color: '#111111' }}>{fmtBRL(p1.valor)}</div>
+                        {p1.data && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>a partir de {fmtData(p1.data, imovel.modalidade)}</div>}
+                      </div>
+                      <div style={{ background: '#dcfce7', borderRadius: 12, padding: '16px' }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: '#15803d', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Lance mínimo (2ª praça)</div>
+                        <div style={{ fontSize: 22, fontWeight: 900, color: '#15803d' }}>{fmtBRL(p2.valor)}</div>
+                        <div style={{ fontSize: 11, color: '#15803d', marginTop: 4 }}>
+                          {imovel.valorAvaliacao > 0 && `${Math.round((1 - p2.valor / imovel.valorAvaliacao) * 100)}% abaixo da avaliação`}
+                          {p2.data && ` · ${fmtData(p2.data, imovel.modalidade)}`}
+                        </div>
+                      </div>
+                    </>
+                  );
+                })()}
                 {imovel.valorAvaliacao && (
                   <div style={{ background: '#f8fafc', borderRadius: 12, padding: '16px' }}>
                     <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Avaliação</div>

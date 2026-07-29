@@ -1612,6 +1612,39 @@ export default function Analise() {
                           : 'Lendo edital/matrícula/anexos e consultando o processo no CNJ, roda no servidor; pode fechar a aba.'}
                       </div>
                     )}
+                    {/* BARRA DE EVOLUÇÃO (mercadológico): cada etapa da geração preenche a barra e
+                        mostra sua contagem quando conclui. Etapas isoladas com tempos independentes. */}
+                    {c.k==='mercado' && c.gerando && Array.isArray(analiseEntry?.progresso?.etapas) && analiseEntry.progresso.etapas.length > 0 && (() => {
+                      const ets = analiseEntry.progresso.etapas;
+                      const resolved = ets.filter(e => ['concluido','pulado','erro'].includes(e.status)).length + 0.5 * ets.filter(e => e.status==='gerando').length;
+                      const pct = Math.round((resolved / ets.length) * 100);
+                      return (
+                        <div style={{ marginTop:2 }}>
+                          <div style={{ height:6, borderRadius:99, background:'#e2e8f0', overflow:'hidden' }}>
+                            <div style={{ height:'100%', width:`${Math.max(6, pct)}%`, background:c.cor, borderRadius:99, transition:'width .5s ease' }}/>
+                          </div>
+                          <div style={{ display:'flex', flexDirection:'column', gap:6, marginTop:10 }}>
+                            {ets.map((e) => {
+                              const st = e.status;
+                              const ic = st==='concluido' ? <CheckCircle2 size={13} color="#15803d"/>
+                                : st==='gerando' ? <Loader2 size={13} color={c.cor} style={{ animation:'spin 1s linear infinite' }}/>
+                                : st==='erro' ? <AlertTriangle size={13} color="#b45309"/>
+                                : st==='pulado' ? <span style={{ fontSize:12, color:'#94a3b8', fontWeight:800 }}>—</span>
+                                : <span style={{ width:12, height:12, borderRadius:'50%', border:'2px solid #cbd5e1', display:'inline-block' }}/>;
+                              const cor = st==='concluido' ? '#15803d' : st==='gerando' ? '#111' : st==='erro' ? '#b45309' : '#94a3b8';
+                              return (
+                                <div key={e.key} style={{ display:'flex', alignItems:'center', gap:8, fontSize:11.5, color:cor, fontWeight: st==='gerando'?800:600 }}>
+                                  <span style={{ width:14, display:'flex', justifyContent:'center', flexShrink:0 }}>{ic}</span>
+                                  <span style={{ flex:1, lineHeight:1.3 }}>{e.label}</span>
+                                  {e.n != null && st==='concluido' && <span style={{ fontSize:10.5, fontWeight:800, color:'#64748b', background:'#f1f5f9', borderRadius:6, padding:'1px 6px' }}>{e.n}</span>}
+                                  {st==='erro' && e.key==='contexto' && <span style={{ fontSize:10, color:'#94a3b8' }}>opcional</span>}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 );})}
               </div>

@@ -22,32 +22,27 @@
 > Checagem rápida a qualquer momento: `select public.auditoria_seguranca();` → `0 crítico / 0 atenção` = íntegro.
 > **Auditorias ofensivas completas: 15/07/2026 (×2).** Total de correções: 15 (1ª rodada) + escalonamento por convite (CRÍTICO) + IDOR do MP (ALTO) + escala. Refazer a ofensiva quando entrarem rotas/pagamento/RLS novos (a Rotina mensal já faz isso sozinha).
 
-## 🔎 EM VALIDAÇÃO COM O DONO (29/07) — re-arquitetar a BUSCA do mercadológico em ESTÁGIOS
-> O dono relatou timeout recorrente em cidade sem base própria (Resende/RJ) e levantou a hipótese
-> (CONFIRMADA) de que o mercadológico busca "várias coisas ao mesmo tempo" e estoura o tempo.
->
-> **Como é HOJE:** UMA única chamada de IA (`promptMercado` em `api/gerar-analise.js`) com a
-> ferramenta `web_search` (até 7 buscas) pede, no MESMO turno: (1) comparáveis nível 1 (mesmo
-> condomínio/rua) venda+locação; (2) comparáveis nível 2 (~1km) venda+locação; (3) imobiliárias
-> locais; (4) FipeZAP (preço/m² + valorização 12m); (5) zoneamento oficial; (6) padrão do imóvel;
-> (7) perfil da região (tier/atratividades/fragilidades); (8) segurança pública (fontes oficiais);
-> (9) colheita de OUTRAS tipologias p/ semear o índice; (10) colheita AMPLA de outros bairros (até
-> 25) p/ compor o índice; (11) consolidado (valor/yield/base de cálculo); (12) comentário. Isso faz
-> o modelo disparar MUITAS buscas → `pause_turn` repetido → em praça sem cushion, estoura os 300s →
-> `tempo_limite` → status 'erro'. As coletas ACESSÓRIAS (zoneamento/segurança/colheita p/ índice)
-> competem pelo orçamento das ESSENCIAIS (comparáveis).
->
-> **Proposta (a validar):** separar em ESTÁGIOS com timeout INDEPENDENTE, cada um sua chamada:
-> A) ESSENCIAL — comparáveis venda+locação (nível 1+2) + preço/m² (prioridade, entrega mesmo se o
-> resto falhar); B) REFERÊNCIA — FipeZAP + valorização (best-effort, timeout curto, pula se estourar);
-> C) CONTEXTO — perfil da região + segurança + zoneamento (best-effort, pula); D) COLHEITA p/ índice
-> (outras tipologias + outros bairros) — FORA do caminho crítico (background/depois); E) PARECER (já
-> separado). Cost×benefício: hoje 1 chamada tudo-ou-nada (falha = todas as buscas pagas + nada
-> entregue); estagiado banca o essencial cedo e só gasta nos acessórios se sobrar orçamento →
-> menos re-geração por timeout + entrega confiável. STOPGAP oferecido: quando mesmo o essencial
-> falhar por timeout, entregar "não estimado" (retryable) em vez de "erro" seco (hoje L1240 lança
-> tempo_limite de propósito — reverter isso é o stopgap). AGUARDA o dono validar prioridades (ex.:
-> segurança pública é essencial ou acessória?) antes de implementar.
+## ✅ COMEÇAR AQUI (29/07 — sessão 15: busca em ESTÁGIOS + barra de evolução + 2ª praça + confirmação dos filtros)
+> MESMA branch `claude/assessor-handoff-system-check-sswll2`. `npm run build` OK; `auditoria_seguranca()` = **0 crítico / 0 atenção**.
+
+**1. MERCADOLÓGICO — busca em 2 ESTÁGIOS com timeouts INDEPENDENTES (`api/gerar-analise.js`).** Implementa o que estava "em validação": a hipótese do dono ("várias coisas ao mesmo tempo estouram o tempo e o relatório vem incompleto/inconsistente") estava CORRETA. A busca era UMA chamada de IA (`promptMercado`, até 7 buscas web pedindo 12 tópicos no mesmo turno) → muitas buscas → `pause_turn` repetido → em praça sem base própria, estourava os 300s. **Agora são DUAS chamadas com orçamento e nº de buscas PRÓPRIOS:**
+>  • **Etapa A — COMPARÁVEIS (essencial):** `promptComparaveis` — níveis 1/2 de venda+locação + consolidado (valor) + fontes locais. Leva o grosso das buscas (6 fresh / 2 cache) e o maior tempo. É a etapa que NÃO pode falhar; se falhar (abort/timeout) vira transitório (`__instavel`) → Índice BidPro/self-heal assumem (como antes).
+>  • **Etapa B — CONTEXTO (best-effort):** `promptContexto` — FipeZAP, zoneamento, perfil da região, segurança pública, outras tipologias, outros bairros. Timeout e buscas curtos (3 fresh / 1 cache), `pause_turn` cap 4. **Só roda se a A NÃO falhou E se sobrou orçamento.** Se estourar/falhar, o relatório entrega assim mesmo com os comparáveis da Etapa A — **nunca mais esvazia por causa do contexto.**
+>  Helper genérico `buscarEtapa({prompt, sistema, msBudget, webUses, pauseCap, minReserva})` substituiu o antigo `buscarMercado`. `promptMercado` (mega-prompt) foi MANTIDO exportado (ainda usado pelo A/B `api/ab-mercadologica.js`). Diagnóstico persistido: `mercado.__diag` (Etapa A) + `mercado.__diagContexto` (Etapa B) + `__diagParecer` (parecer) — tudo no `result`, diagnosticável pelo banco.
+
+**2. BARRA DE EVOLUÇÃO (pedido do dono: "a cada resposta vai preenchendo/sinalizando concluída").** Nova coluna `analises_mercado.progresso` (jsonb, migração `analises_mercado_progresso`). O backend grava o progresso das etapas via helper `marcarProgresso(imovelId, ownerId, etapas)` (PATCH best-effort na linha 'gerando', chave user_id+imovel_id) a cada transição: `comparaveis → contexto → parecer`, cada uma com status (`gerando/concluido/pulado/erro`) e a **CONTAGEM ISOLADA** (n de amostras/itens daquela etapa). Front: `AnalisesContext.rowToEntry` mapeia `progresso`; `Analise.jsx` renderiza a barra DENTRO do card mercadológico enquanto gera (trilha preenchendo + 3 linhas de etapa com ✓/spinner/— e o contador). Reaproveitamento (cache) marca A/B como concluídas na hora.
+
+**3. 2ª PRAÇA — captura + projeção na praça MAIS DESCONTADA.** Diagnóstico (workflow): só a CAIXA/CEF preenchia `valor_minimo_2`/`data_leilao_2`; os leilões JUDICIAIS (Mega/genérico) colapsavam tudo em `valor_minimo`=min / `valor_avaliacao`=max + 1 data. Entregue nesta sessão:
+>  • **Relatório (`gerar-analise.js`)** — lê `valor_minimo_2`/`data_leilao_2` e escolhe a PRAÇA DE REFERÊNCIA = MENOR lance entre as praças com data ainda FUTURA (fallback: menor lance disponível → `valor_minimo`). Usa esse lance no `descontoImovel` e na `classificarIntencao`, e expõe `mercado.pracaReferencia` (`{valor,data,qual}`) no result. **Robusto a qual coluna guarda a 1ª/2ª** (fontes divergem): decide pelo VALOR, não pela posição. SEGURO (só leitura no relatório).
+>  • **Mega (`scripts/scraper-puppeteer.mjs`)** — captura ADITIVA da 2ª praça: coleta os blocos `.card-instance` emparelhando valor↔data por praça (`c.pracas`) e grava a OUTRA praça em `valor_minimo_2`/`data_leilao_2`. **NÃO mexe em `valor_avaliacao`/`valor_minimo`/`data_leilao`** (min/max/próxima) → zero impacto em desconto/filtros do catálogo. AUTO-GATED: se a estrutura `.card-instance` não existir, `pracas`=[] e cai no fluxo antigo (zero regressão). O upsert do scraper é blacklist (só remove campos internos), então as colunas reais persistem.
+>  • **Detalhe (`ImovelDetalhe.jsx`)** — passou a ORDENAR as duas praças por valor (1ª = maior; 2ª = menor/mais descontada), pareando cada valor com a sua data, para o rótulo ficar sempre correto seja qual for a fonte (CEF ou judicial).
+>  ⚠️ **PENDENTE (precisa de recon ao VIVO — ritual do dono):** os DEMAIS scrapers (genérico `scraper-core.mjs`, RJ, Soleon, Pecini, Gestão) ainda colapsam as praças. Cada um extrai o valor à sua maneira → replicar a captura aditiva de `valor_minimo_2`/`data_leilao_2` exige conferir a estrutura VIVA de cada site antes (não editar às cegas — regra anti-regressão BIASI). A Calculadora (`Calculadora.jsx`) segue 100% manual (não pré-preenche da praça).
+
+**4. CONFIRMAÇÃO DAS 3 REGRAS DE FILTRO (Revenda/Locação/Temporada) — pedido "me confirme p/ lapidação".** Mapeado (workflow) — existem DUAS réguas (filtro da Busca × classificador do relatório):
+>  • **REVENDA** — Busca: `tipo IN ('apartamento','casa','comercial','imovel') AND desconto_percentual >= 30` (`Busca.jsx` L196). Relatório: baseTipo residencial|comercial AND desconto(avaliação×lance) >= 30% (`gerar-analise.js` classificarIntencao). → **MESMA régua** (nuance: fonte do desconto difere — coluna vs. recálculo).
+>  • **LOCAÇÃO** — Busca: `tipo IN ('apartamento','casa','imovel')` SEM yield (a tabela não tem coluna de yield/aluguel). Relatório: residencial AND `yieldBruto >= 6%`. → **RÉGUAS DIFERENTES** (Busca é mais permissiva).
+>  • **TEMPORADA** — Busca: residencial AND `cidade_norm IN` (lista ~60 cidades litorâneas), MAS no modo RAIO ignora a cidade. Relatório: residencial AND `ehCidadeTemporada` (mesma lista, em `api/_temporada.js`). → **MESMA régua fora do raio.**
+>  **2 refinamentos possíveis (AGUARDAM o dono — não mexi na régua p/ não mudar a busca sem validar):** (a) a lista de cidades de temporada está DUPLICADA (`Busca.jsx` × `api/_temporada.js`) → risco de drift, unificar numa fonte só; (b) decidir se "Locação" na Busca deve exigir yield (só dá pra fazer materializando um yield/aluguel estimado como coluna em `imoveis_leilao`).
 
 ## ✅ COMEÇAR AQUI (28/07 — sessão 14: causa-raiz do "relatório sem dados" + rastreio no 360 + 4 correções de produto)
 > Continuação da sessão 13, MESMA branch `claude/assessor-handoff-system-check-sswll2`, promovida a `main` por fast-forward. Deploys desta sessão: `0cc5bd1` (calculadora + proximidades), `02bc4e6` (parecer + contrato + Explorador + agendar), e o commit de rastreio do parecer no 360 (topo do log). `auditoria_seguranca()` = **0 crítico / 0 atenção** ao final.
