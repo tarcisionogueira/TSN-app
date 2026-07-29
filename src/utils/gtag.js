@@ -2,8 +2,12 @@ import { metaTrack } from './marketing';
 
 const GA4_ID = 'G-5YNHQB5F81';
 const AW_ID = 'AW-16850175262';
-const CONV_PLANO = `${AW_ID}/7658576769`;
-const CONV_CADASTRO = `${AW_ID}/7658576772`;
+// Rótulos REAIS das ações de conversão criadas na conta Google Ads 475-979-5747
+// (Metas → Conversões): "Compra de plano — BidPro" e "Cadastro — BidPro".
+// Os rótulos numéricos antigos (7658576769/7658576772) eram de ações que não existem
+// mais — as conversões disparavam sem serem contabilizadas.
+const CONV_PLANO = `${AW_ID}/08veCOz06dgcEJ6K5eI-`;
+const CONV_CADASTRO = `${AW_ID}/uwEKCO_06dgcEJ6K5eI-`;
 
 function gtag(...args) {
   if (typeof window === 'undefined') return;
@@ -62,7 +66,8 @@ export function trackCheckoutIniciado(plano, valor) {
 export function trackPlanContratado(plano, valor, eventID, userData) {
   setUserDataGoogle(userData);
   gtag('event', 'purchase', { currency: 'BRL', value: valor, transaction_id: eventID || Date.now(), items: [{ item_name: plano }], send_to: AW_ID });
-  gtag('event', 'conversion', { send_to: CONV_PLANO, value: valor, currency: 'BRL' });
+  // transaction_id: dedup no Google Ads (mesmo id → não conta a conversão duas vezes).
+  gtag('event', 'conversion', { send_to: CONV_PLANO, value: valor, currency: 'BRL', transaction_id: eventID || '' });
   metaTrack('Purchase', { currency: 'BRL', value: valor, content_name: plano }, eventID);
 }
 

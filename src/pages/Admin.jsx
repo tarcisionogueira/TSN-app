@@ -8737,9 +8737,9 @@ function MarketingTab() {
         {sectionHeader('Google Ads', 'Integrações e rastreamento ativo')}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, marginBottom: 16 }}>
           {[
-            { label: 'Tag instalada', value: 'AW-16850175262', status: true, desc: 'Ativa em todas as páginas' },
-            { label: 'Conversão: Cadastro', value: 'ID 7658576772', status: true, desc: 'Conta Uma por usuário' },
-            { label: 'Conversão: Plano', value: 'ID 7658576769', status: true, desc: 'Valor dinâmico por plano' },
+            { label: 'Tag instalada', value: 'AW-16850175262', status: true, desc: 'Conta 475-979-5747 · todas as páginas' },
+            { label: 'Conversão: Cadastro', value: 'Cadastro — BidPro', status: true, desc: 'Rótulo uwEKCO_… · conta Uma por usuário' },
+            { label: 'Conversão: Plano', value: 'Compra de plano — BidPro', status: true, desc: 'Rótulo 08veCOz… · valor dinâmico por plano' },
             { label: 'Page Views', value: 'Automático', status: true, desc: 'Toda troca de rota' },
           ].map(item => (
             <div key={item.label} style={{ background: '#f8fafc', borderRadius: 10, padding: '14px 16px' }}>
