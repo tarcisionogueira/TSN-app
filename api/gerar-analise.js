@@ -6,7 +6,7 @@ export const config = { runtime: 'nodejs', maxDuration: 300 };
 
 import { getUser } from './_auth.js';
 import { anthropicFetch } from './_claude.js';
-import { custoRespostaClaude } from './_uso.js';
+import { custoRespostaClaude, medirGemini } from './_uso.js';
 import { resumoAprendizadoTexto } from './_arremate-aprendizado.js';
 import { ehCidadeTemporada, motivoTemporada } from './_temporada.js';
 import { composicaoTemporal, avisoFrescor } from './_indice-composicao.js';
@@ -17,6 +17,97 @@ const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
 const CLAUDE_KEY   = process.env.CLAUDE_KEY;
 const MODEL = 'claude-sonnet-4-6';
 const REUSE_DIAS = Number(process.env.ANALISE_REUSE_DIAS || 7); // reaproveita a pesquisa de mercado deste imóvel se feita há < N dias
+
+// MERCADOLÓGICO no GEMINI (Google Search grounding) — ~10x mais barato que o Claude web_search.
+// Motor trocável por env (MERCADO_MOTOR=gemini|claude, padrão gemini). O DOCUMENTAL segue no
+// Claude (outro arquivo). Se o Gemini falhar/vier vazio, a buscarEtapa CAI para o Claude
+// automaticamente — custo baixo sem perder uptime/qualidade.
+const MERCADO_MOTOR = (process.env.MERCADO_MOTOR || 'gemini').trim().toLowerCase();
+const GEMINI_KEY = (process.env.GEMINI_API_KEY || '').trim();
+const GEMINI_MODEL_MERCADO = (process.env.GEMINI_MODEL || 'gemini-2.5-flash').trim();
+
+// Pesquisa mercadológica no Gemini com grounding. MESMO prompt/sistema do Claude. Devolve o JSON
+// já parseado (+__diag), ou { __falhou } para o chamador cair no Claude. thinkingBudget:0 evita o
+// "pensamento" do 2.5-flash consumir o teto e truncar o JSON (mesma configuração validada no A/B).
+async function buscarGeminiGrounding({ prompt, sistema, timeoutMs }) {
+  if (!GEMINI_KEY) return { __falhou: true, __erroApi: 'sem GEMINI_API_KEY' };
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), Math.max(20000, timeoutMs || 60000));
+  try {
+    const r = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(GEMINI_MODEL_MERCADO)}:generateContent`,
+      { method: 'POST', headers: { 'content-type': 'application/json', 'x-goog-api-key': GEMINI_KEY }, signal: ctrl.signal,
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: sistema }] },
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          tools: [{ google_search: {} }],
+          generationConfig: { maxOutputTokens: 24000, thinkingConfig: { thinkingBudget: 0 } },
+        }) });
+    if (!r.ok) { const b = await r.text().catch(() => ''); return { __falhou: true, __erroApi: `HTTP ${r.status}: ${b.slice(0, 120)}` }; }
+    const data = await r.json();
+    try { medirGemini(GEMINI_MODEL_MERCADO, data, 'grounding'); } catch { /* mede best-effort */ }
+    const text = (data?.candidates?.[0]?.content?.parts || []).map((p) => (p && typeof p.text === 'string' ? p.text : '')).join('');
+    const parsed = parseJSON(text) || {};
+    parsed.__diag = { motor: 'gemini', stop: data?.candidates?.[0]?.finishReason || null, textoLen: (text || '').length, out_tokens: data?.usageMetadata?.candidatesTokenCount || 0 };
+    return parsed;
+  } catch (e) {
+    return { __falhou: true, __erroApi: `gemini exc: ${String(e?.message || e).slice(0, 120)}` };
+  } finally { clearTimeout(timer); }
+}
+
+// ENDEREÇO COMPLETO A PARTIR DO DOCUMENTO (pedido do dono: "não puxar o endereço estando no
+// edital/matrícula não pode se repetir"). Lê a matrícula/edital (PDF via Claude — leitura de doc
+// é do Claude; HTML por regex) e devolve {texto, bairro, cep} do imóvel do leilão, ou null.
+async function extrairEnderecoPdf(base64, deadline) {
+  const budget = deadline - Date.now();
+  if (budget < 12000) return null;
+  const data = await anthropic({
+    model: MODEL, max_tokens: 300,
+    system: 'Você lê documentos de leilão de imóvel. Responda SOMENTE JSON válido, sem markdown.',
+    messages: [{ role: 'user', content: [
+      { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 }, title: 'documento do lote' },
+      { type: 'text', text: 'Extraia o ENDEREÇO do imóvel objeto do leilão: {"logradouro": string, "numero": string, "bairro": string, "cidade": string, "uf": string, "cep": string}. Copie da DESCRIÇÃO do imóvel no edital/matrícula. Use "" quando não constar. NUNCA invente.' },
+    ] }],
+  }, false, { retries: 0, timeoutMs: Math.min(30000, budget - 3000), noFallback: true });
+  const j = parseJSON(extractText(data)) || {};
+  const partes = [[j.logradouro, j.numero].filter(Boolean).join(', '), j.bairro, j.cidade].map((s) => String(s || '').trim()).filter(Boolean);
+  if (!partes.length) return null;
+  const uf = String(j.uf || '').trim();
+  return { texto: partes.join(', ') + (uf ? `/${uf}` : ''), bairro: String(j.bairro || '').trim(), cep: String(j.cep || '').trim() };
+}
+async function garantirEnderecoDoc(imovelId, deadline) {
+  try {
+    const rows = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(imovelId)}&select=url_lote,link_edital,link_matricula,anexos&limit=1`)).json();
+    const im = Array.isArray(rows) ? rows[0] : null;
+    if (!im) return null;
+    let anexosUrls = [];
+    try { anexosUrls = Array.isArray(im.anexos) ? im.anexos.map((a) => (typeof a === 'string' ? a : a?.url)).filter(Boolean) : []; } catch { /* ignore */ }
+    // Matrícula/edital primeiro (é onde vem a descrição/endereço do imóvel); PDFs antes de páginas.
+    const candidatos = [...new Set([im.link_matricula, im.link_edital, ...anexosUrls, im.url_lote])].filter((u) => typeof u === 'string' && /^https?:\/\//i.test(u));
+    const ehDoc = (u) => (/\.pdf(\?|#|$)|\/edital|matricula|documentacao/i.test(u) ? 0 : 1);
+    candidatos.sort((a, b) => ehDoc(a) - ehDoc(b));
+    for (const url of candidatos) {
+      if (Date.now() > deadline) break;
+      let buf = null, ct = '';
+      try {
+        const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0', 'Accept-Language': 'pt-BR,pt;q=0.9' }, signal: AbortSignal.timeout(12000) });
+        if (!r.ok) continue;
+        ct = r.headers.get('content-type') || '';
+        buf = Buffer.from(await r.arrayBuffer().catch(() => new ArrayBuffer(0)));
+      } catch { continue; }
+      if (!buf?.length) continue;
+      const ehPdf = /pdf/i.test(ct) || buf.slice(0, 5).toString('latin1') === '%PDF-';
+      if (ehPdf && buf.length <= 6_500_000 && Date.now() < deadline) {
+        try { const e = await extrairEnderecoPdf(buf.toString('base64'), deadline); if (e?.texto) return e; } catch { /* próxima fonte */ }
+      } else if (!ehPdf) {
+        const txt = buf.toString('utf8').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ');
+        const m = txt.match(/endere[çc]o[:\s]+([^.;|]{10,120})/i) || txt.match(/((?:rua|avenida|av\.|travessa|alameda|rodovia|estrada|pra[çc]a)\s+[^.;|,]{4,80}[^.;|]{0,60})/i);
+        if (m && m[1]) return { texto: m[1].trim(), bairro: '', cep: '' };
+      }
+    }
+  } catch { /* best-effort — nunca bloqueia o relatório */ }
+  return null;
+}
 
 // Custo REAL (micro-USD) acumulado da geração ATUAL. A função Node da Vercel processa 1
 // requisição por instância → é seguro resetar por request. Usado para cobrar CRÉDITO quando
@@ -1188,6 +1279,18 @@ export default async function handler(req, res) {
       const partes = [rua, bairro, cid].filter(Boolean);
       if (rua || bairro) mercadoInputs.endereco = partes.join(', ') + (est ? `/${est}` : '');
       if (!mercadoInputs.nomeCondominio && imA.nomecondominio) mercadoInputs.nomeCondominio = imA.nomecondominio;
+      // Ainda genérico (sem rua E sem bairro no card/título)? LÊ o edital/matrícula para achar o
+      // endereço completo — o erro de não puxar o endereço estando no documento não pode repetir.
+      if (!rua && !bairro) {
+        try {
+          const alvo = await garantirEnderecoDoc(String(imovelId), Date.now() + Math.min(28000, Math.max(0, restante() - 210000)));
+          if (alvo?.texto) {
+            mercadoInputs.endereco = alvo.texto;
+            if (alvo.bairro) bairro = alvo.bairro;
+            console.log('[endereco-doc]', JSON.stringify({ imovel: String(imovelId), usado: alvo.texto }));
+          }
+        } catch { /* leitura de documento é best-effort */ }
+      }
       console.log('[endereco-busca]', JSON.stringify({ imovel: String(imovelId), rua: !!rua, bairro: bairro || null, usado: mercadoInputs.endereco }));
     }
   } catch { /* enriquecimento é best-effort */ }
@@ -1271,6 +1374,12 @@ export default async function handler(req, res) {
       // abort/timeout/erro → o chamador decide re-tentar ou tratar como transitório (self-heal).
       const RESERVA_PARECER = 55000; // guarda p/ o parecer + a escrita final
       const buscarEtapa = async ({ prompt, sistema, msBudget, webUses, pauseCap = 8, minReserva = RESERVA_PARECER + 12000 }) => {
+        // MOTOR PRIMÁRIO: Gemini (Google Search grounding). Aceita se devolveu JSON útil (mais que
+        // só __diag); se falhar/vier vazio, CAI para o Claude web_search abaixo (fallback seguro).
+        if (MERCADO_MOTOR === 'gemini' && GEMINI_KEY) {
+          const g = await buscarGeminiGrounding({ prompt, sistema, timeoutMs: Math.min(115000, Math.max(30000, msBudget)) });
+          if (g && !g.__falhou && Object.keys(g).some((k) => k !== '__diag')) return g;
+        }
         try {
           const messages = [{ role: 'user', content: prompt }];
           let data, stop, cont = 0;
