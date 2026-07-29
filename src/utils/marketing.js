@@ -21,9 +21,15 @@ export function initMetaPixel() {
   pixelPronto = true;
 }
 
-// Dispara um evento no Meta Pixel (no-op se o pixel não estiver ligado).
-export function metaTrack(evento, params) {
-  try { if (typeof window !== 'undefined' && window.fbq) window.fbq('track', evento, params || {}); } catch { /* ignore */ }
+// Dispara um evento no Meta Pixel (no-op se o pixel não estiver ligado). O 3º argumento
+// eventID permite DEDUPLICAR contra o mesmo evento enviado pelo servidor (Conversions API):
+// quando navegador e servidor mandam o MESMO eventID, o Meta conta UMA conversão só.
+export function metaTrack(evento, params, eventID) {
+  try {
+    if (typeof window === 'undefined' || !window.fbq) return;
+    if (eventID) window.fbq('track', evento, params || {}, { eventID });
+    else window.fbq('track', evento, params || {});
+  } catch { /* ignore */ }
 }
 
 // ── ATRIBUIÇÃO (gclid/fbclid/utm) ─────────────────────────────────────────────

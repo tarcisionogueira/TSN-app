@@ -30,10 +30,12 @@ export function trackCheckoutIniciado(plano, valor) {
   metaTrack('InitiateCheckout', { currency: 'BRL', value: valor, content_name: plano });
 }
 
-export function trackPlanContratado(plano, valor) {
-  gtag('event', 'purchase', { currency: 'BRL', value: valor, transaction_id: Date.now(), items: [{ item_name: plano }], send_to: AW_ID });
+// eventID (opcional): id determinístico compartilhado com o servidor (Meta CAPI) para
+// DEDUPLICAR a conversão — mesmo id no navegador e no webhook = 1 Purchase, não 2.
+export function trackPlanContratado(plano, valor, eventID) {
+  gtag('event', 'purchase', { currency: 'BRL', value: valor, transaction_id: eventID || Date.now(), items: [{ item_name: plano }], send_to: AW_ID });
   gtag('event', 'conversion', { send_to: CONV_PLANO, value: valor, currency: 'BRL' });
-  metaTrack('Purchase', { currency: 'BRL', value: valor, content_name: plano });
+  metaTrack('Purchase', { currency: 'BRL', value: valor, content_name: plano }, eventID);
 }
 
 export function trackAlertaCriado() {

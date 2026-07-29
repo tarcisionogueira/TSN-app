@@ -233,7 +233,15 @@ export default function Checkout() {
   useEffect(() => {
     if (!pago || compradoRef.current) return;
     compradoRef.current = true;
-    try { trackPlanContratado(planoApiKey || planoKey, Number(plano?.preco) || 0); } catch { /* nunca bloqueia o fluxo */ }
+    try {
+      // event_id determinístico p/ DEDUP com o servidor (Meta CAPI). MESMO formato do
+      // backend (api/_meta-capi.js → purchaseEventId): pur_<userId>_<planoBase>_<YYYYMMDD UTC>.
+      // A base (top2/clube/assessorado) sem sufixo casa com o mapeamento do webhook.
+      const base = String(planoApiKey || planoKey || '').replace(/_(anual|vista|mensal)$/i, '');
+      const dia = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      const eventID = user?.id ? `pur_${user.id}_${base}_${dia}` : undefined;
+      trackPlanContratado(planoApiKey || planoKey, Number(plano?.preco) || 0, eventID);
+    } catch { /* nunca bloqueia o fluxo */ }
   }, [pago]);
 
   if (!plano && planoKey !== 'explorador') return null;

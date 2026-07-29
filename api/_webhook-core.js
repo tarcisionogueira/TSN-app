@@ -20,6 +20,11 @@ import { createClient } from '@supabase/supabase-js';
 import { alertarErro } from './_error-alert.js';
 import { emitirNFSeServico, nfseAtivo } from './_nfse.js';
 import { cpfDoRegistro } from './_cpf.js';
+import { enviarPurchaseCapi, purchaseEventId } from './_meta-capi.js';
+
+// Normaliza o plano para a BASE (top2/clube/assessorado) — o event_id do Purchase precisa
+// bater com o do navegador, que usa a mesma base (sem sufixo _anual/_vista/_mensal).
+const planoBase = (p) => String(p || '').replace(/_(anual|vista|mensal)$/i, '');
 
 export const supabase = createClient(
   process.env.VITE_SUPABASE_URL,
@@ -166,6 +171,12 @@ export async function ativarPlanoDireto({ userId, planoKey, gateway, cobranca = 
     } catch (e) {
       console.error(`[${gateway}] comissao_rede (recorrente):`, e.message);
     }
+    // Purchase server-side (Meta CAPI) — cobrança recorrente RECEBIDA de verdade.
+    // Dedup com o Pixel do navegador pelo mesmo event_id. Dormente sem META_CAPI_TOKEN.
+    try {
+      const base = planoBase(planoKey);
+      await enviarPurchaseCapi({ userId, valor: cobranca.valor, planoBase: base, gateway, eventId: purchaseEventId(userId, base) });
+    } catch (_) { /* nunca bloqueia a ativação */ }
   }
   return { ok: true, plano: planoKey };
 }
