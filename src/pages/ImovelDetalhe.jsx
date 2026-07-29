@@ -11,6 +11,7 @@ import { caixaMatriculaUrl, caixaRegrasVendaUrl } from '../utils/caixa';
 import { assinarAnexos } from '../utils/docUrl';
 import { formatarDescricaoImovel } from '../utils/descricao';
 import { fotoCandidatos } from '../utils/foto';
+import { trackImovelVisualizado } from '../utils/gtag';
 
 // Botões de documento só aparecem quando o valor é uma URL real — o scraper da
 // Caixa às vezes grava rótulos ("Venda Direta Online", "Leilão SFI - Edital Único").
@@ -733,6 +734,9 @@ export default function ImovelDetalhe() {
       p_tipo: imovel.tipo || null,
       p_valor: imovel.valorMinimo ?? imovel.valorAvaliacao ?? null,
     }).then(() => {}).catch(() => {});
+    // ViewContent (Meta Pixel + Google Ads) — sinal de INTERESSE por imóvel, usado para
+    // retargeting e otimização. Aproveita o mesmo gate deduplicado (cliente, 1× por imóvel).
+    try { trackImovelVisualizado(String(id), imovel.tipo || null, imovel.valorMinimo ?? imovel.valorAvaliacao ?? 0); } catch { /* nunca quebra a tela */ }
   }, [user, role, id, imovel]);
 
   useEffect(() => {

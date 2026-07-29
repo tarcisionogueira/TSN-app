@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { trackCheckoutIniciado } from '../utils/gtag';
+import { trackCheckoutIniciado, trackPlanContratado } from '../utils/gtag';
 import { Loader2, CheckCircle2, ExternalLink, Briefcase, ShieldCheck, TrendingUp, Headphones, ArrowUpRight, ArrowDownRight, AlertTriangle, RefreshCw, MapPin } from 'lucide-react';
 import LogoB from '../components/LogoB';
 import { PLANOS as PLANOS_STATIC } from '../data/cursos';
@@ -221,6 +221,20 @@ export default function Checkout() {
     pollingRef.current = setInterval(verificar, 8000);
     return () => clearInterval(pollingRef.current);
   }, [asaasIds, pago]);
+
+  // Purchase — evento de CONVERSÃO (Meta Pixel + Google Ads). Dispara UMA única vez
+  // quando o pagamento é APROVADO. Todos os fluxos de sucesso convergem em setPago(true):
+  // confirmarPagamento (redirect MP · polling Asaas · PagamentoServico inline) e
+  // assinarComCadastro (visitante). pagoPendente (análise antifraude) NÃO conta — a
+  // conversão só é contabilizada quando a assinatura é efetivamente aprovada. Sem isto,
+  // Meta/Google mediam clique e início de checkout, mas NÃO a venda (métrica que otimiza
+  // campanha e mede ROI). O valor real é reforçado depois server-side no webhook (CAPI).
+  const compradoRef = useRef(false);
+  useEffect(() => {
+    if (!pago || compradoRef.current) return;
+    compradoRef.current = true;
+    try { trackPlanContratado(planoApiKey || planoKey, Number(plano?.preco) || 0); } catch { /* nunca bloqueia o fluxo */ }
+  }, [pago]);
 
   if (!plano && planoKey !== 'explorador') return null;
 
