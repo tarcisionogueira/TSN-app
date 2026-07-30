@@ -88,6 +88,28 @@
    leiloeiros 0-acervo do backlog TRT-15, fonte ofv35-%). Pareceres vazios: 2 restantes
    (Carapicuíba, Praia Grande — pré-fix), cron 6/6h fecha nas janelas 00h/06h UTC.
 
+**E6. NOITE 30/07 — ROUND 35 EM PRODUÇÃO: 2 leiloeiros novos no ar (TOTAL + SATO), 1 armado (CREPALDI):**
+1. **TOTALLEILOES ✅ VIVO** — via SUPERBID por loja (storeId 16091) no `scraper-puppeteer.mjs`
+   (`scraperSuperbidNet {stores}`): **8 imóveis**, qualidade 100% (uf/valor/link/foto). O resto
+   das 65 ofertas da loja é veículo (filtro client-side no mapeamento — a offer-query da loja
+   NÃO aceita filtro de productType). **Lição cara (1º teste voltou 0 em silêncio):** o modo
+   loja EXIGE espelhar a URL do site white-label — `portalId=[2,15]` + `requestOrigin=store`.
+   `fonte_saude` marca "degradado total 8<10" — é acervo real pequeno, não regressão.
+2. **CREPALDI 🟡 ARMADO** — mesma config (storeId 16139), loja HOJE sem ofertas abertas
+   (recon do Round 35 já previa "0 hoje, deixa armado"). `fonte_saude` vai acusar "falhou
+   total 0" até o Crepaldi publicar — esperado; quando publicar, entra sozinho.
+3. **SATO ✅ VIVO** — `scripts/scraper-sato.mjs` + workflow `scraper-sato.yml` (dispatch, CI
+   grátis — API pública aceita datacenter, SEM Bright Data). Dry-run validou as 3 pendências:
+   paginação real = 9 págs/119 leilões (bem menos que os ~300 estimados), rota `/leilao/{id}`
+   válida, egress OK. Triagem do run: 30 imóveis lote-único prontos · 50 não-imóvel · 38
+   multi-lote (aguardam recon do endpoint de detalhe p/ extrair lotes individuais) · 1 terminal.
+   Run live (dryrun=0) disparado na sequência — conferir `select count(*) from imoveis_leilao
+   where fonte='SATO' and ativo;` (~30) e o card no app.
+4. **PENDENTES do Round 35** (ordem do plano, tarefa #11): recon do detalhe multi-lote do SATO
+   + decidir cron do `scraper-sato.yml` (hoje dispatch-only) · tenant SUPORTE `gustavoreis`
+   (cuidado com eventos EXTERNOS Comprei/PGFN) · cluster PostgREST `picelli`+`shiokawa` (1
+   scraper genérico, centenas de lotes no picelli) · e-confianca via origem e-leiloes.com.br.
+
 **E. BIASI (piso 130, mediana 260, último 96) — recon PENDENTE de dado fresco:** queda contínua desde 16/07 (369→173→96). O ambiente remoto não alcança o site (proxy bloqueia) — validar com o run do cluster disparado hoje: `select total,status from fonte_saude where fonte='BIASI' order by executado_em desc limit 3;`. Se seguir ≤100 com status ok em runs consecutivos, pode ser acervo real encolhendo (pós-leilão); se oscilar, rodar a ofensiva (recon estrutura viva × premissas: `?pagina` na listagem agregada + fallback home) via Actions (`debug-leiloeiros.yml`).
 
 ---

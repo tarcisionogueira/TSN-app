@@ -30,14 +30,20 @@ leiloeiros, LEILOTECH ~13, SUPORTE, SUPERBID, MEGA/ZUK parciais).
 
 **ROUND 35 (30/07, recon das homes via Actions — debug_fetch ofv35-%) — CLASSIFICAÇÃO FECHADA.**
 Plano de ataque em ordem de retorno×esforço (evidências no relatório do round):
-1. **total → SUPERBID storeId 16091** (65 ofertas abertas) e **crepaldi → SUPERBID storeId
-   16139** (0 hoje, deixa armado): só config no scraper SUPERBID existente.
+1. ✅ **total → SUPERBID storeId 16091** VIVO 30/07 (8 imóveis, 100% uf/valor/link/foto —
+   o resto das 65 ofertas é veículo, filtrado) e **crepaldi → SUPERBID storeId 16139**
+   ARMADO (loja sem ofertas hoje; `fonte_saude` vai acusar "falhou total 0" até publicarem —
+   é esperado, não é bug). Lição do 1º teste: a offer-query em modo loja EXIGE
+   `portalId=[2,15]` + `requestOrigin=store` (sem isso volta 0 em silêncio).
 2. **gustavoreis → tenant SUPORTE** (static.suporteleiloes.com.br/gustavoreisleiloescombr/):
    config de tenant; cuidado com eventos EXTERNOS (Comprei/PGFN) para não contar como lote.
 3. **bomnegocio + paulistana → tenants Vlance** ✅ ADICIONADOS 30/07 (paulistana só tem leilão
    de SIMULAÇÃO hoje — armado p/ quando publicar).
-4. ⭐ **sato → dedicado BARATO de ALTO retorno**: API JSON pública paginada
-   `/api-publica/stale/dados-home?page=N&type=leilao` (~300 leilões, metadados ricos, sem HTML).
+4. ✅ ⭐ **sato → dedicado BARATO** VIVO 30/07 (`scripts/scraper-sato.mjs` + workflow
+   `scraper-sato.yml`): dry-run validou 119 leilões em 9 págs da API, egress datacenter OK
+   (roda na CI grátis, sem Bright Data), rota `/leilao/{id}` válida; 30 imóveis lote-único
+   prontos gravados no 1º run live. PENDENTE: 38 leilões multi-lote aguardam recon do
+   endpoint de detalhe (lotes individuais) + decidir cron.
 5. **picelli + shiokawa → cluster NOVO "PostgREST white-label"**: ambos expõem
    `api.<dominio>/rest/v1/auctions|lots` (Supabase/PostgREST aberto, schema idêntico) — 1
    scraper genérico atende os 2 e futuros sites da plataforma (centenas de lotes no picelli).
@@ -124,13 +130,13 @@ Match por NOME do leiloeiro no nosso acervo (⚠️ confirmar que é o mesmo CPF
 - [x] `vegasleiloes.com.br` → **SOLEON** (`scraper-soleon.mjs`, 23/07)
 - [x] `3torresleiloes.com.br` → **SOLEON** (`scraper-soleon.mjs`, 23/07)
 - [~] `extrajustleiloes.com.br` / `lancetotal.com.br` / `lancenoleilao.com.br` / `granadoleiloes.com.br` → **Gestão de Leilões PHP** (`scraper-gestao.mjs`, 23/07)
-- [ ] `crepaldileiloes.com.br`
+- [~] `crepaldileiloes.com.br` → **SUPERBID loja 16139** (armado 30/07 — loja sem ofertas hoje)
 - [ ] `planaltoleiloes.com.br`
 - [ ] `e-leiloeiro.com.br`  *(pode ser plataforma white-label — alto valor se onboarda vários)*
 - [ ] `centraljudicial.com.br`  *(nome sugere portal agregador — verificar)*
 - [ ] `extrajustleiloes.com.br`
 - [ ] `lancetotal.com.br`
-- [ ] `satoleiloes.com.br`
+- [x] `satoleiloes.com.br` → **SATO** (API pública, `scraper-sato.mjs`, 30/07)
 - [ ] `sanchesleiloes.com.br`
 - [ ] `verdeamareloleiloes.com.br`
 - [ ] `lancenoleilao.com.br`
@@ -160,7 +166,7 @@ Match por NOME do leiloeiro no nosso acervo (⚠️ confirmar que é o mesmo CPF
 - [ ] `osvaldoleiloes.com.br`
 - [ ] `judhastas.com.br`  *(nome sugere portal — verificar)*
 - [ ] `granadoleiloes.com.br`
-- [ ] `totalleiloes.com.br`
+- [x] `totalleiloes.com.br` → **TOTALLEILOES** (SUPERBID loja 16091, 30/07)
 - [ ] `hisaleiloes.com.br`
 - [ ] `vincoleiloes.com.br`
 
