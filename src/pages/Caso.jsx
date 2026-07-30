@@ -441,7 +441,7 @@ export default function Caso() {
   const location = useLocation();
   const nav = useNavigate();
   const isMobile = useIsMobile();
-  const { user, role } = useAuth();
+  const { user, role, impersonate, effectiveUserId } = useAuth();
 
   const imovelInit = location.state?.imovel;
 
@@ -555,19 +555,29 @@ export default function Caso() {
         if (error) throw error;
         casoData = data;
       } else if (imovelInit) {
-        // Verifica se já existe caso para este imovel_id do cliente
+        // Verifica se já existe caso para este imovel_id do cliente (no modo suporte,
+        // o cliente é o usuário VISUALIZADO — effectiveUserId —, nunca o da equipe).
+        const clienteAlvo = effectiveUserId || user.id;
         const { data: existente } = await supabase.from('casos')
           .select('*')
-          .eq('cliente_id', user.id)
+          .eq('cliente_id', clienteAlvo)
           .eq('imovel_id', imovelInit.id)
           .maybeSingle();
         if (existente) {
           casoData = existente;
           nav(`/caso/${existente.id}`, { replace: true });
         } else {
-          // Cria novo caso
+          // Cria novo caso — SÓ o próprio cliente cria o seu (abrir a página logado
+          // como equipe criava um caso-fantasma em nome do ADMIN, que passou a aparecer
+          // em "Meus acompanhamentos" dele; achado do dono 30/07 — Rua Marte/Barueri).
+          const ehEquipe = ['admin', 'analista', 'advogado', 'suporte', 'consultor'].includes(role);
+          if (ehEquipe && !impersonate) {
+            setErro('Como equipe, abra um caso existente (Admin → Central da Equipe) ou entre em modo suporte para agir pelo cliente.');
+            setLoading(false);
+            return;
+          }
           const { data: novo, error: errNovo } = await supabase.from('casos').insert({
-            cliente_id: user.id,
+            cliente_id: clienteAlvo,
             imovel_id: imovelInit.id || null,
             imovel_endereco: [imovelInit.endereco, imovelInit.cidade, imovelInit.estado].filter(Boolean).join(', '),
             imovel_valor: imovelInit.valorMinimo || imovelInit.valorAvaliacao || null,
@@ -650,7 +660,7 @@ export default function Caso() {
     } finally {
       setLoading(false);
     }
-  }, [casoId, user, role, imovelInit, nav]);
+  }, [casoId, user, role, imovelInit, nav, impersonate, effectiveUserId]);
 
   useEffect(() => { carregarCaso(); }, [carregarCaso]);
 
