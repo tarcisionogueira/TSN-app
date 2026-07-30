@@ -45,6 +45,18 @@ function Nodo({ nodo, filhosDe, expandido, toggle, nivel }) {
           <div style={{ fontSize: 13.5, fontWeight: 700, color: '#111', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {nodo.nome}
             {nodo.parceiro && <span style={{ marginLeft: 6, fontSize: 9.5, fontWeight: 800, color: '#084BA6', background: '#eff6ff', borderRadius: 999, padding: '1px 7px' }}>PARCEIRO</span>}
+            {/* Plano do indicado DIRETO (a RPC só devolve no nível 1 — LGPD): identifica de
+                relance grátis × Investidor Pro × Assessoria × Leilão Club (pedido do dono). */}
+            {(() => {
+              const P = {
+                explorador: { rot: 'Grátis', cor: '#64748b', bg: '#f1f5f9' },
+                top2: { rot: 'Investidor Pro', cor: '#0D63DB', bg: '#dbeafe' },
+                assessorado: { rot: 'Assessoria', cor: '#7c3aed', bg: '#f3e8ff' },
+                clube: { rot: 'Leilão Club', cor: '#b45309', bg: '#fef3c7' },
+                consultor: { rot: 'Consultor', cor: '#0f766e', bg: '#ccfbf1' },
+              }[nodo.plano];
+              return P ? <span style={{ marginLeft: 6, fontSize: 9.5, fontWeight: 800, color: P.cor, background: P.bg, borderRadius: 999, padding: '1px 7px' }}>{P.rot}</span> : null;
+            })()}
           </div>
           <div style={{ fontSize: 11.5, color: '#94a3b8' }}>{nodo.cidade_uf || 'cidade não informada'}{Number(nodo.n_indicados) > 0 ? ` · ${nodo.n_indicados} indicado${nodo.n_indicados > 1 ? 's' : ''}` : ''}</div>
           {temContato && (
