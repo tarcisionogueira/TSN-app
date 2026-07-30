@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BarChart3, FileText, Search, Wallet, Gift, ArrowLeft, RefreshCw, Info } from 'lucide-react';
+import { BarChart3, FileText, Search, Wallet, Gift, ArrowLeft, RefreshCw, Info, Plus } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
+import { apiCall } from '../utils/apiCall';
+import PagamentoServico from '../components/PagamentoServico';
 
 // Tela "Meus Créditos e Consumo" (#21) — o usuário monitora, num só lugar:
 //  • a COTA mensal do plano por tipo (mercadológico, documental, índice): usado × limite;
@@ -76,6 +78,29 @@ export default function Creditos() {
   const [extrato, setExtrato] = useState([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState('');
+  // Recarga de crédito (PIX/cartão) — o crédito só entra após o servidor confirmar o
+  // pagamento no gateway (/api/creditos-recarga), nunca pelo cliente.
+  const [recarga, setRecarga] = useState(false);
+  const [valorRecarga, setValorRecarga] = useState(null);
+  const [valorLivre, setValorLivre] = useState('');
+  const [recarregando, setRecarregando] = useState(false);
+  const [recargaOk, setRecargaOk] = useState(null);
+  const [recargaErro, setRecargaErro] = useState('');
+
+  const confirmarRecarga = async (paymentId) => {
+    setRecarregando(true); setRecargaErro('');
+    try {
+      const res = await apiCall('/api/creditos-recarga', { method: 'POST', body: JSON.stringify({ paymentId }) });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || 'Não foi possível confirmar a recarga.');
+      setRecargaOk({ valor: d.valor || valorRecarga });
+      carregar();
+    } catch (e) {
+      setValorRecarga(null);
+      setRecargaErro(e.message || 'Erro ao confirmar a recarga. Se você já pagou, fale com o suporte.');
+    }
+    setRecarregando(false);
+  };
 
   const carregar = async () => {
     if (!effectiveUserId) return;
@@ -143,10 +168,65 @@ export default function Creditos() {
                 <div style={{ fontSize: 26, fontWeight: 900, lineHeight: 1.1 }}>{BRL(saldo)}</div>
               </div>
             </div>
-            <div style={{ fontSize: 12, opacity: 0.92, maxWidth: 320, lineHeight: 1.4 }}>
-              Usado automaticamente quando a cota do mês e os bônus acabam. Cada relatório desconta apenas o custo real.
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+              <div style={{ fontSize: 12, opacity: 0.92, maxWidth: 300, lineHeight: 1.4 }}>
+                Usado automaticamente quando a cota do mês e os bônus acabam. Cada relatório desconta apenas o custo real.
+              </div>
+              {/* Recarga: só o PRÓPRIO titular (no modo suporte a equipe não paga pelo cliente). */}
+              {!impersonate && (
+                <button onClick={() => setRecarga(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '11px 18px', background: 'white', color: '#084BA6', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 13.5, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                  <Plus size={16} /> Adicionar créditos
+                </button>
+              )}
             </div>
           </div>
+
+          {/* Modal de RECARGA — fecha o ciclo "Comprar créditos" (a Análise já mandava
+              para cá, mas não existia como pagar). PIX/cartão via PagamentoServico; a
+              confirmação é SERVIDOR-side (/api/creditos-recarga verifica o pagamento no
+              MP e credita via RPC — o valor creditado é o realmente recebido). */}
+          {recarga && (
+            <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.55)', zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={() => !recarregando && setRecarga(false)}>
+              <div style={{ background: 'white', borderRadius: 18, padding: '22px 22px 26px', width: '100%', maxWidth: 460, maxHeight: '92vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+                {recarregando ? (
+                  <div style={{ textAlign: 'center', padding: '32px 0', color: '#0D63DB', fontWeight: 700, fontSize: 14 }}>Confirmando sua recarga…</div>
+                ) : recargaOk ? (
+                  <div style={{ textAlign: 'center', padding: '24px 0' }}>
+                    <div style={{ fontSize: 40, marginBottom: 10 }}>✅</div>
+                    <div style={{ fontSize: 18, fontWeight: 900, color: '#059669' }}>Crédito adicionado!</div>
+                    <div style={{ fontSize: 13.5, color: '#64748b', marginTop: 6 }}>{BRL(recargaOk.valor)} entraram no seu saldo.</div>
+                    <button onClick={() => { setRecarga(false); setRecargaOk(null); setValorRecarga(null); }} style={{ marginTop: 18, padding: '12px 24px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 14, cursor: 'pointer' }}>Fechar</button>
+                  </div>
+                ) : !valorRecarga ? (
+                  <>
+                    <div style={{ fontSize: 17, fontWeight: 900, color: '#111', marginBottom: 4 }}>Adicionar créditos</div>
+                    <div style={{ fontSize: 12.5, color: '#64748b', marginBottom: 16, lineHeight: 1.5 }}>O saldo é usado quando a cota mensal e os bônus acabam — cada relatório desconta só o custo real.</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+                      {[50, 100, 250, 500].map(v => (
+                        <button key={v} onClick={() => setValorRecarga(v)} style={{ padding: '16px 10px', background: '#f8fafc', border: '2px solid #e2e8f0', borderRadius: 12, fontWeight: 900, fontSize: 17, color: '#0f172a', cursor: 'pointer' }}>
+                          {BRL(v)}
+                        </button>
+                      ))}
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <input type="number" min="20" placeholder="Outro valor (mín. R$ 20)" value={valorLivre} onChange={e => setValorLivre(e.target.value)}
+                        style={{ flex: 1, padding: '11px 12px', border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 14, outline: 'none' }} />
+                      <button onClick={() => { const v = Math.floor(Number(valorLivre)); if (v >= 20) setValorRecarga(v); }} disabled={!(Number(valorLivre) >= 20)}
+                        style={{ padding: '11px 16px', background: Number(valorLivre) >= 20 ? '#0D63DB' : '#94a3b8', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 13.5, cursor: Number(valorLivre) >= 20 ? 'pointer' : 'not-allowed' }}>OK</button>
+                    </div>
+                    {recargaErro && <div style={{ marginTop: 10, fontSize: 12.5, color: '#b91c1c', fontWeight: 700 }}>{recargaErro}</div>}
+                    <button onClick={() => setRecarga(false)} style={{ marginTop: 14, background: 'none', border: 'none', color: '#94a3b8', fontSize: 13, cursor: 'pointer', width: '100%' }}>Cancelar</button>
+                  </>
+                ) : (
+                  <PagamentoServico
+                    servico={{ id: 'recarga', nome: `Recarga de crédito — ${BRL(valorRecarga)}`, valor: valorRecarga }}
+                    onPago={confirmarRecarga}
+                    onCancelar={() => setValorRecarga(null)}
+                  />
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Bônus concedidos pela equipe */}
           {concessoes.length > 0 && (

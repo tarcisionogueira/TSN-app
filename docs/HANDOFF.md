@@ -157,6 +157,32 @@ tomar posse); Club não contrata avulsa (ilimitada inclusa).
    "1 por vez" é no cliente (gate de UI + status do servidor) — o pagamento inline em si não é
    bloqueado server-side (aceitável: contrato registra a operação; endurecer depois se preciso).
 
+**E8. NOITE 30/07 — teste do dono no modo suporte: 4 achados corrigidos:**
+1. **Cota 15/15/5 indevida (Matheus Barros + Rafael)**: NÃO era orientação — efeito colateral em
+   cadeia: atribuição manual promovia a 'assessorado' (comportamento antigo, removido no E7) e a
+   migração do grandfather (28/07) marcou `plano_legado=true` em TODO role pagante daquele dia,
+   incluindo os dois (0 aceites, nunca pagaram, 1 caso cada). CORRIGIDO no banco: ambos voltaram a
+   explorador sem legado (casos/relatórios preservados; query com guardas — só afetou quem nunca
+   teve aceite/pagamento). Neuma e Alessandra (pagantes reais) mantêm o grandfather.
+2. **Modo suporte com identidade do CLIENTE**: Header (nome/avatar/etiqueta de plano do menu) e
+   saudação da Home agora usam o usuário visualizado — o banner laranja é quem sinaliza a equipe.
+   O "Ver como" já entrava pela Home (/) respeitando o plano do cliente.
+3. **Recarga de crédito FECHADA (passo 7 do motor que faltava)**: a Análise mandava "Comprar
+   créditos" → /creditos, que não tinha compra; `creditar_credito` existia sem chamador. Agora:
+   botão "Adicionar créditos" no card de saldo (presets 50/100/250/500 + valor livre ≥R$20) →
+   `PagamentoServico` (PIX/cartão) → novo `api/creditos-recarga.js` confirma o pagamento NO MP
+   (approved + dono por metadata.user_id OU CPF do pagador + dedup por referencia mp_{id}) e
+   credita o valor REAL recebido via RPC. Suporte não vê o botão (não paga pelo cliente).
+   ⚠️ herda a limitação PRÉ-EXISTENTE do PIX estático: `mp-verificar-pix` exige metadata.user_id
+   p/ confirmar, e transferência PIX direta não carrega metadata — o caminho cartão funciona
+   ponta a ponta; o PIX estático pode não autoconfirmar (mesma limitação da assessoria; a
+   recarga tem fallback: CPF do pagador no `creditos-recarga`). Revisar o PIX estático num round.
+4. **Meu Portfólio → /arrematados** (a tela real "Meus Arrematados"; /painel é a descartada) +
+   empty state novo: "Você ainda não fez nenhuma arrematação" com a mensagem de acolhimento
+   (BidPro auxilia a encontrar a oportunidade certa) + CTA "Buscar oportunidades" e "Já
+   arrematei — registrar". NOTA: o card "Agendar com o time" ainda aponta p/ /painel — decidir
+   destino (Caso? Análises?) com o dono.
+
 **E. BIASI (piso 130, mediana 260, último 96) — recon PENDENTE de dado fresco:** queda contínua desde 16/07 (369→173→96). O ambiente remoto não alcança o site (proxy bloqueia) — validar com o run do cluster disparado hoje: `select total,status from fonte_saude where fonte='BIASI' order by executado_em desc limit 3;`. Se seguir ≤100 com status ok em runs consecutivos, pode ser acervo real encolhendo (pós-leilão); se oscilar, rodar a ofensiva (recon estrutura viva × premissas: `?pagina` na listagem agregada + fallback home) via Actions (`debug-leiloeiros.yml`).
 
 ---

@@ -609,12 +609,21 @@ export default function Arrematados() {
       ) : arrematados.length === 0 ? (
         <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 16, padding: '48px 24px', textAlign: 'center' }}>
           <Home size={40} color="#cbd5e1" />
-          <div style={{ fontSize: 15, fontWeight: 800, color: '#334155', margin: '14px 0 6px' }}>Nenhum imóvel arrematado ainda</div>
-          <div style={{ fontSize: 13, color: '#64748b', marginBottom: 18, lineHeight: 1.5 }}>{soLeitura ? 'O assinante ainda não registrou nenhuma arrematação.' : 'Registre uma arrematação para acompanhar seus documentos e o financeiro do lote.'}</div>
+          <div style={{ fontSize: 15, fontWeight: 800, color: '#334155', margin: '14px 0 6px' }}>Você ainda não fez nenhuma arrematação</div>
+          <div style={{ fontSize: 13, color: '#64748b', marginBottom: 18, lineHeight: 1.6, maxWidth: 460, margin: '0 auto 18px' }}>
+            {soLeitura
+              ? 'O assinante ainda não registrou nenhuma arrematação.'
+              : 'A BidPro Brasil vai te auxiliar a encontrar a oportunidade certa para o seu perfil. Navegue pelos leilões de todo o Brasil, gere os relatórios dos imóveis que chamarem sua atenção e, quando arrematar, registre aqui para acompanhar documentos e financeiro.'}
+          </div>
           {!soLeitura && (
-            <button onClick={() => setNovo(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '12px 22px', background: '#059669', color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 14, cursor: 'pointer' }}>
-              <Plus size={16} /> Registrar arrematação
-            </button>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+              <button onClick={() => nav('/buscar')} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '12px 22px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 14, cursor: 'pointer' }}>
+                <Search size={16} /> Buscar oportunidades
+              </button>
+              <button onClick={() => setNovo(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '12px 22px', background: 'white', color: '#059669', border: '1.5px solid #a7f3d0', borderRadius: 12, fontWeight: 800, fontSize: 14, cursor: 'pointer' }}>
+                <Plus size={16} /> Já arrematei — registrar
+              </button>
+            </div>
           )}
         </div>
       ) : (

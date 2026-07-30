@@ -227,7 +227,10 @@ export default function Header() {
     nav('/');
   };
 
-  const nomeUsuario = user?.user_metadata?.nome || user?.email?.split('@')[0] || 'Usuário';
+  // Modo suporte: a experiência é a do CLIENTE (nome, avatar e etiqueta de plano do
+  // usuário visualizado — o banner laranja é quem lembra que é a equipe navegando).
+  const nomeUsuario = impersonate?.nome || user?.user_metadata?.nome || user?.email?.split('@')[0] || 'Usuário';
+  const roleEtiqueta = impersonate ? (impersonate.role || 'explorador') : role;
 
   return (
     <header style={{ position: 'sticky', top: 0, zIndex: 1100, background: '#111111', paddingTop: 'env(safe-area-inset-top)' }}>
@@ -334,10 +337,10 @@ export default function Header() {
                 <div data-usermenu="true" style={{ position: 'absolute', right: 0, top: '110%', background: 'white', borderRadius: 12, border: '1px solid #e2e8f0', padding: '8px', minWidth: 200, boxShadow: '0 8px 24px rgba(0,0,0,0.15)', zIndex: 200 }}>
                   <div style={{ padding: '8px 12px', fontSize: 12, color: '#64748b', borderBottom: '1px solid #f1f5f9', marginBottom: 4 }}>
                     <div style={{ fontWeight: 700, color: '#111111' }}>{nomeUsuario}</div>
-                    <div style={{ fontSize: 11 }}>{user.email}</div>
-                    {!loading && role && role !== 'aluno' && (
+                    {!impersonate && <div style={{ fontSize: 11 }}>{user.email}</div>}
+                    {!loading && roleEtiqueta && roleEtiqueta !== 'aluno' && (
                       <div style={{ fontSize: 10, background: '#f1f5f9', borderRadius: 4, padding: '2px 6px', marginTop: 4, display: 'inline-block', fontWeight: 700, textTransform: 'uppercase' }}>
-                        {ROLE_LABELS_STATIC[role] || planosCtx?.[role]?.nome || role}
+                        {ROLE_LABELS_STATIC[roleEtiqueta] || planosCtx?.[roleEtiqueta]?.nome || roleEtiqueta}
                       </div>
                     )}
                   </div>

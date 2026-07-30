@@ -36,12 +36,13 @@ const STATUS_CASO = {
 
 export default function HomeCliente() {
   const nav = useNavigate();
-  const { user, effectiveRole, effectiveUserId, planoLegado } = useAuth();
+  const { user, effectiveRole, effectiveUserId, planoLegado, impersonate } = useAuth();
   const infoBase = PLANO_INFO[effectiveRole] || PLANO_INFO.explorador;
   // Assinante antigo (grandfather) mantém 15; o banco (limite_ia_efetivo) confirma na hora.
   const ehPagoCliente = ['top2', 'top2_anual', 'assessorado', 'assessorado_anual', 'clube', 'clube_anual'].includes(effectiveRole);
   const info = (planoLegado && ehPagoCliente && infoBase.limite != null) ? { ...infoBase, limite: 15 } : infoBase;
-  const primeiroNome = (user?.user_metadata?.nome || user?.email || 'Investidor').split(' ')[0].split('@')[0];
+  // Modo suporte: a saudação é a do CLIENTE visualizado (a equipe navega como ele).
+  const primeiroNome = (impersonate?.nome || user?.user_metadata?.nome || user?.email || 'Investidor').split(' ')[0].split('@')[0];
 
   const [usadas, setUsadas] = useState(0);
   const [copiado, setCopiado] = useState(false);
@@ -153,7 +154,9 @@ export default function HomeCliente() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
           <Acao Icon={Search} titulo="Buscar leilões" desc="Encontre imóveis em todo o Brasil e analise oportunidades." cor="#0D63DB" onClick={() => nav('/buscar')} />
           <Acao Icon={BarChart3} titulo="Minhas Análises" desc="Retome seus relatórios e agende com o analista." cor="#0d9488" onClick={() => nav('/analises')} />
-          <Acao Icon={HomeIcon} titulo="Meu Portfólio" desc="Acompanhe seus imóveis, aportes e resultados." cor="#7c3aed" onClick={() => nav('/painel')} />
+          {/* Meus Arrematados (decisão do dono 30/07): o portfólio real é a tela de
+              arrematados — /painel é a tela antiga, descartada. */}
+          <Acao Icon={HomeIcon} titulo="Meu Portfólio" desc="Acompanhe seus imóveis arrematados, aportes e resultados." cor="#7c3aed" onClick={() => nav('/arrematados')} />
           <Acao Icon={Wallet} titulo="Meus Créditos" desc="Consultas disponíveis, bônus e saldo — tudo num lugar." cor="#0891b2" onClick={() => nav('/creditos')} />
           <Acao Icon={GraduationCap} titulo="Área de Membros" desc="Cursos, eBooks e materiais para arrematar com segurança." cor="#059669" onClick={() => nav('/membros')} />
           {(effectiveRole === 'assessorado' || effectiveRole === 'assessorado_anual' || effectiveRole === 'clube' || effectiveRole === 'clube_anual') && (
