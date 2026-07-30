@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useCallback, useEffect } fr
 import { useAuth } from './AuthContext';
 import { apiCall } from '../utils/apiCall';
 import { supabase } from '../utils/supabase';
+import { termosUsoPendente, abrirTermosModal } from '../components/TermosAtualizadosModal';
 
 // Acompanhamento GLOBAL das análises (mercadológica E documental).
 // A GERAÇÃO RODA NO SERVIDOR (/api/gerar-analise e /api/gerar-documental): o
@@ -43,8 +44,17 @@ const rowToEntry = (r) => {
 export function AnalisesProvider({ children }) {
   // No modo suporte (admin visualizando a conta de um cliente), lê/gera pelo
   // usuário efetivo (o cliente), não pelo admin logado — senão a lista vem vazia.
-  const { user, effectiveUserId } = useAuth();
+  const { user, effectiveUserId, impersonate } = useAuth();
   const uid = effectiveUserId || user?.id || null;
+
+  // TRAVA de termos atualizados (regra do dono, 30/07): com termos vigentes pendentes
+  // de aceite, NENHUM relatório é gerado — reabre o popup e não dispara a API. No modo
+  // suporte não trava (os termos são pessoais do usuário, não do admin que atende).
+  const exigirTermos = useCallback(async () => {
+    if (impersonate) return true;
+    if (await termosUsoPendente(user?.id)) { abrirTermosModal('relatorio'); return false; }
+    return true;
+  }, [user?.id, impersonate]);
   const [analises, setAnalises] = useState(() => loadCache(LS_KEY));
   const [documentais, setDocumentais] = useState(() => loadCache(LS_KEY_DOC));
   const [laudos, setLaudos] = useState(() => loadCache(LS_KEY_LAUDO));
@@ -123,9 +133,10 @@ export function AnalisesProvider({ children }) {
   const upsertLaudo = useCallback((e) => upsertInto(setLaudos)(e), [upsertInto]);
 
   // meta: { imovelId, titulo, cidade, estado, imovel } ; payload: { mercadoInputs, parecerInputs }
-  const iniciar = useCallback((meta, payload) => {
+  const iniciar = useCallback(async (meta, payload) => {
     const imovelId = meta?.imovelId;
     if (!imovelId) return;
+    if (!(await exigirTermos())) return; // termos pendentes → popup, sem gerar
     upsert({ ...meta, status: 'gerando', startedAt: Date.now(), erro: null, result: null });
     apiCall('/api/gerar-analise', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -138,13 +149,14 @@ export function AnalisesProvider({ children }) {
       else upsert({ imovelId, status: 'erro', erro: 'Não foi possível gerar agora. Tente novamente.' });
       recarregar();
     }).catch(() => { upsert({ imovelId, status: 'erro', erro: 'Falha de conexão ao gerar. Tente novamente.' }); recarregar(); });
-  }, [upsert, recarregar]);
+  }, [upsert, recarregar, exigirTermos]);
 
   // Documental: dispara /api/gerar-documental (server-side, persistente).
   // payload pode trazer textoEdital/textoMatricula/processoNumero/processoNome/urlEdital.
-  const iniciarDocumental = useCallback((meta, payload = {}) => {
+  const iniciarDocumental = useCallback(async (meta, payload = {}) => {
     const imovelId = meta?.imovelId;
     if (!imovelId) return;
+    if (!(await exigirTermos())) return; // termos pendentes → popup, sem gerar
     upsertDoc({ ...meta, status: 'gerando', startedAt: Date.now(), erro: null, result: null });
     apiCall('/api/gerar-documental', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -155,13 +167,14 @@ export function AnalisesProvider({ children }) {
       else upsertDoc({ imovelId, status: 'erro', erro: 'Não foi possível gerar agora. Tente novamente.' });
       recarregar();
     }).catch(() => { upsertDoc({ imovelId, status: 'erro', erro: 'Falha de conexão ao gerar. Tente novamente.' }); recarregar(); });
-  }, [upsertDoc, recarregar]);
+  }, [upsertDoc, recarregar, exigirTermos]);
 
   // Laudo de viabilidade (3º documento): consolida mercadológico + documental no
   // servidor (/api/gerar-laudo-viabilidade). Não reprocessa fontes pagas.
-  const iniciarLaudo = useCallback((meta) => {
+  const iniciarLaudo = useCallback(async (meta) => {
     const imovelId = meta?.imovelId;
     if (!imovelId) return;
+    if (!(await exigirTermos())) return; // termos pendentes → popup, sem gerar
     upsertLaudo({ ...meta, status: 'gerando', startedAt: Date.now(), erro: null, result: null });
     apiCall('/api/gerar-laudo-viabilidade', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -172,7 +185,7 @@ export function AnalisesProvider({ children }) {
       else upsertLaudo({ imovelId, status: 'erro', erro: 'Não foi possível gerar agora. Tente novamente.' });
       recarregar();
     }).catch(() => { upsertLaudo({ imovelId, status: 'erro', erro: 'Falha de conexão ao gerar. Tente novamente.' }); recarregar(); });
-  }, [upsertLaudo, recarregar]);
+  }, [upsertLaudo, recarregar, exigirTermos]);
 
   const getAnalise = useCallback((imovelId) => analises.find(a => a.imovelId === imovelId) || null, [analises]);
   const getDocumental = useCallback((imovelId) => documentais.find(a => a.imovelId === imovelId) || null, [documentais]);

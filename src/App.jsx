@@ -11,6 +11,7 @@ import TourGuia from './components/TourGuia';
 import ContratoObrigatorio from './components/ContratoObrigatorio';
 import CompletarCadastroModal from './components/CompletarCadastroModal';
 import KycParceiroModal from './components/KycParceiroModal';
+import TermosAtualizadosModal from './components/TermosAtualizadosModal';
 import ToastRelatorioPronto from './components/ToastRelatorioPronto';
 import ChatSuporte from './components/ChatSuporte';
 import SugestaoImovel from './components/SugestaoImovel';
@@ -271,6 +272,7 @@ function MainLayout() {
       {user && <ContratoObrigatorio userId={user.id} />}
       {user && <CompletarCadastroModal />}
       {user && <KycParceiroModal />}
+      {user && <TermosAtualizadosModal />}
       {user && <ToastRelatorioPronto />}
       {isLoggedIn && <SugestaoImovel />}
       <ChatSuporte />

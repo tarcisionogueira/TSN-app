@@ -20,6 +20,7 @@ export const PRODUTO_TITULOS = {
   analista: 'Analista',
   parceiro: 'Programa de Parceiros (Termo de Adesão)',
   lgpd: 'Termos de Uso e LGPD (cadastro)',
+  termos_uso: 'Termos da Plataforma (atualização)',
   produto: 'Cursos e Ebooks',
 };
 
@@ -49,6 +50,13 @@ export function versaoTermoProduto(key) {
 // passe nome/valor/modelo reais.
 export function termoDoProduto(key, { nome, valorLabel, modelo, inclui } = {}) {
   const fam = familiaTermo(key);
+  if (fam === 'termos_uso') {
+    // Re-aceite dos termos da plataforma (não é compra): declaração simples e ampla.
+    return {
+      familia: fam, titulo: tituloProduto(key), versao: versaoTermoProduto(key),
+      texto: 'Declaro que li e aceito a versão ATUALIZADA dos Termos de Uso e da Política de Privacidade da plataforma BidPro Brasil (bidprobrasil.com.br/#/termos e /#/privacidade), operada por Nogueira Empreendimentos LTDA (CNPJ 02.311.492/0001-61), incluindo as cláusulas sobre: natureza informativa e de apoio à decisão dos relatórios e análises (sem garantia de resultado, recomendação de investimento ou parecer jurídico definitivo); uso de inteligência artificial e de fontes públicas de terceiros, sujeitas a imprecisões; independência da plataforma em relação a leiloeiros, bancos e organizadores de certames; riscos inerentes à arrematação de imóveis em leilão, que correm por conta do arrematante; propriedade intelectual dos conteúdos; tratamento de dados pessoais conforme a LGPD (Lei nº 13.709/2018); e registro eletrônico deste aceite com data, hora, IP, dispositivo e código de verificação (MP nº 2.200-2/2001, art. 10, §2º).',
+    };
+  }
   const base = {
     explorador: { modelo: 'recorrente', inclui: 'busca de imóveis em leilão e relatórios conforme o plano contratado' },
     top2: { modelo: 'recorrente', inclui: 'busca de imóveis, relatórios mercadológico, documental e laudo de viabilidade, e demais recursos do plano contratado' },
