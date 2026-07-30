@@ -61,13 +61,16 @@ export default async function handler(req) {
     data = await rpc('admin_usuario_360', { uid });
     // Anexa o LOG DE ATIVIDADE (movimentos: relatórios ok/erro com motivo, arremate, etc.) —
     // é o que dá diagnóstico do que o usuário (ou o admin) fez, com validade de 90 dias.
+    // full=1 (dossiê): limites altos p/ exportar TODO o histórico retido (atividade ~90d,
+    // navegação ~30d) — a tela normal segue com 100/200 p/ não pesar.
+    const full = params.get('full') === '1';
     if (data && typeof data === 'object') {
-      try { data.atividade = (await rpc('atividade_usuario', { p_user_id: uid, p_limite: 100 })) || []; } catch { data.atividade = []; }
+      try { data.atividade = (await rpc('atividade_usuario', { p_user_id: uid, p_limite: full ? 2000 : 100 })) || []; } catch { data.atividade = []; }
       // Anexa a NAVEGAÇÃO/cliques (clickstream de eventos_atividade): telas vistas, cliques e
       // falhas/relatórios vazios de API — o "tudo o que o usuário fez" p/ caçar bug/quebra. Era
       // COLETADO (tracker.js → /api/track) mas NUNCA exibido: o painel "Navegação e cliques" do
       // Cliente 360 lia dados.navegacao, que ninguém preenchia. Vale p/ cliente/parceiro/equipe.
-      try { data.navegacao = (await rpc('atividade_navegacao', { p_user_id: uid, p_limite: 200 })) || []; } catch { data.navegacao = []; }
+      try { data.navegacao = (await rpc('atividade_navegacao', { p_user_id: uid, p_limite: full ? 2000 : 200 })) || []; } catch { data.navegacao = []; }
     }
   } else {
     // Termo vazio → lista geral. Se o termo tem 11 dígitos, calcula o hash do CPF

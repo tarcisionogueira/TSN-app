@@ -94,6 +94,9 @@ export default function Cliente360() {
   const [importando, setImportando] = useState(false);
   const [importMsg, setImportMsg] = useState(null);
   const [verInteresses, setVerInteresses] = useState(false); // interesses gerados sob demanda
+  const [dossieDe, setDossieDe] = useState('');   // filtro de período do dossiê (vazio = tudo)
+  const [dossieAte, setDossieAte] = useState('');
+  const [dossieGerando, setDossieGerando] = useState(false);
 
   // Estatísticas (triagem) — carrega uma vez ao abrir a tela.
   useEffect(() => {
@@ -161,9 +164,32 @@ export default function Cliente360() {
 
   // Gera o DOSSIÊ do cliente (aceites/datas + indicações + saques + relatórios + atividade)
   // numa janela imprimível → o admin "Salvar em PDF" para uma eventual ocorrência jurídica.
-  const gerarDossie = () => {
-    if (!dados) return;
-    const pf = dados.perfil || {}, au = dados.auth || {}, par = dados.parceria || {}, fin = dados.financeiro || {}, rel = dados.relatorios || {};
+  // Pedido do dono (30/07): permite escolher o PERÍODO (De/Até) — vazio = histórico completo.
+  // Para o completo não ficar preso ao corte da tela (100 eventos), rebusca com full=1.
+  const gerarDossie = async () => {
+    if (!dados || dossieGerando) return;
+    setDossieGerando(true);
+    let base = dados;
+    try {
+      const uid = dados?._busca?.id || dados?.perfil?.id;
+      if (uid) {
+        const r = await apiCall(`/api/admin-usuario-360?user_id=${encodeURIComponent(uid)}&full=1`);
+        const j = await r.json();
+        if (r.ok && j && !j.error) base = { ...j, _busca: dados._busca };
+      }
+    } catch { /* usa o que já está na tela */ }
+    finally { setDossieGerando(false); }
+    // Janela do período: De 00:00 até Até 23:59:59 (local). Vazio = sem corte.
+    const tDe = dossieDe ? new Date(`${dossieDe}T00:00:00`).getTime() : null;
+    const tAte = dossieAte ? new Date(`${dossieAte}T23:59:59.999`).getTime() : null;
+    const noPeriodo = (s) => {
+      if (!tDe && !tAte) return true;
+      const t = s ? new Date(s).getTime() : NaN;
+      if (!Number.isFinite(t)) return false; // sem data não dá p/ afirmar que está no período
+      return (!tDe || t >= tDe) && (!tAte || t <= tAte);
+    };
+    const pf = base.perfil || {}, au = base.auth || {}, par = base.parceria || {}, rel = base.relatorios || {};
+    const fin = { ...(base.financeiro || {}), lancamentos: (base.financeiro?.lancamentos || []).filter((l) => noPeriodo(l.criado_em)) };
     const esc = (s) => String(s ?? '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
     const brlv = (v) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
     const dt = (s) => { try { return s ? new Date(s).toLocaleString('pt-BR') : '—'; } catch { return '—'; } };
@@ -171,12 +197,16 @@ export default function Cliente360() {
     const emitido = new Date().toLocaleString('pt-BR');
     const linhasFin = (fin.lancamentos || []).map(l => `<tr><td>${dt(l.criado_em)}</td><td>${esc(l.tipo)}</td><td>${esc(l.descricao || '')}</td><td style="text-align:right">${brlv(l.valor)}</td><td>${esc(l.status)}</td></tr>`).join('');
     const linhasDir = (par.diretos || []).map(x => `<tr><td>${esc(x.nome || '—')}</td><td>${esc(x.role || '')}</td><td>${x.parceiro_aceite_em ? 'aderiu ' + dta(x.parceiro_aceite_em) : 'não aderiu'}</td><td>${dta(x.created_at)}</td></tr>`).join('');
-    const atividade = (dados.atividade || []).slice(0, 60).map(a => `<tr><td>${dt(a.em || a.criado_em || a.data)}</td><td>${esc(a.tipo || a.evento || '')}</td><td>${esc(a.descricao || a.detalhe || a.motivo || '')}</td></tr>`).join('');
+    const atividade = (base.atividade || []).filter((a) => noPeriodo(a.em || a.criado_em || a.data))
+      .map(a => `<tr><td>${dt(a.em || a.criado_em || a.data)}</td><td>${esc(a.tipo || a.evento || '')}</td><td>${esc(a.descricao || a.detalhe || a.motivo || '')}</td></tr>`).join('');
+    const periodoLabel = (tDe || tAte)
+      ? `Período: ${dossieDe ? dossieDe.split('-').reverse().join('/') : 'início'} a ${dossieAte ? dossieAte.split('-').reverse().join('/') : 'hoje'}`
+      : 'Período: histórico completo disponível';
     const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Dossiê — ${esc(pf.nome || '')}</title>
 <style>body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:32px;font-size:12px;line-height:1.5}h1{font-size:18px;margin:0}h2{font-size:13px;border-bottom:2px solid #0D63DB;padding-bottom:4px;margin:22px 0 8px;color:#0D63DB}table{width:100%;border-collapse:collapse;margin-top:6px}th,td{border:1px solid #e2e8f0;padding:5px 7px;text-align:left;vertical-align:top}th{background:#f1f5f9}.muted{color:#64748b}.kv{margin:2px 0}.box{background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:10px 12px}@media print{.noprint{display:none}}</style></head><body>
 <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #111;padding-bottom:10px">
 <div><h1>BidPro Brasil — Dossiê do Cliente</h1><div class="muted">Documento de uso interno / jurídico</div></div>
-<div class="muted" style="text-align:right">Emitido em ${emitido}</div></div>
+<div class="muted" style="text-align:right">Emitido em ${emitido}<br>${esc(periodoLabel)}</div></div>
 <h2>Identificação</h2><div class="box">
 <div class="kv"><b>Nome:</b> ${esc(pf.nome || '—')}</div>
 <div class="kv"><b>E-mail:</b> ${esc(au.email || '—')} &nbsp; <b>Telefone:</b> ${esc(pf.telefone || '—')}</div>
@@ -191,8 +221,8 @@ ${(par.diretos || []).length ? `<table><thead><tr><th>Indicado</th><th>Plano</th
 <div class="kv"><b>Saldo disponível:</b> ${brlv(fin.saldo)} &nbsp; <b>Total de comissões apuradas:</b> ${brlv(fin.comissoes_total)}</div></div>
 ${(fin.lancamentos || []).length ? `<table><thead><tr><th>Data</th><th>Tipo</th><th>Descrição</th><th style="text-align:right">Valor</th><th>Status</th></tr></thead><tbody>${linhasFin}</tbody></table>` : '<div class="muted" style="margin-top:6px">Sem lançamentos financeiros.</div>'}
 <h2>Relatórios gerados</h2><div class="box"><div class="kv"><b>Mercadológico:</b> ${rel.mercado?.total || 0} &nbsp; <b>Documental:</b> ${rel.documental?.total || 0} &nbsp; <b>Laudo:</b> ${rel.laudo?.total || 0}</div></div>
-${atividade ? `<h2>Atividade recente</h2><table><thead><tr><th>Data</th><th>Evento</th><th>Detalhe</th></tr></thead><tbody>${atividade}</tbody></table>` : ''}
-<div style="margin-top:26px;border-top:1px solid #e2e8f0;padding-top:8px" class="muted">Documento gerado automaticamente pela plataforma BidPro Brasil em ${emitido}. Uso restrito. Contém dados pessoais protegidos pela LGPD (Lei nº 13.709/2018) — tratar com confidencialidade.</div>
+${atividade ? `<h2>Atividade${(tDe || tAte) ? ' no período' : ''}</h2><table><thead><tr><th>Data</th><th>Evento</th><th>Detalhe</th></tr></thead><tbody>${atividade}</tbody></table>` : `<h2>Atividade</h2><div class="muted">Sem eventos ${(tDe || tAte) ? 'no período selecionado' : 'registrados'}. Obs.: o log de atividade tem retenção de ~90 dias — períodos anteriores podem não ter registros.</div>`}
+<div style="margin-top:26px;border-top:1px solid #e2e8f0;padding-top:8px" class="muted">Documento gerado automaticamente pela plataforma BidPro Brasil em ${emitido}. ${esc(periodoLabel)}. O log de atividade respeita a retenção da plataforma (~90 dias). Uso restrito. Contém dados pessoais protegidos pela LGPD (Lei nº 13.709/2018) — tratar com confidencialidade.</div>
 <div class="noprint" style="margin-top:16px"><button onclick="window.print()" style="padding:8px 16px;font-size:13px;cursor:pointer">Imprimir / Salvar em PDF</button></div>
 </body></html>`;
     const w = window.open('', '_blank');
@@ -439,8 +469,24 @@ ${atividade ? `<h2>Atividade recente</h2><table><thead><tr><th>Data</th><th>Even
               </div>
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-              <button onClick={gerarDossie} title="Gera o dossiê (aceites, indicações, saques, relatórios) para salvar em PDF"
-                style={{ padding: '8px 14px', background: '#7c3aed', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}><FileText size={14} /> Dossiê (PDF)</button>
+              {/* Período do dossiê (pedido do dono): De/Até — vazio = exporta o histórico completo. */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#1e293b', borderRadius: 8, padding: '5px 8px' }}
+                title="Período do dossiê: preencha De/Até para recortar, ou deixe vazio para exportar tudo">
+                <span style={{ fontSize: 10.5, color: '#94a3b8', fontWeight: 700 }}>DE</span>
+                <input type="date" value={dossieDe} onChange={(e) => setDossieDe(e.target.value)} max={dossieAte || undefined}
+                  style={{ background: '#0f172a', color: '#e2e8f0', border: '1px solid #334155', borderRadius: 6, padding: '3px 6px', fontSize: 11.5 }} />
+                <span style={{ fontSize: 10.5, color: '#94a3b8', fontWeight: 700 }}>ATÉ</span>
+                <input type="date" value={dossieAte} onChange={(e) => setDossieAte(e.target.value)} min={dossieDe || undefined}
+                  style={{ background: '#0f172a', color: '#e2e8f0', border: '1px solid #334155', borderRadius: 6, padding: '3px 6px', fontSize: 11.5 }} />
+                {(dossieDe || dossieAte) && (
+                  <button onClick={() => { setDossieDe(''); setDossieAte(''); }} title="Limpar período (dossiê completo)"
+                    style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: 12, fontWeight: 700, padding: '0 2px' }}>✕</button>
+                )}
+              </div>
+              <button onClick={gerarDossie} disabled={dossieGerando}
+                title={dossieDe || dossieAte ? 'Gera o dossiê do período selecionado para salvar em PDF' : 'Gera o dossiê COMPLETO (aceites, indicações, saques, relatórios, atividade) para salvar em PDF'}
+                style={{ padding: '8px 14px', background: '#7c3aed', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: dossieGerando ? 'wait' : 'pointer', opacity: dossieGerando ? 0.7 : 1, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <FileText size={14} /> {dossieGerando ? 'Gerando…' : `Dossiê (PDF)${dossieDe || dossieAte ? ' — período' : ' — tudo'}`}</button>
               {email && <a href={`mailto:${email}`} style={{ padding: '8px 14px', background: '#0D63DB', color: 'white', borderRadius: 8, fontWeight: 700, fontSize: 12, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}><Mail size={14} /> E-mail</a>}
               {waNum
                 ? <a href={`https://wa.me/${waNum}`} target="_blank" rel="noreferrer" style={{ padding: '8px 14px', background: '#25D366', color: 'white', borderRadius: 8, fontWeight: 700, fontSize: 12, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}><MessageCircle size={14} /> WhatsApp</a>
