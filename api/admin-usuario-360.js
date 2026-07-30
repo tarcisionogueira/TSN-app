@@ -75,7 +75,7 @@ export default async function handler(req) {
       // IP/versão — prova anti-chargeback) + LGPD do cadastro. A adesão de parceiro já vem na
       // RPC ('parceria'). Antes só a Auditoria da aba Usuários mostrava isso — o 360 não.
       try {
-        const r = await fetch(`${SB}/rest/v1/aceites_plano?user_id=eq.${encodeURIComponent(uid)}&order=aceito_em.desc&limit=100&select=plano_key,valor,termos_versao,ip,gateway,aceito_em,preco_contratado`, {
+        const r = await fetch(`${SB}/rest/v1/aceites_plano?user_id=eq.${encodeURIComponent(uid)}&order=aceito_em.desc&limit=100&select=plano_key,valor,termos_versao,ip,gateway,aceito_em,preco_contratado,aceite_hash`, {
           headers: { apikey: KEY, Authorization: `Bearer ${KEY}` },
         });
         data.aceites = r.ok ? await r.json() : [];

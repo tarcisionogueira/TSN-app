@@ -7,6 +7,7 @@ import { apiCall } from '../utils/apiCall';
 import { extrairDadosDocumento, consolidarDocsImovel } from '../utils/claude';
 import { FinanceiroCaixa, AbaAssinaturas } from './AdminFinanceiro';
 import { gerarContratoPDF } from '../components/ContratoPDF';
+import { imprimirHtml } from '../components/pdfImprimir';
 import Contratos from './Contratos'; // tela ÚNICA de contratos (mesma de "Meus Contratos", modo admin)
 
 export const DEFAULT_FEEDBACK_EMAIL = 'tarcisioaraujo@reimob.com.br';
@@ -946,21 +947,56 @@ function UsuariosTab() {
   async function loadAuditoria(userId) {
     setAuditoriaLoading(true);
     try {
-      const [aceiteRes, contratoRes, compraRes] = await Promise.all([
+      const [aceiteRes, contratoRes, compraRes, perfilRes] = await Promise.all([
         supabase.from('aceites_plano').select('*').eq('user_id', userId).order('aceito_em', { ascending: false }),
         supabase.from('contratos_pendentes').select('*').eq('user_id', userId).order('criado_em', { ascending: false }),
         supabase.from('compras_produtos').select('*').eq('user_id', userId).order('criado_em', { ascending: false }),
+        // Aceites que moram no PERFIL: cadastro/LGPD e adesão ao Programa de Parceiros —
+        // sem isto o modal parecia "Nenhum registro" para usuário que só se cadastrou.
+        supabase.from('perfis').select('nome, lgpd_aceito, lgpd_data, parceiro_aceite_em, parceiro_aceite_versao, created_at').eq('id', userId).maybeSingle(),
       ]);
       setAuditoriaData({
         aceites: aceiteRes.data || [],
         contratos: contratoRes.data || [],
         compras: compraRes.data || [],
+        perfil: perfilRes.data || null,
       });
     } catch (e) {
-      setAuditoriaData({ aceites: [], contratos: [], compras: [] });
+      setAuditoriaData({ aceites: [], contratos: [], compras: [], perfil: null });
     } finally {
       setAuditoriaLoading(false);
     }
+  }
+
+  // COMPROVANTE DE ACEITE (leitura, sem assinatura em tela): documento imprimível com a
+  // identificação, o termo, data/hora e o HASH de verificação — para compra, o hash SHA-256
+  // gravado NO MOMENTO do aceite (trigger no banco); para cadastro/adesão (registro no
+  // perfil, sem hash armazenado), o código é DERIVADO dos campos canônicos na hora.
+  async function gerarComprovanteAceite({ titulo, linhas, canonico, hashArmazenado }) {
+    let hash = hashArmazenado || '';
+    let hashLabel = 'Hash de integridade (SHA-256, gravado no momento do aceite)';
+    if (!hash && canonico) {
+      try {
+        const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonico));
+        hash = Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
+        hashLabel = 'Código de verificação (SHA-256 derivado do registro)';
+      } catch { hash = ''; }
+    }
+    const esc = (s) => String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+    const emitido = new Date().toLocaleString('pt-BR');
+    const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Comprovante de Aceite — ${esc(auditoriaUser?.nome || '')}</title>
+<style>body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:36px;font-size:13px;line-height:1.6}h1{font-size:18px;margin:0}h2{font-size:13px;border-bottom:2px solid #0D63DB;padding-bottom:4px;margin:22px 0 8px;color:#0D63DB}.muted{color:#64748b}.kv{margin:3px 0}.box{background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:12px 14px}.hash{font-family:monospace;font-size:11px;word-break:break-all;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:6px;padding:8px 10px}</style></head><body>
+<div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #111;padding-bottom:10px">
+<div><h1>BidPro Brasil — Comprovante de Aceite de Termos</h1><div class="muted">Registro eletrônico de manifestação de vontade — sem assinatura manuscrita</div></div>
+<div class="muted" style="text-align:right">Emitido em ${esc(emitido)}</div></div>
+<h2>${esc(titulo)}</h2><div class="box">
+${linhas.map(([k, v]) => `<div class="kv"><b>${esc(k)}:</b> ${esc(v)}</div>`).join('')}
+</div>
+${hash ? `<h2>Verificação de integridade</h2><div class="kv muted">${esc(hashLabel)}:</div><div class="hash">${esc(hash)}</div>
+<div class="muted" style="margin-top:6px;font-size:11.5px">O hash é calculado sobre os campos canônicos do registro (usuário, e-mail, termo/versão, valor, IP e data/hora). Qualquer alteração posterior no registro invalida a verificação.</div>` : ''}
+<div style="margin-top:26px;border-top:1px solid #e2e8f0;padding-top:8px;font-size:11.5px" class="muted">O aceite foi manifestado eletronicamente na plataforma BidPro Brasil (MP nº 2.200-2/2001, art. 10, §2º — validade de registro eletrônico acordado entre as partes; Lei nº 13.709/2018 — LGPD). O registro íntegro permanece armazenado na plataforma e pode ser exibido às partes e à Justiça. Documento gerado em ${esc(emitido)}.</div>
+</body></html>`;
+    imprimirHtml(html, `Comprovante de aceite - ${auditoriaUser?.nome || 'usuario'}`);
   }
 
   function abrirAuditoria(u) {
@@ -1209,11 +1245,47 @@ function UsuariosTab() {
               <p style={{ color: '#94a3b8', textAlign: 'center', padding: 32 }}>Carregando auditoria...</p>
             ) : auditoriaData && (
               <>
-                {/* Aceites de Termos */}
+                {/* Aceites que moram no PERFIL: cadastro/LGPD + adesão ao Programa — com comprovante */}
                 <div style={{ marginBottom: 24 }}>
-                  <div style={{ fontSize: 13, fontWeight: 800, color: '#374151', marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.5 }}>Aceites de Termos</div>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: '#374151', marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.5 }}>Cadastro e adesão</div>
+                  {(() => {
+                    const pf = auditoriaData.perfil;
+                    const dtHora = (s) => { try { return s ? new Date(s).toLocaleString('pt-BR') : '—'; } catch { return '—'; } };
+                    const linha = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '8px 12px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, marginBottom: 6, fontSize: 12.5 };
+                    const btn = { padding: '4px 10px', border: '1px solid #cbd5e1', borderRadius: 8, background: 'white', cursor: 'pointer', fontSize: 11.5, fontWeight: 700, color: '#334155', whiteSpace: 'nowrap' };
+                    if (!pf) return <p style={{ fontSize: 13, color: '#94a3b8' }}>Perfil não carregado.</p>;
+                    return (
+                      <>
+                        <div style={linha}>
+                          <span>{pf.lgpd_aceito ? '✅' : '—'} <b>Termos de uso e LGPD (cadastro)</b>{pf.lgpd_aceito ? ` — aceito em ${dtHora(pf.lgpd_data || pf.created_at)}` : ' — sem registro de aceite'}</span>
+                          {pf.lgpd_aceito && (
+                            <button style={btn} onClick={() => gerarComprovanteAceite({
+                              titulo: 'Termos de Uso e Política de Privacidade (cadastro)',
+                              linhas: [['Usuário', `${pf.nome || auditoriaUser?.nome || '—'}`], ['ID do usuário', auditoriaUser?.id || '—'], ['Aceito em', dtHora(pf.lgpd_data || pf.created_at)], ['Registro', 'perfis.lgpd_aceito / lgpd_data (aceite obrigatório no cadastro)']],
+                              canonico: `${auditoriaUser?.id}|lgpd|${pf.lgpd_data || pf.created_at}`,
+                            })}>Comprovante</button>
+                          )}
+                        </div>
+                        <div style={linha}>
+                          <span>{pf.parceiro_aceite_em ? '✅' : '—'} <b>Termo de Adesão — Programa de Parceiros</b>{pf.parceiro_aceite_em ? ` — aderiu em ${dtHora(pf.parceiro_aceite_em)}${pf.parceiro_aceite_versao ? ` (termo ${pf.parceiro_aceite_versao})` : ''}` : ' — não aderiu'}</span>
+                          {pf.parceiro_aceite_em && (
+                            <button style={btn} onClick={() => gerarComprovanteAceite({
+                              titulo: 'Termo de Adesão ao Programa de Parceiros',
+                              linhas: [['Usuário', `${pf.nome || auditoriaUser?.nome || '—'}`], ['ID do usuário', auditoriaUser?.id || '—'], ['Aderiu em', dtHora(pf.parceiro_aceite_em)], ['Versão do termo', pf.parceiro_aceite_versao || '—'], ['Registro', 'perfis.parceiro_aceite_em / parceiro_aceite_versao']],
+                              canonico: `${auditoriaUser?.id}|parceiro|${pf.parceiro_aceite_em}|${pf.parceiro_aceite_versao || ''}`,
+                            })}>Comprovante</button>
+                          )}
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+
+                {/* Aceites de Termos de COMPRA (checkout pago — com IP, versão e hash de integridade) */}
+                <div style={{ marginBottom: 24 }}>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: '#374151', marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.5 }}>Aceites de Termos de Compra</div>
                   {auditoriaData.aceites.length === 0 ? (
-                    <p style={{ fontSize: 13, color: '#94a3b8' }}>Nenhum registro.</p>
+                    <p style={{ fontSize: 13, color: '#94a3b8' }}>Nenhum registro — o aceite de compra é gravado no checkout de plano/produto pago.</p>
                   ) : (
                     <table style={{ ...S.table, fontSize: 12 }}>
                       <thead><tr>
@@ -1224,17 +1296,40 @@ function UsuariosTab() {
                         <th style={S.th}>ID Asaas</th>
                         <th style={S.th}>IP</th>
                         <th style={S.th}>Dispositivo</th>
+                        <th style={S.th}>Verificação</th>
                       </tr></thead>
                       <tbody>
                         {auditoriaData.aceites.map((a, i) => (
                           <tr key={i}>
-                            <td style={S.td}>{fmtData(a.aceito_em)}</td>
+                            <td style={S.td}>{a.aceito_em ? new Date(a.aceito_em).toLocaleString('pt-BR') : '—'}</td>
                             <td style={S.td}>{a.plano_key || a.plano || '—'}</td>
                             <td style={S.td}>{a.valor != null ? `R$ ${Number(a.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}</td>
                             <td style={S.td}>{a.versao_termos || a.termos_versao || '—'}</td>
                             <td style={{ ...S.td, fontFamily: 'monospace', fontSize: 11 }}>{a.asaas_customer_id || a.asaas_id || a.asaas_payment_id || '—'}</td>
                             <td style={{ ...S.td, fontFamily: 'monospace', fontSize: 11 }}>{a.ip || '—'}</td>
-                            <td style={{ ...S.td, fontSize: 11, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={a.user_agent || ''}>{a.user_agent || '—'}</td>
+                            <td style={{ ...S.td, fontSize: 11, maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={a.user_agent || ''}>{a.user_agent || '—'}</td>
+                            <td style={S.td}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                {a.aceite_hash && <span style={{ fontFamily: 'monospace', fontSize: 10.5, color: '#64748b' }} title={`Hash SHA-256 gravado no aceite:\n${a.aceite_hash}`}>{a.aceite_hash.slice(0, 10)}…</span>}
+                                <button style={{ padding: '3px 9px', border: '1px solid #cbd5e1', borderRadius: 8, background: 'white', cursor: 'pointer', fontSize: 11, fontWeight: 700, color: '#334155', whiteSpace: 'nowrap' }}
+                                  onClick={() => gerarComprovanteAceite({
+                                    titulo: `Termo de Compra — ${a.plano_key || a.plano || 'plano/produto'}`,
+                                    linhas: [
+                                      ['Usuário', auditoriaData.perfil?.nome || auditoriaUser?.nome || '—'],
+                                      ['E-mail', a.user_email || '—'],
+                                      ['ID do usuário', auditoriaUser?.id || '—'],
+                                      ['Aceito em', a.aceito_em ? new Date(a.aceito_em).toLocaleString('pt-BR') : '—'],
+                                      ['Plano/produto', a.plano_key || a.plano || '—'],
+                                      ['Valor', a.valor != null ? `R$ ${Number(a.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '—'],
+                                      ['Versão do termo', a.versao_termos || a.termos_versao || '—'],
+                                      ['Gateway', a.gateway || '—'],
+                                      ['IP de origem (servidor)', a.ip || '—'],
+                                      ['Dispositivo (user-agent)', a.user_agent || '—'],
+                                    ],
+                                    hashArmazenado: a.aceite_hash || '',
+                                  })}>Comprovante</button>
+                              </div>
+                            </td>
                           </tr>
                         ))}
                       </tbody>

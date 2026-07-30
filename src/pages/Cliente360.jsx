@@ -200,7 +200,7 @@ export default function Cliente360() {
     // Termos aceitos (SEMPRE completos, sem corte de período — é o registro jurídico).
     const aceites = base.aceites || [];
     const lgpd = base.lgpd || null;
-    const linhasAceites = aceites.map(x => `<tr><td>${dt(x.aceito_em)}</td><td>${esc(x.plano_key || '—')}</td><td style="text-align:right">${x.valor != null ? brlv(x.valor) : '—'}</td><td>${esc(x.termos_versao || '—')}</td><td>${esc(x.gateway || '—')}</td><td>${esc(x.ip || '—')}</td></tr>`).join('');
+    const linhasAceites = aceites.map(x => `<tr><td>${dt(x.aceito_em)}</td><td>${esc(x.plano_key || '—')}</td><td style="text-align:right">${x.valor != null ? brlv(x.valor) : '—'}</td><td>${esc(x.termos_versao || '—')}</td><td>${esc(x.gateway || '—')}</td><td>${esc(x.ip || '—')}</td><td style="font-family:monospace;font-size:10px;word-break:break-all">${esc(x.aceite_hash || '—')}</td></tr>`).join('');
     const atividade = (base.atividade || []).filter((a) => noPeriodo(a.em || a.criado_em || a.data))
       .map(a => `<tr><td>${dt(a.em || a.criado_em || a.data)}</td><td>${esc(a.tipo || a.evento || '')}</td><td>${esc(a.descricao || a.detalhe || a.motivo || '')}</td></tr>`).join('');
     const periodoLabel = (tDe || tAte)
@@ -224,7 +224,7 @@ ${(par.diretos || []).length ? `<table><thead><tr><th>Indicado</th><th>Plano</th
 <h2>Termos aceitos — compra e cadastro</h2><div class="box">
 <div class="kv"><b>Cadastro / LGPD:</b> ${lgpd?.lgpd_aceito ? `aceito${lgpd.lgpd_data ? ' em ' + dt(lgpd.lgpd_data) : ''}` : 'sem registro de aceite'}</div>
 <div class="kv"><b>Termos de compra registrados:</b> ${aceites.length} (com IP de origem e versão do termo — prova para contestação/chargeback)</div></div>
-${aceites.length ? `<table><thead><tr><th>Aceito em</th><th>Plano/produto</th><th style="text-align:right">Valor</th><th>Versão do termo</th><th>Gateway</th><th>IP</th></tr></thead><tbody>${linhasAceites}</tbody></table>` : ''}
+${aceites.length ? `<table><thead><tr><th>Aceito em</th><th>Plano/produto</th><th style="text-align:right">Valor</th><th>Versão do termo</th><th>Gateway</th><th>IP</th><th>Hash de integridade (SHA-256)</th></tr></thead><tbody>${linhasAceites}</tbody></table>` : ''}
 <h2>Financeiro — Comissões e Saques</h2><div class="box">
 <div class="kv"><b>Saldo disponível:</b> ${brlv(fin.saldo)} &nbsp; <b>Total de comissões apuradas:</b> ${brlv(fin.comissoes_total)}</div></div>
 ${(fin.lancamentos || []).length ? `<table><thead><tr><th>Data</th><th>Tipo</th><th>Descrição</th><th style="text-align:right">Valor</th><th>Status</th></tr></thead><tbody>${linhasFin}</tbody></table>` : '<div class="muted" style="margin-top:6px">Sem lançamentos financeiros.</div>'}
