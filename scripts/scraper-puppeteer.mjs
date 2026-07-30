@@ -730,8 +730,11 @@ async function scraperSold(browser, pageNum = 1) {
 // superbid.net). portalId 2 = Superbid, 15 = Sold. Chama a API pública de
 // offers direto do navegador: searchType=opened (só ativos), filtra imóveis,
 // pagina de 100 em 100 até acabar. Genérico por portal/fonte.
-async function scraperSuperbidNet(browser, { portalId, fonte, leiloeiro, prefix, baseSite, storeAsLeiloeiro = false }) {
-  console.log(`  ${leiloeiro} — API offers (portal ${portalId}, somente abertos)...`);
+// `stores`: coleta por LOJA (white-label da rede — ex.: Total 16091, Crepaldi 16139, Round 35)
+// em vez de portal; o filtro vira stores.id:<id> e o portalId sai da query (o site white-label
+// consulta a MESMA offer-query assim — evidência no recon ofv35-total-xhr-list).
+async function scraperSuperbidNet(browser, { portalId, stores, fonte, leiloeiro, prefix, baseSite, storeAsLeiloeiro = false }) {
+  console.log(`  ${leiloeiro} — API offers (${stores ? `loja ${stores}` : `portal ${portalId}`}, somente abertos)...`);
   const page = await browser.newPage();
   await page.setUserAgent(USER_AGENT);
   await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
@@ -740,13 +743,13 @@ async function scraperSuperbidNet(browser, { portalId, fonte, leiloeiro, prefix,
     await page.goto(`${baseSite}/categorias/imoveis`, { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
     await new Promise(r => setTimeout(r, 2500));
 
-    const offers = await page.evaluate(async (portal) => {
+    const offers = await page.evaluate(async ([portal, lojas]) => {
       const FIELDS_BASE = 'id;linkURL;price;priceFormatted;endDate;endDateTime;offerStatus;store;product.shortDesc;product.location;product.productType;product.subCategory;product.thumbnailUrl;auction;offerDetail;offerDescription';
       // Campos de DOCUMENTO (edital/matrícula/laudo). Candidatos — a API ignora os
       // inexistentes; se por acaso REJEITAR o fieldList expandido (0 offers na 1ª página),
       // o fallback volta ao FIELDS_BASE → a coleta NUNCA quebra por causa disto.
       const FIELDS_DOCS = FIELDS_BASE + ';offerDocument;attachments;documents;offerAttachments;product.attachments;offerDetail.attachments;offerDetail.documents';
-      const apiUrl = (n, fields) => `https://offer-query.superbid.net/offers/?portalId=${portal}&locale=pt_BR&timeZoneId=America/Sao_Paulo&searchType=opened&filter=product.productType.description:imoveis;&pageNumber=${n}&pageSize=100&orderBy=endDate:asc&fieldList=${fields}`;
+      const apiUrl = (n, fields) => `https://offer-query.superbid.net/offers/?${lojas ? '' : `portalId=${portal}&`}locale=pt_BR&timeZoneId=America/Sao_Paulo&searchType=opened&filter=${lojas ? `stores.id:${lojas};` : ''}product.productType.description:imoveis;&pageNumber=${n}&pageSize=100&orderBy=endDate:asc&fieldList=${fields}`;
       const buscar = async (n, fields) => {
         try { const r = await fetch(apiUrl(n, fields), { headers: { Accept: 'application/json' } }); if (!r.ok) return null; const d = await r.json(); return d.offers || d.content || d.results || d.items || (Array.isArray(d) ? d : []); }
         catch { return null; }
@@ -764,7 +767,7 @@ async function scraperSuperbidNet(browser, { portalId, fonte, leiloeiro, prefix,
         }
       }
       return all;
-    }, portalId);
+    }, [portalId, stores || null]);
 
     console.log(`    ${leiloeiro}: ${offers.length} offers abertas coletadas`);
     const seen = new Set();
@@ -3212,6 +3215,11 @@ async function main() {
     console.log('\n📋 Rede Superbid — sub-portais 9 e 21...');
     if (rodar('SBID9'))  await coletarFonte('SBID9',  () => scraperSuperbidNet(browser, { portalId: '[9]',  fonte: 'SBID9',  leiloeiro: 'Rede Superbid', prefix: 'sbid9',  baseSite: 'https://www.superbid.net', storeAsLeiloeiro: true }));
     if (rodar('SBID21')) await coletarFonte('SBID21', () => scraperSuperbidNet(browser, { portalId: '[21]', fonte: 'SBID21', leiloeiro: 'Rede Superbid', prefix: 'sbid21', baseSite: 'https://www.superbid.net', storeAsLeiloeiro: true }));
+
+    // 3c. White-labels da rede por LOJA (Round 35 do backlog TRT-15): mesma offer-query,
+    // filtro stores.id — Total (65 ofertas no recon) e Crepaldi (0 hoje; fica armado).
+    if (rodar('TOTALLEILOES')) await coletarFonte('TOTALLEILOES', () => scraperSuperbidNet(browser, { stores: '16091', fonte: 'TOTALLEILOES', leiloeiro: 'Total Leilões', prefix: 'totall', baseSite: 'https://www.totalleiloes.com.br' }));
+    if (rodar('CREPALDI')) await coletarFonte('CREPALDI', () => scraperSuperbidNet(browser, { stores: '16139', fonte: 'CREPALDI', leiloeiro: 'Crepaldi Leilões', prefix: 'crep', baseSite: 'https://www.crepaldileiloes.com.br' }));
 
     // Leiloaria Smart (Leilofy) — imóveis não-CEF (securitizadoras etc.), DOM parsing.
     console.log('\n📋 Leiloaria Smart (Leilofy)...');

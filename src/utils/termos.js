@@ -6,6 +6,13 @@
 // viram v3.1 (aceites antigos preservam a versão com que foram gravados).
 export const TERMOS_VERSAO = '3.0';
 
+// Versões POR FAMÍLIA que evoluíram além da base (o aceite grava `<família>-v<versão>`;
+// quem aceitou a anterior re-aceita a nova na próxima contratação — sem forçar re-aceite
+// global da plataforma). v3.1 (30/07/2026, pedido do dono): honorários de êxito ganham
+// MÍNIMO de R$ 7.000; Leilão Club redefinido como MENTORIA + ASSESSORIA (todas as regras
+// da assessoria se aplicam; assessoria inclusa limitada a 1 imóvel/mês).
+const VERSAO_FAMILIA = { assessorado: '3.1', clube: '3.1' };
+
 // ─── REGISTRO CENTRAL POR PRODUTO/SERVIÇO (pedido do dono, 30/07) ────────────────
 // Cada produto tem TÍTULO amigável (auditoria/comprovante/360) e TERMO próprio
 // versionado — o aceite grava `<família>-v<versão>` para resguardar a empresa em
@@ -41,7 +48,8 @@ function familiaTermo(key) {
 
 // Versão POR PRODUTO gravada no aceite (aceites_plano.termos_versao).
 export function versaoTermoProduto(key) {
-  return `${familiaTermo(key)}-v${TERMOS_VERSAO}`;
+  const fam = familiaTermo(key);
+  return `${fam}-v${VERSAO_FAMILIA[fam] || TERMOS_VERSAO}`;
 }
 
 // Texto do termo da família — TERMO DE CONTRATAÇÃO AMPLO (v3.0), com as cláusulas de
@@ -60,7 +68,7 @@ export function termoDoProduto(key, { nome, valorLabel, modelo, inclui } = {}) {
   const base = {
     explorador: { modelo: 'recorrente', inclui: 'busca de imóveis em leilão e relatórios conforme o plano contratado' },
     top2: { modelo: 'recorrente', inclui: 'busca de imóveis, relatórios mercadológico, documental e laudo de viabilidade, e demais recursos do plano contratado' },
-    clube: { modelo: 'recorrente', inclui: 'comunidade, encontros ao vivo e conteúdos do Leilão Club' },
+    clube: { modelo: 'recorrente', honorarios: true, inclui: 'acesso a TODOS os cursos e ebooks da plataforma; encontro SEMANAL ao vivo (online) com o mentor para dúvidas e ensinamentos sobre o mercado de leilões; acesso aos eventos do mentor com até 10 (dez) convidados; e assessoria de arrematação inclusa para 1 (um) imóvel por mês' },
     assessorado: { modelo: 'parcelado', honorarios: true, inclui: 'assessoria de arrematação com equipe da plataforma e advogado parceiro, conforme escopo do contrato de prestação de serviços' },
     consultor: { modelo: 'recorrente' },
     advogado: { modelo: 'recorrente' },
@@ -84,6 +92,8 @@ export function termoDoProduto(key, { nome, valorLabel, modelo, inclui } = {}) {
     c.push('2. NATUREZA DO PRODUTO. Trata-se de conteúdo digital de caráter EDUCACIONAL e informativo. As informações, estratégias e exemplos apresentados não constituem promessa ou garantia de resultado financeiro, aprovação em leilões ou êxito em arrematações, que dependem de fatores alheios à plataforma e da conduta do próprio usuário.');
   } else if (fam === 'assessorado') {
     c.push('2. NATUREZA DO SERVIÇO. A assessoria constitui OBRIGAÇÃO DE MEIO, não de resultado: a equipe e o advogado parceiro empregam diligência técnica na análise e no acompanhamento, mas NÃO garantem êxito na arrematação, aprovação de proposta, desocupação do imóvel, prazo de registro ou resultado econômico, que dependem do leiloeiro, do juízo, de credores, de terceiros e das condições do certame.');
+  } else if (fam === 'clube') {
+    c.push('2. NATUREZA DO SERVIÇO. O Leilão Club combina MENTORIA (cursos, ebooks, encontros semanais e eventos, de caráter educacional e sem promessa de resultado) e ASSESSORIA DE ARREMATAÇÃO, à qual se aplicam TODAS as regras da Assessoria de Arrematação, inclusive a natureza de OBRIGAÇÃO DE MEIO: a equipe e o advogado parceiro empregam diligência técnica na análise e no acompanhamento, mas NÃO garantem êxito na arrematação, aprovação de proposta, desocupação do imóvel, prazo de registro ou resultado econômico, que dependem do leiloeiro, do juízo, de credores, de terceiros e das condições do certame.');
   } else {
     c.push('2. NATUREZA DO SERVIÇO. A plataforma é ferramenta de INFORMAÇÃO E APOIO À DECISÃO sobre imóveis em leilão. Os relatórios, análises, estimativas de valor, índices e pareceres têm caráter informativo e NÃO constituem garantia de resultado, recomendação de investimento, promessa de rentabilidade nem parecer jurídico definitivo. A decisão de participar de leilão e de ofertar lances é exclusiva do usuário.');
   }
@@ -105,7 +115,7 @@ export function termoDoProduto(key, { nome, valorLabel, modelo, inclui } = {}) {
     c.push('7. ACESSO IMEDIATO A CONTEÚDO DIGITAL. Solicito o acesso imediato ao conteúdo, antes do fim do prazo de arrependimento. Estou ciente de que, exercido o arrependimento no prazo legal, o estorno será integral; contudo, o consumo substancial do conteúdo no período poderá ser considerado na apuração de uso de má-fé do direito.');
   }
   if (base.honorarios) {
-    c.push('7. HONORÁRIOS DE ÊXITO. Estou ciente de que, em caso de arrematação bem-sucedida com apoio da assessoria, incidem 10% (dez por cento) de honorários de êxito sobre o valor da arrematação, conforme contrato de prestação de serviços.');
+    c.push('7. HONORÁRIOS DE ÊXITO. Estou ciente de que, em caso de arrematação bem-sucedida com apoio da assessoria, incidem 10% (dez por cento) de honorários de êxito sobre o valor da arrematação, observado o HONORÁRIO MÍNIMO de R$ 7.000,00 (sete mil reais) sempre que o valor apurado pelo percentual resultar inferior a esse montante, conforme contrato de prestação de serviços.');
   }
   // 8. Conta pessoal + PI
   c.push('8. CONTA PESSOAL E PROPRIEDADE INTELECTUAL. O acesso é pessoal e intransferível; o compartilhamento de credenciais ou a revenda de conteúdo autoriza a suspensão da conta. Relatórios, análises, cursos, ebooks, marcas e software são protegidos por direitos autorais e de propriedade intelectual, sendo vedadas reprodução, distribuição ou uso comercial sem autorização escrita, ressalvado o uso do relatório pelo próprio contratante na negociação do imóvel analisado.');
@@ -117,6 +127,10 @@ export function termoDoProduto(key, { nome, valorLabel, modelo, inclui } = {}) {
   c.push('11. DISPOSIÇÕES FINAIS. Este termo complementa os Termos de Uso e a Política de Privacidade da plataforma (bidprobrasil.com.br/#/termos e /#/privacidade), que declaro ter lido. Aplica-se a lei brasileira. Fica eleito o foro do domicílio do consumidor para relações de consumo e, nas demais, o da comarca da sede da empresa.');
   if (fam === 'assessorado') {
     c.push('12. CONTRATO ESPECÍFICO. A assessoria rege-se também pelo contrato de prestação de serviços firmado no ato da contratação, que prevalece sobre este termo em caso de divergência.');
+  }
+  if (fam === 'clube') {
+    c.push('12. LIMITE DE ASSESSORIAS DO LEILÃO CLUB. A assinatura inclui assessoria de arrematação para 1 (um) imóvel por mês de vigência. Assessorias EXCEDENTES no mesmo mês serão contratadas à parte, pelo mesmo investimento vigente da Assessoria de Arrematação avulsa (incidindo igualmente os honorários de êxito da cláusula 7). Os encontros semanais e eventos seguem a agenda divulgada na plataforma; o acesso a eventos compreende o assinante e até 10 (dez) convidados por evento.');
+    c.push('13. CONTRATO ESPECÍFICO. A assessoria inclusa rege-se também pelo contrato de prestação de serviços da Assessoria de Arrematação, que prevalece sobre este termo em caso de divergência.');
   }
 
   return { familia: fam, titulo: tituloProduto(key), versao: versaoTermoProduto(key), texto: c.join('\n\n') };
@@ -144,7 +158,7 @@ export function montarTermo({ nome, valorLabel, modelo = 'unico', inclui = '', h
     linhas.push('Autorizo a cobrança recorrente e estou ciente de que posso cancelar a qualquer momento pela plataforma, sem multa.');
   }
   if (honorarios) {
-    linhas.push('Estou ciente de que, em caso de arrematação bem-sucedida, incidirão 10% de honorários sobre o valor arrematado.');
+    linhas.push('Estou ciente de que, em caso de arrematação bem-sucedida, incidirão 10% de honorários sobre o valor arrematado, com honorário mínimo de R$ 7.000,00 quando o percentual resultar em valor inferior.');
   }
   linhas.push('Reconheço esta cobrança como legítima e de minha responsabilidade. Confirmo a leitura dos Termos de Uso e da Política de Privacidade.');
   return linhas.join(' ');
