@@ -22,13 +22,28 @@ const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
 //   revelam a API atual e os totais por leilão.
 // · SODRE: cobertura de area/matricula/edital caiu (84%/63%/63%) — listagem + detalhe de
 //   um lote ativo mostram os campos/API de hoje vs as premissas do scraper.
+// Round 34 capturado em 30/07 (dados em debug_fetch, fonte ofv34-%) — concluído.
+// Round 35 — BACKLOG TRT-15, os 16 domínios 0-acervo (docs/LEILOEIROS_TRT15_BACKLOG.md):
+// 1 visita por home com captura de XHR/domstats para classificar plataforma/API de cada um
+// e decidir cluster (1 scraper p/ vários) vs dedicado. Portais suspeitos (e-leiloeiro,
+// centraljudicial, leilaobrasil, hastapublica, judhastas) ficam p/ o Round 36.
 const ALVOS = [
-  { fonte: 'ofv34-biasi-home', url: 'https://www.biasileiloes.com.br/' },
-  { fonte: 'ofv34-biasi-lista1', url: 'https://www.biasileiloes.com.br/lotes/imoveis/pesquisa?pagina=1' },
-  { fonte: 'ofv34-biasi-lista2', url: 'https://www.biasileiloes.com.br/lotes/imoveis?pagina=1' },
-  { fonte: 'ofv34-pestana-home', url: 'https://www.pestanaleiloes.com.br/' },
-  { fonte: 'ofv34-sodre-lotes', url: 'https://www.sodresantoro.com.br/imoveis/lotes' },
-  { fonte: 'ofv34-sodre-det', url: 'https://www.sodresantoro.com.br/imoveis/lote/2781262' },
+  { fonte: 'ofv35-alfa', url: 'https://www.alfaleiloes.com/' },
+  { fonte: 'ofv35-gustavoreis', url: 'https://www.gustavoreisleiloes.com.br/' },
+  { fonte: 'ofv35-sato', url: 'https://www.satoleiloes.com.br/' },
+  { fonte: 'ofv35-hisa', url: 'https://www.hisaleiloes.com.br/' },
+  { fonte: 'ofv35-osvaldo', url: 'https://www.osvaldoleiloes.com.br/' },
+  { fonte: 'ofv35-elizabeth', url: 'https://www.elizabethseoanes.com.br/' },
+  { fonte: 'ofv35-crepaldi', url: 'https://www.crepaldileiloes.com.br/' },
+  { fonte: 'ofv35-econfianca', url: 'https://www.e-confianca.com.br/' },
+  { fonte: 'ofv35-total', url: 'https://www.totalleiloes.com.br/' },
+  { fonte: 'ofv35-delano', url: 'https://www.delanoleiloes.com.br/' },
+  { fonte: 'ofv35-picelli', url: 'https://www.picellileiloes.com.br/' },
+  { fonte: 'ofv35-shiokawa', url: 'https://www.shiokawaleiloes.com.br/' },
+  { fonte: 'ofv35-bomnegocio', url: 'https://www.bomnegocioleiloes.com.br/' },
+  { fonte: 'ofv35-paulistana', url: 'https://www.paulistanaleiloes.com.br/' },
+  { fonte: 'ofv35-saocaetano', url: 'https://www.saocaetanoleiloes.com.br/' },
+  { fonte: 'ofv35-sumare', url: 'https://www.sumareleiloes.com.br/' },
 ];
 
 // Round 33 — PortalZuk: a página do lote TEM a "Matrícula do Imóvel" num card de
