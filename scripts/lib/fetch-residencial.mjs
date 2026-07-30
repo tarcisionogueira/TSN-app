@@ -41,8 +41,13 @@ export async function fetchHeadless(url, { timeoutMs = 60000, esperaMs = 4000 } 
       await new Promise((r) => setTimeout(r, 6000));
       html = await page.content();
     }
-    return ehChallenge(html) ? null : html;                     // se não passou, devolve null (não trava o scraper)
-  } catch {
+    if (ehChallenge(html)) { console.error(`  [headless] ${url} → desafio Cloudflare não resolveu`); return null; }
+    return html;
+  } catch (e) {
+    // Erro VISÍVEL (não silencioso): sem isto o 1º run real em WSL mostrou só "home não
+    // veio" e escondeu a causa (launch do Chromium? rede? timeout?). Continua devolvendo
+    // null — o scraper não trava; mas o log diz o porquê.
+    console.error(`  [headless] ${url} → ${String(e?.message || e).slice(0, 200)}`);
     return null;
   } finally {
     if (page) await page.close().catch(() => {});
