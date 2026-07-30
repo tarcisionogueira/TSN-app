@@ -51,7 +51,7 @@ function RelatorioCard({ icone: Icone, nome, dados }) {
               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {r.titulo || `${r.cidade || '—'}${r.estado ? '/' + r.estado : ''}`}{r.arrematado ? ' 🏆' : ''}
               </span>
-              <span style={{ flexShrink: 0, color: '#94a3b8' }}>{dataBR(r.created_at)}</span>
+              <span style={{ flexShrink: 0, color: '#94a3b8' }}>{dataHoraBR(r.created_at)}</span>
             </div>
           ))}
         </div>
@@ -336,7 +336,7 @@ ${atividade ? `<h2>Atividade recente</h2><table><thead><tr><th>Data</th><th>Even
                       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
                         <b>{f.n}×</b> {evRot}{f.cidade ? ` · ${f.cidade}` : ''} · <span style={{ color: '#b45309' }}>{f.motivo}</span>
                       </span>
-                      <span style={{ flexShrink: 0, color: '#94a3b8' }}>{dataBR(f.ultimo)}</span>
+                      <span style={{ flexShrink: 0, color: '#94a3b8' }}>{dataHoraBR(f.ultimo)}</span>
                     </div>
                   );
                 })}
@@ -543,7 +543,7 @@ ${atividade ? `<h2>Atividade recente</h2><table><thead><tr><th>Data</th><th>Even
                       {v.valor ? <span style={{ color: '#059669' }}> · {brl(v.valor)}</span> : ''}
                       {v.vezes > 1 ? <span style={{ color: '#0D63DB', fontWeight: 700 }}> · {v.vezes}×</span> : ''}
                     </span>
-                    <span style={{ flexShrink: 0, color: '#94a3b8' }}>{dataBR(v.visto_em)}</span>
+                    <span style={{ flexShrink: 0, color: '#94a3b8' }}>{dataHoraBR(v.visto_em)}</span>
                   </div>
                 ))}
               </div>
@@ -584,7 +584,7 @@ ${atividade ? `<h2>Atividade recente</h2><table><thead><tr><th>Data</th><th>Even
                           <span style={{ color: cor, fontWeight: 700 }}>{rot}</span>
                           {a.detalhe ? <span style={{ color: '#64748b' }}> · {a.detalhe}</span> : ''}
                         </span>
-                        <span style={{ flexShrink: 0, color: '#94a3b8' }}>{dataBR(a.criado_em)}</span>
+                        <span style={{ flexShrink: 0, color: '#94a3b8' }}>{dataHoraBR(a.criado_em)}</span>
                       </div>
                       {diag.length > 0 && <div style={{ fontSize: 10.5, color: '#94a3b8', marginTop: 2, whiteSpace: 'normal' }}>{diag.join(' · ')}</div>}
                     </div>
@@ -633,7 +633,7 @@ ${atividade ? `<h2>Atividade recente</h2><table><thead><tr><th>Data</th><th>Even
                       {Array.isArray(b.pagamento_tipos) && b.pagamento_tipos.length ? ` · ${b.pagamento_tipos.join(',')}` : ''}
                       <span style={{ color: '#94a3b8' }}>· {b.resultados_count ?? 0} result.</span>
                     </span>
-                    <span style={{ flexShrink: 0, color: '#94a3b8' }}>{dataBR(b.criado_em)}</span>
+                    <span style={{ flexShrink: 0, color: '#94a3b8' }}>{dataHoraBR(b.criado_em)}</span>
                   </div>
                 ))}
               </div>
@@ -688,7 +688,7 @@ ${atividade ? `<h2>Atividade recente</h2><table><thead><tr><th>Data</th><th>Even
                 {dados.chamados.map((c) => (
                   <div key={c.id} style={{ fontSize: 12.5, color: '#334155', display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
                     <span>{c.titulo || '(sem título)'} {c.atendente_nome ? <span style={{ color: '#94a3b8' }}>· {c.atendente_nome}</span> : ''}</span>
-                    <span style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}><StatusChip status={c.status} /><span style={{ color: '#94a3b8' }}>{dataBR(c.criado_em)}</span></span>
+                    <span style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}><StatusChip status={c.status} /><span style={{ color: '#94a3b8' }}>{dataHoraBR(c.criado_em)}</span></span>
                   </div>
                 ))}
               </div>
