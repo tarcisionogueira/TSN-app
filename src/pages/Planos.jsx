@@ -373,10 +373,19 @@ export default function Planos() {
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 11, marginBottom: 28 }}>
                 {['Tudo do Investidor Pro', 'Análise jurídica e estratégia de lance', 'Acompanhamento até a imissão de posse', 'Suporte com documentação pós-arrematação', 'Registro do imóvel via plataforma (ONR)', '12 meses de acesso · extensível até a posse'].map(t => <CheckItem key={t} txt={t} />)}
               </div>
-              <button onClick={() => ctaTipo('assessorado') === 'downgrade' ? irDowngrade() : ir('assessorado')} disabled={atual('assessorado')}
-                style={{ width: '100%', padding: '14px', border: 'none', borderRadius: 12, background: atual('assessorado') ? '#f1f5f9' : '#d97706', color: atual('assessorado') ? '#94a3b8' : 'white', fontWeight: 800, fontSize: 15, cursor: atual('assessorado') ? 'default' : 'pointer', boxShadow: atual('assessorado') ? 'none' : '0 4px 14px rgba(217,119,6,0.35)' }}>
-                {atual('assessorado') ? 'Seu plano atual' : ctaTipo('assessorado') === 'downgrade' ? 'Fazer downgrade' : 'Contratar assessoria →'}
-              </button>
+              {/* Assessoria é POR ARREMATAÇÃO (regra do dono): quem já é assessorado pode
+                  contratar a PRÓXIMA operação — o Checkout valida se a atual já teve o
+                  arremate sinalizado. Leilão Club não contrata avulsa (já tem ilimitada). */}
+              {(() => {
+                const ehClube = user && /^clube/.test(role || '');
+                const jaAssessorado = atual('assessorado');
+                return (
+                  <button onClick={() => !ehClube && ir('assessorado')} disabled={ehClube}
+                    style={{ width: '100%', padding: '14px', border: 'none', borderRadius: 12, background: ehClube ? '#f1f5f9' : '#d97706', color: ehClube ? '#94a3b8' : 'white', fontWeight: 800, fontSize: 15, cursor: ehClube ? 'default' : 'pointer', boxShadow: ehClube ? 'none' : '0 4px 14px rgba(217,119,6,0.35)' }}>
+                    {ehClube ? 'Incluído no seu plano' : jaAssessorado ? 'Contratar nova arrematação →' : 'Contratar assessoria →'}
+                  </button>
+                );
+              })()}
               <BotaoCompartilhar planoKey="assessorado" />
             </div>
             )}

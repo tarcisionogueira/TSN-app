@@ -110,6 +110,53 @@
    (cuidado com eventos EXTERNOS Comprei/PGFN) · cluster PostgREST `picelli`+`shiokawa` (1
    scraper genérico, centenas de lotes no picelli) · e-confianca via origem e-leiloes.com.br.
 
+**E7. NOITE 30/07 — FLUXO DA ARREMATAÇÃO organizado (spec do dono) + 4 bugs de produção:**
+Regras do dono implementadas: (1) Pro assina → relatórios → assessoria a qualquer momento
+(exige Pro); ao virar assessorado MANTÉM benefícios do Pro (cotas já eram idênticas — auditado);
+mensalidade do Pro CONTINUA indefinidamente durante a assessoria; (2) assessoria é INDIVIDUAL
+(1 arrematação/contrato) — sinalizou "Arrematei" → libera contratar a próxima (antes de vender/
+tomar posse); Club não contrata avulsa (ilimitada inclusa).
+1. **Guarda anti-flip de role (bug crítico)**: pagamento NUNCA rebaixa o role. `roleAposPagamento()`
+   em `api/_webhook-core.js` (escada explorador<top2<assessorado<clube; papéis de equipe intocáveis)
+   aplicada em `ativarPlanoDireto` + `processarConfirmado` + espelho em `mp.js ativarRoleInline` +
+   `reconciliar-assinaturas-cron` (que ainda: NÃO rebaixa assessorado quando o preapproval 12×
+   termina — assessoria encerra pela POSSE, não pelo gateway). Antes: a renovação mensal do Pro
+   gravava role='top2' e o assessorado perdia o acesso ao Caso/jurídico no meio do contrato.
+2. **Atribuição manual sem efeitos colaterais** (`atribuir-arremate.js`): NÃO promove mais para
+   assessorado nem seta plano_vencimento — cria caso+âncora+ledger e PRONTO; role/cotas do usuário
+   ficam como estão (explorador mantém 3/0, Pro mantém 10/10/3). Acesso ao acompanhamento = vínculo
+   ao caso (RLS + "Meus acompanhamentos"). Admin.jsx não força mais role local.
+3. **Pós-posse volta ao PLANO BASE** (`marcar-posse.js`): último caso encerrado → se há recorrência
+   do Pro ativa (espelho `mp_assinaturas` OU Asaas subscriptions ACTIVE ~49,90/99,90 MONTHLY ou
+   ~449,90 YEARLY) volta a `top2`; só cai a explorador sem recorrência nenhuma. Outros casos em
+   aberto seguem mantendo assessorado (lógica que já existia).
+4. **1 assessoria por vez** — novo `api/assessoria-status.js` (podeContratar/motivo): última
+   `contratos_link` de assessoria viva sem arremate sinalizado depois (arrematados.created_at OU
+   casos.arrematado_em > contrato.criado_em) → bloqueia; Checkout ganhou a tela "assessoria em
+   andamento" (e "inclusa no Club"); Planos: card assessoria p/ assessorado virou
+   **"Contratar nova arrematação →"** (era botão morto "Seu plano atual") e p/ Club
+   "Incluído no seu plano" (era "Fazer downgrade" — errado).
+5. **Preço do plano → mensalidade SEGUINTE (fim do grandfather de preço, regra nova)**: RPC
+   `aplicar_precos_agendados` agora devolve de/para (migração `aplicar_precos_agendados_retorna_
+   mudancas.sql`, APLICADA) e o cron `aplicar-precos-agendados-cron` propaga aos gateways: Asaas
+   PUT value (updatePendingPayments=false) casando ciclo+valor antigo EXATO; MP PUT auto_recurring
+   casando external_reference+valor antigo. Assessoria (12× fechado) fora; legado 99,90 NÃO é
+   tocado (só muda quem estava no preço que o admin alterou). ⚠️ Fluxo do admin: usar o PREÇO
+   AGENDADO (Cobrança passo 8) — mudança direta na coluna não dispara propagação.
+6. **Bugs de produção corrigidos no caminho**: (a) `HomeCliente` "Meus acompanhamentos" NUNCA
+   renderizava (coluna `criado_em` inexistente em casos → 42703 silencioso; é `created_at`) —
+   exatamente a tela do arremate atribuído; (b) `api/arrematacoes.js equipeDoCaso` mesma coluna →
+   arrematação nascia sem analista/advogado e o rateio de honorários saía sem equipe; (c)
+   `IndiceConsulta PODE_GERAR` sem as variantes `_anual` (pagantes anuais não viam o botão de
+   gerar Índice); (d) `garantia-cancelar` lia `planos_config.valor` (inexistente; é `preco`) —
+   valor_ref do reembolso sempre null.
+7. **Pendentes/decisões em aberto**: repo tem 2 definições conflitantes de `limite_ia` (banco está
+   na correta 3/10/3 — conferido ao vivo; consolidar arquivos) e de `registrar_preco_contratado`
+   (v2 write-only, ignora assessorado/_anual); `Analise.jsx` "Arrematei" sem o gate visual dos 3
+   relatórios (mitigado: só aparece dentro do Parecer Final, que exige laudo); enforcement do
+   "1 por vez" é no cliente (gate de UI + status do servidor) — o pagamento inline em si não é
+   bloqueado server-side (aceitável: contrato registra a operação; endurecer depois se preciso).
+
 **E. BIASI (piso 130, mediana 260, último 96) — recon PENDENTE de dado fresco:** queda contínua desde 16/07 (369→173→96). O ambiente remoto não alcança o site (proxy bloqueia) — validar com o run do cluster disparado hoje: `select total,status from fonte_saude where fonte='BIASI' order by executado_em desc limit 3;`. Se seguir ≤100 com status ok em runs consecutivos, pode ser acervo real encolhendo (pós-leilão); se oscilar, rodar a ofensiva (recon estrutura viva × premissas: `?pagina` na listagem agregada + fallback home) via Actions (`debug-leiloeiros.yml`).
 
 ---

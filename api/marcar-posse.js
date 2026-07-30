@@ -1,9 +1,13 @@
 /**
  * POST /api/marcar-posse — o cliente (ou admin/analista) sinaliza que TOMOU POSSE
  * do imóvel deste caso. Com a posse, o trabalho da ASSESSORIA daquele imóvel
- * ENCERRA. Regra de plano (decisão do dono):
+ * ENCERRA. Regra de plano (decisão do dono, atualizada 30/07):
  *   - se o cliente já era Leilão Club ou Investidor Pro → MANTÉM o plano.
- *   - senão (assessorado) → REDUZ para Explorador (a assessoria foi concluída).
+ *   - assessorado com OUTRO caso em aberto → mantém assessorado.
+ *   - assessorado no ÚLTIMO caso → volta ao PLANO BASE: a mensalidade do Investidor
+ *     Pro continua sendo cobrada durante toda a assessoria (prazo indeterminado),
+ *     então se há assinatura Pro ativa nos gateways ele volta a 'top2' — só cai para
+ *     Explorador se não houver recorrência ativa nenhuma.
  *
  * Body: { caso_id }
  * Usa service key: o role só muda no servidor (o trigger proteger_campos_sensiveis_perfil
@@ -57,25 +61,52 @@ export default async function handler(req) {
 
   // Reavalia o plano do CLIENTE do caso (não do staff que clicou).
   const clienteId = caso.cliente_id;
-  const [cliente] = await (await sb(`perfis?id=eq.${encodeURIComponent(clienteId)}&select=role&limit=1`)).json().catch(() => []);
+  const [cliente] = await (await sb(`perfis?id=eq.${encodeURIComponent(clienteId)}&select=role,asaas_id&limit=1`)).json().catch(() => []);
   const roleCliente = cliente?.role || null;
   let reduziu = false, roleNovo = roleCliente, outroAberto = false;
   if (roleCliente && !MANTEM_PLANO.includes(roleCliente) && roleCliente !== 'explorador') {
-    // A assessoria é POR IMÓVEL (caso), mas o plano é da CONTA. Só rebaixa para explorador
+    // A assessoria é POR IMÓVEL (caso), mas o plano é da CONTA. Só reavalia o role
     // quando ESTE era o ÚLTIMO caso em aberto do cliente — se ele ainda tem outro imóvel em
     // assessoria (posse_em nulo), mantém o plano até tomar posse de todos. Como já marcamos a
     // posse deste caso acima, a busca por outros abertos exclui este naturalmente.
     const outros = await (await sb(`casos?cliente_id=eq.${encodeURIComponent(clienteId)}&id=neq.${encodeURIComponent(casoId)}&posse_em=is.null&select=id&limit=1`)).json().catch(() => []);
     outroAberto = Array.isArray(outros) && outros.length > 0;
     if (!outroAberto) {
-      // assessorado (ou variante) → explorador: a assessoria do cliente encerrou (último imóvel).
+      // Último caso encerrado → volta ao PLANO BASE. A mensalidade do Pro seguiu sendo
+      // cobrada durante a assessoria (regra do dono), então se há recorrência do Pro
+      // ativa em qualquer gateway, o cliente volta a 'top2'; senão, Explorador.
+      roleNovo = (await temAssinaturaProAtiva(clienteId, cliente?.asaas_id)) ? 'top2' : 'explorador';
       await sb(`perfis?id=eq.${encodeURIComponent(clienteId)}`, {
         method: 'PATCH', headers: { Prefer: 'return=minimal' },
-        body: JSON.stringify({ role: 'explorador' }),
+        body: JSON.stringify({ role: roleNovo }),
       });
-      reduziu = true; roleNovo = 'explorador';
+      reduziu = roleNovo === 'explorador';
     }
   }
 
   return json({ ok: true, posse_em: posseEm, reduziu, role_novo: roleNovo, mantido: !reduziu, outro_imovel_em_assessoria: outroAberto });
+}
+
+// Há recorrência do Investidor Pro ATIVA? Checa o espelho local do MP (mp_assinaturas,
+// mantido pelo reconciliar-assinaturas-cron) e as subscriptions ativas do Asaas pelo
+// customer id. Mensalidade do Pro ≈ 49,90 (legado 99,90) MONTHLY ou 449,90 YEARLY —
+// faixas com folga; a parcela de assessoria (500, 12×) NÃO conta como plano base.
+async function temAssinaturaProAtiva(userId, asaasId) {
+  try {
+    const r = await sb(`mp_assinaturas?user_id=eq.${encodeURIComponent(userId)}&status=eq.authorized&plano_key=like.top2*&select=mp_assinatura_id&limit=1`);
+    const rows = r.ok ? await r.json().catch(() => []) : [];
+    if (Array.isArray(rows) && rows.length > 0) return true;
+  } catch { /* segue para o Asaas */ }
+  const ASAAS_KEY = (process.env.ASAAS_API_KEY || '').trim();
+  if (!asaasId || !ASAAS_KEY) return false;
+  try {
+    const ASAAS_URL = process.env.ASAAS_ENV === 'sandbox' ? 'https://api-sandbox.asaas.com/v3' : 'https://api.asaas.com/v3';
+    const r = await fetch(`${ASAAS_URL}/subscriptions?customer=${encodeURIComponent(asaasId)}&status=ACTIVE&limit=50`, { headers: { access_token: ASAAS_KEY } });
+    if (!r.ok) return false;
+    const data = await r.json().catch(() => null);
+    return (data?.data || []).some(s => {
+      const v = Number(s.value) || 0;
+      return (s.cycle === 'MONTHLY' && v >= 40 && v <= 120) || (s.cycle === 'YEARLY' && v >= 350 && v <= 500);
+    });
+  } catch { return false; }
 }

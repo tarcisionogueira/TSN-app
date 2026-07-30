@@ -65,8 +65,22 @@ async function mpPut(path, body) {
 const SB_URL = (process.env.VITE_SUPABASE_URL || '').trim();
 const SB_KEY = (process.env.SUPABASE_SERVICE_KEY || '').trim();
 
+// Escada anti-flip (espelho de roleAposPagamento em _webhook-core.js, sem arrastar
+// deps Node p/ o bundle Edge): pagamento só SOBE o role — a renovação do Pro não
+// pode rebaixar um assessorado/clube, e papéis de equipe nunca são sobrescritos.
+const RANK_PLANO = { explorador: 0, top2: 1, top2_anual: 1, assessorado: 2, assessorado_anual: 2, clube: 3, clube_anual: 3 };
+
 async function ativarRoleInline(userId, planoKey, mpId) {
   if (!SB_URL || !SB_KEY || !userId || !planoKey) return { skipped: true };
+  let roleFinal = planoKey;
+  try {
+    const at = await fetch(`${SB_URL}/rest/v1/perfis?id=eq.${userId}&select=role`, {
+      headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` },
+    });
+    const [perfil] = at.ok ? await at.json() : [];
+    const rAtual = RANK_PLANO[perfil?.role], rNovo = RANK_PLANO[planoKey];
+    if (perfil?.role && (rAtual == null || (rAtual >= (rNovo ?? 0)))) roleFinal = perfil.role;
+  } catch { /* sem leitura, segue com planoKey (comportamento antigo) */ }
   const res = await fetch(`${SB_URL}/rest/v1/perfis?id=eq.${userId}`, {
     method: 'PATCH',
     headers: {
@@ -78,7 +92,7 @@ async function ativarRoleInline(userId, planoKey, mpId) {
     // Grava o id do preapproval (mp_id): sem ele não dá para rastrear/gerenciar a
     // recorrência por usuário nem cancelar pelo id (só por e-mail). plano_pago_em/
     // ciclo marcam a assinatura ativa.
-    body: JSON.stringify({ role: planoKey, inadimplente_desde: null, role_anterior: null,
+    body: JSON.stringify({ role: roleFinal, inadimplente_desde: null, role_anterior: null,
       ...(mpId ? { mp_id: String(mpId), plano_pago_em: new Date().toISOString(), plano_ciclo: 'mensal' } : {}) }),
   });
   if (!res.ok) {

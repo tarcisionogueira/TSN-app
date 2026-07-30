@@ -42,7 +42,9 @@ async function getRoleFor(userId) {
 // Herda a equipe já sorteada no caso (analista na reunião, advogado no jurídico).
 // O sorteio NÃO acontece aqui — apenas reaproveita quem o fluxo já definiu.
 async function equipeDoCaso(imovel_id, cliente_id) {
-  const r = await dbFetch(`casos?imovel_id=eq.${imovel_id}&cliente_id=eq.${cliente_id}&select=analista_id,advogado_id&order=criado_em.desc&limit=1`);
+  // Coluna é created_at ('criado_em' não existe em casos): o 42703 silencioso fazia
+  // a arrematação nascer sem analista/advogado — e o rateio de honorários sem equipe.
+  const r = await dbFetch(`casos?imovel_id=eq.${imovel_id}&cliente_id=eq.${cliente_id}&select=analista_id,advogado_id&order=created_at.desc&limit=1`);
   const c = r.data?.[0] || {};
   return { analista_id: c.analista_id || null, advogado_id: c.advogado_id || null };
 }

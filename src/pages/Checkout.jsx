@@ -152,6 +152,21 @@ export default function Checkout() {
       .then(r => r.json()).then(d => { const c = d?.cpfs?.[user.id]; if (c) setCpf(c); }).catch(() => {});
   }, [user?.id]);
 
+  // Assessoria é 1 arrematação POR CONTRATO (regra do dono): quem já tem uma em
+  // andamento só contrata a próxima depois de SINALIZAR o arremate. O servidor
+  // decide (/api/assessoria-status); erro de rede não trava o checkout (fail-open —
+  // o pagamento continua sendo uma ação manual e o contrato registra a operação).
+  const [assessoriaStatus, setAssessoriaStatus] = useState(null);
+  useEffect(() => {
+    if (planoKey !== 'assessorado' || !user?.id) { setAssessoriaStatus(null); return; }
+    let vivo = true;
+    apiCall('/api/assessoria-status')
+      .then(r => r.json())
+      .then(d => { if (vivo) setAssessoriaStatus(d || null); })
+      .catch(() => { if (vivo) setAssessoriaStatus({ podeContratar: true, motivo: 'ok' }); });
+    return () => { vivo = false; };
+  }, [planoKey, user?.id]);
+
   const temModalidade = planoKey === 'assessorado' || planoKey === 'clube';
   const temToggleAnual = planoKey === 'top2'; // top1 removido do produto
   const planoApiKey = temModalidade && modalidade === 'vista'
@@ -284,6 +299,34 @@ export default function Checkout() {
           </p>
           <button onClick={() => nav('/checkout?plano=top2')} style={{ width: '100%', padding: '14px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: 'pointer', marginBottom: 12 }}>
             Assinar o Investidor Pro
+          </button>
+          <button onClick={() => nav('/planos')} style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: 13, cursor: 'pointer' }}>
+            Ver todos os planos
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Assessoria em ANDAMENTO (contratada e ainda sem arremate sinalizado): a próxima
+  // só libera quando o cliente sinalizar a arrematação ("Arrematei") — regra de 1
+  // operação por contrato. Leilão Club nem passa por aqui (assessoria já inclusa).
+  if (planoKey === 'assessorado' && assessoriaStatus && !assessoriaStatus.podeContratar) {
+    const ehClube = assessoriaStatus.motivo === 'clube_incluido';
+    return (
+      <div style={{ minHeight: '100vh', background: '#111111', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 20px' }}>
+        <div style={{ maxWidth: 480, textAlign: 'center', background: '#1a1a1a', border: '1px solid #334155', borderRadius: 20, padding: '40px 32px' }}>
+          <div style={{ fontSize: 40, marginBottom: 16 }}>{ehClube ? '♾️' : '🏗️'}</div>
+          <h2 style={{ color: 'white', fontSize: 22, fontWeight: 900, marginBottom: 12 }}>
+            {ehClube ? 'Assessoria já inclusa no seu plano' : 'Você já tem uma assessoria em andamento'}
+          </h2>
+          <p style={{ color: '#94a3b8', fontSize: 14, lineHeight: 1.7, marginBottom: 24 }}>
+            {ehClube
+              ? <>Como membro do <strong style={{ color: '#c084fc' }}>Leilão Club</strong>, você tem assessoria completa para TODAS as suas arrematações — não precisa contratar avulsa. Fale com o time para iniciar o acompanhamento de um novo imóvel.</>
+              : <>A assessoria é individual: <strong style={{ color: 'white' }}>uma arrematação por contrato</strong>. Assim que você arrematar o imóvel da assessoria atual e sinalizar com o botão <strong style={{ color: '#34d399' }}>"Arrematei"</strong> (em Minhas Análises), a contratação da próxima é liberada — mesmo antes de vender ou tomar posse.</>}
+          </p>
+          <button onClick={() => nav(ehClube ? '/painel' : '/analises')} style={{ width: '100%', padding: '14px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: 'pointer', marginBottom: 12 }}>
+            {ehClube ? 'Falar com o time' : 'Ir para Minhas Análises'}
           </button>
           <button onClick={() => nav('/planos')} style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: 13, cursor: 'pointer' }}>
             Ver todos os planos

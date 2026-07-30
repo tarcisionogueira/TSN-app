@@ -54,8 +54,11 @@ export default function HomeCliente() {
 
   useEffect(() => {
     if (!effectiveUserId) return;
-    supabase.from('casos').select('id, imovel_endereco, status_etapa, criado_em')
-      .eq('cliente_id', effectiveUserId).order('criado_em', { ascending: false }).limit(10)
+    // ATENÇÃO: a coluna é created_at ('criado_em' não existe em casos — o 42703 do
+    // PostgREST zerava a lista e "Meus acompanhamentos" nunca renderizava, inclusive
+    // para arremates atribuídos pela equipe).
+    supabase.from('casos').select('id, imovel_endereco, status_etapa, created_at')
+      .eq('cliente_id', effectiveUserId).order('created_at', { ascending: false }).limit(10)
       .then(({ data }) => setMeusCasos(data || []));
   }, [effectiveUserId]);
 

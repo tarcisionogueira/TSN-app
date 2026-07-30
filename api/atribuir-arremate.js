@@ -1,8 +1,7 @@
 /**
  * POST /api/atribuir-arremate — admin/analista ATRIBUI uma arrematação a um usuário
  * (ex.: cliente novo que já tem operação em andamento). Cria um CASO marcado como
- * "arrematado" (habilita o acompanhamento + lançamentos financeiros/indicadores) e
- * promove o usuário para ASSESSORADO imediatamente.
+ * "arrematado" (habilita o acompanhamento + lançamentos financeiros/indicadores).
  *
  * Body: { user_id, imovel_endereco?, imovel_valor?, tipo_leilao?, cidade?, estado?, tipo_imovel? }
  * Só admin/analista. Usa service key (age em nome de outro usuário — fora do RLS).
@@ -11,6 +10,11 @@
  * assessorado): cria um imóvel-âncora oculto → habilita anexar o AUTO DE ARREMATAÇÃO
  * + documentos e gerar os 3 relatórios (mercadológico/jurídico/laudo), que ficam de
  * base para a IA aprender e ganhar assertividade.
+ *
+ * REGRA DO DONO (30/07): atribuição manual NÃO gera cobrança e NÃO altera os direitos
+ * do usuário — o role e as cotas de relatórios/Índice ficam como estão (explorador
+ * mantém as de explorador, Investidor Pro as do Pro). O acesso ao acompanhamento vem
+ * do VÍNCULO ao caso (RLS por cliente_id + "Meus acompanhamentos"), não do role.
  */
 export const config = { runtime: 'edge' };
 
@@ -146,15 +150,10 @@ export default async function handler(req) {
     }
   }
 
-  // 2) Promove o usuário para ASSESSORADO imediatamente (habilita as telas/indicadores).
-  //    Atribuição pela equipe NÃO gera cobrança — a validade da assessoria é de 12
-  //    meses (até a conclusão da posse), então marcamos plano_vencimento = hoje+12m.
-  const venc = new Date(agora); venc.setMonth(venc.getMonth() + 12);
-  const upd = await sb(`perfis?id=eq.${encodeURIComponent(user_id)}`, {
-    method: 'PATCH', headers: { Prefer: 'return=minimal' },
-    body: JSON.stringify({ role: 'assessorado', plano_vencimento: venc.toISOString() }),
-  });
-  if (!upd.ok) return json({ error: 'Caso criado, mas falha ao promover para assessorado', detalhe: await upd.text().catch(() => ''), caso_id: caso?.id }, 500);
-
-  return json({ ok: true, caso_id: caso?.id, imovel_id: imovelId, role: 'assessorado', plano_vencimento: venc.toISOString() });
+  // 3) Regra do dono (30/07): atribuição manual NÃO mexe no role nem nas cotas do
+  //    usuário — o acompanhamento (Caso + "Meus acompanhamentos") vem do vínculo ao
+  //    caso via RLS, e os direitos de relatórios/Índice seguem os do plano que ele
+  //    já tem. (Antes promovia para 'assessorado' + plano_vencimento, o que dava a
+  //    um explorador as cotas 10/10/3 do Pro sem cobrança — removido.)
+  return json({ ok: true, caso_id: caso?.id, imovel_id: imovelId, role: alvo.role, role_alterado: false });
 }

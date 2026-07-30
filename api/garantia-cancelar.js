@@ -124,8 +124,11 @@ export default async function handler(req, res) {
     // valor de referência do plano (para o admin conferir o estorno)
     let valorRef = null;
     try {
-      const [pc] = await (await sb(`planos_config?plano_key=eq.${encodeURIComponent(rolePagante)}&select=valor&limit=1`)).json();
-      valorRef = pc?.valor ?? null;
+      // Coluna é `preco` ('valor' não existe em planos_config — o 42703 deixava o
+      // valor_ref sempre null no registro/e-mail do admin). Variante _anual usa preco_anual.
+      const base = rolePagante.replace(/_anual$/, '');
+      const [pc] = await (await sb(`planos_config?plano_key=eq.${encodeURIComponent(base)}&select=preco,preco_anual&limit=1`)).json();
+      valorRef = /_anual$/.test(rolePagante) ? (pc?.preco_anual ?? pc?.preco ?? null) : (pc?.preco ?? null);
     } catch { /* opcional */ }
 
     // 3) Registra o pedido de reembolso (canal auditável p/ o admin executar o estorno).

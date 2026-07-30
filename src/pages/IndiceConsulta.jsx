@@ -7,7 +7,7 @@ import { gerarIndicePDF } from '../components/IndicePDF';
 import { useAuth } from '../contexts/AuthContext';
 
 // Quem pode GERAR o índice de uma região nova (o servidor é a fonte da verdade — isto é só UI).
-const PODE_GERAR = ['admin', 'top2', 'assessorado', 'clube', 'analista', 'advogado'];
+const PODE_GERAR = ['admin', 'top2', 'top2_anual', 'assessorado', 'assessorado_anual', 'clube', 'clube_anual', 'analista', 'advogado'];
 
 const UFS = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'];
 const brl = (v) => 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { maximumFractionDigits: 0 });

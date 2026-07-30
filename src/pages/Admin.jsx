@@ -1019,7 +1019,9 @@ ${hash ? `<h2>Verificação de integridade</h2><div class="kv muted">${esc(hashL
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Falha ao atribuir');
-      setUsers(users.map(u => u.id === atribUser.id ? { ...u, role: 'assessorado' } : u));
+      // Regra do dono (30/07): atribuição manual NÃO muda role/cotas — o servidor
+      // devolve o role real (inalterado); o acesso ao caso vem do vínculo (RLS).
+      if (data.role) setUsers(users.map(u => u.id === atribUser.id ? { ...u, role: data.role } : u));
       const casoId = data.caso_id;
       const imovelId = data.imovel_id;   // imóvel-âncora: chave dos anexos e dos 3 relatórios
       const alvoId = atribUser.id;

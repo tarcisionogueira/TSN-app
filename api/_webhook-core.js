@@ -26,6 +26,21 @@ import { enviarPurchaseCapi, purchaseEventId } from './_meta-capi.js';
 // bater com o do navegador, que usa a mesma base (sem sufixo _anual/_vista/_mensal).
 const planoBase = (p) => String(p || '').replace(/_(anual|vista|mensal)$/i, '');
 
+// ── Escada de planos do CLIENTE (regra do dono, 30/07): um pagamento NUNCA rebaixa ──
+// o role. A mensalidade do Investidor Pro CONTINUA sendo cobrada enquanto o cliente é
+// assessorado (a assessoria é por arrematação, em cima do Pro) — sem esta guarda, a
+// renovação mensal do Pro gravava role='top2' e o assessorado perdia o acompanhamento
+// (Caso/jurídico) no meio do contrato. Papéis fora da escada (admin/analista/advogado/
+// suporte/consultor) nunca são tocados por pagamento.
+const RANK_PLANO = { explorador: 0, top2: 1, top2_anual: 1, assessorado: 2, assessorado_anual: 2, clube: 3, clube_anual: 3 };
+export function roleAposPagamento(roleAtual, planoPago) {
+  const atual = RANK_PLANO[roleAtual];
+  const novo  = RANK_PLANO[planoPago];
+  if (novo == null) return roleAtual ?? null;              // pagamento não mapeado → não mexe
+  if (roleAtual != null && atual == null) return roleAtual; // papel de equipe/protegido → não mexe
+  return (atual ?? -1) >= novo ? roleAtual : planoPago;     // só sobe na escada, nunca desce
+}
+
 export const supabase = createClient(
   process.env.VITE_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_KEY,
@@ -132,16 +147,22 @@ export async function ativarPlanoDireto({ userId, planoKey, gateway, cobranca = 
   // O TIER fica no `role` (top2/clube/…). NÃO gravar em `plano`: essa coluna tem
   // check constraint (gratuito|analista|gestor) e planoKey='top2' a VIOLAVA →
   // toda ativação de plano pago falhava (webhook e reconciliação). role é a fonte.
+  const PAGANTES = ['top2', 'assessorado', 'clube', 'top2_anual', 'assessorado_anual', 'clube_anual'];
+  const { data: atual } = await supabase.from('perfis').select('role, role_anterior, inadimplente_desde, plano_pago_em').eq('id', userId).maybeSingle();
+  // Recuperação de inadimplência restaura o role suspenso (que pode ser MAIOR que o
+  // plano pago — ex.: assessorado suspenso pagando a mensalidade do Pro); fora dela,
+  // a escada decide: pagamento só SOBE o role, nunca desce (guarda anti-flip).
+  const candidato = (atual?.role_anterior && atual?.inadimplente_desde)
+    ? roleAposPagamento(atual.role_anterior, planoKey)
+    : planoKey;
   const upd = {
     inadimplente_desde: null,
     role_anterior:      null,
-    role:               planoKey, // top2 → role top2, clube → role clube
+    role:               roleAposPagamento(atual?.role, candidato) ?? planoKey,
   };
   // Garantia de 7 dias: âncora só na 1ª assinatura (role atual não-pagante e sem
   // âncora). Renovação recorrente NÃO reinicia a janela; resubscrição após cancelar
   // (que zera plano_pago_em) inicia uma nova.
-  const PAGANTES = ['top2', 'assessorado', 'clube', 'top2_anual', 'assessorado_anual', 'clube_anual'];
-  const { data: atual } = await supabase.from('perfis').select('role, plano_pago_em').eq('id', userId).maybeSingle();
   if (!atual?.plano_pago_em && !PAGANTES.includes(atual?.role)) {
     upd.plano_pago_em = new Date().toISOString();
   }
@@ -279,9 +300,13 @@ export async function processarConfirmado({ valor, descricao, email, gatewayCust
     // planoKey 'top2'/'clube'/'assessorado' a VIOLA → o update inteiro falhava (throw),
     // deixando o cliente PAGO sem acesso (bug ativo no caminho Asaas / fallback, que usa
     // este processarConfirmado). O TIER mora em `role` — mesma correção do ativarPlanoDireto.
-    update.role = (cliente.role_anterior && cliente.inadimplente_desde)
-      ? cliente.role_anterior
+    // Escada anti-flip (mesma do ativarPlanoDireto): a renovação do Pro de um cliente
+    // que virou assessorado NÃO pode rebaixá-lo; recuperação de inadimplência restaura
+    // o role suspenso (role_anterior), que também nunca é rebaixado pelo valor pago.
+    const candidato = (cliente.role_anterior && cliente.inadimplente_desde)
+      ? roleAposPagamento(cliente.role_anterior, mapeado.role)
       : mapeado.role;
+    update.role = roleAposPagamento(cliente.role, candidato) ?? mapeado.role;
     if (cliente.role_anterior && cliente.inadimplente_desde) update.role_anterior = null;
     // Garantia de 7 dias (CDC art. 49): ancora plano_pago_em na 1ª ativação paga —
     // MESMO critério do ativarPlanoDireto. Sem isto, quem paga via Asaas ou plano ANUAL

@@ -90,6 +90,10 @@ async function handler(req) {
               status: sub.status || null, dados_mp: sub, atualizado_em: new Date().toISOString(),
             }, { onConflict: 'mp_assinatura_id' });
           } catch { /* espelho — não bloqueia */ }
+          // ASSESSORIA é recorrência FINITA (12×): o preapproval terminar/cancelar é o
+          // fim NORMAL do parcelamento, não perda de plano — o encerramento da assessoria
+          // é pelo fluxo de POSSE (marcar-posse), nunca pelo gateway (regra do dono 30/07).
+          if (/^assessorado/.test(planoKey)) continue;
           // Período pago ainda vigente → mantém acesso. Sem data confiável, não
           // rebaixa (conservador: o webhook é o caminho primário).
           const fim = sub.next_payment_date ? new Date(sub.next_payment_date) : null;
@@ -97,6 +101,11 @@ async function handler(req) {
 
           const { data: perfil } = await supabase.from('perfis').select('role').eq('id', userId).maybeSingle();
           if (!perfil || perfil.role === 'explorador') continue;
+          // Anti-flip: não rebaixa quem está num degrau MAIOR que o plano desta
+          // assinatura (ex.: virou assessorado/clube e o preapproval antigo do Pro
+          // foi cancelado — o plano vigente não depende mais dele).
+          const RANK = { explorador: 0, top2: 1, top2_anual: 1, assessorado: 2, assessorado_anual: 2, clube: 3, clube_anual: 3 };
+          if ((RANK[perfil.role] ?? 99) > (RANK[planoKey] ?? 0)) continue;
 
           // Não rebaixa quem tem assinatura ATIVA (re-assinou após cancelar).
           const ativo = await mpGet(`/preapproval/search?payer_email=${encodeURIComponent(sub.payer_email || '')}&status=authorized&limit=1`);
