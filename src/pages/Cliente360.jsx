@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { apiCall } from '../utils/apiCall';
+import { tituloProduto } from '../utils/termos';
 import { MapPin, Search, Mail, MessageCircle, User, FileText, Scale, ClipboardCheck, AlertTriangle } from 'lucide-react';
 
 // Fase B — Monitoramento 360º do cliente (admin/analista).
@@ -200,7 +201,7 @@ export default function Cliente360() {
     // Termos aceitos (SEMPRE completos, sem corte de período — é o registro jurídico).
     const aceites = base.aceites || [];
     const lgpd = base.lgpd || null;
-    const linhasAceites = aceites.map(x => `<tr><td>${dt(x.aceito_em)}</td><td>${esc(x.plano_key || '—')}</td><td style="text-align:right">${x.valor != null ? brlv(x.valor) : '—'}</td><td>${esc(x.termos_versao || '—')}</td><td>${esc(x.gateway || '—')}</td><td>${esc(x.ip || '—')}</td><td style="font-family:monospace;font-size:10px;word-break:break-all">${esc(x.aceite_hash || '—')}</td></tr>`).join('');
+    const linhasAceites = aceites.map(x => `<tr><td>${dt(x.aceito_em)}</td><td>${esc(tituloProduto(x.plano_key))}</td><td style="text-align:right">${x.valor != null ? brlv(x.valor) : '—'}</td><td>${esc(x.termos_versao || '—')}</td><td>${esc(x.gateway || '—')}</td><td>${esc(x.ip || '—')}</td><td style="font-family:monospace;font-size:10px;word-break:break-all">${esc(x.aceite_hash || '—')}</td></tr>`).join('');
     const atividade = (base.atividade || []).filter((a) => noPeriodo(a.em || a.criado_em || a.data))
       .map(a => `<tr><td>${dt(a.em || a.criado_em || a.data)}</td><td>${esc(a.tipo || a.evento || '')}</td><td>${esc(a.descricao || a.detalhe || a.motivo || '')}</td></tr>`).join('');
     const periodoLabel = (tDe || tAte)
@@ -545,10 +546,10 @@ ${atividade ? `<h2>Atividade${(tDe || tAte) ? ' no período' : ''}</h2><table><t
                     <div style={{ fontSize: 10.5, color: '#94a3b8' }}>comissões e saques</div>
                   </div>
                   <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '8px 10px' }}
-                    title={aceites.length ? aceites.map((x) => `${dataHoraBR(x.aceito_em)} · ${x.plano_key || ''} · termo ${x.termos_versao || '—'} · IP ${x.ip || '—'}`).join('\n') : 'Nenhum termo de compra registrado'}>
+                    title={aceites.length ? aceites.map((x) => `${dataHoraBR(x.aceito_em)} · ${tituloProduto(x.plano_key)} · termo ${x.termos_versao || '—'} · IP ${x.ip || '—'}`).join('\n') : 'Nenhum termo de compra registrado'}>
                     <div style={{ fontSize: 10.5, color: '#2563eb', fontWeight: 700 }}>TERMOS DE COMPRA</div>
                     <div style={{ fontSize: 12.5, color: '#334155', marginTop: 2 }}>{aceites.length ? `${aceites.length} aceite(s)` : 'nenhum'}</div>
-                    {aceites[0] && <div style={{ fontSize: 10.5, color: '#94a3b8' }}>último: {dataHoraBR(aceites[0].aceito_em)} · {aceites[0].plano_key}</div>}
+                    {aceites[0] && <div style={{ fontSize: 10.5, color: '#94a3b8' }}>último: {dataHoraBR(aceites[0].aceito_em)} · {tituloProduto(aceites[0].plano_key)}</div>}
                   </div>
                   <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px 10px' }}>
                     <div style={{ fontSize: 10.5, color: '#64748b', fontWeight: 700 }}>CADASTRO / LGPD</div>

@@ -8,6 +8,8 @@ import { extrairDadosDocumento, consolidarDocsImovel } from '../utils/claude';
 import { FinanceiroCaixa, AbaAssinaturas } from './AdminFinanceiro';
 import { gerarContratoPDF } from '../components/ContratoPDF';
 import { imprimirHtml } from '../components/pdfImprimir';
+import { tituloProduto, termoDoProduto } from '../utils/termos';
+import { TERMO_PARCEIRO, TERMO_PARCEIRO_PREAMBULO } from '../components/ConviteParceiro';
 import Contratos from './Contratos'; // tela ÚNICA de contratos (mesma de "Meus Contratos", modo admin)
 
 export const DEFAULT_FEEDBACK_EMAIL = 'tarcisioaraujo@reimob.com.br';
@@ -972,7 +974,7 @@ function UsuariosTab() {
   // identificação, o termo, data/hora e o HASH de verificação — para compra, o hash SHA-256
   // gravado NO MOMENTO do aceite (trigger no banco); para cadastro/adesão (registro no
   // perfil, sem hash armazenado), o código é DERIVADO dos campos canônicos na hora.
-  async function gerarComprovanteAceite({ titulo, linhas, canonico, hashArmazenado }) {
+  async function gerarComprovanteAceite({ titulo, linhas, canonico, hashArmazenado, termoTexto }) {
     let hash = hashArmazenado || '';
     let hashLabel = 'Hash de integridade (SHA-256, gravado no momento do aceite)';
     if (!hash && canonico) {
@@ -992,6 +994,7 @@ function UsuariosTab() {
 <h2>${esc(titulo)}</h2><div class="box">
 ${linhas.map(([k, v]) => `<div class="kv"><b>${esc(k)}:</b> ${esc(v)}</div>`).join('')}
 </div>
+${termoTexto ? `<h2>Texto do termo aceito</h2><div class="box" style="font-size:12px">${esc(termoTexto)}</div>` : ''}
 ${hash ? `<h2>Verificação de integridade</h2><div class="kv muted">${esc(hashLabel)}:</div><div class="hash">${esc(hash)}</div>
 <div class="muted" style="margin-top:6px;font-size:11.5px">O hash é calculado sobre os campos canônicos do registro (usuário, e-mail, termo/versão, valor, IP e data/hora). Qualquer alteração posterior no registro invalida a verificação.</div>` : ''}
 <div style="margin-top:26px;border-top:1px solid #e2e8f0;padding-top:8px;font-size:11.5px" class="muted">O aceite foi manifestado eletronicamente na plataforma BidPro Brasil (MP nº 2.200-2/2001, art. 10, §2º — validade de registro eletrônico acordado entre as partes; Lei nº 13.709/2018 — LGPD). O registro íntegro permanece armazenado na plataforma e pode ser exibido às partes e à Justiça. Documento gerado em ${esc(emitido)}.</div>
@@ -1263,6 +1266,7 @@ ${hash ? `<h2>Verificação de integridade</h2><div class="kv muted">${esc(hashL
                               titulo: 'Termos de Uso e Política de Privacidade (cadastro)',
                               linhas: [['Usuário', `${pf.nome || auditoriaUser?.nome || '—'}`], ['ID do usuário', auditoriaUser?.id || '—'], ['Aceito em', dtHora(pf.lgpd_data || pf.created_at)], ['Registro', 'perfis.lgpd_aceito / lgpd_data (aceite obrigatório no cadastro)']],
                               canonico: `${auditoriaUser?.id}|lgpd|${pf.lgpd_data || pf.created_at}`,
+                              termoTexto: 'O usuário declarou ter lido e aceito os Termos de Uso e a Política de Privacidade vigentes da plataforma BidPro Brasil (bidprobrasil.com.br/#/termos e /#/privacidade), condição obrigatória para concluir o cadastro. O aceite inclui o tratamento de dados pessoais nos termos da LGPD (Lei nº 13.709/2018) para as finalidades descritas na Política.',
                             })}>Comprovante</button>
                           )}
                         </div>
@@ -1273,6 +1277,7 @@ ${hash ? `<h2>Verificação de integridade</h2><div class="kv muted">${esc(hashL
                               titulo: 'Termo de Adesão ao Programa de Parceiros',
                               linhas: [['Usuário', `${pf.nome || auditoriaUser?.nome || '—'}`], ['ID do usuário', auditoriaUser?.id || '—'], ['Aderiu em', dtHora(pf.parceiro_aceite_em)], ['Versão do termo', pf.parceiro_aceite_versao || '—'], ['Registro', 'perfis.parceiro_aceite_em / parceiro_aceite_versao']],
                               canonico: `${auditoriaUser?.id}|parceiro|${pf.parceiro_aceite_em}|${pf.parceiro_aceite_versao || ''}`,
+                              termoTexto: `${TERMO_PARCEIRO_PREAMBULO} ${TERMO_PARCEIRO.map((s) => `${s.t}: ${s.d}`).join(' ')}`,
                             })}>Comprovante</button>
                           )}
                         </div>
@@ -1302,7 +1307,7 @@ ${hash ? `<h2>Verificação de integridade</h2><div class="kv muted">${esc(hashL
                         {auditoriaData.aceites.map((a, i) => (
                           <tr key={i}>
                             <td style={S.td}>{a.aceito_em ? new Date(a.aceito_em).toLocaleString('pt-BR') : '—'}</td>
-                            <td style={S.td}>{a.plano_key || a.plano || '—'}</td>
+                            <td style={S.td} title={`chave: ${a.plano_key || a.plano || '—'}`}>{tituloProduto(a.plano_key || a.plano)}</td>
                             <td style={S.td}>{a.valor != null ? `R$ ${Number(a.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}</td>
                             <td style={S.td}>{a.versao_termos || a.termos_versao || '—'}</td>
                             <td style={{ ...S.td, fontFamily: 'monospace', fontSize: 11 }}>{a.asaas_customer_id || a.asaas_id || a.asaas_payment_id || '—'}</td>
@@ -1313,13 +1318,13 @@ ${hash ? `<h2>Verificação de integridade</h2><div class="kv muted">${esc(hashL
                                 {a.aceite_hash && <span style={{ fontFamily: 'monospace', fontSize: 10.5, color: '#64748b' }} title={`Hash SHA-256 gravado no aceite:\n${a.aceite_hash}`}>{a.aceite_hash.slice(0, 10)}…</span>}
                                 <button style={{ padding: '3px 9px', border: '1px solid #cbd5e1', borderRadius: 8, background: 'white', cursor: 'pointer', fontSize: 11, fontWeight: 700, color: '#334155', whiteSpace: 'nowrap' }}
                                   onClick={() => gerarComprovanteAceite({
-                                    titulo: `Termo de Compra — ${a.plano_key || a.plano || 'plano/produto'}`,
+                                    titulo: `Termo de Contratação — ${tituloProduto(a.plano_key || a.plano)}`,
                                     linhas: [
                                       ['Usuário', auditoriaData.perfil?.nome || auditoriaUser?.nome || '—'],
                                       ['E-mail', a.user_email || '—'],
                                       ['ID do usuário', auditoriaUser?.id || '—'],
                                       ['Aceito em', a.aceito_em ? new Date(a.aceito_em).toLocaleString('pt-BR') : '—'],
-                                      ['Plano/produto', a.plano_key || a.plano || '—'],
+                                      ['Produto/serviço', `${tituloProduto(a.plano_key || a.plano)} (chave: ${a.plano_key || a.plano || '—'})`],
                                       ['Valor', a.valor != null ? `R$ ${Number(a.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '—'],
                                       ['Versão do termo', a.versao_termos || a.termos_versao || '—'],
                                       ['Gateway', a.gateway || '—'],
@@ -1327,6 +1332,7 @@ ${hash ? `<h2>Verificação de integridade</h2><div class="kv muted">${esc(hashL
                                       ['Dispositivo (user-agent)', a.user_agent || '—'],
                                     ],
                                     hashArmazenado: a.aceite_hash || '',
+                                    termoTexto: `${termoDoProduto(a.plano_key || a.plano, { valorLabel: a.valor != null ? `R$ ${Number(a.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : undefined }).texto} (Versão do termo registrada no aceite: ${a.versao_termos || a.termos_versao || '—'}.)`,
                                   })}>Comprovante</button>
                               </div>
                             </td>

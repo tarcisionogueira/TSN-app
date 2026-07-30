@@ -9,7 +9,7 @@ import { supabase } from '../utils/supabase';
 import { fetchPlanosComConfig } from '../utils/planosConfig';
 import { apiCall } from '../utils/apiCall';
 import { salvarRef } from '../utils/ref';
-import { TERMOS_VERSAO } from '../utils/termos';
+import { versaoTermoProduto, termoDoProduto } from '../utils/termos';
 import PagamentoServico from '../components/PagamentoServico';
 import { ESTADOS_UF } from '../data/cidades';
 
@@ -557,7 +557,9 @@ export default function Checkout() {
           asaas_payment_id: asaasData?.subscriptionId || asaasData?.customerId || null,
           asaas_subscription_id: asaasData?.subscriptionId || null,
           user_agent: navigator.userAgent,
-          termos_versao: TERMOS_VERSAO,
+          // Versão POR PRODUTO (ex.: 'top2-v2.0'): prova qual termo, de qual produto,
+          // em qual versão foi aceito — cada produto tem o seu (registro em utils/termos.js).
+          termos_versao: versaoTermoProduto(planoKey),
           gateway,
         }),
       });
@@ -1254,6 +1256,21 @@ export default function Checkout() {
                       : temToggleAnual && modalidade === 'anual'
                         ? `Estou ciente de que esta é uma contratação anual de valor único (${plano?.precoAnualLabel || 'R$ 449,90'}), podendo ser paga em até 12× no cartão. Não há renovação automática, o acesso é válido por 12 meses a partir da confirmação do pagamento.`
                         : 'Autorizo a cobrança recorrente mensal conforme o plano selecionado. Sei que posso cancelar a qualquer momento pela plataforma sem multa.'}
+                    {(() => {
+                      // Termo COMPLETO do produto (registro central utils/termos.js) — o texto
+                      // exibido é o mesmo versionado que o aceite grava (termos_versao por produto).
+                      const t = termoDoProduto(planoKey, {
+                        nome: plano?.nome,
+                        valorLabel: modalidade === 'anual' ? (plano?.precoAnualLabel || plano?.precoLabel) : plano?.precoLabel,
+                        modelo: planoKey === 'assessorado' ? (modalidade === 'vista' ? 'unico' : 'parcelado') : (temToggleAnual && modalidade === 'anual' ? 'unico' : 'recorrente'),
+                      });
+                      return (
+                        <details style={{ marginTop: 6 }}>
+                          <summary style={{ color: '#0D63DB', cursor: 'pointer', fontWeight: 600 }}>Ver o termo de contratação — {t.titulo} (versão {t.versao})</summary>
+                          <p style={{ margin: '6px 0 0', fontSize: 11.5, color: '#64748b', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px 10px' }}>{t.texto}</p>
+                        </details>
+                      );
+                    })()}
                   </span>
                 </label>
               )}

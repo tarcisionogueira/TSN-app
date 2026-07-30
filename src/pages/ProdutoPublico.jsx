@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { driveImage } from '../utils/driveUrl';
 import { apiCall } from '../utils/apiCall';
 import { salvarRef, lerRef } from '../utils/ref';
+import { termoDoProduto, versaoTermoProduto } from '../utils/termos';
 
 export default function ProdutoPublico({ tipo }) {
   const { id } = useParams();
@@ -19,6 +20,7 @@ export default function ProdutoPublico({ tipo }) {
   const [comprando, setComprando] = useState(false);
   const [aguardando, setAguardando] = useState(false);
   const [erroCompra, setErroCompra] = useState('');
+  const [aceitouTermo, setAceitouTermo] = useState(false); // termo próprio de curso/ebook
 
   // Persiste código de referência do consultor
   useEffect(() => {
@@ -75,7 +77,21 @@ export default function ProdutoPublico({ tipo }) {
       }
 
       if (jaTem) { setComprouAvulso(true); return; }
-      if (link) { window.open(link, '_blank', 'noopener'); setAguardando(true); }
+      if (link) {
+        // Registra o ACEITE do termo de curso/ebook (com IP no servidor + hash por trigger)
+        // ANTES de abrir o pagamento — antes desta correção, compra de produto digital não
+        // deixava nenhum registro de aceite. Best-effort: não bloqueia a compra.
+        apiCall('/api/registrar-aceite', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            produto_ref: `${tipo}_${id}`,
+            valor: Number(produto?.preco || 0),
+            user_agent: navigator.userAgent,
+            termos_versao: versaoTermoProduto(`${tipo}_${id}`),
+          }),
+        }).catch(() => {});
+        window.open(link, '_blank', 'noopener'); setAguardando(true);
+      }
       else throw new Error('Não foi possível gerar o pagamento.');
     } catch (e) {
       setErroCompra(e?.message || 'Erro ao comprar');
@@ -217,10 +233,26 @@ export default function ProdutoPublico({ tipo }) {
                 </div>
                 {user ? (
                   <>
+                    {isPago && (
+                      /* Termo PRÓPRIO de curso/ebook (conteúdo digital, acesso imediato, CDC art. 49) */
+                      <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12, color: '#475569', cursor: 'pointer', marginBottom: 10 }}>
+                        <input type="checkbox" checked={aceitouTermo} onChange={(e) => setAceitouTermo(e.target.checked)} style={{ marginTop: 2, flexShrink: 0 }} />
+                        <span>
+                          Li e aceito o termo de contratação deste conteúdo digital.
+                          <details style={{ marginTop: 4 }}>
+                            <summary style={{ color: '#0D63DB', cursor: 'pointer', fontWeight: 600 }}>Ver termo (versão {versaoTermoProduto(`${tipo}_${id}`)})</summary>
+                            <p style={{ margin: '6px 0 0', fontSize: 11.5, color: '#64748b', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px 10px' }}>
+                              {termoDoProduto(`${tipo}_${id}`, { nome: produto?.titulo, valorLabel: `R$ ${Number(produto?.preco || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` }).texto}
+                            </p>
+                          </details>
+                        </span>
+                      </label>
+                    )}
                     {isPago ? (
                       /* Compra AVULSA do item (não precisa assinar) */
-                      <button onClick={comprar} disabled={comprando || aguardando}
-                        style={{ width: '100%', padding: '15px', background: cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: (comprando || aguardando) ? 'default' : 'pointer', marginBottom: 10, opacity: (comprando || aguardando) ? 0.7 : 1 }}>
+                      <button onClick={comprar} disabled={comprando || aguardando || !aceitouTermo}
+                        title={!aceitouTermo ? 'Marque o aceite do termo para continuar' : undefined}
+                        style={{ width: '100%', padding: '15px', background: cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: (comprando || aguardando || !aceitouTermo) ? 'default' : 'pointer', marginBottom: 10, opacity: (comprando || aguardando || !aceitouTermo) ? 0.7 : 1 }}>
                         {comprando ? 'Abrindo pagamento…' : aguardando ? 'Aguardando pagamento…' : `Comprar por R$ ${Number(produto.preco).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                       </button>
                     ) : (
