@@ -749,7 +749,14 @@ async function scraperSuperbidNet(browser, { portalId, stores, fonte, leiloeiro,
       // inexistentes; se por acaso REJEITAR o fieldList expandido (0 offers na 1ª página),
       // o fallback volta ao FIELDS_BASE → a coleta NUNCA quebra por causa disto.
       const FIELDS_DOCS = FIELDS_BASE + ';offerDocument;attachments;documents;offerAttachments;product.attachments;offerDetail.attachments;offerDetail.documents';
-      const apiUrl = (n, fields) => `https://offer-query.superbid.net/offers/?${lojas ? '' : `portalId=${portal}&`}locale=pt_BR&timeZoneId=America/Sao_Paulo&searchType=opened&filter=${lojas ? `stores.id:${lojas};` : ''}product.productType.description:imoveis;&pageNumber=${n}&pageSize=100&orderBy=endDate:asc&fieldList=${fields}`;
+      const PS = lojas ? 30 : 100; // modo loja espelha o pageSize do próprio site white-label
+      const apiUrl = (n, fields) => lojas
+        // Modo LOJA: ESPELHO da URL que o site white-label usa (recon ofv35-total-xhr-list) —
+        // portalId=[2,15] + requestOrigin=store são OBRIGATÓRIOS (sem eles a API devolve
+        // vazio em silêncio; comprovado no 1º teste de 30/07). SEM filtro de productType
+        // (a loja lista o catálogo inteiro) — imóveis são filtrados no mapeamento abaixo.
+        ? `https://offer-query.superbid.net/offers/?filter=stores.id:${lojas}&locale=pt_BR&orderBy=endDate:asc&pageNumber=${n}&pageSize=${PS}&portalId=[2,15]&preOrderBy=orderByFirstOpenedOffers&requestOrigin=store&searchType=opened&timeZoneId=UTC${fields ? `&fieldList=${fields}` : ''}`
+        : `https://offer-query.superbid.net/offers/?portalId=${portal}&locale=pt_BR&timeZoneId=America/Sao_Paulo&searchType=opened&filter=product.productType.description:imoveis;&pageNumber=${n}&pageSize=${PS}&orderBy=endDate:asc&fieldList=${fields}`;
       const buscar = async (n, fields) => {
         try { const r = await fetch(apiUrl(n, fields), { headers: { Accept: 'application/json' } }); if (!r.ok) return null; const d = await r.json(); return d.offers || d.content || d.results || d.items || (Array.isArray(d) ? d : []); }
         catch { return null; }
@@ -757,13 +764,14 @@ async function scraperSuperbidNet(browser, { portalId, stores, fonte, leiloeiro,
       let fields = FIELDS_DOCS;
       let first = await buscar(1, FIELDS_DOCS);
       if (!first || !first.length) { fields = FIELDS_BASE; first = await buscar(1, FIELDS_BASE); } // fallback seguro
+      if ((!first || !first.length) && lojas) { fields = ''; first = await buscar(1, ''); } // loja: última carta — sem fieldList (payload cheio, como o site)
       const all = [...(first || [])];
-      if (first && first.length >= 100) {
+      if (first && first.length >= PS) {
         for (let n = 2; n <= 100; n++) {
           const arr = await buscar(n, fields);
           if (!arr || !arr.length) break;
           all.push(...arr);
-          if (arr.length < 100) break;
+          if (arr.length < PS) break;
         }
       }
       return all;
@@ -781,6 +789,9 @@ async function scraperSuperbidNet(browser, { portalId, stores, fonte, leiloeiro,
       if (!id || seen.has(id)) return null;
       seen.add(id);
 
+      // Modo LOJA: o catálogo vem INTEIRO (imóvel + veículo + equipamento + sucata) — o
+      // filtro de imóvel é aqui, pelo productType da própria oferta.
+      if (stores) { const pt = str(p.productType).toLowerCase(); if (!/im[oó]ve/.test(pt)) return null; }
       const titulo = str(p.shortDesc) || str(of.title);
       const estadoMatch = (locStr || '').match(/[-–]\s*([A-Z]{2})\s*$/);
       const valMin = parseFloat(det.initialBidValue || det.currentMinBid || of.price || 0);
