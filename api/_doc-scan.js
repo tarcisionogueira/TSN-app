@@ -49,6 +49,30 @@ function classificar(texto) {
   return 'anexo';
 }
 
+// ── CHAVE CANÔNICA DE DOCUMENTO ───────────────────────────────────────────────
+// Vários leiloeiros servem o MESMO arquivo com querystring VOLÁTIL: cache-buster
+// (?v=<hex> no CDN do Grupo Lance, regenerado a cada render) ou assinatura com
+// validade (?Expires=…&Signature=… na ZUK, nova a cada visita). Comparar pela URL
+// completa fazia cada scrape "ver" um documento novo → o mesmo edital acumulava
+// 7-8 entradas em `anexos` (311 lotes GL, 192 ZUK em 30/07). A chave canônica
+// identifica o ARQUIVO: para path com extensão de documento, host+path (querystring
+// toda fora); senão, remove só os parâmetros voláteis conhecidos (query significativa
+// tipo /download?id=123 é preservada). Uso: DEDUP/comparação — nunca para abrir o
+// link (a URL original, com a assinatura mais recente, é a que abre).
+const RE_PARAM_VOLATIL = /^(v|ver|version|cb|cache|_|expires|signature|policy|key-pair-id|token|awsaccesskeyid|x-amz-[a-z0-9-]+|x-goog-[a-z0-9-]+)$/i;
+export function chaveDocCanonica(url) {
+  const s = String(url || '').replace(/&amp;/gi, '&').trim(); // &amp; não-decodificado (ZUK) quebrava o dedup E o link
+  if (!/^https?:\/\//i.test(s)) return null; // javascript:/mailto:/relativo não é documento
+  try {
+    const u = new URL(s);
+    if (/\.(pdf|docx?|xlsx?|odt|rtf)$/i.test(u.pathname)) return (u.origin + u.pathname).toLowerCase();
+    const params = [...u.searchParams.entries()].filter(([k]) => !RE_PARAM_VOLATIL.test(k));
+    params.sort((a, b) => a[0].localeCompare(b[0]) || String(a[1]).localeCompare(String(b[1])));
+    const q = params.map(([k, v]) => `${k}=${v}`).join('&');
+    return (u.origin + u.pathname).toLowerCase() + (q ? `?${q}` : '');
+  } catch { return null; }
+}
+
 function nomeDeUrl(u) {
   try {
     const p = new URL(u);
@@ -65,6 +89,9 @@ function absolutizar(href, baseUrl) {
 // É um link que vale guardar como documento?
 function ehDocumento(url, label) {
   if (!url || HOST_RUIDO.test(url)) return false;
+  // Só http(s): âncora "Consulte o edital" com href javascript:_gt(... passava no
+  // filtro por citar 'edital' e virava um anexo-lixo inabrível (visto na ZUK).
+  if (!/^https?:\/\//i.test(url)) return false;
   if (RE_IMG_EXT.test(url)) return false;
   if (RE_DOC_INSTITUCIONAL.test(`${url} ${label || ''}`)) return false; // ruído corporativo do site, não do lote
   if (RE_DOC_EXT.test(url)) return true;                       // arquivo .pdf/.doc… → sempre
@@ -98,7 +125,7 @@ export function vasculharDocumentos(html, baseUrl, fotoAtual = null) {
   //    que pareça URL (pega o JSON do __NEXT_DATA__/estado embutido). Mais caminhos
   //    relativos de documento ("/editais/x.pdf").
   const urls = new Set();
-  const push = (u) => { if (u) urls.add(u); };
+  const push = (u) => { if (u) urls.add(String(u).replace(/&amp;/gi, '&')); }; // decodifica &amp; (URL assinada em atributo HTML)
   let m;
   const reAttr = /(?:href|data-href|src|data-src|data-url|content)\s*=\s*["']([^"']+)["']/gi;
   while ((m = reAttr.exec(html)) !== null) push(m[1]);
@@ -119,7 +146,9 @@ export function vasculharDocumentos(html, baseUrl, fotoAtual = null) {
       if (/\.(jpe?g|png|webp)(?:[?#]|$)/i.test(abs)) out.foto = abs;
     }
     if (!ehDocumento(abs, label)) continue;
-    const chave = abs.split('#')[0];
+    // Dedup pelo ARQUIVO (chave canônica), não pela URL completa — a querystring
+    // volátil (cache-buster/assinatura) fazia o mesmo PDF entrar N vezes.
+    const chave = chaveDocCanonica(abs) || abs.split('#')[0];
     if (vistos.has(chave)) continue;
     vistos.add(chave);
     const tipo = classificar(`${label} ${abs}`);
@@ -135,6 +164,14 @@ export function vasculharDocumentos(html, baseUrl, fotoAtual = null) {
   // Ordena: matrícula, edital, laudo, regras, proposta, demais — e limita.
   const ordem = { matricula: 0, edital: 1, laudo: 2, regras: 3, proposta: 4, anexo: 5 };
   out.anexos.sort((x, y) => (ordem[x.tipo] - ordem[y.tipo]));
+  // Cap POR TIPO nomeado (3): cobre o caso legítimo (edital 1ª/2ª praça + retificação)
+  // sem deixar uma página que lista editais de vários leilões explodir a lista.
+  const porTipo = {};
+  out.anexos = out.anexos.filter((a) => {
+    if (a.tipo === 'anexo') return true; // genéricos (certidões/ônus/…) só pelo cap global
+    porTipo[a.tipo] = (porTipo[a.tipo] || 0) + 1;
+    return porTipo[a.tipo] <= 3;
+  });
   out.anexos = out.anexos.slice(0, 25);
   return out;
 }

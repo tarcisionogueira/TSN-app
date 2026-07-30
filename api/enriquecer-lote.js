@@ -14,7 +14,7 @@ export const config = { runtime: 'nodejs', maxDuration: 30 };
 import { getUser } from './_auth.js';
 import { fetchViaBrightData } from './_brightdata.js';
 import { hostExternoSeguro } from './_allowed-hosts.js';
-import { vasculharDocumentos } from './_doc-scan.js';
+import { vasculharDocumentos, chaveDocCanonica } from './_doc-scan.js';
 import { extrairRegistroMatricula } from './_registro-matricula.js';
 import { PDFParse } from 'pdf-parse';
 
@@ -188,7 +188,17 @@ export default async function handler(req, res) {
 
   // Monta o patch: só preenche o que faltava (não sobrescreve dado já bom).
   const patch = { enriquecido_em: new Date().toISOString() };
-  if (achado.anexos.length) patch.anexos = achado.anexos;
+  // Anexos: UNIÃO por chave canônica com os já gravados — a substituição cega
+  // apagava docs de pipelines dedicados (matrícula GL, edital login-gated) que o
+  // scan deste momento não enxerga. Achado do dia primeiro (assinatura mais nova).
+  if (achado.anexos.length) {
+    const atuais = Array.isArray(im.anexos) ? im.anexos : [];
+    const kDe = (a) => chaveDocCanonica(a?.url) || a?.url || null;
+    const vistos = new Set(achado.anexos.map(kDe).filter(Boolean));
+    const merge = [...achado.anexos];
+    for (const a of atuais) { const k = kDe(a); if (k && !vistos.has(k)) { vistos.add(k); merge.push(a); } }
+    patch.anexos = merge.slice(0, 25);
+  }
   if (achado.matricula && !im.link_matricula) patch.link_matricula = achado.matricula;
   if (achado.edital && !im.link_edital) patch.link_edital = achado.edital;
   if (achado.regras && !im.link_regras_venda) patch.link_regras_venda = achado.regras;

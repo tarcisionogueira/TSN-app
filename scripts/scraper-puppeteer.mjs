@@ -8,7 +8,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import puppeteer from 'puppeteer';
-import { vasculharDocumentos } from '../api/_doc-scan.js';
+import { vasculharDocumentos, chaveDocCanonica } from '../api/_doc-scan.js';
 import MUNICIPIOS from '../api/_municipios.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
@@ -125,7 +125,7 @@ async function salvarImoveis(imoveis, fonte) {
     try {
       const { data } = await supabase
         .from('imoveis_leilao')
-        .select('fonte_id, anexos, link_matricula, link_regras_venda, link_edital')
+        .select('fonte_id, anexos, link_matricula, link_regras_venda, link_edital, valor_avaliacao')
         .in('fonte_id', fonteIds.slice(i, i + 150));
       for (const r of data || []) existentes.set(r.fonte_id, r);
     } catch (e) { console.log(`  [${fonte}] merge-docs lookup erro: ${String(e.message).slice(0, 80)}`); }
@@ -182,13 +182,18 @@ async function salvarImoveis(imoveis, fonte) {
     };
     const prev = im.fonte_id ? existentes.get(im.fonte_id) : null;
     if (prev) {
-      // União de anexos por URL (novos primeiro; agrega os de backfill que faltaram). Cap 25.
+      // União de anexos por ARQUIVO — chave CANÔNICA, não URL completa (novos primeiro;
+      // agrega os de backfill que faltaram). Cap 25. Era a raiz do "7x Edital": o CDN
+      // do GL/ZUK muda a querystring (?v=/assinatura) a cada visita e a união por URL
+      // completa acrescentava o MESMO edital a cada rodada diária. Com a chave canônica,
+      // o scrape do dia SUBSTITUI a variante antiga (assinatura expirada = link morto).
       const novos = Array.isArray(im.anexos) ? im.anexos : [];
       const antigos = Array.isArray(prev.anexos) ? prev.anexos : [];
       if (antigos.length) {
-        const vistos = new Set(novos.map(a => a?.url).filter(Boolean));
+        const kDe = (a) => chaveDocCanonica(a?.url) || a?.url || null;
+        const vistos = new Set(novos.map(kDe).filter(Boolean));
         const merge = [...novos];
-        for (const a of antigos) { if (a?.url && !vistos.has(a.url)) { vistos.add(a.url); merge.push(a); } }
+        for (const a of antigos) { const k = kDe(a); if (k && !vistos.has(k)) { vistos.add(k); merge.push(a); } }
         row.anexos = merge.slice(0, 25);
       }
       // Preserva links de documento do backfill quando o scrape do dia não os traz.
@@ -199,6 +204,20 @@ async function salvarImoveis(imoveis, fonte) {
       // Sem preservar, o scrape diário zerava o edital capturado → o nº de docs "flutuava" entre
       // rodadas e re-baixava à toa. Agora só sobrescreve quando o dia traz um edital novo.
       if (prev.link_edital && !im.link_edital) row.link_edital = prev.link_edital;
+      // AVALIAÇÃO recuperada FORA do scrape (garantirValores/on-demand leram o edital e
+      // corrigiram o banco) não pode ser ZERADA pelo upsert diário: o card da listagem de
+      // GL/LJUD/SODRE não traz avaliação (vem 0) e a linha inteira é sobrescrita. Preserva
+      // o valor confirmado e mantém desconto/viabilidade coerentes com ele.
+      const avalPrev = Number(prev.valor_avaliacao) || 0;
+      if (!(Number(row.valor_avaliacao) > 0) && avalPrev > 0 && !SENTINELAS_VALOR.has(avalPrev)) {
+        row.valor_avaliacao = avalPrev;
+        const vm = Number(row.valor_minimo) || 0;
+        if (vm > 0 && avalPrev >= vm) {
+          row.desconto_percentual = Math.round((1 - vm / avalPrev) * 100);
+          row.viavel = (1 - vm / avalPrev) >= 0.3;
+          row.score_viabilidade = Math.min(100, Math.round((1 - vm / avalPrev) * 150));
+        }
+      }
     }
     return row;
   });
@@ -1063,7 +1082,7 @@ async function enriquecerDatasZuk(browser, imoveis) {
       });
       if (docsZuk.edital || docsZuk.regras) {
         if (!Array.isArray(im.anexos)) im.anexos = [];
-        const jaTem = (u) => im.anexos.some(x => x?.url === u);
+        const jaTem = (u) => { const k = chaveDocCanonica(u) || u; return im.anexos.some(x => (chaveDocCanonica(x?.url) || x?.url) === k); };
         if (docsZuk.edital && !jaTem(docsZuk.edital)) { im.anexos.push({ nome: 'Edital de venda', url: docsZuk.edital, tipo: 'edital' }); edt++; }
         if (docsZuk.regras && !jaTem(docsZuk.regras)) im.anexos.push({ nome: 'Condições de venda', url: docsZuk.regras, tipo: 'regras' });
         if (docsZuk.regras && !im.link_regras_venda) im.link_regras_venda = docsZuk.regras;
@@ -2819,6 +2838,21 @@ async function relatorioCapitacao() {
 
 // ─── MAIN ─────────────────────────────────────────────────────────────────────
 
+// Valor de AVALIAÇÃO ancorado na palavra "avaliação" no texto da página (espelho de
+// api/enriquecer-lote.js:extrairAvaliacao — duplicado aqui para o script não arrastar
+// as dependências de runtime da API). 1º valor plausível ganha.
+function extrairAvaliacaoHtml(html) {
+  if (!html) return null;
+  const txt = html.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ');
+  const re = /avalia[cç][aã]?[o]?\w*[^R$\d]{0,18}R?\$?\s*(\d{1,3}(?:\.\d{3})+,\d{2}|\d+,\d{2})/gi;
+  let m;
+  while ((m = re.exec(txt))) {
+    const v = parseFloat(m[1].replace(/\./g, '').replace(',', '.'));
+    if (v && v >= 1000 && v < 100000000) return v;
+  }
+  return null;
+}
+
 // Enriquecimento GENÉRICO de documentos por lote (serve para QUALQUER leiloeiro).
 // Roda no NAVEGADOR REAL (renderiza JS), então captura Edital / Matrícula / Laudo
 // de Avaliação / Modelo de Proposta que o fetch simples do on-demand não enxerga
@@ -2831,8 +2865,13 @@ async function relatorioCapitacao() {
 async function enriquecerDocumentosLote(browser, imoveis, { cap = 150, deadlineMs = 8 * 60 * 1000 } = {}) {
   const alvos = (imoveis || []).filter(im => {
     const url = im.url_lote || im.link_edital;
-    const jaTem = im.link_matricula || (Array.isArray(im.anexos) && im.anexos.length);
-    return url && /^https?:\/\//.test(url) && !jaTem;
+    if (!url || !/^https?:\/\//.test(url)) return false;
+    const jaTemDocs = im.link_matricula || (Array.isArray(im.anexos) && im.anexos.length);
+    // Também visita lotes SEM avaliação (GL/SODRE/BIASI/VIP não trazem no card da
+    // listagem, só no detalhe): o valor é extraído do MESMO HTML que já renderizamos
+    // p/ os documentos — custo marginal zero. Bounded pelos mesmos cap + deadline.
+    const faltaAval = !(Number(im.valor_avaliacao) > 0);
+    return !jaTemDocs || faltaAval;
   }).slice(0, cap);
   if (!alvos.length) return 0;
 
@@ -2848,6 +2887,14 @@ async function enriquecerDocumentosLote(browser, imoveis, { cap = 150, deadlineM
       try {
         await page.goto(url, { waitUntil: 'networkidle2', timeout: 20000 });
         const html = await page.content(); // DOM RENDERIZADO (docs montados por JS aparecem aqui)
+        // AVALIAÇÃO do detalhe renderizado (o card da listagem não traz em GL/SODRE/
+        // BIASI/VIP/SUPORTE): mesma regex ancorada em "avaliação" do on-demand
+        // (api/enriquecer-lote.js). Guards anti mis-read: > mínimo e <= 10x o mínimo.
+        if (!(Number(im.valor_avaliacao) > 0)) {
+          const av = extrairAvaliacaoHtml(html);
+          const vm = Number(im.valor_minimo) || 0;
+          if (av && av > vm && (vm <= 0 || av <= vm * 10)) im.valor_avaliacao = av;
+        }
         const docs = vasculharDocumentos(html, url, im.link_foto || null);
         const achouAlgo = docs.matricula || docs.laudo || (Array.isArray(docs.anexos) && docs.anexos.length);
         if (achouAlgo) {

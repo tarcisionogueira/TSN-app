@@ -11,6 +11,7 @@ import { resumoAprendizadoTexto } from './_arremate-aprendizado.js';
 import { ehCidadeTemporada, motivoTemporada } from './_temporada.js';
 import { composicaoTemporal, avisoFrescor } from './_indice-composicao.js';
 import { geocodificarCascata, rankNivel, coordValida } from './_geo.js';
+import { extratoEdital } from './_edital-extrato.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -1247,6 +1248,13 @@ export default async function handler(req, res) {
   // confirmar vira anomalia. Limitada a uma fração do orçamento p/ não roubar tempo do mercado.
   try { await garantirValores(String(imovelId), Date.now() + Math.min(30000, Math.max(0, restante() - 235000))); } catch { /* nunca bloqueia o relatório */ }
 
+  // EXTRATO DO EDITAL (determinístico, SEM await): praças com valores/datas, forma de
+  // pagamento e avaliação lidas do DOCUMENTO do lote (pdf-parse + regex, sem IA). Roda
+  // EM PARALELO com a busca de mercado (60-190s de espera de rede) e é colhido com race
+  // curto antes das projeções — o mercadológico passa a usar o edital como fonte de
+  // verdade da MELHOR PRAÇA e das condições de pagamento, sem alongar a geração.
+  const extratoEditalP = extratoEdital(String(imovelId), { deadline: Date.now() + Math.min(60000, Math.max(15000, restante() - 90000)) }).catch(() => null);
+
   // Triangula o imóvel-alvo (endereço+CEP+IBGE, grátis) se a coord for imprecisa — âncora do raio
   // de 250m/1km. Grava a coord melhor (durável). Time-boxed; roda ANTES da busca para o recorte por
   // raio já usar a âncora certa. Só re-geocodifica os ~27% imprecisos (os precisos passam direto).
@@ -1492,6 +1500,54 @@ export default async function handler(req, res) {
       const aDoc = Number(imDb?.ficha_juridica?.areaPrivativaM2) || 0;
       if (aDoc >= 5 && aDoc <= 100000) { areaM2 = aDoc; areaFonte = 'matricula'; } // autoritativa
     } catch { /* segue com a área informada */ }
+
+    // ── CONDIÇÕES DO EDITAL (colhe o extrato disparado lá no início; a busca de mercado
+    // já deu o tempo de sobra — se ainda não terminou em 3s, segue sem ele). Divergente
+    // (edital de OUTRO lote anexado por engano) → descarta + anomalia; nunca "confirma"
+    // no relatório um documento que não bate com o lote.
+    let extratoDoc = null;
+    try { extratoDoc = await Promise.race([extratoEditalP, new Promise(r => setTimeout(() => r(null), 3000))]); } catch { /* best-effort */ }
+    if (extratoDoc && extratoDoc.pertenceAoLote === false) {
+      try { await registrarAnomalia('edital_divergente', fonteDb, imovelId, 'anexos', `Edital lido (${extratoDoc.fonteUrl || '?'}) diverge dos valores do lote — extrato descartado no mercadológico.`); } catch { /* log best-effort */ }
+      extratoDoc = null;
+    }
+    if (extratoDoc) {
+      // Avaliação do edital cobre a lacuna do card (com as MESMAS travas de sanidade do
+      // garantirValores) e é persistida — o acervo inteiro se beneficia, não só o relatório.
+      const aEd = Number(extratoDoc.avaliacao) || 0;
+      const vmDb = Number(imDb?.valor_minimo) || 0;
+      if (!(avalDb > 0) && aEd > 0 && (vmDb <= 0 || (aEd > vmDb && aEd <= vmDb * 10))) {
+        avalDb = aEd;
+        try {
+          await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({
+            valor_avaliacao: aEd,
+            ...(vmDb > 0 && aEd >= vmDb ? { desconto_percentual: Math.round((1 - vmDb / aEd) * 100), viavel: (1 - vmDb / aEd) >= 0.3, score_viabilidade: Math.min(100, Math.round((1 - vmDb / aEd) * 150)) } : {}),
+          }) });
+        } catch { /* patch best-effort */ }
+      }
+      // Praças do edital completam as colunas VAZIAS (nunca sobrescrevem o scraper): a
+      // escolha da praça de referência abaixo passa a enxergar a 2ª praça/datas reais.
+      const p1 = extratoDoc.pracas.find(p => p.n === 1);
+      const p2 = extratoDoc.pracas.find(p => p.n === 2);
+      if (imDb) {
+        const patchPr = {};
+        if (!(Number(imDb.valor_minimo_2) > 0) && p2?.valor > 0 && p2.valor !== (Number(imDb.valor_minimo) || 0)) {
+          imDb.valor_minimo_2 = p2.valor; patchPr.valor_minimo_2 = p2.valor;
+          if (p2.data && !imDb.data_leilao_2) { imDb.data_leilao_2 = p2.data; patchPr.data_leilao_2 = p2.data; }
+        }
+        if (!imDb.data_leilao && p1?.data) { imDb.data_leilao = p1.data; patchPr.data_leilao = p1.data; }
+        if (Object.keys(patchPr).length) {
+          try { await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(patchPr) }); } catch { /* best-effort */ }
+        }
+      }
+      // Vai no result (dentro de mercado): o front/PDF mostram e o parecer cita.
+      mercado.condicoesEdital = {
+        pracas: extratoDoc.pracas,
+        formaPagamento: extratoDoc.formaPagamento || null,
+        avaliacao: aEd || null,
+        fonte: extratoDoc.fonteUrl || null,
+      };
+    }
     // VALOR type-correct: o avaliador (IA) calcula valorEstimadoImovel pelo MÉTODO DO TIPO
     // (m² privativo/construído, m² de terreno, hectare, terreno excedente à parte) — preferimos
     // esse número. Só caímos no m²×área quando a IA não o forneceu E a base é por m² construído/
@@ -1679,7 +1735,15 @@ export default async function handler(req, res) {
         // Corpus coletivo da MESMA região/tipo (aprendizado das emissões anteriores).
         try { aprendizadoMercado += await corpusDaRegiao(imovel?.estado || null, imovel?.tipo || null); } catch { /* best-effort */ }
         const sysParecer = 'Você é gestor sênior da BidPro Brasil. Redija um parecer MERCADOLÓGICO e de VIABILIDADE FINANCEIRA. Não faça análise jurídica (CNJ, gravames, diligências) — isso é de outros relatórios. EXCEÇÃO: os débitos/encargos informados que serão assumidos DEVEM constar (são custo da operação), com a indicação de onde confirmá-los. Preciso e persuasivo. Nunca use markdown nem asteriscos. Nunca use travessão (o caractere "—"); escreva com vírgula, ponto ou dois-pontos. Apenas texto simples.' + aprendizadoMercado;
-        const conteudoParecer = promptParecer(pInp, parecerInputs.metricas || {}, mercado, docs);
+        let conteudoParecer = promptParecer(pInp, parecerInputs.metricas || {}, mercado, docs);
+        // Condições LIDAS no edital (extrato determinístico): o parecer cenariza pela
+        // praça real (valores/datas) e cita o pagamento do DOCUMENTO, não suposição.
+        if (mercado.condicoesEdital) {
+          const ce = mercado.condicoesEdital;
+          const linhas = (ce.pracas || []).filter(p => p.valor > 0 || p.data)
+            .map(p => `${p.n}ª praça: ${p.valor > 0 ? `R$ ${Math.round(p.valor).toLocaleString('pt-BR')}` : 'valor não localizado'}${p.data ? ` em ${String(p.data).split('-').reverse().join('/')}` : ''}`);
+          conteudoParecer += `\n\nCONDIÇÕES LIDAS NO EDITAL DO LOTE (fonte de verdade; use nos cenários de lance e indique a melhor entrada):\n${linhas.join(' · ') || 'praças não localizadas'}${ce.formaPagamento ? `\nPagamento segundo o edital: ${ce.formaPagamento}` : ''}${ce.avaliacao ? `\nAvaliação no edital: R$ ${Math.round(ce.avaliacao).toLocaleString('pt-BR')}` : ''}`;
+        }
         // RE-TENTA a redação: até 2 tentativas enquanto houver orçamento. Um 429/overloaded/timeout
         // do Anthropic (retries:0) não pode mais deixar o parecer vazio de forma definitiva. A causa
         // da última falha fica em parecerDiag.erro (não é mais engolida).
@@ -1727,7 +1791,9 @@ export default async function handler(req, res) {
         && !(Number(valorMercado) > 0)
         && !(Number(mercado?.precoMedioM2) > 0)
         && (((mercado?.nivel1?.vendas?.length || 0) + (mercado?.nivel2?.vendas?.length || 0)) === 0);
-      const result = { mercado, parecer, valorMercado, valorLocacao, reaproveitado, pesquisaEm: mercado.pesquisaEm, mercadoVazio };
+      // valorAvaliacao: fecha o loop servidor→tela — o valor confirmado no edital (garantir
+      // Valores/extrato) chegava ao BANCO mas nunca voltava ao card já aberto ("Não informada").
+      const result = { mercado, parecer, valorMercado, valorLocacao, valorAvaliacao: avalDb > 0 ? avalDb : null, reaproveitado, pesquisaEm: mercado.pesquisaEm, mercadoVazio };
       return { result, valorMercado, avalDb, vminImovel };
     })()]);
 

@@ -15,7 +15,7 @@ import { loadImoveis, saveImoveis, generateId } from '../utils/storage';
 import { useAuth } from '../contexts/AuthContext';
 import { useAnalises } from '../contexts/AnalisesContext';
 import { supabase } from '../utils/supabase';
-import { assinarAnexos } from '../utils/docUrl';
+import { assinarAnexos, chaveDocCanonica } from '../utils/docUrl';
 import TabelaAmortizacao from '../components/TabelaAmortizacao';
 import { gerarPDF } from '../components/RelatorioPDF';
 import { gerarLaudoPDF } from '../components/LaudoPDF';
@@ -842,6 +842,11 @@ export default function Analise() {
     if (r.mercado) setMercado(r.mercado);
     if (r.valorMercado) up('valorMercado', r.valorMercado);
     if (r.valorLocacao) up('valorLocacao', r.valorLocacao);
+    // Avaliação confirmada no SERVIDOR (garantirValores leu edital/anexos e corrigiu o
+    // banco durante a geração): sem isto o card seguia "Não informada" mesmo com o valor
+    // recuperado — só voltava se o usuário reabrisse o imóvel pela Busca. Preenche apenas
+    // quando o campo está vazio (nunca sobrescreve o que o usuário digitou).
+    if (Number(r.valorAvaliacao) > 0) setD(p => (Number(p.valorAvaliacao) > 0 ? p : { ...p, valorAvaliacao: r.valorAvaliacao }));
     if (r.parecer) { setParecer(r.parecer); setD(p => ({ ...p, parecer: r.parecer })); }
     carregarCota(); // a geração consumiu cota no servidor, atualiza os contadores
     showMsg('Relatório Mercadológico + Viabilidade pronto!');
@@ -1394,7 +1399,10 @@ export default function Analise() {
               // salva como tipo 'outro'. Antes esses PDFs ficavam ESCONDIDOS. Aqui
               // listamos TODO PDF capturado que ainda não apareceu, com rótulo LIMPO
               // (nunca a URL crua) — nada fica atrás de um link do site.
-              const urlsMostradas = new Set(docsView.map(d => d.fileUrl).filter(Boolean));
+              // Dedup por ARQUIVO (chave canônica): o mesmo edital com querystring volátil
+              // (?v=/assinatura regenerada a cada scrape) aparecia como 7 linhas "Edital".
+              const kDoc = (u) => chaveDocCanonica(u) || u;
+              const urlsMostradas = new Set(docsView.map(d => d.fileUrl).filter(Boolean).map(kDoc));
               // Rótulo humano: só usa o "nome" se for texto de verdade (não URL, path
               // ou nome de arquivo tipo "1727787880704.pdf"); senão, rótulo genérico.
               const nomeLimpo = (n) => {
@@ -1405,14 +1413,22 @@ export default function Analise() {
               const todosAnexos = [...docsLeiloeiro, ...anexosScrape];
               const extras = [];
               const vistos = new Set();
+              // Rótulos distintos p/ docs DIFERENTES do mesmo tipo (legítimo: edital 1ª/2ª
+              // praça, retificação): "Edital", "Edital (2)"… — nunca N linhas idênticas.
+              const porRotulo = {};
+              for (const d of docsView) if (d.fileUrl && d.label) porRotulo[d.label] = 1;
               for (const a of todosAnexos) {
                 const u = (a?.url && /^https?:\/\//.test(a.url)) ? a.url : null;
-                if (!u || urlsMostradas.has(u) || vistos.has(u)) continue;
+                if (!u) continue;
+                const k = kDoc(u);
+                if (urlsMostradas.has(k) || vistos.has(k)) continue;
                 // já contemplado pelos tópicos padrão? (evita duplicar laudo/edital/etc.)
                 if (topicos.includes(a.tipo) && docsView.find(d => d.t === a.tipo)?.fileUrl) continue;
-                vistos.add(u);
+                vistos.add(k);
                 const rot = docMap[a.tipo] || nomeLimpo(a.nome) || `Documento do lote${extras.length ? ' ' + (extras.length + 1) : ''}`;
-                extras.push({ t: `extra_${extras.length}`, label: rot, url: u, fileUrl: u, anexoId: a?.id || null });
+                porRotulo[rot] = (porRotulo[rot] || 0) + 1;
+                const label = porRotulo[rot] > 1 ? `${rot} (${porRotulo[rot]})` : rot;
+                extras.push({ t: `extra_${extras.length}`, label, url: u, fileUrl: u, anexoId: a?.id || null });
               }
               // Quando HÁ PDFs capturados sem classificação (extras), o "no site" por
               // tópico vira enganoso: aparece "Matrícula → abre o site" AO LADO do PDF
@@ -2616,6 +2632,31 @@ export default function Analise() {
                   Base de mercado: {pm2 && area ? `R$ ${fmt(pm2)}/m² × ${fmt(area)} m² = R$ ${fmt(valorMedia)}` : `R$ ${fmt(valorMedia)}`}{nAmostras > 0 ? ` — média de ${nAmostras} anúncio${nAmostras > 1 ? 's' : ''} comparáve${nAmostras > 1 ? 'is' : 'l'} (mesmo condomínio/endereço + raio de ~1 km)` : ' (média dos anúncios)'}.{descSugerido > 0 ? ` A venda estimada (R$ ${fmt(sugerido)}) fica ${descSugerido}% abaixo dessa média — margem conservadora para revenda em prazo saudável.` : ' A venda estimada aplica margem conservadora para revenda em prazo saudável.'}
                 </div>
               )}
+            </div>
+          );
+        })()}
+        {/* ── CONDIÇÕES LIDAS NO EDITAL (extrato determinístico do servidor): praças com
+            valores/datas + forma de pagamento, direto do DOCUMENTO do lote. ── */}
+        {(mercado?.condicoesEdital && ((mercado.condicoesEdital.pracas || []).some(p => p.valor > 0 || p.data) || mercado.condicoesEdital.formaPagamento)) && (() => {
+          const ce = mercado.condicoesEdital;
+          const pr = (ce.pracas || []).filter(p => p.valor > 0 || p.data);
+          const dataBr = (d) => (d ? String(d).split('-').reverse().join('/') : null);
+          return (
+            <div style={{ background:'#f0f9ff', border:'1px solid #bae6fd', borderRadius:14, padding:'14px 18px' }}>
+              <div style={{ fontSize:11, fontWeight:800, letterSpacing:1, textTransform:'uppercase', color:'#0369a1', marginBottom:8 }}>Condições lidas no edital</div>
+              {pr.length > 0 && (
+                <div style={{ display:'flex', gap:14, flexWrap:'wrap', marginBottom: ce.formaPagamento ? 8 : 0 }}>
+                  {pr.map(p => (
+                    <div key={p.n} style={{ fontSize:13, color:'#0c4a6e' }}>
+                      <strong>{p.n}ª praça:</strong> {p.valor > 0 ? `R$ ${fmt(p.valor)}` : 'valor no edital'}{p.data ? ` · ${dataBr(p.data)}` : ''}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {ce.formaPagamento && (
+                <div style={{ fontSize:12, color:'#0c4a6e', lineHeight:1.55 }}><strong>Pagamento (edital):</strong> {ce.formaPagamento}</div>
+              )}
+              <div style={{ fontSize:10.5, color:'#64748b', marginTop:8 }}>Extraído automaticamente do edital do lote — confirme no documento antes do lance{ce.fonte ? <> (<a href={ce.fonte} target="_blank" rel="noreferrer" style={{ color:'#0369a1' }}>abrir edital</a>)</> : null}.</div>
             </div>
           );
         })()}
