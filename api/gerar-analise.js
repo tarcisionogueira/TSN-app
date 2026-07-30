@@ -1690,7 +1690,10 @@ export default async function handler(req, res) {
               model: MODEL, max_tokens: 8000,
               system: sysParecer,
               messages: [{ role: 'user', content: conteudoParecer }],
-            }, false, { retries: 0, timeoutMs: Math.min(60000, restante() - 12000), noFallback: true });
+            // Teto 150s (era 60s): a redação pode ter até 8k tokens — em API lenta estourava os 60s
+            // e AMBAS as tentativas morriam em 'aborted' com minutos de orçamento sobrando (3 casos
+            // reais em 30/07, restanteInicio 240–281s). O guard restante()-12s preserva a escrita.
+            }, false, { retries: 0, timeoutMs: Math.min(150000, restante() - 12000), noFallback: true });
             parecer = extractText(pData);
             parecerDiag.len = parecer.length;
             if (!parecer) parecerDiag.erro = 'resposta_sem_texto';
