@@ -112,7 +112,10 @@ export default function Membros() {
     async function fetchData() {
       const { data: cs } = await supabase.from('cursos_admin').select('*').eq('ativo', true).order('ordem');
       const { data: as } = await supabase.from('aulas_admin').select('*').order('ordem');
-      const { data: es } = await supabase.from('ebooks_admin').select('id, titulo, descricao, capa_url, gratuito, ativo, preco, comissao_pct, assinatura, planos_gratis, criado_em').eq('ativo', true).order('criado_em', { ascending: false });
+      // Defesa em profundidade: além de ativo=true, exige o ARQUIVO do ebook — um registro
+      // legado ativado antes da trava de rascunho (caso "só capa" de 30/07) não aparece na
+      // loja mesmo que o flag esteja errado no banco.
+      const { data: es } = await supabase.from('ebooks_admin').select('id, titulo, descricao, capa_url, gratuito, ativo, preco, comissao_pct, assinatura, planos_gratis, criado_em').eq('ativo', true).not('arquivo_url', 'is', null).neq('arquivo_url', '').order('criado_em', { ascending: false });
 
       const cursosComModulos = (cs || []).map(c => {
         const aulasC = (as || []).filter(a => a.curso_id === c.id);
@@ -201,7 +204,7 @@ export default function Membros() {
     return (
       <button onClick={compartilhar}
         style={{ marginTop: 8, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '7px 10px', border: '1px solid #bfdbfe', background: copiado ? '#dcfce7' : '#eff6ff', color: copiado ? '#166534' : '#0D63DB', borderRadius: 8, fontSize: 11.5, fontWeight: 700, cursor: 'pointer' }}>
-        {copiado ? <><Check size={13} /> Link copiado</> : <><Share2 size={13} /> Compartilhar / vender</>}
+        {copiado ? <><Check size={13} /> Link copiado</> : <><Share2 size={13} /> Compartilhar / Vender</>}
       </button>
     );
   };

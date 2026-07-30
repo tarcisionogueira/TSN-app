@@ -208,7 +208,7 @@ export default function Planos() {
     return (
       <button onClick={() => compartilharPlano(planoKey)}
         style={{ width: '100%', marginTop: 10, padding: '10px', border: dark ? '1px solid rgba(255,255,255,0.35)' : '1px solid #cbd5e1', borderRadius: 10, background: 'transparent', color: dark ? '#e0f2fe' : '#334155', fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-        {copiado ? <><Check size={14} /> Link copiado</> : <><Share2 size={14} /> Compartilhar este plano</>}
+        {copiado ? <><Check size={14} /> Link copiado</> : <><Share2 size={14} /> Compartilhar / Vender</>}
       </button>
     );
   };
