@@ -67,7 +67,7 @@ export default async function handler(req, res) {
   const id = new URL(req.url, 'http://localhost').searchParams.get('imovel_id');
   if (!id) { res.status(400).json({ error: 'imovel_id obrigatório' }); return; }
 
-  const [im] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(id)}&select=id,endereco,bairro,cidade,estado,latitude,longitude,geocod_nivel,cep,condominio:nomecondominio,link_edital,data_leilao&limit=1`)).json();
+  const [im] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(id)}&select=id,titulo,endereco,bairro,cidade,estado,latitude,longitude,geocod_nivel,cep,condominio:nomecondominio,link_edital,data_leilao&limit=1`)).json();
   if (!im) { res.status(404).json({ error: 'Imóvel não encontrado' }); return; }
 
   const nivelAtual = im.geocod_nivel || (im.latitude ? 'cidade' : null);

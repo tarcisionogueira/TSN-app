@@ -81,7 +81,7 @@ async function processarLote(estadosFilter, lote = 50, deadline = Infinity) {
   // reprocessamento (geocod_nivel='refazer') — a cascata melhorada (CEP) pode
   // agora alcançar nível rua/endereço onde antes caía no bairro.
   const r = await sb(
-    `imoveis_leilao?select=id,cidade,estado,endereco,bairro,cep,condominio:nomecondominio&or=(latitude.is.null,and(latitude.eq.0,geocod_nivel.is.null),geocod_nivel.eq.refazer)&ativo=eq.true${estadosFilter}&order=atualizado_em.desc&limit=${lote}`
+    `imoveis_leilao?select=id,titulo,cidade,estado,endereco,bairro,cep,condominio:nomecondominio&or=(latitude.is.null,and(latitude.eq.0,geocod_nivel.is.null),geocod_nivel.eq.refazer)&ativo=eq.true${estadosFilter}&order=atualizado_em.desc&limit=${lote}`
   );
   if (!r.ok) return null;
   const imoveis = await r.json();

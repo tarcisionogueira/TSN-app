@@ -409,7 +409,7 @@ const geoGridDe = (lat, lng) => (Number.isFinite(Number(lat)) && Number.isFinite
 // time-boxed; nunca bloqueia o relatório. Se já está preciso (rua/endereço), não mexe.
 async function ancorarImovel(imovelId, deadline) {
   try {
-    const [im] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=id,endereco,bairro,cidade,estado,latitude,longitude,geocod_nivel,cep,condominio:nomecondominio&limit=1`)).json();
+    const [im] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=id,titulo,endereco,bairro,cidade,estado,latitude,longitude,geocod_nivel,cep,condominio:nomecondominio&limit=1`)).json();
     if (!im) return null;
     const nivelAtual = im.geocod_nivel || (im.latitude != null ? 'cidade' : null);
     const atualValida = im.latitude != null && coordValida(Number(im.latitude), Number(im.longitude), im.estado, im.cidade);

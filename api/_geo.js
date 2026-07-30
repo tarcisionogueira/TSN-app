@@ -283,8 +283,58 @@ export async function geocoderPago(enderecoCompleto) {
  * coordenada (busca estruturada + validação). Retorna { lat, lng, nivel, cep? }
  * ou null. `sleepMs`=0 desliga as pausas (uso on-demand de 1 imóvel).
  */
-export async function geocodificarCascata(im, { deadline = Infinity, sleepMs = 1100, permitirPago = true } = {}) {
-  const { endereco, bairro, cidade, estado, cep, condominio } = im;
+// ── SANEAMENTO do sinal de localização (correção 30/07 — geo on-demand "não funcionava") ──
+// O scraper às vezes deixa `endereco` com LIXO ("praça Valor inicial R$, 166") e o endereço/
+// bairro REAL fica só no TÍTULO ("Apartamento 74 m² - Carapicuíba-SP - Rua Eduardo Augusto
+// Mesquita, 1.372 - ..."). A sessão 18 corrigiu isso SÓ no relatório (gerar-analise); a cascata
+// seguia geocodificando o lixo → imóvel preso no nível bairro/cidade mesmo com o on-demand
+// rodando. Mesmas regras aqui, na RAIZ (vale p/ on-demand E crons). Tolerante: sem `titulo`
+// no objeto, apenas filtra o lixo.
+const RE_END_LIXO = /valor\s*inicial|lance\s*m[íi]nimo|avalia[çc]|r\$|^\s*\d+\s*$/i;
+export function sanearLocalizacao(im) {
+  const out = { ...im };
+  const t = String(out.titulo || '');
+  const endStr = String(out.endereco || '').trim();
+  const ruaOk = endStr.length >= 6 && /[a-zà-ú]{3}/i.test(endStr) && !RE_END_LIXO.test(endStr);
+  if (!ruaOk) out.endereco = '';
+  // Endereço embutido no título: "Rua X, 1.372" / "Avenida Y, nº 45" (nº aceita ponto de milhar).
+  if (!out.endereco && t) {
+    const m = t.match(/((?:rua|avenida|av\.?|travessa|tv\.?|alameda|al\.?|estrada|estr\.?|rodovia|rod\.?|pra[çc]a|largo|viela)\s+[^,;–—-]{3,60}?),?\s*(?:n[º°.]?\s*)?([\d.]{1,7})\b/i);
+    if (m) {
+      const num = m[2].replace(/\./g, '');
+      if (/^\d{1,6}$/.test(num)) out.endereco = `${m[1].replace(/\s+/g, ' ').trim()}, ${num}`;
+    }
+  }
+  // Bairro do título: "Tipo 00 m² - BAIRRO - Cidade - UF" (mesma regra do gerar-analise).
+  if (!String(out.bairro || '').trim() && t) {
+    const segs = t.split(/\s+[-–—]\s+/).map((s) => s.trim()).filter(Boolean);
+    const ehTipoArea = (s) => /m²|m2|apartamento|casa|terreno|\blote\b|sala|loja|gal[pnã]|comercial|ch[aá]cara|s[íi]tio|fazenda|vaga|garagem|im[óo]vel|\d/i.test(s);
+    const cand = segs.find((s) => s && !ehTipoArea(s) && normalizar(s) !== normalizar(out.cidade || '') && !/^[a-z]{2}$/i.test(s));
+    if (cand) out.bairro = cand;
+  }
+  return out;
+}
+
+// Localidade (cidade) de um CEP no ViaCEP — para DESCARTAR CEP contaminado: o doc-scan
+// às vezes captura o CEP do ESCRITÓRIO do leiloeiro (ex.: imóvel de Osasco com CEP da
+// capital) e a cascata inteira gravita para a cidade errada.
+export async function cepConfereCidade(cep, cidade, timeoutMs = 6000) {
+  const cepLimpo = String(cep || '').replace(/\D/g, '');
+  if (cepLimpo.length !== 8 || !cidade) return true; // sem dado p/ conferir → não bloqueia
+  try {
+    const res = await fetchGeo(`https://viacep.com.br/ws/${cepLimpo}/json/`, { signal: AbortSignal.timeout(timeoutMs) });
+    if (!res || !res.ok) return true;
+    const j = await res.json();
+    if (j?.erro || !j?.localidade) return true;
+    return normalizar(j.localidade) === normalizar(cidade);
+  } catch { return true; }
+}
+
+export async function geocodificarCascata(imBruto, { deadline = Infinity, sleepMs = 1100, permitirPago = true } = {}) {
+  const im = sanearLocalizacao(imBruto);
+  let { endereco, bairro, cidade, estado, cep, condominio } = im;
+  // CEP que não pertence à cidade do imóvel = contaminação → ignora (a rua/bairro decidem).
+  if (cep && !(await cepConfereCidade(cep, cidade))) cep = null;
   const ufNome = UFS[String(estado || '').trim().toUpperCase()]?.nome || estado;
   const cond = String(condominio || '').trim();
   // Tolerância ao centróide do município POR PRECISÃO. Antes era 80 km fixo — frouxo
