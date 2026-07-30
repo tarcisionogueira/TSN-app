@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, BarChart3, GraduationCap, Home as HomeIcon, Gift, Copy, Check, ArrowRight, TrendingUp, Calendar, ShieldCheck, Gavel, Wallet } from 'lucide-react';
+import { Search, BarChart3, GraduationCap, Home as HomeIcon, Gift, Copy, Check, ArrowRight, TrendingUp, ShieldCheck, Gavel, Wallet } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
 import TriagemPerfil from '../components/TriagemPerfil';
@@ -159,9 +159,10 @@ export default function HomeCliente() {
           <Acao Icon={HomeIcon} titulo="Meu Portfólio" desc="Acompanhe seus imóveis arrematados, aportes e resultados." cor="#7c3aed" onClick={() => nav('/arrematados')} />
           <Acao Icon={Wallet} titulo="Meus Créditos" desc="Consultas disponíveis, bônus e saldo — tudo num lugar." cor="#0891b2" onClick={() => nav('/creditos')} />
           <Acao Icon={GraduationCap} titulo="Área de Membros" desc="Cursos, eBooks e materiais para arrematar com segurança." cor="#059669" onClick={() => nav('/membros')} />
-          {(effectiveRole === 'assessorado' || effectiveRole === 'assessorado_anual' || effectiveRole === 'clube' || effectiveRole === 'clube_anual') && (
-            <Acao Icon={Calendar} titulo="Agendar com o time" desc="Marque sua reunião de assessoria/mentoria." cor="#d97706" onClick={() => nav('/painel')} />
-          )}
+          {/* "Agendar com o time" REMOVIDO (decisão do dono 30/07): o agendamento com o
+              analista é dos planos pagos e só APÓS os 3 relatórios prontos — o caminho
+              certo já existe dentro do Caso/Minhas Análises, com o gate dos 3 relatórios
+              no servidor (agendar-reuniao). Um atalho solto aqui furava esse funil. */}
           {effectiveRole === 'explorador' && (
             <Acao Icon={TrendingUp} titulo="Fazer upgrade" desc="Investidor Pro: análise documental e jurídica + 15 relatórios/mês." cor="#0D63DB" onClick={() => nav('/planos')} />
           )}
