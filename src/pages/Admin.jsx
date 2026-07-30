@@ -8884,7 +8884,7 @@ function MarketingTab() {
 
               {/* Lançar investimento — alimenta o CAC/ROAS acima. Manual e rápido (30s/semana);
                   a automação por API de LEITURA pode substituir depois sem mudar a tela. */}
-              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '14px 16px', marginBottom: recentes.length ? 18 : 0 }}>
+              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '14px 16px', marginBottom: 18 }}>
                 <div style={{ fontWeight: 700, fontSize: 13, color: '#111111', marginBottom: 10 }}>Lançar investimento em anúncios</div>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                   <input type="date" value={gastoForm.data} onChange={e => setGastoForm(f => ({ ...f, data: e.target.value }))}
@@ -8920,6 +8920,54 @@ function MarketingTab() {
                   </div>
                 )}
               </div>
+
+              {/* Diagnóstico automático — regras sobre os dados do próprio funil (sem API externa):
+                  encode o playbook de gestão das campanhas em sugestões acionáveis. */}
+              {(() => {
+                const dias = Math.max(1, Math.round((new Date(dataFimISO) - new Date(thirtyDaysAgo)) / 86400000));
+                const sug = [];
+                const cadTot = Number(t.cadastros || 0), engTot = Number(t.engajados || 0);
+                canais.filter(c => ['Google Ads', 'Meta Ads'].includes(c.canal)).forEach(c => {
+                  const rec = Number(c.receita || 0);
+                  if (c.gasto > 0 && c.cadastros === 0 && dias >= 7) {
+                    sug.push({ n: 'alerta', txt: `${c.canal}: há investimento lançado e nenhum cadastro atribuído no período. Confira no painel da plataforma se o anúncio está aprovado e recebendo cliques; se estiver, verifique os termos de pesquisa (cliques ruins) e a página de destino.` });
+                  }
+                  if (c.gasto > 0 && rec >= c.gasto * 1.5) {
+                    sug.push({ n: 'ok', txt: `${c.canal} está se pagando (ROAS ${(rec / c.gasto).toFixed(2)}×) — candidato a escalar o orçamento em ~20%.` });
+                  } else if (c.gasto > 0 && rec > 0 && rec < c.gasto) {
+                    sug.push({ n: 'atencao', txt: `${c.canal}: ROAS abaixo de 1× no período. Em assinatura recorrente o retorno cresce nos meses seguintes — mas vale podar termos ruins (relatório de termos de pesquisa) e revisar o teto de CPC.` });
+                  }
+                  if (c.gasto > 0 && c.cadastros > 0 && c.contratantes === 0) {
+                    sug.push({ n: 'info', txt: `${c.canal} gera cadastros, mas nenhum virou pagante ainda — normal nas primeiras semanas; acompanhe a conversão interna (upgrade) antes de mexer na campanha.` });
+                  }
+                  if (c.cadastros >= 30) {
+                    sug.push({ n: 'ok', txt: `${c.canal}: ${c.cadastros} cadastros no período — volume suficiente para migrar o lance de "Maximizar cliques" para "Maximizar conversões".` });
+                  }
+                });
+                if (cadTot >= 10 && engTot / cadTot < 0.3) {
+                  sug.push({ n: 'atencao', txt: `Só ${Math.round((engTot / cadTot) * 100)}% dos novos cadastros abriram imóveis — o gargalo está no primeiro acesso (onboarding), não na captação.` });
+                }
+                if (gastos.length > 0) {
+                  const diasSem = Math.floor((Date.now() - new Date(gastos[0].data + 'T12:00:00').getTime()) / 86400000);
+                  if (diasSem > 8) sug.push({ n: 'atencao', txt: `Último lançamento de investimento foi há ${diasSem} dias — lance o gasto semanal para o CAC/ROAS continuarem fiéis.` });
+                } else if (cadTot > 0) {
+                  sug.push({ n: 'info', txt: 'Nenhum investimento lançado no período — com campanha ativa, lance o gasto semanal (form acima) para ver CAC por assinante e ROAS por canal.' });
+                }
+                if (!sug.length) sug.push({ n: 'info', txt: 'Sem apontamentos no período — as sugestões aparecem automaticamente conforme entram cadastros, contratações e lançamentos de gasto.' });
+                const cor = { ok: '#059669', atencao: '#d97706', alerta: '#dc2626', info: '#64748b' };
+                const icone = { ok: '▲', atencao: '●', alerta: '▼', info: 'ℹ' };
+                return (
+                  <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 12, padding: '14px 16px', marginBottom: recentes.length ? 18 : 0 }}>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: '#111111', marginBottom: 8 }}>Diagnóstico e sugestões (automático)</div>
+                    {sug.map((s, i) => (
+                      <div key={i} style={{ display: 'flex', gap: 8, fontSize: 12.5, color: '#475569', padding: '4px 0', lineHeight: 1.5 }}>
+                        <span style={{ color: cor[s.n], fontWeight: 900, flexShrink: 0 }}>{icone[s.n]}</span>
+                        <span>{s.txt}</span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
               {recentes.length > 0 && (
                 <div>
                   <div style={{ fontWeight: 700, fontSize: 14, color: '#111111', marginBottom: 8 }}>Últimas contratações</div>
