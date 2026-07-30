@@ -22,6 +22,7 @@
  */
 import { createClient } from '@supabase/supabase-js';
 import { fetchViaBrightData, brightDataDisponivel } from '../api/_brightdata.js';
+import { fetchHeadless, fecharHeadless } from './lib/fetch-residencial.mjs';
 import { extrairGenerico, extrairData, checarQualidade } from './lib/scraper-core.mjs';
 import { registrarConhecimento, qualidadeColeta } from './lib/conhecimento.mjs';
 
@@ -40,6 +41,9 @@ const supabase = createClient(SB_URL, SB_KEY);
 
 // Busca crua via Web Unlocker (com teto de custo). Retorna o HTML/XML ou null.
 async function bd(url, { proposito = 'pecini', timeoutMs = 45000 } = {}) {
+  if (process.env.PECINI_HEADLESS === '1') {   // runner residencial: Chromium real de IP de casa, SEM Bright Data
+    return await fetchHeadless(url, { timeoutMs });
+  }
   const r = await fetchViaBrightData(url, { proposito, timeoutMs });
   if (!r || !r.ok) return null;
   return await r.text().catch(() => null);
@@ -229,8 +233,10 @@ function montarRow(rec, det) {
 }
 
 async function main() {
-  if (!brightDataDisponivel()) {
-    console.error('BRIGHTDATA_API_TOKEN/ZONE ausentes — Pecini só é acessível via Web Unlocker. Abortado.');
+  // Bright Data só no modo pago (CI); no runner RESIDENCIAL (PECINI_HEADLESS=1) o
+  // Chromium real de IP de casa dispensa o proxy.
+  if (!brightDataDisponivel() && process.env.PECINI_HEADLESS !== '1') {
+    console.error('BRIGHTDATA_API_TOKEN/ZONE ausentes — Pecini só é acessível via Web Unlocker (ou use PECINI_HEADLESS=1 num IP residencial). Abortado.');
     process.exit(1);
   }
   console.log(`PECINI ${DRYRUN ? '(DRY-RUN — não grava)' : '(GRAVANDO)'} · max ${MAX_LOTES} lote(s)/run`);
@@ -296,4 +302,6 @@ async function main() {
   });
 }
 
-main().catch(e => { console.error(e); process.exit(1); });
+main()
+  .then(() => fecharHeadless().finally(() => process.exit(0)))
+  .catch(e => { console.error(e); fecharHeadless().finally(() => process.exit(1)); });

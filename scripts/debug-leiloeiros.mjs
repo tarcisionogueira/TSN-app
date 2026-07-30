@@ -15,7 +15,21 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
-const ALVOS = [];
+// Round 34 — OFENSIVA 30/07 (alertas do monitor):
+// · BIASI: a estratégia determinística (?pagina em /lotes/imoveis[/pesquisa]) regrediu a 0 —
+//   capturar home + as duas bases pra ver a listagem VIVA (path novo? virou AJAX?).
+// · PESTANA: 385→117 ativos — acervo real encolheu ou premissa quebrou? Os XHR da SPA
+//   revelam a API atual e os totais por leilão.
+// · SODRE: cobertura de area/matricula/edital caiu (84%/63%/63%) — listagem + detalhe de
+//   um lote ativo mostram os campos/API de hoje vs as premissas do scraper.
+const ALVOS = [
+  { fonte: 'ofv34-biasi-home', url: 'https://www.biasileiloes.com.br/' },
+  { fonte: 'ofv34-biasi-lista1', url: 'https://www.biasileiloes.com.br/lotes/imoveis/pesquisa?pagina=1' },
+  { fonte: 'ofv34-biasi-lista2', url: 'https://www.biasileiloes.com.br/lotes/imoveis?pagina=1' },
+  { fonte: 'ofv34-pestana-home', url: 'https://www.pestanaleiloes.com.br/' },
+  { fonte: 'ofv34-sodre-lotes', url: 'https://www.sodresantoro.com.br/imoveis/lotes' },
+  { fonte: 'ofv34-sodre-det', url: 'https://www.sodresantoro.com.br/imoveis/lote/2781262' },
+];
 
 // Round 33 — PortalZuk: a página do lote TEM a "Matrícula do Imóvel" num card de
 // download, mas o link é montado por JS (onclick _gt(...)) e não fica no HTML
@@ -410,9 +424,9 @@ async function main() {
       try { await capturar(browser, alvo); }
       catch (e) { console.log(`  ${alvo.fonte} erro: ${e.message.slice(0, 80)}`); }
     }
-    // Round 33 — descobrir como o ZUK monta a URL da matrícula (onclick _gt).
-    try { await scanZukDocs(browser); }
-    catch (e) { console.log(`  ZUKDOC erro: ${e.message.slice(0, 80)}`); }
+    // Round 33 (concluído — matrícula ZUK já capturada no scraper): desligado para não
+    // gastar tempo de run; religar se a ZUK mudar a função _gt de novo.
+    // try { await scanZukDocs(browser); } catch (e) { console.log(`  ZUKDOC erro: ${e.message.slice(0, 80)}`); }
   } finally {
     await browser.close();
   }

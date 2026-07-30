@@ -48,6 +48,9 @@ rodar GESTAO env GESTAO_HEADLESS=1 GESTAO_DRYRUN=0 node scripts/scraper-gestao.m
 # RJ Leilões — 100% Cloudflare: idem, Chromium real residencial.
 rodar RJ env RJ_HEADLESS=1 node scripts/scraper-rj.mjs
 
+# PECINI — Cloudflare (só saía via Web Unlocker pago): Chromium real residencial, sem BD.
+rodar PECINI env PECINI_HEADLESS=1 PECINI_DRYRUN=0 node scripts/scraper-pecini.mjs
+
 # Vlance (verdeamarelo/sudeste/capitalvalor) — API JSON que dá 403 em datacenter, mas do IP
 # RESIDENCIAL o fetch DIRETO funciona e é GRÁTIS. VLANCE_NO_BD=1 = 100% residencial (sem Bright
 # Data); se preferir BD como rede de segurança quando a casa também falhar, tire o VLANCE_NO_BD
