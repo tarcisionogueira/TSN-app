@@ -7,6 +7,65 @@ import { formatCpf, formatCnpj, validarCpf, validarCnpj, validarEmail } from '..
 import EnderecoAutocomplete from '../components/EnderecoAutocomplete';
 import { gerarContratoPDF } from '../components/ContratoPDF';
 
+// Visualizador de PDF FIT-TO-WIDTH (pdfjs, lazy): o <iframe> de PDF no iOS/Safari NÃO tem
+// visualizador — desenhava a página no tamanho natural, cortada nas laterais, e o signatário
+// só conseguia "arrastar" sem ler (print do dono 30/07: procuração ilegível no celular).
+// Aqui cada página vira um <canvas> na LARGURA do container (nítido em retina via
+// devicePixelRatio) — legível em qualquer tela, sem zoom manual. Erro → cai no iframe antigo.
+function PdfViewer({ url }) {
+  const boxRef = useRef(null);
+  const [estado, setEstado] = useState('carregando'); // carregando | ok | erro
+  useEffect(() => {
+    let vivo = true;
+    (async () => {
+      try {
+        const pdfjs = await import('pdfjs-dist');
+        try { const w = await import('pdfjs-dist/build/pdf.worker.min.mjs?url'); pdfjs.GlobalWorkerOptions.workerSrc = w.default; } catch { /* usa worker padrão */ }
+        const doc = await pdfjs.getDocument({ url }).promise;
+        const box = boxRef.current;
+        if (!vivo || !box) return;
+        box.innerHTML = '';
+        const largura = Math.max(280, box.clientWidth || 320);
+        const dpr = Math.min(2, (typeof window !== 'undefined' && window.devicePixelRatio) || 1);
+        const maxPaginas = Math.min(doc.numPages, 40); // trava sanidade (edital gigante não trava o celular)
+        for (let i = 1; i <= maxPaginas; i++) {
+          const page = await doc.getPage(i);
+          const vp1 = page.getViewport({ scale: 1 });
+          const vp = page.getViewport({ scale: (largura / vp1.width) * dpr });
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.floor(vp.width); canvas.height = Math.floor(vp.height);
+          canvas.style.width = '100%'; canvas.style.display = 'block';
+          if (i > 1) canvas.style.borderTop = '1px solid #e2e8f0';
+          box.appendChild(canvas);
+          await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+          if (!vivo) return;
+        }
+        if (doc.numPages > maxPaginas) {
+          const aviso = document.createElement('div');
+          aviso.textContent = `Mostrando ${maxPaginas} de ${doc.numPages} páginas — abra em nova aba para o documento completo.`;
+          aviso.style.cssText = 'padding:10px 12px;font-size:12px;color:#64748b;border-top:1px solid #e2e8f0;';
+          box.appendChild(aviso);
+        }
+        setEstado('ok');
+      } catch { if (vivo) setEstado('erro'); }
+    })();
+    return () => { vivo = false; };
+  }, [url]);
+  if (estado === 'erro') {
+    return <iframe src={url} title="Documento" style={{ width: '100%', height: '60vh', border: '1px solid #1f2937', borderRadius: 8, background: '#fff' }} />;
+  }
+  return (
+    <div style={{ background: '#fff', borderRadius: 8, overflow: 'hidden', border: '1px solid #1f2937' }}>
+      {estado === 'carregando' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '18px 14px', color: '#64748b', fontSize: 13 }}>
+          <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> Carregando documento…
+        </div>
+      )}
+      <div ref={boxRef} />
+    </div>
+  );
+}
+
 // Localização aproximada (best-effort, com consentimento) — ponto de autenticação no padrão ZapSign.
 // Nunca bloqueia a assinatura: se negar/expirar, segue sem geo.
 function capturarGeo() {
@@ -572,15 +631,20 @@ export default function ContratoLink() {
                 // PDF/texto embute iframe; outros ficam no link. Sempre com link p/ abrir em nova aba.
                 const nome = contrato.arquivo_nome || contrato.arquivo_url || '';
                 const ehImg = /\.(jpe?g|png|gif|webp)($|\?|#)/i.test(nome) || /\.(jpe?g|png|gif|webp)($|\?|#)/i.test(contrato.arquivo_url);
-                const ehPdfTxt = /\.(pdf|txt|html?)($|\?|#)/i.test(nome) || /\.(pdf|txt|html?)($|\?|#)/i.test(contrato.arquivo_url);
+                const ehPdf = /\.pdf($|\?|#)/i.test(nome) || /\.pdf($|\?|#)/i.test(contrato.arquivo_url);
+                const ehTxt = /\.(txt|html?)($|\?|#)/i.test(nome) || /\.(txt|html?)($|\?|#)/i.test(contrato.arquivo_url);
                 const link = (
                   <a href={contrato.arquivo_url} target="_blank" rel="noreferrer"
                     style={{ display:'inline-flex', alignItems:'center', gap:8, marginTop:10, padding:'12px 18px', background:'rgba(96,165,250,0.1)', border:'1px solid rgba(96,165,250,0.3)', borderRadius:10, color:'#60a5fa', fontWeight:700, fontSize:14, textDecoration:'none' }}>
                     <ExternalLink size={16} /> Abrir em nova aba
                   </a>
                 );
-                if (ehImg) return <><img src={contrato.arquivo_url} alt="Documento" style={{ width:'100%', borderRadius:8, maxHeight:520, objectFit:'contain', background:'#fff' }} />{link}</>;
-                if (ehPdfTxt) return <><iframe src={contrato.arquivo_url} title="Documento" style={{ width:'100%', height:'60vh', border:'1px solid #1f2937', borderRadius:8, background:'#fff' }} />{link}</>;
+                // Imagem: SEM teto de altura — foto retrato de documento encolhia a ponto de
+                // não dar para ler; a página rola normalmente.
+                if (ehImg) return <><img src={contrato.arquivo_url} alt="Documento" style={{ width:'100%', borderRadius:8, background:'#fff' }} />{link}</>;
+                // PDF: renderizado na LARGURA da tela (PdfViewer) — iframe de PDF é ilegível no iOS.
+                if (ehPdf) return <><PdfViewer url={contrato.arquivo_url} />{link}</>;
+                if (ehTxt) return <><iframe src={contrato.arquivo_url} title="Documento" style={{ width:'100%', height:'60vh', border:'1px solid #1f2937', borderRadius:8, background:'#fff' }} />{link}</>;
                 return <div>{link}</div>;
               })()}
               <p style={{ margin:'12px 0 0', fontSize:12, color:'#64748b', lineHeight:1.6 }}>
