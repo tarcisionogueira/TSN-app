@@ -16,6 +16,27 @@ Regra de segurança/economia: **sem proxy pago** por padrão (Puppeteer grátis)
 
 ---
 
+## 📊 30/07 — STATUS ATUAL (runner RESIDENCIAL validado; auditoria fresca no banco)
+Acervo em **26 fontes**. Desde 25/07, TODO o custo Bright Data das fontes dedicadas virou
+coleta GRÁTIS de IP residencial (runner do dono, WSL, 2 tarefas agendadas + marco de 72h no
+gate; CI/Bright Data = rede de segurança de 7 dias):
+- **SOLEON** ✅ residencial — calil (CALIL 100) + vegas (VEGAS 42) + 3torres (TORRES3 8);
+- **GESTAOLEILOES** ✅ residencial (188) — granado, lancenoleilao, extrajust, lancetotal, vinco;
+- **VLANCE** ✅ residencial (29) — verdeamarelo, sudeste, capitalvalor; **sanches + destak
+  ADICIONADOS como tenants em 30/07** (recon-2 já provara que são Vlance — validar no próximo run);
+- **RJLEILOES** ✅ residencial (16) · **PECINI** ✅ residencial (45).
+Do backlog de 58: **~15 domínios com scraper dedicado**, ~20 fluem via agregador (LJUD 39
+leiloeiros, LEILOTECH ~13, SUPORTE, SUPERBID, MEGA/ZUK parciais).
+
+**AINDA FALTANDO (0 acervo — exigem recon/scraper dedicado, na ordem de valor):**
+1. ⭐ **alfaleiloes.com** (só imóveis, nacional, provável API) · ⭐ **gustavoreisleiloes** (conferir
+   se o SUPORTE já o cobre de fato — doc #201 diz que sim, acervo mostra SUPORTE 29);
+2. Pares baratos (mesma dona/estrutura): **sato + hisa** · **osvaldo + elizabeth (Seoanes)**;
+3. Independentes: crepaldi, e-confianca, totalleiloes, delano, picelli, shiokawa, bomnegocio,
+   paulistana, saocaetano, eduardosorgi (via Sumaré), sumare (mini-plataforma);
+4. Verificar (podem ser portal/plataforma): e-leiloeiro, centraljudicial, leilaobrasil,
+   hastapublica, judhastas; confirmar brunoleiloes via LJUD; albertomacedo segue 0 no Superbid.
+
 ## 📊 25/07 — STATUS VIVO da cobertura (auditoria no banco)
 Acervo total **~33,5 mil ativos** em **25 fontes**. Boa parte do backlog de 58 domínios já
 FLUI pelos agregadores (não exige scraper novo):

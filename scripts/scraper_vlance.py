@@ -42,7 +42,10 @@ from urllib.robotparser import RobotFileParser
 
 import requests
 
-TENANTS_PADRAO = ["verdeamareloleiloes.com.br", "sudesteleiloes.com.br", "capitalvalorleiloes.com.br"]
+# sanches + destak: o recon-2 de 23/07 confirmou ambos na plataforma Vlance (destak NÃO é
+# independente como o recon-1 supôs) — entram como tenants; se algum não responder ao padrão
+# /v3, o loop por domínio só loga e segue (zero risco para os demais).
+TENANTS_PADRAO = ["verdeamareloleiloes.com.br", "sudesteleiloes.com.br", "capitalvalorleiloes.com.br", "sanchesleiloes.com.br", "destakleiloes.com.br"]
 EP_LEILOES = "/core/api/get-leiloes"
 EP_LOTES = "/core/api/get-lotes"
 
