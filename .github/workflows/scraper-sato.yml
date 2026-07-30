@@ -1,0 +1,38 @@
+name: Scraper SATO
+
+# SATO Leilões via API pública JSON (Round 35). Dispatch-only até validar (padrão
+# recon-first do repo): 1º run em DRY-RUN pela CI; gravação exige dryrun=0. Depois
+# de validado, decidir cron ou entrada no runner residencial.
+on:
+  workflow_dispatch:
+    inputs:
+      dryrun:
+        description: '1 = dry-run (não grava); 0 = grava'
+        required: false
+        default: '1'
+      max_pages:
+        description: 'Máx. de páginas da API (15 leilões/página)'
+        required: false
+        default: '30'
+
+jobs:
+  sato:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm ci
+      - name: Scraper SATO
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          SATO_DRYRUN: ${{ github.event.inputs.dryrun || '1' }}
+          SATO_MAX_PAGES: ${{ github.event.inputs.max_pages || '30' }}
+          SATO_DEBUG: '1'
+        run: node scripts/scraper-sato.mjs
