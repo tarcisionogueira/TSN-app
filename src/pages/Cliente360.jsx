@@ -382,6 +382,34 @@ ${atividade ? `<h2>Atividade${(tDe || tAte) ? ' no período' : ''}</h2><table><t
               </div>
             </div>
           )}
+          {/* FUNIL PÚBLICO (sem conta) — visitantes dos links de venda/páginas públicas (7d).
+              Pedido do dono 30/07: "mandei links e ninguém cadastrou" — o visitante anônimo
+              era invisível (api/track descartava); agora dá para ver se abriram, onde pararam
+              e se algum botão falhou ANTES do cadastro. */}
+          {stats.funil_publico && (
+            <div style={{ background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: 10, padding: '10px 12px' }}>
+              <div style={{ ...label, marginBottom: 6, color: '#0369a1' }}>
+                Funil público (sem conta) — 7 dias · {stats.funil_publico.visitantes_7d || 0} visitante(s) · {stats.funil_publico.pageviews_7d || 0} página(s) vista(s) · {stats.funil_publico.erros_7d || 0} erro(s)
+              </div>
+              {(stats.funil_publico.por_rota || []).length > 0 ? (
+                <div style={{ fontSize: 12, color: '#0c4a6e', marginBottom: 6 }}>
+                  {stats.funil_publico.por_rota.map((r) => `${r.rota} (${r.n} pv · ${r.visitantes} vis.)`).join(' · ')}
+                </div>
+              ) : (
+                <div style={{ fontSize: 12, color: '#64748b', marginBottom: 6 }}>
+                  Nenhuma visita anônima registrada ainda. Se você divulgou links e isto seguir zerado, o problema está ANTES da página (link errado/bloqueado); se aparecerem visitas sem cadastro, o funil mostra onde pararam.
+                </div>
+              )}
+              {(stats.funil_publico.ultimos || []).slice(0, 8).map((e, i) => (
+                <div key={i} style={{ fontSize: 11, color: '#334155', display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
+                    {e.tipo} · {e.rota}{e.alvo ? ` · ${e.alvo}` : ''}{e.detalhe ? ` · ${e.detalhe}` : ''}
+                  </span>
+                  <span style={{ flexShrink: 0, color: '#94a3b8' }}>{dataHoraBR(e.criado_em)}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

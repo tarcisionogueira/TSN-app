@@ -31,16 +31,28 @@ export default async function handler(req, res) {
 
     let userId = null, role = null;
     try { const u = await getUser(req); userId = u?.id || null; if (userId) role = await getUserRoleById(userId); } catch { /* anônimo */ }
-    if (!userId) { res.status(204).end(); return; } // só usuários logados
+    // FUNIL PÚBLICO (30/07): visitante SEM conta também conta — mas com regras mais duras:
+    // exige anon_id, só ROTAS PÚBLICAS, menos tipos e lote menor (anti-abuso; RLS fechado e
+    // retenção de 30d seguem valendo). Sem isto, quem clicava num link de venda e não
+    // cadastrava era invisível — impossível distinguir "ninguém clicou" de "página quebrou".
+    const anonId = typeof b.anon_id === 'string' ? (b.anon_id.replace(/[^\w-]/g, '').slice(0, 48) || null) : null;
+    const TIPOS_ANON = new Set(['pageview', 'click', 'submit', 'api_erro', 'api_falha_rede']);
+    const ROTA_PUBLICA = /^\/($|p\/|planos|login|cadastro|termos|privacidade|convite|cadastro-parceiro|contrato|testemunha|ativar|redefinir|recuperar|\(auth-redirect\))/;
+    let lista = eventos;
+    if (!userId) {
+      if (!anonId) { res.status(204).end(); return; }
+      lista = eventos.filter((e) => e && TIPOS_ANON.has(e.tipo) && ROTA_PUBLICA.test(String(e.rota || ''))).slice(0, 12);
+      if (!lista.length) { res.status(204).end(); return; }
+    }
 
     // Hora da AÇÃO (ts do cliente), não da ingestão — exigência de auditoria (data+hora fiel).
     // Aceita só ts plausível (últimas 48h até +2min de clock skew); fora disso, now() do banco.
     const agora = Date.now();
     const tsValido = (t) => Number.isFinite(t) && t > agora - 48 * 3600 * 1000 && t < agora + 120000;
-    const rows = eventos
+    const rows = lista
       .filter((e) => e && TIPOS.has(e.tipo))
       .map((e) => ({
-        user_id: userId, role: role || null, tipo: e.tipo,
+        user_id: userId, role: userId ? (role || null) : 'anonimo', anon_id: anonId, tipo: e.tipo,
         rota: (redigir(e.rota).slice(0, 200)) || null,
         alvo: (redigir(e.alvo).slice(0, 200)) || null,
         detalhe: (redigir(e.detalhe).slice(0, 300)) || null,

@@ -36,7 +36,16 @@ export function registrarEvento(tipo, { alvo = '', detalhe = '' } = {}) {
 
 function agendar() { if (!timer) timer = setTimeout(flush, 5000); }
 
-let aguardandoLogin = false; // houve eventos retidos por falta de sessão
+// Identidade ANÔNIMA persistente (localStorage): costura a jornada do visitante SEM conta
+// (links de venda/páginas públicas) e, quando ele cadastra, liga o antes e o depois — o
+// servidor grava anon_id junto do user_id.
+function anonId() {
+  try {
+    let v = localStorage.getItem('bp_aid');
+    if (!v) { v = (crypto.randomUUID?.() || `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 12)}`); localStorage.setItem('bp_aid', v); }
+    return String(v).slice(0, 48);
+  } catch { return null; }
+}
 
 async function flush() {
   if (timer) { clearTimeout(timer); timer = null; }
@@ -44,22 +53,14 @@ async function flush() {
   const lote = fila.splice(0, 30);
   let token;
   try { token = (await supabase.auth.getSession())?.data?.session?.access_token; } catch { /* sem sessão */ }
-  if (!token) {
-    // Não descarta: devolve à fila (teto 100, derruba os mais antigos) para enviar assim que o
-    // usuário logar na MESMA sessão SPA — antes o splice destruía a jornada pré-login em ≤5s.
-    fila = lote.concat(fila).slice(-100);
-    // Devolve a cota consumida pelo que foi derrubado do teto (senão o visitante engajado
-    // chegava logado com o contador estourado e o rastreamento pós-login ficava mudo).
-    contador = Math.min(contador, fila.length);
-    aguardandoLogin = true;
-    return;
-  }
-  if (aguardandoLogin) { aguardandoLogin = false; contador = fila.length + lote.length; }
+  // SEM sessão o evento AINDA sobe (funil público): antes ficava retido e a jornada de quem
+  // clicou num link de venda e nunca logou era invisível no Cliente 360 — "mandei links e
+  // ninguém cadastrou" não tinha diagnóstico. O servidor aceita anônimo só em rota pública.
   try {
     await fetch('/api/track', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ eventos: lote }), keepalive: true,
+      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify({ eventos: lote, anon_id: anonId() }), keepalive: true,
     });
   } catch { /* fire-and-forget */ }
 }

@@ -67,6 +67,27 @@
 3. **Desenho da rotina (decisão do dono)**: NADA de desligar crons pagos — eles viraram rede de segurança: `scripts/coleta-recente.mjs` + freio nos workflows SOLEON/GESTAO/RJ (schedule pula se `coleta_cliente.ultima_em` < 7 dias; dispatch manual ignora; VLANCE já tinha `--pular-se-fresco`). Marco entre coletas de casa: **72h** (`coleta_cliente.intervalo_horas`, era 84). Windows dispara "ao ligar + a cada 6h ligado" via Agendador de Tarefas (comandos passados ao dono) — o portão no banco decide se é a hora; flexível a qualquer horário.
 4. Gates ativos e concluídos nas 4 fontes (ultima_em 30/07 ~18:2x-18:5x UTC). Chave service_role apareceu num print do chat (risco baixo, conversa privada) — se o dono quiser, rotacionar depois com atualização casada Vercel+CI.
 
+**E5. NOITE 30/07 — FUNIL PÚBLICO (sem conta) no Cliente 360 + ofensivas em curso:**
+1. **Links de venda invisíveis — causa-raiz corrigida**: `/api/track` DESCARTAVA visitante
+   anônimo ("só usuários logados") e o `tracker.js` retinha a fila sem sessão → quem clicava
+   nos links `/p/curso|/p/ebook|/planos` e não cadastrava sumia sem rastro (dono: "mandei
+   links e ninguém cadastrou"). Agora: tracker envia SEM sessão com `anon_id` persistente
+   (localStorage, costura pré-cadastro→usuário); `/api/track` aceita anônimo APENAS em rotas
+   públicas (regex), tipos restritos (pageview/click/submit/api_erro/api_falha_rede), lote ≤12,
+   role='anonimo'; coluna `eventos_atividade.anon_id` + índice parcial (migração
+   `eventos_atividade_funil_publico.sql`, APLICADA); RPC `admin_360_estatisticas` ganhou a chave
+   aditiva `funil_publico` (visitantes/pageviews/erros 7d, por rota, últimos 20); card novo
+   "Funil público (sem conta)" no Cliente360. Falhas de LOGIN/CADASTRO/recuperação/OAuth/reenvio
+   agora deixam rastro (`registrarEvento('api_erro', login_falha|cadastro_falha|…)` — fecha o
+   gap E1.6). Auditoria de segurança pós-mudança: 0/0. Retenção 30d inalterada.
+2. **Runner residencial JÁ monitorado** (verificado): seção B2 do `monitor-fontes-cron` alerta
+   "coleta grátis parada" a 1,5× o intervalo do gate (72h → alarma ~4,5d, antes do fallback BD
+   de 7d); PECINI entrou automático ao ganhar linha em `coleta_cliente`.
+3. **Ofensivas em curso**: Round 34 (BIASI ?pagina=0 · PESTANA 385→117 · SODRE campos)
+   capturado em `debug_fetch` (fonte ofv34-%) e em análise; Round 35 disparado (homes dos 16
+   leiloeiros 0-acervo do backlog TRT-15, fonte ofv35-%). Pareceres vazios: 2 restantes
+   (Carapicuíba, Praia Grande — pré-fix), cron 6/6h fecha nas janelas 00h/06h UTC.
+
 **E. BIASI (piso 130, mediana 260, último 96) — recon PENDENTE de dado fresco:** queda contínua desde 16/07 (369→173→96). O ambiente remoto não alcança o site (proxy bloqueia) — validar com o run do cluster disparado hoje: `select total,status from fonte_saude where fonte='BIASI' order by executado_em desc limit 3;`. Se seguir ≤100 com status ok em runs consecutivos, pode ser acervo real encolhendo (pós-leilão); se oscilar, rodar a ofensiva (recon estrutura viva × premissas: `?pagina` na listagem agregada + fallback home) via Actions (`debug-leiloeiros.yml`).
 
 ---

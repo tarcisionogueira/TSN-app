@@ -3,6 +3,7 @@ import { usePlanos } from '../contexts/PlanosContext';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../utils/supabase';
 import { trackCadastro } from '../utils/gtag';
+import { registrarEvento } from '../utils/tracker';
 import { Briefcase, Eye, EyeOff, Loader2, CheckCircle2 } from 'lucide-react';
 import { apiCall } from '../utils/apiCall';
 import { buscarTodasCidades } from '../data/cidades';
@@ -147,6 +148,7 @@ export default function Login() {
       if (error) throw error;
       setModo('recuperar_sucesso');
     } catch (err) {
+      registrarEvento('api_erro', { alvo: 'recuperacao_senha_falha', detalhe: String(err?.message || '').slice(0, 150) });
       setErro(traduzErroAuth(err.message) || 'Erro ao enviar email de recuperação.');
     }
     setLoading(false);
@@ -219,6 +221,7 @@ export default function Login() {
       if (error) throw error;
       // Em sucesso, o browser redireciona para o Google (não volta aqui).
     } catch (err) {
+      registrarEvento('api_erro', { alvo: 'oauth_google_falha', detalhe: String(err?.message || '').slice(0, 150) });
       setErro(traduzErroAuth(err.message) || 'Não foi possível conectar com o Google. Tente novamente.');
       setGoogleLoading(false);
     }
@@ -250,6 +253,7 @@ export default function Login() {
       if (error) throw error;
       setReenviado(true); setErro('');
     } catch (err) {
+      registrarEvento('api_erro', { alvo: 'reenvio_confirmacao_falha', detalhe: String(err?.message || '').slice(0, 150) });
       setErro(traduzErroAuth(err.message));
     }
     setReenviando(false);
@@ -287,6 +291,8 @@ export default function Login() {
         nav('/');
       }
     } catch (err) {
+      // Falha de LOGIN agora deixa rastro (antes: zero registro — gap da auditoria E1.6).
+      registrarEvento('api_erro', { alvo: 'login_falha', detalhe: String(err?.message || '').slice(0, 150) });
       if (/email not confirmed/i.test(err.message || '')) setEmailNaoConfirmado(true);
       setErro(traduzErroAuth(err.message));
     }
@@ -338,6 +344,9 @@ export default function Login() {
       if (destProdCad) sessionStorage.setItem('tsn_redirect_produto', destProdCad);
       setModo('sucesso');
     } catch (err) {
+      // Falha de CADASTRO (validação local, e-mail duplicado ou erro do Auth) deixa rastro no
+      // funil público — é exatamente o que se perde quando "mandei links e ninguém cadastrou".
+      registrarEvento('api_erro', { alvo: 'cadastro_falha', detalhe: String(err?.message || '').slice(0, 150) });
       setErro(traduzErroAuth(err.message));
     }
     setLoading(false);
