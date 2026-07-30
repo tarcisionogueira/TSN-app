@@ -197,6 +197,10 @@ export default function Cliente360() {
     const emitido = new Date().toLocaleString('pt-BR');
     const linhasFin = (fin.lancamentos || []).map(l => `<tr><td>${dt(l.criado_em)}</td><td>${esc(l.tipo)}</td><td>${esc(l.descricao || '')}</td><td style="text-align:right">${brlv(l.valor)}</td><td>${esc(l.status)}</td></tr>`).join('');
     const linhasDir = (par.diretos || []).map(x => `<tr><td>${esc(x.nome || '—')}</td><td>${esc(x.role || '')}</td><td>${x.parceiro_aceite_em ? 'aderiu ' + dta(x.parceiro_aceite_em) : 'não aderiu'}</td><td>${dta(x.created_at)}</td></tr>`).join('');
+    // Termos aceitos (SEMPRE completos, sem corte de período — é o registro jurídico).
+    const aceites = base.aceites || [];
+    const lgpd = base.lgpd || null;
+    const linhasAceites = aceites.map(x => `<tr><td>${dt(x.aceito_em)}</td><td>${esc(x.plano_key || '—')}</td><td style="text-align:right">${x.valor != null ? brlv(x.valor) : '—'}</td><td>${esc(x.termos_versao || '—')}</td><td>${esc(x.gateway || '—')}</td><td>${esc(x.ip || '—')}</td></tr>`).join('');
     const atividade = (base.atividade || []).filter((a) => noPeriodo(a.em || a.criado_em || a.data))
       .map(a => `<tr><td>${dt(a.em || a.criado_em || a.data)}</td><td>${esc(a.tipo || a.evento || '')}</td><td>${esc(a.descricao || a.detalhe || a.motivo || '')}</td></tr>`).join('');
     const periodoLabel = (tDe || tAte)
@@ -217,6 +221,10 @@ ${par.aceite_em ? `<div class="kv"><b>Aderiu ao Programa em:</b> ${dt(par.aceite
 <div class="kv"><b>Indicado por:</b> ${par.indicado_por && par.indicado_por.nome ? esc(par.indicado_por.nome) : '—'}</div>
 <div class="kv"><b>Indicados diretos:</b> ${par.diretos_total || 0}</div></div>
 ${(par.diretos || []).length ? `<table><thead><tr><th>Indicado</th><th>Plano</th><th>Aderiu ao termo</th><th>Cadastro</th></tr></thead><tbody>${linhasDir}</tbody></table>` : ''}
+<h2>Termos aceitos — compra e cadastro</h2><div class="box">
+<div class="kv"><b>Cadastro / LGPD:</b> ${lgpd?.lgpd_aceito ? `aceito${lgpd.lgpd_data ? ' em ' + dt(lgpd.lgpd_data) : ''}` : 'sem registro de aceite'}</div>
+<div class="kv"><b>Termos de compra registrados:</b> ${aceites.length} (com IP de origem e versão do termo — prova para contestação/chargeback)</div></div>
+${aceites.length ? `<table><thead><tr><th>Aceito em</th><th>Plano/produto</th><th style="text-align:right">Valor</th><th>Versão do termo</th><th>Gateway</th><th>IP</th></tr></thead><tbody>${linhasAceites}</tbody></table>` : ''}
 <h2>Financeiro — Comissões e Saques</h2><div class="box">
 <div class="kv"><b>Saldo disponível:</b> ${brlv(fin.saldo)} &nbsp; <b>Total de comissões apuradas:</b> ${brlv(fin.comissoes_total)}</div></div>
 ${(fin.lancamentos || []).length ? `<table><thead><tr><th>Data</th><th>Tipo</th><th>Descrição</th><th style="text-align:right">Valor</th><th>Status</th></tr></thead><tbody>${linhasFin}</tbody></table>` : '<div class="muted" style="margin-top:6px">Sem lançamentos financeiros.</div>'}
@@ -510,6 +518,7 @@ ${atividade ? `<h2>Atividade${(tDe || tAte) ? ' no período' : ''}</h2><table><t
           {/* Parceria & Financeiro — trilho jurídico (aceite do termo, indicações, saques) */}
           {(() => {
             const par = dados.parceria || {}, fin = dados.financeiro || {};
+            const aceites = dados.aceites || [], lgpd = dados.lgpd || null;
             const brlv = (v) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
             return (
               <div style={card}>
@@ -534,6 +543,17 @@ ${atividade ? `<h2>Atividade${(tDe || tAte) ? ' no período' : ''}</h2><table><t
                     <div style={{ fontSize: 10.5, color: '#64748b', fontWeight: 700 }}>LANÇAMENTOS</div>
                     <div style={{ fontSize: 12.5, color: '#334155', marginTop: 2 }}>{(fin.lancamentos || []).length} registro(s)</div>
                     <div style={{ fontSize: 10.5, color: '#94a3b8' }}>comissões e saques</div>
+                  </div>
+                  <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '8px 10px' }}
+                    title={aceites.length ? aceites.map((x) => `${dataHoraBR(x.aceito_em)} · ${x.plano_key || ''} · termo ${x.termos_versao || '—'} · IP ${x.ip || '—'}`).join('\n') : 'Nenhum termo de compra registrado'}>
+                    <div style={{ fontSize: 10.5, color: '#2563eb', fontWeight: 700 }}>TERMOS DE COMPRA</div>
+                    <div style={{ fontSize: 12.5, color: '#334155', marginTop: 2 }}>{aceites.length ? `${aceites.length} aceite(s)` : 'nenhum'}</div>
+                    {aceites[0] && <div style={{ fontSize: 10.5, color: '#94a3b8' }}>último: {dataHoraBR(aceites[0].aceito_em)} · {aceites[0].plano_key}</div>}
+                  </div>
+                  <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px 10px' }}>
+                    <div style={{ fontSize: 10.5, color: '#64748b', fontWeight: 700 }}>CADASTRO / LGPD</div>
+                    <div style={{ fontSize: 12.5, color: '#334155', marginTop: 2 }}>{lgpd?.lgpd_aceito ? '✓ aceito' : 'sem registro'}</div>
+                    {lgpd?.lgpd_data && <div style={{ fontSize: 10.5, color: '#94a3b8' }}>em {dataHoraBR(lgpd.lgpd_data)}</div>}
                   </div>
                 </div>
                 <div style={{ fontSize: 10.5, color: '#94a3b8', marginTop: 8 }}>Use “Dossiê (PDF)” no topo para exportar o registro completo (aceites, indicações, saques, relatórios e atividade).</div>

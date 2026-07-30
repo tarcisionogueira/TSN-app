@@ -71,6 +71,22 @@ export default async function handler(req) {
       // COLETADO (tracker.js → /api/track) mas NUNCA exibido: o painel "Navegação e cliques" do
       // Cliente 360 lia dados.navegacao, que ninguém preenchia. Vale p/ cliente/parceiro/equipe.
       try { data.navegacao = (await rpc('atividade_navegacao', { p_user_id: uid, p_limite: full ? 2000 : 200 })) || []; } catch { data.navegacao = []; }
+      // TERMOS ACEITOS (trilho jurídico do 360): compra de plano/produto (aceites_plano, com
+      // IP/versão — prova anti-chargeback) + LGPD do cadastro. A adesão de parceiro já vem na
+      // RPC ('parceria'). Antes só a Auditoria da aba Usuários mostrava isso — o 360 não.
+      try {
+        const r = await fetch(`${SB}/rest/v1/aceites_plano?user_id=eq.${encodeURIComponent(uid)}&order=aceito_em.desc&limit=100&select=plano_key,valor,termos_versao,ip,gateway,aceito_em,preco_contratado`, {
+          headers: { apikey: KEY, Authorization: `Bearer ${KEY}` },
+        });
+        data.aceites = r.ok ? await r.json() : [];
+      } catch { data.aceites = []; }
+      try {
+        const r = await fetch(`${SB}/rest/v1/perfis?id=eq.${encodeURIComponent(uid)}&select=lgpd_aceito,lgpd_data`, {
+          headers: { apikey: KEY, Authorization: `Bearer ${KEY}` },
+        });
+        const j = r.ok ? await r.json() : [];
+        data.lgpd = j?.[0] || null;
+      } catch { data.lgpd = null; }
     }
   } else {
     // Termo vazio → lista geral. Se o termo tem 11 dígitos, calcula o hash do CPF
