@@ -994,7 +994,7 @@ function UsuariosTab() {
 <h2>${esc(titulo)}</h2><div class="box">
 ${linhas.map(([k, v]) => `<div class="kv"><b>${esc(k)}:</b> ${esc(v)}</div>`).join('')}
 </div>
-${termoTexto ? `<h2>Texto do termo aceito</h2><div class="box" style="font-size:12px">${esc(termoTexto)}</div>` : ''}
+${termoTexto ? `<h2>Texto do termo aceito</h2><div class="box" style="font-size:12px;white-space:pre-wrap">${esc(termoTexto)}</div>` : ''}
 ${hash ? `<h2>Verificação de integridade</h2><div class="kv muted">${esc(hashLabel)}:</div><div class="hash">${esc(hash)}</div>
 <div class="muted" style="margin-top:6px;font-size:11.5px">O hash é calculado sobre os campos canônicos do registro (usuário, e-mail, termo/versão, valor, IP e data/hora). Qualquer alteração posterior no registro invalida a verificação.</div>` : ''}
 <div style="margin-top:26px;border-top:1px solid #e2e8f0;padding-top:8px;font-size:11.5px" class="muted">O aceite foi manifestado eletronicamente na plataforma BidPro Brasil (MP nº 2.200-2/2001, art. 10, §2º — validade de registro eletrônico acordado entre as partes; Lei nº 13.709/2018 — LGPD). O registro íntegro permanece armazenado na plataforma e pode ser exibido às partes e à Justiça. Documento gerado em ${esc(emitido)}.</div>
@@ -1332,7 +1332,15 @@ ${hash ? `<h2>Verificação de integridade</h2><div class="kv muted">${esc(hashL
                                       ['Dispositivo (user-agent)', a.user_agent || '—'],
                                     ],
                                     hashArmazenado: a.aceite_hash || '',
-                                    termoTexto: `${termoDoProduto(a.plano_key || a.plano, { valorLabel: a.valor != null ? `R$ ${Number(a.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : undefined }).texto} (Versão do termo registrada no aceite: ${a.versao_termos || a.termos_versao || '—'}.)`,
+                                    termoTexto: (() => {
+                                      const t = termoDoProduto(a.plano_key || a.plano, { valorLabel: a.valor != null ? `R$ ${Number(a.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : undefined });
+                                      const vReg = a.versao_termos || a.termos_versao || '—';
+                                      // O comprovante só apresenta o texto como "aceito" se a versão registrada
+                                      // for a vigente; aceite antigo vale pela versão gravada à época.
+                                      return vReg === t.versao
+                                        ? `${t.texto}\n\n(Versão registrada no aceite: ${vReg}.)`
+                                        : `Versão registrada no aceite: ${vReg} — o aceite vale pelo texto vigente naquela versão/data. Para referência, segue o texto da versão ATUAL (${t.versao}) do termo desta família:\n\n${t.texto}`;
+                                    })(),
                                   })}>Comprovante</button>
                               </div>
                             </td>

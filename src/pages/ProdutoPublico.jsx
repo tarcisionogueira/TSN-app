@@ -241,7 +241,7 @@ export default function ProdutoPublico({ tipo }) {
                           Li e aceito o termo de contratação deste conteúdo digital.
                           <details style={{ marginTop: 4 }}>
                             <summary style={{ color: '#0D63DB', cursor: 'pointer', fontWeight: 600 }}>Ver termo (versão {versaoTermoProduto(`${tipo}_${id}`)})</summary>
-                            <p style={{ margin: '6px 0 0', fontSize: 11.5, color: '#64748b', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px 10px' }}>
+                            <p style={{ margin: '6px 0 0', fontSize: 11.5, color: '#64748b', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px 10px', whiteSpace: 'pre-wrap' }}>
                               {termoDoProduto(`${tipo}_${id}`, { nome: produto?.titulo, valorLabel: `R$ ${Number(produto?.preco || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` }).texto}
                             </p>
                           </details>
