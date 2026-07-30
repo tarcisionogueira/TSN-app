@@ -26,14 +26,17 @@ function rotuloDe(el) {
 }
 
 // Registra um evento (usado internamente e por quem quiser logar uma falha específica).
+// `ts` = hora da AÇÃO (o banco antes carimbava a hora da INGESTÃO — deriva de até 5s+).
 export function registrarEvento(tipo, { alvo = '', detalhe = '' } = {}) {
   if (contador >= TETO) return;
   contador++;
-  fila.push({ tipo, rota: rotaAtual(), alvo: String(alvo).slice(0, 120), detalhe: String(detalhe).slice(0, 200) });
+  fila.push({ tipo, rota: rotaAtual(), alvo: String(alvo).slice(0, 120), detalhe: String(detalhe).slice(0, 200), ts: Date.now() });
   if (fila.length >= 10) flush(); else agendar();
 }
 
 function agendar() { if (!timer) timer = setTimeout(flush, 5000); }
+
+let aguardandoLogin = false; // houve eventos retidos por falta de sessão
 
 async function flush() {
   if (timer) { clearTimeout(timer); timer = null; }
@@ -41,7 +44,17 @@ async function flush() {
   const lote = fila.splice(0, 30);
   let token;
   try { token = (await supabase.auth.getSession())?.data?.session?.access_token; } catch { /* sem sessão */ }
-  if (!token) return; // só usuários logados
+  if (!token) {
+    // Não descarta: devolve à fila (teto 100, derruba os mais antigos) para enviar assim que o
+    // usuário logar na MESMA sessão SPA — antes o splice destruía a jornada pré-login em ≤5s.
+    fila = lote.concat(fila).slice(-100);
+    // Devolve a cota consumida pelo que foi derrubado do teto (senão o visitante engajado
+    // chegava logado com o contador estourado e o rastreamento pós-login ficava mudo).
+    contador = Math.min(contador, fila.length);
+    aguardandoLogin = true;
+    return;
+  }
+  if (aguardandoLogin) { aguardandoLogin = false; contador = fila.length + lote.length; }
   try {
     await fetch('/api/track', {
       method: 'POST',
@@ -71,6 +84,27 @@ export function instalarTracker() {
       const el = e.target?.closest?.('button, a, [role="button"], input[type="submit"], input[type="button"], label, [data-track]');
       if (!el) return;
       registrarEvento('click', { alvo: rotuloDe(el) || el.tagName?.toLowerCase() || 'elemento' });
+    } catch { /* ignora */ }
+  }, { capture: true });
+
+  // Submits (inclui ENTER no formulário — que NÃO gera click no botão) e mudanças de
+  // controles (select/ordenar/filtrar, escolha de arquivo, slider). Rótulo SEM value:
+  // o conteúdo digitado num input pode ser PII/segredo e não deve ir para o log.
+  const rotuloControle = (el) => {
+    try {
+      return String(el.getAttribute?.('aria-label') || el.name || el.id || el.type || el.tagName || '')
+        .replace(/\s+/g, ' ').trim().slice(0, 80);
+    } catch { return ''; }
+  };
+  window.addEventListener('submit', (e) => {
+    try { registrarEvento('submit', { alvo: rotuloControle(e.target) || 'form' }); } catch { /* ignora */ }
+  }, { capture: true });
+  window.addEventListener('change', (e) => {
+    try {
+      const el = e.target;
+      if (!el?.matches?.('select, input[type="file"], input[type="range"], input[type="checkbox"], input[type="radio"]')) return;
+      const det = el.type === 'file' ? `${el.files?.length || 0} arquivo(s)` : (el.type === 'checkbox' || el.type === 'radio') ? String(!!el.checked) : String(el.value ?? '').slice(0, 40);
+      registrarEvento('change', { alvo: rotuloControle(el), detalhe: det });
     } catch { /* ignora */ }
   }, { capture: true });
 

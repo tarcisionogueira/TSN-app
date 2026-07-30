@@ -22,7 +22,34 @@
 > Checagem rápida a qualquer momento: `select public.auditoria_seguranca();` → `0 crítico / 0 atenção` = íntegro.
 > **Auditorias ofensivas completas: 15/07/2026 (×2).** Total de correções: 15 (1ª rodada) + escalonamento por convite (CRÍTICO) + IDOR do MP (ALTO) + escala. Refazer a ofensiva quando entrarem rotas/pagamento/RLS novos (a Rotina mensal já faz isso sozinha).
 
-## ✅ COMEÇAR AQUI (29-30/07 — sessão 19: MARKETING ponta a ponta — pixel/CAPI/Google + funil CAC/ROAS + 1ª campanha no ar)
+## ✅ COMEÇAR AQUI (30/07 — sessão 20: ritual completo + pareceres presos destravados + auditoria de cobertura do tracker)
+> Branch `claude/handoff-rotina-inicio-ta1z4a`. `npm run build` OK. `auditoria_seguranca()` = **0/0** ao final.
+
+**A. RITUAL DE INÍCIO (resultados).** (1) Saúde: 31.452 ativos / 25.041 atualizados 24h; deploys READY; sem erro runtime relevante. (2) **Segurança: 1 atenção corrigida** — `admin_funil_captacao` (RPC da sessão 19) estava executável por `anon` (grant default); revoke aplicado no banco + migração `admin_funil_captacao_revogar_anon.sql`; auditoria de volta a 0/0. (3) **Cluster de leiloeiros parado desde 27/07**: o cron diário (sessão 18) só entrou na `main` em 29/07 11:33 UTC — DEPOIS da janela de 10h — e o run de 30/07 atrasou (delay normal do GitHub). Disparado manualmente 30/07 ~11:25 UTC. (4) **Métricas Google Ads: ciclo AUTO 100% validado** — `marketing_metricas_dia` recebeu 29/07 (R$ 24,55 / 9 cliques / 103 impr.) via Google Ads Script; anúncio já veicula. (5) PECINI gravou na seg 27/07 (não está mais em dry-run; 41 ativos).
+
+**B. PARECERES VAZIOS (pergunta do dono; ele viu `relatorio_parecer_vazio` no 360 — ou seja, o rastreio da sessão 14 FUNCIONOU).** Causa: madrugada 28→29/07 a API Anthropic ficou instável (529/abort); o passe "parecer vazio" do `regenerar-relatorios-cron` tinha teto de **2 tentativas** e ambas caíram DENTRO da janela ruim → **4 relatórios presos** (Carapicuíba `82506bdc`, Alagoinhas, Lauro de Freitas, Praia Grande), todos `cota_estornada=true` (cota devolvida ✓). **Remediação:** `regen_tentativas` resetado nos 4 → cron das 12h UTC de 30/07 regenera. **Raiz:** `MAX_PARECER` 2→**4** + **espaçamento ≥5h** entre tentativas (`regen_em`) — nunca mais queima todas na mesma janela ruim. Verificação: `select count(*) from analises_mercado where status='concluida' and length(coalesce(result->>'parecer',''))=0;` → 0 = limpo. ⚠️ Lembrete: `parecer` fica em `result->>'parecer'` (RAIZ), não em `result->'mercado'`.
+
+**C. AUDITORIA DE COBERTURA DO TRACKER (item pendente da sessão 19) — feita com 3 agentes (pré-login · logado · backend/admin). CORRIGIDO nesta sessão (pacote mínimo de alto retorno):**
+1. `tracker.js`: flush SEM token **não descarta mais** a fila (re-enfileira, teto 100 → jornada pré-login é enviada quando o usuário loga na mesma sessão SPA); contador não é mais queimado por eventos descartados; eventos levam `ts` da AÇÃO; novos listeners globais de **`submit`** (pega ENTER em form, que não gera click) e **`change`** (select/filtros/arquivo/checkbox — rótulo SEM value, anti-PII).
+2. `apiCall.js`: falha de REDE agora registra `api_falha_rede` antes de re-lançar (antes o catch do chamador engolia); regex do peek ganhou `indice-consulta` + detecção de `mapeado:false` ("região não mapeada" = análogo do relatório vazio).
+3. `pdfImprimir.js`: `pdf_gerado`/`pdf_falha` no choke point — a ENTREGA dos 6 geradores de PDF aparece no 360, não só o clique.
+4. `api/track.js`: allowlist ampliada p/ os novos tipos; `criado_em` = hora da AÇÃO (ts do cliente, validado ±janela) e não da ingestão.
+5. `api/_audit.js`: `auditLog` agora RETORNA a promise (call-sites com `await` aguardavam `undefined` → em serverless o insert podia se perder) + loga a própria falha.
+
+**D. BACKLOG PRIORIZADO da auditoria (registrado, NÃO feito — próximas sessões):**
+1. **Ingestão anônima com `sessao_id`** (pré-login de verdade): `eventos_atividade` já aceita `user_id` null; aceitar sem token + UUID de sessão + costura retroativa no SIGNED_IN. É o que fecha a diretriz do dono ponta a ponta.
+2. **`audit_logs` no 360**: tabela existe, tem IP e sucesso/falha, e NINGUÉM lê (nem RPC nem card). ~30 linhas.
+3. **Modo suporte (impersonate) sem trilha**: 100% client-side; eventos do suporte caem no 360 do ADMIN sem marca. Endpoint de início/fim + marcar eventos.
+4. **`atribuir-arremate` sem auditoria** (promove role + vencimento +12m sem registrar QUEM); idem 12 mutações do Admin direto no PostgREST (planos, role, bloqueio, signatário, excluir contrato, gastos mkt, toggles curso/ebook) — opção barata: triggers AFTER em `audit_logs` com `auth.uid()`.
+5. **Funil ContratoLink**: cobrir link inválido/expirado/reaberto, etapa `tipo`, bloqueios client-side (KYC/foto grande/termos) e mover `trackErro` p/ antes das validações 400/404; sucesso não pode depender de `criadorEmail`. Replicar `rastrear` em TestemunhaLink/ConviteLeiloeiro/Convite/AtivarVendedor.
+6. **Login.jsx**: falha de login/cadastro/recuperação/reenvio = ZERO rastro hoje (só sucesso). Com o item C.1, `registrarEvento` nesses ramos já chega ao banco pós-login; anônimo de verdade precisa do backlog 1.
+7. Versionar DDL de `atividade_log`/`registrar_atividade`/RPCs (hoje só no banco; "90 dias" não é auditável no repo); retenção do `audit_logs` (sugestão 5 anos); rate-limit em `/api/track` (teto hoje é só client-side); `auto-contrato.js` importa `auditLog` e nunca chama.
+
+**E. BIASI (piso 130, mediana 260, último 96) — recon PENDENTE de dado fresco:** queda contínua desde 16/07 (369→173→96). O ambiente remoto não alcança o site (proxy bloqueia) — validar com o run do cluster disparado hoje: `select total,status from fonte_saude where fonte='BIASI' order by executado_em desc limit 3;`. Se seguir ≤100 com status ok em runs consecutivos, pode ser acervo real encolhendo (pós-leilão); se oscilar, rodar a ofensiva (recon estrutura viva × premissas: `?pagina` na listagem agregada + fallback home) via Actions (`debug-leiloeiros.yml`).
+
+---
+
+## ✅ Sessão 19 (29/07: MARKETING ponta a ponta — pixel/CAPI/Google + funil CAC/ROAS + 1ª campanha no ar)
 > MESMA branch. `npm run build` OK. Commits `b07c39e..6b2dc65`. **Plano do dia 30/07 no fim desta seção.**
 
 **A. META PIXEL no ar (Reimob `683455009174779`).** Decisão: reaproveitar o pixel "Reimob Imobiliária" (Meta não deixa criar 3º pixel; excluir destrói histórico/públicos; o "Pixel Tarcisio 533681443970197" é da imersão Lance de Ouro — NÃO usar). `VITE_META_PIXEL_ID` no Vercel (Prod+Preview) + redeploy; **validado em produção** (fbq 2.0 + ID embutido nos 24 bundles). O público Lance de Ouro entra depois como Público Personalizado/Lookalike (segmentação), não pelo pixel.

@@ -16,10 +16,13 @@ const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
  * @param {boolean} [params.sucesso]  - true/false
  */
 export function auditLog({ acao, user_id, ip, detalhes, sucesso = true }) {
-  if (!SUPABASE_URL || !SERVICE_KEY) return;
+  if (!SUPABASE_URL || !SERVICE_KEY) return Promise.resolve();
 
-  // Fire-and-forget — não await
-  fetch(`${SUPABASE_URL}/rest/v1/audit_logs`, {
+  // RETORNA a promise: quem faz `await auditLog(...)` de fato espera o insert chegar
+  // (antes retornava undefined e, em serverless, a função podia ser encerrada ANTES do
+  // fetch completar → registro de auditoria perdido em silêncio). Quem não aguarda
+  // mantém o comportamento fire-and-forget.
+  return fetch(`${SUPABASE_URL}/rest/v1/audit_logs`, {
     method: 'POST',
     headers: {
       apikey: SERVICE_KEY,
@@ -28,5 +31,5 @@ export function auditLog({ acao, user_id, ip, detalhes, sucesso = true }) {
       Prefer: 'return=minimal',
     },
     body: JSON.stringify({ acao, user_id: user_id || null, ip: ip || null, detalhes: detalhes || null, sucesso }),
-  }).catch(() => {}); // silencia erros de rede — log nunca deve travar o fluxo
+  }).catch((e) => { try { console.error('[audit] falha ao gravar:', e?.message || e); } catch { /* nunca trava */ } });
 }

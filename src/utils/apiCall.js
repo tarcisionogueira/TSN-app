@@ -18,19 +18,27 @@ export async function apiCall(path, options = {}) {
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const res = await fetch(path, { ...options, headers });
-  // Diagnóstico (Cliente 360): registra falhas de API sem alterar o retorno.
   const rota = String(path).split('?')[0].slice(0, 120);
+  let res;
+  try {
+    res = await fetch(path, { ...options, headers });
+  } catch (e) {
+    // Falha de REDE (offline/timeout/DNS) lançava antes de qualquer registro → o catch do
+    // chamador engolia e o Cliente 360 nunca via. Registra e RE-LANÇA (contrato inalterado).
+    try { registrarEvento('api_falha_rede', { alvo: rota, detalhe: String(e?.message || e).slice(0, 120) }); } catch { /* ignora */ }
+    throw e;
+  }
+  // Diagnóstico (Cliente 360): registra falhas de API sem alterar o retorno.
   if (!res.ok) {
     try { registrarEvento('api_erro', { alvo: rota, detalhe: `HTTP ${res.status}` }); } catch { /* ignora */ }
-  } else if (/gerar-analise|gerar-documental|gerar-laudo|indice-mercado/.test(rota)) {
+  } else if (/gerar-analise|gerar-documental|gerar-laudo|indice-mercado|indice-consulta/.test(rota)) {
     // RESULTADO das ações-chave: um 200 pode vir "vazio" (mercadoVazio) ou com erro no corpo — o
     // dono quer o clique E o DESFECHO. Espia o corpo por CLONE (não consome o retorno do chamador),
     // só nessas rotas (baixa frequência) para não pesar. Best-effort.
     try {
       const b = await res.clone().json();
-      if (b && (b.error || b.mercadoVazio || b.motivo === 'sem_amostras')) {
-        registrarEvento('api_vazio', { alvo: rota, detalhe: String(b.error || (b.mercadoVazio ? 'relatório sem estimativa' : b.motivo)).slice(0, 120) });
+      if (b && (b.error || b.mercadoVazio || b.motivo === 'sem_amostras' || b.mapeado === false)) {
+        registrarEvento('api_vazio', { alvo: rota, detalhe: String(b.error || (b.mercadoVazio ? 'relatório sem estimativa' : b.mapeado === false ? 'região não mapeada' : b.motivo)).slice(0, 120) });
       }
     } catch { /* peek best-effort */ }
   }

@@ -8,8 +8,13 @@
 // diálogo fecha (evento afterprint). Antes restaurávamos logo após print(), mas o
 // Chrome lê o título DEPOIS — então o arquivo saía com o nome do site em vez do
 // nome do documento. Rede de segurança por tempo caso afterprint não dispare.
+import { registrarEvento } from '../utils/tracker.js';
+
 export function imprimirHtml(html, nomeArquivoBruto) {
   const nomeArquivo = String(nomeArquivoBruto || 'Documento').replace(/[\\/:*?"<>|]+/g, ' ').trim();
+  // Único choke point da geração de PDF do produto (mercadológico/documental/laudo/índice/
+  // contrato/combinado) — a ENTREGA precisa aparecer no Cliente 360, não só o clique.
+  try { registrarEvento('pdf_gerado', { alvo: nomeArquivo.slice(0, 100) }); } catch { /* ignora */ }
   const tituloAnterior = document.title;
   const iframe = document.createElement('iframe');
   iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
@@ -37,7 +42,10 @@ export function imprimirHtml(html, nomeArquivoBruto) {
         // Fallback extremo: abre numa nova aba (pode pedir pop-up) e imprime.
         const win = window.open('', '_blank');
         if (win) { win.document.write(html); win.document.close(); win.focus(); setTimeout(() => win.print(), 600); }
-        else alert('Não foi possível abrir a impressão. Verifique o bloqueador de pop-ups.');
+        else {
+          try { registrarEvento('pdf_falha', { alvo: nomeArquivo.slice(0, 100), detalhe: 'pop-up bloqueado' }); } catch { /* ignora */ }
+          alert('Não foi possível abrir a impressão. Verifique o bloqueador de pop-ups.');
+        }
         restaurar();
       }
     };
@@ -57,6 +65,7 @@ export function imprimirHtml(html, nomeArquivoBruto) {
     }
   } catch {
     restaurar();
+    try { registrarEvento('pdf_falha', { alvo: nomeArquivo.slice(0, 100), detalhe: 'iframe de impressão falhou' }); } catch { /* ignora */ }
     alert('Não foi possível gerar o PDF neste navegador.');
   }
 }
