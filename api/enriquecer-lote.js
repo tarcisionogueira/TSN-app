@@ -16,7 +16,7 @@ import { fetchViaBrightData } from './_brightdata.js';
 import { hostExternoSeguro } from './_allowed-hosts.js';
 import { vasculharDocumentos, chaveDocCanonica } from './_doc-scan.js';
 import { extrairRegistroMatricula } from './_registro-matricula.js';
-import { PDFParse } from 'pdf-parse';
+import { carregarPDFParse } from './_pdf-safe.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -95,6 +95,7 @@ async function lerCartorioMatricula(url) {
     if (!r.ok) return null;
     const buf = Buffer.from(await r.arrayBuffer());
     if (buf.length > 12_000_000 || buf.slice(0, 5).toString('latin1') !== '%PDF-') return null;
+    const PDFParse = await carregarPDFParse();
     const parser = new PDFParse({ data: buf });
     const res = await parser.getText();
     await parser.destroy();

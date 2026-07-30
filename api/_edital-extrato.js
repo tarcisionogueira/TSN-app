@@ -8,7 +8,7 @@
  * relatório segue exatamente como antes.
  */
 import { hostExternoSeguro } from './_allowed-hosts.js';
-import { PDFParse } from 'pdf-parse';
+import { carregarPDFParse } from './_pdf-safe.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -76,6 +76,7 @@ async function lerTexto(url, deadline) {
     if (!buf.length || buf.length > 12_000_000) return null;
     const ehPdf = /pdf/i.test(ct) || buf.slice(0, 5).toString('latin1') === '%PDF-';
     if (ehPdf) {
+      const PDFParse = await carregarPDFParse();
       const parser = new PDFParse({ data: buf });
       try {
         const res = await parser.getText();
