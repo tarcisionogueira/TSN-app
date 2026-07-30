@@ -172,13 +172,21 @@ export default async function handler(req, res) {
   // (isCron). SEM janela de idade — o predicado se auto-limpa: ao preencher o parecer o relatório
   // sai do filtro; se não der para regerar (sem inputs) bate o teto e para (economia).
   let mktParecer = 0;
-  const MAX_PARECER = 2;
+  // 4 tentativas ESPAÇADAS (não 2): em 29/07 a API da Anthropic passou a madrugada instável
+  // (529/abort) e as 2 tentativas caíram DENTRO da mesma janela ruim → 4 relatórios presos
+  // sem parecer até intervenção manual. A regeração do parecer é barata (reusa a pesquisa
+  // de mercado recente), então o teto sobe e cada tentativa exige ≥5h desde a anterior —
+  // garantindo que as 4 caiam em janelas distintas de saúde da API.
+  const MAX_PARECER = 4;
+  const ESPACO_PARECER_H = 5;
+  const espacoParecer = new Date(agora - ESPACO_PARECER_H * 3600 * 1000).toISOString();
   // Lote MAIOR que os demais: a regeração do parecer REUSA a pesquisa de mercado recente
   // (mercadoRecente/reaproveitado) — não repaga web search — então é BARATA e pode limpar o
   // backlog de "parecer em branco" num só run em vez de arrastar por vários ciclos.
   const LOTE_PARECER = 8;
   try {
     const q = `analises_mercado?status=eq.concluida&result->>parecer=eq.&regen_tentativas=lt.${MAX_PARECER}`
+      + `&or=(regen_em.is.null,regen_em.lt.${encodeURIComponent(espacoParecer)})`
       + `&order=updated_at.asc&limit=${LOTE_PARECER}&select=user_id,imovel_id,titulo,cidade,estado,imovel,inputs,result,regen_tentativas,cota_estornada`;
     const rows = await (await sb(q)).json();
     if (Array.isArray(rows)) {
