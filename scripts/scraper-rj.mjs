@@ -200,8 +200,10 @@ async function debugRecon() {
 }
 
 async function main() {
-  if (!brightDataDisponivel()) {
-    console.error('BRIGHTDATA_API_TOKEN/ZONE ausentes — RJ só é acessível via Web Unlocker. Abortado.');
+  // Bright Data só é exigido no modo pago (CI); no runner RESIDENCIAL (RJ_HEADLESS=1)
+  // o Chromium real passa o Cloudflare de graça — o guard antigo abortava o modo de casa.
+  if (!brightDataDisponivel() && process.env.RJ_HEADLESS !== '1') {
+    console.error('BRIGHTDATA_API_TOKEN/ZONE ausentes — RJ só é acessível via Web Unlocker (ou use RJ_HEADLESS=1 num IP residencial). Abortado.');
     process.exit(1);
   }
   if (DEBUG) { await debugRecon(); return; }
