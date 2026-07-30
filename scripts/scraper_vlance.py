@@ -45,7 +45,10 @@ import requests
 # sanches + destak: o recon-2 de 23/07 confirmou ambos na plataforma Vlance (destak NÃO é
 # independente como o recon-1 supôs) — entram como tenants; se algum não responder ao padrão
 # /v3, o loop por domínio só loga e segue (zero risco para os demais).
-TENANTS_PADRAO = ["verdeamareloleiloes.com.br", "sudesteleiloes.com.br", "capitalvalorleiloes.com.br", "sanchesleiloes.com.br", "destakleiloes.com.br"]
+# bomnegocio + paulistana: Round 35 (30/07) confirmou ambos na Vlance (vlanceConfigContainer
+# + core/api/get-leiloes). paulistana hoje só tem leilão de SIMULAÇÃO (acervo ~0) — fica
+# armado para quando publicar de verdade; o loop por domínio tolera tenant vazio.
+TENANTS_PADRAO = ["verdeamareloleiloes.com.br", "sudesteleiloes.com.br", "capitalvalorleiloes.com.br", "sanchesleiloes.com.br", "destakleiloes.com.br", "bomnegocioleiloes.com.br", "paulistanaleiloes.com.br"]
 EP_LEILOES = "/core/api/get-leiloes"
 EP_LOTES = "/core/api/get-lotes"
 

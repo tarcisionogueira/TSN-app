@@ -28,14 +28,28 @@ gate; CI/Bright Data = rede de segurança de 7 dias):
 Do backlog de 58: **~15 domínios com scraper dedicado**, ~20 fluem via agregador (LJUD 39
 leiloeiros, LEILOTECH ~13, SUPORTE, SUPERBID, MEGA/ZUK parciais).
 
-**AINDA FALTANDO (0 acervo — exigem recon/scraper dedicado, na ordem de valor):**
-1. ⭐ **alfaleiloes.com** (só imóveis, nacional, provável API) · ⭐ **gustavoreisleiloes** (conferir
-   se o SUPORTE já o cobre de fato — doc #201 diz que sim, acervo mostra SUPORTE 29);
-2. Pares baratos (mesma dona/estrutura): **sato + hisa** · **osvaldo + elizabeth (Seoanes)**;
-3. Independentes: crepaldi, e-confianca, totalleiloes, delano, picelli, shiokawa, bomnegocio,
-   paulistana, saocaetano, eduardosorgi (via Sumaré), sumare (mini-plataforma);
-4. Verificar (podem ser portal/plataforma): e-leiloeiro, centraljudicial, leilaobrasil,
-   hastapublica, judhastas; confirmar brunoleiloes via LJUD; albertomacedo segue 0 no Superbid.
+**ROUND 35 (30/07, recon das homes via Actions — debug_fetch ofv35-%) — CLASSIFICAÇÃO FECHADA.**
+Plano de ataque em ordem de retorno×esforço (evidências no relatório do round):
+1. **total → SUPERBID storeId 16091** (65 ofertas abertas) e **crepaldi → SUPERBID storeId
+   16139** (0 hoje, deixa armado): só config no scraper SUPERBID existente.
+2. **gustavoreis → tenant SUPORTE** (static.suporteleiloes.com.br/gustavoreisleiloescombr/):
+   config de tenant; cuidado com eventos EXTERNOS (Comprei/PGFN) para não contar como lote.
+3. **bomnegocio + paulistana → tenants Vlance** ✅ ADICIONADOS 30/07 (paulistana só tem leilão
+   de SIMULAÇÃO hoje — armado p/ quando publicar).
+4. ⭐ **sato → dedicado BARATO de ALTO retorno**: API JSON pública paginada
+   `/api-publica/stale/dados-home?page=N&type=leilao` (~300 leilões, metadados ricos, sem HTML).
+5. **picelli + shiokawa → cluster NOVO "PostgREST white-label"**: ambos expõem
+   `api.<dominio>/rest/v1/auctions|lots` (Supabase/PostgREST aberto, schema idêntico) — 1
+   scraper genérico atende os 2 e futuros sites da plataforma (centenas de lotes no picelli).
+6. **econfianca → raspar a ORIGEM e-leiloes.com.br** (cards apontam p/ lá; convenção de path
+   igual à do SUPORTE — 1 mini-recon confirma se o scraper SUPORTE serve; cobriria o portal todo).
+7. **alfa → dedicado** (Django server-rendered + /filters/; leiloeiro relevante de imóveis SP).
+8. **sumare → dedicado** HTML /leiloes/{id} (médio; capturou no round apesar do timeout inicial).
+9. **hisa + osvaldo + saocaetano → cluster "Plataforma Leiloar"** (server-rendered, sem API) —
+   por último; só osvaldo mostrou imóveis relevantes (515m² Osasco TRT-2).
+10. **delano (Cloudflare 522 — site fora do ar) e elizabeth (render falhou)**: reagendar no
+    Round 36, junto dos portais (e-leiloeiro, centraljudicial, leilaobrasil, hastapublica,
+    judhastas) + confirmar brunoleiloes via LJUD + albertomacedo 0 no Superbid.
 
 ## 📊 25/07 — STATUS VIVO da cobertura (auditoria no banco)
 Acervo total **~33,5 mil ativos** em **25 fontes**. Boa parte do backlog de 58 domínios já

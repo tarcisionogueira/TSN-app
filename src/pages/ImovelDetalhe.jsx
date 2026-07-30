@@ -698,10 +698,11 @@ export default function ImovelDetalhe() {
   const id = loc.state?.imovel?.id || paramId;
 
   // Compartilhar o imóvel: usa o menu nativo do celular (WhatsApp etc.) quando existe;
-  // no desktop copia o link. O link é a URL atual (/#/imovel/:id) — quem recebe sem
-  // conta cai no teaser (ImovelGate) e entra/cadastra para ver.
+  // no desktop copia o link. Link SEM hash (/i/:id): o preview do WhatsApp mostra
+  // título/cidade/lance/FOTO do imóvel (og-share) e redireciona quem clica para
+  // /#/imovel/:id — sem conta cai no teaser (ImovelGate) e entra/cadastra para ver.
   const compartilhar = async () => {
-    const url = window.location.href;
+    const url = id ? `${window.location.origin}/i/${id}` : window.location.href;
     const titulo = imovel?.titulo || 'Imóvel em leilão — BidPro Brasil';
     if (typeof navigator !== 'undefined' && navigator.share) {
       try { await navigator.share({ title: titulo, text: `Veja este imóvel em leilão: ${titulo}`, url }); }

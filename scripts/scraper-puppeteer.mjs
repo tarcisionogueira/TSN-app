@@ -1311,7 +1311,13 @@ async function scraperSodre(browser) {
         area_m2: area || extrairDaDescricao(`${titulo} ${r.lot_description || ''}`).area_m2 || 0,
         ocupacao: extrairDaDescricao(`${titulo} ${r.lot_description || ''}`).ocupacao || null,
         descricao: String(r.lot_description || titulo).replace(/\s+/g, ' ').slice(0, 500),
-        link_edital: `https://www.sodresantoro.com.br/imoveis/lote/${r.lot_id || r.id}`,
+        // Rota REAL do lote (recon 30/07): www.../imoveis/lote/{id} devolve 404 (Nuxt)
+        // MESMO em lote ativo — a página viva é a do subdomínio de leilão (o padrão que o
+        // captura-docs-sodre já usa). Sem isto, link_edital/url_lote nasciam mortos e a
+        // captura de matrícula/edital regredia (63% vs base ≥82/85%).
+        link_edital: r.auction_id
+          ? `https://leilao.sodresantoro.com.br/leilao/${r.auction_id}/lote/${r.lot_id || r.id}/`
+          : `https://www.sodresantoro.com.br/imoveis/lote/${r.lot_id || r.id}`,
         // Campo real de imagem = lot_pictures (confirmado no recon-sodre-searchlots).
         // Aceita array de strings ou de objetos; normaliza relativo → absoluto. A
         // foto também é backfillada por captura-docs-sodre.mjs (og:image do lote).
@@ -1349,7 +1355,11 @@ async function scraperSodre(browser) {
 function extrairDaDescricao(txt) {
   const t = String(txt || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
   const out = {};
-  const am = t.match(/([\d][\d.]*(?:,\d+)?)\s*m(?:²|2)(?![a-z0-9])/i);
+  // Prefere a área PRIVATIVA/ÚTIL nomeada: a Sodré descreve "privativa de 244,99 m²,
+  // comum 217,43 m², total 462,42 m²" e o 1º m² genérico podia pegar a comum/terreno
+  // (recon 30/07: a API zerou lot_useful_area e a descrição virou a fonte da área).
+  const ap = t.match(/(?:privativa|útil|util)\s*(?:de\s*)?[:\s]*([\d][\d.]*(?:,\d+)?)\s*m(?:²|2)(?![a-z0-9])/i);
+  const am = ap || t.match(/([\d][\d.]*(?:,\d+)?)\s*m(?:²|2)(?![a-z0-9])/i);
   if (am) { const n = parseFloat(am[1].replace(/\./g, '').replace(',', '.')); if (n > 0 && n < 1e7) out.area_m2 = n; }
   const om = t.match(/\b(desocupad[ao]|ocupad[ao])\b/i);
   if (om) out.ocupacao = /desocupad/i.test(om[1]) ? 'Desocupado' : 'Ocupado';
@@ -2131,24 +2141,40 @@ async function scraperBiasi(browser) {
     await page.setUserAgent(USER_AGENT);
     await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
 
-    // ── ESTRATÉGIA 1: listagem de IMÓVEIS paginada por URL (?pagina=N) ──────────────
-    // Determinística: sem vitrine rotativa e sem clique-AJAX. Só URLs imóvel-scoped (não
-    // /leiloes/... que mistura veículos). Reusa biasiParsePagina → mesma qualidade ou vazio.
-    for (const base of [`${BIASI_BASE}/lotes/imoveis/pesquisa`, `${BIASI_BASE}/lotes/imoveis`]) {
-      const antesBase = bens.size;
-      for (let p = 1; p <= 40; p++) {
-        try {
-          await page.goto(`${base}?pagina=${p}`, { waitUntil: 'domcontentloaded', timeout: 45000 });
-          await new Promise(r => setTimeout(r, 1200)); // render server-side
-        } catch { break; }
+    // ── ESTRATÉGIA 1: listagem agregada /lotes/imoveis/pesquisa, paginada por CLIQUE ──
+    // Recon 30/07 (Round 34, debug_fetch ofv34-biasi-*): o site IGNORA `?pagina=` (a
+    // listagem pagina por clique AJAX em .nav-paging) e /lotes/imoveis é rota MORTA
+    // (404 ASP.NET) — o loop antigo por URL colhia no máximo a página 1 (48 lotes) e a
+    // fonte vivia do fallback rotativo da home (por isso a oscilação 26→96→206). Agora:
+    // carrega a pesquisa 1x, lê total/limit de #leilao-lista-lote (206/48 no recon) e
+    // pagina por clique — o MESMO mecanismo já validado no fallback abaixo.
+    try {
+      await page.goto(`${BIASI_BASE}/lotes/imoveis/pesquisa`, { waitUntil: 'domcontentloaded', timeout: 45000 });
+      await new Promise(r => setTimeout(r, 1800));
+      const meta = await page.evaluate(() => {
+        const el = document.getElementById('leilao-lista-lote');
+        return { total: Number((el && el.getAttribute('total')) || 0), limit: Number((el && el.getAttribute('limit')) || 48) };
+      }).catch(() => ({ total: 0, limit: 48 }));
+      const paginas = meta.total > 0 ? Math.min(40, Math.ceil(meta.total / (meta.limit || 48))) : 1;
+      let ultimoPrimeiro = null, semAvanco = 0;
+      for (let p = 1; p <= paginas; p++) {
+        if (p > 1) {
+          const clicked = await page.evaluate((idx) => {
+            const byIdx = document.querySelector(`.nav-paging a[index="${idx}"]`);
+            const next = byIdx || document.querySelector('.nav-paging a[rel="next"], .nav-paging a.next, .nav-paging li.next a');
+            if (next) { next.click(); return true; }
+            return false;
+          }, p).catch(() => false);
+          if (!clicked) break;
+          await new Promise(r => setTimeout(r, 2500)); // espera o AJAX re-renderizar
+        }
         const lotes = await biasiParsePagina(page);
-        if (!lotes.length) break;                       // sem card = URL/estrutura não serve
-        let novos = 0;
-        for (const l of lotes) { if (l.id && !bens.has(l.id)) { bens.set(l.id, l); novos++; } }
-        if (!novos) break;                              // página repetiu = fim da paginação
+        const primeiro = lotes[0]?.id || null;
+        if (!lotes.length || (primeiro && primeiro === ultimoPrimeiro)) { if (++semAvanco >= 2) break; else continue; }
+        semAvanco = 0; ultimoPrimeiro = primeiro;
+        for (const l of lotes) { if (l.id && !bens.has(l.id)) bens.set(l.id, l); }
       }
-      if (bens.size - antesBase >= 30) break;           // esta base já entregou; não tenta a outra
-    }
+    } catch (e) { console.log(`    Biasi listagem agregada: ${String(e.message).slice(0, 60)}`); }
     console.log(`    Biasi: ${bens.size} lotes via listagem agregada`);
 
     // ── ESTRATÉGIA 2 (fallback): home → leilões → páginas por clique ────────────────

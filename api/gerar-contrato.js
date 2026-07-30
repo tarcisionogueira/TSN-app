@@ -142,8 +142,10 @@ export default async function handler(req, res) {
       const links = data.map(row => {
         const nome = listaSign.find(s => s.email === row.assinante_email)?.nome || null;
         return {
-          nome, email: row.assinante_email, token: row.token, url: `${origin}#/c/${row.token}`,
-          testemunhaUrl: (requerTestemunha && row.testemunha_token) ? `${origin}#/t/${row.testemunha_token}` : null,
+          // Link SEM hash (/c/…): o rewrite serve o preview rico "Assinatura de documento"
+          // no WhatsApp e redireciona a pessoa para a rota do app (/#/c/…). Idem testemunha.
+          nome, email: row.assinante_email, token: row.token, url: `${origin}/c/${row.token}`,
+          testemunhaUrl: (requerTestemunha && row.testemunha_token) ? `${origin}/t/${row.testemunha_token}` : null,
         };
       });
       await Promise.all(links.map(l =>

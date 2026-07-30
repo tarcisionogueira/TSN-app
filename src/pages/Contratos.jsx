@@ -489,7 +489,9 @@ export default function Contratos() {
                 {roster.map((p, i) => {
                   const linhasG = detalhe._grupo?.linhas || [];
                   const linha = linhasG.find(l => l.id === p.id) || (p.email && linhasG.find(l => (l.assinante_email || l.dados_signatario?.email) === p.email));
-                  const linkP = linha?.token ? `${window.location.href.split('#')[0]}#/c/${linha.token}` : null;
+                  // Link SEM hash: preview rico ("Assinatura de documento: <título>") no
+                  // WhatsApp; o /c/<token> redireciona a pessoa para a tela de assinatura.
+                  const linkP = linha?.token ? `${window.location.origin}/c/${linha.token}` : null;
                   const emEdicao = editParte?.id === p.id;
                   return (
                     <div key={p.id || i} style={{ borderTop: i ? '1px solid #e2e8f0' : 'none', padding: '8px 0' }}>

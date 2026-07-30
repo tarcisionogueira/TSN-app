@@ -199,7 +199,7 @@ export default function ContratoLink() {
   const [jaAssinado, setJaAssinado] = useState(false); // link reaberto/concluído → modo LEITURA (não dead-end)
   const [roster, setRoster] = useState([]); // partes do contrato + status de assinatura (via token)
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
-  const testemunhaUrl = contrato?.requer_testemunha && contrato?.testemunha_token ? `${origin}/#/t/${contrato.testemunha_token}` : null;
+  const testemunhaUrl = contrato?.requer_testemunha && contrato?.testemunha_token ? `${origin}/t/${contrato.testemunha_token}` : null; // sem hash → preview rico no WhatsApp
   const conteudoRef = useRef(null);
 
   const setImagem = useCallback((id, val) => {

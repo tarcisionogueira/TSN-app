@@ -1,5 +1,12 @@
 {
-  "rewrites": [{ "source": "/api/(.*)", "destination": "/api/$1" }],
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/$1" },
+    { "source": "/c/:token", "destination": "/api/og-share?tipo=contrato&id=:token" },
+    { "source": "/t/:token", "destination": "/api/og-share?tipo=testemunha&id=:token" },
+    { "source": "/i/:id", "destination": "/api/og-share?tipo=imovel&id=:id" },
+    { "source": "/p/curso/:id", "destination": "/api/og-share?tipo=curso&id=:id" },
+    { "source": "/p/ebook/:id", "destination": "/api/og-share?tipo=ebook&id=:id" }
+  ],
   "headers": [
     {
       "source": "/api/(.*)",
