@@ -62,6 +62,7 @@
     { "path": "/api/backfill-mp-pagamentos-cron",  "schedule": "0 3 * * 0"    },
     { "path": "/api/saldo-abandono-cron",          "schedule": "30 6 * * *"   },
     { "path": "/api/limpar-eventos-cron",          "schedule": "0 4 * * *"    },
-    { "path": "/api/indice-reforco-cron",          "schedule": "35 */4 * * *" }
+    { "path": "/api/indice-reforco-cron",          "schedule": "35 */4 * * *" },
+    { "path": "/api/meta-insights-cron",           "schedule": "10 8 * * *"   }
   ]
 }

@@ -8553,6 +8553,7 @@ function MarketingTab() {
   const [alertas, setAlertas] = useState([]);
   const [funil, setFunil] = useState(null); // captação por origem (RPC admin_funil_captacao)
   const [gastos, setGastos] = useState([]); // lançamentos de investimento (marketing_gastos)
+  const [metricasDia, setMetricasDia] = useState([]); // métricas AUTOMÁTICAS (Ads Script / Meta Insights)
   const [gastoForm, setGastoForm] = useState({ data: '', canal: 'Google Ads', valor: '', observacao: '' });
   const [gastoBusy, setGastoBusy] = useState(false);
 
@@ -8656,6 +8657,11 @@ function MarketingTab() {
         .gte('data', thirtyDaysAgo.slice(0, 10)).lte('data', dataFimISO.slice(0, 10))
         .order('data', { ascending: false });
       setGastos(gs || []);
+
+      // Métricas automáticas (Google Ads Script → ads-metrics-ingest · Meta → insights-cron).
+      const { data: md } = await supabase.from('marketing_metricas_dia').select('*')
+        .gte('data', thirtyDaysAgo.slice(0, 10)).lte('data', dataFimISO.slice(0, 10));
+      setMetricasDia(md || []);
 
     } catch (e) {
       console.error('MarketingTab error:', e);
@@ -8806,16 +8812,32 @@ function MarketingTab() {
           const corCanal = c => CORES_CANAL[c] || '#d97706';
           // Cruza o funil com o INVESTIMENTO lançado no período → CAC por assinante e ROAS
           // por canal (a métrica de economia: quanto custou cada assinante pago e o retorno).
-          const gastoCanal = {};
-          (gastos || []).forEach(g => { gastoCanal[g.canal] = (gastoCanal[g.canal] || 0) + Number(g.valor || 0); });
-          const gastoTotal = Object.values(gastoCanal).reduce((a, b) => a + b, 0);
+          // Gasto por canal: coleta AUTOMÁTICA (marketing_metricas_dia — Google Ads Script /
+          // Meta Insights) tem prioridade; canal sem dado automático usa o lançamento manual.
+          // Nunca soma os dois (evita dupla contagem quando ambos existem).
+          const manualCanal = {};
+          (gastos || []).forEach(g => { manualCanal[g.canal] = (manualCanal[g.canal] || 0) + Number(g.valor || 0); });
+          const autoCanal = {};
+          (metricasDia || []).forEach(m => {
+            const a = autoCanal[m.canal] || (autoCanal[m.canal] = { gasto: 0, cliques: 0, impressoes: 0 });
+            a.gasto += Number(m.gasto || 0); a.cliques += Number(m.cliques || 0); a.impressoes += Number(m.impressoes || 0);
+          });
           const canaisMap = {};
           (funil?.canais || []).forEach(c => { canaisMap[c.canal] = { ...c }; });
-          Object.keys(gastoCanal).forEach(canal => {
+          [...Object.keys(manualCanal), ...Object.keys(autoCanal)].forEach(canal => {
             if (!canaisMap[canal]) canaisMap[canal] = { canal, cadastros: 0, engajados: 0, contratantes: 0, receita: 0 };
           });
-          const canais = Object.values(canaisMap).map(c => ({ ...c, gasto: gastoCanal[c.canal] || 0 }))
-            .sort((a, b) => (b.cadastros - a.cadastros) || (b.receita - a.receita));
+          const canais = Object.values(canaisMap).map(c => {
+            const auto = autoCanal[c.canal];
+            return {
+              ...c,
+              gasto: auto ? auto.gasto : (manualCanal[c.canal] || 0),
+              gastoAuto: !!auto,
+              cliques: auto ? auto.cliques : null,
+              impressoes: auto ? auto.impressoes : null,
+            };
+          }).sort((a, b) => (b.cadastros - a.cadastros) || (b.receita - a.receita));
+          const gastoTotal = canais.reduce((s, c) => s + (c.gasto || 0), 0);
           const kpis = [
             { label: 'Cadastros no período', value: t.cadastros ?? 0, color: '#0D63DB' },
             { label: 'Engajados (viram imóveis)', value: t.engajados ?? 0, color: '#7c3aed' },
@@ -8850,6 +8872,8 @@ function MarketingTab() {
                         <th style={{ padding: '8px 10px', textAlign: 'right' }}>Conversão</th>
                         <th style={{ padding: '8px 10px', textAlign: 'right' }}>Receita</th>
                         <th style={{ padding: '8px 10px', textAlign: 'right' }}>Gasto</th>
+                        <th style={{ padding: '8px 10px', textAlign: 'right' }}>Cliques</th>
+                        <th style={{ padding: '8px 10px', textAlign: 'right' }}>CPC méd.</th>
                         <th style={{ padding: '8px 10px', textAlign: 'right' }}>CAC/assinante</th>
                         <th style={{ padding: '8px 10px', textAlign: 'right' }}>ROAS</th>
                       </tr>
@@ -8868,7 +8892,12 @@ function MarketingTab() {
                             {c.cadastros > 0 ? `${((c.contratantes / c.cadastros) * 100).toFixed(1)}%` : '—'}
                           </td>
                           <td style={{ padding: '9px 10px', textAlign: 'right', fontWeight: 700, color: '#111111' }}>{fmtR(c.receita)}</td>
-                          <td style={{ padding: '9px 10px', textAlign: 'right', color: c.gasto > 0 ? '#dc2626' : '#94a3b8' }}>{c.gasto > 0 ? fmtR(c.gasto) : '—'}</td>
+                          <td style={{ padding: '9px 10px', textAlign: 'right', color: c.gasto > 0 ? '#dc2626' : '#94a3b8', whiteSpace: 'nowrap' }}>
+                            {c.gasto > 0 ? fmtR(c.gasto) : '—'}
+                            {c.gastoAuto && <span title="Coletado automaticamente (Ads Script / Insights API)" style={{ marginLeft: 6, fontSize: 9, fontWeight: 800, color: '#059669', background: '#d1fae5', padding: '1px 6px', borderRadius: 8, verticalAlign: 'middle' }}>auto</span>}
+                          </td>
+                          <td style={{ padding: '9px 10px', textAlign: 'right', color: '#64748b' }}>{c.cliques != null ? c.cliques.toLocaleString('pt-BR') : '—'}</td>
+                          <td style={{ padding: '9px 10px', textAlign: 'right', color: '#64748b' }}>{c.cliques > 0 ? fmtR(c.gasto / c.cliques) : '—'}</td>
                           <td style={{ padding: '9px 10px', textAlign: 'right', color: '#64748b' }}>
                             {c.gasto > 0 ? (c.contratantes > 0 ? fmtR(c.gasto / c.contratantes) : 'sem assinante') : '—'}
                           </td>
@@ -8885,7 +8914,8 @@ function MarketingTab() {
               {/* Lançar investimento — alimenta o CAC/ROAS acima. Manual e rápido (30s/semana);
                   a automação por API de LEITURA pode substituir depois sem mudar a tela. */}
               <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '14px 16px', marginBottom: 18 }}>
-                <div style={{ fontWeight: 700, fontSize: 13, color: '#111111', marginBottom: 10 }}>Lançar investimento em anúncios</div>
+                <div style={{ fontWeight: 700, fontSize: 13, color: '#111111', marginBottom: 2 }}>Lançar investimento em anúncios</div>
+                <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 10 }}>Só para canais SEM coleta automática (selo "auto" na tabela) — nos automáticos o gasto entra sozinho todo dia.</div>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                   <input type="date" value={gastoForm.data} onChange={e => setGastoForm(f => ({ ...f, data: e.target.value }))}
                     style={{ fontSize: 12, padding: '7px 10px', border: '1px solid #e2e8f0', borderRadius: 8, color: '#111111' }} />
@@ -8932,6 +8962,9 @@ function MarketingTab() {
                   if (c.gasto > 0 && c.cadastros === 0 && dias >= 7) {
                     sug.push({ n: 'alerta', txt: `${c.canal}: há investimento lançado e nenhum cadastro atribuído no período. Confira no painel da plataforma se o anúncio está aprovado e recebendo cliques; se estiver, verifique os termos de pesquisa (cliques ruins) e a página de destino.` });
                   }
+                  if ((c.cliques || 0) >= 30 && c.cadastros === 0) {
+                    sug.push({ n: 'alerta', txt: `${c.canal}: ${c.cliques} cliques no período e nenhum cadastro — o anúncio atrai, mas a página não converte (ou a atribuição não está marcando). Revise a página de destino e os termos de pesquisa.` });
+                  }
                   if (c.gasto > 0 && rec >= c.gasto * 1.5) {
                     sug.push({ n: 'ok', txt: `${c.canal} está se pagando (ROAS ${(rec / c.gasto).toFixed(2)}×) — candidato a escalar o orçamento em ~20%.` });
                   } else if (c.gasto > 0 && rec > 0 && rec < c.gasto) {
@@ -8947,7 +8980,10 @@ function MarketingTab() {
                 if (cadTot >= 10 && engTot / cadTot < 0.3) {
                   sug.push({ n: 'atencao', txt: `Só ${Math.round((engTot / cadTot) * 100)}% dos novos cadastros abriram imóveis — o gargalo está no primeiro acesso (onboarding), não na captação.` });
                 }
-                if (gastos.length > 0) {
+                const temAuto = canais.some(c => c.gastoAuto);
+                if (temAuto) {
+                  sug.push({ n: 'ok', txt: 'Coleta automática de gasto ativa — os canais com selo "auto" dispensam lançamento manual.' });
+                } else if (gastos.length > 0) {
                   const diasSem = Math.floor((Date.now() - new Date(gastos[0].data + 'T12:00:00').getTime()) / 86400000);
                   if (diasSem > 8) sug.push({ n: 'atencao', txt: `Último lançamento de investimento foi há ${diasSem} dias — lance o gasto semanal para o CAC/ROAS continuarem fiéis.` });
                 } else if (cadTot > 0) {
