@@ -79,8 +79,19 @@ export default function KycParceiroModal() {
       const dataUrl = await dataUrlDe(file);
       const r = await apiCall('/api/validar-selfie', { method: 'POST', body: JSON.stringify({ imagem: dataUrl, tipo: 'rosto' }) });
       const d = await r.json().catch(() => ({}));
-      if (r.ok && (d.ok || d.pendente || d.mensagem)) { setEstado('ok'); window.dispatchEvent(new Event('tsn:parceiro-atualizado')); }
-      else setErro(d.error || d.motivo || 'Não foi possível validar agora. Tente novamente.');
+      // SÓ fecha em sucesso REAL (d.ok) ou quando foi para revisão manual (d.pendente — a identidade
+      // já saiu do estado "pedir"). REJEIÇÃO (rosto não confere/doc ilegível) NÃO fecha: mostra o
+      // motivo e mantém o campo p/ refazer. Antes, qualquer resposta com `mensagem` fechava como ok.
+      if (d.ok || d.pendente) {
+        setEstado('ok');
+        window.dispatchEvent(new Event('tsn:parceiro-atualizado'));
+        if (d.pendente && d.mensagem) setErro('');
+      } else if (d.falta_documento) {
+        setDocEnviado(false);
+        setErro(d.mensagem || 'Envie primeiro a foto do documento.');
+      } else {
+        setErro(d.mensagem || d.error || d.motivo || 'Não foi possível validar agora. Tente novamente.');
+      }
     } catch { setErro('Erro no envio da selfie.'); }
     setSelfieBusy(false);
   }
