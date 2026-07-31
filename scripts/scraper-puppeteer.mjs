@@ -3046,18 +3046,20 @@ function mapLoteLeilofy(raw, id) {
   // filtrando valores pequenos (R$/m², taxas, comissão). Diagnóstico provou que a
   // página vem completa (avaliação e R$ no texto), mas a frase variou entre lotes e a
   // regex ancorada falhava → 0 mapeados. Este fallback não depende do fraseado.
-  let avaliacao = parseBRL(q(/avalia[çc][ãa]o[^R]{0,60}R\$\s*([\d.]+,\d{2})/i));
-  let lance = parseBRL(q(/(?:lance|arremat|m[íi]nimo|lote)[^R]{0,60}R\$\s*([\d.]+,\d{2})/i));
-  // NÃO usar Math.max global p/ avaliação: a página é SPA e traz blocos "destaque/relacionados"
-  // com valores de OUTROS lotes — o max pegava o R$ de destaque e o mesmo valor vazava p/ vários
-  // imóveis (bug validado). Avaliação só vem pelo rótulo do próprio lote; sem rótulo fica 0
-  // (honesto — a matrícula/edital preenche depois). O lance (piso) pode usar o menor R$ p/ o lote
-  // não ser descartado por valor_minimo=0, mas se implicar desconto absurdo a trava central anula.
+  // LEILOFY/leiloariasmart rotula os valores do lote de forma PADRONIZADA:
+  //   "Valor de Avaliação (1ª Praça): R$ X"  e  "Valor Condicional em Leilão (2ª Praça): R$ Y".
+  // A página é uma SPA que AINDA embute uma lista de OUTROS lotes (mesmos rótulos + incrementos).
+  // O antigo Math.min de todos os "R$" pegava um INCREMENTO/valor de outro lote → bug validado
+  // (casa de R$1,45M aparecia com "lance mínimo" R$20.000 = o incremento). A 1ª ocorrência do
+  // rótulo é a do PRÓPRIO lote (o detalhe renderiza antes da lista). Ancorar nos rótulos exatos.
+  let avaliacao = parseBRL(q(/Valor de Avalia[çc][ãa]o\s*\(1[ªa]?\s*Pra[çc]a\)\s*:?\s*R\$\s*([\d.]+,\d{2})/i));
+  const praca2 = parseBRL(q(/Valor Condicional em Leil[ãa]o\s*\(2[ªa]?\s*Pra[çc]a\)\s*:?\s*R\$\s*([\d.]+,\d{2})/i));
+  // Lance mínimo (piso) = 2ª praça (condicional, o piso real); sem 2ª praça, cai na 1ª (avaliação).
+  let lance = praca2 || avaliacao;
+  // Fallback SÓ se os rótulos padronizados falharem: rótulo genérico do próprio lote, EXCLUINDO
+  // "último lance" e "incremento" (não são piso). NUNCA o Math.min global (pega valor de outro lote).
   if (!lance) {
-    const valores = [...text.matchAll(/R\$\s*([\d.]+,\d{2})/g)]
-      .map(m => parseBRL(m[1]))
-      .filter(v => v >= 10000 && v <= 500000000);
-    if (valores.length) lance = valores.length > 1 ? Math.min(...valores) : (avaliacao || valores[0]);
+    lance = parseBRL(q(/(?:lance m[íi]nimo|lance inicial|valor m[íi]nimo|arremat)[^R]{0,40}R\$\s*([\d.]+,\d{2})/i));
   }
   const localizacao = q(/Localiza[çc][ãa]o\s*\n\s*([^\n]+)/i);
   const tipoTxt = q(/Tipo:\s*([^\n]+)/i);
