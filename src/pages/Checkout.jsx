@@ -1187,7 +1187,7 @@ export default function Checkout() {
               <strong style={{ color: '#111111', fontSize: 28 }}>{plano.precoLabel}</strong> {plano.periodicidade}
             </p>
           )}
-          {plano.honorarios && (
+          {typeof plano.honorarios === 'string' && plano.honorarios && (
             <div style={{ background: plano.bg, color: plano.cor, fontSize: 13, fontWeight: 700, padding: '8px 12px', borderRadius: 8, marginBottom: 16 }}>
               {plano.honorarios}
             </div>

@@ -330,7 +330,7 @@ export default function Promo() {
           })}
         </div>
 
-        {plano.honorarios && (
+        {typeof plano.honorarios === 'string' && plano.honorarios && (
           <div style={{ marginTop: 14, padding: '12px 16px', background: 'rgba(255,255,255,0.05)', borderRadius: 10, fontSize: 13, color: '#94a3b8', border: '1px solid rgba(255,255,255,0.08)' }}>
             ℹ️ {plano.honorarios}
           </div>
