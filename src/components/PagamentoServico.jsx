@@ -136,70 +136,81 @@ function EscolhaMetodo({ servico, onEscolha }) {
 /* ── Tela: PIX ── */
 function PagamentoPIX({ servico, onConfirmado, onVoltar }) {
   const { user } = useAuth();
-  const [etapa, setEtapa] = useState('aguardando'); // aguardando | verificando | confirmado | erro
+  const [etapa, setEtapa] = useState('gerando'); // gerando | pronto | confirmado | erro | expirado
   const [copiado, setCop] = useState('');
   const [msgErro, setMsgErro] = useState('');
-  const [showQR, setShowQR] = useState(false);
-  const [paymentId, setPaymentId] = useState(null);
+  const [pix, setPix] = useState(null); // { paymentId, qrCode, qrCodeBase64 }
   const pollingRef = useRef(null);
   const tentRef = useRef(0);
+  const criouRef = useRef(false);
 
-  const PIX_KEY     = import.meta.env.VITE_MP_PIX_KEY     || '';
-  const PIX_TITULAR = import.meta.env.VITE_MP_PIX_TITULAR || 'BidPro Brasil';
-  const PIX_CIDADE  = import.meta.env.VITE_MP_PIX_CIDADE  || 'SAO PAULO';
-
-  // Gera BR Code localmente — zero taxa, zero API
-  const brCode = useMemo(() => {
-    if (!PIX_KEY) return '';
-    return gerarPixBRCode({
-      chave: PIX_KEY,
-      nome: PIX_TITULAR,
-      cidade: PIX_CIDADE,
-      valor: servico.valor,
-      txid: `BIDPRO${servico.id || 'PAG'}`.replace(/[^A-Z0-9]/gi, '').slice(0, 25),
-    });
-  }, [PIX_KEY, PIX_TITULAR, PIX_CIDADE, servico.valor, servico.id]);
-
-  // PIX estático: não cria payment no MP (o cliente paga direto na chave PIX da conta).
-  // Polling usa apenas valor + referência para localizar o recebimento na conta MP.
-
-  const verificar = async () => {
-    if (etapa === 'confirmado') return;
-    tentRef.current++;
-    if (tentRef.current > 90) {
-      clearInterval(pollingRef.current);
+  // PIX DINÂMICO do Mercado Pago (pagamento REAL com metadata.user_id) — assim o
+  // mp-verificar-pix confirma AUTOMÁTICO por paymentId. Substitui o QR estático da chave,
+  // que não dava para atribuir com segurança (dois pagamentos de mesmo valor se confundiam)
+  // e por isso virava confirmação MANUAL. O cliente paga o valor cheio, sem taxa a mais;
+  // a taxa do PIX (recebimento) fica com a plataforma.
+  const criarPix = async () => {
+    if (criouRef.current) return;
+    criouRef.current = true;
+    setEtapa('gerando'); setMsgErro('');
+    try {
+      const res = await apiCall('/api/mp-checkout', {
+        method: 'POST',
+        body: JSON.stringify({
+          valor: servico.valor,
+          descricao: servico.nome || servico.descricao || 'Pagamento BidPro Brasil',
+          email: user?.email,
+          metodoPagamento: 'pix',
+          proposito: servico.proposito || 'servico',
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.qrCode) {
+        setEtapa('erro');
+        setMsgErro(data?.error || 'Não foi possível gerar o PIX agora. Tente de novo ou use o cartão.');
+        criouRef.current = false; // libera nova tentativa
+        return;
+      }
+      setPix({ paymentId: data.paymentId, qrCode: data.qrCode, qrCodeBase64: data.qrCodeBase64 });
+      setEtapa('pronto');
+      iniciarPolling(data.paymentId); // já começa a checar — confirma sozinho ao pagar
+    } catch {
       setEtapa('erro');
-      setMsgErro('Tempo limite atingido. Se já pagou, entre em contato com o suporte.');
+      setMsgErro('Falha de conexão ao gerar o PIX. Tente novamente.');
+      criouRef.current = false;
+    }
+  };
+
+  const verificar = async (pid) => {
+    tentRef.current++;
+    if (tentRef.current > 115) { // ~15 min (a validade do QR PIX do MP é ~30min)
+      clearInterval(pollingRef.current);
+      setEtapa('expirado');
+      setMsgErro('O código PIX expirou. Gere um novo para pagar.');
       return;
     }
     try {
-      // apiCall devolve o Response CRU — é preciso checar res.ok e ler o JSON.
       const res = await apiCall('/api/mp-verificar-pix', {
         method: 'POST',
-        body: JSON.stringify({
-          paymentId: paymentId || undefined,
-          valor: servico.valor,
-          referencia: `tsn-${user?.id}-${servico.id}`,
-        }),
+        body: JSON.stringify({ paymentId: pid }),
       });
-      if (!res.ok) return; // falha transitória → tenta de novo no próximo ciclo do polling
+      if (!res.ok) return; // falha transitória → tenta de novo no próximo ciclo
       const data = await res.json().catch(() => null);
       if (data?.confirmado) {
         clearInterval(pollingRef.current);
         setEtapa('confirmado');
-        setTimeout(() => onConfirmado(data.paymentId || paymentId), 1500);
+        setTimeout(() => onConfirmado(pid), 1500);
       }
-    } catch { /* ignora */ }
+    } catch { /* ignora, tenta de novo */ }
   };
 
-  const iniciarPolling = () => {
-    setEtapa('verificando');
+  const iniciarPolling = (pid) => {
     tentRef.current = 0;
-    verificar();
-    pollingRef.current = setInterval(verificar, 8000);
+    clearInterval(pollingRef.current);
+    pollingRef.current = setInterval(() => verificar(pid), 8000);
   };
 
-  useEffect(() => () => clearInterval(pollingRef.current), []);
+  useEffect(() => { criarPix(); return () => clearInterval(pollingRef.current); }, []);
 
   const copiar = (texto, label) => {
     navigator.clipboard?.writeText(texto).then(() => {
@@ -218,6 +229,13 @@ function PagamentoPIX({ servico, onConfirmado, onVoltar }) {
     );
   }
 
+  const qrImg = pix?.qrCodeBase64 ? `data:image/png;base64,${pix.qrCodeBase64}` : null;
+  const novoBtn = (
+    <button onClick={() => { criouRef.current = false; criarPix(); }} style={{ width: '100%', padding: '14px', background: '#059669', color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+      <QrCode size={16} /> Gerar novo PIX
+    </button>
+  );
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
       <button onClick={onVoltar} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, color: '#64748b', fontSize: 13, padding: 0 }}>
@@ -230,100 +248,60 @@ function PagamentoPIX({ servico, onConfirmado, onVoltar }) {
         <div style={{ fontSize: 12, color: '#64748b' }}>{servico.nome}</div>
       </div>
 
-      {/* Botões de ação: QR ou Copiar */}
-      {brCode && !showQR && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-          <button onClick={() => setShowQR(true)} style={{
-            padding: '12px', background: '#f0fdf4', border: '1px solid #bbf7d0',
-            borderRadius: 10, cursor: 'pointer', display: 'flex', flexDirection: 'column',
-            alignItems: 'center', gap: 6, fontWeight: 700, fontSize: 13, color: '#059669',
-          }}>
-            <QrCode size={22} color="#059669" />
-            Gerar QR Code
-          </button>
-          <button onClick={() => copiar(PIX_KEY, 'chave')} style={{
-            padding: '12px', background: copiado === 'chave' ? '#f0fdf4' : '#f8fafc',
-            border: `1px solid ${copiado === 'chave' ? '#bbf7d0' : '#e2e8f0'}`,
-            borderRadius: 10, cursor: 'pointer', display: 'flex', flexDirection: 'column',
-            alignItems: 'center', gap: 6, fontWeight: 700, fontSize: 13,
-            color: copiado === 'chave' ? '#059669' : '#374151',
-          }}>
-            <Copy size={22} color={copiado === 'chave' ? '#059669' : '#374151'} />
-            {copiado === 'chave' ? 'Copiado!' : 'Copiar chave'}
-          </button>
+      {etapa === 'gerando' && (
+        <div style={{ textAlign: 'center', padding: '28px 0', color: '#64748b', fontSize: 14, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+          <Loader2 size={28} color="#059669" style={{ animation: 'spin 1s linear infinite' }} />
+          Gerando seu PIX…
         </div>
       )}
 
-      {/* QR Code, só aparece após clique */}
-      {showQR && brCode && (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
-          <QRCodeImg value={brCode} size={200} />
-          <div style={{ fontSize: 12, color: '#64748b', textAlign: 'center' }}>
-            Aponte a câmera do seu banco para o QR code
-          </div>
-          <button onClick={() => setShowQR(false)} style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: 12, cursor: 'pointer' }}>
-            Ocultar QR code
-          </button>
-        </div>
-      )}
-
-      {/* Separador */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <div style={{ flex: 1, height: 1, background: '#e2e8f0' }} />
-        <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>CHAVE PIX</span>
-        <div style={{ flex: 1, height: 1, background: '#e2e8f0' }} />
-      </div>
-
-      {/* Chave PIX + titular */}
-      <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '16px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>Chave PIX</div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a', wordBreak: 'break-all' }}>{PIX_KEY || '—'}</div>
-            <div style={{ fontSize: 12, color: '#64748b', marginTop: 3 }}>Titular: <strong>{PIX_TITULAR}</strong></div>
-          </div>
-          <button onClick={() => copiar(PIX_KEY, 'chave')} style={{
-            flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6,
-            padding: '8px 14px', background: copiado === 'chave' ? '#dcfce7' : 'white',
-            border: '1px solid #e2e8f0', borderRadius: 8, cursor: 'pointer',
-            fontSize: 13, fontWeight: 600, color: copiado === 'chave' ? '#059669' : '#374151',
-          }}>
-            <Copy size={13} />{copiado === 'chave' ? 'Copiado!' : 'Copiar'}
-          </button>
-        </div>
-
-        {brCode && (
-          <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>PIX Copia e Cola</div>
-              <div style={{ fontSize: 11, color: '#64748b', wordBreak: 'break-all', fontFamily: 'monospace' }}>{brCode.slice(0, 40)}...</div>
+      {(etapa === 'erro' || etapa === 'expirado') && (
+        <>
+          {msgErro && (
+            <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '12px 16px', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+              <AlertCircle size={16} color="#dc2626" style={{ flexShrink: 0, marginTop: 1 }} />
+              <div style={{ fontSize: 13, color: '#dc2626' }}>{msgErro}</div>
             </div>
-            <button onClick={() => copiar(brCode, 'brcode')} style={{
-              flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6,
-              padding: '8px 14px', background: copiado === 'brcode' ? '#dcfce7' : 'white',
-              border: '1px solid #e2e8f0', borderRadius: 8, cursor: 'pointer',
-              fontSize: 13, fontWeight: 600, color: copiado === 'brcode' ? '#059669' : '#374151',
-            }}>
-              <Copy size={13} />{copiado === 'brcode' ? 'Copiado!' : 'Copiar'}
-            </button>
-          </div>
-        )}
-      </div>
-
-      {msgErro && (
-        <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '12px 16px', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-          <AlertCircle size={16} color="#dc2626" style={{ flexShrink: 0, marginTop: 1 }} />
-          <div style={{ fontSize: 13, color: '#dc2626' }}>{msgErro}</div>
-        </div>
+          )}
+          {novoBtn}
+        </>
       )}
 
-      {etapa === 'verificando'
-        ? btn('#059669', 'Verificando...', null, true, <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />)
-        : btn('#059669', 'Já realizei o pagamento →', iniciarPolling, false, <CheckCircle2 size={16} />)
-      }
+      {etapa === 'pronto' && pix && (
+        <>
+          {qrImg && (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+              <img src={qrImg} alt="QR Code PIX" width={210} height={210} style={{ borderRadius: 12, border: '1px solid #e2e8f0' }} />
+              <div style={{ fontSize: 12, color: '#64748b', textAlign: 'center' }}>
+                Aponte a câmera do app do seu banco para o QR code
+              </div>
+            </div>
+          )}
 
-      {etapa === 'verificando' && (
-        <div style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center' }}>Consultando a cada 8 segundos...</div>
+          {/* PIX Copia e Cola (código do MP, não a chave) */}
+          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '16px' }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>PIX Copia e Cola</div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+              <div style={{ flex: 1, minWidth: 0, fontSize: 11, color: '#64748b', wordBreak: 'break-all', fontFamily: 'monospace' }}>{pix.qrCode.slice(0, 42)}…</div>
+              <button onClick={() => copiar(pix.qrCode, 'brcode')} style={{
+                flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6,
+                padding: '8px 14px', background: copiado === 'brcode' ? '#dcfce7' : 'white',
+                border: '1px solid #e2e8f0', borderRadius: 8, cursor: 'pointer',
+                fontSize: 13, fontWeight: 600, color: copiado === 'brcode' ? '#059669' : '#374151',
+              }}>
+                <Copy size={13} />{copiado === 'brcode' ? 'Copiado!' : 'Copiar'}
+              </button>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: '#059669', fontSize: 13, fontWeight: 600 }}>
+            <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} />
+            Aguardando pagamento — confirma automático
+          </div>
+          <div style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center' }}>
+            Assim que você pagar, a confirmação aparece aqui sozinha. Não feche esta tela.
+          </div>
+        </>
       )}
 
       <style>{`@keyframes spin{to{transform:rotate(360deg);}}`}</style>
