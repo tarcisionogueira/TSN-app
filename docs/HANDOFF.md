@@ -373,6 +373,31 @@ nova de pagamento único que concede 12 meses sem recorrência — validar no sa
 assessorado). **PENDENTE (ideia do dono):** identificação por CPF na tela + popup do bundle (funciona
 pré-login, reutilizável) — construir com rate-limit + retorno mínimo (privacidade: não vazar quem é
 cliente); dono ainda vai definir se o campo de CPF fica na tela da Assessoria ou do Investidor Pro.
+**Rafael ainda NÃO contratou** (segue explorador às ~14h UTC; watch re-armado).
+
+**E14. 31/07 — IDENTIFICAÇÃO POR CPF no link de VENDA da assessoria (dono confirmou o fluxo):**
+commit `2dd56c8` (deploy `dpl_E9ftxohFM8dejZf1EDzd6oJFcs3P` READY). O dono esclareceu: é o link de
+COMPARTILHAMENTO/VENDA do assessorado (parceiro/sistema compartilha `?plano=assessorado&ref=CODE`),
+por onde um convidado NÃO-assinante contrata. Para visitante NÃO-logado, o link começa pedindo o
+CPF (`IdentificacaoCpfAssessoria` em Checkout.jsx). Reusa `api/verificar-cpf` (rate-limit 6/min por
+IP + hash determinístico + NUNCA devolve nome/dados) consultando `{plano,top2}`: `temConta=false`→novo
+· `temAcesso`→já é Pro · senão→explorador. 3 caminhos transparentes (novo=cria conta+Pro+assessoria;
+explorador=entra e assina o Pro junto; Pro=entra e contrata direto), levando `?apos=assessorado` +
+`?ref`. Logado segue na tela de bundle (papel já identifica). Isolado ao ramo assessorado+não-logado.
+**Privacidade aceita:** leak inerente (saber se um CPF é cliente) contido pelo rate-limit; retorno
+mínimo, sem PII. **FAST-FOLLOW aberto:** PIX-anuidade do Pro (pagamento único = 12 meses sem
+recorrência; PIX hoje é semi-manual) — validar no sandbox antes; recomendar CARTÃO enquanto isso.
+
+**E15. 31/07 — fix do "10" solto no card dos planos:** commit `f17fcef`. `data/cursos.js` tinha
+`honorarios: 10` (número cru) em `assessorado` e `clube`; o card renderiza `{plano.honorarios}` num
+box destacado → aparecia só "10" acima dos benefícios (visto no teste do dono). Corrigido p/ texto
+("+10% de honorários sobre o valor arrematado") + render DEFENSIVO em Checkout e Promo (`typeof
+=== 'string'`) p/ número solto nunca mais vazar. (`planosConfig` não sobrescreve `honorarios` — fonte
+é o estático; DB só tem `honorarios_exito_pct` à parte.)
+
+**PRÓXIMA SESSÃO (noite 31/07):** (1) confirmar contratação do Rafael quando ele fizer (role→top2 +
+contrato assessorado); (2) LIGAR o PIX-anuidade do Pro com teste sandbox (fast-follow E13/E14);
+(3) retomar o item #11 (integração leiloeiros Round 35).
 
 **E. BIASI (piso 130, mediana 260, último 96) — recon PENDENTE de dado fresco:** queda contínua desde 16/07 (369→173→96). O ambiente remoto não alcança o site (proxy bloqueia) — validar com o run do cluster disparado hoje: `select total,status from fonte_saude where fonte='BIASI' order by executado_em desc limit 3;`. Se seguir ≤100 com status ok em runs consecutivos, pode ser acervo real encolhendo (pós-leilão); se oscilar, rodar a ofensiva (recon estrutura viva × premissas: `?pagina` na listagem agregada + fallback home) via Actions (`debug-leiloeiros.yml`).
 
