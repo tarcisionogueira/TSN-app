@@ -219,16 +219,30 @@ export function AuthProvider({ children }) {
             fetch('/api/coleta-oportunista', { method: 'POST', headers: { Authorization: `Bearer ${session?.access_token || ''}` } }).catch(() => {});
           }
           const ref = lerRef(); // localStorage c/ janela de 30 dias (+ compat sessionStorage antigo)
+          let refPendente = false; // ref existe mas ainda NÃO foi resolvido (erro transitório)
           if (ref) {
             // vincular_upline: QUALQUER usuário pode ser o indicador (antes só consultor);
             // aceita o id do link (?ref=<id>) ou um código de indicação. Grava indicado_por.
-            try { await supabase.rpc('vincular_upline', { p_ref: ref }); } catch (_) {}
-            limparRef();
+            // (No cadastro por e-mail o trigger handle_new_user JÁ vinculou server-side via
+            // ref_codigo na metadata; este RPC é o caminho do OAuth/Google — onde o trigger
+            // não recebe o ?ref= — e um reforço idempotente.)
+            // SÓ limpa o ref quando houve resposta DEFINITIVA (true=vinculou, false=código
+            // inválido ou já tinha upline). Em ERRO de rede/propagação NÃO limpa — deixa
+            // re-tentar num próximo SIGNED_IN/INITIAL_SESSION (antes, um erro transitório
+            // apagava o ref e o owner-default abaixo "roubava" a indicação do parceiro).
+            let vinc = null;
+            try {
+              const { data, error } = await supabase.rpc('vincular_upline', { p_ref: ref });
+              vinc = error ? null : data; // erro (rede/RLS) → null: não limpa, re-tenta depois
+            } catch (_) { vinc = null; }
+            if (vinc === true || vinc === false) limparRef(); else refPendente = true;
           }
           // Sem link de parceiro → upline PADRÃO é o dono (pedido do dono: "todos que entraram e
           // não são pelo link dos parceiros são para o meu usuário"). Idempotente — só preenche se
           // indicado_por ainda for NULL, então nunca sobrepõe a indicação de parceiro gravada acima.
-          try { await supabase.rpc('vincular_owner_default'); } catch (_) {}
+          // NÃO roda quando há um ref PENDENTE (upline não resolvido por erro transitório): senão o
+          // dono "roubaria" o slot e o retry do parceiro já não teria como sobrepor.
+          if (!refPendente) { try { await supabase.rpc('vincular_owner_default'); } catch (_) {} }
           // ATRIBUIÇÃO de marketing (gclid/fbclid/utm) capturada na chegada → grava 1x (first-touch)
           // para casar a captação com a origem paga (Google Ads / Meta).
           try { const mkt = lerMarketing(); if (mkt) await supabase.rpc('registrar_marketing', { p: mkt }); } catch (_) {}
