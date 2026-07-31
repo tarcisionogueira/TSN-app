@@ -36,30 +36,31 @@ function sb(path, opts = {}) {
   });
 }
 
-// Cancela a assinatura recorrente do MP.
-// Cancela pelo preapproval id do PRÓPRIO usuário (perfis.mp_id). Não usa o e-mail
-// como chave: e-mail pode ter homônimo/conta compartilhada no MP e cancelaria a
-// assinatura de um terceiro. No fallback (sem mp_id salvo) a busca por e-mail é
-// FILTRADA pelo external_reference `${userId}|plano`, garantindo o escopo do usuário.
-async function cancelarMP(mpId, email, userId) {
+// Cancela a assinatura recorrente do MP. A fonte AUTORITATIVA do preapproval é a busca
+// por payer_email FILTRADA pelo external_reference `${userId}|plano` (escopo garantido,
+// sem risco de cancelar de homônimo). Somamos os ids candidatos do perfil
+// (mp_preapproval_id atual; mp_id legado, que já guardou o preapproval antes da coluna
+// dedicada — bug bounty #4) — um id que não seja preapproval só devolve 404 (inócuo).
+async function cancelarMP(candidatos, email, userId) {
   if (!MP_TOKEN) return 0;
-  let cancelados = 0;
+  const ids = new Set();
   try {
-    let ids = [];
-    if (mpId) {
-      ids = [mpId];
-    } else if (email && userId) {
+    if (email && userId) {
       const r = await fetch(`${MP_URL}/preapproval/search?payer_email=${encodeURIComponent(email)}&status=authorized`, { headers: { Authorization: `Bearer ${MP_TOKEN}` } });
       const d = await r.json().catch(() => null);
-      ids = (d?.results || [])
-        .filter(p => String(p.external_reference || '').split('|')[0] === userId)
-        .map(p => p.id).filter(Boolean);
+      for (const p of (d?.results || [])) {
+        if (String(p.external_reference || '').split('|')[0] === userId && p.id) ids.add(String(p.id));
+      }
     }
-    for (const id of ids) {
+  } catch { /* segue com os candidatos do perfil */ }
+  for (const c of (candidatos || [])) if (c) ids.add(String(c));
+  let cancelados = 0;
+  for (const id of ids) {
+    try {
       const pr = await fetch(`${MP_URL}/preapproval/${id}`, { method: 'PUT', headers: { Authorization: `Bearer ${MP_TOKEN}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'cancelled' }) });
       if (pr.ok) cancelados++;
-    }
-  } catch { /* best-effort */ }
+    } catch { /* best-effort por id */ }
+  }
   return cancelados;
 }
 
@@ -88,13 +89,13 @@ export default async function handler(req, res) {
   if (!user?.id) { res.status(401).json({ error: 'Não autenticado' }); return; }
   const email = user.email || null;
 
-  const [perfil] = await (await sb(`perfis?id=eq.${user.id}&select=role,role_anterior,plano_pago_em,mp_id,asaas_id,nome,cpf,cpf_enc`)).json().catch(() => []);
+  const [perfil] = await (await sb(`perfis?id=eq.${user.id}&select=role,role_anterior,plano_pago_em,mp_id,mp_preapproval_id,asaas_id,nome,cpf,cpf_enc`)).json().catch(() => []);
   if (!perfil) { res.status(404).json({ error: 'Perfil não encontrado' }); return; }
 
   const rolePagante = PAGANTES.includes(perfil.role) ? perfil.role : (PAGANTES.includes(perfil.role_anterior) ? perfil.role_anterior : null);
   if (!rolePagante) { res.status(200).json({ ok: true, semAssinatura: true, msg: 'Não há assinatura paga ativa para cancelar.' }); return; }
 
-  const gateway = perfil.mp_id ? 'mercadopago' : perfil.asaas_id ? 'asaas' : 'desconhecido';
+  const gateway = (perfil.mp_id || perfil.mp_preapproval_id) ? 'mercadopago' : perfil.asaas_id ? 'asaas' : 'desconhecido';
   const dentro7 = perfil.plano_pago_em && (Date.now() - new Date(perfil.plano_pago_em).getTime() <= JANELA_MS);
 
   // Garantia é UMA VEZ POR CPF: apura o hash do CPF do cliente e verifica se esse CPF

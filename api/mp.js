@@ -104,11 +104,12 @@ async function ativarRoleInline(userId, planoKey, mpId) {
       'Content-Type':  'application/json',
       Prefer:          'return=minimal',
     },
-    // Grava o id do preapproval (mp_id): sem ele não dá para rastrear/gerenciar a
-    // recorrência por usuário nem cancelar pelo id (só por e-mail). A âncora dos 7 dias
-    // (plano_pago_em) só é gravada na 1ª ativação — NÃO reinicia em renovação/re-assinatura.
+    // Grava o preapproval id em COLUNA DEDICADA (mp_preapproval_id) — NÃO em mp_id, que é o
+    // customer id usado pelo webhook (buscarCliente) para achar o perfil. Sem essa separação,
+    // processarConfirmado sobrescrevia o preapproval com o customer e o cancelamento quebrava
+    // (bug bounty #4). A âncora dos 7 dias (plano_pago_em) só é gravada na 1ª ativação.
     body: JSON.stringify({ role: roleFinal, inadimplente_desde: null, role_anterior: null,
-      ...(mpId ? { mp_id: String(mpId), plano_ciclo: 'mensal', ...(jaAncorado ? {} : { plano_pago_em: new Date().toISOString() }) } : {}) }),
+      ...(mpId ? { mp_preapproval_id: String(mpId), plano_ciclo: 'mensal', ...(jaAncorado ? {} : { plano_pago_em: new Date().toISOString() }) } : {}) }),
   });
   if (!res.ok) {
     const txt = await res.text().catch(() => '');

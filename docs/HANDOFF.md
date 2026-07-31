@@ -234,19 +234,29 @@ era pego só na camada de transporte (sem o imóvel). PENDENTE (baixa): o rebaix
   assessoria e liberava 2ª em duplicidade. CORRIGIDO (casa criado_por OU assinante_email + fallback
   por caso arrematado sem posse).
 
-**PENDENTES registrados (pré-existentes, maiores — NÃO corrigidos nesta rodada):**
-- **BUG 3** pagamento em SPLIT (`mp.js` criar preferências parciais): cada parte cai em
-  `processarConfirmado` e `mapearPlano(valorParcial)`=null → paga e não ativa nada. Corrigir:
-  usar o planoKey do external_reference (base) em vez do valor, ou somar as partes.
-- **BUG 4** colisão de `mp_id`: `processarConfirmado` sobrescreve com o customer id, mas
-  `garantia-cancelar` usa como preapproval id → cancelamento falha e a recorrência continua
-  cobrando. Corrigir: colunas separadas (mp_customer_id × mp_preapproval_id) ou fallback por busca.
-- **BUG 9** `reconciliar-assinaturas-cron` só olha o MP ao re-checar assinatura ativa → quem
-  re-assinou no Asaas (ou tem Pro anual avulso) é rebaixado em loop diário. Corrigir: checar
-  também Asaas/anual antes de suspender.
-- **Gate de assessoria só na UI**: mp.js/asaas.js não repetem a regra de "1 por vez" ao criar a
-  cobrança (fail-open de rede aceitável, mas endurecer no endpoint de pagamento). Planos.jsx: o CTA
-  "Contratar nova arrematação" não consulta /api/assessoria-status (leva ao beco — direção segura).
+**2ª rodada (31/07) — pré-existentes CORRIGIDOS:**
+- **BUG 4** ✅ colisão de `mp_id`: era usado como customer id (buscarCliente) E como preapproval
+  id (ativarRoleInline) — os dois writers brigavam e o cancelamento fazia PUT /preapproval/{customer}
+  → 404, recorrência seguia cobrando. CORRIGIDO: coluna dedicada `perfis.mp_preapproval_id`
+  (migração aplicada); ativarRoleInline grava lá (mp_id fica só para customer id); garantia-cancelar
+  cancela pela BUSCA ESCOPADA (external_reference userId) + candidatos do perfil (cobre legados).
+- **BUG 9** ✅ `reconciliar-assinaturas-cron` só olhava o MP → rebaixava em loop diário quem
+  re-assinou no Asaas ou tem Pro anual. CORRIGIDO: antes de suspender, checa `proAnualVigente()`
+  (âncora plano_ciclo='anual') e `temAssinaturaAsaasAtiva()` (subscription ACTIVE do Asaas).
+- **Regressão (borda)** ✅ processarConfirmado: pagamento de serviço SEM customer id montava PATCH
+  vazio — agora remove chaves undefined e pula o update se vazio.
+
+**AINDA PENDENTE (dormant/estrutural — NÃO corrigido, exige desenho):**
+- **BUG 3** pagamento em SPLIT (`mp.js criarPreferencia` com `split`): cada parte cai em
+  processarConfirmado e mapearPlano(valorParcial)=null → paga e não ativa. **DORMANT: nenhum front
+  passa `split` hoje.** NÃO half-fixar (ativar na 1ª parcela = dar plano por pagamento parcial é
+  pior). Correção correta antes de habilitar split: LEDGER que soma as partes por userId|planoKey e
+  só ativa quando o total é atingido (usar metadata.splitIndex/splitTotal, já gravados).
+- **Gate de assessoria só na UI**: mp.js/asaas.js não repetem a regra "1 por vez" ao criar a
+  cobrança (fail-open de rede aceitável). Planos.jsx: CTA "Contratar nova arrematação" não consulta
+  /api/assessoria-status (leva ao beco — direção segura). Endurecer quando priorizar.
+- **SSRF cego** em _edital-extrato/enriquecer-lote (redirect:follow revalida só a URL inicial) —
+  gated por URL vir do banco; usar redirect:manual + revalidar cada hop.
 
 **E. BIASI (piso 130, mediana 260, último 96) — recon PENDENTE de dado fresco:** queda contínua desde 16/07 (369→173→96). O ambiente remoto não alcança o site (proxy bloqueia) — validar com o run do cluster disparado hoje: `select total,status from fonte_saude where fonte='BIASI' order by executado_em desc limit 3;`. Se seguir ≤100 com status ok em runs consecutivos, pode ser acervo real encolhendo (pós-leilão); se oscilar, rodar a ofensiva (recon estrutura viva × premissas: `?pagina` na listagem agregada + fallback home) via Actions (`debug-leiloeiros.yml`).
 

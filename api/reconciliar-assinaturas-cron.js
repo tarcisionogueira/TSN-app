@@ -17,6 +17,26 @@ import { createClient } from '@supabase/supabase-js';
 
 const MP_TOKEN = (process.env.MP_ACCESS_TOKEN || '').trim();
 
+// Pro ANUAL avulso (sem recorrência): âncora no perfil (plano_ciclo='anual' + plano_pago_em
+// dentro de ~13 meses cobrindo a folga da renovação). Evita rebaixar quem pagou o anual.
+function proAnualVigente(perfil) {
+  if (!/anual/i.test(perfil?.plano_ciclo || '') || !perfil?.plano_pago_em) return false;
+  const pago = new Date(perfil.plano_pago_em).getTime();
+  return Number.isFinite(pago) && (Date.now() - pago) < 13 * 30 * 24 * 3600 * 1000;
+}
+// Assinatura ativa no Asaas (outro gateway) — quem cancelou no MP e re-assinou no Asaas.
+async function temAssinaturaAsaasAtiva(asaasId) {
+  const ASAAS_KEY = (process.env.ASAAS_API_KEY || '').trim();
+  if (!asaasId || !ASAAS_KEY) return false;
+  try {
+    const url = process.env.ASAAS_ENV === 'sandbox' ? 'https://api-sandbox.asaas.com/v3' : 'https://api.asaas.com/v3';
+    const r = await fetch(`${url}/subscriptions?customer=${encodeURIComponent(asaasId)}&status=ACTIVE&limit=1`, { headers: { access_token: ASAAS_KEY } });
+    if (!r.ok) return false;
+    const d = await r.json().catch(() => null);
+    return (d?.data || []).length > 0;
+  } catch { return false; }
+}
+
 // IMPORTANTE: exportar por MÉTODO nomeado (GET/POST), não `export default`. No runtime
 // Node da Vercel, `export default` é tratado como assinatura Express `(req, res)` e o
 // `Response` retornado é IGNORADO — a função nunca sinaliza fim e trava até o maxDuration
@@ -99,7 +119,7 @@ async function handler(req) {
           const fim = sub.next_payment_date ? new Date(sub.next_payment_date) : null;
           if (!fim || fim > agora) continue;
 
-          const { data: perfil } = await supabase.from('perfis').select('role').eq('id', userId).maybeSingle();
+          const { data: perfil } = await supabase.from('perfis').select('role, asaas_id, plano_ciclo, plano_pago_em').eq('id', userId).maybeSingle();
           if (!perfil || perfil.role === 'explorador') continue;
           // Anti-flip: não rebaixa quem está num degrau MAIOR que o plano desta
           // assinatura (ex.: virou assessorado/clube e o preapproval antigo do Pro
@@ -107,9 +127,13 @@ async function handler(req) {
           const RANK = { explorador: 0, top2: 1, top2_anual: 1, assessorado: 2, assessorado_anual: 2, clube: 3, clube_anual: 3 };
           if ((RANK[perfil.role] ?? 99) > (RANK[planoKey] ?? 0)) continue;
 
-          // Não rebaixa quem tem assinatura ATIVA (re-assinou após cancelar).
+          // Não rebaixa quem tem assinatura ATIVA no MP (re-assinou após cancelar)...
           const ativo = await mpGet(`/preapproval/search?payer_email=${encodeURIComponent(sub.payer_email || '')}&status=authorized&limit=1`);
           if (ativo?.results?.length) continue;
+          // ...NEM quem tem o plano vivo por OUTRA via (bug bounty #9): re-assinou no Asaas
+          // ou pagou o Pro ANUAL avulso (sem recorrência). Sem isto, o cron rebaixava todo
+          // dia e a mensalidade Asaas/o anual "recuperava" — flip-flop com dias sem acesso.
+          if (proAnualVigente(perfil) || await temAssinaturaAsaasAtiva(perfil.asaas_id)) continue;
 
           try { await suspenderPlanoDireto({ userId, gateway: 'mercadopago' }); rebaixados++; }
           catch (e) { console.error('[reconciliar] rebaixar', userId, e?.message); }

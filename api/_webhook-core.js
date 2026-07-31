@@ -323,8 +323,14 @@ export async function processarConfirmado({ valor, descricao, email, gatewayCust
     }
   }
 
-  const { error } = await supabase.from('perfis').update(update).eq('id', cliente.id);
-  if (error) throw new Error(error.message);
+  // Só grava se há algo REAL a atualizar. Sem isto, um pagamento de SERVIÇO sem customer id
+  // (MP avulso com payer.id null) montaria update={[campoId]:undefined} → PATCH de corpo
+  // vazio (borda apontada na auditoria de regressão). Remove chaves undefined e pula se vazio.
+  for (const k of Object.keys(update)) if (update[k] === undefined) delete update[k];
+  if (Object.keys(update).length > 0) {
+    const { error } = await supabase.from('perfis').update(update).eq('id', cliente.id);
+    if (error) throw new Error(error.message);
+  }
 
   // Grava preço contratado (trava de 12 meses para recorrência)
   if (mapeado) {
