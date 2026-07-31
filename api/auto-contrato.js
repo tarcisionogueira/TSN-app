@@ -129,6 +129,22 @@ export default async function handler(req, res) {
   if (!planoKey || !['assessorado', 'clube'].includes(planoKey)) {
     return res.status(400).json({ error: 'planoKey deve ser assessorado ou clube' });
   }
+  // TRAVA ABSOLUTA (dono): a assessoria é EXCLUSIVA do Investidor Pro. A regra não pode
+  // viver só na tela — sem isto, um POST direto aqui geraria o contrato de assessoria para
+  // um Explorador. Staff (atribuição manual) passa; 'clube' NÃO entra (já inclui assessoria,
+  // e o gate devolveria clube_incluido). Só self-service de 'assessorado' é barrado.
+  if (planoKey === 'assessorado' && !isStaff) {
+    try {
+      const { podeContratarAssessoria } = await import('./_assessoria.js');
+      const gate = await podeContratarAssessoria({ userId, email: emailUsuario || user.email, role: callerRole });
+      if (!gate.podeContratar) {
+        return res.status(409).json({ error: 'requer_investidor_pro', motivo: gate.motivo });
+      }
+    } catch (e) {
+      // Fail-CLOSED nesta trava: se não deu para confirmar a elegibilidade, não gera o contrato.
+      return res.status(502).json({ error: 'nao_foi_possivel_validar_elegibilidade' });
+    }
+  }
   const nomeUsuario = sanitizeName(nomeRaw, 200);
   const emailUsuario = sanitizeEmail(emailRaw);
   if (emailRaw && !emailUsuario) {

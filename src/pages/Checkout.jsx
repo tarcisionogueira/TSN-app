@@ -70,6 +70,10 @@ export default function Checkout() {
   const [params] = useSearchParams();
   const { user, role, refreshPerfil } = useAuth();
   const planoKey = params.get('plano');
+  // Fluxo GUIADO da assessoria: quem não é Pro assina o Investidor Pro primeiro e, ao
+  // ativar, volta direto para contratar isto (ex.: ?plano=top2&apos=assessorado). Assim o
+  // link único de assessoria vira uma jornada só, reaproveitando os checkouts já testados.
+  const aposPlano = params.get('apos') || '';
   const promoCode = params.get('promo')?.toUpperCase() || '';
   const refCode = params.get('ref') || '';
   const mpStatus = params.get('status'); // 'approved' | 'rejected' | 'pending', vindo do redirect MP
@@ -167,7 +171,9 @@ export default function Checkout() {
       .then(d => { if (vivo) setAssessoriaStatus(d || null); })
       .catch(() => { if (vivo) setAssessoriaStatus({ podeContratar: true, motivo: 'ok' }); });
     return () => { vivo = false; };
-  }, [planoKey, user?.id]);
+    // `role` na dep: ao voltar do Pro recém-assinado (fluxo guiado), o gate re-consulta
+    // com o papel novo (top2) e libera a assessoria sem precisar recarregar a página.
+  }, [planoKey, user?.id, role]);
 
   const temModalidade = planoKey === 'assessorado' || planoKey === 'clube';
   const temToggleAnual = planoKey === 'top2'; // top1 removido do produto
@@ -291,16 +297,35 @@ export default function Checkout() {
   // Pro ou acima. Explorador/deslogado veem um upsell para assinar o Pro antes.
   const ROLES_PRO_OU_ACIMA = ['top2', 'assessorado', 'clube', 'admin', 'analista', 'advogado', 'suporte'];
   if (planoKey === 'assessorado' && !ROLES_PRO_OU_ACIMA.includes(role)) {
+    // Regra ABSOLUTA (dono): assessoria só para Investidor Pro. Em vez de barrar num beco,
+    // a tela é TRANSPARENTE sobre a regra e as DUAS cobranças, e conduz: assina o Pro e volta
+    // direto para a assessoria (?apos=assessorado). Reaproveita os checkouts já testados.
+    const proLabel = PLANOS?.top2?.precoLabel || 'R$ 49,90';
+    const assParcLabel = plano?.precoLabel || 'R$ 6.000,00';
+    const assVistaLabel = plano?.precoVistaLabel || 'R$ 4.800,00';
     return (
       <div style={{ minHeight: '100vh', background: '#111111', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 20px' }}>
-        <div style={{ maxWidth: 460, textAlign: 'center', background: '#1a1a1a', border: '1px solid #334155', borderRadius: 20, padding: '40px 32px' }}>
-          <div style={{ fontSize: 40, marginBottom: 16 }}>🔒</div>
-          <h2 style={{ color: 'white', fontSize: 22, fontWeight: 900, marginBottom: 12 }}>Assessoria é exclusiva do Investidor Pro</h2>
-          <p style={{ color: '#94a3b8', fontSize: 14, lineHeight: 1.7, marginBottom: 24 }}>
-            A Assessoria (do lance à imissão de posse) está disponível para assinantes do plano <strong style={{ color: '#60a5fa' }}>Investidor Pro</strong>. Assine o Investidor Pro primeiro para então contratar a assessoria por arrematação.
+        <div style={{ maxWidth: 480, textAlign: 'center', background: '#1a1a1a', border: '1px solid #334155', borderRadius: 20, padding: '36px 32px' }}>
+          <div style={{ fontSize: 40, marginBottom: 14 }}>🤝</div>
+          <h2 style={{ color: 'white', fontSize: 22, fontWeight: 900, marginBottom: 12 }}>A Assessoria entra junto com o Investidor Pro</h2>
+          <p style={{ color: '#94a3b8', fontSize: 14, lineHeight: 1.7, marginBottom: 18 }}>
+            A Assessoria (do lance à imissão de posse) é <strong style={{ color: 'white' }}>exclusiva do assinante <span style={{ color: '#60a5fa' }}>Investidor Pro</span></strong>. Você assina o Investidor Pro e contrata a assessoria na sequência — são duas contratações:
           </p>
-          <button onClick={() => nav('/checkout?plano=top2')} style={{ width: '100%', padding: '14px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: 'pointer', marginBottom: 12 }}>
-            Assinar o Investidor Pro
+          <div style={{ textAlign: 'left', background: '#111827', border: '1px solid #1f2937', borderRadius: 12, padding: '14px 16px', marginBottom: 18 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginBottom: 10 }}>
+              <span style={{ color: '#e2e8f0', fontSize: 13.5, fontWeight: 700 }}>1. Investidor Pro</span>
+              <span style={{ color: '#94a3b8', fontSize: 13 }}>{proLabel}/mês</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
+              <span style={{ color: '#e2e8f0', fontSize: 13.5, fontWeight: 700 }}>2. Assessoria</span>
+              <span style={{ color: '#94a3b8', fontSize: 13, textAlign: 'right' }}>{assVistaLabel} à vista (PIX)<br/>ou {assParcLabel} em até 12× (3× sem juros)</span>
+            </div>
+          </div>
+          <p style={{ color: '#64748b', fontSize: 12, lineHeight: 1.6, marginBottom: 20 }}>
+            Assim que o Investidor Pro for ativado, você segue <strong style={{ color: '#94a3b8' }}>direto</strong> para a contratação da assessoria.
+          </p>
+          <button onClick={() => nav('/checkout?plano=top2&apos=assessorado')} style={{ width: '100%', padding: '14px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: 'pointer', marginBottom: 12 }}>
+            Assinar o Investidor Pro e seguir →
           </button>
           <button onClick={() => nav('/planos')} style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: 13, cursor: 'pointer' }}>
             Ver todos os planos
@@ -553,7 +578,8 @@ export default function Checkout() {
         setTimeout(() => nav('/membros'), 3500);
       } else {
         setPago(true);
-        setTimeout(() => nav('/membros'), 3000);
+        // Pro ativo agora → se veio do fluxo guiado da assessoria, segue direto p/ ela.
+        setTimeout(() => nav(aposPlano ? `/checkout?plano=${aposPlano}` : '/membros'), 3000);
       }
     } catch (e) {
       setSuErro(e.message || 'Erro ao processar a assinatura.');
@@ -792,7 +818,8 @@ export default function Checkout() {
         }
       } catch (_) {}
     }
-    setTimeout(() => nav('/'), 3500);
+    // Fluxo guiado: Pro recém-ativado → segue DIRETO para contratar o que motivou (assessoria).
+    setTimeout(() => nav(aposPlano ? `/checkout?plano=${aposPlano}` : '/'), 3500);
   };
 
   // Tela de aprovado — cobre tudo, redireciona para home (ou contrato)
