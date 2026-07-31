@@ -7,9 +7,12 @@
  * (cobrança recorrente automática no cartão). Idempotente por ciclo de cobrança
  * (webhook_eventos_processados: evento 'renov_aviso:<data>') — não reenvia.
  *
- * OBS: o plano ANUAL (top2_anual) hoje é pagamento ÚNICO (não é preapproval),
- * portanto NÃO aparece aqui nem auto-renova. Habilitar renovação anual exige um
- * mecanismo de recobrança anual à parte — ver docs/PENDENCIAS_PAGAMENTOS.md.
+ * O plano ANUAL agora é preapproval RECORRENTE (frequency 12/months) → aparece na busca
+ * abaixo e recebe o MESMO aviso de renovação (regra c). Além disso, quem AGENDOU a virada
+ * anual→mensal (ciclo_agendado='mensal', regra b) recebe, perto do vencimento, um e-mail de
+ * REAUTORIZAÇÃO com link 1-clique para assinar o mensal (o gateway exige novo consentimento
+ * do cartão — não cobramos em silêncio); sem clicar, o acesso lapsa no vencimento (cron de
+ * reconciliação). Ver docs/HANDOFF.md (E11).
  *
  * Roda 1x/dia (vercel.json). Autorizado por CRON_SECRET.
  */
@@ -131,6 +134,41 @@ async function handler(req) {
       const total = Number(data?.paging?.total || 0);
       if (offset + 100 >= total) break;
     }
+
+    // ── REGRA (b): reautorização anual→mensal perto do vencimento ────────────
+    // Quem agendou a virada (ciclo_agendado='mensal') recebe o link para ativar o mensal
+    // (o gateway exige novo consentimento — não cobramos sozinhos). Dedup por vencimento.
+    try {
+      const rc = await fetch(`${SUPABASE_URL}/rest/v1/rpc/agendados_ciclo_para_aviso`, {
+        method: 'POST', headers: hdr, body: JSON.stringify({ p_dias: 7 }),
+      });
+      const cand = rc.ok ? await rc.json().catch(() => []) : [];
+      for (const c of (Array.isArray(cand) ? cand : [])) {
+        if (!c.email || !c.plano_vencimento) continue;
+        verificados++;
+        const vencDate = String(c.plano_vencimento).slice(0, 10);
+        if (await jaAvisado(`ciclo_${c.user_id}`, vencDate)) continue;
+        const dataFmt = new Date(c.plano_vencimento).toLocaleDateString('pt-BR', { timeZone: 'America/Bahia' });
+        const saud = c.nome ? `Olá, ${esc(String(c.nome).split(' ')[0])}!` : 'Olá!';
+        const link = `${APP_URL}/#/checkout?plano=top2`;
+        const html = `<div style="font-family:Arial,Helvetica,sans-serif;max-width:520px;margin:0 auto;color:#0f172a">
+          <p style="font-size:15px">${saud}</p>
+          <p style="font-size:14px;line-height:1.7">Você pediu para migrar o seu <strong>Investidor Pro anual</strong> para a <strong>mensalidade</strong>.
+          O seu plano anual vale até <strong>${esc(dataFmt)}</strong>. Para continuar sem interrupção já no <strong>plano mensal (R$ 49,90/mês)</strong>,
+          confirme o cartão no botão abaixo — leva 1 minuto e não há cobrança até o fim do seu período anual atual.</p>
+          <p style="margin:22px 0"><a href="${link}" style="background:#0D63DB;color:#fff;text-decoration:none;padding:12px 22px;border-radius:10px;font-weight:700;font-size:14px">Ativar o plano mensal →</a></p>
+          <p style="font-size:13px;line-height:1.7;color:#475569">Se você não confirmar até ${esc(dataFmt)}, o acesso ao Investidor Pro será pausado no fim do período anual — e você pode reativar quando quiser.</p>
+          <p style="font-size:12px;color:#94a3b8;margin-top:24px">BidPro Brasil · migração do plano anual para mensal.</p>
+        </div>`;
+        try {
+          const r2 = await enviarEmail({ from: EMAIL_FROM, to: c.email, subject: 'Confirme o seu novo plano mensal — BidPro Brasil', html });
+          if (r2?.ok) avisados++;
+          else {
+            await fetch(`${SUPABASE_URL}/rest/v1/webhook_eventos_processados?gateway=eq.mercadopago&gateway_payment_id=eq.${encodeURIComponent('ciclo_' + c.user_id)}&evento=eq.${encodeURIComponent('renov_aviso:' + vencDate)}`, { method: 'DELETE', headers: { ...hdr } }).catch(() => {});
+          }
+        } catch (e) { console.error('[renovacao-avisos] ciclo email:', e?.message); }
+      }
+    } catch (e) { console.error('[renovacao-avisos] loop ciclo_agendado:', e?.message); }
   } catch (e) {
     return new Response(JSON.stringify({ error: e.message }), { status: 500 });
   }
