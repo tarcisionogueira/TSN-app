@@ -961,13 +961,14 @@ function UsuariosTab() {
         supabase.from('usuario_docs').select('tipo, nome, url, criado_em').eq('user_id', userId)
           .in('tipo', ['kyc_selfie', 'kyc_documento_frente', 'kyc_documento_verso', 'kyc_documento', 'kyc_documento_digital'])
           .order('criado_em', { ascending: false }),
-        // KYC do CONTRATO assinado (assessoria/clube): selfie/documento ficam em contratos_link.kyc_fotos
-        // (não em usuario_docs). Puxa os contratos do próprio usuário p/ o comprovante de contratação.
-        supabase.from('contratos_link').select('plano_key, kyc_incluido, kyc_fotos, criado_em, status')
-          .eq('criado_por', userId).eq('kyc_incluido', true).order('criado_em', { ascending: false }),
+        // KYC do CONTRATO assinado (assessoria/clube): as imagens ficam em contratos_link —
+        // kyc_fotos (anexado na criação) e/ou docs_identidade (selfie/documento que o SIGNATÁRIO
+        // envia ao assinar). Puxa os contratos do próprio usuário p/ o comprovante de contratação.
+        supabase.from('contratos_link').select('plano_key, kyc_incluido, kyc_fotos, docs_identidade, criado_em, status')
+          .eq('criado_por', userId).order('criado_em', { ascending: false }),
       ]);
-      // KYC do contrato mais recente que tem fotos (por plano) — usado no comprovante de assessoria/clube.
-      const contratosKyc = (kycContratoRes?.data || []).filter((c) => c.kyc_fotos && c.status !== 'cancelado');
+      // Contratos do usuário com ALGUMA imagem de identidade (kyc_fotos ou docs_identidade), não cancelados.
+      const contratosKyc = (kycContratoRes?.data || []).filter((c) => (c.kyc_fotos || c.docs_identidade) && c.status !== 'cancelado');
       setAuditoriaData({
         kyc: kycRes.data || [],
         kycContratos: contratosKyc,
@@ -1010,17 +1011,21 @@ function UsuariosTab() {
       // Fonte 1 — usuario_docs (KYC do Perfil / Programa de Parceiros). 1 registro por tipo (o + recente).
       const porTipo = {};
       for (const d of (auditoriaData?.kyc || [])) { if (d?.tipo && !porTipo[d.tipo]) porTipo[d.tipo] = d; }
-      // Fonte 2 — kyc_fotos do CONTRATO assinado (assessoria/clube). Pega o contrato mais recente com fotos.
+      // Fonte 2 — CONTRATO assinado (assessoria/clube): kyc_fotos (anexado na criação, chaves
+      // selfie_rosto/doc_frente/…) e docs_identidade (o que o SIGNATÁRIO envia ao assinar, chaves
+      // selfie/foto_doc/selfie_doc). Pega o contrato mais recente que tenha cada uma.
       const contratoFotos = (auditoriaData?.kycContratos || []).find((c) => c.kyc_fotos)?.kyc_fotos || {};
-      // Lista CANÔNICA de imagens (selfie, documento…), mesclando as duas fontes; usuario_docs tem prioridade.
+      const contratoDocs = (auditoriaData?.kycContratos || []).find((c) => c.docs_identidade)?.docs_identidade || {};
+      // Lista CANÔNICA de imagens (selfie, documento…), mesclando as fontes; usuario_docs tem prioridade,
+      // depois a selfie/documento que o próprio signatário enviou no contrato, depois o anexo da criação.
       const CANON = [
-        { rotulo: 'Selfie (rosto)', doc: porTipo.kyc_selfie?.url, contrato: contratoFotos.selfie_rosto },
-        { rotulo: 'Documento — frente', doc: porTipo.kyc_documento_frente?.url, contrato: contratoFotos.doc_frente },
-        { rotulo: 'Documento — verso', doc: porTipo.kyc_documento_verso?.url, contrato: contratoFotos.doc_verso },
-        { rotulo: 'Documento', doc: porTipo.kyc_documento?.url, contrato: null },
-        { rotulo: 'Documento digital', doc: porTipo.kyc_documento_digital?.url, contrato: contratoFotos.doc_digital },
-        { rotulo: 'Selfie com documento', doc: null, contrato: contratoFotos.selfie_doc },
-      ].map((x) => ({ rotulo: x.rotulo, src: x.doc || x.contrato })).filter((x) => x.src);
+        { rotulo: 'Selfie (rosto)', src: porTipo.kyc_selfie?.url || contratoDocs.selfie || contratoFotos.selfie_rosto },
+        { rotulo: 'Documento de identidade', src: porTipo.kyc_documento_frente?.url || contratoDocs.foto_doc || contratoFotos.doc_frente },
+        { rotulo: 'Documento — verso', src: porTipo.kyc_documento_verso?.url || contratoFotos.doc_verso },
+        { rotulo: 'Documento', src: porTipo.kyc_documento?.url },
+        { rotulo: 'Documento digital', src: porTipo.kyc_documento_digital?.url || contratoFotos.doc_digital },
+        { rotulo: 'Selfie com documento', src: contratoDocs.selfie_doc || contratoFotos.selfie_doc },
+      ].filter((x) => x.src);
       // Resolve p/ data URL (autocontido). kyc_fotos já pode vir como data URL — nesse caso usa direto.
       const urlParaDataUrl = async (src) => {
         try {
@@ -3468,6 +3473,25 @@ function ContratosTab() {
                       <img src={detalhe.kyc_fotos[k]} alt={k} style={{ width: '100%', height: 80, objectFit: 'cover', borderRadius: 8, border: '1px solid #e2e8f0' }} />
                     </a>
                   ))}
+                </div>
+              </div>
+            )}
+
+            {/* Identidade enviada pelo SIGNATÁRIO ao assinar (selfie + documento exigidos no contrato) */}
+            {detalhe.docs_identidade && Object.keys(detalhe.docs_identidade).length > 0 && (
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>
+                  Identidade enviada na assinatura
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {[['selfie', 'Selfie'], ['foto_doc', 'Documento'], ['selfie_doc', 'Selfie com documento'], ['comprovante_residencia', 'Comprovante de residência']]
+                    .filter(([k]) => detalhe.docs_identidade[k]).map(([k, lbl]) => (
+                      <a key={k} href={detalhe.docs_identidade[k]} target="_blank" rel="noopener noreferrer" title={lbl}
+                        style={{ flex: '1 1 30%', minWidth: 90, display: 'block' }}>
+                        <img src={detalhe.docs_identidade[k]} alt={lbl} style={{ width: '100%', height: 80, objectFit: 'cover', borderRadius: 8, border: '1px solid #e2e8f0' }} />
+                        <div style={{ fontSize: 9.5, color: '#94a3b8', textAlign: 'center', marginTop: 2 }}>{lbl}</div>
+                      </a>
+                    ))}
                 </div>
               </div>
             )}

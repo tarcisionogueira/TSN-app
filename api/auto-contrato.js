@@ -180,6 +180,13 @@ export default async function handler(req, res) {
       assinante_email: emailUsuario || null,
       plano_key: planoKey,
       produto_tipo: 'plano',
+      // KYC OBRIGATÓRIO na assinatura de assessoria/clube (pedido do dono): o signatário
+      // envia SELFIE (verificacao_identidade) + FOTO DO DOCUMENTO (docs_extras_exigidos) antes
+      // de assinar. As imagens ficam em contratos_link.docs_identidade e passam a compor o
+      // comprovante de aceite (prova de autoria de quem contratou).
+      kyc_incluido: true,
+      verificacao_identidade: 'selfie',
+      docs_extras_exigidos: ['foto_doc'],
     })
     .select('token, id')
     .single();
