@@ -701,7 +701,12 @@ export default function Checkout() {
         setLoading(false);
         return;
       } catch (mpErr) {
-        // MP falhou — fallback automático para Asaas sem mostrar erro ao cliente
+        // MP falhou — fallback automático para Asaas sem mostrar erro ao cliente.
+        // ANTI-DUPLO-MANDATO (P0.2): se o MP CRIOU o preapproval e só o response falhou
+        // (timeout), o Asaas criaria uma 2ª recorrência (no anual, 2× R$449,90). Reseta o
+        // ref para o cancelarAssinaturasAnteriores do pagarAsaas RODAR DE NOVO e cancelar o
+        // mandato meio-criado no MP antes de criar o do Asaas. Fica UM só mandato ativo.
+        cancelouAnterioresRef.current = false;
         console.warn('[checkout] MP falhou, tentando Asaas:', mpErr.message);
       }
     }
