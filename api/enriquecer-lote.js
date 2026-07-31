@@ -13,7 +13,7 @@ export const config = { runtime: 'nodejs', maxDuration: 30 };
 
 import { getUser } from './_auth.js';
 import { fetchViaBrightData } from './_brightdata.js';
-import { hostExternoSeguro } from './_allowed-hosts.js';
+import { hostExternoSeguro, fetchExternoSeguro } from './_allowed-hosts.js';
 import { vasculharDocumentos, chaveDocCanonica } from './_doc-scan.js';
 import { extrairRegistroMatricula } from './_registro-matricula.js';
 import { carregarPDFParse } from './_pdf-safe.js';
@@ -35,7 +35,7 @@ export async function fetchLote(url) {
   if (!hostExternoSeguro(url)) return { html: '', finalUrl: url, via: 'bloqueado' };
   const h = { 'User-Agent': UA, Accept: 'text/html,application/xhtml+xml,*/*;q=0.8', 'Accept-Language': 'pt-BR,pt;q=0.9' };
   let resp = null;
-  try { resp = await fetch(url, { headers: h, redirect: 'follow', signal: AbortSignal.timeout(9000) }); } catch { resp = null; }
+  try { resp = await fetchExternoSeguro(url, { headers: h, signal: AbortSignal.timeout(9000) }); } catch { resp = null; }
   if (resp && resp.ok) {
     const text = await resp.text().catch(() => '');
     if (text && text.length > 500) return { html: text, finalUrl: resp.url || url, via: 'direct' };
@@ -91,7 +91,7 @@ export function extrairAvaliacao(html) {
 async function lerCartorioMatricula(url) {
   if (!hostExternoSeguro(url) || !/\.pdf(\?|#|$)/i.test(url)) return null;
   try {
-    const r = await fetch(url, { headers: { 'User-Agent': UA, Accept: 'application/pdf,*/*' }, redirect: 'follow', signal: AbortSignal.timeout(9000) });
+    const r = await fetchExternoSeguro(url, { headers: { 'User-Agent': UA, Accept: 'application/pdf,*/*' }, signal: AbortSignal.timeout(9000) });
     if (!r.ok) return null;
     const buf = Buffer.from(await r.arrayBuffer());
     if (buf.length > 12_000_000 || buf.slice(0, 5).toString('latin1') !== '%PDF-') return null;

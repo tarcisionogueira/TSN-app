@@ -7,7 +7,7 @@
  * (leitura por visão). Best-effort por contrato: QUALQUER falha devolve null e o
  * relatório segue exatamente como antes.
  */
-import { hostExternoSeguro } from './_allowed-hosts.js';
+import { hostExternoSeguro, fetchExternoSeguro } from './_allowed-hosts.js';
 import { carregarPDFParse } from './_pdf-safe.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -69,7 +69,7 @@ async function lerTexto(url, deadline) {
   const budget = deadline - Date.now();
   if (budget < 3000) return null;
   try {
-    const r = await fetch(url, { headers: { 'User-Agent': UA, 'Accept-Language': 'pt-BR,pt;q=0.9' }, redirect: 'follow', signal: AbortSignal.timeout(Math.min(12000, budget - 500)) });
+    const r = await fetchExternoSeguro(url, { headers: { 'User-Agent': UA, 'Accept-Language': 'pt-BR,pt;q=0.9' }, signal: AbortSignal.timeout(Math.min(12000, budget - 500)) });
     if (!r.ok) return null;
     const ct = r.headers.get('content-type') || '';
     const buf = Buffer.from(await r.arrayBuffer());

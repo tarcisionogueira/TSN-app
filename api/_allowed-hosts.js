@@ -83,3 +83,25 @@ export function ehHostInterno(rawUrl) {
 export function hostExternoSeguro(rawUrl) {
   return !!rawUrl && /^https?:\/\//i.test(rawUrl) && !ehHostInterno(rawUrl);
 }
+
+/**
+ * fetch que segue redirects MANUALMENTE revalidando CADA hop com hostExternoSeguro.
+ * Fecha o SSRF residual do redirect:'follow', que seguia um 302 externo → 169.254.169.254
+ * (metadados de nuvem) / 10.x / localhost sem revalidar. Uso: leitores de documento
+ * (edital/matrícula) cuja URL vem do banco. Lança 'ssrf_bloqueado' se um hop for interno.
+ */
+export async function fetchExternoSeguro(url, opts = {}, maxHops = 4) {
+  let atual = url;
+  for (let i = 0; i <= maxHops; i++) {
+    if (!hostExternoSeguro(atual)) throw new Error('ssrf_bloqueado');
+    const r = await fetch(atual, { ...opts, redirect: 'manual' });
+    if (r.status >= 300 && r.status < 400) {
+      const loc = r.headers.get('location');
+      if (!loc) return r;                              // 3xx sem Location → devolve como está
+      atual = new URL(loc, atual).toString();          // resolve relativo ao hop atual
+      continue;
+    }
+    return r;
+  }
+  throw new Error('ssrf_muitos_redirects');
+}

@@ -88,10 +88,12 @@ export function mapearPlano(valor, descricao = '') {
   const desc = descricao.toLowerCase();
 
   // Investidor Pro — mensal (49,90) ou anual (449,90). 99,90 mantido por
-  // compatibilidade com assinaturas legadas no preço antigo.
-  if (dentroFaixa(v, 49.9))  return { plano: 'top2', role: 'top2' }; // Investidor Pro mensal
-  if (dentroFaixa(v, 99.9))  return { plano: 'top2', role: 'top2' }; // legado (preço antigo)
-  if (dentroFaixa(v, 449.9)) return { plano: 'top2', role: 'top2' }; // Investidor Pro anual
+  // compatibilidade com assinaturas legadas no preço antigo. O `ciclo` distingue o anual
+  // (antes ambos colapsavam em top2 sem ciclo → plano_ciclo='anual' nunca era gravado e a
+  // proteção anti-rebaixamento do anual ficava órfã; bug bounty).
+  if (dentroFaixa(v, 49.9))  return { plano: 'top2', role: 'top2', ciclo: 'mensal' }; // Pro mensal
+  if (dentroFaixa(v, 99.9))  return { plano: 'top2', role: 'top2', ciclo: 'mensal' }; // legado
+  if (dentroFaixa(v, 449.9)) return { plano: 'top2', role: 'top2', ciclo: 'anual' };  // Pro anual
 
   // Leilão Club — verificar ANTES de assessorado pois ambos têm opção de R$5.000.
   // Casa 'clube' E 'club' (o nome oficial é "Leilão Club", sem o 'e'); sem isso
@@ -320,6 +322,18 @@ export async function processarConfirmado({ valor, descricao, email, gatewayCust
     const PAGANTES = ['top2', 'assessorado', 'clube', 'top2_anual', 'assessorado_anual', 'clube_anual'];
     if (!cliente.plano_pago_em && !PAGANTES.includes(cliente.role)) {
       update.plano_pago_em = new Date().toISOString();
+    }
+    // Grava o CICLO do pagamento (mensal/anual). Antes só o mp.js mensal gravava 'mensal'
+    // fixo e o anual (avulso via link/webhook) não gravava nada → plano_ciclo='anual' nunca
+    // existia e a proteção anti-rebaixamento do anual (reconciliar-cron, marcar-posse) ficava
+    // órfã. Para o ANUAL, também ancora a vigência de 12 meses (usada pela proteção e, no
+    // futuro, pela renovação/troca de ciclo).
+    if (mapeado.ciclo) {
+      update.plano_ciclo = mapeado.ciclo;
+      if (mapeado.ciclo === 'anual') {
+        const venc = new Date(); venc.setMonth(venc.getMonth() + 12);
+        update.plano_vencimento = venc.toISOString();
+      }
     }
   }
 

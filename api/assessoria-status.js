@@ -16,16 +16,11 @@
 export const config = { runtime: 'edge' };
 
 import { getAuthUser, getUserRoleById } from './_auth.js';
+import { podeContratarAssessoria } from './_assessoria.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
 const CORS = { 'Access-Control-Allow-Origin': process.env.APP_ORIGIN || 'https://bidprobrasil.com.br', 'Content-Type': 'application/json' };
-
-function sb(path) {
-  return fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
-    headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` },
-  });
-}
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: CORS });
 
 export default async function handler(req) {
@@ -36,42 +31,7 @@ export default async function handler(req) {
   const user = await getAuthUser(req);
   if (!user) return json({ error: 'Não autenticado' }, 401);
   const role = await getUserRoleById(user.id);
-
-  if (/^clube/.test(role || '')) return json({ podeContratar: false, motivo: 'clube_incluido', role });
-  if (['admin', 'analista', 'advogado', 'suporte'].includes(role)) return json({ podeContratar: true, motivo: 'ok', role });
-  if (!/^(top2|assessorado)/.test(role || '')) return json({ podeContratar: false, motivo: 'requer_pro', role });
-
-  // Última assessoria CONTRATADA (contrato vivo — aguardando assinatura ou assinado).
-  // Cancelado/expirado não trava: o cliente desistiu antes de a operação existir.
-  // Casa por criado_por OU assinante_email: quando a EQUIPE emite o contrato, criado_por
-  // é o staff — sem o e-mail, o gate não via a assessoria em andamento e liberava uma 2ª
-  // contratação em duplicidade (bug bounty #8).
-  const emailFiltro = user.email ? `,assinante_email.eq.${encodeURIComponent(String(user.email).toLowerCase())}` : '';
-  const rc = await sb(`contratos_link?or=(criado_por.eq.${encodeURIComponent(user.id)}${emailFiltro})&plano_key=eq.assessorado&status=in.(aguardando,aguardando_assinatura,assinado)&select=id,criado_em&order=criado_em.desc&limit=1`);
-  const [contrato] = rc.ok ? await rc.json().catch(() => []) : [];
-  // Sem contrato mas JÁ é assessorado (ex.: onboardado pela equipe) e tem um caso arrematado
-  // sem posse → há operação em andamento; não liberar 2ª por falta de contrato.
-  if (!contrato) {
-    if (/^assessorado/.test(role || '')) {
-      const rcaso = await sb(`casos?cliente_id=eq.${encodeURIComponent(user.id)}&arrematado_em=not.is.null&posse_em=is.null&select=id&limit=1`);
-      const emAndamento = rcaso.ok ? await rcaso.json().catch(() => []) : [];
-      if ((emAndamento?.length || 0) > 0) return json({ podeContratar: false, motivo: 'assessoria_em_andamento', role });
-    }
-    return json({ podeContratar: true, motivo: 'ok', role });
-  }
-
-  // Arremate SINALIZADO depois desse contrato? (os dois universos: o portfólio
-  // auto-declarado "arrematados" — botão "Arrematei" — e o caso da equipe.)
-  const desde = encodeURIComponent(contrato.criado_em);
-  const [ra, rk] = await Promise.all([
-    sb(`arrematados?user_id=eq.${encodeURIComponent(user.id)}&created_at=gt.${desde}&select=id&limit=1`),
-    sb(`casos?cliente_id=eq.${encodeURIComponent(user.id)}&arrematado_em=gt.${desde}&select=id&limit=1`),
-  ]);
-  const arrDepois  = ra.ok ? await ra.json().catch(() => []) : [];
-  const casoDepois = rk.ok ? await rk.json().catch(() => []) : [];
-  const arrematou = (arrDepois?.length || 0) > 0 || (casoDepois?.length || 0) > 0;
-
-  return arrematou
-    ? json({ podeContratar: true, motivo: 'nova_arrematacao', role })
-    : json({ podeContratar: false, motivo: 'assessoria_em_andamento', role });
+  // Regra compartilhada com os endpoints de pagamento (fonte única em _assessoria.js).
+  const r = await podeContratarAssessoria({ userId: user.id, email: user.email, role });
+  return json({ ...r, role });
 }

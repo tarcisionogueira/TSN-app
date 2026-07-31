@@ -13,6 +13,7 @@
 export const config = { runtime: 'edge' };
 
 import { getAuthUser } from './_auth.js';
+import { podeContratarAssessoria } from './_assessoria.js';
 import { cpfDoRegistro } from './_cpf.js';
 
 const MP_URL    = 'https://api.mercadopago.com';
@@ -421,13 +422,21 @@ export default async function handler(req) {
   const { action, ...params } = body;
   // Segurança: o usuário do checkout é SEMPRE o autenticado (evita IDOR)
   params.userId = user.id;
-  // CPF SEMPRE do perfil autenticado (decifra o cpf_enc; não confia no body).
+  // CPF + role SEMPRE do perfil autenticado (decifra o cpf_enc; não confia no body).
+  let roleAtual = null;
   try {
     const SB = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
     const KEY = process.env.SUPABASE_SERVICE_KEY;
-    const r = await fetch(`${SB}/rest/v1/perfis?id=eq.${user.id}&select=cpf,cpf_enc`, { headers: { apikey: KEY, Authorization: `Bearer ${KEY}` } });
-    if (r.ok) { const [row] = await r.json(); const dec = await cpfDoRegistro(row); if (dec) params.cpf = dec; }
+    const r = await fetch(`${SB}/rest/v1/perfis?id=eq.${user.id}&select=role,cpf,cpf_enc`, { headers: { apikey: KEY, Authorization: `Bearer ${KEY}` } });
+    if (r.ok) { const [row] = await r.json(); roleAtual = row?.role || null; const dec = await cpfDoRegistro(row); if (dec) params.cpf = dec; }
   } catch { /* mantém params.cpf do body como fallback */ }
+
+  // GATE "1 assessoria por vez" no SERVIDOR (a regra não pode viver só na tela): bloqueia
+  // criar uma 2ª cobrança de assessoria enquanto a atual não teve arremate sinalizado.
+  if (/^assessorado/.test(String(params.plano || '')) && ['criar_preferencia', 'criar_assinatura', 'criar_assinatura_transparente'].includes(action)) {
+    const gate = await podeContratarAssessoria({ userId: user.id, email: user.email, role: roleAtual });
+    if (!gate.podeContratar) return new Response(JSON.stringify({ error: 'assessoria_bloqueada', motivo: gate.motivo }), { status: 409, headers: { 'Content-Type': 'application/json' } });
+  }
 
   try {
     let result;

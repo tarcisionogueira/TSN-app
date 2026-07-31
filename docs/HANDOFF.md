@@ -258,6 +258,43 @@ era pego só na camada de transporte (sem o imóvel). PENDENTE (baixa): o rebaix
 - **SSRF cego** em _edital-extrato/enriquecer-lote (redirect:follow revalida só a URL inicial) —
   gated por URL vir do banco; usar redirect:manual + revalidar cada hop.
 
+**E10. 31/07 — sugestões pendentes IMPLEMENTADAS + fundação do ciclo mensal/anual:**
+1. ✅ **Gate de assessoria no SERVIDOR** (era só na tela): regra "1 assessoria por arrematação"
+   extraída para `api/_assessoria.js` (`podeContratarAssessoria`), fonte ÚNICA usada por
+   `assessoria-status.js` (agora um wrapper fino) E pelos endpoints de pagamento. `mp.js` bloqueia
+   (409 `assessoria_bloqueada`) `criar_preferencia`/`criar_assinatura`/`_transparente` quando
+   `plano` começa com `assessorado` e o gate reprova. `asaas.js criar_assinatura` idem (409, com
+   fail-open de infra). Fonte única nos dois gateways + na tela.
+2. ✅ **SSRF fechado nos leitores de documento**: `fetchExternoSeguro()` em `_allowed-hosts.js`
+   segue redirects com `redirect:'manual'` revalidando CADA hop com `hostExternoSeguro` (antes o
+   `redirect:'follow'` seguia um 302 externo→169.254.169.254/10.x/localhost sem checar). Ligado em
+   `_edital-extrato.js` e `enriquecer-lote.js` (2 fetchers). `baixar-doc.js`/`fetch-url.js` usam a
+   allowlist ESTRITA + auth (risco baixo) — hardening opcional futuro.
+3. ✅ **Fundação do CICLO (mensal/anual)**: `mapearPlano` agora devolve `ciclo` ('mensal'|'anual';
+   449,90→anual) e `processarConfirmado` grava `plano_ciclo` + `plano_vencimento`(+12m no anual).
+   Isso **destrava a proteção anti-rebaixamento do anual** que eu já havia escrito (proAnualVigente
+   em reconciliar-cron + marcar-posse) e que estava ÓRFÃ (o valor 'anual' nunca era gravado).
+
+**⚠️ MENSAL↔ANUAL — build maior PENDENTE (dinheiro-crítico, staged p/ sessão focada):** hoje o
+anual (`top2_anual`) é **pagamento único avulso que NÃO renova** (confirmado; `PENDENCIAS_PAGAMENTOS.md`).
+As 3 regras do dono (mensal→anual contrata 12m; anual→mensal vira mensalidade ao fim; anual sem
+mudança renova 12m) exigem reescrever a criação de cobrança nos DOIS gateways — NÃO fazer no meio de
+outras mudanças de pagamento. Plano preciso (pontos do recon):
+- **Anual recorrente**: transformar `top2_anual` em preapproval MP `frequency:12,frequency_type:'months'`
+  (hoje travado em months=1: `mp.js:294,341`; config `recorrente:false` em `:145`) + subscription Asaas
+  `cycle:'YEARLY'` (asaas.js só constrói `_vista`, nunca `_anual` — `:55-62`,`:196`). Com preapproval
+  recorrente, a **renovação (regra c) passa a ser nativa** do gateway.
+- **mensal→anual (regra a)**: `Checkout.jsx:586` `ehMudanca` precisa considerar `modalidade` (hoje
+  compara só role×planoKey base → troca de ciclo nunca vira mudança); `mudarPlano` (`:712`) manda
+  `planoKey` base, tem de mandar `planoApiKey` (`top2_anual`); ramo que CANCELA a recorrência mensal
+  (`cancelarAssinaturasAnteriores`) e cria a anual.
+- **anual→mensal ao fim dos 12m (regra b)**: precisa de MUDANÇA AGENDADA (não existe). Nova coluna
+  `perfis.ciclo_agendado` ('mensal'|null) + cron (estender `reconciliar-assinaturas-cron`) que, ao passar
+  `plano_vencimento` de um `plano_ciclo='anual'` com `ciclo_agendado='mensal'`, cancela a anual e cria a
+  mensal recorrente. A âncora `plano_vencimento`/`plano_ciclo` já passa a ser gravada (fundação acima).
+- **Higiene**: unificar a cópia contraditória no Checkout (`:987` "renova a cada 12 meses" ×
+  `:1300/:1339` "não há renovação automática") conforme a decisão final.
+
 **E. BIASI (piso 130, mediana 260, último 96) — recon PENDENTE de dado fresco:** queda contínua desde 16/07 (369→173→96). O ambiente remoto não alcança o site (proxy bloqueia) — validar com o run do cluster disparado hoje: `select total,status from fonte_saude where fonte='BIASI' order by executado_em desc limit 3;`. Se seguir ≤100 com status ok em runs consecutivos, pode ser acervo real encolhendo (pós-leilão); se oscilar, rodar a ofensiva (recon estrutura viva × premissas: `?pagina` na listagem agregada + fallback home) via Actions (`debug-leiloeiros.yml`).
 
 ---

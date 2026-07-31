@@ -2,6 +2,7 @@ import { checkRateLimit, getIP, rateLimitedRes } from './_rate-limit.js';
 import { auditLog } from './_audit.js';
 import { alertarErro } from './_error-alert.js';
 import { cpfDoRegistro } from './_cpf.js';
+import { podeContratarAssessoria } from './_assessoria.js';
 
 // CPF do usuário autenticado: decifra o cpf_enc do próprio perfil (não confia
 // no CPF que veio do body). Fallback ao body só durante a transição da cifra.
@@ -146,6 +147,15 @@ export default async function handler(req, res) {
     if (action === 'criar_assinatura') {
       const { nome, email, plano } = body;
       if (!PLANOS[plano]) return res.status(400).json({ error: 'Plano inválido' });
+      // GATE "1 assessoria por vez" no SERVIDOR (mesma regra do mp.js / assessoria-status).
+      if (/^assessorado/.test(String(plano || '')) && authUser?.id) {
+        try {
+          const rp = await fetch(`${process.env.VITE_SUPABASE_URL}/rest/v1/perfis?id=eq.${authUser.id}&select=role`, { headers: { apikey: process.env.SUPABASE_SERVICE_KEY, Authorization: `Bearer ${process.env.SUPABASE_SERVICE_KEY}` } });
+          const [pr] = rp.ok ? await rp.json() : [];
+          const gate = await podeContratarAssessoria({ userId: authUser.id, email: authUser.email || email, role: pr?.role || null });
+          if (!gate.podeContratar) return res.status(409).json({ error: 'assessoria_bloqueada', motivo: gate.motivo });
+        } catch { /* falha na checagem não deve travar pagamento legítimo (fail-open de infra) */ }
+      }
       const cpf = await cpfAutenticado(authUser?.id, body.cpf);
 
       // 1. Cria ou recupera customer
