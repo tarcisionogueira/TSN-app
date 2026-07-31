@@ -17,6 +17,17 @@ Regras:
 - "mesma_pessoa": o rosto da selfie e o rosto do documento são, com segurança, da MESMA pessoa. Se claramente diferentes, use false.
 - "confianca": "alta" só quando a comparação é clara (boa qualidade nas duas imagens). Se alguma imagem está ruim/ilegível ou o documento não tem foto de rosto utilizável, use "baixa".`;
 
+// Prompt SERVIDOR do modo COMBINADO (selfie_doc): rosto + documento na MESMA foto. Mesmas chaves
+// de saída do match separado, p/ o chamador decidir de forma uniforme (selfie_rosto_ok = rosto ao vivo).
+export const PROMPT_SELFIE_DOC = `Você é um verificador de identidade (KYC). Recebe UMA imagem que deve mostrar, no MESMO enquadramento, o ROSTO de uma pessoa (ao vivo) E o DOCUMENTO de identidade dela (RG ou CNH), que tem uma foto de rosto.
+Responda SOMENTE com JSON, sem texto adicional:
+{"selfie_rosto_ok": true/false, "documento_ok": true/false, "mesma_pessoa": true/false, "confianca": "alta"|"media"|"baixa", "motivo": "curto em pt-BR"}
+Regras:
+- "selfie_rosto_ok": há UM rosto humano nítido AO VIVO na foto (a pessoa se fotografando), não só a foto do documento.
+- "documento_ok": há um documento de identidade com FOTO DE ROSTO visível e legível na mesma imagem.
+- "mesma_pessoa": o rosto AO VIVO e o rosto IMPRESSO no documento são, com segurança, da MESMA pessoa. Se claramente diferentes, use false.
+- "confianca": "alta" só quando dá para ver bem os DOIS rostos (o ao vivo e o do documento). Se algum está ilegível/ausente, use "baixa".`;
+
 // dataURL "data:image/xxx;base64,..." → { b64, media }, ou null se não for imagem base64.
 export function dataUrlParaImagem(dataUrl) {
   if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/')) return null;
@@ -54,6 +65,42 @@ export async function compararRostoDocumento({ selfieB64, selfieMedia, docB64, d
     const text = data?.content?.[0]?.text || '{}';
     try { return JSON.parse(text.match(/\{[\s\S]*\}/)?.[0] || '{}'); } catch { return null; }
   } catch { return null; }
+}
+
+// Modo COMBINADO (selfie_doc): uma imagem com rosto ao vivo + documento. Mesma forma de retorno
+// do match separado (selfie_rosto_ok/documento_ok/mesma_pessoa/confianca) ou null em falha técnica.
+export async function verificarSelfieComDocumento({ imgB64, imgMedia, claudeKey }) {
+  if (!claudeKey || !imgB64) return null;
+  try {
+    const res = await anthropicFetch({
+      method: 'POST',
+      headers: { 'x-api-key': claudeKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 300,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'image', source: { type: 'base64', media_type: imgMedia || 'image/jpeg', data: imgB64 } },
+            { type: 'text', text: PROMPT_SELFIE_DOC },
+          ],
+        }],
+      }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const text = data?.content?.[0]?.text || '{}';
+    try { return JSON.parse(text.match(/\{[\s\S]*\}/)?.[0] || '{}'); } catch { return null; }
+  } catch { return null; }
+}
+
+// A imagem COMBINADA (rosto+documento numa foto só), se existir no mapa. Chaves conhecidas.
+export function selecionarSelfieDoc(imagens) {
+  if (!imagens || typeof imagens !== 'object') return null;
+  for (const k of ['selfie_doc', 'selfie_com_documento']) {
+    if (typeof imagens[k] === 'string' && imagens[k].startsWith('data:image/')) return imagens[k];
+  }
+  return null;
 }
 
 // Seleciona, de um mapa de imagens do KYC, a melhor SELFIE e o melhor DOCUMENTO para comparar.
