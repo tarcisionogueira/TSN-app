@@ -229,9 +229,16 @@ export async function ativarPlanoDireto({ userId, planoKey, gateway, cobranca = 
 export async function suspenderPlanoDireto({ userId, gateway }) {
   if (!userId) return { skipped: 'sem_referencia' };
   const { data: cliente } = await supabase
-    .from('perfis').select('role, inadimplente_desde').eq('id', userId).maybeSingle();
+    .from('perfis').select('role, inadimplente_desde, plano_ciclo, plano_vencimento').eq('id', userId).maybeSingle();
   if (!cliente) return { skipped: 'perfil_nao_encontrado' };
   if (cliente.inadimplente_desde) return { ok: true, ja_inadimplente: true };
+  // GUARDA da âncora ANUAL: cancelar o MANDATO anual (troca anual→mensal agendada, ou
+  // cancelamento no meio do ano já pago) NÃO rebaixa — o cliente pagou os 12 meses e
+  // mantém acesso até plano_vencimento. A virada/rebaixe acontece no vencimento.
+  if (/anual/i.test(cliente.plano_ciclo || '') && cliente.plano_vencimento
+      && new Date(cliente.plano_vencimento).getTime() > Date.now()) {
+    return { ok: true, ignorado: 'anual_vigente' };
+  }
   const ROLES_PAGANTES = ['top2', 'assessorado', 'clube', 'top2_anual', 'assessorado_anual', 'clube_anual'];
   const update = { inadimplente_desde: new Date().toISOString().slice(0, 10) };
   if (ROLES_PAGANTES.includes(cliente.role)) { update.role_anterior = cliente.role; update.role = 'explorador'; }

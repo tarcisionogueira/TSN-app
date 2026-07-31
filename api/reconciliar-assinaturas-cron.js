@@ -148,6 +148,31 @@ async function handler(req) {
         if (offset + 100 >= total) break;
       }
     }
+
+    // ── ANUAL VENCIDO (regra b materializada + fim do anual/legado) ───────────
+    // A âncora anual expirou. Se o cliente re-assinou (mandato ativo em qualquer gateway),
+    // o webhook já regravou ciclo/vencimento → nada a fazer. Sem mandato ativo → o anual
+    // terminou (agendou mensal e não reautorizou, cancelou, ou legado avulso vencido):
+    // rebaixa a explorador e limpa a âncora. GRAÇA de 5 dias evita rebaixar um recorrente
+    // cuja renovação está sendo processada perto do vencimento.
+    const grace = new Date(Date.now() - 5 * 24 * 3600 * 1000).toISOString();
+    const { data: anuaisVencidos } = await supabase.from('perfis')
+      .select('id, role, plano_ciclo, plano_vencimento, ciclo_agendado, asaas_id, mp_preapproval_id')
+      .eq('plano_ciclo', 'anual').lt('plano_vencimento', grace)
+      .in('role', ['top2', 'top2_anual']);
+    for (const p of (anuaisVencidos || [])) {
+      // Mandato recorrente ainda ativo? (renovação em curso) → não rebaixa.
+      if (await temAssinaturaAsaasAtiva(p.asaas_id)) continue;
+      if (p.mp_preapproval_id) {
+        const pre = await mpGet(`/preapproval/${p.mp_preapproval_id}`);
+        if (pre?.status === 'authorized') continue;
+      }
+      // Anual encerrado: fim do acesso (nunca cobramos a mensal sem reautorização — regra b
+      // é consent-based). Limpa a âncora e o agendamento. role_anterior guarda p/ reativar.
+      const upd = { role: 'explorador', role_anterior: p.role, plano_ciclo: null, plano_vencimento: null, ciclo_agendado: null };
+      const { error: e2 } = await supabase.from('perfis').update(upd).eq('id', p.id);
+      if (!e2) rebaixados++;
+    }
   } catch (e) {
     return new Response(JSON.stringify({ error: e.message }), { status: 500 });
   }

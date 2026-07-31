@@ -131,10 +131,11 @@ export default function Checkout() {
   const [nomeFat, setNomeFat] = useState('');
   const [endLoaded, setEndLoaded] = useState(false);
   const [cepLoadingCk, setCepLoadingCk] = useState(false);
+  const [cicloAtual, setCicloAtual] = useState(null); // ciclo vigente do plano (mensal/anual)
   useEffect(() => {
     if (!user?.id) return;
     supabase.from('perfis')
-      .select('nome,endereco_cep,endereco_logradouro,endereco_numero,endereco_complemento,endereco_bairro,endereco_cidade,endereco_uf')
+      .select('nome,plano_ciclo,plano_vencimento,endereco_cep,endereco_logradouro,endereco_numero,endereco_complemento,endereco_bairro,endereco_cidade,endereco_uf')
       .eq('id', user.id).single()
       .then(({ data }) => {
         if (data) {
@@ -143,6 +144,7 @@ export default function Checkout() {
             complemento: data.endereco_complemento || '', bairro: data.endereco_bairro || '', cidade: data.endereco_cidade || '', uf: data.endereco_uf || '',
           });
           setNomeFat(data.nome || '');
+          setCicloAtual(data.plano_ciclo || null);
         }
         setEndLoaded(true);
       }, () => setEndLoaded(true)); // erro no perfil não pode travar o checkout
@@ -570,10 +572,16 @@ export default function Checkout() {
     iniciandoRef.current = true;
     try {
       try { await salvarDadosFaturamento(); } catch { /* não bloqueia o pagamento por falha ao gravar */ }
+      // TROCA DE CICLO (mensal↔anual) antes de tudo:
+      //  - para ANUAL (regra a): cancela a recorrência mensal + cria a anual recorrente, cobra
+      //    agora (via gerarLink, que já cancela as anteriores antes de criar).
+      //  - para MENSAL (regra b): NÃO cobra agora — agenda a virada para o fim do anual vigente.
+      if (ehTrocaCiclo && cicloAlvo === 'anual') return await gerarLink();
+      if (ehTrocaCiclo && cicloAlvo === 'mensal') return await agendarCiclo();
       if (ehMudanca) return await mudarPlano();
       if (planoKey === 'assessorado') return setShowPagamento(true);
-      // Investidor Pro mensal (recorrente): checkout transparente inline (cartão
-      // coletado no BidPro). O anual (valor único) segue pelo fluxo de link.
+      // Investidor Pro mensal (recorrente): checkout transparente inline (cartão coletado no
+      // BidPro). O anual (recorrente 12m) segue pelo fluxo de link (redirect autoriza o mandato).
       if (planoKey === 'top2' && modalidade !== 'anual') return setShowPagamento(true);
       return await gerarLink();
     } finally {
@@ -585,6 +593,11 @@ export default function Checkout() {
   const planoAtual = PLANOS[role];
   const ehMudanca = PLANOS_PAGOS.includes(role) && role !== planoKey && planoKey !== 'assessorado' && role !== 'assessorado';
   const ehUpgrade = ehMudanca && plano.preco > (planoAtual?.preco || 0);
+  // Troca de CICLO do Investidor Pro (mensal↔anual): ehMudanca compara a base (top2×top2),
+  // então dá false de propósito — este é o sinal separado. Só quando o cliente JÁ é top2 e
+  // o ciclo escolhido difere do vigente.
+  const cicloAlvo = (temToggleAnual && modalidade === 'anual') ? 'anual' : 'mensal';
+  const ehTrocaCiclo = role === 'top2' && planoKey === 'top2' && (cicloAtual || 'mensal') !== cicloAlvo;
 
   // Log de aceite para proteção contra chargeback
   const logAceite = async (planoKey, valor, asaasData, gateway = null) => {
@@ -628,7 +641,7 @@ export default function Checkout() {
     setErro('');
     setOfertandoFallback(false);
     try {
-      if (['clube', 'top2'].includes(planoApiKey)) await cancelarAssinaturasAnteriores();
+      if (['clube', 'top2', 'top2_anual'].includes(planoApiKey)) await cancelarAssinaturasAnteriores();
       const res = await apiCall('/api/asaas', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -660,7 +673,7 @@ export default function Checkout() {
     setOfertandoFallback(false);
 
     // Anti-duplicidade: cancela assinaturas ativas antes de criar a nova recorrência
-    if (['clube', 'top2'].includes(planoApiKey)) await cancelarAssinaturasAnteriores();
+    if (['clube', 'top2', 'top2_anual'].includes(planoApiKey)) await cancelarAssinaturasAnteriores();
 
     // Verifica se MP está ativo (admin pode desligar manualmente no painel)
     const { data: cfgRows } = await supabase.from('config_financeira').select('gateway,ativo');
@@ -669,7 +682,7 @@ export default function Checkout() {
     if (!mpDesligadoManualmente) {
       // ── Tenta Mercado Pago primeiro ───────────────────────────────────
       try {
-        const planoRecorrente = ['clube', 'top2'].includes(planoApiKey);
+        const planoRecorrente = ['clube', 'top2', 'top2_anual'].includes(planoApiKey);
         const action = planoRecorrente ? 'criar_assinatura' : 'criar_preferencia';
         const res = await apiCall('/api/mp', {
           method: 'POST',
@@ -724,6 +737,25 @@ export default function Checkout() {
     } catch (err) {
       setErro(err.message);
     }
+    setLoading(false);
+  };
+
+  // Regra (b) anual→mensal: AGENDA a virada para o fim do anual vigente (não cobra agora).
+  // O servidor marca ciclo_agendado='mensal', cancela a auto-renovação anual (para a regra c
+  // não recobrar 449,90) e mantém o acesso até plano_vencimento. A mensal é materializada
+  // no vencimento (cron) — o cliente reautoriza o cartão por e-mail perto da virada.
+  const agendarCiclo = async () => {
+    setLoading(true); setErro('');
+    try {
+      const res = await apiCall('/api/agendar-ciclo', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ alvo: 'mensal' }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Não foi possível agendar a mudança.');
+      setResultadoMudanca({ agendado: 'mensal', ate: data.ate });
+      setTimeout(() => nav('/'), 4000);
+    } catch (err) { setErro(err.message); }
     setLoading(false);
   };
 
@@ -1057,9 +1089,13 @@ export default function Checkout() {
             <div>
               <div style={{ background: '#d1fae5', border: '1px solid #6ee7b7', borderRadius: 10, padding: '14px', marginBottom: 16 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, color: '#065f46', marginBottom: 6 }}>
-                  <CheckCircle2 size={16} /> Plano alterado com sucesso!
+                  <CheckCircle2 size={16} /> {resultadoMudanca.agendado ? 'Mudança agendada!' : 'Plano alterado com sucesso!'}
                 </div>
-                {resultadoMudanca.tipo === 'upgrade' ? (
+                {resultadoMudanca.agendado === 'mensal' ? (
+                  <p style={{ margin: 0, fontSize: 13, color: '#047857', lineHeight: 1.6 }}>
+                    Você continua no plano anual até <strong>{resultadoMudanca.ate ? new Date(resultadoMudanca.ate).toLocaleDateString('pt-BR') : 'o fim do período pago'}</strong>. Ao fim dos 12 meses, o plano passa a ser <strong>mensal (R$ 49,90/mês)</strong> — enviaremos um e-mail perto da virada para você confirmar o cartão. Nenhuma cobrança agora.
+                  </p>
+                ) : resultadoMudanca.tipo === 'upgrade' ? (
                   <p style={{ margin: 0, fontSize: 13, color: '#047857', lineHeight: 1.6 }}>
                     Geramos a cobrança da diferença de <strong>R$ {Number(resultadoMudanca.cobrancaDiferenca).toFixed(2)}</strong>. O vencimento da recorrência permanece em <strong>{resultadoMudanca.proximoVencimento}</strong>.
                   </p>
@@ -1297,7 +1333,7 @@ export default function Checkout() {
                     {planoKey === 'assessorado'
                       ? `Estou ciente de que este é um serviço de assessoria ${modalidade === 'vista' ? 'pago à vista' : 'parcelado em até 12×'}. O acesso à assessoria é ativado após confirmação do pagamento.`
                       : temToggleAnual && modalidade === 'anual'
-                        ? `Estou ciente de que esta é uma contratação anual de valor único (${plano?.precoAnualLabel || 'R$ 449,90'}), podendo ser paga em até 12× no cartão. Não há renovação automática, o acesso é válido por 12 meses a partir da confirmação do pagamento.`
+                        ? `Autorizo a cobrança anual recorrente (${plano?.precoAnualLabel || 'R$ 449,90'}), que renova automaticamente a cada 12 meses pelo valor vigente. Posso cancelar a renovação a qualquer momento pela plataforma, sem multa — o acesso continua até o fim do período já pago.`
                         : 'Autorizo a cobrança recorrente mensal conforme o plano selecionado. Sei que posso cancelar a qualquer momento pela plataforma sem multa.'}
                     {(() => {
                       // Termo COMPLETO do produto (registro central utils/termos.js) — o texto
@@ -1305,7 +1341,7 @@ export default function Checkout() {
                       const t = termoDoProduto(planoKey, {
                         nome: plano?.nome,
                         valorLabel: modalidade === 'anual' ? (plano?.precoAnualLabel || plano?.precoLabel) : plano?.precoLabel,
-                        modelo: planoKey === 'assessorado' ? (modalidade === 'vista' ? 'unico' : 'parcelado') : (temToggleAnual && modalidade === 'anual' ? 'unico' : 'recorrente'),
+                        modelo: planoKey === 'assessorado' ? (modalidade === 'vista' ? 'unico' : 'parcelado') : 'recorrente',
                       });
                       return (
                         <details style={{ marginTop: 6 }}>
@@ -1323,6 +1359,7 @@ export default function Checkout() {
                 style={{ width: '100%', padding: '14px', background: plano.cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 15, cursor: (!aceitouTermos || !perfilFaturamentoOk || loading) ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: (loading || !aceitouTermos || !perfilFaturamentoOk) ? 0.6 : 1 }}>
                 {loading
                   ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Processando...</>
+                  : ehTrocaCiclo ? (cicloAlvo === 'anual' ? 'Passar para o plano anual →' : 'Agendar mensalidade ao fim do anual →')
                   : ehMudanca ? `Confirmar ${ehUpgrade ? 'upgrade' : 'downgrade'} →` : 'Ir para Pagamento →'}
               </button>
               {!perfilFaturamentoOk && aceitouTermos && (
@@ -1336,7 +1373,7 @@ export default function Checkout() {
                 {planoKey === 'assessorado'
                   ? 'Pague via PIX (sem taxa) ou cartão de crédito em até 12×'
                   : temToggleAnual && modalidade === 'anual'
-                    ? `Pagamento anual único (${plano?.precoAnualLabel || 'R$ 449,90'}) em até 12× no cartão · Contratação anual sem renovação automática mensal`
+                    ? `Cobrança anual recorrente (${plano?.precoAnualLabel || 'R$ 449,90'}) · Renova a cada 12 meses · Cancele a renovação quando quiser`
                     : 'Somente cartão de crédito · Cancele quando quiser'}
               </p>
             </>
