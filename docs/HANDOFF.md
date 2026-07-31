@@ -353,6 +353,27 @@ scraper todo dia e o doc-scan (`enriquecer-lote` só grava `link_edital` vazio) 
 agregador a partir do `fonte_id` (`ljud_{id}`). Scrape LJUD-only disparado (`leiloeiros-puppeteer.yml`
 fontes=LJUD) p/ corrigir os `url_lote` das linhas ativas hoje, sem esperar o cron das 10h UTC.
 
+**E13. 31/07 — LINK ÚNICO GUIADO da assessoria (Pro + assessoria) + trava ABSOLUTA no servidor:**
+commit `638b15c` (deploy `dpl_33CyBPSykuzUEPDiKu8bxnMuRWP4` READY). Contexto: o dono vende
+assessoria (R$ 6.000 parcelado / R$ 4.800 à vista) para quem já arrematou; a assessoria é
+EXCLUSIVA do Investidor Pro (R$ 49,90/mês). Antes, um Explorador no `?plano=assessorado` batia
+num beco 🔒 que jogava ele pra fora do fluxo. **Fix:** o mesmo link (`?plano=assessorado`) virou
+uma jornada só — tela TRANSPARENTE com a regra + as DUAS cobranças com valores, botão leva ao
+Pro com marcador de retorno (`?plano=top2&apos=assessorado`); ao ATIVAR o Pro, volta DIRETO pra
+assessoria. Reaproveita os checkouts já testados (assinatura transparente + PagamentoServico),
+ordem sempre Pro→assessoria (ninguém fica com assessoria sem Pro). Gate `assessoria-status`
+re-consulta quando o `role` muda (dep nova) → libera sem recarregar. Parcelas 1-3× sem juros /
+4-12× com juros já eram o `calcParcelaMaisJuros`. **Trava ABSOLUTA (antes só na tela):**
+`auto-contrato` agora exige Investidor Pro (`podeContratarAssessoria`) para gerar o contrato de
+ASSESSORADO — staff (atribuição manual) passa, `clube` não entra; FAIL-CLOSED. Fecha o furo do
+POST direto. **PIX é semi-manual hoje** (`mp-verificar-pix` exige `metadata.user_id`, que o PIX
+estático não carrega) → recomendado CARTÃO; **PIX-anuidade do Pro é o fast-follow** (variante
+nova de pagamento único que concede 12 meses sem recorrência — validar no sandbox antes). **Rafael**
+(explorador, `6b35b390…`) ia contratar 31/07 pelo link; acompanhar ativação (role→top2 + contrato
+assessorado). **PENDENTE (ideia do dono):** identificação por CPF na tela + popup do bundle (funciona
+pré-login, reutilizável) — construir com rate-limit + retorno mínimo (privacidade: não vazar quem é
+cliente); dono ainda vai definir se o campo de CPF fica na tela da Assessoria ou do Investidor Pro.
+
 **E. BIASI (piso 130, mediana 260, último 96) — recon PENDENTE de dado fresco:** queda contínua desde 16/07 (369→173→96). O ambiente remoto não alcança o site (proxy bloqueia) — validar com o run do cluster disparado hoje: `select total,status from fonte_saude where fonte='BIASI' order by executado_em desc limit 3;`. Se seguir ≤100 com status ok em runs consecutivos, pode ser acervo real encolhendo (pós-leilão); se oscilar, rodar a ofensiva (recon estrutura viva × premissas: `?pagina` na listagem agregada + fallback home) via Actions (`debug-leiloeiros.yml`).
 
 ---
