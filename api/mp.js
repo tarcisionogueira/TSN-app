@@ -80,10 +80,14 @@ const escadaSobe = (roleAtual, planoPago) => {
 
 async function ativarRoleInline(userId, planoKey, mpId) {
   if (!SB_URL || !SB_KEY || !userId || !planoKey) return { skipped: true };
-  let roleFinal = planoKey;
+  // Role sempre na BASE; o CICLO mora só em plano_ciclo (D5). Deriva o ciclo do sufixo.
+  const planoBaseKey = String(planoKey).replace(/_anual$/, '');
+  const ehAnual = /_anual$/.test(planoKey);
+  let roleFinal = planoBaseKey;
   let jaAncorado = false;
+  let temAncoraVenc = false;
   try {
-    const at = await fetch(`${SB_URL}/rest/v1/perfis?id=eq.${userId}&select=role,role_anterior,inadimplente_desde,plano_pago_em`, {
+    const at = await fetch(`${SB_URL}/rest/v1/perfis?id=eq.${userId}&select=role,role_anterior,inadimplente_desde,plano_pago_em,plano_vencimento`, {
       headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` },
     });
     const [perfil] = at.ok ? await at.json() : [];
@@ -91,12 +95,18 @@ async function ativarRoleInline(userId, planoKey, mpId) {
     // MAIOR que o plano pago — ex.: assessorado suspenso pagando a mensalidade do Pro),
     // igual ao ativarPlanoDireto do webhook. Fora dela, a escada só sobe (anti-flip).
     const candidato = (perfil?.role_anterior && perfil?.inadimplente_desde)
-      ? escadaSobe(perfil.role_anterior, planoKey)
-      : planoKey;
+      ? escadaSobe(perfil.role_anterior, planoBaseKey)
+      : planoBaseKey;
     roleFinal = escadaSobe(perfil?.role, candidato);
     const PAGANTES = ['top2', 'top2_anual', 'assessorado', 'assessorado_anual', 'clube', 'clube_anual'];
     jaAncorado = !!perfil?.plano_pago_em || PAGANTES.includes(perfil?.role);
-  } catch { /* sem leitura, segue com planoKey (comportamento antigo) */ }
+    temAncoraVenc = !!perfil?.plano_vencimento;
+  } catch { /* sem leitura, segue com planoBaseKey (comportamento antigo) */ }
+  // ANUAL: ancora a vigência de 12m na 1ª ativação (sem âncora ainda). Renovação real vem
+  // pelo webhook (ativarPlanoDireto com cobrança). Ver P1.2 (não esticar sem pagamento).
+  const vencAnual = (ehAnual && !temAncoraVenc)
+    ? (() => { const d = new Date(); d.setMonth(d.getMonth() + 12); return d.toISOString(); })()
+    : null;
   const res = await fetch(`${SB_URL}/rest/v1/perfis?id=eq.${userId}`, {
     method: 'PATCH',
     headers: {
@@ -108,9 +118,12 @@ async function ativarRoleInline(userId, planoKey, mpId) {
     // Grava o preapproval id em COLUNA DEDICADA (mp_preapproval_id) — NÃO em mp_id, que é o
     // customer id usado pelo webhook (buscarCliente) para achar o perfil. Sem essa separação,
     // processarConfirmado sobrescrevia o preapproval com o customer e o cancelamento quebrava
-    // (bug bounty #4). A âncora dos 7 dias (plano_pago_em) só é gravada na 1ª ativação.
+    // (bug bounty #4). A âncora dos 7 dias (plano_pago_em) só é gravada na 1ª ativação. O
+    // plano_ciclo vem do sufixo do planoKey (NÃO cravar 'mensal' — quebraria um anual — P1.3).
     body: JSON.stringify({ role: roleFinal, inadimplente_desde: null, role_anterior: null,
-      ...(mpId ? { mp_preapproval_id: String(mpId), plano_ciclo: 'mensal', ...(jaAncorado ? {} : { plano_pago_em: new Date().toISOString() }) } : {}) }),
+      ...(mpId ? { mp_preapproval_id: String(mpId), plano_ciclo: ehAnual ? 'anual' : 'mensal',
+        ...(vencAnual ? { plano_vencimento: vencAnual } : {}),
+        ...(jaAncorado ? {} : { plano_pago_em: new Date().toISOString() }) } : {}) }),
   });
   if (!res.ok) {
     const txt = await res.text().catch(() => '');
@@ -121,7 +134,7 @@ async function ativarRoleInline(userId, planoKey, mpId) {
     await fetch(`${SB_URL}/rest/v1/rpc/registrar_preco_contratado`, {
       method: 'POST',
       headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ p_user_id: userId, p_plano_key: planoKey }),
+      body: JSON.stringify({ p_user_id: userId, p_plano_key: planoBaseKey }),
     });
   } catch (_) { /* preço é best-effort; não bloqueia a ativação */ }
   return { ok: true };
@@ -137,13 +150,15 @@ async function ativarRoleInline(userId, planoKey, mpId) {
 //    (assessorado 6.000 em 12×; variantes _vista = preço à vista do admin).
 // Por causa dessa diferença (mensal × total), NÃO dá para ler o planos_config de
 // forma ingênua (o clube cobraria 60.000/mês). Manter sincronizado com o admin.
+// frequency/frequency_type: cadência do preapproval MP (default 1/months). O ANUAL é
+// recorrente de 12 meses (frequency:12) → renova sozinho (regra c), sem cron de cobrança.
 const PLANOS_CONFIG = {
   assessorado:       { nome: 'Assessoria Pós-Arrematação',  valor: 6000.00,  recorrente: false }, // 12× de R$ 500
   assessorado_vista: { nome: 'Assessoria (À Vista)',         valor: 4800.00,  recorrente: false },
-  clube:             { nome: 'Leilão Club — Mensal',         valor: 5000.00,  recorrente: true  }, // 60.000 ÷ 12
+  clube:             { nome: 'Leilão Club — Mensal',         valor: 5000.00,  recorrente: true, frequency: 1,  frequency_type: 'months' }, // 60.000 ÷ 12
   clube_vista:       { nome: 'Leilão Club (À Vista)',        valor: 48000.00, recorrente: false },
-  top2:              { nome: 'Investidor Pro',               valor: 49.90,    recorrente: true  },
-  top2_anual:        { nome: 'Investidor Pro (Anual)',       valor: 449.90,   recorrente: false },
+  top2:              { nome: 'Investidor Pro',               valor: 49.90,    recorrente: true, frequency: 1,  frequency_type: 'months' },
+  top2_anual:        { nome: 'Investidor Pro (Anual)',       valor: 449.90,   recorrente: true, frequency: 12, frequency_type: 'months' },
 };
 
 // Espelha os preços do admin (planos_config) respeitando mensal×total: clube.preco é
@@ -293,8 +308,8 @@ async function criarAssinatura({ plano: planoKey, email, nome, cpf, userId }) {
   const body = {
     reason:            cfg.nome,
     auto_recurring: {
-      frequency:       1,
-      frequency_type:  'months',
+      frequency:       cfg.frequency ?? 1,
+      frequency_type:  cfg.frequency_type ?? 'months',
       transaction_amount: cfg.valor,
       currency_id:     'BRL',
     },
@@ -340,8 +355,8 @@ async function criarAssinaturaTransparente({ plano: planoKey, email, cardTokenId
     back_url:           `${BASE_URL}/#/checkout?plano=${planoKey}&status=assinatura`,
     notification_url:   WEBHOOK,
     auto_recurring: {
-      frequency:          1,
-      frequency_type:     'months',
+      frequency:          cfg.frequency ?? 1,
+      frequency_type:     cfg.frequency_type ?? 'months',
       transaction_amount: Number(cfg.valor), // servidor manda no preço
       currency_id:        'BRL',
     },

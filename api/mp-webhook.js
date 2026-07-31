@@ -163,6 +163,15 @@ export default async function handler(req, res) {
       // FALHA: cobrança recusada, ou assinatura pausada/cancelada no MP → rebaixa + avisa.
       const assinaturaMorta = preapproval.status === 'paused' || preapproval.status === 'cancelled';
       if (cobrancaRecusada || assinaturaMorta) {
+        // BLINDAGEM (P0.1 do design): NÃO rebaixar cego por userId. Se o cliente tem OUTRO
+        // mandato authorized (troca de ciclo: cancelamos o mensal e criamos o anual — a ordem
+        // de entrega dos webhooks do MP NÃO é garantida), o cancelamento do antigo não pode
+        // clobberar a ativação do novo → senão vira explorador+inadimplente e o cron de
+        // UPGRADE nunca resgata (só reativa com !inadimplente_desde).
+        const outra = await mpGet(`/preapproval/search?payer_email=${encodeURIComponent(preapproval.payer_email || '')}&status=authorized&limit=10`);
+        const temOutraAtiva = (outra?.results || []).some(p =>
+          String(p.external_reference || '').split('|')[0] === userId && String(p.id) !== String(preapproval.id));
+        if (temOutraAtiva) return res.status(200).json({ ok: true, ignorado: 'outro_mandato_ativo' });
         const result = await suspenderPlanoDireto({ userId, gateway: 'mercadopago' });
         if (result?.suspenso && preapproval.payer_email) {
           try {

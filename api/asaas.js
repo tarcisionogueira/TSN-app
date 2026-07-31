@@ -30,6 +30,7 @@ const API_KEY = (process.env.ASAAS_API_KEY || '').trim();
 // Fallback hardcoded caso o Supabase não retorne
 const PLANOS_FALLBACK = {
   top2:              { nome: 'Investidor Pro',              valor: 49.90,    ciclo: 'MONTHLY', maxPayments: undefined },
+  top2_anual:        { nome: 'Investidor Pro (Anual)',      valor: 449.90,   ciclo: 'YEARLY',  maxPayments: undefined }, // recorrente anual (renova = regra c)
   clube:             { nome: 'Clube de Negócios (Mensal)',  valor: 5000.00,  ciclo: 'MONTHLY', maxPayments: undefined },
   clube_vista:       { nome: 'Clube de Negócios (À Vista)', valor: 48000.00, avulso: true },
   assessorado:       { nome: 'Assessorado (12× R$ 500)',   valor: 500.00,   ciclo: 'MONTHLY', maxPayments: 12 },
@@ -39,7 +40,7 @@ const PLANOS_FALLBACK = {
 async function getPlanosConfig() {
   try {
     const res = await fetch(
-      `${process.env.VITE_SUPABASE_URL}/rest/v1/planos_config?select=plano_key,nome,preco,preco_vista&ativo=eq.true`,
+      `${process.env.VITE_SUPABASE_URL}/rest/v1/planos_config?select=plano_key,nome,preco,preco_vista,preco_anual&ativo=eq.true`,
       { headers: { apikey: process.env.SUPABASE_SERVICE_KEY, Authorization: `Bearer ${process.env.SUPABASE_SERVICE_KEY}` } }
     );
     if (!res.ok) return PLANOS_FALLBACK;
@@ -59,6 +60,17 @@ async function getPlanosConfig() {
           ...PLANOS_FALLBACK[key],
           nome: `${r.nome} (À Vista)`,
           valor: Number(r.preco_vista),
+        };
+      }
+      // variante ANUAL RECORRENTE (top2_anual): cycle YEARLY, renova indefinido (regra c).
+      if (r.preco_anual != null) {
+        const key = `${r.plano_key}_anual`;
+        cfg[key] = {
+          ...PLANOS_FALLBACK[key],
+          nome: `${r.nome} (Anual)`,
+          valor: Number(r.preco_anual),
+          ciclo: 'YEARLY',
+          maxPayments: undefined,
         };
       }
     }

@@ -62,7 +62,7 @@ export default async function handler(req) {
 
   // Reavalia o plano do CLIENTE do caso (não do staff que clicou).
   const clienteId = caso.cliente_id;
-  const [cliente] = await (await sb(`perfis?id=eq.${encodeURIComponent(clienteId)}&select=role,asaas_id,plano_ciclo,plano_pago_em&limit=1`)).json().catch(() => []);
+  const [cliente] = await (await sb(`perfis?id=eq.${encodeURIComponent(clienteId)}&select=role,asaas_id,plano_ciclo,plano_pago_em,plano_vencimento,inadimplente_desde&limit=1`)).json().catch(() => []);
   const roleCliente = cliente?.role || null;
   let reduziu = false, roleNovo = roleCliente, outroAberto = false;
   if (roleCliente && !MANTEM_PLANO.includes(roleCliente) && roleCliente !== 'explorador') {
@@ -92,21 +92,23 @@ export default async function handler(req) {
 }
 
 // Há Investidor Pro ATIVO por baixo da assessoria? Checa, nesta ordem: (a) recorrência
-// MONTHLY no espelho local do MP; (b) Pro ANUAL — pagamento AVULSO, sem preapproval nem
-// subscription (bug bounty #5): reconhecido pela âncora do perfil (plano_ciclo='anual' com
-// plano_pago_em dentro de ~13 meses); (c) subscription ativa no Asaas (MONTHLY 49,90 ou
-// YEARLY 449,90). A parcela de assessoria (500, 12×) NÃO conta como plano base.
+// MONTHLY no espelho local do MP; (b) Pro ANUAL (recorrente ou avulso) pela âncora do perfil
+// (plano_ciclo='anual' com plano_vencimento no futuro — reancorado a cada renovação);
+// (c) subscription ativa no Asaas (MONTHLY 49,90 ou YEARLY 449,90). NUNCA conta se o cliente
+// está inadimplente (reembolso/chargeback derrubou a âncora — R-4/P2.2). A parcela de
+// assessoria (500, 12×) NÃO conta como plano base.
 async function temAssinaturaProAtiva(userId, cliente) {
   const asaasId = cliente?.asaas_id;
+  if (cliente?.inadimplente_desde) return false; // reembolsado/em atraso não tem plano base ativo
   try {
     const r = await sb(`mp_assinaturas?user_id=eq.${encodeURIComponent(userId)}&status=eq.authorized&plano_key=like.top2*&select=mp_assinatura_id&limit=1`);
     const rows = r.ok ? await r.json().catch(() => []) : [];
     if (Array.isArray(rows) && rows.length > 0) return true;
   } catch { /* segue */ }
-  // (b) Pro anual avulso: âncora do perfil (vigência de 13 meses cobre a folga da renovação).
-  if (/anual/i.test(cliente?.plano_ciclo || '') && cliente?.plano_pago_em) {
-    const pago = new Date(cliente.plano_pago_em).getTime();
-    if (Number.isFinite(pago) && (Date.now() - pago) < 13 * 30 * 24 * 3600 * 1000) return true;
+  // (b) Pro anual: âncora por plano_vencimento (reancorado na renovação; não expira no ano 2).
+  if (/anual/i.test(cliente?.plano_ciclo || '') && cliente?.plano_vencimento) {
+    const venc = new Date(cliente.plano_vencimento).getTime();
+    if (Number.isFinite(venc) && venc > Date.now()) return true;
   }
   const ASAAS_KEY = (process.env.ASAAS_API_KEY || '').trim();
   if (!asaasId || !ASAAS_KEY) return false;

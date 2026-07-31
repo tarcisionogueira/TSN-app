@@ -17,12 +17,13 @@ import { createClient } from '@supabase/supabase-js';
 
 const MP_TOKEN = (process.env.MP_ACCESS_TOKEN || '').trim();
 
-// Pro ANUAL avulso (sem recorrência): âncora no perfil (plano_ciclo='anual' + plano_pago_em
-// dentro de ~13 meses cobrindo a folga da renovação). Evita rebaixar quem pagou o anual.
+// Pro ANUAL vigente: âncora no perfil por plano_vencimento — REANCORADO a cada renovação
+// (ativarPlanoDireto/processarConfirmado). Medir por plano_pago_em quebrava no ano 2 do
+// recorrente (a janela de 13m expirava com o mandato ativo → rebaixava quem paga — P1.1).
 function proAnualVigente(perfil) {
-  if (!/anual/i.test(perfil?.plano_ciclo || '') || !perfil?.plano_pago_em) return false;
-  const pago = new Date(perfil.plano_pago_em).getTime();
-  return Number.isFinite(pago) && (Date.now() - pago) < 13 * 30 * 24 * 3600 * 1000;
+  if (!/anual/i.test(perfil?.plano_ciclo || '') || !perfil?.plano_vencimento) return false;
+  const venc = new Date(perfil.plano_vencimento).getTime();
+  return Number.isFinite(venc) && venc > Date.now();
 }
 // Assinatura ativa no Asaas (outro gateway) — quem cancelou no MP e re-assinou no Asaas.
 async function temAssinaturaAsaasAtiva(asaasId) {
@@ -82,6 +83,11 @@ async function handler(req) {
         // Órfão: assinatura autorizada no MP, mas o cliente segue no Explorador
         // (e não é suspensão por inadimplência). Reativa o plano contratado.
         if (perfil && perfil.role === 'explorador' && !perfil.inadimplente_desde) {
+          // BLINDAGEM (P0.4): NÃO re-conceder plano a quem exerceu a garantia de 7 dias. O
+          // cancelamento MP na garantia é best-effort; se o PUT falhou, o preapproval segue
+          // authorized e este loop re-concederia o plano REEMBOLSADO. Pula se há reembolso.
+          const { data: garantia } = await supabase.from('reembolsos_garantia').select('id').eq('user_id', userId).limit(1).maybeSingle();
+          if (garantia) continue;
           try { await ativarPlanoDireto({ userId, planoKey, gateway: 'mercadopago' }); corrigidos++; }
           catch (e) { console.error('[reconciliar] ativar', userId, e?.message); }
         }
@@ -119,7 +125,7 @@ async function handler(req) {
           const fim = sub.next_payment_date ? new Date(sub.next_payment_date) : null;
           if (!fim || fim > agora) continue;
 
-          const { data: perfil } = await supabase.from('perfis').select('role, asaas_id, plano_ciclo, plano_pago_em').eq('id', userId).maybeSingle();
+          const { data: perfil } = await supabase.from('perfis').select('role, asaas_id, plano_ciclo, plano_pago_em, plano_vencimento').eq('id', userId).maybeSingle();
           if (!perfil || perfil.role === 'explorador') continue;
           // Anti-flip: não rebaixa quem está num degrau MAIOR que o plano desta
           // assinatura (ex.: virou assessorado/clube e o preapproval antigo do Pro

@@ -150,18 +150,33 @@ export async function ativarPlanoDireto({ userId, planoKey, gateway, cobranca = 
   // check constraint (gratuito|analista|gestor) e planoKey='top2' a VIOLAVA →
   // toda ativação de plano pago falhava (webhook e reconciliação). role é a fonte.
   const PAGANTES = ['top2', 'assessorado', 'clube', 'top2_anual', 'assessorado_anual', 'clube_anual'];
-  const { data: atual } = await supabase.from('perfis').select('role, role_anterior, inadimplente_desde, plano_pago_em').eq('id', userId).maybeSingle();
+  const { data: atual } = await supabase.from('perfis').select('role, role_anterior, inadimplente_desde, plano_pago_em, plano_vencimento, ciclo_agendado').eq('id', userId).maybeSingle();
+  // O role fica sempre na BASE (top2/clube/assessorado) — o CICLO mora só em plano_ciclo (D5).
+  // Assim nenhum gate que leia o sufixo do role classifica o anual como mensal.
+  const planoBaseKey = String(planoKey).replace(/_anual$/, '');
   // Recuperação de inadimplência restaura o role suspenso (que pode ser MAIOR que o
   // plano pago — ex.: assessorado suspenso pagando a mensalidade do Pro); fora dela,
   // a escada decide: pagamento só SOBE o role, nunca desce (guarda anti-flip).
   const candidato = (atual?.role_anterior && atual?.inadimplente_desde)
-    ? roleAposPagamento(atual.role_anterior, planoKey)
-    : planoKey;
+    ? roleAposPagamento(atual.role_anterior, planoBaseKey)
+    : planoBaseKey;
   const upd = {
     inadimplente_desde: null,
     role_anterior:      null,
-    role:               roleAposPagamento(atual?.role, candidato) ?? planoKey,
+    role:               roleAposPagamento(atual?.role, candidato) ?? planoBaseKey,
   };
+  // CICLO do plano (mensal/anual) derivado do planoKey — o recorrente MP não usa valor.
+  const cicloKey = /_anual$/.test(planoKey) ? 'anual' : 'mensal';
+  upd.plano_ciclo = cicloKey;
+  if (cicloKey === 'anual' && (cobranca?.gatewayPaymentId || !atual?.plano_vencimento)) {
+    // Reancora a vigência de 12m SÓ com COBRANÇA REAL (renovação — regra c) OU na 1ª
+    // ativação (sem âncora ainda). A mera autorização do mandato / a reconciliação
+    // (cobranca=null com âncora já setada) NÃO estica o vencimento (P1.2 — anti-exploração).
+    const venc = new Date(); venc.setMonth(venc.getMonth() + 12);
+    upd.plano_vencimento = venc.toISOString();
+  }
+  // Confirmou a mensal após um agendamento anual→mensal → limpa a intenção (idempotente).
+  if (cicloKey === 'mensal' && atual?.ciclo_agendado) upd.ciclo_agendado = null;
   // Garantia de 7 dias: âncora só na 1ª assinatura (role atual não-pagante e sem
   // âncora). Renovação recorrente NÃO reinicia a janela; resubscrição após cancelar
   // (que zera plano_pago_em) inicia uma nova.
@@ -171,7 +186,9 @@ export async function ativarPlanoDireto({ userId, planoKey, gateway, cobranca = 
   const { error } = await supabase.from('perfis').update(upd).eq('id', userId);
   if (error) throw new Error(error.message);
   try {
-    await supabase.rpc('registrar_preco_contratado', { p_user_id: userId, p_plano_key: planoKey });
+    // Trava de preço só conhece chaves-base (top2/clube) — normaliza (o valor anual mora
+    // no mandato do gateway; preco_contratado é informativo). Evita o no-op silencioso.
+    await supabase.rpc('registrar_preco_contratado', { p_user_id: userId, p_plano_key: planoBaseKey });
   } catch (e) {
     console.error(`[${gateway}] registrar_preco_contratado:`, e.message);
   }
@@ -333,6 +350,10 @@ export async function processarConfirmado({ valor, descricao, email, gatewayCust
       if (mapeado.ciclo === 'anual') {
         const venc = new Date(); venc.setMonth(venc.getMonth() + 12);
         update.plano_vencimento = venc.toISOString();
+      } else {
+        // Mensal confirmado → limpa qualquer agendamento anual→mensal (idempotente). É por
+        // aqui que a regra (b) se materializa quando o cliente re-assina no ciclo mensal.
+        update.ciclo_agendado = null;
       }
     }
   }
@@ -414,6 +435,11 @@ export async function processarVencido({ gatewayCustomerId, email, gateway }) {
       update.role_anterior = cliente.role;
       update.role = 'explorador';
     }
+    // Derruba a âncora anual: reembolso/chargeback/renovação-falha do anual não pode deixar
+    // plano_ciclo='anual'+plano_vencimento vigentes, senão marcar-posse/reconciliar
+    // re-concedem top2 sobre dinheiro devolvido (P2.2). ciclo_agendado também é limpo.
+    update.plano_vencimento = null;
+    update.ciclo_agendado = null;
     await supabase.from('perfis').update(update).eq('id', cliente.id);
     // LGPD Art. 16 — documentos pessoais retidos por 90 dias após cancelamento
     await setExpiracaoDocumentos(cliente.id);
