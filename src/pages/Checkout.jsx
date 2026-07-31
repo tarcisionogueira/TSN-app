@@ -65,6 +65,99 @@ function mapearErro(msg = '') {
   return null;
 }
 
+// Passo de IDENTIFICAÇÃO por CPF no link de VENDA da assessoria (parceiro/sistema compartilha
+// ?plano=assessorado&ref=CODE). Um convidado NÃO-logado digita o CPF e é orientado: reusa
+// /api/verificar-cpf (rate-limit por IP + hash determinístico; NUNCA devolve nome/dados — só o
+// suficiente pra guiar). Três caminhos: sem cadastro (cria conta + Pro + assessoria), explorador
+// (assina o Pro junto) ou já assinante Pro (entra e contrata direto). A trava vale no servidor.
+function IdentificacaoCpfAssessoria({ nav, refCode, proLabel, assParcLabel, assVistaLabel }) {
+  const [cpf, setCpf] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [erro, setErro] = useState('');
+  const [nivel, setNivel] = useState(null); // 'novo' | 'explorador' | 'pro'
+  const refQ = refCode ? `&ref=${refCode}` : '';
+  const fmtCpf = (v) => v.replace(/\D/g, '').slice(0, 11)
+    .replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+
+  const identificar = async () => {
+    const limpo = cpf.replace(/\D/g, '');
+    if (limpo.length !== 11) { setErro('Digite os 11 dígitos do CPF.'); return; }
+    setErro(''); setLoading(true);
+    try {
+      const res = await apiCall('/api/verificar-cpf', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cpf: limpo, produto: { tipo: 'plano', planoKey: 'top2' } }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) { setErro(d.error || 'Não foi possível verificar agora. Tente em instantes.'); return; }
+      // temConta=false → novo; temAcesso (>= top2) → já é Pro; senão → explorador.
+      setNivel(!d.temConta ? 'novo' : (d.temAcesso ? 'pro' : 'explorador'));
+    } catch { setErro('Falha de conexão. Tente de novo.'); }
+    finally { setLoading(false); }
+  };
+
+  const card = (children) => (
+    <div style={{ minHeight: '100vh', background: '#111111', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 20px' }}>
+      <div style={{ maxWidth: 460, width: '100%', textAlign: 'center', background: '#1a1a1a', border: '1px solid #334155', borderRadius: 20, padding: '36px 32px' }}>{children}</div>
+    </div>
+  );
+  const cta = (texto, destino) => (
+    <button onClick={() => nav(destino)} style={{ width: '100%', padding: '14px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: 'pointer', marginBottom: 12 }}>{texto}</button>
+  );
+  const trocarCpf = (
+    <button onClick={() => { setNivel(null); setCpf(''); }} style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: 13, cursor: 'pointer' }}>Usar outro CPF</button>
+  );
+
+  if (nivel === 'pro') return card(<>
+    <div style={{ fontSize: 40, marginBottom: 14 }}>✅</div>
+    <h2 style={{ color: 'white', fontSize: 21, fontWeight: 900, marginBottom: 12 }}>Você já é assinante Investidor Pro</h2>
+    <p style={{ color: '#94a3b8', fontSize: 14, lineHeight: 1.7, marginBottom: 20 }}>Entre na sua conta para contratar a assessoria — é rápido.</p>
+    {cta('Entrar e contratar a assessoria →', `/login?next=${encodeURIComponent('/checkout?plano=assessorado')}`)}
+    {trocarCpf}
+  </>);
+
+  if (nivel === 'explorador' || nivel === 'novo') {
+    const novo = nivel === 'novo';
+    return card(<>
+      <div style={{ fontSize: 40, marginBottom: 14 }}>🤝</div>
+      <h2 style={{ color: 'white', fontSize: 21, fontWeight: 900, marginBottom: 12 }}>A Assessoria entra junto com o Investidor Pro</h2>
+      <p style={{ color: '#94a3b8', fontSize: 14, lineHeight: 1.7, marginBottom: 18 }}>
+        {novo
+          ? <>Não encontramos cadastro com esse CPF — sem problema. Você <strong style={{ color: 'white' }}>cria sua conta, assina o Investidor Pro e contrata a assessoria</strong> em seguida.</>
+          : <>Encontramos seu cadastro. A assessoria é <strong style={{ color: 'white' }}>exclusiva do assinante <span style={{ color: '#60a5fa' }}>Investidor Pro</span></strong>, então a assinatura entra junto.</>}
+      </p>
+      <div style={{ textAlign: 'left', background: '#111827', border: '1px solid #1f2937', borderRadius: 12, padding: '14px 16px', marginBottom: 18 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginBottom: 10 }}>
+          <span style={{ color: '#e2e8f0', fontSize: 13.5, fontWeight: 700 }}>1. Investidor Pro</span>
+          <span style={{ color: '#94a3b8', fontSize: 13 }}>{proLabel}/mês</span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
+          <span style={{ color: '#e2e8f0', fontSize: 13.5, fontWeight: 700 }}>2. Assessoria</span>
+          <span style={{ color: '#94a3b8', fontSize: 13, textAlign: 'right' }}>{assVistaLabel} à vista (PIX)<br/>ou {assParcLabel} em até 12× (3× sem juros)</span>
+        </div>
+      </div>
+      {cta(novo ? 'Criar conta e assinar o Pro →' : 'Entrar e assinar o Pro →',
+           novo ? `/checkout?plano=top2&apos=assessorado${refQ}` : `/login?next=${encodeURIComponent('/checkout?plano=top2&apos=assessorado')}`)}
+      {trocarCpf}
+    </>);
+  }
+
+  return card(<>
+    <div style={{ fontSize: 40, marginBottom: 14 }}>🤝</div>
+    <h2 style={{ color: 'white', fontSize: 22, fontWeight: 900, marginBottom: 10 }}>Contratar a Assessoria</h2>
+    <p style={{ color: '#94a3b8', fontSize: 14, lineHeight: 1.7, marginBottom: 18 }}>Acompanhamento completo, do lance à imissão de posse. Digite seu CPF para começar.</p>
+    <input value={cpf} inputMode="numeric" placeholder="Seu CPF" onChange={(e) => setCpf(fmtCpf(e.target.value))}
+      onKeyDown={(e) => { if (e.key === 'Enter') identificar(); }}
+      style={{ width: '100%', padding: '13px 14px', border: '1px solid #334155', borderRadius: 12, fontSize: 16, color: 'white', background: '#0f172a', outline: 'none', boxSizing: 'border-box', textAlign: 'center', letterSpacing: 1, marginBottom: 12 }} />
+    {erro && <p style={{ color: '#f87171', fontSize: 12.5, marginBottom: 12 }}>{erro}</p>}
+    <button onClick={identificar} disabled={loading} style={{ width: '100%', padding: '14px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: loading ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: loading ? 0.7 : 1, marginBottom: 12 }}>
+      {loading ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Verificando…</> : 'Continuar →'}
+    </button>
+    <button onClick={() => nav('/planos')} style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: 13, cursor: 'pointer' }}>Ver todos os planos</button>
+    <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+  </>);
+}
+
 export default function Checkout() {
   const nav = useNavigate();
   const [params] = useSearchParams();
@@ -303,6 +396,9 @@ export default function Checkout() {
     const proLabel = PLANOS?.top2?.precoLabel || 'R$ 49,90';
     const assParcLabel = plano?.precoLabel || 'R$ 6.000,00';
     const assVistaLabel = plano?.precoVistaLabel || 'R$ 4.800,00';
+    // Convidado NÃO-logado no link de venda: identifica por CPF primeiro (parceiro/sistema
+    // compartilha). Logado já é identificado pelo papel → segue direto na tela de bundle.
+    if (!user) return <IdentificacaoCpfAssessoria nav={nav} refCode={refCode} proLabel={proLabel} assParcLabel={assParcLabel} assVistaLabel={assVistaLabel} />;
     return (
       <div style={{ minHeight: '100vh', background: '#111111', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 20px' }}>
         <div style={{ maxWidth: 480, textAlign: 'center', background: '#1a1a1a', border: '1px solid #334155', borderRadius: 20, padding: '36px 32px' }}>
