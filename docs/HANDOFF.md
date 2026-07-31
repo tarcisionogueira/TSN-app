@@ -295,6 +295,39 @@ outras mudanças de pagamento. Plano preciso (pontos do recon):
 - **Higiene**: unificar a cópia contraditória no Checkout (`:987` "renova a cada 12 meses" ×
   `:1300/:1339` "não há renovação automática") conforme a decisão final.
 
+**E11. 31/07 (ultracode/Fable 5) — PLANO ANUAL RECORRENTE + troca de ciclo mensal↔anual (3 regras):**
+Guiado por design workflow (5 agentes: viabilidade MP/Asaas + fluxos + crítica adversarial +
+síntese) na ORDEM SEGURA. Commits `40cf355` (backend) · `b1a7420` (front) · `e921095` (P0.2).
+- **Regra (a) mensal→anual**: o toggle agora dispara troca REAL — `Checkout.jsx` detecta
+  `ehTrocaCiclo` (sem tocar `ehMudanca`, que compara base); cancela a recorrência mensal e cria
+  a anual recorrente, cobrando já (via gerarLink → criar_assinatura).
+- **Regra (b) anual→mensal**: novo `api/agendar-ciclo.js` (server-autoritativo, anti-IDOR) marca
+  `perfis.ciclo_agendado='mensal'` e cancela a auto-renovação anual nos 2 gateways; acesso segue
+  até `plano_vencimento` (guarda `anual_vigente` em suspenderPlanoDireto). Materializa no
+  vencimento (loop no reconciliar-cron; a mensal é consent-based — reautorização por e-mail).
+- **Regra (c) anual renova**: NATIVA — anual virou preapproval MP `frequency:12/months` + Asaas
+  subscription `cycle:YEARLY`; o gateway cobra sozinho e o webhook reancora `plano_vencimento`.
+- **Arquitetura**: role sempre BASE `top2`; o CICLO mora só em `plano_ciclo` (D5). `plano_vencimento`
+  é a âncora (reancorada só com COBRANÇA REAL — P1.2). Migração aplicada (ciclo_agendado + trigger
+  + índice + preco_anual); auditoria 0/0.
+- **Buracos do crítico adversarial fechados ANTES da troca existir**: P0.1 (mp-webhook não rebaixa
+  se há OUTRO mandato authorized — troca com ordem de webhook invertida); P0.4 (reconciliar UPGRADE
+  pula quem tem reembolsos_garantia); P0.2 (fallback MP→Asaas não cria 2º mandato — reset do ref
+  re-cancela o meio-criado); P1.1 (proAnualVigente/temAssinaturaProAtiva por plano_vencimento, não
+  plano_pago_em — quebrava no ano 2); P2.2 (processarVencido derruba âncora no reembolso; posse não
+  re-concede se inadimplente); guarda nova `anual_vigente` em suspenderPlanoDireto (cancelar mandato
+  anual no meio do ano pago NÃO rebaixa).
+- **VALIDAR EM SANDBOX antes de anunciar (R-1..R-10 do spec)**: (R-6) confirmar que MP preapproval
+  `12/months` no REDIRECT cobra a 1ª parcela AO autorizar (regra a) — se a conta recusar, fallback
+  `frequency:365,frequency_type:'days'`; (R-2) troca mensal→anual com evento `cancelled` chegando
+  DEPOIS do `authorized` → cliente segue top2; (R-3) fallback MP→Asaas não deixa 2 mandatos; (R-7)
+  agendar-ciclo mantém acesso até o vencimento e materializa/avisa. Estado atual: 3 assinantes top2
+  todos MENSAIS (sem anuais legados — migração não é preocupação).
+- **PENDENTE (courtesy, não-crítico)**: e-mail T-7 do vencimento anual (link 1-clique p/ reautorizar
+  mensal ou renovar anual) — sem ele, o anual que agendou mensal e não reautorizar simplesmente
+  lapsa a explorador no vencimento (mesmo desfecho do avulso hoje, sem cobrança-surpresa). Reusar
+  `renovacao-avisos-cron` com dedup + exclusão de contas internas.
+
 **E. BIASI (piso 130, mediana 260, último 96) — recon PENDENTE de dado fresco:** queda contínua desde 16/07 (369→173→96). O ambiente remoto não alcança o site (proxy bloqueia) — validar com o run do cluster disparado hoje: `select total,status from fonte_saude where fonte='BIASI' order by executado_em desc limit 3;`. Se seguir ≤100 com status ok em runs consecutivos, pode ser acervo real encolhendo (pós-leilão); se oscilar, rodar a ofensiva (recon estrutura viva × premissas: `?pagina` na listagem agregada + fallback home) via Actions (`debug-leiloeiros.yml`).
 
 ---
