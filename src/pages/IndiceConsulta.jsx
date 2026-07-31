@@ -303,6 +303,11 @@ export default function IndiceConsulta() {
                 <div style={{ fontSize: 22, fontWeight: 900, color: '#7c3aed', marginTop: 4 }}>{Number(reg.aluguel_m2) > 0 ? `${brl(reg.aluguel_m2)}/m²·mês` : 'em formação'}</div>
               </div>
             </div>
+            {reg.ponderacao?.misturado && Number(reg.ponderacao.ticket_medio) > 0 && (
+              <div style={{ marginTop: 10, background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '9px 12px', fontSize: 11.5, color: '#1e40af', lineHeight: 1.5 }}>
+                Poucas amostras bem próximas: o valor de venda é uma <strong>referência ponderada</strong> — combina o preço da vizinhança imediata (mesmo padrão) com o ticket médio da região ({brl(reg.ponderacao.ticket_medio)}/m²) para não distorcer com poucos anúncios. Ganha precisão à medida que mais imóveis próximos entram na base.
+              </div>
+            )}
             {reg.bandas && (Number(reg.bandas.popular) > 0 || Number(reg.bandas.alto) > 0) && (
               <div style={{ marginTop: 12, background: 'white', borderRadius: 12, padding: '12px 16px' }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: '#334155', marginBottom: 8 }}>PADRÃO — R$/m² de venda por faixa</div>

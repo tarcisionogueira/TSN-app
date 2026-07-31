@@ -123,6 +123,7 @@ ${avisoHtml}
   </div>
 </div>
 ${yieldAa != null ? `<div class="av" style="font-size:12px;color:#334155;margin-top:10px;">Rentabilidade bruta de locação estimada: <b>${yieldAa.toFixed(2)}% ao ano</b> (aluguel/m² × 12 ÷ preço de venda/m²).</div>` : ''}
+${(reg.ponderacao && reg.ponderacao.misturado && Number(reg.ponderacao.ticket_medio) > 0) ? `<div class="av" style="border:1px solid #bfdbfe;background:#eff6ff;border-radius:10px;padding:10px 14px;margin-top:10px;font-size:11px;color:#1e40af;line-height:1.5;">Poucas amostras bem próximas: o valor de venda é uma <b>referência ponderada</b> — combina o preço da vizinhança imediata (mesmo padrão) com o ticket médio da região (${brl(reg.ponderacao.ticket_medio)}/m²), evitando distorção por poucos anúncios.</div>` : ''}
 
 ${periodosHtml}
 

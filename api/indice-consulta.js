@@ -10,6 +10,7 @@ export const config = { runtime: 'edge' };
 import { getUser, unauthorized } from './_auth.js';
 import { checkRateLimit, getIP, rateLimitedResponse } from './_rate-limit.js';
 import { composicaoTemporal, avisoFrescor } from './_indice-composicao.js';
+import { referenciaPonderada } from './_indice-ponderacao.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -146,10 +147,36 @@ export default async function handler(req) {
     const vendaSamplesReais = regSamples.filter(a => a.especie === 'venda' && !ehSintetica(a)).map(a => ({ valor_m2: a.valor_m2, data_ref: a.data_ref }));
     const comp = composicaoTemporal(vendaSamplesReais, amostras_ano, Date.now(), bandaCentral);
 
+    // REFERÊNCIA PONDERADA (pedido do dono): quando a LOCALIDADE tem poucas amostras, em vez do
+    // corte duro por nível, pondera por PROXIMIDADE + PADRÃO e MISTURA com o ticket médio dos
+    // demais por CREDIBILIDADE — referência mais real. Usa o pool da CIDADE inteira (o "local" e os
+    // "demais" saem do peso de distância), com as amostras PROJETADAS p/ hoje pela taxa da região
+    // (une temporal + espacial). Só com coordenada na consulta; sem ela, segue a composição.
+    let ponderacao = null;
+    if (lat != null && lng != null) {
+      const taxaPond = (comp && comp.taxa_aa != null) ? comp.taxa_aa / 100 : 0;
+      const agoraMs = Date.now();
+      const projetaHoje = (a) => {
+        const m = String(a.data_ref || '').match(/^(\d{4})-(\d{2})/);
+        const anos = m ? Math.max(0, Math.min(6, (agoraMs - Date.UTC(+m[1], +m[2] - 1, 15)) / (365 * 24 * 3600 * 1000))) : 0;
+        return Number(a.valor_m2) * Math.pow(1 + taxaPond, anos);
+      };
+      const poolPond = regCidade
+        .filter(a => a.especie === 'venda' && !ehSintetica(a) && Number(a.valor_m2) > 0)
+        .map(a => ({ valor_m2: projetaHoje(a), lat: a.lat, lng: a.lng }));
+      ponderacao = referenciaPonderada(poolPond, { lat, lng });
+    }
+
     let regiao = null;
     if (vendaVals.length >= 4 || locVals.length >= 4) {
       // Valor de venda = composição temporal (recente OU projetado p/ hoje); locação segue mediana.
-      const vMed = (comp.valor_m2 != null ? comp.valor_m2 : mediana(vendaVals));
+      let vMed = (comp.valor_m2 != null ? comp.valor_m2 : mediana(vendaVals));
+      // Adota a referência ponderada+encolhida quando disponível, com GUARDA de sanidade: se
+      // divergir demais (>2,2×) da composição, mantém a composição (evita salto por dado espúrio).
+      if (ponderacao && ponderacao.valor > 0) {
+        const base = comp.valor_m2 || mediana(vendaVals) || ponderacao.valor;
+        if (ponderacao.valor <= base * 2.2 && ponderacao.valor >= base / 2.2) vMed = ponderacao.valor;
+      }
       regiao = {
         fonte: 'mercado',
         venda_m2: vMed,
@@ -169,6 +196,9 @@ export default async function handler(req) {
         // BANDAS DE PADRÃO (percentis de R$/m² de venda): popular (p25) · médio (p50) · alto
         // (p75). Uma referência de ALTO PADRÃO deve olhar a banda "alto", não a mediana geral.
         bandas: vendaReaisVals.length >= 6 ? { popular: pct(vendaReaisVals, 0.25), medio: pct(vendaReaisVals, 0.50), alto: pct(vendaReaisVals, 0.75) } : null,
+        // Transparência da referência ponderada (proximidade+padrão) e do encolhimento ao ticket
+        // médio quando a localidade tem poucas amostras — a tela/PDF avisam quando houve mistura.
+        ponderacao: ponderacao || null,
       };
     } else {
       // Fallback (região sem amostras de mercado): ponderado com geo → acervo.

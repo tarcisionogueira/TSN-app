@@ -10,6 +10,7 @@ import { custoRespostaClaude, medirGemini } from './_uso.js';
 import { resumoAprendizadoTexto } from './_arremate-aprendizado.js';
 import { ehCidadeTemporada, motivoTemporada } from './_temporada.js';
 import { composicaoTemporal, avisoFrescor } from './_indice-composicao.js';
+import { referenciaPonderada } from './_indice-ponderacao.js';
 import { geocodificarCascata, rankNivel, coordValida } from './_geo.js';
 import { extratoEdital } from './_edital-extrato.js';
 
@@ -334,13 +335,20 @@ async function centralIndiceRegiao(imDb, segmento = 'apartamento') {
   try {
     if (!imDb?.cidade_norm || !imDb?.estado) return null;
     const uf = String(imDb.estado).toUpperCase();
-    const r = await sb(`indice_amostra?cidade_norm=eq.${encodeURIComponent(imDb.cidade_norm)}&uf=eq.${uf}&tipo=eq.${encodeURIComponent(segmento)}&especie=eq.venda&${faixaVendaQ(segmento)}&select=valor_m2,fonte&limit=800`);
+    const r = await sb(`indice_amostra?cidade_norm=eq.${encodeURIComponent(imDb.cidade_norm)}&uf=eq.${uf}&tipo=eq.${encodeURIComponent(segmento)}&especie=eq.venda&${faixaVendaQ(segmento)}&select=valor_m2,fonte,lat,lng&limit=800`);
     if (!r.ok) return null;
     const j = await r.json().catch(() => []);
-    const vals = (Array.isArray(j) ? j : []).filter(a => Number(a.valor_m2) > 0 && !ehFonteLeilao(a.fonte)).map(a => Number(a.valor_m2)).sort((x, y) => x - y);
+    const limpas = (Array.isArray(j) ? j : []).filter(a => Number(a.valor_m2) > 0 && !ehFonteLeilao(a.fonte));
+    const vals = limpas.map(a => Number(a.valor_m2)).sort((x, y) => x - y);
     if (vals.length < 4) return null;
     const pct = (p) => vals[Math.min(vals.length - 1, Math.floor(p * vals.length))];
-    return { venda_m2: Math.round(pct(0.50)), bandas: { popular: Math.round(pct(0.25)), medio: Math.round(pct(0.50)), alto: Math.round(pct(0.75)) }, n: vals.length };
+    // Headline por PROXIMIDADE + PADRÃO ao imóvel-alvo, misturado ao ticket médio quando há poucas
+    // amostras perto (pedido do dono). Só quando o alvo tem coordenada; senão mediana da cidade.
+    // As BANDAS (popular/médio/alto) seguem os percentis da CIDADE — descrevem o espectro de padrão.
+    const pond = referenciaPonderada(limpas.map(a => ({ valor_m2: Number(a.valor_m2), lat: a.lat, lng: a.lng })),
+      { lat: imDb.latitude, lng: imDb.longitude });
+    const venda_m2 = (pond && pond.valor > 0) ? pond.valor : Math.round(pct(0.50));
+    return { venda_m2, bandas: { popular: Math.round(pct(0.25)), medio: Math.round(pct(0.50)), alto: Math.round(pct(0.75)) }, n: vals.length, ponderacao: pond || null };
   } catch { return null; }
 }
 async function lerIndiceBidPro(imDb, segmento = 'apartamento') {
