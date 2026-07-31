@@ -127,7 +127,11 @@ async function handler(req) {
   if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500 });
 
   const ultima = {};
-  for (const l of linhas || []) if (!ultima[l.fonte]) ultima[l.fonte] = l;
+  const penultima = {}; // 2ª leitura mais recente por fonte — p/ a trava de PERSISTÊNCIA (anti-ruído)
+  for (const l of linhas || []) {
+    if (!ultima[l.fonte]) ultima[l.fonte] = l;
+    else if (!penultima[l.fonte]) penultima[l.fonte] = l;
+  }
 
   const agoraMs = Date.now();
   const problemas = [];
@@ -141,7 +145,14 @@ async function handler(req) {
     } else if (u.status === 'falhou') {
       problemas.push({ fonte, tipo: 'falhou (0 imóveis)', detalhe: u.motivo || 'coleta zerada' });
     } else if (u.status === 'degradado') {
-      problemas.push({ fonte, tipo: 'degradado', detalhe: `${u.total} imóveis — ${u.motivo || 'qualidade abaixo do critério'}` });
+      // PERSISTÊNCIA (anti-ruído): um "degradado" isolado quase sempre é dip TRANSITÓRIO da
+      // janela de scrape (a fonte no meio da coleta) que recupera no próximo run → e-mail
+      // desnecessário. Só alerta se a leitura ANTERIOR também foi degradado/falhou (o problema
+      // persiste), OU se não há leitura anterior (1ª vez que a fonte reporta — trata como real).
+      const ant = penultima[fonte];
+      if (!ant || ant.status === 'degradado' || ant.status === 'falhou') {
+        problemas.push({ fonte, tipo: 'degradado', detalhe: `${u.total} imóveis — ${u.motivo || 'qualidade abaixo do critério'}` });
+      }
     }
   }
 
@@ -199,7 +210,13 @@ async function handler(req) {
       const base = BASELINE_FONTES[row.fonte];
       if (!base) continue;
       if (typeof row.ativos === 'number' && row.ativos < base.min) {
-        problemas.push({ fonte: row.fonte, tipo: 'acervo abaixo da linha de base', detalhe: `${row.ativos} ativos (piso ${base.min})` });
+        // Anti-ruído: se a ÚLTIMA coleta (fonte_saude) JÁ voltou acima do piso, o snapshot de
+        // cobertura está atrasado (o dip da janela de scrape já recuperou) → não alerta.
+        const uSaude = ultima[row.fonte];
+        const recuperou = uSaude && Number(uSaude.total) >= base.min;
+        if (!recuperou) {
+          problemas.push({ fonte: row.fonte, tipo: 'acervo abaixo da linha de base', detalhe: `${row.ativos} ativos (piso ${base.min})` });
+        }
       }
       for (const [campo, minPct] of Object.entries(base.campos || {})) {
         const atual = row[campo];
