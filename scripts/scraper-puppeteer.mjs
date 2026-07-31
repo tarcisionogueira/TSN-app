@@ -1673,14 +1673,30 @@ function parseDataLJUD(s) {
   if (ano < 2020 || ano > 2035) return null;
   return iso;
 }
+// Normaliza nm_url_leiloeiro (o portal AGREGA centenas de leiloeiros oficiais) para uma
+// URL https do SITE DE ORIGEM; devolve null quando não parece um domínio real (não vira
+// destino do botão). É o alvo honesto do "Acessar leiloeiro".
+function siteLeiloeiroLJUD(raw) {
+  const s = String(raw || '').trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+  if (!s || /\s/.test(s) || !/\.[a-z]{2,}/i.test(s)) return null;
+  return `https://${s}`;
+}
 function mapLoteLJUD_pp(it) {
   const titulo = String(it.nm_titulo_lote || it.nm_titulo_leilao || '').replace(/\s+/g, ' ').trim();
   const cidade = String(it.nm_cidade || '').trim();
   const valMin = parseFloat(it.vl_lanceminimo || it.vl_ordenacao || 0) || 0;
   const foto = it.fotos?.[0]?.nm_path_completo ? it.fotos[0].nm_path_completo.replace('/196x146/', '/640x480/') : null;
   const loteId = it.lote_id || it.id;
-  // Página do LOTE no portal (não a home do leiloeiro) — destino do "Acessar leiloeiro".
-  const loteUrl = loteId ? `https://www.leiloesjudiciais.com.br/lote/${loteId}` : 'https://www.leiloesjudiciais.com.br';
+  // O portal é AGREGADOR: cada lote vem de um leiloeiro oficial (nm_url_leiloeiro). A página
+  // /lote/{id} do agregador é um SPA frágil que responde "Leilão não encontrado" p/ muitos
+  // lotes (a rota interna não é o lote_id cru, ou o lote foi re-listado com outro id) — mesmo
+  // quando os documentos (anexos S3) vieram certos. Então o destino HONESTO do botão
+  // "Acessar leiloeiro" é o SITE DO LEILOEIRO real; só caímos no agregador quando o portal
+  // não informou o domínio de origem. url_lote é reescrito pelo scraper todo dia e o doc-scan
+  // (enriquecer-lote só grava link_edital vazio) NUNCA o sobrescreve → o domínio fica preservado.
+  const siteLeiloeiro = siteLeiloeiroLJUD(it.nm_url_leiloeiro);
+  const loteUrlAgg = loteId ? `https://www.leiloesjudiciais.com.br/lote/${loteId}` : null;
+  const loteUrl = siteLeiloeiro || loteUrlAgg || 'https://www.leiloesjudiciais.com.br';
   // `anexos`: documentos REAIS do lote (edital, matrícula, laudo…) com URL S3 direta.
   const anexosArr = (Array.isArray(it.anexos) ? it.anexos : [])
     .filter(a => a && a.nm_path_completo)
@@ -1769,14 +1785,20 @@ async function scraperLJUD_navegador(browser, endpoint) {
   // url_lote) e lemos og:image (path S3 fotos/imoveis) — mesma tática comprovada do
   // SODRE. Bounded por run (LJUD_FOTO_MAX): ao longo dos scrapes diários cobre a cauda;
   // fonte_saude.foto_pct do LJUD confirma o ganho. Best-effort: nunca bloqueia o lote.
-  const semFoto = imoveis.filter(i => !i.link_foto && i.url_lote).slice(0, LJUD_FOTO_MAX);
+  const semFoto = imoveis.filter(i => !i.link_foto).slice(0, LJUD_FOTO_MAX);
   let fotoOk = 0;
   for (const im of semFoto) {
     let p2;
+    // A foto (path S3 fotos/imoveis) está na PÁGINA DO LOTE do agregador, não no site do
+    // leiloeiro. Como url_lote agora aponta p/ o leiloeiro real, reconstruímos a URL do lote
+    // no agregador a partir do fonte_id (ljud_{lote_id}) só p/ este backfill best-effort.
+    const loteId = String(im.fonte_id || '').replace(/^ljud_/, '');
+    if (!loteId) continue;
+    const aggUrl = `https://www.leiloesjudiciais.com.br/lote/${loteId}`;
     try {
       p2 = await browser.newPage();
       await p2.setUserAgent(USER_AGENT);
-      await p2.goto(im.url_lote, { waitUntil: 'domcontentloaded', timeout: 20000 });
+      await p2.goto(aggUrl, { waitUntil: 'domcontentloaded', timeout: 20000 });
       const og = await p2.evaluate(() => {
         const meta = document.querySelector('meta[property="og:image"]')?.getAttribute('content');
         if (meta) return meta;
