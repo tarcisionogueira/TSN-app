@@ -98,12 +98,14 @@ export default function KycParceiroModal() {
           Você entrou no <strong>Programa de Parceiros</strong>. Para receber suas comissões com segurança, precisamos verificar sua identidade: envie uma foto do seu <strong>documento</strong> (RG ou CNH) e uma <strong>selfie</strong>. Leva 1 minuto.
         </p>
 
-        {/* Passo 1 — documento */}
-        <input ref={docRef} type="file" accept="image/*,.pdf" capture="environment" style={{ display: 'none' }} onChange={e => enviarDoc(e.target.files[0])} />
+        {/* Passo 1 — documento. SEM `capture`: o seletor nativo deixa ESCOLHER câmera OU galeria/
+            arquivos/Drive (pedido do dono — igual ao contrato de assessoria/club). Com capture o
+            celular abria direto a câmera e não dava p/ carregar um arquivo/PDF já salvo. */}
+        <input ref={docRef} type="file" accept="image/*,.pdf" style={{ display: 'none' }} onChange={e => enviarDoc(e.target.files[0])} />
         <button onClick={() => docRef.current?.click()} disabled={docBusy}
           style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '13px 16px', marginBottom: 10, border: `1px solid ${docEnviado ? '#86efac' : '#cbd5e1'}`, background: docEnviado ? '#f0fdf4' : '#f8fafc', borderRadius: 12, cursor: 'pointer', fontWeight: 700, fontSize: 13.5, color: docEnviado ? '#166534' : '#334155' }}>
           {docEnviado ? <CheckCircle2 size={18} color="#16a34a" /> : <FileText size={18} color="#0D63DB" />}
-          {docBusy ? 'Enviando documento…' : docEnviado ? 'Documento enviado ✓' : '1. Enviar foto do documento (RG/CNH)'}
+          {docBusy ? 'Enviando documento…' : docEnviado ? 'Documento enviado ✓' : '1. Documento (RG/CNH) — foto ou arquivo'}
         </button>
 
         {/* Passo 2 — selfie (habilita após o documento) */}
