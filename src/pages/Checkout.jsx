@@ -201,6 +201,9 @@ export default function Checkout() {
   const [gatewayUsado, setGatewayUsado] = useState(null); // 'mp' | 'asaas'
   const [ofertandoFallback, setOfertandoFallback] = useState(false); // cliente recusado no MP, oferece Asaas
   const [showPagamento, setShowPagamento] = useState(false); // PagamentoServico inline (assessorado)
+  const [showPixAnual, setShowPixAnual] = useState(false); // Investidor Pro anuidade à vista no PIX
+  const [pixAnualFase, setPixAnualFase] = useState('pagando'); // pagando | ativando | erro
+  const pixAnualPidRef = React.useRef(null); // paymentId do PIX-anuidade, p/ retry da ativação
   // Cadastro inline do visitante não-logado (cria a conta no próprio checkout)
   const [su, setSu] = useState({ nome: '', email: '', senha: '', aceite: false });
   const [card, setCard] = useState({ numero: '', nome: '', validade: '', cvv: '' });
@@ -886,6 +889,25 @@ export default function Checkout() {
     setLoading(false);
   };
 
+  // Investidor Pro ANUIDADE via PIX: o PIX foi confirmado (paymentId) → ativa o Pro anual
+  // via endpoint VERIFICADO (confere valor+dono+aprovação no MP). Depois segue o fluxo guiado
+  // (volta pra assessoria se veio do bundle). Idempotente no servidor; erro → oferece retry.
+  const ativarProAnual = async (paymentId) => {
+    pixAnualPidRef.current = paymentId;
+    setPixAnualFase('ativando');
+    try {
+      const res = await apiCall('/api/ativar-pro-anual', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paymentId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { setPixAnualFase('erro'); return; }
+      try { await logAceite('top2_anual', plano?.precoAnual, {}, 'mp'); } catch (_) {}
+      try { await refreshPerfil?.(); } catch (_) {}
+      nav(aposPlano ? `/checkout?plano=${aposPlano}` : '/membros');
+    } catch { setPixAnualFase('erro'); }
+  };
+
   const confirmarPagamento = async () => {
     setPago(true);
     // Registra o aceite dos termos SOMENTE quando o pagamento é efetivado — antes
@@ -1385,6 +1407,35 @@ export default function Checkout() {
               </>
               )}
             </>
+          ) : showPixAnual && planoKey === 'top2' ? (
+            /* ── Investidor Pro ANUIDADE à vista no PIX (pagamento único de 12 meses) ── */
+            pixAnualFase === 'ativando' ? (
+              <div style={{ textAlign: 'center', padding: '48px 24px' }}>
+                <Loader2 size={40} color="#059669" style={{ animation: 'spin 1s linear infinite', margin: '0 auto 16px' }} />
+                <div style={{ fontSize: 16, fontWeight: 800, color: '#0f172a' }}>Ativando seu Investidor Pro…</div>
+                <div style={{ fontSize: 13, color: '#64748b', marginTop: 6 }}>Pagamento confirmado. Só um instante.</div>
+              </div>
+            ) : pixAnualFase === 'erro' ? (
+              <div style={{ background: 'white', borderRadius: 16, padding: '28px 24px', maxWidth: 460, margin: '0 auto', textAlign: 'center', boxShadow: '0 4px 24px rgba(0,0,0,0.10)' }}>
+                <AlertTriangle size={40} color="#d97706" style={{ margin: '0 auto 14px' }} />
+                <div style={{ fontSize: 17, fontWeight: 800, color: '#0f172a', marginBottom: 8 }}>Pagamento recebido — ativação pendente</div>
+                <p style={{ fontSize: 13.5, color: '#64748b', lineHeight: 1.7, marginBottom: 18 }}>Seu PIX foi pago, mas não conseguimos ativar o Pro agora. Tente de novo — se não resolver, fale com o suporte que ativamos na hora (o pagamento está registrado).</p>
+                <button onClick={() => ativarProAnual(pixAnualPidRef.current)} style={{ width: '100%', padding: '13px', background: '#059669', color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: 'pointer' }}>Tentar ativar de novo</button>
+              </div>
+            ) : (
+              <PagamentoServico
+                servico={{
+                  id: 'top2_anual',
+                  nome: 'Investidor Pro — 1 ano (à vista)',
+                  valor: plano.precoAnual || 449.90,
+                  descricao: 'Investidor Pro anual',
+                  proposito: 'plano_anual',
+                }}
+                soPix
+                onPago={(pid) => ativarProAnual(pid)}
+                onCancelar={() => { setShowPixAnual(false); setPixAnualFase('pagando'); }}
+              />
+            )
           ) : showPagamento && planoKey === 'assessorado' ? (
             /* ── Assessoria: pagamento inline PIX + cartão ── */
             <PagamentoServico
@@ -1490,6 +1541,16 @@ export default function Checkout() {
                   : ehTrocaCiclo ? (cicloAlvo === 'anual' ? 'Passar para o plano anual →' : 'Agendar mensalidade ao fim do anual →')
                   : ehMudanca ? `Confirmar ${ehUpgrade ? 'upgrade' : 'downgrade'} →` : 'Ir para Pagamento →'}
               </button>
+              {/* Investidor Pro por PIX = ANUIDADE à vista (cartão = mensalidade recorrente, acima).
+                  Só num contrato NOVO do Pro anual (não em troca de ciclo / mudança de plano). */}
+              {temToggleAnual && modalidade === 'anual' && !ehTrocaCiclo && !ehMudanca && (
+                <button
+                  onClick={() => { if (aceitouTermos && perfilFaturamentoOk) { setPixAnualFase('pagando'); setShowPixAnual(true); } }}
+                  disabled={loading || !aceitouTermos || !perfilFaturamentoOk}
+                  style={{ width: '100%', marginTop: 10, padding: '13px', background: 'white', color: '#059669', border: '1.5px solid #059669', borderRadius: 12, fontWeight: 700, fontSize: 14, cursor: (!aceitouTermos || !perfilFaturamentoOk || loading) ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: (!aceitouTermos || !perfilFaturamentoOk || loading) ? 0.6 : 1 }}>
+                  Pagar 1 ano à vista no PIX ({plano?.precoAnualLabel || 'R$ 449,90'})
+                </button>
+              )}
               {!perfilFaturamentoOk && aceitouTermos && (
                 <p style={{ fontSize: 11, color: '#b45309', textAlign: 'center', marginTop: 8 }}>
                   {!cpfOk && !enderecoOk ? 'Preencha o CPF e o endereço acima para continuar.'

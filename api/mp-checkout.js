@@ -33,7 +33,10 @@ export default async function handler(req, res) {
   // Propósito do pagamento avulso (allowlist). Marca a INTENÇÃO no metadata para que o
   // confirmador correto o aceite — sem isso, /api/creditos-recarga aceitava QUALQUER
   // pagamento 'servico' do usuário (assessoria, etc.) como recarga (bug bounty #1).
-  const PROPOSITOS = new Set(['servico', 'recarga']);
+  // 'plano_anual' marca o PIX-anuidade do Investidor Pro (ativação verificada em
+  // /api/ativar-pro-anual). O metadata.tipo continua 'servico' (o webhook NUNCA eleva
+  // plano por pagamento único — a ativação é feita à parte, conferindo valor+dono+aprovação).
+  const PROPOSITOS = new Set(['servico', 'recarga', 'plano_anual']);
   const proposito = PROPOSITOS.has(String(req.body?.proposito)) ? String(req.body.proposito) : 'servico';
 
   const valorCentavos = Math.round(Number(valor) * 100);

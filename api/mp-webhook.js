@@ -286,6 +286,36 @@ export default async function handler(req, res) {
   try {
     let result;
     if (status === 'approved') {
+      // Investidor Pro ANUIDADE via PIX (pagamento único de 12m): ATIVAÇÃO SERVER-SIDE
+      // resiliente — se o cliente fechar o navegador antes do fast-path do front, o Pro
+      // ainda ativa aqui. Mesmas guardas do /api/ativar-pro-anual (propósito + VALOR do
+      // servidor + idempotência com a MESMA chave 'pix_plano_anual' → nunca ativa em dobro).
+      // metadata.tipo continua 'servico' (o caminho genérico do webhook NÃO eleva plano).
+      if (pagamento.metadata?.proposito === 'plano_anual') {
+        const uidAnual = pagamento.metadata?.user_id;
+        if (!uidAnual) return res.status(200).json({ ok: true, ignorado: 'plano_anual_sem_user' });
+        let precoAnual = 449.90;
+        try {
+          const rc = await fetch(`${_SB_URL}/rest/v1/planos_config?plano_key=eq.top2&select=preco_anual`, { headers: { apikey: _SB_SVC, Authorization: `Bearer ${_SB_SVC}` } });
+          const [row] = await rc.json().catch(() => []);
+          if (row?.preco_anual) precoAnual = Number(row.preco_anual);
+        } catch { /* usa o fallback */ }
+        const vAnual = Number(pagamento.transaction_amount) || 0;
+        if (Math.abs(vAnual - precoAnual) > Math.max(1, precoAnual * 0.01)) {
+          return res.status(200).json({ ok: true, ignorado: 'plano_anual_valor_incompativel' });
+        }
+        if (await eventoJaProcessado({ gateway: 'mercadopago', gatewayPaymentId: String(pagamento.id), evento: 'pix_plano_anual' })) {
+          return res.status(200).json({ ok: true, duplicado: 'plano_anual' });
+        }
+        try {
+          const r = await ativarPlanoDireto({ userId: uidAnual, planoKey: 'top2_anual', gateway: 'mercadopago', cobranca: { gatewayPaymentId: String(pagamento.id), valor: vAnual } });
+          return res.status(200).json({ ok: true, plano_anual: r });
+        } catch (e) {
+          await removerEventoProcessado({ gateway: 'mercadopago', gatewayPaymentId: String(pagamento.id), evento: 'pix_plano_anual' });
+          console.error('[mp-webhook] plano_anual ativação:', e?.message);
+          return res.status(500).json({ error: 'plano_anual_ativacao_falhou' });
+        }
+      }
       if (ehProdutoMp) {
         result = await rpcProduto('confirmar_compra_produto', { p_compra_id: extRefMp, p_gateway: 'mercadopago', p_gateway_payment_id: String(pagamento.id) });
         if (result && result.ok === false) {

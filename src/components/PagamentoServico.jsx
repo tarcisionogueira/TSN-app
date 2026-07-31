@@ -513,10 +513,12 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false }
 /* ── Componente principal ── */
 // assinatura=true → somente cartão (Investidor Pro, Leilão Club recorrente)
 // assinatura=false (padrão) → escolha entre PIX (sem taxa) e cartão
-export default function PagamentoServico({ servico, onPago, onCancelar, assinatura = false, soCartao = false }) {
+export default function PagamentoServico({ servico, onPago, onCancelar, assinatura = false, soCartao = false, soPix = false }) {
   // soCartao: fluxos cujo pagamento PRECISA carregar metadata (ex.: recarga de crédito,
-  // confirmada por metadata.proposito) — o PIX estático não carrega, então só cartão.
-  const [metodo, setMetodo] = useState(assinatura || soCartao ? 'cartao' : null);
+  // confirmada por metadata.proposito) — só cartão.
+  // soPix: fluxo que é PIX por definição (ex.: Investidor Pro ANUIDADE à vista — cartão é a
+  // mensalidade recorrente, que segue outro caminho). Vai direto ao PIX, sem escolha de método.
+  const [metodo, setMetodo] = useState(assinatura || soCartao ? 'cartao' : soPix ? 'pix' : null);
 
   return (
     <div style={{
@@ -544,7 +546,7 @@ export default function PagamentoServico({ servico, onPago, onCancelar, assinatu
       )}
 
       {metodo === 'pix' && (
-        <PagamentoPIX servico={servico} onConfirmado={onPago} onVoltar={() => setMetodo(null)} />
+        <PagamentoPIX servico={servico} onConfirmado={onPago} onVoltar={soPix ? onCancelar : () => setMetodo(null)} />
       )}
       {metodo === 'cartao' && (
         <PagamentoCartao
