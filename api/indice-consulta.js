@@ -39,6 +39,13 @@ export default async function handler(req) {
 
   let body; try { body = await req.json(); } catch { return new Response(JSON.stringify({ error: 'JSON inválido' }), { status: 400, headers }); }
   const cidadeNorm = norm(body.cidade);
+  // NORMALIZAÇÃO POR DESTINO: a base PRÓPRIA (indice_amostra) e o acervo (imoveis_leilao/
+  // cidade_indicadores) gravam a cidade SEM separadores ("são paulo"→"saopaulo"); só a tabela GEO
+  // (indice_amostras, usada no ponderado/bairros) mantém o espaço. Sem esta 2ª forma, cidade de
+  // nome COMPOSTO não casava na base própria → gráfico de valorização e lista de amostras vinham
+  // VAZIOS e o valor caía no fallback ponderado. cidadeNorm já só tem [a-z0-9 ]; tirar o espaço dá
+  // exatamente o formato do banco (mesma regra do _cidadeNorm de gerar-analise).
+  const cidadeNormDb = cidadeNorm.replace(/\s+/g, '');
   const uf = String(body.uf || '').trim().toUpperCase();
   const bairroNorm = norm(body.bairro);
   // Segmento (apartamento/casa/terreno/comercial) — o índice é por segmento (unidades de m²
@@ -78,7 +85,7 @@ export default async function handler(req) {
     // valor estimado. Entravam como uma amostra na composição por período e distorciam a mediana.
     const FONTE_SINTETICA = /fipezap|m[ée]dia\s*(da\s*)?cidade|[íi]ndice\s*bidpro|valor\s*estimad|sint[ée]tic/i;
     const ehSintetica = (a) => FONTE_SINTETICA.test(String(a.fonte || ''));
-    const filtro = `cidade_norm=eq.${encodeURIComponent(cidadeNorm)}&uf=eq.${uf}&tipo=eq.${encodeURIComponent(tipo)}`;
+    const filtro = `cidade_norm=eq.${encodeURIComponent(cidadeNormDb)}&uf=eq.${uf}&tipo=eq.${encodeURIComponent(tipo)}`;
 
     // Amostras de mercado da REGIÃO solicitada (venda + locação), sem leilão. Traz o geo (bairro/
     // grid/lat/lng) para o recorte por RAIO.
@@ -177,7 +184,7 @@ export default async function handler(req) {
           bandas: Number(pond.venda_pop) > 0 ? { popular: pond.venda_pop, medio: pond.venda_med, alto: pond.venda_alto } : null,
           bairro_norm: bairroNorm || null };
       } else {
-        const acervo = await rpc('indice_bidpro_regiao', { p_cidade_norm: cidadeNorm, p_uf: uf, p_bairro: bairroNorm, p_lat: null, p_lng: null, p_tipo: tipo });
+        const acervo = await rpc('indice_bidpro_regiao', { p_cidade_norm: cidadeNormDb, p_uf: uf, p_bairro: bairroNorm, p_lat: null, p_lng: null, p_tipo: tipo });
         if (acervo && (Number(acervo.venda_m2) > 0 || Number(acervo.aluguel_m2) > 0)) regiao = { fonte: 'acervo', ...acervo };
         else {
           // ÚLTIMO nível do cascata (250m → 1km → cidade → ESTADO): referência ampla do estado
@@ -192,7 +199,7 @@ export default async function handler(req) {
         }
       }
     }
-    const valorizacao = await rpc('indice_valorizacao_anual', { p_cidade_norm: cidadeNorm, p_uf: uf, p_tipo: tipo, p_bairro_norm: bairroNorm, p_especie: 'venda', p_anos: 6 });
+    const valorizacao = await rpc('indice_valorizacao_anual', { p_cidade_norm: cidadeNormDb, p_uf: uf, p_tipo: tipo, p_bairro_norm: bairroNorm, p_especie: 'venda', p_anos: 6 });
 
     // LISTA (rastreabilidade) — da MESMA base regSamples (coerente com o valor). O gráfico por
     // ano (amostras_ano) e os períodos de 4 meses (comp.periodos) já foram calculados acima.
@@ -210,7 +217,7 @@ export default async function handler(req) {
       : [];
     // COMPOSIÇÃO por NÍVEL (localidade ≤250m · bairro · cidade · estado) triada por tipologia e
     // padrão — responde "quantas amostras em cada dimensão" no card do índice.
-    const composicao = await rpc('indice_composicao', { p_cidade_norm: cidadeNorm, p_uf: uf, p_bairro_norm: bairroNorm, p_lat: lat, p_lng: lng, p_tipo: tipo }).catch(() => null);
+    const composicao = await rpc('indice_composicao', { p_cidade_norm: cidadeNormDb, p_uf: uf, p_bairro_norm: bairroNorm, p_lat: lat, p_lng: lng, p_tipo: tipo }).catch(() => null);
     return new Response(JSON.stringify({ ok: true, mapeado, regiao, valorizacao: valorizacao || null, amostras: Array.isArray(amostras) ? amostras : [], amostras_ano, periodos: (regiao && regiao.periodos) ? comp.periodos : [], aviso, regioes, composicao }), { status: 200, headers });
   } catch (e) {
     return new Response(JSON.stringify({ error: e.message || 'Falha na consulta' }), { status: 500, headers });

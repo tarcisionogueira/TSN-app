@@ -207,9 +207,19 @@ export default function IndiceConsulta() {
             {res.porTipo.map((t) => {
               const r = t.regiao;
               const ok = t.mapeado && r;
+              // Card mapeado é CLICÁVEL → abre o detalhe daquele tipo (onde ficam o gráfico de
+              // valorização e o botão de PDF). Sem isso, "Todos os tipos" era um beco sem saída:
+              // mostrava os números mas não deixava chegar ao gráfico nem gerar o relatório.
+              const abrirTipo = () => { const nf = { ...form, tipo: t.tipo }; setForm(nf); if (nf.cidade && nf.uf) autoConsultar(nf); };
               return (
-                <div key={t.tipo} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 12, padding: '14px 16px' }}>
-                  <div style={{ fontSize: 12.5, fontWeight: 800, color: '#0f172a', marginBottom: 8 }}>{TIPO_LABEL[t.tipo]}</div>
+                <div key={t.tipo} onClick={ok ? abrirTipo : undefined} role={ok ? 'button' : undefined} tabIndex={ok ? 0 : undefined}
+                  onKeyDown={ok ? (e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); abrirTipo(); } }) : undefined}
+                  title={ok ? 'Abrir detalhes: gráfico de valorização, faixas de padrão e relatório em PDF' : undefined}
+                  style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 12, padding: '14px 16px', cursor: ok ? 'pointer' : 'default' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
+                    <div style={{ fontSize: 12.5, fontWeight: 800, color: '#0f172a' }}>{TIPO_LABEL[t.tipo]}</div>
+                    {ok && <span style={{ fontSize: 10, fontWeight: 700, color: '#0D63DB' }}>ver detalhes →</span>}
+                  </div>
                   {ok ? (
                     <>
                       <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
@@ -237,7 +247,7 @@ export default function IndiceConsulta() {
               );
             })}
           </div>
-          <div style={{ fontSize: 11, color: '#94a3b8' }}>Escolha um tipo específico acima para ver composição por período, faixas de padrão e valorização.</div>
+          <div style={{ fontSize: 11, color: '#94a3b8' }}>Clique num tipo acima (ou escolha no seletor) para ver o gráfico de valorização, a composição por período e gerar o relatório em PDF.</div>
         </div>
       )}
 
