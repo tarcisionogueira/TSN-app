@@ -337,6 +337,22 @@ síntese) na ORDEM SEGURA. Commits `40cf355` (backend) · `b1a7420` (front) · `
 - **PENDENTE (documentado, não-crítico)**: grandfather dos anuais AVULSO legados (D4) — não há
   nenhum hoje (0 anuais na base). Quando existirem, estender a RPC de aviso para incluí-los.
 
+**E12. 31/07 — LJUD "Leilão não encontrado" no botão "Acessar leiloeiro" (fix de raiz):** commit
+`79d1f05`. **Diagnóstico:** o portal `leiloesjudiciais.com.br` é um AGREGADOR de centenas de
+leiloeiros; o mapper ativo (`mapLoteLJUD_pp`) gravava `url_lote = /lote/{lote_id}` do agregador —
+SPA frágil que responde "Leilão não encontrado" p/ muitos lotes (a rota interna não é o `lote_id`
+cru, ou o lote foi re-listado com outro id). Os documentos (anexos S3) vinham CERTOS porque são
+lidos direto da API, independentes daquela página — daí o sintoma do dono (lote futuro, edital/
+matrícula corretos, mas "não encontrado"). O recon por Node-fetch (recon-ljud-url.yml) veio vazio
+(API bloqueia o fingerprint TLS do Node) → artefato do recon, NÃO evidência; a causa foi lida no
+código vivo. **Fix:** `url_lote` passa a apontar p/ o SITE DO LEILOEIRO real (`nm_url_leiloeiro`,
+que já vem na API e o mapper descartava), com fallback ao agregador só quando o portal não informa
+o domínio. Vale p/ os DOIS sub-motivos (bug de rota OU id envelhecido). `url_lote` é reescrito pelo
+scraper todo dia e o doc-scan (`enriquecer-lote` só grava `link_edital` vazio) NUNCA o sobrescreve
+→ domínio preservado, sem migração. Foto backfill (og:image) mantido: reconstrói a URL do lote no
+agregador a partir do `fonte_id` (`ljud_{id}`). Scrape LJUD-only disparado (`leiloeiros-puppeteer.yml`
+fontes=LJUD) p/ corrigir os `url_lote` das linhas ativas hoje, sem esperar o cron das 10h UTC.
+
 **E. BIASI (piso 130, mediana 260, último 96) — recon PENDENTE de dado fresco:** queda contínua desde 16/07 (369→173→96). O ambiente remoto não alcança o site (proxy bloqueia) — validar com o run do cluster disparado hoje: `select total,status from fonte_saude where fonte='BIASI' order by executado_em desc limit 3;`. Se seguir ≤100 com status ok em runs consecutivos, pode ser acervo real encolhendo (pós-leilão); se oscilar, rodar a ofensiva (recon estrutura viva × premissas: `?pagina` na listagem agregada + fallback home) via Actions (`debug-leiloeiros.yml`).
 
 ---
