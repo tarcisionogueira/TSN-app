@@ -414,6 +414,13 @@ Feito em 2 partes, ambas em produção:
   MESMAS guardas + MESMA chave de idempotência (`pix_plano_anual`) → nunca ativa em dobro. Sem mandato → o
   loop ANUAL VENCIDO do reconciliar rebaixa no fim dos 12m.
 
+**ESTADO AO ENCERRAR (tarde 31/07):** tudo em produção e READY. O link de venda da assessoria
+(`https://bidprobrasil.com.br/#/checkout?plano=assessorado`) está no ar com identificação por CPF +
+bundle Pro+assessoria + PIX automático (assessoria e Pro-anuidade) + cartão + trava absoluta no
+servidor. O dono vai mandar o link pro **Rafael** (explorador `6b35b390…`) contratar. Watch do Rafael
+armado (send_later, fire ~15:23 UTC) — avisa quando ele ativar (role→top2 + contrato assessorado),
+conferindo se foi PIX ou cartão. Nenhum assinante anual/Pro novo travado; auditoria de segurança 0/0.
+
 **PRÓXIMA SESSÃO (noite 31/07):** (1) confirmar contratação do Rafael quando ele fizer (role→top2 +
 contrato assessorado); (2) SANITY do PIX real (assessoria + Pro-anuidade) na 1ª cobrança de verdade —
 conferir ativação no banco + o pagamento no MP; (3) retomar o item #11 (leiloeiros Round 35).
