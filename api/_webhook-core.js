@@ -289,13 +289,16 @@ export async function processarConfirmado({ valor, descricao, email, gatewayCust
   // elevaria o plano do cliente "de graça"). mapeado=null pula toda a elevação.
   const mapeado = servico ? null : mapearPlano(valor, descricao);
 
-  // Atualiza perfil: limpa inadimplência, atualiza plano/role
+  // Atualiza perfil. NÃO limpar inadimplência aqui: um pagamento de SERVIÇO (mapeado=null)
+  // não restaura o plano — se limpasse a flag sem restaurar o role, deixaria role_anterior
+  // órfão e a recuperação na próxima renovação do Pro falharia (o cliente viraria top2 e
+  // perderia o assessorado para sempre). A limpeza da flag só acontece com plano mapeado.
   const campoId = gateway === 'mercadopago' ? 'mp_id' : 'asaas_id';
   const update = {
-    inadimplente_desde: null,
     [campoId]: gatewayCustomerId || undefined,
   };
   if (mapeado) {
+    update.inadimplente_desde = null;
     // NÃO gravar `plano`: a coluna tem check constraint (gratuito|analista|gestor) e
     // planoKey 'top2'/'clube'/'assessorado' a VIOLA → o update inteiro falhava (throw),
     // deixando o cliente PAGO sem acesso (bug ativo no caminho Asaas / fallback, que usa

@@ -121,6 +121,17 @@ export default async function handler(req, res) {
       body: JSON.stringify({ role: 'explorador', role_anterior: null, plano_pago_em: null }),
     }).catch(() => {});
 
+    // 2.1) Cancela os contratos de assessoria VIVOS do usuário — senão o gate de "1
+    //      assessoria por vez" (assessoria-status) veria o contrato eternamente e travaria
+    //      a recontratação para sempre, já que nunca haverá arremate (bug bounty #7).
+    if (/^assessorado/.test(rolePagante)) {
+      const emailFiltro = email ? `,assinante_email.eq.${encodeURIComponent(String(email).toLowerCase())}` : '';
+      await sb(`contratos_link?or=(criado_por.eq.${user.id}${emailFiltro})&plano_key=eq.assessorado&status=in.(aguardando,aguardando_assinatura,assinado)`, {
+        method: 'PATCH', headers: { Prefer: 'return=minimal' },
+        body: JSON.stringify({ status: 'cancelado' }),
+      }).catch(() => {});
+    }
+
     // valor de referência do plano (para o admin conferir o estorno)
     let valorRef = null;
     try {

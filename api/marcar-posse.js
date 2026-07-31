@@ -21,8 +21,9 @@ const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
 const CORS = { 'Access-Control-Allow-Origin': process.env.APP_ORIGIN || 'https://bidprobrasil.com.br', 'Content-Type': 'application/json' };
 
-// Roles que MANTÊM o plano após a posse (não são "assessorado").
-const MANTEM_PLANO = ['top2', 'top2_anual', 'clube', 'clube_anual', 'admin', 'analista', 'advogado', 'consultor'];
+// Roles que MANTÊM o plano após a posse (não são "assessorado"). 'suporte' incluído —
+// se um usuário da equipe for cliente de um caso, a posse não pode reescrever o role dele.
+const MANTEM_PLANO = ['top2', 'top2_anual', 'clube', 'clube_anual', 'admin', 'analista', 'advogado', 'consultor', 'suporte'];
 
 function sb(path, opts = {}) {
   return fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
@@ -61,7 +62,7 @@ export default async function handler(req) {
 
   // Reavalia o plano do CLIENTE do caso (não do staff que clicou).
   const clienteId = caso.cliente_id;
-  const [cliente] = await (await sb(`perfis?id=eq.${encodeURIComponent(clienteId)}&select=role,asaas_id&limit=1`)).json().catch(() => []);
+  const [cliente] = await (await sb(`perfis?id=eq.${encodeURIComponent(clienteId)}&select=role,asaas_id,plano_ciclo,plano_pago_em&limit=1`)).json().catch(() => []);
   const roleCliente = cliente?.role || null;
   let reduziu = false, roleNovo = roleCliente, outroAberto = false;
   if (roleCliente && !MANTEM_PLANO.includes(roleCliente) && roleCliente !== 'explorador') {
@@ -69,13 +70,16 @@ export default async function handler(req) {
     // quando ESTE era o ÚLTIMO caso em aberto do cliente — se ele ainda tem outro imóvel em
     // assessoria (posse_em nulo), mantém o plano até tomar posse de todos. Como já marcamos a
     // posse deste caso acima, a busca por outros abertos exclui este naturalmente.
-    const outros = await (await sb(`casos?cliente_id=eq.${encodeURIComponent(clienteId)}&id=neq.${encodeURIComponent(casoId)}&posse_em=is.null&select=id&limit=1`)).json().catch(() => []);
+    // Só conta como "em andamento" o caso REALMENTE arrematado e sem posse — um caso de
+    // mera análise (nasce em 'analise_solicitada', arrematado_em nulo) não é assessoria
+    // ativa e não pode manter o cliente como assessorado para sempre (bug bounty #6).
+    const outros = await (await sb(`casos?cliente_id=eq.${encodeURIComponent(clienteId)}&id=neq.${encodeURIComponent(casoId)}&arrematado_em=not.is.null&posse_em=is.null&select=id&limit=1`)).json().catch(() => []);
     outroAberto = Array.isArray(outros) && outros.length > 0;
     if (!outroAberto) {
       // Último caso encerrado → volta ao PLANO BASE. A mensalidade do Pro seguiu sendo
       // cobrada durante a assessoria (regra do dono), então se há recorrência do Pro
       // ativa em qualquer gateway, o cliente volta a 'top2'; senão, Explorador.
-      roleNovo = (await temAssinaturaProAtiva(clienteId, cliente?.asaas_id)) ? 'top2' : 'explorador';
+      roleNovo = (await temAssinaturaProAtiva(clienteId, cliente)) ? 'top2' : 'explorador';
       await sb(`perfis?id=eq.${encodeURIComponent(clienteId)}`, {
         method: 'PATCH', headers: { Prefer: 'return=minimal' },
         body: JSON.stringify({ role: roleNovo }),
@@ -87,16 +91,23 @@ export default async function handler(req) {
   return json({ ok: true, posse_em: posseEm, reduziu, role_novo: roleNovo, mantido: !reduziu, outro_imovel_em_assessoria: outroAberto });
 }
 
-// Há recorrência do Investidor Pro ATIVA? Checa o espelho local do MP (mp_assinaturas,
-// mantido pelo reconciliar-assinaturas-cron) e as subscriptions ativas do Asaas pelo
-// customer id. Mensalidade do Pro ≈ 49,90 (legado 99,90) MONTHLY ou 449,90 YEARLY —
-// faixas com folga; a parcela de assessoria (500, 12×) NÃO conta como plano base.
-async function temAssinaturaProAtiva(userId, asaasId) {
+// Há Investidor Pro ATIVO por baixo da assessoria? Checa, nesta ordem: (a) recorrência
+// MONTHLY no espelho local do MP; (b) Pro ANUAL — pagamento AVULSO, sem preapproval nem
+// subscription (bug bounty #5): reconhecido pela âncora do perfil (plano_ciclo='anual' com
+// plano_pago_em dentro de ~13 meses); (c) subscription ativa no Asaas (MONTHLY 49,90 ou
+// YEARLY 449,90). A parcela de assessoria (500, 12×) NÃO conta como plano base.
+async function temAssinaturaProAtiva(userId, cliente) {
+  const asaasId = cliente?.asaas_id;
   try {
     const r = await sb(`mp_assinaturas?user_id=eq.${encodeURIComponent(userId)}&status=eq.authorized&plano_key=like.top2*&select=mp_assinatura_id&limit=1`);
     const rows = r.ok ? await r.json().catch(() => []) : [];
     if (Array.isArray(rows) && rows.length > 0) return true;
-  } catch { /* segue para o Asaas */ }
+  } catch { /* segue */ }
+  // (b) Pro anual avulso: âncora do perfil (vigência de 13 meses cobre a folga da renovação).
+  if (/anual/i.test(cliente?.plano_ciclo || '') && cliente?.plano_pago_em) {
+    const pago = new Date(cliente.plano_pago_em).getTime();
+    if (Number.isFinite(pago) && (Date.now() - pago) < 13 * 30 * 24 * 3600 * 1000) return true;
+  }
   const ASAAS_KEY = (process.env.ASAAS_API_KEY || '').trim();
   if (!asaasId || !ASAAS_KEY) return false;
   try {

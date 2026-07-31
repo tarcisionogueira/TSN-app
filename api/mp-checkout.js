@@ -30,6 +30,11 @@ export default async function handler(req, res) {
   if (!valor || !descricao || !email) {
     return res.status(400).json({ error: 'valor, descricao e email são obrigatórios' });
   }
+  // Propósito do pagamento avulso (allowlist). Marca a INTENÇÃO no metadata para que o
+  // confirmador correto o aceite — sem isso, /api/creditos-recarga aceitava QUALQUER
+  // pagamento 'servico' do usuário (assessoria, etc.) como recarga (bug bounty #1).
+  const PROPOSITOS = new Set(['servico', 'recarga']);
+  const proposito = PROPOSITOS.has(String(req.body?.proposito)) ? String(req.body.proposito) : 'servico';
 
   const valorCentavos = Math.round(Number(valor) * 100);
   if (valorCentavos < 100) return res.status(400).json({ error: 'Valor mínimo R$ 1,00' });
@@ -45,7 +50,7 @@ export default async function handler(req, res) {
       // webhook mapearia valor→plano, virando plano vitalício de graça (pagamento único
       // não gera preapproval, então nada revoga). Assinaturas de plano vão por /api/mp
       // (preapproval), onde o preço vem do servidor (planos_config) e é recorrente.
-      metadata: { user_id: user.id, origem: 'tsn-app', tipo: 'servico' },
+      metadata: { user_id: user.id, origem: 'tsn-app', tipo: 'servico', proposito },
       notification_url: `${process.env.APP_BASE_URL || 'https://bidprobrasil.com.br'}/api/mp-webhook`,
       statement_descriptor: 'BIDPRO BRASIL',
     };

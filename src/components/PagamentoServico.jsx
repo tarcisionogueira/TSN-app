@@ -419,6 +419,8 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false }
           email: user?.email,
           metodoPagamento: 'credit_card',
           dadosCartao: { token: token.id, parcelas, metodoPagamentoId },
+          // Marca a INTENÇÃO (recarga vs. serviço) para o confirmador correto aceitar.
+          proposito: servico.proposito || 'servico',
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -533,8 +535,10 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false }
 /* ── Componente principal ── */
 // assinatura=true → somente cartão (Investidor Pro, Leilão Club recorrente)
 // assinatura=false (padrão) → escolha entre PIX (sem taxa) e cartão
-export default function PagamentoServico({ servico, onPago, onCancelar, assinatura = false }) {
-  const [metodo, setMetodo] = useState(assinatura ? 'cartao' : null);
+export default function PagamentoServico({ servico, onPago, onCancelar, assinatura = false, soCartao = false }) {
+  // soCartao: fluxos cujo pagamento PRECISA carregar metadata (ex.: recarga de crédito,
+  // confirmada por metadata.proposito) — o PIX estático não carrega, então só cartão.
+  const [metodo, setMetodo] = useState(assinatura || soCartao ? 'cartao' : null);
 
   return (
     <div style={{
@@ -569,7 +573,7 @@ export default function PagamentoServico({ servico, onPago, onCancelar, assinatu
           servico={servico}
           assinatura={assinatura}
           onConfirmado={onPago}
-          onVoltar={assinatura ? onCancelar : () => setMetodo(null)}
+          onVoltar={(assinatura || soCartao) ? onCancelar : () => setMetodo(null)}
         />
       )}
     </div>

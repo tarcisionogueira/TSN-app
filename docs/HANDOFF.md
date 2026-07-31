@@ -183,6 +183,71 @@ tomar posse); Club não contrata avulsa (ilimitada inclusa).
    arrematei — registrar". NOTA: o card "Agendar com o time" ainda aponta p/ /painel — decidir
    destino (Caso? Análises?) com o dono.
 
+**E9. NOITE 30→31/07 — AUDITORIA + BUG BOUNTY COMPLETOS (4 agentes) + cobertura do 360:**
+
+**Cliente 360 — capturou o incidente do gerar-analise?** SIM. Os 500 viraram `api_erro`
+com rota, endpoint (`alvo`), status e HORA (23 eventos; gerar-analise 500 só do admin —
+0 clientes afetados; enriquecer-lote 500 tocou 2 clientes). MELHORIA aplicada
+(`AnalisesContext.jsx`): os 3 iniciadores agora emitem `api_erro` com o `imovelId` no
+detalhe nos 3 ramos (erro_corpo / resposta_vazia / falha_ou_500) — antes o 500-sem-corpo
+era pego só na camada de transporte (sem o imóvel). PENDENTE (baixa): o rebaixamento
+`gerando`→`erro` por stale ainda não emite evento.
+
+**SEGURANÇA (crítico corrigido no ato):**
+1. 🔴 **VAZAMENTO DE PII — `saldo_usuarios` (view SECURITY DEFINER) legível por `anon`**:
+   expunha nome + **chave PIX** + saldo de TODOS os usuários, sem filtro por dono, ignorando
+   RLS. Qualquer um (sem login) baixava `GET /rest/v1/saldo_usuarios`. Só o backend usa a
+   view. CORRIGIDO: `security_invoker=on` + revoke anon/authenticated (migração aplicada).
+2. 🔴 **`creditos-recarga.js` (feature nova) — duplicação de valor**: creditava QUALQUER
+   pagamento aprovado do usuário (assessoria R$4.800, mensalidade…) como recarga — pagava o
+   serviço E ganhava o valor em saldo. CORRIGIDO: exige `metadata.proposito='recarga'` (posto
+   no mp-checkout), removido o fallback por CPF; recarga forçada a CARTÃO (`soCartao`), PIX
+   estático não carrega o marcador.
+3. 🟠 **`creditar_credito` — idempotência TOCTOU**: SELECT-then-INSERT sem trava → corrida
+   creditava N×. CORRIGIDO: índice único parcial em `credito_lancamentos.referencia` +
+   ON CONFLICT na RPC (migração aplicada).
+4. **Auditor cego a isto**: `auditoria_seguranca()` não cobria views definer com PII — foi
+   por isso que #1 passou 0/0. ADICIONADO o check `view_definer_pii` (migração aplicada);
+   auditoria segue 0/0 (agora de verdade). Advisor do Supabase: 1 ERROR (era o saldo_usuarios,
+   resolvido) + 67 WARN em sua maioria intencionais (funções definer com grant deliberado);
+   backlog defensivo de baixa prioridade: 8 funções com search_path mutável, `sdr_leads` INSERT
+   público (form de lead — verificar), 2 buckets públicos com listing amplo.
+5. 🟡 **SSRF cego** em `_edital-extrato`/`enriquecer-lote` (redirect:follow revalida só a URL
+   inicial). Gated por URL vir do banco; anota como defesa-em-profundidade (usar redirect:manual
+   + revalidar hop). NÃO corrigido — follow-up.
+
+**LÓGICA DO FLUXO DE ARREMATAÇÃO (bugs que causavam perda de acesso pago — corrigidos):**
+- **BUG 1** `mp.js ativarRoleInline`: não replicava a recuperação de inadimplência e resetava
+  a âncora dos 7 dias → assessorado suspenso que atualizava o cartão virava top2 permanente.
+  CORRIGIDO (escadaSobe + candidato de recuperação + plano_pago_em só na 1ª vez).
+- **BUG 2** `_webhook-core processarConfirmado`: pagamento de serviço limpava `inadimplente_desde`
+  sem restaurar role → `role_anterior` órfão → recuperação futura falhava. CORRIGIDO (só limpa a
+  flag com plano mapeado).
+- **BUG 5** `marcar-posse`: Pro ANUAL é pagamento avulso (sem recorrência) → pós-posse derrubava
+  a explorador quem tinha Pro anual pago. CORRIGIDO (âncora plano_ciclo='anual' + plano_pago_em
+  <13m). Follow-up: o path de ativação do Pro anual via MP avulso deveria setar plano_ciclo='anual'.
+- **BUG 6** `marcar-posse`: contava caso de mera análise como "assessoria em andamento" → mantinha
+  assessorado para sempre. CORRIGIDO (filtro arrematado_em not null). + `MANTEM_PLANO` ganhou 'suporte'.
+- **BUG 7** `garantia-cancelar`: não cancelava o `contratos_link` → o gate "1 assessoria por vez"
+  travava a recontratação para sempre. CORRIGIDO (cancela contratos vivos no reembolso).
+- **BUG 8** `assessoria-status`: contrato emitido pela EQUIPE tem criado_por=staff → gate não via a
+  assessoria e liberava 2ª em duplicidade. CORRIGIDO (casa criado_por OU assinante_email + fallback
+  por caso arrematado sem posse).
+
+**PENDENTES registrados (pré-existentes, maiores — NÃO corrigidos nesta rodada):**
+- **BUG 3** pagamento em SPLIT (`mp.js` criar preferências parciais): cada parte cai em
+  `processarConfirmado` e `mapearPlano(valorParcial)`=null → paga e não ativa nada. Corrigir:
+  usar o planoKey do external_reference (base) em vez do valor, ou somar as partes.
+- **BUG 4** colisão de `mp_id`: `processarConfirmado` sobrescreve com o customer id, mas
+  `garantia-cancelar` usa como preapproval id → cancelamento falha e a recorrência continua
+  cobrando. Corrigir: colunas separadas (mp_customer_id × mp_preapproval_id) ou fallback por busca.
+- **BUG 9** `reconciliar-assinaturas-cron` só olha o MP ao re-checar assinatura ativa → quem
+  re-assinou no Asaas (ou tem Pro anual avulso) é rebaixado em loop diário. Corrigir: checar
+  também Asaas/anual antes de suspender.
+- **Gate de assessoria só na UI**: mp.js/asaas.js não repetem a regra de "1 por vez" ao criar a
+  cobrança (fail-open de rede aceitável, mas endurecer no endpoint de pagamento). Planos.jsx: o CTA
+  "Contratar nova arrematação" não consulta /api/assessoria-status (leva ao beco — direção segura).
+
 **E. BIASI (piso 130, mediana 260, último 96) — recon PENDENTE de dado fresco:** queda contínua desde 16/07 (369→173→96). O ambiente remoto não alcança o site (proxy bloqueia) — validar com o run do cluster disparado hoje: `select total,status from fonte_saude where fonte='BIASI' order by executado_em desc limit 3;`. Se seguir ≤100 com status ok em runs consecutivos, pode ser acervo real encolhendo (pós-leilão); se oscilar, rodar a ofensiva (recon estrutura viva × premissas: `?pagina` na listagem agregada + fallback home) via Actions (`debug-leiloeiros.yml`).
 
 ---

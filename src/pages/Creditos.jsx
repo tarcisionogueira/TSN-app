@@ -219,7 +219,8 @@ export default function Creditos() {
                   </>
                 ) : (
                   <PagamentoServico
-                    servico={{ id: 'recarga', nome: `Recarga de crédito — ${BRL(valorRecarga)}`, valor: valorRecarga }}
+                    servico={{ id: 'recarga', proposito: 'recarga', nome: `Recarga de crédito — ${BRL(valorRecarga)}`, valor: valorRecarga }}
+                    soCartao
                     onPago={confirmarRecarga}
                     onCancelar={() => setValorRecarga(null)}
                   />

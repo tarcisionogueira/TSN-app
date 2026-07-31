@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { useAuth } from './AuthContext';
 import { apiCall } from '../utils/apiCall';
+import { registrarEvento } from '../utils/tracker.js';
 import { supabase } from '../utils/supabase';
 import { termosUsoPendente, abrirTermosModal } from '../components/TermosAtualizadosModal';
 
@@ -143,12 +144,12 @@ export function AnalisesProvider({ children }) {
       body: JSON.stringify({ imovelId, titulo: meta.titulo, cidade: meta.cidade, estado: meta.estado, imovel: meta.imovel || null, paraUserId: meta.paraUserId || undefined, ...payload }),
     }).then(r => r.json()).then(d => {
       if (d?.result) upsert({ imovelId, status: 'concluida', result: d.result, erro: null });
-      else if (d?.error) upsert({ imovelId, status: 'erro', erro: d.error });
+      else if (d?.error) { registrarEvento('api_erro', { alvo: 'gerar-analise', detalhe: `erro_corpo imovel=${imovelId}: ${d.error}` }); upsert({ imovelId, status: 'erro', erro: d.error }); }
       // Resposta sem result nem error → NUNCA deixa preso em 'gerando' (o recarregar
       // reconcilia com o banco caso o servidor ainda esteja processando de verdade).
-      else upsert({ imovelId, status: 'erro', erro: 'Não foi possível gerar agora. Tente novamente.' });
+      else { registrarEvento('api_erro', { alvo: 'gerar-analise', detalhe: `resposta_vazia imovel=${imovelId}` }); upsert({ imovelId, status: 'erro', erro: 'Não foi possível gerar agora. Tente novamente.' }); }
       recarregar();
-    }).catch(() => { upsert({ imovelId, status: 'erro', erro: 'Falha de conexão ao gerar. Tente novamente.' }); recarregar(); });
+    }).catch(() => { registrarEvento('api_erro', { alvo: 'gerar-analise', detalhe: `falha_ou_500 imovel=${imovelId}` }); upsert({ imovelId, status: 'erro', erro: 'Falha de conexão ao gerar. Tente novamente.' }); recarregar(); });
   }, [upsert, recarregar, exigirTermos]);
 
   // Documental: dispara /api/gerar-documental (server-side, persistente).
@@ -163,10 +164,10 @@ export function AnalisesProvider({ children }) {
       body: JSON.stringify({ imovelId, titulo: meta.titulo, cidade: meta.cidade, estado: meta.estado, imovel: meta.imovel || null, paraUserId: meta.paraUserId || undefined, ...payload }),
     }).then(r => r.json()).then(d => {
       if (d?.result) upsertDoc({ imovelId, status: 'concluida', result: d.result, erro: null });
-      else if (d?.error) upsertDoc({ imovelId, status: 'erro', erro: d.error });
-      else upsertDoc({ imovelId, status: 'erro', erro: 'Não foi possível gerar agora. Tente novamente.' });
+      else if (d?.error) { registrarEvento('api_erro', { alvo: 'gerar-documental', detalhe: `erro_corpo imovel=${imovelId}: ${d.error}` }); upsertDoc({ imovelId, status: 'erro', erro: d.error }); }
+      else { registrarEvento('api_erro', { alvo: 'gerar-documental', detalhe: `resposta_vazia imovel=${imovelId}` }); upsertDoc({ imovelId, status: 'erro', erro: 'Não foi possível gerar agora. Tente novamente.' }); }
       recarregar();
-    }).catch(() => { upsertDoc({ imovelId, status: 'erro', erro: 'Falha de conexão ao gerar. Tente novamente.' }); recarregar(); });
+    }).catch(() => { registrarEvento('api_erro', { alvo: 'gerar-documental', detalhe: `falha_ou_500 imovel=${imovelId}` }); upsertDoc({ imovelId, status: 'erro', erro: 'Falha de conexão ao gerar. Tente novamente.' }); recarregar(); });
   }, [upsertDoc, recarregar, exigirTermos]);
 
   // Laudo de viabilidade (3º documento): consolida mercadológico + documental no
@@ -181,10 +182,10 @@ export function AnalisesProvider({ children }) {
       body: JSON.stringify({ imovelId, titulo: meta.titulo, cidade: meta.cidade, estado: meta.estado, imovel: meta.imovel || null, paraUserId: meta.paraUserId || undefined }),
     }).then(r => r.json()).then(d => {
       if (d?.result) upsertLaudo({ imovelId, status: 'concluida', result: d.result, erro: null });
-      else if (d?.error) upsertLaudo({ imovelId, status: 'erro', erro: d.error });
-      else upsertLaudo({ imovelId, status: 'erro', erro: 'Não foi possível gerar agora. Tente novamente.' });
+      else if (d?.error) { registrarEvento('api_erro', { alvo: 'gerar-laudo-viabilidade', detalhe: `erro_corpo imovel=${imovelId}: ${d.error}` }); upsertLaudo({ imovelId, status: 'erro', erro: d.error }); }
+      else { registrarEvento('api_erro', { alvo: 'gerar-laudo-viabilidade', detalhe: `resposta_vazia imovel=${imovelId}` }); upsertLaudo({ imovelId, status: 'erro', erro: 'Não foi possível gerar agora. Tente novamente.' }); }
       recarregar();
-    }).catch(() => { upsertLaudo({ imovelId, status: 'erro', erro: 'Falha de conexão ao gerar. Tente novamente.' }); recarregar(); });
+    }).catch(() => { registrarEvento('api_erro', { alvo: 'gerar-laudo-viabilidade', detalhe: `falha_ou_500 imovel=${imovelId}` }); upsertLaudo({ imovelId, status: 'erro', erro: 'Falha de conexão ao gerar. Tente novamente.' }); recarregar(); });
   }, [upsertLaudo, recarregar, exigirTermos]);
 
   const getAnalise = useCallback((imovelId) => analises.find(a => a.imovelId === imovelId) || null, [analises]);

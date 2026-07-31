@@ -70,16 +70,31 @@ const SB_KEY = (process.env.SUPABASE_SERVICE_KEY || '').trim();
 // pode rebaixar um assessorado/clube, e papéis de equipe nunca são sobrescritos.
 const RANK_PLANO = { explorador: 0, top2: 1, top2_anual: 1, assessorado: 2, assessorado_anual: 2, clube: 3, clube_anual: 3 };
 
+const escadaSobe = (roleAtual, planoPago) => {
+  const a = RANK_PLANO[roleAtual], n = RANK_PLANO[planoPago];
+  if (n == null) return roleAtual ?? planoPago;              // não mapeado → não mexe
+  if (roleAtual != null && a == null) return roleAtual;      // papel de equipe → intocável
+  return (a ?? -1) >= n ? roleAtual : planoPago;             // só sobe
+};
+
 async function ativarRoleInline(userId, planoKey, mpId) {
   if (!SB_URL || !SB_KEY || !userId || !planoKey) return { skipped: true };
   let roleFinal = planoKey;
+  let jaAncorado = false;
   try {
-    const at = await fetch(`${SB_URL}/rest/v1/perfis?id=eq.${userId}&select=role`, {
+    const at = await fetch(`${SB_URL}/rest/v1/perfis?id=eq.${userId}&select=role,role_anterior,inadimplente_desde,plano_pago_em`, {
       headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` },
     });
     const [perfil] = at.ok ? await at.json() : [];
-    const rAtual = RANK_PLANO[perfil?.role], rNovo = RANK_PLANO[planoKey];
-    if (perfil?.role && (rAtual == null || (rAtual >= (rNovo ?? 0)))) roleFinal = perfil.role;
+    // Recuperação de inadimplência: restaura o role SUSPENSO (role_anterior pode ser
+    // MAIOR que o plano pago — ex.: assessorado suspenso pagando a mensalidade do Pro),
+    // igual ao ativarPlanoDireto do webhook. Fora dela, a escada só sobe (anti-flip).
+    const candidato = (perfil?.role_anterior && perfil?.inadimplente_desde)
+      ? escadaSobe(perfil.role_anterior, planoKey)
+      : planoKey;
+    roleFinal = escadaSobe(perfil?.role, candidato);
+    const PAGANTES = ['top2', 'top2_anual', 'assessorado', 'assessorado_anual', 'clube', 'clube_anual'];
+    jaAncorado = !!perfil?.plano_pago_em || PAGANTES.includes(perfil?.role);
   } catch { /* sem leitura, segue com planoKey (comportamento antigo) */ }
   const res = await fetch(`${SB_URL}/rest/v1/perfis?id=eq.${userId}`, {
     method: 'PATCH',
@@ -90,10 +105,10 @@ async function ativarRoleInline(userId, planoKey, mpId) {
       Prefer:          'return=minimal',
     },
     // Grava o id do preapproval (mp_id): sem ele não dá para rastrear/gerenciar a
-    // recorrência por usuário nem cancelar pelo id (só por e-mail). plano_pago_em/
-    // ciclo marcam a assinatura ativa.
+    // recorrência por usuário nem cancelar pelo id (só por e-mail). A âncora dos 7 dias
+    // (plano_pago_em) só é gravada na 1ª ativação — NÃO reinicia em renovação/re-assinatura.
     body: JSON.stringify({ role: roleFinal, inadimplente_desde: null, role_anterior: null,
-      ...(mpId ? { mp_id: String(mpId), plano_pago_em: new Date().toISOString(), plano_ciclo: 'mensal' } : {}) }),
+      ...(mpId ? { mp_id: String(mpId), plano_ciclo: 'mensal', ...(jaAncorado ? {} : { plano_pago_em: new Date().toISOString() }) } : {}) }),
   });
   if (!res.ok) {
     const txt = await res.text().catch(() => '');

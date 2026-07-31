@@ -43,9 +43,22 @@ export default async function handler(req) {
 
   // Última assessoria CONTRATADA (contrato vivo — aguardando assinatura ou assinado).
   // Cancelado/expirado não trava: o cliente desistiu antes de a operação existir.
-  const rc = await sb(`contratos_link?criado_por=eq.${encodeURIComponent(user.id)}&plano_key=eq.assessorado&status=in.(aguardando,aguardando_assinatura,assinado)&select=id,criado_em&order=criado_em.desc&limit=1`);
+  // Casa por criado_por OU assinante_email: quando a EQUIPE emite o contrato, criado_por
+  // é o staff — sem o e-mail, o gate não via a assessoria em andamento e liberava uma 2ª
+  // contratação em duplicidade (bug bounty #8).
+  const emailFiltro = user.email ? `,assinante_email.eq.${encodeURIComponent(String(user.email).toLowerCase())}` : '';
+  const rc = await sb(`contratos_link?or=(criado_por.eq.${encodeURIComponent(user.id)}${emailFiltro})&plano_key=eq.assessorado&status=in.(aguardando,aguardando_assinatura,assinado)&select=id,criado_em&order=criado_em.desc&limit=1`);
   const [contrato] = rc.ok ? await rc.json().catch(() => []) : [];
-  if (!contrato) return json({ podeContratar: true, motivo: 'ok', role });
+  // Sem contrato mas JÁ é assessorado (ex.: onboardado pela equipe) e tem um caso arrematado
+  // sem posse → há operação em andamento; não liberar 2ª por falta de contrato.
+  if (!contrato) {
+    if (/^assessorado/.test(role || '')) {
+      const rcaso = await sb(`casos?cliente_id=eq.${encodeURIComponent(user.id)}&arrematado_em=not.is.null&posse_em=is.null&select=id&limit=1`);
+      const emAndamento = rcaso.ok ? await rcaso.json().catch(() => []) : [];
+      if ((emAndamento?.length || 0) > 0) return json({ podeContratar: false, motivo: 'assessoria_em_andamento', role });
+    }
+    return json({ podeContratar: true, motivo: 'ok', role });
+  }
 
   // Arremate SINALIZADO depois desse contrato? (os dois universos: o portfólio
   // auto-declarado "arrematados" — botão "Arrematei" — e o caso da equipe.)
