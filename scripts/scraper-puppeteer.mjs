@@ -3046,21 +3046,17 @@ function mapLoteLeilofy(raw, id) {
   // filtrando valores pequenos (R$/m², taxas, comissão). Diagnóstico provou que a
   // página vem completa (avaliação e R$ no texto), mas a frase variou entre lotes e a
   // regex ancorada falhava → 0 mapeados. Este fallback não depende do fraseado.
-  // LEILOFY/leiloariasmart rotula os valores do lote de forma PADRONIZADA:
-  //   "Valor de Avaliação (1ª Praça): R$ X"  e  "Valor Condicional em Leilão (2ª Praça): R$ Y".
-  // A página é uma SPA que AINDA embute uma lista de OUTROS lotes (mesmos rótulos + incrementos).
-  // O antigo Math.min de todos os "R$" pegava um INCREMENTO/valor de outro lote → bug validado
-  // (casa de R$1,45M aparecia com "lance mínimo" R$20.000 = o incremento). A 1ª ocorrência do
-  // rótulo é a do PRÓPRIO lote (o detalhe renderiza antes da lista). Ancorar nos rótulos exatos.
-  let avaliacao = parseBRL(q(/Valor de Avalia[çc][ãa]o\s*\(1[ªa]?\s*Pra[çc]a\)\s*:?\s*R\$\s*([\d.]+,\d{2})/i));
-  const praca2 = parseBRL(q(/Valor Condicional em Leil[ãa]o\s*\(2[ªa]?\s*Pra[çc]a\)\s*:?\s*R\$\s*([\d.]+,\d{2})/i));
-  // Lance mínimo (piso) = 2ª praça (condicional, o piso real); sem 2ª praça, cai na 1ª (avaliação).
+  // O DETALHE do lote traz os valores na caixa "Primeira praça:" / "Segunda praça:", com o VALOR
+  // logo após a data — VALIDADO no recon: "Primeira praça: 04/08/2026 às 10:25 R$ 18.000.000,00".
+  // A SPA AINDA lista OUTROS lotes abaixo com o rótulo "Valor de Avaliação (1ª Praça)" — NÃO usar
+  // (é de outro lote; foi o que fez a mansão de R$18M mostrar valor de outro imóvel). "Incremento"
+  // (ex.: R$20.000) e "Último lance" (R$0,00) também aparecem — JAMAIS como piso (bug antigo: o
+  // Math.min pegava o incremento). 1ª ocorrência de "Primeira/Segunda praça" = ESTE lote.
+  let avaliacao = parseBRL(q(/Primeira\s+pra[çc]a[\s\S]{0,80}?R\$\s*([\d.]+,\d{2})/i));
+  const praca2  = parseBRL(q(/Segunda\s+pra[çc]a[\s\S]{0,80}?R\$\s*([\d.]+,\d{2})/i));
+  // Lance mínimo (piso) = 2ª praça (condicional); sem 2ª praça, cai na 1ª (avaliação). Sem os
+  // rótulos do detalhe → 0 (honesto; a matrícula/edital preenche depois). NUNCA o Math.min global.
   let lance = praca2 || avaliacao;
-  // Fallback SÓ se os rótulos padronizados falharem: rótulo genérico do próprio lote, EXCLUINDO
-  // "último lance" e "incremento" (não são piso). NUNCA o Math.min global (pega valor de outro lote).
-  if (!lance) {
-    lance = parseBRL(q(/(?:lance m[íi]nimo|lance inicial|valor m[íi]nimo|arremat)[^R]{0,40}R\$\s*([\d.]+,\d{2})/i));
-  }
   const localizacao = q(/Localiza[çc][ãa]o\s*\n\s*([^\n]+)/i);
   const tipoTxt = q(/Tipo:\s*([^\n]+)/i);
   const areaCon = q(/[ÁA]rea constru[íi]da:\s*([\d.,]+)/i);
