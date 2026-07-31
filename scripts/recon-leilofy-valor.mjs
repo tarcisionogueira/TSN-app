@@ -26,6 +26,15 @@ const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
       console.log(`  HTTP ${resp?.status?.() ?? '?'} · título: ${await page.title()}`);
       const info = await page.evaluate(() => {
         const txt = (document.body?.innerText || '').replace(/\r/g, '');
+        // TESTE DE PARSE: aplica as regexes candidatas do scraper e mostra o que capturam.
+        const cap = (re) => { const m = txt.match(re); return m ? m[1] : '(nada)'; };
+        const parse = {
+          primeira_praca: cap(/Primeira\s+pra[çc]a[\s\S]{0,80}?R\$\s*([\d.]+,\d{2})/i),
+          segunda_praca:  cap(/Segunda\s+pra[çc]a[\s\S]{0,80}?R\$\s*([\d.]+,\d{2})/i),
+          rotulo_lista_avaliacao: cap(/Valor de Avalia[çc][ãa]o\s*\(1[ªa]?\s*Pra[çc]a\)\s*:?\s*R\$\s*([\d.]+,\d{2})/i),
+        };
+        const iP = txt.search(/Primeira\s+pra[çc]a/i);
+        const trechoDetalhe = iP >= 0 ? txt.slice(iP, iP + 160).replace(/\s+/g, ' ') : '(rótulo "Primeira praça" não encontrado)';
         // Todos os R$ com ~40 chars antes (o rótulo costuma vir antes do valor).
         const valores = [];
         const re = /R\$\s*[\d.]+,\d{2}/g;
@@ -37,8 +46,13 @@ const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
         // Linhas que contêm rótulos-chave.
         const chaves = txt.split('\n').map(l => l.trim()).filter(l =>
           /(lance|avalia|pra[çc]a|incremento|arremat|m[íi]nimo|valor|d[ée]bito)/i.test(l) && l.length < 120);
-        return { valores, chaves: [...new Set(chaves)].slice(0, 40) };
+        return { valores, chaves: [...new Set(chaves)].slice(0, 40), parse, trechoDetalhe };
       });
+      console.log('  === PARSE TEST (regex candidatas) ===');
+      console.log('    Primeira praça →', info.parse.primeira_praca);
+      console.log('    Segunda praça  →', info.parse.segunda_praca);
+      console.log('    (rótulo lista "Valor de Avaliação (1ª Praça)" →', info.parse.rotulo_lista_avaliacao, '— NÃO usar)');
+      console.log('    trecho detalhe:', info.trechoDetalhe);
       console.log(`  --- ${info.valores.length} valores R$ (com contexto anterior) ---`);
       info.valores.forEach(v => console.log('    ' + v));
       console.log('  --- linhas com rótulos-chave ---');
