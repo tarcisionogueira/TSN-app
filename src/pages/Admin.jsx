@@ -949,22 +949,35 @@ function UsuariosTab() {
   async function loadAuditoria(userId) {
     setAuditoriaLoading(true);
     try {
-      const [aceiteRes, contratoRes, compraRes, perfilRes] = await Promise.all([
+      const [aceiteRes, contratoRes, compraRes, perfilRes, kycRes, kycContratoRes] = await Promise.all([
         supabase.from('aceites_plano').select('*').eq('user_id', userId).order('aceito_em', { ascending: false }),
         supabase.from('contratos_pendentes').select('*').eq('user_id', userId).order('criado_em', { ascending: false }),
         supabase.from('compras_produtos').select('*').eq('user_id', userId).order('criado_em', { ascending: false }),
         // Aceites que moram no PERFIL: cadastro/LGPD e adesão ao Programa de Parceiros —
         // sem isto o modal parecia "Nenhum registro" para usuário que só se cadastrou.
-        supabase.from('perfis').select('nome, lgpd_aceito, lgpd_data, parceiro_aceite_em, parceiro_aceite_versao, created_at').eq('id', userId).maybeSingle(),
+        // identidade_validada/_em: para carimbar o KYC no comprovante do parceiro/assessoria/clube.
+        supabase.from('perfis').select('nome, lgpd_aceito, lgpd_data, parceiro_aceite_em, parceiro_aceite_versao, created_at, identidade_validada, identidade_validada_em').eq('id', userId).maybeSingle(),
+        // Fotos do KYC (selfie + documento) para EMBUTIR no comprovante como prova de identidade.
+        supabase.from('usuario_docs').select('tipo, nome, url, criado_em').eq('user_id', userId)
+          .in('tipo', ['kyc_selfie', 'kyc_documento_frente', 'kyc_documento_verso', 'kyc_documento', 'kyc_documento_digital'])
+          .order('criado_em', { ascending: false }),
+        // KYC do CONTRATO assinado (assessoria/clube): selfie/documento ficam em contratos_link.kyc_fotos
+        // (não em usuario_docs). Puxa os contratos do próprio usuário p/ o comprovante de contratação.
+        supabase.from('contratos_link').select('plano_key, kyc_incluido, kyc_fotos, criado_em, status')
+          .eq('criado_por', userId).eq('kyc_incluido', true).order('criado_em', { ascending: false }),
       ]);
+      // KYC do contrato mais recente que tem fotos (por plano) — usado no comprovante de assessoria/clube.
+      const contratosKyc = (kycContratoRes?.data || []).filter((c) => c.kyc_fotos && c.status !== 'cancelado');
       setAuditoriaData({
+        kyc: kycRes.data || [],
+        kycContratos: contratosKyc,
         aceites: aceiteRes.data || [],
         contratos: contratoRes.data || [],
         compras: compraRes.data || [],
         perfil: perfilRes.data || null,
       });
     } catch (e) {
-      setAuditoriaData({ aceites: [], contratos: [], compras: [], perfil: null });
+      setAuditoriaData({ kyc: [], kycContratos: [], aceites: [], contratos: [], compras: [], perfil: null });
     } finally {
       setAuditoriaLoading(false);
     }
@@ -974,7 +987,7 @@ function UsuariosTab() {
   // identificação, o termo, data/hora e o HASH de verificação — para compra, o hash SHA-256
   // gravado NO MOMENTO do aceite (trigger no banco); para cadastro/adesão (registro no
   // perfil, sem hash armazenado), o código é DERIVADO dos campos canônicos na hora.
-  async function gerarComprovanteAceite({ titulo, linhas, canonico, hashArmazenado, termoTexto }) {
+  async function gerarComprovanteAceite({ titulo, linhas, canonico, hashArmazenado, termoTexto, comIdentidade }) {
     let hash = hashArmazenado || '';
     let hashLabel = 'Hash de integridade (SHA-256, gravado no momento do aceite)';
     if (!hash && canonico) {
@@ -986,6 +999,59 @@ function UsuariosTab() {
     }
     const esc = (s) => String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
     const emitido = new Date().toLocaleString('pt-BR');
+
+    // BLOCO DE IDENTIDADE (KYC): para o Termo de Parceiros e os contratos de Assessoria/Clube,
+    // o comprovante embute a SELFIE e a foto do DOCUMENTO (RG/CNH) que o usuário enviou na
+    // verificação de identidade — prova forte de que quem aceitou é a pessoa identificada.
+    // As imagens são baixadas e INLINADAS (data URL) para o documento ficar autocontido.
+    let identidadeHtml = '';
+    if (comIdentidade) {
+      const pf = auditoriaData?.perfil || {};
+      // Fonte 1 — usuario_docs (KYC do Perfil / Programa de Parceiros). 1 registro por tipo (o + recente).
+      const porTipo = {};
+      for (const d of (auditoriaData?.kyc || [])) { if (d?.tipo && !porTipo[d.tipo]) porTipo[d.tipo] = d; }
+      // Fonte 2 — kyc_fotos do CONTRATO assinado (assessoria/clube). Pega o contrato mais recente com fotos.
+      const contratoFotos = (auditoriaData?.kycContratos || []).find((c) => c.kyc_fotos)?.kyc_fotos || {};
+      // Lista CANÔNICA de imagens (selfie, documento…), mesclando as duas fontes; usuario_docs tem prioridade.
+      const CANON = [
+        { rotulo: 'Selfie (rosto)', doc: porTipo.kyc_selfie?.url, contrato: contratoFotos.selfie_rosto },
+        { rotulo: 'Documento — frente', doc: porTipo.kyc_documento_frente?.url, contrato: contratoFotos.doc_frente },
+        { rotulo: 'Documento — verso', doc: porTipo.kyc_documento_verso?.url, contrato: contratoFotos.doc_verso },
+        { rotulo: 'Documento', doc: porTipo.kyc_documento?.url, contrato: null },
+        { rotulo: 'Documento digital', doc: porTipo.kyc_documento_digital?.url, contrato: contratoFotos.doc_digital },
+        { rotulo: 'Selfie com documento', doc: null, contrato: contratoFotos.selfie_doc },
+      ].map((x) => ({ rotulo: x.rotulo, src: x.doc || x.contrato })).filter((x) => x.src);
+      // Resolve p/ data URL (autocontido). kyc_fotos já pode vir como data URL — nesse caso usa direto.
+      const urlParaDataUrl = async (src) => {
+        try {
+          if (/^data:/.test(src)) return /^data:image\//.test(src) ? { dataUrl: src } : { pdf: /pdf/i.test(src) };
+          const r = await fetch(src); if (!r.ok) return { erro: `HTTP ${r.status}` };
+          const blob = await r.blob();
+          if (!/^image\//.test(blob.type || '')) return { pdf: !!/pdf/i.test(blob.type || '') };
+          const dataUrl = await new Promise((res) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = () => res(null); fr.readAsDataURL(blob); });
+          return dataUrl ? { dataUrl } : { erro: 'leitura falhou' };
+        } catch { return { erro: 'indisponível' }; }
+      };
+      const figuras = [];
+      for (const { rotulo, src } of CANON) {
+        const res = await urlParaDataUrl(src);
+        // Preferido: data URL (autocontido). Fallback: URL direta (imagem cross-origin renderiza
+        // no PDF sem CORS) — assim, se o fetch falhar por CORS, o comprovante ainda mostra a foto.
+        const imgSrc = res.dataUrl || (!res.pdf && /^https?:/.test(src) ? src : null);
+        if (imgSrc) figuras.push(`<figure style="margin:0"><img src="${imgSrc}" style="max-width:240px;max-height:320px;border:1px solid #cbd5e1;border-radius:6px;display:block"/><figcaption class="muted" style="font-size:11px;text-align:center;margin-top:4px">${esc(rotulo)}</figcaption></figure>`);
+        else figuras.push(`<div class="muted" style="font-size:11.5px;align-self:center">${esc(rotulo)}: ${res.pdf ? 'arquivo em PDF (ver no painel)' : 'imagem não disponível'}</div>`);
+      }
+      const statusKyc = pf.identidade_validada
+        ? `✔ Identidade verificada${pf.identidade_validada_em ? ' em ' + new Date(pf.identidade_validada_em).toLocaleString('pt-BR') : ''}`
+        : 'Verificação de identidade pendente';
+      identidadeHtml = `<h2>Verificação de identidade (KYC)</h2><div class="box">
+<div class="kv"><b>Status:</b> ${esc(statusKyc)}</div>
+${figuras.length
+        ? `<div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:10px">${figuras.join('')}</div>`
+        : `<div class="kv muted" style="margin-top:6px">Imagens do KYC não disponíveis para exibição (o registro pode ter sido feito sem retenção de imagem).</div>`}
+<div class="muted" style="margin-top:8px;font-size:11px">Selfie e documento enviados pelo titular na verificação de identidade da plataforma (LGPD — acesso restrito). Compõem a prova de autoria deste aceite.</div>
+</div>`;
+    }
     const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Comprovante de Aceite — ${esc(auditoriaUser?.nome || '')}</title>
 <style>body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:36px;font-size:13px;line-height:1.6}h1{font-size:18px;margin:0}h2{font-size:13px;border-bottom:2px solid #0D63DB;padding-bottom:4px;margin:22px 0 8px;color:#0D63DB}.muted{color:#64748b}.kv{margin:3px 0}.box{background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:12px 14px}.hash{font-family:monospace;font-size:11px;word-break:break-all;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:6px;padding:8px 10px}</style></head><body>
 <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #111;padding-bottom:10px">
@@ -994,6 +1060,7 @@ function UsuariosTab() {
 <h2>${esc(titulo)}</h2><div class="box">
 ${linhas.map(([k, v]) => `<div class="kv"><b>${esc(k)}:</b> ${esc(v)}</div>`).join('')}
 </div>
+${identidadeHtml}
 ${termoTexto ? `<h2>Texto do termo aceito</h2><div class="box" style="font-size:12px;white-space:pre-wrap">${esc(termoTexto)}</div>` : ''}
 ${hash ? `<h2>Verificação de integridade</h2><div class="kv muted">${esc(hashLabel)}:</div><div class="hash">${esc(hash)}</div>
 <div class="muted" style="margin-top:6px;font-size:11.5px">O hash é calculado sobre os campos canônicos do registro (usuário, e-mail, termo/versão, valor, IP e data/hora). Qualquer alteração posterior no registro invalida a verificação.</div>` : ''}
@@ -1280,6 +1347,7 @@ ${hash ? `<h2>Verificação de integridade</h2><div class="kv muted">${esc(hashL
                               linhas: [['Usuário', `${pf.nome || auditoriaUser?.nome || '—'}`], ['ID do usuário', auditoriaUser?.id || '—'], ['Aderiu em', dtHora(pf.parceiro_aceite_em)], ['Versão do termo', pf.parceiro_aceite_versao || '—'], ['Registro', 'perfis.parceiro_aceite_em / parceiro_aceite_versao']],
                               canonico: `${auditoriaUser?.id}|parceiro|${pf.parceiro_aceite_em}|${pf.parceiro_aceite_versao || ''}`,
                               termoTexto: `${TERMO_PARCEIRO_PREAMBULO} ${TERMO_PARCEIRO.map((s) => `${s.t}: ${s.d}`).join(' ')}`,
+                              comIdentidade: true, // parceiro: embute selfie + documento do KYC
                             })}>Comprovante</button>
                           )}
                         </div>
@@ -1334,6 +1402,8 @@ ${hash ? `<h2>Verificação de integridade</h2><div class="kv muted">${esc(hashL
                                       ['Dispositivo (user-agent)', a.user_agent || '—'],
                                     ],
                                     hashArmazenado: a.aceite_hash || '',
+                                    // Assessoria e Clube: embute selfie + documento (KYC) como prova de identidade.
+                                    comIdentidade: ['assessorado', 'clube'].includes(a.plano_key || a.plano),
                                     termoTexto: (() => {
                                       const t = termoDoProduto(a.plano_key || a.plano, { valorLabel: a.valor != null ? `R$ ${Number(a.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : undefined });
                                       const vReg = a.versao_termos || a.termos_versao || '—';
