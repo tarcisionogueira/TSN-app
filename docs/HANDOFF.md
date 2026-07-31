@@ -395,9 +395,18 @@ box destacado → aparecia só "10" acima dos benefícios (visto no teste do don
 === 'string'`) p/ número solto nunca mais vazar. (`planosConfig` não sobrescreve `honorarios` — fonte
 é o estático; DB só tem `honorarios_exito_pct` à parte.)
 
+**DECISÃO DO DONO 31/07 — PIX fica ESTÁTICO (zero taxa, MANUAL):** perguntei se ligava o PIX dinâmico
+do MP (confirma sozinho, mas ~0,99% de taxa no recebido) ou mantinha o estático (QR da chave, zero
+taxa, mas confirmação manual pelo suporte). Dono escolheu **MANTER O ESTÁTICO** e focar no CARTÃO.
+Então: NÃO trocar para PIX dinâmico; recomendar CARTÃO (100% automático) como via padrão; o PIX segue
+disponível porém MANUAL (cliente paga na chave, suporte confirma na conta MP). IMPORTANTE: a infra do
+PIX dinâmico JÁ EXISTE (`mp-checkout` cria PIX com `metadata.user_id` + retorna QR; `mp-verificar-pix`
+confirma por `paymentId`) — se um dia o dono aceitar a taxa, é só o frontend `PagamentoPIX` pedir o
+dinâmico em vez de gerar o BR Code estático. O "PIX-anuidade do Pro" fica arquivado sob essa decisão.
+
 **PRÓXIMA SESSÃO (noite 31/07):** (1) confirmar contratação do Rafael quando ele fizer (role→top2 +
-contrato assessorado); (2) LIGAR o PIX-anuidade do Pro com teste sandbox (fast-follow E13/E14);
-(3) retomar o item #11 (integração leiloeiros Round 35).
+contrato assessorado); (2) retomar o item #11 (integração leiloeiros Round 35). PIX resolvido por
+decisão (mantém estático/manual — ver acima).
 
 **E. BIASI (piso 130, mediana 260, último 96) — recon PENDENTE de dado fresco:** queda contínua desde 16/07 (369→173→96). O ambiente remoto não alcança o site (proxy bloqueia) — validar com o run do cluster disparado hoje: `select total,status from fonte_saude where fonte='BIASI' order by executado_em desc limit 3;`. Se seguir ≤100 com status ok em runs consecutivos, pode ser acervo real encolhendo (pós-leilão); se oscilar, rodar a ofensiva (recon estrutura viva × premissas: `?pagina` na listagem agregada + fallback home) via Actions (`debug-leiloeiros.yml`).
 
