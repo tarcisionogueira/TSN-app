@@ -89,7 +89,7 @@ export default async function handler(req, res) {
   if (!user?.id) { res.status(401).json({ error: 'Não autenticado' }); return; }
   const email = user.email || null;
 
-  const [perfil] = await (await sb(`perfis?id=eq.${user.id}&select=role,role_anterior,plano_pago_em,mp_id,mp_preapproval_id,asaas_id,nome,cpf,cpf_enc`)).json().catch(() => []);
+  const [perfil] = await (await sb(`perfis?id=eq.${user.id}&select=role,role_anterior,plano_pago_em,plano_ciclo,mp_id,mp_preapproval_id,asaas_id,nome,cpf,cpf_enc`)).json().catch(() => []);
   if (!perfil) { res.status(404).json({ error: 'Perfil não encontrado' }); return; }
 
   const rolePagante = PAGANTES.includes(perfil.role) ? perfil.role : (PAGANTES.includes(perfil.role_anterior) ? perfil.role_anterior : null);
@@ -116,10 +116,12 @@ export default async function handler(req, res) {
   const cancelados = (await cancelarMP(perfil.mp_id, email, user.id)) + (await cancelarAsaas(perfil.asaas_id));
 
   if (podeReembolso) {
-    // 2) Rebaixa AGORA + zera a âncora (a garantia foi exercida).
+    // 2) Rebaixa AGORA + zera a âncora (a garantia foi exercida). Limpa também a âncora de
+    //    ciclo anual (M2 — simetria com processarVencido) para não deixar plano_ciclo='anual'
+    //    órfão que marcar-posse/reconciliar leriam como "Pro anual vigente".
     await sb(`perfis?id=eq.${user.id}`, {
       method: 'PATCH', headers: { Prefer: 'return=minimal' },
-      body: JSON.stringify({ role: 'explorador', role_anterior: null, plano_pago_em: null }),
+      body: JSON.stringify({ role: 'explorador', role_anterior: null, plano_pago_em: null, plano_ciclo: null, plano_vencimento: null, ciclo_agendado: null }),
     }).catch(() => {});
 
     // 2.1) Cancela os contratos de assessoria VIVOS do usuário — senão o gate de "1
@@ -136,11 +138,13 @@ export default async function handler(req, res) {
     // valor de referência do plano (para o admin conferir o estorno)
     let valorRef = null;
     try {
-      // Coluna é `preco` ('valor' não existe em planos_config — o 42703 deixava o
-      // valor_ref sempre null no registro/e-mail do admin). Variante _anual usa preco_anual.
+      // Coluna é `preco` ('valor' não existe). O CICLO vem de plano_ciclo (M1) — o `role` é
+      // sempre BASE (top2), então /_anual$/ no role dava sempre false e gravava o valor MENSAL
+      // no reembolso de quem pagou o ANUAL. Anual → preco_anual.
       const base = rolePagante.replace(/_anual$/, '');
+      const ehAnual = /anual/i.test(perfil?.plano_ciclo || '');
       const [pc] = await (await sb(`planos_config?plano_key=eq.${encodeURIComponent(base)}&select=preco,preco_anual&limit=1`)).json();
-      valorRef = /_anual$/.test(rolePagante) ? (pc?.preco_anual ?? pc?.preco ?? null) : (pc?.preco ?? null);
+      valorRef = ehAnual ? (pc?.preco_anual ?? pc?.preco ?? null) : (pc?.preco ?? null);
     } catch { /* opcional */ }
 
     // 3) Registra o pedido de reembolso (canal auditável p/ o admin executar o estorno).

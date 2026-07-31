@@ -90,16 +90,55 @@ export default async function handler(req, res) {
     res.status(400).json({ error: 'Você não tem um plano anual para agendar a mudança.' }); return;
   }
 
-  // 1) Marca a intenção (materializada no vencimento pelo cron / próxima mensal confirmada).
+  // 1) Cancela a auto-renovação ANUAL nos dois gateways (acesso preservado até o vencimento
+  //    pela âncora — suspenderPlanoDireto tem a guarda 'anual_vigente').
+  const cancelados = (await cancelarMP([perfil.mp_preapproval_id, perfil.mp_id], user.email, user.id)) + (await cancelarAsaas(perfil.asaas_id));
+
+  // 2) CONFIRMA que nenhum mandato anual sobreviveu (B2): cancelamento é best-effort e uma
+  //    falha silenciosa deixaria a regra c recobrar 449,90 no vencimento. Se NÃO der para
+  //    confirmar (mandato remanescente OU consulta falhou), NÃO agenda — o cliente reexecuta.
+  const conf = await confirmarSemMandato(perfil.asaas_id, user.email, user.id);
+  if (!conf.ok) {
+    return res.status(conf.erro ? 502 : 409).json({
+      error: 'nao_confirmado',
+      msg: 'Não foi possível confirmar o cancelamento da renovação anual agora. Tente novamente em instantes — nenhuma mudança foi agendada.',
+    });
+  }
+
+  // 3) Só agora marca a intenção (materializada no vencimento pelo cron / próxima mensal).
   await sb(`perfis?id=eq.${user.id}`, {
     method: 'PATCH', headers: { Prefer: 'return=minimal' },
     body: JSON.stringify({ ciclo_agendado: 'mensal' }),
   }).catch(() => {});
 
-  // 2) Cancela a auto-renovação ANUAL nos dois gateways (acesso preservado até o vencimento
-  //    pela âncora — suspenderPlanoDireto tem a guarda 'anual_vigente').
-  const cancelados = (await cancelarMP([perfil.mp_preapproval_id, perfil.mp_id], user.email, user.id)) + (await cancelarAsaas(perfil.asaas_id));
-
   auditLog({ acao: 'ciclo_agendado_mensal', user_id: user.id, ip, detalhes: { ate: perfil.plano_vencimento, cancelados }, sucesso: true });
   return res.status(200).json({ ok: true, agendado: 'mensal', ate: perfil.plano_vencimento, cancelados });
+}
+
+// Confirma que NÃO resta mandato recorrente do usuário (MP authorized OU Asaas ACTIVE).
+// { ok:true } = confirmado sem mandato. { ok:false, erro } = mandato vivo (erro=false) ou
+// consulta falhou (erro=true) → não devemos agendar (conservador).
+async function confirmarSemMandato(asaasId, email, userId) {
+  // MP
+  if (MP_TOKEN && email) {
+    try {
+      const r = await fetch(`${MP_URL}/preapproval/search?payer_email=${encodeURIComponent(email)}&status=authorized&limit=20`, { headers: { Authorization: `Bearer ${MP_TOKEN}` } });
+      if (!r.ok) return { ok: false, erro: true };
+      const d = await r.json().catch(() => null);
+      if (d == null) return { ok: false, erro: true };
+      const vivo = (d.results || []).some(p => String(p.external_reference || '').split('|')[0] === userId);
+      if (vivo) return { ok: false, erro: false };
+    } catch { return { ok: false, erro: true }; }
+  }
+  // Asaas
+  if (ASAAS_KEY && asaasId) {
+    try {
+      const r = await fetch(`${ASAAS_URL}/subscriptions?customer=${encodeURIComponent(asaasId)}&status=ACTIVE&limit=1`, { headers: { access_token: ASAAS_KEY } });
+      if (!r.ok) return { ok: false, erro: true };
+      const d = await r.json().catch(() => null);
+      if (d == null) return { ok: false, erro: true };
+      if ((d.data || []).length > 0) return { ok: false, erro: false };
+    } catch { return { ok: false, erro: true }; }
+  }
+  return { ok: true };
 }

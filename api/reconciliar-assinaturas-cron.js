@@ -27,15 +27,23 @@ function proAnualVigente(perfil) {
 }
 // Assinatura ativa no Asaas (outro gateway) — quem cancelou no MP e re-assinou no Asaas.
 async function temAssinaturaAsaasAtiva(asaasId) {
+  const c = await checarAsaasAtivo(asaasId);
+  return c.ativo; // compat (usado no loop de DOWNGRADE, onde false-on-erro é conservador o bastante)
+}
+// Versão TRI-ESTADO para o loop de rebaixamento anual (B3): distingue "ativo" de
+// "erro de consulta" — um 5xx/timeout NÃO pode ser lido como "sem assinatura" e derrubar
+// quem paga. { ativo, erro }.
+async function checarAsaasAtivo(asaasId) {
   const ASAAS_KEY = (process.env.ASAAS_API_KEY || '').trim();
-  if (!asaasId || !ASAAS_KEY) return false;
+  if (!asaasId || !ASAAS_KEY) return { ativo: false, erro: false };
   try {
     const url = process.env.ASAAS_ENV === 'sandbox' ? 'https://api-sandbox.asaas.com/v3' : 'https://api.asaas.com/v3';
     const r = await fetch(`${url}/subscriptions?customer=${encodeURIComponent(asaasId)}&status=ACTIVE&limit=1`, { headers: { access_token: ASAAS_KEY } });
-    if (!r.ok) return false;
+    if (!r.ok) return { ativo: false, erro: true };          // consulta falhou → INCERTO
     const d = await r.json().catch(() => null);
-    return (d?.data || []).length > 0;
-  } catch { return false; }
+    if (d == null) return { ativo: false, erro: true };
+    return { ativo: (d?.data || []).length > 0, erro: false };
+  } catch { return { ativo: false, erro: true }; }
 }
 
 // IMPORTANTE: exportar por MÉTODO nomeado (GET/POST), não `export default`. No runtime
@@ -161,14 +169,20 @@ async function handler(req) {
       .eq('plano_ciclo', 'anual').lt('plano_vencimento', grace)
       .in('role', ['top2', 'top2_anual']);
     for (const p of (anuaisVencidos || [])) {
-      // Mandato recorrente ainda ativo? (renovação em curso) → não rebaixa.
-      if (await temAssinaturaAsaasAtiva(p.asaas_id)) continue;
-      if (p.mp_preapproval_id) {
+      // FAIL-SAFE (B3): só rebaixa com CONFIRMAÇÃO de que não há mandato ativo. Qualquer
+      // INCERTEZA (erro/timeout de gateway) → pula — um 5xx transitório na janela de renovação
+      // NÃO pode derrubar quem está pagando (auto-recupera no próximo cron).
+      let mandatoAtivo = false, incerto = false;
+      const asaas = await checarAsaasAtivo(p.asaas_id);
+      if (asaas.erro) incerto = true; else if (asaas.ativo) mandatoAtivo = true;
+      if (!mandatoAtivo && p.mp_preapproval_id) {
         const pre = await mpGet(`/preapproval/${p.mp_preapproval_id}`);
-        if (pre?.status === 'authorized') continue;
+        if (pre == null) incerto = true;                 // consulta MP falhou → INCERTO
+        else if (pre.status === 'authorized') mandatoAtivo = true; // renovando → não rebaixa
       }
-      // Anual encerrado: fim do acesso (nunca cobramos a mensal sem reautorização — regra b
-      // é consent-based). Limpa a âncora e o agendamento. role_anterior guarda p/ reativar.
+      if (mandatoAtivo || incerto) continue;
+      // Anual encerrado (confirmado sem mandato): fim do acesso (nunca cobramos a mensal sem
+      // reautorização — regra b é consent-based). Limpa âncora/agendamento; role_anterior p/ reativar.
       const upd = { role: 'explorador', role_anterior: p.role, plano_ciclo: null, plano_vencimento: null, ciclo_agendado: null };
       const { error: e2 } = await supabase.from('perfis').update(upd).eq('id', p.id);
       if (!e2) rebaixados++;

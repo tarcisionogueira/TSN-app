@@ -188,6 +188,21 @@ export default async function handler(req, res) {
 
       // SUCESSO: assinatura autorizada ou cobrança recorrente aprovada → ativa/renova.
       if (preapproval.status === 'authorized' && planoKey) {
+        // BACKSTOP (B1): garante UM SÓ mandato MP ativo por usuário. Se o cancelamento da
+        // recorrência anterior falhou no front (rede/timeout — falha silenciosa), o cliente
+        // ficaria com 2 preapprovals authorized (ex.: mensal 49,90 + anual 449,90) cobrando
+        // em paralelo. Ao ativar ESTE mandato, cancela os OUTROS authorized do mesmo userId.
+        // Só no evento de AUTORIZAÇÃO (subscription_preapproval), não a cada cobrança recorrente.
+        if (tipo === 'subscription_preapproval') {
+          try {
+            const outros = await mpGet(`/preapproval/search?payer_email=${encodeURIComponent(preapproval.payer_email || '')}&status=authorized&limit=20`);
+            for (const o of (outros?.results || [])) {
+              if (String(o.id) === String(preapproval.id)) continue;
+              if (String(o.external_reference || '').split('|')[0] !== userId) continue;
+              await fetch(`${MP_BASE}/preapproval/${o.id}`, { method: 'PUT', headers: { Authorization: `Bearer ${ACCESS_TOKEN}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'cancelled' }) }).catch(() => {});
+            }
+          } catch { /* backstop best-effort; não bloqueia a ativação */ }
+        }
         // Comissão SÓ mediante pagamento recebido: uma cobrança recorrente PROCESSADA
         // (subscription_authorized_payment + ap.status='processed') é dinheiro que ENTROU →
         // carrega a cobrança p/ o motor comissionar cada mensalidade. A mera autorização do

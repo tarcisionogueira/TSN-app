@@ -757,7 +757,7 @@ export default function Checkout() {
         body: JSON.stringify({ alvo: 'mensal' }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Não foi possível agendar a mudança.');
+      if (!res.ok) throw new Error(data.msg || data.error || 'Não foi possível agendar a mudança.');
       setResultadoMudanca({ agendado: 'mensal', ate: data.ate });
       setTimeout(() => nav('/'), 4000);
     } catch (err) { setErro(err.message); }
