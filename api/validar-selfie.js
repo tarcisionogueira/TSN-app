@@ -8,6 +8,7 @@ export const config = { runtime: 'edge' };
 import { getUser, unauthorized } from './_auth.js';
 import { checkRateLimit, getIP, rateLimitedResponse } from './_rate-limit.js';
 import { anthropicFetch } from './_claude.js';
+import { compararRostoDocumento } from './_kyc-match.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -56,18 +57,6 @@ async function urlImagemParaBase64(url) {
 
 const ehArquivoPdf = (doc) => /\.pdf(\?|$)/i.test(String(doc?.url || '')) || /\.pdf$/i.test(String(doc?.nome || ''));
 
-// Prompt SERVIDOR do face match KYC (selfie × documento). Rigoroso e fail-closed no parsing.
-const PROMPT_MATCH = `Você é um verificador de identidade (KYC). Recebe DUAS imagens:
-- Imagem 1 = SELFIE de uma pessoa.
-- Imagem 2 = foto de um DOCUMENTO de identidade brasileiro (RG ou CNH), que contém uma foto de rosto.
-Compare os rostos e avalie o documento. Responda SOMENTE com JSON, sem texto adicional:
-{"selfie_rosto_ok": true/false, "documento_ok": true/false, "mesma_pessoa": true/false, "confianca": "alta"|"media"|"baixa", "motivo": "curto em pt-BR"}
-Regras:
-- "selfie_rosto_ok": a Imagem 1 tem UM rosto humano nítido e frontal (não é foto de objeto, tela, paisagem ou de outro documento).
-- "documento_ok": a Imagem 2 é mesmo um documento de identidade com FOTO DE ROSTO visível e legível.
-- "mesma_pessoa": o rosto da selfie e o rosto do documento são, com segurança, da MESMA pessoa. Se claramente diferentes, use false.
-- "confianca": "alta" só quando a comparação é clara (boa qualidade nas duas imagens). Se alguma imagem está ruim/ilegível ou o documento não tem foto de rosto utilizável, use "baixa".`;
-
 // Prompts fixos por tipo de checagem KYC (o cliente só escolhe o `tipo`).
 const PROMPTS = {
   rosto: 'Esta imagem tem um rosto humano nítido e frontal, sem obstruções? Responda SOMENTE JSON: {"ok": true/false, "motivo": ""}',
@@ -100,36 +89,12 @@ async function validarRostoContraDocumento(user, selfieB64, selfieMedia, claudeK
     return jsonResp({ ok: false, pendente: true, mensagem: 'Selfie recebida. Como o documento foi enviado em arquivo/PDF, a conferência será feita pela equipe em breve.' });
   }
 
-  // 4) Face match selfie × documento (uma chamada, duas imagens, prompt do servidor).
-  let parsed = {};
-  try {
-    const res = await anthropicFetch({
-      method: 'POST',
-      headers: { 'x-api-key': claudeKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-      body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 300,
-        messages: [{
-          role: 'user',
-          content: [
-            { type: 'text', text: 'Imagem 1 (SELFIE):' },
-            { type: 'image', source: { type: 'base64', media_type: selfieMedia, data: selfieB64 } },
-            { type: 'text', text: 'Imagem 2 (DOCUMENTO):' },
-            { type: 'image', source: { type: 'base64', media_type: docImg.mediaType, data: docImg.base64 } },
-            { type: 'text', text: PROMPT_MATCH },
-          ],
-        }],
-      }),
-    });
-    if (!res.ok) {
-      // Indisponibilidade técnica → NÃO reprova o usuário legítimo; manda p/ revisão manual.
-      await marcarIdentidade(user.id, { identidade_pendente: true });
-      return jsonResp({ ok: false, pendente: true, indisponivel: true, mensagem: 'Selfie recebida. A verificação será concluída pela equipe em instantes.' });
-    }
-    const data = await res.json();
-    const text = data?.content?.[0]?.text || '{}';
-    try { parsed = JSON.parse(text.match(/\{[\s\S]*\}/)?.[0] || '{}'); } catch { parsed = {}; }
-  } catch {
+  // 4) Face match selfie × documento (motor compartilhado — 2 imagens, prompt do servidor).
+  const parsed = await compararRostoDocumento({
+    selfieB64, selfieMedia, docB64: docImg.base64, docMedia: docImg.mediaType, claudeKey,
+  });
+  if (!parsed) {
+    // Falha técnica (indisponibilidade/JSON inválido) → NÃO reprova o legítimo; revisão manual.
     await marcarIdentidade(user.id, { identidade_pendente: true });
     return jsonResp({ ok: false, pendente: true, indisponivel: true, mensagem: 'Selfie recebida. A verificação será concluída pela equipe em instantes.' });
   }

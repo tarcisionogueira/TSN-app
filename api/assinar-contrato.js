@@ -1,6 +1,7 @@
 export const config = { runtime: 'edge' };
 
 import { enviarEmail } from './_email.js';
+import { compararRostoDocumento, dataUrlParaImagem, selecionarParSelfieDoc } from './_kyc-match.js';
 
 // Finalização da assinatura eletrônica de contrato (link público).
 // Feito no servidor para ter prova jurídica idônea (Lei 14.063/2020):
@@ -100,6 +101,31 @@ export default async function handler(req) {
     return new Response(JSON.stringify({ error: 'Link de assinatura expirado' }), { status: 410, headers });
   }
 
+  // FACE MATCH KYC (pedido do dono): quando o contrato coletou SELFIE + FOTO DO DOCUMENTO, confere
+  // se são a MESMA pessoa ANTES de registrar a assinatura — impede foto aleatória de passar (mesmo
+  // motor do KYC de parceiro). Só BLOQUEIA em divergência CLARA (confiança alta, rosto e documento
+  // ok, pessoas diferentes); incerteza, PDF, indisponibilidade ou ausência de par NÃO travam o
+  // assinante legítimo — a assinatura segue e o veredito fica registrado (audit_logs) p/ conferência.
+  let kycMatch = null;
+  try {
+    const par = selecionarParSelfieDoc(docs_identidade);
+    const claudeKey = process.env.CLAUDE_KEY;
+    if (par && claudeKey) {
+      const selfie = dataUrlParaImagem(par.selfie);
+      const docimg = dataUrlParaImagem(par.doc);
+      if (selfie && docimg) {
+        kycMatch = await compararRostoDocumento({ selfieB64: selfie.b64, selfieMedia: selfie.media, docB64: docimg.b64, docMedia: docimg.media, claudeKey });
+        if (kycMatch && String(kycMatch.confianca || '').toLowerCase() === 'alta'
+          && kycMatch.selfie_rosto_ok === true && kycMatch.documento_ok === true && kycMatch.mesma_pessoa === false) {
+          trackErro('selfie não confere com o documento (face match KYC)', { kyc_match: { mesma_pessoa: false, confianca: 'alta', motivo: kycMatch.motivo || '' } });
+          sb('audit_logs', { method: 'POST', headers: { Prefer: 'return=minimal' },
+            body: JSON.stringify({ acao: 'contrato_kyc_mismatch', ip, sucesso: false, detalhes: { contrato_id: contrato.id, token, verdito: kycMatch } }) }).catch(() => {});
+          return new Response(JSON.stringify({ error: 'A selfie enviada não confere com a foto do documento. Envie uma selfie sua (do mesmo titular do documento) para concluir a assinatura.' }), { status: 422, headers });
+        }
+      }
+    }
+  } catch { /* o match é reforço; falha técnica NÃO bloqueia a assinatura legítima */ }
+
   const assinado_em = new Date().toISOString();
   // Hash inclui o CONTEÚDO do contrato → vincula a assinatura ao texto assinado
   const hash = await sha256((contrato.conteudo || '') + JSON.stringify(dados) + assinatura + token + assinado_em);
@@ -145,7 +171,7 @@ export default async function handler(req) {
   sb('audit_logs', {
     method: 'POST',
     headers: { Prefer: 'return=minimal' },
-    body: JSON.stringify({ acao: 'contrato_assinado', ip, sucesso: true, detalhes: { contrato_id: contrato.id, token, hash } }),
+    body: JSON.stringify({ acao: 'contrato_assinado', ip, sucesso: true, detalhes: { contrato_id: contrato.id, token, hash, ...(kycMatch ? { kyc_match: { mesma_pessoa: kycMatch.mesma_pessoa, confianca: kycMatch.confianca, documento_ok: kycMatch.documento_ok } } : {}) } }),
   }).catch(() => {});
 
   // NOTIFICA a cada assinatura (pedido do dono): avisa quem CRIOU o contrato que uma parte
