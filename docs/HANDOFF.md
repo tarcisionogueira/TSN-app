@@ -323,10 +323,19 @@ síntese) na ORDEM SEGURA. Commits `40cf355` (backend) · `b1a7420` (front) · `
   DEPOIS do `authorized` → cliente segue top2; (R-3) fallback MP→Asaas não deixa 2 mandatos; (R-7)
   agendar-ciclo mantém acesso até o vencimento e materializa/avisa. Estado atual: 3 assinantes top2
   todos MENSAIS (sem anuais legados — migração não é preocupação).
-- **PENDENTE (courtesy, não-crítico)**: e-mail T-7 do vencimento anual (link 1-clique p/ reautorizar
-  mensal ou renovar anual) — sem ele, o anual que agendou mensal e não reautorizar simplesmente
-  lapsa a explorador no vencimento (mesmo desfecho do avulso hoje, sem cobrança-surpresa). Reusar
-  `renovacao-avisos-cron` com dedup + exclusão de contas internas.
+- **REVIEW ADVERSARIAL (workflow, 4 agentes) — 3 bloqueadores fechados** (commit `c4b0bda`): mesma
+  causa-raiz (`catch→0/[]` confundia "gateway falhou" com "nada existe"). **B1** cobrança dupla
+  mensal→anual: backstop no mp-webhook cancela outros preapprovals authorized do userId ao ativar.
+  **B2** recobrança anual indevida no anual→mensal: agendar-ciclo agora CONFIRMA o cancelamento
+  (409/502 se não confirmar; não agenda). **B3** perda de acesso: loop ANUAL VENCIDO virou FAIL-SAFE
+  (erro de gateway → PULA o rebaixamento). **M1/M2**: garantia grava valor_ref por plano_ciclo +
+  limpa a âncora anual no reembolso.
+- **REGRA (b) COMPLETA** (commit `3f216a3`): e-mail de reautorização anual→mensal perto do vencimento
+  (`renovacao-avisos-cron` + RPC `agendados_ciclo_para_aviso`, aplicada) — o gateway exige novo
+  consentimento do cartão; sem clicar, o acesso pausa no fim do período anual. Aviso de renovação
+  do anual recorrente (regra c) já é coberto pelo mesmo cron.
+- **PENDENTE (documentado, não-crítico)**: grandfather dos anuais AVULSO legados (D4) — não há
+  nenhum hoje (0 anuais na base). Quando existirem, estender a RPC de aviso para incluí-los.
 
 **E. BIASI (piso 130, mediana 260, último 96) — recon PENDENTE de dado fresco:** queda contínua desde 16/07 (369→173→96). O ambiente remoto não alcança o site (proxy bloqueia) — validar com o run do cluster disparado hoje: `select total,status from fonte_saude where fonte='BIASI' order by executado_em desc limit 3;`. Se seguir ≤100 com status ok em runs consecutivos, pode ser acervo real encolhendo (pós-leilão); se oscilar, rodar a ofensiva (recon estrutura viva × premissas: `?pagina` na listagem agregada + fallback home) via Actions (`debug-leiloeiros.yml`).
 
