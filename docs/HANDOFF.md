@@ -395,18 +395,28 @@ box destacado → aparecia só "10" acima dos benefícios (visto no teste do don
 === 'string'`) p/ número solto nunca mais vazar. (`planosConfig` não sobrescreve `honorarios` — fonte
 é o estático; DB só tem `honorarios_exito_pct` à parte.)
 
-**DECISÃO DO DONO 31/07 — PIX fica ESTÁTICO (zero taxa, MANUAL):** perguntei se ligava o PIX dinâmico
-do MP (confirma sozinho, mas ~0,99% de taxa no recebido) ou mantinha o estático (QR da chave, zero
-taxa, mas confirmação manual pelo suporte). Dono escolheu **MANTER O ESTÁTICO** e focar no CARTÃO.
-Então: NÃO trocar para PIX dinâmico; recomendar CARTÃO (100% automático) como via padrão; o PIX segue
-disponível porém MANUAL (cliente paga na chave, suporte confirma na conta MP). IMPORTANTE: a infra do
-PIX dinâmico JÁ EXISTE (`mp-checkout` cria PIX com `metadata.user_id` + retorna QR; `mp-verificar-pix`
-confirma por `paymentId`) — se um dia o dono aceitar a taxa, é só o frontend `PagamentoPIX` pedir o
-dinâmico em vez de gerar o BR Code estático. O "PIX-anuidade do Pro" fica arquivado sob essa decisão.
+**E16. 31/07 — PIX AUTOMÁTICO ligado (dono reverteu a decisão do estático):** o dono primeiro optou por
+manter o PIX estático/manual, depois pediu p/ ligar o automático (aceita a taxa MP ~0,99% no recebido).
+Feito em 2 partes, ambas em produção:
+- **Parte 1 (commit `210fe53`) — assessoria + serviços:** `PagamentoPIX` deixou de gerar QR estático da
+  chave e passou a criar PIX DINÂMICO via `mp-checkout` (pagamento real com `metadata.user_id` + QR do
+  MP); `mp-verificar-pix` confirma por `paymentId`. Confirma sozinho em segundos, sem passo manual. Vale
+  p/ assessoria (R$4.800 à vista) e todo serviço via PagamentoServico. Cliente paga o cheio; a taxa fica
+  com a plataforma.
+- **Parte 2 (commit `23786fc`) — Investidor Pro por PIX (anuidade R$449,90 à vista, 12m sem recorrência):**
+  Cartão = mensalidade recorrente; PIX = anuidade. No Checkout, botão "Pagar 1 ano à vista no PIX" no Pro
+  anual → PagamentoServico `soPix` (proposito='plano_anual') → ao confirmar chama `/api/ativar-pro-anual`
+  (NOVO) → segue o fluxo guiado (volta pra assessoria). **SEGURANÇA (pagamento único que libera plano =
+  onde bug vira Pro grátis):** a ativação NUNCA confia no cliente — confere no MP APROVADO + dono
+  (metadata.user_id) + proposito='plano_anual' + VALOR = preço anual do SERVIDOR (planos_config).
+  Idempotente por paymentId. `mp-checkout` mantém `metadata.tipo='servico'` (webhook genérico NÃO eleva
+  plano). **BACKSTOP no `mp-webhook`** p/ proposito='plano_anual' (resiliente a fechar o navegador) com as
+  MESMAS guardas + MESMA chave de idempotência (`pix_plano_anual`) → nunca ativa em dobro. Sem mandato → o
+  loop ANUAL VENCIDO do reconciliar rebaixa no fim dos 12m.
 
 **PRÓXIMA SESSÃO (noite 31/07):** (1) confirmar contratação do Rafael quando ele fizer (role→top2 +
-contrato assessorado); (2) retomar o item #11 (integração leiloeiros Round 35). PIX resolvido por
-decisão (mantém estático/manual — ver acima).
+contrato assessorado); (2) SANITY do PIX real (assessoria + Pro-anuidade) na 1ª cobrança de verdade —
+conferir ativação no banco + o pagamento no MP; (3) retomar o item #11 (leiloeiros Round 35).
 
 **E. BIASI (piso 130, mediana 260, último 96) — recon PENDENTE de dado fresco:** queda contínua desde 16/07 (369→173→96). O ambiente remoto não alcança o site (proxy bloqueia) — validar com o run do cluster disparado hoje: `select total,status from fonte_saude where fonte='BIASI' order by executado_em desc limit 3;`. Se seguir ≤100 com status ok em runs consecutivos, pode ser acervo real encolhendo (pós-leilão); se oscilar, rodar a ofensiva (recon estrutura viva × premissas: `?pagina` na listagem agregada + fallback home) via Actions (`debug-leiloeiros.yml`).
 
