@@ -99,6 +99,17 @@ congelado). Real em 30d: **1.454 buscas / 17 únicos**. Fix no padrão da demogr
 migração `admin_marketing_buscas_agregado.sql` APLICADA) agrega total/únicos/cidades/estados/
 tipos/pagamentos no servidor; front usa 1 chamada. Escala p/ 10k+ (mesma lição: NUNCA contar
 linhas cruas no cliente — auditar outras telas admin com select sem limit explícito).
+**v2 + auditoria COMPLETA da tela (pedido do dono):** (a) **Mapa de Oportunidades também
+sofria o corte** — contava "imóveis disponíveis por cidade" sobre select cru de 30k+ ativos
+(parava nas 1.000 primeiras linhas) → RPC ganhou a chave `oportunidades` (top-10 cidades
+buscadas × contagem REAL de ativos, join lower(cidade); migração
+`admin_marketing_buscas_oportunidades.sql` APLICADA; Guarulhos=65, Santana=7 conferidos);
+(b) **RESPONSIVIDADE**: os 3 blocos de KPI `repeat(4,1fr)` (Buscas/Perfis/SDR) estouravam a
+largura no celular (card "19 tipos" deslocado no print do dono) → `auto-fit minmax(150px)`;
+os 3 blocos 2-colunas `1fr 1fr` → `auto-fit minmax(260px)` (empilham no mobile); tabelas já
+tinham overflowX:auto. Status das demais seções: funil/gastos (corrigidos hoje), demografia
+(RPC s20) OK; SDR sem filtro de período e alertas_email select* — hoje 0/25 linhas, entram no
+mesmo padrão de RPC QUANDO tiverem volume (backlog leve).
 
 **E. E-MAIL DE OPORTUNIDADES agora respeita o PERFIL DO INVESTIDOR (dono confirmou a regra e
 escolheu a opção A):** `enviar-alertas-cron` — o complemento por raio (50→400km) fazia a seleção

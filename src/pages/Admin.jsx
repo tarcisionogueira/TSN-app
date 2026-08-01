@@ -8814,13 +8814,12 @@ function MarketingTab() {
       const convertidos = statusMap['convertido'] || 0;
       setSdrData({ leadsStatus: statusMap, leadsPorProduto, semanas: sdrSemanas, total: totalLeads, convertidos });
 
-      // ── Seção 4: Mapa de Oportunidades ──
-      const { data: imoveisRaw } = await supabase.from('imoveis_leilao').select('cidade, estado').eq('ativo', true);
-      const imovCidadeMap = {};
-      (imoveisRaw || []).forEach(im => { if (im.cidade) imovCidadeMap[im.cidade] = (imovCidadeMap[im.cidade] || 0) + 1; });
-      const oportsArr = cidadesCount.map(([cidade, buscasCount]) => ({
-        cidade, buscas: buscasCount, imoveis: imovCidadeMap[cidade] || 0,
-        ratio: imovCidadeMap[cidade] ? (buscasCount / imovCidadeMap[cidade]).toFixed(1) : buscasCount * 10,
+      // ── Seção 4: Mapa de Oportunidades (contagem de imóveis AGREGADA no servidor —
+      // o select cru de imoveis_leilao parava nas 1.000 primeiras linhas de 30k+ ativos
+      // e a coluna "Imóveis Disponíveis" saía errada p/ quase toda cidade). ──
+      const oportsArr = (bu?.oportunidades || []).map(o => ({
+        cidade: o.cidade, buscas: o.buscas, imoveis: o.imoveis,
+        ratio: o.imoveis ? (o.buscas / o.imoveis).toFixed(1) : o.buscas * 10,
       })).sort((a, b) => b.ratio - a.ratio);
       setOportunidades(oportsArr);
 
@@ -9207,7 +9206,7 @@ function MarketingTab() {
       {/* Seção 1: Buscas */}
       <div style={{ ...S.card, borderRadius: 16, marginBottom: 20 }}>
         {sectionHeader('Painel de Buscas', 'Dados dos últimos 30 dias')}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 16, marginBottom: 24 }}>
           {[
             { label: 'Total de buscas', value: buscas.total, color: '#0D63DB' },
             { label: 'Usuários únicos buscadores', value: buscas.unicos, color: '#7c3aed' },
@@ -9220,7 +9219,7 @@ function MarketingTab() {
             </div>
           ))}
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 20 }}>
           <div>
             <div style={{ fontWeight: 700, fontSize: 14, color: '#111111', marginBottom: 10 }}>Cidades mais buscadas</div>
             {buscas.cidades.length === 0 ? <div style={{ color: '#94a3b8', fontSize: 13 }}>Sem dados</div> : buscas.cidades.map(([cidade, count]) => (
@@ -9282,7 +9281,7 @@ function MarketingTab() {
       {/* Seção 2: Perfil Demográfico */}
       <div style={{ ...S.card, borderRadius: 16, marginBottom: 20 }}>
         {sectionHeader('Perfil Demográfico dos Usuários', 'Dados dos últimos 30 dias')}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 16, marginBottom: 24 }}>
           {[
             { label: 'Total de usuários', value: perfisData.total, color: '#111111' },
             { label: 'Usuários ativos', value: perfisData.ativos, color: '#059669' },
@@ -9295,7 +9294,7 @@ function MarketingTab() {
             </div>
           ))}
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 20 }}>
           <div>
             <div style={{ fontWeight: 700, fontSize: 14, color: '#111111', marginBottom: 10 }}>Usuários por plano</div>
             {perfisData.porRole.map(([role, count]) => {
@@ -9351,7 +9350,7 @@ function MarketingTab() {
       {/* Seção 3: SDR Intelligence */}
       <div style={{ ...S.card, borderRadius: 16, marginBottom: 20 }}>
         {sectionHeader('SDR Intelligence', 'Dados dos últimos 30 dias')}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 16, marginBottom: 24 }}>
           {[
             { label: 'Total de leads', value: sdrData.total, color: '#111111' },
             { label: 'Convertidos', value: sdrData.convertidos, color: '#059669' },
@@ -9364,7 +9363,7 @@ function MarketingTab() {
             </div>
           ))}
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 20 }}>
           <div>
             <div style={{ fontWeight: 700, fontSize: 14, color: '#111111', marginBottom: 10 }}>Funil de leads</div>
             {FUNNEL_STEPS.map((step, i) => {
