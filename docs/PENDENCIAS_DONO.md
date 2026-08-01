@@ -10,6 +10,18 @@
 
 ## 🟢 Fazer agora — grátis e rápido
 
+### -2. 🟠 RESEND — reativar o webhook com a URL "www" (2 min; rastreio de entrega/abertura parado)
+- **Por quê:** o Resend DESATIVOU o webhook (e-mail de 01/08) porque a URL cadastrada usa o
+  APEX `bidprobrasil.com.br`, que responde **308 → www** (confirmado ao vivo) — o Resend não
+  segue redirect, então TODO evento falhou. Efeito: os ENVIOS continuam normais (33 desde
+  27/07 saíram), mas o 360 nunca recebe "entregue/aberto/clicado" (`emails_log.entregue_em`
+  está vazio na base inteira — o webhook nunca chegou a funcionar).
+- **Passos:** painel Resend → Webhooks → editar a URL para
+  `https://www.bidprobrasil.com.br/api/resend-webhook?k=<o MESMO ?k= que já está lá>`
+  (só acrescentar o `www.`) → salvar → **Re-enable**. O endpoint no www já responde 200 ✓.
+- **Depois:** o Claude confere `emails_log.entregue_em/aberto_em` preenchendo nos e-mails
+  seguintes (o de oportunidades de sábado ~8h é um bom teste).
+
 ### -1. 🔴 VERIFICAÇÃO DO ANUNCIANTE Google Ads (prazo: 31/08/2026 — anúncios PAUSAM se não fizer)
 - **Por quê:** e-mail oficial do Google (01/08) — a conta **475-979-5747** exige a "verificação
   do anunciante" (identidade do responsável/empresa; exigência padrão do Google, não é golpe).

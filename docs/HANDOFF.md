@@ -41,6 +41,12 @@
   **1 conversão** (Charles, gclid) — valida o rastreamento ponta a ponta. Pendentes do dono:
   3 checagens do painel (ações Principal / Conversões otimizadas / Tag Assistant) + termos de
   pesquisa na segunda + developer token p/ conversão offline PIX.
+- **RESEND webhook DESATIVADO (e-mail do dono 01/08 ~20h; diagnóstico PROVADO)**: a URL
+  cadastrada no Resend usa o APEX, que responde **308→www** (testado ao vivo: apex=308,
+  www=200 ok) — Resend não segue redirect → falhou desde 27/07 → disable. Envios intactos;
+  rastreio entrega/abertura NUNCA populou (`max(entregue_em)=null` na base). Fix é do dono
+  (painel Resend: URL com `www.` + re-enable) — `PENDENCIAS_DONO.md` item -2. Validar no
+  e-mail de oportunidades de sábado (~8h): `entregue_em/aberto_em` preenchendo.
 - **Pendências de sistema em aberto**: item pendente da fila CEF (Apto 53 — CEF sem a seção
   de docs; re-tenta no cron) · Rotina mensal de auditoria a RECRIAR (gatilho sem repo; tools
   de trigger pediram aprovação manual) · backlog leve do relatório (pracaReferencia,
