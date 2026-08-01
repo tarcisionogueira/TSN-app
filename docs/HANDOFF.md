@@ -90,6 +90,16 @@ funil público com 37 visitantes anônimos/204 eventos 7d. Achados nos `api_erro
 4. **Dado verdadeiro que a tela revela**: nenhum caso tem analista/advogado atribuído ("Sem
    responsável" nos 6) — atribuir responsáveis é ação do dono/equipe, não bug.
 
+**D2. PAINEL DE BUSCAS congelado em "1000" (achado do dono no print) — CORRIGIDO:** a Seção 1
+do MarketingTab puxava as linhas CRUAS de `busca_historico` p/ o navegador; o PostgREST corta
+em 1.000 linhas → "Total de buscas" travava em 1000, únicos subcontava (16 vs 17) e o ranking
+de cidades/estados era contado na fatia VELHA (1.000 linhas mais antigas — por isso parecia
+congelado). Real em 30d: **1.454 buscas / 17 únicos**. Fix no padrão da demografia: RPC
+**`admin_marketing_buscas(p_inicio,p_fim)`** (SECURITY DEFINER, guard admin, revoke anon —
+migração `admin_marketing_buscas_agregado.sql` APLICADA) agrega total/únicos/cidades/estados/
+tipos/pagamentos no servidor; front usa 1 chamada. Escala p/ 10k+ (mesma lição: NUNCA contar
+linhas cruas no cliente — auditar outras telas admin com select sem limit explícito).
+
 **E. E-MAIL DE OPORTUNIDADES agora respeita o PERFIL DO INVESTIDOR (dono confirmou a regra e
 escolheu a opção A):** `enviar-alertas-cron` — o complemento por raio (50→400km) fazia a seleção
 SÓ por desconto ≥40%; a triagem (faixa_capital/forma_pagamento) e os filtros do alerta eram

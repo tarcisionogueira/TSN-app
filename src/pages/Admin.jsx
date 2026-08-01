@@ -8767,43 +8767,17 @@ function MarketingTab() {
   const carregar = useCallback(async () => {
     setLoading(true);
     try {
-      // ── Seção 1: Buscas ──
-      const [
-        { data: cidadesRaw },
-        { data: tiposRaw },
-        { data: estadosRaw },
-        { data: pagamentosRaw },
-        { data: totaisRaw },
-      ] = await Promise.all([
-        supabase.from('busca_historico').select('cidade').not('cidade', 'is', null).gte('criado_em', thirtyDaysAgo).lte('criado_em', dataFimISO),
-        supabase.from('busca_historico').select('tipo_imovel').not('tipo_imovel', 'is', null).gte('criado_em', thirtyDaysAgo).lte('criado_em', dataFimISO),
-        supabase.from('busca_historico').select('estado').not('estado', 'is', null).gte('criado_em', thirtyDaysAgo).lte('criado_em', dataFimISO),
-        supabase.from('busca_historico').select('pagamento_tipos').not('pagamento_tipos', 'is', null).gte('criado_em', thirtyDaysAgo).lte('criado_em', dataFimISO),
-        supabase.from('busca_historico').select('user_id, id').gte('criado_em', thirtyDaysAgo).lte('criado_em', dataFimISO),
-      ]);
-
-      const countBy = (arr, key) => {
-        const map = {};
-        (arr || []).forEach(r => { const v = r[key]; if (v) map[v] = (map[v] || 0) + 1; });
-        return Object.entries(map).sort((a, b) => b[1] - a[1]);
-      };
-
-      const cidadesCount = countBy(cidadesRaw, 'cidade').slice(0, 10);
-      const estadosCount = countBy(estadosRaw, 'estado').slice(0, 10);
-      const tiposCount = countBy(tiposRaw, 'tipo_imovel');
-
-      const pagMap = {};
-      (pagamentosRaw || []).forEach(r => {
-        const v = r.pagamento_tipos;
-        if (Array.isArray(v)) v.forEach(p => { pagMap[p] = (pagMap[p] || 0) + 1; });
-        else if (v) pagMap[v] = (pagMap[v] || 0) + 1;
+      // ── Seção 1: Buscas (AGREGADO no servidor via RPC admin_marketing_buscas).
+      // Antes eram 5 selects crus somados no navegador — o PostgREST corta em 1.000
+      // linhas por consulta, então o "Total de buscas" CONGELAVA em 1000 e o ranking
+      // de cidades/estados era contado numa fatia velha do período. ──
+      const { data: bu } = await supabase.rpc('admin_marketing_buscas', { p_inicio: thirtyDaysAgo, p_fim: dataFimISO });
+      const cidadesCount = bu?.cidades || []; // já vem [[nome, contagem], ...] ordenado desc
+      setBuscas({
+        total: bu?.total || 0, unicos: bu?.unicos || 0,
+        cidades: cidadesCount, estados: bu?.estados || [],
+        tipos: bu?.tipos || [], pagamentos: bu?.pagamentos || [],
       });
-      const pagamentosCount = Object.entries(pagMap).sort((a, b) => b[1] - a[1]);
-
-      const totalBuscas = (totaisRaw || []).length;
-      const unicosSet = new Set((totaisRaw || []).filter(r => r.user_id).map(r => r.user_id));
-
-      setBuscas({ total: totalBuscas, unicos: unicosSet.size, cidades: cidadesCount, estados: estadosCount, tipos: tiposCount, pagamentos: pagamentosCount });
 
       // ── Seção 2: Perfis demográficos (AGREGADO no servidor via RPC admin_marketing_demografia).
       // Antes puxava a tabela `perfis` INTEIRA pro cliente E usava colunas inexistentes
