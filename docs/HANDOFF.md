@@ -23,6 +23,29 @@
 > **Auditorias ofensivas completas: 15/07/2026 (×2).** Total de correções: 15 (1ª rodada) + escalonamento por convite (CRÍTICO) + IDOR do MP (ALTO) + escala. Refazer a ofensiva quando entrarem rotas/pagamento/RLS novos (a Rotina mensal já faz isso sozinha).
 
 ## ✅ COMEÇAR AQUI (01/08 — sessão 22: ritual de abertura + Cliente 360 + fix resumir-ticket)
+
+**⏹ ENCERRAMENTO 01/08 (~19h UTC) — SMOKE CHECK COMPLETO, TUDO VERDE:**
+- **Relatórios**: pareceres vazios 0 · presos "gerando" 0 · erros 24h 0 · 2 concluídos hoje —
+  o de Bertioga (18:38, JÁ com o deploy novo) saiu com Índice "21 amostras · grid" (fix do
+  n_amostras validado em produção no 1º relatório real) e parecer de 6k chars. O de Feira de
+  Santana (18:18, pré-deploy) mostra o card antigo — regenerar atualiza (grátis), opcional.
+- **Índice**: base com 1.433 amostras; RPCs ok (usadas hoje nas validações).
+- **Busca/geral**: fila de geocode 3,5s → **0,3ms** (EXPLAIN pós-índice); ZERO `api_erro`/
+  `pdf_falha` de usuários nas últimas 8h (360 zerado); deploys READY (prod `6298f0c`);
+  `auditoria_seguranca()` **0/0**.
+- **GOOGLE ADS (dono fez em 01/08)**: ✅ verificação do anunciante CONCLUÍDA (aguardar
+  aprovação, até 7 dias úteis — anúncios seguem no ar) + ✅ 1ª fatura R$74 paga, que BATE
+  com o rastreado (R$74,94 = 24,55+27,06+23,33, 29-31/07; ciclo de medição íntegro).
+  Campanha saudável: cliques 9→15→17/dia, CPC caindo (2,73→1,37, teto 3,00). **Amanhã**:
+  dado de 01/08 entra ~07h UTC (D+1) e conferir no painel se "Cadastro — BidPro" registrou
+  **1 conversão** (Charles, gclid) — valida o rastreamento ponta a ponta. Pendentes do dono:
+  3 checagens do painel (ações Principal / Conversões otimizadas / Tag Assistant) + termos de
+  pesquisa na segunda + developer token p/ conversão offline PIX.
+- **Pendências de sistema em aberto**: item pendente da fila CEF (Apto 53 — CEF sem a seção
+  de docs; re-tenta no cron) · Rotina mensal de auditoria a RECRIAR (gatilho sem repo; tools
+  de trigger pediram aprovação manual) · backlog leve do relatório (pracaReferencia,
+  zoneamento na tela) · e-mail de oportunidades: 1º disparo com a regra nova amanhã 11h UTC
+  (Charles incluso — conferir emails_log).
 > Branch `claude/handoff-bidpro-brasil-jb378n`. ✅ **Sessão 21 (branch
 > `claude/handoff-rotina-inicio-ta1z4a`, 9 commits `8f54882..8a96380`) MERGEADA na `main` em
 > 01/08 com aprovação do dono** — Índice cidade_norm composto + ponderação por proximidade,
