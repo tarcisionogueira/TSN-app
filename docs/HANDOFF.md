@@ -24,6 +24,22 @@
 
 ## ✅ COMEÇAR AQUI (01/08 — sessão 22: ritual de abertura + Cliente 360 + fix resumir-ticket)
 
+**📋 ATIVIDADES DO DONO — SÁBADO 02/08 (lista pedida por ele; detalhes em PENDENCIAS_DONO.md):**
+1. **Resend (2 min)**: Webhooks → editar URL acrescentando `www.`
+   (`https://www.bidprobrasil.com.br/api/resend-webhook?k=<mesmo secret>`) → **Re-enable**.
+   Teste natural: e-mail de oportunidades das ~8h → `entregue_em/aberto_em` preenchendo no 360.
+2. **Google Ads — conferir a 1ª conversão**: Metas → Conversões → "Cadastro — BidPro" deve
+   mostrar **1** (cadastro do Charles, 01/08). Aproveitar e fazer as 3 checagens: ações
+   "Cadastro"/"Compra de plano" como **Principal** e "Registrando conversões" · **Conversões
+   otimizadas** (método da tag) LIGADA · Tag Assistant opcional.
+3. **Atribuir responsável aos 4 casos da Alessandra** (Equipe → Pipeline: 0/4 relatórios da
+   equipe, prazo de 48h estourado há +1 semana) — e disparar os relatórios na ficha.
+4. **Aprovar o prompt de permissão dos triggers** quando o Claude pedir — p/ recriar a Rotina
+   mensal de auditoria de segurança (hoje aponta p/ ambiente sem o repo).
+5. *(Segunda 03/08)* Termos de pesquisa do Google Ads → negativar os ruins.
+6. *(Sem prazo apertado, até 31/08 — já iniciada)* Verificação do anunciante: só acompanhar o
+   e-mail de aprovação do Google.
+
 **⏹ ENCERRAMENTO 01/08 (~19h UTC) — SMOKE CHECK COMPLETO, TUDO VERDE:**
 - **Relatórios**: pareceres vazios 0 · presos "gerando" 0 · erros 24h 0 · 2 concluídos hoje —
   o de Bertioga (18:38, JÁ com o deploy novo) saiu com Índice "21 amostras · grid" (fix do
