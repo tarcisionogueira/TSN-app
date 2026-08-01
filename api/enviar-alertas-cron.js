@@ -14,10 +14,14 @@
  *
  * Seleção por usuário (ordem de interesse):
  *   1. Filtros salvos na busca (filtros_salvos) — sinal de interesse explícito.
- *   2. Cidade do cadastro (perfis.endereco_cidade/uf).
- *   3. Se tiver arrematação registrada → inclui similares (mesmo tipo/estado).
- *   4. Completa até 12 num raio de 200km (centróide IBGE offline + PostGIS);
- *      se não fechar 12, manda os que houver no raio, por maior desconto.
+ *   2. Cidade do cadastro/triagem (perfis.endereco_cidade/uf) com RAIO CRESCENTE
+ *      (50→400km) RESPEITANDO O PERFIL DO INVESTIDOR: 1º passe com tipo/modalidade/
+ *      pagamento (filtros do alerta + forma_pagamento da triagem) e TETO de capital
+ *      (faixa_capital da triagem × valorMax do alerta, o menor); 2º passe relaxa as
+ *      preferências mas mantém o teto — acima do capital do cliente não entra nunca.
+ *   3. Se tiver arrematação registrada → inclui similares (mesmo tipo/estado, ≤ teto).
+ *   4. Sem nenhuma referência de região → melhores do país (≤ teto);
+ *      se não fechar 12, manda os que houver, por maior desconto.
  *
  * Links do e-mail: card → /#/imovel/:id (tela do imóvel) · logo e botão → /#/buscar
  * (leva o cliente direto à plataforma/busca). Remetente: noreply@bidprobrasil.com.br.
@@ -148,7 +152,7 @@ async function handler(req) {
   const BATCH = testeEmail ? 1000 : Math.min(300, Math.max(20, Number(qs.get('batch')) || 120));
   const cursor = (qs.get('cursor') || '').trim();
 
-  const perfisRaw = await sbGet(`perfis?select=id,nome,endereco_cidade,endereco_uf,created_at&role=in.(${ROLES})${isUuid(cursor) ? `&id=gt.${cursor}` : ''}&order=id.asc&limit=${BATCH}`) || [];
+  const perfisRaw = await sbGet(`perfis?select=id,nome,endereco_cidade,endereco_uf,created_at,faixa_capital,forma_pagamento&role=in.(${ROLES})${isUuid(cursor) ? `&id=gt.${cursor}` : ''}&order=id.asc&limit=${BATCH}`) || [];
   const loteCheio = Array.isArray(perfisRaw) && perfisRaw.length === BATCH;
   const ultimoIdLote = perfisRaw.length ? perfisRaw[perfisRaw.length - 1].id : null; // cursor avança mesmo p/ quem não tem e-mail
 
@@ -315,25 +319,54 @@ async function handler(req) {
       }
 
       // 2) Complemento (20% + o que faltar) via RAIO CRESCENTE da(s) cidade(s) de
-      //    referência: começa perto e vai ABRINDO o raio até fechar as 12 vagas
-      //    (50km → 100 → 200 → 400 → 800 → ~nacional). Prefere o imóvel mais próximo;
-      //    só amplia quando ainda falta. Cada anel dedupa (despejar ignora repetidos).
+      //    referência, RESPEITANDO O PERFIL DO INVESTIDOR (regra do dono): a triagem
+      //    (faixa de capital, forma de pagamento) + os filtros do alerta (tipo/
+      //    modalidade/pagamento/teto) moldam o que entra — não só o desconto.
+      //    1º passe: anéis 50→400km com o perfil completo (tipo/modalidade/pagamento
+      //    + teto). Se não fechar as 12, 2º passe relaxa as PREFERÊNCIAS mas MANTÉM
+      //    o teto de capital: imóvel acima do que o cliente consegue pagar é
+      //    irrelevante, não vaga a preencher.
       // Raio MÁXIMO ~400km: mantém a oportunidade geograficamente próxima. NÃO usar
       // 800km/2000km (quase nacional) — era o que colava imóvel de outro estado (ex.: RJ
       // p/ cliente de SP) só p/ preencher as 12 vagas. Melhor mandar menos que irrelevante.
       const RAIOS_M = [50000, 100000, 200000, 400000];
-      for (const cid of cidadesRef.slice(0, 3)) {
+      // Teto de capital pela faixa da triagem (folga ~30% cobre entrada+financiamento;
+      // 'acima_1mi' = sem teto). O valorMax do alerta, quando menor, prevalece.
+      const TETO_FAIXA = { ate_150k: 200000, '150_400k': 520000, '400k_1mi': 1300000, acima_1mi: 0 };
+      const tetoFiltro = numOnly(filtroBase.valorMax);
+      const tetoFaixa = TETO_FAIXA[perfil.faixa_capital] || 0;
+      const tetoPerfil = tetoFiltro && tetoFaixa ? Math.min(tetoFiltro, tetoFaixa) : (tetoFiltro || tetoFaixa);
+      const tiposPref = Array.isArray(filtroBase.tipos) ? filtroBase.tipos.filter(Boolean) : [];
+      const modsPref = Array.isArray(filtroBase.modalidades) ? filtroBase.modalidades.filter(Boolean) : [];
+      const pagPref = new Set(Array.isArray(filtroBase.pagamento) ? filtroBase.pagamento.filter(Boolean) : []);
+      if (['a_vista', 'financiado'].includes(perfil.forma_pagamento)) pagPref.add(perfil.forma_pagamento);
+      const temPref = tiposPref.length || modsPref.length || pagPref.size;
+      const passes = temPref
+        ? [{ tipos: tiposPref, mods: modsPref, pags: [...pagPref] }, { tipos: [], mods: [], pags: [] }]
+        : [{ tipos: [], mods: [], pags: [] }];
+      for (const pass of passes) {
         if (pool.size >= LIMITE) break;
-        const cen = centroide(cid, uf);
-        if (cen) {
+        for (const cid of cidadesRef.slice(0, 3)) {
+          if (pool.size >= LIMITE) break;
+          const cen = centroide(cid, uf);
+          if (!cen) continue;
           for (const raio of RAIOS_M) {
             if (pool.size >= LIMITE) break;
-            despejar(await rpc('buscar_por_raio_v2', { lat: cen.lat, lng: cen.lng, raio_metros: raio, lim: 40, desconto_min: DESC_MIN }), LIMITE - pool.size);
+            despejar(await rpc('buscar_por_raio_v2', {
+              lat: cen.lat, lng: cen.lng, raio_metros: raio, lim: 40, desconto_min: DESC_MIN,
+              tipos_filtro: pass.tipos, modalidades_filtro: pass.mods, pagamentos_filtro: pass.pags,
+              ...(tetoPerfil ? { valor_max: tetoPerfil } : {}),
+            }), LIMITE - pool.size);
           }
         }
-        // Fallback por NOME da cidade: sempre escopado pela UF de referência — senão o
-        // ilike traz homônimas de outros estados (Palmas/TO vs Palmas/PR). Só desconto ≥ DESC_MIN.
-        if (pool.size < LIMITE) despejar(await sbGet(`imoveis_leilao?select=${SEL}&ativo=eq.true${uf ? `&estado=eq.${encodeURIComponent(uf)}` : ''}&cidade=ilike.*${encodeURIComponent(cid)}*&desconto_percentual=gte.${DESC_MIN}&order=desconto_percentual.desc&limit=24`), LIMITE - pool.size);
+      }
+      // Fallback por NOME da cidade (sem coordenada no centróide offline): escopado
+      // pela UF (homônimas: Palmas/TO vs Palmas/PR) + teto do perfil + desconto ≥ DESC_MIN.
+      if (pool.size < LIMITE) {
+        for (const cid of cidadesRef.slice(0, 3)) {
+          if (pool.size >= LIMITE) break;
+          despejar(await sbGet(`imoveis_leilao?select=${SEL}&ativo=eq.true${uf ? `&estado=eq.${encodeURIComponent(uf)}` : ''}&cidade=ilike.*${encodeURIComponent(cid)}*&desconto_percentual=gte.${DESC_MIN}${tetoPerfil ? `&valor_minimo=lte.${tetoPerfil}` : ''}&order=desconto_percentual.desc&limit=24`), LIMITE - pool.size);
+        }
       }
 
       // 3) Similares às arrematações do usuário (mesmo tipo), se ainda faltar.
@@ -342,7 +375,7 @@ async function handler(req) {
         const tipos = [...new Set(meus.map(i => arremInfo[i]?.tipo).filter(Boolean))];
         for (const t of tipos.slice(0, 2)) {
           if (pool.size >= LIMITE) break;
-          despejar(await sbGet(`imoveis_leilao?select=${SEL}&ativo=eq.true&tipo=eq.${encodeURIComponent(t)}${uf ? `&estado=eq.${uf}` : ''}&desconto_percentual=gte.${DESC_MIN}&order=desconto_percentual.desc&limit=8`), LIMITE - pool.size);
+          despejar(await sbGet(`imoveis_leilao?select=${SEL}&ativo=eq.true&tipo=eq.${encodeURIComponent(t)}${uf ? `&estado=eq.${uf}` : ''}&desconto_percentual=gte.${DESC_MIN}${tetoPerfil ? `&valor_minimo=lte.${tetoPerfil}` : ''}&order=desconto_percentual.desc&limit=8`), LIMITE - pool.size);
         }
       }
 
@@ -352,7 +385,7 @@ async function handler(req) {
       //    menos que mandar imóvel de outro estado (push/e-mail seguem cidade+filtros).
       const temRegiao = !!(uf || (cidadesRef && cidadesRef.length));
       if (pool.size < LIMITE && !temRegiao) {
-        despejar(await sbGet(`imoveis_leilao?select=${SEL}&ativo=eq.true&desconto_percentual=gte.${DESC_MIN}&order=desconto_percentual.desc&limit=40`), LIMITE - pool.size);
+        despejar(await sbGet(`imoveis_leilao?select=${SEL}&ativo=eq.true&desconto_percentual=gte.${DESC_MIN}${tetoPerfil ? `&valor_minimo=lte.${tetoPerfil}` : ''}&order=desconto_percentual.desc&limit=40`), LIMITE - pool.size);
       }
 
       // Rede de segurança: só oportunidade ATRATIVA (desconto ≥ DESC_MIN) entra no e-mail,

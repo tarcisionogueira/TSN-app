@@ -90,6 +90,21 @@ funil público com 37 visitantes anônimos/204 eventos 7d. Achados nos `api_erro
 4. **Dado verdadeiro que a tela revela**: nenhum caso tem analista/advogado atribuído ("Sem
    responsável" nos 6) — atribuir responsáveis é ação do dono/equipe, não bug.
 
+**E. E-MAIL DE OPORTUNIDADES agora respeita o PERFIL DO INVESTIDOR (dono confirmou a regra e
+escolheu a opção A):** `enviar-alertas-cron` — o complemento por raio (50→400km) fazia a seleção
+SÓ por desconto ≥40%; a triagem (faixa_capital/forma_pagamento) e os filtros do alerta eram
+ignorados. Agora: **1º passe** dos anéis com tipo+modalidade+pagamento+TETO de capital
+(TETO_FAIXA: ate_150k→200k · 150_400k→520k · 400k_1mi→1,3M · acima_1mi→sem teto; valorMax do
+alerta prevalece se menor; `buscar_por_raio_v2` já aceitava os filtros — só passamos); **2º
+passe** relaxa preferências mas MANTÉM o teto (acima do capital ≠ vaga a preencher). Teto também
+aplicado aos fallbacks (nome da cidade, similares, nacional). Validado com o caso real do
+Charles: passe 1 = 38 casas venda_direta financiáveis ≤200k desc≥40% em ≤400km de Petrolândia/PE
+→ o 1º e-mail dele (sáb 02/08 ~8h BRT) fecha as 12 no perfil exato (R$79k-176k, 40-62% off,
+136-254km). **Mantidos por decisão em vigor**: raio máx 400km (não abre nacional p/ quem tem
+região) e piso desconto 40% — a regra "aumenta o raio ATÉ encontrar" do dono NÃO foi
+implementada além dos 400km (opção B, recusada por ora). Cadência lembrete: trava de 7d faz
+quem recebe o 1º e-mail no fim de semana pular a segunda imediata (Charles: próximo em 10/08).
+
 ## ✅ COMEÇAR AQUI (31/07 — sessão 21: Índice ponderado por proximidade + KYC face match no parceiro e nos contratos)
 > Branch `claude/handoff-rotina-inicio-ta1z4a`. `npm run build` OK. Endpoints de API novos passam `node --check`. Commits: `8f54882` (Índice), `ec08d6d` (ponderação), `ac2307e` (campo doc), `b62b05a` (KYC parceiro), `ae543f7` (KYC contrato), `ad86a6f` (selfie_doc).
 
