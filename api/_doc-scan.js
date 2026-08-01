@@ -21,7 +21,10 @@ const RE_IMG_EXT = /\.(jpe?g|png|webp|gif|avif|svg)(?:[?#]|$)/i;
 // Igualdade Salarial" (Lei 14.611/2023) do SUPERBID vazava como anexo em centenas de
 // lotes e poluía o laudo documental ("já lemos …"). Cirúrgico: só rótulos claramente
 // corporativos — não pega edital/matrícula/laudo/proposta/regras do lote.
-const RE_DOC_INSTITUCIONAL = /igualdade.?salarial|transpar[êe]ncia.?(e.?)?(igualdade|salarial)|quem.?somos|trabalhe.?conosco|c[óo]digo.?de.?(conduta|[ée]tica)|governan[çc]a.?corporativa|rela[çc][õo]es.?com.?investidores/i;
+// + privacidade/cookies/termos de uso/segurança da informação (achado do dono 01/08:
+// MEGA anexava "Política de Privacidade" ×2 em TODO lote — 6.698 entradas em 2.340
+// imóveis; o PDF de consentimento de cookies vem de host "adopt…/disclaimer/").
+const RE_DOC_INSTITUCIONAL = /igualdade.?salarial|transpar[êe]ncia.?(e.?)?(igualdade|salarial)|quem.?somos|trabalhe.?conosco|c[óo]digo.?de.?(conduta|[ée]tica)|governan[çc]a.?corporativa|rela[çc][õo]es.?com.?investidores|pol[ií]tica.?de.?privacidade|politica[_-]?de[_-]?privacidade|aviso.?de.?(privacidade|cookies?)|\bcookies?\b|termos?.?de.?uso|seguran[çc]a.?da.?informa[çc][ãa]o|seguranca[_-]?da[_-]?informacao|\/disclaimer\//i;
 // Palavras-chave de documento no caminho/nome/âncora. laudo (avaliação) e proposta
 // viraram tipos PRÓPRIOS: o laudo de avaliação traz o valor oficial e impacta o
 // mercadológico; o modelo de proposta é o documento de venda parcelada.

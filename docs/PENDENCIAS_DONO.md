@@ -10,6 +10,17 @@
 
 ## 🟢 Fazer agora — grátis e rápido
 
+### -1. 🔴 VERIFICAÇÃO DO ANUNCIANTE Google Ads (prazo: 31/08/2026 — anúncios PAUSAM se não fizer)
+- **Por quê:** e-mail oficial do Google (01/08) — a conta **475-979-5747** exige a "verificação
+  do anunciante" (identidade do responsável/empresa; exigência padrão do Google, não é golpe).
+  Sem concluir até **31/08**, a campanha "Pesquisa — Leilão de Imóveis (BR)" é pausada. O
+  processo pode levar **até 7 dias úteis** — não deixar para a última semana.
+- **Passos:** Google Ads → Faturamento/Central "Verificação do anunciante" (ou o botão
+  "Iniciar a verificação" do próprio e-mail, conferindo que o link leva a ads.google.com) →
+  enviar os dados/documentos da empresa (CNPJ) ou pessoais.
+- **Depois:** nada muda no código; o rastreamento segue igual. Se pausar por atraso, o funil
+  pago para de gerar cadastros (o 1º lead real chegou dia 01/08 — vale proteger).
+
 ### 0. ⭐ TESTAR a compra AVULSA da loja (ebook/curso) — no computador
 - **Por quê:** o checkout avulso (Mercado Pago + Asaas) foi para produção nesta sessão; falta um teste real de ponta a ponta (o dono pediu para testar mais tarde).
 - **Passos:**

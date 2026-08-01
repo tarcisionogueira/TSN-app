@@ -159,6 +159,23 @@ mesmo padrão de RPC QUANDO tiverem volume (backlog leve).
    no PDF (tela não mostra); linha "R$/m²×área" do front refaz conta simples que o servidor
    não usou (unidadeValor por tipo); `fontesLocais`/`outrosBairros` gravados e nunca exibidos.
 
+**G. NOITE 01/08 — anexos institucionais + 2 e-mails do dono:**
+1. **"Política de Privacidade" como documento do LOTE (print do dono, MEGA Bertioga)**: o
+   `RE_DOC_INSTITUCIONAL` do `_doc-scan.js` não cobria privacidade/cookies/termos de uso →
+   **6.698 entradas-lixo em 2.340 imóveis** (Política de Privacidade ×2.652, avisos de
+   cookies/privacidade/termos/segurança da informação ×1.009 cada — um leiloeiro com 4 links
+   institucionais em todo lote — + 10 PDFs de consentimento "adopt/disclaimer"). Blacklist
+   estendida (captura) + migração `anexos_remover_lixo_institucional.sql` APLICADA (varredura
+   pós = 0; Bertioga ficou com os 3 docs corretos: matrícula/edital/condições).
+2. **E-mail Google Ads (verificação do anunciante até 31/08)**: LEGÍTIMO e importante — sem
+   concluir, a campanha PAUSA. Registrado em `PENDENCIAS_DONO.md` item -1 (só o dono faz).
+3. **E-mail Anthropic (Rotina mensal "Auditoria de segurança BidPro")**: a rotina acordou a
+   sessão SEM repositório vinculado (403 nos nomes tsn-app/bidpro) → NÃO rodou nada; não é
+   achado de segurança, é config do gatilho. Corrigir: recriar a Rotina apontando p/ um
+   ambiente com o repo (a gestão de triggers pediu aprovação manual nesta sessão — pendente).
+   Cobertura NÃO ficou zerada no mês: a camada 1 (cron determinístico `seguranca-auditoria-
+   cron` + `auditoria_seguranca()`) segue ativa e 0/0 hoje.
+
 **E. E-MAIL DE OPORTUNIDADES agora respeita o PERFIL DO INVESTIDOR (dono confirmou a regra e
 escolheu a opção A):** `enviar-alertas-cron` — o complemento por raio (50→400km) fazia a seleção
 SÓ por desconto ≥40%; a triagem (faixa_capital/forma_pagamento) e os filtros do alerta eram
