@@ -29,6 +29,14 @@
 > KYC face match (parceiro/contratos) e doc avulso selfie_doc foram para produção junto com o
 > fix do resumir-ticket desta sessão.
 
+**A0. SBID21 RESOLVIDO (recon Round 36, 01/08 ~14h30):** o 0 em 2 runs NÃO é regressão de
+premissa — a sonda (`debug_fetch` fonte `ofv36-sbid21`) provou: portal 21 com filtro de
+imóveis = HTTP 200/total 0 (query do scraper funciona); portal 21 SEM filtro = 62 ofertas,
+todas veículos internacionais (Trucks & Buses, loja Rimac/Peru, US$); portal 9 controle = 70
+"Real Estate" ok. O leilão de imóveis do portal 21 (37 de ontem) ENCERROU — fonte fica ARMADA
+como o CREPALDI: quando publicarem imóveis, o scraper capta sozinho. Nenhum código a mudar;
+o monitor vai acusar "falhou 0" até voltar acervo (ruído esperado).
+
 **A. RITUAL (01/08 ~12h UTC).** (1) Saúde: 30.262 ativos / 27.085 atualizados 24h; fila geocode 399;
 cluster diário rodou (CEF 27,5k, LJUD 1.084, ZUK 596, SUPERBID 1.356, PESTANA recuperou 287, BIASI
 207 em 31/07); deploys READY. (2) Baseline: **SBID21 falhou hoje (0<piso 18;
