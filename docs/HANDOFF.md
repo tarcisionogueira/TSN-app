@@ -55,6 +55,22 @@ funil público com 37 visitantes anônimos/204 eventos 7d. Achados nos `api_erro
    cobra no próximo login; sem ação.
 3. Falhas de login/cadastro agora deixam rastro anônimo ✓ (`login_falha` com anon_id no 360).
 
+**C. TELA DE MARKETING — diagnóstico a pedido do dono + 2 distorções corrigidas (migração
+`admin_funil_captacao_corrigir_contratacao_e_indicacao.sql`, APLICADA):**
+1. **"Contrataram 3 / R$ 0" era FALSO**: a RPC contava qualquer linha de `aceites_plano` como
+   venda, mas desde os Termos v3.0 (sessão 20) o RE-ACEITE de termos também grava lá com
+   `valor` null → 3 re-aceites viravam "contratações" e poluíam "Últimas contratações".
+   Agora só conta aceite com **`valor > 0`**. Pós-fix: contratantes 30d = 0 (verdade — nenhuma
+   venda de plano no período).
+2. **"Indicação (parceiro) 22" era o DEFAULT do dono**: `vincular_owner_default` põe
+   `indicado_por`=admin em todo cadastro sem `?ref=` → 22/23 cadastros caíam em "Indicação" e
+   o Orgânico zerava. Agora indicação exige indicador NÃO-admin. Pós-fix: Orgânico 21 ·
+   Google Ads 1 · Indicação real 1. Auditoria pós-migração: 0/0.
+3. **1ª conversão REAL do Google Ads**: Charles Ferreira de Azevedo, cadastro 01/08 03:08 com
+   gclid+utm=google (não é teste) — CAC do cadastro ≈R$75 (gasto auto 29-31/07: R$74,94 / 41
+   cliques / CPC R$1,83, abaixo do teto R$3). Já abriu chat e aceitou termos. Coleta automática
+   de gasto OK (selo "auto", sem dupla contagem); dado de 01/08 entra ~07h UTC de 02/08.
+
 ## ✅ COMEÇAR AQUI (31/07 — sessão 21: Índice ponderado por proximidade + KYC face match no parceiro e nos contratos)
 > Branch `claude/handoff-rotina-inicio-ta1z4a`. `npm run build` OK. Endpoints de API novos passam `node --check`. Commits: `8f54882` (Índice), `ec08d6d` (ponderação), `ac2307e` (campo doc), `b62b05a` (KYC parceiro), `ae543f7` (KYC contrato), `ad86a6f` (selfie_doc).
 
