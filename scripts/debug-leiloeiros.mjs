@@ -317,6 +317,47 @@ async function scanSuperbidPortais(browser) {
   await page.close();
 }
 
+// Round 36 — SBID21 caiu a 0 em 2 runs seguidos (01/08; SBID9 segue ok com a MESMA
+// função). A sonda separa "portal 21 esvaziou de verdade" × "premissa quebrou":
+// (a) portal 21 COM filtro de imóveis (a query do scraper), (b) portal 21 SEM filtro
+// (qualquer produto — se >0 aqui e 0 em (a), o filtro/productType mudou), (c) portal 9
+// com filtro como CONTROLE, (d) 1º offer cru do 21 sem filtro (p/ ver o productType real).
+async function sondaSbid21(browser) {
+  console.log('🔎 Sonda SBID21 (portal 21 × 9, com/sem filtro de imóveis)...');
+  const page = await browser.newPage();
+  await page.setUserAgent(USER_AGENT);
+  try { await page.goto('https://www.superbid.net/', { waitUntil: 'domcontentloaded', timeout: 45000 }); } catch {}
+  await new Promise(r => setTimeout(r, 3000));
+  const res = await page.evaluate(async () => {
+    const base = 'https://offer-query.superbid.net/offers/';
+    const q = (portal, filtro) =>
+      `${base}?portalId=[${portal}]&locale=pt_BR&timeZoneId=America/Sao_Paulo&searchType=opened${filtro ? '&filter=product.productType.description:imoveis;' : ''}&pageNumber=1&pageSize=3&orderBy=endDate:asc`;
+    const pega = async (portal, filtro) => {
+      try {
+        const r = await fetch(q(portal, filtro), { headers: { Accept: 'application/json' } });
+        if (!r.ok) return { http: r.status };
+        const d = await r.json();
+        const lista = d.offers || d.content || d.results || d.items || [];
+        return {
+          http: r.status,
+          total: d.total ?? d.totalElements ?? d.totalCount ?? null,
+          itens: lista.length,
+          primeiroProductType: lista[0]?.product?.productType?.description ?? null,
+          primeiroOffer: lista[0] ? JSON.stringify(lista[0]).slice(0, 1500) : null,
+        };
+      } catch (e) { return { erro: String(e && e.message || e) }; }
+    };
+    return {
+      p21_com_filtro: await pega(21, true),
+      p21_sem_filtro: await pega(21, false),
+      p9_com_filtro_controle: await pega(9, true),
+    };
+  }).catch((e) => ({ erro: String(e && e.message || e) }));
+  await gravarDebug('ofv36-sbid21', 'offer-query portal 21×9 com/sem filtro', 200, 'application/json', JSON.stringify(res, null, 2));
+  console.log(`  resultado: ${JSON.stringify(res).slice(0, 300)}`);
+  await page.close();
+}
+
 async function gravarDebug(fonte, url, status, contentType, conteudo) {
   const txt = String(conteudo || '').slice(0, 400000);
   const { error } = await supabase.from('debug_fetch').insert({
@@ -435,10 +476,13 @@ async function main() {
     args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
   });
   try {
-    for (const alvo of ALVOS) {
-      try { await capturar(browser, alvo); }
-      catch (e) { console.log(`  ${alvo.fonte} erro: ${e.message.slice(0, 80)}`); }
-    }
+    // Round 36 (01/08): SÓ a sonda do SBID21 (0 em 2 runs; SBID9 ok). O loop do
+    // Round 35 (ALVOS TRT-15, concluído em 30/07) fica desligado p/ o run ser rápido.
+    await sondaSbid21(browser);
+    // for (const alvo of ALVOS) {
+    //   try { await capturar(browser, alvo); }
+    //   catch (e) { console.log(`  ${alvo.fonte} erro: ${e.message.slice(0, 80)}`); }
+    // }
     // Round 33 (concluído — matrícula ZUK já capturada no scraper): desligado para não
     // gastar tempo de run; religar se a ZUK mudar a função _gt de novo.
     // try { await scanZukDocs(browser); } catch (e) { console.log(`  ZUKDOC erro: ${e.message.slice(0, 80)}`); }
