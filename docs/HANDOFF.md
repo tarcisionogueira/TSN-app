@@ -45,9 +45,11 @@ transitório × regressão; CREPALDI 0 = esperado (armado, loja vazia). (3) `aud
 **0/0**. (4) Pareceres vazios = 0. (5) Runner residencial em dia (últimas coletas 30/07, gate 72h →
 próxima ~02/08 18h). (6) Marketing: `marketing_metricas_dia` ingeriu 29-31/07 (31/07: R$23,33/17
 cliques) — ciclo auto OK; pendências de conversão (offline PIX + 3 checagens no painel) seguem
-abertas na sessão 21. (7) **Rafael (`6b35b390…`) segue explorador, sem contrato** — o watch da
-sessão anterior morreu (último fire 03:49, sessão antiga inativa); re-armado NESTA sessão (5/5h,
-sem avisar o dono até ativar).
+abertas na sessão 21. (7) **Rafael (`6b35b390…`) segue explorador, sem contrato** —
+⚠️ **WATCH ENCERRADO a pedido do dono (01/08 ~15h)**: "Pode parar de acompanhar o Rafael.
+Quando ele assinar eu sinalizo." NÃO re-armar send_later p/ o Rafael em sessões futuras;
+quando o dono sinalizar a assinatura, aí sim conferir ativação (role top2 + contrato
+assessorado + PIX/cartão no MP).
 
 **B. CLIENTE 360 (pedido do dono).** Rastreio vivo: 724 eventos/24h (click/pageview/change/submit),
 funil público com 37 visitantes anônimos/204 eventos 7d. Achados nos `api_erro` de 24h:
