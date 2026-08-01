@@ -70,6 +70,25 @@ funil público com 37 visitantes anônimos/204 eventos 7d. Achados nos `api_erro
    gclid+utm=google (não é teste) — CAC do cadastro ≈R$75 (gasto auto 29-31/07: R$74,94 / 41
    cliques / CPC R$1,83, abaixo do teto R$3). Já abriu chat e aceitou termos. Coleta automática
    de gasto OK (selo "auto", sem dupla contagem); dado de 01/08 entra ~07h UTC de 02/08.
+   **Precisão de vocabulário (dono alertou)**: Charles é `role=explorador` (usuário GRÁTIS) —
+   "conversão" aqui = CADASTRO vindo de tráfego pago, não cliente pagante. O "chat" dele foi a
+   saudação PROATIVA da IA ("Como está sendo sua experiência?", origem='proativo'): 2 mensagens
+   da IA, ZERO do cliente, encerrado por ele em 21s ("Auto-resolvido") — por isso não aparece
+   no Atendimento (filtro padrão só mostra pendentes; finalizados ficam no filtro "todos").
+
+**D. PIPELINE DE CASOS corrigido + Agenda unificada (pedido do dono após analisar a tela Equipe):**
+1. **Etapa "Aguardando reunião/parecer" era inalcançável**: `casos.mercadologico_status` é lido
+   em `etapaDoCaso` mas NUNCA gravado por fluxo nenhum → todo caso ficava preso em "Análise
+   (relatórios)". Agora o pipeline busca o mercadológico REAL (`analises_mercado` do cliente ×
+   `imovel_id` do caso): concluído → etapa "decisão". Os 5 casos ativos (4 Alessandra + Matheus
+   pré-arremate) tinham TODOS mercadológico concluído.
+2. **"parado Xd" cego à atividade real**: relatório não toca `casos.updated_at` → o relógio agora
+   usa a última atividade (max do caso × relatórios). Caso da Rui Barbosa marcava "parado 9d"
+   com regeneração em 31/07.
+3. **Agenda → sub-aba de Equipe** (Pipeline · Time · Agenda) — menu de topo perde 1 item; chave
+   antiga em sessionStorage redireciona (padrão dos renames anteriores).
+4. **Dado verdadeiro que a tela revela**: nenhum caso tem analista/advogado atribuído ("Sem
+   responsável" nos 6) — atribuir responsáveis é ação do dono/equipe, não bug.
 
 ## ✅ COMEÇAR AQUI (31/07 — sessão 21: Índice ponderado por proximidade + KYC face match no parceiro e nos contratos)
 > Branch `claude/handoff-rotina-inicio-ta1z4a`. `npm run build` OK. Endpoints de API novos passam `node --check`. Commits: `8f54882` (Índice), `ec08d6d` (ponderação), `ac2307e` (campo doc), `b62b05a` (KYC parceiro), `ae543f7` (KYC contrato), `ad86a6f` (selfie_doc).

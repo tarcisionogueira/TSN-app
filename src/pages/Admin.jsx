@@ -7684,8 +7684,9 @@ function MonitorJuridico() {
 // ═══════════════════════════════════════════════════════════════════════════════
 function EquipeHub() {
   const SUBS = [
-    { key: 'casos', label: '📋 Pipeline de casos' },
-    { key: 'time',  label: '👥 Time & solicitações' },
+    { key: 'casos',  label: '📋 Pipeline de casos' },
+    { key: 'time',   label: '👥 Time & solicitações' },
+    { key: 'agenda', label: '🗓 Agenda' },
   ];
   const [sub, setSub] = React.useState(() => sessionStorage.getItem('admin_equipe_sub') || 'casos');
   const irSub = (k) => { setSub(k); sessionStorage.setItem('admin_equipe_sub', k); };
@@ -7704,8 +7705,9 @@ function EquipeHub() {
         ))}
       </div>
 
-      {sub === 'casos' && <CentralEquipeTab />}
-      {sub === 'time'  && <EquipeTab />}
+      {sub === 'casos'  && <CentralEquipeTab />}
+      {sub === 'time'   && <EquipeTab />}
+      {sub === 'agenda' && <AgendaTab />}
     </div>
   );
 }
@@ -9531,7 +9533,9 @@ function etapaDoCaso(c) {
   if (c.concluido_em) return 'concluido';
   if (c.arrematado_em) return 'arremate';
   if (c.juridico_liberado || c.juridico_enviado_em) return 'juridico';
-  if (c.mercadologico_status === 'concluido') return 'decisao';
+  // `mercadologico_status` não é gravado por nenhum fluxo; o sinal vivo é o relatório
+  // mercadológico concluído do cliente p/ o imóvel do caso (_mercadoConcluido, join no load)
+  if (c.mercadologico_status === 'concluido' || c._mercadoConcluido) return 'decisao';
   return 'analise';
 }
 function CentralEquipeTab() {
@@ -9550,6 +9554,28 @@ function CentralEquipeTab() {
       else if (role === 'advogado') q = q.eq('advogado_id', user.id);
       const { data } = await q;
       const lista = data || [];
+      // Etapa e "parado" REAIS: o caso não registra a atividade de relatório (fica em
+      // analises_mercado) — busca o mercadológico do cliente p/ o imóvel do caso e anota
+      // se está concluído (etapa "Aguardando reunião/parecer") + a última atividade.
+      const cliIds = [...new Set(lista.map(c => c.cliente_id).filter(Boolean))];
+      const imIds = [...new Set(lista.map(c => c.imovel_id).filter(Boolean))];
+      if (cliIds.length && imIds.length) {
+        const { data: ans } = await supabase.from('analises_mercado')
+          .select('user_id, imovel_id, status, updated_at')
+          .in('user_id', cliIds).in('imovel_id', imIds);
+        const anMap = {};
+        (ans || []).forEach(a => {
+          const k = `${a.user_id}|${a.imovel_id}`;
+          const m = anMap[k] || (anMap[k] = { concluida: false, ultima: null });
+          if (a.status === 'concluida') m.concluida = true;
+          if (!m.ultima || new Date(a.updated_at) > new Date(m.ultima)) m.ultima = a.updated_at;
+        });
+        lista.forEach(c => {
+          const m = anMap[`${c.cliente_id}|${c.imovel_id}`];
+          if (m?.concluida) c._mercadoConcluido = true;
+          c._ultimaAtividade = m?.ultima && new Date(m.ultima) > new Date(c.updated_at) ? m.ultima : c.updated_at;
+        });
+      }
       setCasos(lista);
       const ids = [...new Set(lista.flatMap(c => [c.cliente_id, c.analista_id, c.advogado_id]).filter(Boolean))];
       if (ids.length) {
@@ -9595,7 +9621,7 @@ function CentralEquipeTab() {
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {porEtapa[e.key].map(c => {
-                  const dias = diasDe(c.updated_at);
+                  const dias = diasDe(c._ultimaAtividade || c.updated_at);
                   const parado = e.key !== 'concluido' && dias != null && dias >= 7;
                   return (
                     <div key={c.id} onClick={() => abrirFicha(c)}
@@ -9832,7 +9858,7 @@ const GRUPOS_ADMIN = [
   { nome: 'Início',              tabs: ['Dashboard'] },
   { nome: 'Clientes & Vendas',   tabs: ['Usuários', 'Convites', 'Comercial', 'Contratos'] },
   { nome: 'Conteúdo & Ofertas',  tabs: ['Cursos', 'eBooks', 'Promoções', 'Marketing'] },
-  { nome: 'Equipe',              tabs: ['Equipe', 'Agenda'] },
+  { nome: 'Equipe',              tabs: ['Equipe'] }, // Agenda virou sub-aba de Equipe
   { nome: 'Dados & Fontes',      tabs: ['Scrapers', 'Registros', 'CNJ', 'Editais', 'Qualidade'] },
   { nome: 'Financeiro',          tabs: ['Financeiro'] },
   { nome: 'Sistema',             tabs: ['Configurações'] },
@@ -10394,6 +10420,7 @@ export default function Admin() {
     // salvas na sessão.
     if (t === 'Prestação de contas') { sessionStorage.setItem('admin_fin_sub', 'saques'); sessionStorage.setItem('admin_tab', 'Financeiro'); t = 'Financeiro'; }
     if (t === 'Central da Equipe') { sessionStorage.setItem('admin_equipe_sub', 'casos'); sessionStorage.setItem('admin_tab', 'Equipe'); t = 'Equipe'; }
+    if (t === 'Agenda') { sessionStorage.setItem('admin_equipe_sub', 'agenda'); sessionStorage.setItem('admin_tab', 'Equipe'); t = 'Equipe'; } // Agenda virou sub-aba
     return t;
   });
   const mudarTab = (t) => { setTab(t); sessionStorage.setItem('admin_tab', t); };
@@ -10465,7 +10492,6 @@ export default function Admin() {
         {tab === 'Usuários'       && <UsuariosTab />}
         {tab === 'Comercial'      && <ComercialTab />}
         {tab === 'Equipe'         && <EquipeHub />}
-        {tab === 'Agenda'         && <AgendaTab />}
         {tab === 'Scrapers'       && <ScrapersTab />}
         {tab === 'Registros'      && <RegistrosTab />}
         {tab === 'CNJ'            && <CnjTab />}
