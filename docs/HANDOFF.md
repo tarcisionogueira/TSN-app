@@ -22,6 +22,39 @@
 > Checagem rápida a qualquer momento: `select public.auditoria_seguranca();` → `0 crítico / 0 atenção` = íntegro.
 > **Auditorias ofensivas completas: 15/07/2026 (×2).** Total de correções: 15 (1ª rodada) + escalonamento por convite (CRÍTICO) + IDOR do MP (ALTO) + escala. Refazer a ofensiva quando entrarem rotas/pagamento/RLS novos (a Rotina mensal já faz isso sozinha).
 
+## ✅ COMEÇAR AQUI (01/08 — sessão 22: ritual de abertura + Cliente 360 + fix resumir-ticket)
+> Branch `claude/handoff-bidpro-brasil-jb378n`. ✅ **Sessão 21 (branch
+> `claude/handoff-rotina-inicio-ta1z4a`, 9 commits `8f54882..8a96380`) MERGEADA na `main` em
+> 01/08 com aprovação do dono** — Índice cidade_norm composto + ponderação por proximidade,
+> KYC face match (parceiro/contratos) e doc avulso selfie_doc foram para produção junto com o
+> fix do resumir-ticket desta sessão.
+
+**A. RITUAL (01/08 ~12h UTC).** (1) Saúde: 30.262 ativos / 27.085 atualizados 24h; fila geocode 399;
+cluster diário rodou (CEF 27,5k, LJUD 1.084, ZUK 596, SUPERBID 1.356, PESTANA recuperou 287, BIASI
+207 em 31/07); deploys READY. (2) Baseline: **SBID21 falhou hoje (0<piso 18;
+"total 0<5", ontem 37 ok)** — re-scrape SBID21-only disparado (leiloeiros-puppeteer.yml) p/ separar
+transitório × regressão; CREPALDI 0 = esperado (armado, loja vazia). (3) `auditoria_seguranca()` =
+**0/0**. (4) Pareceres vazios = 0. (5) Runner residencial em dia (últimas coletas 30/07, gate 72h →
+próxima ~02/08 18h). (6) Marketing: `marketing_metricas_dia` ingeriu 29-31/07 (31/07: R$23,33/17
+cliques) — ciclo auto OK; pendências de conversão (offline PIX + 3 checagens no painel) seguem
+abertas na sessão 21. (7) **Rafael (`6b35b390…`) segue explorador, sem contrato** — o watch da
+sessão anterior morreu (último fire 03:49, sessão antiga inativa); re-armado NESTA sessão (5/5h,
+sem avisar o dono até ativar).
+
+**B. CLIENTE 360 (pedido do dono).** Rastreio vivo: 724 eventos/24h (click/pageview/change/submit),
+funil público com 37 visitantes anônimos/204 eventos 7d. Achados nos `api_erro` de 24h:
+1. **BUG corrigido nesta sessão — `resumir-ticket` 403 p/ cliente**: `ChatSuporte.jsx:364` dispara
+   `/api/resumir-ticket` ao encerrar o atendimento para QUALQUER usuário, mas a API era staff-only
+   → cliente que encerrava o próprio chat levava 403 (caso real: Charles 01/08 03:08) e a
+   **memória de IA do atendimento nunca era gerada** nesse caminho (feature silenciosamente morta
+   p/ encerramento pelo cliente). Fix na raiz: a API agora permite **staff OU o próprio dono do
+   ticket** (dono resolvido server-side — IDOR-safe mantido, rate-limit 10/min mantido).
+2. **502 `registrar-aceite` (2 usuários, 31/07 tarde)**: era o bug `aceites_plano.valor` NOT NULL,
+   já corrigido na sessão 21 (`0e0eae7`, em produção) — confirmado funcionando: Charles re-aceitou
+   termos v3.0 às 03:10 de 01/08. Os 2 usuários afetados ainda não relogaram (0 aceites) — o popup
+   cobra no próximo login; sem ação.
+3. Falhas de login/cadastro agora deixam rastro anônimo ✓ (`login_falha` com anon_id no 360).
+
 ## ✅ COMEÇAR AQUI (31/07 — sessão 21: Índice ponderado por proximidade + KYC face match no parceiro e nos contratos)
 > Branch `claude/handoff-rotina-inicio-ta1z4a`. `npm run build` OK. Endpoints de API novos passam `node --check`. Commits: `8f54882` (Índice), `ec08d6d` (ponderação), `ac2307e` (campo doc), `b62b05a` (KYC parceiro), `ae543f7` (KYC contrato), `ad86a6f` (selfie_doc).
 
@@ -51,7 +84,6 @@
 1. **Furo real — conversão OFFLINE do Google Ads p/ PIX (implementar).** `trackPlanContratado` é client-side; PIX pago DEPOIS de sair do checkout **não conta no Google** (o Meta conta via CAPI). Não há upload offline p/ Google e o `GOOGLE_ADS_DEVELOPER_TOKEN` nem está setado. **Plano:** o dono obtém o developer token da Google Ads API → implementar o upload de conversão offline no webhook (via `gclid` já capturado em `perfis.mkt_gclid`), **dormente/gated na env** no mesmo padrão do Meta CAPI (`_meta-capi.js`). Posso deixar o esqueleto pronto antes do token.
 2. **3 checagens no painel Google Ads (só o dono faz):** (a) as ações **"Cadastro — BidPro"** e **"Compra de plano — BidPro"** estão como **Principal** e "Registrando conversões"? (b) **"Conversões otimizadas / método da tag"** LIGADO? (senão o Enhanced Conversions que já enviamos é ignorado) (c) rodar o **Google Tag Assistant** na home + um cadastro de teste p/ ver o `conversion` disparar com o rótulo novo.
 3. **Acompanhar o ciclo pós-fix:** confirmar a ingestão de 31/07+01/08 em `marketing_metricas_dia` (parou em 30/07) e observar se, com rótulo novo + mais volume, as conversões passam a registrar.
-
 ## ✅ COMEÇAR AQUI (30/07 — sessão 20: ritual completo + pareceres presos destravados + auditoria de cobertura do tracker)
 > Branch `claude/handoff-rotina-inicio-ta1z4a`. `npm run build` OK. `auditoria_seguranca()` = **0/0** ao final.
 

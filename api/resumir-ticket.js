@@ -13,10 +13,6 @@ export default async function handler(req) {
   const user = await getUser(req);
   if (!user) return unauthorized();
 
-  // Only staff can trigger AI summarisation
-  const role = await getUserRoleById(user.id);
-  if (!['admin', 'consultor', 'analista', 'advogado'].includes(role)) return forbidden('Acesso restrito');
-
   const apiKey = process.env.CLAUDE_KEY;
   const supabaseUrl = process.env.VITE_SUPABASE_URL;
   const supabaseKey = process.env.SUPABASE_SERVICE_KEY;
@@ -36,6 +32,13 @@ export default async function handler(req) {
   const [dono] = await donoRes.json().catch(() => []);
   const userId = dono?.user_id;
   if (!userId) return new Response(JSON.stringify({ error: 'Ticket não encontrado' }), { status: 404 });
+
+  // Staff OU o PRÓPRIO dono do ticket podem gerar o resumo (o ChatSuporte dispara
+  // ao encerrar o atendimento — o dono só alcança a própria memória, resolvida acima)
+  if (user.id !== userId) {
+    const role = await getUserRoleById(user.id);
+    if (!['admin', 'consultor', 'analista', 'advogado'].includes(role)) return forbidden('Acesso restrito');
+  }
 
   // Busca mensagens do ticket
   const msgsRes = await fetch(`${supabaseUrl}/rest/v1/chamados_mensagens?chamado_id=eq.${encodeURIComponent(ticketId)}&order=criado_em.asc&select=autor_tipo,conteudo`, {
