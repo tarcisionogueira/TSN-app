@@ -9503,12 +9503,15 @@ const ETAPAS_CASO = [
   { key: 'concluido',  label: 'Concluído',                cor: '#64748b', bg: '#f8fafc' },
 ];
 function etapaDoCaso(c) {
+  // A etapa VIVA do fluxo é casos.status_etapa (escrita por solicitar análise / reunião /
+  // jurídico / arremate / posse). Timestamps cobrem linhas antigas sem status_etapa.
+  // NÃO usar analises_mercado aqui: relatório que o CLIENTE gera sozinho não é trabalho
+  // da equipe — confundia "Aguardando reunião" com caso que a equipe nem começou.
   if (c.concluido_em) return 'concluido';
-  if (c.arrematado_em) return 'arremate';
-  if (c.juridico_liberado || c.juridico_enviado_em) return 'juridico';
-  // `mercadologico_status` não é gravado por nenhum fluxo; o sinal vivo é o relatório
-  // mercadológico concluído do cliente p/ o imóvel do caso (_mercadoConcluido, join no load)
-  if (c.mercadologico_status === 'concluido' || c._mercadoConcluido) return 'decisao';
+  const se = c.status_etapa || '';
+  if (c.arrematado_em || ['arrematado', 'honorarios_pagos', 'procuracao_assinada', 'pos_arrematacao'].includes(se)) return 'arremate';
+  if (c.juridico_liberado || c.juridico_enviado_em || ['juridico_solicitado', 'juridico_concluido', 'segunda_reuniao'].includes(se)) return 'juridico';
+  if (['analises_prontas', 'reuniao_agendada', 'reuniao_realizada'].includes(se) || c.mercadologico_status === 'concluido') return 'decisao';
   return 'analise';
 }
 function CentralEquipeTab() {
@@ -9527,25 +9530,23 @@ function CentralEquipeTab() {
       else if (role === 'advogado') q = q.eq('advogado_id', user.id);
       const { data } = await q;
       const lista = data || [];
-      // Etapa e "parado" REAIS: o caso não registra a atividade de relatório (fica em
-      // analises_mercado) — busca o mercadológico do cliente p/ o imóvel do caso e anota
-      // se está concluído (etapa "Aguardando reunião/parecer") + a última atividade.
-      const cliIds = [...new Set(lista.map(c => c.cliente_id).filter(Boolean))];
-      const imIds = [...new Set(lista.map(c => c.imovel_id).filter(Boolean))];
-      if (cliIds.length && imIds.length) {
-        const { data: ans } = await supabase.from('analises_mercado')
-          .select('user_id, imovel_id, status, updated_at')
-          .in('user_id', cliIds).in('imovel_id', imIds);
-        const anMap = {};
-        (ans || []).forEach(a => {
-          const k = `${a.user_id}|${a.imovel_id}`;
-          const m = anMap[k] || (anMap[k] = { concluida: false, ultima: null });
-          if (a.status === 'concluida') m.concluida = true;
-          if (!m.ultima || new Date(a.updated_at) > new Date(m.ultima)) m.ultima = a.updated_at;
+      // Progresso REAL do trabalho da equipe: analise_jobs (4 por caso — mercado,
+      // financeira, fluxo de caixa, jurídica prévia). O card mostra X/4 e a última
+      // atividade considera o job mais recente (relatório do time move o relógio).
+      const casoIds = lista.map(c => c.id);
+      if (casoIds.length) {
+        const { data: jbs } = await supabase.from('analise_jobs')
+          .select('caso_id, status, concluido_em, iniciado_em, created_at').in('caso_id', casoIds);
+        const jm = {};
+        (jbs || []).forEach(j => {
+          const m = jm[j.caso_id] || (jm[j.caso_id] = { ok: 0, ultima: null });
+          if (j.status === 'concluido') m.ok++;
+          const ts = j.concluido_em || j.iniciado_em || j.created_at;
+          if (ts && (!m.ultima || new Date(ts) > new Date(m.ultima))) m.ultima = ts;
         });
         lista.forEach(c => {
-          const m = anMap[`${c.cliente_id}|${c.imovel_id}`];
-          if (m?.concluida) c._mercadoConcluido = true;
+          const m = jm[c.id];
+          c._jobsOk = m?.ok || 0;
           c._ultimaAtividade = m?.ultima && new Date(m.ultima) > new Date(c.updated_at) ? m.ultima : c.updated_at;
         });
       }
@@ -9604,6 +9605,11 @@ function CentralEquipeTab() {
                       <div style={{ fontSize: 10.5, color: '#94a3b8' }}>
                         {c.advogado_id ? `Adv: ${nomes[c.advogado_id] || '—'}` : c.analista_id ? `Analista: ${nomes[c.analista_id] || '—'}` : 'Sem responsável'}
                       </div>
+                      {['analise', 'decisao'].includes(e.key) && (
+                        <div style={{ fontSize: 10.5, fontWeight: 700, color: (c._jobsOk || 0) > 0 ? '#059669' : '#d97706' }}>
+                          Relatórios da equipe: {c._jobsOk || 0}/4
+                        </div>
+                      )}
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
                         <span style={{ fontSize: 10.5, fontWeight: 700, color: parado ? '#dc2626' : '#94a3b8' }}>
                           {parado ? `⚠ parado ${dias}d` : dias != null ? `há ${dias}d` : '—'}

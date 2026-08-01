@@ -1,5 +1,5 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react';
-import { HashRouter, Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom';
+import { HashRouter, Routes, Route, Navigate, useLocation, useParams, useNavigate } from 'react-router-dom';
 import { trackPageView } from './utils/gtag';
 import { supabase } from './utils/supabase';
 import { useAuth, AuthProvider } from './contexts/AuthContext';
@@ -338,11 +338,32 @@ function MainLayout() {
   );
 }
 
+// Botão VOLTAR global (pedido do dono): a navegação profunda (Admin → ficha do caso →
+// análise → …) ganha um retorno de 1 toque sem depender do botão do navegador. Aparece
+// só quando HÁ tela anterior DENTRO do app (history.state.idx > 0 — quem entra por link
+// direto não vê) e fora da home/login. Canto inferior ESQUERDO (o chat de suporte ocupa
+// o direito). History API padrão — funciona em qualquer navegador/dispositivo.
+function BotaoVoltar() {
+  const nav = useNavigate();
+  const loc = useLocation();
+  const idx = window.history.state?.idx ?? 0;
+  if (idx <= 0 || ['/', '/login'].includes(loc.pathname)) return null;
+  return (
+    <button onClick={() => nav(-1)} aria-label="Voltar à tela anterior"
+      style={{ position: 'fixed', bottom: 18, left: 18, zIndex: 1200, display: 'flex', alignItems: 'center', gap: 6,
+        padding: '10px 16px', borderRadius: 999, border: '1px solid #e2e8f0', background: 'rgba(255,255,255,0.96)',
+        color: '#0D63DB', fontSize: 13, fontWeight: 800, cursor: 'pointer', boxShadow: '0 4px 14px rgba(15,23,42,0.18)' }}>
+      ← Voltar
+    </button>
+  );
+}
+
 export default function App() {
   return (
     <AuthProvider>
       <HashRouter>
         <RouteTracker />
+        <BotaoVoltar />
         <PwaInstall />
         <PlanosProvider>
         <AnalisesProvider>

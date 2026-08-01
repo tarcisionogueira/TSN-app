@@ -2623,6 +2623,10 @@ export default function Analise() {
                 <div style={{ fontSize:10.5, marginTop:10, lineHeight:1.5, background:'rgba(250,204,21,0.16)', border:'1px solid rgba(250,204,21,0.55)', borderRadius:8, padding:'8px 10px' }}>
                   ⚠️ A área informada ({fmt(area)} m²) parece ser a área <strong>total/terreno</strong>, não a privativa: os comparáveis (R$ {fmt(pm2)}/m²) indicam cerca de <strong>{fmt(areaPrivativaImplicita)} m²</strong> privativos. Informe a <strong>Área Privativa (m²)</strong> do edital para estimar o mercado por comparáveis. Enquanto isso, a análise usa a <strong>avaliação do leilão</strong> como referência (não multiplicamos o R$/m² pela área total).
                 </div>
+              ) : mercado?.fonteEstimativa === 'indice_bidpro' ? (
+                <div style={{ fontSize:10.5, opacity:0.85, marginTop:10, lineHeight:1.5 }}>
+                  Base de mercado: <strong>Índice BidPro</strong> (base própria da região) — sem anúncios comparáveis ativos no momento; a conta de comparáveis não se aplica.
+                </div>
               ) : mercado?.consolidado?.baseCalculo ? (
                 <div style={{ fontSize:10.5, opacity:0.85, marginTop:10, lineHeight:1.5 }}>
                   Base de mercado ({(mercado?.consolidado?.unidadeValor || '').replace(/_/g,' ') || 'por tipo'}): {mercado.consolidado.baseCalculo}.{nAmostras > 0 ? ` Média de ${nAmostras} comparáve${nAmostras > 1 ? 'is' : 'l'} do mesmo tipo/região.` : ''} Valor conservador para revenda em prazo saudável.
@@ -2814,7 +2818,7 @@ export default function Analise() {
 
               {mercado.fonteEstimativa === 'indice_bidpro' && (
                 <div style={{ fontSize:12.5, lineHeight:1.6, color:'#3730a3', background:'#eef2ff', border:'1px solid #c7d2fe', borderRadius:10, padding:'10px 12px', marginBottom:12 }}>
-                  <strong>Referência: Índice BidPro.</strong> Não havia anúncios comparáveis ativos nesta localidade no momento, então a estimativa de mercado usa o <strong>Índice BidPro</strong> (nossa base própria por microrregião) como referência. Serve para saber se o valor é atrativo; assim que surgirem comparáveis ativos, o sistema atualiza automaticamente.
+                  <strong>Referência: Índice BidPro.</strong> Não havia anúncios comparáveis ativos nesta localidade no momento, então a estimativa de mercado usa o <strong>Índice BidPro</strong> (nossa base própria da região) como referência. Serve para saber se o valor é atrativo; assim que surgirem comparáveis ativos, o sistema atualiza automaticamente.
                 </div>
               )}
 
@@ -2866,7 +2870,8 @@ export default function Analise() {
               {mercado.indiceBidPro && (Number(mercado.indiceBidPro.venda_m2) > 0 || Number(mercado.indiceBidPro.aluguel_m2) > 0) && (() => {
                 const ib = mercado.indiceBidPro;
                 const nivelLabel = ib.nivel === 'bairro' ? `bairro ${ib.bairro_norm || ''}`.trim()
-                  : ib.nivel === 'grid' ? 'microrregião (~1 km)' : 'cidade';
+                  : ib.nivel === 'grid' ? 'microrregião (~1 km)'
+                  : ib.nivel === 'estado' ? 'estado (referência ampla)' : 'cidade';
                 const yieldIdx = (Number(ib.venda_m2) > 0 && Number(ib.aluguel_m2) > 0) ? (Number(ib.aluguel_m2) * 12 / Number(ib.venda_m2) * 100) : 0;
                 return (
                   <div style={{ borderRadius:12, border:'1px solid #c7d2fe', background:'#eef2ff', padding:'12px 16px' }}>
@@ -2881,7 +2886,7 @@ export default function Analise() {
                       <div><div style={{ color:'#94a3b8', fontSize:10, fontWeight:700 }}>LOCAÇÃO R$/m²/mês</div><div style={{ fontWeight:800, color:'#7c3aed' }}>{Number(ib.aluguel_m2) > 0 ? `R$ ${fmt(ib.aluguel_m2)}` : 'em formação'}</div></div>
                       <div><div style={{ color:'#94a3b8', fontSize:10, fontWeight:700 }}>YIELD ÍNDICE</div><div style={{ fontWeight:800, color:'#059669' }}>{yieldIdx > 0 ? fmtPct(yieldIdx)+' a.a.' : '—'}</div></div>
                     </div>
-                    <div style={{ fontSize:10.5, color:'#6366f1', marginTop:8, lineHeight:1.5 }}>Índice proprietário BidPro por microrregião, referência independente para <strong>venda</strong> e <strong>locação</strong>, consolidada das análises da plataforma (complementar ao FipeZAP e aos anúncios). O aluguel é semeado à medida que os relatórios da região são gerados.</div>
+                    <div style={{ fontSize:10.5, color:'#6366f1', marginTop:8, lineHeight:1.5 }}>Índice proprietário BidPro (nível {nivelLabel}), referência independente para <strong>venda</strong> e <strong>locação</strong>, consolidada das análises da plataforma (complementar ao FipeZAP e aos anúncios). O aluguel é semeado à medida que os relatórios da região são gerados.</div>
                   </div>
                 );
               })()}
@@ -2907,7 +2912,10 @@ export default function Analise() {
                         <div key={i} style={{ flex:'1 1 90px', minWidth:90, background:'white', borderRadius:8, padding:'8px 10px', border:'1px solid #eef2f7' }}>
                           <div style={{ fontSize:10, color:'#64748b' }}>{p.label}</div>
                           <div style={{ fontSize:14, fontWeight:800, color:'#0f172a' }}>{Number(p.m2) > 0 ? `R$ ${fmt(p.m2)}` : '—'}</div>
-                          <div style={{ fontSize:9.5, color:'#94a3b8' }}>{p.n} anúncio(s)</div>
+                          <div title={p.fora_padrao ? 'Período com poucas amostras no padrão — valor usa a referência da região' : undefined}
+                            style={{ fontSize:9.5, color: p.fora_padrao ? '#c2410c' : '#94a3b8' }}>
+                            {p.n} anúncio(s){p.fora_padrao ? ' · ref. região' : ''}
+                          </div>
                         </div>
                       ))}
                     </div>

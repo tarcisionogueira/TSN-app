@@ -258,19 +258,30 @@ ${mercado?`<div class="av">
      ['Rentab. Líquida',fmtPct(mercado.yieldLiquido||0),'#d97706']].map(([l,v,c])=>`
   <div class="card"><div class="card-l">${l}</div><div class="card-v" style="color:${c}">${v}</div></div>`).join('')}
 </div>
-${mercado.indiceBidPro && ((mercado.indiceBidPro.venda_m2||0)>0 || (mercado.indiceBidPro.aluguel_m2||0)>0)?`<div style="font-size:10px;color:#3730a3;margin:0 0 10px;background:#eef2ff;border:1px solid #c7d2fe;padding:8px 10px;border-radius:4px;"><b>Índice BidPro (nossa base própria, ${mercado.indiceBidPro.nivel==='bairro'?'bairro':mercado.indiceBidPro.nivel==='grid'?'microrregião':'cidade'} · ${mercado.indiceBidPro.n_amostras||0} amostras):</b> ${(mercado.indiceBidPro.venda_m2||0)>0?`venda R$ ${fmt(mercado.indiceBidPro.venda_m2)}/m²`:''}${(mercado.indiceBidPro.aluguel_m2||0)>0?` · locação R$ ${fmt(mercado.indiceBidPro.aluguel_m2)}/m²/mês`:''}. Referência independente da plataforma para venda e locação, complementar ao FipeZAP.</div>`:''}
+${mercado.indiceBidPro && ((mercado.indiceBidPro.venda_m2||0)>0 || (mercado.indiceBidPro.aluguel_m2||0)>0)?`<div style="font-size:10px;color:#3730a3;margin:0 0 10px;background:#eef2ff;border:1px solid #c7d2fe;padding:8px 10px;border-radius:4px;"><b>Índice BidPro (nossa base própria, ${mercado.indiceBidPro.nivel==='bairro'?'bairro':mercado.indiceBidPro.nivel==='grid'?'microrregião':mercado.indiceBidPro.nivel==='estado'?'estado (referência ampla)':'cidade'} · ${mercado.indiceBidPro.n_amostras||0} amostras):</b> ${(mercado.indiceBidPro.venda_m2||0)>0?`venda R$ ${fmt(mercado.indiceBidPro.venda_m2)}/m²`:''}${(mercado.indiceBidPro.aluguel_m2||0)>0?` · locação R$ ${fmt(mercado.indiceBidPro.aluguel_m2)}/m²/mês`:''}. Referência independente da plataforma para venda e locação, complementar ao FipeZAP.</div>`:''}
 ${Array.isArray(mercado.valorizacao?.serie) && mercado.valorizacao.serie.length>=2?`<div style="font-size:10px;color:#065f46;margin:0 0 10px;background:#f0fdf4;border:1px solid #bbf7d0;padding:8px 10px;border-radius:4px;"><b>Valorização BidPro (venda R$/m² por ano, ${mercado.valorizacao.ano_inicial}–${mercado.valorizacao.ano_final}):</b> ${mercado.valorizacao.serie.map(p=>`${p.ano}: R$ ${fmt(p.m2)}`).join(' · ')}. Variação: ${Number(mercado.valorizacao.valorizacao_periodo_pct).toFixed(1)}% no período (${Number(mercado.valorizacao.valorizacao_aa_pct).toFixed(1)}% a.a.). Tendência da microrregião (base própria; não inclui leilão).</div>`:''}
 ${mercado.classificacaoIntencao && (mercado.classificacaoIntencao.revenda||mercado.classificacaoIntencao.locacao||mercado.classificacaoIntencao.temporada)?`<div style="margin:0 0 10px;padding:8px 10px;background:#eff6ff;border:1px solid #dbeafe;border-radius:4px;font-size:10px;color:#334155;line-height:1.5;"><b>Indicado para:</b> ${[mercado.classificacaoIntencao.revenda&&'Revenda',mercado.classificacaoIntencao.locacao&&'Locação',mercado.classificacaoIntencao.temporada&&'Temporada'].filter(Boolean).join(' · ')}.<br/>${[mercado.classificacaoIntencao.motivos?.revenda,mercado.classificacaoIntencao.motivos?.locacao,mercado.classificacaoIntencao.motivos?.temporada].filter(Boolean).join(' ')}</div>`:''}
 ${mercado.comentario?`<p style="font-size:10px;color:#475569;margin:0 0 10px;background:#f8fafc;padding:8px;border-radius:4px;">${mercado.comentario}</p>`:''}
 ${mercado.zoneamento?`<div style="font-size:10px;color:#334155;margin:0 0 10px;background:#f0f9ff;border:1px solid #dbeafe;padding:8px 10px;border-radius:4px;"><b>Zoneamento (uso do solo):</b> ${mercado.zoneamento.encontrado
   ? `${mercado.zoneamento.zona||'—'}${mercado.zoneamento.resumoUso?', '+mercado.zoneamento.resumoUso:''} <span style="color:#64748b">· fonte: ${mercado.zoneamento.fonte||'órgão oficial'}</span>`
   : `não localizado em fonte oficial. Onde confirmar: ${mercado.zoneamento.ondeObter||'Secretaria de Urbanismo/Planejamento da Prefeitura, pelo endereço ou inscrição imobiliária.'}`}</div>`:''}
-${mercado.vendas?.length?`<h3>Amostras de Venda (${mercado.totalAmostrasVenda} encontradas)</h3>
+${(() => {
+  // Relatórios antigos não têm totalAmostrasVenda (saía "undefined encontradas") e o
+  // servidor antigo gravava só o Nível 2 em mercado.vendas — une os dois níveis aqui
+  // p/ o PDF listar as amostras de CONDOMÍNIO (nível 1), as mais relevantes.
+  const vendasPdf = [...(mercado.nivel1?.vendas||[]), ...(mercado.nivel2?.vendas||[])];
+  const lista = vendasPdf.length ? vendasPdf : (mercado.vendas||[]);
+  return lista.length?`<h3>Amostras de Venda (${lista.length} encontradas)</h3>
 <table><tr><th>Imóvel</th><th class="r">Valor Total</th><th class="r">R$/m²</th><th>Fonte</th></tr>
-${mercado.vendas.slice(0,8).map(v=>`<tr><td>${v.descricao}</td><td class="r g">R$ ${fmt(v.valor)}</td><td class="r">R$ ${fmt(v.valorM2)}</td><td style="font-size:9px;color:#94a3b8">${v.fonte}</td></tr>`).join('')}</table>`:''}
-${mercado.locacoes?.length?`<h3>Amostras de Locação</h3>
+${lista.slice(0,12).map(v=>`<tr><td>${v.descricao}</td><td class="r g">R$ ${fmt(v.valor)}</td><td class="r">R$ ${fmt(v.valorM2)}</td><td style="font-size:9px;color:#94a3b8">${v.fonte}</td></tr>`).join('')}</table>`:'';
+})()}
+${(() => {
+  const locPdf = [...(mercado.nivel1?.locacoes||[]), ...(mercado.nivel2?.locacoes||[])];
+  const lista = locPdf.length ? locPdf : (mercado.locacoes||[]);
+  return lista.length?`<h3>Amostras de Locação</h3>
 <table><tr><th>Imóvel</th><th class="r">Aluguel/mês</th><th>Fonte</th></tr>
-${mercado.locacoes.map(l=>`<tr><td>${l.descricao}</td><td class="r" style="color:#7c3aed;font-weight:700;">R$ ${fmt(l.valorMensal)}</td><td style="font-size:9px;color:#94a3b8">${l.fonte}</td></tr>`).join('')}</table>`:''}
+${lista.map(l=>`<tr><td>${l.descricao}</td><td class="r" style="color:#7c3aed;font-weight:700;">R$ ${fmt(l.valorMensal)}</td><td style="font-size:9px;color:#94a3b8">${l.fonte}</td></tr>`).join('')}</table>`:'';
+})()}
 </div>`:''}
 
 ${sec.loc?`<div class="av"><h2>Projeção de Rentabilidade por Locação</h2><pre>${sec.loc}</pre></div>`:''}

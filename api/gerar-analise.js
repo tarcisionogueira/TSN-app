@@ -369,7 +369,11 @@ async function lerIndiceBidPro(imDb, segmento = 'apartamento') {
     // (Alphaville×popular ~R$6.921 que não servia a ninguém). Mantém aluguel/nível do RPC. Só cai
     // no número blendado quando não há amostra própria suficiente (< 4).
     const central = await centralIndiceRegiao(imDb, segmento);
-    if (central) return { venda_m2: central.venda_m2, aluguel_m2: Number(j?.aluguel_m2) || 0, nivel: j?.nivel || 'cidade', bandas: central.bandas };
+    // Campos COMPLETOS e HONESTOS (auditoria 01/08 — o card mostrava "bairro · 0 amostras"
+    // com dado da cidade): n_amostras/fonte sempre presentes, e o NÍVEL declara o escopo
+    // REAL do número — o caminho central usa amostras da CIDADE (ponderadas por proximidade),
+    // então nunca herda o rótulo 'bairro'/'grid' do RPC (prometia granularidade que não tem).
+    if (central) return { venda_m2: central.venda_m2, aluguel_m2: Number(j?.aluguel_m2) || 0, nivel: 'cidade', bandas: central.bandas, n_amostras: central.n, fonte: 'relatorio' };
     if (j && (Number(j.venda_m2) > 0 || Number(j.aluguel_m2) > 0)) return j;
     // ÚLTIMO nível do cascata: ESTADO (referência ampla majorada) quando a cidade não tem base
     // própria — dá um valor de referência em vez de nada (deixa EXPLÍCITO que é do estado).
@@ -378,7 +382,8 @@ async function lerIndiceBidPro(imDb, segmento = 'apartamento') {
       const e = await re.json().catch(() => null);
       if (e && Number(e.venda_m2) > 0) return {
         venda_m2: Number(e.venda_med) > 0 ? Number(e.venda_med) : Number(e.venda_m2), aluguel_m2: 0, nivel: 'estado',
-        bandas: Number(e.venda_pop) > 0 ? { popular: e.venda_pop, medio: e.venda_med, alto: e.venda_alto } : null };
+        bandas: Number(e.venda_pop) > 0 ? { popular: e.venda_pop, medio: e.venda_med, alto: e.venda_alto } : null,
+        n_amostras: Number(e.n_venda) || 0, fonte: 'acervo' };
     } catch { /* sem base no estado ainda */ }
     return null;
   } catch { return null; }
@@ -1441,8 +1446,23 @@ export default async function handler(req, res) {
         mercado.aluguelMedio = mercado.consolidado?.aluguelMedio || 0;
         mercado.yieldBruto = mercado.consolidado?.yieldBruto || 0;
         mercado.yieldLiquido = mercado.consolidado?.yieldLiquido || 0;
-        mercado.vendas = mercado.nivel2?.vendas || [];
-        mercado.locacoes = mercado.nivel2?.locacoes || [];
+        // O PDF lista TODAS as amostras (nível 1 = mesmo condomínio é a mais relevante;
+        // antes só o nível 2 entrava e um lote com amostras só de condomínio saía sem nenhuma).
+        mercado.vendas = [...(mercado.nivel1?.vendas || []), ...(mercado.nivel2?.vendas || [])];
+        mercado.locacoes = [...(mercado.nivel1?.locacoes || []), ...(mercado.nivel2?.locacoes || [])];
+        // Agregados por nível SEMPRE consistentes com as listas: o repair de JSON truncado
+        // preserva os arrays e perde os agregados (que vêm depois) → a tela mostrava
+        // "0 amostras · Mín/Médio/Máx R$ 0" ao lado de uma lista cheia. Recalcula no servidor.
+        for (const nv of [mercado.nivel1, mercado.nivel2].filter(Boolean)) {
+          const vs = (nv.vendas || []).map(v => Number(v.valorM2 ?? v.valor_m2)).filter(x => x > 0).sort((a, b) => a - b);
+          nv.totalAmostras = Math.max(Number(nv.totalAmostras) || 0, (nv.vendas?.length || 0) + (nv.locacoes?.length || 0));
+          if (vs.length) {
+            if (!(Number(nv.precoMedioM2) > 0)) nv.precoMedioM2 = Math.round(vs.reduce((s, x) => s + x, 0) / vs.length);
+            if (!(Number(nv.precoMinM2) > 0)) nv.precoMinM2 = Math.round(vs[0]);
+            if (!(Number(nv.precoMaxM2) > 0)) nv.precoMaxM2 = Math.round(vs[vs.length - 1]);
+          }
+        }
+        mercado.totalAmostrasVenda = mercado.vendas.length; // o PDF imprime esta contagem (era undefined)
         mercado.pesquisaEm = new Date().toISOString();
         const nA = (mercado.nivel1?.vendas?.length || 0) + (mercado.nivel1?.locacoes?.length || 0) + (mercado.nivel2?.vendas?.length || 0) + (mercado.nivel2?.locacoes?.length || 0);
         prog.comparaveis = { status: 'concluido', n: nA };

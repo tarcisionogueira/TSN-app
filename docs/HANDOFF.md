@@ -121,6 +121,44 @@ tinham overflowX:auto. Status das demais seções: funil/gastos (corrigidos hoje
 (RPC s20) OK; SDR sem filtro de período e alertas_email select* — hoje 0/25 linhas, entram no
 mesmo padrão de RPC QUANDO tiverem volume (backlog leve).
 
+**F. TARDE 01/08 — rodada de achados do dono (5 frentes):**
+1. **BOTÃO VOLTAR global** (`App.jsx BotaoVoltar`): pill fixo no canto inferior ESQUERDO
+   (chat ocupa o direito), `navigate(-1)`; só aparece quando HÁ tela anterior no app
+   (`history.state.idx>0`) e fora de `/` e `/login`. Vale p/ todas as rotas (Admin incluso).
+2. **LENTIDÃO — causa raiz achada e corrigida**: o seletor da fila de geocode
+   (`api/geocodificar.js:84`, or= latitude null / 0 / geocod_nivel='refazer' + order
+   atualizado_em desc) varria o índice INTEIRO a cada chamada — **3.691 chamadas × ~3,5s
+   (3,5h de CPU!)** roubando o banco do app todo. Fix: índice PARCIAL
+   `imoveis_leilao_geocode_fila_idx` (migração `imoveis_geocode_fila_indice_parcial.sql`,
+   APLICADA) casa o predicado exato → seleção instantânea.
+3. **PIPELINE DE CASOS v2 (a v1 desta manhã estava ERRADA — corrigida no mesmo dia)**:
+   derivar etapa de `analises_mercado` confundia relatório que o CLIENTE gera sozinho com
+   trabalho da equipe (os 4 casos da Alessandra são `status_etapa='analise_solicitada'`
+   com **0 jobs em `analise_jobs`** — a equipe NUNCA iniciou; a coluna "Aguardando
+   reunião/parecer" enganou o dono). Agora: etapa vem de **`casos.status_etapa`**
+   (analise_solicitada→Análise · analises_prontas/reuniao_*→Decisão · juridico_*→Jurídico ·
+   arrematado/pos→Arremate), card mostra **"Relatórios da equipe: X/4"** e o relógio usa
+   o job mais recente. RESPOSTA AO DONO: a Alessandra NÃO pediu reunião — ela **solicitou
+   análise** de 4 imóveis (22-24/07) e os 4 relatórios da equipe (mercado/financeira/fluxo/
+   jurídica, prazo 48h) estão 0/4 sem responsável há 8-10 dias.
+4. **EDITAL CEF ausente no caso (Apto 53 Carapicuíba)**: o lote foi processado pela captura
+   CEF em 07/07, ANTES da feature de edital — 9 imóveis nessa condição (matrícula ok, edital
+   faltando) re-enfileirados em `cef_matricula_fila` (salvarAnexo pula tipos existentes) +
+   `matricula-cef.yml` disparado.
+5. **RELATÓRIO MERCADOLÓGICO — auditoria completa (agente; 14 descasamentos tela/PDF ×
+   gravado). CORRIGIDOS**: `indiceBidPro` agora leva `n_amostras`+`fonte` nos 3 caminhos e o
+   caminho central declara nível 'cidade' (o card dizia "bairro · 0 amostras" com dado da
+   cidade — o bug do print do dono); branch 'estado' nos rótulos (tela+PDF; antes exibia
+   "cidade"); copy "por microrregião" dinamizada; PDF: "(undefined encontradas)" morto,
+   amostras de NÍVEL 1 (condomínio) incluídas (antes só nível 2 — lote só com amostras de
+   condomínio saía sem nenhuma); agregados por nível recalculados no SERVIDOR (repair de
+   JSON truncado preservava listas e perdia totais → "0 amostras · R$ 0" ao lado de lista
+   cheia); composição por período marca "ref. região" quando `fora_padrao`; base de cálculo
+   não exibe conta de comparáveis quando a fonte é o Índice. **BACKLOG (registrado, não
+   feito)**: exibir `pracaReferencia` (qual praça ancorou projeções); `zoneamento` só existe
+   no PDF (tela não mostra); linha "R$/m²×área" do front refaz conta simples que o servidor
+   não usou (unidadeValor por tipo); `fontesLocais`/`outrosBairros` gravados e nunca exibidos.
+
 **E. E-MAIL DE OPORTUNIDADES agora respeita o PERFIL DO INVESTIDOR (dono confirmou a regra e
 escolheu a opção A):** `enviar-alertas-cron` — o complemento por raio (50→400km) fazia a seleção
 SÓ por desconto ≥40%; a triagem (faixa_capital/forma_pagamento) e os filtros do alerta eram
