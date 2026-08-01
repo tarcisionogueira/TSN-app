@@ -13,12 +13,16 @@
  * cai no fallback amplo por estado — melhor não mandar do que mandar irrelevante.
  *
  * Seleção por usuário (ordem de interesse):
+ * As 12 vagas são DIVIDIDAS entre os critérios (regra do dono): com filtros salvos
+ * E cidade+perfil → 6 vagas p/ os filtros salvos + 6 p/ cidade+perfil; a sobra de um
+ * critério é preenchida pelo outro. Só um critério presente → ele leva as 12.
  *   1. Filtros salvos na busca (filtros_salvos) — sinal de interesse explícito.
  *   2. Cidade do cadastro/triagem (perfis.endereco_cidade/uf) com RAIO CRESCENTE
- *      (50→400km) RESPEITANDO O PERFIL DO INVESTIDOR: 1º passe com tipo/modalidade/
- *      pagamento (filtros do alerta + forma_pagamento da triagem) e TETO de capital
- *      (faixa_capital da triagem × valorMax do alerta, o menor); 2º passe relaxa as
- *      preferências mas mantém o teto — acima do capital do cliente não entra nunca.
+ *      (50→100→200km, MÁXIMO 200km — deslocamento viável p/ o investidor) RESPEITANDO
+ *      O PERFIL DO INVESTIDOR: 1º passe com tipo/modalidade/pagamento (filtros do
+ *      alerta + forma_pagamento da triagem) e TETO de capital (faixa_capital da
+ *      triagem × valorMax do alerta, o menor); 2º passe relaxa as preferências mas
+ *      mantém o teto — acima do capital do cliente não entra nunca.
  *   3. Se tiver arrematação registrada → inclui similares (mesmo tipo/estado, ≤ teto).
  *   4. Sem nenhuma referência de região → melhores do país (≤ teto);
  *      se não fechar 12, manda os que houver, por maior desconto.
@@ -308,12 +312,16 @@ async function handler(req) {
         }
       };
 
-      // 1) 80% das vagas, DISTRIBUÍDAS entre os filtros salvos (independe da qtde).
+      // 1) COTA DOS FILTROS SALVOS (regra do dono: DIVIDIR as 12 entre os critérios).
+      //    Com cidade+perfil TAMBÉM presentes → metade das vagas (6) p/ os filtros
+      //    salvos, distribuída entre eles; sem cidade de referência → filtros levam
+      //    as 12. A sobra de um critério é preenchida pelo outro (passo 2 e 2b).
+      const temCidadeRef = cidadesRef.length > 0;
       if (temPerfil) {
-        const cota80 = Math.round(LIMITE * 0.8); // ~10 de 12
-        const porFiltro = Math.max(1, Math.ceil(cota80 / savedFilters.length));
+        const cotaFiltros = temCidadeRef ? Math.round(LIMITE / 2) : LIMITE; // 6 de 12
+        const porFiltro = Math.max(1, Math.ceil(cotaFiltros / savedFilters.length));
         for (const f of savedFilters) {
-          if (pool.size >= cota80) break;
+          if (pool.size >= cotaFiltros) break;
           despejar(await buscarPorFiltro(f, porFiltro * 4), porFiltro);
         }
       }
@@ -322,14 +330,14 @@ async function handler(req) {
       //    referência, RESPEITANDO O PERFIL DO INVESTIDOR (regra do dono): a triagem
       //    (faixa de capital, forma de pagamento) + os filtros do alerta (tipo/
       //    modalidade/pagamento/teto) moldam o que entra — não só o desconto.
-      //    1º passe: anéis 50→400km com o perfil completo (tipo/modalidade/pagamento
+      //    1º passe: anéis 50→200km com o perfil completo (tipo/modalidade/pagamento
       //    + teto). Se não fechar as 12, 2º passe relaxa as PREFERÊNCIAS mas MANTÉM
       //    o teto de capital: imóvel acima do que o cliente consegue pagar é
       //    irrelevante, não vaga a preencher.
-      // Raio MÁXIMO ~400km: mantém a oportunidade geograficamente próxima. NÃO usar
-      // 800km/2000km (quase nacional) — era o que colava imóvel de outro estado (ex.: RJ
-      // p/ cliente de SP) só p/ preencher as 12 vagas. Melhor mandar menos que irrelevante.
-      const RAIOS_M = [50000, 100000, 200000, 400000];
+      // Raio MÁXIMO 200km (regra do dono, 01/08): acima disso o deslocamento inviabiliza
+      // a visita/arremate p/ a maioria dos investidores — melhor mandar menos que mandar
+      // imóvel a 400km. (Já foi 400km; antes disso, quase-nacional colava RJ p/ cliente SP.)
+      const RAIOS_M = [50000, 100000, 200000];
       // Teto de capital pela faixa da triagem (folga ~30% cobre entrada+financiamento;
       // 'acima_1mi' = sem teto). O valorMax do alerta, quando menor, prevalece.
       const TETO_FAIXA = { ate_150k: 200000, '150_400k': 520000, '400k_1mi': 1300000, acima_1mi: 0 };
@@ -366,6 +374,15 @@ async function handler(req) {
         for (const cid of cidadesRef.slice(0, 3)) {
           if (pool.size >= LIMITE) break;
           despejar(await sbGet(`imoveis_leilao?select=${SEL}&ativo=eq.true${uf ? `&estado=eq.${encodeURIComponent(uf)}` : ''}&cidade=ilike.*${encodeURIComponent(cid)}*&desconto_percentual=gte.${DESC_MIN}${tetoPerfil ? `&valor_minimo=lte.${tetoPerfil}` : ''}&order=desconto_percentual.desc&limit=24`), LIMITE - pool.size);
+        }
+      }
+
+      // 2b) SOBRA da divisão: se cidade+perfil não fechou a parte dele, os filtros
+      //     salvos completam ALÉM da própria cota (nenhuma vaga fica ociosa à toa).
+      if (temPerfil && pool.size < LIMITE) {
+        for (const f of savedFilters) {
+          if (pool.size >= LIMITE) break;
+          despejar(await buscarPorFiltro(f, (LIMITE - pool.size) * 2), LIMITE - pool.size);
         }
       }
 

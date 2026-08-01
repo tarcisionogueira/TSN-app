@@ -99,11 +99,13 @@ alerta prevalece se menor; `buscar_por_raio_v2` já aceitava os filtros — só 
 passe** relaxa preferências mas MANTÉM o teto (acima do capital ≠ vaga a preencher). Teto também
 aplicado aos fallbacks (nome da cidade, similares, nacional). Validado com o caso real do
 Charles: passe 1 = 38 casas venda_direta financiáveis ≤200k desc≥40% em ≤400km de Petrolândia/PE
-→ o 1º e-mail dele (sáb 02/08 ~8h BRT) fecha as 12 no perfil exato (R$79k-176k, 40-62% off,
-136-254km). **Mantidos por decisão em vigor**: raio máx 400km (não abre nacional p/ quem tem
-região) e piso desconto 40% — a regra "aumenta o raio ATÉ encontrar" do dono NÃO foi
-implementada além dos 400km (opção B, recusada por ora). Cadência lembrete: trava de 7d faz
-quem recebe o 1º e-mail no fim de semana pular a segunda imediata (Charles: próximo em 10/08).
+→ o 1º e-mail dele (sáb 02/08 ~8h BRT) fecha as 12. **AJUSTES FINAIS do dono (mesma sessão):**
+(1) **raio MÁXIMO = 200km** (50→100→200; acima disso o investidor não se desloca — já foi 400km);
+(2) **as 12 vagas são DIVIDIDAS entre os critérios**: filtros salvos E cidade+perfil presentes →
+6+6 (cota dos filtros distribuída entre eles; sobra de um critério vai p/ o outro — passo 2b);
+só um critério → leva as 12. Piso desconto 40% mantido. Charles pós-ajuste: 1 casa no perfil
+exato + 51 candidatos ≤200k/≥40%/≤200km → fecha 12. Cadência lembrete: trava de 7d faz quem
+recebe o 1º e-mail no fim de semana pular a segunda imediata (Charles: próximo em 10/08).
 
 ## ✅ COMEÇAR AQUI (31/07 — sessão 21: Índice ponderado por proximidade + KYC face match no parceiro e nos contratos)
 > Branch `claude/handoff-rotina-inicio-ta1z4a`. `npm run build` OK. Endpoints de API novos passam `node --check`. Commits: `8f54882` (Índice), `ec08d6d` (ponderação), `ac2307e` (campo doc), `b62b05a` (KYC parceiro), `ae543f7` (KYC contrato), `ad86a6f` (selfie_doc).
