@@ -55,7 +55,10 @@ export default function CriarContrato() {
   // Um LINK POR ASSINANTE: cada parte recebe por e-mail e pode compartilhar o link.
   const [signatarios, setSignatarios] = useState([{ nome: _preState.clienteNome || '', email: _preState.emailAssinante || '' }]);
   const [tipoContrato, setTipoContrato] = useState(_tipoInicial);
-  const [verificacao, setVerificacao] = useState('nenhuma');
+  // DEFAULT do documento avulso (manual ou gerado por IA): exige FOTO + DOCUMENTO (selfie_doc —
+  // rosto e documento no mesmo enquadramento), pedido do dono. Prova de autoria mais forte e casa
+  // com o face match do KYC. Continua editável (o staff pode trocar por 'nenhuma' num caso pontual).
+  const [verificacao, setVerificacao] = useState('selfie_doc');
   const [docsExtras, setDocsExtras] = useState([]); // ids dos docs extras exigidos
   const [requerTestemunha, setRequerTestemunha] = useState(false); // exige assinatura de testemunha
   // Atribuição a um plano/produto (opcional)
@@ -418,9 +421,12 @@ export default function CriarContrato() {
         <div>
           <div style={S.card}>
             <p style={S.secTitle}>Verificação de identidade do signatário</p>
-            <p style={{ fontSize: 12.5, color: '#64748b', margin: '0 0 16px', lineHeight: 1.6 }}>
+            <p style={{ fontSize: 12.5, color: '#64748b', margin: '0 0 12px', lineHeight: 1.6 }}>
               Seguindo o padrão da MP 2.200-2/2001 e Lei 14.063/2020. O signatário realiza a captura no próprio navegador, sem app externo.
             </p>
+            <div style={{ margin: '0 0 16px', padding: '10px 13px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, fontSize: 12, color: '#1e40af', lineHeight: 1.6 }}>
+              Por padrão, todo documento avulso pede <strong>foto (selfie) + documento</strong> do signatário — a plataforma confere automaticamente se são a mesma pessoa. Você pode ajustar abaixo se este documento específico não precisar.
+            </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
               {VERIFICACOES.map(v => (
                 <label key={v.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '13px 15px', borderRadius: 11, border: `2px solid ${verificacao === v.id ? '#0D63DB' : '#e2e8f0'}`, background: verificacao === v.id ? '#eff6ff' : 'white', cursor: 'pointer' }}>
