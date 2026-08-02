@@ -39,9 +39,23 @@ async function buscarDocumentoUsuario(userId) {
   } catch { return null; }
 }
 
+// O documento do KYC SÓ vale se o arquivo estiver no NOSSO Storage. A linha de `usuario_docs`
+// é escrita pelo próprio cliente (RLS permite inserir a própria linha — Perfil.jsx:542,
+// KycParceiroModal.jsx:62), então `url` é campo controlado por ele: sem esta trava, bastava
+// inserir `{tipo:'kyc_documento', url:'https://site-do-atacante/rg-forjado.jpg'}` e o face match
+// comparava a selfie com um "documento" fabricado pelo próprio usuário — aprovando identidade
+// (pré-requisito de saque). Fecha também o SSRF: o servidor deixa de buscar URL arbitrária.
+// Todos os gravadores legítimos usam URL assinada/pública dos nossos buckets.
+function ehUrlDoNossoStorage(url) {
+  const base = String(SUPABASE_URL || '').replace(/\/+$/, '');
+  if (!base) return false;
+  return String(url || '').startsWith(`${base}/storage/v1/`);
+}
+
 // Baixa uma imagem (URL assinada do bucket privado) → base64 p/ o Claude Vision. Cap de ~4MB
 // (limite prático do Vision e da memória do Edge). Retorna null se não for imagem/for grande demais.
 async function urlImagemParaBase64(url) {
+  if (!ehUrlDoNossoStorage(url)) return null;
   try {
     const r = await fetch(url, { signal: AbortSignal.timeout(12000) });
     if (!r.ok) return null;
@@ -82,7 +96,8 @@ async function validarRostoContraDocumento(user, selfieB64, selfieMedia, claudeK
     return jsonResp({ ok: false, pendente: true, mensagem: 'Selfie recebida. Sua identidade será confirmada pela equipe em breve.' });
   }
 
-  // 3) Documento em PDF (CNH digital) → não há como fazer o match automático da foto: revisão manual.
+  // 3) Documento em PDF (CNH digital) ou fora do nosso Storage → sem match automático: revisão manual.
+  //    (fora do Storage = linha forjada em usuario_docs; nunca aprova sozinha — ver ehUrlDoNossoStorage)
   const docImg = ehArquivoPdf(doc) ? null : await urlImagemParaBase64(doc.url);
   if (!docImg) {
     await marcarIdentidade(user.id, { identidade_pendente: true });

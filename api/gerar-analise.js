@@ -5,6 +5,7 @@
 export const config = { runtime: 'nodejs', maxDuration: 300 };
 
 import { getUser } from './_auth.js';
+import { fetchExternoSeguro } from './_allowed-hosts.js';
 import { anthropicFetch } from './_claude.js';
 import { custoRespostaClaude, medirGemini } from './_uso.js';
 import { resumoAprendizadoTexto } from './_arremate-aprendizado.js';
@@ -92,7 +93,10 @@ async function garantirEnderecoDoc(imovelId, deadline) {
       if (Date.now() > deadline) break;
       let buf = null, ct = '';
       try {
-        const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0', 'Accept-Language': 'pt-BR,pt;q=0.9' }, signal: AbortSignal.timeout(12000) });
+        // URL vem do banco (anexo/edital do leiloeiro) — fetchExternoSeguro barra rede interna
+        // e revalida cada redirect, igual aos demais leitores de documento (gerar-documental,
+        // enriquecer-lote). Antes era fetch cru: só filtrava por ^https?://.
+        const r = await fetchExternoSeguro(url, { headers: { 'User-Agent': 'Mozilla/5.0', 'Accept-Language': 'pt-BR,pt;q=0.9' }, signal: AbortSignal.timeout(12000) });
         if (!r.ok) continue;
         ct = r.headers.get('content-type') || '';
         buf = Buffer.from(await r.arrayBuffer().catch(() => new ArrayBuffer(0)));

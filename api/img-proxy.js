@@ -1,6 +1,6 @@
 export const config = { runtime: 'edge' };
 
-import { hostExternoSeguro } from './_allowed-hosts.js';
+import { hostExternoSeguro, fetchExternoSeguro } from './_allowed-hosts.js';
 
 export default async function handler(req) {
   const { searchParams } = new URL(req.url);
@@ -31,7 +31,10 @@ export default async function handler(req) {
   // da Vercel e devolve 404. As fotos da Caixa vão para o nosso Storage pelo backfill; este proxy
   // serve os demais hosts.
   try {
-    const res = await fetch(url, {
+    // fetchExternoSeguro revalida CADA hop: o guard acima só via a 1ª URL, e o fetch seguia
+    // redirect por padrão — um host liberado podia devolver 302 para 169.254.169.254/10.x e o
+    // proxy buscava a rede interna. Lança 'ssrf_bloqueado' (cai no catch → 502).
+    const res = await fetchExternoSeguro(url, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         'Referer': `https://${targetUrl.hostname}/`,

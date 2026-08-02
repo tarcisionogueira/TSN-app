@@ -84,6 +84,31 @@ nada. Conferido: o check está armado (dispara se a allowlist sumir) e o painel 
    com o token e sem `docs_identidade` assinava sem documento nenhum — e pulava junto o face match,
    que só roda quando as fotos vêm. Agora a API carrega as duas colunas e devolve 422 listando o
    que falta. Vale para a assessoria (R$ 4.800–6.000), que é o contrato mais caro.
+3. **O "documento" do KYC podia ser uma URL do próprio usuário (`api/validar-selfie.js`)** — o mais
+   grave da ofensiva, e ele **ficou mais crítico depois do item 1**: com tudo passando pelo face
+   match, a força do KYC passou a depender de UMA coisa — a procedência da foto do documento. E a
+   linha de `usuario_docs` é escrita pelo CLIENTE (a RLS permite inserir a própria linha —
+   `Perfil.jsx:542`, `KycParceiroModal.jsx:62`), então `url` era campo dele: bastava inserir
+   `{tipo:'kyc_documento', url:'https://site-do-atacante/rg-forjado.jpg'}` e o servidor comparava a
+   selfie com um "documento" fabricado — aprovando identidade e, com ela, o saque. Agora só é aceito
+   arquivo do NOSSO Storage (`${SUPABASE_URL}/storage/v1/…`); qualquer outra origem cai em revisão
+   manual, nunca em aprovação. Fecha junto o SSRF (o servidor deixou de buscar URL arbitrária).
+4. **Link de contrato saindo do domínio do atacante** (`assinar-contrato`, `assinar-testemunha`,
+   `gerar-contrato`, `auto-contrato`): o href do e-mail era montado com `req.headers.origin` (ou o
+   `Host`) — ambos do cliente. Um POST com `Origin` forjado fazia a BidPro enviar, **do próprio
+   domínio**, um e-mail a TODAS as partes com `https://<atacante>/#/c/<token>` — e o token de
+   assinatura de cada uma viaja no fragmento, que a página do atacante lê de `location.hash`. Agora
+   o link sai sempre de `APP_ORIGIN`. No mesmo commit: nome do signatário/testemunha e título do
+   contrato passam por `escapeHtml` (vinham crus do formulário público para o corpo do e-mail).
+5. **SSRF por redirect** (`api/img-proxy.js`, `api/gerar-analise.js`): a allowlist anti-rede-interna
+   era checada só na 1ª URL e o `fetch` seguia redirect — host liberado podia devolver 302 para
+   `169.254.169.254`/`10.x`. Passam a usar `fetchExternoSeguro`, que o projeto já tinha e revalida
+   CADA hop (era usado só em `enriquecer-lote`/`_edital-extrato`).
+> **Ofensiva completa: 02/08/2026.** 12 agentes, 8 achados confirmados por céticos, 8 não
+> verificados (entram no backlog abaixo). **Fica registrado como decisão, não como bug**: o face
+> match é *fail-open* por design (sem CLAUDE_KEY, erro técnico ou confiança não-alta NÃO bloqueiam
+> o assinante legítimo — só divergência CLARA barra). Se o dono quiser fail-closed, é mudança de
+> política, não correção.
 
 **E. BUG BOUNTY DO CÓDIGO (6 agentes por camada + céticos) — corrigidos:**
 1. **Webhook Asaas rebaixava assinante em dia (`api/asaas-webhook.js`)**: `PAYMENT_OVERDUE` e
@@ -148,6 +173,12 @@ já grava `ativo: true` — descoberto o padrão real da URL, os lotes voltam so
 - Fila de documentos: ~200 linhas de fontes PAGAS (GESTAOLEILOES 185, PECINI 19) enfileiradas antes
   da regra de 24/07 seguem sendo tentadas pelo drenador genérico e batem em Cloudflare
   ("Just a moment…") até esgotar as 4 tentativas. Desperdício limitado, mas é desperdício.
+- **Da ofensiva, achados NÃO verificados por cético** (não confirmados nem refutados — verificar
+  antes de mexer): `fetch-url.js:33` e `baixar-doc.js` com o mesmo padrão de redirect do img-proxy
+  (mesma correção: `fetchExternoSeguro`) · `enviar-alertas-cron.js:424` `link_foto` do leiloeiro cru
+  dentro de atributo HTML do e-mail · `email-alerta.js:83` corpo montado com HTML do request sem
+  escape · `chat-suporte.js:81,97` campo `memoria` do cliente concatenado no system prompt e
+  endpoint de IA sem rate limit.
 
 **H. O QUE DEPENDE DO DONO — a lista de ontem continua valendo** (`PENDENCIAS_DONO.md`): Resend
 (URL com `www.` + Re-enable) · 3 checagens do painel Google Ads + conversão do Charles · atribuir
