@@ -328,6 +328,11 @@ export default async function handler(req, res) {
       }
       result = await processarConfirmado(contexto);
     } else if (status === 'rejected' || status === 'cancelled') {
+      // Compra AVULSA de produto/serviço não é assinatura: PIX que expirou ou cartão recusado só
+      // deixa a compra pendente. Sem este guard (que os ramos 'approved' e 'charged_back' já
+      // tinham), o assinante em dia que abandonava um PIX de produto era rebaixado a explorador
+      // com inadimplente_desde marcado. Mesmo defeito corrigido no asaas-webhook nesta sessão.
+      if (ehProdutoMp) return res.status(200).json({ ok: true, ignorado: `produto_${status}` });
       result = await processarRecusado({ ...contexto, motivo: pagamento.status_detail || status });
     } else if (status === 'charged_back') {
       if (ehProdutoMp) {

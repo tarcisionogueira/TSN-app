@@ -283,9 +283,21 @@ export default async function handler(req) {
     // Criar arrematacao
     if (!GESTORES.includes(userRole)) return forbidden('Apenas admin/analista podem registrar arrematações');
 
-    const { imovel_id, arrematante_id, valor_arrematado, data_leilao, leiloeiro, numero_processo, observacoes } = body;
+    const { imovel_id, arrematante_id: arrematanteIdBody, arrematante_email, valor_arrematado, data_leilao, leiloeiro, numero_processo, observacoes } = body;
+    // O e-mail é resolvido AQUI (service key), não no navegador: `perfis` não tem coluna `email`
+    // (fica em auth.users) e a RPC get_user_id_by_email é service-only de propósito — expor a
+    // busca por e-mail ao cliente seria um oráculo de enumeração de contas. Só gestor chega aqui.
+    let arrematante_id = arrematanteIdBody || null;
+    if (!arrematante_id && arrematante_email) {
+      const rid = await dbFetch('rpc/get_user_id_by_email', {
+        method: 'POST',
+        body: JSON.stringify({ p_email: String(arrematante_email).trim().toLowerCase() }),
+      });
+      arrematante_id = (rid.ok && typeof rid.data === 'string') ? rid.data : null;
+      if (!arrematante_id) return json({ error: 'Nenhum usuário cadastrado com esse e-mail.' }, 404);
+    }
     if (!imovel_id || !arrematante_id) {
-      return json({ error: 'imovel_id e arrematante_id são obrigatórios' }, 400);
+      return json({ error: 'imovel_id e arrematante_id (ou arrematante_email) são obrigatórios' }, 400);
     }
 
     // Herda a equipe sorteada no caso (analista na reunião, advogado no jurídico)

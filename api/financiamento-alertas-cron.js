@@ -141,7 +141,9 @@ export default async function handler(req, res) {
   }
 
   if (erros.length > 0) {
-    await alertarErro('[financiamento-alertas-cron]', `${erros.length} financiamentos com erro`, { ids: erros });
+    // Mesma assinatura correta: um objeto. Com args posicionais, `rota`/`erro` saíam undefined
+    // e o e-mail de alerta ia vazio (ou nem saía, pela chave de debounce "undefined:undefined").
+    alertarErro({ rota: '/api/financiamento-alertas-cron', erro: `${erros.length} financiamentos com erro`, extra: { ids: erros } });
   }
 
   return res.status(200).json({ ok: true, enviados, total: fins?.length || 0, erros: erros.length });

@@ -155,7 +155,55 @@ em `FONTES_SEM_SAUDE` no monitor, com uma lista `FONTES_PARADAS` que evita o ale
 já grava `ativo: true` — descoberto o padrão real da URL, os lotes voltam sozinhos.
 **Próximo passo (não feito)**: recon do padrão real de URL do lote da SATO antes de religar.
 
+**E2. FECHAMENTO DO BUG BOUNTY (24 agentes; 13 confirmados por céticos, 5 refutados, 31 não
+verificados). Corrigidos além dos de cima:**
+6. **`perfis.email` NÃO EXISTE — e 7 telas dependiam dele.** O e-mail mora em `auth.users`; pedir
+   `email` no select ou no embed (`perfis(email)`) faz o PostgREST devolver **400** e, como o front
+   não checava `error`, a tela renderizava **vazia/zerada sem avisar**. É a MESMA causa do "painel
+   de Assinaturas tudo 0" da sessão 15 — corrigida lá (`AdminFinanceiro.jsx:331` até documenta a
+   lição) e sobrevivente em 7 pontos. Estavam quebrados: **Dashboard → detalhe por plano ("0
+   usuários / MRR R$ 0,00" em TODOS os planos)**, detalhe da equipe por papel, lista de
+   assessorados, "Salvar e notificar" da ficha (e-mail do cliente nunca carregava), Alertas de
+   E-mail do Marketing (sempre vazio), transcrições de reunião, e o **registro de arremate por
+   e-mail** (`ImovelDetalhe.jsx:298` dizia SEMPRE "Usuário não encontrado com esse email"). Correção
+   na raiz: RPC `admin_emails_por_ids(uuid[])` (migração APLICADA, guard admin/equipe, revoke anon)
+   + helper `emailsPorIds()` no Admin.jsx, usado nos 6 pontos; o 7º (arremate) resolve o e-mail no
+   **servidor** (`/api/arrematacoes` aceita `arrematante_email`), porque `get_user_id_by_email` é
+   service-only de propósito — expor busca por e-mail ao cliente seria oráculo de enumeração.
+7. **Regeração de relatório morria em ≤30s e cobrava cota de novo (`AnalisesContext.jsx:103`)**: o
+   varredor de "gerando" travado media contra `startedAt`, que vem do `created_at` da linha — a data
+   da PRIMEIRA geração, não da atual. Ao regerar um relatório antigo, a tela dizia "excedeu o tempo
+   limite" em segundos, o polling parava e o resultado real nunca chegava; clicar de novo consumia
+   cota outra vez (o servidor via a linha em 'gerando', não 'concluida'). Agora usa `updatedAt` — a
+   mesma régua que o `rowToEntry` logo acima já usava.
+8. **Mercado Pago rebaixava assinante em dia (`api/mp-webhook.js:331`)**: gêmeo exato do bug do
+   Asaas (item E1) — `rejected`/`cancelled` de compra AVULSA caía em `processarRecusado` sem o guard
+   `ehProdutoMp` que os ramos `approved` e `charged_back` já tinham. PIX de produto que expira
+   rebaixava o plano de quem paga.
+9. **TODO chargeback e TODO reembolso quebravam no fim (`api/_webhook-core.js:428/527/547`)**:
+   `alertarErro` é SÍNCRONA e recebe UM objeto `{rota, erro, extra}`; as três chamadas usavam args
+   posicionais + `.catch()` sobre o retorno (`undefined`) → **TypeError** logo depois de já ter
+   gravado o chargeback e suspendido o acesso. Resultado: a equipe **nunca** recebia o alerta e o
+   webhook devolvia 5xx ao gateway em todo chargeback/reembolso (com o evento já marcado como
+   processado, a reentrega era descartada). Um gateway que vê 5xx repetido desativa o webhook — foi
+   exatamente o que aconteceu com o Resend. Mesma correção em `financiamento-alertas-cron.js:144`.
+
 **G. BACKLOG do bug bounty (achado e NÃO corrigido nesta sessão — registrado de propósito):**
+- `api/promo-capturar.js:112` (CONFIRMADO) — link promocional de curso/e-book mostra "🎉 Acesso
+  liberado!" mas nenhum entitlement é criado (`compras_produtos` nunca recebe linha): o cliente bate
+  no paywall. `links_promo` ainda não tem link de curso/ebook em produção — corrigir antes de criar
+  o primeiro. Ou concede de verdade, ou muda o texto da tela.
+- `api/gerar-documental.js:1602` (CONFIRMADO) — aviso "a matrícula corrige a cidade/metragem do
+  mercadológico" é gravado DEPOIS do upsert: some ao recarregar e nunca aparece se a aba fechou.
+- `src/pages/Analise.jsx:2763` (CONFIRMADO) — "Corrigir e regerar a avaliação" refaz a pesquisa com
+  a cidade/metragem ANTIGAS (closure velha) e não atualiza o relatório persistido.
+- `api/garantia-cancelar.js:116` (CONFIRMADO) — cancelamento da recorrência MP inoperante no
+  fallback (string iterada char a char) e ignora `mp_preapproval_id`, mas responde "cancelada".
+- `src/pages/Admin.jsx` (CONFIRMADO) — upload de documentos do arremate ignora `res.ok`.
+- `src/pages/Checkout.jsx:266` (CONFIRMADO) — gate da assessoria falha FECHADO por erro HTTP.
+- `api/indice-mercado.js:60` (CONFIRMADO) — gate de custo falha ABERTO (RPC indisponível = ilimitado).
+- `api/enviar-alertas-cron.js:210` (CONFIRMADO) — consulta `arrematacoes?user_id=…`, coluna que não
+  existe (é `arrematante_id`): a etapa "similares ao que você arrematou" nunca roda.
 - `api/gerar-laudo-viabilidade.js:211` — gate do laudo aceita mercadológico vazio/sem parecer e
   emite veredito sobre "valor de mercado R$ 0".
 - `api/documental-retry-cron.js:39` — janela de 48h medida por `updated_at`, que desliza a cada
@@ -179,6 +227,20 @@ já grava `ativo: true` — descoberto o padrão real da URL, os lotes voltam so
   dentro de atributo HTML do e-mail · `email-alerta.js:83` corpo montado com HTML do request sem
   escape · `chat-suporte.js:81,97` campo `memoria` do cliente concatenado no system prompt e
   endpoint de IA sem rate limit.
+- **Do bug bounty, 31 achados NÃO verificados por cético** — os de maior valor aparente, para
+  confirmar antes de mexer: `Admin.jsx:9550` relógio de SLA do Pipeline sobre `casos.updated_at`
+  (campo que o fluxo não toca) · `Admin.jsx:9512` coluna "Concluído" inalcançável
+  (`casos.concluido_em` lida e nunca gravada) · `Admin.jsx:9566` abrir a ficha pelo Pipeline
+  personifica TODO cliente como 'assessorado' · `Admin.jsx:7131` Comercial/Assinaturas contam
+  `perfis` no navegador sem limite (corte de 1.000 — mesmo padrão já corrigido no Marketing) ·
+  `reconciliar-asaas-cron.js:86/90` promove de plano quem só comprou produto avulso e grava
+  `plano_ciclo='mensal'` para pagamento ANUAL · `daily-webhook.js:56` sem idempotência (reentrega
+  duplica transcrição) · `monitor-dados-cron.js:38` e `monitor-fontes-cron.js:409` engolem falha
+  (RPC quebrada vira "0 regressões"; alerta marcado como enviado sem checar o Resend) ·
+  `juridico-lembretes-cron.js:120` repõe aviso já escalado · `agendar-reuniao.js:182` devolve
+  ok:true com o INSERT falhando (slot queimado) · `gerar-laudo-viabilidade.js:211` aceita
+  mercadológico vazio · `documental-retry-cron.js:39` re-tenta para sempre · `duvida.js:69`
+  (**já corrigido nesta sessão**, o cético não chegou a rodar).
 
 **H. O QUE DEPENDE DO DONO — a lista de ontem continua valendo** (`PENDENCIAS_DONO.md`): Resend
 (URL com `www.` + Re-enable) · 3 checagens do painel Google Ads + conversão do Charles · atribuir

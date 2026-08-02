@@ -100,7 +100,13 @@ export function AnalisesProvider({ children }) {
     const demote = (list) => {
       let mudou = false;
       const out = list.map(a => {
-        if (a.status === 'gerando' && Date.now() - (a.startedAt || a.updatedAt || 0) > STALE_GERANDO_MS) {
+        // Régua = `updatedAt` (o carimbo que o SERVIDOR desliza a cada upsert), igual ao
+        // rowToEntry acima. Com `startedAt` primeiro, uma REGERAÇÃO era rebaixada em ≤30s: o
+        // startedAt vem do `created_at` da linha — a data da 1ª geração, não desta —, então
+        // `Date.now() - startedAt` já nascia acima do limite. A tela dizia "excedeu o tempo
+        // limite" com o servidor ainda gerando, o polling parava (temGerando=false) e o
+        // resultado real nunca chegava; clicar de novo consumia cota outra vez.
+        if (a.status === 'gerando' && Date.now() - (a.updatedAt || a.startedAt || 0) > STALE_GERANDO_MS) {
           mudou = true;
           return { ...a, status: 'erro', erro: a.erro || 'A geração excedeu o tempo limite. Gere novamente.' };
         }

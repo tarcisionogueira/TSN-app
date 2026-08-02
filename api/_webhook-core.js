@@ -425,7 +425,9 @@ export async function processarConfirmado({ valor, descricao, email, gatewayCust
       if (dist && dist.ok === false) console.warn(`[${gateway}] comissao_rede:`, JSON.stringify(dist).slice(0, 200));
     } catch (e) {
       console.error(`[${gateway}] comissao_rede:`, e.message);
-      alertarErro(`[${gateway}] Falha na comissão de rede: ${e.message}`, { cliente_id: cliente?.id }).catch(() => {});
+      // alertarErro é SÍNCRONO e recebe UM objeto { rota, erro, extra } — chamá-lo com args
+      // posicionais e .catch() em cima do retorno (undefined) lançava TypeError aqui dentro.
+      alertarErro({ rota: `webhook/${gateway}`, erro: `Falha na comissão de rede: ${e.message}`, extra: { cliente_id: cliente?.id } });
     }
   }
 
@@ -524,10 +526,15 @@ export async function processarChargeback({ valor, descricao, email, gatewayCust
   try { await estornarComissao({ gatewayPaymentId, gateway, motivo: 'chargeback' }); } catch (_) {}
 
   // Alerta a equipe
-  alertarErro(
-    `⚠️ Chargeback recebido (${gateway}) — ${email || gatewayPaymentId} — R$ ${Number(valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}. Defesa: ${aceite ? 'dossiê pronto' : 'SEM evidência de aceite'}.`,
-    { gatewayPaymentId, plano: aceite?.plano_key, temAceite: !!aceite },
-  ).catch(() => {});
+  // Assinatura correta ({rota,erro,extra}, síncrona). Antes: dois args posicionais + .catch()
+  // sobre undefined → TypeError JUSTO AQUI, depois de já ter gravado o chargeback e suspendido
+  // o acesso: a equipe nunca recebia o alerta e o webhook devolvia 5xx ao gateway em TODO
+  // chargeback (com o evento já marcado como processado, a reentrega era descartada).
+  alertarErro({
+    rota: `webhook/${gateway}/chargeback`,
+    erro: `Chargeback recebido — ${email || gatewayPaymentId} — R$ ${Number(valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}. Defesa: ${aceite ? 'dossiê pronto' : 'SEM evidência de aceite'}.`,
+    extra: { gatewayPaymentId, plano: aceite?.plano_key, temAceite: !!aceite },
+  });
 
   return { ok: true, chargeback: true, defesa: aceite ? 'dossie_pronto' : 'sem_evidencia' };
 }
@@ -544,10 +551,11 @@ export async function processarReembolso({ valor, email, gatewayCustomerId, gate
   }
   let estorno = null;
   try { estorno = await estornarComissao({ gatewayPaymentId, gateway, motivo: 'reembolso' }); } catch (e) { estorno = { erro: e?.message || String(e) }; }
-  alertarErro(
-    `↩️ Reembolso processado (${gateway}) — ${email || gatewayPaymentId} — R$ ${Number(valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}. Comissão de rede estornada${suspender ? '; acesso suspenso' : ' (reembolso parcial — acesso mantido)'}.`,
-    { gatewayPaymentId },
-  ).catch(() => {});
+  alertarErro({
+    rota: `webhook/${gateway}/reembolso`,
+    erro: `Reembolso processado — ${email || gatewayPaymentId} — R$ ${Number(valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}. Comissão de rede estornada${suspender ? '; acesso suspenso' : ' (reembolso parcial — acesso mantido)'}.`,
+    extra: { gatewayPaymentId },
+  });
   return { ok: true, reembolso: true, suspenso: suspender, estorno };
 }
 

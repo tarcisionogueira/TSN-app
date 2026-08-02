@@ -23,6 +23,20 @@ const ROLES_DISPONIVEIS = [
   'admin','explorador','top2','assessorado','clube','analista','advogado','leiloeiro',
 ];
 
+// `perfis` NÃO tem coluna `email` — o e-mail mora em auth.users. Pedir `email` no select ou no
+// embed (`perfis(email)`) faz o PostgREST responder 400 e, sem checar `error`, a tela renderiza
+// VAZIA/ZERADA sem avisar ninguém. Foi assim que o painel de Assinaturas ficou "tudo 0" (sessão
+// 15) e assim que o Dashboard por plano, o detalhe da equipe, o "Salvar e notificar" e os alertas
+// de e-mail do Marketing estavam quebrados até 02/08. Aqui o e-mail vem da RPC admin_emails_por_ids
+// (SECURITY DEFINER com guard de admin/equipe). Nunca volte a pedir `email` em `perfis`.
+async function emailsPorIds(ids) {
+  const unicos = [...new Set((ids || []).filter(Boolean))];
+  if (!unicos.length) return new Map();
+  const { data, error } = await supabase.rpc('admin_emails_por_ids', { p_ids: unicos });
+  if (error) { console.error('[admin] emails_por_ids:', error.message); return new Map(); }
+  return new Map((data || []).map((r) => [r.id, r.email]));
+}
+
 // ─── styles ──────────────────────────────────────────────────────────────────
 // Máscara R$ — usa centavos internamente, exibe formatado
 function maskBRL(raw) {
@@ -2013,11 +2027,17 @@ function ConfigTab() {
     // Carrega assinaturas assessorado ativas
     setLoadingAssessorados(true);
     supabase.from('plano_assinaturas')
-      .select('*, perfis:user_id(nome, email)')
+      .select('*, perfis:user_id(nome)')   // e-mail vem da RPC (perfis não tem a coluna)
       .eq('plano_key', 'assessorado')
       .eq('status', 'ativo')
       .order('created_at', { ascending: false })
-      .then(({ data }) => { setAssessorados(data || []); setLoadingAssessorados(false); });
+      .then(async ({ data, error }) => {
+        if (error) console.error('[assessorados]', error.message);
+        const linhas = data || [];
+        const mapa = await emailsPorIds(linhas.map((a) => a.user_id));
+        setAssessorados(linhas.map((a) => ({ ...a, perfis: { ...(a.perfis || {}), email: mapa.get(a.user_id) || '' } })));
+        setLoadingAssessorados(false);
+      });
   }, []);
 
   function updateCfin(gateway, field, value) {
@@ -4430,10 +4450,18 @@ function UsuariosPlanoDetalhe({ planoKey }) {
 
   React.useEffect(() => {
     supabase.from('perfis')
-      .select('id, nome, email, created_at, inadimplente_desde, plano_ciclo, plano_vencimento')
+      .select('id, nome, created_at, inadimplente_desde, plano_ciclo, plano_vencimento')
       .eq('role', planoKey)
       .order('created_at', { ascending: false })
-      .then(({ data }) => { setUsuarios(data || []); setLoading(false); });
+      .then(async ({ data, error }) => {
+        // Era aqui que o detalhe por plano mostrava "0 usuários / MRR R$ 0,00": o `email` no
+        // select derrubava a query inteira (400) e o erro não era checado.
+        if (error) console.error('[dashboard plano]', error.message);
+        const linhas = data || [];
+        const mapa = await emailsPorIds(linhas.map((u) => u.id));
+        setUsuarios(linhas.map((u) => ({ ...u, email: mapa.get(u.id) || '' })));
+        setLoading(false);
+      });
   }, [planoKey]);
 
   if (loading) return <div style={{ color: '#94a3b8', fontSize: 13, textAlign: 'center', padding: 20 }}>Carregando...</div>;
@@ -4923,8 +4951,10 @@ function DashboardTab({ irParaTab }) {
 
   async function loadEquipeDetalhe(roleKey, p, ini, fim) {
     setEquipeDetalhe(roleKey);
-    const { data: membros } = await supabase.from('perfis').select('id, nome, email, created_at').eq('role', roleKey);
-    setEquipeMembros(membros || []);
+    const { data: membros, error: errMembros } = await supabase.from('perfis').select('id, nome, created_at').eq('role', roleKey);
+    if (errMembros) console.error('[equipe detalhe]', errMembros.message);
+    const mapaEmails = await emailsPorIds((membros || []).map((m) => m.id));
+    setEquipeMembros((membros || []).map((m) => ({ ...m, email: mapaEmails.get(m.id) || '' })));
     if (!membros?.length) { setEquipeMetrics({}); return; }
     const ids = membros.map(m => m.id);
     const range = getRange(p || periodo, ini ?? dataInicio, fim ?? dataFim);
@@ -7286,10 +7316,12 @@ function SolicitacaoModal({ sol, membros, onClose, onSaved }) {
 
   useEffect(() => {
     if (sol.user_id) {
-      supabase.from('perfis').select('email, nome').eq('id', sol.user_id).single()
-        .then(({ data }) => {
-          if (data?.email) setClienteEmail(data.email);
+      supabase.from('perfis').select('nome').eq('id', sol.user_id).single()
+        .then(async ({ data }) => {
           if (data?.nome) setClienteNome(data.nome);
+          const mapa = await emailsPorIds([sol.user_id]);
+          const mail = mapa.get(sol.user_id);
+          if (mail) setClienteEmail(mail);
         });
     }
   }, [sol.user_id]);
@@ -8824,8 +8856,10 @@ function MarketingTab() {
       setOportunidades(oportsArr);
 
       // ── Seção 5: Alertas ──
-      const { data: alertasRaw } = await supabase.from('alertas_email').select('*, perfis(email)').order('total_enviados', { ascending: false });
-      setAlertas(alertasRaw || []);
+      const { data: alertasRaw, error: errAlertas } = await supabase.from('alertas_email').select('*').order('total_enviados', { ascending: false });
+      if (errAlertas) console.error('[marketing alertas]', errAlertas.message);
+      const mapaAlertas = await emailsPorIds((alertasRaw || []).map((a) => a.user_id));
+      setAlertas((alertasRaw || []).map((a) => ({ ...a, perfis: { email: mapaAlertas.get(a.user_id) || '' } })));
 
       // ── Seção 6: Funil de captação por origem (Meta/Google/UTM/indicação → cadastro →
       // engajou → CONTRATOU, com receita) — agregado no servidor, respeita o período.
@@ -10020,11 +10054,19 @@ function RegistrosTab() {
       .select(`
         id, transcricao, duracao_seg, daily_room_name, created_at,
         solicitacoes ( imovel_nome, imovel_cidade, tipo, user_id,
-          perfis:user_id ( nome, email )
+          perfis:user_id ( nome )
         )
       `)
       .order('created_at', { ascending: false })
-      .then(({ data }) => { setTranscricoes(data || []); setLoading(false); });
+      .then(async ({ data, error }) => {
+        if (error) console.error('[transcricoes]', error.message);
+        const linhas = data || [];
+        const mapa = await emailsPorIds(linhas.map((t) => t.solicitacoes?.user_id));
+        setTranscricoes(linhas.map((t) => (t.solicitacoes
+          ? { ...t, solicitacoes: { ...t.solicitacoes, perfis: { ...(t.solicitacoes.perfis || {}), email: mapa.get(t.solicitacoes.user_id) || '' } } }
+          : t)));
+        setLoading(false);
+      });
   }, []);
 
   const meses = [...new Set(transcricoes.map(t => t.created_at?.slice(0, 7)))];

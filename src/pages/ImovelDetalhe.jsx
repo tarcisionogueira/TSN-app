@@ -294,15 +294,14 @@ function SecaoArrematacao({ imovelId, imovelTitulo }) {
   const registrar = async () => {
     setSalvando(true);
     try {
-      // Busca arrematante pelo email
-      const { data: perfis } = await supabase.from('perfis').select('id,nome').ilike('email', form.arrematante_email.trim()).limit(1);
-      if (!perfis?.length) { alert('Usuário não encontrado com esse email'); setSalvando(false); return; }
-      const arrematante_id = perfis[0].id;
+      // O arrematante é resolvido pelo e-mail NO SERVIDOR (/api/arrematacoes): `perfis` não tem
+      // coluna `email` — o filtro .ilike('email', …) daqui devolvia 400 e a tela dizia SEMPRE
+      // "Usuário não encontrado com esse email", mesmo com o cliente cadastrado.
       const t = await token();
       const r = await fetch('/api/arrematacoes', {
         method: 'POST',
         headers: { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imovel_id: imovelId, arrematante_id, valor_arrematado: parseFloat(form.valor_arrematado) || null, data_leilao: form.data_leilao || null, leiloeiro: form.leiloeiro, numero_processo: form.numero_processo, observacoes: form.observacoes }),
+        body: JSON.stringify({ imovel_id: imovelId, arrematante_email: form.arrematante_email.trim(), valor_arrematado: parseFloat(form.valor_arrematado) || null, data_leilao: form.data_leilao || null, leiloeiro: form.leiloeiro, numero_processo: form.numero_processo, observacoes: form.observacoes }),
       });
       if (r.ok) { setModalAberto(false); carregar(); }
       else { const e = await r.json(); alert(e.error || 'Erro ao registrar'); }
