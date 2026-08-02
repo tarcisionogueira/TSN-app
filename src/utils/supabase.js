@@ -3,7 +3,43 @@ import { createClient } from '@supabase/supabase-js';
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://zuwfiwokkdytvjixiwac.supabase.co';
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// ─── Erro do Supabase NUNCA mais em silêncio ─────────────────────────────────
+// Família de bug que mais apareceu na varredura de 02/08: uma consulta pede uma coluna que
+// não existe (`perfis.email`, `sdr_leads.respostas`, `arrematacoes.user_id`), o PostgREST
+// devolve 400, o `error` não é checado no call-site e a tela renderiza VAZIA/ZERADA sem
+// avisar ninguém — foi assim que o painel de Assinaturas ficou "tudo 0" e o Dashboard passou
+// dias mostrando MRR R$ 0,00. Corrigir call-site por call-site não escala: aqui o próprio
+// cliente reporta qualquer resposta ruim para `erros_cliente`, que a verificação de saúde e o
+// Cliente 360 já leem. Custo ~zero: só age no caminho de ERRO, com dedup e teto por sessão
+// (reportarErroCliente), e nunca interfere na resposta devolvida ao chamador.
+const STATUS_IGNORADOS = new Set([
+  401, 403, // sessão expirada / RLS negando — esperado em tela pública, viraria ruído
+  406,      // .single() sem linhas: fluxo normal do app
+  409,      // conflito de upsert tratado pelo call-site
+]);
+
+async function fetchComRelato(input, init) {
+  const res = await fetch(input, init);
+  try {
+    if (!res.ok && !STATUS_IGNORADOS.has(res.status)) {
+      const url = typeof input === 'string' ? input : (input?.url || '');
+      // Login/cadastro têm erro de negócio esperado (senha errada, e-mail duplicado).
+      if (!url.includes('/auth/v1/')) {
+        const alvo = decodeURIComponent((url.split('/rest/v1/')[1] || url).split('?')[0]) || 'supabase';
+        const corpo = await res.clone().text().catch(() => '');
+        let detalhe = corpo.slice(0, 200);
+        try { const j = JSON.parse(corpo); detalhe = j?.message || j?.hint || j?.error || detalhe; } catch { /* texto puro */ }
+        const { reportarErroCliente } = await import('./reportarErro.js'); // dinâmico: evita ciclo
+        reportarErroCliente({ msg: `Supabase ${res.status} em "${alvo}": ${detalhe}` });
+      }
+    }
+  } catch { /* observabilidade nunca quebra a chamada real */ }
+  return res;
+}
+
+export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  global: { fetch: fetchComRelato },
+});
 
 // ─── AUTH ────────────────────────────────────────────────────────────────────
 

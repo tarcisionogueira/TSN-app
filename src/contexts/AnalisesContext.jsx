@@ -39,6 +39,11 @@ const rowToEntry = (r) => {
     updatedAt,
     progresso: r.progresso || null, // barra de evolução das etapas (só mercadológico)
     dataLeilao: r.data_leilao || null, // p/ calcular a expiração do relatório na tela
+    // Divergências que o DOCUMENTAL achou contra a matrícula (cidade/metragem). O documental
+    // já gravava isto em analises_mercado.correcoes_sugeridas, mas NINGUÉM lia de volta: o
+    // aviso só existia na resposta HTTP daquela geração e sumia ao recarregar (ou nunca
+    // aparecia, se a aba tinha sido fechada). Agora sobrevive ao reload.
+    correcoesSugeridas: Array.isArray(r.correcoes_sugeridas?.correcoes) ? r.correcoes_sugeridas.correcoes : null,
   };
 };
 

@@ -767,17 +767,24 @@ export default function Analise() {
     }
   };
 
-  const analisarMercadoClick = async () => {
-    if (!d.endereco && !d.cidade) { showMsg('Preencha o endereço ou cidade antes.','error'); return; }
+  // `override` existe porque "Corrigir e regerar" precisa pesquisar com os valores CORRIGIDOS
+  // no mesmo clique: `setD` é assíncrono e esta função captura o `d` do render atual — o
+  // setTimeout de 150ms não trocava o closure, então a pesquisa saía com a cidade/metragem
+  // ANTIGAS, justamente as que o documental acabara de desmentir.
+  const analisarMercadoClick = async (override = null) => {
+    // Só aceita override de DADOS (nunca um evento de clique passado por engano no onClick).
+    const ov = (override && typeof override === 'object' && !override.nativeEvent && !override.target) ? override : null;
+    const dd = ov ? { ...d, ...ov } : d;
+    if (!dd.endereco && !dd.cidade) { showMsg('Preencha o endereço ou cidade antes.','error'); return; }
     setLoadMercado(true);
     try {
       const res = await analisarMercado({
-        endereco: d.endereco||d.cidade, tipoImovel: d.tipo,
-        areaM2: d.areaM2, cidade: d.cidade, estado: d.estado,
-        nomeCondominio: d.nomeCondominio||'',
+        endereco: dd.endereco||dd.cidade, tipoImovel: dd.tipo,
+        areaM2: dd.areaM2, cidade: dd.cidade, estado: dd.estado,
+        nomeCondominio: dd.nomeCondominio||'',
       });
       setMercado(res);
-      if (res?.precoMedioM2 && d.areaM2) up('valorMercado', Math.round(res.precoMedioM2*d.areaM2*0.9));
+      if (res?.precoMedioM2 && dd.areaM2) up('valorMercado', Math.round(res.precoMedioM2*dd.areaM2*0.9));
       if (res?.aluguelMedio) up('valorLocacao', Math.round(res.aluguelMedio));
       setOpenSec(p => ({ ...p, mercado:true, viabilidade:true }));
       showMsg('Avaliação mercadológica concluída!');
@@ -826,6 +833,15 @@ export default function Analise() {
   // Item 2: correções que o documental achou nos docs e que impactam o mercadológico já gerado
   // (ex.: cidade/metragem diferentes) — a tela informa o IMPACTO e oferece regerar ao usuário.
   const [correcoesMercado, setCorrecoesMercado] = useState(null);
+  // Reidrata o aviso a partir do que o documental GRAVOU (analises_mercado.correcoes_sugeridas).
+  // Sem isto o alerta só existia na resposta HTTP daquela geração: recarregar a página — ou
+  // fechar a aba durante o documental — fazia a divergência (cidade/metragem errada no
+  // mercadológico) sumir para sempre, mesmo estando salva no banco.
+  useEffect(() => {
+    if (correcoesMercado) return;
+    const salvas = getAnalise(analiseImovelId)?.correcoesSugeridas;
+    if (Array.isArray(salvas) && salvas.length) setCorrecoesMercado(salvas);
+  }, [analiseImovelId, analiseEntry?.updatedAt]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const entry = getAnalise(analiseImovelId);
     if (entry?.status === 'gerando') return;
@@ -2753,14 +2769,16 @@ export default function Analise() {
           <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
             <button onClick={() => {
               const cs = correcoesMercado || [];
-              setD(p => { const np = { ...p };
-                for (const c of cs) {
-                  if (c.campo === 'cidade') { const m = String(c.para).match(/(.+?)[\/,]\s*([A-Za-z]{2})\s*$/); if (m) { np.cidade = m[1].trim(); np.estado = m[2].toUpperCase(); } }
-                  if (c.campo === 'metragem') { const n = parseFloat(String(c.para).replace(/[^0-9,.]/g,'').replace(/\./g,'').replace(',', '.')); if (n>0) np.areaM2 = n; }
-                }
-                return np; });
+              // Monta o override ANTES: o mesmo objeto vai para o estado e para a pesquisa,
+              // então a regeração usa exatamente os dados corrigidos (não os do render atual).
+              const corr = {};
+              for (const c of cs) {
+                if (c.campo === 'cidade') { const m = String(c.para).match(/(.+?)[\/,]\s*([A-Za-z]{2})\s*$/); if (m) { corr.cidade = m[1].trim(); corr.estado = m[2].toUpperCase(); } }
+                if (c.campo === 'metragem') { const n = parseFloat(String(c.para).replace(/[^0-9,.]/g,'').replace(/\./g,'').replace(',', '.')); if (n>0) corr.areaM2 = n; }
+              }
+              setD(p => ({ ...p, ...corr }));
               setCorrecoesMercado(null);
-              setTimeout(() => analisarMercadoClick(), 150); // deixa o setD aplicar antes de regerar
+              analisarMercadoClick(corr);
             }} style={{ padding:'8px 14px', background:'#d97706', color:'white', border:'none', borderRadius:8, fontWeight:800, fontSize:12.5, cursor:'pointer' }}>
               Corrigir e regerar a avaliação
             </button>
@@ -2782,7 +2800,7 @@ export default function Analise() {
             </div>
           </div>
 
-          <button onClick={analisarMercadoClick} disabled={loadMercado}
+          <button onClick={() => analisarMercadoClick()} disabled={loadMercado}
             style={{ width:'100%', padding:'13px', background:loadMercado?'#6ee7b7':'#10b981', color:'white', border:'none', borderRadius:12, fontWeight:800, fontSize:14, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
             {loadMercado ? <><Loader2 size={16} style={{animation:'spin 1s linear infinite'}}/> Pesquisando amostras no mercado...</> : <><BarChart3 size={16}/> {mercado ? 'Atualizar Pesquisa de Mercado' : 'Iniciar Avaliação Mercadológica com IA'}</>}
           </button>

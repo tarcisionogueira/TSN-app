@@ -207,7 +207,10 @@ async function handler(req) {
   const [alertasArr, fsalvosArr, arremArr, enviadosArr, fbArr] = await Promise.all([
     sbGet(`alertas_email?user_id=in.${inList}&select=user_id,ativo,ultimo_envio,filtros,total_enviados`),
     sbGet(`filtros_salvos?user_id=in.${inList}&select=user_id,filtros,criado_em&order=criado_em.desc`),
-    sbGet(`arrematacoes?user_id=in.${inList}&select=user_id,imovel_id`),
+    // `arrematacoes` NÃO tem coluna user_id — o dono do arremate é `arrematante_id`. Com a
+    // coluna errada o PostgREST devolvia 400, o sbGet caía em [] e a etapa "similares ao que
+    // você arrematou" NUNCA rodou. `user_id` é criado no map abaixo para o resto seguir igual.
+    sbGet(`arrematacoes?arrematante_id=in.${inList}&select=arrematante_id,imovel_id`),
     sbGet(`alertas_enviados?user_id=in.${inList}&enviado_em=gte.${janelaDedup}&select=user_id,imovel_id`),
     // Aprendizado: imóveis marcados "sem interesse" no widget/tela → excluir do e-mail.
     sbGet(`feedback_imovel?user_id=in.${inList}&sinal=eq.sem_interesse&select=user_id,imovel_id`),
@@ -216,7 +219,7 @@ async function handler(req) {
   // TODOS os filtros salvos por usuário (mais recentes primeiro), até 6 — o e-mail
   // distribui 80% das vagas entre eles (assertividade por perfil/praça).
   const filtroListMap = {}; for (const f of fsalvosArr || []) { const l = (filtroListMap[f.user_id] = filtroListMap[f.user_id] || []); if (l.length < 6 && f.filtros) l.push(f.filtros); }
-  const arremMap = {}; for (const a of arremArr || []) (arremMap[a.user_id] = arremMap[a.user_id] || []).push(a.imovel_id);
+  const arremMap = {}; for (const a of arremArr || []) (arremMap[a.arrematante_id] = arremMap[a.arrematante_id] || []).push(a.imovel_id);
   const enviadosMap = {}; for (const e of enviadosArr || []) (enviadosMap[e.user_id] = enviadosMap[e.user_id] || new Set()).add(e.imovel_id);
   // "Sem interesse" do widget entra na MESMA exclusão dos já-enviados: não reaparece no e-mail.
   for (const f of fbArr || []) (enviadosMap[f.user_id] = enviadosMap[f.user_id] || new Set()).add(f.imovel_id);
