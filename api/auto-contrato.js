@@ -219,7 +219,8 @@ export default async function handler(req, res) {
     } catch (e) { console.error('auto-contrato pendente:', e.message); }
   }
 
-  const origin = req.headers.origin || `https://${req.headers.host}`;
+  // Origin/Host vêm do cliente e o link leva o token de assinatura — usa o domínio do servidor.
+  const origin = process.env.APP_ORIGIN || 'https://bidprobrasil.com.br';
   return res.status(200).json({
     token: data.token,
     url: `${origin}#/c/${data.token}`,

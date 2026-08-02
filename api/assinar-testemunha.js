@@ -1,6 +1,8 @@
 export const config = { runtime: 'edge' };
 
 import { enviarEmail } from './_email.js';
+// Nome da testemunha vem do formulário público — escapar antes de entrar no HTML do e-mail.
+import { escapeHtml } from './_sanitize.js';
 
 // Assinatura da TESTEMUNHA por link próprio (pedido do dono): a parte encaminha o link da sua
 // testemunha; ela abre, confere o contrato, preenche nome/CPF e assina — sem precisar estar
@@ -80,11 +82,12 @@ export default async function handler(req) {
       const p = await sb(`perfis?id=eq.${encodeURIComponent(contrato.criado_por)}&select=email,nome`).then(x => x.json()).catch(() => []);
       const email = p?.[0]?.email || null;
       if (email) {
-        const origin = req.headers.get('origin') || process.env.APP_ORIGIN || 'https://bidprobrasil.com.br';
+        // Origin é do cliente — link de e-mail sai sempre do domínio do servidor (ver assinar-contrato).
+        const origin = process.env.APP_ORIGIN || 'https://bidprobrasil.com.br';
         await enviarEmail({
           to: email,
           subject: `✍️ Testemunha assinou: ${titulo}`,
-          html: `<p>A testemunha <strong>${String(nome).slice(0, 120)}</strong> assinou o contrato <strong>${titulo}</strong>.</p>
+          html: `<p>A testemunha <strong>${escapeHtml(String(nome).slice(0, 120))}</strong> assinou o contrato <strong>${escapeHtml(titulo)}</strong>.</p>
                  <p><a href="${origin}#/contratos" style="display:inline-block;padding:10px 18px;background:#0D63DB;color:#fff;border-radius:8px;text-decoration:none;font-weight:700">Ver contratos</a></p><p>BidPro Brasil</p>`,
           meta: { tipo: 'contrato' },
         }).catch(() => {});

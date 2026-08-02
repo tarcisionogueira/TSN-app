@@ -93,7 +93,8 @@ export default async function handler(req, res) {
       const tituloFinal = sanitizeText(tituloRaw, 200) || 'Contrato';
       const { arquivoUrl, arquivoNome, docsExtrasExigidos } = req.body || {};
       const grupoId = randomUUID();
-      const origin = req.headers.origin || `https://${req.headers.host}`;
+      // Origin/Host vêm do cliente e o link leva o token de assinatura — usa o domínio do servidor.
+      const origin = process.env.APP_ORIGIN || 'https://bidprobrasil.com.br';
       const partesLimpa = Array.isArray(partes)
         ? partes.map(p => ({ nome: sanitizeText(p?.nome || '', 160), qualificacao: sanitizeText(p?.qualificacao || '', 200) })).filter(p => p.nome).slice(0, 10)
         : null;

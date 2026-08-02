@@ -2,6 +2,9 @@ export const config = { runtime: 'edge' };
 
 import { enviarEmail } from './_email.js';
 import { compararRostoDocumento, verificarSelfieComDocumento, dataUrlParaImagem, selecionarParSelfieDoc, selecionarSelfieDoc } from './_kyc-match.js';
+// Nome do signatário e título do contrato entram no HTML do e-mail — escapar é obrigatório:
+// o nome vem do formulário público de assinatura (qualquer um com o link escreve o que quiser).
+import { escapeHtml } from './_sanitize.js';
 
 // Finalização da assinatura eletrônica de contrato (link público).
 // Feito no servidor para ter prova jurídica idônea (Lei 14.063/2020):
@@ -222,12 +225,15 @@ export default async function handler(req) {
       criadorEmail = p?.[0]?.email || null; criadorNome = p?.[0]?.nome || null;
     }
     if (criadorEmail) {
-      const origin = req.headers.get('origin') || process.env.APP_ORIGIN || 'https://bidprobrasil.com.br';
+      // NUNCA derivar o link do header Origin: ele vem do cliente e o link carrega o TOKEN de
+      // assinatura de cada parte no fragmento — um POST com Origin forjado faria a BidPro enviar,
+      // do seu próprio domínio, um link para o site do atacante com o token de cada signatário.
+      const origin = process.env.APP_ORIGIN || 'https://bidprobrasil.com.br';
       await enviarEmail({
         to: criadorEmail,
         subject: completo ? `✅ Contrato totalmente assinado: ${titulo}` : `✍️ Assinatura registrada (${assinadas}/${total}): ${titulo}`,
         html: `<p>Olá${criadorNome ? ' ' + criadorNome : ''}!</p>
-               <p><strong>${quem}</strong> assinou o contrato <strong>${titulo}</strong>.</p>
+               <p><strong>${escapeHtml(quem)}</strong> assinou o contrato <strong>${escapeHtml(titulo)}</strong>.</p>
                <p>Progresso: <strong>${assinadas} de ${total}</strong> parte(s) assinaram.${completo ? ' O contrato está <strong>totalmente assinado</strong>.' : ''}</p>
                <p><a href="${origin}#/contratos" style="display:inline-block;padding:10px 18px;background:#0D63DB;color:#fff;border-radius:8px;text-decoration:none;font-weight:700">Ver contratos</a></p>
                <p>BidPro Brasil</p>`,
@@ -246,7 +252,10 @@ export default async function handler(req) {
     // recebe por e-mail o link do documento devidamente assinado (abre em modo leitura pelo token,
     // sem precisar de conta). Vale para grupo (várias partes) e para contrato de parte única.
     if (completo) {
-      const origin = req.headers.get('origin') || process.env.APP_ORIGIN || 'https://bidprobrasil.com.br';
+      // NUNCA derivar o link do header Origin: ele vem do cliente e o link carrega o TOKEN de
+      // assinatura de cada parte no fragmento — um POST com Origin forjado faria a BidPro enviar,
+      // do seu próprio domínio, um link para o site do atacante com o token de cada signatário.
+      const origin = process.env.APP_ORIGIN || 'https://bidprobrasil.com.br';
       let partes = [];
       if (gid) {
         partes = await sb(`contratos_link?contrato_grupo_id=eq.${encodeURIComponent(gid)}&select=assinante_email,token`).then(x => x.json()).catch(() => []);
@@ -259,7 +268,7 @@ export default async function handler(req) {
             to: p.assinante_email,
             subject: `📄 Documento assinado por todas as partes: ${titulo}`,
             html: `<p>Olá!</p>
-                   <p>O contrato <strong>${titulo}</strong> foi assinado por TODAS as partes e agora tem validade jurídica (MP 2.200-2/2001 e Lei 14.063/2020).</p>
+                   <p>O contrato <strong>${escapeHtml(titulo)}</strong> foi assinado por TODAS as partes e agora tem validade jurídica (MP 2.200-2/2001 e Lei 14.063/2020).</p>
                    <p>Acesse o documento devidamente assinado, com as informações de assinatura ao final:</p>
                    <p><a href="${origin}#/c/${p.token}" style="display:inline-block;padding:11px 20px;background:#0D63DB;color:#fff;border-radius:8px;text-decoration:none;font-weight:700">Ver documento assinado</a></p>
                    <p>Ou copie o link: ${origin}#/c/${p.token}</p>
