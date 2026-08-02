@@ -25,7 +25,20 @@ async function registrarEmailLog(rows) {
 
 // meta (opcional): { tipo, userId } — categoriza e vincula o e-mail ao cliente.
 export async function enviarEmail({ from, to, cc, subject, html, text, attachments, replyTo, headers, meta }) {
-  if (!RESEND_KEY) return { ok: false, error: 'sem_resend' };
+  const destinos = (Array.isArray(to) ? to : [to]).filter(Boolean);
+  if (!RESEND_KEY) {
+    // Sem a key não sai e-mail nenhum — e, sem este registro, isso era INVISÍVEL (o return
+    // acontecia antes do log). Um problema de configuração precisa aparecer no 360/health-check.
+    await registrarEmailLog(destinos.map((dest) => ({
+      user_id: meta?.userId || null,
+      destinatario: String(dest).toLowerCase().slice(0, 200),
+      assunto: (subject || '').slice(0, 300),
+      tipo: meta?.tipo || null,
+      status: 'falha',
+      erro: 'RESEND_API_KEY ausente',
+    })));
+    return { ok: false, error: 'sem_resend' };
+  }
   const payload = {
     from: from || 'BidPro Brasil <noreply@bidprobrasil.com.br>',
     to: Array.isArray(to) ? to : [to],
@@ -57,7 +70,11 @@ export async function enviarEmail({ from, to, cc, subject, html, text, attachmen
     out = { ok: false, error: String(e?.message || e) };
   }
   // Loga um registro por destinatário (to) — inclusive falhas, p/ auditoria.
-  registrarEmailLog(payload.to.map((dest) => ({
+  // O `await` é ESSENCIAL, não estilo: sem ele a função serverless respondia e podia ser
+  // congelada antes de o insert completar, perdendo o registro de forma intermitente. Foi o
+  // que aconteceu com as boas-vindas de 31/07, 01/08 e 02/08 — os e-mails SAÍRAM (uso do
+  // Resend registrado no mesmo segundo), mas sumiram do card "E-mails recebidos" do 360.
+  await registrarEmailLog(payload.to.map((dest) => ({
     user_id: meta?.userId || null,
     destinatario: String(dest).toLowerCase().slice(0, 200),
     assunto: (subject || '').slice(0, 300),
