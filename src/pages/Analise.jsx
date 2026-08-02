@@ -8,6 +8,8 @@ import {
   Home, ClipboardList, LineChart, Award, Info, RefreshCw, Lock,
   Scale, Search, User, Calendar, ChevronRight, AlertCircle, MessageCircle, ClipboardCheck, CreditCard,
 } from 'lucide-react';
+import { arquivoParaBase64 } from '../utils/arquivo';
+import { reportarErroCliente } from '../utils/reportarErro';
 import { extrairDadosDocumento, extrairDadosDocumentoUrl, analisarMercado, gerarParecer } from '../utils/claude';
 import { calcularMetricasCenario, calcularTetoLance, calcularSAC, calcularPrice, calcularVPL, calcularTIR, calcularPayback, calcularMultiplo, fluxoLocacao, TMA_PADRAO, fmt, fmtPct } from '../utils/calculos';
 import { caixaMatriculaUrl, caixaRegrasVendaUrl } from '../utils/caixa';
@@ -682,14 +684,10 @@ export default function Analise() {
       // Extrai via IA diretamente do PDF — sem precisar de texto intermediário
       setLoadDoc(true);
       try {
-        const buf = await file.arrayBuffer();
-        // Base64 em BLOCOS: espalhar um PDF de vários MB em String.fromCharCode(...bytes)
-        // estoura a pilha (RangeError). Fora do try (como estava), a falha era silenciosa —
-        // o loader nem começava e nenhum erro aparecia. Converte em blocos, dentro do try.
-        const bytes = new Uint8Array(buf);
-        let bin = '';
-        for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
-        const b64 = btoa(bin);
+        // Base64 em BLOCOS (utils/arquivo.js): espalhar um PDF de vários MB em
+        // String.fromCharCode(...bytes) estoura a pilha. Dentro do try — fora dele a falha
+        // era silenciosa: o loader nem começava e nenhum erro aparecia.
+        const b64 = await arquivoParaBase64(file);
         const ext = await extrairDadosDocumento('', b64);
         if (ext) {
           setTextoDoc(`[PDF: ${file.name}]`);
@@ -2158,13 +2156,21 @@ export default function Analise() {
               <UploadCloud size={16}/> Upload matrícula PDF ou .TXT
               <input type="file" accept=".pdf,.txt" onChange={async e => {
                 const f = e.target.files[0]; if (!f) return;
-                if (f.type === 'application/pdf') {
-                  const buf = await f.arrayBuffer();
-                  const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
-                  const ext = await extrairDadosDocumento('', b64).catch(() => null);
-                  if (ext?.observacoes) setTextoMatricula(ext.observacoes);
-                  else setTextoMatricula(`[PDF matrícula: ${f.name}]`);
-                } else { setTextoMatricula(await f.text()); }
+                // ERA AQUI o crash de 30/07: `String.fromCharCode(...new Uint8Array(buf))`
+                // espalhava cada byte do PDF como argumento e estourava a pilha ("Maximum call
+                // stack size exceeded") — a aba morria sem mensagem nenhuma. Agora usa o mesmo
+                // conversor em blocos do resto do app, e a falha vira aviso em vez de tela morta.
+                try {
+                  if (f.type === 'application/pdf') {
+                    const b64 = await arquivoParaBase64(f);
+                    const ext = await extrairDadosDocumento('', b64).catch(() => null);
+                    if (ext?.observacoes) setTextoMatricula(ext.observacoes);
+                    else setTextoMatricula(`[PDF matrícula: ${f.name}]`);
+                  } else { setTextoMatricula(await f.text()); }
+                } catch (err) {
+                  showMsg('Não consegui ler esse arquivo de matrícula. Tente um PDF menor ou cole o texto.', 'error');
+                  reportarErroCliente({ msg: `upload matrícula: ${err?.message || err}`, stack: err?.stack });
+                }
               }} style={{display:'none'}}/>
             </label>
           </div>

@@ -11,6 +11,7 @@ import { imprimirHtml } from '../components/pdfImprimir';
 import { tituloProduto, termoDoProduto } from '../utils/termos';
 import { TERMO_PARCEIRO, TERMO_PARCEIRO_PREAMBULO } from '../components/ConviteParceiro';
 import Contratos from './Contratos'; // tela ÚNICA de contratos (mesma de "Meus Contratos", modo admin)
+import { arquivoParaBase64 } from '../utils/arquivo';
 
 export const DEFAULT_FEEDBACK_EMAIL = 'tarcisioaraujo@reimob.com.br';
 const FEEDBACK_KEY = 'tsn_feedback_email';
@@ -798,10 +799,9 @@ function UsuariosTab() {
     let algum = false;
     for (const file of lista) {
       try {
-        const buf = await file.arrayBuffer();
-        let bin = ''; const bytes = new Uint8Array(buf);
-        for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
-        const b64 = btoa(bin);
+        // Conversor único (utils/arquivo.js): o laço byte a byte que estava aqui não quebrava,
+        // mas num PDF de vários MB são milhões de concatenações e a aba congelava por segundos.
+        const b64 = await arquivoParaBase64(file);
         const ext = await extrairDadosDocumento('', b64);
         if (!ext) throw new Error('sem dados');
         exts.push(ext);
