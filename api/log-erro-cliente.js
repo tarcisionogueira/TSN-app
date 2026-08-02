@@ -51,7 +51,9 @@ export default async function handler(req, res) {
       await fetch(`${SUPABASE_URL}/rest/v1/rpc/registrar_erro_cliente`, {
         method: 'POST',
         headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ p_fingerprint: fingerprint, p_msg: msg, p_rota: rota, p_url: url, p_ua: ua, p_user_id: userId }),
+        // p_stack: o front sempre mandou a pilha e ela morria aqui (a RPC não tinha o parâmetro).
+        // Sem stack, um "Maximum call stack size exceeded" chega sem nenhuma pista de origem.
+        body: JSON.stringify({ p_fingerprint: fingerprint, p_msg: msg, p_rota: rota, p_url: url, p_ua: ua, p_user_id: userId, p_stack: String(b.stack || '').slice(0, 4000) || null }),
         signal: AbortSignal.timeout(4000),
       }).catch(() => {});
     }
