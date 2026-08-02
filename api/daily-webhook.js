@@ -53,16 +53,28 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true, skipped: 'solicitacao_nao_encontrada' });
   }
 
-  const { error } = await supabase.from('transcricoes_reuniao').insert({
-    solicitacao_id: sol.id,
-    transcricao,
-    duracao_seg: duracaoSeg,
-    daily_room_name: roomName,
-  });
+  // IDEMPOTÊNCIA: webhook reentrega em timeout/5xx. Sem chave, cada reentrega duplicava a
+  // transcrição na ficha da reunião E repetia o extrairLicoes() abaixo (Gemini, pago),
+  // poluindo o aprendizado com o mesmo conteúdo. `daily_room_name` é único no banco
+  // (transcricoes_reuniao_room_uidx) — quem decide o empate é o índice, não um check-then-insert
+  // que perderia a corrida entre duas reentregas simultâneas.
+  const { data: inseridas, error } = await supabase
+    .from('transcricoes_reuniao')
+    .upsert({
+      solicitacao_id: sol.id,
+      transcricao,
+      duracao_seg: duracaoSeg,
+      daily_room_name: roomName,
+    }, { onConflict: 'daily_room_name', ignoreDuplicates: true })
+    .select('id');
 
   if (error) {
     console.error('Daily webhook Supabase error:', error.message);
     return res.status(500).json({ error: error.message });
+  }
+  // Nada inserido = reentrega do MESMO evento: responde ok e NÃO repete a extração paga.
+  if (!inseridas?.length) {
+    return res.status(200).json({ ok: true, duplicado: true, solicitacao_id: sol.id });
   }
 
   // APRENDIZADO: extrai LIÇÕES da transcrição (Gemini, barato) e roteia para o agente

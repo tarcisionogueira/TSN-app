@@ -188,6 +188,59 @@ verificados). Corrigidos além dos de cima:**
    processado, a reentrega era descartada). Um gateway que vê 5xx repetido desativa o webhook — foi
    exatamente o que aconteceu com o Resend. Mesma correção em `financiamento-alertas-cron.js:144`.
 
+**I. SEGUNDA ONDA (02/08 tarde — pedido do dono: "resolva na ordem sugerida"). P0→P1→P6→P2/P3→P4.**
+- **P0 — MERGE FEITO**: `main` foi de `053024b` a `ea8328d` (fast-forward). ⚠️ **Cuidado achado no
+  caminho**: o `main` LOCAL do container aponta para uma história **não relacionada** (`4f76eab`,
+  "Aula travada → Comprar real"); o `main` de PRODUÇÃO é o `origin/main`. `git checkout main` traz
+  o repo errado — sempre trabalhar contra `origin/main` (`git push origin HEAD:main`).
+- **P1 (5)**: gate de custo do Índice agora falha FECHADO (`rpc()` devolvia null tanto para "sem
+  limite" quanto para "falhou" — e null era lido como ∞: uma queda do banco liberava a pesquisa web
+  paga de graça; vale p/ `indice-mercado` e `indice-gerar`) · link promocional de curso/e-book passa
+  a **conceder de verdade** (RPC `conceder_acesso_promo`, chamada após o login = prova de posse;
+  produto vem de `links_promo.produto_ref_id`, nunca do cliente; a tela só diz "liberado" quando o
+  servidor concedeu) · `garantia-cancelar` recebia `perfil.mp_id` como STRING num parâmetro tratado
+  como array (o `for..of` iterava CARACTERE A CARACTERE e tentava cancelar `/preapproval/<letra>`) e
+  ignorava o `mp_preapproval_id`; agora cancela de verdade, avisa o cliente quando o gateway NÃO
+  confirma e manda e-mail para a equipe cancelar na mão · gate da assessoria no Checkout só
+  bloqueia com veredito EXPLÍCITO (o fail-open só valia p/ erro de rede; um 5xx bloqueava a venda
+  de R$ 4.800-6.000) · upload de documentos do arremate lista as falhas ao operador.
+- **P6 — a correção de MAIOR alavancagem**: o cliente Supabase (`src/utils/supabase.js`) passa a
+  reportar QUALQUER resposta ruim do PostgREST para `erros_cliente`, via o `reportarErroCliente` que
+  já existia (dedup, teto por sessão, funciona anônimo). Era esta família — coluna inexistente → 400
+  → `error` não checado → tela zerada em silêncio — que produziu o "Assinaturas tudo 0" (sessão 15),
+  o "MRR R$ 0,00" e os leads perdidos. Agora aparece sozinho no health-check/360, sem varredura.
+  Ignora 401/403 (RLS/sessão), 406 (`.single()` sem linha), 409 (upsert) e `/auth/v1` (senha errada
+  é negócio, não bug).
+- **P2 (3)**: `enviar-alertas-cron` consultava `arrematacoes.user_id` (é `arrematante_id`) — a etapa
+  "similares ao que você arrematou" nunca rodou · o aviso "a matrícula corrige a cidade/metragem"
+  era gravado em `analises_mercado.correcoes_sugeridas` e **ninguém lia de volta**: sumia no reload;
+  agora o contexto expõe e a tela reidrata · "Corrigir e regerar a avaliação" refazia a pesquisa com
+  os dados ANTIGOS (o `setTimeout` de 150ms não troca o closure do `setD`) — a correção agora vai
+  por parâmetro explícito.
+- **P3 (2)**: `documental-retry-cron` media a janela de 48h em `updated_at`, campo que a própria
+  retentativa desliza — o teto nunca valia (agora `created_at`, o padrão que
+  `regenerar-relatorios-cron` já documentava). *Medido: 0 preliminares hoje — era armadilha
+  latente, não vazamento ativo; o cron é de 6h, não de 1h.* · `enfileirar_docs_faltantes` passa a
+  purgar o que a REGRA ATUAL não enfileiraria (fonte paga/não-publicadora/login-gated/sem url_lote):
+  185 GESTAOLEILOES + 19 PECINI herdados de antes de 24/07 batiam em Cloudflare até esgotar as 4
+  tentativas, ocupando slots do drenador. **Fila 1.258 → 46 pendentes**, com a invariante conferida:
+  **0** candidatos que a regra quer ficaram fora da fila.
+- **P4 — rodada de verificação (o combinado: confirmar antes de virar trabalho).** REFUTADO: "SLA do
+  Pipeline sobre `casos.updated_at`" — já usa `max(job, updated_at)` desde a sessão 22; o "parado
+  9d" dos casos da Alessandra é VERDADE (0 jobs, equipe nunca começou). CONFIRMADOS e corrigidos:
+  ficha do Pipeline personificava TODO cliente como `assessorado` (agora usa o papel real) ·
+  `reconciliar-asaas-cron` promovia de plano quem só comprou PRODUTO avulso (o webhook separa por
+  `externalReference`, a rede de segurança não separava, e `mapearPlano` decide pelo VALOR: produto
+  de R$ 49,90 virava Investidor Pro) e gravava `plano_ciclo='mensal'` para pagamento ANUAL (o ciclo
+  vem do sufixo `_anual`, que não era passado) · `daily-webhook` sem idempotência: reentrega
+  duplicava a transcrição e repetia o `extrairLicoes()` (Gemini, pago) — índice único por
+  `daily_room_name` + upsert `ignoreDuplicates`. CONFIRMADO e NÃO corrigido: `casos.concluido_em` é
+  lido (`Admin.jsx:9559`) e nunca gravado — a coluna "Concluído" do Pipeline é inalcançável (0 de 6
+  casos têm o campo); decidir COM O DONO qual evento conclui um caso antes de gravar.
+- **LATENTE, medido e não mexido**: `Admin.jsx:912` e `:7176` contam `perfis` no navegador sem
+  limite. Com 26 perfis não há corte; vira número errado silencioso a partir de 1.000 usuários —
+  mesmo padrão já corrigido no Marketing. Entra no plano de escala, não em correção de bug.
+
 **G. BACKLOG do bug bounty (achado e NÃO corrigido nesta sessão — registrado de propósito):**
 - `api/promo-capturar.js:112` (CONFIRMADO) — link promocional de curso/e-book mostra "🎉 Acesso
   liberado!" mas nenhum entitlement é criado (`compras_produtos` nunca recebe linha): o cliente bate

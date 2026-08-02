@@ -9568,6 +9568,7 @@ function CentralEquipeTab() {
   const nav = useNavigate();
   const [casos, setCasos] = React.useState([]);
   const [nomes, setNomes] = React.useState({});
+  const [papeis, setPapeis] = React.useState({}); // id → role real do cliente (ficha do Pipeline)
   const [loading, setLoading] = React.useState(true);
 
   React.useEffect(() => {
@@ -9602,9 +9603,9 @@ function CentralEquipeTab() {
       setCasos(lista);
       const ids = [...new Set(lista.flatMap(c => [c.cliente_id, c.analista_id, c.advogado_id]).filter(Boolean))];
       if (ids.length) {
-        const { data: ps } = await supabase.from('perfis').select('id,nome').in('id', ids);
-        const m = {}; (ps || []).forEach(p => { m[p.id] = p.nome || p.id.slice(0, 8); });
-        setNomes(m);
+        const { data: ps } = await supabase.from('perfis').select('id,nome,role').in('id', ids);
+        const m = {}, r = {}; (ps || []).forEach(p => { m[p.id] = p.nome || p.id.slice(0, 8); r[p.id] = p.role; });
+        setNomes(m); setPapeis(r);
       }
       setLoading(false);
     })();
@@ -9612,7 +9613,10 @@ function CentralEquipeTab() {
 
   const diasDe = (ts) => ts ? Math.floor((Date.now() - new Date(ts).getTime()) / 86400000) : null;
   const abrirFicha = (c) => {
-    iniciarSuporte({ id: c.cliente_id, nome: nomes[c.cliente_id] || 'Cliente', role: 'assessorado' });
+    // Papel REAL do cliente. Antes ia 'assessorado' fixo para todo mundo: abrir a ficha pelo
+    // Pipeline personificava qualquer cliente como assessorado e a tela de suporte mostrava
+    // plano/cota de um plano que ele pode não ter.
+    iniciarSuporte({ id: c.cliente_id, nome: nomes[c.cliente_id] || 'Cliente', role: papeis[c.cliente_id] || 'explorador' });
     nav('/caso/' + c.id);
   };
 

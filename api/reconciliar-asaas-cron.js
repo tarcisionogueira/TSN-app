@@ -24,6 +24,7 @@ export const config = { runtime: 'nodejs', maxDuration: 300 };
 
 import { isCronAuthorized } from './_auth.js';
 import { supabase, buscarCliente, ativarPlanoDireto, mapearPlano } from './_webhook-core.js';
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i; // externalReference de compra de produto
 
 const ASAAS_URL = process.env.ASAAS_ENV === 'sandbox'
   ? 'https://api-sandbox.asaas.com/v3'
@@ -72,6 +73,12 @@ async function handler(req) {
         for (const p of results) {
           const custId = typeof p.customer === 'string' ? p.customer : (p.customer?.id || null);
           if (!custId) continue;
+          // Compra AVULSA de produto (curso/e-book/serviço) NÃO vira plano. O webhook já separa
+          // produto de assinatura por `externalReference` (UUID da compra); esta reconciliação —
+          // que é a REDE de segurança do webhook — não separava, e mapearPlano() decide pelo
+          // VALOR: um produto cujo preço bata com o de um plano (ex.: R$ 49,90) promovia o
+          // comprador a Investidor Pro de graça.
+          if (UUID_RE.test(String(p.externalReference || '').trim())) continue;
           verificados++;
 
           // Vínculo: asaas_id (se já salvo) OU e-mail do customer no Asaas.
@@ -87,7 +94,11 @@ async function handler(req) {
           if (!mapeado) continue;
 
           try {
-            await ativarPlanoDireto({ userId: cliente.id, planoKey: mapeado.role, gateway: 'asaas' });
+            // O CICLO precisa ir junto: ativarPlanoDireto deriva mensal/anual do sufixo _anual
+            // do planoKey. Passando só `mapeado.role`, um pagamento ANUAL (R$ 449,90) era
+            // gravado como plano_ciclo='mensal' e a âncora anti-rebaixamento do anual sumia.
+            const planoKeyComCiclo = mapeado.ciclo === 'anual' ? `${mapeado.role}_anual` : mapeado.role;
+            await ativarPlanoDireto({ userId: cliente.id, planoKey: planoKeyComCiclo, gateway: 'asaas' });
             // Grava o asaas_id p/ o webhook localizar o cliente pelo ID daqui pra frente.
             await supabase.from('perfis').update({ asaas_id: custId }).eq('id', cliente.id);
             corrigidos++;
