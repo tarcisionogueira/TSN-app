@@ -333,6 +333,20 @@ A condição do dono ditou o desenho: **nada disso é pesquisado durante o relat
   próxima sessão: ler `socio_ingestao` e `socio_fontes.ultimo_erro`** — se algum agregado errar, o
   erro traz os rótulos que o IBGE devolveu e o conserto é um `update`.
 
+**K2b. 🔴 FURO QUE EU MESMO ABRI HOJE — pego pelo auditor no mesmo dia.** Rodei
+`auditoria_seguranca()` depois de subir tudo (item 3 do ritual) e voltou **1 atenção**:
+`registrar_erro_cliente` SECURITY DEFINER executável por **anon**. Causa: a migração J/E de hoje
+fez `create or replace` **acrescentando `p_stack`** — no Postgres isso não substitui a função,
+**cria uma sobrecarga NOVA**, e função nova nasce com EXECUTE para PUBLIC. A versão de 6
+parâmetros seguia trancada; a de 7 ficou aberta. Como ela escreve em `erros_cliente` por fora da
+RLS, qualquer visitante podia injetar erro falso — **envenenando justamente o check-up de saúde e
+o Cliente 360**, que são as telas onde a gente vai olhar quando algo quebrar de verdade.
+Corrigido (`registrar_erro_cliente_fecha_anon_e_remove_overload.sql`): revoke de anon/authenticated
+e a sobrecarga velha de 6 parâmetros dropada (ninguém a chamava; duas assinaturas quase iguais é
+ambiguidade esperando virar bug). Auditoria depois: **0 crítico / 0 atenção**.
+**Lição para a próxima vez:** todo `create or replace` que MUDA A ASSINATURA de uma RPC
+SECURITY DEFINER precisa vir com os `revoke` na mesma migração.
+
 **K3. O passo a passo do R2 está escrito** (`docs/PENDENCIAS_DONO.md`, item **-3**): criar bucket
 com location hint **fora da América do Sul**, token com `Object Read & Write` **escopado ao
 bucket**, as 5 variáveis na Vercel, redeploy e como conferir no check-up. Custo **R$ 0** (o backup
