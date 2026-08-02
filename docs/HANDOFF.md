@@ -276,6 +276,70 @@ base: o título vira "Usuários (X de Y)" e o Comercial mostra uma tarja "Mostra
 números abaixo se referem a esses X". Preferi a verdade visível à paginação completa: é o mínimo
 que impede número errado silencioso, sem reescrever a UX das duas telas.
 
+**K. ARMAZENAMENTO + DEMOGRAFIA (02/08 noite — pedido do dono: "faça o que traz melhor
+eficiência e segurança das informações, sempre o melhor custo-benefício; o que for desnecessário
+descarte" + "gostei da estrutura que montou, faça — atenção com a separação das etapas para não
+cairmos no mesmo erro anterior de sobrecarregar o tempo de coleta do relatório").**
+
+**K1. Descarte de 1,15 GB de peso morto no Storage — com a trava de segurança primeiro.**
+O bucket `imoveis-fotos` tem 61.208 arquivos; **21.760 (1,15 GB) não são apontados por nenhum
+imóvel** — o lote saiu do acervo ou o backfill re-hospedou com nome novo. São inalcançáveis pelo
+app. A lista do que NÃO pode sumir não veio de memória: **varri toda coluna `text`/`jsonb` do
+schema `public`** atrás de `imoveis-fotos`. Só 4 colunas citam o bucket — `imoveis_leilao.link_foto`
+(acervo vivo) e os snapshots congelados em `analises_mercado`/`analises_documental`/`analises_laudo`
+(relatórios JÁ entregues; apagar uma dessas quebraria o PDF de quem pagou). A RPC
+`fotos_orfas_para_limpeza` exclui as quatro e ainda dá **7 dias de carência** a arquivo novo
+(upload em voo). Conferido antes de ligar: **0 fotos de relatório na fila**.
+`/api/limpar-fotos-orfas-cron` apaga pela **API de Storage** (exclusão por SQL deixaria o arquivo
+no bucket e a conta correndo), 500×3 por dia — os 21 mil somem em ~2 semanas, sem pico de I/O.
+Exclusão é irreversível: devagar é a escolha certa.
+⚠️ **Medido e deliberadamente NÃO tocado:** 1,7 GB de documentos capturados duplicados entre lotes
+(3.614 arquivos para 2.493 conteúdos distintos). Dentro de uma cota de 100 GB, o risco de deduplicar
+não paga o ganho. Registrado para não ser "esquecido" e sim uma decisão.
+
+**K2. Demografia e pressão habitacional no mercadológico — SEM tocar no tempo de coleta.**
+A condição do dono ditou o desenho: **nada disso é pesquisado durante o relatório.**
+- **Ingestão separada** (`/api/socio-ingestao-cron`, diário 02:50): grava em `cidade_socio`.
+  Processa **UMA fonte por execução** (cada agregado do IBGE devolve os 5.570 municípios de uma
+  vez — juntar quatro numa execução só seria repetir o erro em outra camada) e **só toca em fonte
+  com mais de 25 dias**. Efeito: a base se preenche sozinha nos primeiros dias após o deploy e
+  depois se renova sozinha, sem carga concentrada e sem disparo manual.
+- **Leitura no relatório**: `socio_regiao` (bairro > cidade), UMA linha indexada, disparada **em
+  paralelo** com as leituras do Índice. Custo de coleta somado ao relatório: **zero**.
+- **Autonomia como a do Índice**: não há id de agregado nem nome de variável no código — tudo vem
+  de `socio_fontes`, e o casamento é **por NOME (regex)**, não por id. IBGE mudou algo? O conserto
+  é um `update` em SQL, sem deploy.
+- **Honestidade do número** (o ponto sensível): cada campo sai com **fonte e ano**. O déficit
+  habitacional OFICIAL é da **FJP**, não tem API, e tem **colunas próprias** (`deficit_fjp_*`)
+  vazias até carregarmos o dado real. O que derivamos do Censo é chamado pelo que é — **"pressão
+  habitacional"** — com o método impresso junto, e o prompt **proíbe** chamá-la de déficit da FJP.
+  A régua não é chutada: sai dos **tercis de todos os municípios do país**, recalculados a cada
+  ingestão (mesma filosofia do `fonte_baseline_aprendida`).
+- **CAGED entrou DESLIGADO e documentado** (`socio_fontes.caged_emprego`, `ativa=false`): o Novo
+  CAGED não expõe API por município, só o arquivo mensal nacional compactado. O lugar certo é uma
+  **GitHub Action** mensal (já temos o padrão dos scrapers), não uma função serverless. Registrado
+  para não virar promessa esquecida.
+- **BAIRRO**: a chave já tem `bairro_norm` e o relatório já lê bairro > cidade, mas a API do IBGE
+  só serve município (N6) — recorte por bairro só existe em agregados de setores censitários, que
+  não vêm por API. Fase 1 entrega **cidade**; a estrutura está pronta, sem migração futura.
+- **Saúde**: novo item **"Dados socioeconômicos (IBGE)"** — fonte falhando ou parada há mais de 60
+  dias vira **erro**. Relatório citando dado vencido como atual é pior que relatório sem o dado.
+- **Ensaio antes do deploy**: o caminho de gravação foi testado no banco com 3 cidades sintéticas
+  (3 fontes em sequência) — e **pegou uma ambiguidade de coluna no `socio_upsert`** que teria
+  quebrado a primeira execução real. Ensaio limpo depois.
+- ⚠️ **O que ainda não pude verificar**: os IDs dos agregados do IBGE (4709/4712/6579/2612). O
+  proxy deste ambiente bloqueia `servicodados.ibge.gov.br`, então a chamada real só acontece em
+  produção. Foi exatamente por isso que a config foi para o banco e o casamento é por nome. **Na
+  próxima sessão: ler `socio_ingestao` e `socio_fontes.ultimo_erro`** — se algum agregado errar, o
+  erro traz os rótulos que o IBGE devolveu e o conserto é um `update`.
+
+**K3. O passo a passo do R2 está escrito** (`docs/PENDENCIAS_DONO.md`, item **-3**): criar bucket
+com location hint **fora da América do Sul**, token com `Object Read & Write` **escopado ao
+bucket**, as 5 variáveis na Vercel, redeploy e como conferir no check-up. Custo **R$ 0** (o backup
+copia só os **45 arquivos / 15 MB** irrecuperáveis; o gratuito do R2 dá 10 GB). Inclui o alerta de
+que `R2_LOCATION` **declara** a região e precisa bater com a real, e uma nota de LGPD sobre levar
+documento de cliente para fora do país — decisão que é dele.
+
 **G. BACKLOG do bug bounty (achado e NÃO corrigido nesta sessão — registrado de propósito):**
 - `api/promo-capturar.js:112` (CONFIRMADO) — link promocional de curso/e-book mostra "🎉 Acesso
   liberado!" mas nenhum entitlement é criado (`compras_produtos` nunca recebe linha): o cliente bate
@@ -330,7 +394,9 @@ que impede número errado silencioso, sem reescrever a UX das duas telas.
   mercadológico vazio · `documental-retry-cron.js:39` re-tenta para sempre · `duvida.js:69`
   (**já corrigido nesta sessão**, o cético não chegou a rodar).
 
-**H. O QUE DEPENDE DO DONO — a lista de ontem continua valendo** (`PENDENCIAS_DONO.md`): Resend
+**H. O QUE DEPENDE DO DONO** — agora encabeçada pelo **R2 (item -3, ~15 min, R$ 0)**, que é o único
+item da lista que protege contra perda definitiva de arquivo de cliente. Depois dele, a lista de
+ontem continua valendo (`PENDENCIAS_DONO.md`): Resend
 (URL com `www.` + Re-enable) · 3 checagens do painel Google Ads + conversão do Charles · atribuir
 responsável aos 4 casos da Alessandra (0/4 relatórios, prazo estourado) · aprovar o prompt dos
 triggers p/ recriar a Rotina mensal de auditoria · termos de pesquisa na segunda.

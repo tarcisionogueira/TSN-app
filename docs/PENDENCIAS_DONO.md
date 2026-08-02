@@ -4,11 +4,87 @@
 > variável de ambiente). Cada um traz o **porquê**, o **passo a passo** e **o que o Claude
 > faz depois** que você concluir. Quando estiver no computador, é só ir por aqui.
 >
-> _Última atualização: 15/07/2026._
+> _Última atualização: 02/08/2026._
 
 ---
 
 ## 🟢 Fazer agora — grátis e rápido
+
+### -3. 🔴 CLOUDFLARE R2 — ligar o 2º servidor (backup fora da região) — ~15 min, **custo R$ 0**
+
+- **Por quê (o que está em risco HOJE):** o Supabase Pro faz backup do **banco** (7 dias) —
+  mas na **mesma região** (`sa-east-1`, São Paulo) — e **não faz backup nenhum do Storage**.
+  Ou seja: os **documentos que o próprio cliente enviou** (matrícula, KYC, contrato assinado,
+  comprovantes) não têm cópia em lugar nenhum. Se essa região tiver um incidente sério, esses
+  arquivos não voltam. O código do espelhamento (`/api/backup-r2-cron`) **já está pronto e
+  rodando todo dia às 04:40** — mas está **DORMENTE**, porque faltam as chaves. É só isto:
+  criar o bucket e colar 5 variáveis.
+- **Quanto vai custar:** o backup copia só o que é **irrecuperável** — hoje **45 arquivos,
+  15 MB** (as ~14 GB de matrícula/edital raspados dos leiloeiros ficam de fora de propósito:
+  a captura recria tudo). O nível gratuito do R2 dá **10 GB**. Ou seja: **R$ 0**, com muita
+  folga, e sem taxa de saída (o R2 não cobra egress).
+
+**Passo 1 — criar a conta e o bucket (Cloudflare)**
+1. Entre em `dash.cloudflare.com` (cria conta grátis se não tiver) → menu lateral **R2**.
+2. Se pedir cartão para habilitar o R2, é só cadastro — o consumo fica dentro do gratuito.
+3. **Create bucket**:
+   - **Bucket name:** `bidpro-backup` (se usar outro nome, é esse que vai na variável `R2_BUCKET`).
+   - **Location / Location hint:** **⚠️ o ponto mais importante desta tarefa.** Escolha uma
+     região **FORA da América do Sul** — se a cópia ficar na mesma região do banco, ela cai
+     junto no dia do incidente e o backup não serviu para nada. Recomendo
+     **`Eastern North America (enam)`** (é a mais próxima do Brasil entre as opções válidas).
+     Alternativa: `Western Europe (weur)`.
+   - Criar.
+
+**Passo 2 — gerar as chaves de acesso**
+1. Ainda em **R2** → **Manage R2 API Tokens** (canto direito) → **Create API token**.
+2. **Permissions:** `Object Read & Write` (NÃO precisa Admin).
+3. **Specify bucket:** aponte só para `bidpro-backup` (princípio do menor privilégio — se essa
+   chave vazar, ela não alcança mais nada da conta).
+4. Criar e **copiar agora** (o segredo só aparece uma vez):
+   - **Access Key ID**
+   - **Secret Access Key**
+5. **Account ID:** está na página inicial do R2, na barra lateral direita (é também o código
+   que aparece na URL do painel). Copie também.
+
+**Passo 3 — colar as 5 variáveis na Vercel**
+Painel Vercel → projeto **tsn-app** → **Settings → Environment Variables → Add New**.
+Para **cada** uma, marque **Production + Preview + Development**:
+
+| Variável | O que colar |
+|---|---|
+| `R2_ACCOUNT_ID` | o Account ID do passo 2.5 |
+| `R2_ACCESS_KEY_ID` | o Access Key ID |
+| `R2_SECRET_ACCESS_KEY` | o Secret Access Key |
+| `R2_BUCKET` | `bidpro-backup` (ou o nome que você deu) |
+| `R2_LOCATION` | **`enam`** (ou `weur` — exatamente a região que você escolheu no passo 1) |
+
+> ⚠️ `R2_LOCATION` é o que o check-up de saúde lê para confirmar que a cópia está longe do
+> banco. Ele **não muda** onde o bucket está — só **declara**. Se você criar em `enam` e
+> escrever `weur`, o painel vai dizer que está tudo certo quando não está. Tem que bater com
+> a região real.
+
+**Passo 4 — publicar**
+Abra no navegador o link de deploy que já está no `CLAUDE.md`:
+`https://api.vercel.com/v1/integrations/deploy/prj_E0tUYhPJN9IteuNI8spS0CEgZuxo/saLCcQwzMK`
+(variável de ambiente nova só passa a valer depois de um novo deploy).
+
+**Passo 5 — conferir (no dia seguinte)**
+No painel Admin → **Check-up de saúde**, o item **“Infra — backup off-region (2º servidor)”**
+deve sair de 🔴 **erro** para 🟢 **ok**, mostrando algo como
+`Último: há 3h · 45/45 arquivo(s) novos · 7 tabela(s) · destino r2:<conta>/bidpro-backup (enam)`.
+Se aparecer 🟡 avisando *“região não declarada ou na América do Sul”*, o `R2_LOCATION` está
+vazio ou com valor sul-americano — reveja o passo 3.
+
+- **O que o Claude faz depois:** confirmo pelos logs e pelo `backup_execucoes` que a primeira
+  cópia subiu inteira, e a partir daí o check-up cobra sozinho todo dia (sem backup há 48h,
+  falha de cópia ou região errada viram **erro** no painel).
+- **Uma coisa para você decidir com consciência:** esse backup leva documentos pessoais de
+  clientes (KYC, contratos) para fora do país. A LGPD permite transferência internacional com
+  salvaguardas contratuais — a Cloudflare disponibiliza DPA/cláusulas-padrão na própria conta.
+  Se preferir manter tudo em território nacional, o preço é abrir mão da proteção contra uma
+  falha regional; dá para conversar sobre um meio-termo (ex.: outro provedor com região no
+  Brasil, aceitando o risco correlacionado). **Me avisa se quiser mudar essa escolha.**
 
 ### -2. 🟠 RESEND — reativar o webhook com a URL "www" (2 min; rastreio de entrega/abertura parado)
 - **Por quê:** o Resend DESATIVOU o webhook (e-mail de 01/08) porque a URL cadastrada usa o
