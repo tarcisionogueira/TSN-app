@@ -905,12 +905,22 @@ function UsuariosTab() {
     } catch { setConceder(c => ({ ...c, saving: false, msg: 'Erro ao conceder.' })); }
   };
 
+  const [totalUsers, setTotalUsers] = useState(null); // total REAL no banco (pode passar do lote carregado)
   const [planosCfg, setPlanosCfg] = useState([]);
   const [cpfMasc, setCpfMasc] = useState({}); // { userId: '•••.•••.XXX-••' } — vindo do backend
   const loadUsers = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase.from('perfis').select('id, nome, role, role_anterior, plano, created_at, ativo').order('created_at', { ascending: false });
+    // LIMITE EXPLÍCITO + contagem exata. O PostgREST corta em 1.000 linhas em silêncio: sem
+    // isto, a partir de 1.000 perfis a lista (e tudo que se conta sobre ela no navegador)
+    // passaria a mentir sem nenhum sinal — foi assim que o painel de Assinaturas ficou "tudo 0"
+    // e o Marketing travou em "1000 buscas". Aqui a tela AVISA quando não está mostrando tudo.
+    const LIMITE = 2000;
+    const { data, count } = await supabase.from('perfis')
+      .select('id, nome, role, role_anterior, plano, created_at, ativo', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(0, LIMITE - 1);
     setUsers(data || []);
+    setTotalUsers(typeof count === 'number' ? count : (data || []).length);
     setLoading(false);
     // CPF mascarado vem do backend (o texto claro não trafega mais para o navegador).
     const ids = (data || []).map(u => u.id);
@@ -1178,7 +1188,12 @@ ${hash ? `<h2>Verificação de integridade</h2><div class="kv muted">${esc(hashL
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, gap: 12 }}>
-        <h2 style={{ fontSize: 18, fontWeight: 700, color: '#111111', margin: 0 }}>Usuários ({users.length})</h2>
+        {/* Mostra o total REAL do banco; se o lote carregado for menor, diz isso na cara — em vez
+            de exibir "1000" como se fosse o total (o corte silencioso do PostgREST). */}
+        <h2 style={{ fontSize: 18, fontWeight: 700, color: '#111111', margin: 0 }}>
+          Usuários ({typeof totalUsers === 'number' && totalUsers > users.length
+            ? `${users.length} de ${totalUsers}` : users.length})
+        </h2>
         <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar por nome, CPF ou role..." style={{ ...S.input, maxWidth: 280 }} />
         <button style={S.btn('outline')} onClick={loadUsers}>↻ Atualizar</button>
       </div>
@@ -7164,6 +7179,7 @@ const PLANO_NOME = { explorador: 'Explorador', top2: 'Investidor Pro', top2_anua
 
 function ComercialTab() {
   const [clientes, setClientes] = useState([]);
+  const [totalClientes, setTotalClientes] = useState(null); // total REAL (pode passar do lote)
   const [consultores, setConsultores] = useState([]);
   const [leadsMap, setLeadsMap] = useState({});
   const [loading, setLoading] = useState(true);
@@ -7172,12 +7188,15 @@ function ComercialTab() {
 
   const carregar = useCallback(async () => {
     setLoading(true);
-    const [{ data: cl }, { data: cons }, { data: leads }] = await Promise.all([
-      supabase.from('perfis').select('id, nome, role, plano, telefone, indicado_por, created_at, inadimplente_desde').in('role', CLIENT_ROLES).order('created_at', { ascending: false }),
+    const [{ data: cl, count: totalCl }, { data: cons }, { data: leads }] = await Promise.all([
+      // Limite explícito + contagem exata (o corte silencioso de 1.000 do PostgREST faria os
+      // KPIs desta tela — total/pagantes/sem consultor/inadimplentes — mentirem sem avisar).
+      supabase.from('perfis').select('id, nome, role, plano, telefone, indicado_por, created_at, inadimplente_desde', { count: 'exact' }).in('role', CLIENT_ROLES).order('created_at', { ascending: false }).range(0, 1999),
       supabase.from('perfis').select('id, nome').eq('role', 'consultor').order('nome'),
       supabase.from('sdr_leads').select('user_id, origem').not('user_id', 'is', null),
     ]);
     setClientes(cl || []); setConsultores(cons || []);
+    setTotalClientes(typeof totalCl === 'number' ? totalCl : (cl || []).length);
     const m = {}; (leads || []).forEach(l => { if (l.user_id && !m[l.user_id]) m[l.user_id] = l.origem; });
     setLeadsMap(m);
     setLoading(false);
@@ -7191,6 +7210,8 @@ function ComercialTab() {
 
   const ehPagante = (c) => c.role && c.role !== 'explorador';
   const total = clientes.length;
+  // Verdade sobre a amostra: se o banco tem mais do que veio, os KPIs abaixo são do LOTE.
+  const truncado = typeof totalClientes === 'number' && totalClientes > clientes.length;
   const pagantes = clientes.filter(ehPagante).length;
   const semCons = clientes.filter(c => !c.indicado_por).length;
   const inadimplentes = clientes.filter(c => c.inadimplente_desde).length;
@@ -7219,9 +7240,18 @@ function ComercialTab() {
       <h2 style={{ fontSize: 18, fontWeight: 700, color: '#111111', margin: '0 0 4px' }}>Comercial</h2>
       <div style={{ fontSize: 12, color: '#64748b', marginBottom: 18 }}>Todos os clientes (pagantes e não pagantes), por consultor. Quem entrou por link de consultor já vem vinculado; os demais aparecem em “sem consultor” para você atribuir.</div>
 
+      {/* Aviso HONESTO quando o lote não cobre a base inteira — o número na tela passa a ser
+          "de X carregados", nunca um total silenciosamente errado. */}
+      {truncado && (
+        <div style={{ background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontSize: 12, color: '#92400e', fontWeight: 600 }}>
+          ⚠️ Mostrando {clientes.length} de {totalClientes} clientes — os números abaixo se referem
+          a esses {clientes.length}. Use a busca para chegar a quem você procura.
+        </div>
+      )}
+
       {/* Resumo */}
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 20 }}>
-        {card('Clientes', total, '#111111')}
+        {card(truncado ? `Clientes (de ${totalClientes})` : 'Clientes', total, '#111111')}
         {card('Pagantes', pagantes, '#059669')}
         {card('Não pagantes', total - pagantes, '#0D63DB')}
         {card('Sem consultor', semCons, semCons > 0 ? '#d97706' : '#94a3b8')}
@@ -9612,6 +9642,22 @@ function CentralEquipeTab() {
   }, [user?.id, role]);
 
   const diasDe = (ts) => ts ? Math.floor((Date.now() - new Date(ts).getTime()) / 86400000) : null;
+  // CONCLUIR / REABRIR — o fluxo não tinha estado final: `casos.concluido_em` era lido pelo
+  // etapaDoCaso e NUNCA gravado por fluxo nenhum, então nenhum caso saía do quadro e o relógio
+  // "parado Xd" continuava contando sobre trabalho já entregue. Concluir é decisão humana
+  // ('pos_arrematacao' é acompanhamento em andamento, não fim); a trigger do banco
+  // (casos_carimbar_transicoes) carimba concluido_em e limpa na reabertura.
+  const [salvandoCaso, setSalvandoCaso] = React.useState(null);
+  const marcarEtapa = async (c, etapa, aviso) => {
+    if (aviso && !window.confirm(aviso)) return;
+    setSalvandoCaso(c.id);
+    const { error } = await supabase.from('casos').update({ status_etapa: etapa }).eq('id', c.id);
+    setSalvandoCaso(null);
+    if (error) { alert('Não foi possível atualizar o caso: ' + error.message); return; }
+    setCasos(prev => prev.map(x => x.id === c.id
+      ? { ...x, status_etapa: etapa, concluido_em: etapa === 'concluido' ? new Date().toISOString() : null, updated_at: new Date().toISOString() }
+      : x));
+  };
   const abrirFicha = (c) => {
     // Papel REAL do cliente. Antes ia 'assessorado' fixo para todo mundo: abrir a ficha pelo
     // Pipeline personificava qualquer cliente como assessorado e a tela de suporte mostrava
@@ -9669,6 +9715,18 @@ function CentralEquipeTab() {
                         </span>
                         <span style={{ fontSize: 10.5, fontWeight: 700, color: '#0D63DB' }}>abrir ficha →</span>
                       </div>
+                      {/* Saída do quadro: sem isto o caso entregue fica para sempre em "Arremate". */}
+                      <button
+                        onClick={(ev) => { ev.stopPropagation(); e.key === 'concluido'
+                          ? marcarEtapa(c, 'pos_arrematacao')
+                          : marcarEtapa(c, 'concluido', 'Concluir este caso? Ele sai do quadro e para de contar prazo. Dá para reabrir depois.'); }}
+                        disabled={salvandoCaso === c.id}
+                        style={{ marginTop: 8, width: '100%', padding: '5px 8px', fontSize: 10.5, fontWeight: 800, cursor: 'pointer', borderRadius: 7,
+                          border: `1px solid ${e.key === 'concluido' ? '#cbd5e1' : '#bbf7d0'}`,
+                          background: e.key === 'concluido' ? '#f8fafc' : '#f0fdf4',
+                          color: e.key === 'concluido' ? '#475569' : '#15803d', opacity: salvandoCaso === c.id ? 0.6 : 1 }}>
+                        {salvandoCaso === c.id ? 'salvando…' : e.key === 'concluido' ? '↩ Reabrir caso' : '✓ Concluir caso'}
+                      </button>
                     </div>
                   );
                 })}

@@ -237,9 +237,44 @@ verificados). Corrigidos além dos de cima:**
   `daily_room_name` + upsert `ignoreDuplicates`. CONFIRMADO e NÃO corrigido: `casos.concluido_em` é
   lido (`Admin.jsx:9559`) e nunca gravado — a coluna "Concluído" do Pipeline é inalcançável (0 de 6
   casos têm o campo); decidir COM O DONO qual evento conclui um caso antes de gravar.
-- **LATENTE, medido e não mexido**: `Admin.jsx:912` e `:7176` contam `perfis` no navegador sem
-  limite. Com 26 perfis não há corte; vira número errado silencioso a partir de 1.000 usuários —
-  mesmo padrão já corrigido no Marketing. Entra no plano de escala, não em correção de bug.
+**J. OS DOIS ITENS QUE TINHAM FICADO DE FORA — RESOLVIDOS (02/08, pedido do dono).**
+
+**J1. O fluxo de casos nunca teve um FIM (origem, função e impacto do `concluido_em`).**
+- **Origem**: `supabase/schema_fluxo_analise.sql` criou `casos` com DUAS coisas — `status_etapa`
+  (onde o caso ESTÁ) e um bloco "Timestamps das transições de etapa" (`iniciado_em`,
+  `juridico_enviado_em`, `arrematado_em`, `concluido_em` = QUANDO cada passo aconteceu). Só a
+  primeira metade virou código: **nenhum dos quatro carimbos era escrito por fluxo nenhum** e o
+  CHECK de `status_etapa` terminava em `'pos_arrematacao'` ("acompanhamento em andamento") — a
+  máquina de estados **não tinha estado final**.
+- **Função**: `concluido_em` é a porta de saída do quadro — `etapaDoCaso` (Admin.jsx) testa
+  `if (c.concluido_em) return 'concluido'` ANTES de tudo. É o único caminho para a 5ª coluna.
+- **Impacto**: nenhum caso jamais saía do Pipeline. Caso entregue seguia ocupando "Arremate em
+  andamento", o relógio "⚠ parado Xd" continuava contando sobre trabalho concluído (justo a
+  métrica que o dono usa para cobrar prazo — o sinal se perde no ruído), o WIP real da equipe
+  ficava desconhecido e não existia tempo de ciclo (análise → entrega). Com 6 casos é cosmético;
+  é dívida que só machuca no volume.
+- **Achado irmão, no mesmo lugar**: `casos.updated_at` **nunca se movia** depois do insert (nos 6
+  casos `updated_at = iniciado_em`; não havia trigger e os `update` do app não tocavam a coluna).
+  Como o relógio do Pipeline usa `max(job, casos.updated_at)`, para caso SEM job o "parado Xd"
+  media idade desde a CRIAÇÃO, não desde a última atividade.
+- **Resolvido** (`casos_conclusao_e_transicoes.sql`, APLICADA): `status_etapa` ganhou `'concluido'`
+  e uma trigger (`casos_carimbar_transicoes`) mantém `updated_at` vivo e carimba as transições
+  (`juridico_enviado_em`, `arrematado_em`, `concluido_em` — sempre a PRIMEIRA passagem; reabrir
+  limpa o `concluido_em`). No banco, não no call-site: vale para o app, para a API e para
+  qualquer fluxo futuro. No Pipeline, cada card ganhou **"✓ Concluir caso"** (com confirmação) e
+  **"↩ Reabrir caso"** na coluna Concluído — concluir é decisão HUMANA, não dá para inferir.
+  Ciclo testado ponta a ponta num caso real (concluiu → carimbou → reabriu → limpou → estado
+  original restaurado).
+
+**J2. Contagem de `perfis` no navegador (corte silencioso de 1.000) — RESOLVIDO.**
+`Admin.jsx` Usuários (`:912`) e Comercial (`:7176`) liam `perfis` sem limite explícito: hoje, com
+26 perfis, não há corte; a partir de 1.000 a lista e TUDO que se conta sobre ela no navegador
+(total/pagantes/sem consultor/inadimplentes) passariam a mentir sem sinal — exatamente o que
+produziu o "Assinaturas tudo 0" (s15) e o "1000 buscas" congelado (s22). Agora as duas consultas
+pedem `count: 'exact'` com `range` explícito (2.000) e a tela **avisa** quando o lote não cobre a
+base: o título vira "Usuários (X de Y)" e o Comercial mostra uma tarja "Mostrando X de Y — os
+números abaixo se referem a esses X". Preferi a verdade visível à paginação completa: é o mínimo
+que impede número errado silencioso, sem reescrever a UX das duas telas.
 
 **G. BACKLOG do bug bounty (achado e NÃO corrigido nesta sessão — registrado de propósito):**
 - `api/promo-capturar.js:112` (CONFIRMADO) — link promocional de curso/e-book mostra "🎉 Acesso
