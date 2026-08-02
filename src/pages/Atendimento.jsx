@@ -37,8 +37,17 @@ const ESCOPO_PAPEL = {
 };
 
 export default function Atendimento() {
-  const { user, effectiveRole } = useAuth();
-  const escopo = ESCOPO_PAPEL[effectiveRole] ?? []; // papéis fora da lista não atendem
+  const { user, role, roleSimulado, impersonate } = useAuth();
+  // Papel de ATENDIMENTO: o papel REAL do atendente — ou o simulado, quando o admin escolhe ver
+  // a fila como consultor/analista (isso é o propósito da simulação).
+  // NÃO usar `effectiveRole`: ele também carrega a PERSONIFICAÇÃO de um cliente (iniciarSuporte,
+  // usado ao abrir a ficha/360). Como 'explorador'/'assessorado' não existem em ESCOPO_PAPEL, o
+  // `?? []` zerava o escopo e a fila inteira sumia — bastava o admin ter aberto a ficha de um
+  // cliente e não ter encerrado o suporte para o painel dizer "Você não recebe chamados de
+  // clientes por aqui" com 7 chamados abertos no banco. Personificar um cliente serve para VER o
+  // app como ele; não pode tirar o atendente da própria fila.
+  const papelAtendimento = (role === 'admin' && roleSimulado) ? roleSimulado : role;
+  const escopo = ESCOPO_PAPEL[papelAtendimento] ?? []; // papéis fora da lista não atendem
   const segsVisiveis = (escopo === null ? ORDEM_SEG : ORDEM_SEG.filter(s => escopo.includes(s)));
   const [chamados, setChamados] = useState([]);
   const [filtro, setFiltro] = useState('pendentes');
@@ -253,7 +262,7 @@ export default function Atendimento() {
             ) : chamadosFiltrados.length === 0 ? (
               <div style={{ padding: '28px 16px', textAlign: 'center', color: '#94a3b8', fontSize: 13, lineHeight: 1.5 }}>
                 {escopo !== null && escopo.length === 0
-                  ? 'Seu acesso é interno (com analista e administração). Você não recebe chamados de clientes por aqui.'
+                  ? `Seu acesso (${papelAtendimento}) é interno. Você não recebe chamados de clientes por aqui.`
                   : 'Nenhum chamado'}
               </div>
             ) : chamadosFiltrados.map(c => {

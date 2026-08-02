@@ -169,8 +169,16 @@ export default function Header() {
   }, [alvoParceria]);
   // "Indicações" só quando a conta EFETIVA aceitou a parceria (ou é admin de verdade, fora de suporte).
   const mostrarRede = ehParceiro || (effectiveRole === 'admin' && !impersonate);
+  // Papel de EQUIPE: papel real do usuário — ou o simulado, quando o admin escolhe ver o app
+  // como consultor/analista (o propósito da simulação). NÃO usa `effectiveRole`, que também
+  // carrega a PERSONIFICAÇÃO de um cliente (iniciarSuporte / ficha do 360): enquanto o
+  // atendente estava com a ficha de um cliente aberta, o botão "Atendimento" SUMIA do menu e a
+  // fila de suporte ficava inalcançável pelo menu (a rota continuava valendo, porque o
+  // PrivateRoute usa o papel real) — foi o que escondeu os 7 chamados abertos.
+  // Ferramenta de equipe é do ATENDENTE; personificar cliente serve para ver o app como ele.
+  const papelEquipe = (role === 'admin' && roleSimulado) ? roleSimulado : role;
   // "Comissões" (extrato operacional) só p/ a equipe; o parceiro-cliente vê os ganhos em Indicações.
-  const ehEquipe = ['admin', 'consultor', 'analista', 'advogado'].includes(effectiveRole);
+  const ehEquipe = ['admin', 'consultor', 'analista', 'advogado'].includes(papelEquipe);
   const abrirInstalarApp = () => window.dispatchEvent(new Event('tsn:pwa-install'));
 
   const ROLES_CALC = ['explorador', 'top2', 'assessorado', 'clube', 'consultor', 'analista', 'advogado', 'admin'];
@@ -301,14 +309,14 @@ export default function Header() {
             </button>
           )}
 
-          {['analista','consultor','advogado','admin'].includes(effectiveRole) && (
+          {['analista','consultor','advogado','admin'].includes(papelEquipe) && (
             <button onClick={() => nav('/atendimento')}
               style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', border: 'none', borderRadius: 8, background: active('/atendimento') ? '#0891b2' : '#0891b222', color: '#67e8f9', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
               <Headphones size={14} /> Atendimento
             </button>
           )}
 
-          {['analista','admin'].includes(effectiveRole) && (
+          {['analista','admin'].includes(papelEquipe) && (
             <button onClick={() => nav('/cliente-360')}
               style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', border: 'none', borderRadius: 8, background: active('/cliente-360') ? '#0d9488' : '#0d948822', color: '#5eead4', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
               👤 360º Cliente
@@ -430,13 +438,13 @@ export default function Header() {
               ⚖️ Advogado
             </button>
           )}
-          {['analista','consultor','advogado','admin'].includes(effectiveRole) && (
+          {['analista','consultor','advogado','admin'].includes(papelEquipe) && (
             <button onClick={() => { nav('/atendimento'); setOpen(false); }}
               style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: 'none', borderRadius: 8, background: 'transparent', color: '#67e8f9', fontWeight: 700, fontSize: 14, cursor: 'pointer', textAlign: 'left' }}>
               <Headphones size={16} /> Atendimento
             </button>
           )}
-          {['analista','admin'].includes(effectiveRole) && (
+          {['analista','admin'].includes(papelEquipe) && (
             <button onClick={() => { nav('/cliente-360'); setOpen(false); }}
               style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: 'none', borderRadius: 8, background: 'transparent', color: '#5eead4', fontWeight: 700, fontSize: 14, cursor: 'pointer', textAlign: 'left' }}>
               👤 360º Cliente
