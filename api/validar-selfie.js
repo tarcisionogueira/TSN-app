@@ -151,17 +151,22 @@ export default async function handler(req) {
 
   const claudeKey = process.env.CLAUDE_KEY;
 
-  // KYC do PARCEIRO: a selfie ('rosto') é conferida CONTRA o documento já enviado (mesma pessoa),
-  // não basta "ter um rosto". Intercepta aqui — a função trata key ausente/erro/PDF (fail-closed).
-  if (tipo === 'rosto') {
+  // TODA aprovação de identidade passa pelo FACE MATCH contra o documento no acervo — tanto o
+  // KYC do parceiro (tipo 'rosto') quanto o fluxo do Perfil (sem `tipo`).
+  // Era aqui o furo (achado 02/08): sem `tipo`, o endpoint julgava UMA foto enviada pelo próprio
+  // cliente ("tem rosto? tem documento?") e, se a IA dissesse sim, gravava identidade_validada —
+  // sem nunca comparar com o documento do titular. Uma foto de outra pessoa segurando o documento
+  // dela aprovava a SUA conta, e identidade validada é pré-requisito de SAQUE.
+  // Agora `identidade_validada` é escrito em UM lugar só: validarRostoContraDocumento.
+  if (tipo === 'rosto' || !usaTipo) {
     const selfieB64 = imagem.split(',')[1];
     const selfieMedia = imagem.match(/data:(image\/\w+);/)?.[1] || 'image/jpeg';
     return await validarRostoContraDocumento(user, selfieB64, selfieMedia, claudeKey);
   }
 
+  // Daqui p/ baixo é só a checagem por ETAPA do KYC de equipe (documento/ambos), que NUNCA
+  // conclui a validação de identidade — apenas diz se a foto daquela etapa está legível.
   if (!claudeKey) {
-    // Fail-closed: sem key NÃO aprova sozinho — vai para revisão manual da equipe.
-    if (!usaTipo) await marcarIdentidade(user.id, { identidade_pendente: true });
     return new Response(JSON.stringify({ ok: false, mensagem: 'Foto recebida. A verificação será feita pela equipe.' }), { status: 200 });
   }
 
@@ -170,18 +175,7 @@ export default async function handler(req) {
   const mediaType = imagem.match(/data:(image\/\w+);/)?.[1] || 'image/jpeg';
 
   // Prompt SEMPRE do servidor (allowlist por `tipo`). Nunca concatena texto do cliente.
-  const promptText = usaTipo
-    ? `${PROMPTS[tipo]}\n\nResponda SOMENTE com o JSON, sem texto adicional.`
-    : `Analise esta imagem e responda APENAS com JSON no formato:
-{"rosto_visivel": true/false, "documento_visivel": true/false, "aprovado": true/false, "motivo": "texto curto"}
-
-Regras:
-- "rosto_visivel": há uma pessoa com o rosto visível e nítido?
-- "documento_visivel": há um documento de identidade (RG, CNH, passaporte) visível?
-- "aprovado": true apenas se ambos rosto E documento estiverem visíveis e legíveis
-- "motivo": se não aprovado, explique em pt-BR o que está faltando (máx 80 chars)
-
-Responda SOMENTE com o JSON, sem texto adicional.`;
+  const promptText = `${PROMPTS[tipo]}\n\nResponda SOMENTE com o JSON, sem texto adicional.`;
 
   try {
     const claudeRes = await anthropicFetch({
@@ -226,43 +220,17 @@ Responda SOMENTE com o JSON, sem texto adicional.`;
     let parsed;
     try { parsed = JSON.parse(text.match(/\{[\s\S]*\}/)?.[0] || '{}'); } catch { parsed = {}; }
 
-    // Checagem por tipo — usa campo "ok" diretamente
-    if (usaTipo) {
-      if (parsed.ok === true) {
-        // (A selfie do parceiro — tipo 'rosto' — é tratada antes, com face match contra o documento.)
-        return new Response(JSON.stringify({
-          ok: true,
-          mensagem: 'Verificação concluída com sucesso.',
-          detalhes: parsed,
-        }), { status: 200 });
-      } else {
-        return new Response(JSON.stringify({
-          ok: false,
-          mensagem: parsed.motivo || 'Não foi possível verificar a imagem. Tente novamente.',
-          detalhes: parsed,
-        }), { status: 200 });
-      }
-    }
-
-    // Prompt genérico — usa campo "aprovado". Persiste o resultado no perfil (server-side).
-    if (parsed.aprovado) {
-      await marcarIdentidade(user.id, { identidade_validada: true, identidade_validada_em: new Date().toISOString(), identidade_pendente: false });
-      return new Response(JSON.stringify({
-        ok: true,
-        mensagem: 'Identidade verificada com sucesso.',
-        detalhes: parsed,
-      }), { status: 200 });
-    } else {
-      await marcarIdentidade(user.id, { identidade_pendente: true });
-      return new Response(JSON.stringify({
-        ok: false,
-        mensagem: parsed.motivo || 'Não foi possível verificar o documento. Certifique-se de que rosto e documento estão visíveis.',
-        detalhes: parsed,
-      }), { status: 200 });
-    }
+    // Checagem por ETAPA (documento/ambos): responde só se aquela foto está legível. Nenhuma
+    // escrita em perfis — quem valida identidade é o face match, acima.
+    return new Response(JSON.stringify({
+      ok: parsed.ok === true,
+      mensagem: parsed.ok === true
+        ? 'Verificação concluída com sucesso.'
+        : (parsed.motivo || 'Não foi possível verificar a imagem. Tente novamente.'),
+      detalhes: parsed,
+    }), { status: 200 });
   } catch (err) {
-    // Fail-closed: falha técnica NÃO aprova automaticamente — vai para revisão manual.
-    if (!usaTipo) await marcarIdentidade(user.id, { identidade_pendente: true });
+    // Fail-closed: falha técnica NÃO aprova automaticamente.
     return new Response(JSON.stringify({
       ok: false,
       mensagem: 'Foto recebida. A verificação será realizada pela equipe.',

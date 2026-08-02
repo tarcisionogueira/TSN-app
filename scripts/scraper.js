@@ -1605,8 +1605,21 @@ async function salvarImoveis(imoveis) {
     .from('imoveis_leilao')
     .upsert(rows, { onConflict: 'fonte,fonte_id', ignoreDuplicates: false });
 
-  if (error) console.error('Erro ao salvar:', error.message);
-  else console.log(`    ✅ ${comViabilidade.length} imóveis salvos`);
+  if (error) { console.error('Erro ao salvar:', error.message); return; }
+  console.log(`    ✅ ${comViabilidade.length} imóveis salvos`);
+
+  // Está no CSV de hoje ⇒ está à VENDA na Caixa: reativa o lote que o sweep de
+  // vencidos (desativar_imoveis_cef_vencidos) tirou do ar e que voltou ao CSV.
+  // O upsert acima NÃO escreve `ativo` — sem isto o lote reaparecido ficava
+  // ativo=false para sempre (5.025 lotes invisíveis em 02/08, 18% do CSV).
+  // O scraper dos leiloeiros já faz o equivalente com `ativo: true` no payload.
+  const fonteIds = rows.map(r => r.fonte_id).filter(Boolean);
+  if (fonteIds.length) {
+    const { data: reativados, error: errReativar } = await supabase
+      .rpc('reativar_imoveis_cef', { p_fonte_ids: fonteIds });
+    if (errReativar) console.error('    Erro ao reativar lotes do CSV:', errReativar.message);
+    else if (reativados) console.log(`    🔼 ${reativados} lote(s) reativado(s) (voltaram ao CSV)`);
+  }
 }
 
 // ─── MAIN ─────────────────────────────────────────────────────────────────────

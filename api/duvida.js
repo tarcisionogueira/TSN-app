@@ -66,9 +66,16 @@ export default async function handler(req) {
         await sb(`sdr_leads?id=eq.${lead.id}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(patch) });
       }
     } else {
-      await sb('sdr_leads', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ nome, email, whatsapp: telefone || null, origem, status: 'novo' }) });
+      // whatsapp era NOT NULL: dúvida sem telefone (campo opcional na Landing) violava a
+      // constraint e o lead sumia no catch. Coluna agora aceita nulo — e o erro, se houver,
+      // aparece no log em vez de virar silêncio.
+      const leadRes = await sb('sdr_leads', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ nome, email, whatsapp: telefone || null, origem, status: 'novo' }) });
+      if (!leadRes.ok) {
+        const det = await leadRes.text().catch(() => '');
+        console.error('[duvida] lead NÃO gravado', leadRes.status, det.slice(0, 300));
+      }
     }
-  } catch (_) {}
+  } catch (e) { console.error('[duvida] lead NÃO gravado (exceção)', String(e?.message || e)); }
 
   // 2. CHAMADO + 1ª mensagem (consultor responde pelo Atendimento)
   try {

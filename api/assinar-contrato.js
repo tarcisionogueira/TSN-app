@@ -74,7 +74,7 @@ export default async function handler(req) {
   const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null;
 
   // Carrega o contrato pelo token (service key — ignora RLS)
-  const r = await sb(`contratos_link?token=eq.${encodeURIComponent(token)}&select=id,conteudo,status,expira_em,titulo,criado_por,assinante_email,contrato_grupo_id`);
+  const r = await sb(`contratos_link?token=eq.${encodeURIComponent(token)}&select=id,conteudo,status,expira_em,titulo,criado_por,assinante_email,contrato_grupo_id,verificacao_identidade,docs_extras_exigidos`);
   const rows = await r.json().catch(() => []);
   const contrato = Array.isArray(rows) ? rows[0] : null;
   if (!contrato) return new Response(JSON.stringify({ error: 'Contrato não encontrado' }), { status: 404, headers });
@@ -99,6 +99,26 @@ export default async function handler(req) {
   if (contrato.expira_em && new Date(contrato.expira_em) < new Date()) {
     trackErro('link expirado', { expira_em: contrato.expira_em });
     return new Response(JSON.stringify({ error: 'Link de assinatura expirado' }), { status: 410, headers });
+  }
+
+  // DOCUMENTO EXIGIDO PELO CONTRATO — no SERVIDOR. A obrigatoriedade só existia na tela
+  // (src/pages/ContratoLink.jsx:363-374): quem chamasse a API direto com o token e SEM
+  // `docs_identidade` assinava sem nenhum documento, e o face match abaixo — que só roda quando
+  // as fotos vêm — era pulado junto. Espelha exatamente a regra da tela.
+  const docsEnviados = (docs_identidade && typeof docs_identidade === 'object') ? docs_identidade : {};
+  const temImagem = (k) => typeof docsEnviados[k] === 'string' && docsEnviados[k].startsWith('data:image/');
+  const verifExigida = String(contrato.verificacao_identidade || 'nenhuma');
+  const obrigatorios = [
+    ...(verifExigida !== 'nenhuma' && ['selfie', 'selfie_doc', 'foto_doc'].includes(verifExigida) ? [verifExigida] : []),
+    ...(Array.isArray(contrato.docs_extras_exigidos) ? contrato.docs_extras_exigidos.filter(d => typeof d === 'string') : []),
+  ];
+  const faltando = obrigatorios.filter(d => !temImagem(d));
+  if (faltando.length) {
+    trackErro('documento de identidade obrigatório não enviado', { faltando });
+    return new Response(JSON.stringify({
+      error: 'Este contrato exige o envio dos documentos de identificação para ser assinado.',
+      faltando,
+    }), { status: 422, headers });
   }
 
   // VERIFICAÇÃO DE IDENTIDADE KYC (pedido do dono): SEMPRE que o contrato coletar rosto + documento

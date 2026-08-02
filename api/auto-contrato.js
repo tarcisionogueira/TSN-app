@@ -129,6 +129,15 @@ export default async function handler(req, res) {
   if (!planoKey || !['assessorado', 'clube'].includes(planoKey)) {
     return res.status(400).json({ error: 'planoKey deve ser assessorado ou clube' });
   }
+  // Sanitiza ANTES da trava de elegibilidade — a trava usa `emailUsuario`. Enquanto estes dois
+  // `const` ficavam DEPOIS do gate, o acesso caía na zona morta temporal (ReferenceError), o
+  // catch fail-closed engolia e TODO self-service de 'assessorado' devolvia 502
+  // 'nao_foi_possivel_validar_elegibilidade' — parecia inelegibilidade, era bug de ordem.
+  const nomeUsuario = sanitizeName(nomeRaw, 200);
+  const emailUsuario = sanitizeEmail(emailRaw);
+  if (emailRaw && !emailUsuario) {
+    return res.status(400).json({ error: 'emailUsuario inválido' });
+  }
   // TRAVA ABSOLUTA (dono): a assessoria é EXCLUSIVA do Investidor Pro. A regra não pode
   // viver só na tela — sem isto, um POST direto aqui geraria o contrato de assessoria para
   // um Explorador. Staff (atribuição manual) passa; 'clube' NÃO entra (já inclui assessoria,
@@ -142,13 +151,10 @@ export default async function handler(req, res) {
       }
     } catch (e) {
       // Fail-CLOSED nesta trava: se não deu para confirmar a elegibilidade, não gera o contrato.
+      // Loga a causa — foi um erro mudo aqui que escondeu a TDZ do emailUsuario por semanas.
+      console.error('[auto-contrato] gate de assessoria falhou:', String(e?.message || e));
       return res.status(502).json({ error: 'nao_foi_possivel_validar_elegibilidade' });
     }
-  }
-  const nomeUsuario = sanitizeName(nomeRaw, 200);
-  const emailUsuario = sanitizeEmail(emailRaw);
-  if (emailRaw && !emailUsuario) {
-    return res.status(400).json({ error: 'emailUsuario inválido' });
   }
 
   // Tenta buscar nome do perfil do usuário

@@ -135,7 +135,7 @@ export default async function handler(req, res) {
     if (q) respostas[q.slice(0, 200)] = String(r?.resposta ?? '').slice(0, 500);
   }
   try {
-    await sb('sdr_leads', {
+    const leadRes = await sb('sdr_leads', {
       method: 'POST',
       headers: { Prefer: 'return=minimal' },
       body: JSON.stringify({
@@ -144,6 +144,11 @@ export default async function handler(req, res) {
         origem: `Promoção ${codigo}${ref ? ` (ref: ${ref})` : ''}`, status: 'novo',
       }),
     });
+    // Sem isto o lead da promoção sumia sem deixar rastro (schema desalinhado → 400 → catch vazio).
+    if (!leadRes.ok) {
+      const det = await leadRes.text().catch(() => '');
+      console.error('[promo-capturar] lead NÃO gravado', leadRes.status, det.slice(0, 300));
+    }
   } catch { /* best-effort — a conta já foi criada */ }
 
   return res.status(200).json({ ok: true, userId, jaExistia, produto: link.produto, produto_tipo: link.produto_tipo || 'plano' });

@@ -22,6 +22,140 @@
 > Checagem rápida a qualquer momento: `select public.auditoria_seguranca();` → `0 crítico / 0 atenção` = íntegro.
 > **Auditorias ofensivas completas: 15/07/2026 (×2).** Total de correções: 15 (1ª rodada) + escalonamento por convite (CRÍTICO) + IDOR do MP (ALTO) + escala. Refazer a ofensiva quando entrarem rotas/pagamento/RLS novos (a Rotina mensal já faz isso sozinha).
 
+## ✅ COMEÇAR AQUI (02/08 — sessão 23: ritual de abertura + 8 correções de raiz achadas por ele)
+
+> Branch `claude/bidpro-brasil-handoff-je7c30`. `npm run build` OK; endpoints novos passam
+> `node --check`. 5 migrações APLICADAS via MCP. `auditoria_seguranca()` = **0/0** depois de tudo.
+
+**A. RITUAL (02/08 ~12h UTC).** (1) **Saúde**: 33.062 ativos (**era 28.040 — ver B**), 27.170
+atualizados em 24h; deploys READY (prod `053024b`); fila de geocode 1.042 (98,8% do acervo já
+geocodificado, cron horário drena); fila de documentos 1.258 pendentes com vazão de 40/run ×
+~14 runs/dia (drena em ~2 dias — **não** está parada). (2) **Baseline aprendida**: só a SBID21
+abaixo do piso (0 < 18) = **esperado**, leilão encerrado, fonte armada como o CREPALDI.
+(3) **Segurança**: `auditoria_seguranca()` 0/0 — mas a ofensiva achou o que ele **não via**
+(ver D). (4) **Relatórios**: 0 vazios, 0 presos, 0 erros em 24h. (5) **E-mail de oportunidades
+com a regra nova FUNCIONOU**: 3 envios às 11:01 UTC (8h BRT) com 12 oportunidades cada —
+Charles (Petrolândia/PE), Arnaldo (Pariquera-Açu/SP) e Fernando (Santana de Parnaíba/SP).
+(6) **Marketing**: gasto de 01/08 ingerido às 10:50 UTC (R$27,31 / 19 cliques / 221 impressões,
+selo auto) — ciclo D+1 íntegro; a coluna `conversoes` do nosso `marketing_metricas_dia` está
+**0** para 01/08 (a conversão do Charles é conferida no painel do Google, item 2 do dono).
+
+**B. 🔴 O MAIOR ACHADO — 5.025 imóveis da CAIXA (18% do CSV) INVISÍVEIS no app.** Estavam à
+venda na Caixa, vinham no CSV todo dia, e o app escondia. **Causa**: `desativar_imoveis_cef_vencidos`
+tira do ar o lote que sumiu do CSV (certo), mas o upsert do scraper da CEF (`scripts/scraper.js`
+→ `salvarImoveis`) **não escreve a coluna `ativo`** — então o lote que VOLTA ao CSV é atualizado
+(preço, foto, data) e fica `ativo=false` **para sempre**. O scraper dos leiloeiros já fazia certo
+desde sempre (`scraper-puppeteer.mjs:177`: `ativo: true, // coletado agora ⇒ está ativo (reativa
+lotes que voltaram)`); só a CEF ficou de fora. **Prova**: o run de hoje (10:30 UTC) tocou 27.278
+lotes = exatamente o total do CSV; 22.253 ativos + **5.025 com `ativo=false` e `status='disponivel'`**,
+espalhados por TODOS os estados (GO 1.070, RJ 967, SP 760, MG 255…). **Correção**: RPC
+`reativar_imoveis_cef(fonte_ids[])` chamada a cada lote salvo (migração `cef_reativar_lotes_do_csv.sql`,
+APLICADA) + backfill imediato. **Acervo ativo 28.040 → 33.062.** A guarda `status='disponivel'`
+preserva o lote marcado como arrematado pelo cliente. *Por que o monitor não viu: a baseline
+aprendida olha `fonte_saude.total` (o que o scraper PROCESSOU, estável em 27.278), não o acervo
+ATIVO — para a CEF os dois números são diferentes. Vale reavaliar se o piso aprendido deveria
+olhar `fonte_metricas_hist.ativos` também.*
+
+**C. 🔴 CADASTRO PÚBLICO PODIA NASCER ADMIN (escalação de privilégio).** `handle_new_user`
+(trigger de `auth.users`, SECURITY DEFINER → ignora RLS) gravava
+`perfis.role = coalesce(raw_user_meta_data->>'role','explorador')`, e `raw_user_meta_data` é o
+`options.data` do `supabase.auth.signUp` — controlado por quem chama, com a anon key que está no
+bundle do site. `data: { role: 'admin' }` no cadastro = conta admin. A proteção existente
+(`trg_proteger_perfil`) é BEFORE **UPDATE**; o INSERT estava aberto, e por isso o auditor seguia
+0/0. **Correção** (`handle_new_user_role_allowlist.sql`, APLICADA): allowlist — o cadastro só
+nasce `explorador`; papel de equipe continua vindo de `usar_convite_equipe` (valida o token no
+servidor) e papel de plano do webhook de pagamento. Nenhum fluxo legítimo dependia disso (os 6
+caminhos de cadastro já mandavam 'explorador'). **Nunca foi explorado**: 0 perfis com papel
+inesperado. **E o auditor aprendeu** (`auditoria_seguranca_role_do_metadado.sql`, APLICADA): novo
+check genérico `role_do_metadado_cliente` — qualquer função que derive o papel de
+`raw_user_meta_data` sem a allowlist vira CRÍTICO no próximo run, sem precisar lembrar de incluir
+nada. Conferido: o check está armado (dispara se a allowlist sumir) e o painel segue 0/0.
+
+**D. OFENSIVA DE SEGURANÇA (3 agentes + céticos) — 2 furos de KYC fechados:**
+1. **KYC do saque burlável (`api/validar-selfie.js`)**: chamando o endpoint **sem o campo `tipo`**,
+   o servidor julgava UMA foto enviada pelo próprio cliente ("tem rosto? tem documento?") e, se a
+   IA dissesse sim, gravava `identidade_validada=true` — **sem nunca comparar com o documento do
+   titular**. Foto de outra pessoa segurando o documento dela aprovava a SUA conta, e identidade
+   validada é pré-requisito de SAQUE. Agora **todo** caminho passa pelo face match contra o
+   documento no acervo; `identidade_validada` é escrito em **um lugar só**. O caminho fraco (prompt
+   genérico + campo `aprovado`) foi REMOVIDO, não só bloqueado.
+2. **Contrato assinado sem o documento exigido (`api/assinar-contrato.js`)**: `verificacao_identidade`
+   e `docs_extras_exigidos` só eram cobrados na TELA (`ContratoLink.jsx:363-374`). Um POST direto
+   com o token e sem `docs_identidade` assinava sem documento nenhum — e pulava junto o face match,
+   que só roda quando as fotos vêm. Agora a API carrega as duas colunas e devolve 422 listando o
+   que falta. Vale para a assessoria (R$ 4.800–6.000), que é o contrato mais caro.
+
+**E. BUG BOUNTY DO CÓDIGO (6 agentes por camada + céticos) — corrigidos:**
+1. **Webhook Asaas rebaixava assinante em dia (`api/asaas-webhook.js`)**: `PAYMENT_OVERDUE` e
+   `PAYMENT_REFUSED` não checavam `ehProduto` (os fluxos de confirmação, chargeback e reembolso
+   checavam). Assinante que comprava um curso/e-book no boleto e **não pagava** caía em
+   `processarVencido` → role rebaixado para explorador, `inadimplente_desde` marcado,
+   `plano_vencimento` zerado e documentos com prazo de expiração — por causa de um boleto de
+   produto abandonado. Agora produto avulso vencido/recusado não toca o plano.
+2. **Contrato de assessoria self-service SEMPRE dava 502 (`api/auto-contrato.js`)**: `emailUsuario`
+   era usado na trava de elegibilidade 10 linhas ANTES do seu `const` → `ReferenceError` (zona
+   morta temporal) engolido pelo `catch` fail-closed → `nao_foi_possivel_validar_elegibilidade`.
+   Parecia inelegibilidade do cliente; era ordem de declaração. Corrigido + o catch agora **loga**
+   a causa (foi o silêncio dele que escondeu isso).
+3. **Todo lead público ia para o ralo (`sdr_leads` = 0 linhas)**: os 3 gravadores mandavam colunas
+   que **não existem** (`respostas`, `user_id`, `consultor_id` em `sdr-capturar`/`promo-capturar`)
+   ou violavam NOT NULL (`duvida.js`, quando o visitante não informa telefone) → 400/constraint →
+   `catch {}` vazio → lead evapora. Os leitores pediam as MESMAS colunas e tomavam 400
+   (`Admin.jsx:4934` e `:7133`, `health-check.js:292`). Migração
+   `sdr_leads_colunas_que_o_codigo_espera.sql` (APLICADA) cria as colunas, torna `whatsapp` nulável
+   e acrescenta `sdr_produtos.perguntas` (que o questionário da `ProdutoLanding` lê); os 3
+   gravadores agora **logam a falha** em vez de engolir. **Ainda não houve perda real** (0 dúvidas
+   enviadas até hoje) — a armadilha estava armada para o primeiro visitante do tráfego PAGO, que
+   cai exatamente nos formulários da Landing e da Planos.
+4. **Rastreio de entrega do e-mail de oportunidades nunca ia popular (`api/enviar-alertas-cron.js`)**:
+   o cron gravava a linha em `emails_log` **sem `resend_id`**, e `resend-webhook.js` casa o evento
+   por `resend_id`. Ou seja: mesmo depois de o dono corrigir a URL no Resend (item 1 dele), o
+   e-mail de MAIOR volume — o teste natural que ele ia usar hoje — continuaria com
+   `entregue_em/aberto_em` vazios para sempre. Agora o id do Resend é capturado e gravado.
+   *(Os 3 envios de hoje, 11:01 UTC, saíram antes do fix: seguem sem rastreio. O próximo ciclo já
+   valida.)*
+
+**F. CAPTURA — SATO era ponto cego TOTAL (30 lotes com link morto).** `scraper-sato.mjs` inventou
+o padrão da URL do lote e **documenta isso**: linha 31 "palpite /leilao/{id} como url_lote; o 1º
+run real valida" — nunca foi validado. No run das 11:40 do `captura-documentos`, **12 de 12 lotes
+SATO** voltaram `title="Not Found"`: `https://www.satoleiloes.com.br/leilao/<id>` é 404. Ou seja,
+"Acessar leiloeiro" levava a lugar nenhum — o mesmo sintoma que o `limpar-imoveis-stale-cron`
+corrigiu para a CEF. Agravante: a fonte **não escreve `fonte_saude`**, **não estava** em
+`FONTES_SEM_SAUDE` nem em `BASELINE_FONTES`, e `scraper-sato.yml` **não tem cron** (só dispatch
+manual) — coleta única em 30/07 e ninguém para avisar. **Feito**: 30 lotes desativados + fila de
+documentos purgada + `leiloeiro_conhecimento.docs_status='esperado'` (para de queimar slots do
+drenador) + observação com o achado (`sato_lotes_com_url_inexistente.sql`, APLICADA); SATO entra
+em `FONTES_SEM_SAUDE` no monitor, com uma lista `FONTES_PARADAS` que evita o alerta diário de
+"sem acervo ativo" enquanto a fonte está parada de propósito. **REVERSÍVEL**: `scraper-sato.mjs:198`
+já grava `ativo: true` — descoberto o padrão real da URL, os lotes voltam sozinhos.
+**Próximo passo (não feito)**: recon do padrão real de URL do lote da SATO antes de religar.
+
+**G. BACKLOG do bug bounty (achado e NÃO corrigido nesta sessão — registrado de propósito):**
+- `api/gerar-laudo-viabilidade.js:211` — gate do laudo aceita mercadológico vazio/sem parecer e
+  emite veredito sobre "valor de mercado R$ 0".
+- `api/documental-retry-cron.js:39` — janela de 48h medida por `updated_at`, que desliza a cada
+  regeração → re-tenta de hora em hora para sempre.
+- `api/indice-mercado.js:60` — gate de custo falha ABERTO: RPC `limite_ia_efetivo` indisponível é
+  lido como "ilimitado" (o padrão do projeto é fail-closed em gate de custo).
+- `api/enviar-alertas-cron.js:210` — consulta `arrematacoes?user_id=…`, coluna que não existe (é
+  `arrematante_id`/`cliente_id`): a etapa "similares ao que você arrematou" nunca roda.
+- `src/pages/Admin.jsx:1120` — upload de documentos do arremate ignora `res.ok`: arquivo não grava,
+  ninguém é avisado e os 3 relatórios saem sem os documentos.
+- `src/pages/Checkout.jsx:266` — gate da assessoria falha FECHADO por erro HTTP (mostra a tela
+  errada numa contratação de R$ 4.800–6.000).
+- `src/contexts/AnalisesContext.jsx:103` — regeração marcada como "erro/tempo limite" em ≤30s
+  porque `startedAt` vem do `created_at` antigo da linha.
+- Fila de documentos: ~200 linhas de fontes PAGAS (GESTAOLEILOES 185, PECINI 19) enfileiradas antes
+  da regra de 24/07 seguem sendo tentadas pelo drenador genérico e batem em Cloudflare
+  ("Just a moment…") até esgotar as 4 tentativas. Desperdício limitado, mas é desperdício.
+
+**H. O QUE DEPENDE DO DONO — a lista de ontem continua valendo** (`PENDENCIAS_DONO.md`): Resend
+(URL com `www.` + Re-enable) · 3 checagens do painel Google Ads + conversão do Charles · atribuir
+responsável aos 4 casos da Alessandra (0/4 relatórios, prazo estourado) · aprovar o prompt dos
+triggers p/ recriar a Rotina mensal de auditoria · termos de pesquisa na segunda.
+⚠️ **Sobre o item do Resend**: corrigir a URL agora passa a valer de verdade — antes do fix E4 o
+e-mail de oportunidades nunca teria rastreio, com ou sem webhook ativo.
+
 ## ✅ COMEÇAR AQUI (01/08 — sessão 22: ritual de abertura + Cliente 360 + fix resumir-ticket)
 
 **📋 ATIVIDADES DO DONO — SÁBADO 02/08 (lista pedida por ele; detalhes em PENDENCIAS_DONO.md):**

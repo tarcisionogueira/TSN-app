@@ -138,10 +138,17 @@ export default async function handler(req, res) {
       return res.status(200).json(result);
     }
     if (tipo === 'PAYMENT_OVERDUE') {
+      // Compra AVULSA de produto (curso/e-book) não é assinatura: boleto/pix não pago só deixa
+      // a compra pendente. Sem este guard, o assinante em dia que abandonava um boleto de
+      // produto caía em processarVencido → role rebaixado p/ explorador, inadimplente_desde,
+      // plano_vencimento zerado e documentos com prazo de expiração. Os fluxos de confirmação,
+      // chargeback e reembolso já separavam produto × plano; overdue/refused ficaram de fora.
+      if (ehProduto) return res.status(200).json({ ok: true, ignorado: 'produto_vencido' });
       const result = await processarVencido(contexto);
       return res.status(200).json(result);
     }
     if (tipo === 'PAYMENT_REFUSED') {
+      if (ehProduto) return res.status(200).json({ ok: true, ignorado: 'produto_recusado' });
       const result = await processarRecusado({
         ...contexto,
         motivo: pag?.refusedReason || 'PAYMENT_REFUSED',

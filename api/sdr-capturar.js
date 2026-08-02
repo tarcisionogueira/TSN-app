@@ -105,7 +105,7 @@ export default async function handler(req, res) {
 
   // 4) Lead para a equipe/consultor (com respostas do questionário).
   try {
-    await sb('sdr_leads', {
+    const leadRes = await sb('sdr_leads', {
       method: 'POST',
       headers: { Prefer: 'return=minimal' },
       body: JSON.stringify({
@@ -114,7 +114,14 @@ export default async function handler(req, res) {
         origem: String(b.origem || '').slice(0, 500) || null, status: 'novo',
       }),
     });
-  } catch { /* best-effort — a conta já foi criada */ }
+    // NUNCA falhar em silêncio: era assim que o lead sumia (schema sem respostas/user_id/
+    // consultor_id → 400 → catch vazio → 0 linhas em sdr_leads). A conta já foi criada, então
+    // não derrubamos a resposta — mas o erro fica no log do runtime para o health-check/dono.
+    if (!leadRes.ok) {
+      const det = await leadRes.text().catch(() => '');
+      console.error('[sdr-capturar] lead NÃO gravado', leadRes.status, det.slice(0, 300));
+    }
+  } catch (e) { console.error('[sdr-capturar] lead NÃO gravado (exceção)', String(e?.message || e)); }
 
   return res.status(200).json({ ok: true, userId });
 }

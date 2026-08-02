@@ -465,6 +465,12 @@ async function handler(req) {
         signal: AbortSignal.timeout(20000),
       });
       if (emailRes.ok) {
+        // ID do Resend: é a CHAVE que o /api/resend-webhook usa p/ casar o evento de
+        // entrega/abertura/clique com a linha do emails_log (match por resend_id). Sem
+        // gravá-lo, o rastreio do Cliente 360 NUNCA popula para o e-mail de oportunidades
+        // — nem depois de o webhook voltar ao ar. Best-effort: falha na leitura não
+        // derruba o envio (o e-mail já saiu).
+        const resendId = await emailRes.json().then((d) => d?.id || null).catch(() => null);
         await fetch(`${URL_}/rest/v1/alertas_email?on_conflict=user_id`, {
           method: 'POST',
           headers: { ...hdr, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },
@@ -476,7 +482,7 @@ async function handler(req) {
           await fetch(`${URL_}/rest/v1/emails_log`, {
             method: 'POST',
             headers: { ...hdr, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-            body: JSON.stringify({ user_id: perfil.id, destinatario: String(email).toLowerCase(), assunto: `🏠 ${top.length} oportunidades em ${local} esta semana`, tipo: 'oportunidades', status: 'enviado' }),
+            body: JSON.stringify({ user_id: perfil.id, destinatario: String(email).toLowerCase(), assunto: `🏠 ${top.length} oportunidades em ${local} esta semana`, tipo: 'oportunidades', status: 'enviado', resend_id: resendId }),
             signal: AbortSignal.timeout(15000),
           });
         } catch { /* histórico é best-effort */ }

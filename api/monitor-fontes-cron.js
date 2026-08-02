@@ -40,7 +40,16 @@ const FONTES_CRITICAS = ['CEF', 'MEGA', 'SUPERBID', 'SOLD', 'ZUK', 'SODRE', 'FRA
 // Inclui as fontes GRÁTIS servidas por scrapers próprios (Bright Data via GitHub Actions) que
 // NÃO escreviam fonte_saude e eram ponto-cego: GESTAOLEILOES (qui), CALIL/VEGAS/TORRES3 (plataforma
 // SOLEON, seg). Frescor pelo acervo (imoveis_leilao.atualizado_em). 9d cobre a cadência semanal.
-const FONTES_SEM_SAUDE = { PECINI: 9, RJLEILOES: 9, GESTAOLEILOES: 9, CALIL: 9, VEGAS: 9, TORRES3: 9, VLANCE: 9 };
+// SATO (02/08): era ponto cego TOTAL — não escreve fonte_saude, não estava aqui nem em
+// BASELINE_FONTES e `scraper-sato.yml` não tem cron (só dispatch manual). Resultado: coleta
+// única em 30/07 com url_lote inventado (/leilao/{id}, "palpite" do próprio scraper) que dá
+// 404 — 30 lotes com "Acessar leiloeiro" morto e ninguém para avisar. Entra aqui para que a
+// ausência de coleta seja VISÍVEL; quando ganhar cron, a tolerância acompanha a cadência.
+const FONTES_SEM_SAUDE = { PECINI: 9, RJLEILOES: 9, GESTAOLEILOES: 9, CALIL: 9, VEGAS: 9, TORRES3: 9, VLANCE: 9, SATO: 9 };
+// Fontes PARADAS por decisão nossa (acervo zerado de propósito, aguardando conserto). Não
+// alerta "sem acervo ativo" — já está registrado e a repetição só vira ruído; a checagem de
+// FRESCOR continua valendo, então quando a fonte voltar e parar de novo o monitor avisa.
+const FONTES_PARADAS = new Set(['SATO']); // 02/08: url_lote inventado dá 404 — recon pendente
 // Frescor máximo tolerado (h) para as fontes grátis que reportam saúde (Seção A).
 // Elas rodam 2x/semana — seg e qui (cron '1,4' em scraper.yml e leiloeiros-puppeteer.yml).
 // O MAIOR gap NORMAL é quinta→segunda = 96h; com este monitor às 11h UTC e o scrape às
@@ -173,7 +182,9 @@ async function handler(req) {
       .order('atualizado_em', { ascending: false }).limit(1);
     const ultimoAt = mx?.[0]?.atualizado_em;
     if (!ultimoAt) {
-      problemas.push({ fonte, tipo: 'sem acervo ativo', detalhe: 'scraper próprio (pago?) sem imóvel ativo' });
+      if (!FONTES_PARADAS.has(fonte)) {
+        problemas.push({ fonte, tipo: 'sem acervo ativo', detalhe: 'scraper próprio (pago?) sem imóvel ativo' });
+      }
       continue;
     }
     const idadeD = (agoraMs - new Date(ultimoAt).getTime()) / 86400000;
