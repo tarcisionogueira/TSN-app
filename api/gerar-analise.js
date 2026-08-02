@@ -393,6 +393,27 @@ async function lerIndiceBidPro(imDb, segmento = 'apartamento') {
   } catch { return null; }
 }
 
+// DEMOGRAFIA E PRESSÃO HABITACIONAL da cidade (base própria `cidade_socio`, alimentada pelo
+// cron mensal /api/socio-ingestao-cron a partir do IBGE).
+//
+// POR QUE ISTO É UMA LEITURA E NÃO UMA BUSCA: a regra que o dono cravou nesta entrega foi
+// "atenção com a separação das etapas para não sobrecarregar o tempo de coleta do relatório".
+// Se este dado entrasse na ETAPA B (busca web), somaria segundos e outro ponto de falha a cada
+// relatório. Aqui é UMA linha por índice — milissegundos — e a coleta pesada já aconteceu no
+// cron mensal. Falhou? Devolve null e o parecer segue sem o bloco. Nunca bloqueia.
+async function lerSocioRegiao(imDb) {
+  try {
+    if (!imDb?.cidade_norm || !imDb?.estado) return null;
+    const r = await sb('rpc/socio_regiao', {
+      method: 'POST',
+      body: JSON.stringify({ p_cidade_norm: imDb.cidade_norm, p_uf: String(imDb.estado).toUpperCase(), p_bairro: imDb.bairro || '' }),
+    });
+    if (!r.ok) return null;
+    const j = await r.json().catch(() => null);
+    return (j && typeof j === 'object' && (j.populacao || j.pop_estim || j.domicilios)) ? j : null;
+  } catch { return null; }
+}
+
 // Guarda DETERMINÍSTICA anti-leilão: mesmo o prompt mandando descartar leilão, o LLM às
 // vezes inclui um comparável de leilão/Caixa (ex.: "LeilaoImovel / CEF", "... / CEF"),
 // cujo preço fica 30–60% abaixo e CONTAMINA o índice (derruba o R$/m² da região). Aqui
@@ -1112,6 +1133,45 @@ REFERÊNCIAS para confirmar/obter os valores quando não constarem na documenta�
 - Laudêmio/foro (terreno de marinha): SPU — Secretaria de Patrimônio da União, ou o ente foreiro.`;
 }
 
+// Bloco DEMOGRÁFICO do parecer. Todo número sai com FONTE e ANO — dado velho apresentado como
+// atual é pior do que dado nenhum. Duas coisas nunca se misturam aqui:
+//   • FATOS do IBGE (população, domicílios, vagos, nascimentos);
+//   • a LEITURA derivada da BidPro (pressão habitacional), que é claramente rotulada como nossa
+//     e comparada aos tercis do país. O déficit habitacional OFICIAL é da FJP e só aparece se o
+//     número oficial estiver carregado — jamais estimado e chamado de FJP.
+function blocoSocio(s, cidade) {
+  if (!s) return '';
+  const int = (v) => (Number(v) > 0 ? Math.round(Number(v)).toLocaleString('pt-BR') : null);
+  const pct = (v, d = 1) => (Number.isFinite(Number(v)) ? `${Number(v).toFixed(d).replace('.', ',')}%` : null);
+  const L = [];
+  const pop = int(s.pop_estim) || int(s.populacao);
+  const popAno = s.pop_estim > 0 ? s.pop_estim_ano : s.populacao_ano;
+  if (pop) L.push(`- População: ${pop} habitantes (IBGE, ${popAno || 'ano não informado'})`);
+  if (Number.isFinite(Number(s.crescimento_recente_aa_pct)))
+    L.push(`- Ritmo de crescimento populacional: ${pct(s.crescimento_recente_aa_pct, 2)} ao ano`);
+  if (int(s.domicilios)) L.push(`- Domicílios: ${int(s.domicilios)} (Censo IBGE ${s.domicilios_ano || ''})${int(s.domicilios_vagos) ? ` · vagos: ${int(s.domicilios_vagos)} (${pct(s.domicilios_vagos_pct)})` : ''}`);
+  if (Number(s.moradores_por_domicilio) > 0) L.push(`- Média de moradores por domicílio: ${Number(s.moradores_por_domicilio).toFixed(2).replace('.', ',')}`);
+  if (Number(s.densidade_hab_km2) > 0) L.push(`- Densidade: ${int(s.densidade_hab_km2)} hab/km²`);
+  if (int(s.nascimentos)) L.push(`- Nascimentos: ${int(s.nascimentos)} (Registro Civil/IBGE, ${s.nascimentos_ano || ''})`);
+  if (int(s.empregos_saldo)) L.push(`- Saldo de emprego formal: ${int(s.empregos_saldo)} (${s.empregos_ref || ''})`);
+  if (int(s.deficit_fjp)) L.push(`- Déficit habitacional OFICIAL (Fundação João Pinheiro, ${s.deficit_fjp_ano || ''}): ${int(s.deficit_fjp)} domicílios${pct(s.deficit_fjp_pct) ? ` (${pct(s.deficit_fjp_pct)} dos domicílios)` : ''}`);
+  if (s.pressao_classe) {
+    const rot = { demanda_reprimida: 'DEMANDA REPRIMIDA', equilibrio: 'EQUILÍBRIO', estoque_ocioso: 'ESTOQUE OCIOSO' }[s.pressao_classe] || s.pressao_classe;
+    L.push(`- Leitura BidPro de pressão habitacional: ${rot}${s.pressao_nota ? ` — ${s.pressao_nota}` : ''}`);
+  }
+  if (!L.length) return '';
+  return `
+DEMOGRAFIA E PRESSÃO HABITACIONAL DE ${String(cidade || '').toUpperCase() || 'DA CIDADE'} (base própria BidPro, alimentada do IBGE — NÃO pesquise nada disso, use exatamente estes números):
+${L.join('\n')}
+COMO USAR ESTE BLOCO (obrigatório): dedique um parágrafo curto ao FUNDAMENTO DE DEMANDA da praça,
+ligando estes números à decisão — cidade que cresce com poucos domicílios vagos sustenta preço,
+dá liquidez de revenda e reduz vacância no aluguel; cidade estagnada com muito imóvel vago pede
+desconto maior no lance, prazo de saída mais longo e cautela com projeção de valorização. CITE a
+fonte e o ANO de cada número que usar. A "Leitura BidPro de pressão habitacional" é uma leitura
+NOSSA derivada do Censo — apresente-a como tal e NUNCA a chame de déficit habitacional da FJP${int(s.deficit_fjp) ? '' : ' (o número oficial da FJP não está disponível para esta cidade)'}.
+NÃO invente indicador que não esteja acima; se algo faltar, simplesmente não comente.`;
+}
+
 // Foco do parecer por PERFIL-BASE do investidor (triagem no cadastro). Direciona o
 // que o agente prioriza — o mesmo imóvel se defende diferente para cada perfil.
 const PERFIL_FOCO = {
@@ -1156,6 +1216,7 @@ ${(() => {
   return `ADEQUAÇÃO POR OBJETIVO (CLASSIFIQUE e DEFENDA no parecer para quais objetivos este imóvel é bom — pode ser um, dois ou os três): ${bons.join(' | ')}. Na seção de posicionamento/defesa, diga EXPLICITAMENTE se o imóvel é bom para REVENDA, LOCAÇÃO e/ou TEMPORADA, usando esses argumentos.${c.temporada ? ' Para TEMPORADA, sustente a ATRATIVIDADE TURÍSTICA da cidade (demanda de alta temporada, ocupação, perfil do público) como diferencial de renda frente à locação tradicional.' : ''}`;
 })()}
 ${mercado?.comentario ? `- Leitura de mercado: ${mercado.comentario}` : ''}
+${blocoSocio(mercado?.socio, inp.cidade)}
 
 AQUISIÇÃO E RETORNO:
 - Lance SEM disputa (lance base): R$ ${brl(inp.valorArrematacao)}
@@ -1630,6 +1691,10 @@ export default async function handler(req, res) {
         latitude: imDb?.latitude ?? imovel?.lat ?? null, longitude: imDb?.longitude ?? imovel?.lng ?? null };
     }
     mercado.indiceBidPro = null;
+    // Demografia: dispara JUNTO com as leituras do Índice (não em série) e é colhida logo
+    // abaixo. Vale para TODO tipo de imóvel — inclusive rural —, por isso fica fora do bloco
+    // que só trata do índice por m².
+    const pSocio = lerSocioRegiao(imDb);
     const segIdx = segmentoIndice(mercadoInputs.tipoImovel || imovel?.tipo);
     const areaTerreno = Number(mercadoInputs.areaTerrenoM2) || 0;
     const areaSeg = segIdx === 'terreno' ? (areaTerreno || areaM2) : areaM2;
@@ -1652,6 +1717,7 @@ export default async function handler(req, res) {
       mercado.indiceComposicao = await lerComposicaoRegiao(imDb, segIdx);
       mercado.avisoFrescor = avisoFrescor(mercado.indiceComposicao);
     }
+    mercado.socio = await pSocio;
 
     // COLHEITA de outras tipologias (aproveitamento da busca): semeia o Índice dos OUTROS
     // segmentos da região com o que a IA já viu (nível cidade, sem leilão). Só em busca FRESCA

@@ -383,6 +383,26 @@ export default async function handler(req) {
     return { status: 'ok', detalhe: base };
   }));
 
+  // ── Dados socioeconômicos (IBGE) — a base que o parecer cita como fato ──────
+  // O relatório afirma ao cliente "população X, domicílios vagos Y%". Se a ingestão parar,
+  // isso vira número velho apresentado como atual — pior que número nenhum. Aqui a saúde
+  // cobra a fonte mais atrasada e a última execução com erro.
+  itens.push(await check('Dados socioeconômicos (IBGE)', async () => {
+    const r = await sb('socio_fontes?ativa=eq.true&select=chave,ultimo_em,ultimo_ok,ultimo_linhas,ultimo_erro&order=ultimo_em.asc.nullsfirst');
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const fontes = await r.json();
+    if (!fontes.length) return { status: 'aviso', detalhe: 'Nenhuma fonte socioeconômica ativa — o parecer sai sem o bloco de demografia.' };
+    const nunca = fontes.filter(f => !f.ultimo_em);
+    const comErro = fontes.filter(f => f.ultimo_em && f.ultimo_ok === false);
+    const dias = (f) => (Date.now() - new Date(f.ultimo_em).getTime()) / 864e5;
+    const velhas = fontes.filter(f => f.ultimo_em && dias(f) > 60);
+    const base = `${fontes.length} fonte(s) ativa(s); ${fontes.filter(f => f.ultimo_ok).length} com última carga OK.`;
+    if (comErro.length) return { status: 'erro', detalhe: `${base} FALHANDO: ${comErro.map(f => `${f.chave} (${String(f.ultimo_erro || '').slice(0, 90)})`).join(' · ')}` };
+    if (velhas.length) return { status: 'erro', detalhe: `${base} Sem atualizar há mais de 60 dias: ${velhas.map(f => `${f.chave} (${dias(f).toFixed(0)}d)`).join(', ')} — o relatório pode estar citando dado vencido.` };
+    if (nunca.length) return { status: 'aviso', detalhe: `${base} Ainda nunca carregada(s): ${nunca.map(f => f.chave).join(', ')} — o cron diário pega uma por dia.` };
+    return { status: 'ok', detalhe: `${base} Mais atrasada: ${fontes[0].chave} há ${dias(fontes[0]).toFixed(0)}d.` };
+  }));
+
   // ── Compila resultado ──
   const temErro  = itens.some(i => i.status === 'erro');
   const temAviso = itens.some(i => i.status === 'aviso');
