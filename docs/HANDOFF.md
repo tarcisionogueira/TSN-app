@@ -354,6 +354,33 @@ copia só os **45 arquivos / 15 MB** irrecuperáveis; o gratuito do R2 dá 10 GB
 que `R2_LOCATION` **declara** a região e precisa bater com a real, e uma nota de LGPD sobre levar
 documento de cliente para fora do país — decisão que é dele.
 
+**L. LEITOR DE eBOOK + VISIBILIDADE DA DEMOGRAFIA (02/08 noite — 3 pedidos do dono).**
+
+**L1. Leitor paginado estilo Kindle** (`src/components/LeitorPaginado.jsx`). O "Ler" abria uma
+coluna rolável com TODAS as páginas empilhadas, dentro do app, com menu e breadcrumb em volta.
+Agora é modo de leitura: overlay em tela cheia escurecendo o entorno · **uma página por vez**
+escalada para caber na LARGURA (é isso que deixa o texto legível no celular sem zoom) · quando a
+página não cabe na altura ela **rola na vertical** em vez de ser espremida (texto espremido é
+ilegível), com aviso "deslize para ver o resto"; ao virar, volta ao topo · vira por **toque** no
+terço esquerdo/direito, arrasto horizontal, setas do teclado ou botões — e o toque **só conta se o
+dedo não arrastou** (<10px, <400ms), senão rolar para terminar de ler viraria a página sozinho ·
+toque no meio esconde/mostra as barras · 3 temas + zoom · **progresso** "pág. X de Y (N%)" salvo
+na CONTA (`leitura_progresso`), não no aparelho: começa no desktop e continua no celular, com
+localStorage só de espelho e falha de banco nunca travando a leitura. O progresso também aparece
+na vitrine de Membros ("62% lido · Continuar →") — senão a contagem só existiria dentro do leitor.
+⚠️ **Google Drive segue no `/preview`**: o pdf.js precisa de CORS para desenhar os bytes e o link
+de compartilhamento do Drive não dá. PDF do Storage (caso do ebook da Caixa) vai no leitor novo.
+Apagado `LeitorEbook.jsx` (código morto que ninguém importava e cujo cabeçalho dizia "estilo
+Kindle" sendo um iframe que nem abre em celular — armadilha para a próxima sessão).
+
+**L2. Demografia ganhou tela** — o dono perguntou "onde eu vejo e como é alimentado?" e estava
+certo: a base alimentava o parecer e não tinha superfície nenhuma. **Admin → Dados & Fontes →
+👥 Demografia**: de onde vem (cada fonte do IBGE com agregado, período e o resultado da última
+carga, com o erro visível), o quanto já cobre, as últimas ingestões, e uma **consulta por cidade**
+que devolve exatamente o que o relatório vai citar (e diz "sem dado" quando não há — o relatório
+simplesmente não cita o bloco). Botão **"Atualizar agora"** dispara a ingestão sem esperar o cron.
+As tabelas seguem fechadas: o painel é RPC SECURITY DEFINER que exige `is_admin()`.
+
 **G. BACKLOG do bug bounty (achado e NÃO corrigido nesta sessão — registrado de propósito):**
 - `api/promo-capturar.js:112` (CONFIRMADO) — link promocional de curso/e-book mostra "🎉 Acesso
   liberado!" mas nenhum entitlement é criado (`compras_produtos` nunca recebe linha): o cliente bate
