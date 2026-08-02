@@ -30,6 +30,7 @@ export default function Promo() {
   const [enviandoSdr, setEnviandoSdr] = useState(false);
   const [erroSdr, setErroSdr] = useState('');
   const [concluido, setConcluido] = useState(false);
+  const [acessoLiberado, setAcessoLiberado] = useState(false); // só true quando o servidor concedeu
 
   const [tituloConteudo, setTituloConteudo] = useState('');
 
@@ -129,12 +130,21 @@ export default function Promo() {
       });
       const data = await r.json().catch(() => ({}));
       if (!r.ok || !data.ok) throw new Error(data.error || 'Não foi possível enviar. Tente novamente.');
-      // Conta criada e acesso liberado (sem passar por consultor). Faz login já.
-      await supabase.auth.signInWithPassword({ email: contato.email.trim().toLowerCase(), password: contato.senha }).catch(() => {});
+      // Login (prova de posse da conta — vale tanto p/ a conta recém-criada quanto p/ quem já tinha).
+      const { error: erroLogin } = await supabase.auth.signInWithPassword({ email: contato.email.trim().toLowerCase(), password: contato.senha });
       // Plano pago → checkout com o desconto (a conta já existe/logada).
-      // Curso/e-book → entra na plataforma com o acesso já concedido.
-      if (ehPlano) nav(`/checkout?plano=${link.produto}&promo=${link.codigo}${refQS}`);
-      else { setSdrAberto(false); setConcluido(true); }
+      if (ehPlano) { nav(`/checkout?plano=${link.produto}&promo=${link.codigo}${refQS}`); return; }
+      // Curso/e-book: a CONCESSÃO acontece AQUI, no servidor, com o usuário autenticado. Antes a
+      // tela dizia "Acesso liberado!" sem nada ter sido liberado — nenhuma linha em
+      // compras_produtos, que é o que o Curso/E-book exigem — e o cliente batia no paywall.
+      let liberado = false;
+      if (!erroLogin) {
+        const { data: res, error: erroConceder } = await supabase.rpc('conceder_acesso_promo', { p_codigo: link.codigo });
+        if (erroConceder) console.error('[promo] conceder acesso:', erroConceder.message);
+        liberado = !!res?.ok;
+      }
+      setAcessoLiberado(liberado);
+      setSdrAberto(false); setConcluido(true);
     } catch (e) { setErroSdr(e.message); setEnviandoSdr(false); }
   };
 
@@ -209,14 +219,17 @@ export default function Promo() {
         </div>
   ) : null;
 
-  // Confirmação (curso/e-book): respostas enviadas, consultor libera o acesso.
+  // Confirmação (curso/e-book). A mensagem segue o que REALMENTE aconteceu: só diz "liberado"
+  // quando a concessão voltou ok do servidor.
   if (concluido) return (
     <div style={{ minHeight: '100vh', background: '#111', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
       <div style={{ background: 'white', borderRadius: 20, maxWidth: 460, padding: '36px 30px', textAlign: 'center', boxShadow: '0 24px 60px rgba(0,0,0,0.4)' }}>
-        <div style={{ fontSize: 52, marginBottom: 12 }}>🎉</div>
-        <h2 style={{ color: '#111', margin: '0 0 8px' }}>Acesso liberado!</h2>
+        <div style={{ fontSize: 52, marginBottom: 12 }}>{acessoLiberado ? '🎉' : '✅'}</div>
+        <h2 style={{ color: '#111', margin: '0 0 8px' }}>{acessoLiberado ? 'Acesso liberado!' : 'Conta criada!'}</h2>
         <p style={{ color: '#64748b', lineHeight: 1.6, marginBottom: 22 }}>
-          Pronto{contato.nome.trim() ? `, ${contato.nome.trim().split(' ')[0]}` : ''}! Sua conta foi criada e o seu acesso{tituloConteudo ? ` a "${tituloConteudo}"` : ''} já está liberado.
+          {acessoLiberado
+            ? <>Pronto{contato.nome.trim() ? `, ${contato.nome.trim().split(' ')[0]}` : ''}! Sua conta foi criada e o seu acesso{tituloConteudo ? ` a "${tituloConteudo}"` : ''} já está liberado.</>
+            : <>Sua conta foi criada{contato.nome.trim() ? `, ${contato.nome.trim().split(' ')[0]}` : ''}. Entre na plataforma para acessar{tituloConteudo ? ` "${tituloConteudo}"` : ' o conteúdo'} — se ele ainda não aparecer, fale com a gente que liberamos na hora.</>}
         </p>
         <button onClick={() => nav('/membros')} style={{ padding: '12px 26px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, cursor: 'pointer' }}>Acessar agora</button>
       </div>

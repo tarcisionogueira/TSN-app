@@ -263,8 +263,15 @@ export default function Checkout() {
     if (planoKey !== 'assessorado' || !user?.id) { setAssessoriaStatus(null); return; }
     let vivo = true;
     apiCall('/api/assessoria-status')
-      .then(r => r.json())
-      .then(d => { if (vivo) setAssessoriaStatus(d || null); })
+      // O fail-open acima só valia para erro de REDE: um 5xx resolve a promise normalmente e o
+      // corpo de erro ({error: '...'}) virava um status sem `podeContratar` → falsy → a tela de
+      // bloqueio aparecia numa contratação de R$ 4.800-6.000 por causa de um soluço do servidor.
+      // Agora só um veredito EXPLÍCITO do servidor bloqueia; qualquer outra coisa libera.
+      .then(async (r) => (r.ok ? await r.json().catch(() => null) : null))
+      .then(d => {
+        if (!vivo) return;
+        setAssessoriaStatus(typeof d?.podeContratar === 'boolean' ? d : { podeContratar: true, motivo: 'indisponivel' });
+      })
       .catch(() => { if (vivo) setAssessoriaStatus({ podeContratar: true, motivo: 'ok' }); });
     return () => { vivo = false; };
     // `role` na dep: ao voltar do Pro recém-assinado (fluxo guiado), o gate re-consulta

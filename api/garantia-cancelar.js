@@ -41,8 +41,14 @@ function sb(path, opts = {}) {
 // sem risco de cancelar de homônimo). Somamos os ids candidatos do perfil
 // (mp_preapproval_id atual; mp_id legado, que já guardou o preapproval antes da coluna
 // dedicada — bug bounty #4) — um id que não seja preapproval só devolve 404 (inócuo).
+// `candidatos` = ids de preapproval do perfil. ACEITA string OU array: a chamada passava
+// `perfil.mp_id` (uma STRING) e o `for...of` iterava CARACTERE A CARACTERE — o loop abaixo
+// tentava cancelar /preapproval/<letra> e a assinatura real nunca era cancelada por esse
+// caminho (achado do bug bounty 02/08). O `mp_preapproval_id`, que é o id da recorrência,
+// nem era passado: o perfil o usava só para descobrir o gateway.
 async function cancelarMP(candidatos, email, userId) {
   if (!MP_TOKEN) return 0;
+  const lista = Array.isArray(candidatos) ? candidatos : (candidatos ? [candidatos] : []);
   const ids = new Set();
   try {
     if (email && userId) {
@@ -53,7 +59,7 @@ async function cancelarMP(candidatos, email, userId) {
       }
     }
   } catch { /* segue com os candidatos do perfil */ }
-  for (const c of (candidatos || [])) if (c) ids.add(String(c));
+  for (const c of lista) if (c) ids.add(String(c));
   let cancelados = 0;
   for (const id of ids) {
     try {
@@ -113,7 +119,14 @@ export default async function handler(req, res) {
   const podeReembolso = dentro7 && !jaUsouGarantia;
 
   // 1) Cancela a recorrência nos gateways (best-effort nos dois).
-  const cancelados = (await cancelarMP(perfil.mp_id, email, user.id)) + (await cancelarAsaas(perfil.asaas_id));
+  // Passa os DOIS ids do perfil (mp_preapproval_id é o da recorrência; mp_id é legado) —
+  // antes só o mp_id ia, e como string, o que inutilizava o fallback.
+  const cancelados = (await cancelarMP([perfil.mp_preapproval_id, perfil.mp_id], email, user.id))
+    + (await cancelarAsaas(perfil.asaas_id));
+  // O usuário precisa saber quando NÓS não conseguimos cancelar no gateway: dizer
+  // "cancelada" sem ter cancelado é o pior resultado possível (ele para de acompanhar e
+  // segue sendo cobrado). `cancelados === 0` com gateway conhecido = falha real.
+  const falhouNoGateway = cancelados === 0 && gateway !== 'desconhecido';
 
   if (podeReembolso) {
     // 2) Rebaixa AGORA + zera a âncora (a garantia foi exercida). Limpa também a âncora de
@@ -159,7 +172,12 @@ export default async function handler(req, res) {
       if (ADMIN_EMAIL) await enviarEmail({ from: EMAIL_FROM, to: ADMIN_EMAIL, subject: `Reembolso garantia 7 dias — ${perfil.nome || email}`, html: `<p>Processar estorno no ${gateway}:</p><ul><li>Cliente: ${perfil.nome || '—'} (${email || '—'})</li><li>Plano: ${rolePagante}${valorRef ? ` — R$ ${Number(valorRef).toFixed(2)}` : ''}</li><li>Assinaturas canceladas no gateway: ${cancelados}</li></ul><p>Registrado em Admin → Prestação de contas → Reembolsos.</p>` });
     } catch { /* não bloqueia */ }
 
-    res.status(200).json({ ok: true, reembolso: true, dentro7: true, cancelados, msg: 'Assinatura cancelada. Reembolso de 100% em processamento.' });
+    res.status(200).json({
+      ok: true, reembolso: true, dentro7: true, cancelados, falhouNoGateway,
+      msg: falhouNoGateway
+        ? 'Seu acesso foi encerrado e o reembolso de 100% está em processamento. Não conseguimos confirmar o cancelamento da cobrança no gateway — nossa equipe foi avisada e vai concluir; se aparecer uma nova cobrança, fale com a gente.'
+        : 'Assinatura cancelada. Reembolso de 100% em processamento.',
+    });
     return;
   }
 
@@ -168,5 +186,24 @@ export default async function handler(req, res) {
   const msgFim = jaUsouGarantia
     ? 'Renovação cancelada. A garantia de 7 dias já foi utilizada com este CPF, então não há novo reembolso; seu acesso continua até o fim do período já pago.'
     : 'Renovação cancelada. Seu acesso continua até o fim do período já pago.';
-  res.status(200).json({ ok: true, reembolso: false, dentro7, garantiaJaUsada: jaUsouGarantia, cancelados, renovacaoCancelada: cancelados > 0, msg: msgFim });
+  // A mensagem promete "nossa equipe foi avisada" — então avisa de verdade. (No caminho com
+  // reembolso o e-mail ao admin já sai acima, com o contador de assinaturas canceladas.)
+  if (falhouNoGateway && ADMIN_EMAIL) {
+    await enviarEmail({
+      from: EMAIL_FROM, to: ADMIN_EMAIL,
+      subject: `⚠️ Cancelamento NÃO confirmado no gateway — ${perfil.nome || email || user.id}`,
+      html: `<p>O cliente pediu o cancelamento e o gateway <strong>${gateway}</strong> não confirmou nenhuma assinatura cancelada.</p>
+             <ul><li>Cliente: ${perfil.nome || '—'} (${email || '—'})</li><li>Plano: ${rolePagante}</li>
+             <li>mp_preapproval_id: ${perfil.mp_preapproval_id || '—'} · mp_id: ${perfil.mp_id || '—'} · asaas_id: ${perfil.asaas_id || '—'}</li></ul>
+             <p><strong>Cancele manualmente no painel do gateway</strong> — senão o cliente segue sendo cobrado.</p>`,
+      meta: { tipo: 'sistema' },
+    }).catch(() => {});
+  }
+  res.status(200).json({
+    ok: true, reembolso: false, dentro7, garantiaJaUsada: jaUsouGarantia, cancelados,
+    renovacaoCancelada: cancelados > 0, falhouNoGateway,
+    msg: falhouNoGateway
+      ? 'Registramos o seu pedido, mas NÃO conseguimos confirmar o cancelamento da cobrança no gateway. Nossa equipe foi avisada e vai concluir — se aparecer uma nova cobrança, fale com a gente.'
+      : msgFim,
+  });
 }

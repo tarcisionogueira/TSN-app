@@ -1124,6 +1124,10 @@ ${hash ? `<h2>Verificação de integridade</h2><div class="kv muted">${esc(hashL
         try {
           const { data: { session } } = await supabase.auth.getSession();
           const auth = session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {};
+          // O `res.ok` PRECISA ser checado: sem isso um 413/401/500 passava batido, o anexo
+          // não gravava, ninguém era avisado — e logo abaixo o sistema oferecia gerar os 3
+          // relatórios, que saíam sem os documentos do arremate (o material que alimenta a IA).
+          const falhas = [];
           for (const file of arquivos) {
             try {
               const fd = new FormData();
@@ -1131,8 +1135,19 @@ ${hash ? `<h2>Verificação de integridade</h2><div class="kv muted">${esc(hashL
               fd.append('imovel_id', imovelId);
               fd.append('tipo', inferirTipoAnexo(file.name));
               fd.append('arrematado', 'true'); // arremate real → permanente (nunca apagado)
-              await fetch('/api/upload-anexo', { method: 'POST', headers: auth, body: fd });
-            } catch { /* segue com os demais */ }
+              const up = await fetch('/api/upload-anexo', { method: 'POST', headers: auth, body: fd });
+              if (!up.ok) {
+                const det = await up.text().catch(() => '');
+                console.error('[atribuir arremate] upload falhou', file.name, up.status, det.slice(0, 200));
+                falhas.push(`${file.name} (HTTP ${up.status})`);
+              }
+            } catch (e) {
+              console.error('[atribuir arremate] upload falhou', file.name, e?.message || e);
+              falhas.push(`${file.name} (falha de rede)`);
+            }
+          }
+          if (falhas.length) {
+            alert(`Atenção: ${falhas.length} de ${arquivos.length} documento(s) NÃO foram anexados:\n\n${falhas.join('\n')}\n\nOs relatórios sairão SEM esses documentos. Reenvie pela tela do arremate antes de gerar.`);
           }
         } catch { /* sem sessão: os docs podem ser anexados na análise */ }
       }

@@ -25,6 +25,25 @@ async function rpc(name, body) {
   });
   return r.ok ? r.json().catch(() => null) : null;
 }
+
+// Limite de IA: a falha da RPC NÃO pode virar "ilimitado". `rpc()` devolve null tanto para
+// "sem limite" (admin/legado) quanto para "a chamada falhou" — e a linha abaixo lia null como
+// ∞, então uma indisponibilidade do banco liberava a pesquisa web PAGA de graça, para qualquer
+// papel. Aqui distinguimos os dois casos e falhamos FECHADO (503 "tente de novo"), nunca com a
+// mensagem falsa de "sua cota acabou".
+async function limiteIaOuFalha(name, body) {
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${name}`, {
+      method: 'POST',
+      headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) return { erro: true };
+    const v = await r.json().catch(() => undefined);
+    if (v === undefined) return { erro: true };
+    return { erro: false, valor: v };
+  } catch { return { erro: true }; }
+}
 async function perfilDe(uid) {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/perfis?id=eq.${uid}&select=role,indice_count,indice_mes`, {
     headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` },
@@ -58,7 +77,9 @@ export default async function handler(req) {
   // Papel + cota (fonte única limite_ia).
   const perfil = await perfilDe(user.id);
   const role = perfil?.role || 'explorador';
-  const limite = await rpc('limite_ia_efetivo', { p_user_id: user.id, p_tipo: 'indice' }); // int | null (admin/legado 5)
+  const lim = await limiteIaOuFalha('limite_ia_efetivo', { p_user_id: user.id, p_tipo: 'indice' }); // int | null (admin/legado 5)
+  if (lim.erro) { res.status(503).json({ error: 'Não foi possível confirmar seu limite agora. Tente de novo em instantes.', motivo: 'limite_indisponivel' }); return; }
+  const limite = lim.valor;
   const ilimitado = limite === null;
   const mesAtual = new Date().toISOString().slice(0, 7);
   const usadas = (perfil?.indice_mes === mesAtual) ? (perfil?.indice_count || 0) : 0;
