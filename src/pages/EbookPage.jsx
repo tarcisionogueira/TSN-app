@@ -5,6 +5,7 @@ import { supabase } from '../utils/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { driveImage, driveId, drivePreview, driveDownload } from '../utils/driveUrl';
 import PdfReader from '../components/PdfReader';
+import LeitorPaginado from '../components/LeitorPaginado';
 
 export default function EbookPage() {
   const { id } = useParams();
@@ -18,6 +19,7 @@ export default function EbookPage() {
   const [fontSize, setFontSize] = useState(17);
   const [comprouAvulso, setComprouAvulso] = useState(false);
   const [arquivoUrl, setArquivoUrl] = useState(null);
+  const [leitor, setLeitor] = useState(false);   // leitor paginado em tela cheia
 
   useEffect(() => {
     if (!id) return;
@@ -63,6 +65,9 @@ export default function EbookPage() {
   const isPdf = pdfUrl ? (/\.pdf(\?|#|$)/i.test(pdfUrl) || isDrive) : false;
   const embedUrl = isDrive ? drivePreview(pdfUrl) : pdfUrl;
   const baixarUrl = isDrive ? driveDownload(pdfUrl) : pdfUrl;
+  // O leitor paginado desenha os BYTES do PDF (pdf.js) — precisa de CORS. O Storage assinado
+  // permite; o link de compartilhamento do Drive não, e por isso o Drive segue no /preview.
+  const podeLeitorPaginado = isPdf && !isDrive && !!pdfUrl;
 
   if (loading) return (
     <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#111111', color:'#94a3b8' }}>
@@ -75,6 +80,19 @@ export default function EbookPage() {
       eBook não encontrado.
     </div>
   );
+
+  // ── Leitor paginado em tela cheia (sobrepõe TUDO) ───────────────────────────
+  // Fica antes de qualquer outro return: o leitor é um MODO, não uma seção da página.
+  if (leitor && podeLeitorPaginado) {
+    return (
+      <LeitorPaginado
+        url={pdfUrl} titulo={ebook.titulo} baixarUrl={baixarUrl}
+        onClose={() => setLeitor(false)}
+        itemId={ebook.id} itemTipo="ebook"
+        supabase={supabase} userId={user?.id}
+      />
+    );
+  }
 
   // ── Tela de detalhe (capa + botões) ─────────────────────────────────────────
   if (!reading) {
@@ -118,10 +136,10 @@ export default function EbookPage() {
               {podeAcessar ? (
                 <div style={{ display:'flex', gap:12, flexWrap:'wrap' }}>
                   {(pdfUrl || ebook.descricao) && (
-                    <button onClick={() => setReading(true)}
+                    <button onClick={() => (podeLeitorPaginado ? setLeitor(true) : setReading(true))}
                       style={{ flex:1, minWidth:140, padding:'13px 24px', background:'#0D63DB', color:'white', border:'none', borderRadius:10, fontWeight:700, fontSize:15, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
                       <BookOpen size={18}/>
-                      {isPdf ? 'Ler PDF no app' : 'Ler'}
+                      {podeLeitorPaginado ? 'Ler' : isPdf ? 'Ler PDF no app' : 'Ler'}
                     </button>
                   )}
                   {pdfUrl && (

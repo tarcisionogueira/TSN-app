@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Plus, Minus, ExternalLink, Download, Loader } from 'lucide-react';
-// pdf.worker como ASSET (URL) — não puxa a lib principal para o bundle inicial.
-import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+import { getPdfjs } from '../utils/pdfjs';
 
 // Leitor de PDF ROBUSTO (pdf.js). Por que não <iframe>: o Chrome/Safari MOBILE
 // (e o PWA) NÃO renderizam PDF embutido em iframe — e uma URL assinada com
@@ -9,14 +8,8 @@ import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 // BLOQUEADA ("Este conteúdo está bloqueado"). Aqui BUSCAMOS os bytes (fetch/CORS,
 // disposição é irrelevante para fetch) e desenhamos em <canvas> → funciona em
 // desktop e mobile/PWA igualmente, sem re-assinar a URL.
-let _pdfjs = null;
-async function getPdfjs() {
-  if (_pdfjs) return _pdfjs;
-  const pdfjs = await import('pdfjs-dist');          // lazy: só carrega ao ler
-  pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
-  _pdfjs = pdfjs;
-  return pdfjs;
-}
+// O carregamento lazy do pdf.js virou `src/utils/pdfjs.js` — compartilhado com o leitor
+// paginado, para a lib e o worker entrarem UMA vez só no grafo do bundle.
 
 // Desenha UMA página em canvas, ajustada à largura do container × zoom.
 function PdfPage({ pdf, pageNum, zoom, containerRef }) {

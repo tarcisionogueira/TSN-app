@@ -9949,7 +9949,7 @@ const GRUPOS_ADMIN = [
   { nome: 'Clientes & Vendas',   tabs: ['Usuários', 'Convites', 'Comercial', 'Contratos'] },
   { nome: 'Conteúdo & Ofertas',  tabs: ['Cursos', 'eBooks', 'Promoções', 'Marketing'] },
   { nome: 'Equipe',              tabs: ['Equipe'] }, // Agenda virou sub-aba de Equipe
-  { nome: 'Dados & Fontes',      tabs: ['Scrapers', 'Registros', 'CNJ', 'Editais', 'Qualidade'] },
+  { nome: 'Dados & Fontes',      tabs: ['Scrapers', 'Registros', 'CNJ', 'Editais', 'Qualidade', 'Demografia'] },
   { nome: 'Financeiro',          tabs: ['Financeiro'] },
   { nome: 'Sistema',             tabs: ['Configurações'] },
 ];
@@ -9962,8 +9962,237 @@ const ROTULO_TAB = {
   Registros: '🗂️ Registros',
   Editais: '📜 Radar de Editais',
   Qualidade: '✅ Qualidade',
+  Demografia: '👥 Demografia',
   Marketing: '📣 Marketing',
 };
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// DEMOGRAFIA TAB — a base socio-demográfica que entra no relatório mercadológico
+//
+// POR QUE ESTA TELA EXISTE: a base foi construída, alimenta o parecer... e era INVISÍVEL.
+// A pergunta do dono foi literal: "onde eu vejo e como é alimentado?". Dado que ninguém
+// consegue olhar é dado em que ninguém confia — e com razão. Aqui ele vê as três coisas:
+//   1) de onde vem (cada fonte do IBGE, com agregado, período e o resultado da última carga);
+//   2) o quanto já cobre (cidades com dado e como o país se distribui na leitura de pressão);
+//   3) o que exatamente o relatório vai citar para uma cidade — consultando pelo nome.
+// E o botão "Atualizar agora" dispara a ingestão sem esperar o cron.
+// ═══════════════════════════════════════════════════════════════════════════════
+function DemografiaTab() {
+  const [painel, setPainel] = React.useState(null);
+  const [erro, setErro] = React.useState('');
+  const [rodando, setRodando] = React.useState(false);
+  const [msg, setMsg] = React.useState('');
+  const [cidade, setCidade] = React.useState('');
+  const [uf, setUf] = React.useState('SP');
+  const [consulta, setConsulta] = React.useState(undefined);   // undefined = nada buscado ainda
+
+  const carregar = React.useCallback(async () => {
+    const { data, error } = await supabase.rpc('socio_painel');
+    if (error) { setErro(error.message); return; }
+    setErro(''); setPainel(data);
+  }, []);
+  React.useEffect(() => { carregar(); }, [carregar]);
+
+  async function atualizarAgora() {
+    setRodando(true); setMsg('');
+    try {
+      // `todas=1`: aqui o dono quer o resultado agora, não daqui a 4 dias. O cron diário
+      // continua fazendo uma por vez para não concentrar carga.
+      const r = await apiCall('/api/socio-ingestao-cron?todas=1', { method: 'POST' });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d?.error || `HTTP ${r.status}`);
+      const ok = (d.fontes || []).filter(f => f.ok).length;
+      setMsg(d.msg || `${ok}/${(d.fontes || []).length} fonte(s) carregada(s) · ${d.derivadas || 0} cidades recalculadas`);
+      await carregar();
+    } catch (e) { setMsg(`Erro: ${e.message}`); }
+    finally { setRodando(false); }
+  }
+
+  async function consultarCidade() {
+    setConsulta(undefined);
+    const { data, error } = await supabase.rpc('socio_consultar', { p_cidade: cidade, p_uf: uf });
+    setConsulta(error ? null : (data || null));
+  }
+
+  const cob = painel?.cobertura || {};
+  const fmt = (d) => d ? new Date(d).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : '—';
+  const n = (v) => (v === null || v === undefined ? '—' : Number(v).toLocaleString('pt-BR'));
+
+  if (erro) return <div style={S.card}><p style={{ color: '#991b1b', margin: 0 }}>Não foi possível carregar: {erro}</p></div>;
+
+  return (
+    <div>
+      <div style={S.card}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+          <div style={{ flex: 1, minWidth: 260 }}>
+            <h3 style={S.sectionTitle}>Demografia e pressão habitacional</h3>
+            <p style={{ fontSize: 13, color: '#64748b', lineHeight: 1.7, margin: 0 }}>
+              Base própria alimentada do <strong>IBGE</strong> por um cron separado — <strong>nunca</strong> durante a
+              geração do relatório. O parecer mercadológico apenas <em>lê</em> uma linha desta base
+              (milissegundos), então isto não soma nada ao tempo de coleta. Cada número sai no relatório
+              com fonte e ano.
+            </p>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <button style={S.btn(rodando ? 'secondary' : 'primary')} disabled={rodando} onClick={atualizarAgora}>
+              {rodando ? 'Carregando do IBGE…' : '⟳ Atualizar agora'}
+            </button>
+            {msg && <div style={{ fontSize: 12, color: msg.startsWith('Erro') ? '#991b1b' : '#166534', marginTop: 8, maxWidth: 320 }}>{msg}</div>}
+          </div>
+        </div>
+      </div>
+
+      {/* Cobertura */}
+      <div style={S.card}>
+        <h4 style={S.subTitle}>Cobertura da base</h4>
+        {Number(cob.cidades) > 0 ? (
+          <>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 12 }}>
+              {[['Cidades com dado', n(cob.cidades)], ['Com população', n(cob.com_populacao)],
+                ['Com domicílios', n(cob.com_domicilios)], ['Com leitura de pressão', n(cob.com_pressao)]].map(([r, v]) => (
+                <div key={r} style={{ background: '#f8fafc', borderRadius: 10, padding: '12px 14px' }}>
+                  <div style={{ fontSize: 11, color: '#64748b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4 }}>{r}</div>
+                  <div style={{ fontSize: 20, fontWeight: 900, color: '#111' }}>{v}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 12, fontSize: 12.5, color: '#475569' }}>
+              <span>🟢 Demanda reprimida: <strong>{n(cob.demanda_reprimida)}</strong></span>
+              <span>⚪ Equilíbrio: <strong>{n(cob.equilibrio)}</strong></span>
+              <span>🟠 Estoque ocioso: <strong>{n(cob.estoque_ocioso)}</strong></span>
+            </div>
+            <p style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 10, marginBottom: 0 }}>
+              Última atualização: {fmt(cob.atualizado_em)}. A classificação é <strong>autocalibrada</strong>: a régua
+              sai dos tercis de todos os municípios carregados, recalculada a cada ingestão — não há limiar fixo.
+            </p>
+          </>
+        ) : (
+          <p style={{ fontSize: 13, color: '#b45309', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '10px 12px', margin: 0 }}>
+            A base ainda está <strong>vazia</strong>. O cron diário carrega uma fonte por dia sozinho — ou clique em
+            <strong> “Atualizar agora”</strong> para trazer tudo neste momento.
+          </p>
+        )}
+      </div>
+
+      {/* Fontes */}
+      <div style={S.card}>
+        <h4 style={S.subTitle}>Como é alimentado — fontes</h4>
+        <p style={{ fontSize: 12, color: '#64748b', margin: '0 0 12px' }}>
+          Os IDs de agregado e o mapa de variáveis ficam no <strong>banco</strong> (tabela <code>socio_fontes</code>),
+          não no código: se o IBGE mudar algo, o conserto é um UPDATE — sem deploy.
+        </p>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={S.table}>
+            <thead><tr>
+              <th style={S.th}>Fonte</th><th style={S.th}>Agregado</th><th style={S.th}>Período</th>
+              <th style={S.th}>Última carga</th><th style={S.th}>Linhas</th><th style={S.th}>Situação</th>
+            </tr></thead>
+            <tbody>
+              {(painel?.fontes || []).map(f => (
+                <tr key={f.chave}>
+                  <td style={S.td}>
+                    <div style={{ fontWeight: 700 }}>{f.chave}</div>
+                    <div style={{ fontSize: 11.5, color: '#64748b' }}>{f.descricao}</div>
+                  </td>
+                  <td style={S.td}>{f.agregado}</td>
+                  <td style={S.td}>{f.periodo}</td>
+                  <td style={S.td}>{fmt(f.ultimo_em)}</td>
+                  <td style={S.td}>{n(f.ultimo_linhas)}</td>
+                  <td style={S.td}>
+                    {!f.ativa
+                      ? <span style={{ ...S.badge(false), background: '#f1f5f9', color: '#475569' }}>desligada</span>
+                      : f.ultimo_ok === true ? <span style={S.badge(true)}>ok</span>
+                      : f.ultimo_ok === false ? <span style={S.badge(false)}>falhou</span>
+                      : <span style={{ ...S.badge(false), background: '#fef3c7', color: '#92400e' }}>nunca carregou</span>}
+                    {f.ultimo_erro && (
+                      <div style={{ fontSize: 11, color: '#991b1b', marginTop: 4, maxWidth: 380, lineHeight: 1.5 }}>{f.ultimo_erro}</div>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Consulta por cidade — o que o relatório vai citar */}
+      <div style={S.card}>
+        <h4 style={S.subTitle}>O que o relatório vai citar (consulte uma cidade)</h4>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 12 }}>
+          <div style={{ flex: 1, minWidth: 200 }}>
+            <label style={S.label}>Cidade</label>
+            <input style={S.input} value={cidade} onChange={e => setCidade(e.target.value)}
+              placeholder="Ex.: Praia Grande" onKeyDown={e => e.key === 'Enter' && consultarCidade()} />
+          </div>
+          <div style={{ width: 90 }}>
+            <label style={S.label}>UF</label>
+            <input style={S.input} value={uf} maxLength={2} onChange={e => setUf(e.target.value.toUpperCase())}
+              onKeyDown={e => e.key === 'Enter' && consultarCidade()} />
+          </div>
+          <button style={S.btn('primary')} onClick={consultarCidade} disabled={!cidade.trim()}>Consultar</button>
+        </div>
+
+        {consulta === null && (
+          <p style={{ fontSize: 13, color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '10px 12px', margin: 0 }}>
+            Sem dado para esta cidade. O relatório simplesmente <strong>não cita</strong> o bloco de demografia —
+            nunca inventa número.
+          </p>
+        )}
+        {consulta && (
+          <div style={{ background: '#f8fafc', borderRadius: 10, padding: 14, fontSize: 13.5, lineHeight: 1.9, color: '#334155' }}>
+            {consulta.pop_estim > 0 && <div>População: <strong>{n(consulta.pop_estim)}</strong> (IBGE, {consulta.pop_estim_ano})</div>}
+            {consulta.populacao > 0 && <div>População no Censo: <strong>{n(consulta.populacao)}</strong> ({consulta.populacao_ano})</div>}
+            {consulta.crescimento_recente_aa_pct !== null && consulta.crescimento_recente_aa_pct !== undefined &&
+              <div>Crescimento: <strong>{Number(consulta.crescimento_recente_aa_pct).toFixed(2).replace('.', ',')}% ao ano</strong></div>}
+            {consulta.domicilios > 0 && (
+              <div>Domicílios: <strong>{n(consulta.domicilios)}</strong> (Censo {consulta.domicilios_ano})
+                {consulta.domicilios_vagos > 0 && <> · vagos: <strong>{n(consulta.domicilios_vagos)}</strong> ({Number(consulta.domicilios_vagos_pct).toFixed(1).replace('.', ',')}%)</>}
+              </div>
+            )}
+            {consulta.nascimentos > 0 && <div>Nascimentos: <strong>{n(consulta.nascimentos)}</strong> (Registro Civil, {consulta.nascimentos_ano})</div>}
+            {consulta.deficit_fjp > 0
+              ? <div>Déficit habitacional <strong>oficial (FJP, {consulta.deficit_fjp_ano})</strong>: {n(consulta.deficit_fjp)} domicílios</div>
+              : <div style={{ color: '#64748b', fontSize: 12.5 }}>Déficit habitacional oficial da FJP: não carregado (a FJP não publica por API — as colunas existem e ficam vazias até termos o número real).</div>}
+            {consulta.pressao_classe && (
+              <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid #e2e8f0' }}>
+                Leitura BidPro: <strong>{{ demanda_reprimida: 'DEMANDA REPRIMIDA', equilibrio: 'EQUILÍBRIO', estoque_ocioso: 'ESTOQUE OCIOSO' }[consulta.pressao_classe]}</strong>
+                <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>{consulta.pressao_nota}</div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Últimas execuções */}
+      <div style={S.card}>
+        <h4 style={S.subTitle}>Últimas ingestões</h4>
+        {(painel?.execucoes || []).length === 0
+          ? <p style={{ fontSize: 13, color: '#64748b', margin: 0 }}>Nenhuma execução registrada ainda.</p>
+          : (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={S.table}>
+                <thead><tr><th style={S.th}>Quando</th><th style={S.th}>Fonte</th><th style={S.th}>Linhas</th><th style={S.th}>Tempo</th><th style={S.th}>Resultado</th></tr></thead>
+                <tbody>
+                  {painel.execucoes.map((e, i) => (
+                    <tr key={i}>
+                      <td style={S.td}>{fmt(e.executado_em)}</td>
+                      <td style={S.td}>{e.fonte}</td>
+                      <td style={S.td}>{n(e.linhas)}</td>
+                      <td style={S.td}>{e.ms ? `${(e.ms / 1000).toFixed(1)}s` : '—'}</td>
+                      <td style={S.td}>
+                        {e.ok ? <span style={S.badge(true)}>ok</span> : <span style={S.badge(false)}>falhou</span>}
+                        {e.erro && <div style={{ fontSize: 11, color: '#991b1b', marginTop: 4, maxWidth: 420, lineHeight: 1.5 }}>{e.erro}</div>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+      </div>
+    </div>
+  );
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // AGENDA TAB — Disponibilidade dos analistas e geração de slots
@@ -10595,6 +10824,7 @@ export default function Admin() {
         {tab === 'CNJ'            && <CnjTab />}
         {tab === 'Editais'        && <RadarEditaisTab />}
         {tab === 'Qualidade'      && <QualidadeTab />}
+        {tab === 'Demografia'     && <DemografiaTab />}
         {tab === 'Configurações'  && <ConfigTab />}
         {tab === 'Financeiro'     && <FinanceiroHub />}
         {tab === 'Marketing'      && <MarketingTab />}

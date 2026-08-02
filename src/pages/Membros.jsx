@@ -83,6 +83,7 @@ export default function Membros() {
   const [cancelMsg, setCancelMsg] = useState('');
   const [cursos, setCursos] = useState([]);
   const [ebooks, setEbooks] = useState([]);
+  const [leitura, setLeitura] = useState({});   // { [ebook_id]: {pct, pagina, total_paginas} }
   // Preços dos planos: começa no estático (render imediato) e é sobrescrito com os
   // valores AO VIVO do admin (planos_config). Antes usava só o estático (cursos.js),
   // então mudar um preço no admin NÃO refletia na área de membros.
@@ -130,6 +131,7 @@ export default function Membros() {
 
       setCursos(cursosComModulos);
       setEbooks(es || []);
+
     }
     fetchData();
     // Preços dos planos AO VIVO do admin (planos_config).
@@ -137,6 +139,21 @@ export default function Membros() {
     supabase.from('planos_config').select('preco').eq('plano_key', 'pacote').maybeSingle()
       .then(({ data }) => { if (data && data.preco != null) setPrecoPacote(Number(data.preco)); }).catch(() => {});
   }, []);
+
+  // EVOLUÇÃO DA LEITURA dos eBooks. Sem isto o progresso que o leitor conta só existiria
+  // DENTRO do leitor; aqui ele vira o que interessa na vitrine: "continuar de onde parei".
+  // Efeito próprio (dep em user?.id) porque o usuário chega DEPOIS da primeira renderização —
+  // pendurar no fetchData(), que roda com [], faria a consulta sair antes de haver sessão.
+  useEffect(() => {
+    if (!user?.id) { setLeitura({}); return; }
+    supabase.from('leitura_progresso')
+      .select('item_id, pct, pagina, total_paginas').eq('item_tipo', 'ebook')
+      .then(({ data }) => {
+        const mapa = {};
+        (data || []).forEach(r => { mapa[r.item_id] = r; });
+        setLeitura(mapa);
+      });
+  }, [user?.id]);
 
   // Carregar progresso do Supabase (merge com local)
   useEffect(() => {
@@ -414,9 +431,28 @@ export default function Membros() {
                 <div style={{ padding:'0 14px 14px', display:'flex', flexDirection:'column', gap:5, flex:1 }}>
                   <div style={{ fontWeight:800, fontSize:13, color:'#0f172a', lineHeight:1.35, display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical', overflow:'hidden', minHeight:35 }}>{eb.titulo}</div>
                   <div style={{ fontSize:11.5, color:'#64748b' }}>por <span style={{ color:'#0D63DB' }}>BidPro Brasil</span></div>
+                  {(() => {
+                    // Barrinha de leitura: só aparece para quem já começou. Quem nunca abriu
+                    // vê o card limpo de sempre.
+                    const lp = leitura[eb.id];
+                    const pctLido = Math.min(100, Math.max(0, Number(lp?.pct) || 0));
+                    if (!lp || pctLido <= 0) return null;
+                    return (
+                      <div style={{ marginTop:4 }}>
+                        <div style={{ height:3, borderRadius:2, background:'#eef2f7', overflow:'hidden' }}>
+                          <div style={{ height:'100%', width:`${pctLido}%`, background: pctLido >= 100 ? '#16a34a' : '#0D63DB' }}/>
+                        </div>
+                        <div style={{ fontSize:10.5, color:'#94a3b8', marginTop:3, fontWeight:700 }}>
+                          {pctLido >= 100 ? '✓ Leitura concluída' : `${pctLido}% lido · pág. ${lp.pagina}${lp.total_paginas ? ` de ${lp.total_paginas}` : ''}`}
+                        </div>
+                      </div>
+                    );
+                  })()}
                   <div style={{ marginTop:'auto', display:'flex', alignItems:'center', justifyContent:'space-between', gap:8, paddingTop:6 }}>
                     <span style={{ fontSize:13, fontWeight:900, color:ac.cor }}>{ac.txt}</span>
-                    <span style={{ fontSize:11, fontWeight:800, color:'#b45309', background:'#fef3c7', padding:'3px 9px', borderRadius:6, whiteSpace:'nowrap' }}>Ler eBook →</span>
+                    <span style={{ fontSize:11, fontWeight:800, color:'#b45309', background:'#fef3c7', padding:'3px 9px', borderRadius:6, whiteSpace:'nowrap' }}>
+                      {Number(leitura[eb.id]?.pct) > 0 && Number(leitura[eb.id]?.pct) < 100 ? 'Continuar →' : 'Ler eBook →'}
+                    </span>
                   </div>
                   <CompartilharProduto tipo="ebook" id={eb.id} nome={eb.titulo} />
                 </div>
