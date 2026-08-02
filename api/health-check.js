@@ -358,6 +358,31 @@ export default async function handler(req) {
     return { status: 'ok', detalhe: base };
   }));
 
+  // ── Infra — BACKUP OFF-REGION (o "segundo servidor") ──────────────────────
+  // Prevenção de catástrofe só existe se alguém CONFERE. O backup-r2-cron agora deixa rastro
+  // em backup_execucoes; aqui a saúde cobra: rodou? está dormente? falhou? está em outra região?
+  itens.push(await check('Infra — backup off-region (2º servidor)', async () => {
+    const r = await sb('backup_execucoes?select=executado_em,destino,regiao_destino,dormante,ok,arquivos_total,arquivos_novos,falhas,tabelas_ok&order=executado_em.desc&limit=1');
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const [ultimo] = await r.json();
+    if (!ultimo) {
+      return { status: 'erro', detalhe: 'NENHUMA execução registrada de backup off-region. O banco tem backup nativo do Supabase (7 dias, MESMA região) e o Storage não tem nenhum. Configure o R2 (R2_ACCOUNT_ID/R2_ACCESS_KEY_ID/R2_SECRET_ACCESS_KEY/R2_BUCKET + R2_LOCATION).' };
+    }
+    const horas = (Date.now() - new Date(ultimo.executado_em).getTime()) / 3600000;
+    if (ultimo.dormante) {
+      return { status: 'erro', detalhe: `Backup off-region DORMENTE (última checagem há ${horas.toFixed(0)}h): o cron roda mas não copia nada — faltam as env do R2. Hoje NÃO existe cópia dos arquivos do Storage fora da região do banco.` };
+    }
+    // Região: a cópia tem que estar longe do banco (Supabase em sa-east-1).
+    const reg = String(ultimo.regiao_destino || '').toLowerCase();
+    const mesmaRegiao = !reg || reg.includes('sam') || reg.includes('sa-east') || reg.includes('sul');
+    const base = `Último: há ${horas.toFixed(0)}h · ${ultimo.arquivos_novos}/${ultimo.arquivos_total} arquivo(s) novos · ${ultimo.tabelas_ok} tabela(s) · destino ${ultimo.destino || '—'}${reg ? ` (${reg})` : ''}.`;
+    if (horas > 48) return { status: 'erro', detalhe: `${base} SEM BACKUP HÁ MAIS DE 48H — o cron é diário; investigar.` };
+    if (!ultimo.ok || ultimo.falhas > 0) return { status: 'erro', detalhe: `${base} ${ultimo.falhas} falha(s) na cópia — backup INCOMPLETO.` };
+    if (mesmaRegiao) return { status: 'aviso', detalhe: `${base} Região do destino não declarada ou na América do Sul — para DR a cópia deve ficar FORA de sa-east-1 (defina R2_LOCATION, ex.: enam/weur).` };
+    if (horas > 26) return { status: 'aviso', detalhe: `${base} Atrasado (esperado 1x/dia).` };
+    return { status: 'ok', detalhe: base };
+  }));
+
   // ── Compila resultado ──
   const temErro  = itens.some(i => i.status === 'erro');
   const temAviso = itens.some(i => i.status === 'aviso');

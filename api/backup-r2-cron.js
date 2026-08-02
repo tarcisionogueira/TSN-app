@@ -20,6 +20,9 @@
  * que mudou (compara tamanho via HEAD). Autorizado por CRON_SECRET. Registrado no vercel.json.
  */
 export const config = { runtime: 'nodejs', maxDuration: 120 };
+// Região do bucket R2 (location hint declarado na criação: enam/weur/apac/...). Serve para o
+// health-check conferir que a cópia está FORA da região do banco (Supabase: sa-east-1).
+const R2_REGIAO = (process.env.R2_LOCATION || '').trim();
 
 import crypto from 'node:crypto';
 import { isCronAuthorized } from './_auth.js';
@@ -44,6 +47,23 @@ const TABELAS_NEGOCIO = [
 ];
 
 function sbHeaders() { return { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` }; }
+
+// Deixa rastro de CADA execução em backup_execucoes — é o que o check-up de saúde lê para
+// dizer se a cópia off-region está viva. Best-effort: nunca derruba o backup.
+async function registrarExecucao(dados) {
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/backup_execucoes`, {
+      method: 'POST',
+      headers: { ...sbHeaders(), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify({
+        destino: R2_ON ? `r2:${R2.account}/${R2.bucket}` : null,
+        regiao_destino: R2_REGIAO || null,
+        ...dados,
+      }),
+      signal: AbortSignal.timeout(10000),
+    });
+  } catch { /* rastro é best-effort */ }
+}
 const sha256hex = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
 const hmac = (key, str) => crypto.createHmac('sha256', key).update(str).digest();
 
@@ -87,7 +107,13 @@ async function r2Put(key, body, contentType) {
 export default async function handler(req, res) {
   if (!isCronAuthorized(req)) { res.status(401).json({ error: 'Não autorizado' }); return; }
   if (!SUPABASE_URL || !SERVICE_KEY) { res.status(500).json({ error: 'env Supabase ausente' }); return; }
-  if (!R2_ON) { res.status(200).json({ ok: true, dormant: true, motivo: 'R2 não configurado (defina R2_ACCOUNT_ID/R2_ACCESS_KEY_ID/R2_SECRET_ACCESS_KEY/R2_BUCKET)' }); return; }
+  if (!R2_ON) {
+    // Registra a execução DORMENTE: sem este rastro, um backup desligado ficava invisível —
+    // o cron respondia 200 e o painel seguia verde. O health-check lê isto e acusa.
+    await registrarExecucao({ dormante: true, ok: false, detalhe: { motivo: 'R2 não configurado' } });
+    res.status(200).json({ ok: true, dormant: true, motivo: 'R2 não configurado (defina R2_ACCOUNT_ID/R2_ACCESS_KEY_ID/R2_SECRET_ACCESS_KEY/R2_BUCKET)' });
+    return;
+  }
 
   const pfx = R2.prefix ? R2.prefix + '/' : '';
   const out = { storage: { total: 0, enviados: 0, iguais: 0, falhas: 0 }, negocio: { tabelas: 0, falhas: 0 } };
@@ -127,5 +153,13 @@ export default async function handler(req, res) {
     } catch { out.negocio.falhas++; }
   }
 
+  // Só é "ok" se o storage não teve falha E o snapshot do negócio saiu inteiro.
+  const okGeral = out.storage.falhas === 0 && out.negocio.falhas === 0 && out.negocio.tabelas > 0;
+  await registrarExecucao({
+    dormante: false, ok: okGeral,
+    arquivos_total: out.storage.total, arquivos_novos: out.storage.enviados,
+    arquivos_iguais: out.storage.iguais, falhas: out.storage.falhas + out.negocio.falhas,
+    tabelas_ok: out.negocio.tabelas, detalhe: out,
+  });
   res.status(200).json({ ok: true, r2: `${R2.account}/${R2.bucket}`, ...out });
 }
