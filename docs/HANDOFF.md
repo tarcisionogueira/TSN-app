@@ -381,6 +381,59 @@ que devolve exatamente o que o relatório vai citar (e diz "sem dado" quando nã
 simplesmente não cita o bloco). Botão **"Atualizar agora"** dispara a ingestão sem esperar o cron.
 As tabelas seguem fechadas: o painel é RPC SECURITY DEFINER que exige `is_admin()`.
 
+**M. SEO — o site tinha UMA página indexável (02/08 noite, a partir do dono: "pesquisando
+palavras-chave de leilão o meu site não aparece").**
+
+**M1. A causa raiz.** O app é SPA com **HashRouter**: tudo mora depois do `#`, e o Google
+**descarta o fragmento**. Para o buscador, `/#/buscar` e `/#/planos` são a MESMA URL que `/`.
+Um site com **33.032 imóveis** tinha exatamente **uma** página indexável. O `sitemap.xml`
+declarava 7 URLs com `#` — todas colapsavam na raiz: declarava 7, entregava 1. Não havia como
+ranquear para "casa em leilão em Campinas": essa página não existia para o Google. O
+`robots.txt` ainda trazia `Disallow: /#/admin`, que nunca fez nada (o navegador não envia o
+fragmento ao servidor).
+
+**M2. A correção — sem tocar no roteador do app** (migrar para BrowserRouter mexeria em todo
+link, e-mail e PWA; risco alto para o mesmo ganho). Rotas **sem hash, renderizadas no
+servidor** (`api/publico.js`), com o conteúdo pronto no HTML:
+`/leiloes` · `/leiloes/:uf` · `/leiloes/:uf/:cidade` · `/leilao/:id/:slug`, mais
+`/sitemap-leiloes.xml` (índice + partes de 5 mil) gerado do banco. Cache na borda 1h.
+**Verificado em produção**: `/leiloes` = 33.008 imóveis em 27 UFs; `/leiloes/sp/campinas` =
+120 lotes com foto, preço, desconto, breadcrumb, ItemList e paginação; sitemap com 8 partes.
+- **Nível de exposição (decisão consciente)**: essas páginas mostram exatamente o que o
+  visitante não logado JÁ vê no teaser (`ImovelGate`) e o que a RLS "Leitura pública" já
+  libera. O PRODUTO — análise de viabilidade, parecer jurídico, documentos, Índice — segue
+  atrás do cadastro. Funil: o buscador traz pelo imóvel, o cadastro entrega a análise.
+- Cidade sem lote ativo sai do índice (`noindex`) mas continua abrindo: página vazia é
+  conteúdo raso, e conteúdo raso derruba a reputação do site inteiro.
+- `/i/:id` (og-share) **não mudou**: continua sendo preview de link compartilhado, `noindex` e
+  com redirect. São coisas diferentes — página que redireciona não indexa.
+
+**M3. 🔴 BUG QUE EU MESMO PUBLIQUEI E PEGUEI NA VERIFICAÇÃO.** A primeira versão foi ao ar
+anunciando **"980 imóveis em 5 estados"**. Causa: eu contava no JavaScript, puxando as linhas
+com `limit=100000` — e o **PostgREST corta em 1.000 linhas respondendo 200**, sem erro.
+Voltaram as 1.000 primeiras (todas de UF em A/B) e a conta saiu errada com cara de certa, no
+lugar mais caro possível: o texto que o Google indexa. É o **mesmo padrão** já corrigido hoje
+nas telas do Admin. Corrigido na raiz (`acervo_publico_agregados.sql`): contar é trabalho do
+banco, e as RPCs devolvem **um valor jsonb** — sem teto de linhas. O sitemap tinha o mesmo
+defeito latente (partes de 5.000 entregariam 1.000, e sitemap incompleto não dá erro, só
+entrega menos). **Lição:** `select` cru com `limit` alto é teto silencioso; para contar ou
+paginar acima de 1.000, sempre RPC com retorno único.
+
+**M4. O "byd".** Pesquisar "bid pro brasil" devolve BYD porque o Google **autocorrige** o termo
+("Incluindo resultados para byd pro brasil") — ele não reconhece "BidPro" como marca. Não é
+bug do site: é falta de sinal de marca. Feito agora: `alternateName` no schema.org com as
+grafias reais ("Bid Pro Brasil", "BidPro", "Bid Pro") em Organization e WebSite, e a forma com
+espaço escrita no rodapé. Isso ensina o buscador que o termo existe. O resto é tempo, volume de
+busca pela marca e links de fora.
+⚠️ **Fica dependendo do dono** (não dá para fazer daqui): cadastrar o site no **Google Search
+Console**, enviar os dois sitemaps e pedir indexação; e criar o **Perfil da Empresa no Google**.
+São os dois maiores aceleradores tanto do reconhecimento da marca quanto da descoberta das
+33 mil páginas novas.
+
+**M5. Achado menor registrado**: 23 imóveis ativos com UF inválida (20 vazias, 3 "NS"). Já são
+filtrados nas páginas públicas; não valem correção agora, mas indicam ruído no parse de uma
+fonte.
+
 **G. BACKLOG do bug bounty (achado e NÃO corrigido nesta sessão — registrado de propósito):**
 - `api/promo-capturar.js:112` (CONFIRMADO) — link promocional de curso/e-book mostra "🎉 Acesso
   liberado!" mas nenhum entitlement é criado (`compras_produtos` nunca recebe linha): o cliente bate

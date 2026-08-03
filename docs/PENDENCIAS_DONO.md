@@ -10,6 +10,36 @@
 
 ## 🟢 Fazer agora — grátis e rápido
 
+### -4. 🔴 GOOGLE SEARCH CONSOLE + PERFIL DA EMPRESA — ~20 min, grátis (o site não aparece no Google)
+
+- **Por quê:** em 02/08 o site ganhou **33 mil páginas indexáveis** (`/leiloes`, por estado, por
+  cidade e por imóvel) — antes ele tinha UMA só, porque tudo morava depois do `#` e o Google
+  descarta o fragmento. As páginas existem e estão no ar, mas o Google **ainda não sabe disso**.
+  Descobrir sozinho leva semanas; avisando, leva dias. E o Search Console é o único lugar onde dá
+  para ver o que ele indexou e o que rejeitou.
+- **Passos — Search Console:**
+  1. `search.google.com/search-console` → **Adicionar propriedade** → escolha **Prefixo do URL**
+     e informe `https://www.bidprobrasil.com.br`.
+  2. Verificar a propriedade: a opção mais simples é **tag HTML** — o Google mostra uma linha
+     `<meta name="google-site-verification" content="...">`. **Me mande essa linha** que eu coloco
+     no site e você clica em Verificar. (Se preferir, dá para verificar por DNS no painel do
+     domínio — também funciona.)
+  3. Menu **Sitemaps** → adicionar os dois, um de cada vez:
+     - `sitemap.xml`
+     - `sitemap-leiloes.xml`
+  4. Menu **Inspeção de URL** → cole `https://www.bidprobrasil.com.br/leiloes` → **Solicitar
+     indexação**. Repita para uma cidade importante, ex.:
+     `https://www.bidprobrasil.com.br/leiloes/sp/campinas`.
+- **Passos — Perfil da Empresa no Google** (é o que faz o Google parar de trocar "bid" por "byd"):
+  5. `business.google.com` → criar o perfil da **BidPro Brasil**, categoria "Corretor de imóveis"
+     ou "Serviço imobiliário", com o site `https://www.bidprobrasil.com.br`.
+  6. Concluir a verificação que o Google pedir (costuma ser por telefone ou vídeo).
+- **Depois que fizer:** me avisa que eu acompanho a cobertura pelo Search Console (quantas páginas
+  entraram, quais deram erro) e ajusto o que ele reclamar.
+- **Expectativa honesta:** aparecer para "leilão de imóveis em <cidade>" leva **semanas**, não
+  dias — é indexação + reputação. O que estava impedindo era estrutural e foi corrigido; daqui
+  para frente é tempo e volume.
+
 ### -3. 🔴 CLOUDFLARE R2 — ligar o 2º servidor (backup fora da região) — ~15 min, **custo R$ 0**
 
 - **Por quê (o que está em risco HOJE):** o Supabase Pro faz backup do **banco** (7 dias) —
@@ -25,7 +55,10 @@
   folga, e sem taxa de saída (o R2 não cobra egress).
 
 **Passo 1 — criar a conta e o bucket (Cloudflare)**
-1. Entre em `dash.cloudflare.com` (cria conta grátis se não tiver) → menu lateral **R2**.
+1. Entre em `dash.cloudflare.com` (cria conta grátis se não tiver). No menu lateral, o R2 **não
+   aparece com esse nome sozinho**: ele fica dentro de **“Storage & databases”** (grupo *Build*).
+   Clique em **Storage & databases → R2 Object Storage**. Se preferir, digite `R2` na busca do
+   topo da página — o resultado leva direto.
 2. Se pedir cartão para habilitar o R2, é só cadastro — o consumo fica dentro do gratuito.
 3. **Create bucket**:
    - **Bucket name:** `bidpro-backup` (se usar outro nome, é esse que vai na variável `R2_BUCKET`).
