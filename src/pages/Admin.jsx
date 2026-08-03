@@ -149,9 +149,35 @@ function UploadMidia({ kind, onDone, small }) {
     if (file.size > cfg.maxMB * 1024 * 1024) { setErro(`Arquivo grande demais (máx ${cfg.maxMB} MB).`); return; }
     setBusy(true);
     try {
-      const ext = (file.name.split('.').pop() || (kind === 'pdf' ? 'pdf' : 'jpg')).toLowerCase();
+      let corpo = file;
+      let ext = (file.name.split('.').pop() || (kind === 'pdf' ? 'pdf' : 'jpg')).toLowerCase();
+      let contentType = file.type || undefined;
+      if (kind !== 'pdf' && kind !== 'material') {
+        // CAPA: decodifica e RE-CODIFICA no navegador antes de subir. A capa do "Leilões
+        // caixa" chegou ao bucket como JPEG com os dados quebrados no meio (o navegador só
+        // desenhava o topo — "capa cortada" em todas as telas, achado do dono 03/08). Um
+        // arquivo que o celular exporta mal (HEIC→JPEG) passa em qualquer checagem de tipo;
+        // a ÚNICA prova de integridade é decodificar. Se decodifica, sobe um JPEG limpo e
+        // com teto de tamanho; se não, o erro aparece AQUI — não como capa quebrada na loja.
+        try {
+          const bmp = await createImageBitmap(file);
+          const MAX = 1400;
+          const s = Math.min(1, MAX / Math.max(bmp.width, bmp.height));
+          const cv = document.createElement('canvas');
+          cv.width = Math.max(1, Math.round(bmp.width * s));
+          cv.height = Math.max(1, Math.round(bmp.height * s));
+          cv.getContext('2d').drawImage(bmp, 0, 0, cv.width, cv.height);
+          bmp.close?.();
+          const blob = await new Promise((res) => cv.toBlob(res, 'image/jpeg', 0.87));
+          if (!blob || !blob.size) throw new Error('reencode vazio');
+          corpo = blob; ext = 'jpg'; contentType = 'image/jpeg';
+        } catch {
+          setErro('Não consegui ler essa imagem (arquivo corrompido?). Tente exportar de novo ou usar outro PNG/JPG.');
+          setBusy(false); return;
+        }
+      }
       const path = `${cfg.prefix}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-      const { error } = await supabase.storage.from(cfg.bucket).upload(path, file, { upsert: false, contentType: file.type || undefined });
+      const { error } = await supabase.storage.from(cfg.bucket).upload(path, corpo, { upsert: false, contentType });
       if (error) throw error;
       let url;
       if (kind === 'pdf' || kind === 'material') {
