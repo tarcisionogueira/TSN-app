@@ -17,13 +17,21 @@
   abandona o resto, por isso a capa aparece "cortada" no card de Membros, na tela do livro e
   no cabeçalho do leitor. O Claude **não consegue substituir o arquivo daqui** (o proxy do
   ambiente nega acesso ao Storage); só um upload novo resolve.
+- **Onde está o original:** no **Google Drive, na mesma pasta do manuscrito**. Para achar:
+  a capa subiu ao app em **26/07 às 14:17** (JPG de ~545 KB) e o PDF do manuscrito 13 min
+  antes — procure a imagem de capa com data próxima a essa na pasta. *(O Claude tentou
+  verificar o arquivo direto no Drive em 03/08, mas o conector Google pede uma aprovação de
+  permissão que não aparece no celular — se o cartão "Permitir" do Google Drive aparecer numa
+  sessão no computador, aprove que ele confere a integridade do original antes do re-envio.)*
 - **Passos:**
   1. **Admin → Área de Membros → eBooks** → editar o **"Leilões caixa - Mais facil do que
      você imagina"**.
-  2. Clicar em **"Enviar imagem (PNG/JPG)"** no campo da capa e escolher a imagem de novo
-     (a original do computador, de preferência — não um print).
+  2. Clicar em **"Enviar imagem (PNG/JPG)"** no campo da capa e escolher a imagem do Drive
+     (a original — não um print).
   3. Salvar. Nada mais: o upload novo já **decodifica e re-codifica** a imagem antes de subir
-     (correção de 03/08), então se o arquivo estiver ruim o erro aparece na hora, para você.
+     (correção de 03/08) — **ele mesmo faz a verificação**: se o arquivo do Drive estiver bom,
+     sobe limpo e a capa conserta; se estiver corrompido na fonte, o erro aparece na hora e a
+     saída é exportar a capa de novo do editor onde ela foi criada.
 - **Depois que fizer:** abra o card em Membros — a capa conserta nas três telas de uma vez.
   O corte DENTRO do leitor (topo da página embaixo da barra, no iPhone) era outro bug e **já
   foi corrigido em código**, não depende de você.
