@@ -261,7 +261,13 @@ export default function LeitorPaginado({
         style={{
           flex: 1, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch',
           display: 'flex', justifyContent: 'center', alignItems: 'flex-start',
-          padding: '58px 12px 74px', touchAction: 'pan-y', cursor: 'pointer', userSelect: 'none',
+          // As barras são ABSOLUTAS por cima da área e crescem com o notch/indicador do
+          // iPhone (env(safe-area-inset-*)); o espaço reservado aqui precisa crescer JUNTO.
+          // Com 58px fixos, a barra de cima (58 + ~59 de notch) cobria o TOPO da página —
+          // e scrollTop 0 não alcança o que está atrás de um overlay (achado do dono 03/08:
+          // "o leitor deixou a página do livro cortada").
+          padding: 'calc(58px + env(safe-area-inset-top, 0px)) 12px calc(74px + env(safe-area-inset-bottom, 0px))',
+          touchAction: 'pan-y', cursor: 'pointer', userSelect: 'none',
         }}>
 
         {status === 'loading' && (
@@ -316,7 +322,7 @@ export default function LeitorPaginado({
 
       {/* "Ainda tem página abaixo" — o aviso que evita a pessoa virar sem ter lido o fim */}
       {status === 'ready' && temMais && (
-        <div style={{ position: 'absolute', bottom: 78, left: '50%', transform: 'translateX(-50%)', zIndex: 2,
+        <div style={{ position: 'absolute', bottom: 'calc(78px + env(safe-area-inset-bottom, 0px))', left: '50%', transform: 'translateX(-50%)', zIndex: 2,
           display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 999,
           background: 'rgba(0,0,0,0.45)', color: cor.ui, fontSize: 11.5, fontWeight: 600, pointerEvents: 'none' }}>
           <ArrowDown size={13} /> deslize para ver o resto da página

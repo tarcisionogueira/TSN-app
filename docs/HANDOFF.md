@@ -181,6 +181,27 @@ o **tema do site do leiloeiro**, listado como "Documento no leiloeiro".
   "a contar da data de 20/12/2026" → **ignorado** ✔ · matrícula antiga (passado) → ignorado ✔ ·
   data sem âncora → ignorado ✔.
 
+**3. eBOOK — "capa cortada" em 3 telas + página cortada no leitor (prints do dono, 03/08).**
+- **Capa (card de Membros, tela do livro, cabeçalho do leitor): é o ARQUIVO, não o CSS.** A
+  `capas/1785075416388-0i1y4q.jpg` (545 KB, inteira no bucket `membros-capas`) está com os
+  dados JPEG **quebrados no meio**: o navegador decodifica só o topo e abandona o resto (por
+  isso o card mostra o pedaço + fundo cinza, e a tela do livro o pedaço + o gradiente escuro
+  de trás — o resto do `<img>` fica transparente). Provável exportação HEIC→JPEG malfeita do
+  celular no upload. **Não dá para consertar o arquivo daqui** (proxy nega `supabase.co`).
+  **Conserto em 2 partes:** (a) **o dono re-envia a capa** no Admin (2 min); (b) **o upload de
+  capa agora decodifica e RE-CODIFICA via canvas** (`Admin.jsx` → `UploadMidia`): só sobe JPEG
+  limpo (teto 1400px, q0.87); arquivo que não decodifica dá erro NA HORA em vez de virar capa
+  quebrada na loja. O `EbookCapa` (fallback por `onerror`) não pega esse caso — decodificação
+  PARCIAL não dispara erro.
+- **Leitor paginado: topo da página ficava ESCONDIDO sob a barra (iPhone).** As barras do
+  `LeitorPaginado` são absolutas e crescem com `env(safe-area-inset-*)` (notch ≈ +59px), mas o
+  espaço reservado à página era fixo (58px cima / 74px baixo) — o começo da página ficava
+  ATRÁS da barra, inalcançável por rolagem (scrollTop 0 já era o limite). Padding agora soma o
+  safe-area (e o aviso "deslize para ver o resto" subiu junto). Era isso o "layout interessante
+  mas com a página cortada".
+- ⚠️ A 1ª página do PDF desse ebook tem um banner escuro no topo — **depois do deploy, o corte
+  no leitor some; se a CAPA continuar cortada é porque falta o re-upload (item a)**.
+
 **Acompanhar na próxima sessão:** `data_leilao_2` fora da CEF segue em **1** (o `gl_28450` gravado
 à mão) — os crons de enriquecimento é que devem fazer esse número subir; se ficar em 1, o problema
 é acesso à página (Bright Data), não a extração. Cobertura de `data_fim` hoje: GRUPOLANCE 1,2%,
