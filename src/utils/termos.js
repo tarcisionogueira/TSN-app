@@ -2,15 +2,21 @@
 // Ao mudar o texto, incremente a versão: o aceite grava a versão vigente.
 // v3.0 (30/07/2026): termo AMPLO por produto — natureza informativa, IA, ausência de
 // garantia de resultado, riscos do leilão, PI, cobrança/arrependimento, LGPD, foro.
-// ⚠️ Redação técnica pendente de validação do JURÍDICO (reunião do dono) — ressalvas
-// viram v3.1 (aceites antigos preservam a versão com que foram gravados).
-export const TERMOS_VERSAO = '3.0';
+// v3.2 (03/08/2026): entrou em operação a CÓPIA DE SEGURANÇA FORA DO PAÍS (Cloudflare R2,
+// América do Norte). O Art. 33, VIII da LGPD exige consentimento **específico e destacado**
+// para transferência internacional — não basta estar diluído na Política. Por isso o termo
+// de re-aceite ganhou um bloco próprio sobre o tema e a versão subiu, o que faz TODO usuário
+// logado ver o popup de re-aceite. Aceites antigos preservam a versão com que foram gravados.
+// ⚠️ Redação técnica pendente de validação do JURÍDICO (reunião do dono).
+export const TERMOS_VERSAO = '3.2';
 
 // Versões POR FAMÍLIA que evoluíram além da base (o aceite grava `<família>-v<versão>`;
 // quem aceitou a anterior re-aceita a nova na próxima contratação — sem forçar re-aceite
 // global da plataforma). v3.1 (30/07/2026, pedido do dono): honorários de êxito ganham
 // MÍNIMO de R$ 7.000; Leilão Club redefinido como MENTORIA + ASSESSORIA (todas as regras
 // da assessoria se aplicam; assessoria inclusa limitada a 1 imóvel/mês).
+// (Mantidas em 3.1: o que mudou na 3.2 foi o termo de RE-ACEITE da plataforma, não o texto
+// destas famílias. Quem contratar assessoria/clube segue aceitando o 3.1 vigente delas.)
 const VERSAO_FAMILIA = { assessorado: '3.1', clube: '3.1' };
 
 // ─── REGISTRO CENTRAL POR PRODUTO/SERVIÇO (pedido do dono, 30/07) ────────────────
@@ -62,7 +68,8 @@ export function termoDoProduto(key, { nome, valorLabel, modelo, inclui } = {}) {
     // Re-aceite dos termos da plataforma (não é compra): declaração simples e ampla.
     return {
       familia: fam, titulo: tituloProduto(key), versao: versaoTermoProduto(key),
-      texto: 'Declaro que li e aceito a versão ATUALIZADA dos Termos de Uso e da Política de Privacidade da plataforma BidPro Brasil (bidprobrasil.com.br/#/termos e /#/privacidade), operada por Nogueira Empreendimentos LTDA (CNPJ 02.311.492/0001-61), incluindo as cláusulas sobre: natureza informativa e de apoio à decisão dos relatórios e análises (sem garantia de resultado, recomendação de investimento ou parecer jurídico definitivo); uso de inteligência artificial e de fontes públicas de terceiros, sujeitas a imprecisões; independência da plataforma em relação a leiloeiros, bancos e organizadores de certames; riscos inerentes à arrematação de imóveis em leilão, que correm por conta do arrematante; propriedade intelectual dos conteúdos; tratamento de dados pessoais conforme a LGPD (Lei nº 13.709/2018); e registro eletrônico deste aceite com data, hora, IP, dispositivo e código de verificação (MP nº 2.200-2/2001, art. 10, §2º).',
+      texto: 'Declaro que li e aceito a versão ATUALIZADA dos Termos de Uso e da Política de Privacidade da plataforma BidPro Brasil (bidprobrasil.com.br/#/termos e /#/privacidade), operada por Nogueira Empreendimentos LTDA (CNPJ 02.311.492/0001-61), incluindo as cláusulas sobre: natureza informativa e de apoio à decisão dos relatórios e análises (sem garantia de resultado, recomendação de investimento ou parecer jurídico definitivo); uso de inteligência artificial e de fontes públicas de terceiros, sujeitas a imprecisões; independência da plataforma em relação a leiloeiros, bancos e organizadores de certames; riscos inerentes à arrematação de imóveis em leilão, que correm por conta do arrematante; propriedade intelectual dos conteúdos; tratamento de dados pessoais conforme a LGPD (Lei nº 13.709/2018); e registro eletrônico deste aceite com data, hora, IP, dispositivo e código de verificação (MP nº 2.200-2/2001, art. 10, §2º).'
+        + '\n\nCONSENTIMENTO ESPECÍFICO E DESTACADO — TRANSFERÊNCIA INTERNACIONAL DE DADOS (LGPD, Art. 33). Declaro estar informado, de forma prévia e destacada, de que a plataforma mantém a base de dados e os arquivos hospedados no BRASIL (região de São Paulo) e, para proteger meus documentos contra perda definitiva em caso de incidente, guarda uma CÓPIA DE SEGURANÇA em servidores localizados FORA DO PAÍS (Cloudflare R2, América do Norte), além de utilizar prestadores de inteligência artificial, e-mail, vídeo e hospedagem que processam dados no exterior. Consinto com essa transferência, que se apoia também nas garantias do Art. 33, II (acordos de tratamento de dados alinhados às cláusulas-padrão contratuais da Resolução CD/ANPD nº 19/2024) e na execução deste contrato (Art. 33, IX). Estou ciente de que: (a) a cópia serve EXCLUSIVAMENTE para restauração em caso de desastre, com acesso restrito e tráfego criptografado; (b) o dado excluído ou anonimizado no sistema principal sai da cópia na sincronização diária seguinte, e os retratos periódicos do banco são descartados em até 90 dias; (c) a lei brasileira continua aplicável mesmo aos dados armazenados no exterior (Art. 11 da Lei nº 12.965/2014 — Marco Civil da Internet — e Art. 3º da LGPD), permanecendo todos os meus direitos exercíveis no Brasil pelos canais do Encarregado (DPO); e (d) posso revogar este consentimento a qualquer momento, ciente de que a revogação pode inviabilizar os serviços que dele dependem.',
     };
   }
   const base = {
