@@ -274,6 +274,60 @@ function caixaMatriculaUrl({ fonte, estado, fonteId } = {}) {
   if (!num || uf.length !== 2) return null;
   return `https://venda-imoveis.caixa.gov.br/editais/matricula/${uf}/${num}.pdf`;
 }
+// EDITAL DA CAIXA — o único documento dela que NÃO é determinístico.
+//
+// ACHADO DO DONO (03/08, apto em Cuiabá/MT, `cef_8555536754309`): o documental saiu "sem acesso
+// ao edital" — e é um leilão da Caixa, que tem edital. Medido no acervo: dos 10.035 lotes CEF de
+// leilão (extrajudicial + licitação), **7.195 têm `link_edital` apontando para a PÁGINA HTML do
+// anúncio** (`detalhe-imovel.asp`) e os outros 2.840 apontam para `/editais/matricula/...` — ou
+// seja, para a MATRÍCULA. Nenhum tem o edital de verdade. A causa está no scraper do CSV
+// (`scripts/scraper.js`): `link_edital: ehVendaDireta ? null : linkDetalhe` — ele nunca teve o
+// edital para gravar, porque o CSV da Caixa não traz essa coluna.
+//
+// Matrícula e "Regras da Venda Online" são URLs MONTÁVEIS (padrão fixo por UF/número). O edital
+// não é: cada licitação tem o seu, e o único lugar que publica o caminho é a página do lote.
+// Então buscamos lá. A página é HTML leve e o `lerDoc` já sabe furar o bloqueio de IP da Caixa
+// via Bright Data com os cabeçalhos certos.
+//
+// Reconhece o edital pelo caminho `/editais/...pdf`, EXCLUINDO os dois que já temos por outro
+// caminho: `/editais/matricula/` (é a matrícula — foi exatamente essa confusão que encheu
+// `link_edital` de matrícula) e `regras-VOL` (o "como comprar", que é genérico e igual para todos).
+function caixaEditalDaPagina(html) {
+  if (!html) return null;
+  const vistos = new Set();
+  for (const m of String(html).matchAll(/https?:\/\/[^\s"'<>]*\/editais\/[^\s"'<>]+\.pdf/gi)) {
+    const u = m[0].replace(/&amp;/gi, '&');
+    if (/\/editais\/matricula\//i.test(u) || /regras-?VOL/i.test(u)) continue;
+    if (!vistos.has(u)) { vistos.add(u); return u; }
+  }
+  // Caminho relativo ("/editais/licitacao/MT/0001-2026.pdf") — absolutiza no domínio da Caixa.
+  for (const m of String(html).matchAll(/["'](\/editais\/[^\s"'<>]+\.pdf)["']/gi)) {
+    const p = m[1];
+    if (/\/editais\/matricula\//i.test(p) || /regras-?VOL/i.test(p)) continue;
+    return `https://venda-imoveis.caixa.gov.br${p}`;
+  }
+  return null;
+}
+
+// Busca o HTML CRU da página do lote. Não dá para reusar o `lerDoc`: o extrator dele remove as
+// tags (`<[^>]+>` → espaço) para virar texto de leitura — e o href do edital mora exatamente
+// dentro da tag, então chegaria vazio aqui. Direto primeiro (grátis); Bright Data só se o IP for
+// bloqueado, com os cabeçalhos que a Caixa espera.
+async function caixaPaginaHtml(url, deadline) {
+  const h = { 'User-Agent': UA, Accept: 'text/html,application/xhtml+xml,*/*;q=0.8', 'Accept-Language': 'pt-BR,pt;q=0.9' };
+  const bom = (t) => (t && t.length > 500 ? t : null);
+  try {
+    const r = await fetchAntiSSRF(url, { headers: h, signal: AbortSignal.timeout(9000) });
+    if (r?.ok) { const t = bom(await r.text().catch(() => '')); if (t) return t; }
+  } catch { /* cai no Bright Data */ }
+  if (Date.now() > deadline) return null;
+  try {
+    const bd = await fetchViaBrightData(url, { headers: { ...h, Referer: 'https://venda-imoveis.caixa.gov.br/' } });
+    if (bd?.ok) return bom(await bd.text().catch(() => ''));
+  } catch { /* segue sem */ }
+  return null;
+}
+
 function caixaRegrasVendaUrl({ fonte } = {}) {
   if (!ehCaixa(fonte)) return null;
   return 'https://venda-imoveis.caixa.gov.br/editais/regras-VOL/comocomprar.pdf';
@@ -672,6 +726,21 @@ export default async function handler(req, res) {
         if (dd?.edital) add(dd.edital, 'Edital');
         for (const a of (dd?.anexos || [])) add(a.url, a.nome || 'Anexo', a.tipo);
       } catch { /* login on-demand nunca derruba a análise */ }
+    }
+    // EDITAL DA CAIXA: `link_edital` aqui é a PÁGINA do anúncio (ou, pior, a matrícula) — ver
+    // caixaEditalDaPagina(). Antes de cair no fallback, abrimos a página e pegamos o PDF real.
+    // Só para CEF, só quando ainda não temos um edital-arquivo, e com orçamento de tempo curto:
+    // é uma leitura de HTML leve, não pode competir com a leitura dos documentos.
+    if (ehCaixa(row?.fonte) && !urls.some((u) => /edital/i.test(u.nome || '')) && Date.now() < deadline - 8000) {
+      try {
+        const pagina = row?.url_lote || row?.link_edital;
+        if (pagina && /venda-imoveis\.caixa\.gov\.br/i.test(pagina)) {
+          const html = await caixaPaginaHtml(pagina, Math.min(deadline, Date.now() + 12000));
+          const achado = caixaEditalDaPagina(html);
+          if (achado) { console.log(`[documental] edital CEF achado na página: ${achado}`); add(achado, 'Edital'); }
+          else console.log('[documental] edital CEF NÃO encontrado na página do lote');
+        }
+      } catch { /* nunca derruba a análise */ }
     }
     add(row?.link_edital || body?.urlEdital, 'Edital');
     add(body?.urlRegras, 'Regras de venda');
