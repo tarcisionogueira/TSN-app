@@ -72,6 +72,13 @@ curto (5–8 linhas) antes de seguir:
 Todas configuradas no painel Vercel. Para adicionar nova variável:
 Settings → Environment Variables → Add New → marcar Production + Preview + Development
 
+> 🔴 **O repositório `tarcisionogueira/TSN-app` é PÚBLICO** (confirmado em 03/08 via API do
+> GitHub: `visibility: public`). **NUNCA escreva o VALOR de um segredo em arquivo do repo** —
+> nem em `docs/*.md`, nem em comentário de código. Cite sempre o NOME da variável
+> (`RESEND_WEBHOOK_SECRET`) e diga "definido no painel". Um valor commitado continua visível
+> no HISTÓRICO do git mesmo depois de removido do arquivo: a única correção real é **rotacionar
+> o segredo**. Achado de 03/08: `RESEND_WEBHOOK_SECRET` estava em texto puro no HANDOFF.
+
 ## Banco de dados
 - Migrações SQL: `supabase/migrations/`
 - Executar manualmente no painel Supabase → SQL Editor
