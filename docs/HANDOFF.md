@@ -131,6 +131,64 @@ Lote de referência: `GRUPOLANCE` / `gl_28450` (Alphaville Residencial 11, Santa
 
 ---
 
+### ✅ 03/08 (sessão 24) — RITUAL + ANEXO QUE ABRIA CÓDIGO + DATA VINDA DO EDITAL
+
+**Ritual.** Acervo **32.643 ativos**, 30.241 atualizados em 24h. Baseline aprendida: só a
+**SBID21** abaixo do piso (0 < 18) — esperado, leilão encerrado. `auditoria_seguranca()` = **0
+crítico / 0 atenção**. **Cliente 360 íntegro** (`admin_360_estatisticas` responde): 26 clientes,
+75 relatórios, **0 falha de relatório em 24h**, 1 cliente com erro aberto, funil público 7d = 241
+pageviews / 72 visitantes. Fila de geocode e de documentos drenando.
+
+**1. 🔴 ANEXO QUE ABRIA CÓDIGO (achado do dono — lote `vegas_7588`, chácara em Ribeirão Preto).**
+Ele clicou num anexo do lote e recebeu **código** na tela: era `jquery.min.js` / `global.css` —
+o **tema do site do leiloeiro**, listado como "Documento no leiloeiro".
+- **Causa-raiz** (`api/_doc-scan.js`): para URL **sem extensão de documento** a varredura aceitava
+  o sinal genérico de host (`amazonaws|storage|blob.core|/file`) ou uma palavra-chave no texto da
+  âncora. Só que o bucket do leiloeiro hospeda **o site inteiro**; o pixel do Bing carrega o
+  TÍTULO do lote na querystring (com a palavra "avaliação"); "ENVIAR PROPOSTA" aponta para
+  `/licitante/login`; "Leia atentamente o edital" aponta para `/glossario`.
+- **Não era só cosmético:** havia entrada de `bat.bing.com` gravada com **`tipo = matricula`** —
+  o laudo documental contava um pixel de rastreio como matrícula presente.
+- **Corrigido na raiz**: `ehDocumento` passa a barrar, *só para URL sem extensão de documento*,
+  ativo estático (`.js/.css/.map/.woff`, `/assets|/dist|/vendor|_next/`, `*.min.*`), página de
+  conta/institucional (login, licitante, glossário, contato…), link com `utm_/gclid`, host de
+  analytics/chat/CDN de biblioteca, URL com **preço no caminho** e a **home / a própria página do
+  lote** (`#tab-parcelamento`). Qualquer `.pdf/.doc/.xls` continua passando, **mesmo em
+  `/assets/`** — arquivo de verdade nunca é ruído. Testado: 10 lixos reais barrados, 6 documentos
+  legítimos (resale opaco, PestanaAPI, WebLeilões `/documento`, PDF em `/assets/`) mantidos.
+- **Acervo limpo** (`anexos_purgar_ruido_de_pagina.sql`, APLICADA, idempotente): **379 anexos-lixo
+  em 311 lotes** removidos — MEGA 204, SODRE 78, SUPERBID 72, VEGAS 13, SUPORTE 11, LEILOTECH 1.
+  Restante hoje: **0**. `vegas_7588` ficou com os 3 PDFs reais (matrícula, edital, avaliação).
+
+**2. DATA — confirmado o que o dono suspeitou, e o sistema agora puxa do edital.**
+- **O leiloeiro realmente não publica data nesse lote**: `data_leilao/data_leilao_2/data_fim` estão
+  NULL, e o scraper (que lê `jsonLd.startDate` + data ancorada no HTML) não achou nada. Não é falha
+  de parser: **39 dos 40** lotes VEGAS têm data; só o `vegas_7588` não. Ficamos **de acordo com o
+  leiloeiro** — sem data na página, sem data na ficha.
+- **Ao gerar relatório, o edital passa a preencher a lacuna** (regra do dono). O extrato do edital
+  (`_edital-extrato.js`, determinístico, sem IA) já lia praças; agora devolve também
+  `datas:{inicio,fim}` lidas do TEXTO com **âncora estrita** (`leilão|praça|encerr|hasta|aliena|
+  licita|término`) — em edital a palavra "data" aparece o tempo todo ("a contar da data do
+  pagamento") e não serve de âncora. `extrairDatasLeilao` ganhou o modo `{ estrito:true }`; o
+  caminho da página do lote segue idêntico.
+- **Bug irmão corrigido no caminho** (`gerar-analise.js`): a data da **2ª praça** só era gravada
+  *dentro* do `if` que gravava o **valor** da 2ª praça. Com o valor já preenchido — ou num edital
+  que só publica a data — o **prazo real nunca era persistido**. É o mesmo defeito de 02/08 (a 2ª
+  data escondida na tela por exigir `valor_minimo_2`), agora do lado da escrita. Datas e valores
+  ficaram independentes.
+- **Regra mantida**: só preenche **coluna vazia**. Nada sobrescreve o que o leiloeiro publica.
+- Testado em 5 cenários: 1ª/2ª praça datadas ✔ · "encerra-se em 03/11/2026 15:00" → só `fim` ✔ ·
+  "a contar da data de 20/12/2026" → **ignorado** ✔ · matrícula antiga (passado) → ignorado ✔ ·
+  data sem âncora → ignorado ✔.
+
+**Acompanhar na próxima sessão:** `data_leilao_2` fora da CEF segue em **1** (o `gl_28450` gravado
+à mão) — os crons de enriquecimento é que devem fazer esse número subir; se ficar em 1, o problema
+é acesso à página (Bright Data), não a extração. Cobertura de `data_fim` hoje: GRUPOLANCE 1,2%,
+GESTAOLEILOES 0%, VIP 0%, WEBLEILOES 3,4%, PECINI 10,9%, BIASI 15,3%, SUPORTE 17,2%, CEF 43,4% —
+o resto das fontes está em 100%.
+
+---
+
 **A. RITUAL (02/08 ~12h UTC).** (1) **Saúde**: 33.062 ativos (**era 28.040 — ver B**), 27.170
 atualizados em 24h; deploys READY (prod `053024b`); fila de geocode 1.042 (98,8% do acervo já
 geocodificado, cron horário drena); fila de documentos 1.258 pendentes com vazão de 40/run ×
