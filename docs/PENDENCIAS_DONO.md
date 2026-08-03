@@ -4,11 +4,29 @@
 > variável de ambiente). Cada um traz o **porquê**, o **passo a passo** e **o que o Claude
 > faz depois** que você concluir. Quando estiver no computador, é só ir por aqui.
 >
-> _Última atualização: 02/08/2026._
+> _Última atualização: 03/08/2026._
 
 ---
 
 ## 🟢 Fazer agora — grátis e rápido
+
+### -5. 🖼️ RE-ENVIAR A CAPA DO eBOOK "Leilões caixa" — ~2 min, grátis (a capa está cortada nas 3 telas)
+
+- **Por quê:** o arquivo da capa (`membros-capas/capas/1785075416388-0i1y4q.jpg`) chegou ao
+  bucket com os **dados JPEG corrompidos no meio** — o navegador decodifica só o topo e
+  abandona o resto, por isso a capa aparece "cortada" no card de Membros, na tela do livro e
+  no cabeçalho do leitor. O Claude **não consegue substituir o arquivo daqui** (o proxy do
+  ambiente nega acesso ao Storage); só um upload novo resolve.
+- **Passos:**
+  1. **Admin → Área de Membros → eBooks** → editar o **"Leilões caixa - Mais facil do que
+     você imagina"**.
+  2. Clicar em **"Enviar imagem (PNG/JPG)"** no campo da capa e escolher a imagem de novo
+     (a original do computador, de preferência — não um print).
+  3. Salvar. Nada mais: o upload novo já **decodifica e re-codifica** a imagem antes de subir
+     (correção de 03/08), então se o arquivo estiver ruim o erro aparece na hora, para você.
+- **Depois que fizer:** abra o card em Membros — a capa conserta nas três telas de uma vez.
+  O corte DENTRO do leitor (topo da página embaixo da barra, no iPhone) era outro bug e **já
+  foi corrigido em código**, não depende de você.
 
 ### -4. 🔴 GOOGLE SEARCH CONSOLE + PERFIL DA EMPRESA — ~20 min, grátis (o site não aparece no Google)
 
