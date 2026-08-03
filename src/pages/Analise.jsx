@@ -5,7 +5,7 @@ import {
   FileText, Loader2, Sparkles, BarChart3, ShieldAlert, TrendingUp,
   CheckCircle2, XCircle, AlertTriangle, Gavel, DollarSign, Printer, ExternalLink,
   Save, ChevronDown, ChevronUp, UploadCloud, Building2, MapPin,
-  Home, ClipboardList, LineChart, Award, Info, RefreshCw, Lock,
+  Home, ClipboardList, LineChart, Award, Info, RefreshCw, Lock, FileWarning,
   Scale, Search, User, Calendar, ChevronRight, AlertCircle, MessageCircle, ClipboardCheck, CreditCard,
 } from 'lucide-react';
 import { arquivoParaBase64 } from '../utils/arquivo';
@@ -359,8 +359,35 @@ export default function Analise() {
   // "concluida" com precisaDocumentos NÃO é pronto — ainda está capturando/faltando
   // documentos. Separar os dois estados evita a incoerência "Pronto na lista / abre
   // Preparando ainda" (o mesmo status precisa valer em TODA a tela).
-  const relDocumentalPreparando = docEntry?.status === 'concluida' && !!docEntry?.result?.precisaDocumentos;
+  //
+  // MAS "preparando" PRECISA TERMINAR. A captura automática promete "os documentos
+  // chegam em ~1 min e a análise sai sozinha". Quando a fonte simplesmente não
+  // entrega o PDF pelas rotas automáticas, a linha fica 'concluida' +
+  // precisaDocumentos PARA SEMPRE — e o card girava "Preparando documentos…"
+  // eternamente COM O BOTÃO DESABILITADO (`travado` incluía `preparando`): spinner
+  // infinito e nenhuma saída para o usuário (relatado no lote de Cuiabá, 03/08).
+  // Régua igual à de MinhasAnalises: só é "preparando" enquanto a captura é REAL
+  // (emCaptura) E a linha é recente; passado o prazo vira um estado ACIONÁVEL
+  // (tentar de novo / abrir e anexar os PDFs), sem spinner e com botão liberado.
+  const CAPTURA_MAX_MS = 20 * 60 * 1000; // 20 min (a mensagem promete ~1 min)
+  const docPrecisaDocs = docEntry?.status === 'concluida' && !!docEntry?.result?.precisaDocumentos;
+  const relDocumentalPreparando = docPrecisaDocs
+    && !!docEntry?.result?.emCaptura
+    && !!docEntry?.updatedAt
+    && (Date.now() - new Date(docEntry.updatedAt).getTime()) < CAPTURA_MAX_MS;
+  // Estado TERMINAL e acionável: a busca automática não trouxe edital/matrícula.
+  const relDocumentalFaltamDocs = docPrecisaDocs && !relDocumentalPreparando;
   const relDocumentalGerado = docEntry?.status === 'concluida' && !docEntry?.result?.precisaDocumentos;
+  // A janela acima é calculada no render; sem isto o card só sairia de "Preparando…"
+  // no próximo re-render (o usuário via o spinner girar além do prazo). Agenda o
+  // re-render para o instante em que a janela expira.
+  const [, setTickCaptura] = useState(0);
+  useEffect(() => {
+    if (!relDocumentalPreparando) return;
+    const resta = CAPTURA_MAX_MS - (Date.now() - new Date(docEntry.updatedAt).getTime());
+    const t = setTimeout(() => setTickCaptura(x => x + 1), Math.max(1000, resta + 500));
+    return () => clearTimeout(t);
+  }, [relDocumentalPreparando, docEntry?.updatedAt]); // eslint-disable-line react-hooks/exhaustive-deps
   const [parecerDocumental, setParecerDocumental] = useState(null); // resultado do servidor
   const [docMsg, setDocMsg] = useState('');
   // Auto-poll da captura de documentos (leiloeiro integrado): quando o servidor está
@@ -1600,12 +1627,12 @@ export default function Analise() {
               <div style={{ display:'grid', gridTemplateColumns: isMobile?'1fr':'1fr 1fr', gap:14 }}>
                 {[
                   { k:'mercado', cor:'#0d9488', bg:'#f0fdfa', Icon:BarChart3, titulo:'Mercadológico + Viabilidade Financeira', desc:'Avaliação de mercado (níveis 1 e 2), estrutura de custos, cenários, ROI/ROE e teto de lance.', ok:relMercadoGerado, gerando:gerandoMercado, fn:gerarRelMercado, block: analisesBloqueado, seqBloqueado:false, ordem:1 },
-                  { k:'documental', cor:'#1e3a8a', bg:'#eef2ff', Icon:Scale, titulo:'Análise Documental + Processo', desc:'Leitura do edital/matrícula (ônus e gravames) e consulta do processo no CNJ + certidões fiscais.', ok:relDocumentalGerado, gerando:gerandoDocumental, preparando:relDocumentalPreparando, fn:gerarRelDocumental, block:false, seqBloqueado: !relMercadoGerado && !relDocumentalGerado, planoBloqueado: ROLES_SEM_DOCUMENTAL.includes(role), ordem:2 },
+                  { k:'documental', cor:'#1e3a8a', bg:'#eef2ff', Icon:Scale, titulo:'Análise Documental + Processo', desc:'Leitura do edital/matrícula (ônus e gravames) e consulta do processo no CNJ + certidões fiscais.', ok:relDocumentalGerado, gerando:gerandoDocumental, preparando:relDocumentalPreparando, faltamDocs:relDocumentalFaltamDocs, fn:gerarRelDocumental, block:false, seqBloqueado: !relMercadoGerado && !relDocumentalGerado, planoBloqueado: ROLES_SEM_DOCUMENTAL.includes(role), ordem:2 },
                   { k:'laudo', cor:'#111111', bg:'#f1f5f9', Icon:Award, titulo:'Laudo de Viabilidade (Parecer Final)', desc:'Consolida os dois relatórios acima num veredito de defesa (aprovado/condicional/reprovado), com condições e diligências. Não reprocessa fontes, sintetiza o que já foi gerado.', ok:relLaudoGerado, gerando:gerandoLaudo, fn:gerarRelLaudo, block:false, seqBloqueado: !ambosRelatorios && !relLaudoGerado, planoBloqueado: ROLES_SEM_DOCUMENTAL.includes(role), ordem:3 },
                 ].map(c => {
                   const travado = c.gerando || c.preparando || c.block || c.seqBloqueado || c.planoBloqueado;
                   return (
-                  <div key={c.k} style={{ border:`1px solid ${c.ok?c.cor:c.preparando?'#fde68a':'#e2e8f0'}`, borderRadius:14, padding:'18px', display:'flex', flexDirection:'column', gap:12, background: c.ok?c.bg:'white', opacity: c.seqBloqueado?0.7:1 }}>
+                  <div key={c.k} style={{ border:`1px solid ${c.ok?c.cor:(c.preparando||c.faltamDocs)?'#fde68a':'#e2e8f0'}`, borderRadius:14, padding:'18px', display:'flex', flexDirection:'column', gap:12, background: c.ok?c.bg:'white', opacity: c.seqBloqueado?0.7:1 }}>
                     <div style={{ display:'flex', alignItems:'center', gap:10 }}>
                       <div style={{ width:40, height:40, borderRadius:10, background:c.bg, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}><c.Icon size={20} color={c.cor}/></div>
                       <div style={{ fontSize:14, fontWeight:800, color:'#111', lineHeight:1.25 }}><span style={{ color:c.cor }}>{c.ordem}.</span> {c.titulo}</div>
@@ -1624,15 +1651,24 @@ export default function Analise() {
                         </button>
                       ) : (
                         <button onClick={c.fn} disabled={travado}
-                          style={{ flex:1, padding:'10px', background: travado?(c.preparando?'#d97706':'#cbd5e1'):c.cor, color:'white', border:'none', borderRadius:10, fontWeight:800, fontSize:13, cursor: (travado && !c.preparando)?'default':'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
+                          style={{ flex:1, padding:'10px', background: travado?(c.preparando?'#d97706':'#cbd5e1'):(c.faltamDocs?'#b45309':c.cor), color:'white', border:'none', borderRadius:10, fontWeight:800, fontSize:13, cursor: (travado && !c.preparando)?'default':'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
                           {c.gerando ? <><Loader2 size={15} style={{animation:'spin 1s linear infinite'}}/> Gerando...</>
                             : c.preparando ? <><Loader2 size={15} style={{animation:'spin 1s linear infinite'}}/> Preparando documentos…</>
                             : c.seqBloqueado ? <><Lock size={14}/> Gere o 1º antes</>
+                            : c.faltamDocs ? <><RefreshCw size={15}/> Tentar de novo</>
                             : <><Sparkles size={15}/> {c.ok?'Regerar':'Gerar'}</>}
                         </button>
                       )}
-                      {(c.ok || c.preparando) && <button onClick={()=>setRelSel(c.k)} style={{ padding:'10px 14px', background:'white', color:c.cor, border:`1px solid ${c.cor}`, borderRadius:10, fontWeight:800, fontSize:13, cursor:'pointer' }}>Abrir</button>}
+                      {(c.ok || c.preparando || c.faltamDocs) && <button onClick={()=>setRelSel(c.k)} style={{ padding:'10px 14px', background:'white', color:c.faltamDocs?'#b45309':c.cor, border:`1px solid ${c.faltamDocs?'#b45309':c.cor}`, borderRadius:10, fontWeight:800, fontSize:13, cursor:'pointer' }}>{c.faltamDocs?'Anexar':'Abrir'}</button>}
                     </div>
+                    {/* Estado TERMINAL da captura: sem spinner e com saída clara. Antes esta
+                        mesma situação ficava presa em "Preparando documentos…" para sempre. */}
+                    {c.faltamDocs && !c.gerando && (
+                      <div style={{ display:'flex', alignItems:'flex-start', gap:7, fontSize:11, color:'#b45309', lineHeight:1.5, background:'#fffbeb', border:'1px solid #fde68a', borderRadius:9, padding:'8px 10px' }}>
+                        <FileWarning size={14} style={{ flexShrink:0, marginTop:1 }}/>
+                        <span>A busca automática não encontrou o edital/matrícula deste lote. <strong>Tente de novo</strong> ou clique em <strong>Anexar</strong> para enviar os PDFs — a análise roda normalmente com os documentos que você fornecer.</span>
+                      </div>
+                    )}
                     {(c.gerando || c.preparando) && (
                       <div style={{ fontSize:11, color: c.preparando?'#b45309':c.cor, lineHeight:1.4, textAlign:'center' }}>
                         {c.preparando
