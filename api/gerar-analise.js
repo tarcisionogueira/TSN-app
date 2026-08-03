@@ -1626,9 +1626,22 @@ export default async function handler(req, res) {
         const patchPr = {};
         if (!(Number(imDb.valor_minimo_2) > 0) && p2?.valor > 0 && p2.valor !== (Number(imDb.valor_minimo) || 0)) {
           imDb.valor_minimo_2 = p2.valor; patchPr.valor_minimo_2 = p2.valor;
-          if (p2.data && !imDb.data_leilao_2) { imDb.data_leilao_2 = p2.data; patchPr.data_leilao_2 = p2.data; }
         }
-        if (!imDb.data_leilao && p1?.data) { imDb.data_leilao = p1.data; patchPr.data_leilao = p1.data; }
+        // A DATA da 2ª praça é o PRAZO PARA DAR LANCE (vira `data_fim`) e NÃO pode ficar
+        // dependendo do VALOR: quando o lance da 2ª praça já estava preenchido — ou quando o
+        // edital só publica a data —, o prazo real nunca era gravado. Mesmo defeito que
+        // escondia a 2ª data na tela em 02/08, aqui no lado da escrita.
+        if (p2?.data && !imDb.data_leilao_2) { imDb.data_leilao_2 = p2.data; patchPr.data_leilao_2 = p2.data; }
+        if (p1?.data && !imDb.data_leilao) { imDb.data_leilao = p1.data; patchPr.data_leilao = p1.data; }
+        // Edital sem praça DATADA (ou sem praça nenhuma — alienação/venda por proposta): usa as
+        // datas ancoradas do texto. Cobre o lote cujo LEILOEIRO não publica data na página, mas
+        // o edital publica (achado do dono em 03/08). Só preenche COLUNA VAZIA: a página do
+        // leiloeiro continua sendo a fonte de verdade quando ela diz alguma coisa.
+        const dEd = extratoDoc.datas;
+        if (dEd) {
+          if (!imDb.data_leilao && dEd.inicio) { imDb.data_leilao = dEd.inicio; patchPr.data_leilao = dEd.inicio; }
+          if (!imDb.data_leilao_2 && dEd.fim) { imDb.data_leilao_2 = dEd.fim; patchPr.data_leilao_2 = dEd.fim; }
+        }
         if (Object.keys(patchPr).length) {
           try { await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(patchPr) }); } catch { /* best-effort */ }
         }
@@ -1636,6 +1649,7 @@ export default async function handler(req, res) {
       // Vai no result (dentro de mercado): o front/PDF mostram e o parecer cita.
       mercado.condicoesEdital = {
         pracas: extratoDoc.pracas,
+        datas: extratoDoc.datas || null,
         formaPagamento: extratoDoc.formaPagamento || null,
         avaliacao: aEd || null,
         fonte: extratoDoc.fonteUrl || null,

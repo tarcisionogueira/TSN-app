@@ -74,9 +74,15 @@ const CTX_ANCORA = /leil|pra[cçÇ]|encerr|in[íi]cio|inicio|abertura|t[eé]rmin
 const CTX_FIM    = /encerr|t[eé]rmino|termino|fim d|final d|limite|at[ée] |2[ªa°]?\s*pra[cç]a|segunda\s*pra[cç]a/i;
 const CTX_INICIO = /in[íi]cio|inicio|abertura|come[cç]|1[ªa°]?\s*pra[cç]a|primeira\s*pra[cç]a|abre/i;
 
-export function extrairDatasLeilao(html) {
+// Âncora ESTRITA, para ler datas do TEXTO DO EDITAL (não da página do lote): num edital a
+// palavra "data" aparece o tempo todo ("a contar da data do pagamento"), então lá ela não
+// serve de âncora — só valem as expressões que falam do ATO do leilão.
+const CTX_ANCORA_ESTRITA = /leil|pra[cçÇ]|encerr|hasta|aliena|licita|t[eé]rmino|termino/i;
+
+export function extrairDatasLeilao(html, { estrito = false } = {}) {
   const vazio = { inicio: null, fim: null };
   if (!html) return vazio;
+  const ancora = estrito ? CTX_ANCORA_ESTRITA : CTX_ANCORA;
   const txt = html.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ');
   const ontem = Date.now() - 86400000;
   const limite = Date.now() + 730 * 86400000; // 2 anos: janelas de alienação passam de 1 ano
@@ -85,7 +91,7 @@ export function extrairDatasLeilao(html) {
   RE_DATA_LOTE.lastIndex = 0;
   while ((m = RE_DATA_LOTE.exec(txt))) {
     const ctx = txt.slice(Math.max(0, m.index - 90), m.index);
-    if (!CTX_ANCORA.test(ctx)) continue;                     // data solta do texto: ignora
+    if (!ancora.test(ctx)) continue;                         // data solta do texto: ignora
     const y = m[3].length === 2 ? '20' + m[3] : m[3];
     const hh = m[4] ? String(m[4]).padStart(2, '0') : '00';
     const mi = m[5] || '00';

@@ -9,6 +9,7 @@
  */
 import { hostExternoSeguro, fetchExternoSeguro } from './_allowed-hosts.js';
 import { carregarPDFParse } from './_pdf-safe.js';
+import { extrairDatasLeilao } from './enriquecer-lote.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -90,10 +91,15 @@ async function lerTexto(url, deadline) {
 }
 
 /**
- * Lê o edital/regras do lote e devolve { pracas, formaPagamento, avaliacao, fonteUrl,
+ * Lê o edital/regras do lote e devolve { pracas, formaPagamento, avaliacao, datas, fonteUrl,
  * pertenceAoLote } ou null. `pertenceAoLote:false` = o documento lido NÃO bate com os
  * valores do lote (edital de outro lote anexado por engano) — o chamador descarta e
  * registra anomalia; dado errado com selo de "confirmado no edital" é pior que ausente.
+ *
+ * `datas` = { inicio, fim } lidos do TEXTO do edital com âncora estrita. É a rede de
+ * segurança pedida pelo dono em 03/08: há lote cujo LEILOEIRO não publica data na página
+ * (ex.: `vegas_7588`) mas cujo edital publica. Enquanto ninguém pede relatório, ficamos de
+ * acordo com o leiloeiro (sem data); ao gerar o relatório, o edital preenche a lacuna.
  */
 export async function extratoEdital(imovelId, { deadline } = {}) {
   if (!SUPABASE_URL || !SERVICE_KEY) return null;
@@ -136,7 +142,11 @@ export async function extratoEdital(imovelId, { deadline } = {}) {
       const razao = cond.avaliacao / aval;
       if (razao < 0.5 || razao > 2) pertence = false;
     }
-    return { ...cond, fonteUrl: url, pertenceAoLote: pertence };
+    // Datas do ATO (início/encerramento) direto do texto — só têm valor quando as praças
+    // não trouxeram data; por isso vão à parte, sem interferir em nada do que já existia.
+    let datas = null;
+    try { const d = extrairDatasLeilao(txt, { estrito: true }); if (d.inicio || d.fim) datas = d; } catch { /* best-effort */ }
+    return { ...cond, datas, fonteUrl: url, pertenceAoLote: pertence };
   }
   return null;
 }

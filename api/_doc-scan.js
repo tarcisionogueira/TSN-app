@@ -11,8 +11,28 @@
  * Saída: { matricula, edital, regras, laudo, foto, anexos:[{nome,url,tipo}] }.
  */
 
-// Hosts de ruído (analytics, consentimento, fontes, mapas) — nunca são documento.
-const HOST_RUIDO = /(google-analytics|googletagmanager|gstatic|googleapis|cookielaw|onetrust|facebook|fbcdn|doubleclick|hotjar|cloudflareinsights|recaptcha|youtube|ytimg|gravatar|fontawesome)\./i;
+// Hosts de ruído (analytics, consentimento, fontes, mapas, chat, CDN de biblioteca) —
+// nunca são documento. Ampliado em 03/08 pelo achado do dono (ver RE_ASSET_*): o pixel do
+// Bing (`bat.bing.com/action/0?...&tl=…abaixo%20da%20avaliação`) entrava como "Documento"
+// só porque a URL de rastreio carregava o TÍTULO do lote com a palavra "avaliação".
+const HOST_RUIDO = /(google-analytics|googletagmanager|gstatic|googleapis|cookielaw|onetrust|facebook|fbcdn|doubleclick|hotjar|cloudflareinsights|recaptcha|youtube|ytimg|gravatar|fontawesome|bat\.bing|clarity\.ms|lpsnmedia|lpcdn|segment\.(?:io|com)|mixpanel|newrelic|sentry|criteo|taboola|outbrain|rdstation|tiktok|licdn|jsdelivr|unpkg|bootstrapcdn|jquery)\./i;
+// ── RUÍDO QUE VIRAVA "DOCUMENTO" (achado do dono 03/08, lote `vegas_7588`) ────────────
+// Ele clicou num anexo e recebeu CÓDIGO na tela: era `jquery.min.js`/`global.css` do bucket
+// do leiloeiro. Causa: para URL SEM extensão de documento aceitávamos o sinal genérico de
+// host (`amazonaws|storage|blob.core|/file`) — e o tema do site inteiro mora nesse bucket.
+// Nada aqui filtra .pdf/.doc (esses passam antes, pela extensão): isto só decide o que
+// fazer com URL SEM extensão de documento.
+const RE_ASSET_EXT  = /\.(m?js|cjs|css|s[ac]ss|less|map|json|xml|txt|ico|woff2?|ttf|eot|otf|svgz?|mp4|webm|m3u8|wasm)(?:[?#]|$)/i;
+const RE_ASSET_PATH = /\/(assets?|static|dist|build|vendor|node_modules|bundles?|themes?|templates?|plugins?|components?|libs?|_next|wp-includes|wp-content\/(?:themes|plugins))\//i;
+const RE_ASSET_MIN  = /\.min\.[a-z0-9]{2,5}(?:[?#]|$)/i;              // storage.secure.min.html (chat da SODRE)
+// Página de CONTA/institucional do portal: "ENVIAR PROPOSTA" levava ao /licitante/login e
+// "Leia atentamente o edital" ao /glossario — âncoras que citam o documento mas abrem o site.
+const RE_PAGINA_CONTA = /\/(login|signin|sign-in|entrar|logout|sair|cadastr\w*|registrar|licitante|habilita\w*|authorization|authorize|oauth|minha-conta|meus-dados|carrinho|checkout|gloss[áa]rio|glossario|faq|contato|fale-conosco|quem-somos)(?:[/?#]|$)/i;
+// Link de MARKETING (campanha/rastreio) — documento nenhum carrega utm_source/gclid.
+const RE_PARAM_MKT = /[?&](utm_[a-z]+|gclid|fbclid|msclkid|mc_eid)=/i;
+// URL com PREÇO no caminho é rótulo de anúncio virado link, não arquivo
+// (ex.: /item/7588/Chácara…%20-%20Lance%20Inicial:%20R$2.266.000,00).
+const RE_URL_ANUNCIO = /R\$|lance\s*inicial/i;
 // Extensões de documento que nos interessam.
 const RE_DOC_EXT = /\.(pdf|docx?|xlsx?|odt|rtf)(?:[?#]|$)/i;
 const RE_IMG_EXT = /\.(jpe?g|png|webp|gif|avif|svg)(?:[?#]|$)/i;
@@ -89,8 +109,28 @@ function absolutizar(href, baseUrl) {
   try { return new URL(href, baseUrl).href; } catch { return null; }
 }
 
+// decodeURIComponent explode com '%' solto (comum em URL de anúncio); aqui o pior caso
+// é comparar a URL crua, nunca derrubar a varredura.
+function decodificar(u) {
+  try { return decodeURIComponent(String(u)).replace(/\+/g, ' '); } catch { return String(u); }
+}
+
+// A própria página do lote (âncora "#tab-parcelamento") ou a HOME do leiloeiro — nunca
+// são o documento, por mais que o texto da âncora diga "Proposta"/"Edital".
+function ehPaginaDoSite(url, baseUrl) {
+  try {
+    const u = new URL(url);
+    if (u.pathname === '/' || u.pathname === '') return true;
+    if (baseUrl) {
+      const b = new URL(baseUrl);
+      if (u.origin === b.origin && u.pathname === b.pathname) return true;
+    }
+  } catch { /* URL inválida cai fora noutro filtro */ }
+  return false;
+}
+
 // É um link que vale guardar como documento?
-function ehDocumento(url, label) {
+function ehDocumento(url, label, baseUrl) {
   if (!url || HOST_RUIDO.test(url)) return false;
   // Só http(s): âncora "Consulte o edital" com href javascript:_gt(... passava no
   // filtro por citar 'edital' e virava um anexo-lixo inabrível (visto na ZUK).
@@ -98,6 +138,13 @@ function ehDocumento(url, label) {
   if (RE_IMG_EXT.test(url)) return false;
   if (RE_DOC_INSTITUCIONAL.test(`${url} ${label || ''}`)) return false; // ruído corporativo do site, não do lote
   if (RE_DOC_EXT.test(url)) return true;                       // arquivo .pdf/.doc… → sempre
+  // Daqui para baixo a URL NÃO tem extensão de documento e só entra por PALAVRA-CHAVE —
+  // é exatamente aí que o tema do site (js/css), o pixel de rastreio, a página de login e
+  // a âncora da própria página se disfarçavam de anexo e abriam CÓDIGO para o cliente.
+  if (RE_ASSET_EXT.test(url) || RE_ASSET_PATH.test(url) || RE_ASSET_MIN.test(url)) return false;
+  if (RE_PAGINA_CONTA.test(url) || RE_PARAM_MKT.test(url)) return false;
+  if (RE_URL_ANUNCIO.test(decodificar(url))) return false;
+  if (ehPaginaDoSite(url, baseUrl)) return false;
   const alvo = `${url} ${label || ''}`;
   // Sem extensão de arquivo: só aceita se a URL/âncora cita explicitamente um doc
   // E aponta para um recurso (evita capturar a própria página do anúncio).
@@ -148,7 +195,7 @@ export function vasculharDocumentos(html, baseUrl, fotoAtual = null) {
       // evita capturar ícones pequenos do tema; aceita só jpg/png/webp comuns
       if (/\.(jpe?g|png|webp)(?:[?#]|$)/i.test(abs)) out.foto = abs;
     }
-    if (!ehDocumento(abs, label)) continue;
+    if (!ehDocumento(abs, label, baseUrl)) continue;
     // Dedup pelo ARQUIVO (chave canônica), não pela URL completa — a querystring
     // volátil (cache-buster/assinatura) fazia o mesmo PDF entrar N vezes.
     const chave = chaveDocCanonica(abs) || abs.split('#')[0];
