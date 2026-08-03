@@ -501,8 +501,17 @@ async function gravarAmostrasIndice(imDb, mercado, imovelId, segmento = 'apartam
     const vendas = [...(mercado.nivel1?.vendas || []), ...(mercado.nivel2?.vendas || [])];
     const locs   = [...(mercado.nivel1?.locacoes || []), ...(mercado.nivel2?.locacoes || [])];
     const rows = [];
+    // TETO DE DISTÂNCIA NA BASE (achado do dono em 03/08): o relatório de um lote em Santana
+    // de Parnaíba puxou comparáveis de Alphaville — mesma cidade, mas a >5km e de outro padrão
+    // de praça, enquanto havia lotes em Aldeia da Serra a 1–3km. Amostra longe não é só ruim
+    // para AQUELE relatório: ela entra no Índice com o bairro/grid do ALVO e envenena todos os
+    // relatórios seguintes da microrregião. O prompt agora exige `distanciaKm`; aqui é a trava
+    // final — acima de 2km não entra na base, mesmo que a IA insista.
+    const LONGE_KM = 2;
+    const perto = (s) => { const d = Number(s?.distanciaKm); return !Number.isFinite(d) || d <= LONGE_KM; };
     for (const s of vendas) {
       const m2 = Number(s?.valorM2);
+      if (!perto(s)) continue;
       if (!vendaPlausivelTipo(segmento, m2) || ehFonteLeilao(s?.fonte)) continue; // faixa por tipo (terreno não é cortado)
       rows.push({ cidade_norm: imDb.cidade_norm, uf, bairro_norm: bDe(s), geo_grid: geoGrid, lat: latA, lng: lngA, tipo: segmento,
         especie: 'venda', valor_m2: Math.round(m2), valor_total: Number(s?.valor) || null, area_m2: Number(s?.m2) || null,
@@ -520,6 +529,7 @@ async function gravarAmostrasIndice(imDb, mercado, imovelId, segmento = 'apartam
       // Índice do tipo e produz "aluguel médio" e "rentabilidade" para algo que não se aluga.
       // Melhor não ter o número do que ter o número errado.
       if (segmento === 'terreno') continue;
+      if (!perto(s)) continue;
       if (!locacaoPlausivel(segmento, mensal) || ehFonteLeilao(s?.fonte)) continue;
       const vm2 = area > 0 ? Math.round((mensal / area) * 100) / 100 : null;
       if (vm2 !== null && !locacaoM2Plausivel(vm2)) continue;
@@ -903,8 +913,23 @@ Busque o máximo de anúncios de venda E locação DENTRO do mesmo condomínio/e
 na mesma rua. Se NÃO encontrar ao menos 5 amostras, EXPANDA o raio para ~250m ao redor
 do endereço para complementar (mantendo o mesmo tipo de imóvel). Meta: 8+ vendas e 5+ locações.
 
-═══ NÍVEL 2 — VIZINHANÇA (bairro e adjacências, ~1km) ═══
-Busque o máximo de anúncios (mesmo tipo) no bairro e adjacências (~1km). Meta: 15+ vendas e 8+ locações.
+═══ NÍVEL 2 — VIZINHANÇA (250m a ~1km) ═══
+Busque o máximo de anúncios (mesmo tipo) no bairro e adjacências, até ~1km. Meta: 15+ vendas e 8+ locações.
+
+═══ TETO DE DISTÂNCIA (REGRA DURA — não negocie) ═══
+O raio EXISTE para não comparar o imóvel com outra praça. Bairro nobre a 5km tem preço de outro
+mercado; usá-lo como comparável INFLA a estimativa e o cliente decide errado.
+• NUNCA use amostra a mais de 1km nos níveis 1 e 2.
+• Só se, somados os níveis 1 e 2, houver MENOS de 5 vendas, você pode expandir até 2km — e então,
+  OBRIGATORIAMENTE: (a) marque cada amostra assim obtida com "distanciaKm" (ex.: 1.8); (b) dê a ela
+  PESO MENOR na média; (c) escreva no "comentario", com todas as letras, que faltaram comparáveis
+  próximos e o raio foi ampliado para 2km.
+• Mais de 2km: NÃO USE, em nenhuma hipótese. Prefira devolver poucas amostras a devolver amostras
+  de outra praça. Se nem a 2km houver 5 vendas, diga isso no "comentario" e alargue
+  precoMinM2/precoMaxM2 para refletir a incerteza.
+• Preencha "distanciaKm" em TODA amostra sempre que conseguir estimar a distância até o alvo.
+• MESMO PRODUTO: lote em condomínio compara com lote em condomínio; não com lote de rua aberta,
+  chácara ou área comercial, ainda que a distância seja parecida.
 
 FONTES (grandes portais): ZAP, VivaReal, OLX, Quinto Andar, Imovelweb, Loft, 123i, Chaves na Mão, Net Imóveis. Cruze várias.
 
@@ -982,8 +1007,8 @@ nem estime. É diligência de investidor sobre a REGIÃO, não juízo de valor s
 
 Retorne APENAS este JSON (sem markdown):
 {
-  "nivel1": { "descricao": "", "vendas": [{"bairro":"","descricao":"","valor":0,"m2":0,"valorM2":0,"fonte":"","data":"AAAA-MM"}], "locacoes": [{"bairro":"","descricao":"","valorMensal":0,"m2":0,"fonte":"","data":"AAAA-MM"}], "precoMedioM2": 0, "precoMinM2": 0, "precoMaxM2": 0, "aluguelMedio": 0, "totalAmostras": 0, "disponiveis": true },
-  "nivel2": { "descricao": "", "vendas": [{"bairro":"","descricao":"","valor":0,"m2":0,"valorM2":0,"fonte":"","data":"AAAA-MM"}], "locacoes": [{"bairro":"","descricao":"","valorMensal":0,"m2":0,"fonte":"","data":"AAAA-MM"}], "precoMedioM2": 0, "precoMinM2": 0, "precoMaxM2": 0, "aluguelMedio": 0, "totalAmostras": 0 },
+  "nivel1": { "descricao": "", "vendas": [{"bairro":"","descricao":"","valor":0,"m2":0,"valorM2":0,"distanciaKm":0,"fonte":"","data":"AAAA-MM"}], "locacoes": [{"bairro":"","descricao":"","valorMensal":0,"m2":0,"distanciaKm":0,"fonte":"","data":"AAAA-MM"}], "precoMedioM2": 0, "precoMinM2": 0, "precoMaxM2": 0, "aluguelMedio": 0, "totalAmostras": 0, "disponiveis": true },
+  "nivel2": { "descricao": "", "vendas": [{"bairro":"","descricao":"","valor":0,"m2":0,"valorM2":0,"distanciaKm":0,"fonte":"","data":"AAAA-MM"}], "locacoes": [{"bairro":"","descricao":"","valorMensal":0,"m2":0,"distanciaKm":0,"fonte":"","data":"AAAA-MM"}], "precoMedioM2": 0, "precoMinM2": 0, "precoMaxM2": 0, "aluguelMedio": 0, "totalAmostras": 0 },
   "consolidado": { "precoMedioM2": 0, "aluguelMedio": 0, "yieldBruto": 0, "yieldLiquido": 0, "valorEstimadoImovel": 0, "unidadeValor": "m2_privativo|m2_construido|m2_terreno|hectare|unidade", "areaConsiderada": 0, "baseCalculo": "(explique a conta: ex.: 'R$ 10.980/m² privativo × 30 m²' ou 'R$ 45.000/ha × 120 ha terra nua + R$ 200k benfeitorias' ou 'construção 90 m² × R$ 4.000 + terreno excedente 300 m² × R$ 800')", "padraoImovel": "popular|medio|medio_alto|alto|luxo", "terrenoExcedente": { "haExcedente": false, "areaExcedenteM2": 0, "valorTerrenoExcedente": 0 }, "descontoArremate": null },
   "referenciaFipeZap": { "encontrado": true, "precoMedioM2": 0, "valorizacao12m": 0, "mesReferencia": "AAAA-MM", "localidade": "", "fonte": "" },
   "outrasTipologias": { "apartamento": [{"valorM2":0,"valor":0,"m2":0,"fonte":"","data":"AAAA-MM"}], "casa": [], "terreno": [], "comercial": [] },
@@ -1061,8 +1086,23 @@ Busque o máximo de anúncios de venda E locação DENTRO do mesmo condomínio/e
 na mesma rua. Se NÃO encontrar ao menos 5 amostras, EXPANDA o raio para ~250m ao redor
 do endereço para complementar (mantendo o mesmo tipo de imóvel). Meta: 8+ vendas e 5+ locações.
 
-═══ NÍVEL 2 — VIZINHANÇA (bairro e adjacências, ~1km) ═══
-Busque o máximo de anúncios (mesmo tipo) no bairro e adjacências (~1km). Meta: 15+ vendas e 8+ locações.
+═══ NÍVEL 2 — VIZINHANÇA (250m a ~1km) ═══
+Busque o máximo de anúncios (mesmo tipo) no bairro e adjacências, até ~1km. Meta: 15+ vendas e 8+ locações.
+
+═══ TETO DE DISTÂNCIA (REGRA DURA — não negocie) ═══
+O raio EXISTE para não comparar o imóvel com outra praça. Bairro nobre a 5km tem preço de outro
+mercado; usá-lo como comparável INFLA a estimativa e o cliente decide errado.
+• NUNCA use amostra a mais de 1km nos níveis 1 e 2.
+• Só se, somados os níveis 1 e 2, houver MENOS de 5 vendas, você pode expandir até 2km — e então,
+  OBRIGATORIAMENTE: (a) marque cada amostra assim obtida com "distanciaKm" (ex.: 1.8); (b) dê a ela
+  PESO MENOR na média; (c) escreva no "comentario", com todas as letras, que faltaram comparáveis
+  próximos e o raio foi ampliado para 2km.
+• Mais de 2km: NÃO USE, em nenhuma hipótese. Prefira devolver poucas amostras a devolver amostras
+  de outra praça. Se nem a 2km houver 5 vendas, diga isso no "comentario" e alargue
+  precoMinM2/precoMaxM2 para refletir a incerteza.
+• Preencha "distanciaKm" em TODA amostra sempre que conseguir estimar a distância até o alvo.
+• MESMO PRODUTO: lote em condomínio compara com lote em condomínio; não com lote de rua aberta,
+  chácara ou área comercial, ainda que a distância seja parecida.
 
 FONTES (grandes portais): ZAP, VivaReal, OLX, Quinto Andar, Imovelweb, Loft, 123i, Chaves na Mão, Net Imóveis. Cruze várias.
 
@@ -1081,8 +1121,8 @@ confiável (ex.: veio a área TOTAL no lugar da privativa), DIGA no "comentario"
 
 Retorne APENAS este JSON (sem markdown):
 {
-  "nivel1": { "descricao": "", "vendas": [{"bairro":"","descricao":"","valor":0,"m2":0,"valorM2":0,"fonte":"","data":"AAAA-MM"}], "locacoes": [{"bairro":"","descricao":"","valorMensal":0,"m2":0,"fonte":"","data":"AAAA-MM"}], "precoMedioM2": 0, "precoMinM2": 0, "precoMaxM2": 0, "aluguelMedio": 0, "totalAmostras": 0, "disponiveis": true },
-  "nivel2": { "descricao": "", "vendas": [{"bairro":"","descricao":"","valor":0,"m2":0,"valorM2":0,"fonte":"","data":"AAAA-MM"}], "locacoes": [{"bairro":"","descricao":"","valorMensal":0,"m2":0,"fonte":"","data":"AAAA-MM"}], "precoMedioM2": 0, "precoMinM2": 0, "precoMaxM2": 0, "aluguelMedio": 0, "totalAmostras": 0 },
+  "nivel1": { "descricao": "", "vendas": [{"bairro":"","descricao":"","valor":0,"m2":0,"valorM2":0,"distanciaKm":0,"fonte":"","data":"AAAA-MM"}], "locacoes": [{"bairro":"","descricao":"","valorMensal":0,"m2":0,"distanciaKm":0,"fonte":"","data":"AAAA-MM"}], "precoMedioM2": 0, "precoMinM2": 0, "precoMaxM2": 0, "aluguelMedio": 0, "totalAmostras": 0, "disponiveis": true },
+  "nivel2": { "descricao": "", "vendas": [{"bairro":"","descricao":"","valor":0,"m2":0,"valorM2":0,"distanciaKm":0,"fonte":"","data":"AAAA-MM"}], "locacoes": [{"bairro":"","descricao":"","valorMensal":0,"m2":0,"distanciaKm":0,"fonte":"","data":"AAAA-MM"}], "precoMedioM2": 0, "precoMinM2": 0, "precoMaxM2": 0, "aluguelMedio": 0, "totalAmostras": 0 },
   "consolidado": { "precoMedioM2": 0, "aluguelMedio": 0, "yieldBruto": 0, "yieldLiquido": 0, "valorEstimadoImovel": 0, "unidadeValor": "m2_privativo|m2_construido|m2_terreno|hectare|unidade", "areaConsiderada": 0, "baseCalculo": "(explique a conta: ex.: 'R$ 10.980/m² privativo × 30 m²' ou 'R$ 45.000/ha × 120 ha terra nua + R$ 200k benfeitorias' ou 'construção 90 m² × R$ 4.000 + terreno excedente 300 m² × R$ 800')", "padraoImovel": "popular|medio|medio_alto|alto|luxo", "terrenoExcedente": { "haExcedente": false, "areaExcedenteM2": 0, "valorTerrenoExcedente": 0 }, "descontoArremate": null },
   "fontesLocais": [{"nome":"","url":""}],
   "comentario": "Análise qualitativa de 3-4 frases comparando os dois níveis, a tendência e a coerência da média (se as amostras forem antigas/poucas, DIGA e alargue a faixa)."

@@ -289,13 +289,80 @@ integrado. Terminou noutro lugar.
   Rede**. Mesmo padrão do backup dormente e do painel com nome de env errado — três casos, no
   mesmo dia, de "o sistema diz configurado e a coisa não acontece".
 
+**6. 🔴 RELATÓRIO MERCADOLÓGICO COM NÚMERO FALSO — 3 CAMADAS, achadas pelo dono na tela.**
+Ele gerou um mercadológico de um **LOTE de 486 m² em Santana de Parnaíba/SP** e viu
+"ALUGUEL MÉDIO R$ 63.409,17/mês", "YIELD ÍNDICE 79,53% a.a." e, no mesmo relatório,
+"RENTABILIDADE BRUTA 0,00%". Três defeitos somados — e ele foi mais fundo que eu em cada volta:
+
+- **(a) Locação nunca teve trava de plausibilidade.** A VENDA sempre teve faixa por tipo
+  (`vendaPlausivelTipo`); a locação entrava com `valorMensal > 0` e mais nada. Na base havia
+  "aluguéis de terreno" de **R$ 363.000, R$ 150.000 e R$ 135.900/mês** — preço de VENDA que o
+  anúncio classificou como locação. Como o aluguel médio é média aritmética, três outliers
+  decidiram o número. → `locacaoPlausivel(tipo, mensal)` + 2ª malha por R$/m² (0,50–500).
+- **(b) O schema JSON das locações não tinha campo de área.** Sem área não há R$/m², então
+  `valor_m2` era NULL em **todas** as locações da cidade — e a tela exibia "Locação R$/m²/mês
+  R$ 68,40" mesmo assim, derivado de outra conta. Era daí que saía o yield de 79,53% (e a
+  contradição com o 0,00% do card de cima). → `m2` entrou no schema (4 pontos).
+- **(c) 🔑 A CORREÇÃO QUE O DONO VIU E EU NÃO: lote NÃO TEM MERCADO DE LOCAÇÃO.** Eu tinha
+  tratado os R$ 363 mil como outlier e posto uma faixa — o que deixaria o relatório dizendo
+  "aluguel médio R$ 11,5 mil", *menos absurdo e igualmente falso*. Ele apontou: o imóvel é um
+  LOTE EM CONDOMÍNIO; lote não se aluga. Os 11 registros restantes confirmaram — **nenhum com
+  área**, e os bairros entregando o produto real: `chacaras boa vista`, `fazendinha`,
+  `voturuna`, `alphasitio comercial tambore`. Chácara de evento, pátio, área comercial.
+  → Regra categórica: alvo do tipo **terreno** devolve `locacoes: []`, `aluguelMedio: 0` e
+  yields 0, dizendo na descrição que lote não possui mercado de locação.
+  **Princípio que ficou:** *rentabilidade de aluguel para lote não é dado FALTANTE, é dado
+  FALSO — e falso é pior.*
+- **(d) TETO DE DISTÂNCIA (2ª observação do dono, também corrigida).** O relatório puxou
+  comparáveis de **Alphaville (Barueri, >5 km)** — mesma cidade no papel, outra praça na
+  prática — havendo **lotes em Aldeia da Serra a 1–3 km, em condomínio**. É o que explica o
+  R$/m² do relatório (R$ 1.916) divergir do Índice (R$ 1.032): recortes geográficos diferentes.
+  O prompt definia nível 1 (condomínio/rua → ~250m) e nível 2 (~1km), mas **não proibia passar
+  disso** — a IA ampliava em silêncio. Agora: **teto duro de 1km**; só com <5 vendas somadas
+  pode ir a **2km** (o "nível 3" que o dono propôs), e aí é **obrigatório** marcar
+  `distanciaKm`, dar peso menor e **declarar no comentário** que o raio foi ampliado; **acima
+  de 2km, nunca**. `distanciaKm` entrou no schema de vendas e locações, e a ingestão do Índice
+  tem a trava final (`perto()`, 2 km) — amostra longe não estraga só aquele relatório: entra na
+  base com o bairro/grid do ALVO e envenena todos os seguintes da microrregião. Regra do MESMO
+  PRODUTO também explicitada: lote em condomínio compara com lote em condomínio.
+- **Base limpa:** 3 amostras fora de faixa + as 11 de locação de terreno removidas. Sobram só
+  locações de apartamento (91) e casa (38), que têm mercado de verdade.
+- ⚠️ **PENDENTE:** o relatório que o dono já gerou está **gravado com os números velhos**.
+  Oferecido regenerar e comparar os dois — ele não pediu ainda.
+
+**7. Google Ads — verificação do anunciante REPROVOU por nome (e o dono já sabe o que fazer).**
+Ele preencheu como **pessoa física** (`TARCISIO DE SOUZA NOGUEIRA DE ARAUJO`); o Google leu o
+site, inferiu **"Bid Pro Brasil"** e recusou por divergência. Correto é refazer como
+**Organização** = `Nogueira Empreendimentos LTDA` (CNPJ 02.311.492/0001-61), declarando
+**BidPro Brasil** como **nome fantasia** e enviando o Cartão CNPJ (que traz o campo NOME
+FANTASIA). ⚠️ Se o nome fantasia no Cartão CNPJ não for "BidPro Brasil", reprova de novo —
+aí é atualizar na Receita ou enviar marca no INPI. **Prazo: 02/09.** Ele refaz amanhã.
+
+**8. Marketing — o funil NÃO está vazio (leitura da noite de 03/08).**
+**3 cadastros vindos do Google Ads** (corrige o "0 cadastros com gclid" do registro anterior):
+Marlene/BH (03/08, **50 min de sessão**, viu /planos 2×, foi ao checkout, filtrou por preço,
+abriu 2 imóveis em BH e ficou **37 min** na ficha de um), Charles W. (02/08, chegou ao
+checkout) e Charles A. (01/08). Campanha **barateando**: 29/07 R$2,73/clique → 02/08 **R$1,34**,
+com cliques subindo de 9 para 21 no mesmo gasto (~R$25–28/dia). **Vazamento identificado:** os 3
+receberam chamado proativo automático ("Como está sendo sua experiência?"), **`cliente_visto_em`
+NULO nos três** e nenhum atendente — o sistema abriu conversa e ninguém falou. **Ação de maior
+retorno, custo zero: o dono falar com a Marlene**, citando o imóvel específico que ela estudou.
+Conversão 81 cliques → 3 cadastros = **3,7%** (saudável); 0 pagantes em 3 cadastros é o
+**esperado** (0,15–0,3), não sinal de funil quebrado.
+
 **COBRAR NA PRÓXIMA SESSÃO (prometido ao dono para a manhã de 04/08):**
 1. `select * from backup_execucoes order by executado_em desc limit 3;` → a de 04:40 UTC tem de
    sair de `dormante=true` para arquivos copiados. Se falhar, o conserto é variável, não código.
 2. `select enviado_em, entregue_em from emails_log where tipo='oportunidades' order by 1 desc
    limit 3;` → `entregue_em` preenchido = ciclo do Resend provado.
 3. Search Console → `sitemap-leiloes.xml` saiu de "Não foi possível buscar" para "Processado"?
-4. **Investigação que o DONO levantou (não corrigir em massa — é premissa dele):** 2.785 lotes
+4. **E-MAIL MARKETING DO INVESTIDOR PRO (pedido do dono para 04/08):** campanha para a base
+   aproveitar **antes do reajuste de preço**. Ele quer montar na próxima sessão.
+5. **Abordar os 3 leads pagos** (item 8 acima) — Marlene é a mais quente.
+6. **Fotos órfãs:** conferir se os 21.418 começaram a cair de verdade agora que a origem foi
+   fechada (`select count(*) from public.fotos_orfas_para_limpeza(200000);` — antes caía só
+   342/dia porque nasciam ~1.150; a expectativa agora é ~1.500/dia líquido).
+7. **Investigação que o DONO levantou (não corrigir em massa — é premissa dele):** 2.785 lotes
    ativos com **avaliação MENOR que o lance mínimo**. Ele disse que isso OCORRE em leilão
    (avaliação defasada, lance com débitos embutidos) e que "precisa ter uma consulta apurada do
    leiloeiro para validar". Tratar como recon: agrupar por fonte, conferir amostra na página
