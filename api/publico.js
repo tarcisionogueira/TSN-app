@@ -58,6 +58,26 @@ async function sb(path) {
   } catch { return { linhas: null, total: 0 }; }
 }
 
+/**
+ * CONTAGEM VEM DO BANCO, NUNCA DE UM `select` CRU.
+ * A primeira versão desta página contava no JavaScript, pedindo as linhas com `limit=100000`.
+ * O PostgREST corta em 1.000 linhas SEM avisar: a página foi ao ar anunciando "980 imóveis em
+ * 5 estados" quando o acervo tem 33.032 em 28 UFs — erro com cara de acerto, e no lugar mais
+ * caro possível (o texto que o Google indexa). Agora quem agrega é o Postgres, devolvendo UM
+ * valor jsonb, que não tem teto de linhas.
+ */
+async function rpc(nome, corpo = {}) {
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${nome}`, {
+      method: 'POST',
+      headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(corpo), signal: AbortSignal.timeout(10000),
+    });
+    if (!r.ok) return null;
+    return await r.json();
+  } catch { return null; }
+}
+
 // ── Casca HTML. Uma só, para todas as páginas ────────────────────────────────
 // Sem framework e sem JS de aplicação: a página tem que estar PRONTA no HTML que o
 // servidor devolve. Se depender de JS para aparecer, volta ao problema de origem.
@@ -149,10 +169,9 @@ function cardImovel(im) {
 
 // ── /leiloes — índice nacional ───────────────────────────────────────────────
 async function paginaBrasil() {
-  const { linhas } = await sb('imoveis_leilao?ativo=eq.true&select=estado&limit=100000');
-  const cont = {};
-  (linhas || []).forEach((r) => { const uf = String(r.estado || '').toUpperCase(); if (UF_NOME[uf]) cont[uf] = (cont[uf] || 0) + 1; });
-  const ufs = Object.entries(cont).sort((a, b) => b[1] - a[1]);
+  const dados = await rpc('acervo_uf_contagem');
+  const ufs = (Array.isArray(dados) ? dados : [])
+    .filter((r) => UF_NOME[r.uf]).map((r) => [r.uf, Number(r.total) || 0]);
   const total = ufs.reduce((s, [, n]) => s + n, 0);
   return pagina({
     titulo: 'Imóveis em leilão no Brasil — casas, apartamentos e terrenos | BidPro Brasil',
@@ -172,15 +191,9 @@ async function paginaBrasil() {
 // ── /leiloes/:uf ─────────────────────────────────────────────────────────────
 async function paginaUF(uf) {
   const nomeUF = UF_NOME[uf];
-  const { linhas } = await sb(`imoveis_leilao?ativo=eq.true&estado=eq.${uf}&select=cidade,cidade_norm&limit=100000`);
-  const cont = {};
-  (linhas || []).forEach((r) => {
-    if (!r.cidade_norm || !r.cidade) return;
-    const k = r.cidade_norm;
-    if (!cont[k]) cont[k] = { nome: r.cidade, n: 0 };
-    cont[k].n++;
-  });
-  const cidades = Object.entries(cont).sort((a, b) => b[1].n - a[1].n);
+  const dados = await rpc('acervo_cidades_uf', { p_uf: uf });
+  const cidades = (Array.isArray(dados) ? dados : [])
+    .map((r) => [r.cidade_norm, { nome: r.cidade, n: Number(r.total) || 0 }]);
   const total = cidades.reduce((s, [, c]) => s + c.n, 0);
   return pagina({
     titulo: `Imóveis em leilão em ${nomeUF} — ${total.toLocaleString('pt-BR')} oportunidades | BidPro Brasil`,

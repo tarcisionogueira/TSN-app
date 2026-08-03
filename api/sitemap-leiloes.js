@@ -23,14 +23,20 @@ const UFS = ['AC','AL','AM','AP','BA','CE','DF','ES','GO','MA','MG','MS','MT','P
 const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
 const slug = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 70);
 
-async function sb(path, comTotal = false) {
-  const r = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
-    headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, ...(comTotal ? { Prefer: 'count=exact' } : {}) },
-    signal: AbortSignal.timeout(20000),
+/**
+ * TUDO AQUI PASSA POR RPC, de propósito. Um `select=...&limit=5000` no PostgREST volta com
+ * 1.000 linhas e status 200 — o mapa perderia 4 de cada 5 páginas em silêncio, e ninguém
+ * descobriria (um sitemap incompleto não dá erro, só entrega menos). As funções devolvem UM
+ * valor jsonb, que não tem teto de linhas.
+ */
+async function rpc(nome, corpo = {}) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${nome}`, {
+    method: 'POST',
+    headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(corpo), signal: AbortSignal.timeout(20000),
   });
   if (!r.ok) throw new Error(`supabase ${r.status}`);
-  const total = Number(String(r.headers.get('content-range') || '').split('/')[1]) || 0;
-  return { linhas: await r.json(), total };
+  return r.json();
 }
 
 export default async function handler(req, res) {
@@ -43,7 +49,7 @@ export default async function handler(req, res) {
   try {
     // ── Índice ──
     if (p === null) {
-      const { total } = await sb('imoveis_leilao?ativo=eq.true&select=id&limit=1', true);
+      const total = Number(await rpc('acervo_total_ativos')) || 0;
       const partes = Math.max(1, Math.ceil(total / POR_PARTE));
       const hoje = new Date().toISOString().slice(0, 10);
       const itens = ['0', ...Array.from({ length: partes }, (_, i) => String(i + 1))]
@@ -53,10 +59,10 @@ export default async function handler(req, res) {
 
     // ── Parte 0: esqueleto (estados + cidades) ──
     if (p === '0') {
-      const { linhas } = await sb('imoveis_leilao?ativo=eq.true&select=estado,cidade_norm&limit=100000');
+      const linhas = await rpc('acervo_cidades_todas');
       const cidades = new Set(); const ufs = new Set();
-      (linhas || []).forEach((r) => {
-        const uf = String(r.estado || '').toUpperCase();
+      (Array.isArray(linhas) ? linhas : []).forEach((r) => {
+        const uf = String(r.uf || '').toUpperCase();
         if (!UFS.includes(uf)) return;
         ufs.add(uf);
         if (r.cidade_norm) cidades.add(`${uf}/${r.cidade_norm}`);
@@ -71,10 +77,9 @@ export default async function handler(req, res) {
 
     // ── Partes 1..N: imóveis ──
     const n = Math.max(1, Math.min(200, Number(p) || 1));
-    const { linhas } = await sb(
-      `imoveis_leilao?ativo=eq.true&select=id,titulo,atualizado_em&order=id.asc&offset=${(n - 1) * POR_PARTE}&limit=${POR_PARTE}`);
-    const urls = (linhas || []).map((im) => {
-      const lastmod = im.atualizado_em ? String(im.atualizado_em).slice(0, 10) : null;
+    const linhas = await rpc('acervo_sitemap_parte', { p_offset: (n - 1) * POR_PARTE, p_limite: POR_PARTE });
+    const urls = (Array.isArray(linhas) ? linhas : []).map((im) => {
+      const lastmod = im.em ? String(im.em).slice(0, 10) : null;
       return `<url><loc>${SITE}/leilao/${im.id}/${slug(im.titulo || 'imovel')}</loc>${lastmod ? `<lastmod>${lastmod}</lastmod>` : ''}<changefreq>weekly</changefreq><priority>0.6</priority></url>`;
     }).join('');
     return res.status(200).send(`<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls}</urlset>`);
