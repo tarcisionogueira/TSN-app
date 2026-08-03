@@ -21,6 +21,7 @@ import { alertarErro } from './_error-alert.js';
 import { emitirNFSeServico, nfseAtivo } from './_nfse.js';
 import { cpfDoRegistro } from './_cpf.js';
 import { enviarPurchaseCapi, purchaseEventId } from './_meta-capi.js';
+import { enviarConversaoOffline, googleAdsAtivo } from './_google-ads.js';
 
 // Normaliza o plano para a BASE (top2/clube/assessorado) — o event_id do Purchase precisa
 // bater com o do navegador, que usa a mesma base (sem sufixo _anual/_vista/_mensal).
@@ -144,6 +145,39 @@ export async function buscarCliente({ gatewayCustomerId, email, gateway }) {
 // ── ATIVAÇÃO DIRETA POR REFERÊNCIA (assinaturas transparentes) ────────────────
 // As assinaturas (preapproval) informam o plano no external_reference
 // (`userId|planoKey`), então ativamos direto — sem adivinhar o plano pelo valor.
+/**
+ * CONVERSÃO DE ANÚNCIO — avisa Meta e Google que este pagamento virou venda.
+ *
+ * Os dois canais medem do SERVIDOR porque o navegador falha justamente onde mais dói: PIX
+ * pago depois de sair do checkout, aba fechada, bloqueador de anúncio, iOS. Sem isto, a
+ * plataforma de anúncio conclui que a campanha não converte e tira verba de onde está
+ * vendendo — o prejuízo é silencioso e cresce com o investimento.
+ *
+ * • META: `event_id` determinístico, o MESMO que o Pixel do navegador manda → o Meta une os
+ *   dois numa conversão só. Quando o Pixel é bloqueado, sobra o do servidor.
+ * • GOOGLE: precisa do `gclid` (o clique do anúncio), capturado na chegada e guardado em
+ *   `perfis.mkt_gclid`. Sem gclid a venda é orgânica e não há o que atribuir. O mesmo id vai
+ *   como `orderId` para o Google não contar duas vezes quando o evento do navegador já saiu.
+ *
+ * Best-effort por contrato: qualquer falha aqui é logada e engolida — medir venda nunca pode
+ * impedir a venda de ser ativada.
+ */
+async function registrarConversaoAnuncio({ userId, valor, base, gateway, email }) {
+  const v = Number(valor) || 0;
+  if (!userId || !(v > 0)) return;
+  const eventId = purchaseEventId(userId, base);
+  try {
+    await enviarPurchaseCapi({ userId, email, valor: v, planoBase: base, gateway, eventId });
+  } catch (e) { console.error(`[${gateway}] meta capi:`, e?.message || e); }
+  try {
+    // Só consulta o gclid se o Google Ads estiver ligado — enquanto dormente, zero leitura extra.
+    if (googleAdsAtivo()) {
+      const { data } = await supabase.from('perfis').select('mkt_gclid').eq('id', userId).maybeSingle();
+      if (data?.mkt_gclid) await enviarConversaoOffline({ gclid: data.mkt_gclid, valor: v, orderId: eventId });
+    }
+  } catch (e) { console.error(`[${gateway}] google ads offline:`, e?.message || e); }
+}
+
 export async function ativarPlanoDireto({ userId, planoKey, gateway, cobranca = null }) {
   if (!userId || !planoKey) return { skipped: 'sem_referencia' };
   // O TIER fica no `role` (top2/clube/…). NÃO gravar em `plano`: essa coluna tem
@@ -211,12 +245,8 @@ export async function ativarPlanoDireto({ userId, planoKey, gateway, cobranca = 
     } catch (e) {
       console.error(`[${gateway}] comissao_rede (recorrente):`, e.message);
     }
-    // Purchase server-side (Meta CAPI) — cobrança recorrente RECEBIDA de verdade.
-    // Dedup com o Pixel do navegador pelo mesmo event_id. Dormente sem META_CAPI_TOKEN.
-    try {
-      const base = planoBase(planoKey);
-      await enviarPurchaseCapi({ userId, valor: cobranca.valor, planoBase: base, gateway, eventId: purchaseEventId(userId, base) });
-    } catch (_) { /* nunca bloqueia a ativação */ }
+    // Conversão de anúncio (Meta + Google) — cobrança recorrente RECEBIDA de verdade.
+    await registrarConversaoAnuncio({ userId, valor: cobranca.valor, base: planoBase(planoKey), gateway });
   }
   return { ok: true, plano: planoKey };
 }
@@ -430,6 +460,16 @@ export async function processarConfirmado({ valor, descricao, email, gatewayCust
       alertarErro({ rota: `webhook/${gateway}`, erro: `Falha na comissão de rede: ${e.message}`, extra: { cliente_id: cliente?.id } });
     }
   }
+
+  // CONVERSÃO DE ANÚNCIO — este é o caminho do pagamento INICIAL (Asaas e MP), inclusive o
+  // PIX confirmado depois que o cliente já saiu do checkout. Ele estava SEM medição alguma:
+  // o Meta CAPI só era disparado em `ativarPlanoDireto` (recorrência), então a primeira venda
+  // — a que decide se a campanha é lucrativa — só contava quando o navegador conseguia
+  // avisar. Com PIX, muitas vezes não conseguia.
+  await registrarConversaoAnuncio({
+    userId: cliente.id, valor, gateway, email,
+    base: mapeado?.plano ? planoBase(mapeado.plano) : (servico ? 'servico' : 'avulso'),
+  });
 
   return { ok: true, plano: mapeado?.plano };
 }

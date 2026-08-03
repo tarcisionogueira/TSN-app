@@ -27,9 +27,19 @@ export default async function handler(req) {
     // ── Aquisição — trazer pessoas para a plataforma ─────────────────────────
     // Rastreamento (GA4 + tag do Google Ads) já vive no index.html, não em env.
     rastreio: { ok: true,                                   label: 'Rastreamento Google (GA4 + Ads)', grupo: 'aquisicao', impacto: 'crescimento' },
-    metaPixel:{ ok: !!process.env.META_PIXEL_ID,           label: 'Pixel do Meta (Facebook/Instagram)', grupo: 'aquisicao', impacto: 'crescimento' },
-    googleAds:{ ok: !!process.env.GOOGLE_ADS_DEVELOPER_TOKEN, label: 'Google Ads — API (opcional)', grupo: 'aquisicao', impacto: 'crescimento', opcional: true },
-    meta:     { ok: !!process.env.META_ACCESS_TOKEN,       label: 'Meta — API/Conversões (opcional)', grupo: 'aquisicao', impacto: 'crescimento', opcional: true },
+    // ⚠️ Estes três checavam nomes de env que NUNCA existiram (META_PIXEL_ID,
+    // META_ACCESS_TOKEN): o Pixel e o CAPI estavam no ar desde 29/07 e o painel dizia
+    // "Pendente". Painel que mente sobre o que está pronto é pior que painel nenhum —
+    // faz perder tempo reconfigurando o que já funciona. Nomes reais, conferidos no código:
+    // src/utils/marketing.js → VITE_META_PIXEL_ID · api/_meta-capi.js → META_CAPI_TOKEN.
+    metaPixel:{ ok: !!(process.env.VITE_META_PIXEL_ID || process.env.META_PIXEL_ID), label: 'Pixel do Meta (Facebook/Instagram)', grupo: 'aquisicao', impacto: 'crescimento' },
+    meta:     { ok: !!process.env.META_CAPI_TOKEN,         label: 'Meta — Conversões API (server-side)', grupo: 'aquisicao', impacto: 'crescimento' },
+    // Conversão OFFLINE do Google (api/_google-ads.js): é o que faz o PIX pago FORA do
+    // checkout contar como venda no Google. Sem ela, a campanha é otimizada às cegas nesse
+    // trecho. Rótulo diz para que serve — "opcional" seco parecia pendência esquecida.
+    googleAds:{ ok: !!(process.env.GOOGLE_ADS_DEVELOPER_TOKEN && process.env.GOOGLE_ADS_CUSTOMER_ID
+                       && process.env.GOOGLE_ADS_CONVERSION_ACTION_ID && process.env.GOOGLE_ADS_REFRESH_TOKEN),
+                label: 'Google Ads — conversão offline (mede o PIX)', grupo: 'aquisicao', impacto: 'crescimento', opcional: true },
     // ── Comunicação ──────────────────────────────────────────────────────────
     email:    { ok: !!process.env.RESEND_API_KEY,          label: 'E-mail (Resend)',           grupo: 'comunicacao', impacto: 'operacional' },
     from:     { ok: !!process.env.APP_FROM_EMAIL,          label: 'E-mail remetente',          grupo: 'comunicacao', impacto: 'operacional' },
