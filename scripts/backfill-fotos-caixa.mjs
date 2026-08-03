@@ -7,7 +7,7 @@
  * (onde a Caixa atende) e hospedar no nosso Storage (CDN que o Gmail carrega direto).
  *
  * O QUE FAZ: para cada imóvel CEF cujo link_foto ainda aponta para a Caixa, baixa
- * F<num>21.jpg, sobe para o bucket público `imoveis-fotos` em caixa/F<num>21.jpg e
+ * F<num>21.jpg, sobe para o bucket público `imoveis-fotos` em cef/<fonte_id>.jpg e
  * atualiza link_foto para a URL pública do Storage. Idempotente e resumível (quem já
  * migrou tem link_foto no supabase e sai do filtro). Prioriza os atrativos (desconto>=40).
  *
@@ -92,8 +92,18 @@ async function baixarFoto(num) {
   return null;
 }
 
-async function subirStorage(num, buf) {
-  const path = `caixa/F${num}21.jpg`;
+// CAMINHO CANÔNICO: `cef/<fonte_id>.jpg` — o MESMO que o scraper diário usa
+// (scripts/scraper.js, api/scraper-caixa.js, scripts/foto-cef.mjs).
+//
+// POR QUE MUDOU: este backfill gravava em `caixa/F<num>21.jpg`, um segundo caminho para a
+// MESMA foto do MESMO imóvel. O efeito era um pingue-pongue diário: o scraper subia em
+// `cef/…` e apontava o link_foto para lá; o backfill subia em `caixa/…` e movia o link; no
+// dia seguinte o scraper trazia de volta — e a cada troca o arquivo do outro lado ficava
+// ÓRFÃO. Medido em 03/08: 21.418 fotos órfãs (1,1 GB) e o faxineiro diário apagando 1.500/dia
+// enquanto ~1.150 nasciam — saldo de só 342/dia, enxugando gelo. Com o caminho único, o
+// upsert sobrescreve no lugar e a órfã deixa de ser criada.
+async function subirStorage(fonteId, buf) {
+  const path = `cef/${fonteId}.jpg`;
   const r = await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}/${path}`, {
     method: 'POST',
     headers: { ...hdr, 'Content-Type': 'image/jpeg', 'x-upsert': 'true', 'Cache-Control': '2592000' },
@@ -124,7 +134,8 @@ async function processar(im) {
       await atualizarLink(im.id, null).catch(() => {});
       return 'sem_foto';
     }
-    const publicUrl = await subirStorage(num, buf);
+    // Sobe pelo fonte_id (chave canônica), não pelo número — ver subirStorage().
+    const publicUrl = await subirStorage(im.fonte_id, buf);
     await atualizarLink(im.id, publicUrl);
     return 'ok';
   } catch (e) {
