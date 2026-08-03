@@ -513,6 +513,13 @@ async function gravarAmostrasIndice(imDb, mercado, imovelId, segmento = 'apartam
       // Faixa por TIPO (antes bastava ser > 0 — foi por aqui que entrou "aluguel de terreno
       // de R$ 363.000/mês", que era preço de venda). E, quando a área é conhecida, 2ª malha
       // pelo R$/m²: barra o caso em que o valor é plausível mas a área denuncia a troca.
+      // TERRENO NÃO TEM MERCADO DE LOCAÇÃO (achado do dono em 03/08). Lote residencial —
+      // sobretudo em condomínio — não se aluga: não há anúncio, não há praça, não há yield.
+      // O que os portais devolvem como "terreno para alugar" é OUTRO produto: chácara de
+      // evento, pátio, área comercial. Guardar isso como comparável de lote contamina o
+      // Índice do tipo e produz "aluguel médio" e "rentabilidade" para algo que não se aluga.
+      // Melhor não ter o número do que ter o número errado.
+      if (segmento === 'terreno') continue;
       if (!locacaoPlausivel(segmento, mensal) || ehFonteLeilao(s?.fonte)) continue;
       const vm2 = area > 0 ? Math.round((mensal / area) * 100) / 100 : null;
       if (vm2 !== null && !locacaoM2Plausivel(vm2)) continue;
@@ -941,6 +948,12 @@ para a resposta não estourar o limite e ser cortada), CADA UM com o seu "bairro
 completo ANTES de "outrosBairros"; se faltar espaço, corte "outrosBairros", nunca os níveis 1/2.
 Apenas VENDA, mesmo tipo (${tipoImovel}), SEM leilão; o "bairro" de cada amostra é OBRIGATÓRIO.
 
+LOCAÇÃO EM TERRENO — NÃO SE APLICA: se o imóvel-alvo for TERRENO ou LOTE (inclusive em condomínio),
+devolva "locacoes": [], "aluguelMedio": 0, "yieldBruto": 0 e "yieldLiquido": 0, e diga na descrição
+que lote não possui mercado de locação. O que os portais listam como "terreno para alugar" é OUTRO
+produto — chácara de eventos, pátio de estacionamento, área comercial —, não comparável a um lote
+residencial. Rentabilidade de aluguel para lote é informação FALSA, não informação faltante.
+
 LOCAÇÃO — REGRA DE SANIDADE (o relatório de um TERRENO já saiu com "aluguel médio R$ 63.409/mês"
 porque três anúncios de VENDA foram lidos como aluguel): em "locacoes", só inclua anúncios de
 ALUGUEL RESIDENCIAL/COMERCIAL MENSAL do mesmo tipo. Antes de incluir, faça a checagem: um aluguel
@@ -1119,6 +1132,10 @@ apareceu de fato. Isso alimenta o Índice BidPro dos outros segmentos da região
 Liste em "outrosBairros" ATÉ 25 anúncios do MESMO tipo (${tipoImovel}) em OUTROS bairros da cidade
 (sem buscas dedicadas; não passe de 25), CADA UM com o seu "bairro" — alimenta o Índice da
 cidade/estado. Apenas VENDA, mesmo tipo, SEM leilão; o "bairro" de cada amostra é OBRIGATÓRIO.
+
+LOCAÇÃO EM TERRENO — NÃO SE APLICA: imóvel-alvo TERRENO/LOTE → "locacoes": [], "aluguelMedio": 0 e
+yields 0. Lote não tem mercado de locação; "terreno para alugar" nos portais é chácara de evento,
+pátio ou área comercial — outro produto. Rentabilidade de aluguel para lote é informação FALSA.
 
 LOCAÇÃO — REGRA DE SANIDADE: em "locacoes", só anúncios de ALUGUEL MENSAL do mesmo tipo. Um aluguel
 mensal quase nunca passa de 1% do valor de VENDA do mesmo imóvel — se o valor tiver ordem de
