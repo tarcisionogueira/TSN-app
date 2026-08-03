@@ -810,7 +810,9 @@ export default function ImovelDetalhe() {
     // DATA do leilão/licitação (fica na página do imóvel, não no CSV) quando ainda
     // não temos e não é venda direta. O backend tem throttle de 12h.
     const temDocs = imovel.linkMatricula || imovel.linkRegrasVenda || (imovel.anexos && imovel.anexos.length);
-    const faltaData = !imovel.dataLeilao && !isVendaDireta; // vale p/ CEF e leiloeiro
+    // Falta data = sem o início OU sem o ENCERRAMENTO. Só olhar o início fazia o lote parecer
+    // completo e nunca buscar o prazo real, que é o que o cliente precisa para dar lance.
+    const faltaData = (!imovel.dataLeilao || !imovel.dataLeilao2) && !isVendaDireta;
     const precisa = isCef ? faltaData : (!temDocs || faltaData);
     if (!precisa) return;
     let cancel = false;
@@ -820,6 +822,7 @@ export default function ImovelDetalhe() {
         ...prev,
         enriquecidoEm: new Date().toISOString(),
         dataLeilao: prev.dataLeilao || d.data_leilao || null,
+        dataLeilao2: prev.dataLeilao2 || d.data_leilao_2 || null,
         anexos: (d.anexos && d.anexos.length) ? d.anexos : prev.anexos,
         linkMatricula: prev.linkMatricula || d.matricula || null,
         linkEdital: prev.linkEdital || d.edital || null,
@@ -1304,12 +1307,19 @@ export default function ImovelDetalhe() {
               </h2>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <Clock size={16} color="#64748b" />
-                <span style={{ fontSize: 15, fontWeight: 600, color: '#334155' }}>{fmtData(imovel.dataLeilao, imovel.modalidade)}{imovel.valorMinimo2 ? ' (1ª praça)' : ''}</span>
+                <span style={{ fontSize: 15, fontWeight: 600, color: '#334155' }}>{fmtData(imovel.dataLeilao, imovel.modalidade)}{imovel.dataLeilao2 ? (imovel.valorMinimo2 ? ' (1ª praça)' : ' (início)') : ''}</span>
               </div>
-              {imovel.valorMinimo2 && imovel.dataLeilao2 && (
+              {/* A SEGUNDA data aparece SEMPRE que existir — antes exigia também um segundo
+                  lance (`valorMinimo2 && dataLeilao2`), então numa janela de alienação, que tem
+                  encerramento mas um preço só, o PRAZO ficava escondido. Era metade do problema
+                  do lote gl_28450: a tela mostrava só 03/08 num leilão aberto até 03/11. */}
+              {imovel.dataLeilao2 && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
                   <Clock size={16} color="#15803d" />
-                  <span style={{ fontSize: 15, fontWeight: 600, color: '#15803d' }}>{fmtData(imovel.dataLeilao2, imovel.modalidade)} (2ª praça · {fmtBRL(imovel.valorMinimo2)})</span>
+                  <span style={{ fontSize: 15, fontWeight: 600, color: '#15803d' }}>
+                    {fmtData(imovel.dataLeilao2, imovel.modalidade)}
+                    {imovel.valorMinimo2 ? ` (2ª praça · ${fmtBRL(imovel.valorMinimo2)})` : ' (encerramento — prazo para dar lance)'}
+                  </span>
                 </div>
               )}
               {!imovel.dataLeilao && (

@@ -48,25 +48,72 @@ export async function fetchLote(url) {
   return { html: '', finalUrl: url, via: 'fail' };
 }
 
-// Extrai a DATA do próximo leilão/praça da página do lote (Caixa OU leiloeiro).
-// Conservador: ancora em "leilão/praça/encerra/licitação/data", aceita ano com 2 ou
-// 4 dígitos e escolhe a PRÓXIMA data futura — em leilões de 2 praças ignora a 1ª já
-// passada, evitando mostrar um dia errado ao cliente.
-export function extrairDataLeilao(html) {
-  if (!html) return null;
+/**
+ * Extrai o PAR de datas do lote: quando ABRE e quando ENCERRA.
+ *
+ * POR QUE MUDOU (achado do dono em 02/08, lote `gl_28450`): a versão anterior juntava todas as
+ * datas ancoradas em "leilão/praça/..." e devolvia `Math.min` — a mais CEDO. Numa página que
+ * publica "Início do leilão: 03/08/2026 00:00" e "Encerramento do leilão: 03/11/2026 15:00",
+ * a mais cedo é sempre o INÍCIO. Guardávamos a data que menos importa e perdíamos o PRAZO PARA
+ * DAR LANCE — e o app exibia "Data do leilão 03/08/26" num leilão aberto até novembro.
+ *
+ * Como faz agora: acha TODA data dd/mm/aaaa da página, olha as ~90 letras ANTES dela para saber
+ * do que se trata e classifica em três baldes:
+ *   • FIM     — "encerramento", "término", "limite", "2ª praça"  → é o prazo real;
+ *   • INÍCIO  — "início", "abertura", "1ª praça";
+ *   • NEUTRO  — só "leilão"/"data", sem dizer qual.
+ * Regras: início = a mais cedo dos INÍCIO (ou dos NEUTROS); fim = a mais TARDE dos FIM (ou o
+ * maior NEUTRO quando há dois ou mais, que é o caso clássico de 1ª/2ª praça sem rótulo).
+ * A HORA é preservada no fim — "encerra 15:00" é informação que decide lance.
+ *
+ * Exigir uma palavra-âncora no contexto continua sendo o que impede pegar data solta do texto
+ * (nº de alvará, data de matrícula). Sem âncora, a data é ignorada.
+ */
+const RE_DATA_LOTE = /(\d{2})\/(\d{2})\/(\d{2,4})(?:[^0-9]{0,12}(\d{1,2})[:h](\d{2}))?/g;
+const CTX_ANCORA = /leil|pra[cçÇ]|encerr|in[íi]cio|inicio|abertura|t[eé]rmino|termino|licita|aliena|data/i;
+const CTX_FIM    = /encerr|t[eé]rmino|termino|fim d|final d|limite|at[ée] |2[ªa°]?\s*pra[cç]a|segunda\s*pra[cç]a/i;
+const CTX_INICIO = /in[íi]cio|inicio|abertura|come[cç]|1[ªa°]?\s*pra[cç]a|primeira\s*pra[cç]a|abre/i;
+
+export function extrairDatasLeilao(html) {
+  const vazio = { inicio: null, fim: null };
+  if (!html) return vazio;
   const txt = html.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ');
-  const re = /(?:leil[ãa]o|pra[çc]a|encerra|licita[çc][ãa]o|data)[^0-9]{0,40}(\d{2})\/(\d{2})\/(\d{2,4})/gi;
   const ontem = Date.now() - 86400000;
-  const limite = Date.now() + 400 * 86400000; // até ~1 ano à frente
-  const futuras = [];
+  const limite = Date.now() + 730 * 86400000; // 2 anos: janelas de alienação passam de 1 ano
+  const fins = [], inicios = [], neutros = [];
   let m;
-  while ((m = re.exec(txt))) {
+  RE_DATA_LOTE.lastIndex = 0;
+  while ((m = RE_DATA_LOTE.exec(txt))) {
+    const ctx = txt.slice(Math.max(0, m.index - 90), m.index);
+    if (!CTX_ANCORA.test(ctx)) continue;                     // data solta do texto: ignora
     const y = m[3].length === 2 ? '20' + m[3] : m[3];
-    const t = Date.parse(`${y}-${m[2]}-${m[1]}`);
-    if (!isNaN(t) && t >= ontem && t < limite) futuras.push(t);
+    const hh = m[4] ? String(m[4]).padStart(2, '0') : '00';
+    const mi = m[5] || '00';
+    // -03:00 fixo: leiloeiro brasileiro publica em horário de Brasília.
+    const t = Date.parse(`${y}-${m[2]}-${m[1]}T${hh}:${mi}:00-03:00`);
+    if (isNaN(t) || t < ontem || t >= limite) continue;
+    if (CTX_FIM.test(ctx)) fins.push(t);
+    else if (CTX_INICIO.test(ctx)) inicios.push(t);
+    else neutros.push(t);
   }
-  if (!futuras.length) return null;
-  return new Date(Math.min(...futuras)).toISOString().slice(0, 10);
+  if (!fins.length && !inicios.length && !neutros.length) return vazio;
+
+  const iso = (t) => new Date(t).toISOString();
+  const dia = (t) => iso(t).slice(0, 10);
+  const baseInicio = inicios.length ? inicios : neutros;
+  const inicio = baseInicio.length ? dia(Math.min(...baseInicio)) : null;
+  let fim = fins.length ? iso(Math.max(...fins))
+    // sem rótulo explícito, DUAS ou mais datas = 1ª e 2ª praça: a última é o prazo.
+    : (neutros.length >= 2 ? iso(Math.max(...neutros)) : null);
+  // Fim igual ao início não acrescenta nada (e viraria ruído na tela).
+  if (fim && inicio && fim.slice(0, 10) === inicio) fim = null;
+  return { inicio, fim };
+}
+
+// Compatibilidade: quem só quer "a data do lote" continua chamando isto. Devolve o INÍCIO —
+// o campo `data_leilao` sempre significou isso. O prazo real vai em `data_leilao_2`.
+export function extrairDataLeilao(html) {
+  return extrairDatasLeilao(html).inicio;
 }
 
 // Extrai o VALOR DE AVALIAÇÃO da página do lote (leiloeiros mostram "Valor de
@@ -113,7 +160,7 @@ export default async function handler(req, res) {
   const forcar = params.get('forcar') === '1';
   if (!id) { res.status(400).json({ error: 'imovel_id obrigatório' }); return; }
 
-  const [im] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(id)}&select=id,fonte,modalidade,data_leilao,url_lote,link_edital,link_matricula,link_regras_venda,link_foto,anexos,enriquecido_em,ficha_cef,matricula_scan_em&limit=1`)).json();
+  const [im] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(id)}&select=id,fonte,modalidade,data_leilao,data_leilao_2,url_lote,link_edital,link_matricula,link_regras_venda,link_foto,anexos,enriquecido_em,ficha_cef,matricula_scan_em&limit=1`)).json();
   if (!im) { res.status(404).json({ error: 'Imóvel não encontrado' }); return; }
 
   // CEF: os LINKS de documento são determinísticos (não precisa vasculhar), MAS a
@@ -127,11 +174,13 @@ export default async function handler(req, res) {
       res.status(200).json({ ok: true, pulado: ehVendaDireta ? 'cef_venda_direta' : im.data_leilao ? 'cef_tem_data' : 'cef_recente', alterado: false }); return;
     }
     const { html } = await fetchLote(im.url_lote || '');
-    const data = html ? extrairDataLeilao(html) : null;
+    const { inicio: data, fim } = html ? extrairDatasLeilao(html) : { inicio: null, fim: null };
     const patch = { enriquecido_em: new Date().toISOString() };
     if (data) patch.data_leilao = data;
+    // 2ª praça da Caixa: é o prazo que vale quando a 1ª não arremata.
+    if (fim && !im.data_leilao_2) patch.data_leilao_2 = fim;
     await sb(`imoveis_leilao?id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(patch) }).catch(() => {});
-    res.status(200).json({ ok: !!data, pulado: 'cef', alterado: !!data, data_leilao: data || null }); return;
+    res.status(200).json({ ok: !!(data || fim), pulado: 'cef', alterado: !!(data || fim), data_leilao: data || null, data_leilao_2: fim || null }); return;
   }
   // Ficha (cartório/ofício/comarca) a partir da matrícula em PDF — GRÁTIS e só
   // uma vez por imóvel (marca matricula_scan_em, igual ao cron). Roda mesmo que o
@@ -152,7 +201,10 @@ export default async function handler(req, res) {
   // se ainda não tem doc, tenta de novo após 12h (throttle p/ não martelar a fonte).
   const temDocs = !!(im.link_matricula || im.link_regras_venda || (Array.isArray(im.anexos) && im.anexos.length));
   const ehVendaDireta = /venda[_ ]?direta/i.test(im.modalidade || '');
-  const precisaData = !im.data_leilao && !ehVendaDireta; // leilão de leiloeiro sem data → também busca
+  // Falta data quando não temos o início OU não temos o ENCERRAMENTO. O segundo caso era
+  // invisível antes: o lote com data de início parecia "completo" e nunca era revisitado, então
+  // o prazo real (que é o que decide o lance) nunca chegava a ser capturado.
+  const precisaData = (!im.data_leilao || !im.data_leilao_2) && !ehVendaDireta;
   const enriqRecente = im.enriquecido_em && (Date.now() - new Date(im.enriquecido_em).getTime() < 12 * 3600 * 1000);
   // Enfileira a captura por navegador SEMPRE que ABREM um lote de leiloeiro sem
   // documento REAL (PDF) — inclusive quando o scrape de HTML é pulado pelo throttle
@@ -204,9 +256,11 @@ export default async function handler(req, res) {
   if (achado.edital && !im.link_edital) patch.link_edital = achado.edital;
   if (achado.regras && !im.link_regras_venda) patch.link_regras_venda = achado.regras;
   if (achado.foto && !im.link_foto) patch.link_foto = achado.foto;
-  // Data do leilão do leiloeiro (mesma extração da CEF): só quando falta e não é venda direta.
-  const dataLeilao = precisaData ? extrairDataLeilao(html) : null;
-  if (dataLeilao) patch.data_leilao = dataLeilao;
+  // PAR de datas do leiloeiro (mesma extração da CEF): início E encerramento. Cada um só é
+  // gravado se ainda faltava — nunca sobrescreve dado bom já existente.
+  const datas = precisaData ? extrairDatasLeilao(html) : { inicio: null, fim: null };
+  if (datas.inicio && !im.data_leilao) patch.data_leilao = datas.inicio;
+  if (datas.fim && !im.data_leilao_2) patch.data_leilao_2 = datas.fim;
 
   // AVALIAÇÃO real da página do lote (quando não temos uma válida) — corrige o
   // "100% abaixo da avaliação" sem valor e recalcula o desconto. O trigger do banco
@@ -239,6 +293,7 @@ export default async function handler(req, res) {
     regras: patch.link_regras_venda || im.link_regras_venda || null,
     foto: patch.link_foto || im.link_foto || null,
     data_leilao: patch.data_leilao || im.data_leilao || null,
+    data_leilao_2: patch.data_leilao_2 || im.data_leilao_2 || null,
     anexos: achado.anexos,
   });
 }

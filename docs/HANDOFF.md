@@ -59,8 +59,8 @@ arquivo de cliente. Caminho no painel confirmado pelo print dele:
 **Supabase Storage** (não no Drive), então usa o leitor paginado novo; a URL assinada vale até
 2036, conferido.
 
-**🔴 ACHADO DO DONO NO FIM DO DIA (02/08, 22h) — DATA DO LEILÃO. CONFIRMADO, AINDA NÃO
-CORRIGIDO. É o primeiro item de código da próxima sessão.**
+**✅ ACHADO DO DONO NO FIM DO DIA (02/08, 22h) — DATA DO LEILÃO. CONFIRMADO E CORRIGIDO NA
+MESMA NOITE (deploy em `main`).**
 Lote de referência: `GRUPOLANCE` / `gl_28450` (Alphaville Residencial 11, Santana de Parnaíba/SP).
 - **Site do leiloeiro:** início `03/08/2026 00:00` · **encerramento `03/11/2026 15:00`** ·
   valor inicial R$ 950.885,17.
@@ -79,15 +79,42 @@ Lote de referência: `GRUPOLANCE` / `gl_28450` (Alphaville Residencial 11, Santa
   aberto até novembro — e a coluna que sustenta um filtro chamado "encerra" guarda a data de
   *começo*, que é o oposto. Hoje há **3.333 lotes ATIVOS com data já no passado** (e 16.561 sem
   data nenhuma, de 33.082).
-- **Direção da correção** (não implementada): capturar o PAR (início → `data_leilao`,
-  encerramento → `data_leilao_2`, com HORA), preferir o encerramento no que a tela chama de
-  "Data do leilão"/"Encerra em breve", e rotular os dois na ficha. Rever também o `Math.min`:
-  para 1ª/2ª praça judicial a mais cedo faz sentido; para janela início→fim, não.
-- ⚠️ **Não verificado (checar junto):** `valor_avaliacao` = R$ 1.901.770,34 é **exatamente 2×** o
-  mínimo. Bate com a regra judicial (2ª praça a 50%), então é plausivelmente correto — mas há
-  **43 dos 428** lotes GL nesse padrão exato. Confirmar na página se a avaliação é lida de
-  verdade (`extrairAvaliacao` ancora na palavra "avaliação") ou se em algum caminho ela está
-  sendo derivada. Não dá para checar deste ambiente (proxy bloqueia o site).
+- **CORRIGIDO em 4 camadas** (`data_fim_leilao_prazo_real.sql` + 6 arquivos):
+  1. **Extração** (`api/enriquecer-lote.js`): `extrairDataLeilao` (que devolvia `Math.min`) deu
+     lugar a **`extrairDatasLeilao`**, que acha TODA data `dd/mm/aaaa` da página, lê as ~90
+     letras ANTES dela e classifica em **FIM** (encerramento/término/limite/2ª praça), **INÍCIO**
+     (início/abertura/1ª praça) ou **NEUTRO**. Início = a mais cedo dos INÍCIO (ou dos neutros);
+     fim = a mais tarde dos FIM — ou o maior neutro quando há 2+, que é o caso clássico de
+     1ª/2ª praça sem rótulo. **A HORA é preservada** ("encerra 15:00" decide lance). Exigir
+     palavra-âncora no contexto continua barrando data solta do texto (nº de alvará, matrícula).
+     Testado em 6 cenários, incluindo o do dono: início `2026-08-03`, fim `2026-11-03T18:00Z`
+     (= 15:00 de Brasília). ✔
+  2. **Persistência**: `data_leilao_2` agora é gravado pelos três caminhos
+     (`enriquecer-lote`, `enriquecer-datas-cron`, `enriquecer-backfill-cron`) — e o critério de
+     "falta data" virou **sem início OU sem encerramento**. Antes, um lote com início parecia
+     completo e nunca era revisitado: o prazo real jamais chegava. Bug irmão corrigido no
+     caminho: o `select` do `enriquecer-lote` não trazia `data_leilao_2`, então a guarda de
+     "não sobrescrever" nunca teria valido.
+  3. **Coluna `data_fim`** (banco, mantida por trigger): o **último prazo relevante** —
+     encerramento, 2ª praça, ou a única data existente. É ela que a busca ordena/filtra em
+     "Encerra em breve", e que o card e o e-mail de oportunidades exibem. Backfill feito.
+  4. **Telas**: contagem do card ("Encerra em N dias") passa a contar até o **fim**; a ficha
+     mostra as duas datas, e a segunda aparece **sempre que existir** — antes exigia também um
+     `valor_minimo_2`, então numa janela de alienação (um preço só) o prazo ficava **escondido**.
+     Rótulo honesto: "(2ª praça · R$ …)" quando há segundo lance, "(encerramento — prazo para
+     dar lance)" quando é janela.
+- O lote `gl_28450` já está com `data_leilao_2 = 2026-11-03 15:00` e `data_fim = 2026-11-03`
+  (gravado do print do dono, sem esperar o cron). Os demais entram conforme os crons revisitam.
+- ⚠️ **Não verificado (fica para checar):** `valor_avaliacao` = R$ 1.901.770,34 é **exatamente
+  2×** o mínimo. Bate com a regra judicial (2ª praça a 50%), então é plausivelmente correto — mas
+  há **43 dos 428** lotes GL nesse padrão exato. Confirmar na página se a avaliação é lida de
+  verdade (`extrairAvaliacao` ancora na palavra "avaliação") ou se em algum caminho está sendo
+  derivada. Não dá para checar deste ambiente (proxy bloqueia o site). **Basta o dono olhar se a
+  página do lote mostra "Avaliação: R$ 1.901.770,34"** — isso encerra a dúvida.
+- **Acompanhar na próxima sessão:** `select count(*) filter (where data_leilao_2 is not null)
+  from imoveis_leilao where ativo and fonte <> 'CEF';` deve sair de 0 e subir a cada rodada dos
+  crons de enriquecimento. Se ficar em 0, o problema é acesso à página (Bright Data), não a
+  extração — que está testada.
 
 **Do meu lado, o que ficou pendente para a próxima sessão:**
 - ⚠️ **Verificar a 1ª ingestão do IBGE**: `select * from socio_ingestao order by executado_em desc;`

@@ -45,7 +45,7 @@ function centroide(cidade, uf) {
   const c = MUNICIPIOS[`${String(uf).toUpperCase()}|${norm(cidade)}`];
   return Array.isArray(c) ? { lat: c[0], lng: c[1] } : null;
 }
-const SEL = 'id,titulo,endereco,cidade,estado,tipo,modalidade,valor_minimo,valor_avaliacao,desconto_percentual,data_leilao,link_foto,fonte,fonte_id';
+const SEL = 'id,titulo,endereco,cidade,estado,tipo,modalidade,valor_minimo,valor_avaliacao,desconto_percentual,data_leilao,data_fim,link_foto,fonte,fonte_id';
 
 // Foto para o E-MAIL: url ÚNICA e confiável (o e-mail não tem fallback onError como o
 // site). Motivo do "sem foto" em alguns cards: fontes como a Caixa BLOQUEIAM hotlink de
@@ -427,7 +427,9 @@ async function handler(req) {
         const foto = fotoUrl ? `<a href="${url}"><img src="${fotoUrl}" alt="" style="width:100%;height:130px;object-fit:cover;display:block;border-radius:10px 10px 0 0;"></a>` : '';
         const desc = Number(im.desconto_percentual) || 0;
         const descTag = desc > 0 ? `<span style="display:inline-block;background:#f0fdf4;color:#059669;border:1px solid #bbf7d0;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;">${Math.round(desc)}% OFF</span>` : '';
-        const dataLabel = fmtData(im.data_leilao);
+        // Prazo real: o e-mail mostra a data que o cliente precisa respeitar (encerramento),
+        // não o dia em que o leilão abriu.
+        const dataLabel = fmtData(im.data_fim || im.data_leilao);
         const dataTag = dataLabel ? `<span style="display:inline-block;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;margin-left:4px;">📅 ${dataLabel}</span>` : '';
         return `
         <div style="border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;margin-bottom:12px;background:#fff;">

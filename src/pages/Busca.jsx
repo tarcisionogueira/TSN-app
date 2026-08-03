@@ -972,11 +972,15 @@ export default function Busca() {
         base, filtrosAtivos,
         cidadesRaio || (filtrosAtivos.cidades?.length > 0 ? filtrosAtivos.cidades : null)
       );
-      // "Encerra em breve": só leilões com data FUTURA (esconde vencidos e sem data),
-      // senão o topo da lista viria com datas passadas/nulas. Específico da ordenação.
+      // "Encerra em breve": só leilões com prazo FUTURO (esconde vencidos e sem data).
+      // USA `data_fim`, não `data_leilao` — este filtro chama-se "encerra" e `data_leilao`
+      // guarda o INÍCIO. Um lote aberto de 03/08 a 03/11 sumia daqui já no dia 04/08, ainda
+      // com três meses de prazo (achado do dono em 02/08, lote gl_28450). `data_fim` é
+      // mantido no banco como o ÚLTIMO prazo relevante: encerramento, 2ª praça, ou a única
+      // data que houver.
       if (sortAtivo === 'data_asc') {
         const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
-        q = q.gte('data_leilao', hoje.toISOString().slice(0, 10));
+        q = q.gte('data_fim', hoje.toISOString().slice(0, 10));
       }
       return q;
     };
@@ -984,7 +988,7 @@ export default function Busca() {
     const [coluna, dir] = sortAtivo === 'desconto_desc' ? ['desconto_percentual', false]
       : sortAtivo === 'desconto_asc' ? ['desconto_percentual', true]
       : sortAtivo === 'valor_asc'    ? ['valor_minimo', true]
-      : sortAtivo === 'data_asc'     ? ['data_leilao', true]
+      : sortAtivo === 'data_asc'     ? ['data_fim', true]   // ordena pelo PRAZO, não pelo início
       : ['valor_minimo', false];
 
     try {
@@ -1051,6 +1055,7 @@ export default function Busca() {
             foto: im.link_foto,
             leiloeiro: im.leiloeiro,
             dataLeilao: im.data_leilao,
+            dataFim: im.data_fim,   // PRAZO real (encerramento/2ª praça) — é o que a contagem usa
             pagamento: im.forma_pagamento ? [im.forma_pagamento] : [],
             viavel: im.viavel,
             scoreViabilidade: im.score_viabilidade,
@@ -1113,6 +1118,7 @@ export default function Busca() {
         foto: im.link_foto,
         leiloeiro: im.leiloeiro,
         dataLeilao: im.data_leilao,
+        dataFim: im.data_fim,   // PRAZO real (encerramento/2ª praça) — é o que a contagem usa
         pagamento: im.forma_pagamento ? [im.forma_pagamento] : [],
         viavel: im.viavel,
         scoreViabilidade: im.score_viabilidade,
@@ -1824,7 +1830,7 @@ export default function Busca() {
                             {desc && <span style={{ fontSize:10, fontWeight:800, background:'#dcfce7', color:'#16a34a', padding:'0 5px', borderRadius:20 }}>-{fmtDesc(desc)}%</span>}
                             {im.areaM2 > 0 && im.valorMinimo && <span style={{ fontSize:9, fontWeight:700, background:'#f1f5f9', color:'#475569', padding:'0 5px', borderRadius:20 }}>R$ {Number(im.valorMinimo/im.areaM2).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/m²</span>}
                           </div>
-                          {im.dataLeilao && <div style={{ fontSize:9, color:'#94a3b8', marginTop:2 }}>📅 {fmtData(im.dataLeilao)}</div>}
+                          {(im.dataFim || im.dataLeilao) && <div style={{ fontSize:9, color:'#94a3b8', marginTop:2 }}>📅 {fmtData(im.dataFim || im.dataLeilao)}</div>}
                         </div>
                       </div>
                     );
@@ -2012,10 +2018,12 @@ export default function Busca() {
                       )}
                       {im.areaM2>0 && <span style={{ fontSize:9, color:'#8b5cf6', fontWeight:700 }}>{Number(im.areaM2).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} m²</span>}
                       {(() => {
-                        const c = contagemLeilao(im.dataLeilao);
+                        // A contagem diz "Encerra em N dias" — então tem que contar até o ENCERRAMENTO.
+                        // Com data_leilao (o início) ela dizia "Encerra hoje" num lote aberto por 3 meses.
+                        const c = contagemLeilao(im.dataFim || im.dataLeilao);
                         return c
                           ? <span title="Data do leilão" style={{ fontSize:9, fontWeight:800, background:c.bg, color:c.fg, padding:'1px 6px', borderRadius:8 }}>🗓 {c.texto}</span>
-                          : <span style={{ fontSize:9, color:'#94a3b8' }}>🗓 {fmtData(im.dataLeilao, im.modalidade)}</span>;
+                          : <span style={{ fontSize:9, color:'#94a3b8' }}>🗓 {fmtData(im.dataFim || im.dataLeilao, im.modalidade)}</span>;
                       })()}
                     </div>
 

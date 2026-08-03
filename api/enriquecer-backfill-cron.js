@@ -11,7 +11,7 @@
 export const config = { runtime: 'nodejs', maxDuration: 120 };
 
 import { isCronAuthorized } from './_auth.js';
-import { fetchLote, extrairDataLeilao } from './enriquecer-lote.js';
+import { fetchLote, extrairDatasLeilao } from './enriquecer-lote.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -47,11 +47,13 @@ export default async function handler(req, res) {
   // 2) Pool de candidatos: sem data, não venda direta, ativo, com página de lote.
   //    Puxa um pool maior e ordena as CIDADES DOS USUÁRIOS primeiro (in-memory,
   //    evita o encoding frágil do filtro in.() com acentos/espaços).
+  // Falta data = sem INÍCIO **ou** sem ENCERRAMENTO (antes só olhava data_leilao, então lote
+  // com início já gravado nunca voltava aqui e o prazo real nunca era capturado).
   const filtro = [
-    'data_leilao=is.null',
+    'or=(data_leilao.is.null,data_leilao_2.is.null)',
     'modalidade=not.ilike.*venda*direta*',
     'ativo=not.is.false',
-    'select=id,url_lote,link_edital,cidade,fonte',
+    'select=id,url_lote,link_edital,cidade,fonte,data_leilao,data_leilao_2',
     'order=enriquecido_em.asc.nullsfirst',
     `limit=${LOTE_MAX * 5}`,
   ].join('&');
@@ -68,7 +70,7 @@ export default async function handler(req, res) {
   }
   const lista = pool.slice(0, LOTE_MAX);
 
-  let comData = 0, semConteudo = 0, prioridade = 0;
+  let comData = 0, comFim = 0, semConteudo = 0, prioridade = 0;
   const agora = new Date().toISOString();
   for (const im of lista) {
     if (cidadeSet.has(String(im.cidade || '').toLowerCase())) prioridade++;
@@ -77,8 +79,9 @@ export default async function handler(req, res) {
     if (alvo && /^https?:\/\//.test(alvo)) {
       const { html } = await fetchLote(alvo);
       if (html) {
-        const d = extrairDataLeilao(html);
-        if (d) { patch.data_leilao = d; comData++; }
+        const { inicio, fim } = extrairDatasLeilao(html);
+        if (inicio && !im.data_leilao) { patch.data_leilao = inicio; comData++; }
+        if (fim && !im.data_leilao_2) { patch.data_leilao_2 = fim; comFim++; }
       } else {
         semConteudo++;
         // Vazio recorrente = teto do Bright Data atingido → para de martelar.
@@ -88,5 +91,5 @@ export default async function handler(req, res) {
     await marcar(im.id, patch);
   }
 
-  res.status(200).json({ ok: true, processados: lista.length, com_data: comData, sem_conteudo: semConteudo, de_cidades_de_usuarios: prioridade });
+  res.status(200).json({ ok: true, processados: lista.length, com_data: comData, com_encerramento: comFim, sem_conteudo: semConteudo, de_cidades_de_usuarios: prioridade });
 }
