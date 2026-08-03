@@ -202,6 +202,65 @@ o **tema do site do leiloeiro**, listado como "Documento no leiloeiro".
 - ⚠️ A 1ª página do PDF desse ebook tem um banner escuro no topo — **depois do deploy, o corte
   no leitor some; se a CAPA continuar cortada é porque falta o re-upload (item a)**.
 
+**4. TARDE DO DIA 03/08 — SESSÃO AO VIVO COM O DONO NOS PAINÉIS.** Ele sentou no computador e
+fomos item a item. Tudo abaixo está CONCLUÍDO e conferido dos dois lados (painel + banco/API):
+
+- **Capas dos 2 eBooks** ✅ — o original íntegro estava no Drive (`capa livro.pdf`, pasta do
+  manuscrito). Extraí a página 1 a 3×, converti para JPEG limpo e mandei pronto; ele subiu.
+  `Leilões caixa` 545.013 B (quebrado) → **116.180 B** ok; `Lucre Antes de Arrematar` 544.183 B
+  (mesmo defeito latente) → **239.566 B** ok. O upload novo re-codifica via canvas, então esse
+  defeito não volta.
+- **🔴 SECRET VAZADO EM REPO PÚBLICO** ✅ — confirmado pela API do GitHub (`visibility: public`).
+  `RESEND_WEBHOOK_SECRET` estava em texto puro no HANDOFF. Removi do arquivo, varri o repo
+  inteiro (nenhuma outra chave real; `.env` nunca versionado — histórico completo conferido) e
+  gravei a regra no `CLAUDE.md`. O dono **rotacionou** o valor. **Aprendizado que virou
+  processo:** o valor continua no histórico do git para sempre — só a rotação resolve.
+- **Vercel — armadilha do `Sensitive`** ✅ — variável marcada assim é write-only: não dá para
+  ler nem desmarcar, só apagar e recriar. Foi o que travou a 1ª tentativa de rotação (ele
+  salvava sem saber se pegou). Vale para `ASAAS_API_KEY`, que segue Sensitive e **não deve ser
+  tocada** (é a credencial que o Asaas nos deu, não uma senha nossa).
+- **Search Console** ✅ — propriedade de **Domínio** verificada por DNS. Dois tropeços que valem
+  registro: (a) no Registro.br o campo *Nome* CONCATENA `.bidprobrasil.com.br`, então para o
+  domínio-raiz ele tem de ficar **vazio**; (b) em propriedade de Domínio o sitemap exige **URL
+  completa** (`https://www.bidprobrasil.com.br/sitemap.xml`), o caminho curto dá "endereço
+  inválido". `sitemap.xml` **Processado** (2 páginas, correto — o acervo está no outro).
+  `sitemap-leiloes.xml` deu "Não foi possível buscar", mas **abrindo no navegador o índice
+  responde certinho com as 8 partes** (p=0..7) → foi falha momentânea do Google, não nossa.
+- **Cloudflare R2** ✅ — bucket `bidpro-backup`, região **ENAM** (fora do Brasil ✔), token
+  Object Read & Write restrita ao bucket, 5 variáveis na Vercel + redeploy. Detalhe que
+  enganou: a lista de env vars é alfabética e faltavam `R2_BUCKET`/`R2_LOCATION` — peguei
+  pela ordem. ⚠️ A única execução em `backup_execucoes` é de 04:40 UTC de hoje, **dormante**
+  ("R2 não configurado"), de antes da config. **A 1ª execução real é 04/08 04:40 UTC.**
+- **Upstash Redis** ✅ — `bidpro-ratelimit` (us-east-1, free), REST URL+TOKEN na Vercel.
+  Consumidor: `api/_rate-limit.js`. Deixa de contar por instância e passa a contar global.
+- **Asaas** ✅ **Ativado / 0 eventos penalizados.** Três armadilhas encontradas: (a) o webhook
+  tem **DOIS** interruptores — "Este Webhook ficará ativo?" e **"Fila de sincronização
+  ativada?"**; com a fila pausada nada é entregue mesmo com o webhook ativo, e é isso que o
+  mantinha "Interrompido"; (b) o botão **"Gerar Token"** cria um valor do Asaas que NÃO bate
+  com `ASAAS_WEBHOOK_TOKEN` → 401 → fila pausa de novo (aconteceu uma vez); (c) o Asaas pausa
+  a fila automaticamente após 15 falhas. Solução: colar no campo o MESMO valor da Vercel.
+  Eventos marcados: CONFIRMED, RECEIVED, OVERDUE, REFUNDED, PARTIALLY_REFUNDED,
+  CHARGEBACK_REQUESTED, CHARGEBACK_DISPUTE, AWAITING_CHARGEBACK_REVERSAL.
+- **Resend** 🔶 — os dois webhooks com `www` e Enabled; secret rotacionado. **Ainda SEM prova de
+  ponta a ponta:** os eventos que chegaram (204 ✔) eram de e-mails que não são nossos, e o
+  handler casa por `resend_id` — sem linha em `emails_log`, devolve 204 sem gravar. ⚠️ **Erro
+  meu a não repetir:** sugeri testar com "esqueci minha senha", mas esse e-mail sai pelo
+  **Supabase Auth**, não pelo nosso `_email.js` — nunca cria linha em `emails_log`. O teste
+  válido é um e-mail NOSSO (`oportunidades` 11:00 UTC, `boas_vindas` em cadastro novo).
+
+**COBRAR NA PRÓXIMA SESSÃO (prometido ao dono para a manhã de 04/08):**
+1. `select * from backup_execucoes order by executado_em desc limit 3;` → a de 04:40 UTC tem de
+   sair de `dormante=true` para arquivos copiados. Se falhar, o conserto é variável, não código.
+2. `select enviado_em, entregue_em from emails_log where tipo='oportunidades' order by 1 desc
+   limit 3;` → `entregue_em` preenchido = ciclo do Resend provado.
+3. Search Console → `sitemap-leiloes.xml` saiu de "Não foi possível buscar" para "Processado"?
+4. **Investigação que o DONO levantou (não corrigir em massa — é premissa dele):** 2.785 lotes
+   ativos com **avaliação MENOR que o lance mínimo**. Ele disse que isso OCORRE em leilão
+   (avaliação defasada, lance com débitos embutidos) e que "precisa ter uma consulta apurada do
+   leiloeiro para validar". Tratar como recon: agrupar por fonte, conferir amostra na página
+   viva, separar praxe de parse errado. (Separado dos 3.831 com avaliação = lance, normal em
+   venda direta.)
+
 **Acompanhar na próxima sessão:** `data_leilao_2` fora da CEF segue em **1** (o `gl_28450` gravado
 à mão) — os crons de enriquecimento é que devem fazer esse número subir; se ficar em 1, o problema
 é acesso à página (Bright Data), não a extração. Cobertura de `data_fim` hoje: GRUPOLANCE 1,2%,

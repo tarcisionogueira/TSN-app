@@ -4,7 +4,35 @@
 > variável de ambiente). Cada um traz o **porquê**, o **passo a passo** e **o que o Claude
 > faz depois** que você concluir. Quando estiver no computador, é só ir por aqui.
 >
-> _Última atualização: 03/08/2026._
+> _Última atualização: 03/08/2026 (tarde — sessão ao vivo com o dono nos painéis)._
+
+---
+
+## ✅ RESOLVIDO EM 03/08 — não precisa mais fazer
+
+O dono sentou no computador e fechamos, item a item:
+
+| Item | Como ficou |
+|---|---|
+| **-5 Capa do eBook** | ✅ as **duas** trocadas (a do "Lucre Antes de Arrematar" tinha o mesmo defeito latente). Original veio do `capa livro.pdf` no Drive |
+| **-4 Search Console** | ✅ propriedade de **Domínio** verificada por DNS · `sitemap.xml` Processado · `sitemap-leiloes.xml` reenviado (o índice responde certo no navegador — falha foi do Google) |
+| **-3 Cloudflare R2** | ✅ bucket `bidpro-backup` região **ENAM** + token restrita + 5 variáveis + redeploy. **1ª execução real: 04/08 às 04:40 UTC** |
+| **-2 Resend** | ✅ dois webhooks com `www` e Enabled + secret **rotacionado** (estava vazado no repo público). 🔶 falta só a prova de ponta a ponta no cron das 8h |
+| **1 Asaas** | ✅ **Ativado / 0 penalizados**. A trava era a **"Fila de sincronização"** — segundo interruptor, separado do "webhook ativo" |
+| **2 Upstash Redis** | ✅ `bidpro-ratelimit` criado + REST URL/TOKEN na Vercel + redeploy |
+
+**Ainda abertos:** **-1 Google Ads** (verificação até **31/08**, anúncios pausam se não fizer) ·
+**0 Teste da compra avulsa** (a visualização do eBook já foi validada; falta o fluxo de
+pagamento — dá para usar a conta `teste@teste.com.br`) · **3 PECINI**.
+
+> 🔑 **Duas armadilhas que custaram tempo e vão se repetir — leia antes de mexer em painel:**
+> 1. **Vercel `Sensitive`**: variável marcada assim é *write-only* — não dá para ler nem
+>    desmarcar, só apagar e recriar. E **variável nova só vale depois de um REDEPLOY**.
+>    ⚠️ `ASAAS_API_KEY` é Sensitive e **não deve ser trocada** — é a credencial que o Asaas nos
+>    deu (diferente de `ASAAS_WEBHOOK_TOKEN`, que é senha nossa e pode rotacionar à vontade).
+> 2. **Registro.br**: no formulário de DNS o campo *Nome* CONCATENA `.bidprobrasil.com.br`.
+>    Para o domínio-raiz ele fica **VAZIO**. E o Registro.br só grava depois do **segundo**
+>    clique (ADICIONAR → publicar a zona).
 
 ---
 
