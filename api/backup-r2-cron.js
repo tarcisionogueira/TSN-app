@@ -23,6 +23,9 @@ export const config = { runtime: 'nodejs', maxDuration: 120 };
 // Região do bucket R2 (location hint declarado na criação: enam/weur/apac/...). Serve para o
 // health-check conferir que a cópia está FORA da região do banco (Supabase: sa-east-1).
 const R2_REGIAO = (process.env.R2_LOCATION || '').trim();
+// Janela de retenção dos snapshots diários do banco na cópia off-region. Backup é para
+// restaurar desastre recente — não para guardar histórico de dados pessoais sem prazo.
+const DIAS_SNAPSHOT = 90;
 
 import crypto from 'node:crypto';
 import { isCronAuthorized } from './_auth.js';
@@ -67,24 +70,32 @@ async function registrarExecucao(dados) {
 const sha256hex = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
 const hmac = (key, str) => crypto.createHmac('sha256', key).update(str).digest();
 
-// Assinatura AWS SigV4 para um PUT/HEAD único no R2 (region "auto", service "s3").
-function assinar(method, key, payloadHash, extraHeaders = {}) {
+// RFC3986 para a QUERY canônica: o SigV4 exige percent-encoding também em !'()*, que o
+// encodeURIComponent deixa passar. (No caminho mantemos o encoder já em uso e testado.)
+const enc = (s) => encodeURIComponent(String(s)).replace(/[!'()*]/g, (c) => '%' + c.charCodeAt(0).toString(16).toUpperCase());
+
+// Assinatura AWS SigV4 para uma chamada única no R2 (region "auto", service "s3").
+// `key` vazia = operação no BUCKET (ex.: ListObjectsV2); `query` entra na assinatura.
+function assinar(method, key, payloadHash, extraHeaders = {}, query = null) {
   const host = `${R2.account}.r2.cloudflarestorage.com`;
   const now = new Date();
   const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, ''); // YYYYMMDDTHHMMSSZ
   const dateStamp = amzDate.slice(0, 8);
-  const uri = '/' + [R2.bucket, ...key.split('/')].map(encodeURIComponent).join('/');
+  const uri = key === ''
+    ? '/' + encodeURIComponent(R2.bucket)
+    : '/' + [R2.bucket, ...key.split('/')].map(encodeURIComponent).join('/');
+  const canonicalQuery = query ? Object.keys(query).sort().map((k) => `${enc(k)}=${enc(query[k])}`).join('&') : '';
   const headers = { host, 'x-amz-content-sha256': payloadHash, 'x-amz-date': amzDate, ...extraHeaders };
   const signedNames = Object.keys(headers).map((h) => h.toLowerCase()).sort();
   const canonicalHeaders = signedNames.map((h) => `${h}:${String(headers[Object.keys(headers).find((k) => k.toLowerCase() === h)]).trim()}\n`).join('');
   const signedHeaders = signedNames.join(';');
-  const canonicalRequest = `${method}\n${uri}\n\n${canonicalHeaders}\n${signedHeaders}\n${payloadHash}`;
+  const canonicalRequest = `${method}\n${uri}\n${canonicalQuery}\n${canonicalHeaders}\n${signedHeaders}\n${payloadHash}`;
   const scope = `${dateStamp}/auto/s3/aws4_request`;
   const stringToSign = `AWS4-HMAC-SHA256\n${amzDate}\n${scope}\n${sha256hex(Buffer.from(canonicalRequest))}`;
   const kSigning = hmac(hmac(hmac(hmac('AWS4' + R2.secret, dateStamp), 'auto'), 's3'), 'aws4_request');
   const signature = crypto.createHmac('sha256', kSigning).update(stringToSign).digest('hex');
   const authorization = `AWS4-HMAC-SHA256 Credential=${R2.keyId}/${scope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
-  return { url: `https://${host}${uri}`, headers: { ...headers, Authorization: authorization } };
+  return { url: `https://${host}${uri}${canonicalQuery ? `?${canonicalQuery}` : ''}`, headers: { ...headers, Authorization: authorization } };
 }
 
 // Tamanho já espelhado no R2 (HEAD) — para re-espelhar só o que mudou. -1 se não existe/erro.
@@ -104,6 +115,38 @@ async function r2Put(key, body, contentType) {
   return r.ok;
 }
 
+// Lista TODAS as chaves sob um prefixo (ListObjectsV2, paginado). Devolve **null** em
+// qualquer falha — o chamador NUNCA apaga com base numa listagem incompleta, senão uma
+// falha de rede viraria exclusão de backup.
+async function r2Listar(prefixo) {
+  const chaves = [];
+  let token = null;
+  const desescapa = (s) => s.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'");
+  for (let pagina = 0; pagina < 50; pagina++) { // teto defensivo: 50 × 1000 objetos
+    const query = { 'list-type': '2', prefix: prefixo, 'max-keys': '1000', ...(token ? { 'continuation-token': token } : {}) };
+    try {
+      const { url, headers } = assinar('GET', '', sha256hex(Buffer.alloc(0)), {}, query);
+      const r = await fetch(url, { headers, signal: AbortSignal.timeout(20000) });
+      if (!r.ok) return null;
+      const xml = await r.text();
+      for (const m of xml.matchAll(/<Key>([^<]*)<\/Key>/g)) chaves.push(desescapa(m[1]));
+      if (!/<IsTruncated>\s*true\s*<\/IsTruncated>/i.test(xml)) return chaves;
+      const prox = xml.match(/<NextContinuationToken>([^<]*)<\/NextContinuationToken>/);
+      if (!prox) return chaves;
+      token = desescapa(prox[1]);
+    } catch { return null; }
+  }
+  return chaves;
+}
+
+async function r2Delete(key) {
+  try {
+    const { url, headers } = assinar('DELETE', key, sha256hex(Buffer.alloc(0)));
+    const r = await fetch(url, { method: 'DELETE', headers, signal: AbortSignal.timeout(15000) });
+    return r.ok || r.status === 404; // 404 = já não existe, objetivo cumprido
+  } catch { return false; }
+}
+
 export default async function handler(req, res) {
   if (!isCronAuthorized(req)) { res.status(401).json({ error: 'Não autorizado' }); return; }
   if (!SUPABASE_URL || !SERVICE_KEY) { res.status(500).json({ error: 'env Supabase ausente' }); return; }
@@ -116,7 +159,14 @@ export default async function handler(req, res) {
   }
 
   const pfx = R2.prefix ? R2.prefix + '/' : '';
-  const out = { storage: { total: 0, enviados: 0, iguais: 0, falhas: 0 }, negocio: { tabelas: 0, falhas: 0 } };
+  const out = {
+    storage: { total: 0, enviados: 0, iguais: 0, falhas: 0 },
+    negocio: { tabelas: 0, falhas: 0 },
+    limpeza: { orfaos: 0, snapshots: 0, falhas: 0, pulada: null },
+  };
+  // Chaves que DEVEM existir na cópia (preenchido no passo 1) — base da limpeza do passo 3.
+  const esperadas = new Set();
+  let manifestoOk = false;
 
   // 1) STORAGE IRRECUPERÁVEL → R2 (espelha só o que mudou de tamanho)
   try {
@@ -124,10 +174,12 @@ export default async function handler(req, res) {
       method: 'POST', headers: { ...sbHeaders(), 'Content-Type': 'application/json' }, body: '{}',
     })).json();
     if (Array.isArray(rows)) {
+      manifestoOk = true;
       out.storage.total = rows.length;
       for (const o of rows) {
         try {
           const destino = `${pfx}storage/${o.bucket}/${o.name}`;
+          esperadas.add(destino);
           if ((await r2Tamanho(destino)) === Number(o.tamanho)) { out.storage.iguais++; continue; }
           const dl = await fetch(`${SUPABASE_URL}/storage/v1/object/${o.bucket}/${o.name.split('/').map(encodeURIComponent).join('/')}`, {
             headers: sbHeaders(), signal: AbortSignal.timeout(45000),
@@ -151,6 +203,47 @@ export default async function handler(req, res) {
       if (await r2Put(`${pfx}db/${carimbo}/${t}.json`, json, 'application/json')) out.negocio.tabelas++;
       else out.negocio.falhas++;
     } catch { out.negocio.falhas++; }
+  }
+
+  // 3) ELIMINAÇÃO NA CÓPIA (LGPD Art. 18, VI) — o que saiu da ORIGEM tem de sair do BACKUP.
+  //
+  // Sem este passo o backup virava ARQUIVO PERMANENTE, e fora do Brasil: o cliente exercia o
+  // direito ao esquecimento, o arquivo sumia do Supabase e continuava para sempre no R2. Pior
+  // no snapshot do banco, gravado com a DATA na chave (`db/AAAA-MM-DD/...`): uma cópia de
+  // `perfis` inteiro — nome, CPF, telefone — por dia, acumulando sem fim. A Política de
+  // Privacidade promete anonimização imediata no encerramento da conta; sem isto aqui, a
+  // promessa não alcançava a cópia.
+  //
+  // Duas travas para nunca apagar por engano: só roda se o MANIFESTO foi lido com sucesso
+  // (senão "nada é esperado" e apagaríamos tudo) e só apaga com base numa listagem COMPLETA
+  // (r2Listar devolve null em qualquer falha).
+  if (manifestoOk) {
+    const atuais = await r2Listar(`${pfx}storage/`);
+    if (atuais === null) out.limpeza.pulada = 'listagem_falhou';
+    else {
+      for (const k of atuais) {
+        if (esperadas.has(k)) continue;
+        if (await r2Delete(k)) out.limpeza.orfaos++; else out.limpeza.falhas++;
+      }
+    }
+  } else {
+    out.limpeza.pulada = 'manifesto_indisponivel';
+  }
+
+  // Retenção dos snapshots diários do banco: mantém a janela de DIAS_SNAPSHOT e descarta o
+  // resto. Backup serve para restaurar um desastre recente, não para guardar histórico de
+  // dados pessoais indefinidamente (LGPD Art. 15, I e Art. 16).
+  {
+    const snaps = await r2Listar(`${pfx}db/`);
+    if (snaps === null) { if (!out.limpeza.pulada) out.limpeza.pulada = 'listagem_db_falhou'; }
+    else {
+      const corte = new Date(Date.now() - DIAS_SNAPSHOT * 86400000).toISOString().slice(0, 10);
+      for (const k of snaps) {
+        const m = k.match(/db\/(\d{4}-\d{2}-\d{2})\//);
+        if (!m || m[1] >= corte) continue;
+        if (await r2Delete(k)) out.limpeza.snapshots++; else out.limpeza.falhas++;
+      }
+    }
   }
 
   // Só é "ok" se o storage não teve falha E o snapshot do negócio saiu inteiro.

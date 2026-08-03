@@ -14,7 +14,7 @@ export default function Privacidade() {
           <ArrowLeft size={16} /> Voltar
         </button>
         <h1 style={{ fontSize: 32, fontWeight: 900, color: '#111111', margin: '0 0 6px' }}>Política de Privacidade (LGPD)</h1>
-        <p style={{ color: '#94a3b8', fontSize: 13 }}>Última atualização: julho de 2026</p>
+        <p style={{ color: '#94a3b8', fontSize: 13 }}>Última atualização: agosto de 2026</p>
 
         <p style={{ marginTop: 20 }}>Esta política descreve como a BidPro Brasil (Nogueira Empreendimentos LTDA) coleta, usa e protege os dados pessoais dos seus usuários, em conformidade com a Lei nº 13.709/2018 (LGPD).</p>
 
@@ -26,9 +26,13 @@ export default function Privacidade() {
         <p>Utilizamos seus dados para: criar e manter sua conta; processar assinaturas e emitir documentos fiscais; gerar análises e relatórios; e prestar suporte. A base legal é a execução do contrato e o seu consentimento, fornecido no momento do cadastro.</p>
 
         <h2 style={h2}>3. Compartilhamento e transferência internacional</h2>
-        <p>Compartilhamos dados apenas com prestadores essenciais à operação, na medida necessária para prestar o serviço: processadores de pagamento (Asaas e Mercado Pago), infraestrutura e banco de dados (Supabase), envio de e-mails (Resend), reuniões por vídeo (Daily.co) e, quando aplicável, advogado/escritório jurídico parceiro para a assessoria contratada. Não vendemos seus dados.</p>
+        <p>Compartilhamos dados apenas com prestadores essenciais à operação, na medida necessária para prestar o serviço: processadores de pagamento (Asaas e Mercado Pago), infraestrutura e banco de dados (Supabase), hospedagem da aplicação (Vercel), cópia de segurança de arquivos (Cloudflare R2), proteção contra abuso e controle de uso (Upstash), envio de e-mails (Resend), reuniões por vídeo (Daily.co) e, quando aplicável, advogado/escritório jurídico parceiro para a assessoria contratada. Não vendemos seus dados.</p>
         <p style={{ marginTop: 10 }}><strong>Uso de inteligência artificial:</strong> para gerar as análises, dados do imóvel e o conteúdo dos documentos enviados podem ser processados por provedores de IA (Anthropic/Claude e Google/Gemini). Esses provedores atuam como operadores, tratando os dados exclusivamente para gerar o resultado solicitado.</p>
-        <p style={{ marginTop: 10 }}><strong>Transferência internacional (LGPD Art. 33):</strong> alguns desses prestadores (ex.: provedores de IA, e-mail e vídeo) processam dados em servidores fora do Brasil, inclusive nos Estados Unidos. Nesses casos, a transferência ocorre com base na execução do contrato e no seu consentimento, e adotamos salvaguardas contratuais e técnicas para proteger seus dados.</p>
+        <p style={{ marginTop: 10 }}><strong>Transferência internacional (LGPD Art. 33):</strong> alguns desses prestadores (ex.: provedores de IA, e-mail, vídeo e hospedagem) processam dados em servidores fora do Brasil, inclusive nos Estados Unidos. Nesses casos, a transferência ocorre com base na execução do contrato e no seu consentimento, e adotamos salvaguardas contratuais e técnicas para proteger seus dados.</p>
+
+        <p style={{ marginTop: 10 }}><strong>Cópia de segurança fora do Brasil:</strong> o banco de dados e os arquivos ficam hospedados no <strong>Brasil</strong> (Supabase, região de São Paulo). Para que um incidente nessa infraestrutura não cause perda definitiva, mantemos uma <strong>cópia de segurança em servidores da Cloudflare (R2) na América do Norte</strong>. Essa cópia abrange os arquivos que não podem ser recuperados de outra forma — como documentos que você envia (identificação, contratos e comprovantes) — e um retrato periódico das tabelas essenciais do sistema, que inclui dados cadastrais. Ela é usada <strong>exclusivamente para restauração em caso de desastre</strong>, tem acesso restrito à operação da plataforma e trafega criptografada.</p>
+
+        <p style={{ marginTop: 10 }}><strong>Exclusão alcança a cópia:</strong> quando um dado é excluído ou anonimizado no sistema principal — por encerramento de conta, por exercício do seu direito de eliminação ou por vencimento do prazo de retenção —, ele deixa de constar da cópia de segurança na sincronização seguinte, que ocorre <strong>diariamente</strong>. Os retratos periódicos do banco são mantidos por no máximo <strong>90 dias</strong> e descartados automaticamente. Ou seja, a cópia de segurança não funciona como arquivo permanente.</p>
         <p style={{ marginTop: 10 }}><strong>Reuniões por vídeo:</strong> as reuniões de assessoria podem ser transcritas automaticamente para fins de qualidade e auditoria, mediante aviso na entrada da sala, conforme a Lei nº 9.296/1996 (Art. 10) e a LGPD (Art. 7º, I).</p>
 
         <h2 style={h2}>4. Programa de Parceiros e rede de indicações</h2>
@@ -48,13 +52,14 @@ export default function Privacidade() {
         <p style={{ marginTop: 12 }}>Respondemos a solicitações de direitos no prazo de <strong>até 15 dias úteis</strong>, conforme previsto no Art. 18 da LGPD.</p>
 
         <h2 style={h2}>6. Segurança e retenção de dados</h2>
-        <p>Adotamos medidas técnicas e organizacionais para proteger seus dados contra acesso não autorizado, perda ou destruição, incluindo criptografia em trânsito (TLS) e autenticação segura.</p>
+        <p>Adotamos medidas técnicas e organizacionais para proteger seus dados contra acesso não autorizado, perda ou destruição, incluindo criptografia em trânsito (TLS), autenticação segura e <strong>cópia de segurança em região distinta da principal</strong> (ver seção 3), para que uma falha de infraestrutura não implique perda definitiva dos seus documentos.</p>
         <p style={{ marginTop: 10 }}>Prazos de retenção:</p>
         <ul style={{ paddingLeft: 20, marginTop: 8 }}>
           <li style={{ marginBottom: 6 }}><strong>Dados financeiros e registros de compras:</strong> mantidos por <strong>5 anos</strong> após o encerramento da conta, em cumprimento às obrigações legais e fiscais (Lei nº 9.613/98 e legislação tributária aplicável).</li>
           <li style={{ marginBottom: 6 }}><strong>Dados pessoais, histórico de buscas, alertas e filtros salvos:</strong> excluídos ou anonimizados imediatamente no encerramento da conta.</li>
           <li style={{ marginBottom: 6 }}><strong>Dados de suporte (chamados):</strong> mantidos por até 2 anos para fins de auditoria.</li>
           <li style={{ marginBottom: 6 }}><strong>Documentos de leilão arquivados (editais, matrículas):</strong> mantidos enquanto necessários às análises e ao acompanhamento do leilão, e removidos quando expiram ou deixam de ser necessários, conforme nossa política de retenção interna.</li>
+          <li style={{ marginBottom: 6 }}><strong>Cópia de segurança (backup):</strong> acompanha o dado de origem — o que é excluído no sistema principal sai da cópia na sincronização diária seguinte; os retratos periódicos do banco são descartados após <strong>90 dias</strong>.</li>
         </ul>
 
         <h2 style={h2}>7. Encarregado pelo Tratamento de Dados (DPO)</h2>
