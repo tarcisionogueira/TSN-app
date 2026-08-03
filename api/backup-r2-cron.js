@@ -49,6 +49,32 @@ const TABELAS_NEGOCIO = [
   'indice_amostra', 'cidade_indicadores', 'leiloeiro_conhecimento',
 ];
 
+// MINIMIZAÇÃO NA CÓPIA (LGPD Art. 6º, III — necessidade). A cópia existe para RESTAURAR um
+// desastre; para isso não é preciso levar chave financeira nem documento legível para fora
+// do país. Colunas listadas aqui saem do snapshot da tabela:
+//   • chave_pix / pix_key / pj_chave_pix → é o dado de MAIOR valor para um atacante e o de
+//     MENOR custo de recuperação: o parceiro recadastra no próximo saque, em segundos.
+//   • cpf (texto claro) → resquício de antes da criptografia. O CPF continua na cópia como
+//     `cpf_enc` (AES-GCM) e `cpf_hash` (HMAC): sem a CPF_ENC_KEY — que NÃO vai no backup —
+//     são bytes inúteis. Restauração preservada, exposição eliminada.
+// Se a credencial do R2 vazar, o achado é "dados cifrados, sem chave", não "CPF e PIX".
+const COLUNAS_FORA = {
+  perfis: ['cpf', 'chave_pix', 'pix_key', 'pj_chave_pix'],
+};
+
+// Monta o ?select= da tabela excluindo COLUNAS_FORA. Sem lista definida → `*` (como antes).
+async function selectDaTabela(tabela) {
+  const fora = COLUNAS_FORA[tabela];
+  if (!fora?.length) return '*';
+  const r = await fetch(
+    `${SUPABASE_URL}/rest/v1/rpc/backup_colunas_da_tabela`,
+    { method: 'POST', headers: { ...sbHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify({ p_tabela: tabela }) },
+  ).catch(() => null);
+  const cols = r && r.ok ? await r.json().catch(() => null) : null;
+  if (!Array.isArray(cols) || !cols.length) return null; // não sabemos as colunas → NÃO copia
+  return cols.filter((c) => !fora.includes(c)).join(',');
+}
+
 function sbHeaders() { return { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` }; }
 
 // Deixa rastro de CADA execução em backup_execucoes — é o que o check-up de saúde lê para
@@ -197,7 +223,12 @@ export default async function handler(req, res) {
   const carimbo = new Date().toISOString().slice(0, 10);
   for (const t of TABELAS_NEGOCIO) {
     try {
-      const r = await fetch(`${SUPABASE_URL}/rest/v1/${t}?select=*`, { headers: sbHeaders(), signal: AbortSignal.timeout(45000) });
+      // `select` explícito quando a tabela tem colunas fora da cópia (ver COLUNAS_FORA).
+      // null = não conseguimos resolver as colunas → falha declarada, NUNCA cai no `*`
+      // silencioso (seria copiar justamente o que se decidiu não copiar).
+      const sel = await selectDaTabela(t);
+      if (sel === null) { out.negocio.falhas++; continue; }
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/${t}?select=${encodeURIComponent(sel)}`, { headers: sbHeaders(), signal: AbortSignal.timeout(45000) });
       if (!r.ok) { out.negocio.falhas++; continue; }
       const json = Buffer.from(await r.text());
       if (await r2Put(`${pfx}db/${carimbo}/${t}.json`, json, 'application/json')) out.negocio.tabelas++;
