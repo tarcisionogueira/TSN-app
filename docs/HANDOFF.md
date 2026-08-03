@@ -248,6 +248,47 @@ fomos item a item. Tudo abaixo está CONCLUÍDO e conferido dos dois lados (pain
   **Supabase Auth**, não pelo nosso `_email.js` — nunca cria linha em `emails_log`. O teste
   válido é um e-mail NOSSO (`oportunidades` 11:00 UTC, `boas_vindas` em cadastro novo).
 
+**5. 🔴 O MAIOR ACHADO DA NOITE — O CSP BLOQUEAVA O NOSSO PRÓPRIO RASTREAMENTO.**
+Começou com o dono perguntando por que o painel dizia "Pixel do Meta: Pendente" se já tinham
+integrado. Terminou noutro lugar.
+- **(a) O painel mentia:** `system-status.js` checava `META_PIXEL_ID` e `META_ACCESS_TOKEN`,
+  nomes que **nunca existiram**. Os reais são `VITE_META_PIXEL_ID` (marketing.js) e
+  `META_CAPI_TOKEN` (_meta-capi.js). Corrigido — e o item do Google ganhou rótulo dizendo
+  para que serve ("mede o PIX") em vez de "opcional" seco, que parecia pendência esquecida.
+- **(b) A venda INICIAL não era medida:** o Meta CAPI só era disparado em `ativarPlanoDireto`
+  (recorrência). O pagamento inicial passa por `processarConfirmado`, e ali não havia envio
+  nenhum. O HANDOFF de 29/07 registrava dois pontos de disparo; existia **um**. Agora os dois
+  passam por `registrarConversaoAnuncio()`, helper único.
+- **(c) `api/_google-ads.js` — conversão OFFLINE (novo, DORMENTE):** resolve o furo do PIX
+  pago depois de sair do checkout (o Google não conta; o Meta contava via CAPI). Usa o `gclid`
+  já guardado em `perfis.mkt_gclid`; `orderId` = mesmo id do evento do navegador (dedup).
+  Trata `partialFailureError`, que chega com **HTTP 200** — sem olhar isso, erro de conversão
+  passaria por sucesso. Liga com: `GOOGLE_ADS_DEVELOPER_TOKEN` (API Center — **só existe em
+  conta MCC**), `GOOGLE_ADS_CUSTOMER_ID`, `GOOGLE_ADS_CONVERSION_ACTION_ID` (ação do tipo
+  *Importar → rastrear conversões de cliques*; o id sai da URL, `ctId=`), `GOOGLE_ADS_REFRESH_TOKEN`.
+- **(d) 🔴 A CAUSA RAIZ, achada pelo Tag Assistant do dono:** o `Content-Security-Policy` do
+  `vercel.json` **barrava os próprios rastreadores**. Faltavam: `connect.facebook.net` em
+  `script-src` (→ **o fbevents.js NUNCA carregou; o Pixel do Meta estava 100% morto desde
+  sempre**, apesar do registro de 29/07 dizer "validado em produção" — o que se validou foi o
+  ID no bundle, não o script carregando); `googleadservices` + `googleads.g.doubleclick.net`
+  em `script-src` (script de conversão do Ads); e, em `connect-src`, os endpoints **regionais**
+  do GA4 (`region1.google-analytics.com` — daí o curinga), googletagmanager, googleadservices,
+  doubleclick, google.com e facebook.com. Ampliação mínima, por domínio nominal, sem tocar em
+  `default-src`/`object-src`/`frame-ancestors`.
+- **VALIDADO NA TELA pelo dono, depois do deploy** (aba Rede): `fbevents.js` **200** (106 kB) +
+  3 × `tr/?id=683455009174779&ev=PageView` **200** → **Pixel do Meta vivo**; `collect?v=2&tid=
+  G-5YNHQB5F81` **204** (204 é o sucesso do GA4); ping do Ads **200**. A única barrada é
+  `ad.doubleclick.net/ccm/s/collect`, com status **`blocked:other`** = extensão/navegador, não
+  o nosso CSP (seria `blocked:csp`) — e ela não participa da contagem de conversão.
+- **Por que as 4 metas do Ads apareciam "Configuração incorreta / Inativo":** soma de duas
+  causas. Volume baixíssimo (24 cliques, 0 cadastros com gclid) **e** o canal fechado pelo CSP.
+  ⚠️ Eu havia dito ao dono que era "aritmética, não bug" — estava **incompleto**; corrigi na
+  sessão. Não recriar ações no Ads: as duas corretas já existem ("Compra de plano — BidPro" e
+  "Cadastro — BidPro"), com os rótulos batendo com `src/utils/gtag.js`.
+- **Lição para o ritual:** *tag instalada ≠ tag funcionando*. O que prova é **status 200 na aba
+  Rede**. Mesmo padrão do backup dormente e do painel com nome de env errado — três casos, no
+  mesmo dia, de "o sistema diz configurado e a coisa não acontece".
+
 **COBRAR NA PRÓXIMA SESSÃO (prometido ao dono para a manhã de 04/08):**
 1. `select * from backup_execucoes order by executado_em desc limit 3;` → a de 04:40 UTC tem de
    sair de `dormante=true` para arquivos copiados. Se falhar, o conserto é variável, não código.
