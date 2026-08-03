@@ -1,0 +1,355 @@
+/**
+ * /api/publico — PÁGINAS PÚBLICAS INDEXÁVEIS (o que o Google consegue ler).
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * O PROBLEMA QUE ISTO RESOLVE (diagnóstico de 02/08, a partir do dono: "pesquisando
+ * palavras-chave de leilão o meu site não aparece"):
+ *
+ * O app é uma SPA com HashRouter — tudo mora depois do `#`. E o Google DESCARTA o
+ * fragmento: `/#/buscar` e `/#/planos` são, para ele, a MESMA URL que `/`. Ou seja, um
+ * site com 33 mil imóveis tinha exatamente UMA página indexável — a home. Não havia como
+ * ranquear para "casa em leilão em Campinas": essa página simplesmente não existia para o
+ * buscador. O sitemap listava 7 URLs com `#`, que colapsam todas na raiz.
+ *
+ * A CORREÇÃO, sem mexer no roteador do app (risco alto, ganho igual): rotas SEM hash,
+ * renderizadas NO SERVIDOR, com conteúdo de verdade:
+ *   /leiloes                    → índice nacional (todos os estados com acervo)
+ *   /leiloes/:uf                → estado: cidades com mais imóveis
+ *   /leiloes/:uf/:cidade        → cidade: lista os imóveis (paginada)
+ *   /leilao/:id                 → ficha pública do imóvel
+ *
+ * NÍVEL DE EXPOSIÇÃO — decidido para não dar de graça o que é o produto: estas páginas
+ * mostram EXATAMENTE o que o visitante não logado já vê hoje no teaser (`ImovelGate`) e o
+ * que a RLS "Leitura pública" de `imoveis_leilao` já libera: título, tipo, cidade/UF,
+ * bairro, área, valores, datas e foto. O que é o PRODUTO — análise de viabilidade, parecer
+ * jurídico, documentos, Índice — continua atrás do cadastro. É o funil clássico: o buscador
+ * traz a pessoa pelo imóvel, o cadastro entrega a análise.
+ *
+ * NÃO É a mesma coisa que `/i/:id` (og-share): aquele existe para o preview de link
+ * compartilhado, é `noindex` e redireciona para o app. Este aqui é conteúdo para ser lido —
+ * não redireciona ninguém, porque página que redireciona não indexa.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+export const config = { runtime: 'nodejs', maxDuration: 15 };
+
+const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
+const SITE = 'https://www.bidprobrasil.com.br';
+const POR_PAGINA = 36;
+
+const UFS = ['AC','AL','AM','AP','BA','CE','DF','ES','GO','MA','MG','MS','MT','PA','PB','PE','PI','PR','RJ','RN','RO','RR','RS','SC','SE','SP','TO'];
+const UF_NOME = { AC:'Acre', AL:'Alagoas', AM:'Amazonas', AP:'Amapá', BA:'Bahia', CE:'Ceará', DF:'Distrito Federal', ES:'Espírito Santo', GO:'Goiás', MA:'Maranhão', MG:'Minas Gerais', MS:'Mato Grosso do Sul', MT:'Mato Grosso', PA:'Pará', PB:'Paraíba', PE:'Pernambuco', PI:'Piauí', PR:'Paraná', RJ:'Rio de Janeiro', RN:'Rio Grande do Norte', RO:'Rondônia', RR:'Roraima', RS:'Rio Grande do Sul', SC:'Santa Catarina', SE:'Sergipe', SP:'São Paulo', TO:'Tocantins' };
+const TIPO_LABEL = { casa:'Casa', apartamento:'Apartamento', terreno:'Terreno', comercial:'Imóvel comercial', rural:'Imóvel rural', galpao:'Galpão', sala:'Sala comercial', vaga:'Vaga de garagem', imovel:'Imóvel' };
+
+const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const brl = (v) => (Number(v) > 0 ? `R$ ${Math.round(Number(v)).toLocaleString('pt-BR')}` : null);
+const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
+const slug = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 70);
+
+async function sb(path) {
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+      headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, Prefer: 'count=exact' },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!r.ok) return { linhas: null, total: 0 };
+    const total = Number(String(r.headers.get('content-range') || '').split('/')[1]) || 0;
+    return { linhas: await r.json(), total };
+  } catch { return { linhas: null, total: 0 }; }
+}
+
+// ── Casca HTML. Uma só, para todas as páginas ────────────────────────────────
+// Sem framework e sem JS de aplicação: a página tem que estar PRONTA no HTML que o
+// servidor devolve. Se depender de JS para aparecer, volta ao problema de origem.
+function pagina({ titulo, desc, canonical, corpo, jsonld, indexar = true, migalha = [] }) {
+  return `<!doctype html><html lang="pt-BR"><head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>${esc(titulo)}</title>
+<meta name="description" content="${esc(desc)}"/>
+<meta name="robots" content="${indexar ? 'index, follow, max-image-preview:large' : 'noindex, follow'}"/>
+<link rel="canonical" href="${esc(canonical)}"/>
+<link rel="icon" type="image/png" sizes="48x48" href="/favicon-48.png?v=4"/>
+<meta property="og:type" content="website"/>
+<meta property="og:site_name" content="BidPro Brasil"/>
+<meta property="og:title" content="${esc(titulo)}"/>
+<meta property="og:description" content="${esc(desc)}"/>
+<meta property="og:url" content="${esc(canonical)}"/>
+<meta property="og:image" content="${SITE}/og-image.png?v=4"/>
+<meta property="og:locale" content="pt_BR"/>
+<meta name="twitter:card" content="summary_large_image"/>
+${jsonld ? `<script type="application/ld+json">${JSON.stringify(jsonld)}</script>` : ''}
+<style>
+:root{--azul:#0D63DB;--tinta:#0f172a;--cinza:#64748b;--linha:#e2e8f0}
+*{box-sizing:border-box}
+body{margin:0;font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:var(--tinta);background:#f8fafc;line-height:1.6}
+a{color:var(--azul);text-decoration:none}a:hover{text-decoration:underline}
+header{background:#111;color:#fff;padding:14px 20px}
+header .in{max-width:1080px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+header a{color:#fff;font-weight:800;font-size:17px}
+.cta{background:var(--azul);color:#fff!important;padding:9px 18px;border-radius:9px;font-weight:700;font-size:14px;text-decoration:none!important}
+main{max-width:1080px;margin:0 auto;padding:24px 20px 56px}
+.mig{font-size:12.5px;color:var(--cinza);margin-bottom:14px}
+h1{font-size:26px;line-height:1.25;margin:0 0 8px}
+h2{font-size:18px;margin:32px 0 12px}
+.sub{color:var(--cinza);margin:0 0 22px;font-size:15px}
+.grade{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px}
+.card{background:#fff;border:1px solid var(--linha);border-radius:12px;overflow:hidden;display:flex;flex-direction:column}
+.card img{width:100%;height:150px;object-fit:cover;background:#e2e8f0;display:block}
+.card .c{padding:12px 14px;display:flex;flex-direction:column;gap:4px;flex:1}
+.card .t{font-weight:700;font-size:14px;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.card .l{font-size:12.5px;color:var(--cinza)}
+.card .v{font-size:16px;font-weight:900;margin-top:auto;padding-top:6px}
+.tag{display:inline-block;font-size:11px;font-weight:800;color:#166534;background:#dcfce7;padding:2px 8px;border-radius:999px}
+.lista{display:flex;flex-wrap:wrap;gap:8px;margin:0;padding:0;list-style:none}
+.lista li a{display:inline-block;background:#fff;border:1px solid var(--linha);border-radius:999px;padding:6px 14px;font-size:13.5px}
+.painel{background:#fff;border:1px solid var(--linha);border-radius:14px;padding:20px;margin-bottom:20px}
+.dados{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin:16px 0}
+.dados div span{display:block;font-size:11.5px;color:var(--cinza);text-transform:uppercase;letter-spacing:.4px;font-weight:700}
+.dados div strong{font-size:17px}
+.pag{display:flex;gap:10px;justify-content:center;margin-top:28px;font-size:14px}
+footer{border-top:1px solid var(--linha);padding:24px 20px;color:var(--cinza);font-size:12.5px}
+footer .in{max-width:1080px;margin:0 auto}
+@media(prefers-color-scheme:dark){body{background:#0f1115;color:#e5e7eb}.card,.painel,.lista li a{background:#171a21;border-color:#262b36}.sub,.l,.mig,footer{color:#94a3b8}}
+</style>
+</head><body>
+<header><div class="in">
+  <a href="${SITE}/">BidPro Brasil</a>
+  <a class="cta" href="${SITE}/#/login?modo=cadastro">Criar conta grátis</a>
+</div></header>
+<main>
+${migalha.length ? `<nav class="mig">${migalha.map((m, i) => (m.url ? `<a href="${esc(m.url)}">${esc(m.nome)}</a>` : esc(m.nome)) + (i < migalha.length - 1 ? ' › ' : '')).join('')}</nav>` : ''}
+${corpo}
+</main>
+<footer><div class="in">
+  <p><strong>BidPro Brasil</strong> — leilões de imóveis com análise de viabilidade, parecer jurídico e assessoria para arrematar com segurança.
+  Também escrito como <em>Bid Pro Brasil</em>.</p>
+  <p><a href="${SITE}/leiloes">Imóveis em leilão por estado</a> · <a href="${SITE}/#/planos">Planos</a> · <a href="${SITE}/#/termos">Termos</a> · <a href="${SITE}/#/privacidade">Privacidade</a></p>
+</div></footer>
+</body></html>`;
+}
+
+function cardImovel(im) {
+  const t = TIPO_LABEL[String(im.tipo || '').toLowerCase()] || 'Imóvel';
+  const local = [im.bairro, im.cidade, im.estado].filter(Boolean).join(', ');
+  const lance = brl(im.valor_minimo);
+  const aval = brl(im.valor_avaliacao);
+  const desc = Number(im.desconto_percentual) > 0 ? `${im.desconto_percentual}% abaixo da avaliação` : null;
+  return `<article class="card">
+    ${im.link_foto ? `<img src="${esc(im.link_foto)}" alt="${esc(t)} em leilão em ${esc(im.cidade || '')}" loading="lazy"/>` : ''}
+    <div class="c">
+      <a class="t" href="${SITE}/leilao/${esc(im.id)}/${slug(im.titulo || t)}">${esc(im.titulo || `${t} em leilão`)}</a>
+      <div class="l">${esc(t)}${im.area_m2 > 0 ? ` · ${Math.round(im.area_m2)} m²` : ''}</div>
+      <div class="l">${esc(local)}</div>
+      ${desc ? `<div><span class="tag">${esc(desc)}</span></div>` : ''}
+      <div class="v">${lance ? esc(lance) : aval ? esc(aval) : 'Consulte'}</div>
+    </div>
+  </article>`;
+}
+
+// ── /leiloes — índice nacional ───────────────────────────────────────────────
+async function paginaBrasil() {
+  const { linhas } = await sb('imoveis_leilao?ativo=eq.true&select=estado&limit=100000');
+  const cont = {};
+  (linhas || []).forEach((r) => { const uf = String(r.estado || '').toUpperCase(); if (UF_NOME[uf]) cont[uf] = (cont[uf] || 0) + 1; });
+  const ufs = Object.entries(cont).sort((a, b) => b[1] - a[1]);
+  const total = ufs.reduce((s, [, n]) => s + n, 0);
+  return pagina({
+    titulo: 'Imóveis em leilão no Brasil — casas, apartamentos e terrenos | BidPro Brasil',
+    desc: `${total.toLocaleString('pt-BR')} imóveis em leilão judicial e extrajudicial em ${ufs.length} estados. Veja lance mínimo, avaliação e desconto — e analise a viabilidade antes de arrematar.`,
+    canonical: `${SITE}/leiloes`,
+    migalha: [{ nome: 'Início', url: `${SITE}/` }, { nome: 'Imóveis em leilão' }],
+    corpo: `<h1>Imóveis em leilão no Brasil</h1>
+      <p class="sub">${total.toLocaleString('pt-BR')} imóveis de leilão judicial e extrajudicial acompanhados hoje, em ${ufs.length} estados. Escolha o estado para ver as cidades com oportunidades.</p>
+      <ul class="lista">${ufs.map(([uf, n]) => `<li><a href="${SITE}/leiloes/${uf.toLowerCase()}">${esc(UF_NOME[uf])} <strong>(${n.toLocaleString('pt-BR')})</strong></a></li>`).join('')}</ul>
+      <h2>Como funciona a BidPro Brasil</h2>
+      <p class="sub">Reunimos os lotes dos leiloeiros e da Caixa num só lugar e entregamos, para cada imóvel, uma análise de mercado, um parecer jurídico e o cálculo de viabilidade do arremate — o que ninguém consegue fazer sozinho antes de dar um lance.
+      <a href="${SITE}/#/login?modo=cadastro">Crie uma conta grátis</a> para ver a ficha completa de qualquer imóvel.</p>`,
+    jsonld: { '@context': 'https://schema.org', '@type': 'CollectionPage', name: 'Imóveis em leilão no Brasil', url: `${SITE}/leiloes`, isPartOf: { '@type': 'WebSite', name: 'BidPro Brasil', url: SITE } },
+  });
+}
+
+// ── /leiloes/:uf ─────────────────────────────────────────────────────────────
+async function paginaUF(uf) {
+  const nomeUF = UF_NOME[uf];
+  const { linhas } = await sb(`imoveis_leilao?ativo=eq.true&estado=eq.${uf}&select=cidade,cidade_norm&limit=100000`);
+  const cont = {};
+  (linhas || []).forEach((r) => {
+    if (!r.cidade_norm || !r.cidade) return;
+    const k = r.cidade_norm;
+    if (!cont[k]) cont[k] = { nome: r.cidade, n: 0 };
+    cont[k].n++;
+  });
+  const cidades = Object.entries(cont).sort((a, b) => b[1].n - a[1].n);
+  const total = cidades.reduce((s, [, c]) => s + c.n, 0);
+  return pagina({
+    titulo: `Imóveis em leilão em ${nomeUF} — ${total.toLocaleString('pt-BR')} oportunidades | BidPro Brasil`,
+    desc: `Casas, apartamentos e terrenos em leilão em ${nomeUF}: ${total.toLocaleString('pt-BR')} lotes em ${cidades.length} cidades, com lance mínimo, avaliação e desconto.`,
+    canonical: `${SITE}/leiloes/${uf.toLowerCase()}`,
+    indexar: total > 0,
+    migalha: [{ nome: 'Início', url: `${SITE}/` }, { nome: 'Imóveis em leilão', url: `${SITE}/leiloes` }, { nome: nomeUF }],
+    corpo: `<h1>Imóveis em leilão em ${esc(nomeUF)}</h1>
+      <p class="sub">${total.toLocaleString('pt-BR')} imóveis em leilão em ${cidades.length} cidades de ${esc(nomeUF)}. Clique na cidade para ver os lotes.</p>
+      <ul class="lista">${cidades.map(([cn, c]) => `<li><a href="${SITE}/leiloes/${uf.toLowerCase()}/${cn}">${esc(c.nome)} <strong>(${c.n.toLocaleString('pt-BR')})</strong></a></li>`).join('')}</ul>
+      <h2>Antes de dar um lance em ${esc(nomeUF)}</h2>
+      <p class="sub">Cada imóvel de leilão tem uma história: ocupação, dívidas de condomínio e IPTU, ônus na matrícula, prazo de desocupação. A BidPro Brasil produz a análise de mercado, o parecer jurídico e o cálculo de viabilidade de cada lote. <a href="${SITE}/#/login?modo=cadastro">Comece grátis</a>.</p>`,
+    jsonld: { '@context': 'https://schema.org', '@type': 'CollectionPage', name: `Imóveis em leilão em ${nomeUF}`, url: `${SITE}/leiloes/${uf.toLowerCase()}` },
+  });
+}
+
+// ── /leiloes/:uf/:cidade ─────────────────────────────────────────────────────
+async function paginaCidade(uf, cidadeNorm, page) {
+  const desloc = (page - 1) * POR_PAGINA;
+  const campos = 'id,titulo,tipo,cidade,estado,bairro,area_m2,valor_minimo,valor_avaliacao,desconto_percentual,link_foto';
+  const { linhas, total } = await sb(
+    `imoveis_leilao?ativo=eq.true&estado=eq.${uf}&cidade_norm=eq.${encodeURIComponent(cidadeNorm)}` +
+    `&select=${campos}&order=desconto_percentual.desc.nullslast&offset=${desloc}&limit=${POR_PAGINA}`);
+  const itens = Array.isArray(linhas) ? linhas : [];
+  const nomeCidade = itens[0]?.cidade || cidadeNorm;
+  const base = `${SITE}/leiloes/${uf.toLowerCase()}/${cidadeNorm}`;
+  const ultima = Math.max(1, Math.ceil(total / POR_PAGINA));
+
+  // Cidade sem lote hoje NÃO entra no índice: página vazia é conteúdo raso, e conteúdo raso
+  // derruba a reputação do site inteiro. Fica acessível (o acervo muda toda semana), só não
+  // é oferecida ao buscador.
+  if (!itens.length) {
+    return pagina({
+      titulo: `Imóveis em leilão em ${nomeCidade} — ${UF_NOME[uf]} | BidPro Brasil`,
+      desc: `No momento não há lotes ativos em ${nomeCidade}/${uf}. Veja as demais cidades de ${UF_NOME[uf]}.`,
+      canonical: base, indexar: false,
+      migalha: [{ nome: 'Início', url: `${SITE}/` }, { nome: 'Imóveis em leilão', url: `${SITE}/leiloes` }, { nome: UF_NOME[uf], url: `${SITE}/leiloes/${uf.toLowerCase()}` }, { nome: nomeCidade }],
+      corpo: `<h1>Imóveis em leilão em ${esc(nomeCidade)}</h1>
+        <p class="sub">Nenhum lote ativo nesta cidade agora — o acervo muda toda semana.
+        <a href="${SITE}/leiloes/${uf.toLowerCase()}">Ver outras cidades de ${esc(UF_NOME[uf])}</a>.</p>`,
+    });
+  }
+
+  const menor = itens.map(i => Number(i.valor_minimo)).filter(v => v > 0).sort((a, b) => a - b)[0];
+  return pagina({
+    titulo: `${total.toLocaleString('pt-BR')} imóveis em leilão em ${nomeCidade}/${uf}${page > 1 ? ` — página ${page}` : ''} | BidPro Brasil`,
+    desc: `Casas, apartamentos e terrenos em leilão em ${nomeCidade}/${uf}${menor ? `, a partir de ${brl(menor)}` : ''}. Lance mínimo, avaliação, desconto e análise de viabilidade antes de arrematar.`,
+    canonical: page > 1 ? `${base}?pagina=${page}` : base,
+    migalha: [{ nome: 'Início', url: `${SITE}/` }, { nome: 'Imóveis em leilão', url: `${SITE}/leiloes` }, { nome: UF_NOME[uf], url: `${SITE}/leiloes/${uf.toLowerCase()}` }, { nome: nomeCidade }],
+    corpo: `<h1>Imóveis em leilão em ${esc(nomeCidade)}/${esc(uf)}</h1>
+      <p class="sub">${total.toLocaleString('pt-BR')} lotes ativos${menor ? `, a partir de <strong>${esc(brl(menor))}</strong>` : ''}. Ordenados pelo maior desconto sobre a avaliação.</p>
+      <div class="grade">${itens.map(cardImovel).join('')}</div>
+      ${ultima > 1 ? `<nav class="pag">
+        ${page > 1 ? `<a href="${base}${page - 1 > 1 ? `?pagina=${page - 1}` : ''}">← anterior</a>` : ''}
+        <span>página ${page} de ${ultima}</span>
+        ${page < ultima ? `<a href="${base}?pagina=${page + 1}">próxima →</a>` : ''}
+      </nav>` : ''}
+      <h2>Vale a pena arrematar em ${esc(nomeCidade)}?</h2>
+      <p class="sub">Desconto grande nem sempre é bom negócio: o que decide é o valor de mercado do bairro, os débitos que vêm junto e o risco jurídico do processo.
+      A BidPro Brasil entrega os três relatórios por imóvel — mercadológico, documental e jurídico —
+      além do lance máximo que preserva o seu lucro. <a href="${SITE}/#/login?modo=cadastro">Crie sua conta grátis</a>.</p>`,
+    jsonld: {
+      '@context': 'https://schema.org', '@type': 'ItemList',
+      name: `Imóveis em leilão em ${nomeCidade}/${uf}`, numberOfItems: total,
+      itemListElement: itens.slice(0, 20).map((im, i) => ({
+        '@type': 'ListItem', position: desloc + i + 1,
+        url: `${SITE}/leilao/${im.id}/${slug(im.titulo || 'imovel')}`,
+        name: im.titulo || 'Imóvel em leilão',
+      })),
+    },
+  });
+}
+
+// ── /leilao/:id ──────────────────────────────────────────────────────────────
+async function paginaImovel(id) {
+  const campos = 'id,titulo,tipo,cidade,cidade_norm,estado,bairro,area_m2,valor_minimo,valor_minimo_2,valor_avaliacao,desconto_percentual,data_leilao,link_foto,fonte,modalidade,descricao,ativo';
+  const { linhas } = await sb(`imoveis_leilao?id=eq.${encodeURIComponent(id)}&select=${campos}&limit=1`);
+  const im = Array.isArray(linhas) ? linhas[0] : null;
+  if (!im) return null;
+
+  const uf = String(im.estado || '').toUpperCase();
+  const t = TIPO_LABEL[String(im.tipo || '').toLowerCase()] || 'Imóvel';
+  const local = [im.bairro, im.cidade, uf].filter(Boolean).join(', ');
+  const lance = brl(im.valor_minimo), aval = brl(im.valor_avaliacao);
+  const canonical = `${SITE}/leilao/${im.id}/${slug(im.titulo || t)}`;
+  const migalha = [{ nome: 'Início', url: `${SITE}/` }, { nome: 'Imóveis em leilão', url: `${SITE}/leiloes` }];
+  if (UF_NOME[uf]) migalha.push({ nome: UF_NOME[uf], url: `${SITE}/leiloes/${uf.toLowerCase()}` });
+  if (im.cidade_norm && UF_NOME[uf]) migalha.push({ nome: im.cidade, url: `${SITE}/leiloes/${uf.toLowerCase()}/${im.cidade_norm}` });
+  migalha.push({ nome: t });
+
+  const linha = (r, v) => (v ? `<div><span>${esc(r)}</span><strong>${esc(v)}</strong></div>` : '');
+  return pagina({
+    titulo: `${im.titulo || `${t} em leilão`} — ${im.cidade || ''}/${uf} | BidPro Brasil`,
+    desc: `${t} em leilão em ${local}${im.area_m2 > 0 ? `, ${Math.round(im.area_m2)} m²` : ''}${lance ? `, lance a partir de ${lance}` : ''}${aval ? ` (avaliação ${aval})` : ''}. Veja análise de viabilidade e parecer jurídico antes de arrematar.`,
+    canonical,
+    // Lote inativo sai do índice, mas a página continua abrindo: quem chegou por um link
+    // antigo merece ver o que aconteceu, e não um 404 seco.
+    indexar: !!im.ativo,
+    migalha,
+    corpo: `<h1>${esc(im.titulo || `${t} em leilão em ${im.cidade || ''}`)}</h1>
+      <p class="sub">${esc(t)} em leilão · ${esc(local)}${im.modalidade ? ` · ${esc(im.modalidade)}` : ''}</p>
+      ${!im.ativo ? `<p class="painel"><strong>Este lote não está mais ativo</strong> no acervo — provavelmente foi arrematado ou saiu do edital. <a href="${SITE}/leiloes/${uf.toLowerCase()}${im.cidade_norm ? `/${im.cidade_norm}` : ''}">Ver imóveis disponíveis em ${esc(im.cidade || UF_NOME[uf] || 'sua região')}</a>.</p>` : ''}
+      <div class="painel">
+        ${im.link_foto ? `<img src="${esc(im.link_foto)}" alt="${esc(t)} em leilão em ${esc(im.cidade || '')}" style="width:100%;max-height:420px;object-fit:cover;border-radius:10px"/>` : ''}
+        <div class="dados">
+          ${linha('Lance mínimo', lance)}
+          ${linha('Avaliação', aval)}
+          ${linha('Desconto', Number(im.desconto_percentual) > 0 ? `${im.desconto_percentual}%` : null)}
+          ${linha('Área', im.area_m2 > 0 ? `${Math.round(im.area_m2)} m²` : null)}
+          ${linha('Tipo', t)}
+          ${linha('Cidade', im.cidade ? `${im.cidade}/${uf}` : null)}
+          ${linha('Bairro', im.bairro)}
+          ${linha('Data do leilão', im.data_leilao)}
+        </div>
+        <p><a class="cta" href="${SITE}/#/imovel/${esc(im.id)}">Ver ficha completa e análise →</a></p>
+      </div>
+      ${im.descricao ? `<h2>Descrição do lote</h2><p>${esc(String(im.descricao).slice(0, 1200))}</p>` : ''}
+      <h2>O que checar antes de dar um lance</h2>
+      <p class="sub">Desconto sozinho não decide nada. O que decide é o preço real de mercado do bairro, os débitos que vêm junto (IPTU, condomínio, ônus na matrícula), a situação de ocupação e o risco jurídico do processo.
+      A BidPro Brasil monta para este imóvel a análise de mercado, o relatório documental e o parecer jurídico — e calcula o <strong>lance máximo</strong> que ainda preserva o seu lucro.
+      <a href="${SITE}/#/login?modo=cadastro">Criar conta grátis</a>.</p>
+      ${im.cidade_norm && UF_NOME[uf] ? `<p><a href="${SITE}/leiloes/${uf.toLowerCase()}/${im.cidade_norm}">← Todos os imóveis em leilão em ${esc(im.cidade)}/${esc(uf)}</a></p>` : ''}`,
+    jsonld: {
+      '@context': 'https://schema.org', '@type': 'Product',
+      name: im.titulo || `${t} em leilão em ${im.cidade || ''}`,
+      description: `${t} em leilão em ${local}.`,
+      ...(im.link_foto ? { image: im.link_foto } : {}),
+      ...(Number(im.valor_minimo) > 0 ? {
+        offers: {
+          '@type': 'Offer', price: Math.round(Number(im.valor_minimo)), priceCurrency: 'BRL',
+          availability: im.ativo ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
+          url: canonical,
+        },
+      } : {}),
+    },
+  });
+}
+
+export default async function handler(req, res) {
+  if (!SUPABASE_URL || !SERVICE_KEY) return res.status(500).send('indisponível');
+  const u = new URL(req.url, 'http://x');
+  const tipo = u.searchParams.get('tipo') || 'brasil';
+  const uf = String(u.searchParams.get('uf') || '').toUpperCase();
+  const cidade = norm(u.searchParams.get('cidade') || '');
+  const id = String(u.searchParams.get('id') || '').slice(0, 40);
+  const page = Math.max(1, Math.min(200, Number(u.searchParams.get('pagina')) || 1));
+
+  try {
+    let html = null;
+    if (tipo === 'imovel') {
+      if (!/^[0-9a-f-]{20,40}$/i.test(id)) return res.status(404).send('Imóvel não encontrado.');
+      html = await paginaImovel(id);
+      if (!html) return res.status(404).send('Imóvel não encontrado.');
+    } else if (tipo === 'cidade') {
+      if (!UFS.includes(uf) || !cidade) return res.status(404).send('Página não encontrada.');
+      html = await paginaCidade(uf, cidade, page);
+    } else if (tipo === 'uf') {
+      if (!UFS.includes(uf)) return res.status(404).send('Estado não encontrado.');
+      html = await paginaUF(uf);
+    } else {
+      html = await paginaBrasil();
+    }
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    // Cache na borda: estas páginas são iguais para todo mundo e o acervo muda por dia,
+    // não por segundo. Sem isto, cada visita de robô viraria consulta ao banco.
+    res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=3600, stale-while-revalidate=86400');
+    return res.status(200).send(html);
+  } catch (e) {
+    console.error('[publico]', e?.message || e);
+    return res.status(500).send('Erro ao montar a página.');
+  }
+}

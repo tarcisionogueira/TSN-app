@@ -5,7 +5,13 @@
     { "source": "/t/:token", "destination": "/api/og-share?tipo=testemunha&id=:token" },
     { "source": "/i/:id", "destination": "/api/og-share?tipo=imovel&id=:id" },
     { "source": "/p/curso/:id", "destination": "/api/og-share?tipo=curso&id=:id" },
-    { "source": "/p/ebook/:id", "destination": "/api/og-share?tipo=ebook&id=:id" }
+    { "source": "/p/ebook/:id", "destination": "/api/og-share?tipo=ebook&id=:id" },
+    { "source": "/leiloes", "destination": "/api/publico?tipo=brasil" },
+    { "source": "/leiloes/:uf", "destination": "/api/publico?tipo=uf&uf=:uf" },
+    { "source": "/leiloes/:uf/:cidade", "destination": "/api/publico?tipo=cidade&uf=:uf&cidade=:cidade" },
+    { "source": "/leilao/:id", "destination": "/api/publico?tipo=imovel&id=:id" },
+    { "source": "/leilao/:id/:slug", "destination": "/api/publico?tipo=imovel&id=:id" },
+    { "source": "/sitemap-leiloes.xml", "destination": "/api/sitemap-leiloes" }
   ],
   "headers": [
     {

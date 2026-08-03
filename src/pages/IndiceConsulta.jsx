@@ -5,6 +5,7 @@ import { apiCall } from '../utils/apiCall';
 import EnderecoAutocomplete from '../components/EnderecoAutocomplete';
 import { gerarIndicePDF } from '../components/IndicePDF';
 import { useAuth } from '../contexts/AuthContext';
+import CardDemografia from '../components/CardDemografia';
 
 // Quem pode GERAR o índice de uma região nova (o servidor é a fonte da verdade — isto é só UI).
 const PODE_GERAR = ['admin', 'top2', 'top2_anual', 'assessorado', 'assessorado_anual', 'clube', 'clube_anual', 'analista', 'advogado'];
@@ -338,6 +339,9 @@ export default function IndiceConsulta() {
                 </div>
               </div>
             )}
+            {/* O Índice diz QUANTO vale o m² hoje; a demografia diz o que sustenta (ou corrói)
+                esse preço adiante. Juntas na mesma tela, mudam a leitura do mesmo número. */}
+            <CardDemografia cidade={form.cidade} uf={form.uf} />
             {Array.isArray(reg.periodos) && reg.periodos.length >= 1 && (
               <div style={{ marginTop: 12, background: 'white', borderRadius: 12, padding: '12px 16px' }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: '#334155', marginBottom: 8 }}>COMPOSIÇÃO POR PERÍODO (venda R$/m², a cada 4 meses)</div>

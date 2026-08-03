@@ -2982,6 +2982,60 @@ export default function Analise() {
                 );
               })()}
 
+              {/* DEMOGRAFIA E PRESSÃO HABITACIONAL — o fundamento de DEMANDA da praça.
+                  Lê do SNAPSHOT do relatório (mercado.socio), não do banco ao vivo: relatório é
+                  retrato de uma data; se consultasse agora, o PDF de hoje mudaria amanhã.
+                  O parecer já discute isso em texto — este bloco mostra os NÚMEROS com fonte e
+                  ano, para o cliente conferir de onde veio a conclusão. */}
+              {mercado.socio && (Number(mercado.socio.pop_estim) > 0 || Number(mercado.socio.populacao) > 0 || Number(mercado.socio.domicilios) > 0) && (() => {
+                const s = mercado.socio;
+                const cls = {
+                  demanda_reprimida: { rot: 'Demanda reprimida', cor: '#166534', bg: '#f0fdf4', bd: '#bbf7d0',
+                    txt: 'a cidade cresce e sobra pouco imóvel: preço com sustentação, revenda mais líquida e menos vacância no aluguel.' },
+                  equilibrio: { rot: 'Equilíbrio', cor: '#475569', bg: '#f8fafc', bd: '#e2e8f0',
+                    txt: 'oferta e demanda em linha com a média do país — sem vento a favor nem contra.' },
+                  estoque_ocioso: { rot: 'Estoque ocioso', cor: '#9a3412', bg: '#fff7ed', bd: '#fed7aa',
+                    txt: 'muito imóvel vazio e pouco crescimento: exige desconto maior no lance, prazo de saída mais longo e cautela com projeção de valorização.' },
+                }[s.pressao_classe] || { rot: '', cor: '#475569', bg: '#f8fafc', bd: '#e2e8f0', txt: '' };
+                const num = (v) => (Number(v) > 0 ? Math.round(Number(v)).toLocaleString('pt-BR') : null);
+                const dec = (v, c = 1) => (Number.isFinite(Number(v)) ? Number(v).toFixed(c).replace('.', ',') : null);
+                const pop = num(s.pop_estim) || num(s.populacao);
+                const popAno = Number(s.pop_estim) > 0 ? s.pop_estim_ano : s.populacao_ano;
+                const celulas = [
+                  pop && ['População', pop, popAno ? `IBGE, ${popAno}` : ''],
+                  dec(s.crescimento_recente_aa_pct, 2) && ['Crescimento', `${dec(s.crescimento_recente_aa_pct, 2)}% a.a.`, 'ritmo recente'],
+                  num(s.domicilios) && ['Domicílios', num(s.domicilios), s.domicilios_ano ? `Censo ${s.domicilios_ano}` : ''],
+                  dec(s.domicilios_vagos_pct) && ['Domicílios vagos', `${dec(s.domicilios_vagos_pct)}%`, num(s.domicilios_vagos) ? `${num(s.domicilios_vagos)} imóveis` : ''],
+                  dec(s.moradores_por_domicilio, 2) && ['Moradores/domicílio', dec(s.moradores_por_domicilio, 2), ''],
+                  num(s.nascimentos) && ['Nascimentos', num(s.nascimentos), s.nascimentos_ano ? `Registro Civil, ${s.nascimentos_ano}` : ''],
+                ].filter(Boolean);
+                return (
+                  <div style={{ borderRadius:12, border:`1px solid ${cls.bd}`, background:cls.bg, padding:'12px 16px' }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10, flexWrap:'wrap' }}>
+                      <Home size={14} color={cls.cor}/>
+                      <span style={{ fontSize:12, fontWeight:800, color:'#111' }}>Demografia e pressão habitacional</span>
+                      {cls.rot && <span style={{ marginLeft:'auto', fontSize:11, fontWeight:800, padding:'2px 10px', borderRadius:999, background:'#fff', border:`1px solid ${cls.cor}`, color:cls.cor }}>{cls.rot}</span>}
+                    </div>
+                    <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(110px, 1fr))', gap:10 }}>
+                      {celulas.map(([r, v, sub]) => (
+                        <div key={r}>
+                          <div style={{ fontSize:10, color:'#64748b' }}>{r}</div>
+                          <div style={{ fontSize:15, fontWeight:800, color:'#0f172a' }}>{v}</div>
+                          {sub && <div style={{ fontSize:9.5, color:'#94a3b8' }}>{sub}</div>}
+                        </div>
+                      ))}
+                    </div>
+                    {cls.txt && <div style={{ fontSize:11, color:'#334155', marginTop:9, lineHeight:1.55 }}><strong>O que isso muda:</strong> {cls.txt}</div>}
+                    {Number(s.deficit_fjp) > 0 && (
+                      <div style={{ fontSize:11, color:'#334155', marginTop:6 }}>Déficit habitacional oficial (Fundação João Pinheiro, {s.deficit_fjp_ano}): <strong>{num(s.deficit_fjp)}</strong> domicílios.</div>
+                    )}
+                    <div style={{ fontSize:10, color:'#94a3b8', marginTop:8, lineHeight:1.5 }}>
+                      Fonte: IBGE (Censo, estimativas e Registro Civil). A leitura de pressão é interpretação da BidPro sobre esses dados — compara a cidade aos tercis de todos os municípios do país — e <strong>não</strong> é o déficit habitacional oficial da Fundação João Pinheiro.
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* PADRÃO DO IMÓVEL — popular/médio/alto (comparar SEMELHANTE com SEMELHANTE) */}
               {mercado?.consolidado?.padraoImovel && (() => {
                 const meta = {

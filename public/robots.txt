@@ -1,9 +1,18 @@
 User-agent: *
 Allow: /
 Disallow: /api/
-Disallow: /#/admin
-Disallow: /#/painel
-Disallow: /#/checkout
-Disallow: /#/convite-equipe
+
+# As linhas antigas "Disallow: /#/admin" etc. saíram porque NÃO faziam nada: o navegador
+# nunca envia o fragmento (#) ao servidor, então robots.txt não consegue casar com ele.
+# As telas internas são protegidas por login e por RLS — que é onde a proteção precisa estar.
+
+# Rotas de PREVIEW de link compartilhado (WhatsApp/redes): servem og:image e redirecionam
+# para o app. Não são conteúdo — já respondem noindex, e ficam fora daqui para não gastar
+# o orçamento de rastreamento do site.
+Disallow: /c/
+Disallow: /t/
+Disallow: /i/
+Disallow: /p/
 
 Sitemap: https://www.bidprobrasil.com.br/sitemap.xml
+Sitemap: https://www.bidprobrasil.com.br/sitemap-leiloes.xml

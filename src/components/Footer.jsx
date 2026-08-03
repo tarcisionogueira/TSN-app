@@ -14,12 +14,20 @@ export default function Footer() {
           </div>
         </div>
         <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', alignItems: 'center' }}>
+          {/* Link REAL (sem #) para as páginas públicas de acervo — é por aqui que o robô do
+              Google entra no catálogo. Sem um caminho a partir da home, as 33 mil páginas de
+              imóvel dependeriam só do sitemap para serem descobertas. */}
+          <a href="/leiloes" style={{ color: '#64748b', textDecoration: 'none', fontSize: 12 }}>Imóveis em leilão por estado</a>
           <Link to="/termos" style={{ color: '#64748b', textDecoration: 'none', fontSize: 12 }}>Termos de Uso</Link>
           <Link to="/privacidade" style={{ color: '#64748b', textDecoration: 'none', fontSize: 12 }}>Política de Privacidade</Link>
         </div>
       </div>
       <div style={{ maxWidth: 1100, margin: '20px auto 0', paddingTop: 16, borderTop: '1px solid #111111', fontSize: 11, color: '#334155', textAlign: 'center' }}>
         © {new Date().getFullYear()} BidPro Brasil. Todos os direitos reservados.
+        {/* A grafia separada existe de propósito: quem procura "bid pro brasil" hoje é
+            corrigido pelo Google para "byd". Ter a forma com espaço escrita na página ajuda
+            o buscador a aprender que o termo existe e é uma marca. */}
+        <span style={{ display: 'block', marginTop: 4, color: '#1e293b' }}>BidPro Brasil — também escrito Bid Pro Brasil.</span>
       </div>
     </footer>
   );
