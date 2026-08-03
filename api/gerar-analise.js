@@ -429,6 +429,30 @@ const faixaVenda = (tipo) => FAIXA_VENDA_TIPO[String(tipo || '').toLowerCase()] 
 const vendaPlausivelTipo = (tipo, v) => { const [lo, hi] = faixaVenda(tipo); const n = Number(v); return n >= lo && n <= hi; };
 const faixaVendaQ = (tipo) => { const [lo, hi] = faixaVenda(tipo); return `valor_m2=gte.${lo}&valor_m2=lte.${hi}`; };
 
+// ── SANIDADE DA LOCAÇÃO (achado do dono em 03/08) ────────────────────────────────────────
+// A VENDA sempre teve faixa por tipo; a LOCAÇÃO entrava com uma única condição: `mensal > 0`.
+// Resultado no relatório de um TERRENO de 486 m² em Santana de Parnaíba: "aluguel médio
+// R$ 63.409/mês" e "yield 79,53% a.a.". Na base havia aluguéis de R$ 363.000, R$ 150.000 e
+// R$ 135.900/mês para terreno — quase certamente PREÇO DE VENDA que o anúncio classificou como
+// locação. Três outliers puxaram a média e o número saiu no relatório do cliente como se fosse
+// pesquisa de mercado. Precisão aqui não é detalhe: é o produto.
+//
+// Teto por tipo, em R$/mês, generoso o bastante para não cortar imóvel de luxo (uma casa de
+// alto padrão em Alphaville aluga por R$ 30–40 mil) e apertado o bastante para barrar preço de
+// venda disfarçado. Piso de R$ 200 corta lixo e valor em centavos.
+const FAIXA_LOCACAO_TIPO = {
+  terreno:    [200, 60000],   // terreno raramente passa disso; acima é venda ou área industrial
+  apartamento:[200, 80000],
+  casa:       [200, 120000],
+  comercial:  [200, 300000],  // galpão/laje corporativa legitimamente chega a valores altos
+  rural:      [200, 200000],
+};
+const faixaLocacao = (tipo) => FAIXA_LOCACAO_TIPO[String(tipo || '').toLowerCase()] || [200, 150000];
+const locacaoPlausivel = (tipo, mensal) => { const [lo, hi] = faixaLocacao(tipo); const n = Number(mensal); return n >= lo && n <= hi; };
+// Aluguel/m²/mês fora de [0,50 … 500] não existe no Brasil: abaixo disso é erro de área,
+// acima é preço de venda dividido por área. Serve de 2ª malha quando a área é conhecida.
+const locacaoM2Plausivel = (v) => { const n = Number(v); return n >= 0.5 && n <= 500; };
+
 // Grava as amostras DATADAS deste relatório em indice_amostra (base da valorização por
 // ano e da recência real). Só residencial, poison-resistente (dados da pesquisa). O prompt
 // já descarta leilão das amostras → arremate NUNCA entra aqui. Dedup pelo índice único.
@@ -486,10 +510,14 @@ async function gravarAmostrasIndice(imDb, mercado, imovelId, segmento = 'apartam
     }
     for (const s of locs) {
       const mensal = Number(s?.valorMensal); const area = Number(s?.m2);
-      if (!(mensal > 0) || ehFonteLeilao(s?.fonte)) continue;
+      // Faixa por TIPO (antes bastava ser > 0 — foi por aqui que entrou "aluguel de terreno
+      // de R$ 363.000/mês", que era preço de venda). E, quando a área é conhecida, 2ª malha
+      // pelo R$/m²: barra o caso em que o valor é plausível mas a área denuncia a troca.
+      if (!locacaoPlausivel(segmento, mensal) || ehFonteLeilao(s?.fonte)) continue;
       const vm2 = area > 0 ? Math.round((mensal / area) * 100) / 100 : null;
+      if (vm2 !== null && !locacaoM2Plausivel(vm2)) continue;
       rows.push({ cidade_norm: imDb.cidade_norm, uf, bairro_norm: bDe(s), geo_grid: geoGrid, lat: latA, lng: lngA, tipo: segmento,
-        especie: 'locacao', valor_m2: (vm2 && vm2 >= 1 && vm2 <= 1000) ? vm2 : null, valor_total: mensal, area_m2: area || null,
+        especie: 'locacao', valor_m2: vm2, valor_total: mensal, area_m2: area || null,
         data_ref: dref(s?.data), fonte: (s?.fonte ? String(s.fonte).slice(0, 200) : null), origem: 'relatorio', imovel_id: String(imovelId || '') });
     }
     // COLHEITA AMPLA — MESMO TIPO em OUTROS bairros (pedido do dono: "extrair o máximo mesmo fora
@@ -913,6 +941,16 @@ para a resposta não estourar o limite e ser cortada), CADA UM com o seu "bairro
 completo ANTES de "outrosBairros"; se faltar espaço, corte "outrosBairros", nunca os níveis 1/2.
 Apenas VENDA, mesmo tipo (${tipoImovel}), SEM leilão; o "bairro" de cada amostra é OBRIGATÓRIO.
 
+LOCAÇÃO — REGRA DE SANIDADE (o relatório de um TERRENO já saiu com "aluguel médio R$ 63.409/mês"
+porque três anúncios de VENDA foram lidos como aluguel): em "locacoes", só inclua anúncios de
+ALUGUEL RESIDENCIAL/COMERCIAL MENSAL do mesmo tipo. Antes de incluir, faça a checagem: um aluguel
+mensal quase nunca passa de 1% do valor de VENDA do mesmo imóvel. Se o "aluguel" for da ordem de
+grandeza de um preço de venda (dezenas ou centenas de milhares de reais para um imóvel comum),
+DESCARTE — é anúncio de venda mal classificado. Informe "m2" (área do imóvel anunciado) sempre que
+o anúncio trouxer, para permitir o cálculo de R$/m². E em "aluguelMedio" use a MEDIANA das
+locações, não a média: a mediana não é derrubada por um outlier. Se sobrarem menos de 3 locações
+plausíveis, devolva "aluguelMedio": 0 e yield 0 — vazio é honesto, número inventado não é.
+
 ═══ PERFIL DA REGIÃO (atratividade e valorização — explica o R$/m² da microrregião) ═══
 Com base na sua pesquisa, classifique a REGIÃO (bairro/microrregião) do imóvel dentro de ${cidade}/${estado}:
 - "tier": se está entre as MAIS valorizadas, INTERMEDIÁRIAS ou MENOS valorizadas da cidade (valorizado_alto|intermediario|valorizado_baixo);
@@ -931,8 +969,8 @@ nem estime. É diligência de investidor sobre a REGIÃO, não juízo de valor s
 
 Retorne APENAS este JSON (sem markdown):
 {
-  "nivel1": { "descricao": "", "vendas": [{"bairro":"","descricao":"","valor":0,"m2":0,"valorM2":0,"fonte":"","data":"AAAA-MM"}], "locacoes": [{"bairro":"","descricao":"","valorMensal":0,"fonte":"","data":"AAAA-MM"}], "precoMedioM2": 0, "precoMinM2": 0, "precoMaxM2": 0, "aluguelMedio": 0, "totalAmostras": 0, "disponiveis": true },
-  "nivel2": { "descricao": "", "vendas": [{"bairro":"","descricao":"","valor":0,"m2":0,"valorM2":0,"fonte":"","data":"AAAA-MM"}], "locacoes": [{"bairro":"","descricao":"","valorMensal":0,"fonte":"","data":"AAAA-MM"}], "precoMedioM2": 0, "precoMinM2": 0, "precoMaxM2": 0, "aluguelMedio": 0, "totalAmostras": 0 },
+  "nivel1": { "descricao": "", "vendas": [{"bairro":"","descricao":"","valor":0,"m2":0,"valorM2":0,"fonte":"","data":"AAAA-MM"}], "locacoes": [{"bairro":"","descricao":"","valorMensal":0,"m2":0,"fonte":"","data":"AAAA-MM"}], "precoMedioM2": 0, "precoMinM2": 0, "precoMaxM2": 0, "aluguelMedio": 0, "totalAmostras": 0, "disponiveis": true },
+  "nivel2": { "descricao": "", "vendas": [{"bairro":"","descricao":"","valor":0,"m2":0,"valorM2":0,"fonte":"","data":"AAAA-MM"}], "locacoes": [{"bairro":"","descricao":"","valorMensal":0,"m2":0,"fonte":"","data":"AAAA-MM"}], "precoMedioM2": 0, "precoMinM2": 0, "precoMaxM2": 0, "aluguelMedio": 0, "totalAmostras": 0 },
   "consolidado": { "precoMedioM2": 0, "aluguelMedio": 0, "yieldBruto": 0, "yieldLiquido": 0, "valorEstimadoImovel": 0, "unidadeValor": "m2_privativo|m2_construido|m2_terreno|hectare|unidade", "areaConsiderada": 0, "baseCalculo": "(explique a conta: ex.: 'R$ 10.980/m² privativo × 30 m²' ou 'R$ 45.000/ha × 120 ha terra nua + R$ 200k benfeitorias' ou 'construção 90 m² × R$ 4.000 + terreno excedente 300 m² × R$ 800')", "padraoImovel": "popular|medio|medio_alto|alto|luxo", "terrenoExcedente": { "haExcedente": false, "areaExcedenteM2": 0, "valorTerrenoExcedente": 0 }, "descontoArremate": null },
   "referenciaFipeZap": { "encontrado": true, "precoMedioM2": 0, "valorizacao12m": 0, "mesReferencia": "AAAA-MM", "localidade": "", "fonte": "" },
   "outrasTipologias": { "apartamento": [{"valorM2":0,"valor":0,"m2":0,"fonte":"","data":"AAAA-MM"}], "casa": [], "terreno": [], "comercial": [] },
@@ -1030,8 +1068,8 @@ confiável (ex.: veio a área TOTAL no lugar da privativa), DIGA no "comentario"
 
 Retorne APENAS este JSON (sem markdown):
 {
-  "nivel1": { "descricao": "", "vendas": [{"bairro":"","descricao":"","valor":0,"m2":0,"valorM2":0,"fonte":"","data":"AAAA-MM"}], "locacoes": [{"bairro":"","descricao":"","valorMensal":0,"fonte":"","data":"AAAA-MM"}], "precoMedioM2": 0, "precoMinM2": 0, "precoMaxM2": 0, "aluguelMedio": 0, "totalAmostras": 0, "disponiveis": true },
-  "nivel2": { "descricao": "", "vendas": [{"bairro":"","descricao":"","valor":0,"m2":0,"valorM2":0,"fonte":"","data":"AAAA-MM"}], "locacoes": [{"bairro":"","descricao":"","valorMensal":0,"fonte":"","data":"AAAA-MM"}], "precoMedioM2": 0, "precoMinM2": 0, "precoMaxM2": 0, "aluguelMedio": 0, "totalAmostras": 0 },
+  "nivel1": { "descricao": "", "vendas": [{"bairro":"","descricao":"","valor":0,"m2":0,"valorM2":0,"fonte":"","data":"AAAA-MM"}], "locacoes": [{"bairro":"","descricao":"","valorMensal":0,"m2":0,"fonte":"","data":"AAAA-MM"}], "precoMedioM2": 0, "precoMinM2": 0, "precoMaxM2": 0, "aluguelMedio": 0, "totalAmostras": 0, "disponiveis": true },
+  "nivel2": { "descricao": "", "vendas": [{"bairro":"","descricao":"","valor":0,"m2":0,"valorM2":0,"fonte":"","data":"AAAA-MM"}], "locacoes": [{"bairro":"","descricao":"","valorMensal":0,"m2":0,"fonte":"","data":"AAAA-MM"}], "precoMedioM2": 0, "precoMinM2": 0, "precoMaxM2": 0, "aluguelMedio": 0, "totalAmostras": 0 },
   "consolidado": { "precoMedioM2": 0, "aluguelMedio": 0, "yieldBruto": 0, "yieldLiquido": 0, "valorEstimadoImovel": 0, "unidadeValor": "m2_privativo|m2_construido|m2_terreno|hectare|unidade", "areaConsiderada": 0, "baseCalculo": "(explique a conta: ex.: 'R$ 10.980/m² privativo × 30 m²' ou 'R$ 45.000/ha × 120 ha terra nua + R$ 200k benfeitorias' ou 'construção 90 m² × R$ 4.000 + terreno excedente 300 m² × R$ 800')", "padraoImovel": "popular|medio|medio_alto|alto|luxo", "terrenoExcedente": { "haExcedente": false, "areaExcedenteM2": 0, "valorTerrenoExcedente": 0 }, "descontoArremate": null },
   "fontesLocais": [{"nome":"","url":""}],
   "comentario": "Análise qualitativa de 3-4 frases comparando os dois níveis, a tendência e a coerência da média (se as amostras forem antigas/poucas, DIGA e alargue a faixa)."
@@ -1081,6 +1119,12 @@ apareceu de fato. Isso alimenta o Índice BidPro dos outros segmentos da região
 Liste em "outrosBairros" ATÉ 25 anúncios do MESMO tipo (${tipoImovel}) em OUTROS bairros da cidade
 (sem buscas dedicadas; não passe de 25), CADA UM com o seu "bairro" — alimenta o Índice da
 cidade/estado. Apenas VENDA, mesmo tipo, SEM leilão; o "bairro" de cada amostra é OBRIGATÓRIO.
+
+LOCAÇÃO — REGRA DE SANIDADE: em "locacoes", só anúncios de ALUGUEL MENSAL do mesmo tipo. Um aluguel
+mensal quase nunca passa de 1% do valor de VENDA do mesmo imóvel — se o valor tiver ordem de
+grandeza de preço de venda, DESCARTE (é anúncio de venda mal classificado). Informe "m2" quando o
+anúncio trouxer. Em "aluguelMedio" use a MEDIANA, não a média. Menos de 3 locações plausíveis →
+"aluguelMedio": 0 e yield 0.
 
 Retorne APENAS este JSON (sem markdown):
 {
