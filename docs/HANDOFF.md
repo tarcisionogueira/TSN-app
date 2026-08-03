@@ -59,6 +59,36 @@ arquivo de cliente. Caminho no painel confirmado pelo print dele:
 **Supabase Storage** (não no Drive), então usa o leitor paginado novo; a URL assinada vale até
 2036, conferido.
 
+**🔴 ACHADO DO DONO NO FIM DO DIA (02/08, 22h) — DATA DO LEILÃO. CONFIRMADO, AINDA NÃO
+CORRIGIDO. É o primeiro item de código da próxima sessão.**
+Lote de referência: `GRUPOLANCE` / `gl_28450` (Alphaville Residencial 11, Santana de Parnaíba/SP).
+- **Site do leiloeiro:** início `03/08/2026 00:00` · **encerramento `03/11/2026 15:00`** ·
+  valor inicial R$ 950.885,17.
+- **Nosso banco:** `data_leilao = 2026-08-03` · **`data_leilao_2 = NULL`**.
+- **Ou seja:** guardamos o **INÍCIO** e jogamos fora o **ENCERRAMENTO** — que é a data que decide
+  (é o prazo para dar lance). A tela mostra "Data do leilão 03/08/26" num leilão que só fecha em
+  **novembro**.
+- **Causa-raiz (provada no código):** `extrairDataLeilao` (`api/enriquecer-lote.js:55`) casa TODAS
+  as datas da página ancoradas em "leilão|praça|encerra|licitação|data" e devolve
+  **`Math.min(...futuras)`** — a MAIS CEDO. Numa página com início+encerramento, isso é sempre o
+  início. E **nenhum** caminho de leiloeiro escreve `data_leilao_2`: medido, **0%** em todas as
+  fontes, exceto CEF (23,5%). O mapper do GRUPOLANCE ainda grava `data_leilao: null` fixo
+  (`scripts/scraper-puppeteer.mjs:2820`) — só **5 de 428** lotes GL ativos têm qualquer data.
+- **Dano concreto, já medido:** a ordenação **"Encerra em breve"** (`src/pages/Busca.jsx:979`)
+  filtra `data_leilao >= hoje`. A partir de amanhã este lote **some** dessa lista embora fique
+  aberto até novembro — e a coluna que sustenta um filtro chamado "encerra" guarda a data de
+  *começo*, que é o oposto. Hoje há **3.333 lotes ATIVOS com data já no passado** (e 16.561 sem
+  data nenhuma, de 33.082).
+- **Direção da correção** (não implementada): capturar o PAR (início → `data_leilao`,
+  encerramento → `data_leilao_2`, com HORA), preferir o encerramento no que a tela chama de
+  "Data do leilão"/"Encerra em breve", e rotular os dois na ficha. Rever também o `Math.min`:
+  para 1ª/2ª praça judicial a mais cedo faz sentido; para janela início→fim, não.
+- ⚠️ **Não verificado (checar junto):** `valor_avaliacao` = R$ 1.901.770,34 é **exatamente 2×** o
+  mínimo. Bate com a regra judicial (2ª praça a 50%), então é plausivelmente correto — mas há
+  **43 dos 428** lotes GL nesse padrão exato. Confirmar na página se a avaliação é lida de
+  verdade (`extrairAvaliacao` ancora na palavra "avaliação") ou se em algum caminho ela está
+  sendo derivada. Não dá para checar deste ambiente (proxy bloqueia o site).
+
 **Do meu lado, o que ficou pendente para a próxima sessão:**
 - ⚠️ **Verificar a 1ª ingestão do IBGE**: `select * from socio_ingestao order by executado_em desc;`
   e `select chave, ultimo_ok, ultimo_erro from socio_fontes;`. Os IDs de agregado
