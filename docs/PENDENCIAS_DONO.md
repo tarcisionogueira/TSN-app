@@ -18,18 +18,34 @@
   Descobrir sozinho leva semanas; avisando, leva dias. E o Search Console é o único lugar onde dá
   para ver o que ele indexou e o que rejeitou.
 - **Passos — Search Console:**
-  1. `search.google.com/search-console` → **Adicionar propriedade** → escolha **Prefixo do URL**
-     e informe `https://www.bidprobrasil.com.br`.
-  2. Verificar a propriedade: a opção mais simples é **tag HTML** — o Google mostra uma linha
-     `<meta name="google-site-verification" content="...">`. **Me mande essa linha** que eu coloco
-     no site e você clica em Verificar. (Se preferir, dá para verificar por DNS no painel do
-     domínio — também funciona.)
-  3. Menu **Sitemaps** → adicionar os dois, um de cada vez:
+  1. `search.google.com/search-console`, logado com a **mesma conta Google do Google Analytics**
+     do site (é o que destrava o atalho do passo 3).
+  2. **Adicionar propriedade** → coluna da direita, **Prefixo do URL** → cole
+     `https://www.bidprobrasil.com.br` (com `www` — o domínio sem `www` redireciona 308 para ele,
+     então o `www` é o endereço oficial).
+  3. **Verificar a propriedade.** O Google oferece vários métodos; use o primeiro que funcionar:
+     - **① Google Analytics** *(o mais rápido — provavelmente resolve em 1 clique)*: o site já tem
+       o GA4 `G-5YNHQB5F81` instalado. Se a sua conta tem permissão de **editar** essa propriedade,
+       basta escolher "Google Analytics" e clicar em Verificar. **Nada a fazer no site.**
+     - **② Tag HTML**: o Google mostra uma linha
+       `<meta name="google-site-verification" content="XXXXXXXX" />`.
+       **Me mande essa linha** (pode ser só o `content`) que eu publico no site em minutos e você
+       clica em Verificar.
+     - **③ Registro DNS (TXT)**: se preferir, dá para verificar no painel onde o domínio está
+       hospedado. Esse método permite a propriedade do tipo **Domínio**, que cobre `www`, sem
+       `www` e qualquer subdomínio de uma vez — é a melhor no longo prazo, mas exige mexer no DNS.
+  4. Verificado, vá em **Sitemaps** (menu esquerdo) e adicione os dois, um de cada vez —
+     digite só o nome, o Google já preenche o domínio:
      - `sitemap.xml`
      - `sitemap-leiloes.xml`
-  4. Menu **Inspeção de URL** → cole `https://www.bidprobrasil.com.br/leiloes` → **Solicitar
-     indexação**. Repita para uma cidade importante, ex.:
-     `https://www.bidprobrasil.com.br/leiloes/sp/campinas`.
+     Os dois já estão no ar e conferidos em 02/08.
+  5. **Inspeção de URL** (barra de busca do topo) → cole
+     `https://www.bidprobrasil.com.br/leiloes` → **Solicitar indexação**.
+     Repita para 2 ou 3 cidades importantes, ex.:
+     `https://www.bidprobrasil.com.br/leiloes/sp/campinas`
+     (a cota é de ~10 pedidos por dia — não precisa pedir para as 33 mil, o sitemap cuida do resto).
+  6. **Não se assuste** nos primeiros dias: "Páginas não indexadas" vai ficar alto enquanto o
+     Google processa. O que importa é o número de indexadas **subindo** semana a semana.
 - **Passos — Perfil da Empresa no Google** (é o que faz o Google parar de trocar "bid" por "byd"):
   5. `business.google.com` → criar o perfil da **BidPro Brasil**, categoria "Corretor de imóveis"
      ou "Serviço imobiliário", com o site `https://www.bidprobrasil.com.br`.
@@ -57,8 +73,9 @@
 **Passo 1 — criar a conta e o bucket (Cloudflare)**
 1. Entre em `dash.cloudflare.com` (cria conta grátis se não tiver). No menu lateral, o R2 **não
    aparece com esse nome sozinho**: ele fica dentro de **“Storage & databases”** (grupo *Build*).
-   Clique em **Storage & databases → R2 Object Storage**. Se preferir, digite `R2` na busca do
-   topo da página — o resultado leva direto.
+   Caminho exato: **Storage & databases → R2 Object Storage → Overview**.
+   (“Data migration” é para trazer arquivos de outro provedor; “R2 Data Catalog” não tem relação.
+   O botão **Create bucket** e o link **Manage R2 API Tokens** estão os dois na tela *Overview*.)
 2. Se pedir cartão para habilitar o R2, é só cadastro — o consumo fica dentro do gratuito.
 3. **Create bucket**:
    - **Bucket name:** `bidpro-backup` (se usar outro nome, é esse que vai na variável `R2_BUCKET`).
