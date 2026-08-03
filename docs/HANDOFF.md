@@ -2,7 +2,7 @@
 
 > Cole este documento no início de uma nova sessão do Claude Code (com o **conector Supabase ativo**) para continuar com acesso total ao banco. Peça primeiro uma **auditoria completa dos fluxos** e depois siga pelos "Próximos passos".
 
-> 📋 **Pendências que dependem do DONO** (painéis/planos): ver `docs/PENDENCIAS_DONO.md`. Ao iniciar sessão, se o dono perguntar "o que falta que depende de mim?", liste de lá. Hoje: Asaas (reativar webhook), Upstash (provisionar, grátis), e — quando crescerem os pagos — Resend/compute Supabase/senha-vazada.
+> 📋 **Pendências que dependem do DONO** (painéis/planos): ver `docs/PENDENCIAS_DONO.md`. Ao iniciar sessão, se o dono perguntar "o que falta que depende de mim?", liste de lá. **Topo da fila em 02/08: (-4) Google Search Console + Perfil da Empresa** — as 33 mil páginas novas estão no ar e o Google ainda não sabe; e **(-3) Cloudflare R2**, único item que protege contra perda definitiva de arquivo de cliente. Depois: Resend (URL com `www` + Re-enable), Google Ads (verificação até 31/08), Asaas (reativar webhook), Upstash (grátis).
 
 > ⏰ **VALIDAR NO PRÓXIMO CICLO (fontes corrigidas em 18/07):**
 > 1. **PECINI** — o cron gravava em DRY-RUN (fallback `|| '1'` no workflow); corrigido p/ `'0'`. Próximo cron **seg 07-20 09h UTC** deve GRAVAR. Conferir: `select count(*) from imoveis_leilao where fonte='PECINI' and atualizado_em > now()-interval '1 day';` (esperado > 23) **e o gasto Bright Data** (é pago).
@@ -24,8 +24,55 @@
 
 ## ✅ COMEÇAR AQUI (02/08 — sessão 23: ritual de abertura + 8 correções de raiz achadas por ele)
 
-> Branch `claude/bidpro-brasil-handoff-je7c30`. `npm run build` OK; endpoints novos passam
-> `node --check`. 5 migrações APLICADAS via MCP. `auditoria_seguranca()` = **0/0** depois de tudo.
+> Branch `claude/bidpro-brasil-handoff-je7c30`. Tudo desta sessão está em `main` e **READY** em
+> produção (último deploy conferido). `npm run build` OK; endpoints novos passam `node --check`.
+> Migrações APLICADAS via MCP. `auditoria_seguranca()` = **0/0** depois de tudo.
+
+---
+
+### 🔴 ONDE PARAMOS — RETOMAR POR AQUI (fim do dia 02/08)
+
+A sessão terminou com **três passo a passo entregues ao dono** e nada bloqueado do meu lado. O
+próximo encontro começa cobrando o resultado deles, nesta ordem:
+
+**1. Google Search Console + Perfil da Empresa** (`PENDENCIAS_DONO.md` item **-4**) — o mais
+urgente, porque as 33 mil páginas novas já estão no ar e o Google ainda não sabe.
+- Perguntar: conseguiu **verificar a propriedade**? Se ele escolheu o método **Tag HTML**, ele
+  vai trazer uma linha `<meta name="google-site-verification" content="...">` — **é só publicar
+  no `index.html`** e mandar ele clicar em Verificar. O atalho recomendado foi verificar pelo
+  **Google Analytics** (o GA4 `G-5YNHQB5F81` já está no site), que não exige mexer em código.
+- Depois de verificado: conferir se os **dois sitemaps** foram enviados (`sitemap.xml` e
+  `sitemap-leiloes.xml` — ambos conferidos no ar em 02/08) e acompanhar a **cobertura**
+  (indexadas subindo semana a semana; "Descoberta — não indexada" alto nos primeiros dias é
+  normal com 33 mil URLs de uma vez).
+
+**2. Cloudflare R2** (`PENDENCIAS_DONO.md` item **-3**) — proteção contra perda definitiva de
+arquivo de cliente. Caminho no painel confirmado pelo print dele:
+**Storage & databases → R2 Object Storage → Overview** (é onde ficam *Create bucket* e
+*Manage R2 API Tokens*).
+- Quando ele avisar que colou as 5 variáveis e publicou: conferir `backup_execucoes` e o item
+  **"Infra — backup off-region (2º servidor)"** do check-up (hoje 🔴 por falta das chaves).
+- Lembrar do detalhe que engana: `R2_LOCATION` só **declara** a região; se não bater com a real,
+  o painel diz que está tudo certo quando não está.
+
+**3. Leitor de eBook** — ele disse que ia testar. Perguntar como foi. O ebook dele está no
+**Supabase Storage** (não no Drive), então usa o leitor paginado novo; a URL assinada vale até
+2036, conferido.
+
+**Do meu lado, o que ficou pendente para a próxima sessão:**
+- ⚠️ **Verificar a 1ª ingestão do IBGE**: `select * from socio_ingestao order by executado_em desc;`
+  e `select chave, ultimo_ok, ultimo_erro from socio_fontes;`. Os IDs de agregado
+  (4709/4712/6579/2612) **não puderam ser testados** — o proxy deste ambiente bloqueia
+  `servicodados.ibge.gov.br`. Se algum falhar, o erro traz os rótulos que o IBGE devolveu e o
+  conserto é um `update` em `socio_fontes` (**sem deploy**). O dono também pode disparar na hora
+  em **Admin → Dados & Fontes → 👥 Demografia → "Atualizar agora"**.
+- **Conferir a limpeza de fotos órfãs**: o cron diário (04:20) tira ~1.500/dia dos 21.760.
+  `select count(*) from public.fotos_orfas_para_limpeza(100000);` deve cair a cada dia.
+- **Backlog aberto** (seção G): 8 achados confirmados e não corrigidos + 39 não verificados.
+- **Ruído menor**: 23 imóveis ativos com UF inválida (20 vazias, 3 "NS") — já filtrados nas
+  páginas públicas, mas indicam parse sujo em alguma fonte.
+
+---
 
 **A. RITUAL (02/08 ~12h UTC).** (1) **Saúde**: 33.062 ativos (**era 28.040 — ver B**), 27.170
 atualizados em 24h; deploys READY (prod `053024b`); fila de geocode 1.042 (98,8% do acervo já
