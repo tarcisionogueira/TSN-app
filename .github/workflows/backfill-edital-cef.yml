@@ -1,0 +1,40 @@
+name: Backfill edital CEF — grava a URL real do PDF
+
+# Preenche `link_edital` com o PDF de verdade nos lotes de LEILÃO da Caixa (extrajudicial e
+# licitação aberta). Venda direta não entra: por natureza não tem edital.
+# Roda no Actions porque a Caixa atende o IP do runner. Idempotente e resumível.
+
+on:
+  schedule:
+    - cron: '25 13 * * *'   # diário, logo depois do scraper (que roda ~12h UTC)
+  workflow_dispatch:
+    inputs:
+      limite:
+        description: 'Máximo de lotes nesta execução (0 = todos)'
+        required: false
+        default: '0'
+      concorrencia:
+        description: 'Requisições simultâneas à Caixa'
+        required: false
+        default: '6'
+
+concurrency:
+  group: backfill-edital-cef
+  cancel-in-progress: false
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Backfill do edital CEF
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          EDITAL_LIMITE: ${{ inputs.limite || '0' }}
+          EDITAL_CONCURRENCIA: ${{ inputs.concorrencia || '6' }}
+        run: node scripts/backfill-edital-cef.mjs

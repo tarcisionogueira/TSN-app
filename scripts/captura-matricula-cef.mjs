@@ -119,17 +119,33 @@ async function processar(page, item) {
           }
         }
         // 3a) Edital em PDF linkado na página (se ainda não capturado). O edital COLETIVO
-        //     da Caixa é /editais/EL<NNNN><MMYY><UNID>.PDF (ver leiloeiro_conhecimento CEF).
+        //     da Caixa é /editais/E<A|L><NNNN><MMYY><UNID>.PDF (ver leiloeiro_conhecimento CEF).
         //     NUNCA pega a MATRÍCULA (/editais/matricula/…) como edital — foi a origem do
         //     bug "Edital abre matrícula" (removida a antiga heurística "qualquer PDF").
+        //
+        // CORRIGIDO 04/08 (recon na página VIVA, apto de Cuiabá `8555536754309`): a versão
+        // anterior lia SÓ `a.href` — e a Caixa não põe o PDF no href. O link real é:
+        //   <a href='#' onclick=javascript:ExibeDoc('/editais/EA00270326CPVERE.PDF')>
+        //      <strong>Baixar edital e anexos</strong></a>
+        // ou seja, href='#' e o caminho dentro do ONCLICK. Resultado: `a.href` virava
+        // ".../detalhe-imovel.asp#", nenhum seletor casava, e o lote era gravado como
+        // capturado (matrícula + condições) SEM edital — silenciosamente. Era por isso que
+        // só 2 dos 27.278 lotes CEF tinham anexo de edital. Agora lê onclick E href.
         if (!capturados.includes('edital')) {
           const editalPdf = await page.evaluate(() => {
-            const as = Array.from(document.querySelectorAll('a[href]'));
-            const ehMatricula = a => /matr[íi]cula/i.test(`${a.href} ${a.textContent || ''}`) || /\/editais\/matricula\//i.test(a.href);
-            const hit = as.find(a => /\/editais\/E[A-Z]\w+\.pdf/i.test(a.href))                                   // padrão canônico do edital coletivo
-                     || as.find(a => /\.pdf(\?|#|$)/i.test(a.href) && /edital/i.test(`${a.href} ${a.textContent || ''}`) && !ehMatricula(a)); // PDF rotulado "edital", não-matrícula
-            return hit ? hit.href : null;
-          });
+            const EXCLUI = /\/editais\/matricula\/|regras-?VOL/i;                 // matrícula e "como comprar" não são o edital
+            const acha = (txt) => {
+              const m = String(txt || '').match(/(?:https?:\/\/[^\s"'<>()]*)?\/editais\/[^\s"'<>()]+\.pdf/i);
+              return m && !EXCLUI.test(m[0]) ? m[0] : null;
+            };
+            for (const a of document.querySelectorAll('a')) {                     // âncora rotulada "edital": olha onclick ANTES do href
+              if (!/edital/i.test(a.textContent || '')) continue;
+              const u = acha(a.getAttribute('onclick')) || acha(a.getAttribute('href'));
+              if (u) return u;
+            }
+            const m = document.documentElement.outerHTML.match(/\/editais\/E[A-Z][^\s"'<>()]*\.pdf/i); // padrão do edital coletivo
+            return m && !EXCLUI.test(m[0]) ? m[0] : null;
+          }).then(u => (u ? new URL(u, 'https://venda-imoveis.caixa.gov.br').toString() : null));
           if (editalPdf) {
             const ed = await capturarUrl(page, editalPdf).catch(() => null);
             if (ed) { await salvarAnexo(item.imovel_id, ed, 'edital', 'Edital (CEF, automático).pdf'); capturados.push('edital'); }
