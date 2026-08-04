@@ -224,10 +224,17 @@ ausentes) e foram preenchidos com dado REAL em `api/publico.js`: `sku` = id do l
 viola política do Google e rende penalidade) nem `shippingDetails`/`hasMerchantReturnPolicy` (não
 há frete nem devolução de imóvel).
 
-> ⚠️ **DECISÃO DE FUNDO PARA O DONO:** `Product` é o tipo de PRODUTO DE VAREJO. É por isso que o
-> Google aplica validações de loja que nunca farão sentido para uma casa — e por isso esses avisos
-> tendem a voltar. O tipo correto para imóvel é **`RealEstateListing`**. Trocar afeta as **33 mil
-> páginas recém-enviadas**; por isso não foi feito por conta própria.
+> ⚠️ **DECISÃO DE FUNDO — e a recomendação (04/08, perguntado pelo dono):** `Product` é o tipo de
+> PRODUTO DE VAREJO, e é por isso que o Google cobra identificador/frete/devolução/nota de uma
+> casa. O tipo semanticamente correto é `RealEstateListing`. **MAS a recomendação é NÃO trocar
+> agora**, por um motivo concreto: o Google **não gera rich result** para `RealEstateListing` —
+> trocar zera os avisos e, junto, **perde o snippet de preço/disponibilidade** no resultado de
+> busca, que é o principal ativo de SEO de um marketplace. Avisos "não críticos" **não bloqueiam
+> indexação nem rich result**; o custo de trocar é maior que o do aviso.
+> **Caminho certo:** esperar 1–2 semanas a reindexação com `sku`+`priceValidUntil`, abrir
+> Search Console → Aprimoramentos → "Snippets do produto" e **ler os nomes exatos dos campos que
+> sobraram**. Aí se decide com dado, não com suposição. Só reabrir a troca de tipo se aparecer
+> ERRO crítico ou ação manual — aviso não crítico, por si, não justifica.
 
 ### ⏭️ Pendências desta sessão
 
@@ -237,10 +244,12 @@ há frete nem devolução de imóvel).
 - **Liberar o log de runtime da Vercel** (a chamada MCP pede aprovação). Sem ele eu dependi do
   clique do dono para fechar diagnóstico — foi o que deixou o bug do contrato passar duas vezes.
 - **Liberar agendamento** (`send_later`) para eu acordar sozinho e rodar as verificações de amanhã.
-- **LEAD QUENTE da demo de Cuiabá** — quem é? (viu o produto ao vivo, disse que criaria conta e
-  não criou; não está em lugar nenhum do funil).
-- Conferir se `R2_LOCATION` bate com a região real (gravou `enam`) — se não bater, o painel diz
-  que está tudo certo quando não está.
+- ~~LEAD da demo de Cuiabá~~ ✅ **RESPONDIDO pelo dono (04/08): era uma reunião com um investidor.
+  Tem interesse em criar conta, mas NÃO agora. Não precisa monitorar nem abordar.** Encerrado —
+  não reabrir nas próximas sessões.
+- ~~Conferir `R2_LOCATION`~~ ✅ **CONFERIDO (04/08): o dono criou o bucket em Virgínia/EUA e o
+  backup gravou `regiao_destino: 'enam'` (Eastern North America). BATE.** Backup off-region
+  íntegro: 7 tabelas + 45 arquivos, 0 falhas.
 - `PENDENCIAS_DONO.md`: Google Ads (verificação até **31/08**), Asaas (reativar webhook), Resend
   (URL com `www` + Re-enable), Upstash (grátis).
 
