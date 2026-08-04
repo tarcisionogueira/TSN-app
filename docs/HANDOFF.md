@@ -24,10 +24,17 @@
 
 ## ✅ COMEÇAR AQUI (04/08 — sessão 25: ritual + a correção de ontem estava sendo desfeita todo dia)
 
-> Branch `claude/handoff-verificacoes-uyiufd`. Migração `preservar_link_edital_pdf.sql`
-> **APLICADA via MCP** (já valendo em produção). `npm run build` OK, `node --check` OK.
-> ⚠️ **O código ainda NÃO está em `main`** — o gatilho de banco já estancou o sangramento,
-> mas os 3 arquivos de script só chegam à produção quando a branch for para `main`.
+> Branch `claude/handoff-verificacoes-uyiufd`, **JÁ EM `main`** (fast-forward `debf99a..1785eac`,
+> autorizado pelo dono no fim da sessão). Deploy `dpl_5mY12kVq8BUcK8wryPdtbC9R5RdZ` **READY** em
+> 33s nos domínios de produção; `lambdaRuntimeStats: {"nodejs":96}` confirma que não sobrou
+> função edge. Migração `preservar_link_edital_pdf.sql` **APLICADA via MCP**. `npm run build` OK,
+> `node --check` OK.
+>
+> ⚠️ **ARMADILHA DE GIT desta sessão:** existe um `main` LOCAL com história NÃO RELACIONADA ao
+> `origin/main` (`git merge` responde *refusing to merge unrelated histories*, e o checkout
+> reverte a árvore de trabalho). **Não use o `main` local.** O caminho certo é empurrar a branch
+> direto para o remoto: `git push origin <branch>:main` — conferindo antes com
+> `git merge-base --is-ancestor origin/main <branch>` que é fast-forward.
 
 ### 🩺 Ritual de abertura — o resumo
 
@@ -160,10 +167,20 @@ estático e o cron (1.500/dia) drena em ~17 dias. **Só acompanhar**: se em 3 di
 caindo, aí sim é o faxineiro que não está rodando.
 
 ### ⏭️ Pendências desta sessão
-- ⏰ **PRAZO — levar a branch `claude/handoff-verificacoes-uyiufd` para `main` até 05/08 06:00 BRT.**
-  É o que faz a Alessandra receber o aviso antes da cobrança de 07/08 (o cron roda 09:00 UTC).
-  O gatilho do edital já protege o banco desde hoje; o que falta subir é CÓDIGO (3 scripts de
-  captura + 2 crons de assinatura).
+- ✅ **Deploy FEITO** (prazo cumprido). O `renovacao-avisos-cron` das 09:00 UTC de 05/08 já roda
+  com a correção: a próxima cobrança da Alessandra é 07/08 21:06 UTC → `dias = 3`, dentro da
+  janela (1..3). **CONFERIR amanhã** que o aviso saiu de verdade:
+  `select * from webhook_eventos_processados where evento like 'renov_aviso%';` — tem que deixar
+  de ser vazio pela primeira vez. Se continuar vazio, o `sem_email` (novo contador na resposta do
+  cron) dirá se foi e-mail não resolvido ou outra coisa.
+- **`gerar-contrato-ia` — falta o teste de ponta a ponta pelo dono.** Confirmado: `main`
+  atualizado, deploy READY, runtime agora nodejs. **NÃO consegui provar em campo deste ambiente**
+  — o proxy nega `bidprobrasil.com.br` (CONNECT 403) e a URL do deploy está atrás do SSO da
+  Vercel; o log de runtime da Vercel pede aprovação do dono. Quem fecha é o clique no botão.
+- **3 rotas `edge` restantes com chamada de IA** — mesmo risco, menor: `admin-chat.js` e
+  `inbound-juridico.js` (`max_tokens: 2048`) e `cnj-chat`/`financiamento-ia` (1024). Não mexidas
+  por falta de evidência de falha. Se o chat do admin devolver o mesmo "Unexpected token 'A'",
+  é isto — e a correção é idêntica (nodejs + maxDuration + `export const POST`).
 - ✅ Backfill do edital conferido (10.010/10.035) — **o que fica é rodar o termômetro AMANHÃ**,
   depois do scraper das 09:00 UTC: é aí que se prova que o gatilho segurou.
 - **Cliente 360 — última/próxima cobrança por cliente** (o dono não decidiu ainda; ver item 2).
