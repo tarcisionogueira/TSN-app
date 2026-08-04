@@ -93,16 +93,64 @@ de escrita — scraper, endpoint, backfill futuro. Testado em 6 cenários, todos
   (exige assinatura `%PDF-`) — poluindo justamente o log de recusas onde se enxerga a lacuna
   real (os 4 lotes com matrícula em HTTP 404). Só tenta quando é PDF.
 
-**Reparo dos 9.483 de hoje:** `backfill-edital-cef.yml` disparado à mão (não esperou as 13:25).
-**Conferir no início da próxima sessão** — e este número passa a ser o TERMÔMETRO do gatilho:
+**Reparo dos 9.483 de hoje: FEITO e conferido.** `backfill-edital-cef.yml` disparado à mão (não
+esperou as 13:25), run `30906766136` **success**. Cobertura final medida: **10.010 de 10.035**
+(99,7%) — extrajudicial 6.134/6.154 · licitação aberta 3.876/3.881; **0 nulos, 0 apontando para
+matrícula**, e os 25 restantes são lotes sem edital publicado. `numero_edital` acompanha 1-a-1
+(10.010), o que confirma que os dois campos voltaram juntos.
+
+**`leiloeiro_conhecimento` (CEF) atualizado** — o registro que ESCONDEU tudo (dizia "edital 100%"
+contando a página HTML) voltou a `docs_status='ok'`, agora com a régua de medição correta
+(`public.eh_edital_pdf()`), a cobertura real e o INVARIANTE do gatilho escritos nele.
+
+**Termômetro do gatilho — rodar no início da próxima sessão** (o valor tem que continuar ~10.010
+**depois** do scraper das 09:00 UTC; se cair, o gatilho sumiu ou há caminho de escrita novo):
 ```sql
 select count(*) filter (where public.eh_edital_pdf(link_edital)) as com_pdf, count(*) as total
 from imoveis_leilao where fonte='CEF' and ativo and modalidade in ('extrajudicial','licitacao_aberta');
 ```
-Deve ficar em ~10.015/10.035 **e continuar assim depois do scraper das 09:00 UTC**. Se cair de
-novo, o gatilho foi removido ou alguém escreve por um caminho novo.
+### 🔴 2) O AVISO DE RENOVAÇÃO NUNCA FOI ENVIADO A NINGUÉM (pedido do dono na mesma sessão)
 
-### 🟢 2) Fotos órfãs: subiram, mas a causa já tinha sido resolvida ontem
+O dono pediu para conferir a cobrança da **Neuma** (cadastro dia 30, "não cobrou") e garantir a da
+**Alessandra** (dia 7). **As cobranças estão certas** — o que não existe é o aviso prévio.
+
+**Cadastros × cobrança (dado do próprio MP, espelhado 04/08 11:30):**
+
+| Cliente | Conta criada (BRT) | Assinatura autorizada | Dia da cobrança | Situação |
+|---|---|---|---|---|
+| Neuma Nogueira | 30/06 21:37 | 01/07 17:45 | **1º** | 2 cobranças, R$ 99,80 · última **01/08 18:22 aprovada** · próxima 01/09 |
+| Alessandra de Jesus dos Santos | 07/07 18:06 | 07/07 18:06 | **7** | 1 cobrança · próxima **07/08 18:06** · authorized, semáforo verde |
+
+⚠️ **Neuma foi cobrada sim.** O que confunde: **o dia dela é o 1º, não o 30** — ela criou a conta
+em 30/06 21:37 mas só autorizou o cartão em 01/07 17:45 (~20h depois), e o MP ancora a recorrência
+no dia da AUTORIZAÇÃO, não no do cadastro. O webhook funciona: a cobrança de 01/08 entrou em
+`mp_pagamentos` **1 segundo** depois de o MP aprovar.
+
+**O defeito:** `webhook_eventos_processados` não tem **UMA** linha `renov_aviso:` desde que o cron
+existe. Causa-raiz: `/preapproval/search` do MP devolve `payer_id` e **nunca a chave
+`payer_email`** — confirmado no espelho (`dados_mp ? 'payer_email'` = false; as 19 chaves do
+payload estão lá e ela não está). O cron lia `sub.payer_email` e caía num `continue` **silencioso**:
+todo assinante na janela era pulado. A Alessandra deveria ter recebido o aviso em **04/08 de manhã**
+(3 dias antes) e não recebeu. É o MESMO padrão do item 1 — um skip que não gera erro nenhum.
+
+**Corrigido:** o e-mail passa a vir do nosso `auth.users`, pelo `userId` do `external_reference`
+(`<userId>|<plano>`), que os outros crons de MP já usam como chave; `payer_email` fica como atalho
+se um dia voltar. `sem_email` virou contador **devolvido na resposta** — o skip não pode voltar a
+ser invisível. **Mesma raiz, outro cron:** `reconciliar-assinaturas-cron` buscava com
+`payer_email=` vazio; o MP ignora o filtro vazio e devolve qualquer assinatura autorizada da conta,
+então o `continue` disparava sempre e a **rede de rebaixamento nunca agiu**. Passa a usar `payer_id`.
+
+⏰ **JANELA REAL:** o cron roda 09:00 UTC. Com o deploy até **05/08 09:00 UTC (06:00 BRT)** a
+Alessandra ainda recebe o aviso (a 2 dias). Depois disso ela é cobrada em 07/08 sem ter sido avisada.
+
+**Observação de produto (não corrigida — decisão do dono):** **nenhuma tela mostra última/próxima
+cobrança de um cliente.** O painel calcula MRR *estimado* (preço do `planos_config` × assinantes
+ativos) e o front **não lê `mp_pagamentos` nem `mp_assinaturas` em lugar nenhum** — por isso não
+dava para ver que a Neuma tinha pago. `mp_assinaturas.proxima_cobranca` existe como coluna e é
+**morta**: nada escreve, nada lê, embora `dados_mp->>'next_payment_date'` esteja preenchido ao lado.
+Candidato natural para o Cliente 360.
+
+### 🟢 3) Fotos órfãs: subiram, mas a causa já tinha sido resolvida ontem
 
 `fotos_orfas_para_limpeza()` = **24.811** (era 21.760 em 02/08) — subiu, apesar do faxineiro
 diário. **Não é regressão nova:** era o pingue-pongue `cef/` × `caixa/` que a sessão 24 corrigiu
@@ -112,9 +160,13 @@ estático e o cron (1.500/dia) drena em ~17 dias. **Só acompanhar**: se em 3 di
 caindo, aí sim é o faxineiro que não está rodando.
 
 ### ⏭️ Pendências desta sessão
-- **Levar a branch `claude/handoff-verificacoes-uyiufd` para `main`** (o gatilho já protege o
-  banco; os 3 scripts ainda não estão em produção).
-- Conferir o resultado do backfill disparado (query-termômetro acima).
+- ⏰ **PRAZO — levar a branch `claude/handoff-verificacoes-uyiufd` para `main` até 05/08 06:00 BRT.**
+  É o que faz a Alessandra receber o aviso antes da cobrança de 07/08 (o cron roda 09:00 UTC).
+  O gatilho do edital já protege o banco desde hoje; o que falta subir é CÓDIGO (3 scripts de
+  captura + 2 crons de assinatura).
+- ✅ Backfill do edital conferido (10.010/10.035) — **o que fica é rodar o termômetro AMANHÃ**,
+  depois do scraper das 09:00 UTC: é aí que se prova que o gatilho segurou.
+- **Cliente 360 — última/próxima cobrança por cliente** (o dono não decidiu ainda; ver item 2).
 - IBGE: os 2 agregados que nunca rodaram (6579, 2612).
 - **Herdadas da sessão 24, ainda abertas:** os 4 lotes com matrícula em HTTP 404; e-mail
   marketing do Investidor Pro; Google Search Console (item -4, o mais urgente do dono);
