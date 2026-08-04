@@ -10,6 +10,7 @@
 import { createClient } from '@supabase/supabase-js';
 import puppeteer from 'puppeteer';
 import { Buffer } from 'buffer';
+import https from 'https';
 
 const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 const BUCKET = 'documentos';
@@ -25,7 +26,45 @@ function gerarCPF() {
   return [...n, d1, d2].join('');
 }
 
+// BAIXA um PDF ESTÁTICO por HTTP puro — sem navegador.
+//
+// POR QUÊ: matrícula e edital da Caixa são arquivos estáticos, e o navegador é o jeito ERRADO
+// de buscá-los. O Chrome headless não "navega" para um PDF: ele baixa. Quando o content-type
+// não vem exatamente como `application/pdf` (a Caixa às vezes manda octet-stream), o
+// capturarUrl caía no passo 4 e IMPRIMIA a tela como PDF — gerando um arquivo pequeno, sem
+// camada de texto, que a IA lê como vazio. Medido em 04/08: o edital do lote de Cuiabá foi
+// salvo com 63 KB enquanto o PDF real tem 738 KB. Um "documento" desses é PIOR que nenhum:
+// o relatório parece ter o edital e não tem.
+//
+// O download direto (node:https) devolve o arquivo íntegro — é o mesmo cliente que o scraper
+// diário usa e que o recon confirmou (HTTP 200, application/pdf, 755.730 bytes).
+function baixarPdf(url, hops = 0) {
+  return new Promise((resolve) => {
+    const req = https.get(url, {
+      headers: { 'User-Agent': UA, Accept: 'application/pdf,*/*', Referer: 'https://venda-imoveis.caixa.gov.br/sistema/detalhe-imovel.asp' },
+      timeout: 30000,
+    }, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location && hops < 3) {
+        res.resume();
+        return baixarPdf(new URL(res.headers.location, url).toString(), hops + 1).then(resolve);
+      }
+      if (res.statusCode !== 200) { res.resume(); return resolve(null); }
+      const chunks = [];
+      res.on('data', c => chunks.push(c));
+      res.on('end', () => {
+        const buf = Buffer.concat(chunks);
+        // Só aceita PDF DE VERDADE (assinatura %PDF-). Assim uma interstitial do Radware ou
+        // uma página de erro nunca é salva como se fosse o documento.
+        resolve(buf.length > 2000 && buf.subarray(0, 5).toString() === '%PDF-' ? buf : null);
+      });
+    });
+    req.on('error', () => resolve(null));
+    req.on('timeout', () => { req.destroy(); resolve(null); });
+  });
+}
+
 // Navega para uma URL na sessão atual e devolve um PDF (response PDF direto ou página impressa).
+// Para PDFs estáticos prefira `baixarPdf` — ver o comentário acima.
 async function capturarUrl(page, url) {
   const resp = await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
   const status = resp?.status() || 0;
@@ -72,14 +111,17 @@ async function processar(page, item) {
   //    é o hdniip da fila; a UF vem do imóvel.
   const uf = String(imovel?.estado || '').trim().toUpperCase();
   const num = String(item.hdniip || '').replace(/\D/g, '');
+  //    Baixa por HTTP direto (não pelo navegador) — ver baixarPdf().
   const matri = (uf.length === 2 && num)
-    ? await capturarUrl(page, `https://venda-imoveis.caixa.gov.br/editais/matricula/${uf}/${num}.pdf`).catch(() => null)
+    ? await baixarPdf(`https://venda-imoveis.caixa.gov.br/editais/matricula/${uf}/${num}.pdf`).catch(() => null)
     : null;
   if (matri) { await salvarAnexo(item.imovel_id, matri, 'matricula', 'Matrícula (CEF, automática).pdf'); capturados.push('matricula'); }
 
   // 2) Edital direto (quando o link_edital já é um PDF externo/real).
+  //    Com o backfill (backfill-edital-cef.mjs) link_edital já é o PDF real na maior parte do
+  //    acervo, então este é o caminho normal. PDF estático → download direto.
   if (ehUrl(imovel?.link_edital)) {
-    const ed = await capturarUrl(page, imovel.link_edital).catch(() => null);
+    const ed = await baixarPdf(imovel.link_edital).catch(() => null);
     if (ed) { await salvarAnexo(item.imovel_id, ed, 'edital', 'Edital (CEF, automático).pdf'); capturados.push('edital'); }
   }
 
@@ -112,7 +154,10 @@ async function processar(page, item) {
             return rotulada ? rotulada.href : null;
           });
           if (matriculaPdf) {
-            const m2 = await capturarUrl(page, matriculaPdf).catch(() => null);
+            // PDF estático → download direto; só cai no navegador se não for um PDF
+            // (alguns lotes judiciais linkam um .asp, que precisa ser renderizado).
+            const m2 = await baixarPdf(matriculaPdf).catch(() => null)
+                    || await capturarUrl(page, matriculaPdf).catch(() => null);
             if (m2) { await salvarAnexo(item.imovel_id, m2, 'matricula', 'Matrícula (CEF, automática).pdf'); capturados.push('matricula'); }
             await page.goto(detalheUrl, { waitUntil: 'networkidle2', timeout: 30000 }).catch(() => {});
             await new Promise(r => setTimeout(r, 600));
@@ -147,7 +192,7 @@ async function processar(page, item) {
             return m && !EXCLUI.test(m[0]) ? m[0] : null;
           }).then(u => (u ? new URL(u, 'https://venda-imoveis.caixa.gov.br').toString() : null));
           if (editalPdf) {
-            const ed = await capturarUrl(page, editalPdf).catch(() => null);
+            const ed = await baixarPdf(editalPdf).catch(() => null);   // PDF estático → download direto
             if (ed) { await salvarAnexo(item.imovel_id, ed, 'edital', 'Edital (CEF, automático).pdf'); capturados.push('edital'); }
             // Grava a URL REAL do edital em link_edital → o botão "Edital" abre o PDF direto
             // no navegador do usuário (hotlink, IP residencial atendido pela Caixa; sem custo
