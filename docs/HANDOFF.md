@@ -22,6 +22,119 @@
 > Checagem rápida a qualquer momento: `select public.auditoria_seguranca();` → `0 crítico / 0 atenção` = íntegro.
 > **Auditorias ofensivas completas: 15/07/2026 (×2).** Total de correções: 15 (1ª rodada) + escalonamento por convite (CRÍTICO) + IDOR do MP (ALTO) + escala. Refazer a ofensiva quando entrarem rotas/pagamento/RLS novos (a Rotina mensal já faz isso sozinha).
 
+## ✅ COMEÇAR AQUI (04/08 — sessão 24: o edital da Caixa nunca chegava; 2 loops silenciosos)
+
+> Tudo em `main`. `npm run build` OK, `node --check` OK nos scripts. Migrações: nenhuma nova
+> (só UPDATEs de dados via MCP). Verificação em campo via GitHub Actions (a Caixa não atende o
+> IP do ambiente de dev — o do runner sim).
+
+### 1) EDITAL DA CAIXA — não tínhamos o de praticamente NENHUM imóvel
+
+**Gatilho:** o dono gerou o documental de um apto em Cuiabá/MT (`cef_8555536754309`,
+`df644ecd-7f22-4368-9357-4cc6faae7361`) e o relatório saiu "sem acesso ao edital" — sendo um
+leilão da Caixa, que tem edital publicado. Ele mandou olhar **todos** os da Caixa.
+
+**Medição (antes):** dos 27.278 lotes CEF ativos, só **8** tinham `link_edital` apontando para
+um PDF real. 7.187 apontavam para a **página** do anúncio (HTML) e 2.843 para a **matrícula**.
+Só **2** lotes no acervo inteiro tinham anexo do tipo `edital`.
+
+**Causa-raiz** (recon na página VIVA — `scripts/recon-cef-edital.mjs` + `.github/workflows/recon-cef-edital.yml`):
+a Caixa **não põe o PDF no href**. O link é
+
+    <a href='#' onclick=javascript:ExibeDoc('/editais/EA00270326CPVERE.PDF')>
+       <strong>Baixar edital e anexos</strong></a>
+
+`href='#'` e o caminho dentro do **ONCLICK**. Todo seletor que lia `a.href` voltava vazio — e a
+captura então marcava o lote como concluído (matrícula + condições de venda) **sem o edital e
+sem erro nenhum**. Falha silenciosa; foi por isso que sobreviveu meses.
+
+**O CSV oficial não resolve:** colunas são `n do imovel · uf · cidade · bairro · endereco ·
+preco · valor de avaliacao · desconto · financiamento · descricao · modalidade de venda ·
+link de acesso`. **Não há coluna de edital.** Só existe na página do lote.
+
+**PADRÃO DO EDITAL (confirmado em campo):** `/editais/E<A|L><NNNN><MMYY><UNIDADE>.PDF` —
+`EA` para licitação aberta, `EL` para leilão/extrajudicial; bate com o número impresso na
+página ("Edital: 0027/0326 - CPVE/RE" → `EA00270326CPVERE.PDF`, 738 KB). O edital é
+**COLETIVO**: **20 editais distintos cobrem os ~10 mil lotes de leilão**.
+
+**Correções:**
+- `scripts/captura-matricula-cef.mjs` — seletor lê o **onclick** além do href.
+- `scripts/backfill-edital-cef.mjs` + `.github/workflows/backfill-edital-cef.yml` (novos,
+  diário 13:25 UTC, logo após o scraper) — varre os lotes de LEILÃO, abre a página por HTTP
+  simples e grava `link_edital` = PDF real + `numero_edital`. Venda direta **não entra** (não
+  tem edital por natureza). Paginação exata (offset só avança pelos que permaneceram no
+  filtro). Trata a interstitial do **Radware Bot Manager** como FALHA, nunca como "sem edital".
+- `api/gerar-documental.js` — deixa de reabrir a página do lote quando `link_edital` já é o
+  PDF (evitava uma ida à Caixa, e possível custo de Bright Data, em toda análise CEF).
+
+**Resultado medido (depois):** `link_edital` = PDF real em **10.015 de 10.035** lotes de leilão
+ativos (era 8). Sobraram 17 na página + 3 na matrícula. O backfill completo levou 17 min:
+9.709 gravados, 19 sem edital publicado, 1 erro, **0 bloqueios**.
+
+### 2) O ARQUIVO ANEXADO ERA UMA IMPRESSÃO DE TELA (defeito mais grave que o 1)
+
+Ao conferir, o anexo de edital do lote de Cuiabá tinha **63 KB** — o PDF real tem **738 KB**.
+O Chrome headless **não navega** para um PDF, ele baixa; o `capturarUrl` só aceitava a resposta
+quando o `content-type` vinha exatamente com `pdf`, e quando a Caixa manda `octet-stream` ele
+caía no último passo e **imprimia a tela**. Arquivo pequeno, **sem camada de texto** → a IA lê
+como vazio. Pior que faltar: o relatório *parece* ter o edital.
+
+**Correção:** `baixarPdf()` (node:https) para os PDFs estáticos (matrícula e edital), com os
+cabeçalhos que o recon comprovou (UA enxuto + `Accept-Language`; UA completo de Chrome vindo de
+cliente que não é Chrome é sinal de bot). Só aceita resposta com assinatura `%PDF-` de verdade —
+interstitial do Radware ou página de erro **nunca** vira "documento". O navegador ficou só com
+o que ele faz bem: imprimir as Condições de Venda.
+
+**Prova de ponta a ponta:** matrícula do lote 300 KB → **491 KB**; edital → **738 KB** (exato).
+Dos 19 lotes da fila, os **11 com `link_edital` = PDF real receberam o edital**; os 8 sem são
+3 de venda direta (não têm edital) + 5 **inativos** (leilão já ocorrido em julho). Correlação
+perfeita, nada quebrado.
+
+### 3) DOIS "SILÊNCIOS" ESTRUTURAIS CORRIGIDOS na captura CEF
+
+- **O total mentia:** lote sem matrícula volta para a fila, mas era somado em `ok` — uma rodada
+  com várias falhas ainda imprimia `18 ok, 0 erro(s)`. Agora separa *com matrícula ·
+  reagendados · erros · sem edital*, e cada linha marca `[SEM EDITAL]`.
+- **Fila com órfão:** linha marcada `processando` que nunca volta (job morto/timeout) ficava
+  invisível para sempre — a consulta só busca `pendente`. Havia **uma presa desde 07/07**.
+  Agora volta para a fila após 2h.
+- **`baixarPdf` LOGA toda recusa** (status, content-type, bytes, primeiros bytes, URL). Foi
+  isso que revelou 4 lotes com matrícula estática em HTTP 404 (rota alternativa da página
+  também não serve — devolve HTML de ~24 KB). Lacuna **conhecida**, não silenciosa.
+
+### 4) "Preparando documentos…" INFINITO na tela de Análise
+
+`src/pages/Analise.jsx`: `relDocumentalPreparando` era só `status==='concluida' &&
+result.precisaDocumentos`, **sem limite de tempo e sem estado terminal** — e `travado` incluía
+`preparando`, então o botão ficava desabilitado justamente no estado que nunca acabava. Spinner
+eterno, zero saída. Adotada a MESMA régua que `MinhasAnalises.jsx` já usava (só é "preparando"
+com captura real `emCaptura` E linha recente, 20 min); passado o prazo vira estado **acionável**
+("Tentar de novo" + "Anexar"), com um efeito que agenda o re-render na hora que a janela expira.
+
+### 5) A BASE DE CONHECIMENTO ESTAVA ERRADA — e foi ela que escondeu tudo
+
+`leiloeiro_conhecimento` (fonte CEF) afirmava **"edital 100% sobre leilão (10.221/10.221)"**.
+Essa métrica contava a **página HTML** como se fosse o edital. Mediu a coisa errada e declarou
+vitória — nenhum monitor acusou nada. Registro corrigido (`docs_status='atencao'`) com a
+**regra de medição correta**: só conta como edital o `link_edital` que termina em `.pdf` e não
+é `/editais/matricula/` nem `regras-VOL`.
+
+> ⚠️ **LIÇÃO PARA O RITUAL DE ABERTURA:** duas das cinco descobertas desta sessão vieram de
+> *conferir o artefato*, não o log — o log dizia `✓ edital` e o arquivo era uma tela impressa;
+> a métrica dizia 100% e a cobertura real era 0,03%. **Ao auditar captura de documento, medir o
+> ARQUIVO (tamanho/assinatura), não o status da fila.**
+
+### ⏭️ Pendências desta sessão
+- **Reteste do dono:** gerar de novo o documental do lote de Cuiabá — agora com edital de
+  738 KB anexado. Era o pedido explícito dele.
+- Os 4 lotes com matrícula em HTTP 404 (2 SP, 2 BA) seguem sem matrícula; a rota alternativa da
+  página devolve HTML. Investigar se a Caixa mudou o caminho estático para esses casos.
+- E-mail marketing do Investidor Pro (adiado pelo dono para a próxima sessão).
+- Verificação matinal prometida: backup R2, `entregue_em` do Resend, sitemap lido pelo Google,
+  conversões do Ads saindo de "Inativo", fotos órfãs caindo.
+
+---
+
 ## ✅ COMEÇAR AQUI (02/08 — sessão 23: ritual de abertura + 8 correções de raiz achadas por ele)
 
 > Branch `claude/bidpro-brasil-handoff-je7c30`. Tudo desta sessão está em `main` e **READY** em
