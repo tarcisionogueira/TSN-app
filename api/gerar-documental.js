@@ -731,7 +731,12 @@ export default async function handler(req, res) {
     // caixaEditalDaPagina(). Antes de cair no fallback, abrimos a página e pegamos o PDF real.
     // Só para CEF, só quando ainda não temos um edital-arquivo, e com orçamento de tempo curto:
     // é uma leitura de HTML leve, não pode competir com a leitura dos documentos.
-    if (ehCaixa(row?.fonte) && !urls.some((u) => /edital/i.test(u.nome || '')) && Date.now() < deadline - 8000) {
+    // Com o backfill (scripts/backfill-edital-cef.mjs) `link_edital` já é o PDF real na maior
+    // parte do acervo — nesse caso NÃO abrimos a página: seria uma ida à Caixa (e possível
+    // custo de Bright Data) em toda análise CEF para descobrir o que já sabemos.
+    const editalJaEhPdf = /\.pdf(?:[?#]|$)/i.test(String(row?.link_edital || ''))
+      && !/\/editais\/matricula\/|regras-?VOL/i.test(String(row?.link_edital || ''));
+    if (ehCaixa(row?.fonte) && !editalJaEhPdf && !urls.some((u) => /edital/i.test(u.nome || '')) && Date.now() < deadline - 8000) {
       try {
         const pagina = row?.url_lote || row?.link_edital;
         if (pagina && /venda-imoveis\.caixa\.gov\.br/i.test(pagina)) {
