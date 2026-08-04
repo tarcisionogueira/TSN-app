@@ -141,8 +141,15 @@ async function handler(req) {
           const RANK = { explorador: 0, top2: 1, top2_anual: 1, assessorado: 2, assessorado_anual: 2, clube: 3, clube_anual: 3 };
           if ((RANK[perfil.role] ?? 99) > (RANK[planoKey] ?? 0)) continue;
 
-          // Não rebaixa quem tem assinatura ATIVA no MP (re-assinou após cancelar)...
-          const ativo = await mpGet(`/preapproval/search?payer_email=${encodeURIComponent(sub.payer_email || '')}&status=authorized&limit=1`);
+          // Não rebaixa quem tem assinatura ATIVA no MP (re-assinou após cancelar).
+          // Busca por `payer_id` — `/preapproval/search` NÃO devolve `payer_email` (achado
+          // 04/08: a chave nem existe no payload). Com `payer_email=` vazio o filtro era
+          // ignorado pelo MP e a busca voltava QUALQUER assinatura autorizada da conta →
+          // este `continue` disparava sempre e a rede de rebaixamento nunca agia. Sem
+          // `payer_id` (não deveria acontecer) preferimos o conservador: não rebaixa.
+          const payerId = sub.payer_id || sub.payer?.id;
+          if (!payerId) continue;
+          const ativo = await mpGet(`/preapproval/search?payer_id=${encodeURIComponent(payerId)}&status=authorized&limit=1`);
           if (ativo?.results?.length) continue;
           // ...NEM quem tem o plano vivo por OUTRA via (bug bounty #9): re-assinou no Asaas
           // ou pagou o Pro ANUAL avulso (sem recorrência). Sem isto, o cron rebaixava todo

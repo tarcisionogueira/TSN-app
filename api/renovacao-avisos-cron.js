@@ -79,7 +79,18 @@ async function handler(req) {
 
   const AGORA = Date.now();
   const DIA = 86400000;
-  let verificados = 0, avisados = 0;
+  let verificados = 0, avisados = 0, semEmail = 0;
+
+  // E-mail do assinante: fica em `auth.users` (GoTrue admin), não em `perfis` nem no MP.
+  // Mesmo caminho que enviar-alertas-cron/saldo-abandono-cron já usam.
+  async function emailDoUsuario(userId) {
+    try {
+      const r = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${userId}`, { headers: hdr, signal: AbortSignal.timeout(10000) });
+      if (!r.ok) return null;
+      const u = await r.json();
+      return u?.email ? String(u.email).toLowerCase() : null;
+    } catch { return null; }
+  }
 
   try {
     for (let offset = 0; offset < 3000; offset += 100) {
@@ -99,8 +110,18 @@ async function handler(req) {
         if (isNaN(nextMs)) continue;
         const dias = Math.ceil((nextMs - AGORA) / DIA);
         if (dias < 1 || dias > 3) continue;          // avisa ~3 dias antes
-        const email = sub.payer_email;
-        if (!email) continue;
+        // 🔴 O e-mail NÃO vem do MP (achado 04/08). `/preapproval/search` devolve
+        // `payer_id`, e NUNCA a chave `payer_email` — confirmado no espelho de
+        // `mp_assinaturas.dados_mp` (`dados_mp ? 'payer_email'` = false nas 2 assinaturas
+        // vivas). O código antigo lia `sub.payer_email` e caía num `continue` silencioso:
+        // TODO assinante era pulado, e `webhook_eventos_processados` nunca teve UMA linha
+        // `renov_aviso:` — o aviso prometido nas telas e nos termos jamais saiu. Agora o
+        // e-mail vem de ONDE ELE EXISTE: o nosso `auth.users`, pelo userId do
+        // external_reference (`<userId>|<plano>`), que já é o par de chaves usado pelos
+        // outros crons de MP. `payer_email` continua valendo como atalho se um dia voltar.
+        const [userIdRef] = String(sub.external_reference || '').split('|');
+        const email = sub.payer_email || (userIdRef ? await emailDoUsuario(userIdRef) : null);
+        if (!email) { semEmail++; continue; }
 
         const nextDate = String(nextRaw).slice(0, 10);
         if (await jaAvisado(sub.id, nextDate)) continue;
@@ -173,5 +194,8 @@ async function handler(req) {
     return new Response(JSON.stringify({ error: e.message }), { status: 500 });
   }
 
-  return new Response(JSON.stringify({ ok: true, verificados, avisados }), { headers: { 'Content-Type': 'application/json' } });
+  // `sem_email` é REPORTADO, não engolido: foi um skip invisível que segurou 100% dos avisos
+  // por semanas. Assinante dentro da janela e sem e-mail resolvível tem que aparecer no retorno.
+  if (semEmail) console.error(`[renovacao-avisos] ${semEmail} assinante(s) na janela SEM e-mail resolvível`);
+  return new Response(JSON.stringify({ ok: true, verificados, avisados, sem_email: semEmail }), { headers: { 'Content-Type': 'application/json' } });
 }
