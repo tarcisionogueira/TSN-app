@@ -4,6 +4,7 @@ import { FileText, Sparkles, Upload, Camera, UserCheck, ChevronRight, X, CheckCi
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
 import { apiCall } from '../utils/apiCall';
+import { extrairTextoDeVarios } from '../utils/extrairTextoDoc';
 import { useIsMobile } from '../utils/useIsMobile';
 
 const ROLES_OPERACIONAIS = ['admin', 'analista', 'advogado', 'consultor'];
@@ -101,6 +102,11 @@ export default function CriarContrato() {
   const [partesInfo, setPartesInfo] = useState('');
   const [contratoGerado, setContratoGerado] = useState('');
   const [gerandoIA, setGerandoIA] = useState(false);
+  const [lendoDocs, setLendoDocs] = useState(false);
+  // Arquivo anexado que não deu para ler: vira aviso NA TELA. Não é erro (a geração segue
+  // com o que sobrou), mas o usuário precisa saber que aquele anexo não entrou.
+  const [avisoDocs, setAvisoDocs] = useState('');
+  const [docsUsados, setDocsUsados] = useState([]);
 
   // Arquivos de referência adicionais
   const [arquivosRef, setArquivosRef] = useState([]);
@@ -158,8 +164,28 @@ export default function CriarContrato() {
   // ── Gerar com IA ──
   const gerarComIA = async () => {
     if (descricaoIA.trim().length < 20) { setErro('Descreva o contrato com pelo menos 20 caracteres.'); return; }
-    setGerandoIA(true); setErro('');
+    setGerandoIA(true); setErro(''); setAvisoDocs(''); setDocsUsados([]);
     try {
+      // 🔴 OS ANEXOS PRECISAM CHEGAR NA IA (corrigido 04/08). A tela promete "anexe
+      // documentos para a IA extrair as informações", mas os arquivos só eram enviados no
+      // passo FINAL, como links para o signatário — a geração recebia SÓ a descrição
+      // digitada. Foi por isso que o dono anexou o contrato anterior pedindo "mantenha
+      // contratante e contratado" e recebeu [NOME COMPLETO] / [CPF: XXX.XXX.XXX-XX]: o
+      // modelo nunca viu o documento. A rota já aceitava `documentos`; faltava preencher.
+      let documentos = '';
+      if (arquivosRef.length) {
+        setLendoDocs(true);
+        const r0 = await extrairTextoDeVarios(arquivosRef);
+        setLendoDocs(false);
+        documentos = r0.documentos;
+        // Arquivo que não deu para ler é DITO, nunca descartado em silêncio — silêncio aqui
+        // é exatamente o que fez o dono achar que o anexo tinha sido usado.
+        if (r0.ignorados.length) setAvisoDocs(`Não consegui ler: ${r0.ignorados.join(' · ')}. O contrato foi gerado SEM o conteúdo desse(s) arquivo(s).`);
+        // Confirmação POSITIVA do que entrou. O dono não tinha como saber se o anexo tinha
+        // sido usado — e não estava sendo. Agora a tela de revisão diz, por nome.
+        setDocsUsados(r0.lidos);
+      }
+
       // /api/gerar-contrato-ia devolve { ok, contrato } (o /api/gerar-contrato
       // devolve { conteudo } — o modo IA lia o campo errado e vinha vazio).
       // Via apiCall: injeta o token E registra `api_erro` no Cliente 360 — este erro
@@ -169,7 +195,7 @@ export default function CriarContrato() {
       // até o maxDuration. A geração real leva ~30-60s, então 3 min é folgado sem ser eterno.
       const r = await apiCall('/api/gerar-contrato-ia', {
         method: 'POST',
-        body: JSON.stringify({ descricao: descricaoIA, tipo: tipoContrato, partes: partesInfo }),
+        body: JSON.stringify({ descricao: descricaoIA, tipo: tipoContrato, partes: partesInfo, documentos }),
         signal: AbortSignal.timeout(180000),
       });
       // NUNCA `.json()` direto: quando a Vercel mata a função (timeout de runtime) ou um
@@ -183,6 +209,11 @@ export default function CriarContrato() {
           : `O servidor falhou ao gerar o contrato (HTTP ${r.status}). Tente de novo; se persistir, avise o suporte.`);
       }
       if (!r.ok || !data.ok) throw new Error(data.error || 'Erro ao gerar');
+      // Contrato cortado no limite de tokens PARECE completo na caixa de revisão. Avisa, senão
+      // o operador manda assinar um documento que termina no meio de uma cláusula.
+      if (data.truncado) {
+        setAvisoDocs(av => `${av ? av + ' ' : ''}O texto atingiu o tamanho máximo e pode ter ficado incompleto no fim — role até o final e confira antes de enviar.`);
+      }
       setContratoGerado(data.contrato || data.conteudo || '');
       setPasso('revisao');
     } catch (e) {
@@ -192,6 +223,7 @@ export default function CriarContrato() {
         ? 'A geração passou de 3 minutos sem resposta e foi interrompida. Tente de novo; se repetir, avise o suporte.'
         : e.message);
     }
+    setLendoDocs(false);
     setGerandoIA(false);
   };
 
@@ -490,7 +522,11 @@ export default function CriarContrato() {
             <button onClick={() => setPasso('detalhes')} style={{ ...S.btn('#f1f5f9'), color: '#475569' }}>Voltar</button>
             {modo === 'gerar' ? (
               <button onClick={gerarComIA} disabled={gerandoIA} style={S.btn('#6366f1')}>
-                {gerandoIA ? <><Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> Gerando contrato…</> : <><Sparkles size={15} /> Gerar contrato com IA</>}
+                {lendoDocs
+                  ? <><Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> Lendo os documentos anexados…</>
+                  : gerandoIA
+                    ? <><Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> Gerando contrato…</>
+                    : <><Sparkles size={15} /> Gerar contrato com IA</>}
               </button>
             ) : (
               <button onClick={() => setPasso('revisao')} style={S.btn()}>
@@ -499,6 +535,9 @@ export default function CriarContrato() {
             )}
           </div>
           {erro && <div style={{ marginTop: 12, padding: '10px 14px', background: '#fee2e2', color: '#dc2626', borderRadius: 9, fontSize: 12.5 }}>{erro}</div>}
+          {/* Anexo não lido é AVISO (âmbar), não erro: o contrato foi gerado, mas sem aquele
+              arquivo. Some junto com o erro quando se gera de novo. */}
+          {avisoDocs && <div style={{ marginTop: 12, padding: '10px 14px', background: '#fef3c7', color: '#92400e', borderRadius: 9, fontSize: 12.5, lineHeight: 1.5 }}>⚠️ {avisoDocs}</div>}
         </div>
       )}
 
@@ -507,6 +546,15 @@ export default function CriarContrato() {
         <div>
           <div style={S.card}>
             <p style={S.secTitle}>Revisar antes de enviar</p>
+
+            {/* O que a IA REALMENTE leu. Sem isto não há como distinguir "o anexo foi usado"
+                de "o anexo foi ignorado" — a dúvida que o dono teve em 04/08, com razão. */}
+            {docsUsados.length > 0 && (
+              <div style={{ marginBottom: 12, padding: '10px 14px', background: '#f0fdf4', color: '#166534', borderRadius: 9, fontSize: 12.5, lineHeight: 1.5, border: '1px solid #86efac' }}>
+                ✓ A IA leu o conteúdo de: <strong>{docsUsados.join(', ')}</strong>
+              </div>
+            )}
+            {avisoDocs && <div style={{ marginBottom: 12, padding: '10px 14px', background: '#fef3c7', color: '#92400e', borderRadius: 9, fontSize: 12.5, lineHeight: 1.5 }}>⚠️ {avisoDocs}</div>}
 
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
               <span style={{ fontSize: 12, fontWeight: 700, padding: '4px 10px', background: '#eff6ff', color: '#0D63DB', borderRadius: 20 }}>{tipoContrato}</span>

@@ -40,7 +40,7 @@ Ao gerar um contrato você SEMPRE:
 8. Estrutura o documento nesta ordem: QUALIFICAÇÃO DAS PARTES, OBJETO, OBRIGAÇÕES DE CADA PARTE, VALOR E FORMA DE PAGAMENTO (se aplicável), PRAZO E VIGÊNCIA, RESCISÃO E MULTA, CONFIDENCIALIDADE, LGPD, ANTICORRUPÇÃO, FORÇA MAIOR, DISPOSIÇÕES GERAIS, FORO, e fecho com data e campos de assinatura.
 9. Usa numeração sequencial de cláusulas (1., 2., 2.1, 2.2...).
 10. Retorna APENAS o texto do contrato, sem explicações nem markdown — documento pronto para assinar.
-11. Inclui campos para preenchimento: [NOME COMPLETO], [CPF/CNPJ], [ENDEREÇO], [DATA], [VALOR], etc.
+11. Deixa campos para preenchimento — [NOME COMPLETO], [CPF/CNPJ], [ENDEREÇO], [DATA], [VALOR] — APENAS para o que NÃO foi informado. Dado que veio na descrição ou em documento anexado entra TRANSCRITO no contrato; deixar em colchetes algo que o operador já forneceu é ERRO, obriga a redigitar e é a principal queixa de quem usa esta tela.
 12. Rodapé: "Assinatura eletrônica qualificada/avançada válida nos termos da MP 2.200-2/2001 e da Lei 14.063/2020, com registro de IP, data/hora e hash de integridade do documento."`;
 
 // SEM `export default` — de propósito. No runtime Node da Vercel o default export é tratado
@@ -87,11 +87,30 @@ async function handler(req) {
     return new Response(JSON.stringify({ error: 'Descreva o contrato com pelo menos 20 caracteres' }), { status: 400 });
   }
 
+  // 24.000 caracteres (~6k tokens) para os anexos: 6.000 cortava um contrato inteiro no meio,
+  // e o caso REAL desta rota é "gere de novo o contrato do ano passado com a data nova" — o
+  // modelo precisa do documento inteiro, não do primeiro terço.
+  const DOCS_MAX = 24000;
+  const docsTexto = documentos ? String(documentos).slice(0, DOCS_MAX) : '';
+
   const userMessage = `Gere um contrato de ${tipoFinal || 'prestação de serviços'} com base na seguinte descrição em texto livre:
 
 ${descricao.slice(0, 4000)}
 
-${partesFinal ? `Informações adicionais sobre as partes:\n${String(partesFinal).slice(0, 800)}\n` : ''}${documentos ? `Informações extraídas de documentos anexados (use para preencher qualificações, valores, datas e objeto):\n${String(documentos).slice(0, 6000)}\n` : ''}
+${partesFinal ? `Informações adicionais sobre as partes:\n${String(partesFinal).slice(0, 800)}\n` : ''}${docsTexto ? `DOCUMENTOS ANEXADOS PELO OPERADOR (conteúdo real, extraído dos arquivos):
+${docsTexto}
+
+COMO USAR OS ANEXOS — regra que vale mais que o hábito de deixar campo em branco:
+- Todo dado que estiver nos anexos deve ser TRANSCRITO no contrato novo: nomes completos,
+  CPF/CNPJ, endereços, estado civil, profissão, valores, prazos, objeto. NÃO deixe
+  [NOME COMPLETO], [CPF], [ENDEREÇO] em nada que o anexo já informe — o operador anexou o
+  documento justamente para não redigitar isso.
+- Se um anexo for um CONTRATO ANTERIOR do mesmo tipo, trate-o como MODELO A RENOVAR:
+  mantenha as MESMAS partes e as mesmas condições, alterando só o que a descrição mandar
+  mudar (tipicamente datas, prazo e valor). Não troque as partes, não invente novas.
+- Só use [CAMPO ENTRE COLCHETES] para o que REALMENTE não aparece em lugar nenhum.
+- Se a descrição CONTRADISSER o anexo, a descrição vence (ela é a instrução de agora).
+` : ''}
 FORO OBRIGATÓRIO deste contrato: ${foroFinal} (eleja este foro com renúncia a qualquer outro, salvo ressalva legal imperativa).
 
 Gere o contrato completo e pronto para uso.`;
@@ -102,7 +121,10 @@ Gere o contrato completo e pronto para uso.`;
       headers: { 'x-api-key': CLAUDE_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 4000,
+        // 8000: com anexo, o contrato novo TRANSCREVE a qualificação completa das partes em
+        // vez de deixar colchetes, então a saída é bem maior que a de um contrato genérico.
+        // Em 4000 uma renovação de contrato longo terminava cortada no meio de uma cláusula.
+        max_tokens: 8000,
         system: SYSTEM_PROMPT,
         messages: [{ role: 'user', content: userMessage }],
       }),
@@ -119,10 +141,13 @@ Gere o contrato completo e pronto para uso.`;
     if (!data) throw new Error(`Resposta não-JSON do Claude: ${bruto.slice(0, 200)}`);
     const contrato = data.content?.[0]?.text?.trim();
     if (!contrato) throw new Error('Resposta vazia');
+    // TRUNCAMENTO É DITO, não escondido: em `max_tokens` o contrato termina no meio de uma
+    // cláusula e, na tela, parece completo — o operador mandaria assinar um documento cortado.
+    const truncado = data.stop_reason === 'max_tokens';
 
-    await auditLog({ acao: 'contrato_gerado_ia', user_id: user.id, ip, detalhes: { tipo: tipoFinal, foro: foroFinal, comDocs: !!documentos }, sucesso: true });
+    await auditLog({ acao: 'contrato_gerado_ia', user_id: user.id, ip, detalhes: { tipo: tipoFinal, foro: foroFinal, comDocs: !!documentos, truncado }, sucesso: true });
 
-    return new Response(JSON.stringify({ ok: true, contrato }), {
+    return new Response(JSON.stringify({ ok: true, contrato, truncado }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     });
