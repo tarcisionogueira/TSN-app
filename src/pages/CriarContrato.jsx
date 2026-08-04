@@ -164,9 +164,13 @@ export default function CriarContrato() {
       // devolve { conteudo } — o modo IA lia o campo errado e vinha vazio).
       // Via apiCall: injeta o token E registra `api_erro` no Cliente 360 — este erro
       // aconteceu com o dono na tela e não deixou rastro nenhum no painel.
+      // TETO DE ESPERA (3 min): sem ele o botão fica em "Gerando contrato…" para sempre se o
+      // servidor não responder — foi o que o dono viu em 04/08 quando a função ficou pendurada
+      // até o maxDuration. A geração real leva ~30-60s, então 3 min é folgado sem ser eterno.
       const r = await apiCall('/api/gerar-contrato-ia', {
         method: 'POST',
         body: JSON.stringify({ descricao: descricaoIA, tipo: tipoContrato, partes: partesInfo }),
+        signal: AbortSignal.timeout(180000),
       });
       // NUNCA `.json()` direto: quando a Vercel mata a função (timeout de runtime) ou um
       // proxy responde, o corpo é TEXTO PURO — e o parse estourava um "Unexpected token 'A',
@@ -182,7 +186,11 @@ export default function CriarContrato() {
       setContratoGerado(data.contrato || data.conteudo || '');
       setPasso('revisao');
     } catch (e) {
-      setErro(e.message);
+      // AbortSignal.timeout dispara TimeoutError — a mensagem nativa ("signal timed out")
+      // não diz nada ao usuário. Traduz para o que ele precisa saber e fazer.
+      setErro(e?.name === 'TimeoutError'
+        ? 'A geração passou de 3 minutos sem resposta e foi interrompida. Tente de novo; se repetir, avise o suporte.'
+        : e.message);
     }
     setGerandoIA(false);
   };

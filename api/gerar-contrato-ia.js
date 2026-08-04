@@ -43,8 +43,13 @@ Ao gerar um contrato você SEMPRE:
 11. Inclui campos para preenchimento: [NOME COMPLETO], [CPF/CNPJ], [ENDEREÇO], [DATA], [VALOR], etc.
 12. Rodapé: "Assinatura eletrônica qualificada/avançada válida nos termos da MP 2.200-2/2001 e da Lei 14.063/2020, com registro de IP, data/hora e hash de integridade do documento."`;
 
+// SEM `export default` — de propósito. No runtime Node da Vercel o default export é tratado
+// como assinatura Express `(req, res)`: o `Response` devolvido é DESCARTADO, a função nunca
+// sinaliza fim e fica pendurada até o maxDuration (aqui, 300s de spinner na tela e depois 504).
+// Foi o que aconteceu em 04/08 quando o default foi adicionado junto com o POST. Toda rota
+// deste projeto que devolve `Response` exporta SÓ os métodos nomeados (ver os ~17 crons); as
+// que têm `export default` usam a outra assinatura, com `res.status().json()`. Não misturar.
 export const POST = handler;
-export default handler;
 async function handler(req) {
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
 
