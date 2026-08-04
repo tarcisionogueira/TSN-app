@@ -166,29 +166,109 @@ dia — 31/07: 12 · 01/08: 169 · 02/08: 21 · **03/08: 468 · 04/08: 0**. Paro
 estático e o cron (1.500/dia) drena em ~17 dias. **Só acompanhar**: se em 3 dias não estiver
 caindo, aí sim é o faxineiro que não está rodando.
 
+### 🔴 4) CONTRATO POR IA — três defeitos empilhados na MESMA tela (achado do dono, ao vivo)
+
+O dono foi gerar um contrato e tomou erro. Foram **três** camadas, descobertas uma a uma — cada
+correção revelou a seguinte. Todas em produção, e o dono confirmou que **funcionou**.
+
+1. **Rota pesada no Edge.** `gerar-contrato-ia` rodava com `runtime: 'edge'` (teto ~25s) e gera
+   contrato inteiro (`max_tokens` 4000). A Vercel matava a função e devolvia página de erro em
+   TEXTO PURO → o front dava `.json()` e mostrava `Unexpected token 'A', "An error o"...`. Era a
+   ÚNICA rota pesada de IA fora do padrão (gerar-analise/documental já eram nodejs+300s).
+2. **`export default` junto com `export const POST`** (erro MEU, na correção do item 1). No runtime
+   Node o default export é tratado como Express `(req,res)`: o `Response` é DESCARTADO, a função
+   nunca sinaliza fim e pendura até o `maxDuration` → **300s de spinner**. Regra do projeto,
+   confirmada por varredura: rota que devolve `Response` exporta **só** método nomeado; as com
+   `export default` usam `res.status().json()`. **Nunca misturar.**
+3. **O anexo nunca chegava na IA.** A tela promete "anexe documentos para a IA extrair as
+   informações", mas os arquivos só subiam no passo FINAL, como link para o signatário. A geração
+   levava só `{descricao,tipo,partes}` — o modelo NUNCA via o documento. Por isso o contrato saiu
+   com `[NOME COMPLETO]`/`[CPF: XXX...]` mesmo com o contrato anterior anexado. A rota **já
+   aceitava** `documentos`; faltava preencher. Novo `src/utils/extrairTextoDoc.js` (pdf.js, o
+   mesmo singleton dos leitores). Limite honesto: **só PDF com camada de texto** — Word, imagem e
+   PDF digitalizado devolvem MOTIVO na tela, nunca são ignorados calados. O prompt ganhou a regra
+   de TRANSCREVER o que vem do anexo e tratar contrato anterior como MODELO A RENOVAR; o item 11
+   do system prompt (que mandava usar `[NOME COMPLETO]` sem ressalva) passou a valer só para o
+   que NÃO foi informado. Anexos 6k→24k chars, saída 4k→8k tokens, e `stop_reason: max_tokens`
+   virou aviso — contrato cortado no meio PARECE completo na caixa de revisão.
+
+### 🔴 5) HEALTH CHECK (0 erro / 5 avisos) — 4 defeitos reais + 1 falso positivo
+
+- **Upload com acento falhava CALADO** (o mais grave; erro do próprio dono às 18h56). A chave do
+  Storage era montada com o nome do arquivo CRU: `CONTRATO PRESTAÇÃO DE SERVIÇO…pdf` → `Invalid
+  key` (400). E o `error` era DESCARTADO → o contrato seguiria para assinatura **sem o anexo**.
+  Novo `nomeArquivoSeguro()` em `src/utils/arquivo.js` (7 casos testados), aplicado no contrato e
+  no ONR (mesmo padrão). Anexo que não sobe agora ABORTA o envio.
+- **`r.rpc(...).catch is not a function`** — o builder do supabase-js é *thenable*, não Promise:
+  `.catch()` direto (sem `.then()` antes) não existe. O botão de aplicar sugestão não fazia nada.
+- **DUAS telas do Admin em HTTP 400 por FK faltando** — transcrições de reunião
+  (`solicitacoes.user_id→perfis`) e links promocionais (`links_promo.criado_por→perfis`). O
+  PostgREST monta embed a partir de FK declarada. Migração `fks_embed_perfis_e_allowlist_uso.sql`
+  APLICADA, `ON DELETE SET NULL` (preserva histórico e não trava exclusão de conta — LGPD),
+  0 órfãos conferidos antes, + `notify pgrst, 'reload schema'`.
+- **O aviso de RLS era FALSO POSITIVO.** `eventos_atividade` e `cota_concessoes` são só-servidor
+  (medido: 4.722 linhas via `/api/track`, última 19h; a outra o front só LÊ). Política de INSERT
+  para `authenticated` seria REGRESSÃO — usuário logado forjaria evento e **concederia cota a si
+  mesmo**. Entraram na allowlist do `auditoria_uso`, como a própria checagem sugeria. Resultado:
+  `auditoria_uso` **0 gaps**, `auditoria_seguranca` **0/0**.
+- Sobraram 2 avisos de QUALIDADE DE DADO, **não corrigidos**: Índice com 1 cidade fora da faixa de
+  R$/m² (contaminação de área) e 11 anomalias de relatório (cnj_vazio 7 · avaliacao_ausente 3 ·
+  mercado_area_incoerente 1).
+
+### 6) SEARCH CONSOLE — a verificação FUNCIONOU; 2 avisos não críticos respondidos
+
+O e-mail chegar já prova que a propriedade foi verificada (item **-4** do dono, fechado). Os 2
+problemas de "Snippets do produto" são os clássicos (identificador global e `priceValidUntil`
+ausentes) e foram preenchidos com dado REAL em `api/publico.js`: `sku` = id do lote no leiloeiro,
+`priceValidUntil` = `data_fim`. **NÃO** foram acrescentados `aggregateRating`/`review` (nota falsa
+viola política do Google e rende penalidade) nem `shippingDetails`/`hasMerchantReturnPolicy` (não
+há frete nem devolução de imóvel).
+
+> ⚠️ **DECISÃO DE FUNDO PARA O DONO:** `Product` é o tipo de PRODUTO DE VAREJO. É por isso que o
+> Google aplica validações de loja que nunca farão sentido para uma casa — e por isso esses avisos
+> tendem a voltar. O tipo correto para imóvel é **`RealEstateListing`**. Trocar afeta as **33 mil
+> páginas recém-enviadas**; por isso não foi feito por conta própria.
+
 ### ⏭️ Pendências desta sessão
-- ✅ **Deploy FEITO** (prazo cumprido). O `renovacao-avisos-cron` das 09:00 UTC de 05/08 já roda
-  com a correção: a próxima cobrança da Alessandra é 07/08 21:06 UTC → `dias = 3`, dentro da
-  janela (1..3). **CONFERIR amanhã** que o aviso saiu de verdade:
-  `select * from webhook_eventos_processados where evento like 'renov_aviso%';` — tem que deixar
-  de ser vazio pela primeira vez. Se continuar vazio, o `sem_email` (novo contador na resposta do
-  cron) dirá se foi e-mail não resolvido ou outra coisa.
-- **`gerar-contrato-ia` — falta o teste de ponta a ponta pelo dono.** Confirmado: `main`
-  atualizado, deploy READY, runtime agora nodejs. **NÃO consegui provar em campo deste ambiente**
-  — o proxy nega `bidprobrasil.com.br` (CONNECT 403) e a URL do deploy está atrás do SSO da
-  Vercel; o log de runtime da Vercel pede aprovação do dono. Quem fecha é o clique no botão.
-- **3 rotas `edge` restantes com chamada de IA** — mesmo risco, menor: `admin-chat.js` e
-  `inbound-juridico.js` (`max_tokens: 2048`) e `cnj-chat`/`financiamento-ia` (1024). Não mexidas
-  por falta de evidência de falha. Se o chat do admin devolver o mesmo "Unexpected token 'A'",
-  é isto — e a correção é idêntica (nodejs + maxDuration + `export const POST`).
-- ✅ Backfill do edital conferido (10.010/10.035) — **o que fica é rodar o termômetro AMANHÃ**,
-  depois do scraper das 09:00 UTC: é aí que se prova que o gatilho segurou.
-- **Cliente 360 — última/próxima cobrança por cliente** (o dono não decidiu ainda; ver item 2).
-- IBGE: os 2 agregados que nunca rodaram (6579, 2612).
-- **Herdadas da sessão 24, ainda abertas:** os 4 lotes com matrícula em HTTP 404; e-mail
-  marketing do Investidor Pro; Google Search Console (item -4, o mais urgente do dono);
-  **o LEAD QUENTE da demo de Cuiabá — perguntar ao dono quem é** (viu o produto ao vivo,
-  disse que criaria conta e não criou; não está registrado em lugar nenhum).
+
+**Depende do DONO (decisão ou ação dele):**
+- **Schema `Product` → `RealEstateListing`** nas 33 mil páginas públicas (ver item 6). É a única
+  forma de os avisos do Search Console pararem de voltar. Decisão dele; eu avalio o impacto.
+- **Liberar o log de runtime da Vercel** (a chamada MCP pede aprovação). Sem ele eu dependi do
+  clique do dono para fechar diagnóstico — foi o que deixou o bug do contrato passar duas vezes.
+- **Liberar agendamento** (`send_later`) para eu acordar sozinho e rodar as verificações de amanhã.
+- **LEAD QUENTE da demo de Cuiabá** — quem é? (viu o produto ao vivo, disse que criaria conta e
+  não criou; não está em lugar nenhum do funil).
+- Conferir se `R2_LOCATION` bate com a região real (gravou `enam`) — se não bater, o painel diz
+  que está tudo certo quando não está.
+- `PENDENCIAS_DONO.md`: Google Ads (verificação até **31/08**), Asaas (reativar webhook), Resend
+  (URL com `www` + Re-enable), Upstash (grátis).
+
+**VERIFICAR AMANHÃ (só o tempo passando resolve):**
+1. **Termômetro do edital CEF**, depois do scraper das 09:00 UTC — é a prova de fogo do gatilho:
+   `select count(*) filter (where public.eh_edital_pdf(link_edital)) as com_pdf, count(*) as total
+    from imoveis_leilao where fonte='CEF' and ativo and modalidade in ('extrajudicial','licitacao_aberta');`
+   Tem que continuar ~10.010/10.035. Se cair para centenas, o gatilho sumiu ou há caminho novo.
+2. **Aviso de renovação** (cron 09:00 UTC): `select * from webhook_eventos_processados where
+   evento like 'renov_aviso%';` — tem que deixar de ser VAZIO pela 1ª vez. A cobrança da
+   Alessandra é **07/08**, então é a última janela útil. Se continuar vazio, o novo contador
+   `sem_email` na resposta do cron diz se foi e-mail não resolvido ou outra coisa.
+3. **IBGE**: os 2 agregados que nunca rodaram (6579 estimativa_populacao, 2612 registro_civil).
+4. **Fotos órfãs**: tem que estar abaixo de 24.811 (causa já corrigida; é só confirmar a drenagem).
+
+**Backlog técnico (eu faço quando o dono liberar tempo):**
+- **3 rotas `edge` com chamada de IA** — mesmo risco do contrato, menor: `admin-chat.js` e
+  `inbound-juridico.js` (2048 tokens), `cnj-chat`/`financiamento-ia` (1024). Não mexidas por falta
+  de evidência de falha. Sintoma que as denunciaria: o MESMO "Unexpected token 'A'".
+- **Extração de anexo só cobre PDF com texto** — Word, imagem e PDF digitalizado ficam de fora
+  (hoje avisando na tela). Ligar visão no servidor resolveria; caminho já existe para outros docs.
+- **Cliente 360 — última/próxima cobrança por cliente.** Hoje NENHUMA tela mostra: o painel calcula
+  MRR *estimado* e o front não lê `mp_pagamentos`/`mp_assinaturas` em lugar nenhum. Foi por isso
+  que não dava para ver que a Neuma tinha pago.
+- 2 avisos de qualidade de dado do Health Check (Índice: 1 cidade fora da faixa de R$/m²;
+  11 anomalias de relatório).
+- Herdadas: 4 lotes CEF com matrícula em HTTP 404; e-mail marketing do Investidor Pro; backlog da
+  sessão 23 (8 achados confirmados não corrigidos + 39 não verificados).
 
 ---
 
