@@ -38,28 +38,47 @@ function gerarCPF() {
 //
 // O download direto (node:https) devolve o arquivo íntegro — é o mesmo cliente que o scraper
 // diário usa e que o recon confirmou (HTTP 200, application/pdf, 755.730 bytes).
-function baixarPdf(url, hops = 0) {
+// DIAGNÓSTICO OBRIGATÓRIO: toda recusa é LOGADA com o motivo (status, content-type, tamanho,
+// primeiros bytes). Uma captura que devolve null em silêncio é justamente o que fez este bug
+// sobreviver meses — o lote era marcado como concluído sem o documento e ninguém via.
+function baixarPdf(url, rotulo = 'doc', hops = 0) {
   return new Promise((resolve) => {
     const req = https.get(url, {
-      headers: { 'User-Agent': UA, Accept: 'application/pdf,*/*', Referer: 'https://venda-imoveis.caixa.gov.br/sistema/detalhe-imovel.asp' },
+      headers: {
+        // Cabeçalhos IDÊNTICOS aos do recon que comprovadamente baixou o edital
+        // (HTTP 200, application/pdf, 755.730 bytes). UA enxuto — o UA completo de Chrome
+        // com fingerprint de TLS que não é de Chrome é sinal clássico de bot.
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        Accept: 'text/html,application/xhtml+xml,application/pdf,text/csv,*/*',
+        'Accept-Language': 'pt-BR,pt;q=0.9',
+        Referer: 'https://venda-imoveis.caixa.gov.br/sistema/detalhe-imovel.asp',
+      },
       timeout: 30000,
     }, (res) => {
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location && hops < 3) {
         res.resume();
-        return baixarPdf(new URL(res.headers.location, url).toString(), hops + 1).then(resolve);
+        return baixarPdf(new URL(res.headers.location, url).toString(), rotulo, hops + 1).then(resolve);
       }
-      if (res.statusCode !== 200) { res.resume(); return resolve(null); }
+      const ct = res.headers['content-type'] || '';
+      if (res.statusCode !== 200) {
+        res.resume();
+        console.log(`    ⚠️ ${rotulo}: HTTP ${res.statusCode} em ${url}`);
+        return resolve(null);
+      }
       const chunks = [];
       res.on('data', c => chunks.push(c));
       res.on('end', () => {
         const buf = Buffer.concat(chunks);
         // Só aceita PDF DE VERDADE (assinatura %PDF-). Assim uma interstitial do Radware ou
         // uma página de erro nunca é salva como se fosse o documento.
-        resolve(buf.length > 2000 && buf.subarray(0, 5).toString() === '%PDF-' ? buf : null);
+        if (buf.length > 2000 && buf.subarray(0, 5).toString() === '%PDF-') return resolve(buf);
+        const amostra = buf.subarray(0, 60).toString('latin1').replace(/\s+/g, ' ');
+        console.log(`    ⚠️ ${rotulo}: resposta não é PDF — ct=${ct} bytes=${buf.length} início="${amostra}" url=${url}`);
+        resolve(null);
       });
     });
-    req.on('error', () => resolve(null));
-    req.on('timeout', () => { req.destroy(); resolve(null); });
+    req.on('error', (e) => { console.log(`    ⚠️ ${rotulo}: erro de rede ${String(e.message).slice(0, 80)} em ${url}`); resolve(null); });
+    req.on('timeout', () => { req.destroy(); console.log(`    ⚠️ ${rotulo}: timeout em ${url}`); resolve(null); });
   });
 }
 
@@ -113,7 +132,7 @@ async function processar(page, item) {
   const num = String(item.hdniip || '').replace(/\D/g, '');
   //    Baixa por HTTP direto (não pelo navegador) — ver baixarPdf().
   const matri = (uf.length === 2 && num)
-    ? await baixarPdf(`https://venda-imoveis.caixa.gov.br/editais/matricula/${uf}/${num}.pdf`).catch(() => null)
+    ? await baixarPdf(`https://venda-imoveis.caixa.gov.br/editais/matricula/${uf}/${num}.pdf`, 'matricula').catch(() => null)
     : null;
   if (matri) { await salvarAnexo(item.imovel_id, matri, 'matricula', 'Matrícula (CEF, automática).pdf'); capturados.push('matricula'); }
 
@@ -121,7 +140,7 @@ async function processar(page, item) {
   //    Com o backfill (backfill-edital-cef.mjs) link_edital já é o PDF real na maior parte do
   //    acervo, então este é o caminho normal. PDF estático → download direto.
   if (ehUrl(imovel?.link_edital)) {
-    const ed = await baixarPdf(imovel.link_edital).catch(() => null);
+    const ed = await baixarPdf(imovel.link_edital, 'edital').catch(() => null);
     if (ed) { await salvarAnexo(item.imovel_id, ed, 'edital', 'Edital (CEF, automático).pdf'); capturados.push('edital'); }
   }
 
@@ -156,7 +175,7 @@ async function processar(page, item) {
           if (matriculaPdf) {
             // PDF estático → download direto; só cai no navegador se não for um PDF
             // (alguns lotes judiciais linkam um .asp, que precisa ser renderizado).
-            const m2 = await baixarPdf(matriculaPdf).catch(() => null)
+            const m2 = await baixarPdf(matriculaPdf, 'matricula-pagina').catch(() => null)
                     || await capturarUrl(page, matriculaPdf).catch(() => null);
             if (m2) { await salvarAnexo(item.imovel_id, m2, 'matricula', 'Matrícula (CEF, automática).pdf'); capturados.push('matricula'); }
             await page.goto(detalheUrl, { waitUntil: 'networkidle2', timeout: 30000 }).catch(() => {});
@@ -192,7 +211,7 @@ async function processar(page, item) {
             return m && !EXCLUI.test(m[0]) ? m[0] : null;
           }).then(u => (u ? new URL(u, 'https://venda-imoveis.caixa.gov.br').toString() : null));
           if (editalPdf) {
-            const ed = await baixarPdf(editalPdf).catch(() => null);   // PDF estático → download direto
+            const ed = await baixarPdf(editalPdf, 'edital-pagina').catch(() => null);   // PDF estático → download direto
             if (ed) { await salvarAnexo(item.imovel_id, ed, 'edital', 'Edital (CEF, automático).pdf'); capturados.push('edital'); }
             // Grava a URL REAL do edital em link_edital → o botão "Edital" abre o PDF direto
             // no navegador do usuário (hotlink, IP residencial atendido pela Caixa; sem custo
@@ -216,6 +235,16 @@ async function processar(page, item) {
 }
 
 async function main() {
+  // FAXINA DE ÓRFÃOS: uma linha marcada 'processando' que nunca volta (o job morreu no meio,
+  // timeout do Actions, deploy) fica INVISÍVEL para sempre — a consulta abaixo só pega
+  // 'pendente'. Sem retry, sem erro, sem alarme. Havia linha presa desde 07/07. Devolve para
+  // a fila o que está 'processando' há mais de 2h (uma rodada leva minutos).
+  const limite = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+  const { data: presos } = await supabase.from('cef_matricula_fila')
+    .update({ status: 'pendente', erro: 'retomado apos ficar preso em processando' })
+    .eq('status', 'processando').lt('criado_em', limite).select('id');
+  if (presos?.length) console.log(`↻ ${presos.length} linha(s) presa(s) em 'processando' devolvida(s) à fila.`);
+
   const { data: fila } = await supabase.from('cef_matricula_fila').select('*').eq('status', 'pendente').order('criado_em', { ascending: true }).limit(LOTE);
   if (!fila?.length) { console.log('Fila vazia.'); return; }
   console.log(`Processando ${fila.length} imóvel(is) CEF...`);
@@ -223,7 +252,7 @@ async function main() {
   const browser = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox', '--disable-setuid-sandbox'] });
   const page = await browser.newPage();
   await page.setUserAgent(UA);
-  let ok = 0, erros = 0;
+  let ok = 0, erros = 0, reagendados = 0, semEdital = 0;
 
   for (const item of fila) {
     await supabase.from('cef_matricula_fila').update({ status: 'processando', tentativas: (item.tentativas || 0) + 1 }).eq('id', item.id);
@@ -244,8 +273,11 @@ async function main() {
         // na próxima rodada do cron (10 min). Garante que não paramos sem a matrícula.
         await supabase.from('cef_matricula_fila').update({ status: 'pendente', erro: `sem matricula (tentativa ${tent})` }).eq('id', item.id);
       }
-      ok++;
-      console.log(`${temMatricula ? '✓' : '⟳'} ${item.imovel_id}: ${docs.join(', ') || 'nada'}${temMatricula ? '' : ` (sem matrícula, tent ${tent})`}`);
+      // O total NÃO pode contar um reagendamento como sucesso: era assim que uma rodada em
+      // que vários lotes falharam em obter a matrícula ainda imprimia "N ok, 0 erro(s)".
+      if (temMatricula) ok++; else reagendados++;
+      if (!docs.includes('edital')) semEdital++;
+      console.log(`${temMatricula ? '✓' : '⟳'} ${item.imovel_id}: ${docs.join(', ') || 'nada'}${temMatricula ? '' : ` (sem matrícula, tent ${tent})`}${docs.includes('edital') ? '' : ' [SEM EDITAL]'}`);
     } catch (e) {
       await supabase.from('cef_matricula_fila').update({ status: 'erro', erro: String(e.message).slice(0, 300), processado_em: new Date().toISOString() }).eq('id', item.id);
       erros++;
@@ -255,7 +287,7 @@ async function main() {
   }
 
   await browser.close();
-  console.log(`Concluído: ${ok} ok, ${erros} erro(s).`);
+  console.log(`Concluído: ${ok} com matrícula, ${reagendados} reagendado(s) sem matrícula, ${erros} erro(s), ${semEdital} sem edital.`);
 }
 
 main().catch(e => { console.error(e); process.exit(1); });
