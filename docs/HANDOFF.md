@@ -124,9 +124,24 @@ vitória — nenhum monitor acusou nada. Registro corrigido (`docs_status='atenc
 > a métrica dizia 100% e a cobertura real era 0,03%. **Ao auditar captura de documento, medir o
 > ARQUIVO (tamanho/assinatura), não o status da fila.**
 
+### 💼 CONTEXTO COMERCIAL — o lote de Cuiabá era uma DEMO (dito pelo dono no fim da sessão)
+
+O apto de Cuiabá **não era análise de investimento do dono**: ele estava **apresentando a
+plataforma a um investidor**. Ou seja, **o relatório sem edital aconteceu na frente de um
+prospect** — é a segunda vez que uma falha de relatório cai numa demo (a 1ª foi o relatório
+vazio de BH, sessão de 30/07). O investidor **disse que criaria conta e ainda NÃO criou**.
+
+➡️ **LEAD QUENTE, não registrado em lugar nenhum ainda** (não tem cadastro, então não aparece
+no Cliente 360 nem nos 3 leads pagos do item 8 abaixo). **Perguntar ao dono na próxima sessão
+quem é e se quer abordar** — é o lead mais qualificado do funil hoje: viu o produto ao vivo,
+com o dono, e demonstrou intenção. O reteste do documental **não é necessário** (o dono
+dispensou); a correção já está provada pelo tamanho do arquivo (738 KB).
+
+⚠️ **REGRA PRÁTICA que sai daí:** antes de qualquer demo, gerar os relatórios do imóvel-alvo
+**com antecedência** (já valia para o mercadológico — ver o bloco de 30/07 sobre o Rio; agora
+vale para o documental também). Uma demo é o pior lugar para descobrir uma lacuna de captura.
+
 ### ⏭️ Pendências desta sessão
-- **Reteste do dono:** gerar de novo o documental do lote de Cuiabá — agora com edital de
-  738 KB anexado. Era o pedido explícito dele.
 - Os 4 lotes com matrícula em HTTP 404 (2 SP, 2 BA) seguem sem matrícula; a rota alternativa da
   página devolve HTML. Investigar se a Caixa mudou o caminho estático para esses casos.
 - E-mail marketing do Investidor Pro (adiado pelo dono para a próxima sessão).
@@ -471,7 +486,10 @@ Conversão 81 cliques → 3 cadastros = **3,7%** (saudável); 0 pagantes em 3 ca
 3. Search Console → `sitemap-leiloes.xml` saiu de "Não foi possível buscar" para "Processado"?
 4. **E-MAIL MARKETING DO INVESTIDOR PRO (pedido do dono para 04/08):** campanha para a base
    aproveitar **antes do reajuste de preço**. Ele quer montar na próxima sessão.
-5. **Abordar os 3 leads pagos** (item 8 acima) — Marlene é a mais quente.
+5. **Abordar os leads.** Agora são **4**: os 3 pagos do item 8 (Marlene é a mais quente) **+ o
+   investidor da demo do lote de Cuiabá** (03/08), que viu a plataforma ao vivo com o dono,
+   disse que criaria conta e não criou — sem cadastro, então não aparece em nenhum painel.
+   Perguntar ao dono quem é. Ver "CONTEXTO COMERCIAL" no bloco de 04/08.
 6. **Fotos órfãs:** conferir se os 21.418 começaram a cair de verdade agora que a origem foi
    fechada (`select count(*) from public.fotos_orfas_para_limpeza(200000);` — antes caía só
    342/dia porque nasciam ~1.150; a expectativa agora é ~1.500/dia líquido).
