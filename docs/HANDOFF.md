@@ -35,12 +35,32 @@
 | 4 | **Geocode do lote do Rafael** | `select endereco, latitude, longitude, geocod_nivel from imoveis_leilao where fonte_id='zuk_37094-231508';` | Coordenada **diferente** de `-23.4675941, -46.5277704` (o fallback de cidade) e `geocod_nivel` ≠ 'refazer'. **Depois disso, regerar o mercadológico dele e conferir se o Nível 1 traz amostras** — é o fechamento do caso |
 | 5 | **IBGE + fotos órfãs** | `select chave, ultimo_em, ultimo_ok from socio_fontes;` · `select count(*) from public.fotos_orfas_para_limpeza(100000);` | Agregados 6579 e 2612 saírem de NULL · órfãs abaixo de **24.811** |
 
-**Também nesta sessão:** decidir a **Camada 2 do endereço** (edital/matrícula, item 7) e liberar as
-permissões MCP — `.claude/settings.json` foi escrito mas **`.claude/` está no `.gitignore`**, então
-o arquivo é local e **não sobrevive ao container**. Ver "Pendências desta sessão".
+### 📌 As 2 coisas a AGENDAR logo na abertura (o dono aprovou em 04/08 — só faltava a permissão)
 
-**Lembrete de 2 semanas (18/08):** conferir "Snippets do produto" no Search Console — critério de
-decisão pronto no item 6. Não foi possível agendar (a ferramenta pede aprovação do dono).
+As permissões **já estão versionadas** em `.claude/settings.json` (commit 82e964c) e passam a valer
+nesta sessão, porque agora o arquivo existe desde o início. Assim que confirmar que `send_later`
+responde, **agendar as duas** — em 04/08 as chamadas ainda voltavam `requires approval`, porque a
+aprovação é do runtime e o arquivo tinha acabado de ser criado:
+
+1. **18/08 — Search Console, "Snippets do produto".** Passadas 2 semanas do deploy com `sku` +
+   `priceValidUntil`, pedir ao dono os **nomes exatos** dos campos que sobraram no painel
+   (Aprimoramentos → Snippets do produto). Critério de decisão já resolvido no **item 6**: sumiram
+   → encerrado; sobrou aviso NÃO crítico → não mexer; ERRO crítico → aí sim reavaliar
+   `RealEstateListing`, lembrando que a troca custa o rich snippet de preço.
+2. **Heartbeat da manhã seguinte** — mesmo bloco de validações acima, se algum item ficar vermelho
+   hoje e depender de novo ciclo de cron.
+
+### 🔓 Permissões MCP — o que ficou liberado (e o que NÃO)
+
+`allow`: leitura da Vercel (`get_runtime_logs`, `get_runtime_errors`, `get_deployment`,
+`get_deployment_build_logs`, listagens) + agendamento (`send_later` e gestão dos triggers).
+`ask` (segue pedindo aprovação a cada uso): `deploy_to_vercel`,
+`update_project_deployment_protection` e tudo que gasta dinheiro (`buy_domain`, `buy_credits`,
+`buy_addon`, `buy_pro`). **Escolha deliberada:** ler log não muda nada no mundo; publicar e comprar
+mudam. `.claude/` segue ignorada no git — só o `settings.json` abre exceção (`.claude/*` +
+`!.claude/settings.json`, porque o git não reabre arquivo dentro de diretório excluído).
+
+**Também nesta sessão:** decidir a **Camada 2 do endereço** (edital/matrícula, item 7).
 
 ---
 
@@ -322,46 +342,49 @@ Guardar o resultado em `imoveis_leilao.endereco` (o gatilho já protege) para n�
 
 ### ⏭️ Pendências desta sessão
 
-**Depende do DONO (decisão ou ação dele):**
-- **Schema `Product` → `RealEstateListing`** nas 33 mil páginas públicas (ver item 6). É a única
-  forma de os avisos do Search Console pararem de voltar. Decisão dele; eu avalio o impacto.
-- **Liberar o log de runtime da Vercel** (a chamada MCP pede aprovação). Sem ele eu dependi do
-  clique do dono para fechar diagnóstico — foi o que deixou o bug do contrato passar duas vezes.
-- **Liberar agendamento** (`send_later`) para eu acordar sozinho e rodar as verificações de amanhã.
-- ~~LEAD da demo de Cuiabá~~ ✅ **RESPONDIDO pelo dono (04/08): era uma reunião com um investidor.
-  Tem interesse em criar conta, mas NÃO agora. Não precisa monitorar nem abordar.** Encerrado —
-  não reabrir nas próximas sessões.
-- ~~Conferir `R2_LOCATION`~~ ✅ **CONFERIDO (04/08): o dono criou o bucket em Virgínia/EUA e o
-  backup gravou `regiao_destino: 'enam'` (Eastern North America). BATE.** Backup off-region
-  íntegro: 7 tabelas + 45 arquivos, 0 falhas.
+**Depende do DONO (decisão):**
+- **Camada 2 do endereço — edital/matrícula** (item 7). ~343 lotes sem logradouro no título. Ele
+  pediu; falta decidir e construir. Desenho recomendado já escrito: **on-demand na geração do
+  relatório**, nunca em massa.
+- **Schema `Product` → `RealEstateListing`**: **recomendação é NÃO trocar** (item 6). Reabrir só se
+  o Search Console acusar ERRO crítico em 18/08.
 - `PENDENCIAS_DONO.md`: Google Ads (verificação até **31/08**), Asaas (reativar webhook), Resend
   (URL com `www` + Re-enable), Upstash (grátis).
+- ~~Lead de Cuiabá~~ ✅ encerrado · ~~R2_LOCATION~~ ✅ confere (Virgínia = `enam`) ·
+  ~~Google Search Console~~ ✅ verificado (o e-mail de 04/08 prova).
 
-**VERIFICAR AMANHÃ (só o tempo passando resolve):**
-1. **Termômetro do edital CEF**, depois do scraper das 09:00 UTC — é a prova de fogo do gatilho:
-   `select count(*) filter (where public.eh_edital_pdf(link_edital)) as com_pdf, count(*) as total
-    from imoveis_leilao where fonte='CEF' and ativo and modalidade in ('extrajudicial','licitacao_aberta');`
-   Tem que continuar ~10.010/10.035. Se cair para centenas, o gatilho sumiu ou há caminho novo.
-2. **Aviso de renovação** (cron 09:00 UTC): `select * from webhook_eventos_processados where
-   evento like 'renov_aviso%';` — tem que deixar de ser VAZIO pela 1ª vez. A cobrança da
-   Alessandra é **07/08**, então é a última janela útil. Se continuar vazio, o novo contador
-   `sem_email` na resposta do cron diz se foi e-mail não resolvido ou outra coisa.
-3. **IBGE**: os 2 agregados que nunca rodaram (6579 estimativa_populacao, 2612 registro_civil).
-4. **Fotos órfãs**: tem que estar abaixo de 24.811 (causa já corrigida; é só confirmar a drenagem).
+**AGENDAR na abertura** (ver bloco 📌 no topo): lembrete de 18/08 do Search Console.
 
-**Backlog técnico (eu faço quando o dono liberar tempo):**
-- **3 rotas `edge` com chamada de IA** — mesmo risco do contrato, menor: `admin-chat.js` e
+**Backlog técnico (meu):**
+- **3 rotas `edge` com chamada de IA** — mesmo defeito do contrato, menor: `admin-chat.js` e
   `inbound-juridico.js` (2048 tokens), `cnj-chat`/`financiamento-ia` (1024). Não mexidas por falta
-  de evidência de falha. Sintoma que as denunciaria: o MESMO "Unexpected token 'A'".
-- **Extração de anexo só cobre PDF com texto** — Word, imagem e PDF digitalizado ficam de fora
-  (hoje avisando na tela). Ligar visão no servidor resolveria; caminho já existe para outros docs.
-- **Cliente 360 — última/próxima cobrança por cliente.** Hoje NENHUMA tela mostra: o painel calcula
-  MRR *estimado* e o front não lê `mp_pagamentos`/`mp_assinaturas` em lugar nenhum. Foi por isso
-  que não dava para ver que a Neuma tinha pago.
+  de evidência de falha. Sintoma que as denunciaria: o MESMO `Unexpected token 'A'`.
+- **Extração de anexo do contrato só lê PDF com texto** — Word, imagem e PDF digitalizado ficam de
+  fora (hoje avisando na tela, não mais em silêncio). Ligar visão no servidor resolveria.
+- **Cliente 360 — última/próxima cobrança por cliente.** NENHUMA tela mostra hoje: o painel calcula
+  MRR *estimado* e o front não lê `mp_pagamentos`/`mp_assinaturas` em lugar nenhum. Foi por isso que
+  não dava para ver que a Neuma tinha pago.
 - 2 avisos de qualidade de dado do Health Check (Índice: 1 cidade fora da faixa de R$/m²;
-  11 anomalias de relatório).
+  11 anomalias de relatório: cnj_vazio 7 · avaliacao_ausente 3 · mercado_area_incoerente 1).
 - Herdadas: 4 lotes CEF com matrícula em HTTP 404; e-mail marketing do Investidor Pro; backlog da
   sessão 23 (8 achados confirmados não corrigidos + 39 não verificados).
+
+### 🧠 O que esta sessão ensinou (vale para as próximas)
+
+1. **Uma correção só está feita quando sobrevive à rodada seguinte de quem escreve na mesma
+   coluna.** O edital foi corrigido em 03/08 e desfeito pelo scraper em 04/08. O mesmo padrão
+   reapareceu no `endereco`. Sempre perguntar: *quem mais escreve aqui, e o que ele grava?*
+2. **Vazio literal (`''`/`null`) num upsert merge-duplicates é uma ARMA.** Três gatilhos já existem
+   por isso (`data_leilao`, `link_edital`, `endereco`). Ao ver um mapper gravando `campo: ''`,
+   suspeitar antes de o dado sumir.
+3. **`export default` + runtime Node = função pendurada até o maxDuration.** Rota que devolve
+   `Response` exporta SÓ método nomeado. Nunca misturar.
+4. **Erro de API silenciado tem duas caras:** o `.catch` que engole e o `.json()` que estoura em
+   cima de texto. As duas escondem a causa real; ler o corpo como texto e parsear com guarda.
+5. **Aviso de checagem automática pode ser FALSO POSITIVO** — `eventos_atividade`/`cota_concessoes`
+   eram só-servidor. "Corrigir" ali seria abrir escrita para o cliente forjar cota. Medir antes.
+6. **Dado errado é pior que dado ausente.** Endereço errado desloca o raio de 250 m sem avisar; por
+   isso a extração é auto-validada pela cidade e recusa o que não casa.
 
 ---
 
