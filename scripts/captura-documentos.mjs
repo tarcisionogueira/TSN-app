@@ -192,9 +192,13 @@ async function processar(browser, item) {
     capturados.push(tipo);
   };
 
-  // Página do lote (referer + navegação): link_edital costuma ser a própria página;
-  // senão a url_lote; senão as regras de venda.
-  const paginaLote = ehUrl(im.link_edital) ? im.link_edital
+  // Página do lote (referer + navegação): em muitas fontes o link_edital É a própria
+  // página. Mas quando ele já é o PDF do edital (CEF depois do backfill, e agora
+  // permanentemente — ver trg_preservar_link_edital), navegar para ele mandaria o
+  // Puppeteer para um PDF em vez da página do lote: nenhum outro documento seria
+  // encontrado e o Referer do caminho 1 ficaria errado. Aí a url_lote é que vale.
+  const ehPdf = (u) => /\.pdf(\?|#|$)/i.test(u || '');
+  const paginaLote = (ehUrl(im.link_edital) && !ehPdf(im.link_edital)) ? im.link_edital
     : (ehUrl(im.url_lote) ? im.url_lote : (ehUrl(im.link_regras_venda) ? im.link_regras_venda : null));
 
   // ─── CAMINHO 1 — fetch DIRETO dos links já conhecidos (grátis, sem navegador) ───

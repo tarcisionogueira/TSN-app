@@ -367,7 +367,15 @@ async function scraperCEFcsv(uf) {
         valor_minimo: valorMin,
         area_m2: areaM2,
         descricao: descParts.join(' — ') || null,
-        // Venda direta → "regra de venda online"; leilão → edital
+        // Venda direta → "regra de venda online"; leilão → edital.
+        // ⚠️ INVARIANTE (04/08): aqui `link_edital` é só o BOOTSTRAP do lote novo — o CSV
+        // da Caixa NÃO tem coluna de edital, então o melhor que temos no dia 1 é a página
+        // de detalhe. O PDF real é conquistado depois (backfill-edital-cef / captura-
+        // matricula-cef). Como o upsert é merge-duplicates, este valor sobrescrevia o PDF
+        // TODO DIA (9.483 lotes em 04/08). Quem protege é o gatilho de banco
+        // `trg_preservar_link_edital` (migration preservar_link_edital_pdf.sql): PDF de
+        // edital conquistado nunca retrocede para página/nulo. Não remover o gatilho sem
+        // mudar isto aqui — e a página do lote segue disponível em `url_lote`.
         link_edital: ehVendaDireta ? null : linkDetalhe,
         link_regras_venda: ehVendaDireta ? linkDetalhe : null,
         link_matricula: linkMatricula,

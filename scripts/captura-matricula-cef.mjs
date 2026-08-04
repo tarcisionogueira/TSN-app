@@ -139,7 +139,10 @@ async function processar(page, item) {
   // 2) Edital direto (quando o link_edital já é um PDF externo/real).
   //    Com o backfill (backfill-edital-cef.mjs) link_edital já é o PDF real na maior parte do
   //    acervo, então este é o caminho normal. PDF estático → download direto.
-  if (ehUrl(imovel?.link_edital)) {
+  //    Só tenta quando é PDF de verdade: mandar a PÁGINA de detalhe para o baixarPdf
+  //    garante recusa (ela exige assinatura `%PDF-`) e polui o log de recusas — que é
+  //    justamente onde se enxerga a lacuna REAL (os 4 lotes com matrícula em HTTP 404).
+  if (ehUrl(imovel?.link_edital) && /\.pdf(\?|#|$)/i.test(imovel.link_edital)) {
     const ed = await baixarPdf(imovel.link_edital, 'edital').catch(() => null);
     if (ed) { await salvarAnexo(item.imovel_id, ed, 'edital', 'Edital (CEF, automático).pdf'); capturados.push('edital'); }
   }
