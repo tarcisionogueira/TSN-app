@@ -22,6 +22,107 @@
 > Checagem rápida a qualquer momento: `select public.auditoria_seguranca();` → `0 crítico / 0 atenção` = íntegro.
 > **Auditorias ofensivas completas: 15/07/2026 (×2).** Total de correções: 15 (1ª rodada) + escalonamento por convite (CRÍTICO) + IDOR do MP (ALTO) + escala. Refazer a ofensiva quando entrarem rotas/pagamento/RLS novos (a Rotina mensal já faz isso sozinha).
 
+## ✅ COMEÇAR AQUI (04/08 — sessão 25: ritual + a correção de ontem estava sendo desfeita todo dia)
+
+> Branch `claude/handoff-verificacoes-uyiufd`. Migração `preservar_link_edital_pdf.sql`
+> **APLICADA via MCP** (já valendo em produção). `npm run build` OK, `node --check` OK.
+> ⚠️ **O código ainda NÃO está em `main`** — o gatilho de banco já estancou o sangramento,
+> mas os 3 arquivos de script só chegam à produção quando a branch for para `main`.
+
+### 🩺 Ritual de abertura — o resumo
+
+| Item | Estado |
+|---|---|
+| Acervo | **33.099 ativos**, 32.162 atualizados em 24h · 26 sem geocode |
+| Baseline aprendida (bug bounty leiloeiros) | só **SBID21** abaixo do piso (0 < 18) — mesma de ontem, leilão encerrado |
+| `auditoria_seguranca()` | **0 crítico / 0 atenção** ✔ |
+| Cliente 360 | íntegro — 27 clientes, 80 relatórios, 2 falhas em 24h (`faltam_docs`, "sem comparáveis"), 3 erros abertos |
+| Fila de documentos | 764 pendentes, **0 presos** (mais antigo de ontem 12h51, nenhum > 2 dias) |
+| Funil público 7d | 363 pageviews / 103 visitantes / 46 na `/planos` |
+
+**Duas pendências do dono FECHARAM sozinhas desde ontem** (conferir com ele, mas o banco já mostra):
+- 🟢 **Cloudflare R2 (item -3) NO AR.** `backup_execucoes` id=2, hoje 04:41 UTC: `ok=true`,
+  destino `r2:…/bidpro-backup`, **7 tabelas + 45 arquivos, 0 falhas**. A execução de ontem
+  (id=1) ainda dizia "R2 não configurado". O item do check-up "Infra — backup off-region"
+  deve ter virado 🟢. ⚠️ Vale conferir com ele se `R2_LOCATION` bate com a região real —
+  gravou `regiao_destino: "enam"`.
+- 🟢 **Resend entregando com confirmação.** `emails_log` tem os 2 primeiros
+  `status='entregue'` com `entregue_em` preenchido (hoje 11h). Os 28 anteriores pararam em
+  `enviado` — ou seja, o webhook passou a chegar entre ontem 11h e hoje 11h.
+
+**IBGE (pendência da sessão 23): 2 de 4 agregados confirmados.** `censo_populacao` (4709) ok
+03/08 e `censo_domicilios` (4712) ok 04/08, 5.570 municípios cada, `rotulos_ignorados: []`.
+**`estimativa_populacao` (6579) e `registro_civil_nascimentos` (2612) nunca rodaram**
+(`ultimo_em` NULL, sem erro) — pela `ordem` (30 e 40) parece ser um por dia; **conferir amanhã**:
+se seguirem NULL, é a fila que não avança, não o agregado.
+
+### 🔴 1) A CORREÇÃO DE ONTEM ESTAVA SENDO DESFEITA TODO DIA (achado do ritual)
+
+Ontem o backfill deixou **10.015 dos 10.035** lotes CEF de leilão com `link_edital` = PDF real
+do edital. **Hoje, às 11h16–11h20 UTC, sobraram 549.** Os outros **9.483 voltaram a apontar
+para a página HTML do anúncio**, com `numero_edital` zerado junto (549 com número = exatamente
+os 549 com PDF — os que o CSV de hoje não trouxe).
+
+**Causa-raiz:** `scripts/scraper.js` (o scraper vivo, cron 09:00 UTC) monta
+`link_edital = <página de detalhe>` para todo lote que não é venda direta — o CSV da Caixa não
+tem coluna de edital, então essa página é o melhor que ele tem. O upsert por
+`(fonte,fonte_id)` com merge-duplicates **sobrescreve o PDF que a captura dedicada havia
+conquistado**. Idem `numero_edital: m.numero_edital || null`.
+
+**Por que ninguém viu:** o backfill das 13:25 UTC recuperava tudo. O que aparecia no log era um
+backfill *saudável* refazendo 9,5 mil buscas por dia. O dano real era **~4h por dia** em que o
+documental lê a página HTML como se fosse o edital — **é exatamente o defeito da demo de
+Cuiabá** — mais 9,5 mil requisições diárias desnecessárias contra a Caixa (risco de Radware).
+
+> 🧠 **Isto é a LIÇÃO de ontem se repetindo um nível acima.** Ontem: "medir o ARQUIVO, não o
+> status da fila". Hoje: **medir a correção DEPOIS do próximo ciclo do cron**. Uma correção só
+> está feita quando sobrevive à rodada seguinte de quem escreve na mesma coluna.
+
+**Correção — gatilho de banco `trg_preservar_link_edital`** (`preservar_link_edital_pdf.sql`,
+aplicada), no mesmo espírito do `trg_preservar_data_leilao` que já existia: *documento
+conquistado não retrocede*. Se o valor ANTIGO é PDF de edital de verdade (`eh_edital_pdf()`:
+`.pdf`, não `/editais/matricula/`, não `regras-VOL`) e o NOVO não é, mantém o antigo, e o
+`numero_edital` acompanha. PDF novo diferente passa normalmente. Vale para **qualquer** caminho
+de escrita — scraper, endpoint, backfill futuro. Testado em 6 cenários, todos ✔.
+
+**Dois defeitos irmãos, que só apareceriam com o link já corrigido:**
+- `captura-documentos.mjs`: a página de navegação do Puppeteer preferia o `link_edital`. Com ele
+  virando PDF (o estado normal a partir de agora), o navegador **iria para o PDF em vez da
+  página do lote** e nenhum outro documento seria encontrado. Agora cai para `url_lote`.
+- `captura-matricula-cef.mjs`: mandava a página ao `baixarPdf`, que garantidamente recusa
+  (exige assinatura `%PDF-`) — poluindo justamente o log de recusas onde se enxerga a lacuna
+  real (os 4 lotes com matrícula em HTTP 404). Só tenta quando é PDF.
+
+**Reparo dos 9.483 de hoje:** `backfill-edital-cef.yml` disparado à mão (não esperou as 13:25).
+**Conferir no início da próxima sessão** — e este número passa a ser o TERMÔMETRO do gatilho:
+```sql
+select count(*) filter (where public.eh_edital_pdf(link_edital)) as com_pdf, count(*) as total
+from imoveis_leilao where fonte='CEF' and ativo and modalidade in ('extrajudicial','licitacao_aberta');
+```
+Deve ficar em ~10.015/10.035 **e continuar assim depois do scraper das 09:00 UTC**. Se cair de
+novo, o gatilho foi removido ou alguém escreve por um caminho novo.
+
+### 🟢 2) Fotos órfãs: subiram, mas a causa já tinha sido resolvida ontem
+
+`fotos_orfas_para_limpeza()` = **24.811** (era 21.760 em 02/08) — subiu, apesar do faxineiro
+diário. **Não é regressão nova:** era o pingue-pongue `cef/` × `caixa/` que a sessão 24 corrigiu
+em `backfill-fotos-caixa.mjs`. A prova está no próprio Storage: escritas na pasta `caixa/` por
+dia — 31/07: 12 · 01/08: 169 · 02/08: 21 · **03/08: 468 · 04/08: 0**. Parou. O backlog agora é
+estático e o cron (1.500/dia) drena em ~17 dias. **Só acompanhar**: se em 3 dias não estiver
+caindo, aí sim é o faxineiro que não está rodando.
+
+### ⏭️ Pendências desta sessão
+- **Levar a branch `claude/handoff-verificacoes-uyiufd` para `main`** (o gatilho já protege o
+  banco; os 3 scripts ainda não estão em produção).
+- Conferir o resultado do backfill disparado (query-termômetro acima).
+- IBGE: os 2 agregados que nunca rodaram (6579, 2612).
+- **Herdadas da sessão 24, ainda abertas:** os 4 lotes com matrícula em HTTP 404; e-mail
+  marketing do Investidor Pro; Google Search Console (item -4, o mais urgente do dono);
+  **o LEAD QUENTE da demo de Cuiabá — perguntar ao dono quem é** (viu o produto ao vivo,
+  disse que criaria conta e não criou; não está registrado em lugar nenhum).
+
+---
+
 ## ✅ COMEÇAR AQUI (04/08 — sessão 24: o edital da Caixa nunca chegava; 2 loops silenciosos)
 
 > Tudo em `main`. `npm run build` OK, `node --check` OK nos scripts. Migrações: nenhuma nova
