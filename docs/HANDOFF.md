@@ -236,6 +236,46 @@ há frete nem devolução de imóvel).
 > sobraram**. Aí se decide com dado, não com suposição. Só reabrir a troca de tipo se aparecer
 > ERRO crítico ou ação manual — aviso não crítico, por si, não justifica.
 
+### 🔴 7) NÍVEL 1 DO MERCADOLÓGICO VAZIO — o endereço não existe no banco (achado do dono, 04/08)
+
+O dono mandou conferir um mercadológico do cliente **Rafael** (casa, Guarulhos/SP, 60,1 m²) em que o
+**Nível 1 (mesmo condomínio/endereço, raio ~250 m) voltou 0 amostras** e só o Nível 2 (1 km) trouxe
+11. **NÃO está correto** — mas o defeito não é do buscador de amostras, e sim do dado de entrada.
+
+**Lote `zuk_37094-231508`:**
+- `titulo` = "Casa em leilão - **Rua José Miguel Ackel, 2252** - Guarulhos/SP …"
+- `endereco` = **''** (vazio) · `bairro` = **''** (vazio)
+- `latitude/longitude` = `-23.4675941, -46.5277704` — coordenada compartilhada por **4 lotes de 3
+  fontes diferentes (CEF, MEGA, ZUK)** e por **3 análises de endereços distintos**. É fallback de
+  cidade, não a casa.
+
+**Ou seja:** o raio de 250 m foi medido a partir de um ponto genérico de Guarulhos, e a busca
+textual "mesmo endereço" não tinha endereço nenhum para buscar. O relatório diz *"não foram
+encontrados comparáveis exatos para o endereço fornecido"* quando, na verdade, **endereço nenhum
+foi fornecido**. O Nível 2 (por cidade+tipo+área) funciona porque não depende do endereço — por
+isso trouxe 11 e salvou o relatório.
+
+**ESCALA MEDIDA — não é um lote isolado.** Ativos com `endereco` vazio **cujo título traz
+logradouro**:
+
+| Fonte | Ativos | Sem endereço | Título TEM o endereço |
+|---|---|---|---|
+| ZUK | 840 | 840 (100%) | **736** |
+| SUPERBID | 1.360 | 1.342 (98,7%) | 174 |
+| MEGA | 564 | 563 (99,8%) | 67 |
+| LJUD | 1.029 | 1.029 (100%) | 58 |
+| LEILOTECH | 76 | 76 (100%) | 22 |
+| outras | — | — | ~8 |
+
+**≈1.065 lotes** têm o logradouro disponível no título e simplesmente não foi extraído para a
+coluna. Todo mercadológico desses lotes nasce com Nível 1 vazio e geocode de cidade.
+
+**CORREÇÃO PROPOSTA (não feita ainda — decisão do dono):** extrair logradouro+número do `titulo`
+nos mappers dessas fontes (o padrão ZUK é estável: `… - <logradouro>, <nº> - <cidade>/<UF> - …`) +
+backfill dos ativos + re-enfileirar o geocode dos corrigidos. Impacto direto na qualidade de ~1.065
+relatórios futuros. ⚠️ Parser conservador: só grava quando casar o padrão com segurança — endereço
+errado é PIOR que endereço vazio, porque desloca o raio de 250 m para outro lugar sem avisar.
+
 ### ⏭️ Pendências desta sessão
 
 **Depende do DONO (decisão ou ação dele):**
