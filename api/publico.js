@@ -269,7 +269,9 @@ async function paginaCidade(uf, cidadeNorm, page) {
 
 // ── /leilao/:id ──────────────────────────────────────────────────────────────
 async function paginaImovel(id) {
-  const campos = 'id,titulo,tipo,cidade,cidade_norm,estado,bairro,area_m2,valor_minimo,valor_minimo_2,valor_avaliacao,desconto_percentual,data_leilao,link_foto,fonte,modalidade,descricao,ativo';
+  // `fonte_id` e `data_fim` entram para o JSON-LD (identificador e priceValidUntil) — ver
+  // o bloco `jsonld` mais abaixo, que responde aos avisos do Search Console de 04/08.
+  const campos = 'id,titulo,tipo,cidade,cidade_norm,estado,bairro,area_m2,valor_minimo,valor_minimo_2,valor_avaliacao,desconto_percentual,data_leilao,data_fim,fonte_id,link_foto,fonte,modalidade,descricao,ativo';
   const { linhas } = await sb(`imoveis_leilao?id=eq.${encodeURIComponent(id)}&select=${campos}&limit=1`);
   const im = Array.isArray(linhas) ? linhas[0] : null;
   if (!im) return null;
@@ -316,16 +318,34 @@ async function paginaImovel(id) {
       A BidPro Brasil monta para este imóvel a análise de mercado, o relatório documental e o parecer jurídico — e calcula o <strong>lance máximo</strong> que ainda preserva o seu lucro.
       <a href="${SITE}/#/login?modo=cadastro">Criar conta grátis</a>.</p>
       ${im.cidade_norm && UF_NOME[uf] ? `<p><a href="${SITE}/leiloes/${uf.toLowerCase()}/${im.cidade_norm}">← Todos os imóveis em leilão em ${esc(im.cidade)}/${esc(uf)}</a></p>` : ''}`,
+    // JSON-LD do lote. Campos acrescentados em 04/08 respondendo aos avisos NÃO CRÍTICOS
+    // de "Snippets do produto" do Search Console — os dois clássicos são identificador
+    // global ausente e `priceValidUntil` ausente. Ambos são preenchíveis com dado REAL que
+    // já temos, sem inventar nada:
+    //   • `sku` = o id do lote no leiloeiro (identificador estável e verdadeiro);
+    //   • `priceValidUntil` = `data_fim`, o prazo para dar lance (mantido pelo trigger
+    //     trg_data_fim_leilao). É literalmente até quando aquele preço vale.
+    // NÃO acrescentamos `aggregateRating`/`review` (não existe avaliação de imóvel aqui —
+    // marcação de nota falsa é violação de política do Google e rende penalidade), nem
+    // `shippingDetails`/`hasMerchantReturnPolicy` (não há frete nem devolução de imóvel).
+    // ⚠️ PENDÊNCIA DE FUNDO: `Product` é o tipo de PRODUTO DE VAREJO. Para imóvel o tipo
+    // correto é `RealEstateListing`, e é por estar como Product que o Google aplica as
+    // validações de loja (identificador, frete, devolução, nota) que nunca farão sentido
+    // aqui. Trocar o tipo afeta as 33 mil páginas recém-enviadas — decisão do dono.
     jsonld: {
       '@context': 'https://schema.org', '@type': 'Product',
       name: im.titulo || `${t} em leilão em ${im.cidade || ''}`,
       description: `${t} em leilão em ${local}.`,
+      url: canonical,
+      ...(im.fonte_id ? { sku: String(im.fonte_id) } : {}),
       ...(im.link_foto ? { image: im.link_foto } : {}),
       ...(Number(im.valor_minimo) > 0 ? {
         offers: {
           '@type': 'Offer', price: Math.round(Number(im.valor_minimo)), priceCurrency: 'BRL',
           availability: im.ativo ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
           url: canonical,
+          // Só quando existe prazo de verdade — data inventada seria pior que campo ausente.
+          ...(im.data_fim ? { priceValidUntil: String(im.data_fim).slice(0, 10) } : {}),
         },
       } : {}),
     },

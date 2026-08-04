@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../utils/supabase';
 import { apiCall } from '../utils/apiCall';
+import { nomeArquivoSeguro } from '../utils/arquivo';
 import { useAuth } from '../contexts/AuthContext';
 import { ChevronLeft, FileText, CheckCircle2, Clock, AlertCircle, ExternalLink, Upload, Loader2, Info } from 'lucide-react';
 
@@ -105,7 +106,9 @@ export default function OnrRegistro() {
   const handleDocUpload = async (key, file) => {
     if (!file) return;
     setUploads(p => ({ ...p, [key]: 'uploading' }));
-    const path = `onr/${imovelId || 'geral'}/${key}_${Date.now()}_${file.name}`;
+    // Nome SANITIZADO na chave: acento/cedilha/espaço fazem o Storage devolver
+    // `Invalid key` (400) — mesmo defeito achado em 04/08 no anexo do contrato.
+    const path = `onr/${imovelId || 'geral'}/${key}_${Date.now()}_${nomeArquivoSeguro(file.name)}`;
     const { data, error } = await supabase.storage.from('documentos').upload(path, file, { upsert: true });
     if (error) {
       setUploads(p => ({ ...p, [key]: 'error' }));

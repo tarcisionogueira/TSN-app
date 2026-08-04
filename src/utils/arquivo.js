@@ -23,3 +23,33 @@ export function bytesParaBase64(bytes) {
 export async function arquivoParaBase64(file) {
   return bytesParaBase64(new Uint8Array(await file.arrayBuffer()));
 }
+
+// Nome de arquivo seguro para CHAVE do Supabase Storage.
+//
+// POR QUE EXISTE (04/08): o upload dos "documentos de referência" do contrato montava a
+// chave com `${Date.now()}-${f.name}` CRU. O dono anexou
+// "CONTRATO PRESTAÇÃO DE SERVIÇO DE ASSESSORIA.pdf" e o Storage respondeu
+// `Invalid key: …` (400) — a chave não aceita acento/cedilha. Pior: o `error` do upload
+// era DESCARTADO (`const { data: up } = await …`), então o contrato seguia para assinatura
+// sem o anexo e ninguém era avisado. Só apareceu porque o logger global grava em
+// `erros_cliente`.
+//
+// Mantém legível (o nome aparece na lista de documentos), sem acento e sem caractere que
+// a chave rejeite. Preserva a extensão.
+export function nomeArquivoSeguro(nome, maxBase = 70) {
+  const bruto = String(nome || 'arquivo');
+  const ponto = bruto.lastIndexOf('.');
+  const temExt = ponto > 0 && ponto > bruto.length - 12;
+  const base = temExt ? bruto.slice(0, ponto) : bruto;
+  const ext = temExt ? bruto.slice(ponto + 1) : '';
+
+  const limpar = (s) => s
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')  // tira acentos (PRESTAÇÃO → PRESTACAO)
+    .replace(/[^a-zA-Z0-9._-]+/g, '_')                 // espaço e símbolo → _
+    .replace(/_{2,}/g, '_')
+    .replace(/^[._-]+|[._-]+$/g, '');
+
+  const baseLimpa = limpar(base).slice(0, maxBase) || 'arquivo';
+  const extLimpa = limpar(ext).toLowerCase().slice(0, 10);
+  return extLimpa ? `${baseLimpa}.${extLimpa}` : baseLimpa;
+}

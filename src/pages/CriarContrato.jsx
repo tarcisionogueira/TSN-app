@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
 import { apiCall } from '../utils/apiCall';
 import { extrairTextoDeVarios } from '../utils/extrairTextoDoc';
+import { nomeArquivoSeguro } from '../utils/arquivo';
 import { useIsMobile } from '../utils/useIsMobile';
 
 const ROLES_OPERACIONAIS = ['admin', 'analista', 'advogado', 'consultor'];
@@ -238,15 +239,25 @@ export default function CriarContrato() {
 
     setEnviando(true);
     try {
-      // Upload arquivos referência
+      // Upload arquivos referência.
+      // 🔴 A CHAVE PRECISA SER ASCII (corrigido 04/08): o nome do arquivo ia CRU para a chave
+      // do Storage. "CONTRATO PRESTAÇÃO DE SERVIÇO DE ASSESSORIA.pdf" devolvia
+      // `Invalid key` (400) — a chave não aceita acento/cedilha. E o `error` era DESCARTADO,
+      // então o contrato seguia para assinatura SEM o anexo, calado. O `nome` guardado na
+      // linha continua sendo o ORIGINAL: quem lê a lista vê o nome de verdade.
       const refs = [];
+      const refsFalhas = [];
       for (const f of arquivosRef) {
-        const path = `contratos-ref/${user.id}/${Date.now()}-${f.name}`;
-        const { data: up } = await supabase.storage.from('documentos').upload(path, f, { upsert: false });
-        if (up?.path) {
-          const { data: signed } = await supabase.storage.from('documentos').createSignedUrl(up.path, 60 * 60 * 24 * 365);
-          refs.push({ nome: f.name, url: signed?.signedUrl || null });
-        }
+        const path = `contratos-ref/${user.id}/${Date.now()}-${nomeArquivoSeguro(f.name)}`;
+        const { data: up, error: upErr } = await supabase.storage.from('documentos').upload(path, f, { upsert: false });
+        if (upErr || !up?.path) { refsFalhas.push(f.name); continue; }
+        const { data: signed } = await supabase.storage.from('documentos').createSignedUrl(up.path, 60 * 60 * 24 * 365);
+        refs.push({ nome: f.name, url: signed?.signedUrl || null });
+      }
+      // Anexo que não subiu PARA o envio: o operador decide se manda assim ou corrige. Antes
+      // sumia sem aviso e o signatário recebia o contrato sem o documento de apoio.
+      if (refsFalhas.length) {
+        throw new Error(`Não consegui enviar o(s) anexo(s): ${refsFalhas.join(', ')}. Remova-o(s) da lista ou renomeie o arquivo e tente de novo — o contrato NÃO foi enviado.`);
       }
 
       const prod = produtos.find(p => `${p.tipo}:${p.chave}` === produtoSel) || null;

@@ -9886,7 +9886,12 @@ function QualidadeTab() {
     supabase.rpc('admin_aprendizado_sugestoes').then(({ data }) => setSug(Array.isArray(data) ? data : [])).catch(() => {});
   }, []);
   const aplicarSug = async (id, aplicado) => {
-    await supabase.rpc('admin_aprendizado_sugestao_aplicar', { p_id: id, p_aplicado: aplicado }).catch(() => {});
+    // `.catch` NÃO existe no builder do supabase-js — ele é "thenable", não Promise. Chamar
+    // `.catch()` DIRETO (sem um `.then()` antes, que devolve Promise de verdade) estoura
+    // "r.rpc(...).catch is not a function" e o clique não faz nada. Era o erro registrado
+    // em erros_cliente @/admin. O destructuring do erro é o caminho idiomático do supabase-js.
+    const { error } = await supabase.rpc('admin_aprendizado_sugestao_aplicar', { p_id: id, p_aplicado: aplicado });
+    if (error) { console.error('[aprendizado] aplicar sugestão:', error.message); return; }
     setSug(s => s.map(x => x.id === id ? { ...x, aplicado } : x));
   };
   React.useEffect(() => { carregar(); carregarSug(); }, [carregar, carregarSug]);
