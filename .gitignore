@@ -2,7 +2,14 @@ node_modules
 dist
 .env
 .env.local
-.claude/
+# .claude/ segue ignorada (histórico de sessão, caches, settings.local.json com dados de
+# máquina). A EXCEÇÃO é settings.json: são as permissões de ferramenta do projeto, que
+# precisam valer para toda sessão — sem versionar, o arquivo morre junto com o container
+# do ambiente remoto e as permissões voltam a ser pedidas do zero (04/08).
+# Negação exige `.claude/*` em vez de `.claude/`: o git não reabre arquivo dentro de
+# diretório excluído.
+.claude/*
+!.claude/settings.json
 .mcp.json
 
 # Python

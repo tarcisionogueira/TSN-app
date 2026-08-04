@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "permissions": {
+    "allow": [
+      "mcp__Vercel__get_runtime_logs",
+      "mcp__Vercel__get_runtime_errors",
+      "mcp__Vercel__get_deployment",
+      "mcp__Vercel__get_deployment_build_logs",
+      "mcp__Vercel__list_deployments",
+      "mcp__Vercel__list_projects",
+      "mcp__Vercel__list_teams",
+      "mcp__claude-code-remote__send_later",
+      "mcp__claude-code-remote__list_triggers",
+      "mcp__claude-code-remote__update_trigger",
+      "mcp__claude-code-remote__delete_trigger"
+    ],
+    "ask": [
+      "mcp__Vercel__deploy_to_vercel",
+      "mcp__Vercel__update_project_deployment_protection",
+      "mcp__Vercel__buy_domain",
+      "mcp__Vercel__buy_credits",
+      "mcp__Vercel__buy_addon",
+      "mcp__Vercel__buy_pro"
+    ]
+  }
+}
