@@ -1,0 +1,32 @@
+name: Recon — edital da Caixa (CEF)
+
+# Descobre COMO a Caixa publica o edital por lote. O runner do Actions (IP Azure) é
+# atendido pela Caixa; o ambiente de desenvolvimento é bloqueado para esse host.
+# Só lê e imprime no log — não grava nada no banco.
+
+on:
+  workflow_dispatch:
+    inputs:
+      numero:
+        description: 'Número do imóvel CEF (hdnimovel)'
+        required: false
+        default: '8555536754309'
+      uf:
+        description: 'UF do imóvel (para o CSV)'
+        required: false
+        default: 'MT'
+
+jobs:
+  recon:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Recon do edital CEF
+        env:
+          RECON_NUM: ${{ inputs.numero }}
+          RECON_UF: ${{ inputs.uf }}
+        run: node scripts/recon-cef-edital.mjs
