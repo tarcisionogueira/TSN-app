@@ -22,6 +22,28 @@
 > Checagem rápida a qualquer momento: `select public.auditoria_seguranca();` → `0 crítico / 0 atenção` = íntegro.
 > **Auditorias ofensivas completas: 15/07/2026 (×2).** Total de correções: 15 (1ª rodada) + escalonamento por convite (CRÍTICO) + IDOR do MP (ALTO) + escala. Refazer a ofensiva quando entrarem rotas/pagamento/RLS novos (a Rotina mensal já faz isso sozinha).
 
+## 🔔 VALIDAR NA ABERTURA DA SESSÃO DE 05/08 (combinado com o dono no fim do dia 04/08)
+
+> Cinco verificações. **Todas dependem só do tempo passar** — nada foi deixado pela metade. Rodar
+> ANTES de qualquer outra coisa e reportar em bloco. As três primeiras têm prazo.
+
+| # | O que validar | Como | Verde é |
+|---|---|---|---|
+| 1 | **Aviso de renovação da Alessandra** ⏰ *cobrança dia 07* | `select * from webhook_eventos_processados where evento like 'renov_aviso%';` | Deixar de ser VAZIO pela 1ª vez. Se vazio, o contador `sem_email` na resposta do cron diz o porquê |
+| 2 | **Gatilho do edital CEF** ⏰ *prova de fogo* | `select count(*) filter (where public.eh_edital_pdf(link_edital)) com_pdf, count(*) total from imoveis_leilao where fonte='CEF' and ativo and modalidade in ('extrajudicial','licitacao_aberta');` | ~10.010/10.035 **depois** do scraper das 09:00 UTC. Se cair para centenas, o gatilho sumiu |
+| 3 | **Endereço derivado do título** ⏰ *idem* | `select count(*) from imoveis_leilao where ativo and fonte='ZUK' and coalesce(btrim(endereco),'')<>'';` e `select count(*) filter (where geocod_nivel='refazer') from imoveis_leilao where ativo and public.endereco_do_titulo(titulo,cidade) is not null;` | Continuar **722** depois do scrape (prova que o gatilho segurou) e a fila de regeocode DRENANDO (< 722) |
+| 4 | **Geocode do lote do Rafael** | `select endereco, latitude, longitude, geocod_nivel from imoveis_leilao where fonte_id='zuk_37094-231508';` | Coordenada **diferente** de `-23.4675941, -46.5277704` (o fallback de cidade) e `geocod_nivel` ≠ 'refazer'. **Depois disso, regerar o mercadológico dele e conferir se o Nível 1 traz amostras** — é o fechamento do caso |
+| 5 | **IBGE + fotos órfãs** | `select chave, ultimo_em, ultimo_ok from socio_fontes;` · `select count(*) from public.fotos_orfas_para_limpeza(100000);` | Agregados 6579 e 2612 saírem de NULL · órfãs abaixo de **24.811** |
+
+**Também nesta sessão:** decidir a **Camada 2 do endereço** (edital/matrícula, item 7) e liberar as
+permissões MCP — `.claude/settings.json` foi escrito mas **`.claude/` está no `.gitignore`**, então
+o arquivo é local e **não sobrevive ao container**. Ver "Pendências desta sessão".
+
+**Lembrete de 2 semanas (18/08):** conferir "Snippets do produto" no Search Console — critério de
+decisão pronto no item 6. Não foi possível agendar (a ferramenta pede aprovação do dono).
+
+---
+
 ## ✅ COMEÇAR AQUI (04/08 — sessão 25: ritual + a correção de ontem estava sendo desfeita todo dia)
 
 > Branch `claude/handoff-verificacoes-uyiufd`, **JÁ EM `main`** (fast-forward `debf99a..1785eac`,
@@ -270,11 +292,33 @@ logradouro**:
 **≈1.065 lotes** têm o logradouro disponível no título e simplesmente não foi extraído para a
 coluna. Todo mercadológico desses lotes nasce com Nível 1 vazio e geocode de cidade.
 
-**CORREÇÃO PROPOSTA (não feita ainda — decisão do dono):** extrair logradouro+número do `titulo`
-nos mappers dessas fontes (o padrão ZUK é estável: `… - <logradouro>, <nº> - <cidade>/<UF> - …`) +
-backfill dos ativos + re-enfileirar o geocode dos corrigidos. Impacto direto na qualidade de ~1.065
-relatórios futuros. ⚠️ Parser conservador: só grava quando casar o padrão com segurança — endereço
-errado é PIOR que endereço vazio, porque desloca o raio de 250 m para outro lugar sem avisar.
+**✅ CAMADA 1 FEITA (04/08, migração `endereco_do_titulo_e_preservacao.sql`, APLICADA):**
+`endereco_do_titulo()` + gatilho `trg_preservar_endereco` (BEFORE INSERT OR UPDATE).
+
+- **No BANCO, não nos mappers** — por economia e cobertura: um gatilho vale para INSERT e UPDATE,
+  todas as fontes e todo caminho de escrita, sem editar 5 scrapers, sem cron novo, sem chamada paga.
+- **Resolve de brinde o que teria desfeito tudo:** os mappers gravam `endereco: ''` LITERAL e o
+  upsert merge-duplicates APAGA o que estava lá — o backfill de hoje seria perdido no scrape de
+  amanhã (mesma família do bug do `link_edital`). Agora vazio nunca sobrescreve preenchido.
+- **Auto-validação contra endereço errado:** a cidade que vem DENTRO do título tem que bater com a
+  cidade da linha. Ensaio: **722 de 840 casaram, 722 de 722 com cidade conferindo, ZERO divergência.**
+  Título fora do padrão é recusado e fica vazio — endereço errado é pior que vazio.
+- **Resultado:** 722 lotes ZUK com endereço; `zuk_37094-231508` (o do Rafael) agora tem
+  `Rua José Miguel Ackel, 2252`. Os 722 foram para `geocod_nivel='refazer'` — o rótulo antigo não
+  valia nada, porque **358 deles dividiam coordenada com outro lote**, impossível para endereços
+  distintos, mesmo os marcados 'rua'. O cron horário drena usando **só rotas gratuitas**
+  (Nominatim/IBGE/BrasilAPI); o Google, pago, não entra em lote. **Custo: zero.**
+- Testado em 6 cenários: vazio do scraper não apaga · endereço melhor passa · cidade divergente
+  recusada · título sem logradouro recusado · padrão válido aceito · restauração. 6/6 ✔
+
+**⏭️ CAMADA 2 — EDITAL / MATRÍCULA (pedido do dono, ainda NÃO feita).** Sobram ~343 lotes cujo
+título não traz logradouro (e as fontes de padrão irregular: SUPERBID, LJUD, MEGA). A fonte certa
+aí é o **edital e a matrícula que JÁ capturamos** — a matrícula é o documento legal com o endereço
+completo. **Desenho recomendado, pela regra de economia do dono: ON-DEMAND, na geração do
+relatório**, não em massa — só paga o processamento quando alguém realmente pede aquele imóvel, e
+o documental já abre esses PDFs de qualquer forma. `api/_edital-extrato.js` hoje extrai praças,
+valores e datas, mas **não extrai endereço** — é o que falta escrever (determinístico, sem IA).
+Guardar o resultado em `imoveis_leilao.endereco` (o gatilho já protege) para não reprocessar.
 
 ### ⏭️ Pendências desta sessão
 
