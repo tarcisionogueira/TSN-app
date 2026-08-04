@@ -4,7 +4,20 @@
  *
  * Env vars: CLAUDE_KEY, VITE_SUPABASE_URL, SUPABASE_SERVICE_KEY
  */
-export const config = { runtime: 'edge' };
+// 🔴 RUNTIME (corrigido 04/08): era `edge`. O Edge da Vercel tem teto DURO de ~25s, e esta
+// rota gera um contrato inteiro (max_tokens 4000) numa chamada NÃO-streaming ao Claude, que
+// leva bem mais que isso. Quando o teto estoura, a Vercel mata a função e devolve uma página
+// de erro em TEXTO PURO ("An error occurred…") — o `catch` daqui de baixo nem chega a rodar,
+// então o JSON `{ error }` nunca é enviado. Era esse texto que o front tentava dar `.json()`
+// e virava o "Unexpected token 'A', "An error o"... is not valid JSON" na tela do dono.
+// Todas as outras rotas pesadas de IA (gerar-analise, gerar-documental) já rodam em nodejs
+// com maxDuration alto — esta era a única fora do padrão.
+//
+// ⚠️ `export const POST` (embaixo) é OBRIGATÓRIO junto com nodejs: com `export default`, o
+// runtime Node da Vercel trata a função como Express `(req, res)` e IGNORA o `Response`
+// devolvido — a função nunca sinaliza fim e trava até o maxDuration (504). Mesmo motivo
+// documentado em reconciliar-assinaturas-cron.js.
+export const config = { runtime: 'nodejs', maxDuration: 300 };
 import { getUser, getUserRoleById, unauthorized, forbidden } from './_auth.js';
 import { checkRateLimit, getIP, rateLimitedResponse } from './_rate-limit.js';
 import { auditLog } from './_audit.js';
@@ -30,7 +43,9 @@ Ao gerar um contrato você SEMPRE:
 11. Inclui campos para preenchimento: [NOME COMPLETO], [CPF/CNPJ], [ENDEREÇO], [DATA], [VALOR], etc.
 12. Rodapé: "Assinatura eletrônica qualificada/avançada válida nos termos da MP 2.200-2/2001 e da Lei 14.063/2020, com registro de IP, data/hora e hash de integridade do documento."`;
 
-export default async function handler(req) {
+export const POST = handler;
+export default handler;
+async function handler(req) {
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
 
   const ip = getIP(req);
@@ -86,10 +101,17 @@ Gere o contrato completo e pronto para uso.`;
         system: SYSTEM_PROMPT,
         messages: [{ role: 'user', content: userMessage }],
       }),
-    });
+      // Limitado de propósito: com o padrão (3 retries × 120s) o pior caso passa de 6 min e
+      // estoura o maxDuration de 300s — a Vercel mataria a função e o dono veria DE NOVO a
+      // página de texto em vez do JSON de erro. Aqui o pior caso fica ~3,5 min, dentro do teto.
+    }, { retries: 1, timeoutMs: 100000 });
 
-    const data = await r.json();
-    if (!r.ok) throw new Error(data.error?.message || 'Erro Claude');
+    // Erro do Claude vem em JSON, mas um 5xx de borda/proxy pode vir em HTML/texto: ler direto
+    // com .json() esconderia a causa atrás de um SyntaxError. Lê o corpo UMA vez e decide.
+    const bruto = await r.text();
+    let data; try { data = JSON.parse(bruto); } catch { data = null; }
+    if (!r.ok) throw new Error(data?.error?.message || `Claude HTTP ${r.status}: ${bruto.slice(0, 200)}`);
+    if (!data) throw new Error(`Resposta não-JSON do Claude: ${bruto.slice(0, 200)}`);
     const contrato = data.content?.[0]?.text?.trim();
     if (!contrato) throw new Error('Resposta vazia');
 
@@ -100,7 +122,14 @@ Gere o contrato completo e pronto para uso.`;
       headers: { 'Content-Type': 'application/json' },
     });
   } catch (e) {
-    console.error('[gerar-contrato-ia]', e.message);
-    return new Response(JSON.stringify({ error: 'Erro ao gerar contrato' }), { status: 500 });
+    // A MENSAGEM vai para o cliente: "Erro ao gerar contrato" sozinho não dizia se foi cota,
+    // timeout, chave errada ou modelo indisponível — e era o único sinal que o staff tinha.
+    console.error('[gerar-contrato-ia]', e?.message);
+    const motivo = /abort|timeout/i.test(e?.message || '')
+      ? 'A IA demorou demais para responder. Tente de novo em alguns instantes.'
+      : `Erro ao gerar contrato: ${String(e?.message || 'falha desconhecida').slice(0, 200)}`;
+    return new Response(JSON.stringify({ error: motivo }), {
+      status: 500, headers: { 'Content-Type': 'application/json' },
+    });
   }
 }

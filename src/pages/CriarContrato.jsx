@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { FileText, Sparkles, Upload, Camera, UserCheck, ChevronRight, X, CheckCircle2, Loader2, AlertTriangle, Eye } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
+import { apiCall } from '../utils/apiCall';
 import { useIsMobile } from '../utils/useIsMobile';
 
 const ROLES_OPERACIONAIS = ['admin', 'analista', 'advogado', 'consultor'];
@@ -159,15 +160,24 @@ export default function CriarContrato() {
     if (descricaoIA.trim().length < 20) { setErro('Descreva o contrato com pelo menos 20 caracteres.'); return; }
     setGerandoIA(true); setErro('');
     try {
-      const sess = (await supabase.auth.getSession()).data.session;
       // /api/gerar-contrato-ia devolve { ok, contrato } (o /api/gerar-contrato
       // devolve { conteudo } — o modo IA lia o campo errado e vinha vazio).
-      const r = await fetch('/api/gerar-contrato-ia', {
+      // Via apiCall: injeta o token E registra `api_erro` no Cliente 360 — este erro
+      // aconteceu com o dono na tela e não deixou rastro nenhum no painel.
+      const r = await apiCall('/api/gerar-contrato-ia', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sess?.access_token}` },
         body: JSON.stringify({ descricao: descricaoIA, tipo: tipoContrato, partes: partesInfo }),
       });
-      const data = await r.json();
+      // NUNCA `.json()` direto: quando a Vercel mata a função (timeout de runtime) ou um
+      // proxy responde, o corpo é TEXTO PURO — e o parse estourava um "Unexpected token 'A',
+      // "An error o"... is not valid JSON" na cara do usuário, escondendo o erro de verdade.
+      const bruto = await r.text();
+      let data; try { data = JSON.parse(bruto); } catch { data = null; }
+      if (!data) {
+        throw new Error(r.ok
+          ? 'A IA respondeu num formato inesperado. Tente de novo.'
+          : `O servidor falhou ao gerar o contrato (HTTP ${r.status}). Tente de novo; se persistir, avise o suporte.`);
+      }
       if (!r.ok || !data.ok) throw new Error(data.error || 'Erro ao gerar');
       setContratoGerado(data.contrato || data.conteudo || '');
       setPasso('revisao');
@@ -188,8 +198,6 @@ export default function CriarContrato() {
 
     setEnviando(true);
     try {
-      const sess = (await supabase.auth.getSession()).data.session;
-
       // Upload arquivos referência
       const refs = [];
       for (const f of arquivosRef) {
@@ -225,12 +233,17 @@ export default function CriarContrato() {
         conteudo: modo === 'gerar' ? contratoGerado : `Documento anexo: ${arquivoDoc?.name || 'contrato'}`,
       };
 
-      const r = await fetch('/api/gerar-contrato', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sess?.access_token}` },
-        body: JSON.stringify(body),
-      });
-      const data = await r.json();
+      // Mesma régua do gerarComIA: apiCall (token + rastro no Cliente 360) e parse defensivo.
+      // Este é o passo que DISPARA os e-mails de assinatura — falhar aqui com um erro ilegível
+      // é pior ainda, porque o staff não sabe se o contrato foi enviado ou não.
+      const r = await apiCall('/api/gerar-contrato', { method: 'POST', body: JSON.stringify(body) });
+      const bruto = await r.text();
+      let data; try { data = JSON.parse(bruto); } catch { data = null; }
+      if (!data) {
+        throw new Error(r.ok
+          ? 'O servidor respondeu num formato inesperado. Confira em Contratos se o envio foi concluído antes de tentar de novo.'
+          : `Falha ao enviar o contrato (HTTP ${r.status}). Confira em Contratos se ele foi criado antes de tentar de novo.`);
+      }
       if (!r.ok || !data.ok) throw new Error(data.error || 'Erro ao enviar');
       setLinksGerados(Array.isArray(data.links) ? data.links : []);
       setPasso('enviado');
