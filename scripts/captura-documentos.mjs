@@ -67,16 +67,38 @@ async function salvarAnexo(imovelId, buffer, tipo, nome, idx = 0) {
   const url = signed.data?.signedUrl || null;
   const row = { imovel_id: imovelId, tipo, nome, url, storage_path: path, tamanho_kb: Math.round(buffer.length / 1024), role_criador: 'sistema' };
   // Mesmo conteúdo já cadastrado (qualquer tipo) → só atualiza a linha, não duplica.
-  if (jaTem?.length) { await supabase.from('imovel_anexos').update(row).eq('id', jaTem[0].id); return; }
+  if (jaTem?.length) { await supabase.from('imovel_anexos').update(row).eq('id', jaTem[0].id); await sincronizarJsonbAnexos(imovelId, tipo, url); return; }
   // Classificados (edital/matrícula/laudo/regras): 1 por tipo → atualiza o existente.
   // 'outro' é GENÉRICO e pode haver VÁRIOS docs distintos do lote (edital+matrícula
   // que não classificaram) — insere os DISTINTOS (conteúdo diferente = path diferente),
   // sem sobrescrever, mas sem duplicar os idênticos (guard acima).
   if (tipo !== 'outro') {
     const { data: existente } = await supabase.from('imovel_anexos').select('id').eq('imovel_id', imovelId).eq('tipo', tipo).limit(1);
-    if (existente?.length) { await supabase.from('imovel_anexos').update(row).eq('id', existente[0].id); return; }
+    if (existente?.length) { await supabase.from('imovel_anexos').update(row).eq('id', existente[0].id); await sincronizarJsonbAnexos(imovelId, tipo, url); return; }
   }
   await supabase.from('imovel_anexos').insert(row);
+  await sincronizarJsonbAnexos(imovelId, tipo, url);
+}
+
+// Espelho JSONB (imoveis_leilao.anexos) acompanha o path canônico quando a recaptura
+// troca o objeto (path por hash de conteúdo): sem isto, o JSONB ficava apontando p/ o
+// objeto ANTIGO, a limpeza o apagava (órfão em imovel_anexos) e o clique do cliente
+// abria {"code":"NoSuchKey"} — as 14 matrículas GRUPOLANCE mortas de 05/08. Só toca
+// entradas do MESMO tipo que apontam para o NOSSO storage com URL diferente; URLs de
+// CDN do leiloeiro ficam como estão.
+async function sincronizarJsonbAnexos(imovelId, tipo, urlNova) {
+  if (!urlNova || tipo === 'outro') return;
+  try {
+    const { data } = await supabase.from('imoveis_leilao').select('anexos').eq('id', imovelId).single();
+    const lista = Array.isArray(data?.anexos) ? data.anexos : null;
+    if (!lista || !lista.length) return;
+    let mudou = false;
+    const novo = lista.map((a) => {
+      if (a?.tipo === tipo && /\/storage\/v1\/object/.test(a?.url || '') && a.url !== urlNova) { mudou = true; return { ...a, url: urlNova }; }
+      return a;
+    });
+    if (mudou) await supabase.from('imoveis_leilao').update({ anexos: novo }).eq('id', imovelId);
+  } catch (e) { console.log(`  sync jsonb anexos ${imovelId}: ${e.message}`); }
 }
 
 const ehPdfBuf = (buf, ct) => buf && buf.length > 1500 && ((ct || '').includes('pdf') || buf.slice(0, 5).toString('latin1') === '%PDF-');

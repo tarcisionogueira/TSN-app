@@ -79,7 +79,11 @@ export default function CriarContrato() {
     (async () => {
       try {
         const [{ data: pl }, { data: cs }, { data: eb }] = await Promise.all([
-          supabase.from('planos_config').select('plano_key, nome').eq('ativo', true).eq('cobrar', true),
+          // Tiers de CLIENTE, não só os com checkout (cobrar=true): assessoria e Leilão
+          // Club fecham por CONTRATO (cobrar=false) e ficavam fora do dropdown → o
+          // contrato saía sem plano_key e a assinatura não promovia o role (achado
+          // 05/08: Rafael assinou a assessoria e seguiu 'explorador' no painel).
+          supabase.from('planos_config').select('plano_key, nome').eq('ativo', true).in('plano_key', ['explorador', 'top2', 'assessorado', 'clube']),
           supabase.from('cursos_admin').select('id, titulo').eq('ativo', true),
           supabase.from('ebooks_admin').select('id, titulo').eq('ativo', true),
         ]);

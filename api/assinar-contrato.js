@@ -77,7 +77,7 @@ export default async function handler(req) {
   const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null;
 
   // Carrega o contrato pelo token (service key — ignora RLS)
-  const r = await sb(`contratos_link?token=eq.${encodeURIComponent(token)}&select=id,conteudo,status,expira_em,titulo,criado_por,assinante_email,contrato_grupo_id,verificacao_identidade,docs_extras_exigidos`);
+  const r = await sb(`contratos_link?token=eq.${encodeURIComponent(token)}&select=id,conteudo,status,expira_em,titulo,criado_por,assinante_email,contrato_grupo_id,verificacao_identidade,docs_extras_exigidos,plano_key`);
   const rows = await r.json().catch(() => []);
   const contrato = Array.isArray(rows) ? rows[0] : null;
   if (!contrato) return new Response(JSON.stringify({ error: 'Contrato não encontrado' }), { status: 404, headers });
@@ -204,6 +204,39 @@ export default async function handler(req) {
     body: JSON.stringify({ acao: 'contrato_assinado', ip, sucesso: true, detalhes: { contrato_id: contrato.id, token, hash, ...(kycMatch ? { kyc_match: { modo: kycModo, mesma_pessoa: kycMatch.mesma_pessoa, confianca: kycMatch.confianca, documento_ok: kycMatch.documento_ok } } : {}) } }),
   }).catch(() => {});
 
+  // PROMOÇÃO DE ROLE POR CONTRATO (achado 05/08: o Rafael assinou o Contrato de
+  // Assessoria e continuou 'explorador' — o painel identificava o cliente errado).
+  // Contrato com plano_key de TIER de cliente promove o perfil do SIGNATÁRIO na mesma
+  // escada dos pagamentos (só sobe, nunca desce; papel de equipe intocado). Signatário
+  // resolvido pelo contratos_pendentes (contrato direcionado) ou pelo e-mail (RPC
+  // service-only get_user_id_by_email). Best-effort COM trilha — nunca trava a assinatura.
+  try {
+    const RANK_TIER = { explorador: 0, top2: 1, assessorado: 2, clube: 3 }; // espelho da escada do _webhook-core
+    const tier = String(contrato.plano_key || '').replace(/_(anual|vista|mensal)$/i, '');
+    if (RANK_TIER[tier] > 0) {
+      let userId = null;
+      const pend = await sb(`contratos_pendentes?contrato_link_id=eq.${contrato.id}&select=user_id&limit=1`).then(x => x.json()).catch(() => []);
+      userId = pend?.[0]?.user_id || null;
+      if (!userId && contrato.assinante_email) {
+        const rid = await sb('rpc/get_user_id_by_email', { method: 'POST', body: JSON.stringify({ p_email: contrato.assinante_email }) });
+        if (rid.ok) userId = await rid.json().catch(() => null);
+      }
+      if (userId) {
+        const perf = await sb(`perfis?id=eq.${encodeURIComponent(userId)}&select=role`).then(x => x.json()).catch(() => []);
+        const atual = perf?.[0]?.role;
+        const rankAtual = RANK_TIER[atual]; // equipe/desconhecido → undefined → não mexe
+        if (atual !== undefined && rankAtual !== undefined && rankAtual < RANK_TIER[tier]) {
+          const up = await sb(`perfis?id=eq.${encodeURIComponent(userId)}`, {
+            method: 'PATCH', headers: { Prefer: 'return=minimal' },
+            body: JSON.stringify({ role: tier }),
+          });
+          sb('audit_logs', { method: 'POST', headers: { Prefer: 'return=minimal' },
+            body: JSON.stringify({ acao: 'contrato_promoveu_role', ip, sucesso: up.ok, detalhes: { contrato_id: contrato.id, user_id: userId, de: atual, para: tier } }) }).catch(() => {});
+        }
+      }
+    }
+  } catch { /* promoção é reforço; a assinatura já está válida */ }
+
   // NOTIFICA a cada assinatura (pedido do dono): avisa quem CRIOU o contrato que uma parte
   // assinou e, quando TODAS as partes do grupo assinam, que o contrato está completo. Também
   // registra na linha do tempo (Cliente 360). Tudo best-effort — nunca bloqueia a assinatura.
@@ -218,11 +251,18 @@ export default async function handler(req) {
       if (Array.isArray(gr) && gr.length) { total = gr.length; assinadas = gr.filter(x => x.status === 'assinado').length; }
     }
     const completo = assinadas >= total;
-    // E-mail do criador (equipe) p/ notificar.
+    // E-mail do criador (equipe) p/ notificar. O e-mail vive em auth.users, NÃO em
+    // perfis — o select antigo (perfis?select=email) falhava silencioso (coluna não
+    // existe → catch → null) e o aviso "assinatura registrada" NUNCA saiu. Mesmo
+    // padrão admin/users usado nos crons de alerta.
     let criadorEmail = null, criadorNome = null;
     if (contrato.criado_por) {
-      const p = await sb(`perfis?id=eq.${encodeURIComponent(contrato.criado_por)}&select=email,nome`).then(x => x.json()).catch(() => []);
-      criadorEmail = p?.[0]?.email || null; criadorNome = p?.[0]?.nome || null;
+      const p = await sb(`perfis?id=eq.${encodeURIComponent(contrato.criado_por)}&select=nome`).then(x => x.json()).catch(() => []);
+      criadorNome = p?.[0]?.nome || null;
+      const au = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${encodeURIComponent(contrato.criado_por)}`, {
+        headers: { apikey: SVC, Authorization: `Bearer ${SVC}` },
+      }).then(x => (x.ok ? x.json() : null)).catch(() => null);
+      criadorEmail = au?.email || null;
     }
     if (criadorEmail) {
       // NUNCA derivar o link do header Origin: ele vem do cliente e o link carrega o TOKEN de
