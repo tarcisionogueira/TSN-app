@@ -89,6 +89,32 @@ export function nivelReal(nivelBase, lat, lng, cidade, estado) {
   return nivelBase;
 }
 
+// Nível do que o Nominatim de fato ENCONTROU (class/type/addresstype do resultado) — o
+// complemento do nivelReal. O nivelReal só pega o fallback que cai EM CIMA do centróide
+// IBGE; mas quando a rua não existe no OSM, o Nominatim casa só a CIDADE e devolve o NÓ
+// dele para o município — que fica longe do centróide IBGE (Guarulhos: 1,6 km) e passava
+// batido. O rótulo era decidido pelo INPUT ("pedi rua+número → 'endereco'"), não pelo que
+// foi encontrado → 3.458 lotes com ponto genérico rotulados 'rua'/'endereco' (achado
+// 05/08, gatilho: lote do Rafael). Aqui classificamos o RESULTADO; null = tipo neutro
+// (POI/postcode), o chamador mantém o nível pretendido.
+export function nivelNominatim(r) {
+  const classe = String(r?.class || '').toLowerCase();
+  const tipo = String(r?.type || '').toLowerCase();
+  const addr = String(r?.addresstype || '').toLowerCase();
+  if (classe === 'building' || tipo === 'house' || tipo === 'building' || addr === 'building' || addr === 'house') return 'endereco';
+  if (classe === 'highway' || addr === 'road') return 'rua'; // antes do check de bairro: highway/residential é RUA residencial
+  if (['suburb', 'neighbourhood', 'quarter', 'borough', 'city_block'].includes(tipo)
+    || ['suburb', 'neighbourhood', 'quarter', 'borough'].includes(addr)) return 'bairro';
+  if (classe === 'boundary'
+    || ['city', 'town', 'village', 'hamlet', 'municipality', 'county', 'state', 'region', 'administrative'].includes(tipo)
+    || ['city', 'town', 'village', 'hamlet', 'municipality', 'county', 'state'].includes(addr)) return 'cidade';
+  return null;
+}
+
+// Teto de nível: o rótulo final nunca é mais preciso do que o resultado suporta.
+export const capNivel = (alvo, match) =>
+  (match && (NIVEL_RANK[match] ?? 9) < (NIVEL_RANK[alvo] ?? 0) ? match : alvo);
+
 // Extrai "logradouro + número" do endereço bagunçado do CEF.
 // "Rua Raposos, N. 548, Cs 01 Lt 22 Qd 58"  -> { via:'Rua Raposos', numero:'548' }
 // "Rua 20, N. S/n"                           -> { via:'Rua 20',     numero:'' }
@@ -169,7 +195,10 @@ export async function nominatimEstruturado(params) {
     if (!res || !res.ok) return null;
     const data = await res.json();
     if (!data?.length) return null;
-    return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+    // nivelMatch = o que o resultado É (rua? bairro? o nó da cidade?) — o chamador usa
+    // como TETO do rótulo. A busca estruturada também cai para a cidade quando a rua
+    // pedida não existe no OSM.
+    return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon), nivelMatch: nivelNominatim(data[0]) };
   } catch {
     return null;
   }
@@ -188,8 +217,10 @@ export async function nominatimTextoLivre(q) {
     if (!res || !res.ok) return null;
     const data = await res.json();
     if (!data?.length) return null;
-    // class=place/highway/building são coordenadas úteis; evita resultados vagos.
-    return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+    // O parser de texto livre é o MAIS propenso a "casar só a cidade": quando a rua não
+    // está no OSM ele devolve o nó do município como se fosse resposta. nivelMatch conta
+    // ao chamador o que veio de verdade — era a lacuna que gravava ponto genérico como 'rua'.
+    return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon), nivelMatch: nivelNominatim(data[0]) };
   } catch { return null; }
 }
 
@@ -380,7 +411,7 @@ export async function geocodificarCascata(imBruto, { deadline = Infinity, sleepM
   if (cond.length >= 3 && Date.now() < deadline) {
     const qc = [cond, bairro, cidade, ufNome, 'Brasil'].filter(Boolean).join(', ');
     const cc = aceita(await nominatimTextoLivre(qc));
-    if (cc) return { ...cc, nivel: 'rua', cep: cep || null };
+    if (cc) return { lat: cc.lat, lng: cc.lng, nivel: nivelReal(capNivel('rua', cc.nivelMatch), cc.lat, cc.lng, cidade, estado), cep: cep || null };
     await pausa();
   }
 
@@ -389,7 +420,7 @@ export async function geocodificarCascata(imBruto, { deadline = Infinity, sleepM
   if (via && Date.now() < deadline) {
     const street = [via, numero].filter(Boolean).join(' ');
     const c = aceita(await nominatimEstruturado({ street, city: cidade, state: ufNome }));
-    if (c) return { ...c, nivel: nivelReal(numero ? 'endereco' : 'rua', c.lat, c.lng, cidade, estado) };
+    if (c) return { lat: c.lat, lng: c.lng, nivel: nivelReal(capNivel(numero ? 'endereco' : 'rua', c.nivelMatch), c.lat, c.lng, cidade, estado) };
     await pausa();
     // Recuperação via Correios: canoniza o logradouro e tenta de novo.
     if (Date.now() < deadline) {
@@ -398,7 +429,7 @@ export async function geocodificarCascata(imBruto, { deadline = Infinity, sleepM
         cepEnc = via2.cep || null;
         const street2 = [via2.logradouro, numero].filter(Boolean).join(' ');
         const c2 = aceita(await nominatimEstruturado({ street: street2, city: cidade, state: ufNome }));
-        if (c2) return { ...c2, nivel: nivelReal(numero ? 'endereco' : 'rua', c2.lat, c2.lng, cidade, estado), cep: cepEnc };
+        if (c2) return { lat: c2.lat, lng: c2.lng, nivel: nivelReal(capNivel(numero ? 'endereco' : 'rua', c2.nivelMatch), c2.lat, c2.lng, cidade, estado), cep: cepEnc };
         await pausa();
       }
     }
@@ -407,7 +438,7 @@ export async function geocodificarCascata(imBruto, { deadline = Infinity, sleepM
     if (Date.now() < deadline) {
       const ql = [[via, numero].filter(Boolean).join(' '), bairro, cidade, ufNome, 'Brasil'].filter(Boolean).join(', ');
       const cl = aceita(await nominatimTextoLivre(ql));
-      if (cl) return { ...cl, nivel: nivelReal(numero ? 'endereco' : 'rua', cl.lat, cl.lng, cidade, estado), cep: cepEnc };
+      if (cl) return { lat: cl.lat, lng: cl.lng, nivel: nivelReal(capNivel(numero ? 'endereco' : 'rua', cl.nivelMatch), cl.lat, cl.lng, cidade, estado), cep: cepEnc };
       await pausa();
     }
   }
@@ -419,10 +450,12 @@ export async function geocodificarCascata(imBruto, { deadline = Infinity, sleepM
   if (cepLimpo.length === 8 && Date.now() < deadline) {
     // BrasilAPI: coordenada direta do CEP (grátis, sem chave). Mais precisa que o
     // bairro; tratada como nível 'rua'. Roda antes do postalcode do Nominatim.
+    // nivelReal também aqui: CEP "da cidade inteira" (municípios de CEP único) devolve o
+    // ponto genérico do município — rotular 'rua' repetia o bug do pino no centro.
     const cb = aceita(await brasilapiCep(cepLimpo));
-    if (cb) return { ...cb, nivel: 'rua', cep: cepLimpo };
+    if (cb) return { lat: cb.lat, lng: cb.lng, nivel: nivelReal('rua', cb.lat, cb.lng, cidade, estado), cep: cepLimpo };
     const c = aceita(await nominatimEstruturado({ postalcode: cepLimpo, city: cidade, state: ufNome }));
-    if (c) return { ...c, nivel: 'rua', cep: cepLimpo };
+    if (c) return { lat: c.lat, lng: c.lng, nivel: nivelReal(capNivel('rua', c.nivelMatch), c.lat, c.lng, cidade, estado), cep: cepLimpo };
     await pausa();
   }
 
@@ -433,7 +466,7 @@ export async function geocodificarCascata(imBruto, { deadline = Infinity, sleepM
     const cepB = String(viaB?.cep || '').replace(/\D/g, '');
     if (cepB.length === 8 && Date.now() < deadline) {
       const c = aceita(await nominatimEstruturado({ postalcode: cepB, city: cidade, state: ufNome }));
-      if (c) return { ...c, nivel: 'bairro', cep: cepB };
+      if (c) return { lat: c.lat, lng: c.lng, nivel: capNivel('bairro', c.nivelMatch), cep: cepB };
       await pausa();
     }
   }
@@ -443,7 +476,7 @@ export async function geocodificarCascata(imBruto, { deadline = Infinity, sleepM
   // certo que casou no município errado → descarta e cai no centróide da cidade.
   if (bairro && bairro.trim() && Date.now() < deadline) {
     const c = aceita(await nominatimEstruturado({ street: bairro, city: cidade, state: ufNome }), 25);
-    if (c) return { ...c, nivel: 'bairro', cep: cepEnc };
+    if (c) return { lat: c.lat, lng: c.lng, nivel: capNivel('bairro', c.nivelMatch), cep: cepEnc };
     await pausa();
   }
 
@@ -454,7 +487,7 @@ export async function geocodificarCascata(imBruto, { deadline = Infinity, sleepM
   // Último recurso: cidade via Nominatim (cidades fora do IBGE local).
   if (cidade && cidade.trim() && Date.now() < deadline) {
     const c = aceita(await nominatimEstruturado({ city: cidade, state: ufNome }));
-    if (c) return { ...c, nivel: 'cidade', cep: cepEnc };
+    if (c) return { lat: c.lat, lng: c.lng, nivel: 'cidade', cep: cepEnc };
     await pausa();
   }
   return null;

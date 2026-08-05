@@ -50,6 +50,25 @@ export default async function handler(req, res) {
     if (taxa(stats.rec_sem_area) > LIMITE.area)  regressoes.push(`área faltando em ${(taxa(stats.rec_sem_area) * 100).toFixed(0)}% do lote recente`);
   }
 
+  // PINO GENÉRICO rotulado como preciso (backstop do achado de 05/08: mesma coordenada
+  // exata compartilhada por logradouros DIFERENTES + geocod_nivel 'rua'/'endereco' —
+  // 3.458 lotes presos assim, invisíveis porque nunca entravam na fila de refazer).
+  // A cascata foi corrigida (nivelNominatim em _geo.js) e o acervo re-enfileirado;
+  // este check garante que, se o padrão VOLTAR (provedor novo, regressão), o dono
+  // fica sabendo em até 1 ciclo. Limite 300 ≈ 1% do acervo: acima disso não é ruído.
+  let pinosGenericos = 0;
+  try {
+    const rp = await fetch(`${SUPABASE_URL}/rest/v1/rpc/geocode_pinos_genericos_total`, {
+      method: 'POST',
+      headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    if (rp.ok) pinosGenericos = Number(await rp.json()) || 0;
+  } catch { /* função pode não existir antes da migração; não derruba o monitor */ }
+  if (pinosGenericos > 300) {
+    regressoes.push(`${pinosGenericos} lotes com pino genérico rotulado como preciso (coordenada repetida entre ruas diferentes) — regressão do geocode; rodar a migração geocode_pino_generico_detectar_refazer.sql re-enfileira`);
+  }
+
   if (regressoes.length) {
     try {
       await alertarErro({
@@ -60,6 +79,6 @@ export default async function handler(req, res) {
     } catch { /* alerta é best-effort */ }
   }
 
-  console.log('[monitor-dados]', JSON.stringify({ regressoes, stats }));
-  return res.status(200).json({ ok: true, regressoes, stats });
+  console.log('[monitor-dados]', JSON.stringify({ regressoes, pinos_genericos: pinosGenericos, stats }));
+  return res.status(200).json({ ok: true, regressoes, pinos_genericos: pinosGenericos, stats });
 }
