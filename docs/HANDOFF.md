@@ -299,6 +299,64 @@ O que **ainda não** é lido do documento: o **tipo** do imóvel. Os extratores 
 documento exigiria leitura por IA (o doc-scan por visão do documental já faz isso e poderia
 publicar o campo) — próximo passo se o dono quiser.
 
+### 🔴 9) O que o edital diz de CUSTO passa a entrar na projeção (e o condomínio, na busca)
+
+Continuação direta do item 8, pedida pelo dono no mesmo dia: *"caso a comissão mude, que pode
+acontecer, e caso haja alguma taxa administrativa, caso haja um informe de quanto é o IPTU, o
+condomínio, tudo isso dá pra incluir no relatório e auxiliar nas projeções. Também permite pegar
+o nome do condomínio, ou do imóvel de rua, e consultar o bairro para classificar o tipo e
+padrão."*
+
+**Estado antes.** Da leitura do edital só a **comissão** já saía estruturada (`comissaoPct`, em
+`extrairPagamentoTexto`) — e ficava parada: nada dela chegava aos campos da viabilidade. Taxa
+administrativa, IPTU e condomínio **não eram lidos em lugar nenhum** do mercadológico; os campos
+existiam na conta (`calculos.js` já tem `taxaAdministrativaPercentual`, `despesasAdministrativas`,
+`iptuMensal`, `condominioMensal`) mas só eram preenchidos **à mão** ou pelo relatório
+**documental**, que roda DEPOIS. Ou seja: o ROI do mercadológico era calculado sobre a premissa
+da tela (leiloeiro 5%, taxa adm. 0, carrego 0) mesmo quando o documento dizia outra coisa.
+
+**O que passou a ser lido** (`extrairCustosTexto`, determinístico, custo zero, no mesmo texto que
+já era baixado — sem chamada de IA e sem custo novo):
+
+| Campo | Vai para |
+|---|---|
+| `taxaAdmPct` · `despesasAdm` | Taxa administrativa (%) e despesas fixas da viabilidade |
+| `iptuMensal` / `iptuAnual` | Carrego mensal (o anual entra dividido por 12) |
+| `condominioMensal` | Carrego mensal |
+| `iptuDebito` · `condominioDebito` | **Não entram sozinhos** — quem assume depende de cláusula do edital; a tela mostra e manda confirmar |
+| `comissaoPct` (já existia) | Taxa do leiloeiro — o edital **sobrescreve** o padrão de 5% |
+
+A separação **carrego × débito em aberto** é a parte que não podia sair errada: um débito de IPTU
+de R$ 12 mil lido como "IPTU mensal" destruiria o fluxo de caixa. A classificação lê as duas
+janelas (antes e depois da âncora), cada uma parando na fronteira da frase — sem isso,
+`"...exercícios anteriores. O IPTU anual é de R$ 4.200"` contaminava a frase seguinte e o IPTU
+corrente virava débito. E o trecho entre a âncora e o `R$` é filtrado por ruído: `"Casa no
+Condomínio Village, avaliada em R$ 80.000"` **não** vira cota condominial de R$ 80 mil.
+
+**Identidade → busca** (`extrairIdentidadeTexto`): nome do condomínio/empreendimento, logradouro
+e bairro. O nome do condomínio é a **âncora Nível 1** da pesquisa (comparável do mesmo prédio vale
+mais que qualquer média de bairro) e é o que sustenta a classificação de **tipo e padrão**, que o
+prompt já pedia (`consolidado.padraoImovel`) sem ter o nome na mão — a maioria dos leiloeiros não
+publica `nomecondominio`. Logradouro/bairro só entram quando o endereço ainda está genérico: a
+página do leiloeiro continua sendo a fonte de verdade quando ela diz alguma coisa.
+
+**Ordem e orçamento.** As duas leituras (matrícula e edital) já disparavam em paralelo no início;
+agora são colhidas juntas dentro de **um** limite comum de ~16s antes da busca — esperar uma
+depois da outra dobraria a espera. O que não chegar a tempo continua sendo colhido depois, como
+antes, e o relatório nunca fica bloqueado por documento que não abre.
+
+**Onde o cliente vê.** (a) aviso verde *"Projeção ajustada pelo edital"* listando o que foi
+aplicado; (b) o card "Condições lidas no edital" ganhou os custos declarados, o bloco laranja de
+débitos em aberto e o empreendimento usado como âncora; (c) o parecer recebe os números do
+documento com instrução explícita de **avisar quando divergirem** do que sustentou as projeções e
+estimar o impacto. Campo já preenchido pelo usuário é respeitado; o único que o edital sobrescreve
+é a comissão, porque ali o documento é a fonte de verdade e os 5% são só o padrão do sistema.
+
+⚠️ **Ainda não provado em produção:** `doc_extracoes` seguia em 0 linhas — nenhum relatório rodou
+desde o deploy de ontem. O 1º mercadológico de lote com edital em PDF valida de uma vez o cache de
+documento (validação 5 da abertura), a metragem pré-busca (item 8) e estes custos. Conferir no
+log: `[metragem-doc]`, `[identidade-doc]` e `condicoesEdital.custos` no `result`.
+
 ### Próximo passo desta sessão
 
 Re-verificação adversarial dos 16 achados de `docs/VARREDURA_BUGS_2026-08-05.md` marcados

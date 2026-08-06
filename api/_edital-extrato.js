@@ -10,7 +10,7 @@
 import { hostExternoSeguro, fetchExternoSeguro } from './_allowed-hosts.js';
 import { carregarPDFParse } from './_pdf-safe.js';
 import { extrairDatasLeilao } from './enriquecer-lote.js';
-import { cacheLer, cacheGravar, chaveUrl, chaveConteudo, extrairMatriculaTexto, extrairPagamentoTexto } from './_doc-extracao.js';
+import { cacheLer, cacheGravar, chaveUrl, chaveConteudo, extrairMatriculaTexto, extrairPagamentoTexto, extrairCustosTexto, extrairIdentidadeTexto } from './_doc-extracao.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -92,8 +92,8 @@ export async function lerTexto(url, deadline) {
 }
 
 /**
- * Lê o edital/regras do lote e devolve { pracas, formaPagamento, avaliacao, datas, fonteUrl,
- * pertenceAoLote } ou null. `pertenceAoLote:false` = o documento lido NÃO bate com os
+ * Lê o edital/regras do lote e devolve { pracas, formaPagamento, avaliacao, pagamento, custos,
+ * identidade, datas, fonteUrl, pertenceAoLote } ou null. `pertenceAoLote:false` = o documento lido NÃO bate com os
  * valores do lote (edital de outro lote anexado por engano) — o chamador descarta e
  * registra anomalia; dado errado com selo de "confirmado no edital" é pior que ausente.
  *
@@ -131,11 +131,12 @@ export async function extratoEdital(imovelId, { deadline } = {}) {
     // — ou a regeneração deste — já leu este edital → pula download+parse inteiros.
     // Só os FATOS do documento vêm do cache; `pertenceAoLote` é POR LOTE (o mesmo
     // edital cobre vários) e é sempre recalculado abaixo contra os valores DESTE lote.
-    let cond = null, datas = null, pagamento = null, deCache = false;
+    let cond = null, datas = null, pagamento = null, custos = null, identidade = null, deCache = false;
     const hit = await cacheLer(chaveUrl(url));
     if (hit?.campos?.condicoes) {
       cond = hit.campos.condicoes; datas = hit.campos.datas || null;
       pagamento = hit.campos.pagamento || null; deCache = true;
+      custos = hit.campos.custos || null; identidade = hit.campos.identidade || null;
     } else {
       const txt = await lerTexto(url, fim);
       if (!txt) continue;
@@ -148,8 +149,13 @@ export async function extratoEdital(imovelId, { deadline } = {}) {
       // grátis, no mesmo texto já baixado. Grava no cache pelas DUAS chaves: URL
       // (lookup pré-download) e conteúdo (idempotência entre URLs do mesmo PDF).
       pagamento = extrairPagamentoTexto(txt);
+      // CUSTOS declarados (taxa administrativa, IPTU, condomínio — comissão vem no
+      // `pagamento`) e IDENTIDADE (condomínio/logradouro/bairro). Os custos entram na
+      // PROJEÇÃO; a identidade ancora a BUSCA e a classificação de tipo/padrão.
+      custos = extrairCustosTexto(txt);
+      identidade = extrairIdentidadeTexto(txt);
       const mat = extrairMatriculaTexto(txt);
-      const campos = { condicoes: cond, datas, pagamento, ...(mat ? { matricula: mat } : {}) };
+      const campos = { condicoes: cond, datas, pagamento, custos, identidade, ...(mat ? { matricula: mat } : {}) };
       const meta = { url, imovelId, tipoDoc: 'edital', campos, via: 'regex', confianca: 60 };
       await cacheGravar(chaveUrl(url), meta);
       await cacheGravar(chaveConteudo(txt), meta);
@@ -166,7 +172,7 @@ export async function extratoEdital(imovelId, { deadline } = {}) {
       const razao = cond.avaliacao / aval;
       if (razao < 0.5 || razao > 2) pertence = false;
     }
-    return { ...cond, pagamento, datas, fonteUrl: url, pertenceAoLote: pertence, deCache };
+    return { ...cond, pagamento, custos, identidade, datas, fonteUrl: url, pertenceAoLote: pertence, deCache };
   }
   return null;
 }

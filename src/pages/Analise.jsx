@@ -858,6 +858,9 @@ export default function Analise() {
   // Item 2: correções que o documental achou nos docs e que impactam o mercadológico já gerado
   // (ex.: cidade/metragem diferentes) — a tela informa o IMPACTO e oferece regerar ao usuário.
   const [correcoesMercado, setCorrecoesMercado] = useState(null);
+  // Custos lidos NO EDITAL que o sistema aplicou sozinho na projeção (comissão, taxa
+  // administrativa, IPTU, condomínio) — a tela precisa dizer o que mudou e por quê.
+  const [custosEdital, setCustosEdital] = useState(null);
   // Reidrata o aviso a partir do que o documental GRAVOU (analises_mercado.correcoes_sugeridas).
   // Sem isto o alerta só existia na resposta HTTP daquela geração: recarregar a página — ou
   // fechar a aba durante o documental — fazia a divergência (cidade/metragem errada no
@@ -889,6 +892,37 @@ export default function Analise() {
     // quando o campo está vazio (nunca sobrescreve o que o usuário digitou).
     if (Number(r.valorAvaliacao) > 0) setD(p => (Number(p.valorAvaliacao) > 0 ? p : { ...p, valorAvaliacao: r.valorAvaliacao }));
     if (r.parecer) { setParecer(r.parecer); setD(p => ({ ...p, parecer: r.parecer })); }
+    // ── CUSTOS LIDOS NO EDITAL → PROJEÇÃO (pedido do dono, 06/08) ──────────────────
+    // O servidor lê o edital ANTES de pesquisar e extrai o que muda a conta: comissão do
+    // leiloeiro (que varia de edital para edital), taxa administrativa, IPTU e condomínio.
+    // Aqui esses números entram nos campos da viabilidade — senão ficariam só no texto do
+    // parecer e o ROI continuaria calculado sobre a premissa da tela.
+    // Regras: campo em branco é PREENCHIDO; campo já preenchido pelo usuário é respeitado.
+    // A comissão é exceção — o edital é a fonte de verdade dela e o 5% é só o padrão do
+    // sistema. Débito em aberto (IPTU/condomínio) NÃO entra sozinho: quem assume depende
+    // de cláusula do edital, então ele é mostrado para o cliente confirmar.
+    const ce = r.mercado?.condicoesEdital;
+    const cst = ce?.custos || null;
+    const comissaoEd = ce?.regrasOrigem === 'padrao_leiloeiro' ? 0 : Number(ce?.regrasPagamento?.comissaoPct) || 0;
+    if (cst || comissaoEd > 0) {
+      const patch = {}, aplicados = [];
+      if (comissaoEd > 0 && Number(d.taxaLeiloeiroPercentual) !== comissaoEd) {
+        patch.taxaLeiloeiroPercentual = comissaoEd; aplicados.push(`comissão do leiloeiro ${String(comissaoEd).replace('.', ',')}%`);
+      }
+      if (Number(cst?.taxaAdmPct) > 0 && !(Number(d.taxaAdministrativaPercentual) > 0)) {
+        patch.taxaAdministrativaPercentual = Number(cst.taxaAdmPct); aplicados.push(`taxa administrativa ${String(cst.taxaAdmPct).replace('.', ',')}%`);
+      }
+      if (Number(cst?.despesasAdm) > 0 && !(Number(d.despesasAdministrativas) > 0)) {
+        patch.despesasAdministrativas = Number(cst.despesasAdm); aplicados.push(`despesas administrativas R$ ${fmt(cst.despesasAdm)}`);
+      }
+      const iptuMes = Number(cst?.iptuMensal) > 0 ? Number(cst.iptuMensal)
+        : (Number(cst?.iptuAnual) > 0 ? Math.round(Number(cst.iptuAnual) / 12) : 0);
+      if (iptuMes > 0 && !(Number(d.iptuMensal) > 0)) { patch.iptuMensal = iptuMes; aplicados.push(`IPTU R$ ${fmt(iptuMes)}/mês`); }
+      if (Number(cst?.condominioMensal) > 0 && !(Number(d.condominioMensal) > 0)) {
+        patch.condominioMensal = Number(cst.condominioMensal); aplicados.push(`condomínio R$ ${fmt(cst.condominioMensal)}/mês`);
+      }
+      if (aplicados.length) { setD(p => ({ ...p, ...patch })); setCustosEdital({ aplicados, custos: cst }); }
+    }
     carregarCota(); // a geração consumiu cota no servidor, atualiza os contadores
     showMsg('Relatório Mercadológico + Viabilidade pronto!');
   }, [analiseEntry?.status, analiseEntry?.updatedAt, analiseImovelId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -2697,12 +2731,37 @@ export default function Analise() {
             </div>
           );
         })()}
+        {/* ── CUSTOS DO EDITAL APLICADOS NA PROJEÇÃO: o cliente precisa saber que a conta
+            mudou por causa do DOCUMENTO (e não por um ajuste invisível do sistema). ── */}
+        {custosEdital?.aplicados?.length > 0 && (
+          <div style={{ background:'#ecfdf5', border:'1px solid #a7f3d0', borderRadius:14, padding:'12px 16px', fontSize:12.5, color:'#065f46', lineHeight:1.6 }}>
+            <strong>Projeção ajustada pelo edital:</strong> lemos o documento do lote antes da pesquisa e aplicamos {custosEdital.aplicados.join(', ')} nos campos da viabilidade. Os números acima já consideram esses custos. Confira no edital e ajuste manualmente se divergir.
+          </div>
+        )}
         {/* ── CONDIÇÕES LIDAS NO EDITAL (extrato determinístico do servidor): praças com
             valores/datas + forma de pagamento, direto do DOCUMENTO do lote. ── */}
-        {(mercado?.condicoesEdital && ((mercado.condicoesEdital.pracas || []).some(p => p.valor > 0 || p.data) || mercado.condicoesEdital.formaPagamento)) && (() => {
+        {(mercado?.condicoesEdital && ((mercado.condicoesEdital.pracas || []).some(p => p.valor > 0 || p.data) || mercado.condicoesEdital.formaPagamento || mercado.condicoesEdital.custos)) && (() => {
           const ce = mercado.condicoesEdital;
           const pr = (ce.pracas || []).filter(p => p.valor > 0 || p.data);
           const dataBr = (d) => (d ? String(d).split('-').reverse().join('/') : null);
+          // Custos e encargos que o servidor leu no edital. Os RECORRENTES já foram
+          // aplicados na projeção (ver aviso acima); os DÉBITOS em aberto ficam aqui como
+          // informação — quem os assume depende de cláusula do edital, então não entram
+          // sozinhos na conta.
+          const cst = ce.custos || {};
+          const cmEd = ce.regrasOrigem === 'padrao_leiloeiro' ? 0 : Number(ce.regrasPagamento?.comissaoPct) || 0;
+          const custoLinhas = [
+            cmEd > 0 && `Comissão do leiloeiro: ${String(cmEd).replace('.', ',')}%`,
+            Number(cst.taxaAdmPct) > 0 && `Taxa administrativa: ${String(cst.taxaAdmPct).replace('.', ',')}%`,
+            Number(cst.despesasAdm) > 0 && `Despesas administrativas: R$ ${fmt(cst.despesasAdm)}`,
+            Number(cst.iptuMensal) > 0 ? `IPTU: R$ ${fmt(cst.iptuMensal)}/mês`
+              : (Number(cst.iptuAnual) > 0 && `IPTU: R$ ${fmt(cst.iptuAnual)}/ano`),
+            Number(cst.condominioMensal) > 0 && `Condomínio: R$ ${fmt(cst.condominioMensal)}/mês`,
+          ].filter(Boolean);
+          const debitoLinhas = [
+            Number(cst.iptuDebito) > 0 && `IPTU em aberto: R$ ${fmt(cst.iptuDebito)}`,
+            Number(cst.condominioDebito) > 0 && `Condomínio em aberto: R$ ${fmt(cst.condominioDebito)}`,
+          ].filter(Boolean);
           return (
             <div style={{ background:'#f0f9ff', border:'1px solid #bae6fd', borderRadius:14, padding:'14px 18px' }}>
               <div style={{ fontSize:11, fontWeight:800, letterSpacing:1, textTransform:'uppercase', color:'#0369a1', marginBottom:8 }}>Condições lidas no edital</div>
@@ -2717,6 +2776,19 @@ export default function Analise() {
               )}
               {ce.formaPagamento && (
                 <div style={{ fontSize:12, color:'#0c4a6e', lineHeight:1.55 }}><strong>Pagamento (edital):</strong> {ce.formaPagamento}</div>
+              )}
+              {custoLinhas.length > 0 && (
+                <div style={{ fontSize:12, color:'#0c4a6e', lineHeight:1.55, marginTop:8 }}>
+                  <strong>Custos declarados:</strong> {custoLinhas.join(' · ')}
+                </div>
+              )}
+              {debitoLinhas.length > 0 && (
+                <div style={{ fontSize:12, color:'#9a3412', lineHeight:1.55, marginTop:6, background:'#fff7ed', border:'1px solid #fed7aa', borderRadius:10, padding:'8px 10px' }}>
+                  <strong>Débitos em aberto no documento:</strong> {debitoLinhas.join(' · ')}. Não entram automaticamente na projeção: confirme no edital quem assume o débito após a arrematação e, se for do arrematante, lance o valor em "Débitos assumidos".
+                </div>
+              )}
+              {ce.identidade?.nomeCondominio && (
+                <div style={{ fontSize:11.5, color:'#0c4a6e', marginTop:6 }}><strong>Empreendimento no documento:</strong> {ce.identidade.nomeCondominio} — usado como âncora da pesquisa de comparáveis.</div>
               )}
               <div style={{ fontSize:10.5, color:'#64748b', marginTop:8 }}>Extraído automaticamente do edital do lote — confirme no documento antes do lance{ce.fonte ? <> (<a href={ce.fonte} target="_blank" rel="noreferrer" style={{ color:'#0369a1' }}>abrir edital</a>)</> : null}.</div>
             </div>

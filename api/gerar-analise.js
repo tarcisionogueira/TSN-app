@@ -1465,6 +1465,7 @@ export default async function handler(req, res) {
   // Vila Nossa Senhora de Fátima - Guarulhos - SP"). Aqui, no SERVIDOR, montamos o melhor endereço
   // (rua válida + bairro do título + cidade/UF) + nome do condomínio, para o Nível 1/2 da busca não
   // ficar genérico ("cidade"). Best-effort; nunca bloqueia.
+  let enderecoGenerico = false; // sem rua E sem bairro conhecidos → o edital pode completar
   try {
     const [imA] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=endereco,bairro,cidade,estado,titulo,descricao,nomecondominio&limit=1`)).json();
     if (imA && mercadoInputs) {
@@ -1486,11 +1487,13 @@ export default async function handler(req, res) {
       // Ainda genérico (sem rua E sem bairro no card/título)? LÊ o edital/matrícula para achar o
       // endereço completo — o erro de não puxar o endereço estando no documento não pode repetir.
       if (!rua && !bairro) {
+        enderecoGenerico = true;
         try {
           const alvo = await garantirEnderecoDoc(String(imovelId), Date.now() + Math.min(28000, Math.max(0, restante() - 210000)));
           if (alvo?.texto) {
             mercadoInputs.endereco = alvo.texto;
             if (alvo.bairro) bairro = alvo.bairro;
+            enderecoGenerico = false;
             console.log('[endereco-doc]', JSON.stringify({ imovel: String(imovelId), usado: alvo.texto }));
           }
         } catch { /* leitura de documento é best-effort */ }
@@ -1506,11 +1509,14 @@ export default async function handler(req, res) {
   // que decide a assertividade dos comparáveis. Determinístico e cache-first (regex sobre o PDF,
   // sem IA, custo zero); se o documento não abrir a tempo, segue com a área do anúncio e o bloco
   // de correção lá embaixo continua valendo como rede de segurança.
-  let matriculaPre = null;
+  // As DUAS leituras (matrícula e edital) já rodam em paralelo desde o início; aqui só as
+  // colhemos dentro de UM limite comum — esperar as duas em sequência dobraria a espera.
+  let matriculaPre = null, editalPre = null;
   const areaAnunciada = Number(mercadoInputs?.areaM2) || 0;
-  try {
-    matriculaPre = await Promise.race([extratoMatriculaP, new Promise((r) => setTimeout(() => r(null), Math.min(12000, Math.max(0, restante() - 215000))))]);
-  } catch { matriculaPre = null; }
+  const limitePre = Date.now() + Math.min(16000, Math.max(0, restante() - 210000));
+  const colher = (p) => Promise.race([p, new Promise((r) => setTimeout(() => r(null), Math.max(0, limitePre - Date.now())))]).catch(() => null);
+  try { matriculaPre = await colher(extratoMatriculaP); } catch { matriculaPre = null; }
+  try { editalPre = await colher(extratoEditalP); } catch { editalPre = null; }
   if (mercadoInputs && matriculaPre) {
     const aMat = Number(matriculaPre.areaPrivativaM2) || 0;
     const aTer = Number(matriculaPre.areaTerrenoM2) || 0;
@@ -1519,6 +1525,28 @@ export default async function handler(req, res) {
     if (aMat > 0 || aTer > 0) {
       console.log('[metragem-doc]', JSON.stringify({ imovel: String(imovelId), anuncio: areaAnunciada || null, matricula: aMat || null, terreno: aTer || null, usadaNaBusca: mercadoInputs.areaM2 || null }));
     }
+  }
+  // IDENTIDADE lida no edital (06/08): o NOME DO CONDOMÍNIO é a âncora Nível 1 da busca
+  // — comparável do MESMO empreendimento vale mais que qualquer média de bairro — e é o
+  // que permite classificar tipo e PADRÃO pelo que o mercado pede naquele prédio. Quando
+  // o acervo não traz o nome (a maioria dos leiloeiros não publica), o documento traz.
+  // O logradouro/bairro só entram se o endereço ainda estiver genérico: a página do
+  // leiloeiro continua sendo a fonte de verdade quando ela diz alguma coisa.
+  if (mercadoInputs && editalPre?.identidade && editalPre.pertenceAoLote !== false) {
+    const idt = editalPre.identidade;
+    const usados = {};
+    if (!mercadoInputs.nomeCondominio && idt.nomeCondominio) { mercadoInputs.nomeCondominio = idt.nomeCondominio; usados.condominio = idt.nomeCondominio; }
+    if (enderecoGenerico && (idt.logradouro || idt.bairro)) {
+      const cid = mercadoInputs.cidade || cidade || '';
+      const est = mercadoInputs.estado || estado || '';
+      const partes = [idt.logradouro, idt.bairro, cid].filter(Boolean);
+      if (partes.length) {
+        mercadoInputs.endereco = partes.join(', ') + (est ? `/${est}` : '');
+        enderecoGenerico = false;
+        usados.endereco = mercadoInputs.endereco;
+      }
+    }
+    if (Object.keys(usados).length) console.log('[identidade-doc]', JSON.stringify({ imovel: String(imovelId), ...usados }));
   }
 
   // Reseta a barra de evolução ao começar (não herda o progresso de uma geração anterior):
@@ -1773,8 +1801,8 @@ export default async function handler(req, res) {
     // já deu o tempo de sobra — se ainda não terminou em 3s, segue sem ele). Divergente
     // (edital de OUTRO lote anexado por engano) → descarta + anomalia; nunca "confirma"
     // no relatório um documento que não bate com o lote.
-    let extratoDoc = null;
-    try { extratoDoc = await Promise.race([extratoEditalP, new Promise(r => setTimeout(() => r(null), 3000))]); } catch { /* best-effort */ }
+    let extratoDoc = editalPre; // já colhido antes da busca (identidade); não relê
+    try { if (!extratoDoc) extratoDoc = await Promise.race([extratoEditalP, new Promise(r => setTimeout(() => r(null), 3000))]); } catch { /* best-effort */ }
     if (extratoDoc && extratoDoc.pertenceAoLote === false) {
       try { await registrarAnomalia('edital_divergente', fonteDb, imovelId, 'anexos', `Edital lido (${extratoDoc.fonteUrl || '?'}) diverge dos valores do lote — extrato descartado no mercadológico.`); } catch { /* log best-effort */ }
       extratoDoc = null;
@@ -1831,6 +1859,11 @@ export default async function handler(req, res) {
         // REGRAS ESTRUTURADAS p/ projeção de fluxo de caixa (05/08): à vista?, parcelas,
         // sinal/caução, comissão do leiloeiro, prazo de pagamento, financiável/FGTS.
         regrasPagamento: extratoDoc.pagamento || null,
+        // CUSTOS DECLARADOS (06/08): taxa administrativa, IPTU e condomínio — carrego e
+        // débito separados. O front aplica na projeção (campos da viabilidade) e o parecer
+        // cita como número do DOCUMENTO, não premissa.
+        custos: extratoDoc.custos || null,
+        identidade: extratoDoc.identidade || null,
       };
       // O AGENTE APRENDE: cada leitura bem-sucedida vota no padrão do leiloeiro ×
       // modalidade. Só de documento que PERTENCE ao lote (extratos divergentes já
@@ -2056,6 +2089,27 @@ export default async function handler(req, res) {
           const linhas = (ce.pracas || []).filter(p => p.valor > 0 || p.data)
             .map(p => `${p.n}ª praça: ${p.valor > 0 ? `R$ ${Math.round(p.valor).toLocaleString('pt-BR')}` : 'valor não localizado'}${p.data ? ` em ${String(p.data).split('-').reverse().join('/')}` : ''}`);
           conteudoParecer += `\n\nCONDIÇÕES LIDAS NO EDITAL DO LOTE (fonte de verdade; use nos cenários de lance e indique a melhor entrada):\n${linhas.join(' · ') || 'praças não localizadas'}${ce.formaPagamento ? `\nPagamento segundo o edital: ${ce.formaPagamento}` : ''}${ce.avaliacao ? `\nAvaliação no edital: R$ ${Math.round(ce.avaliacao).toLocaleString('pt-BR')}` : ''}`;
+          // CUSTOS DECLARADOS NO DOCUMENTO × os que sustentaram as projeções (06/08). A
+          // comissão do leiloeiro MUDA de edital para edital e a taxa administrativa às
+          // vezes nem é mencionada na página do lote: quando o documento diz um número
+          // diferente do projetado, o parecer avisa e recalcula o efeito, em vez de
+          // apresentar uma viabilidade construída sobre premissa vencida.
+          const cst = ce.custos || {};
+          const comissaoEd = Number(ce.regrasPagamento?.comissaoPct) || 0;
+          const brlN = (v) => Math.round(Number(v)).toLocaleString('pt-BR');
+          const cl = [];
+          if (comissaoEd > 0) cl.push(`Comissão do leiloeiro no edital: ${String(comissaoEd).replace('.', ',')}%${Number(pInp.taxaLeiloeiroPercentual) >= 0 ? ` (a projeção usou ${String(Number(pInp.taxaLeiloeiroPercentual) || 0).replace('.', ',')}%)` : ''}`);
+          if (Number(cst.taxaAdmPct) > 0) cl.push(`Taxa administrativa: ${String(cst.taxaAdmPct).replace('.', ',')}% sobre a arrematação (a projeção usou ${String(Number(pInp.taxaAdministrativaPercentual) || 0).replace('.', ',')}%)`);
+          if (Number(cst.despesasAdm) > 0) cl.push(`Despesas administrativas fixas: R$ ${brlN(cst.despesasAdm)}`);
+          if (Number(cst.iptuMensal) > 0) cl.push(`IPTU informado: R$ ${brlN(cst.iptuMensal)}/mês`);
+          else if (Number(cst.iptuAnual) > 0) cl.push(`IPTU informado: R$ ${brlN(cst.iptuAnual)}/ano (equivale a R$ ${brlN(cst.iptuAnual / 12)}/mês de carrego)`);
+          if (Number(cst.condominioMensal) > 0) cl.push(`Condomínio informado: R$ ${brlN(cst.condominioMensal)}/mês`);
+          if (Number(cst.iptuDebito) > 0) cl.push(`DÉBITO de IPTU em aberto: R$ ${brlN(cst.iptuDebito)} (verifique no edital de quem é a responsabilidade após a arrematação)`);
+          if (Number(cst.condominioDebito) > 0) cl.push(`DÉBITO de condomínio em aberto: R$ ${brlN(cst.condominioDebito)} (débito propter rem — confirme no edital quem assume)`);
+          if (cl.length) {
+            conteudoParecer += `\n\nCUSTOS E ENCARGOS DECLARADOS NO DOCUMENTO DO LOTE (lidos automaticamente do edital, use estes números em vez de qualquer premissa):\n${cl.map(x => '- ' + x).join('\n')}
+COMO USAR (obrigatório): dedique um parágrafo aos CUSTOS DA OPERAÇÃO segundo o documento. Se algum número do edital DIVERGIR do que sustentou as projeções acima, diga isso EXPLICITAMENTE ao cliente, estime o impacto no capital aportado e no retorno, e oriente a refazer a conta com o número do edital. Os DÉBITOS em aberto (IPTU/condomínio) NÃO são carrego mensal: são valores a assumir na aquisição, e a responsabilidade depende de cláusula do edital, portanto trate-os como tal e mande confirmar. Não invente valor que não esteja nesta lista.`;
+          }
         }
         // RE-TENTA a redação: até 2 tentativas enquanto houver orçamento. Um 429/overloaded/timeout
         // do Anthropic (retries:0) não pode mais deixar o parecer vazio de forma definitiva. A causa
