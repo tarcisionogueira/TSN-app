@@ -420,10 +420,21 @@ export default function ConviteEquipe() {
       if (signUpData?.user?.confirmation_sent_at) setPrecisaConfirmarEmail(true);
 
       if (signUpData?.user?.id) {
-        await supabase.rpc('usar_convite_equipe', {
-          p_token: token.toUpperCase(),
-          p_user_id: signUpData.user.id,
-        });
+        // O RPC exige SESSÃO (`auth.uid()`): com confirmação de e-mail ligada, o signUp NÃO
+        // devolve sessão e a chamada aqui volta {ok:false,'não autorizado'} — sempre. O
+        // resgate real acontece no AuthContext, no primeiro login já autenticado. Só
+        // chamamos quando há sessão (conta auto-confirmada); sem ela, guardamos o token
+        // para o AuthContext resgatar. Antes a resposta era ignorada e a tela dava sucesso
+        // como se o papel tivesse sido aplicado — a pessoa entrava como explorador (05/08).
+        if (signUpData?.session) {
+          const { data: rEq } = await supabase.rpc('usar_convite_equipe', {
+            p_token: token.toUpperCase(),
+            p_user_id: signUpData.user.id,
+          });
+          if (rEq?.ok === false) console.warn('[convite-equipe] resgate:', rEq?.erro);
+        } else {
+          try { sessionStorage.setItem('tsn_convite_equipe', token.toUpperCase()); } catch { /* ok */ }
+        }
         // CPF gravado só como hash + cifra (nunca em texto claro). Se já houver
         // sessão (conta auto-confirmada), persiste agora; senão, no 1º acesso.
         if (signUpData?.session && form.cpf) {

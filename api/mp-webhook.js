@@ -311,7 +311,13 @@ export default async function handler(req, res) {
           const r = await ativarPlanoDireto({ userId: uidAnual, planoKey: 'top2_anual', gateway: 'mercadopago', cobranca: { gatewayPaymentId: String(pagamento.id), valor: vAnual } });
           return res.status(200).json({ ok: true, plano_anual: r });
         } catch (e) {
+          // O CLIENTE PAGOU: o reenvio do MP PRECISA reprocessar (regra do dono, 05/08).
+          // Desmarcar só 'pix_plano_anual' não bastava — a marca EXTERNA (evento=status,
+          // gravada bem antes, na entrada do handler) continuava lá e a retentativa do MP
+          // morria no guard de duplicidade sem NUNCA chegar aqui. Resultado: R$449,90 pagos
+          // e Pro anual jamais ativado, sem reconciliação. Agora as DUAS marcas caem.
           await removerEventoProcessado({ gateway: 'mercadopago', gatewayPaymentId: String(pagamento.id), evento: 'pix_plano_anual' });
+          await removerEventoProcessado({ gateway: 'mercadopago', gatewayPaymentId: String(pagamento.id), evento: status });
           console.error('[mp-webhook] plano_anual ativação:', e?.message);
           return res.status(500).json({ error: 'plano_anual_ativacao_falhou' });
         }

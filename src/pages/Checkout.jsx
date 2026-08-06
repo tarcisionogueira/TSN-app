@@ -606,7 +606,7 @@ export default function Checkout() {
     if (!su.aceite) { setSuErro('Aceite os Termos de Uso para continuar.'); return; }
     setSuLoading(true);
     try {
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email, password: senha,
         options: {
           emailRedirectTo: `${window.location.origin}/`,
@@ -614,6 +614,17 @@ export default function Checkout() {
         },
       });
       if (error) throw error;
+      // E-MAIL É ÚNICO POR CADASTRO (regra do dono, 05/08). Com "Confirm email" ligado, o
+      // Supabase NÃO devolve erro para e-mail já cadastrado — é a proteção anti-enumeração:
+      // responde 200 com um usuário "fantasma" e `identities: []`, e NÃO manda e-mail nenhum.
+      // O código só checava `error` → a tela dizia "Cadastro criado!" e o cliente ficava
+      // esperando uma confirmação que nunca chegaria (venda perdida em silêncio).
+      // `identities` vazio é o sinal documentado para esse caso.
+      if (Array.isArray(data?.user?.identities) && data.user.identities.length === 0) {
+        setSuErro('Este e-mail já tem conta. Clique em "Já tenho conta, Entrar" para continuar a assinatura.');
+        setSuLoading(false);
+        return;
+      }
       // Guarda o plano p/ o Login redirecionar de volta ao checkout após o login
       // (Explorador não tem pagamento → não guarda, cai direto na plataforma).
       if (planoKey !== 'explorador') { try { sessionStorage.setItem('tsn_plano_pendente', planoApiKey); } catch { /* ok */ } }

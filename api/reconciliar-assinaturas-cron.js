@@ -104,6 +104,46 @@ async function handler(req) {
       if (offset + 100 >= total) break;
     }
 
+    // ── PAGOU E NÃO TEM ACESSO: pagamento AVULSO de plano (regra do dono, 05/08) ──
+    // A varredura acima cobre PREAPPROVAL (assinatura recorrente). O Pro ANUAL via PIX é
+    // pagamento AVULSO com metadata.proposito='plano_anual' — ficava FORA de qualquer
+    // reconciliação: se a ativação no webhook falhasse, o cliente pagava R$449,90 e nada
+    // nem ninguém corrigia. O bug de idempotência que causava isso foi corrigido em
+    // mp-webhook (as duas marcas caem no erro), mas a regra do dono é categórica: "se o
+    // cliente pagou, deve ter acesso". Esta passagem é a rede que não depende do webhook.
+    // Idempotente: ativarPlanoDireto não re-concede o que já está ativo, e a escada
+    // anti-rebaixamento impede que um anual antigo derrube um tier maior atual.
+    try {
+      const { data: pagosAvulsos } = await supabase
+        .from('mp_pagamentos')
+        .select('mp_payment_id, valor, dados_mp, criado_em')
+        .eq('status', 'approved')
+        .order('criado_em', { ascending: false })
+        .limit(300);
+      for (const pg of (pagosAvulsos || [])) {
+        const meta = pg?.dados_mp?.metadata || {};
+        if (meta.proposito !== 'plano_anual') continue;
+        const uid = meta.user_id;
+        if (!uid) continue;
+        verificados++;
+        const { data: perfil } = await supabase.from('perfis')
+          .select('role, plano_ciclo, plano_vencimento, inadimplente_desde').eq('id', uid).maybeSingle();
+        if (!perfil || perfil.inadimplente_desde) continue;
+        if (proAnualVigente(perfil)) continue;                 // já tem o anual vigente
+        if (['assessorado', 'clube'].includes(perfil.role)) continue; // tier MAIOR: não mexe
+        // Garantia de 7 dias exercida → não re-conceder o que foi reembolsado (mesma
+        // blindagem P0.4 do laço de preapproval).
+        const { data: garantia } = await supabase.from('reembolsos_garantia').select('id').eq('user_id', uid).limit(1).maybeSingle();
+        if (garantia) continue;
+        try {
+          await ativarPlanoDireto({ userId: uid, planoKey: 'top2_anual', gateway: 'mercadopago',
+            cobranca: { gatewayPaymentId: String(pg.mp_payment_id), valor: Number(pg.valor) || 0 } });
+          corrigidos++;
+          console.log('[reconciliar] plano anual pago e sem acesso → ativado', uid, pg.mp_payment_id);
+        } catch (e) { console.error('[reconciliar] anual avulso', uid, e?.message); }
+      }
+    } catch (e) { console.error('[reconciliar] varredura avulsos:', e?.message); }
+
     // ── DOWNGRADE: cancelou/pausou E o período pago já terminou → rebaixa. ─────
     // Mantém o acesso até o fim do período pago (next_payment_date); só rebaixa
     // depois disso. Rede de segurança caso o webhook de cancelamento não chegue.
