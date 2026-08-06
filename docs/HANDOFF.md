@@ -277,6 +277,28 @@ motor). Ganho de lado: falha em um tipo não derruba mais os outros três.
 é o esperado. Se um dia for ligado, precisa da mesma quebra por tipo: hoje ele pede os 4 numa
 tacada, com 3 cidades em paralelo na mesma invocação.
 
+### 🔴 8) Mercadológico: documento ANTES da busca, e uma busca por tipo
+
+Mesmo raciocínio do item 7, aplicado ao relatório. Duas mudanças de **ordem** e de **foco**:
+
+1. **Metragem antes da busca.** A matrícula era colhida DEPOIS da pesquisa e só corrigia o R$/m²
+   no fim — mas a busca já tinha ido atrás de comparáveis do **tamanho errado**, o do anúncio.
+   Agora a leitura determinística (regex sobre o PDF, cache-first, sem IA) é colhida ANTES e a
+   área confirmada entra no prompt. Área de terreno idem. Documento que não abre a tempo: segue
+   com a área do anúncio e o bloco de correção posterior continua valendo como rede.
+   ⚠️ Detalhe que quase virou bug: a divergência anúncio×matrícula passou a ser medida contra a
+   área **anunciada**, capturada antes da sobrescrita — senão viraria matrícula×matrícula e o
+   aviso ao cliente nunca mais dispararia.
+2. **Uma busca = um tipo.** Saiu do prompt a "colheita de outras tipologias" (pedia à IA para
+   listar de quebra ~12 comparáveis de cada um dos outros 3 segmentos). Era grátis, mas dividia
+   atenção e espaço de resposta com o tipo que o cliente contratou. A colheita do MESMO tipo em
+   outros bairros (`outrosBairros`) fica — amplia a geografia sem diluir o tipo.
+
+O que **ainda não** é lido do documento: o **tipo** do imóvel. Os extratores determinísticos dão
+área privativa/total/terreno e número da matrícula, não a natureza do bem. Classificar o tipo pelo
+documento exigiria leitura por IA (o doc-scan por visão do documental já faz isso e poderia
+publicar o campo) — próximo passo se o dono quiser.
+
 ### Próximo passo desta sessão
 
 Re-verificação adversarial dos 16 achados de `docs/VARREDURA_BUGS_2026-08-05.md` marcados
