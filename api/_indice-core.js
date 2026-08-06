@@ -54,10 +54,19 @@ ${regraTipo}
 - Informe o BAIRRO de cada amostra (essencial para classificar a cidade por região).${cidadeInteira ? ' TRAGA amostras de bairros DIFERENTES.' : ''}
 - Mesmo em CIDADE PEQUENA há anúncios: pesquise "${cidade} ${uf}" + o tipo nesses portais e TRAGA o que encontrar — NÃO retorne listas vazias se existir qualquer anúncio real de mercado (venda/locação). Terreno costuma ter R$/m² BAIXO (ex.: 100–400 R$/m²): isso é normal, capture assim mesmo.
 
-Para CADA amostra capture o MÁXIMO de referência de localização que o anúncio der (traga o que houver — não invente): ${todos ? 'tipo (apartamento|casa|terreno|comercial); ' : ''}bairro (nome do bairro); condominio (nome do condomínio/empreendimento/edifício, se o anúncio citar — âncora precisa); endereco (logradouro + número; ou só o logradouro se não houver número); cep (só os dígitos, se houver); valorM2 (R$/m² de VENDA) nas vendas; aluguelM2 (R$/m²/mês) nas locações; area (m²); data (formato "AAAA-MM"); fonte (portal ou imobiliária).
+Para CADA amostra capture o MÁXIMO de referência de localização que o anúncio der (traga o que houver — não invente): ${todos ? 'tipo (apartamento|casa|terreno|comercial); ' : ''}bairro (nome do bairro); condominio (nome do condomínio/empreendimento/edifício, se o anúncio citar — âncora precisa); endereco (logradouro + número; ou só o logradouro se não houver número); cep (só os dígitos, se houver); valorM2 (R$/m² de VENDA) nas vendas; aluguelM2 (R$/m²/mês) nas locações; area (m²); data (formato "AAAA-MM"); fonte (portal ou imobiliária); link (URL do anúncio).
+
+ÂNCORA DE LOCALIZAÇÃO (obrigatória): cada amostra precisa de PELO MENOS o "bairro". Sempre que o
+anúncio mostrar o logradouro ou o nome do empreendimento — o ZAP/VivaReal costumam exibir a rua no
+título ou logo abaixo dele ("Alameda X", "Edifício Y") — traga em "endereco"/"condominio". É essa
+âncora que posiciona a amostra no mapa; sem ela o anúncio só conta como média da cidade e perde o
+recorte de 250 m. NÃO invente rua: se o anúncio não disser, deixe "".
+
+LINK (obrigatório quando houver): "link" com a URL do anúncio que você abriu. É o que torna a
+amostra auditável e re-lível depois; sem link não há como conferir o número.
 
 Retorne SOMENTE JSON válido, sem texto fora do JSON:
-{"nivel1":{"vendas":[{${campoTipo}"bairro":"","condominio":"","endereco":"","cep":"","valorM2":0,"area":0,"data":"AAAA-MM","fonte":""}],"locacoes":[{${campoTipo}"bairro":"","condominio":"","endereco":"","cep":"","aluguelM2":0,"area":0,"data":"AAAA-MM","fonte":""}]},"nivel2":{"vendas":[],"locacoes":[]}}`;
+{"nivel1":{"vendas":[{${campoTipo}"bairro":"","condominio":"","endereco":"","cep":"","valorM2":0,"area":0,"data":"AAAA-MM","fonte":"","link":""}],"locacoes":[{${campoTipo}"bairro":"","condominio":"","endereco":"","cep":"","aluguelM2":0,"area":0,"data":"AAAA-MM","fonte":"","link":""}]},"nivel2":{"vendas":[],"locacoes":[]}}`;
 };
 
 // Monta as amostras (venda e locação) no formato do ingerir_amostras_indice, com fonte_ref
@@ -79,9 +88,18 @@ export function montarAmostras(mercado, ctx) {
   const cepDe = (s) => (String(s?.cep || '').replace(/\D/g, '').slice(0, 8) || null);
   const endDe = (s) => (String(s?.endereco || '').trim().slice(0, 180) || null);
   const condDe = (s) => (String(s?.condominio || '').trim().slice(0, 140) || null);
+  const urlDe = (s) => { const u = String(s?.link || s?.url || '').trim().slice(0, 500); return /^https?:\/\//i.test(u) ? u : null; };
+  // A COORDENADA DA CONSULTA NÃO É A DA AMOSTRA (achado 06/08). Toda amostra nascia carimbada com
+  // o lat/lng do endereço CONSULTADO — 85 anúncios de 4 bairros de Brasília no MESMO ponto. Dois
+  // efeitos: o recorte de 250 m/1 km virava ficção (na consulta seguinte daquele endereço TODAS
+  // apareciam coladas) e o cron de triangulação, que só pega `lat is null`, nunca via essas linhas
+  // — o pipeline de posição existia inteiro e estava desligado nas duas pontas. Agora a amostra
+  // nasce SEM coordenada: quem tem âncora (endereço/condomínio/CEP) é geocodificado pelo
+  // indice-geocodificar-cron; quem só tem bairro casa por TEXTO, que já vale nível 1. É a mesma
+  // regra do acervo: rotular pelo que se sabe, não pelo que se pediu.
   const linha = (s, natureza, vm2) => ({ cidade_norm: ctx.cidadeNorm, uf: ctx.uf, bairro_norm: bairroDe(s),
-    lat: ctx.lat, lng: ctx.lng, tipo: tipoDe(s), origem: 'pesquisa_web', natureza, valor_m2: vm2, area_m2: s?.area || null,
-    cep: cepDe(s), endereco: endDe(s), condominio: condDe(s) });
+    lat: null, lng: null, tipo: tipoDe(s), origem: 'pesquisa_web', natureza, valor_m2: vm2, area_m2: s?.area || null,
+    cep: cepDe(s), endereco: endDe(s), condominio: condDe(s), url: urlDe(s) });
   for (const nivel of [1, 2]) {
     const bloco = mercado?.[`nivel${nivel}`] || {};
     for (const v of (bloco.vendas || [])) {

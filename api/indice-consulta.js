@@ -88,6 +88,34 @@ export default async function handler(req) {
     const ehSintetica = (a) => FONTE_SINTETICA.test(String(a.fonte || ''));
     const filtro = `cidade_norm=eq.${encodeURIComponent(cidadeNormDb)}&uf=eq.${uf}&tipo=eq.${encodeURIComponent(tipo)}`;
 
+    // ESCADA DO ALUGUEL (achado do dono, 06/08). Antes era binário: ou havia locação COM
+    // metragem no recorte, ou caía direto na regra de bolso de 0,4%/mês. Só que o aluguel
+    // MEDIDO da mesma cidade existia em OUTRAS duas bases e ninguém olhava: em Barueri, a base
+    // geolocalizada tinha 5 locações a R$ 41,61/m² e o cidade_indicadores tinha dois bairros
+    // com R$ 39,44 e R$ 50,40 — enquanto a tela mostrava R$ 28 "estimado". Agora, antes de
+    // estimar, sobe a escada do que EXISTE e diz de onde veio. Só devolve MEDIDA; quem não
+    // achar nada continua caindo no 0,4%, agora como último degrau de verdade.
+    const aluguelAmplo = async () => {
+      const pond = await rpc('indice_regiao_ponderado', { p_cidade_norm: cidadeNorm, p_uf: uf, p_bairro_norm: bairroNorm, p_lat: lat, p_lng: lng, p_tipo: tipo });
+      if (pond && Number(pond.locacao_m2) > 0) {
+        const n = Number(pond.n_locacao) || 0;
+        return { valor: Number(pond.locacao_m2), origem: `mediana de ${n} anúncio(s) de locação da base geolocalizada da cidade` };
+      }
+      // Bairros JÁ medidos da mesma cidade (média ponderada pelo nº de amostras de cada um).
+      // Só nivel='bairro': as linhas 'grid' repetem o mesmo valor e contariam em dobro.
+      const linhas = await restGet('cidade_indicadores',
+        `nivel=eq.bairro&cidade_norm=eq.${encodeURIComponent(cidadeNormDb)}&uf=eq.${uf}&tipo=eq.${encodeURIComponent(tipo)}&aluguel_m2=not.is.null&select=bairro_norm,aluguel_m2,n_amostras&limit=200`);
+      const vals = (Array.isArray(linhas) ? linhas : [])
+        .map(l => ({ v: Number(l.aluguel_m2), n: Math.max(1, Number(l.n_amostras) || 1) }))
+        .filter(x => x.v >= 1 && x.v <= 500);
+      if (vals.length) {
+        const somaN = vals.reduce((s, x) => s + x.n, 0);
+        const media = vals.reduce((s, x) => s + x.v * x.n, 0) / somaN;
+        return { valor: Math.round(media * 100) / 100, origem: `média de ${vals.length} bairro(s) já medido(s) da cidade (${somaN} amostras)` };
+      }
+      return null;
+    };
+
     // Amostras de mercado da REGIÃO solicitada (venda + locação), sem leilão. Traz o geo (bairro/
     // grid/lat/lng) para o recorte por RAIO.
     // Busca ARROJADA (teto 2000, era 800) + faixa ampla p/ INCLUIR locação (R$/m²/mês ~1–500,
@@ -185,15 +213,21 @@ export default async function handler(req) {
       // real de Alphaville dá ~0,6%/mês). Agora o número vem rotulado: a tela/PDF mostram
       // "estimado" e o cliente sabe o que está lendo. Achado do dono, 05/08.
       const aluguelMedido = locVals.length ? mediana(locVals) : null;
+      // Sem locação medida NO RECORTE, procura MEDIDA mais ampla antes de estimar (escada acima).
+      const amplo = aluguelMedido == null ? await aluguelAmplo() : null;
+      const aluguelFinal = aluguelMedido != null ? aluguelMedido : (amplo ? amplo.valor : null);
       // Aluguel MENSAL mediano das amostras sem área: é dado REAL (o anúncio traz o valor,
       // só não traz a metragem) e serve de sanidade — melhor mostrar que descartar em silêncio.
       const locMensais = num(regSamples.filter(a => a.especie === 'locacao' && !(Number(a.valor_m2) > 0)).map(a => a.valor_total));
       regiao = {
         fonte: 'mercado',
         venda_m2: vMed,
-        aluguel_m2: aluguelMedido != null ? aluguelMedido : (vMed ? Math.round(vMed * 0.004 * 100) / 100 : null),
-        aluguel_estimado: aluguelMedido == null && vMed > 0,
-        aluguel_estimado_base: aluguelMedido == null && vMed > 0 ? '0,4%/mês sobre o valor de venda (sem amostra de locação com metragem na região)' : null,
+        aluguel_m2: aluguelFinal != null ? aluguelFinal : (vMed ? Math.round(vMed * 0.004 * 100) / 100 : null),
+        aluguel_estimado: aluguelFinal == null && vMed > 0,
+        aluguel_estimado_base: aluguelFinal == null && vMed > 0 ? '0,4%/mês sobre o valor de venda (sem amostra de locação com metragem na região)' : null,
+        // Medido, mas FORA do recorte da consulta — a tela mostra a procedência em vez de
+        // deixar o número mudo (nem "estimado", nem falso "medido aqui").
+        aluguel_origem: amplo ? amplo.origem : null,
         aluguel_mensal_mediano: locMensais.length >= 3 ? mediana(locMensais) : null,
         n_locacao_sem_area: locMensais.length,
         n_amostras: vendaVals.length + locVals.length,
@@ -219,10 +253,15 @@ export default async function handler(req) {
       // Fallback (região sem amostras de mercado): ponderado com geo → acervo.
       const pond = await rpc('indice_regiao_ponderado', { p_cidade_norm: cidadeNorm, p_uf: uf, p_bairro_norm: bairroNorm, p_lat: lat, p_lng: lng, p_tipo: tipo });
       if (pond && (Number(pond.venda_m2) > 0 || Number(pond.locacao_m2) > 0)) {
+        // Mesma escada aqui: sem locação no ponderado, tenta os bairros já medidos da cidade
+        // antes do 0,4%. (aluguelAmplo repete a chamada do ponderado, que já veio nula.)
+        const amploFb = pond.locacao_m2 == null ? await aluguelAmplo() : null;
+        const aluFb = pond.locacao_m2 != null ? Number(pond.locacao_m2) : (amploFb ? amploFb.valor : null);
         regiao = { fonte: 'mercado', venda_m2: pond.venda_m2,
-          aluguel_m2: pond.locacao_m2 != null ? pond.locacao_m2 : (Number(pond.venda_m2) > 0 ? Math.round(pond.venda_m2 * 0.004 * 100) / 100 : null),
-          aluguel_estimado: pond.locacao_m2 == null && Number(pond.venda_m2) > 0,
-          aluguel_estimado_base: pond.locacao_m2 == null && Number(pond.venda_m2) > 0 ? '0,4%/mês sobre o valor de venda (sem amostra de locação com metragem na região)' : null,
+          aluguel_m2: aluFb != null ? aluFb : (Number(pond.venda_m2) > 0 ? Math.round(pond.venda_m2 * 0.004 * 100) / 100 : null),
+          aluguel_estimado: aluFb == null && Number(pond.venda_m2) > 0,
+          aluguel_estimado_base: aluFb == null && Number(pond.venda_m2) > 0 ? '0,4%/mês sobre o valor de venda (sem amostra de locação com metragem na região)' : null,
+          aluguel_origem: amploFb ? amploFb.origem : null,
           n_amostras: (pond.n_venda || 0) + (pond.n_locacao || 0),
           nivel: Number(pond.nivel) === 1 ? 'rua' : Number(pond.nivel) === 2 ? 'grid' : 'cidade',
           nivel_label: Number(pond.nivel) === 1 ? 'rua/condomínio (~250 m)' : Number(pond.nivel) === 2 ? 'bairro e adjacências (~1 km)' : 'cidade',

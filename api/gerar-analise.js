@@ -510,11 +510,19 @@ async function gravarAmostrasIndice(imDb, mercado, imovelId, segmento = 'apartam
     // final — acima de 2km não entra na base, mesmo que a IA insista.
     const LONGE_KM = 2;
     const perto = (s) => { const d = Number(s?.distanciaKm); return !Number.isFinite(d) || d <= LONGE_KM; };
+    // A COORDENADA DO ALVO SÓ VALE PARA QUEM ESTÁ MESMO NO RAIO (achado 06/08). Toda amostra
+    // herdava lat/lng do imóvel-alvo — inclusive a que a própria IA disse estar a 1,8 km. Como o
+    // recorte "nível 1" é ≤250 m, a amostra distante entrava como se fosse da mesma rua. Só
+    // carimba a coordenada quando o anúncio declara estar dentro do raio; fora dele a amostra
+    // vale pelo BAIRRO (casamento por texto), que é o que ela de fato é.
+    const NO_RAIO_KM = 0.25;
+    const noRaio = (s) => { const d = Number(s?.distanciaKm); return Number.isFinite(d) && d <= NO_RAIO_KM; };
+    const coordDe = (s) => (noRaio(s) ? { geo_grid: geoGrid, lat: latA, lng: lngA } : { geo_grid: '', lat: null, lng: null });
     for (const s of vendas) {
       const m2 = Number(s?.valorM2);
       if (!perto(s)) continue;
       if (!vendaPlausivelTipo(segmento, m2) || ehFonteLeilao(s?.fonte)) continue; // faixa por tipo (terreno não é cortado)
-      rows.push({ cidade_norm: imDb.cidade_norm, uf, bairro_norm: bDe(s), geo_grid: geoGrid, lat: latA, lng: lngA, tipo: segmento,
+      rows.push({ cidade_norm: imDb.cidade_norm, uf, bairro_norm: bDe(s), ...coordDe(s), tipo: segmento,
         especie: 'venda', valor_m2: Math.round(m2), valor_total: Number(s?.valor) || null, area_m2: Number(s?.m2) || null,
         data_ref: dref(s?.data), fonte: (s?.fonte ? String(s.fonte).slice(0, 200) : null), origem: 'relatorio', imovel_id: String(imovelId || '') });
     }
@@ -534,7 +542,7 @@ async function gravarAmostrasIndice(imDb, mercado, imovelId, segmento = 'apartam
       if (!locacaoPlausivel(segmento, mensal) || ehFonteLeilao(s?.fonte)) continue;
       const vm2 = area > 0 ? Math.round((mensal / area) * 100) / 100 : null;
       if (vm2 !== null && !locacaoM2Plausivel(vm2)) continue;
-      rows.push({ cidade_norm: imDb.cidade_norm, uf, bairro_norm: bDe(s), geo_grid: geoGrid, lat: latA, lng: lngA, tipo: segmento,
+      rows.push({ cidade_norm: imDb.cidade_norm, uf, bairro_norm: bDe(s), ...coordDe(s), tipo: segmento,
         especie: 'locacao', valor_m2: vm2, valor_total: mensal, area_m2: area || null,
         data_ref: dref(s?.data), fonte: (s?.fonte ? String(s.fonte).slice(0, 200) : null), origem: 'relatorio', imovel_id: String(imovelId || '') });
     }
