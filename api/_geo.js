@@ -111,6 +111,21 @@ export function nivelNominatim(r) {
   return null;
 }
 
+// Nível do que o GOOGLE de fato encontrou. O `location_type` sozinho mente pelo mesmo
+// motivo que o Nominatim mentia: ele descreve a QUALIDADE do ponto (interpolado? centro
+// geométrico?), não O QUE foi casado — um município casado como `locality` volta
+// GEOMETRIC_CENTER e virava rótulo 'rua'. O `types` diz o que é. Mesma escala do
+// nivelNominatim; null = tipo neutro, o chamador mantém o nível pretendido.
+export function nivelGoogle(r) {
+  const t = new Set((Array.isArray(r?.types) ? r.types : []).map((x) => String(x).toLowerCase()));
+  if (t.has('street_address') || t.has('premise') || t.has('subpremise')) return 'endereco';
+  if (t.has('route') || t.has('intersection')) return 'rua';
+  if (t.has('neighborhood') || t.has('sublocality') || t.has('sublocality_level_1')) return 'bairro';
+  if (t.has('locality') || t.has('postal_town') || t.has('administrative_area_level_1')
+    || t.has('administrative_area_level_2') || t.has('country')) return 'cidade';
+  return null;
+}
+
 // Teto de nível: o rótulo final nunca é mais preciso do que o resultado suporta.
 export const capNivel = (alvo, match) =>
   (match && (NIVEL_RANK[match] ?? 9) < (NIVEL_RANK[alvo] ?? 0) ? match : alvo);
@@ -253,8 +268,12 @@ export async function googleGeocode(enderecoCompleto) {
     const loc = r.geometry?.location;
     if (!loc) return null;
     const lt = r.geometry.location_type; // ROOFTOP > RANGE_INTERPOLATED > GEOMETRIC_CENTER > APPROXIMATE
-    const nivel = (lt === 'ROOFTOP' || lt === 'RANGE_INTERPOLATED') ? 'endereco'
+    const porPrecisao = (lt === 'ROOFTOP' || lt === 'RANGE_INTERPOLATED') ? 'endereco'
       : lt === 'GEOMETRIC_CENTER' ? 'rua' : 'bairro';
+    // TETO PELO QUE FOI CASADO — sem isto, "rua que não existe" casada como município
+    // volta GEOMETRIC_CENTER e vira 'rua' no centro da cidade (mesmo bug do Nominatim,
+    // achado 05/08). O `types` manda; a precisão só refina dentro do que o tipo permite.
+    const nivel = capNivel(porPrecisao, nivelGoogle(r));
     registrarUso('google_geocode', 'geocode', { unidades: 1 }); // grátis até 10k/mês; custo além disso no painel
     return { lat: loc.lat, lng: loc.lng, nivel };
   } catch { return null; }
@@ -276,8 +295,17 @@ export async function brasilapiCep(cep) {
     const co = data?.location?.coordinates;
     const lat = parseFloat(co?.latitude);
     const lng = parseFloat(co?.longitude);
-    if (!isFinite(lat) || !isFinite(lng)) return null;
-    return { lat, lng };
+    // GRANULARIDADE DO CEP — nem todo CEP é de logradouro. O "CEP geral" de um município
+    // (o `-000` das cidades pequenas, e o que o ViaCEP devolve quando não há rua) tem por
+    // definição a coordenada do MUNICÍPIO INTEIRO. Rotular isso 'rua' era o pino genérico
+    // com cara de preciso — a metade do bug de 05/08 que a correção do Nominatim não pegou
+    // (achado 06/08: 17 logradouros distintos de Altos/PI no mesmo ponto). O payload já
+    // diz o que o CEP cobre: rua > bairro > cidade. Devolvido SEMPRE, mesmo sem coordenada,
+    // porque serve de teto também para a rota do postalcode no Nominatim.
+    const nivelMatch = String(data?.street || '').trim() ? 'rua'
+      : String(data?.neighborhood || '').trim() ? 'bairro' : 'cidade';
+    if (!isFinite(lat) || !isFinite(lng)) return { lat: null, lng: null, nivelMatch };
+    return { lat, lng, nivelMatch };
   } catch { return null; }
 }
 
@@ -300,9 +328,12 @@ export async function geocoderPago(enderecoCompleto) {
     if (!isFinite(lat) || !isFinite(lng)) return null;
     const tipo = String(r.type || '').toLowerCase();
     const classe = String(r.class || '').toLowerCase();
-    const nivel = (tipo === 'house' || tipo === 'building' || classe === 'building') ? 'endereco'
+    const porTipo = (tipo === 'house' || tipo === 'building' || classe === 'building') ? 'endereco'
       : (classe === 'highway' || tipo === 'road' || tipo === 'residential') ? 'rua'
       : 'bairro';
+    // O catch-all 'bairro' era otimista: LocationIQ fala o dialeto do Nominatim, então o
+    // nó do MUNICÍPIO cai aqui e virava 'bairro'. Mesmo teto pelo resultado das outras rotas.
+    const nivel = capNivel(porTipo, nivelNominatim(r));
     registrarUso('locationiq', 'geocode', { unidades: 1 }); // geocoder pago (por chamada)
     return { lat, lng, nivel };
   } catch { return null; }
@@ -394,7 +425,9 @@ export async function geocodificarCascata(imBruto, { deadline = Infinity, sleepM
   // precisão importa e o volume é limitado. É a metade "sob demanda" da contenção de custo.
   if (permitirPago && Date.now() < deadline) {
     const g = aceita(await googleGeocode(enderecoGoogle), 60); // Google é padrão-ouro: tolera endereço real distante
-    if (g) return { ...g, cep: cep || null };
+    // nivelReal também nas rotas pagas: padrão-ouro ou não, resultado EM CIMA do centróide
+    // IBGE é o município, não a rua pedida.
+    if (g) return { ...g, nivel: nivelReal(g.nivel, g.lat, g.lng, cidade, estado), cep: cep || null };
   }
 
   // Nível 0.5 — GEOCODER PAGO (LocationIQ), pronto para ativar via GEOCODER_KEY.
@@ -402,7 +435,7 @@ export async function geocodificarCascata(imBruto, { deadline = Infinity, sleepM
   // Nominatim, pois quando ativo é mais confiável que os provedores gratuitos.
   if (permitirPago && Date.now() < deadline) {
     const p = aceita(await geocoderPago(enderecoGoogle), 55);
-    if (p) return { ...p, cep: cep || null };
+    if (p) return { ...p, nivel: nivelReal(p.nivel, p.lat, p.lng, cidade, estado), cep: cep || null };
   }
 
   // Nível 0.6 — CONDOMÍNIO como POI (grátis): o Nominatim texto-livre acha prédios/condomínios
@@ -452,10 +485,15 @@ export async function geocodificarCascata(imBruto, { deadline = Infinity, sleepM
     // bairro; tratada como nível 'rua'. Roda antes do postalcode do Nominatim.
     // nivelReal também aqui: CEP "da cidade inteira" (municípios de CEP único) devolve o
     // ponto genérico do município — rotular 'rua' repetia o bug do pino no centro.
-    const cb = aceita(await brasilapiCep(cepLimpo));
-    if (cb) return { lat: cb.lat, lng: cb.lng, nivel: nivelReal('rua', cb.lat, cb.lng, cidade, estado), cep: cepLimpo };
+    const cb = await brasilapiCep(cepLimpo);
+    // Teto do CEP: 'rua' só quando o CEP É de logradouro. Vale para as DUAS rotas —
+    // o Nominatim por postalcode devolve o mesmo ponto genérico quando o CEP é geral,
+    // e o addresstype 'postcode' é neutro (não rebaixa sozinho).
+    const tetoCep = capNivel('rua', cb?.nivelMatch);
+    const cbOk = cb?.lat != null && aceita({ lat: cb.lat, lng: cb.lng }) ? cb : null;
+    if (cbOk) return { lat: cbOk.lat, lng: cbOk.lng, nivel: nivelReal(tetoCep, cbOk.lat, cbOk.lng, cidade, estado), cep: cepLimpo };
     const c = aceita(await nominatimEstruturado({ postalcode: cepLimpo, city: cidade, state: ufNome }));
-    if (c) return { lat: c.lat, lng: c.lng, nivel: nivelReal(capNivel('rua', c.nivelMatch), c.lat, c.lng, cidade, estado), cep: cepLimpo };
+    if (c) return { lat: c.lat, lng: c.lng, nivel: nivelReal(capNivel(tetoCep, c.nivelMatch), c.lat, c.lng, cidade, estado), cep: cepLimpo };
     await pausa();
   }
 
