@@ -1631,7 +1631,16 @@ export default async function handler(req, res) {
         // MOTOR PRIMÁRIO: Gemini (Google Search grounding). Aceita se devolveu JSON útil (mais que
         // só __diag); se falhar/vier vazio, CAI para o Claude web_search abaixo (fallback seguro).
         if (MERCADO_MOTOR === 'gemini' && GEMINI_KEY) {
-          const g = await buscarGeminiGrounding({ prompt, sistema, timeoutMs: Math.min(115000, Math.max(30000, msBudget)) });
+          // TETO DE BUSCAS TAMBÉM NO GEMINI (06/08). `webUses` cai de 6 para 2 quando a base
+          // própria já cobre a praça — é o mecanismo que faz o relatório BARATEAR conforme a
+          // base cresce. Só que ele era passado como `max_uses` do Claude e o Gemini, motor
+          // PRIMÁRIO desde 30/07, nunca o via: a economia estava ligada no motor errado e o
+          // custo não caía por mais densa que a base ficasse. O `google_search` do Gemini não
+          // tem parâmetro de teto, então o limite vai por INSTRUÇÃO — que é onde ele funciona.
+          const teto = `\n\nORÇAMENTO DE BUSCA: faça no MÁXIMO ${webUses} busca(s) na web. ${webUses <= 2
+            ? 'A base própria acima já cobre esta praça: use-a como fonte principal e busque apenas para CONFIRMAR/ATUALIZAR o que estiver faltando ou desatualizado. Não refaça do zero o que já está na base.'
+            : 'Priorize as buscas que trazem comparáveis do MESMO tipo e da MENOR distância.'}`;
+          const g = await buscarGeminiGrounding({ prompt: prompt + teto, sistema, timeoutMs: Math.min(115000, Math.max(30000, msBudget)) });
           if (g && !g.__falhou && Object.keys(g).some((k) => k !== '__diag')) return g;
         }
         try {

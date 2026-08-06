@@ -509,6 +509,42 @@ e a página de Planos já diziam 10; `App.jsx`, `HomeCliente.jsx`, `ProdutoLandi
 cinco. Fonte da verdade continua sendo `limite_ia` no banco: **10 mercadológicos · 10
 documentais · 10 laudos · 3 índices** para top2/assessorado/clube.
 
+### ✅ 13) Decisão do dono: cota fica em 10 + 3. E a economia estava ligada no motor errado
+
+Decisão do dono, registrada: **não reduzir cota** — *"nem todo mundo gera todos os relatórios.
+O ideal é manter em dez e três índices. Com as travas que fizemos vai facilitar o consumo, e à
+medida que vai armazenando as informações mercadológicas captadas em cada busca, vai baratear
+relatórios futuros."* Mantido: 10 mercadológicos · 10 documentais · 10 laudos · 3 índices.
+
+**A premissa foi verificada. Vale para uma metade, não para as duas:**
+
+✅ **Mercadológico — o mecanismo existe e já está acumulando.** `amostrasRegiaoCache` procura na
+base própria amostras de venda da praça (bairro → grid → cidade) dos últimos 120 dias; com ≥8, o
+relatório ancora na base e corta o orçamento de busca de 6 para 2. Hoje **13 das 36 praças (36%)
+já têm densidade suficiente**, com 1.549 amostras em `indice_amostra` + 1.380 em
+`indice_amostras`. Cada relatório e cada índice alimentam essa base — a tese está correta.
+
+🔴 **Mas a economia estava LIGADA NO MOTOR ERRADO.** O `webUses` calculado pelo cache era passado
+como `max_uses` da ferramenta do **Claude**. O motor primário é o **Gemini grounding** desde
+30/07, e ele nunca via esse número: por mais densa que a base ficasse, o custo não caía. O
+`google_search` do Gemini não tem parâmetro de teto, então o limite agora vai por **instrução no
+prompt** ("faça no máximo N buscas; a base própria já cobre esta praça, use-a como fonte
+principal e busque só para confirmar/atualizar"). É onde ele funciona nesse motor.
+
+❌ **Documental NÃO barateia com a base** — e é 68% da cota cheia (R$ 46,50 de R$ 67,92). Ele não
+consulta mercado: lê edital e matrícula. Nenhuma quantidade de amostras acumuladas muda o custo
+dele. A tese do dono não se aplica aqui, e é aqui que está o dinheiro.
+
+**Onde está a economia do documental (medindo antes de mexer).** Hoje **todo** PDF vai como bloco
+`document` — leitura por VISÃO — mesmo quando o PDF tem camada de texto. Os dois editais reais que
+parseei hoje tinham camada de texto (7.830 e 18.002 caracteres): como texto puro custariam ordens
+de grandeza menos. Mas mexer na base de evidência de um relatório **jurídico** sem saber quanto do
+acervo é convertível seria chute. Então: cada PDF lido pelo documental passa a ter a **camada de
+texto medida** (pdf-parse local, custo zero) e o resultado vai no `meta` de `geracao_custos`
+(`pdfs: [{tipo, chars}]`). Em poucos dias isso vira um número:
+`select meta->'pdfs' from geracao_custos where funcao='documental';` — `chars` null = escaneado
+(só visão resolve); `chars` alto = convertível. **Nada foi mudado na leitura ainda.**
+
 ### Próximo passo desta sessão
 
 Re-verificação adversarial dos 16 achados de `docs/VARREDURA_BUGS_2026-08-05.md` marcados

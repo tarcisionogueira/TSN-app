@@ -19,6 +19,7 @@ import { consultarComunicaDJEN } from './_laudo-fontes.js';
 import { consultarCertidoesFiscais } from './_certidoes-fontes.js';
 import { geocodificarCascata, coordValida, rankNivel } from './_geo.js';
 import { cacheGravar } from './_doc-extracao.js';
+import { carregarPDFParse } from './_pdf-safe.js';
 import { urlDocumento } from './_storage.js';
 import { hostExternoSeguro } from './_allowed-hosts.js';
 
@@ -791,7 +792,22 @@ export default async function handler(req, res) {
         }
       }
       if (!doc) continue;
-      lidos.push({ rotulo: u.rotulo, url: u.url, kind: doc.kind, cache: deCache, tipo: u.tipo || tipoDoc });
+      // MEDE A CAMADA DE TEXTO do PDF (local, custo zero). Hoje TODO PDF vai como bloco
+      // `document` — leitura por VISÃO —, que é o que faz o documental custar ~6x o
+      // mercadológico e responder por 68% da cota cheia de um assinante. PDF que TEM camada
+      // de texto poderia ir como texto puro, ordens de grandeza mais barato. Antes de mexer
+      // no relatório JURÍDICO (onde a evidência importa), é preciso saber QUANTO do acervo
+      // é convertível — este número responde isso em poucos dias, sem mudar nada agora.
+      let charsTexto = null;
+      if (doc.kind === 'pdf' && doc.base64 && Date.now() < deadline - 20000) {
+        try {
+          const PDFParse = await carregarPDFParse();
+          const parser = new PDFParse({ data: Buffer.from(doc.base64, 'base64') });
+          try { charsTexto = String((await parser.getText())?.text || '').length; }
+          finally { await parser.destroy().catch(() => {}); }
+        } catch { charsTexto = null; } // escaneado/quebrado → null, e a visão segue sendo a única via
+      }
+      lidos.push({ rotulo: u.rotulo, url: u.url, kind: doc.kind, cache: deCache, tipo: u.tipo || tipoDoc, charsTexto });
       if (doc.kind === 'pdf') blocos.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: doc.base64 }, title: u.rotulo });
       else blocos.push({ type: 'text', text: `=== ${u.rotulo} (${u.url}) ===\n${doc.text}` });
     }
@@ -1468,7 +1484,11 @@ export default async function handler(req, res) {
     // mercadológico do mesmo dia.
     await registrarCustoGeracao('documental', {
       userId: ownerId, imovelId: String(imovelId), custoMicro: _custoMicroReq, ok: true,
-      meta: { nivelRisco: result.nivelRisco || null, docsLidos: (result.documentosLidos || []).length || null },
+      meta: {
+        nivelRisco: result.nivelRisco || null, docsLidos: (result.documentosLidos || []).length || null,
+        // Quanto deste custo seria convertível para leitura em TEXTO (ver medição acima).
+        pdfs: (lidos || []).filter(l => l.kind === 'pdf').map(l => ({ tipo: l.tipo || null, chars: l.charsTexto ?? null })),
+      },
     });
     // Cobra o CRÉDITO quando esta geração usou crédito (cota mensal esgotada). Só aqui, no
     // sucesso REAL (com laudo) — os caminhos de "faltam documentos" estornam a cota e não
