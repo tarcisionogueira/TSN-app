@@ -226,6 +226,26 @@ R$ 65–92. O número certo só vem de **recaptura ancorada no bairro/condomíni
 "Gerar índice" no card do Cauaxi agora, com o coletor corrigido. Vale conferir depois se as
 amostras novas trazem `endereco`/`url` preenchidos (era 0/155 antes).
 
+**REGRA NOVA DO DONO (06/08): número inventado não entra.** *"Se não encontra, informa que não
+localizou anúncios — fica melhor do que fazer um cálculo infundado."* A regra de bolso de
+0,4%/mês sobre a venda foi removida de TODOS os caminhos: os três da consulta, o `indice-gerar`
+(que a semeava em `cidade_indicadores` — o inventado virava "base própria" e voltava parecendo
+mercado observado) e o `indice-mercado`. Sem anúncio, o campo vem vazio com o motivo e a tela
+diz **"Não localizamos anúncios"**. Em **terreno** diz "não se aluga": o 0,4% sobre o preço do
+lote produzia "locação de terreno a R$ 3/m²·mês", e a regra de 03/08 (lote não se aluga) agora
+vale também na porta de entrada do banco (`semear_indice_relatorio`) — havia 1 linha semeada com
+R$ 68,40 que foi zerada.
+
+**BOTÃO DE PESQUISAR — sumia justamente quando era preciso.** Só existia com a região "não
+mapeada"; bastava a CIDADE ter índice para ele desaparecer, e não havia como pedir a pesquisa do
+endereço específico. O Cauaxi ficava preso na mediana de cidade, de julho, sem saída. Agora a
+ação existe sempre e, quando o número na tela vem de um recorte mais largo que o endereço
+consultado, o card explica que é por isso que o valor parece baixo e oferece **"Pesquisar este
+endereço agora"**. Os cards por tipo passam a mostrar o **nível** de cada número.
+
+Bug pré-existente achado no lint junto: `indice-gerar.js` roda em Edge e usava `res.status()` do
+runtime Node no caminho de erro do limite — ReferenceError em vez de 503.
+
 ### Próximo passo desta sessão
 
 Re-verificação adversarial dos 16 achados de `docs/VARREDURA_BUGS_2026-08-05.md` marcados
