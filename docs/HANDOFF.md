@@ -178,6 +178,54 @@ o limiar de 300 media junto.
 refazer 3.037 · gatilho provado no caso real do Rafael (rebaixou o lote E o vizinho
 `zuk_36955-230524` que ocupava o mesmo ponto).
 
+### 🔴 6) O Índice: a amostra nunca soube onde ela está
+
+Gatilho: o dono achou no ZAP vários aluguéis em **Alphaville Industrial** (69 m² R$ 4.500 =
+R$ 65/m²; 84 m² R$ 7.700 = R$ 92/m²; 165 m² R$ 12.500 = R$ 76/m²) enquanto o Índice do
+condomínio Cauaxi mostrava **R$ 28/m²·mês ESTIMADO** e "Localidade 0 · Bairro 0".
+
+**A pesquisa não era o problema.** As duas gerações de hoje (Brasília, do usuário
+`valbeni.junior`) trouxeram **60 locações COM metragem** — apto R$ 45–86/m²·mês, por bairro:
+Noroeste 18 (média 69), Asa Norte 10 (65), Asa Sul 2 (73), Sudoeste 4 (52). O ajuste do prompt
+de 05/08 pegou. E para o endereço do Cauaxi **não houve pesquisa**: só 2 chamadas
+`claude/web_search` hoje, as duas de Brasília — a tela leu a base de **julho**.
+
+**O que estava quebrado eram duas metades que se escondiam:**
+
+1. `montarAmostras` carimbava o **lat/lng do endereço CONSULTADO** em toda amostra. Prova:
+   1.026 amostras com coordenada em apenas **39 pontos distintos** — as 39 consultas que já
+   geraram índice. 85 anúncios de 4 bairros de Brasília no mesmo ponto.
+2. A RPC `ingerir_amostras_indice` **recebia** `cep/endereco/condominio` e **não gravava** —
+   não estavam na lista de colunas do insert. Por isso 0 das 155 amostras de hoje tinham
+   endereço, apesar de o prompt pedir.
+
+Somadas, desligavam o `indice-geocodificar-cron` nas duas pontas (ele seleciona
+`lat is null and (cep|endereco|condominio) not null`): **`geocod_em` está NULO em 100% das
+1.380 amostras, desde sempre**. O pipeline de triangulação existia inteiro e nunca rodou — o
+recorte de 250 m/1 km era ficção.
+
+**Corrigido:** a amostra nasce sem coordenada (quem tem âncora é triangulado pelo cron; quem só
+tem bairro casa por texto, que já vale nível 1); a RPC grava a âncora + a coluna nova `url`
+(link do anúncio — sem ele nada é auditável, e é por isso que os 129 anúncios de locação sem
+área não podem ser recuperados, só recapturados); o prompt exige âncora e link;
+`gerar-analise.js` só carimba a coordenada do alvo na amostra que a IA declarou dentro dos
+250 m (o teto ali era 2 km — amostra a 1,8 km entrava como se fosse da mesma rua). Limpeza:
+1.026 coordenadas falsas na base do índice + 249 na do relatório (9 pontos reivindicados por
+bairros diferentes).
+
+**ESCADA DO ALUGUEL.** Era binário: locação com metragem no recorte, ou regra de bolso de
+0,4%/mês. O aluguel medido da MESMA cidade existia em outras duas bases e ninguém olhava —
+Barueri tinha 5 locações a R$ 41/m² na base geolocalizada e dois bairros já medidos
+(`cidade_indicadores`: Cruz Preta R$ 50,40/39 amostras, Jd. Tupanci R$ 39,44/51) enquanto a
+tela mostrava R$ 28. Agora: recorte → base geolocalizada → bairros já medidos da cidade →
+só então 0,4%, com a procedência escrita e o selo **MEDIDO NA CIDADE**. O Cauaxi passa a
+**R$ 40,84** (5 anúncios).
+
+⚠️ **Isso deixa o número honesto, não certo.** R$ 40,84 é Barueri; Alphaville Industrial é
+R$ 65–92. O número certo só vem de **recaptura ancorada no bairro/condomínio** — apertar
+"Gerar índice" no card do Cauaxi agora, com o coletor corrigido. Vale conferir depois se as
+amostras novas trazem `endereco`/`url` preenchidos (era 0/155 antes).
+
 ### Próximo passo desta sessão
 
 Re-verificação adversarial dos 16 achados de `docs/VARREDURA_BUGS_2026-08-05.md` marcados
