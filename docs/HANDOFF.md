@@ -19,6 +19,12 @@
 > 🩺 **Segurança — automação em 2 camadas (não depende de sessão manual):**
 > 1. **DB/RLS/grants (determinística):** cron `seguranca-auditoria-cron` (semanal, servidor) roda `auditoria_seguranca()` e **e-mail só se regredir**. Cobre AUTOMATICAMENTE objetos novos de banco.
 > 2. **Código (ofensiva):** Rotina agendada `Auditoria de segurança BidPro (mensal)` acorda uma sessão sozinha, roda os 3 agentes ofensivos sobre o repo e **notifica o dono** (sem MCP → não faz a parte de banco, coberta pela camada 1; não faz push automático).
+>
+> 🐛 **Camada 3 — bug bounty do CÓDIGO (item 6 do ritual):** rodou pela 1ª vez em 05/08.
+> 6 lentes → 24 achados → verificação adversarial. Resultado e estado de cada um em
+> `docs/VARREDURA_BUGS_2026-08-05.md`. **Aprendizado do formato:** o workflow travou em
+> 8/24 vereditos — na próxima, verificar em lotes menores e persistir o resultado a cada
+> lote, para que uma parada não leve o trabalho junto.
 > Checagem rápida a qualquer momento: `select public.auditoria_seguranca();` → `0 crítico / 0 atenção` = íntegro.
 > **Auditorias ofensivas completas: 15/07/2026 (×2).** Total de correções: 15 (1ª rodada) + escalonamento por convite (CRÍTICO) + IDOR do MP (ALTO) + escala. Refazer a ofensiva quando entrarem rotas/pagamento/RLS novos (a Rotina mensal já faz isso sozinha).
 
@@ -61,6 +67,41 @@ mudam. `.claude/` segue ignorada no git — só o `settings.json` abre exceção
 `!.claude/settings.json`, porque o git não reabre arquivo dentro de diretório excluído).
 
 **Também nesta sessão:** decidir a **Camada 2 do endereço** (edital/matrícula, item 7).
+
+---
+
+## 🔔 VERIFICAÇÕES INICIAIS DA SESSÃO DE 06/08 (combinado com o dono no fim do dia 05/08)
+
+> Rodar ANTES de qualquer outra coisa e reportar em bloco, junto com o ritual normal.
+
+| # | O que validar | Como | Verde é |
+|---|---|---|---|
+| 1 | **Re-verificação dos 16 achados** ⏰ *combinado com o dono* | `docs/VARREDURA_BUGS_2026-08-05.md` — os marcados **⏳ A VERIFICAR**. Rodar a verificação ADVERSARIAL (refutar primeiro; dúvida = não confirmado). O workflow anterior travou em 8/24 | Cada um vira CONFIRMADO (com repro) ou REFUTADO (com motivo). Atualizar o doc |
+| 2 | **Lote do Rafael** (fechamento do caso) | `select endereco, latitude, longitude, geocod_nivel from imoveis_leilao where fonte_id='zuk_37094-231508';` | Coordenada **≠** `-23.4675941,-46.5277704` e nível ≠ 'refazer'. Depois: regerar o mercadológico e conferir se o **Nível 1 traz amostras** |
+| 3 | **Drenagem do pino genérico** | `select count(*) from imoveis_leilao where ativo and geocod_nivel='refazer';` · `select public.geocode_pinos_genericos_total();` | Fila caindo dos 3.519; o total de pinos genéricos seguir **~0** (se subir, a regressão voltou) |
+| 4 | **Aluguel do Índice** | Gerar/abrir o Índice de uma cidade com locação e conferir o card | Ou valor MEDIDO, ou o selo **ESTIMADO** com a base declarada — nunca um número mudo |
+| 5 | **Cache de documento pegando** | `select count(*), count(*) filter (where extrator::text like '%visao%') from doc_extracoes;` | Deixar de ser 0 conforme relatórios rodam; 2º relatório do mesmo lote não deve reler documento |
+
+### 📌 Os 2 planejamentos que ficaram para 06/08 (o dono decidiu adiar, não descartar)
+
+1. **Fluxo de arremate (itens 2 e 7 da varredura)** — desenho já apresentado e aprovado em
+   linhas gerais pelo dono; falta detalhar e implementar. Regras que ELE definiu:
+   botão só para **assessorado e clube**; **um único arrematante por lote**; para liberar,
+   informar o **valor da arrematação** + anexar **comprovante** (auto de arrematação ou
+   e-mail do leiloeiro com o valor). Desenho proposto: estados `declarado → confirmado →
+   recusado`, índice único parcial `(imovel_id) where estado in ('declarado','confirmado')`,
+   e o RLS `imovel_anexos_meu_arremate_delete` passando a exigir `estado='confirmado'`.
+   **PERGUNTA ABERTA AO DONO:** manter o DELETE do cliente após confirmação, ou remover de
+   vez (recomendação: remover — documento de arremate é prova e a retenção é obrigação
+   nossa; cliente pede, equipe executa). **Momento ideal: hoje há 0 arremates**, zero
+   retrabalho. O botão legado do Painel (`Painel.jsx:447`, grava com id `tsn_…` fora do
+   `sinalizar-arremate`) morre nesse mesmo movimento.
+2. **Jurídico — reatribuição que perde a pasta (item 3)** — plano apresentado: gravar em
+   DOIS TEMPOS (`reatribuicao_pendente` → envia → efetiva), retomada automática das
+   pendências > 30 min, e usar o **webhook do Resend que já existe** para que `delivered`
+   efetive e `bounced` devolva a pasta ao advogado anterior. Junto vai o achado #24 do
+   mesmo arquivo (a escalação ao admin repete todo dia útil porque o `select` não traz
+   `juridico_escalado_admin` e o flag de dedup nunca é lido).
 
 ---
 
@@ -148,6 +189,37 @@ queda para nível cidade, porque não existe amostra marcada "Alphaville Industr
 "Gerar índice" (`_indice-core.js`) não aplicava, e por ali entrou locação de terreno a
 R$ 3,50/m²·mês em Barueri (amostra removida).
 
+### 🟢 7) Marketing e usuários — a foto de 05/08 (o dono pediu no fim do dia)
+
+**33 cadastros** no total (desde 16/06) · **10 nos últimos 7 dias** · 4 pagantes · 28
+gratuitos. Conversão gratuito→pagante **12%**. **MRR real: ~R$100/mês** (2 assinantes Pro).
+⚠️ **O `mp_pagamentos` engana**: dos R$3.963 "aprovados", R$3.813 são **SAÍDAS da conta MP
+do dono** (17 cobranças da Anthropic, PIX) que o backfill puxou do extrato — receita de
+assinatura é só **R$149,70**. Não leia esse total como faturamento.
+
+**Google Ads** — campanha "Pesquisa — Leilão de Imóveis (BR)", 29/07 a 04/08: R$171,19
+investidos, 1.698 impressões, 116 cliques, **CTR 6,8%** e **CPC R$1,48** (ambos bons),
+**R$57 por cadastro**. 🔴 **Mas 0 conversões registradas em TODOS os dias** — e isso não é
+falta de resultado, é **falta de sinal**: o código só envia conversão ao Google quando
+alguém **paga** (`_webhook-core.js:176`); nenhum dos 5 usuários vindos do Ads assinou ainda.
+O Google está otimizando às cegas. **O que resolve:** criar uma 2ª *conversion action* no
+painel do Ads para o **cadastro** e passar o ID — a máquina já existe
+(`enviarConversaoOffline`, `gclid` capturado e guardado por 90 dias). **Depende do dono.**
+Segundo ponto: a ingestão de métricas **não tem cron** (só `meta-insights-cron` está
+agendado) — por isso os dados param em 04/08. Agendar (é leitura, não gasta).
+
+**Atribuição:** 85% dos cadastros (28 de 33) chegam **sem UTM** — ponto cego que impede
+responder "de onde vem quem converte". Zero Meta/Facebook em toda a base. A **(-4) Search
+Console** segue sendo a maior alavanca: as 33 mil páginas estão no ar e o orgânico nem
+começou. ⚠️ **O "indicado por" está enganando:** quase toda a base aparece indicada pelo
+admin (é o padrão quando não há código). As **únicas 2 indicações reais entre usuários**
+são Jaqueline → Julio Garcia e Kaique → Arnaldo — conferir isso antes de calcular
+comissionamento de rede.
+
+**Gargalo é ATIVAÇÃO, não aquisição:** 60 relatórios gerados, mas por apenas **7 pessoas**
+(21% da base). Metade não respondeu a triagem. Perfil de quem responde: 9 revenda, 4 uso
+próprio, 3 locação; capital majoritariamente até R$150k.
+
 ### 🔴 6) CRÍTICO da varredura: serviço avulso suspendia plano de quem está em dia
 
 `mp-webhook` monta `contexto.servico` para pagamento avulso (`metadata.tipo='servico'`:
@@ -158,6 +230,49 @@ sobrescrito e documentos agendados para expurgo LGPD. Corrigido na raiz + mesma 
 gêmea no ramo de REEMBOLSO. **Verificado no banco: nenhum cliente real atingido** — era
 latente. `.claude/settings.json` (04/08) permitiu agendar sem atrito: heartbeat 06/08 13:30
 UTC (`trig_0131…`) e Search Console 18/08 (`trig_013A…`).
+
+### 🔴 8) Os 4 achados que o dono mandou resolver no fim do dia (deploy `4957768`)
+
+- **"Se o cliente pagou, deve ter acesso"** (regra dele, textual). O Pro ANUAL via PIX
+  gravava DUAS marcas de idempotência; falhando a ativação, só a específica caía e o
+  reenvio do MP morria no guard da OUTRA — R$449,90 pagos e plano nunca ativado. Agora as
+  duas caem. E, porque a regra não pode depender do webhook, o `reconciliar-assinaturas-cron`
+  (horário) — que cobria só PREAPPROVAL — passa a varrer os pagamentos **avulsos** com
+  `proposito='plano_anual'`. Verificado: nenhum cliente preso hoje.
+- **E-mail é único por cadastro.** Com "Confirm email" ligado o Supabase NÃO dá erro para
+  e-mail repetido (anti-enumeração: 200 + usuário fantasma + `identities: []` + nenhum
+  e-mail enviado). O Checkout só checava `error` → dizia "Cadastro criado!" e o cliente
+  esperava para sempre. Agora detecta `identities` vazio e manda para o login.
+- **Convite de equipe com validade e uso único.** Uso único já existia; validade não —
+  `expira_em is null` passava, então convite sem data **nunca expirava** (link de acesso
+  privilegiado eterno). Agora NOT NULL default 7 dias, resgate atômico, e o RPC devolve o
+  MOTIVO (inexistente/usado/expirado). O front só descarta o token com DESFECHO: falha
+  transitória preserva, em vez de apagar o convite sem rastro. O `ConviteEquipe` deixou de
+  chamar o RPC sem sessão (onde ele SEMPRE respondia "não autorizado" e a tela dava sucesso).
+  ⚠️ **Não testável agora — ainda não há ninguém na equipe** (o dono avisou); validar no
+  primeiro convite real.
+
+### 🎓 As lições da sessão 26 (valem além dela)
+
+1. **Bug de RÓTULO não aparece como erro — aparece como número plausível.** Cinco achados
+   do dia são o mesmo padrão: nível `rua` num ponto de cidade, `órfão` num objeto ainda
+   linkado, `explorador` em quem assinou assessoria, `mercado` numa regra de bolso,
+   `Cadastro criado!` num cadastro que não houve. Onde houver **fallback silencioso**,
+   procure o rótulo.
+2. **Rotule a estimativa na origem, não na tela.** O aluguel do Índice era `venda × 0,4%`
+   desde sempre; o fallback existia e estava até comentado — só não se anunciava. Fallback
+   mudo vira dado falso no minuto em que alguém confia nele.
+3. **Guard que cobre um caso irmão e esquece o outro é meio guard.** `ehProdutoMp` protegia
+   produto e deixava serviço passar; `nivelReal` cobria 3 dos 8 retornos da cascata. Ao
+   corrigir, varra TODOS os ramos equivalentes — os dois casos gêmeos apareceram assim.
+4. **Idempotência precisa desfazer TUDO que marcou.** Marcar em dois lugares e limpar um só
+   transforma retentativa em silêncio permanente — foi exatamente o que travou o Pro anual.
+5. **Regra de negócio escrita em UM lugar não é regra.** "Terreno não se aluga" valia no
+   `gerar-analise` e não no `_indice-core`; por lá entrou locação de terreno a R$3,50/m².
+   Regra do dono tem que valer em todos os coletores.
+6. **Número agregado sem procedência engana o dono.** O "faturamento" de R$3.963 era
+   majoritariamente conta da Anthropic paga pela conta MP. Antes de reportar dinheiro,
+   pergunte de onde cada linha veio.
 
 ---
 
