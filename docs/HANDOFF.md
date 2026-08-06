@@ -246,6 +246,37 @@ endereço agora"**. Os cards por tipo passam a mostrar o **nível** de cada núm
 Bug pré-existente achado no lint junto: `indice-gerar.js` roda em Edge e usava `res.status()` do
 runtime Node no caminho de erro do limite — ReferenceError em vez de 503.
 
+### 🔴 7) Uma pesquisa = um tipo (o "todos de uma vez" saiu)
+
+Sequência do dia, toda medida: o dono apertou "Pesquisar este endereço agora" no Cauaxi em
+modo **Todos os tipos** e a função morreu — `504 Vercel Runtime Timeout Error: Task timed out
+after 250 seconds`. Como quem respondeu foi a plataforma (página de erro em TEXTO), a tela
+quebrou com `Unexpected token 'A', "An error o"... is not valid JSON`.
+
+**Duas causas, uma delas minha:**
+1. O `retries: 1` que eu tinha acabado de pôr na tentativa ampla permitia que ela sozinha
+   consumisse 150s + backoff + 150s ≈ 300s — acima do teto de 250s. Antes eram 150 + 80 = 230s,
+   que cabia apertado. Removido; quem faz o papel de retry é a 2ª tentativa, agora orçada.
+2. O modo "4 tipos numa busca" é insustentável por desenho: os quatro dividem o **mesmo** teto
+   de saída e as **mesmas** 8 buscas. Contraprova do mesmo dia: tipo único concluiu em **97s e
+   131s** trazendo **70 e 85 amostras** — para um tipo cada.
+
+**Tempo de execução (medido, não estimado):** pesquisa de tipo único = **1min40 a 2min10**.
+Teto da função = 250s. O log agora registra a duração real de toda pesquisa, sucesso e falha —
+antes a única duração observável era a das que estouravam.
+
+**Correções:** orçamento de tempo explícito (225s, com a 1ª tentativa limitada a 120s e proibida
+de invadir os 90s reservados para a 2ª, que só começa se sobrar tempo real); o servidor
+**recusa** `tipo: 'todos'` (400 com instrução — recusado no servidor, não só escondido na tela);
+a tela mantém "Todos os tipos" como CONSULTA mas a geração vira **um botão por tipo**; e o
+`r.json()` às cegas da tela virou parse defensivo (resposta não-JSON deixa de virar mensagem de
+motor). Ganho de lado: falha em um tipo não derruba mais os outros três.
+
+⚠️ **O cron de reforço (`indice-reforco-cron`) está DESLIGADO de propósito** —
+`INDICE_REFORCO !== '1'`, decisão de custo (~US$300/mês proativo). `indice_reforco_estado` vazio
+é o esperado. Se um dia for ligado, precisa da mesma quebra por tipo: hoje ele pede os 4 numa
+tacada, com 3 cidades em paralelo na mesma invocação.
+
 ### Próximo passo desta sessão
 
 Re-verificação adversarial dos 16 achados de `docs/VARREDURA_BUGS_2026-08-05.md` marcados
