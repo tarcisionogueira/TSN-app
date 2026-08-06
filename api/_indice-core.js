@@ -91,6 +91,12 @@ export function montarAmostras(mercado, ctx) {
     }
     for (const l of (bloco.locacoes || [])) {
       const am = Number(l?.aluguelM2); const tp = tipoDe(l); const brr = bairroDe(l) || '';
+      // TERRENO NÃO TEM MERCADO DE LOCAÇÃO (regra do dono, 03/08): lote não se aluga; o que
+      // os portais devolvem como "terreno para alugar" é outro produto (pátio, área de
+      // evento) e contamina o Índice do tipo. O gerar-analise já aplicava essa regra, mas
+      // ESTE coletor (botão "Gerar índice") não — e por aqui entrou "locação de terreno a
+      // R$ 4/m²·mês" em Barueri, puxando a média do tipo para baixo. Mesma regra nos dois.
+      if (tp === 'terreno') continue;
       if (tp && am > 0 && am < 500 && !FONTE_LEILAO.test(String(l?.fonte || ''))) out.push({ ...linha(l, 'locacao', am), nivel, data_anuncio: dataOk(l?.data),
         fonte_ref: `web|${ctx.cidadeNorm}|${brr}|${tp}|locacao|${am}|${Math.round(Number(l?.area) || 0)}|${dataOk(l?.data) || ''}` });
     }

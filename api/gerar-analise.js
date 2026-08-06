@@ -13,7 +13,8 @@ import { ehCidadeTemporada, motivoTemporada } from './_temporada.js';
 import { composicaoTemporal, avisoFrescor } from './_indice-composicao.js';
 import { referenciaPonderada } from './_indice-ponderacao.js';
 import { geocodificarCascata, rankNivel, coordValida } from './_geo.js';
-import { extratoEdital } from './_edital-extrato.js';
+import { extratoEdital, extratoMatricula } from './_edital-extrato.js';
+import { pagamentoPrior, pagamentoAprender } from './_doc-extracao.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -1005,6 +1006,11 @@ JAMAIS um juízo do tipo "bairro perigoso". Se NÃO houver dado oficial confiáv
 "encontrado": false e recomende diligência local (visita ao local, consulta de ocorrências) — não invente
 nem estime. É diligência de investidor sobre a REGIÃO, não juízo de valor sobre quem mora nela.
 
+REGRA DAS LOCAÇÕES (obrigatória): em cada item de "locacoes", o campo "m2" é OBRIGATÓRIO e deve trazer a
+ÁREA do imóvel anunciado (privativa/útil, em m²). Sem a área, o aluguel não vira R$/m² e a amostra é
+DESCARTADA — anúncio de locação sem metragem não deve ser incluído. Prefira menos locações COM área a
+muitas sem área.
+
 Retorne APENAS este JSON (sem markdown):
 {
   "nivel1": { "descricao": "", "vendas": [{"bairro":"","descricao":"","valor":0,"m2":0,"valorM2":0,"distanciaKm":0,"fonte":"","data":"AAAA-MM"}], "locacoes": [{"bairro":"","descricao":"","valorMensal":0,"m2":0,"distanciaKm":0,"fonte":"","data":"AAAA-MM"}], "precoMedioM2": 0, "precoMinM2": 0, "precoMaxM2": 0, "aluguelMedio": 0, "totalAmostras": 0, "disponiveis": true },
@@ -1119,6 +1125,11 @@ hectares OU unidades) e "baseCalculo" (a conta em texto). Para imóvel com TERRE
 a construção + o terreno excedente e detalhe em "terrenoExcedente". Se a área da métrica não for
 confiável (ex.: veio a área TOTAL no lugar da privativa), DIGA no "comentario" e seja conservador.
 
+REGRA DAS LOCAÇÕES (obrigatória): em cada item de "locacoes", o campo "m2" é OBRIGATÓRIO e deve trazer a
+ÁREA do imóvel anunciado (privativa/útil, em m²). Sem a área, o aluguel não vira R$/m² e a amostra é
+DESCARTADA — anúncio de locação sem metragem não deve ser incluído. Prefira menos locações COM área a
+muitas sem área.
+
 Retorne APENAS este JSON (sem markdown):
 {
   "nivel1": { "descricao": "", "vendas": [{"bairro":"","descricao":"","valor":0,"m2":0,"valorM2":0,"distanciaKm":0,"fonte":"","data":"AAAA-MM"}], "locacoes": [{"bairro":"","descricao":"","valorMensal":0,"m2":0,"distanciaKm":0,"fonte":"","data":"AAAA-MM"}], "precoMedioM2": 0, "precoMinM2": 0, "precoMaxM2": 0, "aluguelMedio": 0, "totalAmostras": 0, "disponiveis": true },
@@ -1182,6 +1193,11 @@ mensal quase nunca passa de 1% do valor de VENDA do mesmo imóvel — se o valor
 grandeza de preço de venda, DESCARTE (é anúncio de venda mal classificado). Informe "m2" quando o
 anúncio trouxer. Em "aluguelMedio" use a MEDIANA, não a média. Menos de 3 locações plausíveis →
 "aluguelMedio": 0 e yield 0.
+
+REGRA DAS LOCAÇÕES (obrigatória): em cada item de "locacoes", o campo "m2" é OBRIGATÓRIO e deve trazer a
+ÁREA do imóvel anunciado (privativa/útil, em m²). Sem a área, o aluguel não vira R$/m² e a amostra é
+DESCARTADA — anúncio de locação sem metragem não deve ser incluído. Prefira menos locações COM área a
+muitas sem área.
 
 Retorne APENAS este JSON (sem markdown):
 {
@@ -1433,6 +1449,11 @@ export default async function handler(req, res) {
   // curto antes das projeções — o mercadológico passa a usar o edital como fonte de
   // verdade da MELHOR PRAÇA e das condições de pagamento, sem alongar a geração.
   const extratoEditalP = extratoEdital(String(imovelId), { deadline: Date.now() + Math.min(60000, Math.max(15000, restante() - 90000)) }).catch(() => null);
+
+  // METRAGEM DA MATRÍCULA (determinístico + cache, SEM IA — pedido do dono 05/08: casos
+  // documentados de divergência anúncio×matrícula): roda em paralelo como o extrato do
+  // edital e é colhida no bloco de área. Sem depender do laudo documental ter rodado.
+  const extratoMatriculaP = extratoMatricula(String(imovelId), { deadline: Date.now() + Math.min(45000, Math.max(12000, restante() - 100000)) }).catch(() => null);
 
   // Triangula o imóvel-alvo (endereço+CEP+IBGE, grátis) se a coord for imprecisa — âncora do raio
   // de 250m/1km. Grava a coord melhor (durável). Time-boxed; roda ANTES da busca para o recorte por
@@ -1695,6 +1716,37 @@ export default async function handler(req, res) {
       if (aDoc >= 5 && aDoc <= 100000) { areaM2 = aDoc; areaFonte = 'matricula'; } // autoritativa
     } catch { /* segue com a área informada */ }
 
+    // ── METRAGEM DA MATRÍCULA sem depender do documental (05/08) ────────────────
+    // O documental (ficha_juridica) só existe se o cliente já gerou aquele relatório.
+    // Aqui colhemos a leitura DETERMINÍSTICA disparada no início (cache-first, custo
+    // zero): se a matrícula declara a área privativa, ela PREVALECE sobre a do anúncio
+    // — os casos documentados de divergência mostram que o site erra (traz total/
+    // terreno) e o R$/m² sai inflado. Divergência > 10% vira aviso EXPLÍCITO no
+    // relatório: o cliente precisa saber que o anúncio e a matrícula discordam.
+    let divergenciaArea = null;
+    if (areaFonte !== 'matricula') {
+      let mat = null;
+      try { mat = await Promise.race([extratoMatriculaP, new Promise(r => setTimeout(() => r(null), 2500))]); } catch { /* best-effort */ }
+      const aMat = Number(mat?.areaPrivativaM2) || 0;
+      if (aMat >= 5 && aMat <= 100000) {
+        const aAnuncio = Number(areaM2) || 0;
+        if (aAnuncio > 0 && Math.abs(aMat - aAnuncio) / aAnuncio > 0.10) {
+          divergenciaArea = {
+            anuncio: aAnuncio, matricula: aMat,
+            diferencaPct: Math.round(((aMat - aAnuncio) / aAnuncio) * 100),
+            fonte: mat.fonteUrl || null,
+          };
+          try { await registrarAnomalia('area_divergente', fonteDb, imovelId, 'area_m2',
+            `Área do anúncio ${aAnuncio} m² vs matrícula ${aMat} m² (${divergenciaArea.diferencaPct > 0 ? '+' : ''}${divergenciaArea.diferencaPct}%) — o relatório usou a da MATRÍCULA.`); } catch { /* best-effort */ }
+        }
+        areaM2 = aMat; areaFonte = 'matricula';
+        // Persiste o nº da matrícula quando o acervo ainda não tem (grátis, durável).
+        if (mat.numeroMatricula && !imDb?.numero_matricula) {
+          try { await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ numero_matricula: String(mat.numeroMatricula).slice(0, 40) }) }); } catch { /* best-effort */ }
+        }
+      }
+    }
+
     // ── CONDIÇÕES DO EDITAL (colhe o extrato disparado lá no início; a busca de mercado
     // já deu o tempo de sobra — se ainda não terminou em 3s, segue sem ele). Divergente
     // (edital de OUTRO lote anexado por engano) → descarta + anomalia; nunca "confirma"
@@ -1754,7 +1806,33 @@ export default async function handler(req, res) {
         formaPagamento: extratoDoc.formaPagamento || null,
         avaliacao: aEd || null,
         fonte: extratoDoc.fonteUrl || null,
+        // REGRAS ESTRUTURADAS p/ projeção de fluxo de caixa (05/08): à vista?, parcelas,
+        // sinal/caução, comissão do leiloeiro, prazo de pagamento, financiável/FGTS.
+        regrasPagamento: extratoDoc.pagamento || null,
       };
+      // O AGENTE APRENDE: cada leitura bem-sucedida vota no padrão do leiloeiro ×
+      // modalidade. Só de documento que PERTENCE ao lote (extratos divergentes já
+      // foram descartados acima) — o consenso não pode ser envenenado por edital alheio.
+      if (extratoDoc.pagamento && !extratoDoc.deCache) {
+        try { await pagamentoAprender(fonteDb, String(imDb?.modalidade || ''), extratoDoc.pagamento); } catch { /* best-effort */ }
+      }
+    }
+    // EDITAL NÃO LIDO (escaneado/judicial/sem PDF): herda o CONSENSO aprendido do
+    // leiloeiro × modalidade, sempre rotulado como estimativa com a base declarada —
+    // o cliente vê "padrão deste leiloeiro (N editais lidos)", nunca um número órfão.
+    if (!mercado.condicoesEdital?.regrasPagamento && fonteDb) {
+      try {
+        const prior = await pagamentoPrior(fonteDb, String(imDb?.modalidade || ''));
+        if (prior) {
+          const { amostras, ...regras } = prior;
+          mercado.condicoesEdital = {
+            ...(mercado.condicoesEdital || {}),
+            regrasPagamento: regras,
+            regrasOrigem: 'padrao_leiloeiro',
+            regrasAmostras: amostras,
+          };
+        }
+      } catch { /* best-effort */ }
     }
     // VALOR type-correct: o avaliador (IA) calcula valorEstimadoImovel pelo MÉTODO DO TIPO
     // (m² privativo/construído, m² de terreno, hectare, terreno excedente à parte) — preferimos

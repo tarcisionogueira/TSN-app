@@ -18,6 +18,7 @@ import { aprenderNaEmissao, vicioRegen } from './_aprendizado.js';
 import { consultarComunicaDJEN } from './_laudo-fontes.js';
 import { consultarCertidoesFiscais } from './_certidoes-fontes.js';
 import { geocodificarCascata, coordValida, rankNivel } from './_geo.js';
+import { cacheGravar } from './_doc-extracao.js';
 import { urlDocumento } from './_storage.js';
 import { hostExternoSeguro } from './_allowed-hosts.js';
 
@@ -1606,6 +1607,26 @@ export default async function handler(req, res) {
       await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}`, {
         method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ ficha_juridica: fj }),
       });
+      // WRITE-THROUGH no cache de extração (05/08): a leitura por VISÃO do documental é
+      // a mais cara e a mais precisa — publicá-la em doc_extracoes faz o mercadológico
+      // (e o laudo) herdarem metragem/nº da matrícula sem reler nada. Confiança 90 >
+      // regex 60: o determinístico nunca sobrescreve o que a visão já leu. Chaveado por
+      // IMÓVEL (a visão lê o conjunto de documentos do lote, não uma URL isolada).
+      try {
+        const ex = parsed.extracao || {};
+        await cacheGravar(`i:${String(imovelId)}`, {
+          imovelId: String(imovelId), tipoDoc: 'matricula', via: 'visao', confianca: 90,
+          campos: {
+            matricula: {
+              areaPrivativaM2: Number(ex.areaPrivativaM2) || null,
+              areaTotalM2: Number(ex.areaTotalM2) || null,
+              areaTerrenoM2: Number(ex.areaTerrenoM2) || null,
+              numeroMatricula: String(ex.numeroMatricula || '').trim() || null,
+            },
+            ...(String(ex.formaPagamento || '').trim() ? { pagamentoTexto: String(ex.formaPagamento).slice(0, 800) } : {}),
+          },
+        });
+      } catch { /* cache é acelerador */ }
     } catch { /* não bloqueia o laudo */ }
 
     // Data do leilão/prazo de propostas: a lista em massa da Caixa vem SEM data para

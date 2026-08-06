@@ -10,6 +10,7 @@
 import { hostExternoSeguro, fetchExternoSeguro } from './_allowed-hosts.js';
 import { carregarPDFParse } from './_pdf-safe.js';
 import { extrairDatasLeilao } from './enriquecer-lote.js';
+import { cacheLer, cacheGravar, chaveUrl, chaveConteudo, extrairMatriculaTexto, extrairPagamentoTexto } from './_doc-extracao.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -65,7 +66,7 @@ export function extrairCondicoes(texto) {
 }
 
 // Baixa e devolve o TEXTO de um candidato (PDF → pdf-parse; HTML → sem tags), ou null.
-async function lerTexto(url, deadline) {
+export async function lerTexto(url, deadline) {
   if (!hostExternoSeguro(url)) return null;
   const budget = deadline - Date.now();
   if (budget < 3000) return null;
@@ -126,10 +127,33 @@ export async function extratoEdital(imovelId, { deadline } = {}) {
   ].filter(u => u && /^https?:\/\//i.test(u)))].slice(0, 3);
   for (const url of cands) {
     if (Date.now() > fim) break;
-    const txt = await lerTexto(url, fim);
-    if (!txt) continue;
-    const cond = extrairCondicoes(txt);
-    if (!cond) continue;
+    // CACHE-FIRST por URL canônica (querystring de signed URL fora): outro relatório
+    // — ou a regeneração deste — já leu este edital → pula download+parse inteiros.
+    // Só os FATOS do documento vêm do cache; `pertenceAoLote` é POR LOTE (o mesmo
+    // edital cobre vários) e é sempre recalculado abaixo contra os valores DESTE lote.
+    let cond = null, datas = null, pagamento = null, deCache = false;
+    const hit = await cacheLer(chaveUrl(url));
+    if (hit?.campos?.condicoes) {
+      cond = hit.campos.condicoes; datas = hit.campos.datas || null;
+      pagamento = hit.campos.pagamento || null; deCache = true;
+    } else {
+      const txt = await lerTexto(url, fim);
+      if (!txt) continue;
+      cond = extrairCondicoes(txt);
+      if (!cond) continue;
+      // Datas do ATO (início/encerramento) direto do texto — só têm valor quando as
+      // praças não trouxeram data; vão à parte, sem interferir no que já existia.
+      try { const d = extrairDatasLeilao(txt, { estrito: true }); if (d.inicio || d.fim) datas = d; } catch { /* best-effort */ }
+      // Pagamento ESTRUTURADO (fluxo de caixa) e metragem que o EDITAL às vezes traz —
+      // grátis, no mesmo texto já baixado. Grava no cache pelas DUAS chaves: URL
+      // (lookup pré-download) e conteúdo (idempotência entre URLs do mesmo PDF).
+      pagamento = extrairPagamentoTexto(txt);
+      const mat = extrairMatriculaTexto(txt);
+      const campos = { condicoes: cond, datas, pagamento, ...(mat ? { matricula: mat } : {}) };
+      const meta = { url, imovelId, tipoDoc: 'edital', campos, via: 'regex', confianca: 60 };
+      await cacheGravar(chaveUrl(url), meta);
+      await cacheGravar(chaveConteudo(txt), meta);
+    }
     const vmin = Number(im.valor_minimo) || 0;
     const aval = Number(im.valor_avaliacao) || 0;
     let pertence = true;
@@ -142,11 +166,54 @@ export async function extratoEdital(imovelId, { deadline } = {}) {
       const razao = cond.avaliacao / aval;
       if (razao < 0.5 || razao > 2) pertence = false;
     }
-    // Datas do ATO (início/encerramento) direto do texto — só têm valor quando as praças
-    // não trouxeram data; por isso vão à parte, sem interferir em nada do que já existia.
-    let datas = null;
-    try { const d = extrairDatasLeilao(txt, { estrito: true }); if (d.inicio || d.fim) datas = d; } catch { /* best-effort */ }
-    return { ...cond, datas, fonteUrl: url, pertenceAoLote: pertence };
+    return { ...cond, pagamento, datas, fonteUrl: url, pertenceAoLote: pertence, deCache };
+  }
+  return null;
+}
+
+/**
+ * METRAGEM/Nº DA MATRÍCULA para o mercadológico — determinística e com cache, SEM
+ * depender do laudo documental (que continua sendo quem lê matrícula escaneada por
+ * visão). Casos documentados de divergência de metragem anúncio×matrícula pedem a
+ * área REAL antes do R$/m². Candidatos: anexos tipo matrícula → link_matricula →
+ * anexo do acervo (imovel_anexos). Best-effort: null nunca degrada o relatório.
+ */
+export async function extratoMatricula(imovelId, { deadline } = {}) {
+  if (!SUPABASE_URL || !SERVICE_KEY) return null;
+  const fim = Number(deadline) || (Date.now() + 30000);
+  let im = null, anexoAcervo = null;
+  try {
+    const hdr = { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` } };
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/imoveis_leilao?id=eq.${encodeURIComponent(imovelId)}&select=link_matricula,anexos&limit=1`, hdr);
+    [im] = await r.json();
+    const ra = await fetch(`${SUPABASE_URL}/rest/v1/imovel_anexos?imovel_id=eq.${encodeURIComponent(imovelId)}&tipo=eq.matricula&select=url&limit=1`, hdr);
+    [anexoAcervo] = await ra.json().catch(() => []);
+  } catch { return null; }
+  if (!im) return null;
+  // 1º: leitura por VISÃO do documental (confiança 90), publicada por imóvel. É a mais
+  // precisa e já foi paga — se existe, nada é baixado nem re-lido.
+  const porImovel = await cacheLer(`i:${String(imovelId)}`, { maxDias: 36500 });
+  if (Number(porImovel?.campos?.matricula?.areaPrivativaM2) > 0) {
+    return { ...porImovel.campos.matricula, fonteUrl: null, deCache: true, via: 'visao' };
+  }
+  const anexos = Array.isArray(im.anexos) ? im.anexos : [];
+  const cands = [...new Set([
+    ...anexos.filter(a => a?.tipo === 'matricula').map(a => a.url),
+    im.link_matricula,
+    anexoAcervo?.url,
+  ].filter(u => u && /^https?:\/\//i.test(u) && !/matricula\.asp|detalhe-imovel\.asp/i.test(u)))].slice(0, 3);
+  for (const url of cands) {
+    if (Date.now() > fim) break;
+    const hit = await cacheLer(chaveUrl(url));
+    if (hit?.campos?.matricula) return { ...hit.campos.matricula, fonteUrl: url, deCache: true };
+    const txt = await lerTexto(url, fim);
+    if (!txt) continue;
+    const mat = extrairMatriculaTexto(txt);
+    if (!mat) continue; // PDF escaneado/sem âncora → fica p/ a visão do documental
+    const meta = { url, imovelId, tipoDoc: 'matricula', campos: { matricula: mat }, via: 'regex', confianca: 60 };
+    await cacheGravar(chaveUrl(url), meta);
+    await cacheGravar(chaveConteudo(txt), meta);
+    return { ...mat, fonteUrl: url, deCache: false };
   }
   return null;
 }

@@ -300,8 +300,17 @@ export default function IndiceConsulta() {
                 {Number(reg.total_anuncios) > 0 && <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 3 }}>{reg.total_anuncios} anúncio(s) · {reg.n_recentes || 0} recente(s)</div>}
               </div>
               <div style={{ background: 'white', borderRadius: 12, padding: '14px 16px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#7c3aed', fontSize: 11, fontWeight: 700 }}><Building2 size={13} /> LOCAÇÃO</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#7c3aed', fontSize: 11, fontWeight: 700 }}><Building2 size={13} /> LOCAÇÃO{reg.aluguel_estimado ? <span style={{ marginLeft: 6, fontSize: 9, fontWeight: 800, padding: '1px 6px', borderRadius: 999, background: '#fff7ed', color: '#c2410c' }}>ESTIMADO</span> : null}</div>
                 <div style={{ fontSize: 22, fontWeight: 900, color: '#7c3aed', marginTop: 4 }}>{Number(reg.aluguel_m2) > 0 ? `${brl(reg.aluguel_m2)}/m²·mês` : 'em formação'}</div>
+                {/* O aluguel só é MEDIDO quando há anúncio de locação COM metragem. Sem isso, o
+                    número é a regra de bolso de 0,4%/mês sobre a venda — que subestima região de
+                    padrão alto. Dizer isso na cara evita ler estimativa como mercado observado. */}
+                {reg.aluguel_estimado && (
+                  <div style={{ fontSize: 10, color: '#c2410c', marginTop: 3, lineHeight: 1.45 }}>
+                    Estimativa por {reg.aluguel_estimado_base || '0,4%/mês sobre a venda'} — ainda sem anúncio de locação com metragem nesta região.
+                    {Number(reg.aluguel_mensal_mediano) > 0 ? ` Aluguel mediano anunciado: ${brl(reg.aluguel_mensal_mediano)}/mês (${reg.n_locacao_sem_area} anúncio(s) sem área).` : ''}
+                  </div>
+                )}
               </div>
             </div>
             {reg.ponderacao?.misturado && Number(reg.ponderacao.ticket_medio) > 0 && (
