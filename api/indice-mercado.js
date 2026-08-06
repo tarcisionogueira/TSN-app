@@ -66,8 +66,17 @@ export default async function handler(req, res) {
   const uf = String(body.uf || '').trim().toUpperCase();
   const bairroNorm = norm(body.bairro) || null;
   const tipoRaw = String(body.tipo || '').toLowerCase();
-  const todos = tipoRaw === 'todos';                       // 1 busca ampla cobre os 4 tipos (economia)
-  const tipo = todos ? 'todos' : (SEG_TIPOS.includes(tipoRaw) ? tipoRaw : 'apartamento');
+  // UMA PESQUISA = UM TIPO (decisão do dono, 06/08). A busca "todos os tipos numa tacada" foi a
+  // aposta inicial e não se sustentou: 4 tipos × 2 níveis dividem o MESMO teto de 16k de saída e
+  // as MESMAS 8 buscas, e o pedido não fecha no tempo — o Cauaxi estourou os 250s da função sem
+  // entregar nada, enquanto as pesquisas de tipo único do mesmo dia concluíram em 97s e 131s
+  // trazendo 70 e 85 amostras cada. Recusado no SERVIDOR, não só escondido na tela: caminho que
+  // não fecha no tempo não pode continuar alcançável.
+  if (tipoRaw === 'todos') {
+    res.status(400).json({ error: 'Escolha um tipo por vez (apartamento, casa, terreno ou comercial). Cada pesquisa cobre um tipo e vai somando à base.', motivo: 'tipo_unico' });
+    return;
+  }
+  const tipo = SEG_TIPOS.includes(tipoRaw) ? tipoRaw : 'apartamento';
   const lat = Number.isFinite(+body.lat) ? +body.lat : null;
   const lng = Number.isFinite(+body.lng) ? +body.lng : null;
   if (!cidadeNorm || !/^[A-Z]{2}$/.test(uf)) { res.status(400).json({ error: 'Informe a cidade e a UF (2 letras).' }); return; }
@@ -105,12 +114,12 @@ export default async function handler(req, res) {
       r = await anthropicFetch({
         method: 'POST', headers,
         body: JSON.stringify({
-          model: MODEL, max_tokens: todos ? 16000 : 12000,
+          model: MODEL, max_tokens: 12000,
           // web_search_20260209 (filtragem dinâmica): o modelo filtra os resultados da busca ANTES
           // de entrarem no contexto — mais acerto e menos token gasto com página irrelevante. Não
           // precisa de header beta nem de declarar code_execution junto (roda por baixo).
           tools: [{ type: 'web_search_20260209', name: 'web_search', max_uses: webUses }],
-          system: `Perito avaliador. ${todos ? 'Cubra os 4 tipos (apartamento, casa, terreno, comercial) e marque o "tipo" de CADA amostra.' : 'Só ' + tipo + '.'} Só mercado livre (descarte leilão). Retorne apenas JSON válido.`,
+          system: `Perito avaliador. Só ${tipo}. Só mercado livre (descarte leilão). Retorne apenas JSON válido.`,
           messages: [{ role: 'user', content: promptIndice({ endereco: body.endereco, condominio: body.condominio, bairro: body.bairro, tipo, cidade: body.cidade, uf, compacto }) }],
         }),
         // SEM retry interno: ele MULTIPLICA o relógio (150s + backoff + 150s ≈ 300s) e estoura o
@@ -154,14 +163,14 @@ export default async function handler(req, res) {
   }
 
   // Guarda as amostras e recomputa o índice ponderado.
-  const amostras = montarAmostras(mercado, { cidadeNorm, uf, bairroNorm, lat, lng, tipo, todos });
+  const amostras = montarAmostras(mercado, { cidadeNorm, uf, bairroNorm, lat, lng, tipo, todos: false });
   let inseridas = 0;
   if (amostras.length) inseridas = (await rpc('ingerir_amostras_indice', { p_amostras: amostras })) || 0;
   // Tempo REAL de cada pesquisa bem-sucedida — é o que permite calibrar o orçamento acima em
   // vez de estimar. Sem isto, a única duração observável era a das que estouravam.
   console.log('[indice-mercado] ok', { cidade: cidadeNorm, uf, tipo, segundos: Math.round((Date.now() - T0) / 1000), amostras: amostras.length, inseridas });
 
-  // Cobra 1 crédito só no SUCESSO (mesma regra para single e todos): cota mensal → crédito.
+  // Cobra 1 crédito só no SUCESSO: cota mensal → crédito. Uma pesquisa = um tipo = 1 crédito.
   const cobrar = async () => {
     if (ilimitado) return { ilimitado: true };
     if (cobrarCredito) {
@@ -182,21 +191,6 @@ export default async function handler(req, res) {
     return Array.isArray(r) ? r : [];
   };
 
-  if (todos) {
-    const porTipo = [];
-    for (const t of SEG_TIPOS) {
-      const p = await rpc('indice_regiao_ponderado', { p_cidade_norm: cidadeNorm, p_uf: uf, p_bairro_norm: bairroNorm, p_lat: lat, p_lng: lng, p_tipo: t });
-      // Aluguel só MEDIDO (regra do dono, 06/08): sem anúncio de locação, o campo vem vazio e a
-      // tela diz que não localizou — melhor do que a regra de bolso de 0,4% sobre a venda.
-      if (p && p.venda_m2 != null) porTipo.push({ tipo: t, nivel: p.nivel, venda_m2: p.venda_m2,
-        aluguel_m2: t === 'terreno' ? null : (p.locacao_m2 != null ? p.locacao_m2 : null),
-        n_amostras: (p.n_venda || 0) + (p.n_locacao || 0), regioes: await regioesDe(t) });
-    }
-    if (!porTipo.length) { res.status(200).json({ ok: true, gerado: false, motivo: 'sem_amostras', inseridas }); return; }
-    const cota = await cobrar();
-    res.status(200).json({ ok: true, gerado: true, todos: true, fonte: 'mercado', inseridas, porTipo, cota });
-    return;
-  }
 
   const pond = await rpc('indice_regiao_ponderado', { p_cidade_norm: cidadeNorm, p_uf: uf, p_bairro_norm: bairroNorm, p_lat: lat, p_lng: lng, p_tipo: tipo });
   if (!pond || pond.venda_m2 == null) { res.status(200).json({ ok: true, gerado: false, motivo: 'sem_amostras', inseridas }); return; }

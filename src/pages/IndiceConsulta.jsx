@@ -73,10 +73,17 @@ export default function IndiceConsulta() {
   // Gera o índice de MERCADO desta localidade: pesquisa web ao vivo (api/indice-mercado),
   // guarda as amostras (peso por data) e reconsulta p/ exibir. Cobra cota/crédito no servidor.
   // Passa endereço + condomínio → Nível 1 (mesmo condomínio/rua, ≤250 m), como no mercadológico.
-  const gerar = async () => {
-    setGerando(true); setGerMsg('');
+  // UMA PESQUISA = UM TIPO (decisão do dono, 06/08). O botão "gerar todos os tipos de uma vez"
+  // saiu: os 4 tipos dividiam o mesmo teto de saída e as mesmas buscas, e o pedido não fechava no
+  // tempo — no Cauaxi estourou os 250s sem entregar nada. Agora cada tipo é uma pesquisa própria,
+  // com o relógio zerado, e a base vai somando. `tipoAlvo` diz qual tipo pesquisar; sem ele, usa
+  // o do seletor (que nunca é 'todos' aqui — o servidor recusa).
+  const gerar = async (tipoAlvo) => {
+    const tipoPesquisa = tipoAlvo || (form.tipo === 'todos' ? null : form.tipo);
+    if (!tipoPesquisa) { setGerMsg('Escolha um tipo para pesquisar.'); return; }
+    setGerando(tipoPesquisa); setGerMsg('');
     try {
-      const r = await apiCall('/api/indice-mercado', { method: 'POST', body: JSON.stringify(form) });
+      const r = await apiCall('/api/indice-mercado', { method: 'POST', body: JSON.stringify({ ...form, tipo: tipoPesquisa }) });
       // O corpo NEM SEMPRE é JSON: quando a função estoura o tempo, quem responde é a Vercel,
       // com uma página de erro em TEXTO. O `r.json()` direto explodia e o usuário via
       // "Unexpected token 'A', "An error o"... is not valid JSON" — mensagem de dentro do
@@ -90,9 +97,14 @@ export default function IndiceConsulta() {
         setGerando(false); return;
       }
       if (!r.ok) { setGerMsg(d.error || 'Não foi possível gerar.'); setGerando(false); return; }
-      if (!d.gerado) { setGerMsg('A pesquisa não encontrou amostras de mercado suficientes nesta localidade. Tente uma cidade/bairro maior.'); setGerando(false); return; }
+      if (!d.gerado) { setGerMsg(`Não encontramos anúncios de ${TIPO_LABEL[tipoPesquisa] || tipoPesquisa} nesta localidade.`); setGerando(false); return; }
       const dc = await consultarDe(form).catch(() => null);
-      if (dc) { setRes(dc); setGerMsg(d.inseridas ? `Pesquisa concluída — ${d.inseridas} amostra(s) nova(s) na base.` : 'Índice atualizado.'); }
+      if (dc) {
+        setRes(dc);
+        setGerMsg(d.inseridas
+          ? `${TIPO_LABEL[tipoPesquisa] || tipoPesquisa}: ${d.inseridas} amostra(s) nova(s) na base. Pesquise outro tipo para completar.`
+          : `${TIPO_LABEL[tipoPesquisa] || tipoPesquisa} atualizado.`);
+      }
     } catch (e) { setGerMsg(e.message || 'Falha ao gerar.'); }
     setGerando(false);
   };
@@ -197,22 +209,29 @@ export default function IndiceConsulta() {
       {res && res.todos && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div style={{ fontSize: 14, fontWeight: 800, color: '#111' }}>Índice por tipo — {localLabel || `${form.cidade}/${form.uf}`}</div>
+          {/* UM TIPO POR PESQUISA. O botão único "gerar os 4 de uma vez" saiu: dividia o mesmo
+              orçamento de saída e de buscas entre quatro tipos e não fechava no tempo. Aqui cada
+              tipo tem o seu botão — pesquisa uma coisa de cada vez e a base vai somando. */}
           {res.porTipo.some(t => !t.mapeado) && (
             <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 12, padding: '12px 16px' }}>
               <div style={{ fontSize: 13, color: '#78350f', lineHeight: 1.5, marginBottom: podeGerar ? 10 : 0 }}>
                 {res.porTipo.filter(t => !t.mapeado).map(t => TIPO_LABEL[t.tipo]).join(', ')} ainda sem índice aqui.
-                {podeGerar ? ' Uma única pesquisa cobre todos os tipos.' : ' Nos planos pagos você gera na hora.'}
+                {podeGerar ? ' Pesquise um tipo de cada vez — cada pesquisa é mais profunda e vai somando à base.' : ' Nos planos pagos você gera na hora.'}
               </div>
               {gerMsg && <div style={{ fontSize: 12.5, color: '#92400e', background: '#fef3c7', borderRadius: 8, padding: '8px 10px', marginBottom: 10 }}>{gerMsg}</div>}
               {podeGerar ? (
-                <button onClick={gerar} disabled={gerando}
-                  style={{ padding: '9px 16px', background: gerando ? '#94a3b8' : '#d97706', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 13, cursor: gerando ? 'wait' : 'pointer' }}>
-                  {gerando ? 'Pesquisando o mercado…' : '⚡ Gerar todos os tipos (1 pesquisa)'}
-                </button>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {res.porTipo.filter(t => !t.mapeado).map((t) => (
+                    <button key={t.tipo} onClick={() => gerar(t.tipo)} disabled={!!gerando}
+                      style={{ padding: '9px 14px', background: gerando === t.tipo ? '#94a3b8' : gerando ? '#cbd5e1' : '#d97706', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 13, cursor: gerando ? 'wait' : 'pointer' }}>
+                      {gerando === t.tipo ? `Pesquisando ${TIPO_LABEL[t.tipo]}…` : `⚡ Pesquisar ${TIPO_LABEL[t.tipo]}`}
+                    </button>
+                  ))}
+                </div>
               ) : (
                 <button onClick={() => nav('/planos')} style={{ padding: '9px 16px', background: '#d97706', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 13, cursor: 'pointer' }}>Ver planos</button>
               )}
-              {podeGerar && effectiveRole !== 'admin' && <div style={{ fontSize: 11, color: '#a16207', marginTop: 8 }}>Consome 1 do seu limite mensal de índice (uma pesquisa cobre os 4 tipos).</div>}
+              {podeGerar && effectiveRole !== 'admin' && <div style={{ fontSize: 11, color: '#a16207', marginTop: 8 }}>Cada pesquisa consome 1 do seu limite mensal de índice.</div>}
             </div>
           )}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10 }}>
@@ -287,10 +306,19 @@ export default function IndiceConsulta() {
                 : <>Quer atualizar? A pesquisa varre os portais e imobiliárias <strong>agora</strong>, ancorada em {form.nivelConsulta === 'rua' ? 'condomínio/rua (250 m) e vizinhança (1 km)' : form.nivelConsulta === 'bairro' ? 'bairro e adjacências' : 'cidade'}, e guarda as amostras novas.</>}
             </div>
             {gerMsg && <div style={{ fontSize: 12.5, color: '#92400e', background: '#fef3c7', borderRadius: 8, padding: '8px 10px', marginBottom: 10 }}>{gerMsg}</div>}
-            <button onClick={gerar} disabled={gerando}
-              style={{ padding: '9px 16px', background: gerando ? '#94a3b8' : (largo ? '#d97706' : '#0D63DB'), color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 13, cursor: gerando ? 'wait' : 'pointer' }}>
-              {gerando ? 'Pesquisando o mercado…' : largo ? '⚡ Pesquisar este endereço agora' : '⚡ Atualizar a pesquisa desta localidade'}
-            </button>
+            {/* Em "todos os tipos" a ação é POR TIPO — um botão para cada, um de cada vez. */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {(res.todos ? res.porTipo.map(t => t.tipo) : [form.tipo]).map((t) => (
+                <button key={t} onClick={() => gerar(t)} disabled={!!gerando}
+                  style={{ padding: '9px 16px', background: gerando === t ? '#94a3b8' : gerando ? '#cbd5e1' : (largo ? '#d97706' : '#0D63DB'), color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 13, cursor: gerando ? 'wait' : 'pointer' }}>
+                  {gerando === t
+                    ? `Pesquisando ${TIPO_LABEL[t] || t}…`
+                    : res.todos
+                      ? `⚡ ${largo ? 'Pesquisar' : 'Atualizar'} ${TIPO_LABEL[t] || t}`
+                      : (largo ? '⚡ Pesquisar este endereço agora' : '⚡ Atualizar a pesquisa desta localidade')}
+                </button>
+              ))}
+            </div>
             {effectiveRole !== 'admin' && (
               <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 8 }}>Consome 1 do seu limite mensal de índice; esgotado, usa crédito.</div>
             )}
@@ -311,9 +339,9 @@ export default function IndiceConsulta() {
           </div>
           {gerMsg && <div style={{ fontSize: 12.5, color: '#92400e', background: '#fef3c7', borderRadius: 8, padding: '8px 10px', marginBottom: 12 }}>{gerMsg}</div>}
           {podeGerar ? (
-            <button onClick={gerar} disabled={gerando}
+            <button onClick={() => gerar()} disabled={!!gerando}
               style={{ padding: '10px 18px', background: gerando ? '#94a3b8' : '#d97706', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 13, cursor: gerando ? 'wait' : 'pointer' }}>
-              {gerando ? 'Pesquisando o mercado…' : '⚡ Gerar índice agora'}
+              {gerando ? `Pesquisando ${TIPO_LABEL[gerando] || gerando}…` : '⚡ Gerar índice agora'}
             </button>
           ) : (
             <button onClick={() => nav('/planos')} style={{ padding: '10px 18px', background: '#d97706', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 13, cursor: 'pointer' }}>
