@@ -96,6 +96,7 @@ export default async function handler(req, res) {
   // Pesquisa mercadológica ao vivo (busca web). Igual ao relatório: 1ª tentativa ARROJADA (8
   // buscas) e, se travar OU vier JSON truncado (parseJSON=null numa cidade grande), 2ª tentativa
   // ESTREITA (3 buscas) que costuma CONCLUIR — evita 502 e "0 amostras" numa pesquisa cara.
+  const T0 = Date.now();
   let custoMicro = 0, mercado = null, motivoFalha = null;
   const headers = { 'x-api-key': CLAUDE_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' };
   const buscar = async (webUses, timeoutMs, compacto = false) => {
@@ -112,9 +113,10 @@ export default async function handler(req, res) {
           system: `Perito avaliador. ${todos ? 'Cubra os 4 tipos (apartamento, casa, terreno, comercial) e marque o "tipo" de CADA amostra.' : 'Só ' + tipo + '.'} Só mercado livre (descarte leilão). Retorne apenas JSON válido.`,
           messages: [{ role: 'user', content: promptIndice({ endereco: body.endereco, condominio: body.condominio, bairro: body.bairro, tipo, cidade: body.cidade, uf, compacto }) }],
         }),
-        // 1 retry na tentativa ampla: um único 429/529 da Anthropic derrubava a pesquisa inteira
-        // (o usuário via "falhou, tente novamente" por causa de um pico de fila).
-      }, { retries: compacto ? 0 : 1, timeoutMs, noFallback: true });
+        // SEM retry interno: ele MULTIPLICA o relógio (150s + backoff + 150s ≈ 300s) e estoura o
+        // maxDuration de 250s antes de a 2ª tentativa existir — foi o 504 de 13:43. Quem faz o
+        // papel de retry é a 2ª tentativa (compacta), que é orçada e cabe no tempo.
+      }, { retries: 0, timeoutMs, noFallback: true });
     } catch (e) {
       motivoFalha = `rede/timeout: ${e?.name || ''} ${e?.message || ''}`.trim();
       throw e;
@@ -128,11 +130,25 @@ export default async function handler(req, res) {
     if (!json) motivoFalha = `JSON incompleto (stop_reason=${data?.stop_reason}, output_tokens=${data?.usage?.output_tokens}, buscas=${data?.usage?.server_tool_use?.web_search_requests})`;
     return json;
   };
-  try { mercado = await buscar(8, 150000); } catch { mercado = null; }
-  // 2ª tentativa ESTREITA e COMPACTA: menos buscas e menos amostras pedidas.
-  if (!mercado) { try { mercado = await buscar(3, 80000, true); } catch { mercado = null; } }
+  // ORÇAMENTO DE TEMPO (achado 06/08 — 504 "Task timed out after 250 seconds"): os timeouts
+  // eram FIXOS (150s + 80s) e não conversavam com o maxDuration. Somados ao overhead já
+  // raspavam o teto; com um retry interno passavam dele, e o cliente recebia a página de erro
+  // da Vercel em texto puro no lugar do nosso JSON. Agora o relógio manda: a 1ª tentativa nunca
+  // invade o tempo reservado da 2ª, e a 2ª só começa se REALMENTE couber.
+  const FOLGA_MS = 25000;                    // ingestão das amostras + montagem da resposta
+  const ORCAMENTO_MS = 250000 - FOLGA_MS;    // maxDuration da função menos a folga
+  const restante = () => ORCAMENTO_MS - (Date.now() - T0);
+  const t1 = Math.min(120000, Math.max(30000, restante() - 90000));
+  try { mercado = await buscar(8, t1); } catch { mercado = null; }
+  // 2ª tentativa ESTREITA e COMPACTA: menos buscas e menos amostras pedidas. Só entra com
+  // tempo de sobra real — melhor devolver o motivo da 1ª falha do que morrer no timeout.
+  if (!mercado && restante() > 35000) {
+    try { mercado = await buscar(3, Math.min(80000, restante() - 15000), true); } catch { mercado = null; }
+  } else if (!mercado) {
+    motivoFalha = `${motivoFalha || 'falha na 1ª tentativa'} | sem orçamento de tempo para a 2ª (restavam ${Math.round(restante() / 1000)}s)`;
+  }
   if (!mercado) {
-    console.error('[indice-mercado] pesquisa falhou', { cidade: cidadeNorm, uf, tipo, bairro: bairroNorm, motivo: motivoFalha });
+    console.error('[indice-mercado] pesquisa falhou', { cidade: cidadeNorm, uf, tipo, bairro: bairroNorm, segundos: Math.round((Date.now() - T0) / 1000), motivo: motivoFalha });
     res.status(502).json({ error: 'A pesquisa de mercado falhou. Tente novamente.', detalhe: motivoFalha || 'busca instável' });
     return;
   }
@@ -141,6 +157,9 @@ export default async function handler(req, res) {
   const amostras = montarAmostras(mercado, { cidadeNorm, uf, bairroNorm, lat, lng, tipo, todos });
   let inseridas = 0;
   if (amostras.length) inseridas = (await rpc('ingerir_amostras_indice', { p_amostras: amostras })) || 0;
+  // Tempo REAL de cada pesquisa bem-sucedida — é o que permite calibrar o orçamento acima em
+  // vez de estimar. Sem isto, a única duração observável era a das que estouravam.
+  console.log('[indice-mercado] ok', { cidade: cidadeNorm, uf, tipo, segundos: Math.round((Date.now() - T0) / 1000), amostras: amostras.length, inseridas });
 
   // Cobra 1 crédito só no SUCESSO (mesma regra para single e todos): cota mensal → crédito.
   const cobrar = async () => {

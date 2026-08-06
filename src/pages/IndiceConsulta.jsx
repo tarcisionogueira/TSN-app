@@ -77,7 +77,18 @@ export default function IndiceConsulta() {
     setGerando(true); setGerMsg('');
     try {
       const r = await apiCall('/api/indice-mercado', { method: 'POST', body: JSON.stringify(form) });
-      const d = await r.json();
+      // O corpo NEM SEMPRE é JSON: quando a função estoura o tempo, quem responde é a Vercel,
+      // com uma página de erro em TEXTO. O `r.json()` direto explodia e o usuário via
+      // "Unexpected token 'A', "An error o"... is not valid JSON" — mensagem de dentro do
+      // motor, que não diz nada a quem está esperando o índice.
+      const bruto = await r.text();
+      let d = null; try { d = JSON.parse(bruto); } catch { /* resposta não-JSON (erro de plataforma) */ }
+      if (!d) {
+        setGerMsg(/timeout|timed out/i.test(bruto)
+          ? 'A pesquisa passou do tempo limite desta região. Tente de novo — a 2ª tentativa é mais enxuta e costuma concluir.'
+          : 'A pesquisa não respondeu a tempo. Tente novamente em instantes.');
+        setGerando(false); return;
+      }
       if (!r.ok) { setGerMsg(d.error || 'Não foi possível gerar.'); setGerando(false); return; }
       if (!d.gerado) { setGerMsg('A pesquisa não encontrou amostras de mercado suficientes nesta localidade. Tente uma cidade/bairro maior.'); setGerando(false); return; }
       const dc = await consultarDe(form).catch(() => null);
