@@ -593,6 +593,40 @@ coluna não existia quando foram capturadas); as novas nascem completas.
 Desligar, se precisar: `MERCADO_MODO_BASE=0`. Ajustar a exigência: `MERCADO_BASE_MIN` (padrão 12).
 A economia real aparece sozinha no painel **Custo por geração** — que é exatamente para isso.
 
+### 📎 15) Nota metodológica no rodapé de tudo (o referenciamento de apresentação)
+
+Pedido do dono: *"assim como funciona em apresentações fazendo o referenciamento, ter as letras
+pequenas no rodapé dizendo a metodologia de pesquisa e de análise realizada, para resguardo das
+informações em cima de um parecer. Isso vale para todos os relatórios e índices."*
+
+Componente único (`src/components/NotaMetodologica.jsx`), na TELA e no PDF dos três relatórios e
+do Índice. **A regra que faz isso valer alguma coisa: o rodapé é montado dos FATOS daquela
+geração, não é texto fixo.** Rodapé que repete a mesma frase em todo relatório não resguarda
+nada; resguarda o que BATE com o relatório acima dele. Então ele diz, conforme o caso:
+
+- comparáveis de **pesquisa** (com a data) × da **base própria** (com o período) × do **Índice**
+  (declarando que não é comparativo ao vivo) × **reaproveitados**;
+- qual **área prevaleceu** (matrícula × anúncio) e a divergência quando houve;
+- se o **edital foi lido** ou se as condições vieram do consenso aprendido do leiloeiro;
+- mediana × média, descarte de anúncio de leilão, locação sem metragem fora da amostra;
+- no documental: peças lidas, CNJ/DJEN/certidões que responderam, e o que **não** é automático
+  (CNDT, CNIB, protesto);
+- no laudo: é **síntese sem fonte nova**, e de que versão dos dois relatórios;
+- no Índice: percentis das faixas, valor projetado quando é o caso, e por que o aluguel não sai.
+
+Fecha com a ressalva fixa: **não é laudo NBR 14653 nem parecer jurídico**, não substitui vistoria,
+leitura integral do edital/matrícula nem profissional habilitado.
+
+Para os três relatórios e o Índice, os geradores passaram a publicar `metodologia` no result —
+fatos estruturados, não frase pronta. Relatório emitido ANTES de 06/08 não tem esses fatos: o
+rodapé mostra só a ressalva, nunca uma metodologia que não podemos comprovar.
+
+**🔴 Bug encontrado ao fazer isso: a divergência de área nunca chegava ao cliente.** O
+mercadológico calculava `divergenciaArea` (anúncio × matrícula), registrava a anomalia interna e
+**a variável morria ali** — apesar de o comentário do bloco prometer "aviso EXPLÍCITO no
+relatório". O cliente via a área da matrícula sem saber que o anúncio dizia outra coisa. Agora vai
+no `result`, aparece no rodapé e no PDF.
+
 ### Próximo passo desta sessão
 
 Re-verificação adversarial dos 16 achados de `docs/VARREDURA_BUGS_2026-08-05.md` marcados

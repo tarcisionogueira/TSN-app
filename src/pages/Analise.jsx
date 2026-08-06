@@ -25,6 +25,7 @@ import { gerarDocumentalPDF } from '../components/DocumentalPDF';
 import { gerarCombinadoPDF } from '../components/CombinadoPDF';
 import { scoreBidPro, scoreLabel } from '../utils/score';
 import { apiCall } from '../utils/apiCall';
+import NotaMetodologica from '../components/NotaMetodologica';
 
 // Rótulos do tipo de ocupação no Raio-X jurídico (Fase 1).
 const OCUP_LABEL_A = {
@@ -1228,7 +1229,7 @@ export default function Analise() {
     if (relSel === 'laudo' && relLaudoGerado && laudoEntry?.result) {
       return gerarLaudoPDF({ imovel: d, laudo: laudoEntry.result, cab: cabPDF });
     }
-    return gerarPDF({ d, metricas, metricasTeto, teto, isAVista, isUsoProprio, isViavel, fluxo, sacTab, priceTab, mercado, parecer, indicadores, cab: cabPDF });
+    return gerarPDF({ d, metricas, metricasTeto, teto, isAVista, isUsoProprio, isViavel, fluxo, sacTab, priceTab, mercado, parecer, indicadores, divergenciaArea: analiseEntry?.result?.divergenciaArea || null, cab: cabPDF });
   };
 
   // "Baixar os 3": só liberado quando os TRÊS relatórios estão prontos. Gera um
@@ -2539,6 +2540,15 @@ export default function Analise() {
 
           </div>
         )}
+
+        {/* Nota metodológica do relatório ABERTO (documental/laudo). Fica aqui, e não dentro
+            de cada bloco, para o rodapé acompanhar o relatório que o cliente está lendo. */}
+        {relSel === 'documental' && parecerDocumental && !parecerDocumental.precisaDocumentos && (
+          <NotaMetodologica tipo="documental" dados={parecerDocumental} />
+        )}
+        {relSel === 'laudo' && laudoEntry?.result && !laudoEntry.result.precisaRelatorios && (
+          <NotaMetodologica tipo="laudo" dados={laudoEntry.result} />
+        )}
       </Section>}
 
       {/* ── ETAPA 2: DADOS DO IMÓVEL ── */}
@@ -3661,6 +3671,13 @@ export default function Analise() {
           )}
         </div>
       </div>
+
+      {/* ── NOTA METODOLÓGICA (rodapé em letra pequena) ────────────────────────────────
+          Pedido do dono: o referenciamento de apresentação — a metodologia de pesquisa e de
+          análise no rodapé, para resguardo do que sustenta o parecer. Montada dos FATOS desta
+          geração (origem dos comparáveis, período, área que prevaleceu, documento lido), não
+          de texto fixo: rodapé que repete a mesma frase em todo relatório não resguarda nada. */}
+      <NotaMetodologica tipo="mercadologico" dados={analiseEntry?.result || { mercado }} />
 
       </>)}
 

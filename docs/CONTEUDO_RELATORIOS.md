@@ -163,6 +163,31 @@ amostras que colheram. Uma pesquisa = um tipo (apartamento, casa, terreno ou com
 
 ---
 
+## Nota metodológica (rodapé de todos os relatórios e do Índice)
+
+Todo relatório e toda consulta do Índice terminam com um **rodapé em letra pequena** —
+"Metodologia e ressalvas" — no padrão de referenciamento de apresentação. Ele existe para
+**resguardar a informação que sustenta o parecer**, e por isso é **montado dos fatos daquela
+geração**, nunca texto fixo:
+
+- se os comparáveis vieram de **pesquisa**, diz a data da pesquisa e o recorte;
+- se vieram da **base própria**, diz isso e o período dos anúncios;
+- se veio do **Índice** por falta de anúncio ativo, diz que não é comparativo ao vivo;
+- diz qual **área prevaleceu** (matrícula ou anúncio) e mostra a divergência quando houve;
+- diz se o **edital foi lido** ou se as condições vieram do padrão aprendido do leiloeiro;
+- lista as **referências externas** e as **bases públicas** que responderam;
+- no documental, lista as **peças lidas**, as consultas (CNJ, DJEN, certidões) e o que
+  **não** é consultado automaticamente;
+- no laudo, deixa claro que é **síntese sem fonte nova** e de que versão dos dois relatórios;
+- no Índice, explica mediana × média, os percentis das faixas e por que o aluguel não aparece.
+
+Fecha sempre com a ressalva fixa: caráter informativo e de apoio à decisão, informações de
+terceiros que podem conter erro de origem, **não é laudo NBR 14653 nem parecer jurídico**, e não
+substitui vistoria, leitura integral do edital e da matrícula, nem profissional habilitado.
+
+Relatório emitido ANTES de 06/08/2026 não tem os fatos estruturados: nesses, o rodapé mostra
+apenas a ressalva — nunca uma metodologia que não podemos comprovar.
+
 ## Regras que valem em todos
 
 1. **Número inventado não entra.** Sem amostra, o campo vem vazio com o motivo — nunca uma regra de bolso apresentada como mercado.

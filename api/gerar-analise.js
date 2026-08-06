@@ -2286,7 +2286,53 @@ COMO USAR (obrigatório): dedique um parágrafo aos CUSTOS DA OPERAÇÃO segundo
         && (((mercado?.nivel1?.vendas?.length || 0) + (mercado?.nivel2?.vendas?.length || 0)) === 0);
       // valorAvaliacao: fecha o loop servidor→tela — o valor confirmado no edital (garantir
       // Valores/extrato) chegava ao BANCO mas nunca voltava ao card já aberto ("Não informada").
-      const result = { mercado, parecer, valorMercado, valorLocacao, valorAvaliacao: avalDb > 0 ? avalDb : null, reaproveitado, pesquisaEm: mercado.pesquisaEm, mercadoVazio };
+      // ── NOTA METODOLÓGICA (pedido do dono, 06/08) ───────────────────────────────────────
+      // "Como funciona em apresentações: letras pequenas no rodapé dizendo a metodologia de
+      //  pesquisa e de análise realizada, para resguardo das informações em cima de um parecer."
+      //
+      // Fatos ESTRUTURADOS desta geração — não texto genérico. A frase é montada na tela a
+      // partir daqui, então o rodapé descreve o que ESTE relatório de fato fez: se pesquisou ou
+      // leu da base, quantas amostras, de que período, que documento foi lido, qual área
+      // prevaleceu. Um rodapé padrão que diz sempre a mesma coisa não resguarda nada; o que
+      // resguarda é ele bater com o relatório acima dele.
+      const nVend = (mercado.nivel1?.vendas?.length || 0) + (mercado.nivel2?.vendas?.length || 0);
+      const nLoc = (mercado.nivel1?.locacoes?.length || 0) + (mercado.nivel2?.locacoes?.length || 0);
+      const datasAmostra = [...(mercado.nivel1?.vendas || []), ...(mercado.nivel2?.vendas || []),
+        ...(mercado.nivel1?.locacoes || []), ...(mercado.nivel2?.locacoes || [])]
+        .map(a => String(a?.data || '')).filter(d => /^\d{4}-\d{2}/.test(d)).sort();
+      mercado.metodologia = {
+        geradoEm: new Date().toISOString(),
+        comparaveis: {
+          origem: mercado.__modoBase ? 'base_propria'
+            : mercado.fonteEstimativa === 'indice_bidpro' ? 'indice_bidpro'
+            : reaproveitado ? 'reaproveitado' : 'pesquisa_web',
+          motor: mercado.__diag?.motor || (mercado.__modoBase ? null : 'web'),
+          nVendas: nVend, nLocacoes: nLoc,
+          nivelBase: mercado.__modoBase?.nivel || null,
+          periodo: datasAmostra.length ? { de: datasAmostra[0].slice(0, 7), ate: datasAmostra[datasAmostra.length - 1].slice(0, 7) } : null,
+          pesquisaEm: mercado.pesquisaEm || null,
+        },
+        area: { valor: areaM2 || null, fonte: areaFonte, divergencia: divergenciaArea },
+        documento: {
+          editalLido: !!mercado.condicoesEdital?.fonte,
+          editalFonte: mercado.condicoesEdital?.fonte || null,
+          regrasOrigem: mercado.condicoesEdital?.regrasOrigem || (mercado.condicoesEdital?.regrasPagamento ? 'edital' : null),
+          custosLidos: !!mercado.condicoesEdital?.custos,
+        },
+        referencias: {
+          fipeZap: !!mercado.referenciaFipeZap?.encontrado,
+          zoneamento: !!mercado.zoneamento?.encontrado,
+          seguranca: !!mercado.segurancaPublica?.encontrado,
+          ibge: !!mercado.socio,
+          indiceBidPro: mercado.indiceBidPro?.nivel || null,
+          valorizacaoAnos: Array.isArray(mercado.valorizacao?.serie) ? mercado.valorizacao.serie.length : 0,
+        },
+      };
+      const result = { mercado, parecer, valorMercado, valorLocacao, valorAvaliacao: avalDb > 0 ? avalDb : null, reaproveitado, pesquisaEm: mercado.pesquisaEm, mercadoVazio,
+        // DIVERGÊNCIA DE ÁREA: era calculada, virava anomalia interna e MORRIA aqui — nunca
+        // chegava ao cliente, apesar de o comentário do bloco prometer "aviso EXPLÍCITO no
+        // relatório". Agora vai no result e a tela mostra.
+        divergenciaArea };
       return { result, valorMercado, avalDb, vminImovel };
     })()]);
 

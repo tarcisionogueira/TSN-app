@@ -6,6 +6,7 @@ import EnderecoAutocomplete from '../components/EnderecoAutocomplete';
 import { gerarIndicePDF } from '../components/IndicePDF';
 import { useAuth } from '../contexts/AuthContext';
 import CardDemografia from '../components/CardDemografia';
+import NotaMetodologica from '../components/NotaMetodologica';
 
 // Quem pode GERAR o índice de uma região nova (o servidor é a fonte da verdade — isto é só UI).
 const PODE_GERAR = ['admin', 'top2', 'top2_anual', 'assessorado', 'assessorado_anual', 'clube', 'clube_anual', 'analista', 'advogado'];
@@ -556,9 +557,9 @@ export default function IndiceConsulta() {
             </div>
           )}
 
-          <div style={{ fontSize: 11, color: '#94a3b8', lineHeight: 1.5 }}>
-            Base própria BidPro (anúncios de venda/locação e revendas confirmadas, com data). Não inclui preços de leilão/arremate. Referência de mercado — não é avaliação formal.
-          </div>
+          {/* Rodapé metodológico — mesmo padrão dos relatórios: montado do que ESTA consulta
+              devolveu (recorte, nº de amostras, se o valor foi projetado, se há aluguel medido). */}
+          <NotaMetodologica tipo="indice" dados={res?.regiao} extra={form.tipo === 'todos' ? null : form.tipo} compacto />
         </div>
       )}
     </div>

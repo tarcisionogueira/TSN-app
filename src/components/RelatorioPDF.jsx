@@ -1,6 +1,10 @@
 import { fmt, fmtPct } from '../utils/calculos';
 import { imprimirHtml } from './pdfImprimir';
 import { cabecalhoBidPro, ESTILOS_CABECALHO } from './pdfCabecalho';
+import { notaMetodologicaTexto } from './NotaMetodologica';
+
+// Escape para o rodapé metodológico (texto montado dos dados da geração).
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 // CSS do documento (exportado para o PDF combinado reaproveitar). O `.bl` aqui é
 // "texto azul" (helper de tabela); o parecer final usa `.blk` para blocos, para
@@ -31,7 +35,7 @@ export const ESTILOS_MERCADOLOGICO = `
 
 // Corpo (conteúdo do <body>) do relatório mercadológico — exportado para o PDF
 // combinado. O gerador individual (gerarPDF) empacota isto num documento completo.
-export function corpoMercadologico({ d, metricas: m, metricasTeto: mt, teto, isAVista, isUsoProprio, isViavel, fluxo, sacTab, priceTab, mercado, parecer, indicadores: ind, cab = {} }) {
+export function corpoMercadologico({ d, metricas: m, metricasTeto: mt, teto, isAVista, isUsoProprio, isViavel, fluxo, sacTab, priceTab, mercado, parecer, indicadores: ind, divergenciaArea = null, cab = {} }) {
   const parseSecoes = (txt) => {
     if (!txt) return {};
     const res = {};
@@ -335,7 +339,12 @@ ${(d.riscos||[]).map(r=>`<div style="padding:6px 10px;margin-bottom:4px;border-r
 
 ${sec.conc?`<div class="av"><h2>Conclusão e Recomendação da Gestão</h2><pre>${sec.conc}</pre></div>`:''}
 
-<div style="margin-top:28px;border-top:2px solid #e2e8f0;padding-top:12px;display:flex;justify-content:space-between;font-size:8.5px;color:#94a3b8;">
+<div style="margin-top:24px;border-top:1px solid #e2e8f0;padding-top:10px;">
+  <div style="font-size:7.5px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:#94a3b8;margin-bottom:4px;">Metodologia e ressalvas</div>
+  <p style="font-size:7.5px;line-height:1.5;color:#94a3b8;margin:0;text-align:justify;">${esc(notaMetodologicaTexto('mercadologico', { mercado, divergenciaArea }))}</p>
+</div>
+
+<div style="margin-top:14px;border-top:2px solid #e2e8f0;padding-top:12px;display:flex;justify-content:space-between;font-size:8.5px;color:#94a3b8;">
   <span>BidPro Brasil · Análise gerada em ${new Date().toLocaleString('pt-BR')}</span>
   <span>Documento confidencial · Uso exclusivo do cliente</span>
 </div>

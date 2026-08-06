@@ -5,6 +5,7 @@
 
 import { imprimirHtml } from './pdfImprimir';
 import { cabecalhoBidPro, ESTILOS_CABECALHO } from './pdfCabecalho';
+import { notaMetodologicaTexto } from './NotaMetodologica';
 
 const esc = (s) => String(s == null ? '' : s)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -142,6 +143,11 @@ ${samplesHtml}
 
 <h2>O que é o Índice BidPro</h2>
 <pre class="av">O Índice BidPro é a referência própria de preço por metro quadrado (venda e locação) por microrregião, consolidada das análises de mercado da plataforma: anúncios ativos com data e revendas confirmadas, ponderados por recência e proximidade (rua/condomínio, microrregião de cerca de 1 km ou cidade). Os anúncios são organizados por período (janelas de 4 meses); quando há amostra recente (últimos 4 meses), o valor usa esses anúncios; quando não há, o valor é uma PROJEÇÃO para hoje dos anúncios de períodos anteriores, corrigidos pela valorização da própria região (indicada como "projetado"). Não inclui preços de leilão/arremate, para não contaminar a base. É uma referência de mercado para orientar a decisão, não uma avaliação formal.</pre>
+
+<div style="margin-top:18px;border-top:1px solid #e2e8f0;padding-top:9px;">
+  <div style="font-size:7.5px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:#94a3b8;margin-bottom:4px;">Metodologia e ressalvas</div>
+  <p style="font-size:7.5px;line-height:1.5;color:#94a3b8;margin:0;text-align:justify;">${esc(notaMetodologicaTexto('indice', reg, form && form.tipo))}</p>
+</div>
 
 <div class="foot av">
   BidPro Brasil · O ecossistema completo para investidores em leilões. Relatório do Índice gerado em ${new Date().toLocaleDateString('pt-BR')}.

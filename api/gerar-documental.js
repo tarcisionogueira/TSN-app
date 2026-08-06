@@ -1469,6 +1469,21 @@ export default async function handler(req, res) {
       // a tela mostra um aviso próprio e oferece regerar com os dados corretos.
       divergenciasImovel: parsed._divergenciasDoc || [],
       geradoEm: new Date().toISOString(),
+      // NOTA METODOLÓGICA (06/08): o que ESTA análise leu e consultou, em fatos estruturados.
+      // A tela e o PDF montam o rodapé a partir daqui, então ele descreve a diligência real —
+      // quais peças foram lidas, quais bases públicas responderam e o que ficou pendente.
+      metodologia: {
+        geradoEm: new Date().toISOString(),
+        documentos: (lidos || []).map(l => ({ tipo: l.tipo || null, rotulo: l.rotulo || null, formato: l.kind || null, doCache: !!l.cache })),
+        textoColado: !!(body?.textoEdital || body?.textoMatricula),
+        consultas: {
+          cnj: cnj ? { total: cnj.total || 0, tribunais: cnj.tribunais_consultados || [], porNome: !!cnjViaNome } : null,
+          djen: !!fx.djen,
+          certidoesFiscais: fx.certidoes?.resumo || null,
+        },
+        antifraude: { fonteReconhecida: antifraude.fonteReconhecida, modalidade: antifraude.modalidade, dvCnjValido: antifraude.processoDvCNJValido, confirmadoDataJud: antifraude.processoConfirmadoDataJud },
+        pendencias, preliminar,
+      },
     };
     // APRENDER NA EMISSÃO (durável, sem IA) + apontar regeração se houver vício.
     const qualDoc = {

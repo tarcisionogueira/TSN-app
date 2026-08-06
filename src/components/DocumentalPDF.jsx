@@ -6,6 +6,7 @@
 
 import { imprimirHtml } from './pdfImprimir';
 import { cabecalhoBidPro, ESTILOS_CABECALHO } from './pdfCabecalho';
+import { notaMetodologicaTexto } from './NotaMetodologica';
 
 const esc = (s) => String(s == null ? '' : s)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -184,6 +185,11 @@ ${parecerHtml}
 ${lacunasHtml}
 ${certidoesHtml}
 ${certidoesDocsHtml}
+
+<div style="margin-top:18px;border-top:1px solid #e2e8f0;padding-top:9px;">
+  <div style="font-size:7.5px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:#94a3b8;margin-bottom:4px;">Metodologia e ressalvas</div>
+  <p style="font-size:7.5px;line-height:1.5;color:#94a3b8;margin:0;text-align:justify;">${esc(notaMetodologicaTexto('documental', P, null))}</p>
+</div>
 
 <div class="foot av">
   Esta análise documental e processual é gerada com apoio de inteligência artificial, a partir dos documentos disponíveis e de consultas públicas. Pode conter imprecisões e não substitui a análise de um profissional nem a verificação presencial. Recomendamos agendar a reunião com um analista BidPro e, uma vez aprovado, o laudo jurídico definitivo por advogado antes de qualquer lance.

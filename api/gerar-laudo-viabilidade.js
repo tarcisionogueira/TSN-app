@@ -342,6 +342,18 @@ export default async function handler(req, res) {
       parecer: (parsed.parecer || '') + AVISO,
       baseadoEm: { mercadoEm: mRow.updated_at, documentalEm: dRow.updated_at },
       geradoEm: new Date().toISOString(),
+      // NOTA METODOLÓGICA (06/08): o laudo NÃO refaz fonte nenhuma — ele pondera os dois
+      // relatórios anteriores. O rodapé precisa dizer isso e a partir de QUE versão deles,
+      // senão o leitor pode supor uma diligência nova que não houve.
+      metodologia: {
+        geradoEm: new Date().toISOString(),
+        natureza: 'sintese',
+        semFontesNovas: true,
+        baseMercadologicoEm: mRow.updated_at || null,
+        baseDocumentalEm: dRow.updated_at || null,
+        metodologiaMercadologico: mRow.result?.mercado?.metodologia || null,
+        metodologiaDocumental: dRow.result?.metodologia || null,
+      },
     };
     // Coerência determinística: um veredito "aprovado" NÃO pode conviver com um
     // pedido de revisão do controle de qualidade (baixa confiança/contradição entre

@@ -7,6 +7,7 @@
 // Escapa texto vindo da IA para não quebrar o HTML nem permitir injeção.
 import { imprimirHtml } from './pdfImprimir';
 import { cabecalhoBidPro, ESTILOS_CABECALHO } from './pdfCabecalho';
+import { notaMetodologicaTexto } from './NotaMetodologica';
 
 const esc = (s) => String(s == null ? '' : s)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -127,6 +128,11 @@ ${itens(L.resumoOperacao).length ? `<div class="av" style="border:2px solid #111
   <div style="font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:1px;color:#111827;margin-bottom:8px;">Resumo da Operação</div>
   <ul>${listaHtml(L.resumoOperacao)}</ul>
 </div>` : ''}
+
+<div style="margin-top:18px;border-top:1px solid #e2e8f0;padding-top:9px;">
+  <div style="font-size:7.5px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:#94a3b8;margin-bottom:4px;">Metodologia e ressalvas</div>
+  <p style="font-size:7.5px;line-height:1.5;color:#94a3b8;margin:0;text-align:justify;">${esc(notaMetodologicaTexto('laudo', L, null))}</p>
+</div>
 
 <div class="foot av">
   Este parecer final é um documento de apoio à decisão, gerado com apoio de inteligência artificial a partir dos relatórios Mercadológico + Viabilidade Financeira e Documental + Jurídico. Não substitui a análise de um profissional nem a verificação presencial do imóvel. Recomendamos agendar a reunião com um analista BidPro para validar o veredito antes de qualquer lance.
