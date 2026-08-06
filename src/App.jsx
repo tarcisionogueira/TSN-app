@@ -129,7 +129,7 @@ function PopupBonusAnalises({ userId, onFechar }) {
           <div style={{ fontSize: 36, fontWeight: 900, color: '#0D63DB' }}>5</div>
           <div style={{ fontSize: 13, color: '#3b82f6', fontWeight: 600 }}>análises por mês</div>
         </div>
-        <p style={{ fontSize: 12, color: '#94a3b8', margin: '0 0 20px' }}>Faça upgrade para o plano Investidor Pro e ganhe 15 análises mensais com relatório jurídico completo.</p>
+        <p style={{ fontSize: 12, color: '#94a3b8', margin: '0 0 20px' }}>Faça upgrade para o plano Investidor Pro e ganhe 10 relatórios mercadológicos e 10 documentais e jurídicos por mês.</p>
         <button onClick={fechar} style={{ width: '100%', padding: '13px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>
           Começar a explorar →
         </button>

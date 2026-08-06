@@ -238,12 +238,59 @@ export default async function handler(req) {
     };
   } catch { /* opcional */ }
 
+  // ── CUSTO POR GERAÇÃO: acompanhamento no tempo (pedido do dono, 06/08) ──────────────
+  // "Preciso ter essa métrica para fazer acompanhamento. À medida que reduz o esforço da
+  // busca na internet, acredito que o custo caia, sendo basicamente leitura da documentação
+  // e comparativo com o que já temos na base."
+  //
+  // A tese é testável e esta é a régua: custo MÉDIO por geração, por função, mês a mês. Se a
+  // base própria estiver substituindo a busca, a curva do mercadológico cai sozinha. Junto vai
+  // o DESPERDÍCIO (gerações que gastaram e não entregaram) — sem ele, uma queda na média
+  // pode ser só falha barata disfarçada de eficiência.
+  //
+  // E a conta que decide o preço do plano: quanto custa a cota CHEIA de um assinante. Se um
+  // cliente usar tudo a que tem direito, isso é o custo de IA que aquele plano precisa cobrir.
+  let custoGeracao = null;
+  try {
+    if (SB && KEY) {
+      const rpc = async (nome, corpo) => {
+        const r = await fetch(`${SB}/rest/v1/rpc/${nome}`, {
+          method: 'POST', headers: { apikey: KEY, Authorization: `Bearer ${KEY}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify(corpo || {}),
+        });
+        return r.ok ? await r.json().catch(() => null) : null;
+      };
+      const [resumo30, mensal] = await Promise.all([rpc('custo_por_geracao', { p_dias: 30 }), rpc('custo_geracao_mensal', { p_meses: 12 })]);
+      const porFuncao = {};
+      for (const l of (resumo30 || [])) porFuncao[l.funcao] = { n: Number(l.n) || 0, media_usd: Number(l.media_usd) || 0, mediana_usd: Number(l.mediana_usd) || 0, total_usd: Number(l.total_usd) || 0, media_brl: brl(Number(l.media_usd) || 0) };
+      // Cota cheia do plano pago (limite_ia: 10 mercadológicos, 10 documentais, 10 laudos,
+      // 3 índices). Usa a média medida quando existe; senão o seed, para nunca ficar sem número.
+      const md = (f, seed) => (porFuncao[f]?.n >= 3 ? porFuncao[f].media_usd : seed);
+      const cota = { mercadologico: 10, documental: 10, laudo: 10, indice: 3 };
+      const unit = { mercadologico: md('mercadologico', 0.14), documental: md('documental', 0.86), laudo: md('laudo', 0.09), indice: md('indice', 0.54) };
+      const cotaCheiaUsd = Object.entries(cota).reduce((s, [f, q]) => s + q * (unit[f] || 0), 0);
+      custoGeracao = {
+        por_funcao_30d: porFuncao,
+        mensal: Array.isArray(mensal) ? mensal : [],
+        cota_cheia: {
+          composicao: Object.fromEntries(Object.entries(cota).map(([f, q]) => [f, { qtd: q, unit_usd: Math.round((unit[f] || 0) * 1e4) / 1e4, total_usd: Math.round(q * (unit[f] || 0) * 100) / 100 }])),
+          custo_usd: Math.round(cotaCheiaUsd * 100) / 100,
+          custo_brl: brl(cotaCheiaUsd),
+          preco_plano_brl: precoPro,
+          margem_brl: Math.round((precoPro - brl(cotaCheiaUsd)) * 100) / 100,
+          medido: Object.keys(porFuncao).length > 0,
+        },
+      };
+    }
+  } catch { /* bloco opcional do painel */ }
+
   return new Response(JSON.stringify({
     gerado_em: new Date().toISOString(),
     usd_brl: usdBrl,
     dia_do_mes: diaDoMes, dias_no_mes: diasNoMes,
     total_mes: { custo_usd: totalMesUsd, custo_brl: brl(totalMesUsd), projecao_custo_usd: Math.round(projecaoTotalUsd * 100) / 100, projecao_custo_brl: brl(projecaoTotalUsd) },
     sustentabilidade,
+    custo_geracao: custoGeracao,
     provedores,
   }), { status: 200, headers: { 'Content-Type': 'application/json', ...CORS } });
 }

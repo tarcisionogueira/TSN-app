@@ -641,7 +641,7 @@ export default function Calculadora() {
                   'Análise jurídica de edital e matrícula',
                   'Análise processual do imóvel',
                   'Alertas de risco automáticos',
-                  'Até 15 relatórios/mês (mercado + documental)',
+                  'Até 10 relatórios de cada tipo/mês (mercado + documental)',
                 ].map(f => (
                   <div key={f} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#bfdbfe' }}>
                     <div style={{ width: 16, height: 16, borderRadius: '50%', background: 'rgba(134,239,172,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>

@@ -468,6 +468,47 @@ migração para o Gemini, o único consumidor de `claude/web_search` é o ÍNDIC
 índice e chamava de análise, subestimando em ~4× o teto de "análises grátis que um Pro banca".
 Agora aprende de `geracao_custos` filtrado por `funcao='mercadologico'`.
 
+### 📉 12) A métrica de custo virou painel — e a cota cheia não fecha no preço
+
+Três pedidos do dono, na mesma mensagem. Os três verificados:
+
+**(a) Acompanhamento no tempo.** A tese do dono: *"à medida que reduz o esforço da busca na
+internet, o custo cai, sendo basicamente leitura da documentação e comparativo com o que já
+temos na base."* A tese é **testável** e agora tem régua: bloco **"📉 Custo por geração"** no
+painel Custos & Uso (Admin), com média por produto nos últimos 30 dias e a **série mensal** dos
+últimos 6 meses. O **desperdício** (gerações que gastaram e não entregaram) vem na mesma tabela
+de propósito: sem ele, uma queda na média pode ser só falha barata disfarçada de eficiência.
+
+**(b) 10 relatórios + 3 índices, quanto custa** — com os números medidos em 06/08:
+
+| Item | Qtd | Unitário | Total |
+|---|---|---|---|
+| Mercadológico | 10 | R$ 0,76 | R$ 7,60 |
+| Documental | 10 | R$ 4,65 | R$ 46,50 |
+| Laudo (o 3º, se usado) | 10 | R$ 0,50 | R$ 5,00 |
+| Índice | 3 | R$ 2,94 | R$ 8,82 |
+| **Cota cheia** | | | **R$ 67,92** (faixa R$ 55–82) |
+
+🔴 **A mensalidade é R$ 49,90.** Um assinante que use **tudo** a que tem direito custa
+**R$ 62–82** de IA. O preço só fecha porque a utilização média é baixa — hoje 54 mercadológicos
+e 16 documentais no total, entre 7 usuários. Quem carrega a conta é o **documental**: 68% do
+custo da cota cheia, porque lê PDF por visão. É lá que mora a economia, não no mercadológico
+(que já está em R$ 0,76). O painel mostra essa conta e fica **vermelho** quando a margem é
+negativa — não é um número que se descobre depois.
+
+**(c) A trava do documental EXISTE e está no servidor** (`api/gerar-documental.js`): documental
+NOVO sem mercadológico concluído do mesmo (usuário, imóvel) recebe **409** com
+`precisaMercado: true`. À prova de burla por API, não só escondida na tela. Isenta cron
+(self-heal) e admin/analista gerando pelo cliente; não bloqueia REGERAÇÃO. Auditoria confirma:
+**0 documentais órfãos** hoje (eram ~20 antes do gate).
+
+**🔴 Achado colateral: 5 telas anunciavam 15 relatórios/mês, o plano entrega 10.** O 15 era o
+limite ANTIGO, hoje preservado só para os **2 assinantes legados** (grandfather). `planos_config`
+e a página de Planos já diziam 10; `App.jsx`, `HomeCliente.jsx`, `ProdutoLanding.jsx`,
+`Calculadora.jsx` e `cursos.js` ficaram para trás — anunciando 15 e entregando 10. Corrigido nas
+cinco. Fonte da verdade continua sendo `limite_ia` no banco: **10 mercadológicos · 10
+documentais · 10 laudos · 3 índices** para top2/assessorado/clube.
+
 ### Próximo passo desta sessão
 
 Re-verificação adversarial dos 16 achados de `docs/VARREDURA_BUGS_2026-08-05.md` marcados

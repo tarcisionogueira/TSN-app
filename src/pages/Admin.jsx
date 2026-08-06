@@ -4637,6 +4637,75 @@ function PainelCustosUso({ controlado = false, uso: usoProp = null, erro: erroPr
           </div>
         );
       })()}
+
+      {/* ── CUSTO POR GERAÇÃO (acompanhamento no tempo) ────────────────────────────────
+          Pedido do dono (06/08): a tese é que o custo caia conforme a base própria cresce
+          e o relatório passe a se resolver mais por comparativo interno do que por busca na
+          internet. A tese é testável; esta é a régua. O DESPERDÍCIO vem junto de propósito:
+          sem ele, uma queda na média pode ser só falha barata disfarçada de eficiência. */}
+      {uso.custo_geracao && (() => {
+        const cg = uso.custo_geracao;
+        const ROT = { mercadologico: 'Mercadológico', documental: 'Documental', laudo: 'Laudo', indice: 'Índice' };
+        const fns = Object.keys(cg.por_funcao_30d || {});
+        const cc = cg.cota_cheia || {};
+        const meses = [...new Set((cg.mensal || []).map(l => l.mes))].sort().reverse().slice(0, 6);
+        return (
+          <div style={{ border: '1px solid #e2e8f0', borderRadius: 10, padding: 14, marginBottom: 14 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#111111', marginBottom: 10 }}>📉 Custo por geração (acompanhamento)</div>
+            {fns.length === 0 ? (
+              <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 10 }}>
+                Ainda sem geração medida. A partir da próxima, cada relatório e cada índice grava o próprio custo e a curva começa aqui.
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 10, marginBottom: 12 }}>
+                {fns.map(f => (
+                  <div key={f} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px 12px' }}>
+                    <div style={{ fontSize: 11, color: '#64748b', fontWeight: 700 }}>{ROT[f] || f}</div>
+                    <div style={{ fontSize: 18, fontWeight: 900, color: '#111111' }}>{brl(cg.por_funcao_30d[f].media_brl)}</div>
+                    <div style={{ fontSize: 10.5, color: '#94a3b8' }}>média de {int(cg.por_funcao_30d[f].n)} em 30d · mediana US$ {Number(cg.por_funcao_30d[f].mediana_usd).toFixed(3)}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {/* Cota cheia × preço do plano: é o que decide se o preço cobre o produto. */}
+            {cc.custo_brl != null && (
+              <div style={{ background: (cc.margem_brl >= 0 ? '#f0fdf4' : '#fef2f2'), border: `1px solid ${cc.margem_brl >= 0 ? '#bbf7d0' : '#fecaca'}`, borderRadius: 8, padding: '10px 12px', fontSize: 12, color: cc.margem_brl >= 0 ? '#15803d' : '#b91c1c', lineHeight: 1.6 }}>
+                <b>Cota cheia de 1 assinante</b> (10 mercadológicos + 10 documentais + 10 laudos + 3 índices):
+                custo de IA <b>{brl(cc.custo_brl)}</b> contra <b>{brl(cc.preco_plano_brl)}</b> de mensalidade →
+                margem <b>{brl(cc.margem_brl)}</b>{cc.medido ? '' : ' (ainda por estimativa, sem gerações medidas)'}.
+                {cc.margem_brl < 0 && ' Um cliente que use TUDO a que tem direito dá prejuízo: o preço só fecha porque a utilização média é baixa.'}
+              </div>
+            )}
+            {meses.length > 0 && (
+              <div style={{ marginTop: 12, overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11.5, minWidth: 420 }}>
+                  <thead>
+                    <tr style={{ color: '#64748b', textAlign: 'left' }}>
+                      <th style={{ padding: '4px 6px' }}>Mês</th><th style={{ padding: '4px 6px' }}>Produto</th>
+                      <th style={{ padding: '4px 6px', textAlign: 'right' }}>Gerações</th>
+                      <th style={{ padding: '4px 6px', textAlign: 'right' }}>Média</th>
+                      <th style={{ padding: '4px 6px', textAlign: 'right' }}>Total</th>
+                      <th style={{ padding: '4px 6px', textAlign: 'right' }}>Desperdício</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(cg.mensal || []).filter(l => meses.includes(l.mes)).map((l, i) => (
+                      <tr key={i} style={{ borderTop: '1px solid #f1f5f9' }}>
+                        <td style={{ padding: '4px 6px', color: '#64748b' }}>{l.mes}</td>
+                        <td style={{ padding: '4px 6px' }}>{ROT[l.funcao] || l.funcao}</td>
+                        <td style={{ padding: '4px 6px', textAlign: 'right' }}>{int(l.n)}</td>
+                        <td style={{ padding: '4px 6px', textAlign: 'right', fontWeight: 700 }}>{brl(Number(l.media_usd) * (uso.usd_brl || 5.4))}</td>
+                        <td style={{ padding: '4px 6px', textAlign: 'right' }}>{brl(Number(l.total_usd) * (uso.usd_brl || 5.4))}</td>
+                        <td style={{ padding: '4px 6px', textAlign: 'right', color: Number(l.desperdicio_usd) > 0 ? '#b91c1c' : '#94a3b8' }}>{brl(Number(l.desperdicio_usd) * (uso.usd_brl || 5.4))}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        );
+      })()}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 12 }}>
         {(uso.provedores || []).map((p) => {
           const t = p.teto || {};

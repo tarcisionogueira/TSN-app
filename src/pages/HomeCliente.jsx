@@ -164,7 +164,7 @@ export default function HomeCliente() {
               certo já existe dentro do Caso/Minhas Análises, com o gate dos 3 relatórios
               no servidor (agendar-reuniao). Um atalho solto aqui furava esse funil. */}
           {effectiveRole === 'explorador' && (
-            <Acao Icon={TrendingUp} titulo="Fazer upgrade" desc="Investidor Pro: análise documental e jurídica + 15 relatórios/mês." cor="#0D63DB" onClick={() => nav('/planos')} />
+            <Acao Icon={TrendingUp} titulo="Fazer upgrade" desc="Investidor Pro: 10 relatórios mercadológicos e 10 documentais e jurídicos por mês." cor="#0D63DB" onClick={() => nav('/planos')} />
           )}
         </div>
 
