@@ -78,7 +78,10 @@ export default async function handler(req) {
   const perfil = await perfilDe(user.id);
   const role = perfil?.role || 'explorador';
   const lim = await limiteIaOuFalha('limite_ia_efetivo', { p_user_id: user.id, p_tipo: 'indice' }); // int | null (admin/legado 5)
-  if (lim.erro) { res.status(503).json({ error: 'Não foi possível confirmar seu limite agora. Tente de novo em instantes.', motivo: 'limite_indisponivel' }); return; }
+  // Este handler é EDGE (devolve Response); o `res.status().json()` daqui era do runtime Node e
+  // não existe neste escopo — o caminho de erro do limite estourava ReferenceError em vez de
+  // devolver 503. Achado de lint em 06/08, pré-existente.
+  if (lim.erro) return new Response(JSON.stringify({ error: 'Não foi possível confirmar seu limite agora. Tente de novo em instantes.', motivo: 'limite_indisponivel' }), { status: 503, headers });
   const limite = lim.valor;
   const ilimitado = limite === null;
   const mesAtual = new Date().toISOString().slice(0, 7);
@@ -97,7 +100,10 @@ export default async function handler(req) {
   if (pond && pond.venda_m2 != null) {
     out = {
       fonte: 'mercado', nivel: pond.nivel, venda_m2: pond.venda_m2,
-      aluguel_m2: pond.locacao_m2 != null ? pond.locacao_m2 : Math.round(pond.venda_m2 * 0.004 * 100) / 100,
+      // Só aluguel MEDIDO (regra do dono, 06/08). A regra de bolso de 0,4%/mês entrava aqui e
+      // era SEMEADA em cidade_indicadores — o número inventado virava "base própria" e voltava
+      // depois como se fosse mercado observado, inclusive em terreno, que não se aluga.
+      aluguel_m2: pond.locacao_m2 != null ? pond.locacao_m2 : null,
       n_amostras: (pond.n_venda || 0) + (pond.n_locacao || 0),
     };
   } else {

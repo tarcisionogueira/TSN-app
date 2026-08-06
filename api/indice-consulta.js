@@ -88,6 +88,17 @@ export default async function handler(req) {
     const ehSintetica = (a) => FONTE_SINTETICA.test(String(a.fonte || ''));
     const filtro = `cidade_norm=eq.${encodeURIComponent(cidadeNormDb)}&uf=eq.${uf}&tipo=eq.${encodeURIComponent(tipo)}`;
 
+    // NÚMERO INVENTADO NÃO ENTRA (regra do dono, 06/08): "se não encontra, informa que não
+    // localizou anúncios — fica melhor do que fazer um cálculo infundado". A regra de bolso de
+    // 0,4%/mês sobre a venda saía como se fosse mercado: em Alphaville dava R$ 28/m²·mês contra
+    // R$ 65–92 dos anúncios reais do ZAP, e em TERRENO — que não se aluga — inventava
+    // R$ 3/m²·mês a partir do preço de venda. Agora o aluguel só existe MEDIDO; sem anúncio, o
+    // campo vem vazio e a tela diz que não localizou.
+    const ehTerreno = tipo === 'terreno';
+    const semAluguelMotivo = ehTerreno
+      ? 'terreno não tem mercado de locação — lote não se aluga'
+      : 'nenhum anúncio de locação com metragem localizado nesta região';
+
     // ESCADA DO ALUGUEL (achado do dono, 06/08). Antes era binário: ou havia locação COM
     // metragem no recorte, ou caía direto na regra de bolso de 0,4%/mês. Só que o aluguel
     // MEDIDO da mesma cidade existia em OUTRAS duas bases e ninguém olhava: em Barueri, a base
@@ -213,18 +224,21 @@ export default async function handler(req) {
       // real de Alphaville dá ~0,6%/mês). Agora o número vem rotulado: a tela/PDF mostram
       // "estimado" e o cliente sabe o que está lendo. Achado do dono, 05/08.
       const aluguelMedido = locVals.length ? mediana(locVals) : null;
-      // Sem locação medida NO RECORTE, procura MEDIDA mais ampla antes de estimar (escada acima).
+      // Sem locação medida NO RECORTE, procura MEDIDA mais ampla (escada acima). Se nem lá houver,
+      // o campo fica VAZIO — ver `semAluguel` abaixo.
       const amplo = aluguelMedido == null ? await aluguelAmplo() : null;
-      const aluguelFinal = aluguelMedido != null ? aluguelMedido : (amplo ? amplo.valor : null);
+      const aluguelFinal = ehTerreno ? null : (aluguelMedido != null ? aluguelMedido : (amplo ? amplo.valor : null));
       // Aluguel MENSAL mediano das amostras sem área: é dado REAL (o anúncio traz o valor,
       // só não traz a metragem) e serve de sanidade — melhor mostrar que descartar em silêncio.
       const locMensais = num(regSamples.filter(a => a.especie === 'locacao' && !(Number(a.valor_m2) > 0)).map(a => a.valor_total));
       regiao = {
         fonte: 'mercado',
         venda_m2: vMed,
-        aluguel_m2: aluguelFinal != null ? aluguelFinal : (vMed ? Math.round(vMed * 0.004 * 100) / 100 : null),
-        aluguel_estimado: aluguelFinal == null && vMed > 0,
-        aluguel_estimado_base: aluguelFinal == null && vMed > 0 ? '0,4%/mês sobre o valor de venda (sem amostra de locação com metragem na região)' : null,
+        aluguel_m2: aluguelFinal,
+        aluguel_estimado: false,
+        aluguel_estimado_base: null,
+        aluguel_indisponivel: aluguelFinal == null,
+        aluguel_indisponivel_motivo: aluguelFinal == null ? semAluguelMotivo : null,
         // Medido, mas FORA do recorte da consulta — a tela mostra a procedência em vez de
         // deixar o número mudo (nem "estimado", nem falso "medido aqui").
         aluguel_origem: amplo ? amplo.origem : null,
@@ -256,11 +270,13 @@ export default async function handler(req) {
         // Mesma escada aqui: sem locação no ponderado, tenta os bairros já medidos da cidade
         // antes do 0,4%. (aluguelAmplo repete a chamada do ponderado, que já veio nula.)
         const amploFb = pond.locacao_m2 == null ? await aluguelAmplo() : null;
-        const aluFb = pond.locacao_m2 != null ? Number(pond.locacao_m2) : (amploFb ? amploFb.valor : null);
+        const aluFb = ehTerreno ? null : (pond.locacao_m2 != null ? Number(pond.locacao_m2) : (amploFb ? amploFb.valor : null));
         regiao = { fonte: 'mercado', venda_m2: pond.venda_m2,
-          aluguel_m2: aluFb != null ? aluFb : (Number(pond.venda_m2) > 0 ? Math.round(pond.venda_m2 * 0.004 * 100) / 100 : null),
-          aluguel_estimado: aluFb == null && Number(pond.venda_m2) > 0,
-          aluguel_estimado_base: aluFb == null && Number(pond.venda_m2) > 0 ? '0,4%/mês sobre o valor de venda (sem amostra de locação com metragem na região)' : null,
+          aluguel_m2: aluFb,
+          aluguel_estimado: false,
+          aluguel_estimado_base: null,
+          aluguel_indisponivel: aluFb == null,
+          aluguel_indisponivel_motivo: aluFb == null ? semAluguelMotivo : null,
           aluguel_origem: amploFb ? amploFb.origem : null,
           n_amostras: (pond.n_venda || 0) + (pond.n_locacao || 0),
           nivel: Number(pond.nivel) === 1 ? 'rua' : Number(pond.nivel) === 2 ? 'grid' : 'cidade',
@@ -278,9 +294,11 @@ export default async function handler(req) {
           const est = await rpc('indice_estado_ponderado', { p_uf: uf, p_tipo: tipo });
           if (est && Number(est.venda_m2) > 0) regiao = { fonte: 'estado',
             venda_m2: Number(est.venda_med) > 0 ? est.venda_med : est.venda_m2,
-            aluguel_m2: Number(est.venda_m2) > 0 ? Math.round(est.venda_m2 * 0.004 * 100) / 100 : null,
-            aluguel_estimado: Number(est.venda_m2) > 0,
-            aluguel_estimado_base: Number(est.venda_m2) > 0 ? '0,4%/mês sobre o valor de venda (referência ampla do estado)' : null,
+            aluguel_m2: null,
+            aluguel_estimado: false,
+            aluguel_estimado_base: null,
+            aluguel_indisponivel: true,
+            aluguel_indisponivel_motivo: semAluguelMotivo,
             n_amostras: est.n_venda || 0, nivel: 'estado', nivel_label: `estado ${uf} (referência ampla)`,
             bandas: Number(est.venda_pop) > 0 ? { popular: est.venda_pop, medio: est.venda_med, alto: est.venda_alto } : null,
             bairro_norm: null };

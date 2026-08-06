@@ -228,10 +228,17 @@ export default function IndiceConsulta() {
                         <span style={{ fontSize: 17, fontWeight: 900, color: '#0D63DB' }}>{Number(r.venda_m2) > 0 ? `${brl(r.venda_m2)}/m²` : '—'}</span>
                         {r.projetado ? <span style={{ fontSize: 8.5, fontWeight: 800, padding: '1px 5px', borderRadius: 999, background: '#fff7ed', color: '#c2410c' }}>PROJ.</span> : null}
                       </div>
+                      {/* Sem anúncio de locação o campo fica VAZIO e diz o porquê — nunca a regra
+                          de bolso sobre a venda, que inventava "aluguel de terreno" (regra do dono). */}
                       <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginTop: 4 }}>
                         <span style={{ fontSize: 10, color: '#7c3aed', fontWeight: 700 }}>LOCAÇÃO</span>
-                        <span style={{ fontSize: 14, fontWeight: 800, color: '#7c3aed' }}>{Number(r.aluguel_m2) > 0 ? `${brl(r.aluguel_m2)}/m²·mês` : 'em formação'}</span>
+                        <span style={{ fontSize: Number(r.aluguel_m2) > 0 ? 14 : 11, fontWeight: Number(r.aluguel_m2) > 0 ? 800 : 600, color: Number(r.aluguel_m2) > 0 ? '#7c3aed' : '#94a3b8' }}>
+                          {Number(r.aluguel_m2) > 0 ? `${brl(r.aluguel_m2)}/m²·mês` : (t.tipo === 'terreno' ? 'não se aluga' : 'sem anúncio localizado')}
+                        </span>
                       </div>
+                      {/* O NÍVEL é o que explica número "abaixo do mercado": mediana da CIDADE não é
+                          o preço da rua. Antes só o detalhe mostrava isso — aqui fica na cara. */}
+                      {r.nivel_label && <div style={{ fontSize: 9.5, color: '#94a3b8', marginTop: 4 }}>nível {r.nivel_label}</div>}
                       {r.bandas && Number(r.bandas.popular) > 0 && (
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
                           <span title="padrão popular (p25)" style={{ fontSize: 9.5, fontWeight: 700, color: '#0369a1', background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: 5, padding: '1px 5px' }}>pop. {brl(r.bandas.popular)}</span>
@@ -251,6 +258,34 @@ export default function IndiceConsulta() {
           <div style={{ fontSize: 11, color: '#94a3b8' }}>Clique num tipo acima (ou escolha no seletor) para ver o gráfico de valorização, a composição por período e gerar o relatório em PDF.</div>
         </div>
       )}
+
+      {/* PESQUISAR DE NOVO — o botão só existia quando a região estava "não mapeada". Bastava a
+          cidade ter índice para ele SUMIR, e não havia como pedir a pesquisa do endereço/bairro
+          específico: o Cauaxi (Alphaville) ficava preso na mediana da CIDADE, de julho, sem saída.
+          Agora a ação existe sempre — e avisa quando o que está na tela é de um recorte mais largo
+          do que o endereço consultado, que é justamente o caso em que o número parece baixo. */}
+      {res && podeGerar && (res.todos ? res.porTipo.every((t) => t.mapeado) : res.mapeado) && (() => {
+        const nivelAtual = res.todos ? (res.porTipo.find((t) => t.regiao?.nivel)?.regiao?.nivel || null) : reg?.nivel;
+        const pediuFino = form.nivelConsulta === 'rua' || form.nivelConsulta === 'bairro';
+        const largo = pediuFino && (nivelAtual === 'cidade' || nivelAtual === 'estado');
+        return (
+          <div style={{ background: largo ? '#fffbeb' : '#f8fafc', border: `1px solid ${largo ? '#fde68a' : '#e2e8f0'}`, borderRadius: 14, padding: '14px 18px' }}>
+            <div style={{ fontSize: 13, color: largo ? '#78350f' : '#475569', lineHeight: 1.55, marginBottom: 10 }}>
+              {largo
+                ? <>O que está acima é a referência da <strong>cidade</strong> — ainda não temos anúncios do recorte que você pediu ({localLabel || 'este endereço'}). Por isso o valor tende a ficar abaixo do praticado num bairro de padrão alto.</>
+                : <>Quer atualizar? A pesquisa varre os portais e imobiliárias <strong>agora</strong>, ancorada em {form.nivelConsulta === 'rua' ? 'condomínio/rua (250 m) e vizinhança (1 km)' : form.nivelConsulta === 'bairro' ? 'bairro e adjacências' : 'cidade'}, e guarda as amostras novas.</>}
+            </div>
+            {gerMsg && <div style={{ fontSize: 12.5, color: '#92400e', background: '#fef3c7', borderRadius: 8, padding: '8px 10px', marginBottom: 10 }}>{gerMsg}</div>}
+            <button onClick={gerar} disabled={gerando}
+              style={{ padding: '9px 16px', background: gerando ? '#94a3b8' : (largo ? '#d97706' : '#0D63DB'), color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 13, cursor: gerando ? 'wait' : 'pointer' }}>
+              {gerando ? 'Pesquisando o mercado…' : largo ? '⚡ Pesquisar este endereço agora' : '⚡ Atualizar a pesquisa desta localidade'}
+            </button>
+            {effectiveRole !== 'admin' && (
+              <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 8 }}>Consome 1 do seu limite mensal de índice; esgotado, usa crédito.</div>
+            )}
+          </div>
+        );
+      })()}
 
       {res && !res.todos && !res.mapeado && (
         <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 14, padding: '18px 20px' }}>
@@ -304,14 +339,17 @@ export default function IndiceConsulta() {
                   {reg.aluguel_estimado ? <span style={{ marginLeft: 6, fontSize: 9, fontWeight: 800, padding: '1px 6px', borderRadius: 999, background: '#fff7ed', color: '#c2410c' }}>ESTIMADO</span>
                     : reg.aluguel_origem ? <span style={{ marginLeft: 6, fontSize: 9, fontWeight: 800, padding: '1px 6px', borderRadius: 999, background: '#eff6ff', color: '#1d4ed8' }}>MEDIDO NA CIDADE</span> : null}
                 </div>
-                <div style={{ fontSize: 22, fontWeight: 900, color: '#7c3aed', marginTop: 4 }}>{Number(reg.aluguel_m2) > 0 ? `${brl(reg.aluguel_m2)}/m²·mês` : 'em formação'}</div>
-                {/* O aluguel só é MEDIDO quando há anúncio de locação COM metragem. Sem isso, o
-                    número é a regra de bolso de 0,4%/mês sobre a venda — que subestima região de
-                    padrão alto. Dizer isso na cara evita ler estimativa como mercado observado. */}
-                {reg.aluguel_estimado && (
-                  <div style={{ fontSize: 10, color: '#c2410c', marginTop: 3, lineHeight: 1.45 }}>
-                    Estimativa por {reg.aluguel_estimado_base || '0,4%/mês sobre a venda'} — ainda sem anúncio de locação com metragem nesta região.
+                <div style={{ fontSize: Number(reg.aluguel_m2) > 0 ? 22 : 15, fontWeight: Number(reg.aluguel_m2) > 0 ? 900 : 700, color: Number(reg.aluguel_m2) > 0 ? '#7c3aed' : '#64748b', marginTop: 4 }}>
+                  {Number(reg.aluguel_m2) > 0 ? `${brl(reg.aluguel_m2)}/m²·mês` : 'Não localizamos anúncios'}
+                </div>
+                {/* O aluguel só existe MEDIDO. Não havendo anúncio, o campo diz isso — número
+                    inventado (a antiga regra de bolso de 0,4% sobre a venda) não entra: dava
+                    R$ 28/m² em Alphaville contra R$ 65–92 reais, e inventava aluguel de terreno. */}
+                {reg.aluguel_indisponivel && (
+                  <div style={{ fontSize: 10, color: '#64748b', marginTop: 3, lineHeight: 1.45 }}>
+                    {reg.aluguel_indisponivel_motivo || 'nenhum anúncio de locação com metragem localizado nesta região'}.
                     {Number(reg.aluguel_mensal_mediano) > 0 ? ` Aluguel mediano anunciado: ${brl(reg.aluguel_mensal_mediano)}/mês (${reg.n_locacao_sem_area} anúncio(s) sem área).` : ''}
+                    {podeGerar ? ' Rode a pesquisa desta localidade para buscar anúncios agora.' : ''}
                   </div>
                 )}
                 {/* MEDIDO, mas fora do recorte: número real de anúncio, só que de uma vizinhança

@@ -150,8 +150,10 @@ export default async function handler(req, res) {
     const porTipo = [];
     for (const t of SEG_TIPOS) {
       const p = await rpc('indice_regiao_ponderado', { p_cidade_norm: cidadeNorm, p_uf: uf, p_bairro_norm: bairroNorm, p_lat: lat, p_lng: lng, p_tipo: t });
+      // Aluguel só MEDIDO (regra do dono, 06/08): sem anúncio de locação, o campo vem vazio e a
+      // tela diz que não localizou — melhor do que a regra de bolso de 0,4% sobre a venda.
       if (p && p.venda_m2 != null) porTipo.push({ tipo: t, nivel: p.nivel, venda_m2: p.venda_m2,
-        aluguel_m2: p.locacao_m2 != null ? p.locacao_m2 : Math.round(p.venda_m2 * 0.004 * 100) / 100,
+        aluguel_m2: t === 'terreno' ? null : (p.locacao_m2 != null ? p.locacao_m2 : null),
         n_amostras: (p.n_venda || 0) + (p.n_locacao || 0), regioes: await regioesDe(t) });
     }
     if (!porTipo.length) { res.status(200).json({ ok: true, gerado: false, motivo: 'sem_amostras', inseridas }); return; }
@@ -166,7 +168,7 @@ export default async function handler(req, res) {
   const cota = await cobrar();
   res.status(200).json({
     ok: true, gerado: true, fonte: 'mercado', nivel: pond.nivel,
-    venda_m2: pond.venda_m2, aluguel_m2: pond.locacao_m2 != null ? pond.locacao_m2 : Math.round(pond.venda_m2 * 0.004 * 100) / 100,
+    venda_m2: pond.venda_m2, aluguel_m2: tipo === 'terreno' ? null : (pond.locacao_m2 != null ? pond.locacao_m2 : null),
     n_amostras: (pond.n_venda || 0) + (pond.n_locacao || 0), inseridas, regioes: await regioesDe(tipo), cota,
   });
 }
