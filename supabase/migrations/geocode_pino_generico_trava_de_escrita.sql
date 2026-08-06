@@ -27,8 +27,14 @@
 
 -- 1) Normalização do logradouro. Compara VIA, não endereço: "Rua X, 100" e "Rua X, 250"
 -- são a mesma via (prédio/quarteirão — não dispara), "R. Projetada" e "Rua Projetada II"
--- não são. Tira acento, prefixo de tipo de via e pontuação, que variam por leiloeiro e
+-- não são. Tira acento, pontuação e prefixo de tipo de via, que variam por leiloeiro e
 -- gerariam falso positivo entre grafias do MESMO logradouro.
+--
+-- O NÚMERO sai junto, e não basta cortar na vírgula: metade dos leiloeiros escreve
+-- "AVENIDA Dona Otília N. 606 Apto. 401, BL 07" — sem vírgula antes do número. Sem tirá-lo,
+-- dois apartamentos do MESMO prédio viram "vias diferentes" e o pino legítimo do edifício
+-- seria rebaixado. O corte só vale para número no FIM: "Avenida 7 de Setembro" e "Rua 20"
+-- têm o número no nome e sobrevivem inteiros.
 create or replace function public.via_normalizada(endereco text)
 returns text
 language sql
@@ -39,18 +45,45 @@ as $$
     btrim(regexp_replace(
       regexp_replace(
         regexp_replace(
-          translate(
-            lower(btrim(split_part(coalesce(endereco, ''), ',', 1))),
-            'áàâãäéèêëíìîïóòôõöúùûüçñ', 'aaaaaeeeeiiiiooooouuuucn'),
-          '^(r|rua|av|avenida|trav|travessa|tv|al|alameda|rod|rodovia|est|estr|estrada|pc|praca|praça|largo|viela|qd|quadra)\.?\s+',
+          btrim(regexp_replace(
+            translate(
+              lower(btrim(split_part(coalesce(endereco, ''), ',', 1))),
+              'áàâãäéèêëíìîïóòôõöúùûüçñ', 'aaaaaeeeeiiiiooooouuuucn'),
+            '[^a-z0-9]+', ' ', 'g')),
+          '^(r|rua|av|avenida|trav|travessa|tv|al|alameda|rod|rodovia|est|estr|estrada|pc|praca|largo|viela|qd|quadra)\s+',
           ''),
-        '[^a-z0-9]+', ' ', 'g'),
-      '\s+', ' ', 'g')),
+        '\s+n\s*[0-9].*$', ''),          -- "N. 606 Apto. 401" (número explícito + complemento)
+      '\s+[0-9]+[a-z]?(\s.*)?$', '')),   -- número solto no fim + o que vier depois
     '')
 $$;
 
 revoke execute on function public.via_normalizada(text) from public, anon, authenticated;
 grant execute on function public.via_normalizada(text) to service_role;
+
+-- 1.1) A DETECÇÃO passa a usar a mesma normalização. Antes ela comparava o 1º segmento
+-- cru do endereço, então o leiloeiro sem vírgula antes do número inflava a contagem de
+-- "vias" (cada apartamento virava uma via) — o número do monitor media parte ruído, e o
+-- limiar de 300 media junto. Detecção e trava passam a dizer a MESMA coisa.
+create or replace function public.geocode_pinos_genericos()
+returns table (latitude numeric, longitude numeric, lotes_precisos bigint, vias bigint)
+language sql
+stable
+set search_path = public
+as $$
+  select i.latitude::numeric, i.longitude::numeric,
+         count(*) filter (where i.geocod_nivel in ('rua','endereco')) as lotes_precisos,
+         count(distinct public.via_normalizada(i.endereco)) as vias
+  from public.imoveis_leilao i
+  where i.ativo
+    and i.latitude is not null and i.latitude::numeric <> 0
+    and public.via_normalizada(i.endereco) is not null
+  group by i.latitude::numeric, i.longitude::numeric
+  having count(distinct public.via_normalizada(i.endereco)) > 1
+     and count(*) filter (where i.geocod_nivel in ('rua','endereco')) > 0
+$$;
+
+revoke execute on function public.geocode_pinos_genericos() from public, anon, authenticated;
+grant execute on function public.geocode_pinos_genericos() to service_role;
 
 -- 2) A trava. Roda BEFORE INSERT/UPDATE e só faz trabalho quando alguém tenta gravar um
 -- rótulo PRECISO ('rua'/'endereco') numa coordenada nova — os UPDATEs do scraper (preço,

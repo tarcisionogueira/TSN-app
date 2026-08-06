@@ -105,6 +105,87 @@ mudam. `.claude/` segue ignorada no git — só o `settings.json` abre exceção
 
 ---
 
+## ✅ COMEÇAR AQUI (06/08 — sessão 27: a correção de ontem tinha pegado só metade das rotas)
+
+> Branch `claude/bid-pro-brasil-verificacoes-fkigq2` → **JÁ EM `main`** (fast-forward
+> `0dbffe7..7e290ab`). Deploy `dpl_7d6LeFT8XWEALxx3KFvEKcWcn936` **READY**, produção,
+> `lambdaRuntimeStats {"nodejs":96}`. `npm run build` OK · `auditoria_seguranca()`
+> **0 crítico / 0 atenção** · captura: nenhuma fonte abaixo do piso aprendido.
+
+### Diagnóstico de abertura
+
+| Camada | Estado |
+|---|---|
+| Banco | 32.329 ativos · 19.721 atualizados em 24h · scraper diário rodando no horário |
+| Deploy | READY, sem erro de runtime em 24h (só `DeprecationWarning` de `url.parse()` e `Failed to fetch` do gtag bloqueado por extensão do visitante) |
+| Captura | Piso aprendido: nenhuma regressão. `CREPALDI` (0/falhou), `TOTALLEILOES` (9) e `VENDASGOV` (2) seguem idênticos há 4+ dias — estáveis, não é regressão nova |
+| Segurança | 0 crítico / 0 atenção |
+
+### As 5 validações combinadas para hoje (resultado)
+
+| # | Item | Resultado |
+|---|---|---|
+| 1 | Re-verificação dos 16 achados | ⏳ **não iniciada** — é o próximo trabalho (ver "Próximo passo") |
+| 2 | Lote do Rafael | 🔴 continuava no ponto genérico com `nivel='rua'` → virou o achado do dia; hoje rotulado `cidade` pelo gatilho novo e re-enfileirado |
+| 3 | Drenagem do pino genérico | 🔴 fila drenava (3.519 → 2.803), mas **o vazamento estava ativo** — ver abaixo |
+| 4 | Aluguel do Índice | ⏳ depende de abrir a tela; não dá para provar por SQL |
+| 5 | Cache de documento | ⏳ `doc_extracoes` = 0, mas **nenhum relatório foi gerado desde o deploy** (último mercadológico 05/08 13:08). Inconclusivo — validar no 1º relatório que rodar |
+
+### 🔴 O rótulo ainda mentia — em OUTRAS três rotas
+
+A correção de 05/08 (`nivelNominatim`/`capNivel`) cobriu os retornos do **Nominatim**. A
+conta não fechou na abertura: dos 3.415 lotes re-enfileirados, 631 já haviam sido
+reprocessados e **399 voltaram rotulados `rua`/`endereco`** (324 deles ainda numa
+coordenada compartilhada por logradouros diferentes) contra 232 com rótulo honesto.
+Relapso de **51%**, e o cron de geocode roda **de hora em hora** — não era resíduo de
+backlog, era vazamento ativo. As rotas que escaparam rotulavam pela INTENÇÃO:
+
+1. **CEP — a origem real** (`_geo.js`, nível 1.5). Nem todo CEP é de logradouro: o "CEP
+   geral" do município tem, por definição, a coordenada do município inteiro. Era o maior
+   cluster do acervo — **17 logradouros de Altos/PI no mesmo ponto**, todos sem CEP no
+   anúncio (o ViaCEP por bairro recupera o CEP geral da cidade). Agora o payload decide o
+   teto: `street` → rua, `neighborhood` → bairro, nada → cidade. O mesmo teto vale para a
+   rota do `postalcode` no Nominatim, cujo `addresstype: postcode` é neutro e não
+   rebaixava sozinho.
+2. **Google** (nível 0). `location_type` descreve a QUALIDADE do ponto, não O QUE foi
+   casado: município casado como `locality` volta `GEOMETRIC_CENTER` → virava `rua`. Agora
+   o `types` é o teto (`nivelGoogle`), e o `nivelReal` (centróide IBGE) passa a valer
+   também nas rotas pagas. Hoje só afeta o on-demand (o cron roda `permitirPago:false`),
+   mas era o mesmo buraco.
+3. **LocationIQ** (nível 0.5, inerte sem `GEOCODER_KEY`). O catch-all `bairro` era otimista
+   para o nó do município; passa pelo mesmo `nivelNominatim`.
+
+**Rede de baixo — trava no BANCO** (`geocode_pino_generico_trava_de_escrita.sql`), que vale
+para todo escritor (crons, scripts, correção manual, provedor que entrar amanhã): ao gravar
+rótulo preciso numa coordenada que **outra via já ocupa**, o gatilho
+`trg_zz_geocode_pino_generico` rebaixa para `cidade` **os dois lados** — o que entra e o
+incumbente. Sem rebaixar o incumbente, o 1º lote de cada ponto genérico mentiria para
+sempre (685 grupos = 685 mentiras remanescentes). O `zz_` no nome é de propósito: gatilho
+BEFORE dispara em ordem alfabética e este precisa ver o endereço **depois** do
+`trg_preservar_endereco`, que ainda o deriva do título.
+
+**`via_normalizada()` — o que conta como "via diferente".** Tira acento, pontuação, prefixo
+(`R.`/`Rua`/`Av`…) **e o número**. O número não sai só cortando na vírgula: metade dos
+leiloeiros escreve `AVENIDA Dona Otília N. 606 Apto. 401, BL 07` — sem vírgula antes do
+número — e sem tirá-lo dois apartamentos do MESMO prédio virariam "vias diferentes",
+rebaixando o pino legítimo do edifício. O corte só vale para número no FIM, então
+`Avenida 7 de Setembro` e `Rua 20` sobrevivem inteiros. A **detecção** passou a usar a mesma
+normalização: o número do monitor media ruído antes (**324 → 232** só de trocar a régua), e
+o limiar de 300 media junto.
+
+**Resultado:** `geocode_pinos_genericos_total()` = **0** · 232 relapsos re-enfileirados
+(carimbo `2026-08-06 11:37:18.686046+00`, use-o para medir a próxima rodada) · fila de
+refazer 3.037 · gatilho provado no caso real do Rafael (rebaixou o lote E o vizinho
+`zuk_36955-230524` que ocupava o mesmo ponto).
+
+### Próximo passo desta sessão
+
+Re-verificação adversarial dos 16 achados de `docs/VARREDURA_BUGS_2026-08-05.md` marcados
+**⏳ A VERIFICAR** — em lotes pequenos, persistindo o resultado a cada lote (o workflow de
+ontem travou em 8/24 e levou o trabalho junto).
+
+---
+
 ## ✅ COMEÇAR AQUI (05/08 — sessão 26: o rótulo mentia em três lugares diferentes)
 
 > Branch `claude/bidprobrasil-system-checks-u1lrl6` → **JÁ EM `main`** (fast-forward
