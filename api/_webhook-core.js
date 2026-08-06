@@ -609,7 +609,7 @@ async function setExpiracaoDocumentos(userId) {
 }
 
 // ── PAGAMENTO RECUSADO ────────────────────────────────────────────────────────
-export async function processarRecusado({ gatewayCustomerId, email, motivo, gateway }) {
+export async function processarRecusado({ gatewayCustomerId, email, motivo, gateway, servico = false }) {
   const cliente = await buscarCliente({ gatewayCustomerId, email, gateway });
   if (cliente) {
     const ROLES_PAGANTES = ['top2', 'assessorado', 'clube', 'top2_anual', 'assessorado_anual', 'clube_anual'];
@@ -617,6 +617,17 @@ export async function processarRecusado({ gatewayCustomerId, email, motivo, gate
       pagamento_erro:      motivo || 'RECUSADO',
       pagamento_erro_data: new Date().toISOString(),
     };
+    // SERVIÇO AVULSO NÃO É ASSINATURA (05/08): recarga de crédito, assessoria avulsa ou
+    // PIX de anuidade ABANDONADO chegam aqui com metadata.tipo='servico'. O chamador já
+    // marcava `contexto.servico`, mas esta função nem recebia o campo — então o assinante
+    // EM DIA que desistia de um PIX avulso era rebaixado a 'explorador', ganhava
+    // inadimplente_desde e tinha os documentos agendados para expurgo LGPD (90 dias).
+    // O guard de `ehProdutoMp` no webhook cobria só PRODUTO; serviço passava reto.
+    // Falha de cobrança avulsa registra o erro, mas NUNCA suspende o plano vigente.
+    if (servico) {
+      await supabase.from('perfis').update(update).eq('id', cliente.id);
+      return { ok: true, servico: true, suspensao_ignorada: true };
+    }
     // Só suspende se ainda não está inadimplente (evita sobrescrever role_anterior já salvo)
     if (ROLES_PAGANTES.includes(cliente.role) && !cliente.inadimplente_desde) {
       update.inadimplente_desde = new Date().toISOString().slice(0, 10);

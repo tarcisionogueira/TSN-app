@@ -362,7 +362,10 @@ export default async function handler(req, res) {
         }
         return res.status(200).json({ ok: true, produto_estorno: result });
       }
-      result = await processarReembolso({ ...contexto, suspender: !parcial });
+      // Reembolso de SERVIÇO avulso (recarga, assessoria) estorna a comissão mas NÃO
+      // suspende o plano: o assinante devolvido de uma compra avulsa segue pagante.
+      // Mesma lacuna do ramo rejected/cancelled — o guard cobria só produto.
+      result = await processarReembolso({ ...contexto, suspender: !parcial && !contexto.servico });
     } else {
       // pending, in_process, authorized — aguardar próxima notificação
       return res.status(200).json({ ok: true, ignored: status });
