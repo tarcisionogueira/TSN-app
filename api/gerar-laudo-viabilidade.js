@@ -12,6 +12,7 @@ export const config = { runtime: 'nodejs', maxDuration: 180 };
 
 import { getUser } from './_auth.js';
 import { anthropicFetch } from './_claude.js';
+import { custoRespostaClaude, registrarCustoGeracao } from './_uso.js';
 import { resumoAprendizadoTexto, recalcularArremate } from './_arremate-aprendizado.js';
 import { aprenderNaEmissao, vicioRegen } from './_aprendizado.js';
 
@@ -19,6 +20,9 @@ const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
 const CLAUDE_KEY   = process.env.CLAUDE_KEY;
 const MODEL = 'claude-sonnet-4-6';
+// Rodapé fixo do laudo. No ESCOPO DO MÓDULO porque a checagem de "laudo vazio" (fora da
+// IIFE de geração) precisa descontá-lo para medir o conteúdo REAL do parecer.
+const AVISO = '\n\n§ SEÇÃO: LEMBRETE\nEste laudo de viabilidade é um parecer consolidado gerado com apoio de inteligência artificial a partir dos dois relatórios anteriores — tem caráter de apoio à decisão e não substitui a análise de um profissional nem a verificação presencial. Recomendamos agendar a reunião com um analista para validar o veredito antes de qualquer lance.';
 
 function sb(path, opts = {}) {
   return fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
@@ -45,6 +49,30 @@ function extractText(data) {
   if (!data?.content) return '';
   return data.content.filter(c => c.type === 'text').map(c => c.text).join('\n');
 }
+// Fecha strings/colchetes/chaves abertos num JSON TRUNCADO (resposta cortada no
+// max_tokens). Idêntico ao do documental — que o tem desde sempre, e por isso nunca
+// perdeu um parecer inteiro por um corte no fim. O laudo era o ÚNICO dos três sem
+// esta rede: JSON cortado virava `{}` e o relatório saía vazio, com o veredito
+// 'condicional' do default e o parecer contendo apenas o aviso de rodapé.
+function fecharJSONtruncado(frag) {
+  let out = frag, inStr = false, esc = false;
+  const st = [];
+  for (let k = 0; k < out.length; k++) {
+    const ch = out[k];
+    if (inStr) { if (esc) esc = false; else if (ch === '\\') esc = true; else if (ch === '"') inStr = false; continue; }
+    if (ch === '"') inStr = true;
+    else if (ch === '{' || ch === '[') st.push(ch === '{' ? '}' : ']');
+    else if (ch === '}' || ch === ']') st.pop();
+  }
+  if (inStr) out += '"';
+  out = out.replace(/\\+$/, '');
+  out = out.replace(/[\s,]+$/, '');
+  out = out.replace(/:\s*$/, ': null');
+  out = out.replace(/,\s*"[^"]*"\s*$/, '');
+  out = out.replace(/[\s,]+$/, '');
+  while (st.length) out += st.pop();
+  return out;
+}
 function parseJSON(text) {
   if (!text) return null;
   const clean = text.trim();
@@ -53,8 +81,20 @@ function parseJSON(text) {
   if (md) { try { return JSON.parse(md[1].trim()); } catch {} }
   const obj = clean.match(/\{[\s\S]*\}/);
   if (obj) { try { return JSON.parse(obj[0]); } catch {} }
+  const i = clean.indexOf('{');
+  if (i >= 0) {
+    const s = clean.slice(i).replace(/```/g, '');
+    try { return JSON.parse(fecharJSONtruncado(s)); } catch {}
+    for (const m of ['"', '}', ']']) {
+      const p = s.lastIndexOf(m);
+      if (p > 0) { try { return JSON.parse(fecharJSONtruncado(s.slice(0, p + 1))); } catch {} }
+    }
+  }
   return null;
 }
+// Custo REAL acumulado desta geração (a função Vercel processa 1 requisição por
+// instância → é seguro acumular em módulo e zerar por request).
+let _custoMicroReq = 0;
 async function anthropic(payload, fetchOpts) {
   const headers = { 'x-api-key': CLAUDE_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' };
   const r = await anthropicFetch({ method: 'POST', headers, body: JSON.stringify(payload) }, fetchOpts);
@@ -65,7 +105,9 @@ async function anthropic(payload, fetchOpts) {
     console.error('[anthropic:laudo] HTTP', r.status, String(corpo).slice(0, 600));
     throw new Error(`anthropic_http_${r.status}`);
   }
-  return r.json();
+  const j = await r.json();
+  try { _custoMicroReq += custoRespostaClaude(payload?.model, j?.usage); } catch { /* medição nunca quebra a geração */ }
+  return j;
 }
 async function ultimoConcluido(tabela, userId, imovelId) {
   const r = await sb(`${tabela}?user_id=eq.${userId}&imovel_id=eq.${encodeURIComponent(String(imovelId))}&status=eq.concluida&select=result,data_leilao,updated_at&order=updated_at.desc&limit=1`);
@@ -236,6 +278,8 @@ export default async function handler(req, res) {
   const DEADLINE_MS = 160000;
   const prazo = new Promise((_, rej) => setTimeout(() => rej(new Error('tempo_limite')), DEADLINE_MS));
 
+  let diag = null;
+  _custoMicroReq = 0; // zera o acumulador de custo desta geração
   try {
     const result = await Promise.race([prazo, (async () => {
     const resMerc = resumoMercado(mRow.result);
@@ -256,14 +300,29 @@ export default async function handler(req, res) {
     // Calibração por ARREMATES REAIS (previsto×realizado, por modalidade).
     try { aprendizados += await resumoAprendizadoTexto(imovel?.modalidade || null); } catch { /* best-effort */ }
 
+    // max_tokens 12000 (era 4000). O JSON pedido tem 8 campos, entre eles 3 listas de 3 a 6
+    // tópicos e um PARECER de SEIS seções — não cabe em 4k de saída. Os 4 laudos já emitidos
+    // saíram TODOS vazios, sempre com o mesmo tamanho (só o aviso de rodapé) e o veredito
+    // 'condicional' do default: a resposta era cortada, o JSON ficava inválido e o `|| {}`
+    // transformava a falha em relatório em branco, sem erro e sem rastro.
     const data = await anthropic({
-      model: MODEL, max_tokens: 4000,
+      model: MODEL, max_tokens: 12000,
       system: 'Você é o gestor sênior de decisão da BidPro Brasil. Emite o parecer final de viabilidade consolidando o relatório mercadológico/financeiro e o documental/jurídico. Pondera as duas visões, não as refaz. Honesto e objetivo. Nunca use markdown nem asteriscos. Nunca use travessão (o caractere "—"); escreva com vírgula, ponto ou dois-pontos. Retorne apenas JSON válido.' + aprendizados,
       messages: [{ role: 'user', content: promptDefesa(im, resMerc, resDoc) }],
     }, { retries: 1, timeoutMs: 120000, noFallback: true });
-    const parsed = parseJSON(extractText(data)) || {};
+    const bruto = extractText(data);
+    const parsed = parseJSON(bruto) || {};
+    // DIAGNÓSTICO PERSISTIDO: por que um laudo saiu vazio tem de ser respondível pelo banco,
+    // sem depender de log da Vercel. Foi a lição do "relatório concluído mas em branco" do
+    // mercadológico, que aqui ainda não tinha sido aplicada.
+    diag = {
+      stop: data?.stop_reason || null, textoLen: bruto.length,
+      out_tokens: data?.usage?.output_tokens || 0,
+      camposLidos: Object.keys(parsed).length,
+      parecerLen: String(parsed.parecer || '').length,
+    };
+    if (!String(parsed.parecer || '').trim()) console.error('[laudo] parecer vazio', JSON.stringify({ imovel: String(imovelId), ...diag }));
 
-    const AVISO = '\n\n§ SEÇÃO: LEMBRETE\nEste laudo de viabilidade é um parecer consolidado gerado com apoio de inteligência artificial a partir dos dois relatórios anteriores — tem caráter de apoio à decisão e não substitui a análise de um profissional nem a verificação presencial. Recomendamos agendar a reunião com um analista para validar o veredito antes de qualquer lance.';
 
     const result = {
       veredito: parsed.veredito || 'condicional',
@@ -298,6 +357,13 @@ export default async function handler(req, res) {
 
     // APRENDER NA EMISSÃO (durável, sem IA): o próprio controleQualidade do laudo já
     // sinaliza vícios (revisão/contradição/lacuna) → aprende e aponta regeração.
+    // LAUDO VAZIO NÃO É "CONCLUÍDO" (mesma regra já valendo no mercadológico). Antes, um
+    // parecer em branco era gravado como sucesso: o cliente abria um relatório sem conteúdo,
+    // o Cliente 360 registrava 'ok' e o self-heal nem olhava (status errado). Agora é ERRO
+    // com o diagnóstico junto — a regeração automática pega e o dono enxerga a falha.
+    if (!result.resumoExecutivo && !(result.pontosFortes || []).length && String(result.parecer || '').replace(AVISO, '').trim().length < 200) {
+      const e = new Error('laudo_vazio'); e.diag = diag; throw e;
+    }
     const cq = result.controleQualidade || {};
     const qualLaudo = {
       recomenda_revisao: !!cq.recomendaRevisao,
@@ -305,7 +371,8 @@ export default async function handler(req, res) {
       tem_lacunas_criticas: Array.isArray(cq.lacunasCriticas) && cq.lacunasCriticas.length > 0,
     };
     await upsertLaudo({ ...baseRow, status: 'concluida', erro: null, result, regen_motivo: vicioRegen(qualLaudo), regen_em: new Date().toISOString() });
-    await logAtividade(ownerId, 'relatorio_laudo_ok', `Laudo de viabilidade: ${result.veredito}`, { imovel_id: String(imovelId), veredito: result.veredito });
+    await logAtividade(ownerId, 'relatorio_laudo_ok', `Laudo de viabilidade: ${result.veredito}`, { imovel_id: String(imovelId), veredito: result.veredito, diag });
+    await registrarCustoGeracao('laudo', { userId: ownerId, imovelId: String(imovelId), custoMicro: _custoMicroReq, ok: true, meta: { veredito: result.veredito, ...(diag || {}) } });
     await aprenderNaEmissao(sb, { agente: 'laudo', imovel: { id: imovelId, cidade: im.cidade, estado: im.estado, tipo: im.tipo, modalidade: imovel?.modalidade },
       corpus: { veredito: result.veredito, confianca_mercado: cq.confiancaMercadologico ?? null, confianca_documental: cq.confiancaDocumental ?? null },
       qualidade: qualLaudo });
@@ -315,9 +382,15 @@ export default async function handler(req, res) {
     res.status(200).json({ ok: true, result });
   } catch (e) {
     const timeout = String(e?.message) === 'tempo_limite';
-    const msg = timeout ? 'A geração excedeu o tempo limite do servidor. Costuma ser temporário: tente novamente.' : String(e?.message || e);
+    const vazio = String(e?.message) === 'laudo_vazio';
+    const msg = timeout ? 'A geração excedeu o tempo limite do servidor. Costuma ser temporário: tente novamente.'
+      : vazio ? 'A redação do laudo voltou sem conteúdo. Tente gerar novamente: o sistema também re-tenta sozinho.'
+      : String(e?.message || e);
     await upsertLaudo({ ...baseRow, status: 'erro', erro: msg });
-    await logAtividade(ownerId, 'relatorio_laudo_erro', msg.slice(0, 180), { imovel_id: String(imovelId), timeout });
+    await logAtividade(ownerId, 'relatorio_laudo_erro', msg.slice(0, 180), { imovel_id: String(imovelId), timeout, vazio, diag: e?.diag || diag });
+    // Gasto sem entrega fica MEDIDO como desperdício (ok:false) — é o que torna visível
+    // um agente que consome e não produz, em vez de sumir na média.
+    await registrarCustoGeracao('laudo', { userId: ownerId, imovelId: String(imovelId), custoMicro: _custoMicroReq, ok: false, meta: { erro: msg.slice(0, 120), ...(e?.diag || diag || {}) } });
     res.status(timeout ? 504 : 500).json({ error: timeout ? 'Tempo limite ao gerar o laudo' : 'Falha ao gerar o laudo de viabilidade', detalhe: msg });
   }
 }

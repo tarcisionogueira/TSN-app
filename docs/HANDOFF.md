@@ -408,6 +408,66 @@ Resultado nos dois editais reais: `Edifício Evazo` · `Rua Gonçalves Maia` · 
 privativa 72,85 m² · matrícula 3757 · comissão 5%; e `Rua Otávio Francisco Caruso da Rocha` ·
 comissão 6% · sinal 25% · caução 20%. Cobertura a acompanhar: `select * from doc_fatos_cobertura();`
 
+### 💰 11) Quanto custa cada relatório — e o 3º nunca funcionou
+
+Pergunta do dono: *"veja quanto custa em média cada relatório e índice. Também veja a
+eficiência e necessidade do terceiro relatório de parecer final ou se é desnecessário."*
+
+**Custo (medido, isolando dias de mix conhecido — câmbio R$ 5,40):**
+
+| Produto | Motor | Custo | Base da medição |
+|---|---|---|---|
+| **Mercadológico** | Gemini grounding (2×) + parecer Claude | **US$ 0,12–0,16 · R$ 0,65–0,87** | 03/08: 5 gerações, zero documental, US$ 0,804 · 01/08: 2 gerações, US$ 0,237 |
+| **Documental** | Claude com leitura de PDF por visão | **US$ 0,63–1,10 · R$ 3,40–5,95** | 04 e 05/08 (3 merc + 3 doc cada), descontando o mercadológico |
+| **Laudo (3º)** | 1 passada Claude, sem busca | **≈ US$ 0,09 · R$ 0,50** | tokens do prompt; nunca isolado em dia limpo |
+| **Índice (1 pesquisa, 1 tipo)** | **Claude web_search** | **US$ 0,54 · R$ 2,94** | 06/08 isolado: 2 pesquisas (85 e 70 amostras), US$ 1,088, nenhum relatório no dia |
+
+**Pacote completo (3 relatórios) ≈ US$ 1,10 · R$ 5,95.**
+
+⚠️ **O maior desalinhamento de custo do sistema:** o Índice custa **4× o mercadológico**
+fazendo o MESMO tipo de trabalho. O mercadológico migrou para Gemini grounding
+(US$ 0,035/busca, token barato); o Índice continua no Claude web_search (US$ 0,01/busca +
+114 mil tokens de entrada por chamada, porque o resultado da busca volta para o contexto).
+Migrar o Índice para o mesmo motor levaria US$ 0,54 → ~US$ 0,15. **Não fiz sozinho:** o dono
+acabou de validar a qualidade das amostras do motor atual (60 locações reais em Brasília), e
+trocar o motor de algo recém-aprovado é decisão dele, não minha.
+
+**🔴 O 3º relatório não é desnecessário — ele NUNCA funcionou.** Os 4 laudos já emitidos
+(21, 23, 30 e 31/07) são cascas **idênticas e vazias**: `veredito` = 'condicional' (o default
+do código), `resumoExecutivo` vazio, 0 pontos fortes, 0 pontos de atenção, `controleQualidade`
+null e `parecer` com **exatamente 358 caracteres** nos quatro — o tamanho do aviso de rodapé
+sozinho. Nenhum deles tem uma linha de conteúdo.
+
+**Causa:** `max_tokens: 4000` para um JSON com 8 campos, entre eles três listas de 3 a 6
+tópicos e um parecer de SEIS seções. Não cabe. A resposta era cortada, o JSON ficava inválido,
+`parseJSON` devolvia null e o `|| {}` transformava a falha em relatório em branco — gravado
+como **'concluida'**, sem erro, sem rastro, e o self-heal nem olhava (status errado). O laudo
+era o único dos três SEM a recuperação de JSON truncado que o documental tem desde sempre.
+
+**Corrigido:** `max_tokens` 4000 → 12000 · recuperação de JSON truncado portada do documental ·
+diagnóstico persistido (`stop`, `out_tokens`, `camposLidos`, `parecerLen`) · e a regra que já
+valia no mercadológico agora vale aqui: **laudo vazio não é "concluída"** — vira erro, o cliente
+recebe mensagem acionável e a regeração automática pega.
+
+**Sobre manter ou não o 3º relatório: a decisão é do dono, agora com dados.** Ele é o mais
+BARATO dos três (R$ 0,50, ~4% do pacote) e é o único que faz o que os outros dois não fazem:
+cruzar mercado × jurídico, emitir veredito único e rodar controle de qualidade entre os dois
+relatórios (confiança de cada um, contradições, lacunas). Também é o gate do agendamento com o
+analista. Recomendação: manter e validar a correção com um laudo real — se depois disso ele
+ainda não agregar, aí sim a discussão é de produto, não de bug.
+
+**Instrumentação (o que faltava para nem precisar dessa arqueologia):** `geracao_custos` +
+`registrar_geracao_custo()` gravam o custo REAL de CADA geração, com `ok=false` quando gastou
+sem entregar. `uso_integracoes` agrega por provedor/DIA e mistura os produtos; o único ponto que
+gravava custo por geração era `debitar_credito`, que só roda com a cota esgotada — e por isso
+tem 0 linhas. Daqui pra frente: `select * from custo_por_geracao(30);`
+
+**Bug tirado junto:** o painel de sustentabilidade aprendia o "custo por análise" de
+`claude/web_search`, premissa que valia quando o mercadológico usava esse motor. Depois da
+migração para o Gemini, o único consumidor de `claude/web_search` é o ÍNDICE — o painel media o
+índice e chamava de análise, subestimando em ~4× o teto de "análises grátis que um Pro banca".
+Agora aprende de `geracao_custos` filtrado por `funcao='mercadologico'`.
+
 ### Próximo passo desta sessão
 
 Re-verificação adversarial dos 16 achados de `docs/VARREDURA_BUGS_2026-08-05.md` marcados

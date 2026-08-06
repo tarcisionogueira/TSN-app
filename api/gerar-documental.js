@@ -12,7 +12,7 @@ import { getUser } from './_auth.js';
 import { fetchViaBrightData } from './_brightdata.js';
 import { capturarDocsLoginOnDemand, temLoginParaFonte } from './_leiloeiro-auth.js';
 import { anthropicFetch } from './_claude.js';
-import { custoRespostaClaude } from './_uso.js';
+import { custoRespostaClaude, registrarCustoGeracao } from './_uso.js';
 import { buscarProcessosCNJ } from './_cnj.js';
 import { aprenderNaEmissao, vicioRegen } from './_aprendizado.js';
 import { consultarComunicaDJEN } from './_laudo-fontes.js';
@@ -1463,6 +1463,13 @@ export default async function handler(req, res) {
     };
     await upsertDoc({ ...base, status: 'concluida', erro: null, result, regen_motivo: vicioRegen(qualDoc), regen_em: new Date().toISOString() });
     await logAtividade(ownerId, 'relatorio_documental_ok', `Documental concluído (risco ${result.nivelRisco || '?'})`, { imovel_id: String(imovelId), nivelRisco: result.nivelRisco, alertasAntifraude: (result.antifraude?.alertas || []).length });
+    // CUSTO REAL desta geração (ver _uso.js). O documental é o mais caro dos três — lê PDF
+    // por visão —, e é justamente o que o agregado diário escondia ao se somar ao
+    // mercadológico do mesmo dia.
+    await registrarCustoGeracao('documental', {
+      userId: ownerId, imovelId: String(imovelId), custoMicro: _custoMicroReq, ok: true,
+      meta: { nivelRisco: result.nivelRisco || null, docsLidos: (result.documentosLidos || []).length || null },
+    });
     // Cobra o CRÉDITO quando esta geração usou crédito (cota mensal esgotada). Só aqui, no
     // sucesso REAL (com laudo) — os caminhos de "faltam documentos" estornam a cota e não
     // cobram. Débito = custo real medido × multiplicador; nunca negativa (já pré-autorizado).

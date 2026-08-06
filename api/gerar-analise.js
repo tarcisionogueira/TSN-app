@@ -7,7 +7,7 @@ export const config = { runtime: 'nodejs', maxDuration: 300 };
 import { getUser } from './_auth.js';
 import { fetchExternoSeguro } from './_allowed-hosts.js';
 import { anthropicFetch } from './_claude.js';
-import { custoRespostaClaude, medirGemini } from './_uso.js';
+import { custoRespostaClaude, medirGemini, registrarCustoGeracao } from './_uso.js';
 import { resumoAprendizadoTexto } from './_arremate-aprendizado.js';
 import { ehCidadeTemporada, motivoTemporada } from './_temporada.js';
 import { composicaoTemporal, avisoFrescor } from './_indice-composicao.js';
@@ -2211,6 +2211,17 @@ COMO USAR (obrigatório): dedique um parágrafo aos CUSTOS DA OPERAÇÃO segundo
           : `Mercado estimado por ${fonte}${valorMercado ? ` — R$ ${Math.round(valorMercado).toLocaleString('pt-BR')}` : ''}`;
       await logAtividade(ownerId, evento, detalhe,
         { imovelId: String(imovelId), cidade: cidade || null, fonte, comparaveis: nComp, valorMercado: valorMercado || null, erroApi: m.__erroApi || null, parecerDiag: dp, reaproveitado: !!result.reaproveitado, ator: user.id });
+      // CUSTO REAL desta geração (uma linha por relatório). Sem isto, "quanto custa um
+      // mercadológico" só saía por inferência do agregado diário — que num dia com
+      // documentais junto mistura os dois. `ok:false` na entrega incompleta: o gasto de
+      // uma geração que não entregou precisa aparecer como desperdício, não como custo
+      // normal do produto. Vale para geração reaproveitada também (custo perto de zero,
+      // que é justamente o que o cache economiza e queremos ver na média).
+      await registrarCustoGeracao('mercadologico', {
+        userId: ownerId, imovelId: String(imovelId), custoMicro: _custoMicroReq,
+        ok: !mercadoVazio && !semParecer,
+        meta: { cidade: cidade || null, comparaveis: nComp, reaproveitado: !!result.reaproveitado, evento },
+      });
     } catch { /* log best-effort */ }
 
     // SEGURANÇA: NÃO realimentar o score do CARD do catálogo com valores desta análise.

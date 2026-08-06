@@ -11,7 +11,7 @@ export const config = { runtime: 'nodejs', maxDuration: 250 };
 
 import { getUser } from './_auth.js';
 import { anthropicFetch } from './_claude.js';
-import { custoRespostaClaude } from './_uso.js';
+import { custoRespostaClaude, registrarCustoGeracao } from './_uso.js';
 import { SEG_TIPOS, norm, extractText, parseJSON, promptIndice, montarAmostras } from './_indice-core.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
@@ -158,6 +158,9 @@ export default async function handler(req, res) {
   }
   if (!mercado) {
     console.error('[indice-mercado] pesquisa falhou', { cidade: cidadeNorm, uf, tipo, bairro: bairroNorm, segundos: Math.round((Date.now() - T0) / 1000), motivo: motivoFalha });
+    // Pesquisa que falhou GASTOU: registra como desperdício (ok:false) para a média por
+    // geração distinguir o custo do produto do custo das tentativas perdidas.
+    await registrarCustoGeracao('indice', { userId: user.id, imovelId: `${cidadeNorm}|${tipo}`, custoMicro, ok: false, meta: { uf, bairro: bairroNorm || null, motivo: String(motivoFalha || '').slice(0, 120) } });
     res.status(502).json({ error: 'A pesquisa de mercado falhou. Tente novamente.', detalhe: motivoFalha || 'busca instável' });
     return;
   }
@@ -169,6 +172,9 @@ export default async function handler(req, res) {
   // Tempo REAL de cada pesquisa bem-sucedida — é o que permite calibrar o orçamento acima em
   // vez de estimar. Sem isto, a única duração observável era a das que estouravam.
   console.log('[indice-mercado] ok', { cidade: cidadeNorm, uf, tipo, segundos: Math.round((Date.now() - T0) / 1000), amostras: amostras.length, inseridas });
+  // Custo REAL desta pesquisa. É a única forma de comparar o índice (Claude web_search) com o
+  // mercadológico (Gemini grounding) na mesma régua — os dois fazem o mesmo tipo de trabalho.
+  await registrarCustoGeracao('indice', { userId: user.id, imovelId: `${cidadeNorm}|${tipo}`, custoMicro, ok: amostras.length > 0, meta: { uf, bairro: bairroNorm || null, amostras: amostras.length, inseridas, segundos: Math.round((Date.now() - T0) / 1000) } });
 
   // Cobra 1 crédito só no SUCESSO: cota mensal → crédito. Uma pesquisa = um tipo = 1 crédito.
   const cobrar = async () => {

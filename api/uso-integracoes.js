@@ -187,21 +187,29 @@ export default async function handler(req) {
       if (r.ok) m = await r.json();
     }
 
-    // Custo/análise APRENDIDO com o fluxo: soma de todo o custo mercadológico do
-    // Claude (web_search) ÷ nº de chamadas medidas. Começa semeado pela média do
-    // piloto A/B (env, ~US$ 0,49) e vai convergindo para o real conforme roda em
-    // produção. Cada mercadológica = 1 chamada web_search → custo/chamada é estável.
+    // Custo/análise APRENDIDO — agora do custo REAL de cada geração (`geracao_custos`,
+    // uma linha por relatório), não mais de `claude/web_search`.
+    //
+    // Por que mudou: a métrica antiga assumia "1 mercadológica = 1 chamada claude
+    // web_search". Isso deixou de ser verdade quando o mercadológico migrou para o Gemini
+    // grounding — desde então o único consumidor de claude/web_search é o ÍNDICE, então o
+    // painel vinha medindo o custo do ÍNDICE e chamando de "custo por análise". Como o
+    // índice custa cerca de 4x o relatório, o teto de "análises grátis que um Pro banca"
+    // saía subestimado por um fator próximo de 4.
+    //
+    // Fallback preservado: sem linhas suficientes em geracao_custos (base nova), cai no
+    // seed do piloto A/B, como antes — nunca fica sem número.
     let custoAprendidoUsd = custoAnaliseUsd, baseAmostras = 0, aprendido = false;
     try {
       if (SB && KEY) {
-        const r = await fetch(`${SB}/rest/v1/uso_integracoes?provedor=eq.claude&operacao=eq.web_search&select=requests,custo_usd_micro`, {
+        const r = await fetch(`${SB}/rest/v1/geracao_custos?funcao=eq.mercadologico&ok=is.true&select=custo_micro&order=criado_em.desc&limit=200`, {
           headers: { apikey: KEY, Authorization: `Bearer ${KEY}` },
         });
         if (r.ok) {
           const linhas = await r.json();
-          const req = linhas.reduce((s, x) => s + (x.requests || 0), 0);
-          const usd = linhas.reduce((s, x) => s + (x.custo_usd_micro || 0), 0) / 1e6;
-          if (req >= 5) { custoAprendidoUsd = usd / req; baseAmostras = req; aprendido = true; }
+          const n = Array.isArray(linhas) ? linhas.length : 0;
+          const usd = (linhas || []).reduce((s, x) => s + (Number(x.custo_micro) || 0), 0) / 1e6;
+          if (n >= 5) { custoAprendidoUsd = usd / n; baseAmostras = n; aprendido = true; }
         }
       }
     } catch { /* mantém o seed do piloto */ }

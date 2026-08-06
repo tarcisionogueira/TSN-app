@@ -128,3 +128,27 @@ export async function medirGemini(model, data, operacao = 'messages') {
     await registrarUso('gemini', operacao, { requests: 1, tokens_in: tin, tokens_out: tout, unidades: buscas, custo_usd_micro: custo });
   } catch { /* best-effort */ }
 }
+
+/**
+ * CUSTO REAL DE UMA GERAÇÃO (uma linha por relatório/índice). `uso_integracoes` agrega
+ * por provedor/operação/DIA — num dia com 3 mercadológicos e 3 documentais os dois se
+ * misturam e o custo por relatório vira inferência. Aqui cada geração grava o que ELA
+ * gastou (o acumulador `_custoMicroReq` de cada gerador), então "quanto custa em média
+ * cada relatório" passa a ser uma consulta, não uma estimativa: `custo_por_geracao()`.
+ * `ok:false` marca geração que gastou e não entregou — o desperdício fica medido também.
+ * Best-effort: nunca lança para o gerador.
+ */
+export async function registrarCustoGeracao(funcao, { userId = null, imovelId = null, custoMicro = 0, ok = true, meta = null } = {}) {
+  if (!SUPABASE_URL || !SERVICE_KEY || !funcao) return;
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/rpc/registrar_geracao_custo`, {
+      method: 'POST',
+      headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify({
+        p_funcao: String(funcao), p_user_id: userId || null, p_imovel_id: imovelId ? String(imovelId) : null,
+        p_custo_micro: Math.round(Number(custoMicro) || 0), p_ok: !!ok, p_meta: meta || null,
+      }),
+      signal: AbortSignal.timeout(6000),
+    });
+  } catch { /* medição nunca quebra a geração */ }
+}
