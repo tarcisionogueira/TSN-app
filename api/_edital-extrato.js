@@ -16,6 +16,30 @@ const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
+/**
+ * PUBLICA NA FICHA DO IMÓVEL o que a leitura do documento apurou (pedido do dono, 06/08:
+ * "que também apareça na tela do imóvel — isso gera mais credibilidade"). Fica aqui, e não
+ * no chamador, porque TODO caminho que lê edital/matrícula passa por este módulo: o
+ * mercadológico, o laudo e qualquer rotina futura enriquecem a ficha só de rodar.
+ *
+ * `registrar_doc_fatos` faz MERGE atômico por chave de topo — a leitura da matrícula não
+ * apaga o que o edital apurou, e duas gerações simultâneas do mesmo lote não se atropelam.
+ * Best-effort por contrato: falhar aqui nunca afeta o relatório em curso.
+ */
+async function publicarDocFatos(imovelId, fatos) {
+  if (!SUPABASE_URL || !SERVICE_KEY || !imovelId || !fatos) return;
+  const uteis = Object.fromEntries(Object.entries(fatos).filter(([, v]) => v && (typeof v !== 'object' || Object.values(v).some((x) => x !== null && x !== ''))));
+  if (!Object.keys(uteis).length) return;
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/rpc/registrar_doc_fatos`, {
+      method: 'POST',
+      headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify({ p_imovel_id: String(imovelId), p_fatos: { ...uteis, em: new Date().toISOString() } }),
+      signal: AbortSignal.timeout(8000),
+    });
+  } catch { /* enriquecer a ficha nunca bloqueia a geração */ }
+}
+
 const parseValor = (s) => {
   const v = parseFloat(String(s || '').replace(/\./g, '').replace(',', '.'));
   return Number.isFinite(v) && v >= 1000 && v < 100000000 ? v : 0;
@@ -172,6 +196,11 @@ export async function extratoEdital(imovelId, { deadline } = {}) {
       const razao = cond.avaliacao / aval;
       if (razao < 0.5 || razao > 2) pertence = false;
     }
+    // Ficha do imóvel: só publica o que PERTENCE ao lote (edital de outro lote anexado por
+    // engano vira anomalia no chamador e não pode virar "informação confirmada" na tela).
+    if (pertence) {
+      await publicarDocFatos(imovelId, { identidade, custos, pagamento, fonteEdital: url });
+    }
     return { ...cond, pagamento, custos, identidade, datas, fonteUrl: url, pertenceAoLote: pertence, deCache };
   }
   return null;
@@ -200,6 +229,7 @@ export async function extratoMatricula(imovelId, { deadline } = {}) {
   // precisa e já foi paga — se existe, nada é baixado nem re-lido.
   const porImovel = await cacheLer(`i:${String(imovelId)}`, { maxDias: 36500 });
   if (Number(porImovel?.campos?.matricula?.areaPrivativaM2) > 0) {
+    await publicarDocFatos(imovelId, { matricula: porImovel.campos.matricula });
     return { ...porImovel.campos.matricula, fonteUrl: null, deCache: true, via: 'visao' };
   }
   const anexos = Array.isArray(im.anexos) ? im.anexos : [];
@@ -211,14 +241,21 @@ export async function extratoMatricula(imovelId, { deadline } = {}) {
   for (const url of cands) {
     if (Date.now() > fim) break;
     const hit = await cacheLer(chaveUrl(url));
-    if (hit?.campos?.matricula) return { ...hit.campos.matricula, fonteUrl: url, deCache: true };
+    if (hit?.campos?.matricula) {
+      await publicarDocFatos(imovelId, { matricula: hit.campos.matricula, identidade: hit.campos.identidade || null, fonteMatricula: url });
+      return { ...hit.campos.matricula, fonteUrl: url, deCache: true };
+    }
     const txt = await lerTexto(url, fim);
     if (!txt) continue;
     const mat = extrairMatriculaTexto(txt);
     if (!mat) continue; // PDF escaneado/sem âncora → fica p/ a visão do documental
-    const meta = { url, imovelId, tipoDoc: 'matricula', campos: { matricula: mat }, via: 'regex', confianca: 60 };
+    // A MATRÍCULA descreve o imóvel melhor que o edital (é dela que sai o nome do
+    // empreendimento e o logradouro na forma registral) — lê a identidade no mesmo texto.
+    const idm = extrairIdentidadeTexto(txt);
+    const meta = { url, imovelId, tipoDoc: 'matricula', campos: { matricula: mat, ...(idm ? { identidade: idm } : {}) }, via: 'regex', confianca: 60 };
     await cacheGravar(chaveUrl(url), meta);
     await cacheGravar(chaveConteudo(txt), meta);
+    await publicarDocFatos(imovelId, { matricula: mat, identidade: idm, fonteMatricula: url });
     return { ...mat, fonteUrl: url, deCache: false };
   }
   return null;

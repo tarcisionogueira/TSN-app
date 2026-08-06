@@ -357,6 +357,57 @@ desde o deploy de ontem. O 1º mercadológico de lote com edital em PDF valida d
 documento (validação 5 da abertura), a metragem pré-busca (item 8) e estes custos. Conferir no
 log: `[metragem-doc]`, `[identidade-doc]` e `condicoesEdital.custos` no `result`.
 
+### 🔴 10) O que o documento diz passa a aparecer na FICHA, não só no relatório
+
+Pedido do dono, na sequência do item 9: *"caso encontre nome de condomínio, despesas mensais, que
+também apareça na tela do imóvel. Ao extrair a documentação, poder informar esses detalhes, pois
+isso gera mais credibilidade ao visualizar a ficha de um imóvel."*
+
+**O buraco.** Tudo do item 9 vivia DENTRO do relatório: quem abria a ficha do lote não via nada do
+que o documento diz. E a coluna `nomecondominio` existe desde sempre, preenchida em **0 dos 33.484
+lotes ativos** — nenhum leiloeiro publica esse campo; quem tem o nome do empreendimento é o
+documento.
+
+**Coluna nova `imoveis_leilao.doc_fatos`** (+ `doc_fatos_em`), gravada pela RPC
+`registrar_doc_fatos` — MERGE atômico e **por campo**: edital e matrícula se COMPLETAM (o edital
+costuma dar os custos, a matrícula dá o nome do empreendimento e o logradouro registral) e quem
+roda por último não zera o que o outro achou; duas gerações simultâneas do mesmo lote não se
+atropelam. Preenche `nomecondominio` quando está vazio, nunca por cima da fonte. Só service_role
+grava; o cliente lê pela política pública que já existia.
+
+**Dois pontos de gravação, e o segundo é o que escala:**
+1. `_edital-extrato.js` — todo caminho que lê documento (mercadológico, laudo, o que vier) publica
+   só de rodar. Edital que **não pertence ao lote** não publica: dado errado com selo de
+   "confirmado no documento" é pior que ausente.
+2. `scripts/captura-documentos.mjs` — o PDF já está em memória na captura; ler o texto e aplicar
+   os mesmos extratores custa milissegundos e **zero em API**. Sem isso, só o lote de quem gerou
+   relatório teria ficha enriquecida; com isso, todo lote que passa pela captura ganha sozinho.
+
+**Na ficha:** card *"Confirmado na documentação"* com o imóvel na documentação (condomínio,
+endereço registral, área privativa/terreno da matrícula, nº da matrícula), **despesas mensais**
+(condomínio, IPTU), custos e condições da arrematação (comissão, taxa administrativa,
+parcelamento, sinal, prazo) e — em bloco laranja separado — **débitos em aberto**, com o aviso de
+que não são despesa mensal e que quem os assume depende de cláusula do edital. Ficha sem leitura
+continua exatamente como era.
+
+**Dois defeitos que só apareceram em PDF de verdade** (dois editais LJUD baixados e parseados no
+teste — o resto do acervo respondeu 403 ao ambiente da sessão):
+- **Comissão não saía em edital JUDICIAL.** A forma padrão deles é *"comissão do(a) leiloeiro(a) a
+  título de 5%"* e *"Arbitro a comissão da Leiloeira em 6%"* — o vão entre a palavra e o
+  percentual não casava com o padrão fechado anterior. Agora o vão é tolerante (≤70 chars) com
+  teto de 20%, senão um "100% da avaliação" na mesma frase entraria como comissão.
+- **Logradouro colhia lixo.** `Praça` + `[^.;,]{4,70}` produziu o logradouro
+  `"Praça no (https://comunica"` a partir de *"Edital de Praça no (https://comunica.pje.jus.br/)"*.
+  Agora nome de via e nome de condomínio usam a MESMA régua de nome próprio (token capitalizado,
+  ligação só no meio, URL/parêntese cortam).
+  ⚠️ Detalhe que quase passou: a lista de "não é nome" casava por PREFIXO, então `do` derrubava
+  **"Dona Otília"**. Separada em duas listas — prefixo para flexão (`edilíci`, `localizad`),
+  exata para palavra curta (`do`, `da`, `de`).
+
+Resultado nos dois editais reais: `Edifício Evazo` · `Rua Gonçalves Maia` · `Boa Vista` · área
+privativa 72,85 m² · matrícula 3757 · comissão 5%; e `Rua Otávio Francisco Caruso da Rocha` ·
+comissão 6% · sinal 25% · caução 20%. Cobertura a acompanhar: `select * from doc_fatos_cobertura();`
+
 ### Próximo passo desta sessão
 
 Re-verificação adversarial dos 16 achados de `docs/VARREDURA_BUGS_2026-08-05.md` marcados

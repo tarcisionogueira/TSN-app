@@ -18,6 +18,8 @@ import puppeteer from 'puppeteer';
 import { Buffer } from 'buffer';
 import { createHash } from 'node:crypto';
 import { fetchViaBrightData, brightDataDisponivel } from '../api/_brightdata.js';
+import { carregarPDFParse } from '../api/_pdf-safe.js';
+import { extrairMatriculaTexto, extrairPagamentoTexto, extrairCustosTexto, extrairIdentidadeTexto } from '../api/_doc-extracao.js';
 
 const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 const BUCKET = 'documentos';
@@ -52,6 +54,33 @@ function classificar(url, nome = '', fonte = '') {
   return 'outro';
 }
 
+/**
+ * ENRIQUECE A FICHA NO MOMENTO DA CAPTURA (pedido do dono, 06/08: "ao extrair a
+ * documentação, poder informar esses detalhes na tela do imóvel").
+ *
+ * O PDF já está em memória aqui — ler o texto e aplicar os mesmos extratores do
+ * relatório custa milissegundos e ZERO em API. Sem isto, os fatos do documento só
+ * apareceriam no lote de quem gerou relatório; com isto, todo lote que passa pela
+ * captura ganha a ficha enriquecida sozinho. PDF escaneado (sem camada de texto)
+ * não rende nada e fica para a leitura por visão do documental — como antes.
+ * Best-effort absoluto: qualquer falha aqui não pode derrubar a captura.
+ */
+async function publicarFatosDoPdf(imovelId, buffer, tipo) {
+  try {
+    const PDFParse = await carregarPDFParse();
+    const parser = new PDFParse({ data: buffer });
+    let txt = '';
+    try { txt = String((await parser.getText())?.text || '').slice(0, 120000); }
+    finally { await parser.destroy().catch(() => {}); }
+    if (txt.length < 200) return;
+    const fatos = { identidade: extrairIdentidadeTexto(txt) };
+    if (tipo === 'matricula') fatos.matricula = extrairMatriculaTexto(txt);
+    else { fatos.custos = extrairCustosTexto(txt); fatos.pagamento = extrairPagamentoTexto(txt); fatos.matricula = extrairMatriculaTexto(txt); }
+    if (!Object.values(fatos).some(Boolean)) return;
+    await supabase.rpc('registrar_doc_fatos', { p_imovel_id: imovelId, p_fatos: { ...fatos, em: new Date().toISOString() } });
+  } catch { /* enriquecer a ficha nunca bloqueia a captura */ }
+}
+
 async function salvarAnexo(imovelId, buffer, tipo, nome, idx = 0) {
   // Caminho ENDEREÇADO POR CONTEÚDO (hash do PDF), NÃO por Date.now(). Assim uma
   // recaptura do MESMO documento reaproveita o mesmo objeto (upsert sobrescreve) em vez
@@ -66,6 +95,10 @@ async function salvarAnexo(imovelId, buffer, tipo, nome, idx = 0) {
   const signed = await supabase.storage.from(BUCKET).createSignedUrl(path, 60 * 60 * 24 * 365);
   const url = signed.data?.signedUrl || null;
   const row = { imovel_id: imovelId, tipo, nome, url, storage_path: path, tamanho_kb: Math.round(buffer.length / 1024), role_criador: 'sistema' };
+  // Lê o PDF que acabou de chegar e publica os fatos na ficha (nome do condomínio,
+  // despesas mensais, custos do edital, área da matrícula). Antes do return de dedup:
+  // documento já cadastrado continua valendo, e o merge da RPC é idempotente.
+  await publicarFatosDoPdf(imovelId, buffer, tipo);
   // Mesmo conteúdo já cadastrado (qualquer tipo) → só atualiza a linha, não duplica.
   if (jaTem?.length) { await supabase.from('imovel_anexos').update(row).eq('id', jaTem[0].id); await sincronizarJsonbAnexos(imovelId, tipo, url); return; }
   // Classificados (edital/matrícula/laudo/regras): 1 por tipo → atualiza o existente.

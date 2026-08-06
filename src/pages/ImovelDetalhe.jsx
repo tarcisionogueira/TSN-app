@@ -777,6 +777,10 @@ export default function ImovelDetalhe() {
           fichaCef: data.ficha_cef || null,
           fichaJuridica: data.ficha_juridica || null,
           ocupacao: data.ocupacao || null,
+          // Fatos lidos no edital/matrícula (nome do condomínio, despesas mensais, custos da
+          // arrematação, área da matrícula) — publicados por quem leu o documento.
+          nomeCondominio: data.nomecondominio || null,
+          docFatos: data.doc_fatos || null, docFatosEm: data.doc_fatos_em || null,
         });
       })
       .finally(() => setLoading(false));
@@ -1434,6 +1438,94 @@ export default function ImovelDetalhe() {
                 )}
               </div>
             )}
+
+            {/* ── CONFIRMADO NA DOCUMENTAÇÃO ────────────────────────────────────────────
+                Pedido do dono (06/08): "caso encontre nome de condomínio, despesas mensais,
+                que também apareça na tela do imóvel — isso gera mais credibilidade ao
+                visualizar a ficha". O que a leitura do edital/matrícula apurou fica aqui,
+                fora do relatório: quem só está olhando o lote já vê que o documento foi
+                lido, o que ele diz e de onde saiu. Só aparece com fato apurado — ficha sem
+                leitura continua exatamente como era.
+                Regra que não pode cair: DESPESA RECORRENTE (carrego) e DÉBITO EM ABERTO são
+                blocos separados e rotulados. Misturar os dois faria a ficha prometer um
+                custo mensal que na verdade é uma dívida a assumir. */}
+            {(() => {
+              const df = imovel.docFatos;
+              if (!df) return null;
+              const idt = df.identidade || {}, cst = df.custos || {}, pag = df.pagamento || {}, mat = df.matricula || {};
+              const n = (v) => (Number(v) > 0 ? Number(v) : 0);
+              const pct = (v) => String(v).replace('.', ',');
+              const identidade = [
+                idt.nomeCondominio && ['Condomínio/empreendimento', idt.nomeCondominio],
+                idt.logradouro && ['Endereço na documentação', [idt.logradouro, idt.bairro].filter(Boolean).join(', ')],
+                n(mat.areaPrivativaM2) && ['Área privativa (matrícula)', `${mat.areaPrivativaM2} m²`],
+                n(mat.areaTerrenoM2) && ['Área do terreno (matrícula)', `${mat.areaTerrenoM2} m²`],
+                mat.numeroMatricula && ['Nº da matrícula', mat.numeroMatricula],
+              ].filter(Boolean);
+              const mensais = [
+                n(cst.condominioMensal) && ['Condomínio', `${fmtBRL(cst.condominioMensal)}/mês`],
+                n(cst.iptuMensal) ? ['IPTU', `${fmtBRL(cst.iptuMensal)}/mês`]
+                  : (n(cst.iptuAnual) && ['IPTU', `${fmtBRL(cst.iptuAnual)}/ano`]),
+              ].filter(Boolean);
+              const arremate = [
+                n(pag.comissaoPct) && ['Comissão do leiloeiro', `${pct(pag.comissaoPct)}%`],
+                n(cst.taxaAdmPct) && ['Taxa administrativa', `${pct(cst.taxaAdmPct)}%`],
+                n(cst.despesasAdm) && ['Despesas administrativas', fmtBRL(cst.despesasAdm)],
+                n(pag.parcelas) && ['Parcelamento previsto', `até ${pag.parcelas}x`],
+                n(pag.sinalPct) && ['Sinal/entrada', `${pct(pag.sinalPct)}%`],
+                n(pag.prazoDias) && ['Prazo de pagamento', `${pag.prazoDias} dia${pag.prazoDias > 1 ? 's' : ''}`],
+              ].filter(Boolean);
+              const debitos = [
+                n(cst.condominioDebito) && ['Condomínio em aberto', fmtBRL(cst.condominioDebito)],
+                n(cst.iptuDebito) && ['IPTU em aberto', fmtBRL(cst.iptuDebito)],
+              ].filter(Boolean);
+              if (!identidade.length && !mensais.length && !arremate.length && !debitos.length) return null;
+              const fonte = df.fonteEdital || df.fonteMatricula || null;
+              const Bloco = ({ titulo, itens, cor }) => (
+                <div style={{ marginTop: 14 }}>
+                  <div style={{ fontSize: 12, fontWeight: 800, color: '#64748b', marginBottom: 8 }}>{titulo}</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {itens.map(([r, v]) => (
+                      <div key={r} style={{ display: 'flex', gap: 10, alignItems: 'baseline', fontSize: 13, flexWrap: 'wrap' }}>
+                        <span style={{ color: '#94a3b8', minWidth: 190 }}>{r}:</span>
+                        <span style={{ fontWeight: 700, color: cor || '#334155' }}>{v}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+              return (
+                <div style={{ background: 'white', borderRadius: 16, border: '1px solid #bbf7d0', padding: '24px' }}>
+                  <h2 style={{ fontSize: 16, fontWeight: 800, color: '#111111', margin: '0 0 4px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <ShieldCheck size={18} color="#15803d" /> Confirmado na documentação
+                  </h2>
+                  <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.6 }}>
+                    Lido automaticamente do edital/matrícula deste lote. Confirme no documento antes de dar o lance.
+                  </div>
+                  {identidade.length > 0 && <Bloco titulo="O imóvel na documentação" itens={identidade} />}
+                  {mensais.length > 0 && <Bloco titulo="Despesas mensais informadas" itens={mensais} />}
+                  {arremate.length > 0 && <Bloco titulo="Custos e condições da arrematação" itens={arremate} />}
+                  {debitos.length > 0 && (
+                    <div style={{ marginTop: 14, background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 10, padding: '10px 12px' }}>
+                      <div style={{ fontSize: 12, fontWeight: 800, color: '#9a3412', marginBottom: 6 }}>Débitos em aberto citados no documento</div>
+                      {debitos.map(([r, v]) => (
+                        <div key={r} style={{ display: 'flex', gap: 10, alignItems: 'baseline', fontSize: 13, flexWrap: 'wrap' }}>
+                          <span style={{ color: '#c2410c', minWidth: 190 }}>{r}:</span>
+                          <span style={{ fontWeight: 800, color: '#9a3412' }}>{v}</span>
+                        </div>
+                      ))}
+                      <div style={{ fontSize: 11.5, color: '#9a3412', marginTop: 6, lineHeight: 1.5 }}>
+                        Não é despesa mensal: é dívida já existente. Quem a assume depois da arrematação depende de cláusula do edital, confirme antes do lance.
+                      </div>
+                    </div>
+                  )}
+                  <div style={{ fontSize: 10.5, color: '#94a3b8', marginTop: 14 }}>
+                    Leitura automática do documento{imovel.docFatosEm ? ` em ${fmtData(imovel.docFatosEm)}` : ''}
+                    {fonte ? <> · <a href={fonte} target="_blank" rel="noreferrer" style={{ color: '#0D63DB' }}>abrir o documento</a></> : null}. Não substitui a conferência do edital e da matrícula.
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Aviso de risco */}
             <div style={{ background: '#fffbeb', borderRadius: 16, border: '1px solid #fbbf24', padding: '16px 20px', display: 'flex', gap: 12, alignItems: 'flex-start' }}>

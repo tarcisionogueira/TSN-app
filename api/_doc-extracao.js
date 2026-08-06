@@ -117,7 +117,16 @@ export function extrairPagamentoTexto(texto) {
     parcelas: (() => { const m = t.match(/(?:em\s+at[ée]|parcelad[oa]\s+em|at[ée])\s+(\d{1,3})\s*(?:parcelas|vezes|x)\b/i); const n = m ? Number(m[1]) : 0; return n >= 2 && n <= 420 ? n : null; })(),
     sinalPct: pct(/(?:sinal|entrada)\s+(?:de\s+|m[íi]nim[oa]\s+de\s+)?(\d{1,2}(?:,\d{1,2})?)\s*%/i),
     caucaoPct: pct(/cau[çc][ãa]o\s+(?:de\s+)?(\d{1,2}(?:,\d{1,2})?)\s*%/i),
-    comissaoPct: pct(/comiss[ãa]o\s+(?:do\s+leiloeiro\s+)?(?:de\s+|no\s+percentual\s+de\s+)?(\d{1,2}(?:,\d{1,2})?)\s*%/i),
+    // Comissão: o vão entre a palavra e o percentual muda muito de edital para edital —
+    // "comissão de 5%", "comissão do(a) leiloeiro(a) a título de 5%", "Arbitro a comissão
+    // da Leiloeira em 6%" (os dois últimos são a forma padrão dos editais JUDICIAIS e não
+    // casavam com o padrão fechado anterior). Teto de 20%: comissão real é 5–10%; sem o
+    // teto, um "100% da avaliação" na mesma frase entraria como comissão.
+    comissaoPct: (() => {
+      const m = t.match(/comiss[ãa]o[^.;%]{0,70}?(\d{1,2}(?:,\d{1,2})?)\s*%/i);
+      const v = m ? numBr(m[1]) : 0;
+      return v >= 0.5 && v <= 20 ? v : null;
+    })(),
     prazoDias: (() => { const m = t.match(/prazo\s+(?:de|para)\s+(?:pagamento|dep[óo]sito|quita[çc][ãa]o)[^.;]{0,30}?(\d{1,3})\s*(?:dias?|horas?)/i); if (!m) return null; const n = Number(m[1]); const horas = /horas?/i.test(m[0]); return n > 0 ? (horas ? Math.max(1, Math.round(n / 24)) : n) : null; })(),
     financiavel: /financiamento\s+(?:habitacional|banc[áa]rio|imobili[áa]rio)|aceita\s+financiamento|pode\s+ser\s+financiad/i.test(t) || null,
     fgts: /\bfgts\b/i.test(t) || null,
@@ -209,40 +218,60 @@ export function extrairCustosTexto(texto) {
 export function extrairIdentidadeTexto(texto) {
   const t = String(texto || '').replace(/\s+/g, ' ');
   if (t.length < 120) return null;
-  // Palavras que seguem a âncora sem serem NOME ("condomínio edilício", "condomínio em
-  // atraso", "edifício objeto deste"...). Sem esta trava, o regime jurídico vira nome.
-  const NAO_NOME = /^(edil[íi]ci|geral|ordin|extraordin|em|no|na|do|da|de|com|sem|ser|fica|dever|est|s[ãa]o|que|cujo|localizad|situad|acima|referid|mencionad|objeto|atual|vencid|atrasad|pendent|respons|deste|desta|desse|dessa|este|esta|os|as|n[ºo°]|matr[íi]cul|im[óo]vel|apartament|unidade|bloc|torre|lote|quadra|constitu[íi]d|form|integr|conven|assembl|administrador|s[íi]ndic|taxa|cota|d[ée]bit|d[íi]vid|conforme|nos\b|art\b|artigo|lei\b)/i;
+  // O que segue a âncora sem ser NOME. Duas listas, porque a régua é diferente:
+  //  • PREFIXO casa o começo da palavra (cobre flexão: "edilício/edilícia", "localizado/a");
+  //  • EXATA casa a palavra INTEIRA — se "do|da|de" fosse prefixo, "Dona Otília" seria
+  //    descartada por começar com "Do" (defeito real, pego no teste do Alphaville).
+  const NAO_NOME_PREFIXO = /^(edil[íi]ci|ordin|extraordin|localizad|situad|referid|mencionad|vencid|atrasad|pendent|respons|constitu[íi]d|integr|conven|assembl|administrador|s[íi]ndic|d[ée]bit|d[íi]vid|matr[íi]cul|apartament|im[óo]ve|unidade|artigo)/i;
+  const NAO_NOME_EXATA = /^(geral|em|no|na|do|da|de|com|sem|ser|ser[áa]|fica|dever|dever[áa]|est[áa]|s[ãa]o|que|cujo|acima|objeto|atual|deste|desta|desse|dessa|este|esta|os|as|o|a|n[ºo°]|bloco|torre|lote|quadra|forma|taxa|cota|conforme|nos|art|lei|leil[ãa]o|hasta|pra[çc]a)$/i;
+  const naoNome = (s) => NAO_NOME_PREFIXO.test(s) || NAO_NOME_EXATA.test(s);
   const ehTokenNome = (s) => /^[A-ZÀ-Ý][A-Za-zÀ-ÿ0-9'’.-]*$/.test(s) || /^\d{1,4}[ºª°]?$/.test(s);
   const ehLigacao = (s) => /^(de|da|do|das|dos|e)$/i.test(s);
-  const ANCORAS = [
+  /**
+   * Colhe o NOME PRÓPRIO que vem logo depois de uma âncora. Um `[^.;,]{4,70}` solto
+   * colhia lixo do próprio edital — "Edital de Praça no (https://comunica" virou
+   * logradouro num edital judicial REAL. Aqui cada token tem de parecer nome; ligação
+   * ("das", "de") entra no meio e é permitida também na 1ª posição quando um nome vem
+   * atrás dela ("Rua das Acácias"), mas nunca sobra na ponta.
+   */
+  const nomeApos = (pos, maxToks, maxLen) => {
+    const toks = t.slice(pos, pos + 90).trim().split(/\s+/);
+    if (!toks.length || naoNome(toks[0].replace(/[,;:.].*$/, ''))) return null;
+    const nome = [];
+    for (const bruto of toks.slice(0, maxToks)) {
+      const tok = bruto.replace(/[,;:)].*$/, '');
+      if (!tok || /https?:|www\.|[(@]/i.test(tok)) break;
+      if (ehTokenNome(tok)) nome.push(tok);
+      else if (ehLigacao(tok)) nome.push(tok.toLowerCase());
+      else break;
+      if (/[,;:)]/.test(bruto)) break;
+    }
+    while (nome.length && ehLigacao(nome[nome.length - 1])) nome.pop();
+    if (nome.length && ehLigacao(nome[0]) && nome.length < 2) return null;
+    const cand = nome.join(' ').replace(/[.\s]+$/, '').slice(0, maxLen);
+    return cand.length >= 3 && /[A-Za-zÀ-ÿ]{3}/.test(cand) ? cand : null;
+  };
+  const primeiroNome = (ancoras, maxToks, maxLen) => {
+    for (const [re, rotulo] of ancoras) {
+      for (const m of t.matchAll(re)) {
+        const cand = nomeApos(m.index + m[0].length, maxToks, maxLen);
+        if (cand) return `${rotulo} ${cand}`;
+      }
+    }
+    return null;
+  };
+  const nomeCondominio = primeiroNome([
     [/condom[íi]nio/gi, 'Condomínio'], [/edif[íi]cio/gi, 'Edifício'],
     [/residencial/gi, 'Residencial'], [/empreendimento/gi, 'Empreendimento'],
-  ];
-  let nomeCondominio = null;
-  for (const [re, rotulo] of ANCORAS) {
-    if (nomeCondominio) break;
-    for (const m of t.matchAll(re)) {
-      const toks = t.slice(m.index + m[0].length, m.index + m[0].length + 90).trim().split(/\s+/);
-      if (!toks.length || NAO_NOME.test(toks[0].replace(/[,;:.].*$/, ''))) continue;
-      const nome = [];
-      for (const bruto of toks.slice(0, 5)) {
-        const tok = bruto.replace(/[,;:)].*$/, '');
-        if (!tok) break;
-        if (ehTokenNome(tok)) nome.push(tok);
-        else if (nome.length && ehLigacao(tok)) nome.push(tok.toLowerCase());
-        else break;
-        if (/[,;:)]/.test(bruto)) break;
-      }
-      while (nome.length && ehLigacao(nome[nome.length - 1])) nome.pop();
-      const cand = nome.join(' ').replace(/[.\s]+$/, '').slice(0, 60);
-      if (cand.length >= 3 && /[A-Za-zÀ-ÿ]{3}/.test(cand)) { nomeCondominio = `${rotulo} ${cand}`; break; }
-    }
-  }
-  const via = t.match(/((?:rua|avenida|av\.|travessa|alameda|rodovia|estrada|pra[çc]a)\s+[^.;|,]{4,70})/i);
+  ], 5, 60);
+  const logradouro = primeiroNome([
+    [/\brua\b/gi, 'Rua'], [/\bavenida\b|\bav\./gi, 'Avenida'], [/\btravessa\b/gi, 'Travessa'],
+    [/\balameda\b/gi, 'Alameda'], [/\brodovia\b/gi, 'Rodovia'], [/\bestrada\b/gi, 'Estrada'], [/\bpra[çc]a\b/gi, 'Praça'],
+  ], 6, 70);
   const bai = t.match(/bairro\s+(?:d[eoa]s?\s+)?([A-Za-zÀ-ÿ'’ -]{3,40}?)\s*(?:[,.;]|\bna\b|\bem\b|\bcidade\b|$)/i);
   const out = {
     nomeCondominio,
-    logradouro: via ? via[1].trim().replace(/\s+/g, ' ').slice(0, 90) : null,
+    logradouro,
     bairro: bai ? bai[1].trim().replace(/\s+/g, ' ').slice(0, 60) : null,
   };
   return Object.values(out).some((v) => v) ? out : null;
