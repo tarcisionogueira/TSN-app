@@ -518,13 +518,20 @@ async function gravarAmostrasIndice(imDb, mercado, imovelId, segmento = 'apartam
     const NO_RAIO_KM = 0.25;
     const noRaio = (s) => { const d = Number(s?.distanciaKm); return Number.isFinite(d) && d <= NO_RAIO_KM; };
     const coordDe = (s) => (noRaio(s) ? { geo_grid: geoGrid, lat: latA, lng: lngA } : { geo_grid: '', lat: null, lng: null });
+    // REFERÊNCIA CITÁVEL da amostra (link/endereço/condomínio). Sem ela, um comparável guardado
+    // na base não é auditável pelo cliente — e é a base que sustenta o relatório em MODO BASE.
+    const refDe = (s) => ({
+      url: (typeof s?.url === 'string' && /^https?:\/\//i.test(s.url)) ? s.url.slice(0, 500) : null,
+      endereco: s?.endereco ? String(s.endereco).slice(0, 200) : null,
+      condominio: s?.condominio ? String(s.condominio).slice(0, 160) : null,
+    });
     for (const s of vendas) {
       const m2 = Number(s?.valorM2);
       if (!perto(s)) continue;
       if (!vendaPlausivelTipo(segmento, m2) || ehFonteLeilao(s?.fonte)) continue; // faixa por tipo (terreno não é cortado)
       rows.push({ cidade_norm: imDb.cidade_norm, uf, bairro_norm: bDe(s), ...coordDe(s), tipo: segmento,
         especie: 'venda', valor_m2: Math.round(m2), valor_total: Number(s?.valor) || null, area_m2: Number(s?.m2) || null,
-        data_ref: dref(s?.data), fonte: (s?.fonte ? String(s.fonte).slice(0, 200) : null), origem: 'relatorio', imovel_id: String(imovelId || '') });
+        data_ref: dref(s?.data), fonte: (s?.fonte ? String(s.fonte).slice(0, 200) : null), ...refDe(s), origem: 'relatorio', imovel_id: String(imovelId || '') });
     }
     for (const s of locs) {
       const mensal = Number(s?.valorMensal); const area = Number(s?.m2);
@@ -544,7 +551,7 @@ async function gravarAmostrasIndice(imDb, mercado, imovelId, segmento = 'apartam
       if (vm2 !== null && !locacaoM2Plausivel(vm2)) continue;
       rows.push({ cidade_norm: imDb.cidade_norm, uf, bairro_norm: bDe(s), ...coordDe(s), tipo: segmento,
         especie: 'locacao', valor_m2: vm2, valor_total: mensal, area_m2: area || null,
-        data_ref: dref(s?.data), fonte: (s?.fonte ? String(s.fonte).slice(0, 200) : null), origem: 'relatorio', imovel_id: String(imovelId || '') });
+        data_ref: dref(s?.data), fonte: (s?.fonte ? String(s.fonte).slice(0, 200) : null), ...refDe(s), origem: 'relatorio', imovel_id: String(imovelId || '') });
     }
     // COLHEITA AMPLA — MESMO TIPO em OUTROS bairros (pedido do dono: "extrair o máximo mesmo fora
     // da localidade e marcar pelo bairro para ir compondo cidade/estado"). Vai à base com o bairro
@@ -555,7 +562,7 @@ async function gravarAmostrasIndice(imDb, mercado, imovelId, segmento = 'apartam
       if (!b || !vendaPlausivelTipo(segmento, m2) || ehFonteLeilao(s?.fonte)) continue;
       rows.push({ cidade_norm: imDb.cidade_norm, uf, bairro_norm: b, geo_grid: '', lat: null, lng: null, tipo: segmento,
         especie: 'venda', valor_m2: Math.round(m2), valor_total: Number(s?.valor) || null, area_m2: Number(s?.m2) || null,
-        data_ref: dref(s?.data), fonte: (s?.fonte ? String(s.fonte).slice(0, 200) : null), origem: 'relatorio_regiao', imovel_id: String(imovelId || '') });
+        data_ref: dref(s?.data), fonte: (s?.fonte ? String(s.fonte).slice(0, 200) : null), ...refDe(s), origem: 'relatorio_regiao', imovel_id: String(imovelId || '') });
     }
     if (!rows.length) return;
     await sb('indice_amostra', { method: 'POST', headers: { Prefer: 'return=minimal,resolution=ignore-duplicates' }, body: JSON.stringify(rows) });
@@ -620,7 +627,7 @@ async function amostrasRegiaoCache(imDb, segmento = 'apartamento') {
     const geoGrid = geoGridDe(imDb.latitude, imDb.longitude);
     const desde = new Date(Date.now() - DIAS * 24 * 3600 * 1000).toISOString().slice(0, 10); // data_ref é DATE
     const baseFiltro = `cidade_norm=eq.${encodeURIComponent(imDb.cidade_norm)}&uf=eq.${uf}&tipo=eq.${encodeURIComponent(segmento)}&especie=eq.venda&${faixaVendaQ(segmento)}&data_ref=gte.${desde}`;
-    const cols = 'select=valor_m2,valor_total,area_m2,data_ref,fonte,bairro_norm,geo_grid,criado_em&order=criado_em.desc&limit=400';
+    const cols = 'select=valor_m2,valor_total,area_m2,data_ref,fonte,url,endereco,condominio,bairro_norm,geo_grid,criado_em&order=criado_em.desc&limit=400';
     const buscar = async (extra) => {
       try {
         const r = await sb(`indice_amostra?${baseFiltro}${extra}&${cols}`);
@@ -645,8 +652,96 @@ async function amostrasRegiaoCache(imDb, segmento = 'apartamento') {
       return `- ${Math.round(a.valor_m2).toLocaleString('pt-BR')} R$/m²${ar}${vt}${ft} (ref ${String(a.data_ref || '').slice(0, 7)})`;
     }).join('\n');
     const text = `\n\nBASE PRÓPRIA DA REGIÃO (Índice BidPro — ${arr.length} comparáveis de VENDA do MESMO tipo já capturados no nível ${nivel}, SEM leilão; mediana ${Math.round(mediana).toLocaleString('pt-BR')} R$/m²). Use estes comparáveis REAIS como ÂNCORA principal e complemente com no MÁXIMO 1–2 buscas web só para preencher lacunas (padrão do imóvel, anúncios ativos recentes). NÃO ignore esta base nem invente números fora dela:\n${linhas}`;
-    return { hit: true, nivel, n: arr.length, mediana, text };
+    return { hit: true, nivel, n: arr.length, mediana, text, arr };
   } catch { return null; }
+}
+
+/**
+ * MODO BASE — o relatório mercadológico SEM busca na web (pedido do dono, 06/08).
+ *
+ * "A parte mercadológica conseguiremos ter economia bastando pegar apenas os valores e
+ *  referências para apresentar no relatório, e fazer o cálculo para a unidade de acordo com
+ *  a forma de pagamento, mostrando a viabilidade."
+ *
+ * Quando a base própria já cobre a praça com DENSIDADE e em nível FINO, os comparáveis saem
+ * dela — anúncios REAIS já capturados, com fonte, data e link — e a Etapa A (a busca cara)
+ * não roda. O que decide o relatório continua determinístico: R$/m² da base × área da
+ * MATRÍCULA, e a viabilidade pela forma de pagamento lida no edital.
+ *
+ * Guardas, porque o barato não pode custar a credibilidade:
+ *  • nível FINO (bairro/grid). Base de CIDADE é grossa demais para avaliar um imóvel
+ *    específico — nesses casos a busca continua valendo.
+ *  • densidade maior que a exigida para só ENCURTAR a busca (12 contra 8): substituir a
+ *    pesquisa pede mais evidência do que complementá-la.
+ *  • frescor de 120 dias já garantido por `amostrasRegiaoCache`. Como o modo base não gera
+ *    amostra nova, a praça envelhece e sai do modo sozinha — aí um relatório pesquisa e
+ *    reabastece. É um ciclo, não um caminho sem volta.
+ *  • o relatório DIZ que os comparáveis vêm da base própria, com a data de cada um. Amostra
+ *    real de 2 meses atrás é honesta; apresentá-la como anúncio ativo de hoje não seria.
+ */
+const MODO_BASE_MIN = Math.max(8, Number(process.env.MERCADO_BASE_MIN || 12));
+// LOCAÇÕES da mesma praça, da base própria. Sem elas o relatório em modo base sairia sem
+// aluguel e sem yield — e yield é metade da decisão de quem compra para renda. O recorte
+// acompanha o da venda (mesmo nível, mesma janela de 120 dias).
+async function locacoesDaBase(imDb, segmento, nivel) {
+  try {
+    if (segmento === 'terreno') return [];              // lote não se aluga (regra de 03/08)
+    if (!imDb?.cidade_norm || !imDb?.estado) return [];
+    const DIAS = Math.max(15, Number(process.env.MERCADO_CACHE_DIAS || 120));
+    const desde = new Date(Date.now() - DIAS * 24 * 3600 * 1000).toISOString().slice(0, 10);
+    const uf = String(imDb.estado).toUpperCase();
+    const bairroNorm = _norm(imDb.bairro);
+    const geoGrid = geoGridDe(imDb.latitude, imDb.longitude);
+    const recorte = nivel === 'bairro' && bairroNorm ? `&bairro_norm=eq.${encodeURIComponent(bairroNorm)}`
+      : nivel === 'grid' && geoGrid ? `&geo_grid=eq.${encodeURIComponent(geoGrid)}` : '';
+    const r = await sb(`indice_amostra?cidade_norm=eq.${encodeURIComponent(imDb.cidade_norm)}&uf=eq.${uf}&tipo=eq.${encodeURIComponent(segmento)}&especie=eq.locacao&data_ref=gte.${desde}${recorte}&select=valor_m2,valor_total,area_m2,data_ref,fonte,url,endereco,condominio,bairro_norm&order=data_ref.desc&limit=60`);
+    if (!r.ok) return [];
+    const j = await r.json().catch(() => []);
+    return (Array.isArray(j) ? j : []).filter(a => Number(a.valor_total) > 0 && Number(a.area_m2) > 0 && !ehFonteLeilao(a.fonte));
+  } catch { return []; }
+}
+async function mercadoDaBase(cacheReg, segmento, imDb) {
+  const arr = Array.isArray(cacheReg?.arr) ? cacheReg.arr : [];
+  if (!cacheReg?.hit || arr.length < MODO_BASE_MIN) return null;
+  if (!['bairro', 'grid'].includes(cacheReg.nivel)) return null;
+  const mesRef = (a) => String(a.data_ref || '').slice(0, 7);
+  const item = (a) => ({
+    bairro: a.bairro_norm || '', descricao: [a.condominio, a.endereco].filter(Boolean).join(' — ').slice(0, 160) || 'comparável da base BidPro',
+    valor: Number(a.valor_total) || 0, m2: Number(a.area_m2) || 0, valorM2: Math.round(Number(a.valor_m2) || 0),
+    distanciaKm: 0, fonte: a.fonte || 'base BidPro', url: a.url || '', data: mesRef(a), daBase: true,
+  });
+  // Nível 1 = mesmo bairro/grid do alvo (é o recorte que o cache já aplicou); os demais no 2.
+  const ord = arr.slice().sort((a, b) => String(b.data_ref || '').localeCompare(String(a.data_ref || '')));
+  const vendas = ord.map(item);
+  const m2s = vendas.map(v => v.valorM2).filter(v => v > 0).sort((a, b) => a - b);
+  if (m2s.length < MODO_BASE_MIN) return null;
+  const med = m2s.length % 2 ? m2s[(m2s.length - 1) / 2] : Math.round((m2s[m2s.length / 2 - 1] + m2s[m2s.length / 2]) / 2);
+  const nv1 = vendas.slice(0, 12);
+  const nv2 = vendas.slice(12, 40);
+  const locs = (await locacoesDaBase(imDb, segmento, cacheReg.nivel)).map(a => ({
+    bairro: a.bairro_norm || '', descricao: [a.condominio, a.endereco].filter(Boolean).join(' — ').slice(0, 160) || 'locação da base BidPro',
+    valorMensal: Math.round(Number(a.valor_total)), m2: Math.round(Number(a.area_m2)), distanciaKm: 0,
+    fonte: a.fonte || 'base BidPro', url: a.url || '', data: mesRef(a), daBase: true,
+  }));
+  // MEDIANA (não média) do aluguel, mesma régua da busca; com menos de 3, fica sem número —
+  // "não localizamos" é melhor que um aluguel sustentado por uma amostra só (regra do dono).
+  const alugs = locs.map(l => l.valorMensal).filter(v => v > 0).sort((a, b) => a - b);
+  const aluguelMedio = alugs.length >= 3 ? (alugs.length % 2 ? alugs[(alugs.length - 1) / 2] : Math.round((alugs[alugs.length / 2 - 1] + alugs[alugs.length / 2]) / 2)) : 0;
+  const agreg = (vs) => {
+    const xs = vs.map(v => v.valorM2).filter(v => v > 0).sort((a, b) => a - b);
+    if (!xs.length) return { precoMedioM2: 0, precoMinM2: 0, precoMaxM2: 0 };
+    const m = xs.length % 2 ? xs[(xs.length - 1) / 2] : Math.round((xs[xs.length / 2 - 1] + xs[xs.length / 2]) / 2);
+    return { precoMedioM2: m, precoMinM2: xs[0], precoMaxM2: xs[xs.length - 1] };
+  };
+  return {
+    nivel1: { descricao: `Base própria BidPro — ${nv1.length} comparáveis reais já capturados no nível ${cacheReg.nivel}`, vendas: nv1, locacoes: locs.slice(0, 12), ...agreg(nv1), aluguelMedio, totalAmostras: nv1.length + Math.min(locs.length, 12), disponiveis: true },
+    nivel2: { descricao: `Base própria BidPro — demais comparáveis da praça`, vendas: nv2, locacoes: locs.slice(12), ...agreg(nv2), aluguelMedio: 0, totalAmostras: nv2.length + Math.max(0, locs.length - 12) },
+    consolidado: { precoMedioM2: med, aluguelMedio, yieldBruto: 0, yieldLiquido: 0, valorEstimadoImovel: 0, unidadeValor: segmento === 'terreno' ? 'm2_terreno' : 'm2_privativo', areaConsiderada: 0, baseCalculo: '', padraoImovel: '' },
+    precoMedioM2: med,
+    fonteEstimativa: 'base_propria',
+    __modoBase: { nivel: cacheReg.nivel, n: arr.length, mediana: med },
+    comentario: `Os comparáveis deste relatório vêm da BASE PRÓPRIA BidPro: ${arr.length} anúncios reais do mesmo tipo já capturados nesta praça (nível ${cacheReg.nivel}), todos com fonte e data. Não houve nova pesquisa na web porque a base já cobre a região com densidade e no período recente. A mediana de ${Math.round(med).toLocaleString('pt-BR')} R$/m² é o que sustenta o valor estimado.`,
+  };
 }
 
 // Valorização por ano (mediana de R$/m² de VENDA) da microrregião — vai no relatório
@@ -1017,11 +1112,11 @@ muitas sem área.
 
 Retorne APENAS este JSON (sem markdown):
 {
-  "nivel1": { "descricao": "", "vendas": [{"bairro":"","descricao":"","valor":0,"m2":0,"valorM2":0,"distanciaKm":0,"fonte":"","data":"AAAA-MM"}], "locacoes": [{"bairro":"","descricao":"","valorMensal":0,"m2":0,"distanciaKm":0,"fonte":"","data":"AAAA-MM"}], "precoMedioM2": 0, "precoMinM2": 0, "precoMaxM2": 0, "aluguelMedio": 0, "totalAmostras": 0, "disponiveis": true },
-  "nivel2": { "descricao": "", "vendas": [{"bairro":"","descricao":"","valor":0,"m2":0,"valorM2":0,"distanciaKm":0,"fonte":"","data":"AAAA-MM"}], "locacoes": [{"bairro":"","descricao":"","valorMensal":0,"m2":0,"distanciaKm":0,"fonte":"","data":"AAAA-MM"}], "precoMedioM2": 0, "precoMinM2": 0, "precoMaxM2": 0, "aluguelMedio": 0, "totalAmostras": 0 },
+  "nivel1": { "descricao": "", "vendas": [{"bairro":"","descricao":"","valor":0,"m2":0,"valorM2":0,"distanciaKm":0,"fonte":"","url":"","endereco":"","condominio":"","data":"AAAA-MM"}], "locacoes": [{"bairro":"","descricao":"","valorMensal":0,"m2":0,"distanciaKm":0,"fonte":"","url":"","endereco":"","data":"AAAA-MM"}], "precoMedioM2": 0, "precoMinM2": 0, "precoMaxM2": 0, "aluguelMedio": 0, "totalAmostras": 0, "disponiveis": true },
+  "nivel2": { "descricao": "", "vendas": [{"bairro":"","descricao":"","valor":0,"m2":0,"valorM2":0,"distanciaKm":0,"fonte":"","url":"","endereco":"","condominio":"","data":"AAAA-MM"}], "locacoes": [{"bairro":"","descricao":"","valorMensal":0,"m2":0,"distanciaKm":0,"fonte":"","url":"","endereco":"","data":"AAAA-MM"}], "precoMedioM2": 0, "precoMinM2": 0, "precoMaxM2": 0, "aluguelMedio": 0, "totalAmostras": 0 },
   "consolidado": { "precoMedioM2": 0, "aluguelMedio": 0, "yieldBruto": 0, "yieldLiquido": 0, "valorEstimadoImovel": 0, "unidadeValor": "m2_privativo|m2_construido|m2_terreno|hectare|unidade", "areaConsiderada": 0, "baseCalculo": "(explique a conta: ex.: 'R$ 10.980/m² privativo × 30 m²' ou 'R$ 45.000/ha × 120 ha terra nua + R$ 200k benfeitorias' ou 'construção 90 m² × R$ 4.000 + terreno excedente 300 m² × R$ 800')", "padraoImovel": "popular|medio|medio_alto|alto|luxo", "terrenoExcedente": { "haExcedente": false, "areaExcedenteM2": 0, "valorTerrenoExcedente": 0 }, "descontoArremate": null },
   "referenciaFipeZap": { "encontrado": true, "precoMedioM2": 0, "valorizacao12m": 0, "mesReferencia": "AAAA-MM", "localidade": "", "fonte": "" },
-  "outrosBairros": [{"bairro":"","valorM2":0,"valor":0,"m2":0,"fonte":"","data":"AAAA-MM"}],
+  "outrosBairros": [{"bairro":"","valorM2":0,"valor":0,"m2":0,"fonte":"","url":"","data":"AAAA-MM"}],
   "fontesLocais": [{"nome":"","url":""}],
   "zoneamento": { "encontrado": false, "zona": "", "resumoUso": "", "fonte": "", "ondeObter": "" },
   "perfilRegiao": { "tier": "valorizado_alto|intermediario|valorizado_baixo|", "atratividades": [""], "fragilidades": [""], "motivos": "" },
@@ -1135,8 +1230,8 @@ muitas sem área.
 
 Retorne APENAS este JSON (sem markdown):
 {
-  "nivel1": { "descricao": "", "vendas": [{"bairro":"","descricao":"","valor":0,"m2":0,"valorM2":0,"distanciaKm":0,"fonte":"","data":"AAAA-MM"}], "locacoes": [{"bairro":"","descricao":"","valorMensal":0,"m2":0,"distanciaKm":0,"fonte":"","data":"AAAA-MM"}], "precoMedioM2": 0, "precoMinM2": 0, "precoMaxM2": 0, "aluguelMedio": 0, "totalAmostras": 0, "disponiveis": true },
-  "nivel2": { "descricao": "", "vendas": [{"bairro":"","descricao":"","valor":0,"m2":0,"valorM2":0,"distanciaKm":0,"fonte":"","data":"AAAA-MM"}], "locacoes": [{"bairro":"","descricao":"","valorMensal":0,"m2":0,"distanciaKm":0,"fonte":"","data":"AAAA-MM"}], "precoMedioM2": 0, "precoMinM2": 0, "precoMaxM2": 0, "aluguelMedio": 0, "totalAmostras": 0 },
+  "nivel1": { "descricao": "", "vendas": [{"bairro":"","descricao":"","valor":0,"m2":0,"valorM2":0,"distanciaKm":0,"fonte":"","url":"","endereco":"","condominio":"","data":"AAAA-MM"}], "locacoes": [{"bairro":"","descricao":"","valorMensal":0,"m2":0,"distanciaKm":0,"fonte":"","url":"","endereco":"","data":"AAAA-MM"}], "precoMedioM2": 0, "precoMinM2": 0, "precoMaxM2": 0, "aluguelMedio": 0, "totalAmostras": 0, "disponiveis": true },
+  "nivel2": { "descricao": "", "vendas": [{"bairro":"","descricao":"","valor":0,"m2":0,"valorM2":0,"distanciaKm":0,"fonte":"","url":"","endereco":"","condominio":"","data":"AAAA-MM"}], "locacoes": [{"bairro":"","descricao":"","valorMensal":0,"m2":0,"distanciaKm":0,"fonte":"","url":"","endereco":"","data":"AAAA-MM"}], "precoMedioM2": 0, "precoMinM2": 0, "precoMaxM2": 0, "aluguelMedio": 0, "totalAmostras": 0 },
   "consolidado": { "precoMedioM2": 0, "aluguelMedio": 0, "yieldBruto": 0, "yieldLiquido": 0, "valorEstimadoImovel": 0, "unidadeValor": "m2_privativo|m2_construido|m2_terreno|hectare|unidade", "areaConsiderada": 0, "baseCalculo": "(explique a conta: ex.: 'R$ 10.980/m² privativo × 30 m²' ou 'R$ 45.000/ha × 120 ha terra nua + R$ 200k benfeitorias' ou 'construção 90 m² × R$ 4.000 + terreno excedente 300 m² × R$ 800')", "padraoImovel": "popular|medio|medio_alto|alto|luxo", "terrenoExcedente": { "haExcedente": false, "areaExcedenteM2": 0, "valorTerrenoExcedente": 0 }, "descontoArremate": null },
   "fontesLocais": [{"nome":"","url":""}],
   "comentario": "Análise qualitativa de 3-4 frases comparando os dois níveis, a tendência e a coerência da média (se as amostras forem antigas/poucas, DIGA e alargue a faixa)."
@@ -1199,7 +1294,7 @@ muitas sem área.
 Retorne APENAS este JSON (sem markdown):
 {
   "referenciaFipeZap": { "encontrado": true, "precoMedioM2": 0, "valorizacao12m": 0, "mesReferencia": "AAAA-MM", "localidade": "", "fonte": "" },
-  "outrosBairros": [{"bairro":"","valorM2":0,"valor":0,"m2":0,"fonte":"","data":"AAAA-MM"}],
+  "outrosBairros": [{"bairro":"","valorM2":0,"valor":0,"m2":0,"fonte":"","url":"","data":"AAAA-MM"}],
   "zoneamento": { "encontrado": false, "zona": "", "resumoUso": "", "fonte": "", "ondeObter": "" },
   "perfilRegiao": { "tier": "valorizado_alto|intermediario|valorizado_baixo|", "atratividades": [""], "fragilidades": [""], "motivos": "", "turismoSazonal": { "e": false, "tipo": "praia|historica|serra_inverno|termas_aguas|parques_natureza|campo_verao|religioso", "motivo": "" } },
   "segurancaPublica": { "encontrado": false, "nivel": "", "indicadores": "", "tendencia": "", "fonte": "", "periodo": "", "recomendacao": "" }
@@ -1314,7 +1409,8 @@ OBJETIVO: ${usoProprio ? 'USO PRÓPRIO' : 'INVESTIMENTO'}
 ${inp.nomeCondominio ? `CONDOMÍNIO: ${inp.nomeCondominio}` : ''}
 
 MERCADO:${mercado?.fonteEstimativa === 'indice_bidpro' ? '\n- ATENÇÃO: não há anúncios comparáveis ativos na região agora; a estimativa de mercado abaixo vem do ÍNDICE BIDPRO (base própria). O parecer DEVE informar isso ao cliente com transparência (referência de mercado por falta de comparativos ativos na localidade), SEM inventar comparáveis nem citar anúncios específicos.' : ''}
-- Preço médio/m² (${mercado?.fonteEstimativa === 'indice_bidpro' ? 'Índice BidPro, base própria' : 'média dos anúncios'}): R$ ${brl(mercado?.precoMedioM2)}
+${mercado?.fonteEstimativa === 'base_propria' ? '\n- ORIGEM DOS COMPARÁVEIS: base própria BidPro. São anúncios REAIS do mesmo tipo já capturados nesta praça, cada um com fonte e mês de referência, e não uma pesquisa feita agora. Diga isso ao cliente com naturalidade e transparência (a base é recente e do mesmo recorte), e trate as datas dos comparáveis como o que são: o retrato do período, não do minuto.' : ''}
+- Preço médio/m² (${mercado?.fonteEstimativa === 'indice_bidpro' ? 'Índice BidPro, base própria' : mercado?.fonteEstimativa === 'base_propria' ? 'mediana dos comparáveis da base própria' : 'média dos anúncios'}): R$ ${brl(mercado?.precoMedioM2)}
 - Aluguel médio: R$ ${brl(mercado?.aluguelMedio)} · Yield: ${(mercado?.yieldBruto || 0).toFixed(2)}% bruto / ${(mercado?.yieldLiquido || 0).toFixed(2)}% líquido
 ${mercado?.referenciaFipeZap?.encontrado ? `- Referência FipeZAP (${mercado.referenciaFipeZap.localidade || inp.cidade || ''}, ${mercado.referenciaFipeZap.mesReferencia || 'recente'}): R$ ${brl(mercado.referenciaFipeZap.precoMedioM2)}/m² · valorização 12m: ${(Number(mercado.referenciaFipeZap.valorizacao12m) || 0).toFixed(1)}%. Compare com a média dos anúncios acima: se divergirem muito, comente e use a mais conservadora na defesa.` : ''}
 ${mercado?.indiceBidPro && (Number(mercado.indiceBidPro.venda_m2) > 0 || Number(mercado.indiceBidPro.aluguel_m2) > 0) ? `- Índice BidPro (nossa base própria por microrregião, nível ${mercado.indiceBidPro.nivel})${Number(mercado.indiceBidPro.venda_m2) > 0 ? `: venda R$ ${brl(mercado.indiceBidPro.venda_m2)}/m²` : ''}${Number(mercado.indiceBidPro.aluguel_m2) > 0 ? ` · locação R$ ${brl(mercado.indiceBidPro.aluguel_m2)}/m²/mês` : ''}. Referência interna independente (venda e locação), consolidada das análises da plataforma — use como sanity-check adicional junto ao FipeZAP.` : ''}
@@ -1598,11 +1694,12 @@ export default async function handler(req, res) {
       // quadrimestre distante, amostrasRegiaoCache devolve miss → busca COMPLETA (5) = refaz/atualiza.
       // Vale igual para dono e cliente (mesmo código). Rural fica fora (régua de ha).
       const segCache = segmentoIndice(mercadoInputs.tipoImovel || imovel?.tipo);
-      let cacheReg = null;
+      let cacheReg = null, imRegBase = null;   // imRegBase: a praça do alvo, reusada pelo modo base
       const cacheLigado = process.env.MERCADO_CACHE !== '0';
       if (cacheLigado && segCache !== 'rural') {
         try {
           const [imReg] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=cidade_norm,estado,bairro,latitude,longitude&limit=1`)).json();
+          imRegBase = imReg || null;
           cacheReg = await amostrasRegiaoCache(imReg, segCache);
         } catch { cacheReg = null; }
       }
@@ -1665,14 +1762,18 @@ export default async function handler(req, res) {
       };
 
       // ── ETAPA A — COMPARÁVEIS (ESSENCIAL): venda + locação (níveis 1/2) + valor consolidado ──
+      // MODO BASE primeiro: com a praça já coberta em nível fino e densidade suficiente, os
+      // comparáveis saem da base própria e a busca (a etapa CARA) não roda. Ver mercadoDaBase().
+      const daBase = process.env.MERCADO_MODO_BASE === '0' ? null : await mercadoDaBase(cacheReg, segCache, imRegBase);
       const sysComp = `Você é um perito avaliador imobiliário sênior. Busque o MÁXIMO de amostras possível, SEMPRE do mesmo tipo (${mercadoInputs.tipoImovel}). Retorne apenas JSON válido.`;
       const promptA = promptComparaveis(mercadoInputs) + cacheTxt + fontesTxt;
       // 1ª busca: reserva o parecer, ~55s p/ a Etapa B (contexto) e ~35s p/ uma 2ª tentativa da A.
-      let compar = await buscarEtapa({ prompt: promptA, sistema: sysComp, msBudget: Math.min(135000, restante() - RESERVA_PARECER - 90000), webUses: maxWebA });
+      let compar = daBase || await buscarEtapa({ prompt: promptA, sistema: sysComp, msBudget: Math.min(135000, restante() - RESERVA_PARECER - 90000), webUses: maxWebA });
+      if (daBase) console.log('[modo-base]', JSON.stringify({ imovel: String(imovelId), ...daBase.__modoBase, tipo: segCache }));
       const semAmostrasA = (m) => (((m?.nivel1?.vendas?.length || 0) + (m?.nivel1?.locacoes?.length || 0) + (m?.nivel2?.vendas?.length || 0) + (m?.nivel2?.locacoes?.length || 0)) === 0) && !(Number(m?.consolidado?.precoMedioM2) > 0);
       // Re-tenta se (vazio OU falhou) E ainda há orçamento. Falhou → 1 busca (quase sempre conclui e
       // dá um R$/m² de referência); vazio-mas-concluiu (praça fina) → ≤3 buscas. A ampla já foi a 1ª.
-      if ((compar.__falhou || semAmostrasA(compar)) && restante() > RESERVA_PARECER + 55000) {
+      if (!daBase && (compar.__falhou || semAmostrasA(compar)) && restante() > RESERVA_PARECER + 55000) {
         const usos = compar.__falhou ? 1 : Math.min(maxWebA, 3);
         compar = await buscarEtapa({ prompt: promptA, sistema: sysComp, msBudget: Math.min(100000, restante() - RESERVA_PARECER - 30000), webUses: usos });
       }
@@ -1908,6 +2009,18 @@ export default async function handler(req, res) {
     let valorMercado = null;
     if (vEstIA > 0) valorMercado = Math.round(vEstIA);
     else if (precoM2 && areaM2 && ['residencial', 'comercial', 'industrial'].includes(baseTipo)) valorMercado = Math.round(precoM2 * areaM2 * 0.9);
+    // MODO BASE + TERRENO: sem a IA, não há `valorEstimadoImovel`, e o fallback acima cobre só
+    // as bases por m² construído — um terreno sairia SEM valor de mercado. Aqui a conta é a
+    // mesma, com a régua do tipo: R$/m² de TERRENO da base × área de terreno (da matrícula
+    // quando ela foi lida). É determinística, que é justamente o ponto do modo base.
+    else if (mercado?.__modoBase && baseTipo === 'terreno' && precoM2 > 0) {
+      const aT = Number(mercadoInputs.areaTerrenoM2) || Number(areaM2) || 0;
+      if (aT > 0) {
+        valorMercado = Math.round(precoM2 * aT * 0.9);
+        mercado.consolidado = { ...(mercado.consolidado || {}), valorEstimadoImovel: valorMercado, areaConsiderada: aT,
+          baseCalculo: `R$ ${Math.round(precoM2).toLocaleString('pt-BR')}/m² de terreno (mediana da base própria) × ${Math.round(aT).toLocaleString('pt-BR')} m², com margem conservadora de 10% para revenda` };
+      }
+    }
     // COERÊNCIA (só bases por m² privativo/construído) — se o R$/m² dos comparáveis divergir
     // MUITO do R$/m² implícito na AVALIAÇÃO (área provável TOTAL/terreno, não privativa: 121 m²
     // × R$10.980 = R$1,3M vs avaliação R$329k gerava desconto/ROI irreais), ancoramos o mercado
@@ -1962,7 +2075,11 @@ export default async function handler(req, res) {
       await semearIndiceBidPro(imDb, precoM2, aluguelM2, nAmostras, segIdx);
       mercado.indiceBidPro = await lerIndiceBidPro(imDb, segIdx);
       // Amostras datadas (valorização/recência) + curva de valorização por ano no relatório.
-      await gravarAmostrasIndice(imDb, mercado, imovelId, segIdx);
+      // NO MODO BASE, NÃO regrava: os comparáveis VIERAM da base. Reinserir faria a base
+      // crescer de si mesma — a mesma amostra contada várias vezes inflaria a densidade e a
+      // praça nunca mais sairia do modo base, congelando um retrato antigo como se fosse
+      // evidência nova. É a diferença entre reaproveitar e se auto-alimentar.
+      if (!mercado.__modoBase) await gravarAmostrasIndice(imDb, mercado, imovelId, segIdx);
       // FONTES LOCAIS vistas neste relatório → registro da praça (revalidação orgânica: ult_visto=now,
       // vezes+1). Empresas que somem param de aparecer e envelhecem sozinhas; novas entram aqui.
       try { if (Array.isArray(mercado.fontesLocais) && mercado.fontesLocais.length) await sb('rpc/registrar_fontes_locais', { method: 'POST', body: JSON.stringify({ p_cidade_norm: _norm(cidade), p_uf: String(estado || '').toUpperCase(), p_fontes: mercado.fontesLocais }) }); } catch { /* best-effort */ }

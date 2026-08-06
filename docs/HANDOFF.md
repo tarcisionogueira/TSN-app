@@ -545,6 +545,54 @@ texto medida** (pdf-parse local, custo zero) e o resultado vai no `meta` de `ger
 `select meta->'pdfs' from geracao_custos where funcao='documental';` — `chars` null = escaneado
 (só visão resolve); `chars` alto = convertível. **Nada foi mudado na leitura ainda.**
 
+### 💡 14) MODO BASE: o mercadológico que não pesquisa
+
+Pedido do dono, fechando o raciocínio de custo: *"a leitura de documentos sempre vai consumir
+IA, mas a parte mercadológica conseguiremos ter economia bastando pegar apenas os valores e
+referências para apresentar no relatório, e fazer o cálculo para a unidade de acordo com a forma
+de pagamento, mostrando a viabilidade."*
+
+**Como funciona.** Quando a base própria já cobre a praça com **densidade** (≥12 amostras de
+venda) e em **nível fino** (bairro ou grid), os comparáveis saem dela — anúncios REAIS já
+capturados, com fonte e mês — e a **Etapa A (a busca cara) não roda**. As locações da mesma
+praça vêm junto (mediana com ≥3 amostras; menos que isso fica sem número, pela regra de 06/08).
+O que decide o relatório segue determinístico: R$/m² da base × área da **matrícula**, e a
+viabilidade pela **forma de pagamento lida no edital**.
+
+**Guardas, porque o barato não pode custar a credibilidade:**
+- **Nível fino obrigatório.** Base de CIDADE é grossa demais para avaliar um imóvel específico —
+  nesses casos a busca continua valendo.
+- **Densidade maior que a de encurtar a busca** (12 contra 8): substituir a pesquisa exige mais
+  evidência do que complementá-la.
+- **Frescor de 120 dias** (já era regra do cache).
+- **Não se auto-alimenta.** Em modo base o relatório NÃO regrava as amostras: reinserir o que
+  veio da base faria a densidade crescer de si mesma, e a praça nunca mais sairia do modo base —
+  congelando um retrato antigo como se fosse evidência nova.
+- **Ciclo, não caminho sem volta.** Como não gera amostra, a praça envelhece, sai dos 120 dias e
+  volta a pesquisar sozinha. A base se renova por construção.
+- **O relatório DIZ de onde vem.** `fonteEstimativa: 'base_propria'`, comentário explícito e
+  instrução ao parecer: comparável real de 2 meses atrás é honesto; apresentá-lo como anúncio
+  ativo de hoje não seria.
+
+**Terreno em modo base tinha um buraco que fechei junto:** sem a IA não há
+`valorEstimadoImovel`, e o fallback existente só cobre bases por m² construído — um terreno
+sairia SEM valor de mercado. Agora a conta é a do tipo: R$/m² de terreno da base × área de
+terreno, com a margem conservadora de 10%.
+
+**Prova com dado real** (Barueri / Jardim Tupanci / apartamento, 28 amostras de mai–jul/2026):
+mediana **R$ 6.986/m²**, nível 1 com 12 amostras (R$ 6.164–7.500) e nível 2 com 16
+(R$ 5.190–11.471); valor estimado para 70 m² = **R$ 440.118**. Coerente com a praça.
+
+**Praças que já entram em modo base hoje:** Barueri/Jd. Tupanci (apartamento, 28) e Sorocaba/Vila
+Haro (terreno, 16). Vai crescer a cada relatório e a cada índice.
+
+**Referência citável:** `indice_amostra` ganhou `url`, `endereco` e `condominio`, e os prompts
+passam a pedir o link em cada comparável. As 1.549 amostras antigas ficam com fonte + mês (a
+coluna não existia quando foram capturadas); as novas nascem completas.
+
+Desligar, se precisar: `MERCADO_MODO_BASE=0`. Ajustar a exigência: `MERCADO_BASE_MIN` (padrão 12).
+A economia real aparece sozinha no painel **Custo por geração** — que é exatamente para isso.
+
 ### Próximo passo desta sessão
 
 Re-verificação adversarial dos 16 achados de `docs/VARREDURA_BUGS_2026-08-05.md` marcados
