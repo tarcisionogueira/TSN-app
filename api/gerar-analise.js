@@ -563,6 +563,9 @@ async function gravarAmostrasIndice(imDb, mercado, imovelId, segmento = 'apartam
 }
 
 // COLHEITA DE OUTRAS TIPOLOGIAS (aproveitamento da MESMA busca — pedido do dono): a IA lista em
+// LEGADO (06/08): o prompt NÃO pede mais outras tipologias — pedir 4 segmentos na mesma busca
+// diluía a atenção e a assertividade do tipo-alvo, que é o que o cliente contratou. A função
+// fica só para o caso de um `mercado` em cache antigo ainda trazer o campo; nada novo o produz.
 // mercado.outrasTipologias os comparáveis de VENDA que JÁ VIU de outros segmentos (apto/casa/
 // terreno/comercial) na mesma cidade, SEM buscas dedicadas. Semeamos o Índice desses segmentos
 // no nível CIDADE (bairro/grid VAZIOS de propósito: o quarteirão do imóvel-alvo NÃO vale para
@@ -966,14 +969,6 @@ hectares OU unidades) e "baseCalculo" (a conta em texto). Para imóvel com TERRE
 a construção + o terreno excedente e detalhe em "terrenoExcedente". Se a área da métrica não for
 confiável (ex.: veio a área TOTAL no lugar da privativa), DIGA no "comentario" e seja conservador.
 
-═══ COLHEITA DE OUTRAS TIPOLOGIAS (aproveitamento — NÃO gaste buscas dedicadas) ═══
-Ao pesquisar o tipo-alvo, você INEVITAVELMENTE verá anúncios de OUTRAS tipologias na MESMA
-cidade (apartamento, casa, terreno, comercial). NÃO os use no cálculo do imóvel-alvo. Mas, para
-não desperdiçar a pesquisa, LISTE em "outrasTipologias" os de VENDA que você JÁ VIU (sem buscas
-dedicadas a eles), até ~12 por tipo, com R$/m² e data. Regras: apenas VENDA; NÃO repita o
-tipo-alvo (${tipoImovel}); EXCLUA leilão/venda direta; só o que apareceu de fato (não invente).
-Isso alimenta o Índice BidPro dos outros segmentos da região — economia da mesma busca.
-
 ═══ COLHEITA AMPLA — MESMO TIPO EM TODA A CIDADE (compõe o Índice) ═══
 Ao pesquisar (grandes portais E imobiliárias LOCAIS), você verá MUITOS anúncios do MESMO tipo
 (${tipoImovel}) em OUTROS bairros da cidade, fora da vizinhança do imóvel-alvo. NÃO os use no
@@ -1026,7 +1021,6 @@ Retorne APENAS este JSON (sem markdown):
   "nivel2": { "descricao": "", "vendas": [{"bairro":"","descricao":"","valor":0,"m2":0,"valorM2":0,"distanciaKm":0,"fonte":"","data":"AAAA-MM"}], "locacoes": [{"bairro":"","descricao":"","valorMensal":0,"m2":0,"distanciaKm":0,"fonte":"","data":"AAAA-MM"}], "precoMedioM2": 0, "precoMinM2": 0, "precoMaxM2": 0, "aluguelMedio": 0, "totalAmostras": 0 },
   "consolidado": { "precoMedioM2": 0, "aluguelMedio": 0, "yieldBruto": 0, "yieldLiquido": 0, "valorEstimadoImovel": 0, "unidadeValor": "m2_privativo|m2_construido|m2_terreno|hectare|unidade", "areaConsiderada": 0, "baseCalculo": "(explique a conta: ex.: 'R$ 10.980/m² privativo × 30 m²' ou 'R$ 45.000/ha × 120 ha terra nua + R$ 200k benfeitorias' ou 'construção 90 m² × R$ 4.000 + terreno excedente 300 m² × R$ 800')", "padraoImovel": "popular|medio|medio_alto|alto|luxo", "terrenoExcedente": { "haExcedente": false, "areaExcedenteM2": 0, "valorTerrenoExcedente": 0 }, "descontoArremate": null },
   "referenciaFipeZap": { "encontrado": true, "precoMedioM2": 0, "valorizacao12m": 0, "mesReferencia": "AAAA-MM", "localidade": "", "fonte": "" },
-  "outrasTipologias": { "apartamento": [{"valorM2":0,"valor":0,"m2":0,"fonte":"","data":"AAAA-MM"}], "casa": [], "terreno": [], "comercial": [] },
   "outrosBairros": [{"bairro":"","valorM2":0,"valor":0,"m2":0,"fonte":"","data":"AAAA-MM"}],
   "fontesLocais": [{"nome":"","url":""}],
   "zoneamento": { "encontrado": false, "zona": "", "resumoUso": "", "fonte": "", "ondeObter": "" },
@@ -1182,12 +1176,6 @@ Atlas da Violência/IPEA, dados municipais) — citando a FONTE e o PERÍODO. Re
 FACTUAIS, JAMAIS um juízo do tipo "bairro perigoso". Sem dado oficial confiável, marque
 "encontrado": false e recomende diligência local. Não invente nem estime.
 
-═══ COLHEITA DE OUTRAS TIPOLOGIAS (aproveitamento — NÃO gaste buscas dedicadas) ═══
-Ao pesquisar o contexto, você verá anúncios de OUTRAS tipologias na MESMA cidade. LISTE em
-"outrasTipologias" os de VENDA que JÁ VIU (sem buscas dedicadas), até ~12 por tipo, com R$/m² e
-data. Apenas VENDA; NÃO repita o tipo-alvo (${tipoImovel}); EXCLUA leilão/venda direta; só o que
-apareceu de fato. Isso alimenta o Índice BidPro dos outros segmentos da região.
-
 ═══ COLHEITA AMPLA — MESMO TIPO EM OUTROS BAIRROS (compõe o Índice) ═══
 Liste em "outrosBairros" ATÉ 25 anúncios do MESMO tipo (${tipoImovel}) em OUTROS bairros da cidade
 (sem buscas dedicadas; não passe de 25), CADA UM com o seu "bairro" — alimenta o Índice da
@@ -1211,7 +1199,6 @@ muitas sem área.
 Retorne APENAS este JSON (sem markdown):
 {
   "referenciaFipeZap": { "encontrado": true, "precoMedioM2": 0, "valorizacao12m": 0, "mesReferencia": "AAAA-MM", "localidade": "", "fonte": "" },
-  "outrasTipologias": { "apartamento": [{"valorM2":0,"valor":0,"m2":0,"fonte":"","data":"AAAA-MM"}], "casa": [], "terreno": [], "comercial": [] },
   "outrosBairros": [{"bairro":"","valorM2":0,"valor":0,"m2":0,"fonte":"","data":"AAAA-MM"}],
   "zoneamento": { "encontrado": false, "zona": "", "resumoUso": "", "fonte": "", "ondeObter": "" },
   "perfilRegiao": { "tier": "valorizado_alto|intermediario|valorizado_baixo|", "atratividades": [""], "fragilidades": [""], "motivos": "", "turismoSazonal": { "e": false, "tipo": "praia|historica|serra_inverno|termas_aguas|parques_natureza|campo_verao|religioso", "motivo": "" } },
@@ -1512,6 +1499,28 @@ export default async function handler(req, res) {
     }
   } catch { /* enriquecimento é best-effort */ }
 
+  // ── LER O DOCUMENTO ANTES DE PESQUISAR (pedido do dono, 06/08) ──────────────────────────────
+  // A ORDEM importa e estava invertida: a matrícula era colhida DEPOIS da busca e só corrigia o
+  // R$/m² no fim — mas a pesquisa já tinha ido atrás de comparáveis do tamanho ERRADO, o do
+  // anúncio. Confirmar a metragem ANTES faz a busca procurar imóveis do tamanho REAL, que é o
+  // que decide a assertividade dos comparáveis. Determinístico e cache-first (regex sobre o PDF,
+  // sem IA, custo zero); se o documento não abrir a tempo, segue com a área do anúncio e o bloco
+  // de correção lá embaixo continua valendo como rede de segurança.
+  let matriculaPre = null;
+  const areaAnunciada = Number(mercadoInputs?.areaM2) || 0;
+  try {
+    matriculaPre = await Promise.race([extratoMatriculaP, new Promise((r) => setTimeout(() => r(null), Math.min(12000, Math.max(0, restante() - 215000))))]);
+  } catch { matriculaPre = null; }
+  if (mercadoInputs && matriculaPre) {
+    const aMat = Number(matriculaPre.areaPrivativaM2) || 0;
+    const aTer = Number(matriculaPre.areaTerrenoM2) || 0;
+    if (aMat >= 5 && aMat <= 100000) mercadoInputs.areaM2 = aMat;
+    if (aTer >= 5 && aTer <= 10000000 && !(Number(mercadoInputs.areaTerrenoM2) > 0)) mercadoInputs.areaTerrenoM2 = aTer;
+    if (aMat > 0 || aTer > 0) {
+      console.log('[metragem-doc]', JSON.stringify({ imovel: String(imovelId), anuncio: areaAnunciada || null, matricula: aMat || null, terreno: aTer || null, usadaNaBusca: mercadoInputs.areaM2 || null }));
+    }
+  }
+
   // Reseta a barra de evolução ao começar (não herda o progresso de uma geração anterior):
   // Etapa A (comparáveis) já entra como 'gerando'; B (contexto) e o parecer ficam 'pendente'.
   await upsertAnalise({ ...base, status: 'gerando', erro: null, result: null, progresso: {
@@ -1734,11 +1743,15 @@ export default async function handler(req, res) {
     // relatório: o cliente precisa saber que o anúncio e a matrícula discordam.
     let divergenciaArea = null;
     if (areaFonte !== 'matricula') {
-      let mat = null;
-      try { mat = await Promise.race([extratoMatriculaP, new Promise(r => setTimeout(() => r(null), 2500))]); } catch { /* best-effort */ }
+      // Reusa o que já foi colhido ANTES da busca; só corre atrás de novo se lá não deu tempo.
+      let mat = matriculaPre;
+      if (!mat) { try { mat = await Promise.race([extratoMatriculaP, new Promise(r => setTimeout(() => r(null), 2500))]); } catch { /* best-effort */ } }
       const aMat = Number(mat?.areaPrivativaM2) || 0;
       if (aMat >= 5 && aMat <= 100000) {
-        const aAnuncio = Number(areaM2) || 0;
+        // A referência da divergência é a área ANUNCIADA, capturada antes de a matrícula
+        // sobrescrever o input da busca — senão a comparação seria matrícula×matrícula e o
+        // aviso ao cliente nunca dispararia.
+        const aAnuncio = areaAnunciada > 0 ? areaAnunciada : (Number(areaM2) || 0);
         if (aAnuncio > 0 && Math.abs(aMat - aAnuncio) / aAnuncio > 0.10) {
           divergenciaArea = {
             anuncio: aAnuncio, matricula: aMat,
