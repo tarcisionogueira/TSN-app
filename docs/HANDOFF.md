@@ -64,6 +64,103 @@ mudam. `.claude/` segue ignorada no git — só o `settings.json` abre exceção
 
 ---
 
+## ✅ COMEÇAR AQUI (05/08 — sessão 26: o rótulo mentia em três lugares diferentes)
+
+> Branch `claude/bidprobrasil-system-checks-u1lrl6` → **JÁ EM `main`** (fast-forward
+> `4547c23..682c29c`, autorizado pelo dono). Deploy `dpl_qmmNVu2sJFbuRsL7UuPbU1cjW79t`
+> **READY** em 32s, alias `bidprobrasil.com.br` ativo, `lambdaRuntimeStats {"nodejs":96}`.
+> `npm run build` OK · `auditoria_seguranca()` **0 crítico / 0 atenção** (as tabelas novas
+> nasceram com RLS). Caminho de push: `git push origin <branch>:main` — o `main` LOCAL
+> de história não relacionada continua existindo, **não use**.
+
+### As 5 validações combinadas para hoje (resultado)
+
+| # | Item | Resultado |
+|---|---|---|
+| 1 | Aviso de renovação da Alessandra | ✅ 1 registro — saiu do vazio antes da cobrança do dia 07 |
+| 2 | Gatilho do edital CEF | ✅ **10.010 / 10.035** — exato, sobreviveu ao scraper das 09h |
+| 3 | Endereço derivado do título | ✅ gatilho segurou **100%**: dos 450 ZUK ativos, 418 derivam do título e 418 têm endereço (zero vazios). O "722" de ontem era sobre 840 lotes — a proporção SUBIU (86% → 93%). Fila de regeocode 722 → 4 |
+| 4 | Geocode do lote do Rafael | 🔴 abriu um bug maior — ver abaixo |
+| 5 | IBGE + fotos órfãs | ✅ órfãs 23.341 (< 24.811). `caged_emprego` NULL **não é bug**: desligada de propósito (o Novo CAGED não expõe API por município; caminho documentado = Action mensal que baixa o arquivo nacional) |
+
+### 🔴 1) O geocode rotulava pela INTENÇÃO, não pelo resultado — 3.458 lotes
+
+O endereço do Rafael passou a existir (correção de 04/08) e mesmo assim a coordenada não
+mudou: continuou `-23.4675941,-46.5277704`, agora com `geocod_nivel='rua'`. Prova de que o
+rótulo mentia: **duas ruas ZUK diferentes** com a MESMA coordenada de 7 casas decimais, e um
+lote CEF `nivel='cidade'` no mesmo ponto. Quando a rua não existe no OSM, o Nominatim
+devolve o **nó da cidade** — e a cascata rotulava pelo INPUT ("pedi rua+número → endereco").
+O guarda `nivelReal` só pegava resultado a <250 m do centróide IBGE; este caía a **1,6 km**.
+
+**Escala:** 3.458 lotes ativos rotulados `rua`/`endereco` com coordenada exata compartilhada
+entre **logradouros diferentes** (685 grupos) — e, por parecerem precisos, **nunca entravam
+na fila de refazer**. Corrigido em `api/_geo.js` (`nivelNominatim` classifica o
+class/type/addresstype do RESULTADO; `capNivel` vira teto do rótulo em TODOS os retornos —
+POI, rua, CEP, bairro). Migração `geocode_pino_generico_detectar_refazer.sql` aplicada:
+detecção + requeue (fila 22 → 3.519; detecção zerada). Backstop permanente no
+`monitor-dados-cron` (`geocode_pinos_genericos_total()` > 300 alerta).
+
+### 🔴 2) Matrícula abrindo `{"code":"NoSuchKey"}` (achado do dono)
+
+A recaptura troca o objeto canônico da matrícula em `imovel_anexos` (path por hash), o JSONB
+`imoveis_leilao.anexos` fica apontando p/ o objeto ANTIGO, e a limpeza do bucket — que só
+enxergava `imovel_anexos`/`usuario_docs`/`arrematacoes` — apagava o "órfão" **com o app ainda
+linkando**. 14 matrículas GRUPOLANCE mortas. Corrigido em 3 camadas: a função de limpeza
+enxerga o JSONB (nem em `dup_extra`), reparo idempotente dos links (**14 → 0**), e
+`captura-documentos.mjs` sincroniza o espelho JSONB ao trocar o path.
+
+### 🔴 3) Role errado no painel: o assessorado aparecia como Explorador
+
+Cadeia: `CriarContrato` só listava planos `cobrar=true` — e **assessorado/clube fecham por
+CONTRATO** (`cobrar=false`) → contrato sem `plano_key` → a assinatura não tinha o que
+promover (e não havia promoção nenhuma). Corrigido: dropdown lista os 4 tiers de cliente;
+`assinar-contrato` promove o role do signatário na **mesma escada anti-rebaixamento** dos
+pagamentos (equipe intocada), com trilha em `audit_logs`. Rafael reparado
+(`plano_key='assessorado'` + perfil promovido). **Bônus:** o e-mail "assinatura registrada"
+NUNCA foi enviado — buscava `email` em `perfis`, coluna que não existe (vive em
+`auth.users`); falhava em silêncio. Corrigido via `admin/users`.
+
+### 🟢 4) "Leia 1 vez, use em todo lugar" — cache de documento (pedido do dono)
+
+`doc_extracoes` (chave = md5 do CONTEÚDO + URL canônica sem a querystring da signed URL):
+mercadológico, documental e laudo consultam ANTES de baixar ou chamar IA. Regenerar
+relatório, ou gerar o 2º/3º do mesmo lote, **custa zero**. Merge por CONFIANÇA — o
+determinístico (60) nunca sobrescreve o que a visão do documental (90) já leu (write-through).
+**Metragem da matrícula** entra no mercadológico SEM depender do documental
+(`extratoMatricula`, regex): divergindo >10% do anúncio, o R$/m² usa a MATRÍCULA e a
+divergência vira anomalia. **Fluxo de caixa**: `regrasPagamento` estruturado (à vista,
+parcelas, sinal, caução, comissão, prazo, financiável, FGTS) + `leiloeiro_pagamento_prior` —
+cada leitura VOTA no padrão do leiloeiro × modalidade; edital que não abre herda o consenso
+(moda, mín. 2 amostras) rotulado `origem: padrao_leiloeiro`.
+
+### 🔴 5) O aluguel do Índice não era mercado: era `venda × 0,4%`
+
+Barueri/Alphaville mostrava **R$ 28/m²·mês** = `6.985 × 0,004`. As 13 amostras REAIS de
+locação (R$ 2.100–3.200/mês) tinham `area_m2` **NULL** — a IA devolve anúncio de aluguel sem
+metragem — e eram TODAS descartadas em silêncio, caindo numa regra de bolso que subestima
+região de padrão alto (o real de Alphaville dá ~0,6%/mês → ~R$ 42: **33% acima** do exibido).
+Corrigido: (a) o prompt exige `m2` nas locações e manda DESCARTAR anúncio sem área;
+(b) a API devolve `aluguel_estimado` + `aluguel_estimado_base` + o aluguel mensal mediano
+realmente anunciado; (c) a tela marca **ESTIMADO** e explica. **Venda NÃO estava poluída por
+tipo** (as 105 amostras são todas apartamento; bandas batem com o painel) — o que houve foi
+queda para nível cidade, porque não existe amostra marcada "Alphaville Industrial".
+**Terreno não se aluga** (regra do dono de 03/08) agora vale nos DOIS coletores: o do botão
+"Gerar índice" (`_indice-core.js`) não aplicava, e por ali entrou locação de terreno a
+R$ 3,50/m²·mês em Barueri (amostra removida).
+
+### 🔴 6) CRÍTICO da varredura: serviço avulso suspendia plano de quem está em dia
+
+`mp-webhook` monta `contexto.servico` para pagamento avulso (`metadata.tipo='servico'`:
+recarga, assessoria, PIX de anuidade abandonado), mas **`processarRecusado` nem recebia o
+campo**. O guard cobria só PRODUTO (`ehProdutoMp`). Assinante EM DIA que desistisse de um PIX
+avulso era rebaixado a `explorador`, ganhava `inadimplente_desde`, `role_anterior`
+sobrescrito e documentos agendados para expurgo LGPD. Corrigido na raiz + mesma lacuna
+gêmea no ramo de REEMBOLSO. **Verificado no banco: nenhum cliente real atingido** — era
+latente. `.claude/settings.json` (04/08) permitiu agendar sem atrito: heartbeat 06/08 13:30
+UTC (`trig_0131…`) e Search Console 18/08 (`trig_013A…`).
+
+---
+
 ## ✅ COMEÇAR AQUI (04/08 — sessão 25: ritual + a correção de ontem estava sendo desfeita todo dia)
 
 > Branch `claude/handoff-verificacoes-uyiufd`, **JÁ EM `main`** (fast-forward `debf99a..1785eac`,
