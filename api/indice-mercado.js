@@ -96,27 +96,44 @@ export default async function handler(req, res) {
   // Pesquisa mercadológica ao vivo (busca web). Igual ao relatório: 1ª tentativa ARROJADA (8
   // buscas) e, se travar OU vier JSON truncado (parseJSON=null numa cidade grande), 2ª tentativa
   // ESTREITA (3 buscas) que costuma CONCLUIR — evita 502 e "0 amostras" numa pesquisa cara.
-  let custoMicro = 0, mercado = null;
-  const headers = { 'x-api-key': CLAUDE_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json', 'anthropic-beta': 'web-search-2025-03-05' };
-  const buscar = async (webUses, timeoutMs) => {
-    const r = await anthropicFetch({
-      method: 'POST', headers,
-      body: JSON.stringify({
-        model: MODEL, max_tokens: todos ? 16000 : 12000,
-        tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: webUses }],
-        system: `Perito avaliador. ${todos ? 'Cubra os 4 tipos (apartamento, casa, terreno, comercial) e marque o "tipo" de CADA amostra.' : 'Só ' + tipo + '.'} Só mercado livre (descarte leilão). Retorne apenas JSON válido.`,
-        messages: [{ role: 'user', content: promptIndice({ endereco: body.endereco, condominio: body.condominio, bairro: body.bairro, tipo, cidade: body.cidade, uf }) }],
-      }),
-    }, { retries: 0, timeoutMs, noFallback: true });
-    if (!r.ok) throw new Error(`anthropic_http_${r.status}`);
+  let custoMicro = 0, mercado = null, motivoFalha = null;
+  const headers = { 'x-api-key': CLAUDE_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' };
+  const buscar = async (webUses, timeoutMs, compacto = false) => {
+    let r;
+    try {
+      r = await anthropicFetch({
+        method: 'POST', headers,
+        body: JSON.stringify({
+          model: MODEL, max_tokens: todos ? 16000 : 12000,
+          // web_search_20260209 (filtragem dinâmica): o modelo filtra os resultados da busca ANTES
+          // de entrarem no contexto — mais acerto e menos token gasto com página irrelevante. Não
+          // precisa de header beta nem de declarar code_execution junto (roda por baixo).
+          tools: [{ type: 'web_search_20260209', name: 'web_search', max_uses: webUses }],
+          system: `Perito avaliador. ${todos ? 'Cubra os 4 tipos (apartamento, casa, terreno, comercial) e marque o "tipo" de CADA amostra.' : 'Só ' + tipo + '.'} Só mercado livre (descarte leilão). Retorne apenas JSON válido.`,
+          messages: [{ role: 'user', content: promptIndice({ endereco: body.endereco, condominio: body.condominio, bairro: body.bairro, tipo, cidade: body.cidade, uf, compacto }) }],
+        }),
+        // 1 retry na tentativa ampla: um único 429/529 da Anthropic derrubava a pesquisa inteira
+        // (o usuário via "falhou, tente novamente" por causa de um pico de fila).
+      }, { retries: compacto ? 0 : 1, timeoutMs, noFallback: true });
+    } catch (e) {
+      motivoFalha = `rede/timeout: ${e?.name || ''} ${e?.message || ''}`.trim();
+      throw e;
+    }
+    if (!r.ok) { motivoFalha = `anthropic_http_${r.status}`; throw new Error(motivoFalha); }
     const data = await r.json();
     try { custoMicro += custoRespostaClaude(MODEL, data?.usage); } catch { /* medição best-effort */ }
-    return parseJSON(extractText(data)); // null se truncou (JSON incompleto)
+    const json = parseJSON(extractText(data)); // null se truncou (JSON incompleto)
+    // DIAGNÓSTICO (achado 06/08): o 502 era MUDO — no log da Vercel só aparecia o status, sem
+    // dizer se foi 429, timeout ou JSON cortado, e sem isso não dá para saber o que corrigir.
+    if (!json) motivoFalha = `JSON incompleto (stop_reason=${data?.stop_reason}, output_tokens=${data?.usage?.output_tokens}, buscas=${data?.usage?.server_tool_use?.web_search_requests})`;
+    return json;
   };
   try { mercado = await buscar(8, 150000); } catch { mercado = null; }
-  if (!mercado) { try { mercado = await buscar(3, 80000); } catch { mercado = null; } } // estreita conclui
+  // 2ª tentativa ESTREITA e COMPACTA: menos buscas e menos amostras pedidas.
+  if (!mercado) { try { mercado = await buscar(3, 80000, true); } catch { mercado = null; } }
   if (!mercado) {
-    res.status(502).json({ error: 'A pesquisa de mercado falhou. Tente novamente.', detalhe: 'busca instável' });
+    console.error('[indice-mercado] pesquisa falhou', { cidade: cidadeNorm, uf, tipo, bairro: bairroNorm, motivo: motivoFalha });
+    res.status(502).json({ error: 'A pesquisa de mercado falhou. Tente novamente.', detalhe: motivoFalha || 'busca instável' });
     return;
   }
 

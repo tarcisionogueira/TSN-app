@@ -857,7 +857,8 @@ async function mercadoRecente(imovelId) {
 
 async function anthropic(payload, useSearch, fetchOpts) {
   const headers = { 'x-api-key': CLAUDE_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' };
-  if (useSearch) headers['anthropic-beta'] = 'web-search-2025-03-05';
+  // web_search_20260209 (filtragem dinâmica) não pede header beta — o antigo
+  // 'web-search-2025-03-05' era do tipo _20250305 e virou ruído aqui.
   const r = await anthropicFetch({ method: 'POST', headers, body: JSON.stringify(payload) }, fetchOpts);
   // FALHA-ALTO: um erro NÃO-retryável do Anthropic (400 modelo/beta inválido, 401 chave, 404,
   // web_search indisponível) NÃO pode virar "mercado vazio" silencioso — o parseJSON do corpo
@@ -1602,7 +1603,7 @@ export default async function handler(req, res) {
           do {
             data = await anthropic({
               model: MODEL, max_tokens: 32000,
-              tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: webUses }],
+              tools: [{ type: 'web_search_20260209', name: 'web_search', max_uses: webUses }],
               system: sistema,
               messages,
             }, true, { retries: 0, timeoutMs: Math.max(30000, msBudget), noFallback: true });

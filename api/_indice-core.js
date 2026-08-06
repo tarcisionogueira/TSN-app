@@ -29,13 +29,21 @@ export function parseJSON(txt) {
 
 // Um imóvel "todos" faz UMA busca ampla cobrindo os 4 tipos (economia do dono: "puxar tudo o
 // que tiver anunciado e a IA só filtra e organiza a cada raio"), com o tipo em CADA amostra.
-export const promptIndice = ({ endereco, condominio, bairro, tipo, cidade, uf }) => {
+export const promptIndice = ({ endereco, condominio, bairro, tipo, cidade, uf, compacto = false }) => {
   const todos = tipo === 'todos';
   const cidadeInteira = !endereco && !condominio && !bairro;
   const alvo = todos ? 'de TODOS os tipos (apartamento, casa, terreno, comercial)' : `para o imóvel do tipo "${tipo}"`;
+  // MODO COMPACTO — a 2ª tentativa (quando a 1ª falha ou volta com JSON truncado) pede MENOS
+  // amostras. Antes ela repetia o mesmo pedido "traga o máximo, não resuma" com menos buscas:
+  // se a causa era resposta grande demais para caber, truncava de novo e o usuário via
+  // "a pesquisa falhou" sem nenhuma pista. Melhor um índice com 8 amostras do que nenhum.
   const regraTipo = todos
-    ? '- Cubra os 4 tipos (apartamento, casa, terreno, comercial). Em CADA amostra informe "tipo": exatamente um de apartamento|casa|terreno|comercial (sem variações). Traga o MÁXIMO de amostras REAIS que encontrar (idealmente 12 a 18 por tipo por nível) — quanto mais anúncios ativos, mais fiel o índice. NÃO resuma nem corte a lista.'
-    : `- SÓ o MESMO TIPO (${tipo}). Descarte tipos diferentes. Traga o MÁXIMO de amostras REAIS (idealmente 20 a 30 por nível) — não resuma nem limite a lista; quanto mais anúncios ativos, melhor o índice.`;
+    ? (compacto
+      ? '- Cubra os 4 tipos (apartamento, casa, terreno, comercial). Em CADA amostra informe "tipo": exatamente um de apartamento|casa|terreno|comercial. Traga até 8 amostras por tipo por nível — priorize as MAIS PRÓXIMAS e RECENTES. Resposta enxuta: é melhor entregar menos amostras completas do que uma lista longa cortada no meio.'
+      : '- Cubra os 4 tipos (apartamento, casa, terreno, comercial). Em CADA amostra informe "tipo": exatamente um de apartamento|casa|terreno|comercial (sem variações). Traga o MÁXIMO de amostras REAIS que encontrar (idealmente 12 a 18 por tipo por nível) — quanto mais anúncios ativos, mais fiel o índice. NÃO resuma nem corte a lista.')
+    : (compacto
+      ? `- SÓ o MESMO TIPO (${tipo}). Traga até 12 amostras por nível — priorize as MAIS PRÓXIMAS e RECENTES. Resposta enxuta: é melhor entregar menos amostras completas do que uma lista longa cortada no meio.`
+      : `- SÓ o MESMO TIPO (${tipo}). Descarte tipos diferentes. Traga o MÁXIMO de amostras REAIS (idealmente 20 a 30 por nível) — não resuma nem limite a lista; quanto mais anúncios ativos, melhor o índice.`);
   const campoTipo = todos ? '"tipo":"apartamento",' : '';
   const niveis = cidadeInteira
     ? `- NÍVEL 1: bairros CENTRAIS / mais valorizados de ${cidade}.
