@@ -4815,6 +4815,37 @@ function PainelAuditoriaSistema() {
   const [loading, setLoading] = React.useState(true);
   const [erro, setErro] = React.useState(false);
   const [abertos, setAbertos] = React.useState({});
+  const [disparando, setDisparando] = React.useState(false);
+  const [aviso, setAviso] = React.useState('');
+
+  // Dispara a varredura COMPLETA do código sob demanda. O agendamento diário saiu
+  // em 07/08 porque custava ~R$ 43-59 por execução; o custo é declarado ANTES do
+  // clique de propósito — quem paga precisa saber quanto está aprovando.
+  const rodarAuditoria = React.useCallback(async () => {
+    const ok = window.confirm(
+      'Rodar a auditoria completa do código?\n\n' +
+      'Ela varre o sistema inteiro (~2,1 milhões de tokens em 77 chamadas) e leva de 40 a 90 minutos.\n' +
+      'Custo estimado desta execução: US$ 8 a 11 (cerca de R$ 43 a 59).\n\n' +
+      'O relatório aparece aqui quando terminar.'
+    );
+    if (!ok) return;
+    setDisparando(true); setAviso('');
+    try {
+      const res = await apiCall('/api/auditoria-sistema', { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      setAviso(res.ok
+        ? '✓ Auditoria disparada. Leva de 40 a 90 min; recarregue esta página mais tarde para ver o relatório.'
+        : `Não foi possível disparar: ${data?.motivo || 'erro desconhecido'}`);
+    } catch (e) { setAviso(`Não foi possível disparar: ${e?.message || 'falha de rede'}`); }
+    setDisparando(false);
+  }, []);
+
+  const BotaoRodar = () => (
+    <button onClick={rodarAuditoria} disabled={disparando}
+      style={{ fontSize: 12, fontWeight: 700, padding: '5px 12px', borderRadius: 8, border: '1px solid #e2e8f0', background: 'white', color: '#0D63DB', cursor: disparando ? 'default' : 'pointer' }}>
+      {disparando ? 'Disparando…' : '▶ Rodar auditoria completa'}
+    </button>
+  );
   React.useEffect(() => {
     let vivo = true;
     (async () => {
@@ -4838,8 +4869,12 @@ function PainelAuditoriaSistema() {
   if (!a || a.vazio) {
     return (
       <div style={{ ...S.card, marginBottom: 16 }}>
-        <div style={{ fontWeight: 700, fontSize: 15, color: '#111111', marginBottom: 6 }}>🔍 Auditoria do Sistema (Claude)</div>
-        <div style={{ fontSize: 13, color: '#64748b', lineHeight: 1.6 }}>Auditoria ainda não executada. Roda automaticamente toda segunda-feira, ou dispare a Action <b>“Auditoria do Sistema (Claude)”</b> no GitHub. Ela audita funcionalidades, fluxos de API e segurança dos dados — e as correções viram PR para sua revisão.</div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 6 }}>
+          <div style={{ fontWeight: 700, fontSize: 15, color: '#111111' }}>🔍 Auditoria do Sistema (Claude)</div>
+          <BotaoRodar />
+        </div>
+        <div style={{ fontSize: 13, color: '#64748b', lineHeight: 1.6 }}>Auditoria ainda não executada. Ela roda <b>sob demanda</b> (sem agendamento): audita funcionalidades, fluxos de API e segurança dos dados varrendo o código inteiro, e as correções viram PR para sua revisão. Custo estimado por execução: <b>US$ 8 a 11 (~R$ 43 a 59)</b>.</div>
+        {aviso && <div style={{ fontSize: 12, color: '#334155', marginTop: 8 }}>{aviso}</div>}
       </div>
     );
   }
@@ -4858,15 +4893,19 @@ function PainelAuditoriaSistema() {
           🔍 Auditoria do Sistema (Claude)
           <span style={{ width: 10, height: 10, borderRadius: '50%', background: cor, display: 'inline-block' }} />
         </div>
-        <div style={{ fontSize: 11, color: '#94a3b8' }}>
-          {a.gerado_em && new Date(a.gerado_em).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
-          {diasAtras != null && diasAtras > 0 ? ` · há ${diasAtras}d` : ''}
-          {a.commit_sha ? ` · ${String(a.commit_sha).slice(0, 7)}` : ''}{a.modelo ? ` · ${a.modelo}` : ''}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 11, color: '#94a3b8' }}>
+            {a.gerado_em && new Date(a.gerado_em).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
+            {diasAtras != null && diasAtras > 0 ? ` · há ${diasAtras}d` : ''}
+            {a.commit_sha ? ` · ${String(a.commit_sha).slice(0, 7)}` : ''}{a.modelo ? ` · ${a.modelo}` : ''}
+          </span>
+          <BotaoRodar />
         </div>
       </div>
+      {aviso && <div style={{ fontSize: 12, color: '#334155', marginBottom: 10 }}>{aviso}</div>}
       {desatualizada && (
         <div style={{ fontSize: 12, color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '9px 13px', marginBottom: 10, lineHeight: 1.5 }}>
-          ⚠ Este relatório é de <b>{diasAtras} dias atrás</b> e pode não refletir correções já aplicadas desde então — vários achados podem já estar resolvidos no código atual. Rode a Action <b>“Auditoria do Sistema (Claude)”</b> no GitHub para atualizar o retrato antes de agir sobre os itens abaixo.
+          ⚠ Este relatório é de <b>{diasAtras} dias atrás</b> e pode não refletir correções já aplicadas desde então — vários achados podem já estar resolvidos no código atual. Use <b>“Rodar auditoria completa”</b> acima para atualizar o retrato antes de agir sobre os itens abaixo (a auditoria não roda mais sozinha: ~R$ 43 a 59 por execução).
         </div>
       )}
       {a.resumo && <div style={{ fontSize: 13, color: '#334155', lineHeight: 1.6, marginBottom: 10, padding: '10px 14px', background: '#f8fafc', borderRadius: 10, borderLeft: `3px solid ${cor}` }}>{a.resumo}</div>}

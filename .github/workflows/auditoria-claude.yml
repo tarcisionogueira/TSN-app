@@ -1,19 +1,29 @@
 name: Auditoria do Sistema (Claude)
 
 # Auditoria técnica pelo Claude: funcionalidades, fluxos de API e segurança dos
-# dados. Roda DIÁRIA (6h UTC) nesta fase de correções intensas e sob demanda. Só LÊ
-# o código e grava o relatório em auditoria_sistema — não altera nada. As correções
-# propostas nos achados viram PR revisável quando aprovadas.
-# TODO: quando o ritmo de mudanças baixar, voltar para semanal (cron '0 6 * * 1').
+# dados. Só LÊ o código e grava o relatório em auditoria_sistema — não altera nada.
+# As correções propostas nos achados viram PR revisável quando aprovadas.
+#
+# SOB DEMANDA APENAS (decisão do dono, 07/08) — o agendamento diário foi REMOVIDO.
+# Motivo: a auditoria varre o repositório INTEIRO a cada execução (~6,0 milhões de
+# caracteres = ~2,1 milhões de tokens em 76 lotes + 1 síntese), o que custa
+# ~US$ 8 a 11 (~R$ 43 a 59) POR EXECUÇÃO. Rodando todo dia, era a maior despesa
+# recorrente de IA do projeto — e nenhum centavo disso passava pelo medidor de uso
+# (o script chama a API direto, sem registrarUso), então não aparecia em
+# `uso_integracoes` nem no painel de custos. Agora dispara pelo botão do painel
+# admin ("Rodar auditoria completa") ou por workflow_dispatch aqui.
 on:
-  schedule:
-    - cron: '0 6 * * *'
   workflow_dispatch:
 
 jobs:
   auditoria:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # 120 min: com 60 as execuções de 02/08 em diante eram CANCELADAS no estouro do
+    # limite — o repositório cresceu e a varredura completa passou a levar mais de
+    # uma hora. Como o relatório só é gravado no FIM, pagava-se a hora inteira de
+    # chamadas e nada era escrito (6 dias seguidos: 02/08 a 07/08). Sem folga aqui,
+    # o botão novo reproduziria exatamente esse desperdício.
+    timeout-minutes: 120
     steps:
       - name: Checkout
         uses: actions/checkout@v4
