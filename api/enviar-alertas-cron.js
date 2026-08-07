@@ -38,6 +38,19 @@ import MUNICIPIOS from './_municipios.js';
 import { assinarUnsub } from './cancelar-alertas.js';
 import { ALLOWED_HOSTS } from './_allowed-hosts.js';
 import { enviarWebPush } from './_webpush.js';
+import { CIDADES_TEMPORADA } from './_temporada.js';
+
+// Espelho das constantes da Busca (src/pages/Busca.jsx) — a INTENÇÃO salva no filtro
+// restringe tipo/desconto e precisa valer também no e-mail. Ao mexer lá, mexa aqui.
+const TIPOS_RESIDENCIAL = ['apartamento', 'casa', 'imovel'];              // locação/temporada
+const TIPOS_LIQUIDOS    = ['apartamento', 'casa', 'comercial', 'imovel']; // revenda (flip)
+const REVENDA_DESCONTO_MIN = 30;
+// Checkbox da Busca ('aVista') → valor canônico do banco ('a_vista'). O filtro salvo guarda a
+// CHAVE do checkbox; mandar a chave crua para a RPC não casava com nada e o filtro de
+// pagamento simplesmente não existia no e-mail.
+const PAG_CANON = { aVista: 'a_vista', financiado: 'financiado', hipotecado: 'hipotecado' };
+const pagCanon = (l) => [...new Set((Array.isArray(l) ? l : [])
+  .map(k => PAG_CANON[k] || (Object.values(PAG_CANON).includes(k) ? k : null)).filter(Boolean))];
 
 const norm = (c) => (c || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
 function centroide(cidade, uf) {
@@ -135,8 +148,11 @@ async function handler(req) {
   }
   // Timeout em TODAS as chamadas de rede: sem AbortSignal, um upstream lento (PostgREST/
   // GoTrue) pendura a função até o maxDuration e corta o disparo no meio.
-  const sbGet = async (path) => { try { const r = await fetch(`${URL_}/rest/v1/${path}`, { headers: hdr, signal: AbortSignal.timeout(15000) }); return r.ok ? await r.json() : []; } catch { return []; } };
-  const rpc = async (fn, body) => { try { const r = await fetch(`${URL_}/rest/v1/rpc/${fn}`, { method: 'POST', headers: { ...hdr, 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(15000) }); return r.ok ? await r.json() : []; } catch { return []; } };
+  // Falha de consulta NÃO pode ser silenciosa: uma query malformada (400) devolvia [] igual a
+  // "não há imóveis", e a etapa inteira sumia do e-mail sem deixar rastro. Continua devolvendo
+  // [] (o envio não pode cair por causa de uma etapa), mas agora aparece no log da invocação.
+  const sbGet = async (path) => { try { const r = await fetch(`${URL_}/rest/v1/${path}`, { headers: hdr, signal: AbortSignal.timeout(15000) }); if (!r.ok) { console.error('[alertas] GET', r.status, path.slice(0, 300), (await r.text().catch(() => '')).slice(0, 300)); return []; } return await r.json(); } catch (e) { console.error('[alertas] GET erro', path.slice(0, 200), e?.message); return []; } };
+  const rpc = async (fn, body) => { try { const r = await fetch(`${URL_}/rest/v1/rpc/${fn}`, { method: 'POST', headers: { ...hdr, 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(15000) }); if (!r.ok) { console.error('[alertas] RPC', fn, r.status, (await r.text().catch(() => '')).slice(0, 300)); return []; } return await r.json(); } catch (e) { console.error('[alertas] RPC erro', fn, e?.message); return []; } };
 
   const seteDias = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
   // Inclui 'admin' (o dono acompanha os disparos) além dos planos.
@@ -243,28 +259,105 @@ async function handler(req) {
   // Aplicado em TODOS os caminhos de seleção + rede de segurança na lista final.
   const DESC_MIN = Number(process.env.ALERTA_DESCONTO_MIN || 40);
   // Monta as condições PostgREST de UM filtro salvo (tipo/modalidade/valor/desconto/
-  // bairros/cidades) — fiel ao que o cliente salvou na Busca.
+  // bairros/cidades/pagamento/intenção) — fiel ao que o cliente salvou na Busca.
+  //
+  // REGRA (07/08, dono): "todos os filtros devem funcionar simultaneamente" — e isso vale
+  // para o E-MAIL, não só para a tela. O filtro salvo é o CONTRATO do que o cliente quer
+  // receber; qualquer chave que o cron não conheça vira um filtro SILENCIOSAMENTE ignorado,
+  // e o e-mail passa a mandar imóvel que a tela não mostraria. Ao acrescentar um filtro novo
+  // na Busca, inclua-o AQUI TAMBÉM (além de aplicarFiltrosImoveis + RPC + api/busca-raio.js).
   const condFiltro = (f) => {
     const p = [];
     const tipos = Array.isArray(f.tipos) ? f.tipos.filter(Boolean) : [];
-    if (tipos.length) p.push(`tipo=in.(${[...tipos, 'imovel'].map(encodeURIComponent).join(',')})`);
+    // INTENÇÃO (revenda/locação/temporada) restringe os TIPOS por cima da escolha do
+    // cliente — mesma semântica de aplicarFiltrosImoveis, onde os dois `.in('tipo', …)`
+    // se combinam em AND (interseção). Interseção vazia = contradição → sentinela que
+    // não casa nada, em vez de "todos" (que era o que o e-mail mandava antes).
+    const limIntencao = f.intencao === 'revenda' ? TIPOS_LIQUIDOS
+      : (f.intencao === 'locacao' || f.intencao === 'temporada') ? TIPOS_RESIDENCIAL : null;
+    const tiposBase = tipos.length ? [...tipos, 'imovel'] : null;
+    const tiposFinal = (tiposBase && limIntencao)
+      ? (tiposBase.filter(t => limIntencao.includes(t)).length
+        ? tiposBase.filter(t => limIntencao.includes(t)) : ['__sem_tipo__'])
+      : (tiposBase || limIntencao);
+    if (tiposFinal) p.push(`tipo=in.(${tiposFinal.map(encodeURIComponent).join(',')})`);
     const mods = Array.isArray(f.modalidades) ? f.modalidades.filter(Boolean) : [];
     if (mods.length) p.push(`modalidade=in.(${mods.map(encodeURIComponent).join(',')})`);
     if (f.valorMin) p.push(`valor_minimo=gte.${numOnly(f.valorMin)}`);
     if (f.valorMax) p.push(`valor_minimo=lte.${numOnly(f.valorMax)}`);
     // Desconto: piso de DESC_MIN (o filtro do cliente pode exigir MAIS, nunca menos).
-    p.push(`desconto_percentual=gte.${Math.max(DESC_MIN, Number(f.descontoMin) || 0)}`);
+    // Revenda tem piso próprio de viabilidade (30%), abaixo do DESC_MIN do e-mail.
+    p.push(`desconto_percentual=gte.${Math.max(DESC_MIN, Number(f.descontoMin) || 0, f.intencao === 'revenda' ? REVENDA_DESCONTO_MIN : 0)}`);
     const bairros = Array.isArray(f.bairros) ? f.bairros.filter(Boolean) : [];
-    if (bairros.length) p.push(`bairro=in.(${bairros.map(b => encodeURIComponent(`"${b}"`)).join(',')})`);
+    const cidades = Array.isArray(f.cidades) ? f.cidades.filter(Boolean) : [];
+    // Bairro só filtra COM cidade selecionada (nomes de bairro se repetem entre cidades) —
+    // mesma condição da tela.
+    if (bairros.length && cidades.length) p.push(`bairro=in.(${bairros.map(b => encodeURIComponent(`"${b}"`)).join(',')})`);
     // Estado é aplicado SEMPRE (não em else) — cidades homônimas em UFs diferentes
     // (Palmas/TO vs Palmas/PR) exigem estado E cidade juntos. Antes, ter cidade no
     // filtro DROPAVA o estado e o e-mail trazia imóveis de outro estado.
     if (f.estado) p.push(`estado=eq.${encodeURIComponent(f.estado)}`);
-    const cidades = Array.isArray(f.cidades) ? f.cidades.filter(Boolean) : [];
-    if (cidades.length) p.push(`cidade_norm=in.(${cidades.map(c => encodeURIComponent(normCid(c))).join(',')})`);
+    // TEMPORADA restringe a praças de veraneio/turismo. Com cidades escolhidas, é a
+    // interseção; sem cidades, a lista curada inteira.
+    const cidadesNorm = cidades.map(normCid);
+    const cidadesFinal = f.intencao === 'temporada'
+      ? (cidadesNorm.length
+        ? (cidadesNorm.filter(c => CIDADES_TEMPORADA.has(c)).length ? cidadesNorm.filter(c => CIDADES_TEMPORADA.has(c)) : ['__sem_cidade__'])
+        : [...CIDADES_TEMPORADA])
+      : cidadesNorm;
+    if (cidadesFinal.length) p.push(`cidade_norm=in.(${cidadesFinal.map(encodeURIComponent).join(',')})`);
+    // PAGAMENTO: buckets por MODALIDADE, idênticos aos da tela e da RPC (hipotecado =
+    // judicial; a_vista/financiado = não-judicial). Sem isto, o e-mail mandava imóvel
+    // à vista para quem só quer parcelado.
+    const canon = pagCanon(f.pagamento);
+    if (canon.length) {
+      const ors = [];
+      if (canon.includes('a_vista'))    ors.push('and(forma_pagamento.eq.a_vista,or(modalidade.neq.judicial,modalidade.is.null))');
+      if (canon.includes('financiado')) ors.push('and(forma_pagamento.eq.financiado,or(modalidade.neq.judicial,modalidade.is.null))');
+      if (canon.includes('hipotecado')) ors.push('or(modalidade.eq.judicial,forma_pagamento.eq.hipotecado)');
+      // Literais fixos (sem dado do cliente) → vão sem encode, que é como o PostgREST
+      // documenta a árvore lógica; encodar a vírgula aqui só arrisca quebrar o parser.
+      if (ors.length) p.push(`or=(${ors.join(',')})`);
+    }
     return p.length ? '&' + p.join('&') : '';
   };
-  const buscarPorFiltro = (f, lim) => sbGet(`imoveis_leilao?select=${SEL}&ativo=eq.true${condFiltro(f)}&order=desconto_percentual.desc&limit=${lim}`);
+
+  // RAIO — o recorte geográfico do filtro salvo (chave `__raio`, gravada pela Busca desde
+  // 07/08). Sem este caminho o cron caía no condFiltro puro: um filtro salvo COM raio e SEM
+  // cidade virava uma busca NACIONAL, e o cliente recebia imóvel a 900 km do círculo que ele
+  // desenhou no mapa. No modo raio a cidade é só o CENTRO (não filtra) e o bairro é ignorado
+  // — exatamente como na tela.
+  const buscarPorRaio = async (f, lim) => {
+    const c = f.__raio?.centro; const km = Number(f.__raio?.km) || 0;
+    if (!c || !km || !Number.isFinite(Number(c.lat)) || !Number.isFinite(Number(c.lng))) return null;
+    const tipos = Array.isArray(f.tipos) ? f.tipos.filter(Boolean) : [];
+    const limIntencao = f.intencao === 'revenda' ? TIPOS_LIQUIDOS
+      : (f.intencao === 'locacao' || f.intencao === 'temporada') ? TIPOS_RESIDENCIAL : null;
+    // Aqui a interseção NÃO acrescenta 'imovel' — a própria RPC já aceita `tipo='imovel'`
+    // como curinga; é a mesma tradução que a tela faz no caminho do raio.
+    const tiposRpc = (tipos.length && limIntencao)
+      ? (tipos.filter(t => limIntencao.includes(t)).length ? tipos.filter(t => limIntencao.includes(t)) : ['__sem_tipo__'])
+      : (tipos.length ? tipos : (limIntencao || []));
+    const linhas = await rpc('buscar_por_raio_v2', {
+      lat: Number(c.lat), lng: Number(c.lng), raio_metros: km * 1000,
+      lim: Math.min(200, Math.max(lim * 4, 40)),
+      tipos_filtro: tiposRpc,
+      estado_filtro: f.estado || '',
+      modalidades_filtro: Array.isArray(f.modalidades) ? f.modalidades.filter(Boolean) : [],
+      pagamentos_filtro: pagCanon(f.pagamento),
+      desconto_min: Math.max(DESC_MIN, Number(f.descontoMin) || 0, f.intencao === 'revenda' ? REVENDA_DESCONTO_MIN : 0),
+      ...(numOnly(f.valorMin) ? { valor_min: numOnly(f.valorMin) } : {}),
+      ...(numOnly(f.valorMax) ? { valor_max: numOnly(f.valorMax) } : {}),
+    });
+    // A RPC ordena por DISTÂNCIA; o e-mail leva sempre o maior desconto primeiro.
+    return (linhas || []).sort((a, b) => (Number(b.desconto_percentual) || 0) - (Number(a.desconto_percentual) || 0));
+  };
+
+  const buscarPorFiltro = async (f, lim) => {
+    const porRaio = await buscarPorRaio(f, lim);
+    if (porRaio) return porRaio;
+    return sbGet(`imoveis_leilao?select=${SEL}&ativo=eq.true${condFiltro(f)}&order=desconto_percentual.desc&limit=${lim}`);
+  };
 
   let enviados = 0;
   const isSegunda = new Date().getUTCDay() === 1; // 11h UTC de segunda = 8h BRT de segunda
@@ -349,7 +442,10 @@ async function handler(req) {
       const tetoPerfil = tetoFiltro && tetoFaixa ? Math.min(tetoFiltro, tetoFaixa) : (tetoFiltro || tetoFaixa);
       const tiposPref = Array.isArray(filtroBase.tipos) ? filtroBase.tipos.filter(Boolean) : [];
       const modsPref = Array.isArray(filtroBase.modalidades) ? filtroBase.modalidades.filter(Boolean) : [];
-      const pagPref = new Set(Array.isArray(filtroBase.pagamento) ? filtroBase.pagamento.filter(Boolean) : []);
+      // pagCanon: o filtro salvo guarda a CHAVE do checkbox ('aVista'); a RPC espera o valor
+      // canônico ('a_vista'). Sem converter, a preferência de pagamento do cliente ia para a
+      // RPC como string desconhecida e não casava nada.
+      const pagPref = new Set(pagCanon(filtroBase.pagamento));
       if (['a_vista', 'financiado'].includes(perfil.forma_pagamento)) pagPref.add(perfil.forma_pagamento);
       const temPref = tiposPref.length || modsPref.length || pagPref.size;
       const passes = temPref
