@@ -1795,6 +1795,46 @@ export default async function handler(req, res) {
         mercado = compar;
         mercado.precoMedioM2 = mercado.consolidado?.precoMedioM2 || mercado.nivel2?.precoMedioM2 || 0;
         mercado.aluguelMedio = mercado.consolidado?.aluguelMedio || 0;
+        // ALUGUEL RECALCULADO NO SERVIDOR (07/08) — mesmo princípio da correção de Cotia: se o
+        // servidor TEM as amostras, ele não reimprime o agregado que o modelo mandou.
+        // Caso real (Sorocaba, `8407e489`): as 7 locações vieram PERFEITAS (R$ 950 a 2.100,
+        // 42-47 m², todas em Caguassu/Jd. Carandá a menos de 1 km), mas o `consolidado` trouxe
+        // `aluguelMedio: 27,62` — a mediana em R$/m²·mês, não a mediana do valor MENSAL
+        // (que é R$ 1.300). O modelo carregou a unidade do bloco vizinho (`unidadeValor:
+        // m2_privativo`, `baseCalculo: "R$ 3206,91/m² × 47,4 m²"`) para um campo que o resto do
+        // sistema trata como TOTAL — a linha 2134 abaixo prova a semântica ao fazer
+        // `aluguelMedio = aluguelM2 × área`. Sem esta trava o estrago é em cascata: card com
+        // "R$ 27,62/mês", yield contaminado, e `valorLocacao` do parecer virando R$ 28 de renda
+        // mensal (Analise.jsx:814 arredonda o aluguelMedio para o formulário).
+        // A regra é a MESMA que o prompt já pede — mediana do `valorMensal` — só que executada
+        // de forma determinística, com o mínimo de 3 amostras que o dono definiu.
+        {
+          const locs = [...(mercado.nivel1?.locacoes || []), ...(mercado.nivel2?.locacoes || []), ...(Array.isArray(mercado.locacoes) ? mercado.locacoes : [])];
+          const mensais = locs.map(l => Number(l?.valorMensal) || 0).filter(v => v > 0).sort((a, b) => a - b);
+          if (mensais.length >= 3) {
+            const mediana = mensais.length % 2
+              ? mensais[(mensais.length - 1) / 2]
+              : Math.round((mensais[mensais.length / 2 - 1] + mensais[mensais.length / 2]) / 2);
+            const doModelo = Number(mercado.aluguelMedio) || 0;
+            // Só sobrescreve quando o modelo DIVERGE do que as amostras dizem (>5%), para não
+            // mexer no caso em que ele acertou. A divergência típica aqui é de ordem de grandeza.
+            if (Math.abs(mediana - doModelo) / mediana > 0.05) {
+              mercado.__diagAluguel = { doModelo, recalculado: mediana, nAmostras: mensais.length, motivo: 'mediana do valorMensal das locações' };
+              mercado.aluguelMedio = mediana;
+              if (mercado.consolidado) mercado.consolidado.aluguelMedio = mediana;
+              // O yield foi derivado do aluguel ERRADO, então corrigir só o aluguel deixaria a
+              // rentabilidade mentindo do lado do número certo. Fórmula ANUAL, a mesma da linha
+              // ~787: aluguel × 12 / valor × 100. No caso de Sorocaba, 0,0103 vira ~10,3% a.a.
+              const valImovel = Number(mercado.consolidado?.valorEstimadoImovel) || 0;
+              if (valImovel > 0) {
+                const yBruto = Number(((mediana * 12 / valImovel) * 100).toFixed(2));
+                mercado.__diagAluguel.yieldAntes = Number(mercado.consolidado?.yieldBruto) || 0;
+                mercado.__diagAluguel.yieldDepois = yBruto;
+                if (mercado.consolidado) mercado.consolidado.yieldBruto = yBruto;
+              }
+            }
+          }
+        }
         mercado.yieldBruto = mercado.consolidado?.yieldBruto || 0;
         mercado.yieldLiquido = mercado.consolidado?.yieldLiquido || 0;
         // O PDF lista TODAS as amostras (nível 1 = mesmo condomínio é a mais relevante;
