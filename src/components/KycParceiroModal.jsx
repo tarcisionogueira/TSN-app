@@ -3,6 +3,7 @@ import { Loader2, ShieldCheck, Camera, FileText, CheckCircle2 } from 'lucide-rea
 import { supabase } from '../utils/supabase';
 import { apiCall } from '../utils/apiCall';
 import { useAuth } from '../contexts/AuthContext';
+import ContinuarNoCelular from './ContinuarNoCelular';
 
 // Popup de VERIFICAÇÃO DE IDENTIDADE do PARCEIRO (pedido do dono: "quem vira parceiro e não fez
 // o KYC deve ver um popup para preencher o que falta — selfie + documento").
@@ -98,6 +99,24 @@ export default function KycParceiroModal() {
 
   const adiar = () => { try { sessionStorage.setItem(ADIAR_KEY, '1'); } catch { /* ignore */ } setAdiado(true); };
 
+  // O celular terminou de mandar documento + selfie (via QR). O telefone NÃO valida nada — quem
+  // pede a conferência é ESTA sessão, autenticada, com a mesma rota de sempre. A diferença é que
+  // a selfie já está no acervo, então mandamos `selfie_do_acervo` em vez dos bytes.
+  async function concluirPeloCelular() {
+    setDocEnviado(true); setSelfieBusy(true); setErro('');
+    try {
+      const r = await apiCall('/api/validar-selfie', { method: 'POST', body: JSON.stringify({ tipo: 'rosto', selfie_do_acervo: true }) });
+      const d = await r.json().catch(() => ({}));
+      if (d.ok || d.pendente) {
+        setEstado('ok');
+        window.dispatchEvent(new Event('tsn:parceiro-atualizado'));
+      } else {
+        setErro(d.mensagem || d.error || 'Recebi as fotos, mas não consegui concluir a verificação. Tente a selfie por aqui.');
+      }
+    } catch { setErro('Recebi as fotos, mas a verificação falhou. Tente novamente.'); }
+    setSelfieBusy(false);
+  }
+
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 4000, padding: 16 }}>
       <div style={{ background: 'white', borderRadius: 20, padding: '30px 28px', width: '100%', maxWidth: 440, boxShadow: '0 24px 60px rgba(0,0,0,0.35)' }}>
@@ -125,6 +144,13 @@ export default function KycParceiroModal() {
           style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '13px 16px', border: 'none', background: (!docEnviado || selfieBusy) ? '#93c5fd' : '#0D63DB', borderRadius: 12, cursor: (!docEnviado || selfieBusy) ? 'default' : 'pointer', fontWeight: 800, fontSize: 14, color: 'white', opacity: (!docEnviado || selfieBusy) ? 0.8 : 1, justifyContent: 'center' }}>
           {selfieBusy ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Verificando…</> : <><Camera size={16} /> 2. Tirar/enviar selfie</>}
         </button>
+
+        {/* Desvio para o CELULAR (só aparece no computador — no telefone o botão de câmera já
+            resolve). Webcam de desktop fotografa documento mal, e era exatamente aqui que o
+            cliente parava. O QR leva só este passo para o celular, sem novo login. */}
+        <div style={{ margin: '12px 0 2px' }}>
+          <ContinuarNoCelular fluxo="kyc" rotulo="Prefere pelo celular? Ler QR code" onConcluido={concluirPeloCelular} />
+        </div>
 
         {erro && <div style={{ marginTop: 14, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '9px 12px', fontSize: 12.5, color: '#dc2626' }}>{erro}</div>}
 

@@ -71,6 +71,19 @@ async function urlImagemParaBase64(url) {
 
 const ehArquivoPdf = (doc) => /\.pdf(\?|$)/i.test(String(doc?.url || '')) || /\.pdf$/i.test(String(doc?.nome || ''));
 
+// Última SELFIE do usuário no acervo. Serve ao "continuar no celular": o telefone entrega a foto
+// (rota do QR, que só escreve) e o DESKTOP autenticado pede a validação sem ter os bytes em mãos.
+// Mesma trava do documento: só vale arquivo do NOSSO Storage (ehUrlDoNossoStorage), então uma
+// linha forjada em `usuario_docs` apontando para fora não vira selfie válida.
+async function buscarSelfieUsuario(userId) {
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/usuario_docs?user_id=eq.${userId}&tipo=eq.kyc_selfie&select=url,nome,criado_em&order=criado_em.desc&limit=1`,
+      { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` } });
+    const j = await r.json().catch(() => []);
+    return Array.isArray(j) && j.length ? j[0] : null;
+  } catch { return null; }
+}
+
 // Prompts fixos por tipo de checagem KYC (o cliente só escolhe o `tipo`).
 const PROMPTS = {
   rosto: 'Esta imagem tem um rosto humano nítido e frontal, sem obstruções? Responda SOMENTE JSON: {"ok": true/false, "motivo": ""}',
@@ -155,6 +168,20 @@ export default async function handler(req) {
   }
 
   const { imagem, tipo } = body;
+  const claudeKeyEnv = process.env.CLAUDE_KEY;
+
+  // ── "Continuar no celular": a selfie já está no acervo, o desktop só pede a conferência ──
+  // O telefone entrega a foto pela rota do QR (que apenas escreve). Quem dispara a validação é
+  // esta sessão, do próprio titular — o código do QR nunca vale como credencial aqui.
+  if (body.selfie_do_acervo === true) {
+    const selfie = await buscarSelfieUsuario(user.id);
+    const img = selfie ? await urlImagemParaBase64(selfie.url) : null;
+    if (!img) {
+      return new Response(JSON.stringify({ ok: false, mensagem: 'Ainda não recebi a selfie enviada pelo celular. Aguarde alguns segundos e tente de novo.' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    return await validarRostoContraDocumento(user, img.base64, img.mediaType, claudeKeyEnv);
+  }
+
   if (!imagem || !imagem.startsWith('data:image/')) {
     return new Response(JSON.stringify({ ok: false, mensagem: 'Imagem inválida.' }), { status: 400 });
   }

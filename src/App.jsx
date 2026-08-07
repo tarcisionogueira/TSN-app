@@ -62,6 +62,9 @@ const TestemunhaLink = lazy(() => import('./pages/TestemunhaLink'));
 const ProdutoLanding = lazy(() => import('./pages/ProdutoLanding'));
 const ProdutoPublico = lazy(() => import('./pages/ProdutoPublico'));
 const CancelarAlertas = lazy(() => import('./pages/CancelarAlertas'));
+// Tela que abre NO CELULAR pelo QR code do desktop (envio de foto). Pública de propósito: o
+// telefone não tem sessão — quem autoriza é o código de uso único do QR, validado no servidor.
+const ContinuarCaptura = lazy(() => import('./pages/ContinuarCaptura'));
 const Perfil = lazy(() => import('./pages/Perfil'));
 const Creditos = lazy(() => import('./pages/Creditos'));
 const Comissoes = lazy(() => import('./pages/Comissoes'));
@@ -326,6 +329,7 @@ function MainLayout() {
           <Route path="/termos" element={<Termos />} />
           <Route path="/privacidade" element={<Privacidade />} />
           <Route path="/cancelar-alertas" element={<CancelarAlertas />} />
+          <Route path="/continuar/:codigo" element={<ContinuarCaptura />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         </Suspense>

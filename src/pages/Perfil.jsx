@@ -8,6 +8,7 @@ import { apiCall } from '../utils/apiCall';
 import { pushSuportado, statusPermissao, ativarPush, desativarPush, getSubscriptionAtiva } from '../utils/push';
 import { ESTADOS_UF } from '../data/cidades';
 import CidadeAutocomplete from '../components/CidadeAutocomplete';
+import ContinuarNoCelular from '../components/ContinuarNoCelular';
 import { usePlanos } from '../contexts/PlanosContext';
 import { PLANOS as PLANOS_STATIC } from '../data/cursos';
 
@@ -585,6 +586,21 @@ export default function Perfil() {
     setKycBusy(false);
   }
 
+  // O celular concluiu documento + selfie pelo QR. Igual ao modal do parceiro: o telefone só
+  // entrega as fotos; a conferência é pedida por ESTA sessão, com a selfie já no acervo.
+  async function concluirKycPeloCelular() {
+    setDocFotos((d) => ({ ...d, frente: true }));
+    setKycBusy(true); setPjMsg(null);
+    try {
+      const r = await apiCall('/api/validar-selfie', { method: 'POST', body: JSON.stringify({ tipo: 'rosto', selfie_do_acervo: true }) });
+      const d = await r.json().catch(() => ({}));
+      if (d.ok) setPjMsg({ tipo: 'sucesso', texto: '✓ Identidade verificada (fotos enviadas pelo celular).' });
+      else setPjMsg({ tipo: 'aviso', texto: d.mensagem || 'Fotos recebidas — a equipe fará a conferência.' });
+      carregarPJ();
+    } catch { setPjMsg({ tipo: 'erro', texto: 'Recebi as fotos, mas a verificação falhou. Tente novamente.' }); }
+    setKycBusy(false);
+  }
+
   // CPF: só é digitado UMA vez. Grava cifrado (cpf-set) e passa a ser reusado em
   // pagamentos e saques. Depois de salvo, o campo vira somente-leitura (mascarado).
   const maskCpf = (v) => (v || '').replace(/\D/g, '').slice(0, 11)
@@ -1112,6 +1128,11 @@ export default function Perfil() {
                       {kycBusy ? 'Enviando…' : '📷 Tirar selfie do rosto'}
                       <input type="file" accept="image/*" capture="user" style={{ display: 'none' }} disabled={kycBusy} onChange={e => enviarRostoKYC(e.target.files?.[0])} />
                     </label>
+                    {/* Mesmo desvio do modal do parceiro: no computador, o QR leva documento e
+                        selfie para o celular. Não aparece quando já se está no telefone. */}
+                    <div style={{ marginTop: 4 }}>
+                      <ContinuarNoCelular fluxo="kyc" compacto rotulo="Fotografar pelo celular (QR code)" onConcluido={concluirKycPeloCelular} />
+                    </div>
                   </div>
                 )}
 
