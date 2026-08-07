@@ -363,6 +363,37 @@ hoje** (13 corrigidos + 1 falso positivo). Restam 5, listados no fim.
 | ⏳ `mp-webhook.js:294` — recarga sem entrega server-side | Precisa do caminho resiliente equivalente ao do plano anual |
 | ⏳ `Login.jsx:338` — plano escolhido se perde após confirmar e-mail | Depende de decidir onde persistir a intenção entre dispositivos |
 
+### 6. Achados da tarde de 07/08 (trazidos pelo dono, um por vez, com print)
+
+Commits: `0df8282` · `427fc51` · `520355e` · `be0b2c7` (todos em `main`).
+
+| # | Sintoma que o dono viu | Causa-raiz | Correção |
+|---|---|---|---|
+| a | "Expira em 31/07" num relatório gerado em 07/08 | O lote já tinha leilão encerrado; o relatório nascia com validade contada da data do leilão e a limpeza o apagava em seguida | `api/_leilao-encerrado.js` — gate ANTES da cota, nos dois geradores. Regra do dono: *"não vale pois já passou a data de arrematar"*. Considera `data_leilao` **e** `data_leilao_2` (só 1ª praça vencida é normal) e **falha aberta** sem data confiável |
+| b | O filtro de raio se perdia ao reabrir o filtro salvo | O raio vivia em estado separado (`raioAtivo`/`raioKmAtivo`/`centroRaio`) e nunca era salvo junto do filtro — em **três** caminhos, não só ao reabrir | Raio passa a viajar dentro do filtro (`__raio: {km, centro}`), com restauração e persistência em sessão |
+| c | "3 de 3 relatórios disponíveis" depois de gerar (Romualdo) | `consumir_analise_por` grava em `amostra_mercado_usadas` para o explorador, mas **os dois leitores** liam `analises_count` (a RPC `minhas_cotas` e o `Busca.jsx`, que consulta `perfis` direto) | Ambos passam a ler a coluna certa por papel; o rótulo deixou de prometer renovação mensal (a amostra é vitalícia) |
+| d | *(não relatado — achado ao fechar o item b)* | O cron de alertas **ignorava em silêncio** três filtros salvos: `__raio` (filtro com raio e sem cidade virava busca NACIONAL), `pagamento` (11 dos 14 filtros salvos usam) e `intencao` | `condFiltro` cobre os três + caminho por raio via `buscar_por_raio_v2`; `pagCanon` traduz a chave do checkbox (`aVista`) para o valor do banco (`a_vista`) |
+
+**Medição do item (d), no acervo real:** um filtro salvo de Resende/RJ pedindo só **Financiado**
+casava **8 imóveis** no e-mail — e **zero** deles era financiado. O cliente recebia, toda segunda,
+uma lista que a própria tela dele não mostraria.
+
+**A classe que se repetiu três vezes no mesmo dia** (Índice · cota do explorador · filtros do
+e-mail): **escritor e leitor discordando de onde o dado mora** — ou de que ele existe. Nenhum dos
+três deu erro; todos devolveram um resultado plausível e errado. Ao criar campo/coluna nova, a
+pergunta de rotina passa a ser: *"quem mais lê isto, e está lendo do mesmo lugar?"*
+
+**Prevenção deixada no código:**
+- `condFiltro` (em `enviar-alertas-cron.js`) marcado como ponto **obrigatório** ao criar filtro novo
+  na Busca — junto de `aplicarFiltrosImoveis`, da RPC e de `api/busca-raio.js`. Filtro que o cron
+  não conhece não dá erro: ele desaparece.
+- `sbGet`/`rpc` do cron de alertas **pararam de engolir falha**: 400/500 viram log em vez de `[]`
+  indistinguível de "não há imóveis" (mesmo padrão do "relatório vazio" do começo do dia).
+
+**Fica em aberto:** filtros salvos ANTES de 07/08 não têm `__raio` — não dá para recuperar
+retroativamente o círculo que o cliente havia desenhado. Quem quiser o raio no e-mail precisa
+salvar o filtro de novo.
+
 ---
 
 ## ✅ COMEÇAR AQUI (06/08 — sessão 27: a correção de ontem tinha pegado só metade das rotas)
