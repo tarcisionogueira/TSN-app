@@ -223,6 +223,42 @@ async function auditarFuncionamento() {
   return out;
 }
 
+// Avisa o dono por e-mail quando a auditoria acha algo CRÍTICO. Best-effort: uma
+// falha de e-mail não pode derrubar a auditoria (o relatório já está gravado).
+async function avisarCritico(criticos, nAlto) {
+  const KEY = process.env.RESEND_API_KEY;
+  const destino = process.env.AUDITORIA_EMAIL_DESTINO;
+  if (!KEY || !destino) {
+    console.log('  (aviso de crítico não enviado: RESEND_API_KEY ou AUDITORIA_EMAIL_DESTINO ausente)');
+    return;
+  }
+  const esc = (s) => String(s || '').replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
+  const itens = criticos.slice(0, 10).map((a) => `
+    <li style="margin-bottom:12px">
+      <b>${esc(a.area)}</b> — <code>${esc(a.arquivo)}${a.linha ? ':' + a.linha : ''}</code><br>
+      ${esc(a.descricao)}<br>
+      <i>Correção proposta:</i> ${esc(a.correcao)}
+    </li>`).join('');
+  const html = `
+    <p>A auditoria semanal do código encontrou <b>${criticos.length} achado(s) CRÍTICO(S)</b>${nAlto ? ` (e ${nAlto} de severidade alta)` : ''}.</p>
+    <p>Este e-mail só é disparado em achado crítico — os demais ficam no painel admin, em “Auditoria do Sistema”.</p>
+    <ul>${itens}</ul>
+    <p style="color:#64748b;font-size:12px">Auditoria automática · roda semanal só quando não há sessão de trabalho há 7+ dias.</p>`;
+  try {
+    const r = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from: 'BidPro Brasil <noreply@bidprobrasil.com.br>',
+        to: destino,
+        subject: `[BidPro] Auditoria: ${criticos.length} achado(s) CRÍTICO(S) no código`,
+        html,
+      }),
+    });
+    console.log(r.ok ? '  Aviso de crítico enviado por e-mail.' : `  (falha ao enviar aviso: ${r.status})`);
+  } catch (e) { console.log(`  (falha ao enviar aviso: ${e.message})`); }
+}
+
 async function main() {
   const arquivos = coletarArquivos();
   const lotes = emLotes(arquivos);
@@ -291,6 +327,14 @@ async function main() {
   });
   if (!r.ok) { console.error('Falha ao gravar auditoria:', r.status, await r.text().catch(() => '')); process.exit(1); }
   console.log(`Auditoria concluída: saúde=${saude}, ${achados.length} achados (${nCrit} críticos, ${nAlto} altos).`);
+
+  // SINALIZAÇÃO — só CRÍTICO manda e-mail. A auditoria agendada existe justamente
+  // para a janela em que o dono está 7+ dias fora; sem aviso ativo, um achado grave
+  // ficaria esperando ele voltar. O corte em "crítico" é deliberado: em 27 execuções
+  // os "altos" vieram de 10 a 40 POR RODADA e nenhum crítico apareceu — avisar em
+  // "alto" recriaria o e-mail diário ignorado que já se provou ruído. Os altos ficam
+  // no painel, que é onde se triam.
+  if (nCrit > 0) await avisarCritico(achados.filter((a) => a.severidade === 'critica'), nAlto);
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });

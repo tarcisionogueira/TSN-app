@@ -2,17 +2,23 @@ name: Auditoria do Sistema (Claude)
 
 # Auditoria técnica pelo Claude: funcionalidades, fluxos de API e segurança dos
 # dados. Só LÊ o código e grava o relatório em auditoria_sistema — não altera nada.
-# As correções propostas nos achados viram PR revisável quando aprovadas.
 #
-# SOB DEMANDA APENAS (decisão do dono, 07/08) — o agendamento diário foi REMOVIDO.
-# Motivo: a auditoria varre o repositório INTEIRO a cada execução (~6,0 milhões de
-# caracteres = ~2,1 milhões de tokens em 76 lotes + 1 síntese), o que custa
-# ~US$ 8 a 11 (~R$ 43 a 59) POR EXECUÇÃO. Rodando todo dia, era a maior despesa
-# recorrente de IA do projeto — e nenhum centavo disso passava pelo medidor de uso
-# (o script chama a API direto, sem registrarUso), então não aparecia em
-# `uso_integracoes` nem no painel de custos. Agora dispara pelo botão do painel
-# admin ("Rodar auditoria completa") ou por workflow_dispatch aqui.
+# CADÊNCIA (decisão do dono, 07/08): SEMANAL, mas só roda se ninguém abriu sessão
+# de trabalho nos últimos 7 dias. O raciocínio é dele e está certo: o ritual de
+# abertura de sessão JÁ faz a checagem completa do sistema, e ali o consumo é da
+# assinatura — não vira lançamento na fatura. Esta Action usa CLAUDE_KEY (API,
+# cobrada por token) e custa ~US$ 8 a 11 (~R$ 43 a 59) por execução, porque varre
+# o repositório inteiro (~6,0 mi de caracteres = ~2,1 mi de tokens em 76 lotes +
+# 1 síntese). Rodar por cima de uma sessão recente é pagar duas vezes pela mesma
+# informação. Antes disso ela rodava TODO DIA — a maior despesa recorrente de IA
+# do projeto, e invisível: o script chama a API direto, sem passar pelo medidor,
+# então nada aparecia em `uso_integracoes` nem no painel de custos.
+#
+# O botão "Rodar auditoria completa" no painel admin dispara por workflow_dispatch
+# e IGNORA o gate (quando o dono clica, ele quer rodar agora).
 on:
+  schedule:
+    - cron: '0 6 * * 1'   # segunda, 6h UTC — só executa se o gate abaixo permitir
   workflow_dispatch:
 
 jobs:
@@ -22,21 +28,70 @@ jobs:
     # limite — o repositório cresceu e a varredura completa passou a levar mais de
     # uma hora. Como o relatório só é gravado no FIM, pagava-se a hora inteira de
     # chamadas e nada era escrito (6 dias seguidos: 02/08 a 07/08). Sem folga aqui,
-    # o botão novo reproduziria exatamente esse desperdício.
+    # o disparo manual reproduziria exatamente esse desperdício.
     timeout-minutes: 120
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 2   # precisa do commit mais recente com data p/ o gate
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22'
 
+      # GATE DE INATIVIDADE — só vale para o disparo agendado. Considera "houve
+      # sessão" o MAIS RECENTE entre dois sinais, porque nenhum sozinho é confiável:
+      #   (a) heartbeat `sessao_claude`, gravado no ritual de abertura — pega a
+      #       sessão de diagnóstico que não commitou nada;
+      #   (b) data do último commit — rede de segurança para a sessão em que o
+      #       heartbeat falhou ou foi esquecido.
+      # Na dúvida (Supabase fora do ar, resposta ilegível), o git decide sozinho.
+      # A direção do fail-safe é deliberada: melhor PULAR uma auditoria do que
+      # cobrar R$ 50 por engano — o custo de pular é adiar em uma semana, e o
+      # próximo início de sessão faz a checagem completa de qualquer jeito.
+      - name: Verificar inatividade (7 dias)
+        id: gate
+        if: github.event_name == 'schedule'
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: |
+          COMMIT_ISO=$(git log -1 --format=%cI)
+          HB_ISO=$(curl -s --max-time 20 \
+            -H "apikey: $SUPABASE_SERVICE_KEY" \
+            -H "Authorization: Bearer $SUPABASE_SERVICE_KEY" \
+            "$VITE_SUPABASE_URL/rest/v1/sistema_heartbeat?chave=eq.sessao_claude&select=ultimo_em" \
+            | sed -n 's/.*"ultimo_em":"\([^"]*\)".*/\1/p')
+          echo "Último commit:    ${COMMIT_ISO:-<nenhum>}"
+          echo "Último heartbeat: ${HB_ISO:-<nenhum>}"
+          AGORA=$(date +%s)
+          ts() { [ -n "$1" ] && date -d "$1" +%s 2>/dev/null || echo 0; }
+          C=$(ts "$COMMIT_ISO"); H=$(ts "$HB_ISO")
+          ULTIMO=$([ "$C" -gt "$H" ] && echo "$C" || echo "$H")
+          if [ "$ULTIMO" -eq 0 ]; then
+            echo "Sem sinal de atividade legível — auditoria SEGUE."
+            echo "rodar=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          DIAS=$(( (AGORA - ULTIMO) / 86400 ))
+          echo "Dias desde a última atividade: $DIAS"
+          if [ "$DIAS" -ge 7 ]; then
+            echo "7+ dias sem sessão — auditoria SEGUE."
+            echo "rodar=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Houve sessão há $DIAS dia(s) — a checagem de abertura já cobriu. PULANDO (economia de ~R\$ 50)."
+            echo "rodar=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Rodar auditoria
+        # Disparo manual roda sempre; agendado só passa pelo gate.
+        if: github.event_name == 'workflow_dispatch' || steps.gate.outputs.rodar == 'true'
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           CLAUDE_KEY: ${{ secrets.CLAUDE_KEY }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          AUDITORIA_EMAIL_DESTINO: ${{ secrets.AUDITORIA_EMAIL_DESTINO }}
           GITHUB_SHA: ${{ github.sha }}
         run: node scripts/auditoria-claude.mjs

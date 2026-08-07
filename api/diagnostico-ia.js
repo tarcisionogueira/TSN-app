@@ -11,7 +11,14 @@ const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
 const GEMINI_KEY   = (process.env.GEMINI_API_KEY || '').trim();
 const GEMINI_MODEL = (process.env.GEMINI_MODEL || 'gemini-2.5-flash').trim();
-const TTL_HORAS    = Number(process.env.DIAGNOSTICO_TTL_HORAS || 20);
+// TTL de 68h (~3 dias, com folga p/ o cron das 11h não achar o cache "fresco" e
+// pular a regeneração). Era 20h, casado com o cron diário. A cadência passou a ser
+// de 3 dias por decisão do dono (07/08) e o TTL tem de acompanhar: senão a primeira
+// visita do admin ao painel depois de 20h regeneraria assim mesmo e o intervalo de
+// 3 dias não existiria na prática. Três dias também é um prazo mais honesto para os
+// indicadores que ele lê — demanda de busca, saúde da coleta e custo do mês mal se
+// mexem em 24h, então o diagnóstico anterior repetia a si mesmo.
+const TTL_HORAS    = Number(process.env.DIAGNOSTICO_TTL_HORAS || 68);
 
 function sb(path, opts = {}) {
   return fetch(`${SUPABASE_URL}/rest/v1/${path}`, {

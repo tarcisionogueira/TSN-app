@@ -4,6 +4,15 @@
 Ao começar uma sessão nova e ler o HANDOFF (`docs/HANDOFF.md`), produza um diagnóstico
 curto (5–8 linhas) antes de seguir:
 
+> **0. HEARTBEAT (primeira query da sessão, antes do diagnóstico):**
+> `select public.registrar_heartbeat('sessao_claude', 'ritual de abertura');`
+> **Por que importa:** a auditoria completa do código (`auditoria-claude.yml`) roda
+> SEMANAL mas só se ninguém abriu sessão há 7+ dias — ela custa ~R$ 43-59 por execução
+> (API cobrada por token), enquanto o ritual aqui roda na assinatura. Este carimbo é o
+> que faz o workflow PULAR e não pagar por cima do que já foi checado. Esquecer disso
+> não quebra nada (a data do último commit é a rede de segurança), mas numa sessão só
+> de diagnóstico, sem commit, é o ÚNICO sinal — e aí a auditoria gasta à toa.
+
 1. **Saúde** (MCP Supabase/Vercel): imóveis ativos e atualizados nas últimas 24h, fila de
    geocode, últimos deploys (`state=READY`?), crons com timeout recente.
 2. **Captura — bug bounty dos leiloeiros (AUTO-APRENDIDO)**: o monitor APRENDE o "normal" de
