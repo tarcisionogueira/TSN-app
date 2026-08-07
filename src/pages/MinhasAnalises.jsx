@@ -59,7 +59,8 @@ export default function MinhasAnalises() {
     const by = {};
     const push = (a, tipo) => {
       if (!a?.imovelId) return;
-      const it = by[a.imovelId] || (by[a.imovelId] = { imovelId: a.imovelId, titulo: a.titulo, cidade: a.cidade, estado: a.estado, imovel: a.imovel || null, updatedAt: 0, reports: {} });
+      const it = by[a.imovelId] || (by[a.imovelId] = { imovelId: a.imovelId, titulo: a.titulo, cidade: a.cidade, estado: a.estado, imovel: a.imovel || null, dataLeilao: a.dataLeilao || null, updatedAt: 0, reports: {} });
+      if (!it.dataLeilao && a.dataLeilao) it.dataLeilao = a.dataLeilao;
       it.reports[tipo] = { status: a.status, result: a.result || null, erro: a.erro || null };
       it.updatedAt = Math.max(it.updatedAt, a.updatedAt || 0);
       if (!it.titulo && a.titulo) it.titulo = a.titulo;
@@ -127,6 +128,19 @@ export default function MinhasAnalises() {
     return ok(r.mercado)
       && ok(r.documental) && !r.documental?.result?.precisaDocumentos
       && ok(r.laudo) && !r.laudo?.result?.precisaRelatorios;
+  };
+
+  // JANELA PARA REGISTRAR O ARREMATE (regra do dono, 07/08). Desde hoje o lote com data vencida
+  // sai da busca, e o relatório é apagado depois do prazo — então o investidor que GANHOU o
+  // leilão precisa conseguir registrar isso, e precisa ser lembrado. Duas consequências aqui:
+  //   • depois do leilão, "Arrematei" aparece SEMPRE. O gate dos 3 relatórios existe para não
+  //     confundir quem ainda está analisando; depois do pregão ele só impediria o registro de uma
+  //     compra real — e sem registro o cliente perde relatório e documentos do imóvel que comprou.
+  //   • o card avisa, com a data, que a janela está correndo.
+  const leilaoPassou = (it) => {
+    const d = it.dataLeilao ? new Date(it.dataLeilao) : null;
+    if (!d || Number.isNaN(d.getTime())) return false;
+    return d.getTime() < Date.now();
   };
 
   // Chips de veredito por relatório: dá pra ver na lista o que tem potencial de evoluir.
@@ -204,6 +218,13 @@ export default function MinhasAnalises() {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 14.5, fontWeight: 800, color: '#111', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.titulo || 'Imóvel'}</div>
                   <div style={{ fontSize: 12.5, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{[a.cidade, a.estado].filter(Boolean).join(', ')}</div>
+                  {/* Janela do arremate: o lote já saiu da busca (leilão vencido) e o relatório
+                      tem prazo. Quem ganhou precisa ver isto — e agir pelo botão ao lado. */}
+                  {!jaArr && leilaoPassou(a) && (
+                    <div style={{ fontSize: 11.5, color: '#9a3412', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 8, padding: '5px 8px', marginTop: 5, lineHeight: 1.45 }}>
+                      Leilão em {new Date(a.dataLeilao).toLocaleDateString('pt-BR')} — <strong>arrematou?</strong> Registre em &quot;Arrematei&quot; para manter o relatório e os documentos.
+                    </div>
+                  )}
                   <div style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
                     {s && (
                       <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -230,7 +251,7 @@ export default function MinhasAnalises() {
                   </button>
                 )}
                 {/* "Arrematei" é AÇÃO de sinalizar — some quando o imóvel já está arrematado. */}
-                {!jaArr && tresProntos(a) && (
+                {!jaArr && (tresProntos(a) || leilaoPassou(a)) && (
                 <button onClick={(e) => sinalizarArremate(e, a)}
                   disabled={sinalizando === a.imovelId}
                   title="Confirmo que arrematei este imóvel (mantém os documentos)"

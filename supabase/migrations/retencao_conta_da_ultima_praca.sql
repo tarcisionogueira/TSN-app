@@ -1,0 +1,4 @@
+-- Aplicada em produção em 07/08 via MCP. Versionada aqui para o histórico.
+-- limpar_analises_orfas: os 15 dias passam a ser contados da ÚLTIMA praça conhecida do lote
+-- (1ª, 2ª ou data_fim), não da data gravada na geração — que é a 1ª. Num lote com 2ª praça três
+-- semanas depois, o relatório era apagado ANTES do leilão que interessava.
