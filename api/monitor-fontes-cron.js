@@ -49,7 +49,14 @@ const FONTES_SEM_SAUDE = { PECINI: 9, RJLEILOES: 9, GESTAOLEILOES: 9, CALIL: 9, 
 // Fontes PARADAS por decisão nossa (acervo zerado de propósito, aguardando conserto). Não
 // alerta "sem acervo ativo" — já está registrado e a repetição só vira ruído; a checagem de
 // FRESCOR continua valendo, então quando a fonte voltar e parar de novo o monitor avisa.
-const FONTES_PARADAS = new Set(['SATO']); // 02/08: url_lote inventado dá 404 — recon pendente
+// SATO (02/08): url_lote inventado dá 404 — recon pendente.
+// CREPALDI (07/08): NÃO é bug — o leiloeiro está com o acervo VAZIO. Provado por recon
+// (.github/workflows/recon-crepaldi.yml): o PRÓPRIO site chama a API do Superbid com
+// `stores.id:16139` — exatamente o id que o scraper usa — e recebe HTTP 200 com
+// `{"total":0}`. Ou seja: id certo, plataforma certa, scraper certo, zero lote publicado.
+// Ficava alertando todo dia como "falhou (0 imóveis)" por 9 dias seguidos, treinando o dono
+// a ignorar o e-mail do monitor — que é o pior efeito possível num alarme.
+const FONTES_PARADAS = new Set(['SATO', 'CREPALDI']);
 // Frescor máximo tolerado (h) para as fontes grátis que reportam saúde (Seção A).
 // Elas rodam 2x/semana — seg e qui (cron '1,4' em scraper.yml e leiloeiros-puppeteer.yml).
 // O MAIOR gap NORMAL é quinta→segunda = 96h; com este monitor às 11h UTC e o scrape às
@@ -152,7 +159,13 @@ async function handler(req) {
     if (idadeH > MAX_IDADE_H) {
       problemas.push({ fonte, tipo: 'coleta parada', detalhe: `última coleta há ${idadeH.toFixed(0)}h (${u.total} imóveis)` });
     } else if (u.status === 'falhou') {
-      problemas.push({ fonte, tipo: 'falhou (0 imóveis)', detalhe: u.motivo || 'coleta zerada' });
+      // Fonte declarada PARADA não vira alerta de 'falhou': o zero é conhecido e esperado
+      // (leiloeiro sem acervo publicado). A checagem de FRESCOR acima continua valendo, então
+      // se o scraper realmente parar de rodar o monitor avisa do mesmo jeito — e no dia em que
+      // a fonte voltar a publicar e depois regredir, a linha de base aprendida assume.
+      if (!FONTES_PARADAS.has(fonte)) {
+        problemas.push({ fonte, tipo: 'falhou (0 imóveis)', detalhe: u.motivo || 'coleta zerada' });
+      }
     } else if (u.status === 'degradado') {
       // PERSISTÊNCIA (anti-ruído): um "degradado" isolado quase sempre é dip TRANSITÓRIO da
       // janela de scrape (a fonte no meio da coleta) que recupera no próximo run → e-mail
