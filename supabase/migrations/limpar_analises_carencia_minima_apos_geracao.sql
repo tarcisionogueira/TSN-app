@@ -1,0 +1,20 @@
+-- CARÊNCIA MÍNIMA APÓS A GERAÇÃO (achado do dono, 07/08).
+--
+-- Gatilho: relatório gerado em 07/08/2026 exibindo "Expira em 31/07/2026" — data no PASSADO.
+-- O rótulo era o sintoma; o problema real é que a regra de limpeza olhava SÓ a data do leilão:
+--   `data_leilao::date < now() - 15 dias`
+-- Para um lote cujo leilão já ocorreu, o relatório gerado hoje JÁ NASCE elegível para exclusão —
+-- o cliente gasta a cota, recebe o relatório e o cron o apaga na execução seguinte. Pagar por
+-- algo que é apagado no dia seguinte é o pior desfecho possível.
+--
+-- Correção: a exclusão passa a exigir as DUAS condições — 15 dias após o leilão E 15 dias após a
+-- GERAÇÃO. A validade vira max(data_leilao + 15d, created_at + 15d), então todo relatório tem um
+-- piso de vida a partir do momento em que foi pago.
+--
+-- Medido na aplicação: 1 relatório estava nessa situação (Indaiatuba, leilão 17/07, gerado hoje)
+-- e passou a valer até 22/08. O guard de 2ª praça segue igual; o ramo sem data_leilao já era
+-- baseado em created_at e não precisava do piso.
+--
+-- A tela (src/pages/Analise.jsx) espelha esta fórmula de propósito: tela e cron divergirem na
+-- data de validade é uma classe de bug por si só.
+-- Corpo completo da função: ver limpar_analises_orfas() no banco (aplicada nesta migração).

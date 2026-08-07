@@ -3366,13 +3366,25 @@ export default function Analise() {
                   || (mercado?.pesquisaEm && !isNaN(Date.parse(mercado.pesquisaEm)) ? Date.parse(mercado.pesquisaEm) : null)
                   || ent?.startedAt || null;
                 const baseCriacao = ent?.startedAt || geradoMs;
-                // Regra do cron: 15 dias após o leilão (se há data) OU 60 dias após a criação.
-                const expMs = dlMs ? dlMs + 15 * 864e5 : (baseCriacao ? baseCriacao + 60 * 864e5 : null);
+                // Regra do cron: 15 dias após o leilão (se há data) OU 60 dias após a criação —
+                // com PISO de 15 dias a partir da GERAÇÃO (07/08). Sem o piso, um lote cujo leilão
+                // já ocorreu produzia "Gerado em 07/08 · Expira em 31/07": data no passado. E não
+                // era só o rótulo — o cron apagava mesmo, então o cliente gastava a cota e perdia
+                // o relatório na execução seguinte. A fórmula aqui espelha a do banco de
+                // propósito: tela e cron divergirem é uma classe de bug por si só.
+                const PISO_MS = baseCriacao ? baseCriacao + 15 * 864e5 : null;
+                const porLeilao = dlMs ? dlMs + 15 * 864e5 : null;
+                const expMs = porLeilao
+                  ? (PISO_MS ? Math.max(porLeilao, PISO_MS) : porLeilao)
+                  : (baseCriacao ? baseCriacao + 60 * 864e5 : null);
+                // Quando o piso é que manda (leilão já passado), o texto não pode seguir dizendo
+                // "15 dias após o leilão" — seria explicar a data por uma conta que não é a dela.
+                const pisoMandou = !!(porLeilao && PISO_MS && PISO_MS > porLeilao);
                 if (!geradoMs && !expMs) return null; // sem nada a mostrar (não deixa "—" vazio)
                 return (
                   <div style={{ display:'flex', flexWrap:'wrap', gap:10, alignItems:'center', fontSize:11.5, color:'#64748b', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:10, padding:'8px 14px' }}>
                     {geradoMs && <span>🗓️ Gerado em <strong style={{ color:'#334155' }}>{fmtD(geradoMs)}</strong></span>}
-                    {expMs && <span>· ⏳ Expira em <strong style={{ color:'#334155' }}>{fmtD(expMs)}</strong> <span style={{ color:'#94a3b8' }}>({dlMs ? '15 dias após o leilão' : '60 dias'}, se não arrematado)</span></span>}
+                    {expMs && <span>· ⏳ Expira em <strong style={{ color:'#334155' }}>{fmtD(expMs)}</strong> <span style={{ color:'#94a3b8' }}>({pisoMandou ? '15 dias após a geração — o leilão já ocorreu' : dlMs ? '15 dias após o leilão' : '60 dias'}, se não arrematado)</span></span>}
                   </div>
                 );
               })()}
