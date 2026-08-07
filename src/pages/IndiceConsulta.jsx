@@ -43,11 +43,16 @@ export default function IndiceConsulta() {
   const consultarDe = async (f) => {
     if (f.tipo === 'todos') {
       const porTipo = await Promise.all(SEG_TIPOS.map(async (t) => {
+        // FALHA != "NÃO MAPEADO" (07/08). Antes, qualquer erro da API virava `mapeado:false` —
+        // e "não mapeado" é justamente o estado que oferece o botão PAGO. Um 500 passageiro num
+        // bairro JÁ mapeado fazia o cliente pagar de novo para pesquisar o que já estava na base.
+        // O ramo de tipo único sempre tratou certo (lança e pinta o banner de erro); esta
+        // assimetria é que era o defeito. Agora o erro tem estado próprio e NÃO oferece cobrança.
         try {
           const r = await apiCall('/api/indice-consulta', { method: 'POST', body: JSON.stringify({ ...f, tipo: t }) });
           const d = await r.json();
-          return { tipo: t, ...(r.ok ? d : { mapeado: false }) };
-        } catch { return { tipo: t, mapeado: false }; }
+          return r.ok ? { tipo: t, ...d } : { tipo: t, mapeado: false, falhouConsulta: true };
+        } catch { return { tipo: t, mapeado: false, falhouConsulta: true }; }
       }));
       return { todos: true, porTipo };
     }
@@ -103,8 +108,12 @@ export default function IndiceConsulta() {
       if (dc) {
         setRes(dc);
         setGerMsg(d.inseridas
-          ? `${TIPO_LABEL[tipoPesquisa] || tipoPesquisa}: ${d.inseridas} amostra(s) nova(s) na base. Pesquise outro tipo para completar.`
+          ? `${TIPO_LABEL[tipoPesquisa] || tipoPesquisa}: ${d.inseridas} amostra(s) nova(s) na base. Atualize outro tipo para completar.`
           : `${TIPO_LABEL[tipoPesquisa] || tipoPesquisa} atualizado.`);
+      } else {
+        // A pesquisa CONCLUIU e já foi cobrada — só a releitura falhou. Sem esta mensagem a tela
+        // ficava idêntica e o cliente clicava de novo, pagando 2x pelo mesmo trabalho.
+        setGerMsg(`${TIPO_LABEL[tipoPesquisa] || tipoPesquisa}: pesquisa concluída${d.inseridas ? ` (${d.inseridas} amostra(s) nova(s))` : ''}, mas não conseguimos recarregar o índice agora. Atualize a página — NÃO clique de novo, o trabalho já foi feito e cobrado.`);
       }
     } catch (e) { setGerMsg(e.message || 'Falha ao gerar.'); }
     setGerando(false);
@@ -213,19 +222,19 @@ export default function IndiceConsulta() {
           {/* UM TIPO POR PESQUISA. O botão único "gerar os 4 de uma vez" saiu: dividia o mesmo
               orçamento de saída e de buscas entre quatro tipos e não fechava no tempo. Aqui cada
               tipo tem o seu botão — pesquisa uma coisa de cada vez e a base vai somando. */}
-          {res.porTipo.some(t => !t.mapeado) && (
+          {res.porTipo.some(t => !t.mapeado && !t.falhouConsulta) && (
             <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 12, padding: '12px 16px' }}>
               <div style={{ fontSize: 13, color: '#78350f', lineHeight: 1.5, marginBottom: podeGerar ? 10 : 0 }}>
-                {res.porTipo.filter(t => !t.mapeado).map(t => TIPO_LABEL[t.tipo]).join(', ')} ainda sem índice aqui.
+                {res.porTipo.filter(t => !t.mapeado && !t.falhouConsulta).map(t => TIPO_LABEL[t.tipo]).join(', ')} ainda sem índice aqui.
                 {podeGerar ? ' Pesquise um tipo de cada vez — cada pesquisa é mais profunda e vai somando à base.' : ' Nos planos pagos você gera na hora.'}
               </div>
               {gerMsg && <div style={{ fontSize: 12.5, color: '#92400e', background: '#fef3c7', borderRadius: 8, padding: '8px 10px', marginBottom: 10 }}>{gerMsg}</div>}
               {podeGerar ? (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                  {res.porTipo.filter(t => !t.mapeado).map((t) => (
+                  {res.porTipo.filter(t => !t.mapeado && !t.falhouConsulta).map((t) => (
                     <button key={t.tipo} onClick={() => gerar(t.tipo)} disabled={!!gerando}
                       style={{ padding: '9px 14px', background: gerando === t.tipo ? '#94a3b8' : gerando ? '#cbd5e1' : '#d97706', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 13, cursor: gerando ? 'wait' : 'pointer' }}>
-                      {gerando === t.tipo ? `Pesquisando ${TIPO_LABEL[t.tipo]}…` : `⚡ Pesquisar ${TIPO_LABEL[t.tipo]}`}
+                      {gerando === t.tipo ? `Pesquisando ${TIPO_LABEL[t.tipo]}…` : `⚡ Atualizar índice — ${TIPO_LABEL[t.tipo]}`}
                     </button>
                   ))}
                 </div>
@@ -256,8 +265,12 @@ export default function IndiceConsulta() {
                     <>
                       <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
                         <span style={{ fontSize: 10, color: '#0D63DB', fontWeight: 700 }}>VENDA</span>
-                        <span style={{ fontSize: 17, fontWeight: 900, color: '#0D63DB' }}>{Number(r.venda_m2) > 0 ? `${brl(r.venda_m2)}/m²` : '—'}</span>
+                        <span style={{ fontSize: 17, fontWeight: 900, color: r.venda_base_fraca ? '#b91c1c' : '#0D63DB' }}>{Number(r.venda_m2) > 0 ? `${brl(r.venda_m2)}/m²` : '—'}</span>
                         {r.projetado ? <span style={{ fontSize: 8.5, fontWeight: 800, padding: '1px 5px', borderRadius: 999, background: '#fff7ed', color: '#c2410c' }}>PROJ.</span> : null}
+                        {/* A régua de base fraca vale para TODO tipo de imóvel, não só no card
+                            grande: era aqui que apartamento/casa/comercial/terreno apareciam
+                            lado a lado com a mesma autoridade, medidos ou não. */}
+                        {r.venda_base_fraca ? <span style={{ fontSize: 8.5, fontWeight: 800, padding: '1px 5px', borderRadius: 999, background: '#fef2f2', color: '#b91c1c' }}>BASE FRACA</span> : null}
                       </div>
                       {/* Sem anúncio de locação o campo fica VAZIO e diz o porquê — nunca a regra
                           de bolso sobre a venda, que inventava "aluguel de terreno" (regra do dono). */}
@@ -315,8 +328,8 @@ export default function IndiceConsulta() {
                   {gerando === t
                     ? `Pesquisando ${TIPO_LABEL[t] || t}…`
                     : res.todos
-                      ? `⚡ ${largo ? 'Pesquisar' : 'Atualizar'} ${TIPO_LABEL[t] || t}`
-                      : (largo ? '⚡ Pesquisar este endereço agora' : '⚡ Atualizar a pesquisa desta localidade')}
+                      ? `⚡ Atualizar ${TIPO_LABEL[t] || t}`
+                      : '⚡ Atualizar índice para esta localidade'}
                 </button>
               ))}
             </div>
