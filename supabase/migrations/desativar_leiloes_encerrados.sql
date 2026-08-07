@@ -1,0 +1,5 @@
+-- Aplicada em produção em 07/08 via MCP. Versionada aqui para o histórico.
+-- Ver o corpo em: public.leilao_ja_encerrado / trg_zz_desativa_leilao_encerrado /
+-- public.desativar_leiloes_encerrados
+-- Lote com leilão vencido sai de circulação (ativo = false), com duas cautelas: venda direta
+-- nunca vence por data (venda contínua) e vale a MAIS FUTURA das datas conhecidas.

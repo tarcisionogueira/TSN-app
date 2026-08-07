@@ -62,6 +62,39 @@ export function leilaoEncerrado(im) {
   return { encerrado: ultima.fim < Date.now(), ultimaData: ultima.dia, semData: false };
 }
 
+/**
+ * PRAÇA DE REFERÊNCIA — sobre qual lance as projeções devem ser feitas.
+ *
+ * Regra do dono (07/08, vista na apresentação): *"as projeções do sistema e dos relatórios
+ * serem geradas sobre as praças mais descontadas"*. O que ele viu foi o contrário: a simulação
+ * saía sobre a praça mais PRÓXIMA no tempo — quase sempre a 1ª, a mais cara.
+ *
+ * O tamanho do erro, medido no acervo: 3.235 lotes ativos têm 2ª praça mais barata e ainda
+ * futura. Neles o desconto médio pela 1ª praça é de **−6,1%** (ou seja, ACIMA da avaliação) e
+ * pela 2ª é de **+23,5%** — a 2ª sai em média 27,3% abaixo da 1ª. Projetar pela 1ª faz uma
+ * oportunidade real parecer um mau negócio.
+ *
+ * Escolhe o MENOR lance entre as praças cuja data ainda NÃO passou (praça vencida não é
+ * oportunidade). Decide pelo VALOR, não pela coluna: as fontes divergem sobre qual campo guarda
+ * a 1ª e qual guarda a 2ª (judicial × CEF). Espelha `escolherPraca` em api/gerar-analise.js.
+ */
+export function pracaMaisDescontada(im) {
+  if (!im) return { valor: 0, data: null, qual: 'nenhuma', temDuas: false };
+  const cand = [
+    { valor: Number(im.valor_minimo ?? im.valorMinimo) || 0, data: im.data_leilao ?? im.dataLeilao ?? null },
+    { valor: Number(im.valor_minimo_2 ?? im.valorMinimo2) || 0, data: im.data_leilao_2 ?? im.dataLeilao2 ?? null },
+  ].filter((p) => p.valor > 0);
+  if (!cand.length) return { valor: 0, data: null, qual: 'nenhuma', temDuas: false };
+
+  const futura = (d) => { const l = limite(d); return !l || l.fim >= Date.now(); };
+  const futuras = cand.filter((p) => futura(p.data));
+  const pool = futuras.length ? futuras : cand; // nenhuma futura conhecida → considera todas
+  const melhor = pool.reduce((a, b) => (b.valor < a.valor ? b : a));
+  const temDuas = cand.length === 2 && cand[0].valor !== cand[1].valor;
+  const maisBarata = temDuas && melhor.valor === Math.min(cand[0].valor, cand[1].valor);
+  return { valor: melhor.valor, data: melhor.data, qual: temDuas ? (maisBarata ? '2a_praca' : '1a_praca') : 'unica', temDuas };
+}
+
 /** dd/mm/aaaa a partir de 'AAAA-MM-DD' (o formato que a função acima devolve). */
 export const dataBR = (iso) => (iso ? String(iso).split('-').reverse().join('/') : '');
 

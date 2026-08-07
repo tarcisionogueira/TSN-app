@@ -42,6 +42,16 @@ export default async function handler(req, res) {
     leiloeiro = r2.ok ? await r2.json().catch(() => null) : { erro: (await r2.text().catch(() => '')).slice(0, 200) };
   } catch (e) { leiloeiro = { erro: String(e?.message || e).slice(0, 200) }; }
 
-  console.log('[limpar-imoveis-stale]', JSON.stringify({ desativados, margem_horas: MARGEM_HORAS, leiloeiro }));
-  return res.status(200).json({ ok: true, desativados, leiloeiro });
+  // 3) LEILÃO VENCIDO (07/08, regra do dono: lote com data passada não pode ficar aparecendo e
+  // criando expectativa). O gatilho do banco já derruba a cada escrita do scraper; esta varredura
+  // é para o lote que ninguém tocou e cuja data venceu sozinha. Venda direta nunca entra — lá a
+  // data é vestigial e a venda é contínua.
+  let encerrados = null;
+  try {
+    const r3 = await rpc('desativar_leiloes_encerrados', {});
+    encerrados = r3.ok ? await r3.json().catch(() => null) : { erro: (await r3.text().catch(() => '')).slice(0, 200) };
+  } catch (e) { encerrados = { erro: String(e?.message || e).slice(0, 200) }; }
+
+  console.log('[limpar-imoveis-stale]', JSON.stringify({ desativados, margem_horas: MARGEM_HORAS, leiloeiro, encerrados }));
+  return res.status(200).json({ ok: true, desativados, leiloeiro, leiloes_encerrados: encerrados });
 }

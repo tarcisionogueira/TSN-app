@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { leilaoEncerrado, dataBR } from '../utils/leilaoEncerrado';
+import { leilaoEncerrado, pracaMaisDescontada, dataBR } from '../utils/leilaoEncerrado';
 import { useIsMobile } from '../utils/useIsMobile';
 import {
   FileText, Loader2, Sparkles, BarChart3, ShieldAlert, TrendingUp,
@@ -199,15 +199,19 @@ export default function Analise() {
   // recusava gerar (sem cobrar cota), mas esta tela seguia oferecendo os três botões: o cliente
   // clicava, esperava, e só então tomava o "não". Achado do dono em 07/08, no lote de Guarulhos.
   const loteEncerrado = leilaoEncerrado(imovelInicial);
+  // O lance que abre o formulário é o da praça MAIS DESCONTADA ainda disponível — não o
+  // `valor_minimo` cru, que é a 1ª praça (a mais cara) sempre que o lote tem duas. Era daí que
+  // saíam as projeções que o dono viu na apresentação, feitas sobre a praça mais PRÓXIMA.
+  const pracaAlvo = pracaMaisDescontada(imovelInicial);
 
   const [d, setD] = useState(() => {
     if (imovelInicial) return {
       ...VAZIO, id: generateId(), nome: imovelInicial.titulo||'',
       tipo: imovelInicial.tipo||'apartamento', endereco: imovelInicial.endereco||'',
       cidade: imovelInicial.cidade||'', estado: imovelInicial.estado||'',
-      valorAvaliacao: imovelInicial.valorAvaliacao||0, valorArrematacao: imovelInicial.valorMinimo||0,
+      valorAvaliacao: imovelInicial.valorAvaliacao||0, valorArrematacao: pracaAlvo.valor || imovelInicial.valorMinimo || 0,
       areaM2: imovelInicial.areaM2||0, leiloeiro: imovelInicial.leiloeiro||'',
-      dataLeilao: imovelInicial.dataLeilao||'', origem: imovelInicial.modalidade||'extrajudicial',
+      dataLeilao: (pracaAlvo.data ? String(pracaAlvo.data).slice(0,10) : imovelInicial.dataLeilao) || '', origem: imovelInicial.modalidade||'extrajudicial',
       somenteAVista: !imovelInicial.pagamento?.includes('financiado'),
       // Venda direta e Licitação (Caixa) normalmente NÃO têm leiloeiro → sem taxa.
       // Demais: 5% (editável — alguns leiloeiros cobram mais). Confirmar no edital.

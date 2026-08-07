@@ -2304,12 +2304,30 @@ export default async function handler(req, res) {
         // como se o imóvel não rendesse nada.
         const aluguelServidor = Number(mercado?.aluguelMedio) || 0;
         const locacaoCliente = Number(parecerInputs.d?.valorLocacao) || 0;
+        // ── LANCE DAS PROJEÇÕES = PRAÇA MAIS DESCONTADA (07/08) ──────────────────────
+        // `pracaRef` já era calculado acima com a regra do dono ("as projeções sobre a praça
+        // mais descontada"), mas só alimentava a CLASSIFICAÇÃO de intenção. As projeções em si
+        // — capital, lucro, ROI, teto de lance — seguiam usando o `valorArrematacao` que veio da
+        // tela, semeado com `valor_minimo`, isto é, a 1ª praça: a mais PRÓXIMA e a mais CARA.
+        // Era exatamente o que o dono viu na apresentação.
+        // O valor digitado pelo cliente é respeitado: só substituímos quando o que chegou é o
+        // semeado automaticamente (bate com uma das praças do lote) e a praça de referência é
+        // mais barata — aí o número não é uma escolha dele, é o padrão errado.
+        const vArrCliente = Number(parecerInputs.d?.valorArrematacao) || 0;
+        const pracasDoLote = [Number(imDb?.valor_minimo) || 0, Number(imDb?.valor_minimo_2) || 0].filter(v => v > 0);
+        const veioSemeado = pracasDoLote.some(v => Math.abs(v - vArrCliente) < 0.01);
+        const usarPraca = pracaRef.valor > 0 && (vArrCliente <= 0 || (veioSemeado && pracaRef.valor < vArrCliente));
         const pInp = {
           ...parecerInputs.d,
+          ...(usarPraca ? { valorArrematacao: pracaRef.valor } : {}),
           valorMercado: valorMercado || parecerInputs.d.valorMercado,
           valorLocacao: locacaoCliente > 0 ? locacaoCliente : aluguelServidor,
           _cenario: parecerInputs.cenario, _teto: parecerInputs.teto, _perfil: perfilInvestidor,
         };
+        if (usarPraca) {
+          parecerDiag.lanceTrocadoPelaPraca = { cliente: vArrCliente, usado: pracaRef.valor, qual: pracaRef.qual, data: pracaRef.data };
+          console.log('[praca-referencia]', JSON.stringify({ imovel: String(imovelId), cliente: vArrCliente, usado: pracaRef.valor, qual: pracaRef.qual }));
+        }
         // ── MÉTRICAS RECALCULADAS NO SERVIDOR (07/08) ────────────────────────────────
         // As métricas de viabilidade (capital, lucro, ROI, teto de lance) chegavam PRONTAS
         // do cliente: a tela as calcula no clique, ANTES da pesquisa de mercado existir.

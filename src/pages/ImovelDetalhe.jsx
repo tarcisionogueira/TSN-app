@@ -7,7 +7,7 @@ import { apiCall } from '../utils/apiCall';
 import ScoreRisco from '../components/ScoreRisco';
 import { fmtBRL, fmtData, MODAL_LABEL, explicacaoData } from '../utils/format';
 import { scoreBidPro, scoreLabel } from '../utils/score';
-import { leilaoEncerrado, dataBR } from '../utils/leilaoEncerrado';
+import { leilaoEncerrado, pracaMaisDescontada, dataBR } from '../utils/leilaoEncerrado';
 import { caixaMatriculaUrl, caixaRegrasVendaUrl } from '../utils/caixa';
 import { assinarAnexos } from '../utils/docUrl';
 import { formatarDescricaoImovel } from '../utils/descricao';
@@ -1274,7 +1274,12 @@ export default function ImovelDetalhe() {
 
             {/* Simulação rápida, estimativa pela avaliação do leilão (NÃO é a mercadológica) */}
             {imovel.valorMinimo > 0 && imovel.valorAvaliacao > 0 && (() => {
-              const lance = imovel.valorMinimo;
+              // A simulação sai sobre a praça MAIS DESCONTADA ainda disponível, não sobre a mais
+              // próxima no tempo (regra do dono, 07/08 — foi o que ele viu errado na apresentação).
+              // Num lote com 2ª praça futura mais barata, projetar pela 1ª mostrava margem negativa
+              // onde havia negócio: no acervo, −6,1% de desconto médio pela 1ª contra +23,5% pela 2ª.
+              const praca = pracaMaisDescontada(imovel);
+              const lance = praca.valor || imovel.valorMinimo;
               const custosAquisicao = lance * 0.095; // ITBI ~3% + registro ~1,5% + comissão leiloeiro 5%
               const revendaRef = imovel.valorAvaliacao;
               const comissaoVenda = revendaRef * 0.05;
@@ -1293,7 +1298,7 @@ export default function ImovelDetalhe() {
                   <p style={{ fontSize: 12, color: '#94a3b8', margin: '0 0 14px', lineHeight: 1.5 }}>
                     Estimativa com base no <strong>valor de avaliação do leilão</strong> e custos médios. A <strong>avaliação mercadológica real</strong> e a viabilidade financeira completa são feitas no <strong>relatório</strong>.
                   </p>
-                  {linha('Lance mínimo', fmtBRL(lance))}
+                  {linha(praca.qual === '2a_praca' ? 'Lance mínimo (2ª praça)' : 'Lance mínimo', fmtBRL(lance))}
                   {linha('Custos de aquisição (est. ~9,5%)', '− ' + fmtBRL(custosAquisicao), '#b45309')}
                   {linha('Revenda de referência (avaliação)', fmtBRL(revendaRef))}
                   {linha('Comissão de venda (5%)', '− ' + fmtBRL(comissaoVenda), '#b45309')}

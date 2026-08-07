@@ -1,0 +1,5 @@
+-- Aplicada em produção em 07/08 via MCP. Versionada aqui para o histórico.
+-- Ver o corpo em: public.lance_praca_mais_descontada / public.desconto_da_praca_mais_descontada /
+-- trg_zzz_desconto_praca / public.recalcular_desconto_praca
+-- O desconto anunciado passa a ser o da praça mais descontada AINDA DISPONÍVEL.
+-- Medido no acervo: 3.228 lotes saíram de -6,1% (média) para +23,6%.

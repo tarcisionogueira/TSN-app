@@ -52,6 +52,7 @@
     { "path": "/api/juridico-lembretes-cron", "schedule": "0 12 * * 1-5" },
     { "path": "/api/limpar-analises-cron",    "schedule": "0 4 * * *"    },
     { "path": "/api/limpar-imoveis-stale-cron","schedule": "0 5 * * *"    },
+    { "path": "/api/desativar-encerrados-cron", "schedule": "5 * * * *"  },
     { "path": "/api/enriquecer-proximidades", "schedule": "*/15 * * * *" },
     { "path": "/api/reconciliar-assinaturas-cron", "schedule": "30 * * * *"   },
     { "path": "/api/cancelar-nao-pagos-cron",     "schedule": "0 */6 * * *"  },
