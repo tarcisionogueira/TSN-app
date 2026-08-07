@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../utils/supabase';
 import { CheckCircle2, ArrowRight, Loader2, AlertCircle, Eye, EyeOff, Camera, Upload, RefreshCw } from 'lucide-react';
 import { apiCall } from '../utils/apiCall';
+import { salvarConvite, lerConvite, limparConvite, CHAVE_EQUIPE, CHAVE_CLIENTE } from '../utils/convitePendente';
 
 const ROLE_CONFIG = {
   analista: {
@@ -303,7 +304,7 @@ export default function ConviteEquipe() {
     // SEGURANÇA: valida o token por RPC de correspondência EXATA (get_convite_equipe_info).
     // A tabela convites_equipe não é mais legível por token (evita enumerar todos os
     // convites ativos e roubar um token de staff antes do convidado real).
-    supabase.rpc('get_convite_equipe_info', { p_token: token.toUpperCase() })
+    supabase.rpc('get_convite_equipe_info', { p_token: token })
       .then(({ data, error }) => {
         if (error || !data?.valido) setErro('Convite não encontrado, já utilizado ou expirado.');
         else setConvite(data);
@@ -398,7 +399,7 @@ export default function ConviteEquipe() {
       // Persiste o token para resgate do convite APÓS a autenticação (o RPC
       // usar_convite_equipe agora exige sessão e só eleva o próprio perfil; se o
       // cadastro exigir confirmação de e-mail, o AuthContext resgata no 1º login).
-      if (token) sessionStorage.setItem('tsn_convite_equipe', token.toUpperCase());
+      if (token) salvarConvite(CHAVE_EQUIPE, token);
 
       const extraData = Object.fromEntries(cfg.passos_extras.map(p => [p.key, form[p.key] || '']));
 
@@ -428,12 +429,12 @@ export default function ConviteEquipe() {
         // como se o papel tivesse sido aplicado — a pessoa entrava como explorador (05/08).
         if (signUpData?.session) {
           const { data: rEq } = await supabase.rpc('usar_convite_equipe', {
-            p_token: token.toUpperCase(),
+            p_token: token,
             p_user_id: signUpData.user.id,
           });
           if (rEq?.ok === false) console.warn('[convite-equipe] resgate:', rEq?.erro);
         } else {
-          try { sessionStorage.setItem('tsn_convite_equipe', token.toUpperCase()); } catch { /* ok */ }
+          salvarConvite(CHAVE_EQUIPE, token);
         }
         // CPF gravado só como hash + cifra (nunca em texto claro). Se já houver
         // sessão (conta auto-confirmada), persiste agora; senão, no 1º acesso.
@@ -445,7 +446,7 @@ export default function ConviteEquipe() {
       // Salvar fotos KYC via função SECURITY DEFINER (RLS não permite UPDATE direto)
       if (selfie_rosto_compressed || doc_frente_compressed || selfie_doc_compressed) {
         await supabase.rpc('salvar_kyc_equipe', {
-          p_token: token.toUpperCase(),
+          p_token: token,
           p_fotos: {
             selfie_rosto: selfie_rosto_compressed,
             doc_frente: doc_frente_compressed,

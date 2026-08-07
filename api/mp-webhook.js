@@ -113,6 +113,9 @@ export default async function handler(req, res) {
   if (tipo === 'subscription_preapproval' || tipo === 'subscription_authorized_payment') {
     if (!dataId) return res.status(200).json({ ok: true, ignored: 'sem id' });
     if (!ACCESS_TOKEN) return res.status(500).json({ error: 'MP_ACCESS_TOKEN não configurado' });
+    // Chave de idempotência JÁ GRAVADA nesta execução — declarada FORA do try porque o
+    // catch precisa dela para desfazer a marca (ver o catch ao fim do ramo).
+    let idemGravado = null;
     try {
       let preapproval = null;
       let ap = null;
@@ -159,6 +162,10 @@ export default async function handler(req, res) {
       if (await eventoJaProcessado({ gateway: 'mercadopago', gatewayPaymentId: dataId, evento: idemEvento })) {
         return res.status(200).json({ ok: true, duplicado: true });
       }
+      // `eventoJaProcessado` INSERE a marca (é insert-e-checa). A partir daqui, qualquer
+      // falha do EFEITO precisa desfazê-la — senão a reentrega do MP é descartada como
+      // duplicada e a transição se perde de vez. Ver o catch ao fim deste ramo.
+      idemGravado = idemEvento;
 
       // FALHA: cobrança recusada, ou assinatura pausada/cancelada no MP → rebaixa + avisa.
       const assinaturaMorta = preapproval.status === 'paused' || preapproval.status === 'cancelled';
@@ -216,6 +223,18 @@ export default async function handler(req, res) {
       }
       return res.status(200).json({ ok: true, status: preapproval.status });
     } catch (e) {
+      // ROLLBACK DA IDEMPOTÊNCIA (07/08) — o ramo de PAGAMENTO já fazia isso em 6 pontos;
+      // o de ASSINATURA não, e a assimetria custava caro: `suspenderPlanoDireto`/
+      // `ativarPlanoDireto` LANÇAM em erro de escrita (_webhook-core), então um erro
+      // transitório do Supabase caía aqui com a marca já gravada. A reentrega do MP virava
+      // `{duplicado:true}` e a suspensão NUNCA acontecia — cliente com cobrança recusada
+      // seguia no plano pago sem `inadimplente_desde`. Os dois loops do
+      // reconciliar-assinaturas-cron não pegam esse caso: o de downgrade só varre mandato
+      // `cancelled`/`paused`, e uma recusa sobre mandato ainda `authorized` não entra lá.
+      if (idemGravado) {
+        await removerEventoProcessado({ gateway: 'mercadopago', gatewayPaymentId: dataId, evento: idemGravado })
+          .catch((err) => console.error('[mp-webhook] rollback idempotência falhou:', err?.message || err));
+      }
       console.error('[mp-webhook] assinatura:', e.message);
       return res.status(500).json({ error: 'Erro interno' });
     }

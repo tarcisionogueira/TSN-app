@@ -50,6 +50,14 @@ async function rodarClaude(inp) {
       system: `Você é um perito avaliador imobiliário sênior. Busque o MÁXIMO de amostras possível, SEMPRE do mesmo tipo (${inp.tipoImovel}). Retorne apenas JSON válido.`,
       messages: [{ role: 'user', content: promptMercado(inp) }],
     }),
+  }, {
+    // Sem estas opções o call site herdava `retries=3, timeoutMs=120000`: 4 tentativas de
+    // 120s = 480s numa função com `maxDuration: 300`. A função morria antes da última, o
+    // upsert em `ab_mercadologica` nunca acontecia e o resultado do Gemini rodando em
+    // paralelo ia junto — pagava-se até 4× a pesquisa (Sonnet + 8 buscas) e não se gravava
+    // nada. `retries: 0` + 150s: uma tentativa que CABE no orçamento da função e entrega.
+    // Mesmo padrão de indice-reforco-cron e gerar-analise.
+    retries: 0, timeoutMs: 150000, noFallback: true,
   });
   const data = await r.json();
   const mercado = parseJSON(extractText(data)) || {};

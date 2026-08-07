@@ -8,6 +8,7 @@ import { Briefcase, Eye, EyeOff, Loader2, CheckCircle2 } from 'lucide-react';
 import { apiCall } from '../utils/apiCall';
 import { buscarTodasCidades } from '../data/cidades';
 import { salvarRef, lerRef } from '../utils/ref';
+import { salvarConvite, lerConvite, limparConvite, CHAVE_EQUIPE, CHAVE_CLIENTE } from '../utils/convitePendente';
 
 const inp = {
   width: '100%', padding: '11px 14px', border: '1px solid #e2e8f0', borderRadius: 10,
@@ -36,13 +37,13 @@ export default function Login() {
   // Persiste o ref e convite em sessionStorage
   useEffect(() => {
     if (refParam) salvarRef(refParam); // persiste com janela de 30 dias
-    if (conviteParam) sessionStorage.setItem('tsn_convite_codigo', conviteParam);
-    if (conviteEquipeParam) sessionStorage.setItem('tsn_convite_equipe', conviteEquipeParam);
+    if (conviteParam) salvarConvite(CHAVE_CLIENTE, conviteParam);
+    if (conviteEquipeParam) salvarConvite(CHAVE_EQUIPE, conviteEquipeParam);
   }, [refParam, conviteParam, conviteEquipeParam]);
 
   // Processa convite de equipe após autenticação
   async function processarConviteEquipe(userId) {
-    const token = sessionStorage.getItem('tsn_convite_equipe');
+    const token = lerConvite(CHAVE_EQUIPE);
     if (!token) return;
     try {
       // RPC SECURITY DEFINER: valida (ativo/expira_em/usado_em), atribui o role
@@ -50,7 +51,7 @@ export default function Login() {
       // é barrado pela RLS (usuário comum não altera o próprio role).
       const { data, error } = await supabase.rpc('usar_convite_equipe', { p_token: token, p_user_id: userId });
       if (error) throw error;
-      if (data?.ok) sessionStorage.removeItem('tsn_convite_equipe');
+      if (data?.ok) limparConvite(CHAVE_EQUIPE);
     } catch (e) {
       console.error('Erro ao processar convite de equipe:', e);
     }

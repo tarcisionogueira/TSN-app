@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { UserPlus, AlertCircle, ShieldCheck, Users, ArrowRight, Briefcase } from 'lucide-react';
 import LogoB from '../components/LogoB';
 import { supabase } from '../utils/supabase';
+import { salvarConvite, lerConvite, limparConvite, CHAVE_EQUIPE, CHAVE_CLIENTE } from '../utils/convitePendente';
 
 const ROLE_LABELS = {
   analista: 'Analista',
@@ -38,7 +39,7 @@ export default function Convite() {
       const { data: equipeInfo } = await supabase.rpc('get_convite_equipe_info', { p_token: codigo });
       if (equipeInfo?.valido) {
         setConviteEquipe(equipeInfo);
-        sessionStorage.setItem('tsn_convite_equipe', codigo);
+        salvarConvite(CHAVE_EQUIPE, codigo);
         setLoading(false);
         return;
       }
@@ -55,7 +56,7 @@ export default function Convite() {
         setErro('Link de convite não encontrado ou expirado.');
       } else {
         setLink(data);
-        sessionStorage.setItem('tsn_convite_codigo', data.codigo);
+        salvarConvite(CHAVE_CLIENTE, data.codigo);
       }
       setLoading(false);
     }
@@ -64,11 +65,11 @@ export default function Convite() {
   }, [codigo]);
 
   const irParaCadastroEquipe = () => {
-    sessionStorage.setItem('tsn_convite_equipe', codigo);
+    salvarConvite(CHAVE_EQUIPE, codigo);
     nav('/login?modo=cadastro&convite_equipe=' + codigo);
   };
   const irParaLoginEquipe = () => {
-    sessionStorage.setItem('tsn_convite_equipe', codigo);
+    salvarConvite(CHAVE_EQUIPE, codigo);
     nav('/login?convite_equipe=' + codigo);
   };
 

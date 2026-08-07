@@ -54,11 +54,19 @@ export default async function handler(req, res) {
   if (useSearch) headers['anthropic-beta'] = 'web-search-2025-03-05';
 
   try {
+    // TIMEOUT MENOR QUE O maxDuration (07/08). Sem opções, este call site herdava
+    // `retries=3, timeoutMs=120000` — exatamente o `maxDuration: 120` desta função. Os dois
+    // números iguais significam que a Vercel matava a invocação no mesmo instante em que a
+    // 1ª tentativa expiraria: o trabalho do outro lado já tinha sido feito e COBRADO, o
+    // resultado ia para o lixo, e nem o medidor nem a linha `abortada` do anthropicFetch
+    // chegavam a rodar (o processo morre antes do catch) — gasto 100% invisível.
+    // `retries: 0` porque com 120s de teto não cabe uma 2ª tentativa; 100s deixa folga para
+    // esta função responder o erro ao cliente em vez de morrer calada.
     const anthropicRes = await anthropicFetch({
       method: 'POST',
       headers,
       body: JSON.stringify(payload),
-    });
+    }, { retries: 0, timeoutMs: 100000 });
     const data = await anthropicRes.json();
     return res.status(anthropicRes.status).json(data);
   } catch (e) {

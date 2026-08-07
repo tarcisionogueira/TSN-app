@@ -3,6 +3,7 @@ import { supabase } from '../utils/supabase';
 import { ativarPushAutomatico } from '../utils/push';
 import { salvarRef, lerRef, limparRef } from '../utils/ref';
 import { lerMarketing } from '../utils/marketing';
+import { salvarConvite, lerConvite, limparConvite, CHAVE_EQUIPE, CHAVE_CLIENTE } from '../utils/convitePendente';
 
 const AuthContext = createContext(null);
 
@@ -246,10 +247,10 @@ export function AuthProvider({ children }) {
           // ATRIBUIÇÃO de marketing (gclid/fbclid/utm) capturada na chegada → grava 1x (first-touch)
           // para casar a captação com a origem paga (Google Ads / Meta).
           try { const mkt = lerMarketing(); if (mkt) await supabase.rpc('registrar_marketing', { p: mkt }); } catch (_) {}
-          const convite = sessionStorage.getItem('tsn_convite_codigo');
+          const convite = lerConvite(CHAVE_CLIENTE);
           if (convite) {
             try { await supabase.rpc('usar_convite', { p_codigo: convite }); } catch (_) {}
-            sessionStorage.removeItem('tsn_convite_codigo');
+            limparConvite(CHAVE_CLIENTE);
           }
           // CONVITE DE EQUIPE — o token só é descartado quando o resgate teve DESFECHO
           // (05/08). Antes o removeItem era incondicional: falha de rede, RPC fora do ar ou
@@ -257,12 +258,12 @@ export function AuthProvider({ children }) {
           // como explorador e nada indicava o porquê. Agora: sucesso OU recusa definitiva
           // (inválido/expirado/já usado) descartam; falha TRANSITÓRIA preserva o token para
           // a próxima sessão tentar de novo. Uso único e validade são garantidos no RPC.
-          const conviteEq = sessionStorage.getItem('tsn_convite_equipe');
+          const conviteEq = lerConvite(CHAVE_EQUIPE);
           if (conviteEq) {
             try {
               const { data: rEq, error: eEq } = await supabase.rpc('usar_convite_equipe', { p_token: conviteEq, p_user_id: u.id });
               const definitivo = rEq?.ok === true || (rEq?.ok === false && !/não autorizado/i.test(String(rEq?.erro || '')));
-              if (!eEq && definitivo) sessionStorage.removeItem('tsn_convite_equipe');
+              if (!eEq && definitivo) limparConvite(CHAVE_EQUIPE);
               if (rEq?.ok === false) console.warn('[convite-equipe] não resgatado:', rEq?.erro);
             } catch (e) { console.warn('[convite-equipe] resgate adiado:', e?.message || e); }
           }
