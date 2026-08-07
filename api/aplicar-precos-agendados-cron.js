@@ -121,21 +121,52 @@ export default async function handler(req, res) {
     });
     const mudancas = await r.json().catch(() => null);
     if (!r.ok) { res.status(500).json({ ok: false, mudancas }); return; }
+    const resumo = { asaas: 0, mp: 0, erros: [], confirmados: [] };
+
+    // DOIS TEMPOS (07/08): não propagamos mais o RETORNO da RPC, e sim a FILA de pendentes.
+    // A diferença importa: o retorno traz só o que mudou AGORA, então uma propagação que
+    // falhou ontem nunca era retomada — e, como a RPC consumia `preco_agendado` no mesmo
+    // statement, o par (de → para) sumia junto. Agora a RPC marca `propagacao_pendente` e
+    // guarda o valor anterior; esta fila devolve tanto o que acabou de mudar quanto o que
+    // ficou para trás. Retentar é seguro: o PUT no gateway define o valor final (não
+    // incrementa) e o filtro só casa mandato que ainda está no preço antigo.
+    let pendentes = [];
+    try {
+      const rp = await fetch(`${SUPABASE_URL}/rest/v1/rpc/precos_propagacao_pendente`, {
+        method: 'POST',
+        headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' },
+        body: '{}',
+      });
+      if (rp.ok) pendentes = await rp.json();
+      else resumo.erros.push(`fila_${rp.status}`);
+    } catch (e) { resumo.erros.push(`fila: ${e.message}`); }
 
     // Propaga aos assinantes ativos (mensalidade seguinte) — só recorrência aberta.
-    const resumo = { asaas: 0, mp: 0, erros: [] };
-    for (const m of (Array.isArray(mudancas) ? mudancas : [])) {
+    for (const m of (Array.isArray(pendentes) ? pendentes : [])) {
       if (!PLANOS_RECORRENTES.includes(m.plano_key)) continue;
+      const errosAntes = resumo.erros.length;
       try { await sincronizarAsaas(m, resumo); } catch (e) { resumo.erros.push(`asaas_${m.plano_key}: ${e.message}`); }
       try { await sincronizarMP(m, resumo); } catch (e) { resumo.erros.push(`mp_${m.plano_key}: ${e.message}`); }
+      // Só baixa a marca quando ESTE plano passou sem nenhum erro novo. Com erro, fica
+      // pendente e a próxima execução tenta de novo — que é o ponto de todo o desenho.
+      if (resumo.erros.length === errosAntes) {
+        try {
+          await fetch(`${SUPABASE_URL}/rest/v1/rpc/precos_propagacao_confirmar`, {
+            method: 'POST',
+            headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ p_plano_key: m.plano_key }),
+          });
+          resumo.confirmados.push(m.plano_key);
+        } catch (e) { resumo.erros.push(`confirmar_${m.plano_key}: ${e.message}`); }
+      }
     }
-    // FALHA DE PROPAGAÇÃO NÃO PODE SAIR COMO SUCESSO (07/08). O preço no banco já mudou
-    // (a RPC aplica e consome no MESMO statement), então uma falha aqui deixa o gateway no
-    // valor ANTIGO sem ninguém saber: novos checkouts cobram o novo, assinantes existentes
-    // seguem no velho, e o par (de → para) não existe mais para reconstruir quem ficou de
-    // fora. Antes isso ia só para console.error e o handler respondia 200 ok:true.
-    // Agora alerta pelo mesmo canal do resto do repo e devolve 5xx — o cron falho fica
-    // visível no painel da Vercel em vez de passar por execução bem-sucedida.
+    // FALHA DE PROPAGAÇÃO NÃO PODE SAIR COMO SUCESSO (07/08). O preço no banco já mudou,
+    // então uma falha aqui deixa o gateway no valor ANTIGO: novos checkouts cobram o novo e
+    // assinantes existentes seguem no velho. Com o modelo em dois tempos a informação não se
+    // perde mais (o plano fica `propagacao_pendente` e a próxima execução retoma), mas o
+    // silêncio ainda seria ruim: antes isso ia só para console.error e o handler respondia
+    // 200 ok:true, então uma pendência podia arrastar por semanas sem ninguém olhar.
+    // Alerta pelo mesmo canal do resto do repo e devolve 5xx, para o cron falho aparecer.
     if (resumo.erros.length) {
       console.error('[precos-agendados] erros de propagação:', resumo.erros.join(' · '));
       try {
