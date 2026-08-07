@@ -105,6 +105,68 @@ mudam. `.claude/` segue ignorada no git — só o `settings.json` abre exceção
 
 ---
 
+## ✅ COMEÇAR AQUI (07/08 — sessão 28: os 3 relatórios de Cotia · "Pronto!" repetido + laudo divergente)
+
+> O dono gerou os 3 relatórios de um imóvel em Cotia e trouxe dois problemas: *"o 2º relatório
+> ficava notificando que estava pronto sem estar"* e *"o terceiro relatório apresentando um
+> resultado divergente dos outros"*. Ambos confirmados no banco e corrigidos na raiz.
+> Imóvel: `060eff88-badc-43ff-b11c-6b482da68b9b` — Casa, Estrada dos Galdinos, Jardim
+> Barbacena, Cotia/SP, praça R$ 500.929,04 (avaliação CEF R$ 786.000).
+
+### 1. "Pronto!" avisado com o documental ainda incompleto
+
+**Causa:** `ToastRelatorioPronto.jsx` disparava na transição crua `gerando → concluida`. Mas o
+documental grava `status='concluida'` **com** `result.precisaDocumentos = true` enquanto a captura
+automática ainda baixa matrícula/edital, e a tela re-tenta a cada 25s (`capturaPollRef`, até 5×).
+O `atividade_log` registrou dois `relatorio_documental_faltam_docs` (00:38:08 e 00:38:40) antes do
+OK real às 00:45:34 — três notificações "Pronto!" para um relatório só.
+
+**Correção:** o gate deixa de ser o STATUS e passa a ser a ENTREGA. Novo helper `entregue(tipo, a)`
+checa `precisaDocumentos` (documental) e `precisaRelatorios` (laudo); o mapa de transição guarda
+`'pronto'` vs. o status cru, então "aguardando documento" e "pronto" são estados distintos e a
+notificação só sai na virada de verdade.
+
+### 2. O laudo reprovou um imóvel com 44% de desconto — e estava certo
+
+O mercadológico concluiu **R$ 895.000** de valor de mercado contra praça de **R$ 500.929** (44% de
+desconto) e o documental deu risco AMARELO — mas o laudo veio **reprovado**, com *"prejuízo
+estimado de mais de R$ 629 mil mesmo no lance mínimo"* e *"ROI de menos 371,55%"*. O
+`controleQualidade` do próprio laudo apontou a contradição: *"o relatório mercadológico registra
+capital total aportado de R$ 169.407,33, valor inferior ao lance de R$ 500.929,04"*.
+
+**Causa-raiz (provada pela coluna `inputs` gravada):** `parecerInputs.d.valorMercado = 0` e
+`metricas.valorRef = 0`. As métricas de viabilidade chegam **prontas do cliente** — a tela as
+calcula no clique, ANTES de a pesquisa de mercado existir. O servidor corrigia só o campo
+`pInp.valorMercado` e passava `parecerInputs.metricas` **intocado** para o `promptParecer`, que
+imprime capital/lucro/ROI literalmente. O parecer saiu com os números de um imóvel que valeria
+zero; o laudo leu o parecer e reprovou com razão. **O terceiro relatório era o mensageiro, não o
+bug.**
+
+**Correção (`api/gerar-analise.js`):** o servidor agora **recalcula** capital, lucro, ROI e teto de
+lance com o valor de mercado que ele mesmo descobriu, importando a MESMA função pura da tela
+(`calcularMetricasCenario` / `calcularTetoLance` de `src/utils/calculos.js` — o padrão de importar
+`src/` de dentro de `api/` já existia em `og-share.js`). Dispara quando o cliente não tinha valor de
+mercado, quando o servidor achou outro (>2% de diferença) ou quando as métricas vieram zeradas. O
+antes/depois fica em `result.mercado.__diagParecer.metricasRecalculadas`.
+
+Conferido rodando a função com os `inputs` reais gravados deste imóvel:
+
+| | capital | lucro | ROI | teto de lance |
+|---|---|---|---|---|
+| Antes (vm = 0) | R$ 169.407 | **−R$ 629.427** | **−371,55%** | R$ 0 |
+| Depois (vm = 895.000) | R$ 169.407 | **+R$ 107.424** | **+63,41%** | R$ 548.675 |
+
+**Complemento:** quando a pesquisa **não** estima valor de mercado, o parecer deixa de imprimir
+lucro/ROI/teto (que seriam a venda por zero, a origem do "prejuízo integral") e passa a informar
+com transparência que a referência não foi estimada, apresentando só os custos da operação.
+
+> ⏭️ **Próxima verificação:** gerar de novo os 3 relatórios deste mesmo imóvel de Cotia e conferir
+> (a) que o toast do documental sai **uma vez só**, depois do OK, e (b) que o parecer e o laudo
+> falam de ROI positivo. Checagem pelo banco:
+> `select result->'mercado'->'__diagParecer'->'metricasRecalculadas' from analises_mercado where imovel_id='060eff88-badc-43ff-b11c-6b482da68b9b' order by updated_at desc limit 1;`
+
+---
+
 ## ✅ COMEÇAR AQUI (06/08 — sessão 27: a correção de ontem tinha pegado só metade das rotas)
 
 > Branch `claude/bid-pro-brasil-verificacoes-fkigq2` → **JÁ EM `main`** (fast-forward
