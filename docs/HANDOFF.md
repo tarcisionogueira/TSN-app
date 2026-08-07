@@ -105,6 +105,40 @@ mudam. `.claude/` segue ignorada no git — só o `settings.json` abre exceção
 
 ---
 
+## 🏁 FECHAMENTO DE 07/08 — leia este bloco primeiro
+
+**O dia começou com dois sintomas relatados pelo dono nos 3 relatórios de um imóvel em Cotia e
+terminou com uma causa-raiz sistêmica encontrada, corrigida, e o estrago limpo.**
+
+| | |
+|---|---|
+| Commits em `main` | `0e1c9f3` · `27af5c4` · `d7d663e` |
+| Deploy | `dpl_4FMF2z69ytcXZzKAfdEiSgbbe4jj` **READY** em produção |
+| `auditoria_seguranca()` | **0 crítico / 0 atenção** |
+| `npm run build` | OK (o único erro de lint é pré-existente em `_proximidades.js`/`_meta-capi.js`) |
+| Achados fechados | 2 de hoje + **14 dos 19** da varredura de 05/08 |
+| Relatórios inválidos | 15 removidos (+1 laudo), com backup reversível |
+| Aprendizado das amostras | **preservado integralmente** — 1.549 → 1.549 |
+
+**A lição do dia, em uma frase:** o servidor descobria o dado certo e continuava imprimindo o do
+cliente. Não era um bug, era um PADRÃO — e ele já tinha vazado para o aluguel (43 de 55 relatórios
+com yield 0,00%), para o gate do laudo, para o corpus de calibração e para a tela de Arrematados.
+Ao revisar código novo, a pergunta de rotina passa a ser: *"o servidor descobre este valor durante
+a geração? Então ele não pode reimprimir o que o cliente mandou antes da descoberta."*
+
+**➡️ A lista de bugs em aberto para validar e resolver na próxima sessão está em
+`docs/BUGS_ABERTOS_2026-08-07.md`** — 10 itens priorizados (P1 a P4), cada um com o que confirmar
+antes de mexer, mais 6 validações de produção para rodar na abertura.
+
+**Decisões do dono registradas hoje (não reabrir):**
+- **Cota fica em 10 relatórios + 10 documentais + 3 índices.** Conferido: `limite_ia` já estava
+  assim e a apresentação também — não havia nada a ajustar.
+- **Plano legado mantido em 15 + 5** para os 2 assinantes Pro antigos. Ao investigar, os "15" não
+  eram config desatualizada e sim um *grandfathering* deliberado (`plano_legado = true`); igualar
+  teria retirado benefício de pagante. `plano_legado` não é atribuído a contas novas.
+
+---
+
 ## ✅ COMEÇAR AQUI (07/08 — sessão 28: os 3 relatórios de Cotia · "Pronto!" repetido + laudo divergente)
 
 > O dono gerou os 3 relatórios de um imóvel em Cotia e trouxe dois problemas: *"o 2º relatório
@@ -261,10 +295,13 @@ de AGOSTO, que são outras. O bônus é aditivo e garante a regeração sem gast
 reposição do relatório perdido. Ambos ficaram com `bonus_mercado = 1` e o evento
 `cota_reposta_relatorio_invalido` no `atividade_log`.
 
-> ⚠️ **Achado lateral a decidir:** `limite_ia_efetivo(role='top2','mercado')` devolve **15** no
-> banco, enquanto a apresentação (corrigida ontem) diz **10**. O dono decidiu manter 10 + 3 índices
-> — a config do banco ficou para trás. Não mudei por conta própria: mexer nisso reduz a cota de
-> assinante ativo. Confirmar e ajustar `planos_config.limite_ia`.
+> ✅ **Achado lateral, RESOLVIDO na conversa (07/08):** eu havia reportado que o banco concedia 15
+> contra os 10 da apresentação, sugerindo config desatualizada. **Estava errado e me corrigi antes
+> de mexer:** `limite_ia` já é 10 mercado / 10 documental / 3 índice; os 15 vêm de um ramo separado
+> de `limite_ia_efetivo`, o `plano_legado = true`, que é *grandfathering* deliberado (15 + 5) e hoje
+> atinge **2 assinantes Pro reais**. Ou seja, não havia nada a corrigir no plano vigente — a única
+> coisa que a mudança faria era retirar benefício de pagante antigo. Levado ao dono, que decidiu
+> **manter o grandfathering**. `plano_legado` não é atribuído a contas novas.
 
 ### 5. Varredura dos bugs mapeados nos últimos dias (`docs/VARREDURA_BUGS_2026-08-05.md`)
 
