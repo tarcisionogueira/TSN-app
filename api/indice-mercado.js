@@ -199,6 +199,22 @@ export default async function handler(req, res) {
   const amostras = montarAmostras(mercado, { cidadeNorm, uf, bairroNorm, lat, lng, tipo, todos: false });
   let inseridas = 0;
   if (amostras.length) inseridas = (await rpc('ingerir_amostras_indice', { p_amostras: amostras })) || 0;
+
+  // GEOCODIFICAR NA HORA (07/08, pedido do dono). As amostras nascem SEM coordenada — quem
+  // triangula é o `indice-geocodificar-cron`, que roda de 4 em 4 horas. Quem gerava um índice
+  // às 15:35 via o recorte por raio (250 m / 1 km) vazio até as 15:50, porque a distância não
+  // tinha como ser calculada: o relatório então descia para o nível de bairro e dizia ao
+  // cliente que só achou "região próxima". Era o caso da Alameda Dourada, 71.
+  // Aqui o cron é ACORDADO logo após a ingestão, sem esperar o relógio. Fire-and-forget com
+  // timeout curto: a geocodificação é melhoria de precisão, não pode atrasar nem derrubar a
+  // resposta que o cliente está esperando. Se falhar, o cron das 4h faz o de sempre.
+  if (inseridas > 0 && process.env.CRON_SECRET) {
+    const base = (process.env.APP_BASE_URL || 'https://bidprobrasil.com.br').replace('://bidprobrasil.com.br', '://www.bidprobrasil.com.br');
+    fetch(`${base}/api/indice-geocodificar-cron?lote=40`, {
+      headers: { 'x-cron-secret': process.env.CRON_SECRET },
+      signal: AbortSignal.timeout(3000),
+    }).catch(() => { /* best-effort: o cron agendado cobre */ });
+  }
   // Tempo REAL de cada pesquisa bem-sucedida — é o que permite calibrar o orçamento acima em
   // vez de estimar. Sem isto, a única duração observável era a das que estouravam.
   console.log('[indice-mercado] ok', { cidade: cidadeNorm, uf, tipo, motor: motorUsado, segundos: Math.round((Date.now() - T0) / 1000), amostras: amostras.length, inseridas });
