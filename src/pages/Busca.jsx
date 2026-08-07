@@ -556,13 +556,22 @@ export default function Busca() {
   useEffect(() => {
     if (!effectiveUserId || limiteAnalises == null) { setAnalisesBonus(null); return; }
     const mes = new Date().toISOString().slice(0, 7);
-    supabase.from('perfis').select('bonus_mercado, analises_mes, analises_count').eq('id', effectiveUserId).single()
+    // COLUNA CERTA POR PAPEL (07/08). O EXPLORADOR consome amostra grátis, e o
+    // `consumir_analise_por` grava isso em `amostra_mercado_usadas` — nunca em
+    // `analises_count`. Lendo só `analises_count`, o contador ficava eternamente em
+    // "3 de 3 disponíveis" por mais relatórios que ele gerasse (caso do Romualdo:
+    // amostra_mercado_usadas = 1 e analises_count = 0). Mesma classe do bug do Índice de
+    // hoje: escritor e leitor discordando sobre onde o dado mora.
+    // A amostra também NÃO reseta por mês — por isso ela não passa pela comparação de `mes`.
+    supabase.from('perfis').select('bonus_mercado, analises_mes, analises_count, amostra_mercado_usadas').eq('id', effectiveUserId).single()
       .then(({ data }) => {
         if (!data) return;
         setAnalisesBonus(data.bonus_mercado || 0);
-        setAnalisesUsadas(data.analises_mes === mes ? (data.analises_count || 0) : 0);
+        setAnalisesUsadas(effectiveRole === 'explorador'
+          ? (data.amostra_mercado_usadas || 0)
+          : (data.analises_mes === mes ? (data.analises_count || 0) : 0));
       });
-  }, [effectiveUserId, limiteAnalises]);
+  }, [effectiveUserId, limiteAnalises, effectiveRole]);
   const analisesRestantes = limiteAnalises != null ? Math.max(0, limiteAnalises - analisesUsadas) : null;
   const FILTROS_INICIAL = { tipos:[], estado:'', cidades:[], bairros:[], raioKm:0, valorMin:'', valorMax:'', modalidades:[], pagamento:[], descontoMin:0, intencao:'' };
   // Se viemos de um deep-link de email, pré-popula os filtros e dispara busca
@@ -1297,7 +1306,7 @@ export default function Busca() {
           {totalDisp > 0
             ? (effectiveRole === 'explorador' && analisesBonus > 0
                 ? `📊 ${totalDisp} ${totalDisp === 1 ? 'relatório disponível' : 'relatórios disponíveis'} este mês (${analisesRestantes} do plano + ${analisesBonus} bônus)`
-                : `📊 ${analisesRestantes} de ${limiteAnalises} ${limiteAnalises === 1 ? 'relatório disponível' : 'relatórios disponíveis'} este mês`)
+                : `📊 ${analisesRestantes} de ${limiteAnalises} ${limiteAnalises === 1 ? 'relatório disponível' : 'relatórios disponíveis'}${effectiveRole === 'explorador' ? ' (amostra grátis, não renova)' : ' este mês'}`)
             : '🔒 Relatórios do mês esgotados, faça upgrade'}
         </div>
       );

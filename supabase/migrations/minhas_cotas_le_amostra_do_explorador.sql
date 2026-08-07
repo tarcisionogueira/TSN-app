@@ -1,0 +1,20 @@
+-- COTA DO EXPLORADOR: quem ESCREVE e quem LÊ usavam colunas diferentes (achado 07/08).
+--
+-- Gatilho: o Romualdo gerou um relatório e a tela seguia dizendo "3 de 3 disponíveis este mês".
+--
+-- O consumo funcionou. `consumir_analise_por` tem um ramo próprio para `explorador` que grava em
+-- `amostra_mercado_usadas` (a amostra grátis é saldo de EXPERIMENTAÇÃO, não cota mensal — por
+-- isso coluna separada e sem reset por mês). Conferido: amostra_mercado_usadas = 1.
+--
+-- Mas `minhas_cotas` calculava o usado SEMPRE por analises_count + analises_mes, colunas que o
+-- ramo do explorador nunca toca. Usado = 0 para sempre, contador travado em "3 de 3".
+--
+-- MESMA CLASSE do bug do Índice de hoje (pesquisa gravava em indice_amostras, relatório lia
+-- indice_amostra): escritor e leitor discordando sobre onde o dado mora. Por isso a leitura passa
+-- a ESPELHAR o ramo da escrita, em vez de ganhar mais um caso especial solto.
+--
+-- `amostra: true` no retorno permite à tela rotular certo: para o explorador não é "por mês", é
+-- saldo de amostra que não renova — dizer "este mês" promete renovação que não vai acontecer.
+--
+-- Afetados na correção: 2 exploradores, ambos com 1 uso real e 0 aparecendo na tela.
+-- (Corpo completo da função aplicado nesta migração — ver minhas_cotas() no banco.)
