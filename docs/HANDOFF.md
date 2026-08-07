@@ -394,6 +394,46 @@ pergunta de rotina passa a ser: *"quem mais lê isto, e está lendo do mesmo lug
 retroativamente o círculo que o cliente havia desenhado. Quem quiser o raio no e-mail precisa
 salvar o filtro de novo.
 
+### 7. Fim do dia 07/08 — QR para o celular · leilão encerrado na TELA
+
+Commits: `3ba1679` · `881281a` (`main`).
+
+**a) "Continuar no celular" (QR code) — pedido do dono.** Quem abre a verificação de identidade
+pelo computador agora tem um QR que leva SÓ o passo da foto para o telefone. Motivo: webcam de
+desktop fotografa documento mal (quando existe), e era ali que o cliente parava.
+
+O telefone **não recebe sessão**. O código do QR é permissão de **ENTREGA**, não de leitura:
+128 bits, gravado só como **hash** (`captura_handoff`), TTL de 15 min, teto de 12 envios,
+cancelado ao fechar o modal. A rota do celular apenas grava a foto no bucket privado e registra
+em `usuario_docs`; quem pede a conferência é a sessão do desktop, agora com `selfie_do_acervo`.
+O QR é desenhado no navegador (`qrcode-generator`) — mandar a URL para uma API externa de QR
+seria entregar o código de acesso a um terceiro.
+Ligado em: modal de KYC do parceiro e KYC do Perfil. **Fora por ora:** contrato por link e
+convite de equipe — são páginas sem sessão (token de convite), não têm quem assine o código.
+
+**b) Leilão encerrado na TELA (achado do dono: lote de Guarulhos).** O gate da manhã vivia só no
+servidor; a tela seguia oferecendo os botões e o cliente só tomava o "não" depois de clicar.
+Agora a regra é a mesma nos dois lados (`src/utils/leilaoEncerrado.js` espelha
+`api/_leilao-encerrado.js`, com teste de paridade rodado).
+
+**E o gate estava errado no outro sentido:** bloqueava **venda direta** por data vencida.
+Medido: venda direta da Caixa é venda CONTÍNUA (15.516 ativos sem data; 1.674 com data de até 25
+dias atrás, ainda na planilha de hoje). A regra antiga marcava **3.333** lotes como encerrados;
+a nova marca **1.659** e **destrava 1.674** que estão à venda agora.
+
+**Causa-raiz do lote sem data** (o que deixava o gate cego): `extrairDatasLeilao` DESCARTAVA
+toda data anterior a ontem. Numa página que diz "Leilão encerrado em 22/07", nada era extraído,
+o lote ficava sem data **para sempre**, e sem data o gate falha aberto — por decisão. Agora a
+mais recente das datas passadas volta em `encerradaEm` (só quando não há NENHUMA data futura) e
+os dois enriquecedores a registram. A fila do `enriquecer-datas-cron` passou a priorizar quem
+não tem data nenhuma (~1.000 lotes; disputavam vez com 5.600 que só queriam o prazo).
+
+O e-mail de oportunidades também deixou de mandar lote com leilão encerrado.
+
+**Fica em aberto:** o lote exato do print (`e7bd0637`, Jardim Santo Expedito, WEBLEILOES) segue
+**sem data nenhuma** no acervo e nunca foi enriquecido (`enriquecido_em` nulo). Ele é o primeiro
+da nova fila — confirmar na próxima rodada se a página do leiloeiro entrega a data passada.
+
 ---
 
 ## ✅ COMEÇAR AQUI (06/08 — sessão 27: a correção de ontem tinha pegado só metade das rotas)
