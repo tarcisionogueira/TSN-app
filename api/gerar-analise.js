@@ -711,7 +711,29 @@ async function mercadoDaBase(cacheReg, segmento, imDb) {
     distanciaKm: 0, fonte: a.fonte || 'base BidPro', url: a.url || '', data: mesRef(a), daBase: true,
   });
   // Nível 1 = mesmo bairro/grid do alvo (é o recorte que o cache já aplicou); os demais no 2.
-  const ord = arr.slice().sort((a, b) => String(b.data_ref || '').localeCompare(String(a.data_ref || '')));
+  // ORDEM POR PROXIMIDADE + IDADE (pedido do dono, 07/08): "sempre deve trazer, tanto no índice
+  // quanto no relatório mercadológico, as amostras que tiveram maior peso na precificação e mais
+  // próximas do endereço solicitado". Antes a ordem era SÓ por `data_ref` — então o Nível 1
+  // (as 12 primeiras) era simplesmente "as 12 mais recentes do bairro", e um anúncio do PRÓPRIO
+  // condomínio do imóvel podia cair no Nível 2 ou ficar de fora, enquanto um de outra rua
+  // aparecia como comparável principal.
+  // Mesma régua do Índice (api/indice-consulta.js): condomínio > endereço > grid > bairro; e,
+  // dentro do mesmo nível, o anúncio mais NOVO — que é o que pesa mais na precificação, porque a
+  // composição por quadrimestre projeta o valor a partir dos mais recentes.
+  const alvoCondB = String(imDb?.nomecondominio || imDb?.condominio || '').trim().toLowerCase();
+  const alvoBairroB = String(imDb?.bairro || '').trim().toLowerCase();
+  const alvoGridB = String(cacheReg?.grid || '').trim();
+  const rankProx = (a) => {
+    const cond = String(a.condominio || '').trim().toLowerCase();
+    const end = String(a.endereco || '').trim().toLowerCase();
+    if (alvoCondB && cond && (cond.includes(alvoCondB) || alvoCondB.includes(cond))) return 0;
+    if (alvoCondB && end && end.includes(alvoCondB)) return 1;
+    if (alvoGridB && String(a.geo_grid || '') === alvoGridB) return 2;
+    if (alvoBairroB && String(a.bairro_norm || '').toLowerCase() === alvoBairroB) return 3;
+    return 4;
+  };
+  const ord = arr.slice().sort((a, b) => rankProx(a) - rankProx(b)
+    || String(b.data_ref || '').localeCompare(String(a.data_ref || '')));
   const vendas = ord.map(item);
   const m2s = vendas.map(v => v.valorM2).filter(v => v > 0).sort((a, b) => a - b);
   if (m2s.length < MODO_BASE_MIN) return null;
