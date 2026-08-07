@@ -1,0 +1,48 @@
+name: Recon — CREPALDI (diagnóstico, só leitura)
+
+# Descobre por que a fonte CREPALDI nunca capturou nada. O log do scraper diário mostra
+# "loja 16139 → 0 offers abertas" enquanto o MESMO código faz a loja 16091 devolver 110 —
+# então ou o stores.id está errado, ou o site não é white-label do Superbid. Este job olha
+# o que o próprio site pede e imprime o id verdadeiro.
+#
+# SEM CUSTO: Actions é gratuito em repositório público, usa o Chromium do runner e NÃO
+# encosta em Bright Data (o único caminho pago do scraping) nem em API de IA.
+# SEM EFEITO COLATERAL: não recebe credencial do Supabase e não grava nada.
+#
+# Manual apenas — não tem cron de propósito: é diagnóstico pontual, não rotina.
+on:
+  workflow_dispatch:
+    inputs:
+      site:
+        description: 'Site a sondar (default: crepaldileiloes.com.br)'
+        required: false
+        default: 'https://www.crepaldileiloes.com.br'
+
+jobs:
+  recon:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            libatk-bridge2.0-0 libdrm2 libxkbcommon0 libxcomposite1 \
+            libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2t64 \
+            libpango-1.0-0 libcairo2 libatspi2.0-0 libgtk-3-0
+
+      - name: Rodar recon
+        env:
+          RECON_SITE: ${{ github.event.inputs.site }}
+        run: node scripts/recon-crepaldi.mjs
