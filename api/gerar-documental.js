@@ -8,6 +8,7 @@
 // financeira e o mercado ficam no relatório MERCADOLÓGICO (gerar-analise.js).
 export const config = { runtime: 'nodejs', maxDuration: 300 };
 
+import { createHash } from 'node:crypto';
 import { getUser } from './_auth.js';
 import { fetchViaBrightData } from './_brightdata.js';
 import { capturarDocsLoginOnDemand, temLoginParaFonte } from './_leiloeiro-auth.js';
@@ -763,6 +764,11 @@ export default async function handler(req, res) {
     const tiposGuardados = Object.values(cache).filter((c) => c?.storage_path).map((c) => c.tipo);
     const blocos = [];
     const lidos = [];
+    // Impressão digital do CONTEÚDO de cada documento já embarcado — ver a dedup logo
+    // abaixo, no corpo do laço. A dedup por URL (no `add`) não cobre o caso real: o MESMO
+    // PDF chega por duas URLs diferentes (a cópia em `imovel_anexos` e a URL montada da
+    // fonte), que são strings distintas.
+    const vistosConteudo = new Set();
     // Cap de leitura adaptativo: judicial lê mais peças (até 8) para o cruzamento
     // apurado exigido nesses casos; o deadline continua protegendo o tempo total.
     const capLeitura = ehJudicial ? 8 : 6;
@@ -792,6 +798,22 @@ export default async function handler(req, res) {
         }
       }
       if (!doc) continue;
+      // DEDUP POR CONTEÚDO — a dedup por URL acima compara strings, e o MESMO documento
+      // chega por DUAS URLs distintas: a cópia registrada em `imovel_anexos` e a URL
+      // montada/raspada da fonte. Medido no lote de Cotia (07/08): 6 blocos enviados ao
+      // modelo para 3 documentos reais — matrícula, edital e regras, cada um DUPLICADO —
+      // ou seja, ~2× o custo da chamada mais cara do sistema (o documental sozinho é 93%
+      // do custo dos 3 relatórios). Além do dinheiro, a duplicata ocupava vaga do cap de
+      // leitura e expulsava anexo de verdade num lote judicial (auto de penhora, laudo).
+      // O hash é do conteúdo lido, então independe de rótulo, tipo ou origem da URL.
+      const impressao = doc.kind === 'pdf'
+        ? `pdf:${createHash('sha1').update(doc.base64).digest('hex')}`
+        : `txt:${createHash('sha1').update(String(doc.text || '')).digest('hex')}`;
+      if (vistosConteudo.has(impressao)) {
+        console.log('[documental] duplicata ignorada', JSON.stringify({ rotulo: u.rotulo, tipo: tipoDoc || u.tipo || null }));
+        continue; // NÃO consome vaga do cap: sobra para um documento DIFERENTE
+      }
+      vistosConteudo.add(impressao);
       // MEDE A CAMADA DE TEXTO do PDF (local, custo zero). Hoje TODO PDF vai como bloco
       // `document` — leitura por VISÃO —, que é o que faz o documental custar ~6x o
       // mercadológico e responder por 68% da cota cheia de um assinante. PDF que TEM camada

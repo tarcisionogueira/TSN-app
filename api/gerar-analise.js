@@ -1876,6 +1876,18 @@ export default async function handler(req, res) {
       if (implausivel) { try { await registrarAnomalia('avaliacao_implausivel', imDb?.fonte || '', imovelId, 'valor_avaliacao',
         `Avaliação R$${Math.round(n)} vs mínimo R$${Math.round(vminDb)} = desconto ~${Math.round((1 - vminDb / n) * 100)}% — implausível/grudada; ignorada no relatório.`); } catch { /* log best-effort */ } }
       fonteDb = imDb?.fonte || '';
+      // ÁREA DO ACERVO como fallback — mesma família do bug de Cotia: o servidor JÁ LIA
+      // `area_m2` aqui (está no select acima) e mandava imprimir o 0 que veio do cliente.
+      // Sem área, `valorMercado = precoM2 × área × 0,9` não computa e o relatório sai sem
+      // referência — a ausência que produziu os ROIs impossíveis. Confirmado no banco em
+      // 07/08: 4 mercadológicos concluíram sem valor de mercado APESAR de a pesquisa ter
+      // achado preço/m², e em 2 deles o acervo tinha a área. Ordem: matrícula > acervo >
+      // cliente — a matrícula continua vencendo logo abaixo e no bloco de divergência.
+      // `areaFonte` sai no relatório (result.mercado.area.fonte), então 'acervo' é
+      // declarado ao cliente como o que é: a área do anúncio do leiloeiro, a confirmar
+      // na matrícula — nunca um número mudo passando por medição própria.
+      const aAcervo = Number(imDb?.area_m2) || 0;
+      if (areaM2 <= 0 && aAcervo >= 5 && aAcervo <= 100000) { areaM2 = aAcervo; areaFonte = 'acervo'; }
       const aDoc = Number(imDb?.ficha_juridica?.areaPrivativaM2) || 0;
       if (aDoc >= 5 && aDoc <= 100000) { areaM2 = aDoc; areaFonte = 'matricula'; } // autoritativa
     } catch { /* segue com a área informada */ }

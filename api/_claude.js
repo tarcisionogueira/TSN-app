@@ -4,7 +4,7 @@
 // único para toda chamada Claude do backend: troque `fetch(URL_CLAUDE, opts)` por
 // `anthropicFetch(opts)`.
 import { geminiFetch } from './_gemini.js';
-import { medirClaude } from './_uso.js';
+import { medirClaude, registrarUso } from './_uso.js';
 
 export const URL_CLAUDE = 'https://api.anthropic.com/v1/messages';
 const RETRYABLE = new Set([429, 500, 502, 503, 529]);
@@ -32,6 +32,12 @@ export async function anthropicFetch(options, { retries = 3, baseDelay = 800, ti
       const espera = ra > 0 ? ra * 1000 : baseDelay * 2 ** tent + Math.floor(Math.random() * 300);
       await sleep(espera);
     } catch (e) {
+      // GASTO INVISÍVEL: `medirClaude` só mede `res.ok`. Um timeout do NOSSO lado (AbortError)
+      // não cancela o trabalho já feito do outro lado — a chamada é cobrada e não aparece em
+      // `uso_integracoes`, então o painel some justamente com o desperdício. Cada tentativa
+      // abortada/quebrada vira uma linha `abortada` (sem custo estimável — não sabemos os
+      // tokens), para que o número de chamadas cobradas e não entregues seja AUDITÁVEL.
+      registrarUso('claude', 'abortada', { requests: 1 }); // fire-and-forget: nunca atrasa o retry
       if (tent === retries) { // rede caiu/timeout no último ataque → tenta fallback antes de propagar
         if (noFallback) throw e; // Claude-only: propaga a falha (o caller reprocessa)
         const fb = await geminiFetch(options, { timeoutMs: 8000 });
