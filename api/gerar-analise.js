@@ -551,10 +551,22 @@ async function gravarAmostrasIndice(imDb, mercado, imovelId, segmento = 'apartam
         especie: 'venda', valor_m2: Math.round(m2), valor_total: Number(s?.valor) || null, area_m2: Number(s?.m2) || null,
         data_ref: dref(s?.data), fonte: (s?.fonte ? String(s.fonte).slice(0, 200) : null), ...refDe(s), origem: 'relatorio_regiao', imovel_id: String(imovelId || '') });
     }
-    if (!rows.length) return;
-    await sb('indice_amostra', { method: 'POST', headers: { Prefer: 'return=minimal,resolution=ignore-duplicates' }, body: JSON.stringify(rows) });
+    const comAnc = rows.filter(r => String(r.bairro_norm || '').trim() || r.endereco || r.condominio);
+    if (comAnc.length !== rows.length) console.log('[indice-ancora] descartadas', rows.length - comAnc.length, 'de', rows.length);
+    if (!comAnc.length) return;
+    await sb('indice_amostra', { method: 'POST', headers: { Prefer: 'return=minimal,resolution=ignore-duplicates' }, body: JSON.stringify(comAnc) });
   } catch { /* aprendizado é best-effort: nunca bloqueia o relatório */ }
 }
+
+// ÂNCORA DE LOCALIZAÇÃO (regra do dono, 07/08): amostra sem NENHUMA referência de lugar —
+// bairro, endereço ou condomínio — não entra no corpus. Sem isso ela afirma só "nesta cidade" e
+// mesmo assim pesa como se fosse da região consultada; pode ser outro lugar, com o portal apenas
+// querendo vender. Medido em 07/08: 1.216 das 2.490 linhas do corpus de consulta estavam assim,
+// todas vindas DESTE caminho (origem 'relatorio'/'relatorio_regiao').
+// O filtro aqui é o par do CHECK que existe na tabela: sem ele o banco rejeitaria o INSERT
+// INTEIRO por causa de uma linha ruim, e o lote bom se perderia junto (o insert é best-effort e
+// a falha seria silenciosa).
+const comAncora = (rs) => rs.filter(r => String(r.bairro_norm || '').trim() || r.endereco || r.condominio);
 
 // COLHEITA DE OUTRAS TIPOLOGIAS (aproveitamento da MESMA busca — pedido do dono): a IA lista em
 // LEGADO (06/08): o prompt NÃO pede mais outras tipologias — pedir 4 segmentos na mesma busca
@@ -585,8 +597,9 @@ async function gravarOutrasTipologias(imDb, outras, imovelId, segAlvo = '') {
           data_ref: dref(s?.data), fonte: (s?.fonte ? String(s.fonte).slice(0, 200) : null), origem: 'relatorio_regiao', imovel_id: String(imovelId || '') });
       }
     }
-    if (!rows.length) return 0;
-    await sb('indice_amostra', { method: 'POST', headers: { Prefer: 'return=minimal,resolution=ignore-duplicates' }, body: JSON.stringify(rows) });
+    const comAnc2 = comAncora(rows);
+    if (!comAnc2.length) return 0;
+    await sb('indice_amostra', { method: 'POST', headers: { Prefer: 'return=minimal,resolution=ignore-duplicates' }, body: JSON.stringify(comAnc2) });
     console.log('[outras-tipologias]', JSON.stringify({ imovel: String(imovelId), n: rows.length, cidade: imDb.cidade_norm }));
     return rows.length;
   } catch { return 0; }
