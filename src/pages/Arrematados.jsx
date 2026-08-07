@@ -64,7 +64,11 @@ function Detalhe({ arr, onBack, onChange, soLeitura, permitirAnexo = !soLeitura 
   // Revenda: valor real de venda do imóvel arrematado → amostra do Índice + gabarito.
   const [revenda, setRevenda] = React.useState({ open: false, valor: '', mes: new Date().toISOString().slice(0, 7), enviando: false, ok: !!arr.revenda_valor, erro: '' });
   const enviarRevenda = async () => {
-    const valor = Number(String(revenda.valor).replace(/[^\d]/g, ''));
+    // "R$ 320.000,00" precisa virar 320000, não 32.000.000. O parse antigo removia TODO
+    // não-dígito, então os centavos viravam ordem de grandeza (100x) — e este valor é
+    // justamente o gabarito que calibra a precisão das estimativas futuras (ver o texto
+    // logo abaixo do botão). Mesma regra do addLanc e do NovoArrematado nesta tela.
+    const valor = Number(String(revenda.valor).replace(/\./g, '').replace(',', '.').replace(/[^\d.]/g, ''));
     if (!valor || valor <= 0) { setRevenda(r => ({ ...r, erro: 'Informe o valor da revenda.' })); return; }
     if (!/^\d{4}-\d{2}$/.test(revenda.mes)) { setRevenda(r => ({ ...r, erro: 'Informe o mês/ano da revenda.' })); return; }
     setRevenda(r => ({ ...r, enviando: true, erro: '' }));

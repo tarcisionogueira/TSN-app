@@ -91,6 +91,26 @@ export async function getUserRoleById(userId) {
   }
 }
 
+/** CPF do usuário (só dígitos), via service key. Usado para provar TITULARIDADE de uma
+ *  cobrança quando o perfil ainda não tem `asaas_id` (1º checkout) — ver
+ *  `api/verificar-pagamento.js`. Retorna '' quando não há CPF cadastrado. */
+export async function getCpfById(userId) {
+  if (!userId) return '';
+  const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
+  if (!SERVICE_KEY) return '';
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/perfis?id=eq.${userId}&select=cpf`, {
+      headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) return '';
+    const data = await res.json();
+    return String(data?.[0]?.cpf || '').replace(/\D/g, '');
+  } catch {
+    return '';
+  }
+}
+
 /** Busca o customer id do Asaas do usuário (UUID) — usa service key. Retorna null
  *  se o usuário ainda não tem cadastro de cobrança (ex.: antes do 1º pagamento). */
 export async function getAsaasIdById(userId) {

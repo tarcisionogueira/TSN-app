@@ -371,6 +371,7 @@ async function handler(req) {
   const heartbeat = outageSerio && estado?.enviado_em &&
     (Date.now() - new Date(estado.enviado_em).getTime()) > REENVIO_DIAS * 86400000;
   const enviar = mudou || heartbeat;
+  let emailEnviado = false; // vira true só com HTTP ok do Resend — é o que libera gravar o estado
 
   const agora = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
   if (enviar && RESEND_KEY) {
@@ -398,17 +399,23 @@ async function handler(req) {
         </div>
       </div>`;
     try {
-      await fetch('https://api.resend.com/emails', {
+      const rEmail = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: { Authorization: `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ from: FROM_EMAIL, to: ADMIN_EMAIL, subject: `🔴 BidPro — ${problemas.length} fonte(s) de leilão com problema`, html }),
       });
-    } catch (e) { /* não bloqueia o retorno */ }
+      emailEnviado = rEmail.ok;
+      if (!rEmail.ok) console.error('[monitor-fontes] Resend HTTP', rEmail.status, String(await rEmail.text().catch(() => '')).slice(0, 200));
+    } catch (e) { console.error('[monitor-fontes] Resend exceção:', String(e?.message || e).slice(0, 200)); }
   }
 
-  if (enviar) await gravarEstadoAlerta(supabase, 'monitor_fontes', assinatura, new Date().toISOString());
+  // SÓ marca como "avisado" quando o e-mail REALMENTE saiu (07/08). Antes o estado era gravado
+  // incondicionalmente: um soluço do Resend (ou RESEND_KEY ausente) enterrava o alerta para
+  // sempre, porque a assinatura já constava como enviada e a próxima rodada via "nada novo".
+  // Uma fonte degradada perdia a única boca que tinha. Sem envio, não grava → re-tenta amanhã.
+  if (enviar && emailEnviado) await gravarEstadoAlerta(supabase, 'monitor_fontes', assinatura, new Date().toISOString());
 
-  return new Response(JSON.stringify({ ok: true, problemas: problemas.length, enviado: enviar, detalhes: problemas }), {
+  return new Response(JSON.stringify({ ok: true, problemas: problemas.length, enviado: emailEnviado, alerta_pendente: enviar && !emailEnviado, detalhes: problemas }), {
     headers: { 'Content-Type': 'application/json' },
   });
 }

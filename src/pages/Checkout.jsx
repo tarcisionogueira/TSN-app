@@ -302,13 +302,35 @@ export default function Checkout() {
     if (!plano && planoKey !== 'explorador') nav('/');
   }, [planoKey]);
 
-  // Ativa plano quando MP redireciona de volta com status=approved
+  // Ativa plano quando MP redireciona de volta com status=approved.
+  //
+  // O QUERY PARAM NÃO É PROVA DE PAGAMENTO (corrigido em 07/08 — achado da varredura de
+  // 05/08). Antes, `?plano=clube&status=approved` bastava: qualquer usuário logado que
+  // abrisse essa URL (link compartilhado, histórico do navegador, curiosidade) via a tela
+  // "Pagamento aprovado!", tinha um ACEITE de contrato gravado sem transação nenhuma e ainda
+  // era mandado para o fluxo de contrato. Quem ativa o plano é o webhook, no servidor; então
+  // agora conferimos NO SERVIDOR que o plano ficou ativo antes de comemorar. O webhook às
+  // vezes chega alguns segundos depois do redirect, daí as tentativas espaçadas; se mesmo
+  // assim não confirmar, cai na tela honesta de "Pagamento em análise" (pagoPendente), que já
+  // existe e não grava aceite nem gera contrato.
   useEffect(() => {
-    if (mpStatus === 'approved' && !jaConfirmouRef.current) {
-      jaConfirmouRef.current = true;
-      confirmarPagamento();
-    }
-  }, [mpStatus]);
+    if (mpStatus !== 'approved' || jaConfirmouRef.current) return;
+    jaConfirmouRef.current = true;
+    let vivo = true;
+    (async () => {
+      const HIER = ['explorador', 'top2', 'assessorado', 'clube'];
+      const alvo = HIER.indexOf(String(planoKey || '').replace(/_(anual|vista|mensal)$/i, ''));
+      for (let i = 0; i < 6 && vivo; i++) { // ~30s de tolerância para o webhook
+        let p = null;
+        try { p = await refreshPerfil?.(); } catch { /* tenta de novo */ }
+        const atual = HIER.indexOf(String(p?.role || '').replace(/_anual$/, ''));
+        if (alvo < 0 || (atual >= 0 && atual >= alvo)) { if (vivo) confirmarPagamento(); return; }
+        await new Promise(r => setTimeout(r, 5000));
+      }
+      if (vivo) setPagoPendente(true);
+    })();
+    return () => { vivo = false; };
+  }, [mpStatus]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Polling automático — verifica a cada 8s se o Asaas confirmou o pagamento.
   // Trava de segurança: para após ~10 min (75 tentativas) e avisa o cliente,

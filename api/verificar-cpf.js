@@ -98,7 +98,12 @@ export default async function handler(req) {
   // ── Verifica se é produto de plano (assinatura) ──
   if (produto.tipo === 'plano') {
     const hierarquia = ['explorador', 'top2', 'assessorado', 'clube'];
-    const nivelAtual = hierarquia.indexOf(role);
+    // Roles ANUAIS existem no banco ('top2_anual', 'assessorado_anual'…) e não estavam na
+    // hierarquia: indexOf devolvia -1 e o assinante ANUAL era tratado como abaixo de
+    // explorador (achado da varredura de 05/08, corrigido em 07/08). No funil da assessoria
+    // isso mandava quem JÁ paga o Pro anual "entrar e assinar o Pro".
+    const roleBase = String(role || '').replace(/_anual$/, '');
+    const nivelAtual = hierarquia.indexOf(roleBase);
     const nivelDesejado = hierarquia.indexOf(produto.planoKey);
     const temAcesso = nivelAtual >= nivelDesejado && nivelDesejado >= 0;
     return new Response(JSON.stringify({ temConta: true, temAcesso, ehBeneficio: true }), { status: 200, headers });

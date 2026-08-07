@@ -67,7 +67,7 @@ export default async function handler(req) {
     const exRes = await sb(`arrematados?select=id&user_id=eq.${user.id}&imovel_id=eq.${encodeURIComponent(imovelId)}&limit=1`);
     const ex = await exRes.json().catch(() => []);
     if (!Array.isArray(ex) || !ex.length) {
-      await sb('arrematados', {
+      const ins = await sb('arrematados', {
         method: 'POST',
         headers: { Prefer: 'return=minimal' },
         body: JSON.stringify({
@@ -79,6 +79,16 @@ export default async function handler(req) {
           data_arrematacao: new Date().toISOString().slice(0, 10),
         }),
       });
+      // FALHA-ALTO (07/08): a resposta do insert não era checada e o handler devolvia
+      // ok:true de qualquer jeito — o botão virava "Arremate confirmado ✓" sem existir linha
+      // em `arrematados`. Pior que a mensagem errada: é esse registro que PROTEGE os
+      // documentos do lote da limpeza por retenção, então o cliente ficava achando que
+      // estava tudo guardado enquanto o prazo corria.
+      if (!ins.ok) {
+        const corpo = await ins.text().catch(() => '');
+        console.error('[sinalizar-arremate] insert falhou', ins.status, String(corpo).slice(0, 300));
+        return new Response(JSON.stringify({ error: 'Não foi possível registrar o arremate agora. Tente novamente em instantes.' }), { status: 502, headers });
+      }
     }
 
     // 2/3) Só quando o imovel_id é um UUID real (imóvel do acervo): protege os

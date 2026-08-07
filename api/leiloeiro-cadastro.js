@@ -45,7 +45,11 @@ export default async function handler(req) {
     if (!r.ok) return json({ error: 'Erro interno' }, 500);
     const [parc] = await r.json();
     if (!parc) return json({ error: 'Link inválido' }, 404);
-    if (parc.status === 'suspenso') return json({ error: 'Acesso suspenso' }, 403);
+    // 'inativo' entra junto de 'suspenso' (07/08): o link do cadastro nunca expira nem
+    // rotaciona, e o POST abaixo grava status:'ativo' incondicionalmente — então o parceiro
+    // que o admin DESATIVOU (ou qualquer um com o link em mãos) se reativava sozinho
+    // reenviando o formulário, e o feed voltava para a busca sem ninguém aprovar.
+    if (parc.status === 'suspenso' || parc.status === 'inativo') return json({ error: 'Acesso suspenso' }, 403);
 
     const campos = {
       nome: String(body.nome || '').slice(0, 200),

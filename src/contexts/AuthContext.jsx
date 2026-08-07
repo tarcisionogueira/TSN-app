@@ -311,10 +311,13 @@ export function AuthProvider({ children }) {
   // Reavaliação manual do perfil (usado logo após um pagamento: o role já foi
   // ativado no servidor de forma síncrona, mas o contexto ainda tem o valor antigo
   // até um foco/reload — chamar isto libera o acesso na hora, sem re-login).
+  // Devolve o perfil recém-lido além de atualizar o contexto: quem precisa DECIDIR na hora
+  // (ex.: o Checkout, que só pode comemorar o pagamento depois de ver o plano ativo no
+  // servidor) não consegue ler o `role` do contexto no mesmo tick — o state ainda é o antigo.
   const refreshPerfil = async () => {
     const { data } = await supabase.auth.getSession();
     const uid = data.session?.user?.id;
-    if (!uid) return;
+    if (!uid) return null;
     const p = await fetchPerfil(uid);
     setRole(p.role);
     setAtivo(p.ativo);
@@ -322,6 +325,7 @@ export function AuthProvider({ children }) {
     setCadastroIncompleto(p.cadastroIncompleto ?? false);
     setNome(p.nome || '');
     setPlanoLegado(p.planoLegado ?? false);
+    return p;
   };
 
   // Inicia o modo suporte. Os dados continuam protegidos por RLS: admin/analista

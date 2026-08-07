@@ -1642,6 +1642,17 @@ export default async function handler(req, res) {
     if (Object.keys(usados).length) console.log('[identidade-doc]', JSON.stringify({ imovel: String(imovelId), ...usados }));
   }
 
+  // REGERAÇÃO NÃO PODE DESTRUIR O RELATÓRIO QUE JÁ ESTAVA PRONTO (07/08 — achado da varredura
+  // de 05/08). O reset abaixo grava `result: null` no INÍCIO de toda geração. Se a regeração
+  // falhar por um motivo diferente de timeout (429, 5xx, rede), o catch grava status 'erro' sem
+  // restaurar nada — e o cliente que clicou "Regerar" num relatório PRONTO ficava sem nenhum
+  // dos dois. Guardamos o result anterior aqui e o catch o devolve.
+  let resultAnterior = null;
+  try {
+    const [prev] = await (await sb(`analises_mercado?user_id=eq.${ownerId}&imovel_id=eq.${encodeURIComponent(String(imovelId))}&status=eq.concluida&select=result&limit=1`)).json();
+    if (prev?.result) resultAnterior = prev.result;
+  } catch { /* sem anterior → nada a preservar */ }
+
   // Reseta a barra de evolução ao começar (não herda o progresso de uma geração anterior):
   // Etapa A (comparáveis) já entra como 'gerando'; B (contexto) e o parecer ficam 'pendente'.
   await upsertAnalise({ ...base, status: 'gerando', erro: null, result: null, progresso: {
@@ -2468,8 +2479,15 @@ COMO USAR (obrigatório): dedique um parágrafo aos CUSTOS DA OPERAÇÃO segundo
     const msg = timeout
       ? 'A pesquisa de mercado demorou mais que o tempo limite do servidor. Costuma ser temporário: tente gerar novamente.'
       : String(e?.message || e);
-    await upsertAnalise({ ...base, status: 'erro', erro: msg });
-    try { await logAtividade(ownerId, 'relatorio_mercado_erro', String(msg).slice(0, 200), { imovelId: String(imovelId), cidade: cidade || null, timeout, erroApi: e?.detalhe || null, ator: user.id }); } catch { /* log best-effort */ }
+    // REGERAÇÃO QUE FALHOU: devolve o relatório anterior em vez de deixar o cliente sem nada.
+    // Volta como 'concluida' (é um relatório íntegro, o de antes) com o motivo da falha em
+    // `erro`, para a tela poder avisar "não deu para atualizar, este é o anterior".
+    if (resultAnterior) {
+      await upsertAnalise({ ...base, status: 'concluida', erro: `regeracao_falhou: ${String(msg).slice(0, 160)}`, result: resultAnterior });
+    } else {
+      await upsertAnalise({ ...base, status: 'erro', erro: msg });
+    }
+    try { await logAtividade(ownerId, 'relatorio_mercado_erro', String(msg).slice(0, 200), { imovelId: String(imovelId), cidade: cidade || null, timeout, erroApi: e?.detalhe || null, restaurouAnterior: !!resultAnterior, ator: user.id }); } catch { /* log best-effort */ }
     // Estorna a cota consumida (não cobra por análise que falhou; evita cobrança
     // dupla na re-tentativa, já que 'erro' não conta como concluída em isNovo).
     if (cota && cota.ok && cota.tipo) {

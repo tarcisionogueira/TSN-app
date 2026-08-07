@@ -39,12 +39,14 @@ O ramo `status === 'rejected' || 'cancelled'` do mp-webhook só protege compras 
 
 ## Gravidade ALTA
 
-### 🟠 CONFIRMADO · `supabase/migrations/20260714_imovel_anexos_dono_arremate.sql:8`
+### ✅ CORRIGIDO · `supabase/migrations/20260714_imovel_anexos_dono_arremate.sql:8`
 **RLS `imovel_anexos_meu_arremate_delete`: qualquer usuário que se AUTODECLARE arrematante pode apagar os docume**
 
 A policy de DELETE em imovel_anexos libera para quem tem linha em `arrematados` daquele imóvel. Mas o arremate é autoconsentido (sinalizar-arremate.js: 'Autoconsentido: o usuário declara o próprio arremate', sem verificação) — log
 
 *Impacto:* Perda de dado cross-usuário: o edital/matrícula-PDF capturados (cache que alimenta a análise documental de TODOS os usuários e os botões 'Documentos do lote' em ImovelDet
+
+*Correção:* 07/08 — policy imovel_anexos_meu_arremate_delete REVOGADA (migração imovel_anexos_delete_autodeclarado_revogado.sql). Arremate autodeclarado não apaga mais documento compartilhado; admin/analista seguem podendo.
 
 <sub>lente: telas-imovel · verificação: CONFIRMADO</sub>
 
@@ -110,60 +112,72 @@ O caminho server-side resiliente do plano anual (webhook) grava DUAS marcas de i
 
 <sub>lente: planos-cobranca · verificação: CONFIRMADO</sub>
 
-### ⏳ A VERIFICAR · `api/agendar-ciclo.js:109`
+### ✅ CORRIGIDO · `api/agendar-ciclo.js:109`
 **agendar-ciclo: PATCH de ciclo_agendado engolido depois de já ter cancelado a renovação anual nos gateways**
 
 O endpoint primeiro CANCELA os mandatos anuais no Mercado Pago e Asaas (passo 1, linha 95) e confirma o cancelamento (passo 2), mas o passo 3 — gravar perfis.ciclo_agendado='mensal', que é o que materializa a mensal no vencimento 
 
 *Impacto:* Efeito irreversível já aconteceu ANTES da escrita não verificada: a auto-renovação anual foi cancelada nos dois gateways. Se a intenção 'mensal' não ficou gravada, no ven
 
+*Correção:* 07/08 — o PATCH deixou de ser .catch(()=>{}): falha devolve 502 com instrução ao suporte e fica no auditLog. O efeito irreversível (cancelamento nos gateways) não vira mais silêncio.
+
 <sub>lente: fetch-sem-ok · verificação: NAO VERIFICADO</sub>
 
 
 ## Gravidade MEDIA
 
-### ⏳ A VERIFICAR · `api/sinalizar-arremate.js:70`
+### ✅ CORRIGIDO · `api/sinalizar-arremate.js:70`
 **sinalizar-arremate devolve ok:true sem checar se o INSERT em `arrematados` funcionou — 'Arremate confirmado ✓'**
 
 O POST em `arrematados` (e os PATCH de imovel_anexos/doc_retencao_aviso) não têm a resposta verificada: se o insert falhar (constraint, coluna, indisponibilidade do PostgREST), o handler segue e retorna `{ok:true}` — o botão vira 
 
 *Impacto:* Padrão falso-sucesso do dono: o cliente acredita que o arremate está registrado (e que os documentos estão protegidos da retenção), mas se o insert falhou não há linha em
 
+*Correção:* 07/08 — a resposta do INSERT em arrematados é checada; falha devolve 502 com mensagem acionável em vez de "Arremate confirmado" falso.
+
 <sub>lente: telas-imovel · verificação: NAO VERIFICADO</sub>
 
-### ⏳ A VERIFICAR · `api/monitor-dados-cron.js:38`
+### ✅ CORRIGIDO · `api/monitor-dados-cron.js:38`
 **monitor-dados-cron lê a RPC sem checar r.ok — se a RPC falhar, o monitor de regressão responde ok:true sem mon**
 
 `stats = await r.json()` sem verificar `r.ok`. Quando a RPC stats_completude_imoveis falha (404 se a função sumir numa migração, 500, timeout do statement, key inválida), o PostgREST devolve um corpo de ERRO em JSON ({code,message
 
 *Impacto:* O alarme que existe para avisar 'o scraper de uma fonte quebrou e está gravando campo vazio em massa' se auto-silencia justamente quando o próprio pipeline de medição que
 
+*Correção:* 07/08 — checa r.ok e devolve 502 quando a RPC falha, em vez de tratar o corpo de erro como stats zerado e se auto-silenciar.
+
 <sub>lente: crons · verificação: NAO VERIFICADO</sub>
 
-### ⏳ A VERIFICAR · `api/verificar-cpf.js:100`
+### ✅ CORRIGIDO · `api/verificar-cpf.js:100`
 **verificar-cpf ignora roles com sufixo _anual: assinante anual é orientado a 'assinar o Pro' que já paga**
 
 O check de acesso a plano compara perfis.role cru contra a hierarquia ['explorador','top2','assessorado','clube']. Roles anuais existem no banco ('top2_anual' etc. — vide api/_webhook-core.js:36 RANK_PLANO e reconciliar-assinatura
 
 *Impacto:* No funil da assessoria (Checkout.jsx IdentificacaoCpfAssessoria, linha 94), o assinante Pro ANUAL digita o CPF e recebe nivel='explorador' com CTA 'Entrar e assinar o Pro
 
+*Correção:* 07/08 — sufixo _anual normalizado antes do indexOf; assinante Pro anual deixa de ser tratado como abaixo de explorador.
+
 <sub>lente: pre-login · verificação: NAO VERIFICADO</sub>
 
-### ⏳ A VERIFICAR · `api/monitor-fontes-cron.js:409`
+### ✅ CORRIGIDO · `api/monitor-fontes-cron.js:409`
 **monitor-fontes-cron marca o alerta como 'enviado' mesmo quando o e-mail falhou (ou sem RESEND_KEY) — problema **
 
 O envio ao Resend está dentro de `if (enviar && RESEND_KEY)` com try/catch vazio e SEM checar a resposta HTTP; logo abaixo, `if (enviar) await gravarEstadoAlerta(...)` grava assinatura + enviado_em incondicionalmente. Se o fetch f
 
 *Impacto:* O 'bug bounty dos leiloeiros' automático perde a boca: uma fonte degradada (ex.: cobertura de matrícula despencou) cujo primeiro e-mail caiu num soluço do Resend nunca ch
 
+*Correção:* 07/08 — o estado do alerta só é gravado quando o Resend responde ok; e-mail que falhou deixa o alerta pendente para a próxima rodada (alerta_pendente no retorno).
+
 <sub>lente: crons · verificação: NAO VERIFICADO</sub>
 
-### ⏳ A VERIFICAR · `src/pages/Arrematados.jsx:67`
+### ✅ CORRIGIDO · `src/pages/Arrematados.jsx:67`
 **Registrar revenda: parse remove TODO separador ('320.000,00' vira R$ 32.000.000) — gabarito de calibração corr**
 
 enviarRevenda converte o valor com `replace(/[^\\d]/g,'')`, que trata separador decimal como dígitos: qualquer valor digitado com centavos infla 100×. O resto da mesma tela parseia certo (addLanc linha 152 e NovoArrematado linha 4
 
 *Impacto:* Usuário que digita 'R$ 320.000,00' registra revenda de R$ 32 milhões: (1) `arrematados.revenda_valor` — o gabarito que o dono usa para calibrar a precisão das estimativas
+
+*Correção:* 07/08 — parse monetário corrigido (mesma regra do addLanc): "320.000,00" vira 320000, não 32 milhões. O gabarito de calibração para de ser inflado 100x.
 
 <sub>lente: telas-imovel · verificação: NAO VERIFICADO</sub>
 
@@ -185,57 +199,69 @@ A confirmação da recarga é 100% client-side: só /api/creditos-recarga (chama
 
 <sub>lente: planos-cobranca · verificação: NAO VERIFICADO</sub>
 
-### ⏳ A VERIFICAR · `api/gerar-analise.js:1487`
+### ✅ CORRIGIDO · `api/gerar-analise.js:1487`
 **'Regerar' o relatório Mercadológico APAGA o resultado anterior no início da geração e não o restaura em falha **
 
 gerar-analise faz upsert com `result: null` logo no início de TODA geração (inclusive regeração). Se a geração falhar (timeout, anthropic_http_*, rede), o catch grava `status:'erro'` sem restaurar o result — o relatório mercadológ
 
 *Impacto:* Cliente com o mercadológico pronto clica 'Regerar' (botão exposto quando c.ok, Analise.jsx:1659); se a API do modelo/busca falhar por motivo ≠ timeout (429, 5xx, rede), e
 
+*Correção:* 07/08 — o result anterior é guardado antes do reset; se a regeração falhar, ele é restaurado (status concluida + motivo em erro) em vez de deixar o cliente sem relatório nenhum.
+
 <sub>lente: telas-imovel · verificação: NAO VERIFICADO</sub>
 
-### ⏳ A VERIFICAR · `api/marcar-posse.js:58`
+### ✅ CORRIGIDO · `api/marcar-posse.js:58`
 **marcar-posse: rebaixa o role do cliente assumindo que o PATCH da posse funcionou (nenhuma escrita é verificada**
 
 O PATCH que grava posse_em/status_etapa em `casos` (linhas 58-61) não tem a resposta checada; logo em seguida o código reavalia o plano e pode fazer PATCH de perfis.role para 'explorador' (linha 83, também sem checagem), devolvend
 
 *Impacto:* Se o PATCH em casos falhar silenciosamente e este era o último caso do assessorado, a reavaliação segue mesmo assim e rebaixa o cliente para 'explorador' com o caso AINDA
 
+*Correção:* 07/08 — a resposta do PATCH da posse é checada e o handler para em 502 antes de chegar à reavaliação de plano; o cliente não é mais rebaixado com o caso ainda aberto.
+
 <sub>lente: fetch-sem-ok · verificação: NAO VERIFICADO</sub>
 
-### ⏳ A VERIFICAR · `api/mp-webhook.js:365`
+### ✅ SEM DEFEITO · `api/mp-webhook.js:365`
 **Reembolso de pagamento avulso de SERVIÇO (recarga/assessoria) suspende o plano do assinante — mesmo guard ause**
 
 No ramo 'refunded'/'partially_refunded', só compras de PRODUTO são isentas (ehProdutoMp). Um reembolso de pagamento avulso com metadata.tipo='servico' (ex.: suporte devolve uma recarga de crédito ou uma assessoria avulsa) cai em p
 
 *Impacto:* Ação administrativa legítima (devolver uma recarga de R$ 50 pelo painel do MP) derruba o plano pago do cliente: role vira explorador, âncora do anual (plano_vencimento) é
 
+*Verificação:* FALSO POSITIVO / já resolvido — verificado em 07/08: o ramo refunded já usa suspender: !parcial && !contexto.servico, ou seja, o guard de serviço existe. Nenhuma mudança necessária.
+
 <sub>lente: planos-cobranca · verificação: NAO VERIFICADO</sub>
 
-### ⏳ A VERIFICAR · `api/verificar-pagamento.js:48`
+### ✅ CORRIGIDO · `api/verificar-pagamento.js:48`
 **IDOR condicional em verificar-pagamento.js: usuário sem asaas_id lê status/vencimento de cobrança/assinatura A**
 
 A checagem de dono do pagamento/assinatura só roda QUANDO o usuário autenticado já tem asaas_id. Para qualquer conta sem asaas_id (todo Explorador grátis e qualquer conta antes do 1º pagamento), a verificação de propriedade é PULA
 
 *Impacto:* Vazamento cross-tenant: qualquer usuário logado (basta uma conta grátis, cujo perfis.asaas_id é sempre null) consegue consultar, iterando paymentId/subscriptionId do Asaa
 
+*Correção:* 07/08 — titularidade agora é SEMPRE provada: com asaas_id compara o customer; sem asaas_id (Explorador grátis / 1º checkout) confere e-mail ou CPF do customer da própria cobrança. Sem igualdade, 403. Vale para pagamento avulso E assinatura.
+
 <sub>lente: api-auth · verificação: NAO VERIFICADO</sub>
 
-### ⏳ A VERIFICAR · `src/pages/Checkout.jsx:307`
+### ✅ CORRIGIDO · `src/pages/Checkout.jsx:307`
 **URL /checkout?plano=clube&status=approved dispara 'Pagamento aprovado' + contrato do Clube sem nenhum pagament**
 
 O Checkout confia cegamente no query param do redirect do MP: `status=approved` chama confirmarPagamento(), que mostra a tela 'Pagamento aprovado!', grava um aceite (registrar-aceite) e, para assessorado/clube, chama /api/auto-con
 
 *Impacto:* Qualquer usuário logado (até explorador) que abra a URL com status=approved — link compartilhado, histórico do navegador, ou por curiosidade — vê 'Pagamento aprovado!', t
 
+*Correção:* 07/08 — o query param deixou de ser prova: só comemora depois de confirmar NO SERVIDOR que o plano ficou ativo (refreshPerfil x hierarquia, ~30s de tolerância p/ o webhook). Não confirmando, cai em "Pagamento em análise" — sem aceite e sem contrato.
+
 <sub>lente: planos-cobranca · verificação: NAO VERIFICADO</sub>
 
-### ⏳ A VERIFICAR · `api/leiloeiro-cadastro.js:64`
+### ✅ CORRIGIDO · `api/leiloeiro-cadastro.js:64`
 **Link de cadastro do leiloeiro reativa parceiro desativado pelo admin (status:'ativo' incondicional)**
 
 O POST público (só exige o token do link, que nunca expira nem rotaciona) grava status:'ativo' incondicionalmente; o único status bloqueado é 'suspenso' (linha 48). O Admin trabalha com 'pendente'/'inativo'/'suspenso' (Admin.jsx:6
 
 *Impacto:* O dono desativa um leiloeiro parceiro (feed some da busca) e o parceiro — ou qualquer um que tenha o link, que a própria página manda 'entregar ao TI' — reenvia o formulá
+
+*Correção:* 07/08 — o POST público passa a barrar status "inativo" junto de "suspenso": parceiro desativado pelo admin não se reativa reenviando o formulário.
 
 <sub>lente: pre-login · verificação: NAO VERIFICADO</sub>
 
@@ -248,11 +274,13 @@ No cadastro com ?plano=X, o plano é guardado em sessionStorage ('tsn_plano_pend
 
 <sub>lente: pre-login · verificação: NAO VERIFICADO</sub>
 
-### ⏳ A VERIFICAR · `api/juridico-lembretes-cron.js:137`
+### ✅ CORRIGIDO · `api/juridico-lembretes-cron.js:137`
 **Escalação ao admin repete TODO dia útil: select não traz juridico_escalado_admin, o flag de dedup nunca é lido**
 
 O guard `if (!caso.juridico_escalado_admin)` deveria escalar 1x só, mas o SELECT dos casos (linha 120) não inclui a coluna juridico_escalado_admin (existe no banco: supabase/migrations/analises_e_auditoria.sql:65). `caso.juridico_
 
 *Impacto:* Todo caso que bateu o teto de 3 reatribuições gera uma mensagem duplicada no chat interno POR DIA ÚTIL, para sempre (o caso continua em_revisao até intervenção manual). O
+
+*Correção:* 07/08 — juridico_escalado_admin incluído no SELECT; o guard de dedup volta a funcionar e a escalação para de repetir todo dia útil.
 
 <sub>lente: crons · verificação: NAO VERIFICADO</sub>

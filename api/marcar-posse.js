@@ -55,10 +55,19 @@ export default async function handler(req) {
 
   // Marca a posse (idempotente: mantém a 1ª data se já houver).
   const posseEm = caso.posse_em || new Date().toISOString();
-  await sb(`casos?id=eq.${encodeURIComponent(casoId)}`, {
+  const patPosse = await sb(`casos?id=eq.${encodeURIComponent(casoId)}`, {
     method: 'PATCH', headers: { Prefer: 'return=minimal' },
     body: JSON.stringify({ posse_em: posseEm, status_etapa: 'pos_arrematacao' }),
-  });
+  }).catch(() => null);
+  // NÃO SEGUIR SEM CONFIRMAR A POSSE (07/08): logo abaixo este handler pode REBAIXAR o role
+  // do cliente para 'explorador' por concluir que era o último caso em aberto. Se o PATCH
+  // acima falhou em silêncio, o caso continua aberto no banco e o cliente perde o plano com a
+  // assessoria em andamento — dano ao pagante a partir de uma escrita que ninguém checou.
+  if (!patPosse || !patPosse.ok) {
+    const corpo = patPosse ? await patPosse.text().catch(() => '') : 'sem resposta';
+    console.error('[marcar-posse] PATCH casos falhou', patPosse?.status, String(corpo).slice(0, 200));
+    return json({ error: 'Não foi possível registrar a posse agora. Tente novamente em instantes.' }, 502);
+  }
 
   // Reavalia o plano do CLIENTE do caso (não do staff que clicou).
   const clienteId = caso.cliente_id;

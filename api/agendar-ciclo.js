@@ -106,10 +106,24 @@ export default async function handler(req, res) {
   }
 
   // 3) Só agora marca a intenção (materializada no vencimento pelo cron / próxima mensal).
-  await sb(`perfis?id=eq.${user.id}`, {
+  //    ESTA ESCRITA NÃO PODE SER ENGOLIDA (07/08): o efeito IRREVERSÍVEL já aconteceu nos
+  //    passos 1 e 2 — a renovação anual foi cancelada nos dois gateways. Se a intenção
+  //    'mensal' não ficar gravada, no vencimento o cliente simplesmente PERDE o plano em vez
+  //    de migrar para a mensal, e ninguém fica sabendo. O `.catch(() => {})` transformava
+  //    exatamente isso num sucesso silencioso. Agora falha alto, com instrução ao suporte.
+  const pat = await sb(`perfis?id=eq.${user.id}`, {
     method: 'PATCH', headers: { Prefer: 'return=minimal' },
     body: JSON.stringify({ ciclo_agendado: 'mensal' }),
-  }).catch(() => {});
+  }).catch(() => null);
+  if (!pat || !pat.ok) {
+    const corpo = pat ? await pat.text().catch(() => '') : 'sem resposta';
+    console.error('[agendar-ciclo] PATCH ciclo_agendado falhou', pat?.status, String(corpo).slice(0, 200));
+    try { auditLog({ acao: 'ciclo_agendado_falha_gravacao', user_id: user.id, ip, detalhes: { cancelados, http: pat?.status || null }, sucesso: false }); } catch { /* auditoria best-effort */ }
+    return res.status(502).json({
+      error: 'agendamento_nao_gravado',
+      msg: 'A renovação anual foi cancelada, mas não conseguimos agendar a mensal agora. Fale com o suporte para concluir a troca antes do vencimento.',
+    });
+  }
 
   auditLog({ acao: 'ciclo_agendado_mensal', user_id: user.id, ip, detalhes: { ate: perfil.plano_vencimento, cancelados }, sucesso: true });
   return res.status(200).json({ ok: true, agendado: 'mensal', ate: perfil.plano_vencimento, cancelados });

@@ -1,0 +1,22 @@
+-- ══════════════════════════════════════════════════════════════════════════════
+-- REVOGA o DELETE de anexos concedido por arremate AUTODECLARADO
+-- (achado ALTA da varredura de 05/08, confirmado e corrigido em 07/08)
+--
+-- `20260714_imovel_anexos_dono_arremate.sql` criou DUAS políticas para quem tem
+-- linha em `arrematados` daquele imóvel: SELECT (ler) e DELETE (apagar). O SELECT
+-- está certo — o arrematante precisa dos documentos do lote que comprou.
+--
+-- O DELETE não: o arremate é AUTOCONSENTIDO (`api/sinalizar-arremate.js` grava a
+-- declaração do próprio usuário, sem verificação com o leiloeiro). Ou seja,
+-- qualquer usuário logado que clicasse "Arrematei" num imóvel ganhava permissão
+-- para APAGAR a matrícula e o edital em cache daquele lote — arquivos COMPARTILHADOS,
+-- que alimentam a análise documental de todos os outros usuários e os botões
+-- "Documentos do lote" da ficha do imóvel. Perda de dado cross-usuário a um clique,
+-- e ainda por cima cara: recapturar um PDF de fonte paga custa Bright Data.
+-- Hoje há 8 anexos nessa condição.
+--
+-- Quem PODE apagar segue sendo admin/analista (política `imovel_anexos_delete`),
+-- e a limpeza automática por retenção roda pelo service_role, que ignora RLS.
+-- ══════════════════════════════════════════════════════════════════════════════
+
+drop policy if exists imovel_anexos_meu_arremate_delete on public.imovel_anexos;

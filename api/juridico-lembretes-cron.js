@@ -117,7 +117,10 @@ export default async function handler(req, res) {
     if (adm?.id) adminEmail = await emailDoUsuario(adm.id);
   }
   adminEmail = adminEmail ? norm(adminEmail) : null;
-  const casos = await sbGet(`casos?juridico_status=eq.em_revisao&juridico_enviado_em=not.is.null&select=id,imovel_id,imovel_endereco,tipo_leilao,advogado_id,juridico_enviado_em,prazo_juridico,juridico_token,juridico_lembretes,juridico_ultimo_lembrete,juridico_reatribuicoes`);
+  const casos = await sbGet(`casos?juridico_status=eq.em_revisao&juridico_enviado_em=not.is.null&select=id,imovel_id,imovel_endereco,tipo_leilao,advogado_id,juridico_enviado_em,prazo_juridico,juridico_token,juridico_lembretes,juridico_ultimo_lembrete,juridico_reatribuicoes,juridico_escalado_admin`);
+  // `juridico_escalado_admin` FALTAVA no select (achado da varredura de 05/08, corrigido em
+  // 07/08): o guard `if (!caso.juridico_escalado_admin)` lia sempre `undefined`, então todo caso
+  // que bateu o teto de reatribuições reescalava para o admin TODO dia útil, para sempre.
   const resumo = { casos: Array.isArray(casos) ? casos.length : 0, lembretes: 0, reatribuicoes: 0, sem_destino: 0, erros: 0 };
 
   for (const caso of (Array.isArray(casos) ? casos : [])) {

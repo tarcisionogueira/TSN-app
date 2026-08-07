@@ -226,10 +226,105 @@ mercado disponível. O conteúdo da tela já avisa "Mercado não estimado", o cr
 > falam de ROI positivo e yield real. Checagem pelo banco:
 > `select result->'mercado'->'__diagParecer'->'metricasRecalculadas' from analises_mercado where imovel_id='060eff88-badc-43ff-b11c-6b482da68b9b' order by updated_at desc limit 1;`
 >
-> ⚠️ **Os 15 relatórios antigos com ROI −371,55% seguem gravados com o número errado.** A correção
-> vale da próxima geração em diante; ela não reescreve o que já foi emitido. Decisão do dono:
-> regerar esses 15 (o mercadológico já pago não recobra cota — `isNovo` é falso) ou deixar como
-> histórico. A lista está na tabela acima.
+### 4. Remoção dos relatórios inválidos + cota devolvida (decisão do dono, 07/08)
+
+**Removidos:** os 15 mercadológicos com ROI impossível **e** o único laudo derivado deles (Cotia,
+`a67bee87`, reprovado indevidamente). Os 4 documentais dos mesmos imóveis **ficaram** — a análise
+jurídica não depende do valor de mercado e estava correta.
+
+**Backup antes de apagar:** `public.analises_removidas_roi_invalido_20260807` (16 linhas, `to_jsonb`
+da linha inteira, RLS ligada e `revoke` de anon/authenticated). Reversível.
+
+**O aprendizado das amostras é viável e foi 100% preservado** — a pergunta do dono. Motivos
+verificados antes de apagar: (a) **não existe FK** de `indice_amostra` para `analises_mercado`, então
+não há cascade; (b) `analise_id` é só proveniência — **nada no código faz join por ele** (só aparece
+na migração que criou a coluna). Contagens antes → depois: `indice_amostra` **1.549 → 1.549**,
+`indice_amostras` **1.380 → 1.380**, `agente_aprendizado` **164** intactos. As 241 amostras que
+pendiam dessas análises continuam na base.
+
+**Além de sobreviver, o aprendizado nunca esteve contaminado:** `agente_aprendizado.corpus` guarda
+só FATOS DE PESQUISA (preço/m², aluguel médio, FipeZAP, desconto, avaliação) — nenhum ROI, lucro ou
+capital. O defeito era do cálculo de viabilidade, que não entra no corpus.
+
+**Cota devolvida.** Dos 15, **13 eram do próprio dono** (admin, cota ilimitada — nada a repor).
+Dois eram de usuários reais:
+
+| Usuário | Papel | Imóvel | Reposição |
+|---|---|---|---|
+| Alessandra de Jesus dos Santos | top2 | Carapicuíba, 23/07 | `bonus_mercado` +1 |
+| Igor dos Santos Queiroz | explorador | Vila Velha, 06/07 | `bonus_mercado` +1 |
+
+Por que bônus e não estorno do contador mensal: a consumida da Alessandra foi em **julho** e o mês
+já virou (`analises_mes = 2026-08`), então `estornar_analise_por('mensal')` descontaria de análises
+de AGOSTO, que são outras. O bônus é aditivo e garante a regeração sem gastar a cota do mês. Igor é
+`explorador` e sua `amostra_mercado_usadas` já estava em 0 (alcance intacto) — o bônus vale como
+reposição do relatório perdido. Ambos ficaram com `bonus_mercado = 1` e o evento
+`cota_reposta_relatorio_invalido` no `atividade_log`.
+
+> ⚠️ **Achado lateral a decidir:** `limite_ia_efetivo(role='top2','mercado')` devolve **15** no
+> banco, enquanto a apresentação (corrigida ontem) diz **10**. O dono decidiu manter 10 + 3 índices
+> — a config do banco ficou para trás. Não mudei por conta própria: mexer nisso reduz a cota de
+> assinante ativo. Confirmar e ajustar `planos_config.limite_ia`.
+
+### 5. Varredura dos bugs mapeados nos últimos dias (`docs/VARREDURA_BUGS_2026-08-05.md`)
+
+O dono pediu que os demais achados também não se repetissem. Dos 19 abertos, **14 foram fechados
+hoje** (13 corrigidos + 1 falso positivo). Restam 5, listados no fim.
+
+**Segurança (as duas mais graves da lista):**
+- **`imovel_anexos_meu_arremate_delete` — policy REVOGADA** (migração
+  `imovel_anexos_delete_autodeclarado_revogado.sql`, já aplicada). O arremate é AUTOCONSENTIDO
+  (`sinalizar-arremate.js` grava a declaração do usuário sem verificar com o leiloeiro), e a policy
+  dava DELETE nos anexos daquele imóvel a quem se declarasse arrematante — matrícula e edital em
+  cache, arquivos COMPARTILHADOS que alimentam a documental de todos e os botões "Documentos do
+  lote". Perda de dado cross-usuário a um clique, e recapturar PDF de fonte paga custa Bright Data.
+  Havia 8 anexos nessa condição. O SELECT continua (o arrematante precisa ler); apagar segue com
+  admin/analista, e a limpeza por retenção roda no service_role, que ignora RLS.
+- **`verificar-pagamento.js` — IDOR fechado.** A checagem de dono era `if (asaasId && …)`: como todo
+  Explorador grátis tem `asaas_id` null, ela era PULADA e bastava iterar `paymentId` para ler status
+  e vencimento de cobranças de outros clientes. Agora a titularidade é sempre provada — pelo
+  `asaas_id` ou, na sua ausência, pelo e-mail/CPF do customer da própria cobrança (novo
+  `getCpfById` em `_auth.js`). Sem igualdade, 403. Vale para avulso e assinatura.
+
+**Falso sucesso / escrita não verificada — a mesma família dos bugs de hoje:**
+- `Checkout.jsx`: `?status=approved` na URL deixou de ser prova de pagamento. Antes, qualquer
+  usuário logado que abrisse `?plano=clube&status=approved` via "Pagamento aprovado!", tinha um
+  ACEITE gravado sem transação e era mandado ao fluxo de contrato. Agora só comemora depois de
+  confirmar no servidor que o plano ficou ativo (~30s de tolerância para o webhook); não
+  confirmando, cai na tela honesta "Pagamento em análise". (`refreshPerfil` passou a devolver o
+  perfil lido — sem isso o Checkout não consegue decidir no mesmo tick.)
+- `sinalizar-arremate.js`: devolvia `ok:true` sem checar o INSERT — "Arremate confirmado ✓" sem
+  linha em `arrematados`. E é esse registro que PROTEGE os documentos da limpeza por retenção.
+- `agendar-ciclo.js`: o PATCH de `ciclo_agendado` era `.catch(() => {})` — depois de já ter
+  cancelado a renovação anual nos dois gateways. A falha silenciosa fazia o cliente PERDER o plano
+  no vencimento em vez de migrar para a mensal. Agora 502 + auditLog.
+- `marcar-posse.js`: seguia para rebaixar o role do cliente sem confirmar que a posse foi gravada.
+- `monitor-dados-cron.js`: lia a RPC sem `r.ok` — o alarme de regressão de scraper se auto-silenciava
+  justamente quando a medição quebrava.
+- `monitor-fontes-cron.js`: marcava o alerta como enviado mesmo com o Resend fora, enterrando o
+  aviso para sempre. Agora só grava o estado com HTTP ok; senão devolve `alerta_pendente`.
+- `gerar-analise.js`: "Regerar" apagava o `result` no início e não restaurava em falha — o cliente
+  ficava sem o relatório novo E sem o antigo. Agora o anterior é guardado e devolvido.
+
+**Outros:**
+- `juridico-lembretes-cron.js`: `juridico_escalado_admin` faltava no SELECT, então a escalação ao
+  admin repetia todo dia útil, para sempre.
+- `Arrematados.jsx`: o parse da revenda removia todo não-dígito — "R$ 320.000,00" virava R$ 32
+  milhões. É o gabarito que calibra as estimativas futuras (o próprio texto da tela diz isso).
+- `verificar-cpf.js`: roles `_anual` caíam fora da hierarquia e o assinante Pro ANUAL era orientado a
+  "entrar e assinar o Pro".
+- `leiloeiro-cadastro.js`: o link público (que nunca expira) reativava parceiro desativado pelo admin.
+- `mp-webhook.js:365`: **falso positivo** — o guard `!contexto.servico` no ramo `refunded` já existia.
+
+**Ficam em aberto (5):**
+
+| Achado | Por que não fechei |
+|---|---|
+| 🟠 `juridico-lembretes-cron.js:148` — reatribuição grava antes do e-mail | Já tem plano desenhado (gravar em dois tempos + webhook do Resend). É refatoração de fluxo, não one-liner |
+| 🟠 `Painel.jsx:447` — "Arrematei" com id local, fora do `sinalizar-arremate` | Já tem plano (matar o botão legado junto da unificação do arremate) |
+| ⏳ `financiamento-alertas-cron.js:55` — lembrete de parcela sem idempotência | Precisa de coluna/tabela de estado por parcela |
+| ⏳ `mp-webhook.js:294` — recarga sem entrega server-side | Precisa do caminho resiliente equivalente ao do plano anual |
+| ⏳ `Login.jsx:338` — plano escolhido se perde após confirmar e-mail | Depende de decidir onde persistir a intenção entre dispositivos |
 
 ---
 

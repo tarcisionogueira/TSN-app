@@ -35,6 +35,14 @@ export default async function handler(req, res) {
       headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' },
       body: '{}',
     });
+    // FALHA-ALTO (07/08): sem checar `r.ok`, um erro do PostgREST (404 se a função sumir numa
+    // migração, 500, timeout) volta como JSON {code,message} e virava um `stats` "válido" com
+    // tudo zero — o monitor que existe para gritar "o scraper de uma fonte quebrou" respondia
+    // ok:true e se auto-silenciava justamente quando a própria medição parou de funcionar.
+    if (!r.ok) {
+      const corpo = await r.text().catch(() => '');
+      return res.status(502).json({ error: 'RPC stats_completude_imoveis falhou', http: r.status, detalhe: String(corpo).slice(0, 200) });
+    }
     stats = await r.json();
   } catch (e) {
     return res.status(500).json({ error: 'Falha ao ler stats', detalhe: String(e?.message || e) });
