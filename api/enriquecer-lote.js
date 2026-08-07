@@ -115,7 +115,11 @@ export function extrairDatasLeilao(html, { estrito = false } = {}) {
     else neutros.push(t);
   }
   const iso = (t) => new Date(t).toISOString();
-  const dia = (t) => iso(t).slice(0, 10);
+  // O DIA sai no fuso de Brasília, não em UTC. As datas foram lidas da página como -03:00, então
+  // qualquer horário a partir das 21h vira o dia seguinte no toISOString — um leilão que começa
+  // "03/08 às 22:00" era gravado como 04/08 e o lote parecia aberto um dia a mais. Mesmo erro que
+  // fez a tela anunciar "encerrado em 04/08" num leilão de 03/08 (lote Rua Ita 55).
+  const dia = (t) => new Date(t).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
   // A data de encerramento só é afirmada quando NÃO há nenhuma data futura na página — com
   // uma futura por perto, a passada costuma ser a 1ª praça já vencida, e o lote segue vivo.
   const encerradaEm = (!fins.length && !inicios.length && !neutros.length && passadas.length)

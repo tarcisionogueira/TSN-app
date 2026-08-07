@@ -21,14 +21,23 @@
  * de informação é pior que deixar passar uma inútil.
  */
 
-// Aceita 'AAAA-MM-DD', ISO completo, Date. Data sem hora vale até o FIM do dia — senão um leilão
-// marcado para hoje apareceria como encerrado desde a meia-noite.
-function ms(v) {
+// Aceita 'AAAA-MM-DD', ISO completo, Date. Devolve DUAS coisas, e a separação não é detalhe:
+//   • `fim` — o instante em que o prazo acaba, para COMPARAR. Data sem hora vale até o fim do
+//     dia em horário de Brasília; senão um leilão marcado para hoje apareceria encerrado desde
+//     a meia-noite (e, se o fim do dia fosse tomado em UTC, o lote morreria às 21h BRT — com
+//     pregão às 21h30 ainda rolando).
+//   • `dia` — a data para MOSTRAR, tirada do texto original. Derivar o dia do instante era o bug
+//     que o dono viu no print: leilão de 03/08 anunciado como "encerrado em 04/08", porque o fim
+//     do dia em -03:00 cai depois da meia-noite UTC e o toISOString devolvia o dia seguinte.
+function limite(v) {
   if (!v) return null;
   const s = String(v).trim();
-  if (!/^\d{4}-\d{2}-\d{2}/.test(s)) { const t = Date.parse(s); return Number.isNaN(t) ? null : t; }
-  const t = Date.parse(s.length === 10 ? `${s}T23:59:59-03:00` : s);
-  return Number.isNaN(t) ? null : t;
+  const soData = /^\d{4}-\d{2}-\d{2}$/.test(s);
+  const fim = Date.parse(soData ? `${s}T23:59:59-03:00` : s);
+  if (Number.isNaN(fim)) return null;
+  // Com hora, o dia é lido no fuso de Brasília (é o fuso em que o leiloeiro publica).
+  const dia = soData ? s : new Date(fim).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+  return { fim, dia };
 }
 
 const ehVendaDireta = (m) => /venda[_\s-]?direta/i.test(String(m || ''));
@@ -41,20 +50,16 @@ export function leilaoEncerrado(im) {
   if (!im) return { encerrado: false, ultimaData: null, semData: true };
   const modalidade = im.modalidade || im.modalidade_norm;
   const datas = [
-    ms(im.data_leilao ?? im.dataLeilao),
-    ms(im.data_leilao_2 ?? im.dataLeilao2),
-    ms(im.data_fim ?? im.dataFim),
-  ].filter((x) => Number.isFinite(x));
+    limite(im.data_leilao ?? im.dataLeilao),
+    limite(im.data_leilao_2 ?? im.dataLeilao2),
+    limite(im.data_fim ?? im.dataFim),
+  ].filter(Boolean);
 
   if (!datas.length) return { encerrado: false, ultimaData: null, semData: true };
   if (ehVendaDireta(modalidade)) return { encerrado: false, ultimaData: null, semData: false };
 
-  const ultima = Math.max(...datas);
-  return {
-    encerrado: ultima < Date.now(),
-    ultimaData: new Date(ultima).toISOString().slice(0, 10),
-    semData: false,
-  };
+  const ultima = datas.reduce((a, b) => (b.fim > a.fim ? b : a));
+  return { encerrado: ultima.fim < Date.now(), ultimaData: ultima.dia, semData: false };
 }
 
 /** dd/mm/aaaa a partir de 'AAAA-MM-DD' (o formato que a função acima devolve). */

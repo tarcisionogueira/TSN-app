@@ -28,16 +28,21 @@
  * deixar passar uma inútil — o cliente pode ter contexto que o acervo não tem.
  */
 
-// Aceita 'AAAA-MM-DD', ISO completo e Date. Devolve ms ou null.
-function ms(v) {
+// Aceita 'AAAA-MM-DD', ISO completo e Date. Devolve o instante do FIM do prazo (para comparar) e
+// o DIA (para mostrar) — separados de propósito, porque juntá-los produzia dois erros opostos:
+//   • fim do dia em UTC dava o lote por encerrado às 20h59 de Brasília, com pregão das 21h ainda
+//     acontecendo;
+//   • derivar o dia do instante em -03:00 anunciava um leilão de 03/08 como "encerrado em 04/08"
+//     (o print do dono, lote Rua Ita 55).
+// A referência é sempre Brasília: é o fuso em que o leiloeiro publica.
+function limite(v) {
   if (!v) return null;
   const s = String(v).trim();
-  if (!/^\d{4}-\d{2}-\d{2}/.test(s)) {
-    const t = Date.parse(s);
-    return Number.isNaN(t) ? null : t;
-  }
-  const t = Date.parse(s.length === 10 ? `${s}T23:59:59Z` : s);
-  return Number.isNaN(t) ? null : t;
+  const soData = /^\d{4}-\d{2}-\d{2}$/.test(s);
+  const fim = Date.parse(soData ? `${s}T23:59:59-03:00` : s);
+  if (Number.isNaN(fim)) return null;
+  const dia = soData ? s : new Date(fim).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+  return { fim, dia };
 }
 
 /**
@@ -49,10 +54,10 @@ function ms(v) {
 export function encerradoPorDatas(row) {
   if (!row) return { encerrado: false, ultimaData: null };
   if (/venda[_\s-]?direta/i.test(String(row.modalidade || ''))) return { encerrado: false, ultimaData: null };
-  const validas = [ms(row.data_leilao), ms(row.data_leilao_2), ms(row.data_fim)].filter((x) => Number.isFinite(x));
+  const validas = [limite(row.data_leilao), limite(row.data_leilao_2), limite(row.data_fim)].filter(Boolean);
   if (!validas.length) return { encerrado: false, ultimaData: null }; // sem data → não afirma nada
-  const ultima = Math.max(...validas);
-  return { encerrado: ultima < Date.now(), ultimaData: new Date(ultima).toISOString().slice(0, 10) };
+  const ultima = validas.reduce((a, b) => (b.fim > a.fim ? b : a));
+  return { encerrado: ultima.fim < Date.now(), ultimaData: ultima.dia };
 }
 
 /**
@@ -72,21 +77,18 @@ export async function leilaoEncerrado(sb, imovelId, dataDoCliente = null) {
       if (/venda[_\s-]?direta/i.test(String(row.modalidade || ''))) return { encerrado: false, ultimaData: null };
       // `data_fim` é o "último prazo relevante" mantido pelo banco (trigger trg_data_fim_leilao):
       // ficava de fora e, em lote cujo prazo real só vive nela, o gate não enxergava nada.
-      candidatas.push(ms(row.data_leilao), ms(row.data_leilao_2), ms(row.data_fim));
+      candidatas.push(limite(row.data_leilao), limite(row.data_leilao_2), limite(row.data_fim));
       // Lote ATIVO sem nenhuma data conhecida: não dá para afirmar que encerrou.
       if (row.ativo && !candidatas.some(Boolean)) return { encerrado: false, ultimaData: null };
     }
   } catch { return { encerrado: false, ultimaData: null }; } // consulta falhou → falha aberta
-  candidatas.push(ms(dataDoCliente));
+  candidatas.push(limite(dataDoCliente));
 
-  const validas = candidatas.filter((x) => Number.isFinite(x));
+  const validas = candidatas.filter(Boolean);
   if (!validas.length) return { encerrado: false, ultimaData: null }; // sem data → não bloqueia
 
-  const ultima = Math.max(...validas);
-  return {
-    encerrado: ultima < Date.now(),
-    ultimaData: new Date(ultima).toISOString().slice(0, 10),
-  };
+  const ultima = validas.reduce((a, b) => (b.fim > a.fim ? b : a));
+  return { encerrado: ultima.fim < Date.now(), ultimaData: ultima.dia };
 }
 
 // Mensagem única para os dois geradores — o cliente precisa ver a mesma explicação venha de onde
