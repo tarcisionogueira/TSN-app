@@ -7,6 +7,7 @@ import { apiCall } from '../utils/apiCall';
 import ScoreRisco from '../components/ScoreRisco';
 import { fmtBRL, fmtData, MODAL_LABEL, explicacaoData } from '../utils/format';
 import { scoreBidPro, scoreLabel } from '../utils/score';
+import { leilaoEncerrado, dataBR } from '../utils/leilaoEncerrado';
 import { caixaMatriculaUrl, caixaRegrasVendaUrl } from '../utils/caixa';
 import { assinarAnexos } from '../utils/docUrl';
 import { formatarDescricaoImovel } from '../utils/descricao';
@@ -942,6 +943,10 @@ export default function ImovelDetalhe() {
   // direciona ao upgrade) — não mais como "Fazer upgrade para analisar" já no imóvel.
   const PLANOS_ANALISE = ['admin', 'analista', 'assessorado', 'clube', 'top2', 'top2_anual', 'explorador', 'consultor'];
   const podeFazerAnalise = PLANOS_ANALISE.includes(role);
+  // LEILÃO ENCERRADO (07/08): o servidor já recusava gerar relatório de lote vencido, mas a tela
+  // seguia oferecendo o botão — o cliente só descobria depois de clicar, e para ele o relatório
+  // "continuava disponível". Mesma regra dos dois lados (src/utils/leilaoEncerrado.js).
+  const encerrado = leilaoEncerrado(imovel);
   const economia = imovel.valorAvaliacao && imovel.valorMinimo ? imovel.valorAvaliacao - imovel.valorMinimo : null;
   const precoM2 = imovel.areaM2 > 0 && imovel.valorMinimo ? imovel.valorMinimo / imovel.areaM2 : null;
 
@@ -1608,7 +1613,11 @@ export default function ImovelDetalhe() {
 
               {/* Solicitar análise */}
               {user ? (
-                podeFazerAnalise ? (
+                encerrado.encerrado ? (
+                  <div style={{ padding: '13px 14px', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 12, fontSize: 12.5, color: '#9a3412', lineHeight: 1.55 }}>
+                    <strong>Leilão encerrado{encerrado.ultimaData ? ` em ${dataBR(encerrado.ultimaData)}` : ''}.</strong> Como não é mais possível dar lance, o relatório não é gerado para este lote.
+                  </div>
+                ) : podeFazerAnalise ? (
                   <button onClick={() => nav('/analise', { state: { imovel } })}
                     style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '13px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
                     <BarChart2 size={15} /> Solicitar Análise
@@ -1673,7 +1682,11 @@ export default function ImovelDetalhe() {
           </a>
         )}
         {user ? (
-          podeFazerAnalise ? (
+          encerrado.encerrado ? (
+            <div style={{ flex: 1, padding: '11px 13px', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 12, fontSize: 12, color: '#9a3412', fontWeight: 700, textAlign: 'center' }}>
+              Leilão encerrado{encerrado.ultimaData ? ` em ${dataBR(encerrado.ultimaData)}` : ''}
+            </div>
+          ) : podeFazerAnalise ? (
             <button onClick={() => nav('/analise', { state: { imovel } })}
               style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '13px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
               <BarChart2 size={16} /> Solicitar Análise

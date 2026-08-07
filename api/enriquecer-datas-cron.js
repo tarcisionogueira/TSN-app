@@ -43,7 +43,11 @@ export default async function handler(req, res) {
     'modalidade=not.ilike.*venda*direta*',
     'link_edital=ilike.*//*/*', // tem barra após o domínio → página de lote, não home
     'select=id,link_edital,url_lote,modalidade,data_leilao,data_leilao_2',
-    'order=enriquecido_em.asc.nullsfirst',
+    // Ordem: primeiro quem não tem data NENHUMA (`data_leilao` nulo). É o lote em que o gate
+    // de leilão encerrado fica cego — sem data ele falha aberto e o relatório segue oferecido.
+    // Depois, quem nunca foi tentado. Antes a fila era só por `enriquecido_em`, e os ~1.000 lotes
+    // sem data nenhuma disputavam vez com 5.600 que só queriam o prazo de encerramento.
+    'order=data_leilao.asc.nullsfirst,enriquecido_em.asc.nullsfirst',
     `limit=${LOTE_MAX}`,
   ].join('&');
 
@@ -52,7 +56,7 @@ export default async function handler(req, res) {
     res.status(200).json({ ok: true, processados: 0, com_data: 0, motivo: 'sem_candidatos' }); return;
   }
 
-  let comData = 0, comFim = 0, semConteudo = 0;
+  let comData = 0, comFim = 0, semConteudo = 0, encerrados = 0;
   const agora = new Date().toISOString();
   for (const im of candidatos) {
     const alvo = im.url_lote || im.link_edital;
@@ -60,9 +64,13 @@ export default async function handler(req, res) {
     const { html } = await fetchLote(alvo);
     const patch = { enriquecido_em: agora };
     if (html) {
-      const { inicio, fim } = extrairDatasLeilao(html);
+      const { inicio, fim, encerradaEm } = extrairDatasLeilao(html);
       if (inicio && !im.data_leilao) { patch.data_leilao = inicio; comData++; }
       if (fim && !im.data_leilao_2) { patch.data_leilao_2 = fim; comFim++; }
+      // Página só com data PASSADA e lote sem data alguma → leilão já ocorrido. Registrar é o
+      // que tira o lote do limbo "sem data" (onde o gate de encerrado falha aberto e o
+      // relatório segue oferecido). Só quando não há NENHUMA data futura — ver extrairDatasLeilao.
+      if (encerradaEm && !im.data_leilao && !im.data_leilao_2) { patch.data_leilao = encerradaEm; encerrados++; }
     } else {
       semConteudo++;
       // Sem conteúdo costuma ser teto do Bright Data atingido → para de martelar.
@@ -71,7 +79,7 @@ export default async function handler(req, res) {
     await marcar(im.id, patch);
   }
 
-  res.status(200).json({ ok: true, processados: candidatos.length, com_data: comData, com_encerramento: comFim, sem_conteudo: semConteudo });
+  res.status(200).json({ ok: true, processados: candidatos.length, com_data: comData, com_encerramento: comFim, ja_encerrados: encerrados, sem_conteudo: semConteudo });
 }
 
 async function marcar(id, patch) {

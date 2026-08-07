@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { leilaoEncerrado, dataBR } from '../utils/leilaoEncerrado';
 import { useIsMobile } from '../utils/useIsMobile';
 import {
   FileText, Loader2, Sparkles, BarChart3, ShieldAlert, TrendingUp,
@@ -193,6 +194,11 @@ export default function Analise() {
   }, [role, user, semLimite, limiteRole]);
 
   useEffect(() => { carregarCota(); }, [carregarCota]);
+
+  // LEILÃO ENCERRADO — mesma regra do servidor (api/_leilao-encerrado.js). O gate de lá já
+  // recusava gerar (sem cobrar cota), mas esta tela seguia oferecendo os três botões: o cliente
+  // clicava, esperava, e só então tomava o "não". Achado do dono em 07/08, no lote de Guarulhos.
+  const loteEncerrado = leilaoEncerrado(imovelInicial);
 
   const [d, setD] = useState(() => {
     if (imovelInicial) return {
@@ -1659,13 +1665,18 @@ export default function Analise() {
             <div style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:16, padding: isMobile?'18px':'26px' }}>
               <div style={{ fontSize:16, fontWeight:900, color:'#111', marginBottom:4 }}>Gerar relatórios de análise</div>
               <div style={{ fontSize:13, color:'#64748b', marginBottom:18, lineHeight:1.6 }}>A IA usa automaticamente os dados e documentos deste imóvel. Gere cada relatório, eles vão para a barra lateral e abrem aqui. Com os dois prontos, libera a reunião com o analista.</div>
+              {loteEncerrado.encerrado && (
+                <div style={{ background:'#fff7ed', border:'1px solid #fed7aa', borderRadius:12, padding:'12px 14px', marginBottom:16, fontSize:12.5, color:'#9a3412', lineHeight:1.6 }}>
+                  <strong>Leilão encerrado{loteEncerrado.ultimaData ? ` em ${dataBR(loteEncerrado.ultimaData)}` : ''}.</strong> Como não é mais possível dar lance, novos relatórios não são gerados para este lote — e nenhuma cota é consumida. Relatórios já gerados continuam disponíveis para consulta.
+                </div>
+              )}
               <div style={{ display:'grid', gridTemplateColumns: isMobile?'1fr':'1fr 1fr', gap:14 }}>
                 {[
                   { k:'mercado', cor:'#0d9488', bg:'#f0fdfa', Icon:BarChart3, titulo:'Mercadológico + Viabilidade Financeira', desc:'Avaliação de mercado (níveis 1 e 2), estrutura de custos, cenários, ROI/ROE e teto de lance.', ok:relMercadoGerado, gerando:gerandoMercado, fn:gerarRelMercado, block: analisesBloqueado, seqBloqueado:false, ordem:1 },
                   { k:'documental', cor:'#1e3a8a', bg:'#eef2ff', Icon:Scale, titulo:'Análise Documental + Processo', desc:'Leitura do edital/matrícula (ônus e gravames) e consulta do processo no CNJ + certidões fiscais.', ok:relDocumentalGerado, gerando:gerandoDocumental, preparando:relDocumentalPreparando, faltamDocs:relDocumentalFaltamDocs, fn:gerarRelDocumental, block:false, seqBloqueado: !relMercadoGerado && !relDocumentalGerado, planoBloqueado: ROLES_SEM_DOCUMENTAL.includes(role), ordem:2 },
                   { k:'laudo', cor:'#111111', bg:'#f1f5f9', Icon:Award, titulo:'Laudo de Viabilidade (Parecer Final)', desc:'Consolida os dois relatórios acima num veredito de defesa (aprovado/condicional/reprovado), com condições e diligências. Não reprocessa fontes, sintetiza o que já foi gerado.', ok:relLaudoGerado, gerando:gerandoLaudo, fn:gerarRelLaudo, block:false, seqBloqueado: !ambosRelatorios && !relLaudoGerado, planoBloqueado: ROLES_SEM_DOCUMENTAL.includes(role), ordem:3 },
                 ].map(c => {
-                  const travado = c.gerando || c.preparando || c.block || c.seqBloqueado || c.planoBloqueado;
+                  const travado = c.gerando || c.preparando || c.block || c.seqBloqueado || c.planoBloqueado || (loteEncerrado.encerrado && !c.ok);
                   return (
                   <div key={c.k} style={{ border:`1px solid ${c.ok?c.cor:(c.preparando||c.faltamDocs)?'#fde68a':'#e2e8f0'}`, borderRadius:14, padding:'18px', display:'flex', flexDirection:'column', gap:12, background: c.ok?c.bg:'white', opacity: c.seqBloqueado?0.7:1 }}>
                     <div style={{ display:'flex', alignItems:'center', gap:10 }}>
@@ -1689,6 +1700,7 @@ export default function Analise() {
                           style={{ flex:1, padding:'10px', background: travado?(c.preparando?'#d97706':'#cbd5e1'):(c.faltamDocs?'#b45309':c.cor), color:'white', border:'none', borderRadius:10, fontWeight:800, fontSize:13, cursor: (travado && !c.preparando)?'default':'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
                           {c.gerando ? <><Loader2 size={15} style={{animation:'spin 1s linear infinite'}}/> Gerando...</>
                             : c.preparando ? <><Loader2 size={15} style={{animation:'spin 1s linear infinite'}}/> Preparando documentos…</>
+                            : (loteEncerrado.encerrado && !c.ok) ? <><Lock size={14}/> Leilão encerrado</>
                             : c.seqBloqueado ? <><Lock size={14}/> Gere o 1º antes</>
                             : c.faltamDocs ? <><RefreshCw size={15}/> Tentar de novo</>
                             : <><Sparkles size={15}/> {c.ok?'Regerar':'Gerar'}</>}

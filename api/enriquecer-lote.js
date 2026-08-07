@@ -68,6 +68,14 @@ export async function fetchLote(url) {
  *
  * Exigir uma palavra-âncora no contexto continua sendo o que impede pegar data solta do texto
  * (nº de alvará, data de matrícula). Sem âncora, a data é ignorada.
+ *
+ * DATA JÁ PASSADA (achado do dono, 07/08 — "continua com relatório disponível mesmo após o
+ * leilão encerrado"): as datas anteriores a ontem eram DESCARTADAS aqui. A consequência era
+ * silenciosa e grave: numa página que diz "Leilão encerrado em 22/07/2026", nada era extraído,
+ * o lote ficava SEM DATA para sempre, e sem data o gate de leilão encerrado falha aberto — ou
+ * seja, o lote vencido seguia oferecendo relatório. Agora a mais recente das datas passadas
+ * volta em `encerradaEm`, num campo SEPARADO: quem grava decide se registra (o cron/ondemand
+ * registram só quando não há nenhuma data futura, para nunca rebaixar um prazo bom).
  */
 const RE_DATA_LOTE = /(\d{2})\/(\d{2})\/(\d{2,4})(?:[^0-9]{0,12}(\d{1,2})[:h](\d{2}))?/g;
 const CTX_ANCORA = /leil|pra[cçÇ]|encerr|in[íi]cio|inicio|abertura|t[eé]rmino|termino|licita|aliena|data/i;
@@ -80,13 +88,14 @@ const CTX_INICIO = /in[íi]cio|inicio|abertura|come[cç]|1[ªa°]?\s*pra[cç]a|p
 const CTX_ANCORA_ESTRITA = /leil|pra[cçÇ]|encerr|hasta|aliena|licita|t[eé]rmino|termino/i;
 
 export function extrairDatasLeilao(html, { estrito = false } = {}) {
-  const vazio = { inicio: null, fim: null };
+  const vazio = { inicio: null, fim: null, encerradaEm: null };
   if (!html) return vazio;
   const ancora = estrito ? CTX_ANCORA_ESTRITA : CTX_ANCORA;
   const txt = html.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ');
   const ontem = Date.now() - 86400000;
+  const piso = Date.now() - 400 * 86400000;   // datas passadas ainda úteis (ver `passadas`)
   const limite = Date.now() + 730 * 86400000; // 2 anos: janelas de alienação passam de 1 ano
-  const fins = [], inicios = [], neutros = [];
+  const fins = [], inicios = [], neutros = [], passadas = [];
   let m;
   RE_DATA_LOTE.lastIndex = 0;
   while ((m = RE_DATA_LOTE.exec(txt))) {
@@ -97,15 +106,23 @@ export function extrairDatasLeilao(html, { estrito = false } = {}) {
     const mi = m[5] || '00';
     // -03:00 fixo: leiloeiro brasileiro publica em horário de Brasília.
     const t = Date.parse(`${y}-${m[2]}-${m[1]}T${hh}:${mi}:00-03:00`);
-    if (isNaN(t) || t < ontem || t >= limite) continue;
+    if (isNaN(t) || t >= limite) continue;
+    // Passado recente (até ~13 meses) fica guardado à parte: é o que revela que o leilão JÁ
+    // ACONTECEU. Não entra nos baldes de início/fim para não contaminar o prazo.
+    if (t < ontem) { if (t >= piso) passadas.push(t); continue; }
     if (CTX_FIM.test(ctx)) fins.push(t);
     else if (CTX_INICIO.test(ctx)) inicios.push(t);
     else neutros.push(t);
   }
-  if (!fins.length && !inicios.length && !neutros.length) return vazio;
-
   const iso = (t) => new Date(t).toISOString();
   const dia = (t) => iso(t).slice(0, 10);
+  // A data de encerramento só é afirmada quando NÃO há nenhuma data futura na página — com
+  // uma futura por perto, a passada costuma ser a 1ª praça já vencida, e o lote segue vivo.
+  const encerradaEm = (!fins.length && !inicios.length && !neutros.length && passadas.length)
+    ? dia(Math.max(...passadas)) : null;
+
+  if (!fins.length && !inicios.length && !neutros.length) return { ...vazio, encerradaEm };
+
   const baseInicio = inicios.length ? inicios : neutros;
   const inicio = baseInicio.length ? dia(Math.min(...baseInicio)) : null;
   let fim = fins.length ? iso(Math.max(...fins))
@@ -113,7 +130,7 @@ export function extrairDatasLeilao(html, { estrito = false } = {}) {
     : (neutros.length >= 2 ? iso(Math.max(...neutros)) : null);
   // Fim igual ao início não acrescenta nada (e viraria ruído na tela).
   if (fim && inicio && fim.slice(0, 10) === inicio) fim = null;
-  return { inicio, fim };
+  return { inicio, fim, encerradaEm: null };
 }
 
 // Compatibilidade: quem só quer "a data do lote" continua chamando isto. Devolve o INÍCIO —
@@ -264,9 +281,13 @@ export default async function handler(req, res) {
   if (achado.foto && !im.link_foto) patch.link_foto = achado.foto;
   // PAR de datas do leiloeiro (mesma extração da CEF): início E encerramento. Cada um só é
   // gravado se ainda faltava — nunca sobrescreve dado bom já existente.
-  const datas = precisaData ? extrairDatasLeilao(html) : { inicio: null, fim: null };
+  const datas = precisaData ? extrairDatasLeilao(html) : { inicio: null, fim: null, encerradaEm: null };
   if (datas.inicio && !im.data_leilao) patch.data_leilao = datas.inicio;
   if (datas.fim && !im.data_leilao_2) patch.data_leilao_2 = datas.fim;
+  // A página só tinha data JÁ PASSADA e o lote não tinha data nenhuma: é um leilão que já
+  // aconteceu. Registrar isso é o que faz o gate de leilão encerrado enxergar o lote — sem
+  // registrar, ele ficava eternamente "sem data" e continuava oferecendo relatório.
+  if (datas.encerradaEm && !im.data_leilao && !im.data_leilao_2) patch.data_leilao = datas.encerradaEm;
 
   // AVALIAÇÃO real da página do lote (quando não temos uma válida) — corrige o
   // "100% abaixo da avaliação" sem valor e recalcula o desconto. O trigger do banco

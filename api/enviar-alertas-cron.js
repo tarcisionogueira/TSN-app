@@ -38,6 +38,7 @@ import MUNICIPIOS from './_municipios.js';
 import { assinarUnsub } from './cancelar-alertas.js';
 import { ALLOWED_HOSTS } from './_allowed-hosts.js';
 import { enviarWebPush } from './_webpush.js';
+import { encerradoPorDatas } from './_leilao-encerrado.js';
 import { CIDADES_TEMPORADA } from './_temporada.js';
 
 // Espelho das constantes da Busca (src/pages/Busca.jsx) — a INTENÇÃO salva no filtro
@@ -58,7 +59,7 @@ function centroide(cidade, uf) {
   const c = MUNICIPIOS[`${String(uf).toUpperCase()}|${norm(cidade)}`];
   return Array.isArray(c) ? { lat: c[0], lng: c[1] } : null;
 }
-const SEL = 'id,titulo,endereco,cidade,estado,tipo,modalidade,valor_minimo,valor_avaliacao,desconto_percentual,data_leilao,data_fim,link_foto,fonte,fonte_id';
+const SEL = 'id,titulo,endereco,cidade,estado,tipo,modalidade,valor_minimo,valor_avaliacao,desconto_percentual,data_leilao,data_leilao_2,data_fim,link_foto,fonte,fonte_id';
 
 // Foto para o E-MAIL: url ÚNICA e confiável (o e-mail não tem fallback onError como o
 // site). Motivo do "sem foto" em alguns cards: fontes como a Caixa BLOQUEIAM hotlink de
@@ -400,7 +401,12 @@ async function handler(req) {
       // oportunidades, sem repetir. Se não houver novidade suficiente, manda menos (não
       // recicla). Cada fonte já vem ordenada por maior desconto (>40% lideram).
       const despejar = (lista, limite) => {
-        const frescos = (lista || []).filter(im => im && im.id && !enviadosSet.has(im.id));
+        // LEILÃO ENCERRADO nunca entra no e-mail (07/08). Mandar toda segunda um lote cujo prazo
+        // já passou é pior que mandar menos: o cliente clica, se interessa e descobre que não dá
+        // mais para dar lance. Ponto de estrangulamento único — TODAS as fontes de lote (filtro
+        // salvo, raio, similares, país) passam por aqui.
+        const frescos = (lista || []).filter(im => im && im.id && !enviadosSet.has(im.id)
+          && !encerradoPorDatas(im).encerrado);
         let n = 0;
         for (const im of frescos) {
           if (n >= limite || pool.size >= LIMITE) break;
