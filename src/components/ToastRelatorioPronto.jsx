@@ -19,18 +19,35 @@ export default function ToastRelatorioPronto() {
   const [toasts, setToasts] = useState([]);
   const prev = useRef(null); // Map(key -> status); null = ainda não inicializado
 
+  // "CONCLUÍDA" NÃO É SINÔNIMO DE PRONTO (achado do dono, 07/08 — Cotia).
+  // O documental grava status 'concluida' com `precisaDocumentos: true` enquanto a captura
+  // automática ainda está baixando matrícula/edital, e a tela re-tenta a cada 25s. Como o
+  // toast olhava só o status, cada ciclo virava um "Pronto!" — o dono recebeu a notificação
+  // várias vezes com o relatório ainda incompleto. O laudo tem o mesmo estado intermediário
+  // (`precisaRelatorios`). Aqui o gate passa a ser a ENTREGA, não o status.
+  const entregue = (tipo, a) => {
+    if (a?.status !== 'concluida') return false;
+    const r = a.result || {};
+    if (tipo === 'documental') return !r.precisaDocumentos;
+    if (tipo === 'laudo') return !r.precisaRelatorios;
+    return true;
+  };
+
   useEffect(() => {
     const listas = { mercado: analises, documental: documentais, laudo: laudos };
     const atual = new Map();
     for (const [tipo, lista] of Object.entries(listas)) {
-      for (const a of (lista || [])) atual.set(`${tipo}:${a.imovelId}`, a.status);
+      // Guarda o estado de ENTREGA (não o status cru): assim "aguardando documento" e
+      // "pronto" são estados distintos e a transição só dispara na virada de verdade.
+      for (const a of (lista || [])) atual.set(`${tipo}:${a.imovelId}`, entregue(tipo, a) ? 'pronto' : a.status);
     }
     if (prev.current === null) { prev.current = atual; return; } // 1ª passada: só registra
     const novos = [];
     for (const [tipo, lista] of Object.entries(listas)) {
       for (const a of (lista || [])) {
         const key = `${tipo}:${a.imovelId}`;
-        if (a.status === 'concluida' && prev.current.get(key) === 'gerando') {
+        const antes = prev.current.get(key);
+        if (entregue(tipo, a) && antes !== 'pronto' && antes !== undefined) {
           novos.push({ id: `${key}:${a.updatedAt || ''}`, tipo, imovelId: a.imovelId, titulo: a.titulo, cidade: a.cidade, estado: a.estado, imovel: a.imovel });
         }
       }

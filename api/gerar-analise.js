@@ -16,6 +16,10 @@ import { referenciaPonderada } from './_indice-ponderacao.js';
 import { geocodificarCascata, rankNivel, coordValida } from './_geo.js';
 import { extratoEdital, extratoMatricula } from './_edital-extrato.js';
 import { pagamentoPrior, pagamentoAprender } from './_doc-extracao.js';
+// MESMA função pura que a tela usa para ROI/ROE/capital/teto. Importada aqui para o
+// servidor RECALCULAR a viabilidade depois de descobrir o valor de mercado (ver o bloco
+// "MÉTRICAS RECALCULADAS NO SERVIDOR" no parecer) — parecer e tela param de divergir.
+import { calcularMetricasCenario, calcularTetoLance } from '../src/utils/calculos.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -1412,10 +1416,20 @@ ${blocoSocio(mercado?.socio, inp.cidade)}
 
 AQUISIÇÃO E RETORNO:
 - Lance SEM disputa (lance base): R$ ${brl(inp.valorArrematacao)}
-- Lance MÁXIMO COM disputa (preserva o piso de lucro): R$ ${brl(inp._teto)}
+${Number(inp.valorMercado) > 0
+  // SEM valor de mercado NÃO existe retorno: lucro e ROI sairiam de uma venda por zero
+  // (o "prejuízo integral" que reprovava imóveis bons). Nesse caso o parecer diz que a
+  // referência não foi estimada, em vez de imprimir um número que não significa nada.
+  ? `- Lance MÁXIMO COM disputa (preserva o piso de lucro): R$ ${brl(inp._teto)}
 - Capital total aportado: R$ ${brl(m.capitalMobilizado)}
 - Lucro/Economia estimada: R$ ${brl(m.lucro)}
-- Retorno (ROI/ROE): ${(m.roi || 0).toFixed(2)}%
+- Retorno (ROI/ROE): ${(m.roi || 0).toFixed(2)}%`
+  : `- Capital total aportado: R$ ${brl(m.capitalMobilizado)}
+- ATENÇÃO: a pesquisa NÃO conseguiu estimar o valor de mercado desta unidade. NÃO calcule
+  nem cite lucro, ROI, ROE ou teto de lance neste parecer, e NÃO trate a ausência de
+  referência como prejuízo. Informe com transparência que a referência de mercado não foi
+  estimada nesta rodada, apresente apenas os CUSTOS da operação e oriente o cliente a
+  confirmar o valor de mercado antes de definir o lance.`}
 OBSERVAÇÕES: ${inp.observacoes || 'Sem observações adicionais'}
 ${debitos}
 
@@ -2172,6 +2186,49 @@ export default async function handler(req, res) {
           perfilInvestidor = p?.perfil_investidor || null;
         } catch { /* sem perfil → parecer padrão pelo objetivoCompra */ }
         const pInp = { ...parecerInputs.d, valorMercado: valorMercado || parecerInputs.d.valorMercado, _cenario: parecerInputs.cenario, _teto: parecerInputs.teto, _perfil: perfilInvestidor };
+        // ── MÉTRICAS RECALCULADAS NO SERVIDOR (07/08) ────────────────────────────────
+        // As métricas de viabilidade (capital, lucro, ROI, teto de lance) chegavam PRONTAS
+        // do cliente: a tela as calcula no clique, ANTES da pesquisa de mercado existir.
+        // Quando o imóvel ainda não tinha valor de mercado preenchido, o cliente calculava
+        // com valorMercado = 0 e mandava o resultado disso — o servidor corrigia só o
+        // `valorMercado` do pInp e imprimia as métricas velhas no parecer. Caso real (Cotia,
+        // 07/08): mercado R$ 895.000 contra praça de R$ 500.929 (44% de desconto), mas o
+        // parecer saiu com capital R$ 169.407, prejuízo de R$ 629.427 e ROI −371,55% —
+        // números de um imóvel que valeria zero. O LAUDO leu o parecer e REPROVOU, com
+        // razão; o terceiro relatório era o mensageiro, não o bug. Agora o servidor
+        // recalcula com o valor que ele mesmo descobriu, usando a MESMA função pura da
+        // tela, para que parecer, laudo e tela falem do mesmo imóvel.
+        const isAVistaParecer = parecerInputs.cenario === 'À Vista' || !!pInp.somenteAVista;
+        let metricasParecer = parecerInputs.metricas || {};
+        const vmCliente = Number(parecerInputs.d?.valorMercado) || 0;
+        const vmServidor = Number(pInp.valorMercado) || 0;
+        // Recalcula quando o cliente não tinha valor de mercado, quando o servidor achou
+        // outro (>2% de diferença) ou quando as métricas vieram vazias/zeradas.
+        const precisaRecalcular = vmServidor > 0
+          && (vmCliente <= 0
+            || Math.abs(vmServidor - vmCliente) / vmServidor > 0.02
+            || !(Number(metricasParecer.capitalMobilizado) > 0));
+        if (precisaRecalcular) {
+          try {
+            const antesRoi = Number(metricasParecer.roi) || 0;
+            metricasParecer = calcularMetricasCenario(pInp, Number(pInp.valorArrematacao) || 0, isAVistaParecer);
+            // Mesma meta da tela: uso próprio não persegue retorno, investimento mira 30%.
+            const metaRetorno = pInp.objetivoCompra === 'uso_proprio' ? 0 : 30;
+            pInp._teto = calcularTetoLance(pInp, isAVistaParecer, metaRetorno, vmServidor);
+            parecerDiag.metricasRecalculadas = {
+              vmCliente, vmServidor, cenario: isAVistaParecer ? 'aVista' : 'alavancado',
+              roiAntes: Math.round(antesRoi * 100) / 100,
+              roiDepois: Math.round((Number(metricasParecer.roi) || 0) * 100) / 100,
+              tetoAntes: Math.round(Number(parecerInputs.teto) || 0),
+              tetoDepois: Math.round(Number(pInp._teto) || 0),
+            };
+          } catch (e) {
+            // Falhou o recálculo: segue com o que veio do cliente (parecer imperfeito é
+            // melhor que geração perdida), mas fica registrado no diagnóstico.
+            metricasParecer = parecerInputs.metricas || {};
+            parecerDiag.metricasErro = String(e?.message || e || '').slice(0, 160);
+          }
+        }
         // APRENDIZADO: correções que analistas fizeram em avaliações anteriores
         // (via transcrição de reunião → mercado_aprendizado) voltam ao prompt. No-op
         // enquanto não houver lições; fica mais assertivo com o uso.
@@ -2190,7 +2247,7 @@ export default async function handler(req, res) {
         // Corpus coletivo da MESMA região/tipo (aprendizado das emissões anteriores).
         try { aprendizadoMercado += await corpusDaRegiao(imovel?.estado || null, imovel?.tipo || null); } catch { /* best-effort */ }
         const sysParecer = 'Você é gestor sênior da BidPro Brasil. Redija um parecer MERCADOLÓGICO e de VIABILIDADE FINANCEIRA. Não faça análise jurídica (CNJ, gravames, diligências) — isso é de outros relatórios. EXCEÇÃO: os débitos/encargos informados que serão assumidos DEVEM constar (são custo da operação), com a indicação de onde confirmá-los. Preciso e persuasivo. Nunca use markdown nem asteriscos. Nunca use travessão (o caractere "—"); escreva com vírgula, ponto ou dois-pontos. Apenas texto simples.' + aprendizadoMercado;
-        let conteudoParecer = promptParecer(pInp, parecerInputs.metricas || {}, mercado, docs);
+        let conteudoParecer = promptParecer(pInp, metricasParecer, mercado, docs);
         // Condições LIDAS no edital (extrato determinístico): o parecer cenariza pela
         // praça real (valores/datas) e cita o pagamento do DOCUMENTO, não suposição.
         if (mercado.condicoesEdital) {
