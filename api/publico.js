@@ -332,23 +332,32 @@ async function paginaImovel(id) {
     // correto é `RealEstateListing`, e é por estar como Product que o Google aplica as
     // validações de loja (identificador, frete, devolução, nota) que nunca farão sentido
     // aqui. Trocar o tipo afeta as 33 mil páginas recém-enviadas — decisão do dono.
-    jsonld: {
+    // ERRO CRÍTICO do Search Console (07/08): "Especifique offers, review ou aggregateRating".
+    // A causa NÃO é o dilema Product×RealEstateListing anotado acima — é que o bloco `offers`
+    // sempre foi CONDICIONAL ao preço. Lote sem `valor_minimo` publicava um `Product` sem
+    // offers, sem review e sem aggregateRating: para o Google, um produto que não é comprável
+    // nem avaliável, ou seja, marcação inválida. Medido hoje: 7 lotes de 33.327 (0,02%),
+    // concentrados em PESTANA e SUPERBID.
+    // A saída é NÃO publicar Product quando não há preço. Não se perde nada: sem preço não
+    // existe rich snippet de preço a exibir, então o JSON-LD só podia gerar erro. E preservar
+    // `Product` nos 33 mil lotes COM preço mantém o rich snippet que a troca para
+    // `RealEstateListing` custaria — por isso a troca deixa de ser necessária para fechar
+    // este erro (a pendência de fundo segue registrada acima, mas sem urgência).
+    jsonld: Number(im.valor_minimo) > 0 ? {
       '@context': 'https://schema.org', '@type': 'Product',
       name: im.titulo || `${t} em leilão em ${im.cidade || ''}`,
       description: `${t} em leilão em ${local}.`,
       url: canonical,
       ...(im.fonte_id ? { sku: String(im.fonte_id) } : {}),
       ...(im.link_foto ? { image: im.link_foto } : {}),
-      ...(Number(im.valor_minimo) > 0 ? {
-        offers: {
-          '@type': 'Offer', price: Math.round(Number(im.valor_minimo)), priceCurrency: 'BRL',
-          availability: im.ativo ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
-          url: canonical,
-          // Só quando existe prazo de verdade — data inventada seria pior que campo ausente.
-          ...(im.data_fim ? { priceValidUntil: String(im.data_fim).slice(0, 10) } : {}),
-        },
-      } : {}),
-    },
+      offers: {
+        '@type': 'Offer', price: Math.round(Number(im.valor_minimo)), priceCurrency: 'BRL',
+        availability: im.ativo ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
+        url: canonical,
+        // Só quando existe prazo de verdade — data inventada seria pior que campo ausente.
+        ...(im.data_fim ? { priceValidUntil: String(im.data_fim).slice(0, 10) } : {}),
+      },
+    } : null,
   });
 }
 
