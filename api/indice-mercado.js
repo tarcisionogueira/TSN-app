@@ -12,6 +12,7 @@ export const config = { runtime: 'nodejs', maxDuration: 250 };
 import { getUser } from './_auth.js';
 import { anthropicFetch } from './_claude.js';
 import { custoRespostaClaude, registrarCustoGeracao } from './_uso.js';
+import { groundingGemini, geminiDisponivel } from './_grounding.js';
 import { SEG_TIPOS, norm, extractText, parseJSON, promptIndice, montarAmostras } from './_indice-core.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
@@ -106,8 +107,29 @@ export default async function handler(req, res) {
   // buscas) e, se travar OU vier JSON truncado (parseJSON=null numa cidade grande), 2ª tentativa
   // ESTREITA (3 buscas) que costuma CONCLUIR — evita 502 e "0 amostras" numa pesquisa cara.
   const T0 = Date.now();
-  let custoMicro = 0, mercado = null, motivoFalha = null;
+  let custoMicro = 0, mercado = null, motivoFalha = null, motorUsado = null;
   const headers = { 'x-api-key': CLAUDE_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' };
+  // MOTOR PRIMÁRIO: Gemini grounding — o MESMO do mercadológico desde 30/07. O Índice tinha
+  // ficado para trás no Claude web_search e a conta chegou em 06/08: a pesquisa de "casa" em
+  // Santana de Parnaíba/Jardim Paula ABORTOU nas duas tentativas (200s) e o cliente recebeu
+  // "a pesquisa de mercado falhou" — enquanto o mercadológico, no mesmo tipo de trabalho,
+  // conclui em 60–90s. O Claude segue como FALLBACK: se o Gemini falhar ou vier vazio, o
+  // caminho antigo assume, então nada do que funcionava deixa de funcionar.
+  const buscarGemini = async (webUses, timeoutMs, compacto = false) => {
+    if (!geminiDisponivel()) return null;
+    const teto = `\n\nORÇAMENTO DE BUSCA: faça no MÁXIMO ${webUses} busca(s) na web, priorizando as que trazem anúncios do MESMO tipo e da MENOR distância. Traga VENDA e LOCAÇÃO.`;
+    const g = await groundingGemini({
+      prompt: promptIndice({ endereco: body.endereco, condominio: body.condominio, bairro: body.bairro, tipo, cidade: body.cidade, uf, compacto }) + teto,
+      sistema: `Perito avaliador. Só ${tipo}. Só mercado livre (descarte leilão). Retorne apenas JSON válido.`,
+      timeoutMs, maxOutputTokens: 24000,
+    });
+    custoMicro += Number(g.custoMicro) || 0;   // Gemini também entra na medição da geração
+    if (g.__falhou) { motivoFalha = `gemini: ${g.__erroApi}`; return null; }
+    const json = parseJSON(g.texto);
+    if (!json) { motivoFalha = `gemini JSON incompleto (stop=${g.diag?.stop}, out_tokens=${g.diag?.out_tokens})`; return null; }
+    motorUsado = 'gemini';
+    return json;
+  };
   const buscar = async (webUses, timeoutMs, compacto = false) => {
     let r;
     try {
@@ -134,6 +156,7 @@ export default async function handler(req, res) {
     const data = await r.json();
     try { custoMicro += custoRespostaClaude(MODEL, data?.usage); } catch { /* medição best-effort */ }
     const json = parseJSON(extractText(data)); // null se truncou (JSON incompleto)
+    if (json) motorUsado = 'claude';
     // DIAGNÓSTICO (achado 06/08): o 502 era MUDO — no log da Vercel só aparecia o status, sem
     // dizer se foi 429, timeout ou JSON cortado, e sem isso não dá para saber o que corrigir.
     if (!json) motivoFalha = `JSON incompleto (stop_reason=${data?.stop_reason}, output_tokens=${data?.usage?.output_tokens}, buscas=${data?.usage?.server_tool_use?.web_search_requests})`;
@@ -148,11 +171,18 @@ export default async function handler(req, res) {
   const ORCAMENTO_MS = 250000 - FOLGA_MS;    // maxDuration da função menos a folga
   const restante = () => ORCAMENTO_MS - (Date.now() - T0);
   const t1 = Math.min(120000, Math.max(30000, restante() - 90000));
-  try { mercado = await buscar(8, t1); } catch { mercado = null; }
+  // Gemini primeiro (rápido e barato); só cai no Claude se ele não entregar.
+  try { mercado = await buscarGemini(8, Math.min(80000, t1)); } catch { mercado = null; }
+  if (!mercado && restante() > 45000) {
+    try { mercado = await buscar(8, Math.min(t1, restante() - 30000)); } catch { mercado = null; }
+  }
   // 2ª tentativa ESTREITA e COMPACTA: menos buscas e menos amostras pedidas. Só entra com
   // tempo de sobra real — melhor devolver o motivo da 1ª falha do que morrer no timeout.
   if (!mercado && restante() > 35000) {
-    try { mercado = await buscar(3, Math.min(80000, restante() - 15000), true); } catch { mercado = null; }
+    try { mercado = await buscarGemini(3, Math.min(60000, restante() - 15000), true); } catch { mercado = null; }
+    if (!mercado && restante() > 35000) {
+      try { mercado = await buscar(3, Math.min(80000, restante() - 15000), true); } catch { mercado = null; }
+    }
   } else if (!mercado) {
     motivoFalha = `${motivoFalha || 'falha na 1ª tentativa'} | sem orçamento de tempo para a 2ª (restavam ${Math.round(restante() / 1000)}s)`;
   }
@@ -171,10 +201,10 @@ export default async function handler(req, res) {
   if (amostras.length) inseridas = (await rpc('ingerir_amostras_indice', { p_amostras: amostras })) || 0;
   // Tempo REAL de cada pesquisa bem-sucedida — é o que permite calibrar o orçamento acima em
   // vez de estimar. Sem isto, a única duração observável era a das que estouravam.
-  console.log('[indice-mercado] ok', { cidade: cidadeNorm, uf, tipo, segundos: Math.round((Date.now() - T0) / 1000), amostras: amostras.length, inseridas });
+  console.log('[indice-mercado] ok', { cidade: cidadeNorm, uf, tipo, motor: motorUsado, segundos: Math.round((Date.now() - T0) / 1000), amostras: amostras.length, inseridas });
   // Custo REAL desta pesquisa. É a única forma de comparar o índice (Claude web_search) com o
   // mercadológico (Gemini grounding) na mesma régua — os dois fazem o mesmo tipo de trabalho.
-  await registrarCustoGeracao('indice', { userId: user.id, imovelId: `${cidadeNorm}|${tipo}`, custoMicro, ok: amostras.length > 0, meta: { uf, bairro: bairroNorm || null, amostras: amostras.length, inseridas, segundos: Math.round((Date.now() - T0) / 1000) } });
+  await registrarCustoGeracao('indice', { userId: user.id, imovelId: `${cidadeNorm}|${tipo}`, custoMicro, ok: amostras.length > 0, meta: { uf, bairro: bairroNorm || null, motor: motorUsado, amostras: amostras.length, inseridas, segundos: Math.round((Date.now() - T0) / 1000) } });
 
   // Cobra 1 crédito só no SUCESSO: cota mensal → crédito. Uma pesquisa = um tipo = 1 crédito.
   const cobrar = async () => {

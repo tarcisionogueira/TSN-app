@@ -126,7 +126,11 @@ export async function medirGemini(model, data, operacao = 'messages') {
     const buscas = operacao === 'grounding' ? 1 : 0; // 1 grounding por chamada com busca
     const custo = custoMicro(model, tin, tout) + Math.round(buscas * GROUNDING_USD * 1e6);
     await registrarUso('gemini', operacao, { requests: 1, tokens_in: tin, tokens_out: tout, unidades: buscas, custo_usd_micro: custo });
-  } catch { /* best-effort */ }
+    // DEVOLVE o custo (antes só registrava): os geradores acumulam o custo REAL da geração em
+    // `geracao_custos`, e esse acumulador só contava o Claude. Com o mercadológico rodando no
+    // Gemini, a maior parte do custo dele ficava de fora da própria métrica de custo.
+    return custo;
+  } catch { return 0; }
 }
 
 /**

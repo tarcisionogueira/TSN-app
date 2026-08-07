@@ -7,7 +7,8 @@ export const config = { runtime: 'nodejs', maxDuration: 300 };
 import { getUser } from './_auth.js';
 import { fetchExternoSeguro } from './_allowed-hosts.js';
 import { anthropicFetch } from './_claude.js';
-import { custoRespostaClaude, medirGemini, registrarCustoGeracao } from './_uso.js';
+import { custoRespostaClaude, registrarCustoGeracao } from './_uso.js';
+import { groundingGemini } from './_grounding.js';
 import { resumoAprendizadoTexto } from './_arremate-aprendizado.js';
 import { ehCidadeTemporada, motivoTemporada } from './_temporada.js';
 import { composicaoTemporal, avisoFrescor } from './_indice-composicao.js';
@@ -28,35 +29,17 @@ const REUSE_DIAS = Number(process.env.ANALISE_REUSE_DIAS || 7); // reaproveita a
 // automaticamente — custo baixo sem perder uptime/qualidade.
 const MERCADO_MOTOR = (process.env.MERCADO_MOTOR || 'gemini').trim().toLowerCase();
 const GEMINI_KEY = (process.env.GEMINI_API_KEY || '').trim();
-const GEMINI_MODEL_MERCADO = (process.env.GEMINI_MODEL || 'gemini-2.5-flash').trim();
 
-// Pesquisa mercadológica no Gemini com grounding. MESMO prompt/sistema do Claude. Devolve o JSON
-// já parseado (+__diag), ou { __falhou } para o chamador cair no Claude. thinkingBudget:0 evita o
-// "pensamento" do 2.5-flash consumir o teto e truncar o JSON (mesma configuração validada no A/B).
+// Pesquisa mercadológica no Gemini com grounding. MESMO prompt/sistema do Claude. O motor
+// saiu daqui para `_grounding.js` em 06/08 e passou a ser compartilhado com o ÍNDICE, que
+// continuava no Claude web_search e abortava por timeout (200s) em endereço comum. Aqui fica
+// só o que é do relatório: o parse (com recuperação de JSON truncado) e o __diag.
 async function buscarGeminiGrounding({ prompt, sistema, timeoutMs }) {
-  if (!GEMINI_KEY) return { __falhou: true, __erroApi: 'sem GEMINI_API_KEY' };
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), Math.max(20000, timeoutMs || 60000));
-  try {
-    const r = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(GEMINI_MODEL_MERCADO)}:generateContent`,
-      { method: 'POST', headers: { 'content-type': 'application/json', 'x-goog-api-key': GEMINI_KEY }, signal: ctrl.signal,
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: sistema }] },
-          contents: [{ role: 'user', parts: [{ text: prompt }] }],
-          tools: [{ google_search: {} }],
-          generationConfig: { maxOutputTokens: 24000, thinkingConfig: { thinkingBudget: 0 } },
-        }) });
-    if (!r.ok) { const b = await r.text().catch(() => ''); return { __falhou: true, __erroApi: `HTTP ${r.status}: ${b.slice(0, 120)}` }; }
-    const data = await r.json();
-    try { medirGemini(GEMINI_MODEL_MERCADO, data, 'grounding'); } catch { /* mede best-effort */ }
-    const text = (data?.candidates?.[0]?.content?.parts || []).map((p) => (p && typeof p.text === 'string' ? p.text : '')).join('');
-    const parsed = parseJSON(text) || {};
-    parsed.__diag = { motor: 'gemini', stop: data?.candidates?.[0]?.finishReason || null, textoLen: (text || '').length, out_tokens: data?.usageMetadata?.candidatesTokenCount || 0 };
-    return parsed;
-  } catch (e) {
-    return { __falhou: true, __erroApi: `gemini exc: ${String(e?.message || e).slice(0, 120)}` };
-  } finally { clearTimeout(timer); }
+  const g = await groundingGemini({ prompt, sistema, timeoutMs });
+  if (g.__falhou) return g;
+  const parsed = parseJSON(g.texto) || {};
+  parsed.__diag = g.diag;
+  return parsed;
 }
 
 // ENDEREÇO COMPLETO A PARTIR DO DOCUMENTO (pedido do dono: "não puxar o endereço estando no

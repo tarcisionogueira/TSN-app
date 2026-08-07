@@ -627,6 +627,39 @@ mercadológico calculava `divergenciaArea` (anúncio × matrícula), registrava 
 relatório". O cliente via a área da matrícula sem saber que o anúncio dizia outra coisa. Agora vai
 no `result`, aparece no rodapé e no PDF.
 
+### 🔴 16) O Índice falhou num endereço real — e a instrumentação de hoje entregou a causa
+
+Teste do dono em 06/08: `Estrada de Ipanema, 2900 · Jardim Paula · Santana de Parnaíba/SP`, tipo
+CASA. A tela mostrou **"A pesquisa de mercado falhou"**, caiu para a referência de CIDADE
+(R$ 7.033/m² PROJETADO, 24 amostras) e o aluguel saiu como "não localizamos anúncios" — numa
+região onde o dono sabe que **há oferta de locação**.
+
+**A causa saiu no primeiro lugar em que olhei**, porque a medição de custo por geração entrou
+hoje: `geracao_custos` já tinha a linha com `ok:false` e
+`motivo: "rede/timeout: AbortError"`. O log confirmou: **200 segundos, as duas tentativas
+abortadas**. Não foi falta de anúncio na região — foi a busca não voltar.
+
+**Causa-raiz: o Índice era o único que ainda rodava no Claude web_search.** O mercadológico
+migrou para o Gemini grounding em 30/07 e conclui em 60–90s; o Índice ficou para trás e paga por
+isso duas vezes — **4× mais caro** (US$ 0,54 contra US$ 0,14, porque o resultado da busca volta
+ao contexto: ~114 mil tokens de ENTRADA por chamada) e, agora, **sem concluir**.
+
+**Corrigido:** o motor de grounding saiu de dentro do `gerar-analise.js` para `api/_grounding.js`
+e passou a ser compartilhado. O Índice usa **Gemini primeiro** (80s) e mantém o **Claude como
+fallback** — quem já funcionava não muda; o Índice ganha o caminho rápido. A cascata cabe no
+orçamento: Gemini 80s → Claude 85s → Gemini compacto → Claude compacto, tudo dentro dos 225s.
+
+**🔴 Bug encontrado junto — aluguel sumindo em silêncio.** O coletor só aceitava `aluguelM2`
+entre 0 e 500. É comum o modelo devolver nesse campo o **aluguel CHEIO** (ex.: 4.500 em vez de
+18/m²) — e a amostra caía fora **sem deixar rastro**, produzindo exatamente o "não localizamos
+anúncios" numa região com oferta. Agora o prompt pede também `valorMensal`, e o R$/m² é
+**recalculado por nós** quando o declarado é implausível ou falta. Teste com 4 amostras: antes
+sobrava **1**, agora sobram **3** (a 4ª, sem área, segue descartada — sem área não há R$/m²).
+
+**Precisão da métrica de custo:** `medirGemini` passou a DEVOLVER o custo, e os geradores o
+somam em `geracao_custos`. Antes o acumulador só contava o Claude — com o mercadológico rodando
+no Gemini, a maior parte do custo dele ficava de fora da própria métrica de custo.
+
 ### Próximo passo desta sessão
 
 Re-verificação adversarial dos 16 achados de `docs/VARREDURA_BUGS_2026-08-05.md` marcados

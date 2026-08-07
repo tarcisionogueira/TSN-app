@@ -62,7 +62,7 @@ ${regraTipo}
 - Informe o BAIRRO de cada amostra (essencial para classificar a cidade por região).${cidadeInteira ? ' TRAGA amostras de bairros DIFERENTES.' : ''}
 - Mesmo em CIDADE PEQUENA há anúncios: pesquise "${cidade} ${uf}" + o tipo nesses portais e TRAGA o que encontrar — NÃO retorne listas vazias se existir qualquer anúncio real de mercado (venda/locação). Terreno costuma ter R$/m² BAIXO (ex.: 100–400 R$/m²): isso é normal, capture assim mesmo.
 
-Para CADA amostra capture o MÁXIMO de referência de localização que o anúncio der (traga o que houver — não invente): ${todos ? 'tipo (apartamento|casa|terreno|comercial); ' : ''}bairro (nome do bairro); condominio (nome do condomínio/empreendimento/edifício, se o anúncio citar — âncora precisa); endereco (logradouro + número; ou só o logradouro se não houver número); cep (só os dígitos, se houver); valorM2 (R$/m² de VENDA) nas vendas; aluguelM2 (R$/m²/mês) nas locações; area (m²); data (formato "AAAA-MM"); fonte (portal ou imobiliária); link (URL do anúncio).
+Para CADA amostra capture o MÁXIMO de referência de localização que o anúncio der (traga o que houver — não invente): ${todos ? 'tipo (apartamento|casa|terreno|comercial); ' : ''}bairro (nome do bairro); condominio (nome do condomínio/empreendimento/edifício, se o anúncio citar — âncora precisa); endereco (logradouro + número; ou só o logradouro se não houver número); cep (só os dígitos, se houver); valorM2 (R$/m² de VENDA) nas vendas; aluguelM2 (R$/m²/mês) nas locações E TAMBÉM valorMensal (o aluguel CHEIO anunciado, em R$/mês — traga sempre, é o número que aparece no anúncio); area (m²); data (formato "AAAA-MM"); fonte (portal ou imobiliária); link (URL do anúncio).
 
 ÂNCORA DE LOCALIZAÇÃO (obrigatória): cada amostra precisa de PELO MENOS o "bairro". Sempre que o
 anúncio mostrar o logradouro ou o nome do empreendimento — o ZAP/VivaReal costumam exibir a rua no
@@ -74,7 +74,7 @@ LINK (obrigatório quando houver): "link" com a URL do anúncio que você abriu.
 amostra auditável e re-lível depois; sem link não há como conferir o número.
 
 Retorne SOMENTE JSON válido, sem texto fora do JSON:
-{"nivel1":{"vendas":[{${campoTipo}"bairro":"","condominio":"","endereco":"","cep":"","valorM2":0,"area":0,"data":"AAAA-MM","fonte":"","link":""}],"locacoes":[{${campoTipo}"bairro":"","condominio":"","endereco":"","cep":"","aluguelM2":0,"area":0,"data":"AAAA-MM","fonte":"","link":""}]},"nivel2":{"vendas":[],"locacoes":[]}}`;
+{"nivel1":{"vendas":[{${campoTipo}"bairro":"","condominio":"","endereco":"","cep":"","valorM2":0,"area":0,"data":"AAAA-MM","fonte":"","link":""}],"locacoes":[{${campoTipo}"bairro":"","condominio":"","endereco":"","cep":"","aluguelM2":0,"valorMensal":0,"area":0,"data":"AAAA-MM","fonte":"","link":""}]},"nivel2":{"vendas":[],"locacoes":[]}}`;
 };
 
 // Monta as amostras (venda e locação) no formato do ingerir_amostras_indice, com fonte_ref
@@ -116,7 +116,19 @@ export function montarAmostras(mercado, ctx) {
         fonte_ref: `web|${ctx.cidadeNorm}|${brr}|${tp}|venda|${Math.round(vm)}|${Math.round(Number(v?.area) || 0)}|${dataOk(v?.data) || ''}` });
     }
     for (const l of (bloco.locacoes || [])) {
-      const am = Number(l?.aluguelM2); const tp = tipoDe(l); const brr = bairroDe(l) || '';
+      const tp = tipoDe(l); const brr = bairroDe(l) || '';
+      // R$/m²·MÊS RECALCULADO quando preciso. O filtro de plausibilidade corta acima de 500,
+      // e é comum o modelo devolver em `aluguelM2` o aluguel CHEIO (ex.: 4.500) em vez do
+      // valor por m² — nesse caso a amostra caía FORA em silêncio, e o Índice mostrava "não
+      // localizamos anúncios" numa região que tem oferta de aluguel (relatado pelo dono em
+      // 06/08, Jardim Paula). Agora, com a área e o valor mensal, a conta é nossa.
+      const area = Number(l?.area) || 0;
+      const mensal = Number(l?.valorMensal) || 0;
+      const declarado = Number(l?.aluguelM2) || 0;
+      const calculado = area > 0 && mensal > 0 ? Math.round((mensal / area) * 100) / 100 : 0;
+      // Usa o declarado quando é plausível; senão o calculado. Se o "declarado" for grande e
+      // bater com o valor mensal, era o aluguel cheio — o calculado corrige.
+      const am = (declarado > 0 && declarado < 500) ? declarado : calculado;
       // TERRENO NÃO TEM MERCADO DE LOCAÇÃO (regra do dono, 03/08): lote não se aluga; o que
       // os portais devolvem como "terreno para alugar" é outro produto (pátio, área de
       // evento) e contamina o Índice do tipo. O gerar-analise já aplicava essa regra, mas
@@ -124,7 +136,7 @@ export function montarAmostras(mercado, ctx) {
       // R$ 4/m²·mês" em Barueri, puxando a média do tipo para baixo. Mesma regra nos dois.
       if (tp === 'terreno') continue;
       if (tp && am > 0 && am < 500 && !FONTE_LEILAO.test(String(l?.fonte || ''))) out.push({ ...linha(l, 'locacao', am), nivel, data_anuncio: dataOk(l?.data),
-        fonte_ref: `web|${ctx.cidadeNorm}|${brr}|${tp}|locacao|${am}|${Math.round(Number(l?.area) || 0)}|${dataOk(l?.data) || ''}` });
+        fonte_ref: `web|${ctx.cidadeNorm}|${brr}|${tp}|locacao|${am}|${Math.round(area)}|${dataOk(l?.data) || ''}` });
     }
   }
   return out;
