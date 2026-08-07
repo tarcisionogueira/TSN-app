@@ -500,6 +500,55 @@ export default function IndiceConsulta() {
             </div>
           )}
 
+          {/* AMOSTRAS QUE SUSTENTAM O NÚMERO (pedido do dono, 07/08). A lista existia na resposta
+              da API mas NUNCA era renderizada — só entrava no PDF. Quem olhava o R$/m² na tela
+              não tinha como saber de onde ele veio, nem se havia algo do próprio condomínio.
+              Caso que motivou: Índice do Condomínio Paisagem Tamboré, com 38 amostras gravadas
+              (várias do próprio condomínio, venda E locação) e nenhuma visível.
+              Ordem: as mais próximas e de maior peso primeiro (a API já entrega ordenado). */}
+          {Array.isArray(res?.amostras) && res.amostras.length > 0 && (
+            <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 14, padding: '16px 18px' }}>
+              <div style={{ fontSize: 13, fontWeight: 800, color: '#0f172a', marginBottom: 4 }}>Amostras que sustentam este valor</div>
+              <div style={{ fontSize: 11, color: '#64748b', marginBottom: 12 }}>
+                As mais próximas do endereço consultado e de maior peso na precificação. Clique para abrir o anúncio.
+              </div>
+              {['venda', 'locacao'].map((esp) => {
+                const lista = res.amostras.filter(a => a.especie === esp);
+                if (!lista.length) return null;
+                return (
+                  <div key={esp} style={{ marginBottom: 14 }}>
+                    <div style={{ fontSize: 11, fontWeight: 800, color: esp === 'venda' ? '#0D63DB' : '#7c3aed', marginBottom: 6 }}>
+                      {esp === 'venda' ? 'VENDA' : 'LOCAÇÃO'} · {lista.length} amostra(s)
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {lista.map((a, i) => (
+                        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, padding: '8px 10px', background: '#f8fafc', borderRadius: 9, flexWrap: 'wrap' }}>
+                          <div style={{ minWidth: 0, flex: '1 1 220px' }}>
+                            <div style={{ fontSize: 12, color: '#0f172a', fontWeight: 600 }}>
+                              {a.condominio || a.endereco || a.bairro_norm || 'anúncio da região'}
+                            </div>
+                            <div style={{ fontSize: 10.5, color: '#64748b', marginTop: 2 }}>
+                              {a.proximidade}{a.distancia_m != null ? ` · ${a.distancia_m} m` : ''}
+                              {a.area_m2 ? ` · ${Math.round(a.area_m2)} m²` : ''}
+                              {a.data_ref ? ` · ${String(a.data_ref).slice(0, 7)}` : ''}
+                            </div>
+                          </div>
+                          <div style={{ textAlign: 'right', flex: '0 0 auto' }}>
+                            <div style={{ fontSize: 13, fontWeight: 800, color: esp === 'venda' ? '#0D63DB' : '#7c3aed' }}>
+                              {brl(a.valor_m2)}/m²{esp === 'locacao' ? '·mês' : ''}
+                            </div>
+                            {Number(a.valor_total) > 0 && <div style={{ fontSize: 10, color: '#94a3b8' }}>{brl(a.valor_total)}</div>}
+                            {a.url && <a href={a.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 10, color: '#0D63DB', fontWeight: 700 }}>ver anúncio →</a>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
           <button
             onClick={() => gerarIndicePDF({ form, reg, amostras: res?.amostras || [], amostrasAno: res?.amostras_ano || [], aviso: res?.aviso || null, periodos: reg?.periodos || [], solicitante: { nome, role: effectiveRole } })}
             style={{ alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 20px', background: '#0D2A54', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 14, cursor: 'pointer' }}>

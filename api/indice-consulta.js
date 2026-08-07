@@ -133,7 +133,7 @@ export default async function handler(req) {
     // antes barrada pelo piso 200 → locação caía num sintético 0,4%). A plausibilidade POR TIPO
     // (venda) e por natureza (locação) é aplicada em JS logo abaixo — tira o outlier da conta.
     const regCidade = semLeilao(await restGet('indice_amostra',
-      `${filtro}&valor_m2=gte.1&valor_m2=lte.200000&select=especie,valor_m2,valor_total,area_m2,data_ref,fonte,criado_em,bairro_norm,geo_grid,lat,lng&order=data_ref.desc,criado_em.desc&limit=2000`))
+      `${filtro}&valor_m2=gte.1&valor_m2=lte.200000&select=especie,valor_m2,valor_total,area_m2,data_ref,fonte,criado_em,bairro_norm,geo_grid,lat,lng,endereco,condominio,url&order=data_ref.desc,criado_em.desc&limit=2000`))
       .filter(amostraPlausivel);
 
     // RECORTE POR RAIO (pedido do dono — classificar a ~250m, rua/condomínio). Com coordenada na
@@ -324,7 +324,47 @@ export default async function handler(req) {
 
     // LISTA (rastreabilidade) — da MESMA base regSamples (coerente com o valor). O gráfico por
     // ano (amostras_ano) e os períodos de 4 meses (comp.periodos) já foram calculados acima.
-    const amostras = regSamples.slice(0, 20);
+    // LISTA DE AMOSTRAS QUE SUSTENTAM O NÚMERO (pedido do dono, 07/08): "sempre deve trazer,
+    // tanto no índice quanto no mercadológico, as amostras que tiveram maior peso na precificação
+    // e mais próximas do endereço solicitado". Antes isto era `regSamples.slice(0,20)` — a ordem
+    // era a da consulta (data desc), não a da RELEVÂNCIA, e a tela sequer renderizava a lista
+    // (ela só existia dentro do PDF). Quem via o R$/m² não tinha como saber de onde ele veio.
+    //
+    // Ordem: proximidade primeiro (mesmo condomínio/endereço > mesma rua/250 m > 1 km > bairro),
+    // e dentro do mesmo nível o anúncio mais RECENTE — que é o que mais pesa na precificação,
+    // já que a composição temporal projeta pelo mais novo.
+    const distDe = (a) => (lat != null && lng != null && Number.isFinite(+a.lat) && Number.isFinite(+a.lng))
+      ? 111320 * Math.sqrt(Math.pow(+a.lat - lat, 2) + Math.pow((+a.lng - lng) * Math.cos(lat * Math.PI / 180), 2))
+      : null;
+    // Peso de proximidade quando NÃO há coordenada (o caso comum: a amostra acabou de nascer e o
+    // cron de triangulação ainda não passou). O texto do endereço/condomínio resolve: casar o
+    // condomínio pedido é o sinal mais forte que existe, melhor até que 250 m de raio.
+    const alvoCond = String(body.condominio || '').trim().toLowerCase();
+    const alvoEnd = String(body.endereco || '').trim().toLowerCase().slice(0, 28);
+    const rank = (a) => {
+      const cond = String(a.condominio || '').trim().toLowerCase();
+      const end = String(a.endereco || '').trim().toLowerCase();
+      if (alvoCond && cond && (cond.includes(alvoCond) || alvoCond.includes(cond))) return 0; // mesmo condomínio
+      if (alvoEnd && end && end.includes(alvoEnd)) return 1;                                   // mesmo endereço
+      const d = distDe(a);
+      if (d != null && d <= 250) return 2;
+      if (d != null && d <= 1000) return 3;
+      if (bairroNorm && a.bairro_norm === bairroNorm) return 4;
+      return 5;
+    };
+    const amostras = [...regSamples]
+      .map(a => ({ ...a, __rank: rank(a), __dist: distDe(a) }))
+      .sort((x, y) => x.__rank - y.__rank
+        || (x.__dist ?? 9e9) - (y.__dist ?? 9e9)
+        || String(y.data_ref || '').localeCompare(String(x.data_ref || '')))
+      .slice(0, 24)
+      .map(a => ({
+        especie: a.especie, valor_m2: a.valor_m2, valor_total: a.valor_total, area_m2: a.area_m2,
+        data_ref: a.data_ref, fonte: a.fonte, bairro_norm: a.bairro_norm,
+        endereco: a.endereco || null, condominio: a.condominio || null, url: a.url || null,
+        distancia_m: a.__dist != null ? Math.round(a.__dist) : null,
+        proximidade: ['mesmo condomínio', 'mesmo endereço', 'até 250 m', 'até 1 km', 'mesmo bairro', 'região'][a.__rank],
+      }));
 
     const mapeado = !!regiao;
     // aviso de frescor/projeção só quando o VALOR veio da composição temporal (ramo de mercado);
