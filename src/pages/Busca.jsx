@@ -681,9 +681,23 @@ export default function Busca() {
   const POR_PAGINA = 20;
 
   // Radius search state
-  const [raioKmAtivo, setRaioKmAtivo] = useState(50);
-  const [raioAtivo, setRaioAtivo] = useState(false);
-  const [centroRaio, setCentroRaio] = useState(null);
+  // RAIO PERSISTIDO NA SESSÃO (07/08). `filtros` já sobrevivia ao F5 pelo sessionStorage, mas o
+  // raio não — então recarregar a página devolvia todos os filtros de campo e silenciosamente
+  // descartava o recorte geográfico, mostrando lotes de fora da área. Terceira situação em que o
+  // raio se perdia, junto de "salvar filtro" e "reabrir filtro salvo".
+  const _raioInicio = React.useMemo(() => {
+    try { const s = sessionStorage.getItem('busca_raio'); return s ? JSON.parse(s) : null; } catch { return null; }
+  }, []);
+  const [raioKmAtivo, setRaioKmAtivo] = useState(Number(_raioInicio?.km) > 0 ? Number(_raioInicio.km) : 50);
+  const [raioAtivo, setRaioAtivo] = useState(!!(_raioInicio?.centro && Number(_raioInicio?.km) > 0));
+  const [centroRaio, setCentroRaio] = useState(_raioInicio?.centro || null);
+  // Espelha o raio na sessão sempre que ele muda — mesma garantia que `filtros` já tinha.
+  React.useEffect(() => {
+    try {
+      if (raioAtivo && centroRaio) sessionStorage.setItem('busca_raio', JSON.stringify({ km: raioKmAtivo, centro: centroRaio }));
+      else sessionStorage.removeItem('busca_raio');
+    } catch { /* sessão indisponível não pode quebrar a busca */ }
+  }, [raioAtivo, centroRaio, raioKmAtivo]);
   const [distancias, setDistancias] = useState({});
   // Padrão de apresentação POR DISPOSITIVO: no celular a LISTA abre por padrão (mapa em
   // tela pequena não é confortável); no desktop, o mapa estilo Google. A escolha do
@@ -947,10 +961,32 @@ export default function Busca() {
     }
   };
 
+  // Aplica um filtro salvo por INTEIRO — os de campo E o raio. Se o salvo não tem raio, o raio
+  // atual é LIMPO: senão um filtro sem recorte herdaria o raio de uma busca anterior e o
+  // resultado não seria o que foi salvo. Regra do dono: todos os filtros valem ao mesmo tempo.
+  const aplicarFiltroSalvo = (salvo) => {
+    const raio = salvo?.__raio || null;
+    const { __raio, ...campos } = salvo || {};   // eslint-disable-line no-unused-vars
+    setFiltrosPersist(campos);
+    if (raio?.centro && Number(raio.km) > 0) {
+      setCentroRaio(raio.centro); setRaioKmAtivo(Number(raio.km)); setRaioAtivo(true);
+    } else {
+      setCentroRaio(null); setRaioAtivo(false); setDistancias({});
+    }
+  };
+
   async function salvarFiltroAtual() {
     if (!nomeFiltro.trim() || !user?.id) return;
+    // O RAIO faz parte do filtro (07/08). Ele vive em estado SEPARADO (raioAtivo/raioKmAtivo/
+    // centroRaio) e por isso nunca era salvo: o filtro salvo nascia sem o recorte geográfico.
+    // Duas consequências, e a segunda é a séria:
+    //  (a) reabrir o filtro clicando nele não trazia o raio de volta;
+    //  (b) os E-MAILS DE NOTIFICAÇÃO leem `filtros_salvos` (api/enviar-alertas-cron.js) — sem o
+    //      raio ali, o alerta jamais respeitou o recorte que o cliente definiu, e ele recebia
+    //      lote fora da área que pediu.
+    const filtrosComRaio = { ...filtros, __raio: (raioAtivo && centroRaio) ? { km: raioKmAtivo, centro: centroRaio } : null };
     const { data, error } = await supabase.from('filtros_salvos').insert({
-      user_id: user.id, nome: nomeFiltro.trim(), filtros,
+      user_id: user.id, nome: nomeFiltro.trim(), filtros: filtrosComRaio,
     }).select().single();
     if (error) { alert('Erro ao salvar filtro. Tente novamente.'); return; }
     if (data) setFiltrosSalvos(p => [data, ...p]);
@@ -1692,7 +1728,7 @@ export default function Busca() {
             <span style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, flexShrink: 0 }}>Filtros salvos:</span>
             {filtrosSalvos.map(filtro => (
               <span key={filtro.id} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 20, background: '#eff6ff', border: '1px solid #bfdbfe', color: '#084BA6', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-                <span onClick={() => setFiltrosPersist(filtro.filtros)}>{filtro.nome}</span>
+                <span onClick={() => aplicarFiltroSalvo(filtro.filtros)}>{filtro.nome}</span>
                 {!soLeitura && <button onClick={() => deletarFiltro(filtro.id)} style={{ background: 'none', border: 'none', color: '#93c5fd', cursor: 'pointer', padding: 0, fontSize: 13, lineHeight: 1, display: 'flex', alignItems: 'center' }}>×</button>}
               </span>
             ))}
