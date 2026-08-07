@@ -5,6 +5,7 @@
 export const config = { runtime: 'nodejs', maxDuration: 300 };
 
 import { getUser } from './_auth.js';
+import { leilaoEncerrado, respostaLeilaoEncerrado } from './_leilao-encerrado.js';
 import { fetchExternoSeguro } from './_allowed-hosts.js';
 import { anthropicFetch } from './_claude.js';
 import { custoRespostaClaude, registrarCustoGeracao } from './_uso.js';
@@ -1521,6 +1522,18 @@ export default async function handler(req, res) {
   const rawData = imovel?.dataLeilao || parecerInputs?.d?.dataLeilao || null;
   const dataLeilao = rawData && !isNaN(Date.parse(rawData)) ? new Date(rawData).toISOString() : null;
   const base = { user_id: ownerId, imovel_id: String(imovelId), titulo: titulo || null, cidade: cidade || null, estado: estado || null, imovel: imovel || null, inputs: { mercadoInputs, parecerInputs }, data_leilao: dataLeilao };
+
+  // ── LEILÃO JÁ ENCERRADO → não gera e não cobra (regra do dono, 07/08) ───────
+  // "não vale, pois já passou a data de arrematar". Checado ANTES da cota: o ponto do gate é
+  // justamente não consumir. Considera a 2ª praça e usa a data do ACERVO (a do cliente entra só
+  // como reforço); sem data confiável, deixa passar — ver api/_leilao-encerrado.js.
+  {
+    const lz = await leilaoEncerrado(sb, imovelId, rawData);
+    if (lz.encerrado) {
+      res.status(422).json(respostaLeilaoEncerrado(lz.ultimaData));
+      return;
+    }
+  }
 
   // ── Cota NO SERVIDOR (anti-abuso do custo de IA) ────────────────────────────
   // A cota é consumida aqui (onde o custo ocorre), não mais só no cliente — que

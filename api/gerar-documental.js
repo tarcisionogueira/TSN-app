@@ -10,6 +10,7 @@ export const config = { runtime: 'nodejs', maxDuration: 300 };
 
 import { createHash } from 'node:crypto';
 import { getUser } from './_auth.js';
+import { leilaoEncerrado, respostaLeilaoEncerrado } from './_leilao-encerrado.js';
 import { fetchViaBrightData } from './_brightdata.js';
 import { capturarDocsLoginOnDemand, temLoginParaFonte } from './_leiloeiro-auth.js';
 import { anthropicFetch } from './_claude.js';
@@ -580,6 +581,17 @@ export default async function handler(req, res) {
   }
 
   // ── Cota documental NO SERVIDOR (anti-abuso do custo de IA) ─────────────────
+  // ── LEILÃO JÁ ENCERRADO → não gera e não cobra (regra do dono, 07/08) ───────
+  // Mesmo gate do mercadológico, aqui também: o cliente pode entrar direto pelo documental, e
+  // bloquear só num dos dois deixaria a porta aberta. Antes da cota, de propósito.
+  {
+    const lz = await leilaoEncerrado(sb, imovelId, body?.dataLeilao || null);
+    if (lz.encerrado) {
+      res.status(422).json(respostaLeilaoEncerrado(lz.ultimaData));
+      return;
+    }
+  }
+
   // Mesmo padrão do mercadológico (gerar-analise): cobra só em análise NOVA deste
   // imóvel; re-gerar/atualizar o mesmo não recobra. Explorador já foi barrado
   // acima; admin é ilimitado na RPC. O limite por plano vem de limite_ia (banco).
