@@ -85,6 +85,28 @@ async function processarLote(estadosFilter, lote = 50, deadline = Infinity) {
   );
   if (!r.ok) return null;
   const imoveis = await r.json();
+
+  // BACKLOG "PRESO NO CENTROIDE" (07/08). A fila acima não enxerga o lote que JÁ foi
+  // geocodificado e terminou em `cidade`: ele tem coordenada e não está em 'refazer', então
+  // saía da fila para sempre exibindo o pino do centro do município. Era o caso do
+  // `zuk_37094-231508` — endereço completo, CEP válido, e ainda assim nível 'cidade' depois
+  // de reprocessar, porque as rotas gratuitas não conhecem o logradouro.
+  // Medido hoje: 2.441 lotes ativos nessa situação COM número no endereço. Entram aqui em
+  // fatias pequenas, e só eles ganham a rota paga (ver `temEnderecoCompleto` abaixo) —
+  // sempre sob o teto mensal do Google, que já devolve no-op quando estoura.
+  // O filtro de "tem número" é feito em JS porque o PostgREST não expõe regex; por isso
+  // buscamos o dobro da fatia e descartamos o que não qualifica.
+  const FATIA_CENTROIDE = 20;
+  try {
+    const rc = await sb(
+      `imoveis_leilao?select=id,titulo,cidade,estado,endereco,bairro,cep,condominio:nomecondominio&geocod_nivel=eq.cidade&endereco=not.is.null&ativo=eq.true${estadosFilter}&order=atualizado_em.desc&limit=${FATIA_CENTROIDE * 2}`
+    );
+    if (rc.ok) {
+      const presos = (await rc.json()).filter(x => /\d/.test(String(x.endereco || '')) && String(x.endereco).trim().length > 8);
+      imoveis.push(...presos.slice(0, FATIA_CENTROIDE));
+    }
+  } catch { /* aditivo: o backlog normal segue mesmo se esta consulta falhar */ }
+
   if (!imoveis.length) return { processados: 0 };
 
   // processados conta o que de fato foi tratado: o lote pode ser interrompido antes do fim
@@ -104,9 +126,22 @@ async function processarLote(estadosFilter, lote = 50, deadline = Infinity) {
       coords = coordCache[key];
       fromCache = true;
     } else {
-      // Cron em LOTE: só rotas GRATUITAS (Nominatim/IBGE/BrasilAPI). O Google (pago) fica
-      // reservado ao on-demand da página do imóvel — contém o custo do backlog inteiro.
-      coords = await geocodificarCascata(im, { deadline, permitirPago: false });
+      // Cron em LOTE: por padrão só rotas GRATUITAS (Nominatim/IBGE/BrasilAPI) — o backlog
+      // inteiro no Google custaria caro e a maioria dos lotes nem tem endereço para justificar.
+      //
+      // EXCEÇÃO (07/08), pedida pelo caso do lote `zuk_37094-231508`: quando o lote TEM
+      // logradouro E número, as rotas grátis já provaram que não resolvem — o OSM
+      // simplesmente não conhece boa parte das ruas brasileiras — e o resultado é o pino no
+      // centroide da cidade. Foi o que aconteceu ali: "Rua José Miguel Ackel, 2252",
+      // Guarulhos, CEP 07273000, endereço completo, e mesmo assim `geocod_nivel='cidade'`
+      // depois de reprocessar. O efeito para o cliente não é cosmético: sem coordenada real
+      // o mercadológico não acha comparáveis de Nível 1, então o relatório sai pior.
+      // O Google é o único que conhece esses logradouros, e é exatamente o caso em que ele
+      // se paga. NÃO é gasto aberto: `googleGeocode` já respeita `GOOGLE_GEOCODE_MAX_MES`
+      // (default 10.000/mês = o tier grátis) e vira no-op ao bater o teto, caindo de volta
+      // nas rotas gratuitas. Ou seja, o pior caso continua sendo custo ~US$ 0.
+      const temEnderecoCompleto = /\d/.test(String(im.endereco || '')) && String(im.endereco || '').trim().length > 8;
+      coords = await geocodificarCascata(im, { deadline, permitirPago: temEnderecoCompleto });
       // Salva no cache só nível bairro/cidade (sem endereço), para reutilizar em imóveis do mesmo bairro
       if (coords && coords.nivel !== 'endereco' && !im.endereco?.trim()) coordCache[key] = coords;
     }

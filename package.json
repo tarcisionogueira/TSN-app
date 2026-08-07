@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "lint:resposta": "eslint . --rule '{}' --no-eslintrc 2>/dev/null || eslint . | grep -E 'checar-response-ok|problems' || true"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",

@@ -19,6 +19,12 @@ const JANELA_MS = JANELA_DIAS * 24 * 60 * 60 * 1000;
 
 export const CHAVE_EQUIPE = 'tsn_convite_equipe';
 export const CHAVE_CLIENTE = 'tsn_convite_codigo';
+// PLANO ESCOLHIDO antes do cadastro (item 7 de docs/BUGS_ABERTOS_2026-08-07.md). Mesma
+// doença dos convites: a tela promete "após o login você será direcionado para o pagamento",
+// mas o link de confirmação abre em OUTRA aba/aparelho e o sessionStorage vem vazio — a
+// pessoa cai na home como explorador e a intenção de compra evapora no caminho mais comum
+// do funil. Guardado aqui pela mesma janela.
+export const CHAVE_PLANO = 'tsn_plano_pendente';
 
 // Guarda o token com carimbo de tempo. NÃO normaliza a caixa: o token de equipe é um
 // `crypto.randomUUID()` (minúsculo) e o RPC compara com igualdade sensível a caixa

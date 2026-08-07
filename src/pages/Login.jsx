@@ -8,7 +8,7 @@ import { Briefcase, Eye, EyeOff, Loader2, CheckCircle2 } from 'lucide-react';
 import { apiCall } from '../utils/apiCall';
 import { buscarTodasCidades } from '../data/cidades';
 import { salvarRef, lerRef } from '../utils/ref';
-import { salvarConvite, lerConvite, limparConvite, CHAVE_EQUIPE, CHAVE_CLIENTE } from '../utils/convitePendente';
+import { salvarConvite, lerConvite, limparConvite, CHAVE_EQUIPE, CHAVE_CLIENTE, CHAVE_PLANO } from '../utils/convitePendente';
 
 const inp = {
   width: '100%', padding: '11px 14px', border: '1px solid #e2e8f0', borderRadius: 10,
@@ -195,13 +195,13 @@ export default function Login() {
   const handleGoogle = async () => {
     setErro(''); setGoogleLoading(true);
     try {
-      if (planoEscolhido) sessionStorage.setItem('tsn_plano_pendente', planoEscolhido);
+      if (planoEscolhido) salvarConvite(CHAVE_PLANO, planoEscolhido);
       // Salva ref antes do redirect OAuth (sessionStorage pode ser limpo em alguns browsers)
       if (refCodigo) salvarRef(refCodigo); // persiste antes do redirect OAuth (janela de 30 dias)
       // O fluxo OAuth NÃO passa pelo handleLogin, então calculamos aqui o destino
       // pós-login (plano/checkout, next ou produto) e o AuthContext o consome.
       const produtoRedirect = sessionStorage.getItem('tsn_redirect_produto');
-      const planoPendente = planoEscolhido || sessionStorage.getItem('tsn_plano_pendente');
+      const planoPendente = planoEscolhido || lerConvite(CHAVE_PLANO);
       const promoPendente = promoParam || sessionStorage.getItem('tsn_promo_pendente') || '';
       let dest = '';
       if (produtoRedirect) dest = produtoRedirect;
@@ -271,8 +271,8 @@ export default function Login() {
       // Verifica plano no sessionStorage (definido durante cadastro) ou na URL
       const produtoRedirect = sessionStorage.getItem('tsn_redirect_produto');
       sessionStorage.removeItem('tsn_redirect_produto');
-      const planoPendente = planoEscolhido || sessionStorage.getItem('tsn_plano_pendente');
-      sessionStorage.removeItem('tsn_plano_pendente');
+      const planoPendente = planoEscolhido || lerConvite(CHAVE_PLANO);
+      limparConvite(CHAVE_PLANO);
       const promoPendente = promoParam || sessionStorage.getItem('tsn_promo_pendente') || '';
       sessionStorage.removeItem('tsn_promo_pendente');
       // Funil de produto pago: quem veio de /p/ebook|curso/:id ("Já tenho conta, Entrar" ou
@@ -337,7 +337,7 @@ export default function Login() {
       trackCadastro(form.email, form.nome);
       // Preserva o plano na URL de confirmação de email (HashRouter usa /#/)
       if (planoEscolhido) {
-        sessionStorage.setItem('tsn_plano_pendente', planoEscolhido);
+        salvarConvite(CHAVE_PLANO, planoEscolhido);
       }
       // Preserva a intenção de PRODUTO (ebook/curso) → após confirmar o e-mail e entrar,
       // o usuário volta à página do produto para comprar, em vez de cair na Home.

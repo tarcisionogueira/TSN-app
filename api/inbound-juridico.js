@@ -119,6 +119,18 @@ Regras: nunca invente fatos; se o advogado não deu posição clara, use null em
       headers: { 'x-api-key': CLAUDE_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
       body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 2048, system: sys, messages: [{ role: 'user', content: userMsg }] }),
     });
+    // FALHA-ALTO: `anthropicFetch` DEVOLVE o Response não-ok depois de esgotar os retries
+    // (não lança), então sem checar `.ok` um 429/529 da Anthropic virava `txt = ''` e a
+    // compilação retornava null EM SILÊNCIO. O caso seguia para `juridico_status='publicado'`
+    // com resultado/nivel_risco/red_flags nulos e zero linhas em `juridico_aprendizado` — e,
+    // publicado, saía do alcance do juridico-lembretes-cron (que só varre `em_revisao`).
+    // Ou seja: a devolutiva do advogado era perdida como aprendizado e ninguém era avisado.
+    // Distinguir null (sem IA) de erro permite ao chamador NÃO publicar.
+    if (!res.ok) {
+      const corpo = await res.text().catch(() => '');
+      console.error('[inbound-juridico] compilação IA falhou', res.status, String(corpo).slice(0, 300));
+      return { __falhouIA: true };
+    }
     const data = await res.json();
     const txt = data?.content?.[0]?.text || '';
     const ini = txt.indexOf('{'), fim = txt.lastIndexOf('}');
@@ -201,9 +213,17 @@ export default async function handler(req) {
       body: { caso_id: caso.id, imovel_id: caso.imovel_id, campo: d.campo || null, valor_ia: d.valor_ia || null, valor_advogado: d.valor_advogado || null, observacao: d.observacao || null } });
   }
 
-  // Atualiza o caso
-  await sb(`casos?id=eq.${caso.id}`, { method: 'PATCH', prefer: 'return=minimal',
-    body: { status_etapa: 'juridico_concluido', juridico_status: 'publicado' } });
+  // Atualiza o caso. Se a IA FALHOU (indisponibilidade da Anthropic), o caso NÃO é publicado:
+  // fica em revisão para a próxima passada compilar de verdade. Publicar aqui apagaria o
+  // veredito estruturado e ainda tiraria o caso do juridico-lembretes-cron, que só varre
+  // `em_revisao` — o parecer do advogado ficaria órfão sem ninguém perceber. O texto dele já
+  // está preservado em `relatorio_md` acima, então nada se perde ao adiar.
+  if (compilado?.__falhouIA) {
+    console.warn('[inbound-juridico] IA indisponível — caso mantido em revisão para recompilar', caso.id);
+  } else {
+    await sb(`casos?id=eq.${caso.id}`, { method: 'PATCH', prefer: 'return=minimal',
+      body: { status_etapa: 'juridico_concluido', juridico_status: 'publicado' } });
+  }
 
   // Auditoria do e-mail recebido
   await sb('juridico_emails', { method: 'POST', prefer: 'return=minimal',

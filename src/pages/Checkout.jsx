@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { salvarConvite, CHAVE_PLANO } from '../utils/convitePendente';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { trackCheckoutIniciado, trackPlanContratado } from '../utils/gtag';
@@ -649,7 +650,7 @@ export default function Checkout() {
       }
       // Guarda o plano p/ o Login redirecionar de volta ao checkout após o login
       // (Explorador não tem pagamento → não guarda, cai direto na plataforma).
-      if (planoKey !== 'explorador') { try { sessionStorage.setItem('tsn_plano_pendente', planoApiKey); } catch { /* ok */ } }
+      if (planoKey !== 'explorador') { salvarConvite(CHAVE_PLANO, planoApiKey); }
       setContaCriada(true);
     } catch (e) {
       const m = String(e?.message || '');
