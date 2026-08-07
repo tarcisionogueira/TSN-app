@@ -173,8 +173,18 @@ export default async function handler(req, res) {
   const t1 = Math.min(120000, Math.max(30000, restante() - 90000));
   // Gemini primeiro (rápido e barato); só cai no Claude se ele não entregar.
   try { mercado = await buscarGemini(8, Math.min(80000, t1)); } catch { mercado = null; }
-  if (!mercado && restante() > 45000) {
-    try { mercado = await buscar(8, Math.min(t1, restante() - 30000)); } catch { mercado = null; }
+  // RESERVA DA 2ª TENTATIVA (07/08). Aqui estava o furo: `t1` reserva 90s para a 2ª, mas esta
+  // 1ª do Claude usava `restante() - 30000` — só 30s. As duas tentativas ARROJADAS então comiam
+  // o orçamento inteiro e sobravam 30s, ABAIXO dos 35s que a COMPACTA exige, então ela nunca
+  // rodava. Foi exatamente o que derrubou o Índice de TERRENO do Gênesis 2 (Colinas da
+  // Anhanguera, Santana de Parnaíba) às 16:57: "rede/timeout: AbortError | sem orçamento de
+  // tempo para a 2ª (restavam 30s)" — 80s no Gemini + 115s no Claude = 195s dos 225s.
+  // A compacta é justamente a que "costuma concluir" (comentário do próprio desenho), e é a
+  // que mais importa em mercado RASO como terreno em condomínio, onde a busca arrojada demora
+  // mais e entrega menos. Deixá-la de fora transformava pesquisa difícil em falha certa.
+  const RESERVA_2A_MS = 90000;
+  if (!mercado && restante() > RESERVA_2A_MS + 30000) {
+    try { mercado = await buscar(8, Math.min(t1, restante() - RESERVA_2A_MS)); } catch { mercado = null; }
   }
   // 2ª tentativa ESTREITA e COMPACTA: menos buscas e menos amostras pedidas. Só entra com
   // tempo de sobra real — melhor devolver o motivo da 1ª falha do que morrer no timeout.
