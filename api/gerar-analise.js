@@ -2185,7 +2185,20 @@ export default async function handler(req, res) {
           const [p] = await (await sb(`perfis?id=eq.${ownerId}&select=perfil_investidor&limit=1`)).json();
           perfilInvestidor = p?.perfil_investidor || null;
         } catch { /* sem perfil → parecer padrão pelo objetivoCompra */ }
-        const pInp = { ...parecerInputs.d, valorMercado: valorMercado || parecerInputs.d.valorMercado, _cenario: parecerInputs.cenario, _teto: parecerInputs.teto, _perfil: perfilInvestidor };
+        // ALUGUEL: mesma correção do valorMercado, um campo ao lado. A tela manda
+        // `valorLocacao` do formulário — que é 0 enquanto a pesquisa não rodou — e o servidor
+        // nunca aplicava o `aluguelMedio` que ACABOU de descobrir. Medição em 07/08: 43 dos
+        // 55 relatórios com inputs gravados tinham locação 0 no cliente com aluguel real
+        // encontrado pela busca (Cotia: R$ 4.771/mês) → TODO parecer imprimia yield 0,00%,
+        // como se o imóvel não rendesse nada.
+        const aluguelServidor = Number(mercado?.aluguelMedio) || 0;
+        const locacaoCliente = Number(parecerInputs.d?.valorLocacao) || 0;
+        const pInp = {
+          ...parecerInputs.d,
+          valorMercado: valorMercado || parecerInputs.d.valorMercado,
+          valorLocacao: locacaoCliente > 0 ? locacaoCliente : aluguelServidor,
+          _cenario: parecerInputs.cenario, _teto: parecerInputs.teto, _perfil: perfilInvestidor,
+        };
         // ── MÉTRICAS RECALCULADAS NO SERVIDOR (07/08) ────────────────────────────────
         // As métricas de viabilidade (capital, lucro, ROI, teto de lance) chegavam PRONTAS
         // do cliente: a tela as calcula no clique, ANTES da pesquisa de mercado existir.
@@ -2203,10 +2216,13 @@ export default async function handler(req, res) {
         const vmCliente = Number(parecerInputs.d?.valorMercado) || 0;
         const vmServidor = Number(pInp.valorMercado) || 0;
         // Recalcula quando o cliente não tinha valor de mercado, quando o servidor achou
-        // outro (>2% de diferença) ou quando as métricas vieram vazias/zeradas.
-        const precisaRecalcular = vmServidor > 0
+        // outro (>2% de diferença), quando o aluguel entrou só agora (yield estava 0) ou
+        // quando as métricas vieram vazias/zeradas.
+        const aluguelEntrouAgora = locacaoCliente <= 0 && aluguelServidor > 0;
+        const precisaRecalcular = (vmServidor > 0 || aluguelEntrouAgora)
           && (vmCliente <= 0
-            || Math.abs(vmServidor - vmCliente) / vmServidor > 0.02
+            || aluguelEntrouAgora
+            || (vmServidor > 0 && Math.abs(vmServidor - vmCliente) / vmServidor > 0.02)
             || !(Number(metricasParecer.capitalMobilizado) > 0));
         if (precisaRecalcular) {
           try {
@@ -2217,8 +2233,11 @@ export default async function handler(req, res) {
             pInp._teto = calcularTetoLance(pInp, isAVistaParecer, metaRetorno, vmServidor);
             parecerDiag.metricasRecalculadas = {
               vmCliente, vmServidor, cenario: isAVistaParecer ? 'aVista' : 'alavancado',
+              locacaoCliente, locacaoUsada: Number(pInp.valorLocacao) || 0,
               roiAntes: Math.round(antesRoi * 100) / 100,
               roiDepois: Math.round((Number(metricasParecer.roi) || 0) * 100) / 100,
+              yieldAntes: Math.round((Number(parecerInputs.metricas?.yieldAnual) || 0) * 100) / 100,
+              yieldDepois: Math.round((Number(metricasParecer.yieldAnual) || 0) * 100) / 100,
               tetoAntes: Math.round(Number(parecerInputs.teto) || 0),
               tetoDepois: Math.round(Number(pInp._teto) || 0),
             };

@@ -160,10 +160,76 @@ Conferido rodando a função com os `inputs` reais gravados deste imóvel:
 lucro/ROI/teto (que seriam a venda por zero, a origem do "prejuízo integral") e passa a informar
 com transparência que a referência não foi estimada, apresentando só os custos da operação.
 
+### 3. Varredura pedida pelo dono: "que estes mesmos erros não se repitam em outros relatórios"
+
+Varri as duas classes de defeito no resto do sistema. **Cotia não era caso isolado.**
+
+#### Classe B (número do cliente usado como verdade) — o alcance real
+
+| Medição em `analises_mercado` (55 relatórios com `inputs` gravados) | Quantidade |
+|---|---|
+| Cliente mandou `valorMercado = 0` | **49** |
+| Cliente mandou `valorLocacao = 0` **e** a busca achou aluguel real | **43** |
+| Parecer impresso com **ROI abaixo de −100%** (impossível no modelo) | **15** |
+
+Os 15 de ROI absurdo, todos com o mesmo `−371,55%` (é sempre a mesma fórmula sobre mercado
+zero), desde **06/07**: Cotia 07/08 · Feira de Santana 01/08 · Resende 29/07 · Goiânia 28/07 ·
+Praia Grande 28/07 · Carapicuíba 23/07 · Feira de Santana 15/07 · Salvador 14/07 · **Cotia 14/07
+(mercado R$ 770 mil × lance R$ 293 mil — 62% de desconto, reprovado)** · Itapevi 14/07 · Praia
+Grande 12/07 · Vila Velha 09/07 · Salvador 07/07 · Carapicuíba 07/07 · Vila Velha 06/07.
+
+**Achado novo, um campo ao lado do de Cotia:** o servidor também nunca aplicava ao parecer o
+`aluguelMedio` que ACABARA de descobrir — 43 de 55 relatórios imprimiram **yield 0,00%**, como se
+o imóvel não rendesse nada, com o aluguel medido ali no mesmo `result` (Cotia: R$ 4.771/mês).
+Corrigido junto: `pInp.valorLocacao` recebe o aluguel do servidor quando o cliente mandou 0, e
+isso também dispara o recálculo. Cotia depois das duas correções: **ROI +63,41% · yield 33,80%
+a.a. · aluguel R$ 4.771/mês** (antes: −371,55% · 0,00% · R$ 0).
+
+#### Classe A (`concluida` ≠ pronta) — onde mais aparecia
+
+- **Gate do laudo (`gerar-laudo-viabilidade.js`) — o mesmo erro do toast, um relatório adiante.**
+  O gate só perguntava `if (!dRow?.result)`. Mas o documental em `precisaDocumentos: true` **TEM**
+  um `result` → passava, e o laudo era emitido sobre um documental que não leu documento nenhum
+  ("risco não classificado, nenhum risco discriminado"). Somado ao toast anunciando "Pronto!"
+  cedo demais, os dois defeitos se reforçavam: o cliente era convidado a pedir o laudo exatamente
+  na janela errada. Agora o laudo exige os dois relatórios **entregues** — documental sem
+  `precisaDocumentos` e mercadológico com `valorMercado > 0` e sem `mercadoVazio`. A mensagem
+  passou a distinguir "ainda não gerado" de "gerado mas incompleto" (mandar "gere primeiro" para
+  quem já gerou faz o cliente clicar de novo e queimar cota).
+- **`resumoMercado` imprimia "Valor de mercado estimado: R$ 0"** para o laudo. Aconteceu de
+  verdade em **31/07** (imóvel `1d117f3c`, sem `valorMercado` mas com preço/m² de R$ 10.049) e o
+  laudo concluiu em cima disso. Agora escreve "NÃO ESTIMADO … não trate como zero, aponte como
+  lacuna" — segunda barreira, porque relatório antigo reprocessado ainda pode chegar sem o campo.
+- **`_arremate-aprendizado.js`** ingeria `valorMercado = 0` como previsão → previsto×realizado
+  gravava −100% de desvio e envenenava a calibração que volta ao prompt de **todos** os
+  relatórios daquela modalidade. Zero e `mercadoVazio` agora viram `null` (desconhecido, fora da
+  média); idem o "veredito" de um laudo que era o aviso `precisaRelatorios`.
+- **`Arrematados.jsx`** usava `?? null`, que cobre o campo AUSENTE mas não o ZERO: a tela
+  calculava `lucro = 0 − arrematação` e exibia um prejuízo do tamanho do lance. Zero agora é "—".
+
+#### O que auditei e está correto (não mexi)
+
+`agendar-reuniao.js` (já checa `precisaDocumentos`/`precisaRelatorios`) · `MinhasAnalises.jsx`
+(status geral, chips e o gate dos "3 prontos") · o painel de viabilidade da própria tela de
+Análise (já mostra "Mercado não estimado" e "—" no lugar do ROI) · `score.js` (já trata 0 como
+"não medido", com o comentário que virou a regra desta varredura) · cota do documental (os
+caminhos de "faltam documentos" **estornam**) · `analise_viavel`/`score_financeiro` do catálogo
+(deliberadamente não alimentados por dado do cliente, correção de segurança anterior).
+
+**Deixei de propósito:** o passo "Mercadológico ✓" fica verde mesmo quando a pesquisa não estimou
+valor. Bloquear ali faria a auto-sequência (`Analise.jsx:1109`) re-gerar em loop num endereço sem
+mercado disponível. O conteúdo da tela já avisa "Mercado não estimado", o cron
+`regenerar-relatorios-cron` re-tenta sozinho e o gate do laudo agora segura a consequência.
+
 > ⏭️ **Próxima verificação:** gerar de novo os 3 relatórios deste mesmo imóvel de Cotia e conferir
 > (a) que o toast do documental sai **uma vez só**, depois do OK, e (b) que o parecer e o laudo
-> falam de ROI positivo. Checagem pelo banco:
+> falam de ROI positivo e yield real. Checagem pelo banco:
 > `select result->'mercado'->'__diagParecer'->'metricasRecalculadas' from analises_mercado where imovel_id='060eff88-badc-43ff-b11c-6b482da68b9b' order by updated_at desc limit 1;`
+>
+> ⚠️ **Os 15 relatórios antigos com ROI −371,55% seguem gravados com o número errado.** A correção
+> vale da próxima geração em diante; ela não reescreve o que já foi emitido. Decisão do dono:
+> regerar esses 15 (o mercadológico já pago não recobra cota — `isNovo` é falso) ou deixar como
+> histórico. A lista está na tabela acima.
 
 ---
 

@@ -133,7 +133,11 @@ function Detalhe({ arr, onBack, onChange, soLeitura, permitirAnexo = !soLeitura 
         try { const { data: im } = await supabase.from('imoveis_leilao').select('valor_avaliacao').eq('id', imovelId).maybeSingle(); avaliacao = im?.valor_avaliacao ?? null; } catch { /* ignore */ }
         try {
           const { data: am } = await supabase.from('analises_mercado').select('result').eq('user_id', arr.user_id).eq('imovel_id', imovelId).eq('status', 'concluida').order('updated_at', { ascending: false }).limit(1);
-          valorMercado = am?.[0]?.result?.valorMercado ?? null;
+          // `?? null` cobria o campo AUSENTE, mas não o ZERO: um mercadológico que concluiu
+          // sem estimar valor virava "lucro = 0 − arrematação", ou seja, a tela mostrava um
+          // prejuízo do tamanho do lance num imóvel que ninguém avaliou. Zero aqui é
+          // desconhecido, e desconhecido se mostra como "—".
+          valorMercado = Number(am?.[0]?.result?.valorMercado) > 0 ? Number(am[0].result.valorMercado) : null;
         } catch { /* ignore */ }
       }
       if (vivo) setNums({ avaliacao, valorMercado });
@@ -525,7 +529,8 @@ export default function Arrematados() {
         } catch { setNDocs({}); }
         try {
           const { data: am } = await supabase.from('analises_mercado').select('imovel_id,result,updated_at').eq('user_id', uid).in('imovel_id', imovelIds).eq('status', 'concluida').order('updated_at', { ascending: false });
-          const mm = {}; (am || []).forEach(x => { if (!(x.imovel_id in mm)) mm[x.imovel_id] = x.result?.valorMercado ?? null; }); setMercado(mm);
+          // Mesma regra da ficha do arremate: zero = não estimado, não é um valor.
+          const mm = {}; (am || []).forEach(x => { if (!(x.imovel_id in mm)) mm[x.imovel_id] = Number(x.result?.valorMercado) > 0 ? Number(x.result.valorMercado) : null; }); setMercado(mm);
         } catch { setMercado({}); }
         try {
           const { data: iv } = await supabase.from('imoveis_leilao').select('id,valor_avaliacao').in('id', imovelIds);

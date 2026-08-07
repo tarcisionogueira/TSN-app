@@ -37,7 +37,18 @@ export async function recalcularArremate(imovelId) {
     const laudo = await (await sb(`analises_laudo?imovel_id=eq.${enc}&status=eq.concluida&select=result&order=updated_at.desc&limit=1`)).json().catch(() => []);
     const mr = merc?.[0]?.result || {};
     const lr = laudo?.[0]?.result || {};
-    const previsto = { valor_mercado: num(mr.valorMercado), valor_locacao: num(mr.valorLocacao), veredito: lr.veredito || null };
+    // ZERO NÃO É PREVISÃO (07/08). Um mercadológico que concluiu sem estimar valor
+    // (`mercadoVazio`) entrava aqui como "previu R$ 0" e o previsto×realizado registrava
+    // -100% de desvio contra o arremate real — envenenando a calibração que volta ao prompt
+    // de TODOS os relatórios daquela modalidade. Sem estimativa, o previsto fica null (a
+    // linha existe, o campo é reconhecidamente desconhecido) e não entra na média.
+    // O mesmo vale para o veredito de um laudo que na verdade era o aviso "faltam relatórios".
+    const positivo = (v) => { const n = num(v); return n != null && n > 0 ? n : null; };
+    const previsto = {
+      valor_mercado: mr.mercadoVazio === true ? null : positivo(mr.valorMercado),
+      valor_locacao: positivo(mr.valorLocacao),
+      veredito: lr.precisaRelatorios === true ? null : (lr.veredito || null),
+    };
 
     // REALIZADO: preserva o que já há (valor arrematado semeado; revenda/aluguel são
     // preenchidos depois, à medida que a operação avança). Fallback do valor pelo caso.

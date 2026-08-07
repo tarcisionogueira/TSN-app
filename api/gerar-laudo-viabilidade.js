@@ -123,7 +123,13 @@ function resumoMercado(m) {
   const idx = merc.indiceBidPro || {};                 // base própria (venda_m2/aluguel_m2/nivel)
   const val = merc.valorizacao || {};                  // curva R$/m² por ano (serie/…_pct)
   const partes = [
-    `- Valor de mercado estimado: R$ ${Number(m.valorMercado || 0).toLocaleString('pt-BR')}`,
+    // NUNCA imprimir "R$ 0" aqui: o laudo lê isto como "o imóvel não vale nada" e reprova.
+    // Aconteceu em 31/07 (imóvel 1d117f3c), com o mercadológico sem `valorMercado` mas com
+    // preço/m² de R$ 10.049. O gate acima já barra este caso; a frase fica como segunda
+    // barreira, porque um relatório antigo reprocessado pode chegar aqui sem o campo.
+    Number(m.valorMercado) > 0
+      ? `- Valor de mercado estimado: R$ ${Number(m.valorMercado).toLocaleString('pt-BR')}`
+      : '- Valor de mercado estimado: NÃO ESTIMADO nesta pesquisa. NÃO trate como zero e NÃO conclua prejuízo por ausência de referência: aponte a falta da estimativa como LACUNA a suprir antes do lance.',
     merc.precoMedioM2 ? `- Preço médio/m²: R$ ${Number(merc.precoMedioM2).toLocaleString('pt-BR')}` : '',
     merc.aluguelMedio ? `- Aluguel médio: R$ ${Number(merc.aluguelMedio).toLocaleString('pt-BR')} (yield ${(merc.yieldBruto||0).toFixed?.(1) || merc.yieldBruto || 0}% bruto)` : '',
     merc.referenciaFipeZap?.encontrado ? `- FipeZAP ${merc.referenciaFipeZap.localidade || ''}: R$ ${Number(merc.referenciaFipeZap.precoMedioM2||0).toLocaleString('pt-BR')}/m², valorização 12m ${(Number(merc.referenciaFipeZap.valorizacao12m)||0).toFixed(1)}%` : '',
@@ -249,14 +255,35 @@ export default async function handler(req, res) {
     ultimoConcluido('analises_mercado', ownerId, imovelId),
     ultimoConcluido('analises_documental', ownerId, imovelId),
   ]);
+  // "CONCLUÍDA" NÃO É SINÔNIMO DE PRONTA (07/08 — mesma família do toast prematuro).
+  // O gate só olhava se existia um `result`. Só que:
+  //  · o documental grava `concluida` com `precisaDocumentos: true` enquanto a captura ainda
+  //    baixa matrícula/edital — esse result EXISTE, então o gate passava e o laudo era emitido
+  //    sobre um documental que não leu um único documento ("risco não classificado, nenhum
+  //    risco discriminado"). Com o toast anunciando "Pronto!" cedo demais, os dois defeitos se
+  //    somavam: o cliente era convidado a pedir o laudo exatamente na janela errada;
+  //  · o mercadológico pode concluir com `mercadoVazio: true` (a pesquisa não achou nada) ou
+  //    sem `valorMercado` — e aí o laudo decide sobre um imóvel que "vale zero".
+  // Agora o laudo exige os dois relatórios ENTREGUES, não apenas gravados.
   const faltando = [];
-  if (!mRow?.result) faltando.push('mercadológico');
-  if (!dRow?.result) faltando.push('documental');
+  const mR = mRow?.result, dR = dRow?.result;
+  if (!mR || mR.mercadoVazio === true || !(Number(mR.valorMercado) > 0)) faltando.push('mercadológico');
+  if (!dR || dR.precisaDocumentos === true) faltando.push('documental');
   if (faltando.length) {
-    // Gate: o laudo é uma SÍNTESE — precisa dos dois relatórios prontos antes.
+    // Gate: o laudo é uma SÍNTESE — precisa dos dois relatórios prontos antes. A mensagem
+    // distingue "ainda não gerado" de "gerado mas incompleto": mandar "gere primeiro" para
+    // quem JÁ gerou é o tipo de aviso que faz o cliente clicar de novo e queimar cota.
+    const comoResolver = (f) => {
+      if (f === 'mercadológico') {
+        return !mR ? 'gere o Relatório Mercadológico'
+          : 'gere novamente o Relatório Mercadológico (a pesquisa anterior não conseguiu estimar o valor de mercado, e sem essa referência o laudo não tem base para concluir)';
+      }
+      return !dR ? 'gere a Análise Documental e Jurídica'
+        : 'aguarde a Análise Documental e Jurídica terminar (ela ainda está com documentos pendentes; assim que a matrícula e o edital forem lidos, o laudo pode ser emitido)';
+    };
     res.status(200).json({ ok: true, result: {
       precisaRelatorios: true, faltando,
-      motivo: `O laudo de viabilidade consolida os dois relatórios. Gere primeiro: ${faltando.map(f => f === 'mercadológico' ? 'Relatório Mercadológico' : 'Análise Documental').join(' e ')}.`,
+      motivo: `O laudo de viabilidade consolida os dois relatórios. Para emiti-lo, ${faltando.map(comoResolver).join('; e ')}.`,
     } });
     return;
   }
