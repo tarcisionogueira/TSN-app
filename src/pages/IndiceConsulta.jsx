@@ -370,8 +370,14 @@ export default function IndiceConsulta() {
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div style={{ background: 'white', borderRadius: 12, padding: '14px 16px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#0D63DB', fontSize: 11, fontWeight: 700 }}><Home size={13} /> VENDA{reg.projetado ? <span style={{ marginLeft: 6, fontSize: 9, fontWeight: 800, padding: '1px 6px', borderRadius: 999, background: '#fff7ed', color: '#c2410c' }}>PROJETADO</span> : null}</div>
-                <div style={{ fontSize: 22, fontWeight: 900, color: '#0D63DB', marginTop: 4 }}>{Number(reg.venda_m2) > 0 ? `${brl(reg.venda_m2)}/m²` : '—'}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#0D63DB', fontSize: 11, fontWeight: 700, flexWrap: 'wrap' }}><Home size={13} /> VENDA{reg.projetado ? <span style={{ marginLeft: 6, fontSize: 9, fontWeight: 800, padding: '1px 6px', borderRadius: 999, background: '#fff7ed', color: '#c2410c' }}>PROJETADO</span> : null}
+                  {/* BASE FRACA (07/08): a locação já declarava a procedência; a venda mostrava
+                      duas amostras com a mesma cara de uma média sobre dezenas. O dono viu isso
+                      num Índice de TERRENO que saiu por quase metade do real. Agora o selo avisa. */}
+                  {reg.venda_base_fraca ? <span style={{ marginLeft: 6, fontSize: 9, fontWeight: 800, padding: '1px 6px', borderRadius: 999, background: '#fef2f2', color: '#b91c1c' }}>BASE FRACA</span> : null}
+                </div>
+                <div style={{ fontSize: 22, fontWeight: 900, color: reg.venda_base_fraca ? '#b91c1c' : '#0D63DB', marginTop: 4 }}>{Number(reg.venda_m2) > 0 ? `${brl(reg.venda_m2)}/m²` : '—'}</div>
+                {reg.venda_base_motivo && <div style={{ fontSize: 10, color: '#b91c1c', marginTop: 3, lineHeight: 1.4 }}>{reg.venda_base_motivo}. Use como indicativo e confirme com pesquisa local.</div>}
                 {Number(reg.total_anuncios) > 0 && <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 3 }}>{reg.total_anuncios} anúncio(s) · {reg.n_recentes || 0} recente(s)</div>}
               </div>
               <div style={{ background: 'white', borderRadius: 12, padding: '14px 16px' }}>

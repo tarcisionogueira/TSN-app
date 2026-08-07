@@ -245,6 +245,21 @@ export default async function handler(req) {
         aluguel_mensal_mediano: locMensais.length >= 3 ? mediana(locMensais) : null,
         n_locacao_sem_area: locMensais.length,
         n_amostras: vendaVals.length + locVals.length,
+        // PISO DE AMOSTRAS NA VENDA (07/08). `venda_m2` saía sem nenhuma exigência de volume:
+        // DUAS amostras viravam "o R$/m² da região", com a mesma cara de um número medido sobre
+        // dezenas. Gatilho do dono: Índice de TERRENO na Alameda Dourada mostrou quase METADE do
+        // que ele sabe ser a média do condomínio. A base eram 2 amostras de "Barueri" genérico
+        // (R$ 1.200 e R$ 1.714/m², sem bairro, sem endereço e sem link) — nunca foi uma medição
+        // daquele condomínio, mas era apresentada como se fosse.
+        // A locação já tinha esse piso (>= 3 acima); a venda não tinha. Agora os dois declaram.
+        // Não escondemos o número — dizemos com quantas amostras ele foi feito, para a tela
+        // poder marcar "base fraca" em vez de afirmar. Mesma regra do dono para o aluguel:
+        // "ou valor medido, ou o selo com a base declarada — nunca um número mudo".
+        n_venda: vendaVals.length,
+        venda_base_fraca: vendaVals.length > 0 && vendaVals.length < 3,
+        venda_base_motivo: vendaVals.length === 0
+          ? 'nenhuma amostra de venda deste tipo na região'
+          : (vendaVals.length < 3 ? `apenas ${vendaVals.length} amostra(s) de venda — insuficiente para média confiável` : null),
         nivel: nivelGeo,
         nivel_label: nivelGeo === 'rua' ? 'rua/condomínio (~250 m)' : nivelGeo === 'grid' ? 'microrregião (~1 km)' : 'cidade (composição de mercado)',
         bairro_norm: bairroNorm || null,
