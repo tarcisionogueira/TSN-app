@@ -256,6 +256,28 @@ não. **Ao criar função nova, revogue de PUBLIC.**
 | 3 fontes publicando lote vencido | LEILOTECH (132 de 189), SBID21 (37 de 39), VEGAS (41 de 62) — entra na próxima ofensiva |
 | Lote de Guarulhos `e7bd0637` | segue sem data; é o primeiro da nova fila de enriquecimento |
 | 155 `.json()` sem `.ok` | triagem pendente para promover o lint de warn a error |
+| `/checkout` — "Failed to fetch" | 2 ocorrências, 06/08 08:02 → 07/08 15:27. **NÃO é resíduo de deploy** (ver abaixo): atravessa dois dias e é a tela de PAGAMENTO. Investigar primeiro |
+| `/minha-rede` — Supabase 400 em `storage/v1/object/sign` | 3 ocorrências, 06/08 08:25 → 07/08 15:23. Assinatura de URL falhando na tela do parceiro — mesma família do bug do KYC (path que não vira URL assinada), agora do lado do cliente |
+
+### 🧾 Rastreabilidade deste bloco (para não se perder depois)
+
+- **Fuso.** Este bloco está rotulado **08/08** porque a sessão rodou em UTC, mas em horário de
+  Brasília ela terminou às **22h14 de 07/08**. Quem for procurar os commits pela data local vai
+  encontrá-los carimbados **07/08** — não são de dias diferentes.
+- **Commit de fechamento:** `993c918` (este bloco). Os sete anteriores estão na tabela do topo.
+- **A correção do achado do auditor** está na migração **`revogar_execute_public_funcoes_novas`**,
+  que revoga de `public, anon, authenticated` as 11 funções `SECURITY DEFINER` criadas na sessão:
+  `conciliacao_classificar`, `desativar_leiloes_encerrados`, `dre_competencia`,
+  `enfileirar_espelho_documentos`, `fornecedor_definir_conta`, `fornecedor_mesclar`,
+  `fornecedores_sincronizar`, `limpar_captura_handoff`, `rateio_definir`,
+  `recalcular_desconto_praca`, `limpar_analises_orfas`.
+- **Por que chegou e-mail de ERRO do health check nesta tarde** (a pergunta do dono): não foi falha
+  do sistema — foi a **minha própria sequência de deploys**, mais de 40 em 24 h (duas páginas
+  cheias na API da Vercel e ainda havia mais). Cada deploy troca o hash dos bundles; quem estava
+  com a página aberta pedia um chunk que já não existia. Daí os "Failed to fetch" concentrados
+  entre **14h33 e 16h12** em `/buscar`, `/imovel/:id`, `/login`, `/perfil`, `/minha-rede` e `/`,
+  mais um `vite:preloadError PRESO`. **Esses somem sozinhos** (o health check limpa em 24 h se não
+  recorrerem). Os DOIS da tabela acima não somem: são anteriores à janela de deploys e ficam.
 
 **A pergunta de rotina que fica deste dia:** antes de confiar numa varredura de código, *o que o
 sistema já registrou no banco sobre si mesmo?* Erro de runtime do cliente, anomalia de relatório,
