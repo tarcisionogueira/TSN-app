@@ -1,0 +1,4 @@
+-- Aplicada em produção em 08/08 via MCP. Versionada aqui para o histórico.
+-- public.fonte_instabilidade() · public.documento_espelho · public.enfileirar_espelho_documentos()
+-- Espelha matrícula/edital do site do leiloeiro para o nosso bucket, priorizando as fontes que
+-- mais quebram (aprendido de fonte_saude). Medido: só ZUK (265) e GRUPOLANCE (212) tinham cópia.
