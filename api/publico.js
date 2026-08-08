@@ -128,6 +128,20 @@ h2{font-size:18px;margin:32px 0 12px}
 .dados div span{display:block;font-size:11.5px;color:var(--cinza);text-transform:uppercase;letter-spacing:.4px;font-weight:700}
 .dados div strong{font-size:17px}
 .pag{display:flex;gap:10px;justify-content:center;margin-top:28px;font-size:14px}
+/* Busca por cidade — HTML puro, sem JS: a página pública precisa abrir rápido e funcionar
+   para o robô do buscador tanto quanto para a pessoa. */
+.busca{background:#fff;border:1px solid var(--linha);border-radius:14px;padding:18px;margin:0 0 24px}
+.busca form{display:flex;gap:10px;flex-wrap:wrap}
+.busca input{flex:1;min-width:220px;padding:12px 14px;border:1px solid var(--linha);border-radius:10px;font-size:15px;font-family:inherit;color:inherit;background:#fff}
+.busca input:focus{outline:2px solid var(--azul);outline-offset:1px}
+.busca button{padding:12px 22px;border:none;border-radius:10px;background:var(--azul);color:#fff;font-weight:800;font-size:15px;cursor:pointer;font-family:inherit}
+.busca .dica{font-size:12.5px;color:var(--cinza);margin:10px 0 0}
+/* Bloco de cadastro no lote: o que é do assinante fica visível como PROMESSA, não escondido. */
+.trava{background:linear-gradient(180deg,#eff6ff,#fff);border:1px solid #bfdbfe;border-radius:14px;padding:20px;margin:20px 0}
+.trava h3{margin:0 0 10px;font-size:16px}
+.trava ul{margin:0 0 16px;padding-left:20px;color:var(--cinza);font-size:14px;line-height:1.9}
+.trava .cta{display:inline-block}
+.trava .obs{font-size:12.5px;color:var(--cinza);margin:10px 0 0}
 footer{border-top:1px solid var(--linha);padding:24px 20px;color:var(--cinza);font-size:12.5px}
 footer .in{max-width:1080px;margin:0 auto}
 @media(prefers-color-scheme:dark){body{background:#0f1115;color:#e5e7eb}.card,.painel,.lista li a{background:#171a21;border-color:#262b36}.sub,.l,.mig,footer{color:#94a3b8}}
@@ -167,6 +181,44 @@ function cardImovel(im) {
   </article>`;
 }
 
+// Caixa de busca por cidade. Aparece no topo das páginas de lista — é o caminho que o
+// visitante de anúncio espera ("digito minha cidade e vejo o que tem"), em vez de descer
+// por Brasil → estado → cidade. Formulário GET simples: sem JS, funciona no robô e no
+// celular ruim, e a URL do resultado é compartilhável.
+function caixaBusca(valor = '') {
+  return `<div class="busca">
+    <form action="${SITE}/leiloes/buscar" method="get">
+      <input name="cidade" value="${esc(valor)}" placeholder="Digite a cidade — ex.: Campinas, Rio de Janeiro, Goiânia" aria-label="Cidade" autocomplete="off"/>
+      <button type="submit">Ver imóveis</button>
+    </form>
+    <p class="dica">Ou navegue por estado abaixo.</p>
+  </div>`;
+}
+
+// ── /leiloes/buscar?cidade= ──────────────────────────────────────────────────
+async function paginaBusca(termo) {
+  const q = String(termo || '').trim().slice(0, 60);
+  const achados = q.length >= 2 ? await rpc('acervo_busca_cidade', { p_q: q }) : [];
+  const lista = Array.isArray(achados) ? achados : [];
+
+  // Resultado da busca NÃO entra no índice: é conteúdo gerado por consulta, muda a cada
+  // digitação e geraria milhares de URLs rasas — exatamente o que já nos custou o aviso de
+  // "cópia" no Search Console. A página serve à PESSOA; o buscador continua pelas de cidade.
+  return pagina({
+    titulo: q ? `Imóveis em leilão em ${q} | BidPro Brasil` : 'Buscar imóveis em leilão | BidPro Brasil',
+    desc: 'Encontre imóveis em leilão pela cidade.',
+    canonical: `${SITE}/leiloes`, indexar: false,
+    migalha: [{ nome: 'Início', url: `${SITE}/` }, { nome: 'Imóveis em leilão', url: `${SITE}/leiloes` }, { nome: 'Busca' }],
+    corpo: `<h1>${q ? `Resultados para “${esc(q)}”` : 'Buscar imóveis em leilão'}</h1>
+      ${caixaBusca(q)}
+      ${!q || q.length < 2 ? '<p class="sub">Digite ao menos duas letras do nome da cidade.</p>' : ''}
+      ${q.length >= 2 && !lista.length ? `<p class="sub">Não encontramos lotes ativos em uma cidade com esse nome. O acervo muda toda semana —
+        <a href="${SITE}/leiloes">veja todos os estados</a> ou tente outra grafia.</p>` : ''}
+      ${lista.length ? `<p class="sub">${lista.length === 1 ? '1 cidade encontrada' : `${lista.length} cidades encontradas`}. Clique para ver os lotes.</p>
+      <ul class="lista">${lista.map((c) => `<li><a href="${SITE}/leiloes/${String(c.uf).toLowerCase()}/${esc(c.cidade_norm)}">${esc(c.cidade)}/${esc(c.uf)} <strong>(${Number(c.total).toLocaleString('pt-BR')})</strong></a></li>`).join('')}</ul>` : ''}`,
+  });
+}
+
 // ── /leiloes — índice nacional ───────────────────────────────────────────────
 async function paginaBrasil() {
   const dados = await rpc('acervo_uf_contagem');
@@ -179,7 +231,9 @@ async function paginaBrasil() {
     canonical: `${SITE}/leiloes`,
     migalha: [{ nome: 'Início', url: `${SITE}/` }, { nome: 'Imóveis em leilão' }],
     corpo: `<h1>Imóveis em leilão no Brasil</h1>
-      <p class="sub">${total.toLocaleString('pt-BR')} imóveis de leilão judicial e extrajudicial acompanhados hoje, em ${ufs.length} estados. Escolha o estado para ver as cidades com oportunidades.</p>
+      <p class="sub">${total.toLocaleString('pt-BR')} imóveis de leilão judicial e extrajudicial acompanhados hoje, em ${ufs.length} estados.</p>
+      ${caixaBusca()}
+      <h2>Ou escolha o estado</h2>
       <ul class="lista">${ufs.map(([uf, n]) => `<li><a href="${SITE}/leiloes/${uf.toLowerCase()}">${esc(UF_NOME[uf])} <strong>(${n.toLocaleString('pt-BR')})</strong></a></li>`).join('')}</ul>
       <h2>Como funciona a BidPro Brasil</h2>
       <p class="sub">Reunimos os lotes dos leiloeiros e da Caixa num só lugar e entregamos, para cada imóvel, uma análise de mercado, um parecer jurídico e o cálculo de viabilidade do arremate — o que ninguém consegue fazer sozinho antes de dar um lance.
@@ -202,7 +256,9 @@ async function paginaUF(uf) {
     indexar: total > 0,
     migalha: [{ nome: 'Início', url: `${SITE}/` }, { nome: 'Imóveis em leilão', url: `${SITE}/leiloes` }, { nome: nomeUF }],
     corpo: `<h1>Imóveis em leilão em ${esc(nomeUF)}</h1>
-      <p class="sub">${total.toLocaleString('pt-BR')} imóveis em leilão em ${cidades.length} cidades de ${esc(nomeUF)}. Clique na cidade para ver os lotes.</p>
+      <p class="sub">${total.toLocaleString('pt-BR')} imóveis em leilão em ${cidades.length} cidades de ${esc(nomeUF)}.</p>
+      ${caixaBusca()}
+      <h2>Cidades de ${esc(nomeUF)}</h2>
       <ul class="lista">${cidades.map(([cn, c]) => `<li><a href="${SITE}/leiloes/${uf.toLowerCase()}/${cn}">${esc(c.nome)} <strong>(${c.n.toLocaleString('pt-BR')})</strong></a></li>`).join('')}</ul>
       <h2>Antes de dar um lance em ${esc(nomeUF)}</h2>
       <p class="sub">Cada imóvel de leilão tem uma história: ocupação, dívidas de condomínio e IPTU, ônus na matrícula, prazo de desocupação. A BidPro Brasil produz a análise de mercado, o parecer jurídico e o cálculo de viabilidade de cada lote. <a href="${SITE}/#/login?modo=cadastro">Comece grátis</a>.</p>`,
@@ -324,13 +380,33 @@ async function paginaImovel(id) {
           ${linha('Bairro', im.bairro)}
           ${linha('Data do leilão', im.data_leilao)}
         </div>
-        <p><a class="cta" href="${SITE}/#/imovel/${esc(im.id)}">Ver ficha completa e análise →</a></p>
       </div>
       ${im.descricao ? `<h2>Descrição do lote</h2><p>${esc(String(im.descricao).slice(0, 1200))}</p>` : ''}
+
+      <!-- O GATE (08/08, pedido do dono: "ao abrir o imóvel ele solicita o cadastro para ver
+           as informações"). Feito como PROMESSA VISÍVEL, não como parede.
+           POR QUE NÃO ESCONDER TUDO: estas 31 mil páginas são o ativo de busca orgânica da
+           empresa — elas só rankeiam porque têm conteúdo legível. Página que exige login não
+           é indexada, e mostrar ao Google algo diferente do que a pessoa vê é cloaking, que
+           dá penalidade. Então o público continua vendo o FATO (o que qualquer site de
+           leilão mostra: preço, área, cidade, desconto) e o cadastro abre o que é NOSSO e
+           ninguém mais tem: endereço exato, edital, matrícula, análise e lance máximo.
+           Robô e pessoa veem exatamente a mesma coisa. -->
+      <div class="trava">
+        <h3>Crie sua conta grátis para ver a ficha completa deste imóvel</h3>
+        <ul>
+          <li><strong>Endereço exato</strong> e localização no mapa</li>
+          <li><strong>Edital e matrícula</strong> do lote, quando o leiloeiro publica</li>
+          <li><strong>Análise de mercado</strong> — quanto vale de verdade no bairro</li>
+          <li><strong>Parecer jurídico</strong> — ocupação, dívidas e ônus na matrícula</li>
+          <li><strong>Lance máximo</strong> que ainda preserva o seu lucro</li>
+        </ul>
+        <a class="cta" href="${SITE}/#/login?modo=cadastro&amp;imovel=${esc(im.id)}">Criar conta grátis e ver a ficha</a>
+        <p class="obs">São 3 análises por mês no plano gratuito. Já tem conta? <a href="${SITE}/#/imovel/${esc(im.id)}">Entrar e abrir este imóvel</a>.</p>
+      </div>
+
       <h2>O que checar antes de dar um lance</h2>
-      <p class="sub">Desconto sozinho não decide nada. O que decide é o preço real de mercado do bairro, os débitos que vêm junto (IPTU, condomínio, ônus na matrícula), a situação de ocupação e o risco jurídico do processo.
-      A BidPro Brasil monta para este imóvel a análise de mercado, o relatório documental e o parecer jurídico — e calcula o <strong>lance máximo</strong> que ainda preserva o seu lucro.
-      <a href="${SITE}/#/login?modo=cadastro">Criar conta grátis</a>.</p>
+      <p class="sub">Desconto sozinho não decide nada. O que decide é o preço real de mercado do bairro, os débitos que vêm junto (IPTU, condomínio, ônus na matrícula), a situação de ocupação e o risco jurídico do processo.</p>
       ${im.cidade_norm && UF_NOME[uf] ? `<p><a href="${SITE}/leiloes/${uf.toLowerCase()}/${im.cidade_norm}">← Todos os imóveis em leilão em ${esc(im.cidade)}/${esc(uf)}</a></p>` : ''}`,
     // JSON-LD do lote. Campos acrescentados em 04/08 respondendo aos avisos NÃO CRÍTICOS
     // de "Snippets do produto" do Search Console — os dois clássicos são identificador
@@ -386,7 +462,10 @@ export default async function handler(req, res) {
 
   try {
     let html = null;
-    if (tipo === 'imovel') {
+    if (tipo === 'busca') {
+      // O termo cru (com acento e espaço) — quem normaliza é a função de busca no banco.
+      html = await paginaBusca(u.searchParams.get('cidade') || '');
+    } else if (tipo === 'imovel') {
       if (!/^[0-9a-f-]{20,40}$/i.test(id)) return res.status(404).send('Imóvel não encontrado.');
       html = await paginaImovel(id);
       if (!html) return res.status(404).send('Imóvel não encontrado.');
@@ -402,7 +481,12 @@ export default async function handler(req, res) {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     // Cache na borda: estas páginas são iguais para todo mundo e o acervo muda por dia,
     // não por segundo. Sem isto, cada visita de robô viraria consulta ao banco.
-    res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=3600, stale-while-revalidate=86400');
+    // A BUSCA é a exceção: o resultado depende do que a pessoa digitou, então cachear por
+    // hora encheria a borda de páginas de uso único. Cache curto, só para absorver o
+    // duplo-clique e o "voltar" do navegador.
+    res.setHeader('Cache-Control', tipo === 'busca'
+      ? 'public, max-age=0, s-maxage=60'
+      : 'public, max-age=0, s-maxage=3600, stale-while-revalidate=86400');
     return res.status(200).send(html);
   } catch (e) {
     console.error('[publico]', e?.message || e);

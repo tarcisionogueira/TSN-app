@@ -7,6 +7,7 @@
     { "source": "/p/curso/:id", "destination": "/api/og-share?tipo=curso&id=:id" },
     { "source": "/p/ebook/:id", "destination": "/api/og-share?tipo=ebook&id=:id" },
     { "source": "/leiloes", "destination": "/api/publico?tipo=brasil" },
+    { "source": "/leiloes/buscar", "destination": "/api/publico?tipo=busca" },
     { "source": "/leiloes/:uf", "destination": "/api/publico?tipo=uf&uf=:uf" },
     { "source": "/leiloes/:uf/:cidade", "destination": "/api/publico?tipo=cidade&uf=:uf&cidade=:cidade" },
     { "source": "/leilao/:id", "destination": "/api/publico?tipo=imovel&id=:id" },
