@@ -20,7 +20,10 @@ const ROLES_CLIENTE = ['explorador', 'top2', 'top2_anual', 'assessorado', 'asses
 const fmtBRL = (v) => v ? 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';
 const fmtData = (d) => d ? new Date(d).toLocaleDateString('pt-BR') : '—';
 
-const ROLES_COM_COMISSAO = ['admin', 'consultor', 'analista', 'advogado'];
+// Quem tem caminho de recebimento na plataforma. O EXPLORADOR entrou aqui em 08/08: o
+// parceiro grátis passou a ganhar comissão, e sem isto ele acumulava saldo sem NUNCA ver a
+// tela de saque nem a de cadastro da empresa — dinheiro dele, invisível para ele.
+const ROLES_COM_COMISSAO = ['admin', 'consultor', 'analista', 'advogado', 'explorador'];
 // Clientes PAGANTES também recebem comissão (Programa de Parceiros — rede multinível) e
 // precisam ver saldo/saque + o relatório da rede.
 const ROLES_PAGOS_CLIENTE = ['top2', 'top2_anual', 'assessorado', 'assessorado_anual', 'clube', 'clube_anual'];
@@ -1093,9 +1096,20 @@ export default function Perfil() {
               )}
             </div>
 
-            {ehParceiro && (
+            {/* SEM GATE POR PAPEL (08/08). Este bloco — CNPJ, razão social, PIX da empresa,
+                verificação na Receita e contrato social — estava sob `ehParceiro`, que só
+                cobre cliente PAGANTE. Resultado: a EQUIPE (admin, analista, advogado,
+                consultor) nunca viu esta tela na vida, e o dono chegou a perguntar onde ela
+                estava. Agora que não existe pagamento a pessoa física, todo mundo que recebe
+                precisa cadastrar a empresa — logo, todo mundo que chega aqui vê o bloco. */}
+            {true && (
               <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
                 <div style={{ fontSize: 12, fontWeight: 800, color: '#334155', marginBottom: 8 }}>Empresa (PJ) e verificação — necessário para sacar</div>
+                <div style={{ fontSize: 11.5, color: '#64748b', marginBottom: 8, lineHeight: 1.55 }}>
+                  O pagamento é feito <strong>sempre para a conta de uma empresa da qual você é sócio</strong> — não há pagamento a pessoa física.
+                  Informe o CNPJ e clique em <strong>“Verificar automaticamente (Receita)”</strong>: consultamos o quadro societário e, se o seu CPF constar lá, a liberação é imediata e você não precisa anexar nada.
+                  O contrato social só é necessário quando a consulta automática não confirmar.
+                </div>
                 {pj.pj_revalidacao_pendente ? (
                   <div style={{ fontSize: 11.5, fontWeight: 700, color: '#b45309', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '8px 10px', marginBottom: 8 }}>
                     ⚠️ Revalidação necessária — {pj.pj_revalidacao_motivo || 'os dados da sua empresa divergiram na reconferência periódica'}. Atualize o CNPJ/razão social abaixo e clique em <strong>“Verificar automaticamente (Receita)”</strong> para liberar novos repasses. O saldo fica retido até lá.
