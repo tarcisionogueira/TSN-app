@@ -20,6 +20,8 @@ import { fetchViaBrightData, brightDataDisponivel } from '../api/_brightdata.js'
 import { fetchHeadless, fecharHeadless } from './lib/fetch-residencial.mjs';
 import { extrairGenerico, extrairData, checarQualidade } from './lib/scraper-core.mjs';
 import { registrarConhecimento, qualidadeColeta } from './lib/conhecimento.mjs';
+// Monitor de fontes: sem esta linha a fonte fica INVISÍVEL ao bug bounty (ver _saude-fonte.mjs).
+import { registrarSaude } from './_saude-fonte.mjs';
 
 const BASE = 'https://www.rjleiloes.com.br';
 const MAX_LOTES = Number(process.env.RJ_MAX_LOTES || 40);
@@ -263,6 +265,9 @@ async function main() {
   const { error } = await supabase.from('imoveis_leilao').upsert(prontos, { onConflict: 'fonte_id', ignoreDuplicates: false });
   if (error) { console.error('erro ao gravar:', error.message); process.exit(1); }
   console.log(`✅ ${prontos.length} imóveis RJ Leilões gravados/atualizados.`);
+  // SAÚDE DA FONTE (08/08): entra no monitor de regressão junto das demais. Antes esta fonte
+  // não escrevia em `fonte_saude`, então nunca ganhava piso aprendido e uma quebra passaria batido.
+  await registrarSaude(supabase, 'RJLEILOES', prontos, 'principal');
   // Auto-aprendizado: registra o que este scraper sabe na base de conhecimento.
   await registrarConhecimento(supabase, {
     fonte: 'RJLEILOES', plataforma: 'SOLEON', acesso: 'brightdata', custo: 'pago',

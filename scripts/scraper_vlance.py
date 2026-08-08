@@ -341,6 +341,41 @@ def upsert_supabase(rows):
             return
         total += len(lote)
     print(f"   ✅ acervo: {total} imóvel(is) upsert em imoveis_leilao (fonte VLANCE)")
+    registrar_saude(rows, url, key)
+
+
+def registrar_saude(rows, url, key):
+    """SAÚDE DA FONTE (08/08) — grava 1 linha por execução em `fonte_saude`.
+
+    Sem isto a VLANCE ficava INVISÍVEL ao monitor de regressão: nunca escrevia histórico, logo
+    nunca ganhava piso aprendido, logo o alerta de quebra jamais dispararia para ela. Era uma das
+    7 fontes no ponto cego (29 lotes ativos). Equivalente ao scripts/_saude-fonte.mjs do lado Node.
+    Best-effort: falhar aqui não pode derrubar uma coleta que já gravou o acervo.
+    """
+    n = len(rows or [])
+    def pct(cond):
+        return round(sum(1 for r in rows if cond(r)) / n, 3) if n else 0
+    corpo = {
+        "fonte": "VLANCE", "total": n, "estrategia": "principal",
+        "uf_pct": pct(lambda r: isinstance(r.get("estado"), str) and len(r.get("estado") or "") == 2),
+        "valor_pct": pct(lambda r: (r.get("valor_minimo") or 0) > 0),
+        "link_pct": pct(lambda r: str(r.get("link_edital") or r.get("url_lote") or "").startswith("http")),
+        "foto_pct": pct(lambda r: bool(r.get("link_foto"))),
+        "status": "ok" if n else "falhou",
+        "motivo": None if n else "coleta vazia",
+    }
+    try:
+        r = requests.post(
+            f"{url.rstrip('/')}/rest/v1/fonte_saude",
+            headers={"apikey": key, "Authorization": f"Bearer {key}",
+                     "Content-Type": "application/json", "Prefer": "return=minimal"},
+            data=json.dumps(corpo), timeout=30)
+        if r.status_code >= 300:
+            print(f"!! fonte_saude ({r.status_code}): {r.text[:200]}", file=sys.stderr)
+        else:
+            print(f"   🩺 saúde registrada: {n} lotes · {corpo['status']}")
+    except Exception as e:  # noqa: BLE001 — best-effort
+        print(f"!! fonte_saude erro: {e}", file=sys.stderr)
 
 
 def main():

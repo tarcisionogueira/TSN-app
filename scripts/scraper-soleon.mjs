@@ -25,6 +25,8 @@ import { createClient } from '@supabase/supabase-js';
 import { fetchViaBrightData, brightDataDisponivel } from '../api/_brightdata.js';
 import { extrairGenerico, extrairData, checarQualidade } from './lib/scraper-core.mjs';
 import { registrarConhecimento, qualidadeColeta } from './lib/conhecimento.mjs';
+// Monitor de fontes: sem esta linha a fonte fica INVISÍVEL ao bug bounty (ver _saude-fonte.mjs).
+import { registrarSaude } from './_saude-fonte.mjs';
 
 // Tenants SOLEON confirmados no recon (23/07). fonte = chave única no acervo/monitor;
 // o baseline auto-aprendido (monitor-fontes-cron) passa a vigiar cada um após alguns runs.
@@ -299,6 +301,10 @@ async function main() {
   for (const tenant of TENANTS) {
     const rows = prontos.filter(r => r.fonte === tenant.fonte);
     if (!rows.length) continue;
+    // SAÚDE POR TENANT (08/08): CALIL, VEGAS e 3 TORRES compartilham a plataforma Soleon mas são
+    // fontes SEPARADAS no acervo — cada uma precisa da sua linha, senão o piso aprendido de uma
+    // esconde a quebra da outra. As três estavam fora do monitor.
+    await registrarSaude(supabase, tenant.fonte, rows, 'soleon');
     await registrarConhecimento(supabase, {
       fonte: tenant.fonte, plataforma: 'SOLEON', acesso: 'gratis+brightdata', custo: 'misto',
       anti_bot: 'cloudflare_parcial', enumeracao: 'listagem_paginada', url_lote: '/item/{id}/detalhes',
