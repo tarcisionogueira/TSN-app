@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import ExtratoUnificado from '../components/ExtratoUnificado';
+import ConciliacaoBancaria from '../components/ConciliacaoBancaria';
 import { useNavigate } from 'react-router-dom';
 import { apiCall } from '../utils/apiCall';
 import { supabase } from '../utils/supabase';
@@ -515,7 +516,7 @@ export default function AdminFinanceiro() {
       <div style={{ maxWidth: 900, margin: '0 auto', padding: '32px 20px' }}>
         {/* Seletor de visão: Fluxo de caixa × Assinaturas */}
         <div style={{ display: 'flex', gap: 4, marginBottom: 24, background: '#e2e8f0', padding: 4, borderRadius: 10, width: 'fit-content' }}>
-          {[['sintese', '📊 Síntese'], ['caixa', '💰 Fluxo de caixa'], ['extrato', '🏦 Extrato'], ['assinaturas', '👥 Assinaturas']].map(([k, label]) => (
+          {[['sintese', '📊 Síntese'], ['caixa', '💰 Fluxo de caixa'], ['extrato', '🏦 Extrato'], ['conciliacao', '📒 Conciliação'], ['assinaturas', '👥 Assinaturas']].map(([k, label]) => (
             <button key={k} onClick={() => setAba(k)}
               style={{ padding: '8px 18px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 700,
                 background: aba === k ? '#fff' : 'transparent', color: aba === k ? '#0D63DB' : '#64748b',
@@ -532,6 +533,9 @@ export default function AdminFinanceiro() {
             fluxo. As outras abas partem do que o sistema registrou; esta lê as contas e mostra
             também as SAÍDAS — sem elas há faturamento, não fluxo de caixa. */}
         {aba === 'extrato' && <ExtratoUnificado />}
+        {/* CONCILIAÇÃO: onde o extrato vira contabilidade. Classifica pelo plano de contas,
+            registra quem classificou e exporta (PDF/OFX) para a contabilidade fechar a DRE. */}
+        {aba === 'conciliacao' && <ConciliacaoBancaria />}
       </div>
     </div>
   );

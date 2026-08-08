@@ -1,0 +1,5 @@
+-- Aplicada em produção em 08/08 via MCP. Versionada aqui para o histórico.
+-- public.plano_contas (estrutura DRE 3..9) · public.conciliacao_regra (de/para aprendível)
+-- public.conciliacao_lancamento (extrato persistido) · conciliacao_classificar() · dre_competencia()
+-- Persistir o extrato é o ponto central: a contabilidade fecha competências passadas, e número
+-- que muda a cada consulta faz a DRE de março mudar depois de entregue.

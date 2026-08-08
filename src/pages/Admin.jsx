@@ -10094,14 +10094,19 @@ function QualidadeTab() {
 // Menus agrupados por área — navegação mais fácil que a lista corrida de abas.
 // FONTE ÚNICA das abas: os botões, o tab default e o render saem daqui (não há mais
 // lista `TABS` paralela p/ dessincronizar). `flatMap` dá o conjunto plano quando preciso.
+// MENU EM DOIS NÍVEIS (08/08, pedido do dono: "apesar de completa, desorganizada, com os botões
+// amontoados... ter o botão da família e, ao clicar, os botões internos dele").
+// Antes: SETE faixas com TODAS as abas visíveis ao mesmo tempo — 18 botões competindo por atenção
+// na primeira dobra. Agora: quatro famílias por ÁREA DA EMPRESA (a divisão que uma organização de
+// porte usa), e só a família aberta mostra as suas abas.
+// Ficaram quatro, não três: Comercial e Financeiro respondem perguntas diferentes — o que vendemos
+// e o que entrou/saiu — e juntá-las devolveria o amontoado num único botão.
 const GRUPOS_ADMIN = [
-  { nome: 'Início',              tabs: ['Dashboard'] },
-  { nome: 'Clientes & Vendas',   tabs: ['Usuários', 'Convites', 'Comercial', 'Contratos'] },
-  { nome: 'Conteúdo & Ofertas',  tabs: ['Cursos', 'eBooks', 'Promoções', 'Marketing'] },
-  { nome: 'Equipe',              tabs: ['Equipe'] }, // Agenda virou sub-aba de Equipe
-  { nome: 'Dados & Fontes',      tabs: ['Scrapers', 'Registros', 'CNJ', 'Editais', 'Qualidade', 'Demografia'] },
-  { nome: 'Financeiro',          tabs: ['Financeiro'] },
-  { nome: 'Sistema',             tabs: ['Configurações'] },
+  { nome: 'Início',        icone: '🏠', desc: 'Visão geral do dia',            tabs: ['Dashboard'] },
+  { nome: 'Administrativo',icone: '🏢', desc: 'Pessoas, contratos e ajustes',  tabs: ['Usuários', 'Convites', 'Equipe', 'Contratos', 'Configurações'] },
+  { nome: 'Comercial',     icone: '📣', desc: 'Vendas, ofertas e conteúdo',    tabs: ['Comercial', 'Marketing', 'Promoções', 'Cursos', 'eBooks'] },
+  { nome: 'Financeiro',    icone: '💰', desc: 'Fluxo de caixa e conciliação',  tabs: ['Financeiro'] },
+  { nome: 'Operacional',   icone: '⚙️', desc: 'Coleta, dados e qualidade',     tabs: ['Scrapers', 'Registros', 'CNJ', 'Editais', 'Qualidade', 'Demografia'] },
 ];
 
 // Rótulos amigáveis das abas — a CHAVE interna (usada em tab===..., sessionStorage) NÃO muda,
@@ -10901,6 +10906,14 @@ export default function Admin() {
     return t;
   });
   const mudarTab = (t) => { setTab(t); sessionStorage.setItem('admin_tab', t); };
+  // A família aberta é DERIVADA da aba atual — não é estado paralelo. Assim voltar de outra tela
+  // (ou o F5) cai sempre na família certa, sem um segundo lugar para dessincronizar.
+  const familiaDaTab = (t) => (GRUPOS_ADMIN.find(g => g.tabs.includes(t)) || GRUPOS_ADMIN[0]).nome;
+  const [familiaAberta, setFamiliaAberta] = React.useState(() => familiaDaTab(tab));
+  React.useEffect(() => { setFamiliaAberta(familiaDaTab(tab)); }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Clicar na família abre a PRIMEIRA aba dela: um clique já leva a algum lugar útil, em vez de
+  // só revelar mais botões.
+  const abrirFamilia = (g) => { setFamiliaAberta(g.nome); if (!g.tabs.includes(tab)) mudarTab(g.tabs[0]); };
 
   if (loading) {
     return <div style={{ ...S.page, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><p style={{ color: '#64748b' }}>Carregando...</p></div>;
@@ -10949,15 +10962,35 @@ export default function Admin() {
       </div>
 
       <div style={S.body}>
-        <div style={{ ...S.tabs, display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'stretch' }}>
-          {GRUPOS_ADMIN.map(g => (
-            <div key={g.nome} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 10, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, width: 130, flexShrink: 0 }}>{g.nome}</span>
-              {g.tabs.map(t => (
-                <button key={t} style={S.tab(tab === t)} onClick={() => mudarTab(t)}>{ROTULO_TAB[t] || t}</button>
-              ))}
-            </div>
-          ))}
+        <div style={{ ...S.tabs, display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'stretch' }}>
+          {/* Nível 1 — as famílias. A família da aba aberta fica marcada, então recarregar a
+              página cai na família certa sem estado extra para guardar. */}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {GRUPOS_ADMIN.map(g => {
+              const ativa = g.nome === familiaAberta;
+              return (
+                <button key={g.nome} onClick={() => abrirFamilia(g)}
+                  style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2, padding: '10px 16px', borderRadius: 10, cursor: 'pointer',
+                    border: `1px solid ${ativa ? '#0D63DB' : '#334155'}`, background: ativa ? '#0D63DB' : 'rgba(255,255,255,0.04)',
+                    color: ativa ? '#fff' : '#cbd5e1', minWidth: 150, textAlign: 'left', transition: 'all .15s' }}>
+                  <span style={{ fontSize: 13.5, fontWeight: 800 }}>{g.icone} {g.nome}</span>
+                  <span style={{ fontSize: 10.5, opacity: ativa ? 0.85 : 0.6 }}>{g.desc}</span>
+                </button>
+              );
+            })}
+          </div>
+          {/* Nível 2 — só as abas da família aberta. Família de aba única não repete o botão. */}
+          {(() => {
+            const g = GRUPOS_ADMIN.find(x => x.nome === familiaAberta);
+            if (!g || g.tabs.length <= 1) return null;
+            return (
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', paddingTop: 2 }}>
+                {g.tabs.map(t => (
+                  <button key={t} style={S.tab(tab === t)} onClick={() => mudarTab(t)}>{ROTULO_TAB[t] || t}</button>
+                ))}
+              </div>
+            );
+          })()}
         </div>
 
         {tab === 'Dashboard'      && <DashboardTab irParaTab={mudarTab} />}
