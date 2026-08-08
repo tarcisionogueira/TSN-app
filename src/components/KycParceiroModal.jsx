@@ -30,24 +30,33 @@ export default function KycParceiroModal() {
   const docRef = React.useRef();
   const selfieRef = React.useRef();
 
+  // EQUIPE TAMBÉM VERIFICA IDENTIDADE (decisão do dono, 08/08): "a equipe coloca pra fazer a
+  // mesma verificação, batendo a selfie e anexando o documento de identidade". Quem recebe
+  // dinheiro da plataforma prova quem é — a regra deixou de valer só para o parceiro. O bloqueio
+  // duro vive no saque (`saque.exige_kyc`, escopo "todos"); este popup é o atalho para resolver.
+  // O admin segue fora do POPUP (é quem opera o sistema e o vê o dia inteiro), mas NÃO fica fora
+  // do gate de saque: se ele for sacar sem identidade validada, a regra barra igual.
+  const RECEBE_POR_FUNCAO = ['analista', 'advogado', 'consultor', 'afiliado', 'leiloeiro'];
+
   useEffect(() => {
-    // Admin (papel real) nunca é cobrado; no modo suporte o popup não aparece (é ação pessoal do
-    // cliente — e os documentos iriam para a conta errada). Só o próprio usuário, na sua sessão.
+    // No modo suporte o popup não aparece (é ação pessoal do usuário — e os documentos iriam
+    // para a conta errada). Só o próprio usuário, na sua sessão.
     if (!user?.id || role === 'admin' || impersonate) { setEstado('ok'); return; }
     let vivo = true;
+    const precisaDe = (data) =>
+      (!!data?.parceiro_aceite_em || RECEBE_POR_FUNCAO.includes(role))
+      && !data?.identidade_validada && !data?.identidade_pendente;
     supabase.from('perfis').select('parceiro_aceite_em, identidade_validada, identidade_pendente')
       .eq('id', user.id).maybeSingle()
-      .then(({ data }) => {
-        if (!vivo) return;
-        const precisa = !!data?.parceiro_aceite_em && !data?.identidade_validada && !data?.identidade_pendente;
-        setEstado(precisa ? 'pedir' : 'ok');
-      }).catch(() => setEstado('ok'));
+      .then(({ data }) => { if (vivo) setEstado(precisaDe(data) ? 'pedir' : 'ok'); })
+      .catch(() => setEstado('ok'));
     // Reavalia ao aceitar a parceria (o mesmo evento que atualiza o menu).
     const h = () => { setAdiado(false); try { sessionStorage.removeItem(ADIAR_KEY); } catch { /* ignore */ }
       supabase.from('perfis').select('parceiro_aceite_em, identidade_validada, identidade_pendente').eq('id', user.id).maybeSingle()
-        .then(({ data }) => setEstado((!!data?.parceiro_aceite_em && !data?.identidade_validada && !data?.identidade_pendente) ? 'pedir' : 'ok')).catch(() => {}); };
+        .then(({ data }) => setEstado(precisaDe(data) ? 'pedir' : 'ok')).catch(() => {}); };
     window.addEventListener('tsn:parceiro-atualizado', h);
     return () => { vivo = false; window.removeEventListener('tsn:parceiro-atualizado', h); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, role, impersonate]);
 
   // Não briga com o popup de cadastro base (nome/cidade/telefone): deixa aquele terminar antes.
