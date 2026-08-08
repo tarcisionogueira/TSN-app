@@ -15,6 +15,37 @@ curto (5–8 linhas) antes de seguir:
 
 1. **Saúde** (MCP Supabase/Vercel): imóveis ativos e atualizados nas últimas 24h, fila de
    geocode, últimos deploys (`state=READY`?), crons com timeout recente.
+
+   > **1b. O QUE ESTÁ QUEBRADO AGORA — rode SEMPRE, é uma query só e custa zero** (decisão do
+   > dono, 08/08). O que custa é a auditoria do Claude; ler o estado do banco não custa nada, e
+   > foi assim que apareceram, num dia só: 3 telas com consulta quebrada falhando em silêncio, o
+   > KYC que nunca validou ninguém e um selo verde jurídico dado sem consulta. **Nenhum deles
+   > tinha aparecido em varredura de código** — só no rastro que deixaram no banco.
+   > ```sql
+   > -- erros de runtime que o CLIENTE tomou (tabela/coluna inexistente, 400, Failed to fetch)
+   > select rota, ocorrencias, left(msg,120) as erro, ultima_em from erros_cliente
+   >  where not resolvido and ultima_em > now() - interval '14 days' order by ultima_em desc limit 20;
+   > -- incoerências que chegam ao relatório do cliente
+   > select tipo, count(*), max(atualizado_em) from relatorio_anomalias where not resolvido group by 1;
+   > -- chamado DO CLIENTE sem resposta (proativo da IA sem retorno NÃO conta — não é dívida nossa)
+   > select c.id, c.titulo, c.criado_em from chamados c where c.status='aberto'
+   >   and c.criado_em < now() - interval '3 days'
+   >   and exists (select 1 from chamados_mensagens m where m.chamado_id=c.id and m.autor_tipo='cliente');
+   > -- KYC: documento gravado sem URL utilizável (trava saque; era 8/8 em 07/08)
+   > select count(*) from usuario_docs where url not like 'http%';
+   > -- fontes no PONTO CEGO do monitor: têm lote ativo e nenhum registro em fonte_saude
+   > select fonte, count(*) from imoveis_leilao i where ativo
+   >   and not exists (select 1 from fonte_saude s where s.fonte=i.fonte) group by 1 order by 2 desc;
+   > -- inventário de documentos por leiloeiro (0% = documental sem o que ler)
+   > select fonte, count(*) ativos,
+   >   round(100.0*count(*) filter (where link_matricula is not null
+   >     or jsonb_array_length(coalesce(anexos,'[]'::jsonb))>0)/count(*),0) as pct_com_doc
+   >   from imoveis_leilao where ativo and fonte not in ('CEF','caixa') group by 1 having count(*)>=20 order by 2 desc;
+   > ```
+   > **Duas checagens automáticas convivem, e elas NÃO são a mesma coisa:**
+   > `/api/health-check` (2×/dia, **custo zero** — não usa IA; só manda e-mail quando há
+   > problema) **continua ligado e deve continuar**. A auditoria do Claude
+   > (`auditoria-claude.yml`, ~R$ 43-59) é a que só roda com 7+ dias sem sessão.
 2. **Captura — bug bounty dos leiloeiros (AUTO-APRENDIDO)**: o monitor APRENDE o "normal" de
    cada leiloeiro do próprio histórico (`fonte_baseline_aprendida()` = mín. dos runs saudáveis
    × 0,65) e alerta quando o último scrape cai abaixo — **auto-calibra os ATUAIS e ONBOARDA os
