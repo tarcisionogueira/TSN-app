@@ -150,8 +150,12 @@ export default async function handler(req, res) {
       truncado = true;
       avisos.push(`Asaas: o período tem mais de ${MAX_PAGINAS * PAGINA} lançamentos e a leitura parou nesse teto — os totais abaixo estão INCOMPLETOS. Reduza o período.`);
     }
+    // Asaas é o gateway de BACKUP (o principal é o Mercado Pago; ver Checkout.jsx, que só
+    // cai no Asaas quando o MP falha ou recusa). Período sem lançamento aqui costuma ser
+    // BOA notícia — significa que o principal não falhou. O aviso existe para não confundir
+    // "não teve fallback" com "não consegui ler a conta": são coisas diferentes.
     if (!recebidos.itens.length && !transfers.itens.length) {
-      avisos.push('O Asaas respondeu sem nenhum lançamento no período — confira se a ASAAS_API_KEY do ambiente é a da conta de produção.');
+      avisos.push('Asaas (gateway de backup) sem lançamentos no período — esperado quando o Mercado Pago não falhou. Se você esperava movimento aqui, confira a ASAAS_API_KEY do ambiente.');
     }
     for (const p of recebidos.itens) {
       const desc = p.description || p.billingType || 'Recebimento Asaas';

@@ -105,7 +105,12 @@ curto (5–8 linhas) antes de seguir:
 - **Frontend:** React + Vite → Vercel (Pro)
 - **Backend:** Vercel Serverless Functions (Edge + Node.js)
 - **Banco:** Supabase (PostgreSQL + Auth + Storage)
-- **Pagamentos:** Asaas
+- **Pagamentos:** **Mercado Pago = gateway PRINCIPAL** · **Asaas = BACKUP** (o checkout tenta o MP
+  primeiro e só cai no Asaas quando o MP falha ou recusa — `src/pages/Checkout.jsx`; o admin pode
+  desligar o MP em `config_financeira`). ⚠️ Ao conferir o financeiro, **sempre verifique o fluxo**:
+  extrato só com Mercado Pago é o NORMAL, não um buraco — Asaas vazio significa que o principal
+  não falhou. (Corrigido em 08/08: esta linha dizia só "Asaas" e me levou a diagnosticar como
+  falha o que era o funcionamento correto.)
 - **Email:** Resend
 - **Vídeo:** Daily.co
 

@@ -212,19 +212,59 @@ o buraco. Agora pagina até acabar (teto de 3.000 por fonte) e, se o teto for at
 devolve `completo: false` e a tela mostra faixa VERMELHA de total incompleto. Também ficou
 explícito que a lista vem cortada em 300 mas os totais somam tudo (`lancamentos_exibidos`).
 
-> 🔴 **Achado ao conferir: não há NENHUM lançamento do Asaas em `conciliacao_lancamento`.** As 40
-> linhas persistidas são todas do Mercado Pago (21 entradas / 19 saídas, R$ 3.066,79 × R$ 1.588,33).
-> O Asaas é o gateway das assinaturas — a receita recorrente está fora da conciliação. Adicionei
-> aviso explícito na resposta quando o Asaas volta vazio, apontando a suspeita mais provável
-> (`ASAAS_API_KEY` do ambiente não ser a da conta de produção). **Confirmar isso é o primeiro item
-> da próxima sessão** — enquanto não fechar, a DRE não tem o lado da receita de assinatura.
+> ✅ **CORREÇÃO (o dono apontou, e ele está certo).** Eu havia registrado aqui que "não há nenhum
+> lançamento do Asaas na conciliação, logo a receita de assinatura está fora da DRE". **Errado.**
+> O **Mercado Pago é o gateway PRINCIPAL** e o **Asaas é o BACKUP**: o checkout tenta o MP primeiro
+> e só cai no Asaas quando o MP falha ou recusa (`src/pages/Checkout.jsx`, confirmado no código).
+> Então extrato só com Mercado Pago é o **funcionamento correto** — Asaas vazio quer dizer que o
+> principal não falhou. As 40 linhas de MP (21 entradas / 19 saídas · R$ 3.066,79 × R$ 1.588,33)
+> são a operação, não um pedaço dela.
+>
+> **A raiz do meu erro está registrada:** o `CLAUDE.md` dizia apenas "**Pagamentos:** Asaas". Li a
+> documentação e diagnostiquei como falha o que era comportamento correto — a MESMA classe de
+> divergência que esta sessão inteira tratou, só que na documentação em vez do código. O
+> `CLAUDE.md` foi corrigido e agora diz qual é o principal, qual é o backup e manda **sempre
+> verificar o fluxo** antes de concluir. O aviso na API também mudou de tom: "sem lançamentos —
+> esperado quando o MP não falhou" em vez de acusar chave errada.
+
+### Termos v3.3 — todo parceiro re-aceita, e o aceite TRAVA o saque
+
+Ordem do dono: *"antes de colocar em produção tem que descer atualiza os termos e todos os que já
+são parceiros devem aceitar; não precisa bater foto nenhuma novamente, basta aceitar"*.
+
+O mecanismo de re-aceite já existia (`TermosAtualizadosModal` + `aceites_plano` com IP e hash) —
+subir `TERMOS_VERSAO` faz todo usuário logado ver o popup. **Mas popup se fecha.** Por isso o
+aceite virou também **regra de servidor** (`saque.exige_termos_vigentes`): sem a versão vigente
+gravada em `perfis.termos_uso_versao`, o parceiro não saca. Nenhum documento novo é pedido — o
+item de pendência diz isso com todas as letras na tela.
+
+Texto novo em três lugares: a cláusula 8.2–8.4 da página de Termos (quem pode ganhar, teto de
+R$ 2.500/mês, NF acima do teto, sexta 12h), o texto do re-aceite (o que o usuário declara ao
+clicar) e a regra no banco. **Estado hoje:** 20 perfis sem aceite nenhum, 10 na v3.2 e 6 na v3.0 —
+os 36 vão ver o popup.
+
+### NF acima do teto virou ABSOLUTA — inclusive para a equipe
+
+Correção do dono sobre a minha primeira versão: *"essa regra deve ser absoluta para todas as
+classes incluindo equipe, visto questões fiscais. Toda classe deveria emitir nota fiscal, mas isso
+seria uma trava nessa fase inicial"*. Eu havia isentado a equipe do teto inteiro; agora **o teto e
+a NF valem para todo mundo**. O que continua restrito a parceiro é "estar em plano pago" — mandar
+um analista assinar plano para receber pelo próprio trabalho não faz sentido, e não é disso que a
+regra fiscal trata. Conferido depois da mudança: admin saca R$ 50 direto e é barrado por NF em
+R$ 3.000; parceiro é barrado por KYC + aceite dos termos.
+
+> ⏱️ **Nota de sinceridade sobre a ordem dos fatos:** o dono pediu os termos *antes* da produção, e
+> a regra de comissão já tinha subido no commit anterior. Exposição real no intervalo: **zero** —
+> nenhum explorador tem saldo, não há cadeia de indicação entre pagantes, e o gate de aceite agora
+> impede saque sob a regra nova sem o aceite. Mas a ordem certa era esta, e fica registrado.
 
 ### O que fica para a próxima sessão
 
 | Pendência | O que falta |
 |---|---|
 | `EMPRESA_CNPJ` na Vercel | sem ele toda NF cai em revisão manual |
-| Asaas ausente da conciliação | conferir a chave do ambiente; é a receita de assinatura inteira |
+| Jurídico valida o texto v3.3 | a redação das cláusulas 8.2–8.4 é minha; segue a ressalva de sempre |
+| KYC da equipe | equipe hoje saca sem verificação de identidade. Não foi pedido — mas agora que a NF é absoluta, vale perguntar se o KYC também deveria ser |
 | Tela do parceiro | `Comissoes.jsx`/`MinhaRede.jsx` ainda não mostram o teto do mês nem o upload da NF — a API já devolve `teto_sem_nf`, `disponivel_sem_nf` e `exige_nf`; falta a UI |
 | Parecer do contador | pagamento a PF contra recibo, no volume que a nova regra permite, é o único risco que código não conserta depois (§12.9) |
 | Herdadas de 08/08 | `CONTABILIDADE_EMAIL` · `AUDITORIA_EMAIL_DESTINO` · `GITHUB_ACTIONS_TOKEN` · Pluggy · 4 fontes com 0% de documento · 3 fontes com lote vencido · Guarulhos `e7bd0637` · 155 `.json()` sem `.ok` |
