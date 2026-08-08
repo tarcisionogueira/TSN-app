@@ -139,6 +139,131 @@ antes de mexer, mais 6 validações de produção para rodar na abertura.
 
 ---
 
+## 🏁 FECHAMENTO DE 08/08 — leia este bloco primeiro
+
+**O dia começou lendo o rastro que o sistema deixou no banco e terminou com um financeiro que se
+monta sozinho. A lição do dia: os quatro achados mais graves NÃO estavam no código — estavam no
+estado.**
+
+| | |
+|---|---|
+| Commits em `main` | `67d8603` · `f61db42` · `a96ad6d` · `98bbec2` · `89b5d5f` · `2ffffa1` · `537802a` |
+| Deploy | `dpl_GkFgngV6ac7srPUxPgmr68nQmHjT` **READY** em produção |
+| `auditoria_seguranca()` | **0 crítico / 0 atenção** — depois de corrigir 1 achado do próprio auditor (ver abaixo) |
+| `npm run build` | OK |
+
+### O achado que mais importa: o KYC nunca validou ninguém
+
+**8 de 8** documentos do sistema (5 usuários) estavam gravados com **path cru** em vez de URL
+assinada. O `createSignedUrl` de 10 anos falhava e o `signed?.signedUrl || path` engolia o erro.
+Como o servidor exige URL do nosso Storage (trava anti-forjaria, correta), **o face match nunca
+rodou**: toda identidade caía em revisão manual — e identidade validada é pré-requisito de SAQUE.
+O parceiro ficava sem receber esperando alguém olhar na mão.
+Corrigido na raiz: o SERVIDOR assina o path na hora, com a service key, aceitando só o formato
+dos nossos gravadores. Ele deixou de depender do que o cliente conseguiu gravar.
+
+### Selo verde jurídico dado sem consulta
+
+`gerarParecerRisco([])` devolvia **verde** — "Nenhum processo encontrado nos tribunais
+consultados" — em TODOS os caminhos, inclusive quando a consulta nem aconteceu (chave ausente, UF
+inválida, tribunal fora do ar). Em lote JUDICIAL o processo existe por definição, e mesmo assim o
+cliente lia verde. Não é número errado: é alguém dando lance achando que a diligência processual
+passou. A TELA piorava — `cores[nivel] || cores.verde` fazia qualquer nível desconhecido virar
+"VIABILIDADE JURÍDICA PRELIMINAR FAVORÁVEL". Agora são três estados, o fallback nunca é verde, o
+documental tem teto (sem consulta confirmada não pode ser verde) e os 2 relatórios já entregues
+com verde indevido foram corrigidos no banco.
+
+### Três telas com consulta quebrada, falhando em silêncio
+
+`/caso/:id` (tabela `imoveis` que não existe, coluna `link_leilao` idem, `descricao` num insert de
+`chamados` — o canal de atendimento do caso **nunca era criado**; e as mensagens liam
+`created_at`/`user_id`/`mensagem` em vez dos nomes reais, então o histórico aparecia vazio) e
+`/admin` (embed em `plano_assinaturas`, cuja FK aponta para `auth.users` — a lista de assessorados
+carregava vazia).
+
+### Os "chamados presos" eram nossos, não do cliente
+
+Os 6 reportados pelo health check eram abordagens **proativas da IA** sem resposta — um deles do
+próprio dono. O health check passou a contar só chamado em que o CLIENTE falou. Cobrar resposta do
+suporte por abordagem sem retorno treina a equipe a ignorar o alerta.
+
+### Leiloeiros
+
+- **7 fontes saíram do ponto cego** (CALIL, GESTAOLEILOES, PECINI, VLANCE, VEGAS, RJLEILOES,
+  TORRES3 — 418 lotes). `registrarSaude` vivia dentro do scraper-puppeteer; virou módulo
+  compartilhado e os cinco scrapers passaram a chamá-lo. **Regra nova: leiloeiro sem essa chamada
+  nasce invisível ao bug bounty de volume.**
+- **Documentos passam a ter cópia nossa.** Medido: só ZUK (265) e GRUPOLANCE (212) tinham; LJUD
+  (932), MEGA (538), PESTANA (383) e o resto eram só links para o site do leiloeiro. Novo
+  `espelhar-docs-cron` (4/4h) copia matrícula e edital, com a fila ordenada pela **instabilidade
+  real** de cada fonte (`fonte_instabilidade()`): TOTALLEILOES e CREPALDI a 100%, VENDASGOV 65%,
+  FRAZAO e LEILOFY 30%. 300 documentos enfileirados.
+- **Inventário:** 27 fontes ativas, 30.476 lotes, 92,5% com matrícula. Quatro fontes com **0% de
+  documento real** — GESTAOLEILOES (143), SBID9 (33), VLANCE (29) e PECINI (50%): nesses ~251
+  lotes o documental não tem o que ler.
+
+### Financeiro: de tela de receita a fluxo de caixa com DRE
+
+O `mp-admin?action=transacoes` **descartava de propósito** tudo que não era recebimento — e é ali
+que estão as saídas. Sem os dois lados existe faturamento, não fluxo de caixa. Agora o Financeiro
+tem 5 abas: Síntese · Fluxo de caixa · **Extrato** · **Conciliação** · **Monitor**.
+
+- **Plano de contas** com 30 contas em estrutura de DRE, desenhado para a operação (IA e dados,
+  infraestrutura, coleta/proxy, jurídico, comissões de parceiros, taxas de gateway).
+- **Classificação em cascata: credor → regra → 9.9 A CLASSIFICAR.** Classificar pelo CREDOR é mais
+  forte que por descrição: "ANTHROPIC PBC", "Anthropic, PBC*Claude" e "ANTHROPIC 4155551212" são o
+  mesmo fornecedor. Um clique classifica o credor e todos os lançamentos dele. **A v1 da
+  normalização devolvia três chaves diferentes para os três — inútil; a v2 corrige, mantendo a
+  segunda palavra quando a primeira é guarda-chuva (senão "Google Ads" e "Google Cloud" viravam o
+  mesmo credor).**
+- **O extrato é PERSISTIDO.** É o ponto central: a contabilidade fecha competências passadas, e
+  número que muda a cada consulta faz a DRE de março mudar depois de entregue.
+- **Mesclar credores** (mesmo fornecedor grafado de dois jeitos) e **compor lançamento** (o caso do
+  dono: R$ 1.000 pagos com R$ 200 de dedução acordada = uma linha no banco, duas na contabilidade).
+  Rateio que não fecha é **recusado com a diferença**.
+- **Exportação** PDF + OFX 1.0 (SGML — o que os ERPs brasileiros importam), com a conta contábil no
+  MEMO, e envio por e-mail com a resposta do Resend CHECADA.
+- **O extrato entra sozinho** (`conciliacao-sync-cron`, 8h25, janela de 45 dias). O botão manual
+  virou "Atualizar agora" — quem lembra de apertar um botão de importação todo dia é ninguém.
+- **Monitor** com entradas × saídas mês a mês, divisão das saídas, maiores credores e diagnóstico
+  no Gemini (achados determinísticos sempre; texto da IA por cima, e a tela diz qual é qual).
+
+### Menu do Admin reorganizado
+
+Eram SETE faixas com as 18 abas visíveis ao mesmo tempo. Agora são quatro famílias por área —
+Administrativo, Comercial, Financeiro, Operacional — e só a família aberta mostra suas abas. A
+família é DERIVADA da aba atual, não estado paralelo.
+
+### 🔴 O auditor de segurança pegou um erro MEU — e é a lição técnica do dia
+
+`revoke all on function ... from anon, authenticated` **é falsa proteção**. No Postgres toda função
+nasce com EXECUTE concedido a **PUBLIC**, e revogar dos dois papéis não tira o grant de PUBLIC —
+eles continuam alcançando a função por herança. Resultado: **10 funções SECURITY DEFINER criadas
+hoje ficaram executáveis por ANÔNIMO**, entre elas `dre_competencia` (a DRE da empresa),
+`fornecedor_definir_conta`, `rateio_definir` e `desativar_leiloes_encerrados` (que poderia tirar
+lotes do ar). Corrigido com `revoke ... from public, anon, authenticated`; auditoria voltou a
+**0/0**. Em TABELA o padrão antigo funciona (tabela não tem grant implícito a PUBLIC); em FUNÇÃO,
+não. **Ao criar função nova, revogue de PUBLIC.**
+
+### O que fica para a próxima sessão
+
+| Pendência | O que falta |
+|---|---|
+| `CONTABILIDADE_EMAIL` na Vercel | destino padrão do envio à contabilidade (dá para digitar na tela) |
+| `AUDITORIA_EMAIL_DESTINO` · `GITHUB_ACTIONS_TOKEN` | pendentes desde 07/08 |
+| Pluggy | confirmar com o comercial se **CNPJ cabe no Meu Pluggy gratuito**. Se sim, custo zero para Inter, C6, Bradesco e Caixa; se não, R$ 2.500/mês não se justifica para uso interno — cai para API direta do banco ou OFX |
+| 4 fontes com 0% de documento | pipeline de captura para GESTAOLEILOES, SBID9 e VLANCE |
+| 3 fontes publicando lote vencido | LEILOTECH (132 de 189), SBID21 (37 de 39), VEGAS (41 de 62) — entra na próxima ofensiva |
+| Lote de Guarulhos `e7bd0637` | segue sem data; é o primeiro da nova fila de enriquecimento |
+| 155 `.json()` sem `.ok` | triagem pendente para promover o lint de warn a error |
+
+**A pergunta de rotina que fica deste dia:** antes de confiar numa varredura de código, *o que o
+sistema já registrou no banco sobre si mesmo?* Erro de runtime do cliente, anomalia de relatório,
+documento sem URL, fonte sem histórico — quatro achados graves, nenhum visível no código. O passo
+**1b** do ritual (CLAUDE.md) existe por causa deste dia.
+
+---
+
 ## ✅ COMEÇAR AQUI (07/08 — sessão 28: os 3 relatórios de Cotia · "Pronto!" repetido + laudo divergente)
 
 > O dono gerou os 3 relatórios de um imóvel em Cotia e trouxe dois problemas: *"o 2º relatório

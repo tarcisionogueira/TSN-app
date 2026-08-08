@@ -1,0 +1,5 @@
+-- Aplicada em produção em 08/08 via MCP. Versionada aqui para o histórico.
+-- Revoga EXECUTE de PUBLIC nas funções SECURITY DEFINER criadas hoje.
+-- LIÇÃO: `revoke ... from anon, authenticated` em FUNÇÃO é falsa proteção — toda função nasce com
+-- EXECUTE para PUBLIC, e os dois papéis alcançam por herança. Em TABELA o padrão funciona; em
+-- FUNÇÃO é preciso revogar de PUBLIC. Achado pelo próprio auditoria_seguranca().
