@@ -45,9 +45,14 @@ export default function Convite() {
       }
 
       // 2. Fallback: client invite (links_convite)
+      // SEM embed de `perfis` (08/08): `links_convite.criado_por` tem FK para `auth.users`,
+      // não para `perfis` — o embed devolvia 400 e o `if (error)` abaixo mostrava
+      // "Link de convite não encontrado ou expirado" para TODO convite de cliente (16 ativos).
+      // O nome de quem convidou também não é legível por anônimo (RLS de `perfis`, correto):
+      // a tela já cai no rótulo neutro "BidPro Brasil".
       const { data, error } = await supabase
         .from('links_convite')
-        .select('id, codigo, criado_por, perfis:criado_por(nome)')
+        .select('id, codigo, criado_por')
         .eq('codigo', codigo.toUpperCase())
         .eq('ativo', true)
         .single();

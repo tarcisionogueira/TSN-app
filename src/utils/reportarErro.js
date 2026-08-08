@@ -27,9 +27,28 @@ function ehRuido(msg = '') {
   return !m.trim() || RUIDO.some((r) => m.includes(r));
 }
 
+// Erro que aconteceu FORA do nosso código. Caso real (08/08): um "Failed to fetch" em
+// /checkout ficou dois dias no topo da fila de investigação como suspeita de falha no
+// PAGAMENTO — o stack mostrava que era uma extensão do Chrome do próprio usuário, que
+// substitui o `window.fetch`, bloqueando um beacon do Google Tag Manager. Não é nosso bug,
+// não temos como corrigir, e ocupava a vaga de um erro que importa.
+// Regra conservadora: só descarta quando o stack é INTEIRAMENTE de terceiro — se algum
+// quadro é do nosso bundle, o erro pode ser nosso e vai para a fila normalmente.
+const TERCEIROS = [
+  'chrome-extension://', 'moz-extension://', 'safari-web-extension://',
+  'googletagmanager.com', 'google-analytics.com', 'connect.facebook.net', 'clarity.ms',
+];
+function ehStackDeTerceiro(stack = '') {
+  const s = String(stack);
+  if (!s.trim()) return false;
+  if (!TERCEIROS.some((t) => s.includes(t))) return false;
+  const origem = typeof location !== 'undefined' ? location.origin : '';
+  return !(origem && s.includes(origem));
+}
+
 export async function reportarErroCliente({ msg, stack = '', url } = {}) {
   try {
-    if (contador >= TETO || ehRuido(msg)) return;
+    if (contador >= TETO || ehRuido(msg) || ehStackDeTerceiro(stack)) return;
     const href = url || (typeof location !== 'undefined' ? location.href : '');
     const rota = (href.split('#')[1] || (typeof location !== 'undefined' ? location.pathname : '')).split('?')[0];
     // chave de dedup: mensagem + rota, com números/ids neutralizados

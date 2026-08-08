@@ -3929,7 +3929,10 @@ function PromoTab() {
   const carregar = useCallback(async () => {
     setLoading(true);
     const [{ data: lk }, { data: cs }, { data: eb }] = await Promise.all([
-      supabase.from('links_promo').select('*, perfis(nome)').order('criado_em', { ascending: false }),
+      // FK EXPLÍCITA (08/08): `links_promo.criado_por` tem DUAS FKs (auth.users e perfis).
+      // Com duas, o PostgREST não sabe qual usar e devolve 400 ("more than one relationship")
+      // → a lista de links promocionais carregava vazia. Nomear a constraint resolve.
+      supabase.from('links_promo').select('*, perfis!links_promo_criado_por_perfis_fkey(nome)').order('criado_em', { ascending: false }),
       supabase.from('cursos_admin').select('id, titulo').eq('ativo', true).order('titulo'),
       supabase.from('ebooks_admin').select('id, titulo').eq('ativo', true).order('titulo'),
     ]);
@@ -4233,8 +4236,17 @@ function ConvitesTab() {
 
   const carregar = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase.from('links_convite').select('*, perfis:criado_por(nome)').order('criado_em', { ascending: false });
-    setConvites(data || []);
+    // `links_convite.criado_por` referencia `auth.users`, NÃO `perfis` — o embed
+    // `perfis:criado_por(nome)` devolvia 400 e a aba carregava vazia (08/08). Buscamos os
+    // nomes em uma segunda consulta (o admin lê `perfis` por RLS) e montamos o mesmo formato.
+    const { data } = await supabase.from('links_convite').select('*').order('criado_em', { ascending: false });
+    const ids = [...new Set((data || []).map(c => c.criado_por).filter(Boolean))];
+    let nomes = new Map();
+    if (ids.length) {
+      const { data: ps } = await supabase.from('perfis').select('id, nome').in('id', ids);
+      nomes = new Map((ps || []).map(p => [p.id, p.nome]));
+    }
+    setConvites((data || []).map(c => ({ ...c, perfis: { nome: nomes.get(c.criado_por) || null } })));
     setLoading(false);
   }, []);
 
@@ -10515,7 +10527,7 @@ function RegistrosTab() {
       .select(`
         id, transcricao, duracao_seg, daily_room_name, created_at,
         solicitacoes ( imovel_nome, imovel_cidade, tipo, user_id,
-          perfis:user_id ( nome )
+          perfis!solicitacoes_user_id_perfis_fkey ( nome )
         )
       `)
       .order('created_at', { ascending: false })
