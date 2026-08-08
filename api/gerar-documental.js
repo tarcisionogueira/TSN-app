@@ -950,7 +950,7 @@ export default async function handler(req, res) {
     const procNome = body?.processoNome || null;
     let cnj = null;
     if ((procNum || procNome) && im.estado && Date.now() < deadline) {
-      try { cnj = await buscarProcessosCNJ({ numero_processo: procNum || undefined, nome_parte: procNome || undefined, uf: im.estado }); }
+      try { cnj = await buscarProcessosCNJ({ numero_processo: procNum || undefined, nome_parte: procNome || undefined, uf: im.estado, modalidade: im.modalidade }); }
       catch { /* CNJ pode estar indisponível */ }
     }
 
@@ -1156,13 +1156,13 @@ export default async function handler(req, res) {
     // consulta CNJ por NÚMERO — a 1ª consulta (antes da IA) só via o nº do scraper.
     const numExtr = String(ex.numeroProcesso || '').replace(/\D/g, '');
     if ((!cnj || !cnj.total) && numExtr.length >= 15 && numExtr !== String(procNum || '').replace(/\D/g, '') && im.estado && Date.now() < hardDeadline) {
-      try { const porNum = await buscarProcessosCNJ({ numero_processo: ex.numeroProcesso, uf: im.estado }); if (porNum && porNum.total) cnj = porNum; }
+      try { const porNum = await buscarProcessosCNJ({ numero_processo: ex.numeroProcesso, uf: im.estado, modalidade: im.modalidade }); if (porNum && porNum.total) cnj = porNum; }
       catch { /* CNJ por número extraído é best-effort */ }
     }
     let cnjViaNome = false;
     if ((!cnj || !cnj.total) && execNome.length >= 6 && im.estado) {
       try {
-        const porNome = await buscarProcessosCNJ({ nome_parte: execNome, uf: im.estado });
+        const porNome = await buscarProcessosCNJ({ nome_parte: execNome, uf: im.estado, modalidade: im.modalidade });
         cnjViaNome = true;
         if (porNome && porNome.total) cnj = porNome;
       } catch { /* CNJ por nome é best-effort */ }
@@ -1480,6 +1480,13 @@ export default async function handler(req, res) {
     // omite a seção automaticamente. Mantido como array p/ compatibilidade do result.
     const certidoesDocumentos = [];
 
+    // Nível de risco final, com o TETO explicado no comentário do campo abaixo.
+    const nivelBruto = parsed.nivelRisco || (temProc ? cnj?.parecer?.nivel : null) || 'amarelo';
+    const processualNaoConfirmado = !cnj
+      || cnj.parecer?.nivel === 'nao_verificado'
+      || (cnj.total === 0 && (/judicial/i.test(String(im?.modalidade || '')) || cnj.parecer?.motivo === 'nao_localizado'));
+    const nivelRiscoFinal = (nivelBruto === 'verde' && processualNaoConfirmado) ? 'amarelo' : nivelBruto;
+
     const result = {
       extracao: parsed.extracao || null,
       riscos: rlist,
@@ -1489,7 +1496,11 @@ export default async function handler(req, res) {
       faltando,
       paginaLeiloeiro,
       lacunas: parsed.lacunas || [],
-      nivelRisco: parsed.nivelRisco || (temProc ? cnj.parecer?.nivel : null) || 'amarelo',
+      // TRAVA (08/08): o nível NÃO pode ser verde quando a consulta processual não foi feita ou
+      // não localizou o processo de um lote judicial. A IA às vezes carimba verde olhando só a
+      // documentação — e verde aqui vale 85 pontos no score jurídico e é lido como "pode dar
+      // lance". Sem consulta processual confirmada, o teto é amarelo.
+      nivelRisco: nivelRiscoFinal,
       diligenciaPendente: !docOk,
       preliminar,
       parecer: parecerBase + fontesTxt + AVISO_DOCUMENTAL,

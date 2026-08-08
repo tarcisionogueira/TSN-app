@@ -2082,16 +2082,27 @@ function ConfigTab() {
       });
     // Carrega assinaturas assessorado ativas
     setLoadingAssessorados(true);
+    // NOME vem em consulta SEPARADA (08/08). O embed `perfis:user_id(nome)` dava 400 —
+    // "Could not find a relationship between 'plano_assinaturas' and 'user_id'" — porque a
+    // FK de `plano_assinaturas.user_id` aponta para `auth.users`, não para `perfis`: sem
+    // relação declarada, o PostgREST não tem como juntar. A lista de assessorados carregava
+    // vazia. Buscamos os nomes por `in.(ids)`, o mesmo caminho já usado para os e-mails.
     supabase.from('plano_assinaturas')
-      .select('*, perfis:user_id(nome)')   // e-mail vem da RPC (perfis não tem a coluna)
+      .select('*')
       .eq('plano_key', 'assessorado')
       .eq('status', 'ativo')
       .order('created_at', { ascending: false })
       .then(async ({ data, error }) => {
         if (error) console.error('[assessorados]', error.message);
         const linhas = data || [];
+        const ids = [...new Set(linhas.map((a) => a.user_id).filter(Boolean))];
+        const nomes = new Map();
+        if (ids.length) {
+          const { data: ps } = await supabase.from('perfis').select('id,nome').in('id', ids);
+          for (const p of ps || []) nomes.set(p.id, p.nome);
+        }
         const mapa = await emailsPorIds(linhas.map((a) => a.user_id));
-        setAssessorados(linhas.map((a) => ({ ...a, perfis: { ...(a.perfis || {}), email: mapa.get(a.user_id) || '' } })));
+        setAssessorados(linhas.map((a) => ({ ...a, perfis: { nome: nomes.get(a.user_id) || '', email: mapa.get(a.user_id) || '' } })));
         setLoadingAssessorados(false);
       });
   }, []);

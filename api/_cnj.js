@@ -151,8 +151,51 @@ function formatarProcesso(hit, tribunal) {
   };
 }
 
-export function gerarParecerRisco(processos) {
-  if (!processos.length) return { nivel: 'verde', texto: 'Nenhum processo encontrado nos tribunais consultados. Recomenda-se consulta adicional no cartório de registro de imóveis.' };
+/**
+ * PARECER DE RISCO PROCESSUAL.
+ *
+ * ACHADO GRAVE (08/08, varredura das anomalias): lista vazia devolvia **verde** com o texto
+ * "Nenhum processo encontrado nos tribunais consultados" em TODOS os caminhos — inclusive quando
+ * a consulta nem aconteceu (chave `CNJ_DATAJUD_KEY` ausente, UF inválida, tribunal fora do ar).
+ * Pior: em lote JUDICIAL o processo existe por definição, e mesmo assim o cliente lia um selo
+ * verde dizendo que não há processo. Caso real: lote MEGA, processo 1139028-25.2021.8.26.0100,
+ * anomalia `cnj_vazio` registrada — e o relatório entregue com `nivel: verde`.
+ *
+ * Não é um número errado, é um SELO DE SEGURANÇA JURÍDICA indevido: leva alguém a dar lance
+ * achando que a due diligence processual passou. A regra agora separa as três situações:
+ *   • NÃO CONSULTAMOS (erro/sem chave/sem tribunal)      → 'nao_verificado', nunca verde;
+ *   • CONSULTAMOS e não achamos, mas o lote é JUDICIAL
+ *     ou temos o número do processo                       → 'amarelo' (não localizado ≠ inexistente);
+ *   • CONSULTAMOS e não achamos, sem indício de processo  → verde, com a ressalva de sempre.
+ *
+ * @param {Array} processos
+ * @param {{erros?: string[], tribunais?: string[], numeroProcesso?: string, modalidade?: string}} ctx
+ */
+export function gerarParecerRisco(processos, ctx = {}) {
+  if (!processos.length) {
+    const houveErro = Array.isArray(ctx.erros) && ctx.erros.length > 0;
+    const consultou = Array.isArray(ctx.tribunais) && ctx.tribunais.length > 0 && !houveErro;
+    const ehJudicial = /judicial/i.test(String(ctx.modalidade || ''));
+    const temNumero = !!String(ctx.numeroProcesso || '').replace(/\D/g, '');
+
+    if (!consultou) {
+      return {
+        nivel: 'nao_verificado',
+        texto: 'NÃO FOI POSSÍVEL CONSULTAR os tribunais agora. Isto NÃO significa que não existe processo — a consulta processual deste lote está pendente.',
+        recomendacao: 'Confirme o processo no tribunal (ou peça a consulta ao suporte) antes de dar lance.',
+        motivo: houveErro ? 'consulta_falhou' : 'consulta_nao_realizada',
+      };
+    }
+    if (ehJudicial || temNumero) {
+      return {
+        nivel: 'amarelo',
+        texto: `Processo ${temNumero ? `${ctx.numeroProcesso} ` : ''}NÃO LOCALIZADO na base pública do CNJ${ehJudicial ? ', embora o lote seja de leilão JUDICIAL (há processo por definição)' : ''}. A base do DataJud tem atraso e cobertura parcial — ausência ali não é ausência de processo.`,
+        recomendacao: 'Confirme os autos no tribunal de origem antes de dar lance.',
+        motivo: 'nao_localizado',
+      };
+    }
+    return { nivel: 'verde', texto: 'Nenhum processo encontrado nos tribunais consultados. Recomenda-se consulta adicional no cartório de registro de imóveis.', motivo: 'sem_processo' };
+  }
   const bloqueantes = processos.flatMap(p => p.riscos.filter(r => r.severidade === 'bloqueante'));
   const alertas = processos.flatMap(p => p.riscos.filter(r => r.severidade === 'alerta'));
   if (bloqueantes.length > 0) return { nivel: 'vermelho', texto: `OPERAÇÃO COM RISCO ALTO. ${bloqueantes.length} risco(s) bloqueante(s) em ${processos.length} processo(s): ${[...new Set(bloqueantes.map(r => r.categoria))].join(', ')}.`, recomendacao: 'Consulte advogado especializado antes do leilão.' };
@@ -164,13 +207,13 @@ export function gerarParecerRisco(processos) {
  * Consulta o CNJ DataJud por número de processo OU por nome da parte, na UF dada.
  * Retorna { processos, total, tribunais_consultados, erros, parecer }.
  */
-export async function buscarProcessosCNJ({ numero_processo, nome_parte, uf, nacional = false }) {
-  if (!CNJ_KEY) return { processos: [], total: 0, tribunais_consultados: [], erros: ['CNJ_DATAJUD_KEY ausente'], parecer: gerarParecerRisco([]) };
+export async function buscarProcessosCNJ({ numero_processo, nome_parte, uf, nacional = false, modalidade = null }) {
+  if (!CNJ_KEY) return { processos: [], total: 0, tribunais_consultados: [], erros: ['CNJ_DATAJUD_KEY ausente'], parecer: gerarParecerRisco([], { erros: ['CNJ_DATAJUD_KEY ausente'], numeroProcesso: numero_processo, modalidade }) };
   const ufUp = String(uf || '').toUpperCase();
   const estadual = TRIBUNAL_ESTADUAL[ufUp];
   const trf = TRF_MAP[ufUp];
   // nacional = varre todos os TJs + TRFs + superiores; senão, foca na UF + STJ.
-  if (!nacional && !estadual) return { processos: [], total: 0, tribunais_consultados: [], erros: [`UF inválida: ${uf}`], parecer: gerarParecerRisco([]) };
+  if (!nacional && !estadual) return { processos: [], total: 0, tribunais_consultados: [], erros: [`UF inválida: ${uf}`], parecer: gerarParecerRisco([], { erros: [`UF inválida: ${uf}`], numeroProcesso: numero_processo, modalidade }) };
 
   let query;
   if (numero_processo) {
@@ -179,7 +222,7 @@ export async function buscarProcessosCNJ({ numero_processo, nome_parte, uf, naci
   } else if (nome_parte) {
     query = { nested: { path: 'partes', query: { match: { 'partes.nome': { query: nome_parte, fuzziness: 'AUTO' } } } } };
   } else {
-    return { processos: [], total: 0, tribunais_consultados: [], erros: ['informe numero_processo ou nome_parte'], parecer: gerarParecerRisco([]) };
+    return { processos: [], total: 0, tribunais_consultados: [], erros: ['informe numero_processo ou nome_parte'], parecer: gerarParecerRisco([], { erros: ['sem critério de busca'], modalidade }) };
   }
 
   // Por UF: TJ da UF + TRF da região + STJ. MG também consulta o trf1 (base legada
@@ -201,5 +244,5 @@ export async function buscarProcessosCNJ({ numero_processo, nome_parte, uf, naci
   }
   const unique = processos.filter((p, i, arr) => arr.findIndex(x => x.numero === p.numero) === i);
   unique.sort((a, b) => (a.tem_bloqueante === b.tem_bloqueante ? b.score_risco - a.score_risco : a.tem_bloqueante ? -1 : 1));
-  return { processos: unique, total: unique.length, tribunais_consultados: tribunais, erros: erros.length ? erros : undefined, parecer: gerarParecerRisco(unique) };
+  return { processos: unique, total: unique.length, tribunais_consultados: tribunais, erros: erros.length ? erros : undefined, parecer: gerarParecerRisco(unique, { erros, tribunais, numeroProcesso: numero_processo, modalidade }) };
 }

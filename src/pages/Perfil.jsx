@@ -537,7 +537,14 @@ export default function Perfil() {
     const path = `pj/${user.id}/${prefixo}-${Date.now()}.${ext}`;
     const { error: upErr } = await supabase.storage.from('documentos').upload(path, file, { upsert: false });
     if (upErr) throw upErr;
-    const { data: signed } = await supabase.storage.from('documentos').createSignedUrl(path, 60 * 60 * 24 * 3650);
+    // A URL assinada é BÔNUS, não requisito (08/08). Medido: os 8 documentos KYC do sistema
+    // estavam com PATH CRU — o `createSignedUrl` de 10 anos falhava e o `|| path` engolia o erro
+    // em silêncio. Como o servidor exigia URL do Storage, o face match NUNCA rodava e toda
+    // identidade caía em revisão manual (e identidade validada é pré-requisito de saque).
+    // Agora: prazo sensato (1 ano), falha registrada, e o PATH é gravado de propósito — o
+    // servidor sabe assinar o path na hora, com a service key.
+    const { data: signed, error: signErr } = await supabase.storage.from('documentos').createSignedUrl(path, 60 * 60 * 24 * 365);
+    if (signErr) console.warn('[kyc] URL assinada indisponível, gravando o path:', signErr.message);
     // Checa o insert: sem isso, uma falha (ex.: RLS) mostrava "documento recebido" mas o
     // servidor nunca via o doc → o KYC nunca concluía (selfie retornava falta_documento).
     const { error: insErr } = await supabase.from('usuario_docs').insert({ user_id: user.id, tipo, nome: file.name || `${prefixo}.${ext}`, url: signed?.signedUrl || path, tamanho_kb: Math.round((file.size || 0) / 1024) });

@@ -449,7 +449,7 @@ export default function Caso() {
   const [caso, setCaso] = useState(null);
   const [certidoes, setCertidoes] = useState([]);   // certidões recomendadas (raio-X jurídico do laudo)
   const [certStatus, setCertStatus] = useState({}); // { slug: true } — o que já foi obtido
-  const [imovelExtra, setImovelExtra] = useState(null); // data_leilao, titulo, link_leilao
+  const [imovelExtra, setImovelExtra] = useState(null); // data_leilao, titulo, url_lote
   const [showAgendar, setShowAgendar] = useState(null); // null | 1 | 2
   const [jobs, setJobs] = useState([]);
   const [relatorios, setRelatorios] = useState([]);
@@ -607,7 +607,10 @@ export default function Caso() {
         supabase.from('cotas_analise').select('*').eq('usuario_id', user.id).eq('mes_ref', mesRef()).maybeSingle(),
         supabase.from('config_honorarios').select('*').eq('id', 1).maybeSingle(),
         casoData.imovel_id
-          ? supabase.from('imoveis').select('data_leilao,titulo,link_leilao').eq('id', casoData.imovel_id).maybeSingle()
+          // Tabela e coluna CERTAS (08/08): não existe `imoveis` nem `link_leilao` — é
+          // `imoveis_leilao` e `url_lote`. A consulta devolvia 400 e a tela do caso perdia a
+          // data do leilão e o link do lote em silêncio.
+          ? supabase.from('imoveis_leilao').select('data_leilao,titulo,url_lote').eq('id', casoData.imovel_id).maybeSingle()
           : Promise.resolve({ data: null }),
       ]);
 
@@ -640,18 +643,22 @@ export default function Caso() {
           user_id: casoData.cliente_id,
           caso_id: casoData.id,
           titulo: `Análise: ${casoData.imovel_endereco || 'Imóvel'}`,
-          descricao: 'Canal de atendimento vinculado ao fluxo de análise.',
+          // `descricao` NÃO existe em `chamados` (08/08) — o insert devolvia 400 e o canal de
+          // atendimento do caso nunca era criado. O contexto já vive no título e no caso_id.
           status: 'em_atendimento',
         }).select('id').single();
         chamado = novoChamado;
       }
 
       if (chamado) {
+        // Nomes REAIS das colunas (08/08): `criado_em` (não created_at), `autor_id` (não
+        // user_id) e `conteudo` (não mensagem). Com os nomes errados o order dava 400 e, quando
+        // passava, o texto vinha undefined — o histórico do atendimento aparecia vazio.
         const { data: msgsData } = await supabase.from('chamados_mensagens')
-          .select('*, perfis(nome, role)')
+          .select('*')
           .eq('chamado_id', chamado.id)
-          .order('created_at');
-        setMsgs((msgsData || []).map(m => ({ ...m, remetente_id: m.user_id, texto: m.mensagem })));
+          .order('criado_em');
+        setMsgs((msgsData || []).map(m => ({ ...m, remetente_id: m.autor_id, texto: m.conteudo })));
         setChamadoId(chamado.id);
       }
 
@@ -985,7 +992,7 @@ export default function Caso() {
   const linkGoogleAgenda = () => {
     const titulo = imovelExtra?.titulo || caso?.imovel_endereco || 'Leilão de Imóvel';
     const dataLeilao = imovelExtra?.data_leilao;
-    const linkLeilao = imovelExtra?.link_leilao || '';
+    const linkLeilao = imovelExtra?.url_lote || '';
     const endereco   = caso?.imovel_endereco || '';
 
     // Formata data para o formato do Google Calendar: YYYYMMDD
@@ -1229,7 +1236,7 @@ export default function Caso() {
                 imovelId={caso.imovel_id}
                 relatorioInicial={getRel('juridica_preliminar')}
                 onConcluido={carregarCaso}
-                linkLeilao={imovelExtra?.link_leilao || imovelInit?.url || null}
+                linkLeilao={imovelExtra?.url_lote || imovelInit?.url || null}
               />
             )}
             {TIPOS_ANALISE.map(info => (

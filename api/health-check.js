@@ -127,13 +127,30 @@ export default async function handler(req) {
   // o atendimento (era, inclusive, uma ação quebrada: gravava obs_interna, coluna que
   // não existe). Aqui só SINALIZA para um humano revisar na aba Suporte.
   itens.push(await check('Supabase — chamados presos', async () => {
+    // O QUE CONTA COMO "PRESO" (corrigido em 08/08): chamado em que o CLIENTE falou e ninguém
+    // respondeu. Antes contava qualquer chamado aberto há +7 dias — e os 6 que vinham sendo
+    // reportados eram TODOS abordagens PROATIVAS da nossa própria IA ("Como está sendo sua
+    // experiência?") que o cliente nunca respondeu. Um deles era o próprio dono. Isso é o
+    // inverso de dívida de atendimento: é abordagem nossa sem retorno, e cobrar resposta do
+    // suporte por isso treina a equipe a ignorar o alerta — que é como um alerta morre.
     const limite = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
-    const r = await sb(`chamados?select=id,titulo,criado_em&status=eq.aberto&criado_em=lt.${limite}&order=criado_em.asc&limit=50`);
+    const r = await sb(`chamados?select=id,titulo,criado_em,origem&status=eq.aberto&criado_em=lt.${limite}&order=criado_em.asc&limit=100`);
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    const presos = await r.json();
-    if (presos.length === 0) return { status: 'ok', detalhe: 'Nenhum chamado sem resposta' };
+    const abertos = await r.json();
+    if (!abertos.length) return { status: 'ok', detalhe: 'Nenhum chamado sem resposta' };
+
+    // Um chamado só é dívida nossa se existe mensagem do CLIENTE nele.
+    const ids = abertos.map(c => c.id).filter(Boolean);
+    const rm = await sb(`chamados_mensagens?chamado_id=in.(${ids.join(',')})&autor_tipo=eq.cliente&select=chamado_id`);
+    const comCliente = new Set(rm.ok ? (await rm.json()).map(m => m.chamado_id) : ids); // falha na leitura → conservador
+    const presos = abertos.filter(c => comCliente.has(c.id));
+    const proativosSemResposta = abertos.length - presos.length;
+
+    if (!presos.length) {
+      return { status: 'ok', detalhe: `Nenhum chamado do cliente sem resposta${proativosSemResposta ? ` (${proativosSemResposta} abordagem(ns) proativa(s) da IA sem retorno — não exigem resposta).` : '.'}` };
+    }
     const antigo = presos[0]?.criado_em ? new Date(presos[0].criado_em).toLocaleDateString('pt-BR') : '';
-    return { status: 'aviso', detalhe: `${presos.length} chamado(s) aberto(s) há +7 dias — REVISAR na aba Suporte (não fecho sozinho; mais antigo: ${antigo}).` };
+    return { status: 'aviso', detalhe: `${presos.length} chamado(s) DO CLIENTE sem resposta há +7 dias — REVISAR na aba Suporte (não fecho sozinho; mais antigo: ${antigo}).${proativosSemResposta ? ` Além deles, ${proativosSemResposta} abordagem(ns) proativa(s) sem retorno (ignoradas).` : ''}` };
   }));
 
   // ── 3a2. Índice PRÓPRIO de mercado (cidade_indicadores) — base dos filtros revenda/locação ──

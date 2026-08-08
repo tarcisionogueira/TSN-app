@@ -52,12 +52,46 @@ function ehUrlDoNossoStorage(url) {
   return String(url || '').startsWith(`${base}/storage/v1/`);
 }
 
+// PATH do nosso bucket privado (ex.: `pj/<uuid>/kyc-doc-frente-123.jpg`). Só reconhece a forma
+// exata que os nossos gravadores usam — nunca um caminho arbitrário do cliente.
+function pathDoNossoBucket(v) {
+  const s = String(v || '');
+  return /^pj\/[0-9a-f-]{36}\/[A-Za-z0-9._-]+$/.test(s) ? s : null;
+}
+
+// Assina o path com a SERVICE KEY, na hora. Por que o servidor faz isso em vez de confiar na
+// URL gravada (08/08): TODOS os 8 documentos KYC do sistema estavam com PATH CRU em vez de URL
+// assinada — o `createSignedUrl` do cliente falhava e o código caía no `signed?.signedUrl || path`,
+// gravando o path em silêncio. Como a trava exigia URL do Storage, o face match NUNCA rodava:
+// toda identidade caía em "revisão manual", e identidade validada é pré-requisito de SAQUE.
+// Assinando aqui, o servidor deixa de depender do que o cliente conseguiu gravar — e o caminho
+// continua fechado a URL de fora (o path é validado pelo formato acima).
+async function assinarPathPrivado(path) {
+  try {
+    const r = await fetch(`${SUPABASE_URL}/storage/v1/object/sign/documentos/${path}`, {
+      method: 'POST',
+      headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ expiresIn: 600 }),
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!r.ok) { console.error('[validar-selfie] sign', r.status, (await r.text().catch(() => '')).slice(0, 200)); return null; }
+    const j = await r.json().catch(() => null);
+    return j?.signedURL ? `${SUPABASE_URL}/storage/v1${j.signedURL}` : null;
+  } catch (e) { console.error('[validar-selfie] sign erro', e?.message); return null; }
+}
+
 // Baixa uma imagem (URL assinada do bucket privado) → base64 p/ o Claude Vision. Cap de ~4MB
 // (limite prático do Vision e da memória do Edge). Retorna null se não for imagem/for grande demais.
 async function urlImagemParaBase64(url) {
-  if (!ehUrlDoNossoStorage(url)) return null;
+  let alvo = url;
+  if (!ehUrlDoNossoStorage(alvo)) {
+    const path = pathDoNossoBucket(alvo);
+    if (!path) return null;
+    alvo = await assinarPathPrivado(path);
+    if (!alvo) return null;
+  }
   try {
-    const r = await fetch(url, { signal: AbortSignal.timeout(12000) });
+    const r = await fetch(alvo, { signal: AbortSignal.timeout(12000) });
     if (!r.ok) return null;
     const ct = (r.headers.get('content-type') || '').toLowerCase();
     if (!ct.startsWith('image/')) return null; // PDF (CNH digital) e outros não entram no match automático

@@ -2356,14 +2356,29 @@ export default function Analise() {
                 {/* Parecer consolidado */}
                 {(() => {
                   const p = cnjResultados.parecer;
-                  const cores = { vermelho: ['#fef2f2','#dc2626','#fee2e2'], amarelo: ['#fefce8','#d97706','#fef3c7'], verde: ['#f0fdf4','#16a34a','#dcfce7'] };
-                  const [bg, cor, borda] = cores[p?.nivel] || cores.verde;
+                  // FALLBACK NUNCA É VERDE (08/08). Era `|| cores.verde`: qualquer nível que a
+                  // tela não conhecesse virava "VIABILIDADE JURÍDICA PRELIMINAR FAVORÁVEL" —
+                  // um selo de segurança jurídica dado por desconhecimento. Agora o padrão é o
+                  // neutro "não verificado", e verde só sai quando o servidor diz verde.
+                  const cores = {
+                    vermelho: ['#fef2f2','#dc2626','#fee2e2'],
+                    amarelo: ['#fefce8','#d97706','#fef3c7'],
+                    verde: ['#f0fdf4','#16a34a','#dcfce7'],
+                    nao_verificado: ['#f8fafc','#475569','#e2e8f0'],
+                  };
+                  const [bg, cor, borda] = cores[p?.nivel] || cores.nao_verificado;
                   return (
                     <div style={{ background: bg, border: `2px solid ${borda}`, borderRadius: 12, padding: '14px 18px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                        {p?.nivel === 'vermelho' ? <ShieldAlert size={18} color={cor} /> : p?.nivel === 'amarelo' ? <AlertTriangle size={18} color={cor} /> : <CheckCircle2 size={18} color={cor} />}
+                        {p?.nivel === 'vermelho' ? <ShieldAlert size={18} color={cor} />
+                          : p?.nivel === 'amarelo' ? <AlertTriangle size={18} color={cor} />
+                          : p?.nivel === 'verde' ? <CheckCircle2 size={18} color={cor} />
+                          : <AlertTriangle size={18} color={cor} />}
                         <span style={{ fontWeight: 900, fontSize: 13, color: cor }}>
-                          {p?.nivel === 'vermelho' ? 'RISCO ALTO — ATENÇÃO ANTES DE ARREMATAR' : p?.nivel === 'amarelo' ? 'RISCOS A MONITORAR' : 'VIABILIDADE JURÍDICA PRELIMINAR FAVORÁVEL'}
+                          {p?.nivel === 'vermelho' ? 'RISCO ALTO — ATENÇÃO ANTES DE ARREMATAR'
+                            : p?.nivel === 'amarelo' ? 'RISCOS A MONITORAR'
+                            : p?.nivel === 'verde' ? 'VIABILIDADE JURÍDICA PRELIMINAR FAVORÁVEL'
+                            : 'CONSULTA PROCESSUAL PENDENTE — NÃO VERIFICADO'}
                         </span>
                       </div>
                       <p style={{ margin: 0, fontSize: 12, color: cor, lineHeight: 1.7 }}>{p?.texto}</p>
@@ -2376,9 +2391,13 @@ export default function Analise() {
                   );
                 })()}
 
+                {/* Sem processo na lista: o texto tem de acompanhar o PARECER. Antes afirmava
+                    "nenhum processo encontrado" mesmo quando a consulta não tinha acontecido. */}
                 {cnjResultados.total === 0 && (
-                  <div style={{ padding: '16px', background: '#f8fafc', borderRadius: 10, fontSize: 12, color: '#64748b', textAlign: 'center' }}>
-                    Nenhum processo encontrado nos tribunais consultados. Verifique também no cartório de registro de imóveis.
+                  <div style={{ padding: '16px', background: '#f8fafc', borderRadius: 10, fontSize: 12, color: '#64748b', textAlign: 'center', lineHeight: 1.6 }}>
+                    {cnjResultados.parecer?.nivel === 'verde'
+                      ? 'Nenhum processo encontrado nos tribunais consultados. Verifique também no cartório de registro de imóveis.'
+                      : (cnjResultados.parecer?.texto || 'Consulta processual pendente.')}
                   </div>
                 )}
 

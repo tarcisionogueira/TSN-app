@@ -230,12 +230,13 @@ export default async function handler(req, res) {
   let processosCNJ = [];
   let parecerCNJ = null;
   const ehExtrajudicial = imovel?.modalidade === 'extrajudicial';
+  const modalidade = imovel?.modalidade || null; // vai ao parecer do CNJ: lote judicial TEM processo por definição
   const uf = imovel?.estado;
   const tarefasCNJ = [];
   // Por número: o tribunal está embutido no nº CNJ — basta a UF (barato).
-  if (numeroProcesso) tarefasCNJ.push(buscarProcessosCNJ({ numero_processo: numeroProcesso, uf, nacional: !uf }));
+  if (numeroProcesso) tarefasCNJ.push(buscarProcessosCNJ({ numero_processo: numeroProcesso, uf, nacional: !uf, modalidade }));
   // Por nome do devedor: varredura NACIONAL (pega ações em qualquer estado/justiça).
-  if ((ehExtrajudicial || !numeroProcesso) && executadoNome) tarefasCNJ.push(buscarProcessosCNJ({ nome_parte: executadoNome, uf, nacional: true }));
+  if ((ehExtrajudicial || !numeroProcesso) && executadoNome) tarefasCNJ.push(buscarProcessosCNJ({ nome_parte: executadoNome, uf, nacional: true, modalidade }));
   if (tarefasCNJ.length) {
     try {
       const resCNJ = await Promise.all(tarefasCNJ);
