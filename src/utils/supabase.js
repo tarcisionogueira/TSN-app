@@ -168,13 +168,21 @@ export async function marcarProgresso(userId, licaoId, concluido) {
 // ─── PERGUNTAS ───────────────────────────────────────────────────────────────
 
 export async function listarPerguntas(licaoId) {
+  // `perguntas.user_id` referencia `auth.users`, não `perfis` — o embed `perfis(nome)`
+  // devolvia 400 e, como esta função dá `throw`, derrubava o Q&A da lição inteira (08/08).
   const { data, error } = await supabase
     .from('perguntas')
-    .select('*, perfis(nome)')
+    .select('*')
     .eq('licao_id', licaoId)
     .order('created_at', { ascending: false });
   if (error) throw error;
-  return data || [];
+  const ids = [...new Set((data || []).map(p => p.user_id).filter(Boolean))];
+  let nomes = new Map();
+  if (ids.length) {
+    const { data: ps } = await supabase.from('perfis').select('id, nome').in('id', ids);
+    nomes = new Map((ps || []).map(p => [p.id, p.nome]));
+  }
+  return (data || []).map(p => ({ ...p, perfis: { nome: nomes.get(p.user_id) || null } }));
 }
 
 export async function fazerPergunta(userId, licaoId, texto) {

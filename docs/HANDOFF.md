@@ -139,6 +139,108 @@ antes de mexer, mais 6 validações de produção para rodar na abertura.
 
 ---
 
+## 🏁 SESSÃO 29 (08/08 — ritual de abertura: o convite de cliente estava morto há 2 dias)
+
+**Ritual completo rodado. O diagnóstico saiu verde em tudo que é automático — e o achado grave veio
+de novo do ESTADO, não do código: um erro registrado às 11h26 de hoje.** O padrão do dia anterior se
+repetiu e ganhou nome: **embed do PostgREST apontando para uma FK que não existe (ou que existe duas
+vezes)**. Cinco telas caíam nisso; a pior derrubava a captação de clientes.
+
+### Diagnóstico de abertura (o que está verde)
+
+| Item | Estado |
+|---|---|
+| Heartbeat | registrado 11:29 (auditoria semanal paga vai PULAR) |
+| Acervo | **30.713** ativos · 21.837 atualizados em 24h · fila de geocode **28** |
+| `auditoria_seguranca()` | **0 crítico / 0 atenção** |
+| Baseline de captura | **nenhuma fonte abaixo do piso aprendido** |
+| Chamados do CLIENTE presos | **0** (o filtro de 07/08 segurou) |
+| Deploys Vercel | os 20 últimos **READY** |
+| Anomalias de relatório | 5 `cnj_vazio` (05/08) + 1 `mercado_area_incoerente` (28/07) — sem novas |
+
+### 🔴 O convite de cliente estava quebrado para TODO MUNDO
+
+`links_convite.criado_por` referencia **`auth.users`**, não `perfis`. O embed
+`perfis:criado_por(nome)` devolvia 400, e em `Convite.jsx` o `if (error)` traduzia isso para
+**"Link de convite não encontrado ou expirado"**. Ou seja: os **16 links ativos** que os parceiros
+distribuíram mostravam ao convidado que o convite não valia. Não é tela feia — é a porta de entrada
+de cliente fechada, em silêncio, com o parceiro achando que divulgou. O nome de quem convida também
+não é legível por anônimo (RLS de `perfis`, correto) — a tela já tinha o rótulo neutro
+"BidPro Brasil" de reserva.
+
+### As outras quatro da mesma família
+
+| Onde | Causa | O que o usuário via |
+|---|---|---|
+| `/admin` → convites | FK para `auth.users` | aba vazia |
+| `/admin` → links promocionais | **DUAS** FKs em `criado_por` (auth.users + perfis) → PostgREST não escolhe | lista vazia |
+| `/admin` → transcrições | **DUAS** FKs em `solicitacoes.user_id` | lista vazia |
+| Q&A da lição (`listarPerguntas`) | FK para `auth.users`, e a função dá `throw` | Q&A da lição inteira caindo |
+
+**A regra que fica:** `alias:coluna(...)` só funciona quando existe **exatamente uma** FK naquela
+coluna. Zero FKs e duas FKs dão o MESMO erro 400 — e o PostgREST diz "could not find a relationship"
+nos dois casos, o que engana. Onde a FK aponta para `auth.users`, buscar o nome em consulta
+separada; onde há duas, nomear a constraint (`perfis!links_promo_criado_por_perfis_fkey(nome)`).
+
+### O chat do caso: lia meio certo, escrevia errado
+
+A sessão de 07/08 corrigiu a LEITURA de `chamados_mensagens` e não tocou na ESCRITA. O insert de
+`/caso/:id` mandava `user_id` e `mensagem` — colunas que não existem (são `autor_id`/`conteudo`).
+Como o supabase-js **não dá throw** no insert, o erro era engolido: `nova` vinha `undefined` e a
+tela dizia *"Erro ao enviar: Cannot read properties of undefined"*. **Nenhuma mensagem de caso era
+gravada.** Junto com isso, a renderização lia `m.perfis?.nome` (nunca preenchido → todo mundo
+aparecia como **"Sistema"**) e `m.created_at` (a coluna é `criado_em` → **data em branco**).
+Corrigido o insert (com `autor_tipo` na convenção do ChatSuporte, que é o que o health check usa
+para saber se quem falou foi o cliente) e os dois campos do render.
+
+### O `/checkout` "Failed to fetch" NÃO era o pagamento
+
+Era o item nº 1 da fila de investigação deixada ontem. O stack respondeu em 30 segundos: as chamadas
+saem de `chrome-extension://hoklmm…`, que substitui o `window.fetch`, e o alvo é um beacon do
+**Google Tag Manager**. Bug de extensão do próprio usuário, num beacon de analytics — não temos como
+corrigir e não afeta a compra. **Ocupou dois dias no topo da fila por falta de um filtro.** Agora
+`reportarErro.js` descarta erro cujo stack é INTEIRAMENTE de terceiro (extensão, GTM, GA, Meta,
+Clarity); se qualquer quadro for do nosso bundle, o erro passa normalmente — a regra é conservadora
+de propósito.
+
+### O 400 do `/minha-rede` era ruído que nós mesmos gerávamos
+
+`createSignedUrl` no cliente, no bucket `documentos`, **sempre** falha (o cliente não tem permissão
+de assinar ali). Depois da correção de ontem — quem assina é o servidor, com a service key — a
+chamada virou vestigial: só produzia 400 registrado em `erros_cliente`, escondendo erro de verdade,
+para obter algo que já não é usado. Removida de `Perfil.jsx` e `KycParceiroModal.jsx`; o path é
+gravado de propósito, e `api/validar-selfie.js` (`assinarPathPrivado`) assina na hora.
+
+> ⚠️ **A consulta `usuario_docs where url not like 'http%'` do ritual (CLAUDE.md, passo 1b) virou
+> FALSO POSITIVO.** Os 8 documentos com path cru são agora o formato **correto**. Ela segue útil
+> como inventário, mas 8 ≠ problema. Trocar por "path que não casa com `^pj/<uuid>/`" em algum
+> momento.
+
+### Fontes cegas: o código já está certo, falta o cron rodar
+
+As 7 fontes (CALIL, GESTAOLEILOES, PECINI, VLANCE, VEGAS, RJLEILOES, TORRES3 — 418 lotes) **ainda
+aparecem sem `fonte_saude`**, mas isso é esperado: todas ganharam a chamada ontem e os crons delas
+são **semanais**. Próximas gravações: **segunda** (SOLEON → CALIL/VEGAS/TORRES3, PECINI, VLANCE),
+**terça** (RJLEILOES), **quinta** (GESTAOLEILOES). Verificado arquivo por arquivo, inclusive o
+scraper Python do VLANCE, que grava direto no REST. **Se na terça alguma continuar ausente, aí sim
+é bug.**
+
+### O que fica para a próxima sessão
+
+As pendências de 08/08 continuam valendo, MENOS `/checkout` e `/minha-rede` (fechadas acima). Segue
+pendente: `CONTABILIDADE_EMAIL` · `AUDITORIA_EMAIL_DESTINO` · `GITHUB_ACTIONS_TOKEN` · Pluggy ·
+4 fontes com 0% de documento · 3 fontes publicando lote vencido · lote de Guarulhos `e7bd0637` ·
+155 `.json()` sem `.ok`. **Novo:** varrer o resto do app atrás de embed `alias:coluna(...)` — eu
+cobri `src/`, mas as rotas `api/` usam PostgREST direto e não passaram por essa lente.
+
+> **Nota de verificação, para não superestimar o que foi provado:** as correções foram conferidas
+> contra o catálogo de FKs do banco (`pg_constraint`) e o build passou, mas **não** contra o
+> PostgREST em execução — a política de rede deste ambiente só deixa o MCP falar com o Supabase, e
+> `curl` volta 403. Para o convite a correção é definitiva (sem FK, o embed é impossível); para as
+> duas de constraint ambígua, confirmar na tela depois do deploy.
+
+---
+
 ## 🏁 FECHAMENTO DE 08/08 — leia este bloco primeiro
 
 **O dia começou lendo o rastro que o sistema deixou no banco e terminou com um financeiro que se

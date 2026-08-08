@@ -31,8 +31,12 @@ curto (5–8 linhas) antes de seguir:
    > select c.id, c.titulo, c.criado_em from chamados c where c.status='aberto'
    >   and c.criado_em < now() - interval '3 days'
    >   and exists (select 1 from chamados_mensagens m where m.chamado_id=c.id and m.autor_tipo='cliente');
-   > -- KYC: documento gravado sem URL utilizável (trava saque; era 8/8 em 07/08)
-   > select count(*) from usuario_docs where url not like 'http%';
+   > -- KYC: documento que o SERVIDOR não consegue abrir (trava saque). O critério espelha
+   > -- `pathDoNossoBucket` em api/validar-selfie.js: path cru é FORMATO VÁLIDO desde 08/08
+   > -- (quem assina é o servidor, com a service key) — só é problema o que não casa com
+   > -- nenhuma das duas formas. Verde = 0. (O antigo `url not like 'http%'` acusava 8 sadios.)
+   > select count(*) from usuario_docs
+   >  where url !~ '^https?://' and url !~ '^pj/[0-9a-f-]{36}/[A-Za-z0-9._-]+$';
    > -- fontes no PONTO CEGO do monitor: têm lote ativo e nenhum registro em fonte_saude
    > select fonte, count(*) from imoveis_leilao i where ativo
    >   and not exists (select 1 from fonte_saude s where s.fonte=i.fonte) group by 1 order by 2 desc;

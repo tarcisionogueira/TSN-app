@@ -59,15 +59,12 @@ export default function KycParceiroModal() {
     const path = `pj/${user.id}/${prefixo}-${Date.now()}.${ext}`;
     const { error: upErr } = await supabase.storage.from('documentos').upload(path, file, { upsert: false });
     if (upErr) throw upErr;
-    // A URL assinada é BÔNUS, não requisito (08/08). Medido: os 8 documentos KYC do sistema
-    // estavam com PATH CRU — o `createSignedUrl` de 10 anos falhava e o `|| path` engolia o erro
-    // em silêncio. Como o servidor exigia URL do Storage, o face match NUNCA rodava e toda
-    // identidade caía em revisão manual (e identidade validada é pré-requisito de saque).
-    // Agora: prazo sensato (1 ano), falha registrada, e o PATH é gravado de propósito — o
-    // servidor sabe assinar o path na hora, com a service key.
-    const { data: signed, error: signErr } = await supabase.storage.from('documentos').createSignedUrl(path, 60 * 60 * 24 * 365);
-    if (signErr) console.warn('[kyc] URL assinada indisponível, gravando o path:', signErr.message);
-    const { error: insErr } = await supabase.from('usuario_docs').insert({ user_id: user.id, tipo, nome: file.name || `${prefixo}.${ext}`, url: signed?.signedUrl || path, tamanho_kb: Math.round((file.size || 0) / 1024) });
+    // Grava o PATH, de propósito (08/08): quem assina é o SERVIDOR, na hora, com a service key.
+    // A tentativa de `createSignedUrl` aqui era vestigial — o cliente não tem permissão de
+    // assinar neste bucket, então ela SEMPRE falhava com 400 e o handler global registrava o
+    // erro em `erros_cliente` (3 ocorrências em /minha-rede). Ruído que escondia erro de verdade,
+    // para obter algo que já não é usado.
+    const { error: insErr } = await supabase.from('usuario_docs').insert({ user_id: user.id, tipo, nome: file.name || `${prefixo}.${ext}`, url: path, tamanho_kb: Math.round((file.size || 0) / 1024) });
     if (insErr) throw insErr;
   }
 

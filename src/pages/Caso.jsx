@@ -441,7 +441,7 @@ export default function Caso() {
   const location = useLocation();
   const nav = useNavigate();
   const isMobile = useIsMobile();
-  const { user, role, impersonate, effectiveUserId } = useAuth();
+  const { user, role, nome, impersonate, effectiveUserId } = useAuth();
 
   const imovelInit = location.state?.imovel;
 
@@ -957,13 +957,23 @@ export default function Caso() {
     if (!chatInput.trim() || !caso || !chamadoId) return;
     setEnviando(true);
     try {
-      const { data: nova } = await supabase.from('chamados_mensagens').insert({
+      // COLUNAS REAIS (08/08): a tabela é `autor_id`/`autor_nome`/`autor_tipo`/`conteudo`/
+      // `criado_em`. O insert antigo mandava `user_id`/`mensagem` (inexistentes) → 400, e como
+      // o supabase-js NÃO dá throw, o erro era engolido: `nova` vinha undefined e a tela
+      // mostrava "Cannot read properties of undefined". Nenhuma mensagem do caso era gravada.
+      // `autor_tipo` segue a convenção do ChatSuporte — é o que o health check usa para saber
+      // se quem falou foi o CLIENTE.
+      const { data: nova, error: msgErr } = await supabase.from('chamados_mensagens').insert({
         chamado_id: chamadoId,
-        user_id: user.id,
-        mensagem: chatInput.trim(),
+        autor_id: user.id,
+        autor_nome: nome || 'Usuário',
+        autor_tipo: role === 'cliente' ? 'cliente' : 'atendente',
+        conteudo: chatInput.trim(),
+        anexos: [],
         remetente_role: role,
-      }).select('*, perfis(nome, role)').single();
-      setMsgs(p => [...p, { ...nova, remetente_id: nova.user_id, texto: nova.mensagem }]);
+      }).select('*').single();
+      if (msgErr) throw msgErr;
+      setMsgs(p => [...p, { ...nova, remetente_id: nova.autor_id, texto: nova.conteudo }]);
       setChatInput('');
     } catch (e) {
       setMsg(`Erro ao enviar: ${e.message}`);
@@ -1725,11 +1735,15 @@ export default function Caso() {
                 const meu = m.remetente_id === user?.id;
                 return (
                   <div key={m.id} style={{ alignSelf: meu ? 'flex-end' : 'flex-start', maxWidth:'80%' }}>
-                    {!meu && <div style={{ fontSize:10, color:'#94a3b8', marginBottom:2 }}>{m.perfis?.nome || 'Sistema'}</div>}
+                    {/* `perfis` nunca vinha preenchido (a leitura faz `select('*')`) → TODA
+                        mensagem do outro lado aparecia como "Sistema". O nome está em
+                        `autor_nome`, gravado no próprio registro. */}
+                    {!meu && <div style={{ fontSize:10, color:'#94a3b8', marginBottom:2 }}>{m.autor_nome || 'Sistema'}</div>}
                     <div style={{ padding:'8px 12px', borderRadius: meu ? '12px 12px 2px 12px' : '12px 12px 12px 2px', background: meu ? '#0D63DB' : 'white', color: meu ? 'white' : '#111111', fontSize:13, border: meu ? 'none' : '1px solid #e2e8f0' }}>
                       {m.texto}
                     </div>
-                    <div style={{ fontSize:10, color:'#94a3b8', marginTop:2, textAlign: meu ? 'right' : 'left' }}>{fmtDate(m.created_at)}</div>
+                    {/* a coluna é `criado_em`; `created_at` não existe → data em branco. */}
+                    <div style={{ fontSize:10, color:'#94a3b8', marginTop:2, textAlign: meu ? 'right' : 'left' }}>{fmtDate(m.criado_em)}</div>
                   </div>
                 );
               })}
