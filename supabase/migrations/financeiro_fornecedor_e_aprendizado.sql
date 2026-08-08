@@ -1,0 +1,6 @@
+-- Aplicada em produção em 08/08 via MCP. Versionada aqui para o histórico.
+-- public.fornecedor_normalizar (v2) · public.financeiro_fornecedor · fornecedores_sincronizar()
+-- public.fornecedor_definir_conta() · conciliacao_classificar() em CASCATA (credor > regra > 9.9)
+-- Classificar por CREDOR resolve todas as variações do nome de uma vez; a regex só acerta o que
+-- alguém previu. Validado: as 3 grafias de "Anthropic" caem na mesma chave e um clique classifica
+-- todas.

@@ -28,6 +28,7 @@ import { getUser, getUserRoleById } from './_auth.js';
 import { checkRateLimit } from './_rate-limit.js';
 import { enviarEmail } from './_email.js';
 import { escapeHtml } from './_sanitize.js';
+import { geminiFetch } from './_gemini.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -224,6 +225,153 @@ export default async function handler(req, res) {
       }).catch(() => {});
     }
     res.status(200).json({ ok: true, lancamento: linha || null });
+    return;
+  }
+
+  // ── CREDORES: a fila de trabalho REAL ────────────────────────────────────────────────────
+  // Classificar por credor é mais forte que por descrição: "ANTHROPIC PBC", "Anthropic*Claude" e
+  // "ANTHROPIC 4155551212" são o mesmo fornecedor e a mesma conta. Definir UMA vez tira o credor
+  // da fila para sempre — é assim que a DRE se monta sozinha ao longo dos meses.
+  if (acao === 'fornecedores') {
+    await sb('rpc/fornecedores_sincronizar', { method: 'POST', body: '{}' }).catch(() => {});
+    const lista = await (await sb('financeiro_fornecedor?select=*&order=total_valor.desc&limit=300')).json().catch(() => []);
+    const semConta = lista.filter(f => !f.conta_padrao);
+    res.status(200).json({
+      ok: true,
+      // Os sem conta vêm primeiro e ordenados por VOLUME: começar pelo credor de R$ 5.000
+      // resolve mais DRE que pelo de R$ 12.
+      pendentes: semConta,
+      classificados: lista.filter(f => f.conta_padrao),
+      resumo: { total: lista.length, sem_conta: semConta.length,
+                valor_sem_conta: Number(semConta.reduce((s, f) => s + Number(f.total_valor || 0), 0).toFixed(2)) },
+    });
+    return;
+  }
+
+  // Um clique: define a conta do credor e reclassifica TODOS os lançamentos dele de uma vez.
+  if (acao === 'definir_fornecedor') {
+    const chave = String(body.chave || '').trim();
+    const conta = String(body.conta || '').trim();
+    if (!chave || !conta) { res.status(400).json({ error: 'chave e conta são obrigatórias' }); return; }
+    const r = await sb('rpc/fornecedor_definir_conta', {
+      method: 'POST', body: JSON.stringify({ p_chave: chave, p_conta: conta, p_user: user.id }),
+    });
+    if (!r.ok) {
+      const det = await r.text().catch(() => '');
+      console.error('[conciliacao] definir_fornecedor', r.status, det.slice(0, 200));
+      res.status(502).json({ error: 'Falha ao definir a conta do credor.' }); return;
+    }
+    res.status(200).json({ ok: true, lancamentos_reclassificados: await r.json().catch(() => 0) });
+    return;
+  }
+
+  // ── MONITOR: para onde o dinheiro está indo, mês a mês ───────────────────────────────────
+  if (acao === 'monitor') {
+    const meses = Math.min(24, Math.max(3, Number(body.meses || url.searchParams.get('meses')) || 6));
+    const d = new Date(); d.setMonth(d.getMonth() - (meses - 1));
+    const desdeComp = d.toISOString().slice(0, 7);
+    const linhas = await (await sb(
+      `conciliacao_lancamento?competencia=gte.${desdeComp}&select=competencia,direcao,conta,valor_bruto,valor_liquido,fornecedor,descricao&limit=5000`
+    )).json().catch(() => []);
+    const contas = await (await sb('plano_contas?select=codigo,nome,natureza,grupo_dre')).json().catch(() => []);
+    const mapaConta = Object.fromEntries(contas.map(c => [c.codigo, c]));
+
+    const serie = {}, porGrupo = {}, porCredor = {};
+    for (const l of linhas) {
+      const v = Number(l.valor_liquido ?? l.valor_bruto ?? 0);
+      const m = l.competencia;
+      serie[m] = serie[m] || { competencia: m, entradas: 0, saidas: 0 };
+      serie[m][l.direcao === 'entrada' ? 'entradas' : 'saidas'] += v;
+      if (l.direcao === 'saida') {
+        const g = mapaConta[l.conta]?.grupo_dre || 'Não classificado';
+        porGrupo[g] = (porGrupo[g] || 0) + v;
+        const c = l.fornecedor || '(sem credor)';
+        porCredor[c] = porCredor[c] || { credor: c, total: 0, qtd: 0, conta: l.conta };
+        porCredor[c].total += v; porCredor[c].qtd += 1;
+      }
+    }
+    const serieArr = Object.values(serie).sort((a, b) => a.competencia.localeCompare(b.competencia))
+      .map(x => ({ ...x, entradas: Number(x.entradas.toFixed(2)), saidas: Number(x.saidas.toFixed(2)),
+                   resultado: Number((x.entradas - x.saidas).toFixed(2)) }));
+    res.status(200).json({
+      ok: true, meses,
+      serie: serieArr,
+      por_grupo: Object.entries(porGrupo).map(([grupo, total]) => ({ grupo, total: Number(total.toFixed(2)) })).sort((a, b) => b.total - a.total),
+      top_credores: Object.values(porCredor).sort((a, b) => b.total - a.total).slice(0, 15)
+        .map(c => ({ ...c, total: Number(c.total.toFixed(2)) })),
+    });
+    return;
+  }
+
+  // ── DIAGNÓSTICO (Gemini) — direções sobre pagamentos e sugestões comerciais ──────────────
+  // Roda no GEMINI, não no Claude: é leitura de números já apurados, não geração de relatório —
+  // custa centavos e não precisa do modelo caro (a auditoria do Claude custa R$ 43-59/execução).
+  // ANCORADO nos totais REAIS que acabamos de calcular; o prompt proíbe inventar número. Sem a
+  // chave, devolve o diagnóstico determinístico (concentração, margem, pendências) em vez de
+  // erro — número bom sem texto é melhor que tela vazia.
+  if (acao === 'diagnostico') {
+    const meses = 6;
+    const d0 = new Date(); d0.setMonth(d0.getMonth() - (meses - 1));
+    const linhas = await (await sb(
+      `conciliacao_lancamento?competencia=gte.${d0.toISOString().slice(0, 7)}&select=competencia,direcao,conta,valor_bruto,valor_liquido,fornecedor&limit=5000`
+    )).json().catch(() => []);
+    const contas = await (await sb('plano_contas?select=codigo,nome,grupo_dre')).json().catch(() => []);
+    const nomeConta = Object.fromEntries(contas.map(c => [c.codigo, c.nome]));
+
+    const ent = linhas.filter(l => l.direcao === 'entrada').reduce((s, l) => s + Number(l.valor_liquido ?? l.valor_bruto ?? 0), 0);
+    const sai = linhas.filter(l => l.direcao === 'saida').reduce((s, l) => s + Number(l.valor_liquido ?? l.valor_bruto ?? 0), 0);
+    const porConta = {};
+    for (const l of linhas.filter(x => x.direcao === 'saida')) {
+      porConta[l.conta] = (porConta[l.conta] || 0) + Number(l.valor_liquido ?? l.valor_bruto ?? 0);
+    }
+    const topSaidas = Object.entries(porConta).sort((a, b) => b[1] - a[1]).slice(0, 8)
+      .map(([c, v]) => ({ conta: c, nome: nomeConta[c] || c, total: Number(v.toFixed(2)), pct: sai > 0 ? Math.round((v / sai) * 100) : 0 }));
+    const pendentes = linhas.filter(l => l.conta === '9.9').length;
+    const margem = ent > 0 ? Math.round(((ent - sai) / ent) * 100) : null;
+
+    // Achados determinísticos: valem por si e são a resposta quando o Gemini não estiver disponível.
+    const achados = [];
+    if (margem != null && margem < 0) achados.push(`Resultado NEGATIVO no período: saiu ${brl(sai)} contra ${brl(ent)} de entrada.`);
+    else if (margem != null && margem < 20) achados.push(`Margem apertada: ${margem}% do que entra sobra depois das saídas.`);
+    if (topSaidas[0] && topSaidas[0].pct >= 40) achados.push(`Concentração de gasto: ${topSaidas[0].pct}% das saídas estão em "${topSaidas[0].nome}".`);
+    if (pendentes > 0) achados.push(`${pendentes} lançamento(s) sem conta contábil — a DRE não fecha certa até classificá-los.`);
+
+    let texto = null;
+    const prompt = `Você é o controller de uma plataforma SaaS de leilões de imóveis no Brasil.
+Analise os números REAIS abaixo (últimos ${meses} meses) e escreva um diagnóstico curto e prático em português.
+
+Entradas: ${brl(ent)}
+Saídas: ${brl(sai)}
+Resultado: ${brl(ent - sai)}${margem != null ? ` (margem ${margem}%)` : ''}
+Maiores saídas por conta contábil:
+${topSaidas.map(t => `- ${t.nome}: ${brl(t.total)} (${t.pct}% das saídas)`).join('\n') || '- (sem saídas registradas)'}
+Lançamentos sem classificação: ${pendentes}
+
+REGRAS OBRIGATÓRIAS:
+- NÃO invente nenhum número que não esteja acima. Se faltar dado para uma conclusão, diga que falta.
+- Máximo 200 palavras, em 3 blocos com estes títulos exatos: "Pagamentos", "Comercial", "Atenção".
+- "Pagamentos": onde cortar ou renegociar, citando a conta e o valor.
+- "Comercial": o que fazer para aumentar receita, considerando que o produto vende assinaturas
+  (Investidor Pro), Clube de Negócios, assessoria e relatórios avulsos.
+- "Atenção": o risco mais concreto que os números mostram.
+- Direto, sem elogio e sem introdução.`;
+    try {
+      const r = await geminiFetch({ method: 'POST', body: JSON.stringify({ messages: [{ role: 'user', content: prompt }], max_tokens: 700 }) }, { timeoutMs: 25000 });
+      if (r?.ok) {
+        const j = await r.json().catch(() => null);
+        texto = j?.candidates?.[0]?.content?.parts?.[0]?.text || j?.content?.[0]?.text || null;
+      }
+    } catch (e) { console.error('[conciliacao] gemini', e?.message); }
+
+    res.status(200).json({
+      ok: true, meses,
+      numeros: { entradas: Number(ent.toFixed(2)), saidas: Number(sai.toFixed(2)), resultado: Number((ent - sai).toFixed(2)), margem_pct: margem, pendentes },
+      top_saidas: topSaidas,
+      achados,
+      diagnostico: texto,
+      // A tela precisa saber a diferença entre "a IA não respondeu" e "a IA disse que está tudo bem".
+      fonte: texto ? 'gemini' : 'sem_ia',
+    });
     return;
   }
 
