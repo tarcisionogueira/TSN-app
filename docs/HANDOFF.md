@@ -258,13 +258,44 @@ R$ 3.000; parceiro é barrado por KYC + aceite dos termos.
 > nenhum explorador tem saldo, não há cadeia de indicação entre pagantes, e o gate de aceite agora
 > impede saque sob a regra nova sem o aceite. Mas a ordem certa era esta, e fica registrado.
 
+### Rodada final de correções do dono — e um erro meu que ela desfez
+
+**1. KYC também para a equipe.** *"A equipe coloca pra fazer a mesma verificação, batendo a selfie
+e anexando o documento de identidade."* Feito: `saque.exige_kyc` escopo `todos`, e o popup de KYC
+passou a aparecer para quem recebe por função (analista, advogado, consultor, afiliado, leiloeiro).
+O admin fica fora do POPUP — opera o sistema e o veria o dia inteiro — mas **não** fica fora da
+trava: hoje ele está bloqueado para sacar até bater a selfie.
+
+**2. 🔴 NÃO EXISTE pagamento a pessoa física — e o erro era meu.** *"Para realizar o pagamento
+exige informar o CNPJ vinculado ao CPF. Já tínhamos vencido essa etapa anteriormente."* Ele está
+certo: é a rota do §12.9. Ao abrir o saque para o parceiro grátis, **eu o mandei para o ramo do PIX
+pessoal** que existia para a equipe — reintroduzi pagamento PF pela porta dos fundos e ainda
+levantei em cima disso uma preocupação tributária que a arquitetura já tinha resolvido. Agora o
+destino é a **PJ para toda classe**, com CPF conferido no QSA. Some da lista de pendências o
+"parecer do contador sobre pagamento a PF": a premissa era falsa.
+
+**3. A nota cobre o MÊS INTEIRO, não o pedido.** *"Se o pagamento foi feito inferior a R$ 2.500 e
+durante o mês alcançou o valor, deve não permitir o saque e exigir nota fiscal referente ao valor
+integral do mês."* Eu exigia nota do valor pedido — buraco óbvio: 3 saques de R$ 1.000 sem nota e
+um quarto de R$ 500 pediria nota de R$ 500, com R$ 3.500 sacados e R$ 500 documentados. Agora a
+nota precisa cobrir `ja_sacado_no_mês + este_pedido`.
+
+**4. Botão da nota na própria tela do saque.** `Comissoes.jsx` mostra "sacado neste mês" e "ainda
+pode sacar sem nota" **antes** de o parceiro pedir, e quando o pedido estoura o teto abre o anexo
+já com o valor integral exigido, com o veredito da conferência ali mesmo.
+
+> 🧪 **O mecanismo pegou o autor do mecanismo.** Ao criar `saque.destino_sempre_pj`, declarei a
+> regra e deixei o comportamento fixo no código, em vez de lê-la. A `auditoria_regras_negocio()`
+> acusou **"regra órfã"** na hora, com o nome da função. Corrigi para ler a regra e voltou a 0.
+> É o melhor teste que essa auditoria podia ter recebido — e no mesmo dia em que nasceu.
+
 ### O que fica para a próxima sessão
 
 | Pendência | O que falta |
 |---|---|
-| `EMPRESA_CNPJ` na Vercel | sem ele toda NF cai em revisão manual |
+| `EMPRESA_CNPJ` | sem ele toda NF cai em revisão manual. **O CNPJ é público** (está no próprio texto dos Termos), então a alternativa recomendada é gravá-lo em `regra_negocio` — dado auditável, sem variável de ambiente e sem deploy |
 | Jurídico valida o texto v3.3 | a redação das cláusulas 8.2–8.4 é minha; segue a ressalva de sempre |
-| KYC da equipe | equipe hoje saca sem verificação de identidade. Não foi pedido — mas agora que a NF é absoluta, vale perguntar se o KYC também deveria ser |
+| PJ para a equipe | com o destino sempre PJ, cada integrante que recebe pela plataforma precisa de CNPJ cadastrado e validado. Hoje **nenhum** tem — todos estão bloqueados até preencher |
 | Tela do parceiro | `Comissoes.jsx`/`MinhaRede.jsx` ainda não mostram o teto do mês nem o upload da NF — a API já devolve `teto_sem_nf`, `disponivel_sem_nf` e `exige_nf`; falta a UI |
 | Parecer do contador | pagamento a PF contra recibo, no volume que a nova regra permite, é o único risco que código não conserta depois (§12.9) |
 | Herdadas de 08/08 | `CONTABILIDADE_EMAIL` · `AUDITORIA_EMAIL_DESTINO` · `GITHUB_ACTIONS_TOKEN` · Pluggy · 4 fontes com 0% de documento · 3 fontes com lote vencido · Guarulhos `e7bd0637` · 155 `.json()` sem `.ok` |

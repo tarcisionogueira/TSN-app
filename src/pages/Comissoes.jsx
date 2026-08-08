@@ -43,6 +43,9 @@ export default function Comissoes() {
   const [showSaqueForm, setShowSaqueForm] = useState(false);
   const [proximaLiberacao, setProximaLiberacao] = useState(null); // data da próxima sexta de pagamento
   const [faltandoSaque, setFaltandoSaque] = useState([]); // campos do cadastro que faltam p/ liberar saque
+  // Teto de saque do mês (regra saque.teto_sem_nf) e o estado da nota fiscal, quando exigida.
+  const [teto, setTeto] = useState({ teto: null, ja: 0, disponivel: null });
+  const [nf, setNf] = useState(null);   // { exigido, enviando, status, motivo }
   const [naoGanhaNovas, setNaoGanhaNovas] = useState(false); // sem plano pago em dia: pode sacar o acumulado, mas não ganha novas comissões
 
   const [cfinConfig, setCfinConfig] = useState({});  // config financeira por gateway
@@ -70,6 +73,7 @@ export default function Comissoes() {
       setProximaLiberacao(sq.proxima_liberacao || null);
       setFaltandoSaque(Array.isArray(sq.faltando) ? sq.faltando : []);
       setNaoGanhaNovas(!!sq.nao_ganha_novas);
+      setTeto({ teto: sq.teto_sem_nf, ja: sq.ja_sacado_na_janela, disponivel: sq.disponivel_sem_nf });
     } catch { setSaldoApi(0); setExtrato([]); }
     const k = p?.chave_pix || '';
     setPixKey(k);
@@ -100,7 +104,6 @@ export default function Comissoes() {
   async function solicitarSaque() {
     const valor = Number(valorSaque);
     if (!valor || valor <= 0) { setMsgSaque({ tipo: 'erro', txt: 'Informe um valor válido.' }); return; }
-    if (!pixKeySalva) { setMsgSaque({ tipo: 'erro', txt: 'Salve sua chave PIX antes de solicitar.' }); return; }
     if (valor > totalDisponivel) { setMsgSaque({ tipo: 'erro', txt: 'Valor maior que o disponível.' }); return; }
 
     setSolicitandoSaque(true);
@@ -115,13 +118,40 @@ export default function Comissoes() {
         setShowSaqueForm(false);
         carregar();
       } else {
+        // Acima do teto do mês: em vez de só recusar, abre o anexo da nota JÁ com o valor
+        // exigido preenchido — que é o INTEGRAL sacado no mês, não o deste pedido.
+        if (data.exige_nf) setNf({ exigido: Number(data.nf_valor_exigido || valor), status: null, motivo: null });
         setMsgSaque({ tipo: 'erro', txt: data.error || 'Erro ao solicitar saque.' });
       }
     } catch {
       setMsgSaque({ tipo: 'erro', txt: 'Erro ao solicitar saque.' });
     }
     setSolicitandoSaque(false);
-    setTimeout(() => setMsgSaque(null), 5000);
+    setTimeout(() => setMsgSaque(null), 8000);
+  }
+
+  // ── NOTA FISCAL DO SAQUE (pedido do dono, 08/08) ───────────────────────────
+  // "Na mesma tela do saque deve ter o botão de anexar a nota fiscal referente ao valor
+  // sacado." O arquivo sobe para o bucket privado e o servidor confere: dados da nota
+  // contra o pedido e, quando houver link/QR da prefeitura, a emissão de verdade.
+  async function enviarNotaFiscal(file) {
+    if (!file || !nf?.exigido) return;
+    setNf(n => ({ ...n, enviando: true, status: null, motivo: null }));
+    try {
+      const ext = ((file.name || '').split('.').pop() || 'pdf').toLowerCase();
+      const path = `nf/${user.id}/nf-${Date.now()}.${ext}`;
+      const { error: upErr } = await supabase.storage.from('documentos').upload(path, file, { upsert: false });
+      if (upErr) throw upErr;
+      const res = await apiCall('/api/saque-nf', { method: 'POST', body: JSON.stringify({ storage_path: path, valor: nf.exigido }) });
+      const d = await res.json().catch(() => ({}));
+      // `.ok` checado antes de ler o corpo: um 4xx traz JSON sem `status` e a tela diria
+      // "enviado" para uma nota que o servidor recusou.
+      if (!res.ok) { setNf(n => ({ ...n, enviando: false, status: 'erro', motivo: d.error || 'Não consegui enviar a nota.' })); return; }
+      setNf(n => ({ ...n, enviando: false, status: d.status, motivo: d.motivo }));
+      if (d.status === 'aprovada') carregar();
+    } catch (e) {
+      setNf(n => ({ ...n, enviando: false, status: 'erro', motivo: e?.message || 'Falha ao enviar a nota.' }));
+    }
   }
 
   const totalPendente = comissoes.filter(c => c.status === 'pendente').reduce((a, c) => a + Number(c.valor_comissao), 0);
@@ -221,6 +251,15 @@ export default function Comissoes() {
                   Pagamentos às sextas · próxima liberação: {fmtLiberacao(proximaLiberacao)}
                 </div>
               )}
+              {/* O teto do mês precisa aparecer ANTES de o parceiro pedir — descobrir a regra
+                  só na recusa é o jeito errado de contar. */}
+              {teto.teto != null && (
+                <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>
+                  Sacado neste mês: <strong>{fmt(teto.ja)}</strong> · sem nota fiscal você ainda pode sacar{' '}
+                  <strong style={{ color: teto.disponivel > 0 ? '#059669' : '#b45309' }}>{fmt(teto.disponivel)}</strong>
+                  {' '}(limite de {fmt(teto.teto)}/mês)
+                </div>
+              )}
             </div>
             {(() => { const liberado = totalDisponivel > 0 && faltandoSaque.length === 0; return (
             <button onClick={() => setShowSaqueForm(p => !p)} disabled={!liberado}
@@ -235,6 +274,35 @@ export default function Comissoes() {
               <div style={{ fontSize: 12, fontWeight: 800, color: '#6d28d9', marginBottom: 4 }}>💜 Você pode indicar e sacar o que já acumulou</div>
               <div style={{ fontSize: 11.5, color: '#7c3aed', lineHeight: 1.55 }}>Para GANHAR novas comissões, sua assinatura precisa estar <strong>em dia na data da cobrança</strong> dos seus indicados. Nos meses em que estiver em dia, você recebe normalmente.</div>
               <button onClick={() => { window.location.hash = '#/planos'; }} style={{ marginTop: 8, padding: '8px 16px', background: '#7c3aed', color: 'white', border: 'none', borderRadius: 8, fontWeight: 800, fontSize: 12.5, cursor: 'pointer' }}>Ver planos →</button>
+            </div>
+          )}
+          {/* ANEXO DA NOTA FISCAL — aparece na própria tela do saque quando o mês passa do
+              teto. O valor exigido é o INTEGRAL sacado no mês (quem tirou 3× R$ 1.000 sem
+              nota e pede mais R$ 500 precisa de nota de R$ 3.500), e o texto diz isso. */}
+          {nf?.exigido > 0 && (
+            <div style={{ marginTop: 10, background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 8, padding: '11px 13px' }}>
+              <div style={{ fontSize: 12.5, fontWeight: 800, color: '#9a3412', marginBottom: 4 }}>
+                📎 Nota fiscal necessária — {fmt(nf.exigido)}
+              </div>
+              <div style={{ fontSize: 11.5, color: '#9a3412', lineHeight: 1.55 }}>
+                Este saque leva o mês acima do limite de {fmt(teto.teto)}. Anexe a nota fiscal de serviço no valor
+                <strong> integral sacado no mês ({fmt(nf.exigido)})</strong>, emitida pelo seu CNPJ contra a BidPro Brasil.
+                Conferimos os dados automaticamente e, quando a nota traz o link de verificação da prefeitura, checamos a emissão.
+              </div>
+              <label style={{ display: 'inline-block', marginTop: 9, padding: '8px 16px', background: nf.enviando ? '#94a3b8' : '#ea580c', color: 'white', borderRadius: 8, fontWeight: 800, fontSize: 12.5, cursor: nf.enviando ? 'default' : 'pointer' }}>
+                {nf.enviando ? 'Conferindo a nota…' : 'Anexar nota fiscal'}
+                <input type="file" accept="application/pdf,image/*" disabled={nf.enviando} style={{ display: 'none' }}
+                  onChange={e => enviarNotaFiscal(e.target.files?.[0])} />
+              </label>
+              {nf.status && (
+                <div style={{ marginTop: 9, fontSize: 11.5, fontWeight: 700, lineHeight: 1.55,
+                  color: nf.status === 'aprovada' ? '#047857' : nf.status === 'reprovada' || nf.status === 'erro' ? '#b91c1c' : '#a16207' }}>
+                  {nf.status === 'aprovada' ? '✓ Nota aprovada — pode solicitar o saque.'
+                    : nf.status === 'revisao_manual' ? '⏳ Nota recebida e em conferência da equipe.'
+                    : '✕ Nota não aceita.'}
+                  {nf.motivo ? ` ${nf.motivo}` : ''}
+                </div>
+              )}
             </div>
           )}
           {faltandoSaque.length > 0 && (

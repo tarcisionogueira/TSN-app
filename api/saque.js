@@ -185,8 +185,6 @@ export default async function handler(req) {
     const valor = Math.round(Number(body.valor) * 100) / 100;
     if (!valor || valor <= 0) return json({ error: 'Valor inválido' }, 400);
 
-    const ehParceiroCliente = PLANOS_PAGOS.includes(role);
-
     // QUEM DECIDE É O AVALIADOR (08/08). Antes, esta rota refazia à mão as checagens de KYC
     // e PJ antes de chamar a RPC — mais um espelho, mais uma chance de divergir. Agora ela
     // só PERGUNTA. Todas as travas (cadastro, KYC, PJ, teto do mês, nota fiscal) vivem em
@@ -215,8 +213,11 @@ export default async function handler(req) {
       }, 422);
     }
 
-    // Daqui para baixo é só o parceiro-cliente com PJ pendente — o resto já foi respondido.
-    if (!ehParceiroCliente || !av.pj_pendente) {
+    // Daqui para baixo é só quem está com a PJ pendente — o resto já foi respondido.
+    // NÃO filtra mais por "é parceiro-cliente" (08/08): não existe pagamento a pessoa
+    // física, então TODA classe passa pela validação da empresa, e a automação do QSA
+    // precisa alcançar todas elas.
+    if (!av.pj_pendente) {
       return json({ error: av.motivo || 'Não foi possível solicitar o saque', faltando: av.faltando || [] }, 422);
     }
 
