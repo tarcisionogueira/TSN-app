@@ -29,6 +29,7 @@ export default function KycParceiroModal() {
   const [adiado, setAdiado] = useState(() => { try { return sessionStorage.getItem(ADIAR_KEY) === '1'; } catch { return false; } });
   const docRef = React.useRef();
   const selfieRef = React.useRef();
+  const selfieArqRef = React.useRef(); // mesma selfie, vinda de arquivo em vez da câmera
 
   // EQUIPE TAMBÉM VERIFICA IDENTIDADE (decisão do dono, 08/08): "a equipe coloca pra fazer a
   // mesma verificação, batendo a selfie e anexando o documento de identidade". Quem recebe
@@ -151,12 +152,23 @@ export default function KycParceiroModal() {
           {docBusy ? 'Enviando documento…' : docEnviado ? 'Documento enviado ✓' : '1. Documento (RG/CNH) — foto ou arquivo'}
         </button>
 
-        {/* Passo 2 — selfie (habilita após o documento) */}
+        {/* Passo 2 — selfie (habilita após o documento). DOIS caminhos explícitos: câmera e
+            arquivo já existente. O `capture="user"` sozinho engana no computador — lá o
+            atributo é ignorado e abre um seletor de arquivos, sem o usuário ter pedido isso.
+            Melhor oferecer os dois com o nome certo (o QR para o celular vem logo abaixo). */}
         <input ref={selfieRef} type="file" accept="image/*" capture="user" style={{ display: 'none' }} onChange={e => enviarSelfie(e.target.files[0])} />
-        <button onClick={() => selfieRef.current?.click()} disabled={!docEnviado || selfieBusy}
-          style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '13px 16px', border: 'none', background: (!docEnviado || selfieBusy) ? '#93c5fd' : '#0D63DB', borderRadius: 12, cursor: (!docEnviado || selfieBusy) ? 'default' : 'pointer', fontWeight: 800, fontSize: 14, color: 'white', opacity: (!docEnviado || selfieBusy) ? 0.8 : 1, justifyContent: 'center' }}>
-          {selfieBusy ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Verificando…</> : <><Camera size={16} /> 2. Tirar/enviar selfie</>}
-        </button>
+        <input ref={selfieArqRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={e => enviarSelfie(e.target.files[0])} />
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={() => selfieRef.current?.click()} disabled={!docEnviado || selfieBusy}
+            style={{ flex: 2, display: 'flex', alignItems: 'center', gap: 8, padding: '13px 14px', border: 'none', background: (!docEnviado || selfieBusy) ? '#93c5fd' : '#0D63DB', borderRadius: 12, cursor: (!docEnviado || selfieBusy) ? 'default' : 'pointer', fontWeight: 800, fontSize: 14, color: 'white', opacity: (!docEnviado || selfieBusy) ? 0.8 : 1, justifyContent: 'center' }}>
+            {selfieBusy ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Verificando…</> : <><Camera size={16} /> 2. Tirar selfie</>}
+          </button>
+          <button onClick={() => selfieArqRef.current?.click()} disabled={!docEnviado || selfieBusy}
+            title="Enviar uma foto que você já tem"
+            style={{ flex: 1, padding: '13px 10px', border: '1px solid #cbd5e1', background: 'white', borderRadius: 12, cursor: (!docEnviado || selfieBusy) ? 'default' : 'pointer', fontWeight: 700, fontSize: 12.5, color: '#334155', opacity: (!docEnviado || selfieBusy) ? 0.6 : 1 }}>
+            📎 Escolher foto
+          </button>
+        </div>
 
         {/* Desvio para o CELULAR (só aparece no computador — no telefone o botão de câmera já
             resolve). Webcam de desktop fotografa documento mal, e era exatamente aqui que o

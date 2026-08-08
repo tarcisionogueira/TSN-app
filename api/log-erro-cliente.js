@@ -29,6 +29,27 @@ function rotaDe(url = '') {
   return normalizar(base).slice(0, 120);
 }
 
+// ESPELHO SERVIDOR do filtro de `src/utils/reportarErro.js` (08/08). O filtro do cliente é a
+// primeira linha, mas ele só protege quem já recarregou a página com o bundle novo — e quem
+// está com a aba antiga aberta continua mandando. Caso real: um "Failed to fetch" no /checkout
+// ficou DOIS DIAS no topo da fila de investigação como suspeita de falha no PAGAMENTO, e o
+// stack mostrava uma extensão do Chrome do próprio usuário bloqueando um beacon do Google Tag
+// Manager. Não é nosso bug, não temos como corrigir, e ocupava a vaga de um erro que importa.
+// Conservador: só descarta quando o stack é INTEIRAMENTE de terceiro — havendo um quadro do
+// nosso domínio, o erro entra normalmente.
+const TERCEIROS = [
+  'chrome-extension://', 'moz-extension://', 'safari-web-extension://',
+  'googletagmanager.com', 'google-analytics.com', 'connect.facebook.net', 'clarity.ms',
+];
+function ehStackDeTerceiro(stack = '', url = '') {
+  const s = String(stack);
+  if (!s.trim()) return false;
+  if (!TERCEIROS.some((t) => s.includes(t))) return false;
+  let origem = '';
+  try { origem = new URL(url).origin; } catch { /* url ilegível */ }
+  return !(origem && s.includes(origem));
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') { res.status(405).end(); return; }
   try {
@@ -37,6 +58,12 @@ export default async function handler(req, res) {
     const url = String(b.url || '').slice(0, 300);
     const ua = String(b.ua || '').slice(0, 300);
     const rota = rotaDe(url);
+
+    if (ehStackDeTerceiro(b.stack, url)) {
+      console.warn('[erro-cliente] descartado (stack de terceiro)', JSON.stringify({ msg, rota }));
+      res.status(200).json({ ok: true, ignorado: 'stack_de_terceiro' });
+      return;
+    }
 
     // Visível nos Runtime Logs (diagnóstico imediato).
     console.error('[erro-cliente]', JSON.stringify({

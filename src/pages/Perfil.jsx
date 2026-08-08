@@ -512,15 +512,22 @@ export default function Perfil() {
         pj_dados_atualizados_em: new Date().toISOString(), // reseta o relógio de abandono (90d)
       }).eq('id', user.id);
       if (error) throw error;
-      setPjMsg({ tipo: 'sucesso', texto: 'Dados da empresa salvos.' });
       carregarSaldo();
+      // VERIFICA NA HORA (08/08, pedido do dono: "não precisa ter o botão de verificar na
+      // Receita; ao clicar em salvar deve verificar e notificar automaticamente"). Botão que
+      // o usuário PRECISA lembrar de apertar é passo que ele esquece — e sem a verificação o
+      // saque fica bloqueado sem ele entender por quê. Salvar é o gatilho natural.
+      setPjMsg({ tipo: 'aviso', texto: 'Dados salvos. Consultando o quadro societário na Receita…' });
+      await verificarPJAuto({ silencioso: true });
     } catch (e) { setPjMsg({ tipo: 'erro', texto: e.message || 'Erro ao salvar.' }); }
     setSavingPj(false);
   }
 
   // Verificação automática (grátis): confere se o CPF consta no quadro societário do CNPJ (Receita).
-  async function verificarPJAuto() {
-    setVerificandoPj(true); setPjMsg(null);
+  // `silencioso` = chamada logo após salvar; a mensagem de "consultando…" já está na tela.
+  async function verificarPJAuto({ silencioso = false } = {}) {
+    setVerificandoPj(true);
+    if (!silencioso) setPjMsg(null);
     try {
       const r = await apiCall('/api/validar-pj-socio', { method: 'POST', body: JSON.stringify({}) });
       const d = await r.json().catch(() => ({}));
@@ -1141,11 +1148,23 @@ export default function Perfil() {
                         <input type="file" accept="image/*,application/pdf" style={{ display: 'none' }} disabled={docBusy} onChange={e => enviarDocKYC(e.target.files?.[0], 'arquivo')} />
                       </label>
                     </div>
+                    {/* TRÊS CAMINHOS PARA A SELFIE (08/08, pedido do dono). Antes havia só
+                        `capture="user"`: no celular abre a câmera, mas no COMPUTADOR o
+                        atributo é ignorado e cai num seletor de arquivos sem aviso — quem
+                        não tem webcam, ou já tem a foto pronta, ficava sem saída óbvia.
+                        Agora: câmera, arquivo existente ou passar para o celular via QR. */}
                     <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>b) Selfie do <strong>rosto</strong> (conclui — envie o documento antes)</div>
-                    <label style={{ fontSize: 11.5, color: '#0D63DB', fontWeight: 700, cursor: 'pointer' }}>
-                      {kycBusy ? 'Enviando…' : '📷 Tirar selfie do rosto'}
-                      <input type="file" accept="image/*" capture="user" style={{ display: 'none' }} disabled={kycBusy} onChange={e => enviarRostoKYC(e.target.files?.[0])} />
-                    </label>
+                    <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+                      <label style={{ fontSize: 11.5, color: '#0D63DB', fontWeight: 700, cursor: kycBusy ? 'default' : 'pointer' }}>
+                        {kycBusy ? 'Enviando…' : '📷 Tirar agora (câmera)'}
+                        <input type="file" accept="image/*" capture="user" style={{ display: 'none' }} disabled={kycBusy} onChange={e => enviarRostoKYC(e.target.files?.[0])} />
+                      </label>
+                      <span style={{ fontSize: 11, color: '#94a3b8' }}>ou</span>
+                      <label style={{ fontSize: 11.5, color: '#0D63DB', fontWeight: 700, cursor: kycBusy ? 'default' : 'pointer' }}>
+                        📎 Escolher uma foto
+                        <input type="file" accept="image/*" style={{ display: 'none' }} disabled={kycBusy} onChange={e => enviarRostoKYC(e.target.files?.[0])} />
+                      </label>
+                    </div>
                     {/* Mesmo desvio do modal do parceiro: no computador, o QR leva documento e
                         selfie para o celular. Não aparece quando já se está no telefone. */}
                     <div style={{ marginTop: 4 }}>
@@ -1160,18 +1179,35 @@ export default function Perfil() {
                   <input value={pj.razao_social || ''} onChange={e => setPj(p => ({ ...p, razao_social: e.target.value }))} placeholder="Razão social" style={{ ...inputStyle, flex: 1, minWidth: 150 }} />
                 </div>
                 <input value={pj.pj_chave_pix || ''} onChange={e => setPj(p => ({ ...p, pj_chave_pix: e.target.value }))} placeholder="Chave PIX da empresa (de preferência o CNPJ)" style={{ ...inputStyle, width: '100%', marginTop: 8 }} />
+                {/* UM BOTÃO SÓ (08/08). Havia "Salvar empresa" e, ao lado, "Verificar
+                    automaticamente (Receita)" — dois cliques para uma coisa só, e quem não
+                    apertasse o segundo ficava com o saque bloqueado sem entender o motivo.
+                    Salvar já dispara a consulta ao quadro societário e avisa o resultado. */}
                 <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
-                  <button onClick={salvarPJ} disabled={savingPj} style={{ padding: '8px 14px', background: '#111111', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>{savingPj ? 'Salvando…' : 'Salvar empresa'}</button>
-                  <button onClick={verificarPJAuto} disabled={verificandoPj} style={{ padding: '8px 14px', background: '#0D63DB', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>{verificandoPj ? 'Verificando…' : 'Verificar automaticamente (Receita)'}</button>
+                  <button onClick={salvarPJ} disabled={savingPj || verificandoPj} style={{ padding: '8px 16px', background: (savingPj || verificandoPj) ? '#64748b' : '#0D63DB', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: (savingPj || verificandoPj) ? 'default' : 'pointer' }}>
+                    {savingPj ? 'Salvando…' : verificandoPj ? 'Consultando a Receita…' : 'Salvar e verificar na Receita'}
+                  </button>
                 </div>
 
-                <div style={{ fontSize: 11.5, fontWeight: 700, color: '#334155', margin: '10px 0 4px' }}>3) Contrato social (comprova que você é sócio)</div>
-                <label style={{ fontSize: 11.5, color: '#0D63DB', fontWeight: 700, cursor: 'pointer' }}>
-                  📎 Anexar contrato social
-                  <input type="file" accept="application/pdf,image/*" style={{ display: 'none' }} onChange={e => uploadContratoSocial(e.target.files?.[0])} />
-                </label>
+                {/* O contrato social só aparece quando a consulta automática NÃO confirmou —
+                    pedir documento antes de tentar de graça é atrito à toa. */}
+                {pj.cnpj && !pj.pj_validada_em && (
+                  <>
+                    <div style={{ fontSize: 11.5, fontWeight: 700, color: '#334155', margin: '10px 0 4px' }}>3) Contrato social — só se a consulta automática não confirmar</div>
+                    <label style={{ fontSize: 11.5, color: '#0D63DB', fontWeight: 700, cursor: 'pointer' }}>
+                      📎 Anexar contrato social
+                      <input type="file" accept="application/pdf,image/*" style={{ display: 'none' }} onChange={e => uploadContratoSocial(e.target.files?.[0])} />
+                    </label>
+                  </>
+                )}
 
-                <div style={{ fontSize: 11, color: '#64748b', marginTop: 10, lineHeight: 1.6 }}>O <strong>1º saque</strong> pode ser liberado automaticamente se o seu CPF constar no quadro societário do CNPJ; os <strong>seguintes</strong> passam por conferência manual da equipe.</div>
+                {pj.pj_validada_em && (
+                  <div style={{ fontSize: 11.5, fontWeight: 700, color: '#047857', background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 8, padding: '8px 10px', marginTop: 10 }}>
+                    ✓ Empresa validada{pj.pj_validada_via === 'auto_qsa' ? ' pela consulta ao quadro societário da Receita' : ''} em {new Date(pj.pj_validada_em).toLocaleDateString('pt-BR')}. Nenhum documento é necessário.
+                  </div>
+                )}
+
+                <div style={{ fontSize: 11, color: '#64748b', marginTop: 10, lineHeight: 1.6 }}>Ao salvar, consultamos o <strong>quadro societário na Receita</strong>. Se o seu CPF constar no CNPJ, a liberação é imediata e você não anexa nada.</div>
                 {pjMsg && <div style={{ marginTop: 8, fontSize: 11.5, fontWeight: 700, color: pjMsg.tipo === 'sucesso' ? '#16a34a' : pjMsg.tipo === 'aviso' ? '#b45309' : '#dc2626' }}>{pjMsg.texto}</div>}
               </div>
             )}

@@ -288,14 +288,28 @@ async function paginaImovel(id) {
 
   const linha = (r, v) => (v ? `<div><span>${esc(r)}</span><strong>${esc(v)}</strong></div>` : '');
   return pagina({
-    titulo: `${im.titulo || `${t} em leilão`} — ${im.cidade || ''}/${uf} | BidPro Brasil`,
+    // TÍTULO PRECISA SER ÚNICO (08/08 — resposta ao "Cópia, o Google e o usuário selecionaram
+    // uma página canônica diferente" do Search Console). Medido no acervo: 1.000 lotes ativos
+    // com o título EXATAMENTE igual ("Apartamento — SANTA CRUZ RIO DE JANEIRO RJ"), 479 com
+    // outro, 302 com outro. O título vem do scraper, é montado por template e não distingue
+    // um lote do vizinho — para o buscador são mil cópias, e ele indexa uma. Aqui somamos o
+    // que de fato DIFERENCIA cada lote (área, lance e o identificador do lote na fonte), sem
+    // inventar texto: são dados reais que já estão na página.
+    titulo: [
+      im.titulo || `${t} em leilão`,
+      im.area_m2 > 0 ? `${Math.round(im.area_m2)} m²` : null,
+      lance ? `lance ${lance}` : null,
+      `lote ${String(im.fonte_id || im.id).slice(-8)}`,
+    ].filter(Boolean).join(' · ') + ` | BidPro Brasil`,
     desc: `${t} em leilão em ${local}${im.area_m2 > 0 ? `, ${Math.round(im.area_m2)} m²` : ''}${lance ? `, lance a partir de ${lance}` : ''}${aval ? ` (avaliação ${aval})` : ''}. Veja análise de viabilidade e parecer jurídico antes de arrematar.`,
     canonical,
     // Lote inativo sai do índice, mas a página continua abrindo: quem chegou por um link
     // antigo merece ver o que aconteceu, e não um 404 seco.
     indexar: !!im.ativo,
     migalha,
-    corpo: `<h1>${esc(im.titulo || `${t} em leilão em ${im.cidade || ''}`)}</h1>
+    // O H1 segue a mesma lógica do <title>: com mil lotes de título idêntico, um H1 repetido
+    // é o segundo sinal que leva o Google a tratar as páginas como cópias.
+    corpo: `<h1>${esc([im.titulo || `${t} em leilão em ${im.cidade || ''}`, im.area_m2 > 0 ? `${Math.round(im.area_m2)} m²` : null].filter(Boolean).join(' · '))}</h1>
       <p class="sub">${esc(t)} em leilão · ${esc(local)}${im.modalidade ? ` · ${esc(im.modalidade)}` : ''}</p>
       ${!im.ativo ? `<p class="painel"><strong>Este lote não está mais ativo</strong> no acervo — provavelmente foi arrematado ou saiu do edital. <a href="${SITE}/leiloes/${uf.toLowerCase()}${im.cidade_norm ? `/${im.cidade_norm}` : ''}">Ver imóveis disponíveis em ${esc(im.cidade || UF_NOME[uf] || 'sua região')}</a>.</p>` : ''}
       <div class="painel">
