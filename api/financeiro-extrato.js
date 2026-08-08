@@ -66,6 +66,48 @@ async function mp(path) {
   return r.json().catch(() => null);
 }
 
+// ── Paginação ────────────────────────────────────────────────────────────────
+// PEDIDO DO DONO (08/08): "não podem haver valores flutuantes, mas sim valores reais
+// cobrados, recebidos e pagos". A causa de valor que muda sem motivo estava aqui: as
+// três consultas pediam `limit=100` e paravam — sem `offset`, sem olhar `hasMore` nem
+// `paging.total`. Passando de 100 lançamentos no período, o resto sumia EM SILÊNCIO, e
+// o resumo (entradas/saídas/resultado) era somado sobre o pedaço que coube. Dois
+// períodos diferentes não fechavam entre si, e a conciliação — que importa deste mesmo
+// endpoint — herdava o extrato pela metade, levando o buraco para a DRE.
+// Agora: pagina até acabar, com teto explícito. Se o teto for atingido, a resposta DIZ
+// (`truncado`), porque total incompleto sem aviso é pior que total ausente.
+const PAGINA = 100;
+const MAX_PAGINAS = 30; // 3.000 lançamentos por fonte
+
+async function asaasPaginado(base) {
+  const itens = [];
+  let truncado = false;
+  for (let p = 0; p < MAX_PAGINAS; p++) {
+    const j = await asaas(`${base}&limit=${PAGINA}&offset=${p * PAGINA}`);
+    if (!j) break;
+    const lote = j.data || [];
+    itens.push(...lote);
+    if (!j.hasMore || lote.length === 0) return { itens, truncado: false };
+    if (p === MAX_PAGINAS - 1) truncado = true;
+  }
+  return { itens, truncado };
+}
+
+async function mpPaginado(base) {
+  const itens = [];
+  let truncado = false;
+  for (let p = 0; p < MAX_PAGINAS; p++) {
+    const j = await mp(`${base}&limit=${PAGINA}&offset=${p * PAGINA}`);
+    if (!j) break;
+    const lote = j.results || [];
+    itens.push(...lote);
+    const total = Number(j.paging?.total ?? 0);
+    if (lote.length === 0 || itens.length >= total) return { itens, truncado: false };
+    if (p === MAX_PAGINAS - 1) truncado = true;
+  }
+  return { itens, truncado };
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'GET' && req.method !== 'POST') { res.status(405).json({ error: 'Método não permitido' }); return; }
 
@@ -91,17 +133,27 @@ export default async function handler(req, res) {
   const lancamentos = [];
   const contas = [];
   const avisos = [];
+  // Vira true se alguma fonte bateu o teto de paginação: a resposta precisa CONFESSAR
+  // que o total não é o total, senão a tela mostra um número parcial com cara de real.
+  let truncado = false;
 
   // ── ASAAS ──────────────────────────────────────────────────────────────────────────────────
   if (ASAAS_KEY) {
     const [saldo, recebidos, transfers] = await Promise.all([
       asaas('/finance/balance'),
-      asaas(`/payments?status=RECEIVED&paymentDate[ge]=${desde}&paymentDate[le]=${ate}&limit=100`),
-      asaas(`/transfers?dateCreated[ge]=${desde}&limit=100`),
+      asaasPaginado(`/payments?status=RECEIVED&paymentDate[ge]=${desde}&paymentDate[le]=${ate}`),
+      asaasPaginado(`/transfers?dateCreated[ge]=${desde}`),
     ]);
     contas.push({ banco: 'Asaas', tipo: 'gateway', saldo: saldo ? num(saldo.balance) : null, saldo_indisponivel: !saldo });
     if (!saldo) avisos.push('Não consegui ler o saldo do Asaas agora.');
-    for (const p of recebidos?.data || []) {
+    if (recebidos.truncado || transfers.truncado) {
+      truncado = true;
+      avisos.push(`Asaas: o período tem mais de ${MAX_PAGINAS * PAGINA} lançamentos e a leitura parou nesse teto — os totais abaixo estão INCOMPLETOS. Reduza o período.`);
+    }
+    if (!recebidos.itens.length && !transfers.itens.length) {
+      avisos.push('O Asaas respondeu sem nenhum lançamento no período — confira se a ASAAS_API_KEY do ambiente é a da conta de produção.');
+    }
+    for (const p of recebidos.itens) {
       const desc = p.description || p.billingType || 'Recebimento Asaas';
       lancamentos.push({
         banco: 'Asaas', id: String(p.id), data: dia(p.paymentDate || p.confirmedDate || p.dateCreated),
@@ -111,7 +163,7 @@ export default async function handler(req, res) {
         metodo: p.billingType || null, categoria: classificar(desc, 'entrada'),
       });
     }
-    for (const t of transfers?.data || []) {
+    for (const t of transfers.itens) {
       const desc = t.description || `Transferência ${t.type || ''}`.trim();
       lancamentos.push({
         banco: 'Asaas', id: String(t.id), data: dia(t.dateCreated || t.effectiveDate),
@@ -139,8 +191,12 @@ export default async function handler(req, res) {
     });
     if (!bal) avisos.push('O Mercado Pago não expõe o saldo desta conta pela API.');
 
-    const busca = await mp(`/v1/payments/search?sort=date_created&criteria=desc&range=date_created&begin_date=${desde}T00:00:00.000-03:00&end_date=${ate}T23:59:59.999-03:00&limit=100`);
-    for (const p of busca?.results || []) {
+    const busca = await mpPaginado(`/v1/payments/search?sort=date_created&criteria=desc&range=date_created&begin_date=${desde}T00:00:00.000-03:00&end_date=${ate}T23:59:59.999-03:00`);
+    if (busca.truncado) {
+      truncado = true;
+      avisos.push(`Mercado Pago: o período tem mais de ${MAX_PAGINAS * PAGINA} lançamentos e a leitura parou nesse teto — os totais abaixo estão INCOMPLETOS. Reduza o período.`);
+    }
+    for (const p of busca.itens) {
       if (p.status !== 'approved') continue;
       const bruto = num(p.transaction_amount);
       const liquido = p.transaction_details?.net_received_amount != null ? num(p.transaction_details.net_received_amount) : null;
@@ -196,14 +252,22 @@ export default async function handler(req, res) {
     contas,
     cobertura: 'Somente Asaas e Mercado Pago. Contas bancárias (Inter, C6, Bradesco, Caixa) ainda não integradas.',
     avisos,
+    // `completo: false` = os totais NÃO fecham com a conta real. A tela deve dizer isso
+    // ao lado do número, não escondê-lo.
+    completo: !truncado,
     resumo: {
       entradas: Number(entradas.toFixed(2)),
       saidas: Number(saidas.toFixed(2)),
       resultado: Number((entradas - saidas).toFixed(2)),
       lancamentos: lancamentos.length,
+      completo: !truncado,
     },
     por_banco: Object.values(porBanco),
     por_categoria: Object.values(porCategoria).sort((a, b) => b.total - a.total),
+    // A LISTA vem cortada em 300 por peso de payload, mas os TOTAIS acima são somados
+    // sobre todos os lançamentos lidos — `lancamentos_exibidos` × `resumo.lancamentos`
+    // deixa isso explícito, para ninguém conferir a soma contando as linhas da tela.
+    lancamentos_exibidos: Math.min(lancamentos.length, 300),
     lancamentos: lancamentos.slice(0, 300),
   });
 }

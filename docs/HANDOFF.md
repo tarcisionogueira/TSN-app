@@ -139,6 +139,98 @@ antes de mexer, mais 6 validações de produção para rodar na abertura.
 
 ---
 
+## 🏁 SESSÃO 30 (08/08 — a regra que não existia, o grátis que passa a ganhar, o extrato pela metade)
+
+**Pedido do dono:** *"é para esse tipo de divergência não voltar a acontecer, pois acaba gerando
+uma confusão na hora de montarmos um planejamento."* Este bloco é a resposta — mais a mudança de
+comissionamento e a conferência do Financeiro.
+
+### 🔴 A divergência tinha nome: DOIS CÉREBROS
+
+A regra do dono — *"Explorador indica, mas para sacar precisa de assinatura ativa"* — estava
+escrita no comentário de `api/saque.js:68` e tinha até função própria (`podeReceber`). **Ela nunca
+bloqueou ninguém.** `podeReceber` só alimentava um aviso na tela; quem decidia era
+`PLANOS_PAGOS.includes(role)`, e explorador é `false` ali → caía no ramo da equipe operacional e
+sacava com PIX pessoal, **sem KYC, sem PJ, sem NF e sem teto**. O gate estava invertido: *assinar*
+é que LIGAVA as exigências. Pior, havia rota de fuga — o `AuthContext` rebaixa para explorador após
+5 dias de inadimplência, então bastava parar de pagar para o gate de PJ evaporar.
+
+A causa não foi esquecimento: enquanto a tela calcular por um caminho e o banco por outro, os dois
+divergem — é questão de tempo. **O conserto tem três partes** (`regras_negocio_saque_teto_nf.sql`):
+
+| Peça | O que faz |
+|---|---|
+| `regra_negocio` | A regra vira **dado**. Quem planeja lê a MESMA linha que o motor obedece. Não existe "versão do documento" |
+| `saque_avaliar()` | **Um avaliador só**, sem efeito colateral. A tela chama para mostrar, a RPC chama para decidir, a auditoria chama para conferir |
+| `auditoria_regras_negocio()` | Acusa regra ativa que ninguém aplica **e** função de dinheiro que parou de delegar ao avaliador. Entrou no ritual (passo 2b), custo zero |
+
+**A auditoria foi testada nos dois sentidos:** com o sistema íntegro dá `0 crítico`; injetando uma
+regra órfã de propósito, ela acusa e nomeia a função que falta. Sem essa prova negativa, um
+auditor que só diz "está tudo bem" não vale nada.
+
+### O grátis passa a ganhar; a trava foi para o saque
+
+Decisão do dono: *"os valores da comissão deles são dele; a trava é para trazer para que ele seja
+pagante"*. Então:
+
+- **Ganho:** `distribuir_comissao_rede` troca `eh_pagante` por `pode_ganhar_comissao` — o
+  explorador entra na rede em todos os fluxos. Sem teto de ganho. Como ele não tem rank, o
+  `max_nivel` cai no coalesce 1: **recebe do nível 1 e só**, conservador de propósito.
+- **Saque:** até **R$ 2.500 no mês** ele saca direto. Ao ultrapassar isso no mês, exige **plano
+  pago + nota fiscal**. A tela agora informa quanto ainda cabe sem NF, em vez de só dizer "não".
+- **KYC virou requisito de QUALQUER saque de parceiro** — antes só o pagante precisava, ou seja, o
+  grátis tinha menos controle que o assinante.
+
+> ⚠️ **Janela = MÊS, não vitalícia.** O dono falou em *"o período do mês"*; implementei mensal.
+> Trocar é `update regra_negocio set valor = valor || '{"janela":"vitalicio"}' where chave =
+> 'saque.teto_sem_nf';` — sem deploy. É para isso que a regra virou dado.
+
+> 🔴 **Regressão que o teste pegou antes de ir ao ar:** a primeira versão jogou a **equipe
+> operacional** na regra dos parceiros, e o admin recebia "assine um plano para sacar". Equipe
+> recebe por FUNÇÃO — está isenta de teto, NF e KYC. Conferido depois: admin R$ 50 liberado;
+> parceiro pagante barrado por NF acima do teto.
+
+### Nota fiscal conferida pela IA (`api/saque-nf.js`)
+
+Três estados, nunca dois — e a distinção é o ponto: **ler** a nota (emitente, tomador, valor, data)
+pega o erro honesto, mas não prova emissão; um PDF bem-feito passa. **A única prova real é o
+link/QR da prefeitura**, que o servidor abre e confere se cita o número da nota. Nota sem link não
+é reprovada (nem todo município publica) — vai para revisão humana com o motivo escrito. Aprovação
+automática exige dados batendo **e** confirmação no verificador.
+
+**Falta configurar: `EMPRESA_CNPJ` na Vercel.** Sem ele não dá para afirmar que a nota foi emitida
+contra a BidPro, e toda NF cai em revisão manual (o motivo aparece na resposta).
+
+### Financeiro: o extrato estava vindo pela metade
+
+O pedido foi *"não podem haver valores flutuantes, mas sim valores reais cobrados, recebidos e
+pagos"*. A causa estava em `api/financeiro-extrato.js`: as três consultas pediam `limit=100` e
+**paravam** — sem `offset`, sem olhar `hasMore` nem `paging.total`. Passando de 100 lançamentos no
+período, o resto sumia **em silêncio**, e o resumo era somado sobre o pedaço que coube. Dois
+períodos não fechavam entre si — e a **conciliação bebe deste mesmo endpoint**, então a DRE herdava
+o buraco. Agora pagina até acabar (teto de 3.000 por fonte) e, se o teto for atingido, a resposta
+devolve `completo: false` e a tela mostra faixa VERMELHA de total incompleto. Também ficou
+explícito que a lista vem cortada em 300 mas os totais somam tudo (`lancamentos_exibidos`).
+
+> 🔴 **Achado ao conferir: não há NENHUM lançamento do Asaas em `conciliacao_lancamento`.** As 40
+> linhas persistidas são todas do Mercado Pago (21 entradas / 19 saídas, R$ 3.066,79 × R$ 1.588,33).
+> O Asaas é o gateway das assinaturas — a receita recorrente está fora da conciliação. Adicionei
+> aviso explícito na resposta quando o Asaas volta vazio, apontando a suspeita mais provável
+> (`ASAAS_API_KEY` do ambiente não ser a da conta de produção). **Confirmar isso é o primeiro item
+> da próxima sessão** — enquanto não fechar, a DRE não tem o lado da receita de assinatura.
+
+### O que fica para a próxima sessão
+
+| Pendência | O que falta |
+|---|---|
+| `EMPRESA_CNPJ` na Vercel | sem ele toda NF cai em revisão manual |
+| Asaas ausente da conciliação | conferir a chave do ambiente; é a receita de assinatura inteira |
+| Tela do parceiro | `Comissoes.jsx`/`MinhaRede.jsx` ainda não mostram o teto do mês nem o upload da NF — a API já devolve `teto_sem_nf`, `disponivel_sem_nf` e `exige_nf`; falta a UI |
+| Parecer do contador | pagamento a PF contra recibo, no volume que a nova regra permite, é o único risco que código não conserta depois (§12.9) |
+| Herdadas de 08/08 | `CONTABILIDADE_EMAIL` · `AUDITORIA_EMAIL_DESTINO` · `GITHUB_ACTIONS_TOKEN` · Pluggy · 4 fontes com 0% de documento · 3 fontes com lote vencido · Guarulhos `e7bd0637` · 155 `.json()` sem `.ok` |
+
+---
+
 ## 🏁 SESSÃO 29 (08/08 — ritual de abertura: o convite de cliente estava morto há 2 dias)
 
 **Ritual completo rodado. O diagnóstico saiu verde em tudo que é automático — e o achado grave veio

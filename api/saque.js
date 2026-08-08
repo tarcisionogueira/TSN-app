@@ -152,37 +152,31 @@ export default async function handler(req) {
     }
     const saldo = await saldoDe(user.id);
     const extrato = (await db(`saldo_lancamentos?user_id=eq.${user.id}&order=criado_em.desc&limit=200&select=*`)).data || [];
-    // Pré-requisitos do saque: cadastro completo (nome, CPF, telefone, chave PIX).
-    // Aponta o que falta para o profissional liberar o saque (espelha a RPC).
-    const perfil = (await db(`perfis?id=eq.${user.id}&select=nome,cpf,cpf_hash,telefone,chave_pix,cnpj,razao_social,pj_chave_pix,pj_validada_em,pj_revalidacao_pendente,pj_revalidacao_motivo`)).data?.[0] || {};
-    const ehParceiroCliente = PLANOS_PAGOS.includes(role);
-    const faltando = [];
-    if (!perfil.nome || !String(perfil.nome).trim()) faltando.push('nome');
-    // CPF: presente se houver texto claro (legado) OU o hash (cpf-set cifra e zera o texto).
-    if (!(perfil.cpf && String(perfil.cpf).trim()) && !perfil.cpf_hash) faltando.push('CPF');
-    if (!perfil.telefone || !String(perfil.telefone).trim()) faltando.push('telefone');
-    // Parceiro-cliente recebe via PJ (B2B): exige empresa (CNPJ, razão social, PIX da empresa) —
-    // espelha a RPC solicitar_saque_ledger. Equipe operacional recebe via PIX pessoal.
-    if (ehParceiroCliente) {
-      if (!perfil.cnpj || !String(perfil.cnpj).trim()) faltando.push('empresa (CNPJ)');
-      if (!perfil.razao_social || !String(perfil.razao_social).trim()) faltando.push('razão social');
-      if (!perfil.pj_chave_pix || !String(perfil.pj_chave_pix).trim()) faltando.push('PIX da empresa');
-    } else {
-      if (!perfil.chave_pix || !String(perfil.chave_pix).trim()) faltando.push('chave PIX');
-    }
-    // GATE PJ (anti-interposição): o parceiro-cliente só saca com a empresa VALIDADA pela equipe
-    // (cartão CNPJ/contrato social + CPF no quadro societário + NF) — espelha o gate da RPC.
-    // Enquanto pendente, o saldo acumula mas o saque fica bloqueado (crédito condicionado).
-    const pjPendente = ehParceiroCliente && (!perfil.pj_validada_em || !!perfil.pj_revalidacao_pendente);
-    // Flag INFORMATIVO (não bloqueia o saque): quem não está em plano pago não GANHA comissões
-    // novas (a origem já filtra por "em dia na cobrança"); pode sacar o que já acumulou.
-    const naoGanhaNovas = !podeReceber(role);
-    // Data da próxima liberação (sexta 12:00 Bahia) para exibir na tela do profissional.
+
+    // UM CÉREBRO SÓ (08/08). Esta tela costumava calcular os pré-requisitos por conta
+    // própria, "espelhando" a RPC. Espelho não é a coisa: foi exatamente assim que a regra
+    // do dono ("Explorador indica, mas só saca sendo pagante") virou letra morta — a tela
+    // avisava por `podeReceber()` e o banco decidia por outro caminho, que não bloqueava
+    // ninguém. Agora quem responde é `saque_avaliar`, a MESMA função que a RPC obedece e
+    // que a auditoria confere. Passamos valor 0 = "o que você diria antes de eu pedir".
+    const av = (await rpc('saque_avaliar', { p_user_id: user.id, p_valor: 0 })).data || {};
+    const perfil = (await db(`perfis?id=eq.${user.id}&select=pj_revalidacao_motivo`)).data?.[0] || {};
+
+    // Flag INFORMATIVO (não bloqueia): quem não está em plano pago não GANHA comissões
+    // novas — mas o parceiro GRÁTIS agora ganha (regra comissao.gratis_ganha).
+    const naoGanhaNovas = !podeReceber(role) && role !== 'explorador';
     return json({ saldo, extrato, proxima_liberacao: proximaLiberacao().toISOString(),
-      nao_ganha_novas: naoGanhaNovas, pj_pendente: pjPendente,
-      pj_revalidar: ehParceiroCliente && !!perfil.pj_revalidacao_pendente,
+      nao_ganha_novas: naoGanhaNovas,
+      pj_pendente: !!av.pj_pendente, pj_revalidar: !!av.pj_revalidar,
       pj_revalidacao_motivo: perfil.pj_revalidacao_motivo || null,
-      saque_habilitado: faltando.length === 0 && !pjPendente, faltando });
+      // Teto do mês: a tela mostra quanto ainda cabe sem nota fiscal e quando a NF entra.
+      teto_sem_nf: av.teto ?? null,
+      ja_sacado_na_janela: av.ja_sacado_na_janela ?? 0,
+      disponivel_sem_nf: av.disponivel_sem_nf ?? null,
+      exige_nf_acima_do_teto: true,
+      saque_habilitado: !!av.permitido,
+      faltando: av.faltando || [],
+      motivo: av.permitido ? null : (av.motivo || null) });
   }
 
   // ── POST: solicitar saque ────────────────────────────────────────────────
@@ -193,41 +187,40 @@ export default async function handler(req) {
 
     const ehParceiroCliente = PLANOS_PAGOS.includes(role);
 
-    // Equipe operacional (admin/analista/…): PIX pessoal, sem gate de PJ — fluxo original.
-    // Checagem de saldo/PIX + inserção é ATÔMICA no banco (advisory lock por usuário).
-    if (!ehParceiroCliente) {
+    // QUEM DECIDE É O AVALIADOR (08/08). Antes, esta rota refazia à mão as checagens de KYC
+    // e PJ antes de chamar a RPC — mais um espelho, mais uma chance de divergir. Agora ela
+    // só PERGUNTA. Todas as travas (cadastro, KYC, PJ, teto do mês, nota fiscal) vivem em
+    // `saque_avaliar`, e a RPC reavalia sob advisory lock antes de reservar o valor.
+    const av = (await rpc('saque_avaliar', { p_user_id: user.id, p_valor: valor })).data || {};
+
+    // Equipe operacional e parceiro já liberado: caminho direto.
+    if (av.permitido) {
       const r = await rpc('solicitar_saque_ledger', { p_user_id: user.id, p_valor: valor });
       if (!r.ok) return json({ error: 'Erro ao solicitar saque', detail: r.data }, 500);
-      if (!r.data?.ok) return json({ error: r.data?.error || 'Não foi possível solicitar o saque' }, 400);
+      if (!r.data?.ok) return json({ error: r.data?.error || 'Não foi possível solicitar o saque', ...r.data }, 400);
       await logSaque(user.id, 'saque', `Saque solicitado — R$ ${valor.toFixed(2)}`, { valor });
       return json({ ok: true, saldo_restante: r.data.saldo_restante }, 201);
     }
 
-    // ── Parceiro-cliente: fluxo B2B com validação da PJ (anti-interposição) ──
+    // Acima do teto do mês: ou falta assinar, ou falta a nota fiscal. Devolve o número —
+    // a tela precisa dizer quanto ainda cabe hoje, senão o parceiro só vê "não pode".
+    if (av.precisa_assinar || av.exige_nf) {
+      return json({
+        error: av.motivo,
+        acima_do_teto: true,
+        precisa_assinar: !!av.precisa_assinar,
+        exige_nf: !!av.exige_nf,
+        teto: av.teto, ja_sacado_na_janela: av.ja_sacado_na_janela,
+        disponivel_sem_nf: av.disponivel_sem_nf,
+      }, 422);
+    }
+
+    // Daqui para baixo é só o parceiro-cliente com PJ pendente — o resto já foi respondido.
+    if (!ehParceiroCliente || !av.pj_pendente) {
+      return json({ error: av.motivo || 'Não foi possível solicitar o saque', faltando: av.faltando || [] }, 422);
+    }
+
     const perfil = (await db(`perfis?id=eq.${user.id}&select=nome,cpf,cpf_enc,cnpj,razao_social,pj_chave_pix,pj_validada_em,identidade_validada,pj_revalidacao_pendente,pj_revalidacao_motivo`)).data?.[0] || {};
-
-    // KYC obrigatório (selfie + documento) antes de qualquer saque de parceiro.
-    if (!perfil.identidade_validada) {
-      return json({ error: 'Conclua a verificação de identidade (selfie + documento) antes de sacar.', kyc_pendente: true }, 422);
-    }
-    // Empresa (PJ) cadastrada.
-    const faltaPJ = [];
-    if (!perfil.cnpj || !String(perfil.cnpj).trim()) faltaPJ.push('empresa (CNPJ)');
-    if (!perfil.razao_social || !String(perfil.razao_social).trim()) faltaPJ.push('razão social');
-    if (!perfil.pj_chave_pix || !String(perfil.pj_chave_pix).trim()) faltaPJ.push('PIX da empresa');
-    if (faltaPJ.length) return json({ error: `Cadastre a empresa para sacar. Falta: ${faltaPJ.join(', ')}.`, faltando: faltaPJ, pj_incompleta: true }, 422);
-
-    // Empresa JÁ validada → tenta sacar direto. O gate de REVALIDAÇÃO vive na RPC: se a
-    // reconferência periódica divergiu, ela devolve {pj_revalidar} e NÃO reserva nada — o
-    // saldo a receber ACUMULA e não expira; o parceiro atualiza o CNPJ e revalida para liberar
-    // (o retido paga junto com os ganhos futuros). Bloqueia o SAQUE, nunca o crédito.
-    if (perfil.pj_validada_em) {
-      const r = await rpc('solicitar_saque_ledger', { p_user_id: user.id, p_valor: valor });
-      if (!r.ok) return json({ error: 'Erro ao solicitar saque', detail: r.data }, 500);
-      if (!r.data?.ok) return json({ error: r.data.error || 'Não foi possível solicitar o saque', pj_revalidar: !!r.data.pj_revalidar, pj_pendente: !!r.data.pj_pendente, faltando: r.data.faltando }, 422);
-      await logSaque(user.id, 'saque', `Saque solicitado — R$ ${valor.toFixed(2)}`, { valor });
-      return json({ ok: true, saldo_restante: r.data.saldo_restante }, 201);
-    }
 
     // 1ª validação do cadastro: tenta a AUTOMAÇÃO (CPF do parceiro no quadro societário/QSA da
     // Receita, grátis). Match → valida e libera; sem match → conferência manual (analista/dono).

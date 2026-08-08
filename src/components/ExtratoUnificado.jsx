@@ -93,6 +93,17 @@ export default function ExtratoUnificado() {
         </button>
       </div>
 
+      {/* TOTAL INCOMPLETO tem faixa PRÓPRIA, vermelha, acima da cobertura (08/08). Enquanto a
+          leitura parava calada nos 100 primeiros lançamentos, o resumo mostrava a soma de um
+          pedaço com cara de número fechado — e dois períodos não batiam entre si. Agora, se
+          faltou lançamento, isso é a primeira coisa que a tela diz. */}
+      {dados && dados.completo === false && (
+        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '10px 13px', fontSize: 12, color: '#b91c1c', marginBottom: 10, lineHeight: 1.55, fontWeight: 600 }}>
+          <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+          <span>Estes totais estão <strong>incompletos</strong>: o período tem mais lançamentos do que a leitura consegue trazer de uma vez. Reduza o período para conferir valores.</span>
+        </div>
+      )}
+
       {dados?.cobertura && (
         <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '10px 13px', fontSize: 12, color: '#1e40af', marginBottom: 14, lineHeight: 1.55 }}>
           <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 1 }} />

@@ -64,6 +64,17 @@ curto (5–8 linhas) antes de seguir:
    leiloeiro NOVO for integrado, ou houver suspeita de mudança estrutural. Depois, atualize
    `leiloeiro_conhecimento` + `docs/BASELINE_CAPTURA_LEILOEIROS.md`. A Rotina mensal
    **"Bug bounty dos leiloeiros"** já faz essa ofensiva sozinha e notifica o dono.
+2b. **REGRAS DE NEGÓCIO — a regra que o planejamento cita é a que o código aplica?**
+   `select public.auditoria_regras_negocio();` → `0 crítico` = íntegro. **Por que existe
+   (08/08):** a regra do dono "Explorador indica, mas só saca sendo pagante" estava escrita
+   no comentário de `api/saque.js`, tinha até uma função (`podeReceber`) — e não bloqueava
+   NINGUÉM: a tela decidia por um caminho e o banco por outro. Planejamento inteiro em cima
+   de uma regra que não existia. Agora as regras vivem em `regra_negocio` (dado, não
+   comentário) e esta auditoria acusa (a) regra ativa que nenhuma função aplica e (b) função
+   de dinheiro que parou de delegar ao avaliador único. **Ao criar regra nova de negócio:
+   grave em `regra_negocio` com `aplicada_por` preenchido — senão a auditoria acusa, que é
+   exatamente o ponto.** Para ver as regras vigentes (é a fonte para planejar):
+   `select chave, valor, descricao from regra_negocio where ativo order by chave;`
 3. **Segurança — postura**: rode `select public.auditoria_seguranca();` (ou leia a última
    linha de `seguranca_auditoria`). `0 crítico / 0 atenção` = íntegro; qualquer achado =
    investigar e corrigir ANTES de seguir. Este auditor cobre AUTOMATICAMENTE qualquer
