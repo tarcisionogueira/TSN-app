@@ -54,6 +54,7 @@
     { "path": "/api/limpar-imoveis-stale-cron","schedule": "0 5 * * *"    },
     { "path": "/api/desativar-encerrados-cron", "schedule": "5 * * * *"  },
     { "path": "/api/espelhar-docs-cron",      "schedule": "40 */4 * * *" },
+    { "path": "/api/conciliacao-sync-cron",   "schedule": "25 8 * * *"   },
     { "path": "/api/enriquecer-proximidades", "schedule": "*/15 * * * *" },
     { "path": "/api/reconciliar-assinaturas-cron", "schedule": "30 * * * *"   },
     { "path": "/api/cancelar-nao-pagos-cron",     "schedule": "0 */6 * * *"  },

@@ -89,11 +89,15 @@ export default function ConciliacaoBancaria() {
         <span style={{ color: '#94a3b8', fontSize: 13 }}>até</span>
         <input type="month" value={ate} onChange={e => setAte(e.target.value)} style={{ padding: '7px 10px', borderRadius: 8, border: '1px solid #cbd5e1', fontSize: 13 }} />
         <button onClick={() => acao('importar', { dias: 180 }, 'Importação')} disabled={!!ocupado} style={btn('#0D63DB')}>
-          {ocupado === 'importar' ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <RefreshCw size={14} />} Importar extrato
+          {ocupado === 'importar' ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <RefreshCw size={14} />} Atualizar agora
         </button>
         <button onClick={() => acao('classificar', {}, 'Reclassificação')} disabled={!!ocupado} style={{ ...btn('#fff'), color: '#334155', border: '1px solid #cbd5e1' }}>
           <FileText size={14} /> Reclassificar
         </button>
+      </div>
+
+      <div style={{ fontSize: 11.5, color: '#64748b', marginBottom: 12, lineHeight: 1.55 }}>
+        O extrato das contas conectadas entra <strong>sozinho todo dia</strong> (janela de 45 dias, para pegar estorno e recebimento retroativo). O botão acima é só para ver o movimento de hoje sem esperar.
       </div>
 
       {msg && (
@@ -177,6 +181,7 @@ function LinhaLancamento({ l, contas, onFeito }) {
   const [conta, setConta] = useState(l.conta || '9.9');
   const [virarRegra, setVirarRegra] = useState(false);
   const [salvando, setSalvando] = useState(false);
+  const [compondo, setCompondo] = useState(false);
   const pendente = l.conta === '9.9' || l.classificado_por === 'pendente';
 
   async function conciliar() {
@@ -211,10 +216,92 @@ function LinhaLancamento({ l, contas, onFeito }) {
       <label style={{ fontSize: 10.5, color: '#64748b', display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }} title="Cria uma regra a partir deste histórico — o próximo lançamento igual já vem classificado">
         <input type="checkbox" checked={virarRegra} onChange={e => setVirarRegra(e.target.checked)} /> virar regra
       </label>
+      {/* COMPOR: quando a linha do banco é, contabilmente, mais de uma coisa. */}
+      <button onClick={() => setCompondo(v => !v)} title="Dividir este lançamento em partes com contas diferentes"
+        style={{ padding: '6px 10px', borderRadius: 8, border: `1px solid ${l.rateado ? '#7c3aed' : '#cbd5e1'}`, background: l.rateado ? '#f5f3ff' : '#fff', color: l.rateado ? '#7c3aed' : '#475569', cursor: 'pointer', fontSize: 11.5, fontWeight: 700 }}>
+        {l.rateado ? 'Composto ✓' : 'Compor'}
+      </button>
       <button onClick={conciliar} disabled={salvando}
         style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 11px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 11.5, fontWeight: 800, background: l.conciliado ? '#f1f5f9' : '#059669', color: l.conciliado ? '#475569' : '#fff' }}>
         {salvando ? <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> : <Check size={12} />} {l.conciliado ? 'Reconciliar' : 'Conciliar'}
       </button>
+      {compondo && <PainelRateio l={l} contas={contas} onFeito={() => { setCompondo(false); onFeito?.(); }} />}
+    </div>
+  );
+}
+
+/**
+ * COMPOSIÇÃO DE UM LANÇAMENTO — o caso do acordo com dedução.
+ * Um pagamento de R$ 1.000 em que R$ 200 foram dedução de uma despesa já paga é UMA linha no
+ * banco e DUAS na contabilidade. Aqui as partes são digitadas e o servidor confere se somam o
+ * valor do lançamento: rateio que não fecha vira erro contábil, então é recusado com a
+ * diferença na tela.
+ */
+function PainelRateio({ l, contas, onFeito }) {
+  const valor = Number(l.valor_liquido ?? l.valor_bruto ?? 0);
+  const [partes, setPartes] = useState([{ conta: l.conta || '9.9', valor: valor, descricao: '', contraparte: '' }]);
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState('');
+  const soma = partes.reduce((s, p) => s + (Number(p.valor) || 0), 0);
+  const diferenca = Number((valor - soma).toFixed(2));
+
+  const mudar = (i, campo, v) => setPartes(ps => ps.map((p, j) => (j === i ? { ...p, [campo]: v } : p)));
+
+  async function salvar() {
+    setSalvando(true); setErro('');
+    try {
+      const r = await apiCall('/api/conciliacao', {
+        method: 'POST',
+        body: JSON.stringify({ acao: 'ratear', id: l.id, partes: partes.filter(p => Number(p.valor)) }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) setErro(d?.error || 'Não consegui gravar a composição.');
+      else onFeito?.();
+    } catch { setErro('Falha de conexão.'); }
+    setSalvando(false);
+  }
+
+  return (
+    <div style={{ flexBasis: '100%', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '12px 14px', marginTop: 8 }}>
+      <div style={{ fontSize: 12, fontWeight: 800, color: '#111', marginBottom: 8 }}>
+        Compor {brl(valor)} em partes
+        <span style={{ fontWeight: 500, color: diferenca === 0 ? '#059669' : '#b45309', marginLeft: 8 }}>
+          {diferenca === 0 ? 'fecha ✓' : `faltam ${brl(diferenca)}`}
+        </span>
+      </div>
+      {partes.map((p, i) => (
+        <div key={i} style={{ display: 'flex', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
+          <select value={p.conta} onChange={e => mudar(i, 'conta', e.target.value)}
+            style={{ padding: '5px 8px', borderRadius: 7, border: '1px solid #cbd5e1', fontSize: 11.5, maxWidth: 230 }}>
+            {contas.map(c => <option key={c.codigo} value={c.codigo}>{c.codigo} · {c.nome}</option>)}
+          </select>
+          <input type="number" step="0.01" value={p.valor} onChange={e => mudar(i, 'valor', e.target.value)}
+            style={{ padding: '5px 8px', borderRadius: 7, border: '1px solid #cbd5e1', fontSize: 11.5, width: 100 }} placeholder="valor" />
+          <input value={p.descricao} onChange={e => mudar(i, 'descricao', e.target.value)} placeholder="o que é esta parte"
+            style={{ padding: '5px 8px', borderRadius: 7, border: '1px solid #cbd5e1', fontSize: 11.5, flex: 1, minWidth: 140 }} />
+          <input value={p.contraparte} onChange={e => mudar(i, 'contraparte', e.target.value)} placeholder="credor/pagador"
+            style={{ padding: '5px 8px', borderRadius: 7, border: '1px solid #cbd5e1', fontSize: 11.5, width: 130 }} />
+          {partes.length > 1 && (
+            <button onClick={() => setPartes(ps => ps.filter((_, j) => j !== i))}
+              style={{ background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer', fontSize: 16 }}>×</button>
+          )}
+        </div>
+      ))}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 6 }}>
+        <button onClick={() => setPartes(ps => [...ps, { conta: '9.9', valor: diferenca > 0 ? diferenca : 0, descricao: '', contraparte: '' }])}
+          style={{ padding: '6px 11px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#fff', cursor: 'pointer', fontSize: 11.5, fontWeight: 700, color: '#334155' }}>
+          + parte
+        </button>
+        <button onClick={salvar} disabled={salvando}
+          style={{ padding: '6px 13px', borderRadius: 8, border: 'none', background: '#7c3aed', color: '#fff', cursor: 'pointer', fontSize: 11.5, fontWeight: 800 }}>
+          {salvando ? 'Salvando…' : 'Salvar composição'}
+        </button>
+        <button onClick={() => apiCall('/api/conciliacao', { method: 'POST', body: JSON.stringify({ acao: 'ratear', id: l.id, partes: [] }) }).then(onFeito)}
+          style={{ padding: '6px 11px', borderRadius: 8, border: 'none', background: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: 11.5 }}>
+          desfazer composição
+        </button>
+      </div>
+      {erro && <div style={{ fontSize: 11.5, color: '#dc2626', marginTop: 7 }}>{erro}</div>}
     </div>
   );
 }

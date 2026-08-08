@@ -66,6 +66,19 @@ export default function MonitorFinanceiro() {
     setOcupado('');
   }
 
+  // MESCLAR: o mesmo credor grafado de dois jeitos ("Bright Data" e "BRIGHTDATA"). Sem isto ele
+  // ocupa duas linhas na fila, divide o próprio histórico, e a DRE mostra dois custos onde há um.
+  async function mesclar(deChave, paraChave) {
+    setOcupado(deChave);
+    try {
+      const r = await apiCall('/api/conciliacao', { method: 'POST', body: JSON.stringify({ acao: 'mesclar_fornecedor', de_chave: deChave, para_chave: paraChave }) });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) setMsg(d?.error || 'Falha ao mesclar.');
+      else { setMsg(`Credores unidos — ${d.lancamentos_migrados} lançamento(s) migrados.`); await carregar(); }
+    } catch { setMsg('Falha de conexão.'); }
+    setOcupado('');
+  }
+
   async function definirCredor(chave, conta) {
     setOcupado(chave);
     try {
@@ -111,6 +124,16 @@ export default function MonitorFinanceiro() {
                     <option value="">Classificar em…</option>
                     {contas.filter(c => (f.direcao === 'entrada' ? c.natureza === 'receita' : c.natureza !== 'receita'))
                       .map(c => <option key={c.codigo} value={c.codigo}>{c.codigo} · {c.nome}</option>)}
+                  </select>
+                  {/* Mesclar com outro credor já conhecido — resolve a mesma empresa escrita de
+                      dois jeitos, que a normalização sozinha não junta. */}
+                  <select defaultValue="" disabled={ocupado === f.chave}
+                    onChange={e => { if (e.target.value) mesclar(f.chave, e.target.value); }}
+                    title="É o mesmo credor de outro já cadastrado? Una os dois."
+                    style={{ padding: '6px 8px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 11, maxWidth: 150, color: '#64748b' }}>
+                    <option value="">é o mesmo que…</option>
+                    {[...(forn.classificados || []), ...forn.pendentes.filter(x => x.chave !== f.chave)]
+                      .slice(0, 60).map(o => <option key={o.chave} value={o.chave}>{o.nome_exibicao || o.chave}</option>)}
                   </select>
                   {ocupado === f.chave && <Loader2 size={14} style={{ animation: 'spin 1s linear infinite', color: '#b45309' }} />}
                 </div>

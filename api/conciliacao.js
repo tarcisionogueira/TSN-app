@@ -265,6 +265,49 @@ export default async function handler(req, res) {
     return;
   }
 
+  // ── MESCLAR CREDORES: o mesmo fornecedor grafado de dois jeitos ──────────────────────────
+  // "Bright Data" e "BRIGHTDATA" são o mesmo credor; sem mesclar, ele ocupa duas linhas na fila,
+  // divide o próprio histórico e a DRE mostra dois custos onde há um.
+  if (acao === 'mesclar_fornecedor') {
+    const de_ = String(body.de_chave || '').trim();
+    const para = String(body.para_chave || '').trim();
+    if (!de_ || !para) { res.status(400).json({ error: 'de_chave e para_chave são obrigatórias' }); return; }
+    const r = await sb('rpc/fornecedor_mesclar', { method: 'POST', body: JSON.stringify({ p_de: de_, p_para: para, p_user: user.id }) });
+    if (!r.ok) {
+      console.error('[conciliacao] mesclar', r.status, (await r.text().catch(() => '')).slice(0, 200));
+      res.status(502).json({ error: 'Falha ao mesclar os credores.' }); return;
+    }
+    res.status(200).json({ ok: true, lancamentos_migrados: await r.json().catch(() => 0) });
+    return;
+  }
+
+  // ── RATEIO: um lançamento que contabilmente é mais de uma coisa ──────────────────────────
+  // Caso do dono: pagamento de R$ 1.000 com R$ 200 de dedução acordada de uma despesa já paga.
+  // O banco mostra uma linha; a contabilidade precisa de duas. A soma das partes é conferida
+  // contra o valor do lançamento — rateio que não fecha é erro de digitação virando erro contábil.
+  if (acao === 'ratear') {
+    const id = String(body.id || '');
+    const partes = Array.isArray(body.partes) ? body.partes : [];
+    if (!id) { res.status(400).json({ error: 'id obrigatório' }); return; }
+    if (!partes.length) {
+      // Sem partes = desfaz o rateio e o lançamento volta a valer inteiro.
+      await sb(`conciliacao_rateio?lancamento_id=eq.${encodeURIComponent(id)}`, { method: 'DELETE', headers: { Prefer: 'return=minimal' } });
+      res.status(200).json({ ok: true, partes: 0, desfeito: true });
+      return;
+    }
+    const r = await sb('rpc/rateio_definir', { method: 'POST', body: JSON.stringify({ p_lancamento: id, p_partes: partes, p_user: user.id }) });
+    if (!r.ok) {
+      console.error('[conciliacao] ratear', r.status, (await r.text().catch(() => '')).slice(0, 200));
+      res.status(502).json({ error: 'Falha ao gravar o rateio.' }); return;
+    }
+    const out = await r.json().catch(() => ({}));
+    // O erro de fechamento vem do banco com a diferença calculada — devolvemos como 400 para a
+    // tela mostrar o número, não um "erro" genérico.
+    if (out?.ok === false) { res.status(400).json({ error: out.erro || 'O rateio não fecha com o valor do lançamento.' }); return; }
+    res.status(200).json({ ok: true, partes: out?.partes || partes.length });
+    return;
+  }
+
   // ── MONITOR: para onde o dinheiro está indo, mês a mês ───────────────────────────────────
   if (acao === 'monitor') {
     const meses = Math.min(24, Math.max(3, Number(body.meses || url.searchParams.get('meses')) || 6));

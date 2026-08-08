@@ -1,0 +1,5 @@
+-- Aplicada em produção em 08/08 via MCP. Versionada aqui para o histórico.
+-- fornecedor_mesclar() · conciliacao_rateio · rateio_definir() · dre_competencia() ciente do rateio
+-- Mesclar resolve o mesmo credor grafado de dois jeitos; o rateio resolve o lançamento que é,
+-- contabilmente, mais de uma coisa (pagamento com dedução acordada). Rateio que não fecha é
+-- RECUSADO com a diferença — validado: 800+150 contra 1.000 devolve "diferença de 50,00".

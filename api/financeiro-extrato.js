@@ -24,7 +24,7 @@
  */
 export const config = { runtime: 'nodejs', maxDuration: 60 };
 
-import { getUser, getUserRoleById } from './_auth.js';
+import { getUser, getUserRoleById, isCronAuthorized } from './_auth.js';
 import { checkRateLimit, getIP } from './_rate-limit.js';
 
 const ASAAS_URL = process.env.ASAAS_ENV === 'sandbox' ? 'https://api-sandbox.asaas.com/v3' : 'https://api.asaas.com/v3';
@@ -69,14 +69,19 @@ async function mp(path) {
 export default async function handler(req, res) {
   if (req.method !== 'GET' && req.method !== 'POST') { res.status(405).json({ error: 'Método não permitido' }); return; }
 
-  // Dado financeiro da empresa: só admin, e com teto de chamadas (as APIs externas são pagas
-  // em latência e têm limite próprio).
-  const user = await getUser(req);
-  if (!user?.id) { res.status(401).json({ error: 'Não autenticado' }); return; }
-  const role = await getUserRoleById(user.id);
-  if (role !== 'admin') { res.status(403).json({ error: 'Acesso restrito a administradores' }); return; }
-  const rl = await checkRateLimit(`financeiro:${user.id}`, 30, 5 * 60_000);
-  if (!rl.ok) { res.status(429).json({ error: 'Muitas consultas. Aguarde alguns minutos.' }); return; }
+  // Dado financeiro da empresa: só admin — OU o cron de sincronização, que traz o extrato para a
+  // conciliação sozinho (senão a importação dependeria de alguém lembrar de apertar um botão).
+  // O cron entra pelo CRON_SECRET, nunca por sessão, e só LÊ.
+  const ehCron = isCronAuthorized(req);
+  let user = null;
+  if (!ehCron) {
+    user = await getUser(req);
+    if (!user?.id) { res.status(401).json({ error: 'Não autenticado' }); return; }
+    const role = await getUserRoleById(user.id);
+    if (role !== 'admin') { res.status(403).json({ error: 'Acesso restrito a administradores' }); return; }
+    const rl = await checkRateLimit(`financeiro:${user.id}`, 30, 5 * 60_000);
+    if (!rl.ok) { res.status(429).json({ error: 'Muitas consultas. Aguarde alguns minutos.' }); return; }
+  }
 
   const url = new URL(req.url, 'http://localhost');
   const dias = Math.min(365, Math.max(7, Number(url.searchParams.get('dias')) || 90));
