@@ -9,6 +9,7 @@ import { pushSuportado, statusPermissao, ativarPush, desativarPush, getSubscript
 import { ESTADOS_UF } from '../data/cidades';
 import CidadeAutocomplete from '../components/CidadeAutocomplete';
 import ContinuarNoCelular from '../components/ContinuarNoCelular';
+import CapturaCamera from '../components/CapturaCamera';
 import { usePlanos } from '../contexts/PlanosContext';
 import { PLANOS as PLANOS_STATIC } from '../data/cursos';
 
@@ -457,6 +458,7 @@ export default function Perfil() {
   const [docArquivo, setDocArquivo] = useState(false);
   // O que JÁ ESTÁ no acervo, lido do banco (não do que foi feito nesta aba).
   const [kycFeito, setKycFeito] = useState({ documento: false, verso: false, selfie: false });
+  const [camAberta, setCamAberta] = useState(false);
   const maskCnpj = (v) => (v || '').replace(/\D/g, '').slice(0, 14)
     .replace(/(\d{2})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2')
     .replace(/(\d{3})(\d)/, '$1/$2').replace(/(\d{4})(\d{1,2})$/, '$1-$2');
@@ -1213,10 +1215,17 @@ export default function Perfil() {
                           : ' (conclui — envie o documento antes)'}
                     </div>
                     <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-                      <label style={{ fontSize: 11.5, color: '#0D63DB', fontWeight: 700, cursor: kycBusy ? 'default' : 'pointer' }}>
+                      {/* Botão de verdade, não `<input capture>`: no computador o `capture`
+                          é ignorado e abre o seletor de arquivos. Aqui abre a webcam. */}
+                      <CapturaCamera
+                        aberto={camAberta}
+                        onFechar={() => setCamAberta(false)}
+                        onCapturar={(file) => { setCamAberta(false); enviarRostoKYC(file); }}
+                        titulo="Tirar selfie do rosto" />
+                      <button type="button" onClick={() => setCamAberta(true)} disabled={kycBusy}
+                        style={{ background: 'none', border: 'none', padding: 0, fontSize: 11.5, color: '#0D63DB', fontWeight: 700, cursor: kycBusy ? 'default' : 'pointer', fontFamily: 'inherit' }}>
                         {kycBusy ? 'Enviando…' : '📷 Tirar agora (câmera)'}
-                        <input type="file" accept="image/*" capture="user" style={{ display: 'none' }} disabled={kycBusy} onChange={e => enviarRostoKYC(e.target.files?.[0])} />
-                      </label>
+                      </button>
                       <span style={{ fontSize: 11, color: '#94a3b8' }}>ou</span>
                       <label style={{ fontSize: 11.5, color: '#0D63DB', fontWeight: 700, cursor: kycBusy ? 'default' : 'pointer' }}>
                         📎 Escolher uma foto
@@ -1226,7 +1235,15 @@ export default function Perfil() {
                     {/* Mesmo desvio do modal do parceiro: no computador, o QR leva documento e
                         selfie para o celular. Não aparece quando já se está no telefone. */}
                     <div style={{ marginTop: 4 }}>
-                      <ContinuarNoCelular fluxo="kyc" compacto rotulo="Fotografar pelo celular (QR code)" onConcluido={concluirKycPeloCelular} />
+                      {/* O celular pede só o que FALTA (08/08). Com o documento já no
+                          acervo, mandar o fluxo 'kyc' fazia o telefone pedir documento e
+                          selfie de novo — retrabalho e a impressão de que o envio anterior
+                          se perdeu. */}
+                      <ContinuarNoCelular
+                        fluxo={kycFeito.documento ? 'selfie' : 'kyc'}
+                        compacto
+                        rotulo={kycFeito.documento ? 'Tirar a selfie pelo celular (QR code)' : 'Fotografar pelo celular (QR code)'}
+                        onConcluido={concluirKycPeloCelular} />
                     </div>
                   </div>
                 )}

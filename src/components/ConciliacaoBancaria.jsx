@@ -312,6 +312,24 @@ function LinhaLancamento({ l, contas, onFeito, onLinhaOk }) {
     setSalvando(false);
   }
 
+  // Aplica a conta escolhida ao CREDOR inteiro. Aqui a lista PRECISA ser recarregada — a
+  // ação mexe em várias linhas de uma vez, e atualizar só esta deixaria as outras mentindo
+  // na tela. É a exceção consciente à regra de não recarregar.
+  async function classificarCredor() {
+    if (!l.fornecedor) return;
+    setSalvando(true); setErroLinha('');
+    try {
+      const r = await apiCall('/api/conciliacao', {
+        method: 'POST',
+        body: JSON.stringify({ acao: 'definir_fornecedor', chave: l.fornecedor, conta }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) setErroLinha(d?.error || 'Não consegui classificar o credor.');
+      else onFeito?.(d.lancamentos_reclassificados);
+    } catch { setErroLinha('Falha de conexão ao classificar o credor.'); }
+    setSalvando(false);
+  }
+
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid #f1f5f9', flexWrap: 'wrap',
       background: pendente ? '#fffbeb' : 'transparent' }}>
@@ -338,6 +356,18 @@ function LinhaLancamento({ l, contas, onFeito, onLinhaOk }) {
         style={{ padding: '6px 10px', borderRadius: 8, border: `1px solid ${l.rateado ? '#7c3aed' : '#cbd5e1'}`, background: l.rateado ? '#f5f3ff' : '#fff', color: l.rateado ? '#7c3aed' : '#475569', cursor: 'pointer', fontSize: 11.5, fontWeight: 700 }}>
         {l.rateado ? 'Composto ✓' : 'Compor'}
       </button>
+      {/* CLASSIFICAR O CREDOR — resolve TODOS os lançamentos dele de uma vez (08/08).
+          O dono classificou um PIX de R$ 1.000 e os outros dois do mesmo credor ficaram para
+          trás, porque a Conciliação só sabia tratar linha a linha; a ação por credor existia
+          na API, mas só aparecia na aba Monitor. Com o volume crescendo, um a um não escala:
+          é o mesmo credor, é a mesma conta, tem de ser um clique. */}
+      {l.fornecedor && (
+        <button onClick={classificarCredor} disabled={salvando}
+          title={`Aplica a conta escolhida a TODOS os lançamentos de "${l.fornecedor}" — e aos próximos que chegarem`}
+          style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #0D63DB', background: '#eff6ff', color: '#0D63DB', cursor: 'pointer', fontSize: 11.5, fontWeight: 700 }}>
+          Todo “{String(l.fornecedor).slice(0, 14)}”
+        </button>
+      )}
       <button onClick={conciliar} disabled={salvando}
         style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 11px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 11.5, fontWeight: 800, background: atual.conciliado ? '#f1f5f9' : '#059669', color: atual.conciliado ? '#475569' : '#fff' }}>
         {salvando ? <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> : <Check size={12} />} {atual.conciliado ? 'Reconciliar' : 'Conciliar'}

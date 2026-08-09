@@ -4,6 +4,7 @@ import { supabase } from '../utils/supabase';
 import { apiCall } from '../utils/apiCall';
 import { useAuth } from '../contexts/AuthContext';
 import ContinuarNoCelular from './ContinuarNoCelular';
+import CapturaCamera from './CapturaCamera';
 
 // Popup de VERIFICAÇÃO DE IDENTIDADE do PARCEIRO (pedido do dono: "quem vira parceiro e não fez
 // o KYC deve ver um popup para preencher o que falta — selfie + documento").
@@ -28,8 +29,8 @@ export default function KycParceiroModal() {
   const [erro, setErro] = useState('');
   const [adiado, setAdiado] = useState(() => { try { return sessionStorage.getItem(ADIAR_KEY) === '1'; } catch { return false; } });
   const docRef = React.useRef();
-  const selfieRef = React.useRef();
   const selfieArqRef = React.useRef(); // mesma selfie, vinda de arquivo em vez da câmera
+  const [camAberta, setCamAberta] = React.useState(false);
 
   // EQUIPE TAMBÉM VERIFICA IDENTIDADE (decisão do dono, 08/08): "a equipe coloca pra fazer a
   // mesma verificação, batendo a selfie e anexando o documento de identidade". Quem recebe
@@ -178,10 +179,14 @@ export default function KycParceiroModal() {
             arquivo já existente. O `capture="user"` sozinho engana no computador — lá o
             atributo é ignorado e abre um seletor de arquivos, sem o usuário ter pedido isso.
             Melhor oferecer os dois com o nome certo (o QR para o celular vem logo abaixo). */}
-        <input ref={selfieRef} type="file" accept="image/*" capture="user" style={{ display: 'none' }} onChange={e => enviarSelfie(e.target.files[0])} />
+        <CapturaCamera
+          aberto={camAberta}
+          onFechar={() => setCamAberta(false)}
+          onCapturar={(file) => { setCamAberta(false); enviarSelfie(file); }}
+          titulo="Tirar selfie do rosto" />
         <input ref={selfieArqRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={e => enviarSelfie(e.target.files[0])} />
         <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={() => selfieRef.current?.click()} disabled={!docEnviado || selfieBusy}
+          <button onClick={() => setCamAberta(true)} disabled={!docEnviado || selfieBusy}
             style={{ flex: 2, display: 'flex', alignItems: 'center', gap: 8, padding: '13px 14px', border: 'none', background: (!docEnviado || selfieBusy) ? '#93c5fd' : '#0D63DB', borderRadius: 12, cursor: (!docEnviado || selfieBusy) ? 'default' : 'pointer', fontWeight: 800, fontSize: 14, color: 'white', opacity: (!docEnviado || selfieBusy) ? 0.8 : 1, justifyContent: 'center' }}>
             {selfieBusy ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Verificando…</> : <><Camera size={16} /> 2. Tirar selfie</>}
           </button>
@@ -196,7 +201,10 @@ export default function KycParceiroModal() {
             resolve). Webcam de desktop fotografa documento mal, e era exatamente aqui que o
             cliente parava. O QR leva só este passo para o celular, sem novo login. */}
         <div style={{ margin: '12px 0 2px' }}>
-          <ContinuarNoCelular fluxo="kyc" rotulo="Prefere pelo celular? Ler QR code" onConcluido={concluirPeloCelular} />
+          <ContinuarNoCelular
+            fluxo={docEnviado ? 'selfie' : 'kyc'}
+            rotulo={docEnviado ? 'Tirar a selfie pelo celular? Ler QR code' : 'Prefere pelo celular? Ler QR code'}
+            onConcluido={concluirPeloCelular} />
         </div>
 
         {erro && <div style={{ marginTop: 14, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '9px 12px', fontSize: 12.5, color: '#dc2626' }}>{erro}</div>}

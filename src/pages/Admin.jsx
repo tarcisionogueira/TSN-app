@@ -6913,7 +6913,18 @@ function ScrapersTab() {
         <div style={{ background: 'white', borderRadius: 10, border: '1px solid #e2e8f0', padding: '12px 16px', marginBottom: 16 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
             <span style={{ fontSize: 12, fontWeight: 700, color: '#334155' }}>Cobertura de coordenadas GPS</span>
-            <span style={{ fontSize: 12, color: '#64748b' }}>{geoStats.com.toLocaleString('pt-BR')} de {geoStats.total.toLocaleString('pt-BR')} imóveis</span>
+            {/* "de N imóveis" era o TOTAL DA TABELA — ativos + histórico —, e foi de onde
+                veio a dúvida do dono: 52 mil aqui contra 31 mil na página pública. Não é
+                divergência: a diferença são os lotes encerrados, que ficam porque metade das
+                análises já emitidas aponta para eles. O rótulo agora diz isso. */}
+            <span style={{ fontSize: 12, color: '#64748b' }}>
+              {geoStats.com.toLocaleString('pt-BR')} de {geoStats.total.toLocaleString('pt-BR')} imóveis no acervo
+              {typeof status?.ativos === 'number' && (
+                <span title="A base guarda o lote encerrado porque relatórios já entregues apontam para ele.">
+                  {' '}· {status.ativos.toLocaleString('pt-BR')} ativos + {(geoStats.total - status.ativos).toLocaleString('pt-BR')} histórico
+                </span>
+              )}
+            </span>
           </div>
           <div style={{ height: 8, background: '#f1f5f9', borderRadius: 8, overflow: 'hidden' }}>
             <div style={{ height: '100%', width: `${geoPct}%`, background: geoPct > 80 ? '#10b981' : geoPct > 50 ? '#f59e0b' : '#ef4444', borderRadius: 8, transition: 'width 0.5s' }} />
