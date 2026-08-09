@@ -1224,12 +1224,27 @@ ${hash ? `<h2>Verificação de integridade</h2><div class="kv muted">${esc(hashL
         <button style={S.btn('outline')} onClick={loadUsers}>↻ Atualizar</button>
       </div>
 
-      <div style={S.card}>
+      {/* SEM SALTO AO CARREGAR (08/08). A tela "se reformatava" no primeiro segundo por dois
+          motivos somados: (a) o card do estado "Carregando…" tinha ~90px e virava uma tabela
+          de centenas de pixels, empurrando tudo abaixo; (b) a tabela era `table-layout: auto`,
+          então TODAS as colunas recalculavam a largura no instante em que os dados chegavam.
+          Agora o card reserva a altura antes de saber o conteúdo, e as colunas têm largura
+          declarada — o desenho nasce pronto e só o miolo é preenchido. */}
+      <div style={{ ...S.card, minHeight: 320 }}>
         {loading ? <p style={{ color: '#94a3b8', textAlign: 'center', padding: 32 }}>Carregando...</p>
           : filtered.length === 0 ? <p style={{ color: '#94a3b8', textAlign: 'center', padding: 32 }}>Nenhum usuário encontrado.</p>
           : (
             <div style={{ overflowX: 'auto' }}>
-              <table style={S.table}>
+              <table style={{ ...S.table, tableLayout: 'fixed', minWidth: 860 }}>
+                <colgroup>
+                  <col style={{ width: '22%' }} />{/* Nome */}
+                  <col style={{ width: '13%' }} />{/* CPF */}
+                  <col style={{ width: '12%' }} />{/* Role */}
+                  <col style={{ width: '13%' }} />{/* Plano */}
+                  <col style={{ width: '11%' }} />{/* Cadastro */}
+                  <col style={{ width: '10%' }} />{/* Status */}
+                  <col style={{ width: '19%' }} />{/* Ações */}
+                </colgroup>
                 <thead><tr>
                   <th style={S.th}>Nome</th>
                   <th style={S.th}>CPF</th>
