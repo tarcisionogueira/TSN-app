@@ -139,6 +139,28 @@ antes de mexer, mais 6 validações de produção para rodar na abertura.
 
 ---
 
+## ⏰ CONFERIR A PARTIR DE 10/08 — as conversões do Google destravaram?
+
+> **Depende só do tempo passar.** Corrigido em 08/08 (`bdd9b4b`): `src/utils/gtag.js` empurrava um
+> **Array** na `dataLayer` em vez do objeto **`arguments`**, e o gtag.js do Google descarta comandos
+> nesse formato **em silêncio**. Por isso as ações "Cadastro — BidPro" e "Compra de plano" estavam
+> **INATIVAS com 0 conversões**, apesar de 5 cadastros reais vindos de clique pago com `gclid`
+> gravado no banco.
+>
+> ```sql
+> -- 1. o Google passou a contar?
+> select data, impressoes, cliques, gasto, conversoes from marketing_metricas_dia order by data desc limit 5;
+> -- 2. a landing nova está atribuindo? (utm novo = 'pesquisa-leilao-imoveis')
+> select created_at, mkt_gclid is not null as tem_gclid, mkt_utm_campaign
+>   from perfis where created_at > '2026-08-08' order by created_at desc;
+> ```
+> **Se `conversoes` seguir 0 COM cadastro por gclid no período, o problema NÃO é o gtag:** investigar
+> consent/bloqueio e avaliar a conversão **offline server-side** (`api/_google-ads.js`, hoje dormente
+> por falta das credenciais da API do Google Ads). As 5 conversões antigas estão perdidas para o
+> navegador — só o caminho offline as recuperaria.
+
+---
+
 ## 🏁 SESSÃO 30 (08/08 — a regra que não existia, o grátis que passa a ganhar, o extrato pela metade)
 
 **Pedido do dono:** *"é para esse tipo de divergência não voltar a acontecer, pois acaba gerando
