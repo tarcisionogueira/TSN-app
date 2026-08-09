@@ -45,6 +45,22 @@ export default function ConciliacaoBancaria() {
 
   useEffect(() => { carregar(); }, [carregar]);
 
+  // Atualiza o lançamento conciliado NO ESTADO, sem refazer a consulta. Mantém o contador de
+  // pendentes honesto e, com o filtro "só os que faltam" ligado, a linha sai da lista sozinha
+  // — sem a página piscar nem voltar ao topo.
+  const marcarConciliado = useCallback((id, conta) => {
+    setDados(d => {
+      if (!d?.lancamentos) return d;
+      const lancamentos = d.lancamentos.map(l => (
+        l.id === id ? { ...l, conta, conciliado: true, classificado_por: 'manual' } : l
+      ));
+      // O contador vive em `dados.resumo.pendentes` (é de lá que o painel lê) — atualizar a
+      // raiz não moveria o número na tela.
+      const pendentes = lancamentos.filter(l => l.conta === '9.9' || l.classificado_por === 'pendente').length;
+      return { ...d, lancamentos, resumo: { ...(d.resumo || {}), pendentes } };
+    });
+  }, []);
+
   async function acao(nome, corpo, rotulo) {
     setOcupado(nome); setMsg(null);
     try {
@@ -247,8 +263,11 @@ export default function ConciliacaoBancaria() {
               </label>
             </div>
             {!lancs.length && <div style={{ fontSize: 13, color: '#94a3b8', padding: '10px 0' }}>Nada aqui. Importe o extrato da competência para começar.</div>}
+            {/* `onFeito` (recarrega tudo) fica só para COMPOR/RATEAR, que muda a estrutura da
+                linha. O Conciliar simples usa `onLinhaOk`: atualiza o dado em memória e não
+                refaz a consulta — assim a página não pisca nem volta ao topo a cada clique. */}
             {lancs.map(l => (
-              <LinhaLancamento key={l.id} l={l} contas={contas} onFeito={carregar} />
+              <LinhaLancamento key={l.id} l={l} contas={contas} onFeito={carregar} onLinhaOk={marcarConciliado} />
             ))}
           </div>
         </>
@@ -258,22 +277,38 @@ export default function ConciliacaoBancaria() {
   );
 }
 
-function LinhaLancamento({ l, contas, onFeito }) {
+function LinhaLancamento({ l, contas, onFeito, onLinhaOk }) {
   const [conta, setConta] = useState(l.conta || '9.9');
   const [virarRegra, setVirarRegra] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [compondo, setCompondo] = useState(false);
-  const pendente = l.conta === '9.9' || l.classificado_por === 'pendente';
+  const [erroLinha, setErroLinha] = useState('');
+  // Estado da PRÓPRIA linha depois de conciliada, para ela se atualizar sem refetch.
+  const [estado, setEstado] = useState(null);
+  const atual = estado || l;
+  const pendente = atual.conta === '9.9' || atual.classificado_por === 'pendente';
 
+  // CONCILIAR SEM RECARREGAR A LISTA (08/08). Antes, cada clique refazia a consulta inteira:
+  // a tela piscava e o navegador voltava ao TOPO, então conciliar 40 lançamentos virava 40
+  // idas e voltas de rolagem. Agora a linha se atualiza no lugar — o servidor confirmou, a
+  // tela só reflete. `onLinhaOk` avisa o pai para acertar os contadores sem refetch.
   async function conciliar() {
     setSalvando(true);
     try {
-      await apiCall('/api/conciliacao', {
+      const r = await apiCall('/api/conciliacao', {
         method: 'POST',
         body: JSON.stringify({ acao: 'conciliar', id: l.id, conta, virar_regra: virarRegra }),
       });
-      onFeito?.();
-    } catch { /* a tela recarrega e mostra o estado real */ }
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        setErroLinha(d?.error || 'Não consegui conciliar este lançamento.');
+      } else {
+        // Estado local: some do "pendente" e ganha o ✓ sem sair do lugar.
+        setEstado({ conciliado: true, conta, classificado_por: 'manual' });
+        setErroLinha('');
+        onLinhaOk?.(l.id, conta);
+      }
+    } catch { setErroLinha('Falha de conexão ao conciliar.'); }
     setSalvando(false);
   }
 
@@ -283,9 +318,10 @@ function LinhaLancamento({ l, contas, onFeito }) {
       <div style={{ flex: 1, minWidth: 180 }}>
         <div style={{ fontSize: 12.5, fontWeight: 700, color: '#111', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.descricao || '(sem histórico)'}</div>
         <div style={{ fontSize: 10.5, color: '#94a3b8' }}>
-          {String(l.data || '').split('-').reverse().join('/')} · {l.banco} · {l.classificado_por}
-          {l.conciliado && <span style={{ color: '#059669', fontWeight: 700 }}> · conciliado ✓</span>}
+          {String(l.data || '').split('-').reverse().join('/')} · {l.banco} · {atual.classificado_por}
+          {atual.conciliado && <span style={{ color: '#059669', fontWeight: 700 }}> · conciliado ✓</span>}
         </div>
+        {erroLinha && <div style={{ fontSize: 11, color: '#dc2626', fontWeight: 700, marginTop: 2 }}>{erroLinha}</div>}
       </div>
       <div style={{ fontSize: 13, fontWeight: 800, color: l.direcao === 'saida' ? '#dc2626' : '#059669', minWidth: 110, textAlign: 'right' }}>
         {l.direcao === 'saida' ? '−' : '+'} {brl(l.valor_liquido ?? l.valor_bruto)}
@@ -303,8 +339,8 @@ function LinhaLancamento({ l, contas, onFeito }) {
         {l.rateado ? 'Composto ✓' : 'Compor'}
       </button>
       <button onClick={conciliar} disabled={salvando}
-        style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 11px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 11.5, fontWeight: 800, background: l.conciliado ? '#f1f5f9' : '#059669', color: l.conciliado ? '#475569' : '#fff' }}>
-        {salvando ? <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> : <Check size={12} />} {l.conciliado ? 'Reconciliar' : 'Conciliar'}
+        style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 11px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 11.5, fontWeight: 800, background: atual.conciliado ? '#f1f5f9' : '#059669', color: atual.conciliado ? '#475569' : '#fff' }}>
+        {salvando ? <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> : <Check size={12} />} {atual.conciliado ? 'Reconciliar' : 'Conciliar'}
       </button>
       {compondo && <PainelRateio l={l} contas={contas} onFeito={() => { setCompondo(false); onFeito?.(); }} />}
     </div>
