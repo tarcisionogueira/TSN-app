@@ -121,6 +121,34 @@ export default function Landing() {
           <p style={{ fontSize: 'clamp(15px,2vw,18px)', color: '#94a3b8', maxWidth: 600, margin: '0 auto 40px', lineHeight: 1.75 }}>
             A <strong style={{ color: '#ffffff', fontWeight: 800 }}>Bid Pro Brasil</strong> lê o edital, <strong style={{ color: '#e2e8f0', fontWeight: 700 }}>mapeia os riscos jurídicos</strong> e calcula a <strong style={{ color: '#e2e8f0', fontWeight: 700 }}>viabilidade financeira</strong> de cada imóvel e te dá uma resposta clara <span style={{ color: '#34d399', fontWeight: 700 }}>antes do primeiro lance</span>.
           </p>
+          {/* BUSCA POR CIDADE NA PRIMEIRA TELA (08/08).
+              Antes, o acervo público — 31 mil imóveis em páginas que abrem SEM cadastro — só
+              era alcançável por um link no RODAPÉ. Isso custava dos dois lados: o visitante
+              chegava numa página que fala do produto sem nunca ver um imóvel, e o Google, que
+              mede importância por link interno, tratava a maior seção do site como nota de
+              rodapé. Agora a primeira ação possível é a que o visitante já veio fazer —
+              procurar imóvel na cidade dele. O formulário é GET puro para a rota pública, de
+              propósito: não depende do app carregar e o robô segue o link. */}
+          <form
+            action="/leiloes/buscar" method="get"
+            style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap', maxWidth: 560, margin: '0 auto 16px' }}>
+            <input
+              name="cidade" aria-label="Cidade"
+              placeholder="Digite sua cidade — ex.: Campinas, Rio de Janeiro"
+              style={{ flex: 1, minWidth: 240, padding: '15px 18px', borderRadius: 12, border: '1px solid rgba(255,255,255,0.18)', background: 'rgba(255,255,255,0.06)', color: '#fff', fontSize: 15, fontFamily: 'inherit', outline: 'none' }}
+            />
+            <button type="submit"
+              style={{ padding: '15px 28px', background: '#059669', color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 8px 28px rgba(5,150,105,0.35)' }}>
+              <Search size={17} /> Ver imóveis
+            </button>
+          </form>
+          <p style={{ color: '#64748b', fontSize: 12.5, margin: '0 0 26px' }}>
+            {/* SEM número fixo aqui de propósito: o acervo muda toda semana e um "31 mil"
+                escrito à mão vira mentira em duas semanas. A contagem real aparece na
+                própria página de destino, onde é calculada na hora. */}
+            <a href="/leiloes" style={{ color: '#60a5fa', fontWeight: 700, textDecoration: 'none' }}>Ou veja todos os imóveis em leilão, por estado →</a>
+          </p>
+
           <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
             <button onClick={() => nav('/planos')}
               style={{ padding: '15px 34px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 9, boxShadow: '0 8px 28px rgba(13,99,219,0.45)' }}>
