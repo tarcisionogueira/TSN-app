@@ -161,6 +161,67 @@ antes de mexer, mais 6 validações de produção para rodar na abertura.
 
 ---
 
+## 🔴 ATIVAÇÃO DO EXPLORADOR (09/08) — o onboarding não existia há 5 semanas
+
+> **O maior vazamento do funil, medido.** Diagnóstico pedido pelo dono; a causa-raiz apareceu no
+> banco, não em varredura de código.
+>
+> **O funil real dos 30 exploradores:**
+>
+> | etapa | pessoas |
+> |---|---|
+> | cadastro | 30 |
+> | qualquer atividade | 18 |
+> | abriu algum imóvel | 9 |
+> | clicou "Solicitar Análise" | **3** |
+> | gerou relatório | **3** |
+>
+> Duas leituras que mudam a conclusão: **quem clica, converte** (3 cliques → 3 análises, 100%) — o
+> funil quebra ANTES do clique, não depois; e **ninguém volta** — 27 dos 30 têm um único dia de
+> atividade, sempre o dia do cadastro. Os 5 vindos do Google Ads: nenhum gerou relatório, todos com
+> um único dia. Das 90 amostras grátis disponíveis (3 por conta), **3 foram usadas**.
+>
+> ### Causa-raiz: o tour de boas-vindas estava apagado desde 01/07 (CORRIGIDO, `c2208e9`)
+> `TourGuia.jsx` resolvia a versão por `new Date().toISOString().slice(0,7)` — **o mês do relógio**.
+> A única versão cadastrada em `tour_etapas` era `'2026-06'`; a partir de 01/07 a consulta passou a
+> devolver zero etapas e o tour deixou de aparecer, **sem erro, sem log, sem nada na tela**.
+> `tour_progresso` tinha **0 linhas**. Os 30 exploradores são todos de 03/07 em diante: **nenhum
+> deles jamais viu o onboarding**. Mesma família do gtag e do KYC — funcionalidade inteira dark, e o
+> único rastro estava no banco.
+> A versão passou a ser **a mais recente publicada** (sobrevive à virada do mês; publicar versão
+> nova a promove sozinha), `roles` nulo não derruba mais o efeito, e há teto de 3 exibições para
+> quem fecha sem concluir. Conteúdo novo em `supabase/migrations/tour_versao_2026_08_ativacao.sql`:
+> o de 2026-06 dizia "TSN Ativos" (marca antiga), "laudos gerados pela equipe" (quem gera é a IA) e
+> **não citava as análises grátis**. Explorador vê 5 etapas; plano pago vê 8. Desligar sem código:
+> `update tour_etapas set ativo=false where versao='2026-08';`
+>
+> ⚠️ **Fato para não errar de novo:** explorador tem **3 amostras VITALÍCIAS**
+> (`perfis.amostra_mercado_usadas`), **não** cota mensal — conferido em `consumir_analise_por()`.
+>
+> ### 🔴 Estamos cegos no único canal de reengajamento (DEPENDE DO DONO — painel Resend)
+> `select count(*) filter (where aberto_em is not null) from emails_log;` → **0 em 120 e-mails**,
+> desde 24/06. `email.delivered` chega (26 linhas com `entregue_em`), então o webhook, a URL e o
+> secret **funcionam** — `api/resend-webhook.js` já trata `email.opened`/`email.clicked` (linhas
+> 41–42). O que falta é do lado do Resend: **Domains → bidprobrasil.com.br → ligar Open tracking e
+> Click tracking** (vêm desligados) e, em **Webhooks**, marcar os eventos `email.opened` e
+> `email.clicked`. Sem isso não dá para saber se e-mail nenhum é lido — nem medir se o tour ou
+> qualquer nudge funcionou.
+>
+> ### O que ainda NÃO foi feito (precisa da palavra do dono — muda o que o cliente recebe/vê)
+> 1. **Nada nudga quem cadastrou e não gerou.** O `enviar-alertas-cron` só alcança quem criou
+>    alerta/filtro salvo (1–5 e-mails/dia); os "oportunidades" chegaram a 30 pessoas, mas o segundo
+>    toque para quem NÃO se ativou não existe. Não há cron de reengajamento — o que existe com o
+>    nome "abandono" (`saldo-abandono-cron`) é sobre **saldo**, e `retencao-avisos-cron` é sobre
+>    **documentos**. Proposta: cron D+2 / D+7 para quem tem 0 análises, com as 3 amostras na chamada.
+> 2. **O CTA não diz que é grátis.** O botão do imóvel é "Solicitar Análise" — soa a pedido para uma
+>    equipe, possivelmente pago. Foi clicado 3 vezes em 5 semanas. `podeFazerAnalise` já inclui
+>    explorador (`ImovelDetalhe.jsx:944`), então não é gate: é a promessa. Trocar por
+>    **"Analisar grátis (N de 3)"** é a mudança de maior alavanca por menor esforço do funil inteiro.
+> 3. **Mandamos o cliente embora.** Na página do imóvel, "Acessar leiloeiro" teve 7 cliques (2
+>    pessoas) contra 3 de "Solicitar Análise" (3 pessoas).
+
+---
+
 ## 🏁 SESSÃO 30 (08/08 — a regra que não existia, o grátis que passa a ganhar, o extrato pela metade)
 
 **Pedido do dono:** *"é para esse tipo de divergência não voltar a acontecer, pois acaba gerando
