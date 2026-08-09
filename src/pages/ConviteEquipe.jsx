@@ -175,19 +175,25 @@ function PastoFoto({ cor, instrucao, validacaoTipo, onCapturada }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ imagem: dataUrl, tipo: validacaoTipo }),
       });
-      const data = await res.json();
-      if (data.ok) {
+      // `.ok` CHECADO antes de ler o corpo: um 4xx/5xx traz JSON sem `ok` e caía no ramo
+      // genérico, escondendo o motivo real da recusa.
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.ok) {
         setValidacaoOk(true);
         setMsgValidacao(data.mensagem || 'Imagem verificada com sucesso.');
         onCapturada(dataUrl);
       } else {
         setValidacaoOk(false);
-        setMsgValidacao(data.mensagem || 'Não foi possível verificar. Tente novamente.');
+        setMsgValidacao(data.mensagem || data.error || 'Não foi possível verificar. Tente novamente.');
       }
     } catch {
-      setValidacaoOk(true);
-      setMsgValidacao('Foto recebida. Verificação manual será realizada pela equipe.');
-      onCapturada(dataUrl);
+      // FALHA NÃO É APROVAÇÃO (08/08). Este catch fazia `setValidacaoOk(true)` e chamava
+      // `onCapturada` — ou seja, queda de rede ou erro 500 do servidor viravam "identidade
+      // verificada", e a pessoa seguia no convite de equipe com a mensagem de que a equipe
+      // faria conferência manual. Nenhuma conferência era registrada em lugar nenhum: o
+      // erro virava aprovação silenciosa, no fluxo que dá ACESSO à operação.
+      setValidacaoOk(false);
+      setMsgValidacao('Não consegui verificar agora (falha de conexão). Tente novamente em instantes.');
     }
     setValidando(false);
   };

@@ -455,6 +455,8 @@ export default function Perfil() {
   const [docBusy, setDocBusy] = useState(false);
   const [docFotos, setDocFotos] = useState({ frente: false, verso: false });
   const [docArquivo, setDocArquivo] = useState(false);
+  // O que JÁ ESTÁ no acervo, lido do banco (não do que foi feito nesta aba).
+  const [kycFeito, setKycFeito] = useState({ documento: false, verso: false, selfie: false });
   const maskCnpj = (v) => (v || '').replace(/\D/g, '').slice(0, 14)
     .replace(/(\d{2})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2')
     .replace(/(\d{3})(\d)/, '$1/$2').replace(/(\d{4})(\d{1,2})$/, '$1-$2');
@@ -479,26 +481,42 @@ export default function Perfil() {
     } catch { /* ignora */ }
   };
 
-  // Dados da empresa (PJ) do parceiro — para o card de cadastro/validação do saque B2B.
+  // Dados da empresa (PJ) + o que JÁ FOI ENTREGUE no KYC.
+  // O segundo pedaço existe porque a tela pedia tudo de novo, sempre: o dono tinha enviado
+  // documento frente e verso e mesmo assim via "envie o documento". Estado que a tela não lê
+  // é estado que o usuário refaz à toa — e, pior, faz ele achar que o sistema perdeu o envio.
   const carregarPJ = async () => {
     try {
-      const { data } = await supabase.from('perfis')
-        .select('cnpj,razao_social,pj_chave_pix,pj_validada_em,pj_validada_via,identidade_validada,pj_revalidacao_pendente,pj_revalidacao_motivo')
-        .eq('id', user.id).maybeSingle();
+      const [{ data }, { data: docs }] = await Promise.all([
+        supabase.from('perfis')
+          .select('cnpj,razao_social,pj_chave_pix,pj_validada_em,pj_validada_via,identidade_validada,identidade_pendente,pj_revalidacao_pendente,pj_revalidacao_motivo')
+          .eq('id', user.id).maybeSingle(),
+        supabase.from('usuario_docs').select('tipo').eq('user_id', user.id).like('tipo', 'kyc%'),
+      ]);
       if (data) setPj((p) => ({ ...p, ...data }));
+      const tipos = new Set((docs || []).map((d) => d.tipo));
+      setKycFeito({
+        documento: tipos.has('kyc_documento_frente') || tipos.has('kyc_documento'),
+        verso: tipos.has('kyc_documento_verso'),
+        selfie: tipos.has('kyc_selfie'),
+      });
     } catch { /* ignora */ }
   };
 
+  // carregarPJ vale para QUEM VÊ O BLOCO — e o bloco passou a ser de todos (não existe
+  // pagamento a pessoa física). Antes ficava preso ao `ehParceiro`, que é só cliente
+  // pagante: para o admin, os campos de CNPJ apareciam VAZIOS mesmo com a empresa já
+  // cadastrada e validada na Receita, como se nada tivesse sido salvo.
   useEffect(() => {
     if (!temComissao) return;
     carregarSaldo();
+    carregarPJ();
   }, [temComissao, user.id]); // eslint-disable-line
 
   // Relatório do Programa de Parceiros (rede multinível) — sintético + analítico.
   useEffect(() => {
     if (!ehParceiro) return;
     supabase.rpc('relatorio_comissoes_rede').then(({ data }) => { if (data && !data.erro) setRelRede(data); }).catch(() => {});
-    carregarPJ();
   }, [ehParceiro, user.id]); // eslint-disable-line
 
   // Salva os dados da empresa (PJ). cnpj/razao/pix não são campos protegidos → update direto.
@@ -624,8 +642,12 @@ export default function Perfil() {
     try {
       const r = await apiCall('/api/validar-selfie', { method: 'POST', body: JSON.stringify({ tipo: 'rosto', selfie_do_acervo: true }) });
       const d = await r.json().catch(() => ({}));
-      if (d.ok) setPjMsg({ tipo: 'sucesso', texto: '✓ Identidade verificada (fotos enviadas pelo celular).' });
-      else setPjMsg({ tipo: 'aviso', texto: d.mensagem || 'Fotos recebidas — a equipe fará a conferência.' });
+      // `.ok` checado: sem isto, um 4xx caía no "Fotos recebidas — a equipe fará a
+      // conferência", que anuncia uma revisão que ninguém registrou.
+      if (!r.ok) setPjMsg({ tipo: 'erro', texto: d.error || d.mensagem || 'A verificação falhou. Tente novamente.' });
+      else if (d.ok) setPjMsg({ tipo: 'sucesso', texto: '✓ Identidade verificada (fotos enviadas pelo celular).' });
+      else if (d.pendente) setPjMsg({ tipo: 'aviso', texto: d.mensagem || 'Fotos recebidas — a equipe fará a conferência.' });
+      else setPjMsg({ tipo: 'erro', texto: d.mensagem || 'As fotos não foram aceitas. Refaça pelo celular.' });
       carregarPJ();
     } catch { setPjMsg({ tipo: 'erro', texto: 'Recebi as fotos, mas a verificação falhou. Tente novamente.' }); }
     setKycBusy(false);
@@ -1148,8 +1170,21 @@ export default function Perfil() {
                   <span style={{ fontSize: 11.5, color: '#16a34a', fontWeight: 700 }}>✓ Identidade verificada</span>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    <div style={{ fontSize: 11, color: '#64748b' }}>a) Documento de identificação — por <strong>foto (frente e verso)</strong> ou anexe o <strong>arquivo</strong> (ex.: CNH digital)</div>
-                    <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
+                    {/* A TELA MOSTRA O QUE JÁ FOI ENTREGUE (08/08). Antes ela pedia tudo de
+                        novo, sempre — o dono já tinha mandado documento frente e verso e
+                        continuava lendo "envie o documento". Além do retrabalho, isso faz
+                        parecer que o sistema perdeu o envio. Agora o que está no acervo vem
+                        com ✓ e o que falta fica em destaque. */}
+                    {kycFeito.selfie && !kycFeito.documento && (
+                      <div style={{ fontSize: 11.5, color: '#b45309', fontWeight: 700 }}>Falta o documento de identificação.</div>
+                    )}
+                    <div style={{ fontSize: 11, color: '#64748b' }}>
+                      a) Documento de identificação
+                      {kycFeito.documento
+                        ? <strong style={{ color: '#16a34a' }}> · ✓ recebido{kycFeito.verso ? ' (frente e verso)' : ''} — reenvie só se quiser trocar</strong>
+                        : <> — por <strong>foto (frente e verso)</strong> ou anexe o <strong>arquivo</strong> (ex.: CNH digital)</>}
+                    </div>
+                    <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap', opacity: kycFeito.documento ? 0.55 : 1 }}>
                       <label style={{ fontSize: 11.5, color: docFotos.frente ? '#16a34a' : '#0D63DB', fontWeight: 700, cursor: 'pointer' }}>
                         📷 Foto frente{docFotos.frente ? ' ✓' : ''}
                         <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }} disabled={docBusy} onChange={e => enviarDocKYC(e.target.files?.[0], 'frente')} />
@@ -1169,7 +1204,14 @@ export default function Perfil() {
                         atributo é ignorado e cai num seletor de arquivos sem aviso — quem
                         não tem webcam, ou já tem a foto pronta, ficava sem saída óbvia.
                         Agora: câmera, arquivo existente ou passar para o celular via QR. */}
-                    <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>b) Selfie do <strong>rosto</strong> (conclui — envie o documento antes)</div>
+                    <div style={{ fontSize: 11, color: kycFeito.documento && !kycFeito.selfie ? '#b45309' : '#64748b', marginTop: 4, fontWeight: kycFeito.documento && !kycFeito.selfie ? 700 : 400 }}>
+                      b) Selfie do <strong>rosto</strong>
+                      {kycFeito.selfie
+                        ? <strong style={{ color: '#16a34a' }}> · ✓ recebida</strong>
+                        : kycFeito.documento
+                          ? ' — é só isto que falta. A IA compara o seu rosto com a foto do documento.'
+                          : ' (conclui — envie o documento antes)'}
+                    </div>
                     <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
                       <label style={{ fontSize: 11.5, color: '#0D63DB', fontWeight: 700, cursor: kycBusy ? 'default' : 'pointer' }}>
                         {kycBusy ? 'Enviando…' : '📷 Tirar agora (câmera)'}

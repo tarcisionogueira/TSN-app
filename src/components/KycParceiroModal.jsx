@@ -138,6 +138,11 @@ export default function KycParceiroModal() {
     try {
       const r = await apiCall('/api/validar-selfie', { method: 'POST', body: JSON.stringify({ tipo: 'rosto', selfie_do_acervo: true }) });
       const d = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        setErro(d.error || d.mensagem || 'A verificação falhou. Tente novamente em instantes.');
+        setSelfieBusy(false);
+        return;
+      }
       if (d.ok || d.pendente) {
         setEstado('ok');
         window.dispatchEvent(new Event('tsn:parceiro-atualizado'));
