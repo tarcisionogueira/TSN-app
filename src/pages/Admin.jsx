@@ -8310,17 +8310,43 @@ function FinanceiroHub() {
     return s;
   });
   const irSub = (k) => { setSub(k); sessionStorage.setItem('admin_fin_sub', k); };
+  const navFin = useNavigate();
+
+  // A CONTABILIDADE ESTAVA ÓRFÃ (08/08). Extrato, Conciliação, DRE, importação de OFX e
+  // fechamento de competência vivem em `/admin/financeiro`, uma rota que existia "para
+  // deep-link" e que NENHUM lugar do app linkava — só se chegava digitando a URL. O dono
+  // procurou a tela de conciliação e não achou, com razão: não havia caminho.
+  // Estes atalhos ligam as duas telas. Cada um abre a rota já na aba certa.
+  const IR_PARA = [
+    { aba: 'extrato',     label: '🏦 Extrato real' },
+    { aba: 'conciliacao', label: '📒 Conciliação e DRE' },
+    { aba: 'monitor',     label: '📈 Monitor' },
+  ];
+  const abrirContabil = (aba) => {
+    sessionStorage.setItem('admin_fin_aba', aba);
+    navFin('/admin/financeiro');
+  };
 
   return (
     <div>
       {/* Sub-abas do Financeiro */}
-      <div style={{ display: 'flex', gap: 6, marginBottom: 22, flexWrap: 'wrap', background: '#f1f5f9', padding: 5, borderRadius: 12, width: 'fit-content' }}>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap', background: '#f1f5f9', padding: 5, borderRadius: 12, width: 'fit-content' }}>
         {SUBS.map(s => (
           <button key={s.key} onClick={() => irSub(s.key)}
             style={{ padding: '8px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 13.5, fontWeight: 700,
               background: sub === s.key ? '#fff' : 'transparent', color: sub === s.key ? '#0D63DB' : '#64748b',
               boxShadow: sub === s.key ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}>
             {s.label}
+          </button>
+        ))}
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, marginBottom: 22, flexWrap: 'wrap', alignItems: 'center' }}>
+        <span style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>Contabilidade:</span>
+        {IR_PARA.map(x => (
+          <button key={x.aba} onClick={() => abrirContabil(x.aba)}
+            style={{ padding: '7px 14px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#fff', color: '#334155', cursor: 'pointer', fontSize: 12.5, fontWeight: 700 }}>
+            {x.label}
           </button>
         ))}
       </div>

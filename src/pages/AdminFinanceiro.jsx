@@ -500,7 +500,15 @@ export function SinteseFinanceira() {
 
 export default function AdminFinanceiro() {
   const navigate = useNavigate();
-  const [aba, setAba] = useState('sintese'); // 'sintese' | 'caixa' (fluxo) | 'assinaturas'
+  // Abre já na aba que o atalho do Admin pediu (Extrato / Conciliação / Monitor). Sem isto,
+  // quem clicava em "Conciliação e DRE" caía na Síntese e tinha de procurar a aba de novo.
+  const [aba, setAba] = useState(() => {
+    try {
+      const pedida = sessionStorage.getItem('admin_fin_aba');
+      if (pedida) { sessionStorage.removeItem('admin_fin_aba'); return pedida; }
+    } catch { /* sessionStorage indisponível */ }
+    return 'sintese';
+  });
 
   return (
     <div style={{ minHeight: '100vh', background: '#f1f5f9', padding: '0 0 60px' }}>
