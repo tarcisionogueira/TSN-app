@@ -4,8 +4,18 @@ import { ChevronRight, ChevronLeft, X, RotateCcw } from 'lucide-react';
 import { supabase } from '../utils/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
-const VERSAO_ATUAL = new Date().toISOString().slice(0, 7); // 'YYYY-MM'
-const TOUR_SESSION_KEY = `tsn_tour_${VERSAO_ATUAL}`; // mostra 1x por sessão de login
+/**
+ * A versão do tour é a MAIS RECENTE PUBLICADA em `tour_etapas` — nunca o mês do relógio.
+ *
+ * POR QUE (09/08): esta linha era `new Date().toISOString().slice(0,7)`, ou seja, o tour só
+ * aparecia se existisse uma versão com o rótulo do mês CORRENTE. A única versão cadastrada é
+ * '2026-06'; a partir de 01/07 a consulta passou a devolver zero etapas e o tour de boas-vindas
+ * simplesmente parou de existir — sem erro, sem log, sem nada na tela. Os 30 exploradores que se
+ * cadastraram são TODOS de 03/07 em diante: `tour_progresso` tinha 0 linhas, nenhum deles viu o
+ * onboarding. Ancorar na versão mais recente publicada faz o tour sobreviver à virada do mês e
+ * ainda mantém o comportamento desejado: publicou versão nova, ela vira a atual sozinha.
+ */
+const CAP_VISUALIZACOES = 3; // não insistir para sempre com quem fecha sem concluir
 
 export default function TourGuia() {
   const { user, role } = useAuth();
@@ -14,11 +24,10 @@ export default function TourGuia() {
 
   const [etapas, setEtapas] = useState([]);
   const [versoes, setVersoes] = useState([]);
-  const [versaoVendo, setVersaoVendo] = useState(VERSAO_ATUAL);
+  const [versaoAtual, setVersaoAtual] = useState(null);
+  const [versaoVendo, setVersaoVendo] = useState(null);
   const [indice, setIndice] = useState(0);
   const [visivel, setVisivel] = useState(false);
-  const [mostrarMenu, setMostrarMenu] = useState(false);
-  const [progresso, setProgresso] = useState(null);
 
   const carregarEtapas = useCallback(async (versao) => {
     const { data } = await supabase
@@ -28,8 +37,10 @@ export default function TourGuia() {
       .eq('ativo', true)
       .order('ordem');
 
+    // `roles` vazio = etapa para todo mundo. Tolerante a null: uma etapa cadastrada sem roles
+    // não pode derrubar o tour inteiro com TypeError dentro do efeito (falha invisível).
     const filtradas = (data || []).filter(e =>
-      e.roles.length === 0 || e.roles.includes(role)
+      !e.roles || e.roles.length === 0 || e.roles.includes(role)
     );
     setEtapas(filtradas);
     setIndice(0);
@@ -40,7 +51,7 @@ export default function TourGuia() {
     if (!user) return;
 
     async function verificar() {
-      // Carrega versões disponíveis (para o menu "ver anteriores")
+      // Carrega versões disponíveis (a mais recente é a "atual"; as outras vão para "ver anteriores")
       const { data: todasVersoes } = await supabase
         .from('tour_etapas')
         .select('versao')
@@ -48,27 +59,29 @@ export default function TourGuia() {
         .order('versao', { ascending: false });
       const unicas = [...new Set((todasVersoes || []).map(e => e.versao))];
       setVersoes(unicas);
+      if (unicas.length === 0) return; // nenhuma versão publicada — nada a mostrar
 
-      // Verifica progresso do mês atual
+      const atual = unicas[0];
+      setVersaoAtual(atual);
+      setVersaoVendo(atual);
+
+      // Verifica progresso na versão atual
       const { data: prog } = await supabase
         .from('tour_progresso')
         .select('*')
         .eq('user_id', user.id)
-        .eq('versao', VERSAO_ATUAL)
+        .eq('versao', atual)
         .maybeSingle();
 
-      setProgresso(prog);
-
       // Exibe apenas uma vez por sessão de login (sessionStorage é limpo ao fechar o browser/aba)
-      const jaVisto = sessionStorage.getItem(TOUR_SESSION_KEY);
-      if (!jaVisto && !prog?.completo) {
-        const etapasList = await carregarEtapas(VERSAO_ATUAL);
+      const jaVisto = sessionStorage.getItem(`tsn_tour_${atual}`);
+      const views = prog?.visualizacoes || 0;
+      if (!jaVisto && !prog?.completo && views < CAP_VISUALIZACOES) {
+        const etapasList = await carregarEtapas(atual);
         if (etapasList.length > 0) {
-          setVersaoVendo(VERSAO_ATUAL);
           setVisivel(true);
-          sessionStorage.setItem(TOUR_SESSION_KEY, '1');
-          const views = prog?.visualizacoes || 0;
-          await registrarVisualizacao(prog, views);
+          sessionStorage.setItem(`tsn_tour_${atual}`, '1');
+          await registrarVisualizacao(prog, views, atual);
         }
       }
     }
@@ -76,7 +89,7 @@ export default function TourGuia() {
     verificar();
   }, [user]);
 
-  async function registrarVisualizacao(prog, viewsAtuais) {
+  async function registrarVisualizacao(prog, viewsAtuais, versao) {
     if (!user) return;
     if (prog) {
       await supabase.from('tour_progresso')
@@ -84,7 +97,7 @@ export default function TourGuia() {
         .eq('id', prog.id);
     } else {
       await supabase.from('tour_progresso')
-        .insert({ user_id: user.id, versao: VERSAO_ATUAL, visualizacoes: 1 });
+        .insert({ user_id: user.id, versao, visualizacoes: 1 });
     }
   }
 
@@ -119,7 +132,6 @@ export default function TourGuia() {
 
   const verVersao = async (v) => {
     setVersaoVendo(v);
-    setMostrarMenu(false);
     const lista = await carregarEtapas(v);
     if (lista.length > 0) {
       nav(lista[0].rota);
@@ -127,13 +139,6 @@ export default function TourGuia() {
     }
   };
 
-  const verNovamente = async () => {
-    const lista = await carregarEtapas(VERSAO_ATUAL);
-    if (lista.length > 0) {
-      nav(lista[0].rota);
-      setVisivel(true);
-    }
-  };
 
   // Botão flutuante "?" removido a pedido — o tour de boas-vindas ainda abre 1x por
   // login; dúvidas sobre a plataforma são respondidas pela IA do chat de suporte.
@@ -141,7 +146,10 @@ export default function TourGuia() {
 
   const etapa = etapas[indice];
   const total = etapas.length;
-  const ehNovas = versaoVendo === VERSAO_ATUAL;
+  // "Novidade" só quando a versão publicada é mesmo do mês corrente; fora disso é o tour de
+  // boas-vindas — chamar de novidade um conteúdo de meses atrás confunde quem acabou de entrar.
+  const ehNovas = versaoVendo === versaoAtual;
+  const ehDoMes = versaoVendo === new Date().toISOString().slice(0, 7);
 
   return (
     <>
@@ -157,7 +165,7 @@ export default function TourGuia() {
           <div>
             {ehNovas && (
               <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: '#eff6ff', color: '#084BA6', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                ✨ Novidade, {VERSAO_ATUAL}
+                {ehDoMes ? `✨ Novidade, ${versaoVendo}` : '👋 Comece por aqui'}
               </div>
             )}
             <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: '#111111', lineHeight: 1.3 }}>{etapa.titulo}</h3>
