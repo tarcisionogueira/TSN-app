@@ -90,10 +90,27 @@ export default function KycParceiroModal() {
     if (!file) return;
     setSelfieBusy(true); setErro('');
     try {
-      try { await armazenarDoc(file, 'kyc_selfie', 'kyc-rosto'); } catch { /* segue mesmo sem guardar */ }
+      // Gravar a selfie é REQUISITO, não bônus (08/08). O catch vazio de antes deixava o
+      // fluxo seguir sem a foto no acervo — e sem ela a equipe não tem o que conferir na
+      // revisão manual. Caso real: documento gravado, selfie inexistente, identidade nem
+      // validada nem pendente, e a pessoa achando que concluiu.
+      try {
+        await armazenarDoc(file, 'kyc_selfie', 'kyc-rosto');
+      } catch (e) {
+        setErro(`Não consegui guardar a selfie (${e?.message || 'falha no envio'}). Tente de novo — sem ela a verificação não conclui.`);
+        setSelfieBusy(false);
+        return;
+      }
       const dataUrl = await dataUrlDe(file);
       const r = await apiCall('/api/validar-selfie', { method: 'POST', body: JSON.stringify({ imagem: dataUrl, tipo: 'rosto' }) });
       const d = await r.json().catch(() => ({}));
+      // `.ok` checado antes de interpretar o corpo: um 4xx/5xx traz JSON sem `ok`/`pendente`
+      // e caía no ramo genérico, escondendo o motivo real.
+      if (!r.ok) {
+        setErro(d.error || d.mensagem || 'A verificação falhou. Tente novamente em instantes.');
+        setSelfieBusy(false);
+        return;
+      }
       // SÓ fecha em sucesso REAL (d.ok) ou quando foi para revisão manual (d.pendente — a identidade
       // já saiu do estado "pedir"). REJEIÇÃO (rosto não confere/doc ilegível) NÃO fecha: mostra o
       // motivo e mantém o campo p/ refazer. Antes, qualquer resposta com `mensagem` fechava como ok.

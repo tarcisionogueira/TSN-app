@@ -589,12 +589,28 @@ export default function Perfil() {
     if (!file) return;
     setKycBusy(true); setPjMsg(null);
     try {
-      try { await armazenarDoc(file, 'kyc_selfie', 'kyc-rosto'); } catch { /* validação segue mesmo sem guardar */ }
+      // A SELFIE PRECISA SER GRAVADA (08/08). Antes, o upload era best-effort com catch
+      // VAZIO e a resposta da API não era checada — então uma falha aqui virava a mensagem
+      // "Selfie recebida, a equipe fará a conferência", que era mentira: nada tinha sido
+      // guardado e nada tinha ido para revisão. Foi o que aconteceu com o dono: documento
+      // frente e verso no acervo, selfie inexistente, identidade nem validada nem pendente,
+      // e ele achando que tinha terminado. Sem a selfie no acervo a equipe não tem o que
+      // conferir, então falhar aqui tem de PARAR o fluxo e dizer o motivo.
+      try {
+        await armazenarDoc(file, 'kyc_selfie', 'kyc-rosto');
+      } catch (e) {
+        setPjMsg({ tipo: 'erro', texto: `Não consegui guardar a selfie (${e?.message || 'falha no envio'}). Tente de novo — sem ela a verificação não conclui.` });
+        setKycBusy(false);
+        return;
+      }
       const dataUrl = await dataUrlDe(file);
       const r = await apiCall('/api/validar-selfie', { method: 'POST', body: JSON.stringify({ imagem: dataUrl, tipo: 'rosto' }) });
       const d = await r.json().catch(() => ({}));
-      if (d.ok) setPjMsg({ tipo: 'sucesso', texto: '✓ Identidade verificada.' });
-      else setPjMsg({ tipo: 'aviso', texto: d.mensagem || 'Selfie recebida — a equipe fará a conferência.' });
+      // `.ok` CHECADO: um 4xx traz JSON sem `ok`/`pendente` e caía no ramo otimista.
+      if (!r.ok) setPjMsg({ tipo: 'erro', texto: d.error || d.mensagem || 'A verificação falhou. Tente novamente em instantes.' });
+      else if (d.ok) setPjMsg({ tipo: 'sucesso', texto: '✓ Identidade verificada.' });
+      else if (d.pendente) setPjMsg({ tipo: 'aviso', texto: d.mensagem || 'Selfie recebida — a equipe fará a conferência.' });
+      else setPjMsg({ tipo: 'erro', texto: d.mensagem || 'A selfie não foi aceita. Refaça a foto com o rosto bem visível.' });
       carregarPJ();
     } catch { setPjMsg({ tipo: 'erro', texto: 'Erro no envio da selfie.' }); }
     setKycBusy(false);
