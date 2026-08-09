@@ -9,10 +9,26 @@ const AW_ID = 'AW-16850175262';
 const CONV_PLANO = `${AW_ID}/08veCOz06dgcEJ6K5eI-`;
 const CONV_CADASTRO = `${AW_ID}/uwEKCO_06dgcEJ6K5eI-`;
 
-function gtag(...args) {
+// ⚠️ NÃO troque por `dataLayer.push([...])`. Esta função já foi assim e o efeito foi mudo:
+// TODA conversão do app era descartada em silêncio (08/08).
+//
+// O gtag.js do Google varre a `dataLayer` e só reconhece como COMANDO os itens que são
+// objetos `arguments` — exatamente o que o snippet oficial do index.html produz
+// (`function gtag(){dataLayer.push(arguments);}`). Um Array comum, que é o que o rest
+// parameter (`...args`) cria, é lido como evento no estilo GTM e o comando é ignorado.
+// Nada quebra, nada aparece no console: o evento simplesmente não existe para o Google.
+//
+// Sintoma no painel: as ações "Cadastro — BidPro" e "Compra de plano" ficaram com status
+// INATIVO e 0 conversões, enquanto o banco mostrava 5 cadastros vindos de clique pago com
+// `gclid` gravado. As conversões aconteciam; o recado é que não chegava.
+//
+// Correção: usar o `window.gtag` do index.html, que é o oficial. O push de `arguments`
+// fica só como reserva para o caso de o snippet não ter carregado.
+function gtag() {
   if (typeof window === 'undefined') return;
+  if (typeof window.gtag === 'function') { window.gtag.apply(null, arguments); return; }
   window.dataLayer = window.dataLayer || [];
-  window.dataLayer.push(args);
+  window.dataLayer.push(arguments); // `arguments`, nunca um Array
 }
 
 // Cada conversão é enviada em PARALELO ao Google (GA4 + Ads) e ao Meta Pixel (se ligado por
