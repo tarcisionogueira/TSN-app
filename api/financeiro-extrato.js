@@ -222,6 +222,16 @@ export default async function handler(req, res) {
     avisos.push('Token do Mercado Pago não configurado — a conta ficou de fora.');
   }
 
+  // RUÍDO DE R$ 0,00 (08/08): o Mercado Pago registra "Recurring payment validation" — a
+  // cobrança de teste que valida o cartão da assinatura — como pagamento aprovado de valor
+  // zero. Não é receita nem despesa: é o gateway conversando consigo mesmo. Chegavam à fila
+  // de conciliação e alguém tinha de classificar linha que não significa nada.
+  const zerados = lancamentos.filter((l) => !((l.liquido ?? l.bruto ?? 0) > 0)).length;
+  const comValor = lancamentos.filter((l) => (l.liquido ?? l.bruto ?? 0) > 0);
+  lancamentos.length = 0;
+  lancamentos.push(...comValor);
+  if (zerados) avisos.push(`${zerados} lançamento(s) de R$ 0,00 ignorado(s) (validação de cartão do gateway).`);
+
   lancamentos.sort((a, b) => String(b.data || '').localeCompare(String(a.data || '')));
 
   const somar = (fn) => lancamentos.filter(fn).reduce((s, l) => s + (l.liquido ?? l.bruto ?? 0), 0);

@@ -70,12 +70,36 @@ export default async function handler(req, res) {
     gravados = linhas.length;
   }
 
+  // MÍDIA PAGA (08/08): o custo operacional é pago pelo cartão do Mercado Pago e entra pelo
+  // extrato acima — MENOS o Google Ads, que não aceita cartão pré-pago. Esse gasto ficava
+  // fora da contabilidade inteira. Como o script do Google já alimenta `marketing_metricas_dia`
+  // todo dia, a ponte transforma aquele dado em lançamento na conta 6.1. Origem própria
+  // ("Google Ads (mídia)") para nunca se confundir com extrato bancário, e idempotente por
+  // dia+campanha. Best-effort: mídia é complemento — se falhar, não derruba a conciliação.
+  let midia = null;
+  try {
+    const m = await sb('rpc/midia_para_conciliacao', { method: 'POST', body: JSON.stringify({ p_desde: null }) });
+    midia = m.ok ? await m.json().catch(() => null) : null;
+    if (!m.ok) console.error('[conciliacao-sync] midia', m.status, (await m.text().catch(() => '')).slice(0, 200));
+  } catch (e) { console.error('[conciliacao-sync] midia erro', e?.message); }
+
+  // TAXA DE GATEWAY (08/08): já era capturada, mas ficava numa coluna do lançamento e nunca
+  // chegava à conta 4.1. Na DRE, "Deduções da receita" aparecia zerada mesmo havendo taxa, e
+  // a receita entrava pelo bruto sem o custo de receber — erro que cresce na proporção do
+  // faturamento. Também best-effort, pelo mesmo motivo da mídia.
+  let taxas = null;
+  try {
+    const t = await sb('rpc/taxas_para_conciliacao', { method: 'POST', body: JSON.stringify({ p_desde: null }) });
+    taxas = t.ok ? await t.json().catch(() => null) : null;
+    if (!t.ok) console.error('[conciliacao-sync] taxas', t.status, (await t.text().catch(() => '')).slice(0, 200));
+  } catch (e) { console.error('[conciliacao-sync] taxas erro', e?.message); }
+
   const cl = await sb('rpc/conciliacao_classificar', { method: 'POST', body: JSON.stringify({ p_competencia: null }) });
   const classificados = cl.ok ? await cl.json().catch(() => 0) : 0;
 
   // Quantos ainda estão sem conta: é o número que diz se a DRE do mês fecha. Aparece no log
   // mesmo quando é zero — silêncio não distingue "nada pendente" de "cron parou".
   const pend = await (await sb('conciliacao_lancamento?conta=eq.9.9&select=id&limit=1000')).json().catch(() => []);
-  console.log('[conciliacao-sync]', JSON.stringify({ lidos: linhas.length, gravados, classificados, a_classificar: pend.length, avisos: ext.avisos }));
-  res.status(200).json({ ok: true, lidos: linhas.length, gravados, classificados, a_classificar: pend.length, avisos: ext.avisos });
+  console.log('[conciliacao-sync]', JSON.stringify({ lidos: linhas.length, gravados, classificados, midia, taxas, a_classificar: pend.length, avisos: ext.avisos }));
+  res.status(200).json({ ok: true, lidos: linhas.length, gravados, classificados, midia, taxas, a_classificar: pend.length, avisos: ext.avisos });
 }
