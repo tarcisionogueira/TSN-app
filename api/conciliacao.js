@@ -29,6 +29,7 @@ import { checkRateLimit } from './_rate-limit.js';
 import { enviarEmail } from './_email.js';
 import { escapeHtml } from './_sanitize.js';
 import { geminiFetch } from './_gemini.js';
+import { lerOFX } from './_ofx.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -193,6 +194,83 @@ export default async function handler(req, res) {
     const cl = await sb('rpc/conciliacao_classificar', { method: 'POST', body: JSON.stringify({ p_competencia: null }) });
     const classificados = cl.ok ? await cl.json().catch(() => 0) : 0;
     res.status(200).json({ ok: true, importados: linhas.length, classificados, cobertura: ext.cobertura, avisos: ext.avisos });
+    return;
+  }
+
+  // ── IMPORTAR OFX (extrato de banco sem API) ───────────────────────────────────────────────
+  // Bradesco, C6 e Caixa não têm caminho automático viável hoje: Open Finance exige ser
+  // instituição autorizada pelo Banco Central e agregador cobra mensalidade que o volume
+  // atual não paga. Mas todos exportam OFX pelo internet banking — então o arquivo entra
+  // por aqui e daí em diante é o MESMO fluxo do extrato de gateway: mesma tabela, mesma
+  // idempotência (banco + chave_origem), mesma classificação em cascata, mesma DRE.
+  if (acao === 'importar_ofx') {
+    const bruto = String(body.arquivo || '');
+    if (!bruto) { res.status(400).json({ error: 'Envie o arquivo OFX.' }); return; }
+    // ~8 MB de base64 ≈ 6 MB de arquivo: extrato de ano inteiro cabe com folga.
+    if (bruto.length > 8_000_000) { res.status(413).json({ error: 'Arquivo muito grande. Exporte por período menor.' }); return; }
+
+    let lido;
+    try {
+      const bytes = Buffer.from(bruto, 'base64');
+      lido = lerOFX(bytes, body.banco);
+    } catch (e) {
+      console.error('[conciliacao] ofx', e?.message);
+      res.status(422).json({ error: 'Não consegui ler o arquivo OFX.' }); return;
+    }
+    if (!lido.ok) { res.status(422).json({ error: lido.error, erros: lido.erros || [] }); return; }
+
+    const linhas = lido.lancamentos.map((l) => ({ ...l, classificado_por: 'pendente' }));
+    const up = await sb('conciliacao_lancamento?on_conflict=banco,chave_origem', {
+      method: 'POST',
+      headers: { Prefer: 'resolution=ignore-duplicates,return=minimal' },
+      body: JSON.stringify(linhas),
+    });
+    if (!up.ok) {
+      const det = await up.text().catch(() => '');
+      console.error('[conciliacao] upsert ofx', up.status, det.slice(0, 300));
+      // A trava de competência recusa lançamento em mês já entregue à contabilidade —
+      // e isso NÃO é falha do sistema: é a regra funcionando. A mensagem do banco já
+      // explica o que fazer, então ela sobe para a tela em vez de virar "erro genérico".
+      const fechada = /FECHADA/i.test(det);
+      res.status(fechada ? 409 : 502).json({
+        error: fechada
+          ? 'Este extrato tem lançamentos em uma competência já FECHADA. Reabra a competência (fica registrado) ou importe apenas o período em aberto.'
+          : 'Falha ao gravar os lançamentos do OFX.',
+      });
+      return;
+    }
+
+    const cl = await sb('rpc/conciliacao_classificar', { method: 'POST', body: JSON.stringify({ p_competencia: null }) });
+    const classificados = cl.ok ? await cl.json().catch(() => 0) : 0;
+    res.status(200).json({
+      ok: true, importados: linhas.length, classificados,
+      banco: lido.banco, conta: lido.conta, periodo: lido.periodo,
+      // Linha ignorada aparece SEMPRE. Importação silenciosa que come 3 lançamentos é
+      // como o extrato truncado: o total fica errado e ninguém fica sabendo.
+      erros: lido.erros || [],
+      mensagem: `${linhas.length} lançamento(s) do ${lido.banco} importado(s)`
+        + (lido.periodo ? ` (${lido.periodo.de} a ${lido.periodo.ate})` : '')
+        + ((lido.erros || []).length ? ` · ${lido.erros.length} linha(s) ignorada(s)` : '')
+        + '. Reimportar o mesmo arquivo não duplica.',
+    });
+    return;
+  }
+
+  // ── FECHAR / REABRIR competência ──────────────────────────────────────────────────────────
+  if (acao === 'fechar_competencia' || acao === 'reabrir_competencia') {
+    const comp = String(body.competencia || '').slice(0, 7);
+    if (!/^\d{4}-\d{2}$/.test(comp)) { res.status(400).json({ error: 'Informe a competência (AAAA-MM).' }); return; }
+    const fn = acao === 'fechar_competencia' ? 'fechar_competencia' : 'reabrir_competencia';
+    const args = acao === 'fechar_competencia'
+      ? { p_competencia: `${comp}-01`, p_user_id: user.id, p_obs: body.observacao || null }
+      : { p_competencia: `${comp}-01`, p_user_id: user.id, p_motivo: body.motivo || '' };
+    const r = await sb(`rpc/${fn}`, { method: 'POST', body: JSON.stringify(args) });
+    const d = await r.json().catch(() => null);
+    if (!r.ok) { res.status(502).json({ error: 'Falha ao atualizar a competência.' }); return; }
+    if (d && d.ok === false) { res.status(422).json({ error: d.error }); return; }
+    res.status(200).json({ ok: true, ...d, mensagem: acao === 'fechar_competencia'
+      ? `Competência ${comp} fechada.${d?.aviso ? ' ' + d.aviso : ''}`
+      : `Competência ${comp} reaberta — a reabertura ficou registrada.` });
     return;
   }
 

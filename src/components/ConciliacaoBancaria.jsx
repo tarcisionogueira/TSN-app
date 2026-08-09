@@ -29,6 +29,8 @@ export default function ConciliacaoBancaria() {
   const [msg, setMsg] = useState(null);
   const [soPendentes, setSoPendentes] = useState(false);
   const [emailContab, setEmailContab] = useState('');
+  const [bancoOfx, setBancoOfx] = useState('Bradesco');
+  const [ofxErros, setOfxErros] = useState([]);
 
   const carregar = useCallback(async () => {
     setCarregando(true); setMsg(null);
@@ -51,6 +53,30 @@ export default function ConciliacaoBancaria() {
       if (!r.ok) setMsg({ tipo: 'erro', txt: d?.error || `Falha em ${rotulo}.` });
       else { setMsg({ tipo: 'ok', txt: d.mensagem || `${rotulo} concluído.` }); await carregar(); }
     } catch { setMsg({ tipo: 'erro', txt: `Falha de conexão em ${rotulo}.` }); }
+    setOcupado('');
+  }
+
+  // Sobe o OFX em base64. O arquivo é texto, mas vem em ISO-8859-1 com frequência — mandar
+  // como string deixaria o navegador "consertar" o acento e o servidor receberia lixo. Em
+  // base64 os bytes chegam intactos e quem decide o encoding é o leitor, lendo o cabeçalho.
+  async function enviarOfx(file) {
+    if (!file) return;
+    setOcupado('importar_ofx'); setMsg(null); setOfxErros([]);
+    try {
+      const b64 = await new Promise((resolve, reject) => {
+        const fr = new FileReader();
+        fr.onload = () => resolve(String(fr.result).split(',')[1] || '');
+        fr.onerror = reject;
+        fr.readAsDataURL(file);
+      });
+      const r = await apiCall('/api/conciliacao', {
+        method: 'POST',
+        body: JSON.stringify({ acao: 'importar_ofx', arquivo: b64, banco: bancoOfx, de, ate }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) { setMsg({ tipo: 'erro', txt: d?.error || 'Não consegui importar o OFX.' }); setOfxErros(d?.erros || []); }
+      else { setMsg({ tipo: 'ok', txt: d.mensagem || 'Extrato importado.' }); setOfxErros(d.erros || []); await carregar(); }
+    } catch { setMsg({ tipo: 'erro', txt: 'Falha ao ler o arquivo.' }); }
     setOcupado('');
   }
 
@@ -94,10 +120,65 @@ export default function ConciliacaoBancaria() {
         <button onClick={() => acao('classificar', {}, 'Reclassificação')} disabled={!!ocupado} style={{ ...btn('#fff'), color: '#334155', border: '1px solid #cbd5e1' }}>
           <FileText size={14} /> Reclassificar
         </button>
+        {/* FECHAR A COMPETÊNCIA — o mês entregue à contabilidade para de aceitar lançamento
+            novo. Sem isso, uma reimportação ou um extrato atrasado muda a DRE de um mês já
+            assinado, e o contador perde a confiança no número. Reabrir é possível, exige
+            motivo e fica registrado: a trava serve para tornar a mudança consciente. */}
+        <button
+          onClick={() => {
+            if (!window.confirm(`Fechar a competência ${de}?\n\nDepois disso, nenhum lançamento entra, muda ou sai desse mês — é o que garante que a DRE entregue à contabilidade não mude depois. Dá para reabrir informando o motivo.`)) return;
+            acao('fechar_competencia', { competencia: de }, 'Fechamento');
+          }}
+          disabled={!!ocupado}
+          style={{ ...btn('#fff'), color: '#92400e', border: '1px solid #fcd34d' }}>
+          <Check size={14} /> Fechar {de}
+        </button>
+        <button
+          onClick={() => {
+            const motivo = window.prompt(`Reabrir a competência ${de}?\n\nInforme o motivo — ele fica registrado com o seu nome e a data:`);
+            if (motivo === null) return;
+            if (!motivo.trim()) { setMsg({ tipo: 'erro', txt: 'A reabertura exige um motivo.' }); return; }
+            acao('reabrir_competencia', { competencia: de, motivo: motivo.trim() }, 'Reabertura');
+          }}
+          disabled={!!ocupado}
+          style={{ ...btn('#fff'), color: '#64748b', border: '1px solid #e2e8f0' }}>
+          Reabrir
+        </button>
       </div>
 
       <div style={{ fontSize: 11.5, color: '#64748b', marginBottom: 12, lineHeight: 1.55 }}>
         O extrato das contas conectadas entra <strong>sozinho todo dia</strong> (janela de 45 dias, para pegar estorno e recebimento retroativo). O botão acima é só para ver o movimento de hoje sem esperar.
+      </div>
+
+      {/* ── EXTRATO DE BANCO POR ARQUIVO (OFX) ──────────────────────────────────────────
+          Mercado Pago, Asaas e Inter entram por API. Bradesco, C6 e Caixa não têm caminho
+          automático viável hoje — mas todos exportam OFX no internet banking. O arquivo
+          entra aqui e segue o MESMO fluxo: mesma tabela, mesma classificação, mesma DRE.
+          Reimportar não duplica (a chave é conta + identificador do lançamento). */}
+      <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '13px 15px', marginBottom: 14 }}>
+        <div style={{ fontSize: 12.5, fontWeight: 800, color: '#334155', marginBottom: 6 }}>Extrato de banco por arquivo (OFX)</div>
+        <div style={{ fontSize: 11.5, color: '#64748b', marginBottom: 10, lineHeight: 1.55 }}>
+          Para Bradesco, C6, Caixa e qualquer conta sem integração. No internet banking, exporte o extrato no formato <strong>OFX</strong> (às vezes aparece como “Money”, “Dinheiro” ou “OFX/QIF”). Reimportar o mesmo arquivo <strong>não duplica</strong> lançamento.
+        </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <select value={bancoOfx} onChange={e => setBancoOfx(e.target.value)}
+            style={{ padding: '7px 10px', borderRadius: 8, border: '1px solid #cbd5e1', fontSize: 13 }}>
+            {['Bradesco', 'C6 Bank', 'Caixa', 'Banco Inter', 'Outro banco'].map(b => <option key={b} value={b}>{b}</option>)}
+          </select>
+          <label style={{ ...btn(ocupado === 'importar_ofx' ? '#94a3b8' : '#059669'), cursor: ocupado ? 'default' : 'pointer' }}>
+            {ocupado === 'importar_ofx'
+              ? <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Lendo o arquivo…</>
+              : <><Download size={14} style={{ transform: 'rotate(180deg)' }} /> Enviar arquivo OFX</>}
+            <input type="file" accept=".ofx,.OFX,text/plain,application/x-ofx" style={{ display: 'none' }}
+              disabled={!!ocupado} onChange={e => enviarOfx(e.target.files?.[0])} />
+          </label>
+        </div>
+        {ofxErros.length > 0 && (
+          <div style={{ marginTop: 9, background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '8px 10px', fontSize: 11.5, color: '#92400e', lineHeight: 1.6 }}>
+            <strong>Linhas ignoradas nesta importação:</strong>
+            <ul style={{ margin: '4px 0 0', paddingLeft: 16 }}>{ofxErros.slice(0, 8).map((e, i) => <li key={i}>{e}</li>)}</ul>
+          </div>
+        )}
       </div>
 
       {msg && (
