@@ -100,7 +100,11 @@ export default function ExtratoUnificado() {
       {dados && dados.completo === false && (
         <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '10px 13px', fontSize: 12, color: '#b91c1c', marginBottom: 10, lineHeight: 1.55, fontWeight: 600 }}>
           <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 1 }} />
-          <span>Estes totais estão <strong>incompletos</strong>: o período tem mais lançamentos do que a leitura consegue trazer de uma vez. Reduza o período para conferir valores.</span>
+          {/* A faixa NÃO crava mais a causa (10/08). O texto anterior dizia sempre "o período tem
+              mais lançamentos... reduza o período", mas incompleto também acontece quando a API
+              do gateway RECUSA a leitura (403) — e aí reduzir o período não resolve nada. A causa
+              real vem em `avisos`, logo abaixo, fonte por fonte. */}
+          <span>Estes totais estão <strong>incompletos</strong> — parte do movimento não entrou na soma. O motivo está em <strong>Cobertura</strong>, logo abaixo.</span>
         </div>
       )}
 

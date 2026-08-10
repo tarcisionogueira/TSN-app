@@ -79,18 +79,27 @@ async function mp(path) {
 const PAGINA = 100;
 const MAX_PAGINAS = 30; // 3.000 lançamentos por fonte
 
+// FALHA DA FONTE ≠ FIM DAS PÁGINAS (10/08). `asaas()`/`mp()` devolvem `null` em qualquer
+// resposta não-ok, e o `if (!j) break` tratava isso EXATAMENTE como "acabaram as páginas":
+// um 403 na primeira página produzia `{itens: [], truncado: false}` e o extrato seguia
+// carimbando `completo: true` sobre o que sobrou. Estava acontecendo de verdade — os logs da
+// Vercel destes dias trazem `[financeiro] asaas /transfers?... 403`, ou seja, TODAS as saídas
+// da conta Asaas estavam fora do extrato, do `por_categoria` e do `resultado`, com o payload
+// afirmando que o total era completo. O autor já tinha a confissão certa para o teto de
+// paginação (`truncado`) e para o saldo (`saldo_indisponivel`); faltava para a falha de rede.
+// Um `null` aqui é SEMPRE falha: uma página vazia bem-sucedida devolve `{data: []}`, não null.
 async function asaasPaginado(base) {
   const itens = [];
   let truncado = false;
   for (let p = 0; p < MAX_PAGINAS; p++) {
     const j = await asaas(`${base}&limit=${PAGINA}&offset=${p * PAGINA}`);
-    if (!j) break;
+    if (!j) return { itens, truncado, falhou: true };
     const lote = j.data || [];
     itens.push(...lote);
-    if (!j.hasMore || lote.length === 0) return { itens, truncado: false };
+    if (!j.hasMore || lote.length === 0) return { itens, truncado: false, falhou: false };
     if (p === MAX_PAGINAS - 1) truncado = true;
   }
-  return { itens, truncado };
+  return { itens, truncado, falhou: false };
 }
 
 async function mpPaginado(base) {
@@ -98,14 +107,14 @@ async function mpPaginado(base) {
   let truncado = false;
   for (let p = 0; p < MAX_PAGINAS; p++) {
     const j = await mp(`${base}&limit=${PAGINA}&offset=${p * PAGINA}`);
-    if (!j) break;
+    if (!j) return { itens, truncado, falhou: true };
     const lote = j.results || [];
     itens.push(...lote);
     const total = Number(j.paging?.total ?? 0);
-    if (lote.length === 0 || itens.length >= total) return { itens, truncado: false };
+    if (lote.length === 0 || itens.length >= total) return { itens, truncado: false, falhou: false };
     if (p === MAX_PAGINAS - 1) truncado = true;
   }
-  return { itens, truncado };
+  return { itens, truncado, falhou: false };
 }
 
 export default async function handler(req, res) {
@@ -150,11 +159,20 @@ export default async function handler(req, res) {
       truncado = true;
       avisos.push(`Asaas: o período tem mais de ${MAX_PAGINAS * PAGINA} lançamentos e a leitura parou nesse teto — os totais abaixo estão INCOMPLETOS. Reduza o período.`);
     }
+    if (recebidos.falhou || transfers.falhou) {
+      truncado = true;
+      const quais = [recebidos.falhou && 'recebimentos', transfers.falhou && 'transferências/saídas'].filter(Boolean).join(' e ');
+      avisos.push(`Asaas: a leitura de ${quais} FALHOU (a API recusou ou não respondeu — confira o status no log). Os totais abaixo estão INCOMPLETOS: o que não foi lido não está somado.`);
+    }
     // Asaas é o gateway de BACKUP (o principal é o Mercado Pago; ver Checkout.jsx, que só
     // cai no Asaas quando o MP falha ou recusa). Período sem lançamento aqui costuma ser
     // BOA notícia — significa que o principal não falhou. O aviso existe para não confundir
     // "não teve fallback" com "não consegui ler a conta": são coisas diferentes.
-    if (!recebidos.itens.length && !transfers.itens.length) {
+    // Só afirma "sem lançamentos" quando as DUAS leituras deram certo. Antes este aviso saía
+    // também quando a chamada tinha falhado — e aí ele REAFIRMAVA a leitura errada, ensinando
+    // a ler "vazio = o principal não falhou" (que é o que o CLAUDE.md instrui) num caso em que
+    // vazio significava 403. Vazio por falha é o oposto de vazio por ausência de movimento.
+    if (!recebidos.falhou && !transfers.falhou && !recebidos.itens.length && !transfers.itens.length) {
       avisos.push('Asaas (gateway de backup) sem lançamentos no período — esperado quando o Mercado Pago não falhou. Se você esperava movimento aqui, confira a ASAAS_API_KEY do ambiente.');
     }
     for (const p of recebidos.itens) {
@@ -193,12 +211,25 @@ export default async function handler(req, res) {
       saldo_a_liberar: bal ? num(bal.unavailable_balance ?? bal.unavailable) : null,
       saldo_indisponivel: !bal,
     });
-    if (!bal) avisos.push('O Mercado Pago não expõe o saldo desta conta pela API.');
+    // NÃO afirmar a causa: o log mostra 403 nesta chamada, que é escopo/permissão do token —
+    // corrigível no painel do MP. O texto anterior ("não expõe o saldo pela API") dava o
+    // problema como limitação da plataforma e ensinava a NÃO corrigir o que é corrigível.
+    if (!bal) avisos.push('Não consegui ler o saldo do Mercado Pago agora (a API recusou a consulta — em geral é permissão/escopo do token de acesso).');
 
     const busca = await mpPaginado(`/v1/payments/search?sort=date_created&criteria=desc&range=date_created&begin_date=${desde}T00:00:00.000-03:00&end_date=${ate}T23:59:59.999-03:00`);
     if (busca.truncado) {
       truncado = true;
       avisos.push(`Mercado Pago: o período tem mais de ${MAX_PAGINAS * PAGINA} lançamentos e a leitura parou nesse teto — os totais abaixo estão INCOMPLETOS. Reduza o período.`);
+    }
+    if (busca.falhou) {
+      truncado = true;
+      avisos.push('Mercado Pago: a busca de pagamentos FALHOU (a API recusou ou não respondeu). Os totais abaixo estão INCOMPLETOS — e como o MP é o gateway PRINCIPAL, provavelmente falta a maior parte do movimento.');
+    }
+    // `/users/me` é o que resolve o nosso id; sem ele, `somosRecebedor` assume `true` para
+    // TODO pagamento e uma saída pode ser somada como entrada. Isso não pode passar calado.
+    if (!me) {
+      truncado = true;
+      avisos.push('Mercado Pago: não consegui identificar a conta (/users/me falhou). Sem isso não dá para separar com segurança o que entrou do que saiu — trate o resultado como provisório.');
     }
     for (const p of busca.itens) {
       if (p.status !== 'approved') continue;

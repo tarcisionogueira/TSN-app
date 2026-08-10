@@ -36,11 +36,54 @@ export default async function handler(req, res) {
   // 'plano_anual' marca o PIX-anuidade do Investidor Pro (ativação verificada em
   // /api/ativar-pro-anual). O metadata.tipo continua 'servico' (o webhook NUNCA eleva
   // plano por pagamento único — a ativação é feita à parte, conferindo valor+dono+aprovação).
-  const PROPOSITOS = new Set(['servico', 'recarga', 'plano_anual']);
+  const PROPOSITOS = new Set(['servico', 'recarga', 'plano_anual', 'assessoria']);
   const proposito = PROPOSITOS.has(String(req.body?.proposito)) ? String(req.body.proposito) : 'servico';
 
   const valorCentavos = Math.round(Number(valor) * 100);
   if (valorCentavos < 100) return res.status(400).json({ error: 'Valor mínimo R$ 1,00' });
+
+  // ASSESSORIA — o gate "1 assessoria por contrato" e o PREÇO precisam valer AQUI (10/08).
+  // Este endpoint é o que efetivamente COBRA a assessoria (Checkout.jsx → PagamentoServico →
+  // /api/mp-checkout), e era o único caminho de assessoria sem gate: ele existia em /api/mp,
+  // /api/asaas e /api/auto-contrato — nenhum dos três no caminho do dinheiro. Resultado
+  // possível: cliente com assessoria em andamento paga R$ 4.800–6.000, vê "Pagamento
+  // aprovado" e não recebe contrato, porque o auto-contrato (fail-closed, correto) recusa
+  // DEPOIS. Cobrar e não entregar é o pior desfecho possível — o gate vem antes da cobrança.
+  if (proposito === 'assessoria') {
+    const SB_URL = process.env.VITE_SUPABASE_URL, SB_KEY = process.env.SUPABASE_SERVICE_KEY;
+    const sbGet = (p) => fetch(`${SB_URL}/rest/v1/${p}`, {
+      headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` }, signal: AbortSignal.timeout(10000),
+    });
+    try {
+      const [pr] = await (await sbGet(`perfis?id=eq.${encodeURIComponent(user.id)}&select=role`)).json();
+      const { podeContratarAssessoria } = await import('./_assessoria.js');
+      const gate = await podeContratarAssessoria({ userId: user.id, email: user.email, role: pr?.role || null });
+      if (!gate.podeContratar) {
+        return res.status(409).json({ error: 'Não é possível contratar a assessoria agora.', motivo: gate.motivo });
+      }
+      // PREÇO DO SERVIDOR. `transaction_amount` vinha do body do cliente, sem nenhum confronto
+      // com `planos_config` — o mesmo cuidado que /api/mp já tem para a assinatura.
+      // NÃO é igualdade: de 4x em diante o cliente assume os juros (PagamentoServico
+      // `calcParcelaMaisJuros`), então o total legítimo passa do preço de tabela. O que precisa
+      // ser barrado é pagar MENOS que o preço vigente e receber o serviço. Piso = o menor preço
+      // vigente (à vista, quando existe); teto de 2× como sanidade contra valor absurdo — a
+      // maior taxa é 3,49% a.a. em 12x, muito abaixo disso.
+      const [cfg] = await (await sbGet(`planos_config?plano_key=eq.assessorado&select=preco,preco_vista&limit=1`)).json();
+      const vigentes = [cfg?.preco, cfg?.preco_vista].map(Number).filter((n) => n > 0);
+      if (vigentes.length) {
+        const piso = Math.min(...vigentes), teto = Math.max(...vigentes) * 2;
+        const v = Number(valor);
+        if (v < piso - 0.01 || v > teto) {
+          return res.status(400).json({ error: 'Valor da assessoria não confere com o preço vigente.' });
+        }
+      }
+    } catch (e) {
+      // FAIL-CLOSED: sem conseguir conferir o gate ou o preço, NÃO cobra. Um erro de leitura
+      // não pode virar autorização para debitar milhares de reais.
+      console.error('[mp-checkout] gate assessoria falhou', e?.message || e);
+      return res.status(503).json({ error: 'Não consegui validar a contratação agora. Tente em instantes.' });
+    }
+  }
 
   try {
     const payload = {

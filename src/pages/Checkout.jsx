@@ -10,6 +10,7 @@ import { supabase } from '../utils/supabase';
 import { fetchPlanosComConfig } from '../utils/planosConfig';
 import { apiCall } from '../utils/apiCall';
 import { salvarRef } from '../utils/ref';
+import { reportarErroCliente } from '../utils/reportarErro';
 import { versaoTermoProduto, termoDoProduto } from '../utils/termos';
 import PagamentoServico from '../components/PagamentoServico';
 import { ESTADOS_UF } from '../data/cidades';
@@ -195,6 +196,9 @@ export default function Checkout() {
   const [erro, setErro] = useState('');
   const [pago, setPago] = useState(false); // tela de aprovado
   const [pagoPendente, setPagoPendente] = useState(false); // assinatura em análise (3DS/antifraude)
+  // Pagou, mas o contrato não pôde ser emitido. Estado PRÓPRIO: sem ele, o cliente lia
+  // "Preparando seu contrato…" e caía na home sem contrato e sem explicação (10/08).
+  const [contratoFalhou, setContratoFalhou] = useState(false);
   const [modalidade, setModalidade] = useState('mensal'); // 'mensal' | 'vista'
   const [aceitouTermos, setAceitouTermos] = useState(false);
   const [asaasIds, setAsaasIds] = useState(null); // { subscriptionId, paymentId }
@@ -959,6 +963,11 @@ export default function Checkout() {
     // Reavalia o perfil AGORA para o novo role valer sem precisar de re-login/reload.
     try { await refreshPerfil?.(); } catch (_) {}
     if (planoKey === 'assessorado' || planoKey === 'clube') {
+      // O CONTRATO PODE NÃO SAIR, E ISSO NÃO PODE SER SILENCIOSO (10/08). O `auto-contrato` é
+      // fail-closed de propósito (409/502 quando não deve emitir). Antes, o `catch(_){}` engolia
+      // e o `data.token` indefinido caía no `nav('/')` do fim — o cliente acabava de PAGAR, lia
+      // "Pagamento aprovado! Preparando seu contrato para assinatura…" e era mandado para a home
+      // sem contrato e sem nenhuma explicação. Pagou e não recebeu, sem rastro.
       try {
         const res = await apiCall('/api/auto-contrato', {
           method: 'POST',
@@ -970,12 +979,24 @@ export default function Checkout() {
             emailUsuario: user?.email,
           }),
         });
-        const data = await res.json();
-        if (data.token) {
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.token) {
           setTimeout(() => nav(`/c/${data.token}`), 2000);
           return;
         }
-      } catch (_) {}
+        throw new Error(data?.error || data?.motivo || `auto-contrato ${res.status}`);
+      } catch (e) {
+        // Deixa RASTRO em `erros_cliente` (o mesmo canal que o ritual de abertura lê todo dia):
+        // "pagou e o contrato não saiu" é exatamente o que não pode passar despercebido.
+        try {
+          await reportarErroCliente({
+            msg: `PAGOU E O CONTRATO NÃO SAIU (${planoKey}): ${String(e?.message || e)}`,
+            url: window.location.href,
+          });
+        } catch (_) { /* rastro é best-effort; a tela abaixo é a garantia p/ o cliente */ }
+        setContratoFalhou(true);
+        return;
+      }
     }
     // Fluxo guiado: Pro recém-ativado → segue DIRETO para contratar o que motivou (assessoria).
     setTimeout(() => nav(aposPlano ? `/checkout?plano=${aposPlano}` : '/'), 3500);
@@ -994,6 +1015,27 @@ export default function Checkout() {
         <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Entrando…
       </div>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+    </div>
+  );
+
+  // PAGOU E O CONTRATO NÃO SAIU — precede a tela verde, porque dizer "aprovado" e sumir é pior
+  // que dizer a verdade. O pagamento está feito e registrado: a mensagem tranquiliza sobre o
+  // dinheiro e assume a pendência como NOSSA, sem mandar o cliente pagar de novo.
+  if (contratoFalhou) return (
+    <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #1e3a5f 0%, #0f172a 100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 20, textAlign: 'center' }}>
+      <AlertTriangle size={52} color="#fbbf24" style={{ marginBottom: 18 }} />
+      <h1 style={{ color: 'white', fontWeight: 900, fontSize: 26, margin: '0 0 12px' }}>Pagamento confirmado — contrato pendente</h1>
+      <p style={{ color: '#cbd5e1', fontSize: 15, margin: '0 0 26px', lineHeight: 1.7, maxWidth: 460 }}>
+        Seu pagamento foi <strong style={{ color: 'white' }}>recebido e registrado</strong>. Não conseguimos gerar o contrato de assinatura automaticamente agora — nossa equipe já foi avisada e conclui para você. <strong style={{ color: 'white' }}>Não pague de novo.</strong>
+      </p>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
+        <button onClick={() => { setContratoFalhou(false); confirmarPagamento(); }}
+          style={{ padding: '12px 20px', background: '#059669', color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 14.5, cursor: 'pointer' }}>Tentar gerar de novo</button>
+        {/* Mesmo caminho que o resto do app usa para suporte: o chat, por evento. NÃO existe
+            rota /suporte — um nav() para lá cairia em 404 justamente com o cliente aflito. */}
+        <button onClick={() => window.dispatchEvent(new CustomEvent('tsn:open-chat'))}
+          style={{ padding: '12px 20px', background: 'transparent', color: '#93c5fd', border: '1px solid #334155', borderRadius: 12, fontWeight: 700, fontSize: 14.5, cursor: 'pointer' }}>Falar com o suporte</button>
+      </div>
     </div>
   );
 
@@ -1485,6 +1527,10 @@ export default function Checkout() {
                 nome: `${plano.nome}${modalidade === 'vista' ? ' (à vista)' : ' (parcelado)'}`,
                 valor: modalidade === 'vista' ? (plano.precoVista || plano.preco) : plano.preco,
                 descricao: plano.nome,
+                // Declara o propósito para o /api/mp-checkout aplicar o gate "1 assessoria por
+                // contrato" e conferir o preço no servidor ANTES de cobrar (10/08). Sem isto o
+                // pagamento da assessoria era o único caminho de dinheiro sem gate nenhum.
+                proposito: 'assessoria',
               }}
               assinatura={false}
               onPago={() => confirmarPagamento()}

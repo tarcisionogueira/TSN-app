@@ -446,7 +446,11 @@ export default function Painel() {
     // cliente confirma o registro e anexa os documentos do arremate.
     nav('/arrematados', { state: { prefill: {
       titulo: im.nome || im.titulo || '', cidade: im.cidade || '', estado: im.estado || '',
-      valor: im.valorArrematacao || im.valorMinimo || '', imovelId: im.id || null,
+      // SÓ o uuid do acervo. `im.id` é o id LOCAL do portfólio (`tsn_…`) e ia direto para
+      // `arrematados.imovel_id`, coluna TEXT que o aceitava e depois não casava com nenhuma
+      // tabela de verdade. Sem uuid, vai `null` — e o Arrematados cria a âncora certa via
+      // /api/arrematado-ancora, que é exatamente o caminho previsto para lote fora do acervo.
+      valor: im.valorArrematacao || im.valorMinimo || '', imovelId: im.imovelIdAcervo || null,
       imovel: im, modalidade: /judicial/i.test(im.modalidade || '') && !/extra/i.test(im.modalidade || '') ? 'judicial' : 'extrajudicial',
     } } });
   };

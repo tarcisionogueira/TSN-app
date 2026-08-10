@@ -190,7 +190,13 @@ export default function Analise() {
 
   const [d, setD] = useState(() => {
     if (imovelInicial) return {
-      ...VAZIO, id: generateId(), nome: imovelInicial.titulo||'',
+      // `id` é o id LOCAL do portfólio (`tsn_…`), gerado sempre — inclusive para lote vindo do
+      // acervo. Guardar o uuid REAL à parte (10/08): sem ele, quem seguisse do portfólio para
+      // "Arrematei" gravava o `tsn_…` em `arrematados.imovel_id`, e esse id não casa com
+      // `imovel_anexos`/`analises_mercado`/`imoveis_leilao` — documentos somem, upload é
+      // recusado e a lista de arremates zera inteira. O uuid já existia na tela
+      // (`analiseImovelId`), só não sobrevivia ao registro salvo.
+      ...VAZIO, id: generateId(), imovelIdAcervo: imovelInicial.id || null, nome: imovelInicial.titulo||'',
       tipo: imovelInicial.tipo||'apartamento', endereco: imovelInicial.endereco||'',
       cidade: imovelInicial.cidade||'', estado: imovelInicial.estado||'',
       valorAvaliacao: imovelInicial.valorAvaliacao||0, valorArrematacao: pracaAlvo.valor || imovelInicial.valorMinimo || 0,

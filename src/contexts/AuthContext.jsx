@@ -3,7 +3,7 @@ import { supabase } from '../utils/supabase';
 import { ativarPushAutomatico } from '../utils/push';
 import { salvarRef, lerRef, limparRef } from '../utils/ref';
 import { lerMarketing } from '../utils/marketing';
-import { salvarConvite, lerConvite, limparConvite, CHAVE_EQUIPE, CHAVE_CLIENTE } from '../utils/convitePendente';
+import { salvarConvite, lerConvite, limparConvite, CHAVE_EQUIPE, CHAVE_CLIENTE, CHAVE_PLANO } from '../utils/convitePendente';
 
 const AuthContext = createContext(null);
 
@@ -272,6 +272,28 @@ export function AuthProvider({ children }) {
           if (oauthDest) {
             sessionStorage.removeItem('tsn_oauth_redirect');
             if (window.location.hash.replace(/^#/, '') !== oauthDest) window.location.hash = oauthDest;
+          }
+          // PLANO ESCOLHIDO ANTES DO CADASTRO — resgatado aqui (10/08). `CHAVE_PLANO` era
+          // GRAVADA em três lugares (Login, Checkout) e LIDA só dentro do Login.jsx, no
+          // `handleLogin`/`handleGoogle`. Só que o caminho mais comum não passa por nenhum dos
+          // dois: quem escolhe plano pago se cadastra, abre o e-mail (em geral no celular, outra
+          // aba), clica em confirmar, e o Supabase estabelece a sessão por `detectSessionInUrl`
+          // — que dispara ESTE bloco e joga a pessoa em `${origin}/`. Ela chegava na Home como
+          // explorador, sem nenhuma menção ao plano, depois de a tela ter prometido "após o
+          // login você será direcionado para o pagamento". A intenção de compra evaporava no
+          // ponto final do funil. O resgate vive junto dos outros (convite de cliente, de
+          // equipe, ref, marketing) porque é o único ponto por onde TODOS os logins passam.
+          // Roda depois do oauthDest para não competir com ele, e o `limparConvite` garante
+          // que aconteça no máximo uma vez.
+          const planoPend = lerConvite(CHAVE_PLANO);
+          if (planoPend && !oauthDest) {
+            limparConvite(CHAVE_PLANO);
+            // Já está no plano que pediu (webhook chegou antes, ou pagou por outro caminho):
+            // não manda para o checkout cobrar de novo.
+            const roleBase = String(p.role || '').replace(/_anual$/, '');
+            if (roleBase !== String(planoPend) && !/^\/?checkout/.test(window.location.hash.replace(/^#/, ''))) {
+              window.location.hash = `/checkout?plano=${encodeURIComponent(planoPend)}`;
+            }
           }
           updateActivity();
         }

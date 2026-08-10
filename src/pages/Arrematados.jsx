@@ -47,7 +47,18 @@ function StatOp({ label, valor, cor, sub }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Tela do arremate (dedicada): números da operação + Lançamentos + Documentos
 // ─────────────────────────────────────────────────────────────────────────────
-function Detalhe({ arr, onBack, onChange, soLeitura, permitirAnexo = !soLeitura }) {
+// `arrematados.imovel_id` é TEXT, mas as tabelas com que ele casa (`imovel_anexos.imovel_id`,
+// `analises_mercado.imovel_id`, `imoveis_leilao.id`) são UUID. Um id LOCAL de portfólio
+// (`tsn_<ts>_<rand>`, gerado no Analise.jsx) cabia na coluna e passava no insert — e depois
+// quebrava toda consulta que o usasse, com PostgREST 400 `22P02`. Como o supabase-js devolve
+// `{data:null,error}` e boa parte do código só desestrutura `data`, o erro virava lista vazia:
+// UM arremate ruim zerava `0 docs` e as avaliações da LISTA INTEIRA. Este guarda separa o que
+// é chave de banco do que é id local. (10/08)
+const ehUuid = (v) => typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+
+// `podeRemover` espelha a policy `imovel_anexos_delete` (admin/analista). Não é cosmético:
+// mostrar lixeira para quem o banco não autoriza produz a mentira do "removido" que volta.
+function Detalhe({ arr, onBack, onChange, soLeitura, podeRemover = false, permitirAnexo = !soLeitura }) {
   const [aba, setAba] = React.useState(arr._abaInicial || 'lancamentos');
   // Contratos VINCULADOS a esta arrematação (aparecem junto dos documentos, mesmo assinados).
   const [contratosVinc, setContratosVinc] = React.useState([]); // só LEITURA (vincular é no módulo de Contratos)
@@ -93,7 +104,9 @@ function Detalhe({ arr, onBack, onChange, soLeitura, permitirAnexo = !soLeitura 
   // Documentos do arremate: fonte única = imovel_anexos (é o que a atribuição gravou
   // e o que a IA lê). Assim os anexos incluídos na atribuição aparecem aqui.
   const carregarDocs = React.useCallback(async () => {
-    if (!imovelId) { setDocs([]); setDocsLoading(false); return; }
+    // Só consulta com uuid: com `tsn_…` o PostgREST devolve 400 e a lista ficava vazia sem
+    // nenhum aviso — o cliente via "nenhum documento" num arremate que tinha edital e matrícula.
+    if (!ehUuid(imovelId)) { setDocs([]); setDocsLoading(false); return; }
     setDocsLoading(true);
     const { data } = await supabase.from('imovel_anexos')
       .select('id,tipo,nome,storage_path,validacao,criado_em')
@@ -171,7 +184,10 @@ function Detalhe({ arr, onBack, onChange, soLeitura, permitirAnexo = !soLeitura 
 
   // Garante o imóvel-âncora (cria sob demanda se o arrematado não veio da base).
   const garantirAncora = async () => {
-    if (imovelId) return imovelId;
+    // `if (imovelId)` sozinho aceitava o `tsn_…` (truthy) e mandava esse id para o
+    // /api/upload-anexo, que exige uuid → "imovel_id inválido" e nenhum documento anexável.
+    // Id que não é uuid = âncora ainda não existe: cria.
+    if (ehUuid(imovelId)) return imovelId;
     const { data: { session } } = await supabase.auth.getSession();
     const res = await fetch('/api/arrematado-ancora', {
       method: 'POST', headers: { 'Content-Type': 'application/json', ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) },
@@ -216,8 +232,18 @@ function Detalhe({ arr, onBack, onChange, soLeitura, permitirAnexo = !soLeitura 
   };
   const delDoc = async (d) => {
     if (!confirm(`Remover "${d.nome}"? Use quando o anexo não tiver a ver com esta arrematação.`)) return;
-    const { error } = await supabase.from('imovel_anexos').delete().eq('id', d.id);
+    // `.select()` para saber o que REALMENTE saiu (10/08). RLS que filtra linhas NÃO é erro:
+    // quando a política não alcança o usuário, o delete casa ZERO linhas e o supabase-js
+    // devolve `error: null`. O código antigo lia isso como sucesso, tirava o item da lista e
+    // o documento reaparecia no reload — a tela afirmava uma remoção que nunca houve. Agora a
+    // prova é a linha devolvida, não a ausência de erro; se a política mudar de novo, a tela
+    // avisa em vez de mentir.
+    const { data, error } = await supabase.from('imovel_anexos').delete().eq('id', d.id).select('id');
     if (error) { alert('Não foi possível remover o documento.'); return; }
+    if (!data || data.length === 0) {
+      alert('Este documento não pôde ser removido por aqui. Documento de arrematação é prova e a guarda é nossa — peça a remoção ao suporte que a equipe executa.');
+      return;
+    }
     setDocs(prev => prev.filter(x => x.id !== d.id));
   };
 
@@ -347,7 +373,10 @@ function Detalhe({ arr, onBack, onChange, soLeitura, permitirAnexo = !soLeitura 
                     </div>
                   )}
                   <div style={{ fontSize: 12, color: '#64748b', marginBottom: 8, lineHeight: 1.5 }}>
-                    Selecione o tipo e anexe o PDF (auto de arrematação, carta, escritura, matrícula registrada…). Os documentos ficam <b>permanentes</b> e alimentam a IA. Ao anexar, a IA <b>confere automaticamente</b> se o documento é desta arrematação — se sinalizar que <b>não é</b>, remova pelo ícone de lixeira.
+                    {/* A instrução dizia "remova pelo ícone de lixeira" — mas a policy de DELETE
+                        do dono foi revogada em 07/08 (documento de arremate é prova; a guarda é
+                        obrigação nossa). A tela mandava fazer o que o banco não permite. */}
+                    Selecione o tipo e anexe o PDF (auto de arrematação, carta, escritura, matrícula registrada…). Os documentos ficam <b>permanentes</b> e alimentam a IA. Ao anexar, a IA <b>confere automaticamente</b> se o documento é desta arrematação — se sinalizar que <b>não é</b>, {podeRemover ? <>remova pelo ícone de lixeira.</> : <>peça a remoção ao suporte: a guarda do documento é nossa e quem executa é a equipe.</>}
                   </div>
                   <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
                     <select value={docTipo} onChange={e => setDocTipo(e.target.value)} style={{ ...inp, flex: 1, minWidth: 200 }}>
@@ -379,7 +408,7 @@ function Detalhe({ arr, onBack, onChange, soLeitura, permitirAnexo = !soLeitura 
                         </div>
                       </div>
                       <button onClick={() => abrirDoc(d)} title="Abrir" style={{ background: 'none', border: 'none', color: '#0D63DB', cursor: 'pointer' }}><ExternalLink size={15} /></button>
-                      {!soLeitura && <button onClick={() => delDoc(d)} title="Remover" style={{ background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer' }}><Trash2 size={15} /></button>}
+                      {podeRemover && <button onClick={() => delDoc(d)} title="Remover" style={{ background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer' }}><Trash2 size={15} /></button>}
                     </div>
                   ))}
                 </div>
@@ -525,7 +554,10 @@ export default function Arrematados() {
       (ls || []).forEach(l => { acc[l.arrematado_id] = (acc[l.arrematado_id] || 0) + (l.tipo === 'entrada' ? 1 : -1) * Number(l.valor || 0); });
       setSaldos(acc);
       // números por imóvel: nº de documentos (imovel_anexos) + valor de mercado (relatório)
-      const imovelIds = [...new Set(lista.map(a => a.imovel_id).filter(Boolean))];
+      // `filter(ehUuid)` e não `filter(Boolean)`: um único id local na lista fazia as três
+      // consultas `.in(...)` abaixo falharem de uma vez, zerando docs e avaliações de TODOS
+      // os arremates do usuário. Um registro ruim não pode contaminar os bons.
+      const imovelIds = [...new Set(lista.map(a => a.imovel_id).filter(ehUuid))];
       if (imovelIds.length) {
         try {
           const { data: an } = await supabase.from('imovel_anexos').select('imovel_id').in('imovel_id', imovelIds);
@@ -593,7 +625,7 @@ export default function Arrematados() {
   return (
     <div style={{ maxWidth: 900, margin: '0 auto', padding: isMobile ? '16px 12px' : '28px 20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
       {sel ? (
-        <Detalhe arr={sel} soLeitura={soLeitura} permitirAnexo={permitirAnexo} onBack={() => { setSel(null); carregar(); }} onChange={(u) => { setSel(u); setArrematados(prev => prev.map(a => a.id === u.id ? u : a)); }} />
+        <Detalhe arr={sel} soLeitura={soLeitura} podeRemover={['admin', 'analista'].includes(role)} permitirAnexo={permitirAnexo} onBack={() => { setSel(null); carregar(); }} onChange={(u) => { setSel(u); setArrematados(prev => prev.map(a => a.id === u.id ? u : a)); }} />
       ) : (
       <>
       <div>
