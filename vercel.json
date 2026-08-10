@@ -26,10 +26,7 @@
     {
       "source": "/(.*)",
       "headers": [
-        {
-          "//": "camera=(self) e geolocation=(self): a lista VAZIA — camera=() — nega a permissão para TODO MUNDO, inclusive a própria origem. Com ela, getUserMedia rejeitava na hora com NotAllowedError e o navegador NUNCA chegava a perguntar: a tela dizia 'permissão negada' sem existir prompt para o usuário aceitar (achado do dono em 09/08, no PWA e no navegador). Isso derrubava em silêncio a selfie do KYC, a validação de identidade da equipe (ConviteEquipe) e a foto do documento no contrato. O geolocation=() era pior por ser INVISÍVEL: a assinatura de contrato grava latitude/longitude como elemento de validade jurídica, o getCurrentPosition caía no callback de erro, o código resolvia null e o contrato era salvo SEM geo — anunciando geolocalização que não existia. Nenhum contrato havia sido assinado ainda, então não há passivo. microphone segue negado: não usamos.",
-          "key": "X-Content-Type-Options", "value": "nosniff"
-        },
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
         { "key": "X-Frame-Options", "value": "DENY" },
         { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
         { "key": "Permissions-Policy", "value": "camera=(self), microphone=(), geolocation=(self)" },
