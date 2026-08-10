@@ -28,8 +28,10 @@ insert into public.tour_etapas (versao, ordem, rota, titulo, descricao, roles, a
    'Aqui você encontra imóveis em leilão do Brasil inteiro e descobre, antes de dar o lance, se o negócio fecha. São 2 minutos para conhecer o caminho.',
    '{}', true),
 
+  -- Passo dos FILTROS (pedido do dono 09/08): é onde a busca deixa de ser uma lista de 30 mil
+  -- lotes e vira a lista dele. Sem citar os filtros, a pessoa rola a esmo e desiste.
   ('2026-08', 2, '/buscar', 'Comece pela busca',
-   'Filtre por cidade, tipo de imóvel, faixa de valor e desconto sobre a avaliação. Achou algo interessante? Abra o imóvel para ver fotos, mapa, edital e datas das praças.',
+   'Abra os Filtros no topo: cidade (com raio de distância), tipo de imóvel, faixa de valor, desconto mínimo sobre a avaliação, modalidade (judicial ou extrajudicial) e forma de pagamento — à vista, financiado ou parcelado. Salve a combinação em "Salvar filtros atuais" e a gente te avisa por e-mail quando entrar lote novo no seu perfil. Achou algo? Abra o imóvel para ver fotos, mapa, edital e as datas das praças.',
    '{}', true),
 
   ('2026-08', 3, '/analise', 'Você tem 3 análises gratuitas',

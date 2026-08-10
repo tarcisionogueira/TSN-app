@@ -153,11 +153,14 @@ export default function TourGuia() {
 
   return (
     <>
-      {/* Overlay escuro */}
-      <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 9000, backdropFilter: 'blur(2px)' }} onClick={fechar} />
+      {/* Véu LEVE e SEM blur (09/08, pedido do dono): o tour existe para mostrar a tela, e o
+          overlay a 0,75 com blur escondia justamente aquilo que cada passo está descrevendo —
+          a pessoa lia "Área de Membros" olhando para um borrão. Agora dá para ver o fundo e
+          entender do que o texto está falando; o card continua legível por contraste próprio. */}
+      <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.28)', zIndex: 9000 }} onClick={fechar} />
 
       {/* Card central do tour */}
-      <div style={{ position: 'fixed', bottom: 40, left: '50%', transform: 'translateX(-50%)', zIndex: 9001, width: 'calc(100% - 32px)', maxWidth: 520, background: 'white', borderRadius: 20, padding: '28px 28px 24px', boxShadow: '0 24px 60px rgba(0,0,0,0.5)' }}
+      <div style={{ position: 'fixed', bottom: 40, left: '50%', transform: 'translateX(-50%)', zIndex: 9001, width: 'calc(100% - 32px)', maxWidth: 520, background: 'white', borderRadius: 20, padding: '28px 28px 24px', boxShadow: '0 24px 70px rgba(0,0,0,0.45), 0 0 0 1px rgba(15,23,42,0.08)' }}
         onClick={e => e.stopPropagation()}>
 
         {/* Header */}
