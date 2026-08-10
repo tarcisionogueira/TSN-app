@@ -81,7 +81,7 @@ o que finalmente grava `perfis.nome` e faz as duas leituras concordarem.
 
 ---
 
-## ✅ SEGUNDA LEVA — CORRIGIDA EM 10/08 (commit `HASH`)
+## ✅ SEGUNDA LEVA — CORRIGIDA EM 10/08 (commit `1787f1d`)
 
 ### M8. Falha de leitura do perfil rebaixava o assinante — e ia para o cache — **RESOLVIDO**
 `const { data } = await …single()` descartava o `error`, e o postgrest-js não lança em não-2xx.
