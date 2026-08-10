@@ -73,15 +73,29 @@ export default async function handler(req) {
     const valorM2 = area > 0 ? Math.round(valor / area) : null;
 
     // 1) Gabarito na tabela do arremate.
-    await sb(`arrematados?id=eq.${arr.id}`, {
+    // FALHA-ALTO (10/08) — mesmo remédio do irmão `sinalizar-arremate.js:87`, que foi corrigido
+    // em 07/08 e não teve a correção propagada para cá. O PATCH era disparado com o resultado
+    // DESCARTADO e o handler devolvia `ok:true` de qualquer jeito; o front (`Arrematados.jsx:82`)
+    // só checa `res.ok`, marcava `revenda.ok = true` e mostrava o valor na tela — que sumia no
+    // próximo carregamento. E a revenda é o GABARITO que calibra as estimativas do Índice: o dado
+    // que o cliente acredita ter entregue simplesmente não entrava.
+    const pat = await sb(`arrematados?id=eq.${arr.id}`, {
       method: 'PATCH', headers: { Prefer: 'return=minimal' },
       body: JSON.stringify({ revenda_valor: valor, revenda_data: dataRef, revenda_m2: area || null }),
     });
+    if (!pat.ok) {
+      const corpo = await pat.text().catch(() => '');
+      console.error('[sinalizar-revenda] patch falhou', pat.status, String(corpo).slice(0, 300));
+      return new Response(JSON.stringify({ error: 'Não foi possível registrar a revenda agora. Tente novamente em instantes.' }), { status: 502, headers });
+    }
 
     // 2) Amostra REAL de mercado no Índice (só se der para calcular R$/m² plausível).
+    // Aqui o insert é ACESSÓRIO: o gabarito já está gravado acima. Uma falha não derruba a
+    // resposta, mas também NÃO pode ser reportada como sucesso — `amostra` passa a refletir o
+    // que de fato entrou, porque é isso que a tela mostra ao cliente.
     let amostra = false;
     if (cidadeNorm && uf && valorM2 && valorM2 >= 200 && valorM2 <= 50000) {
-      await sb('indice_amostra', {
+      const ins = await sb('indice_amostra', {
         method: 'POST', headers: { Prefer: 'return=minimal,resolution=ignore-duplicates' },
         body: JSON.stringify({
           cidade_norm: cidadeNorm, uf, bairro_norm: '', geo_grid: '', tipo: 'residencial',
@@ -89,7 +103,8 @@ export default async function handler(req) {
           data_ref: dataRef, fonte: 'Revenda (cliente)', origem: 'revenda', imovel_id: iid,
         }),
       });
-      amostra = true;
+      amostra = ins.ok;
+      if (!ins.ok) console.error('[sinalizar-revenda] amostra do Índice não entrou', ins.status);
     }
 
     // Log de atividade (Cliente 360) — best-effort, mesmo padrão do sinalizar-arremate.

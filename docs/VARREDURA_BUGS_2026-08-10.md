@@ -76,23 +76,60 @@ falha de leitura não bloqueia mais (o gate de verdade é o servidor); e o crit�
 a ser o MESMO do contexto, com o valor do metadata pré-preenchido para o usuário confirmar —
 o que finalmente grava `perfis.nome` e faz as duas leituras concordarem.
 > **Nota:** o achado **M8** (AuthContext descartando o `error` e gravando o perfil de falha no
-> cache) é o *outro* gatilho desta família e **segue aberto**.
+> cache) é o *outro* gatilho desta família — resolvido logo abaixo, na segunda leva.
+
+
+---
+
+## ✅ SEGUNDA LEVA — CORRIGIDA EM 10/08 (commit `HASH`)
+
+### M8. Falha de leitura do perfil rebaixava o assinante — e ia para o cache — **RESOLVIDO**
+`const { data } = await …single()` descartava o `error`, e o postgrest-js não lança em não-2xx.
+Um 500 transitório no refetch de foco virava `role:'explorador'` + `cadastroIncompleto:true`, e
+`savePerfilCache` **gravava isso** — então a próxima abertura hidratava com o perfil rebaixado.
+→ `maybeSingle()` separa de vez "não tem perfil" (dado) de "não consegui ler" (falha); o
+resultado carrega `falhouLeitura`; o cache só aceita leitura boa (`podeCachear`); e o popup de
+cadastro não abre numa falha — o `role` segue fail-closed, porque permissão a MAIS é pior, mas
+trancar o app atrás de um popup por um 500 é o oposto do que o popup existe para fazer.
+
+### M1. Documental: cota debitada e o cliente recebia o relatório ANTERIOR — **RESOLVIDO**
+Os dois pontos que chamam `preservarSeBom` fazem `if (_pres) return _pres;`, e o bloco de
+estorno estava LOGO ABAIXO desse `return` — inalcançável nesse caminho. O cliente pagava a cota
+e recebia de volta o relatório que já tinha.
+→ O estorno foi para DENTRO do helper, não nos chamadores: assim acompanha qualquer call site
+futuro, que é exatamente o tipo de "esqueceram no terceiro lugar" que criou o bug. E o `catch`
+passa a preservar `status:'concluida'` quando há relatório bom, alinhando com o gêmeo
+`gerar-analise.js:2603` — rebaixar para `'erro'` com um `result` bom na linha mostrava falha
+sobre um relatório que o cliente tem e fazia a próxima geração contar como nova.
+
+### M2. "Atualizar Pesquisa de Mercado": IA paga sem cota nem medição — **RESOLVIDO**
+Era o último ponto vivo do caminho LEGADO do cliente (`utils/claude.js` → `/api/claude`):
+Sonnet com `web_search max_uses: 8` a cada clique, sem debitar cota, sem debitar crédito, sem
+registrar custo — uma cota comprava pesquisas ilimitadas. E era o único botão da tela sem o gate
+`analisesBloqueado`, que os vizinhos já tinham.
+→ Passa pela geração do servidor (`gerarRelMercado`), que debita, mede e **persiste**. O caminho
+legado (`analisarMercadoClick` + o import de `analisarMercado`) foi **removido**: deixar código
+morto que gasta dinheiro é convite para ressuscitar.
+
+### M5. `sinalizar-revenda` devolvia `ok:true` sem checar a gravação — **RESOLVIDO**
+O PATCH era disparado com o resultado descartado. O front só checa `res.ok`, mostrava o valor na
+tela, e ele sumia no próximo carregamento — sendo que a revenda é o **gabarito que calibra o
+Índice**.
+→ Mesmo remédio do irmão `sinalizar-arremate.js:87` (corrigido em 07/08 e não propagado): 502
+quando o gabarito não grava. O insert da amostra do Índice é acessório e não derruba a resposta,
+mas `amostra` passa a refletir o que de fato entrou — é o que a tela mostra ao cliente.
+
+### M6. `validar-pj-socio` anunciava "pode sacar" sem checar a gravação — **RESOLVIDO**
+O helper `rpc()` devolve `{ok, data}` de propósito e o call site descartava os dois. Falhando a
+gravação, `pj_validada_em` ficava nulo — e é ele que `api/saque.js:224` exige — mas a resposta já
+dizia `matched: true` e a MinhaRede imprimia "✓ Empresa validada — você já pode solicitar o
+saque". Convidava a sacar e barrava na hora.
+→ Fail-closed: 502 quando a gravação não confirma. Confirmação de gate de dinheiro não se dá
+antes de o registro existir.
 
 ---
 
 ## 🟠 ABERTO — MÉDIA
-
-### M1. Documental: cota debitada e o cliente recebe o relatório ANTERIOR
-`api/gerar-documental.js:931,1458` (o `return` de `preservarSeBom` está ACIMA do estorno das
-linhas 942/1469). O `catch` sempre rebaixa para `status:'erro'`, o que torna a próxima geração
-"nova" e cobrável. O mercadológico trata o mesmo par e trata certo (`gerar-analise.js:2604`).
-
-### M2. "Atualizar Pesquisa de Mercado": IA paga sem cota, sem crédito e sem medição
-`src/pages/Analise.jsx:2946` → `api/claude.js`. Dispara Sonnet com `web_search max_uses: 8` a
-cada clique. Nenhum débito, nenhuma linha em `registrarCustoGeracao`. O botão segue ativo com
-`analisesBloqueado === true` — os botões vizinhos do mesmo arquivo têm o gate, só falta nele.
-Exige uma geração oficial antes, o que limita mas não impede: 1 cota compra pesquisas
-ilimitadas.
 
 ### M3. `retencao-avisos-cron`: a data anunciada não é a data aplicada
 `api/retencao-avisos-cron.js:120,140`. No caminho de REENVIO, `apagar_em` não está no `select`
@@ -107,28 +144,11 @@ não conta, não entra em `erros`, não alerta, não gera `emails_log` (este cro
 direto). E a janela é a igualdade `dtStr === hoje`: amanhã já não casa e o lembrete **nunca
 mais sai**.
 
-### M5. `sinalizar-revenda` devolve `ok:true` sem checar a gravação
-`api/sinalizar-revenda.js:76-92`. Irmão não corrigido do `sinalizar-arremate.js:87-91` (fechado
-em 07/08). A revenda é o **gabarito que calibra o Índice**: o dado que o cliente acha que
-entregou não entrou.
-
-### M6. `validar-pj-socio` anuncia "pode sacar" sem checar a gravação
-`api/validar-pj-socio.js:65`. O helper devolve `{ok, data}` de propósito e o call site descarta
-os dois. Se a RPC falhou, `pj_validada_em` fica nulo e `api/saque.js:224` barra o saque — o
-parceiro é convidado a sacar e bloqueado. (`Perfil.jsx` reconsulta e corrige o selo;
-`MinhaRede.jsx`, que é a tela que fala em saque, não.)
-
 ### M7. `/api/saque` lido sem `.ok` em duas telas
 `src/pages/MinhaRede.jsx:143` · `src/pages/Comissoes.jsx:66`. Em qualquer falha (401, 500,
 timeout), a tela mostra R$ 0,00 e *"Você ainda não tem saldo a sacar"* — indistinguível de um
 parceiro sem comissão. Com `faltando` vazio, nem o aviso de cadastro pendente aparece: a tela
 fica coerente e errada.
-
-### M8. Falha de leitura do perfil rebaixa o assinante — e é gravada no cache
-`src/contexts/AuthContext.jsx:28`. `const { data } = await ...single()` descarta o `error`;
-postgrest-js não lança em não-2xx. Um 500 transitório no refetch de foco vira
-`role:'explorador'` + `cadastroIncompleto:true`, e `savePerfilCache` **grava isso**. 401/403/406
-estão em `STATUS_IGNORADOS`, então nem rastro em `erros_cliente` fica.
 
 ### M9. `cancelar-nao-pagos-cron`: varredura sem teto dentro de `maxDuration: 60`
 `api/cancelar-nao-pagos-cron.js:20,73-112`. Até 300 chamadas ao Asaas por página, sequenciais,

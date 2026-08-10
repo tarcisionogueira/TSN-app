@@ -62,7 +62,17 @@ export default async function handler(req) {
   const r = await verificarSocioQSA({ cnpj: perfil.cnpj, cpf, nome: perfil.nome });
 
   if (r.matched) {
-    await rpc('registrar_pj_validacao_auto', { p_user_id: user.id, p_snapshot: r.snapshot });
+    // O helper `rpc()` devolve `{ok, data}` DE PROPÓSITO e o call site descartava os dois
+    // (10/08). Se a gravação falhasse, `pj_validada_em` continuava nulo — e é ele que
+    // `api/saque.js:224` exige — mas a resposta já dizia `matched: true`, e a MinhaRede
+    // imprimia "✓ Empresa validada — você já pode solicitar o saque". O parceiro era convidado
+    // a sacar e barrado na hora de sacar. Confirmação de gate de dinheiro não pode ser dada
+    // antes de a gravação existir: aqui é fail-closed, como já é o ramo do "não confirmou".
+    const grav = await rpc('registrar_pj_validacao_auto', { p_user_id: user.id, p_snapshot: r.snapshot });
+    if (!grav.ok) {
+      console.error('[validar-pj-socio] registrar_pj_validacao_auto falhou', JSON.stringify(grav.data).slice(0, 300));
+      return json({ ok: false, error: 'Confirmamos sua empresa, mas não conseguimos concluir o registro agora. Tente novamente em instantes.' }, 502);
+    }
     return json({ ok: true, matched: true, via: 'auto_qsa', fonte: r.fonte });
   }
   // Não confirmou automaticamente → conferência manual (nunca auto-aprova na dúvida).

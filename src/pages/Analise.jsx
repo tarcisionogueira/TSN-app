@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { arquivoParaBase64 } from '../utils/arquivo';
 import { reportarErroCliente } from '../utils/reportarErro';
-import { extrairDadosDocumento, extrairDadosDocumentoUrl, analisarMercado, gerarParecer } from '../utils/claude';
+import { extrairDadosDocumento, extrairDadosDocumentoUrl, gerarParecer } from '../utils/claude';
 import { calcularMetricasCenario, calcularTetoLance, calcularSAC, calcularPrice, calcularVPL, calcularTIR, calcularPayback, calcularMultiplo, fluxoLocacao, TMA_PADRAO, fmt, fmtPct } from '../utils/calculos';
 import { caixaMatriculaUrl, caixaRegrasVendaUrl } from '../utils/caixa';
 import { loadImoveis, saveImoveis, generateId } from '../utils/storage';
@@ -309,7 +309,6 @@ export default function Analise() {
   const [mercado, setMercado] = useState(null);
   const [parecer, setParecer] = useState('');
   const [loadDoc, setLoadDoc] = useState(false);
-  const [loadMercado, setLoadMercado] = useState(false);
   const [loadParecer, setLoadParecer] = useState(false);
   const [saved, setSaved] = useState(false);
   const [msg, setMsg] = useState({ text:'', type:'' });
@@ -796,42 +795,11 @@ export default function Analise() {
     }
   };
 
-  // `override` existe porque "Corrigir e regerar" precisa pesquisar com os valores CORRIGIDOS
-  // no mesmo clique: `setD` é assíncrono e esta função captura o `d` do render atual — o
-  // setTimeout de 150ms não trocava o closure, então a pesquisa saía com a cidade/metragem
-  // ANTIGAS, justamente as que o documental acabara de desmentir.
-  const analisarMercadoClick = async (override = null) => {
-    // Só aceita override de DADOS (nunca um evento de clique passado por engano no onClick).
-    const ov = (override && typeof override === 'object' && !override.nativeEvent && !override.target) ? override : null;
-    const dd = ov ? { ...d, ...ov } : d;
-    if (!dd.endereco && !dd.cidade) { showMsg('Preencha o endereço ou cidade antes.','error'); return; }
-    setLoadMercado(true);
-    try {
-      const res = await analisarMercado({
-        endereco: dd.endereco||dd.cidade, tipoImovel: dd.tipo,
-        areaM2: dd.areaM2, cidade: dd.cidade, estado: dd.estado,
-        nomeCondominio: dd.nomeCondominio||'',
-      });
-      setMercado(res);
-      if (res?.precoMedioM2 && dd.areaM2) up('valorMercado', Math.round(res.precoMedioM2*dd.areaM2*0.9));
-      if (res?.aluguelMedio) up('valorLocacao', Math.round(res.aluguelMedio));
-      setOpenSec(p => ({ ...p, mercado:true, viabilidade:true }));
-      showMsg('Avaliação mercadológica concluída!');
-    } catch { showMsg('Erro na análise de mercado.','error'); }
-    setLoadMercado(false);
-  };
-
-  const gerarParecerClick = async () => {
-    setLoadParecer(true);
-    try {
-      const txt = await gerarParecer({ ...d, _cenario:isAVista?'À Vista':'Alavancado', _teto:teto }, metricas, mercado);
-      setParecer(txt);
-      setD(p => ({ ...p, parecer:txt }));
-      setOpenSec(p => ({ ...p, laudo:true }));
-      showMsg('Laudo gerado com sucesso!');
-    } catch { showMsg('Erro ao gerar laudo.','error'); }
-    setLoadParecer(false);
-  };
+  // O caminho LEGADO do cliente (`analisarMercadoClick` → utils/claude.js → /api/claude)
+  // foi REMOVIDO em 10/08: era IA paga sem cota, sem crédito e sem registro de custo, e o
+  // resultado só vivia em estado local (sumia no reload, e o laudo — que lê
+  // `analises_mercado` — seguia decidindo sobre os dados antigos). Tudo passa pela geração
+  // do servidor, `gerarRelMercado`, que debita, mede e persiste. Não ressuscitar.
 
   // ─── Relatório 1: Mercadológico + Viabilidade Financeira ───────────────────
   // Gera tudo automaticamente a partir dos dados do imóvel (sem formulário).
@@ -2973,9 +2941,18 @@ export default function Analise() {
             </div>
           </div>
 
-          <button onClick={() => analisarMercadoClick()} disabled={loadMercado}
-            style={{ width:'100%', padding:'13px', background:loadMercado?'#6ee7b7':'#10b981', color:'white', border:'none', borderRadius:12, fontWeight:800, fontSize:14, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
-            {loadMercado ? <><Loader2 size={16} style={{animation:'spin 1s linear infinite'}}/> Pesquisando amostras no mercado...</> : <><BarChart3 size={16}/> {mercado ? 'Atualizar Pesquisa de Mercado' : 'Iniciar Avaliação Mercadológica com IA'}</>}
+          {/* GERAÇÃO DO SERVIDOR, com cota (10/08). Este botão era o último ponto vivo do
+              caminho LEGADO do cliente (`utils/claude.js` → /api/claude): disparava Sonnet com
+              `web_search max_uses: 8` a CADA clique, sem debitar cota, sem debitar crédito e sem
+              registrar custo em lugar nenhum — uma cota comprava pesquisas ilimitadas. Também
+              era o único da tela sem o gate `analisesBloqueado`, que os botões vizinhos já
+              tinham. Agora usa a mesma geração do card do Mercadológico: é medida, é cobrada
+              como as outras e PERSISTE (o resultado legado só vivia em estado local). */}
+          <button onClick={() => gerarRelMercado()} disabled={gerandoMercado || analisesBloqueado}
+            style={{ width:'100%', padding:'13px', background:(gerandoMercado||analisesBloqueado)?'#6ee7b7':'#10b981', color:'white', border:'none', borderRadius:12, fontWeight:800, fontSize:14, cursor:(gerandoMercado||analisesBloqueado)?'default':'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
+            {gerandoMercado ? <><Loader2 size={16} style={{animation:'spin 1s linear infinite'}}/> Pesquisando amostras no mercado...</>
+              : analisesBloqueado ? <><Lock size={14}/> Limite atingido</>
+              : <><BarChart3 size={16}/> {mercado ? 'Atualizar Pesquisa de Mercado' : 'Iniciar Avaliação Mercadológica com IA'}</>}
           </button>
 
           {mercado && (

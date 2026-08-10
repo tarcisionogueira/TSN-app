@@ -25,11 +25,21 @@ function isSessionExpired() {
 
 async function fetchPerfil(userId) {
   if (!userId) return { role: 'explorador', ativo: true, inadimplenteDias: 0, cadastroIncompleto: false, planoLegado: false };
-  const { data } = await supabase
+  // FALHA DE LEITURA ≠ PERFIL VAZIO (10/08). O postgrest-js **não lança** em não-2xx: devolve
+  // `{data:null,error}`. Desestruturando só `data`, um 500/503/401 transitório (timeout de
+  // statement, pool esgotado, corrida no refresh do token) caía no MESMO ramo de "perfil não
+  // existe" — e o ramo foi escrito para o segundo caso. Resultado: o assinante `clube` que
+  // trocava de aba virava `explorador` na UI, com o popup de "Complete seu cadastro" por cima,
+  // e o perfil FALSO era gravado no cache. 401/403/406 estão em STATUS_IGNORADOS do relator,
+  // então nem rastro em `erros_cliente` sobrava.
+  // `maybeSingle` em vez de `single`: com zero linhas devolve `{data:null,error:null}`, o que
+  // separa de vez "não tem perfil" (dado) de "não consegui ler" (falha).
+  const { data, error } = await supabase
     .from('perfis')
     .select('role, ativo, inadimplente_desde, cpf_hash, lgpd_aceito, nome, telefone, endereco_cidade, endereco_uf, plano_legado')
     .eq('id', userId)
-    .single();
+    .maybeSingle();
+  const falhouLeitura = !!error;
 
   // Cadastro-base obrigatório: nome, telefone/WhatsApp, cidade E estado, + aceite LGPD.
   // O CPF NÃO entra aqui — só é exigido na hora de PAGAR (checkout) e de SACAR. A cidade
@@ -54,7 +64,7 @@ async function fetchPerfil(userId) {
       role_anterior: data.role,
       role: 'explorador',
     }).eq('id', userId);
-    return { role: 'explorador', ativo: data?.ativo !== false, inadimplenteDias, cadastroIncompleto: cadastroFalta, planoLegado: false };
+    return { role: 'explorador', ativo: data?.ativo !== false, inadimplenteDias, cadastroIncompleto: cadastroFalta, planoLegado: false, falhouLeitura };
   }
 
   // Normaliza o sufixo _anual: a modalidade anual é forma de PAGAMENTO, não um
@@ -68,13 +78,23 @@ async function fetchPerfil(userId) {
     ativo: data?.ativo !== false,
     inadimplenteDias,
     // Cliente sem nome/telefone/CPF/cidade/UF/LGPD precisa completar antes de usar o app.
-    cadastroIncompleto: ehCliente && cadastroFalta,
+    // Numa FALHA de leitura, nunca: trancar o app atrás de um popup por causa de um 500
+    // transitório é o oposto do que o popup existe para fazer. O `role` segue fail-closed
+    // (menor privilégio) porque permissão errada a MAIS é pior; já o popup só atrapalha.
+    cadastroIncompleto: ehCliente && cadastroFalta && !falhouLeitura,
     nome: data?.nome || '',
     // Grandfather de cota (assinantes antigos mantêm 15+15+5). Só o flag; a cota real
     // vem de limite_ia_efetivo no banco — aqui é só para o espelho de UI não bloquear antes.
     planoLegado: !!data?.plano_legado,
+    falhouLeitura,
   };
 }
+
+// Cache é para acelerar a PRÓXIMA abertura com o último perfil CONHECIDO. Gravar o resultado
+// de uma leitura que falhou envenena exatamente isso: a próxima abertura hidrataria com o
+// perfil rebaixado antes de revalidar. Uma linha, e ela é o que impede o erro de durar mais
+// que o segundo em que aconteceu.
+function podeCachear(p) { return !!p && !p.falhouLeitura; }
 
 function loadImpersonate() {
   try { return JSON.parse(sessionStorage.getItem(IMPERSONATE_KEY) || 'null'); }
@@ -150,7 +170,7 @@ export function AuthProvider({ children }) {
       const cached = loadPerfilCache(u.id);
       if (cached) { aplicarPerfil(cached); setLoading(false); }
       // Revalida em 2º plano; só o 1º acesso (sem cache) espera a query.
-      fetchPerfil(u.id).then((p) => { aplicarPerfil(p); savePerfilCache(u.id, p); setLoading(false); })
+      fetchPerfil(u.id).then((p) => { aplicarPerfil(p); if (podeCachear(p)) savePerfilCache(u.id, p); setLoading(false); })
         .catch(() => setLoading(false));
     });
 
@@ -186,7 +206,7 @@ export function AuthProvider({ children }) {
         setCadastroIncompleto(p.cadastroIncompleto ?? false);
       setNome(p.nome || '');
         setPlanoLegado(p.planoLegado ?? false);
-        if (u) savePerfilCache(u.id, p);
+        if (u && podeCachear(p)) savePerfilCache(u.id, p);
         // Vincula o cliente ao consultor que o indicou (link de afiliado), inclusive no
         // login Google onde o trigger não recebe o código. Só no sign-in real.
         if (u && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')) {
@@ -316,7 +336,7 @@ export function AuthProvider({ children }) {
       setCadastroIncompleto(p.cadastroIncompleto ?? false);
       setNome(p.nome || '');
       setPlanoLegado(p.planoLegado ?? false);
-      savePerfilCache(uid, p);
+      if (podeCachear(p)) savePerfilCache(uid, p);
     };
     const onVisible = () => { if (document.visibilityState === 'visible') refetchPerfil(); };
     window.addEventListener('focus', refetchPerfil);

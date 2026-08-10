@@ -665,6 +665,15 @@ export default async function handler(req, res) {
     await upsertDoc({ ...base, status: 'concluida', erro: null, result: resultadoAnterior, regen_motivo: null });
     registrarAnomalia('documental_regen_leitura_zero', row?.fonte, imovelId, 'documentos',
       `Regeração leu 0 documentos (faltaria: ${(faltandoAgora || []).join(', ')}); relatório anterior PRESERVADO (não rebaixado a "faltam documentos").`).catch(() => {});
+    // ESTORNO AQUI DENTRO, não nos chamadores (10/08). Os dois pontos que chamam
+    // `preservarSeBom` fazem `if (_pres) return _pres;` — e o bloco de estorno estava LOGO
+    // ABAIXO desse return, portanto inalcançável nesse caminho. O cliente pagava a cota e
+    // recebia de volta o relatório que JÁ TINHA: nada de novo foi gerado, então nada deveria
+    // ser cobrado. Pondo o estorno dentro do helper, ele acompanha qualquer chamador futuro —
+    // era exatamente esse tipo de "esqueceram no terceiro call site" que criou o bug.
+    if (cota && cota.ok && cota.tipo) {
+      try { await sb('rpc/estornar_documental_por', { method: 'POST', body: JSON.stringify({ p_user_id: user.id, p_tipo: cota.tipo }) }); } catch { /* padrao-ok: estorno best-effort, nunca derruba a resposta */ }
+    }
     return resultadoAnterior;
   };
 
@@ -1797,8 +1806,16 @@ export default async function handler(req, res) {
   } catch (e) {
     const timeout = String(e?.message) === 'tempo_limite' || /abort|timed? *out|timeout/i.test(String(e?.message));
     const msg = timeout ? 'A geração excedeu o tempo limite do servidor. Costuma ser temporário: tente novamente.' : String(e?.message || e);
-    await upsertDoc({ ...base, status: 'erro', erro: msg });
-    await logAtividade(ownerId, 'relatorio_documental_erro', msg.slice(0, 180), { imovel_id: String(imovelId), timeout });
+    // REGERAÇÃO QUE FALHOU: devolve o relatório anterior em vez de rebaixar tudo a 'erro'.
+    // Alinha com o gêmeo `gerar-analise.js:2603`, que já fazia isto. Rebaixar para 'erro' com um
+    // `result` BOM ainda na linha deixava o cliente vendo estado de falha sobre um relatório que
+    // ele tem, e fazia a próxima geração contar como NOVA (o `jaFeita` filtra por 'concluida').
+    if (tinhaRelatorioBom) {
+      await upsertDoc({ ...base, status: 'concluida', erro: `regeracao_falhou: ${String(msg).slice(0, 160)}`, result: resultadoAnterior });
+    } else {
+      await upsertDoc({ ...base, status: 'erro', erro: msg });
+    }
+    await logAtividade(ownerId, 'relatorio_documental_erro', msg.slice(0, 180), { imovel_id: String(imovelId), timeout, restaurouAnterior: !!tinhaRelatorioBom });
     // Estorna a cota consumida (não cobra por análise que falhou).
     if (cota && cota.ok && cota.tipo) {
       try { await sb('rpc/estornar_documental_por', { method: 'POST', body: JSON.stringify({ p_user_id: user.id, p_tipo: cota.tipo }) }); } catch { /* estorno best-effort */ }
