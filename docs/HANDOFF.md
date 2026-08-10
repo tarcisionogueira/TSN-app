@@ -161,101 +161,115 @@ antes de mexer, mais 6 validações de produção para rodar na abertura.
 
 ---
 
-## 🩺 RITUAL DE 10/08 — o backup off-region estava parado há 2 dias
+## 🏁 FECHAMENTO DE 10/08 — leia este bloco primeiro
 
-> **Diagnóstico de abertura. Tudo verde nas auditorias, e mesmo assim o achado mais grave em
-> dias estava no `health_check_logs`, não em varredura de código.** Auditorias no início:
-> `auditoria_seguranca` **0/0** · `auditoria_regras_negocio` **0 crítico** · baseline aprendida
-> de captura **sem nenhuma fonte abaixo do piso** · KYC ilegível **0** · 31.022 imóveis ativos,
-> 22.031 atualizados em 24h · fila de regeocode **1** · pinos genéricos **16**.
+> **19 commits, `main` em `3ba2fa0`.** O dia começou com um ritual de rotina e virou a maior
+> limpeza desde que o projeto existe. O fio condutor foi um só, e ele vale mais que a lista:
+> **resposta de erro entregue como conteúdo válido.** Apareceu em seis achados independentes, em
+> camadas que não se falam. Nenhum tinha aparecido em varredura de código anterior — todos são
+> código que PARECE certo.
 
-### 🔴 P1 — CORRIGIDO (commit `021fb46`, branch `claude/bidpro-brasil-verificacoes-rpv7pd`)
-**A cópia off-region no R2 — a única proteção contra perda DEFINITIVA de arquivo de cliente —
-não roda desde 08/08 04:41.** O run de 10/08 morreu com `Task timed out after 120 seconds`; o
-de 09/08 não deixou linha nenhuma.
+### Os quatro grandes do dia
 
-**Por que ninguém viu:** `registrarExecucao()` é a ÚLTIMA instrução do handler. Timeout mata a
-função antes do rastro, então **"falhou" e "nunca rodou" produzem o mesmo no banco: nada.** O
-health-check só escala para erro depois de **48h** de frescor — por isso a descoberta veio dois
-dias tarde. Mesma família do gtag, do tour e do KYC.
+| # | o que era | como estava passando |
+|---|---|---|
+| 1 | **Backup off-region parado há 2 dias** | `registrarExecucao()` é a última instrução do handler: o timeout matava a função ANTES do rastro, então "falhou" e "nunca rodou" davam o mesmo no banco — nada. É a única proteção contra perda definitiva de arquivo de cliente |
+| 2 | **51% do acervo dizendo "nenhum ponto de interesse"** | O Overpass devolve erro de runtime em **HTTP 200 com `remark`**. O `.ok` estava checado — o erro vinha DENTRO do 200 |
+| 3 | **Extrato carimbando `completo: true` sobre um 403** | `if (!j) break` tratava falha HTTP como "acabaram as páginas" |
+| 4 | **Cobrança de assessoria (R$ 4.800–6.000) sem gate e com preço do body** | O gate existia em 3 endpoints, nenhum no caminho que COBRA |
 
-**Por que estourou:** a varredura era 100% sequencial (1 HEAD por arquivo + download/PUT quando
-mudou) e o acervo irrecuperável foi de **44 → 73 arquivos** entre 04 e 08/08. Não foi pico: foi
-a fila passando do teto de 120s.
+### Bug bounty completo — 28 achados, todos fechados
+5 agentes por camada. Lista inteira, com estado e refutados, em
+**`docs/VARREDURA_BUGS_2026-08-10.md`**. Fechados em três levas: 6 primeiros (`408abb1`),
+as 5 de alta (`e78e511`), 5 médias (`1787f1d`) e os 13 restantes (`219ec6b`).
 
-**O que mudou:** `maxDuration` 120→300 · espelhamento com 6 trabalhadores · **orçamento de 200s**
-no passo do storage, sobrando tempo para snapshot, limpeza e rastro · varredura incompleta grava
-`ok=false` (o health-check já trata `!ok` como erro → **12h** em vez de 48h) · exceção no corpo
-grava linha `ok=false` com o motivo antes de subir.
+### 🛡️ O que impede a família de voltar (o entregável mais durável do dia)
+1. **`npm run verificar:padroes`** — 4 regras ESTRUTURAIS, linha de base por arquivo, roda no
+   `prebuild` (todo build e todo deploy da Vercel) e no CI. Só reprova ocorrência NOVA, então as
+   299 históricas ficam como estão e o padrão não cresce. Exceção deliberada:
+   `// padrao-ok: <motivo>`. **Achou um bug REAL na primeira execução** — um `signUp` legado sem
+   guard, sem nenhum importador, gravando `role:'aluno'`.
+2. **`CLAUDE.md` → "A PERGUNTA DE REVISÃO"** — as quatro formas que já morderam esta base.
+3. **`qa_invariantes.proximidades_vazio_falso`** — o vazio falso volta a ser visível.
+4. **`health-check` → "E-mail de oportunidades"** — lê o rastro do cron de alertas.
 
-> ⚠️ **BUG LATENTE fechado no caminho — vale mais que o P1.** O passo 3 apaga do R2 tudo que não
-> está em `esperadas` (direito ao esquecimento, LGPD Art. 18, VI), e `esperadas` é preenchida
-> **arquivo a arquivo no passo 1**. O corte por orçamento que acabei de introduzir deixaria os
-> arquivos não visitados fora do conjunto, e a limpeza os **APAGARIA do backup** — exatamente os
-> que ninguém recupera. Fila incompleta agora **pula a limpeza** (`pulada='storage_incompleto'`).
-> Havia duas travas (manifesto lido, listagem completa); esta é a terceira. **Ao introduzir
-> parada parcial num laço, pergunte o que a lista PARCIAL autoriza depois.**
+### ⚠️ ERREI TRÊS VEZES HOJE. As três estão registradas porque a lição é o valor.
 
-### 🟠 Aberto — o que o monitor já alertou hoje (15h UTC) e ninguém tratou
-`alerta_estado.monitor_fontes` de hoje: `RJLEILOES:coleta parada (silenciosa)` +
-`RJLEILOES:acervo abaixo da linha de base` · `VENDASGOV:falhou (0 imóveis)` + acervo abaixo da
-base · `TOTALLEILOES:degradado` · campos regredidos em `BIASI`/`PESTANA`/`SODRE`/`VIP`.
-**O monitor funciona — o que falta é ação.** Os dois com prazo:
-- **RJLEILOES é PAGO** (Bright Data): acervo sem atualizar há **10,9 dias**, 5 ativos contra piso
-  8. Roda 1×/semana (ter 11h UTC) → pulou pelo menos um ciclo. Pagar sem coletar.
-- **VENDASGOV**: acervo parado há **27 dias** (1 ativo). Roda todo dia e traz 0–2.
+**1. Corroboração instantânea não corrobora nada.** Corrigi as proximidades de manhã pedindo uma
+"segunda opinião" a outro espelho do Overpass — no MESMO instante, sob a MESMA carga. Em 3h de
+produção: 247 de 248 imóveis "vazio confirmado", incluindo 11 em São Paulo capital. **Duas
+observações simultâneas não são duas evidências, são uma.** Só o TEMPO separa "não há POI aqui" de
+"os espelhos estavam sobrecarregados". Corrigido com corroboração TEMPORAL
+(`imoveis_leilao.proximidades_vazios`, 3 execuções distintas).
+E havia um agravante que eu mesmo criei: o `Promise.any` sobre 5 espelhos dispara 5 requisições
+POR IMÓVEL — ~800/h contra instâncias públicas que limitam por IP. **A otimização de latência
+estava PRODUZINDO o rate-limit que gerava os vazios.**
 
-### 🟠 Aberto — `/api/financeiro-extrato` toma 403 todo dia, nos DOIS gateways
-`[financeiro] mp /users/1095744029/mercadopago_account/balance 403` (4×, último 10/08 08:25) e
-`[financeiro] asaas /transfers?... 403` (4×, último 10/08). Cheira a **escopo/credencial**, não a
-código. Enquanto durar, o extrato que o dono lê está incompleto — e o Asaas vazio deixa de ser
-prova de que "o principal não falhou".
+**2. Lote é teto de contagem, nunca de tempo.** Subi o timeout do Overpass e somei uma rodada,
+mantendo LOTE=40: o cron passou a estourar 300s em 44% das execuções. É literalmente o defeito
+que eu apontei em três OUTROS crons no mesmo dia e não apliquei neste.
 
-### ⏰ A validação do gtag ficou INCONCLUSIVA (não é sinal de que falhou)
-`marketing_metricas_dia` segue com `conversoes` **0** em 08 e 09/08 — mas **não houve nenhum
-cadastro desde 07/08**, então não havia o que converter. O critério do bloco acima ("0 conversão
-COM cadastro por gclid") **não foi atingido**: nada a concluir ainda. O que o dado mostra é outra
-coisa: **31 cliques pagos em 08–09/08 (R$ 52,02) e zero cadastro.**
+**3. Deduzi errado no Asaas.** Eu disse "a mesma chave responde em `/payments`, logo não é a
+chave, é o recurso da conta". Isso pressupõe permissão tudo-ou-nada — e o Asaas tem permissão
+**granular por chave**. O log deu a resposta literal: `insufficient_permission`, "a chave não
+possui permissão para operações de saque via API". **Quando o fornecedor tem escopo por
+credencial, "funciona em X logo a credencial está boa" não se sustenta.**
 
-### 🔴 P1 (relatado pelo dono) — metade do acervo dizia "nenhum ponto de interesse" (`c2dfa24`)
-O Overpass sinaliza erro de runtime com **HTTP 200 + campo `remark`** e `elements: []`. O
-`res.ok` estava checado — o erro vinha DENTRO do 200. E o `Promise.any` dos espelhos premia o
-mais RÁPIDO: um espelho que desiste na hora ganha de um que responderia com dados, então a
-otimização de latência passou a **preferir a falha**. Resultado: `pontos_proximos = '{}'`
-gravado em **15.764 de 31.022 ativos (51%)** — 82% dos lotes de São Paulo capital, 92% dos de
-Brasília, e as execuções recentes do cron dando 100% de vazio hora após hora. O vazio ainda era
-PERMANENTE (saía da fila do cron; e no on-demand `Object.values({})` é `[]`, então a checagem de
-cache obsoleto nunca disparava). **A tela estava certa o tempo todo** — ela já distingue
-carregando/vazio/erro; reportou fielmente o que lhe disseram.
-Corrigido no helper compartilhado (vale para o cron e o on-demand): `remark` lança, zero
-elementos vira INCONCLUSIVO e só é aceito com corroboração de um 2º espelho, timeout 12s→20s.
-Para não congelar de novo: **vazio com validade de 30 dias** nos dois caminhos + invariante
-`proximidades_vazio_falso` em `qa_invariantes()` (conta `{}` em cidade onde o vizinho TEM
-pontos — auto-calibrado, e gleba rural não entra). Os 15.764 voltaram à fila; invariante em 0.
+### Decisões registradas (não reabrir sem motivo novo)
 
-### 🐛 BUG BOUNTY DO CÓDIGO — 28 achados, 6 corrigidos hoje
-Varredura completa (item 6 do ritual), 5 agentes por camada. **Lista inteira, com estado de cada
-um, em `docs/VARREDURA_BUGS_2026-08-10.md`.** Corrigidos em `408abb1`: extrato que carimbava
-`completo: true` sobre um total furado por 403 · cobrança da assessoria sem gate e com preço do
-body · "Pagamento aprovado" seguido de home vazia quando o contrato não sai · lixeira que
-apagava 0 linhas dizendo que apagou · id local envenenando a lista de arremates · plano
-escolhido sumindo no link de confirmação.
+- **Asaas `/transfers`: NÃO habilitar a permissão.** O Asaas classifica até o GET como "operação
+  de saque". Habilitar daria poder de MOVIMENTAR DINHEIRO a uma credencial que vive em variável
+  de ambiente — para ler uma lista hoje VAZIA (saldo R$ 0,00, zero lançamentos Asaas desde
+  junho). A lacuna virou **declarada**: não marca o banco como incompleto, vira aviso. Revisitar
+  só quando houver saque de verdade, aí com chave dedicada e escopo mínimo.
+- **Downgrade de plano: AGENDADO** para o fim do período pago (`plano_agendado`), nunca cancelar
+  e recriar. O que decidiu foi um detalhe: o webhook do MP identifica o plano pelo
+  `external_reference`, não pelo valor — baixar só o valor deixaria a pessoa pagando o preço do
+  Pro e continuando com o Clube.
+- **Saldo ≠ extrato.** O 403 do MP é só no saldo (endpoint não documentado, pode nunca liberar).
+  Os lançamentos vêm de outro endpoint e funcionam. Misturar os dois fazia o MP parecer quebrado.
+- **Bancos isolados no extrato**: cada conta com veredito próprio; o consolidado é DERIVADO. Um
+  403 no Asaas não invalida mais o Mercado Pago.
 
-> **O fio condutor, e é o mesmo do bug das proximidades:** *resposta de erro entregue como
-> conteúdo válido* — em 6 achados, em camadas que não se falam. A pergunta de rotina ao revisar
-> código novo passa a ser: **"este vazio é uma resposta, ou é uma falha que não sabe que
-> falhou?"**
+---
 
-### Anotado, não corrigido
-- `indice-reforco-cron` segue sem semear: `indice_reforco_estado` **vazia**, `indice_amostras`
-  parado em **975** desde 07/08 (era o achado de 09/08 — não se mexeu, continua valendo).
-- `emails_log`: **0 aberturas em 146 e-mails**. Depende do painel Resend (Open/Click tracking).
-- Nudge de ativação segue **desligado** (`ativacao_nudge_ativo='false'`), como combinado.
-- `tour_progresso` saiu de 0 para **3** — o tour corrigido em 09/08 está aparecendo para gente.
-- `erros_cliente` sem novidade real: o único dos últimos 3 dias é um `vite:preloadError` preso
-  (10/08 00:53). Os erros de schema (`chamados.descricao`, `imoveis.data_leilao`,
-  `plano_assinaturas`) são de 07/08 e anteriores.
-- Anomalias de relatório abertas: 5 `cnj_vazio`, 1 `avaliacao_ausente`, 1 `mercado_area_incoerente`.
+## ⏰ PRÓXIMOS PASSOS — 11/08 (há lembrete agendado para 13h UTC com estas queries)
+
+### 1. As três validações que dependem só do tempo passar
+| o quê | quando | verde é |
+|---|---|---|
+| **Backup off-region** (a prova do P1) | run 04:40 UTC | linha NOVA em `backup_execucoes` com `ok=true`. Conferir também `detalhe.limpeza.pulada` — a limpeza NÃO pode rodar com storage incompleto |
+| **RJLEILOES** | cron terça 11h UTC | `atualizado_em` de 11/08 e ≥ 8 ativos. O freio residencial não deve pegar (última coleta ~12 dias) |
+| **Proximidades** | contínuo | `com_pontos` **acima de 14.625** (fechou o dia assim, subindo). `vazio` fechou em **38**, todos com ≥3 observações; invariante em **30** |
+
+> **Como ler o resultado das proximidades:** `vazio` crescendo devagar com `com_pontos` subindo =
+> funcionando. `vazio` disparando = a corroboração temporal não segurou, reabrir. Conferir também
+> se o cron parou de estourar 300s (eram 7 de 16 execuções).
+
+### 2. Nudge de ativação — LIGADO hoje, primeiro disparo real 11/08 12h UTC
+1 pessoa na janela (Marlene, BH, etapa d7) — o lote pequeno é natural, não precisou de `?limite`.
+**Olhar entrega/abertura/clique ANTES de liberar o backlog** (27 pessoas, `?backlog=1`, uso único).
+Só dá para medir abertura se o tracking do Resend estiver ligado — ver abaixo.
+
+### 3. Depende do dono
+1. **Resend** — clicar **Verify** (o CNAME `links` foi criado hoje e está correto), depois ligar
+   **Open tracking** e **Click tracking** em Domains, e marcar `email.opened`/`email.clicked` em
+   Webhooks. Sem isso o nudge dispara e ninguém sabe se foi lido. **É o item nº 1.**
+2. **Mercado Pago (opcional)** — tentar um Access Token de produção da conta TITULAR para o
+   saldo. Se seguir 403, é limitação da plataforma: parar por aí, não custa nada e não afeta o
+   extrato.
+3. Legal review dos Termos v3.3 · G2RS · `AUDITORIA_EMAIL_DESTINO`/`GITHUB_ACTIONS_TOKEN`.
+
+### 4. Trabalho técnico na fila
+- **Primeiro downgrade real deve ser acompanhado** — o fluxo está correto por leitura e reusa
+  chamadas provadas, mas não deu para exercitar MP/Asaas daqui. Hoje há 0 agendamentos, então dá
+  para escolher a hora.
+- **1 erro de lint PRÉ-EXISTENTE**: `{true &&` em `src/pages/Perfil.jsx:1152` (commit `6760a21`).
+  É o único do projeto; enquanto existir, `npm run lint` nunca fecha limpo.
+- **`indice-reforco-cron`** segue desligado por decisão de custo (~US$ 300/mês). Não é bug — foi
+  REFUTADO hoje. O que se corrigiu foi a ambiguidade das respostas.
+- **Achados de 09/08 ainda abertos**: MRR do dashboard contando conta de teste; laços de
+  aprendizado (`mercado_aprendizado`, `laudo_aprendizado`, `juridico_aprendizado`) com 0 linhas.
 
 ---
 
