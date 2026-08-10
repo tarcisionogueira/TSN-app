@@ -217,6 +217,35 @@ cadastro desde 07/08**, então não havia o que converter. O critério do bloco 
 COM cadastro por gclid") **não foi atingido**: nada a concluir ainda. O que o dado mostra é outra
 coisa: **31 cliques pagos em 08–09/08 (R$ 52,02) e zero cadastro.**
 
+### 🔴 P1 (relatado pelo dono) — metade do acervo dizia "nenhum ponto de interesse" (`c2dfa24`)
+O Overpass sinaliza erro de runtime com **HTTP 200 + campo `remark`** e `elements: []`. O
+`res.ok` estava checado — o erro vinha DENTRO do 200. E o `Promise.any` dos espelhos premia o
+mais RÁPIDO: um espelho que desiste na hora ganha de um que responderia com dados, então a
+otimização de latência passou a **preferir a falha**. Resultado: `pontos_proximos = '{}'`
+gravado em **15.764 de 31.022 ativos (51%)** — 82% dos lotes de São Paulo capital, 92% dos de
+Brasília, e as execuções recentes do cron dando 100% de vazio hora após hora. O vazio ainda era
+PERMANENTE (saía da fila do cron; e no on-demand `Object.values({})` é `[]`, então a checagem de
+cache obsoleto nunca disparava). **A tela estava certa o tempo todo** — ela já distingue
+carregando/vazio/erro; reportou fielmente o que lhe disseram.
+Corrigido no helper compartilhado (vale para o cron e o on-demand): `remark` lança, zero
+elementos vira INCONCLUSIVO e só é aceito com corroboração de um 2º espelho, timeout 12s→20s.
+Para não congelar de novo: **vazio com validade de 30 dias** nos dois caminhos + invariante
+`proximidades_vazio_falso` em `qa_invariantes()` (conta `{}` em cidade onde o vizinho TEM
+pontos — auto-calibrado, e gleba rural não entra). Os 15.764 voltaram à fila; invariante em 0.
+
+### 🐛 BUG BOUNTY DO CÓDIGO — 28 achados, 6 corrigidos hoje
+Varredura completa (item 6 do ritual), 5 agentes por camada. **Lista inteira, com estado de cada
+um, em `docs/VARREDURA_BUGS_2026-08-10.md`.** Corrigidos em `408abb1`: extrato que carimbava
+`completo: true` sobre um total furado por 403 · cobrança da assessoria sem gate e com preço do
+body · "Pagamento aprovado" seguido de home vazia quando o contrato não sai · lixeira que
+apagava 0 linhas dizendo que apagou · id local envenenando a lista de arremates · plano
+escolhido sumindo no link de confirmação.
+
+> **O fio condutor, e é o mesmo do bug das proximidades:** *resposta de erro entregue como
+> conteúdo válido* — em 6 achados, em camadas que não se falam. A pergunta de rotina ao revisar
+> código novo passa a ser: **"este vazio é uma resposta, ou é uma falha que não sabe que
+> falhou?"**
+
 ### Anotado, não corrigido
 - `indice-reforco-cron` segue sem semear: `indice_reforco_estado` **vazia**, `indice_amostras`
   parado em **975** desde 07/08 (era o achado de 09/08 — não se mexeu, continua valendo).
