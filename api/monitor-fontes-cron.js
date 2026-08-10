@@ -45,7 +45,20 @@ const FONTES_CRITICAS = ['CEF', 'MEGA', 'SUPERBID', 'SOLD', 'ZUK', 'SODRE', 'FRA
 // única em 30/07 com url_lote inventado (/leilao/{id}, "palpite" do próprio scraper) que dá
 // 404 — 30 lotes com "Acessar leiloeiro" morto e ninguém para avisar. Entra aqui para que a
 // ausência de coleta seja VISÍVEL; quando ganhar cron, a tolerância acompanha a cadência.
-const FONTES_SEM_SAUDE = { PECINI: 9, RJLEILOES: 9, GESTAOLEILOES: 9, CALIL: 9, VEGAS: 9, TORRES3: 9, VLANCE: 9, SATO: 9 };
+// FREIO RESIDENCIAL × CRON SEMANAL (10/08): as fontes PAGAS servidas por
+// `.github/workflows/scraper-{rj,pecini,gestao,soleon}.yml` passam por `coleta-recente.mjs
+// <FONTE> 7` — se o runner residencial (grátis) coletou nos últimos 7 dias, o run agendado
+// PULA para não pagar à toa. Com cron SEMANAL, esse freio consome o ciclo inteiro: coleta
+// residencial no dia 0 → o cron do dia ~7 pula (5-6 dias < 7) → a próxima coleta real só no
+// dia ~14. Ou seja, **acervo com 12-14 dias é o funcionamento CORRETO**, e a tolerância de 9
+// acusava "coleta parada (silenciosa)" toda vez que o freio pegava. Foi o caso do RJLEILOES
+// hoje: o run agendado de 04/08 terminou `success` com o passo "Rodar scraper RJ" = `skipped`
+// pelo freio — nada quebrou, e mesmo assim o monitor alertou. Alarme que chora lobo treina o
+// dono a ignorar o e-mail, que é o pior efeito possível (mesma lição do CREPALDI).
+// 16d = 2 ciclos semanais + folga: absolve o freio e AINDA pega o scraper que morreu de vez
+// (dois ciclos seguidos sem coletar não tem explicação legítima).
+// VLANCE e SATO seguem em 9: não têm freio, então não têm por que gastar dois ciclos.
+const FONTES_SEM_SAUDE = { PECINI: 16, RJLEILOES: 16, GESTAOLEILOES: 16, CALIL: 16, VEGAS: 16, TORRES3: 16, VLANCE: 9, SATO: 9 };
 // Fontes PARADAS por decisão nossa (acervo zerado de propósito, aguardando conserto). Não
 // alerta "sem acervo ativo" — já está registrado e a repetição só vira ruído; a checagem de
 // FRESCOR continua valendo, então quando a fonte voltar e parar de novo o monitor avisa.
