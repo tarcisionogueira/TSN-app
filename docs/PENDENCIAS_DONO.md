@@ -190,17 +190,30 @@ vazio ou com valor sul-americano — reveja o passo 3.
   falha regional; dá para conversar sobre um meio-termo (ex.: outro provedor com região no
   Brasil, aceitando o risco correlacionado). **Me avisa se quiser mudar essa escolha.**
 
-### -2. 🟠 RESEND — reativar o webhook com a URL "www" (2 min; rastreio de entrega/abertura parado)
-- **Por quê:** o Resend DESATIVOU o webhook (e-mail de 01/08) porque a URL cadastrada usa o
-  APEX `bidprobrasil.com.br`, que responde **308 → www** (confirmado ao vivo) — o Resend não
-  segue redirect, então TODO evento falhou. Efeito: os ENVIOS continuam normais (33 desde
-  27/07 saíram), mas o 360 nunca recebe "entregue/aberto/clicado" (`emails_log.entregue_em`
-  está vazio na base inteira — o webhook nunca chegou a funcionar).
-- **Passos:** painel Resend → Webhooks → editar a URL para
-  `https://www.bidprobrasil.com.br/api/resend-webhook?k=<o MESMO ?k= que já está lá>`
-  (só acrescentar o `www.`) → salvar → **Re-enable**. O endpoint no www já responde 200 ✓.
-- **Depois:** o Claude confere `emails_log.entregue_em/aberto_em` preenchendo nos e-mails
-  seguintes (o de oportunidades de sábado ~8h é um bom teste).
+### -2. 🟠 RESEND — subdomínio de rastreio (a ENTREGA já volta; ABERTURA e CLIQUE ainda não)
+- **Estado em 09/08:** o webhook do `www` foi corrigido e **funciona** — 26 linhas de
+  `emails_log` já têm `entregue_em`. Mas `aberto_em` e `clicado_em` seguem em **ZERO nas 120
+  linhas da base inteira**, desde 24/06. Não é bug nosso: `api/resend-webhook.js` já trata
+  `email.opened` e `email.clicked` (linhas 41–42) — esses eventos simplesmente nunca são
+  emitidos, porque no Resend o rastreio é **opt-in por domínio** e exige um subdomínio próprio.
+- **Efeito:** não dá para saber se e-mail nenhum é lido. Isso trava a medição do nudge de
+  ativação (`ativacao-nudge-cron`) e de qualquer campanha.
+- **Passos:** Resend → Domains → `bidprobrasil.com.br` → aba **Configuration** → *Enable
+  tracking metrics* → **Configure**:
+  1. No campo **Subdomain** digite **apenas `links`** — o Resend concatena o Domain sozinho.
+     (Digitar `links.bidprobrasil.com.br` inteiro produz
+     `links.bidprobrasil.com.br.bidprobrasil.com.br`, que é o erro que o campo acusa em
+     vermelho.) A prévia à direita tem de ler `links.bidprobrasil.com.br/your-link`.
+     Não use `send` — já é do SPF/MX.
+  2. Marque **Enable click tracking** e **Enable open tracking** → **Add domain**.
+  3. Ele devolve **CNAME(s)**: adicione no MESMO lugar onde vivem hoje o `resend._domainkey`
+     e o `send`, e espere ficar **Verified**.
+  4. Resend → **Webhooks** → abrir o endpoint existente → marcar **`email.opened`** e
+     **`email.clicked`**. Sem isso o rastreio liga e nada chega até nós.
+- **Ressalva honesta:** abertura é medida por pixel invisível — Apple Mail e Gmail distorcem
+  (iPhone abre sozinho; imagem bloqueada não conta). **Clique é o número confiável**; ligue os
+  dois e decida pelo clique.
+- **Depois:** o Claude confere `emails_log.aberto_em/clicado_em` preenchendo nos envios seguintes.
 
 ### -1. 🔴 VERIFICAÇÃO DO ANUNCIANTE Google Ads (prazo: 31/08/2026 — anúncios PAUSAM se não fizer)
 - **Por quê:** e-mail oficial do Google (01/08) — a conta **475-979-5747** exige a "verificação

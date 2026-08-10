@@ -207,18 +207,38 @@ antes de mexer, mais 6 validações de produção para rodar na abertura.
 > `email.clicked`. Sem isso não dá para saber se e-mail nenhum é lido — nem medir se o tour ou
 > qualquer nudge funcionou.
 >
-> ### O que ainda NÃO foi feito (precisa da palavra do dono — muda o que o cliente recebe/vê)
-> 1. **Nada nudga quem cadastrou e não gerou.** O `enviar-alertas-cron` só alcança quem criou
->    alerta/filtro salvo (1–5 e-mails/dia); os "oportunidades" chegaram a 30 pessoas, mas o segundo
->    toque para quem NÃO se ativou não existe. Não há cron de reengajamento — o que existe com o
->    nome "abandono" (`saldo-abandono-cron`) é sobre **saldo**, e `retencao-avisos-cron` é sobre
->    **documentos**. Proposta: cron D+2 / D+7 para quem tem 0 análises, com as 3 amostras na chamada.
-> 2. **O CTA não diz que é grátis.** O botão do imóvel é "Solicitar Análise" — soa a pedido para uma
->    equipe, possivelmente pago. Foi clicado 3 vezes em 5 semanas. `podeFazerAnalise` já inclui
->    explorador (`ImovelDetalhe.jsx:944`), então não é gate: é a promessa. Trocar por
->    **"Analisar grátis (N de 3)"** é a mudança de maior alavanca por menor esforço do funil inteiro.
-> 3. **Mandamos o cliente embora.** Na página do imóvel, "Acessar leiloeiro" teve 7 cliques (2
->    pessoas) contra 3 de "Solicitar Análise" (3 pessoas).
+> ### CTA do imóvel — FEITO (`e86683c`)
+> O botão dizia só "Solicitar Análise": soa a pedido para uma equipe, possivelmente pago. Agora diz
+> o que a pessoa tem no bolso, por permissão — explorador **"Analisar grátis (3 de 3)"**, pagante
+> **"Analisar (7 de 10 deste mês)"**, admin segue genérico. Falha ao ler a cota volta ao texto
+> genérico: rede caída não pode virar "você não tem análise".
+> ⚠️ **Achado no caminho:** a tabela de limites estava em TRÊS telas e elas já discordavam —
+> `Busca.jsx` anunciava **15/mês** ao Investidor Pro quando o banco (`limite_ia`) entrega **10**
+> (15 é só o grandfather de `plano_legado`). A busca prometia cinco relatórios que o servidor não
+> daria. Unificado em **`src/utils/cotaAnalise.js`**, espelho ÚNICO no frontend: mexeu no banco,
+> mexe lá, e as três telas acompanham. **Não crie uma quarta cópia.**
+>
+> ### Nudge de ativação — CONSTRUÍDO E DESLIGADO (`7bacc78`)
+> `api/ativacao-nudge-cron.js` + `supabase/migrations/ativacao_nudge.sql`. Máx. **2 e-mails na
+> vida**: D+2 e D+7, com 3 imóveis reais (cascata cidade → estado → Brasil, para nenhum e-mail
+> sair vazio). Sai da fila na primeira análise gerada. Cron diário 12h UTC.
+> **Para ligar:** `ATIVACAO_NUDGE_ATIVO=1` no painel da Vercel. Sem isso é dry-run — apura e
+> devolve a prévia, não envia nem grava.
+> **A lista, sem disparar nada:** `select * from public.ativacao_nudge_candidatos();` (passe
+> `true` para ver o backlog). Em 09/08: 1 na janela normal, **27 no backlog**.
+> **`?backlog=1` é de USO ÚNICO** — alcança quem se cadastrou antes de o cron existir; depois
+> disso as janelas diárias bastam.
+> Travas: unique `(user_id, etapa)`; grava ANTES de enviar (perder um nudge > mandar dois);
+> internas fora por domínio; opt-out one-click + `List-Unsubscribe`, mesmo token e mesmo sinal do
+> e-mail de oportunidades; sem imóvel para oferecer, não queima a etapa.
+>
+> ### O que ainda NÃO foi feito
+> 1. **Mandamos o cliente embora.** Na página do imóvel, "Acessar leiloeiro" teve 7 cliques (2
+>    pessoas) contra 3 de "Solicitar Análise" (3 pessoas). Nenhuma mudança feita — decisão de produto.
+> 2. **Divergência menor, anotada:** o espelho do frontend dá limite **0** a analista/advogado
+>    ("equipe não gera relatório próprio"), mas `limite_ia` no banco dá **100** a esses papéis. A
+>    tela bloqueia quem o servidor liberaria. Ninguém reclamou porque a equipe gera em nome do
+>    cliente (`paraUserId`); decidir qual dos dois lados está certo e alinhar.
 
 ---
 
