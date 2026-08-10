@@ -19,7 +19,19 @@
  * SEGURO/ECONÔMICO: best-effort (nunca derruba), volume minúsculo (11 MB), re-espelha só o
  * que mudou (compara tamanho via HEAD). Autorizado por CRON_SECRET. Registrado no vercel.json.
  */
-export const config = { runtime: 'nodejs', maxDuration: 120 };
+export const config = { runtime: 'nodejs', maxDuration: 300 };
+// ORÇAMENTO DE TEMPO (10/08). A execução de 10/08 04:40 morreu com "Task timed out after 120
+// seconds" e a de 09/08 não deixou linha nenhuma: o `registrarExecucao` é a ÚLTIMA instrução do
+// handler, então um timeout mata o backup ANTES do rastro — cópia off-region parada por 2 dias
+// com o painel em silêncio, descoberta só pelo health-check reclamando de backup velho. Duas
+// mudanças: o teto sobe para 300s (Pro; mesmo teto do monitor-fontes) e a varredura do storage
+// respeita um orçamento MENOR que ele, para sempre sobrar tempo de gravar o que aconteceu. Um
+// backup incompleto passa a ser um FATO REGISTRADO (`ok=false`), não uma ausência de linha.
+const ORCAMENTO_STORAGE_MS = 200000; // 200s dos 300s: sobra p/ snapshot do negócio + limpeza + rastro
+// Espelhamento em paralelo: cada arquivo custa 1 HEAD (+ download + PUT quando mudou), e a fila
+// era 100% sequencial — por isso 73 arquivos já estouravam 120s. 6 é conservador para o R2 e
+// corta o tempo da varredura por ~6.
+const CONCORRENCIA = 6;
 // Região do bucket R2 (location hint declarado na criação: enam/weur/apac/...). Serve para o
 // health-check conferir que a cópia está FORA da região do banco (Supabase: sa-east-1).
 const R2_REGIAO = (process.env.R2_LOCATION || '').trim();
@@ -173,7 +185,20 @@ async function r2Delete(key) {
   } catch { return false; }
 }
 
+// O rastro em backup_execucoes é a ÚNICA prova de que a cópia off-region rodou. Se o corpo
+// estourar (rede, R2 fora, bug), o `registrarExecucao` do fim nunca acontecia e o resultado era
+// indistinguível de "o cron não existe": silêncio. Aqui a exceção vira linha `ok=false` com o
+// motivo, e só depois sobe.
 export default async function handler(req, res) {
+  try {
+    await executar(req, res);
+  } catch (e) {
+    await registrarExecucao({ dormante: false, ok: false, detalhe: { motivo: 'excecao', erro: String(e?.message || e) } });
+    if (!res.headersSent) res.status(500).json({ error: 'falha no backup', detalhe: String(e?.message || e) });
+  }
+}
+
+async function executar(req, res) {
   if (!isCronAuthorized(req)) { res.status(401).json({ error: 'Não autorizado' }); return; }
   if (!SUPABASE_URL || !SERVICE_KEY) { res.status(500).json({ error: 'env Supabase ausente' }); return; }
   if (!R2_ON) {
@@ -193,6 +218,10 @@ export default async function handler(req, res) {
   // Chaves que DEVEM existir na cópia (preenchido no passo 1) — base da limpeza do passo 3.
   const esperadas = new Set();
   let manifestoOk = false;
+  // Varredura do storage COMPLETA? Só uma varredura completa autoriza a limpeza do passo 3 —
+  // ver a trava lá embaixo. Começa `false` e só vira `true` no fim do passo 1.
+  let storageCompleto = false;
+  const comecou = Date.now();
 
   // 1) STORAGE IRRECUPERÁVEL → R2 (espelha só o que mudou de tamanho)
   try {
@@ -202,20 +231,31 @@ export default async function handler(req, res) {
     if (Array.isArray(rows)) {
       manifestoOk = true;
       out.storage.total = rows.length;
-      for (const o of rows) {
+      let proximo = 0;
+      const espelhar = async (o) => {
         try {
           const destino = `${pfx}storage/${o.bucket}/${o.name}`;
           esperadas.add(destino);
-          if ((await r2Tamanho(destino)) === Number(o.tamanho)) { out.storage.iguais++; continue; }
+          if ((await r2Tamanho(destino)) === Number(o.tamanho)) { out.storage.iguais++; return; }
           const dl = await fetch(`${SUPABASE_URL}/storage/v1/object/${o.bucket}/${o.name.split('/').map(encodeURIComponent).join('/')}`, {
             headers: sbHeaders(), signal: AbortSignal.timeout(45000),
           });
-          if (!dl.ok) { out.storage.falhas++; continue; }
+          if (!dl.ok) { out.storage.falhas++; return; }
           const bytes = Buffer.from(await dl.arrayBuffer());
           if (await r2Put(destino, bytes, dl.headers.get('content-type') || 'application/octet-stream')) out.storage.enviados++;
           else out.storage.falhas++;
         } catch { out.storage.falhas++; }
-      }
+      };
+      // Fila com CONCORRENCIA trabalhadores. Cada um para de puxar quando o orçamento acaba —
+      // o que sobra fica declarado em `out.storage.restantes` e o run é marcado incompleto.
+      await Promise.all(Array.from({ length: Math.min(CONCORRENCIA, rows.length) }, async () => {
+        while (proximo < rows.length) {
+          if (Date.now() - comecou > ORCAMENTO_STORAGE_MS) return;
+          await espelhar(rows[proximo++]);
+        }
+      }));
+      if (proximo >= rows.length) storageCompleto = true;
+      else out.storage.restantes = rows.length - proximo;
     }
   } catch { /* storage best-effort */ }
 
@@ -248,7 +288,14 @@ export default async function handler(req, res) {
   // Duas travas para nunca apagar por engano: só roda se o MANIFESTO foi lido com sucesso
   // (senão "nada é esperado" e apagaríamos tudo) e só apaga com base numa listagem COMPLETA
   // (r2Listar devolve null em qualquer falha).
-  if (manifestoOk) {
+  // TERCEIRA trava (10/08): a varredura do passo 1 precisa ter terminado. `esperadas` é
+  // preenchida arquivo a arquivo; se o orçamento cortou a fila no meio, tudo que não chegou a
+  // ser visitado ficaria "não esperado" e este passo APAGARIA do backup cópias perfeitamente
+  // válidas — justamente os arquivos que ninguém consegue recuperar. Fila incompleta = não
+  // apaga nada; a limpeza espera o próximo run inteiro.
+  if (manifestoOk && !storageCompleto) {
+    out.limpeza.pulada = 'storage_incompleto';
+  } else if (manifestoOk) {
     const atuais = await r2Listar(`${pfx}storage/`);
     if (atuais === null) out.limpeza.pulada = 'listagem_falhou';
     else {
@@ -277,8 +324,10 @@ export default async function handler(req, res) {
     }
   }
 
-  // Só é "ok" se o storage não teve falha E o snapshot do negócio saiu inteiro.
-  const okGeral = out.storage.falhas === 0 && out.negocio.falhas === 0 && out.negocio.tabelas > 0;
+  // Só é "ok" se o storage foi varrido INTEIRO e sem falha, E o snapshot do negócio saiu
+  // completo. Varredura cortada pelo orçamento não é sucesso parcial: é uma cópia que não
+  // reflete a origem, e o health-check tem de enxergar isso como problema.
+  const okGeral = storageCompleto && out.storage.falhas === 0 && out.negocio.falhas === 0 && out.negocio.tabelas > 0;
   await registrarExecucao({
     dormante: false, ok: okGeral,
     arquivos_total: out.storage.total, arquivos_novos: out.storage.enviados,
