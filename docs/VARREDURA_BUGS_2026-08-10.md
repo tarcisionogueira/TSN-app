@@ -130,7 +130,7 @@ antes de o registro existir.
 
 ---
 
-## ✅ TERCEIRA LEVA — TODO O RESTANTE, CORRIGIDO EM 10/08 (commit `HASH3`)
+## ✅ TERCEIRA LEVA — TODO O RESTANTE, CORRIGIDO EM 10/08 (commit `219ec6b`)
 
 **M3 · `retencao-avisos-cron`** — `apagar_em` e `push_enviado` entraram no `select`. No reenvio,
 `row.apagar_em` saía `undefined` e o `||` caía no valor CRU da regra (que pode já estar no
