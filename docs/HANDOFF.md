@@ -161,6 +161,75 @@ antes de mexer, mais 6 validações de produção para rodar na abertura.
 
 ---
 
+## 🩺 RITUAL DE 10/08 — o backup off-region estava parado há 2 dias
+
+> **Diagnóstico de abertura. Tudo verde nas auditorias, e mesmo assim o achado mais grave em
+> dias estava no `health_check_logs`, não em varredura de código.** Auditorias no início:
+> `auditoria_seguranca` **0/0** · `auditoria_regras_negocio` **0 crítico** · baseline aprendida
+> de captura **sem nenhuma fonte abaixo do piso** · KYC ilegível **0** · 31.022 imóveis ativos,
+> 22.031 atualizados em 24h · fila de regeocode **1** · pinos genéricos **16**.
+
+### 🔴 P1 — CORRIGIDO (commit `021fb46`, branch `claude/bidpro-brasil-verificacoes-rpv7pd`)
+**A cópia off-region no R2 — a única proteção contra perda DEFINITIVA de arquivo de cliente —
+não roda desde 08/08 04:41.** O run de 10/08 morreu com `Task timed out after 120 seconds`; o
+de 09/08 não deixou linha nenhuma.
+
+**Por que ninguém viu:** `registrarExecucao()` é a ÚLTIMA instrução do handler. Timeout mata a
+função antes do rastro, então **"falhou" e "nunca rodou" produzem o mesmo no banco: nada.** O
+health-check só escala para erro depois de **48h** de frescor — por isso a descoberta veio dois
+dias tarde. Mesma família do gtag, do tour e do KYC.
+
+**Por que estourou:** a varredura era 100% sequencial (1 HEAD por arquivo + download/PUT quando
+mudou) e o acervo irrecuperável foi de **44 → 73 arquivos** entre 04 e 08/08. Não foi pico: foi
+a fila passando do teto de 120s.
+
+**O que mudou:** `maxDuration` 120→300 · espelhamento com 6 trabalhadores · **orçamento de 200s**
+no passo do storage, sobrando tempo para snapshot, limpeza e rastro · varredura incompleta grava
+`ok=false` (o health-check já trata `!ok` como erro → **12h** em vez de 48h) · exceção no corpo
+grava linha `ok=false` com o motivo antes de subir.
+
+> ⚠️ **BUG LATENTE fechado no caminho — vale mais que o P1.** O passo 3 apaga do R2 tudo que não
+> está em `esperadas` (direito ao esquecimento, LGPD Art. 18, VI), e `esperadas` é preenchida
+> **arquivo a arquivo no passo 1**. O corte por orçamento que acabei de introduzir deixaria os
+> arquivos não visitados fora do conjunto, e a limpeza os **APAGARIA do backup** — exatamente os
+> que ninguém recupera. Fila incompleta agora **pula a limpeza** (`pulada='storage_incompleto'`).
+> Havia duas travas (manifesto lido, listagem completa); esta é a terceira. **Ao introduzir
+> parada parcial num laço, pergunte o que a lista PARCIAL autoriza depois.**
+
+### 🟠 Aberto — o que o monitor já alertou hoje (15h UTC) e ninguém tratou
+`alerta_estado.monitor_fontes` de hoje: `RJLEILOES:coleta parada (silenciosa)` +
+`RJLEILOES:acervo abaixo da linha de base` · `VENDASGOV:falhou (0 imóveis)` + acervo abaixo da
+base · `TOTALLEILOES:degradado` · campos regredidos em `BIASI`/`PESTANA`/`SODRE`/`VIP`.
+**O monitor funciona — o que falta é ação.** Os dois com prazo:
+- **RJLEILOES é PAGO** (Bright Data): acervo sem atualizar há **10,9 dias**, 5 ativos contra piso
+  8. Roda 1×/semana (ter 11h UTC) → pulou pelo menos um ciclo. Pagar sem coletar.
+- **VENDASGOV**: acervo parado há **27 dias** (1 ativo). Roda todo dia e traz 0–2.
+
+### 🟠 Aberto — `/api/financeiro-extrato` toma 403 todo dia, nos DOIS gateways
+`[financeiro] mp /users/1095744029/mercadopago_account/balance 403` (4×, último 10/08 08:25) e
+`[financeiro] asaas /transfers?... 403` (4×, último 10/08). Cheira a **escopo/credencial**, não a
+código. Enquanto durar, o extrato que o dono lê está incompleto — e o Asaas vazio deixa de ser
+prova de que "o principal não falhou".
+
+### ⏰ A validação do gtag ficou INCONCLUSIVA (não é sinal de que falhou)
+`marketing_metricas_dia` segue com `conversoes` **0** em 08 e 09/08 — mas **não houve nenhum
+cadastro desde 07/08**, então não havia o que converter. O critério do bloco acima ("0 conversão
+COM cadastro por gclid") **não foi atingido**: nada a concluir ainda. O que o dado mostra é outra
+coisa: **31 cliques pagos em 08–09/08 (R$ 52,02) e zero cadastro.**
+
+### Anotado, não corrigido
+- `indice-reforco-cron` segue sem semear: `indice_reforco_estado` **vazia**, `indice_amostras`
+  parado em **975** desde 07/08 (era o achado de 09/08 — não se mexeu, continua valendo).
+- `emails_log`: **0 aberturas em 146 e-mails**. Depende do painel Resend (Open/Click tracking).
+- Nudge de ativação segue **desligado** (`ativacao_nudge_ativo='false'`), como combinado.
+- `tour_progresso` saiu de 0 para **3** — o tour corrigido em 09/08 está aparecendo para gente.
+- `erros_cliente` sem novidade real: o único dos últimos 3 dias é um `vite:preloadError` preso
+  (10/08 00:53). Os erros de schema (`chamados.descricao`, `imoveis.data_leilao`,
+  `plano_assinaturas`) são de 07/08 e anteriores.
+- Anomalias de relatório abertas: 5 `cnj_vazio`, 1 `avaliacao_ausente`, 1 `mercado_area_incoerente`.
+
+---
+
 ## 🏁 FECHAMENTO DE 09/08 — leia este bloco primeiro
 
 > Sessão longa. O fio condutor foi o mesmo do dia inteiro: **coisa construída, configurada e
