@@ -36,6 +36,9 @@ function CotaCard({ tipo, dados }) {
   const bonus = Number(dados?.bonus || 0);
   const restanteMes = ilimitado ? null : Math.max(0, Number(limite || 0) - usado);
   const pct = ilimitado || !limite ? 0 : Math.min(100, Math.round((usado / limite) * 100));
+  // `amostra` vem de minhas_cotas: o explorador tem contador VITALÍCIO, não mensal. Dizer
+  // "restantes este mês" a ele fazia esperar uma renovação que nunca acontece.
+  const janela = dados?.amostra ? 'no total' : 'este mês';
   return (
     <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, padding: '18px 20px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
@@ -53,12 +56,12 @@ function CotaCard({ tipo, dados }) {
         <>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
             <div style={{ fontSize: 22, fontWeight: 900, color: '#111' }}>{restanteMes}<span style={{ fontSize: 13, fontWeight: 700, color: '#94a3b8' }}> de {limite}</span></div>
-            <div style={{ fontSize: 11.5, color: '#64748b', fontWeight: 700 }}>restantes este mês</div>
+            <div style={{ fontSize: 11.5, color: '#64748b', fontWeight: 700 }}>restantes {janela}</div>
           </div>
           <div style={{ height: 7, background: '#eef2f7', borderRadius: 5, overflow: 'hidden' }}>
             <div style={{ width: `${pct}%`, height: '100%', background: cor, transition: 'width .3s' }} />
           </div>
-          <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 5 }}>{usado} usada(s) no mês</div>
+          <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 5 }}>{usado} usada(s){dados?.amostra ? ' — amostra grátis, não renova' : ' no mês'}</div>
         </>
       )}
       {bonus > 0 && (

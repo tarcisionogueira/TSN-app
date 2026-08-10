@@ -4,7 +4,8 @@
  * nível mais específico com amostras) e SEMEIA cidade_indicadores — a mesma tabela que o
  * relatório mercadológico lê (indice_bidpro_regiao) → a geração alimenta o mercadológico.
  *
- * Cota (limite_ia 'indice'): admin ∞ · pago (top2/assessorado/clube) 5/mês · explorador 0 (só vê).
+ * Cota (limite_ia 'indice'): admin ∞ · pago (top2/assessorado/clube) 3/mês · explorador 0 (só vê).
+ * (Dizia 5/mês até 09/08; limite_ia devolve 3 — o 5 é só o grandfather do plano_legado.)
  * Só consome crédito quando GERA de verdade (região sem amostras não gasta cota).
  * Body: { cidade, uf, bairro?, lat?, lng?, tipo? }.
  */

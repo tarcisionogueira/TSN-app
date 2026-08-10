@@ -3,27 +3,29 @@ import { useNavigate } from 'react-router-dom';
 import { Search, BarChart3, GraduationCap, Home as HomeIcon, Gift, Copy, Check, ArrowRight, TrendingUp, ShieldCheck, Gavel, Wallet } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
+import { lerCotas, janelaLabel } from '../utils/cotaAnalise';
 import TriagemPerfil from '../components/TriagemPerfil';
 import { TERMO_PARCEIRO_VERSAO, TERMO_PARCEIRO_PREAMBULO, TERMO_PARCEIRO } from '../components/ConviteParceiro';
 
-// Rótulo e configuração da home por plano (usa o role EFETIVO — respeita o modo suporte).
+// Rótulo da home por plano (usa o role EFETIVO — respeita o modo suporte).
+// SÓ NOME E COR. O limite saiu daqui em 09/08: esta tabela dava `limite: null` ao CONSULTOR,
+// e null pinta "Análises ilimitadas" na tela — o consultor tem 5. Analista e advogado idem
+// (o banco dá 100, não infinito). Além disso o contador lia `analises_count` para todo mundo,
+// e o explorador grava em `amostra_mercado_usadas` — o selo dele ficava eterno em "3 de 3".
+// Agora o número vem de `minhas_cotas`, que é o mesmo que a escrita usa.
 const PLANO_INFO = {
-  // Admin/equipe entram pela home normal (o admin, desde o fim do redirect forçado) — sem o
-  // fallback "Explorador 3/3". limite null = ilimitado (esconde o contador "X de Y").
-  admin:             { nome: 'Administrador',        limite: null, cor: '#0D63DB', indica: true  },
-  analista:          { nome: 'Analista',             limite: null, cor: '#0D63DB', indica: true  },
-  advogado:          { nome: 'Jurídico',             limite: null, cor: '#0D63DB', indica: true  },
-  consultor:         { nome: 'Consultor',            limite: null, cor: '#0D63DB', indica: true  },
-  explorador:        { nome: 'Explorador',           limite: 3,  cor: '#0D63DB', indica: true  },
-  top2:              { nome: 'Investidor Pro',       limite: 10, cor: '#0D63DB', indica: true  },
-  top2_anual:        { nome: 'Investidor Pro',       limite: 10, cor: '#0D63DB', indica: true  },
-  assessorado:       { nome: 'Assessorado',          limite: 10, cor: '#0D63DB', indica: true  },
-  assessorado_anual: { nome: 'Assessorado',          limite: 10, cor: '#0D63DB', indica: true  },
-  clube:             { nome: 'Membro Leilão Club',   limite: 10, cor: '#0D63DB', indica: true  },
-  clube_anual:       { nome: 'Membro Leilão Club',   limite: 10, cor: '#0D63DB', indica: true  },
+  admin:             { nome: 'Administrador',        cor: '#0D63DB', indica: true },
+  analista:          { nome: 'Analista',             cor: '#0D63DB', indica: true },
+  advogado:          { nome: 'Jurídico',             cor: '#0D63DB', indica: true },
+  consultor:         { nome: 'Consultor',            cor: '#0D63DB', indica: true },
+  explorador:        { nome: 'Explorador',           cor: '#0D63DB', indica: true },
+  top2:              { nome: 'Investidor Pro',       cor: '#0D63DB', indica: true },
+  top2_anual:        { nome: 'Investidor Pro',       cor: '#0D63DB', indica: true },
+  assessorado:       { nome: 'Assessorado',          cor: '#0D63DB', indica: true },
+  assessorado_anual: { nome: 'Assessorado',          cor: '#0D63DB', indica: true },
+  clube:             { nome: 'Membro Leilão Club',   cor: '#0D63DB', indica: true },
+  clube_anual:       { nome: 'Membro Leilão Club',   cor: '#0D63DB', indica: true },
 };
-
-const mesAtual = () => new Date().toISOString().slice(0, 7);
 
 // Termo de ADESÃO ao Programa de Parceiros: FONTE ÚNICA em ../components/ConviteParceiro
 // (importado acima). Reutilizado aqui (card lateral) e nas telas de equipe/leiloeiro.
@@ -36,15 +38,12 @@ const STATUS_CASO = {
 
 export default function HomeCliente() {
   const nav = useNavigate();
-  const { user, effectiveRole, effectiveUserId, planoLegado, impersonate } = useAuth();
-  const infoBase = PLANO_INFO[effectiveRole] || PLANO_INFO.explorador;
-  // Assinante antigo (grandfather) mantém 15; o banco (limite_ia_efetivo) confirma na hora.
-  const ehPagoCliente = ['top2', 'top2_anual', 'assessorado', 'assessorado_anual', 'clube', 'clube_anual'].includes(effectiveRole);
-  const info = (planoLegado && ehPagoCliente && infoBase.limite != null) ? { ...infoBase, limite: 15 } : infoBase;
+  const { user, effectiveRole, effectiveUserId, impersonate } = useAuth();
+  const info = PLANO_INFO[effectiveRole] || PLANO_INFO.explorador;
   // Modo suporte: a saudação é a do CLIENTE visualizado (a equipe navega como ele).
   const primeiroNome = (impersonate?.nome || user?.user_metadata?.nome || user?.email || 'Investidor').split(' ')[0].split('@')[0];
 
-  const [usadas, setUsadas] = useState(0);
+  const [cotaMercado, setCotaMercado] = useState(null);
   const [copiado, setCopiado] = useState(false);
   const [meusCasos, setMeusCasos] = useState([]);
   const [aceite, setAceite] = useState(undefined); // undefined=carregando · null=não aceitou · ts=aceitou
@@ -64,12 +63,16 @@ export default function HomeCliente() {
   }, [effectiveUserId]);
 
   useEffect(() => {
-    if (!effectiveUserId || info.limite == null) return;
-    supabase.from('perfis').select('analises_mes, analises_count').eq('id', effectiveUserId).single()
-      .then(({ data }) => { if (data) setUsadas(data.analises_mes === mesAtual() ? (data.analises_count || 0) : 0); });
-  }, [effectiveUserId, info.limite]);
+    if (!effectiveUserId) { setCotaMercado(null); return; }
+    let vivo = true;
+    lerCotas(supabase, effectiveUserId).then((c) => { if (vivo) setCotaMercado(c?.mercado || null); });
+    return () => { vivo = false; };
+  }, [effectiveUserId]);
 
-  const restantes = info.limite != null ? Math.max(0, info.limite - usadas) : null;
+  // Sem cota carregada não mostra selo nenhum. Melhor nenhum número que um número errado.
+  const temSelo = !!cotaMercado && !cotaMercado.ilimitado && Number(cotaMercado.limite || 0) > 0;
+  const limiteCota = temSelo ? Number(cotaMercado.limite) : null;
+  const restantes = temSelo ? Math.max(0, limiteCota - Number(cotaMercado.usado || 0)) + Number(cotaMercado.bonus || 0) : null;
   // Link GERAL do parceiro → tela de INÍCIO do site (o visitante entra, navega, vê os produtos e
   // vem a assinar). Usa o código curto de indicação (…?ref=ABC123) em vez do UUID cru; enquanto o
   // código não carrega, cai no id (também aceito por vincular_upline) — o link nunca quebra. A
@@ -140,10 +143,10 @@ export default function HomeCliente() {
           <div style={{ fontSize: 26, fontWeight: 900, lineHeight: 1.15 }}>Olá, {primeiroNome}! 👋</div>
           {restantes != null && (
             <div style={{ marginTop: 14, display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,0.18)', borderRadius: 20, padding: '6px 14px', fontSize: 13, fontWeight: 700 }}>
-              <BarChart3 size={14} /> {restantes} de {info.limite} análises disponíveis este mês
+              <BarChart3 size={14} /> {restantes} de {limiteCota} análises disponíveis {janelaLabel(cotaMercado)}
             </div>
           )}
-          {info.limite == null && (
+          {cotaMercado?.ilimitado && (
             <div style={{ marginTop: 14, display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,0.18)', borderRadius: 20, padding: '6px 14px', fontSize: 13, fontWeight: 700 }}>
               <BarChart3 size={14} /> Análises ilimitadas
             </div>

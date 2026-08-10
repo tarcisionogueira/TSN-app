@@ -685,7 +685,7 @@ export default function ImovelDetalhe() {
   const nav = useNavigate();
   const loc = useLocation();
   const { id: paramId } = useParams();
-  const { user, role, planoLegado } = useAuth();
+  const { user, role } = useAuth();
   const [imovel, setImovel] = useState(loc.state?.imovel || null);
   const [cota, setCota] = useState(null); // quanto ainda dá para analisar — vira o texto do botão
   const [anexosDocs, setAnexosDocs] = useState([]);
@@ -748,10 +748,9 @@ export default function ImovelDetalhe() {
   useEffect(() => {
     if (!user) { setCota(null); return; }
     let vivo = true;
-    lerCotaMercado(supabase, user.id, role, planoLegado)
-      .then((c) => { if (vivo) setCota(c.carregou ? c : null); });
+    lerCotaMercado(supabase, user.id).then((c) => { if (vivo) setCota(c); });
     return () => { vivo = false; };
-  }, [user, role, planoLegado]);
+  }, [user]);
 
   useEffect(() => {
     // A busca por raio passa o imóvel no state SEM edital/matrícula/descrição.
@@ -966,17 +965,17 @@ export default function ImovelDetalhe() {
   const rotuloAnalise = (() => {
     if (!cota || cota.ilimitado) return 'Solicitar Análise';
     if (cota.restantes <= 0) {
-      return cota.vitalicia ? 'Análises grátis esgotadas' : 'Cota do mês esgotada';
+      return cota.amostra ? 'Análises grátis esgotadas' : 'Cota do mês esgotada';
     }
-    return cota.vitalicia
+    return cota.amostra
       ? `Analisar grátis (${cota.restantes} de ${cota.limite})`
       : `Analisar (${cota.restantes} de ${cota.limite} deste mês)`;
   })();
   // A barra fixa do mobile divide a largura com "Acessar leiloeiro" — o rótulo longo estoura.
   const rotuloAnaliseCurto = (() => {
     if (!cota || cota.ilimitado) return 'Solicitar Análise';
-    if (cota.restantes <= 0) return cota.vitalicia ? 'Grátis esgotadas' : 'Cota esgotada';
-    return cota.vitalicia ? `Analisar grátis (${cota.restantes})` : `Analisar (${cota.restantes})`;
+    if (cota.restantes <= 0) return cota.amostra ? 'Grátis esgotadas' : 'Cota esgotada';
+    return cota.amostra ? `Analisar grátis (${cota.restantes})` : `Analisar (${cota.restantes})`;
   })();
   // LEILÃO ENCERRADO (07/08): o servidor já recusava gerar relatório de lote vencido, mas a tela
   // seguia oferecendo o botão — o cliente só descobria depois de clicar, e para ele o relatório

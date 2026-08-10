@@ -402,7 +402,7 @@ async function paginaImovel(id) {
           <li><strong>Lance máximo</strong> que ainda preserva o seu lucro</li>
         </ul>
         <a class="cta" href="${SITE}/#/login?modo=cadastro&amp;imovel=${esc(im.id)}">Criar conta grátis e ver a ficha</a>
-        <p class="obs">São 3 análises por mês no plano gratuito. Já tem conta? <a href="${SITE}/#/imovel/${esc(im.id)}">Entrar e abrir este imóvel</a>.</p>
+        <p class="obs">São 3 análises gratuitas ao criar a conta, sem cartão. Já tem conta? <a href="${SITE}/#/imovel/${esc(im.id)}">Entrar e abrir este imóvel</a>.</p>
       </div>
 
       <h2>O que checar antes de dar um lance</h2>

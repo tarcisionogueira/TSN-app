@@ -12,7 +12,7 @@ import { supabase } from '../utils/supabase';
 import { apiCall } from '../utils/apiCall';
 import { parseDataLocal } from '../utils/format';
 import { useAuth } from '../contexts/AuthContext';
-import { limiteMercado, usadasMercado, COTA_SELECT } from '../utils/cotaAnalise';
+import { lerCotas, janelaLabel } from '../utils/cotaAnalise';
 import { useIsMobile } from '../utils/useIsMobile';
 import ScoreRisco from '../components/ScoreRisco';
 import { scoreBidPro, scoreLabel } from '../utils/score';
@@ -542,36 +542,26 @@ export default function Busca() {
   const plano = role || 'explorador';
   const canSite    = user && ROLES_SITE.includes(role);
   const canAnalise = user && ROLES_ANALISE.includes(role);
-  const [analisesBonus, setAnalisesBonus] = useState(null);
-  const [analisesUsadas, setAnalisesUsadas] = useState(0);
-  // Limite de relatórios por plano, para o selo de disponibilidade na busca. Vem do espelho
-  // ÚNICO (`utils/cotaAnalise`). Esta tela mantinha a própria cópia e dizia **15/mês** ao
-  // Investidor Pro quando o banco entrega **10** (15 é só o grandfather do plano_legado) —
-  // prometia cinco relatórios que o servidor não daria. Admin = null → sem selo (ilimitado).
-  // `null` = sem selo. O admin (ilimitado) e a EQUIPE (analista/advogado, que recebe demanda em
-  // vez de gerar) não têm o que exibir — antes a equipe caía fora por não existir na tabela local;
-  // como o espelho devolve 0 para ela, o 0 também precisa virar "sem selo", senão a busca passaria
-  // a anunciar "0 relatórios disponíveis" para quem nunca teve esse selo.
-  const limiteBruto = limiteMercado(effectiveRole, planoLegado);
-  const limiteAnalises = limiteBruto ? limiteBruto : null;
+  // Selo de disponibilidade. O número vem do BANCO (`minhas_cotas`), nunca de tabela copiada:
+  // esta tela mantinha a própria e anunciava 15 relatórios/mês ao Investidor Pro, quando o
+  // servidor entrega 10. Sem cota carregada não há selo — melhor nenhum número que um errado.
+  const [cotaMercado, setCotaMercado] = useState(null);
 
   useEffect(() => {
-    if (!effectiveUserId || limiteAnalises == null) { setAnalisesBonus(null); return; }
-    // COLUNA CERTA POR PAPEL (07/08). O EXPLORADOR consome amostra grátis, e o
-    // `consumir_analise_por` grava isso em `amostra_mercado_usadas` — nunca em
-    // `analises_count`. Lendo só `analises_count`, o contador ficava eternamente em
-    // "3 de 3 disponíveis" por mais relatórios que ele gerasse (caso do Romualdo:
-    // amostra_mercado_usadas = 1 e analises_count = 0). Mesma classe do bug do Índice de
-    // hoje: escritor e leitor discordando sobre onde o dado mora.
-    // A amostra também NÃO reseta por mês — por isso ela não passa pela comparação de `mes`.
-    supabase.from('perfis').select(COTA_SELECT).eq('id', effectiveUserId).single()
-      .then(({ data }) => {
-        if (!data) return;
-        setAnalisesBonus(data.bonus_mercado || 0);
-        setAnalisesUsadas(usadasMercado(data, effectiveRole));
-      });
-  }, [effectiveUserId, limiteAnalises, effectiveRole]);
-  const analisesRestantes = limiteAnalises != null ? Math.max(0, limiteAnalises - analisesUsadas) : null;
+    if (!effectiveUserId) { setCotaMercado(null); return; }
+    let vivo = true;
+    lerCotas(supabase, effectiveUserId).then((c) => { if (vivo) setCotaMercado(c?.mercado || null); });
+    return () => { vivo = false; };
+  }, [effectiveUserId]);
+
+  // Sem selo para admin (ilimitado) e para a equipe/quem não gera (limite 0) — nenhum dos dois
+  // tem o que exibir, e "0 relatórios disponíveis" seria pior que o silêncio.
+  const mostraSelo = !!cotaMercado && !cotaMercado.ilimitado && Number(cotaMercado.limite || 0) > 0;
+  const limiteAnalises = mostraSelo ? Number(cotaMercado.limite) : null;
+  const analisesBonus = mostraSelo ? Number(cotaMercado.bonus || 0) : 0;
+  const analisesRestantes = mostraSelo ? Math.max(0, limiteAnalises - Number(cotaMercado.usado || 0)) : null;
+  const janelaSelo = janelaLabel(cotaMercado);
+
   const FILTROS_INICIAL = { tipos:[], estado:'', cidades:[], bairros:[], raioKm:0, valorMin:'', valorMax:'', modalidades:[], pagamento:[], descontoMin:0, intencao:'' };
   // Se viemos de um deep-link de email, pré-popula os filtros e dispara busca
   const filtrosFromUrl = React.useMemo(() => {
@@ -1297,16 +1287,21 @@ export default function Busca() {
 
   return (
     <div style={{ position:'relative' }}>
-    {/* Selo fixo de relatórios DISPONÍVEIS no mês (explorador 3/mês, Investidor Pro 15/mês) */}
+    {/* Selo fixo de relatórios disponíveis. Números e janela ("este mês" × "no total") vêm de
+        minhas_cotas — a amostra do explorador NÃO renova, e dizer "do mês" a ele fazia a pessoa
+        esperar uma renovação que nunca chega. */}
     {analisesRestantes !== null && (() => {
-      const totalDisp = analisesRestantes + (effectiveRole === 'explorador' ? (analisesBonus || 0) : 0);
+      const totalDisp = analisesRestantes + (analisesBonus || 0);
+      const plural = (n) => (n === 1 ? 'relatório disponível' : 'relatórios disponíveis');
       return (
         <div style={{ position:'fixed', bottom: 80, left: '50%', transform:'translateX(-50%)', zIndex:1000, background: totalDisp > 0 ? '#0D63DB' : '#dc2626', color:'white', borderRadius:999, padding:'8px 20px', fontSize:13, fontWeight:700, boxShadow:'0 4px 20px rgba(0,0,0,0.25)', display:'flex', alignItems:'center', gap:8, whiteSpace:'nowrap' }}>
           {totalDisp > 0
-            ? (effectiveRole === 'explorador' && analisesBonus > 0
-                ? `📊 ${totalDisp} ${totalDisp === 1 ? 'relatório disponível' : 'relatórios disponíveis'} este mês (${analisesRestantes} do plano + ${analisesBonus} bônus)`
-                : `📊 ${analisesRestantes} de ${limiteAnalises} ${limiteAnalises === 1 ? 'relatório disponível' : 'relatórios disponíveis'}${effectiveRole === 'explorador' ? ' (amostra grátis, não renova)' : ' este mês'}`)
-            : '🔒 Relatórios do mês esgotados, faça upgrade'}
+            ? (analisesBonus > 0
+                ? `📊 ${totalDisp} ${plural(totalDisp)} ${janelaSelo} (${analisesRestantes} do plano + ${analisesBonus} bônus)`
+                : `📊 ${analisesRestantes} de ${limiteAnalises} ${plural(limiteAnalises)}${cotaMercado?.amostra ? ' (amostra grátis, não renova)' : ' este mês'}`)
+            : (cotaMercado?.amostra
+                ? '🔒 Amostra grátis esgotada, faça upgrade'
+                : '🔒 Relatórios do mês esgotados, faça upgrade')}
         </div>
       );
     })()}

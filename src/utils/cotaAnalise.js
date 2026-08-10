@@ -1,77 +1,68 @@
 /**
- * COTA DE RELATÓRIO MERCADOLÓGICO — espelho ÚNICO do banco no frontend.
+ * COTA — a tela pergunta ao BANCO quanto a pessoa tem. Não existe tabela de limites no
+ * frontend, de propósito.
  *
- * POR QUE EXISTE (09/08): esta regra estava copiada em TRÊS telas e as cópias já tinham
- * divergido. `Busca.jsx` anunciava 15 relatórios/mês para o Investidor Pro; `Analise.jsx` e a
- * função `limite_ia` do banco dizem 10 (15 é só o grandfather de `plano_legado`). Ou seja: a
- * busca prometia cinco relatórios que o servidor não entregaria. É a mesma classe de problema
- * dos "dois cérebros" do saque — planejamento em cima de uma regra que o código não aplica.
- * Daqui para frente, quem precisar da cota importa deste arquivo; mexeu no banco, mexe AQUI, e
- * as telas acompanham juntas.
+ * POR QUE (09/08): a tabela de limites estava copiada em QUATRO telas e todas as cópias já
+ * tinham divergido do servidor, cada uma para um lado:
+ *   • `Busca.jsx` prometia 15 relatórios/mês ao Investidor Pro — o banco entrega 10;
+ *   • `HomeCliente.jsx` dava `limite: null` ao CONSULTOR, e null vira "Análises ilimitadas"
+ *     na tela — o consultor tem 5;
+ *   • `Analise.jsx` dava 0 à equipe, o banco dá 100;
+ *   • o popup de bônus em `App.jsx` anunciava "5 análises por mês" fixo, sem ler nada.
+ * Todas eram anúncio falso de quantidade. A causa é sempre a mesma: cópia que envelhece
+ * sozinha. A cura não é sincronizar as cópias — é não ter cópia.
  *
- * FONTE DA VERDADE continua sendo o servidor: `limite_ia(role, tipo)` +
- * `limite_ia_efetivo(user, tipo)` (grandfather) e o consumo em `consumir_analise_por()`.
- * Este arquivo só evita que a UI bloqueie (ou prometa) antes da hora.
+ * `minhas_cotas(user_id)` já existia no banco, é STABLE SECURITY DEFINER, exige `auth.uid()`
+ * (admin/analista podem ler de terceiros, o que faz o modo suporte funcionar) e — o ponto que
+ * importa — ESPELHA O RAMO DA ESCRITA: devolve `amostra: true` para o explorador, cujo
+ * contador é VITALÍCIO (`amostra_mercado_usadas`) e não reseta no mês. É a única fonte que
+ * não pode divergir de `consumir_analise_por`, porque as duas leem as mesmas colunas.
+ *
+ * Formato devolvido:
+ *   { plano, role, mes, amostra, credito_saldo,
+ *     mercado:    { usado, limite, bonus, ilimitado, amostra },
+ *     documental: { usado, limite, bonus, ilimitado },
+ *     indice:     { usado, limite, bonus, ilimitado } }
  */
 
-// Planos de CLIENTE pagante que carregam o grandfather de 15 quando `plano_legado`.
-export const ROLES_PAGOS_CLIENTE = ['top2', 'top2_anual', 'assessorado', 'assessorado_anual', 'clube', 'clube_anual'];
+/**
+ * Nunca lança e nunca inventa: devolve `null` se a leitura falhar. Quem chama usa isso para
+ * PINTAR botão e selo — uma falha de rede não pode virar "você não tem análise" nem, pior,
+ * um número errado na tela.
+ */
+export async function lerCotas(supabase, userId) {
+  if (!userId) return null;
+  try {
+    const { data, error } = await supabase.rpc('minhas_cotas', { p_user_id: userId });
+    if (error || !data || data.erro) return null;
+    return data;
+  } catch {
+    return null;
+  }
+}
 
-// Espelha o ramo `else` de limite_ia(role,'mercado'). Equipe (analista/advogado) não gera
-// relatório próprio — recebe demanda — por isso fica de fora e cai no 0.
-const LIMITE_MERCADO = {
-  explorador: 3, consultor: 5,
-  top2: 10, top2_anual: 10,
-  assessorado: 10, assessorado_anual: 10,
-  clube: 10, clube_anual: 10,
-};
-
-/** null = ilimitado (admin). 0 = não gera. */
-export function limiteMercado(role, planoLegado) {
-  if (role === 'admin') return null;
-  if (planoLegado && ROLES_PAGOS_CLIENTE.includes(role)) return 15;
-  return LIMITE_MERCADO[role] || 0;
+/** Atalho para quem só precisa do relatório mercadológico. */
+export async function lerCotaMercado(supabase, userId) {
+  const c = await lerCotas(supabase, userId);
+  return c?.mercado ? { ...c.mercado, restantes: restantesDe(c.mercado) } : null;
 }
 
 /**
- * O EXPLORADOR consome AMOSTRA VITALÍCIA (`amostra_mercado_usadas`), que não reseta no mês;
- * os demais consomem cota MENSAL (`analises_count` + `analises_mes`). Escritor e leitor
- * precisam concordar sobre onde o dado mora — ler a coluna errada foi o bug que deixava o
- * contador do explorador eternamente em "3 de 3".
+ * Quanto ainda dá para gerar. Espelha `consumir_analise_por`: gasta o limite principal
+ * primeiro e usa o bônus como excedente — por isso o bônus SOMA ao que sobrou, e não
+ * ao limite.
  */
-export const vitalicia = (role) => role === 'explorador';
-
-/** Colunas a pedir no select do perfil. */
-export const COTA_SELECT = 'analises_mes, analises_count, amostra_mercado_usadas, bonus_mercado';
-
-export function usadasMercado(perfil, role) {
-  if (!perfil) return 0;
-  if (vitalicia(role)) return perfil.amostra_mercado_usadas || 0;
-  const mes = new Date().toISOString().slice(0, 7);
-  return perfil.analises_mes === mes ? (perfil.analises_count || 0) : 0;
+export function restantesDe(bloco) {
+  if (!bloco || bloco.ilimitado) return null;
+  const limite = Number(bloco.limite || 0);
+  const usado = Number(bloco.usado || 0);
+  return Math.max(0, limite - usado) + Number(bloco.bonus || 0);
 }
 
 /**
- * Lê o estado da cota do usuário. Devolve sempre um objeto — nunca lança —, porque quem chama
- * usa isso para PINTAR botão: uma falha de rede não pode virar "você não tem análise".
- * `restantes` já soma o bônus, espelhando consumir_analise_por (gasta o principal e usa o
- * bônus como excedente).
+ * "este mês" ou "no total". Dizer "este mês" ao explorador é a falha mais cara desta família:
+ * ele lê que renova, não renova nunca, e some — em vez de comprar crédito ou assinar.
  */
-export async function lerCotaMercado(supabase, userId, role, planoLegado) {
-  const limite = limiteMercado(role, planoLegado);
-  const vazio = { limite, usadas: 0, bonus: 0, restantes: null, ilimitado: limite === null, vitalicia: vitalicia(role), carregou: false };
-  if (!userId || limite === null) return vazio;
-
-  const { data, error } = await supabase.from('perfis').select(COTA_SELECT).eq('id', userId).single();
-  if (error || !data) return vazio;
-
-  const usadas = usadasMercado(data, role);
-  const bonus = data.bonus_mercado || 0;
-  return {
-    limite, usadas, bonus,
-    restantes: Math.max(0, limite - usadas) + bonus,
-    ilimitado: false,
-    vitalicia: vitalicia(role),
-    carregou: true,
-  };
+export function janelaLabel(bloco) {
+  return bloco?.amostra ? 'no total' : 'este mês';
 }

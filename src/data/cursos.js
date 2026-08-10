@@ -283,7 +283,7 @@ export const PLANOS = {
     descricao: 'Comece a explorar o mercado de leilões sem pagar nada',
     recursos: [
       '✅ Busca de leilões em todo o Brasil',
-      '✅ 3 relatórios mercadológicos e viabilidade financeira de amostra',
+      '✅ 3 relatórios mercadológicos e viabilidade financeira de amostra (uso único, não renovam)',
       '✅ Flag de viabilidade (🟢/🔴)',
       '✅ Direcionamento ao site do leiloeiro',
       '✅ Cursos gratuitos (Destravando Leilões + Leilão Seguro)',

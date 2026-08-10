@@ -106,9 +106,17 @@ function ContaInativa() {
   );
 }
 
-function PopupBonusAnalises({ userId, onFechar }) {
+/**
+ * Popup de BÔNUS concedido. Recebe `bonus` (o valor real de perfis.bonus_mercado) — até 09/08
+ * o texto era fixo e mentia duas vezes: dizia que o Explorador tem "3 análises por mês" (são 3
+ * VITALÍCIAS, `amostra_mercado_usadas` não reseta) e estampava "5 análises por mês" numa caixa
+ * grande, número que não vinha de lugar nenhum. Dois usuários com 1 bônus cada estavam a um
+ * login de ver esse "5".
+ */
+function PopupBonusAnalises({ userId, bonus, onFechar }) {
   const [fechado, setFechado] = React.useState(false);
   if (fechado) return null;
+  const n = Number(bonus || 0);
 
   function fechar() {
     setFechado(true);
@@ -124,15 +132,15 @@ function PopupBonusAnalises({ userId, onFechar }) {
       <div style={{ background: 'white', borderRadius: 20, padding: 36, maxWidth: 420, width: '100%', textAlign: 'center', boxShadow: '0 20px 60px rgba(0,0,0,0.3)', position: 'relative' }}>
         <button onClick={fechar} style={{ position: 'absolute', top: 14, right: 16, background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#94a3b8' }}>✕</button>
         <div style={{ fontSize: 56, marginBottom: 12 }}>🎁</div>
-        <h2 style={{ fontSize: 22, fontWeight: 900, color: '#111111', margin: '0 0 10px' }}>Bem-vindo ao BidPro Brasil!</h2>
+        <h2 style={{ fontSize: 22, fontWeight: 900, color: '#111111', margin: '0 0 10px' }}>Você ganhou análises extras!</h2>
         <p style={{ fontSize: 15, color: '#475569', lineHeight: 1.6, margin: '0 0 24px' }}>
-          Seu plano <strong style={{ color: '#0D63DB' }}>Explorador</strong> inclui <strong style={{ color: '#0D63DB' }}>3 análises Mercadológicas + Viabilidade por mês</strong>, de graça, para você avaliar imóveis em leilão.
+          Creditamos <strong style={{ color: '#0D63DB' }}>{n} {n === 1 ? 'análise' : 'análises'} de bônus</strong> na sua conta, além do que o seu plano já inclui.
         </p>
         <div style={{ background: '#eff6ff', borderRadius: 12, padding: '14px 20px', marginBottom: 24 }}>
-          <div style={{ fontSize: 36, fontWeight: 900, color: '#0D63DB' }}>5</div>
-          <div style={{ fontSize: 13, color: '#3b82f6', fontWeight: 600 }}>análises por mês</div>
+          <div style={{ fontSize: 36, fontWeight: 900, color: '#0D63DB' }}>{n}</div>
+          <div style={{ fontSize: 13, color: '#3b82f6', fontWeight: 600 }}>{n === 1 ? 'análise de bônus' : 'análises de bônus'}</div>
         </div>
-        <p style={{ fontSize: 12, color: '#94a3b8', margin: '0 0 20px' }}>Faça upgrade para o plano Investidor Pro e ganhe 10 relatórios mercadológicos e 10 documentais e jurídicos por mês.</p>
+        <p style={{ fontSize: 12, color: '#94a3b8', margin: '0 0 20px' }}>O bônus é usado depois que a cota do seu plano acaba, e não expira no fim do mês.</p>
         <button onClick={fechar} style={{ width: '100%', padding: '13px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>
           Começar a explorar →
         </button>
@@ -244,7 +252,7 @@ function MainLayout() {
     if (!isLoggedIn || role !== 'explorador' || !user?.id) return;
     supabase.from('perfis').select('bonus_mercado, bonus_exibido').eq('id', user.id).single()
       .then(({ data }) => {
-        if (data?.bonus_mercado > 0 && !data?.bonus_exibido) setShowBonus(true);
+        if (data?.bonus_mercado > 0 && !data?.bonus_exibido) setShowBonus(data.bonus_mercado);
       });
   }, [isLoggedIn, role, user?.id]);
 
@@ -270,7 +278,7 @@ function MainLayout() {
     <div style={{ minHeight: '100dvh', background: '#f1f5f9', fontFamily: "'Inter', sans-serif", display: 'flex', flexDirection: 'column' }}>
       <Header />
       {isLoggedIn && inadimplenteDias > 0 && <PopupInadimplente dias={inadimplenteDias} />}
-      {showBonus && <PopupBonusAnalises userId={user.id} onFechar={() => setShowBonus(false)} />}
+      {showBonus && <PopupBonusAnalises userId={user.id} bonus={showBonus} onFechar={() => setShowBonus(false)} />}
       {isLoggedIn && <TourGuia />}
       {user && <ContratoObrigatorio userId={user.id} />}
       {user && <CompletarCadastroModal />}

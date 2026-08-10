@@ -18,7 +18,7 @@ import { loadImoveis, saveImoveis, generateId } from '../utils/storage';
 import { useAuth } from '../contexts/AuthContext';
 import { useAnalises } from '../contexts/AnalisesContext';
 import { supabase } from '../utils/supabase';
-import { limiteMercado, usadasMercado, COTA_SELECT } from '../utils/cotaAnalise';
+import { lerCotas } from '../utils/cotaAnalise';
 import { assinarAnexos, chaveDocCanonica } from '../utils/docUrl';
 import TabelaAmortizacao from '../components/TabelaAmortizacao';
 import { gerarPDF } from '../components/RelatorioPDF';
@@ -125,10 +125,8 @@ function BandaMercado({ n, titulo, sub, cor = '#0D63DB' }) {
   );
 }
 
-// Limite de relatórios mercadológicos+viabilidade por plano. O espelho do banco mora em
-// `src/utils/cotaAnalise.js` (fonte única no frontend) — havia três cópias desta tabela e
-// elas já discordavam entre si.
-const limiteRelatorios = (role, planoLegado) => limiteMercado(role, planoLegado) ?? 0;
+// O limite NÃO mora mais aqui: vem de `minhas_cotas` no banco (via utils/cotaAnalise).
+// Havia quatro cópias desta tabela no frontend e todas já divergiam do servidor.
 const ROLES_SEM_LIMITE = ['admin'];
 // Documental/jurídico só a partir do Investidor Pro (explorador/consultor não têm).
 const ROLES_SEM_DOCUMENTAL = ['explorador', 'consultor'];
@@ -156,29 +154,28 @@ export default function Analise() {
   const temCNJ = ROLES_COM_CNJ.includes(role);
   const semLimite = ROLES_SEM_LIMITE.includes(role);
 
-  const [analisesBloqueado, setAnalisesBloqueado] = useState(false);
-  const [analisesUsadas, setAnalisesUsadas] = useState(0);
-  const [analisesBonus, setAnalisesBonus] = useState(0);
+  const [cotaMercado, setCotaMercado] = useState(null);
   const [upgrade, setUpgrade] = useState(null); // popup de compra: null | { tipo:'plano'|'cota', titulo }
-  const limiteRole = limiteRelatorios(role, planoLegado);
 
-  // Lê os contadores de cota do perfil (fonte da verdade). O CONSUMO da cota
-  // passou a ser server-side (/api/gerar-analise → consumir_analise_por); aqui só
-  // LEMOS para pintar o estado da tela — chamamos no mount e após cada geração.
+  const limiteRole = Number(cotaMercado?.limite || 0);
+  const analisesUsadas = Number(cotaMercado?.usado || 0);
+  const analisesBonus = Number(cotaMercado?.bonus || 0);
+  // Bloqueia só quando estourou o limite E não há bônus por cima (espelha
+  // consumir_analise_por: consome o principal primeiro, bônus como excedente). Enquanto a
+  // cota não carregou, NÃO bloqueia — trancar a tela por causa de rede lenta é pior que
+  // deixar o servidor recusar depois, que é o gate de verdade.
+  const analisesBloqueado = !!cotaMercado && !cotaMercado.ilimitado && analisesUsadas >= limiteRole && analisesBonus <= 0;
+  // "amostra" = contador VITALÍCIO (explorador). Quem decide é o banco, não o papel adivinhado
+  // na tela: dizer "este mês" a quem tem amostra faz a pessoa esperar uma renovação que não vem.
+  const ehAmostra = !!cotaMercado?.amostra;
+
+  // Lê a cota do BANCO (minhas_cotas espelha exatamente o que consumir_analise_por escreve).
+  // O CONSUMO é server-side; aqui só LEMOS para pintar a tela — no mount e após cada geração.
   const carregarCota = React.useCallback(async () => {
     if (!user || semLimite) return;
-    const { data, error } = await supabase.from('perfis').select(COTA_SELECT).eq('id', user.id).single();
-    if (error || !data) return;
-    // EXPLORADOR: contador de AMOSTRA VITALÍCIA (não reseta por mês). Demais planos: cota mensal.
-    // Qual coluna ler por papel é decisão de `usadasMercado` — a mesma que a Busca e o Imóvel usam.
-    const count = usadasMercado(data, role);
-    const bonus = data.bonus_mercado || 0;
-    setAnalisesUsadas(count);
-    setAnalisesBonus(bonus);
-    // Bloqueia só quando estourou o limite E não há bônus por cima
-    // (espelha consumir_analise_por: consome o principal primeiro, bônus como excedente).
-    setAnalisesBloqueado(count >= limiteRole && bonus <= 0);
-  }, [role, user, semLimite, limiteRole]);
+    const c = await lerCotas(supabase, user.id);
+    if (c?.mercado) setCotaMercado(c.mercado);
+  }, [user, semLimite]);
 
   useEffect(() => { carregarCota(); }, [carregarCota]);
 
@@ -1330,10 +1327,10 @@ export default function Analise() {
       {!semLimite && (
         <div style={{ padding:'10px 16px', borderRadius:10, background: analisesBloqueado ? '#fee2e2' : role === 'explorador' ? '#eff6ff' : '#fef3c7', color: analisesBloqueado ? '#dc2626' : role === 'explorador' ? '#084BA6' : '#92400e', fontSize:12, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
           <span>{analisesBloqueado
-            ? (role === 'explorador'
+            ? (ehAmostra
                 ? `🔒 Você usou seus ${limiteRole} relatórios de amostra. Compre créditos para gerar mais.`
                 : `🔒 Limite de ${limiteRole} análises mensais atingido.`)
-            : role === 'explorador'
+            : ehAmostra
               ? `📊 Relatórios de amostra: ${analisesUsadas}/${limiteRole}${analisesBonus > 0 ? ` (+${analisesBonus} bônus)` : ''}`
               : `📊 Análises este mês: ${analisesUsadas}/${limiteRole}`
           }</span>
@@ -3736,11 +3733,15 @@ export default function Analise() {
                 <Sparkles size={13}/> Investidor Pro
               </div>
               <div style={{ fontSize:20, fontWeight:900, marginTop:12, lineHeight:1.2 }}>
-                {upgrade.tipo === 'cota' ? 'Você usou suas análises do mês' : 'Desbloqueie a análise completa'}
+                {upgrade.tipo === 'cota'
+                  ? (ehAmostra ? 'Você usou suas análises gratuitas' : 'Você usou suas análises do mês')
+                  : 'Desbloqueie a análise completa'}
               </div>
               <div style={{ fontSize:13, opacity:0.92, marginTop:6, lineHeight:1.55 }}>
                 {upgrade.tipo === 'cota'
-                  ? `Você atingiu o limite de ${limiteRole} análises mensais. Assine o Investidor Pro e continue analisando com folga.`
+                  ? (ehAmostra
+                      ? `Suas ${limiteRole} análises gratuitas são de amostra e não renovam no mês seguinte. Assine o Investidor Pro para ter 10 relatórios mercadológicos por mês.`
+                      : `Você atingiu o limite de ${limiteRole} análises mensais. Assine o Investidor Pro e continue analisando com folga.`)
                   : `${upgrade.titulo ? `"${upgrade.titulo}" faz parte do ` : 'Faz parte do '}Investidor Pro: a leitura jurídica e o parecer final que decidem o lance com segurança.`}
               </div>
             </div>
