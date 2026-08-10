@@ -166,7 +166,7 @@ export default async function handler(req, res) {
   if (acao === 'importar') {
     const dias = Math.min(365, Math.max(7, Number(body.dias) || 120));
     const auth = req.headers?.authorization || req.headers?.Authorization || '';
-    const r = await fetch(`${BASE}/api/financeiro-extrato?dias=${dias}`, { headers: { Authorization: auth } });
+    const r = await fetch(`${BASE}/api/financeiro-extrato?dias=${dias}&lista=completa`, { headers: { Authorization: auth } });
     if (!r.ok) {
       const det = await r.text().catch(() => '');
       console.error('[conciliacao] extrato', r.status, det.slice(0, 200));

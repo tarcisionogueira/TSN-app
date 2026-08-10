@@ -118,7 +118,12 @@ export default async function handler(req) {
     const ehBeneficio = preco === 0;
 
     if (ehBeneficio) {
-      const temAcesso = PLANOS_COM_CONTEUDO.includes(role);
+      // MESMA normalização do ramo de PLANO acima (linha ~105). O `_anual` foi tratado lá e
+      // esquecido aqui: `top2_anual` não está em PLANOS_COM_CONTEUDO, então quem paga o Pro
+      // ANUAL abria um curso/e-book INCLUSO no plano e lia "entre na sua conta e faça upgrade
+      // do plano para acessar este conteúdo", com o botão de criar conta desabilitado. Mandava
+      // fazer upgrade quem já paga e já tem. (10/08)
+      const temAcesso = PLANOS_COM_CONTEUDO.includes(String(role || '').replace(/_anual$/, ''));
       return new Response(JSON.stringify({ temConta: true, temAcesso, ehBeneficio: true }), { status: 200, headers });
     } else {
       const rc = await sb(`compras_produtos?user_id=eq.${encodeURIComponent(userId)}&produto_tipo=eq.${encodeURIComponent(produto.tipo)}&produto_id=eq.${encodeURIComponent(produto.id)}&status=eq.ativo&select=id`);

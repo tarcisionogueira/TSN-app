@@ -210,6 +210,15 @@ export default async function handler(req) {
         exige_nf: !!av.exige_nf,
         teto: av.teto, ja_sacado_na_janela: av.ja_sacado_na_janela,
         disponivel_sem_nf: av.disponivel_sem_nf,
+        // `nf_valor_exigido` e `total_do_mes` vinham do `saque_avaliar` e eram DESCARTADOS aqui
+        // (10/08). A tela lia `data.nf_valor_exigido` — campo que nunca chegava — e caía no
+        // fallback `|| valor`, pedindo a nota do PEDIDO em vez da do INTEGRAL do mês, ao
+        // contrário do que o próprio comentário dela dizia.
+        // (O motor no banco está correto e sempre esteve: ele exige `valor_nf >= total_do_mes`,
+        // ou seja, `ja_sacado_na_janela + este pedido` — não dá para escapar fatiando saques.
+        // O defeito era só de TRANSPORTE: a regra certa não chegava à tela.)
+        nf_valor_exigido: av.nf_valor_exigido ?? av.total_do_mes ?? null,
+        total_do_mes: av.total_do_mes ?? null,
       }, 422);
     }
 

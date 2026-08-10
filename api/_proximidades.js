@@ -82,7 +82,9 @@ export async function consultarProximidades(lat, lng) {
     data = await Promise.any(OVERPASS_MIRRORS.map(ep => tentarEspelho(ep)));
   } catch (e) {
     const errs = (e && Array.isArray(e.errors)) ? e.errors.map(x => String(x?.message || x)).join('; ') : String(e?.message || e);
-    throw new Error(errs || 'overpass indisponível');
+    // `cause` preserva o AggregateError original: sem ele, some qual espelho falhou por quê —
+    // e é justamente esse detalhe que distingue "429 em todos" de "200 com remark".
+    throw new Error(errs || 'overpass indisponível', { cause: e });
   }
 
   // ZERO elementos é INCONCLUSIVO, não é resposta. Um raio de 4 km sem uma escola, um ponto de

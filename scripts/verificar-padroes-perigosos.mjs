@@ -60,6 +60,21 @@ const REGRAS = [
   },
 ];
 
+// Regras de ARQUIVO: o defeito não está numa linha, está na AUSÊNCIA de algo no arquivo inteiro.
+const REGRAS_ARQUIVO = [
+  {
+    id: 'signup-sem-guard-duplicado',
+    titulo: 'signUp() sem o guard de e-mail já cadastrado (identities: [])',
+    // Com "Confirm email" ligado, o Supabase protege contra enumeração: e-mail JÁ cadastrado
+    // devolve 200, um usuário fantasma com `identities: []` e `confirmation_sent_at` preenchido
+    // — e NÃO manda e-mail. Quem checa só o `signUpError` conclui "conta criada" e manda a
+    // pessoa esperar um e-mail que nunca chega, com uma senha que não abre nada. Três fluxos
+    // desta base tinham o guard e um não tinha (ConviteEquipe, 10/08); a Promo tinha o mesmo
+    // defeito por outro caminho. É a ausência que se detecta, não uma linha.
+    testar: (texto) => /\.auth\.signUp\s*\(/.test(texto) && !/identities/.test(texto),
+  },
+];
+
 function arquivos(dir, saida = []) {
   const abs = join(RAIZ, dir);
   if (!existsSync(abs)) return saida;
@@ -77,7 +92,14 @@ function contar() {
   const porArquivo = {}; // arquivo → { regraId: [linhas] }
   for (const dir of DIRS) {
     for (const rel of arquivos(dir)) {
-      const linhas = readFileSync(join(RAIZ, rel), 'utf8').split('\n');
+      const texto = readFileSync(join(RAIZ, rel), 'utf8');
+      for (const r of REGRAS_ARQUIVO) {
+        if (!r.testar(texto)) continue;
+        if (/\/\/\s*padrao-ok:\s*\S/.test(texto)) continue; // exceção declarada em qualquer ponto do arquivo
+        porArquivo[rel] ||= {};
+        (porArquivo[rel][r.id] ||= []).push(0); // regra de arquivo: linha 0 = "o arquivo inteiro"
+      }
+      const linhas = texto.split('\n');
       for (let i = 0; i < linhas.length; i++) {
         const linha = linhas[i];
         // Exceção deliberada: marcador na própria linha ou na linha imediatamente acima.
@@ -130,7 +152,7 @@ if (!pioras.length) {
 
 console.error('\n✗ PADRÃO PERIGOSO NOVO — esta é a família de bugs de 10/08 tentando voltar.\n');
 for (const p of pioras) {
-  const regra = REGRAS.find((r) => r.id === p.id);
+  const regra = REGRAS.find((r) => r.id === p.id) || REGRAS_ARQUIVO.find((r) => r.id === p.id);
   console.error(`  ${p.arq}`);
   console.error(`    ${regra.titulo}`);
   console.error(`    linha(s): ${p.linhas.join(', ')}   (base ${p.antes} → agora ${p.agora})\n`);

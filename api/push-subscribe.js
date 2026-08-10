@@ -43,7 +43,11 @@ export default async function handler(req) {
   const { subscription, action = 'subscribe' } = body;
 
   if (action === 'unsubscribe') {
-    await sb(`push_subscriptions?user_id=eq.${user.id}`, { method: 'DELETE' });
+    const del = await sb(`push_subscriptions?user_id=eq.${user.id}`, { method: 'DELETE' });
+    if (!del.ok) {
+      console.error('[push-subscribe] delete falhou', del.status);
+      return new Response(JSON.stringify({ error: 'Não foi possível desativar as notificações agora.' }), { status: 502, headers });
+    }
     return new Response(JSON.stringify({ ok: true }), { status: 200, headers });
   }
 
@@ -51,8 +55,10 @@ export default async function handler(req) {
     return new Response(JSON.stringify({ error: 'subscription inválida' }), { status: 400, headers });
   }
 
-  // Upsert: um registro por usuário (substitui se já existe)
-  await sb('push_subscriptions', {
+  // Upsert: um registro por usuário (substitui se já existe).
+  // O resultado era DESCARTADO e o handler devolvia ok:true de qualquer jeito: o usuário via
+  // "notificações ativadas" e nunca recebia push, sem nada registrar a divergência. (10/08)
+  const ins = await sb('push_subscriptions', {
     method: 'POST',
     headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
     body: JSON.stringify({
@@ -63,6 +69,10 @@ export default async function handler(req) {
       user_agent: req.headers.get('user-agent')?.slice(0, 200) || null,
     }),
   });
+  if (!ins.ok) {
+    console.error('[push-subscribe] upsert falhou', ins.status, (await ins.text().catch(() => '')).slice(0, 200));
+    return new Response(JSON.stringify({ error: 'Não foi possível ativar as notificações agora.' }), { status: 502, headers });
+  }
 
   return new Response(JSON.stringify({ ok: true }), { status: 200, headers });
 }

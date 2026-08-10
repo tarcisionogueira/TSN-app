@@ -278,6 +278,18 @@ export default async function handler(req) {
           ],
         }],
       }),
+    }, {
+      // ORÇAMENTO DE EDGE (10/08). Estes handlers são `runtime: 'edge'`, que tem teto DURO de
+      // 25s para a resposta inicial, e chamavam `anthropicFetch` SEM opções — herdando o padrão
+      // `retries: 3, timeoutMs: 120000` do `_claude.js`. Um único 529 do Anthropic já passava dos
+      // 25s e a Vercel MATAVA a função: com isso todo o desenho de fail-open ('revisar'/
+      // 'pendente', que existe justamente para não travar a assinatura de um contrato) virava
+      // CÓDIGO MORTO — os catch nunca executavam e o cliente recebia erro de rede.
+      // 1 retry de 8s (+~0,8s de espera) cabe com folga nos 25s e mantém a proteção contra o
+      // 529 transitório. O remédio de fundo seria migrar para runtime Node com maxDuration (é o
+      // que `api/claude.js` fez) — mas aí o `export default` teria de virar `export const POST`,
+      // senão o Response é ignorado (a armadilha documentada em monitor-fontes-cron.js).
+      retries: 1, timeoutMs: 8000,
     });
 
     // Sem checar claudeRes.ok, uma indisponibilidade do Claude (4xx/5xx) virava corpo {} →

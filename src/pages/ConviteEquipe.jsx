@@ -424,7 +424,39 @@ export default function ConviteEquipe() {
         },
       });
       if (signUpError) throw signUpError;
+      // E-MAIL JÁ CADASTRADO NÃO DEVOLVE ERRO (10/08). Com "Confirm email" ligado, o Supabase
+      // protege contra enumeração: responde 200 com um usuário FANTASMA, `identities: []` e
+      // `confirmation_sent_at` preenchido — e não envia e-mail nenhum. Checando só o
+      // `signUpError`, esta tela levava a pessoa pelos 9 passos e as 3 fotos de KYC e terminava
+      // em "Cadastro concluído! Verifique também seu e-mail" com uma senha que não abre nada:
+      // a conta antiga, com a senha antiga, é a única que existe.
+      // Os outros dois fluxos de cadastro da base já tinham este guard (`Login.jsx:333` e
+      // `Checkout.jsx:645`) — aqui foi omissão, não decisão. O convite NÃO se perde: o
+      // AuthContext resgata `CHAVE_EQUIPE` no primeiro login (por isso a orientação é logar).
+      if (signUpData?.user && Array.isArray(signUpData.user.identities) && signUpData.user.identities.length === 0) {
+        throw new Error('Este e-mail já tem conta na BidPro Brasil. Faça login (ou recupere a senha) com ele — seu convite de equipe é aplicado automaticamente no primeiro acesso.');
+      }
       if (signUpData?.user?.confirmation_sent_at) setPrecisaConfirmarEmail(true);
+
+      // KYC ANTES DO RESGATE — a ORDEM é o bug (10/08). `usar_convite_equipe` faz
+      // `set ativo = false` no convite, e `salvar_kyc_equipe` filtra por
+      // `ativo = true and kyc_fotos is null` (ver seguranca_convites_kyc_enumeracao.sql).
+      // Rodando o resgate primeiro, as 3 fotos que a pessoa acabou de tirar eram descartadas
+      // EM SILÊNCIO — e o retorno do RPC nem era checado. Salvando antes, o convite ainda está
+      // ativo e as fotos entram; e agora o resultado é conferido, porque KYC perdido só
+      // reaparece pedindo tudo de novo ao usuário.
+      if (selfie_rosto_compressed || doc_frente_compressed || selfie_doc_compressed) {
+        const { data: rKyc, error: eKyc } = await supabase.rpc('salvar_kyc_equipe', {
+          p_token: token,
+          p_fotos: {
+            selfie_rosto: selfie_rosto_compressed,
+            doc_frente: doc_frente_compressed,
+            selfie_doc: selfie_doc_compressed,
+            validado_em: new Date().toISOString(),
+          },
+        });
+        if (eKyc || rKyc?.ok === false) console.warn('[convite-equipe] KYC não salvo:', eKyc?.message || rKyc?.erro);
+      }
 
       if (signUpData?.user?.id) {
         // O RPC exige SESSÃO (`auth.uid()`): com confirmação de e-mail ligada, o signUp NÃO
@@ -447,19 +479,6 @@ export default function ConviteEquipe() {
         if (signUpData?.session && form.cpf) {
           try { await apiCall('/api/cpf-set', { method: 'POST', body: JSON.stringify({ cpf: form.cpf.replace(/\D/g, '') }) }); } catch { /* melhor esforço */ }
         }
-      }
-
-      // Salvar fotos KYC via função SECURITY DEFINER (RLS não permite UPDATE direto)
-      if (selfie_rosto_compressed || doc_frente_compressed || selfie_doc_compressed) {
-        await supabase.rpc('salvar_kyc_equipe', {
-          p_token: token,
-          p_fotos: {
-            selfie_rosto: selfie_rosto_compressed,
-            doc_frente: doc_frente_compressed,
-            selfie_doc: selfie_doc_compressed,
-            validado_em: new Date().toISOString(),
-          },
-        });
       }
 
       // Gerar e enviar contrato operacional automaticamente (exceto admin)

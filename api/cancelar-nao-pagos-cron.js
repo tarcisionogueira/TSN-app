@@ -69,15 +69,29 @@ export default async function handler(req, res) {
     return pago;
   };
 
+  // ORÇAMENTO DE TEMPO (10/08). `maxDuration` aqui é 60s, mas o laço abaixo é dimensionado para
+  // 10.000 offsets: cada cobrança com assinatura custa um GET (`/payments?subscription=`) mais
+  // dois DELETE, tudo sequencial — uma única página de 100 pode valer 100-300 chamadas ao Asaas.
+  // Sem checagem de deadline, a invocação morria com "Task timed out", `res.status(200)` nunca
+  // rodava e o array `erros` (a ÚNICA memória de um DELETE que falhou) sumia junto: a mesma
+  // indistinguibilidade entre "falhou" e "nunca rodou" que motivou a correção do backup-r2-cron.
+  // Com o corte, a varredura termina sempre e DIZ que ficou pela metade; o run seguinte continua
+  // de onde a lista estiver (é idempotente — o que já foi cancelado não reaparece como PENDING).
+  const T0 = Date.now();
+  const ORCAMENTO_MS = 45000; // de 60s: sobra para responder e registrar
+  let cortadoPorTempo = false;
   try {
     for (const status of ['PENDING', 'OVERDUE']) {
+      if (cortadoPorTempo) break;
       for (let offset = 0; offset < 10000; offset += 100) {
+        if (Date.now() - T0 > ORCAMENTO_MS) { cortadoPorTempo = true; break; }
         const url = `/payments?status=${status}&dateCreated%5Ble%5D=${cutoffData}&limit=100&offset=${offset}`;
         const data = await asaasGet(url);
         const results = data?.data || [];
         if (!results.length) break;
 
         for (const p of results) {
+          if (Date.now() - T0 > ORCAMENTO_MS) { cortadoPorTempo = true; break; }
           vistos++;
           if (STATUS_PAGO.has(p.status)) continue; // sanidade
 
@@ -107,7 +121,7 @@ export default async function handler(req, res) {
           }
         }
 
-        if (!data?.hasMore) break;
+        if (cortadoPorTempo || !data?.hasMore) break;
       }
     }
   } catch (e) {
@@ -117,6 +131,9 @@ export default async function handler(req, res) {
 
   res.status(200).json({
     ok: true, vistos, assinaturasCanceladas, cobrancasRemovidas, avulsasRemovidas,
+    // `completo: false` = a varredura NÃO alcançou o fim da lista. Sem este campo, um run
+    // cortado no meio se lia exatamente como um run que não tinha nada a fazer.
+    completo: !cortadoPorTempo, cortado_por_tempo: cortadoPorTempo,
     ignoradasPagas, indeterminados, erros: erros.slice(0, 20),
   });
 }

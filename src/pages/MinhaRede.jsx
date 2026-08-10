@@ -102,6 +102,7 @@ export default function MinhaRede() {
   const [nivel, setNivel] = useState(null);           // retorno de meu_nivel()
   const [saldo, setSaldo] = useState(0);
   const [faltando, setFaltando] = useState([]);       // pré-requisitos do saque (inclui empresa/CNPJ p/ parceiro)
+  const [erroSaldo, setErroSaldo] = useState('');     // leitura do saldo FALHOU (≠ saldo zero)
   const [naoGanhaNovas, setNaoGanhaNovas] = useState(false);
   const [proximaLib, setProximaLib] = useState(null);
   // Cadastro da PJ
@@ -141,13 +142,24 @@ export default function MinhaRede() {
       setNivel(n && n.ok ? n : null);
     } catch { setNivel(null); }
     try {
+      // CHECAR `.ok` ANTES DE USAR O CORPO (10/08). `apiCall` devolve o Response CRU e não
+      // lança em status de erro; um 401/500/timeout traz JSON válido (`{error:'…'}`), o
+      // `.json()` resolve, e `Number(sq.saldo || 0)` virava **R$ 0,00** com a frase "Você ainda
+      // não tem saldo a sacar" — indistinguível de um parceiro sem comissão. Pior: com
+      // `faltando` vazio, nem o aviso de cadastro pendente aparecia, então a tela ficava
+      // coerente e ERRADA. É o mesmo padrão do "relatório vazio".
       const res = await apiCall('/api/saque');
+      if (!res.ok) throw new Error(`saque ${res.status}`);
       const sq = await res.json();
+      setErroSaldo('');
       setSaldo(Number(sq.saldo || 0));
       setFaltando(Array.isArray(sq.faltando) ? sq.faltando : []);
       setNaoGanhaNovas(!!sq.nao_ganha_novas);
       setProximaLib(sq.proxima_liberacao || null);
-    } catch { /* mantém zeros */ }
+    } catch {
+      // NÃO zera: saldo desconhecido não é saldo zero. A tela passa a dizer que não conseguiu ler.
+      setErroSaldo('Não conseguimos consultar seu saldo agora. Isto não significa que ele é zero — tente recarregar em instantes.');
+    }
     try {
       const { data: p } = await supabase.from('perfis').select('codigo_indicacao, cnpj, razao_social, pj_chave_pix').eq('id', uid).maybeSingle();
       let cod = p?.codigo_indicacao;
@@ -562,7 +574,9 @@ export default function MinhaRede() {
                   </button>
                 </div>
               ) : (
-                <div style={{ marginTop: 10, fontSize: 12, color: '#94a3b8' }}>Você ainda não tem saldo a sacar.</div>
+                erroSaldo
+                  ? <div style={{ marginTop: 10, fontSize: 12, color: '#b45309', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '8px 11px', fontWeight: 600 }}>{erroSaldo}</div>
+                  : <div style={{ marginTop: 10, fontSize: 12, color: '#94a3b8' }}>Você ainda não tem saldo a sacar.</div>
               )}
               {msgSaque && <div style={{ marginTop: 8, fontSize: 12, fontWeight: 700, color: msgSaque.tipo === 'ok' ? '#059669' : '#dc2626' }}>{msgSaque.txt}</div>}
             </>

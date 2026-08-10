@@ -136,6 +136,13 @@ export default async function handler(req, res) {
 
   const url = new URL(req.url, 'http://localhost');
   const dias = Math.min(365, Math.max(7, Number(url.searchParams.get('dias')) || 90));
+  // `?lista=completa` — para consumidores de SERVIDOR (10/08). O corte em 300 abaixo existe por
+  // PESO DE PAYLOAD para a tela; os importadores da conciliação/DRE não são tela, e consumiam
+  // `lancamentos` como se fosse a lista inteira. Acima de 300 lançamentos na janela (o cron usa
+  // 45 dias, a importação manual até 120), tudo o que passasse do 300º mais recente NUNCA
+  // chegava a `conciliacao_lancamento` — e, como o upsert é idempotente e a ordem é data desc,
+  // repetir a importação também não alcançava os antigos. A DRE ficava incompleta em silêncio.
+  const listaCompleta = url.searchParams.get('lista') === 'completa';
   const desde = new Date(Date.now() - dias * 86400000).toISOString().slice(0, 10);
   const ate = new Date().toISOString().slice(0, 10);
 
@@ -312,7 +319,9 @@ export default async function handler(req, res) {
     // A LISTA vem cortada em 300 por peso de payload, mas os TOTAIS acima são somados
     // sobre todos os lançamentos lidos — `lancamentos_exibidos` × `resumo.lancamentos`
     // deixa isso explícito, para ninguém conferir a soma contando as linhas da tela.
-    lancamentos_exibidos: Math.min(lancamentos.length, 300),
-    lancamentos: lancamentos.slice(0, 300),
+    lancamentos_exibidos: listaCompleta ? lancamentos.length : Math.min(lancamentos.length, 300),
+    // `lista_truncada` é explícito para que ninguém precise DEDUZIR o corte comparando contagens.
+    lista_truncada: !listaCompleta && lancamentos.length > 300,
+    lancamentos: listaCompleta ? lancamentos : lancamentos.slice(0, 300),
   });
 }

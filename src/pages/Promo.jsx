@@ -31,6 +31,7 @@ export default function Promo() {
   const [erroSdr, setErroSdr] = useState('');
   const [concluido, setConcluido] = useState(false);
   const [acessoLiberado, setAcessoLiberado] = useState(false); // só true quando o servidor concedeu
+  const [contaNova, setContaNova] = useState(true);  // false = o e-mail já tinha conta (servidor: jaExistia)
 
   const [tituloConteudo, setTituloConteudo] = useState('');
 
@@ -132,8 +133,22 @@ export default function Promo() {
       if (!r.ok || !data.ok) throw new Error(data.error || 'Não foi possível enviar. Tente novamente.');
       // Login (prova de posse da conta — vale tanto p/ a conta recém-criada quanto p/ quem já tinha).
       const { error: erroLogin } = await supabase.auth.signInWithPassword({ email: contato.email.trim().toLowerCase(), password: contato.senha });
-      // Plano pago → checkout com o desconto (a conta já existe/logada).
-      if (ehPlano) { nav(`/checkout?plano=${link.produto}&promo=${link.codigo}${refQS}`); return; }
+      // E-MAIL JÁ CADASTRADO: o servidor DIZ, e a tela ignorava (10/08). `promo-capturar`
+      // responde `{ ok:true, jaExistia:true, userId:null }` e não cria nada — decisão correta
+      // dele (não atribuir vendedor a conta existente, para não sequestrar comissão). Só que
+      // `jaExistia` não era lido em lugar nenhum do front, e a senha NOVA que a pessoa acabou de
+      // digitar não abre a conta ANTIGA: o `signInWithPassword` falha. Daí, no plano pago, o
+      // `nav('/checkout')` rodava assim mesmo e a pessoa chegava DESLOGADA, vendo de novo o
+      // formulário de criar conta, sem nunca ler que o e-mail já existe.
+      if (data.jaExistia && erroLogin) {
+        throw new Error('Este e-mail já tem conta na BidPro Brasil, e a senha informada não confere. Entre com a sua senha (ou recupere-a) e volte por este mesmo link para garantir a promoção.');
+      }
+      // Plano pago → checkout com o desconto (a conta já existe/logada). Só segue LOGADO: sem
+      // sessão, o checkout não sabe quem é o cliente e o funil recomeça do zero.
+      if (ehPlano) {
+        if (erroLogin) throw new Error('Conta registrada, mas não conseguimos entrar automaticamente. Faça login e volte por este link para concluir com o desconto.');
+        nav(`/checkout?plano=${link.produto}&promo=${link.codigo}${refQS}`); return;
+      }
       // Curso/e-book: a CONCESSÃO acontece AQUI, no servidor, com o usuário autenticado. Antes a
       // tela dizia "Acesso liberado!" sem nada ter sido liberado — nenhuma linha em
       // compras_produtos, que é o que o Curso/E-book exigem — e o cliente batia no paywall.
@@ -143,6 +158,9 @@ export default function Promo() {
         if (erroConceder) console.error('[promo] conceder acesso:', erroConceder.message);
         liberado = !!res?.ok;
       }
+      // `contaNova` separa "criamos sua conta" de "sua conta já existia": a tela dizia
+      // "✅ Conta criada!" mesmo quando nada foi criado e o login tinha falhado.
+      setContaNova(!data.jaExistia);
       setAcessoLiberado(liberado);
       setSdrAberto(false); setConcluido(true);
     } catch (e) { setErroSdr(e.message); setEnviandoSdr(false); }
@@ -225,11 +243,13 @@ export default function Promo() {
     <div style={{ minHeight: '100vh', background: '#111', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
       <div style={{ background: 'white', borderRadius: 20, maxWidth: 460, padding: '36px 30px', textAlign: 'center', boxShadow: '0 24px 60px rgba(0,0,0,0.4)' }}>
         <div style={{ fontSize: 52, marginBottom: 12 }}>{acessoLiberado ? '🎉' : '✅'}</div>
-        <h2 style={{ color: '#111', margin: '0 0 8px' }}>{acessoLiberado ? 'Acesso liberado!' : 'Conta criada!'}</h2>
+        <h2 style={{ color: '#111', margin: '0 0 8px' }}>{acessoLiberado ? 'Acesso liberado!' : contaNova ? 'Conta criada!' : 'Tudo certo!'}</h2>
         <p style={{ color: '#64748b', lineHeight: 1.6, marginBottom: 22 }}>
           {acessoLiberado
             ? <>Pronto{contato.nome.trim() ? `, ${contato.nome.trim().split(' ')[0]}` : ''}! Sua conta foi criada e o seu acesso{tituloConteudo ? ` a "${tituloConteudo}"` : ''} já está liberado.</>
-            : <>Sua conta foi criada{contato.nome.trim() ? `, ${contato.nome.trim().split(' ')[0]}` : ''}. Entre na plataforma para acessar{tituloConteudo ? ` "${tituloConteudo}"` : ' o conteúdo'} — se ele ainda não aparecer, fale com a gente que liberamos na hora.</>}
+            : contaNova
+              ? <>Sua conta foi criada{contato.nome.trim() ? `, ${contato.nome.trim().split(' ')[0]}` : ''}. Entre na plataforma para acessar{tituloConteudo ? ` "${tituloConteudo}"` : ' o conteúdo'} — se ele ainda não aparecer, fale com a gente que liberamos na hora.</>
+              : <>Recebemos suas respostas{contato.nome.trim() ? `, ${contato.nome.trim().split(' ')[0]}` : ''}. Você já tinha conta aqui: entre com a sua senha para acessar{tituloConteudo ? ` "${tituloConteudo}"` : ' o conteúdo'} — se ele não aparecer, fale com a gente que liberamos na hora.</>}
         </p>
         <button onClick={() => nav('/membros')} style={{ padding: '12px 26px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, cursor: 'pointer' }}>Acessar agora</button>
       </div>

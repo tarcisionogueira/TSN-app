@@ -21,6 +21,21 @@ const CLAUDE_KEY   = process.env.CLAUDE_KEY;
 const MODEL = 'claude-sonnet-4-6';
 const EST_INDICE_MICRO = 600000; // ~US$0,60 estimado (1 busca web + tokens) p/ pré-autorizar crédito
 
+// Variante que DIZ se a chamada deu certo. O `rpc()` abaixo colapsa "falhou" e "sem resultado"
+// no mesmo `null` — o que é aceitável onde o chamador trata os dois igual, e é BUG onde a
+// diferença muda a mensagem ao cliente. Use esta quando a distinção importar.
+async function rpcOk(name, body) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${name}`, {
+    method: 'POST', headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) {
+    console.error('[indice-mercado] RPC falhou', name, r.status, (await r.text().catch(() => '')).slice(0, 200));
+    return { ok: false, data: null };
+  }
+  return { ok: true, data: await r.json().catch(() => null) };
+}
+
 async function rpc(name, body) {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${name}`, {
     method: 'POST', headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' },
@@ -254,7 +269,21 @@ export default async function handler(req, res) {
   };
 
 
-  const pond = await rpc('indice_regiao_ponderado', { p_cidade_norm: cidadeNorm, p_uf: uf, p_bairro_norm: bairroNorm, p_lat: lat, p_lng: lng, p_tipo: tipo });
+  // FALHA DA RPC ≠ REGIÃO SEM MERCADO (10/08). `rpc()` devolve `null` tanto para "a RPC falhou"
+  // quanto para "não veio resultado", e o teste `!pond` fundia os dois em `motivo:'sem_amostras'`.
+  // A tela então imprimia "Não encontramos anúncios de <tipo> nesta localidade" — depois de a
+  // pesquisa web ter rodado inteira (60–200s, custo real) e de `ingerir_amostras_indice` ter
+  // inserido N amostras. O cliente concluía que a região não tem mercado e/ou clicava de novo,
+  // disparando outra pesquisa cara. O irmão desse defeito já fora corrigido na leitura
+  // (`IndiceConsulta.jsx:44`, "FALHA != NÃO MAPEADO", 07/08) — faltava aqui, na escrita.
+  // `inseridas > 0` com "sem amostras" é contradição em si: se acabamos de inserir, há amostra.
+  const pondRes = await rpcOk('indice_regiao_ponderado', { p_cidade_norm: cidadeNorm, p_uf: uf, p_bairro_norm: bairroNorm, p_lat: lat, p_lng: lng, p_tipo: tipo });
+  if (!pondRes.ok) {
+    res.status(502).json({ ok: false, gerado: false, motivo: 'ponderacao_indisponivel', inseridas,
+      error: 'As amostras foram coletadas, mas não consegui calcular o índice agora. Tente de novo em instantes — não é falta de mercado na região.' });
+    return;
+  }
+  const pond = pondRes.data;
   if (!pond || pond.venda_m2 == null) { res.status(200).json({ ok: true, gerado: false, motivo: 'sem_amostras', inseridas }); return; }
 
   const cota = await cobrar();

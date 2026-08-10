@@ -36,7 +36,7 @@ export default async function handler(req, res) {
   // O extrato é lido pela rota interna, que já sabe falar com Asaas e Mercado Pago. Ela exige
   // admin; o cron usa o CRON_SECRET, que ela também aceita — assim não há uma segunda cópia da
   // lógica de leitura das contas para dessincronizar.
-  const r = await fetch(`${BASE}/api/financeiro-extrato?dias=${DIAS}`, {
+  const r = await fetch(`${BASE}/api/financeiro-extrato?dias=${DIAS}&lista=completa`, {
     headers: { 'x-cron-secret': process.env.CRON_SECRET || '' },
   });
   if (!r.ok) {

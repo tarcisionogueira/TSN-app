@@ -375,6 +375,28 @@ export default async function handler(req) {
     return { status: 'ok', detalhe: base };
   }));
 
+  // ── E-mail de oportunidades — a VARREDURA chegou ao fim? ─────────────────
+  // O `enviar-alertas-cron` ganhou orçamento de tempo e rastro em 10/08, mas rastro que ninguém
+  // LÊ não é rastro: era o follow-up anotado na própria correção. Aqui a saúde cobra as duas
+  // coisas que importam — o cron rodou recentemente, e a varredura NÃO ficou pela metade.
+  // Uma cadeia cortada significa gente que não recebeu o e-mail daquele ciclo, e o padrão da
+  // inanição era sempre a MESMA cauda da tabela: silencioso e repetido.
+  itens.push(await check('E-mail de oportunidades — varredura completa', async () => {
+    const r = await sb(`alerta_estado?chave=eq.enviar_alertas_cron&select=assinatura,atualizado_em`);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const [linha] = await r.json();
+    if (!linha) return { status: 'aviso', detalhe: 'Nenhuma execução registrada ainda do enviar-alertas-cron. Se o cron já rodou desde 10/08, o rastro deveria existir.' };
+    const horas = (Date.now() - new Date(linha.atualizado_em).getTime()) / 3600000;
+    let d = {}; try { d = JSON.parse(linha.assinatura || '{}'); } catch { /* padrao-ok: assinatura ilegível cai no ramo de aviso abaixo */ }
+    const base = `Último lote há ${horas.toFixed(0)}h · ${d.enviados ?? '?'} enviado(s) de ${d.lote ?? '?'} perfil(is).`;
+    if (d.cortado_por_tempo) {
+      return { status: 'aviso', detalhe: `${base} A varredura foi CORTADA pelo orçamento de tempo e encadeou a partir de ${d.cursor_proximo || '—'}. Se isto se repetir todo ciclo, o lote (BATCH) está grande demais para o custo por usuário.` };
+    }
+    // O cron é diário; às segundas é que sai o e-mail recorrente. 50h cobre o ciclo com folga.
+    if (horas > 50) return { status: 'erro', detalhe: `${base} SEM EXECUÇÃO HÁ MAIS DE 50H — o cron é diário; investigar.` };
+    return { status: 'ok', detalhe: base };
+  }));
+
   // ── Infra — BACKUP OFF-REGION (o "segundo servidor") ──────────────────────
   // Prevenção de catástrofe só existe se alguém CONFERE. O backup-r2-cron agora deixa rastro
   // em backup_execucoes; aqui a saúde cobra: rodou? está dormente? falhou? está em outra região?

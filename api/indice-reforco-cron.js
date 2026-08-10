@@ -25,12 +25,21 @@ const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
 const CLAUDE_KEY   = process.env.CLAUDE_KEY;
 const MODEL = 'claude-sonnet-4-6';
 
+// Devolve `{ ok, data }` — e o `ok` importa (10/08). Antes retornava `null` em QUALQUER resposta
+// não-ok, então uma RPC ausente (404), sem grant, ou em erro virava `[]` no chamador e o cron
+// respondia `200 {ok:true, nota:'nada elegível'}`: verde, indistinguível de "está tudo bem".
+// Três estados de significado OPOSTO — desligado por decisão, fila vazia, RPC quebrada — saíam
+// exatamente iguais. É a mesma ambiguidade "falhou vs. nunca rodou" já eliminada no backup-r2.
 async function rpc(name, body) {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${name}`, {
     method: 'POST', headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
-  return r.ok ? r.json().catch(() => null) : null;
+  if (!r.ok) {
+    console.error('[indice-reforco] RPC falhou', name, r.status, (await r.text().catch(() => '')).slice(0, 200));
+    return { ok: false, data: null };
+  }
+  return { ok: true, data: await r.json().catch(() => null) };
 }
 
 // upsert do estado de rotação (PK cidade_norm,uf) — evita reforçar a mesma cidade toda hora.
@@ -71,8 +80,16 @@ async function reforcarCidade(cidade, uf) {
     if (!mercado) return { cidade, uf, erro: 'busca instável', ms: Date.now() - t0 };
     const amostras = montarAmostras(mercado, { cidadeNorm, uf, bairroNorm: null, lat: null, lng: null, tipo: 'todos', todos: true });
     let inseridas = 0;
-    if (amostras.length) inseridas = (await rpc('ingerir_amostras_indice', { p_amostras: amostras })) || 0;
-    return { cidade, uf, amostras: amostras.length, inseridas, ms: Date.now() - t0 };
+    // A ingestão pode FALHAR sem que a busca tenha falhado. Antes o `|| 0` transformava isso em
+    // "inseriu zero", indistinguível de "não havia amostra a inserir" — e o estado da rotação
+    // era gravado como sucesso. `erroIngestao` sobe junto no retorno e vira `ultimo_erro`.
+    let erroIngestao = null;
+    if (amostras.length) {
+      const ing = await rpc('ingerir_amostras_indice', { p_amostras: amostras });
+      inseridas = ing.ok ? (ing.data || 0) : 0;
+      if (!ing.ok) erroIngestao = 'ingestao_falhou';
+    }
+    return { cidade, uf, amostras: amostras.length, inseridas, erro: erroIngestao, ms: Date.now() - t0 };
   } catch (e) {
     return { cidade, uf, erro: String(e?.message || e).slice(0, 120), ms: Date.now() - t0 };
   }
@@ -86,12 +103,18 @@ export default async function handler(req, res) {
   // DESLIGADO POR PADRÃO (decisão do dono: evitar custo proativo ~US$300/mês). A base é alimentada
   // ORGANICAMENTE a cada relatório/índice gerado (busca já arrojada). Para LIGAR o reforço proativo
   // (backfill das cidades magras), definir a env INDICE_REFORCO=1 no painel Vercel.
-  if (process.env.INDICE_REFORCO !== '1') { res.status(200).json({ ok: true, desligado: true, nota: 'reforço proativo OFF (custo). Ligue com INDICE_REFORCO=1.' }); return; }
+  // `motivo` legível em TODA saída: é o que separa os três estados. A cadência do cron
+  // (35 */4 * * *) fica como está DE PROPÓSITO — ela é o botão do dono. Quando o reforço for
+  // ligado, é essa frequência que dá a rotação; mudá-la agora alteraria em silêncio o
+  // comportamento da funcionalidade no dia em que ela for ativada.
+  if (process.env.INDICE_REFORCO !== '1') { res.status(200).json({ ok: true, desligado: true, motivo: 'desligado_por_env', nota: 'reforço proativo OFF (custo). Ligue com INDICE_REFORCO=1.' }); return; }
 
   const LOTE = Math.max(1, Math.min(6, Number(process.env.INDICE_REFORCO_LOTE || 3)));
   const DIAS = Math.max(1, Number(process.env.INDICE_REFORCO_DIAS || 14));
-  const cidades = (await rpc('indice_reforco_proximas', { p_n: LOTE, p_dias: DIAS, p_min_amostras: 60 })) || [];
-  if (!Array.isArray(cidades) || !cidades.length) { res.status(200).json({ ok: true, reforcadas: [], nota: 'nada elegível' }); return; }
+  const fila = await rpc('indice_reforco_proximas', { p_n: LOTE, p_dias: DIAS, p_min_amostras: 60 });
+  if (!fila.ok) { res.status(502).json({ ok: false, motivo: 'rpc_indisponivel', nota: 'indice_reforco_proximas não respondeu — NÃO é fila vazia.' }); return; }
+  const cidades = Array.isArray(fila.data) ? fila.data : [];
+  if (!cidades.length) { res.status(200).json({ ok: true, reforcadas: [], motivo: 'fila_vazia', nota: 'nada elegível' }); return; }
 
   // Reforça em PARALELO (I/O-bound); cada cidade tem timeout < maxDuration. Marca o estado de
   // cada uma (mesmo em erro) para a rotação seguir em frente e não travar no mesmo lote.

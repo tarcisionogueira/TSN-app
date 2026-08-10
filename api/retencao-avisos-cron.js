@@ -117,7 +117,16 @@ async function handler(req) {
     if (!ATIVO) continue; // DRY-RUN: só conta
 
     // Já existe aviso deste imóvel+regra?
-    const exRes = await sb(`doc_retencao_aviso?select=id,email_enviado,cancelado_em&imovel_id=eq.${c.imovel_id}&regra=eq.${c.regra}&limit=1`);
+    // `apagar_em` e `push_enviado` entram no SELECT (10/08). O select respondia só à pergunta
+    // "já avisei?" e depois virou também a FONTE do `apagar_em` do e-mail — sem estar na lista.
+    // No caminho de REENVIO (linha existente com email_enviado=false), `row.apagar_em` saía
+    // `undefined` e o `||` caía no `c.apagar_em`, o valor CRU da regra: para um imóvel cujo 3º
+    // relatório saiu há mais de 15 dias, essa data já está NO PASSADO, enquanto o prazo que a
+    // RPC de deleção honra é o gravado, `max(regra, agora+7d)`. O cliente lia "seus documentos
+    // serão removidos a partir de <data que já passou>". É a mesma forma do bug do
+    // `juridico_escalado_admin`: a coluna que decide não estava no select, e o fallback `||`
+    // mascarou a omissão em vez de acusá-la.
+    const exRes = await sb(`doc_retencao_aviso?select=id,email_enviado,push_enviado,cancelado_em,apagar_em&imovel_id=eq.${c.imovel_id}&regra=eq.${c.regra}&limit=1`);
     const ex = await exRes.json().catch(() => []);
     let row = Array.isArray(ex) && ex.length ? ex[0] : null;
 
@@ -158,8 +167,18 @@ async function handler(req) {
         else console.error('[retencao-avisos] email nao enviado:', r?.error);
       } catch (e) { console.error('[retencao-avisos] email:', e?.message); }
     }
-    pushOk = await enviarPush(c.user_id, c.regra, c.titulo);
-    if (pushOk) resumo.push_enviados++;
+    // PUSH SÓ UMA VEZ. Rodava incondicionalmente a cada passagem, e a RPC de candidatos não
+    // exclui quem já tem aviso (a dedup vive no `if` acima, que exige email_enviado OU
+    // cancelado_em). Quem nunca consegue receber e-mail — conta sem e-mail resolvível, GoTrue
+    // fora do ar — reentrava todo dia e levava "Confirme seu arremate" INDEFINIDAMENTE, sem
+    // nunca chegar à deleção. O `tag` do push só substitui a notificação anterior no aparelho;
+    // cada run ainda disparava uma nova.
+    if (!row.push_enviado) {
+      pushOk = await enviarPush(c.user_id, c.regra, c.titulo);
+      if (pushOk) resumo.push_enviados++;
+    } else {
+      pushOk = true; // já foi; preserva o estado no PATCH abaixo
+    }
 
     await sb(`doc_retencao_aviso?id=eq.${row.id}`, {
       method: 'PATCH', headers: { Prefer: 'return=minimal' },

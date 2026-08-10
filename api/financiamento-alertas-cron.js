@@ -133,6 +133,19 @@ export default async function handler(req, res) {
           });
         }
         enviados++;
+      } else {
+        // FALHA DE ENVIO ERA SILENCIOSA **E** IRRECUPERÁVEL (10/08). O `if (emailRes.ok)` foi
+        // escrito para decidir se marca `notificado_sinal`, e acabou sendo o único ponto que
+        // observa o resultado do envio — sem `else`, o caminho de falha era literalmente vazio.
+        // Um 429/4xx/5xx do Resend não lança, então não contava, não entrava em `erros`, não
+        // acionava `alertarErro`, e este cron fala com o Resend DIRETO (sem `_email.js`), então
+        // nem a linha de falha em `emails_log` existia.
+        // E a perda é DEFINITIVA: a elegibilidade é a igualdade exata `dtStr === hoje` — amanhã
+        // a parcela já não casa e o lembrete NUNCA mais sai. Por isso entra em `erros`, que é o
+        // que dispara o e-mail ao admin: alguém tem de saber no MESMO dia.
+        const corpo = await emailRes.text().catch(() => '');
+        console.error('[financiamento-alertas] Resend recusou', emailRes.status, corpo.slice(0, 200));
+        erros.push(fin.id);
       }
     } catch (e) {
       console.error('[financiamento-alertas]', e.message);

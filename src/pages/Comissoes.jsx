@@ -30,6 +30,7 @@ export default function Comissoes() {
 
   const [comissoes, setComissoes] = useState([]);
   const [saldoApi, setSaldoApi] = useState(0);
+  const [erroSaldo, setErroSaldo] = useState(''); // leitura do saldo FALHOU (≠ saldo zero)
   const [extrato, setExtrato] = useState([]);
   const [loading, setLoading] = useState(true);
   const [aba, setAba] = useState('resumo'); // resumo | analitico | saques
@@ -67,14 +68,22 @@ export default function Comissoes() {
     ]);
     setComissoes(c || []);
     try {
+      // Mesmo motivo do MinhaRede: `apiCall` não lança em erro HTTP, então sem checar `.ok` um
+      // 401/500 virava saldo R$ 0,00 e extrato vazio — a tela dizia, com toda a calma, que o
+      // parceiro não tem nada a receber.
+      if (!saqueRes.ok) throw new Error(`saque ${saqueRes.status}`);
       const sq = await saqueRes.json();
+      setErroSaldo('');
       setSaldoApi(Number(sq.saldo || 0));
       setExtrato(Array.isArray(sq.extrato) ? sq.extrato : []);
       setProximaLiberacao(sq.proxima_liberacao || null);
       setFaltandoSaque(Array.isArray(sq.faltando) ? sq.faltando : []);
       setNaoGanhaNovas(!!sq.nao_ganha_novas);
       setTeto({ teto: sq.teto_sem_nf, ja: sq.ja_sacado_na_janela, disponivel: sq.disponivel_sem_nf });
-    } catch { setSaldoApi(0); setExtrato([]); }
+    } catch {
+      // NÃO zera: desconhecido não é zero.
+      setErroSaldo('Não conseguimos consultar seu saldo agora. Isto não significa que ele é zero — tente recarregar em instantes.');
+    }
     const k = p?.chave_pix || '';
     setPixKey(k);
     setPixKeySalva(k);
@@ -245,7 +254,11 @@ export default function Comissoes() {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
             <div>
               <div style={{ fontSize: 13, fontWeight: 700, color: '#334155' }}>Solicitar saque</div>
-              <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>Disponível: {fmt(totalDisponivel)}</div>
+              {/* Saldo DESCONHECIDO não é saldo zero: quando a leitura falha, a tela diz isso
+                  em vez de imprimir "Disponível: R$ 0,00" com cara de fato apurado. */}
+              {erroSaldo
+                ? <div style={{ fontSize: 12, color: '#b45309', marginTop: 4, fontWeight: 600, maxWidth: 420, lineHeight: 1.5 }}>{erroSaldo}</div>
+                : <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>Disponível: {fmt(totalDisponivel)}</div>}
               {proximaLiberacao && (
                 <div style={{ fontSize: 11, color: '#0D63DB', marginTop: 4, fontWeight: 600 }}>
                   Pagamentos às sextas · próxima liberação: {fmtLiberacao(proximaLiberacao)}

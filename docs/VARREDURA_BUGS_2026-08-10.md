@@ -53,7 +53,8 @@ do fim do lote, senão os não tratados seriam pulados). `ultimoProcessado` só 
 tratar o perfil, então o corte nunca engole quem estava em andamento. Rastro da varredura em
 `alerta_estado` (chave `enviar_alertas_cron`) — "não havia ninguém" e "a cadeia morreu" deixam
 de ser indistinguíveis.
-> **Follow-up:** ninguém LÊ esse rastro ainda. Vale ligá-lo ao `health-check` ou ao monitor.
+> **Follow-up FECHADO na terceira leva:** o `health-check` passou a ler esse rastro
+> ("E-mail de oportunidades — varredura completa").
 
 ### A4. Upgrade de plano só existia pelo Asaas — **RESOLVIDO (upgrade)**
 `mudarPlano` só chamava `/api/asaas`, e `api/mp.js` não tem action equivalente. Como o MP é o
@@ -129,89 +130,93 @@ antes de o registro existir.
 
 ---
 
-## 🟠 ABERTO — MÉDIA
+## ✅ TERCEIRA LEVA — TODO O RESTANTE, CORRIGIDO EM 10/08 (commit `HASH3`)
 
-### M3. `retencao-avisos-cron`: a data anunciada não é a data aplicada
-`api/retencao-avisos-cron.js:120,140`. No caminho de REENVIO, `apagar_em` não está no `select`
-→ `row.apagar_em` é `undefined` e o e-mail usa o valor CRU da regra, que pode já estar no
-passado, enquanto a linha gravada é `max(regra, agora+7d)`. Mesma forma do bug do
-`juridico_escalado_admin`. Junto: o push "Confirme seu arremate" é reenviado **todo dia,
-indefinidamente**, para quem tem `email_enviado=false`.
+**M3 · `retencao-avisos-cron`** — `apagar_em` e `push_enviado` entraram no `select`. No reenvio,
+`row.apagar_em` saía `undefined` e o `||` caía no valor CRU da regra (que pode já estar no
+passado), enquanto o prazo honrado é o gravado, `max(regra, agora+7d)`: o cliente lia "seus
+documentos serão removidos a partir de <data que já passou>". Mesma forma do bug do
+`juridico_escalado_admin` — a coluna que decide não estava no select e o `||` mascarou. O push
+passa a sair **uma vez**: rodava a cada passagem, e quem nunca consegue receber e-mail reentrava
+todo dia, levando "Confirme seu arremate" indefinidamente sem nunca chegar à deleção.
 
-### M4. `financiamento-alertas-cron`: falha de envio silenciosa e irrecuperável
-`api/financiamento-alertas-cron.js:125` — `if (emailRes.ok)` sem `else`. Um 429/5xx do Resend
-não conta, não entra em `erros`, não alerta, não gera `emails_log` (este cron fala com o Resend
-direto). E a janela é a igualdade `dtStr === hoje`: amanhã já não casa e o lembrete **nunca
-mais sai**.
+**M4 · `financiamento-alertas-cron`** — o `if (emailRes.ok)` não tinha `else`, então um 429/5xx
+do Resend não contava, não entrava em `erros`, não alertava e não gerava `emails_log` (este cron
+fala com o Resend direto). E a perda é DEFINITIVA: a janela é a igualdade `dtStr === hoje`.
+Agora entra em `erros`, que é o que dispara o e-mail ao admin — alguém precisa saber no mesmo dia.
 
-### M7. `/api/saque` lido sem `.ok` em duas telas
-`src/pages/MinhaRede.jsx:143` · `src/pages/Comissoes.jsx:66`. Em qualquer falha (401, 500,
-timeout), a tela mostra R$ 0,00 e *"Você ainda não tem saldo a sacar"* — indistinguível de um
-parceiro sem comissão. Com `faltando` vazio, nem o aviso de cadastro pendente aparece: a tela
-fica coerente e errada.
+**M7 · `/api/saque` sem `.ok`** — em MinhaRede e Comissões. `apiCall` devolve o Response cru e
+não lança: um 401/500 trazia JSON válido e `Number(sq.saldo || 0)` virava **R$ 0,00** com "Você
+ainda não tem saldo a sacar". Com `faltando` vazio, nem o aviso de cadastro pendente aparecia —
+a tela ficava coerente e errada. Agora **saldo desconhecido não é saldo zero**: as duas telas
+dizem que não conseguiram consultar.
 
-### M9. `cancelar-nao-pagos-cron`: varredura sem teto dentro de `maxDuration: 60`
-`api/cancelar-nao-pagos-cron.js:20,73-112`. Até 300 chamadas ao Asaas por página, sequenciais,
-sem checagem de deadline; `erros` só existe no corpo da resposta. Volume do Asaas hoje é baixo
-(é o backup) — por isso média, não alta.
+**M9 · `cancelar-nao-pagos-cron`** — orçamento de 45s dentro do laço (de `maxDuration: 60`), e
+`completo: false` na resposta. A varredura ia até 10.000 offsets com até ~300 chamadas ao Asaas
+por página; ao estourar, `res.status(200)` nunca rodava e o array `erros` — única memória de um
+DELETE que falhou — sumia junto.
 
-### M10. Conciliação/DRE importa no máximo 300 lançamentos e reporta sucesso
-`api/financeiro-extrato.js:285` (`slice(0, 300)`, um limite de UI) consumido por
-`conciliacao.js:177` e `conciliacao-sync-cron.js:49` como se fosse a lista completa. Acima de
-300 na janela, o resto **nunca** chega a `conciliacao_lancamento` — e como o upsert é
-idempotente e a ordem é data desc, repetir a importação não alcança os antigos. Latente: só
-morde acima de ~6,7 lançamentos/dia na janela de 45 dias.
+**M10 · Conciliação/DRE cortada em 300** — o `slice(0, 300)` é limite de UI, e os dois
+importadores server-side consumiam a lista como se fosse completa; acima de 300 na janela, o
+resto **nunca** chegava a `conciliacao_lancamento`. Novo `?lista=completa` para consumidor de
+servidor, mais `lista_truncada` explícito para ninguém precisar deduzir o corte comparando
+contagens.
 
-### M11. KYC por imagem: Edge com timeout de 120s × 3 contra o teto de 25s
-`api/verificar-identidade-kyc.js` · `api/validar-selfie.js` — `runtime: 'edge'` chamando
-`anthropicFetch` sem opções (herda `retries: 3, timeoutMs: 120000`). Um 529 do Anthropic passa
-dos 25s e a Vercel mata a função: **todo o desenho de fail-open-to-review vira código morto** e
-o cliente recebe erro de rede em vez de "sua identidade passará por revisão".
+**M11 · KYC no Edge** — os handlers são `runtime: 'edge'` (teto duro de 25s) e chamavam
+`anthropicFetch` sem opções, herdando `retries: 3, timeoutMs: 120000`. Um 529 passava dos 25s e a
+Vercel matava a função: todo o desenho de fail-open (`revisar`/`pendente`, que existe para não
+travar a assinatura de um contrato) era **código morto**. Agora `retries: 1, timeoutMs: 8000` nos
+4 call sites — cabe nos 25s e mantém a proteção contra o 529 transitório.
 
-### M12. Convite de equipe com e-mail já cadastrado termina em falso sucesso
-`src/pages/ConviteEquipe.jsx:412-427`. Com "Confirm email" ligado, o `signUp` de e-mail
-existente devolve 200 com `identities: []` e não manda e-mail. O código só checa `signUpError`.
-9 passos + 3 fotos de KYC terminam em "Cadastro concluído!" com uma senha que não funciona.
-Os outros dois fluxos da base já têm o guard (`Login.jsx:333`, `Checkout.jsx:645`) — é omissão.
-*Adjacente, mesmo arquivo:* `usar_convite_equipe` roda ANTES de `salvar_kyc_equipe`, e o
-primeiro faz `ativo = false` enquanto o segundo filtra `ativo = true` — as 3 fotos são
-descartadas em silêncio.
+**M12 · Convite de equipe** — ganhou o guard `identities.length === 0` que os outros três fluxos
+já tinham. E a ORDEM foi corrigida: `salvar_kyc_equipe` roda ANTES de `usar_convite_equipe`,
+porque o primeiro filtra `ativo = true` e o segundo faz `set ativo = false` — as 3 fotos de KYC
+eram descartadas em silêncio, e o retorno do RPC nem era checado.
 
-### M13. Promoção com e-mail já cadastrado: "Conta criada!" e login que falhou calado
-`src/pages/Promo.jsx:134-147`. O servidor devolve `jaExistia: true` (decisão correta, para não
-sequestrar comissão) e **o front nunca lê esse campo**. Plano pago: `nav('/checkout')` roda
-mesmo assim e a pessoa chega deslogada. Curso/e-book: a tela exibe "✅ Conta criada!" e um
-botão que rebate para o login.
+**M13 · Promoção** — o front nunca lia `jaExistia`, que o servidor mandava. Com e-mail já
+cadastrado, a senha nova não abre a conta antiga, o login falhava e o `nav('/checkout')` rodava
+assim mesmo: a pessoa chegava deslogada, sem nunca ler que o e-mail já existe. Agora a mensagem
+diz a verdade e o checkout só recebe quem está logado.
 
-### M14. Assinante ANUAL barrado em conteúdo incluso no plano
-`api/verificar-cpf.js:121` compara o role CRU com `PLANOS_COM_CONTEUDO`, enquanto a linha 105
-do mesmo arquivo já normaliza o sufixo `_anual`. `top2_anual` não está na lista → a tela manda
-"faça upgrade" para quem já paga o anual, e desabilita o botão de criar conta.
+**M14 · Assinante ANUAL** — `PLANOS_COM_CONTEUDO.includes(role)` passou a normalizar `_anual`,
+como o ramo de PLANO do mesmo arquivo já fazia. Mandava "faça upgrade" para quem já paga o anual
+e já tem o conteúdo incluso.
+
+**B1 · Índice** — `rpcOk()` separa "a RPC falhou" de "não veio resultado". O colapso num `null`
+fazia a tela dizer "Não encontramos anúncios nesta localidade" DEPOIS de a pesquisa web ter
+rodado inteira (60–200s, custo real) e as amostras terem sido inseridas — o cliente concluía que
+a região não tem mercado e clicava de novo, pagando outra pesquisa.
+
+**B2 · `push-subscribe`** — upsert e delete passam a ser checados; "notificações ativadas" sem
+inscrição gravada acabou.
+
+**B3 · NF do saque** — **o achado estava parcialmente errado, e vale registrar.** O motor no banco
+SEMPRE esteve certo: `saque_avaliar` exige `valor_nf >= total_do_mes` (= `ja_sacado_na_janela +
+este pedido`) e já devolve `nf_valor_exigido`. Não dá para escapar fatiando saques — essa parte
+do achado é **refutada**. O defeito era só de TRANSPORTE: `api/saque.js` montava o 422 à mão e
+descartava o campo, então a tela caía no fallback `|| valor` e pedia a nota do PEDIDO. Corrigido
+encaminhando `nf_valor_exigido` e `total_do_mes`.
+
+**B4 · `indice-reforco-cron`** — o helper `rpc()` devolvia `null` em qualquer não-ok, então RPC
+ausente virava "fila vazia" e o cron respondia `200 ok` — verde, indistinguível de "tudo bem".
+Agora cada saída tem `motivo` (`desligado_por_env` · `fila_vazia` · `rpc_indisponivel`, este com
+502) e a falha de ingestão sobe como `ultimo_erro` em vez de virar "inseriu zero". A **cadência
+do cron ficou como está de propósito**: ela é o botão do dono, e mudá-la agora alteraria em
+silêncio o comportamento da funcionalidade no dia em que for ligada.
 
 ---
 
-## 🟡 ABERTO — BAIXA
+## 🛡️ O QUE IMPEDE ESTA FAMÍLIA DE VOLTAR
 
-### B1. Índice: falha da RPC de ponderação vira "não encontramos anúncios nesta localidade"
-`api/indice-mercado.js:257`. A pesquisa web roda inteira (60–200s, custo real), as amostras são
-inseridas, e um `null` da RPC colapsa "falhou" com "não há resultado". A resposta traz
-`inseridas: N` e a tela ignora. O irmão desse defeito já foi corrigido em
-`IndiceConsulta.jsx:44` ("FALHA != NÃO MAPEADO, 07/08") — faltou aqui.
-
-### B2. `push-subscribe` confirma a inscrição sem checar o upsert
-`api/push-subscribe.js:55`. O usuário vê "notificações ativadas" e nunca recebe push.
-
-### B3. NF do saque: a tela pede um campo que o servidor nunca envia
-`src/pages/Comissoes.jsx:120` lê `data.nf_valor_exigido`, que **não existe em lugar nenhum do
-repositório**. O fallback `|| valor` é o único caminho vivo, então a nota exigida vira a do
-PEDIDO e não a do mês integral — contrariando o comentário logo acima da linha. No banco,
-`saque_avaliar` também só exige `valor_nf >= v_valor`, então dá para fatiar pedidos.
-
-### B4. `indice-reforco-cron` é ruído agendado
-6 invocações diárias (`35 */4 * * *`) só para responder `{desligado:true}`. E três estados de
-significado oposto — *desligado por decisão*, *nada elegível*, *RPC quebrada* — saem todos como
-`200 ok:true`, sem deixar linha. O helper `rpc()` (`:33`) devolve `null` em qualquer resposta
-não-ok, então RPC ausente vira "fila vazia".
+1. **`npm run verificar:padroes`** — 4 regras estruturais, linha de base por arquivo, roda no
+   `prebuild` (todo build e todo deploy da Vercel) e no CI. Só reprova ocorrência NOVA.
+   Achou um bug REAL na primeira execução: um `signUp` legado em `src/utils/supabase.js`, sem o
+   guard de duplicata, sem nenhum importador e gravando `role: 'aluno'` — removido.
+2. **`CLAUDE.md` → "A PERGUNTA DE REVISÃO"** — as quatro formas que já morderam esta base, para
+   o que o scanner não alcança.
+3. **`qa_invariantes.proximidades_vazio_falso`** — o vazio falso volta a ser visível se reaparecer.
+4. **`health-check` → "E-mail de oportunidades — varredura completa"** — fecha o follow-up que
+   ficou aberto no A3: o rastro do cron agora é LIDO, e uma cadeia cortada vira aviso.
 
 ---
 

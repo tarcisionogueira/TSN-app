@@ -43,17 +43,13 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
 
 // ─── AUTH ────────────────────────────────────────────────────────────────────
 
-export async function signUp({ email, senha, nome, cpf, telefone, endereco }) {
-  const { data, error } = await supabase.auth.signUp({
-    email,
-    password: senha,
-    options: {
-      data: { nome, cpf, telefone, endereco, role: 'aluno' },
-    },
-  });
-  if (error) throw error;
-  return data;
-}
+// O helper `signUp` legado foi REMOVIDO em 10/08. Ninguém o importava (confirmado por grep),
+// gravava `role: 'aluno'` — papel de uma encarnação antiga do produto, que não existe mais — e
+// checava só o `error`, então herdava o defeito do e-mail duplicado: com "Confirm email" ligado,
+// e-mail já cadastrado devolve 200 com `identities: []` e nenhum e-mail é enviado. Foi o
+// verificador de padrões (`scripts/verificar-padroes-perigosos.mjs`, regra
+// `signup-sem-guard-duplicado`) que o encontrou na PRIMEIRA execução. Cadastro se faz por
+// `Login.jsx`, `Checkout.jsx`, `ConviteEquipe.jsx` ou `Promo.jsx` — todos com o guard.
 
 export async function signIn({ email, senha }) {
   const { data, error } = await supabase.auth.signInWithPassword({ email, password: senha });
