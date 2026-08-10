@@ -5008,7 +5008,11 @@ function PainelCoberturaRelatorios() {
     ['Relatórios gerados', fmtN(totalRel), `${fmtN(rel.mercado)} merc · ${fmtN(rel.documental)} doc · ${fmtN(rel.laudo)} laudo`, '#10b981'],
     ['Amostras de mercado', fmtN(m.amostras), 'anúncios usados como base', '#7c3aed'],
     ['Buscas realizadas', fmtN(bus.total), `${zeroPct}% sem resultado · ${fmtN(bus.ult_7d)} em 7d`, zeroPct > 40 ? '#f59e0b' : '#64748b'],
-    ['Índice BidPro', `${fmtN(idx.cidades)} cidades`, `${fmtN(idx.com_aluguel)} microrreg. c/ locação`, '#4f46e5'],
+    // `com_aluguel` agora conta só o nível CIDADE, comparável com o número grande ao lado.
+    // Antes somava cidade+grid+bairro e imprimia "60 microrreg." ao lado de "53 cidades" —
+    // populações diferentes no mesmo card, e o 60 > 53 sugeria mais recortes com aluguel do
+    // que cidades indexadas, quando só 12 das 53 cidades têm aluguel.
+    ['Índice BidPro', `${fmtN(idx.cidades)} cidades`, `${fmtN(idx.com_aluguel)} c/ locação · +${fmtN(idx.sub_com_aluguel)} bairros/grids`, '#4f46e5'],
     ['Cidades maduras (Índice)', fmtN(mat.maduras), `${fmtN(mat.em_progresso)} em progresso · libera desconto×índice`, (mat.maduras || 0) > 0 ? '#059669' : '#94a3b8'],
   ];
   return (
