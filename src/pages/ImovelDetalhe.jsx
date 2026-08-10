@@ -13,6 +13,7 @@ import { assinarAnexos } from '../utils/docUrl';
 import { formatarDescricaoImovel } from '../utils/descricao';
 import { fotoCandidatos } from '../utils/foto';
 import { trackImovelVisualizado } from '../utils/gtag';
+import { lerCotaMercado } from '../utils/cotaAnalise';
 
 // Botões de documento só aparecem quando o valor é uma URL real — o scraper da
 // Caixa às vezes grava rótulos ("Venda Direta Online", "Leilão SFI - Edital Único").
@@ -684,8 +685,9 @@ export default function ImovelDetalhe() {
   const nav = useNavigate();
   const loc = useLocation();
   const { id: paramId } = useParams();
-  const { user, role } = useAuth();
+  const { user, role, planoLegado } = useAuth();
   const [imovel, setImovel] = useState(loc.state?.imovel || null);
+  const [cota, setCota] = useState(null); // quanto ainda dá para analisar — vira o texto do botão
   const [anexosDocs, setAnexosDocs] = useState([]);
   const [buscandoDocs, setBuscandoDocs] = useState('');
   const [filaDocs, setFilaDocs] = useState(null); // status da fila de captura CEF (persiste no F5)
@@ -739,6 +741,17 @@ export default function ImovelDetalhe() {
     // retargeting e otimização. Aproveita o mesmo gate deduplicado (cliente, 1× por imóvel).
     try { trackImovelVisualizado(String(id), imovel.tipo || null, imovel.valorMinimo ?? imovel.valorAvaliacao ?? 0); } catch { /* nunca quebra a tela */ }
   }, [user, role, id, imovel]);
+
+  // Cota do usuário, para o botão dizer o que ele já tem. `lerCotaMercado` nunca lança: se a
+  // leitura falhar, `cota` fica null e o botão volta ao texto genérico — falha de rede não pode
+  // virar "você não tem análise".
+  useEffect(() => {
+    if (!user) { setCota(null); return; }
+    let vivo = true;
+    lerCotaMercado(supabase, user.id, role, planoLegado)
+      .then((c) => { if (vivo) setCota(c.carregou ? c : null); });
+    return () => { vivo = false; };
+  }, [user, role, planoLegado]);
 
   useEffect(() => {
     // A busca por raio passa o imóvel no state SEM edital/matrícula/descrição.
@@ -943,6 +956,28 @@ export default function ImovelDetalhe() {
   // direciona ao upgrade) — não mais como "Fazer upgrade para analisar" já no imóvel.
   const PLANOS_ANALISE = ['admin', 'analista', 'assessorado', 'clube', 'top2', 'top2_anual', 'explorador', 'consultor'];
   const podeFazerAnalise = PLANOS_ANALISE.includes(role);
+
+  // O QUE O BOTÃO PROMETE (09/08). Ele se chamava só "Solicitar Análise" — que soa como pedido
+  // a uma equipe, e possivelmente pago. Em 5 semanas foi clicado 3 vezes, por 3 pessoas, e as 3
+  // geraram relatório: quem clica converte, o problema é ninguém clicar. O explorador tem 3
+  // amostras GRÁTIS e não fazia ideia (90 disponíveis entre os 30 cadastrados, 3 usadas). Dizer
+  // o que a pessoa já tem no bolso é o que muda o clique — e vale para o pagante também, que
+  // precisa saber quantos relatórios do mês ainda lhe restam antes de gastar um.
+  const rotuloAnalise = (() => {
+    if (!cota || cota.ilimitado) return 'Solicitar Análise';
+    if (cota.restantes <= 0) {
+      return cota.vitalicia ? 'Análises grátis esgotadas' : 'Cota do mês esgotada';
+    }
+    return cota.vitalicia
+      ? `Analisar grátis (${cota.restantes} de ${cota.limite})`
+      : `Analisar (${cota.restantes} de ${cota.limite} deste mês)`;
+  })();
+  // A barra fixa do mobile divide a largura com "Acessar leiloeiro" — o rótulo longo estoura.
+  const rotuloAnaliseCurto = (() => {
+    if (!cota || cota.ilimitado) return 'Solicitar Análise';
+    if (cota.restantes <= 0) return cota.vitalicia ? 'Grátis esgotadas' : 'Cota esgotada';
+    return cota.vitalicia ? `Analisar grátis (${cota.restantes})` : `Analisar (${cota.restantes})`;
+  })();
   // LEILÃO ENCERRADO (07/08): o servidor já recusava gerar relatório de lote vencido, mas a tela
   // seguia oferecendo o botão — o cliente só descobria depois de clicar, e para ele o relatório
   // "continuava disponível". Mesma regra dos dois lados (src/utils/leilaoEncerrado.js).
@@ -1625,7 +1660,7 @@ export default function ImovelDetalhe() {
                 ) : podeFazerAnalise ? (
                   <button onClick={() => nav('/analise', { state: { imovel } })}
                     style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '13px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
-                    <BarChart2 size={15} /> Solicitar Análise
+                    <BarChart2 size={15} /> {rotuloAnalise}
                   </button>
                 ) : (
                   <button onClick={() => nav('/planos')}
@@ -1694,7 +1729,7 @@ export default function ImovelDetalhe() {
           ) : podeFazerAnalise ? (
             <button onClick={() => nav('/analise', { state: { imovel } })}
               style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '13px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
-              <BarChart2 size={16} /> Solicitar Análise
+              <BarChart2 size={16} /> {rotuloAnaliseCurto}
             </button>
           ) : (
             <button onClick={() => nav('/planos')}

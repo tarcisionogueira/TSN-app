@@ -12,6 +12,7 @@ import { supabase } from '../utils/supabase';
 import { apiCall } from '../utils/apiCall';
 import { parseDataLocal } from '../utils/format';
 import { useAuth } from '../contexts/AuthContext';
+import { limiteMercado, usadasMercado, COTA_SELECT } from '../utils/cotaAnalise';
 import { useIsMobile } from '../utils/useIsMobile';
 import ScoreRisco from '../components/ScoreRisco';
 import { scoreBidPro, scoreLabel } from '../utils/score';
@@ -528,7 +529,7 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
 export default function Busca() {
   const nav = useNavigate();
   const isMobile = useIsMobile();
-  const { role, user, effectiveRole, effectiveUserId, impersonate } = useAuth();
+  const { role, user, effectiveRole, effectiveUserId, impersonate, planoLegado } = useAuth();
   const soLeitura = !!impersonate; // modo suporte: só visualiza (não salva/apaga filtro do cliente)
   // Lê filtros pré-ativados via URL (usados no deep-link do email de alerta)
   const loc = typeof window !== 'undefined' ? window.location.hash : '';
@@ -543,19 +544,19 @@ export default function Busca() {
   const canAnalise = user && ROLES_ANALISE.includes(role);
   const [analisesBonus, setAnalisesBonus] = useState(null);
   const [analisesUsadas, setAnalisesUsadas] = useState(0);
-  // Limite mensal de relatórios por plano (para o selo de disponibilidade na busca).
-  // Espelha limite_ia (banco) / LIMITE_POR_ROLE (Analise.jsx). Admin fica de fora (sem selo = ilimitado).
-  const LIMITE_ANALISES = {
-    explorador: 3, consultor: 5,
-    top2: 15, top2_anual: 15,
-    assessorado: 15, assessorado_anual: 15,
-    clube: 15, clube_anual: 15,
-  };
-  const limiteAnalises = LIMITE_ANALISES[effectiveRole];
+  // Limite de relatórios por plano, para o selo de disponibilidade na busca. Vem do espelho
+  // ÚNICO (`utils/cotaAnalise`). Esta tela mantinha a própria cópia e dizia **15/mês** ao
+  // Investidor Pro quando o banco entrega **10** (15 é só o grandfather do plano_legado) —
+  // prometia cinco relatórios que o servidor não daria. Admin = null → sem selo (ilimitado).
+  // `null` = sem selo. O admin (ilimitado) e a EQUIPE (analista/advogado, que recebe demanda em
+  // vez de gerar) não têm o que exibir — antes a equipe caía fora por não existir na tabela local;
+  // como o espelho devolve 0 para ela, o 0 também precisa virar "sem selo", senão a busca passaria
+  // a anunciar "0 relatórios disponíveis" para quem nunca teve esse selo.
+  const limiteBruto = limiteMercado(effectiveRole, planoLegado);
+  const limiteAnalises = limiteBruto ? limiteBruto : null;
 
   useEffect(() => {
     if (!effectiveUserId || limiteAnalises == null) { setAnalisesBonus(null); return; }
-    const mes = new Date().toISOString().slice(0, 7);
     // COLUNA CERTA POR PAPEL (07/08). O EXPLORADOR consome amostra grátis, e o
     // `consumir_analise_por` grava isso em `amostra_mercado_usadas` — nunca em
     // `analises_count`. Lendo só `analises_count`, o contador ficava eternamente em
@@ -563,13 +564,11 @@ export default function Busca() {
     // amostra_mercado_usadas = 1 e analises_count = 0). Mesma classe do bug do Índice de
     // hoje: escritor e leitor discordando sobre onde o dado mora.
     // A amostra também NÃO reseta por mês — por isso ela não passa pela comparação de `mes`.
-    supabase.from('perfis').select('bonus_mercado, analises_mes, analises_count, amostra_mercado_usadas').eq('id', effectiveUserId).single()
+    supabase.from('perfis').select(COTA_SELECT).eq('id', effectiveUserId).single()
       .then(({ data }) => {
         if (!data) return;
         setAnalisesBonus(data.bonus_mercado || 0);
-        setAnalisesUsadas(effectiveRole === 'explorador'
-          ? (data.amostra_mercado_usadas || 0)
-          : (data.analises_mes === mes ? (data.analises_count || 0) : 0));
+        setAnalisesUsadas(usadasMercado(data, effectiveRole));
       });
   }, [effectiveUserId, limiteAnalises, effectiveRole]);
   const analisesRestantes = limiteAnalises != null ? Math.max(0, limiteAnalises - analisesUsadas) : null;

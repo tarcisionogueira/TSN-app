@@ -18,6 +18,7 @@ import { loadImoveis, saveImoveis, generateId } from '../utils/storage';
 import { useAuth } from '../contexts/AuthContext';
 import { useAnalises } from '../contexts/AnalisesContext';
 import { supabase } from '../utils/supabase';
+import { limiteMercado, usadasMercado, COTA_SELECT } from '../utils/cotaAnalise';
 import { assinarAnexos, chaveDocCanonica } from '../utils/docUrl';
 import TabelaAmortizacao from '../components/TabelaAmortizacao';
 import { gerarPDF } from '../components/RelatorioPDF';
@@ -124,22 +125,10 @@ function BandaMercado({ n, titulo, sub, cor = '#0D63DB' }) {
   );
 }
 
-// Limite de relatórios mercadológicos+viabilidade por plano/mês (espelha limite_ia
-// no banco). Explorador: 5/mês, sem documental/jurídico. Todos os acessos têm cota;
-// só o admin é ilimitado. Equipe (analista/advogado) NÃO gera relatórios (só
-// recebe/visualiza demandas) → sem entrada aqui = limite 0.
-const LIMITE_POR_ROLE = {
-  explorador: 3, consultor: 5,
-  top2: 10, top2_anual: 10,
-  assessorado: 10, assessorado_anual: 10,
-  clube: 10, clube_anual: 10,
-};
-// Assinantes ANTIGOS (plano_legado) mantêm 15 (grandfather). O banco é a fonte da
-// verdade (limite_ia_efetivo); aqui é só p/ o espelho de UI não bloquear antes da hora.
-const ROLES_PAGOS_CLIENTE = ['top2', 'top2_anual', 'assessorado', 'assessorado_anual', 'clube', 'clube_anual'];
-const limiteRelatorios = (role, planoLegado) =>
-  (planoLegado && ROLES_PAGOS_CLIENTE.includes(role)) ? 15 : (LIMITE_POR_ROLE[role] || 0);
-const mesAtual = () => new Date().toISOString().slice(0, 7);
+// Limite de relatórios mercadológicos+viabilidade por plano. O espelho do banco mora em
+// `src/utils/cotaAnalise.js` (fonte única no frontend) — havia três cópias desta tabela e
+// elas já discordavam entre si.
+const limiteRelatorios = (role, planoLegado) => limiteMercado(role, planoLegado) ?? 0;
 const ROLES_SEM_LIMITE = ['admin'];
 // Documental/jurídico só a partir do Investidor Pro (explorador/consultor não têm).
 const ROLES_SEM_DOCUMENTAL = ['explorador', 'consultor'];
@@ -178,13 +167,11 @@ export default function Analise() {
   // LEMOS para pintar o estado da tela — chamamos no mount e após cada geração.
   const carregarCota = React.useCallback(async () => {
     if (!user || semLimite) return;
-    const { data, error } = await supabase.from('perfis')
-      .select('analises_mes, analises_count, amostra_mercado_usadas, bonus_mercado').eq('id', user.id).single();
+    const { data, error } = await supabase.from('perfis').select(COTA_SELECT).eq('id', user.id).single();
     if (error || !data) return;
     // EXPLORADOR: contador de AMOSTRA VITALÍCIA (não reseta por mês). Demais planos: cota mensal.
-    const count = role === 'explorador'
-      ? (data.amostra_mercado_usadas || 0)
-      : (data.analises_mes === mesAtual() ? (data.analises_count || 0) : 0);
+    // Qual coluna ler por papel é decisão de `usadasMercado` — a mesma que a Busca e o Imóvel usam.
+    const count = usadasMercado(data, role);
     const bonus = data.bonus_mercado || 0;
     setAnalisesUsadas(count);
     setAnalisesBonus(bonus);
