@@ -74,16 +74,44 @@ async function escolherImoveis(cidade, uf) {
   return [];
 }
 
+// Marca do e-mail. Feita em HTML PURO, de propósito: a maioria dos clientes bloqueia imagem
+// por padrão, e um cabeçalho que depende de PNG aparece vazio justamente na primeira impressão.
+// Cores oficiais de docs/MARCA.md — azul #0D63DB → #0B4BA6, o "B" branco no quadrado azul.
+function cabecalho() {
+  const home = `${BASE}/?utm_source=email_ativacao&utm_medium=email&utm_campaign=ativacao`;
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;background:#0D63DB;background-image:linear-gradient(135deg,#0D63DB 0%,#0B4BA6 100%);border-radius:14px 14px 0 0;">
+    <tr><td align="center" style="padding:22px 20px;">
+      <a href="${home}" style="text-decoration:none;display:inline-block;" target="_blank">
+        <table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+          <tr>
+            <td style="background:#ffffff;border-radius:9px;width:34px;height:34px;text-align:center;vertical-align:middle;font-family:Arial,Helvetica,sans-serif;font-size:20px;font-weight:900;color:#0D63DB;line-height:34px;">B</td>
+            <td style="padding-left:10px;font-family:Arial,Helvetica,sans-serif;font-size:19px;font-weight:900;color:#ffffff;letter-spacing:-.2px;white-space:nowrap;">
+              BidPro <span style="font-weight:400;letter-spacing:2px;font-size:12px;opacity:.85;">BRASIL</span>
+            </td>
+          </tr>
+        </table>
+      </a>
+      <div style="font-family:Arial,Helvetica,sans-serif;font-size:11.5px;color:#dbeafe;margin-top:9px;letter-spacing:.2px;">
+        Inteligência para arrematar imóveis em leilão
+      </div>
+    </td></tr>
+  </table>`;
+}
+
 function cardImovel(im) {
   const url = `${BASE}/#/imovel/${im.id}?utm_source=email_ativacao&utm_medium=email&utm_campaign=ativacao`;
   const desc = Math.round(Number(im.desconto_percentual) || 0);
+  // O card SEMPRE foi um link (o `<a>` envolve tudo) — o que faltava era PARECER clicável.
+  // Sem pista visual, o leitor lê como cartaz e não clica: a barra azul à esquerda e o
+  // "Ver relatório →" existem para isso, não para enfeite.
   return `<tr><td style="padding:0 0 12px;">
-    <a href="${url}" style="display:block;text-decoration:none;border:1px solid #e2e8f0;border-radius:12px;padding:14px 16px;">
+    <a href="${url}" target="_blank" style="display:block;text-decoration:none;border:1px solid #e2e8f0;border-left:4px solid #0D63DB;border-radius:12px;padding:14px 16px;background:#ffffff;">
       <div style="font-size:14px;font-weight:700;color:#0f172a;line-height:1.4;">${esc(im.titulo || 'Imóvel em leilão')}</div>
       <div style="font-size:12px;color:#64748b;margin-top:4px;">${esc(im.cidade || '')}${im.estado ? ' · ' + esc(im.estado) : ''}</div>
       <div style="margin-top:8px;font-size:15px;font-weight:800;color:#0D63DB;">${brl(im.valor_minimo)}
         ${desc >= 25 ? `<span style="font-size:12px;font-weight:700;color:#059669;margin-left:8px;">${desc}% abaixo da avaliação</span>` : ''}
       </div>
+      <div style="margin-top:9px;font-size:12.5px;font-weight:700;color:#0D63DB;">Ver relatório deste imóvel &rarr;</div>
     </a></td></tr>`;
 }
 
@@ -106,17 +134,29 @@ export function corpo({ nome, etapa, imoveis, cidade, unsubUrl }) {
 
   const cta = `${BASE}/#/buscar?utm_source=email_ativacao&utm_medium=email&utm_campaign=ativacao`;
 
-  return `<div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto;color:#0f172a;">
-    <p style="font-size:15px;font-weight:700;">${saudacao}</p>
-    ${abertura}
-    <table style="width:100%;border-collapse:collapse;margin:18px 0 8px;">${imoveis.map(cardImovel).join('')}</table>
-    <div style="text-align:center;margin:22px 0 8px;">
-      <a href="${cta}" style="display:inline-block;background:#0D63DB;color:#fff;text-decoration:none;padding:13px 28px;border-radius:10px;font-weight:700;font-size:15px;">Ver mais imóveis</a>
-    </div>
-    <p style="font-size:12px;color:#94a3b8;line-height:1.6;margin-top:26px;border-top:1px solid #f1f5f9;padding-top:14px;">
-      BidPro Brasil · Você recebe este e-mail porque criou uma conta na plataforma.
-      <a href="${unsubUrl}" style="color:#94a3b8;">Não quero mais receber</a>.
-    </p>
+  const home = `${BASE}/?utm_source=email_ativacao&utm_medium=email&utm_campaign=ativacao`;
+  // Estrutura em TABELA e estilo INLINE: é o que sobrevive ao Outlook e ao Gmail. Nada de
+  // flexbox/grid aqui — o que renderiza bem no navegador costuma quebrar no cliente de e-mail.
+  return `<div style="font-family:Arial,Helvetica,sans-serif;background:#f1f5f9;padding:22px 12px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;max-width:560px;margin:0 auto;">
+      <tr><td>${cabecalho()}</td></tr>
+      <tr><td style="background:#ffffff;border-radius:0 0 14px 14px;padding:26px 24px;color:#0f172a;">
+        <p style="font-size:15px;font-weight:700;margin:0 0 12px;">${saudacao}</p>
+        ${abertura}
+        <table role="presentation" style="width:100%;border-collapse:collapse;margin:18px 0 8px;">${imoveis.map(cardImovel).join('')}</table>
+        <div style="text-align:center;margin:22px 0 6px;">
+          <a href="${cta}" target="_blank" style="display:inline-block;background:#0D63DB;color:#fff;text-decoration:none;padding:13px 28px;border-radius:10px;font-weight:700;font-size:15px;">Ver mais imóveis</a>
+        </div>
+        <p style="text-align:center;font-size:12px;color:#94a3b8;margin:0;">Clique em qualquer imóvel acima para abrir a página dele.</p>
+      </td></tr>
+      <tr><td style="padding:16px 24px 0;text-align:center;">
+        <p style="font-size:12px;color:#94a3b8;line-height:1.6;margin:0;">
+          <a href="${home}" target="_blank" style="color:#64748b;text-decoration:none;font-weight:700;">BidPro Brasil</a> ·
+          Você recebe este e-mail porque criou uma conta na plataforma.<br>
+          <a href="${unsubUrl}" style="color:#94a3b8;">Não quero mais receber</a>.
+        </p>
+      </td></tr>
+    </table>
   </div>`;
 }
 
