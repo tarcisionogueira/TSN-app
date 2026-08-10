@@ -24,7 +24,7 @@ refutação antes de entrar na lista.
 
 ---
 
-## ✅ AS 5 DE ALTA — CORRIGIDAS EM 10/08 (commit `6ff2d64`)
+## ✅ AS 5 DE ALTA — CORRIGIDAS EM 10/08 (commit `e78e511`)
 
 ### A1. Crédito comprado não desbloqueava a geração — **RESOLVIDO**
 `analisesBloqueado` não consultava `credito_saldo`, e `lerCotaMercado` descartava esse campo
