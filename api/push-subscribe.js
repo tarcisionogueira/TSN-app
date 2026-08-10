@@ -58,7 +58,16 @@ export default async function handler(req) {
   // Upsert: um registro por usuário (substitui se já existe).
   // O resultado era DESCARTADO e o handler devolvia ok:true de qualquer jeito: o usuário via
   // "notificações ativadas" e nunca recebia push, sem nada registrar a divergência. (10/08)
-  const ins = await sb('push_subscriptions', {
+  // `on_conflict=user_id` é OBRIGATÓRIO aqui (10/08). `Prefer: resolution=merge-duplicates` sozinho
+  // não diz ao PostgREST em QUAL restrição resolver o conflito, então ele tenta um INSERT puro e
+  // bate na unique `push_subscriptions_user_id_key` com 409/23505 — ou seja, para quem JÁ tinha
+  // inscrição (a maioria: o app reinscreve a cada acesso) a gravação NUNCA acontecia.
+  // Isto estava mascarado pelo bug B2: como o resultado era descartado, o endpoint respondia
+  // `ok:true` e o defeito era invisível. Ao passar a checar o `.ok`, o 409 apareceu de imediato
+  // nos logs — a checagem não criou o problema, ela revelou um que já existia há tempo.
+  // A tabela tem unique em `user_id` E em `endpoint`; conflito por `endpoint` (mesmo aparelho,
+  // outra conta) é caso legítimo de erro e segue tratado abaixo.
+  const ins = await sb('push_subscriptions?on_conflict=user_id', {
     method: 'POST',
     headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
     body: JSON.stringify({
