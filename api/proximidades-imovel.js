@@ -23,7 +23,7 @@ export default async function handler(req) {
   const id = new URL(req.url).searchParams.get('imovel_id');
   if (!id) return json({ error: 'imovel_id obrigatório' }, 400);
 
-  const [im] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(id)}&select=latitude,longitude,pontos_proximos,proximidades_em`)).json();
+  const [im] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(id)}&select=latitude,longitude,pontos_proximos,proximidades_em,proximidades_vazios`)).json();
   if (!im) return json({ error: 'Imóvel não encontrado' }, 404);
 
   const lat = Number(im.latitude), lng = Number(im.longitude);
@@ -54,9 +54,28 @@ export default async function handler(req) {
   if (!lat || !lng) return json({ pontos: null, sem_coordenada: true });
 
   try {
-    const pontos = await consultarProximidades(lat, lng);
+    const { pontos, vazio } = await consultarProximidades(lat, lng);
+
+    if (vazio) {
+      // UMA observação de vazio NÃO autoriza dizer ao cliente "não há nada por perto" (10/08).
+      // É indício: conta para a corroboração TEMPORAL do cron (`proximidades_vazios`) e devolve
+      // o estado honesto de "não consegui determinar agora", que a tela já sabe pintar —
+      // "Não foi possível carregar os pontos próximos agora" + "Tentar novamente".
+      // Quando o cron confirmar o vazio em execuções diferentes, ele grava `{}` e AÍ a tela
+      // passa a dizer "nenhum ponto de interesse" — que nesse momento é verdade.
+      // Gravar `{}` aqui era o que congelava o engano: o cache devolvia o vazio para sempre.
+      await sb(`imoveis_leilao?id=eq.${encodeURIComponent(id)}`, {
+        method: 'PATCH', headers: { Prefer: 'return=minimal' },
+        // `proximidades_vazios` incrementado no servidor seria melhor, mas PostgREST não faz
+        // expressão em PATCH; ler-e-somar aqui é aceitável porque um contador de corroboração
+        // que perde uma contagem por concorrência apenas ADIA a conclusão — nunca a antecipa.
+        body: JSON.stringify({ proximidades_vazios: (Number(im.proximidades_vazios) || 0) + 1 }),
+      }).catch(() => { /* padrao-ok: contagem best-effort; perder uma só adia a conclusão */ });
+      return json({ pontos: null, indeterminado: true, retryable: true }, 502);
+    }
+
     await sb(`imoveis_leilao?id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' },
-      body: JSON.stringify({ pontos_proximos: pontos, proximidades_em: new Date().toISOString() }) });
+      body: JSON.stringify({ pontos_proximos: pontos, proximidades_em: new Date().toISOString(), proximidades_vazios: 0 }) });
     return json({ pontos });
   } catch (e) {
     // Falha REAL (Overpass fora/limite em todos os espelhos) → status de ERRO, não

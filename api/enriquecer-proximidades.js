@@ -18,7 +18,18 @@ const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
 // Com os espelhos do Overpass agora em PARALELO (_proximidades.js), cada imóvel resolve em ~3-5s
 // (antes até ~45s em sequência) → dá p/ processar um lote MAIOR dentro dos 300s e pré-carregar
 // muito mais (menos "não carregou" na hora que o usuário abre). Ajustável por env.
-const LOTE = Number(process.env.PROXIMIDADES_LOTE || 40);
+// LOTE 40 -> 12 e ORÇAMENTO DE TEMPO (10/08, correção da correção). Com 40 itens e o custo por
+// item tendo subido (timeout maior + rodada extra), o cron passou a estourar os 300s em 7 de 16
+// execuções — 44%. É exatamente o defeito que este mesmo dia apontou em três outros crons:
+// **um lote é teto de CONTAGEM, nunca de TEMPO**. Agora há os dois, e o de tempo é que manda.
+// 12 também reduz a pressão sobre as instâncias PÚBLICAS do Overpass, que é a causa de fundo
+// dos vazios falsos (ver o cabeçalho de _proximidades.js).
+const LOTE = Number(process.env.PROXIMIDADES_LOTE || 12);
+const ORCAMENTO_MS = 240000; // de 300s: sobra para gravar o último item e responder
+// Quantas execuções DISTINTAS precisam observar vazio antes de aceitá-lo como verdade.
+// 3 observações em horários diferentes: um vazio de sobrecarga não sobrevive a isso; um vazio
+// real (gleba rural, 4 km sem nada mapeado no OSM) se repete sempre.
+const PROX_VAZIOS_P_ACEITAR = 3;
 
 function sb(path, opts = {}) {
   return fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
@@ -36,7 +47,7 @@ export default async function handler(req, res) {
   // Fila: sem pontos ainda E com menos de MAX_TENT falhas (não exclui para sempre por
   // uma falha transitória do Overpass — ver migration proximidades_tentativas_retry).
   const MAX_TENT = 5;
-  const fila = await (await sb(`imoveis_leilao?select=id,latitude,longitude,proximidades_tentativas&proximidades_em=is.null&proximidades_tentativas=lt.${MAX_TENT}&latitude=not.is.null&latitude=neq.0&ativo=eq.true&order=proximidades_tentativas.asc,atualizado_em.desc&limit=${LOTE}`)).json();
+  const fila = await (await sb(`imoveis_leilao?select=id,latitude,longitude,proximidades_tentativas,proximidades_vazios&proximidades_em=is.null&proximidades_tentativas=lt.${MAX_TENT}&latitude=not.is.null&latitude=neq.0&ativo=eq.true&order=proximidades_tentativas.asc,atualizado_em.desc&limit=${LOTE}`)).json();
 
   // REVALIDAÇÃO DO VAZIO (10/08). Um resultado vazio é o que uma consulta que falhou em
   // silêncio também produz — e, uma vez gravado, ficava valendo PARA SEMPRE, porque a fila
@@ -55,7 +66,7 @@ export default async function handler(req, res) {
     // nunca revalidar um imóvel que já tem pontos bons e sobrescrevê-lo à toa.
     // `proximidades_tentativas` limita também aqui: senão um imóvel cuja revalidação falha
     // segue com `proximidades_em` antigo e voltaria à fila em todo run, para sempre.
-    const revalidar = await (await sb(`imoveis_leilao?select=id,latitude,longitude,proximidades_tentativas,pontos_proximos&pontos_proximos=eq.${encodeURIComponent('{}')}&proximidades_em=lt.${encodeURIComponent(corte)}&proximidades_tentativas=lt.${MAX_TENT}&latitude=not.is.null&latitude=neq.0&ativo=eq.true&order=proximidades_em.asc&limit=${sobra}`)).json();
+    const revalidar = await (await sb(`imoveis_leilao?select=id,latitude,longitude,proximidades_tentativas,proximidades_vazios,pontos_proximos&pontos_proximos=eq.${encodeURIComponent('{}')}&proximidades_em=lt.${encodeURIComponent(corte)}&proximidades_tentativas=lt.${MAX_TENT}&latitude=not.is.null&latitude=neq.0&ativo=eq.true&order=proximidades_em.asc&limit=${sobra}`)).json();
     if (Array.isArray(revalidar)) {
       for (const im of revalidar) {
         const p = im.pontos_proximos;
@@ -63,16 +74,36 @@ export default async function handler(req, res) {
       }
     }
   }
-  let ok = 0, falhas = 0;
+  const T0 = Date.now();
+  let ok = 0, falhas = 0, vaziosParciais = 0, cortadoPorTempo = false, i = 0;
   for (const im of (Array.isArray(fila) ? fila : [])) {
+    if (Date.now() - T0 > ORCAMENTO_MS) { cortadoPorTempo = true; break; }
     try {
-      const pontos = await consultarProximidades(Number(im.latitude), Number(im.longitude));
-      // Sucesso. Vazio {} só chega aqui CORROBORADO por um 2º espelho (_proximidades.js) —
-      // vazio sem corroboração lança e cai no catch. Grava e sai da fila via proximidades_em;
-      // se for vazio, com validade de 30 dias (ver REVALIDAÇÃO DO VAZIO acima).
-      // Zera as tentativas: quem foi revalidado não deve carregar o histórico de falhas antigo.
+      // `rodizio` faz cada imóvel começar por um espelho diferente: espalha a carga em vez de
+      // concentrar tudo no primeiro da lista, que é o que os limitava.
+      const { pontos, vazio } = await consultarProximidades(Number(im.latitude), Number(im.longitude), { rodizio: i++ });
+
+      if (vazio) {
+        // VAZIO É INDÍCIO, NÃO VEREDITO. Um espelho saudável respondeu "não há nada" — mas foi
+        // UMA observação, no instante em que os espelhos podiam estar sob carga. Conta e devolve
+        // à fila; só ao repetir em execuções diferentes vira `{}` gravado.
+        const n = (Number(im.proximidades_vazios) || 0) + 1;
+        if (n >= PROX_VAZIOS_P_ACEITAR) {
+          await sb(`imoveis_leilao?id=eq.${im.id}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' },
+            body: JSON.stringify({ pontos_proximos: {}, proximidades_em: new Date().toISOString(), proximidades_tentativas: 0, proximidades_vazios: n }) });
+          ok++;
+        } else {
+          await sb(`imoveis_leilao?id=eq.${im.id}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' },
+            body: JSON.stringify({ proximidades_vazios: n }) });
+          vaziosParciais++;
+        }
+        continue;
+      }
+
+      // Achou pontos: grava e sai da fila. Zera os DOIS contadores — o histórico de falhas e o
+      // de vazios não dizem mais nada sobre um imóvel que agora tem resposta boa.
       await sb(`imoveis_leilao?id=eq.${im.id}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' },
-        body: JSON.stringify({ pontos_proximos: pontos, proximidades_em: new Date().toISOString(), proximidades_tentativas: 0 }) });
+        body: JSON.stringify({ pontos_proximos: pontos, proximidades_em: new Date().toISOString(), proximidades_tentativas: 0, proximidades_vazios: 0 }) });
       ok++;
     } catch (_) {
       // FALHA real (Overpass fora/limite, ou 200 com `remark`, ou vazio inconclusivo): NÃO
@@ -83,5 +114,7 @@ export default async function handler(req, res) {
       falhas++;
     }
   }
-  return res.status(200).json({ ok, falhas, lote: LOTE });
+  // `cortado_por_tempo` e `vazios_parciais` são o que distingue um ciclo saudável de um ciclo
+  // que morreu no meio — antes, os dois davam a mesma resposta.
+  return res.status(200).json({ ok, falhas, vazios_parciais: vaziosParciais, lote: LOTE, cortado_por_tempo: cortadoPorTempo, ms: Date.now() - T0 });
 }
