@@ -85,4 +85,13 @@ $function$;
 revoke all on function public.ativacao_nudge_candidatos(boolean) from public, anon, authenticated;
 grant execute on function public.ativacao_nudge_candidatos(boolean) to service_role;
 
+-- INTERRUPTOR no banco, não em env var: ligar/desligar vira uma linha de SQL, sem redeploy,
+-- e dá para desligar às pressas no meio de um envio. Nasce DESLIGADO.
+--   update public.app_config set value='true'  where key='ativacao_nudge_ativo';  -- liga
+--   update public.app_config set value='false' where key='ativacao_nudge_ativo';  -- desliga
+-- O env ATIVACAO_NUDGE_ATIVO=0 continua valendo como freio de mão por cima disto.
+insert into public.app_config (key, value)
+values ('ativacao_nudge_ativo', 'false')
+on conflict (key) do nothing;
+
 commit;

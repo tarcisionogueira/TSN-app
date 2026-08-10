@@ -222,8 +222,13 @@ antes de mexer, mais 6 validações de produção para rodar na abertura.
 > `api/ativacao-nudge-cron.js` + `supabase/migrations/ativacao_nudge.sql`. Máx. **2 e-mails na
 > vida**: D+2 e D+7, com 3 imóveis reais (cascata cidade → estado → Brasil, para nenhum e-mail
 > sair vazio). Sai da fila na primeira análise gerada. Cron diário 12h UTC.
-> **Para ligar:** `ATIVACAO_NUDGE_ATIVO=1` no painel da Vercel. Sem isso é dry-run — apura e
-> devolve a prévia, não envia nem grava.
+> **Para ligar (uma linha de SQL, sem deploy):**
+> `update app_config set value='true' where key='ativacao_nudge_ativo';` — e `'false'` desliga
+> na hora, inclusive no meio de um envio. O env `ATIVACAO_NUDGE_ATIVO=0` é freio de mão por
+> cima disso. Desligado = dry-run: apura, devolve a prévia, não envia nem grava.
+> **`?limite=N` libera em LOTE** — o primeiro envio de uma cadência é o teste dela; mandar
+> para 5, olhar entrega/abertura/clique, e só então soltar o resto. O resumo diz
+> `adiados_pelo_lote` para o corte não se ler como "acabou a fila".
 > **A lista, sem disparar nada:** `select * from public.ativacao_nudge_candidatos();` (passe
 > `true` para ver o backlog). Em 09/08: 1 na janela normal, **27 no backlog**.
 > **`?backlog=1` é de USO ÚNICO** — alcança quem se cadastrou antes de o cron existir; depois

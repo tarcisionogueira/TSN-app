@@ -8,10 +8,17 @@
  * documento, e `enviar-alertas-cron` só alcança quem criou filtro salvo (quase ninguém fez).
  * Resultado: das 90 amostras grátis disponíveis (3 por conta), 3 foram usadas.
  *
- * DESLIGADO POR PADRÃO. Sem `ATIVACAO_NUDGE_ATIVO=1` no painel, roda em DRY-RUN: apura quem
- * receberia, devolve a lista e **não envia nem grava nada**. A polaridade é o inverso da do
- * `retencao-avisos-cron` (que é ligado por padrão) de propósito — aquele já foi autorizado e
- * roda há semanas; este manda e-mail novo para cliente e precisa de um "sim" explícito.
+ * DESLIGADO POR PADRÃO, e o interruptor vive no BANCO (`app_config.ativacao_nudge_ativo`),
+ * não num env var: ligar e desligar vira uma linha de SQL, sem redeploy, e dá para desligar
+ * às pressas se algo sair errado no meio de um envio. O env `ATIVACAO_NUDGE_ATIVO=0` continua
+ * valendo como freio de mão — se estiver setado como '0', nada sai, mesmo com o banco ligado.
+ * Desligado = DRY-RUN: apura quem receberia, devolve a lista e não envia nem grava nada.
+ * A polaridade é o inverso da do `retencao-avisos-cron` (ligado por padrão) de propósito:
+ * aquele já foi autorizado e roda há semanas; este manda e-mail novo para cliente.
+ *
+ * ?limite=N — libera em LOTE. O primeiro envio de uma cadência nova é também o teste dela:
+ * vale mandar para 5 pessoas, olhar entrega/abertura/clique, e só então soltar o resto. Sem o
+ * parâmetro, processa todo mundo elegível.
  *
  * ?backlog=1 — as janelas D+2/D+7 têm um dia cada, porque o cron é diário. Na primeira
  * execução isso deixaria de fora justamente os 27 que já se cadastraram há semanas. Com
@@ -33,7 +40,8 @@ const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
 const BASE         = process.env.APP_BASE_URL || 'https://bidprobrasil.com.br';
 const FROM         = process.env.APP_ALERTS_FROM || process.env.EMAIL_FROM || 'BidPro Brasil <noreply@bidprobrasil.com.br>';
-const ATIVO        = process.env.ATIVACAO_NUDGE_ATIVO === '1';
+// Freio de mão do painel: '0' desliga tudo, independente do banco.
+const FREIO_ENV    = process.env.ATIVACAO_NUDGE_ATIVO === '0';
 
 const hdr = { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' };
 const sb = (path, opts = {}) => fetch(`${SUPABASE_URL}/rest/v1/${path}`, { ...opts, headers: { ...hdr, ...(opts.headers || {}) } });
@@ -118,17 +126,39 @@ async function handler(req) {
     return new Response(JSON.stringify({ error: 'Supabase não configurado' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
   }
 
-  let backlog = false;
-  try { backlog = new URL(req.url, 'http://x').searchParams.get('backlog') === '1'; } catch { /* url malformada */ }
+  let backlog = false, limite = 0;
+  try {
+    const q = new URL(req.url, 'http://x').searchParams;
+    backlog = q.get('backlog') === '1';
+    limite = Math.max(0, Number(q.get('limite') || 0) || 0);
+  } catch { /* url malformada */ }
+
+  // Interruptor no banco. Falha de leitura => DESLIGADO: se não dá para ter certeza de que
+  // foi autorizado, não manda e-mail para cliente.
+  let ligadoNoBanco = false;
+  try {
+    const r = await sb('app_config?key=eq.ativacao_nudge_ativo&select=value');
+    const linhas = await r.json().catch(() => []);
+    ligadoNoBanco = String(linhas?.[0]?.value ?? '').toLowerCase() === 'true';
+  } catch { ligadoNoBanco = false; }
+  const ATIVO = ligadoNoBanco && !FREIO_ENV;
 
   const candRes = await sb('rpc/ativacao_nudge_candidatos', { method: 'POST', body: JSON.stringify({ p_backlog: backlog }) });
   if (!candRes.ok) {
     return new Response(JSON.stringify({ error: 'RPC falhou', detalhe: await candRes.text().catch(() => '') }), { status: 500, headers: { 'Content-Type': 'application/json' } });
   }
   const candidatos = await candRes.json().catch(() => []);
-  const lista = Array.isArray(candidatos) ? candidatos : [];
+  const todos = Array.isArray(candidatos) ? candidatos : [];
+  const lista = limite > 0 ? todos.slice(0, limite) : todos;
 
-  const resumo = { ativo: ATIVO, backlog, candidatos: lista.length, d2: 0, d7: 0, enviados: 0, falhas: 0, sem_imovel: 0 };
+  const resumo = {
+    ativo: ATIVO, freio_env: FREIO_ENV, backlog,
+    elegiveis: todos.length, candidatos: lista.length,
+    // Se o lote cortou gente, DIZ quantos ficaram — truncar em silêncio se lê como
+    // "acabou a fila" quando na verdade sobrou fila.
+    ...(limite > 0 && todos.length > lista.length ? { adiados_pelo_lote: todos.length - lista.length } : {}),
+    d2: 0, d7: 0, enviados: 0, falhas: 0, sem_imovel: 0,
+  };
 
   // DRY-RUN: devolve QUEM receberia, para conferência antes de autorizar. Só o primeiro nome
   // e o domínio do e-mail — a lista trafega em log/resposta e não precisa do endereço inteiro.
