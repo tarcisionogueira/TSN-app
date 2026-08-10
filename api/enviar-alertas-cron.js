@@ -197,10 +197,27 @@ async function handler(req) {
 
   // Continuação encadeada: dispara a PRÓXIMA invocação (best-effort; o timeout curto só
   // garante que a próxima já foi acionada — ela roda independente). Não encadeia em teste.
+  // ORÇAMENTO DE TEMPO (10/08). O `continuar()` só era chamado DEPOIS de processar o lote
+  // inteiro, e o cursor existia apenas na query string dessa chamada encadeada — não era
+  // gravado em lugar nenhum. Consequência: a invocação que estourasse os 300s matava a CADEIA,
+  // e como o cron sempre reinicia em `cursor=''`, era sempre o MESMO pedaço final da tabela que
+  // ficava sem e-mail. Inanição determinística, não azar. E o custo por usuário varia muito
+  // (filtros salvos, 3 cidades × 3 raios × 2 passes de RPC, Resend), então "120" é um teto de
+  // CONTAGEM, nunca um teto de TEMPO — o que faltava era este.
+  // Agora o laço para no orçamento e encadeia a partir do ÚLTIMO PROCESSADO: ninguém é pulado.
+  const T0 = Date.now();
+  const ORCAMENTO_MS = 240000; // de 300s: sobra para encadear, gravar o rastro e responder
+  let ultimoProcessado = null;  // id do último perfil realmente tratado neste lote
+  let cortadoPorTempo = false;
+
   async function continuar() {
     const CRON = process.env.CRON_SECRET;
-    if (!loteCheio || !ultimoIdLote || testeEmail || !CRON) return;
-    const q = new URLSearchParams({ cursor: ultimoIdLote, batch: String(BATCH) });
+    // Encadeia quando o lote veio cheio (há mais gente adiante) OU quando o orçamento cortou
+    // este lote no meio (há gente AQUI que ainda não foi tratada). No corte, o cursor é o
+    // último processado — não o fim do lote, senão os não tratados seriam pulados.
+    const cursorProx = cortadoPorTempo ? ultimoProcessado : ultimoIdLote;
+    if ((!loteCheio && !cortadoPorTempo) || !cursorProx || testeEmail || !CRON) return;
+    const q = new URLSearchParams({ cursor: cursorProx, batch: String(BATCH) });
     if (forcar) q.set('forcar', '1');
     // Força www: o apex responde 308 e o redirect pode perder o header x-cron-secret.
     const selfBase = String(BASE).replace(/:\/\/(www\.)?bidprobrasil\.com\.br/, '://www.bidprobrasil.com.br');
@@ -364,6 +381,10 @@ async function handler(req) {
   const isSegunda = new Date().getUTCDay() === 1; // 11h UTC de segunda = 8h BRT de segunda
 
   for (const perfil of perfis) {
+    // Corte por ORÇAMENTO antes de começar mais um usuário. `ultimoProcessado` só avança
+    // depois que o `try` termina, então o corte nunca "pula" quem estava em andamento: ele
+    // volta a ser o primeiro do próximo lote.
+    if (!testeEmail && Date.now() - T0 > ORCAMENTO_MS) { cortadoPorTempo = true; break; }
     try {
       const email = emailMap.get(perfil.id); if (!email || !RESEND_KEY) continue;
       const a = alertaMap[perfil.id];
@@ -617,8 +638,24 @@ async function handler(req) {
     } catch (e) {
       console.error('[enviar-alertas-cron] erro user', perfil.id, e?.message);
     }
+    ultimoProcessado = perfil.id; // avança SÓ depois de tratar (inclusive quando deu erro)
   }
 
   await continuar(); // aciona o próximo lote (se houver), depois de processar este
-  return new Response(JSON.stringify({ ok: true, enviados, lote: perfis.length, cursor_proximo: loteCheio ? ultimoIdLote : null }), { headers: { 'Content-Type': 'application/json' } });
+  // RASTRO da varredura. Sem isto, "não havia ninguém para avisar" e "a cadeia morreu no meio"
+  // eram indistinguíveis: o único sinal era o corpo HTTP de uma invocação que ninguém lê.
+  // `assinatura` guarda o resumo do último lote e o cursor de onde ele parou.
+  try {
+    await fetch(`${URL_}/rest/v1/alerta_estado`, {
+      method: 'POST',
+      headers: { ...hdr, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },
+      body: JSON.stringify({
+        chave: 'enviar_alertas_cron',
+        assinatura: JSON.stringify({ enviados, lote: perfis.length, cortado_por_tempo: cortadoPorTempo, cursor_proximo: cortadoPorTempo ? ultimoProcessado : (loteCheio ? ultimoIdLote : null) }),
+        atualizado_em: new Date().toISOString(),
+      }),
+      signal: AbortSignal.timeout(8000),
+    });
+  } catch { /* rastro é best-effort — nunca derruba o envio */ }
+  return new Response(JSON.stringify({ ok: true, enviados, lote: perfis.length, cortado_por_tempo: cortadoPorTempo, cursor_proximo: cortadoPorTempo ? ultimoProcessado : (loteCheio ? ultimoIdLote : null) }), { headers: { 'Content-Type': 'application/json' } });
 }

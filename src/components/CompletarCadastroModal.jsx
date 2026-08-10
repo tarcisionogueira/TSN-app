@@ -40,17 +40,31 @@ export default function CompletarCadastroModal() {
     let vivo = true;
     (async () => {
       setCarregando(true);
-      const { data } = await supabase.from('perfis')
+      const { data, error } = await supabase.from('perfis')
         .select('nome, telefone, endereco_cidade, endereco_uf, lgpd_aceito')
         .eq('id', user.id).single();
       if (!vivo) return;
-      const nome = data?.nome || user.user_metadata?.full_name || user.user_metadata?.name || '';
+      // FALHA DE LEITURA NÃO É "CADASTRO INCOMPLETO" (10/08). O postgrest-js não lança em
+      // não-2xx: devolve `{data:null,error}`. Com `data` nulo, todo campo virava "faltando" e
+      // o app ficava atrás de um popup por causa de um 500 transitório. Some-se a isto o fato
+      // de `passos` poder dar VAZIO (ver abaixo) e o resultado era uma cortina cinza sem saída.
+      // Sem conseguir ler, o certo é NÃO bloquear: o gate de verdade é o servidor.
+      if (error) { setCadastroIncompleto(false); setCarregando(false); return; }
+      // MESMO CRITÉRIO DO AuthContext (`fetchPerfil`: `!data?.nome`). Antes o modal aceitava o
+      // `full_name` do metadata do Auth como nome válido, então para uma conta social com
+      // `perfis.nome` vazio o contexto dizia "incompleto" e o modal concluía "nada falta" —
+      // discordância que produzia o overlay vazio E se auto-perpetuava, porque o patch só grava
+      // `passos.includes('nome')` e `perfis.nome` nunca era preenchido. Agora o passo aparece
+      // com o nome do metadata JÁ PREENCHIDO: o usuário confirma, o `perfis.nome` é gravado e
+      // as duas leituras passam a concordar.
+      const nomePerfil = String(data?.nome || '').trim();
+      const nome = nomePerfil || user.user_metadata?.full_name || user.user_metadata?.name || '';
       const tel = data?.telefone || '';
       const cidade = data?.endereco_cidade || '';
       const uf = data?.endereco_uf || '';
       const lgpd = !!data?.lgpd_aceito;
       const falta = [];
-      if (!nome || !nome.trim()) falta.push('nome');
+      if (!nomePerfil) falta.push('nome');
       if (!cidade || !uf) falta.push('cidade');
       if (!tel) falta.push('telefone');
       if (!lgpd) falta.push('lgpd');
@@ -63,7 +77,17 @@ export default function CompletarCadastroModal() {
     return () => { vivo = false; };
   }, [user, cadastroIncompleto]);
 
-  if (!cadastroIncompleto || !user) return null;
+  // NADA A PEDIR = NADA A MOSTRAR. O `passos.length === 0 ? null` vivia DENTRO do JSX da
+  // cortina: sobrava um retângulo cinza em tela cheia com o cabeçalho "Complete seu cadastro" e
+  // mais nada — sem campo, sem botão, sem X, sem clique-fora. Não havia caminho de saída na
+  // interface e o app inteiro ficava inutilizável. Além de não renderizar (early return abaixo),
+  // o estado é DESLIGADO aqui — em efeito, nunca durante o render, que atualizaria o contexto no
+  // meio da renderização de outro componente. Sem desligar, a condição voltaria no próximo
+  // render e o usuário ficaria preso do mesmo jeito.
+  const vazio = !carregando && cadastroIncompleto && !!user && passos.length === 0;
+  useEffect(() => { if (vazio) setCadastroIncompleto(false); }, [vazio, setCadastroIncompleto]);
+
+  if (!cadastroIncompleto || !user || vazio) return null;
 
   const passo = passos[idx];
   const ultimo = idx >= passos.length - 1;

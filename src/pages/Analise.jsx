@@ -18,7 +18,7 @@ import { loadImoveis, saveImoveis, generateId } from '../utils/storage';
 import { useAuth } from '../contexts/AuthContext';
 import { useAnalises } from '../contexts/AnalisesContext';
 import { supabase } from '../utils/supabase';
-import { lerCotas } from '../utils/cotaAnalise';
+import { lerCotas, bloqueado } from '../utils/cotaAnalise';
 import { assinarAnexos, chaveDocCanonica } from '../utils/docUrl';
 import TabelaAmortizacao from '../components/TabelaAmortizacao';
 import { gerarPDF } from '../components/RelatorioPDF';
@@ -160,11 +160,12 @@ export default function Analise() {
   const limiteRole = Number(cotaMercado?.limite || 0);
   const analisesUsadas = Number(cotaMercado?.usado || 0);
   const analisesBonus = Number(cotaMercado?.bonus || 0);
-  // Bloqueia só quando estourou o limite E não há bônus por cima (espelha
-  // consumir_analise_por: consome o principal primeiro, bônus como excedente). Enquanto a
-  // cota não carregou, NÃO bloqueia — trancar a tela por causa de rede lenta é pior que
-  // deixar o servidor recusar depois, que é o gate de verdade.
-  const analisesBloqueado = !!cotaMercado && !cotaMercado.ilimitado && analisesUsadas >= limiteRole && analisesBonus <= 0;
+  // Regra ÚNICA em `cotaAnalise.bloqueado()` — inclui o crédito comprado, que o servidor
+  // aceita (`gerar-analise.js:1551` → `pode_debitar`) e a tela ignorava, deixando o cliente
+  // que RECARREGOU preso em "Limite atingido". Não duplicar esta lógica: mexeu no banco,
+  // mexe no espelho, e as telas acompanham.
+  const analisesBloqueado = bloqueado(cotaMercado);
+  const temCredito = Number(cotaMercado?.credito_saldo || 0) > 0;
   // "amostra" = contador VITALÍCIO (explorador). Quem decide é o banco, não o papel adivinhado
   // na tela: dizer "este mês" a quem tem amostra faz a pessoa esperar uma renovação que não vem.
   const ehAmostra = !!cotaMercado?.amostra;
@@ -174,7 +175,9 @@ export default function Analise() {
   const carregarCota = React.useCallback(async () => {
     if (!user || semLimite) return;
     const c = await lerCotas(supabase, user.id);
-    if (c?.mercado) setCotaMercado(c.mercado);
+    // `credito_saldo` vem no TOPO do retorno, não dentro de `mercado`: sem carregá-lo junto,
+    // a tela não sabe que o cliente recarregou e segue barrando o que o servidor liberaria.
+    if (c?.mercado) setCotaMercado({ ...c.mercado, credito_saldo: Number(c.credito_saldo || 0) });
   }, [user, semLimite]);
 
   useEffect(() => { carregarCota(); }, [carregarCota]);
@@ -832,23 +835,32 @@ export default function Analise() {
 
   // ─── Relatório 1: Mercadológico + Viabilidade Financeira ───────────────────
   // Gera tudo automaticamente a partir dos dados do imóvel (sem formulário).
-  const gerarRelMercado = () => {
+  // `override` (10/08): "Corrigir e regerar" precisa gerar com os valores CORRIGIDOS no MESMO
+  // clique — `setD` é assíncrono e esta função captura o `d` do render atual. Mesma razão do
+  // override em `analisarMercadoClick`; a diferença é que aqui a geração é a do SERVIDOR, que
+  // persiste. As derivadas (`metricas`/`teto`) são recalculadas sobre o snapshot corrigido,
+  // senão o laudo iria com a viabilidade dos dados velhos.
+  const gerarRelMercado = (override = null) => {
+    const ov = (override && typeof override === 'object' && !override.nativeEvent && !override.target) ? override : null;
+    const dSnap = ov ? { ...d, ...ov } : { ...d };
     if (analisesBloqueado) { showMsg('Limite de análises atingido.', 'error'); return; }
-    if (!d.endereco && !d.cidade) { showMsg('Imóvel sem endereço/cidade para avaliar o mercado.', 'error'); return; }
+    if (!dSnap.endereco && !dSnap.cidade) { showMsg('Imóvel sem endereço/cidade para avaliar o mercado.', 'error'); return; }
     if (gerandoMercado) return;
+    const isAVistaSnap = cenario === 'aVista' || dSnap.somenteAVista;
+    const metricasSnap = ov ? calcularMetricasCenario(dSnap, dSnap.valorArrematacao || 0, isAVistaSnap) : metricas;
+    const tetoSnap = ov ? calcularTetoLance(dSnap, isAVistaSnap, META, dSnap.valorMercado || 0) : teto;
     // Snapshots dos dados no momento do clique — a geração roda no provider e
     // não depende mais desta tela ficar montada.
-    const dSnap = { ...d };
     const mercadoInputs = {
       endereco: dSnap.endereco || dSnap.cidade, tipoImovel: dSnap.tipo,
       areaM2: dSnap.areaM2, areaTerrenoM2: dSnap.areaTerrenoM2 || 0,
       cidade: dSnap.cidade, estado: dSnap.estado,
       nomeCondominio: dSnap.nomeCondominio || '',
     };
-    const parecerInputs = { d: dSnap, metricas, teto, cenario: isAVista ? 'À Vista' : 'Alavancado' };
+    const parecerInputs = { d: dSnap, metricas: metricasSnap, teto: tetoSnap, cenario: isAVistaSnap ? 'À Vista' : 'Alavancado' };
     showMsg('Geração iniciada no servidor, pode até fechar a aba; acompanhe em "Análises" no topo.');
     iniciarAnalise(
-      { imovelId: analiseImovelId, titulo: d.nome || d.endereco || imovelInicial?.titulo || 'Imóvel', cidade: d.cidade, estado: d.estado, imovel: imovelInicial || null, paraUserId },
+      { imovelId: analiseImovelId, titulo: dSnap.nome || dSnap.endereco || imovelInicial?.titulo || 'Imóvel', cidade: dSnap.cidade, estado: dSnap.estado, imovel: imovelInicial || null, paraUserId },
       { mercadoInputs, parecerInputs }
     );
   };
@@ -1336,6 +1348,10 @@ export default function Analise() {
             ? (ehAmostra
                 ? `🔒 Você usou seus ${limiteRole} relatórios de amostra. Compre créditos para gerar mais.`
                 : `🔒 Limite de ${limiteRole} análises mensais atingido.`)
+            : (analisesUsadas >= limiteRole && analisesBonus <= 0 && temCredito)
+              // Cota acabou, mas há CRÉDITO: o servidor gera e debita. Dizer isso é o que
+              // faltava — quem recarregou precisa saber que pode usar, e que vai consumir saldo.
+              ? `💳 Cota ${ehAmostra ? 'de amostra' : 'do mês'} esgotada — as próximas análises usam seu saldo de créditos.`
             : ehAmostra
               ? `📊 Relatórios de amostra: ${analisesUsadas}/${limiteRole}${analisesBonus > 0 ? ` (+${analisesBonus} bônus)` : ''}`
               : `📊 Análises este mês: ${analisesUsadas}/${limiteRole}`
@@ -2927,7 +2943,15 @@ export default function Analise() {
               }
               setD(p => ({ ...p, ...corr }));
               setCorrecoesMercado(null);
-              analisarMercadoClick(corr);
+              // GERAÇÃO DO SERVIDOR, não o caminho legado do cliente (10/08). Antes este botão
+              // chamava `analisarMercadoClick`, que roda o `utils/claude.js` e só faz
+              // `setMercado()` em estado LOCAL: os números mudavam na tela e voltavam ao
+              // recarregar, porque `analises_mercado` nunca era atualizado. E o laudo lê
+              // DESSA tabela (`api/gerar-laudo-viabilidade.js:253`) — então o parecer final
+              // seguia decidindo sobre a cidade/área que o documental acabara de desmentir.
+              // O resultado legado ainda era mais pobre que o salvo (sem metodologia,
+              // condicoesEdital, indiceBidPro, pracaReferencia, divergenciaArea).
+              gerarRelMercado(corr);
             }} style={{ padding:'8px 14px', background:'#d97706', color:'white', border:'none', borderRadius:8, fontWeight:800, fontSize:12.5, cursor:'pointer' }}>
               Corrigir e regerar a avaliação
             </button>

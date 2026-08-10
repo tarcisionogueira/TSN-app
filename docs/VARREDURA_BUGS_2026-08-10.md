@@ -24,45 +24,59 @@ refutação antes de entrar na lista.
 
 ---
 
-## 🔴 ABERTO — ALTA
+## ✅ AS 5 DE ALTA — CORRIGIDAS EM 10/08 (commit `6ff2d64`)
 
-### A1. Crédito comprado não desbloqueia a geração
-`src/pages/Analise.jsx:167` (`analisesBloqueado`) · `src/utils/cotaAnalise.js:47`
-Explorador que usou as 3 amostras vê "compre créditos", compra, e o card continua "🔒 Limite
-atingido". **O servidor aceitaria** — `api/gerar-analise.js:1551-1563` chama `pode_debitar` e
-segue com `cobrarCredito = true`. O bloqueio é só do cliente: `analisesBloqueado` não consulta
-`credito_saldo`, e `lerCotaMercado` joga fora esse campo que `minhas_cotas` já devolve.
-**Ele pagou e não consegue gastar.** Vale para top2 que estourou os 10/mês e recarregou.
+### A1. Crédito comprado não desbloqueava a geração — **RESOLVIDO**
+`analisesBloqueado` não consultava `credito_saldo`, e `lerCotaMercado` descartava esse campo
+(que vem no TOPO de `minhas_cotas`, não dentro de `mercado`). O servidor aceitaria:
+`gerar-analise.js:1551` chama `pode_debitar` e segue com `cobrarCredito`. **O cliente pagava e
+não conseguia gastar.**
+→ Regra única em `cotaAnalise.bloqueado()`, que inclui o crédito. O contador passa a dizer
+"as próximas análises usam seu saldo de créditos" em vez de mostrar a cota estourada sem
+contexto. **Não criar uma segunda cópia desta regra.**
 
-### A2. "Corrigir e regerar a avaliação" não regera nem persiste
-`src/pages/Analise.jsx:2924` → `:794` → `src/utils/claude.js:289`
-O botão roda o caminho LEGADO do cliente e só faz `setMercado()` em estado local. Recarregou,
-os números voltam. Pior: `analises_mercado` nunca é atualizado e o **laudo lê dessa tabela**
-(`api/gerar-laudo-viabilidade.js:253`) — o parecer final segue decidindo sobre a cidade/área
-que o documental já desmentiu. O resultado legado ainda é mais pobre que o salvo (sem
-`metodologia`, `condicoesEdital`, `indiceBidPro`, `pracaReferencia`, `divergenciaArea`).
+### A2. "Corrigir e regerar a avaliação" não regerava nem persistia — **RESOLVIDO**
+O botão chamava `analisarMercadoClick`, caminho LEGADO do cliente que só faz `setMercado()`
+local — recarregou, voltava. E o laudo lê `analises_mercado`, então o parecer final seguia
+decidindo sobre a cidade/área que o documental acabara de desmentir.
+→ Passa a chamar `gerarRelMercado(corr)`, a geração do SERVIDOR, que persiste. `gerarRelMercado`
+ganhou `override` (mesma razão do override em `analisarMercadoClick`: `setD` é assíncrono), e
+`metricas`/`teto` são recalculados sobre o snapshot corrigido — senão o laudo iria com a
+viabilidade dos dados velhos.
 
-### A3. `enviar-alertas-cron`: inanição determinística da cauda
-`api/enviar-alertas-cron.js:173,622`
-Processa 120 perfis e só na ÚLTIMA instrução aciona o próximo lote; o cursor existe apenas na
-query string dessa chamada encadeada. Timeout → a cadeia morre e **ninguém acima daquele `id`
-recebe**. Como o cron sempre reinicia em `cursor=''`, é sempre o MESMO pedaço final da tabela
-que fica de fora. Sem registro de execução: "0 e-mails" e "morreu no meio" são idênticos.
-O custo se concentra na segunda-feira — o dia em que o e-mail deveria sair.
+### A3. `enviar-alertas-cron`: inanição determinística da cauda — **RESOLVIDO**
+`continuar()` só era chamado DEPOIS do lote inteiro, e o cursor vivia apenas na query string da
+chamada encadeada. Timeout matava a cadeia, e como o cron reinicia em `cursor=''`, era sempre o
+MESMO pedaço final da tabela que ficava sem e-mail.
+→ Orçamento de 240s dentro do laço; ao cortar, encadeia a partir do **último processado** (não
+do fim do lote, senão os não tratados seriam pulados). `ultimoProcessado` só avança depois de
+tratar o perfil, então o corte nunca engole quem estava em andamento. Rastro da varredura em
+`alerta_estado` (chave `enviar_alertas_cron`) — "não havia ninguém" e "a cadeia morreu" deixam
+de ser indistinguíveis.
+> **Follow-up:** ninguém LÊ esse rastro ainda. Vale ligá-lo ao `health-check` ou ao monitor.
 
-### A4. Upgrade de plano só existe pelo Asaas
-`src/pages/Checkout.jsx:747` → `api/asaas.js:283`
-`iniciarPagamento` desvia para `mudarPlano()` ANTES de escolher gateway, e `mudarPlano` só
-chama `/api/asaas`. Como o MP é o principal, o assinante típico não está no Asaas: a tela
-mostra "Confirmar upgrade →" e devolve *"Cliente não encontrado no Asaas"*. Não há action
-equivalente em `api/mp.js` — **não existe caminho de upgrade para quem assinou pelo MP.**
+### A4. Upgrade de plano só existia pelo Asaas — **RESOLVIDO (upgrade)**
+`mudarPlano` só chamava `/api/asaas`, e `api/mp.js` não tem action equivalente. Como o MP é o
+principal, o assinante típico levava *"Cliente não encontrado no Asaas"* sem alternativa.
+→ 404 do Asaas passa a significar "a assinatura está no MP": o **upgrade** segue por
+`gerarLink()`, o caminho já usado e testado na troca mensal→anual (cancela as recorrências
+anteriores e cria a nova, cobrando agora — a semântica exata de um upgrade).
+> ⚠️ **DOWNGRADE pelo MP ficou de fora DE PROPÓSITO — decisão do dono pendente.** Cancelar e
+> recriar por valor menor faz o cliente perder o restante do período já pago. Enquanto não se
+> decide, a tela diz a verdade e encaminha ao suporte, em vez de dar erro de gateway.
 
-### A5. `CompletarCadastroModal` pode travar o app num overlay cinza vazio
-`src/components/CompletarCadastroModal.jsx:109-121` vs `src/contexts/AuthContext.jsx:38`
-Duas leituras da mesma tabela discordam (o contexto usa só `perfis.nome`; o modal aceita o
-`full_name` do metadata). Quando o contexto diz "incompleto" e o modal conclui "nada falta", o
-`return null` está DENTRO do overlay: sobra a cortina em tela cheia, sem campo, sem botão, sem
-X, sem clique-fora. E se auto-perpetua, porque o patch de gravação nunca grava `perfis.nome`.
+### A5. `CompletarCadastroModal` podia travar o app — **RESOLVIDO**
+Três defeitos somados: (a) o `passos.length === 0 ? null` vivia DENTRO do JSX do overlay, então
+sobrava a cortina em tela cheia sem campo, botão, X ou clique-fora; (b) o `error` da consulta
+era descartado, e com `data` nulo tudo virava "faltando"; (c) o modal aceitava o `full_name` do
+metadata como nome válido enquanto o AuthContext exige `perfis.nome` — discordância que se
+auto-perpetuava, porque o patch só grava `passos.includes('nome')`.
+→ Early return ANTES do overlay + desligamento do estado em efeito (nunca durante o render);
+falha de leitura não bloqueia mais (o gate de verdade é o servidor); e o critério do nome passa
+a ser o MESMO do contexto, com o valor do metadata pré-preenchido para o usuário confirmar —
+o que finalmente grava `perfis.nome` e faz as duas leituras concordarem.
+> **Nota:** o achado **M8** (AuthContext descartando o `error` e gravando o perfil de falha no
+> cache) é o *outro* gatilho desta família e **segue aberto**.
 
 ---
 

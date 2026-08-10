@@ -44,7 +44,32 @@ export async function lerCotas(supabase, userId) {
 /** Atalho para quem só precisa do relatório mercadológico. */
 export async function lerCotaMercado(supabase, userId) {
   const c = await lerCotas(supabase, userId);
-  return c?.mercado ? { ...c.mercado, restantes: restantesDe(c.mercado) } : null;
+  // `credito_saldo` vem no TOPO de `minhas_cotas`, não dentro de `mercado` — e era descartado
+  // aqui. Sem ele, a tela não tinha como saber que o cliente comprou crédito. Ver `bloqueado()`.
+  return c?.mercado ? { ...c.mercado, credito_saldo: Number(c.credito_saldo || 0), restantes: restantesDe(c.mercado) } : null;
+}
+
+/**
+ * A tela pode BARRAR a geração? (10/08)
+ *
+ * Espelha o servidor, que é quem decide: `api/gerar-analise.js:1551` — quando
+ * `consumir_analise_por` recusa, ele tenta `pode_debitar` e, havendo saldo, GERA cobrando o
+ * crédito. Idem documental (`gerar-documental.js:611`, no ramo `limite_mensal`) e índice.
+ *
+ * O bloqueio da tela ignorava `credito_saldo`, então acontecia isto: o explorador que usou as
+ * 3 amostras lia "compre créditos para gerar mais", comprava, voltava — e o card continuava
+ * "🔒 Limite atingido, fazer upgrade". **Ele pagou e não conseguia gastar**, num caminho que o
+ * servidor teria aceitado. Vale igual para o pagante que estourou a cota do mês e recarregou.
+ *
+ * Enquanto a cota não carregou (`bloco` nulo), NÃO bloqueia: trancar a tela por rede lenta é
+ * pior que deixar o servidor recusar depois, que é o gate de verdade.
+ */
+export function bloqueado(bloco) {
+  if (!bloco || bloco.ilimitado) return false;
+  if (Number(bloco.credito_saldo || 0) > 0) return false; // tem crédito → o servidor geraria
+  const limite = Number(bloco.limite || 0);
+  const usado = Number(bloco.usado || 0);
+  return usado >= limite && Number(bloco.bonus || 0) <= 0;
 }
 
 /**

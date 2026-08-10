@@ -890,6 +890,18 @@ export default function Checkout() {
     setLoading(false);
   };
 
+  // MUDANÇA DE PLANO — o Asaas não é o único lugar onde a assinatura pode estar (10/08).
+  // `gerenciar_assinatura` existe SÓ em /api/mp NÃO tem action equivalente, e o Mercado Pago é
+  // o gateway PRINCIPAL: o assinante típico não está no Asaas. A tela mostrava "Confirmar
+  // upgrade →" e devolvia *"Cliente não encontrado no Asaas. Faça a primeira assinatura."*,
+  // sem nenhum caminho alternativo — upgrade impossível pela plataforma para quem assinou pelo
+  // MP. Agora o 404 do Asaas significa "a assinatura está no MP" e o UPGRADE segue pelo
+  // `gerarLink()`, que é o caminho já usado (e testado) na troca mensal→anual: ele cancela as
+  // recorrências anteriores e cria a nova, cobrando agora — que é exatamente a semântica de um
+  // upgrade.
+  // DOWNGRADE pelo MP fica de fora de propósito: cancelar e recriar por um valor menor faria o
+  // cliente perder o restante do período já pago, e isso é decisão de produto, não detalhe de
+  // implementação. Enquanto não houver decisão, a tela diz a verdade e encaminha ao suporte.
   const mudarPlano = async () => {
     setLoading(true);
     setErro('');
@@ -900,6 +912,12 @@ export default function Checkout() {
         body: JSON.stringify({ action: 'gerenciar_assinatura', email: user.email, plano: planoKey }),
       });
       const data = await res.json();
+      if (res.status === 404) {
+        if (ehUpgrade) { setLoading(false); return await gerarLink(); }
+        setErro('Sua assinatura atual é gerenciada pelo Mercado Pago e a troca para um plano de menor valor precisa ser feita pelo suporte, para você não perder o período já pago. Fale com a gente que resolvemos na hora.');
+        setLoading(false);
+        return;
+      }
       if (!res.ok) throw new Error(data.error || 'Erro ao alterar plano');
       setResultadoMudanca(data);
       if (data.linkPagamento) {
