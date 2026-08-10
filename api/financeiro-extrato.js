@@ -56,7 +56,15 @@ const dia = (d) => (d ? String(d).slice(0, 10) : null);
 async function asaas(path) {
   if (!ASAAS_KEY) return null;
   const r = await fetch(`${ASAAS_URL}${path}`, { headers: { access_token: ASAAS_KEY }, signal: AbortSignal.timeout(20000) });
-  if (!r.ok) { console.error('[financeiro] asaas', path, r.status); return null; }
+  if (!r.ok) {
+    // LOGA O CORPO, não só o status (10/08). O 403 recorrente em `/transfers` não diz por quê
+    // com o status sozinho: o Asaas devolve um `errors[].code` que separa "chave inválida" de
+    // "conta sem permissão para este recurso" — e são conserto diferente. Sem o corpo, o
+    // diagnóstico vira chute. 300 chars bastam e não vazam a chave (ela vai no header).
+    const corpo = await r.text().catch(() => '');
+    console.error('[financeiro] asaas', path, r.status, corpo.slice(0, 300));
+    return null;
+  }
   return r.json().catch(() => null);
 }
 async function mp(path) {
@@ -149,9 +157,18 @@ export default async function handler(req, res) {
   const lancamentos = [];
   const contas = [];
   const avisos = [];
-  // Vira true se alguma fonte bateu o teto de paginação: a resposta precisa CONFESSAR
-  // que o total não é o total, senão a tela mostra um número parcial com cara de real.
-  let truncado = false;
+
+  // ── SAÚDE **POR BANCO** (pedido do dono, 10/08) ────────────────────────────────────────────
+  // Antes havia um único `truncado` global: bastava o Asaas recusar `/transfers` para o extrato
+  // INTEIRO virar "incompleto", inclusive a parte do Mercado Pago, que estava perfeita. Um banco
+  // derrubava o outro, e a leitura útil ("o MP fechou, o Asaas é que não respondeu") se perdia.
+  // Agora cada conta carrega o próprio veredito; o consolidado é DERIVADO — só é completo quando
+  // todos são. Assim a tela pode mostrar o total unificado E dizer exatamente quem está furado.
+  const saude = {}; // banco → { completo, motivos: [] }
+  const marcarBanco = (banco, motivo) => {
+    saude[banco] = saude[banco] || { completo: true, motivos: [] };
+    if (motivo) { saude[banco].completo = false; saude[banco].motivos.push(motivo); }
+  };
 
   // ── ASAAS ──────────────────────────────────────────────────────────────────────────────────
   if (ASAAS_KEY) {
@@ -162,14 +179,13 @@ export default async function handler(req, res) {
     ]);
     contas.push({ banco: 'Asaas', tipo: 'gateway', saldo: saldo ? num(saldo.balance) : null, saldo_indisponivel: !saldo });
     if (!saldo) avisos.push('Não consegui ler o saldo do Asaas agora.');
+    marcarBanco('Asaas', null); // nasce completo; os problemas abaixo é que derrubam
     if (recebidos.truncado || transfers.truncado) {
-      truncado = true;
-      avisos.push(`Asaas: o período tem mais de ${MAX_PAGINAS * PAGINA} lançamentos e a leitura parou nesse teto — os totais abaixo estão INCOMPLETOS. Reduza o período.`);
+      marcarBanco('Asaas', `mais de ${MAX_PAGINAS * PAGINA} lançamentos no período — a leitura parou no teto. Reduza o período.`);
     }
     if (recebidos.falhou || transfers.falhou) {
-      truncado = true;
       const quais = [recebidos.falhou && 'recebimentos', transfers.falhou && 'transferências/saídas'].filter(Boolean).join(' e ');
-      avisos.push(`Asaas: a leitura de ${quais} FALHOU (a API recusou ou não respondeu — confira o status no log). Os totais abaixo estão INCOMPLETOS: o que não foi lido não está somado.`);
+      marcarBanco('Asaas', `a leitura de ${quais} FALHOU (a API recusou ou não respondeu). O que não foi lido não está somado.`);
     }
     // Asaas é o gateway de BACKUP (o principal é o Mercado Pago; ver Checkout.jsx, que só
     // cai no Asaas quando o MP falha ou recusa). Período sem lançamento aqui costuma ser
@@ -224,20 +240,23 @@ export default async function handler(req, res) {
     if (!bal) avisos.push('Não consegui ler o saldo do Mercado Pago agora (a API recusou a consulta — em geral é permissão/escopo do token de acesso).');
 
     const busca = await mpPaginado(`/v1/payments/search?sort=date_created&criteria=desc&range=date_created&begin_date=${desde}T00:00:00.000-03:00&end_date=${ate}T23:59:59.999-03:00`);
+    marcarBanco('Mercado Pago', null);
     if (busca.truncado) {
-      truncado = true;
-      avisos.push(`Mercado Pago: o período tem mais de ${MAX_PAGINAS * PAGINA} lançamentos e a leitura parou nesse teto — os totais abaixo estão INCOMPLETOS. Reduza o período.`);
+      marcarBanco('Mercado Pago', `mais de ${MAX_PAGINAS * PAGINA} lançamentos no período — a leitura parou no teto. Reduza o período.`);
     }
     if (busca.falhou) {
-      truncado = true;
-      avisos.push('Mercado Pago: a busca de pagamentos FALHOU (a API recusou ou não respondeu). Os totais abaixo estão INCOMPLETOS — e como o MP é o gateway PRINCIPAL, provavelmente falta a maior parte do movimento.');
+      marcarBanco('Mercado Pago', 'a busca de pagamentos FALHOU (a API recusou ou não respondeu). Como o MP é o gateway PRINCIPAL, provavelmente falta a maior parte do movimento.');
     }
     // `/users/me` é o que resolve o nosso id; sem ele, `somosRecebedor` assume `true` para
     // TODO pagamento e uma saída pode ser somada como entrada. Isso não pode passar calado.
     if (!me) {
-      truncado = true;
-      avisos.push('Mercado Pago: não consegui identificar a conta (/users/me falhou). Sem isso não dá para separar com segurança o que entrou do que saiu — trate o resultado como provisório.');
+      marcarBanco('Mercado Pago', 'não consegui identificar a conta (/users/me falhou). Sem isso não dá para separar com segurança o que entrou do que saiu — trate como provisório.');
     }
+    // NOTA (10/08): o 403 recorrente do MP é SÓ no saldo (`/users/{id}/mercadopago_account/
+    // balance`), que é endpoint NÃO documentado e pode simplesmente não ser liberado para a
+    // conta. Saldo indisponível NÃO torna o extrato incompleto — os lançamentos vêm de
+    // `/v1/payments/search`, que responde normalmente. Por isso o saldo vive em
+    // `saldo_indisponivel`, e não em `completo`: são perguntas diferentes.
     for (const p of busca.itens) {
       if (p.status !== 'approved') continue;
       const bruto = num(p.transaction_amount);
@@ -290,11 +309,22 @@ export default async function handler(req, res) {
     porBanco[k][l.direcao === 'entrada' ? 'entradas' : 'saidas'] += (l.liquido ?? l.bruto ?? 0);
     porBanco[k].qtd += 1;
   }
+  // Banco que FALHOU pode não ter gerado lançamento nenhum e sumiria do `por_banco` — some
+  // justamente quem precisa aparecer. Garante uma linha para toda conta consultada.
+  for (const nome of Object.keys(saude)) {
+    porBanco[nome] = porBanco[nome] || { banco: nome, entradas: 0, saidas: 0, qtd: 0 };
+  }
   for (const b of Object.values(porBanco)) {
     b.entradas = Number(b.entradas.toFixed(2));
     b.saidas = Number(b.saidas.toFixed(2));
     b.resultado = Number((b.entradas - b.saidas).toFixed(2));
+    b.completo = saude[b.banco]?.completo !== false;
+    b.motivos = saude[b.banco]?.motivos || [];
   }
+  // CONSOLIDADO = derivado. Só é completo quando TODOS os bancos lidos são. E `bancos_incompletos`
+  // nomeia quem está furado, para a tela não precisar dizer "algo" quando ela pode dizer "o Asaas".
+  const bancosIncompletos = Object.entries(saude).filter(([, v]) => !v.completo).map(([k]) => k);
+  const truncado = bancosIncompletos.length > 0;
 
   res.status(200).json({
     ok: true,
@@ -307,6 +337,7 @@ export default async function handler(req, res) {
     // `completo: false` = os totais NÃO fecham com a conta real. A tela deve dizer isso
     // ao lado do número, não escondê-lo.
     completo: !truncado,
+    bancos_incompletos: bancosIncompletos,
     resumo: {
       entradas: Number(entradas.toFixed(2)),
       saidas: Number(saidas.toFixed(2)),

@@ -104,7 +104,14 @@ export default function ExtratoUnificado() {
               mais lançamentos... reduza o período", mas incompleto também acontece quando a API
               do gateway RECUSA a leitura (403) — e aí reduzir o período não resolve nada. A causa
               real vem em `avisos`, logo abaixo, fonte por fonte. */}
-          <span>Estes totais estão <strong>incompletos</strong> — parte do movimento não entrou na soma. O motivo está em <strong>Cobertura</strong>, logo abaixo.</span>
+          {/* NOMEIA A CONTA (10/08). Cada banco tem saúde PRÓPRIA agora, então a faixa pode dizer
+              "o Asaas" em vez de "algo" — e deixa explícito que as contas boas seguem confiáveis.
+              Antes, um 403 no Asaas invalidava também o Mercado Pago, que estava perfeito. */}
+          <span>
+            {dados.bancos_incompletos?.length
+              ? <>Leitura incompleta em <strong>{dados.bancos_incompletos.join(' e ')}</strong>. O total unificado abaixo está <strong>subestimado</strong> — as demais contas seguem íntegras. Veja o motivo em <strong>Por conta</strong>.</>
+              : <>Estes totais estão <strong>incompletos</strong> — parte do movimento não entrou na soma. O motivo está em <strong>Cobertura</strong>, logo abaixo.</>}
+          </span>
         </div>
       )}
 
@@ -171,14 +178,32 @@ export default function ExtratoUnificado() {
           {!!dados.por_banco?.length && (
             <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '16px 18px', marginBottom: 16 }}>
               <div style={{ fontSize: 14, fontWeight: 900, color: '#111', marginBottom: 10 }}>Por conta</div>
+              {/* Cada conta com o PRÓPRIO selo. Isolar os bancos só serve se a tela mostrar o
+                  isolamento: uma conta furada não contamina mais a leitura das outras, e o motivo
+                  fica ao lado do número que ele afeta — não numa faixa genérica no topo. */}
               {dados.por_banco.map(b => (
-                <div key={b.banco} style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 0', borderBottom: '1px solid #f1f5f9', fontSize: 13 }}>
-                  <span style={{ fontWeight: 700, color: '#334155' }}>{b.banco}</span>
-                  <span style={{ color: '#64748b' }}>
-                    <span style={{ color: '#059669' }}>+{brl(b.entradas)}</span>{'  '}
-                    <span style={{ color: '#dc2626' }}>−{brl(b.saidas)}</span>{'  '}
-                    <strong style={{ color: b.resultado >= 0 ? '#059669' : '#dc2626' }}>= {brl(b.resultado)}</strong>
-                  </span>
+                <div key={b.banco} style={{ padding: '9px 0', borderBottom: '1px solid #f1f5f9', fontSize: 13 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                    <span style={{ fontWeight: 700, color: '#334155', display: 'inline-flex', alignItems: 'center', gap: 7 }}>
+                      {b.banco}
+                      <span style={{ fontSize: 10.5, fontWeight: 800, padding: '2px 8px', borderRadius: 20,
+                        background: b.completo === false ? '#fef2f2' : '#f0fdf4',
+                        color: b.completo === false ? '#b91c1c' : '#15803d',
+                        border: `1px solid ${b.completo === false ? '#fecaca' : '#bbf7d0'}` }}>
+                        {b.completo === false ? 'incompleto' : 'íntegro'}
+                      </span>
+                    </span>
+                    <span style={{ color: '#64748b' }}>
+                      <span style={{ color: '#059669' }}>+{brl(b.entradas)}</span>{'  '}
+                      <span style={{ color: '#dc2626' }}>−{brl(b.saidas)}</span>{'  '}
+                      <strong style={{ color: b.resultado >= 0 ? '#059669' : '#dc2626' }}>= {brl(b.resultado)}</strong>
+                    </span>
+                  </div>
+                  {b.completo === false && !!b.motivos?.length && (
+                    <div style={{ marginTop: 5, fontSize: 11.5, color: '#b45309', lineHeight: 1.5 }}>
+                      {b.motivos.map((m, i) => <div key={i}>• {m}</div>)}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
