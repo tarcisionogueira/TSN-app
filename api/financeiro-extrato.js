@@ -53,19 +53,25 @@ function classificar(descricao, direcao) {
 const num = (v) => Number(v || 0);
 const dia = (d) => (d ? String(d).slice(0, 10) : null);
 
+// O CORPO do erro era a peça que faltava (10/08). Com o status sozinho, o 403 recorrente em
+// `/transfers` não dizia por quê e o diagnóstico virava chute — inclusive o meu: deduzi que "a
+// mesma chave funciona em /payments, logo não é a chave", o que pressupõe permissão tudo-ou-nada.
+// O Asaas tem permissão GRANULAR por chave, e a resposta é literal:
+//   {"errors":[{"code":"insufficient_permission","description":"A chave de API fornecida não
+//    possui permissão para realizar operações de saque via API."}]}
+// Devolve `{ok, data, code}` para o chamador poder tratar `insufficient_permission` como o que
+// ele é — uma decisão nossa, não uma pane.
 async function asaas(path) {
-  if (!ASAAS_KEY) return null;
+  if (!ASAAS_KEY) return { ok: false, data: null, code: 'sem_chave' };
   const r = await fetch(`${ASAAS_URL}${path}`, { headers: { access_token: ASAAS_KEY }, signal: AbortSignal.timeout(20000) });
   if (!r.ok) {
-    // LOGA O CORPO, não só o status (10/08). O 403 recorrente em `/transfers` não diz por quê
-    // com o status sozinho: o Asaas devolve um `errors[].code` que separa "chave inválida" de
-    // "conta sem permissão para este recurso" — e são conserto diferente. Sem o corpo, o
-    // diagnóstico vira chute. 300 chars bastam e não vazam a chave (ela vai no header).
     const corpo = await r.text().catch(() => '');
     console.error('[financeiro] asaas', path, r.status, corpo.slice(0, 300));
-    return null;
+    let code = `http_${r.status}`;
+    try { code = JSON.parse(corpo)?.errors?.[0]?.code || code; } catch { /* padrao-ok: corpo não-JSON cai no código genérico acima */ }
+    return { ok: false, data: null, code };
   }
-  return r.json().catch(() => null);
+  return { ok: true, data: await r.json().catch(() => null), code: null };
 }
 async function mp(path) {
   if (!MP_TOKEN) return null;
@@ -100,14 +106,15 @@ async function asaasPaginado(base) {
   const itens = [];
   let truncado = false;
   for (let p = 0; p < MAX_PAGINAS; p++) {
-    const j = await asaas(`${base}&limit=${PAGINA}&offset=${p * PAGINA}`);
-    if (!j) return { itens, truncado, falhou: true };
+    const r = await asaas(`${base}&limit=${PAGINA}&offset=${p * PAGINA}`);
+    if (!r.ok) return { itens, truncado, falhou: true, code: r.code };
+    const j = r.data || {};
     const lote = j.data || [];
     itens.push(...lote);
-    if (!j.hasMore || lote.length === 0) return { itens, truncado: false, falhou: false };
+    if (!j.hasMore || lote.length === 0) return { itens, truncado: false, falhou: false, code: null };
     if (p === MAX_PAGINAS - 1) truncado = true;
   }
-  return { itens, truncado, falhou: false };
+  return { itens, truncado, falhou: false, code: null };
 }
 
 async function mpPaginado(base) {
@@ -177,15 +184,29 @@ export default async function handler(req, res) {
       asaasPaginado(`/payments?status=RECEIVED&paymentDate[ge]=${desde}&paymentDate[le]=${ate}`),
       asaasPaginado(`/transfers?dateCreated[ge]=${desde}`),
     ]);
-    contas.push({ banco: 'Asaas', tipo: 'gateway', saldo: saldo ? num(saldo.balance) : null, saldo_indisponivel: !saldo });
-    if (!saldo) avisos.push('Não consegui ler o saldo do Asaas agora.');
+    const saldoOk = saldo?.ok && saldo.data;
+    contas.push({ banco: 'Asaas', tipo: 'gateway', saldo: saldoOk ? num(saldo.data.balance) : null, saldo_indisponivel: !saldoOk });
+    if (!saldoOk) avisos.push('Não consegui ler o saldo do Asaas agora.');
     marcarBanco('Asaas', null); // nasce completo; os problemas abaixo é que derrubam
     if (recebidos.truncado || transfers.truncado) {
       marcarBanco('Asaas', `mais de ${MAX_PAGINAS * PAGINA} lançamentos no período — a leitura parou no teto. Reduza o período.`);
     }
-    if (recebidos.falhou || transfers.falhou) {
-      const quais = [recebidos.falhou && 'recebimentos', transfers.falhou && 'transferências/saídas'].filter(Boolean).join(' e ');
-      marcarBanco('Asaas', `a leitura de ${quais} FALHOU (a API recusou ou não respondeu). O que não foi lido não está somado.`);
+    // LACUNA DECLARADA ≠ PANE (10/08). O Asaas classifica até o GET de `/transfers` como
+    // "operação de saque via API" e exige que a CHAVE tenha essa permissão. Habilitar isso
+    // significaria dar poder de MOVIMENTAR DINHEIRO a uma credencial que vive numa variável de
+    // ambiente — e o ganho seria ler uma lista que hoje é vazia (saldo R$ 0,00, zero lançamentos
+    // Asaas em toda a base). Decisão: NÃO habilitar; declarar a lacuna.
+    // Sem esta distinção o Asaas ficaria "incompleto" para sempre por um buraco de R$ 0,00, e
+    // alarme permanente é o que treina o dono a ignorar o alarme — a mesma lição do CREPALDI em
+    // `FONTES_PARADAS`. Quando houver saque de verdade por aqui, revisitar com uma chave
+    // dedicada e escopo mínimo.
+    const semPermissaoSaque = transfers.falhou && transfers.code === 'insufficient_permission';
+    if (semPermissaoSaque) {
+      avisos.push('Asaas: as SAÍDAS não são lidas — a chave de API não tem (por decisão nossa) permissão de saque. Como a conta nunca teve transferência, isto não subtrai nada do resultado. Reveja se passar a haver saque por aqui.');
+    }
+    const falhasReais = [recebidos.falhou && 'recebimentos', (transfers.falhou && !semPermissaoSaque) && 'transferências/saídas'].filter(Boolean);
+    if (falhasReais.length) {
+      marcarBanco('Asaas', `a leitura de ${falhasReais.join(' e ')} FALHOU (a API recusou ou não respondeu). O que não foi lido não está somado.`);
     }
     // Asaas é o gateway de BACKUP (o principal é o Mercado Pago; ver Checkout.jsx, que só
     // cai no Asaas quando o MP falha ou recusa). Período sem lançamento aqui costuma ser
@@ -195,7 +216,7 @@ export default async function handler(req, res) {
     // também quando a chamada tinha falhado — e aí ele REAFIRMAVA a leitura errada, ensinando
     // a ler "vazio = o principal não falhou" (que é o que o CLAUDE.md instrui) num caso em que
     // vazio significava 403. Vazio por falha é o oposto de vazio por ausência de movimento.
-    if (!recebidos.falhou && !transfers.falhou && !recebidos.itens.length && !transfers.itens.length) {
+    if (!recebidos.falhou && (!transfers.falhou || semPermissaoSaque) && !recebidos.itens.length && !transfers.itens.length) {
       avisos.push('Asaas (gateway de backup) sem lançamentos no período — esperado quando o Mercado Pago não falhou. Se você esperava movimento aqui, confira a ASAAS_API_KEY do ambiente.');
     }
     for (const p of recebidos.itens) {
