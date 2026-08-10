@@ -1,0 +1,325 @@
+{
+  "api/_arremate-aprendizado.js": {
+    "json-inline-sem-resposta": 8
+  },
+  "api/_webhook-core.js": {
+    "delete-sem-select": 1,
+    "data-sem-error": 16
+  },
+  "api/admin-chargebacks.js": {
+    "json-inline-sem-resposta": 1
+  },
+  "api/advogado-atendimentos.js": {
+    "json-inline-sem-resposta": 2
+  },
+  "api/advogado-escritorio.js": {
+    "json-inline-sem-resposta": 2
+  },
+  "api/agendar-ciclo.js": {
+    "json-inline-sem-resposta": 1
+  },
+  "api/agendar-reuniao.js": {
+    "json-inline-sem-resposta": 2
+  },
+  "api/anexo-url.js": {
+    "json-inline-sem-resposta": 1
+  },
+  "api/arrematado-ancora.js": {
+    "json-inline-sem-resposta": 2
+  },
+  "api/auto-contrato.js": {
+    "data-sem-error": 2
+  },
+  "api/captura-handoff.js": {
+    "json-inline-sem-resposta": 1
+  },
+  "api/capturar-matricula-cef.js": {
+    "json-inline-sem-resposta": 1
+  },
+  "api/cnj-monitor-cron.js": {
+    "json-inline-sem-resposta": 1
+  },
+  "api/conciliacao-sync-cron.js": {
+    "json-inline-sem-resposta": 1
+  },
+  "api/conciliacao.js": {
+    "json-inline-sem-resposta": 3
+  },
+  "api/cpf-migrar.js": {
+    "json-inline-sem-resposta": 1
+  },
+  "api/daily-webhook.js": {
+    "data-sem-error": 1
+  },
+  "api/diagnostico-ia.js": {
+    "json-inline-sem-resposta": 1
+  },
+  "api/documental-retry-cron.js": {
+    "json-inline-sem-resposta": 1
+  },
+  "api/enriquecer-backfill-cron.js": {
+    "json-inline-sem-resposta": 2
+  },
+  "api/enriquecer-datas-cron.js": {
+    "json-inline-sem-resposta": 1
+  },
+  "api/enriquecer-proximidades.js": {
+    "json-inline-sem-resposta": 1
+  },
+  "api/enviar-juridico-email.js": {
+    "json-inline-sem-resposta": 4
+  },
+  "api/espelhar-docs-cron.js": {
+    "json-inline-sem-resposta": 1
+  },
+  "api/garantia-cancelar.js": {
+    "json-inline-sem-resposta": 1
+  },
+  "api/gerar-analise.js": {
+    "json-inline-sem-resposta": 3
+  },
+  "api/gerar-contrato.js": {
+    "data-sem-error": 1
+  },
+  "api/gerar-documental.js": {
+    "json-inline-sem-resposta": 3
+  },
+  "api/gerar-laudo-viabilidade.js": {
+    "json-inline-sem-resposta": 3
+  },
+  "api/juridico-destinatarios.js": {
+    "json-inline-sem-resposta": 2
+  },
+  "api/juridico-eficiencia.js": {
+    "json-inline-sem-resposta": 3
+  },
+  "api/laudo-retry-cron.js": {
+    "json-inline-sem-resposta": 1
+  },
+  "api/marcar-reuniao.js": {
+    "json-inline-sem-resposta": 1
+  },
+  "api/monitor-fontes-cron.js": {
+    "data-sem-error": 8
+  },
+  "api/monitorar-processo.js": {
+    "json-inline-sem-resposta": 1
+  },
+  "api/mp-checkout.js": {
+    "json-inline-sem-resposta": 1
+  },
+  "api/notificar-cliente.js": {
+    "json-inline-sem-resposta": 1
+  },
+  "api/pj-revalidacao-cron.js": {
+    "data-sem-error": 1
+  },
+  "api/processar-analise.js": {
+    "json-inline-sem-resposta": 1
+  },
+  "api/radar-editais-cron.js": {
+    "data-sem-error": 4
+  },
+  "api/reconciliar-assinaturas-cron.js": {
+    "data-sem-error": 7
+  },
+  "api/regenerar-relatorios-cron.js": {
+    "json-inline-sem-resposta": 4
+  },
+  "api/saldo-abandono-cron.js": {
+    "data-sem-error": 2
+  },
+  "api/upload-anexo.js": {
+    "json-inline-sem-resposta": 1
+  },
+  "api/validar-anexos-arremate.js": {
+    "json-inline-sem-resposta": 1
+  },
+  "src/components/ChatSuporte.jsx": {
+    "data-sem-error": 11
+  },
+  "src/components/ContratoObrigatorio.jsx": {
+    "data-sem-error": 1
+  },
+  "src/components/LeitorPaginado.jsx": {
+    "data-sem-error": 1
+  },
+  "src/components/TermosAtualizadosModal.jsx": {
+    "data-sem-error": 1
+  },
+  "src/components/TourGuia.jsx": {
+    "data-sem-error": 3
+  },
+  "src/contexts/AnalisesContext.jsx": {
+    "delete-sem-select": 3
+  },
+  "src/contexts/AuthContext.jsx": {
+    "data-sem-error": 3
+  },
+  "src/pages/Admin.jsx": {
+    "data-sem-error": 36,
+    "delete-sem-select": 9
+  },
+  "src/pages/AdvogadoPortal.jsx": {
+    "data-sem-error": 1
+  },
+  "src/pages/Analise.jsx": {
+    "data-sem-error": 1
+  },
+  "src/pages/Arrematados.jsx": {
+    "data-sem-error": 9,
+    "delete-sem-select": 2
+  },
+  "src/pages/Atendimento.jsx": {
+    "data-sem-error": 1
+  },
+  "src/pages/Busca.jsx": {
+    "data-sem-error": 3,
+    "delete-sem-select": 1
+  },
+  "src/pages/Caso.jsx": {
+    "data-sem-error": 8
+  },
+  "src/pages/Checkout.jsx": {
+    "data-sem-error": 1
+  },
+  "src/pages/CompletarCadastro.jsx": {
+    "data-sem-error": 1
+  },
+  "src/pages/ContratoLink.jsx": {
+    "data-sem-error": 1
+  },
+  "src/pages/Contratos.jsx": {
+    "data-sem-error": 5,
+    "delete-sem-select": 2
+  },
+  "src/pages/Convite.jsx": {
+    "data-sem-error": 1
+  },
+  "src/pages/ConviteEquipe.jsx": {
+    "data-sem-error": 1
+  },
+  "src/pages/CriarContrato.jsx": {
+    "data-sem-error": 2
+  },
+  "src/pages/Curso.jsx": {
+    "data-sem-error": 4
+  },
+  "src/pages/EbookPage.jsx": {
+    "data-sem-error": 2
+  },
+  "src/pages/HomeCliente.jsx": {
+    "data-sem-error": 2
+  },
+  "src/pages/ImovelDetalhe.jsx": {
+    "data-sem-error": 2,
+    "delete-sem-select": 1
+  },
+  "src/pages/LeiloeiroPortal.jsx": {
+    "data-sem-error": 1
+  },
+  "src/pages/Membros.jsx": {
+    "data-sem-error": 4
+  },
+  "src/pages/MeusChamados.jsx": {
+    "data-sem-error": 2
+  },
+  "src/pages/MinhaRede.jsx": {
+    "data-sem-error": 6
+  },
+  "src/pages/OnrRegistro.jsx": {
+    "data-sem-error": 3
+  },
+  "src/pages/Painel.jsx": {
+    "data-sem-error": 1,
+    "delete-sem-select": 2
+  },
+  "src/pages/Planos.jsx": {
+    "data-sem-error": 2
+  },
+  "src/pages/ProdutoLanding.jsx": {
+    "data-sem-error": 3
+  },
+  "src/pages/ProdutoPublico.jsx": {
+    "data-sem-error": 4
+  },
+  "src/pages/Promo.jsx": {
+    "data-sem-error": 1
+  },
+  "src/utils/planosConfig.js": {
+    "data-sem-error": 1
+  },
+  "src/utils/supabase.js": {
+    "data-sem-error": 3,
+    "delete-sem-select": 3
+  },
+  "scripts/_saude-fonte.mjs": {
+    "data-sem-error": 1
+  },
+  "scripts/captura-docs-grupolance.mjs": {
+    "data-sem-error": 3
+  },
+  "scripts/captura-docs-sodre.mjs": {
+    "data-sem-error": 1
+  },
+  "scripts/captura-documentos.mjs": {
+    "data-sem-error": 5
+  },
+  "scripts/captura-matricula-cef.mjs": {
+    "data-sem-error": 4
+  },
+  "scripts/captura-matricula-grupolance.mjs": {
+    "data-sem-error": 2
+  },
+  "scripts/captura-matricula-zuk.mjs": {
+    "data-sem-error": 2
+  },
+  "scripts/debug-frazao-click.mjs": {
+    "data-sem-error": 1
+  },
+  "scripts/debug-frazao-modal.mjs": {
+    "data-sem-error": 1
+  },
+  "scripts/debug-grupolance-login.mjs": {
+    "data-sem-error": 1
+  },
+  "scripts/debug-grupolance-puppeteer.mjs": {
+    "data-sem-error": 1
+  },
+  "scripts/espelhar-docs-criticos.mjs": {
+    "data-sem-error": 1
+  },
+  "scripts/foto-cef.mjs": {
+    "data-sem-error": 1
+  },
+  "scripts/lib/scraper-core.mjs": {
+    "data-sem-error": 1
+  },
+  "scripts/recon-frazao-api.mjs": {
+    "data-sem-error": 1
+  },
+  "scripts/recon-login-leiloeiro.mjs": {
+    "data-sem-error": 1
+  },
+  "scripts/recon-sodre-searchlots.mjs": {
+    "data-sem-error": 1
+  },
+  "scripts/scraper-pecini.mjs": {
+    "data-sem-error": 1
+  },
+  "scripts/scraper-powerbi-mj.mjs": {
+    "delete-sem-select": 1
+  },
+  "scripts/scraper-puppeteer.mjs": {
+    "data-sem-error": 3
+  },
+  "scripts/scraper-rj.mjs": {
+    "data-sem-error": 1
+  },
+  "scripts/scraper-soleon.mjs": {
+    "data-sem-error": 1
+  },
+  "scripts/verificar-padroes-perigosos.mjs": {
+    "json-inline-sem-resposta": 2
+  }
+}

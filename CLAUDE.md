@@ -101,6 +101,35 @@ curto (5–8 linhas) antes de seguir:
    raiz, e registrar no HANDOFF. A intenção do dono: essa varredura é ROTINA de abertura, não
    pontual.
 
+## 🚨 A PERGUNTA DE REVISÃO (10/08) — "este vazio é resposta, ou é falha que não sabe que falhou?"
+
+> A varredura de 10/08 achou 28 bugs e **seis eram o mesmo defeito com roupas diferentes**:
+> *resposta de erro entregue como conteúdo válido*. Extrato carimbando `completo: true` sobre um
+> 403 · proximidades gravando "nenhum ponto de interesse" para 51% do acervo · lixeira dizendo
+> que apagou o que a RLS não deixou · assinante rebaixado a explorador por um 500 transitório.
+> **Nenhum apareceu em varredura de código anterior** — todos são código que PARECE certo.
+> Ao revisar ou escrever qualquer leitura externa, faça a pergunta do título.
+
+**As quatro formas que já morderam esta base — decore:**
+1. **`.ok` checado não basta.** O Overpass devolve erro de runtime em **HTTP 200 com `remark`**
+   no corpo. API que erra dentro de um 200 existe; procure o campo de erro do fornecedor.
+2. **`{data, error}` do postgrest-js.** Ele **não lança** em não-2xx. `const { data } = await …`
+   funde "não achou" com "não consegui ler".
+3. **RLS que filtra linhas NÃO é erro.** `delete`/`update` que não alcança nada devolve
+   `error: null`. Só `.select()` prova o que mudou.
+4. **`null` como "acabou".** Helper que devolve `null` em falha, dentro de um laço de paginação,
+   vira "fim das páginas" — e o total sai completo e errado.
+
+**Corolário do dia:** quando a operação for paralela e competitiva (`Promise.any` entre
+espelhos), a corrida **premia o mais rápido — e quem desiste na hora é o mais rápido de todos**.
+Falha tem que LANÇAR dentro do competidor, senão a otimização de latência passa a preferir o erro.
+
+**Trava automática, custo zero:** `npm run verificar:padroes` (roda sozinho no `prebuild`, ou
+seja, em todo `npm run build` e no deploy da Vercel; e no CI por `verificar-padroes.yml`). É
+LINHA DE BASE por arquivo — só reprova ocorrência NOVA, o acervo histórico fica como está.
+Exceção deliberada: marque a linha com `// padrao-ok: <motivo>` (motivo obrigatório).
+**Ao criar leitura externa nova, é mais barato acertar do que explicar depois.**
+
 ## Stack
 - **Frontend:** React + Vite → Vercel (Pro)
 - **Backend:** Vercel Serverless Functions (Edge + Node.js)

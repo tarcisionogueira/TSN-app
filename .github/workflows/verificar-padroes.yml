@@ -1,0 +1,33 @@
+name: Padrões perigosos (erro entregue como conteúdo válido)
+
+# Trava DETERMINÍSTICA, custo ZERO (não usa IA), contra a família de bugs de 10/08:
+# resposta de erro entregue como conteúdo válido. Ver docs/VARREDURA_BUGS_2026-08-10.md.
+#
+# Roda em todo push/PR que toque código. Só reprova quando um arquivo GANHA ocorrência nova
+# em relação a `scripts/padroes-perigosos.baseline.json` — o acervo histórico é aceito como
+# está, então ninguém precisa parar tudo para refatorar 300 pontos antigos.
+#
+# Este workflow é REDUNDANTE de propósito: o `prebuild` do package.json já roda a mesma
+# verificação antes de todo `npm run build`, inclusive no deploy da Vercel. A redundância
+# existe porque o build local pode ser pulado, e aqui o resultado fica visível no PR.
+
+on:
+  push:
+    paths: ['api/**', 'src/**', 'scripts/**', '.github/workflows/verificar-padroes.yml']
+  pull_request:
+    paths: ['api/**', 'src/**', 'scripts/**']
+  workflow_dispatch:
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      # Sem `npm ci`: o verificador só usa módulos nativos do Node, de propósito — assim a
+      # trava roda em segundos e não depende de instalar 400 pacotes para dizer "sim" ou "não".
+      - name: Verificar padrões perigosos
+        run: node scripts/verificar-padroes-perigosos.mjs
