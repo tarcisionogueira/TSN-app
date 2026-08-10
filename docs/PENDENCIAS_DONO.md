@@ -190,6 +190,14 @@ vazio ou com valor sul-americano — reveja o passo 3.
   falha regional; dá para conversar sobre um meio-termo (ex.: outro provedor com região no
   Brasil, aceitando o risco correlacionado). **Me avisa se quiser mudar essa escolha.**
 
+### -2.5 🔴 EMPRESA_CNPJ no painel (1 min; hoje TODA nota fiscal cai em conferência manual)
+- **Por quê:** `api/saque-nf.js` compara o TOMADOR da nota com o CNPJ da BidPro para afirmar
+  que a nota foi emitida contra nós. Sem a variável, essa comparação não acontece e o veredito
+  cai em `revisao_manual` mesmo quando a nota está perfeita — vira fila da equipe.
+- **Passo:** Vercel → Settings → Environment Variables → `EMPRESA_CNPJ` (só dígitos) →
+  marcar Production + Preview + Development.
+- **Retorno:** é o item de maior retorno por menor esforço da conferência de NF. Custo zero.
+
 ### -2. 🟠 RESEND — subdomínio de rastreio (a ENTREGA já volta; ABERTURA e CLIQUE ainda não)
 - **Estado em 09/08:** o webhook do `www` foi corrigido e **funciona** — 26 linhas de
   `emails_log` já têm `entregue_em`. Mas `aberto_em` e `clicado_em` seguem em **ZERO nas 120

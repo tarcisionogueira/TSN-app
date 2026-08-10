@@ -309,7 +309,7 @@ export default function MinhaRede() {
           Transforme vidas através do investimento em leilões.
         </div>
         <div style={{ fontSize: 13.5, opacity: 0.95, marginTop: 8, lineHeight: 1.6 }}>
-          Um bom leilão muda a vida de quem compra bem — e de quem mostra o caminho. Ao indicar, você leva
+          Um bom leilão muda a vida de quem compra bem, e também de quem mostra o caminho. Ao indicar, você leva
           um serviço de alta qualidade para quem quer investir com segurança e é <strong>bem recompensado
           por cada pessoa que ajuda a entrar nesse mundo</strong>. Abaixo estão seu link, seu nível e seus ganhos.
         </div>

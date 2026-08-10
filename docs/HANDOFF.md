@@ -161,6 +161,105 @@ antes de mexer, mais 6 validações de produção para rodar na abertura.
 
 ---
 
+## 🏁 FECHAMENTO DE 09/08 — leia este bloco primeiro
+
+> Sessão longa. O fio condutor foi o mesmo do dia inteiro: **coisa construída, configurada e
+> ativa, que não funcionava para ninguém, sem erro em lugar nenhum.** Três achados desta
+> família num dia só.
+
+### O que quebrou e foi corrigido (tudo em `main`, tudo com o porquê no commit)
+
+| # | achado | por que ninguém viu |
+|---|---|---|
+| 1 | **Tour de boas-vindas apagado desde 01/07** — a versão era o mês do RELÓGIO e a única cadastrada era `2026-06` | Consulta devolvia zero etapas. `tour_progresso` com 0 linhas: nenhum dos 30 exploradores viu onboarding |
+| 2 | **Câmera e geolocalização proibidas pelo nosso próprio header** — `Permissions-Policy: camera=()` nega para a própria origem | O navegador nunca perguntava; a tela dizia "permissão negada" e mandava liberar no cadeado, onde não havia nada |
+| 3 | **Quatro cópias da tabela de cotas**, todas divergindo do banco | Ninguém compara tela com `limite_ia` |
+| 4 | **`saque.exige_kyc` tinha campo `escopo` que o código NUNCA lia** | `aplicada_por` apontava certo — a função consulta a regra, só ignorava um campo dela |
+
+### ⚠️ Aprendizado que vale mais que os quatro
+**`aplicada_por` na `regra_negocio` prova que a função CONSULTA a regra, não que ela respeita
+todos os campos dela.** A `auditoria_regras_negocio` dava `saque.exige_kyc` como aplicada, e
+estava certa — o `escopo` é que era decorativo. **Ao acrescentar campo numa regra existente,
+confira o consumidor.** A auditoria não pega isso.
+
+### Regras de saque — estado FINAL de 09/08 (mudou duas vezes hoje)
+
+| regra | escopo | observação |
+|---|---|---|
+| Teto R$ 2.500/mês sem NF | **todos** | absoluto |
+| Acima do teto: **plano pago** | **todos** | mudou hoje. Alcança a equipe: analista sem plano fica limitado a R$ 2.500/mês de honorário. Dono ciente e quis assim ("penso em cobrar posteriormente um plano deles… por enquanto mantenha") |
+| Acima do teto: **NF do valor INTEGRAL do mês** | todos | sacou 3× R$1.000 e pede R$500 → nota de R$3.500 |
+| **KYC (selfie + documento)** | **parceiro** | mudou hoje. É validação DO PARCEIRO, **1× na vida**; a equipe saiu. Não afrouxa comissão: só parceiro indica e ganha |
+| Destino sempre PJ | todos | CPF conferido no QSA |
+| Aceite dos Termos vigentes | parceiro | equipe isenta (recebe por função) |
+>
+> **Identidade × sociedade são coisas diferentes, de propósito:** a identidade se prova UMA
+> vez (`perfis.identidade_validada`, nunca pedida de novo). O que é reconferido todo mês é a
+> **sociedade** — `pj-revalidacao-cron` bate o quadro societário e retém o repasse se o CPF
+> deixar de constar no CNPJ.
+>
+> Qualquer um desses escopos volta atrás com **um update, sem deploy**:
+> `update regra_negocio set valor = jsonb_set(valor,'{escopo}','"todos"') where chave = '…';`
+
+### 🔵 PARA AMANHÃ — leitura da NF: eficiência e custo × benefício (o dono pediu)
+
+> **O diagnóstico honesto: o custo não está na IA.** A leitura já é barata — PDF com camada de
+> texto vai pelo `pdf-parse` (custo zero) e só o escaneado cai no Vision; estimativa de
+> **US$ 0,02–0,05 por nota**. O custo real é **HUMANO**: hoje quase toda nota cai em
+> `revisao_manual`, e é a fila da equipe que vai doer, não a fatura da Anthropic.
+>
+> **Por que caem em manual, em ordem de impacto:**
+> 1. **`EMPRESA_CNPJ` não está no painel.** Sem o CNPJ da BidPro não dá para afirmar que a nota
+>    foi emitida contra nós → *toda* nota vira revisão. **Custo de corrigir: zero.** É o
+>    primeiro item, e depende só do dono.
+> 2. **Nota sem link de verificação legível.** Muitas NFS-e trazem a URL **só no QR code**, e
+>    hoje só lemos a URL como TEXTO. Um decodificador de QR no servidor (`zxing`/`jsQR`) é
+>    biblioteca local, **sem custo de API**, e converteria boa parte de "sem link" em
+>    "confirmada". **É a maior alavanca por menor esforço.**
+>
+> **A investigar amanhã (não confirmei, não afirmar antes de checar):**
+> - **NFS-e padrão nacional / chave de acesso.** Se a nota for do padrão nacional, a
+>   verificação pode ser determinística pela chave, **sem IA nenhuma**. Falta confirmar
+>   cobertura real nos municípios dos nossos parceiros e se há consulta pública utilizável.
+> - **Pedir o XML em vez do PDF** quando o parceiro tiver. XML é estruturado: leitura
+>   determinística, custo zero, sem ambiguidade. Melhor caso possível.
+> - **Parser determinístico antes da IA.** NFS-e é altamente padronizada por município;
+>   regex de CNPJ/valor/número/chave resolveria os repetidos, com a IA só de fallback.
+> - **Haiku para extração, Sonnet só em baixa confiança.** ~10× mais barato, mas é ganho de
+>   segunda ordem — o gargalo é a fila humana, não o token.
+>
+> **Ordem sugerida:** (1) `EMPRESA_CNPJ` → (2) QR code → (3) XML/chave nacional → (4) modelo
+> mais barato. Os dois primeiros resolvem a maior parte e custam quase nada.
+
+### Segue dependendo do dono
+1. **`EMPRESA_CNPJ`** no painel da Vercel (ver bloco acima — é o item de maior retorno).
+2. **Resend**: o CNAME `links` foi criado, domínio ficou **Partially Verified**. Conferir se
+   virou *Verified*; sem isso não há abertura/clique e não dá para medir o nudge.
+3. **Nudge de ativação**: construído e **desligado**. Ligar é
+   `update app_config set value='true' where key='ativacao_nudge_ativo';` — combinado é soltar
+   com `?limite=5` primeiro, para o lote pequeno ser o teste da cadência.
+4. Legal review dos Termos v3.3 · G2RS · `AUDITORIA_EMAIL_DESTINO`/`GITHUB_ACTIONS_TOKEN`.
+
+### Achados menores, anotados e NÃO corrigidos
+- **`indice-reforco-cron` parece não estar semeando.** Roda 6×/dia com IA, mas
+  `indice_reforco_estado` está **vazia** e `indice_amostras` não cresce desde 07/08. Ou está
+  desligado por env (`INDICE_REFORCO=0`), ou falha. É a proteção contra "relatório vazio"
+  quando a busca ao vivo cai — vale destravar. Não mexi por não conseguir ler o env daqui.
+- **Laços de aprendizado vazios:** `mercado_aprendizado`, `laudo_aprendizado` e
+  `juridico_aprendizado` têm 0 linhas. Alimentam-se das correções que o analista faz nas
+  reuniões gravadas (Daily). O código trata o vazio sem quebrar; o laço só não começou.
+- **MRR do dashboard conta uma conta chamada "teste teste"** (R$ 49,90) e uma sem pagamento.
+  Aritmética certa, rótulo honesto ("estimado por plano"), mas conta de teste não deveria
+  entrar em métrica. Marcar contas internas e excluir do cálculo.
+- **Custo de IA (30 dias): US$ 85,25** — Claude mensagens 43,91 · busca web 38,55 · Gemini 2,79.
+- **`health-check` NÃO usa IA** (só `GET /v1/models`, grátis). Pode continuar 2×/dia sem
+  preocupação. Os 5 avisos do e-mail eram **todos procedentes** — conferidos um a um.
+
+### Estado das auditorias no fechamento
+`auditoria_seguranca` **0/0** · `auditoria_uso` **0** · `auditoria_regras_negocio` **0 crítico**.
+
+---
+
 ## 🔴 ATIVAÇÃO DO EXPLORADOR (09/08) — o onboarding não existia há 5 semanas
 
 > **O maior vazamento do funil, medido.** Diagnóstico pedido pelo dono; a causa-raiz apareceu no
