@@ -211,6 +211,10 @@ export async function ativarPlanoDireto({ userId, planoKey, gateway, cobranca = 
   }
   // Confirmou a mensal após um agendamento anual→mensal → limpa a intenção (idempotente).
   if (cicloKey === 'mensal' && atual?.ciclo_agendado) upd.ciclo_agendado = null;
+  // DOWNGRADE AGENDADO cumprido (ou desfeito): qualquer ativação de plano encerra o
+  // agendamento. Deixá-lo pendurado faria o cron seguir convidando para uma troca que já
+  // aconteceu — e o cliente receberia e-mail pedindo para ativar o plano que ele já tem.
+  upd.plano_agendado = null;
   // Garantia de 7 dias: âncora só na 1ª assinatura (role atual não-pagante e sem
   // âncora). Renovação recorrente NÃO reinicia a janela; resubscrição após cancelar
   // (que zera plano_pago_em) inicia uma nova.

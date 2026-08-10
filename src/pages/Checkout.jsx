@@ -913,9 +913,19 @@ export default function Checkout() {
       });
       const data = await res.json();
       if (res.status === 404) {
+        // 404 do Asaas = a assinatura está no MP (o gateway PRINCIPAL).
         if (ehUpgrade) { setLoading(false); return await gerarLink(); }
-        setErro('Sua assinatura atual é gerenciada pelo Mercado Pago e a troca para um plano de menor valor precisa ser feita pelo suporte, para você não perder o período já pago. Fale com a gente que resolvemos na hora.');
+        // DOWNGRADE: agenda a virada para o fim do período JÁ PAGO (10/08). Não cobra agora e
+        // não tira nada do cliente; perto do vencimento ele recebe o link para autorizar o
+        // plano novo. Mesma mecânica provada da troca anual→mensal.
+        const ag = await apiCall('/api/agendar-plano', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ alvo: planoKey }),
+        });
+        const dAg = await ag.json().catch(() => ({}));
         setLoading(false);
+        if (!ag.ok) { setErro(dAg.error || 'Não foi possível agendar a troca agora.'); return; }
+        setResultadoMudanca({ tipo: 'downgrade_agendado', ...dAg });
         return;
       }
       if (!res.ok) throw new Error(data.error || 'Erro ao alterar plano');
@@ -1342,7 +1352,18 @@ export default function Checkout() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, color: '#065f46', marginBottom: 6 }}>
                   <CheckCircle2 size={16} /> {resultadoMudanca.agendado ? 'Mudança agendada!' : 'Plano alterado com sucesso!'}
                 </div>
-                {resultadoMudanca.agendado === 'mensal' ? (
+                {resultadoMudanca.tipo === 'downgrade_agendado' ? (
+                  /* Downgrade pelo Mercado Pago: a virada é no FIM do período já pago. As três
+                     coisas que o cliente precisa saber estão aqui — não paga agora, não perde o
+                     que pagou, e vai receber o link para autorizar o plano novo. */
+                  <p style={{ margin: 0, fontSize: 13, color: '#047857', lineHeight: 1.6 }}>
+                    Você mantém o <strong>{PLANOS[resultadoMudanca.de]?.nome || 'plano atual'}</strong> até{' '}
+                    <strong>{resultadoMudanca.vale_a_partir_de ? new Date(resultadoMudanca.vale_a_partir_de).toLocaleDateString('pt-BR') : 'o fim do período pago'}</strong>{' '}
+                    — <strong>sem nenhuma cobrança agora</strong> e sem perder nada do que já pagou.
+                    A renovação automática foi cancelada e, perto do vencimento, enviamos o link para você
+                    ativar o <strong>{PLANOS[resultadoMudanca.para]?.nome || 'novo plano'}</strong>.
+                  </p>
+                ) : resultadoMudanca.agendado === 'mensal' ? (
                   <p style={{ margin: 0, fontSize: 13, color: '#047857', lineHeight: 1.6 }}>
                     Você continua no plano anual até <strong>{resultadoMudanca.ate ? new Date(resultadoMudanca.ate).toLocaleDateString('pt-BR') : 'o fim do período pago'}</strong>. Ao fim dos 12 meses, o plano passa a ser <strong>mensal (R$ 49,90/mês)</strong> — enviaremos um e-mail perto da virada para você confirmar o cartão. Nenhuma cobrança agora.
                   </p>

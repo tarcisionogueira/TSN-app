@@ -87,7 +87,10 @@ function cardImovel(im) {
     </a></td></tr>`;
 }
 
-function corpo({ nome, etapa, imoveis, cidade, unsubUrl }) {
+// Exportado para `scripts/previa-nudge.mjs`: o dono precisa VER o e-mail exatamente como o
+// cliente vai receber antes de autorizar o disparo. Prévia que reimplementa o template não
+// prova nada — tem de ser a mesma função que envia.
+export function corpo({ nome, etapa, imoveis, cidade, unsubUrl }) {
   const saudacao = nome ? `Olá, ${esc(String(nome).split(' ')[0])}!` : 'Olá!';
   const ondeTxt = cidade ? ` em ${esc(cidade)} e região` : '';
 

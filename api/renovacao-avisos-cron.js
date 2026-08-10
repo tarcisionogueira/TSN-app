@@ -190,6 +190,50 @@ async function handler(req) {
         } catch (e) { console.error('[renovacao-avisos] ciclo email:', e?.message); }
       }
     } catch (e) { console.error('[renovacao-avisos] loop ciclo_agendado:', e?.message); }
+
+    // ── DOWNGRADE AGENDADO: convite para autorizar o plano MENOR (10/08) ─────
+    // Espelha o bloco de cima. Quem pediu para descer de plano (`plano_agendado`) mantém o
+    // atual até `plano_vencimento`; aqui recebe o link para ativar o novo. O gateway exige
+    // consentimento para uma recorrência nova — sem este e-mail, o cliente simplesmente CAI
+    // no vencimento, que é o oposto do que ele pediu.
+    try {
+      const rp = await fetch(`${SUPABASE_URL}/rest/v1/rpc/agendados_plano_para_aviso`, {
+        method: 'POST', headers: hdr, body: JSON.stringify({ p_dias: 7 }),
+      });
+      const candP = rp.ok ? await rp.json().catch(() => []) : [];
+      if (!rp.ok) console.error('[renovacao-avisos] agendados_plano_para_aviso falhou', rp.status);
+      const NOME_PLANO = { top2: 'Investidor Pro', clube: 'Clube' };
+      for (const c of (Array.isArray(candP) ? candP : [])) {
+        if (!c.email || !c.plano_vencimento || !c.plano_agendado) continue;
+        verificados++;
+        const vencDate = String(c.plano_vencimento).slice(0, 10);
+        if (await jaAvisado(`plano_${c.user_id}`, vencDate)) continue;
+        const dataFmt = new Date(c.plano_vencimento).toLocaleDateString('pt-BR', { timeZone: 'America/Bahia' });
+        const saud = c.nome ? `Olá, ${esc(String(c.nome).split(' ')[0])}!` : 'Olá!';
+        const novo = NOME_PLANO[c.plano_agendado] || 'novo plano';
+        const atualNome = NOME_PLANO[String(c.role || '').replace(/_anual$/, '')] || 'plano atual';
+        const link = `${APP_URL}/#/checkout?plano=${encodeURIComponent(c.plano_agendado)}`;
+        const html = `<div style="font-family:Arial,Helvetica,sans-serif;max-width:520px;margin:0 auto;color:#0f172a">
+          <p style="font-size:15px">${saud}</p>
+          <p style="font-size:14px;line-height:1.7">Você pediu para mudar do <strong>${esc(atualNome)}</strong> para o <strong>${esc(novo)}</strong>.
+          O seu plano atual vale até <strong>${esc(dataFmt)}</strong> — você não perdeu nada do que já pagou.</p>
+          <p style="font-size:14px;line-height:1.7">Para continuar sem interrupção já no <strong>${esc(novo)}</strong>, confirme o cartão no botão abaixo.
+          Leva 1 minuto e <strong>não há cobrança até ${esc(dataFmt)}</strong>.</p>
+          <p style="margin:22px 0"><a href="${link}" style="background:#0D63DB;color:#fff;text-decoration:none;padding:12px 22px;border-radius:10px;font-weight:700;font-size:14px">Ativar o ${esc(novo)} →</a></p>
+          <p style="font-size:13px;line-height:1.7;color:#475569">Se você não confirmar até ${esc(dataFmt)}, o acesso será pausado no fim do período atual — e você pode reativar quando quiser.</p>
+          <p style="font-size:12px;color:#94a3b8;margin-top:24px">BidPro Brasil · mudança de plano agendada por você.</p>
+        </div>`;
+        try {
+          const r3 = await enviarEmail({ from: EMAIL_FROM, to: c.email, subject: `Confirme o seu novo plano — BidPro Brasil`, html });
+          if (r3?.ok) avisados++;
+          else {
+            // Libera a trava de dedup: e-mail que NÃO saiu não pode contar como avisado, senão
+            // o cliente perde o único convite e cai no vencimento sem entender por quê.
+            await fetch(`${SUPABASE_URL}/rest/v1/webhook_eventos_processados?gateway=eq.mercadopago&gateway_payment_id=eq.${encodeURIComponent('plano_' + c.user_id)}&evento=eq.${encodeURIComponent('renov_aviso:' + vencDate)}`, { method: 'DELETE', headers: { ...hdr } }).catch(() => {});
+          }
+        } catch (e) { console.error('[renovacao-avisos] plano email:', e?.message); }
+      }
+    } catch (e) { console.error('[renovacao-avisos] loop plano_agendado:', e?.message); }
   } catch (e) {
     return new Response(JSON.stringify({ error: e.message }), { status: 500 });
   }
