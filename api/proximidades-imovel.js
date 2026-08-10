@@ -33,11 +33,21 @@ export default async function handler(req) {
   // ficam a quilômetros do local certo: a distância recalculada (coord atual → ponto)
   // não bate com o dist_m gravado. Nesse caso ignora o cache e recalcula no local certo.
   // (Sintoma: todas as proximidades aparecendo ~10 km numa cidade densa.)
-  if (im.pontos_proximos && lat && lng) {
+  // VAZIO TEM VALIDADE (10/08). Um `{}` em cache é indistinguível de uma consulta que falhou
+  // em silêncio, e o cache o devolvia PARA SEMPRE: `Object.values({})` é `[]`, `pts.some(...)`
+  // é `false`, então o resultado nunca era considerado velho. Foi o que congelou 51% do acervo
+  // em "Nenhum ponto de interesse mapeado nas proximidades". Agora o vazio vale 30 dias; depois
+  // disso é recalculado na hora, para o cliente que abre a página não ficar preso ao engano.
+  const VALIDADE_VAZIO_MS = 30 * 86400000;
+  const vazioEmCache = im.pontos_proximos && Object.keys(im.pontos_proximos).length === 0;
+  const vazioVencido = vazioEmCache
+    && (!im.proximidades_em || (Date.now() - new Date(im.proximidades_em).getTime()) > VALIDADE_VAZIO_MS);
+
+  if (im.pontos_proximos && !vazioVencido && lat && lng) {
     const pts = Object.values(im.pontos_proximos).filter(p => p && p.lat != null && p.lng != null);
     const stale = pts.some(p => Math.abs(haversine(lat, lng, Number(p.lat), Number(p.lng)) - (Number(p.dist_m) || 0)) > 500);
     if (!stale) return json({ pontos: im.pontos_proximos, cache: true });
-  } else if (im.pontos_proximos && (!lat || !lng)) {
+  } else if (im.pontos_proximos && !vazioVencido && (!lat || !lng)) {
     return json({ pontos: im.pontos_proximos, cache: true });
   }
 
