@@ -51,15 +51,26 @@ export default function CapaCurso({
   };
 
   if (capa) {
+    // A IMAGEM VAI DENTRO DO CONTAINER, NÃO É O CONTAINER (corrigido 11/08).
+    // Antes o `aspect-ratio` ficava no próprio <img>, com `height` automático. Em elemento
+    // SUBSTITUÍDO (img/video) o Safari resolve a altura pela proporção NATURAL do arquivo e
+    // ignora a declarada — então a caixa ficava com a altura certa e a imagem preenchia só
+    // uma faixa no topo, deixando o resto no cinza de fundo. Foi o que o dono viu no iPhone:
+    // "a imagem da capa está cortada".
+    // Com a proporção no DIV e a imagem em 100%×100% + object-fit, o enquadramento é o mesmo
+    // em qualquer navegador e para arquivo de qualquer dimensão — retrato, paisagem ou quadrado.
+    // `display:block` sobrescreve o flex do `base`: com imagem não há o que centralizar, e
+    // flex + align-items:center é justamente onde a altura do filho vira imprevisível.
     return (
-      <img
-        src={driveImage(capa)}
-        alt={curso?.titulo || 'Capa do curso'}
-        className={className}
-        style={{ ...base, objectFit: 'cover', display: 'block', background: '#f1f5f9' }}
-        // Capa quebrada não pode virar um vão branco sem explicação: cai no monograma.
-        onError={(e) => { e.currentTarget.style.display = 'none'; }}
-      />
+      <div className={className} style={{ ...base, display: 'block', background: '#e2e8f0' }}>
+        <img
+          src={driveImage(capa)}
+          alt={curso?.titulo || 'Capa do curso'}
+          style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center', display: 'block' }}
+          // Capa quebrada não pode virar um vão cinza sem explicação: some e fica o fundo.
+          onError={(e) => { e.currentTarget.style.display = 'none'; }}
+        />
+      </div>
     );
   }
 
