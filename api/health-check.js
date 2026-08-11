@@ -312,6 +312,41 @@ export default async function handler(req) {
     return { status: 'aviso', detalhe: `${count} lead(s) sem consultor há mais de 3 dias — atribuição manual necessária` };
   }));
 
+  // ── Config do servidor que trava fluxo de DINHEIRO ──
+  // Existe porque `EMPRESA_CNPJ` é invisível: sem ela, `api/saque-nf.js` não confere o
+  // TOMADOR da nota e TODA nota fiscal de saque cai em revisão manual — sem erro, sem
+  // alerta, só fila crescendo na equipe. Variável de ambiente não se lê de fora do
+  // servidor, então a única forma de saber se está lá é o próprio servidor dizer.
+  // Confere também o dígito verificador: CNPJ com um dígito trocado é pior que ausente —
+  // a comparação roda, nunca casa, e toda nota vira "o tomador não é a BidPro".
+  itens.push(await check('Financeiro — CNPJ da empresa (conferência de NF)', async () => {
+    const bruto = String(process.env.EMPRESA_CNPJ || '').replace(/\D/g, '');
+    if (!bruto) {
+      return { status: 'erro', detalhe: 'EMPRESA_CNPJ não configurada — toda NF de saque cai em revisão manual' };
+    }
+    if (bruto.length !== 14) {
+      return { status: 'erro', detalhe: `EMPRESA_CNPJ tem ${bruto.length} dígitos (esperado 14)` };
+    }
+    // Peso do dígito i (da esquerda): conta-se da DIREITA para a esquerda com 2,3,…,9 e
+    // recomeça em 2. Daí o `% 8` sobre a distância até o fim da base.
+    const dv = (base) => {
+      let soma = 0;
+      for (let i = 0; i < base.length; i++) {
+        soma += Number(base[i]) * (((base.length - 1 - i) % 8) + 2);
+      }
+      const r = soma % 11;
+      return String(r < 2 ? 0 : 11 - r);
+    };
+    const d1 = dv(bruto.slice(0, 12));
+    const d2 = dv(bruto.slice(0, 12) + d1);
+    if (d1 + d2 !== bruto.slice(12)) {
+      return { status: 'erro', detalhe: 'EMPRESA_CNPJ com dígito verificador inválido — a conferência de NF nunca vai casar' };
+    }
+    // Só os 4 primeiros dígitos no detalhe: o suficiente para conferir que é a empresa
+    // certa, sem espalhar o documento inteiro por log e e-mail de health-check.
+    return { status: 'ok', detalhe: `configurado e válido (${bruto.slice(0, 2)}.${bruto.slice(2, 5)}.***)` };
+  }));
+
   // ── 5. Daily.co — API ──
   if (DAILY_KEY) {
     itens.push(await check('Daily.co — API', async () => {
