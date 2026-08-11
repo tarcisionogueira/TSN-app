@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { CATEGORIAS, PLANOS, PACOTE } from '../data/cursos';
 import { driveImage } from '../utils/driveUrl';
+import CapaCurso from '../components/CapaCurso';
 import { fetchPlanosComConfig } from '../utils/planosConfig';
 import { supabase } from '../utils/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -290,9 +291,7 @@ export default function Membros() {
                 onMouseEnter={e=>{ e.currentTarget.style.boxShadow='0 8px 24px rgba(37,99,235,0.15)'; e.currentTarget.style.transform='translateY(-2px)'; }}
                 onMouseLeave={e=>{ e.currentTarget.style.boxShadow='0 2px 8px rgba(37,99,235,0.08)'; e.currentTarget.style.transform='none'; }}>
                 {/* Mini capa */}
-                <div style={{ width:56, height:56, borderRadius:12, background:`linear-gradient(135deg,${c.cor},${c.cor}cc)`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:28, flexShrink:0 }}>
-                  {c.emoji}
-                </div>
+                <CapaCurso curso={c} tamanho={56} raio={12}/>
                 <div style={{ flex:1, minWidth:0 }}>
                   <div style={{ fontWeight:800, fontSize:14, color:'#111111', marginBottom:4, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.titulo}</div>
                   {/* Barra de progresso */}
@@ -319,7 +318,7 @@ export default function Membros() {
               <div key={c.id} onClick={()=>nav(`/membros/curso/${c.id}`)}
                 style={{ background:`linear-gradient(135deg, ${c.cor}15 0%, white 60%)`, borderRadius:16, border:`2px solid ${c.cor}40`, padding:'20px 22px', cursor:'pointer', display:'flex', gap:16, alignItems:'center' }}
                 onMouseEnter={e=>e.currentTarget.style.borderColor=c.cor} onMouseLeave={e=>e.currentTarget.style.borderColor=c.cor+'40'}>
-                <div style={{ fontSize:48, flexShrink:0 }}>{c.emoji}</div>
+                <CapaCurso curso={c} tamanho={64} raio={14}/>
                 <div style={{ flex:1 }}>
                   <div style={{ display:'flex', gap:6, marginBottom:6 }}>
                     <span style={{ fontSize:10, fontWeight:700, padding:'2px 8px', borderRadius:20, background:c.bg, color:c.cor }}>{c.nivel}</span>
@@ -371,16 +370,7 @@ export default function Membros() {
               onMouseLeave={e=>{ e.currentTarget.style.boxShadow='0 1px 3px rgba(0,0,0,0.05)'; e.currentTarget.style.transform='none'; }}>
 
               {/* Capa */}
-              {c.capa_url ? (
-                <img src={driveImage(c.capa_url)} alt={c.titulo}
-                  style={{ width:'100%', aspectRatio:'2/3', objectFit:'cover', display:'block', background:'#f1f5f9' }}
-                  onError={e=>{ e.currentTarget.style.display='none'; }}/>
-              ) : (
-                <div style={{ background:`linear-gradient(135deg, ${c.cor} 0%, ${c.cor}cc 100%)`, aspectRatio:'2/3', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:10 }}>
-                  <div style={{ fontSize:52 }}>{c.emoji}</div>
-                  <div style={{ fontSize:11, color:'rgba(255,255,255,0.8)', fontWeight:700, textTransform:'uppercase', textAlign:'center', padding:'0 12px' }}>{c.categoria}</div>
-                </div>
-              )}
+              <CapaCurso curso={c} preencher proporcao="2/3" raio={0} legenda={c.capa_url ? null : c.categoria}/>
 
               {/* Barra de progresso */}
               {concluidas > 0 && (

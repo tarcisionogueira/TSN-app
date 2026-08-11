@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import CapaCurso from '../components/CapaCurso';
 import { usePlanos, PlanosProvider } from '../contexts/PlanosContext';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../utils/supabase';
@@ -114,7 +115,7 @@ const PLANOS_ACESSO = [
 ];
 
 function defaultCurso() {
-  return { titulo: '', subtitulo: '', descricao: '', emoji: '📚', capa_url: '', cor: '#0D63DB', nivel: 'Iniciante', categoria: 'Fundamentos', preco: '', gratuito: false, destaque: false, comissao_pct: 30, planos_gratis: [], modulos: [] };
+  return { titulo: '', subtitulo: '', descricao: '', capa_url: '', cor: '#0D63DB', nivel: 'Iniciante', categoria: 'Fundamentos', preco: '', gratuito: false, destaque: false, comissao_pct: 30, planos_gratis: [], modulos: [] };
 }
 function defaultModulo(idx) { return { _key: String(Date.now() + idx), titulo: '', aulas: [] }; }
 function defaultAula() { return { _key: String(Date.now() + Math.random()), titulo: '', duracao: '', video_url: '', descricao: '', gratis: false, materiais: [] }; }
@@ -345,7 +346,7 @@ function CursosTab() {
       // não vai para a loja/área de membros; fica só para o admin concluir depois.
       const faltam = faltamCampos(form);
       const completo = faltam.length === 0;
-      const cursoPayload = { titulo: rest.titulo, subtitulo: rest.subtitulo || '', descricao: rest.descricao || '', emoji: rest.emoji || '📚', capa_url: rest.capa_url || null, cor: rest.cor || '#0D63DB', nivel: rest.nivel || 'Iniciante', categoria: rest.categoria || 'Fundamentos', preco: Number(rest.preco) || 0, gratuito: rest.gratuito || false, destaque: rest.destaque || false, comissao_pct: Number(rest.comissao_pct) || 30, planos_gratis: Array.isArray(rest.planos_gratis) ? rest.planos_gratis : [], ativo: completo ? (rest.ativo !== false) : false };
+      const cursoPayload = { titulo: rest.titulo, subtitulo: rest.subtitulo || '', descricao: rest.descricao || '', capa_url: rest.capa_url || null, cor: rest.cor || '#0D63DB', nivel: rest.nivel || 'Iniciante', categoria: rest.categoria || 'Fundamentos', preco: Number(rest.preco) || 0, gratuito: rest.gratuito || false, destaque: rest.destaque || false, comissao_pct: Number(rest.comissao_pct) || 30, planos_gratis: Array.isArray(rest.planos_gratis) ? rest.planos_gratis : [], ativo: completo ? (rest.ativo !== false) : false };
 
       let cursoId;
       if (modal === 'new') {
@@ -358,15 +359,39 @@ function CursosTab() {
         cursoId = rest.id;
       }
 
-      await supabase.from('aulas_admin').delete().eq('curso_id', cursoId);
-      const rows = [];
+      // ─── A AULA PRESERVA A IDENTIDADE ENTRE SALVAMENTOS (11/08) ───────────────────
+      // Antes: `delete().eq('curso_id')` + `insert(rows)`. Cada salvamento do curso apagava
+      // TODAS as aulas e criava outras com UUID novo — e `aula_progresso` é indexado por
+      // `aula_id`. Ou seja: **qualquer edição no curso zerava o progresso de todos os alunos**
+      // ("0 de N aulas concluídas"), sem aviso e sem como recuperar. Ninguém notava porque
+      // curso publicado raramente era reeditado; com os botões de ordem, reeditar passa a ser
+      // rotina — e o bug sairia do silêncio da pior forma possível.
+      // Agora: aula que já existe é ATUALIZADA pelo id (o progresso continua válido) e só o
+      // que saiu de cena é apagado.
+      const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const existentes = [], novas = [], idsMantidos = [];
       (modulos || []).forEach((m, mi) => {
         (m.aulas || []).forEach((a, ai) => {
-          rows.push({ curso_id: cursoId, modulo: m.titulo || `Módulo ${mi + 1}`, titulo: a.titulo || '', descricao: a.descricao || '', video_url: a.video_url || '', duracao: a.duracao || '', gratis: a.gratis || false, materiais: Array.isArray(a.materiais) ? a.materiais : [], ordem: mi * 100 + ai });
+          const linha = { curso_id: cursoId, modulo: m.titulo || `Módulo ${mi + 1}`, titulo: a.titulo || '', descricao: a.descricao || '', video_url: a.video_url || '', duracao: a.duracao || '', gratis: a.gratis || false, materiais: Array.isArray(a.materiais) ? a.materiais : [], ordem: mi * 100 + ai };
+          // `_key` é o id REAL quando a aula veio do banco; aula nova tem chave temporária.
+          if (UUID.test(String(a._key || ''))) { linha.id = a._key; idsMantidos.push(a._key); existentes.push(linha); }
+          else novas.push(linha);
         });
       });
-      if (rows.length) {
-        const { error } = await supabase.from('aulas_admin').insert(rows);
+
+      // Apaga só o que o admin removeu — e com `.select()`, que é a única forma de saber se
+      // apagou algo (RLS que filtra linhas devolve `error: null`).
+      let del = supabase.from('aulas_admin').delete().eq('curso_id', cursoId);
+      if (idsMantidos.length) del = del.not('id', 'in', `(${idsMantidos.join(',')})`);
+      const { error: errDel } = await del.select('id');
+      if (errDel) throw errDel;
+
+      if (existentes.length) {
+        const { error } = await supabase.from('aulas_admin').upsert(existentes, { onConflict: 'id' });
+        if (error) throw error;
+      }
+      if (novas.length) {
+        const { error } = await supabase.from('aulas_admin').insert(novas);
         if (error) throw error;
       }
 
@@ -387,6 +412,27 @@ function CursosTab() {
   function addMaterial(mkey, akey, mat) { setForm(f => ({ ...f, modulos: f.modulos.map(m => m._key !== mkey ? m : { ...m, aulas: m.aulas.map(a => a._key === akey ? { ...a, materiais: [...(a.materiais || []), mat] } : a) }) })); }
   function removeMaterial(mkey, akey, idx) { setForm(f => ({ ...f, modulos: f.modulos.map(m => m._key !== mkey ? m : { ...m, aulas: m.aulas.map(a => a._key === akey ? { ...a, materiais: (a.materiais || []).filter((_, i) => i !== idx) } : a) }) })); }
   function removeAula(mkey, akey) { setForm(f => ({ ...f, modulos: f.modulos.map(m => m._key !== mkey ? m : { ...m, aulas: m.aulas.filter(a => a._key !== akey) }) })); }
+  // ─── ORDEM (pedido do dono, 11/08) ─────────────────────────────────────────────
+  // Até aqui a ordem era a de CRIAÇÃO e não havia como mudá-la: para inserir uma aula no
+  // meio era preciso apagar e recriar as seguintes. O `salvar` já grava
+  // `ordem: mi * 100 + ai` a partir da POSIÇÃO no array, e o aluno lê por `order('ordem')` —
+  // então mexer no array é tudo o que falta; nenhuma mudança de schema é necessária.
+  const trocar = (arr, i, j) => { const c = [...arr]; [c[i], c[j]] = [c[j], c[i]]; return c; };
+  function moverAula(mkey, idx, dir) {
+    const alvo = idx + dir;
+    setForm(f => ({ ...f, modulos: f.modulos.map(m => {
+      if (m._key !== mkey) return m;
+      if (alvo < 0 || alvo >= m.aulas.length) return m;
+      return { ...m, aulas: trocar(m.aulas, idx, alvo) };
+    }) }));
+  }
+  function moverModulo(idx, dir) {
+    setForm(f => {
+      const alvo = idx + dir;
+      if (alvo < 0 || alvo >= f.modulos.length) return f;
+      return { ...f, modulos: trocar(f.modulos, idx, alvo) };
+    });
+  }
 
   return (
     <div>
@@ -411,7 +457,7 @@ function CursosTab() {
                 <tbody>
                   {cursos.map(c => (
                     <tr key={c.id}>
-                      <td style={S.td}><span style={{ marginRight: 6 }}>{c.emoji}</span><strong>{c.titulo}</strong></td>
+                      <td style={S.td}><strong>{c.titulo}</strong></td>
                       <td style={S.td}>{c._aulaCount}</td>
                       <td style={S.td}>{c.nivel}</td>
                       <td style={S.td}><span style={S.badge(c.ativo)}>{c.ativo ? 'Ativo' : 'Inativo'}</span></td>
@@ -442,22 +488,20 @@ function CursosTab() {
                 <input style={S.input} value={form.titulo} onChange={e => setForm({ ...form, titulo: e.target.value })} />
               </div>
               <div style={{ ...S.col, flex: 1 }}>
-                <label style={S.label}>Emoji</label>
-                <input style={S.input} value={form.emoji} onChange={e => setForm({ ...form, emoji: e.target.value })} />
-              </div>
-              <div style={{ ...S.col, flex: 1 }}>
                 <label style={S.label}>Cor</label>
                 <input type="color" style={{ ...S.input, padding: 4, height: 38 }} value={form.cor} onChange={e => setForm({ ...form, cor: e.target.value })} />
               </div>
             </div>
 
             <div style={{ marginBottom: 14 }}>
-              <label style={S.label}>Capa (imagem PNG/JPG) — miniatura do curso na Área de Membros (opcional; sem capa usa o emoji)</label>
+              <label style={S.label}>Capa (imagem PNG/JPG) — miniatura do curso na Área de Membros (opcional; sem capa, entra o monograma nas iniciais do título, na cor do curso)</label>
               <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
                 {form.capa_url ? (
                   <img src={form.capa_url} alt="capa" style={{ width: 80, height: 120, objectFit: 'cover', borderRadius: 8, border: '1px solid #e2e8f0', flexShrink: 0 }} />
                 ) : (
-                  <div style={{ width: 80, height: 120, borderRadius: 8, border: '1px dashed #cbd5e1', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28, flexShrink: 0 }}>{form.emoji || '📚'}</div>
+                  <div style={{ width: 80, height: 120, borderRadius: 8, overflow: 'hidden', flexShrink: 0 }}>
+                    <CapaCurso curso={{ titulo: form.titulo, cor: form.cor }} preencher proporcao="2/3" raio={8} />
+                  </div>
                 )}
                 <div style={{ flex: 1 }}>
                   <UploadMidia kind="capa" onDone={url => setForm({ ...form, capa_url: url })} />
@@ -518,16 +562,31 @@ function CursosTab() {
 
               {form.modulos.map((m, mi) => (
                 <div key={m._key} style={{ border: '1px solid #e2e8f0', borderRadius: 10, padding: 14, marginBottom: 12 }}>
-                  <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+                  <div style={{ display: 'flex', gap: 8, marginBottom: 10, alignItems: 'center' }}>
                     <input style={{ ...S.input, flex: 1 }} placeholder={`Módulo ${mi + 1} — título`} value={m.titulo} onChange={e => updateModulo(m._key, 'titulo', e.target.value)} />
+                    {/* Ordem do MÓDULO — a posição no array vira `ordem` no salvar. */}
+                    <button title="Subir módulo" disabled={mi === 0}
+                      style={{ ...S.btn('outline'), padding: '6px 10px', opacity: mi === 0 ? 0.35 : 1, cursor: mi === 0 ? 'not-allowed' : 'pointer' }}
+                      onClick={() => moverModulo(mi, -1)}>▲</button>
+                    <button title="Descer módulo" disabled={mi === form.modulos.length - 1}
+                      style={{ ...S.btn('outline'), padding: '6px 10px', opacity: mi === form.modulos.length - 1 ? 0.35 : 1, cursor: mi === form.modulos.length - 1 ? 'not-allowed' : 'pointer' }}
+                      onClick={() => moverModulo(mi, 1)}>▼</button>
                     <button style={S.btn('danger')} onClick={() => removeModulo(m._key)}>✕</button>
                   </div>
 
                   {m.aulas.map((a, ai) => (
                     <div key={a._key} style={{ background: '#f8fafc', borderRadius: 8, padding: 10, marginBottom: 8 }}>
-                      <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+                      <div style={{ display: 'flex', gap: 6, marginBottom: 6, alignItems: 'center' }}>
+                        <span style={{ fontSize: 12, fontWeight: 800, color: '#94a3b8', minWidth: 20, textAlign: 'right' }}>{ai + 1}.</span>
                         <input style={{ ...S.input, flex: 2 }} placeholder="Título da aula" value={a.titulo} onChange={e => updateAula(m._key, a._key, 'titulo', e.target.value)} />
                         <input style={{ ...S.input, flex: 1 }} placeholder="Duração (ex: 8:30)" value={a.duracao} onChange={e => updateAula(m._key, a._key, 'duracao', e.target.value)} />
+                        {/* Ordem da AULA dentro do módulo — é a ordem que o aluno vê. */}
+                        <button title="Subir aula" disabled={ai === 0}
+                          style={{ ...S.btn('outline'), padding: '6px 9px', opacity: ai === 0 ? 0.35 : 1, cursor: ai === 0 ? 'not-allowed' : 'pointer' }}
+                          onClick={() => moverAula(m._key, ai, -1)}>▲</button>
+                        <button title="Descer aula" disabled={ai === m.aulas.length - 1}
+                          style={{ ...S.btn('outline'), padding: '6px 9px', opacity: ai === m.aulas.length - 1 ? 0.35 : 1, cursor: ai === m.aulas.length - 1 ? 'not-allowed' : 'pointer' }}
+                          onClick={() => moverAula(m._key, ai, 1)}>▼</button>
                         <button style={{ ...S.btn('danger'), padding: '6px 10px' }} onClick={() => removeAula(m._key, a._key)}>✕</button>
                       </div>
                       <input style={{ ...S.input, marginBottom: 6 }} placeholder="URL do vídeo (YouTube, Bunny Stream, Vimeo, Panda...)" value={a.video_url} onChange={e => updateAula(m._key, a._key, 'video_url', e.target.value)} />

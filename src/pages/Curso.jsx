@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../utils/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import CapaCurso from '../components/CapaCurso';
 import { CURSOS, PLANOS } from '../data/cursos';
 
 // ── localStorage fallback ─────────────────────────────────────────────────────
@@ -34,11 +35,20 @@ function podeAssistir(licao, plano, comprouAvulso = false, planosGratis = []) {
 // Converte a "URL do vídeo" da aula no player certo. Recomendado: URL de EMBED
 // (iframe) da Bunny Stream — o player da Bunny já cuida de HLS adaptativo, token e
 // tela cheia em qualquer navegador. Também aceita YouTube, Vimeo, Panda e MP4 direto.
+// ATENÇÃO AO ADICIONAR PROVEDOR NOVO (11/08): o host precisa entrar no `frame-src` da CSP
+// em `vercel.json`. Foi exatamente isto que quebrou o primeiro vídeo do dono: o embed do
+// YouTube estava certo, o link abria no navegador, e dentro do app o iframe era BLOQUEADO
+// pela CSP — a tela mostrava um retângulo cinza com ícone de arquivo quebrado, sem erro
+// visível em lugar nenhum. Código certo, entrega errada.
 function videoEmbed(url) {
   const u = String(url || '').trim();
   if (!u) return null;
-  let m = u.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([\w-]{11})/i);
-  if (m) return { tipo: 'iframe', src: `https://www.youtube.com/embed/${m[1]}` };
+  let m = u.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/|live\/)|youtu\.be\/)([\w-]{11})/i);
+  if (m) {
+    // youtube-nocookie: não grava cookie de rastreio antes do play (LGPD) e é idêntico no resto.
+    // rel=0 mantém as sugestões do fim no nosso canal; modestbranding tira a marca d'água.
+    return { tipo: 'iframe', src: `https://www.youtube-nocookie.com/embed/${m[1]}?rel=0&modestbranding=1&playsinline=1` };
+  }
   m = u.match(/vimeo\.com\/(?:video\/)?(\d+)/i);
   if (m) return { tipo: 'iframe', src: `https://player.vimeo.com/video/${m[1]}` };
   // Arquivo de vídeo progressivo (MP4/WebM/OGG) → tag <video> nativa.
@@ -244,7 +254,7 @@ export default function Curso() {
             style={{ display:'flex', alignItems:'center', gap:6, background:'rgba(255,255,255,0.15)', border:'none', borderRadius:8, padding:'6px 12px', color:'white', fontSize:12, fontWeight:600, cursor:'pointer', marginBottom:14 }}>
             <ChevronLeft size={13}/> Todos os cursos
           </button>
-          <div style={{ fontSize:40, marginBottom:10 }}>{curso.emoji}</div>
+          <div style={{ marginBottom:12 }}><CapaCurso curso={curso} tamanho={44} raio={10}/></div>
           <h2 style={{ margin:'0 0 6px', fontSize:17, fontWeight:900, color:'white', lineHeight:1.2 }}>{curso.titulo}</h2>
           <p style={{ margin:'0 0 16px', fontSize:12, color:'rgba(255,255,255,0.75)', lineHeight:1.5 }}>{curso.subtitulo}</p>
           <div style={{ display:'flex', gap:12, fontSize:11, color:'rgba(255,255,255,0.7)' }}>
@@ -362,7 +372,7 @@ export default function Curso() {
                   return (
                     <div style={{ background:'#111111', aspectRatio:'16/9', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:14, position:'relative' }}>
                       <div style={{ position:'absolute', inset:0, background:`radial-gradient(circle at 30% 40%, ${curso.cor}30 0%, transparent 60%)` }}/>
-                      <div style={{ fontSize:72, position:'relative' }}>{curso.emoji}</div>
+                      <div style={{ position:'relative' }}><CapaCurso curso={curso} tamanho={84} raio={18}/></div>
                       <div style={{ position:'relative', textAlign:'center' }}>
                         <div style={{ fontSize:16, fontWeight:700, color:'white', marginBottom:6 }}>{licaoAtiva.titulo}</div>
                         <div style={{ fontSize:12, color:'#94a3b8' }}>🎬 Vídeo em breve</div>
@@ -373,13 +383,25 @@ export default function Curso() {
 
                 {/* Controles + título */}
                 <div style={{ padding:'22px 24px' }}>
-                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:14, flexWrap:'wrap', gap:10 }}>
-                    <div>
-                      <div style={{ fontSize:11, color:'#94a3b8', fontWeight:600, textTransform:'uppercase', marginBottom:4 }}>
-                        {curso.modulos.find(m=>m.licoes.some(l=>l.id===licaoAtiva.id))?.titulo}
-                      </div>
-                      <h2 style={{ margin:0, fontSize:20, fontWeight:900, color:'#111111' }}>{licaoAtiva.titulo}</h2>
-                    </div>
+                  {/* ORDEM DE LEITURA DO YOUTUBE (pedido do dono, 11/08): título primeiro,
+                      metadados em uma linha discreta logo abaixo, DEPOIS a barra de ações, e a
+                      descrição num card cinza no fim. Antes o título vinha atrás de um rótulo
+                      de módulo em caixa alta e disputava a linha com quatro botões — quem abre
+                      uma aula quer ler o nome dela antes de qualquer outra coisa. */}
+                  <h2 style={{ margin:'0 0 6px', fontSize:20, fontWeight:900, color:'#111111', lineHeight:1.3 }}>{licaoAtiva.titulo}</h2>
+                  <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', fontSize:12.5, color:'#64748b', marginBottom:14 }}>
+                    <span style={{ fontWeight:600 }}>{curso.modulos.find(m=>m.licoes.some(l=>l.id===licaoAtiva.id))?.titulo}</span>
+                    {(() => {
+                      const i = todasLicoes.findIndex(l => l.id === licaoAtiva.id);
+                      return i >= 0 ? <><span>·</span><span>Aula {i + 1} de {todasLicoes.length}</span></> : null;
+                    })()}
+                    {licaoAtiva.duracao && <><span>·</span><span>{licaoAtiva.duracao}</span></>}
+                    {progresso[licaoAtiva.id] && (
+                      <><span>·</span><span style={{ color:'#059669', fontWeight:700, display:'inline-flex', alignItems:'center', gap:4 }}><CheckCircle2 size={12}/> concluída</span></>
+                    )}
+                  </div>
+
+                  <div style={{ display:'flex', justifyContent:'flex-start', alignItems:'center', marginBottom:16, flexWrap:'wrap', gap:8, paddingBottom:16, borderBottom:'1px solid #f1f5f9' }}>
                     <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
                       {licaoAnterior && (
                         <button onClick={()=>irParaLicao(licaoAnterior)}
@@ -406,10 +428,15 @@ export default function Curso() {
                     </div>
                   </div>
 
-                  <div style={{ background:'#f8fafc', borderRadius:12, padding:'16px 18px', borderLeft:`4px solid ${curso.cor}` }}>
-                    <div style={{ fontSize:11, fontWeight:700, color:curso.cor, textTransform:'uppercase', marginBottom:8 }}>Sobre esta aula</div>
-                    <p style={{ margin:0, fontSize:14, color:'#334155', lineHeight:1.8 }}>{licaoAtiva.descricao}</p>
-                  </div>
+                  {/* Card de descrição no formato do YouTube: cinza, cantos arredondados, sem
+                      barra colorida — a informação é o texto, não a moldura. Aula sem descrição
+                      não renderiza um card vazio (isso lia como "faltou carregar"). */}
+                  {String(licaoAtiva.descricao || '').trim() && (
+                    <div style={{ background:'#f2f2f2', borderRadius:12, padding:'14px 16px' }}>
+                      <div style={{ fontSize:12.5, fontWeight:700, color:'#0f172a', marginBottom:8 }}>Sobre esta aula</div>
+                      <p style={{ margin:0, fontSize:14, color:'#334155', lineHeight:1.75, whiteSpace:'pre-line' }}>{licaoAtiva.descricao}</p>
+                    </div>
+                  )}
 
                   {/* Material de apoio — só se a aula tiver algo anexado (senão, nada) */}
                   {Array.isArray(licaoAtiva.materiais) && licaoAtiva.materiais.length > 0 && (
