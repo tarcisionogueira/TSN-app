@@ -5238,12 +5238,21 @@ function DashboardTab({ irParaTab }) {
     if (!membros?.length) { setEquipeMetrics({}); return; }
     const ids = membros.map(m => m.id);
     const range = getRange(p || periodo, ini ?? dataInicio, fim ?? dataFim);
-    const [{ data: chamados }, { data: comissoes }, { data: leadsSDR }, { data: reunioes }] = await Promise.all([
+    // ⚠️ A COLUNA DE DATA NÃO É A MESMA EM TODAS ESTAS TABELAS (corrigido 11/08). `chamados`
+    // e `sdr_leads` usam `criado_em`; `comissoes` e `solicitacoes` usam `created_at`. As duas
+    // últimas estavam filtrando por uma coluna inexistente → 400 do PostgREST → `data`
+    // undefined → o painel de produtividade contava ZERO comissão e ZERO solicitação para
+    // todo mundo, sem um erro na tela. Analista produtivo aparecia como analista parado.
+    const [{ data: chamados, error: e1 }, { data: comissoes, error: e2 }, { data: leadsSDR, error: e3 }, { data: reunioes, error: e4 }] = await Promise.all([
       supabase.from('chamados').select('atendente_id, status').in('atendente_id', ids).gte('criado_em', range.inicio).lte('criado_em', range.fim),
-      supabase.from('comissoes').select('beneficiario_id, valor_comissao, status').in('beneficiario_id', ids).gte('criado_em', range.inicio).lte('criado_em', range.fim),
+      supabase.from('comissoes').select('beneficiario_id, valor_comissao, status').in('beneficiario_id', ids).gte('created_at', range.inicio).lte('created_at', range.fim),
       supabase.from('sdr_leads').select('consultor_id, status').in('consultor_id', ids).gte('criado_em', range.inicio).lte('criado_em', range.fim),
-      supabase.from('solicitacoes').select('analista_id, status').in('analista_id', ids).gte('criado_em', range.inicio).lte('criado_em', range.fim),
+      supabase.from('solicitacoes').select('analista_id, status').in('analista_id', ids).gte('created_at', range.inicio).lte('created_at', range.fim),
     ]);
+    // Falha de leitura vira ZERO na tela, que é indistinguível de "não houve atividade".
+    // Registrar é o mínimo para o próximo caso não levar 4 meses para aparecer.
+    const errosProd = [e1, e2, e3, e4].filter(Boolean);
+    if (errosProd.length) console.error('[produtividade] leitura falhou:', errosProd.map(e => e.message).join(' · '));
     const m = {};
     ids.forEach(id => {
       m[id] = {
@@ -8087,8 +8096,12 @@ function EquipeTab() {
     // Team invites
     const { data: convitesData } = await supabase.from('convites_equipe').select('*').order('criado_em', { ascending: false }).limit(20);
     setConvitesEquipe(convitesData || []);
-    // Solicitacoes
-    const { data: solData } = await supabase.from('solicitacoes').select('*').order('criado_em', { ascending: false });
+    // Solicitacoes — `created_at`, NÃO `criado_em` (corrigido 11/08). Ordenar por coluna
+    // inexistente devolve 400, e o `|| []` transformava isso em "nenhuma solicitação":
+    // a fila da equipe aparecia VAZIA na tela do admin, sem erro nenhum. Foi assim que o
+    // erro chegou ao `erros_cliente` antes de alguém notar pela tela.
+    const { data: solData, error: solErr } = await supabase.from('solicitacoes').select('*').order('created_at', { ascending: false });
+    if (solErr) console.error('[admin] solicitações não carregaram:', solErr.message);
     setSolicitacoes(solData || []);
     setLoading(false);
   }, []);
