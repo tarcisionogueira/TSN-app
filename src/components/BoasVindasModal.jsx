@@ -39,12 +39,19 @@ export default function BoasVindasModal() {
   const [aberto, setAberto] = useState(false);
   const [salvando, setSalvando] = useState(false);
 
+  // PRÉVIA PARA A EQUIPE: `?boasvindas=previa` na URL abre o pop-up mesmo para admin/analista,
+  // sem gravar progresso. Existe porque o dono entrou para conferir e não viu nada — o filtro
+  // de papel estava certo (equipe não recebe onboarding), mas quem publica o vídeo precisa
+  // conseguir ver o que o cliente vê, sem criar uma conta falsa para isso.
+  const previa = typeof window !== 'undefined'
+    && new URLSearchParams(window.location.hash.split('?')[1] || window.location.search).get('boasvindas') === 'previa';
+
   useEffect(() => {
     // Equipe não recebe o onboarding do cliente (e em modo suporte o que vale é o que a
     // EQUIPE está fazendo, não a ficha de quem ela olha — abrir um pop-up de boas-vindas
     // no meio de um atendimento seria só atrapalhar).
-    if (!user || impersonate || !ROLES_CLIENTE.includes(role)) return;
-    if (sessionStorage.getItem(DISPENSA_KEY) === '1') return;
+    if (!user || (!previa && (impersonate || !ROLES_CLIENTE.includes(role)))) return;
+    if (!previa && sessionStorage.getItem(DISPENSA_KEY) === '1') return;
 
     let cancelado = false;
     (async () => {
@@ -66,12 +73,14 @@ export default function BoasVindasModal() {
 
       const feitas = new Set((prog || []).filter((p) => p.concluida).map((p) => p.aula_id));
       const primeiraPendente = lista.findIndex((a) => !feitas.has(a.id));
-      if (primeiraPendente < 0) return;   // já assistiu tudo → nunca mais aparece
+      // Na prévia começa sempre do primeiro vídeo: quem publica já assistiu tudo e, pela regra
+      // normal, o pop-up nunca mais abriria para ele.
+      if (primeiraPendente < 0 && !previa) return;   // já assistiu tudo → nunca mais aparece
 
-      setCurso(c); setAulas(lista); setIdx(primeiraPendente); setAberto(true);
+      setCurso(c); setAulas(lista); setIdx(Math.max(0, primeiraPendente)); setAberto(true);
     })();
     return () => { cancelado = true; };
-  }, [user, role, impersonate]);
+  }, [user, role, impersonate, previa]);
 
   const fechar = useCallback(() => {
     sessionStorage.setItem(DISPENSA_KEY, '1');   // volta só no próximo acesso
@@ -83,16 +92,17 @@ export default function BoasVindasModal() {
     setSalvando(true);
     const aula = aulas[idx];
     try {
+      if (previa) throw new Error('previa');   // conferir não altera dado de ninguém
       // Mesmo registro da área de membros — o progresso daqui aparece lá.
       const { error } = await supabase.from('aula_progresso')
         .upsert({ user_id: user.id, curso_id: curso.id, aula_id: aula.id, concluida: true },
           { onConflict: 'user_id,aula_id' });
       if (error) console.warn('[boas-vindas] progresso:', error.message);
-    } catch (e) { console.warn('[boas-vindas] progresso:', e?.message); }
+    } catch (e) { if (e?.message !== 'previa') console.warn('[boas-vindas] progresso:', e?.message); }
     setSalvando(false);
     if (idx + 1 < aulas.length) setIdx(idx + 1);
     else { sessionStorage.setItem(DISPENSA_KEY, '1'); setAberto(false); }
-  }, [salvando, curso, aulas, idx, user]);
+  }, [salvando, curso, aulas, idx, user, previa]);
 
   if (!aberto || !curso || !aulas.length) return null;
 

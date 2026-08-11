@@ -24,7 +24,25 @@ if command -v flock >/dev/null 2>&1; then
   flock -n 9 || { echo "[$(date)] já há um runner em execução nesta máquina — saindo."; exit 0; }
 fi
 
-echo "===== [$(date)] runner residencial ====="
+# ─── AUTO-ATUALIZAÇÃO (11/08) ────────────────────────────────────────────────
+# O runner roda de um clone LOCAL na máquina de casa, então correção feita no repositório só
+# chegava aqui quando alguém lembrava de dar `git pull`. Foi assim que o `RJ_DRYRUN=0` ficou
+# corrigido no repo e o RJ continuou rodando em dry-run em casa — o pior tipo de pendência,
+# porque some da vista de quem corrigiu.
+#
+# `--ff-only`: só avança se for avanço limpo. Se a cópia local tiver alteração manual, o pull
+# falha e o runner segue com o que tem — nunca sobrescreve trabalho local nem para a coleta
+# por causa de git. E registra a versão que está rodando, para "está atualizado?" virar dado
+# em vez de suposição.
+if [ "${RUNNER_SEM_AUTOUPDATE:-0}" != "1" ]; then
+  if git -C "$(pwd)" pull --ff-only --quiet 2>/dev/null; then
+    echo "[$(date)] código atualizado ($(git rev-parse --short HEAD))"
+  else
+    echo "[$(date)] AVISO: git pull não avançou — rodando com $(git rev-parse --short HEAD 2>/dev/null || echo 'versão desconhecida'). Alteração local pendente?"
+  fi
+fi
+
+echo "===== [$(date)] runner residencial ($(git rev-parse --short HEAD 2>/dev/null || echo '?')) ====="
 
 # rodar <FONTE> <comando...> : só executa se o GATE liberar (2x/semana, sem overlap); conclui no sucesso.
 #
