@@ -75,20 +75,44 @@ async function consumirCota(proposito = 'geral') {
   }
 }
 
+/**
+ * Registra o DESFECHO da chamada. O contador de cota incrementa ANTES do fetch (tem de ser
+ * assim: é uma reserva atômica), então ele mede PERMISSÃO CONCEDIDA, não gasto. Quando a
+ * chamada nem chega ao fornecedor, não houve gasto — e segurar o crédito penaliza a coleta
+ * por um erro de rede nosso. Foi o que abriu a distância entre o nosso ledger (~2.549 desde
+ * 29/06) e os ~780 créditos que o painel do Bright Data mostra consumidos. (11/08)
+ */
+async function registrarResultado(proposito, ok, devolver) {
+  if (!SB_URL || !SB_KEY) return;
+  try {
+    await fetch(`${SB_URL}/rest/v1/rpc/registrar_resultado_brightdata`, {
+      method: 'POST',
+      headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ p_proposito: proposito, p_ok: ok, p_devolver: devolver }),
+      signal: AbortSignal.timeout(5000),
+    });
+  } catch { /* contabilidade é best-effort: não pode derrubar a coleta */ }
+}
+
 /** Chamada crua ao Web Unlocker, já com a cota consumida. Lança ErroBrightData. */
-async function chamarUnlocker(url, { method, headers, timeoutMs }) {
+async function chamarUnlocker(url, { method, headers, timeoutMs, proposito }) {
   try {
     // headers: a Web Unlocker API (/request) valida `headers` como OBJETO
     // { "Accept": "...", "Origin": "..." } — passar array [{name,value}] devolve
     // HTTP 400 "headers must be of type object". Repassa o objeto como veio.
     const temHeaders = headers && typeof headers === 'object' && Object.keys(headers).length > 0;
-    return await fetch('https://api.brightdata.com/request', {
+    const r = await fetch('https://api.brightdata.com/request', {
       method: 'POST',
       headers: { Authorization: `Bearer ${BD_TOKEN}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ zone: BD_ZONE, url, method, format: 'raw', ...(temHeaders ? { headers } : {}) }),
       signal: AbortSignal.timeout(timeoutMs),
     });
+    // Chegou ao fornecedor (mesmo com status de erro) → foi consumido, não devolve.
+    await registrarResultado(proposito, true, false);
+    return r;
   } catch (e) {
+    // Não chegou lá: devolve o crédito ao teto.
+    await registrarResultado(proposito, false, true);
     throw new ErroBrightData('rede', String(e?.message || e).slice(0, 160));
   }
 }
@@ -105,7 +129,7 @@ export async function buscarViaBrightData(url, { method = 'GET', headers = null,
     throw new ErroBrightData(cota.motivo, cota.detalhe
       || `propósito ${proposito}: ${cota.usado ?? '?'} usados · total ${cota.usado_total ?? '?'}/${cota.teto ?? TETO}`);
   }
-  const resp = await chamarUnlocker(url, { method, headers, timeoutMs });
+  const resp = await chamarUnlocker(url, { method, headers, timeoutMs, proposito });
   if (exigirOk && !resp.ok) throw new ErroBrightData('http', `HTTP ${resp.status} em ${url}`);
   return resp;
 }

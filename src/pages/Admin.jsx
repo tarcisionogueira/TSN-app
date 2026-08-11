@@ -6364,7 +6364,7 @@ function ParceirosLeiloeiroTab({ parceiros, setParceiros }) {
     if (data?.length) {
       const res = await Promise.all(
         data.map(p =>
-          supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('fonte', `parceiro_${p.id}`)
+          supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true).eq('fonte', `parceiro_${p.id}`)
         )
       );
       const mapa = {};
@@ -6710,11 +6710,11 @@ function ScrapersTab() {
     } finally {
       // Atualiza contadores globais e recarrega pendentes do estado
       Promise.all([
-        supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).not('latitude', 'is', null).neq('latitude', 0),
-        supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).is('latitude', null),
-        supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('latitude', 0),
-        supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('estado', uf).is('latitude', null),
-        supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('estado', uf).eq('latitude', 0),
+        supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true).not('latitude', 'is', null).neq('latitude', 0),
+        supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true).is('latitude', null),
+        supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true).eq('latitude', 0),
+        supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true).eq('estado', uf).is('latitude', null),
+        supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true).eq('estado', uf).eq('latitude', 0),
       ]).then(([comGeo, semNull, semZero, ufNull, ufZero]) => {
         const com = comGeo.count || 0;
         const sem = (semNull.count || 0) + (semZero.count || 0);
@@ -6775,12 +6775,17 @@ function ScrapersTab() {
 
   const UFS_GEOCOD_ORDEM = ['SP','MG','PR','RS','RJ','SC','BA','GO','CE','PE','MT','MS','ES','PA','MA','RN','PB','AL','PI','SE','TO','RO','AM','DF','AC','AP','RR'];
 
+  // TODOS os contadores de imóvel desta tela filtram `ativo` (11/08). A tabela tem 56.126
+  // linhas mas só 31.059 são acervo vivo — as outras 25.067 são lotes desativados que nunca
+  // mais aparecem para ninguém. Contá-las inflava o painel para "mais de 50 mil imóveis" e,
+  // pior, punha 300 lotes MORTOS na fila de geocodificação: trabalho pago para posicionar no
+  // mapa o que ninguém vai ver. O número honesto é o do acervo que o cliente enxerga.
   async function carregarPendentes() {
     const results = await Promise.all(
       UFS_GEOCOD_ORDEM.map(async uf => {
         const [r1, r2] = await Promise.all([
-          supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('estado', uf).is('latitude', null),
-          supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('estado', uf).eq('latitude', 0),
+          supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true).eq('estado', uf).is('latitude', null),
+          supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true).eq('estado', uf).eq('latitude', 0),
         ]);
         return [uf, (r1.count || 0) + (r2.count || 0)];
       })
@@ -6838,9 +6843,9 @@ function ScrapersTab() {
     setGeocTodos(g => ({ ...g, rodando: false }));
     // Atualiza contador após processar
     Promise.all([
-      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).not('latitude', 'is', null).neq('latitude', 0),
-      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).is('latitude', null),
-      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('latitude', 0),
+      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true).not('latitude', 'is', null).neq('latitude', 0),
+      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true).is('latitude', null),
+      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true).eq('latitude', 0),
     ]).then(([comGeo, semNull, semZero]) => {
       const com = comGeo.count || 0;
       const sem = (semNull.count || 0) + (semZero.count || 0);
@@ -10964,7 +10969,15 @@ export default function Admin() {
   const { role, loading, simularRole, roleSimulado } = useAuth();
   const navigate = useNavigate();
   const [tab, setTab] = useState(() => {
-    let t = sessionStorage.getItem('admin_tab') || 'Dashboard';
+    // `?aba=Equipe&sub=casos` permite LINKAR direto para uma aba. Sem isto, qualquer tela que
+    // quisesse mandar o admin para a Central da Equipe só conseguia dizer "vá lá e clique" —
+    // foi o que deixou o bloqueio do /caso sem saída (11/08). A URL ganha da sessão.
+    const q = new URLSearchParams(window.location.search);
+    const daUrl = q.get('aba');
+    const subUrl = q.get('sub');
+    if (subUrl) sessionStorage.setItem('admin_equipe_sub', subUrl);
+    if (daUrl) sessionStorage.setItem('admin_tab', daUrl);
+    let t = daUrl || sessionStorage.getItem('admin_tab') || 'Dashboard';
     // "Prestação de contas" virou sub-aba de Financeiro e "Central da Equipe" virou sub-aba de
     // Equipe — migra tabs antigas persistidas p/ não renderizar tela em branco em quem as tinha
     // salvas na sessão.

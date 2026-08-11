@@ -25,11 +25,15 @@ async function rpc(fn, args) {
 }
 
 export default async function handler(req) {
+  // OPTIONS ANTES da autenticação: o preflight do CORS não carrega credencial, então
+  // autenticar primeiro devolvia 401 no preflight e derrubava a chamada real em qualquer
+  // origem diferente da do app. Hoje o app é mesma-origem e por isso não doía — é uma
+  // armadilha armada para o dia em que alguém chamar de outro domínio.
+  if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
   const user = await getUser(req);
   if (!user) return unauthorized();
   const role = await getUserRoleById(user.id);
   if (role !== 'admin' && role !== 'analista') return forbidden();
-  if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
   if (!SB || !KEY) return new Response(JSON.stringify({ error: 'Supabase não configurado' }), { status: 500, headers: { 'Content-Type': 'application/json', ...CORS } });
 
   const params = new URL(req.url).searchParams;
@@ -65,28 +69,42 @@ export default async function handler(req) {
     // navegação ~30d) — a tela normal segue com 100/200 p/ não pesar.
     const full = params.get('full') === '1';
     if (data && typeof data === 'object') {
-      try { data.atividade = (await rpc('atividade_usuario', { p_user_id: uid, p_limite: full ? 2000 : 100 })) || []; } catch { data.atividade = []; }
+      // ─── POR QUE ISTO EXISTE (11/08) ─────────────────────────────────────────────
+      // Cada bloco abaixo fazia `(await rpc(...)) || []`. O `rpc()` devolve null em QUALQUER
+      // falha (HTTP não-ok, rede, timeout) — então uma leitura quebrada virava lista VAZIA e a
+      // tela dizia "nenhuma atividade", "nenhum aceite". No caso de `aceites` isso é grave: é
+      // a trilha anti-chargeback (plano, IP, versão dos termos). "Não consegui ler" apresentado
+      // como "o cliente nunca aceitou" é uma conclusão jurídica errada tirada de um erro de rede.
+      // Agora cada seção que falha entra em `_falhas` e a tela/dossiê dizem que não puderam ler.
+      data._falhas = [];
+      const secao = async (nome, fn) => {
+        const v = await fn();
+        if (v == null) { data._falhas.push(nome); return null; }
+        return v;
+      };
+
+      data.atividade = (await secao('atividade', () => rpc('atividade_usuario', { p_user_id: uid, p_limite: full ? 2000 : 100 }))) || [];
       // Anexa a NAVEGAÇÃO/cliques (clickstream de eventos_atividade): telas vistas, cliques e
       // falhas/relatórios vazios de API — o "tudo o que o usuário fez" p/ caçar bug/quebra. Era
       // COLETADO (tracker.js → /api/track) mas NUNCA exibido: o painel "Navegação e cliques" do
       // Cliente 360 lia dados.navegacao, que ninguém preenchia. Vale p/ cliente/parceiro/equipe.
-      try { data.navegacao = (await rpc('atividade_navegacao', { p_user_id: uid, p_limite: full ? 2000 : 200 })) || []; } catch { data.navegacao = []; }
+      data.navegacao = (await secao('navegacao', () => rpc('atividade_navegacao', { p_user_id: uid, p_limite: full ? 2000 : 200 }))) || [];
       // TERMOS ACEITOS (trilho jurídico do 360): compra de plano/produto (aceites_plano, com
       // IP/versão — prova anti-chargeback) + LGPD do cadastro. A adesão de parceiro já vem na
       // RPC ('parceria'). Antes só a Auditoria da aba Usuários mostrava isso — o 360 não.
-      try {
-        const r = await fetch(`${SB}/rest/v1/aceites_plano?user_id=eq.${encodeURIComponent(uid)}&order=aceito_em.desc&limit=100&select=plano_key,valor,termos_versao,ip,gateway,aceito_em,preco_contratado,aceite_hash`, {
-          headers: { apikey: KEY, Authorization: `Bearer ${KEY}` },
-        });
-        data.aceites = r.ok ? await r.json() : [];
-      } catch { data.aceites = []; }
-      try {
-        const r = await fetch(`${SB}/rest/v1/perfis?id=eq.${encodeURIComponent(uid)}&select=lgpd_aceito,lgpd_data`, {
-          headers: { apikey: KEY, Authorization: `Bearer ${KEY}` },
-        });
-        const j = r.ok ? await r.json() : [];
-        data.lgpd = j?.[0] || null;
-      } catch { data.lgpd = null; }
+      const ler = async (url) => {
+        try {
+          const r = await fetch(`${SB}${url}`, { headers: { apikey: KEY, Authorization: `Bearer ${KEY}` } });
+          if (!r.ok) return null;
+          return await r.json();
+        } catch { return null; }
+      };
+      data.aceites = (await secao('aceites', () => ler(`/rest/v1/aceites_plano?user_id=eq.${encodeURIComponent(uid)}&order=aceito_em.desc&limit=100&select=plano_key,valor,termos_versao,ip,gateway,aceito_em,preco_contratado,aceite_hash`))) || [];
+      const lgpd = await secao('lgpd', () => ler(`/rest/v1/perfis?id=eq.${encodeURIComponent(uid)}&select=lgpd_aceito,lgpd_data`));
+      data.lgpd = lgpd?.[0] || null;
+      // `completo` é DERIVADO — a tela não precisa saber a regra, e um bloco novo que falhe
+      // entra no cálculo sozinho por estar em `_falhas`.
+      data._completo = data._falhas.length === 0;
     }
   } else {
     // Termo vazio → lista geral. Se o termo tem 11 dígitos, calcula o hash do CPF

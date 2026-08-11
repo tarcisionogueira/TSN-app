@@ -123,7 +123,12 @@ export default async function handler(req, res) {
     }
 
     const ext = /pdf/i.test(mime) ? 'pdf' : /jpe?g/i.test(mime) ? 'jpg' : /png/i.test(mime) ? 'png' : 'bin';
-    const path = `espelho/${d.fonte}/${d.imovel_id}/${d.tipo}.${ext}`;
+    // Sufixo do id no nome: com os ANEXOS na fila (11/08) um mesmo imóvel passa a ter VÁRIOS
+    // documentos do mesmo tipo — o rj_82634 tem 1ª, 2ª e 3ª publicação. Com o path antigo
+    // (`${tipo}.${ext}`) o `x-upsert: true` faria o segundo sobrescrever o primeiro e as duas
+    // linhas apontariam para o mesmo arquivo: dois registros, um documento. As 543 cópias já
+    // feitas mantêm o path antigo — elas não são reprocessadas (status 'copiado').
+    const path = `espelho/${d.fonte}/${d.imovel_id}/${d.tipo}-${String(d.id).slice(0, 8)}.${ext}`;
     const up = await fetch(`${SUPABASE_URL}/storage/v1/object/documentos/${path}`, {
       method: 'POST',
       headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': mime, 'x-upsert': 'true' },

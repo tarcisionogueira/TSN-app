@@ -158,9 +158,14 @@ export default function Cliente360() {
     setResolvendo(true);
     try {
       const r = await apiCall('/api/admin-usuario-360', { method: 'POST', body: JSON.stringify({ acao: 'resolver_erros', user_id: uid }) });
-      const j = await r.json();
-      if (r.ok && j?.ok) { if (dados?._busca) await abrir(dados._busca); }
-    } catch { /* silencioso */ } finally { setResolvendo(false); }
+      const j = await r.json().catch(() => null);
+      // Falhar em silêncio aqui é pior que falhar: o admin clica, a tag "erro" continua na
+      // lista e ele conclui que os erros voltaram — quando na verdade a marcação nem chegou.
+      if (r.ok && j?.ok) { setErro(''); if (dados?._busca) await abrir(dados._busca); }
+      else setErro(`Não consegui marcar os erros como resolvidos (${j?.error || `HTTP ${r.status}`}).`);
+    } catch (e) {
+      setErro(`Não consegui marcar os erros como resolvidos: ${String(e?.message || e).slice(0, 100)}`);
+    } finally { setResolvendo(false); }
   };
 
   // Gera o DOSSIÊ do cliente (aceites/datas + indicações + saques + relatórios + atividade)
@@ -171,15 +176,35 @@ export default function Cliente360() {
     if (!dados || dossieGerando) return;
     setDossieGerando(true);
     let base = dados;
+    // O dossiê existe para uma EVENTUAL OCORRÊNCIA JURÍDICA. Antes, se a rebusca `full=1`
+    // falhasse, ele caía em silêncio no recorte da tela (100 eventos de ~2000) e imprimia
+    // um documento intitulado "histórico completo" com 5% do histórico. Documento jurídico
+    // não pode sair incompleto sem dizer que está — e aqui o certo é NÃO sair: um dossiê
+    // parcial em processo é pior que dossiê nenhum. (11/08)
     try {
       const uid = dados?._busca?.id || dados?.perfil?.id;
-      if (uid) {
-        const r = await apiCall(`/api/admin-usuario-360?user_id=${encodeURIComponent(uid)}&full=1`);
-        const j = await r.json();
-        if (r.ok && j && !j.error) base = { ...j, _busca: dados._busca };
+      if (!uid) { setDossieGerando(false); setErro('Não identifiquei o cliente para gerar o dossiê.'); return; }
+      const r = await apiCall(`/api/admin-usuario-360?user_id=${encodeURIComponent(uid)}&full=1`);
+      const j = await r.json().catch(() => null);
+      if (!r.ok || !j || j.error) {
+        setDossieGerando(false);
+        setErro(`Não foi possível montar o dossiê completo (${j?.error || `HTTP ${r.status}`}). `
+          + 'Nada foi gerado — um dossiê parcial não serve como prova. Tente de novo em alguns instantes.');
+        return;
       }
-    } catch { /* usa o que já está na tela */ }
-    finally { setDossieGerando(false); }
+      if (Array.isArray(j._falhas) && j._falhas.length) {
+        setDossieGerando(false);
+        setErro(`Não foi possível ler ${j._falhas.join(', ')} deste cliente. `
+          + 'O dossiê NÃO foi gerado para não sair com seção vazia parecendo "não existe". Tente de novo em alguns instantes.');
+        return;
+      }
+      base = { ...j, _busca: dados._busca };
+    } catch (e) {
+      setDossieGerando(false);
+      setErro(`Falha ao montar o dossiê: ${String(e?.message || e).slice(0, 120)}. Nada foi gerado.`);
+      return;
+    }
+    setDossieGerando(false);
     // Janela do período: De 00:00 até Até 23:59:59 (local). Vazio = sem corte.
     const tDe = dossieDe ? new Date(`${dossieDe}T00:00:00`).getTime() : null;
     const tAte = dossieAte ? new Date(`${dossieAte}T23:59:59.999`).getTime() : null;
@@ -491,6 +516,15 @@ ${atividade ? `<h2>Atividade${(tDe || tAte) ? ' no período' : ''}</h2><table><t
           <button onClick={voltar} style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 6, background: 'white', border: '1px solid #cbd5e1', borderRadius: 10, padding: '8px 14px', fontSize: 13, fontWeight: 700, color: '#334155', cursor: 'pointer' }}>
             ← Voltar para a lista
           </button>
+          {/* Seção que o backend não conseguiu ler aparece AQUI, não como painel vazio. Sem
+              esta faixa, "nenhum aceite registrado" e "não consegui ler os aceites" ficam
+              visualmente idênticos — e a segunda leva a conclusão errada sobre o cliente. */}
+          {Array.isArray(dados._falhas) && dados._falhas.length > 0 && (
+            <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '10px 14px', fontSize: 13, color: '#b91c1c', fontWeight: 600 }}>
+              ⚠ Não foi possível ler: {dados._falhas.join(', ')}. Os painéis correspondentes estão
+              <strong> incompletos</strong> — vazio aqui não significa "não existe". Recarregue para tentar de novo.
+            </div>
+          )}
           {/* Cabeçalho do cliente + contato */}
           <div style={{ ...card, background: '#111', color: 'white', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
             <div>

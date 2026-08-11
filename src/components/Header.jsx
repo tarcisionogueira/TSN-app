@@ -185,6 +185,10 @@ export default function Header() {
   const linksPublicos = [
     { path: '/', label: 'Home', icon: Home, tourId: 'home' },
     { path: '/calculadora', label: 'Calculadora', icon: Calculator, tourId: 'calculadora' },
+    // Acervo aberto (sem login). `externo: true` porque /leiloes NÃO é rota do React —
+    // é servida por /api/publico via rewrite do vercel.json. Navegar com o router daria
+    // tela em branco: o SPA não tem esse caminho e não há fallback para 404 interno.
+    { path: '/leiloes', label: 'Buscar Leilões', icon: Search, tourId: 'leiloes-publico', externo: true },
     { path: '/planos', label: 'Planos', icon: Tag, tourId: 'planos' },
   ];
   const linksPrivados = [
@@ -207,6 +211,10 @@ export default function Header() {
   // continuam disponíveis; só o auto-start após o cadastro foi desativado.
 
   const active = (p) => loc.pathname === p;
+
+  // Link do menu: rota do SPA vai pelo router; página server-side (rewrite do vercel.json,
+  // como /leiloes → /api/publico) precisa de navegação REAL do navegador.
+  const irPara = (l) => { if (l.externo) window.location.assign(l.path); else nav(l.path); };
 
   const abrirFeedback = () => setShowFeedback(true);
 
@@ -278,7 +286,7 @@ export default function Header() {
         {/* Nav desktop */}
         <nav style={{ display: 'flex', gap: 4, rowGap: 6, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end', minWidth: 0 }} className="hide-mobile">
           {links.map(l => (
-            <button key={l.path} onClick={() => nav(l.path)}
+            <button key={l.path} onClick={() => irPara(l)}
               data-tour={l.tourId}
               style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', border: 'none', borderRadius: 8, background: active(l.path) ? '#084BA6' : 'transparent', color: active(l.path) ? 'white' : '#94a3b8', fontWeight: 600, fontSize: 13, cursor: 'pointer', transition: 'all 0.15s' }}>
               <l.icon size={14} /> {l.label}
@@ -408,7 +416,7 @@ export default function Header() {
       {open && (
         <div style={{ background: '#111111', borderTop: '1px solid #111111', padding: '12px 20px', display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 'calc(100dvh - 56px - env(safe-area-inset-top, 0px))', overflowY: 'auto', WebkitOverflowScrolling: 'touch', paddingBottom: 'calc(16px + env(safe-area-inset-bottom, 0px))' }}>
           {links.map(l => (
-            <button key={l.path} onClick={() => { nav(l.path); setOpen(false); }}
+            <button key={l.path} onClick={() => { irPara(l); setOpen(false); }}
               style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: 'none', borderRadius: 8, background: active(l.path) ? '#084BA6' : 'transparent', color: active(l.path) ? 'white' : '#94a3b8', fontWeight: 600, fontSize: 14, cursor: 'pointer', textAlign: 'left' }}>
               <l.icon size={16} /> {l.label}
             </button>

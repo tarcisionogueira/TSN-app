@@ -572,7 +572,30 @@ export default function Caso() {
           // em "Meus acompanhamentos" dele; achado do dono 30/07 — Rua Marte/Barueri).
           const ehEquipe = ['admin', 'analista', 'advogado', 'suporte', 'consultor'].includes(role);
           if (ehEquipe && !impersonate) {
-            setErro('Como equipe, abra um caso existente (Admin → Central da Equipe) ou entre em modo suporte para agir pelo cliente.');
+            // Antes de barrar: talvez JÁ exista caso deste imóvel, de outro cliente — é o que
+            // a equipe quase sempre quer ver. O guard de 30/07 estava certo em não CRIAR, mas
+            // mandava a equipe para uma tela vermelha com um "Voltar" e mais nada (relato do
+            // dono, 11/08: "eu buscando um imóvel deu esse erro"). Barrar sem oferecer o
+            // caminho certo é meio guard: protege o dado e trava a pessoa.
+            const { data: deOutro, error: errBusca } = await supabase.from('casos')
+              .select('id, cliente_id')
+              .eq('imovel_id', imovelInit.id)
+              .order('criado_em', { ascending: false })
+              .limit(1);
+            // `error` checado: uma falha de leitura aqui NÃO é "não existe caso" — sem isso
+            // a equipe veria "nenhum caso" em cima de um 500 e concluiria a coisa errada.
+            if (errBusca) throw errBusca;
+            if (deOutro?.length) { nav(`/caso/${deOutro[0].id}`, { replace: true }); return; }
+            setErro({
+              msg: 'Este imóvel ainda não tem acompanhamento aberto.',
+              detalhe: 'Como equipe você não abre um caso em seu próprio nome — o caso pertence ao cliente. '
+                + 'Entre em modo suporte pelo Cliente 360 para agir por ele, ou veja os casos já existentes na Central da Equipe.',
+              acoes: [
+                { label: 'Central da Equipe', onClick: () => nav('/admin?aba=Equipe&sub=casos') },
+                { label: 'Cliente 360 (entrar em modo suporte)', onClick: () => nav('/cliente-360') },
+                { label: 'Voltar', onClick: () => nav(-1), secundario: true },
+              ],
+            });
             setLoading(false);
             return;
           }
@@ -1036,13 +1059,26 @@ export default function Caso() {
     </div>
   );
 
-  if (erro) return (
-    <div style={{ maxWidth:600, margin:'60px auto', padding:24, textAlign:'center' }}>
-      <AlertTriangle size={40} color="#ef4444" style={{marginBottom:12}}/>
-      <div style={{ color:'#ef4444', fontWeight:700, fontSize:16 }}>{erro}</div>
-      <button onClick={() => nav(-1)} style={{ ...btn('#64748b'), marginTop:16 }}>Voltar</button>
-    </div>
-  );
+  // `erro` aceita string (falha crua) OU { msg, detalhe, acoes } — porque um bloqueio de
+  // FLUXO não é uma falha: quem chega aqui precisa do próximo passo, não de um "Voltar".
+  if (erro) {
+    const e = typeof erro === 'string' ? { msg: erro } : erro;
+    const acoes = e.acoes?.length ? e.acoes : [{ label: 'Voltar', onClick: () => nav(-1), secundario: true }];
+    return (
+      <div style={{ maxWidth:600, margin:'60px auto', padding:24, textAlign:'center' }}>
+        <AlertTriangle size={40} color="#ef4444" style={{marginBottom:12}}/>
+        <div style={{ color:'#ef4444', fontWeight:700, fontSize:16 }}>{e.msg}</div>
+        {e.detalhe && (
+          <div style={{ color:'#64748b', fontSize:14, lineHeight:1.6, marginTop:10 }}>{e.detalhe}</div>
+        )}
+        <div style={{ display:'flex', gap:10, justifyContent:'center', flexWrap:'wrap', marginTop:18 }}>
+          {acoes.map((a) => (
+            <button key={a.label} onClick={a.onClick} style={btn(a.secundario ? '#64748b' : '#0D63DB')}>{a.label}</button>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   if (!caso) return null;
 
