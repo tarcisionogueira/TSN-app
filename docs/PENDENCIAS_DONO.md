@@ -222,6 +222,16 @@ vazio ou com valor sul-americano — reveja o passo 3.
   (iPhone abre sozinho; imagem bloqueada não conta). **Clique é o número confiável**; ligue os
   dois e decida pelo clique.
 - **Depois:** o Claude confere `emails_log.aberto_em/clicado_em` preenchendo nos envios seguintes.
+- **✅ DNS FEITO (11/08, print do painel):** `CNAME links → links1.resend-dns.com` **Verified**,
+  junto com SPF/MX/DKIM. A parte que dependia de DNS está encerrada.
+- **🔶 FALTA CONFERIR O PASSO 4** (inscrição do webhook nos eventos): `emails_log` continua com
+  **0 aberturas e 0 cliques**, inclusive nos 3 e-mails de hoje (todos entregues). `email.delivered`
+  CHEGA — o que prova que o endpoint e o `RESEND_WEBHOOK_SECRET` estão certos e que o problema,
+  se existir, é só a lista de eventos marcados. Resend → **Webhooks** → abrir o endpoint →
+  marcar **`email.opened`** e **`email.clicked`**.
+  Desde 11/08 o handler registra **todo evento recebido** em `webhook_eventos_processados`
+  (`gateway='resend'`), então o próximo envio responde sozinho: se `email.opened` nunca aparecer
+  ali, é a inscrição; se aparecer e a coluna seguir nula, é comportamento real de quem recebeu.
 - **🔴 SUBIU DE PRIORIDADE EM 11/08 — agora ele bloqueia uma medição que NÃO se repete.** Nova
   medição: **136 e-mails em 30 dias, 55 entregues, 0 aberturas, 0 cliques** — o retrato de um canal
   sem instrumento. E o **backlog do nudge de ativação** (26 pessoas que passaram da janela D+2/D+7)
@@ -241,6 +251,34 @@ vazio ou com valor sul-americano — reveja o passo 3.
   enviar os dados/documentos da empresa (CNPJ) ou pessoais.
 - **Depois:** nada muda no código; o rastreamento segue igual. Se pausar por atraso, o funil
   pago para de gerar cadastros (o 1º lead real chegou dia 01/08 — vale proteger).
+
+#### 🔁 SEGUNDA REPROVA (11/08) — e o motivo agora é OUTRO
+
+E-mail da **G2 Risk Solutions** (`g2no-reply@g2risksolutions.com`), que é a empresa por onde o
+Google conduz esta verificação — o mesmo canal da reprova de 03/08, então **não é golpe novo**.
+Ainda assim, a regra de sempre: **não clique no link do e-mail**; entre pelo site da G2RS ou pelo
+painel do Google Ads e siga de lá.
+
+| | 1ª reprova (03/08) | 2ª reprova (11/08) |
+|---|---|---|
+| Motivo | Nome divergente: preencheu como **pessoa física**, o Google leu o site e inferiu "Bid Pro Brasil" | **Categoria do negócio**: o formulário registrou **"Sou um mecanismo de busca"** |
+| Correção | Refazer como **Organização** = `Nogueira Empreendimentos LTDA`, CNPJ **02.311.492/0001-61**, "BidPro Brasil" como nome fantasia + Cartão CNPJ | Refazer escolhendo a categoria que **descreve o produto**, não o formato do site |
+
+**Por que essa categoria reprova, e por que é fácil errar:** o site *parece* um buscador — são 33
+mil páginas de listagem (`/leiloes/sp/campinas` e afins) feitas justamente para o Google indexar.
+Mas o que a BidPro vende não é busca: é **análise** — relatório de viabilidade, valor de mercado
+da região, desconto real, custo de arrematação e retorno estimado. Buscar é o meio; o produto é o
+laudo. A categoria deve refletir **serviços de informação / análise no setor imobiliário**, não
+"mecanismo de busca".
+
+**Passos:** site da G2RS → nova solicitação → escolher a opção de **"solicitação avaliada
+anteriormente"** → informar o **código G2RS** que veio no envio original (está no e-mail da
+primeira submissão) → revisar TODAS as opções do formulário e marcar as que descrevem o negócio.
+Se você entender que a recusa foi engano, o caminho é **recurso** (mesmo código) — mas aqui não
+parece engano: a categoria está mesmo errada.
+
+⏰ **Prazo continua o mesmo (fim de agosto) e o processo leva até 7 dias úteis.** Já foram duas
+rodadas; a terceira precisa sair esta semana para caber.
 
 ### 0. ⭐ TESTAR a compra AVULSA da loja (ebook/curso) — no computador
 - **Por quê:** o checkout avulso (Mercado Pago + Asaas) foi para produção nesta sessão; falta um teste real de ponta a ponta (o dono pediu para testar mais tarde).
