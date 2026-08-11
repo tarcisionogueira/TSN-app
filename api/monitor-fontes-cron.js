@@ -58,7 +58,16 @@ const FONTES_CRITICAS = ['CEF', 'MEGA', 'SUPERBID', 'SOLD', 'ZUK', 'SODRE', 'FRA
 // 16d = 2 ciclos semanais + folga: absolve o freio e AINDA pega o scraper que morreu de vez
 // (dois ciclos seguidos sem coletar não tem explicação legítima).
 // VLANCE e SATO seguem em 9: não têm freio, então não têm por que gastar dois ciclos.
-const FONTES_SEM_SAUDE = { PECINI: 16, RJLEILOES: 16, GESTAOLEILOES: 16, CALIL: 16, VEGAS: 16, TORRES3: 16, VLANCE: 9, SATO: 9 };
+// REVISADO EM 11/08 — 16 era tolerância demais, e a razão importa. Ontem eu subi 9→16 aceitando
+// que o freio residencial podia consumir um ciclo semanal inteiro. Hoje ficou provado que o
+// problema não era esse: o freio olhava um CARIMBO que o runner grava mesmo sem coletar, então
+// ele não atrasava a coleta em um ciclo — bloqueava PARA SEMPRE (RJ: 10,3 dias de defasagem
+// entre carimbo e acervo). Corrigida a causa (o freio agora olha o ACERVO, ver
+// scripts/coleta-recente.mjs), o cenário que justificava 16 deixou de existir: se o acervo
+// envelhece, o cron pago RODA. 12 = um ciclo semanal + folga de atraso do Actions, sem mascarar.
+// Lição registrada: eu tinha silenciado um alarme VERDADEIRO por confirmar o mecanismo ("o freio
+// pegou") sem confirmar o resultado ("mas o residencial coletou?").
+const FONTES_SEM_SAUDE = { PECINI: 12, RJLEILOES: 12, GESTAOLEILOES: 12, CALIL: 12, VEGAS: 12, TORRES3: 12, VLANCE: 9, SATO: 9 };
 // Fontes PARADAS por decisão nossa (acervo zerado de propósito, aguardando conserto). Não
 // alerta "sem acervo ativo" — já está registrado e a repetição só vira ruído; a checagem de
 // FRESCOR continua valendo, então quando a fonte voltar e parar de novo o monitor avisa.
