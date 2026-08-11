@@ -161,6 +161,71 @@ antes de mexer, mais 6 validações de produção para rodar na abertura.
 
 ---
 
+## 🏁 FECHAMENTO DE 11/08 (noite) — eficiência em produção + o 360 medindo clique sozinho
+
+> Pedido do dono: *"resolva o que der sem precisar de mim e vamos validando. agora precisa ter
+> eficiência pois já estamos em produção para quando um cliente for usar não ter surpresas. o
+> cliente 360 deve monitorar tudo para irmos resolvendo."* Critério aplicado, nesta ordem:
+> **primeiro o que falha sem avisar, depois o que pesa no caminho do cliente.**
+
+### O que foi ao ar (`main` em `c8e1c58`)
+
+| # | O quê | Por que importava |
+|---|---|---|
+| 1 | **Duas tabelas públicas SEM RLS** — `indice_amostra(s)_sem_ancora_20260807`, deixadas por mim em 07/08 | Legíveis por `anon`. Sem PII (amostras de imóvel), mas é a base do Índice. Nosso `auditoria_seguranca()` dizia 0 crítico porque procura **tabela com PII** — o critério certo nunca foi "tem PII?", é "está exposta?" |
+| 2 | **`seguranca_tabelas_sem_rls()`** | Fecha a lacuna acima: o próximo backup esquecido aparece no ritual, sem depender do advisor do Supabase |
+| 3 | **`maxDuration` em 2 crons** (`financiamento-alertas`, `meta-insights`) | Herdavam o default da Vercel. Cortados no meio: metade da lista sem e-mail, ou o painel de CAC/ROAS com número menor — os dois **sem erro nenhum** |
+| 4 | **Busca: `select('*')` → 36 colunas** | A tabela tem 66 colunas / 180 MB; a tela usa 36. As 30 extras incluíam os jsonb pesados. Custo por busca, de cada cliente |
+| 5 | **Painel de geocodificação: 54 contagens → 1** | Eram 27 UFs × 2 `count: exact` sobre 180 MB a cada abertura. `count=exact` no PostgREST é `COUNT(*)` de verdade — 54 competindo por conexão com o cliente que busca no mesmo instante |
+| 6 | **`/api/clique` — clique medido por nós** | Ver abaixo |
+| 7 | **Espelho `LOTE` 600 → 1200** | Medido: 598 cópias em **138s de 240s**. Não faltou tempo, acabou o lote |
+| 8 | **Health-check confere `EMPRESA_CNPJ`** | Inclusive o dígito verificador. CNPJ errado é **pior que ausente**: a comparação roda, nunca casa, e toda NF vira "o tomador não é a BidPro" — parece fraude do parceiro sendo erro de digitação nosso |
+
+### O clique de e-mail agora é nosso — e cai no Cliente 360
+
+O rastreio do Resend está desligado e ligar depende de painel + DNS + espera. Mas **todo link
+dos nossos e-mails já aponta para o nosso domínio**: `/api/clique` registra e redireciona.
+O clique preenche `emails_log.clicado_em` (coluna que existia e **nunca** foi preenchida, porque
+só o webhook do Resend a alimentava) e entra em `atividade_log` — ou seja, aparece no **360 ao
+lado do resto do que a pessoa fez**, não num painel de terceiro. Ligado no nudge de ativação e
+nos dois e-mails de produto.
+
+Três decisões que não devem ser desfeitas sem entender:
+1. **O destino é um CAMINHO, nunca uma URL.** Aceitar `?u=https://…` faria disto um **open
+   redirect** — link com o nosso domínio na barra levando à página do golpista. `//evil.com` é
+   recusado (URL absoluta disfarçada). A assinatura HMAC não protege o destino (esse já é seguro
+   por construção): protege a **identidade**, senão qualquer um forja clique alheio e envenena o 360.
+2. **A pessoa chega ao destino de qualquer jeito.** Assinatura inválida redireciona igual; falha
+   de gravação é engolida antes do 302. Perder a medição de um clique é aceitável; perder o clique não.
+3. **O link de descadastro continua direto**, fora do rastreador. Cancelar e-mail tem de funcionar
+   mesmo com todo o resto quebrado.
+
+### O que eu NÃO fiz, e por quê
+
+- **Não troquei `count=exact` por `estimated` em `api/publico.js`** (o levantamento sugeria):
+  aquele número vai para o **título que o Google indexa** ("1.234 imóveis em leilão em
+  Campinas/SP"). Estimado ali é número errado no índice. O outro uso é filtro por chave primária.
+- **Não apaguei as 6 tabelas de backup**, que era o plano: as de 07/08 guardam linhas **removidas**
+  da base viva (16 análises, 1.700 amostras) — o backup é a única cópia. RLS fecha a exposição com
+  zero perda; descartar fica para quando a investigação do Índice for dada por encerrada.
+- **As 211 policies sem cláusula `TO`** (de 234) — origem de **478 dos 571** avisos de performance.
+  O ganho é grande e o risco também: as páginas públicas leem `imoveis_leilao` como `anon`, então
+  aplicar `TO authenticated` em bloco derruba o SEO. Exige sessão própria, tabela a tabela, com a
+  busca e o Índice sob teste.
+- **Lotes de cron em geral rendem menos do que parecem:** dos 12 sem teto de tempo, quase todos têm
+  o lote pequeno **de propósito** (cota paga do Bright Data, chamada de IA, volume de e-mail).
+  `enriquecer-datas-cron` (fila 6.608, ~82 dias) é justamente um desses — alargar ali é **gastar**.
+  O único com teto arbitrário é `limpar-fotos-orfas-cron`.
+
+### Dois erros meus, pegos pelo próprio teste antes de subir
+
+1. `linkRastreado` com caminho inválido gerava `https://bidprobrasil.com.brhttps://evil.com` —
+   link quebrado dentro do e-mail do cliente. Agora cai na home.
+2. A fórmula do dígito verificador do CNPJ estava errada e **reprovava o CNPJ correto** — o falso
+   alarme que o check existe para evitar. Refeita e validada contra 7 casos, incluindo CNPJs reais.
+
+---
+
 ## ⏰ CONFERIR EM 18/08 — os dois números que só o tempo produz
 
 > **Nenhum dos dois dá para responder hoje**, e os dois foram deixados MEDINDO sozinhos em 11/08.
