@@ -30,6 +30,12 @@ const ORIGENS_YT = ['https://www.youtube-nocookie.com', 'https://www.youtube.com
 export default function PlayerVideo({ url, titulo, onFim, style }) {
   const iframeRef = useRef(null);
   const jaAvisouRef = useRef(false);   // `onFim` uma única vez por vídeo
+  // O chamador passa uma arrow inline (`onFim={() => …}`), que é uma função NOVA a cada
+  // render. Se ela entrasse nas dependências, o efeito se desmontaria e remontaria a cada
+  // render — derrubando o handshake com o player no meio. Guardada em ref, o efeito depende
+  // só do vídeo e ainda assim chama sempre a versão mais recente do callback.
+  const onFimRef = useRef(onFim);
+  useEffect(() => { onFimRef.current = onFim; }, [onFim]);
   const emb = videoEmbed(url);
   const src = emb?.src || '';
 
@@ -58,18 +64,31 @@ export default function PlayerVideo({ url, titulo, onFim, style }) {
       if (!ORIGENS_YT.includes(ev.origin)) return;
       let dados;
       try { dados = typeof ev.data === 'string' ? JSON.parse(ev.data) : ev.data; } catch { return; }
-      // info === 0 é ENDED no protocolo do player. (-1 não iniciado, 1 tocando, 2 pausado…)
       const info = dados?.info;
-      const terminou = dados?.event === 'onStateChange'
-        && (info === 0 || info?.playerState === 0);
-      if (!terminou || jaAvisouRef.current) return;
+
+      // TRÊS SINAIS, todos MEDIDOS pelo player — nenhum é cronômetro. Apostar num só era
+      // frágil: o player anuncia o mesmo fato por caminhos diferentes conforme a versão do
+      // embed, e a mensagem `onStateChange` pode simplesmente não chegar (aba em segundo
+      // plano na hora exata do fim, por exemplo). Basta UM dos três para marcar.
+      //   1. onStateChange com info 0  → ENDED explícito
+      //   2. infoDelivery com playerState 0 → o mesmo estado, por outro canal
+      //   3. currentTime encostando na duração → o vídeo chegou ao fim, medido pelo player
+      const estado = typeof info === 'number' ? info : info?.playerState;
+      const ended = estado === 0
+        && (dados?.event === 'onStateChange' || dados?.event === 'infoDelivery');
+
+      const t = Number(info?.currentTime);
+      const d = Number(info?.duration);
+      const chegouAoFim = Number.isFinite(t) && Number.isFinite(d) && d > 0 && t >= d - 1.5;
+
+      if (!(ended || chegouAoFim) || jaAvisouRef.current) return;
       jaAvisouRef.current = true;
       clearInterval(timer);
-      onFim?.();
+      onFimRef.current?.();
     };
     window.addEventListener('message', aoReceber);
     return () => { clearInterval(timer); window.removeEventListener('message', aoReceber); };
-  }, [src, emb?.tipo, onFim]);
+  }, [src, emb?.tipo]);
 
   if (!emb) return null;
 
@@ -95,7 +114,7 @@ export default function PlayerVideo({ url, titulo, onFim, style }) {
         controls
         controlsList="nodownload"
         playsInline
-        onEnded={() => { if (!jaAvisouRef.current) { jaAvisouRef.current = true; onFim?.(); } }}
+        onEnded={() => { if (!jaAvisouRef.current) { jaAvisouRef.current = true; onFimRef.current?.(); } }}
         style={{ width: '100%', aspectRatio: '16/9', background: '#000', display: 'block', ...style }}
       />
     );
