@@ -139,17 +139,28 @@ function valoresPlausiveis(txt) {
 // Preposições/artigos que o regex de "CIDADE/UF" arrasta junto ("EM ITABAIANA/SE",
 // "A CIDADE DE BARRA DOS COQUEIROS/SE"). Sem esta limpeza a cidade gravada não bate
 // com nenhum filtro do site nem com a geocodificação.
-const PALAVRA_DE_LIGACAO = /^(?:d[aeo]s?|n[aeo]s?|em|a|o|as|os|cidade|bairro|munic[íi]pio|distrito|povoado|conjunto|condom[íi]nio|resid[êe]ncial|situad[oa]|localizad[oa])$/i;
+const CONECTIVO = /^(?:d[aeo]s?|n[aeo]s?|em|a|o|as|os|situad[oa]|localizad[oa])$/i;
+// "cidade", "bairro", "povoado"… NÃO são conectivos por si só — **Cidade Ocidental/GO é um
+// município de verdade**, e uma versão anterior desta limpeza renomeou 756 lotes para
+// "Ocidental" antes de eu perceber. Substantivo geográfico só é ruído quando vem seguido de
+// "de/do/da" ("a CIDADE DE Barra dos Coqueiros"); colado direto no nome, ele É o nome.
+const SUBSTANTIVO_GEO = /^(?:cidade|bairro|munic[íi]pio|distrito|povoado|conjunto|condom[íi]nio|resid[êe]ncial)$/i;
+const PREPOSICAO = /^(?:d[aeo]s?)$/i;
 function limparCidade(bruta) {
   if (!bruta) return null;
   let c = String(bruta).trim().replace(/\s+/g, ' ');
   // "CENTRO EM ITABAIANINHA" → o que vem DEPOIS do último " EM " é a cidade.
   const posEm = c.toUpperCase().lastIndexOf(' EM ');
   if (posEm > 0) c = c.slice(posEm + 4).trim();
-  const palavras = c.split(' ').filter(Boolean);
-  while (palavras.length > 1 && PALAVRA_DE_LIGACAO.test(palavras[0])) palavras.shift();
-  c = palavras.join(' ').trim();
-  if (!c || c.length > 60 || PALAVRA_DE_LIGACAO.test(c)) return null;
+  const p = c.split(' ').filter(Boolean);
+  for (;;) {
+    if (p.length > 1 && CONECTIVO.test(p[0])) { p.shift(); continue; }
+    // "CIDADE DE Barra…" → descarta os dois; "Cidade Ocidental" → intocado.
+    if (p.length > 2 && SUBSTANTIVO_GEO.test(p[0]) && PREPOSICAO.test(p[1])) { p.splice(0, 2); continue; }
+    break;
+  }
+  c = p.join(' ').trim();
+  if (!c || c.length > 60 || CONECTIVO.test(c) || SUBSTANTIVO_GEO.test(c)) return null;
   return c;
 }
 

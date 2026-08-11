@@ -16,6 +16,18 @@
  * CUIDADOS DE CUSTO E EDUCAÇÃO: lote pequeno por execução, teto de tamanho por arquivo, e o
  * documento NÃO é rebaixado — o link original continua no acervo; a cópia entra como espelho.
  * Falhar aqui nunca altera o lote.
+ *
+ * ─── DUAS CORREÇÕES DE 11/08, medidas ─────────────────────────────────────────
+ * (1) A FILA ESTAVA NA ORDEM ERRADA. Era `criado_em asc`: o documento de um lote que vai a
+ *     leilão depois de amanhã ficava atrás de milhares cujo leilão é daqui a três meses.
+ *     Depois do leilão o leiloeiro tira o lote do ar e o documento é irrecuperável — a perda
+ *     que este cron existe para evitar. Agora a ordem é por DATA DO LEILÃO
+ *     (`proximos_espelho_documentos`), depois instabilidade da fonte, depois chegada.
+ * (2) A FILA NÃO DRENAVA. 4.079 pendentes contra 543 copiados: o cron enfileirava 200 por
+ *     execução e copiava 25. Vazão real conferida: 148-150/dia → ~27 dias só para a fila
+ *     atual, que cresce. O teto de 25 era um teto de CONTAGEM onde o que limita é TEMPO —
+ *     a função tem 300s e gastava ~30s. Agora o lote é orçamento de tempo (lote é teto de
+ *     contagem, nunca de teto de tempo).
  */
 export const config = { runtime: 'nodejs', maxDuration: 300 };
 
@@ -24,7 +36,10 @@ import { hostExternoSeguro, fetchExternoSeguro } from './_allowed-hosts.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
-const LOTE = Number(process.env.ESPELHO_LOTE || 25);
+const LOTE = Number(process.env.ESPELHO_LOTE || 150);
+// Sai com folga antes do maxDuration de 300s: um download pode levar 25s (o timeout abaixo),
+// então paramos aos 240s para sempre haver tempo de responder e registrar o resultado.
+const ORCAMENTO_MS = Number(process.env.ESPELHO_ORCAMENTO_MS || 240000);
 const MAX_BYTES = 25 * 1024 * 1024; // matrícula digitalizada passa de 10 MB; 25 é folga sensata
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
@@ -54,14 +69,37 @@ export default async function handler(req, res) {
     else console.error('[espelhar-docs] enfileirar', r.status, (await r.text().catch(() => '')).slice(0, 200));
   } catch (e) { console.error('[espelhar-docs] enfileirar erro', e?.message); }
 
-  const pend = await (await sb(`documento_espelho?status=eq.pendente&tentativas=lt.3&select=id,imovel_id,fonte,tipo,url_origem,tentativas&order=criado_em.asc&limit=${LOTE}`)).json().catch(() => []);
-  if (!Array.isArray(pend) || !pend.length) {
+  // A leitura da fila é BINDADA e tem `.ok` checado: antes era
+  // `await (await sb(...)).json().catch(() => [])` — uma falha de leitura virava lista vazia,
+  // o cron respondia `ok: true, motivo: 'fila vazia'` e ninguém ficava sabendo que a fila
+  // parou. É a forma #1/#3 do CLAUDE.md, no mesmo arquivo que protege documento de cliente.
+  const rFila = await sb('rpc/proximos_espelho_documentos', {
+    method: 'POST', body: JSON.stringify({ p_limite: LOTE }),
+  });
+  if (!rFila.ok) {
+    const txt = (await rFila.text().catch(() => '')).slice(0, 200);
+    console.error('[espelhar-docs] leitura da fila falhou', rFila.status, txt);
+    res.status(502).json({ ok: false, enfileirados, erro: `fila HTTP ${rFila.status}`, detalhe: txt });
+    return;
+  }
+  const pend = await rFila.json().catch(() => null);
+  if (!Array.isArray(pend)) {
+    console.error('[espelhar-docs] fila com corpo inesperado');
+    res.status(502).json({ ok: false, enfileirados, erro: 'fila com corpo inesperado' });
+    return;
+  }
+  if (!pend.length) {
+    console.log('[espelhar-docs]', JSON.stringify({ enfileirados, processados: 0, motivo: 'fila vazia' }));
     res.status(200).json({ ok: true, enfileirados, processados: 0, motivo: 'fila vazia' });
     return;
   }
 
-  let copiados = 0, falhas = 0, ignorados = 0;
+  const t0 = Date.now();
+  let copiados = 0, falhas = 0, ignorados = 0, processados = 0, semTempo = 0;
   for (const d of pend) {
+    // Orçamento de TEMPO: o que limita esta função é o maxDuration, não a contagem.
+    if (Date.now() - t0 > ORCAMENTO_MS) { semTempo = pend.length - processados; break; }
+    processados++;
     // Anti-SSRF: só host externo permitido — a URL veio do acervo, mas o acervo vem de scraper.
     if (!hostExternoSeguro(d.url_origem)) {
       await marcar(d.id, { status: 'ignorado', motivo: 'host não permitido' }); ignorados++; continue;
@@ -99,8 +137,19 @@ export default async function handler(req, res) {
     copiados++;
   }
 
+  // Quanto ainda falta: sem isto, "copiei 25" parece progresso mesmo quando a fila cresce
+  // mais rápido do que drena — que foi exatamente o que aconteceu por três dias.
+  let pendentes = null;
+  try {
+    const r = await sb('documento_espelho?status=eq.pendente&tentativas=lt.3&select=id', {
+      headers: { Prefer: 'count=exact', Range: '0-0' },
+    });
+    if (r.ok) pendentes = Number((r.headers.get('content-range') || '').split('/')[1]) || null;
+  } catch { /* contagem é informativa; não derruba a execução */ }
+
   // Log sempre, inclusive quando não houve baixa: silêncio não distingue "nada a fazer" de
   // "cron parou" — a lição do monitor de fontes.
-  console.log('[espelhar-docs]', JSON.stringify({ enfileirados, processados: pend.length, copiados, falhas, ignorados }));
-  res.status(200).json({ ok: true, enfileirados, processados: pend.length, copiados, falhas, ignorados });
+  const saida = { enfileirados, processados, copiados, falhas, ignorados, sem_tempo: semTempo, pendentes };
+  console.log('[espelhar-docs]', JSON.stringify(saida));
+  res.status(200).json({ ok: true, ...saida });
 }
