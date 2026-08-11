@@ -22,6 +22,11 @@
  * Env: BRIGHTDATA_API_TOKEN, BRIGHTDATA_ZONE, VITE_SUPABASE_URL, SUPABASE_SERVICE_KEY.
  */
 import { createClient } from '@supabase/supabase-js';
+// NOTA (11/08): aqui o `null` do fetchViaBrightData é um fallback DELIBERADO (tenta o
+// caminho grátis/residencial, e o pago é a segunda chance) — por isso este arquivo segue
+// na linha de base do verificador de padrões em vez de migrar para `buscarViaBrightData`.
+// O que fecha o buraco perigoso é outra coisa: coleta com zero lote agora sai com código
+// 1 e grava `fonte_saude` 'falhou', e o gate só carimba "coletei" com linha no acervo.
 import { fetchViaBrightData, brightDataDisponivel } from '../api/_brightdata.js';
 import { extrairGenerico, extrairData, checarQualidade } from './lib/scraper-core.mjs';
 import { registrarConhecimento, qualidadeColeta } from './lib/conhecimento.mjs';
@@ -286,7 +291,19 @@ async function main() {
   for (const tenant of TENANTS) prontos.push(...await coletarTenant(tenant));
 
   console.log(`\nTotal: ${prontos.length} imóveis prontos.`);
-  if (!prontos.length) { console.log('nada a gravar.'); return; }
+  // Coleta que não coletou NADA não é sucesso — é falha que ainda não sabe que falhou.
+  // Sair com 0 aqui engana três consumidores de uma vez: o check do GitHub, o `rodar()`
+  // do runner residencial (que carimbava o gate) e o freio de custo, que passava a
+  // bloquear o caminho pago. Foi assim que o RJ ficou 12 dias congelado, tudo verde.
+  if (!prontos.length) {
+    for (const tenant of TENANTS) {
+      await registrarSaude(supabase, tenant.fonte, [], 'soleon',
+        { ok: false, metricas: { n: 0, uf_pct: 0, valor_pct: 0, link_pct: 0, foto_pct: 0 }, motivo: 'execução sem nenhum lote pronto' });
+    }
+    console.error('nada a gravar — nenhum tenant devolveu lote. Saindo com erro.');
+    process.exitCode = 1;
+    return;
+  }
 
   if (DRYRUN) {
     console.log('DRY-RUN: não gravei. Amostra:');
@@ -300,11 +317,16 @@ async function main() {
   // Auto-aprendizado por tenant.
   for (const tenant of TENANTS) {
     const rows = prontos.filter(r => r.fonte === tenant.fonte);
-    if (!rows.length) continue;
     // SAÚDE POR TENANT (08/08): CALIL, VEGAS e 3 TORRES compartilham a plataforma Soleon mas são
     // fontes SEPARADAS no acervo — cada uma precisa da sua linha, senão o piso aprendido de uma
     // esconde a quebra da outra. As três estavam fora do monitor.
-    await registrarSaude(supabase, tenant.fonte, rows, 'soleon');
+    //
+    // O `if (!rows.length) continue` saía ANTES desta linha (corrigido 11/08): o tenant que
+    // coletava zero era justamente o que não deixava rastro — o único caso em que o monitor
+    // precisava de uma linha, e era o único em que ela não vinha. TORRES3 está com 1 lote ativo.
+    await registrarSaude(supabase, tenant.fonte, rows, 'soleon',
+      rows.length ? undefined : { ok: false, metricas: { n: 0, uf_pct: 0, valor_pct: 0, link_pct: 0, foto_pct: 0 }, motivo: 'tenant sem lote nesta execução' });
+    if (!rows.length) continue;
     await registrarConhecimento(supabase, {
       fonte: tenant.fonte, plataforma: 'SOLEON', acesso: 'gratis+brightdata', custo: 'misto',
       anti_bot: 'cloudflare_parcial', enumeracao: 'listagem_paginada', url_lote: '/item/{id}/detalhes',

@@ -49,6 +49,10 @@
 import { createClient } from '@supabase/supabase-js';
 import { checarQualidade } from './lib/scraper-core.mjs';
 import { registrarConhecimento, qualidadeColeta } from './lib/conhecimento.mjs';
+// Monitor de fontes: sem esta linha a fonte NASCE INVISÍVEL ao bug bounty. O SATO ainda é
+// dispatch-only, então dava para não notar — e é exatamente assim que uma fonte entra em
+// produção sem piso aprendido e quebra em silêncio meses depois (ver _saude-fonte.mjs).
+import { registrarSaude } from './_saude-fonte.mjs';
 
 const FONTE = 'SATO';
 const LEILOEIRO = 'Sato Leilões';
@@ -307,6 +311,8 @@ async function main() {
     console.log(`  ⚠️ SATO coletou ${prontos.length} (≤50) — pulando desativação por segurança`);
   }
 
+  // SAÚDE DA FONTE: a linha que ONBOARDA o SATO no monitor de regressão.
+  await registrarSaude(supabase, FONTE, prontos, 'api_publica');
   // Auto-aprendizado (leiloeiro_conhecimento) — o monitor baseline assume daqui.
   await registrarConhecimento(supabase, {
     fonte: FONTE, plataforma: 'sato_spa_quasar', acesso: 'api_publica_json', custo: 'gratis',

@@ -7,6 +7,23 @@
  * Uso típico (fallback): tenta fetch direto; se falhar e a fonte costuma bloquear,
  * chama fetchViaBrightData(url) como segunda tentativa.
  *
+ * ─── DUAS CORREÇÕES DE 11/08, as duas medidas ──────────────────────────────────
+ * (1) AS SUB-COTAS NÃO EXISTIAM. Elas eram contadas num Map em MEMÓRIA DO PROCESSO;
+ *     cada run do Actions e cada invocação da Vercel começava do zero. Resultado: não
+ *     limitavam ninguém e — o que doeu — não RESERVAVAM nada. O teto global de 450/semana
+ *     ficou saturado 4 semanas seguidas (20/07 a 10/08; a última bateu 450 na segunda às
+ *     13h) e o scraper RJ, que precisa de ~13 requests e não tem via grátis (o site é 100%
+ *     Cloudflare), nunca achou um crédito livre. Agora a contagem por propósito e a
+ *     RESERVA vivem no banco (migração brightdata_reserva_por_proposito.sql).
+ *
+ * (2) `null` DIZIA QUATRO COISAS DIFERENTES: não configurado · teto atingido · sub-cota
+ *     · erro de rede. O chamador não conseguia distinguir "acabou a cota" de "a fonte não
+ *     tem nada" — e o scraper RJ lia isso como "fim das páginas", saía com exit 0 e o
+ *     workflow ficava VERDE sem ter coletado nada. É a forma #4 do CLAUDE.md ("null como
+ *     acabou"). Agora existe `buscarViaBrightData`, que LANÇA com o motivo; o
+ *     `fetchViaBrightData` (null) segue para os chamadores antigos, mas não é o caminho
+ *     recomendado para coleta nova.
+ *
  * Env vars (na Vercel): BRIGHTDATA_API_TOKEN, BRIGHTDATA_ZONE, BRIGHTDATA_MAX_REQ_SEMANA.
  */
 
@@ -16,46 +33,16 @@ const SB_URL   = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SB_KEY   = process.env.SUPABASE_SERVICE_KEY;
 const TETO     = parseInt(process.env.BRIGHTDATA_MAX_REQ_SEMANA || '450', 10);
 
-// Sub-cotas SUAVES por propósito: impedem que UM consumidor devore sozinho o teto
-// semanal e deixe os demais (datas/doc/geo) sem cota. A paginação profunda do LJUD
-// é o caso que estoura o orçamento, então limitamos 'ljud' a ~180/semana; os outros
-// propósitos seguem dividindo o restante até o teto global. O teto global (RPC no
-// banco) continua sendo o fail-safe DURO de custo — isto é só um repartidor.
-const SUBCOTAS = {
-  ljud: parseInt(process.env.BRIGHTDATA_MAX_LJUD_SEMANA || '180', 10),
-  // Captura de documentos (caminho 3 do captura-documentos.mjs): teto semanal próprio
-  // p/ desbloquear leiloeiros anti-bot (ex.: PECINI) sem devorar o orçamento dos
-  // demais propósitos (datas/geo/scrapers). O teto global (RPC) segue como trava dura.
-  docs: parseInt(process.env.BRIGHTDATA_MAX_DOCS_SEMANA || '150', 10),
-  // Scraper RJ Leilões (100% Cloudflare → só via Web Unlocker): sub-cota própria p/
-  // o RJ não monopolizar o teto semanal compartilhado.
-  rj: parseInt(process.env.BRIGHTDATA_MAX_RJ_SEMANA || '120', 10),
-  // Radar de Editais (DJEN/Comunica): o WAF do CNJ bloqueia o IP de datacenter da
-  // Vercel (403). Sub-cota pequena — o auto-ajuste do radar já faz só 1 pull OK/dia
-  // (~6-18 req), então ~120/semana sobra e não devora o orçamento dos demais.
-  radar: parseInt(process.env.BRIGHTDATA_MAX_RADAR_SEMANA || '250', 10),
-  // Cluster SOLEON multi-tenant (calil/vegas/3torres...): só o 3torres está atrás de
-  // Cloudflare — o scraper tenta fetch GRÁTIS primeiro e só cai no Web Unlocker quando
-  // barrado, então o gasto real fica bem abaixo desta sub-cota.
-  soleon: parseInt(process.env.BRIGHTDATA_MAX_SOLEON_SEMANA || '150', 10),
-  // Cluster "Gestão de Leilões" PHP (extrajust/lancetotal/lancenoleilao/granado): backend
-  // ÚNICO (mesmo idLeilao nos 4 domínios) atrás de Cloudflare → 1 fonte, Web Unlocker.
-  gestao: parseInt(process.env.BRIGHTDATA_MAX_GESTAO_SEMANA || '150', 10),
-};
-// Contagem por propósito na semana corrente, mantida na memória do processo. A
-// paginação profunda (o caso que estoura a cota) roda numa única invocação, então
-// este contador a barra DENTRO da run; entre invocações ele reinicia (limite suave,
-// por isso o teto global no banco continua sendo a trava real). 'geral' não tem
-// sub-cota → comportamento idêntico ao de antes (compatível para trás).
-const usoPorProposito = new Map();
-let _baldeSemana = null;
-function contarProposito(proposito) {
-  const balde = Math.floor(Date.now() / (7 * 24 * 60 * 60 * 1000)); // balde semanal
-  if (balde !== _baldeSemana) { usoPorProposito.clear(); _baldeSemana = balde; } // virou a semana → zera
-  return usoPorProposito.get(proposito) || 0;
-}
-function registrarProposito(proposito) {
-  usoPorProposito.set(proposito, contarProposito(proposito) + 1);
+/** Erro tipado: quem chama consegue diferenciar "sem cota" de "a fonte respondeu errado". */
+export class ErroBrightData extends Error {
+  constructor(motivo, detalhe) {
+    super(`brightdata:${motivo}${detalhe ? ` — ${detalhe}` : ''}`);
+    this.name = 'ErroBrightData';
+    this.motivo = motivo;   // sem_config | teto_global | subcota | reservado_para_outros | cota_indisponivel | rede | http
+    this.detalhe = detalhe || null;
+    // Só o teto/sub-cota é "o sistema decidiu não gastar"; o resto é falha de verdade.
+    this.semCota = ['teto_global', 'subcota', 'reservado_para_outros', 'cota_indisponivel'].includes(motivo);
+  }
 }
 
 /** Bright Data está configurado nesta instância? */
@@ -63,54 +50,80 @@ export function brightDataDisponivel() {
   return !!(BD_TOKEN && BD_ZONE);
 }
 
-/** Incrementa o consumo semanal e diz se ainda está sob o teto (atômico no banco). */
+/**
+ * Incrementa o consumo semanal e diz se ainda está sob o teto (atômico no banco).
+ * Retorna { permitido, motivo, ... } — o motivo vem da RPC, que já conhece reserva e sub-cota.
+ */
 async function consumirCota(proposito = 'geral') {
-  if (!SB_URL || !SB_KEY) return false;
-  // Sub-cota suave: se este propósito já bateu seu limite semanal (contagem por
-  // processo), recusa ANTES de gastar a cota global — assim sobra orçamento p/ os
-  // demais. Propósitos sem sub-cota (ex.: 'geral') não são afetados.
-  const sub = SUBCOTAS[proposito];
-  if (sub != null && contarProposito(proposito) >= sub) return false;
+  if (!SB_URL || !SB_KEY) return { permitido: false, motivo: 'cota_indisponivel', detalhe: 'sem credencial do Supabase' };
   try {
     const r = await fetch(`${SB_URL}/rest/v1/rpc/registrar_uso_brightdata`, {
       method: 'POST',
       headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ p_teto: TETO }),
+      body: JSON.stringify({ p_teto: TETO, p_proposito: proposito }),
       signal: AbortSignal.timeout(8000),
     });
-    if (!r.ok) return false;
+    // `.ok` checado ANTES do corpo: um 4xx/5xx aqui não é "teto atingido", é contador
+    // indisponível — e tratar os dois como a mesma coisa foi o que escondeu 4 semanas
+    // de saturação atrás de um check verde.
+    if (!r.ok) return { permitido: false, motivo: 'cota_indisponivel', detalhe: `RPC HTTP ${r.status}` };
     const j = await r.json().catch(() => null);
-    const permitido = j?.permitido === true;
-    // Só contabiliza no propósito o que efetivamente passou no teto global.
-    if (permitido && sub != null) registrarProposito(proposito);
-    return permitido;
-  } catch {
-    return false;
+    if (!j || typeof j !== 'object') return { permitido: false, motivo: 'cota_indisponivel', detalhe: 'RPC sem corpo' };
+    return { permitido: j.permitido === true, motivo: j.motivo || (j.permitido ? 'ok' : 'teto_global'), ...j };
+  } catch (e) {
+    return { permitido: false, motivo: 'cota_indisponivel', detalhe: String(e?.message || e).slice(0, 120) };
   }
+}
+
+/** Chamada crua ao Web Unlocker, já com a cota consumida. Lança ErroBrightData. */
+async function chamarUnlocker(url, { method, headers, timeoutMs }) {
+  try {
+    // headers: a Web Unlocker API (/request) valida `headers` como OBJETO
+    // { "Accept": "...", "Origin": "..." } — passar array [{name,value}] devolve
+    // HTTP 400 "headers must be of type object". Repassa o objeto como veio.
+    const temHeaders = headers && typeof headers === 'object' && Object.keys(headers).length > 0;
+    return await fetch('https://api.brightdata.com/request', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${BD_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ zone: BD_ZONE, url, method, format: 'raw', ...(temHeaders ? { headers } : {}) }),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  } catch (e) {
+    throw new ErroBrightData('rede', String(e?.message || e).slice(0, 160));
+  }
+}
+
+/**
+ * CAMINHO RECOMENDADO para coleta nova: devolve o Response ou **LANÇA** ErroBrightData.
+ * Nunca devolve algo que possa ser confundido com "a fonte não tem conteúdo".
+ * Use `e.semCota` para separar "o freio de custo agiu" de "a coleta falhou".
+ */
+export async function buscarViaBrightData(url, { method = 'GET', headers = null, proposito = 'geral', timeoutMs = 45000, exigirOk = true } = {}) {
+  if (!brightDataDisponivel()) throw new ErroBrightData('sem_config', 'BRIGHTDATA_API_TOKEN/ZONE ausentes');
+  const cota = await consumirCota(proposito);
+  if (!cota.permitido) {
+    throw new ErroBrightData(cota.motivo, cota.detalhe
+      || `propósito ${proposito}: ${cota.usado ?? '?'} usados · total ${cota.usado_total ?? '?'}/${cota.teto ?? TETO}`);
+  }
+  const resp = await chamarUnlocker(url, { method, headers, timeoutMs });
+  if (exigirOk && !resp.ok) throw new ErroBrightData('http', `HTTP ${resp.status} em ${url}`);
+  return resp;
 }
 
 /**
  * Busca uma URL via Bright Data Web Unlocker. Retorna um objeto Response (fetch)
  * com o corpo bruto da fonte, ou null se: BD não configurado, teto atingido, ou erro.
  * O chamador usa resp.ok / resp.arrayBuffer() / resp.text() normalmente.
+ *
+ * COMPATIBILIDADE: mantido para os chamadores que já tratam `null` como "não deu, siga
+ * pelo caminho grátis" (fallback legítimo). Para COLETA — onde `null` vira dado faltando
+ * sem ninguém perceber — use `buscarViaBrightData`.
  */
-export async function fetchViaBrightData(url, { method = 'GET', headers = null, proposito = 'geral', timeoutMs = 45000 } = {}) {
-  if (!brightDataDisponivel()) return null;
-  const liberado = await consumirCota(proposito);
-  if (!liberado) return null; // teto semanal atingido → não chama (fail-safe de custo)
+export async function fetchViaBrightData(url, opts = {}) {
   try {
-    // headers: a Web Unlocker API (/request) valida `headers` como OBJETO
-    // { "Accept": "...", "Origin": "..." } — passar array [{name,value}] devolve
-    // HTTP 400 "headers must be of type object". Repassa o objeto como veio.
-    const temHeaders = headers && typeof headers === 'object' && Object.keys(headers).length > 0;
-    const resp = await fetch('https://api.brightdata.com/request', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${BD_TOKEN}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ zone: BD_ZONE, url, method, format: 'raw', ...(temHeaders ? { headers } : {}) }),
-      signal: AbortSignal.timeout(timeoutMs),
-    });
-    return resp;
-  } catch {
+    return await buscarViaBrightData(url, { ...opts, exigirOk: false });
+  } catch (e) {
+    if (!(e instanceof ErroBrightData)) throw e;
     return null;
   }
 }

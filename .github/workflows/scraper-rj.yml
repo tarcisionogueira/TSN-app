@@ -2,14 +2,21 @@ name: Scraper RJ Leilões (Bright Data)
 
 # RJ Leilões está 100% atrás de Cloudflare (Puppeteer barrado até no Actions), então
 # a coleta usa o Bright Data Web Unlocker. Validado (recon → dry-run → gravação).
-# Custo: ~13 requests/coleta (RJ é pequeno, ~12 imóveis) — teto semanal + sub-cota 'rj'.
-# Agendado 1x/semana (terça) + manual — o comentário dizia "2x/semana (ter/sex)" e o cron
-# abaixo sempre foi só terça; corrigido em 10/08 ao investigar por que o acervo ficava 12
-# dias sem atualizar (era o freio residencial consumindo o ciclo, não uma sexta perdida).
-# No cron GRAVA; no dispatch manual é dry-run por padrão (passe dryrun=0 p/ gravar).
+# Custo: ~13 requests/coleta (RJ é pequeno, ~12 imóveis) — teto semanal + RESERVA 'rj'
+# de 60 req/semana (migração brightdata_reserva_por_proposito.sql). Duas coletas/semana
+# cabem folgadas na reserva.
+#
+# 2x/semana (ter/sex), como o comentário sempre dizia — o cron era só terça. Com o
+# residencial finalmente gravando (faltava RJ_DRYRUN=0 no runner), a terça costuma ser
+# pulada pelo freio; a sexta é a rede de segurança quando a coleta de casa não passa.
+#
+# dryrun default '0' (GRAVA) desde 11/08: com default '1' os oito dispatches manuais de
+# 02/08 a 11/08 gastaram cota do Bright Data e não gravaram uma linha — todos verdes.
+# Quem quiser inspecionar sem gravar passa dryrun=1 explicitamente.
 on:
   schedule:
-    - cron: '0 11 * * 2'   # 1x/semana (terça), 11 UTC — fonte PAGA (Bright Data)
+    - cron: '0 11 * * 2'   # terça, 11 UTC — fonte PAGA (Bright Data)
+    - cron: '0 11 * * 5'   # sexta, 11 UTC — rede de segurança se o residencial não passou
   workflow_dispatch:
     inputs:
       debug:
@@ -19,7 +26,7 @@ on:
       dryrun:
         description: '1 = dry-run (não grava); 0 = grava'
         required: false
-        default: '1'
+        default: '0'
       max_lotes:
         description: 'Máx. de lotes por execução'
         required: false

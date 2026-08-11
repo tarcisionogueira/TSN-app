@@ -27,7 +27,12 @@
 // serve CALIL, VEGAS e TORRES3). Só é considerado fresco quando **todas** as fontes daquele
 // gate estão frescas — senão o freio bloquearia a coleta das que ficaram para trás por causa
 // das que deram certo. É o caso real do SOLEON: VEGAS coletou hoje, TORRES3 está com 7 dias.
-const ACERVO_DO_GATE = {
+//
+// O mapa vem de `coleta_cliente.fontes_acervo` (mesma coluna que a RPC do gate usa) — era
+// uma tabela hardcoded aqui, e duas cópias da mesma verdade divergem no dia em que alguém
+// integra um leiloeiro novo e só atualiza uma delas. O fallback abaixo mantém o script útil
+// se a leitura falhar, mas o banco manda.
+const ACERVO_FALLBACK = {
   RJ: ['RJLEILOES'],
   PECINI: ['PECINI'],
   GESTAO: ['GESTAOLEILOES'],
@@ -45,11 +50,27 @@ if (!fonte || !URL_BASE || !KEY) {
   process.exit(0);
 }
 
-const acervos = ACERVO_DO_GATE[fonte] || [fonte];
 const headers = { apikey: KEY, Authorization: `Bearer ${KEY}` };
 const corte = Date.now() - dias * 86400000;
 
+async function acervosDoGate() {
+  try {
+    const r = await fetch(
+      `${URL_BASE}/rest/v1/coleta_cliente?fonte=eq.${encodeURIComponent(fonte)}&select=fontes_acervo`,
+      { headers, signal: AbortSignal.timeout(15000) },
+    );
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const [linha] = await r.json();
+    const lista = Array.isArray(linha?.fontes_acervo) ? linha.fontes_acervo.filter(Boolean) : [];
+    if (lista.length) return lista;
+  } catch (e) {
+    console.error(`[coleta-recente] não li fontes_acervo (${String(e?.message || e).slice(0, 80)}) — usando fallback local`);
+  }
+  return ACERVO_FALLBACK[fonte] || [fonte];
+}
+
 try {
+  const acervos = await acervosDoGate();
   const idades = [];
   for (const nome of acervos) {
     const r = await fetch(

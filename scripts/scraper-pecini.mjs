@@ -21,6 +21,11 @@
  * Env: BRIGHTDATA_API_TOKEN, BRIGHTDATA_ZONE, VITE_SUPABASE_URL, SUPABASE_SERVICE_KEY.
  */
 import { createClient } from '@supabase/supabase-js';
+// NOTA (11/08): aqui o `null` do fetchViaBrightData é um fallback DELIBERADO (tenta o
+// caminho grátis/residencial, e o pago é a segunda chance) — por isso este arquivo segue
+// na linha de base do verificador de padrões em vez de migrar para `buscarViaBrightData`.
+// O que fecha o buraco perigoso é outra coisa: coleta com zero lote agora sai com código
+// 1 e grava `fonte_saude` 'falhou', e o gate só carimba "coletei" com linha no acervo.
 import { fetchViaBrightData, brightDataDisponivel } from '../api/_brightdata.js';
 import { fetchHeadless, fecharHeadless } from './lib/fetch-residencial.mjs';
 import { extrairGenerico, extrairData, checarQualidade } from './lib/scraper-core.mjs';
@@ -284,7 +289,17 @@ async function main() {
   }
 
   console.log(`\nResumo: ${prontos.length} prontos · ${reprovados} descartados · ${semDetalhe} sem detalhe.`);
-  if (!prontos.length) { console.log('nada a gravar.'); return; }
+  // Zero pronto não é "a fonte está vazia" — é coleta quebrada até prova em contrário.
+  // Sai com erro E deixa a linha em `fonte_saude`: sem isso a fonte some do monitor
+  // (nenhuma linha nova) e o acervo encolhe em silêncio. Ver scraper-rj.mjs, 11/08.
+  if (!prontos.length) {
+    await registrarSaude(supabase, 'PECINI', [], 'principal',
+      { ok: false, metricas: { n: 0, uf_pct: 0, valor_pct: 0, link_pct: 0, foto_pct: 0 },
+        motivo: `nada pronto (${semDetalhe} sem detalhe, ${reprovados} reprovados)` });
+    console.error('nada a gravar. Saindo com erro para não carimbar coleta que não coletou.');
+    process.exitCode = 1;
+    return;
+  }
 
   if (DRYRUN) {
     console.log('DRY-RUN: não gravei. Amostra do que inseriria:');
@@ -307,6 +322,9 @@ async function main() {
   });
 }
 
+// `process.exit(0)` FIXO apagava o `process.exitCode = 1` que o caminho "nada a gravar"
+// acabara de definir — a coleta falhava e o processo saía verde mesmo assim. Agora o
+// código de saída é o que o main decidiu (0 por padrão, 1 quando não coletou nada).
 main()
-  .then(() => fecharHeadless().finally(() => process.exit(0)))
+  .then(() => fecharHeadless().finally(() => process.exit(process.exitCode || 0)))
   .catch(e => { console.error(e); fecharHeadless().finally(() => process.exit(1)); });

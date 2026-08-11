@@ -154,7 +154,7 @@
     "delete-sem-select": 3
   },
   "src/contexts/AuthContext.jsx": {
-    "data-sem-error": 3
+    "data-sem-error": 2
   },
   "src/pages/Admin.jsx": {
     "data-sem-error": 36,
@@ -304,7 +304,11 @@
   "scripts/recon-sodre-searchlots.mjs": {
     "data-sem-error": 1
   },
+  "scripts/scraper-gestao.mjs": {
+    "brightdata-null-em-coletor": 1
+  },
   "scripts/scraper-pecini.mjs": {
+    "brightdata-null-em-coletor": 1,
     "data-sem-error": 1
   },
   "scripts/scraper-powerbi-mj.mjs": {
@@ -313,10 +317,8 @@
   "scripts/scraper-puppeteer.mjs": {
     "data-sem-error": 3
   },
-  "scripts/scraper-rj.mjs": {
-    "data-sem-error": 1
-  },
   "scripts/scraper-soleon.mjs": {
+    "brightdata-null-em-coletor": 1,
     "data-sem-error": 1
   },
   "scripts/verificar-padroes-perigosos.mjs": {

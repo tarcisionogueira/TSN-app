@@ -73,6 +73,30 @@ const REGRAS_ARQUIVO = [
     // defeito por outro caminho. É a ausência que se detecta, não uma linha.
     testar: (texto) => /\.auth\.signUp\s*\(/.test(texto) && !/identities/.test(texto),
   },
+  {
+    id: 'coletor-sem-registrar-saude',
+    titulo: 'Coletor que grava no acervo sem chamar registrarSaude — nasce cego ao monitor',
+    // A fonte que não escreve em `fonte_saude` não ganha piso aprendido, logo o alerta de
+    // regressão NUNCA dispara para ela: se quebrar, o acervo encolhe em silêncio. Medido em
+    // 11/08: RJLEILOES era a ÚNICA fonte com lote ativo e zero histórico de saúde — porque
+    // `registrarSaude` só era chamado no caminho de sucesso e a coleta nunca teve sucesso.
+    testar: (texto, rel) => /^scripts\/scraper-/.test(rel)
+      && /from\s*\(\s*['"]imoveis_leilao['"]\s*\)|\.from\(['"]imoveis_leilao['"]\)/.test(texto)
+      && !/registrarSaude/.test(texto),
+  },
+  {
+    id: 'brightdata-null-em-coletor',
+    titulo: 'Coletor usando fetchViaBrightData (devolve null) em vez de buscarViaBrightData (lança)',
+    // `null` do fetchViaBrightData significa QUATRO coisas: não configurado, teto semanal,
+    // sub-cota e erro de rede. Num laço de páginas isso vira "fim das páginas" e a coleta sai
+    // com exit 0 dizendo que a fonte está vazia. Foi o que congelou o RJ por 12 dias com o
+    // teto do Bright Data saturado — e nada, em lugar nenhum, ficou vermelho. Em COLETA use
+    // `buscarViaBrightData`, que lança com o motivo; `null` é aceitável só em fallback
+    // (tento o pago, não deu, sigo pelo grátis) — e aí marque com // padrao-ok:.
+    // Só o IMPORT conta — citar o nome num comentário (como o histórico logo acima) não é uso.
+    testar: (texto, rel) => /^scripts\/scraper-/.test(rel)
+      && /^\s*import[\s\S]{0,200}?\bfetchViaBrightData\b[\s\S]{0,200}?from\s*['"]/m.test(texto),
+  },
 ];
 
 function arquivos(dir, saida = []) {
@@ -94,7 +118,9 @@ function contar() {
     for (const rel of arquivos(dir)) {
       const texto = readFileSync(join(RAIZ, rel), 'utf8');
       for (const r of REGRAS_ARQUIVO) {
-        if (!r.testar(texto)) continue;
+        // O caminho relativo entra na regra: algumas só fazem sentido para uma família de
+        // arquivos (um coletor precisa de registrarSaude; uma tela React, não).
+        if (!r.testar(texto, rel.replace(/\\/g, '/'))) continue;
         if (/\/\/\s*padrao-ok:\s*\S/.test(texto)) continue; // exceção declarada em qualquer ponto do arquivo
         porArquivo[rel] ||= {};
         (porArquivo[rel][r.id] ||= []).push(0); // regra de arquivo: linha 0 = "o arquivo inteiro"

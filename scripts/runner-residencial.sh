@@ -27,11 +27,18 @@ fi
 echo "===== [$(date)] runner residencial ====="
 
 # rodar <FONTE> <comando...> : só executa se o GATE liberar (2x/semana, sem overlap); conclui no sucesso.
+#
+# ATENÇÃO (lição de 11/08): `exit 0` do scraper NÃO é prova de coleta. O RJ rodava em
+# dry-run por falta de uma variável, saía com 0, o gate carimbava "coletei" e o carimbo
+# bloqueava o caminho pago — 12 dias de acervo congelado, tudo verde. O `concluir` agora
+# consulta o acervo antes de carimbar (migração coleta_gate_concluir_exige_prova.sql) e
+# sai 4 quando não houve gravação; a linha abaixo torna isso VISÍVEL no log do runner.
 rodar() {
   local fonte="$1"; shift
   if node scripts/coleta-gate.mjs claim "$fonte"; then
     if "$@"; then
-      node scripts/coleta-gate.mjs concluir "$fonte"
+      node scripts/coleta-gate.mjs concluir "$fonte" \
+        || echo "  ⚠️ ($fonte saiu com sucesso mas NÃO gravou no acervo — janela segue aberta; investigue o scraper)"
     else
       echo "  ($fonte falhou — NÃO concluído; o gate retenta em ~15 min / próxima janela)"
     fi
@@ -46,7 +53,10 @@ rodar SOLEON env SOLEON_NO_BD=1 SOLEON_DRYRUN=0 node scripts/scraper-soleon.mjs
 rodar GESTAO env GESTAO_HEADLESS=1 GESTAO_DRYRUN=0 node scripts/scraper-gestao.mjs
 
 # RJ Leilões — 100% Cloudflare: idem, Chromium real residencial.
-rodar RJ env RJ_HEADLESS=1 node scripts/scraper-rj.mjs
+# RJ_DRYRUN=0 é OBRIGATÓRIO: o default do scraper-rj.mjs é dry-run, e esta linha ficou sem
+# ele desde sempre — o residencial parseava e descartava, sem nunca gravar uma linha (as
+# outras fontes já traziam SOLEON_DRYRUN=0 / GESTAO_DRYRUN=0 / PECINI_DRYRUN=0).
+rodar RJ env RJ_HEADLESS=1 RJ_DRYRUN=0 node scripts/scraper-rj.mjs
 
 # PECINI — Cloudflare (só saía via Web Unlocker pago): Chromium real residencial, sem BD.
 rodar PECINI env PECINI_HEADLESS=1 PECINI_DRYRUN=0 node scripts/scraper-pecini.mjs

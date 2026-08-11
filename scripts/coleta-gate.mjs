@@ -28,9 +28,23 @@ try {
     console.log(`[gate] ${fonte}: NÃO é a hora (2x/semana) ou já em curso — pulando`);
     process.exit(3);
   } else if (acao === 'concluir') {
-    await rpc('coleta_cliente_concluir', { p_fonte: fonte });
-    console.log(`[gate] ${fonte}: concluído (janela fechada)`);
-    process.exit(0);
+    // O carimbo agora EXIGE PROVA no acervo (ver migração coleta_gate_concluir_exige_prova.sql):
+    // a RPC devolve `carimbado:false / motivo:'sem_gravacao'` quando o scraper saiu com 0 sem
+    // ter gravado nada. Antes isso era um `void` que ninguém lia — e foi assim que o RJ ficou
+    // 12 dias congelado com o freio de custo bloqueando a única via que funcionava.
+    const r = await rpc('coleta_cliente_concluir', { p_fonte: fonte });
+    if (!r.ok) {
+      console.error(`[gate] ${fonte}: RPC concluir falhou (HTTP ${r.status}) — NÃO carimbado`);
+      process.exit(4);
+    }
+    const j = await r.json().catch(() => null);
+    if (j?.carimbado === true) {
+      console.log(`[gate] ${fonte}: concluído (${j.linhas} linha(s) no acervo · janela fechada)`);
+      process.exit(0);
+    }
+    console.error(`[gate] ${fonte}: NÃO carimbado — ${j?.motivo || 'resposta inesperada'}. `
+      + 'O scraper terminou sem gravar no acervo; a janela segue aberta para nova tentativa.');
+    process.exit(4);
   }
   console.error(`[gate] ação desconhecida: ${acao}`);
   process.exit(2);
