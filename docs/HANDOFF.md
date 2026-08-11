@@ -161,6 +161,82 @@ antes de mexer, mais 6 validações de produção para rodar na abertura.
 
 ---
 
+## ⏰ CONFERIR EM 18/08 — os dois números que só o tempo produz
+
+> **Nenhum dos dois dá para responder hoje**, e os dois foram deixados MEDINDO sozinhos em 11/08.
+> Um exige uma semana de coleta; o outro exige que o dono ligue uma chave antes de gastar a única
+> amostra que temos. Ambos vieram da pergunta dele: *"esse crédito do Bright Data está mesmo sendo
+> consumido?"* e *"esses que dependem de mim, qual alternativa resolve com maior segurança dos
+> dados, eficiência e custo × benefício?"*
+
+### 1. Bright Data — o teto de 450/semana está certo? (custo zero, é só ler)
+
+Desde 11/08 o ledger separa **permissão concedida** (`requests`, reservada ANTES do fetch) de
+**chamada efetivada** (`sucessos`, que é o que o painel cobra). Era a confusão entre as duas que
+punha ~2.549 no nosso lado contra ~780 no painel. A query está no **ritual de abertura do
+`CLAUDE.md`** (bloco "o que está quebrado agora") — roda sozinha toda sessão, não precisa lembrar.
+
+Em **18/08**, com a primeira semana inteira contabilizada dos dois jeitos:
+
+```sql
+select proposito, requests, sucessos, falhas_rede
+  from brightdata_uso_proposito
+ where semana = '2026-08-17'::date   -- a 1ª semana limpa (a de 10/08 é meio-a-meio)
+ order by requests desc;
+```
+
+| O que sair | O que significa | O que fazer |
+|---|---|---|
+| `sucessos` da semana ≈ delta do painel | O ledger é fiel. O teto mede gasto real | Decidir o teto olhando `sucessos`, não `requests` |
+| Painel **acima** do nosso | Alguém gasta fora do ledger | `scripts/recon-*.mjs` e `scripts/scraper_vlance.py` chamam a Web Unlocker **direto**, sem passar pela cota — se houve recon na semana, é isso. Se não houve, investigar |
+| Painel **abaixo** do nosso | Sobrou reserva não usada | Baixar a reserva de quem não gastou, não o teto global |
+
+**Estado em 11/08 (linha de partida):** `rj` com `requests 15 · sucessos 5 · falhas_rede 0`,
+reserva 60 / teto 120, total da semana **465**. Os 10 sem desfecho são anteriores à migração de
+hoje — **não são vazamento**, e a partir de 17/08 a coluna fecha. A decisão do teto continua sendo
+do dono (item 1 do bloco de 11/08); esta é a medição que faltava para ela deixar de ser palpite.
+
+### 2. Nudge de ativação — a ORDEM importa, e ela não se repete
+
+Medido em 11/08: **136 e-mails nos últimos 30 dias, 55 com confirmação de entrega, ZERO aberturas
+e ZERO cliques**. Não é desempenho ruim — é o **tracking de abertura/clique DESLIGADO no Resend**.
+
+O backlog de ativação (26 pessoas que passaram da janela D+2/D+7) é de **uso único**: cada pessoa
+recebe uma vez e some da fila. Disparar antes de ligar o tracking queima a única chance de saber se
+o nudge funciona, e nenhuma medição posterior recupera isso.
+
+1. **Dono:** ligar o rastreio no Resend — o passo a passo exato já está em
+   `docs/PENDENCIAS_DONO.md` **item -2** (subdomínio `links`, CNAMEs, e — a parte que costuma
+   ficar de fora — **marcar `email.opened` e `email.clicked` no webhook**; sem isso o rastreio
+   liga e nada chega até nós). Custo zero, não muda o conteúdo do e-mail.
+2. **Só então:** rodar o workflow **"Nudge de ativação — backlog (manual)"**
+   (`.github/workflows/nudge-backlog.yml`, aba Actions → Run workflow). Comece com `limite=2` para
+   ver a resposta real; depois `limite=0`. A autorização vai por **header** `x-cron-secret` (o
+   segredo vive no painel; URL com segredo vaza em histórico e log — por isso o workflow existe em
+   vez de um link para colar no navegador).
+3. **Uma semana depois** (a coluna é `enviado_em`, não `criado_em`; hoje só existe **1** e-mail
+   `tipo='ativacao'` no acervo de 30 dias — é a linha de base):
+   ```sql
+   select tipo,
+          count(*) enviados,
+          count(*) filter (where entregue_em is not null) entregues,
+          count(*) filter (where aberto_em  is not null) aberturas,
+          count(*) filter (where clicado_em is not null) cliques
+     from emails_log
+    where enviado_em > now() - interval '14 days'
+    group by 1 order by 2 desc;
+   ```
+   Aberturas > 0 em **qualquer** tipo é a prova de que o canal mede; cliques em `ativacao` é a prova
+   de que o nudge converte.
+
+> **Se em 18/08 as aberturas continuarem em 0 com entregas > 0**, o tracking não foi ligado (ou foi
+> ligado depois do disparo) — confirmar com o dono ANTES de concluir qualquer coisa sobre o texto do
+> e-mail. Zero abertura com tracking desligado não é resultado, é ausência de instrumento: é
+> exatamente a mesma armadilha do bloco de 10/08 ("este vazio é resposta, ou é falha que não sabe
+> que falhou?"), só que no marketing.
+
+---
+
 ## 🏁 FECHAMENTO DE 11/08 — a coleta do RJ, e o que ela revelou sobre o resto
 
 > **`main` em `7fc3777`.** O dia começou validando o freio residencial que consertei de manhã e

@@ -222,6 +222,14 @@ vazio ou com valor sul-americano — reveja o passo 3.
   (iPhone abre sozinho; imagem bloqueada não conta). **Clique é o número confiável**; ligue os
   dois e decida pelo clique.
 - **Depois:** o Claude confere `emails_log.aberto_em/clicado_em` preenchendo nos envios seguintes.
+- **🔴 SUBIU DE PRIORIDADE EM 11/08 — agora ele bloqueia uma medição que NÃO se repete.** Nova
+  medição: **136 e-mails em 30 dias, 55 entregues, 0 aberturas, 0 cliques** — o retrato de um canal
+  sem instrumento. E o **backlog do nudge de ativação** (26 pessoas que passaram da janela D+2/D+7)
+  é de **uso único**: cada pessoa recebe uma vez e sai da fila para sempre. Se ele disparar antes do
+  rastreio estar ligado, a única amostra grande que temos vira 26 envios sem nenhum dado — e
+  nenhuma medição futura recupera isso. O disparo já está pronto e **parado de propósito**,
+  esperando este item: Actions → **"Nudge de ativação — backlog (manual)"** (comece com `limite=2`).
+  Ordem certa: **(1) este item → (2) o workflow**. Ele não roda sozinho.
 
 ### -1. 🔴 VERIFICAÇÃO DO ANUNCIANTE Google Ads (prazo: 31/08/2026 — anúncios PAUSAM se não fizer)
 - **Por quê:** e-mail oficial do Google (01/08) — a conta **475-979-5747** exige a "verificação

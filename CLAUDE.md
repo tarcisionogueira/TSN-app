@@ -40,6 +40,19 @@ curto (5–8 linhas) antes de seguir:
    > -- fontes no PONTO CEGO do monitor: têm lote ativo e nenhum registro em fonte_saude
    > select fonte, count(*) from imoveis_leilao i where ativo
    >   and not exists (select 1 from fonte_saude s where s.fonte=i.fonte) group by 1 order by 2 desc;
+   > -- BRIGHT DATA: o que a cota PAGA comprou nesta semana. As duas colunas NÃO são a mesma coisa
+   > -- e essa diferença é o ponto: `requests` = permissão concedida (reserva atômica, ANTES do
+   > -- fetch); `sucessos` = chamada que chegou ao fornecedor — é ISSO que o painel cobra. Foi a
+   > -- confusão entre as duas que abriu a distância entre o nosso ledger (~2.549 desde 29/06) e os
+   > -- ~780 créditos que o painel mostrava. Verde = `sucessos + falhas_rede ≈ requests` e ninguém
+   > -- sozinho comendo o total. Duas ressalvas ANTES de gritar: (a) `sucessos` só existe desde
+   > -- 11/08 — request anterior à migração aparece sem desfecho, e a semana de 10/08 é a única
+   > -- meio-a-meio; (b) `scripts/recon-*.mjs` e `scripts/scraper_vlance.py` chamam a Web Unlocker
+   > -- DIRETO, fora deste ledger: rodou recon na semana, o painel cobra mais do que aparece aqui.
+   > select p.proposito, p.requests, p.sucessos, p.falhas_rede, r.reserva, r.teto,
+   >        (select requests from brightdata_uso u where u.semana = p.semana) as total_semana
+   >   from brightdata_uso_proposito p left join brightdata_reserva r on r.proposito = p.proposito
+   >  where p.semana = date_trunc('week', now())::date order by p.requests desc;
    > -- inventário de documentos por leiloeiro (0% = documental sem o que ler)
    > select fonte, count(*) ativos,
    >   round(100.0*count(*) filter (where link_matricula is not null

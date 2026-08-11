@@ -1,0 +1,48 @@
+name: Nudge de ativação — backlog (manual)
+
+# Dispara /api/ativacao-nudge-cron com o CRON_SECRET no header. Existe porque o backlog é de
+# USO ÚNICO e não dá para chamar do navegador: a autorização vai por header, não por URL —
+# e colocar o segredo numa URL é o tipo de atalho que vaza em histórico e log.
+#
+# ORDEM QUE IMPORTA (medida em 11/08): dos 136 e-mails dos últimos 30 dias, 55 têm confirmação
+# de ENTREGA e ZERO têm abertura ou clique — o tracking de abertura/clique está DESLIGADO no
+# Resend. Disparar o backlog antes de ligá-lo queima a única chance de medir se o nudge
+# funciona, porque o backlog não se repete. Ligue o tracking primeiro; depois rode isto.
+#
+# `limite` existe para um teste real com pouca gente antes de soltar os 26. `seco=1` não
+# manda nada: só lista quem entraria — use para conferir a lista antes.
+on:
+  workflow_dispatch:
+    inputs:
+      backlog:
+        description: '1 = inclui quem passou da janela D+2/D+7 (USO ÚNICO). 0 = só a janela do dia'
+        required: false
+        default: '0'
+      limite:
+        description: 'Máximo de pessoas neste disparo (0 = sem limite). Comece com 2 ou 3.'
+        required: false
+        default: '0'
+      base_url:
+        description: 'Base URL do deploy'
+        required: false
+        default: 'https://bidprobrasil.com.br'
+
+jobs:
+  disparar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Chamar o nudge
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::error::CRON_SECRET vazio — cadastre em Settings > Secrets and variables > Actions"
+            exit 1
+          fi
+          URL="${{ github.event.inputs.base_url }}/api/ativacao-nudge-cron?backlog=${{ github.event.inputs.backlog }}&limite=${{ github.event.inputs.limite }}"
+          echo "GET $URL"
+          curl -sSL --max-time 295 "$URL" -H "x-cron-secret: ${CRON_SECRET}" -o resp.json -w "HTTP %{http_code}\n"
+          echo "--- resposta ---"
+          python3 -m json.tool resp.json || cat resp.json
+          # A resposta traz `ativo`, `elegiveis`, `candidatos`, `enviados` e o motivo de quem
+          # ficou de fora — sem isso, "rodou" não distingue "mandou" de "estava desligado".
