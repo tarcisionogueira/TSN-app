@@ -5,7 +5,14 @@ import { supabase } from './supabase.js';
 
 let fila = [];
 let contador = 0;          // teto por sessão (anti-flood + economia)
-const TETO = 200;
+// TETO DE 200 CORTAVA A SESSÃO NO MEIO, EM SILÊNCIO (medido 11/08). O objetivo declarado do
+// dono é "registrar tudo o que o usuário fez". Com 200, uma sessão de trabalho de verdade
+// parava de ser gravada e o 360 mostrava um dia que simplesmente ACABA no meio da tarde —
+// sem nada dizendo que o coletor é que desistiu. Sessões reais medidas: 631, 506, 448, 413
+// eventos por dia. O teto sobe para 3.000 e, ao ser atingido, o coletor grava UM evento
+// dizendo que parou: silêncio inexplicado é pior que dado faltando com aviso.
+const TETO = 3000;
+let avisouTeto = false;
 let timer = null;
 
 // Nunca deixa TOKEN de auth virar "rota": no fluxo implícito do Supabase com HashRouter, a URL
@@ -28,7 +35,17 @@ function rotuloDe(el) {
 // Registra um evento (usado internamente e por quem quiser logar uma falha específica).
 // `ts` = hora da AÇÃO (o banco antes carimbava a hora da INGESTÃO — deriva de até 5s+).
 export function registrarEvento(tipo, { alvo = '', detalhe = '' } = {}) {
-  if (contador >= TETO) return;
+  if (contador >= TETO) {
+    // Um único aviso, e depois silêncio de verdade — sem isto, quem lê o 360 conclui que a
+    // pessoa parou de usar a plataforma quando na verdade fomos nós que paramos de olhar.
+    if (!avisouTeto) {
+      avisouTeto = true;
+      fila.push({ tipo: 'limite_sessao', rota: rotaAtual(), alvo: `teto de ${TETO} eventos atingido`,
+        detalhe: 'os eventos seguintes desta sessão NÃO foram registrados', ts: Date.now() });
+      flush();
+    }
+    return;
+  }
   contador++;
   fila.push({ tipo, rota: rotaAtual(), alvo: String(alvo).slice(0, 120), detalhe: String(detalhe).slice(0, 200), ts: Date.now() });
   if (fila.length >= 10) flush(); else agendar();
@@ -80,9 +97,27 @@ export function instalarTracker() {
   window.addEventListener('hashchange', pv);
 
   // Cliques em elementos interativos (captura o mais próximo botão/link/label).
+  //
+  // O SELETOR SOZINHO PERDIA 54 PONTOS DE CLIQUE (contados em 11/08): esta base usa muito
+  // `<div onClick>` — card de imóvel, card de curso, linha de tabela. O React registra esses
+  // handlers em JS, então não existe atributo para procurar: pelo seletor, o clique no card
+  // inteiro simplesmente não existia. O segundo caminho é a PISTA VISUAL — se o navegador
+  // desenha cursor de mão, aquilo é um botão para quem está usando, seja qual for a tag.
+  const ehClicavelVisualmente = (el) => {
+    try { return window.getComputedStyle(el).cursor === 'pointer'; } catch { return false; }
+  };
   window.addEventListener('click', (e) => {
     try {
-      const el = e.target?.closest?.('button, a, [role="button"], input[type="submit"], input[type="button"], label, [data-track]');
+      let el = e.target?.closest?.('button, a, [role="button"], input[type="submit"], input[type="button"], label, [data-track]');
+      if (!el) {
+        // Sobe no máximo 4 níveis atrás do elemento clicável mais próximo. O limite evita
+        // atribuir o clique a um container gigante só porque ele herdou cursor:pointer.
+        let n = e.target, saltos = 0;
+        while (n && n !== document.body && saltos < 4) {
+          if (n.nodeType === 1 && ehClicavelVisualmente(n)) { el = n; break; }
+          n = n.parentElement; saltos++;
+        }
+      }
       if (!el) return;
       registrarEvento('click', { alvo: rotuloDe(el) || el.tagName?.toLowerCase() || 'elemento' });
     } catch { /* ignora */ }

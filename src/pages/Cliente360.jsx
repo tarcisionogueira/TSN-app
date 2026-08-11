@@ -256,6 +256,7 @@ ${aceites.length ? `<table><thead><tr><th>Aceito em</th><th>Plano/produto</th><t
 ${(fin.lancamentos || []).length ? `<table><thead><tr><th>Data</th><th>Tipo</th><th>Descrição</th><th style="text-align:right">Valor</th><th>Status</th></tr></thead><tbody>${linhasFin}</tbody></table>` : '<div class="muted" style="margin-top:6px">Sem lançamentos financeiros.</div>'}
 <h2>Relatórios gerados</h2><div class="box"><div class="kv"><b>Mercadológico:</b> ${rel.mercado?.total || 0} &nbsp; <b>Documental:</b> ${rel.documental?.total || 0} &nbsp; <b>Laudo:</b> ${rel.laudo?.total || 0}</div></div>
 ${atividade ? `<h2>Atividade${(tDe || tAte) ? ' no período' : ''}</h2><table><thead><tr><th>Data</th><th>Evento</th><th>Detalhe</th></tr></thead><tbody>${atividade}</tbody></table>` : `<h2>Atividade</h2><div class="muted">Sem eventos ${(tDe || tAte) ? 'no período selecionado' : 'registrados'}. Obs.: o log de atividade tem retenção de ~90 dias — períodos anteriores podem não ter registros.</div>`}
+${Array.isArray(base._truncado) && base._truncado.length ? `<div style="margin-top:20px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 12px;font-size:12px;color:#92400e"><strong>Aviso de completude:</strong> as seções <strong>${esc(base._truncado.join(', '))}</strong> excedem o limite de exportação e aparecem aqui apenas com os registros mais recentes. Documento parcial NESTAS seções.</div>` : ''}
 <div style="margin-top:26px;border-top:1px solid #e2e8f0;padding-top:8px" class="muted">Documento gerado automaticamente pela plataforma BidPro Brasil em ${emitido}. ${esc(periodoLabel)}. O log de atividade respeita a retenção da plataforma (~90 dias). Uso restrito. Contém dados pessoais protegidos pela LGPD (Lei nº 13.709/2018) — tratar com confidencialidade.</div>
 <div class="noprint" style="margin-top:16px"><button onclick="window.print()" style="padding:8px 16px;font-size:13px;cursor:pointer">Imprimir / Salvar em PDF</button></div>
 </body></html>`;
@@ -525,6 +526,15 @@ ${atividade ? `<h2>Atividade${(tDe || tAte) ? ' no período' : ''}</h2><table><t
               <strong> incompletos</strong> — vazio aqui não significa "não existe". Recarregue para tentar de novo.
             </div>
           )}
+          {/* Lista CORTADA não é lista completa. A tela mostra os eventos mais recentes; sem
+              este aviso, "200 cliques" parecia ser tudo o que a pessoa fez. O dossiê traz o
+              histórico inteiro retido. */}
+          {Array.isArray(dados._truncado) && dados._truncado.length > 0 && (
+            <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '10px 14px', fontSize: 12.5, color: '#92400e', fontWeight: 600 }}>
+              Mostrando apenas os eventos mais recentes de: {dados._truncado.join(', ')}. Há mais histórico
+              do que cabe nesta tela — gere o dossiê para ver tudo o que está retido.
+            </div>
+          )}
           {/* Cabeçalho do cliente + contato */}
           <div style={{ ...card, background: '#111', color: 'white', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
             <div>
@@ -729,7 +739,21 @@ ${atividade ? `<h2>Atividade${(tDe || tAte) ? ' no período' : ''}</h2><table><t
             {(dados.navegacao || []).length === 0 ? <div style={{ fontSize: 12, color: '#94a3b8' }}>Sem navegação registrada ainda.</div> : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 5, maxHeight: 320, overflowY: 'auto' }}>
                 {dados.navegacao.map((n, i) => {
-                  const meta = { pageview: { rot: 'Tela', cor: '#64748b' }, click: { rot: 'Clique', cor: '#0D63DB' }, api_erro: { rot: 'Falha API', cor: '#dc2626' }, api_vazio: { rot: 'Sem resultado', cor: '#b45309' } }[n.tipo] || { rot: n.tipo, cor: '#64748b' };
+                  // TODO tipo coletado tem rótulo e cor. Os quatro que faltavam (submit, change,
+                  // pdf_gerado, api_falha_rede) apareciam com o slug cru em cinza — e
+                  // `api_falha_rede`, que é FALHA, ficava com a mesma cara de um clique comum.
+                  // O dono quer ler "o que deu certo e o que deu errado": vermelho = falhou.
+                  const meta = {
+                    pageview:        { rot: 'Tela',            cor: '#64748b' },
+                    click:           { rot: 'Clique',          cor: '#0D63DB' },
+                    submit:          { rot: 'Envio de form',   cor: '#0D63DB' },
+                    change:          { rot: 'Campo alterado',  cor: '#64748b' },
+                    pdf_gerado:      { rot: 'PDF gerado',      cor: '#059669' },
+                    api_erro:        { rot: 'Falha de API',    cor: '#dc2626' },
+                    api_falha_rede:  { rot: 'Falha de rede',   cor: '#dc2626' },
+                    api_vazio:       { rot: 'Sem resultado',   cor: '#b45309' },
+                    limite_sessao:   { rot: 'Coleta interrompida (teto da sessão)', cor: '#b45309' },
+                  }[n.tipo] || { rot: n.tipo, cor: '#64748b' };
                   return (
                     <div key={i} style={{ fontSize: 12, color: '#334155', display: 'flex', justifyContent: 'space-between', gap: 8, borderTop: i ? '1px solid #f1f5f9' : 'none', paddingTop: i ? 5 : 0 }}>
                       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>

@@ -83,12 +83,30 @@ export default async function handler(req) {
         return v;
       };
 
-      data.atividade = (await secao('atividade', () => rpc('atividade_usuario', { p_user_id: uid, p_limite: full ? 2000 : 100 }))) || [];
+      // ─── SABER QUANDO A LISTA FOI CORTADA (11/08) ────────────────────────────────
+      // `atividade_navegacao` travava em 300 e `atividade_usuario` em 500 — tetos INTERNOS
+      // que o chamador não conhecia. O dossiê pedia 2.000 de cada e recebia o teto, sem
+      // nenhum sinal: o usuário mais ativo tem 4.511 eventos e o documento dizia
+      // "histórico completo" com 300 deles. Os tetos subiram para 5.000 no banco; aqui
+      // pedimos SEMPRE n+1 e, se vier um a mais, sabemos que há continuação e dizemos.
+      data._truncado = [];
+      const listaLimitada = async (nome, limite, fn) => {
+        const v = await secao(nome, () => fn(limite + 1));
+        if (!Array.isArray(v)) return v == null ? [] : v;
+        if (v.length > limite) { data._truncado.push(nome); return v.slice(0, limite); }
+        return v;
+      };
+
+      const LIM_ATIVIDADE = full ? 2000 : 100;
+      data.atividade = await listaLimitada('atividade', LIM_ATIVIDADE,
+        (n) => rpc('atividade_usuario', { p_user_id: uid, p_limite: n }));
       // Anexa a NAVEGAÇÃO/cliques (clickstream de eventos_atividade): telas vistas, cliques e
       // falhas/relatórios vazios de API — o "tudo o que o usuário fez" p/ caçar bug/quebra. Era
       // COLETADO (tracker.js → /api/track) mas NUNCA exibido: o painel "Navegação e cliques" do
       // Cliente 360 lia dados.navegacao, que ninguém preenchia. Vale p/ cliente/parceiro/equipe.
-      data.navegacao = (await secao('navegacao', () => rpc('atividade_navegacao', { p_user_id: uid, p_limite: full ? 2000 : 200 }))) || [];
+      const LIM_NAVEGACAO = full ? 2000 : 200;
+      data.navegacao = await listaLimitada('navegacao', LIM_NAVEGACAO,
+        (n) => rpc('atividade_navegacao', { p_user_id: uid, p_limite: n }));
       // TERMOS ACEITOS (trilho jurídico do 360): compra de plano/produto (aceites_plano, com
       // IP/versão — prova anti-chargeback) + LGPD do cadastro. A adesão de parceiro já vem na
       // RPC ('parceria'). Antes só a Auditoria da aba Usuários mostrava isso — o 360 não.

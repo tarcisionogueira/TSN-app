@@ -98,6 +98,8 @@ export default function BoasVindasModal() {
   const aula = aulas[idx];
   const emb = videoEmbed(aula.video_url);
   const ultima = idx + 1 >= aulas.length;
+  // Quantos ainda faltam DEPOIS deste — é o número que a linha de contrato mostra.
+  const restantes = aulas.length - (idx + 1);
   const cor = curso.cor || '#0D63DB';
 
   return (
@@ -137,9 +139,27 @@ export default function BoasVindasModal() {
           )}
         </div>
 
+        {/* CONTRATO EXPLÍCITO COM QUEM ESTÁ VENDO (pedido do dono, 11/08): a pessoa precisa
+            saber POR QUE isto reaparece e O QUE faz parar. Sem esta linha, um convite que
+            volta a cada acesso vira incômodo sem explicação — e o reflexo é fechar mais
+            rápido a cada vez, não assistir. */}
+        <div style={{ margin: '14px 20px 0', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 12px', display: 'flex', gap: 9, alignItems: 'flex-start' }}>
+          <CheckCircle2 size={15} color={cor} style={{ flexShrink: 0, marginTop: 1 }} />
+          <div style={{ fontSize: 12.5, color: '#475569', lineHeight: 1.55 }}>
+            {restantes > 0 ? (
+              <>Assista e marque como concluído para este convite <strong>parar de aparecer</strong>.
+              {' '}Faltam {restantes} {restantes === 1 ? 'vídeo' : 'vídeos'}.</>
+            ) : (
+              <>Este é o último. Ao marcar como concluído, o convite <strong>não aparece mais</strong>.</>
+            )}
+            {' '}Você também pode assistir depois na Área de Membros — o progresso é o mesmo.
+          </div>
+        </div>
+
         {/* Ações */}
         <div style={{ padding: '16px 20px 20px', display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'space-between' }}>
           <button onClick={fechar}
+            title="Fecha agora; o convite volta no próximo acesso até você concluir os vídeos."
             style={{ background: 'transparent', border: 'none', color: '#64748b', fontSize: 13, fontWeight: 600, cursor: 'pointer', padding: '8px 4px' }}>
             Ver depois
           </button>
