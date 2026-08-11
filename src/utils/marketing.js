@@ -45,9 +45,40 @@ export function capturarMarketing() {
     const hq = iq >= 0 ? new URLSearchParams(h.slice(iq)) : new URLSearchParams();
     const get = (k) => (qs.get(k) || hq.get(k) || '').slice(0, 300);
     const dados = { gclid: get('gclid'), fbclid: get('fbclid'), utm_source: get('utm_source'), utm_medium: get('utm_medium'), utm_campaign: get('utm_campaign') };
-    if (Object.values(dados).some(Boolean)) {
-      localStorage.setItem(KEY, JSON.stringify({ ...dados, ts: Date.now() }));
-    }
+
+    // REFERRER E PÁGINA DE ENTRADA (11/08). Até aqui só gravávamos quem chegava com
+    // gclid/fbclid/utm — ou seja, só quem veio de anúncio. Quem chega do Instagram, de um
+    // grupo de WhatsApp, da busca orgânica ou digitando o endereço não deixava rastro
+    // nenhum, e no painel isso aparecia como "indicado pelo dono" (o upline padrão),
+    // que é uma resposta errada com cara de certa. Dos 17 cadastros dos últimos 14 dias,
+    // 10 estavam assim.
+    //
+    // Guardamos só o HOST de origem, nunca a URL inteira: o caminho de onde a pessoa veio
+    // pode carregar dado de terceiro (um grupo, um perfil, uma busca) e não acrescenta nada
+    // à pergunta que queremos responder, que é "de que canal veio".
+    let referrer = 'direto';
+    try {
+      const r = document.referrer || '';
+      if (r) {
+        const h = new URL(r).hostname.replace(/^www\./, '');
+        // Navegação interna não é origem — só marcaria "veio da própria BidPro".
+        if (h && h !== window.location.hostname.replace(/^www\./, '')) referrer = h.slice(0, 120);
+        else referrer = '';
+      }
+    } catch { referrer = ''; }
+    const landing = String(window.location.pathname + (window.location.hash || '')).slice(0, 200);
+
+    // A PRECEDÊNCIA IMPORTA, e errar aqui custa a medição da campanha paga:
+    //   • Chegou com anúncio → SOBRESCREVE sempre. É a atribuição que o Google Ads precisa
+    //     para contar a conversão. Quem visitou organicamente ontem e clicou no anúncio hoje
+    //     tem que ficar registrado como vindo do anúncio.
+    //   • Chegou sem anúncio → só preenche o VAZIO. Nunca apaga uma atribuição paga já
+    //     guardada; senão uma visita orgânica posterior derrubaria o gclid e a campanha
+    //     apareceria sem converter.
+    const temAnuncio = Object.values(dados).some(Boolean);
+    const registro = JSON.stringify({ ...dados, referrer, landing, ts: Date.now() });
+    if (temAnuncio) localStorage.setItem(KEY, registro);
+    else if (referrer && !localStorage.getItem(KEY)) localStorage.setItem(KEY, registro);
   } catch { /* ignore */ }
 }
 
