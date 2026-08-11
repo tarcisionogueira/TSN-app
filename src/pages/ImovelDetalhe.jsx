@@ -108,6 +108,7 @@ function MiniMapa({ lat, lng, pontos, nivel }) {
 
   useEffect(() => {
     let cancel = false;
+    const timers = [];
     import('leaflet').then(({ default: L }) => {
       if (cancel || !ref.current || mapRef.current) return;
       const map = L.map(ref.current, { scrollWheelZoom: false, attributionControl: false }).setView([lat, lng], zoomBase);
@@ -124,11 +125,27 @@ function MiniMapa({ lat, lng, pontos, nivel }) {
         { url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', opts: { subdomains: 'abcd', maxZoom: 19 } },
       ];
       let baseIdx = 0, tileErros = 0, refLayer = null;
+      // `vivo()`: o mapa ainda está montado E é este mapa? Todo retorno ASSÍNCRONO abaixo
+      // precisa perguntar isso antes de tocar no Leaflet.
+      //
+      // FOI EXATAMENTE AQUI QUE QUEBROU (erro de cliente em 11/08, rota /imovel/:id:
+      // "Cannot read properties of undefined (reading '_leaflet_pos')", 2 ocorrências).
+      // `tileerror` chega da REDE, e a rede não sabe que a pessoa já saiu da página. Quem
+      // navegava entre imóveis com tile falhando disparava o fallback DEPOIS do
+      // `map.remove()` da limpeza: `layer.addTo(map)` num mapa removido faz o Leaflet
+      // procurar o `_mapPane`, que não existe mais → estouro na cara do cliente.
+      // `map.remove()` para as animações sozinho, mas não cancela handler nosso preso a
+      // resposta de rede pendente — isso é conosco.
+      const vivo = () => !cancel && mapRef.current === map;
       const montarBase = () => {
         const b = BASEMAPS[baseIdx];
         const layer = L.tileLayer(b.url, { ...b.opts, zIndex: 1 });
         tileErros = 0;
         layer.on('tileerror', () => {
+          // Na PRIMEIRA montagem `mapRef.current` ainda é null (só recebe o mapa no fim do
+          // efeito), então aqui basta "não foi desmontado" — o `vivo()` completo vale para
+          // os callbacks que rodam depois, quando a referência já existe.
+          if (cancel) return;
           tileErros += 1;
           if (tileErros >= 6 && baseIdx < BASEMAPS.length - 1) {
             baseIdx += 1;
@@ -137,8 +154,10 @@ function MiniMapa({ lat, lng, pontos, nivel }) {
             montarBase();
           }
         });
-        layer.addTo(map);
-        if (b.labels) { refLayer = L.tileLayer(b.labels, { maxNativeZoom: 16, maxZoom: 19, zIndex: 2 }); refLayer.addTo(map); }
+        try {
+          layer.addTo(map);
+          if (b.labels) { refLayer = L.tileLayer(b.labels, { maxNativeZoom: 16, maxZoom: 19, zIndex: 2 }); refLayer.addTo(map); }
+        } catch { /* mapa saiu do ar entre o erro de tile e a troca de basemap */ }
       };
       montarBase();
       // Imóvel: pino exato (endereço/rua) OU círculo de área aproximada (bairro/cidade)
@@ -163,15 +182,25 @@ function MiniMapa({ lat, lng, pontos, nivel }) {
       // (a foto acima ainda ajustando o layout, ou a remontagem ao carregar os
       // pontos próximos). Reinvalida o tamanho algumas vezes e também quando o
       // elemento ganha dimensão real — sem isso o Leaflet fica cinza/vazio.
-      [120, 400, 800].forEach(t => setTimeout(() => { if (mapRef.current === map) { map.invalidateSize(); enquadrar(); } }, t));
+      [120, 400, 800].forEach(t => timers.push(setTimeout(() => {
+        if (!vivo()) return;
+        try { map.invalidateSize(); enquadrar(); } catch { /* container já sem tamanho válido */ }
+      }, t)));
       if (typeof ResizeObserver !== 'undefined' && ref.current) {
-        const ro = new ResizeObserver(() => { if (mapRef.current === map) map.invalidateSize(); });
+        const ro = new ResizeObserver(() => {
+          if (!vivo()) return;
+          try { map.invalidateSize(); } catch { /* */ }
+        });
         ro.observe(ref.current);
         roRef.current = ro;
       }
     });
     return () => {
       cancel = true;
+      // Timers cancelados de verdade, não só ignorados: o guarda protege contra tocar no
+      // mapa, mas timer pendente segura a closure inteira (mapa, camadas, pontos) na
+      // memória até disparar. Em quem navega entre imóveis, isso se acumula.
+      timers.forEach(clearTimeout);
       if (roRef.current) { roRef.current.disconnect(); roRef.current = null; }
       if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; }
     };

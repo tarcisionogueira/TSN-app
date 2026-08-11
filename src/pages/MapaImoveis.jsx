@@ -161,8 +161,11 @@ export default function MapaImoveis() {
   useEffect(() => {
     if (!mapRef.current || leafletMap.current) return;
 
+    let desmontado = false;
     import('leaflet').then(async L => {
+      if (desmontado) return;
       await import('leaflet.markercluster');
+      if (desmontado) return;
 
       delete L.Icon.Default.prototype._getIconUrl;
       L.Icon.Default.mergeOptions({
@@ -178,11 +181,16 @@ export default function MapaImoveis() {
       });
 
       let baseIdx = 0, tileErros = 0, refLayer = null;
+      // Mesma correção da Busca e do /imovel/:id (erro de cliente em 11/08): `tileerror`
+      // vem da REDE e pode chegar depois de a tela ser desmontada — aí o fallback faria
+      // `addTo` num mapa já removido e o Leaflet procuraria um pane inexistente.
+      const vivoMapa = () => !desmontado;
       const montarBase = () => {
         const b = BASEMAPS[baseIdx];
         const layer = L.tileLayer(b.url, { ...b.opts, zIndex: 1 });
         tileErros = 0;
         layer.on('tileerror', () => {
+          if (!vivoMapa()) return;
           tileErros += 1;
           if (tileErros >= 6 && baseIdx < BASEMAPS.length - 1) {
             baseIdx += 1;
@@ -191,8 +199,11 @@ export default function MapaImoveis() {
             montarBase();
           }
         });
-        layer.addTo(map);
-        if (b.labels) { refLayer = L.tileLayer(b.labels, { maxNativeZoom: 16, maxZoom: 19, zIndex: 2 }); refLayer.addTo(map); }
+        if (!vivoMapa()) return;
+        try {
+          layer.addTo(map);
+          if (b.labels) { refLayer = L.tileLayer(b.labels, { maxNativeZoom: 16, maxZoom: 19, zIndex: 2 }); refLayer.addTo(map); }
+        } catch { /* mapa saiu do ar entre o erro de tile e a troca de basemap */ }
       };
       montarBase();
 
@@ -228,6 +239,7 @@ export default function MapaImoveis() {
     });
 
     return () => {
+      desmontado = true;
       if (leafletMap.current) {
         leafletMap.current.remove();
         leafletMap.current = null;

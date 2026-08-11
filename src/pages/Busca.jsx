@@ -303,6 +303,7 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
   // Inicializa mapa
   useEffect(() => {
     if (!mapContainerRef.current || leafletRef.current) return;
+    const timersMapa = [];
     import('leaflet').then(async L => {
       // markercluster é PLUGIN: se falhar ao carregar/anexar, NÃO pode impedir o
       // mapa de ficar pronto (senão a centralização nunca roda → mapa no Brasil).
@@ -331,11 +332,18 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
           opts: { subdomains: 'abcd', maxZoom: 19, attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> © <a href="https://carto.com/attributions">CARTO</a>' } },
       ];
       let baseIdx = 0, tileErros = 0, refLayer = null;
+      const mapaBase = leafletRef.current;
+      // Mesma correção do MiniMapa do /imovel/:id (erro de cliente em 11/08): `tileerror`
+      // chega da REDE, e a rede não sabe que a tela já foi desmontada. Sem este guarda, o
+      // fallback de basemap roda DEPOIS do `remove()` e faz `addTo` num mapa morto — ou,
+      // aqui, `addTo(null)`, porque a limpeza zera o `leafletRef`.
+      const vivoMapa = () => leafletRef.current && leafletRef.current === mapaBase;
       const montarBase = () => {
         const b = BASEMAPS[baseIdx];
         const layer = L.tileLayer(b.url, { ...b.opts, zIndex: 1 });
         tileErros = 0;
         layer.on('tileerror', () => {
+          if (!vivoMapa()) return;
           tileErros += 1;
           // Vários erros seguidos = provedor bloqueado → cai para o próximo basemap.
           if (tileErros >= 6 && baseIdx < BASEMAPS.length - 1) {
@@ -345,13 +353,16 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
             montarBase();
           }
         });
-        layer.addTo(leafletRef.current);
-        // Camada de rótulos por cima da base (só o Light Gray tem). Pins ficam
-        // acima disto (markerPane), então continuam visíveis.
-        if (b.labels) {
-          refLayer = L.tileLayer(b.labels, { maxNativeZoom: 16, maxZoom: 19, zIndex: 2 });
-          refLayer.addTo(leafletRef.current);
-        }
+        if (!vivoMapa()) return;
+        try {
+          layer.addTo(leafletRef.current);
+          // Camada de rótulos por cima da base (só o Light Gray tem). Pins ficam
+          // acima disto (markerPane), então continuam visíveis.
+          if (b.labels) {
+            refLayer = L.tileLayer(b.labels, { maxNativeZoom: 16, maxZoom: 19, zIndex: 2 });
+            refLayer.addTo(leafletRef.current);
+          }
+        } catch { /* mapa saiu do ar entre o erro de tile e a troca de basemap */ }
       };
       montarBase();
       // Cluster agrupa os marcadores (evita travar com milhares de pins). Se o
@@ -365,19 +376,22 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
       markersRef.current.addTo(leafletRef.current);
       circlesRef.current = L.layerGroup().addTo(leafletRef.current);
       // Corrige tiles incompletos quando o container foi montado enquanto estava oculto
-      setTimeout(() => { if (leafletRef.current) leafletRef.current.invalidateSize(); }, 50);
-      setTimeout(() => { if (leafletRef.current) leafletRef.current.invalidateSize(); }, 300);
+      timersMapa.push(setTimeout(() => { if (vivoMapa()) try { leafletRef.current.invalidateSize(); } catch { /* */ } }, 50));
+      timersMapa.push(setTimeout(() => { if (vivoMapa()) try { leafletRef.current.invalidateSize(); } catch { /* */ } }, 300));
       // ResizeObserver: recalcula o mapa sempre que o container muda de tamanho
       // (resolve Mapa+Lista, troca de aba e resize de janela de forma robusta)
       if (typeof ResizeObserver !== 'undefined' && mapContainerRef.current) {
         resizeObsRef.current = new ResizeObserver(() => {
-          if (leafletRef.current) leafletRef.current.invalidateSize();
+          if (vivoMapa()) try { leafletRef.current.invalidateSize(); } catch { /* */ }
         });
         resizeObsRef.current.observe(mapContainerRef.current);
       }
       setMapReady(true);
     });
     return () => {
+      // Cancela de verdade: timer pendente segura a closure inteira (mapa, camadas,
+      // marcadores) na memória até disparar.
+      timersMapa.forEach(clearTimeout);
       if (resizeObsRef.current) { resizeObsRef.current.disconnect(); resizeObsRef.current = null; }
       if (leafletRef.current) { leafletRef.current.remove(); leafletRef.current = null; }
       setMapReady(false);
@@ -514,8 +528,9 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
   useEffect(() => {
     if (visivel && leafletRef.current) {
       // Duplo fire: 100ms para layout inicial, 400ms após possível transição CSS
-      setTimeout(() => leafletRef.current?.invalidateSize(), 100);
-      setTimeout(() => leafletRef.current?.invalidateSize(), 400);
+      const t1 = setTimeout(() => { try { leafletRef.current?.invalidateSize(); } catch { /* */ } }, 100);
+      const t2 = setTimeout(() => { try { leafletRef.current?.invalidateSize(); } catch { /* */ } }, 400);
+      return () => { clearTimeout(t1); clearTimeout(t2); };
     }
   }, [visivel]);
 
