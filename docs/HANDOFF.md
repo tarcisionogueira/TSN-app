@@ -161,6 +161,81 @@ antes de mexer, mais 6 validações de produção para rodar na abertura.
 
 ---
 
+## 🔚 ENCERRAMENTO DE 11/08 — leia ESTE bloco primeiro
+
+> **`main` em `3ffa533` · 32 commits no dia · deploy de produção READY · banco 0 crítico em tudo.**
+> O dia começou na coleta do RJ e terminou numa varredura de fim de dia que achou mais um defeito.
+> Abaixo, o estado real ao encerrar e o que espera a próxima sessão.
+
+### Estado medido ao fechar (23h UTC)
+
+| Verificação | Resultado |
+|---|---|
+| `auditoria_seguranca()` | **0 crítico / 0 atenção** |
+| `auditoria_regras_negocio()` | **0 crítico** |
+| `auditoria_uso()` (gaps de escrita) | **0** |
+| `seguranca_tabelas_sem_rls()` | **vazio** |
+| Advisor de segurança do Supabase | **0 ERROR** (eram 2 pela manhã) |
+| Erros de cliente abertos | **0** (dois achados e corrigidos hoje) |
+| Chamados do cliente sem resposta | **0** |
+| Invariantes em alerta | **1** — `bd_teto_saturado 465/405`, decisão marcada para 18/08 |
+
+### ⚠️ O QUE ESPERA VOCÊ NA ABERTURA
+
+1. **G2RS — a submissão FALHOU no envio, e não por conteúdo.** A tela devolveu *"Você não está
+   qualificado para enviar uma NOVA solicitação... a ID de cliente do Google já tem uma solicitação
+   em andamento"*. Causa: na primeira pergunta ficou marcado **"Esta é uma nova solicitação"**, e o
+   certo é a **segunda opção** ("avaliada anteriormente… atualizar os campos"), que exige o
+   **código G2RS** do envio original. O dono vai refazer amanhã — **todo o conteúdo já está
+   decidido e conferido**, ver `docs/PENDENCIAS_DONO.md` item -1. Se ele não achar o código:
+   `FinancialServicesVerification@g2risksolutions.com`, citando a ID `475-979-5747` e o CNPJ.
+2. **Do lado do Google ele ainda é PESSOA FÍSICA.** O perfil de pagamentos mostra
+   `TARCISIO DE SOUZA NOGUEIRA DE ARAUJO` e a conta do Google Payments ainda se chama
+   *"Clube Conselheiro"*. **É a causa provável de uma terceira reprova**, e não se resolve no
+   formulário da G2RS. Ressalva: trocar perfil de pagamentos de pessoa física para empresa pode
+   não ser editável depois de criado — conferir em `ads.google.com/aw/advertiserverification`.
+3. **Espelho com `LOTE 1200` — validação agendada para 01:00 UTC** (a rodada das 00:40 ainda não
+   tinha acontecido quando fechei; a checagem das 22:46 foi cedo demais, erro meu de agendamento).
+   Referência: 598 cópias em 138s de um orçamento de 240s com `LOTE 600`. Verde = bem acima de 598.
+4. **Resend: falta só marcar `email.opened` e `email.clicked`** na inscrição do webhook. O DNS está
+   pronto (CNAME `links` **Verified**) e `email.delivered` já chega — o endpoint e o segredo estão
+   certos. Desde hoje o handler registra **todo evento recebido** em `webhook_eventos_processados`
+   (`gateway='resend'`), então o próximo envio diz sozinho se é inscrição ou comportamento real.
+   Depois disso, o **backlog de 26 pessoas** está liberado (workflow manual, `limite=2` primeiro).
+
+### Os dois defeitos achados DEPOIS do trabalho do dia — e como apareceram
+
+Os dois são a mesma família e nenhum saiu de varredura de código: um veio do **rastro no banco**,
+o outro de **comparar o código com o schema**.
+
+1. **`erros_cliente` acusou às 22:40** — `column solicitacoes.criado_em does not exist` na rota
+   `/admin`. A fila de solicitações da equipe aparecia **VAZIA** (400 → `{data}` sem `error` →
+   `|| []`), e no painel de produtividade **dois dos quatro** contadores davam zero, porque
+   `comissoes` também usa `created_at`. Analista produtivo lido como parado.
+2. **A varredura schema × código achou `Caso.jsx`** ordenando `casos` por `criado_em`. O lugar não
+   podia ser pior: é a consulta de RESGATE escrita HOJE para o relato *"eu buscando um imóvel deu
+   esse erro"* — ela existe para oferecer o caso já existente em vez de tela vermelha, e com a
+   coluna errada dava 400 e a pessoa via a tela vermelha do mesmo jeito. **O conserto carregava um
+   defeito da mesma família que veio consertar.**
+
+> **A lição, na forma que serve para a próxima vez:** a coluna de data **não é a mesma** em todas as
+> tabelas — `criado_em` nas antigas, `created_at` nas novas. Escrever as consultas juntas num
+> `Promise.all` faz a inconsistência sumir da vista. Já está registrada como a **sexta forma** no
+> `CLAUDE.md`, com o método de varredura (todos os `from('tabela')` × `information_schema`).
+
+### Conferido e íntegro (para ninguém refazer)
+
+- As **36 colunas** de `COLUNAS_BUSCA` existem todas em `imoveis_leilao` — uma inexistente
+  derrubaria a busca inteira, não um campo.
+- Os guardas de ciclo de vida do Leaflet estão nos **três** arquivos de mapa.
+- O painel de geocodificação não tem referência órfã depois de trocar 54 contagens pela RPC.
+- `/api/clique` testado em produção: redireciona certo, redireciona também com assinatura inválida
+  (é o contrato), e os dois vetores de open redirect (`https://evil.com` e `//evil.com`) caem na
+  nossa própria home.
+- Health-check das 22:00 confirmou `EMPRESA_CNPJ` — *"configurado e válido (02.311.***)"*.
+
+---
+
 ## 🏁 FECHAMENTO DE 11/08 (noite) — eficiência em produção + o 360 medindo clique sozinho
 
 > Pedido do dono: *"resolva o que der sem precisar de mim e vamos validando. agora precisa ter

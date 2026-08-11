@@ -280,6 +280,51 @@ parece engano: a categoria está mesmo errada.
 ⏰ **Prazo continua o mesmo (fim de agosto) e o processo leva até 7 dias úteis.** Já foram duas
 rodadas; a terceira precisa sair esta semana para caber.
 
+#### 📋 O FORMULÁRIO JÁ ESTÁ TODO DECIDIDO — só refazer com o radio certo (11/08, noite)
+
+A submissão de 11/08 **não chegou a ser avaliada**: a tela devolveu *"Você não está qualificado
+para enviar uma NOVA solicitação... a ID de cliente do Google já tem uma solicitação em
+andamento"*. Ficou marcado **"Esta é uma nova solicitação"** na primeira pergunta. O certo é a
+**segunda** — *"foi avaliada anteriormente… atualizar os campos de dados"* — que exige o
+**código G2RS** do envio ORIGINAL (está no e-mail da primeira submissão, não no da recusa).
+Sem o código: `FinancialServicesVerification@g2risksolutions.com`, citando a ID do Google Ads e o CNPJ.
+
+Nada mais muda. Preencher assim:
+
+| Campo | Valor |
+|---|---|
+| 1ª pergunta | **"foi avaliada anteriormente"** + código G2RS |
+| Estado | Anunciante de **serviços não financeiros** |
+| Modelo de negócios | **Outros** → `Análise e assessoria para arrematação de imóveis em leilão (relatórios de viabilidade e due diligence)` |
+| Anexos (limite 2) | Contrato social + Cartão CNPJ |
+| ID Google Ads | `4759795747` (sem traços; não é conta de gerente) |
+| Nome fantasia | `BidPro Brasil` |
+| Razão social | `Nogueira Empreendimentos LTDA` |
+| Endereço | `Rua Barra Avenida, SN, Conj Barra do Mendes, Mangabeira, Feira de Santana – BA, CEP 44.056-536` |
+| Telefone | `+55 71 99650-2234` (o Cartão CNPJ traz sem o 9º dígito — vale o que atende) |
+| CNPJ / País | `02311492000161` / Brazil |
+| Domínio | `bidprobrasil.com.br`, **só ele** |
+| Campo do regulador (domínio e e-mail) | **em branco** — não somos regulados |
+| E-mail de contato | `tarcisioaraujo@reimob.com.br` — é o que consta no **Cartão CNPJ anexado**, e recebe de verdade |
+| Checkboxes | Garantia · Termos · Privacidade · Transferência p/ EUA e Vietnã |
+
+**Texto de observações (736 de 750 caracteres), já validado:**
+> Nova submissão após negativa anterior. A solicitação original marcou "sou um mecanismo de busca",
+> o que não descreve a empresa: o site publica páginas de listagem por cidade para ser encontrado na
+> busca, mas o que vendemos é o relatório de análise do imóvel, não a busca. Anexamos o Cartão CNPJ
+> e o contrato social registrado na Junta Comercial da Bahia em 02/04/2025. A cláusula primeira do
+> contrato altera o nome empresarial de CLUBE CONSELHEIRO para NOGUEIRA EMPREENDIMENTOS LTDA — o
+> campo de nome fantasia do Cartão CNPJ ainda exibe o nome antigo. BidPro Brasil é a marca da
+> plataforma, e os Termos de Uso em bidprobrasil.com.br/#/termos identificam a empresa como
+> operadora. O objeto social não inclui nenhuma atividade financeira.
+
+> 🔴 **O RISCO QUE SOBRA, e não se resolve neste formulário:** o perfil de pagamentos do Google
+> mostra **TARCISIO DE SOUZA NOGUEIRA DE ARAUJO** (pessoa física) e a conta do Google Payments
+> ainda se chama **"Clube Conselheiro"**. O formulário avisa que divergência com o nome verificado
+> no Google causa atraso ou rejeição — foi o motivo da 1ª reprova. Abra o ajuste em
+> `ads.google.com/aw/advertiserverification` em paralelo. Ressalva honesta: trocar perfil de
+> pagamentos de pessoa física para empresa às vezes **não é editável** depois de criado.
+
 ### 0. ⭐ TESTAR a compra AVULSA da loja (ebook/curso) — no computador
 - **Por quê:** o checkout avulso (Mercado Pago + Asaas) foi para produção nesta sessão; falta um teste real de ponta a ponta (o dono pediu para testar mais tarde).
 - **Passos:**
