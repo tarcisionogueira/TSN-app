@@ -36,7 +36,9 @@ import { hostExternoSeguro, fetchExternoSeguro } from './_allowed-hosts.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
-const LOTE = Number(process.env.ESPELHO_LOTE || 150);
+const LOTE = Number(process.env.ESPELHO_LOTE || 600);
+// Downloads simultâneos. O gargalo é rede de terceiro, não CPU nossa — ver o pool abaixo.
+const CONCORRENCIA = Math.max(1, Number(process.env.ESPELHO_CONCORRENCIA || 6));
 // Sai com folga antes do maxDuration de 300s: um download pode levar 25s (o timeout abaixo),
 // então paramos aos 240s para sempre haver tempo de responder e registrar o resultado.
 const ORCAMENTO_MS = Number(process.env.ESPELHO_ORCAMENTO_MS || 240000);
@@ -64,7 +66,7 @@ export default async function handler(req, res) {
   // Reabastece a fila antes de trabalhar: lotes novos entram na ordem da instabilidade da fonte.
   let enfileirados = 0;
   try {
-    const r = await sb('rpc/enfileirar_espelho_documentos', { method: 'POST', body: JSON.stringify({ p_limite: 200 }) });
+    const r = await sb('rpc/enfileirar_espelho_documentos', { method: 'POST', body: JSON.stringify({ p_limite: 500 }) });
     if (r.ok) enfileirados = await r.json().catch(() => 0);
     else console.error('[espelhar-docs] enfileirar', r.status, (await r.text().catch(() => '')).slice(0, 200));
   } catch (e) { console.error('[espelhar-docs] enfileirar erro', e?.message); }
@@ -96,13 +98,13 @@ export default async function handler(req, res) {
 
   const t0 = Date.now();
   let copiados = 0, falhas = 0, ignorados = 0, processados = 0, semTempo = 0;
-  for (const d of pend) {
-    // Orçamento de TEMPO: o que limita esta função é o maxDuration, não a contagem.
-    if (Date.now() - t0 > ORCAMENTO_MS) { semTempo = pend.length - processados; break; }
-    processados++;
+
+  /** Espelha UM documento. Não lança: devolve o desfecho para o pool contabilizar. */
+  async function espelhar(d) {
     // Anti-SSRF: só host externo permitido — a URL veio do acervo, mas o acervo vem de scraper.
     if (!hostExternoSeguro(d.url_origem)) {
-      await marcar(d.id, { status: 'ignorado', motivo: 'host não permitido' }); ignorados++; continue;
+      await marcar(d.id, { status: 'ignorado', motivo: 'host não permitido' });
+      return 'ignorado';
     }
     let bin = null, mime = 'application/pdf';
     try {
@@ -110,16 +112,16 @@ export default async function handler(req, res) {
         headers: { 'User-Agent': UA, Accept: 'application/pdf,*/*' },
         signal: AbortSignal.timeout(25000),
       });
-      if (!r.ok) { await marcar(d.id, { status: 'pendente', tentativas: (d.tentativas || 0) + 1, motivo: `HTTP ${r.status}` }); falhas++; continue; }
+      if (!r.ok) { await marcar(d.id, { status: 'pendente', tentativas: (d.tentativas || 0) + 1, motivo: `HTTP ${r.status}` }); return 'falha'; }
       mime = (r.headers.get('content-type') || 'application/pdf').split(';')[0].trim();
       const buf = new Uint8Array(await r.arrayBuffer());
       // Página HTML de erro travestida de documento: não espelha lixo como se fosse matrícula.
-      if (/text\/html/i.test(mime)) { await marcar(d.id, { status: 'ignorado', motivo: 'resposta HTML, não é documento' }); ignorados++; continue; }
-      if (!buf.length || buf.length > MAX_BYTES) { await marcar(d.id, { status: 'ignorado', motivo: `tamanho ${buf.length}` }); ignorados++; continue; }
+      if (/text\/html/i.test(mime)) { await marcar(d.id, { status: 'ignorado', motivo: 'resposta HTML, não é documento' }); return 'ignorado'; }
+      if (!buf.length || buf.length > MAX_BYTES) { await marcar(d.id, { status: 'ignorado', motivo: `tamanho ${buf.length}` }); return 'ignorado'; }
       bin = Buffer.from(buf);
     } catch (e) {
       await marcar(d.id, { status: 'pendente', tentativas: (d.tentativas || 0) + 1, motivo: String(e?.message || e).slice(0, 120) });
-      falhas++; continue;
+      return 'falha';
     }
 
     const ext = /pdf/i.test(mime) ? 'pdf' : /jpe?g/i.test(mime) ? 'jpg' : /png/i.test(mime) ? 'png' : 'bin';
@@ -136,11 +138,35 @@ export default async function handler(req, res) {
     });
     if (!up.ok) {
       await marcar(d.id, { status: 'pendente', tentativas: (d.tentativas || 0) + 1, motivo: `upload ${up.status}` });
-      falhas++; continue;
+      return 'falha';
     }
     await marcar(d.id, { status: 'copiado', storage_path: path, bytes: bin.length, motivo: null });
-    copiados++;
+    return 'copiado';
   }
+
+  // ─── POOL DE TRABALHADORES (11/08, medido) ────────────────────────────────────
+  // A primeira execução com orçamento de tempo copiou 113 documentos em 240s — 2,1s cada,
+  // quase tudo esperando o download do CDN do leiloeiro. Sequencial, o teto é esse: 678/dia
+  // contra 1.200/dia entrando na fila enquanto os anexos são enfileirados. A fila NÃO drenava.
+  // Com CONCORRENCIA downloads em voo, o tempo ocioso vira vazão sem pedir mais recurso a
+  // ninguém — é o mesmo padrão já validado no backup-r2-cron. Cada trabalhador respeita o
+  // MESMO orçamento de tempo, então a função continua terminando antes do maxDuration.
+  // 6 é deliberadamente modesto: são CDNs de terceiros e não queremos parecer rajada.
+  let cursor = 0;
+  const trabalhador = async () => {
+    for (;;) {
+      if (Date.now() - t0 > ORCAMENTO_MS) return;
+      const i = cursor++;
+      if (i >= pend.length) return;
+      processados++;
+      const r = await espelhar(pend[i]).catch(() => 'falha');
+      if (r === 'copiado') copiados++;
+      else if (r === 'ignorado') ignorados++;
+      else falhas++;
+    }
+  };
+  await Promise.all(Array.from({ length: CONCORRENCIA }, trabalhador));
+  semTempo = Math.max(0, pend.length - processados);
 
   // Quanto ainda falta: sem isto, "copiei 25" parece progresso mesmo quando a fila cresce
   // mais rápido do que drena — que foi exatamente o que aconteceu por três dias.
