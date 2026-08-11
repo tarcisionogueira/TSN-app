@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Play, Lock, CheckCircle2, Clock, BookOpen, ChevronLeft,
@@ -9,6 +9,7 @@ import { useAuth } from '../contexts/AuthContext';
 import CapaCurso from '../components/CapaCurso';
 import { videoEmbed } from '../utils/videoEmbed';
 import DicaAudioIOS from '../components/DicaAudioIOS';
+import PlayerVideo from '../components/PlayerVideo';
 import { CURSOS, PLANOS } from '../data/cursos';
 
 // ── localStorage fallback ─────────────────────────────────────────────────────
@@ -319,38 +320,27 @@ export default function Curso() {
             {podeVer ? (
               <div style={{ background:'white', borderRadius:16, border:'1px solid #e2e8f0', overflow:'hidden' }}>
 
-                {/* Player de vídeo — real quando a aula tem video_url; senão, capa "em breve" */}
-                {(() => {
-                  const emb = videoEmbed(licaoAtiva.video_url);
-                  if (emb?.tipo === 'iframe') {
-                    return (
-                      <div style={{ position:'relative', width:'100%', aspectRatio:'16/9', background:'#000' }}>
-                        <iframe src={emb.src} title={licaoAtiva.titulo} loading="lazy"
-                          allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture; fullscreen"
-                          allowFullScreen
-                          style={{ position:'absolute', inset:0, width:'100%', height:'100%', border:'none' }} />
-                      </div>
-                    );
-                  }
-                  if (emb?.tipo === 'video') {
-                    return (
-                      <video src={emb.src} controls controlsList="nodownload" playsInline
-                        onEnded={() => { if (!progresso[licaoAtiva.id]) marcarConcluida(licaoAtiva.id); }}
-                        style={{ width:'100%', aspectRatio:'16/9', background:'#000', display:'block' }} />
-                    );
-                  }
+                {/* Player de vídeo — real quando a aula tem video_url; senão, capa "em breve".
+                    Ao TERMINAR, marca a aula como assistida sozinha (o player avisa o fim por
+                    postMessage — ver PlayerVideo.jsx). O botão manual continua ali para quem o
+                    provedor não reporta ou para quem assistiu por fora. */}
+                {videoEmbed(licaoAtiva.video_url) ? (
+                  <PlayerVideo
+                    url={licaoAtiva.video_url}
+                    titulo={licaoAtiva.titulo}
+                    onFim={() => { if (!progresso[licaoAtiva.id]) marcarConcluida(licaoAtiva.id); }}
+                  />
+                ) : (
                   // Sem vídeo cadastrado: capa neutra (nada de "player" falso).
-                  return (
-                    <div style={{ background:'#111111', aspectRatio:'16/9', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:14, position:'relative' }}>
-                      <div style={{ position:'absolute', inset:0, background:`radial-gradient(circle at 30% 40%, ${curso.cor}30 0%, transparent 60%)` }}/>
-                      <div style={{ position:'relative' }}><CapaCurso curso={curso} tamanho={84} raio={18}/></div>
-                      <div style={{ position:'relative', textAlign:'center' }}>
-                        <div style={{ fontSize:16, fontWeight:700, color:'white', marginBottom:6 }}>{licaoAtiva.titulo}</div>
-                        <div style={{ fontSize:12, color:'#94a3b8' }}>🎬 Vídeo em breve</div>
-                      </div>
+                  <div style={{ background:'#111111', aspectRatio:'16/9', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:14, position:'relative' }}>
+                    <div style={{ position:'absolute', inset:0, background:`radial-gradient(circle at 30% 40%, ${curso.cor}30 0%, transparent 60%)` }}/>
+                    <div style={{ position:'relative' }}><CapaCurso curso={curso} tamanho={84} raio={18}/></div>
+                    <div style={{ position:'relative', textAlign:'center' }}>
+                      <div style={{ fontSize:16, fontWeight:700, color:'white', marginBottom:6 }}>{licaoAtiva.titulo}</div>
+                      <div style={{ fontSize:12, color:'#94a3b8' }}>Vídeo em breve</div>
                     </div>
-                  );
-                })()}
+                  </div>
+                )}
 
                 {/* Controles + título */}
                 <div style={{ padding:'22px 24px' }}>

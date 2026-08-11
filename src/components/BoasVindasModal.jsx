@@ -1,9 +1,9 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { X, Play, CheckCircle2, ArrowRight } from 'lucide-react';
+import { X, CheckCircle2, ArrowRight } from 'lucide-react';
 import { supabase } from '../utils/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { videoEmbed } from '../utils/videoEmbed';
+import PlayerVideo from './PlayerVideo';
 import DicaAudioIOS from './DicaAudioIOS';
 
 /**
@@ -97,7 +97,6 @@ export default function BoasVindasModal() {
   if (!aberto || !curso || !aulas.length) return null;
 
   const aula = aulas[idx];
-  const emb = videoEmbed(aula.video_url);
   const ultima = idx + 1 >= aulas.length;
   // Quantos ainda faltam DEPOIS deste — é o número que a linha de contrato mostra.
   const restantes = aulas.length - (idx + 1);
@@ -123,22 +122,10 @@ export default function BoasVindasModal() {
           </button>
         </div>
 
-        {/* Player */}
-        <div style={{ position: 'relative', width: '100%', aspectRatio: '16/9', background: '#000' }}>
-          {emb?.tipo === 'iframe' ? (
-            <iframe src={emb.src} title={aula.titulo}
-              allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture; fullscreen"
-              allowFullScreen
-              style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 'none' }} />
-          ) : emb?.tipo === 'video' ? (
-            <video src={emb.src} controls controlsList="nodownload" playsInline
-              style={{ width: '100%', height: '100%', background: '#000', display: 'block' }} />
-          ) : (
-            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: 13 }}>
-              <Play size={18} style={{ marginRight: 8 }} /> Vídeo indisponível
-            </div>
-          )}
-        </div>
+        {/* Player — ao TERMINAR, marca sozinho e já passa para o próximo vídeo. É o que o
+            dono pediu: "ao concluir o vídeo, marcar como assistido automaticamente". O botão
+            continua ali para quem pular ou para o caso de o provedor não reportar o fim. */}
+        <PlayerVideo url={aula.video_url} titulo={aula.titulo} onFim={concluirEAvancar} />
 
         <DicaAudioIOS style={{ margin: '12px 20px 0' }} />
 

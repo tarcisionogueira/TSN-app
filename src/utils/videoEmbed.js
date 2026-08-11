@@ -19,7 +19,11 @@ export function videoEmbed(url) {
   if (m) {
     // youtube-nocookie: não grava cookie de rastreio antes do play (LGPD) e é idêntico no resto.
     // rel=0 mantém as sugestões do fim no nosso canal; modestbranding tira a marca d'água.
-    return { tipo: 'iframe', src: `https://www.youtube-nocookie.com/embed/${m[1]}?rel=0&modestbranding=1&playsinline=1` };
+    // enablejsapi=1 faz o player AVISAR quando o vídeo termina (via postMessage) — é o que
+    // permite marcar a aula como assistida sozinha, sem cronômetro e sem script de terceiro.
+    // Ver src/components/PlayerVideo.jsx. `origin` é exigido pelo player quando a API está on.
+    const origem = typeof window !== 'undefined' && window.location?.origin ? `&origin=${encodeURIComponent(window.location.origin)}` : '';
+    return { tipo: 'iframe', src: `https://www.youtube-nocookie.com/embed/${m[1]}?rel=0&modestbranding=1&playsinline=1&enablejsapi=1${origem}` };
   }
   m = u.match(/vimeo\.com\/(?:video\/)?(\d+)/i);
   if (m) return { tipo: 'iframe', src: `https://player.vimeo.com/video/${m[1]}` };
