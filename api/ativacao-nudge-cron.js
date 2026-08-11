@@ -35,6 +35,7 @@ export const config = { runtime: 'nodejs', maxDuration: 300 };
 import { isCronAuthorized } from './_auth.js';
 import { enviarEmail } from './_email.js';
 import { assinarUnsub } from './cancelar-alertas.js';
+import { linkRastreado } from './_link-email.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -77,8 +78,8 @@ async function escolherImoveis(cidade, uf) {
 // Marca do e-mail. Feita em HTML PURO, de propósito: a maioria dos clientes bloqueia imagem
 // por padrão, e um cabeçalho que depende de PNG aparece vazio justamente na primeira impressão.
 // Cores oficiais de docs/MARCA.md — azul #0D63DB → #0B4BA6, o "B" branco no quadrado azul.
-function cabecalho() {
-  const home = `${BASE}/?utm_source=email_ativacao&utm_medium=email&utm_campaign=ativacao`;
+function cabecalho(L) {
+  const home = L('/?utm_source=email_ativacao&utm_medium=email&utm_campaign=ativacao');
   return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;background:#0D63DB;background-image:linear-gradient(135deg,#0D63DB 0%,#0B4BA6 100%);border-radius:14px 14px 0 0;">
     <tr><td align="center" style="padding:22px 20px;">
       <a href="${home}" style="text-decoration:none;display:inline-block;" target="_blank">
@@ -98,8 +99,8 @@ function cabecalho() {
   </table>`;
 }
 
-function cardImovel(im) {
-  const url = `${BASE}/#/imovel/${im.id}?utm_source=email_ativacao&utm_medium=email&utm_campaign=ativacao`;
+function cardImovel(im, L) {
+  const url = L(`/#/imovel/${im.id}?utm_source=email_ativacao&utm_medium=email&utm_campaign=ativacao`);
   const desc = Math.round(Number(im.desconto_percentual) || 0);
   // O card SEMPRE foi um link (o `<a>` envolve tudo) — o que faltava era PARECER clicável.
   // Sem pista visual, o leitor lê como cartaz e não clica: a barra azul à esquerda e o
@@ -118,7 +119,10 @@ function cardImovel(im) {
 // Exportado para `scripts/previa-nudge.mjs`: o dono precisa VER o e-mail exatamente como o
 // cliente vai receber antes de autorizar o disparo. Prévia que reimplementa o template não
 // prova nada — tem de ser a mesma função que envia.
-export function corpo({ nome, etapa, imoveis, cidade, unsubUrl }) {
+export function corpo({ nome, etapa, imoveis, cidade, unsubUrl, userId }) {
+  // Todo link do corpo passa por aqui. Sem `userId` (prévia do dono, teste local) devolve o
+  // link direto — a prévia continua sendo o MESMO template, que era o ponto de exportá-la.
+  const L = (caminho) => linkRastreado(userId, 'ativacao', caminho);
   const saudacao = nome ? `Olá, ${esc(String(nome).split(' ')[0])}!` : 'Olá!';
   const ondeTxt = cidade ? ` em ${esc(cidade)} e região` : '';
 
@@ -132,18 +136,18 @@ export function corpo({ nome, etapa, imoveis, cidade, unsubUrl }) {
        avaliação, mas é depois de somar ITBI, comissão do leiloeiro e reforma que dá para saber se o
        negócio fecha. É exatamente isso que o relatório calcula. Veja três imóveis${ondeTxt}:</p>`;
 
-  const cta = `${BASE}/#/buscar?utm_source=email_ativacao&utm_medium=email&utm_campaign=ativacao`;
+  const cta = L('/#/buscar?utm_source=email_ativacao&utm_medium=email&utm_campaign=ativacao');
 
-  const home = `${BASE}/?utm_source=email_ativacao&utm_medium=email&utm_campaign=ativacao`;
+  const home = L('/?utm_source=email_ativacao&utm_medium=email&utm_campaign=ativacao');
   // Estrutura em TABELA e estilo INLINE: é o que sobrevive ao Outlook e ao Gmail. Nada de
   // flexbox/grid aqui — o que renderiza bem no navegador costuma quebrar no cliente de e-mail.
   return `<div style="font-family:Arial,Helvetica,sans-serif;background:#f1f5f9;padding:22px 12px;">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;max-width:560px;margin:0 auto;">
-      <tr><td>${cabecalho()}</td></tr>
+      <tr><td>${cabecalho(L)}</td></tr>
       <tr><td style="background:#ffffff;border-radius:0 0 14px 14px;padding:26px 24px;color:#0f172a;">
         <p style="font-size:15px;font-weight:700;margin:0 0 12px;">${saudacao}</p>
         ${abertura}
-        <table role="presentation" style="width:100%;border-collapse:collapse;margin:18px 0 8px;">${imoveis.map(cardImovel).join('')}</table>
+        <table role="presentation" style="width:100%;border-collapse:collapse;margin:18px 0 8px;">${imoveis.map((im) => cardImovel(im, L)).join('')}</table>
         <div style="text-align:center;margin:22px 0 6px;">
           <a href="${cta}" target="_blank" style="display:inline-block;background:#0D63DB;color:#fff;text-decoration:none;padding:13px 28px;border-radius:10px;font-weight:700;font-size:15px;">Ver mais imóveis</a>
         </div>
@@ -240,7 +244,7 @@ async function handler(req) {
         subject: c.etapa === 'd2'
           ? 'Suas 3 análises gratuitas estão esperando'
           : 'O desconto que aparece no leilão não é o desconto real',
-        html: corpo({ nome: c.nome, etapa: c.etapa, imoveis, cidade: c.cidade, unsubUrl }),
+        html: corpo({ nome: c.nome, etapa: c.etapa, imoveis, cidade: c.cidade, unsubUrl, userId: c.user_id }),
         // List-Unsubscribe: o cliente de e-mail mostra o "descadastrar" nativo. Sem isso,
         // quem não quer mais receber marca como SPAM — e aí o domínio inteiro paga.
         headers: { 'List-Unsubscribe': `<${unsubUrl}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' },

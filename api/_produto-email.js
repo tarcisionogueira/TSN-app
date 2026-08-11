@@ -8,6 +8,7 @@
  * marca fica inconsistente sem ninguém decidir isso.
  */
 import { escapeHtml } from './_sanitize.js';
+import { linkRastreado } from './_link-email.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SVC = process.env.SUPABASE_SERVICE_KEY;
@@ -28,9 +29,17 @@ export function capaEmail(url) {
  *   não viu este material. O segundo é o da divulgação quinzenal: dizer "novidade" sobre algo
  *   publicado há três meses queima a confiança de quem lê.
  */
-export function corpoEmailProduto({ tipo, produto, nome, contexto = 'novidade' }) {
+export function corpoEmailProduto({ tipo, produto, nome, contexto = 'novidade', userId, tipoEmail }) {
+  // Mesmo mecanismo do nudge: clique medido por nós, no nosso domínio, e gravado no 360.
+  // Sem `userId` (anúncio manual sem destinatário identificado) os links saem diretos.
+  //
+  // `tipoEmail` TEM de ser o mesmo rótulo que vai em `meta.tipo` do enviarEmail — é por ele
+  // que o /api/clique acha a linha do emails_log para carimbar. Rótulos diferentes não dão
+  // erro: dão um clique que não encontra o e-mail e some. Por isso é parâmetro explícito,
+  // e não algo derivado aqui de 'curso'/'ebook'.
+  const L = (caminho) => linkRastreado(userId, tipoEmail, caminho);
   const rotulo = tipo === 'curso' ? 'curso' : 'eBook';
-  const link = `${BASE}/#/p/${tipo}/${produto.id}`;
+  const link = L(`/#/p/${tipo}/${produto.id}`);
   const isPago = Number(produto.preco || 0) > 0;
   const preco = isPago ? fmtBRL(produto.preco) : 'Incluído no seu acesso';
   const capa = capaEmail(produto.capa_url);
@@ -45,7 +54,7 @@ export function corpoEmailProduto({ tipo, produto, nome, contexto = 'novidade' }
   return `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="margin:0;padding:0;background:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
 <div style="max-width:560px;margin:0 auto;padding:24px 16px;">
-  <a href="${BASE}/#/membros" style="text-decoration:none;">
+  <a href="${L('/#/membros')}" style="text-decoration:none;">
     <div style="background:#0f172a;border-radius:16px 16px 0 0;padding:22px 28px;text-align:center;">
       <div style="font-size:22px;font-weight:800;color:#fff;">BidPro Brasil</div>
       <div style="font-size:12px;color:#94a3b8;margin-top:2px;">Leilão &amp; Investimentos</div>

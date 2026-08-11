@@ -36,7 +36,12 @@ import { hostExternoSeguro, fetchExternoSeguro } from './_allowed-hosts.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
-const LOTE = Number(process.env.ESPELHO_LOTE || 600);
+// 600 → 1200 (11/08, MEDIDO): com o pool de 6 em paralelo, a rodada das 20:40 copiou 598
+// documentos e terminou em 138s de um orçamento de 240s. Não faltou tempo — acabou o lote.
+// O teto que segurava a vazão era este número, não a concorrência nem o maxDuration.
+// Subir é seguro porque quem corta de verdade é o ORCAMENTO_MS abaixo: se 1200 não couber,
+// a rodada para no tempo e o resto fica na fila para a próxima, sem nada pela metade.
+const LOTE = Number(process.env.ESPELHO_LOTE || 1200);
 // Downloads simultâneos. O gargalo é rede de terceiro, não CPU nossa — ver o pool abaixo.
 const CONCORRENCIA = Math.max(1, Number(process.env.ESPELHO_CONCORRENCIA || 6));
 // Sai com folga antes do maxDuration de 300s: um download pode levar 25s (o timeout abaixo),

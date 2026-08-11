@@ -114,7 +114,7 @@ export default async function handler(req, res) {
       const [linha] = await rIns.json().catch(() => []);
 
       const produto = { id: c.produto_id, titulo: c.titulo, descricao: c.descricao, capa_url: c.capa_url, preco: c.preco, cor: c.cor };
-      const html = corpoEmailProduto({ tipo: c.tipo, produto, nome: c.nome, contexto: 'lembrete' })
+      const html = corpoEmailProduto({ tipo: c.tipo, produto, nome: c.nome, contexto: 'lembrete', userId: c.user_id, tipoEmail: 'divulgacao_produto' })
         .replace('{{UNSUB}}', `${BASE}/api/cancelar-alertas?token=${assinarUnsub(c.user_id)}`);
       const rotulo = c.tipo === 'curso' ? 'curso' : 'eBook';
       const assunto = `Você ainda não viu este ${rotulo}: ${c.titulo || ''}`.trim().slice(0, 120);

@@ -90,7 +90,7 @@ async function handler(req) {
     const chunk = lista.slice(i, i + CONC);
     const res = await Promise.all(chunk.map(async (p) => {
       const email = emailMap.get(p.id);
-      const html = corpoEmailProduto({ tipo, produto, nome: p.nome, contexto: 'novidade' }).replace('{{UNSUB}}', `${BASE}/api/cancelar-alertas?token=${assinarUnsub(p.id)}`);
+      const html = corpoEmailProduto({ tipo, produto, nome: p.nome, contexto: 'novidade', userId: p.id, tipoEmail: 'anuncio_produto' }).replace('{{UNSUB}}', `${BASE}/api/cancelar-alertas?token=${assinarUnsub(p.id)}`);
       const r = await enviarEmail({ from: FROM, to: email, subject: assunto, html, meta: { tipo: 'anuncio_produto', userId: p.id } });
       return !!r?.ok;
     }));
