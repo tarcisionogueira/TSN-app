@@ -23,7 +23,13 @@ function getPlano() { return localStorage.getItem('tsn_plano_membro') || 'explor
 const PLANOS_PAGOS = ['top2','assessorado','clube','analista','consultor','advogado','admin'];
 const MAT_ICON = { excel: '📊', word: '📝', ppt: '📽️', pdf: '📄', link: '🔗' };
 
-function podeAssistir(licao, plano, comprouAvulso = false, planosGratis = []) {
+function podeAssistir(licao, plano, comprouAvulso = false, planosGratis = [], cursoGratuito = false) {
+  // CURSO GRATUITO É GRATUITO (11/08). `curso.gratuito` marca o curso como livre e a Área de
+  // Membros já estampa "Grátis" no card — mas esta função nunca consultava a flag. Resultado:
+  // o curso de BOAS-VINDAS aparecia com o selo Grátis e abria CADEADO para quem está no plano
+  // explorador, ou seja, exatamente o recém-chegado a quem o vídeo se destina. O rótulo
+  // prometia uma coisa e o portão fazia outra.
+  if (cursoGratuito) return true;
   if (licao.gratis) return true;                 // amostra grátis (preview)
   if (comprouAvulso) return true;                // comprou o curso avulso
   if (PLANOS_PAGOS.includes(plano)) return true; // plano pago / equipe
@@ -160,7 +166,7 @@ export default function Curso() {
   // ── Abrir na primeira aula disponível ──────────────────────────────────────
   useEffect(() => {
     if (curso) {
-      const emProgresso = todasLicoes.find(l => !progresso[l.id] && podeAssistir(l, plano, comprouAvulso, curso?.planos_gratis));
+      const emProgresso = todasLicoes.find(l => !progresso[l.id] && podeAssistir(l, plano, comprouAvulso, curso?.planos_gratis, curso?.gratuito));
       const primeiraGratis = todasLicoes.find(l => l.gratis);
       setLicaoAtiva(emProgresso || primeiraGratis || todasLicoes[0]);
       setVideoProgress(0);
@@ -215,7 +221,7 @@ export default function Curso() {
     );
   }
 
-  const podeVer = licaoAtiva ? podeAssistir(licaoAtiva, plano, comprouAvulso, curso?.planos_gratis) : false;
+  const podeVer = licaoAtiva ? podeAssistir(licaoAtiva, plano, comprouAvulso, curso?.planos_gratis, curso?.gratuito) : false;
 
   const marcarConcluida = (lid) => {
     salvarProgresso(lid, true);
@@ -230,7 +236,7 @@ export default function Curso() {
   };
 
   const irParaLicao = (lic) => {
-    if (!podeAssistir(lic, plano, comprouAvulso, curso?.planos_gratis)) { setShowUpgrade(true); return; }
+    if (!podeAssistir(lic, plano, comprouAvulso, curso?.planos_gratis, curso?.gratuito)) { setShowUpgrade(true); return; }
     setLicaoAtiva(lic);
     setVideoProgress(0);
     setVideoPlaying(false);
@@ -259,7 +265,7 @@ export default function Curso() {
           <p style={{ margin:'0 0 16px', fontSize:12, color:'rgba(255,255,255,0.75)', lineHeight:1.5 }}>{curso.subtitulo}</p>
           <div style={{ display:'flex', gap:12, fontSize:11, color:'rgba(255,255,255,0.7)' }}>
             <span><Clock size={11}/> {curso.duracao}</span>
-            <span><BookOpen size={11}/> {curso.aulas} aulas</span>
+            <span><BookOpen size={11}/> {curso.aulas} {curso.aulas === 1 ? 'aula' : 'aulas'}</span>
           </div>
           {/* Parceiro: link de venda do curso (só cursos do banco, pagos) */}
           {cursoDb && Number(curso.preco || 0) > 0 && user && <CompartilharCurso cursoId={curso.id}/>}
@@ -274,7 +280,7 @@ export default function Curso() {
           <div style={{ height:8, background:'#f1f5f9', borderRadius:8, overflow:'hidden' }}>
             <div style={{ height:8, background:curso.cor, width:`${pct}%`, borderRadius:8, transition:'width 0.4s' }}/>
           </div>
-          <div style={{ fontSize:11, color:'#94a3b8', marginTop:6 }}>{concluidas} de {todasLicoes.length} aulas concluídas</div>
+          <div style={{ fontSize:11, color:'#94a3b8', marginTop:6 }}>{concluidas} de {todasLicoes.length} {todasLicoes.length === 1 ? 'aula concluída' : 'aulas concluídas'}</div>
           {pct === 100 && (
             <div style={{ marginTop:10, display:'flex', alignItems:'center', gap:6, background:'#fef3c7', borderRadius:8, padding:'8px 12px' }}>
               <Award size={14} color="#f59e0b"/>
@@ -300,7 +306,7 @@ export default function Curso() {
               {modulosAbertos[mi] && mod.licoes.map((lic) => {
                 const ativa = licaoAtiva?.id === lic.id;
                 const feita = progresso[lic.id];
-                const pode = podeAssistir(lic, plano, comprouAvulso, curso?.planos_gratis);
+                const pode = podeAssistir(lic, plano, comprouAvulso, curso?.planos_gratis, curso?.gratuito);
                 return (
                   <button key={lic.id} onClick={()=>irParaLicao(lic)}
                     style={{ width:'100%', padding:'10px 16px 10px 24px', border:'none', borderBottom:'1px solid #f8fafc', background:ativa?curso.cor+'12':'white', cursor:'pointer', display:'flex', alignItems:'center', gap:10, textAlign:'left', transition:'background 0.15s' }}
@@ -485,9 +491,9 @@ export default function Curso() {
                   <button key={lic.id} onClick={()=>irParaLicao(lic)}
                     style={{ display:'flex', alignItems:'center', gap:12, padding:'10px 12px', border:'none', borderRadius:10, background:'#f8fafc', cursor:'pointer', textAlign:'left' }}
                     onMouseEnter={e=>e.currentTarget.style.background='#f1f5f9'} onMouseLeave={e=>e.currentTarget.style.background='#f8fafc'}>
-                    <div style={{ width:36, height:36, borderRadius:8, background:podeAssistir(lic,plano)?curso.cor+'20':'#f1f5f9', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                    <div style={{ width:36, height:36, borderRadius:8, background:podeAssistir(lic, plano, comprouAvulso, curso?.planos_gratis, curso?.gratuito)?curso.cor+'20':'#f1f5f9', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
                       {progresso[lic.id] ? <CheckCircle2 size={16} color="#10b981"/>
-                        : !podeAssistir(lic,plano) ? <Lock size={14} color="#94a3b8"/>
+                        : !podeAssistir(lic, plano, comprouAvulso, curso?.planos_gratis, curso?.gratuito) ? <Lock size={14} color="#94a3b8"/>
                         : <Play size={14} color={curso.cor}/>}
                     </div>
                     <div style={{ flex:1 }}>
