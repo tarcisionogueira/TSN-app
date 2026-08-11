@@ -115,7 +115,7 @@ const PLANOS_ACESSO = [
 ];
 
 function defaultCurso() {
-  return { titulo: '', subtitulo: '', descricao: '', capa_url: '', cor: '#0D63DB', nivel: 'Iniciante', categoria: 'Fundamentos', preco: '', gratuito: false, destaque: false, comissao_pct: 30, planos_gratis: [], modulos: [] };
+  return { titulo: '', subtitulo: '', descricao: '', capa_url: '', cor: '#0D63DB', nivel: 'Iniciante', categoria: 'Fundamentos', preco: '', gratuito: false, destaque: false, onboarding: false, comissao_pct: 30, planos_gratis: [], modulos: [] };
 }
 function defaultModulo(idx) { return { _key: String(Date.now() + idx), titulo: '', aulas: [] }; }
 function defaultAula() { return { _key: String(Date.now() + Math.random()), titulo: '', duracao: '', video_url: '', descricao: '', gratis: false, materiais: [] }; }
@@ -346,7 +346,7 @@ function CursosTab() {
       // não vai para a loja/área de membros; fica só para o admin concluir depois.
       const faltam = faltamCampos(form);
       const completo = faltam.length === 0;
-      const cursoPayload = { titulo: rest.titulo, subtitulo: rest.subtitulo || '', descricao: rest.descricao || '', capa_url: rest.capa_url || null, cor: rest.cor || '#0D63DB', nivel: rest.nivel || 'Iniciante', categoria: rest.categoria || 'Fundamentos', preco: Number(rest.preco) || 0, gratuito: rest.gratuito || false, destaque: rest.destaque || false, comissao_pct: Number(rest.comissao_pct) || 30, planos_gratis: Array.isArray(rest.planos_gratis) ? rest.planos_gratis : [], ativo: completo ? (rest.ativo !== false) : false };
+      const cursoPayload = { titulo: rest.titulo, subtitulo: rest.subtitulo || '', descricao: rest.descricao || '', capa_url: rest.capa_url || null, cor: rest.cor || '#0D63DB', nivel: rest.nivel || 'Iniciante', categoria: rest.categoria || 'Fundamentos', preco: Number(rest.preco) || 0, gratuito: rest.gratuito || false, destaque: rest.destaque || false, onboarding: rest.onboarding || false, comissao_pct: Number(rest.comissao_pct) || 30, planos_gratis: Array.isArray(rest.planos_gratis) ? rest.planos_gratis : [], ativo: completo ? (rest.ativo !== false) : false };
 
       let cursoId;
       if (modal === 'new') {
@@ -544,6 +544,13 @@ function CursosTab() {
               <label style={{ fontSize: 14, display: 'flex', alignItems: 'center', gap: 6, color: '#374151' }}>
                 <input type="checkbox" checked={form.destaque || false} onChange={e => setForm({ ...form, destaque: e.target.checked })} /> Destaque
               </label>
+              {/* O pop-up de boas-vindas lê ESTE campo para saber qual curso abrir no primeiro
+                  acesso. Fica no cadastro, e não chumbado no código, porque trocar o vídeo de
+                  boas-vindas não pode depender de um deploy. */}
+              <label style={{ fontSize: 14, display: 'flex', alignItems: 'center', gap: 6, color: '#374151' }}
+                title="Abre em pop-up no primeiro acesso do cliente e volta até ele assistir. Marque em apenas um curso.">
+                <input type="checkbox" checked={form.onboarding || false} onChange={e => setForm({ ...form, onboarding: e.target.checked })} /> Curso de boas-vindas (pop-up)
+              </label>
             </div>
             {!form.gratuito && (
               <div style={{ marginBottom: 14 }}>
@@ -621,7 +628,7 @@ function CursosTab() {
 // ═══════════════════════════════════════════════════════════════════════════════
 // EBOOKS TAB
 // ═══════════════════════════════════════════════════════════════════════════════
-function defaultEbook() { return { titulo: '', descricao: '', capa_url: '', arquivo_url: '', preco: '', planos_gratis: [] }; }
+function defaultEbook() { return { titulo: '', descricao: '', capa_url: '', arquivo_url: '', preco: '', destaque: false, planos_gratis: [] }; }
 
 // Seletor reutilizável de "planos com acesso grátis" (chips clicáveis).
 function PlanosGratisSelector({ valor, onChange }) {
@@ -720,7 +727,7 @@ function EbooksTab() {
       // — não aparece na loja/área de membros; fica só para o admin concluir depois.
       const faltam = faltamCamposEbook(form);
       const completo = faltam.length === 0;
-      const payload = { titulo: form.titulo, descricao: form.descricao || '', capa_url: form.capa_url || '', arquivo_url: form.arquivo_url || '', preco: Number(form.preco) || 0, planos_gratis: Array.isArray(form.planos_gratis) ? form.planos_gratis : [], ativo: completo ? (form.ativo !== false) : false };
+      const payload = { titulo: form.titulo, descricao: form.descricao || '', capa_url: form.capa_url || '', arquivo_url: form.arquivo_url || '', preco: Number(form.preco) || 0, destaque: form.destaque || false, planos_gratis: Array.isArray(form.planos_gratis) ? form.planos_gratis : [], ativo: completo ? (form.ativo !== false) : false };
       if (modal === 'new') {
         const { error } = await supabase.from('ebooks_admin').insert(payload);
         if (error) throw error;
@@ -809,6 +816,14 @@ function EbooksTab() {
                 {form.arquivo_url && <span style={{ fontSize: 12, color: '#059669', fontWeight: 700 }}>✓ arquivo anexado</span>}
                 {form.arquivo_url && <button type="button" onClick={() => setForm({ ...form, arquivo_url: '' })} style={{ ...S.btn('outline'), padding: '6px 10px', fontSize: 11 }}>Remover</button>}
               </div>
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              {/* Destaque alimenta DUAS coisas: a faixa de vitrine na home do cliente e a
+                  ordem da divulgação quinzenal (destaque primeiro). */}
+              <label style={{ fontSize: 14, display: 'flex', alignItems: 'center', gap: 6, color: '#374151' }}
+                title="Aparece na faixa de destaque da home do cliente e tem prioridade na divulgação quinzenal.">
+                <input type="checkbox" checked={form.destaque || false} onChange={e => setForm({ ...form, destaque: e.target.checked })} /> Destaque (vitrine + prioridade na divulgação)
+              </label>
             </div>
             <div style={{ marginBottom: 16 }}>
               <PlanosGratisSelector valor={form.planos_gratis} onChange={v => setForm({ ...form, planos_gratis: v })} />

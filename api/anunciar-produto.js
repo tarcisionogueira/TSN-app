@@ -15,7 +15,7 @@ export const config = { runtime: 'nodejs', maxDuration: 300 };
 import { getAuthUser, unauthorized, forbidden, getUserRoleById } from './_auth.js';
 import { enviarEmail } from './_email.js';
 import { assinarUnsub } from './cancelar-alertas.js';
-import { escapeHtml } from './_sanitize.js';
+import { corpoEmailProduto, emailsDoLote } from './_produto-email.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SVC = process.env.SUPABASE_SERVICE_KEY;
@@ -36,65 +36,10 @@ const sbGet = async (path) => {
   catch { return []; }
 };
 
-const fmtBRL = (v) => 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const esc = (s) => escapeHtml(String(s ?? ''));
 
-// Capa p/ e-mail: só URL http(s) direta (bucket público membros-capas). Drive/relativa → sem imagem.
-function capaEmail(url) {
-  const u = String(url || '').trim();
-  return /^https?:\/\//i.test(u) && !/drive\.google\.com/i.test(u) ? u : null;
-}
-
-function corpoEmail({ tipo, produto, nome }) {
-  const rotulo = tipo === 'curso' ? 'curso' : 'eBook';
-  const link = `${BASE}/#/p/${tipo}/${produto.id}`;
-  const isPago = Number(produto.preco || 0) > 0;
-  const preco = isPago ? fmtBRL(produto.preco) : 'Incluído no plano Investidor Pro';
-  const capa = capaEmail(produto.capa_url);
-  const desc = String(produto.descricao || '').slice(0, 320);
-  const cor = produto.cor || '#0D63DB';
-  return `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
-<div style="max-width:560px;margin:0 auto;padding:24px 16px;">
-  <a href="${BASE}/#/membros" style="text-decoration:none;">
-    <div style="background:#0f172a;border-radius:16px 16px 0 0;padding:22px 28px;text-align:center;">
-      <div style="font-size:22px;font-weight:800;color:#fff;">BidPro Brasil</div>
-      <div style="font-size:12px;color:#94a3b8;margin-top:2px;">Leilão &amp; Investimentos</div>
-    </div>
-  </a>
-  <div style="background:#fff;padding:28px;border-radius:0 0 16px 16px;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
-    <div style="font-size:11px;font-weight:800;color:${esc(cor)};text-transform:uppercase;letter-spacing:2px;margin-bottom:10px;">Novidade · ${rotulo}</div>
-    <h2 style="margin:0 0 12px;font-size:20px;color:#0f172a;line-height:1.3;">${esc(produto.titulo || 'Novo material')}</h2>
-    ${nome ? `<p style="margin:0 0 14px;color:#475569;font-size:14px;">Olá, ${esc(String(nome).split(' ')[0])}! Acabamos de disponibilizar este ${rotulo} na plataforma.</p>` : ''}
-    ${capa ? `<a href="${link}"><img src="${esc(capa)}" alt="" style="width:100%;max-height:280px;object-fit:cover;border-radius:12px;margin-bottom:18px;display:block;"></a>` : ''}
-    ${desc ? `<p style="margin:0 0 20px;color:#475569;font-size:14px;line-height:1.7;">${esc(desc)}${produto.descricao && produto.descricao.length > 320 ? '…' : ''}</p>` : ''}
-    <div style="font-size:13px;color:#64748b;margin-bottom:18px;">${isPago ? `<strong style="color:#0f172a;font-size:18px;">${preco}</strong>` : `<strong style="color:#0f172a;">${preco}</strong>`}</div>
-    <div style="text-align:center;margin:8px 0 6px;">
-      <a href="${link}" style="display:inline-block;background:${esc(cor)};color:#fff;text-decoration:none;padding:14px 30px;border-radius:10px;font-weight:800;font-size:15px;">
-        ${isPago ? `Ver e adquirir →` : `Acessar agora →`}
-      </a>
-    </div>
-    <p style="font-size:11px;color:#94a3b8;text-align:center;margin-top:22px;">BidPro Brasil · Novidades da plataforma · <a href="{{UNSUB}}" style="color:#94a3b8;">Cancelar e-mails</a></p>
-  </div>
-</div></body></html>`;
-}
-
-// E-mails do lote (auth.users via GoTrue admin), concorrência limitada.
-async function emailsDoLote(ids) {
-  const map = new Map(); const CONC = 8;
-  for (let i = 0; i < ids.length; i += CONC) {
-    const res = await Promise.all(ids.slice(i, i + CONC).map(async (uid) => {
-      try {
-        const r = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${uid}`, { headers: hdr, signal: AbortSignal.timeout(10000) });
-        if (!r.ok) return null;
-        const u = await r.json();
-        return u?.email ? [uid, String(u.email).toLowerCase()] : null;
-      } catch { return null; }
-    }));
-    for (const e of res) if (e) map.set(e[0], e[1]);
-  }
-  return map;
-}
+// O template do e-mail e a busca de e-mails vivem em `_produto-email.js`, compartilhados
+// com /api/divulgacao-cron (a divulgacao quinzenal). Duas copias do HTML divergiriam na
+// primeira melhoria feita em uma so.
 
 // SOMENTE export nomeado (POST): no runtime Node da Vercel, `export default` é tratado
 // como assinatura Express (req,res) e o `Response` retornado é IGNORADO → 504.
@@ -145,7 +90,7 @@ async function handler(req) {
     const chunk = lista.slice(i, i + CONC);
     const res = await Promise.all(chunk.map(async (p) => {
       const email = emailMap.get(p.id);
-      const html = corpoEmail({ tipo, produto, nome: p.nome }).replace('{{UNSUB}}', `${BASE}/api/cancelar-alertas?token=${assinarUnsub(p.id)}`);
+      const html = corpoEmailProduto({ tipo, produto, nome: p.nome, contexto: 'novidade' }).replace('{{UNSUB}}', `${BASE}/api/cancelar-alertas?token=${assinarUnsub(p.id)}`);
       const r = await enviarEmail({ from: FROM, to: email, subject: assunto, html, meta: { tipo: 'anuncio_produto', userId: p.id } });
       return !!r?.ok;
     }));

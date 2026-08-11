@@ -14,6 +14,7 @@ import KycParceiroModal from './components/KycParceiroModal';
 import TermosAtualizadosModal from './components/TermosAtualizadosModal';
 import ToastRelatorioPronto from './components/ToastRelatorioPronto';
 import ChatSuporte from './components/ChatSuporte';
+import BoasVindasModal from './components/BoasVindasModal';
 import SugestaoImovel from './components/SugestaoImovel';
 import PwaInstall from './components/PwaInstall.jsx';
 // Páginas carregadas SOB DEMANDA (code-splitting): cada rota vira um chunk próprio,
@@ -285,6 +286,10 @@ function MainLayout() {
       {user && <KycParceiroModal />}
       {user && <TermosAtualizadosModal />}
       {user && <ToastRelatorioPronto />}
+      {/* Boas-vindas: entra por ULTIMO entre os modais para nunca cobrir uma pendência
+          que trava a conta (contrato, cadastro, KYC, termos). Ele mesmo se cala quando a
+          pessoa já assistiu — ver o componente. */}
+      {user && <BoasVindasModal />}
       {isLoggedIn && <SugestaoImovel />}
       <ChatSuporte />
       <main style={{ flex: 1 }}>

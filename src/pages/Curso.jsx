@@ -7,6 +7,7 @@ import {
 import { supabase } from '../utils/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import CapaCurso from '../components/CapaCurso';
+import { videoEmbed } from '../utils/videoEmbed';
 import { CURSOS, PLANOS } from '../data/cursos';
 
 // ── localStorage fallback ─────────────────────────────────────────────────────
@@ -36,31 +37,6 @@ function podeAssistir(licao, plano, comprouAvulso = false, planosGratis = [], cu
   // "Grátis por classe de assinante" definido no cadastro do curso (planos_gratis)
   if (Array.isArray(planosGratis) && (planosGratis.includes(plano) || (plano === 'top2' && planosGratis.includes('top2_anual')))) return true;
   return false;
-}
-
-// Converte a "URL do vídeo" da aula no player certo. Recomendado: URL de EMBED
-// (iframe) da Bunny Stream — o player da Bunny já cuida de HLS adaptativo, token e
-// tela cheia em qualquer navegador. Também aceita YouTube, Vimeo, Panda e MP4 direto.
-// ATENÇÃO AO ADICIONAR PROVEDOR NOVO (11/08): o host precisa entrar no `frame-src` da CSP
-// em `vercel.json`. Foi exatamente isto que quebrou o primeiro vídeo do dono: o embed do
-// YouTube estava certo, o link abria no navegador, e dentro do app o iframe era BLOQUEADO
-// pela CSP — a tela mostrava um retângulo cinza com ícone de arquivo quebrado, sem erro
-// visível em lugar nenhum. Código certo, entrega errada.
-function videoEmbed(url) {
-  const u = String(url || '').trim();
-  if (!u) return null;
-  let m = u.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/|live\/)|youtu\.be\/)([\w-]{11})/i);
-  if (m) {
-    // youtube-nocookie: não grava cookie de rastreio antes do play (LGPD) e é idêntico no resto.
-    // rel=0 mantém as sugestões do fim no nosso canal; modestbranding tira a marca d'água.
-    return { tipo: 'iframe', src: `https://www.youtube-nocookie.com/embed/${m[1]}?rel=0&modestbranding=1&playsinline=1` };
-  }
-  m = u.match(/vimeo\.com\/(?:video\/)?(\d+)/i);
-  if (m) return { tipo: 'iframe', src: `https://player.vimeo.com/video/${m[1]}` };
-  // Arquivo de vídeo progressivo (MP4/WebM/OGG) → tag <video> nativa.
-  if (/\.(mp4|webm|ogg)(\?|$)/i.test(u)) return { tipo: 'video', src: u };
-  // Bunny Stream / Panda / qualquer URL de embed → iframe (o player do provedor cuida do HLS).
-  return { tipo: 'iframe', src: u };
 }
 
 export default function Curso() {

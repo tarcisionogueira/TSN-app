@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
 import { lerCotas, janelaLabel } from '../utils/cotaAnalise';
 import TriagemPerfil from '../components/TriagemPerfil';
+import VitrineMaterial from '../components/VitrineMaterial';
 import { TERMO_PARCEIRO_VERSAO, TERMO_PARCEIRO_PREAMBULO, TERMO_PARCEIRO } from '../components/ConviteParceiro';
 
 // Rótulo da home por plano (usa o role EFETIVO — respeita o modo suporte).
@@ -137,6 +138,9 @@ export default function HomeCliente() {
       <TriagemPerfil userId={user?.id} />
       {/* Coluna principal */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 18, minWidth: 0 }}>
+        {/* Vitrine: material em destaque que esta pessoa ainda não abriu. Some sozinha
+            quando não há destaque marcado ou quando ela já viu tudo. */}
+        <VitrineMaterial />
         {/* Boas-vindas — gradiente da marca (azul), consistente com o header e os planos */}
         <div style={{ background: 'linear-gradient(135deg, #0D63DB 0%, #084BA6 100%)', borderRadius: 18, padding: '26px 26px', color: 'white', boxShadow: '0 8px 24px rgba(13,99,219,0.18)' }}>
           <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.9, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Bem-vindo, {info.nome}</div>
