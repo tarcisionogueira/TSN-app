@@ -139,6 +139,93 @@ antes de mexer, mais 6 validações de produção para rodar na abertura.
 
 ---
 
+## 🏁 ABERTURA DE 11/08 — o ritual achou dois defeitos, os dois "sucesso sobre vazio"
+
+> **O invariante criado ONTEM pegou o defeito de ontem voltando HOJE.** É a primeira vez que
+> uma rede montada numa sessão captura a regressão na sessão seguinte, antes de qualquer
+> pessoa relatar. As duas correções do dia saíram dessa leitura.
+
+### Verificações do bloco "próximos passos de 11/08"
+
+| o quê | resultado |
+|---|---|
+| **Backup off-region** (a prova do P1) | ✅ **VERDE.** Run 11/08 04:42, `ok=true`, 348 arquivos enviados, 0 falhas, `limpeza.pulada=null`. Confirma o buraco de 09 e 10/08 e confirma o conserto |
+| **RJLEILOES** | 🔴 **VERMELHO — e a causa não era o freio "pegar por engano": ver defeito 2** |
+| **Proximidades** | 🔴 **VERMELHO.** `com_pontos` 14.337 (fechou ontem em 14.625, devia SUBIR) e `vazio` 38 → 547. Pela regra de leitura do próprio handoff: "vazio disparando = a corroboração temporal não segurou, reabrir". Reaberto e corrigido |
+| **Nudge de ativação** | ✅ Disparou 11/08 12:00:52, entregue (Marlene). Abertura/clique seguem 0 em TODOS os e-mails — o tracking do Resend continua desligado, é item do dono. **Não liberar o backlog de 27 sem isso**: dispara às cegas |
+| **Conversões Google** | ⏳ Ainda 0 em 09 e 10/08 — mas **não há como concluir nada**: zero cadastros com `gclid` desde o fix. O único cadastro do período (10/08 20:44) veio sem `gclid`. O teste ainda não aconteceu |
+| Ritual padrão | `auditoria_seguranca()` **0/0** · `auditoria_regras_negocio()` **0 crítico** · KYC ilegível **0** · chamado de cliente sem resposta **0** · baseline de captura: nenhuma fonte abaixo do piso |
+
+### Defeito 1 — a corroboração "temporal" durava 30 minutos
+
+`proximidades_vazio_falso` = **446** (limite 300). `PROX_VAZIOS_P_ACEITAR = 3` contava
+OBSERVAÇÕES, não TEMPO — e a fila devolvia o mesmo lote à execução seguinte (ordena por
+`atualizado_em desc`, e a gravação parcial não mexe em `atualizado_em`), então as 3
+observações caíam em ~30-45 min, dentro do mesmo episódio de rate-limit. **Ontem o erro foi
+corroborar no mesmo instante; hoje era corroborar na mesma meia hora** — para uma instância
+pública limitada por IP, a mesma coisa.
+
+**Prova sem consultar o Overpass:** na coordenada EXATA `-23.5329,-46.6395` (centro de SP),
+24 lotes ativos têm pontos e 15 estavam gravados como "vazio corroborado com 3 observações".
+Mesma coordenada, mesma consulta, resultado oposto. De 99 coordenadas com vazio corroborado,
+**43 tinham vizinho na mesma coordenada com pontos**.
+
+Correção (`proximidades_corroboracao_temporal_de_verdade.sql` + os dois endpoints):
+1. **Intervalo mínimo de 6h entre observações** (`imoveis_leilao.proximidades_vazio_em`) — 3
+   observações passam a levar ≥ 12h. Vale no cron E no on-demand (senão o cliente que reabre
+   a página corrobora sozinho). A fila exclui quem está em cooldown: sem isso o lote gastaria
+   vaga e requisição para não contar nada — e essa carga inútil é a causa dos vazios falsos.
+2. **Vizinho de mesma coordenada** — se outro lote ativo na coordenada idêntica tem pontos, o
+   vazio é falso por construção: copia. A cópia é EXATA (o `around:4000` e o `dist_m` partem
+   da coordenada), e economiza uma requisição a instância pública.
+
+Resultado imediato: invariante **446 → 0** · `com_pontos` 14.337 → **14.499** (162 copiados) ·
+`vazio` 547 → **97** (só os genuínos, em cidade onde nenhum vizinho tem pontos).
+
+### Defeito 2 — o carimbo dizia "coletei" sem ter gravado nada, e isso DESLIGAVA a correção
+
+RJLEILOES parado em 5 lotes desde **30/07 (12 dias), sem um único alerta**. O handoff previa
+"o freio residencial não deve pegar (última coleta ~12 dias)" — ele pegou, e estava
+tecnicamente certo pelo dado que lia:
+
+- O runner residencial chama `coleta_cliente_concluir` ao TERMINAR, tenha gravado 50 lotes ou
+  zero (`api/coleta-cliente.js` diz isso em comentário: "fecha a janela (mesmo com 0
+  gravados)"). Para fechar a janela do anti-overlap está certo — a tentativa aconteceu.
+- Só que `ultima_em` virou **prova de coleta** para quem gasta dinheiro. RJ Leilões está 100%
+  atrás de Cloudflare — é POR ISSO que existe o caminho pago. A via grátis tentava, era
+  barrada, gravava zero, carimbava; o freio lia o carimbo e desligava a rede de segurança
+  feita exatamente para esse caso. Verificado: `scraper-rj.yml` de hoje 11:38 UTC → step
+  "Rodar scraper RJ" = **skipped**.
+- **Os dois vigias liam a mesma linha mentirosa:** o monitor B2 também lê `ultima_em` (fresco
+  → silêncio), e a tolerância de frescor do acervo para RJLEILOES é 16 dias (só acusaria em
+  15/08, com 4 dias de atraso).
+
+Correção (`coleta_cliente_carimbo_precisa_provar_gravacao.sql` + `scripts/coleta-recente.mjs`
++ monitor B2): o carimbo continua fechando a janela, mas **deixa de ser aceito como prova**.
+Quem decide gastar confere o ACERVO, via `coleta_cliente.fontes_acervo` (os nomes não batem:
+gate `RJ` → acervo `RJLEILOES`; gate `SOLEON` → CALIL/VEGAS/TORRES3 — tradução que vivia só
+na cabeça de quem tinha lido os scrapers). Sem prova de gravação, roda o pago; fail-open em
+toda dúvida. O monitor ganha o problema **"coleta grátis carimbou sem gravar"**, classificado
+como outage sério — é o estado mais perigoso dos três, porque parece saudável em toda tela.
+
+Simulado contra o banco: a decisão vira em **exatamente um** gate (RJ → RODA); GESTAO, PECINI,
+SOLEON e VLANCE seguem PULA. Nenhum gasto novo além do RJ.
+
+> ⚠️ **DECISÃO DO DONO PENDENTE:** o cron do RJ só roda **terça 11h UTC** — com o freio
+> corrigido, ele volta a coletar em **18/08**. Para destravar antes é preciso disparar
+> `scraper-rj.yml` manualmente com `dryrun=0`, e isso **gasta Bright Data** (~13 requests).
+> Não disparei: gastar não é decisão minha. RJLEILOES são 5 lotes — o custo de esperar é baixo.
+
+### Também verificado (sem ação)
+- **CREPALDI `falhou` há 12 dias seguidos: NÃO é bug.** Está em `FONTES_PARADAS`, com recon
+  provando acervo vazio na origem. O silêncio é deliberado e correto.
+- **`aval_ausente_com_doc` = 3.942 (limite 3.800)** — segundo invariante em alerta. É `gap`
+  (backlog vigiado), não `bug`; cresceu com o acervo. Recalibrar ou atacar o backlog, decidir.
+- **Erros de cliente abertos**: 7, todos com última ocorrência ≤ 07/08 (anteriores às
+  correções de 08–10/08). Nenhum novo desde então — falta só marcar `resolvido`.
+
+---
+
 ## ⏰ CONFERIR A PARTIR DE 10/08 — as conversões do Google destravaram?
 
 > **Depende só do tempo passar.** Corrigido em 08/08 (`bdd9b4b`): `src/utils/gtag.js` empurrava um

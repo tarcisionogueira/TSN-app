@@ -223,16 +223,46 @@ async function handler(req) {
   //     (ultima_em nulo) ou parou além do intervalo previsto. Era ponto-cego total (o monitor lia
   //     só fonte_saude/acervo). Hoje cobre o VLANCE (client-side puro, que não grava fonte_saude
   //     nem tem workflow) — assim a falha silenciosa da via residencial fica VISÍVEL/alertada.
+  //     11/08 — B2 lia o MESMO carimbo que o freio do custo pago, e o carimbo mente: o runner
+  //     chama `coleta_cliente_concluir` ao terminar mesmo gravando ZERO (fecha a janela do
+  //     anti-overlap, que é o propósito dele). Com o carimbo fresco, B2 ficava calado e o
+  //     freio pulava o cron pago — os dois enganados pela mesma linha. Foi assim que
+  //     RJLEILOES ficou 12 dias parado sem um alerta. Agora B2 confere o ACERVO
+  //     (`fontes_acervo`) e trata "carimbou sem gravar" como problema PRÓPRIO, com nome, que
+  //     é o estado mais perigoso dos três: parece saudável em toda tela que olhe o carimbo.
   try {
     const { data: gate } = await supabase
-      .from('coleta_cliente').select('fonte,ultima_em,intervalo_horas,ativo').eq('ativo', true);
+      .from('coleta_cliente').select('fonte,ultima_em,intervalo_horas,ativo,fontes_acervo').eq('ativo', true);
     for (const g of gate || []) {
       if (!g.ultima_em) {
         problemas.push({ fonte: g.fonte, tipo: 'coleta grátis nunca concluiu', detalhe: 'via residencial/client-side sem nenhuma coleta bem-sucedida (ultima_em nulo)' });
-      } else {
-        const idadeH = (agoraMs - new Date(g.ultima_em).getTime()) / 3600000;
-        const tol = (Number(g.intervalo_horas) || 84) * 1.5; // 1,5× o intervalo previsto = folga
-        if (idadeH > tol) problemas.push({ fonte: g.fonte, tipo: 'coleta grátis parada', detalhe: `via residencial sem coleta há ${idadeH.toFixed(0)}h (intervalo ${g.intervalo_horas}h)` });
+        continue;
+      }
+      const idadeH = (agoraMs - new Date(g.ultima_em).getTime()) / 3600000;
+      const tol = (Number(g.intervalo_horas) || 84) * 1.5; // 1,5× o intervalo previsto = folga
+      if (idadeH > tol) {
+        problemas.push({ fonte: g.fonte, tipo: 'coleta grátis parada', detalhe: `via residencial sem coleta há ${idadeH.toFixed(0)}h (intervalo ${g.intervalo_horas}h)` });
+        continue;
+      }
+      // Carimbo fresco: ele GRAVOU? Sem mapa não dá para responder — e uma pergunta que não
+      // dá para responder é um ponto cego, não um "ok". Alerta pedindo o mapa.
+      const alvos = Array.isArray(g.fontes_acervo) ? g.fontes_acervo.filter(Boolean) : [];
+      if (!alvos.length) {
+        problemas.push({ fonte: g.fonte, tipo: 'gate sem mapa de acervo', detalhe: 'coleta_cliente.fontes_acervo vazio — impossível conferir se a coleta grava (e o freio do cron pago fica sem prova)' });
+        continue;
+      }
+      const desde = new Date(agoraMs - tol * 3600000).toISOString();
+      const { data: escritos, error: errEsc } = await supabase
+        .from('imoveis_leilao').select('fonte').in('fonte', alvos).gte('atualizado_em', desde).limit(1);
+      // `error` checado: no postgrest-js um erro NÃO lança, e `data` vem null — sem isto
+      // "não consegui ler" viraria "não gravou nada" e o monitor alertaria por engano.
+      if (errEsc) continue;
+      if (!escritos?.length) {
+        problemas.push({
+          fonte: g.fonte,
+          tipo: 'coleta grátis carimbou sem gravar',
+          detalhe: `ultima_em ${new Date(g.ultima_em).toISOString().slice(0, 16)} mas nenhum lote de ${alvos.join('/')} escrito em ${tol.toFixed(0)}h — a janela fechou sem coleta e isso desliga o freio do cron pago`,
+        });
       }
     }
   } catch { /* aditivo: nunca derruba o monitor */ }
@@ -393,7 +423,8 @@ async function handler(req) {
   const assinatura = problemas.map(p => `${p.fonte}:${p.tipo}`).sort().join('|');
   const estado = await lerEstadoAlerta(supabase, 'monitor_fontes');
   const mudou = !estado || estado.assinatura !== assinatura;
-  const outageSerio = problemas.some(p => /coleta parada|falhou|sem coleta|sem acervo/i.test(p.tipo));
+  // "carimbou sem gravar" entra aqui: é um outage que se disfarça de saúde (11/08).
+  const outageSerio = problemas.some(p => /coleta parada|falhou|sem coleta|sem acervo|carimbou sem gravar/i.test(p.tipo));
   const heartbeat = outageSerio && estado?.enviado_em &&
     (Date.now() - new Date(estado.enviado_em).getTime()) > REENVIO_DIAS * 86400000;
   const enviar = mudou || heartbeat;

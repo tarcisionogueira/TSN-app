@@ -23,7 +23,7 @@ export default async function handler(req) {
   const id = new URL(req.url).searchParams.get('imovel_id');
   if (!id) return json({ error: 'imovel_id obrigatório' }, 400);
 
-  const [im] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(id)}&select=latitude,longitude,pontos_proximos,proximidades_em,proximidades_vazios`)).json();
+  const [im] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(id)}&select=latitude,longitude,pontos_proximos,proximidades_em,proximidades_vazios,proximidades_vazio_em`)).json();
   if (!im) return json({ error: 'Imóvel não encontrado' }, 404);
 
   const lat = Number(im.latitude), lng = Number(im.longitude);
@@ -53,6 +53,25 @@ export default async function handler(req) {
 
   if (!lat || !lng) return json({ pontos: null, sem_coordenada: true });
 
+  // VIZINHO DE MESMA COORDENADA (11/08). Antes de gastar uma requisição a uma instância
+  // pública do Overpass — que é a causa de fundo dos vazios falsos —, aproveita o que outro
+  // lote na coordenada IDÊNTICA já calculou. `around:RAIO` a partir da mesma coordenada dá a
+  // mesma resposta, e o `dist_m` é medido dela: a cópia é exata. Ganho maior no centroide de
+  // cidade, onde dezenas de lotes caem no mesmo ponto. Se não houver vizinho, segue o
+  // caminho normal — o atalho nunca vira "não há pontos".
+  try {
+    const r = await sb(`imoveis_leilao?select=pontos_proximos&ativo=eq.true&latitude=eq.${encodeURIComponent(im.latitude)}&longitude=eq.${encodeURIComponent(im.longitude)}&pontos_proximos=not.is.null&pontos_proximos=neq.${encodeURIComponent('{}')}&limit=1`);
+    if (r.ok) {
+      const [v] = await r.json();
+      const p = v?.pontos_proximos;
+      if (p && typeof p === 'object' && Object.keys(p).length > 0) {
+        await sb(`imoveis_leilao?id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' },
+          body: JSON.stringify({ pontos_proximos: p, proximidades_em: new Date().toISOString(), proximidades_vazios: 0, proximidades_vazio_em: null }) });
+        return json({ pontos: p, vizinho: true });
+      }
+    }
+  } catch { /* padrao-ok: atalho opcional; sem ele consulta o Overpass como antes */ }
+
   try {
     const { pontos, vazio } = await consultarProximidades(lat, lng);
 
@@ -64,18 +83,24 @@ export default async function handler(req) {
       // Quando o cron confirmar o vazio em execuções diferentes, ele grava `{}` e AÍ a tela
       // passa a dizer "nenhum ponto de interesse" — que nesse momento é verdade.
       // Gravar `{}` aqui era o que congelava o engano: o cache devolvia o vazio para sempre.
-      await sb(`imoveis_leilao?id=eq.${encodeURIComponent(id)}`, {
-        method: 'PATCH', headers: { Prefer: 'return=minimal' },
-        // `proximidades_vazios` incrementado no servidor seria melhor, mas PostgREST não faz
-        // expressão em PATCH; ler-e-somar aqui é aceitável porque um contador de corroboração
-        // que perde uma contagem por concorrência apenas ADIA a conclusão — nunca a antecipa.
-        body: JSON.stringify({ proximidades_vazios: (Number(im.proximidades_vazios) || 0) + 1 }),
-      }).catch(() => { /* padrao-ok: contagem best-effort; perder uma só adia a conclusão */ });
+      // INTERVALO MÍNIMO entre observações (11/08): a corroboração é TEMPORAL, então duas
+      // observações dentro da mesma janela de 6h contam como UMA. Sem isto, o cliente que
+      // abre e reabre a página em minutos "corrobora" sozinho o vazio que o cron depois grava.
+      const ultimo = im.proximidades_vazio_em ? Date.parse(im.proximidades_vazio_em) : 0;
+      if (!ultimo || Date.now() - ultimo >= 6 * 3600000) {
+        await sb(`imoveis_leilao?id=eq.${encodeURIComponent(id)}`, {
+          method: 'PATCH', headers: { Prefer: 'return=minimal' },
+          // `proximidades_vazios` incrementado no servidor seria melhor, mas PostgREST não faz
+          // expressão em PATCH; ler-e-somar aqui é aceitável porque um contador de corroboração
+          // que perde uma contagem por concorrência apenas ADIA a conclusão — nunca a antecipa.
+          body: JSON.stringify({ proximidades_vazios: (Number(im.proximidades_vazios) || 0) + 1, proximidades_vazio_em: new Date().toISOString() }),
+        }).catch(() => { /* padrao-ok: contagem best-effort; perder uma só adia a conclusão */ });
+      }
       return json({ pontos: null, indeterminado: true, retryable: true }, 502);
     }
 
     await sb(`imoveis_leilao?id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' },
-      body: JSON.stringify({ pontos_proximos: pontos, proximidades_em: new Date().toISOString(), proximidades_vazios: 0 }) });
+      body: JSON.stringify({ pontos_proximos: pontos, proximidades_em: new Date().toISOString(), proximidades_vazios: 0, proximidades_vazio_em: null }) });
     return json({ pontos });
   } catch (e) {
     // Falha REAL (Overpass fora/limite em todos os espelhos) → status de ERRO, não
