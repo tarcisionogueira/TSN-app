@@ -8,6 +8,12 @@
  * META_AD_ACCOUNT_ID (ex.: act_1114056112873901). Guard: x-cron-secret (padrão dos crons).
  * Somente LEITURA no Meta — este token não gerencia campanhas nem gasta orçamento.
  */
+// Sem `config`, herdava o default da Vercel — e este cron faz várias chamadas à Graph API
+// em série (7 dias × campanhas) antes de gravar. Cortado no meio, ele grava METADE do
+// período e devolve sucesso: o painel de CAC/ROAS mostra número menor sem nada indicar
+// que faltou dado. Marketing errado para baixo é pior que marketing ausente. (11/08)
+export const config = { runtime: 'nodejs', maxDuration: 120 };
+
 import crypto from 'crypto';
 import { createClient } from '@supabase/supabase-js';
 

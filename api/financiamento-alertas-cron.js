@@ -1,3 +1,10 @@
+// Sem `config`, a função herdava o default da Vercel (10s no plano Pro para função Node).
+// Este cron manda e-mail em laço: no default ele seria CORTADO no meio da fila e sairia sem
+// dizer que foi — os que já receberam ficam gravados, os que faltavam somem sem erro.
+// É a mesma família de "falha que não sabe que falhou" do resto do projeto: o cron aparece
+// como executado, e ninguém descobre que metade da lista não recebeu. (11/08)
+export const config = { runtime: 'nodejs', maxDuration: 300 };
+
 import { alertarErro } from './_error-alert.js';
 import { isCronAuthorized } from './_auth.js';
 import { escapeHtml } from './_sanitize.js';

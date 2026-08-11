@@ -6599,6 +6599,9 @@ function ScrapersTab() {
   const [geocTodos, setGeocTodos] = useState({ rodando: false, atual: 0, total: 0, ufAtual: '', processadosTotal: 0 });
   const [geocPendentes, setGeocPendentes] = useState({});
   const [geocUltimoRefresh, setGeocUltimoRefresh] = useState(null);
+  // Falha de LEITURA dos pendentes tem que aparecer na tela. Sem isto, erro de rede
+  // devolveria "0 pendentes" — indistinguível de "está tudo geocodificado".
+  const [geocErro, setGeocErro] = useState('');
   const [parceiros, setParceiros] = useState([]);
   const [gerandoConviteLeiloeiro, setGerandoConviteLeiloeiro] = useState(false);
   const [linkLeiloeiro, setLinkLeiloeiro] = useState(null);
@@ -6782,21 +6785,9 @@ function ScrapersTab() {
     } catch (e) {
       setGeocRegiao(g => ({ ...g, [uf]: { rodando: false, erro: e.message, processados: totalProc } }));
     } finally {
-      // Atualiza contadores globais e recarrega pendentes do estado
-      Promise.all([
-        supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true).not('latitude', 'is', null).neq('latitude', 0),
-        supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true).is('latitude', null),
-        supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true).eq('latitude', 0),
-        supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true).eq('estado', uf).is('latitude', null),
-        supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true).eq('estado', uf).eq('latitude', 0),
-      ]).then(([comGeo, semNull, semZero, ufNull, ufZero]) => {
-        const com = comGeo.count || 0;
-        const sem = (semNull.count || 0) + (semZero.count || 0);
-        setGeoStats({ com, sem, total: com + sem });
-        // Atualiza pendentes reais do estado processado
-        const ufPendentes = (ufNull.count || 0) + (ufZero.count || 0);
-        setGeocPendentes(p => ({ ...p, [uf]: ufPendentes }));
-      });
+      // Atualiza contadores globais E os pendentes por UF — as 5 contagens exatas que
+      // estavam aqui são as mesmas que a RPC devolve numa varredura só.
+      carregarPendentes();
     }
   }
 
@@ -6854,17 +6845,22 @@ function ScrapersTab() {
   // mais aparecem para ninguém. Contá-las inflava o painel para "mais de 50 mil imóveis" e,
   // pior, punha 300 lotes MORTOS na fila de geocodificação: trabalho pago para posicionar no
   // mapa o que ninguém vai ver. O número honesto é o do acervo que o cliente enxerga.
+  // UMA varredura no lugar de 54 (11/08). Antes: 27 UFs × 2 `count: 'exact'` em paralelo
+  // sobre uma tabela de 180 MB, a cada abertura da tela. Agora um `group by estado` no
+  // servidor devolve tudo junto — os mesmos números, uma passada só.
   async function carregarPendentes() {
-    const results = await Promise.all(
-      UFS_GEOCOD_ORDEM.map(async uf => {
-        const [r1, r2] = await Promise.all([
-          supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true).eq('estado', uf).is('latitude', null),
-          supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true).eq('estado', uf).eq('latitude', 0),
-        ]);
-        return [uf, (r1.count || 0) + (r2.count || 0)];
-      })
-    );
-    setGeocPendentes(Object.fromEntries(results));
+    const { data, error } = await supabase.rpc('geocod_pendentes');
+    // `error` CHECADO de propósito: o postgrest-js não lança em não-2xx. Sem isto, uma
+    // falha de leitura viraria "0 pendentes em todo o Brasil" — a tela mais tranquila
+    // possível para o pior estado possível.
+    if (error || !data) {
+      setGeocErro('não foi possível ler os pendentes de geocodificação: ' + (error?.message || 'resposta vazia'));
+      return;
+    }
+    setGeocErro('');
+    const porUf = data.por_uf || {};
+    setGeocPendentes(Object.fromEntries(UFS_GEOCOD_ORDEM.map(uf => [uf, Number(porUf[uf]) || 0])));
+    setGeoStats({ com: Number(data.com) || 0, sem: Number(data.sem) || 0, total: (Number(data.com) || 0) + (Number(data.sem) || 0) });
     setGeocUltimoRefresh(new Date());
   }
 
@@ -6915,16 +6911,8 @@ function ScrapersTab() {
       await new Promise(res => setTimeout(res, 500));
     }
     setGeocTodos(g => ({ ...g, rodando: false }));
-    // Atualiza contador após processar
-    Promise.all([
-      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true).not('latitude', 'is', null).neq('latitude', 0),
-      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true).is('latitude', null),
-      supabase.from('imoveis_leilao').select('*', { count: 'exact', head: true }).eq('ativo', true).eq('latitude', 0),
-    ]).then(([comGeo, semNull, semZero]) => {
-      const com = comGeo.count || 0;
-      const sem = (semNull.count || 0) + (semZero.count || 0);
-      setGeoStats({ com, sem, total: com + sem });
-    });
+    // Atualiza contador após processar (mesma varredura única)
+    carregarPendentes();
   }
 
   // Lista de estados com horários do cron (UTC)
@@ -7340,7 +7328,9 @@ function ScrapersTab() {
                 ? <span style={{ color: '#0D63DB', fontWeight: 700 }}>⏳ Processando {geocTodos.ufAtual}... · <b>{geocTodos.processadosTotal.toLocaleString('pt-BR')}</b> / {Object.values(geocPendentes).reduce((a, b) => a + b, 0).toLocaleString('pt-BR')} processados</span>
                 : geocTodos.total > 0
                   ? <span style={{ color: '#059669', fontWeight: 700 }}>✅ Sessão concluída · {geocTodos.processadosTotal.toLocaleString('pt-BR')} imóveis geocodificados</span>
-                  : <span>Cron 24h · a cada 10min · clique ▶ para forçar um estado agora{geocUltimoRefresh ? ` · atualizado ${geocUltimoRefresh.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : ''}</span>}
+                  : geocErro
+                    ? <span style={{ color: '#dc2626', fontWeight: 700 }}>⚠️ {geocErro}</span>
+                    : <span>Cron 24h · a cada 10min · clique ▶ para forçar um estado agora{geocUltimoRefresh ? ` · atualizado ${geocUltimoRefresh.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : ''}</span>}
             </div>
             <button onClick={() => { toggleExpandir('geocod'); if (!estadosExpandidos.geocod && Object.keys(geocPendentes).length === 0) carregarPendentes(); }} style={{ fontSize: 11, color: '#0D63DB', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>
               {estadosExpandidos.geocod ? '▲ Recolher estados' : '▼ Ver todos os estados (27)'}

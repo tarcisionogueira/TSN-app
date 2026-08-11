@@ -120,6 +120,27 @@ function ajustarFiltrosPorIntencao(intencao, tiposUsuario, descontoMinUsuario) {
   return { tipos, descontoMin };
 }
 const MODAL_LABEL = { primeiro_leilao:'1ª Praça', segundo_leilao:'2ª Praça', venda_direta:'Venda Direta', licitacao_aberta:'Licitação Aberta', judicial:'Judicial', extrajudicial:'Extrajudicial' };
+
+/**
+ * COLUNAS QUE A BUSCA REALMENTE USA (11/08). Antes era `select('*')`.
+ *
+ * `imoveis_leilao` tem 66 colunas e ~180 MB; o `.map()` logo abaixo consome 36 delas. As 30
+ * que sobravam vinham junto em toda página de resultado — incluindo os jsonb pesados
+ * (`anexos`, `proximidades`, fatos de documento), que são justamente os maiores campos da
+ * tabela e não aparecem em lugar nenhum da lista. Cada busca de cada cliente pagava esse
+ * transporte, e a conta cresce com o número de usuários, não com o acervo.
+ *
+ * Ao acrescentar campo novo na lista de resultados, INCLUA A COLUNA AQUI — senão ela chega
+ * `undefined` e a tela mostra vazio sem erro nenhum, que é a falha mais difícil de enxergar.
+ */
+const COLUNAS_BUSCA = [
+  'id','titulo','tipo','modalidade','estado','cidade','bairro','endereco',
+  'valor_avaliacao','valor_minimo','valor_mercado','analise_viavel','desconto_percentual',
+  'area_m2','descricao','url_lote','link_edital','link_matricula','link_foto','leiloeiro',
+  'data_leilao','data_fim','forma_pagamento','viavel','score_viabilidade','fracionado',
+  'fonte','fonte_id','numero_edital','numero_matricula','numero_processo',
+  'latitude','longitude','score_financeiro','score_juridico','score_localizacao',
+].join(',');
 const fmtBRL = (v) => v ? 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits:2, maximumFractionDigits:2 }) : '—';
 
 // Carrega imagem apenas quando o elemento entra na viewport
@@ -1119,8 +1140,8 @@ export default function Busca() {
         const [{ count }, { data, error }] = await Promise.all([
           // count 'estimated' (planner): exato p/ conjuntos pequenos, estimativa barata p/
           // grandes — evita um COUNT(*) cheio do catálogo a cada busca (escala com 10k users).
-          buildQuery(supabase.from('imoveis_leilao').select('*', { count: 'estimated', head: true })),
-          buildQuery(supabase.from('imoveis_leilao').select('*'))
+          buildQuery(supabase.from('imoveis_leilao').select('id', { count: 'estimated', head: true })),
+          buildQuery(supabase.from('imoveis_leilao').select(COLUNAS_BUSCA))
             .order(coluna, { ascending: dir, nullsFirst: false })
             .range(offset, offset + POR_PAGINA - 1),
         ]);
