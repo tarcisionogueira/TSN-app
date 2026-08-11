@@ -42,6 +42,22 @@ export default async function handler(req, res) {
       else if (tipo === 'email.clicked') await patch({ clicado_em: at }, '&clicado_em=is.null');
       else if (tipo === 'email.bounced') await patch({ status: 'bounce' });
       else if (tipo === 'email.complained') await patch({ status: 'reclamacao' });
+
+      // REGISTRA O TIPO QUE CHEGOU — mesmo o que não sabemos tratar (11/08).
+      // Sem isto, `aberturas = 0` tem DUAS leituras que não se distinguem: "ninguém abriu"
+      // e "o Resend não está nos mandando `email.opened`". A segunda é problema de
+      // configuração e some da vista, porque parece resultado. Com o carimbo do evento dá
+      // para responder em uma query: se `email.opened` NUNCA chegou, o webhook não está
+      // inscrito nesse evento; se chega e a coluna segue nula, aí sim é comportamento real.
+      await fetch(`${SB}/rest/v1/webhook_eventos_processados`, {
+        method: 'POST',
+        headers: {
+          apikey: KEY, Authorization: `Bearer ${KEY}`,
+          'Content-Type': 'application/json', Prefer: 'resolution=ignore-duplicates,return=minimal',
+        },
+        body: JSON.stringify({ gateway: 'resend', gateway_payment_id: emailId, evento: tipo }),
+        signal: AbortSignal.timeout(4000),
+      }).catch(() => {});
     }
   } catch { /* nunca falha o webhook */ }
   res.status(204).end();
