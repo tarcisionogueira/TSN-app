@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-  Play, Lock, CheckCircle2, Clock, BookOpen, ChevronLeft,
+  Play, Lock, CheckCircle2, BookOpen, ChevronLeft,
   ChevronDown, ChevronUp, Award, Crown, ArrowRight, ArrowLeft, ChevronRight, Share2,
 } from 'lucide-react';
 import { supabase } from '../utils/supabase';
@@ -69,7 +69,7 @@ export default function Curso() {
       });
       setCursoDb({
         id: c.id, titulo: c.titulo, subtitulo: c.subtitulo || '', descricao: c.descricao || '',
-        emoji: c.emoji || '📚', cor: c.cor || '#0D63DB', duracao: c.duracao || '',
+        capa_url: c.capa_url || '', cor: c.cor || '#0D63DB',
         aulas: (as || []).length, preco: Number(c.preco || 0), gratuito: !!c.gratuito,
         planos_gratis: Array.isArray(c.planos_gratis) ? c.planos_gratis : [],
         modulos: Object.entries(modMap).map(([titulo, licoes]) => ({ titulo, licoes })),
@@ -220,38 +220,52 @@ export default function Curso() {
       {/* SIDEBAR */}
       <div className="curso-lateral" style={{ display:'flex', flexDirection:'column', gap:12, position:'sticky', top:82 }}>
 
-        {/* Cabeçalho do curso */}
-        <div style={{ background:`linear-gradient(135deg, ${curso.cor} 0%, ${curso.cor}cc 100%)`, borderRadius:16, padding:'20px' }}>
-          <button onClick={()=>nav('/membros')}
-            style={{ display:'flex', alignItems:'center', gap:6, background:'rgba(255,255,255,0.15)', border:'none', borderRadius:8, padding:'6px 12px', color:'white', fontSize:12, fontWeight:600, cursor:'pointer', marginBottom:14 }}>
-            <ChevronLeft size={13}/> Todos os cursos
-          </button>
-          <div style={{ marginBottom:12 }}><CapaCurso curso={curso} tamanho={44} raio={10}/></div>
-          <h2 style={{ margin:'0 0 6px', fontSize:17, fontWeight:900, color:'white', lineHeight:1.2 }}>{curso.titulo}</h2>
-          <p style={{ margin:'0 0 16px', fontSize:12, color:'rgba(255,255,255,0.75)', lineHeight:1.5 }}>{curso.subtitulo}</p>
-          <div style={{ display:'flex', gap:12, fontSize:11, color:'rgba(255,255,255,0.7)' }}>
-            <span><Clock size={11}/> {curso.duracao}</span>
-            <span><BookOpen size={11}/> {curso.aulas} {curso.aulas === 1 ? 'aula' : 'aulas'}</span>
-          </div>
-          {/* Parceiro: link de venda do curso (só cursos do banco, pagos) */}
-          {cursoDb && Number(curso.preco || 0) > 0 && user && <CompartilharCurso cursoId={curso.id}/>}
-        </div>
-
-        {/* Barra de progresso geral */}
+        {/* CABEÇALHO DO CURSO — refeito em 11/08 a pedido do dono ("esse quadro azul não está
+            agregando"). Ele tinha razão, e por três motivos concretos:
+              • o monograma "CA" era ruído — e estava QUEBRADO: `capa_url` nunca entrava no
+                objeto do curso, então a arte que ele subiu nunca aparecia ali (bug meu);
+              • havia um ícone de relógio sozinho, sem número, porque curso do banco não tem
+                campo de duração — a tela exibia um dado que não existe;
+              • e o progresso aparecia TRÊS vezes na mesma página: no bloco azul, num card
+                próprio logo abaixo e na barra sob o player.
+            Agora é um cabeçalho branco como o resto da página, com o card de progresso
+            fundido dentro dele — um card a menos — e só informação que existe de verdade. */}
         <div style={{ background:'white', borderRadius:14, border:'1px solid #e2e8f0', padding:'14px 16px' }}>
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
-            <span style={{ fontSize:12, fontWeight:700, color:'#334155' }}>Seu progresso</span>
-            <span style={{ fontSize:13, fontWeight:900, color:curso.cor }}>{pct}%</span>
+          <button onClick={()=>nav('/membros')}
+            style={{ display:'flex', alignItems:'center', gap:5, background:'transparent', border:'none', padding:0, color:'#64748b', fontSize:12.5, fontWeight:700, cursor:'pointer', marginBottom:10 }}>
+            <ChevronLeft size={14}/> Todos os cursos
+          </button>
+
+          <h2 style={{ margin:'0 0 4px', fontSize:16, fontWeight:900, color:'#0f172a', lineHeight:1.3 }}>{curso.titulo}</h2>
+          {curso.subtitulo && (
+            <p style={{ margin:'0 0 12px', fontSize:12.5, color:'#64748b', lineHeight:1.5 }}>{curso.subtitulo}</p>
+          )}
+
+          <div style={{ display:'flex', alignItems:'center', gap:7, flexWrap:'wrap', fontSize:12, color:'#64748b', marginBottom:9 }}>
+            <span style={{ display:'inline-flex', alignItems:'center', gap:4 }}>
+              <BookOpen size={12}/> {todasLicoes.length} {todasLicoes.length === 1 ? 'aula' : 'aulas'}
+            </span>
+            <span>·</span>
+            <span>{concluidas} {concluidas === 1 ? 'concluída' : 'concluídas'}</span>
+            {(curso.gratuito || !Number(curso.preco || 0)) && (
+              <><span>·</span><span style={{ color:'#059669', fontWeight:700 }}>Grátis</span></>
+            )}
           </div>
-          <div style={{ height:8, background:'#f1f5f9', borderRadius:8, overflow:'hidden' }}>
-            <div style={{ height:8, background:curso.cor, width:`${pct}%`, borderRadius:8, transition:'width 0.4s' }}/>
+
+          <div style={{ height:6, background:'#f1f5f9', borderRadius:6, overflow:'hidden' }}>
+            <div style={{ height:6, background:curso.cor, width:`${pct}%`, borderRadius:6, transition:'width 0.4s' }}/>
           </div>
-          <div style={{ fontSize:11, color:'#94a3b8', marginTop:6 }}>{concluidas} de {todasLicoes.length} {todasLicoes.length === 1 ? 'aula concluída' : 'aulas concluídas'}</div>
+
           {pct === 100 && (
             <div style={{ marginTop:10, display:'flex', alignItems:'center', gap:6, background:'#fef3c7', borderRadius:8, padding:'8px 12px' }}>
               <Award size={14} color="#f59e0b"/>
               <span style={{ fontSize:11, fontWeight:700, color:'#92400e' }}>Curso concluído! 🎉</span>
             </div>
+          )}
+
+          {/* Parceiro: link de venda do curso (só cursos do banco, pagos) */}
+          {cursoDb && Number(curso.preco || 0) > 0 && user && (
+            <div style={{ marginTop:12 }}><CompartilharCurso cursoId={curso.id}/></div>
           )}
         </div>
 
