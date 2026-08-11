@@ -680,11 +680,18 @@ export default function ContratoLink() {
                   { key: 'selfie_doc', label: 'Selfie com Documento', desc: 'Confirmação de posse do documento' },
                 ].filter(({ key }) => contrato.kyc_fotos[key]).map(({ key, label, desc }) => (
                   <div key={key} style={{ background: '#1a2744', border: '1px solid #111111', borderRadius: 12, overflow: 'hidden' }}>
-                    <img
-                      src={contrato.kyc_fotos[key]}
-                      alt={label}
-                      style={{ width: '100%', display: 'block', aspectRatio: '4/3', objectFit: 'cover' }}
-                    />
+                    {/* Proporção no DIV, imagem em 100%×100% (11/08). Com `aspect-ratio` no
+                        próprio <img> o Safari resolve a altura pela proporção NATURAL do
+                        arquivo e ignora a declarada — a caixa fica certa e a foto preenche só
+                        uma faixa. Aqui isso é pior que estética: é a foto do DOCUMENTO que a
+                        equipe confere para liberar saque. */}
+                    <div style={{ width: '100%', aspectRatio: '4/3', overflow: 'hidden', background: '#0f172a' }}>
+                      <img
+                        src={contrato.kyc_fotos[key]}
+                        alt={label}
+                        style={{ width: '100%', height: '100%', display: 'block', objectFit: 'cover', objectPosition: 'center' }}
+                      />
+                    </div>
                     <div style={{ padding: '10px 14px' }}>
                       <div style={{ fontSize: 12, fontWeight: 700, color: '#cbd5e1' }}>{label}</div>
                       <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{desc}</div>

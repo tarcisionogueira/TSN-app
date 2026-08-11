@@ -109,14 +109,19 @@ export default function PlayerVideo({ url, titulo, onFim, style }) {
 
   if (emb.tipo === 'video') {
     return (
-      <video
-        src={emb.src}
-        controls
-        controlsList="nodownload"
-        playsInline
-        onEnded={() => { if (!jaAvisouRef.current) { jaAvisouRef.current = true; onFimRef.current?.(); } }}
-        style={{ width: '100%', aspectRatio: '16/9', background: '#000', display: 'block', ...style }}
-      />
+      // <video> é elemento SUBSTITUÍDO como o <img>: `aspect-ratio` nele, com altura
+      // automática, também cede para a proporção natural do arquivo no Safari. Um MP4 em
+      // retrato quebraria o enquadramento do mesmo jeito. Proporção no container.
+      <div style={{ position: 'relative', width: '100%', aspectRatio: '16/9', background: '#000', ...style }}>
+        <video
+          src={emb.src}
+          controls
+          controlsList="nodownload"
+          playsInline
+          onEnded={() => { if (!jaAvisouRef.current) { jaAvisouRef.current = true; onFimRef.current?.(); } }}
+          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block' }}
+        />
+      </div>
     );
   }
 

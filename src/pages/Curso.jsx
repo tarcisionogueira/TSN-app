@@ -303,12 +303,19 @@ export default function Curso() {
                     </div>
                     <div style={{ flex:1, minWidth:0 }}>
                       <div style={{ fontSize:12, fontWeight:ativa?700:500, color:ativa?curso.cor:'#334155', lineHeight:1.3, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-                        {feita && <span style={{ marginRight:4 }}>✅</span>}{lic.titulo}
+                        {/* Sem o ✅ aqui: o ícone circulado à ESQUERDA já sinaliza a aula feita,
+                            e o dono já pediu emoji fora do produto ("não fica profissional").
+                            Dois sinais para o mesmo fato é ruído, não reforço. */}
+                        {lic.titulo}
                       </div>
-                      <div style={{ fontSize:10, color:'#94a3b8', marginTop:2, display:'flex', gap:6 }}>
-                        <span>{lic.duracao}</span>
-                        {lic.gratis && <span style={{ color:'#10b981', fontWeight:600 }}>Grátis</span>}
-                      </div>
+                      {/* Só renderiza o que existe: `duracao` não é campo de curso do banco,
+                         e um <span> vazio dentro de um flex com gap deixa um buraco. */}
+                      {(lic.duracao || lic.gratis) && (
+                        <div style={{ fontSize:10, color:'#94a3b8', marginTop:2, display:'flex', gap:6 }}>
+                          {lic.duracao && <span>{lic.duracao}</span>}
+                          {lic.gratis && <span style={{ color:'#10b981', fontWeight:600 }}>Grátis</span>}
+                        </div>
+                      )}
                     </div>
                   </button>
                 );
@@ -477,9 +484,35 @@ export default function Curso() {
               </div>
             )}
 
-            {/* A seguir neste módulo */}
+            {/* ─── "A SEGUIR" ────────────────────────────────────────────────────────────
+                Tinha DOIS defeitos, os dois visíveis no print do dono (11/08):
+                  • Renderizava a moldura VAZIA na última aula, porque `slice` a partir do fim
+                    devolve lista vazia — um card com título e nada dentro, que não comunica
+                    coisa alguma. Card sem conteúdo é ruído; ou tem o que dizer, ou não existe.
+                  • Dizia "neste módulo" enquanto fatiava `todasLicoes`, que é a lista do CURSO
+                    INTEIRO. Com dois módulos de uma aula, o card prometia uma coisa e
+                    mostrava outra.
+                Agora: quando há próxima, o título é "A seguir no curso" e ela aparece; quando
+                a pessoa chegou ao fim, o card vira o FECHAMENTO — que é a mensagem que faltava
+                ali: "acabou, e aqui está o que você fez". */}
+            {todasLicoes.slice(licaoIdx + 1).length === 0 ? (
+              <div style={{ background:'white', borderRadius:14, border:'1px solid #e2e8f0', padding:'18px 20px', textAlign:'center' }}>
+                <div style={{ fontSize:14, fontWeight:800, color:'#0f172a', marginBottom:4 }}>
+                  {pct === 100 ? 'Você concluiu o curso 🎉' : 'Esta é a última aula'}
+                </div>
+                <div style={{ fontSize:12.5, color:'#64748b', lineHeight:1.55, marginBottom:14 }}>
+                  {pct === 100
+                    ? 'Assistiu a tudo. O conteúdo continua disponível para rever quando quiser.'
+                    : `Faltam ${todasLicoes.length - concluidas} ${todasLicoes.length - concluidas === 1 ? 'aula' : 'aulas'} para concluir o curso — role a lista e retome de onde parou.`}
+                </div>
+                <button onClick={()=>nav('/membros')}
+                  style={{ background:curso.cor, color:'white', border:'none', borderRadius:10, padding:'10px 18px', fontSize:13, fontWeight:800, cursor:'pointer' }}>
+                  Ver outros cursos
+                </button>
+              </div>
+            ) : (
             <div style={{ background:'white', borderRadius:14, border:'1px solid #e2e8f0', padding:'16px 20px' }}>
-              <div style={{ fontSize:11, fontWeight:800, color:'#475569', textTransform:'uppercase', letterSpacing:0.5, marginBottom:12 }}>A seguir neste módulo</div>
+              <div style={{ fontSize:11, fontWeight:800, color:'#475569', textTransform:'uppercase', letterSpacing:0.5, marginBottom:12 }}>A seguir no curso</div>
               <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
                 {todasLicoes.slice(licaoIdx+1, licaoIdx+4).map((lic) => (
                   <button key={lic.id} onClick={()=>irParaLicao(lic)}
@@ -492,13 +525,19 @@ export default function Curso() {
                     </div>
                     <div style={{ flex:1 }}>
                       <div style={{ fontSize:13, fontWeight:600, color:'#111111' }}>{lic.titulo}</div>
-                      <div style={{ fontSize:11, color:'#94a3b8', marginTop:2 }}>{lic.duracao}{lic.gratis?' · Grátis':''}</div>
+                      {/* Sem duração, o separador ficava solto na frente (" · Grátis"). */}
+                      {(lic.duracao || lic.gratis) && (
+                        <div style={{ fontSize:11, color:'#94a3b8', marginTop:2 }}>
+                          {[lic.duracao, lic.gratis ? 'Grátis' : ''].filter(Boolean).join(' · ')}
+                        </div>
+                      )}
                     </div>
                     <ChevronRight size={14} color="#94a3b8"/>
                   </button>
                 ))}
               </div>
             </div>
+            )}
           </>
         )}
       </div>

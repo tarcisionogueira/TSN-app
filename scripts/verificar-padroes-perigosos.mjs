@@ -54,6 +54,23 @@ const REGRAS = [
     testar: (linha) => /(const|let)\s*\{\s*data\s*(:\s*\w+\s*)?\}\s*=\s*await\s+(supabase|sb)\b/.test(linha),
   },
   {
+    id: 'proporcao-em-elemento-substituido',
+    titulo: 'aspectRatio no próprio <img>/<video> — o Safari usa a proporção do ARQUIVO',
+    // Em elemento SUBSTITUÍDO (img, video, iframe com conteúdo próprio) com `height` automático,
+    // o WebKit resolve a altura pela proporção NATURAL do arquivo e ignora a declarada. A caixa
+    // fica com a altura certa e a mídia preenche só uma faixa — o resto vira fundo. Aconteceu
+    // em 11/08 com a capa do curso (o dono viu no iPhone: "a imagem da capa está cortada") e a
+    // mesma construção estava na foto de DOCUMENTO do KYC, que a equipe confere para liberar
+    // saque. O certo é a proporção no CONTAINER e a mídia em width/height 100% + object-fit —
+    // padrão que esta base já usava em EbookCapa.
+    // O SINAL É `aspectRatio` E `objectFit` NO MESMO style. `object-fit` só tem efeito em
+    // elemento substituído; um container <div> nunca o usa. Então os dois juntos significam,
+    // necessariamente, que a proporção foi declarada NA MÍDIA — que é o defeito. No padrão
+    // correto eles ficam separados: `aspectRatio` no container, `objectFit` na mídia.
+    // (Regra de linha basta: os dois estão sempre no mesmo objeto de estilo.)
+    testar: (linha) => /aspectRatio\s*:/.test(linha) && /objectFit\s*:/.test(linha),
+  },
+  {
     id: 'json-inline-sem-resposta',
     titulo: 'await (await f()).json() — impossível checar .ok antes de usar o corpo',
     testar: (linha) => /await\s*\(\s*await\s+[^)]*\)\s*\)?\s*\.json\(\)/.test(linha),
