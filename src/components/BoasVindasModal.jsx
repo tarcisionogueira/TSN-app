@@ -4,6 +4,7 @@ import { X, Play, CheckCircle2, ArrowRight } from 'lucide-react';
 import { supabase } from '../utils/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { videoEmbed } from '../utils/videoEmbed';
+import DicaAudioIOS from './DicaAudioIOS';
 
 /**
  * POP-UP DE BOAS-VINDAS — o vídeo que recebe quem entra pela primeira vez.
@@ -138,6 +139,8 @@ export default function BoasVindasModal() {
             </div>
           )}
         </div>
+
+        <DicaAudioIOS style={{ margin: '12px 20px 0' }} />
 
         {/* CONTRATO EXPLÍCITO COM QUEM ESTÁ VENDO (pedido do dono, 11/08): a pessoa precisa
             saber POR QUE isto reaparece e O QUE faz parar. Sem esta linha, um convite que

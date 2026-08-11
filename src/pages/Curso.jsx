@@ -8,6 +8,7 @@ import { supabase } from '../utils/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import CapaCurso from '../components/CapaCurso';
 import { videoEmbed } from '../utils/videoEmbed';
+import DicaAudioIOS from '../components/DicaAudioIOS';
 import { CURSOS, PLANOS } from '../data/cursos';
 
 // ── localStorage fallback ─────────────────────────────────────────────────────
@@ -353,6 +354,8 @@ export default function Curso() {
 
                 {/* Controles + título */}
                 <div style={{ padding:'22px 24px' }}>
+                  <DicaAudioIOS style={{ marginBottom:14 }} />
+
                   {/* PROGRESSO JUNTO DO VÍDEO (pedido do dono, 11/08). A barra existia só na
                       barra lateral — que no celular agora fica DEPOIS do player, ou seja, fora
                       de vista justamente na hora em que ela importa: logo após assistir. Aqui
