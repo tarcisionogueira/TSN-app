@@ -161,6 +161,89 @@ antes de mexer, mais 6 validações de produção para rodar na abertura.
 
 ---
 
+## 🏁 FECHAMENTO DE 11/08 — a coleta do RJ, e o que ela revelou sobre o resto
+
+> **`main` em `7fc3777`.** O dia começou validando o freio residencial que consertei de manhã e
+> terminou descobrindo que o problema era **quatro defeitos empilhados**, nenhum deles visível em
+> log de erro. O fio condutor é o mesmo de 10/08, com uma variação nova: não só "erro entregue
+> como conteúdo", mas **freio de custo entregue como conteúdo**. "Sem cota" virava "a fonte não
+> tem nada" em toda a cadeia, e o check ficava verde.
+
+### O que estava acontecendo (medido, não deduzido)
+
+| # | Defeito | Como se manifestava |
+|---|---------|---------------------|
+| 1 | **Teto do Bright Data saturado há 4 semanas** (450/450 desde 20/07; a semana de 10/08 bateu na segunda às 13h) | `fetchViaBrightData` → `null` → `if (!body) break` → "Nenhum lote na listagem" → **exit 0 em 0,6s**, check verde |
+| 2 | **As sub-cotas por propósito não existiam** — eram um `Map` em memória do processo; cada run do Actions e cada invocação da Vercel começava do zero | Não limitavam ninguém e não RESERVAVAM nada. O RJ precisa de ~13 req/semana e não tem via grátis (100% Cloudflare): nunca achava crédito livre |
+| 3 | **O runner residencial rodava o RJ em DRY-RUN** — faltava `RJ_DRYRUN=0` na linha do runner (as outras fontes já tinham) | O caminho grátis **nunca gravou uma linha de RJ**. Saía com 0, o gate carimbava "coletei", e o carimbo bloqueava o caminho pago. Deadlock |
+| 4 | **Preços errados por 20×** — 3 dos 5 ativos com `valor_minimo` = 5% do lance real (a comissão do leiloeiro, pega pelo `Math.min` de todos os R$ da página) | O cliente via R$ 30 mil num imóvel de R$ 600 mil. O próprio TÍTULO trazia o valor certo |
+
+### O que ficou no ar
+
+- **Reserva por propósito no banco** (`brightdata_reserva` + `brightdata_uso_proposito`): o RJ tem
+  **60 req/semana garantidos** que ninguém mais consome. Teto global inalterado — reparte, não gasta mais.
+- **`buscarViaBrightData` LANÇA com o motivo** (`teto_global` · `subcota` · `reservado_para_outros` ·
+  `rede` · `http`). O `fetchViaBrightData` (null) fica para os fallbacks legítimos.
+- **`coleta_cliente_concluir` EXIGE PROVA**: só carimba se houver linha gravada no acervo depois do
+  claim. *"Concluí" passa a significar "gravei"* — para toda fonte, não só o RJ.
+- **Zero lote pronto = código de saída 1 + `fonte_saude` 'falhou'** em SOLEON, PECINI, GESTAO e RJ
+  (o `process.exit(0)` fixo do rodapé apagava o `exitCode` que o main tinha acabado de definir).
+- **SOLEON registrava saúde só do tenant que coletou** — justo o que coletava zero ficava sem rastro.
+- **Espelho de documentos ordenado por DATA DO LEILÃO**, não por ordem de chegada (ver abaixo).
+
+### VALIDADO EM PRODUÇÃO (run 31496700248, 13:32 UTC)
+
+```
+página 1: +16 lote(s) · no banco: 9 · novos: 7 · 7 prontos · 0 sem detalhe
+✅ 7 imóveis gravados · 🩺 saúde registrada: 7 lotes · ok
+```
+Custo real: **9 requests** da reserva de 60. RJ ativo de 5 → **11 lotes**, todos com data futura,
+edital e anexos. `fonte_cega_no_monitor` 1 → 0 · `valor_diverge_do_titulo` 0.
+
+### ⚠️ ERRO MEU, no mesmo dia — vale mais registrado que escondido
+
+Ao limpar as cidades sujas do RJ ("EM ITABAIANA", "A CIDADE DE BARRA DOS COQUEIROS") apliquei a
+regra ao **acervo inteiro** com "cidade" na lista de conectivos. **Cidade Ocidental/GO é um
+município**: 756 lotes viraram "Ocidental". Revertido integralmente (0 remanescentes; não existe
+município chamado só "Ocidental", então a restauração foi sem ambiguidade). Os ~245 acertos reais
+na BIASI ficaram. O `limparCidade` do scraper tinha o **mesmo defeito** e foi corrigido antes de
+rodar de novo, com bateria de casos incluindo o que me mordeu: substantivo geográfico só é ruído
+quando vem seguido de *de/do/da*; colado direto no nome, **ele É o nome**.
+
+> **A lição, na forma em que serve para a próxima vez:** uma limpeza de texto validada em 4 exemplos
+> não está validada. Antes de rodar `update` em acervo inteiro, rode o `select` que mostra
+> `antes → depois` agrupado e **leia os pares mais frequentes** — os 733 iguais teriam saltado aos
+> olhos em dois segundos.
+
+### 📋 DECISÕES QUE DEPENDEM DO DONO (nenhuma bloqueia nada hoje)
+
+1. **Teto do Bright Data.** Saturado 4 semanas seguidas em 450/semana. Só agora existe contabilidade
+   POR PROPÓSITO (`brightdata_uso_proposito`) — em uma semana dá para ver quem come a cota. Decisão:
+   subir o teto, ou aceitar que os consumidores oportunistas fiquem sem? Query:
+   `select proposito, requests from brightdata_uso_proposito where semana = date_trunc('week', now())::date order by 2 desc;`
+2. **Anexos não são espelhados — nenhum.** A fila só cobre `link_matricula` e `link_edital`.
+   Estão de fora **9.584 PDFs de anexo** (laudos, publicações, autos de avaliação) de lotes ativos;
+   5.766 deles são de leilão nos próximos 30 dias. Espelhar tudo custa ~22 GB de Storage
+   (543 docs = 872 MB → ~1,6 MB cada). **Não enfileirei sem sua decisão de custo.**
+3. **1.648 lotes ativos com data de leilão no passado** (1.642 são CEF; 1.168 foram atualizados nas
+   últimas 24h — ou seja, a CEF segue publicando o lote e a data não é refrescada). Invariante
+   `leilao_vencido_ativo` criada como 'gap' com limite 1.800 para vigiar. Investigação do fluxo CEF
+   fica para uma sessão própria.
+4. **`aval_ausente_com_doc` passou do limite** (3.966 vs 3.800, calibrado em 08/08). Deriva lenta,
+   não regressão — reavaliar o limite ou atacar a lacuna.
+
+### 🔭 O QUE OBSERVAR NA PRÓXIMA SESSÃO
+
+| O que | Query | Verde é |
+|---|---|---|
+| Freio + coleta do RJ na sexta | `select fonte, total, status, executado_em from fonte_saude where fonte='RJLEILOES' order by executado_em desc limit 3;` | Linha nova de sexta 11h UTC (ou terça), `status='ok'` |
+| Reserva funcionando | `select proposito, requests from brightdata_uso_proposito where semana=date_trunc('week',now())::date order by 2 desc;` | `rj` avançando; ninguém sozinho comendo tudo |
+| Fila de documentos drenando | `select status, count(*) from documento_espelho group by 1;` | `pendente` CAINDO (era 4.079 e crescia) |
+| Gate não carimba sem gravar | `select fonte, ultima_em, tentativa_em from coleta_cliente order by fonte;` | `ultima_em` do RJ só anda quando o acervo andou |
+| Invariantes | `select chave, valor, limite from public.qa_invariantes() where status='alerta';` | Só os 4 declarados acima |
+
+---
+
 ## 🏁 FECHAMENTO DE 10/08 — leia este bloco primeiro
 
 > **19 commits, `main` em `3ba2fa0`.** O dia começou com um ritual de rotina e virou a maior
