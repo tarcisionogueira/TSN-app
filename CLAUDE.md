@@ -119,6 +119,12 @@ curto (5–8 linhas) antes de seguir:
    `error: null`. Só `.select()` prova o que mudou.
 4. **`null` como "acabou".** Helper que devolve `null` em falha, dentro de um laço de paginação,
    vira "fim das páginas" — e o total sai completo e errado.
+5. **O FREIO DE CUSTO entregue como conteúdo (11/08).** Quando o teto de gasto recusa a chamada,
+   o helper devolve a MESMA coisa que devolveria num erro de rede — e o chamador entende "a fonte
+   não tem nada". O teto do Bright Data ficou **saturado 4 semanas seguidas** e o scraper do RJ
+   saía com **exit 0 em 0,6 segundos**, check verde, acervo congelado há 12 dias. Se a sua função
+   pode dizer "não" por decisão de ORÇAMENTO, ela tem que dizer **qual** não (`e.semCota`), e um
+   coletor jamais pode carimbar sucesso sem ter gravado (`coleta_cliente_concluir` exige prova).
 
 **Corolário do dia:** quando a operação for paralela e competitiva (`Promise.any` entre
 espelhos), a corrida **premia o mais rápido — e quem desiste na hora é o mais rápido de todos**.
