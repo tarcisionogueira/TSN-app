@@ -494,13 +494,13 @@ function CursosTab() {
             </div>
 
             <div style={{ marginBottom: 14 }}>
-              <label style={S.label}>Capa (imagem PNG/JPG) — miniatura do curso na Área de Membros (opcional; sem capa, entra o monograma nas iniciais do título, na cor do curso)</label>
+              <label style={S.label}>Capa do curso — use PAISAGEM 16:9 (ex.: 1280×720), a mesma proporção do vídeo. Opcional: sem capa, entra o monograma nas iniciais do título, na cor do curso</label>
               <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
                 {form.capa_url ? (
-                  <img src={form.capa_url} alt="capa" style={{ width: 80, height: 120, objectFit: 'cover', borderRadius: 8, border: '1px solid #e2e8f0', flexShrink: 0 }} />
+                  <img src={form.capa_url} alt="capa" style={{ width: 160, height: 90, objectFit: 'cover', borderRadius: 8, border: '1px solid #e2e8f0', flexShrink: 0 }} />
                 ) : (
-                  <div style={{ width: 80, height: 120, borderRadius: 8, overflow: 'hidden', flexShrink: 0 }}>
-                    <CapaCurso curso={{ titulo: form.titulo, cor: form.cor }} preencher proporcao="2/3" raio={8} />
+                  <div style={{ width: 160, height: 90, borderRadius: 8, overflow: 'hidden', flexShrink: 0 }}>
+                    <CapaCurso curso={{ titulo: form.titulo, cor: form.cor }} preencher proporcao="16/9" raio={8} />
                   </div>
                 )}
                 <div style={{ flex: 1 }}>

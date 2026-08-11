@@ -370,7 +370,11 @@ export default function Membros() {
               onMouseLeave={e=>{ e.currentTarget.style.boxShadow='0 1px 3px rgba(0,0,0,0.05)'; e.currentTarget.style.transform='none'; }}>
 
               {/* Capa */}
-              <CapaCurso curso={c} preencher proporcao="2/3" raio={0} legenda={c.capa_url ? null : c.categoria}/>
+              {/* PAISAGEM 16/9 (11/08): a capa do curso é a mesma arte do vídeo. Num container
+                  2/3 (retrato) a arte 16/9 do dono aparecia cortada nas laterais, com faixa
+                  preta — foi o que ele viu no celular. Curso é vídeo; vídeo é paisagem.
+                  eBook segue retrato, porque capa de livro é retrato. */}
+              <CapaCurso curso={c} preencher proporcao="16/9" raio={0} legenda={c.capa_url ? null : c.categoria}/>
 
               {/* Barra de progresso */}
               {concluidas > 0 && (

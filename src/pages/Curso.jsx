@@ -93,10 +93,6 @@ export default function Curso() {
   }, [user, id, plano]);
 
   // Video progress simulation ref (tracks "watched" percentage)
-  const videoTimerRef = useRef(null);
-  const autoSavedRef = useRef(false); // tracks if 80% save already fired this session
-  const [videoProgress, setVideoProgress] = useState(0); // 0-100
-  const [videoPlaying, setVideoPlaying] = useState(false);
 
   const todasLicoes = curso ? curso.modulos.flatMap(m => m.licoes) : [];
   const concluidas = todasLicoes.filter(l => progresso[l.id]).length;
@@ -145,37 +141,19 @@ export default function Curso() {
       const emProgresso = todasLicoes.find(l => !progresso[l.id] && podeAssistir(l, plano, comprouAvulso, curso?.planos_gratis, curso?.gratuito));
       const primeiraGratis = todasLicoes.find(l => l.gratis);
       setLicaoAtiva(emProgresso || primeiraGratis || todasLicoes[0]);
-      setVideoProgress(0);
-      setVideoPlaying(false);
     }
   // Também dispara quando o curso do BANCO termina de carregar (curso: null → objeto).
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, !!curso]);
 
-  // Reset autoSaved flag when changing lesson
-  useEffect(() => { autoSavedRef.current = false; setVideoProgress(0); setVideoPlaying(false); }, [licaoAtiva?.id]);
-
-  // ── Simulação de progresso de vídeo ────────────────────────────────────────
-  useEffect(() => {
-    if (!videoPlaying || !licaoAtiva) return;
-    videoTimerRef.current = setInterval(() => {
-      setVideoProgress(prev => {
-        const next = prev + 1;
-        // Auto-mark complete at 80% — use ref to avoid stale closure
-        if (next >= 80 && !autoSavedRef.current) {
-          autoSavedRef.current = true;
-          salvarProgresso(licaoAtiva.id, true);
-        }
-        if (next >= 100) {
-          clearInterval(videoTimerRef.current);
-          setVideoPlaying(false);
-          return 100;
-        }
-        return next;
-      });
-    }, 300);
-    return () => clearInterval(videoTimerRef.current);
-  }, [videoPlaying, licaoAtiva, salvarProgresso]);
+  // ── A SIMULAÇÃO DE PROGRESSO DE VÍDEO FOI REMOVIDA (11/08) ─────────────────
+  // Havia aqui um `setInterval` que subia 1% a cada 300ms e marcava a aula como CONCLUÍDA ao
+  // chegar a 80%. Era código morto — `setVideoPlaying(true)` nunca foi chamado em lugar
+  // nenhum, porque o iframe do YouTube não avisa que começou a tocar. Mas era código morto
+  // PERIGOSO: bastava alguém ligar o gatilho para a plataforma passar a dar aula por
+  // concluída com base em TEMPO DECORRIDO — marcando como assistido o vídeo de quem deixou a
+  // aba aberta e foi almoçar. Progresso de vídeo que não pode ser medido não deve ser
+  // inventado: quem declara que assistiu é a pessoa, no botão.
 
   if (!curso && carregandoCurso) {
     return (
@@ -199,24 +177,21 @@ export default function Curso() {
 
   const podeVer = licaoAtiva ? podeAssistir(licaoAtiva, plano, comprouAvulso, curso?.planos_gratis, curso?.gratuito) : false;
 
-  const marcarConcluida = (lid) => {
-    salvarProgresso(lid, true);
+  // `feito=false` DESMARCA. Marcar por engano acontece; sem volta, a pessoa fica com o curso
+  // dado por completo sem ter assistido — e o pop-up de boas-vindas, que lê este mesmo
+  // progresso, sumiria para sempre. Só avança para a próxima aula quando MARCA.
+  const marcarConcluida = (lid, feito = true) => {
+    salvarProgresso(lid, feito);
+    if (!feito) return;
     const idx = todasLicoes.findIndex(l => l.id === lid);
     if (idx < todasLicoes.length - 1) {
-      setTimeout(() => {
-        setLicaoAtiva(todasLicoes[idx + 1]);
-        setVideoProgress(0);
-        setVideoPlaying(false);
-      }, 500);
+      setTimeout(() => setLicaoAtiva(todasLicoes[idx + 1]), 500);
     }
   };
 
   const irParaLicao = (lic) => {
     if (!podeAssistir(lic, plano, comprouAvulso, curso?.planos_gratis, curso?.gratuito)) { setShowUpgrade(true); return; }
     setLicaoAtiva(lic);
-    setVideoProgress(0);
-    setVideoPlaying(false);
-    clearInterval(videoTimerRef.current);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -225,10 +200,23 @@ export default function Curso() {
   const proximaLicao = licaoIdx < todasLicoes.length - 1 ? todasLicoes[licaoIdx + 1] : null;
 
   return (
-    <div style={{ maxWidth:1280, margin:'0 auto', padding:'20px', display:'grid', gridTemplateColumns:'360px 1fr', gap:20, alignItems:'start' }}>
+    <div className="curso-grid" style={{ maxWidth:1280, margin:'0 auto', padding:'20px', display:'grid', gridTemplateColumns:'360px 1fr', gap:20, alignItems:'start' }}>
+      {/* NO CELULAR O PLAYER SUMIA (relato do dono, 11/08). A grade era `360px 1fr` FIXO, sem
+          media query: numa tela de ~390px a barra lateral sozinha consumia 360, e a coluna do
+          vídeo era empurrada para fora da viewport. O vídeo estava lá — só que fora da tela.
+          Agora a grade colapsa e o PLAYER VEM PRIMEIRO: quem abre uma aula quer assistir, não
+          rolar a lista de módulos até o fim para achar o vídeo. A barra lateral também deixa
+          de ser `sticky` no celular, onde grudar no topo só rouba altura útil. */}
+      <style>{`
+        @media (max-width: 900px){
+          .curso-grid{ grid-template-columns: 1fr !important; }
+          .curso-grid > .curso-conteudo{ order: 1; }
+          .curso-grid > .curso-lateral{ order: 2; position: static !important; }
+        }
+      `}</style>
 
       {/* SIDEBAR */}
-      <div style={{ display:'flex', flexDirection:'column', gap:12, position:'sticky', top:82 }}>
+      <div className="curso-lateral" style={{ display:'flex', flexDirection:'column', gap:12, position:'sticky', top:82 }}>
 
         {/* Cabeçalho do curso */}
         <div style={{ background:`linear-gradient(135deg, ${curso.cor} 0%, ${curso.cor}cc 100%)`, borderRadius:16, padding:'20px' }}>
@@ -315,7 +303,7 @@ export default function Curso() {
       </div>
 
       {/* ÁREA DE CONTEÚDO */}
-      <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+      <div className="curso-conteudo" style={{ display:'flex', flexDirection:'column', gap:16, minWidth:0 }}>
 
         {/* Breadcrumb */}
         <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:13, color:'#94a3b8' }}>
@@ -365,6 +353,24 @@ export default function Curso() {
 
                 {/* Controles + título */}
                 <div style={{ padding:'22px 24px' }}>
+                  {/* PROGRESSO JUNTO DO VÍDEO (pedido do dono, 11/08). A barra existia só na
+                      barra lateral — que no celular agora fica DEPOIS do player, ou seja, fora
+                      de vista justamente na hora em que ela importa: logo após assistir. Aqui
+                      ela responde "quanto falta" sem rolar a página. */}
+                  <div style={{ marginBottom:16 }}>
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', marginBottom:6 }}>
+                      <span style={{ fontSize:11.5, fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:0.4 }}>Seu progresso no curso</span>
+                      <span style={{ fontSize:13, fontWeight:900, color:curso.cor }}>{pct}%</span>
+                    </div>
+                    <div style={{ height:7, background:'#f1f5f9', borderRadius:6, overflow:'hidden' }}>
+                      <div style={{ height:7, background:curso.cor, width:`${pct}%`, borderRadius:6, transition:'width 0.4s' }}/>
+                    </div>
+                    <div style={{ fontSize:11.5, color:'#94a3b8', marginTop:5 }}>
+                      {concluidas} de {todasLicoes.length} {todasLicoes.length === 1 ? 'aula concluída' : 'aulas concluídas'}
+                      {concluidas === todasLicoes.length && todasLicoes.length > 0 ? ' · curso completo 🎉' : ''}
+                    </div>
+                  </div>
+
                   {/* ORDEM DE LEITURA DO YOUTUBE (pedido do dono, 11/08): título primeiro,
                       metadados em uma linha discreta logo abaixo, DEPOIS a barra de ações, e a
                       descrição num card cinza no fim. Antes o título vinha atrás de um rótulo
@@ -394,12 +400,17 @@ export default function Curso() {
                       {!progresso[licaoAtiva.id] ? (
                         <button onClick={()=>marcarConcluida(licaoAtiva.id)}
                           style={{ padding:'7px 16px', background:curso.cor, color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', display:'flex', alignItems:'center', gap:5 }}>
-                          <CheckCircle2 size={13}/> Marcar como concluída
+                          <CheckCircle2 size={13}/> Marcar como assistida
                         </button>
                       ) : (
-                        <div style={{ display:'flex', alignItems:'center', gap:6, padding:'7px 12px', background:'#d1fae5', borderRadius:8, fontSize:12, fontWeight:700, color:'#065f46' }}>
-                          <CheckCircle2 size={13}/> Concluída
-                        </div>
+                        // Clicável para DESMARCAR: marcar por engano acontece, e sem volta a
+                        // pessoa fica com o curso "completo" sem ter assistido — e o pop-up de
+                        // boas-vindas, que lê este mesmo progresso, some para sempre.
+                        <button onClick={()=>marcarConcluida(licaoAtiva.id, false)}
+                          title="Clique para desmarcar"
+                          style={{ display:'flex', alignItems:'center', gap:6, padding:'7px 12px', background:'#d1fae5', border:'1px solid #a7f3d0', borderRadius:8, fontSize:12, fontWeight:700, color:'#065f46', cursor:'pointer' }}>
+                          <CheckCircle2 size={13}/> Aula assistida
+                        </button>
                       )}
                       {proximaLicao && (
                         <button onClick={()=>irParaLicao(proximaLicao)}

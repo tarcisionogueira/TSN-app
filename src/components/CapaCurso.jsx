@@ -29,8 +29,8 @@ export default function CapaCurso({
   curso,
   tamanho = 56,
   raio = 12,
-  preencher = false,   // ocupa 100% da largura do pai (usado no card em pé, aspect 2/3)
-  proporcao,           // ex.: '2/3' — só faz sentido com `preencher`
+  preencher = false,   // ocupa 100% da largura do pai (card do curso, 16/9)
+  proporcao,           // ex.: '16/9' — só faz sentido com `preencher`
   legenda,             // texto opcional embaixo do monograma (ex.: categoria)
   className,
 }) {
@@ -46,7 +46,7 @@ export default function CapaCurso({
     flexShrink: 0,
     overflow: 'hidden',
     ...(preencher
-      ? { width: '100%', aspectRatio: proporcao || '2/3', borderRadius: raio }
+      ? { width: '100%', aspectRatio: proporcao || '16/9', borderRadius: raio }
       : { width: tamanho, height: tamanho, borderRadius: raio }),
   };
 
