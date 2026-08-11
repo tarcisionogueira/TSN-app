@@ -143,6 +143,18 @@ curto (5–8 linhas) antes de seguir:
 espelhos), a corrida **premia o mais rápido — e quem desiste na hora é o mais rápido de todos**.
 Falha tem que LANÇAR dentro do competidor, senão a otimização de latência passa a preferir o erro.
 
+**6. A COLUNA DE DATA NÃO É A MESMA EM TODAS AS TABELAS (11/08).** `chamados`, `sdr_leads`,
+`atividade_log` e a maioria das antigas usam `criado_em`; `casos`, `comissoes`, `solicitacoes`,
+`perfis`, `relatorios` e as nascidas depois usam `created_at`. Filtrar/ordenar pela errada dá
+**400 do PostgREST**, e o `{ data }` sem `error` transforma isso em lista vazia: a fila da equipe
+apareceu SEM NENHUMA solicitação, e o painel de produtividade contou zero comissão para todo
+mundo. Escrever as consultas juntas num `Promise.all` faz a inconsistência sumir da vista — foi
+exatamente assim que passou. **Ao escrever consulta nova, confira a coluna no schema**, e para
+varrer o acervo compare código × `information_schema` (ache todos os `from('tabela')` e valide as
+colunas de data usadas). Achados de 11/08 por esse método: `Admin.jsx` (2 telas) e `Caso.jsx` —
+esta última era a consulta de RESGATE do `/caso`, ou seja, o conserto tinha o defeito que veio
+consertar.
+
 **Trava automática, custo zero:** `npm run verificar:padroes` (roda sozinho no `prebuild`, ou
 seja, em todo `npm run build` e no deploy da Vercel; e no CI por `verificar-padroes.yml`). É
 LINHA DE BASE por arquivo — só reprova ocorrência NOVA, o acervo histórico fica como está.

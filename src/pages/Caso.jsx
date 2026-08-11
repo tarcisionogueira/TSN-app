@@ -577,10 +577,18 @@ export default function Caso() {
             // mandava a equipe para uma tela vermelha com um "Voltar" e mais nada (relato do
             // dono, 11/08: "eu buscando um imóvel deu esse erro"). Barrar sem oferecer o
             // caminho certo é meio guard: protege o dado e trava a pessoa.
+            // `created_at`, NÃO `criado_em` (corrigido 11/08, na varredura de fim de dia).
+            // A tabela `casos` usa o padrão em inglês; as vizinhas do projeto usam os dois
+            // conforme a época em que nasceram. Aqui o erro era especialmente ruim: esta é a
+            // consulta de RESGATE que eu escrevi hoje para o "eu buscando um imóvel deu esse
+            // erro" — ela existe justamente para oferecer um caminho em vez de tela vermelha.
+            // Com a coluna errada, ela dava 400, o `throw errBusca` abaixo subia, e a pessoa
+            // via a tela vermelha do mesmo jeito. O conserto tinha um defeito da mesma
+            // família que ele veio consertar.
             const { data: deOutro, error: errBusca } = await supabase.from('casos')
               .select('id, cliente_id')
               .eq('imovel_id', imovelInit.id)
-              .order('criado_em', { ascending: false })
+              .order('created_at', { ascending: false })
               .limit(1);
             // `error` checado: uma falha de leitura aqui NÃO é "não existe caso" — sem isso
             // a equipe veria "nenhum caso" em cima de um 500 e concluiria a coisa errada.
