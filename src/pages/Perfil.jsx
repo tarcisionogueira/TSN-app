@@ -1149,7 +1149,7 @@ export default function Perfil() {
                 consultor) nunca viu esta tela na vida, e o dono chegou a perguntar onde ela
                 estava. Agora que não existe pagamento a pessoa física, todo mundo que recebe
                 precisa cadastrar a empresa — logo, todo mundo que chega aqui vê o bloco. */}
-            {true && (
+            {(
               <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
                 <div style={{ fontSize: 12, fontWeight: 800, color: '#334155', marginBottom: 8 }}>Empresa (PJ) e verificação — necessário para sacar</div>
                 <div style={{ fontSize: 11.5, color: '#64748b', marginBottom: 8, lineHeight: 1.55 }}>
