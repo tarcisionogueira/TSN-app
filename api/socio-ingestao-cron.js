@@ -146,7 +146,13 @@ async function processarFonte(fonte, municipios) {
     if (ids.length) variaveis = ids.join('|');
   } catch { /* segue com 'all' */ }
 
-  const url = `${IBGE}/api/v3/agregados/${fonte.agregado}/periodos/${periodo}/variaveis/${variaveis}?localidades=N6[all]`;
+  // CLASSIFICAÇÃO OPCIONAL (ex.: '11558[95253,95254]' = espécie de domicílio). Sem ela o IBGE
+  // devolve apenas o TOTAL da variável — e uma coluna que depende de categoria (domicílios
+  // VAGOS) fica eternamente vazia, com a ingestão parecendo bem-sucedida. É a mesma família
+  // de silêncio que este arquivo já carrega documentada duas vezes.
+  const clas = String(fonte.classificacao || '').trim();
+  const url = `${IBGE}/api/v3/agregados/${fonte.agregado}/periodos/${periodo}/variaveis/${variaveis}`
+    + `?localidades=N6[all]${clas ? `&classificacao=${encodeURIComponent(clas)}` : ''}`;
   const dados = await jsonIBGE(url, 120000);
   if (!Array.isArray(dados) || !dados.length) throw new Error('agregado sem dados para N6');
 
@@ -289,6 +295,13 @@ export default async function handler(req, res) {
         ok: true, agregado: sonda, nome: meta?.nome || null,
         periodos: meta?.periodicidade || null,
         variaveis: (meta?.variaveis || []).map((v) => ({ id: v?.id, nome: v?.nome, unidade: v?.unidade })),
+        // CLASSIFICAÇÕES: sem elas o agregado devolve só o TOTAL. "Domicílios recenseados"
+        // sozinho é o total; a quebra Ocupado/Vago/Uso ocasional só vem pedindo a
+        // classificação na URL. Foi por isso que `domicilios_vagos` ficou vazio na 1ª tentativa.
+        classificacoes: (meta?.classificacoes || []).map((c) => ({
+          id: c?.id, nome: c?.nome,
+          categorias: (c?.categorias || []).map((k) => ({ id: k?.id, nome: k?.nome })).slice(0, 12),
+        })),
       });
     } catch (e) {
       return res.status(200).json({ ok: false, agregado: sonda, erro: String(e?.message || e).slice(0, 300) });
