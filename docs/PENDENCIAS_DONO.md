@@ -250,24 +250,110 @@ entram em `visita_origem` no **primeiro toque** e ficam amarrados ao `anon_id` �
 Cliente 360. Quando a pessoa cria conta, dá para dizer de qual campanha ela veio. O painel
 "Funil de quem ainda não é cliente" já mostra **origem → viraram conta**.
 
-Faltam três coisas, e todas dependem de você:
+Faltam três coisas, e todas dependem de você. **Faça a 1 hoje** (5 min, grátis, destrava todo o
+resto). A 2 é opcional. A 3 só depois que a verificação do anunciante sair.
 
-1. **Ligar o auto-tagging no Google Ads** (Configurações da conta → *Marcação automática* →
-   "Marcar o URL final…"). Sem isso o `gclid` não chega na URL e **nada é atribuído**. É um
-   interruptor, leva 1 minuto. ⚠️ Confirme que a campanha não usa um template de URL que
-   remove a query string.
-2. **UTM nos anúncios** (opcional, mas ajuda a separar anúncio/palavra sem depender da API):
-   sufixo de URL final `utm_source=google&utm_medium=cpc&utm_campaign={campaignid}&utm_term={keyword}&utm_content={creative}`.
-3. **Números do lado do Ads** — impressão, clique, CTR e **custo** só existem no Google.
-   O site nunca vai saber quanto foi gasto. Dois caminhos:
-   - **barato:** você exporta o relatório diário e a gente compara com os cadastros por campanha;
-   - **completo:** credenciar a **Google Ads API** (developer token + OAuth) para puxar custo
-     automaticamente **e** devolver a conversão (*Offline Conversion Import* pelo `gclid`), que é
-     o que faz o Google otimizar por **valor real de venda** em vez de por clique. É o passo que
-     mais muda resultado, e o único que exige credencial nova.
+---
 
-> **Só faz sentido depois da verificação do anunciante sair** (item -1): conta não verificada
-> tem entrega restrita, e otimizar em cima de dado restrito ensina a máquina errado.
+#### PASSO 1 — Ligar a marcação automática (auto-tagging) · ~5 min · R$ 0 · **é o que destrava tudo**
+
+Sem isso o Google não coloca o `gclid` na URL do anúncio, e **nada** é atribuído — o site fica
+capturando um parâmetro que nunca chega.
+
+1. Entre em **ads.google.com** com a conta **475-979-5747**.
+2. Abra o menu de **administração da conta** (ícone de engrenagem/ferramentas no topo; conforme a
+   versão do painel aparece como **Admin** ou **Configurações**) → **Configurações da conta**.
+3. Abra a seção **Marcação automática** (*Auto-tagging*).
+4. Marque **"Marcar o URL que as pessoas clicam no meu anúncio"** e **salve**.
+
+> ⚠️ **Duas armadilhas que anulam o passo:**
+> - Se a campanha usa **template de acompanhamento** (*tracking template*) próprio, confira que ele
+>   repassa a query string — um template mal montado engole o `gclid`. Onde ver: Campanha →
+>   Configurações → *Opções de URL da campanha*.
+> - Se você usa outra ferramenta de rastreio que já reescreve a URL, teste antes de ligar as duas.
+
+**Como saber que funcionou (não confie no interruptor, confie no dado):** depois do primeiro clique
+real num anúncio, me avise. Eu rodo:
+```sql
+select origem, pessoas, viraram_conta from jsonb_to_recordset(
+  (select (public.funil_publico(7))->'origens')) as t(origem text, pessoas int, viraram_conta int);
+```
+Verde = aparecer uma linha **`Google Ads · …`**. Enquanto só existir `(não medido)`, o `gclid` não
+está chegando — e aí o problema é uma das duas armadilhas acima.
+
+---
+
+#### PASSO 2 — UTM nos anúncios · ~10 min · R$ 0 · opcional
+
+Serve para separar **campanha, palavra-chave e criativo** sem depender da API. Convive bem com o
+auto-tagging (um não anula o outro).
+
+1. Campanha → **Configurações** → **Opções de URL da campanha**.
+2. Em **Sufixo do URL final**, cole:
+   ```
+   utm_source=google&utm_medium=cpc&utm_campaign={campaignid}&utm_term={keyword}&utm_content={creative}
+   ```
+3. Salve. As chaves entre `{}` são preenchidas pelo próprio Google em cada clique.
+
+O site já lê esses cinco parâmetros e grava no primeiro toque.
+
+---
+
+#### PASSO 3 — Google Ads API · ~1–2 h suas + dias de espera · R$ 0 · **faça depois do item -1**
+
+É o que traz **custo, cliques, impressões e CTR** para dentro do painel, e o que permite devolver a
+conversão ao Google (*Offline Conversion Import*) para ele otimizar por **valor de venda**, não por
+clique. Ordem certa:
+
+**3a. Conta de gerente (MCC)** — o *developer token* só é emitido para conta de gerente, e a
+`475-979-5747` **não é** uma. Crie uma em **ads.google.com/home/tools/manager-accounts** (grátis) e
+**vincule** a conta 475-979-5747 a ela (a conta filha precisa aceitar o convite).
+
+**3b. Developer token** — na conta de gerente: **Admin → Central de API** (*API Center*). Solicite o
+token. Ele nasce com acesso **de teste** (só conta de teste); peça a elevação para **Basic access**
+descrevendo o uso (relatório interno de campanha e importação de conversões). **A aprovação leva
+dias** — é o item de maior espera, comece por ele.
+
+**3c. Credencial OAuth no Google Cloud** — em **console.cloud.google.com**:
+   1. crie um projeto (ou use um existente);
+   2. **APIs e serviços → Biblioteca** → ative **Google Ads API**;
+   3. **Tela de permissão OAuth** → configure (modo Externo serve; pode ficar em "Teste" com o seu
+      e-mail como usuário de teste);
+   4. **Credenciais → Criar credenciais → ID do cliente OAuth** → tipo **App para computador**
+      (é o mais simples para gerar o refresh token);
+   5. guarde **Client ID** e **Client Secret**;
+   6. gere o **refresh token** autorizando com o e-mail que tem acesso ao Ads (o fluxo do
+      `oauth2l`/playground do Google, escopo `https://www.googleapis.com/auth/adwords`).
+
+**3d. Ação de conversão para importação** — no Ads: **Metas → Conversões → Nova ação de conversão
+→ Importar → Rastreamento manual de conversões via upload**. Crie duas: **"Cadastro"** (valor 0) e
+**"Assinatura"** (valor variável). São elas que vão receber o `gclid` de volta.
+
+**3e. Variáveis no painel da Vercel** (Settings → Environment Variables, marcar Production +
+Preview + Development). **Cole só no painel — nunca em arquivo do repositório, que é público:**
+```
+GOOGLE_ADS_DEVELOPER_TOKEN
+GOOGLE_ADS_CLIENT_ID
+GOOGLE_ADS_CLIENT_SECRET
+GOOGLE_ADS_REFRESH_TOKEN
+GOOGLE_ADS_CUSTOMER_ID          → 4759795747 (sem traços)
+GOOGLE_ADS_LOGIN_CUSTOMER_ID    → o ID da conta de GERENTE (sem traços)
+```
+
+**3f. Me avisar.** Com as variáveis no ar eu construo, do nosso lado:
+- cron diário que puxa **custo, cliques, impressões e CTR por campanha** e grava em tabela;
+- card no painel cruzando **custo × visitantes × cadastros × receita** → custo por cadastro e por
+  cliente pagante, por campanha;
+- envio das conversões pelo `gclid` (cadastro na hora; assinatura com o **valor real**, inclusive
+  retroativo quando o pagamento confirma dias depois).
+
+> **Por que a ordem importa:** conta com verificação do anunciante pendente (item **-1**) tem
+> entrega restrita. Otimizar em cima de dado restrito ensina a máquina errado, e o aprendizado
+> ruim demora a sair. Primeiro a verificação, depois a API.
+
+> **LGPD:** `gclid` e `utm_*` são dados de navegação de visitante anônimo. Confirmar com o jurídico
+> se a Política de Privacidade atual já cobre "identificadores de campanha publicitária" — se não
+> cobrir, é uma frase a acrescentar.
 
 ### -1.5 🔴 MX do `bidprobrasil.com.br` → inbound do Resend (o `suporte@` não recebe nada)
 
