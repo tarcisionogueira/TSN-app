@@ -5124,10 +5124,18 @@ function PainelCoberturaRelatorios() {
   // 0,03% de território com 1,6% de acervo — mal coberta; Lauro de Freitas dá 6,3% de
   // território com 57,3% de acervo — concentrada onde importa. É o cruzamento que informa.
   if (cobIdx) {
-    cards.push(['Cobertura do Índice',
-      `${Number(cobIdx.pct_acervo || 0).toLocaleString('pt-BR')}% do acervo`,
-      `${Number(cobIdx.pct_municipio || 0).toLocaleString('pt-BR')}% da área dos municípios · ${fmtN(cobIdx.cidades_com_indice)} cidades`,
+    // A leitura em DESTAQUE é a mancha urbana: é o denominador certo para "território
+    // mapeado", porque a área do município inclui zona rural que ninguém precisa mapear
+    // (Cuiabá: 4.327 km² de município contra 160,6 km² de mancha urbana). A do município
+    // fica ao lado como piso conservador, e o acervo responde "cobrimos onde anunciamos?".
+    cards.push(['Território mapeado (mancha urbana)',
+      `${Number(cobIdx.pct_urbanizada || 0).toLocaleString('pt-BR')}%`,
+      `${fmtN(cobIdx.km2_mapeado)} de ${fmtN(cobIdx.km2_urbanizada)} km² urbanizados · ${Number(cobIdx.pct_municipio || 0).toLocaleString('pt-BR')}% da área municipal`,
       '#0f766e']);
+    cards.push(['Índice cobre o acervo',
+      `${Number(cobIdx.pct_acervo || 0).toLocaleString('pt-BR')}%`,
+      `${fmtN(cobIdx.acervo_coberto)} de ${fmtN(cobIdx.acervo_total)} imóveis · ${fmtN(cobIdx.cidades_com_indice)} cidades com Índice`,
+      '#0d9488']);
   }
   return (
     <div style={S.card}>

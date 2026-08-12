@@ -95,3 +95,35 @@ $$;
 
 revoke all on function public.indice_cobertura_resumo() from public, anon;
 grant execute on function public.indice_cobertura_resumo() to authenticated, service_role;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- ADENDO (12/08, mesmo dia): entrou a terceira leitura, e era a mais assertiva.
+-- ÁREA URBANIZADA por município — IBGE agregado 8418 ("Áreas Urbanizadas do Brasil"),
+-- variável 12749, achado pela busca no catálogo (`?buscar=urbaniz`).
+--
+-- Por que ela muda tudo:  São Paulo 1.521,2 km² de município · 914,6 de mancha urbana
+--                         Cuiabá    4.327,4 km² de município · 160,6 de mancha urbana (27×)
+-- Medir contra o município faz um índice bom parecer 0,03%, porque o denominador inclui zona
+-- rural que ninguém precisa mapear. Agregado do sistema: 2,3% da mancha urbana contra 0,38%
+-- da área municipal — seis vezes de diferença, e a de 2,3% é a honesta.
+--
+-- CUIDADO NO REGEX: o agregado traz subcategorias ("Áreas urbanizadas pouco densas",
+-- "Loteamentos vazios", "Vazios intraurbanos", "Área total mapeada"). O padrão é ANCORADO
+-- (^…$) — um regex frouxo gravaria a subcategoria errada na coluna sem avisar.
+--
+-- E A COLUNA NOVA ENTRA NO socio_upsert JUNTO: aquela função enumera as colunas uma a uma, e
+-- `jsonb_populate_recordset` descarta em silêncio o que não estiver lá. Foi assim que
+-- `area_km2` ficou 8 dias vazia. Coluna nova e upsert mudam na MESMA migração, nunca depois.
+alter table public.cidade_socio add column if not exists area_urbanizada_km2 numeric;
+
+insert into public.socio_fontes (chave, descricao, agregado, periodo, mapa, ativa, ordem)
+values ('ibge_area_urbanizada',
+        'Áreas Urbanizadas do Brasil — mancha urbana por município (km²)',
+        '8418', '-1',
+        '{"^(á|a)reas urbanizadas$": "area_urbanizada_km2"}'::jsonb, true, 16)
+on conflict (chave) do update set
+  descricao = excluded.descricao, agregado = excluded.agregado,
+  periodo = excluded.periodo, mapa = excluded.mapa, ativa = true;
+
+-- (socio_upsert e indice_cobertura_resumo foram reescritas com a coluna nova — ver o estado
+--  vigente no banco; ambas estão em migrações aplicadas em 12/08.)
