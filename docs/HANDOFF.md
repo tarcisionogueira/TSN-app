@@ -161,7 +161,103 @@ antes de mexer, mais 6 validações de produção para rodar na abertura.
 
 ---
 
-## 🔚 ENCERRAMENTO DE 11/08 — leia ESTE bloco primeiro
+## 🔚 SESSÃO DE 12/08 (abertura) — leia ESTE bloco primeiro
+
+> Sessão de **verificações iniciais** pedida pelo dono (saúde de sistema, otimizações e Cliente
+> 360). O ritual saiu **verde em tudo que ele já cobria** — e foi a varredura **schema × código**,
+> a mesma que fechou 11/08, que achou **seis defeitos novos**, dois deles batendo no cliente.
+> Todos corrigidos nesta sessão.
+
+### O que o ritual mediu (verde, para ninguém refazer)
+
+| Verificação | Resultado |
+|---|---|
+| `auditoria_seguranca()` | **0 crítico / 0 atenção** (reconferido depois das 2 migrações) |
+| `auditoria_regras_negocio()` | **0 crítico** |
+| Erros de cliente abertos (14d) | **0** |
+| Chamados do cliente sem resposta | **0** |
+| KYC ilegível pelo servidor | **0** |
+| Fontes no ponto cego do monitor | **0** |
+| Deploys Vercel | todos **READY** |
+| Acervo | 30.999 ativos · 20.747 tocados em 24h · fila de geocode **104** (era 3.519 em 06/08) |
+
+**Espelho — item 3 do encerramento de 11/08: FECHADO ✅.** A correção do teto invisível do
+PostgREST funcionou como previsto: fila **5.560 → 2.144**, copiados **2.239 → 6.075**, 9.353 MB.
+O limite voltou a ser o tempo, não o lote.
+
+### Os seis achados — e o que cada um ensinou
+
+**1. O cliente recebia o e-mail de uma reunião que não existia.** `solicitacoes.reuniao_em` e
+`reuniao_duracao_min` **nunca foram criadas** (o código veio no commit `e41fc0c` de 10/08; a
+migração não). O `update` do Admin não checava `error`: o 400 era engolido e **nada** era gravado
+— nem checklist, nem notas, nem link, nem status. E `salvarENotificar` seguia adiante, criava a
+sala Daily.co e **disparava o e-mail**. Do outro lado, o card "Próximas Reuniões" do Painel lia a
+mesma coluna ausente dentro de um `Promise.all` e não mostrava nada. Sintoma zero dos dois lados.
+Prova de que nunca funcionou: 3 solicitações no acervo, **0 com `google_meet_link`**.
+*Corrigido:* colunas criadas (+ índice parcial), e-mail só depois de PROVAR a gravação, e o Painel
+reportando falha em `erros_cliente`.
+
+**2. `/registro-imovel` (ONR) inteiro sobre uma tabela inexistente.** `add_onr_protocolos.sql`
+estava no repo desde 10/08 e nunca foi aplicada. Lista caindo em `data || []` (vazia, com cara de
+funcionando); protocolar jogava o erro cru do PostgREST na tela. *Corrigido:* migração aplicada
+(com `REVOKE` de anon — a tabela guarda CPF/CNPJ), tela distinguindo "nenhum protocolo" de "não
+consegui ler", e o update de status provando o que mudou com `.select()`.
+
+**3. O timeout que não avisa — 3 dias de coleta truncada em silêncio.** O scraper Puppeteer diário
+passou dos 90 min e o job termina `cancelled`; **`cancelled` não é `failure()`**, então o passo
+"Notify on failure" ficava *skipped*. O corte cai sempre na CAUDA da lista: **SUPORTE, GRUPOLANCE e
+WEBLEILOES sem coletar desde 09/08**, 557 lotes congelados. Medido: em 09/08 a rodada completa
+levou ~87 min — encostada no teto. *Corrigido:* timeout 150, notify em `failure() || cancelled()`,
+**nos três** workflows que têm notify (os três tinham a mesma cegueira), e as 3 fontes disparadas
+à mão.
+
+**4. A cota negando, gravada como regressão do leiloeiro.** Bright Data saturado (450/450; como o
+propósito `rj` reserva 60 e usou 30, o teto efetivo dos demais caiu para **420**). CALIL, VEGAS e
+TORRES3 saíram com `0 lotes enumerados (via null)` **em 0,6 s** e viraram
+`REGRESSÃO: caiu de 6 para 0`. Orçamento lido como quebra de site — e as duas coisas pedem ações
+**opostas**. *Corrigido:* `scraper-soleon` passa a usar `buscarViaBrightData` (que LANÇA com o
+motivo) e o `semCota` chega até `registrarSaude`, que não acusa mais regressão quando o zero veio
+do orçamento.
+
+**5. PESTANA caiu de 1.014 para 0 — e era falha TRANSITÓRIA se apresentando como leiloeiro
+quebrado.** Rodada das 12:13 deu `total 0 · falhou`; às 13:08, **sem tocar em nada**, voltou a
+**992 · ok**. A causa é estrutural no scraper, não no site: `/api/v2/leilao` é o gargalo de TODA a
+fonte e era chamada **uma única vez** — um piscar de rede devolvia `null`, o scraper retornava `[]`
+e um acervo de mil lotes virava `REGRESSÃO: caiu de 1014 para 0` no monitor. *Corrigido:* 3
+tentativas com backoff antes de desistir. O acervo nunca chegou a ser perdido (os lotes seguiram
+ativos), mas o alarme era falso e teria custado uma investigação inteira.
+
+**6. O freio de custo que nunca freou.** `scripts/lib/scraper-core.mjs` tinha limitador de cota
+mensal de proxy, teto em dólar e alerta de 80%/100% — e a tabela `proxy_uso` **nunca existiu**.
+`carregarUso` lia sem checar `error` (zero a cada execução), `dentroDoLimite()` respondia "pode
+gastar" para sempre, e **nenhum** dos cinco scrapers importava essas funções. Código morto que se
+lia como rede de proteção. *Removido*, com nota apontando para o controle real (`api/_brightdata.js`).
+
+> **O método que achou 1, 2 e 6 é o mesmo, e é barato:** extrair todos os `.from('tabela')` do
+> código (90 tabelas) e todas as colunas de data usadas em filtro/ordenação (53 pares), e conferir
+> contra `information_schema`. Nenhum dos três apareceria em leitura de código — o código está
+> certo; o banco é que não recebeu a migração. Vale repetir a cada sessão que suba feature nova.
+> Cuidado com um falso-positivo: `supabase.storage.from('documentos')` é BUCKET, não tabela.
+
+### ⚠️ O QUE ESPERA VOCÊ NA ABERTURA
+
+1. **Nada ficou pela metade.** Os seis achados foram corrigidos e verificados nesta sessão; as
+   fontes paradas foram recoletadas à mão (SUPORTE, PESTANA, GRUPOLANCE, WEBLEILOES) em vez de
+   esperar o cron de amanhã.
+   > Nota de método: o recon do PESTANA **não pôde** rodar desta sessão — a política de rede do
+   > ambiente bloqueia `pestanaleiloes.com.br` (403 no CONNECT do proxy). A saída foi usar o
+   > próprio scraper como sonda, via `workflow_dispatch` com `fontes=PESTANA`, porque o log dele
+   > já separa os três pontos de quebra possíveis. Vale lembrar disso na próxima vez que um recon
+   > parecer impossível daqui.
+2. **Bright Data — a decisão do teto continua marcada para 18/08**, agora com um dado a mais: a
+   saturação NÃO é teórica, ela já negou coleta de 3 fontes em 12/08. Semana atual: 480 requests
+   (o total passa de 450 porque a reserva do `rj` empresta acima do teto global, por definição).
+3. **Confirme que o notify de cancelamento funciona de verdade** no próximo estouro — a correção
+   é da classe certa, mas só o primeiro cancelamento real prova.
+
+---
+
+## 🔚 ENCERRAMENTO DE 11/08 (bloco anterior)
 
 > **`main` em `3ffa533` · 32 commits no dia · deploy de produção READY · banco 0 crítico em tudo.**
 > O dia começou na coleta do RJ e terminou numa varredura de fim de dia que achou mais um defeito.

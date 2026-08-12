@@ -2071,12 +2071,21 @@ async function scraperPestana(browser) {
     catch (e) { console.log(`    Pestana: goto (${String(e.message).slice(0, 35)})`); }
     await new Promise(r => setTimeout(r, 4000)); // boot
 
-    // 1) Todos os leilões.
-    const leiloes = await page.evaluate(async () => {
-      try { const r = await fetch('/api/v2/leilao', { headers: { Accept: 'application/json' } }); return r.ok ? await r.json() : null; }
-      catch (e) { return null; }
-    }).catch(() => null);
-    if (!Array.isArray(leiloes)) { console.log('    Pestana: /api/v2/leilao não retornou lista'); return []; }
+    // 1) Todos os leilões. COM RETENTATIVA (12/08): esta chamada é o gargalo de TODA a fonte —
+    // se ela falhar uma vez, o scraper devolve [] e um acervo de ~1.000 lotes vira `total 0`,
+    // `status falhou` e "REGRESSÃO: caiu de 1014 para 0" no monitor. Foi exatamente o que
+    // aconteceu às 12:13 de 12/08: às 13:08, sem tocar em nada, voltou a 992. Uma falha
+    // transitória de rede não pode se apresentar como leiloeiro quebrado.
+    let leiloes = null;
+    for (let tentativa = 1; tentativa <= 3 && !Array.isArray(leiloes); tentativa++) {
+      if (tentativa > 1) await new Promise(r => setTimeout(r, 3000 * tentativa));
+      leiloes = await page.evaluate(async () => {
+        try { const r = await fetch('/api/v2/leilao', { headers: { Accept: 'application/json' } }); return r.ok ? await r.json() : null; }
+        catch (e) { return null; }
+      }).catch(() => null);
+      if (!Array.isArray(leiloes)) console.log(`    Pestana: /api/v2/leilao sem lista (tentativa ${tentativa}/3)`);
+    }
+    if (!Array.isArray(leiloes)) { console.log('    Pestana: /api/v2/leilao não retornou lista após 3 tentativas'); return []; }
 
     // 2) Só leilões que contêm IMÓVEIS (subTipoBens com tipoBem 462).
     const imovLeiloes = leiloes.filter(l => Array.isArray(l.subTipoBens) && l.subTipoBens.some(s => Number(s.tipoBem) === PESTANA_TIPOBEM_IMOVEL));
