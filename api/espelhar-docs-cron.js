@@ -36,12 +36,20 @@ import { hostExternoSeguro, fetchExternoSeguro } from './_allowed-hosts.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
-// 600 → 1200 (11/08, MEDIDO): com o pool de 6 em paralelo, a rodada das 20:40 copiou 598
-// documentos e terminou em 138s de um orçamento de 240s. Não faltou tempo — acabou o lote.
-// O teto que segurava a vazão era este número, não a concorrência nem o maxDuration.
-// Subir é seguro porque quem corta de verdade é o ORCAMENTO_MS abaixo: se 1200 não couber,
-// a rodada para no tempo e o resto fica na fila para a próxima, sem nada pela metade.
-const LOTE = Number(process.env.ESPELHO_LOTE || 1200);
+// TAMANHO DE CADA LEITURA DA FILA — e por que 1000 e não mais (11/08, medido duas vezes).
+//
+// 1ª medição: com LOTE 600 a rodada copiou 598 e terminou em 138s de 240s. Não faltou tempo,
+// acabou o lote. Subi para 1200 esperando ~1.150 cópias.
+// 2ª medição: a rodada seguinte copiou 985 + 14 ignorados = **999**. Esse número redondo é a
+// resposta: o PostgREST CORTA a resposta em 1.000 linhas SEM AVISAR, inclusive em RPC que
+// devolve conjunto. Pedir 1200 e receber 1000 não gera erro nenhum — é a mesma armadilha que
+// o `api/publico.js` já documenta neste repositório ("limit=100000" devolvia 1.000 e a página
+// foi ao ar anunciando 980 imóveis num acervo de 33 mil).
+//
+// Então LOTE acima de 1000 é ilusão. O jeito de usar o orçamento inteiro é LER DE NOVO depois
+// de processar — o laço abaixo faz isso, e funciona porque documento copiado sai da fila,
+// então a leitura seguinte traz os PRÓXIMOS, não os mesmos.
+const LOTE = Math.min(1000, Number(process.env.ESPELHO_LOTE || 1000));
 // Downloads simultâneos. O gargalo é rede de terceiro, não CPU nossa — ver o pool abaixo.
 const CONCORRENCIA = Math.max(1, Number(process.env.ESPELHO_CONCORRENCIA || 6));
 // Sai com folga antes do maxDuration de 300s: um download pode levar 25s (o timeout abaixo),
@@ -80,29 +88,24 @@ export default async function handler(req, res) {
   // `await (await sb(...)).json().catch(() => [])` — uma falha de leitura virava lista vazia,
   // o cron respondia `ok: true, motivo: 'fila vazia'` e ninguém ficava sabendo que a fila
   // parou. É a forma #1/#3 do CLAUDE.md, no mesmo arquivo que protege documento de cliente.
-  const rFila = await sb('rpc/proximos_espelho_documentos', {
-    method: 'POST', body: JSON.stringify({ p_limite: LOTE }),
-  });
-  if (!rFila.ok) {
-    const txt = (await rFila.text().catch(() => '')).slice(0, 200);
-    console.error('[espelhar-docs] leitura da fila falhou', rFila.status, txt);
-    res.status(502).json({ ok: false, enfileirados, erro: `fila HTTP ${rFila.status}`, detalhe: txt });
-    return;
-  }
-  const pend = await rFila.json().catch(() => null);
-  if (!Array.isArray(pend)) {
-    console.error('[espelhar-docs] fila com corpo inesperado');
-    res.status(502).json({ ok: false, enfileirados, erro: 'fila com corpo inesperado' });
-    return;
-  }
-  if (!pend.length) {
-    console.log('[espelhar-docs]', JSON.stringify({ enfileirados, processados: 0, motivo: 'fila vazia' }));
-    res.status(200).json({ ok: true, enfileirados, processados: 0, motivo: 'fila vazia' });
-    return;
+  //
+  // Devolve { erro } em vez de lançar, porque a 1ª leitura e as seguintes têm desfechos
+  // diferentes: falhar na primeira é 502 (não fizemos nada); falhar na quarta é parar e
+  // responder com o que já foi copiado — jogar fora 3 lotes de trabalho por um erro de rede
+  // na leitura seguinte seria pior que o problema.
+  async function lerFila() {
+    const r = await sb('rpc/proximos_espelho_documentos', {
+      method: 'POST', body: JSON.stringify({ p_limite: LOTE }),
+    });
+    if (!r.ok) return { erro: `fila HTTP ${r.status}`, detalhe: (await r.text().catch(() => '')).slice(0, 200) };
+    const j = await r.json().catch(() => null);
+    if (!Array.isArray(j)) return { erro: 'fila com corpo inesperado' };
+    return { itens: j };
   }
 
   const t0 = Date.now();
   let copiados = 0, falhas = 0, ignorados = 0, processados = 0, semTempo = 0;
+  let leituras = 0, erroLeitura = null;
 
   /** Espelha UM documento. Não lança: devolve o desfecho para o pool contabilizar. */
   async function espelhar(d) {
@@ -157,21 +160,52 @@ export default async function handler(req, res) {
   // ninguém — é o mesmo padrão já validado no backup-r2-cron. Cada trabalhador respeita o
   // MESMO orçamento de tempo, então a função continua terminando antes do maxDuration.
   // 6 é deliberadamente modesto: são CDNs de terceiros e não queremos parecer rajada.
-  let cursor = 0;
-  const trabalhador = async () => {
-    for (;;) {
-      if (Date.now() - t0 > ORCAMENTO_MS) return;
-      const i = cursor++;
-      if (i >= pend.length) return;
-      processados++;
-      const r = await espelhar(pend[i]).catch(() => 'falha');
-      if (r === 'copiado') copiados++;
-      else if (r === 'ignorado') ignorados++;
-      else falhas++;
+  //
+  // ─── LER → PROCESSAR → LER DE NOVO, até o tempo acabar (11/08, 2ª medição) ────
+  // O pool sozinho não bastava: com um único `lerFila()` a rodada terminava em 179s de 240s
+  // porque o PostgREST devolve no MÁXIMO 1.000 linhas, sem avisar (ver o comentário do LOTE).
+  // Ou seja, 60s de orçamento sobravam todo dia por um teto que ninguém tinha declarado.
+  // Reler funciona porque o que foi copiado sai da fila: a leitura seguinte traz os PRÓXIMOS.
+  // A guarda `!lote.itens.length` é o que garante término — fila vazia encerra o laço.
+  for (;;) {
+    if (Date.now() - t0 > ORCAMENTO_MS) break;
+    const lote = await lerFila();
+    if (lote.erro) {
+      if (leituras === 0) {   // nada feito ainda: é 502 mesmo
+        console.error('[espelhar-docs] leitura da fila falhou', lote.erro, lote.detalhe || '');
+        res.status(502).json({ ok: false, enfileirados, erro: lote.erro, detalhe: lote.detalhe });
+        return;
+      }
+      erroLeitura = lote.erro;   // já copiamos algo: para e reporta junto com o resultado
+      break;
     }
-  };
-  await Promise.all(Array.from({ length: CONCORRENCIA }, trabalhador));
-  semTempo = Math.max(0, pend.length - processados);
+    if (!lote.itens.length) break;
+    leituras++;
+
+    const pend = lote.itens;
+    let cursor = 0;
+    const trabalhador = async () => {
+      for (;;) {
+        if (Date.now() - t0 > ORCAMENTO_MS) return;
+        const i = cursor++;
+        if (i >= pend.length) return;
+        processados++;
+        const r = await espelhar(pend[i]).catch(() => 'falha');
+        if (r === 'copiado') copiados++;
+        else if (r === 'ignorado') ignorados++;
+        else falhas++;
+      }
+    };
+    await Promise.all(Array.from({ length: CONCORRENCIA }, trabalhador));
+    // Sobrou item do lote = o tempo acabou no meio dele. Não adianta reler.
+    if (cursor < pend.length) { semTempo = pend.length - cursor; break; }
+  }
+
+  if (leituras === 0) {
+    console.log('[espelhar-docs]', JSON.stringify({ enfileirados, processados: 0, motivo: 'fila vazia' }));
+    res.status(200).json({ ok: true, enfileirados, processados: 0, motivo: 'fila vazia' });
+    return;
+  }
 
   // Quanto ainda falta: sem isto, "copiei 25" parece progresso mesmo quando a fila cresce
   // mais rápido do que drena — que foi exatamente o que aconteceu por três dias.
@@ -185,7 +219,15 @@ export default async function handler(req, res) {
 
   // Log sempre, inclusive quando não houve baixa: silêncio não distingue "nada a fazer" de
   // "cron parou" — a lição do monitor de fontes.
-  const saida = { enfileirados, processados, copiados, falhas, ignorados, sem_tempo: semTempo, pendentes };
+  // `leituras` e `ms` entram na resposta porque foram eles que revelaram o teto invisível do
+  // PostgREST: uma rodada que faz 1 leitura e termina antes do orçamento está batendo em
+  // algum limite que não é o tempo. Sem esses dois números, isso só apareceu comparando
+  // cópias entre dois dias — caro demais para um dado que cabe no log.
+  const saida = {
+    enfileirados, processados, copiados, falhas, ignorados,
+    sem_tempo: semTempo, pendentes, leituras, ms: Date.now() - t0,
+    ...(erroLeitura ? { erro_leitura: erroLeitura } : {}),
+  };
   console.log('[espelhar-docs]', JSON.stringify(saida));
   res.status(200).json({ ok: true, ...saida });
 }
