@@ -488,6 +488,60 @@ derivado**.
 diário), mas o job precisava ler o corpo. Agora testa `ok` e reprova. Mesmo defeito do dia,
 na última casa onde ainda morava.
 
+### 12. 🔴 "Os mercadológicos sumiram" — e não tinham sumido (fim do dia, print do dono)
+
+O dono mandou o print de **Minhas Análises**: seis cards, vários com só o chip *"Jurídico:
+risco médio"* e nenhum relatório de mercado. Duas causas independentes, e a principal não
+apagava nada:
+
+**(a) A lista lia 12 de CADA tabela.** `AnalisesContext` tem `MAX = 12` e consulta
+`analises_mercado`, `analises_documental` e `analises_laudo` com `.limit(12)` **cada uma,
+ordenada pelo seu próprio `updated_at`**. Com 51 mercadológicos e 19 documentais na conta do
+dono, os cortes caem em datas diferentes: imóvel com documental recente e mercadológico antigo
+aparecia sem o chip de mercado. **O relatório estava no banco o tempo todo** — SAMAMBAIA era o
+27º mercadológico e o 8º documental.
+
+Não era cosmético, e é por isso que a correção foi uma RPC e não um `12 → 60`:
+
+| Sintoma | Causa |
+|---|---|
+| Abrir análise antiga mostrava "não gerado" | `Analise.jsx` lê do MESMO contexto truncado — e um clique em Gerar reprocessava a IA de um relatório existente (não recobra cota; gasta) |
+| Dois cards com o nome trocado (*"Rua Marte, N. 429"*) | O título canônico vem da mercadológica; a documental grava o endereço da matrícula |
+| Aviso *"Leilão em … arrematou?"* não aparecia | `data_leilao` costuma vir NULA na documental — sem a linha de mercado, a tela achava que não havia data |
+
+*Corrigido:* RPC **`minhas_analises_lista()`** — uma linha por imóvel, montada no servidor, com
+título/imóvel preferindo a mercadológica, **data de leilão efetiva** (maior entre as análises e
+a praça do acervo) e, de cada relatório, só o status e as poucas flags que o card desenha (o
+`result`, 12 kB em média, não viaja: 39 imóveis = 102 kB). Mais **`garantirCarregado(imovelId)`**
+no contexto, com os imóveis pedidos por id **FIXADOS** para o corte em `MAX` não os descartar —
+sem o pin, a análise antiga buscada por id era jogada fora no mesmo instante por ser velha.
+
+**(b) A retenção apagava POR TABELA, e não enxergava a praça do acervo.**
+`limpar_analises_orfas` varria `analises_mercado` e `analises_documental` em blocos separados,
+cada uma com a SUA `data_leilao` e o SEU `created_at` — e como a data costuma vir preenchida na
+mercadológica e nula na documental, **o mercadológico vencia sozinho**. Pior: o branch por
+leilão exigia `a.data_leilao is not null`, então linha sem data própria **nunca** expirava por
+leilão, mesmo com o acervo sabendo que a praça foi há semanas. E `analises_laudo` não aparecia
+em branch nenhum. *Corrigido:* decisão por `(user_id, imovel_id)`, última praça = maior data
+entre acervo e análises, apagando os três juntos. Rodado agora: **4 imóveis** (3 do dono, 1 de
+outro cliente), um deles com praça em **21/07** ainda ocupando a lista.
+
+> **Regra do dono preservada:** lote com leilão passado **continua** na lista até vencer o prazo
+> de 15 dias — é a janela do "Arrematei". Quem some é o vencido. E o filtro de prazo **não** foi
+> reimplementado na tela: quem tira da lista é a retenção apagando. Duas verdades divergiriam no
+> dia em que alguém mudasse `ANALISE_LIMPAR_DIAS`.
+
+**Documental sem mercadológico:** o gate de ordem **já existia** no servidor
+(`gerar-documental.js`, 409 `precisaMercado`) e na UI (`seqBloqueado`). Sobraram 4 análises
+anteriores a ele; o card agora diz **"Mercadológico pendente — gere primeiro"** em vez de
+exibir só o chip jurídico com cara de análise completa. Os documentais em si estão sadios:
+15 dos 17 com `preliminar: false` e 5 documentos lidos em média — "risco médio" é veredito, não
+falta de leitura.
+
+> **A trava pegou a mim, no mesmo dia:** `auditoria_seguranca()` acusou `minhas_analises_lista`
+> em `rpc_definer_anon` minutos depois do deploy. `revoke ... from anon` **não basta** — o grant
+> padrão do Postgres é para `PUBLIC`, e anon herda dele. Vale para toda RPC nova.
+
 ### ⚠️ O QUE ESPERA VOCÊ NA ABERTURA (tarde de 12/08)
 
 1. **Nada pendente do dia** — tudo em produção, banco e repositório conferidos iguais.
