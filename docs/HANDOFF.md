@@ -448,7 +448,15 @@ Nada a corrigir; a ponte melhora sozinha com o tempo.
 - **7 fontes IBGE verdes.** `estimativa_populacao` falhou uma vez com `fetch failed` (rede do
   IBGE) e **foi gravada como falha** — no regime antigo teria saído verde. Refeita: 5.571 linhas,
   `ok=true`.
-- **Segurança/regras/erros de cliente/chamados: tudo em zero**, reconferido depois das migrações.
+- **Segurança/regras/erros de cliente/chamados/KYC: tudo em zero**, reconferido depois das
+  migrações.
+- **`relatorio_anomalias` tem 7 em aberto, e NÃO são bug** (24/07 a 09/08): 5 `cnj_vazio`
+  (o DataJud não devolveu o processo — segredo de justiça ou fora da cobertura), 1
+  `mercado_area_incoerente` (comparáveis a R$ 10.200/m² contra avaliação de R$ 2.846/m²; a área
+  de 210 m² é provavelmente TOTAL, não privativa — o sistema ancorou na avaliação em vez de
+  publicar o número inflado) e 1 `avaliacao_ausente`. É o ledger fazendo exatamente o que
+  existe para fazer: **declarar a incerteza em vez de fingir número**. Não marcar como
+  resolvido sem tratar — a fila baixa é sinal de saúde, zero forçado seria mentira.
 
 ### 10. 🔴 A deriva que faltava — banco que MUDA e não volta para o repositório
 
