@@ -5075,13 +5075,23 @@ function PainelCoberturaRelatorios() {
   if (!m) return <div style={{ ...S.card, color: '#94a3b8', fontSize: 13 }}>Carregando cobertura de relatórios…</div>;
   const cob = m.cobertura || {}, rel = m.relatorios || {}, bus = m.buscas || {}, idx = m.indice || {}, mat = m.indice_maturidade || {};
   const totalRel = (rel.mercado || 0) + (rel.documental || 0) + (rel.laudo || 0);
-  const zeroPct = bus.total ? Math.round((bus.zero_resultado / bus.total) * 100) : 0;
+  // BUSCAS: o número que interessa neste painel é o do CLIENTE. Medido em 12/08, 54% das
+  // 2.206 buscas eram da conta admin — ler o total como uso de produto dobrava o número.
+  // (Mesma classe do "Indicação de TARCISIO" de 11/08: atividade interna indistinguível de
+  // uso real.) O total interno continua visível, para o número não sumir nem enganar.
+  const temSplit = bus.cliente != null;
+  const buscas = temSplit ? bus.cliente : (bus.total || 0);
+  const buscasZero = temSplit ? bus.cliente_zero : bus.zero_resultado;
+  const buscas7d = temSplit ? bus.cliente_ult_7d : bus.ult_7d;
+  const zeroPct = buscas ? Math.round((buscasZero / buscas) * 100) : 0;
   const cards = [
     ['Imóveis analisados', fmtN(cob.imoveis), 'com relatório gerado', '#0D63DB'],
     ['Cidades · Estados', `${fmtN(cob.cidades)} · ${fmtN(cob.estados)}`, 'cobertura geográfica', '#0891b2'],
     ['Relatórios gerados', fmtN(totalRel), `${fmtN(rel.mercado)} merc · ${fmtN(rel.documental)} doc · ${fmtN(rel.laudo)} laudo`, '#10b981'],
     ['Amostras de mercado', fmtN(m.amostras), 'anúncios usados como base', '#7c3aed'],
-    ['Buscas realizadas', fmtN(bus.total), `${zeroPct}% sem resultado · ${fmtN(bus.ult_7d)} em 7d`, zeroPct > 40 ? '#f59e0b' : '#64748b'],
+    [temSplit ? 'Buscas de clientes' : 'Buscas realizadas', fmtN(buscas),
+      `${zeroPct}% sem resultado · ${fmtN(buscas7d)} em 7d${temSplit && bus.internas > 0 ? ` · +${fmtN(bus.internas)} internas` : ''}`,
+      zeroPct > 40 ? '#f59e0b' : '#64748b'],
     // `com_aluguel` agora conta só o nível CIDADE, comparável com o número grande ao lado.
     // Antes somava cidade+grid+bairro e imprimia "60 microrreg." ao lado de "53 cidades" —
     // populações diferentes no mesmo card, e o 60 > 53 sugeria mais recortes com aluguel do
@@ -5188,6 +5198,7 @@ function DashboardTab({ irParaTab }) {
   const planosCtx = usePlanos();
   const pNome = (key) => planosCtx?.[key]?.nome || key;
   const [dados, setDados] = useState(null);
+  const [erroContadores, setErroContadores] = useState(null);
   const [asaasDados, setAsaasDados] = useState(null);
   const [mpSaldo, setMpSaldo] = useState(null); // saldo Mercado Pago (gateway principal)
   const [loading, setLoading] = useState(true);
@@ -5281,16 +5292,43 @@ function DashboardTab({ irParaTab }) {
       // sem puxar a tabela `perfis` inteira pro cliente (escala p/ 10k+ usuários). E o
       // `imoveis_ativos` sai da MESMA fonte do /api/scraper-status (acervo_stats) → o KPI
       // "imóveis ativos" não diverge mais entre o Dashboard e a Operação de Coleta.
-      const { data: m } = await supabase.rpc('admin_dashboard_contadores', { p_inicio: range.inicio, p_fim: range.fim });
+      // `error` CHECADO: sem isto, uma RPC que falha deixa `m` indefinido e TODA a linha de
+      // cima vira zero — "Total usuários 0 · MRR R$ 0,00 · Inadimplentes 0 · Reembolsos 0".
+      // E "0 inadimplentes" se lê como BOA NOTÍCIA. O painel de cobertura logo abaixo já
+      // checava o erro e se escondia; a mesma tela tinha dois comportamentos opostos.
+      const { data: m, error: errCont } = await supabase.rpc('admin_dashboard_contadores', { p_inicio: range.inicio, p_fim: range.fim });
+      if (errCont || !m) {
+        setDados(null);
+        setErroContadores(errCont?.message || 'resposta vazia');
+        setLoading(false);
+        return;
+      }
+      setErroContadores(null);
 
       // Contagem já normalizada no servidor (anuais somados ao plano-base; resto em "outros").
       const contagem = { admin: 0, explorador: 0, top2: 0, assessorado: 0, clube: 0, consultor: 0, analista: 0, advogado: 0, outros: 0, ...(m?.contagem || {}) };
+      // `mrr_base` já vem CRUZADO no servidor: por plano, quantos ATIVOS (não inadimplentes)
+      // são mensais e quantos são anuais. Cruzar isso no cliente exigiria supor quem é o
+      // inadimplente — e suposição em conta de dinheiro erra calada.
+      const base = m?.mrr_base || {};
 
-      // MRR pelo preço REAL do planos_config (mrrMensalPlano — a MESMA conta do detalhe por
-      // plano), agora sobre as CONTAGENS agregadas no servidor. Normaliza p/ mensal-equivalente.
-      const mrr = (contagem.top2 * mrrMensalPlano(planosCtx?.top2, 49.90))
-        + (contagem.assessorado * mrrMensalPlano(planosCtx?.assessorado, 500))
-        + (contagem.clube * mrrMensalPlano(planosCtx?.clube, 5000));
+      // MRR pelo preço REAL do planos_config, mensal-equivalente. Duas correções de 12/08:
+      //  · O ANUAL não custa o preço mensal. A contagem funde `top2_anual` em `top2` (proposital,
+      //    para o detalhe por plano), e o MRR multiplicava tudo por R$49,90 — mas o anual do top2
+      //    é R$449,90, ou R$37,49/mês. Eram 33% a mais por assinante anual. Havia zero anuais
+      //    quando isto foi escrito, então o número estava certo e erraria na primeira venda.
+      //  · INADIMPLENTE não paga. O topo somava todo mundo enquanto o detalhe por plano já
+      //    descontava os inadimplentes — dois números da mesma tela prontos para discordar no
+      //    primeiro atraso.
+      const mrrPlano = (key, precoMensalFallback) => {
+        const cfg = planosCtx?.[key];
+        const b = base[key] || {};
+        const pMensal = mrrMensalPlano(cfg, precoMensalFallback);
+        // `precoMensalAnual` = preco_anual/12, já normalizado em utils/planosConfig.
+        const pAnual = Number(cfg?.precoMensalAnual) > 0 ? Number(cfg.precoMensalAnual) : pMensal;
+        return (Number(b.mensais) || 0) * pMensal + (Number(b.anuais) || 0) * pAnual;
+      };
+      const mrr = mrrPlano('top2', 49.90) + mrrPlano('assessorado', 500) + mrrPlano('clube', 5000);
       const taxaPix = mrr * 0.01;
 
       setDados({
@@ -5368,6 +5406,23 @@ function DashboardTab({ irParaTab }) {
   const fmtN = (v) => Number(v).toLocaleString('pt-BR');
 
   if (loading) return <div style={{ textAlign: 'center', padding: 60, color: '#94a3b8' }}>Carregando dashboard…</div>;
+
+  // Falha da RPC de contadores aparece COMO FALHA. O anterior era pior que uma tela de erro:
+  // todos os indicadores caíam para zero, e "0 inadimplentes / 0 reembolsos pendentes" tem
+  // exatamente a cara de um dia bom.
+  if (erroContadores || !dados) {
+    return (
+      <div style={{ ...S.card, borderLeft: '4px solid #dc2626', margin: 20 }}>
+        <div style={{ fontWeight: 800, color: '#991b1b', fontSize: 15, marginBottom: 6 }}>
+          Não foi possível carregar os indicadores
+        </div>
+        <div style={{ fontSize: 13, color: '#475569' }}>
+          {erroContadores || 'a consulta não retornou dados'}. Os números NÃO estão em zero — eles
+          não foram lidos. Recarregue a página; se persistir, é problema no banco ou na permissão.
+        </div>
+      </div>
+    );
+  }
 
   const marco = marcoAsaas(dados.mrr);
   const proximo = dados.mrr < 10000 ? 10000 : dados.mrr < 30000 ? 30000 : dados.mrr < 100000 ? 100000 : null;
