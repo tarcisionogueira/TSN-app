@@ -100,11 +100,28 @@ function rotulos(variavel, resultado) {
   return [variavel, ...cats].join(' | ');
 }
 
+/**
+ * Qual coluna recebe este rótulo. Devolve `{ coluna, ambiguo }`.
+ *
+ * AMBIGUIDADE É ERRO, NÃO DETALHE (achado em 12/08). A versão anterior devolvia o PRIMEIRO
+ * padrão que casasse, e isso gravou lixo por 8 dias sem ninguém ver: o rótulo
+ *   "Média de moradores em domicílios particulares permanentes ocupados"
+ * casa com `domic(í|i)lios.*ocupad` ANTES de chegar em `m(é|e)dia de moradores`. Resultado:
+ * `domicilios_ocupados` de São Paulo ficou com 265 — uma cidade de 11,4 milhões de pessoas
+ * com 265 domicílios. A faixa nacional inteira ficou entre 229 e 586, que é a média de
+ * moradores (2,65) multiplicada por 100 pelo bug do separador decimal.
+ *
+ * O número parecia PREENCHIDO, e é isso que o torna caro: `count(*)` não-nulo dava 5.570 e
+ * qualquer verificação de completude passava. Agora, rótulo que casa com mais de um padrão é
+ * reportado como ambíguo em vez de escolher no escuro.
+ */
 function colunaPara(rotulo, mapa) {
+  const casam = [];
   for (const [padrao, coluna] of Object.entries(mapa || {})) {
-    try { if (new RegExp(padrao, 'i').test(rotulo)) return coluna; } catch { /* regex inválido na config: ignora */ }
+    try { if (new RegExp(padrao, 'i').test(rotulo)) casam.push(coluna); } catch { /* regex inválido na config: ignora */ }
   }
-  return null;
+  const unicos = [...new Set(casam)];
+  return { coluna: unicos[0] || null, ambiguo: unicos.length > 1, candidatos: unicos };
 }
 
 async function processarFonte(fonte, municipios) {
@@ -125,7 +142,7 @@ async function processarFonte(fonte, municipios) {
   try {
     const meta = await jsonIBGE(`${IBGE}/api/v3/agregados/${fonte.agregado}/metadados`, 20000);
     nomesMeta = (meta?.variaveis || []).map((v) => String(v?.nome || ''));
-    const ids = (meta?.variaveis || []).filter((v) => colunaPara(String(v?.nome || ''), fonte.mapa)).map((v) => v.id);
+    const ids = (meta?.variaveis || []).filter((v) => colunaPara(String(v?.nome || ''), fonte.mapa).coluna).map((v) => v.id);
     if (ids.length) variaveis = ids.join('|');
   } catch { /* segue com 'all' */ }
 
@@ -139,7 +156,11 @@ async function processarFonte(fonte, municipios) {
   for (const v of dados) {
     for (const resultado of v?.resultados || []) {
       const rot = rotulos(v?.variavel || '', resultado);
-      const coluna = colunaPara(rot, fonte.mapa);
+      const { coluna, ambiguo, candidatos } = colunaPara(rot, fonte.mapa);
+      // Rótulo que casa com mais de uma coluna NÃO é gravado: escolher no escuro foi o que
+      // pôs a média de moradores dentro de `domicilios_ocupados`. Vai para a lista de
+      // ignorados com o motivo, e a conferência de "coluna faltando" acusa o buraco.
+      if (ambiguo) { semColuna.add(`${rot} → AMBÍGUO entre ${candidatos.join(' e ')}`); continue; }
       if (!coluna) { semColuna.add(rot); continue; }
       for (const s of resultado?.series || []) {
         const id = String(s?.localidade?.id || '');
