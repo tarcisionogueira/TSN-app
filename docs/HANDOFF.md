@@ -320,6 +320,181 @@ Três decisões que valem entender antes de mexer:
 
 ---
 
+## 🗺️ SESSÃO DE 12/08 (tarde e noite) — o Brasil mapeado, e o Censo que nunca tinha entrado
+
+> O dono pediu um card de **"% do Brasil mapeado"**. Para responder isso era preciso ter área,
+> domicílios e população por município — e a ingestão do IBGE, que se declarava `ok=true` desde
+> 03/08, **não tinha trazido praticamente nada**. O dia virou a reforma dessa ingestão. Terminou
+> com **7 fontes verdes, 8 colunas preenchidas nos 5.570 municípios** e números que batem com o
+> IBGE publicado na terceira casa.
+
+### 1. A regra do dono que define o NUMERADOR (não mudar sem falar com ele)
+
+> *"os imóveis em leilão em si não devem ser usados, pois é muito comum avaliações defasadas de
+> anos ou infladas por alguma questão desconhecida de quem as avaliou"*
+
+O mapeamento é alimentado **só por amostras de mercado** (o que abastece o Índice e os
+relatórios). O **acervo de leilão entra apenas como população de referência** — serve para
+perguntar "cobrimos onde anunciamos?", **nunca** como fonte de valor. Cada relatório gerado e
+cada Índice novo aumentam o mapeamento sozinhos; é assim que o número cresce sem custo extra.
+
+### 2. As quatro causas que mantinham a ingestão do Censo vazia
+
+Todas as quatro produziam **dado plausível e errado**, não erro — nenhuma apareceria em leitura
+de código:
+
+| # | Causa | Sintoma |
+|---|---|---|
+| 1 | **O que não é PEDIDO nunca chega para ser ignorado.** O filtro de variáveis no metadado emagrecia a chamada, e `rotulos_ignorados: []` saía vazio | `ok=true`, 5.570 linhas, **1 de 4 colunas** |
+| 2 | **Separador decimal.** O IBGE v3 usa ponto como DECIMAL; o parser tratava como separador de milhar | São Paulo com **1.521.202 km²** (mil vezes o real) |
+| 3 | **Rótulo ambíguo.** *"Média de moradores em domicílios ocupados"* casava com o regex de `domicilios_ocupados` antes do regex certo | São Paulo com **265 domicílios** |
+| 4 | **Colisão de rótulos.** *"Nascidos vivos"* e *"Nascidos vivos — percentual do total"* casavam com o MESMO regex e gravavam na MESMA coluna; o percentual sobrescrevia a contagem | **`nascimentos = 100` nos 5.570 municípios** |
+
+**O detector de ambiguidade que criei para a causa 3 NÃO pegou a causa 4** — ele compara
+colunas, e a colisão é entre RÓTULOS. Ficaram os dois: `colunaPara()` recusa rótulo ambíguo, e
+um `Map` de rótulo→coluna recusa dois rótulos distintos escrevendo na mesma coluna. Hoje a
+ingestão devolve `colunas_faltando`, `colisoes_de_rotulo` e `variaveis_do_agregado`, e
+**ingestão parcial sai `ok=false`** — antes saía verde.
+
+Ferramentas que sobraram e valem para a próxima fonte: `?metadados=<agregado>` lista as
+variáveis E as classificações reais; `?buscar=<termo>` procura no catálogo do IBGE. Com elas o
+ajuste dos regex vira leitura, não tentativa e erro. Ambas pelo workflow
+`socio-reingerir.yml` (nunca com o segredo na URL — vai no header).
+
+### 3. Os números fecharam contra o IBGE publicado — esta é a prova, não a contagem de não-nulos
+
+Contar linhas preenchidas foi exatamente o que deixou passar as quatro causas acima. O teste que
+vale é **comparar com o número que o IBGE publica**:
+
+| Medida | BidPro | IBGE | |
+|---|---|---|---|
+| População (Censo 2022) | 203.080.756 | 203.080.756 | ✅ exato |
+| População estimada 2025 | 213.421.037 | ~213,4 mi | ✅ |
+| Domicílios ocupados | 72.456.368 | 72,48 mi | ✅ |
+| Domicílios vagos | 11.400.705 (**12,6%**) | 11,39 mi | ✅ |
+| Área dos municípios | 8.497.332 km² | 8.510.295 km² | ✅ (−0,15%) |
+| Área urbanizada | 45.944 km² | ~48 mil km² (2019) | ✅ |
+
+> **`boaesperancadonorte`/MT sem Censo NÃO é falha:** município instalado em 2025 — tem
+> estimativa e não tem Censo 2022. É a 5.571ª linha; as outras 5.570 estão completas.
+>
+> **`domicilios_vagos` é só "vago", não inclui "uso ocasional"** (a classificação pedida ao IBGE
+> é `3[59993,60002]`). É deliberado: segunda residência de veraneio não é estoque parado.
+> Balneário Camboriú sai com **6,1% de vagos** por causa disso, e está certo. Se um dia alguém
+> quiser a leitura de veraneio, é **coluna nova**, não trocar esta.
+
+### 4. Pressão habitacional: primeira vez com dado real
+
+`socio_derivar()` (já chamada no fim de toda ingestão) só agora teve `domicilios`/`vagos` de
+verdade. Resultado nos 5.570: **2.092 demanda reprimida · 2.072 estoque ocioso · 1.406
+equilíbrio**, com régua autocalibrada nos tercis do país. Confere com o que se sabe: Balneário
+Camboriú (6,1% vagos, +1,96% a.a.) = demanda reprimida; Salvador (16,4% vagos, −0,18% a.a.) =
+estoque ocioso. **Não é o déficit da FJP** — o `pressao_metodo` diz isso em toda linha.
+
+### 5. As três leituras de cobertura, e por que são três
+
+Uma sozinha engana. Estado ao fechar:
+
+| Leitura | Valor | Responde |
+|---|---|---|
+| **Brasil mapeado (domicílios)** | **13,3% venda · 9,0% locação** (29 de 5.571 municípios) | Quanto do ESTOQUE DE MORADIA do país já tem valor de referência |
+| **Território (mancha urbana)** | **2,3%** — 55,7 de 2.452 km² urbanizados | Quanto do que é cidade está mapeado |
+| **Índice cobre o acervo** | **10,9%** — 209 de 1.913 imóveis | Cobrimos onde de fato anunciamos |
+
+A mancha urbana é o denominador em destaque porque a área do município inclui zona rural que
+ninguém precisa mapear (Cuiabá: 4.327 km² de município contra 160,6 km² de mancha). A área
+municipal fica ao lado como piso conservador — **0,38%**.
+
+> ⚠️ **O número do Brasil mapeado CAIU no fim do dia (de ~20% para 13,3%) e a queda é o
+> conserto.** Enquanto `domicilios_ocupados` ainda guardava lixo e a mesma cidade existia com
+> duas grafias em `cidade_indicadores`, o numerador contava cidade repetida sobre um denominador
+> errado. Hoje `sem_par_ibge = 0` (todas as 29 casam com o IBGE) e o denominador bate com o
+> Censo. **13,3% é o número certo. Não "restaure" o maior.**
+
+### 6. `cidade_norm`: uma convenção só, com trava no banco
+
+A mesma cidade estava gravada de duas formas (`'sao paulo'` e `'saopaulo'`) **na mesma tabela**.
+Custo medido: o relatório de Feira de Santana enxergava **54 de 171 amostras** da própria
+cidade; Lauro de Freitas, 20 de 79. *Corrigido:* dados unificados, trigger
+`trg_cidade_norm_sem_espaco()` em 4 tabelas (a grafia errada não volta) e **7 pontos de chamada**
+em `api/indice-*.js` passando a normalizar. Conferir a qualquer momento:
+`select replace(cidade_norm,' ','') k, uf, count(distinct cidade_norm) from cidade_indicadores
+group by 1,2 having count(distinct cidade_norm) > 1;` → vazio = íntegro.
+
+Na mesma linha, a normalização de **bairro** no `indice_cobertura_resumo` era unilateral (tirava
+acento/espaço só do lado do imóvel e comparava com o lado do Índice, que os mantinha): só bairro
+de palavra única casava — **6 de 23**. Agora **17 de 23**. O defeito era meu, e estava dentro da
+função escrita para medir cobertura.
+
+### 7. MRR: dois números, porque eram duas coisas
+
+O card único misturava assinatura com pacote de prazo fixo. Agora: **"Recebido no período"
+(R$ 4.615,13)** e **"Assinaturas (MRR)" (R$ 199,60)**. A amortização do pacote Assessoria e o
+Clube saem do MRR e entram no recebido — é o que o dono pediu ao dizer que queria faturamento
+real, e evita anunciar como recorrente o que acaba quando o contrato acaba.
+
+### 8. Cliente 360 enxerga o pré-login
+
+A linha do tempo de navegação agora marca **`pré-cadastro`** no que a pessoa fez antes de ter
+conta. Verificado: `src/utils/tracker.js` **sempre** manda `anon_id`, e **zero** eventos
+registrados desde 05/08 estão sem ele — os 2.389 sem `anon_id` são históricos e não voltam.
+Nada a corrigir; a ponte melhora sozinha com o tempo.
+
+### 9. Verificação de fim de dia — o que foi checado e deu certo
+
+- **`indice_amostras`: 0 geocodificáveis pendentes.** As 944 sem coordenada **não têm cep, nem
+  endereço, nem condomínio** — geocodificar é impossível, não "ainda não tentado". Fecha a
+  pergunta de custo×benefício: não há o que rodar aqui.
+- **7 fontes IBGE verdes.** `estimativa_populacao` falhou uma vez com `fetch failed` (rede do
+  IBGE) e **foi gravada como falha** — no regime antigo teria saído verde. Refeita: 5.571 linhas,
+  `ok=true`.
+- **Segurança/regras/erros de cliente/chamados: tudo em zero**, reconferido depois das migrações.
+
+### 10. 🔴 A deriva que faltava — banco que MUDA e não volta para o repositório
+
+Achado ao verificar o próprio trabalho do dia: **`admin_metricas_negocio()` em produção já tinha
+`pct_dom_venda`, e nenhuma migração do repositório tinha.** Foi aplicada direto no banco e nunca
+voltou. Se alguém recriasse o banco a partir de `supabase/migrations/`, a chave sumiria do JSON e
+o card leria `br.pct_dom_venda || 0` → **"0% venda"**, com cara de resposta.
+
+É a mesma família que abriu o dia (`reuniao_em`, `onr_protocolos`: migração escrita que nunca
+chegou ao banco), **na direção contrária**. Corrigido em
+`supabase/migrations/dashboard_brasil_mapeado_domicilios.sql`, que é cópia fiel do
+`pg_get_functiondef()` da produção. Conferi as outras 6 funções tocadas hoje
+(`indice_cobertura_resumo`, `cidades_indice_maduras`, `schema_inventario`,
+`trg_cidade_norm_sem_espaco`, `socio_derivar`, `admin_dashboard_contadores`) — **só esta havia
+derivado**.
+
+> **Lacuna honesta, para quem abrir a próxima sessão:** `npm run verificar:schema` pega tabela e
+> coluna que faltam no banco. **Ninguém pega CORPO DE FUNÇÃO que existe nos dois lados e
+> divergiu.** Comparar `pg_get_functiondef()` com o texto da migração é frágil (formatação), e a
+> versão barata — conferir que todo `.rpc('x')` do código existe no banco — **não pegaria este
+> caso**, porque a função existia. Deixei registrado em vez de construir uma trava que dá falsa
+> segurança. Enquanto não houver trava: **mudou função no banco, escreva a migração no mesmo
+> commit.**
+
+### 11. Trava nova, pequena: workflow manual não sai mais verde por cima de `ok=false`
+
+`socio-reingerir.yml` recebia HTTP 200 com `{"ok":false,"erro":"fetch failed"}` e terminava
+**success** — o 200 é de propósito (uma fonte quebrada não pode derrubar as outras no cron
+diário), mas o job precisava ler o corpo. Agora testa `ok` e reprova. Mesmo defeito do dia,
+na última casa onde ainda morava.
+
+### ⚠️ O QUE ESPERA VOCÊ NA ABERTURA (tarde de 12/08)
+
+1. **Nada pendente do dia** — tudo em produção, banco e repositório conferidos iguais.
+2. **O Censo é anual/decenal**: o cron só toca em fonte com mais de 25 dias. Não há o que
+   reingerir por um tempo. Para uma fonte nova, use a sonda (`metadados`/`buscar`) ANTES de
+   escrever regex.
+3. **Melhoria disponível, não feita (é decisão do dono):** capturar *"uso ocasional"* como
+   coluna nova, ao lado de `domicilios_vagos`. Muda a leitura de cidade litorânea/de veraneio —
+   Balneário Camboriú tem 86.336 domicílios para 139 mil pessoas. Custo: uma categoria a mais na
+   classificação do agregado 4711 + uma coluna. **Não trocar** o significado de
+   `domicilios_vagos` para fazer isso.
+4. **Bright Data — a decisão do teto continua marcada para 18/08** (ver o bloco da manhã).
+
+---
+
 ## 🔚 ENCERRAMENTO DE 11/08 (bloco anterior)
 
 > **`main` em `3ffa533` · 32 commits no dia · deploy de produção READY · banco 0 crítico em tudo.**

@@ -164,6 +164,23 @@ aplicado: `/registro-imovel` abria vazia, com cara de funcionando. `proxy_uso` n
 limitador de custo que dependia dela respondia "pode gastar" para sempre. **Nenhum aparece em
 revisão de código, lint ou teste de front — o código está certo; o que falta está no banco.**
 
+**7b. E A DIREÇÃO CONTRÁRIA (12/08, tarde).** `admin_metricas_negocio()` em produção tinha a chave
+`pct_dom_venda`; **nenhuma migração do repositório tinha** — foi aplicada direto no banco e nunca
+voltou. Recriar o banco a partir de `supabase/migrations/` faria a chave sumir e o card imprimir
+**"0% venda"** com cara de resposta. `verificar:schema` NÃO pega isto (a função existe nos dois
+lados; só o corpo divergiu) e não há trava barata que pegue. Regra manual, então: **mudou função no
+banco, escreva a migração no mesmo commit.**
+
+**8. CONTAR NÃO-NULOS NÃO É VALIDAR (12/08).** A ingestão do IBGE gravou `ok=true`, 5.570 linhas e
+`rotulos_ignorados: []` durante 9 dias trazendo **1 de 4 colunas** — *o que não é PEDIDO nunca
+chega para ser ignorado*, então a lista de descartados sai vazia justamente quando mais falta
+coisa. As outras três causas do mesmo dia deram número **plausível e errado**: separador decimal
+(São Paulo com 1.521.202 km²), rótulo ambíguo (São Paulo com 265 domicílios) e **dois rótulos
+distintos gravando na MESMA coluna** (`nascimentos = 100` no Brasil inteiro, porque o percentual
+sobrescrevia a contagem — e o detector de ambiguidade não pegou, ele compara colunas, não
+rótulos). **Ao ingerir fonte externa, valide contra o número que a fonte PUBLICA**, num caso que
+você conhece de cabeça. Contagem de preenchidos teria passado nos quatro.
+
 ## 🔒 As duas travas automáticas (custo zero, sem IA)
 
 | Trava | Onde roda | O que pega |

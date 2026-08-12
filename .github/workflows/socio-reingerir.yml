@@ -65,9 +65,25 @@ jobs:
             URL="${{ github.event.inputs.base_url }}/api/socio-ingestao-cron?fonte=${{ github.event.inputs.fonte }}"
           fi
           echo "GET $URL"
-          curl -sSL --max-time 295 "$URL" -H "x-cron-secret: ${CRON_SECRET}" -o resp.json -w "HTTP %{http_code}\n"
+          CODE=$(curl -sSL --max-time 295 "$URL" -H "x-cron-secret: ${CRON_SECRET}" -o resp.json -w "%{http_code}")
+          echo "HTTP $CODE"
           echo "--- resposta ---"
           python3 -m json.tool resp.json || cat resp.json
+          # A ingestão responde 200 mesmo quando FALHA (`ok:false` no corpo) — é assim que o
+          # cron diário evita que uma fonte quebrada derrube as outras. Sem o teste abaixo o
+          # job saía VERDE por cima de `"erro":"fetch failed"`, que é exatamente o defeito que
+          # o dia inteiro de 12/08 foi corrigir: resposta de erro entregue como sucesso.
+          # Sonda (`metadados`/`buscar`) não ingere nada e não tem `ok` — não se aplica.
+          if [ "$CODE" != "200" ]; then
+            echo "::error::HTTP $CODE"
+            exit 1
+          fi
+          if python3 -c "import json,sys; d=json.load(open('resp.json')); sys.exit(0 if d.get('ok') is not False else 1)"; then
+            echo "ok"
+          else
+            echo "::error::A ingestão respondeu ok=false — veja 'erro'/'colunas_faltando'/'colisoes_de_rotulo' acima"
+            exit 1
+          fi
 
       # `cancelled()` junto com `failure()`: timeout não é failure para o GitHub, e sem isto a
       # execução cortada terminaria sem aviso (lição do scraper diário, 12/08).
