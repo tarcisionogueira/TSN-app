@@ -165,6 +165,7 @@
     "mutacao-sem-binding": 1
   },
   "src/contexts/AnalisesContext.jsx": {
+    "mesma-janela-em-tabelas-diferentes": 1,
     "delete-sem-select": 3
   },
   "src/contexts/AuthContext.jsx": {
@@ -172,7 +173,7 @@
     "data-sem-error": 2
   },
   "src/pages/Admin.jsx": {
-    "data-sem-error": 35,
+    "data-sem-error": 34,
     "delete-sem-select": 9,
     "mutacao-sem-binding": 18
   },

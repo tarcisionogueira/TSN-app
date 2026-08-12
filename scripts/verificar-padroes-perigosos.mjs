@@ -148,6 +148,44 @@ const REGRAS_ARQUIVO = [
     testar: (texto, rel) => /^scripts\/scraper-/.test(rel)
       && /^\s*import[\s\S]{0,200}?\bfetchViaBrightData\b[\s\S]{0,200}?from\s*['"]/m.test(texto),
   },
+  {
+    id: 'mesma-janela-em-tabelas-diferentes',
+    titulo: 'O MESMO .limit() aplicado a tabelas diferentes no mesmo Promise.all',
+    // Repetir a MESMA janela em várias tabelas significa que elas são, para quem escreveu, UM
+    // conjunto só — e é aí que truncar cada uma por conta própria quebra: os cortes caem em
+    // datas diferentes e o cruzamento sai pela metade, sem erro nenhum.
+    //
+    // Foi o defeito de 12/08. `AnalisesContext` lia analises_mercado/documental/laudo com
+    // `.limit(MAX)` cada uma, ordenadas pelo próprio `updated_at`. Com 51 mercadológicos e 19
+    // documentais, um imóvel com documental recente e mercadológico antigo aparecia na lista
+    // do cliente SEM o relatório de mercado — que estava no banco o tempo todo. E abrir a
+    // análise mostrava "não gerado", com um clique em Gerar reprocessando IA à toa.
+    //
+    // Não confundir com duas listas independentes que só por acaso viajam juntas (extrato +
+    // concessões em Creditos.jsx, disponibilidades + slots no Admin): ali cada `.limit()` tem
+    // seu próprio valor, e é por isso que a regra exige o MESMO literal repetido. Quando a
+    // repetição for intencional (cache de menu, por exemplo), marque com // padrao-ok: <motivo>.
+    testar: (texto) => {
+      const bloco = (t, i) => {
+        let d = 0;
+        for (let k = i; k < t.length && k < i + 6000; k++) {
+          if (t[k] === '[') d++;
+          else if (t[k] === ']' && --d === 0) return t.slice(i, k + 1);
+        }
+        return t.slice(i, i + 2000);
+      };
+      const re = /Promise\.all\s*\(\s*\[/g;
+      let m;
+      while ((m = re.exec(texto))) {
+        const jan = bloco(texto, texto.indexOf('[', m.index));
+        const tabelas = new Set([...jan.matchAll(/\.from\s*\(\s*['"]([a-z_]+)['"]/g)].map((x) => x[1]));
+        const limites = [...jan.matchAll(/\.limit\s*\(\s*([A-Za-z0-9_]+)\s*\)/g)].map((x) => x[1]);
+        const repetido = limites.some((v, i) => limites.indexOf(v) !== i);
+        if (tabelas.size >= 2 && repetido) return true;
+      }
+      return false;
+    },
+  },
 ];
 
 function arquivos(dir, saida = []) {

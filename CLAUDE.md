@@ -181,11 +181,30 @@ sobrescrevia a contagem — e o detector de ambiguidade não pegou, ele compara 
 rótulos). **Ao ingerir fonte externa, valide contra o número que a fonte PUBLICA**, num caso que
 você conhece de cabeça. Contagem de preenchidos teria passado nos quatro.
 
+**9. TRUNCAR CADA TABELA POR CONTA PRÓPRIA E DEPOIS CRUZAR (12/08).** `AnalisesContext` lia
+`analises_mercado`, `analises_documental` e `analises_laudo` com `.limit(12)` **cada uma,
+ordenada pelo seu próprio `updated_at`**. Os cortes caem em datas diferentes: imóvel com
+documental recente e mercadológico antigo aparecia na lista do cliente **sem o relatório de
+mercado, que estava no banco o tempo todo** — e abrir a análise dizia "não gerado", com um
+clique em Gerar reprocessando IA à toa. Regra: **janela de cache não é janela de dados.** Se
+várias leituras vão ser CRUZADAS por uma chave, ou elas vêm de uma consulta só (RPC no
+servidor), ou nenhuma delas pode ter `.limit`. A trava `mesma-janela-em-tabelas-diferentes`
+pega o sintoma escrito — o MESMO literal de `.limit()` repetido sobre tabelas diferentes.
+
+**9b. E A RETENÇÃO PRECISA APAGAR PELA MESMA UNIDADE QUE O CLIENTE ENXERGA.** No mesmo dia,
+`limpar_analises_orfas` expirava POR TABELA, cada linha com a sua `data_leilao` — e como a data
+vem preenchida na mercadológica e nula na documental, **o mercadológico vencia sozinho**: meia
+análise, com cara de relatório que sumiu. Pior, o branch por leilão exigia `data_leilao` na
+PRÓPRIA linha, então quem não tinha data nunca expirava mesmo com o acervo sabendo da praça.
+Três invariantes novos em `qa_invariantes()` vigiam isso no rastro do banco:
+`analise_sem_mercadologico`, `laudo_sem_base` e `analise_vencida_nao_limpa` (este último é o
+que grita se a retenção parar de funcionar — um DELETE que não apaga não dá erro).
+
 ## 🔒 As duas travas automáticas (custo zero, sem IA)
 
 | Trava | Onde roda | O que pega |
 |---|---|---|
-| `npm run verificar:padroes` | `prebuild` (todo `npm run build` e o deploy da Vercel) + CI `verificar-padroes.yml` | As formas 1–6 acima **e**, desde 12/08: `mutacao-sem-binding` (update/insert cujo resultado é descartado — a forma que mandou o e-mail de reunião fantasma) e `notify-sem-cancelled` (passo de alerta com `if: failure()` sem `cancelled()`, que deixou 3 dias de coleta truncada sem aviso) |
+| `npm run verificar:padroes` | `prebuild` (todo `npm run build` e o deploy da Vercel) + CI `verificar-padroes.yml` | As formas 1–6 acima **e**, desde 12/08: `mutacao-sem-binding` (update/insert cujo resultado é descartado — a forma que mandou o e-mail de reunião fantasma), `notify-sem-cancelled` (passo de alerta com `if: failure()` sem `cancelled()`, que deixou 3 dias de coleta truncada sem aviso) e `mesma-janela-em-tabelas-diferentes` (o MESMO `.limit()` em tabelas diferentes no mesmo `Promise.all` — ver a forma 9) |
 | `npm run verificar:schema` | CI `verificar-schema.yml` — push, PR e **diário 11h UTC** | A forma 7: toda tabela em `.from('x')` e toda coluna de data em filtro/ordenação, conferidas contra o schema REAL (RPC `schema_inventario()`) |
 
 Ambas são **linha de base por arquivo**: só reprovam ocorrência NOVA, o acervo histórico fica como

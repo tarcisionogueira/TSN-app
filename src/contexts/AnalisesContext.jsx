@@ -92,6 +92,13 @@ export function AnalisesProvider({ children }) {
   const mergeDocRows = useCallback((rows) => mergeInto(setDocumentais)(rows), [mergeInto]);
   const mergeLaudoRows = useCallback((rows) => mergeInto(setLaudos)(rows), [mergeInto]);
 
+  // ESTE `limit(MAX)` É CACHE DO MENU DO TOPO — não é a janela de dados do app, e a partir de
+  // 12/08 nada que precisa de completude depende dele: a lista de "Minhas Análises" vem da RPC
+  // `minhas_analises_lista` (uma linha por imóvel, montada no servidor) e a tela de detalhe usa
+  // `garantirCarregado(imovelId)`. A regra `mesma-janela-em-tabelas-diferentes` do
+  // `verificar:padroes` marca este ponto de propósito: se alguém voltar a montar uma lista
+  // cruzando estas três leituras truncadas, o corte cai em datas diferentes e a análise aparece
+  // pela metade — foi exatamente assim que "o mercadológico sumiu" do painel do dono.
   const recarregar = useCallback(async () => {
     if (!uid) return;
     const [{ data: m }, { data: d }, { data: l }] = await Promise.all([
