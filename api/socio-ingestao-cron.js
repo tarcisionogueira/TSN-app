@@ -49,8 +49,21 @@ const cidadeNorm = (s) => String(s || '').toLowerCase().normalize('NFD').replace
 const num = (v) => {
   // O IBGE devolve '-' e '...' para "não aplicável"/"sem dado". Virar 0 seria mentir.
   if (v === null || v === undefined) return null;
-  const s = String(v).trim().replace(/\./g, '').replace(',', '.');
+  let s = String(v).trim();
   if (!s || /^[-.]+$/.test(s) || s === 'X' || s === '..') return null;
+
+  // SEPARADOR DECIMAL (corrigido em 12/08, antes do dado ser usado). A versão anterior
+  // apagava TODO ponto, assumindo formato brasileiro (ponto = milhar). A API v3 do IBGE usa
+  // ponto como DECIMAL: "1521.202" km² de São Paulo virava 1.521.202 — mil vezes maior, e
+  // plausível o bastante para passar despercebido num campo que ninguém confere de cabeça.
+  // A densidade saía igual, 752.826 hab/km² em vez de 7.528.
+  // Regra que cobre os três formatos que aparecem:
+  //   tem vírgula        → vírgula é decimal, ponto é milhar  ("1.521,20")
+  //   dois ou mais pontos→ pontos são milhar                  ("11.451.999")
+  //   um ponto só        → é decimal, preserva                ("1521.202")
+  if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.');
+  else if ((s.match(/\./g) || []).length >= 2) s = s.replace(/\./g, '');
+
   const n = Number(s);
   return Number.isFinite(n) ? n : null;
 };
