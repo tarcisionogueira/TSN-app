@@ -7654,7 +7654,10 @@ function SolicitacaoModal({ sol, membros, onClose, onSaved }) {
 
   async function salvar() {
     setSaving(true);
-    await supabase.from('solicitacoes').update({
+    // `error` checado: até 12/08 este update ia para uma coluna inexistente (`reuniao_em`),
+    // devolvia 400 e o retorno era descartado — checklist, notas, link e status eram perdidos
+    // em silêncio e a tela ainda avisava que tinha salvo.
+    const { error } = await supabase.from('solicitacoes').update({
       checklist,
       notas_analista: notas,
       google_meet_link: meetLink,
@@ -7663,6 +7666,7 @@ function SolicitacaoModal({ sol, membros, onClose, onSaved }) {
       reuniao_duracao_min: reuniaoDuracao,
     }).eq('id', sol.id);
     setSaving(false);
+    if (error) { alert(`Não foi possível salvar: ${error.message}`); return; }
     onSaved();
   }
 
@@ -7694,7 +7698,7 @@ function SolicitacaoModal({ sol, membros, onClose, onSaved }) {
       console.error('Erro ao criar sala Daily:', e);
     }
 
-    await supabase.from('solicitacoes').update({
+    const { error: errSalvar } = await supabase.from('solicitacoes').update({
       checklist,
       notas_analista: notas,
       google_meet_link: linkFinal,
@@ -7702,6 +7706,15 @@ function SolicitacaoModal({ sol, membros, onClose, onSaved }) {
       reuniao_em: new Date(reuniaoEm).toISOString(),
       reuniao_duracao_min: reuniaoDuracao,
     }).eq('id', sol.id);
+
+    // O e-mail só sai depois de PROVAR que a reunião foi gravada. Até 12/08 a ordem era
+    // outra: o update falhava calado e o cliente recebia "sua reunião está marcada" para
+    // uma reunião que não existia em lugar nenhum — nem no Painel dele, que lê a mesma coluna.
+    if (errSalvar) {
+      setNotificando(false);
+      alert(`A reunião NÃO foi salva (${errSalvar.message}). O cliente não foi notificado — corrija e tente de novo.`);
+      return;
+    }
 
     try {
       await apiCall('/api/notificar-reuniao', {
@@ -7729,8 +7742,9 @@ function SolicitacaoModal({ sol, membros, onClose, onSaved }) {
   async function prorrogarReuniao() {
     if (!meetLink) { alert('Nenhuma sala ativa para prorrogar.'); return; }
     const novasDuracao = reuniaoDuracao + 30;
+    const { error } = await supabase.from('solicitacoes').update({ reuniao_duracao_min: novasDuracao }).eq('id', sol.id);
+    if (error) { alert(`Não foi possível prorrogar: ${error.message}`); return; }
     setReuniaoDuracao(novasDuracao);
-    await supabase.from('solicitacoes').update({ reuniao_duracao_min: novasDuracao }).eq('id', sol.id);
     alert(`Reunião estendida para ${novasDuracao} minutos.`);
   }
 

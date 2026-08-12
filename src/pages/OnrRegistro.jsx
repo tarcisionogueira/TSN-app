@@ -82,11 +82,18 @@ export default function OnrRegistro() {
       });
     // Carrega protocolos anteriores deste imóvel
     setLoadingReg(true);
+    // `error` checado: a tabela `onr_protocolos` foi ao ar em 10/08 sem a migração aplicada,
+    // e o `data || []` transformava "a tabela não existe" em "nenhum protocolo ainda" — a tela
+    // parecia funcionar, vazia, para todo mundo.
     supabase.from('onr_protocolos')
       .select('*')
       .eq('imovel_id', imovelId)
       .order('criado_em', { ascending: false })
-      .then(({ data }) => { setRegistros(data || []); setLoadingReg(false); });
+      .then(({ data, error }) => {
+        if (error) setErros(e => ({ ...e, lista: `Não foi possível carregar os protocolos: ${error.message}` }));
+        setRegistros(data || []);
+        setLoadingReg(false);
+      });
   }, [imovelId]);
 
   // Preenche nome do arrematante com dados do usuário logado. O CPF vem cheio e
@@ -428,6 +435,13 @@ export default function OnrRegistro() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {loadingReg ? (
             <div style={{ textAlign: 'center', padding: 40 }}><Loader2 size={24} color="#94a3b8" style={{ animation: 'spin 1s linear infinite' }} /></div>
+          ) : erros.lista ? (
+            /* Falha de leitura NÃO pode se passar por "nenhum protocolo": a diferença entre
+               as duas é o que decide se a pessoa cadastra de novo o que já está lá. */
+            <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 12, padding: '14px 16px', color: '#991b1b', fontSize: 13, display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+              <AlertCircle size={16} style={{ flexShrink: 0, marginTop: 1 }} />
+              <span>{erros.lista}</span>
+            </div>
           ) : registros.length === 0 ? (
             <div style={{ textAlign: 'center', color: '#94a3b8', padding: 40, fontSize: 14 }}>Nenhum protocolo registrado para este imóvel.</div>
           ) : (
@@ -442,9 +456,17 @@ export default function OnrRegistro() {
                         {r.cartorio_cidade}/{r.cartorio_uf} · {r.data_protocolo ? new Date(r.data_protocolo + 'T12:00:00').toLocaleDateString('pt-BR') : new Date(r.criado_em).toLocaleDateString('pt-BR')}
                       </div>
                     </div>
-                    <StatusSelect registro={r} onAtualizar={(id, status) => {
+                    <StatusSelect registro={r} onAtualizar={async (id, status) => {
+                      const anterior = r.status;
                       setRegistros(prev => prev.map(x => x.id === id ? { ...x, status } : x));
-                      supabase.from('onr_protocolos').update({ status, atualizado_em: new Date().toISOString() }).eq('id', id);
+                      // `.select()` porque UPDATE barrado pela RLS não é erro: volta `error: null`
+                      // com zero linha. Sem a prova, a tela mostraria a mudança que não aconteceu.
+                      const { data, error } = await supabase.from('onr_protocolos')
+                        .update({ status, atualizado_em: new Date().toISOString() }).eq('id', id).select('id');
+                      if (error || !data?.length) {
+                        setRegistros(prev => prev.map(x => x.id === id ? { ...x, status: anterior } : x));
+                        setErros(e => ({ ...e, lista: error ? `Não foi possível atualizar o status: ${error.message}` : 'Sem permissão para alterar este protocolo.' }));
+                      }
                     }} />
                   </div>
                   {r.valor_arrematacao && (

@@ -13,6 +13,7 @@ import { fmt, fmtPct } from '../utils/calculos';
 import { useAuth } from '../contexts/AuthContext';
 import { gerarPDFFinanceiro } from '../components/RelatorioFinanceiroPDF';
 import { supabase } from '../utils/supabase';
+import { reportarErroCliente } from '../utils/reportarErro';
 
 // Tipos de avaliação disponíveis na aba "Em Análise"
 const AVALIACOES = [
@@ -221,13 +222,22 @@ export default function Painel() {
     if (!user) return;
     setLoadingAnalise(true);
     try {
-      const [{ data: solics }, { data: agends }, { data: reunioes }] = await Promise.all([
+      // `error` checado nas TRÊS: dentro de um Promise.all um 400 vira `undefined` e o `|| []`
+      // o transforma em "não há nada" — foi assim que o card de reuniões sumiu sem sintoma
+      // quando `reuniao_em` ainda não existia na tabela (11–12/08).
+      const [{ data: solics, error: e1 }, { data: agends, error: e2 }, { data: reunioes, error: e3 }] = await Promise.all([
         supabase.from('solicitacoes').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
         supabase.from('agendamentos').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
         supabase.from('solicitacoes').select('id,imovel_nome,imovel_cidade,reuniao_em,reuniao_duracao_min,google_meet_link')
           .eq('user_id', user.id).not('reuniao_em', 'is', null).not('google_meet_link', 'is', null)
           .gte('reuniao_em', new Date().toISOString()).order('reuniao_em', { ascending: true }).limit(5),
       ]);
+      // Lista vazia por FALHA deixa rastro em `erros_cliente` — o mesmo canal que o ritual
+      // de abertura lê todo dia. Sem isso, "o cliente não tem reunião marcada" e "a consulta
+      // quebrou" são indistinguíveis na tela e no banco.
+      const falha = e1 || e2 || e3;
+      if (falha) reportarErroCliente({ msg: `painel/analise: ${falha.message}` });
+
       setSolicitacoes(solics || []);
       setAgendamentos(agends || []);
       setProximasReunioes(reunioes || []);
