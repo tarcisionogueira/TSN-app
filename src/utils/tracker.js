@@ -81,7 +81,17 @@ function origemPrimeiroToque() {
       gclid: g('gclid'), gbraid: g('gbraid'), wbraid: g('wbraid'),
       utm_source: g('utm_source'), utm_medium: g('utm_medium'), utm_campaign: g('utm_campaign'),
       utm_term: g('utm_term'), utm_content: g('utm_content'),
-      referrer_host: (() => { try { return document.referrer ? new URL(document.referrer).hostname : null; } catch { return null; } })(),
+      // Referrer do PRÓPRIO domínio não é origem — é navegação interna. Sem este filtro, quem
+      // chega por `/leiloes` (página pública, fora do React) e clica para entrar no app grava
+      // "bidprobrasil.com.br" como origem, apagando a campanha que trouxe a pessoa. Aconteceu
+      // em 2 das 5 primeiras linhas gravadas em 12/08.
+      referrer_host: (() => {
+        try {
+          if (!document.referrer) return null;
+          const h = new URL(document.referrer).hostname;
+          return h && h !== window.location.hostname ? h : null;
+        } catch { return null; }
+      })(),
       landing: window.location.pathname || '/',
     };
     if (!Object.entries(o).some(([k, v]) => k !== 'landing' && v)) return null; // nada a atribuir

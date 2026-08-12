@@ -47,8 +47,12 @@ begin
       passo as (
         select
           (select count(*) from anon) as visitantes,
+          -- `/leiloes%` é a LISTAGEM e `/leilao%` é a página do LOTE: as duas são acervo
+          -- público. Contar só o plural deixava de fora exatamente onde o SEO de cauda longa
+          -- entrega gente — pego no primeiro dado real, uma visita orgânica em Araxá/MG.
           (select count(distinct anon_id) from public.eventos_atividade
-            where user_id is null and criado_em > corte and rota like '/leiloes%') as viu_acervo,
+            where user_id is null and criado_em > corte
+              and (rota like '/leiloes%' or rota like '/leilao%')) as viu_acervo,
           (select count(distinct anon_id) from public.eventos_atividade
             where user_id is null and criado_em > corte and rota = '/planos') as viu_planos,
           (select count(distinct anon_id) from public.eventos_atividade
@@ -76,7 +80,7 @@ begin
                         then coalesce('Google Ads · ' || nullif(o.utm_campaign,''), 'Google Ads')
                       when nullif(o.utm_source,'') is not null
                         then o.utm_source || coalesce(' · ' || nullif(o.utm_campaign,''), '')
-                      when nullif(o.referrer_host,'') is not null then o.referrer_host
+                      when nullif(o.referrer_host,'') is not null then o.referrer_host || ' (orgânico)'
                  end, '(não medido)') as origem,
                count(distinct a.anon_id) as pessoas,
                count(distinct a.anon_id) filter (

@@ -44,7 +44,13 @@ export default async function handler(req, res) {
     // correção: em 30 dias, visitante anônimo aparecia em CINCO rotas (/, /planos, /login,
     // /termos, /privacidade) e ZERO nas 33 mil. Não dava para distinguir "o SEO não traz
     // ninguém" de "não estamos medindo" — que são diagnósticos opostos.
-    const ROTA_PUBLICA = /^\/($|p\/|leiloes|planos|login|cadastro|termos|privacidade|convite|cadastro-parceiro|contrato|testemunha|ativar|redefinir|recuperar|\(auth-redirect\))/;
+    // `leilao` (SINGULAR) entrou horas depois de `leiloes`, e a lacuna era exatamente a mesma
+    // que a allowlist existia para corrigir: a página do LOTE é `/leilao/<id>/<slug>` e a de
+    // listagem é `/leiloes/<uf>/<cidade>`. Só o plural estava aqui, então a página de lote —
+    // que é onde o SEO de cauda longa entrega gente — continuava descartada com 204 silencioso.
+    // Pego no primeiro dado real: uma visita orgânica do Google caiu em
+    // `/leilao/.../restaurante-desocupado-...-araxa-mg`, gravou a origem e perdeu o pageview.
+    const ROTA_PUBLICA = /^\/($|p\/|leil(ao|oes)|planos|login|cadastro|termos|privacidade|convite|cadastro-parceiro|contrato|testemunha|ativar|redefinir|recuperar|\(auth-redirect\))/;
     let lista = eventos;
     if (!userId) {
       if (!anonId) { res.status(204).end(); return; }
