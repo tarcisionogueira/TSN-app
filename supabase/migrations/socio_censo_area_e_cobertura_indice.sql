@@ -49,8 +49,16 @@ security definer
 set search_path = public, pg_catalog
 stable
 as $$
+  -- Bairro normalizado NOS DOIS LADOS (corrigido em 12/08, no mesmo dia): a primeira versão
+  -- tirava os não-alfanuméricos só do lado do IMÓVEL e comparava com o `bairro_norm` intacto,
+  -- que guarda espaços ("vila santa terezinha"). Só casavam bairros de UMA palavra: 6 de 23.
+  -- Normalizando os dois, 17 de 23. Terceira vez no dia que convenções diferentes entre
+  -- tabelas feitas para casar mordem — e sempre errando para BAIXO, que ninguém questiona.
   with rec as (
-    select distinct cidade_norm, uf, nullif(bairro_norm,'') bairro, nullif(geo_grid,'') grid
+    select distinct cidade_norm, uf,
+           nullif(lower(regexp_replace(translate(coalesce(bairro_norm,''),
+             'áàâãéêíóôõúüçÁÀÂÃÉÊÍÓÔÕÚÜÇ','aaaaeeiooouucAAAAEEIOOOUUC'),'[^a-zA-Z0-9]','','g')),'') bairro,
+           nullif(geo_grid,'') grid
       from public.cidade_indicadores where nivel in ('bairro','grid')),
   im as (
     select i.cidade_norm, upper(i.estado) uf,
