@@ -85,6 +85,15 @@ export default async function handler(req) {
       headers: { Prefer: 'return=representation' },
       body: JSON.stringify({ user_id: null, user_email: email, user_nome: nome || email, titulo, status: 'aberto', segmento: 'curioso' }),
     });
+    // O corpo de erro do PostgREST é um OBJETO, não um array: `const [x] = await res.json()`
+    // sobre ele lança "not iterable", cai no catch e devolve 500 genérico ao visitante —
+    // sem nenhuma pista do motivo no log. Foi assim que a `user_id NOT NULL` (corrigida em
+    // 12/08) ficou invisível: a dúvida do visitante nunca virava chamado e ninguém sabia.
+    if (!chamadoRes.ok) {
+      const det = await chamadoRes.text().catch(() => '');
+      console.error('[duvida] chamado NÃO criado', chamadoRes.status, det.slice(0, 300));
+      return json({ error: 'Não foi possível registrar sua dúvida agora. Tente novamente.' }, 500);
+    }
     const [chamado] = await chamadoRes.json();
     if (chamado?.id) {
       await sb('chamados_mensagens', {

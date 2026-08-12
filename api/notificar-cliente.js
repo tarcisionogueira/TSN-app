@@ -36,10 +36,29 @@ export default async function handler(req) {
   const { chamado_id, mensagem } = body;
   if (!chamado_id || !String(mensagem || '').trim()) return json({ error: 'chamado_id e mensagem obrigatórios' }, 400);
 
-  const [chamado] = await (await sb(`chamados?id=eq.${encodeURIComponent(chamado_id)}&select=user_email,user_nome,titulo`)).json();
+  const [chamado] = await (await sb(`chamados?id=eq.${encodeURIComponent(chamado_id)}&select=user_email,user_nome,titulo,canal,email_token`)).json();
   if (!chamado?.user_email) return json({ ok: true, skipped: 'sem_email' });
 
   if (!RESEND_KEY) return json({ ok: true, skipped: 'sem_resend' });
+
+  // REPLY-TO COM TOKEN. Este e-mail termina dizendo "é só responder este e-mail", e até
+  // 12/08 o reply-to era `suporte@` puro — endereço que ninguém lia: o inbound descartava
+  // tudo que não fosse devolutiva de advogado. Agora a resposta volta para ESTE chamado.
+  // O token é criado na primeira resposta, inclusive em chamado nascido dentro do app:
+  // assim o cliente que prefere responder por e-mail continua na mesma conversa.
+  let token = chamado.email_token || null;
+  if (!token) {
+    token = crypto.randomUUID().replace(/-/g, '').slice(0, 20);
+    const up = await fetch(`${SUPABASE_URL}/rest/v1/chamados?id=eq.${encodeURIComponent(chamado_id)}`, {
+      method: 'PATCH',
+      headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=representation' },
+      body: JSON.stringify({ email_token: token }),
+    });
+    // Sem token gravado, a resposta do cliente abriria um chamado novo em vez de
+    // continuar este. Não é motivo para não responder — mas não pode passar calado.
+    if (!up.ok) { console.error('[notificar-cliente] token não gravado', up.status); token = null; }
+  }
+  const replyTo = token ? `suporte+${token}@bidprobrasil.com.br` : 'suporte@bidprobrasil.com.br';
 
   try {
     await fetch('https://api.resend.com/emails', {
@@ -48,7 +67,7 @@ export default async function handler(req) {
       body: JSON.stringify({
         from: 'BidPro Brasil <noreply@bidprobrasil.com.br>',
         to: [chamado.user_email],
-        reply_to: 'suporte@bidprobrasil.com.br',
+        reply_to: replyTo,
         subject: `Resposta da nossa equipe — ${chamado.titulo || 'sua dúvida'}`,
         html: `<div style="font-family:sans-serif;max-width:560px;margin:0 auto">
           <h2 style="color:#0D63DB">Olá${chamado.user_nome ? ', ' + chamado.user_nome : ''}!</h2>

@@ -74,15 +74,32 @@ function headerMap(data) {
   else if (arr && typeof arr === 'object') Object.entries(arr).forEach(([k, v]) => { h[k.toLowerCase()] = v; });
   return h;
 }
-function extrairToken(data, headers) {
-  const dests = []
+function destinatarios(data, headers) {
+  return []
     .concat(data?.to || [], data?.cc || [], headers['delivered-to'] || [], headers['to'] || [])
     .flatMap(x => typeof x === 'string' ? [x] : (x?.address ? [x.address] : []));
-  for (const d of dests) {
+}
+function extrairToken(data, headers) {
+  for (const d of destinatarios(data, headers)) {
     const m = String(d).match(/juridico\+([a-z0-9]+)@/i);
     if (m) return m[1];
   }
   return null;
+}
+// Token do fio de ATENDIMENTO: `suporte+<token>@` no To/Cc.
+function extrairTokenSuporte(data, headers) {
+  for (const d of destinatarios(data, headers)) {
+    const m = String(d).match(/(?:suporte|contato|privacidade)\+([a-z0-9]+)@/i);
+    if (m) return m[1];
+  }
+  return null;
+}
+function remetente(data) {
+  const f = data?.from;
+  const endereco = (typeof f === 'string' ? f : f?.address) || '';
+  const nome = (typeof f === 'string' ? '' : f?.name) || '';
+  const m = String(endereco).match(/<([^>]+)>/);
+  return { endereco: (m ? m[1] : endereco).trim().toLowerCase(), nome: nome.trim() };
 }
 
 async function uploadAnexo(imovelId, att) {
@@ -142,6 +159,104 @@ Regras: nunca invente fatos; se o advogado não deu posição clara, use null em
 const ENUM_RESULT = ['recomendo', 'recomendo_ressalvas', 'nao_recomendo'];
 const ENUM_RISCO = ['baixo', 'medio', 'alto'];
 
+// ─── E-mail que NÃO é devolutiva de advogado → vira CHAMADO no Atendimento ────
+//
+// Três formas de casar com uma conversa que já existe, da mais forte para a mais
+// fraca, antes de abrir um chamado novo:
+//   1. token do reply-to (`suporte+<token>@`) — é o que nós mesmos enviamos;
+//   2. In-Reply-To/References contra o Message-ID de uma mensagem já gravada —
+//      cobre o cliente que responde um e-mail nosso anterior ao token existir;
+//   3. remetente com chamado ABERTO no canal e-mail — cobre quem escreve de novo
+//      em vez de responder o fio. Sem isto, cada mensagem viraria um chamado solto.
+//
+// ANEXOS: o remetente aqui é QUALQUER UM da internet. Guardar o conteúdo criaria
+// um caminho de upload não autenticado para o nosso storage (abuso de espaço e,
+// pior, hospedagem de arquivo com URL assinada nossa). Registramos só os NOMES,
+// e o atendente pede reenvio pelo chat se precisar do arquivo.
+async function encaminharParaAtendimento(data, headers, messageId) {
+  const { endereco, nome } = remetente(data);
+  if (!endereco) return json({ ok: true, ignorado: 'sem_remetente' });
+
+  const assunto = String(data?.subject || '').trim().slice(0, 200) || 'Mensagem por e-mail';
+  const corpo = limparResposta(data?.text || data?.html?.replace(/<[^>]+>/g, ' ') || '').slice(0, 20000);
+  const anexos = (data?.attachments || [])
+    .map(a => ({ nome: String(a?.filename || 'anexo').slice(0, 120), tipo: 'email_nao_armazenado' }));
+  if (!corpo && !anexos.length) return json({ ok: true, ignorado: 'vazio' });
+
+  // Leitura que LANÇA em não-2xx. Aqui um `{}` silencioso não é inofensivo: falhar em
+  // achar o fio existente faz a resposta do cliente virar um chamado NOVO, fragmentando a
+  // conversa sem nenhum erro à vista. Melhor devolver 500 e deixar o Resend reentregar.
+  const buscar1 = async (path) => {
+    const r = await sb(path);
+    if (!r.ok) throw new Error(`consulta ${r.status}: ${path.split('?')[0]}`);
+    const linhas = await r.json();
+    return Array.isArray(linhas) ? (linhas[0] || null) : null;
+  };
+
+  let chamado = null;
+  try {
+    const tok = extrairTokenSuporte(data, headers);
+    if (tok) chamado = await buscar1(`chamados?email_token=eq.${encodeURIComponent(tok)}&select=id,status&limit=1`);
+    if (!chamado) {
+      const refs = `${headers['in-reply-to'] || ''} ${headers['references'] || ''}`.match(/[^\s<>]+/g) || [];
+      for (const ref of refs) {
+        const m = await buscar1(`chamados_mensagens?email_message_id=eq.${encodeURIComponent(ref)}&select=chamado_id&limit=1`);
+        if (!m?.chamado_id) continue;
+        chamado = await buscar1(`chamados?id=eq.${encodeURIComponent(m.chamado_id)}&select=id,status&limit=1`);
+        if (chamado) break;
+      }
+    }
+    if (!chamado) {
+      chamado = await buscar1(`chamados?canal=eq.email&user_email=eq.${encodeURIComponent(endereco)}&status=eq.aberto&select=id,status&order=criado_em.desc&limit=1`);
+    }
+  } catch (e) {
+    console.error('[inbound-atendimento] busca do fio', e?.message || e);
+    return json({ error: 'consulta_falhou' }, 500);
+  }
+
+  let novo = false;
+  if (!chamado) {
+    const token = crypto.randomUUID().replace(/-/g, '').slice(0, 20);
+    const r = await sb('chamados', {
+      method: 'POST', prefer: 'return=representation',
+      body: {
+        user_id: null, user_email: endereco, user_nome: nome || endereco,
+        titulo: assunto, status: 'aberto', segmento: 'curioso', tipo: 'duvida',
+        origem: 'email', canal: 'email', email_token: token,
+      },
+    });
+    if (!r.ok) {
+      // Falhar aqui é PERDER a mensagem do cliente. 500 faz o Resend re-entregar.
+      console.error('[inbound-atendimento] criar chamado', r.status, await r.text().catch(() => ''));
+      return json({ error: 'nao_foi_possivel_abrir_chamado' }, 500);
+    }
+    [chamado] = await r.json();
+    novo = true;
+  } else if (chamado.status !== 'aberto') {
+    await sb(`chamados?id=eq.${chamado.id}`, { method: 'PATCH', body: { status: 'aberto' } });
+  }
+
+  const rm = await sb('chamados_mensagens', {
+    method: 'POST', prefer: 'return=representation',
+    body: {
+      chamado_id: chamado.id, autor_id: null, autor_nome: nome || endereco,
+      autor_tipo: 'cliente', conteudo: corpo || '[mensagem sem texto]',
+      anexos, canal: 'email', email_message_id: messageId || null,
+    },
+  });
+  if (!rm.ok) {
+    const txt = await rm.text().catch(() => '');
+    // 23505 = índice único de email_message_id: o webhook reentregou a MESMA
+    // mensagem. Isso é sucesso, não erro — devolver 500 pediria mais reentregas.
+    if (/23505|duplicate key/i.test(txt)) return json({ ok: true, duplicate: true });
+    console.error('[inbound-atendimento] gravar mensagem', rm.status, txt);
+    return json({ error: 'nao_foi_possivel_gravar_mensagem' }, 500);
+  }
+
+  await sb(`chamados?id=eq.${chamado.id}`, { method: 'PATCH', body: { atualizado_em: new Date().toISOString() } });
+  return json({ ok: true, atendimento: true, chamado_id: chamado.id, novo });
+}
+
 export default async function handler(req) {
   if (req.method !== 'POST') return new Response('Method Not Allowed', { status: 405 });
   const raw = await req.text();
@@ -172,7 +287,12 @@ export default async function handler(req) {
       if (caso) break;
     }
   }
-  if (!caso) return json({ ok: true, unmatched: true }); // 200 p/ não gerar retry infinito
+  // NÃO É UM CASO JURÍDICO → é e-mail para o atendimento (suporte@, privacidade@,
+  // contato@ …). Antes esta linha era `return { ok:true, unmatched:true }`: o e-mail
+  // sumia com HTTP 200, sem log e sem alerta — inclusive a resposta do cliente ao
+  // "é só responder este e-mail" que nós mesmos mandamos, e pedido de titular de
+  // dados endereçado ao privacidade@, que a LGPD obriga a atender.
+  if (!caso) return await encaminharParaAtendimento(data, headers, messageId);
 
   const corpoBruto = data?.text || data?.html?.replace(/<[^>]+>/g, ' ') || '';
   const devolutiva = limparResposta(corpoBruto);

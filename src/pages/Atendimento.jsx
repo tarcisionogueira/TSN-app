@@ -130,6 +130,9 @@ export default function Atendimento() {
     const { data: msg, error: msgErr } = await supabase.from('chamados_mensagens').insert({
       chamado_id: chamadoAtivo.id, autor_id: user.id, autor_nome: nomeAtendente,
       autor_tipo: 'atendente', conteudo: texto || '[anexo]', anexos,
+      // Marca por onde a resposta saiu — o histórico precisa deixar claro que esta
+      // mensagem foi entregue por e-mail, e não só gravada numa tela que o cliente não tem.
+      canal: chamadoAtivo.canal === 'email' ? 'email' : null,
     }).select().single();
     if (msgErr) { alert('Erro ao enviar mensagem. Tente novamente.'); setEnviando(false); return; }
     if (msg) setMensagens(prev => [...prev, msg]);
@@ -313,6 +316,11 @@ export default function Atendimento() {
                 {(() => { const sg = SEGMENTOS[segOf(chamadoAtivo)] || SEGMENTOS.outro; return (
                   <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 10, background: sg.bg, color: sg.cor }}>{sg.label}</span>
                 ); })()}
+                {/* Quem responde precisa saber por onde a resposta SAI: neste chamado ela vai
+                    por e-mail, não aparece em tela nenhuma para o cliente. */}
+                {chamadoAtivo.canal === 'email' && (
+                  <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 10, background: '#e0e7ff', color: '#3730a3' }}>✉ por e-mail</span>
+                )}
               </div>
               <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
                 <User size={11} style={{ verticalAlign: 'middle', marginRight: 4 }} />
@@ -366,7 +374,8 @@ export default function Atendimento() {
                   ) : isSistema ? (
                     <>{m.autor_nome || 'Sistema'} · {fmtHora(m.criado_em)}</>
                   ) : (
-                    <><User size={11} style={{ verticalAlign: 'middle', marginRight: 3 }} />{m.autor_nome || 'Cliente'} · {fmtHora(m.criado_em)}</>
+                    <><User size={11} style={{ verticalAlign: 'middle', marginRight: 3 }} />{m.autor_nome || 'Cliente'} · {fmtHora(m.criado_em)}
+                      {m.canal === 'email' && <span style={{ marginLeft: 5, color: '#4338ca', fontWeight: 700 }}>✉ por e-mail</span>}</>
                   )}
                 </div>
                 <div style={{
@@ -406,6 +415,14 @@ export default function Atendimento() {
                   ))}
                 </div>
               )}
+              {/* O cliente que escreveu por e-mail NÃO tem tela para acompanhar: ele só vê o que
+                  chega na caixa dele. Dizer isso antes de escrever muda o tom da resposta —
+                  nada de "veja no painel", e o anexo precisa ir descrito no texto. */}
+              {chamadoAtivo.canal === 'email' && (
+                <div style={{ background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: 10, padding: '8px 12px', marginBottom: 8, fontSize: 12, color: '#3730a3', lineHeight: 1.5 }}>
+                  ✉ <strong>Este atendimento chegou por e-mail.</strong> Sua resposta vai por e-mail para <strong>{chamadoAtivo.user_email}</strong> — ele não enxerga esta tela. Anexos daqui <strong>não</strong> seguem no e-mail.
+                </div>
+              )}
               <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
                 <button onClick={() => fileRef.current?.click()} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: 8, borderRadius: 8 }}>
                   <Paperclip size={16} />
@@ -413,7 +430,7 @@ export default function Atendimento() {
                 <textarea
                   value={texto} onChange={e => setTexto(e.target.value)} onPaste={handlePaste}
                   onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviarMensagem(); } }}
-                  placeholder="Responder ao cliente… (Ctrl+V para colar print · Enter para enviar)"
+                  placeholder={chamadoAtivo.canal === 'email' ? 'Responder por e-mail… (Enter para enviar)' : 'Responder ao cliente… (Ctrl+V para colar print · Enter para enviar)'}
                   rows={2}
                   style={{ flex: 1, padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 13, resize: 'none', outline: 'none', fontFamily: 'inherit', lineHeight: 1.4 }}
                 />
