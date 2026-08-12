@@ -21,7 +21,9 @@ O dono sentou no computador e fechamos, item a item:
 | **1 Asaas** | ✅ **Ativado / 0 penalizados**. A trava era a **"Fila de sincronização"** — segundo interruptor, separado do "webhook ativo" |
 | **2 Upstash Redis** | ✅ `bidpro-ratelimit` criado + REST URL/TOKEN na Vercel + redeploy |
 
-**Ainda abertos:** **-1 Google Ads** (verificação até **31/08**, anúncios pausam se não fizer) ·
+**Ainda abertos:** **-1.5 MX do domínio** (o `suporte@` e o `privacidade@` são publicados no site
+e não recebem nada — o código do inbound já está pronto, falta só o MX) ·
+**-1 Google Ads** (verificação até **02/09**, anúncios pausam se não fizer) ·
 **0 Teste da compra avulsa** (a visualização do eBook já foi validada; falta o fluxo de
 pagamento — dá para usar a conta `teste@teste.com.br`) · **3 PECINI**.
 
@@ -241,7 +243,34 @@ vazio ou com valor sul-americano — reveja o passo 3.
   esperando este item: Actions → **"Nudge de ativação — backlog (manual)"** (comece com `limite=2`).
   Ordem certa: **(1) este item → (2) o workflow**. Ele não roda sozinho.
 
-### -1. 🔴 VERIFICAÇÃO DO ANUNCIANTE Google Ads (prazo: 31/08/2026 — anúncios PAUSAM se não fizer)
+### -1.5 🔴 MX do `bidprobrasil.com.br` → inbound do Resend (o `suporte@` não recebe nada)
+
+- **Por quê, e não é "faltava uma feature":** a home publica `suporte@bidprobrasil.com.br`, os
+  Termos e a Política publicam `privacidade@bidprobrasil.com.br`, e o e-mail que a equipe manda
+  ao cliente termina com **"é só responder este e-mail"**, com `reply-to` para o `suporte@`.
+  **Nenhum desses endereços recebe.** Até 12/08 o único inbound descartava, com HTTP 200 e sem
+  log, tudo que não fosse devolutiva de advogado. Cliente que respondia falava com o vazio —
+  inclusive pedido de titular de dados no `privacidade@`, que a LGPD (Art. 18) obriga a atender.
+- **O código já está pronto e em produção** (12/08): e-mail vira **chamado** na tela de
+  Atendimento, com badge "✉ por e-mail", a resposta sai por e-mail com `reply-to` tokenizado
+  (`suporte+<token>@`) para o cliente continuar na mesma conversa, e dedup por Message-ID.
+  Testado no banco. **Só falta o MX** — sem ele, nada chega.
+- **O que fazer:** no painel de DNS do domínio, apontar o **MX** para o inbound do Resend
+  (Resend → *Domains* → `bidprobrasil.com.br` → *Receiving/Inbound*), e confirmar que o webhook
+  `email.received` aponta para `/api/inbound-juridico` com o segredo em `INBOUND_WEBHOOK_SECRET`.
+  ⚠️ Mexer no MX afeta o recebimento do domínio inteiro — se hoje há caixa de e-mail nesse
+  domínio em outro provedor, decidir antes quem fica com o MX.
+- **Como saber que funcionou:** mande uma mensagem de fora para `suporte@bidprobrasil.com.br` e
+  ela tem que aparecer em **Atendimento** como chamado novo, marcado "por e-mail".
+- **Efeito colateral bom:** com o MX no ar, dá para usar `suporte@bidprobrasil.com.br` como
+  e-mail de contato na G2RS/Google, que é o que aquelas regras pedem (domínio do e-mail = domínio
+  do site). Hoje, sem isso, o contato precisa ser o `@reimob.com.br`.
+
+### -1. 🔴 VERIFICAÇÃO DO ANUNCIANTE Google Ads (prazo: **02/09/2026** — anúncios PAUSAM se não fizer)
+
+> ⏰ **Correção da data (12/08):** o prazo **não é 31/08**. O e-mail do Google de 03/08
+> (`ads-account-noreply`) já traz **02 de setembro de 2026**. O de 01/08 dizia 31/08; foi
+> reemitido. Vale a data mais recente.
 - **Por quê:** e-mail oficial do Google (01/08) — a conta **475-979-5747** exige a "verificação
   do anunciante" (identidade do responsável/empresa; exigência padrão do Google, não é golpe).
   Sem concluir até **31/08**, a campanha "Pesquisa — Leilão de Imóveis (BR)" é pausada. O
