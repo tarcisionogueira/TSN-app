@@ -100,9 +100,18 @@ async function processarFonte(fonte, municipios) {
 
   // Pede só as variáveis que interessam quando conseguimos identificá-las nos metadados:
   // resposta menor, mesma informação. Se os metadados falharem, pede todas (degradação suave).
+  //
+  // ARMADILHA MEDIDA EM 12/08: este filtro é o ponto onde a ingestão emagrece em silêncio. O
+  // mapa de `censo_populacao` aponta 4 colunas (populacao, area_km2, densidade, crescimento) e
+  // só `populacao` chegou; o de `censo_domicilios` aponta 4 e só `domicilios_ocupados` chegou.
+  // As duas execuções gravaram `ok=true`, 5.570 linhas e `rotulos_ignorados: []` — porque o que
+  // não é PEDIDO nunca chega para ser ignorado. Guardamos os nomes vistos para que a próxima
+  // pessoa não precise adivinhar contra qual string o regex deveria casar.
   let variaveis = 'all';
+  let nomesMeta = [];
   try {
     const meta = await jsonIBGE(`${IBGE}/api/v3/agregados/${fonte.agregado}/metadados`, 20000);
+    nomesMeta = (meta?.variaveis || []).map((v) => String(v?.nome || ''));
     const ids = (meta?.variaveis || []).filter((v) => colunaPara(String(v?.nome || ''), fonte.mapa)).map((v) => v.id);
     if (ids.length) variaveis = ids.join('|');
   } catch { /* segue com 'all' */ }
@@ -170,7 +179,22 @@ async function processarFonte(fonte, municipios) {
     if (!r.ok) throw new Error(`socio_upsert ${r.status}: ${(await r.text().catch(() => '')).slice(0, 200)}`);
     gravadas += Number(await r.json().catch(() => 0)) || 0;
   }
-  return { gravadas, municipios: porMunicipio.size, ms: Date.now() - t0, rotulos_ignorados: [...semColuna].slice(0, 10) };
+  // COLUNA PEDIDA QUE NÃO CHEGOU. Sem esta conferência a ingestão declara sucesso completo
+  // tendo trazido 1 de 4 colunas — foi o que aconteceu com os dois censos, e o efeito só
+  // apareceu semanas depois, quando `cidade_socio.area_km2` (vazia) inviabilizou medir
+  // território mapeado. "5.570 linhas gravadas" parece perfeito e não é.
+  const esperadas = [...new Set(Object.values(fonte.mapa || {}))];
+  const recebidas = [...new Set(linhas.flatMap((l) => Object.keys(l)))];
+  const faltando = esperadas.filter((c) => !recebidas.includes(c));
+
+  return {
+    gravadas, municipios: porMunicipio.size, ms: Date.now() - t0,
+    rotulos_ignorados: [...semColuna].slice(0, 10),
+    colunas_esperadas: esperadas,
+    colunas_faltando: faltando,
+    // Os nomes que o IBGE realmente expõe, para ajustar o regex do `mapa` sem tentativa e erro.
+    variaveis_do_agregado: nomesMeta.slice(0, 20),
+  };
 }
 
 async function registrar(fonte, ok, linhas, ms, erro, detalhe) {
@@ -231,8 +255,17 @@ export default async function handler(req, res) {
     const t0 = Date.now();
     try {
       const r = await processarFonte(f, municipios);
-      await registrar(f.chave, true, r.gravadas, r.ms, null, { municipios: r.municipios, rotulos_ignorados: r.rotulos_ignorados });
-      resultado.push({ fonte: f.chave, ok: true, linhas: r.gravadas, ms: r.ms });
+      // Coluna pedida que não veio = ingestão PARCIAL, e parcial não é `ok`. Registrar como
+      // sucesso aqui foi o que manteve `area_km2` e `domicilios` vazios por 8 dias com o
+      // painel de fontes todo verde.
+      const parcial = (r.colunas_faltando || []).length > 0;
+      await registrar(f.chave, !parcial, r.gravadas, r.ms,
+        parcial ? `ingestão PARCIAL: colunas sem dado — ${r.colunas_faltando.join(', ')}` : null,
+        { municipios: r.municipios, rotulos_ignorados: r.rotulos_ignorados,
+          colunas_esperadas: r.colunas_esperadas, colunas_faltando: r.colunas_faltando,
+          variaveis_do_agregado: r.variaveis_do_agregado });
+      resultado.push({ fonte: f.chave, ok: !parcial, linhas: r.gravadas, ms: r.ms,
+        colunas_faltando: r.colunas_faltando, variaveis_do_agregado: r.variaveis_do_agregado });
     } catch (e) {
       // Uma fonte quebrada NUNCA derruba as outras nem apaga o que já está gravado —
       // o socio_upsert só sobrescreve coluna com valor novo (coalesce).

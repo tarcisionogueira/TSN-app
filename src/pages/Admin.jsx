@@ -5340,13 +5340,23 @@ function DashboardTab({ irParaTab }) {
         const pAnual = Number(cfg?.precoMensalAnual) > 0 ? Number(cfg.precoMensalAnual) : pMensal;
         return (Number(b.mensais) || 0) * pMensal + (Number(b.anuais) || 0) * pAnual;
       };
-      const mrr = mrrPlano('top2', 49.90) + mrrPlano('assessorado', 500) + mrrPlano('clube', 5000);
+      // ASSINATURA e CONTRATO separados. Somados, davam um "MRR" em que 71% era amortização de
+      // pacote de prazo fixo (Assessoria R$6.000/12) — receita que não se repete sozinha e que
+      // some inteira quando o contrato acaba. Chamar isso de recorrente prometia uma
+      // previsibilidade que o número não tem.
+      const mrrAssinatura = mrrPlano('top2', 49.90);
+      const contratoMensalizado = mrrPlano('assessorado', 500) + mrrPlano('clube', 5000);
+      const mrr = mrrAssinatura + contratoMensalizado; // mantido p/ os marcos e o rateio abaixo
       const taxaPix = mrr * 0.01;
+      const receita = m?.receita || {};
 
       setDados({
         contagem,
         total: m?.total || 0, // total REAL de perfis (inclui anuais/leiloeiro/pacote/outros)
         mrr,
+        mrrAssinatura,
+        contratoMensalizado,
+        receita,
         taxaPix,
         liquido: mrr - taxaPix,
         inadimplentes: m?.inadimplentes || 0,
@@ -5655,7 +5665,20 @@ function DashboardTab({ irParaTab }) {
       {/* Stat cards */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
         {statCard('Total usuários', fmtN(dados.total), `+${dados.novosMes} ${periodo === 'hoje' ? 'hoje' : periodo === '7d' ? 'nos últimos 7 dias' : periodo === 'custom' ? 'no período' : 'este mês'}`, '#60a5fa')}
-        {statCard('MRR estimado', `R$ ${fmt(dados.mrr)}`, 'Estimado por plano (receita real: Financeiro)', '#10b981')}
+        {/* RECEBIDO é caixa: entrou de verdade, no período selecionado. Era o número que
+            faltava — o card antigo mostrava só a projeção por plano (R$ 699,60) enquanto
+            entravam R$ 4.615 no mês, porque 95% vem de avulso, que a projeção não vê. */}
+        {statCard('Recebido no período',
+          `R$ ${fmt(dados.receita?.recebido || 0)}`,
+          `${fmtN(dados.receita?.pagamentos || 0)} pagto(s) · recorrente R$ ${fmt(dados.receita?.recorrente || 0)} · avulso R$ ${fmt(dados.receita?.avulso || 0)} · só Mercado Pago`,
+          '#10b981')}
+        {/* Assinatura SEM o pacote de prazo fixo dentro: é o que se repete sozinho. */}
+        {statCard('Assinaturas (MRR)',
+          `R$ ${fmt(dados.mrrAssinatura || 0)}`,
+          (dados.contratoMensalizado || 0) > 0
+            ? `projeção mensal · + R$ ${fmt(dados.contratoMensalizado)}/mês de contrato de prazo fixo`
+            : 'projeção mensal das assinaturas ativas',
+          '#34d399')}
         {statCard('Inadimplentes', fmtN(dados.inadimplentes || 0), dados.inadimplentes ? 'assinaturas com pagamento em falha' : 'nenhum em atraso', dados.inadimplentes ? '#f59e0b' : '#94a3b8')}
         {statCard('Reembolsos pendentes', fmtN(dados.reembolsosPendentes || 0), dados.reembolsosPendentes ? 'garantia 7 dias — ação em Financeiro › Saques' : 'nenhum pendente', dados.reembolsosPendentes ? '#dc2626' : '#94a3b8')}
       </div>
