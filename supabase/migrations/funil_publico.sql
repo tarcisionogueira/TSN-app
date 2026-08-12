@@ -36,6 +36,14 @@ begin
         select distinct anon_id from public.eventos_atividade
          where user_id is null and anon_id is not null and criado_em > corte
       ),
+      virou as (   -- ponte pré-login: o mesmo navegador aparece depois COM user_id
+        select distinct anon_id from public.eventos_atividade
+         where user_id is not null and anon_id is not null and criado_em > corte
+      ),
+      com_erro as (
+        select distinct anon_id from public.eventos_atividade
+         where user_id is null and tipo='api_erro' and criado_em > corte
+      ),
       passo as (
         select
           (select count(*) from anon) as visitantes,
@@ -47,11 +55,14 @@ begin
             where user_id is null and criado_em > corte and rota = '/login') as foi_ao_cadastro,
           (select count(distinct anon_id) from public.eventos_atividade
             where user_id is null and criado_em > corte and tipo = 'submit' and rota = '/login') as tentou,
-          (select count(distinct anon_id) from public.eventos_atividade
-            where user_id is null and criado_em > corte and tipo = 'api_erro') as tomou_erro,
-          -- ponte pré-login: o mesmo navegador aparece depois COM user_id
-          (select count(distinct anon_id) from public.eventos_atividade
-            where user_id is not null and anon_id is not null and criado_em > corte) as virou_conta
+          (select count(*) from virou) as virou_conta,
+          (select count(*) from com_erro) as tomou_erro,
+          -- O NÚMERO QUE IMPORTA: tomou erro E nunca virou conta. Sem ele, `tomou_erro` é lido
+          -- como perda — e não é. Medido em 12/08: 10 erraram em 30 dias e 8 entraram assim
+          -- mesmo (a maioria por "Email not confirmed", que é a pessoa tentando logar antes de
+          -- clicar no link do e-mail: transitório). Perda real = 2.
+          (select count(*) from com_erro c
+            where not exists (select 1 from virou v where v.anon_id = c.anon_id)) as desistiu_apos_erro
       )
       select to_jsonb(passo) from passo),
     'origens', coalesce((
@@ -70,12 +81,21 @@ begin
          where user_id is null and tipo = 'pageview' and criado_em > corte
          group by 1 order by 2 desc limit 10) x), '[]'::jsonb),
     'barreiras', coalesce((
-      select jsonb_agg(x) from (
-        select alvo, left(coalesce(detalhe,''), 120) as motivo,
-               count(*) as vezes, count(distinct anon_id) as pessoas
-          from public.eventos_atividade
-         where user_id is null and tipo = 'api_erro' and criado_em > corte
-         group by 1, 2 order by 4 desc, 3 desc limit 10) x), '[]'::jsonb),
+      select jsonb_agg(to_jsonb(g) order by g.perdeu desc, g.pessoas desc)
+        from (
+          select case when e.alvo = 'cadastro_falha' then 'Criar conta'
+                      when e.alvo = 'login_falha'    then 'Entrar'
+                      else 'Uso do site' end                          as etapa,
+                 left(coalesce(e.detalhe,''), 120)                    as motivo,
+                 count(*)                                             as vezes,
+                 count(distinct e.anon_id)                            as pessoas,
+                 -- PERDA REAL desta barreira: das que a tomaram, quantas nunca viraram conta.
+                 count(distinct e.anon_id) filter (
+                    where not exists (select 1 from public.eventos_atividade v
+                                       where v.anon_id = e.anon_id and v.user_id is not null)) as perdeu
+            from public.eventos_atividade e
+           where e.user_id is null and e.tipo = 'api_erro' and e.criado_em > corte
+           group by 1, 2) g), '[]'::jsonb),
     'gerado_em', now());
 end;
 $$;

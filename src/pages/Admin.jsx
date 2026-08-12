@@ -5132,12 +5132,23 @@ function PainelFunilPublico() {
 
           {(f.barreiras || []).length > 0 && (
             <div style={{ marginTop: 16 }}>
-              <div style={{ fontSize: 12.5, fontWeight: 800, color: '#b45309', marginBottom: 6 }}>Onde eles travaram</div>
+              <div style={{ fontSize: 12.5, fontWeight: 800, color: '#b45309' }}>Onde eles travaram</div>
+              {/* SEM esta frase, "6 pessoas travaram" é lido como 6 perdidos — e não é. A maioria
+                  volta e entra ("Email not confirmed" é a pessoa tentando logar antes de clicar
+                  no link do e-mail). Quem manda é a coluna PERDEU. */}
+              <div style={{ fontSize: 11.5, color: '#92400e', marginBottom: 7, lineHeight: 1.5 }}>
+                Travar não é perder: <strong>{Number(d.desistiu_apos_erro || 0)}</strong> de{' '}
+                <strong>{Number(d.tomou_erro || 0)}</strong> que erraram <strong>não voltaram</strong>. O resto entrou depois.
+              </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
                 {f.barreiras.map((b, i) => (
-                  <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'baseline', fontSize: 12, background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '6px 10px' }}>
-                    <span style={{ fontWeight: 800, color: '#92400e', flexShrink: 0 }}>{b.pessoas} {b.pessoas === 1 ? 'pessoa' : 'pessoas'}</span>
-                    <span style={{ color: '#78350f', overflow: 'hidden', textOverflow: 'ellipsis' }}>{b.motivo || b.alvo}</span>
+                  <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'baseline', fontSize: 12,
+                    background: b.perdeu > 0 ? '#fef2f2' : '#fffbeb', border: `1px solid ${b.perdeu > 0 ? '#fecaca' : '#fde68a'}`, borderRadius: 8, padding: '6px 10px' }}>
+                    <span style={{ fontSize: 10, fontWeight: 800, padding: '1px 6px', borderRadius: 6, background: 'white', border: '1px solid #e2e8f0', color: '#475569', flexShrink: 0 }}>{b.etapa}</span>
+                    <span style={{ fontWeight: 800, color: b.perdeu > 0 ? '#b91c1c' : '#92400e', flexShrink: 0 }}>
+                      {b.pessoas} {b.pessoas === 1 ? 'pessoa' : 'pessoas'}{b.perdeu > 0 ? ` · ${b.perdeu} não voltou` : ''}
+                    </span>
+                    <span style={{ color: '#78350f', overflow: 'hidden', textOverflow: 'ellipsis' }}>{b.motivo || b.etapa}</span>
                   </div>
                 ))}
               </div>
