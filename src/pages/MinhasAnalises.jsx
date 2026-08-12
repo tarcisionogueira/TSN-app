@@ -5,6 +5,7 @@ import { useAnalises } from '../contexts/AnalisesContext';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
 import { apiCall } from '../utils/apiCall';
+import { reportarErroCliente } from '../utils/reportarErro';
 import { useIsMobile } from '../utils/useIsMobile';
 import FotoImovel from '../components/FotoImovel';
 
@@ -55,22 +56,74 @@ export default function MinhasAnalises() {
       .then(({ data }) => setArrematadosSet(new Set((data || []).map(r => String(r.imovel_id)).filter(Boolean))));
   }, [effectiveUserId]);
 
+  // FONTE DA LISTA = RPC `minhas_analises_lista` (uma linha por imóvel, montada no servidor).
+  //
+  // Por que NÃO vem mais do contexto: ele lê as três tabelas com `.limit(12)` CADA UMA, e os
+  // cortes caem em datas diferentes. Um imóvel com documental recente e mercadológico antigo
+  // aparecia aqui com o chip "Jurídico: risco médio" e nenhum chip de mercado — o relatório
+  // estava no banco o tempo todo. Também trocava o TÍTULO do card (a documental grava o
+  // endereço da matrícula, a mercadológica grava o título do lote) e perdia a `data_leilao`,
+  // que costuma vir nula na documental — sumindo o aviso "Leilão em … arrematou?".
+  // O contexto continua valendo para o que está GERANDO agora (ver o overlay abaixo).
+  const [lista, setLista] = React.useState(null); // null = ainda carregando
+  const [erroLista, setErroLista] = React.useState(null);
+  const carregarLista = React.useCallback(async () => {
+    if (!effectiveUserId) return;
+    const { data, error } = await supabase.rpc('minhas_analises_lista', { p_user_id: effectiveUserId });
+    if (error) {
+      // Lista vazia por falha de leitura é indistinguível de "você não tem análises" — e essa
+      // confusão é exatamente o que faz o cliente achar que os relatórios sumiram. Diz o que houve.
+      setErroLista(error.message || 'Não foi possível carregar suas análises.');
+      reportarErroCliente({ msg: `minhas_analises_lista: ${error.message || 'erro'}` });
+      return;
+    }
+    setErroLista(null);
+    setLista(Array.isArray(data) ? data : []);
+  }, [effectiveUserId]);
+  React.useEffect(() => { carregarLista(); }, [carregarLista]);
+
+  const ts = (v) => (typeof v === 'number' ? v : (Date.parse(v || 0) || 0));
+  // Do `result` completo (que o contexto tem em memória) para as mesmas flags leves que a RPC
+  // devolve — assim o card desenha igual venha de onde vier.
+  const flagsDe = (tipo, result) => {
+    const r = result || null;
+    if (tipo === 'documental') return { precisaDocumentos: !!r?.precisaDocumentos, emCaptura: !!r?.emCaptura, nivelRisco: r?.nivelRisco || null };
+    if (tipo === 'laudo') return { precisaRelatorios: !!r?.precisaRelatorios, veredito: r?.veredito || null };
+    return { temResultado: !!r };
+  };
+
   const itens = React.useMemo(() => {
     const by = {};
-    const push = (a, tipo) => {
+    (lista || []).forEach(r => {
+      if (!r?.imovelId) return;
+      by[r.imovelId] = { ...r, reports: { ...(r.relatorios || {}) } };
+    });
+    // OVERLAY do que está acontecendo AGORA: geração em curso (a linha do banco pode nem existir
+    // ainda) e erro recém-recebido. Só sobrepõe nesses casos — o estado persistido é a verdade.
+    const overlay = (arr, tipo) => (arr || []).forEach(a => {
       if (!a?.imovelId) return;
-      const it = by[a.imovelId] || (by[a.imovelId] = { imovelId: a.imovelId, titulo: a.titulo, cidade: a.cidade, estado: a.estado, imovel: a.imovel || null, dataLeilao: a.dataLeilao || null, updatedAt: 0, reports: {} });
-      if (!it.dataLeilao && a.dataLeilao) it.dataLeilao = a.dataLeilao;
-      it.reports[tipo] = { status: a.status, result: a.result || null, erro: a.erro || null };
-      it.updatedAt = Math.max(it.updatedAt, a.updatedAt || 0);
+      const it = by[a.imovelId] || (by[a.imovelId] = {
+        imovelId: a.imovelId, titulo: a.titulo, cidade: a.cidade, estado: a.estado,
+        imovel: a.imovel || null, dataLeilao: a.dataLeilao || null, updatedAt: a.updatedAt || 0, reports: {},
+      });
+      const persistido = it.reports[tipo];
+      // Só sobrepõe quando o contexto sabe de algo que o banco ainda não mostra: geração em
+      // curso, imóvel que nem linha tem, ou erro sobre algo que NÃO está concluído. Um 'erro'
+      // velho no cache local não pode apagar da tela um relatório concluído no banco.
+      const vale = a.status === 'gerando' || !persistido
+        || (a.status === 'erro' && persistido.status !== 'concluida');
+      if (vale) {
+        it.reports[tipo] = { status: a.status, flags: flagsDe(tipo, a.result) };
+        it.updatedAt = Math.max(ts(it.updatedAt), ts(a.updatedAt));
+      }
       if (!it.titulo && a.titulo) it.titulo = a.titulo;
       if (!it.imovel && a.imovel) it.imovel = a.imovel;
-    };
-    (analises || []).forEach(a => push(a, 'mercado'));
-    (documentais || []).forEach(a => push(a, 'documental'));
-    (laudos || []).forEach(a => push(a, 'laudo'));
-    return Object.values(by).sort((x, y) => (y.updatedAt || 0) - (x.updatedAt || 0));
-  }, [analises, documentais, laudos]);
+    });
+    overlay(analises, 'mercado');
+    overlay(documentais, 'documental');
+    overlay(laudos, 'laudo');
+    return Object.values(by).sort((x, y) => ts(y.updatedAt) - ts(x.updatedAt));
+  }, [lista, analises, documentais, laudos]);
 
   const abrir = (a) => nav('/analise', { state: { imovel: a.imovel || { id: a.imovelId, titulo: a.titulo, cidade: a.cidade, estado: a.estado } } });
 
@@ -105,13 +158,19 @@ export default function MinhasAnalises() {
   const statusGeral = (it) => {
     const rs = Object.values(it.reports);
     const anyGer = rs.some(r => r.status === 'gerando');
-    const docRes = it.reports.documental?.status === 'concluida' ? it.reports.documental.result : null;
+    const docFlags = it.reports.documental?.status === 'concluida' ? (it.reports.documental.flags || {}) : null;
     if (anyGer) return { Icon: Loader2, cor: '#0d9488', txt: 'Gerando…', spin: true };
-    if (docRes?.precisaDocumentos) {
-      const capturandoAgora = docRes.emCaptura && it.updatedAt && (Date.now() - it.updatedAt) < CAPTURA_MAX_MS;
+    if (docFlags?.precisaDocumentos) {
+      const capturandoAgora = docFlags.emCaptura && it.updatedAt && (Date.now() - ts(it.updatedAt)) < CAPTURA_MAX_MS;
       return capturandoAgora
         ? { Icon: Loader2, cor: '#b45309', txt: 'Preparando documentos…', spin: true }
         : { Icon: FileWarning, cor: '#b45309', txt: 'Faltam documentos — anexe', spin: false };
+    }
+    // DOCUMENTAL SEM MERCADOLÓGICO. O servidor já exige a ordem (gate em gerar-documental), mas
+    // sobraram análises anteriores a essa regra — e o card delas mostrava só o chip jurídico,
+    // com cara de análise completa. Dizer o que falta é melhor do que a lacuna muda.
+    if (it.reports.documental?.status === 'concluida' && !it.reports.mercado) {
+      return { Icon: FileWarning, cor: '#b45309', txt: 'Mercadológico pendente — gere primeiro', spin: false };
     }
     const anyOk = rs.some(r => r.status === 'concluida');
     const anyErr = rs.some(r => r.status === 'erro');
@@ -126,8 +185,8 @@ export default function MinhasAnalises() {
     const r = it.reports || {};
     const ok = (x) => x?.status === 'concluida';
     return ok(r.mercado)
-      && ok(r.documental) && !r.documental?.result?.precisaDocumentos
-      && ok(r.laudo) && !r.laudo?.result?.precisaRelatorios;
+      && ok(r.documental) && !r.documental?.flags?.precisaDocumentos
+      && ok(r.laudo) && !r.laudo?.flags?.precisaRelatorios;
   };
 
   // JANELA PARA REGISTRAR O ARREMATE (regra do dono, 07/08). Desde hoje o lote com data vencida
@@ -150,12 +209,12 @@ export default function MinhasAnalises() {
       const v = it.imovel?.analise_viavel;
       out.push(v === true ? { t: 'Mercado: viável', ...CHIP.verde } : v === false ? { t: 'Mercado: reprovado', ...CHIP.vermelho } : { t: 'Mercado ✓', ...CHIP.neutro });
     }
-    if (rs.documental?.status === 'concluida' && !rs.documental.result?.precisaDocumentos) {
-      const nr = rs.documental.result?.nivelRisco;
+    if (rs.documental?.status === 'concluida' && !rs.documental.flags?.precisaDocumentos) {
+      const nr = rs.documental.flags?.nivelRisco;
       out.push(nr === 'verde' ? { t: 'Jurídico: risco baixo', ...CHIP.verde } : nr === 'vermelho' ? { t: 'Jurídico: risco alto', ...CHIP.vermelho } : { t: 'Jurídico: risco médio', ...CHIP.ambar });
     }
-    if (rs.laudo?.status === 'concluida' && rs.laudo.result?.veredito) {
-      const v = rs.laudo.result.veredito;
+    if (rs.laudo?.status === 'concluida' && rs.laudo.flags?.veredito) {
+      const v = rs.laudo.flags.veredito;
       out.push(v === 'aprovado' ? { t: 'Laudo: aprovado', ...CHIP.verde } : v === 'reprovado' ? { t: 'Laudo: reprovado', ...CHIP.vermelho } : { t: 'Laudo: com ressalvas', ...CHIP.ambar });
     }
     return out;
@@ -189,7 +248,23 @@ export default function MinhasAnalises() {
         {acao('Meus arrematados', Home, '#059669', () => nav('/arrematados'))}
       </div>
 
-      {itens.length === 0 ? (
+      {erroLista ? (
+        <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 16, padding: '20px 22px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 800, color: '#b91c1c' }}>
+            <XCircle size={17} /> Não foi possível carregar suas análises
+          </div>
+          <div style={{ fontSize: 13, color: '#7f1d1d', marginTop: 6, lineHeight: 1.5 }}>
+            Nenhuma análise foi apagada — é a leitura que falhou. Detalhe técnico: {erroLista}
+          </div>
+          <button onClick={carregarLista} style={{ marginTop: 12, padding: '9px 16px', background: '#b91c1c', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+            Tentar de novo
+          </button>
+        </div>
+      ) : lista === null && itens.length === 0 ? (
+        <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 16, padding: '40px 24px', textAlign: 'center', color: '#64748b', fontSize: 13.5, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9 }}>
+          <Loader2 size={17} style={{ animation: 'spin 1s linear infinite' }} /> Carregando suas análises…
+        </div>
+      ) : itens.length === 0 ? (
         <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 16, padding: '48px 24px', textAlign: 'center' }}>
           <BarChart3 size={40} color="#cbd5e1" />
           <div style={{ fontSize: 15, fontWeight: 800, color: '#334155', margin: '14px 0 6px' }}>Você ainda não tem análises</div>
@@ -259,7 +334,7 @@ export default function MinhasAnalises() {
                   <Trophy size={13} /> {sinalizando === a.imovelId ? 'Enviando…' : 'Arrematei'}
                 </button>
                 )}
-                <button onClick={(e) => { e.stopPropagation(); if (window.confirm('Remover esta análise? Os relatórios mercadológico, documental e laudo deste imóvel serão apagados e não há como desfazer.')) remover(a.imovelId); }} title="Remover" style={{ background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer', fontSize: 20, lineHeight: 1, padding: 4, flexShrink: 0 }}>×</button>
+                <button onClick={(e) => { e.stopPropagation(); if (window.confirm('Remover esta análise? Os relatórios mercadológico, documental e laudo deste imóvel serão apagados e não há como desfazer.')) { setLista(prev => (prev || []).filter(r => r.imovelId !== a.imovelId)); Promise.resolve(remover(a.imovelId)).then(carregarLista); } }} title="Remover" style={{ background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer', fontSize: 20, lineHeight: 1, padding: 4, flexShrink: 0 }}>×</button>
               </div>
             );
           })}

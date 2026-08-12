@@ -3,8 +3,13 @@
  * Apaga as análises geradas (analises_mercado) que NÃO foram arrematadas após o
  * leilão. Se arrematado, NUNCA apaga (vira operação real / portfólio).
  *
- *  - data_leilao conhecida  → apaga 15 dias após o leilão sem arrematar.
- *  - sem data_leilao (lote manual etc.) → fallback de 60 dias após a criação.
+ *  - praça conhecida  → apaga 15 dias após a ÚLTIMA praça, sem arrematar.
+ *  - sem praça em lugar nenhum (lote manual etc.) → fallback de 60 dias após a criação.
+ *
+ * A decisão é por (user_id, imovel_id) e apaga mercadológico + documental + laudo JUNTOS.
+ * Antes era por tabela, e como a `data_leilao` costuma vir preenchida na mercadológica e nula
+ * na documental, o mercadológico vencia sozinho: o cliente ficava com a análise pela metade,
+ * com cara de relatório que sumiu. Detalhes em `supabase/migrations/analises_retencao_por_imovel.sql`.
  */
 export const config = { runtime: 'nodejs', maxDuration: 60 };
 
@@ -56,8 +61,11 @@ export default async function handler(req, res) {
     apagados = rr.ok ? (await rr.json().catch(() => ({}))) : { erro: `rpc HTTP ${rr.status}` };
   } catch (e) { apagados = { erro: String(e.message).slice(0, 120) }; }
 
-  const total = ['analises_mercado', 'analises_documental']
-    .reduce((s, t) => s + ((apagados[t]?.por_leilao || 0) + (apagados[t]?.sem_data || 0)), 0);
+  // A RPC passou a decidir por IMÓVEL (12/08) e devolve {imoveis, mercado, documental, laudo}.
+  // O formato antigo era por tabela ({analises_mercado: {por_leilao, sem_data}, ...}) e some daqui
+  // junto com ele — somar chave que não existe mais daria `total: 0` com a limpeza funcionando,
+  // que é exatamente o tipo de zero que este repositório passou o dia inteiro caçando.
+  const total = (apagados?.mercado || 0) + (apagados?.documental || 0) + (apagados?.laudo || 0);
 
   // TTL do log de atividade (Cliente 360): apaga o que passou de apagar_em (90d por padrão)
   // — não deixa o histórico acumular lixo no banco.

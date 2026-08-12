@@ -69,12 +69,23 @@ export function AnalisesProvider({ children }) {
   useEffect(() => { try { localStorage.setItem(LS_KEY_DOC, JSON.stringify(documentais.slice(0, MAX))); } catch {} }, [documentais]);
   useEffect(() => { try { localStorage.setItem(LS_KEY_LAUDO, JSON.stringify(laudos.slice(0, MAX))); } catch {} }, [laudos]);
 
+  // Imóveis FIXADOS: os que alguma tela pediu explicitamente por id (ver garantirCarregado).
+  // Sem isto o corte em MAX descartaria, no mesmo instante, a análise antiga que acabamos de
+  // buscar — ela entra ordenada por updated_at e cai fora da fatia por ser velha.
+  const fixados = React.useRef(new Set());
+  const cortar = (todos) => {
+    const ordenados = todos.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    const dentro = ordenados.slice(0, MAX);
+    const extras = ordenados.slice(MAX).filter(a => fixados.current.has(String(a.imovelId)));
+    return extras.length ? dentro.concat(extras) : dentro;
+  };
+
   const mergeInto = useCallback((setter) => (rows) => {
     setter(prev => {
       const byId = {};
       for (const a of prev) byId[a.imovelId] = a;
       for (const r of rows) { const e = rowToEntry(r); byId[e.imovelId] = { ...byId[e.imovelId], ...e }; }
-      return Object.values(byId).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)).slice(0, MAX);
+      return cortar(Object.values(byId));
     });
   }, []);
   const mergeRows = useCallback((rows) => mergeInto(setAnalises)(rows), [mergeInto]);
@@ -95,6 +106,30 @@ export function AnalisesProvider({ children }) {
 
   // Ao logar (ou trocar o usuário efetivo no suporte), carrega do banco.
   useEffect(() => { setAnalises([]); setDocumentais([]); setLaudos([]); if (uid) recarregar(); }, [uid, recarregar]);
+
+  // GARANTE que os relatórios DESTE imóvel estejam em memória, mesmo que ele esteja fora dos
+  // MAX mais recentes. Por que existe (12/08): `recarregar` traz 12 linhas de CADA tabela; a
+  // tela de detalhe lia só isso, então abrir uma análise antiga mostrava "não gerado" para um
+  // relatório que estava no banco — e um clique em Gerar reprocessava a IA à toa. O `limit(12)`
+  // é tamanho de cache do menu do topo; nunca foi para ser a janela de dados do app.
+  const garantirCarregado = useCallback(async (imovelId) => {
+    const id = imovelId ? String(imovelId) : '';
+    if (!uid || !id) return true;
+    fixados.current.add(id);
+    const porImovel = (tabela) => supabase.from(tabela).select('*').eq('user_id', uid).eq('imovel_id', id).limit(1);
+    const [m, d, l] = await Promise.all([porImovel('analises_mercado'), porImovel('analises_documental'), porImovel('analises_laudo')]);
+    // `{ data, error }` do postgrest-js NÃO lança em não-2xx: sem checar `error`, uma falha de
+    // leitura viraria "este imóvel não tem relatório" — que é o defeito que esta função conserta.
+    const falha = m.error || d.error || l.error;
+    if (falha) {
+      registrarEvento('api_erro', { alvo: 'analises_por_imovel', detalhe: `imovel=${id}: ${falha.message || 'erro'}` });
+      return false;
+    }
+    if (m.data?.length) mergeRows(m.data);
+    if (d.data?.length) mergeDocRows(d.data);
+    if (l.data?.length) mergeLaudoRows(l.data);
+    return true;
+  }, [uid, mergeRows, mergeDocRows, mergeLaudoRows]);
 
   // VARREDURA anti-fantasma: um 'gerando' pode existir SÓ no cache local (sem linha no banco
   // p/ o merge corrigir) quando a aba fecha no meio, o servidor bloqueia no gate (cota/crédito)
@@ -137,7 +172,7 @@ export function AnalisesProvider({ children }) {
     setter(prev => {
       const old = prev.find(a => a.imovelId === entry.imovelId) || {};
       const rest = prev.filter(a => a.imovelId !== entry.imovelId);
-      return [{ ...old, ...entry, updatedAt: Date.now() }, ...rest].slice(0, MAX);
+      return cortar([{ ...old, ...entry, updatedAt: Date.now() }, ...rest]);
     });
   }, []);
   const upsert = useCallback((e) => upsertInto(setAnalises)(e), [upsertInto]);
@@ -217,12 +252,12 @@ export function AnalisesProvider({ children }) {
   const emAndamento = analises.filter(a => a.status === 'gerando').length + documentais.filter(a => a.status === 'gerando').length + laudos.filter(a => a.status === 'gerando').length;
 
   return (
-    <AnalisesContext.Provider value={{ analises, documentais, laudos, iniciar, iniciarDocumental, iniciarLaudo, getAnalise, getDocumental, getLaudo, remover, emAndamento, recarregar }}>
+    <AnalisesContext.Provider value={{ analises, documentais, laudos, iniciar, iniciarDocumental, iniciarLaudo, getAnalise, getDocumental, getLaudo, remover, emAndamento, recarregar, garantirCarregado }}>
       {children}
     </AnalisesContext.Provider>
   );
 }
 
 export function useAnalises() {
-  return useContext(AnalisesContext) || { analises: [], documentais: [], laudos: [], iniciar: () => {}, iniciarDocumental: () => {}, iniciarLaudo: () => {}, getAnalise: () => null, getDocumental: () => null, getLaudo: () => null, remover: () => {}, emAndamento: 0, recarregar: () => {} };
+  return useContext(AnalisesContext) || { analises: [], documentais: [], laudos: [], iniciar: () => {}, iniciarDocumental: () => {}, iniciarLaudo: () => {}, getAnalise: () => null, getDocumental: () => null, getLaudo: () => null, remover: () => {}, emAndamento: 0, recarregar: () => {}, garantirCarregado: async () => true };
 }

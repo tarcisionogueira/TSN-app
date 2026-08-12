@@ -324,8 +324,18 @@ export default function Analise() {
   // Análise mercadológica roda em SEGUNDO PLANO no AnalisesContext: o usuário pode
   // sair desta tela e navegar/buscar imóveis enquanto gera. "Gerando" deriva do
   // contexto; o resultado é aplicado de volta quando concluído (efeito abaixo).
-  const { iniciar: iniciarAnalise, getAnalise, iniciarDocumental, getDocumental, iniciarLaudo, getLaudo } = useAnalises();
+  const { iniciar: iniciarAnalise, getAnalise, iniciarDocumental, getDocumental, iniciarLaudo, getLaudo, garantirCarregado } = useAnalises();
   const analiseImovelId = imovelInicial?.id || d.id;
+  // Puxa os relatórios DESTE imóvel mesmo que ele esteja fora da janela de recentes do contexto.
+  // Sem isto, abrir uma análise antiga mostrava os três cards como "não gerado" — e gerar de
+  // novo reprocessava a IA de um relatório que já existia.
+  const [falhouCarregar, setFalhouCarregar] = useState(false);
+  useEffect(() => {
+    let vivo = true;
+    if (!analiseImovelId) return undefined;
+    Promise.resolve(garantirCarregado(analiseImovelId)).then(ok => { if (vivo) setFalhouCarregar(!ok); });
+    return () => { vivo = false; };
+  }, [analiseImovelId, garantirCarregado]);
   // "Arrematei este imóvel": o cliente sinaliza o arremate → mantém os documentos
   // (Retenção Etapa 2). Autoconsentido; só protege, nunca apaga.
   const [arrematadoSinalizado, setArrematadoSinalizado] = useState(false);
@@ -1643,6 +1653,14 @@ export default function Analise() {
             <div style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:16, padding: isMobile?'18px':'26px' }}>
               <div style={{ fontSize:16, fontWeight:900, color:'#111', marginBottom:4 }}>Gerar relatórios de análise</div>
               <div style={{ fontSize:13, color:'#64748b', marginBottom:18, lineHeight:1.6 }}>A IA usa automaticamente os dados e documentos deste imóvel. Gere cada relatório, eles vão para a barra lateral e abrem aqui. Com os dois prontos, libera a reunião com o analista.</div>
+              {/* Se a leitura dos relatórios deste imóvel FALHOU, os três cards abaixo aparecem
+                  como "não gerado" — e gerar de novo custaria IA sobre algo que talvez exista.
+                  Avisar é obrigatório: aqui, "não achei" e "não consegui ler" se parecem. */}
+              {falhouCarregar && (
+                <div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:12, padding:'12px 14px', marginBottom:16, fontSize:12.5, color:'#b91c1c', lineHeight:1.6 }}>
+                  <strong>Não foi possível verificar os relatórios já gerados deste imóvel.</strong> Recarregue a página antes de gerar de novo — se algum já existir, gerar outra vez só reprocessa o que você já tem.
+                </div>
+              )}
               {loteEncerrado.encerrado && (
                 <div style={{ background:'#fff7ed', border:'1px solid #fed7aa', borderRadius:12, padding:'12px 14px', marginBottom:16, fontSize:12.5, color:'#9a3412', lineHeight:1.6 }}>
                   <strong>Leilão encerrado{loteEncerrado.ultimaData ? ` em ${dataBR(loteEncerrado.ultimaData)}` : ''}.</strong> Como não é mais possível dar lance, novos relatórios não são gerados para este lote — e nenhuma cota é consumida. Relatórios já gerados continuam disponíveis para consulta.
