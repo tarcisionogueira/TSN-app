@@ -5074,6 +5074,7 @@ function PainelCoberturaRelatorios() {
   const fmtN = (v) => Number(v || 0).toLocaleString('pt-BR');
   if (!m) return <div style={{ ...S.card, color: '#94a3b8', fontSize: 13 }}>Carregando cobertura de relatórios…</div>;
   const cob = m.cobertura || {}, rel = m.relatorios || {}, bus = m.buscas || {}, idx = m.indice || {}, mat = m.indice_maturidade || {};
+  const br = m.brasil || {};
   const totalRel = (rel.mercado || 0) + (rel.documental || 0) + (rel.laudo || 0);
   // BUSCAS: o número que interessa neste painel é o do CLIENTE. Medido em 12/08, 54% das
   // 2.206 buscas eram da conta admin — ler o total como uso de produto dobrava o número.
@@ -5097,7 +5098,18 @@ function PainelCoberturaRelatorios() {
     // populações diferentes no mesmo card, e o 60 > 53 sugeria mais recortes com aluguel do
     // que cidades indexadas, quando só 12 das 53 cidades têm aluguel.
     ['Índice BidPro', `${fmtN(idx.cidades)} cidades`, `${fmtN(idx.com_aluguel)} c/ locação · +${fmtN(idx.sub_com_aluguel)} bairros/grids`, '#4f46e5'],
-    ['Cidades maduras (Índice)', fmtN(mat.maduras), `${fmtN(mat.em_progresso)} em progresso · libera desconto×índice`, (mat.maduras || 0) > 0 ? '#059669' : '#94a3b8'],
+    // O QUE ESTE NÚMERO É, para não virar outra métrica com nome maior do que ela: cidades com
+    // pelo menos 6 recortes (bairro/grid) já indexados. NÃO é "% do território mapeado" — para
+    // isso faltaria a área do município, e `cidade_socio.area_km2` está vazia (ver o card do
+    // Brasil). O rótulo "libera desconto×índice" saiu em 12/08: o dono confirmou que essa
+    // modelagem não existe, e métrica com promessa falsa colada é pior do que métrica nenhuma.
+    ['Cidades com Índice detalhado', fmtN(mat.maduras), `${fmtN(mat.em_progresso)} em progresso · ≥6 bairros/grids indexados`, (mat.maduras || 0) > 0 ? '#059669' : '#94a3b8'],
+    // BRASIL MAPEADO — o denominador é POPULAÇÃO e o card diz isso. Domicílio seria melhor
+    // (é o estoque de moradias), mas `cidade_socio.domicilios` está vazio nas 5.571 linhas.
+    // Um "%" mudo aqui seria pior: cada leitor imaginaria um denominador diferente.
+    ['Brasil mapeado (população)', `${Number(br.pct_pop_venda || 0).toLocaleString('pt-BR')}% venda`,
+      `${Number(br.pct_pop_aluguel || 0).toLocaleString('pt-BR')}% locação · ${fmtN(br.cidades_venda)} de ${fmtN(br.municipios_br)} municípios`,
+      '#be185d'],
   ];
   return (
     <div style={S.card}>
