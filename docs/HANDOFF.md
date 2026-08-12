@@ -542,6 +542,55 @@ falta de leitura.
 > em `rpc_definer_anon` minutos depois do deploy. `revoke ... from anon` **não basta** — o grant
 > padrão do Postgres é para `PUBLIC`, e anon herda dele. Vale para toda RPC nova.
 
+### 13. 📬 O Atendimento passa a receber e-mail — e dois defeitos vivos no caminho
+
+Saiu de uma pergunta do dono no meio da verificação da G2RS: *"tínhamos criado o suporte@ para
+cair na tela do atendimento como um chamado, não?"*. **Não — nunca existiu.** E o que existia
+era pior do que a ausência:
+
+**(a) O sistema convidava a resposta e jogava fora.** A home publica `suporte@bidprobrasil.com.br`;
+os Termos e a Política publicam `privacidade@bidprobrasil.com.br`. E `api/notificar-cliente.js`
+responde ao cliente com `reply_to: suporte@` e o texto **"é só responder este e-mail"**. Do outro
+lado, `api/inbound-juridico.js` — único ponto de entrada de e-mail — fazia:
+
+```js
+if (!caso) return json({ ok: true, unmatched: true });
+```
+
+Todo e-mail que não casasse com um caso jurídico **sumia com HTTP 200**, sem log e sem alerta.
+Inclui pedido de titular de dados endereçado ao `privacidade@`, que a LGPD (Art. 18) obriga a
+atender.
+
+**(b) `chamados.user_id` era NOT NULL, e `api/duvida.js` insere `user_id: null` desde sempre.**
+O insert era rejeitado; o `const [chamado] = await res.json()` estourava sobre o corpo de erro (que
+é objeto, não array), caía no catch e o visitante recebia *"Não foi possível registrar sua dúvida
+agora"*. Medido: **`sdr_leads` vazia e ZERO chamados com segmento `curioso`** — o formulário de
+dúvida da Landing nunca gravou nada. A intenção sempre foi aceitar nulo: a própria RLS
+(`chamados_staff_escopo`) trata `WHEN user_id IS NULL THEN 'curioso'`. Só a constraint ficou para
+trás.
+
+**O que passa a existir:** e-mail sem caso jurídico vira **chamado** (`canal='email'`), com três
+formas de casar com um fio existente antes de abrir outro — token do reply-to (`suporte+<token>@`),
+`In-Reply-To`/`References` contra o Message-ID já gravado, e remetente com chamado aberto no canal
+e-mail. `notificar-cliente` passa a mandar o reply-to **com token**, criado na primeira resposta
+inclusive em chamado nascido no app: quem prefere responder por e-mail continua na mesma conversa.
+Dedup por Message-ID (índice único parcial), porque o webhook reentrega. Na tela: badge
+**"✉ por e-mail"** no chamado e na mensagem, e aviso acima da caixa de resposta dizendo para onde a
+resposta vai.
+
+> **Duas decisões que valem entender antes de mexer:**
+> 1. **Anexo de e-mail NÃO é armazenado, só o nome.** O remetente aqui é qualquer um da internet;
+>    guardar o conteúdo abriria um caminho de upload não autenticado para o nosso storage — abuso
+>    de espaço e, pior, hospedagem de arquivo com URL assinada nossa. O atendente pede reenvio.
+> 2. **A busca do fio LANÇA em não-2xx e devolve 500** para o Resend reentregar. Um `{}` silencioso
+>    ali fragmentaria a conversa do cliente sem erro à vista. Quem pegou isso foi a própria trava
+>    `json-inline-sem-resposta`, no meu código novo, minutos depois de eu escrevê-lo.
+>
+> 🔴 **FALTA O DONO:** apontar o **MX de `bidprobrasil.com.br` para o inbound do Resend**. O código
+> está pronto e testado no banco (chamado com `user_id` nulo entra, dedup bloqueia a reentrega),
+> mas **sem o MX nada chega**. Enquanto isso, `suporte@` continua sendo endereço publicado que não
+> recebe.
+
 ### ⚠️ O QUE ESPERA VOCÊ NA ABERTURA (tarde de 12/08)
 
 1. **Nada pendente do dia** — tudo em produção, banco e repositório conferidos iguais.
