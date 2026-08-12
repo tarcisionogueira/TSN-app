@@ -206,6 +206,7 @@ que grita se a retenção parar de funcionar — um DELETE que não apaga não d
 |---|---|---|
 | `npm run verificar:padroes` | `prebuild` (todo `npm run build` e o deploy da Vercel) + CI `verificar-padroes.yml` | As formas 1–6 acima **e**, desde 12/08: `mutacao-sem-binding` (update/insert cujo resultado é descartado — a forma que mandou o e-mail de reunião fantasma), `notify-sem-cancelled` (passo de alerta com `if: failure()` sem `cancelled()`, que deixou 3 dias de coleta truncada sem aviso) e `mesma-janela-em-tabelas-diferentes` (o MESMO `.limit()` em tabelas diferentes no mesmo `Promise.all` — ver a forma 9) |
 | `npm run verificar:schema` | CI `verificar-schema.yml` — push, PR e **diário 11h UTC** | A forma 7: toda tabela em `.from('x')` e toda coluna de data em filtro/ordenação, conferidas contra o schema REAL (RPC `schema_inventario()`) |
+| `npm run verificar:sintaxe` | `prebuild` (bloqueia o deploy) | **ERRO de parse em `api/`, `scripts/` e `src/`.** O `vite build` só compila `src/` — `api/` vai para a Vercel sem ninguém olhar, e um arquivo quebrado ali é 500 em produção. Só ERROS reprovam; avisos históricos seguem tolerados |
 
 Ambas são **linha de base por arquivo**: só reprovam ocorrência NOVA, o acervo histórico fica como
 está. Exceções deliberadas: `// padrao-ok: <motivo>` e `// schema-ok: <motivo>` — motivo obrigatório.

@@ -37,7 +37,14 @@ export default async function handler(req, res) {
     // cadastrava era invisível — impossível distinguir "ninguém clicou" de "página quebrou".
     const anonId = typeof b.anon_id === 'string' ? (b.anon_id.replace(/[^\w-]/g, '').slice(0, 48) || null) : null;
     const TIPOS_ANON = new Set(['pageview', 'click', 'submit', 'api_erro', 'api_falha_rede']);
-    const ROTA_PUBLICA = /^\/($|p\/|planos|login|cadastro|termos|privacidade|convite|cadastro-parceiro|contrato|testemunha|ativar|redefinir|recuperar|\(auth-redirect\))/;
+    // `leiloes` entrou em 12/08 e é a correção mais cara da lista: são as ~33 mil páginas de
+    // acervo público (servidas por /api/publico, FORA do React), o principal ativo de aquisição
+    // do site. Sem esta palavra, o evento chegava aqui e era descartado com 204 — silêncio dos
+    // dois lados: o tracker não rodava lá E o servidor recusaria se rodasse. Medido antes da
+    // correção: em 30 dias, visitante anônimo aparecia em CINCO rotas (/, /planos, /login,
+    // /termos, /privacidade) e ZERO nas 33 mil. Não dava para distinguir "o SEO não traz
+    // ninguém" de "não estamos medindo" — que são diagnósticos opostos.
+    const ROTA_PUBLICA = /^\/($|p\/|leiloes|planos|login|cadastro|termos|privacidade|convite|cadastro-parceiro|contrato|testemunha|ativar|redefinir|recuperar|\(auth-redirect\))/;
     let lista = eventos;
     if (!userId) {
       if (!anonId) { res.status(204).end(); return; }

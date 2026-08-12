@@ -5059,6 +5059,115 @@ function PainelAuditoriaSistema() {
 // Painel de COBERTURA de relatórios & inteligência — quantos imóveis/cidades/estados já tiveram
 // relatório, quantas amostras de mercado serviram de base, buscas e cobertura do Índice BidPro.
 // Dado real via RPC admin_metricas_negocio (admin-gated). É o "o que ocorre no sistema".
+// FUNIL PÚBLICO — quem AINDA NÃO é cliente. Existe porque o defeito de 12/08 (uma pessoa
+// tentando criar conta cinco vezes e desistindo) só apareceu quando o dono pediu para olhar o
+// Cliente 360 no fim do dia. Achado por acaso não é processo: aqui o funil fica na tela.
+function PainelFunilPublico() {
+  const [f, setF] = React.useState(null);
+  const [erro, setErro] = React.useState(null);
+  const [dias, setDias] = React.useState(30);
+  React.useEffect(() => {
+    let vivo = true;
+    supabase.rpc('funil_publico', { p_dias: dias }).then(({ data, error }) => {
+      if (!vivo) return;
+      // Painel que some em silêncio vira "não há visitante" — que é o oposto do diagnóstico.
+      if (error) { setErro(error.message || 'falha ao ler'); setF(null); return; }
+      setErro(null); setF(data);
+    });
+    return () => { vivo = false; };
+  }, [dias]);
+
+  const n = (v) => Number(v || 0).toLocaleString('pt-BR');
+  const pct = (a, b) => (Number(b) > 0 ? `${Math.round((Number(a) / Number(b)) * 100)}%` : '—');
+  const d = f?.degraus || {};
+  const degraus = [
+    ['Chegaram no site', d.visitantes, null, '#0D63DB'],
+    ['Viram o acervo público', d.viu_acervo, d.visitantes, '#0891b2'],
+    ['Viram os planos', d.viu_planos, d.visitantes, '#7c3aed'],
+    ['Foram ao cadastro', d.foi_ao_cadastro, d.visitantes, '#c026d3'],
+    ['Tentaram criar conta', d.tentou, d.foi_ao_cadastro, '#ea580c'],
+    ['Criaram conta', d.virou_conta, d.visitantes, '#059669'],
+  ];
+
+  return (
+    <div style={S.card}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 4 }}>
+        <div style={{ fontSize: 15, fontWeight: 900, color: '#111' }}>Funil de quem ainda não é cliente</div>
+        <div style={{ display: 'flex', gap: 6 }}>
+          {[7, 30, 90].map(x => (
+            <button key={x} onClick={() => setDias(x)}
+              style={{ padding: '4px 10px', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                border: `1px solid ${dias === x ? '#0D63DB' : '#e2e8f0'}`, background: dias === x ? '#eff6ff' : 'white', color: dias === x ? '#0D63DB' : '#64748b' }}>
+              {x}d
+            </button>
+          ))}
+        </div>
+      </div>
+      <div style={{ fontSize: 12, color: '#64748b', marginBottom: 14, lineHeight: 1.5 }}>
+        Visitante anônimo, sem conta. &quot;Criaram conta&quot; é <strong>piso</strong>: conta quem cadastrou no mesmo
+        navegador da visita — quem trocou de aparelho no meio não aparece.
+      </div>
+
+      {erro ? (
+        <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '10px 12px', fontSize: 12.5, color: '#b91c1c' }}>
+          Não foi possível ler o funil — <strong>não é ausência de visitante</strong>. Detalhe: {erro}
+        </div>
+      ) : !f ? (
+        <div style={{ color: '#94a3b8', fontSize: 13 }}>Carregando funil…</div>
+      ) : (
+        <>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+            {degraus.map(([rot, val, base, cor]) => (
+              <div key={rot} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 165, fontSize: 12.5, color: '#334155', flexShrink: 0 }}>{rot}</div>
+                <div style={{ flex: 1, background: '#f1f5f9', borderRadius: 6, height: 22, position: 'relative', overflow: 'hidden' }}>
+                  <div style={{ position: 'absolute', inset: 0, width: `${d.visitantes ? Math.max(2, Math.round((Number(val || 0) / Number(d.visitantes)) * 100)) : 0}%`, background: cor, opacity: 0.85 }} />
+                  <div style={{ position: 'relative', fontSize: 11.5, fontWeight: 800, color: '#111', lineHeight: '22px', paddingLeft: 8 }}>
+                    {n(val)}{base ? ` · ${pct(val, base)}` : ''}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {(f.barreiras || []).length > 0 && (
+            <div style={{ marginTop: 16 }}>
+              <div style={{ fontSize: 12.5, fontWeight: 800, color: '#b45309', marginBottom: 6 }}>Onde eles travaram</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                {f.barreiras.map((b, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'baseline', fontSize: 12, background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '6px 10px' }}>
+                    <span style={{ fontWeight: 800, color: '#92400e', flexShrink: 0 }}>{b.pessoas} {b.pessoas === 1 ? 'pessoa' : 'pessoas'}</span>
+                    <span style={{ color: '#78350f', overflow: 'hidden', textOverflow: 'ellipsis' }}>{b.motivo || b.alvo}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: 20, marginTop: 16, flexWrap: 'wrap' }}>
+            <div style={{ minWidth: 190 }}>
+              <div style={{ fontSize: 11.5, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 5 }}>De onde vieram</div>
+              {(f.origens || []).map((o, i) => (
+                <div key={i} style={{ fontSize: 12, color: '#334155', display: 'flex', justifyContent: 'space-between', gap: 10, padding: '2px 0' }}>
+                  <span style={{ color: o.origem === '(não medido)' ? '#94a3b8' : '#334155' }}>{o.origem}</span><strong>{n(o.pessoas)}</strong>
+                </div>
+              ))}
+            </div>
+            <div style={{ minWidth: 190 }}>
+              <div style={{ fontSize: 11.5, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 5 }}>Páginas mais vistas</div>
+              {(f.paginas || []).slice(0, 6).map((p, i) => (
+                <div key={i} style={{ fontSize: 12, color: '#334155', display: 'flex', justifyContent: 'space-between', gap: 10, padding: '2px 0' }}>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 150 }}>{p.rota}</span><strong>{n(p.pessoas)}</strong>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function PainelCoberturaRelatorios() {
   const [m, setM] = React.useState(null);
   const [cobIdx, setCobIdx] = React.useState(null);
@@ -5712,6 +5821,10 @@ function DashboardTab({ irParaTab }) {
         {statCard('Inadimplentes', fmtN(dados.inadimplentes || 0), dados.inadimplentes ? 'assinaturas com pagamento em falha' : 'nenhum em atraso', dados.inadimplentes ? '#f59e0b' : '#94a3b8')}
         {statCard('Reembolsos pendentes', fmtN(dados.reembolsosPendentes || 0), dados.reembolsosPendentes ? 'garantia 7 dias — ação em Financeiro › Saques' : 'nenhum pendente', dados.reembolsosPendentes ? '#dc2626' : '#94a3b8')}
       </div>
+
+      {/* Quem ainda NÃO é cliente: onde chega, onde para, por quê. Vem antes da cobertura
+          porque é o topo do funil — se ninguém entra, o resto não importa. */}
+      <PainelFunilPublico />
 
       {/* Cobertura de relatórios & inteligência (o que ocorre no sistema — dado real) */}
       <PainelCoberturaRelatorios />

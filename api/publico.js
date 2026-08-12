@@ -160,6 +160,37 @@ ${corpo}
   Também escrito como <em>Bid Pro Brasil</em>.</p>
   <p><a href="${SITE}/leiloes">Imóveis em leilão por estado</a> · <a href="${SITE}/#/planos">Planos</a> · <a href="${SITE}/#/termos">Termos</a> · <a href="${SITE}/#/privacidade">Privacidade</a></p>
 </div></footer>
+<!-- MEDIÇÃO DO ACERVO PÚBLICO (12/08). Estas páginas são servidas FORA do React, então o
+     tracker de src/utils/tracker.js — que monta no main.jsx — nunca rodou aqui: as ~33 mil
+     páginas de SEO, o principal ativo de aquisição, eram um ponto cego total. Não dava para
+     saber se o Google trazia gente, de quais cidades, nem quantos seguiam para o cadastro.
+     Snippet mínimo, sem dependência, que reusa a MESMA chave bp_aid do tracker do app —
+     é isso que costura a visita anônima com o Cliente 360 quando a pessoa cria conta depois.
+     Não guarda a URL do referrer, só o HOST (é o que interessa para aquisição e evita
+     arrastar query string de terceiro para o nosso banco). -->
+<script>
+(function(){try{
+  // Bot que executa JS (Googlebot renderiza) encheria o funil de visita que não é gente.
+  if(/bot|crawl|spider|slurp|bingpreview|headless|lighthouse/i.test(navigator.userAgent||''))return;
+  if(navigator.webdriver)return;
+  var id=null;try{id=localStorage.getItem('bp_aid');if(!id){id=(window.crypto&&crypto.randomUUID?crypto.randomUUID():Date.now().toString(36)+Math.random().toString(36).slice(2,12));localStorage.setItem('bp_aid',id);}}catch(e){}
+  if(!id)return;
+  // '(direto)' EXPLÍCITO quando não há referrer. Se mandássemos null, o banco não distinguiria
+  // "veio direto" de "não foi medido" — e o painel diria "213 vieram direto" para um período em
+  // que a origem simplesmente não era coletada. Conclusão errada e cara: parece que SEO e
+  // anúncio não trazem ninguém.
+  var ref='(direto)';try{if(document.referrer){var h=new URL(document.referrer).hostname;if(h&&h!==location.hostname)ref=h;else ref='(interno)';}}catch(e){}
+  var env=function(tipo,alvo,det){try{fetch('/api/track',{method:'POST',headers:{'Content-Type':'application/json'},keepalive:true,
+    body:JSON.stringify({anon_id:id,eventos:[{tipo:tipo,rota:location.pathname,alvo:alvo||null,detalhe:det||null,ts:Date.now()}]})});}catch(e){}};
+  env('pageview',location.pathname,ref);
+  // Só o clique que INTERESSA (ir para cadastro/planos/lote): é o passo seguinte do funil.
+  document.addEventListener('click',function(e){try{
+    var a=e.target&&e.target.closest?e.target.closest('a'):null;if(!a)return;
+    var h=a.getAttribute('href')||'',t=(a.textContent||'').trim().slice(0,60);
+    if(/login|planos|criar conta|cadastro/i.test(h+' '+t))env('click',t||h,null);
+  }catch(err){}},{passive:true});
+}catch(e){}})();
+</script>
 </body></html>`;
 }
 

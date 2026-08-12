@@ -13,7 +13,8 @@
     "verificar:padroes:atualizar": "node scripts/verificar-padroes-perigosos.mjs --atualizar",
     "verificar:schema": "node scripts/verificar-schema-codigo.mjs",
     "verificar:schema:listar": "node scripts/verificar-schema-codigo.mjs --listar",
-    "prebuild": "node scripts/verificar-padroes-perigosos.mjs"
+    "verificar:sintaxe": "eslint api scripts src --quiet",
+    "prebuild": "node scripts/verificar-padroes-perigosos.mjs && npm run verificar:sintaxe"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",

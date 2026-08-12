@@ -628,6 +628,77 @@ Supabase, então a pessoa vê os cinco requisitos com ✓ e mesmo assim é recus
 > o código está sintaticamente correto nos dois casos. Só o rastro de quem usou mostra. Rodar
 > `eventos_atividade` por `tipo='api_erro'` agrupado por pessoa é uma consulta e custa zero.
 
+### 15. 🕸️ O ponto cego de aquisição: 33 mil páginas sem medição nenhuma
+
+Pedido do dono ao fechar: *"precisa monitorar o que ocorre no sistema mesmo para pessoas que não
+são clientes ainda, para saber onde estamos pecando"*. Fui medir e o resultado foi pior do que
+"faltava um painel".
+
+**Em 30 dias, visitante anônimo aparece em CINCO rotas:** `/`, `/planos`, `/login`, `/termos`,
+`/privacidade`. **Zero** nas ~33 mil páginas de acervo público — o principal ativo de aquisição
+do site, aquele que motivou o Search Console e as 33 mil URLs no sitemap.
+
+E eram **duas** barreiras, não uma:
+
+1. `/leiloes` **não é rota do React** — é servida por `api/publico.js`, fora da SPA. O tracker
+   monta no `main.jsx`, então nunca rodou lá.
+2. Mesmo se rodasse, `api/track.js` descartava: a allowlist `ROTA_PUBLICA` não tinha `leiloes`,
+   e o descarte é um **204 silencioso**. Filtro que recusa sem dizer — a forma da casa.
+
+Não dava para distinguir **"o SEO não traz ninguém"** de **"não estamos medindo"**, que são
+diagnósticos opostos e levam a decisões opostas.
+
+*Corrigido:* `leiloes` na allowlist + snippet mínimo injetado no HTML público, que reusa a **mesma
+chave `bp_aid`** do tracker do app — é isso que costura a visita anônima ao Cliente 360 quando a
+pessoa cria conta depois. Ignora bot que executa JS (Googlebot renderiza) e guarda só o **host**
+do referrer, não a URL.
+
+**Novo: RPC `funil_publico(dias)` + painel "Funil de quem ainda não é cliente"** no topo do
+Dashboard — degraus (chegou → viu acervo → viu planos → foi ao cadastro → tentou → criou conta),
+**de onde vieram**, páginas mais vistas e **onde travaram, com o motivo escrito**. Estado ao criar
+(30 dias): 213 visitantes · 59 viram planos · 22 foram ao cadastro · **10 tentaram e 10 tomaram
+erro** · 26 criaram conta.
+
+> **Uma honestidade embutida no painel:** origem sem referrer aparece como **"(não medido)"**, não
+> como "(direto)". A origem só passou a ser coletada hoje; rotular o histórico como tráfego direto
+> faria o painel afirmar que SEO e anúncio não trazem ninguém — conclusão oposta à realidade.
+>
+> ⏰ **CALIBRAR EM 48 H:** *não* criei invariante para a medição das páginas públicas, porque hoje
+> o valor é 0 e não há linha de base — alarme que nasce vermelho é pior que alarme nenhum. Na
+> próxima sessão, rodar
+> `select count(distinct anon_id) from eventos_atividade where rota like '/leiloes%' and criado_em > now()-interval '2 days';`
+> Se vier **> 0**, a instrumentação funciona: calibrar `qa_invariantes` com um piso. Se vier
+> **0**, aí sim é diagnóstico — ou o snippet não roda, ou o SEO realmente não traz ninguém.
+
+### 16. 🔒 Cobertura das travas — o que de hoje pode voltar, e o que não pode
+
+| Defeito de hoje | O que impede de voltar | Onde roda |
+|---|---|---|
+| Migração escrita que nunca chegou ao banco | `verificar:schema` | CI + diário 11h |
+| `update`/`insert` com resultado descartado | `mutacao-sem-binding` | prebuild |
+| Alerta de workflow cego a `cancelled()` | `notify-sem-cancelled` (base **0**) | prebuild |
+| Erro entregue como conteúdo (`await (await f()).json()`) | `json-inline-sem-resposta` — **pegou meu próprio código hoje** | prebuild |
+| Janela de cache usada como janela de dados | `mesma-janela-em-tabelas-diferentes` | prebuild |
+| Retenção apagando meia análise | `analise_vencida_nao_limpa` · `analise_sem_mercadologico` · `laudo_sem_base` | monitor diário |
+| Cadastro barrando visitante | `cadastro_barrado` | monitor diário |
+| Ingestão externa parcial em silêncio | `ok=false` + `colunas_faltando` + detector de colisão de rótulos | toda ingestão |
+| Workflow verde por cima de `ok:false` | teste do corpo no `.yml` | manual, provado |
+| Mesma cidade em duas grafias | `trg_cidade_norm_sem_espaco` | banco, 4 tabelas |
+| **Erro de sintaxe em `api/` indo para produção** | **`verificar:sintaxe` (novo)** | **prebuild — bloqueia o deploy** |
+
+> **A trava nova nasceu de um erro meu, hoje:** pus crases num comentário dentro de um template
+> literal e quebrei `api/publico.js`. O `npm run build` **passou** — o Vite só compila `src/`,
+> e `api/` vai para a Vercel sem ninguém olhar. Um `export default` quebrado ali seria 500 em
+> produção, e a única trava que existia (`verificar:padroes`) é regex, não parser. Agora o
+> `prebuild` roda `eslint api scripts src --quiet` (8 s, só ERROS reprovam — os 38 avisos
+> históricos seguem tolerados). Testado de ponta a ponta: reintroduzi as crases → build falhou
+> com a linha exata; removi → passou.
+
+**As duas lacunas que continuam abertas, ditas na cara:**
+1. **Corpo de função que existe nos dois lados e divergiu** (o caso `pct_dom_venda`). Não há trava
+   barata e confiável. Regra manual: *mudou função no banco, escreva a migração no mesmo commit.*
+2. **Medição das páginas públicas** — instrumentada hoje, sem alarme até haver linha de base (48 h).
+
 ### ⚠️ O QUE ESPERA VOCÊ NA ABERTURA (encerramento de 12/08)
 
 **Nada ficou pela metade no código.** Tudo em produção, banco e repositório conferidos iguais,
