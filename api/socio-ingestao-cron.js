@@ -159,6 +159,15 @@ async function processarFonte(fonte, municipios) {
   // Acumula por município: { <ibge>: { <coluna>: { [periodo]: valor } } }
   const porMunicipio = new Map();
   let semColuna = new Set();
+  // COLISÃO DE RÓTULOS: dois rótulos DIFERENTES alimentando a MESMA coluna. O segundo
+  // sobrescreve o primeiro em silêncio, e o resultado parece preenchido.
+  // Caso real (12/08): o agregado 2612 tem "Nascidos vivos ocorridos no ano" E "Nascidos
+  // vivos ocorridos no ano - percentual do total geral". O mapa dizia só `nascidos vivos`,
+  // os dois casavam, e o PERCENTUAL sobrescrevia a contagem: os 5.570 municípios ficaram com
+  // o mesmo valor — 100 (por cento) — inclusive São Paulo, que tem ~150 mil nascimentos.
+  // O detector de AMBIGUIDADE não pega este caso, porque lá os padrões apontam para colunas
+  // diferentes; aqui apontam para a mesma. São dois defeitos distintos e ambos silenciosos.
+  const rotulosPorColuna = new Map();
   for (const v of dados) {
     for (const resultado of v?.resultados || []) {
       const rot = rotulos(v?.variavel || '', resultado);
@@ -168,6 +177,8 @@ async function processarFonte(fonte, municipios) {
       // ignorados com o motivo, e a conferência de "coluna faltando" acusa o buraco.
       if (ambiguo) { semColuna.add(`${rot} → AMBÍGUO entre ${candidatos.join(' e ')}`); continue; }
       if (!coluna) { semColuna.add(rot); continue; }
+      if (!rotulosPorColuna.has(coluna)) rotulosPorColuna.set(coluna, new Set());
+      rotulosPorColuna.get(coluna).add(rot);
       for (const s of resultado?.series || []) {
         const id = String(s?.localidade?.id || '');
         if (!municipios.has(id)) continue;
@@ -226,12 +237,16 @@ async function processarFonte(fonte, municipios) {
   const esperadas = [...new Set(Object.values(fonte.mapa || {}))];
   const recebidas = [...new Set(linhas.flatMap((l) => Object.keys(l)))];
   const faltando = esperadas.filter((c) => !recebidas.includes(c));
+  const colisoes = [...rotulosPorColuna.entries()]
+    .filter(([, rots]) => rots.size > 1)
+    .map(([col, rots]) => `${col} ← ${[...rots].join('  ||  ')}`);
 
   return {
     gravadas, municipios: porMunicipio.size, ms: Date.now() - t0,
     rotulos_ignorados: [...semColuna].slice(0, 10),
     colunas_esperadas: esperadas,
     colunas_faltando: faltando,
+    colisoes_de_rotulo: colisoes,
     // Os nomes que o IBGE realmente expõe, para ajustar o regex do `mapa` sem tentativa e erro.
     variaveis_do_agregado: nomesMeta.slice(0, 20),
   };
@@ -346,14 +361,23 @@ export default async function handler(req, res) {
       // Coluna pedida que não veio = ingestão PARCIAL, e parcial não é `ok`. Registrar como
       // sucesso aqui foi o que manteve `area_km2` e `domicilios` vazios por 8 dias com o
       // painel de fontes todo verde.
-      const parcial = (r.colunas_faltando || []).length > 0;
+      // Parcial (coluna sem dado) OU colisão (duas variáveis na mesma coluna) reprovam. As
+      // duas produzem número que PARECE preenchido, que é o caro de consertar depois.
+      const colidiu = (r.colisoes_de_rotulo || []).length > 0;
+      const parcial = (r.colunas_faltando || []).length > 0 || colidiu;
+      const motivo = [
+        (r.colunas_faltando || []).length ? `colunas sem dado — ${r.colunas_faltando.join(', ')}` : null,
+        colidiu ? `COLISÃO (uma variável sobrescreve a outra) — ${r.colisoes_de_rotulo.join(' ;; ')}` : null,
+      ].filter(Boolean).join(' | ');
       await registrar(f.chave, !parcial, r.gravadas, r.ms,
-        parcial ? `ingestão PARCIAL: colunas sem dado — ${r.colunas_faltando.join(', ')}` : null,
+        parcial ? `ingestão PARCIAL: ${motivo}` : null,
         { municipios: r.municipios, rotulos_ignorados: r.rotulos_ignorados,
           colunas_esperadas: r.colunas_esperadas, colunas_faltando: r.colunas_faltando,
+          colisoes_de_rotulo: r.colisoes_de_rotulo,
           variaveis_do_agregado: r.variaveis_do_agregado });
       resultado.push({ fonte: f.chave, ok: !parcial, linhas: r.gravadas, ms: r.ms,
-        colunas_faltando: r.colunas_faltando, variaveis_do_agregado: r.variaveis_do_agregado });
+        colunas_faltando: r.colunas_faltando, colisoes_de_rotulo: r.colisoes_de_rotulo,
+        variaveis_do_agregado: r.variaveis_do_agregado });
     } catch (e) {
       // Uma fonte quebrada NUNCA derruba as outras nem apaga o que já está gravado —
       // o socio_upsert só sobrescreve coluna com valor novo (coalesce).
