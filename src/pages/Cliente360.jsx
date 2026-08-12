@@ -757,6 +757,15 @@ ${Array.isArray(base._truncado) && base._truncado.length ? `<div style="margin-t
                   return (
                     <div key={i} style={{ fontSize: 12, color: '#334155', display: 'flex', justifyContent: 'space-between', gap: 8, borderTop: i ? '1px solid #f1f5f9' : 'none', paddingTop: i ? 5 : 0 }}>
                       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
+                        {/* ANTES DE TER CONTA. Estes eventos vêm da sessão anônima (anon_id) que
+                            depois virou este usuário — a jornada que levou ao cadastro. Sem a
+                            marca, a linha do tempo misturaria as duas fases e sugeriria que a
+                            pessoa já era usuária quando ainda estava decidindo. */}
+                        {n.pre_login && (
+                          <span style={{ background: '#f5f3ff', color: '#6d28d9', fontWeight: 700, fontSize: 10, borderRadius: 6, padding: '1px 6px', marginRight: 6 }}>
+                            pré-cadastro
+                          </span>
+                        )}
                         <span style={{ color: meta.cor, fontWeight: 700 }}>{meta.rot}</span>
                         {n.alvo ? <span> · {n.alvo}</span> : ''}
                         {n.rota ? <span style={{ color: '#94a3b8' }}> · {n.rota}</span> : ''}
