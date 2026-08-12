@@ -243,6 +243,32 @@ vazio ou com valor sul-americano — reveja o passo 3.
   esperando este item: Actions → **"Nudge de ativação — backlog (manual)"** (comece com `limite=2`).
   Ordem certa: **(1) este item → (2) o workflow**. Ele não roda sozinho.
 
+### -1.2 🟠 GOOGLE ADS — fechar o ciclo de medição (o site já faz a parte dele)
+
+Em 12/08 o site passou a capturar o **clique**: `gclid`/`gbraid`/`wbraid` e todos os `utm_*`
+entram em `visita_origem` no **primeiro toque** e ficam amarrados ao `anon_id` — o mesmo do
+Cliente 360. Quando a pessoa cria conta, dá para dizer de qual campanha ela veio. O painel
+"Funil de quem ainda não é cliente" já mostra **origem → viraram conta**.
+
+Faltam três coisas, e todas dependem de você:
+
+1. **Ligar o auto-tagging no Google Ads** (Configurações da conta → *Marcação automática* →
+   "Marcar o URL final…"). Sem isso o `gclid` não chega na URL e **nada é atribuído**. É um
+   interruptor, leva 1 minuto. ⚠️ Confirme que a campanha não usa um template de URL que
+   remove a query string.
+2. **UTM nos anúncios** (opcional, mas ajuda a separar anúncio/palavra sem depender da API):
+   sufixo de URL final `utm_source=google&utm_medium=cpc&utm_campaign={campaignid}&utm_term={keyword}&utm_content={creative}`.
+3. **Números do lado do Ads** — impressão, clique, CTR e **custo** só existem no Google.
+   O site nunca vai saber quanto foi gasto. Dois caminhos:
+   - **barato:** você exporta o relatório diário e a gente compara com os cadastros por campanha;
+   - **completo:** credenciar a **Google Ads API** (developer token + OAuth) para puxar custo
+     automaticamente **e** devolver a conversão (*Offline Conversion Import* pelo `gclid`), que é
+     o que faz o Google otimizar por **valor real de venda** em vez de por clique. É o passo que
+     mais muda resultado, e o único que exige credencial nova.
+
+> **Só faz sentido depois da verificação do anunciante sair** (item -1): conta não verificada
+> tem entrega restrita, e otimizar em cima de dado restrito ensina a máquina errado.
+
 ### -1.5 🔴 MX do `bidprobrasil.com.br` → inbound do Resend (o `suporte@` não recebe nada)
 
 - **Por quê, e não é "faltava uma feature":** a home publica `suporte@bidprobrasil.com.br`, os

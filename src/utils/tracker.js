@@ -64,6 +64,32 @@ function anonId() {
   } catch { return null; }
 }
 
+// ORIGEM DO CLIQUE (gclid/UTM), capturada na PRIMEIRA visita e guardada no navegador.
+// Precisa ser persistida porque o cadastro quase nunca acontece na página de chegada — sem
+// isto, a campanha que trouxe a pessoa se perde no primeiro clique interno. O servidor grava
+// uma vez só por anon_id (first touch), então reenviar a cada lote é inofensivo.
+const LS_ORIGEM = 'bp_orig';
+function origemPrimeiroToque() {
+  try {
+    const salvo = localStorage.getItem(LS_ORIGEM);
+    if (salvo) return JSON.parse(salvo);
+    const q = new URLSearchParams(window.location.search);
+    // O hash-router guarda a query DEPOIS do #, então é preciso olhar os dois lugares.
+    const hq = new URLSearchParams((window.location.hash.split('?')[1] || ''));
+    const g = (k) => q.get(k) || hq.get(k) || null;
+    const o = {
+      gclid: g('gclid'), gbraid: g('gbraid'), wbraid: g('wbraid'),
+      utm_source: g('utm_source'), utm_medium: g('utm_medium'), utm_campaign: g('utm_campaign'),
+      utm_term: g('utm_term'), utm_content: g('utm_content'),
+      referrer_host: (() => { try { return document.referrer ? new URL(document.referrer).hostname : null; } catch { return null; } })(),
+      landing: window.location.pathname || '/',
+    };
+    if (!Object.entries(o).some(([k, v]) => k !== 'landing' && v)) return null; // nada a atribuir
+    localStorage.setItem(LS_ORIGEM, JSON.stringify(o));
+    return o;
+  } catch { return null; }
+}
+
 async function flush() {
   if (timer) { clearTimeout(timer); timer = null; }
   if (!fila.length) return;
@@ -77,7 +103,7 @@ async function flush() {
     await fetch('/api/track', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-      body: JSON.stringify({ eventos: lote, anon_id: anonId() }), keepalive: true,
+      body: JSON.stringify({ eventos: lote, anon_id: anonId(), origem: origemPrimeiroToque() }), keepalive: true,
     });
   } catch { /* fire-and-forget */ }
 }

@@ -670,6 +670,31 @@ erro** · 26 criaram conta.
 > Se vier **> 0**, a instrumentação funciona: calibrar `qa_invariantes` com um piso. Se vier
 > **0**, aí sim é diagnóstico — ou o snippet não roda, ou o SEO realmente não traz ninguém.
 
+### 15b. 📣 Medição do Google Ads — o site já faz a parte dele
+
+Complemento do item 15, no mesmo dia. Além de não medir as páginas públicas, **a query string era
+descartada em todo o caminho**: o tracker manda só o `pathname`. Ou seja, `gclid` e `utm_*`
+nunca chegavam a lugar nenhum — não existia atribuição de campanha, nem poderia existir.
+
+*Corrigido:* tabela **`visita_origem`** (chave = `anon_id`, o mesmo `bp_aid` do Cliente 360) com
+`gclid`/`gbraid`/`wbraid` + os cinco `utm_*` + host do referrer + landing. Capturada nos **dois**
+lados (app e páginas públicas), persistida no navegador e gravada **uma vez só por visitante**.
+
+> **`Prefer: resolution=ignore-duplicates` é o coração disto.** Garante *first touch*: a pessoa
+> volta depois pelo orgânico e o crédito continua com o clique que a trouxe. Com *last touch*, o
+> Ads pareceria não converter nada — a última visita sempre sobrescreveria a campanha.
+
+O painel do funil passou a mostrar **origem → viraram conta**, que é o que responde "esta campanha
+vale o que custa". Hoje tudo aparece como **(não medido)**: é honesto, o histórico não tem como
+ser atribuído retroativamente. A partir do próximo clique com `gclid`, aparece
+`Google Ads · <campanha>`.
+
+**O que o site NÃO pode saber, e por isso virou pendência do dono** (`PENDENCIAS_DONO.md`,
+item **-1.2**): impressão, clique, CTR e **custo** só existem no Google. E o auto-tagging precisa
+estar ligado na conta, senão o `gclid` não chega na URL e nada é atribuído. O passo que mais muda
+resultado é o **Offline Conversion Import** pelo `gclid` — devolver ao Google o valor real da
+venda, para ele otimizar por dinheiro e não por clique; exige credenciar a Google Ads API.
+
 ### 16. 🔒 Cobertura das travas — o que de hoje pode voltar, e o que não pode
 
 | Defeito de hoje | O que impede de voltar | Onde roda |

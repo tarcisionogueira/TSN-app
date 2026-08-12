@@ -65,15 +65,27 @@ begin
             where not exists (select 1 from virou v where v.anon_id = c.anon_id)) as desistiu_apos_erro
       )
       select to_jsonb(passo) from passo),
+    -- ORIGEM POR CAMPANHA: sai de `visita_origem` (gclid/UTM do primeiro toque). Cada linha
+    -- traz quantos CHEGARAM e quantos viraram CONTA — que é o que responde "esta campanha vale
+    -- o que custa". O fallback '(não medido)' cobre a visita anterior a 12/08, quando a query
+    -- string era descartada em todo o caminho; chamar aquilo de tráfego direto seria mentira.
     'origens', coalesce((
-      select jsonb_agg(x) from (
-        -- NULL aqui é "não medido", NÃO é "veio direto": a origem só passou a ser coletada
-        -- em 12/08, e só nas páginas públicas. Rotular tudo como direto faria o painel dizer
-        -- que SEO e anúncio não trazem ninguém — conclusão oposta à realidade, e cara.
-        select coalesce(nullif(detalhe,''), '(não medido)') as origem, count(distinct anon_id) as pessoas
-          from public.eventos_atividade
-         where user_id is null and tipo = 'pageview' and criado_em > corte
-         group by 1 order by 2 desc limit 8) x), '[]'::jsonb),
+      select jsonb_agg(to_jsonb(g) order by g.pessoas desc) from (
+        select coalesce(
+                 case when o.gclid is not null or o.gbraid is not null or o.wbraid is not null
+                        then coalesce('Google Ads · ' || nullif(o.utm_campaign,''), 'Google Ads')
+                      when nullif(o.utm_source,'') is not null
+                        then o.utm_source || coalesce(' · ' || nullif(o.utm_campaign,''), '')
+                      when nullif(o.referrer_host,'') is not null then o.referrer_host
+                 end, '(não medido)') as origem,
+               count(distinct a.anon_id) as pessoas,
+               count(distinct a.anon_id) filter (
+                 where exists (select 1 from public.eventos_atividade v
+                                where v.anon_id = a.anon_id and v.user_id is not null)) as viraram_conta
+          from (select distinct anon_id from public.eventos_atividade
+                 where user_id is null and anon_id is not null and criado_em > corte) a
+          left join public.visita_origem o on o.anon_id = a.anon_id
+         group by 1 order by 2 desc limit 10) g), '[]'::jsonb),
     'paginas', coalesce((
       select jsonb_agg(x) from (
         select rota, count(distinct anon_id) as pessoas

@@ -72,6 +72,34 @@ export default async function handler(req, res) {
         body: JSON.stringify(rows), signal: AbortSignal.timeout(5000),
       }).catch(() => {});
     }
+
+    // ORIGEM DO CLIQUE (gclid/UTM) — PRIMEIRO TOQUE, gravado uma única vez por anon_id.
+    // `ignore-duplicates` é o que garante o first touch: a pessoa volta pelo orgânico depois,
+    // e o crédito continua com o clique que a trouxe. Sem isto, a última visita sobrescreveria
+    // a campanha e o Ads pareceria não converter nada.
+    const o = b.origem;
+    if (anonId && o && typeof o === 'object') {
+      const txt = (v, n = 120) => {
+        const s = String(v ?? '').trim();
+        return s && !RE_SEGREDO.test(s) ? s.slice(0, n) : null;
+      };
+      const linha = {
+        anon_id: anonId,
+        gclid: txt(o.gclid), gbraid: txt(o.gbraid), wbraid: txt(o.wbraid),
+        utm_source: txt(o.utm_source, 60), utm_medium: txt(o.utm_medium, 60),
+        utm_campaign: txt(o.utm_campaign, 120), utm_term: txt(o.utm_term, 120), utm_content: txt(o.utm_content, 120),
+        referrer_host: txt(o.referrer_host, 120), landing: txt(o.landing, 200),
+      };
+      // Só grava se houver ALGO além do anon_id — linha vazia não é origem, é ruído.
+      if (Object.entries(linha).some(([k, v]) => k !== 'anon_id' && v)) {
+        await fetch(`${SB}/rest/v1/visita_origem`, {
+          method: 'POST',
+          headers: { apikey: KEY, Authorization: `Bearer ${KEY}`, 'Content-Type': 'application/json',
+            Prefer: 'return=minimal,resolution=ignore-duplicates' },
+          body: JSON.stringify(linha), signal: AbortSignal.timeout(5000),
+        }).catch(() => {});
+      }
+    }
   } catch { /* nunca falha o cliente por causa do track */ }
   res.status(204).end();
 }

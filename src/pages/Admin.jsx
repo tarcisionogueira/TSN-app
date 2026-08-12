@@ -5157,10 +5157,13 @@ function PainelFunilPublico() {
 
           <div style={{ display: 'flex', gap: 20, marginTop: 16, flexWrap: 'wrap' }}>
             <div style={{ minWidth: 190 }}>
-              <div style={{ fontSize: 11.5, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 5 }}>De onde vieram</div>
+              <div style={{ fontSize: 11.5, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 5 }}>De onde vieram <span style={{ textTransform: 'none', fontWeight: 600 }}>(→ viraram conta)</span></div>
               {(f.origens || []).map((o, i) => (
                 <div key={i} style={{ fontSize: 12, color: '#334155', display: 'flex', justifyContent: 'space-between', gap: 10, padding: '2px 0' }}>
-                  <span style={{ color: o.origem === '(não medido)' ? '#94a3b8' : '#334155' }}>{o.origem}</span><strong>{n(o.pessoas)}</strong>
+                  <span style={{ color: o.origem === '(não medido)' ? '#94a3b8' : '#334155', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 150 }} title={o.origem}>{o.origem}</span>
+                  <strong style={{ flexShrink: 0 }}>{n(o.pessoas)}{' '}
+                    <span style={{ color: Number(o.viraram_conta) > 0 ? '#059669' : '#cbd5e1', fontWeight: 700 }}>→ {n(o.viraram_conta)}</span>
+                  </strong>
                 </div>
               ))}
             </div>

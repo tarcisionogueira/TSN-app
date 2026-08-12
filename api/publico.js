@@ -180,8 +180,22 @@ ${corpo}
   // que a origem simplesmente não era coletada. Conclusão errada e cara: parece que SEO e
   // anúncio não trazem ninguém.
   var ref='(direto)';try{if(document.referrer){var h=new URL(document.referrer).hostname;if(h&&h!==location.hostname)ref=h;else ref='(interno)';}}catch(e){}
+  // ORIGEM DO CLIQUE, primeiro toque. Estas paginas sao a porta de entrada do Ads e do SEO —
+  // se o gclid nao for capturado AQUI, ele se perde no primeiro clique interno e a campanha
+  // fica sem atribuicao nenhuma. Guardado no navegador; o servidor grava uma vez por anon_id.
+  var orig=null;try{
+    var sv=localStorage.getItem('bp_orig');
+    if(sv){orig=JSON.parse(sv);}
+    else{var q=new URLSearchParams(location.search),gt=function(k){return q.get(k)||null;};
+      var o={gclid:gt('gclid'),gbraid:gt('gbraid'),wbraid:gt('wbraid'),utm_source:gt('utm_source'),
+        utm_medium:gt('utm_medium'),utm_campaign:gt('utm_campaign'),utm_term:gt('utm_term'),
+        utm_content:gt('utm_content'),referrer_host:(ref==='(direto)'||ref==='(interno)')?null:ref,
+        landing:location.pathname};
+      var temAlgo=false;for(var k in o){if(k!=='landing'&&o[k])temAlgo=true;}
+      if(temAlgo){orig=o;localStorage.setItem('bp_orig',JSON.stringify(o));}}
+  }catch(e){}
   var env=function(tipo,alvo,det){try{fetch('/api/track',{method:'POST',headers:{'Content-Type':'application/json'},keepalive:true,
-    body:JSON.stringify({anon_id:id,eventos:[{tipo:tipo,rota:location.pathname,alvo:alvo||null,detalhe:det||null,ts:Date.now()}]})});}catch(e){}};
+    body:JSON.stringify({anon_id:id,origem:orig,eventos:[{tipo:tipo,rota:location.pathname,alvo:alvo||null,detalhe:det||null,ts:Date.now()}]})});}catch(e){}};
   env('pageview',location.pathname,ref);
   // Só o clique que INTERESSA (ir para cadastro/planos/lote): é o passo seguinte do funil.
   document.addEventListener('click',function(e){try{
