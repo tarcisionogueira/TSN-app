@@ -194,9 +194,18 @@ antes de mexer, mais 6 validações de produção para rodar na abertura.
    *"Clube Conselheiro"*. **É a causa provável de uma terceira reprova**, e não se resolve no
    formulário da G2RS. Ressalva: trocar perfil de pagamentos de pessoa física para empresa pode
    não ser editável depois de criado — conferir em `ads.google.com/aw/advertiserverification`.
-3. **Espelho com `LOTE 1200` — validação agendada para 01:00 UTC** (a rodada das 00:40 ainda não
-   tinha acontecido quando fechei; a checagem das 22:46 foi cedo demais, erro meu de agendamento).
-   Referência: 598 cópias em 138s de um orçamento de 240s com `LOTE 600`. Verde = bem acima de 598.
+3. **Espelho — VALIDADO às 01:00, e a medição achou um teto invisível.** A rodada das 00:40 com
+   `LOTE 1200` copiou **985** (contra 598 com `LOTE 600`) e ignorou 14: **999**. Esse número
+   redondo é a resposta — **o PostgREST corta a resposta em 1.000 linhas sem avisar**, inclusive
+   em RPC que devolve conjunto. Pedir 1200 e receber 1000 não gera erro. É a mesma armadilha que
+   o `api/publico.js` já documenta neste repositório, e eu escrevi 1200 sem lembrar do precedente.
+   O sintoma que denunciava: terminou em **179s de 240s** — de novo não faltou tempo.
+   **Corrigido (`051efc2`)**: `LOTE` fica em 1000 e o cron passa a **ler → processar → ler de
+   novo** até o orçamento acabar (funciona porque documento copiado sai da fila). A resposta
+   agora traz `leituras` e `ms`. **Conferir na rodada das 04:40**: `leituras` ≥ 2 e `ms` perto de
+   240000 é a prova de que o limite voltou a ser o tempo.
+   Estado ao fechar: **2.239 copiados · 3.379 MB · fila 5.560** — e a fila **caiu** pela primeira
+   vez (era 6.059), mesmo com 501 anexos novos entrando na mesma rodada.
 4. **Resend: falta só marcar `email.opened` e `email.clicked`** na inscrição do webhook. O DNS está
    pronto (CNAME `links` **Verified**) e `email.delivered` já chega — o endpoint e o segredo estão
    certos. Desde hoje o handler registra **todo evento recebido** em `webhook_eventos_processados`
