@@ -79,6 +79,10 @@ export default async function handler(req, res) {
 
   const body = req.body || {};
   const cidadeNorm = norm(body.cidade);
+  // Convenção canônica de `cidade_norm` no banco é SEM ESPAÇO (imoveis_leilao e
+  // cidade_socio, as duas maiores tabelas). `norm()` produz COM espaço; passar essa
+  // forma para a RPC fazia a consulta não achar nada em cidade de nome composto.
+  const cidadeNormDb = String(cidadeNorm || '').replace(/\s+/g, '');
   const uf = String(body.uf || '').trim().toUpperCase();
   const bairroNorm = norm(body.bairro) || null;
   const tipoRaw = String(body.tipo || '').toLowerCase();
@@ -264,7 +268,7 @@ export default async function handler(req, res) {
   const cidadeAmpla = !bairroNorm && lat == null && lng == null;
   const regioesDe = async (t) => {
     if (!cidadeAmpla) return [];
-    const r = await rpc('indice_bairros_cidade', { p_cidade_norm: cidadeNorm, p_uf: uf, p_tipo: t });
+    const r = await rpc('indice_bairros_cidade', { p_cidade_norm: cidadeNormDb, p_uf: uf, p_tipo: t });
     return Array.isArray(r) ? r : [];
   };
 
@@ -277,7 +281,7 @@ export default async function handler(req, res) {
   // disparando outra pesquisa cara. O irmão desse defeito já fora corrigido na leitura
   // (`IndiceConsulta.jsx:44`, "FALHA != NÃO MAPEADO", 07/08) — faltava aqui, na escrita.
   // `inseridas > 0` com "sem amostras" é contradição em si: se acabamos de inserir, há amostra.
-  const pondRes = await rpcOk('indice_regiao_ponderado', { p_cidade_norm: cidadeNorm, p_uf: uf, p_bairro_norm: bairroNorm, p_lat: lat, p_lng: lng, p_tipo: tipo });
+  const pondRes = await rpcOk('indice_regiao_ponderado', { p_cidade_norm: cidadeNormDb, p_uf: uf, p_bairro_norm: bairroNorm, p_lat: lat, p_lng: lng, p_tipo: tipo });
   if (!pondRes.ok) {
     res.status(502).json({ ok: false, gerado: false, motivo: 'ponderacao_indisponivel', inseridas,
       error: 'As amostras foram coletadas, mas não consegui calcular o índice agora. Tente de novo em instantes — não é falta de mercado na região.' });

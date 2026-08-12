@@ -107,7 +107,7 @@ export default async function handler(req) {
     // estimar, sobe a escada do que EXISTE e diz de onde veio. Só devolve MEDIDA; quem não
     // achar nada continua caindo no 0,4%, agora como último degrau de verdade.
     const aluguelAmplo = async () => {
-      const pond = await rpc('indice_regiao_ponderado', { p_cidade_norm: cidadeNorm, p_uf: uf, p_bairro_norm: bairroNorm, p_lat: lat, p_lng: lng, p_tipo: tipo });
+      const pond = await rpc('indice_regiao_ponderado', { p_cidade_norm: cidadeNormDb, p_uf: uf, p_bairro_norm: bairroNorm, p_lat: lat, p_lng: lng, p_tipo: tipo });
       if (pond && Number(pond.locacao_m2) > 0) {
         const n = Number(pond.n_locacao) || 0;
         return { valor: Number(pond.locacao_m2), origem: `mediana de ${n} anúncio(s) de locação da base geolocalizada da cidade` };
@@ -280,7 +280,7 @@ export default async function handler(req) {
       };
     } else {
       // Fallback (região sem amostras de mercado): ponderado com geo → acervo.
-      const pond = await rpc('indice_regiao_ponderado', { p_cidade_norm: cidadeNorm, p_uf: uf, p_bairro_norm: bairroNorm, p_lat: lat, p_lng: lng, p_tipo: tipo });
+      const pond = await rpc('indice_regiao_ponderado', { p_cidade_norm: cidadeNormDb, p_uf: uf, p_bairro_norm: bairroNorm, p_lat: lat, p_lng: lng, p_tipo: tipo });
       if (pond && (Number(pond.venda_m2) > 0 || Number(pond.locacao_m2) > 0)) {
         // Mesma escada aqui: sem locação no ponderado, tenta os bairros já medidos da cidade
         // antes do 0,4%. (aluguelAmplo repete a chamada do ponderado, que já veio nula.)
@@ -374,7 +374,7 @@ export default async function handler(req) {
     // R$/m² ponderado de cada BAIRRO já mapeado (>=3 amostras). Bairro fino cai na média (nível 3).
     const cidadeAmpla = !bairroNorm && lat == null && lng == null;
     const regioes = cidadeAmpla
-      ? await rpc('indice_bairros_cidade', { p_cidade_norm: cidadeNorm, p_uf: uf, p_tipo: tipo }).then(r => Array.isArray(r) ? r : []).catch(() => [])
+      ? await rpc('indice_bairros_cidade', { p_cidade_norm: cidadeNormDb, p_uf: uf, p_tipo: tipo }).then(r => Array.isArray(r) ? r : []).catch(() => [])
       : [];
     // COMPOSIÇÃO por NÍVEL (localidade ≤250m · bairro · cidade · estado) triada por tipologia e
     // padrão — responde "quantas amostras em cada dimensão" no card do índice.

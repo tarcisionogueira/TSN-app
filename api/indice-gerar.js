@@ -67,6 +67,10 @@ export default async function handler(req) {
 
   let body; try { body = await req.json(); } catch { return new Response(JSON.stringify({ error: 'JSON inválido' }), { status: 400, headers }); }
   const cidadeNorm = norm(body.cidade);
+  // Convenção canônica de `cidade_norm` no banco é SEM ESPAÇO (imoveis_leilao e
+  // cidade_socio, as duas maiores tabelas). `norm()` produz COM espaço; passar essa
+  // forma para a RPC fazia a consulta não achar nada em cidade de nome composto.
+  const cidadeNormDb = String(cidadeNorm || '').replace(/\s+/g, '');
   const uf = String(body.uf || '').trim().toUpperCase();
   const bairroNorm = norm(body.bairro);
   const SEGS = ['apartamento', 'casa', 'terreno', 'comercial'];
@@ -96,7 +100,7 @@ export default async function handler(req) {
   // Fonte PRIMÁRIA: AMOSTRAS DE MERCADO (indice_amostras — pesquisa web + backfill histórico),
   // ponderadas por recência do anúncio. Fallback: mediana do ACERVO (gerar_indice_regiao) quando
   // a região ainda não tem amostras de mercado. Sem nenhuma das duas → NÃO consome crédito.
-  const pond = await rpc('indice_regiao_ponderado', { p_cidade_norm: cidadeNorm, p_uf: uf, p_bairro_norm: bairroNorm, p_lat: lat, p_lng: lng, p_tipo: tipo });
+  const pond = await rpc('indice_regiao_ponderado', { p_cidade_norm: cidadeNormDb, p_uf: uf, p_bairro_norm: bairroNorm, p_lat: lat, p_lng: lng, p_tipo: tipo });
   let out = null;
   if (pond && pond.venda_m2 != null) {
     out = {
@@ -108,7 +112,7 @@ export default async function handler(req) {
       n_amostras: (pond.n_venda || 0) + (pond.n_locacao || 0),
     };
   } else {
-    const g = await rpc('gerar_indice_regiao', { p_cidade_norm: cidadeNorm, p_uf: uf, p_bairro: bairroNorm, p_lat: lat, p_lng: lng, p_tipo: tipo });
+    const g = await rpc('gerar_indice_regiao', { p_cidade_norm: cidadeNormDb, p_uf: uf, p_bairro: bairroNorm, p_lat: lat, p_lng: lng, p_tipo: tipo });
     if (g && g.gerado === true) out = { fonte: 'acervo', nivel: g.nivel, venda_m2: g.venda_m2, aluguel_m2: g.aluguel_m2, n_amostras: g.n_amostras };
   }
   if (!out)
