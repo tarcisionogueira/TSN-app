@@ -239,6 +239,27 @@ lia como rede de proteção. *Removido*, com nota apontando para o controle real
 > não recebeu a migração. **Não precisa mais rodar isso à mão:** `npm run verificar:schema` faz, e
 > o CI roda a cada push e todo dia às 11h UTC.
 
+### 📊 Auditoria das 11 caixas do Dashboard (12/08) — 10 certas, 1 impossível
+
+O dono pediu parecer sobre a origem dos dados. Conferi caixa a caixa, recalculando cada número
+direto no banco sem passar pelas RPCs. **Origem:** a linha de cima vem de `admin_dashboard_contadores`
+(+ MRR calculado no NAVEGADOR sobre `planos_config`); as 7 de baixo vêm de `admin_metricas_negocio`.
+
+**Dez batiam exatamente.** O que não batia, e o que enganava:
+
+| # | Achado | Estado |
+|---|---|---|
+| 1 | **"Cidades maduras" era um zero ESTRUTURAL** — `cidades_indice_maduras(6,'residencial')` filtrava um `tipo` que não existe nos níveis bairro/grid (lá é apartamento/casa/terreno). Nunca casava com nada. Real: **3 maduras · 19 em progresso**. E o card anuncia *"libera desconto×índice"* — regra de negócio pendurada num indicador que não podia disparar | ✅ `p_tipo` vazio = todos os tipos |
+| 2 | **54% das buscas eram do dono** (1.182 de 2.206), num painel que se lê como uso de cliente. Uso real: **1.024** | ✅ card virou "Buscas de clientes", internas reveladas ao lado |
+| 3 | **A metade de cima falhava em silêncio**: RPC sem checar `error` → tudo virava zero, e *"0 inadimplentes"* tem cara de dia bom. O painel de baixo já checava e se escondia — mesma tela, dois comportamentos | ✅ aviso explícito |
+| 4 | **MRR: anual contado a preço mensal** (R$49,90 em vez de R$37,49 — +33%) e **inadimplente contado no topo mas não no detalhe**. Zero anuais e zero inadimplentes hoje, então o número está certo; erraria na primeira venda anual | ✅ base do MRR já cruzada no servidor |
+| 5 | **Amostras: `(n1)+(n2)` com um lado nulo descarta a LINHA inteira** do `sum()`. As 51 atuais têm os dois níveis, então 1.524 está correto | ✅ coalesce por nível |
+
+> **Leitura que continua valendo para o dono, e não é bug:** dos R$ 699,60 de MRR, **R$ 500 (71%)
+> são amortização do pacote Assessoria** (R$6.000÷12), que é prazo fixo, não assinatura — se não
+> renovar, o MRR cai 71%. E "39 usuários" inclui a conta admin e 33 exploradores gratuitos:
+> **pagantes são 5**.
+
 ### 🔒 As travas criadas para que esta família não volte (12/08, EM PRODUÇÃO)
 
 Corrigir os seis achados não impede a MESMA família de voltar na próxima feature. Cada classe
