@@ -233,19 +233,56 @@ mensal de proxy, teto em dólar e alerta de 80%/100% — e a tabela `proxy_uso` 
 gastar" para sempre, e **nenhum** dos cinco scrapers importava essas funções. Código morto que se
 lia como rede de proteção. *Removido*, com nota apontando para o controle real (`api/_brightdata.js`).
 
-> **O método que achou 1, 2 e 6 é o mesmo, e é barato:** extrair todos os `.from('tabela')` do
-> código (90 tabelas) e todas as colunas de data usadas em filtro/ordenação (53 pares), e conferir
-> contra `information_schema`. Nenhum dos três apareceria em leitura de código — o código está
-> certo; o banco é que não recebeu a migração. Vale repetir a cada sessão que suba feature nova.
-> Cuidado com um falso-positivo: `supabase.storage.from('documentos')` é BUCKET, não tabela.
+> **O método que achou 1, 2 e 6 virou TRAVA AUTOMÁTICA** (ver a seção seguinte): extrair todos os
+> `.from('tabela')` do código e as colunas de data usadas em filtro/ordenação, e conferir contra o
+> schema real. Nenhum dos três apareceria em leitura de código — o código está certo; o banco é que
+> não recebeu a migração. **Não precisa mais rodar isso à mão:** `npm run verificar:schema` faz, e
+> o CI roda a cada push e todo dia às 11h UTC.
+
+### 🔒 As travas criadas para que esta família não volte (12/08, EM PRODUÇÃO)
+
+Corrigir os seis achados não impede a MESMA família de voltar na próxima feature. Cada classe
+ganhou uma trava **determinística, custo zero, sem IA**:
+
+| Trava | Onde roda | Pega |
+|---|---|---|
+| `npm run verificar:schema` (**nova**) | CI `verificar-schema.yml` — push, PR e **diário 11h UTC** | Toda tabela em `.from('x')` (88) e coluna de data em filtro/ordenação (54) conferidas contra o schema REAL, pela RPC `schema_inventario()` |
+| `mutacao-sem-binding` (**nova regra**) | `prebuild` — todo build e o deploy da Vercel | `await supabase.from(...).update/insert` cujo resultado é descartado: a forma exata que mandou o e-mail de reunião fantasma |
+| `notify-sem-cancelled` (**nova regra**) | idem | Passo de alerta com `if: failure()` sem `cancelled()`. **Linha de base ZERO** = portão duro |
+
+Três decisões que valem entender antes de mexer:
+
+1. **O verificador de schema NÃO está no `prebuild`.** Ele fala com o banco; pôr isso no caminho
+   do build faria o deploy da Vercel depender da disponibilidade do Supabase — trocaria uma classe
+   de falha por outra. Roda **também agendado**, porque a deriva nasce dos dois lados: renomear uma
+   coluna quebra código que ninguém tocou, e aí não há push nenhum para disparar a checagem.
+2. **Ele reprova quando NÃO CONSEGUE verificar** (saída 2). Tratar "não consegui checar" como "está
+   tudo bem" seria cometer, dentro da própria trava, o defeito que ela existe para pegar.
+3. **`mutacao-sem-binding` entrou com 96 ocorrências históricas na linha de base** (total 395, era
+   299). É deliberado: só ocorrência NOVA reprova. Não saia refatorando as 96.
+
+> **A trava caiu na própria armadilha, e o registro disso é a parte útil.** O primeiro CI reprovou
+> acusando `imoveis_leilao` — 66 colunas, existe desde sempre. A RPC devolvia uma linha por coluna
+> (2.136) e **o PostgREST corta em 1.000 sem erro**: o verificador recebia meio schema. É a mesma
+> armadilha que `api/publico.js` e o cron do espelho já documentam aqui. Corrigido devolvendo **um
+> único jsonb** (uma linha nunca é truncada) e, mais importante, o verificador agora **reprova se a
+> RPC voltar a devolver array**. Lição para a próxima trava que alguém escrever: o teto de 1.000 do
+> PostgREST é característica do TRANSPORTE, não detalhe de cada chamada.
+>
+> Por que passou de primeira: validei o extrator e os pares por SQL, mas nunca exercitei o caminho
+> completo do script (sem credencial na sessão, ele parava na saída 2). Agora há teste de ponta a
+> ponta com servidor falso nos três casos — completo passa; faltando `reuniao_em`/`onr_protocolos`
+> reprova apontando arquivo e linha; array reprova como "não verificado".
 
 ### ⚠️ O QUE ESPERA VOCÊ NA ABERTURA
 
-1. **🔴 AS CORREÇÕES DE WORKFLOW SÓ VALEM DEPOIS DO MERGE — leia isto primeiro.** Elas estão na
-   branch `claude/handoff-bidpro-brasil-checks-sil3ws`, e o cron diário roda a partir da `main`.
-   Ou seja: **enquanto não houver merge, a rodada das 10h UTC continua com teto de 90 min e
-   continua truncando em silêncio.** As correções de banco (as 2 migrações) já estão valendo em
-   produção, porque foram aplicadas direto; as de código (front, scrapers e workflows) não.
+1. **Tudo já está em produção** — `main` recebeu os commits (fast-forward de `3591829`), o deploy
+   da Vercel saiu READY e o CI das duas travas passou (`verificar-padroes` e `verificar-schema`,
+   ambos `success`). As migrações de banco já valiam antes, por terem sido aplicadas direto.
+   > ⚠️ **Cuidado com o `main` LOCAL deste clone:** ele aponta para um histórico NÃO RELACIONADO
+   > (`27091e6`, 52 commits divergentes) e `git merge` recusa com "unrelated histories". Não é o
+   > `origin/main`. Para publicar, use `git push origin HEAD:main` a partir da branch de trabalho
+   > — foi o que se fez aqui. Não tente "consertar" o main local sem entender de onde ele veio.
 2. **As fontes paradas já foram recoletadas à mão**, em vez de esperar o cron — e a defasagem de
    3 dias era real, não só congelamento: GRUPOLANCE **434 → 453** ativos, WEBLEILOES **89 → 90**,
    SUPORTE atualizado, PESTANA de volta a **992 · ok**. A rodada fechou em 11 min com `success`.
