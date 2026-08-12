@@ -33,20 +33,26 @@ export function metricasColeta(imoveis) {
  * @param {string} fonte    código da fonte (o mesmo gravado em imoveis_leilao.fonte)
  * @param {Array}  imoveis  lotes coletados nesta execução
  * @param {string} estrategia rótulo livre ('principal', 'api', 'html'…)
- * @param {object} validacao {ok, metricas, motivo} quando o coletor tem portão de qualidade
+ * @param {object} validacao {ok, metricas, motivo, semCota} quando o coletor tem portão de
+ *   qualidade. `semCota: true` marca que o zero veio de decisão de ORÇAMENTO (cota do
+ *   fornecedor pago negada) e não de mudança na fonte — nesse caso não se acusa regressão,
+ *   porque a ação que resolve é liberar cota, não consertar parser.
  */
 export async function registrarSaude(supabase, fonte, imoveis, estrategia, validacao) {
   const m = validacao?.metricas || metricasColeta(imoveis || []);
+  const semCota = validacao?.semCota === true;
   let status = 'ok', motivo = validacao?.motivo || '';
   if (!m.n) status = 'falhou';
   else if (validacao && validacao.ok === false) status = 'degradado';
   try {
     const { data: ant } = await supabase.from('fonte_saude')
       .select('total').eq('fonte', fonte).order('executado_em', { ascending: false }).limit(1).maybeSingle();
-    if (ant && ant.total > 0 && m.n < ant.total * 0.5) {
+    if (ant && ant.total > 0 && m.n < ant.total * 0.5 && !semCota) {
       if (status === 'ok') status = 'degradado';
       motivo = [motivo, `queda vs anterior (${m.n}<${ant.total})`].filter(Boolean).join('; ');
       console.log(`  ⚠️ [${fonte}] REGRESSÃO: caiu de ${ant.total} para ${m.n}`);
+    } else if (semCota && ant && ant.total > 0) {
+      console.log(`  💰 [${fonte}] sem cota: coleta não tentada (anterior ${ant.total}). NÃO é regressão da fonte.`);
     }
     await supabase.from('fonte_saude').insert({
       fonte, total: m.n, estrategia: estrategia || null,

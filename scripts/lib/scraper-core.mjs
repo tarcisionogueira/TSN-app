@@ -1,150 +1,36 @@
 /**
- * FASE 1 — Núcleo de scraping escalável
+ * Núcleo de scraping — EXTRATORES compartilhados pelos coletores.
  * ────────────────────────────────────────────────────────────────────────────
  * Componentes:
- *  1. fetchViaProxy()    — wrapper único (ScraperAPI | Bright Data | direto)
- *                          com limitador de cota e alerta de custo
- *  2. extrairGenerico()  — extrator heurístico (schema.org, og:tags, padrões)
- *  3. extrairComIA()     — fallback Claude quando a heurística falha
- *  4. checarQualidade()  — valida campos-base (matrícula/foto/valor/descrição)
+ *  1. extrairGenerico()  — extrator heurístico (schema.org, og:tags, padrões)
+ *  2. extrairComIA()     — fallback Claude quando a heurística falha
+ *  3. checarQualidade()  — valida campos-base (matrícula/foto/valor/descrição)
+ *  4. chaveDedup()       — chave de deduplicação entre fontes
  *
- * Sem chave de proxy configurada, fetchViaProxy() cai para fetch direto
- * (útil em ambientes liberados). A chave decide o provedor — nada de hardcode.
+ * A camada de PROXY saiu daqui em 12/08 (ver a nota logo abaixo): quem controla
+ * acesso pago e custo é `api/_brightdata.js`.
  */
 
 // ── Configuração via variáveis de ambiente ──────────────────────────────────
-const PROXY_PROVIDER   = process.env.PROXY_PROVIDER || '';          // 'scraperapi' | 'brightdata' | ''
-const SCRAPERAPI_KEY   = process.env.SCRAPERAPI_KEY || '';
-const BRIGHTDATA_URL   = process.env.BRIGHTDATA_PROXY_URL || '';     // ex.: http://user:pass@zproxy.lum-superproxy.io:22225
-const MAX_REQ_MES      = parseInt(process.env.PROXY_MAX_REQ_MES || '15000', 10);
-const TETO_USD         = parseFloat(process.env.PROXY_TETO_USD || '40');
-const CUSTO_POR_MIL    = parseFloat(process.env.PROXY_CUSTO_POR_MIL || '1.5');
-const ALERTA_PCT       = parseInt(process.env.PROXY_ALERTA_PCT || '80', 10);
 const CLAUDE_KEY       = process.env.CLAUDE_KEY || '';
-const RESEND_API_KEY   = process.env.RESEND_API_KEY || '';
-const FROM_EMAIL       = process.env.APP_FROM_EMAIL || 'alertas@bidprobrasil.com.br';
-const ADMIN_EMAIL      = process.env.ADMIN_EMAIL || 'tarcisioaraujo@reimob.com.br';
 
-const mesAtual = () => new Date().toISOString().slice(0, 7); // 'YYYY-MM'
-
-// ── 1. LIMITADOR + ALERTA ───────────────────────────────────────────────────
-// Estado em memória do processo; persistido no Supabase ao final via flushUso().
-let _uso = { requisicoes: 0, falhas: 0, travado: false };
-
-export function usoAtual() {
-  return { ..._uso, custo_usd: +(_uso.requisicoes / 1000 * CUSTO_POR_MIL).toFixed(2) };
-}
-
-async function carregarUso(supabase) {
-  const { data } = await supabase.from('proxy_uso').select('*').eq('mes', mesAtual()).maybeSingle();
-  if (data) {
-    _uso.requisicoes = data.requisicoes || 0;
-    _uso.falhas = data.requisicoes_falha || 0;
-    _uso._alerta80 = data.alerta_80_enviado;
-    _uso._alerta100 = data.alerta_100_enviado;
-  }
-  return _uso;
-}
-
-function dentroDoLimite() {
-  const custo = _uso.requisicoes / 1000 * CUSTO_POR_MIL;
-  return _uso.requisicoes < MAX_REQ_MES && custo < TETO_USD;
-}
-
-async function enviarAlerta(assunto, corpo) {
-  if (!RESEND_API_KEY) { console.log(`[ALERTA] ${assunto}`); return; }
-  // Regra de segurança: e-mail do admin recebe apenas notificações de sistema.
-  try {
-    await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        from: FROM_EMAIL, to: ADMIN_EMAIL, subject: assunto,
-        html: `<div style="font-family:sans-serif;max-width:560px">
-          <h2 style="color:#0D63DB">⚙️ Proxy de scraping</h2><p>${corpo}</p>
-          <p style="color:#64748b;font-size:12px">Mês ${mesAtual()} — ${_uso.requisicoes} req · ~US$ ${(_uso.requisicoes/1000*CUSTO_POR_MIL).toFixed(2)}</p></div>`,
-      }),
-    });
-  } catch (e) { console.log('[ALERTA] falha envio:', e.message); }
-}
-
-async function checarAlertas(supabase) {
-  const custo = _uso.requisicoes / 1000 * CUSTO_POR_MIL;
-  const pct = (_uso.requisicoes / MAX_REQ_MES) * 100;
-  if (!dentroDoLimite() && !_uso._alerta100) {
-    _uso._alerta100 = true; _uso.travado = true;
-    await enviarAlerta('🛑 Proxy pausado — teto atingido',
-      `Cota mensal atingida (${_uso.requisicoes}/${MAX_REQ_MES} req · US$ ${custo.toFixed(2)}/${TETO_USD}). Scraping de leiloeiros pausado até o próximo mês. A CEF (CSV grátis) continua ativa.`);
-    await flushUso(supabase);
-  } else if ((pct >= ALERTA_PCT || custo >= TETO_USD * (ALERTA_PCT/100)) && !_uso._alerta80) {
-    _uso._alerta80 = true;
-    await enviarAlerta(`⚠️ Proxy em ${Math.round(pct)}% da cota`,
-      `Uso do proxy chegou a ${_uso.requisicoes}/${MAX_REQ_MES} req (~US$ ${custo.toFixed(2)}). Acompanhe para não exceder o teto de US$ ${TETO_USD}.`);
-    await flushUso(supabase);
-  }
-}
-
-export async function flushUso(supabase) {
-  const custo = +(_uso.requisicoes / 1000 * CUSTO_POR_MIL).toFixed(2);
-  await supabase.from('proxy_uso').upsert({
-    mes: mesAtual(),
-    requisicoes: _uso.requisicoes,
-    requisicoes_falha: _uso.falhas,
-    custo_estimado_usd: custo,
-    alerta_80_enviado: !!_uso._alerta80,
-    alerta_100_enviado: !!_uso._alerta100,
-    atualizado_em: new Date().toISOString(),
-  }, { onConflict: 'mes' });
-}
-
-// ── 1b. WRAPPER DE FETCH ────────────────────────────────────────────────────
-function montarUrlProxy(url) {
-  if (PROXY_PROVIDER === 'scraperapi' && SCRAPERAPI_KEY) {
-    return `https://api.scraperapi.com/?api_key=${SCRAPERAPI_KEY}&country_code=br&url=${encodeURIComponent(url)}`;
-  }
-  return url; // direto ou Brigth Data (via agente HTTP — ver opts abaixo)
-}
-
-/**
- * Busca uma URL respeitando o limitador. Retorna { ok, html, status }.
- * @param {object} supabase  cliente Supabase (para contabilizar uso)
- */
-export async function fetchViaProxy(url, supabase, { timeoutMs = 20000 } = {}) {
-  if (supabase && _uso.requisicoes === 0 && !_uso._carregado) {
-    _uso._carregado = true; await carregarUso(supabase);
-  }
-  if (_uso.travado || !dentroDoLimite()) {
-    _uso.travado = true;
-    return { ok: false, html: '', status: 0, motivo: 'limite_atingido' };
-  }
-
-  const usandoProxy = PROXY_PROVIDER === 'scraperapi' && SCRAPERAPI_KEY;
-  const alvo = montarUrlProxy(url);
-
-  try {
-    const controller = new AbortController();
-    const t = setTimeout(() => controller.abort(), timeoutMs);
-    const resp = await fetch(alvo, {
-      signal: controller.signal,
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'pt-BR,pt;q=0.9',
-      },
-    });
-    clearTimeout(t);
-
-    // Só contabiliza quando passou pelo proxy pago
-    if (usandoProxy) { _uso.requisicoes++; if (supabase) await checarAlertas(supabase); }
-
-    if (!resp.ok) { _uso.falhas++; return { ok: false, html: '', status: resp.status }; }
-    const html = await resp.text();
-    return { ok: true, html, status: resp.status };
-  } catch (e) {
-    _uso.falhas++;
-    return { ok: false, html: '', status: 0, motivo: e.name === 'AbortError' ? 'timeout' : e.message };
-  }
-}
+// ── 1. CAMADA DE PROXY: NÃO MORA MAIS AQUI ──────────────────────────────────
+// Havia aqui um `fetchViaProxy()` com limitador de cota mensal, contador persistido
+// em `proxy_uso` e alerta de custo em 80%/100%. Removido em 12/08 por ser uma REDE DE
+// PROTEÇÃO QUE NÃO PROTEGIA — e esse é o ponto, não a limpeza:
+//
+//   · a tabela `proxy_uso` NUNCA existiu no banco. `carregarUso` fazia
+//     `const { data } = await supabase.from('proxy_uso')…` sem checar `error`, então lia
+//     zero a cada execução; `dentroDoLimite()` respondia "pode gastar" sempre; e o
+//     `flushUso` gravava no vazio. Os alertas de 80% e 100% nunca poderiam disparar.
+//   · nenhum scraper importava essas funções (os cinco importam só os extratores),
+//     então o teto não segurava nada de verdade — mas quem lesse o arquivo concluiria
+//     que o gasto de proxy estava limitado e monitorado.
+//
+// O controle de custo REAL vive em `api/_brightdata.js`: reserva atômica no banco antes
+// do fetch (`registrar_uso_brightdata`), sub-cota por propósito, e `ErroBrightData` com
+// `semCota` para o chamador distinguir "o orçamento disse não" de "a fonte não tem nada".
+// É esse que o ritual de abertura do CLAUDE.md audita toda sessão.
 
 // ── 2. EXTRATOR HEURÍSTICO ──────────────────────────────────────────────────
 const _abs = (href, base) => {

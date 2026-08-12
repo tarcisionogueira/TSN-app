@@ -16,18 +16,22 @@
  *   - SOLEON_DRYRUN (default '1'): NÃO grava — busca, parseia e LOGA o que inseriria.
  *   - SOLEON_DEBUG  (default '0'): dumpa a estrutura (listagem + 1 detalhe/tenant) p/
  *     confirmar os padrões de URL e o parser ANTES de gravar (método recon-first).
- *   - Bright Data via fetchViaBrightData(proposito='soleon') → sub-cota + teto global.
+ *   - Bright Data via buscarViaBrightData(proposito='soleon') → sub-cota + teto global.
  *   - SOLEON_TENANTS: csv de fontes p/ rodar um subconjunto (ex.: "CALIL,VEGAS").
  *
  * Env: BRIGHTDATA_API_TOKEN, BRIGHTDATA_ZONE, VITE_SUPABASE_URL, SUPABASE_SERVICE_KEY.
  */
 import { createClient } from '@supabase/supabase-js';
-// NOTA (11/08): aqui o `null` do fetchViaBrightData é um fallback DELIBERADO (tenta o
-// caminho grátis/residencial, e o pago é a segunda chance) — por isso este arquivo segue
-// na linha de base do verificador de padrões em vez de migrar para `buscarViaBrightData`.
-// O que fecha o buraco perigoso é outra coisa: coleta com zero lote agora sai com código
-// 1 e grava `fonte_saude` 'falhou', e o gate só carimba "coletei" com linha no acervo.
-import { fetchViaBrightData, brightDataDisponivel } from '../api/_brightdata.js';
+// NOTA (11/08, REVISTA EM 12/08): a decisão anterior era manter o `null` do
+// `fetchViaBrightData` como fallback deliberado — grátis primeiro, pago como segunda
+// chance. O fallback continua certo; o `null` é que era cego. Em 12/08 a cota semanal
+// saturou e as três fontes foram para o `fonte_saude` como
+// "REGRESSÃO: caiu de 6 para 0" — mandando procurar um bug de parser que não existia,
+// quando a ação correta era liberar orçamento. Agora usa `buscarViaBrightData`, que LANÇA
+// com o motivo, e o `semCota` chega até o registro de saúde.
+// Segue valendo o resto: coleta com zero lote sai com código 1 e grava 'falhou', e o gate
+// só carimba "coletei" com linha no acervo.
+import { buscarViaBrightData, ErroBrightData, brightDataDisponivel } from '../api/_brightdata.js';
 import { extrairGenerico, extrairData, checarQualidade } from './lib/scraper-core.mjs';
 import { registrarConhecimento, qualidadeColeta } from './lib/conhecimento.mjs';
 // Monitor de fontes: sem esta linha a fonte fica INVISÍVEL ao bug bounty (ver _saude-fonte.mjs).
@@ -92,10 +96,24 @@ async function fetchTenant(url, { timeoutMs = 45000 } = {}) {
   // bloqueia só datacenter, não tem Cloudflare) → NUNCA cair no Bright Data. Pula a página se
   // por acaso o direto falhar (evita gasto surpresa de BD numa coleta que deveria ser grátis).
   if (process.env.SOLEON_NO_BD === '1') return { html: null, via: 'sem-bd' };
-  const bd = await fetchViaBrightData(url, { proposito: 'soleon', timeoutMs });
-  if (!bd || !bd.ok) return { html: null, via: 'bloqueado' };
-  const html = await bd.text().catch(() => null);
-  return { html, via: 'brightdata' };
+  // `buscarViaBrightData` (que LANÇA com o motivo) no lugar do `fetchViaBrightData` (que
+  // devolve null para quatro causas diferentes). Motivo, medido em 12/08: a cota semanal
+  // saturou (450/450, com a reserva do 'rj' derrubando o teto efetivo dos demais para 420),
+  // as três fontes saíram com 0 lotes em 0,6 s e foram gravadas como
+  // "REGRESSÃO: caiu de 6 para 0" — decisão de ORÇAMENTO lida como quebra do leiloeiro.
+  // É a forma #5 do CLAUDE.md, e aqui ela contaminava o próprio painel de saúde.
+  try {
+    const bd = await buscarViaBrightData(url, { proposito: 'soleon', timeoutMs, exigirOk: false });
+    if (!bd.ok) return { html: null, via: 'bloqueado' };
+    const html = await bd.text().catch(() => null);
+    return { html, via: 'brightdata' };
+  } catch (e) {
+    if (e instanceof ErroBrightData) {
+      // `semCota` = o sistema decidiu não gastar. Não é o site que mudou.
+      return { html: null, via: e.semCota ? 'sem-cota' : 'bloqueado', semCota: !!e.semCota, motivoBD: e.motivo };
+    }
+    throw e;
+  }
 }
 
 function inferirTipo(titulo = '') {
@@ -205,13 +223,18 @@ function montarRow(tenant, url, det) {
 }
 
 // Enumera lotes de imóveis de um tenant: listagem /lotes/imovel paginada (+ salvaguardas).
+// Tenants cuja coleta parou por decisão de ORÇAMENTO (cota Bright Data), não por mudança
+// no site. A diferença decide se `fonte_saude` recebe "regressão" ou "sem cota".
+const SEM_COTA = new Set();
+
 async function enumerarLotes(tenant) {
   const setUrls = new Set();
   let via = null;
   for (let p = 1; p <= MAX_PAGES; p++) {
     // Listagem de imóveis do SOLEON: /lotes/imovel (pág 1) e ?tipo=imovel&page=N (2+).
     const url = `${tenant.base}/lotes/imovel${p > 1 ? `?tipo=imovel&page=${p}` : ''}`;
-    const { html, via: v } = await fetchTenant(url);
+    const { html, via: v, semCota } = await fetchTenant(url);
+    if (semCota) SEM_COTA.add(tenant.fonte);
     if (!html) break;
     via = via || v;
     const antes = setUrls.size;
@@ -296,11 +319,26 @@ async function main() {
   // do runner residencial (que carimbava o gate) e o freio de custo, que passava a
   // bloquear o caminho pago. Foi assim que o RJ ficou 12 dias congelado, tudo verde.
   if (!prontos.length) {
+    // "Não coletei porque a cota acabou" e "não coletei porque o site mudou" exigem AÇÕES
+    // OPOSTAS (liberar orçamento × consertar parser). Gravar o primeiro como o segundo põe o
+    // leiloeiro no banco dos réus e manda alguém procurar um bug que não existe — foi o que
+    // aconteceu com CALIL, VEGAS e TORRES3 em 12/08.
     for (const tenant of TENANTS) {
-      await registrarSaude(supabase, tenant.fonte, [], 'soleon',
-        { ok: false, metricas: { n: 0, uf_pct: 0, valor_pct: 0, link_pct: 0, foto_pct: 0 }, motivo: 'execução sem nenhum lote pronto' });
+      const semCota = SEM_COTA.has(tenant.fonte);
+      await registrarSaude(supabase, tenant.fonte, [], 'soleon', {
+        ok: false,
+        semCota,
+        metricas: { n: 0, uf_pct: 0, valor_pct: 0, link_pct: 0, foto_pct: 0 },
+        motivo: semCota
+          ? 'SEM COTA Bright Data — coleta não tentada (decisão de orçamento, não regressão da fonte)'
+          : 'execução sem nenhum lote pronto',
+      });
     }
-    console.error('nada a gravar — nenhum tenant devolveu lote. Saindo com erro.');
+    if (SEM_COTA.size) {
+      console.error(`sem cota Bright Data para: ${[...SEM_COTA].join(', ')} — orçamento, não regressão. Saindo com erro.`);
+    } else {
+      console.error('nada a gravar — nenhum tenant devolveu lote. Saindo com erro.');
+    }
     process.exitCode = 1;
     return;
   }
@@ -325,7 +363,14 @@ async function main() {
     // coletava zero era justamente o que não deixava rastro — o único caso em que o monitor
     // precisava de uma linha, e era o único em que ela não vinha. TORRES3 está com 1 lote ativo.
     await registrarSaude(supabase, tenant.fonte, rows, 'soleon',
-      rows.length ? undefined : { ok: false, metricas: { n: 0, uf_pct: 0, valor_pct: 0, link_pct: 0, foto_pct: 0 }, motivo: 'tenant sem lote nesta execução' });
+      rows.length ? undefined : {
+        ok: false,
+        semCota: SEM_COTA.has(tenant.fonte),
+        metricas: { n: 0, uf_pct: 0, valor_pct: 0, link_pct: 0, foto_pct: 0 },
+        motivo: SEM_COTA.has(tenant.fonte)
+          ? 'SEM COTA Bright Data — coleta não tentada (decisão de orçamento, não regressão da fonte)'
+          : 'tenant sem lote nesta execução',
+      });
     if (!rows.length) continue;
     await registrarConhecimento(supabase, {
       fonte: tenant.fonte, plataforma: 'SOLEON', acesso: 'gratis+brightdata', custo: 'misto',

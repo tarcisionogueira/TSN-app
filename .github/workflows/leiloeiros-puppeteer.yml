@@ -17,7 +17,12 @@ on:
 jobs:
   scraper-puppeteer:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    # 150 (era 90). Medido: em 09/08 a rodada COMPLETA levou ~87 min — encostada no teto.
+    # Em 10, 11 e 12/08 passou de 90 e foi CANCELADA no meio do Leilotech, levando junto as
+    # tres fontes que vem depois (SUPORTE, GRUPOLANCE, WEBLEILOES), que ficaram 3 dias sem
+    # coletar. O teto agora tem folga E o cancelamento avisa (passo abaixo), para o proximo
+    # crescimento aparecer em vez de comer a cauda da lista em silencio.
+    timeout-minutes: 150
 
     steps:
       - name: Checkout
@@ -47,13 +52,21 @@ jobs:
           LJUD_DEBUG: ${{ github.event.inputs.ljud_debug || '0' }}
         run: node scripts/scraper-puppeteer.mjs
 
+      # `cancelled()` junto com `failure()`: estourar o timeout-minutes NAO e failure para o
+      # GitHub, e o job termina `cancelled` — com este passo pulado. Foi assim que 3 dias de
+      # rodada truncada passaram sem um unico aviso.
       - name: Notify on failure
-        if: failure()
+        if: failure() || cancelled()
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
           APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
+          JOB_STATUS: ${{ job.status }}
+          # Aspas duplas no escalar YAML sao obrigatorias: a mensagem tem ':' e sem elas o
+          # arquivo inteiro deixa de fazer parse (o workflow some, que seria pior que o bug).
+          MOTIVO: "${{ job.status == 'cancelled' && 'TIMEOUT ou cancelamento - a rodada foi cortada no meio e as fontes do FIM da lista (SUPORTE, GRUPOLANCE, WEBLEILOES) podem nao ter coletado. Confira o log e o timeout-minutes.' || 'Erro na execucao.' }}"
         run: |
           curl -s -X POST "${APP_BASE_URL:-https://bidprobrasil.com.br}/api/notify-scraper" \
             -H "x-cron-secret: ${CRON_SECRET}" \
             -H "Content-Type: application/json" \
-            -d '{"tipo":"Scraper Leiloeiros","run_id":"'$GITHUB_RUN_ID'","run_url":"https://github.com/'$GITHUB_REPOSITORY'/actions/runs/'$GITHUB_RUN_ID'"}' || true
+            -d '{"tipo":"Scraper Leiloeiros","etapa":"'"$JOB_STATUS"'","mensagem":"'"$MOTIVO"'","run_id":"'$GITHUB_RUN_ID'","run_url":"https://github.com/'$GITHUB_REPOSITORY'/actions/runs/'$GITHUB_RUN_ID'"}' || true
+        continue-on-error: true
