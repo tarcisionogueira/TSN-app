@@ -313,19 +313,28 @@ Ponto de partida para leilão de imóveis:
 > Desativado"* — **manter assim**: com verificação pendente e orçamento pequeno, você quer
 > controle, não o Google mexendo sozinho na campanha.
 
-#### PASSO 2 — UTM nos anúncios · ~10 min · R$ 0 · opcional
+#### PASSO 2 — UTM nos anúncios · 🟡 PARCIALMENTE FEITO (12/08)
 
-Serve para separar **campanha, palavra-chave e criativo** sem depender da API. Convive bem com o
-auto-tagging (um não anula o outro).
+**Já chegando:** `utm_source=google`, `utm_medium=cpc` e `utm_campaign=pesquisa-leilao-imoveis`
+(confirmado nos dois primeiros cliques, 21:49 e 21:53 de 12/08).
+**Faltando:** `utm_term` e `utm_content` — sem eles não se sabe QUAL palavra-chave trouxe a pessoa,
+e as negativas continuam saindo de lista genérica em vez do dado próprio.
 
-1. Campanha → **Configurações** → **Opções de URL da campanha**.
-2. Em **Sufixo do URL final**, cole:
-   ```
-   utm_source=google&utm_medium=cpc&utm_campaign={campaignid}&utm_term={keyword}&utm_content={creative}
-   ```
-3. Salve. As chaves entre `{}` são preenchidas pelo próprio Google em cada clique.
+Cole em Campanha → **Configurações** → **Opções de URL da campanha** → **Sufixo do URL final**:
+```
+utm_source=google&utm_medium=cpc&utm_campaign=pesquisa-leilao-imoveis&utm_term={keyword}&utm_content={creative}
+```
 
-O site já lê esses cinco parâmetros e grava no primeiro toque.
+> ⚠️ Troque **onde já está definido**. Como o `utm_campaign` chega com nome legível (e não com
+> `{campaignid}`), o sufixo atual está no nível da CAMPANHA. Criar outro no nível da conta faz os
+> dois coexistirem — e o mais específico vence, o que só confunde na hora de ler o relatório.
+
+**Opcional, três sinais no mesmo campo e sem mudar nada do nosso lado:**
+`utm_content={creative}-{matchtype}-{device}` — revela se o desperdício vem de correspondência
+ampla (`b`) e se celular (`m`) converte pior que desktop (`c`), as duas maiores fontes de gasto
+ruim numa campanha de pesquisa.
+
+O site já lê os cinco parâmetros e grava no primeiro toque (`visita_origem`).
 
 ---
 
