@@ -235,6 +235,10 @@ export default function Login() {
     if (/email not confirmed/i.test(m)) return 'Seu e-mail ainda não foi confirmado. Verifique sua caixa de entrada e o spam, ou reenvie a confirmação abaixo.';
     if (/already registered|already been registered/i.test(m)) return 'Este e-mail já está cadastrado. Faça login ou recupere a senha.';
     if (/password should be at least/i.test(m)) return 'A senha é muito curta. Use ao menos 8 caracteres.';
+    // Verificação de senha VAZADA do Supabase — não é regra de complexidade, então a pessoa vê
+    // os cinco requisitos com ✓ e mesmo assim é recusada. Sem esta linha a mensagem caía em
+    // inglês na tela (4 ocorrências, 2 pessoas nos últimos 30 dias) e virava beco sem saída.
+    if (/known to be weak|pwned|leaked password/i.test(m)) return 'Esta senha apareceu em vazamentos públicos e não pode ser usada. Escolha outra — ela pode cumprir todos os requisitos acima e ainda assim ser conhecida.';
     if (/email rate limit|over_email_send_rate/i.test(m)) return 'Muitas tentativas de envio de e-mail. Aguarde alguns minutos e tente novamente.';
     if (/for security purposes|rate limit|too many requests/i.test(m)) return 'Muitas tentativas em pouco tempo. Aguarde um instante e tente de novo.';
     if (/invalid email|unable to validate email|email address.*invalid/i.test(m)) return 'E-mail inválido. Confira o endereço digitado.';
@@ -532,7 +536,7 @@ export default function Login() {
                 </datalist>
               </div>
               <div>
-                <label style={lbl}>Senha * (mín. 8: maiúscula, minúscula, número e especial)</label>
+                <label style={lbl}>Senha *</label>
                 <div style={{ position: 'relative' }}>
                   <input type={showSenha ? 'text' : 'password'} value={form.senha} onChange={e => up('senha', e.target.value)}
                     placeholder="••••••••" required style={{ ...inp, paddingRight: 44 }} />
@@ -540,6 +544,26 @@ export default function Login() {
                     style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 0 }}>
                     {showSenha ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
+                </div>
+                {/* REQUISITOS AO VIVO, como já existe no Checkout. Até 12/08 a regra só aparecia
+                    (a) miúda, entre parênteses no rótulo, e (b) como ERRO depois do submit, com os
+                    quatro requisitos numa frase só — sem dizer qual estava faltando.
+                    Custo medido no Cliente 360: um visitante às 15h13 tentou criar conta CINCO
+                    vezes, tomou a mesma mensagem nas cinco, tentou o Google, voltou, tentou de
+                    novo e foi embora sem conta. Tráfego pago entrando pela porta da frente e
+                    esbarrando na fechadura. */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 3, margin: '7px 2px 0' }}>
+                  {[
+                    { ok: form.senha.length >= 8, txt: 'Mínimo 8 caracteres' },
+                    { ok: /[A-Z]/.test(form.senha), txt: 'Uma letra maiúscula' },
+                    { ok: /[a-z]/.test(form.senha), txt: 'Uma letra minúscula' },
+                    { ok: /\d/.test(form.senha), txt: 'Um número' },
+                    { ok: /[^A-Za-z0-9]/.test(form.senha), txt: 'Um caractere especial (ex.: ! @ # $)' },
+                  ].map(rr => (
+                    <div key={rr.txt} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: rr.ok ? '#059669' : '#94a3b8', fontWeight: rr.ok ? 600 : 400 }}>
+                      <span style={{ fontSize: 12, width: 12, display: 'inline-block' }}>{rr.ok ? '✓' : '○'}</span> {rr.txt}
+                    </div>
+                  ))}
                 </div>
               </div>
               <label style={{ display: 'flex', gap: 9, alignItems: 'flex-start', fontSize: 12, color: '#475569', lineHeight: 1.5, cursor: 'pointer' }}>

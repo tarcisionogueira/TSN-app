@@ -591,18 +591,64 @@ resposta vai.
 > mas **sem o MX nada chega**. Enquanto isso, `suporte@` continua sendo endereço publicado que não
 > recebe.
 
-### ⚠️ O QUE ESPERA VOCÊ NA ABERTURA (tarde de 12/08)
+### 14. 👤 Revisão do Cliente 360 no fim do dia — um cadastro perdido em tempo real
 
-1. **Nada pendente do dia** — tudo em produção, banco e repositório conferidos iguais.
-2. **O Censo é anual/decenal**: o cron só toca em fonte com mais de 25 dias. Não há o que
-   reingerir por um tempo. Para uma fonte nova, use a sonda (`metadados`/`buscar`) ANTES de
-   escrever regex.
-3. **Melhoria disponível, não feita (é decisão do dono):** capturar *"uso ocasional"* como
-   coluna nova, ao lado de `domicilios_vagos`. Muda a leitura de cidade litorânea/de veraneio —
-   Balneário Camboriú tem 86.336 domicílios para 139 mil pessoas. Custo: uma categoria a mais na
-   classificação do agregado 4711 + uma coluna. **Não trocar** o significado de
-   `domicilios_vagos` para fazer isso.
-4. **Bright Data — a decisão do teto continua marcada para 18/08** (ver o bloco da manhã).
+Pedido do dono ao encerrar: "veja o Cliente 360 caso alguém tenha acessado". **Foi a varredura
+mais barata do dia e achou o defeito que mais custa dinheiro.**
+
+**6 visitantes em 12 h · 131 eventos · 13 buscas · 0 erros de cliente abertos.** Três deles
+passaram pelo `/login` e **nenhum criou conta**. Um em especial, `anon:c472a6bf`, entre 15h11 e
+15h17:
+
+| Hora | O que fez |
+|---|---|
+| 15:12:57 | aceitou os Termos |
+| 15:13:57 | "Criar conta grátis" → *"A senha deve ter ao menos 8 caracteres, com letra maiúscula, minúscula, número e caractere especial."* |
+| 15:14:34 · 15:14:45 · 15:15:24 | mesma tentativa, **mesma mensagem**, três vezes |
+| 15:15:51 | tentou "Cadastrar com Google" |
+| 15:16:13 | voltou à senha — **5ª recusa** |
+| 15:16:19 | "Entrar com Google" |
+| 15:17:45 | voltou para a home e **sumiu** |
+
+A regra existia só em dois lugares ruins: miúda entre parênteses no rótulo, e como ERRO **depois**
+do submit, com os quatro requisitos numa frase só — sem dizer **qual** faltava. E o mesmo produto
+já fazia certo no **Checkout**, com a lista de requisitos ao vivo (✓/○). Só o Login, que é a porta
+por onde entra o tráfego pago, tinha ficado de fora. *Corrigido:* a mesma lista ao vivo no cadastro.
+
+**Segundo achado, do mesmo rastro:** `Password is known to be weak and easy to guess` (4×, 2
+pessoas) caía **em inglês** na tela — não é regra de complexidade, é a checagem de senha VAZADA do
+Supabase, então a pessoa vê os cinco requisitos com ✓ e mesmo assim é recusada, sem entender.
+*Corrigido:* mensagem em português que explica exatamente isso.
+
+> **Para acompanhar, não para consertar:** `Email not confirmed` — 7×, **6 pessoas** em 12 dias.
+> O fluxo já trata (estado `emailNaoConfirmado` + botão de reenvio), então não é bug; é a taxa
+> natural de quem não clica no link na hora. Vale olhar de novo se crescer.
+>
+> **O método vale mais que os dois achados:** nenhum dos dois aparece em varredura de código —
+> o código está sintaticamente correto nos dois casos. Só o rastro de quem usou mostra. Rodar
+> `eventos_atividade` por `tipo='api_erro'` agrupado por pessoa é uma consulta e custa zero.
+
+### ⚠️ O QUE ESPERA VOCÊ NA ABERTURA (encerramento de 12/08)
+
+**Nada ficou pela metade no código.** Tudo em produção, banco e repositório conferidos iguais,
+travas passando. O que espera é **espera de terceiro** ou **decisão do dono**:
+
+| # | O que | Quando / quem |
+|---|---|---|
+| 1 | ⏳ **G2RS — resultado da 3ª rodada.** Enviada 12/08 18:57 como **REAPPLICATION** (as duas anteriores morreram em "nova solicitação" e em "mecanismo de busca"). Resposta em até **5 dias corridos**, no `tarcisioaraujo@reimob.com.br` | G2RS · até ~17/08 |
+| 2 | 🔴 **Verificação do anunciante Google Ads** — caso `1-3785000040835`. Reprovada em 03/08: *"advertiser name TARCISIO DE SOUZA NOGUEIRA DE ARAUJO needs to match the inferred name, Bid Pro Brasil"*. Caminho do próprio Google: **resetar a verificação** e declarar **DBA** ligando "BidPro Brasil" à razão social. **Prazo 02/09** (não 31/08 — reemitido em 03/08) | Dono |
+| 3 | 🔴 **MX do domínio → inbound do Resend** (`PENDENCIAS_DONO.md` item **-1.5**). O código do inbound subiu hoje e está testado; **sem o MX nada chega**, e `suporte@`/`privacidade@` seguem publicados no site sem receber | Dono |
+| 4 | 🟠 **Nome fantasia e objeto social na Junta.** O CNPJ ainda diz **CLUBE CONSELHEIRO** e o objeto social não menciona análise/consultoria (CNAE principal 74.90-1-04 termina em *"exceto imobiliários"*). É o que fecha de vez G2RS + Google + revisões futuras | Dono + contador |
+| 5 | 🟠 **Bright Data — decisão do teto**, marcada para 18/08 (ver o bloco da manhã) | Dono |
+| 6 | 🔵 **"Uso ocasional" como coluna nova**, ao lado de `domicilios_vagos` — muda a leitura de cidade de veraneio (Balneário Camboriú: 86.336 domicílios para 139 mil pessoas). Custo: uma categoria a mais no agregado 4711 + uma coluna. **Não trocar** o significado de `domicilios_vagos` | Decisão do dono |
+| 7 | 🔵 **Censo é anual/decenal** — o cron só toca em fonte com +25 dias. Não há o que reingerir. Para fonte nova, use a sonda (`metadados`/`buscar`) ANTES de escrever regex | — |
+
+**Dois alertas de `qa_invariantes()` que já estavam lá e continuam:** `bd_teto_saturado` (480/405,
+é o item 5) e `proximidades_vazio_falso` (**400/300 — passou do limite**, vale investigar: é a
+família de 10/08, proximidades gravando vazio em cidade já mapeada).
+
+**E as 7 anomalias de relatório seguem abertas de propósito** — são incerteza declarada, não fila
+de conserto (ver o item 9 acima).
 
 ---
 
