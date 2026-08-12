@@ -220,6 +220,25 @@ export default async function handler(req, res) {
   const forcada = url.searchParams.get('fonte') || '';
   const todas = url.searchParams.get('todas') === '1';
 
+  // SONDA DE METADADOS: `?metadados=4714` devolve os nomes das variáveis daquele agregado do
+  // IBGE e não escreve nada. Existe porque descobrir o agregado certo era um ciclo de
+  // deploy-e-torcer: em 12/08 ficou provado que o 4709 (usado por `censo_populacao`) NÃO tem
+  // área nem densidade — só População residente, Variação absoluta e Taxa de crescimento
+  // geométrico. Sem esta sonda, achar onde a área mora custaria um deploy por tentativa.
+  const sonda = url.searchParams.get('metadados') || '';
+  if (sonda) {
+    try {
+      const meta = await jsonIBGE(`${IBGE}/api/v3/agregados/${encodeURIComponent(sonda)}/metadados`, 20000);
+      return res.status(200).json({
+        ok: true, agregado: sonda, nome: meta?.nome || null,
+        periodos: meta?.periodicidade || null,
+        variaveis: (meta?.variaveis || []).map((v) => ({ id: v?.id, nome: v?.nome, unidade: v?.unidade })),
+      });
+    } catch (e) {
+      return res.status(200).json({ ok: false, agregado: sonda, erro: String(e?.message || e).slice(0, 300) });
+    }
+  }
+
   // Cadência: o cron roda todo dia, mas só toca em fonte com mais de 25 dias (dado do IBGE é
   // anual/decenal — reingerir diariamente seria queimar chamada à toa). Efeito prático: nos
   // primeiros dias após o deploy a base se preenche sozinha, uma fonte por dia, e depois cada

@@ -28,9 +28,13 @@ on:
   workflow_dispatch:
     inputs:
       fonte:
-        description: 'Chave em socio_fontes (censo_populacao, censo_domicilios, estimativa_populacao, registro_civil_nascimentos)'
-        required: true
+        description: 'Chave em socio_fontes (censo_populacao, censo_domicilios, estimativa_populacao, registro_civil_nascimentos). Ignorado se `metadados` for preenchido.'
+        required: false
         default: 'censo_populacao'
+      metadados:
+        description: 'SONDA: número do agregado IBGE (ex.: 4714). Só LISTA as variáveis dele, não ingere nada. Use para achar onde mora área/densidade.'
+        required: false
+        default: ''
       base_url:
         description: 'Base URL do deploy'
         required: false
@@ -49,7 +53,11 @@ jobs:
             echo "::error::CRON_SECRET vazio — cadastre em Settings > Secrets and variables > Actions"
             exit 1
           fi
-          URL="${{ github.event.inputs.base_url }}/api/socio-ingestao-cron?fonte=${{ github.event.inputs.fonte }}"
+          if [ -n "${{ github.event.inputs.metadados }}" ]; then
+            URL="${{ github.event.inputs.base_url }}/api/socio-ingestao-cron?metadados=${{ github.event.inputs.metadados }}"
+          else
+            URL="${{ github.event.inputs.base_url }}/api/socio-ingestao-cron?fonte=${{ github.event.inputs.fonte }}"
+          fi
           echo "GET $URL"
           curl -sSL --max-time 295 "$URL" -H "x-cron-secret: ${CRON_SECRET}" -o resp.json -w "HTTP %{http_code}\n"
           echo "--- resposta ---"
