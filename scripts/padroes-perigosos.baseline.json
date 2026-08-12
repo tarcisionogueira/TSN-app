@@ -4,7 +4,8 @@
   },
   "api/_webhook-core.js": {
     "delete-sem-select": 1,
-    "data-sem-error": 16
+    "data-sem-error": 16,
+    "mutacao-sem-binding": 7
   },
   "api/admin-chargebacks.js": {
     "json-inline-sem-resposta": 1
@@ -28,7 +29,8 @@
     "json-inline-sem-resposta": 2
   },
   "api/auto-contrato.js": {
-    "data-sem-error": 2
+    "data-sem-error": 2,
+    "mutacao-sem-binding": 1
   },
   "api/captura-handoff.js": {
     "json-inline-sem-resposta": 1
@@ -49,7 +51,8 @@
     "json-inline-sem-resposta": 1
   },
   "api/daily-webhook.js": {
-    "data-sem-error": 1
+    "data-sem-error": 1,
+    "mutacao-sem-binding": 3
   },
   "api/diagnostico-ia.js": {
     "json-inline-sem-resposta": 1
@@ -118,16 +121,22 @@
     "json-inline-sem-resposta": 1
   },
   "api/radar-editais-cron.js": {
-    "data-sem-error": 4
+    "data-sem-error": 4,
+    "mutacao-sem-binding": 1
+  },
+  "api/reconciliar-asaas-cron.js": {
+    "mutacao-sem-binding": 1
   },
   "api/reconciliar-assinaturas-cron.js": {
+    "mutacao-sem-binding": 2,
     "data-sem-error": 7
   },
   "api/regenerar-relatorios-cron.js": {
     "json-inline-sem-resposta": 4
   },
   "api/saldo-abandono-cron.js": {
-    "data-sem-error": 2
+    "data-sem-error": 2,
+    "mutacao-sem-binding": 2
   },
   "api/upload-anexo.js": {
     "json-inline-sem-resposta": 1
@@ -136,13 +145,15 @@
     "json-inline-sem-resposta": 1
   },
   "src/components/ChatSuporte.jsx": {
-    "data-sem-error": 11
+    "data-sem-error": 11,
+    "mutacao-sem-binding": 10
   },
   "src/components/ContratoObrigatorio.jsx": {
     "data-sem-error": 1
   },
   "src/components/LeitorPaginado.jsx": {
-    "data-sem-error": 1
+    "data-sem-error": 1,
+    "mutacao-sem-binding": 1
   },
   "src/components/TermosAtualizadosModal.jsx": {
     "data-sem-error": 1
@@ -150,41 +161,57 @@
   "src/components/TourGuia.jsx": {
     "data-sem-error": 3
   },
+  "src/components/TriagemPerfil.jsx": {
+    "mutacao-sem-binding": 1
+  },
   "src/contexts/AnalisesContext.jsx": {
     "delete-sem-select": 3
   },
   "src/contexts/AuthContext.jsx": {
+    "mutacao-sem-binding": 1,
     "data-sem-error": 2
   },
   "src/pages/Admin.jsx": {
-    "data-sem-error": 36,
-    "delete-sem-select": 9
+    "data-sem-error": 35,
+    "delete-sem-select": 9,
+    "mutacao-sem-binding": 18
   },
   "src/pages/AdvogadoPortal.jsx": {
     "data-sem-error": 1
   },
   "src/pages/Analise.jsx": {
-    "data-sem-error": 1
+    "data-sem-error": 1,
+    "mutacao-sem-binding": 4
   },
   "src/pages/Arrematados.jsx": {
     "data-sem-error": 9,
-    "delete-sem-select": 2
+    "delete-sem-select": 2,
+    "mutacao-sem-binding": 1
   },
   "src/pages/Atendimento.jsx": {
-    "data-sem-error": 1
+    "data-sem-error": 1,
+    "mutacao-sem-binding": 3
   },
   "src/pages/Busca.jsx": {
     "data-sem-error": 3,
     "delete-sem-select": 1
   },
+  "src/pages/CancelarAlertas.jsx": {
+    "mutacao-sem-binding": 1
+  },
   "src/pages/Caso.jsx": {
-    "data-sem-error": 8
+    "data-sem-error": 8,
+    "mutacao-sem-binding": 7
   },
   "src/pages/Checkout.jsx": {
+    "mutacao-sem-binding": 1,
     "data-sem-error": 1
   },
   "src/pages/CompletarCadastro.jsx": {
     "data-sem-error": 1
+  },
+  "src/pages/Consultor.jsx": {
+    "mutacao-sem-binding": 3
   },
   "src/pages/ContratoLink.jsx": {
     "data-sem-error": 1
@@ -213,16 +240,19 @@
   },
   "src/pages/ImovelDetalhe.jsx": {
     "data-sem-error": 2,
+    "mutacao-sem-binding": 2,
     "delete-sem-select": 1
   },
   "src/pages/LeiloeiroPortal.jsx": {
-    "data-sem-error": 1
+    "data-sem-error": 1,
+    "mutacao-sem-binding": 1
   },
   "src/pages/Membros.jsx": {
     "data-sem-error": 4
   },
   "src/pages/MeusChamados.jsx": {
-    "data-sem-error": 2
+    "data-sem-error": 2,
+    "mutacao-sem-binding": 2
   },
   "src/pages/MinhaRede.jsx": {
     "data-sem-error": 6
@@ -232,7 +262,8 @@
   },
   "src/pages/Painel.jsx": {
     "data-sem-error": 1,
-    "delete-sem-select": 2
+    "delete-sem-select": 2,
+    "mutacao-sem-binding": 1
   },
   "src/pages/Planos.jsx": {
     "data-sem-error": 2
@@ -246,6 +277,9 @@
   "src/pages/Promo.jsx": {
     "data-sem-error": 1
   },
+  "src/utils/logUso.js": {
+    "mutacao-sem-binding": 1
+  },
   "src/utils/planosConfig.js": {
     "data-sem-error": 1
   },
@@ -254,25 +288,31 @@
     "delete-sem-select": 3
   },
   "scripts/_saude-fonte.mjs": {
-    "data-sem-error": 1
+    "data-sem-error": 1,
+    "mutacao-sem-binding": 2
   },
   "scripts/captura-docs-grupolance.mjs": {
     "data-sem-error": 3
   },
   "scripts/captura-docs-sodre.mjs": {
-    "data-sem-error": 1
+    "data-sem-error": 1,
+    "mutacao-sem-binding": 1
   },
   "scripts/captura-documentos.mjs": {
-    "data-sem-error": 5
+    "data-sem-error": 5,
+    "mutacao-sem-binding": 4
   },
   "scripts/captura-matricula-cef.mjs": {
-    "data-sem-error": 4
+    "data-sem-error": 4,
+    "mutacao-sem-binding": 5
   },
   "scripts/captura-matricula-grupolance.mjs": {
-    "data-sem-error": 2
+    "data-sem-error": 2,
+    "mutacao-sem-binding": 1
   },
   "scripts/captura-matricula-zuk.mjs": {
-    "data-sem-error": 2
+    "data-sem-error": 2,
+    "mutacao-sem-binding": 2
   },
   "scripts/debug-frazao-click.mjs": {
     "data-sem-error": 1
@@ -286,11 +326,18 @@
   "scripts/debug-grupolance-puppeteer.mjs": {
     "data-sem-error": 1
   },
+  "scripts/enriquecer-datas-cef.mjs": {
+    "mutacao-sem-binding": 1
+  },
   "scripts/espelhar-docs-criticos.mjs": {
     "data-sem-error": 1
   },
   "scripts/foto-cef.mjs": {
-    "data-sem-error": 1
+    "data-sem-error": 1,
+    "mutacao-sem-binding": 1
+  },
+  "scripts/lib/conhecimento.mjs": {
+    "mutacao-sem-binding": 1
   },
   "scripts/lib/scraper-core.mjs": {
     "data-sem-error": 1
@@ -315,11 +362,14 @@
     "delete-sem-select": 1
   },
   "scripts/scraper-puppeteer.mjs": {
-    "data-sem-error": 3
+    "data-sem-error": 3,
+    "mutacao-sem-binding": 2
   },
   "scripts/scraper-soleon.mjs": {
-    "brightdata-null-em-coletor": 1,
     "data-sem-error": 1
+  },
+  "scripts/scraper.js": {
+    "mutacao-sem-binding": 1
   },
   "scripts/verificar-padroes-perigosos.mjs": {
     "json-inline-sem-resposta": 2

@@ -155,10 +155,34 @@ colunas de data usadas). Achados de 11/08 por esse método: `Admin.jsx` (2 telas
 esta última era a consulta de RESGATE do `/caso`, ou seja, o conserto tinha o defeito que veio
 consertar.
 
-**Trava automática, custo zero:** `npm run verificar:padroes` (roda sozinho no `prebuild`, ou
-seja, em todo `npm run build` e no deploy da Vercel; e no CI por `verificar-padroes.yml`). É
-LINHA DE BASE por arquivo — só reprova ocorrência NOVA, o acervo histórico fica como está.
-Exceção deliberada: marque a linha com `// padrao-ok: <motivo>` (motivo obrigatório).
+**7. A MIGRAÇÃO ESCRITA NÃO É A MIGRAÇÃO APLICADA (12/08).** Três defeitos do mesmo dia tinham
+essa causa única: **código correto cujo banco nunca recebeu o objeto**. `solicitacoes.reuniao_em`
+(nunca criada) fazia o `update` do Admin dar 400 sem ninguém checar `error` — e o sistema seguia,
+criava a sala no Daily.co e mandava ao **cliente** um e-mail dizendo que a reunião estava marcada,
+com o banco sem registro nenhum. `onr_protocolos` tinha o `.sql` no repo desde 10/08 e nunca foi
+aplicado: `/registro-imovel` abria vazia, com cara de funcionando. `proxy_uso` nunca existiu, e o
+limitador de custo que dependia dela respondia "pode gastar" para sempre. **Nenhum aparece em
+revisão de código, lint ou teste de front — o código está certo; o que falta está no banco.**
+
+## 🔒 As duas travas automáticas (custo zero, sem IA)
+
+| Trava | Onde roda | O que pega |
+|---|---|---|
+| `npm run verificar:padroes` | `prebuild` (todo `npm run build` e o deploy da Vercel) + CI `verificar-padroes.yml` | As formas 1–6 acima **e**, desde 12/08: `mutacao-sem-binding` (update/insert cujo resultado é descartado — a forma que mandou o e-mail de reunião fantasma) e `notify-sem-cancelled` (passo de alerta com `if: failure()` sem `cancelled()`, que deixou 3 dias de coleta truncada sem aviso) |
+| `npm run verificar:schema` | CI `verificar-schema.yml` — push, PR e **diário 11h UTC** | A forma 7: toda tabela em `.from('x')` e toda coluna de data em filtro/ordenação, conferidas contra o schema REAL (RPC `schema_inventario()`) |
+
+Ambas são **linha de base por arquivo**: só reprovam ocorrência NOVA, o acervo histórico fica como
+está. Exceções deliberadas: `// padrao-ok: <motivo>` e `// schema-ok: <motivo>` — motivo obrigatório.
+
+Duas decisões de projeto que valem entender antes de mexer:
+- **O verificador de schema NÃO está no `prebuild`.** Ele precisa falar com o banco, e pôr isso no
+  caminho do build faria o deploy da Vercel depender da disponibilidade do Supabase — trocaria uma
+  classe de falha por outra. Fica no CI, e roda **também por agendamento**, porque a deriva
+  nasce dos dois lados (renomear uma coluna quebra código que ninguém tocou).
+- **Ele reprova quando NÃO CONSEGUE verificar** (saída 2, sem credencial ou banco fora). Tratar
+  "não consegui checar" como "está tudo bem" seria cometer, dentro da própria trava, o defeito que
+  ela existe para pegar.
+
 **Ao criar leitura externa nova, é mais barato acertar do que explicar depois.**
 
 ## Stack

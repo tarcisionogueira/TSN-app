@@ -13,9 +13,12 @@ name: Padrões perigosos (erro entregue como conteúdo válido)
 
 on:
   push:
-    paths: ['api/**', 'src/**', 'scripts/**', '.github/workflows/verificar-padroes.yml']
+    # `.github/workflows/**` entrou em 12/08: o verificador passou a ter uma regra de YAML
+    # (`notify-sem-cancelled`), então mexer num workflow precisa acionar a trava — senão a
+    # regra existe e nunca roda no caso que ela veio cobrir.
+    paths: ['api/**', 'src/**', 'scripts/**', '.github/workflows/**']
   pull_request:
-    paths: ['api/**', 'src/**', 'scripts/**']
+    paths: ['api/**', 'src/**', 'scripts/**', '.github/workflows/**']
   workflow_dispatch:
 
 jobs:

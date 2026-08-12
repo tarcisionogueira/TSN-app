@@ -1,0 +1,56 @@
+name: Deriva código × banco (migração que não foi aplicada)
+
+# Trava DETERMINÍSTICA, custo ZERO (não usa IA), contra a família de bugs de 12/08:
+# código CORRETO cujo banco nunca recebeu a migração. Ver o bloco de 12/08 no docs/HANDOFF.md.
+#
+# Três defeitos do mesmo dia tinham essa causa — `solicitacoes.reuniao_em`, `onr_protocolos` e
+# `proxy_uso` — e o pior deles fazia o sistema mandar ao CLIENTE um e-mail dizendo que a
+# reunião estava marcada quando nada havia sido gravado.
+#
+# POR QUE NÃO ESTÁ NO PREBUILD (como o verificador de padrões): esta checagem precisa FALAR COM
+# O BANCO. Pôr isso no caminho do `npm run build` faria o deploy da Vercel depender da
+# disponibilidade do Supabase — trocaria uma classe de falha por outra. Aqui roda no push, no
+# PR e uma vez por dia; o agendamento importa porque a deriva também nasce do lado do BANCO
+# (alguém renomeia uma coluna e o código, intocado, passa a mentir).
+
+on:
+  push:
+    paths: ['api/**', 'src/**', 'scripts/**', 'supabase/migrations/**', '.github/workflows/verificar-schema.yml']
+  pull_request:
+    paths: ['api/**', 'src/**', 'scripts/**', 'supabase/migrations/**']
+  schedule:
+    - cron: '0 11 * * *'   # diário, 11h UTC — depois dos scrapers da manhã
+  workflow_dispatch:
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      # Sem `npm ci`: o verificador usa só módulos nativos do Node e `fetch`, de propósito.
+      - name: Verificar deriva código × banco
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        # Saída 1 = achou deriva. Saída 2 = NÃO CONSEGUIU VERIFICAR (sem credencial, banco fora).
+        # As duas reprovam, e é deliberado: tratar "não consegui checar" como "está tudo bem"
+        # seria cometer, dentro da própria trava, exatamente o defeito que ela existe para pegar.
+        run: node scripts/verificar-schema-codigo.mjs
+
+      # `cancelled()` junto com `failure()` — a lição do próprio 12/08: timeout não é failure.
+      - name: Notify on failure
+        if: failure() || cancelled()
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          curl -s -X POST "${APP_BASE_URL:-https://bidprobrasil.com.br}/api/notify-scraper" \
+            -H "x-cron-secret: ${CRON_SECRET}" \
+            -H "Content-Type: application/json" \
+            -d '{"tipo":"Deriva codigo x banco","etapa":"'"$JOB_STATUS"'","mensagem":"O codigo referencia tabela/coluna que nao existe no banco (ou a verificacao nao pode ser feita). Ver o log.","run_id":"'$GITHUB_RUN_ID'","run_url":"https://github.com/'$GITHUB_REPOSITORY'/actions/runs/'$GITHUB_RUN_ID'"}' || true
+        continue-on-error: true

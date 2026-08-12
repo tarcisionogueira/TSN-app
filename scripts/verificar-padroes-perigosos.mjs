@@ -75,6 +75,40 @@ const REGRAS = [
     titulo: 'await (await f()).json() — impossível checar .ok antes de usar o corpo',
     testar: (linha) => /await\s*\(\s*await\s+[^)]*\)\s*\)?\s*\.json\(\)/.test(linha),
   },
+  {
+    id: 'mutacao-sem-binding',
+    titulo: 'update/insert/upsert cujo resultado é DESCARTADO — falha vira sucesso silencioso',
+    // Irmã do `data-sem-error`, mas pior: ali pelo menos `data` é lido. Aqui o statement começa
+    // em `await supabase.from(...)` e não vincula NADA, então é estruturalmente impossível
+    // saber se a escrita passou.
+    //
+    // O caso de 12/08 mostra por que isto é grave e não estético. Em `Admin.jsx`, o
+    // `salvarENotificar` fazia `await supabase.from('solicitacoes').update({...})` sem binding.
+    // As colunas `reuniao_em`/`reuniao_duracao_min` não existiam: 400, nada gravado — nem
+    // checklist, nem notas, nem link, nem status. E o código SEGUIA, criava a sala no Daily.co
+    // e mandava ao cliente um e-mail dizendo que a reunião estava marcada. O sistema afirmou
+    // ao cliente, por escrito, algo que não era verdade.
+    //
+    // A regra é de LINHA porque a cadeia começa sempre na mesma: `await supabase.from(`.
+    // Leitura best-effort que deliberadamente ignora o resultado → marque com // padrao-ok:.
+    testar: (linha) => /^\s*await\s+(supabase|sb)\s*\.\s*from\s*\(/.test(linha)
+      && /\.\s*(update|insert|upsert)\s*\(/.test(linha),
+  },
+];
+
+// Regras de WORKFLOW (.github/workflows/*.yml): o defeito mora no YAML, não no JS.
+const REGRAS_WORKFLOW = [
+  {
+    id: 'notify-sem-cancelled',
+    titulo: 'Passo de notificação com `if: failure()` sem `cancelled()` — timeout não avisa',
+    // `timeout-minutes` estourado NÃO é `failure()` para o GitHub: o job termina `cancelled`,
+    // e todo passo condicionado a `failure()` fica SKIPPED. Medido em 12/08: o scraper
+    // Puppeteer diário vinha sendo cortado aos 90 min havia TRÊS DIAS, levando junto as fontes
+    // do fim da lista (SUPORTE, GRUPOLANCE, WEBLEILOES ficaram sem coletar desde 09/08) — e
+    // ninguém foi avisado, porque o único passo de alerta do workflow nunca chegava a rodar.
+    // Dos 56 workflows, os 3 que tinham notificação tinham os 3 o mesmo defeito.
+    testar: (texto) => /if:\s*failure\(\)\s*$/m.test(texto) && /notify|Notify/.test(texto),
+  },
 ];
 
 // Regras de ARQUIVO: o defeito não está numa linha, está na AUSÊNCIA de algo no arquivo inteiro.
@@ -131,6 +165,23 @@ function arquivos(dir, saida = []) {
 
 function contar() {
   const porArquivo = {}; // arquivo → { regraId: [linhas] }
+
+  // Workflows primeiro: são YAML, não passam pelas regras de JS.
+  const dirWf = join(RAIZ, '.github', 'workflows');
+  if (existsSync(dirWf)) {
+    for (const nome of readdirSync(dirWf)) {
+      if (!/\.ya?ml$/.test(nome)) continue;
+      const rel = `.github/workflows/${nome}`;
+      const texto = readFileSync(join(dirWf, nome), 'utf8');
+      if (/#\s*padrao-ok:\s*\S/.test(texto)) continue; // exceção declarada (comentário YAML)
+      for (const r of REGRAS_WORKFLOW) {
+        if (!r.testar(texto, rel)) continue;
+        porArquivo[rel] ||= {};
+        (porArquivo[rel][r.id] ||= []).push(0);
+      }
+    }
+  }
+
   for (const dir of DIRS) {
     for (const rel of arquivos(dir)) {
       const texto = readFileSync(join(RAIZ, rel), 'utf8');
@@ -195,7 +246,8 @@ if (!pioras.length) {
 
 console.error('\n✗ PADRÃO PERIGOSO NOVO — esta é a família de bugs de 10/08 tentando voltar.\n');
 for (const p of pioras) {
-  const regra = REGRAS.find((r) => r.id === p.id) || REGRAS_ARQUIVO.find((r) => r.id === p.id);
+  const regra = REGRAS.find((r) => r.id === p.id) || REGRAS_ARQUIVO.find((r) => r.id === p.id)
+    || REGRAS_WORKFLOW.find((r) => r.id === p.id);
   console.error(`  ${p.arq}`);
   console.error(`    ${regra.titulo}`);
   console.error(`    linha(s): ${p.linhas.join(', ')}   (base ${p.antes} → agora ${p.agora})\n`);

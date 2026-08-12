@@ -11,6 +11,8 @@
     "lint:resposta": "eslint . --rule '{}' --no-eslintrc 2>/dev/null || eslint . | grep -E 'checar-response-ok|problems' || true",
     "verificar:padroes": "node scripts/verificar-padroes-perigosos.mjs",
     "verificar:padroes:atualizar": "node scripts/verificar-padroes-perigosos.mjs --atualizar",
+    "verificar:schema": "node scripts/verificar-schema-codigo.mjs",
+    "verificar:schema:listar": "node scripts/verificar-schema-codigo.mjs --listar",
     "prebuild": "node scripts/verificar-padroes-perigosos.mjs"
   },
   "dependencies": {
