@@ -5114,8 +5114,12 @@ function PainelCoberturaRelatorios() {
     // BRASIL MAPEADO — o denominador é POPULAÇÃO e o card diz isso. Domicílio seria melhor
     // (é o estoque de moradias), mas `cidade_socio.domicilios` está vazio nas 5.571 linhas.
     // Um "%" mudo aqui seria pior: cada leitor imaginaria um denominador diferente.
-    ['Brasil mapeado (população)', `${Number(br.pct_pop_venda || 0).toLocaleString('pt-BR')}% venda`,
-      `${Number(br.pct_pop_aluguel || 0).toLocaleString('pt-BR')}% locação · ${fmtN(br.cidades_venda)} de ${fmtN(br.municipios_br)} municípios`,
+    // DOMICÍLIO é o denominador do mercado imobiliário — mede estoque de moradias, não gente.
+    // Era a intenção desde o início; só passou a ser possível em 12/08, quando
+    // `domicilios_ocupados` deixou de guardar lixo (era a média de moradores × 100, e São
+    // Paulo aparecia com 265 domicílios). População fica ao lado como segunda leitura.
+    ['Brasil mapeado (domicílios)', `${Number(br.pct_dom_venda || 0).toLocaleString('pt-BR')}% venda`,
+      `${Number(br.pct_dom_aluguel || 0).toLocaleString('pt-BR')}% locação · ${Number(br.pct_pop_venda || 0).toLocaleString('pt-BR')}% da população · ${fmtN(br.cidades_venda)} de ${fmtN(br.municipios_br)} municípios`,
       '#be185d'],
   ];
 
