@@ -238,6 +238,28 @@ export default async function handler(req, res) {
   // deploy-e-torcer: em 12/08 ficou provado que o 4709 (usado por `censo_populacao`) NÃO tem
   // área nem densidade — só População residente, Variação absoluta e Taxa de crescimento
   // geométrico. Sem esta sonda, achar onde a área mora custaria um deploy por tentativa.
+  // BUSCA NO CATÁLOGO: `?buscar=urbaniz` lista os agregados cujo nome (ou o da pesquisa)
+  // contém o termo. Sem isto, achar o agregado certo é adivinhar número por número — foi o
+  // que custou caro até a sonda `metadados` existir. Não escreve nada.
+  const termo = (url.searchParams.get('buscar') || '').trim().toLowerCase();
+  if (termo) {
+    try {
+      const cat = await jsonIBGE(`${IBGE}/api/v3/agregados`, 60000);
+      const achados = [];
+      for (const pesquisa of Array.isArray(cat) ? cat : []) {
+        for (const ag of pesquisa?.agregados || []) {
+          const alvo = `${pesquisa?.nome || ''} | ${ag?.nome || ''}`.toLowerCase();
+          if (alvo.includes(termo)) achados.push({ id: ag?.id, nome: ag?.nome, pesquisa: pesquisa?.nome });
+          if (achados.length >= 40) break;
+        }
+        if (achados.length >= 40) break;
+      }
+      return res.status(200).json({ ok: true, termo, total: achados.length, agregados: achados });
+    } catch (e) {
+      return res.status(200).json({ ok: false, termo, erro: String(e?.message || e).slice(0, 300) });
+    }
+  }
+
   const sonda = url.searchParams.get('metadados') || '';
   if (sonda) {
     try {
