@@ -342,6 +342,13 @@ export default async function handler(req, res) {
     console.error('[socio]', e?.message || e);
     return res.status(500).json({ error: 'Não foi possível ler socio_fontes' });
   }
+  // "Nada a ingerir" só é SUCESSO quando ninguém pediu fonte nenhuma. Com `?fonte=x`, lista
+  // vazia significa que a chave não existe (ou está inativa) — e responder `ok:true` a um
+  // pedido que não foi atendido é a forma da casa: erro entregue como conteúdo válido. O
+  // workflow manual sairia verde por cima de um nome digitado errado.
+  if (!fontes.length && forcada) {
+    return res.status(404).json({ ok: false, erro: `fonte '${forcada}' não existe em socio_fontes (ou está inativa)` });
+  }
   if (!fontes.length) return res.status(200).json({ ok: true, msg: 'nada a ingerir (todas as fontes frescas)', fontes: [] });
 
   let municipios;
