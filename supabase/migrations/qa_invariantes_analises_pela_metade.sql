@@ -15,6 +15,10 @@
 --                                ou seja, se o gate parar de valer.
 --   laudo_sem_base             → limite 0. O laudo é síntese dos outros dois; existir sem
 --                                eles significa que alguém apagou metade por baixo dele.
+--   cadastro_barrado           → limite 7 = as ocorrencias dos ultimos 7 dias (5 delas de UMA
+--                                pessoa so, em 12/08, que desistiu). Vigia a porta de entrada:
+--                                se o cadastro voltar a barrar gente, o numero sobe e o monitor
+--                                diario avisa — em vez de a gente descobrir por acaso.
 --   analise_vencida_nao_limpa  → limite 0, com 2 dias de folga sobre a janela de 15 (o cron
 --                                é diário). Este é o que teria gritado: 4 imóveis venceram e
 --                                ficaram, um deles com praça em 21/07, porque o branch por
@@ -65,6 +69,9 @@ as $function$
        (select count(*) from imoveis_leilao where ativo and (valor_minimo in (999999999,99999999,9999999999,111111111,123456789) or valor_avaliacao in (999999999,99999999,9999999999,111111111,123456789))), 0),
      ('perfil_sem_role','Perfil sem role definido','Conta','bug',
        (select count(*) from perfis where coalesce(role,'')=''), 0),
+     ('cadastro_barrado','Cadastro recusado na tela de criar conta (7d)','Conta','bug',
+       (select count(*) from eventos_atividade where tipo='api_erro' and alvo='cadastro_falha'
+          and criado_em > now() - interval '7 days'), 7),
      ('proximidades_vazio_falso','Proximidades vazias em cidade já mapeada','Relatório','bug',
        (select count(*) from imoveis_leilao i where i.ativo and i.pontos_proximos = '{}'::jsonb
           and coalesce(i.cidade,'') <> ''
