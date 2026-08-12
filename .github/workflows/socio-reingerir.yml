@@ -1,0 +1,71 @@
+name: Sócio/IBGE — reingerir fonte (manual)
+
+# Dispara /api/socio-ingestao-cron para uma FONTE específica, com o CRON_SECRET no header.
+#
+# POR QUE EXISTE (12/08): `cidade_socio.area_km2`, `domicilios`, `densidade_hab_km2` e
+# `crescimento_pct` estão VAZIOS nas 5.571 linhas — e sem área não há como medir território
+# mapeado. A causa não foi erro: as duas ingestões do Censo gravaram `ok=true`, 5.570 linhas e
+# `rotulos_ignorados: []`, tendo trazido UMA de quatro colunas cada. O filtro de variáveis nos
+# metadados é onde a ingestão emagrece, e emagrecia calada — o que não é PEDIDO nunca chega
+# para ser ignorado.
+#
+# O cron diário só toca em fonte com mais de 25 dias (dado do IBGE é anual/decenal). Como os
+# censos rodaram em 03 e 04/08, esperar o ciclo custaria semanas para ver o diagnóstico. Daí
+# este disparo.
+#
+# O QUE LER NA RESPOSTA, em ordem:
+#   · `colunas_faltando`      → quais colunas do `mapa` não vieram (vazio = ingestão completa)
+#   · `variaveis_do_agregado` → os nomes que o IBGE REALMENTE expõe. É contra estas strings que
+#                               os regex de `socio_fontes.mapa` precisam casar. Com esta lista o
+#                               ajuste é leitura, não tentativa e erro.
+#   · `ok`                    → agora sai FALSE em ingestão parcial, que é o ponto todo.
+#
+# Ajuste os regex com:
+#   update socio_fontes set mapa = '{"<regex>": "<coluna>", ...}'::jsonb where chave = '<fonte>';
+# e rode este workflow de novo.
+
+on:
+  workflow_dispatch:
+    inputs:
+      fonte:
+        description: 'Chave em socio_fontes (censo_populacao, censo_domicilios, estimativa_populacao, registro_civil_nascimentos)'
+        required: true
+        default: 'censo_populacao'
+      base_url:
+        description: 'Base URL do deploy'
+        required: false
+        default: 'https://bidprobrasil.com.br'
+
+jobs:
+  reingerir:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Chamar a ingestão
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::error::CRON_SECRET vazio — cadastre em Settings > Secrets and variables > Actions"
+            exit 1
+          fi
+          URL="${{ github.event.inputs.base_url }}/api/socio-ingestao-cron?fonte=${{ github.event.inputs.fonte }}"
+          echo "GET $URL"
+          curl -sSL --max-time 295 "$URL" -H "x-cron-secret: ${CRON_SECRET}" -o resp.json -w "HTTP %{http_code}\n"
+          echo "--- resposta ---"
+          python3 -m json.tool resp.json || cat resp.json
+
+      # `cancelled()` junto com `failure()`: timeout não é failure para o GitHub, e sem isto a
+      # execução cortada terminaria sem aviso (lição do scraper diário, 12/08).
+      - name: Notify on failure
+        if: failure() || cancelled()
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          curl -s -X POST "${APP_BASE_URL:-https://bidprobrasil.com.br}/api/notify-scraper" \
+            -H "x-cron-secret: ${CRON_SECRET}" \
+            -H "Content-Type: application/json" \
+            -d '{"tipo":"Socio/IBGE reingestao","etapa":"'"$JOB_STATUS"'","run_id":"'$GITHUB_RUN_ID'","run_url":"https://github.com/'$GITHUB_REPOSITORY'/actions/runs/'$GITHUB_RUN_ID'"}' || true
+        continue-on-error: true
