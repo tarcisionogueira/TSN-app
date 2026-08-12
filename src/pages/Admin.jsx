@@ -5061,12 +5061,19 @@ function PainelAuditoriaSistema() {
 // Dado real via RPC admin_metricas_negocio (admin-gated). É o "o que ocorre no sistema".
 function PainelCoberturaRelatorios() {
   const [m, setM] = React.useState(null);
+  const [cobIdx, setCobIdx] = React.useState(null);
   const [erro, setErro] = React.useState(false);
   React.useEffect(() => {
     let vivo = true;
     supabase.rpc('admin_metricas_negocio').then(({ data, error }) => {
       if (!vivo) return;
       if (error || !data) setErro(true); else setM(data);
+    });
+    // Cobertura do Índice em 3 leituras — RPC própria porque cruza acervo × recortes × área
+    // do município, e não faz sentido pesar a métrica de negócio com isso.
+    supabase.rpc('indice_cobertura_resumo').then(({ data, error }) => {
+      if (!vivo || error) return;   // sem cobertura o painel segue; o card some, não mente
+      setCobIdx(data);
     });
     return () => { vivo = false; };
   }, []);
@@ -5111,6 +5118,17 @@ function PainelCoberturaRelatorios() {
       `${Number(br.pct_pop_aluguel || 0).toLocaleString('pt-BR')}% locação · ${fmtN(br.cidades_venda)} de ${fmtN(br.municipios_br)} municípios`,
       '#be185d'],
   ];
+
+  // COBERTURA DO ÍNDICE — as duas leituras que se cobrem. Acervo mede RELEVÂNCIA (cobrimos
+  // onde vendemos?), município mede EXTENSÃO. Sozinhas enganam: Cuiabá tem 4.327 km² e dá
+  // 0,03% de território com 1,6% de acervo — mal coberta; Lauro de Freitas dá 6,3% de
+  // território com 57,3% de acervo — concentrada onde importa. É o cruzamento que informa.
+  if (cobIdx) {
+    cards.push(['Cobertura do Índice',
+      `${Number(cobIdx.pct_acervo || 0).toLocaleString('pt-BR')}% do acervo`,
+      `${Number(cobIdx.pct_municipio || 0).toLocaleString('pt-BR')}% da área dos municípios · ${fmtN(cobIdx.cidades_com_indice)} cidades`,
+      '#0f766e']);
+  }
   return (
     <div style={S.card}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
