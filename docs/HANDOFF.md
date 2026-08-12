@@ -241,18 +241,23 @@ lia como rede de proteção. *Removido*, com nota apontando para o controle real
 
 ### ⚠️ O QUE ESPERA VOCÊ NA ABERTURA
 
-1. **Nada ficou pela metade.** Os seis achados foram corrigidos e verificados nesta sessão; as
-   fontes paradas foram recoletadas à mão (SUPORTE, PESTANA, GRUPOLANCE, WEBLEILOES) em vez de
-   esperar o cron de amanhã.
+1. **🔴 AS CORREÇÕES DE WORKFLOW SÓ VALEM DEPOIS DO MERGE — leia isto primeiro.** Elas estão na
+   branch `claude/handoff-bidpro-brasil-checks-sil3ws`, e o cron diário roda a partir da `main`.
+   Ou seja: **enquanto não houver merge, a rodada das 10h UTC continua com teto de 90 min e
+   continua truncando em silêncio.** As correções de banco (as 2 migrações) já estão valendo em
+   produção, porque foram aplicadas direto; as de código (front, scrapers e workflows) não.
+2. **As fontes paradas já foram recoletadas à mão**, em vez de esperar o cron — e a defasagem de
+   3 dias era real, não só congelamento: GRUPOLANCE **434 → 453** ativos, WEBLEILOES **89 → 90**,
+   SUPORTE atualizado, PESTANA de volta a **992 · ok**. A rodada fechou em 11 min com `success`.
    > Nota de método: o recon do PESTANA **não pôde** rodar desta sessão — a política de rede do
    > ambiente bloqueia `pestanaleiloes.com.br` (403 no CONNECT do proxy). A saída foi usar o
    > próprio scraper como sonda, via `workflow_dispatch` com `fontes=PESTANA`, porque o log dele
    > já separa os três pontos de quebra possíveis. Vale lembrar disso na próxima vez que um recon
    > parecer impossível daqui.
-2. **Bright Data — a decisão do teto continua marcada para 18/08**, agora com um dado a mais: a
+3. **Bright Data — a decisão do teto continua marcada para 18/08**, agora com um dado a mais: a
    saturação NÃO é teórica, ela já negou coleta de 3 fontes em 12/08. Semana atual: 480 requests
    (o total passa de 450 porque a reserva do `rj` empresta acima do teto global, por definição).
-3. **Confirme que o notify de cancelamento funciona de verdade** no próximo estouro — a correção
+4. **Confirme que o notify de cancelamento funciona de verdade** no próximo estouro — a correção
    é da classe certa, mas só o primeiro cancelamento real prova.
 
 ---
