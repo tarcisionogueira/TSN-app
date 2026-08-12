@@ -149,14 +149,26 @@ async function inventario() {
   }
   // `.ok` ANTES do corpo: um 401/404 aqui não é "o schema está vazio", é "não consegui ler".
   if (!r.ok) return { erro: `RPC schema_inventario devolveu HTTP ${r.status}` };
-  const linhas = await r.json().catch(() => null);
-  if (!Array.isArray(linhas) || !linhas.length) return { erro: 'RPC devolveu corpo vazio/inesperado' };
+  const obj = await r.json().catch(() => null);
+
+  // A RPC devolve UM jsonb {tabela: [colunas]}, e a forma importa. A primeira versão devolvia
+  // uma linha por coluna — 2.136 linhas — e o PostgREST corta em 1.000 SEM ERRO: o verificador
+  // recebia meio schema e acusou `imoveis_leilao` (66 colunas, existe desde sempre) como
+  // inexistente. Um objeto de uma linha só é imune ao corte. Se algum dia voltar a chegar
+  // ARRAY aqui, é sinal de que a RPC foi revertida para a forma truncável — e isso reprova,
+  // em vez de virar um "schema pela metade" silencioso.
+  if (Array.isArray(obj)) {
+    return { erro: 'RPC devolveu ARRAY (forma truncável em 1.000 linhas pelo PostgREST) — esperado UM objeto jsonb' };
+  }
+  if (!obj || typeof obj !== 'object') return { erro: 'RPC devolveu corpo vazio/inesperado' };
 
   const tabelas = new Map(); // tabela → Set(colunas)
-  for (const l of linhas) {
-    if (!tabelas.has(l.tabela)) tabelas.set(l.tabela, new Set());
-    tabelas.get(l.tabela).add(l.coluna);
+  for (const [tab, cols] of Object.entries(obj)) {
+    if (Array.isArray(cols)) tabelas.set(tab, new Set(cols));
   }
+  // Sanidade grosseira: este projeto tem ~175 tabelas. Um inventário minúsculo é bug de
+  // leitura, não schema vazio — e reprovar aqui é melhor do que acusar meio código.
+  if (tabelas.size < 50) return { erro: `inventário implausível: só ${tabelas.size} tabelas` };
   return { tabelas };
 }
 
