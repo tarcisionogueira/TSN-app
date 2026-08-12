@@ -119,5 +119,10 @@ begin
 end;
 $$;
 
+-- `revoke ... from anon` NÃO basta: o grant padrão do Postgres é para PUBLIC, e anon herda dele.
+-- Foi assim que `auditoria_seguranca()` acusou esta função em `rpc_definer_anon` minutos depois
+-- de ela subir — o auditor estava certo e a linha de baixo é a correção.
+revoke execute on function public.minhas_analises_lista(uuid) from public;
 revoke execute on function public.minhas_analises_lista(uuid) from anon;
 grant  execute on function public.minhas_analises_lista(uuid) to authenticated;
+grant  execute on function public.minhas_analises_lista(uuid) to service_role;
