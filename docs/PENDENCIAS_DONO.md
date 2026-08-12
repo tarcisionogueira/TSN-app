@@ -255,10 +255,19 @@ resto). A 2 é opcional. A 3 só depois que a verificação do anunciante sair.
 
 ---
 
-#### PASSO 1 — Ligar a marcação automática (auto-tagging) · ~5 min · R$ 0 · **é o que destrava tudo**
+#### PASSO 1 — ✅ **JÁ ESTAVA FEITO** (conferido na tela de configurações em 12/08)
 
-Sem isso o Google não coloca o `gclid` na URL do anúncio, e **nada** é atribuído — o site fica
-capturando um parâmetro que nunca chega.
+**Codificação automática: Sim** — é o auto-tagging (a posição na lista bate com o padrão do Google:
+depois de Fuso horário, antes de Acompanhamento). E as duas armadilhas **não existem** nesta conta:
+**Acompanhamento: "Nenhuma opção definida"** (sem template que engula o `gclid`) e **Medição
+terceirizada: "Nenhuma"** (sem ferramenta concorrente reescrevendo a URL).
+
+> **A conclusão incômoda:** o `gclid` **já vinha chegando** em toda visita de anúncio, esse tempo
+> todo. Era o NOSSO lado que descartava — o tracker mandava só o `pathname`. O dado estava na
+> porta e era jogado fora. Corrigido em 12/08; do próximo clique em diante é medido.
+
+Passos abaixo mantidos para referência (e para o caso de a conta ser recriada ou o interruptor
+ser desligado por engano):
 
 1. Entre em **ads.google.com** com a conta **475-979-5747**.
 2. Abra o menu de **administração da conta** (ícone de engrenagem/ferramentas no topo; conforme a
@@ -282,6 +291,27 @@ Verde = aparecer uma linha **`Google Ads · …`**. Enquanto só existir `(não 
 está chegando — e aí o problema é uma das duas armadilhas acima.
 
 ---
+
+#### PASSO 1b — 🔴 PALAVRAS-CHAVE NEGATIVAS (achado da mesma tela, 12/08) · gasto direto
+
+A tela de configurações mostra **"Palavras-chave negativas: Nenhuma"**. Sem negativas, a campanha
+paga por busca que nunca compra. Duas ressalvas antes de agir: essa linha é a lista **da CONTA**
+(pode haver negativas no nível da campanha, que não aparecem ali), e a lista genérica abaixo é só
+o ponto de partida.
+
+**A lista boa sai do seu próprio relatório:** Campanha → **Insights → Termos de pesquisa**. Ele
+mostra o que as pessoas realmente digitaram antes de clicar — é onde o desperdício aparece com
+nome e sobrenome.
+
+Ponto de partida para leilão de imóveis:
+`curso` · `como funciona` · `o que é` · `grátis` · `gratuito` · `emprego` · `vaga` · `salário` ·
+`carro` · `veículo` · `moto` · `leiloeiro oficial` · `concurso` · `apostila` · `pdf` · `simulador`
+
+> **Também na mesma tela:** *"Termos dos anúncios de formulário de lead: não aceitos"* — vale
+> considerar. O formulário de lead capta o contato DENTRO do anúncio, sem a pessoa passar pelo
+> cadastro do site, que é justamente onde perdemos gente em 12/08. E *"Aplicação automática:
+> Desativado"* — **manter assim**: com verificação pendente e orçamento pequeno, você quer
+> controle, não o Google mexendo sozinho na campanha.
 
 #### PASSO 2 — UTM nos anúncios · ~10 min · R$ 0 · opcional
 
