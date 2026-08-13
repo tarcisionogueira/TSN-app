@@ -484,10 +484,18 @@ ${Array.isArray(base._truncado) && base._truncado.length ? `<div style="margin-t
           : <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <div style={{ fontSize: 12, color: '#64748b', fontWeight: 700 }}>{resultados.length} usuário(s){resultados.length >= 200 ? '+ (refine a busca para ver mais)' : ''}</div>
               {resultados.map((u) => (
-                <button key={u.id} onClick={() => abrir(u)} style={{ ...card, textAlign: 'left', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                  <div>
+                // SELOS VAZANDO PELA LATERAL NO CELULAR (13/08, relato do dono). A coluna da
+                // esquerda não tinha `minWidth: 0` — e num flex o padrão é `min-width: auto`,
+                // ou seja, ela se RECUSA a encolher abaixo da largura do conteúdo. Com um
+                // e-mail longo (`jessicamarabrandaofo@gmail.com`) ela empurrava a coluna dos
+                // selos, que por sua vez tinha `flexShrink: 0` e também não cedia: a soma
+                // estourava o card e "Investidor Pro"/"Explorador" saíam pela borda da tela.
+                // Agora a esquerda encolhe e quebra o e-mail, e os selos vão para baixo quando
+                // não couberem ao lado — sem media query, o próprio wrap resolve.
+                <button key={u.id} onClick={() => abrir(u)} style={{ ...card, textAlign: 'left', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <div style={{ flex: '1 1 190px', minWidth: 0 }}>
                     <div style={{ fontSize: 14, fontWeight: 700, color: '#111' }}>{u.nome || '(sem nome)'}</div>
-                    <div style={{ fontSize: 12, color: '#64748b' }}>{u.email}{u.telefone ? ` · ${u.telefone}` : ''}</div>
+                    <div style={{ fontSize: 12, color: '#64748b', overflowWrap: 'anywhere' }}>{u.email}{u.telefone ? ` · ${u.telefone}` : ''}</div>
                     {(() => {
                       const d = u.ultima_atividade ? diasAtras(u.ultima_atividade) : null;
                       const ativo = d != null && d <= JANELA_ACESSO;
@@ -498,7 +506,7 @@ ${Array.isArray(base._truncado) && base._truncado.length ? `<div style="margin-t
                       );
                     })()}
                   </div>
-                  <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end', minWidth: 0 }}>
                     {u.tem_erro && <span title="Tem erro de navegação em aberto" style={{ fontSize: 10.5, fontWeight: 700, color: '#b91c1c', background: '#fee2e2', padding: '3px 8px', borderRadius: 20, display: 'flex', alignItems: 'center', gap: 3 }}><AlertTriangle size={11} /> erro</span>}
                     {u.perfil_investidor
                       ? <span style={{ fontSize: 10.5, fontWeight: 700, color: '#5b21b6', background: '#ede9fe', padding: '3px 8px', borderRadius: 20 }}>{PERFIL_LABEL[u.perfil_investidor] || u.perfil_investidor}</span>

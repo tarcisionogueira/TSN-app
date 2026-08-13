@@ -602,9 +602,9 @@ function FichaTecnicaCEF({ ficha }) {
     </span>
   );
   const Linha = ({ rot, val }) => (
-    <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', fontSize: 13 }}>
-      <span style={{ color: '#94a3b8', minWidth: 140 }}>{rot}:</span>
-      <span style={{ fontWeight: 700, color: '#334155' }}>{val}</span>
+    <div className="kv-linha" style={{ display: 'flex', gap: 8, alignItems: 'baseline', fontSize: 13, flexWrap: 'wrap', minWidth: 0 }}>
+      <span className="kv-rot" style={{ color: '#94a3b8', minWidth: 140 }}>{rot}:</span>
+      <span style={{ fontWeight: 700, color: '#334155', minWidth: 0, overflowWrap: 'anywhere' }}>{val}</span>
     </div>
   );
 
@@ -635,7 +635,7 @@ function FichaTecnicaCEF({ ficha }) {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
         {ficha.ocupacao && (
           <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', fontSize: 13 }}>
-            <span style={{ color: '#94a3b8', minWidth: 140 }}>Situação:</span>
+            <span className="kv-rot" style={{ color: '#94a3b8', minWidth: 140 }}>Situação:</span>
             <span style={{ fontWeight: 700, color: ficha.ocupacao === 'Desocupado' ? '#15803d' : '#b45309' }}>{ficha.ocupacao}</span>
             <span style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>(confirmar em visita, o status da Caixa costuma divergir)</span>
           </div>
@@ -668,9 +668,9 @@ function AnaliseJuridicaCard({ fj }) {
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 800, padding: '5px 12px', borderRadius: 999, background: bg, color: cor, border: `1px solid ${br}` }}>{children}</span>
   );
   const Linha = ({ rot, val, cor }) => (
-    <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', fontSize: 13 }}>
-      <span style={{ color: '#94a3b8', minWidth: 150 }}>{rot}:</span>
-      <span style={{ fontWeight: 700, color: cor || '#334155' }}>{val}</span>
+    <div className="kv-linha" style={{ display: 'flex', gap: 8, alignItems: 'baseline', fontSize: 13, flexWrap: 'wrap', minWidth: 0 }}>
+      <span className="kv-rot" style={{ color: '#94a3b8', minWidth: 150 }}>{rot}:</span>
+      <span style={{ fontWeight: 700, color: cor || '#334155', minWidth: 0, overflowWrap: 'anywhere' }}>{val}</span>
     </div>
   );
 
@@ -1430,19 +1430,19 @@ export default function ImovelDetalhe() {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
                     {imovel.numeroEdital && (
                       <div style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13 }}>
-                        <span style={{ color: '#94a3b8', minWidth: 110 }}>Nº Edital:</span>
+                        <span className="kv-rot" style={{ color: '#94a3b8', minWidth: 110 }}>Nº Edital:</span>
                         <span style={{ fontWeight: 700, color: '#334155', background: '#eff6ff', padding: '2px 8px', borderRadius: 6 }}>{imovel.numeroEdital}</span>
                       </div>
                     )}
                     {imovel.numeroMatricula && (
                       <div style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13 }}>
-                        <span style={{ color: '#94a3b8', minWidth: 110 }}>Nº Matrícula:</span>
+                        <span className="kv-rot" style={{ color: '#94a3b8', minWidth: 110 }}>Nº Matrícula:</span>
                         <span style={{ fontWeight: 700, color: '#334155', background: '#f0fdf4', padding: '2px 8px', borderRadius: 6 }}>{imovel.numeroMatricula}</span>
                       </div>
                     )}
                     {imovel.numeroProcesso && (
                       <div style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13 }}>
-                        <span style={{ color: '#94a3b8', minWidth: 110 }}>Nº Processo:</span>
+                        <span className="kv-rot" style={{ color: '#94a3b8', minWidth: 110 }}>Nº Processo:</span>
                         <span style={{ fontWeight: 700, color: '#334155', background: '#faf5ff', padding: '2px 8px', borderRadius: 6 }}>{imovel.numeroProcesso}</span>
                       </div>
                     )}
@@ -1560,7 +1560,7 @@ export default function ImovelDetalhe() {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                     {itens.map(([r, v]) => (
                       <div key={r} style={{ display: 'flex', gap: 10, alignItems: 'baseline', fontSize: 13, flexWrap: 'wrap' }}>
-                        <span style={{ color: '#94a3b8', minWidth: 190 }}>{r}:</span>
+                        <span className="kv-rot" style={{ color: '#94a3b8', minWidth: 190 }}>{r}:</span>
                         <span style={{ fontWeight: 700, color: cor || '#334155' }}>{v}</span>
                       </div>
                     ))}
@@ -1583,7 +1583,7 @@ export default function ImovelDetalhe() {
                       <div style={{ fontSize: 12, fontWeight: 800, color: '#9a3412', marginBottom: 6 }}>Débitos em aberto citados no documento</div>
                       {debitos.map(([r, v]) => (
                         <div key={r} style={{ display: 'flex', gap: 10, alignItems: 'baseline', fontSize: 13, flexWrap: 'wrap' }}>
-                          <span style={{ color: '#c2410c', minWidth: 190 }}>{r}:</span>
+                          <span className="kv-rot" style={{ color: '#c2410c', minWidth: 190 }}>{r}:</span>
                           <span style={{ fontWeight: 800, color: '#9a3412' }}>{v}</span>
                         </div>
                       ))}
@@ -1776,6 +1776,15 @@ export default function ImovelDetalhe() {
       <style>{`
         .acoes-mobile-bar { display: none; }
         @media (max-width: 900px) {
+          /* ROLAGEM HORIZONTAL NO CELULAR (13/08, relato do dono: "tive que dar um zoom out
+             na tela de imóvel"). Os rótulos das linhas rótulo/valor tinham largura MÍNIMA fixa
+             (110 a 190 px). Num telefone sobram ~330 px úteis: rótulo de 190 + um valor longo
+             não cabem, e como a linha não quebrava, a PÁGINA inteira ganhava rolagem lateral —
+             o app parecia largo demais e só dava para usar com zoom out. No celular o rótulo
+             passa a ter largura natural e a linha quebra. */
+          .kv-rot { min-width: 0 !important; }
+          .kv-linha { flex-wrap: wrap !important; }
+          .detalhe-page { overflow-x: hidden; }
           .detalhe-grid { grid-template-columns: 1fr !important; }
           .detalhe-sidebar { position: static !important; }
           .detalhe-page { padding-bottom: 96px !important; }
