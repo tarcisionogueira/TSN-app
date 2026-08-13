@@ -161,6 +161,100 @@ antes de mexer, mais 6 validações de produção para rodar na abertura.
 
 ---
 
+## 🔚 SESSÃO DE 13/08 — leia ESTE bloco primeiro
+
+> **O dia em uma frase:** o ritual saiu verde em tudo que ele cobre, e os dois alertas que
+> sobraram tinham a MESMA causa de fundo — **um escritor que ninguém tinha mapeado, gravando
+> ausência como se fosse conteúdo.**
+
+### O que o ritual mediu (verde, para ninguém refazer)
+
+| Verificação | Resultado |
+|---|---|
+| `auditoria_seguranca()` | **0 crítico / 0 atenção** |
+| `auditoria_regras_negocio()` | **0 crítico** |
+| Erros de cliente abertos (14d) | **0** |
+| Chamados do cliente sem resposta | **0** |
+| KYC ilegível pelo servidor | **0** |
+| Fontes no ponto cego do monitor | **0** |
+| Baseline de captura (regressão) | **vazio** = íntegro |
+| Deploys Vercel (últimos 20) | **todos READY** |
+| Acervo | 30.026 ativos · 21.571 tocados em 24h · fila de geocode **325** |
+| Cliente 360 | RPC íntegra · 39 clientes · **0 com erro** · funil 7d: 90 visitantes, 317 pageviews |
+
+### 1. `proximidades_vazio_falso` — o TERCEIRO escritor (causa-raiz do alerta que crescia)
+
+O fechamento de 12/08 deixou este alerta em movimento (400 → 412 → 452) e a pergunta "é coleta
+nova ou regravação?". **Não era nenhuma das duas.** Estava em **580** na abertura.
+
+Em 10/08 o vazio falso foi corrigido em DOIS caminhos: o cron (3 observações em execuções
+diferentes antes de aceitar `{}`) e o on-demand (502 "indeterminado" em vez de gravar vazio).
+Ficou de fora **`scripts/enriquecer-osm.mjs`**, job diário das 05h UTC, que gravava
+`pontos_proximos = nearest` mesmo com `nearest = {}` e carimbava `proximidades_em`.
+
+**Assinatura no banco:** `pontos_proximos = '{}'` com `proximidades_vazios = 0` — estado que o
+cron é **incapaz** de produzir, porque ele grava o contador junto do `{}`. Eram **293** assim,
+53 carimbados às 06:19 do próprio dia 13/08, **em 7 segundos e 37 cidades** (o cron faz 12 por
+rodada de 300s — não era ele).
+
+**O estrago maior não era o vazio, era o carimbo.** A fila de revalidação do cron procura
+`proximidades_em < now() - 30 dias`, e o job recarimbava **12.820 dos 13.101** lotes com
+geocode preciso a cada 48h. Nenhum envelhecia o bastante para ser reconferido: **a auto-cura
+de 10/08 estava desligada**, e o `{}` "com validade de 30 dias" era renovado todo dia.
+
+*Corrigido na raiz:* sem POI encontrado, o job grava só `score_localizacao` e **não toca** em
+`pontos_proximos` nem em `proximidades_em` — o lote segue para o cron corroborar. Mais duas
+coisas que o recon achou de graça:
+- **Piso mínimo de POIs** (`OSM_POIS_MINIMO`, 50 mil). `existsSync` provava que o arquivo
+  existe, não que veio inteiro: um PBF truncado zerava as proximidades do **país inteiro** num
+  run, cada linha carimbada como resposta boa. Agora aborta antes de gravar.
+- **`praia` preservada.** A categoria só existe no helper do Overpass; o job não a calcula e a
+  **apagava** dos 412 lotes de praia toda vez que os tocava. Agora mescla o que só o Overpass sabe.
+
+*Reparo do acervo:* `supabase/migrations/proximidades_reparo_residuo_job_osm.sql` devolveu à
+fila os não corroborados (`proximidades_vazios = 0`). **580 → 345**, e a assinatura do defeito
+em **0**. Os 345 que restam são vazios que o cron **confirmou** em execuções distintas — ficam
+como estão, agora com o relógio de 30 dias voltando a correr de verdade. O invariante segue
+acima do limite (300) até esse ciclo drenar; **é drenagem, não defeito**.
+
+### 2. `edital_eq_matricula` = 399 — o botão "Edital" abria a matrícula
+
+Alerta que **não constava** no fechamento de ontem. 399 lotes (410 contando os que apontam para
+o caminho da matrícula sem serem idênticos), **todos CEF, todos extrajudicial**:
+`link_edital = https://venda-imoveis.caixa.gov.br/editais/matricula/AM/1444401910191.pdf`.
+O cliente clicava em "Edital" e recebia a **matrícula** — outro documento, sem as regras do
+leilão, e que **abre normalmente**, o que torna o engano invisível.
+
+*Causa:* em `backfill-edital-cef.mjs`, quando a Caixa não publica edital o script devolvia
+`sem_edital` e **não escrevia nada** — o `link_edital` antigo (a matrícula) ficava valendo.
+"A Caixa não publicou edital" era gravado como "o edital é este outro documento aqui".
+
+*Corrigido:* o backfill passa a gravar `link_edital = null` nesse caso, e
+`supabase/migrations/edital_cef_nao_e_matricula.sql` limpou os 410 do acervo.
+Invariante: **399 → 0**.
+
+### 3. Marketing — o Ads está entregando, mas medindo pela metade
+
+**6 cliques em 14 dias**, todos com `gclid`, campanha `pesquisa-leilao-imoveis`, o último hoje
+11:38 (eram 2 ontem à noite — está crescendo). Mas **`utm_term` e `utm_content` seguem nulos em
+6 de 6**: a pendência (A) do dono, o sufixo de UTM, **não foi aplicada**. Sem isso não se sabe
+QUAL palavra-chave traz gente, e as negativas continuam saindo de lista genérica.
+
+### ⚠️ O QUE ESPERA VOCÊ NA ABERTURA
+
+1. **`proximidades_vazio_falso` deve seguir CAINDO sozinho** conforme o cron (a cada 15 min)
+   drena. Verde = ≤ 300. Se voltar a SUBIR, a assinatura é o que diz se é escritor novo:
+   `select count(*) from imoveis_leilao where ativo and pontos_proximos='{}'::jsonb and coalesce(proximidades_vazios,0)=0;`
+   → tem que continuar **0**. Se sair de zero, apareceu um quarto escritor.
+2. **O job OSM das 05h UTC de 14/08 é a prova de fogo** da correção — o log agora separa
+   `com pontos` de `sem POI (deixados p/ o cron)`. Se `sem POI` vier alto, o problema é o
+   extrato de POIs, não o Brasil ter ficado sem escolas.
+3. **Pendências do dono seguem as de 12/08** (A: sufixo UTM · B: verificação do Ads, prazo
+   02/09 · C: MX do domínio · D: Junta · E: teto Bright Data, decisão 18/08 · F: "uso ocasional").
+   `bd_teto_saturado` continua em 480/405 — é o item E, decisão marcada.
+
+---
+
 ## 🔚 SESSÃO DE 12/08 — leia ESTE bloco primeiro
 
 > **O dia em uma frase:** começou como ritual de verificação e virou a maior varredura da base até

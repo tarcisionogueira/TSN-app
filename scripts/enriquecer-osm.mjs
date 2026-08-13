@@ -85,6 +85,14 @@ function categoria(t) {
   return null;
 }
 
+// PISO MÍNIMO DE POIs (13/08). `existsSync` prova que o arquivo EXISTE, não que ele veio
+// inteiro. Um PBF baixado pela metade ou um osmium interrompido produzem um GeoJSONSeq curto,
+// válido e pobre — e aí `avaliar()` devolve `{}` para TODO imóvel do país. Sem este piso, um
+// download truncado zeraria as proximidades do acervo inteiro num único run, cada linha
+// carimbada como resposta boa. Abortar é a única saída correta: "não consegui carregar" não
+// pode ser processado como "não há nada no Brasil".
+const POIS_MINIMO = Number(process.env.OSM_POIS_MINIMO || 50000);
+
 async function carregarPois() {
   if (!fs.existsSync(POIS_FILE)) { console.error(`POIs não encontrado: ${POIS_FILE}`); process.exit(1); }
   const rl = readline.createInterface({ input: fs.createReadStream(POIS_FILE), crlfDelay: Infinity });
@@ -105,6 +113,11 @@ async function carregarPois() {
     usados++;
   }
   console.log(`POIs lidos: ${n} · usados (categorizados): ${usados} · células ${grade.size}`);
+  if (usados < POIS_MINIMO) {
+    console.error(`❌ Extrato OSM pobre demais: ${usados} POIs categorizados < piso ${POIS_MINIMO}. `
+      + 'Provável download/osmium truncado — abortando ANTES de gravar, para não carimbar o acervo como vazio.');
+    process.exit(1);
+  }
 }
 
 function avaliar(lat, lng) {
@@ -131,7 +144,7 @@ async function buscarCandidatos() {
   const PAG = 1000, out = [];
   while (out.length < LIMITE) {
     const { data, error } = await supabase.from('imoveis_leilao')
-      .select('id, latitude, longitude')
+      .select('id, latitude, longitude, pontos_proximos')
       .eq('ativo', true).eq('geocod_nivel', 'endereco')
       .not('latitude', 'is', null).neq('latitude', 0)
       .order('proximidades_em', { ascending: true, nullsFirst: true })
@@ -149,7 +162,7 @@ async function main() {
   const cands = await buscarCandidatos();
   if (!cands.length) { console.log('OSM: sem candidatos (endereço).'); return; }
   console.log(`OSM localização: ${cands.length} candidatos (endereço) · limite ${LIMITE}`);
-  let ok = 0, feitos = 0;
+  let ok = 0, vazios = 0, falhas = 0, feitos = 0;
   const CONC = 8; // gravação no Supabase em paralelo (cálculo é local e rápido)
   let idx = 0;
   async function worker() {
@@ -157,15 +170,47 @@ async function main() {
       const im = cands[idx++];
       const lat = Number(im.latitude), lng = Number(im.longitude);
       const { nearest, score } = avaliar(lat, lng);
-      await supabase.from('imoveis_leilao')
-        .update({ pontos_proximos: nearest, score_localizacao: score, proximidades_em: new Date().toISOString() })
-        .eq('id', im.id).then(() => {}, () => {});
-      ok++; feitos++;
-      if (feitos % 500 === 0) console.log(`  ${feitos}/${cands.length} · score gravado ${ok}`);
+      const achou = Object.keys(nearest).length > 0;
+
+      // ─── VAZIO NÃO É RESPOSTA (13/08) ──────────────────────────────────────────────
+      // Este job gravava `pontos_proximos: nearest` mesmo com `nearest = {}`, carimbando
+      // `proximidades_em`. Dois estragos, medidos no acervo:
+      //
+      // 1. Um vazio de UMA observação virava veredito. O cron do Overpass exige TRÊS
+      //    observações em execuções diferentes antes de aceitar `{}` (ver
+      //    `api/enriquecer-proximidades.js`) e o on-demand se recusa a gravar vazio — este
+      //    job furava os dois. Sintoma: 293 lotes com `{}` e o contador de corroboração
+      //    em ZERO, estado que o cron não consegue produzir.
+      // 2. Pior: o carimbo diário de `proximidades_em` DESLIGAVA a auto-cura. A fila de
+      //    revalidação do cron busca `proximidades_em < now() - 30 dias`, e 12.820 dos
+      //    13.101 lotes com geocode preciso eram recarimbados a cada 48h — nenhum deles
+      //    envelhecia o bastante para ser reconferido. O `{}` com validade de 30 dias era
+      //    renovado todo dia, para sempre.
+      //
+      // Agora: sem POI encontrado, grava só o `score_localizacao` e NÃO toca em
+      // `pontos_proximos` nem em `proximidades_em` — o lote segue para o cron corroborar.
+      const patch = { score_localizacao: score };
+      if (achou) {
+        // Preserva as categorias que ESTE job não sabe calcular. `praia` só existe no helper
+        // do Overpass (`api/_proximidades.js`); sem esta mesclagem, os 411 lotes de praia
+        // perdiam a categoria toda vez que o job os tocava.
+        const soDoOverpass = Object.fromEntries(
+          Object.entries(im.pontos_proximos || {}).filter(([k]) => !CATS.includes(k) && k !== 'negativo'));
+        patch.pontos_proximos = { ...soDoOverpass, ...nearest };
+        patch.proximidades_em = new Date().toISOString();
+      }
+      const { error } = await supabase.from('imoveis_leilao').update(patch).eq('id', im.id);
+      if (error) falhas++;
+      else if (achou) ok++;
+      else vazios++;
+      feitos++;
+      if (feitos % 500 === 0) console.log(`  ${feitos}/${cands.length} · com pontos ${ok} · sem POI ${vazios} · falhas ${falhas}`);
     }
   }
   await Promise.all(Array.from({ length: CONC }, () => worker()));
-  console.log(`FIM OSM localização: score gravado ${ok} · processados ${feitos}`);
+  // `vazios` separado de `ok` é o que distingue um run saudável de um extrato pobre: se ele
+  // disparar, o problema é o arquivo de POIs, não o Brasil ter ficado sem escolas.
+  console.log(`FIM OSM localização: ${ok} com pontos · ${vazios} sem POI (deixados p/ o cron) · ${falhas} falhas · ${feitos} processados`);
 }
 
 main().catch(e => { console.error(e); process.exit(1); });

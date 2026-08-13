@@ -110,7 +110,7 @@ async function gravar(id, linkEdital, numeroEdital) {
   if (!r.ok) throw new Error(`patch ${r.status}`);
 }
 
-// → { s: 'ok'|'sem_edital'|'bloqueado'|'erro', url? }
+// → { s: 'ok'|'sem_edital'|'limpo'|'bloqueado'|'erro', url? }
 async function processar(im) {
   const num = String(im.fonte_id || '').replace(/^(caixa_|cef_)/, '').replace(/\D/g, '');
   if (!num) return { s: 'erro' };
@@ -118,7 +118,20 @@ async function processar(im) {
   if (ehCaptcha(texto)) return { s: 'bloqueado' };
   if (status !== 200 || texto.length < 2000) return { s: 'erro' };
   const url = editalDaPagina(texto);
-  if (!url) return { s: 'sem_edital' };                // lote de leilão que a Caixa ainda não publicou
+  if (!url) {
+    // A Caixa não publicou edital para este lote. Sair daqui SEM ESCREVER deixava o
+    // `link_edital` antigo valendo — e em 399 lotes esse valor antigo era a URL da
+    // MATRÍCULA (`/editais/matricula/<UF>/<n>.pdf`). Resultado para o cliente: o botão
+    // "Edital" abria a matrícula, um documento diferente, com cara de estar certo. É o
+    // invariante `edital_eq_matricula` (limite 8) marcando 399 em 13/08.
+    // "Não existe edital" tem que ser gravado como AUSÊNCIA, não deixado como o documento
+    // errado: com `null`, a tela diz "sem edital publicado", que é a verdade.
+    if (/\/editais\/matricula\//i.test(String(im.link_edital || ''))) {
+      try { await gravar(im.id, null, null); return { s: 'limpo' }; }
+      catch { return { s: 'erro' }; }
+    }
+    return { s: 'sem_edital' };                        // lote de leilão que a Caixa ainda não publicou
+  }
   try { await gravar(im.id, url, numeroEditalDaPagina(texto)); return { s: 'ok', url }; }
   catch { return { s: 'erro' }; }
 }
@@ -132,7 +145,7 @@ async function emLotes(itens, n, fn) {
 
 (async () => {
   console.log(`Backfill edital CEF (concorrência ${CONCURRENCIA}${LIMITE ? `, limite ${LIMITE}` : ''})`);
-  let ok = 0, sem = 0, bloq = 0, erro = 0, processados = 0, offset = 0;
+  let ok = 0, sem = 0, limpos = 0, bloq = 0, erro = 0, processados = 0, offset = 0;
   const editais = new Set();
   const t0 = Date.now();
   try {
@@ -146,6 +159,9 @@ async function emLotes(itens, n, fn) {
       for (const x of r) {
         if (x?.s === 'ok') { ok++; corrigidos++; if (x.url) editais.add(x.url); }
         else if (x?.s === 'sem_edital') sem++;
+        // `limpo` NÃO conta como corrigido para a paginação: com `link_edital = null` o lote
+        // continua casando o filtro (`link_edital.is.null`), então a posição dele permanece.
+        else if (x?.s === 'limpo') { limpos++; sem++; }
         else if (x?.s === 'bloqueado') bloq++;
         else erro++;
       }
@@ -154,7 +170,7 @@ async function emLotes(itens, n, fn) {
       // sozinhas. O offset só avança pelos que PERMANECERAM (sem edital publicado, erro,
       // bloqueio) — senão pularíamos ~1 lote não processado para cada 1 corrigido.
       offset += lote.length - corrigidos;
-      console.log(`… ${processados} | ok=${ok} sem_edital=${sem} bloqueado=${bloq} erro=${erro} | ${editais.size} editais distintos | ${((Date.now() - t0) / 1000).toFixed(0)}s`);
+      console.log(`… ${processados} | ok=${ok} sem_edital=${sem} (matricula_limpa=${limpos}) bloqueado=${bloq} erro=${erro} | ${editais.size} editais distintos | ${((Date.now() - t0) / 1000).toFixed(0)}s`);
       // O bloqueio do Radware é temporário e vale para a rodada inteira: insistir só queima
       // tempo e reforça o bloqueio. Para e deixa a próxima execução retomar (idempotente).
       if (bloq > 30 && bloq > ok) { console.error('⚠️ Bloqueio do Bot Manager predominante — interrompendo; a próxima execução retoma.'); break; }
@@ -164,7 +180,7 @@ async function emLotes(itens, n, fn) {
     console.error(`⚠️ Interrompido (parcial preservado): ${String(e?.message || e).slice(0, 200)}`);
     process.exitCode = 0;
   }
-  console.log(`\n✅ ${ok} lotes com edital real, ${sem} sem edital publicado, ${bloq} bloqueados, ${erro} erros.`);
+  console.log(`\n✅ ${ok} lotes com edital real, ${sem} sem edital publicado (${limpos} tiveram a MATRÍCULA removida do botão "Edital"), ${bloq} bloqueados, ${erro} erros.`);
   if (editais.size) {
     // O edital da Caixa é COLETIVO: poucos PDFs cobrem milhares de lotes. Listar ajuda a
     // conferir o padrão (EA… licitação / EL… leilão) e a auditar a cobertura.
