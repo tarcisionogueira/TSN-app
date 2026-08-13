@@ -161,7 +161,23 @@ antes de mexer, mais 6 validações de produção para rodar na abertura.
 
 ---
 
-## 🔚 SESSÃO DE 12/08 (abertura) — leia ESTE bloco primeiro
+## 🔚 SESSÃO DE 12/08 — leia ESTE bloco primeiro
+
+> **O dia em uma frase:** começou como ritual de verificação e virou a maior varredura da base até
+> hoje — **46 commits**, e o padrão que se repetiu do primeiro ao último achado foi sempre o mesmo:
+> **código correto entregando resposta errada em silêncio.**
+>
+> **Índice do dia** (cada item tem sua seção abaixo):
+> 1–6 · os seis achados do ritual de abertura ⟶ 7 · auditoria das 11 caixas do Dashboard ⟶
+> 8–9 · travas novas ⟶ 10 · Brasil mapeado + Censo IBGE reformado ⟶ 11 · MRR ⟶ 12 · "o
+> mercadológico sumiu" (janela de 12 + retenção pela metade) ⟶ 13 · Atendimento recebendo e-mail ⟶
+> 14 · Cliente 360: um cadastro perdido em tempo real ⟶ 15 · as 33 mil páginas sem medição ⟶
+> 15b · medição do Google Ads ⟶ 16 · cobertura das travas.
+>
+> **Se for ler só uma coisa:** o encerramento no fim deste bloco, com o alerta que estava
+> **crescendo** quando o dia fechou.
+
+### 🔚 (abertura) — o ritual e os seis primeiros achados
 
 > Sessão de **verificações iniciais** pedida pelo dono (saúde de sistema, otimizações e Cliente
 > 360). O ritual saiu **verde em tudo que ele já cobria** — e foi a varredura **schema × código**,
@@ -724,27 +740,65 @@ venda, para ele otimizar por dinheiro e não por clique; exige credenciar a Goog
    barata e confiável. Regra manual: *mudou função no banco, escreva a migração no mesmo commit.*
 2. **Medição das páginas públicas** — instrumentada hoje, sem alarme até haver linha de base (48 h).
 
-### ⚠️ O QUE ESPERA VOCÊ NA ABERTURA (encerramento de 12/08)
+### ⚠️ ENCERRAMENTO DE 12/08 — estado medido e o que espera a próxima sessão
 
-**Nada ficou pela metade no código.** Tudo em produção, banco e repositório conferidos iguais,
-travas passando. O que espera é **espera de terceiro** ou **decisão do dono**:
+> **`main` em `88d664a` · 46 commits no dia · deploy READY · working tree limpo.**
+> Segurança **0 crítico / 0 atenção** · regras **0** · erros de cliente **0** · KYC ilegível **0** ·
+> fontes IBGE ruins **0** · chamados parados **0** · travas `verificar:padroes`,
+> `verificar:schema` e `verificar:sintaxe` passando.
 
-| # | O que | Quando / quem |
+**Nada ficou pela metade no código.** O que sobrou é ação do dono, espera de terceiro, ou o
+alerta que cresceu durante o dia (abaixo, primeiro).
+
+### 🔴 COMECE POR AQUI AMANHÃ: `proximidades_vazio_falso` está CRESCENDO
+
+Não é um alerta parado — é um número em movimento, medido no mesmo dia:
+
+| Hora (UTC, 12/08) | Valor | Limite |
 |---|---|---|
-| 1 | ⏳ **G2RS — resultado da 3ª rodada.** Enviada 12/08 18:57 como **REAPPLICATION** (as duas anteriores morreram em "nova solicitação" e em "mecanismo de busca"). Resposta em até **5 dias corridos**, no `tarcisioaraujo@reimob.com.br` | G2RS · até ~17/08 |
-| 2 | 🔴 **Verificação do anunciante Google Ads** — caso `1-3785000040835`. Reprovada em 03/08: *"advertiser name TARCISIO DE SOUZA NOGUEIRA DE ARAUJO needs to match the inferred name, Bid Pro Brasil"*. Caminho do próprio Google: **resetar a verificação** e declarar **DBA** ligando "BidPro Brasil" à razão social. **Prazo 02/09** (não 31/08 — reemitido em 03/08) | Dono |
-| 3 | 🔴 **MX do domínio → inbound do Resend** (`PENDENCIAS_DONO.md` item **-1.5**). O código do inbound subiu hoje e está testado; **sem o MX nada chega**, e `suporte@`/`privacidade@` seguem publicados no site sem receber | Dono |
-| 4 | 🟠 **Nome fantasia e objeto social na Junta.** O CNPJ ainda diz **CLUBE CONSELHEIRO** e o objeto social não menciona análise/consultoria (CNAE principal 74.90-1-04 termina em *"exceto imobiliários"*). É o que fecha de vez G2RS + Google + revisões futuras | Dono + contador |
-| 5 | 🟠 **Bright Data — decisão do teto**, marcada para 18/08 (ver o bloco da manhã) | Dono |
-| 6 | 🔵 **"Uso ocasional" como coluna nova**, ao lado de `domicilios_vagos` — muda a leitura de cidade de veraneio (Balneário Camboriú: 86.336 domicílios para 139 mil pessoas). Custo: uma categoria a mais no agregado 4711 + uma coluna. **Não trocar** o significado de `domicilios_vagos` | Decisão do dono |
-| 7 | 🔵 **Censo é anual/decenal** — o cron só toca em fonte com +25 dias. Não há o que reingerir. Para fonte nova, use a sonda (`metadados`/`buscar`) ANTES de escrever regex | — |
+| 19h02 | 400 | 300 |
+| 21h39 | 412 | 300 |
+| **00h10 (13/08 UTC — 12/08 21h10 em Brasília)** | **452** | 300 |
 
-**Dois alertas de `qa_invariantes()` que já estavam lá e continuam:** `bd_teto_saturado` (480/405,
-é o item 5) e `proximidades_vazio_falso` (**400/300 — passou do limite**, vale investigar: é a
-família de 10/08, proximidades gravando vazio em cidade já mapeada).
+**+52 em 5 horas.** É a família de 10/08 voltando: lote ativo com `pontos_proximos = '{}'` numa
+cidade onde OUTROS lotes têm proximidades preenchidas — ou seja, não é "a cidade não tem pontos
+de interesse", é a chamada falhando e gravando vazio como se fosse resposta. Cada lote nesse
+estado entrega ao cliente um relatório dizendo "nenhum ponto de interesse por perto".
 
-**E as 7 anomalias de relatório seguem abertas de propósito** — são incerteza declarada, não fila
-de conserto (ver o item 9 acima).
+Por onde começar: ver se o crescimento acompanha a coleta (lote novo entrando já vazio) ou se é
+regravação de lote antigo; e conferir se o Overpass está devolvendo erro dentro de HTTP 200 com
+`remark` no corpo — que é a **forma 1** documentada no CLAUDE.md e já mordeu esta base.
+
+### ⏳ Pendências do DONO — o que ficou de hoje
+
+| # | O que | Estado |
+|---|---|---|
+| A | **Sufixo UTM com `utm_term` e `utm_content`** — colar em Campanha → Configurações → Opções de URL da campanha → Sufixo do URL final: `utm_source=google&utm_medium=cpc&utm_campaign=pesquisa-leilao-imoveis&utm_term={keyword}&utm_content={creative}` | 🔴 **Não aplicado.** Sem isso não se sabe QUAL palavra-chave traz gente, e as negativas continuam saindo de lista genérica. Verificação: `utm_term` deixar de vir nulo em `visita_origem` |
+| B | **Verificação do anunciante Google Ads** (caso `1-3785000040835`): resetar + declarar DBA ligando "BidPro Brasil" à razão social | 🔴 Prazo **02/09** |
+| C | **MX do domínio → inbound do Resend** (`PENDENCIAS_DONO.md` -1.5) | 🔴 Código pronto e testado; sem o MX nada chega |
+| D | **Nome fantasia e objeto social na Junta** — CNPJ ainda diz CLUBE CONSELHEIRO; objeto social não menciona análise | 🟠 Com o contador |
+| E | **Bright Data — decisão do teto** | 🟠 Marcada para 18/08 |
+| F | **"Uso ocasional" como coluna nova** ao lado de `domicilios_vagos` | 🔵 Decisão |
+
+### ✅ O que o DONO já resolveu hoje (não refazer)
+
+- **Auto-tagging** já estava ligado — e provado pelo dado: 2 cliques com `gclid` às 21:49 e 21:53,
+  campanha `pesquisa-leilao-imoveis`, ambos caindo em `/leiloes`.
+- **16 palavras-chave negativas** aplicadas na conta.
+- **Termos do formulário de lead** aceitos (destrava o formulário no anúncio como plano B para
+  quem trava no cadastro do site).
+- **G2RS enviada** 12/08 18:57 como **REAPPLICATION** — resposta em até 5 dias corridos, no
+  `tarcisioaraujo@reimob.com.br`. **Eu consigo ler e avisar.**
+
+### ⏳ Espera de terceiro
+
+- **G2RS** — até ~17/08.
+- **Google Ads API (passo 3)** — não começar antes da verificação do anunciante sair: conta não
+  verificada tem entrega restrita, e treinar o algoritmo com dado restrito ensina errado. A
+  primeira etapa (developer token) leva dias, então é por ela que se começa quando for a hora.
+
+**As 7 anomalias de relatório seguem abertas de propósito** — são incerteza declarada, não fila de
+conserto (ver o item 9 acima). E `bd_teto_saturado` (480/405) é o item E.
 
 ---
 
