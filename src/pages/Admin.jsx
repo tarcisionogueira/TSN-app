@@ -8039,9 +8039,9 @@ function SolicitacaoModal({ sol, membros, onClose, onSaved }) {
             <div style={{ fontWeight: 800, fontSize: 17, color: '#111111', marginBottom: 16 }}>Informações do Imóvel</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
               {[['Imóvel', sol.imovel_nome || '—'], ['Cidade', sol.imovel_cidade || '—'], ['Referência', sol.imovel_ref || '—'], ['Analista', analista?.nome || 'Não atribuído']].map(([k, v]) => (
-                <div key={k} style={{ display: 'flex', gap: 8 }}>
+                <div key={k} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', minWidth: 0 }}>
                   <span style={{ fontSize: 13, color: '#64748b', minWidth: 80 }}>{k}:</span>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: '#111111' }}>{v}</span>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: '#111111', minWidth: 0, overflowWrap: 'anywhere' }}>{v}</span>
                 </div>
               ))}
             </div>

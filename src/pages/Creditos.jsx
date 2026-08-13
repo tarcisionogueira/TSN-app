@@ -260,7 +260,12 @@ export default function Creditos() {
           <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, padding: '16px 20px' }}>
             <div style={{ fontSize: 15, fontWeight: 800, color: '#111', marginBottom: 4 }}>Extrato de crédito</div>
             <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 12 }}>Recargas e descontos do seu saldo de crédito.</div>
-            {extrato.length === 0 ? (
+            {/* `[]` inicial diz "vazio confirmado" antes de o servidor responder: por um instante a
+    tela afirma que não há nada e depois se corrige sozinha — o "pisca" que o dono relatou.
+    Enquanto carrega, a resposta honesta é NÃO AFIRMAR. (13/08) */}
+            {loading ? (
+              <div style={{ color: '#cbd5e1', fontSize: 13, padding: '10px 0' }}>Carregando o extrato…</div>
+            ) : extrato.length === 0 ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#94a3b8', fontSize: 13, padding: '10px 0' }}>
                 <Info size={15} /> Nenhuma movimentação de crédito ainda. Suas consultas estão sendo cobertas pela cota do plano.
               </div>

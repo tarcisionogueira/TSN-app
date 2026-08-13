@@ -417,7 +417,12 @@ function Detalhe({ arr, onBack, onChange, soLeitura, podeRemover = false, permit
               {/* CONTRATOS VINCULADOS a esta arrematação (o documento assinado aparece aqui). */}
               <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid #f1f5f9' }}>
                 <div style={{ fontSize: 12, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 }}>Contratos vinculados</div>
-                {contratosVinc.length === 0 ? (
+                {/* `[]` inicial diz "vazio confirmado" antes de o servidor responder: por um instante a
+    tela afirma que não há nada e depois se corrige sozinha — o "pisca" que o dono relatou.
+    Enquanto carrega, a resposta honesta é NÃO AFIRMAR. (13/08) */}
+                {loading ? (
+                  <div style={{ color: '#cbd5e1', fontSize: 13 }}>Carregando…</div>
+                ) : contratosVinc.length === 0 ? (
                   <div style={{ color: '#94a3b8', fontSize: 13 }}>Nenhum contrato vinculado a esta arrematação.</div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>

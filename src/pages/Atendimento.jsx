@@ -352,7 +352,10 @@ export default function Atendimento() {
 
           {/* Mensagens */}
           <div style={{ padding: '20px', flex: 1, overflowY: 'auto', minHeight: 320, maxHeight: 460, display: 'flex', flexDirection: 'column', gap: 14 }}>
-            {mensagens.length === 0 && (
+            {/* `[]` inicial diz "vazio confirmado" antes de o servidor responder: por um instante a
+    tela afirma que não há nada e depois se corrige sozinha — o "pisca" que o dono relatou.
+    Enquanto carrega, a resposta honesta é NÃO AFIRMAR. (13/08) */}
+            {!loading && mensagens.length === 0 && (
               <div style={{ textAlign: 'center', color: '#94a3b8', fontSize: 13, padding: 20 }}>Sem mensagens ainda</div>
             )}
             {mensagens.map(m => {

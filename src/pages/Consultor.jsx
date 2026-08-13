@@ -562,7 +562,12 @@ export default function Consultor() {
                 <span style={{ fontSize:12, color:'#94a3b8', marginLeft:4 }}>{listaClientes.length} cliente{listaClientes.length!==1?'s':''}</span>
               </div>
 
-              {listaClientes.length === 0 && leadsSDR.length === 0 ? (
+              {/* `[]` inicial diz "vazio confirmado" antes de o servidor responder: por um instante a
+    tela afirma que não há nada e depois se corrige sozinha — o "pisca" que o dono relatou.
+    Enquanto carrega, a resposta honesta é NÃO AFIRMAR. (13/08) */}
+              {loading ? (
+                <div style={{ textAlign:'center', padding:'40px', color:'#cbd5e1' }}>Carregando…</div>
+              ) : listaClientes.length === 0 && leadsSDR.length === 0 ? (
                 <div style={{ textAlign:'center', padding:'40px', color:'#94a3b8' }}>
                   <Users size={40} color="#cbd5e1" style={{ margin:'0 auto 12px' }}/>
                   <p>{filtroCarteira==='pagantes' ? 'Nenhum cliente pagante ainda.' : filtroCarteira==='nao_pagantes' ? 'Nenhum cliente gratuito.' : 'Nenhum cliente ainda. Compartilhe seu link de indicação para começar.'}</p>

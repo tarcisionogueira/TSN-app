@@ -114,6 +114,74 @@ const REGRAS_WORKFLOW = [
 // Regras de ARQUIVO: o defeito não está numa linha, está na AUSÊNCIA de algo no arquivo inteiro.
 const REGRAS_ARQUIVO = [
   {
+    id: 'flash-de-vazio-no-carregamento',
+    titulo: 'Lista nasce [] e já anuncia "nenhum" — a tela afirma o vazio antes de saber',
+    // A MESMA família do resto deste arquivo, mas no TEMPO em vez de no dado: `useState([])`
+    // diz "vazio CONFIRMADO", quando a verdade na primeira pintura é "ainda não sei". A tela
+    // afirma "Nenhuma movimentação", "Sem mensagens", e um instante depois se corrige sozinha.
+    // Foi o "pisca" que o dono relatou em 13/08 ("carregamentos rápidos que mostram uma coisa
+    // e num instante muda"). `null` é o estado honesto de "não sei ainda"; `[]` é uma resposta.
+    //
+    // NÃO acusa (medido: sem estas exceções a regra dava 17 falsos positivos para 4 reais):
+    //  - tela com early return de carregamento (`if (loading) return …`), que cobre tudo;
+    //  - mensagem de vazio já dentro de uma cadeia guardada por carregando/loading.
+    testar: (texto, rel) => {
+      if (!/^src\/.*\.jsx$/.test(rel)) return false;
+      if (/if\s*\(\s*!?\s*(carregando|loading)\w*\b[^)]*\)\s*return/i.test(texto)) return false;
+      const vars = [...texto.matchAll(/const\s*\[\s*(\w+)\s*,\s*set\w+\s*\]\s*=\s*(?:React\.)?useState\(\[\]\)/g)].map(m => m[1]);
+      for (const v of vars) {
+        const re = new RegExp(`${v}\\.length\\s*===\\s*0\\s*(\\?|&&)([\\s\\S]{0,260})`, 'g');
+        let m;
+        while ((m = re.exec(texto))) {
+          if (!/Nenhum|nenhuma|Sem |não encontrad|vazi/i.test(m[2])) continue;
+          const antes = texto.slice(Math.max(0, m.index - 900), m.index);
+          if (/carregando|loading|buscando|carregad/i.test(antes + m[2])) continue;
+          return true;
+        }
+      }
+      return false;
+    },
+  },
+  {
+    id: 'flex-rotulo-fixo-sem-quebra',
+    titulo: 'Linha flex com rótulo de largura fixa e SEM flexWrap — estoura no celular',
+    // Rótulo com `minWidth` de 80 a 190 px ao lado de um valor, numa linha que não quebra.
+    // Num telefone sobram ~330 px úteis: rótulo de 190 mais um valor longo não cabem, e o
+    // excesso empurra a PÁGINA inteira para a rolagem horizontal. Foi por isso que o dono
+    // precisou dar zoom out na tela de imóvel (13/08). LINHA DE BASE ZERO: as 5 ocorrências
+    // que existiam foram corrigidas, então qualquer nova reprova.
+    testar: (texto, rel) => {
+      if (!/^src\/.*\.jsx$/.test(rel)) return false;
+      const re = /display:\s*'flex'((?:(?!\}\}).){0,220})\}\}>\s*[\r\n]+\s*<[a-zA-Z][^>]{0,200}?minWidth:\s*(\d+)/gs;
+      let m;
+      while ((m = re.exec(texto))) {
+        if (/flexWrap/.test(m[1])) continue;
+        if (Number(m[2]) >= 80) return true;
+      }
+      return false;
+    },
+  },
+  {
+    id: 'flex-2col-sem-minwidth0',
+    titulo: 'Flex de 2 colunas sem minWidth:0 no filho — conteúdo longo vaza pela lateral',
+    // Num flex o padrão é `min-width: auto`: a coluna se RECUSA a encolher abaixo da largura
+    // do próprio conteúdo. Com um e-mail longo ela empurra a coluna vizinha para fora do card
+    // — foi assim que os selos "Investidor Pro"/"Explorador" saíram da tela na lista do
+    // Cliente 360 (13/08). Entra COM linha de base (33 arquivos históricos), porque a maioria
+    // tem conteúdo curto e nunca vaza; o que a trava impede é a construção NOVA.
+    testar: (texto, rel) => {
+      if (!/^src\/.*\.jsx$/.test(rel)) return false;
+      const re = /display:\s*'flex'((?:(?!\}\}).){0,200}?)justifyContent:\s*'space-between'((?:(?!\}\}).){0,200})\}\}>\s*[\r\n]+\s*<div(\s+style=\{\{((?:(?!\}\}).){0,200})\}\})?\s*>/gs;
+      let m;
+      while ((m = re.exec(texto))) {
+        const filho = m[4] || '';
+        if (/minWidth/.test(filho) || /flex:/.test(filho)) continue;
+        return true;
+      }
+      return false;
+    },
+  },
+  {
     id: 'signup-sem-guard-duplicado',
     titulo: 'signUp() sem o guard de e-mail já cadastrado (identities: [])',
     // Com "Confirm email" ligado, o Supabase protege contra enumeração: e-mail JÁ cadastrado

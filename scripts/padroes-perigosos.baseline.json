@@ -144,12 +144,25 @@
   "api/validar-anexos-arremate.js": {
     "json-inline-sem-resposta": 1
   },
+  "src/components/BoasVindasModal.jsx": {
+    "flex-2col-sem-minwidth0": 1
+  },
   "src/components/ChatSuporte.jsx": {
+    "flex-2col-sem-minwidth0": 1,
     "data-sem-error": 11,
     "mutacao-sem-binding": 10
   },
+  "src/components/ConciliacaoBancaria.jsx": {
+    "flex-2col-sem-minwidth0": 1
+  },
   "src/components/ContratoObrigatorio.jsx": {
     "data-sem-error": 1
+  },
+  "src/components/FinanciamentoTracker.jsx": {
+    "flex-2col-sem-minwidth0": 1
+  },
+  "src/components/Footer.jsx": {
+    "flex-2col-sem-minwidth0": 1
   },
   "src/components/LeitorPaginado.jsx": {
     "data-sem-error": 1,
@@ -159,6 +172,7 @@
     "data-sem-error": 1
   },
   "src/components/TourGuia.jsx": {
+    "flex-2col-sem-minwidth0": 1,
     "data-sem-error": 3
   },
   "src/components/TriagemPerfil.jsx": {
@@ -173,14 +187,22 @@
     "data-sem-error": 2
   },
   "src/pages/Admin.jsx": {
+    "flex-2col-sem-minwidth0": 1,
     "data-sem-error": 34,
     "delete-sem-select": 9,
     "mutacao-sem-binding": 18
+  },
+  "src/pages/AdminChargebacks.jsx": {
+    "flex-2col-sem-minwidth0": 1
+  },
+  "src/pages/AdminFinanceiro.jsx": {
+    "flex-2col-sem-minwidth0": 1
   },
   "src/pages/AdvogadoPortal.jsx": {
     "data-sem-error": 1
   },
   "src/pages/Analise.jsx": {
+    "flex-2col-sem-minwidth0": 1,
     "data-sem-error": 1,
     "mutacao-sem-binding": 4
   },
@@ -190,17 +212,23 @@
     "mutacao-sem-binding": 1
   },
   "src/pages/Atendimento.jsx": {
+    "flex-2col-sem-minwidth0": 1,
     "data-sem-error": 1,
     "mutacao-sem-binding": 3
   },
   "src/pages/Busca.jsx": {
+    "flex-2col-sem-minwidth0": 1,
     "data-sem-error": 3,
     "delete-sem-select": 1
+  },
+  "src/pages/Calculadora.jsx": {
+    "flex-2col-sem-minwidth0": 1
   },
   "src/pages/CancelarAlertas.jsx": {
     "mutacao-sem-binding": 1
   },
   "src/pages/Caso.jsx": {
+    "flex-2col-sem-minwidth0": 1,
     "data-sem-error": 8,
     "mutacao-sem-binding": 7
   },
@@ -208,16 +236,25 @@
     "mutacao-sem-binding": 1,
     "data-sem-error": 1
   },
+  "src/pages/Cliente360.jsx": {
+    "flex-2col-sem-minwidth0": 1
+  },
+  "src/pages/Comissoes.jsx": {
+    "flex-2col-sem-minwidth0": 1
+  },
   "src/pages/CompletarCadastro.jsx": {
     "data-sem-error": 1
   },
   "src/pages/Consultor.jsx": {
+    "flex-2col-sem-minwidth0": 1,
     "mutacao-sem-binding": 3
   },
   "src/pages/ContratoLink.jsx": {
+    "flex-2col-sem-minwidth0": 1,
     "data-sem-error": 1
   },
   "src/pages/Contratos.jsx": {
+    "flex-2col-sem-minwidth0": 1,
     "data-sem-error": 5,
     "delete-sem-select": 2
   },
@@ -227,10 +264,17 @@
   "src/pages/ConviteEquipe.jsx": {
     "data-sem-error": 1
   },
+  "src/pages/ConviteLeiloeiro.jsx": {
+    "flex-2col-sem-minwidth0": 1
+  },
+  "src/pages/Creditos.jsx": {
+    "flex-2col-sem-minwidth0": 1
+  },
   "src/pages/CriarContrato.jsx": {
     "data-sem-error": 2
   },
   "src/pages/Curso.jsx": {
+    "flex-2col-sem-minwidth0": 1,
     "data-sem-error": 4
   },
   "src/pages/EbookPage.jsx": {
@@ -240,36 +284,57 @@
     "data-sem-error": 2
   },
   "src/pages/ImovelDetalhe.jsx": {
+    "flex-2col-sem-minwidth0": 1,
     "data-sem-error": 2,
     "mutacao-sem-binding": 2,
     "delete-sem-select": 1
+  },
+  "src/pages/IndiceConsulta.jsx": {
+    "flex-2col-sem-minwidth0": 1
+  },
+  "src/pages/Landing.jsx": {
+    "flex-2col-sem-minwidth0": 1
   },
   "src/pages/LeiloeiroPortal.jsx": {
     "data-sem-error": 1,
     "mutacao-sem-binding": 1
   },
+  "src/pages/MapaImoveis.jsx": {
+    "flex-2col-sem-minwidth0": 1
+  },
   "src/pages/Membros.jsx": {
     "data-sem-error": 4
   },
   "src/pages/MeusChamados.jsx": {
+    "flex-2col-sem-minwidth0": 1,
     "data-sem-error": 2,
     "mutacao-sem-binding": 2
   },
   "src/pages/MinhaRede.jsx": {
+    "flex-2col-sem-minwidth0": 1,
     "data-sem-error": 6
   },
+  "src/pages/MinhasAnalises.jsx": {
+    "flex-2col-sem-minwidth0": 1
+  },
   "src/pages/OnrRegistro.jsx": {
+    "flex-2col-sem-minwidth0": 1,
     "data-sem-error": 3
   },
   "src/pages/Painel.jsx": {
+    "flex-2col-sem-minwidth0": 1,
     "data-sem-error": 1,
     "delete-sem-select": 2,
     "mutacao-sem-binding": 1
+  },
+  "src/pages/Perfil.jsx": {
+    "flex-2col-sem-minwidth0": 1
   },
   "src/pages/Planos.jsx": {
     "data-sem-error": 2
   },
   "src/pages/ProdutoLanding.jsx": {
+    "flex-2col-sem-minwidth0": 1,
     "data-sem-error": 3
   },
   "src/pages/ProdutoPublico.jsx": {
