@@ -1074,18 +1074,18 @@ A busca começa PELAS IMOBILIÁRIAS LOCAIS e só depois soma os grandes portais.
 de estilo: quem vende naquela rua é a imobiliária do bairro, e o anúncio dela é o preço praticado
 na praça. O portal nacional é COMPLEMENTO — serve para completar a amostra, não para formá-la.
 ${fontesConhecidas || ''}
-PASSO 1 — IMOBILIÁRIAS LOCAIS (faça PRIMEIRO, é obrigatório).
-Descubra quais imobiliárias e corretores ATENDEM ${cidade}/${estado}${bairroTxt} e abra os sites delas.
-Buscas a fazer, nesta ordem (use as strings COMO ESTÃO, sem parênteses nem pontuação extra):
-"imobiliária ${bairroTxt2}", "imobiliárias que atendem ${bairroTxt2}", "imóveis à venda ${bairroTxt2}",
-"${tipoImovel || 'apartamento'} à venda ${bairroTxt2}" — e, se houver lista acima,
-comece por ELA. Colha os anúncios do tipo-alvo direto no site de cada uma. Inclua as amostras nos
-níveis 1/2 com "fonte" = NOME da imobiliária. Meta: pelo menos METADE das amostras vindas daqui.
+PASSO 1 — IMOBILIÁRIAS LOCAIS (primeiro, dentro do ORÇAMENTO DE BUSCA informado no fim).
+${fontesConhecidas
+  ? 'NÃO gaste busca para descobrir quem atende a praça: a lista acima já é o resultado das análises anteriores. Vá DIRETO aos sites dela e colha os anúncios do tipo-alvo — isto não consome o orçamento de descoberta.'
+  : `Gaste a PRIMEIRA busca descobrindo quem atende a praça, com esta string exatamente: "imobiliária ${bairroTxt2}". Se sobrar orçamento e faltar amostra, a próxima é "${tipoImovel || 'apartamento'} à venda ${bairroTxt2}".`}
+Inclua as amostras nos níveis 1/2 com "fonte" = NOME da imobiliária. Meta: pelo menos METADE das
+amostras vindas daqui — é o anúncio da imobiliária do bairro que reflete o preço praticado na praça.
 
-PASSO 2 — GRANDES PORTAIS (depois, para COMPLEMENTAR a amostra do passo 1).
-ZAP, VivaReal, OLX, Quinto Andar, Imovelweb, Loft, 123i, Chaves na Mão, Net Imóveis. Cruze vários,
-sempre na MESMA localidade dos níveis 1/2. Se o passo 1 já entregou amostra suficiente, o portal
-serve para CONFERIR o preço, não para substituí-la.
+PASSO 2 — GRANDES PORTAIS (depois, para COMPLEMENTAR o passo 1, com o que sobrar do orçamento).
+ZAP, VivaReal, OLX, Quinto Andar, Imovelweb, Loft, 123i, Chaves na Mão, Net Imóveis, sempre na
+MESMA localidade dos níveis 1/2. Se o passo 1 já entregou amostra suficiente, o portal serve para
+CONFERIR o preço, não para substituí-la. NÃO estoure o orçamento para cumprir a meta do passo 1:
+poucas amostras boas valem mais que muitas de outra praça, e o orçamento é limite, não sugestão.
 
 Ao final, liste em "fontesLocais" TODAS as imobiliárias locais que você encontrou (nome + url),
 mesmo as que não renderam anúncio do tipo-alvo — nós memorizamos e reusamos nesta praça. Um site
@@ -1267,18 +1267,18 @@ A busca começa PELAS IMOBILIÁRIAS LOCAIS e só depois soma os grandes portais.
 de estilo: quem vende naquela rua é a imobiliária do bairro, e o anúncio dela é o preço praticado
 na praça. O portal nacional é COMPLEMENTO — serve para completar a amostra, não para formá-la.
 ${fontesConhecidas || ''}
-PASSO 1 — IMOBILIÁRIAS LOCAIS (faça PRIMEIRO, é obrigatório).
-Descubra quais imobiliárias e corretores ATENDEM ${cidade}/${estado}${bairroTxt} e abra os sites delas.
-Buscas a fazer, nesta ordem (use as strings COMO ESTÃO, sem parênteses nem pontuação extra):
-"imobiliária ${bairroTxt2}", "imobiliárias que atendem ${bairroTxt2}", "imóveis à venda ${bairroTxt2}",
-"${tipoImovel || 'apartamento'} à venda ${bairroTxt2}" — e, se houver lista acima,
-comece por ELA. Colha os anúncios do tipo-alvo direto no site de cada uma. Inclua as amostras nos
-níveis 1/2 com "fonte" = NOME da imobiliária. Meta: pelo menos METADE das amostras vindas daqui.
+PASSO 1 — IMOBILIÁRIAS LOCAIS (primeiro, dentro do ORÇAMENTO DE BUSCA informado no fim).
+${fontesConhecidas
+  ? 'NÃO gaste busca para descobrir quem atende a praça: a lista acima já é o resultado das análises anteriores. Vá DIRETO aos sites dela e colha os anúncios do tipo-alvo — isto não consome o orçamento de descoberta.'
+  : `Gaste a PRIMEIRA busca descobrindo quem atende a praça, com esta string exatamente: "imobiliária ${bairroTxt2}". Se sobrar orçamento e faltar amostra, a próxima é "${tipoImovel || 'apartamento'} à venda ${bairroTxt2}".`}
+Inclua as amostras nos níveis 1/2 com "fonte" = NOME da imobiliária. Meta: pelo menos METADE das
+amostras vindas daqui — é o anúncio da imobiliária do bairro que reflete o preço praticado na praça.
 
-PASSO 2 — GRANDES PORTAIS (depois, para COMPLEMENTAR a amostra do passo 1).
-ZAP, VivaReal, OLX, Quinto Andar, Imovelweb, Loft, 123i, Chaves na Mão, Net Imóveis. Cruze vários,
-sempre na MESMA localidade dos níveis 1/2. Se o passo 1 já entregou amostra suficiente, o portal
-serve para CONFERIR o preço, não para substituí-la.
+PASSO 2 — GRANDES PORTAIS (depois, para COMPLEMENTAR o passo 1, com o que sobrar do orçamento).
+ZAP, VivaReal, OLX, Quinto Andar, Imovelweb, Loft, 123i, Chaves na Mão, Net Imóveis, sempre na
+MESMA localidade dos níveis 1/2. Se o passo 1 já entregou amostra suficiente, o portal serve para
+CONFERIR o preço, não para substituí-la. NÃO estoure o orçamento para cumprir a meta do passo 1:
+poucas amostras boas valem mais que muitas de outra praça, e o orçamento é limite, não sugestão.
 
 Ao final, liste em "fontesLocais" TODAS as imobiliárias locais que você encontrou (nome + url),
 mesmo as que não renderam anúncio do tipo-alvo — nós memorizamos e reusamos nesta praça. Um site
@@ -2189,6 +2189,13 @@ export default async function handler(req, res) {
           // SILÊNCIO. Lê direto do acervo, que é a mesma origem daquela variável.
           lote: { valorMinimo: Number(imDb?.valor_minimo) || 0, valorAvaliacao: avalDb, endereco: imovel?.endereco },
         });
+        // QUANTAS AMOSTRAS AUTORIZAM SUBSTITUIR O NÚMERO DA IA (revisão 13/08).
+        // Com 1 ou 2 amostras, a média ponderada é o preço de UM anúncio com nome de
+        // estatística — e foi exatamente disso que este trabalho veio reclamar (o nível 1 da
+        // análise `ea0f6aa9` tinha "2 amostras", uma sem preço, e virava a régua da capa).
+        // Abaixo de 3, os níveis e os descartes são gravados para o cliente ver, mas o VALOR
+        // continua o da IA, que ao menos triangula FipeZAP e a avaliação. `baseFina` avisa.
+        const MIN_P_SUBSTITUIR = 3;
         if (avalPond.consolidado.n > 0 && mercado) {
           // Reescreve o que a tela mostra por nível, já sem as amostras descartadas — o
           // `totalAmostras` passa a bater com o que sustenta a conta (antes um anúncio SEM
@@ -2198,22 +2205,40 @@ export default async function handler(req, res) {
             mercado[k] = { ...mercado[k], vendas: r.usadas.map(({ _valorM2, _dist, _distEstimada, _nivel, ...v }) => v),
               precoMedioM2: r.precoMedioM2, precoMinM2: r.precoMinM2, precoMaxM2: r.precoMaxM2, totalAmostras: r.n };
           }
+          const podeSubstituir = avalPond.consolidado.n >= MIN_P_SUBSTITUIR;
           mercado.consolidado = {
             ...(mercado.consolidado || {}),
             precoMedioM2: avalPond.consolidado.precoMedioM2,
-            valorEstimadoImovel: Math.round(avalPond.consolidado.precoMedioM2 * areaM2),
-            areaConsiderada: areaM2,
-            baseCalculo: explicarCalculo({ precoM2: avalPond.consolidado.precoMedioM2, area: areaM2,
-              n: avalPond.consolidado.n, descartadas: avalPond.descartadas }),
+            ...(podeSubstituir ? {
+              valorEstimadoImovel: Math.round(avalPond.consolidado.precoMedioM2 * areaM2),
+              areaConsiderada: areaM2,
+              baseCalculo: explicarCalculo({ precoM2: avalPond.consolidado.precoMedioM2, area: areaM2,
+                n: avalPond.consolidado.n, descartadas: avalPond.descartadas }),
+            } : {}),
+          };
+          mercado.valorPonderado = {
+            precoMedioM2: avalPond.consolidado.precoMedioM2, amostras: avalPond.consolidado.n,
+            valor: Math.round(avalPond.consolidado.precoMedioM2 * areaM2), aplicado: podeSubstituir,
+            motivo: podeSubstituir ? null : `base fina (${avalPond.consolidado.n} amostra(s), mínimo ${MIN_P_SUBSTITUIR})`,
           };
           // Transparência: o que foi descartado e por quê fica no result. Descarte silencioso
           // é a mesma família de defeito que esta correção veio fechar.
-          mercado.amostrasDescartadas = avalPond.descartadas.map(d => ({ fonte: d.fonte, valor: d.valor, m2: d.m2, distanciaKm: d.distanciaKm, motivo: d._motivo }));
+          // Limitado a 40: o result vai inteiro para o banco e para a tela, e uma análise com
+          // 200 descartes engordaria a linha sem informar mais nada. O TOTAL por motivo já vai
+          // no `baseCalculo`, que é o número que importa.
+          mercado.amostrasDescartadas = avalPond.descartadas.slice(0, 40)
+            .map(d => ({ fonte: d.fonte, valor: d.valor, m2: d.m2, distanciaKm: d.distanciaKm, motivo: d._motivo }));
           mercado.raioAmpliado = !!avalPond.ampliado;
           mercado.baseFina = !!avalPond.baseFina;
         }
       }
-    } catch { /* padrao-ok: ponderação é refinamento; se falhar, segue o número da IA */ }
+    } catch (e) {
+      // Refinamento: se falhar, o relatório sai com o número da IA em vez de não sair. Mas NÃO
+      // pode falhar em silêncio — foi essa a família de defeito que ocupou o dia inteiro. Fica
+      // no log do servidor e no result, para a próxima varredura achar sem precisar adivinhar.
+      console.error('[valor-ponderado] falhou:', String(e?.message || e).slice(0, 200));
+      if (mercado) mercado.valorPonderado = { aplicado: false, motivo: `erro: ${String(e?.message || e).slice(0, 120)}` };
+    }
 
     const vEstIA = Number(mercado?.consolidado?.valorEstimadoImovel) || 0;
     let valorMercado = null;

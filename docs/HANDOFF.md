@@ -277,6 +277,67 @@ para consultar, o CNJ sai como traço, não como "0 processos" — a mesma disti
 procurei" e "procurei e não achei" que o CLAUDE.md cobra no resto da base. E a etapa de
 certidões vira `erro` se a consulta cair, em vez de girar para sempre.
 
+### 5. MERCADOLÓGICO — o preço do m² saiu da IA e virou código (pedido do dono)
+
+O dono trouxe um caso concreto: apto em Guarulhos, corretora e Google mostrando R$ 250–270 mil,
+sistema fechando ~R$ 200 mil. **A investigação achou um problema mais fundo que o número:**
+o relatório NÃO calculava o preço do m² — pedia o número à IA. `valorEstimadoImovel` era um campo
+do JSON que o modelo preenchia, e a regra "quanto mais perto, maior a influência" **não existia
+em lugar nenhum do código**. Resultado medido: a MESMA microrregião precificada entre R$ 4.209 e
+R$ 7.248/m² conforme a análise (72% de amplitude), com o nível 1 saindo mais barato que o nível 2
+em 4 de 8 análises.
+
+**Cinco defeitos nas amostras reais** (análises `bc8a88cf` e `ea0f6aa9`):
+1. **O próprio lote como comparável** — `fonte: "Imóveis de Leilão Caixa"`, `valor: 94.815,14`
+   (o lance mínimo, ao centavo) a R$ 2.280/m². **6 das 54 análises (11%).**
+2. **Aluguel contado como venda** — R$ 3.200/mês em 40 m² = R$ 80/m².
+3. **Teto de distância nunca verificado** — comparáveis a 6 e 7 km a R$ 13.800/m² inflaram o
+   nível 2 para R$ 7.248/m². O prompt chamava de "REGRA DURA"; nada no código conferia.
+4. **Anúncio sem preço contava como amostra** — "2 amostras" onde havia 1.
+5. Comparável de outra praça dentro do raio.
+
+*Corrigido* — `api/_valor-mercado.js`, determinístico: peso 1/(1+d/250m) × recência 1/(1+anos),
+descarte com motivo registrado, ampliação para 2 km abaixo de **10 amostras** (era 5), e
+`baseCalculo` imprimindo a fórmula. Só para m² privativo/construído — terreno/rural/hectare
+seguem com o método type-aware da IA.
+
+### 6. A BUSCA passa a começar pelas imobiliárias locais
+
+O dono suspeitava que o sistema errava em **localizar** as imobiliárias. **A medição não
+confirmou:** `fonte_local_cidade` tem Guarulhos com 13 imobiliárias, 88 reusos, todas frescas, e
+42,5% das amostras do acervo já vêm de fontes locais reais (Lopes 40, Morada na Praia 14,
+J.A.D.S. 10, Menezes 8). **O defeito era de PRIORIDADE:** (a) o prompt punha "FONTES (grandes
+portais)" primeiro e as locais como *"além dos portais, busque também"* — suplemento, não base;
+(b) a lista concreta da praça era **colada no fim do prompt** (`prompt + cacheTxt + fontesTxt`),
+depois de ~200 linhas e desgrudada da seção de fontes. Por isso a análise do imóvel do dono saiu
+com Wimoveis/ZAP/QuintoAndar/VivaReal e **zero imobiliária local, tendo 13 conhecidas**.
+
+*Corrigido:* bloco FONTES em dois passos — passo 1 locais (com a lista conhecida DENTRO dele),
+passo 2 portais como complemento; buscas por BAIRRO, não só cidade.
+
+### 7. A REVISÃO de custo-benefício (pedido do dono, antes de publicar)
+
+A revisão pegou **um defeito que eu mesmo tinha introduzido**, e ele valia o passo: o orçamento
+de buscas é por INSTRUÇÃO (`webUses`, que cai de 6 para **2** quando a base própria já cobre a
+praça — a economia criada em 06/08). Meu bloco novo mandava fazer **4 buscas só no passo 1**, mais
+os portais. Ou o modelo estouraria o teto e o custo subiria em toda análise cacheada, desfazendo
+em silêncio aquela economia, ou obedeceria o teto e nunca chegaria aos portais — menos amostras
+que antes. **Os dois desfechos ruins.**
+
+*Resolvido pela própria memória:* quando a praça já tem imobiliárias conhecidas, o prompt agora
+diz para **não gastar busca descobrindo** — a lista está ali, vá direto aos sites. A memória
+passa a PAGAR em custo, que era o ponto dela. Só quando a lista está vazia é que se gasta uma
+busca de descoberta.
+
+Mais duas travas da mesma revisão:
+- **Mínimo de 3 amostras para substituir o número da IA.** Com 1 ou 2, a média ponderada é o
+  preço de UM anúncio com nome de estatística — exatamente o que este trabalho veio criticar. O
+  valor determinístico continua gravado em `mercado.valorPonderado` com `aplicado: false` e o
+  motivo, para o cliente e a auditoria verem, mas não vira a capa.
+- **O `catch` do refinamento deixou de ser mudo:** vai para o log do servidor e para
+  `mercado.valorPonderado.motivo`. Um refinamento que falha em silêncio é a família do dia.
+- `amostrasDescartadas` limitado a 40 por análise (o total por motivo já vai no `baseCalculo`).
+
 ### ⚠️ O QUE ESPERA VOCÊ NA ABERTURA
 
 1. **`proximidades_vazio_falso` deve seguir CAINDO sozinho** conforme o cron (a cada 15 min)

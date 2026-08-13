@@ -150,8 +150,10 @@ export function descartarOutliers(usadas, { fator = 2.5, minParaFiltrar = 4 } = 
   if (!(mediana > 0)) return { usadas: xs, descartadas: [] };
   const piso = mediana / fator, tetoV = mediana * fator;
   const ok = [], fora = [];
-  for (const a of xs) (a._valorM2 >= piso && a._valorM2 <= tetoV ? ok : fora).push(
-    a._valorM2 >= piso && a._valorM2 <= tetoV ? a : { ...a, _motivo: 'outlier', _mediana: Math.round(mediana) });
+  for (const a of xs) {
+    if (a._valorM2 >= piso && a._valorM2 <= tetoV) ok.push(a);
+    else fora.push({ ...a, _motivo: 'outlier', _mediana: Math.round(mediana) });
+  }
   return { usadas: ok, descartadas: fora };
 }
 
