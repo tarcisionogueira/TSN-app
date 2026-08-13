@@ -12,6 +12,7 @@ import { custoRespostaClaude, registrarCustoGeracao } from './_uso.js';
 import { groundingGemini } from './_grounding.js';
 import { resumoAprendizadoTexto } from './_arremate-aprendizado.js';
 import { ehCidadeTemporada, motivoTemporada } from './_temporada.js';
+import { avaliarMercado, explicarCalculo } from './_valor-mercado.js';
 import { composicaoTemporal, avisoFrescor } from './_indice-composicao.js';
 import { referenciaPonderada } from './_indice-ponderacao.js';
 import { geocodificarCascata, rankNivel, coordValida } from './_geo.js';
@@ -1051,7 +1052,7 @@ Busque o máximo de anúncios (mesmo tipo) no bairro e adjacências, até ~1km. 
 O raio EXISTE para não comparar o imóvel com outra praça. Bairro nobre a 5km tem preço de outro
 mercado; usá-lo como comparável INFLA a estimativa e o cliente decide errado.
 • NUNCA use amostra a mais de 1km nos níveis 1 e 2.
-• Só se, somados os níveis 1 e 2, houver MENOS de 5 vendas, você pode expandir até 2km — e então,
+• Só se, somados os níveis 1 e 2, houver MENOS de 10 amostras VÁLIDAS (com preço E metragem), você pode expandir até 2km — e então,
   OBRIGATORIAMENTE: (a) marque cada amostra assim obtida com "distanciaKm" (ex.: 1.8); (b) dê a ela
   PESO MENOR na média; (c) escreva no "comentario", com todas as letras, que faltaram comparáveis
   próximos e o raio foi ampliado para 2km.
@@ -1220,7 +1221,7 @@ Busque o máximo de anúncios (mesmo tipo) no bairro e adjacências, até ~1km. 
 O raio EXISTE para não comparar o imóvel com outra praça. Bairro nobre a 5km tem preço de outro
 mercado; usá-lo como comparável INFLA a estimativa e o cliente decide errado.
 • NUNCA use amostra a mais de 1km nos níveis 1 e 2.
-• Só se, somados os níveis 1 e 2, houver MENOS de 5 vendas, você pode expandir até 2km — e então,
+• Só se, somados os níveis 1 e 2, houver MENOS de 10 amostras VÁLIDAS (com preço E metragem), você pode expandir até 2km — e então,
   OBRIGATORIAMENTE: (a) marque cada amostra assim obtida com "distanciaKm" (ex.: 1.8); (b) dê a ela
   PESO MENOR na média; (c) escreva no "comentario", com todas as letras, que faltaram comparáveis
   próximos e o raio foi ampliado para 2km.
@@ -2113,6 +2114,52 @@ export default async function handler(req, res) {
     // privativo (residencial/comercial/industrial); terreno/rural sem estimativa ficam sem valor
     // (o front pede o dado) em vez de multiplicar a régua errada.
     const baseTipo = baseAvaliacaoPorTipo(mercadoInputs.tipoImovel || imovel?.tipo);
+
+    // ─── R$/m² PONDERADO POR PROXIMIDADE — a conta passa a ser CÓDIGO (13/08) ──────────────
+    // Até aqui o número da capa era o que a IA escrevia em `valorEstimadoImovel`, seguindo uma
+    // instrução em texto. Sem conta determinística, a MESMA microrregião de Guarulhos saiu
+    // entre R$ 4.209 e R$ 7.248/m² dependendo da análise que se abrisse. Agora a IA continua
+    // ACHANDO e DESCREVENDO os anúncios (o que ela faz bem) e `_valor-mercado.js` faz a conta:
+    // descarta o que não é comparável (o próprio leilão, anúncio sem preço, aluguel travestido
+    // de venda, fora do raio, discrepante da mediana) e pondera por proximidade × recência.
+    // Só se aplica a bases por m² privativo/construído — terreno/rural/hectare/unidade seguem
+    // com o método type-aware da IA, que a régua do m² não substitui.
+    let avalPond = null;
+    try {
+      if (['residencial', 'comercial', 'industrial'].includes(baseTipo) && areaM2 > 0) {
+        avalPond = avaliarMercado({
+          nivel1: mercado?.nivel1?.vendas, nivel2: mercado?.nivel2?.vendas,
+          // `vminImovel` só é declarado mais abaixo (const, zona morta temporal) — usar aqui
+          // daria ReferenceError engolido pelo catch, desligando a trava de auto-referência EM
+          // SILÊNCIO. Lê direto do acervo, que é a mesma origem daquela variável.
+          lote: { valorMinimo: Number(imDb?.valor_minimo) || 0, valorAvaliacao: avalDb, endereco: imovel?.endereco },
+        });
+        if (avalPond.consolidado.n > 0 && mercado) {
+          // Reescreve o que a tela mostra por nível, já sem as amostras descartadas — o
+          // `totalAmostras` passa a bater com o que sustenta a conta (antes um anúncio SEM
+          // PREÇO contava como amostra e o cliente lia "2" onde havia 1).
+          for (const [k, r] of [['nivel1', avalPond.nivel1], ['nivel2', avalPond.nivel2]]) {
+            if (!mercado[k]) continue;
+            mercado[k] = { ...mercado[k], vendas: r.usadas.map(({ _valorM2, _dist, _distEstimada, _nivel, ...v }) => v),
+              precoMedioM2: r.precoMedioM2, precoMinM2: r.precoMinM2, precoMaxM2: r.precoMaxM2, totalAmostras: r.n };
+          }
+          mercado.consolidado = {
+            ...(mercado.consolidado || {}),
+            precoMedioM2: avalPond.consolidado.precoMedioM2,
+            valorEstimadoImovel: Math.round(avalPond.consolidado.precoMedioM2 * areaM2),
+            areaConsiderada: areaM2,
+            baseCalculo: explicarCalculo({ precoM2: avalPond.consolidado.precoMedioM2, area: areaM2,
+              n: avalPond.consolidado.n, descartadas: avalPond.descartadas }),
+          };
+          // Transparência: o que foi descartado e por quê fica no result. Descarte silencioso
+          // é a mesma família de defeito que esta correção veio fechar.
+          mercado.amostrasDescartadas = avalPond.descartadas.map(d => ({ fonte: d.fonte, valor: d.valor, m2: d.m2, distanciaKm: d.distanciaKm, motivo: d._motivo }));
+          mercado.raioAmpliado = !!avalPond.ampliado;
+          mercado.baseFina = !!avalPond.baseFina;
+        }
+      }
+    } catch { /* padrao-ok: ponderação é refinamento; se falhar, segue o número da IA */ }
+
     const vEstIA = Number(mercado?.consolidado?.valorEstimadoImovel) || 0;
     let valorMercado = null;
     if (vEstIA > 0) valorMercado = Math.round(vEstIA);
