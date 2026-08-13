@@ -37,7 +37,10 @@ const rowToEntry = (r) => {
     imovel: r.imovel || null, status, result: r.result || null, erro,
     startedAt: r.created_at ? Date.parse(r.created_at) : Date.now(),
     updatedAt,
-    progresso: r.progresso || null, // barra de evolução das etapas (só mercadológico)
+    // Barra de evolução das etapas. Desde 13/08 vale para os TRÊS relatórios (mercadológico,
+    // documental e laudo) — as três tabelas têm a coluna e os três geradores emitem no mesmo
+    // formato. Este normalizador é compartilhado, então não há nada a fazer por tabela.
+    progresso: r.progresso || null,
     dataLeilao: r.data_leilao || null, // p/ calcular a expiração do relatório na tela
     // Divergências que o DOCUMENTAL achou contra a matrícula (cidade/metragem). O documental
     // já gravava isto em analises_mercado.correcoes_sugeridas, mas NINGUÉM lia de volta: o

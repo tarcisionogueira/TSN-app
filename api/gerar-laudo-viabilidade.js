@@ -297,7 +297,25 @@ export default async function handler(req, res) {
     return raw && !isNaN(Date.parse(raw)) ? new Date(raw).toISOString() : null;
   })();
   const baseRow = { user_id: ownerId, imovel_id: String(imovelId), titulo: titulo || im.endereco || null, cidade: im.cidade || null, estado: im.estado || null, imovel: imovel || null, data_leilao: dataLeilao };
-  await upsertLaudo({ ...baseRow, status: 'gerando', erro: null, result: null });
+  // BARRA DE EVOLUÇÃO (13/08) — mesmo formato de `progresso` dos outros dois relatórios,
+  // para o hub desenhar os três cards com um componente só. Este laudo NÃO reprocessa
+  // fontes: ele consolida o que já existe, então são duas fases honestas, não quatro
+  // inventadas para a barra parecer cheia.
+  const prog = { base: { status: 'gerando', n: null }, veredito: { status: 'pendente', n: null } };
+  const etapasDe = (p) => ([
+    { key: 'base', label: 'Cruzando o mercadológico e o documental', status: p.base.status, n: p.base.n },
+    { key: 'veredito', label: 'Parecer final de viabilidade', status: p.veredito.status, n: p.veredito.n },
+  ]);
+  const flush = async () => {
+    try {
+      await sb(`analises_laudo?user_id=eq.${ownerId}&imovel_id=eq.${encodeURIComponent(String(imovelId))}`, {
+        method: 'PATCH', headers: { Prefer: 'return=minimal' },
+        body: JSON.stringify({ progresso: { etapas: etapasDe(prog), atualizadoEm: new Date().toISOString() } }),
+      });
+    } catch { /* padrao-ok: progresso é best-effort; nunca bloqueia o laudo */ }
+  };
+  await upsertLaudo({ ...baseRow, status: 'gerando', erro: null, result: null,
+    progresso: { etapas: etapasDe(prog), atualizadoEm: new Date().toISOString() } });
 
   // DEADLINE interno < maxDuration (180s): garante gravar 'erro' antes de a Vercel
   // matar a função. Sem isto, se a chamada de IA travar/re-tentar além do limite, a
@@ -332,6 +350,11 @@ export default async function handler(req, res) {
     // saíram TODOS vazios, sempre com o mesmo tamanho (só o aviso de rodapé) e o veredito
     // 'condicional' do default: a resposta era cortada, o JSON ficava inválido e o `|| {}`
     // transformava a falha em relatório em branco, sem erro e sem rastro.
+    // O cruzamento das duas bases terminou; o que falta é o parecer da IA — a parte longa.
+    prog.base = { status: 'concluido', n: null };
+    prog.veredito = { status: 'gerando', n: null };
+    await flush();
+
     const data = await anthropic({
       model: MODEL, max_tokens: 12000,
       system: 'Você é o gestor sênior de decisão da BidPro Brasil. Emite o parecer final de viabilidade consolidando o relatório mercadológico/financeiro e o documental/jurídico. Pondera as duas visões, não as refaz. Honesto e objetivo. Nunca use markdown nem asteriscos. Nunca use travessão (o caractere "—"); escreva com vírgula, ponto ou dois-pontos. Retorne apenas JSON válido.' + aprendizados,
@@ -409,7 +432,9 @@ export default async function handler(req, res) {
       tem_contradicoes: Array.isArray(cq.contradicoes) && cq.contradicoes.length > 0,
       tem_lacunas_criticas: Array.isArray(cq.lacunasCriticas) && cq.lacunasCriticas.length > 0,
     };
-    await upsertLaudo({ ...baseRow, status: 'concluida', erro: null, result, regen_motivo: vicioRegen(qualLaudo), regen_em: new Date().toISOString() });
+    prog.veredito = { status: 'concluido', n: null };
+    await upsertLaudo({ ...baseRow, status: 'concluida', erro: null, result, regen_motivo: vicioRegen(qualLaudo), regen_em: new Date().toISOString(),
+      progresso: { etapas: etapasDe(prog), atualizadoEm: new Date().toISOString() } });
     await logAtividade(ownerId, 'relatorio_laudo_ok', `Laudo de viabilidade: ${result.veredito}`, { imovel_id: String(imovelId), veredito: result.veredito, diag });
     await registrarCustoGeracao('laudo', { userId: ownerId, imovelId: String(imovelId), custoMicro: _custoMicroReq, ok: true, meta: { veredito: result.veredito, ...(diag || {}) } });
     await aprenderNaEmissao(sb, { agente: 'laudo', imovel: { id: imovelId, cidade: im.cidade, estado: im.estado, tipo: im.tipo, modalidade: imovel?.modalidade },

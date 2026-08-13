@@ -68,6 +68,42 @@ async function upsertDoc(row) {
   });
 }
 
+// ── BARRA DE EVOLUÇÃO (13/08) ───────────────────────────────────────────────
+// Espelha `marcarProgresso` de `api/gerar-analise.js`, com o MESMO formato de `progresso`,
+// para que o hub de relatórios use um único componente nos três cards.
+//
+// POR QUE EXISTE: o cliente clicava em "Gerar" no documental e a tela ficava num spinner
+// mudo por minutos, enquanto o mercadológico mostrava etapa a etapa. Não era design — o
+// documental simplesmente não tinha o que reportar. As etapas abaixo são as fases REAIS
+// desta função, na ordem em que ela as executa; nenhuma é decorativa.
+//
+// Best-effort por princípio: é um PATCH curto entre chamadas caras e NUNCA pode atrasar
+// nem derrubar a geração. Falhou o progresso, o relatório segue.
+const PROG_LABELS = {
+  documentos: 'Reunindo edital, matrícula e anexos',
+  processo: 'Consulta do processo no CNJ',
+  parecer: 'Leitura jurídica dos documentos',
+  certidoes: 'Certidões fiscais do executado',
+};
+const PROG_ORDEM = ['documentos', 'processo', 'parecer', 'certidoes'];
+async function marcarProgresso(imovelId, ownerId, prog) {
+  try {
+    if (!ownerId || !imovelId) return;
+    const norm = PROG_ORDEM.map(k => ({
+      key: k, label: PROG_LABELS[k], status: prog?.[k]?.status || 'pendente', n: (prog?.[k]?.n ?? null),
+    }));
+    await sb(`analises_documental?user_id=eq.${ownerId}&imovel_id=eq.${encodeURIComponent(String(imovelId))}`, {
+      method: 'PATCH',
+      headers: { Prefer: 'return=minimal' },
+      body: JSON.stringify({ progresso: { etapas: norm, atualizadoEm: new Date().toISOString() } }),
+    });
+  } catch { /* padrao-ok: progresso é best-effort; nunca bloqueia o relatório */ }
+}
+const progInicial = () => ({
+  documentos: { status: 'gerando', n: null }, processo: { status: 'pendente', n: null },
+  parecer: { status: 'pendente', n: null }, certidoes: { status: 'pendente', n: null },
+});
+
 // ── Cache de documentos no bucket privado `documentos` ──────────────────────
 // O servidor recebe 403 nos PDFs da Caixa (IP de datacenter) e cai no Bright Data
 // (IP residencial), que tem TETO SEMANAL. Cachear o PDF baixado evita re-baixar
@@ -678,7 +714,14 @@ export default async function handler(req, res) {
   };
 
   // Mantém o result ANTERIOR visível durante a regeração (não zera o relatório bom).
-  await upsertDoc({ ...base, status: 'gerando', erro: null, result: resultadoAnterior });
+  // A barra de evolução é RESETADA aqui: não pode herdar as etapas de uma geração anterior,
+  // senão a tela abriria com etapas já verdes de um relatório que está sendo refeito.
+  const prog = progInicial();
+  const flush = () => marcarProgresso(imovelId, ownerId, prog);
+  await upsertDoc({ ...base, status: 'gerando', erro: null, result: resultadoAnterior, progresso: {
+    etapas: PROG_ORDEM.map(k => ({ key: k, label: PROG_LABELS[k], status: prog[k].status, n: null })),
+    atualizadoEm: new Date().toISOString(),
+  } });
 
   // Orçamento da fase de COLETA (leitura de docs + CNJ): capado em 165s para SOBRAR
   // tempo para a IA (extração) + consultas de fontes + gravação, tudo dentro do
@@ -954,14 +997,28 @@ export default async function handler(req, res) {
       return semDocs;
     }
 
+    // Etapa 1 fechada: os documentos que dava para reunir já foram lidos. `n` é a CONTAGEM
+    // do que foi efetivamente lido — o número que responde "com base em quantas peças?".
+    prog.documentos = { status: 'concluido', n: lidos.length };
+    prog.processo = { status: 'gerando', n: null };
+    await flush();
+
     // 2) Consulta o CNJ (quando há processo e UF). Modalidade judicial prioriza.
     const procNum = body?.processoNumero || row?.numero_processo || null;
     const procNome = body?.processoNome || null;
     let cnj = null;
-    if ((procNum || procNome) && im.estado && Date.now() < deadline) {
+    const temBuscaCnj = (procNum || procNome) && im.estado;
+    if (temBuscaCnj && Date.now() < deadline) {
       try { cnj = await buscarProcessosCNJ({ numero_processo: procNum || undefined, nome_parte: procNome || undefined, uf: im.estado, modalidade: im.modalidade }); }
       catch { /* CNJ pode estar indisponível */ }
     }
+    // 'pulado' quando não há número/parte para consultar: é diferente de "consultei e não
+    // achei nada". O cliente vê um traço, não um zero — a distinção que o CLAUDE.md cobra.
+    prog.processo = temBuscaCnj
+      ? { status: 'concluido', n: (cnj?.total ?? null) }
+      : { status: 'pulado', n: null };
+    prog.parecer = { status: 'gerando', n: null };
+    await flush();
 
     // 3) Monta a mensagem para o Claude (documentos + resumo do CNJ).
     const temProc = !!(cnj && cnj.total);
@@ -1237,6 +1294,10 @@ export default async function handler(req, res) {
       verificadoEm: new Date().toISOString(),
     };
     let fontesTxt = '', fontesExternas = null;
+    // A leitura jurídica (IA) terminou; o que vem agora são as consultas fiscais.
+    prog.parecer = { status: 'concluido', n: null };
+    prog.certidoes = { status: docOk ? 'gerando' : 'pulado', n: null };
+    await flush();
     try {
       // CONSULTAS AUTOMÁTICAS = só as que o sistema traz SOZINHO e de GRAÇA (decisão do dono):
       // DJEN/Comunica CNJ + certidões FISCAIS (Receita/PGFN/FGTS). CNDT (trabalhista), CNIB
@@ -1249,6 +1310,14 @@ export default async function handler(req, res) {
         docOk ? consultarCertidoesFiscais(execDoc).catch(() => null) : null,
       ]);
       fontesExternas = { djen, certidoes: cert };
+      if (prog.certidoes.status === 'gerando') {
+        // `n` = quantas certidões voltaram com resposta. Zero com a etapa CONCLUÍDA é uma
+        // informação legítima ("consultei, não veio nada"); é diferente de 'pulado'.
+        const nCert = cert && typeof cert === 'object'
+          ? Object.values(cert).filter(v => v && typeof v === 'object').length : null;
+        prog.certidoes = { status: 'concluido', n: nCert };
+        await flush();
+      }
       // Comprovantes: gera um comprovante PRÓPRIO (estático, sem script) de cada fonte
       // e guarda só a URL (a prova que o cliente abre). Nunca deixa o HTML cru no result
       // nem linka o portal ao vivo (era a causa da "tela de digitação").
@@ -1276,7 +1345,12 @@ export default async function handler(req, res) {
         linhas.push(`• CPF/CNPJ do executado/proprietário não localizado nos documentos${execNome ? ` (parte identificada: ${execNome})` : ''} — certidões fiscais por documento não realizadas.${ondeObter}`);
       }
       if (linhas.length) fontesTxt = `\n\n§ SEÇÃO: CERTIDÕES E FONTES EXTERNAS\n\n${linhas.join('\n')}\n\nConsultas públicas automáticas — confirme em certidão oficial atualizada antes do lance.`;
-    } catch { /* fontes externas nunca derrubam o laudo */ }
+    } catch {
+      // Fontes externas nunca derrubam o laudo — mas a etapa não pode ficar girando para
+      // sempre na tela do cliente. 'erro' aqui é honesto: a consulta não completou, e o
+      // relatório sai assim mesmo. Deixar em 'gerando' seria o spinner eterno de novo.
+      if (prog.certidoes.status === 'gerando') { prog.certidoes = { status: 'erro', n: null }; await flush(); }
+    }
 
     // Checklist de evolução: o que já foi consultado e o que ficou PENDENTE (fonte
     // instável/CAPTCHA) — deixa o relatório transparente e justifica o prazo p/ liberar.

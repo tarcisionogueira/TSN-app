@@ -1085,7 +1085,13 @@ export default function Analise() {
     if (gerandoLaudo) return;
     showMsg('Laudo de viabilidade iniciado no servidor, consolida os dois relatórios; pode fechar a aba.');
     iniciarLaudo({ imovelId: analiseImovelId, titulo: d.nome || d.endereco || imovelInicial?.titulo || 'Imóvel', cidade: d.cidade, estado: d.estado, imovel: imovelInicial || null, paraUserId });
-    setRelSel('laudo');
+    // FLUXO UNIFICADO (13/08, pedido do dono). Havia um `setRelSel('laudo')` aqui: clicar em
+    // "Gerar" no laudo ARRANCAVA o cliente do hub e o jogava numa tela à parte com um spinner
+    // mudo, enquanto o mercadológico ficava no lugar mostrando etapa a etapa. Os três agora se
+    // comportam igual — ficam no hub, com a barra de evolução embaixo do próprio card, e o
+    // cliente abre o relatório quando ele fica pronto (botão "Abrir").
+    // O documental ainda navega, mas SÓ quando faltam documentos: ali a tela separada é o
+    // lugar onde se anexa o PDF, então o salto leva a uma ação, não a uma espera.
   };
 
   // AUTO-SEQUÊNCIA (arremate atribuído com docs): gera os 3 relatórios EM ORDEM sozinho —
@@ -1668,9 +1674,9 @@ export default function Analise() {
               )}
               <div style={{ display:'grid', gridTemplateColumns: isMobile?'1fr':'1fr 1fr', gap:14 }}>
                 {[
-                  { k:'mercado', cor:'#0d9488', bg:'#f0fdfa', Icon:BarChart3, titulo:'Mercadológico + Viabilidade Financeira', desc:'Avaliação de mercado (níveis 1 e 2), estrutura de custos, cenários, ROI/ROE e teto de lance.', ok:relMercadoGerado, gerando:gerandoMercado, fn:gerarRelMercado, block: analisesBloqueado, seqBloqueado:false, ordem:1 },
-                  { k:'documental', cor:'#1e3a8a', bg:'#eef2ff', Icon:Scale, titulo:'Análise Documental + Processo', desc:'Leitura do edital/matrícula (ônus e gravames) e consulta do processo no CNJ + certidões fiscais.', ok:relDocumentalGerado, gerando:gerandoDocumental, preparando:relDocumentalPreparando, faltamDocs:relDocumentalFaltamDocs, fn:gerarRelDocumental, block:false, seqBloqueado: !relMercadoGerado && !relDocumentalGerado, planoBloqueado: ROLES_SEM_DOCUMENTAL.includes(role), ordem:2 },
-                  { k:'laudo', cor:'#111111', bg:'#f1f5f9', Icon:Award, titulo:'Laudo de Viabilidade (Parecer Final)', desc:'Consolida os dois relatórios acima num veredito de defesa (aprovado/condicional/reprovado), com condições e diligências. Não reprocessa fontes, sintetiza o que já foi gerado.', ok:relLaudoGerado, gerando:gerandoLaudo, fn:gerarRelLaudo, block:false, seqBloqueado: !ambosRelatorios && !relLaudoGerado, planoBloqueado: ROLES_SEM_DOCUMENTAL.includes(role), ordem:3 },
+                  { k:'mercado', cor:'#0d9488', bg:'#f0fdfa', Icon:BarChart3, titulo:'Mercadológico + Viabilidade Financeira', desc:'Avaliação de mercado (níveis 1 e 2), estrutura de custos, cenários, ROI/ROE e teto de lance.', ok:relMercadoGerado, gerando:gerandoMercado, fn:gerarRelMercado, block: analisesBloqueado, seqBloqueado:false, ordem:1, entry: analiseEntry },
+                  { k:'documental', cor:'#1e3a8a', bg:'#eef2ff', Icon:Scale, titulo:'Análise Documental + Processo', desc:'Leitura do edital/matrícula (ônus e gravames) e consulta do processo no CNJ + certidões fiscais.', ok:relDocumentalGerado, gerando:gerandoDocumental, preparando:relDocumentalPreparando, faltamDocs:relDocumentalFaltamDocs, fn:gerarRelDocumental, block:false, seqBloqueado: !relMercadoGerado && !relDocumentalGerado, planoBloqueado: ROLES_SEM_DOCUMENTAL.includes(role), ordem:2, entry: docEntry },
+                  { k:'laudo', cor:'#111111', bg:'#f1f5f9', Icon:Award, titulo:'Laudo de Viabilidade (Parecer Final)', desc:'Consolida os dois relatórios acima num veredito de defesa (aprovado/condicional/reprovado), com condições e diligências. Não reprocessa fontes, sintetiza o que já foi gerado.', ok:relLaudoGerado, gerando:gerandoLaudo, fn:gerarRelLaudo, block:false, seqBloqueado: !ambosRelatorios && !relLaudoGerado, planoBloqueado: ROLES_SEM_DOCUMENTAL.includes(role), ordem:3, entry: laudoEntry },
                 ].map(c => {
                   const travado = c.gerando || c.preparando || c.block || c.seqBloqueado || c.planoBloqueado || (loteEncerrado.encerrado && !c.ok);
                   return (
@@ -1721,10 +1727,16 @@ export default function Analise() {
                           : 'Lendo edital/matrícula/anexos e consultando o processo no CNJ, roda no servidor; pode fechar a aba.'}
                       </div>
                     )}
-                    {/* BARRA DE EVOLUÇÃO (mercadológico): cada etapa da geração preenche a barra e
-                        mostra sua contagem quando conclui. Etapas isoladas com tempos independentes. */}
-                    {c.k==='mercado' && c.gerando && Array.isArray(analiseEntry?.progresso?.etapas) && analiseEntry.progresso.etapas.length > 0 && (() => {
-                      const ets = analiseEntry.progresso.etapas;
+                    {/* BARRA DE EVOLUÇÃO — cada etapa da geração preenche a barra e mostra sua
+                        contagem quando conclui. Etapas isoladas com tempos independentes.
+                        UNIFICADA NOS 3 (13/08): era `c.k==='mercado'` e lia `analiseEntry` fixo,
+                        então documental e laudo geravam sob um spinner mudo — e o laudo ainda
+                        arrancava o cliente para outra tela. Agora cada card lê o progresso da
+                        SUA entrada (`c.entry`), e os três backends emitem etapas no mesmo
+                        formato. Card sem etapas (linha antiga, geração que não reporta) não
+                        desenha nada, exatamente como antes. */}
+                    {c.gerando && Array.isArray(c.entry?.progresso?.etapas) && c.entry.progresso.etapas.length > 0 && (() => {
+                      const ets = c.entry.progresso.etapas;
                       const resolved = ets.filter(e => ['concluido','pulado','erro'].includes(e.status)).length + 0.5 * ets.filter(e => e.status==='gerando').length;
                       const pct = Math.round((resolved / ets.length) * 100);
                       return (

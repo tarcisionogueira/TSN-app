@@ -240,6 +240,43 @@ Invariante: **399 → 0**.
 6 de 6**: a pendência (A) do dono, o sufixo de UTM, **não foi aplicada**. Sem isso não se sabe
 QUAL palavra-chave traz gente, e as negativas continuam saindo de lista genérica.
 
+### 4. Fluxo dos 3 relatórios unificado (pedido do dono, na mesma sessão)
+
+> *"Ao gerar o relatório documental ele vai para uma tela à parte e não fica como quando clico
+> no mercadológico, na mesma tela e mostrando a evolução da elaboração embaixo. Poderia
+> organizar o fluxo para ser o mesmo nos 3?"*
+
+**Não era escolha de design, era assimetria de implementação.** O que estava assim:
+
+| | Mercadológico | Documental | Laudo |
+|---|---|---|---|
+| Fica no hub ao gerar | ✅ | ✅ (só saltava quando faltam docs) | ❌ `setRelSel('laudo')` incondicional |
+| Coluna `progresso` | ✅ | ❌ não existia | ❌ não existia |
+| Backend emite etapas | ✅ 7 pontos | ❌ zero | ❌ zero |
+| Barra de evolução | ✅ | ❌ render travado em `c.k==='mercado'` | ❌ idem |
+
+O laudo **arrancava** o cliente do hub e o jogava numa tela à parte com um spinner mudo. O
+documental ficava no hub, mas sem nada para mostrar — o spinner era a única prova de vida.
+
+*Unificado nas três camadas:*
+- **Banco** (`progresso_documental_e_laudo.sql`): `progresso jsonb` nas outras duas tabelas,
+  mesmo formato do mercadológico. `rowToEntry` do `AnalisesContext` é compartilhado, então
+  o dado flui para os três sem mudança por tabela.
+- **Backends**: `gerar-documental.js` emite 4 etapas REAIS, na ordem em que executa
+  (reunindo documentos · processo no CNJ · leitura jurídica · certidões fiscais), com
+  contagem por etapa; `gerar-laudo-viabilidade.js` emite 2 (cruzando as bases · parecer
+  final) — ele consolida, não reprocessa, então são duas fases honestas e não quatro
+  inventadas para a barra parecer cheia.
+- **Tela**: o `setRelSel('laudo')` saiu; a barra deixou de ser travada em `mercado` e cada
+  card lê o progresso da **sua** entrada (`c.entry`).
+
+**Duas decisões que valem entender:** (a) o documental **continua** navegando quando faltam
+documentos — ali a tela separada é onde se anexa o PDF, então o salto leva a uma AÇÃO, não a
+uma espera; (b) as etapas distinguem `pulado` de `concluído com zero`. Sem número de processo
+para consultar, o CNJ sai como traço, não como "0 processos" — a mesma distinção entre "não
+procurei" e "procurei e não achei" que o CLAUDE.md cobra no resto da base. E a etapa de
+certidões vira `erro` se a consulta cair, em vez de girar para sempre.
+
 ### ⚠️ O QUE ESPERA VOCÊ NA ABERTURA
 
 1. **`proximidades_vazio_falso` deve seguir CAINDO sozinho** conforme o cron (a cada 15 min)
