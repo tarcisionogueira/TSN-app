@@ -996,7 +996,13 @@ async function anthropic(payload, useSearch, fetchOpts) {
   return j;
 }
 
-export function promptMercado({ endereco, tipoImovel, areaM2, cidade, estado, nomeCondominio }) {
+export function promptMercado({ endereco, tipoImovel, areaM2, cidade, estado, nomeCondominio, bairro, fontesConhecidas }) {
+  // Bairro e lista de imobiliárias já conhecidas alimentam o bloco FONTES (ordem local→portal).
+  // `fontesConhecidas` chega pronta do chamador (RPC `fontes_locais_frescas`); antes ela era
+  // COLADA NO FIM do prompt, longe da seção de fontes — a instrução mais específica que temos
+  // chegava por último e desgrudada. Agora entra DENTRO do passo 1.
+  const bairroTxt = bairro ? ` (bairro ${bairro})` : '';
+  const bairroTxt2 = bairro ? `${bairro}, ${cidade}/${estado}` : `${cidade}/${estado}`;
   return `Você é um perito avaliador imobiliário. Realize pesquisa de mercado COMPLETA em DOIS NÍVEIS para o imóvel:
 - Tipo: ${tipoImovel}, ${areaM2 ? areaM2 + 'm²' : 'área não informada'}
 - Endereço: ${endereco}, ${cidade}/${estado}
@@ -1063,9 +1069,27 @@ mercado; usá-lo como comparável INFLA a estimativa e o cliente decide errado.
 • MESMO PRODUTO: lote em condomínio compara com lote em condomínio; não com lote de rua aberta,
   chácara ou área comercial, ainda que a distância seja parecida.
 
-FONTES (grandes portais): ZAP, VivaReal, OLX, Quinto Andar, Imovelweb, Loft, 123i, Chaves na Mão, Net Imóveis. Cruze várias.
+═══ FONTES — A ORDEM IMPORTA (decisão do dono, 13/08) ═══
+A busca começa PELAS IMOBILIÁRIAS LOCAIS e só depois soma os grandes portais. Não é preferência
+de estilo: quem vende naquela rua é a imobiliária do bairro, e o anúncio dela é o preço praticado
+na praça. O portal nacional é COMPLEMENTO — serve para completar a amostra, não para formá-la.
+${fontesConhecidas || ''}
+PASSO 1 — IMOBILIÁRIAS LOCAIS (faça PRIMEIRO, é obrigatório).
+Descubra quais imobiliárias e corretores ATENDEM ${cidade}/${estado}${bairroTxt} e abra os sites delas.
+Buscas a fazer, nesta ordem (use as strings COMO ESTÃO, sem parênteses nem pontuação extra):
+"imobiliária ${bairroTxt2}", "imobiliárias que atendem ${bairroTxt2}", "imóveis à venda ${bairroTxt2}",
+"${tipoImovel || 'apartamento'} à venda ${bairroTxt2}" — e, se houver lista acima,
+comece por ELA. Colha os anúncios do tipo-alvo direto no site de cada uma. Inclua as amostras nos
+níveis 1/2 com "fonte" = NOME da imobiliária. Meta: pelo menos METADE das amostras vindas daqui.
 
-FONTES LOCAIS (OBRIGATÓRIO — frequentemente MAIS confiáveis): além dos grandes portais, busque também ANÚNCIOS DE IMOBILIÁRIAS DA PRÓPRIA CIDADE de ${cidade}/${estado}. Pesquise por "imobiliária ${cidade}", "imóveis à venda ${cidade}" (e o bairro, se houver) e abra os sites das imobiliárias locais — os anúncios delas costumam refletir MELHOR o preço praticado na praça e podem ser COMPLEMENTARES ou até DECISIVOS na composição do valor. Inclua essas amostras nos níveis 1/2 com "fonte" = nome da imobiliária local, e dê PESO ao menos igual ao dos grandes portais quando forem recentes e do mesmo tipo/microrregião. Ao final, liste em "fontesLocais" as imobiliárias LOCAIS que você usou/encontrou (nome + url do site) — nós memorizamos e reusamos nas próximas análises desta praça.
+PASSO 2 — GRANDES PORTAIS (depois, para COMPLEMENTAR a amostra do passo 1).
+ZAP, VivaReal, OLX, Quinto Andar, Imovelweb, Loft, 123i, Chaves na Mão, Net Imóveis. Cruze vários,
+sempre na MESMA localidade dos níveis 1/2. Se o passo 1 já entregou amostra suficiente, o portal
+serve para CONFERIR o preço, não para substituí-la.
+
+Ao final, liste em "fontesLocais" TODAS as imobiliárias locais que você encontrou (nome + url),
+mesmo as que não renderam anúncio do tipo-alvo — nós memorizamos e reusamos nesta praça. Um site
+que você abriu e não tinha o tipo-alvo hoje pode tê-lo na próxima análise.
 
 DATA DO ANÚNCIO: para CADA amostra, capture a data no campo "data" (formato "AAAA-MM"; senão "recente").
 RECÊNCIA (IMPORTANTE): priorize FORTEMENTE anúncios do ANO CORRENTE e dos últimos ~12 meses. EVITE anúncios com mais de ~18 meses, a menos que não haja recentes suficientes — o preço muda rápido. Na média, dê MENOS peso às amostras antigas. Se a maioria das amostras for antiga (ex.: de anos anteriores), diga isso EXPLICITAMENTE no "comentario" e trate a estimativa como menos precisa (alargue precoMinM2/precoMaxM2).
@@ -1162,7 +1186,13 @@ Retorne APENAS este JSON (sem markdown):
 //     PRÓPRIOS e curtos; se falhar/estourar, o relatório entrega assim mesmo com a Etapa A.
 // Assim um contexto lento nunca mais derruba (ou esvazia) o relatório inteiro.
 // ─────────────────────────────────────────────────────────────────────────────
-export function promptComparaveis({ endereco, tipoImovel, areaM2, cidade, estado, nomeCondominio }) {
+export function promptComparaveis({ endereco, tipoImovel, areaM2, cidade, estado, nomeCondominio, bairro, fontesConhecidas }) {
+  // Bairro e lista de imobiliárias já conhecidas alimentam o bloco FONTES (ordem local→portal).
+  // `fontesConhecidas` chega pronta do chamador (RPC `fontes_locais_frescas`); antes ela era
+  // COLADA NO FIM do prompt, longe da seção de fontes — a instrução mais específica que temos
+  // chegava por último e desgrudada. Agora entra DENTRO do passo 1.
+  const bairroTxt = bairro ? ` (bairro ${bairro})` : '';
+  const bairroTxt2 = bairro ? `${bairro}, ${cidade}/${estado}` : `${cidade}/${estado}`;
   return `Você é um perito avaliador imobiliário. Realize a PESQUISA DE COMPARÁVEIS em DOIS NÍVEIS para o imóvel:
 - Tipo: ${tipoImovel}, ${areaM2 ? areaM2 + 'm²' : 'área não informada'}
 - Endereço: ${endereco}, ${cidade}/${estado}
@@ -1232,9 +1262,27 @@ mercado; usá-lo como comparável INFLA a estimativa e o cliente decide errado.
 • MESMO PRODUTO: lote em condomínio compara com lote em condomínio; não com lote de rua aberta,
   chácara ou área comercial, ainda que a distância seja parecida.
 
-FONTES (grandes portais): ZAP, VivaReal, OLX, Quinto Andar, Imovelweb, Loft, 123i, Chaves na Mão, Net Imóveis. Cruze várias.
+═══ FONTES — A ORDEM IMPORTA (decisão do dono, 13/08) ═══
+A busca começa PELAS IMOBILIÁRIAS LOCAIS e só depois soma os grandes portais. Não é preferência
+de estilo: quem vende naquela rua é a imobiliária do bairro, e o anúncio dela é o preço praticado
+na praça. O portal nacional é COMPLEMENTO — serve para completar a amostra, não para formá-la.
+${fontesConhecidas || ''}
+PASSO 1 — IMOBILIÁRIAS LOCAIS (faça PRIMEIRO, é obrigatório).
+Descubra quais imobiliárias e corretores ATENDEM ${cidade}/${estado}${bairroTxt} e abra os sites delas.
+Buscas a fazer, nesta ordem (use as strings COMO ESTÃO, sem parênteses nem pontuação extra):
+"imobiliária ${bairroTxt2}", "imobiliárias que atendem ${bairroTxt2}", "imóveis à venda ${bairroTxt2}",
+"${tipoImovel || 'apartamento'} à venda ${bairroTxt2}" — e, se houver lista acima,
+comece por ELA. Colha os anúncios do tipo-alvo direto no site de cada uma. Inclua as amostras nos
+níveis 1/2 com "fonte" = NOME da imobiliária. Meta: pelo menos METADE das amostras vindas daqui.
 
-FONTES LOCAIS (OBRIGATÓRIO — frequentemente MAIS confiáveis): além dos grandes portais, busque também ANÚNCIOS DE IMOBILIÁRIAS DA PRÓPRIA CIDADE de ${cidade}/${estado}. Pesquise por "imobiliária ${cidade}", "imóveis à venda ${cidade}" (e o bairro, se houver) e abra os sites das imobiliárias locais — os anúncios delas costumam refletir MELHOR o preço praticado na praça e podem ser COMPLEMENTARES ou até DECISIVOS na composição do valor. Inclua essas amostras nos níveis 1/2 com "fonte" = nome da imobiliária local, e dê PESO ao menos igual ao dos grandes portais quando forem recentes e do mesmo tipo/microrregião. Ao final, liste em "fontesLocais" as imobiliárias LOCAIS que você usou/encontrou (nome + url do site) — nós memorizamos e reusamos nas próximas análises desta praça.
+PASSO 2 — GRANDES PORTAIS (depois, para COMPLEMENTAR a amostra do passo 1).
+ZAP, VivaReal, OLX, Quinto Andar, Imovelweb, Loft, 123i, Chaves na Mão, Net Imóveis. Cruze vários,
+sempre na MESMA localidade dos níveis 1/2. Se o passo 1 já entregou amostra suficiente, o portal
+serve para CONFERIR o preço, não para substituí-la.
+
+Ao final, liste em "fontesLocais" TODAS as imobiliárias locais que você encontrou (nome + url),
+mesmo as que não renderam anúncio do tipo-alvo — nós memorizamos e reusamos nesta praça. Um site
+que você abriu e não tinha o tipo-alvo hoje pode tê-lo na próxima análise.
 
 DATA DO ANÚNCIO: para CADA amostra, capture a data no campo "data" (formato "AAAA-MM"; senão "recente").
 RECÊNCIA (IMPORTANTE): priorize FORTEMENTE anúncios do ANO CORRENTE e dos últimos ~12 meses. EVITE anúncios com mais de ~18 meses, a menos que não haja recentes suficientes — o preço muda rápido. Na média, dê MENOS peso às amostras antigas. Se a maioria das amostras for antiga (ex.: de anos anteriores), diga isso EXPLICITAMENTE no "comentario" e trate a estimativa como menos precisa (alargue precoMinM2/precoMaxM2).
@@ -1772,7 +1820,14 @@ export default async function handler(req, res) {
       let fontesTxt = '';
       try {
         const fl = await (await sb('rpc/fontes_locais_frescas', { method: 'POST', body: JSON.stringify({ p_cidade_norm: _norm(cidade), p_uf: String(estado || '').toUpperCase() }) })).json();
-        if (Array.isArray(fl) && fl.length) fontesTxt = `\n\nIMOBILIÁRIAS LOCAIS JÁ CONHECIDAS de ${cidade}/${estado} (comece por elas: abra os sites e colha anúncios do tipo-alvo; ADICIONE as novas que encontrar em "fontesLocais"):\n` + fl.map(f => `- ${f.nome || f.url} (${f.url})`).join('\n');
+        // ENTRA NO CORPO DO PROMPT, no passo 1 do bloco FONTES — não mais colado no fim.
+        // Era `promptComparaveis(...) + cacheTxt + fontesTxt`: a lista concreta de imobiliárias
+        // da praça (a instrução mais específica que temos) chegava DEPOIS de ~200 linhas de
+        // outras regras e desgrudada da seção de fontes, que ainda por cima mandava começar
+        // pelos grandes portais. Guarulhos tinha 13 imobiliárias mapeadas e 88 reusos, e mesmo
+        // assim análises saíam 100% de portal.
+        if (Array.isArray(fl) && fl.length) fontesTxt = `IMOBILIÁRIAS DESTA PRAÇA JÁ CONHECIDAS (comece por estas, abra os sites e colha os anúncios do tipo-alvo):\n`
+          + fl.map(f => `- ${f.nome || f.url} (${f.url})`).join('\n') + '\n';
       } catch { /* best-effort */ }
       console.log('[mercado-cache]', JSON.stringify({ on: cacheLigado, hit: !!cacheReg?.hit, nivel: cacheReg?.nivel || null, n: cacheReg?.n || 0, maxWebA, maxWebB, imovel: String(imovelId) }));
       // Cada ETAPA é uma chamada com timeout PRÓPRIO (retries:0). UMA etapa nunca soma tempo com
@@ -1823,7 +1878,7 @@ export default async function handler(req, res) {
       // comparáveis saem da base própria e a busca (a etapa CARA) não roda. Ver mercadoDaBase().
       const daBase = process.env.MERCADO_MODO_BASE === '0' ? null : await mercadoDaBase(cacheReg, segCache, imRegBase);
       const sysComp = `Você é um perito avaliador imobiliário sênior. Busque o MÁXIMO de amostras possível, SEMPRE do mesmo tipo (${mercadoInputs.tipoImovel}). Retorne apenas JSON válido.`;
-      const promptA = promptComparaveis(mercadoInputs) + cacheTxt + fontesTxt;
+      const promptA = promptComparaveis({ ...mercadoInputs, bairro: imRegBase?.bairro || null, fontesConhecidas: fontesTxt }) + cacheTxt;
       // 1ª busca: reserva o parecer, ~55s p/ a Etapa B (contexto) e ~35s p/ uma 2ª tentativa da A.
       let compar = daBase || await buscarEtapa({ prompt: promptA, sistema: sysComp, msBudget: Math.min(135000, restante() - RESERVA_PARECER - 90000), webUses: maxWebA });
       if (daBase) console.log('[modo-base]', JSON.stringify({ imovel: String(imovelId), ...daBase.__modoBase, tipo: segCache }));
