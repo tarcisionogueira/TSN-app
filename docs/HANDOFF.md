@@ -60,6 +60,49 @@ proteger o documento do cliente contra o leiloeiro tirar o PDF do ar.
 2. `api/espelhar-docs-cron.js` — `enfileirados` começa em **`null`**, não 0, e o motivo do erro
    viaja na resposta (`erro_enfileirar`). "Não consegui" deixa de se parecer com "não havia nada".
 
+### 🔴 CONSERTADO: "Falha de conexão ao gerar" num relatório que estava sendo gerado normalmente
+
+**Relatado pelo dono ao vivo** (imóvel em Itapevi): a tela deu erro e "se recarregou sozinha".
+O rastro em `eventos_atividade` fecha o caso sem margem para dúvida:
+
+| Hora | O que aconteceu |
+|---|---|
+| 13:00:15 | clique em **Gerar** |
+| 13:00:17 | servidor cria a linha em `analises_mercado` |
+| **13:01:58** | **`api_falha_rede` · `/api/gerar-analise` · "Load failed"** — a conexão do fetch caiu |
+| 13:03:40 | **servidor conclui a análise normalmente** (`status: concluida`, sem `erro`) |
+| 13:04:01 | dono clica em **Abrir** — o relatório estava lá |
+
+**A geração roda no SERVIDOR e é persistente** — o cabeçalho de `AnalisesContext.jsx` diz que o
+cliente pode até fechar a aba. Ou seja, perder a conexão HTTP significa "perdi o canal ao vivo",
+**não** "a geração falhou". Mas o `.catch` do `apiCall` pintava `status: 'erro'` na hora, com
+"Falha de conexão ao gerar. Tente novamente." — e o polling de 12s depois relia o banco e
+desfazia. Erro falso na cara do cliente, e pior: **um convite a clicar em Gerar de novo, que
+queima cota e reprocessa IA de um relatório já pronto.**
+
+Por que a conexão cai: a requisição fica **mais de 3 minutos sem trafegar byte** (o servidor tem
+`maxDuration` de 5 min). Navegador, rede móvel e gateway derrubam conexão ociosa bem antes disso
+— não é caso raro, é o caso comum de quem gera relatório no celular.
+
+**Correção:** antes de acusar erro, o cliente **pergunta ao banco** (`reconciliarFalhaDeRede`,
+até 3 leituras em ~24s). Achou linha `gerando`/`concluida` → segue quieto e deixa o polling
+terminar. Achou linha com `erro` do servidor → mostra o erro **real** dele. Não achou linha
+nenhuma → aí sim foi falha de verdade e a mensagem aparece como antes. Vale para os três
+relatórios, e cobre de quebra o **504 do gateway**, que caía neste mesmo `catch`.
+
+**E o pedido do dono — "se dá erro e se resolve sozinho, some da tela e aparece no Cliente 360":**
+o cliente passa a emitir `geracao_recuperada`, o 360 ganha o card **"Rede recup. (7d)"** (âmbar,
+nunca vermelho: não houve prejuízo) e a linha do tempo mostra *"Falha de rede recuperada
+(invisível ao cliente)"*. O que se vigia é a **repetição** — o mesmo cliente ou a mesma rota
+aparecendo várias vezes é rede/timeout a investigar.
+
+> **Uma armadilha evitada por pouco, e um bug antigo achado no caminho.** `api/track.js` tem uma
+> allowlist de tipos de evento: `geracao_recuperada` seria **descartado em silêncio** e o card
+> novo mostraria zero para sempre — eu teria construído o erro invisível que é invisível também
+> no diagnóstico. Ao corrigir, apareceu que **`limite_sessao` estava nessa situação desde 11/08**:
+> o tracker emite esse aviso justamente para o 360 não parecer um dia que acaba no meio da tarde,
+> e ele nunca chegava. O aviso contra o silêncio estava sendo silenciado. Os dois entraram.
+
 ### 🟡 CONSERTADO: a assinatura do defeito de proximidades voltou de 0 para 110 — e NÃO é um quarto escritor
 
 A checagem combinada no fechamento de ontem (`pontos_proximos='{}'` com `proximidades_vazios=0`

@@ -351,6 +351,10 @@ ${Array.isArray(base._truncado) && base._truncado.length ? `<div style="margin-t
               ['Relat. laudo', stats.relatorios?.laudo, '#059669'],
               ['Clientes c/ erro', stats.clientes_com_erro, stats.clientes_com_erro > 0 ? '#dc2626' : '#059669'],
               ['Relat. falha (24h)', stats.relatorios_falha_24h, stats.relatorios_falha_24h > 0 ? '#dc2626' : '#059669'],
+              // Erro que o cliente NÃO viu (conexão caiu, servidor concluiu). Âmbar, nunca
+              // vermelho: não houve prejuízo. Mas fica à vista porque é o único lugar onde ele
+              // aparece — na tela do cliente, por decisão, ele não aparece mais.
+              ['Rede recup. (7d)', stats.erros_invisiveis_7d, stats.erros_invisiveis_7d > 0 ? '#b45309' : '#059669'],
             ].map(([l, v, c]) => (
               <div key={l} style={{ background: '#f8fafc', borderRadius: 10, padding: '10px 12px' }}>
                 <div style={{ fontSize: 22, fontWeight: 900, color: c }}>{v ?? 0}</div>
@@ -760,6 +764,11 @@ ${Array.isArray(base._truncado) && base._truncado.length ? `<div style="margin-t
                     api_erro:        { rot: 'Falha de API',    cor: '#dc2626' },
                     api_falha_rede:  { rot: 'Falha de rede',   cor: '#dc2626' },
                     api_vazio:       { rot: 'Sem resultado',   cor: '#b45309' },
+                    // Erro que o cliente NÃO viu: a conexão caiu no meio da geração, o servidor
+                    // seguiu e concluiu, e a tela nunca acusou falha. Fica âmbar (não vermelho)
+                    // de propósito — não houve prejuízo ao cliente —, mas PRECISA aparecer: se
+                    // repetir no mesmo cliente ou na mesma rota, é rede/timeout a investigar.
+                    geracao_recuperada: { rot: 'Falha de rede recuperada (invisível ao cliente)', cor: '#b45309' },
                     limite_sessao:   { rot: 'Coleta interrompida (teto da sessão)', cor: '#b45309' },
                   }[n.tipo] || { rot: n.tipo, cor: '#64748b' };
                   return (
