@@ -28,6 +28,56 @@
 > Checagem rápida a qualquer momento: `select public.auditoria_seguranca();` → `0 crítico / 0 atenção` = íntegro.
 > **Auditorias ofensivas completas: 15/07/2026 (×2).** Total de correções: 15 (1ª rodada) + escalonamento por convite (CRÍTICO) + IDOR do MP (ALTO) + escala. Refazer a ofensiva quando entrarem rotas/pagamento/RLS novos (a Rotina mensal já faz isso sozinha).
 
+## ✅ CHECKLIST DE 14/08 — o que ficou para o DONO (leia isto primeiro)
+
+> Escrito no encerramento de 13/08, a pedido do dono. **Tudo que não dependia dele já está em
+> produção** (`main` em `ea063bc`, 10 commits no dia, CI verde). O que segue depende de acesso a
+> painel, contratação ou decisão — nada aqui é código pendente.
+
+### 🔴 Segurança — os 3 de maior retorno (minutos cada, exceto o 3)
+
+| ✓ | O quê | Por que importa | Onde |
+|---|---|---|---|
+| ☐ | **Ligar MFA** em Supabase, Vercel e GitHub | **É o item de maior retorno da lista inteira.** Uma senha de admin comprometida entrega o banco todo — RLS não protege contra credencial legítima | Supabase: Account → Security → Enable MFA · Vercel: Settings → Authentication · GitHub: Settings → Password and authentication |
+| ☐ | **Confirmar PITR** ligado | Backup diário perde até 24h. PITR recupera ao segundo, e é o que salva de um `DELETE` errado | Dashboard → Database → Backups. Se não vier no plano, avaliar custo × risco |
+| ☐ | **Testar UMA restauração** | Backup nunca testado não é backup, é esperança. Uma vez por ano basta | Restaurar num projeto novo e conferir uma tabela |
+| ☐ | **Contratar pentest externo com laudo** | Maior lacuna técnica; vale ~6 pontos da nota sozinho, e é o que cliente corporativo pede | Escopo mínimo: auth, RLS, webhooks de pagamento, upload de documento |
+| ☐ | **Nomear e publicar o Encarregado (DPO)** | Exigência da LGPD: identificação pública | Definir a pessoa + publicar na Política de Privacidade |
+| ☐ | **Política de rotação de credenciais** | Calendário anual **e sempre após saída de pessoa com acesso** | — |
+
+### 🟠 Pendências que já vinham de 12/08 (nenhuma resolvida em 13/08)
+
+| ✓ | # | O quê | Estado |
+|---|---|---|---|
+| ☐ | **C** | **MX do domínio → inbound do Resend** | ⚠️ **SUBIU DE PRIORIDADE.** Descobri montando o mapa de segurança que `privacidade@bidprobrasil.com.br` está **publicado no site e não recebe nada**. Isso deixou de ser assunto de produto: canal de privacidade publicado que não funciona é **lacuna de conformidade LGPD** |
+| ☐ | **A** | **Sufixo UTM** com `utm_term` e `utm_content` | Medido em 13/08: **6 cliques do Ads em 14 dias, `utm_term` nulo em 6 de 6**. Sem isso não se sabe qual palavra-chave traz gente |
+| ☐ | **B** | **Verificação do anunciante Google Ads** (caso `1-3785000040835`) | Prazo **02/09** |
+| ☐ | **E** | **Bright Data — decisão do teto** | Saturado (480/405). Decisão marcada para **18/08** |
+| ☐ | **D** | Nome fantasia e objeto social na Junta | Com o contador |
+| ☐ | **F** | "Uso ocasional" como coluna nova | Decisão |
+
+### 🧪 Os dois testes que só o dono pode fazer
+
+| ✓ | Teste | O que conferir |
+|---|---|---|
+| ☐ | **Regerar o mercadológico de Lavras** (Av. José Brumatti 2856, Guarulhos) | (a) as imobiliárias de Guarulhos aparecem entre as FONTES? (b) os anúncios de R$ 250–270 mil entram na amostra? (c) o `baseCalculo` mostra a fórmula e os descartes? |
+| ☐ | **Gerar um documental de leilão JUDICIAL com financiamento a assumir** | A ressalva sai como **bloqueante e no topo** da seção 6? |
+| ☐ | **Abrir a lista do Cliente 360 e a tela de imóvel no celular, sem zoom** | Algum campo ainda vaza pela lateral? |
+
+### 🤖 O que roda sozinho e eu confiro na abertura de amanhã
+
+- **Job OSM, 05h UTC** — primeira rodada com o código novo (a correção subiu às 12h15 de 13/08,
+  DEPOIS da execução de ontem). A consulta que decide: a assinatura do defeito
+  (`pontos_proximos='{}'` com `proximidades_vazios=0`) tem que continuar em **0**. Se sair de
+  zero, apareceu um quarto escritor.
+- **`proximidades_vazio_falso`** — hoje 440/300, mas **não é o defeito**: são vazios corroborados
+  com 3+ observações. A decisão pendente é de **calibragem do limite**, e é sua (§2 do
+  encerramento).
+- **O erro anônimo em `/imovel/:id`** — se repetir, agora o stack **resolve para arquivo e linha**
+  (sourcemap ligado em 13/08).
+
+---
+
 ## 🔔 VALIDAR NA ABERTURA DA SESSÃO DE 05/08 (combinado com o dono no fim do dia 04/08)
 
 > Cinco verificações. **Todas dependem só do tempo passar** — nada foi deixado pela metade. Rodar
@@ -355,7 +405,7 @@ Mais duas travas da mesma revisão:
 
 ### ⚠️ ENCERRAMENTO DE 13/08 — estado MEDIDO e o que espera amanhã
 
-> **`main` em `d4f2ca9` · 7 commits no dia · deploy READY · CI verde · working tree limpo.**
+> **`main` em `ea063bc` · 10 commits no dia · deploy READY · CI verde · working tree limpo.**
 
 **Verificação de fechamento (tudo remedido agora, não de memória):**
 
@@ -521,7 +571,7 @@ com `gclid` e `utm_term` NULO em 6 de 6**; (B) verificação do anunciante Googl
 
 ---
 
-## 🏁 O QUE FOI FEITO EM 13/08 — os 7 commits
+## 🏁 O QUE FOI FEITO EM 13/08 — os 10 commits
 
 1. **`05eedcd` — Proximidades e edital CEF.** O terceiro escritor de `pontos_proximos`
    (`enriquecer-osm.mjs`) gravava vazio como resposta E recarimbava `proximidades_em` de 12.820
