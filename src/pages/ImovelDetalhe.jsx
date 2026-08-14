@@ -1110,11 +1110,17 @@ export default function ImovelDetalhe() {
       {/* Breadcrumb */}
       <div style={{ background: '#111111', padding: '12px 20px' }}>
         <div style={{ maxWidth: 1100, margin: '0 auto', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <button onClick={() => nav(-1)} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: 13, fontWeight: 600, padding: 0 }}>
+          {/* No celular esta barra tem três itens disputando ~350 px, e quem cedia era o
+              "Voltar à busca": sem `nowrap` + `flexShrink: 0` ele quebrava em TRÊS linhas
+              ("Voltar" / "à" / "busca") e empurrava a barra inteira para baixo. Quem tem de
+              ceder é o título do imóvel, que já tem reticências para isso — por isso ele passa
+              a `minWidth: 0` (sem isso um flex item não encolhe abaixo do conteúdo) e perde o
+              `maxWidth` fixo de 300 px, que numa tela de 390 não sobrava mesmo. (14/08) */}
+          <button onClick={() => nav(-1)} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: 13, fontWeight: 600, padding: 0, whiteSpace: 'nowrap', flexShrink: 0 }}>
             <ArrowLeft size={15} /> Voltar à busca
           </button>
-          <span style={{ color: '#334155', fontSize: 13 }}>/</span>
-          <span style={{ color: '#64748b', fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 300 }}>{imovel.titulo || 'Imóvel'}</span>
+          <span style={{ color: '#334155', fontSize: 13, flexShrink: 0 }}>/</span>
+          <span style={{ color: '#64748b', fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, flexShrink: 1 }}>{imovel.titulo || 'Imóvel'}</span>
           <button onClick={compartilhar} title="Compartilhar este imóvel"
             style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, background: compartilhado ? '#16a34a' : 'rgba(255,255,255,0.10)', border: '1px solid rgba(255,255,255,0.18)', color: compartilhado ? '#fff' : '#e2e8f0', cursor: 'pointer', fontSize: 12.5, fontWeight: 700, padding: '6px 12px', borderRadius: 8, whiteSpace: 'nowrap', flexShrink: 0 }}>
             {compartilhado ? <><Check size={14} /> Link copiado</> : <><Share2 size={14} /> Compartilhar</>}
