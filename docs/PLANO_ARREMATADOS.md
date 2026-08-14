@@ -1040,13 +1040,19 @@ jurídica, de parecer, de capital ou de funding.
 | **6** | Financeira própria **× IF parceira** (correspondente) | o correspondente entrega quase a mesma experiência por custo ~zero |
 | **14** | **Uma** tabela `contrato` para todas as modalidades × uma por modalidade | decide se a máquina é construída uma vez ou cinco |
 | **15** | Quais modalidades entram, e em que ordem | sugestão: locação + home equity |
+| **25** | **Resolvedor único de direito de acesso** × checar papel tela a tela | já são 60 checagens em 17 arquivos de `src/` e 45 em `api/`, com 5 papéis. Cada módulo novo multiplica — e a correção custa 5× mais depois |
 | **19** | **Âncora do imóvel fora de leilão** (matrícula?) sem criar duas ideias de "imóvel" | é muito mais barato nascer assim do que migrar depois — e escala a Decisão 1 |
+| **26** | **Poucos planos empacotando módulos** × preço por módulo | preço por módulo multiplica SKU, suporte e telas de upgrade |
+| **27** | **Família B gratuita ao usuário** (quem paga é o parceiro) | cobrar do cliente e do parceiro pelo mesmo ato transforma recomendação em venda |
+| **28** | **Subpath** × subdomínio × domínio por marca | domínio separado quebra a sessão única — e a tese é uma conta atravessando os módulos |
 | **23** | **Faixas de preço** pela métrica normalizada (custo para N contratos) · implantação zero | comparar tabela sem normalizar a unidade dá número plausível e errado |
 | **24** | Ordem da captação da família B: **home equity antes de consórcio** | o sinal do home equity já está no banco; consórcio depende de parceria |
 | 1 | `arrematacoes` × `arrematados`: uma estrutura ou duas | destrava documentos |
 | 20 | Relatórios para imóvel fora de leilão: mesma cota × produto avulso | receita nova sobre máquina já paga |
 | 21 | **Marca da tela do inquilino** — do proprietário (recomendado) × nossa | tela com a nossa cara sugere que nós administramos, e é o que o enquadramento evita |
 | 22 | Ofertar produto financeiro ao inquilino — recomendação: **não na v1** | é o comportamento que mais se parece com administradora |
+| 29 | O que acontece ao **desligar um módulo** — leitura preservada, escrita bloqueada | cancelar contratos não pode apagar contratos |
+| 30 | Quais verticais ganham **LP primeiro**, e quais entram como lista de espera | LP da família B pode subir antes de existir software |
 | 2 | Lucro **realizado × potencial** como número principal | impede o lucro falso |
 | 3 | Fluxo de arremate de 06/08 (inclui o DELETE de documento pelo cliente) | sem entrada, o resto é vitrine |
 | 4 | De quem saem os **0,5%** da venda | ver a Decisão 12: a forma de cobrar é prova do enquadramento |
