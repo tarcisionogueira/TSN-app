@@ -1065,3 +1065,118 @@ jurídica, de parecer, de capital ou de funding.
 | **Contador** | tributação da revenda com habitualidade (alerta do cliente, item 4c) |
 | **Comercial** | instituição do home equity · corretora de seguros · administradora de consórcio · contrato com portal |
 | **BCB / consultor** | figura jurídica, se a financeira própria avançar |
+
+---
+
+## 9. Arquitetura de módulos e marcas (dono, 14/08)
+
+> "O **leilão é a base**. Isso aqui são insights para o sistema, colocando em **módulos**:
+> administração de imóveis próprios, venda parcelada, contratos, consórcio e crédito com imóvel de
+> garantia. Cada um geraria um **aumento da mensalidade** do usuário. Poderíamos criar inclusive
+> **landing pages à parte** para cada funcionalidade: BidPro Brasil **Leilões**, BidPro Brasil
+> **Imóveis**, BidPro Brasil **Crédito**, entre outras."
+
+> ℹ️ Esta seção já é maior que o título do documento. Ao retomar, provavelmente vira doc próprio
+> (`docs/PLANO_MODULOS.md`) — fica aqui porque nasceu desta conversa.
+
+### 9.1 "O leilão é a base" — e vale dizer precisamente por quê
+
+Não é só a porta de entrada. É o **fosso**: acervo de 33 mil lotes, o Índice BidPro, o deságio
+medido, e a audiência que chega sozinha pela busca. Todos os módulos abaixo são **monetização de
+um público que o leilão traz** — nenhum deles atrai gente por conta própria no começo.
+
+**Consequência prática, e é uma regra:** a base é **aquisição** (gratuita ou barata, indexável,
+generosa); os módulos são **ARPU**. Nunca se degrada a base para vender módulo — fechar acervo,
+esconder análise ou encher a busca de oferta destrói o funil que sustenta todo o resto.
+
+### 9.2 Cada módulo aumenta a mensalidade — e a conta de complexidade já é mensurável
+
+**Medido hoje no repositório:**
+
+| | |
+|---|---|
+| Comparações de papel (`role === '…'`) em `src/` | **60**, em **17 arquivos** |
+| Arquivos em `api/` que checam papel/plano | **45** |
+| Papéis existentes | `admin` · `top2` · `assessorado` · `clube` · `explorador` (+ `parceiro`, `equipe`) |
+
+Cinco papéis × cinco módulos = **25 combinações** a responder em ~62 arquivos. Hoje cada tela
+pergunta por conta própria — e isso é exatamente a família de defeito que o `CLAUDE.md` já
+cataloga (o "Arrematei" que aparecia sem os três relatórios prontos).
+
+> ✅ **A correção é barata e é agora, no papel:** **um resolvedor único de direito de acesso** —
+> uma função que responde "este usuário tem o módulo X?" — em vez de `role === 'top2'` espalhado.
+> As regras vivem em `regra_negocio` com `aplicada_por` (§2b do `CLAUDE.md`), e um invariante
+> acusa módulo cobrado sem gate. **Fazer isso depois de cinco módulos custa cinco vezes mais.**
+
+**Três armadilhas de cobrança por módulo:**
+
+1. 🔴 **Gate no front-end não é gate.** Módulo pago precisa ser barrado na **API e na RLS**;
+   escondido na tela, ele continua acessível para quem chamar o endpoint — vendendo o que
+   qualquer um pega. É o padrão-alvo "botão/ação sem gate" do ritual de abertura.
+2. **Assinatura de valor fixo no MP não serve.** Ligar um módulo no meio do ciclo muda o valor —
+   a mesma armadilha 3 de 4a, agora do nosso lado. Precisa de proração e de regra escrita de
+   quando o novo valor vale.
+3. **Desligar módulo ≠ apagar dado.** Cliente que cancela o módulo de contratos não pode perder os
+   contratos. Leitura preservada, escrita bloqueada — decidido antes, não no primeiro cancelamento.
+
+**Recomendação comercial: poucos planos que EMPACOTAM módulos, não um preço por módulo.** Preço
+por módulo multiplica SKU, suporte e telas de upgrade, e pune quem usa mais. Dois ou três planos
+(ex.: Leilão · Patrimônio · Completo) com um ou dois add-ons de baixa cardinalidade comunicam
+melhor e dão o mesmo ARPU.
+
+> 🔴 **E uma regra que evita quebrar a confiança: os módulos da família B (crédito, consórcio,
+> seguro) devem ser GRATUITOS para o usuário.** Nessas, quem nos paga é o parceiro. Cobrar
+> mensalidade do cliente **e** comissão do parceiro pelo mesmo ato é cobrar duas vezes — e é
+> exatamente o que transformaria a recomendação em venda. Mensalidade se cobra pela **família A**,
+> onde nós de fato administramos.
+
+### 9.3 Landing pages por vertical — barato, e o ganho real é SEO
+
+A máquina já existe: `api/publico.js` renderiza páginas públicas com a marca alinhada, e o
+`sitemap-leiloes.xml` já indexa dezenas de milhares de URLs. Uma LP por vertical é o mesmo
+mecanismo.
+
+**O ganho não é estético, é de busca:** "crédito com garantia de imóvel", "administrar aluguel do
+meu imóvel" e "consórcio de imóvel" são consultas **diferentes**, e uma página só não ranqueia
+para todas. Página por vertical é o jeito barato de disputar cada uma.
+
+> ⚠️ **E cada LP precisa nascer com captura de origem.** O diagnóstico de 14/08 mediu **214
+> cliques pagos em 14 dias × 19 visitas com `gclid`**. LP nova sem `utm`/`gclid` gravando em
+> `visita_origem` repete o vazamento — e aí não dá para saber qual vertical paga a própria conta.
+
+**Subpath × subdomínio × domínio separado — e a sessão decide:**
+
+| Opção | SEO | Sessão do usuário | Custo |
+|---|---|---|---|
+| **`/credito`, `/imoveis` no domínio atual** ✅ | autoridade **concentra** | **a mesma** — quem entra por Crédito já está logado no Leilões | ~zero |
+| `credito.bidpro…` (subdomínio) | autoridade **divide** | cookie/sessão exigem configuração extra | baixo |
+| domínio separado | começa **do zero** | **sessão não passa** — quebra a tese de "uma conta, vários módulos" | alto (SSL, projeto, marca, tempo) |
+
+**Recomendação: subpaths.** A tese do produto é *uma conta que atravessa os módulos*; domínio
+separado é justamente o que impede isso. As marcas "BidPro Brasil Leilões / Imóveis / Crédito"
+funcionam perfeitamente como **linha de produto dentro do mesmo domínio**.
+
+> 🔴 **"BidPro Brasil Crédito" tem uma condição.** Como **correspondente** (4a-ter) nós **não
+> somos** a instituição — e uma marca chamada "Crédito" sugere que somos. A peça precisa
+> identificar a instituição parceira ("em parceria com X"), não só trazer o nosso logo. Não é
+> preciosismo: é a regra de conduta do correspondente, e vale para consórcio e seguro igualmente.
+
+**Duas notas práticas:** registrar a família de marcas no **INPI** é barato e a hora é **antes** de
+as LPs subirem; e a LP de vertical é o lugar natural de medir demanda **antes** de construir —
+formulário de interesse com contagem é a pesquisa de mercado mais barata que existe.
+
+### 9.4 Qual LP pode subir antes do módulo existir
+
+| Família | Pode subir antes? | Por quê |
+|---|---|---|
+| **B — crédito, consórcio, seguro** | **sim** | o produto é do parceiro. LP + formulário + encaminhamento **já é a operação inteira** — receita sem construir software. Reforça o item 4.8 |
+| **A — administração, venda parcelada, contratos** | **não** | LP de módulo que não existe é promessa. Cabe LP de **lista de espera**, com essa palavra na tela |
+
+### 9.5 Decisões que faltam
+
+25. **Resolvedor único de direito de acesso** (recomendado) × continuar checando papel tela a tela.
+26. **Poucos planos empacotando módulos** (recomendado) × preço por módulo.
+27. **Família B gratuita ao usuário** (recomendado) — confirmar.
+28. **Subpath** (recomendado) × subdomínio × domínio por marca.
+29. **O que acontece ao desligar um módulo** — leitura preservada, escrita bloqueada (recomendado).
+30. **Quais verticais ganham LP primeiro**, e quais entram como lista de espera.
