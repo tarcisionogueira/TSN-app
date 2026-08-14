@@ -189,6 +189,50 @@ export function AnalisesProvider({ children }) {
   const upsertDoc = useCallback((e) => upsertInto(setDocumentais)(e), [upsertInto]);
   const upsertLaudo = useCallback((e) => upsertInto(setLaudos)(e), [upsertInto]);
 
+  // ═══ FALHA DE REDE NÃO É FALHA DE GERAÇÃO (14/08) ═══════════════════════════════════════
+  // Caso real, imóvel em Itapevi: clique em Gerar às 13:00:15; a conexão do fetch caiu às
+  // 13:01:58 ("Load failed"); o SERVIDOR seguiu trabalhando e concluiu às 13:03:40. A tela,
+  // porém, pintou "Falha de conexão ao gerar. Tente novamente." no instante da queda, e só
+  // voltou ao normal quando o polling releu o banco — o cliente viu um erro que nunca existiu
+  // e a análise "se consertou sozinha". Além de custar credibilidade, convida ao clique em
+  // Gerar de novo, que QUEIMA COTA e reprocessa IA de um relatório que já estava pronto.
+  //
+  // A geração é server-side e persistente (o cabeçalho deste arquivo diz: o cliente pode
+  // FECHAR A ABA). Logo, perder a conexão HTTP significa "perdi o canal ao vivo", não
+  // "a geração falhou" — e o banco é a fonte da verdade. Antes de acusar erro, perguntamos
+  // ao banco. Isto também cobre o 504 do gateway, que hoje cai neste mesmo catch (o corpo
+  // HTML quebra o `r.json()`).
+  //
+  // Se não houver linha nenhuma depois das tentativas, aí sim foi falha de verdade (o pedido
+  // não chegou) e o erro aparece como antes. O teto é curto de propósito: ~24s de spinner no
+  // pior caso é melhor que um erro falso, e o watchdog de STALE_GERANDO_MS segue como rede.
+  const RECONCILIAR_TENTATIVAS = 3;
+  const RECONCILIAR_INTERVALO_MS = 8000;
+  const reconciliarFalhaDeRede = useCallback(async ({ imovelId, tabela, alvo, merge }) => {
+    if (!uid || !imovelId) return false;
+    for (let i = 0; i < RECONCILIAR_TENTATIVAS; i++) {
+      // `{ data, error }` do postgrest-js NÃO lança em não-2xx: sem checar `error`, uma falha
+      // de leitura viraria "não existe linha" e voltaríamos a acusar o erro que não houve.
+      const { data, error } = await supabase.from(tabela).select('*')
+        .eq('user_id', uid).eq('imovel_id', imovelId).limit(1);
+      if (!error && data?.length) {
+        merge(data); // pinta o estado REAL do servidor (inclusive um 'erro' legítimo dele)
+        if (data[0].status === 'gerando' || data[0].status === 'concluida') {
+          // Erro que o cliente NÃO viu: invisível na tela, visível no Cliente 360 (pedido do
+          // dono). Sem este evento, um problema de rede recorrente ficaria indistinguível de
+          // "nada aconteceu" — some da tela e some do diagnóstico junto.
+          registrarEvento('geracao_recuperada', {
+            alvo,
+            detalhe: `conexão caiu, servidor seguiu (${data[0].status}) imovel=${imovelId}`,
+          });
+        }
+        return true;
+      }
+      if (i < RECONCILIAR_TENTATIVAS - 1) await new Promise(r => setTimeout(r, RECONCILIAR_INTERVALO_MS));
+    }
+    return false;
+  }, [uid]);
+
   // meta: { imovelId, titulo, cidade, estado, imovel } ; payload: { mercadoInputs, parecerInputs }
   const iniciar = useCallback(async (meta, payload) => {
     const imovelId = meta?.imovelId;
@@ -205,8 +249,14 @@ export function AnalisesProvider({ children }) {
       // reconcilia com o banco caso o servidor ainda esteja processando de verdade).
       else { registrarEvento('api_erro', { alvo: 'gerar-analise', detalhe: `resposta_vazia imovel=${imovelId}` }); upsert({ imovelId, status: 'erro', erro: 'Não foi possível gerar agora. Tente novamente.' }); }
       recarregar();
-    }).catch(() => { registrarEvento('api_erro', { alvo: 'gerar-analise', detalhe: `falha_ou_500 imovel=${imovelId}` }); upsert({ imovelId, status: 'erro', erro: 'Falha de conexão ao gerar. Tente novamente.' }); recarregar(); });
-  }, [upsert, recarregar, exigirTermos]);
+    }).catch(async () => {
+      registrarEvento('api_erro', { alvo: 'gerar-analise', detalhe: `falha_ou_500 imovel=${imovelId}` });
+      // Pergunta ao banco antes de acusar erro — ver reconciliarFalhaDeRede.
+      if (await reconciliarFalhaDeRede({ imovelId, tabela: 'analises_mercado', alvo: 'gerar-analise', merge: mergeRows })) return;
+      upsert({ imovelId, status: 'erro', erro: 'Falha de conexão ao gerar. Tente novamente.' });
+      recarregar();
+    });
+  }, [upsert, recarregar, exigirTermos, reconciliarFalhaDeRede, mergeRows]);
 
   // Documental: dispara /api/gerar-documental (server-side, persistente).
   // payload pode trazer textoEdital/textoMatricula/processoNumero/processoNome/urlEdital.
@@ -223,8 +273,13 @@ export function AnalisesProvider({ children }) {
       else if (d?.error) { registrarEvento('api_erro', { alvo: 'gerar-documental', detalhe: `erro_corpo imovel=${imovelId}: ${d.error}` }); upsertDoc({ imovelId, status: 'erro', erro: d.error }); }
       else { registrarEvento('api_erro', { alvo: 'gerar-documental', detalhe: `resposta_vazia imovel=${imovelId}` }); upsertDoc({ imovelId, status: 'erro', erro: 'Não foi possível gerar agora. Tente novamente.' }); }
       recarregar();
-    }).catch(() => { registrarEvento('api_erro', { alvo: 'gerar-documental', detalhe: `falha_ou_500 imovel=${imovelId}` }); upsertDoc({ imovelId, status: 'erro', erro: 'Falha de conexão ao gerar. Tente novamente.' }); recarregar(); });
-  }, [upsertDoc, recarregar, exigirTermos]);
+    }).catch(async () => {
+      registrarEvento('api_erro', { alvo: 'gerar-documental', detalhe: `falha_ou_500 imovel=${imovelId}` });
+      if (await reconciliarFalhaDeRede({ imovelId, tabela: 'analises_documental', alvo: 'gerar-documental', merge: mergeDocRows })) return;
+      upsertDoc({ imovelId, status: 'erro', erro: 'Falha de conexão ao gerar. Tente novamente.' });
+      recarregar();
+    });
+  }, [upsertDoc, recarregar, exigirTermos, reconciliarFalhaDeRede, mergeDocRows]);
 
   // Laudo de viabilidade (3º documento): consolida mercadológico + documental no
   // servidor (/api/gerar-laudo-viabilidade). Não reprocessa fontes pagas.
@@ -241,8 +296,13 @@ export function AnalisesProvider({ children }) {
       else if (d?.error) { registrarEvento('api_erro', { alvo: 'gerar-laudo-viabilidade', detalhe: `erro_corpo imovel=${imovelId}: ${d.error}` }); upsertLaudo({ imovelId, status: 'erro', erro: d.error }); }
       else { registrarEvento('api_erro', { alvo: 'gerar-laudo-viabilidade', detalhe: `resposta_vazia imovel=${imovelId}` }); upsertLaudo({ imovelId, status: 'erro', erro: 'Não foi possível gerar agora. Tente novamente.' }); }
       recarregar();
-    }).catch(() => { registrarEvento('api_erro', { alvo: 'gerar-laudo-viabilidade', detalhe: `falha_ou_500 imovel=${imovelId}` }); upsertLaudo({ imovelId, status: 'erro', erro: 'Falha de conexão ao gerar. Tente novamente.' }); recarregar(); });
-  }, [upsertLaudo, recarregar, exigirTermos]);
+    }).catch(async () => {
+      registrarEvento('api_erro', { alvo: 'gerar-laudo-viabilidade', detalhe: `falha_ou_500 imovel=${imovelId}` });
+      if (await reconciliarFalhaDeRede({ imovelId, tabela: 'analises_laudo', alvo: 'gerar-laudo-viabilidade', merge: mergeLaudoRows })) return;
+      upsertLaudo({ imovelId, status: 'erro', erro: 'Falha de conexão ao gerar. Tente novamente.' });
+      recarregar();
+    });
+  }, [upsertLaudo, recarregar, exigirTermos, reconciliarFalhaDeRede, mergeLaudoRows]);
 
   const getAnalise = useCallback((imovelId) => analises.find(a => a.imovelId === imovelId) || null, [analises]);
   const getDocumental = useCallback((imovelId) => documentais.find(a => a.imovelId === imovelId) || null, [documentais]);

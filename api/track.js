@@ -15,7 +15,16 @@ const KEY = process.env.SUPABASE_SERVICE_KEY;
 // submit/change = ações sem clique (ENTER em form, select/filtro/arquivo); api_falha_rede =
 // fetch que nem chegou ao servidor; pdf_gerado/pdf_falha = ENTREGA do documento (choke point
 // do pdfImprimir) — auditoria de cobertura do tracker de 30/07.
-const TIPOS = new Set(['pageview', 'click', 'submit', 'change', 'api_erro', 'api_vazio', 'api_falha_rede', 'pdf_gerado', 'pdf_falha']);
+// geracao_recuperada = a conexão do fetch caiu no meio da geração, o SERVIDOR seguiu e
+// concluiu, e a tela deliberadamente NÃO mostra erro (decisão do dono, 14/08: erro que se
+// resolve sozinho vai para o Cliente 360, não para o usuário). Como a tela não mostra mais,
+// esta allowlist é o único caminho até o diagnóstico — fora dela o evento morre em silêncio e
+// uma rede ruim recorrente vira "nada aconteceu".
+// limite_sessao = o coletor atingiu o teto de eventos e PAROU de gravar. O tracker emite este
+// aviso desde 11/08 justamente para que o 360 não pareça um dia que acaba no meio da tarde —
+// mas ele nunca chegou: ficava de fora daqui e era descartado. O aviso contra o silêncio
+// estava sendo silenciado; corrigido em 14/08 junto com o de cima.
+const TIPOS = new Set(['pageview', 'click', 'submit', 'change', 'api_erro', 'api_vazio', 'api_falha_rede', 'pdf_gerado', 'pdf_falha', 'geracao_recuperada', 'limite_sessao']);
 
 // Defesa em profundidade: NUNCA persistir token/segredo no log de atividade, mesmo que um cliente
 // antigo/adulterado mande (ex.: #access_token=... do fluxo implícito, ou um JWT eyJ...). Redige.
