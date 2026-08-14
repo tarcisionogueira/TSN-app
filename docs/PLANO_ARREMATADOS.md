@@ -1283,3 +1283,86 @@ e quem só quer leilão não vê preço de contrato.
 34. **Nome da faixa de patrimônio** — por unidade, fora da escada de leilão.
 35. **O que o Explorador grátis inclui** no eixo patrimônio (recomendado: cadastrar e avaliar
     imóvel próprio; cobrar só no primeiro contrato ativo).
+
+---
+
+## 11. Módulos como upsell sobre o Explorador (dono, 14/08)
+
+> "O Explorador deve ter acesso, no menu ou na tela principal, ao botão em que ele vai poder
+> contratar um **consórcio** ou um **home equity**. E a questão de **administrar o patrimônio**,
+> assim como **vender ou parcelar**, a partir do **módulo de contratos**, também serem **módulos
+> adicionais para aumentar a mensalidade — sendo um upsell**."
+
+### 11.1 O que fica decidido
+
+| | |
+|---|---|
+| ✅ **Vitrine da família B é para todos**, Explorador incluído | é o maior público e não custa nada expor: quem paga é o parceiro |
+| ✅ **Patrimônio, venda/parcelamento e contratos são add-ons** que somam à mensalidade | upsell sobre o plano que a pessoa já tem |
+| ✅ **Inclusive sobre o Explorador (grátis)** | quem quer só administrar o próprio imóvel não precisa subir a escada de leilão para pagar |
+
+**E isso é uma boa notícia comercial maior do que parece:** o módulo vira a **primeira compra** de
+um usuário que nunca teve interesse na escada de leilão. Hoje o Explorador só monetiza se virar
+Investidor Pro; com add-on, ele monetiza sendo Explorador.
+
+### 11.2 🔴 Mas isso quebra uma suposição que está no código HOJE
+
+Hoje **`role` é usado como sinônimo de "paga ou não paga"**. Com módulo pago sobre o Explorador,
+essa equivalência deixa de valer — e há pelo menos dois lugares em que ela está escrita:
+
+| Onde | O que faz | O que acontece com Explorador pagando módulo |
+|---|---|---|
+| `src/contexts/AuthContext.jsx:62` | após 5 dias de inadimplência rebaixa o plano — e **pula o explorador de propósito**, porque explorador não paga | **inadimplência nunca é tratada**: o módulo pago continua liberado indefinidamente, de graça |
+| `src/pages/Consultor.jsx:496` | separa a carteira em pagantes × não-pagantes por `plano === 'explorador'` | cliente **pagando** aparece como **não-pagante** no painel da equipe |
+
+O primeiro é dinheiro saindo em silêncio; o segundo é a família "número plausível e errado" que
+este documento já encontrou três vezes.
+
+> ↪️ **Correção do que eu disse na seção 10.1.** Ali eu registrei que a urgência do **resolvedor
+> único de acesso (Decisão 25)** havia diminuído, porque a matriz caiu de 25 para 8 combinações.
+> O tamanho da matriz caiu mesmo — **mas a razão para o resolvedor mudou e ficou mais forte**:
+> não é mais volume de combinações, é que **`role` e "é pagante" viraram duas perguntas
+> diferentes**, e hoje o código responde às duas com a mesma variável. **A Decisão 25 volta ao
+> topo.**
+
+**O que o resolvedor precisa responder, e são três perguntas distintas:** qual o **plano de
+leilão**; quais **módulos** estão ativos; e se **há débito** — hoje as três saem de `role`.
+
+### 11.3 Não existe "assinatura sem plano" hoje
+
+`src/pages/Checkout.jsx` trata `explorador` como o caminho de **não-compra** (linhas 307, 402 e
+500 desviam antes de cobrar), e `api/mp.js` monta a assinatura a partir de `planos_config`. Uma
+assinatura cuja **única linha é um módulo** é uma forma que o checkout ainda não conhece.
+
+Não é grande — é **novo**, e é melhor descobrir agora: a assinatura precisa aceitar
+`plano (podendo ser grátis) + N módulos`, com um valor total que muda quando um módulo entra ou
+sai (a armadilha da proração, seção 9.2).
+
+### 11.4 Onde o upsell aparece — contexto converte, tabela de preço não
+
+Módulo tem uma vantagem que plano não tem: **o momento certo é óbvio**. Três gatilhos naturais,
+todos em telas que já existem:
+
+| Gatilho | Oferta |
+|---|---|
+| anexou a **matrícula** de um imóvel próprio | "quer administrar a locação deste imóvel?" |
+| marcou **arrematado** / lançou fluxo de caixa | "quer gerar o contrato de venda e cobrar as parcelas?" |
+| registrou **proposta parcelada** | módulo de contratos + simulador |
+
+Isso converte muito melhor que uma tela de planos — e **custa quase nada**, porque a tela já
+existe e o dado que dispara a oferta já está lá.
+
+**Dois limites:** a oferta não pode atrapalhar a ação principal da tela (regra 9.1 — a base é
+aquisição), e o módulo tem que ser barrado na **API/RLS**, não escondido no front (armadilha 1
+de 9.2). Vender add-on cujo gate é visual é vender o que qualquer um pega.
+
+### 11.5 Decisões que faltam
+
+36. **Separar `role` de "é pagante"** — o resolvedor da Decisão 25 responde plano, módulos e
+    débito como perguntas distintas.
+37. **Régua de inadimplência do módulo** — o que acontece com um Explorador que para de pagar o
+    add-on (hoje ele simplesmente não é alcançado).
+38. **Formato da assinatura** — plano (possivelmente grátis) + N módulos, com proração.
+39. **Onde cada gatilho de upsell aparece**, e qual o teto de insistência por usuário.
+40. **Os módulos são independentes entre si?** (contratos sem patrimônio? venda parcelada sem
+    contratos?) — define se são três SKUs ou um pacote.
