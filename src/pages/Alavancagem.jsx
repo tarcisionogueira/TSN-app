@@ -69,7 +69,7 @@ const MODALIDADES = {
       'Você escolhe o valor da carta de crédito e o prazo.',
       'Paga as parcelas mensais junto com o grupo.',
       'É contemplado por sorteio ou antecipa dando um lance.',
-      'Recebe a carta e compra o imóvel — para o vendedor, é pagamento à vista.',
+      'Recebe a carta e compra o imóvel numa compra e venda comum, com escritura e registro — para o vendedor, é pagamento à vista.',
       'Segue pagando as parcelas restantes.',
     ],
     exemplo: {
@@ -82,8 +82,9 @@ const MODALIDADES = {
       ],
       nota: 'Taxa de administração é o custo do consórcio e varia bastante por administradora. Aqui usamos 20% + 2% só para mostrar como a conta funciona.',
     },
-    paraQuem: 'Quem não precisa do dinheiro agora e quer se preparar para a próxima compra pagando parcela menor — ou quem quer poder de compra à vista no futuro.',
+    paraQuem: 'Quem não precisa do dinheiro agora e quer se preparar para comprar pagando parcela menor — e, em especial, quem vai comprar um imóvel já arrematado: paga o vendedor à vista com a carta e fica com a parcela.',
     atencao: [
+      'A carta NÃO serve para dar lance em leilão judicial: a administradora exige compra e venda com escritura e registro, e o prazo do edital não comporta a liberação. Ela entra na aquisição extrajudicial e na compra do imóvel já arrematado.',
       'Não existe data garantida de contemplação: pode vir cedo por lance ou demorar por sorteio.',
       'A taxa de administração é o custo — não há juros, mas não é de graça.',
       'Desistir no meio tem regras próprias e costuma devolver o dinheiro só ao fim do grupo.',
@@ -93,11 +94,12 @@ const MODALIDADES = {
 };
 
 const COMPARACAO = [
+  ['Dá para usar no leilão?', 'Sim — o dinheiro é seu e entra como pagamento à vista, desde que o crédito saia antes da praça', 'Não no leilão judicial. Entra na aquisição extrajudicial e na compra do imóvel já arrematado'],
   ['Quando o dinheiro chega', 'Em 30 a 45 dias, com data previsível', 'Quando você for contemplado — por sorteio ou lance'],
   ['Qual é o custo', 'Juros mais correção monetária', 'Taxa de administração (não há juros)'],
   ['Exige imóvel quitado?', 'Sim — ele é a garantia', 'Não'],
   ['O que fica em garantia', 'O imóvel que você já tem', 'O imóvel que você vai comprar'],
-  ['Serve melhor para', 'Uma oportunidade que está na sua frente agora', 'Planejar a próxima compra com parcela menor'],
+  ['Serve melhor para', 'Uma oportunidade que está na sua frente agora', 'Comprar um imóvel já arrematado, ou planejar a próxima compra com parcela menor'],
 ];
 
 export default function Alavancagem() {
@@ -249,12 +251,13 @@ export default function Alavancagem() {
           <p style={{ fontSize: 14.5, color: '#cbd5e1', margin: '0 0 22px', lineHeight: 1.65, maxWidth: 720 }}>
             Leilão tem uma característica que muda tudo: <strong style={{ color: 'white' }}>o pagamento
             é à vista e o prazo é curto</strong>. Quem tem o dinheiro disponível na hora certa compra
-            melhor. É exatamente esse o problema que as duas modalidades resolvem.
+            melhor. <strong style={{ color: 'white' }}>O Home Equity resolve esse lado; o consórcio
+            resolve o outro</strong> — o de quem vai comprar o imóvel de você depois.
           </p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
             {[
               { icone: Clock, t: 'Capital pronto para o arremate', d: 'O Home Equity transforma um imóvel parado em dinheiro em conta. Com o crédito aprovado antes da praça, você disputa sabendo até onde pode ir.' },
-              { icone: Users, t: 'Carta contemplada como pagamento à vista', d: 'A carta do consórcio é poder de compra à vista — que é justamente o que o leilão exige. Serve para quem está montando a próxima compra com parcela menor.' },
+              { icone: Users, t: 'Consórcio: na revenda, não no lance', d: 'A carta não serve para dar lance em leilão judicial — a administradora exige compra e venda com escritura e registro, e o prazo do edital não cabe. Ela entra na aquisição extrajudicial e, principalmente, na compra do imóvel já arrematado: o comprador usa a carta pelo preço comercial, você recebe à vista e ele fica com a parcela.' },
               { icone: TrendingUp, t: 'Girar o mesmo capital', d: 'Arrematar com deságio, revender ou alugar, quitar e repetir. É assim que um patrimônio parado vira uma operação que se paga.' },
             ].map((c, i) => {
               const Ic = c.icone;
