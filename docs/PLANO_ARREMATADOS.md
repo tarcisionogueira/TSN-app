@@ -1041,7 +1041,7 @@ jurídica, de parecer, de capital ou de funding.
 | **6** | Financeira própria **× IF parceira** (correspondente) | o correspondente entrega quase a mesma experiência por custo ~zero |
 | **14** | **Uma** tabela `contrato` para todas as modalidades × uma por modalidade | decide se a máquina é construída uma vez ou cinco |
 | **15** | Quais modalidades entram, e em que ordem | sugestão: locação + home equity |
-| **25** | **Resolvedor único de direito de acesso** × checar papel tela a tela | já são 60 checagens em 17 arquivos de `src/` e 45 em `api/`, com 5 papéis. Cada módulo novo multiplica — e a correção custa 5× mais depois |
+| **25 · 36** | **Resolvedor único de direito de acesso**, respondendo plano · módulos · débito como perguntas **distintas** | com add-on sobre o Explorador, `role` deixa de significar "é pagante" — e hoje o código usa a mesma variável para as duas coisas. Já há dois pontos medidos que quebram (§11.2) |
 | **19** | **Âncora do imóvel fora de leilão** (matrícula?) sem criar duas ideias de "imóvel" | é muito mais barato nascer assim do que migrar depois — e escala a Decisão 1 |
 | **26** | **Poucos planos empacotando módulos** × preço por módulo | preço por módulo multiplica SKU, suporte e telas de upgrade |
 | **31** | **Uma tela por objetivo** × tela de planos + tela de módulos | plano é nível, módulo é capacidade: lado a lado o usuário não sabe se substitui ou soma. Duas telas dobram o problema |
