@@ -103,6 +103,82 @@ aparecendo várias vezes é rede/timeout a investigar.
 > o tracker emite esse aviso justamente para o 360 não parecer um dia que acaba no meio da tarde,
 > e ele nunca chegava. O aviso contra o silêncio estava sendo silenciado. Os dois entraram.
 
+### 🔴 CONSERTADO: busca por raio lenta — e o mapa mostrando 3,5% da área
+
+**Pergunta do dono:** "se já temos a geocodificação de todos os lotes, por que o raio de Cotia
+demora tanto?" **Resposta: o banco não tem nada a ver com isso** — a RPC `buscar_por_raio_v2`
+responde a Cotia/30 km em **80 ms**, com o índice GiST `idx_imoveis_earth` em uso.
+
+O tempo estava no MAPA. `MapaEmbutido` fazia `.limit(2000)` **sem recorte geográfico e sem
+`order by`**, e só depois aplicava o raio por haversine no navegador. Duas consequências, a
+segunda pior que a primeira:
+
+| | |
+|---|---|
+| **Custo** | **1,5 MB de JSON** por busca, descendo pelo 5G |
+| **Erro** | os 2.000 são uma fatia **arbitrária** de 29.941 lotes do Brasil inteiro. Dos **794** lotes realmente dentro de 30 km de Cotia, só **28** caíam nessa fatia |
+
+Ou seja: o mapa desenhava **3,5%** da área e parecia completo. O lento e o errado tinham a mesma
+causa. Pior ainda, o container do mapa usa `display:none` na vista **Lista** — mas o componente
+segue montado, então **na vista Lista (padrão no celular) esse 1,5 MB era baixado para um mapa
+que o usuário não está vendo**, competindo com a requisição da lista.
+
+*Correção:* (a) o recorte vira faixa de lat/long no servidor (servida pelo `idx_imoveis_coords`),
+e o haversine só apara os cantos do quadrado; (b) nada é carregado enquanto o mapa está
+invisível; (c) `{ data, error }` passa a checar `error` — era `const { data } =`, então falha de
+leitura virava "nenhum imóvel no mapa" (forma #2); (d) se o teto de 2.000 for atingido DENTRO da
+área, a tela avisa em vez de truncar calada.
+
+### 🔴 CONSERTADO: aluguel em terreno, e a rentabilidade 100× menor em metade dos relatórios
+
+**Pergunta do dono:** "gerei o relatório de um lote em condomínio e apareceu aluguel. Está
+correto?" **Não.** E ao investigar, apareceu um segundo defeito, maior, no mesmo card.
+
+**(1) Lote não se aluga — regra de 03/08 que o código não aplicava.** O prompt manda o modelo
+devolver `locacoes: []` para terreno, com a frase *"rentabilidade de aluguel para lote é
+informação FALSA, não informação faltante"*, e `locacoesDaBase` obedece. O caminho do **modelo**
+não: a regra vivia só como instrução em texto, e o modelo a ignorou. O lote de Cotia saiu com
+**R$ 3.000,00/mês** — preço de casa, não de terreno vazio. É o §2b do CLAUDE.md em estado puro.
+
+**(2) O yield vinha do modelo, e veio como RAZÃO.** No mesmo relatório: `0,09`, que é
+36.000/322.500 — sem o ×100 que o próprio prompt pede. A tela imprimiu **"0,09% a.a." onde o
+certo era 11,16% a.a.** Medido no acervo: **25 dos 56** relatórios concluídos estavam assim —
+**quase metade do que já foi entregue a cliente, com a rentabilidade cem vezes menor.** O sinal
+de que ninguém conferia estava à vista: bruto e líquido saíam **idênticos**, quando o líquido é
+15% menor por definição.
+
+*Correção:* o yield deixa de ser opinião e vira conta do servidor (`aluguel × 12 / valor × 100`;
+líquido = bruto × 0,85), e terreno zera locação/aluguel/yield **declarando** que não se aplica —
+a tela troca os três cards por essa frase, porque "R$ 0,00" e "0,00%" também seriam afirmações
+falsas.
+
+*Reparo do acervo, sem reprocessar IA (os dois números da conta já estavam no JSON):*
+- **23 relatórios recalculados** — yields agora de **0,96% a 11,16% a.a.** (média 7,09%).
+- **2 relatórios de terreno** (Cotia e Sorocaba) com locação/aluguel/yield zerados e a frase de
+  "não se aplica".
+- Ambos reversíveis: `yield_backfill_2026_08_14` e `terreno_locacao_backfill_2026_08_14`.
+
+> **Sobraram 2, de causa diferente — e NÃO foram tocados de propósito**, porque o defeito neles
+> não é a conta, é a entrada (recalcular sobre entrada errada só troca um número errado por
+> outro mais convincente). **Precisam ser REGERADOS:** `8407e489…` (Sorocaba) tem
+> `aluguelMedio: 27,62`, que é R$/m²·mês e não valor mensal; `e0d7ea4c…` (Vila Velha, 31/07) tem
+> `valorEstimadoImovel: 0`, ou seja, não há denominador. O invariante novo fica **em alerta (1)**
+> até o segundo ser regerado — de propósito.
+
+*Travas:* `qa_invariantes()` ganhou `relatorio_yield_sem_x100` e `relatorio_lote_com_aluguel`,
+ambas com limite 0. **Não** entraram em `regra_negocio`: `auditoria_regras_negocio()` valida
+`aplicada_por` contra funções **do banco**, e estas são aplicadas em `api/gerar-analise.js` —
+registrá-las lá criava 3 críticos permanentes numa auditoria que estava em 0. Alarme falso não é
+garantia; a guarda certa para regra do app é o rastro dela no dado.
+
+> ⚠️ **Um quase-acidente que vale como aviso (a lição 7b de novo).** Ao escrever a migração dos
+> invariantes, parti do último `qa_invariantes*.sql` do repositório — e ele estava **atrasado em
+> relação ao banco**: faltavam `analise_sem_mercadologico`, `analise_vencida_nao_limpa`,
+> `cadastro_barrado` e `laudo_sem_base`. Replicar aquele arquivo teria **apagado os quatro**. A
+> versão commitada foi escrita a partir da definição VIVA e conferida chave a chave contra
+> `select chave from qa_invariantes()` — 20 = 20. **Ao mexer nessa função, parta do banco, não
+> do último .sql.**
+
 ### 🔴 CONSERTADO: o zoom do iPhone que nunca volta ("perde o dimensionamento ao trocar de tela")
 
 **Relatado pelo dono com print** (tela de filtros da Busca, iPhone): o app aparece deslocado,

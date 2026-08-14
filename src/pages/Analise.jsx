@@ -3020,13 +3020,20 @@ export default function Analise() {
                 </div>
               )}
 
-              {/* KPIs consolidados */}
-              <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4,1fr)', gap:10 }}>
+              {/* KPIs consolidados.
+                  LOTE NÃO SE ALUGA: para terreno, os três cards de aluguel saem da grade e dão
+                  lugar a uma linha que explica POR QUE não existem. Antes eles apareciam com
+                  número — o lote de Cotia saiu com "aluguel médio R$ 3.000,00/mês" (preço de
+                  casa) —, e mesmo zerados diriam "rentabilidade 0,00%", que é outra afirmação
+                  falsa: o retorno de um lote é revenda, não aluguel. */}
+              <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : (mercado.locacaoNaoSeAplica ? '1fr' : 'repeat(4,1fr)'), gap:10 }}>
                 {[
                   [mercado.fonteEstimativa === 'indice_bidpro' ? 'Preço/m² (Índice BidPro)' : 'Preço Médio/m²', `R$ ${fmt(mercado.precoMedioM2||0)}`, '#0D63DB','#eff6ff'],
-                  ['Aluguel Médio', `R$ ${fmt(mercado.aluguelMedio||0)}/mês`, '#8b5cf6','#ede9fe'],
-                  ['Rentabilidade Bruta (aluguel)', fmtPct(mercado.yieldBruto||0)+' a.a.', '#10b981','#f0fdf4'],
-                  ['Rentabilidade Líquida (aluguel)', fmtPct(mercado.yieldLiquido||0)+' a.a.', '#f59e0b','#fef3c7'],
+                  ...(mercado.locacaoNaoSeAplica ? [] : [
+                    ['Aluguel Médio', `R$ ${fmt(mercado.aluguelMedio||0)}/mês`, '#8b5cf6','#ede9fe'],
+                    ['Rentabilidade Bruta (aluguel)', fmtPct(mercado.yieldBruto||0)+' a.a.', '#10b981','#f0fdf4'],
+                    ['Rentabilidade Líquida (aluguel)', fmtPct(mercado.yieldLiquido||0)+' a.a.', '#f59e0b','#fef3c7'],
+                  ]),
                 ].map(([l,v,c,bg])=>(
                   <div key={l} style={{background:bg,borderRadius:12,padding:'14px 16px',textAlign:'center',border:`1px solid ${c}30`}}>
                     <div style={{fontSize:9,color:c,fontWeight:800,textTransform:'uppercase',marginBottom:6,letterSpacing:0.5}}>{l}</div>
@@ -3034,6 +3041,12 @@ export default function Analise() {
                   </div>
                 ))}
               </div>
+              {mercado.locacaoNaoSeAplica && (
+                <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:12, padding:'12px 14px', fontSize:12.5, color:'#475569', lineHeight:1.6 }}>
+                  <b style={{ color:'#334155' }}>Aluguel e rentabilidade: não se aplica a este imóvel.</b><br/>
+                  {mercado.locacaoNaoSeAplica}
+                </div>
+              )}
 
               {/* ═══════════ BANDA 2 — REFERÊNCIAS DE PREÇO: validação cruzada ═══════════ */}
               {(mercado.referenciaFipeZap?.encontrado || (mercado.indiceBidPro && (Number(mercado.indiceBidPro.venda_m2) > 0 || Number(mercado.indiceBidPro.aluguel_m2) > 0))) && (

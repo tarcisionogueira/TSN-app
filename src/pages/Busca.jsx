@@ -17,6 +17,7 @@ import { useIsMobile } from '../utils/useIsMobile';
 import ScoreRisco from '../components/ScoreRisco';
 import { scoreBidPro, scoreLabel } from '../utils/score';
 import { fotoCandidatos } from '../utils/foto';
+import { registrarEvento } from '../utils/tracker.js';
 
 function haversine(lat1, lon1, lat2, lon2) {
   const R = 6371;
@@ -263,29 +264,63 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
   const [carregando, setCarregando] = React.useState(true);
 
   const [semCoordenadas, setSemCoordenadas] = React.useState(false);
+  const [truncado, setTruncado] = React.useState(false);
+  const [erroPins, setErroPins] = React.useState('');
 
   useEffect(() => {
     async function carregar() {
       // Sem snapshot de filtros ainda (montagem antes da 1ª busca): não carrega
       // nada — evita puxar pins de todo o Brasil e crash por filtros nulos.
       if (!filtros) { setImoveisMapa([]); setCarregando(false); return; }
+      // O MAPA ESCONDIDO CUSTAVA A ESPERA DA LISTA (14/08). O container do mapa usa
+      // `display:none` na vista Lista, mas o componente segue MONTADO — então este efeito
+      // rodava e baixava os pins de um mapa que o usuário não está vendo, competindo com a
+      // requisição da lista pela banda do celular. Na vista Lista (padrão no mobile) isso é
+      // 100% de desperdício. Carrega quando ficar visível; o que já foi carregado permanece.
+      if (!visivel) { setCarregando(false); return; }
       setCarregando(true);
       setSemCoordenadas(false);
+      setErroPins('');
 
       // Fonte única de filtros. No modo raio a cidade é só o CENTRO (a área vem do
       // haversine abaixo), então não filtra por cidade.
       const aplicarFiltros = (base) =>
         aplicarFiltrosImoveis(base, filtros, (!raioAtivo && filtros.cidades?.length) ? filtros.cidades : null);
 
-      // Busca só imóveis com coordenadas (aparecem como pins)
-      const { data } = await aplicarFiltros(
-        supabase
-          .from('imoveis_leilao')
-          .select('id, titulo, cidade, estado, tipo, modalidade, valor_minimo, desconto_percentual, forma_pagamento, latitude, longitude, link_foto, geocod_nivel, fonte, fonte_id, area_m2, link_edital, link_matricula, score_juridico, score_financeiro, valor_mercado, analise_viavel')
-          .not('latitude', 'is', null)
-          .neq('latitude', 0)
-          .limit(2000)
-      );
+      // ═══ A CAIXA GEOGRÁFICA VAI NO SERVIDOR (14/08) ═══════════════════════════════════
+      // Antes: `.limit(2000)` SEM recorte geográfico e SEM `order by`, e o raio era aplicado
+      // só depois, por haversine, no navegador. Duas consequências, ambas medidas em Cotia
+      // (raio de 30 km), que é o caso que o dono relatou como lento:
+      //   • CUSTO: 1,5 MB de JSON descendo pelo 5G para desenhar um punhado de pins.
+      //   • ERRO: os 2.000 são uma fatia ARBITRÁRIA de 29.941 lotes do Brasil inteiro. Dos
+      //     794 lotes que estão de fato dentro do raio, só **28** caíam nessa fatia — o mapa
+      //     mostrava 3,5% da área e parecia completo. O lento e o errado tinham a mesma causa.
+      // Agora o recorte desce para o banco como faixa de lat/long (servida pelo índice
+      // `idx_imoveis_coords`), e o haversine abaixo só apara os cantos do quadrado.
+      const GRAU_LAT_KM = 111.32;
+      const LIMITE_PINS = 2000;
+      let q = supabase
+        .from('imoveis_leilao')
+        .select('id, titulo, cidade, estado, tipo, modalidade, valor_minimo, desconto_percentual, forma_pagamento, latitude, longitude, link_foto, geocod_nivel, fonte, fonte_id, area_m2, link_edital, link_matricula, score_juridico, score_financeiro, valor_mercado, analise_viavel')
+        .not('latitude', 'is', null)
+        .neq('latitude', 0);
+      if (raioAtivo && centroRaio) {
+        const dLat = raioKm / GRAU_LAT_KM;
+        // O meridiano encurta com a latitude; `max(0.01)` evita divisão por ~0 perto do polo.
+        const dLng = raioKm / (GRAU_LAT_KM * Math.max(0.01, Math.abs(Math.cos(centroRaio.lat * Math.PI / 180))));
+        q = q.gte('latitude', centroRaio.lat - dLat).lte('latitude', centroRaio.lat + dLat)
+             .gte('longitude', centroRaio.lng - dLng).lte('longitude', centroRaio.lng + dLng);
+      }
+      // `{ data, error }` do postgrest-js NÃO lança em não-2xx: o `const { data } = await …`
+      // que estava aqui transformava falha de leitura em "nenhum imóvel no mapa" — mapa vazio
+      // com cara de resposta (forma #2 do CLAUDE.md).
+      const { data, error } = await aplicarFiltros(q).limit(LIMITE_PINS);
+      if (error) {
+        registrarEvento('api_erro', { alvo: 'mapa_pins', detalhe: String(error.message || 'erro').slice(0, 120) });
+        setErroPins('Não foi possível carregar os pontos do mapa. A lista ao lado continua válida.');
+        setCarregando(false);
+        return;
+      }
       const comCoords = (data || []).filter(im => {
         if (!raioAtivo || !centroRaio || im.latitude == null || im.longitude == null || im.latitude === 0 || im.longitude === 0) return true;
         return haversine(centroRaio.lat, centroRaio.lng, Number(im.latitude), Number(im.longitude)) <= raioKm;
@@ -293,12 +328,15 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
 
       // Detecta caso onde há resultados na lista mas nenhum tem coordenadas
       if (comCoords.length === 0 && totalLista > 0) setSemCoordenadas(true);
+      // Corte silencioso é o que fazia o mapa parecer completo estando pela metade: se
+      // batemos no teto, o usuário precisa saber que há mais pontos do que os desenhados.
+      setTruncado((data || []).length >= LIMITE_PINS);
 
       setImoveisMapa(comCoords);
       setCarregando(false);
     }
     carregar();
-  }, [filtros, centroRaio, raioAtivo, raioKm, totalLista]);
+  }, [filtros, centroRaio, raioAtivo, raioKm, totalLista, visivel]);
 
   // Inicializa mapa
   useEffect(() => {
@@ -544,6 +582,18 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
       {!carregando && imoveisMapa.length > 0 && (
         <div style={{ position: 'absolute', top: 12, right: 12, zIndex: 1000, background: 'white', padding: '5px 14px', borderRadius: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.12)', fontSize: 12, fontWeight: 700, color: '#0D63DB' }}>
           {imoveisMapa.length} imóveis com localização
+        </div>
+      )}
+      {/* Falha de leitura dos pins: dizer que falhou, não desenhar um mapa vazio com cara de
+          "não há nada aqui" — a lista ao lado vem de outro caminho e continua válida. */}
+      {!carregando && erroPins && (
+        <div style={{ position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: '#fef2f2', border: '1px solid #fecaca', padding: '8px 16px', borderRadius: 12, fontSize: 12, color: '#b91c1c', textAlign: 'center', maxWidth: 320 }}>
+          {erroPins}
+        </div>
+      )}
+      {!carregando && truncado && (
+        <div style={{ position: 'absolute', top: 48, right: 12, zIndex: 1000, background: '#fffbeb', border: '1px solid #fde68a', padding: '5px 12px', borderRadius: 20, fontSize: 11.5, fontWeight: 600, color: '#b45309', maxWidth: 260 }}>
+          Muitos pontos nesta área — o mapa desenha os primeiros. Reduza o raio ou refine os filtros para ver todos.
         </div>
       )}
       {!carregando && imoveisMapa.length === 0 && semCoordenadas && (

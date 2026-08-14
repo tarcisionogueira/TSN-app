@@ -1,0 +1,45 @@
+-- Relatório mercadológico: aluguel de lote e rentabilidade que saía 100× menor.
+--
+-- Achado a partir de um relatório que o dono gerou de um lote em condomínio em Cotia (14/08).
+-- Dois defeitos independentes no mesmo card:
+--
+-- 1. "LOTE NÃO SE ALUGA" já existia desde 03/08 — escrita no prompt do modelo e obedecida por
+--    `locacoesDaBase` (api/gerar-analise.js:690). Mas o caminho do MODELO não a aplicava: a
+--    regra vivia como instrução em texto, e o modelo a ignorou. O relatório saiu com "aluguel
+--    médio R$ 3.000,00/mês" para um terreno vazio — preço de casa. É o padrão do §2b do
+--    CLAUDE.md: a regra que o planejamento cita não é a que o código aplica.
+--
+-- 2. "YIELD VINHA DO MODELO": no mesmo relatório ele devolveu 0,09 — uma RAZÃO, sem o ×100 que
+--    o próprio prompt pede — e a tela imprimiu "0,09% a.a." onde o certo era 11,16% a.a.
+--    Medido no acervo: **25 dos 56** relatórios concluídos tinham yield entre 0 e 0,5% com
+--    aluguel > 0. Quase metade saiu para o cliente com a rentabilidade cem vezes menor. O sinal
+--    de que ninguém conferia é que bruto e líquido saíam IDÊNTICOS, quando o líquido é 15%
+--    menor por definição.
+--
+-- NÃO entraram em `regra_negocio`: `auditoria_regras_negocio()` valida `aplicada_por` contra
+-- FUNÇÕES DO BANCO (procura o nome em `pg_proc` e o texto da chave no corpo), e estas duas são
+-- aplicadas em `api/gerar-analise.js`. Registrá-las lá criava 3 críticos permanentes numa
+-- auditoria que estava em 0 — trocaria um defeito por um alarme falso. A guarda correta para
+-- regra aplicada no app é o RASTRO que ela deixa no banco, que é onde elas foram parar:
+-- `qa_invariantes()` ganhou `relatorio_yield_sem_x100` e `relatorio_lote_com_aluguel`, ambos
+-- com limite 0 (ver `qa_invariantes_relatorio_aluguel_yield`).
+--
+-- REPARO DO ACERVO (as duas migrações irmãs, ambas com backup reversível):
+--   • `yield_backfill_relatorios_emitidos` — 23 relatórios recalculados a partir dos números
+--     que já estavam no próprio JSON (aluguelMedio × 12 / valorEstimadoImovel × 100). Sem
+--     reprocessar IA, custo zero. Yields resultantes: 0,96% a 11,16% a.a. (média 7,09%).
+--     Valores anteriores em `yield_backfill_2026_08_14`.
+--   • `terreno_sem_locacao_backfill` — 2 relatórios de terreno (Cotia e Sorocaba) tiveram
+--     locações, aluguel e yield zerados e ganharam a frase de "não se aplica". Valores
+--     anteriores em `terreno_locacao_backfill_2026_08_14`.
+--
+-- SOBRARAM 2, de causa DIFERENTE — não são conta errada, são dado de entrada ruim, e por isso
+-- não foram tocados (recalcular sobre entrada errada só troca um número errado por outro):
+--   • `8407e489…` (Sorocaba) — `aluguelMedio: 27,62`, que é R$/m²·mês e não valor mensal (o
+--     bug de unidade corrigido em 07/08 para relatórios NOVOS).
+--   • `e0d7ea4c…` (Vila Velha, 31/07) — `valorEstimadoImovel: 0`, então não há denominador.
+-- Os dois precisam ser REGERADOS para ficarem corretos.
+--
+-- Este arquivo é o registro da decisão; as mudanças de comportamento estão em
+-- `api/gerar-analise.js` (locacaoNaoSeAplica + yield calculado no servidor) e em
+-- `src/pages/Analise.jsx` (os três cards de aluguel dão lugar à explicação, para terreno).

@@ -1939,6 +1939,52 @@ export default async function handler(req, res) {
             }
           }
         }
+        // ═══ LOTE NÃO SE ALUGA — A REGRA DE 03/08, AGORA APLICADA (14/08) ════════════════
+        // O prompt manda o modelo devolver `locacoes: []`, `aluguelMedio: 0` e yield 0 para
+        // terreno/lote, com a frase "rentabilidade de aluguel para lote é informação FALSA,
+        // não informação faltante". `locacoesDaBase` obedece (linha ~690). O caminho do MODELO
+        // não: a regra vivia só como instrução em texto, e o modelo a ignorou. Relatado pelo
+        // dono em 14/08 num lote em condomínio de Cotia, que saiu com "aluguel médio
+        // R$ 3.000,00/mês" — valor de casa, não de terreno vazio.
+        // É o padrão do §2b do CLAUDE.md: regra escrita que o código não aplica. Aqui ela vira
+        // código. `segCache` é o segmento já resolvido para este imóvel.
+        const naoAluga = segCache === 'terreno';
+        if (naoAluga) {
+          mercado.locacoes = [];
+          if (mercado.nivel1) mercado.nivel1.locacoes = [];
+          if (mercado.nivel2) mercado.nivel2.locacoes = [];
+          mercado.aluguelMedio = 0;
+          if (mercado.consolidado) { mercado.consolidado.aluguelMedio = 0; mercado.consolidado.yieldBruto = 0; mercado.consolidado.yieldLiquido = 0; }
+          // A tela precisa saber a DIFERENÇA entre "não apuramos" e "não existe": sem esta
+          // marca, zero vira lacuna e alguém tenta preencher de novo.
+          mercado.locacaoNaoSeAplica = 'Lote/terreno não tem mercado de locação residencial. O que os portais listam como "terreno para alugar" é outro produto (pátio, área de eventos, área comercial) e não serve de comparável — o retorno aqui é revenda/valorização, não aluguel.';
+        }
+
+        // ═══ O YIELD É CONTA, NÃO OPINIÃO (14/08) ════════════════════════════════════════
+        // O yield vinha do MODELO. No relatório de Cotia ele devolveu **0,09** — a RAZÃO
+        // (36.000 / 386.191,76 = 0,0932), sem o ×100 que o próprio prompt pede. A tela imprimiu
+        // "0,09% a.a." onde o número certo é 9,32% a.a.: cem vezes menor, e com cara de
+        // resposta. O "yield 0,00%" de 43 relatórios (visto em 07/08) é a mesma falha com
+        // arredondamento. Sinal de que ninguém conferia: bruto e líquido saíram IDÊNTICOS,
+        // quando o líquido é, por definição do prompt, 15% menor.
+        // Yield é função pura de dois números que o servidor já tem — então o servidor calcula,
+        // e a resposta do modelo deixa de participar. A trava do aluguel logo acima já fazia
+        // isso, mas só quando o aluguel divergia da mediana; quando ele acertava o aluguel e
+        // errava a unidade do yield, passava.
+        {
+          const valImovel = Number(mercado.consolidado?.valorEstimadoImovel) || 0;
+          const aluguel = Number(mercado.aluguelMedio) || 0;
+          if (valImovel > 0 && aluguel > 0) {
+            const yBruto = Number(((aluguel * 12 / valImovel) * 100).toFixed(2));
+            const yLiquido = Number((yBruto * 0.85).toFixed(2)); // 15% vacância/despesas, como o prompt define
+            if (mercado.consolidado) { mercado.consolidado.yieldBruto = yBruto; mercado.consolidado.yieldLiquido = yLiquido; }
+          } else if (mercado.consolidado) {
+            // Sem aluguel ou sem valor não há yield — e 0 aqui é ausência declarada, não
+            // rentabilidade zero. A tela já trata 0 como "—".
+            mercado.consolidado.yieldBruto = 0;
+            mercado.consolidado.yieldLiquido = 0;
+          }
+        }
         mercado.yieldBruto = mercado.consolidado?.yieldBruto || 0;
         mercado.yieldLiquido = mercado.consolidado?.yieldLiquido || 0;
         // O PDF lista TODAS as amostras (nível 1 = mesmo condomínio é a mais relevante;
