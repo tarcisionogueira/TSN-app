@@ -97,29 +97,64 @@ direito. O botão legado do Painel (`Painel.jsx:447`) grava com id `tsn_…` for
 
 Três lacunas, e a **primeira virou urgente por causa do caso do Rafael**:
 
-### 4a. Parcelamento com correção (o caso concreto de hoje)
+### 4a. Parcelamento — e a decisão do dono de fazer disso um PRODUTO
 
-A compradora do lote do Rafael propôs **50% à vista + 50% em 24× com IPCA + 1% a.m.**
+> **Refinamento do dono (14/08):** não é só registrar a proposta. É **fazer o contrato pelo
+> módulo de contratos e originar a cobrança**: informa-se o sinal e em quantas vezes parcela; o
+> sistema puxa a taxa base de **1% a.m. + IPCA**; a cobrança sai pelo **Mercado Pago**, com as
+> **taxas repassadas ao cliente**, mais **0,5% sobre a venda** para a plataforma. E uma
+> **simulação** mostrando como fica o parcelado com tudo embutido — possivelmente também na
+> visão do vendedor.
 
-Hoje isso **não cabe** na estrutura: `arrematado_lancamentos` tem um valor e uma data — uma
-linha por evento. Registrar 24 parcelas manualmente é inviável, e sem a correção o total fica
-errado. Pior: como o lançamento não distingue **previsto** de **realizado**, um plano de 24 meses
-entraria como se já tivesse entrado no caixa, e o "lucro" da operação sairia inflado no dia da
-assinatura.
+Isso muda a natureza do item: deixa de ser um campo no fluxo de caixa e vira **produto
+financeiro**. O caso concreto que o originou: a compradora do lote do Rafael propôs **50% à
+vista + 50% em 24× com IPCA + 1% a.m.**
 
-*O que fazer:*
-- `arrematado_lancamentos.situacao` (`previsto` | `realizado`) — e o saldo passa a somar **só
-  realizado**, com o previsto exibido à parte, como fluxo futuro. É a mudança mínima e é a que
-  impede o lucro falso.
-- Tabela de **plano de pagamento** (`arrematado_parcelas`): entrada, nº de parcelas, índice de
-  correção (IPCA/IGPM/nenhum), juros a.m., data da primeira. Gera as parcelas como lançamentos
-  `previsto`; ao receber, vira `realizado` com o valor efetivo.
-- **A correção precisa de dado externo.** IPCA vem do IBGE — e nós **já ingerimos IBGE**
-  (`socio_fontes`). Reaproveitar a mesma trilha; sem índice publicado no mês, a parcela mostra o
-  valor **projetado pela última taxa conhecida**, declarado como projeção (nunca como fato).
-- **Valor presente:** 50% em 24× com IPCA + 1% a.m. **não é** 50% do preço. A tela precisa dizer
-  quanto vale hoje esse recebível, senão o vendedor compara uma proposta à vista com uma
-  parcelada como se fossem o mesmo número.
+#### O que o sistema precisa saber fazer
+
+| Peça | O que é |
+|---|---|
+| **Simulador** | entrada + nº de parcelas + taxa + índice → parcela, total, custo efetivo, e o que sobra para o vendedor |
+| **Contrato** | gerado pelo módulo que já existe (`contratos_link`, assinatura eletrônica) com o plano anexado |
+| **Cobrança** | assinatura/recorrência no Mercado Pago, uma cobrança por parcela |
+| **Conciliação** | cada parcela paga vira lançamento `realizado` no fluxo de caixa do arrematado |
+
+#### As quatro armadilhas — e a segunda é a mais cara
+
+**1. Previsto não é caixa.** `arrematado_lancamentos` não distingue **previsto** de **realizado**.
+Sem a coluna `situacao`, um plano de 24 meses entra como se já tivesse caído na conta e o lucro
+sai inflado no dia da assinatura. **É a menor mudança da lista e a que impede a mentira maior.**
+
+**2. Repassar taxa é divisão, não multiplicação.** Para receber líquido `X` com taxa `t`, o valor
+cobrado é `X / (1 − t)` — **não** `X × (1 + t)`. Com MP a 4,99%, num boleto de R$ 5.000: por
+fora dá R$ 5.249,50 e chegam R$ 4.987,55 (faltam R$ 12,45); por dentro dá R$ 5.262,66 e chegam
+os R$ 5.000 exatos. Parece detalhe e não é: **em 24 parcelas a diferença vira quase uma parcela
+inteira**, absorvida em silêncio pela plataforma. É a mesma família do yield sem ×100 que
+corrigimos hoje — conta com aparência de certa.
+
+**3. IPCA é retroativo, e isso decide o desenho da cobrança.** O índice do mês só é publicado
+depois do mês. Duas saídas, e é decisão de produto:
+- **parcela variável** — corrige na data de cada vencimento; exige cobrança avulsa mês a mês no
+  MP (assinatura de valor fixo não serve) e o cliente não sabe hoje o valor da parcela 18;
+- **parcela fixa** — pré-calculada com IPCA projetado; previsível para os dois lados, mas
+  **erra** em relação ao índice real, e o contrato precisa dizer o que acontece com a diferença.
+
+**4. Quem é o credor?** A plataforma intermedeia a cobrança, mas o recebível é do vendedor. Em
+24 meses há inadimplência, e é preciso estar escrito: qual a garantia (alienação fiduciária do
+próprio imóvel?), o que acontece se parar de pagar, e quem executa. **A plataforma não pode
+parecer credora sem ser** — nem assumir risco de crédito sem decidir isso.
+
+#### As decisões que faltam
+
+1. **De quem sai os 0,5%** — do vendedor (nosso cliente) ou embutido no parcelado do comprador?
+   Muda contrato, tributação e o número que a simulação mostra.
+2. **Parcela fixa ou variável** (armadilha 3).
+3. **Cartão, boleto ou PIX recorrente** — mudam a taxa, o prazo de repasse e o risco.
+4. **Assumimos risco de crédito?** Se não, o contrato precisa dizer isso em letra grande.
+
+> **Sugestão de ordem:** o **simulador primeiro**, sozinho, sem cobrança nenhuma. Ele é barato,
+> não move dinheiro, e é o que responde "essa proposta é boa?" — que é a pergunta do Rafael
+> hoje. Contrato e cobrança vêm depois, quando as quatro decisões estiverem tomadas.
 
 ### 4b. Rateio entre sócios
 Arremate em conjunto é comum. Hoje o portfólio é de um `user_id` só.
@@ -138,19 +173,30 @@ ganharmos em cima do posicionamento de venda.
 **O que há hoje:** nada. Não existe integração de saída com portal nenhum — todo o pipeline é de
 **entrada** (scrapers lendo leiloeiro). Publicar anúncio é a direção contrária.
 
+> **Direção do dono (14/08):** "conectar com a OLX, por exemplo, ou outro portal, e ver como
+> podemos monetizar."
+
 **Como funciona esse mercado, na prática:**
 
 | Caminho | O que exige | Prazo realista |
 |---|---|---|
-| **API de parceiro (OLX/ZAP/VivaReal)** | contrato comercial + CRECI da imobiliária anunciante + homologação | semanas a meses, e **depende de decisão comercial, não de código** |
-| **XML/feed padrão do mercado** | gerar um feed com os imóveis e cadastrá-lo no portal | é o caminho barato: o feed é HTML/XML gerado do banco, como já fazemos no sitemap |
-| **Vitrine própria** (`/venda/:id` no nosso domínio) | só nosso código; indexável pelo Google como as 33 mil páginas de acervo | **dias** |
+| **Feed XML / integração de parceiro** (OLX, ZAP, VivaReal) | conta de anunciante **profissional** + contrato + homologação do feed. A OLX exige plano de imobiliária/corretor para volume; a ZAP/VivaReal (Grupo OLX) trabalha com integradores | semanas, e a parte lenta é **comercial**, não técnica |
+| **Vitrine própria** (`/venda/:id` no nosso domínio) | só nosso código; indexável como as 33 mil páginas de acervo | **dias** |
 
-**Recomendação: começar pela vitrine própria + feed**, nesta ordem. A vitrine não depende de
-ninguém, reaproveita `api/publico.js` (que acabou de entrar no código da marca) e já nasce
-indexável — e o feed XML é o mesmo dado noutro formato, pronto para quando houver contrato.
+O **feed é o mesmo dado noutro formato**: um XML gerado do banco, exatamente como já fazemos com
+o `sitemap-leiloes.xml`. Tecnicamente é o item mais barato do plano. O que custa é o contrato e a
+figura de quem anuncia.
 
-> ⚠️ **Antes do código, três definições suas:** (a) a BidPro anuncia como **intermediária** — e
+**Onde está o dinheiro — quatro modelos, e eles não são exclusivos:**
+
+| Modelo | Como cobra | Observação |
+|---|---|---|
+| **Comissão de venda** | % sobre a venda concretizada | é o maior ticket e o que mais exige: intermediação imobiliária no Brasil é atividade **regulada (CRECI)** |
+| **Taxa de anúncio** | fixo por imóvel/mês para publicar nos portais | previsível, não depende de vender, e não configura corretagem |
+| **Destaque pago** | posição privilegiada na vitrine própria | receita pequena, custo zero |
+| **Originação da venda parcelada** | os 0,5% do item 4a | **é o que já está desenhado**, e não passa por portal nenhum |
+
+**Recomendação: começar pela vitrine própria + feed**> ⚠️ **Antes do código, três definições suas:** (a) a BidPro anuncia como **intermediária** — e
 > aí entra CRECI e responsabilidade de corretagem —, ou hospeda anúncio **do cliente**?
 > (b) qual a nossa remuneração: comissão sobre a venda, taxa de anúncio, ou destaque pago?
 > (c) o cliente autoriza a divulgação por escrito? Isso é cláusula, não checkbox.
@@ -182,10 +228,11 @@ O que a plataforma precisa suportar para não perder este caso:
 | 1 | Fluxo de arremate (Decisão 3) | sua resposta sobre o DELETE | sem entrada, o resto é vitrine |
 | 2 | `situacao` previsto/realizado + card do realizado (2 e 4a mínimo) | — | impede o lucro falso; é pequeno |
 | 3 | `arrematados.arrematacao_id` + `imovel_id` UUID (Decisão 1) | — | destrava documentos e evita fazer tudo duas vezes |
-| 4 | Plano de parcelas + IPCA + valor presente (4a completo) | 2 | é o caso do Rafael |
-| 5 | Vitrine `/venda/:id` | suas 3 definições da seção 5 | receita nova |
-| 6 | Feed XML para portais | 5 + contrato comercial | quando houver acordo |
-| 7 | Rateio entre sócios · fechamento fiscal | — | valor real, sem urgência |
+| 4 | **Simulador** de parcelamento (sem cobrança) | 2 | responde "essa proposta é boa?" — a pergunta do Rafael hoje. Barato e não move dinheiro |
+| 5 | Contrato + cobrança MP + conciliação | 4 + as 4 decisões de 4a | vira produto financeiro; só depois do simulador |
+| 6 | Vitrine `/venda/:id` | suas 3 definições da seção 5 | receita nova, sem depender de terceiro |
+| 7 | Feed XML para portais (OLX etc.) | 6 + contrato comercial | o XML é barato; o contrato é o caminho crítico |
+| 8 | Rateio entre sócios · fechamento fiscal | — | valor real, sem urgência |
 
 **O que já dá para fazer hoje, sem decisão nenhuma:** subir a carta de arrematação do lote do
 Rafael pela tela de Arrematados. O tipo existe e o upload funciona.
