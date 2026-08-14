@@ -12,7 +12,14 @@
       "mcp__claude-code-remote__send_later",
       "mcp__claude-code-remote__list_triggers",
       "mcp__claude-code-remote__update_trigger",
-      "mcp__claude-code-remote__delete_trigger"
+      "mcp__claude-code-remote__delete_trigger",
+      "mcp__claude-code-remote__subscribe_pr_activity",
+      "mcp__claude-code-remote__unsubscribe_pr_activity",
+      "mcp__github__pull_request_read",
+      "mcp__github__create_pull_request",
+      "mcp__github__update_pull_request",
+      "mcp__github__actions_list",
+      "mcp__github__get_job_logs"
     ],
     "ask": [
       "mcp__Vercel__deploy_to_vercel",

@@ -24,8 +24,17 @@ export default function ImovelGate() {
 
   useEffect(() => {
     let vivo = true;
+    // FICHA DE FATOS, não só o título (14/08, pedido do dono a partir do botão Compartilhar:
+    // "abri o link e aparecem dados bem resumidos"). Os campos acrescentados — área, bairro,
+    // tipo, data da praça, modalidade, 2ª praça, leiloeiro e descrição — são EXATAMENTE os que
+    // a página pública `/leilao/:id/:slug` (api/publico.js) já serve ao Google e a qualquer
+    // visitante desde 02/08. Ou seja: nenhuma exposição nova, custo marginal ZERO (uma única
+    // leitura ao banco, sem IA e sem fornecedor pago) — só parou de esconder de quem recebe o
+    // link o que já está aberto na página indexada do mesmo lote.
+    // A DECISÃO DE 08/08 SEGUE DE PÉ: endereço exato, mapa, edital/matrícula e as análises
+    // continuam atrás do cadastro. O público vê o FATO; a conta abre o que é NOSSO.
     supabase.from('imoveis_leilao')
-      .select('id,titulo,cidade,estado,tipo,valor_minimo,valor_avaliacao,desconto_percentual,link_foto,fonte,fonte_id')
+      .select('id,titulo,cidade,estado,bairro,tipo,area_m2,valor_minimo,valor_minimo_2,valor_avaliacao,desconto_percentual,data_leilao,modalidade,leiloeiro,descricao,link_foto,fonte,fonte_id')
       .eq('id', id).maybeSingle()
       // `{ data }` SEM `error` funde "não achei o imóvel" com "não consegui ler" — o
       // postgrest-js não lança em não-2xx. Numa rota PÚBLICA (as 33 mil páginas indexadas)
@@ -52,6 +61,25 @@ export default function ImovelGate() {
   const foto = cands[imgIdx] || null;
   const desc = Number(im.desconto_percentual) || 0;
   const local = [im.cidade, im.estado].filter(Boolean).join('/');
+  // Data da praça vem do scraper em formatos variados; só formata o que for ISO reconhecível,
+  // e no que não for mostra o texto original — inventar formato é pior que repetir a fonte.
+  const dataBR = (s) => {
+    const t = String(s || '').trim();
+    if (!t) return null;
+    const m = t.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    return m ? `${m[3]}/${m[2]}/${m[1]}` : t.slice(0, 40);
+  };
+  const MODALIDADE_LABEL = { judicial: 'Leilão judicial', extrajudicial: 'Leilão extrajudicial', licitacao_aberta: 'Licitação aberta', venda_direta: 'Venda direta' };
+  const fichaFatos = [
+    ['Tipo', TIPO_LABEL[String(im.tipo || '').toLowerCase()] || null],
+    ['Área', Number(im.area_m2) > 0 ? `${Math.round(im.area_m2)} m²` : null],
+    ['Bairro', im.bairro || null],
+    ['Avaliação', Number(im.valor_avaliacao) > 0 ? fmtBRL(im.valor_avaliacao) : null],
+    ['2ª praça', Number(im.valor_minimo_2) > 0 ? fmtBRL(im.valor_minimo_2) : null],
+    ['Data do leilão', dataBR(im.data_leilao)],
+    ['Modalidade', MODALIDADE_LABEL[String(im.modalidade || '').toLowerCase()] || im.modalidade || null],
+    ['Leiloeiro', im.leiloeiro || null],
+  ].filter(([, v]) => v);
 
   return (
     <div style={{ position: 'relative', minHeight: '78vh', overflow: 'hidden', background: 'linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%)' }}>
@@ -82,10 +110,31 @@ export default function ImovelGate() {
                   <MapPin size={13} /> {local}
                 </div>
               )}
-              <div style={{ display: 'inline-flex', alignItems: 'baseline', gap: 8, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '8px 14px', marginBottom: 16 }}>
+              <div style={{ display: 'inline-flex', alignItems: 'baseline', gap: 8, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '8px 14px', marginBottom: 14 }}>
                 <span style={{ fontSize: 18, fontWeight: 900, color: '#0D63DB' }}>{im.valor_minimo ? fmtBRL(im.valor_minimo) : 'Consultar'}</span>
                 {desc > 0 && <span style={{ fontSize: 12, fontWeight: 800, color: '#16a34a', background: '#dcfce7', padding: '2px 8px', borderRadius: 20 }}>-{Math.round(desc)}%</span>}
               </div>
+
+              {/* Ficha de fatos — os mesmos campos da página pública do lote. Sem isto, quem
+                  recebia o link via WhatsApp via menos do que o Google já mostra do mesmo
+                  imóvel, e a função do botão é justamente apresentar o lote a quem está fora
+                  da plataforma. Cada linha só aparece quando há dado (nada de "—" decorativo). */}
+              {fichaFatos.length > 0 && (
+                <div style={{ textAlign: 'left', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '10px 14px', marginBottom: 14 }}>
+                  {fichaFatos.map(([rot, val]) => (
+                    <div key={rot} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 12.5, padding: '3px 0' }}>
+                      <span style={{ color: '#64748b' }}>{rot}</span>
+                      <strong style={{ color: '#0f172a', textAlign: 'right' }}>{val}</strong>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {im.descricao && (
+                <p style={{ textAlign: 'left', fontSize: 12, color: '#475569', lineHeight: 1.55, margin: '0 0 14px', maxHeight: 110, overflow: 'hidden' }}>
+                  {String(im.descricao).slice(0, 320)}{String(im.descricao).length > 320 ? '…' : ''}
+                </p>
+              )}
             </>
           ) : (
             <div style={{ fontSize: 13, color: '#64748b', margin: '4px 0 16px' }}>
@@ -110,6 +159,18 @@ export default function ImovelGate() {
           <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 14 }}>
             Você voltará para este imóvel assim que entrar.
           </div>
+
+          {/* Saída SEM conta. A página pública do lote (`/leilao/:id`, servida pelo servidor em
+              api/publico.js) já existe desde 02/08, é indexada e traz a descrição completa e o
+              contexto da cidade. Quem recebeu o link e ainda não quer se cadastrar tinha, até
+              aqui, só duas portas — ambas pedindo conta. Oferecer a terceira não custa nada e
+              não abre nada novo: é a mesma página que o Google já serve deste imóvel. */}
+          {im.id && (
+            <a href={`/leilao/${im.id}`}
+              style={{ display: 'inline-block', marginTop: 12, fontSize: 12, color: '#64748b', textDecoration: 'underline' }}>
+              Ver a página pública deste imóvel, sem criar conta
+            </a>
+          )}
         </div>
       </div>
     </div>
