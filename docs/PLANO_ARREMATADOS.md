@@ -7,9 +7,10 @@
 > funcionalidade — é descobrir por que ela não é usada, fechar as pontas e cobrir dois casos
 > reais que o dono trouxe do cliente do Rafael.
 >
-> ⚠️ **Isto é planejamento. Nada nas seções 4a, 4a-bis e 4a-ter foi implementado, e nenhuma delas
-> deve virar código antes das decisões que cada uma lista** (dono, 14/08: *"essa parte não é pra
-> colocar nada em efetivo — estamos apenas desenhando para, no momento certo, implantar"*).
+> ⚠️ **Isto é planejamento. Nada nas seções 4a, 4a-bis, 4a-ter e 4a-quater foi implementado, nada
+> disso aparece para cliente nenhum, e nenhuma delas deve virar código antes das decisões que
+> cada uma lista** (dono, 14/08: *"essa parte não é pra colocar nada em efetivo — estamos apenas
+> desenhando para, no momento certo, implantar"* · *"não é para aparecer para nenhum cliente"*).
 
 ---
 
@@ -434,6 +435,202 @@ jurídica, antes de Inter, antes de contrato.
 8. **Volume mínimo que justifica** — quantas operações por mês pagam o custo fixo de estar
    autorizado? Sem esse número, a decisão é de gosto.
 
+#### 4a-quater. Prazo longo, seguro, retomada — e o módulo como assinatura (dono, 14/08)
+
+> "Pretendo colocar esse **módulo de contratos e o módulo de cobrança** com um **adicional cobrado
+> do cliente mensalmente**, servindo tanto para **locação** quanto para **venda de patrimônio**.
+> Isto ainda é planejamento — **não é para aparecer para nenhum cliente**.
+> Operar como funciona um banco, só que arrematando o imóvel: o sinal abate, e a diferença
+> parcela em **10, 20 anos** — os 24 meses foram só sugestão da compradora. **O valor é garantido
+> porque foi arrematado muito mais em conta.** Precisaria de ponte com uma **seguradora** para
+> quitar em caso de falecimento, e das medidas para **reencaminhar o imóvel a leilão** em caso de
+> inadimplência."
+
+##### São dois produtos, e misturá-los é o primeiro erro a evitar
+
+| | **Módulo por assinatura** | **Crédito imobiliário próprio** |
+|---|---|---|
+| O que é | SaaS: contrato + cobrança recorrente + conciliação, mensalidade por contrato administrado | operação financeira de 10–20 anos |
+| Capital | zero | alto, ou funding de terceiro |
+| Regulador | nenhum (mas CRECI na locação — ver adiante) | BCB, e a figura de 4a-ter |
+| Prazo até faturar | **semanas** — a máquina já existe | trimestres |
+| Risco | churn | crédito, prazo, índice, jurídico |
+
+**Recomendação de sequência: o módulo por assinatura sai primeiro, sozinho.** Ele usa a mesma
+máquina que o crédito vai precisar (contrato assinado, régua de cobrança, conciliação, régua de
+inadimplência), fatura sem capital nenhum, e produz a coisa que **qualquer investidor ou
+securitizadora vai pedir depois**: histórico de adimplência medido em contratos reais. Construir
+o crédito antes é pagar caro para descobrir o que a assinatura ensinaria de graça.
+
+##### 🔴 Quando o prazo sobe, a taxa tem que CAIR — e é o contrário da intuição
+
+Sobre R$ 225 mil financiados (metade de uma venda de R$ 450 mil), a 1% a.m.:
+
+| Prazo | Parcela | Total pago | Múltiplo do emprestado |
+|---|---|---|---|
+| 24× | R$ 10.591 | R$ 254.197 | 1,13× |
+| 120× (10 anos) | R$ 3.228 | R$ 387.372 | 1,72× |
+| 240× (20 anos) | R$ 2.477 | R$ 594.587 | **2,64×** |
+
+**E isso é sem IPCA nenhum.** Com IPCA por cima, o saldo ainda é multiplicado à parte: 4,5% a.a.
+por 20 anos multiplica por **2,41×**.
+
+O ponto não é o total nominal — é a taxa **real**. Correção monetária não é ganho; o ganho é o
+juro. Então:
+
+| | Juro real ao ano |
+|---|---|
+| Nossa proposta (1% a.m. capitalizado, IPCA à parte) | **12,68%** |
+| Financiamento bancário típico (~10,5% a.a. nominal, inflação ~4,5%) | **≈ 5,7%** |
+
+**Cobraríamos mais que o dobro do juro real de um banco, por 20 anos.** Em 24 meses isso passa
+— é venda a prazo, e o comprador aceita pela conveniência. Em 240 meses é outro produto: é o
+perfil exato de contrato que vira ação revisional, e o cliente vê o número no CET antes de
+assinar. **1% a.m. é preço de prazo curto.** Se o prazo vai a 10 ou 20 anos, ou a taxa cai para
+perto do real de mercado, ou o produto não fecha — nem comercial, nem juridicamente.
+
+##### 🔴 A armadilha do saldo corrigido: amortização negativa
+
+O desenho de 4a mencionava **parcela fixa pré-calculada com IPCA projetado**. Em 24 meses o erro
+é pequeno. Em 240, esse desenho tem nome e história no Brasil:
+
+> Se o **saldo devedor** é corrigido por um índice e a **parcela** por outro (ou por nenhum),
+> chega o mês em que a correção do saldo supera a amortização embutida na parcela. **A pessoa
+> paga e deve mais do que devia antes.** É o resíduo que o SFH acumulou nos anos 80 e que o FCVS
+> teve que absorver.
+
+Não é hipótese remota: com IPCA a 4,5% e prazo longo, é o comportamento **esperado** de parcela
+fixa. É a mesma família dos defeitos que o `CLAUDE.md` cataloga — número com aparência de certo.
+A regra a fixar no desenho: **parcela e saldo corrigidos pelo mesmo índice, na mesma data**, e o
+simulador precisa exibir a evolução do saldo, não só a parcela. Se em algum mês o saldo sobe, o
+plano está errado — e isso é candidato a **invariante**, não a revisão manual.
+
+Some-se: **SAC ou Price**. O SFH/SFI usa SAC em prazo longo exatamente porque Price + correção +
+240 meses é o cenário que gera a discussão de anatocismo. Decisão de produto, não de código.
+
+##### A premissa do deságio — o que ela garante, e o que não
+
+"O valor é garantido porque foi arrematado muito mais em conta" é a premissa que sustenta o
+produto inteiro, e ela é **boa** — mas garante uma coisa específica:
+
+- ✅ **Garante LTV baixo.** Se o custo de aquisição foi R$ 300 mil e o financiado é R$ 225 mil, a
+  dívida está bem coberta pelo bem. É a melhor posição que um credor pode ter.
+- ❌ **Não garante liquidez.** O deságio só vira dinheiro num evento de liquidação: consolidação,
+  dois leilões, eventual desocupação. Isso tem prazo e custo.
+- ❌ **Não garante que ele exista quando for preciso.** O risco é **correlacionado**: se a
+  inadimplência vier de queda de mercado, o deságio encolhe exatamente no mês em que dependemos
+  dele. É a lição de 2008 em uma linha.
+- ⚠️ **O deságio protege NÓS, não o comprador.** Ele comprou a preço de mercado. Isso está certo,
+  mas precisa estar dito — inclusive porque é o que responde "por que a plataforma financia?".
+
+> **Vantagem que quase ninguém tem:** o **Índice BidPro** já mede deságio de arremate. Dá para
+> **calcular** o deságio histórico e a sua dispersão por região e tipo, em vez de supor. Um
+> originador de crédito normalmente compra esse dado; nós o produzimos. É argumento de funding.
+
+##### O funding é o gargalo real — e ele responde à pergunta da receita
+
+Crédito de 20 anos exige dinheiro de 20 anos. **E o vendedor não quer esperar 20 anos** — ele
+quer o dinheiro. Alguém tem que pôr o principal na mesa hoje:
+
+| Fonte | O que exige | Observação |
+|---|---|---|
+| **Capital próprio** | caixa parado por 240 meses | cada operação consome capital que só volta em 20 anos: não escala |
+| **Cessão a banco/fundo** | recebível padronizado, com garantia registrada | o caminho mais curto |
+| **CRI via securitizadora** (Lei 14.430/2022) | securitizadora + agente fiduciário + lastro | **feito sob medida** para recebível imobiliário de prazo longo |
+| **FIDC** | volume, gestor e administrador habilitados, estrutura de cotas | faz sentido depois de escala |
+
+> **A síntese que fecha o desenho de 4a-ter:** originar e **ceder** — em vez de carregar — é o que
+> permite ganhar o percentual da intermediação **sem** imobilizar capital por 20 anos. A resposta
+> do funding e a resposta da receita são a mesma resposta. E note: **nenhuma dessas fontes compra
+> recebível sem alienação fiduciária registrada.** A garantia não vale só na inadimplência; ela é
+> pré-requisito para o dinheiro existir.
+
+##### 🟢 A retomada é a nossa casa — e é o ponto mais forte da ideia
+
+A Lei 9.514/1997 já desenha exatamente o que o dono descreveu: inadimplindo, o devedor é intimado
+a purgar a mora; não purgando, **consolida-se a propriedade** no fiduciário, que é obrigado a levar
+o bem a **leilão extrajudicial** — primeiro pelo valor de avaliação do contrato, segundo pelo valor
+da dívida. Não vendido no segundo, a **dívida se extingue** e o imóvel fica com o credor; havendo
+sobra, ela é **do devedor**. (A constitucionalidade do rito extrajudicial foi reconhecida pelo STF
+— confirmar a citação com o advogado.)
+
+**O encaixe estratégico é raro:** o remédio do inadimplemento é literalmente o nosso negócio e o
+nosso canal. Quem empresta não tem público de leilão; nós temos, com o acervo, a base e a
+audiência. Isso reduz o custo e o prazo do pior cenário — que é onde crédito imobiliário ganha ou
+perde dinheiro.
+
+> ⚠️ **O contrapeso é de marca, e é sério.** Hoje a BidPro é quem *ajuda a comprar* em leilão.
+> Retomar o imóvel de um cliente e releiloá-lo na nossa própria vitrine é uma posição diferente,
+> e ela aparece no pior dia da vida da pessoa. Não é impeditivo — é decisão consciente, com
+> política de cobrança escrita antes do primeiro contrato, não no primeiro atraso.
+
+##### O seguro: são dois, e vêm com três regras
+
+O que o dono pediu é o **prestamista / MIP** (morte e invalidez permanente), que quita o saldo. Em
+financiamento imobiliário ele nunca anda sozinho: vem com o **DFI** (danos físicos ao imóvel) —
+porque se a garantia pega fogo, não há garantia.
+
+1. **Vender seguro é atividade habilitada.** Receber comissão exige **corretora registrada na
+   SUSEP**, ou parceria em que a corretora/seguradora é quem vende. É uma linha de receita real,
+   e tem porta de entrada.
+2. **Venda casada é proibida** (CDC art. 39, I). Pode-se **exigir** o seguro; não se pode exigir
+   que seja o *nosso*. Apólice equivalente de outra seguradora tem que ser aceita.
+3. **O prêmio entra no CET** e tem que aparecer na simulação, mês a mês — ele encarece a parcela.
+
+> **E há um limite que morde justamente o prazo longo:** prestamista encarece muito com a idade e
+> tem teto de idade final. **Comprador de 55 anos + 20 anos de prazo pode simplesmente não ser
+> segurável.** Ou seja, o prazo máximo não é decisão só nossa — a seguradora decide junto, por
+> idade. Isso entra na política de crédito (passo 3 de 4a-ter), não no fim do fluxo.
+
+##### O módulo por assinatura — locação e venda de patrimônio
+
+**O que já existe:** módulo de contratos com assinatura eletrônica (`contratos_link`), recorrência
+no Mercado Pago, o padrão de conciliação de webhook do Asaas/MP e o `honorarios-split.js` para
+distribuição por percentual. **A máquina está construída; falta o produto em volta dela.**
+
+**O que falta, e é pequeno:** régua de reajuste anual, régua de inadimplência (aviso → notificação
+→ providência), repasse ao proprietário com extrato, e a mensalidade em si.
+
+**Três pontos que precisam de decisão antes do código:**
+
+1. **Administrar locação de terceiro é atividade de imobiliária** (Lei 6.530/1978 — **CRECI**). É o
+   mesmo limite da seção 5. Ou o produto é **software para quem já é habilitado** (a imobiliária,
+   o proprietário), ou a BidPro administra e entra na atividade regulada. **Isto muda tudo, e é
+   pergunta de negócio, não de código.**
+2. **Repassar aluguel é dinheiro de terceiro outra vez** — a armadilha B de 4a-bis, idêntica. Se o
+   boleto sai na conta do proprietário, é software; se cai na nossa e repassamos, é custódia.
+3. **Lei do Inquilinato (8.245/1991)**: periodicidade mínima anual de reajuste, formas de garantia
+   (fiança, caução, seguro-fiança) e o rito de despejo. A régua tem que nascer sabendo disso.
+
+**Precificação a decidir:** valor fixo por contrato administrado (previsível, e não depende de
+valor) × percentual sobre o administrado (escala com o cliente, e se parece mais com corretagem —
+ver ponto 1). Na venda de patrimônio, a mensalidade convive com os 0,5% de 4a: é preciso decidir
+se somam ou se um substitui o outro.
+
+##### O que levar ao advogado (continuação)
+
+13. **Prazo de 10–20 anos**: até onde uma venda a prazo com alienação fiduciária vai sem ser
+    operação privativa de instituição financeira.
+14. **Índice e forma de amortização** em contrato longo: IPCA × IGP-M × TR, SAC × Price, e o que
+    o contrato precisa dizer sobre amortização negativa.
+15. **Rito da Lei 9.514** aplicado a imóvel de origem em arrematação — e a nossa posição de
+    releiloar na própria plataforma (conflito? divulgação?).
+16. **Seguro**: figura para receber comissão (corretora SUSEP própria × parceria) e redação que
+    exige o seguro sem configurar venda casada.
+17. **Administração de locação × CRECI**: software para habilitado × administradora.
+18. **Cessão do recebível** a securitizadora/FIDC: o que o contrato de origem precisa conter desde
+    a primeira via para ser cedível depois (é mais barato nascer cedível do que virar).
+
+##### Decisões que faltam (somam-se às de 4a e 4a-ter)
+
+9. **Prazo máximo do produto** — e a taxa correspondente. 24 meses e 240 meses não são o mesmo
+   produto com outro número de parcelas.
+10. **Parcela e saldo pelo mesmo índice** (sim, provavelmente) e **SAC × Price**.
+11. **Quem administra a locação** — nós ou o cliente habilitado. Define se o módulo é SaaS ou
+    serviço regulado.
+12. **Mensalidade fixa × percentual**, e como ela convive com os 0,5% da venda.
+13. **Idade máxima e prazo máximo por idade**, herdados da regra da seguradora.
+
 ### 4b. Rateio entre sócios
 Arremate em conjunto é comum. Hoje o portfólio é de um `user_id` só.
 
@@ -509,6 +706,7 @@ O que a plataforma precisa suportar para não perder este caso:
 | 4 | **Simulador** de parcelamento (sem cobrança) | 2 | responde "essa proposta é boa?" — a pergunta do Rafael hoje. Barato, não move dinheiro e não depende de advogado |
 | 4.5 | **Parecer jurídico** sobre as listas de 4a-bis e 4a-ter | — | a taxa de 1% a.m. capitalizado entre particulares excede o teto da Lei de Usura; decidir isso ANTES de emitir o primeiro boleto |
 | 4.6 | **Decidir quem come o calote** (4a-ter) | — | é a linha de onde sai toda a conta de capital. Vem antes de figura jurídica, de Inter e de contrato — não custa nada e destrava as outras |
+| 4.7 | **Módulo de contratos + cobrança como assinatura** (4a-quater) | decisão CRECI da locação | **o item de melhor relação custo-benefício do plano inteiro**: a máquina já existe, fatura sem capital, sem regulador financeiro, e produz o histórico de adimplência que qualquer funding vai exigir depois |
 | 5 | Contrato + cobrança (Inter, boleto na conta do vendedor) + conciliação | 4 + 4.5 + 4.6 | vira produto financeiro; só depois do simulador e do parecer |
 | 5.5 | **Aprovação de crédito** (os 7 passos de 4a-ter) | 5 | sem ela, 24× é aposta com o dinheiro do vendedor. Os passos 1 e 6 já existem (KYC, contratos); o custo novo é bureau + política escrita |
 | 6 | Vitrine `/venda/:id` | suas 3 definições da seção 5 | receita nova, sem depender de terceiro |
