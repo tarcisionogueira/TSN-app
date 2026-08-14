@@ -501,9 +501,9 @@ REGRA IMPORTANTE: se algum dado (ex.: débitos, ônus, ocupação) NÃO estiver 
 
 CLASSIFICAÇÃO DE RISCO — REGRAS ESTRITAS (evite alarmismo; leilão de imóvel tem particularidades legais que o comprador leigo desconhece):
 - FINANCIAMENTO A ASSUMIR = RESSALVA MÁXIMA, NAS DUAS MODALIDADES (pedido do dono, 13/08).
-  Avalie SEMPRE, seja o leilão JUDICIAL ou EXTRAJUDICIAL, e preencha `financiamentoAssumido`
-  em qualquer um dos dois. A pergunta é uma só: **depois de arrematar e pagar, sobra alguma
-  dívida de financiamento presa ao imóvel?** Se sobra, é ressalva máxima.
+  Avalie SEMPRE, seja o leilão JUDICIAL ou EXTRAJUDICIAL, e preencha "financiamentoAssumido"
+  em qualquer um dos dois. A pergunta é uma só: DEPOIS DE ARREMATAR E PAGAR, SOBRA ALGUMA
+  DÍVIDA DE FINANCIAMENTO PRESA AO IMÓVEL? Se sobra, é ressalva máxima.
   • No EXTRAJUDICIAL (Lei 9.514, típico Caixa/bancos): em regra a consolidação da propriedade já
     extinguiu o contrato do ex-mutuário e o arrematante recebe livre daquele saldo. MAS há
     editais que preveem o contrário, e há vendas em que o comprador assume um financiamento
