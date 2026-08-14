@@ -55,7 +55,15 @@ export default async function handler(req, res) {
       titulo = 'Assinatura de testemunha — BidPro Brasil';
       desc = 'Você foi indicado(a) como testemunha de um documento. Abra o link para preencher seus dados e assinar.';
     } else if (tipo === 'imovel' && idOk) {
-      destino = `/#/imovel/${id}`;
+      // VISITANTE VAI PARA A PÁGINA PÚBLICA DO LOTE, não para o teaser (14/08, pedido do dono).
+      // O botão Compartilhar existe para mostrar um imóvel a quem NÃO é da plataforma, e o
+      // teaser (`ImovelGate`) dava menos do que a página pública `/leilao/:id` — que é
+      // renderizada no servidor, abre sem JS, tem a ficha completa, a descrição do lote e o
+      // convite de cadastro. Quem JÁ tem conta continua indo direto para a tela do app.
+      // A escolha é feita no NAVEGADOR (script abaixo): a sessão do Supabase mora no
+      // localStorage, então o servidor não tem como saber quem está logado — e um redirect
+      // server-side erraria com metade das pessoas.
+      destino = `/leilao/${id}`;
       titulo = 'Imóvel em leilão — BidPro Brasil';
       // A descrição do preview é a VITRINE do botão Compartilhar: é o que a pessoa de fora vê
       // no WhatsApp antes de decidir se abre. Área, desconto e data da praça entram porque são
@@ -105,7 +113,23 @@ export default async function handler(req, res) {
 <meta name="twitter:image" content="${esc(img)}"/>
 <meta name="robots" content="noindex"/>
 <meta http-equiv="refresh" content="0;url=${esc(destino)}"/>
-<script>location.replace(${JSON.stringify(destino)});</script>
+<script>${tipo === 'imovel' && idOk ? `
+// Quem tem sessão válida do Supabase (chave sb-<ref>-auth-token no localStorage) vai para a
+// tela COMPLETA do app; os demais para a página pública do lote. Sessão EXPIRADA conta como
+// visitante — mandar para o app só para cair no teaser é um passo a mais sem nada em troca.
+(function () {
+  var app = ${JSON.stringify(`/#/imovel/${id}`)}, publico = ${JSON.stringify(destino)}, logado = false;
+  try {
+    for (var i = 0; i < localStorage.length; i++) {
+      var k = localStorage.key(i);
+      if (!k || !/^sb-.+-auth-token$/.test(k)) continue;
+      var s = JSON.parse(localStorage.getItem(k) || 'null');
+      var exp = s && (s.expires_at || (s.currentSession && s.currentSession.expires_at));
+      if (s && (!exp || Number(exp) * 1000 > Date.now())) { logado = true; break; }
+    }
+  } catch (e) { /* storage bloqueado (aba privada): trata como visitante */ }
+  location.replace(logado ? app : publico);
+})();` : `location.replace(${JSON.stringify(destino)});`}</script>
 </head><body>Redirecionando… <a href="${esc(destino)}">continuar</a></body></html>`;
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=600');
