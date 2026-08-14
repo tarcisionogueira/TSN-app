@@ -1366,3 +1366,84 @@ de 9.2). Vender add-on cujo gate é visual é vender o que qualquer um pega.
 39. **Onde cada gatilho de upsell aparece**, e qual o teto de insistência por usuário.
 40. **Os módulos são independentes entre si?** (contratos sem patrimônio? venda parcelada sem
     contratos?) — define se são três SKUs ou um pacote.
+
+---
+
+## 12. Leilão é o foco — e a porta de entrada por LP (dono, 14/08)
+
+> "Lembra que o **foco principal é sempre o módulo de Leilões**; isso aí seria **a mais** para
+> disponibilizar na plataforma. Talvez possamos criar uma **landing page específica** para a
+> pessoa **criar uma conta e contratar** também, e cairia na **mesma tela dos leilões**, com a
+> conta **Explorador**, só que com a **função adicional** dela."
+
+### 12.1 A hierarquia vira regra — com um teste
+
+Já estava na regra 9.1 como princípio. Fica como **critério de decisão**, aplicável a qualquer
+proposta deste documento:
+
+> **Se a mudança piora a tela de leilão para quem só quer leilão, ela está errada** — por mais
+> que venda módulo. Módulo é `a mais`, nunca `em vez de`.
+
+Isso resolve antecipadamente uma classe inteira de discussões futuras: banner de módulo na busca,
+card de crédito acima do resultado, aviso de upsell no meio do acervo. Todos reprovam no teste.
+
+### 12.2 A máquina do "crie a conta e contrate" já existe — e foi construída em 10/08
+
+Não é fluxo novo. **Está pronto e em produção para planos:**
+
+| Peça | Onde | O que faz |
+|---|---|---|
+| Guardar a intenção antes do cadastro | `src/pages/Checkout.jsx:657` → `salvarConvite(CHAVE_PLANO, …)` | a pessoa escolhe, o cadastro acontece, a escolha não se perde |
+| Resgatar depois do cadastro | `src/contexts/AuthContext.jsx:296-310` | retoma o plano pendente assim que a sessão existe |
+| Landing de produto | `src/pages/ProdutoLanding.jsx` (517 linhas), rota `/p/:tipo/:id` | a LP em si |
+| Não sequestrar o destino | `CompletarCadastroModal` já trata `/p/` como **destino proposital** | quem veio por uma LP não é jogado para outro lugar |
+
+> **Conclusão prática: LP de módulo é reuso, não construção.** O que falta é a chave carregar
+> **módulo** além de plano — e a LP existir. O caminho inteiro já foi percorrido uma vez.
+
+### 12.3 🟠 O risco desta porta: quem entra por "Imóveis" cai numa tela de leilão
+
+O desenho do dono está certo — **mesma conta, mesma home** — e é o que sustenta a decisão de
+subpath (§9.3): domínio separado quebraria a sessão e obrigaria a um segundo cadastro.
+
+Mas há um atrito real: quem clicou em "administre o aluguel do seu imóvel" e cai numa tela cheia
+de lotes de leilão pode achar que errou de lugar. **A saída não é um app diferente** — é a home
+continuar sendo a de leilão, com um **card "comece por aqui"** do módulo que a pessoa contratou,
+em primeiro lugar na primeira visita e discreto depois.
+
+Isso honra as duas coisas ao mesmo tempo: o leilão segue sendo a tela, e quem veio pela outra
+porta encontra o que comprou sem precisar procurar.
+
+### 12.4 🔴 Este corredor já mordeu hoje
+
+O cadastro do João Paulo, hoje, atravessou: **termos repetidos** → **vídeo marcado como visto** →
+**parou na tela de planos e não voltou para a home**. Foram três correções em um dia, no mesmo
+corredor.
+
+Uma LP que promete "crie a conta e contrate" **acrescenta o checkout a esse corredor**. A regra
+que evita repetir o problema:
+
+> **A promessa da LP define o corredor, e nada mais entra nele:** cadastro → checkout → home com o
+> módulo ligado. Triagem de perfil, vídeo e qualquer passo opcional vêm **depois** — e nenhum
+> deles pode bloquear.
+
+### 12.5 E é aqui que a atribuição finalmente paga a conta
+
+Com LP por vertical + cadastro + contratação na mesma sessão, o funil vira **medível ponta a
+ponta**: visita → cadastro → módulo contratado, por LP. As peças existem (`visita_origem`,
+`perfis.mkt_*`, `marketing_metricas_dia`) — falta a LP carregar os parâmetros, o que é a mesma
+pendência do vazamento medido hoje (**214 cliques pagos × 19 visitas com `gclid`**).
+
+**É esse número que decide qual vertical merece verba** — e sem ele a decisão de onde investir
+vira palpite.
+
+### 12.6 Decisões que faltam
+
+41. **Chave de intenção genérica** — `CHAVE_PLANO` vira "o que a pessoa veio contratar"
+    (plano e/ou módulos), ou nasce uma chave separada.
+42. **Card "comece por aqui"** na home para quem entrou por LP de módulo — quantas visitas ele
+    permanece em destaque.
+43. **Corredor fechado do cadastro por LP** (recomendado): cadastro → checkout → home. Confirmar
+    que triagem e vídeo ficam fora dele.
+44. **Uma LP por módulo × uma LP por marca vertical** (§9.3) — são coisas diferentes e podem
+    coexistir: a marca vende o conceito, a LP de módulo vende o add-on.
