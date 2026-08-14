@@ -1447,3 +1447,43 @@ vira palpite.
     que triagem e vídeo ficam fora dele.
 44. **Uma LP por módulo × uma LP por marca vertical** (§9.3) — são coisas diferentes e podem
     coexistir: a marca vende o conceito, a LP de módulo vende o add-on.
+
+---
+
+## 13. Onde o consórcio entra de verdade (correção do dono, 14/08)
+
+> "O consórcio **não pode ser utilizado no leilão**. Salvo em **aquisições extrajudiciais**, onde
+> você recompra o imóvel — seja aquisição à vista ou financiada através do consórcio —
+> **capitalizando no preço comercial** do imóvel e ficando com a parcela do consórcio."
+
+**Eu tinha escrito o contrário na tela `/alavancagem`** ("a carta é poder de compra à vista, que é
+justamente o que o leilão exige") e o dono corrigiu. A administradora só libera a carta contra
+**compra e venda com escritura e registro**, com o bem em garantia — e o prazo do edital não
+comporta a análise e a liberação. Do jeito que estava, a página levaria alguém a contar com um
+dinheiro que não sairia a tempo, num negócio com **prazo fatal**. Corrigido em `428f0ae`.
+
+### O que isso muda no PLANO, não só na tela
+
+A correção não enfraquece o produto — **reposiciona o consórcio na outra ponta da mesma
+operação**, e essa ponta é justamente a que a seção 4a estava tentando resolver:
+
+| Ponta | Quem precisa de dinheiro | Instrumento |
+|---|---|---|
+| **Arremate** | o nosso cliente, para pagar a praça | **Home Equity** (crédito aprovado ANTES da praça) |
+| **Revenda** | o comprador do imóvel já arrematado | **Consórcio** — carta pelo preço comercial, o vendedor recebe à vista |
+
+> 🟢 **E aqui está o ganho que não é óbvio: o consórcio é uma ALTERNATIVA à venda parcelada de
+> 4a.** Em vez de o nosso cliente financiar o comprador em 24× — assumindo risco de crédito,
+> índice, inadimplência e todo o desenho jurídico de 4a-bis/4a-ter —, o comprador traz uma carta
+> contemplada e paga **à vista**. O vendedor recebe tudo, o comprador fica com a parcela do grupo,
+> e **nenhum dos dois riscos fica conosco**.
+
+Isso não substitui 4a: a carta depende de contemplação, e nem todo comprador tem uma. Mas muda a
+ordem de esforço — **oferecer consórcio ao comprador é mais barato e mais seguro do que originar
+crédito para ele**, e deveria ser tentado primeiro. Reforça a recomendação de 4.8: a família B
+(originação) vem antes do produto financeiro próprio.
+
+**Consequência para a Decisão 24** (ordem da captação da família B): o consórcio deixa de ser
+"público oposto, para depois". Ele tem um público **imediato e identificável** — quem está
+comprando um imóvel arrematado do nosso cliente. Continua valendo o home equity primeiro, porque
+o sinal já está no banco; mas o consórcio ganha um gatilho próprio: **a tela de revenda**.
