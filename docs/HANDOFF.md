@@ -28,6 +28,83 @@
 > Checagem rápida a qualquer momento: `select public.auditoria_seguranca();` → `0 crítico / 0 atenção` = íntegro.
 > **Auditorias ofensivas completas: 15/07/2026 (×2).** Total de correções: 15 (1ª rodada) + escalonamento por convite (CRÍTICO) + IDOR do MP (ALTO) + escala. Refazer a ofensiva quando entrarem rotas/pagamento/RLS novos (a Rotina mensal já faz isso sozinha).
 
+## 🩺 ABERTURA DE 14/08 — diagnóstico, 2 consertos e 3 checagens novas na rotina
+
+> Ritual de abertura rodado às 10h UTC. Heartbeat carimbado. **Segurança 0/0, regras de negócio
+> 0 crítico, nenhuma fonte abaixo do piso aprendido, KYC 0, fila de geocode 0.** O que segue é o
+> que NÃO estava verde — e os dois consertos que já subiram.
+
+### 🔴 CONSERTADO: o espelhamento de documentos estava PARADO (achado hoje, corrigido hoje)
+
+**Sintoma:** `[espelhar-docs] enfileirar 400 {"code":"23514"}` de 4 em 4 horas desde 12/08, e
+**zero** documentos enfileirados em 14/08 (contra 978 em 13/08 e 997 em 12/08).
+
+**Causa-raiz:** `enfileirar_espelho_documentos()` copiava `anexos[].tipo` **cru** do leiloeiro
+para `documento_espelho.tipo`, que tem CHECK restrito a 6 valores. A MEGA passou a publicar 44
+anexos com `tipo: 'proposta'` — rótulo legítimo do site dela, desconhecido nosso. Como o INSERT
+é **uma instrução para o lote inteiro** (limite 500), uma linha inválida derruba o lote TODO. E
+como as 44 nunca entram, elas seguem "novas" e envenenam a rodada seguinte, e a seguinte: o
+enfileiramento morreu de vez assim que a janela de 500 alcançou a primeira delas.
+
+**Por que passou:** o erro só existia no `console.error` da Vercel, e o contador caía para `0` —
+o **mesmo 0** de "não havia nada novo para enfileirar". O cron respondia `ok: true`. É a forma
+**#5 do CLAUDE.md** (freio/erro entregue como conteúdo) num cron cuja razão de existir é
+proteger o documento do cliente contra o leiloeiro tirar o PDF do ar.
+
+**Correção (2 camadas):**
+1. `supabase/migrations/espelho_documentos_tipo_normalizado.sql` — novo `doc_tipo_normalizado()`
+   mapeia o rótulo do leiloeiro (com acento, maiúscula ou abreviado) para a nossa taxonomia e
+   joga **desconhecido em `'outro'`**. Leiloeiro inventar categoria amanhã vira um documento a
+   menos classificado, não a fila inteira parada. **Já aplicada no banco** — a chamada seguinte
+   enfileirou **486** documentos represados.
+2. `api/espelhar-docs-cron.js` — `enfileirados` começa em **`null`**, não 0, e o motivo do erro
+   viaja na resposta (`erro_enfileirar`). "Não consegui" deixa de se parecer com "não havia nada".
+
+### 🟡 CONSERTADO: a assinatura do defeito de proximidades voltou de 0 para 110 — e NÃO é um quarto escritor
+
+A checagem combinada no fechamento de ontem (`pontos_proximos='{}'` com `proximidades_vazios=0`
+tem que continuar em 0) deu **110**. Investigado antes de concluir: **todas CEF, todas com
+`proximidades_em` de 29/07 a 09/08** — ou seja, anteriores à correção de 13/08 12h15 — e todas
+com `atualizado_em` de hoje 09:56, o scrape da CEF. Não é escritor novo: é o **reparo de 13/08
+ter sido de tiro único sobre os lotes ATIVOS**, e a reativação trazer o resíduo de volta.
+Reaplicado o mesmo UPDATE (idempotente): **110 → 0**, os lotes voltaram para a fila do cron.
+
+> **Para as próximas aberturas:** um valor > 0 aqui só é "quarto escritor" se `proximidades_em`
+> for **posterior a 13/08 12h15**. Anterior a isso é resíduo reimportado por reativação, e o
+> conserto é reaplicar o UPDATE de `proximidades_reparo_residuo_job_osm.sql`.
+
+### 🟠 O que está amarelo e é DECISÃO, não conserto
+
+| O quê | Número de hoje | Leitura |
+|---|---|---|
+| **Bright Data — teto** | Ledger travado em **480** desde 12/08 09h | Deixou de ser assunto de orçamento: hoje às 09:39 **TORRES3, VEGAS e CALIL** não foram coletadas ("SEM COTA — coleta não tentada") e **RJLEILOES** bateu `teto_global`. O monitor está honesto (declara o motivo, não finge acervo zero), mas o acervo dessas 4 fontes congela até a decisão de **18/08** |
+| **`proximidades_vazio_falso`** | **617** (limite 300), era 440 ontem | Todos os 617 são vazios **corroborados** (`vazios >= 1`), escritos de 10/08 para cá — é a drenagem prevista, não o defeito. Segue pendente a **calibragem do limite**, que é decisão sua |
+| **Backup off-region (R2)** | **3 dias seguidos** batendo o teto de 1.000 arquivos/rodada, com `arquivos_iguais = 0` | **É o achado mais sério do dia depois do espelho.** Até 11/08 a rodada terminava (536 arquivos, 188 já iguais). De 12/08 em diante ela para no teto sem chegar aos antigos: o backup está **atrás do crescimento diário** do bucket `documentos` (25,0 → 26,8 GB em 24h) e a distância aumenta todo dia. `ok: false` com `falhas: 0` é exatamente isso: nada falhou, só não coube. **Precisa subir o teto por rodada ou rodar mais vezes** — é a única defesa contra perda definitiva de arquivo de cliente |
+| **Pagante sem entrega** | **2 Investidor Pro** sem gerar 1 relatório em 14 dias | Um assinou em **01/07** (6 semanas sem usar). É churn em formação, e aparece aqui antes de aparecer na fatura |
+| **Marketing — vazamento de clique** | **214 cliques pagos** em 14 dias × **19 visitas com gclid** registradas | Ver abaixo |
+| `erros_cliente` | 1 ocorrência, `/imovel/:id` | `Cannot read properties of null (reading 'id')`, 13/08 17:32, **não repetiu**. Com sourcemap ligado o stack agora resolve — se voltar, dá para nomear o arquivo |
+
+### 📣 MARKETING — o número que só aparece cruzando duas fontes
+
+O painel do Google cobrou **214 cliques / R$ 318 / 14 dias** com **1 conversão**. O nosso
+`visita_origem` registrou **19** visitas com `gclid` no mesmo período. Cada número sozinho parece
+saudável; a **razão entre eles** é que denuncia. Parte da distância é esperada (`visita_origem` é
+primeiro-toque por dispositivo e não reconta revisita), mas 214 → 19 é grande demais para ser só
+isso. Fecha o funil: **29 cadastros em 30 dias, 5 atribuídos ao `google` e 24 sem origem
+nenhuma** — e `utm_term` **nulo em 43 de 43** visitas, que é exatamente a pendência **A** da sua
+lista. Enquanto ela não entra, não há como saber qual palavra-chave traz gente; e enquanto o
+vazio de 214→19 não for explicado, não há como saber se o problema é a palavra ou o rastreio.
+
+### ✅ Rotina de abertura AMPLIADA (pedido de hoje) — Cliente 360, Marketing e Saúde do sistema
+
+Entraram no `CLAUDE.md` como **item 1c**, junto do 1b, com as consultas prontas e — o que
+importa mais — **como ler cada uma**: por que `arquivos_iguais = 0` no backup é pior que uma
+falha declarada, por que as três contagens de marketing caem naturalmente (e o que se vigia é o
+tamanho da queda, não a queda), e por que pagante sem relatório é o sinal de churn mais barato
+que existe. Custo zero, mesma regra do 1b: ler o banco não custa nada.
+
+---
+
 ## ✅ CHECKLIST DE 14/08 — o que ficou para o DONO (leia isto primeiro)
 
 > Escrito no encerramento de 13/08, a pedido do dono. **Tudo que não dependia dele já está em

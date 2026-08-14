@@ -77,12 +77,22 @@ export default async function handler(req, res) {
   if (!SUPABASE_URL || !SERVICE_KEY) { res.status(500).json({ error: 'Supabase não configurado' }); return; }
 
   // Reabastece a fila antes de trabalhar: lotes novos entram na ordem da instabilidade da fonte.
-  let enfileirados = 0;
+  //
+  // `enfileirados` começa NULL, não 0. Em 14/08 este contador caiu para 0 por três rodadas
+  // seguidas porque o INSERT do lote inteiro morria num CHECK (um leiloeiro publicou um
+  // `tipo` de anexo fora da nossa taxonomia) — e 0 é indistinguível de "não havia nada novo
+  // para enfileirar". O cron respondia `ok: true` enquanto o espelhamento estava parado.
+  // Agora: null = não consegui enfileirar, e o motivo viaja na resposta (forma #5 do CLAUDE.md).
+  let enfileirados = null;
+  let enfileirarErro = null;
   try {
     const r = await sb('rpc/enfileirar_espelho_documentos', { method: 'POST', body: JSON.stringify({ p_limite: 500 }) });
-    if (r.ok) enfileirados = await r.json().catch(() => 0);
-    else console.error('[espelhar-docs] enfileirar', r.status, (await r.text().catch(() => '')).slice(0, 200));
-  } catch (e) { console.error('[espelhar-docs] enfileirar erro', e?.message); }
+    if (r.ok) enfileirados = await r.json().catch(() => null);
+    else {
+      enfileirarErro = `${r.status} ${(await r.text().catch(() => '')).slice(0, 200)}`;
+      console.error('[espelhar-docs] enfileirar', enfileirarErro);
+    }
+  } catch (e) { enfileirarErro = e?.message || 'erro'; console.error('[espelhar-docs] enfileirar erro', enfileirarErro); }
 
   // A leitura da fila é BINDADA e tem `.ok` checado: antes era
   // `await (await sb(...)).json().catch(() => [])` — uma falha de leitura virava lista vazia,
@@ -227,6 +237,7 @@ export default async function handler(req, res) {
     enfileirados, processados, copiados, falhas, ignorados,
     sem_tempo: semTempo, pendentes, leituras, ms: Date.now() - t0,
     ...(erroLeitura ? { erro_leitura: erroLeitura } : {}),
+    ...(enfileirarErro ? { erro_enfileirar: enfileirarErro } : {}),
   };
   console.log('[espelhar-docs]', JSON.stringify(saida));
   res.status(200).json({ ok: true, ...saida });

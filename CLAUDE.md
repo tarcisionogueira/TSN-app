@@ -63,6 +63,72 @@ curto (5–8 linhas) antes de seguir:
    > `/api/health-check` (2×/dia, **custo zero** — não usa IA; só manda e-mail quando há
    > problema) **continua ligado e deve continuar**. A auditoria do Claude
    > (`auditoria-claude.yml`, ~R$ 43-59) é a que só roda com 7+ dias sem sessão.
+
+   > **1c. CLIENTE 360 · MARKETING · SAÚDE DO SISTEMA — as três telas do negócio** (pedido do
+   > dono, 14/08). Custo zero, mesma regra do 1b: ler o banco não custa nada. As três respondem
+   > perguntas que nenhuma varredura de código responde — *o cliente está sendo servido? o
+   > dinheiro do anúncio está virando gente? o que roda sozinho ainda roda?*
+   >
+   > **(a) CLIENTE 360 — o cliente está recebendo o que pagou?**
+   > ```sql
+   > -- painel agregado (é o que a tela /cliente-360 consome): planos, relatórios, falhas, funil
+   > select public.admin_360_estatisticas();
+   > ```
+   > Verde = `clientes_com_erro: 0` **e** `relatorios_falha_24h: 0`. `relatorios_falha_7d` alto
+   > com `falhas_recentes` repetindo o MESMO motivo é sintoma de fonte/gate quebrado, não de
+   > azar. Olhe também `por_plano` × `relatorios`: **pagante que não gerou nada é churn em
+   > formação** — mais barato ver aqui do que na fatura. E `sem_perfil` (triagem não respondida)
+   > é o que faz o e-mail de oportunidade sair genérico.
+   > ```sql
+   > -- pagante sem entrega: assinou e não gerou UM relatório em 14 dias
+   > select p.id, p.role, p.created_at::date assinou
+   >   from perfis p
+   >  where p.role in ('top2','assessorado','clube') and p.ativo
+   >    and not exists (select 1 from analises_mercado a where a.user_id=p.id and a.created_at > now()-interval '14 days')
+   >  order by 3;
+   > ```
+   >
+   > **(b) MARKETING — o que a verba comprou, e quanto disso chegou aqui**
+   > ```sql
+   > -- gasto × cliques × conversões (a ingestão roda ~10h50 UTC e traz o dia ANTERIOR:
+   > -- antes disso, "último dia = anteontem" é normal, não atraso)
+   > select data, canal, gasto, cliques, conversoes from marketing_metricas_dia
+   >  where data > current_date - 14 order by data desc;
+   > -- O CRUZAMENTO QUE IMPORTA: clique PAGO (painel do Google) × visita que o nosso
+   > -- rastreador registrou. Em 14/08: 214 cliques em 14 dias × 19 visitas com gclid.
+   > -- Um número sozinho parece saudável; é a razão entre os dois que denuncia perda.
+   > select (select sum(cliques) from marketing_metricas_dia where data > current_date-14) as cliques_pagos,
+   >        count(*) filter (where gclid is not null or gbraid is not null or wbraid is not null) as visitas_com_gclid,
+   >        count(*) filter (where utm_term is not null) as com_utm_term,  -- 0 = pendência A do dono
+   >        count(*) as visitas_14d
+   >   from visita_origem where primeira_em > now() - interval '14 days';
+   > -- fecha o funil: o cadastro sabe de onde veio? (perfis.mkt_* é gravado no cadastro)
+   > select coalesce(mkt_utm_source, case when mkt_gclid is not null then '(gclid sem utm)' else '(sem origem)' end) origem,
+   >        count(*) cadastros from perfis where created_at > now() - interval '30 days' group by 1 order by 2 desc;
+   > ```
+   > **Não confunda as três contagens**: `marketing_metricas_dia` é o que o Google COBRA;
+   > `visita_origem` é primeiro-toque por dispositivo (não conta revisita); `perfis.mkt_*` é
+   > cadastro atribuído. Elas caem naturalmente nessa ordem — o que se vigia é o TAMANHO da
+   > queda, não o fato de haver queda.
+   >
+   > **(c) SAÚDE DO SISTEMA — o que roda sozinho ainda roda?**
+   > ```sql
+   > -- o health-check já rodou por nós 2×/dia; leia o veredito em vez de refazer o trabalho
+   > select executado_em, resumo, jsonb_agg(i) filter (where i->>'status' <> 'ok') as nao_ok
+   >   from health_check_logs, lateral jsonb_array_elements(itens) i
+   >  where executado_em > now() - interval '36 hours' group by 1,2 order by 1 desc limit 2;
+   > -- invariantes de dado (alerta = acima do limite) + backup off-region
+   > select * from public.qa_invariantes() where status <> 'ok';
+   > select executado_em, ok, arquivos_total, arquivos_novos, arquivos_iguais, falhas
+   >   from backup_execucoes order by executado_em desc limit 5;
+   > ```
+   > **Como ler o backup — a armadilha é `arquivos_iguais = 0`.** O job copia até 1.000 arquivos
+   > por rodada. Enquanto ele TERMINA a varredura, `arquivos_iguais` vem alto (achou o que já
+   > estava lá). Quando bate no teto de 1.000 com `iguais = 0`, ele nem chegou aos antigos:
+   > está **atrás do crescimento diário**, e a distância aumenta todo dia. `ok: false` com
+   > `falhas: 0` é exatamente isso — nada falhou, só não coube. Foi o estado encontrado em
+   > 14/08 (3 dias seguidos no teto), e o backup off-region é a única defesa contra perda
+   > definitiva de arquivo de cliente.
 2. **Captura — bug bounty dos leiloeiros (AUTO-APRENDIDO)**: o monitor APRENDE o "normal" de
    cada leiloeiro do próprio histórico (`fonte_baseline_aprendida()` = mín. dos runs saudáveis
    × 0,65) e alerta quando o último scrape cai abaixo — **auto-calibra os ATUAIS e ONBOARDA os
