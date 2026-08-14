@@ -1028,6 +1028,7 @@ jurídica, de parecer, de capital ou de funding.
 | **17** | A unidade de cobrança é o **contrato ativo**, não o imóvel cadastrado — o portfólio segue gratuito | 4a-sexies |
 | — | O cliente pode anexar **matrícula de imóvel próprio fora de leilão** | 4a-sexies |
 | — | Existe **tela do inquilino** (boleto, prestação de contas, comunicação) | 4a-sexies |
+| **27** | **Crédito, consórcio e seguro NÃO são módulos pagos** — são vitrine gratuita com botão de interesse na tela inicial. Quem paga é o parceiro | 10.1 |
 | 5-A | Estrutura do dinheiro **sem** financeira: boleto na conta do vendedor/proprietário | 4a-bis |
 
 ### ⏳ Abertas — em ordem de quanto destravam
@@ -1043,7 +1044,7 @@ jurídica, de parecer, de capital ou de funding.
 | **25** | **Resolvedor único de direito de acesso** × checar papel tela a tela | já são 60 checagens em 17 arquivos de `src/` e 45 em `api/`, com 5 papéis. Cada módulo novo multiplica — e a correção custa 5× mais depois |
 | **19** | **Âncora do imóvel fora de leilão** (matrícula?) sem criar duas ideias de "imóvel" | é muito mais barato nascer assim do que migrar depois — e escala a Decisão 1 |
 | **26** | **Poucos planos empacotando módulos** × preço por módulo | preço por módulo multiplica SKU, suporte e telas de upgrade |
-| **27** | **Família B gratuita ao usuário** (quem paga é o parceiro) | cobrar do cliente e do parceiro pelo mesmo ato transforma recomendação em venda |
+| **31** | **Uma tela por objetivo** × tela de planos + tela de módulos | plano é nível, módulo é capacidade: lado a lado o usuário não sabe se substitui ou soma. Duas telas dobram o problema |
 | **28** | **Subpath** × subdomínio × domínio por marca | domínio separado quebra a sessão única — e a tese é uma conta atravessando os módulos |
 | **23** | **Faixas de preço** pela métrica normalizada (custo para N contratos) · implantação zero | comparar tabela sem normalizar a unidade dá número plausível e errado |
 | **24** | Ordem da captação da família B: **home equity antes de consórcio** | o sinal do home equity já está no banco; consórcio depende de parceria |
@@ -1106,7 +1107,11 @@ esconder análise ou encher a busca de oferta destrói o funil que sustenta todo
 | Papéis existentes | `admin` · `top2` · `assessorado` · `clube` · `explorador` (+ `parceiro`, `equipe`) |
 
 Cinco papéis × cinco módulos = **25 combinações** a responder em ~62 arquivos. Hoje cada tela
-pergunta por conta própria — e isso é exatamente a família de defeito que o `CLAUDE.md` já
+pergunta por conta própria
+
+> ↪️ **Corrigido na seção 10:** com crédito, consórcio e seguro fora da grade de preço, sobram
+> **dois** módulos pagos — 8 combinações, não 25. A dívida de hoje (60 + 45 checagens) continua
+> existindo; a urgência é menor do que esta conta sugeria. — e isso é exatamente a família de defeito que o `CLAUDE.md` já
 cataloga (o "Arrematei" que aparecia sem os três relatórios prontos).
 
 > ✅ **A correção é barata e é agora, no papel:** **um resolvedor único de direito de acesso** —
@@ -1186,3 +1191,95 @@ formulário de interesse com contagem é a pesquisa de mercado mais barata que e
 28. **Subpath** (recomendado) × subdomínio × domínio por marca.
 29. **O que acontece ao desligar um módulo** — leitura preservada, escrita bloqueada (recomendado).
 30. **Quais verticais ganham LP primeiro**, e quais entram como lista de espera.
+
+---
+
+## 10. Planos × módulos — como apresentar (dono, 14/08)
+
+> "Agora que falou, de fato o **crédito não faz sentido** [como módulo pago]. É melhor colocar um
+> **botão na tela inicial**, como o consórcio e o home equity, e um **material apresentando o que é
+> cada modalidade**, para a pessoa **se habilitar informando qual tem interesse**. Agora teria a
+> tela de planos e a tela de módulos — ou ver outra forma de apresentar isso, pois temos o
+> **Explorador, o Investidor Pro, a Assessoria e o Leilão Club** no que fala de leilão, mas o
+> usuário também pode querer **administrar os seus imóveis, vendê-los e gerenciar os contratos**."
+
+**Ainda é desenho.** Nada disto vai para tela.
+
+### 10.1 Tirar o crédito da grade de preço simplifica mais do que parece
+
+✅ **Confirma a Decisão 27** — e o efeito é maior do que uma linha de preço a menos. A seção 9.2
+contava **cinco** módulos na matriz de direito de acesso. Com crédito, consórcio e seguro fora
+dela, sobram **dois módulos pagos** (patrimônio/contratos e venda parcelada). A conta cai de
+25 combinações para 8.
+
+> O resolvedor único de acesso (Decisão 25) **continua valendo** — 60 checagens em 17 arquivos de
+> `src/` e 45 em `api/` já são a dívida de hoje, sem módulo novo nenhum. Mas a urgência diminuiu,
+> e é justo dizer isso.
+
+**O desenho da vitrine da família B:**
+
+| Peça | O que é |
+|---|---|
+| **Botão na tela inicial** | um card por modalidade — Crédito com garantia · Consórcio · Seguro |
+| **Material** | o que é, para quem serve, o que exige, o que custa. **Educativo, não recomendação** |
+| **"Tenho interesse"** | formulário curto: modalidade, valor pretendido, consentimento explícito |
+| **Registro** | `interesse_modalidade` (usuário, modalidade, data, consentimento, status do encaminhamento) |
+
+> 💡 **E isto pode subir antes de existir parceiro** — desde que a tela diga a verdade
+> ("estamos abrindo esta modalidade; deixe seu interesse"), sem simular oferta que não existe.
+> **É a pesquisa de mercado mais barata do plano inteiro:** a contagem por modalidade decide qual
+> parceria vale a pena buscar primeiro, em vez de negociar às cegas.
+
+**Três regras, herdadas de 4a-ter e 9.3:** identificar a instituição parceira quando ela existir
+(não somos a instituição); informar como somos remunerados, na tela; e **não tomar o lugar da
+base** — card em posição secundária, nunca competindo com a busca de leilão (regra 9.1).
+
+### 10.2 Por que "tela de planos + tela de módulos" incomoda: são unidades incomparáveis
+
+O desconforto do dono tem causa técnica. **Plano é um nível; módulo é uma capacidade.** Lado a
+lado na mesma grade, o usuário não consegue responder a única pergunta que importa — *isto
+substitui ou soma ao que eu já pago?*
+
+É a mesma família de erro da pesquisa de preço de 4a-sexies: R$ 49 por imóvel e R$ 247 por
+imobiliária num quadro só produzem uma comparação de aparência correta e sem sentido. **Duas
+telas de preço não resolvem — dobram o problema**, porque agora o usuário precisa cruzar as duas
+de cabeça.
+
+### 10.3 A proposta: uma tela só, organizada por OBJETIVO
+
+Em vez de "Planos" e "Módulos", uma tela cujas seções são **o que a pessoa quer fazer**. O SKU
+aparece dentro do objetivo, nunca ao lado de um SKU de outro eixo:
+
+| Objetivo | O que é | Como cobra |
+|---|---|---|
+| **Encontrar oportunidade em leilão** | a escada que já existe: **Explorador (grátis) → Investidor Pro → Assessoria → Leilão Club** | inalterada |
+| **Administrar meu patrimônio** | contratos, cobrança, prestação de contas, tela do inquilino — **imóvel de leilão ou não** | **faixa por contrato ativo** (Decisão 17) |
+| **Vender / parcelar** | contrato de venda, simulador, plano de parcelas | ver 4a — decisão em aberto |
+| **Contratar crédito, consórcio ou seguro** | vitrine da família B | **grátis** — quem paga é o parceiro |
+
+**Por que isto resolve:** cada eixo tem a sua própria unidade e nunca é comparado com a do outro.
+Quem só quer administrar o próprio imóvel não precisa entender a escada de leilão para ignorá-la —
+e quem só quer leilão não vê preço de contrato.
+
+**Três cuidados no desenho:**
+
+1. **O Explorador grátis tem que sobreviver.** Ele é a aquisição (regra 9.1). Quem anexa a
+   matrícula para administrar precisa poder começar sem pagar — a mensalidade entra com o
+   **primeiro contrato ativo**, que é exatamente a unidade já decidida.
+2. **Não estender a escada de leilão para o patrimônio.** "Patrimônio Club" faria o usuário
+   procurar o degrau equivalente, que não existe. Nome por unidade, não por nível
+   (ex.: *Patrimônio — até 3 contratos*).
+3. **Nunca somar duas escadas na mesma linha.** O total mensal aparece uma vez, no fim, com as
+   parcelas discriminadas — plano de leilão + faixa de patrimônio. É a diferença entre "R$ X e
+   R$ Y" e "R$ X + Y = Z".
+
+### 10.4 Decisões que faltam
+
+31. **Uma tela por objetivo** (recomendado) × tela de planos + tela de módulos.
+32. **Onde o card da família B fica na tela inicial** — e a confirmação de que não compete com a
+    busca.
+33. **Subir a vitrine antes de haver parceiro**, com texto de "estamos abrindo" (recomendado) ×
+    esperar a parceria.
+34. **Nome da faixa de patrimônio** — por unidade, fora da escada de leilão.
+35. **O que o Explorador grátis inclui** no eixo patrimônio (recomendado: cadastrar e avaliar
+    imóvel próprio; cobrar só no primeiro contrato ativo).
