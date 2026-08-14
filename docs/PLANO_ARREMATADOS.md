@@ -6,6 +6,10 @@
 > Índice BidPro. **O acervo tem 2 arrematados e 2 lançamentos.** O plano não é construir a
 > funcionalidade — é descobrir por que ela não é usada, fechar as pontas e cobrir dois casos
 > reais que o dono trouxe do cliente do Rafael.
+>
+> ⚠️ **Isto é planejamento. Nada nas seções 4a, 4a-bis e 4a-ter foi implementado, e nenhuma delas
+> deve virar código antes das decisões que cada uma lista** (dono, 14/08: *"essa parte não é pra
+> colocar nada em efetivo — estamos apenas desenhando para, no momento certo, implantar"*).
 
 ---
 
@@ -188,6 +192,9 @@ de quem quer revisar o contrato depois de 18 parcelas pagas.
 3. Estruturar via instituição financeira parceira — aí o teto não se aplica, mas o produto deixa
    de ser nosso.
 
+> ↪️ **A saída 3 deixou de ser hipotética:** o dono está avaliando **abrir a financeira**. Isso
+> resolve este bloqueio — e cria outros. Ver **4a-ter**, logo abaixo.
+
 ##### 🟠 O segundo ponto: de quem é o dinheiro no caminho
 
 É aqui que a escolha do Inter decide a exposição regulatória, e **a diferença não aparece na
@@ -242,6 +249,190 @@ de crédito que não somos autorizados a fazer.
    plataforma **não** faz.
 6. Se o comprador for consumidor: CDC, direito à informação do CET e à quitação antecipada com
    redução proporcional dos juros (art. 52, §2º) — **isto o simulador precisa saber calcular.**
+
+#### 4a-ter. A financeira própria, a aprovação de crédito e o percentual da intermediação (dono, 14/08)
+
+> "Essa parte não é pra colocar nada em efetivo — estamos fazendo apenas um **planejamento**.
+> Ainda teria a questão de fazer uma **aprovação de crédito** e outras funções nesse fluxo. Estou
+> desenhando para, no momento certo, fazer a implantação. Estou avaliando **abrir um CNPJ de
+> financeira** justamente para poder fazer essas cobranças, mantendo o fluxo pela plataforma —
+> o **BidPro seria o moderador** e a **operação seria pela financeira**. A intenção é **ganhar um
+> percentual da intermediação financeira**."
+
+**Nada aqui vira código.** Esta seção existe para que a decisão, quando vier, já esteja tomada em
+cima do mapa certo. Continua valendo: **não sou advogado, e isto não é parecer.**
+
+##### O que a financeira muda no que está escrito em 4a-bis
+
+| Ponto | Sem financeira (4a-bis) | Com financeira |
+|---|---|---|
+| Teto de juros | 🔴 1% a.m. capitalizado = **12,68% a.a.** contra o teto de **12%** da Lei de Usura | 🟢 **resolvido** — Súmula 596 do STF afasta o teto para instituição financeira, e a capitalização passa a ser admitida |
+| Caminho do dinheiro | 🟠 recomendei o boleto **na conta do vendedor**, só para o dinheiro não nos tocar | 🟢 a recomendação **cai**: passar dinheiro de terceiro é exatamente o que uma IF é autorizada a fazer |
+| Taxa administrativa | 🟢 serviço prestado ao **vendedor**, com NF e ISS | 🔴 **piora** — ver abaixo |
+
+##### 🔴 A inversão que ninguém espera: virar financeira LIBERA o juro e TRAVA a taxa
+
+A analogia do dono ("como funciona no financiamento bancário: o cliente recebe o valor corrigido e
+a gente recebe um percentual administrativo em cima") tem um problema que só aparece **depois** de
+virar banco: instituição financeira **não pode cobrar de pessoa física a tarifa que quiser**. A
+lista de tarifas é **taxativa** (Res. CMN 3.919/2010), e a antiga TAC — Taxa de Abertura de
+Crédito, que é literalmente "percentual administrativo em cima" — foi **proibida** (Res. CMN
+3.518/2007) e a proibição confirmada pelo **STJ em recurso repetitivo** (REsp 1.251.331), com
+devolução do que foi cobrado.
+
+O paradoxo, então:
+
+> **Hoje**, sem ser financeira, a taxa administrativa é fácil (serviço ao vendedor) e o juro é
+> difícil (teto de 12%). **Como financeira**, o juro fica fácil e a taxa administrativa
+> — cobrada do comprador PF — fica difícil.
+
+Isso não mata a ideia; **muda de onde sai a receita**. As três origens legítimas do "percentual da
+intermediação", em ordem de solidez:
+
+1. **Spread** — a financeira empresta a X% e capta/remunera o investidor a Y%; a diferença é a
+   receita. É o modelo bancário de verdade, e o único que **não depende de tarifa nenhuma**.
+2. **Serviço ao VENDEDOR** — administração do recebível, correção, cobrança, prestação de contas.
+   É o que já está desenhado em 4a-bis e continua valendo **com ou sem** financeira.
+3. **Comissão da instituição** — se a IF for de terceiro, a BidPro é **correspondente** e recebe
+   dela, não do cliente (ver a tabela seguinte).
+
+O que **não** funciona: um percentual administrativo cobrado do comprador PF dentro da operação
+de crédito. É esse desenho específico que a Res. 3.919 e o repetitivo do STJ bloqueiam.
+
+##### As quatro figuras possíveis — e só uma exige milhões
+
+"Abrir um CNPJ de financeira" tem quatro leituras muito diferentes de custo. **Financeira** com
+nome e sobrenome é **SCFI** (Sociedade de Crédito, Financiamento e Investimento), e é a mais cara
+das quatro:
+
+| Figura | Autorização BCB | Capital mínimo | O que pode | Como a BidPro ganha |
+|---|---|---|---|---|
+| **Correspondente bancário** (Res. CMN 4.935/2021) | **não precisa** — quem responde é a instituição contratante | **zero** | originar, cadastrar, receber e encaminhar propostas para uma IF parceira | **comissão paga pela IF** — e é a única remuneração admitida (não pode cobrar do cliente) |
+| **SEP** — Sociedade de Empréstimo entre Pessoas (Res. CMN 4.656/2018) | sim | **R$ 1 milhão** | conectar credor e devedor em plataforma eletrônica, **sem emprestar dinheiro próprio** | **tarifa de intermediação** — é literalmente "BidPro moderador, ganhando percentual da intermediação" |
+| **SCD** — Sociedade de Crédito Direto (Res. CMN 4.656/2018) | sim | **R$ 1 milhão** | emprestar **capital próprio** por plataforma eletrônica; ceder o crédito a FIDC/securitizadora | **juro/spread** — e o risco de crédito é dela |
+| **SCFI / "financeira"** (Res. CMN 4.970/2021 e anteriores) | sim, processo completo | **na casa dos milhões** (confirmar a faixa vigente com o BCB) | financiamento amplo, captação via LF/RDB, funding institucional | spread + carteira |
+
+> **A figura que descreve exatamente a frase do dono é a SEP**, não a SCFI: moderador que conecta
+> quem tem o recebível a quem paga, ganhando percentual da intermediação, **sem** pôr capital
+> próprio nem assumir o calote. A SCFI só é necessária se a intenção for **emprestar dinheiro
+> nosso** — e aí a pergunta deixa de ser jurídica e vira de caixa.
+
+**E há um caminho antes de todos:** enquanto a operação for **eventual**, a venda a prazo é do
+vendedor e o recebível pode ser **cedido** (cessão de crédito civil) sem instituição nenhuma. O
+que atrai a exigência de autorização é a **habitualidade e a profissionalidade** — fazer disso um
+negócio recorrente. Ou seja: dá para provar o produto com 5, 10 operações antes de decidir a
+figura. **Essa é a recomendação de sequência.**
+
+##### O que "abrir um CNPJ de financeira" realmente pede
+
+Não é abertura de empresa; é **processo de autorização**, e ele não termina no dia do alvará:
+
+- **Fit & proper** dos controladores e administradores (idoneidade, comprovação de origem do
+  patrimônio) — o BCB analisa pessoa por pessoa.
+- **Capital integralizado** e mantido — não é caixa de giro, é requisito permanente.
+- **PLD/FT** completo (Circular BCB 3.978/2020): política, KYC próprio, monitoramento, comunicação
+  ao COAF. Isto é **estrutura de pessoas**, não um módulo.
+- **Contabilidade COSIF**, auditoria independente, **ouvidoria** (Res. CMN 4.860/2020), SCR e
+  reportes periódicos ao BCB.
+- **Prazo realista:** meses a mais de um ano entre protocolo e autorização.
+
+> Custo recorrente de conformidade é o item que mais surpreende: ele existe **mesmo com zero
+> operação no mês**. Antes de decidir, o número que importa não é o capital mínimo — é o
+> **custo fixo anual de estar autorizado** contra a receita que 24 parcelas de um lote geram.
+
+##### 🟠 O conflito que ameaça o ativo principal
+
+O produto inteiro se sustenta em uma coisa: **a análise da BidPro é isenta**. É o que faz o
+relatório valer, e é o que o item 4c já protege ("informar, nunca aconselhar").
+
+Se a mesma plataforma que diz "este lote vale a pena" também **ganha percentual do financiamento
+da venda dele**, o incentivo passa a existir — e basta existir para contaminar. Duas travas para
+desenhar desde já, antes de qualquer linha:
+
+1. **Divulgação obrigatória** da remuneração na tela onde a proposta aparece. Não em termos: na
+   tela.
+2. **Separação dura**: nenhum dado do motor de crédito pode entrar no relatório, e nenhuma meta
+   de originação pode alcançar quem gera análise. É candidato natural a **invariante em
+   `qa_invariantes()`** — o rastro é verificável: relatório cujo conteúdo mudou depois de haver
+   proposta de crédito no mesmo imóvel.
+
+##### A aprovação de crédito — o fluxo que o dono apontou como faltante
+
+Sem ela, "50% em 24×" é uma aposta feita com o dinheiro do vendedor. O desenho, em sete passos,
+marcando o que **já existe** na base:
+
+| # | Passo | O que usa hoje | O que falta |
+|---|---|---|---|
+| 1 | **Identificação** do comprador | KYC já existe: `usuario_docs`, `api/validar-selfie.js`, o gate do saque | reaproveitar como gate da proposta |
+| 2 | **Consulta a bureau** (Serasa/Boa Vista/SPC) | — | contrato + **custo por consulta** (é despesa variável por proposta, entra no preço) |
+| 3 | **Capacidade de pagamento** | — | renda declarada × comprometimento máximo; regra escrita, não critério de quem olha |
+| 4 | **Garantia** | — | ver a armadilha de sequência, abaixo |
+| 5 | **Decisão** | — | motor de regras + **política de crédito escrita**. Pela regra §2b do `CLAUDE.md`, a política vive em `regra_negocio` com `aplicada_por` — senão a auditoria acusa, que é o ponto |
+| 6 | **Formalização** | módulo de contratos (`contratos_link`, assinatura eletrônica) | anexar o plano aprovado e, havendo garantia, o registro |
+| 7 | **Registro da decisão** | — | **por que** aprovou ou negou, com data e versão da política. É o que se pede em auditoria e o que o cliente tem direito de saber |
+
+**Três obrigações que nascem junto com o passo 2, e não depois:**
+
+- **LGPD art. 20** — decisão automatizada que afeta interesses do titular dá direito a **revisão**.
+  Motor automático exige caminho humano disponível, não como exceção.
+- **Motivo da negativa** — negar crédito sem dizer por quê não se sustenta (CDC art. 43 e Lei do
+  Cadastro Positivo 12.414/2011). O passo 7 existe também por isso.
+- **Base legal para consultar bureau** — consentimento específico no fluxo, não enterrado no termo
+  de uso. Cai bem no aceite único que acabamos de unificar no cadastro.
+
+Esboço de dado (**planejamento, nenhuma migração escrita**): `credito_solicitacao` (proposta,
+comprador, imóvel, valor, prazo) · `credito_analise` (consulta, score, capacidade, decisão,
+motivo, política aplicada) · `credito_politica` (versionada — a decisão de ontem tem que continuar
+explicável pela política de ontem).
+
+##### A armadilha de sequência da garantia — específica de imóvel arrematado
+
+A alienação fiduciária (Lei 9.514/1997) é o que torna 24× financiável sem assumir risco de verdade:
+inadimplindo, retoma-se o bem. **Só que ela só existe depois de registrada no RI** — e não se dá em
+garantia o que ainda não está no nome do devedor.
+
+No nosso caso o imóvel vem de **arrematação**: entre a carta e o registro há prazo, custo (ITBI,
+emolumentos) e, às vezes, disputa. Quer dizer que **existe uma janela em que o parcelamento já
+começou e a garantia ainda não vale** — e é exatamente a janela em que a inadimplência inicial
+acontece. É a mesma família de defeito do item 4a, armadilha 1: **o papel diz que está garantido
+antes de estar**.
+
+Saídas a considerar no desenho: exigir registro concluído como condição da liberação; sinal maior
+enquanto a garantia não existe; ou seguro/fiança cobrindo só a janela.
+
+##### A pergunta que decide tudo: quem come o calote?
+
+| Se… | Então… |
+|---|---|
+| **o vendedor** assume | somos plataforma; capital ~zero; a receita é serviço/intermediação; é a SEP ou o correspondente |
+| **nós** assumimos (antecipando ao vendedor) | vira operação de crédito de verdade: **funding** (capital próprio ou FIDC), provisão, cobrança, e a SCD/SCFI deixa de ser opção e vira requisito |
+
+**Toda a conta de capital sai desta linha.** É a primeira coisa a responder — antes de figura
+jurídica, antes de Inter, antes de contrato.
+
+##### O que levar ao advogado / consultor de BCB (continuação da lista de 4a-bis)
+
+7. Qual figura cabe na operação pretendida: **correspondente, SEP, SCD ou SCFI** — e a partir de
+   qual volume a habitualidade exige autorização.
+8. O "percentual da intermediação": **de quem** pode ser cobrado em cada figura, e como se
+   documenta (tarifa da SEP × comissão de correspondente × serviço ao vendedor × spread).
+9. Res. CMN 3.919/2010 e o repetitivo do STJ (REsp 1.251.331): confirmar que a taxa administrativa
+   cobrada do comprador PF é inviável dentro de IF — e se muda algo sendo PJ.
+10. **BidPro "moderadora" × financeira operadora do mesmo grupo**: partes relacionadas, conflito
+    de interesse e o que precisa ser divulgado ao cliente.
+11. Alienação fiduciária de imóvel arrematado: momento em que pode ser constituída e como cobrir
+    a janela sem garantia.
+12. Custo fixo anual de conformidade da figura escolhida — o número que decide se vale.
+
+##### As decisões que faltam (somam-se às de 4a)
+
+5. **Quem assume o risco de crédito** — a linha acima. Decide tudo.
+6. **Financeira própria ou IF parceira** — o correspondente entrega quase a mesma experiência ao
+   cliente por custo próximo de zero; a financeira própria só se paga com volume.
+7. **Onde entra o "investidor"** — captação (a financeira remunera quem põe dinheiro) ou o próprio
+   vendedor recebendo à vista pela cessão? São produtos diferentes.
+8. **Volume mínimo que justifica** — quantas operações por mês pagam o custo fixo de estar
+   autorizado? Sem esse número, a decisão é de gosto.
 
 ### 4b. Rateio entre sócios
 Arremate em conjunto é comum. Hoje o portfólio é de um `user_id` só.
@@ -316,11 +507,19 @@ O que a plataforma precisa suportar para não perder este caso:
 | 2 | `situacao` previsto/realizado + card do realizado (2 e 4a mínimo) | — | impede o lucro falso; é pequeno |
 | 3 | `arrematados.arrematacao_id` + `imovel_id` UUID (Decisão 1) | — | destrava documentos e evita fazer tudo duas vezes |
 | 4 | **Simulador** de parcelamento (sem cobrança) | 2 | responde "essa proposta é boa?" — a pergunta do Rafael hoje. Barato, não move dinheiro e não depende de advogado |
-| 4.5 | **Parecer jurídico** sobre a lista de 4a-bis | — | a taxa de 1% a.m. capitalizado entre particulares excede o teto da Lei de Usura; decidir isso ANTES de emitir o primeiro boleto |
-| 5 | Contrato + cobrança (Inter, boleto na conta do vendedor) + conciliação | 4 + 4.5 | vira produto financeiro; só depois do simulador e do parecer |
+| 4.5 | **Parecer jurídico** sobre as listas de 4a-bis e 4a-ter | — | a taxa de 1% a.m. capitalizado entre particulares excede o teto da Lei de Usura; decidir isso ANTES de emitir o primeiro boleto |
+| 4.6 | **Decidir quem come o calote** (4a-ter) | — | é a linha de onde sai toda a conta de capital. Vem antes de figura jurídica, de Inter e de contrato — não custa nada e destrava as outras |
+| 5 | Contrato + cobrança (Inter, boleto na conta do vendedor) + conciliação | 4 + 4.5 + 4.6 | vira produto financeiro; só depois do simulador e do parecer |
+| 5.5 | **Aprovação de crédito** (os 7 passos de 4a-ter) | 5 | sem ela, 24× é aposta com o dinheiro do vendedor. Os passos 1 e 6 já existem (KYC, contratos); o custo novo é bureau + política escrita |
 | 6 | Vitrine `/venda/:id` | suas 3 definições da seção 5 | receita nova, sem depender de terceiro |
 | 7 | Feed XML para portais (OLX etc.) | 6 + contrato comercial | o XML é barato; o contrato é o caminho crítico |
 | 8 | Rateio entre sócios · fechamento fiscal | — | valor real, sem urgência |
 
 **O que já dá para fazer hoje, sem decisão nenhuma:** subir a carta de arrematação do lote do
 Rafael pela tela de Arrematados. O tipo existe e o upload funciona.
+
+> **Trilha paralela, longa e que não bloqueia nada:** a decisão da figura jurídica de 4a-ter
+> (correspondente · SEP · SCD · SCFI). Autorização do BCB leva meses; a conversa vale começar
+> cedo. Mas **as 5 ou 10 primeiras operações não dependem dela** — venda a prazo do vendedor,
+> com cessão de crédito, não exige figura nenhuma enquanto for eventual. É assim que se prova o
+> produto antes de pagar por estrutura.
