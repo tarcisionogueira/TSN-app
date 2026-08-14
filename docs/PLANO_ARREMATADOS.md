@@ -591,21 +591,61 @@ distribuição por percentual. **A máquina está construída; falta o produto e
 **O que falta, e é pequeno:** régua de reajuste anual, régua de inadimplência (aviso → notificação
 → providência), repasse ao proprietário com extrato, e a mensalidade em si.
 
-**Três pontos que precisam de decisão antes do código:**
+##### ✅ DECISÃO DO DONO (14/08): é software para o dono administrar o PATRIMÔNIO PRÓPRIO
 
-1. **Administrar locação de terceiro é atividade de imobiliária** (Lei 6.530/1978 — **CRECI**). É o
-   mesmo limite da seção 5. Ou o produto é **software para quem já é habilitado** (a imobiliária,
-   o proprietário), ou a BidPro administra e entra na atividade regulada. **Isto muda tudo, e é
-   pergunta de negócio, não de código.**
-2. **Repassar aluguel é dinheiro de terceiro outra vez** — a armadilha B de 4a-bis, idêntica. Se o
-   boleto sai na conta do proprietário, é software; se cai na nossa e repassamos, é custódia.
-3. **Lei do Inquilinato (8.245/1991)**: periodicidade mínima anual de reajuste, formas de garantia
-   (fiança, caução, seguro-fiança) e o rito de despejo. A régua tem que nascer sabendo disso.
+> "A ideia é ser um software para administração de **imóveis próprios**. O dono pode locar e vender
+> o seu imóvel e **não precisa de CRECI**. E ele pode contratar a plataforma para fazer isso."
 
-**Precificação a decidir:** valor fixo por contrato administrado (previsível, e não depende de
-valor) × percentual sobre o administrado (escala com o cliente, e se parece mais com corretagem —
-ver ponto 1). Na venda de patrimônio, a mensalidade convive com os 0,5% de 4a: é preciso decidir
-se somam ou se um substitui o outro.
+**Está certo, e resolve a Decisão 11.** Quem vende ou aluga imóvel **seu** não exerce corretagem: a
+Lei 6.530/1978 regula a **intermediação de negócio alheio**. Proprietário agindo em nome próprio
+não intermedeia nada — e ferramenta que ele usa para isso é software, sem regulador nenhum.
+
+O enquadramento ainda encaixa melhor do que parece: **o nosso cliente já é exatamente esse
+proprietário.** Ele arremata para si, e o produto serve a pessoa que já está na base — não exige
+conquistar imobiliária.
+
+**A linha fica no "contratar a plataforma para fazer isso", e ela tem um lado de cada:**
+
+| A plataforma faz… | Enquadramento |
+|---|---|
+| emitir contrato a partir dos dados que o dono informa, gerar boleto, cobrar, conciliar, avisar atraso, prestar contas, publicar o anúncio **em nome dele** | **execução administrativa** — apoio operacional, não intermediação |
+| achar inquilino/comprador, mostrar o imóvel, negociar preço e condições, opinar sobre a comercialização | **intermediação** — é corretagem (CC art. 722 + Lei 6.530), e aí CRECI volta |
+
+> 🔴 **O detalhe que decide, e é o mesmo item da precificação:** o que mais caracteriza corretagem
+> não é o rótulo do contrato — é a **forma de remuneração**. Mensalidade fixa por imóvel
+> administrado reforça "software/serviço administrativo". **Percentual sobre o negócio fechado é a
+> definição econômica de comissão**, e atrai a caracterização de corretagem por mais que o
+> contrato se chame outra coisa. Ou seja: a **Decisão 12 (fixo × percentual) não é comercial, é a
+> principal prova do que a atividade é.**
+
+**Consequência prática na seção 5 (portais), que muda o desenho técnico:** se o anúncio sai **em
+nome do proprietário**, o feed precisa publicar **por conta de cada dono** — credencial por
+cliente, anunciante = ele. Uma conta profissional única da BidPro publicando imóvel de terceiro em
+volume é justamente o perfil a que os portais pedem CRECI. **Multi-conta é mais trabalho que
+conta única, e é a diferença entre software e corretagem.** Melhor descobrir agora, no papel.
+
+**Os dois pontos que continuam de pé:**
+
+1. **Repassar aluguel é dinheiro de terceiro outra vez** — a armadilha B de 4a-bis, idêntica, e
+   agora com um segundo motivo: reter dinheiro de aluguel alheio é o que mais se parece com
+   **administradora**. Boleto na conta do proprietário mantém o produto como software; cair na
+   nossa e repassar é custódia, e enfraquece o enquadramento que a decisão acima acabou de
+   estabelecer. **As duas razões apontam para o mesmo desenho.**
+2. **Lei do Inquilinato (8.245/1991)**: periodicidade mínima anual de reajuste, formas de garantia
+   (fiança, caução, seguro-fiança) e o rito de despejo. A régua tem que nascer sabendo disso — o
+   fato de o dono ser o locador não afasta a lei, só afasta o CRECI.
+
+**Precificação (Decisão 12, agora com peso jurídico):** valor fixo por imóvel administrado ×
+percentual sobre o negócio. Na venda de patrimônio, a mensalidade convive com os 0,5% de 4a —
+e vale notar que **os 0,5% sobre a venda são exatamente a forma de remuneração que a tabela acima
+sinaliza.** Se a plataforma só executa o que o dono decidiu, defensável; se também aproxima o
+comprador, é o ponto a levar ao advogado (item 17).
+
+> ⚠️ **Um alerta que é do CLIENTE, não nosso — e que este produto torna mais provável:** vender
+> imóvel próprio é ganho de capital; **comprar e revender com habitualidade** pode ser tratado
+> pela Receita como atividade empresarial, com tributação inteiramente diferente. O "Meus
+> Arrematados" incentiva exatamente a repetição. Vale a mesma disciplina do item 4c: **informar,
+> nunca aconselhar** — e mandar para o contador.
 
 ##### O que levar ao advogado (continuação)
 
@@ -617,7 +657,9 @@ se somam ou se um substitui o outro.
     releiloar na própria plataforma (conflito? divulgação?).
 16. **Seguro**: figura para receber comissão (corretora SUSEP própria × parceria) e redação que
     exige o seguro sem configurar venda casada.
-17. **Administração de locação × CRECI**: software para habilitado × administradora.
+17. **Administração de patrimônio próprio × corretagem**: até onde a plataforma pode **executar**
+    pelo proprietário (contrato, cobrança, anúncio em nome dele) sem virar intermediação — e se
+    remuneração percentual sobre o negócio contamina esse enquadramento.
 18. **Cessão do recebível** a securitizadora/FIDC: o que o contrato de origem precisa conter desde
     a primeira via para ser cedível depois (é mais barato nascer cedível do que virar).
 
@@ -626,9 +668,11 @@ se somam ou se um substitui o outro.
 9. **Prazo máximo do produto** — e a taxa correspondente. 24 meses e 240 meses não são o mesmo
    produto com outro número de parcelas.
 10. **Parcela e saldo pelo mesmo índice** (sim, provavelmente) e **SAC × Price**.
-11. **Quem administra a locação** — nós ou o cliente habilitado. Define se o módulo é SaaS ou
-    serviço regulado.
-12. **Mensalidade fixa × percentual**, e como ela convive com os 0,5% da venda.
+11. ~~**Quem administra a locação**~~ — ✅ **decidida em 14/08**: software para o dono administrar
+    o **patrimônio próprio**. Sem CRECI, porque não há negócio alheio. O que resta é a fronteira
+    execução × intermediação, na tabela acima.
+12. **Mensalidade fixa × percentual**, e como ela convive com os 0,5% da venda. **Subiu de
+    importância:** é a principal evidência de que a atividade é serviço e não corretagem.
 13. **Idade máxima e prazo máximo por idade**, herdados da regra da seguradora.
 
 ### 4b. Rateio entre sócios
@@ -676,6 +720,12 @@ figura de quem anuncia.
 > (b) qual a nossa remuneração: comissão sobre a venda, taxa de anúncio, ou destaque pago?
 > (c) o cliente autoriza a divulgação por escrito? Isso é cláusula, não checkbox.
 > **Nenhuma linha de código deve ser escrita antes destas três.**
+>
+> ✅ **(a) respondida em 14/08** (ver 4a-quater): anúncio **do cliente**, publicado em nome dele.
+> **Isso muda o desenho do feed**: em vez de uma conta profissional única da BidPro, é
+> **credencial por proprietário**, com ele como anunciante. Dá mais trabalho — e é exatamente a
+> diferença entre software e corretagem. Conta única publicando imóvel de terceiro em volume é o
+> perfil a que o portal pede CRECI.
 
 ---
 
@@ -706,7 +756,7 @@ O que a plataforma precisa suportar para não perder este caso:
 | 4 | **Simulador** de parcelamento (sem cobrança) | 2 | responde "essa proposta é boa?" — a pergunta do Rafael hoje. Barato, não move dinheiro e não depende de advogado |
 | 4.5 | **Parecer jurídico** sobre as listas de 4a-bis e 4a-ter | — | a taxa de 1% a.m. capitalizado entre particulares excede o teto da Lei de Usura; decidir isso ANTES de emitir o primeiro boleto |
 | 4.6 | **Decidir quem come o calote** (4a-ter) | — | é a linha de onde sai toda a conta de capital. Vem antes de figura jurídica, de Inter e de contrato — não custa nada e destrava as outras |
-| 4.7 | **Módulo de contratos + cobrança como assinatura** (4a-quater) | decisão CRECI da locação | **o item de melhor relação custo-benefício do plano inteiro**: a máquina já existe, fatura sem capital, sem regulador financeiro, e produz o histórico de adimplência que qualquer funding vai exigir depois |
+| 4.7 | **Módulo de contratos + cobrança como assinatura** (4a-quater) | **nada** — o CRECI saiu do caminho com a decisão de 14/08 (patrimônio próprio) | **o item de melhor relação custo-benefício do plano inteiro**: a máquina já existe, fatura sem capital, sem regulador financeiro, e produz o histórico de adimplência que qualquer funding vai exigir depois. **É o único item grande do plano que não depende de decisão nenhuma para começar** |
 | 5 | Contrato + cobrança (Inter, boleto na conta do vendedor) + conciliação | 4 + 4.5 + 4.6 | vira produto financeiro; só depois do simulador e do parecer |
 | 5.5 | **Aprovação de crédito** (os 7 passos de 4a-ter) | 5 | sem ela, 24× é aposta com o dinheiro do vendedor. Os passos 1 e 6 já existem (KYC, contratos); o custo novo é bureau + política escrita |
 | 6 | Vitrine `/venda/:id` | suas 3 definições da seção 5 | receita nova, sem depender de terceiro |
