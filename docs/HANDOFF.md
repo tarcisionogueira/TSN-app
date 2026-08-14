@@ -449,6 +449,43 @@ corrido do parecer. Uma ressalva que depende de o modelo lembrar não é uma res
    severidade — **não depende da redação do parecer para aparecer em destaque**. É a mesma
    escolha do resto do dia: o que importa não pode depender de o modelo lembrar.
 
+### 🔐 SEGURANÇA — hardening feito e o mapa de requisitos (novo: `docs/SEGURANCA_REQUISITOS.md`)
+
+> Intenção do dono: *"não são os certificados, mas atender a todos os requisitos deles para
+> cobrir qualquer eventualidade."*
+
+**Feito em 13/08:**
+- **21 funções próprias ganharam `search_path` fixo** (`public, extensions, pg_temp`) — migração
+  aplicada e espelhada no repo. `pg_temp` por ÚLTIMO de propósito: é a inversão da ordem que é o
+  risco. Verificado: 21 → **0**, e as funções testadas contra dado real continuam corretas.
+  > ⚠️ **Correção de uma afirmação minha, na mesma sessão:** eu classifiquei isso como "vetor
+  > clássico de escalação de privilégio". **Exagerei.** Medido depois, **nenhuma das 21 era
+  > SECURITY DEFINER** — sem DEFINER a função roda com o privilégio de quem chama, então não há
+  > escalação. O risco real era sequestro de RESOLUÇÃO. Corrigir foi certo; a gravidade era menor
+  > do que eu disse, e o registro precisa dizer isso.
+- **15 funções `SECURITY DEFINER` executáveis por anon: auditadas uma a uma, nenhuma ação.**
+  5 são gatilhos (ruído do detector), 5 são públicas por TOKEN por desenho (contrato/convite —
+  quem assina não tem conta), 3 devolvem o papel do próprio chamador, e as 2 que eu havia
+  marcado para revisão foram lidas linha a linha: `obter_arquivo_ebook` só entrega pago com
+  compra ativa; `registrar_imovel_visto` sai se `auth.uid()` for nulo. Corretas.
+- **`extension_in_public` (cube/earthdistance): aceito com registro.** Mover exige recriar os
+  índices geoespaciais do Índice — risco de mudança maior que o do achado.
+- **Advisor: 0 ERROR.** Os 95 WARN decompostos no documento — não são 95 problemas, são ~3.
+
+**Documento novo `docs/SEGURANCA_REQUISITOS.md`** com: mapa de 18 requisitos ISO 27001/SOC 2 pelo
+MÉRITO (✅/🟡/🔴, sem candidatura a certificado), **plano de resposta a incidente** (severidade
+S1–S4, conter antes de entender, preservar evidência antes de corrigir, e o prazo da ANPD —
+3 dias úteis do CONHECIMENTO, Resolução CD/ANPD 15/2024), registro de fornecedores críticos com
+o que acontece se cada um cair, e os 7 itens que dependem do dono com o passo exato.
+
+**Nota de postura: 72 → 80.** Teto sem ação do dono: ~85. O pentest externo sozinho vale ~6.
+
+> **Os 3 itens de maior retorno, todos do dono:** (1) **MFA** em Supabase/Vercel/GitHub — uma
+> senha de admin comprometida entrega o banco inteiro; (2) confirmar **PITR** e testar UMA
+> restauração (backup nunca testado não é backup, é esperança); (3) **pentest externo com laudo**.
+> Detalhe: o canal `privacidade@` está publicado no site e **não recebe** enquanto o MX não for
+> configurado — isso é lacuna de conformidade, não só de produto.
+
 ### 🔥 A PROVA DE FOGO É AMANHÃ ÀS 05h UTC
 
 O job `enriquecer-osm` roda 05:00 UTC. A correção dele foi ao ar às 12h15 de hoje, **depois** da
