@@ -675,6 +675,105 @@ comprador, é o ponto a levar ao advogado (item 17).
     importância:** é a principal evidência de que a atividade é serviço e não corretagem.
 13. **Idade máxima e prazo máximo por idade**, herdados da regra da seguradora.
 
+#### 4a-quinquies. O módulo é um MOTOR de modalidades — e a mensalidade por grupo (dono, 14/08)
+
+> "A plataforma **não** acha o inquilino ou o comprador — a ideia é a primeira opção: gerar o
+> contrato com os dados do dono e todas as demais funções descritas. Penso em cobrar uma
+> **mensalidade por grupo de imóveis**. Ainda é planejamento, nada definido — mas deixe registrado
+> para, ao retomarmos, já termos boa parte do caminho andada. Assim posso administrar um
+> **financiamento**, uma **locação**, intermediar com uma **corretora de seguros**, **consórcio**,
+> **home equity**, entre outras modalidades."
+
+✅ **A fronteira ficou onde deveria:** a plataforma fica na coluna da esquerda da tabela de
+4a-quater — **executa, não intermedeia**. Isso mantém o enquadramento de software/serviço.
+
+##### A frase que muda a arquitetura: "entre outras modalidades"
+
+Isso não é um módulo de locação com primos. É **um motor** — contrato + plano de pagamento +
+régua — com modalidades plugadas. E é exatamente a pergunta da **Decisão 1** deste mesmo plano
+(`arrematacoes` × `arrematados`: uma estrutura ou duas?), agora valendo cinco vezes mais caro:
+**se cada modalidade nascer com tabela própria, a mesma máquina é construída cinco vezes, e a
+quinta chega pior que a primeira.**
+
+##### Duas famílias, e confundi-las é o erro estrutural
+
+| Modalidade | Família | Contraparte | Reajuste | Garantia típica | Na inadimplência | Porta de entrada habilitada | Nossa receita |
+|---|---|---|---|---|---|---|---|
+| **Locação** | **A — administração** | inquilino | anual (Lei 8.245) | fiança · caução · seguro-fiança | notificação → despejo | nenhuma (imóvel próprio) | **mensalidade** |
+| **Venda parcelada / financiamento próprio** | **A** | comprador | mensal, índice do contrato | alienação fiduciária | consolidação → leilão (Lei 9.514) | ver 4a-ter | mensalidade (+ 0,5%, a decidir) |
+| **Seguro** | **B — originação** | segurado | apólice anual | — | cancelamento da apólice | **corretora SUSEP** (própria ou parceira) | comissão do parceiro |
+| **Consórcio** | **B** | consorciado | conforme o grupo | carta / bem alienado | exclusão do grupo | **representante de administradora autorizada** (Lei 11.795/2008 — administrar consórcio é privativo de administradora autorizada pelo BCB) | comissão do parceiro |
+| **Home equity** | **B** | tomador | do banco | alienação fiduciária do imóvel | rito do banco | **correspondente bancário** (Res. CMN 4.935/2021 — sem capital, sem autorização) | comissão da instituição |
+
+**Família A** = nós executamos o contrato e a cobrança. Receita: mensalidade. Motor: contrato →
+parcelas → régua → conciliação.
+**Família B** = o produto é de terceiro; nós apresentamos, acompanhamos e prestamos contas.
+Receita: comissão. Motor: proposta → status → repasse. **Não é o mesmo software**, e tratar as
+duas como uma só é o segundo erro estrutural.
+
+##### 🟢 A família B é a receita mais rápida do plano inteiro — e o público já é nosso
+
+Especialmente o **home equity**. Reparar em quem é o nosso cliente: **arrematou com deságio, e o
+imóvel está quitado.** Isso é, literalmente, o perfil ideal de tomador de crédito com garantia de
+imóvel — e nós **sabemos o portfólio dele**, coisa que o banco não sabe. Como **correspondente**
+não há capital, não há autorização do BCB e não há risco de crédito; a receita é comissão da
+instituição. É o item de menor custo e maior probabilidade de faturar deste documento inteiro,
+e **não depende de nenhuma das decisões de 4a-ter.**
+
+> ⚠️ Vale a mesma trava de conflito de 4a-ter: se a plataforma que diz "este lote vale a pena"
+> também ganha comissão de seguro, consórcio ou crédito, **a remuneração tem que aparecer na tela
+> onde a oferta aparece** — não no termo de uso. Nenhuma meta de originação pode alcançar quem
+> gera análise.
+
+##### O esboço do motor (planejamento — nenhuma migração escrita)
+
+| Tabela | Papel |
+|---|---|
+| `contrato` | uma linha por acordo, com `modalidade` e `imovel_id`. **É a tabela que não pode ser duplicada por modalidade.** |
+| `contrato_parte` | quem é quem (dono, inquilino, comprador, fiador) — evita `inquilino_id` e `comprador_id` como colunas diferentes para a mesma ideia |
+| `plano_pagamento` | valor, nº de parcelas, índice, periodicidade, forma de amortização |
+| `parcela` | previsto × realizado — **a mesma distinção da armadilha 1 de 4a**, e pelo mesmo motivo |
+| `regua_evento` | o que dispara e quando: lembrete, atraso, notificação, providência |
+| `modalidade_config` | o que varia por modalidade — **dado, não código** |
+
+**O que varia entre modalidades é pouco:** índice e periodicidade do reajuste, tipo de garantia,
+rito da inadimplência e base legal. Tudo isso é configuração. **O que não varia — emitir, cobrar,
+conciliar, avisar, prestar contas — é o produto.** Pela regra §2b do `CLAUDE.md`, as regras de
+negócio de cada modalidade vivem em `regra_negocio` com `aplicada_por` preenchido.
+
+##### A mensalidade por grupo — e as quatro armadilhas
+
+A intuição está alinhada com o enquadramento jurídico, e vale dizer por quê: **faixa por
+quantidade não é percentual sobre negócio.** É a forma de cobrança que mais reforça "serviço" e
+menos se parece com comissão — exatamente o que a Decisão 12 precisa (4a-quater).
+
+Desenho: faixas por quantidade (ex.: 1–3 · 4–10 · 11–30 · 31+), preço decrescente por imóvel.
+
+1. **O que conta como "imóvel do grupo"?** Se contar **imóvel cadastrado**, o cliente é punido por
+   usar o portfólio — e "Meus Arrematados" existe justamente para ele cadastrar tudo. **Recomendação:
+   contar CONTRATO ATIVO.** O portfólio segue gratuito (é o produto de hoje, e não se cobra pelo
+   que já é grátis), e a mensalidade acompanha o valor entregue.
+2. **Mudança de faixa no meio do mês** — contrato novo sobe, contrato encerrado desce. Assinatura
+   de **valor fixo no MP não serve** quando a faixa muda: é a mesma armadilha 3 de 4a (parcela
+   variável), agora do nosso lado. Precisa de proração e de uma regra escrita de quando o novo
+   valor passa a valer.
+3. **Quem paga é o DONO** — nunca o inquilino. Na locação é fácil confundir, porque quem recebe o
+   boleto é o inquilino; mas o boleto dele é o **objeto administrado**, não a nossa mensalidade.
+   Cobrar taxa de administração de quem não contratou é problema à parte.
+4. **A mensalidade não pode virar percentual disfarçado** — "faixa por valor administrado" em vez
+   de por quantidade recria exatamente o que a Decisão 12 quer evitar. Faixa por **quantidade**.
+
+##### Decisões que faltam (somam-se às anteriores)
+
+14. **Uma tabela `contrato` para todas as modalidades** (recomendado) × tabela por modalidade.
+15. **Quais modalidades entram, e em que ordem.** Sugestão: locação (A, mais simples e sem as
+    pendências jurídicas de 4a-ter) e **home equity (B, receita rápida)** primeiro.
+16. **Faixas e preços** da mensalidade — e o que fica no plano gratuito.
+17. **Contrato ativo × imóvel cadastrado** como unidade de cobrança (armadilha 1).
+18. **Porta de entrada de cada modalidade da família B:** corretora SUSEP própria ou parceria ·
+    qual administradora de consórcio · qual instituição para o home equity. Cada uma é uma
+    conversa comercial, e nenhuma depende de código.
+
 ### 4b. Rateio entre sócios
 Arremate em conjunto é comum. Hoje o portfólio é de um `user_id` só.
 
@@ -757,6 +856,7 @@ O que a plataforma precisa suportar para não perder este caso:
 | 4.5 | **Parecer jurídico** sobre as listas de 4a-bis e 4a-ter | — | a taxa de 1% a.m. capitalizado entre particulares excede o teto da Lei de Usura; decidir isso ANTES de emitir o primeiro boleto |
 | 4.6 | **Decidir quem come o calote** (4a-ter) | — | é a linha de onde sai toda a conta de capital. Vem antes de figura jurídica, de Inter e de contrato — não custa nada e destrava as outras |
 | 4.7 | **Módulo de contratos + cobrança como assinatura** (4a-quater) | **nada** — o CRECI saiu do caminho com a decisão de 14/08 (patrimônio próprio) | **o item de melhor relação custo-benefício do plano inteiro**: a máquina já existe, fatura sem capital, sem regulador financeiro, e produz o histórico de adimplência que qualquer funding vai exigir depois. **É o único item grande do plano que não depende de decisão nenhuma para começar** |
+| 4.8 | **Família B — originação** (4a-quinquies), começando por **home equity via correspondente** | conversa comercial com a instituição | zero capital, zero autorização, zero risco de crédito — e o público já é nosso: arrematou com deságio e o imóvel está quitado. **Não depende de nenhuma decisão de 4a-ter** |
 | 5 | Contrato + cobrança (Inter, boleto na conta do vendedor) + conciliação | 4 + 4.5 + 4.6 | vira produto financeiro; só depois do simulador e do parecer |
 | 5.5 | **Aprovação de crédito** (os 7 passos de 4a-ter) | 5 | sem ela, 24× é aposta com o dinheiro do vendedor. Os passos 1 e 6 já existem (KYC, contratos); o custo novo é bureau + política escrita |
 | 6 | Vitrine `/venda/:id` | suas 3 definições da seção 5 | receita nova, sem depender de terceiro |
@@ -766,8 +866,59 @@ O que a plataforma precisa suportar para não perder este caso:
 **O que já dá para fazer hoje, sem decisão nenhuma:** subir a carta de arrematação do lote do
 Rafael pela tela de Arrematados. O tipo existe e o upload funciona.
 
+**As duas coisas que já dá para fazer sem decisão nenhuma, e que faturam:** o **módulo por
+assinatura** (4.7) e a **originação de home equity** (4.8). Nenhuma das duas depende de figura
+jurídica, de parecer, de capital ou de funding.
+
 > **Trilha paralela, longa e que não bloqueia nada:** a decisão da figura jurídica de 4a-ter
 > (correspondente · SEP · SCD · SCFI). Autorização do BCB leva meses; a conversa vale começar
 > cedo. Mas **as 5 ou 10 primeiras operações não dependem dela** — venda a prazo do vendedor,
 > com cessão de crédito, não exige figura nenhuma enquanto for eventual. É assim que se prova o
 > produto antes de pagar por estrutura.
+
+---
+
+## 8. Estado das decisões — o mapa para retomar
+
+> Pedido do dono: *"deixe tudo registrado para, na hora de retomarmos, já termos boa parte do
+> caminho andada."* Esta é a tabela para olhar primeiro na volta. **Nada aqui foi implementado.**
+
+### ✅ Decididas
+
+| # | Decisão | Onde |
+|---|---|---|
+| 11 | O módulo é **software para o dono administrar patrimônio próprio** — sem CRECI, porque não há negócio alheio | 4a-quater |
+| — | A plataforma **executa, não intermedeia**: gera contrato com os dados do dono, cobra, concilia, avisa, presta contas, anuncia em nome dele. **Não procura inquilino nem comprador** | 4a-quinquies |
+| — | Cobrança por **mensalidade por grupo de imóveis** (faixas por quantidade) | 4a-quinquies |
+| 5-A | Estrutura do dinheiro **sem** financeira: boleto na conta do vendedor/proprietário | 4a-bis |
+
+### ⏳ Abertas — em ordem de quanto destravam
+
+| # | Decisão | Por que pesa |
+|---|---|---|
+| **5** | **Quem assume o risco de crédito** | é de onde sai toda a conta de capital. Responder não custa nada e destrava 6, 7 e 8 |
+| **12** | Mensalidade **fixa × percentual** sobre o negócio | virou a principal prova de que a atividade é serviço, não corretagem |
+| **9** | **Prazo máximo** do produto de crédito — e a taxa correspondente | 24 meses e 240 meses não são o mesmo produto com outro número de parcelas |
+| **6** | Financeira própria **× IF parceira** (correspondente) | o correspondente entrega quase a mesma experiência por custo ~zero |
+| **14** | **Uma** tabela `contrato` para todas as modalidades × uma por modalidade | decide se a máquina é construída uma vez ou cinco |
+| **15** | Quais modalidades entram, e em que ordem | sugestão: locação + home equity |
+| **17** | **Contrato ativo × imóvel cadastrado** como unidade de cobrança | cobrar por cadastro pune quem usa o portfólio |
+| 1 | `arrematacoes` × `arrematados`: uma estrutura ou duas | destrava documentos |
+| 2 | Lucro **realizado × potencial** como número principal | impede o lucro falso |
+| 3 | Fluxo de arremate de 06/08 (inclui o DELETE de documento pelo cliente) | sem entrada, o resto é vitrine |
+| 4 | De quem saem os **0,5%** da venda | ver a Decisão 12: a forma de cobrar é prova do enquadramento |
+| 10 | Parcela e saldo pelo **mesmo índice** (provavelmente sim) · **SAC × Price** | evita amortização negativa |
+| 13 | **Idade máxima × prazo máximo**, herdados da seguradora | a seguradora decide o prazo junto conosco |
+| 16 | Faixas e preços da mensalidade · o que fica no plano gratuito | — |
+| 18 | Porta de entrada de cada modalidade da família B | corretora SUSEP · administradora de consórcio · banco do home equity |
+| 7 | Onde entra o "investidor": captação × cessão à vista | são produtos diferentes |
+| 8 | Volume mínimo que paga o custo fixo de estar autorizado | sem esse número, a escolha da figura é de gosto |
+
+### 🧑‍⚖️ Fora do nosso alcance — precisa de terceiro
+
+| Quem | O quê |
+|---|---|
+| **Advogado** | os 18 itens de 4a-bis, 4a-ter e 4a-quater |
+| **Contador** | tributação da revenda com habitualidade (alerta do cliente, item 4c) |
+| **Comercial** | instituição do home equity · corretora de seguros · administradora de consórcio · contrato com portal |
+| **BCB / consultor** | figura jurídica, se a financeira própria avançar |
