@@ -43,6 +43,12 @@ const TIPO_LABEL = { casa:'Casa', apartamento:'Apartamento', terreno:'Terreno', 
 
 const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const brl = (v) => (Number(v) > 0 ? `R$ ${Math.round(Number(v)).toLocaleString('pt-BR')}` : null);
+// A data da praça vem do scraper em formatos variados. Só reformata o que for ISO reconhecível
+// e devolve o resto como veio — inventar formato é pior que repetir a fonte. Sem isto a página
+// mostrava "2026-08-31" ao visitante, que é data de banco, não de gente.
+const dataBR = (s) => { const t = String(s || '').trim(); if (!t) return null;
+  const m = t.match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? `${m[3]}/${m[2]}/${m[1]}` : t.slice(0, 40); };
+const MODALIDADE_LABEL = { judicial: 'Leilão judicial', extrajudicial: 'Leilão extrajudicial', licitacao_aberta: 'Licitação aberta', venda_direta: 'Venda direta' };
 const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
 const slug = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 70);
 
@@ -99,34 +105,65 @@ function pagina({ titulo, desc, canonical, corpo, jsonld, indexar = true, migalh
 <meta property="og:locale" content="pt_BR"/>
 <meta name="twitter:card" content="summary_large_image"/>
 ${jsonld ? `<script type="application/ld+json">${JSON.stringify(jsonld)}</script>` : ''}
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&family=League+Spartan:wght@700;800;900&display=swap" rel="stylesheet">
 <style>
-:root{--azul:#0D63DB;--tinta:#0f172a;--cinza:#64748b;--linha:#e2e8f0}
+/* ═══ Alinhado ao docs/MARCA.md (14/08, pedido do dono: "revisar o layout para ficar de
+   acordo com os padrões"). O conteúdo desta página já estava certo; o que destoava era a
+   casca — ela nasceu como HTML de SEO e não seguia o código da marca:
+     • as fontes da marca (League Spartan nos títulos, Inter nos textos) NÃO eram carregadas:
+       o font-family Inter do CSS caía no fallback do sistema, e a página parecia de outro
+       produto ao lado do app;
+     • o cabeçalho era um texto "BidPro Brasil" em vez do lockup (/logo.svg) que toda tela
+       usa, sem a sub-linha "LEILÃO & INVESTIMENTOS";
+     • tinta #0f172a em vez do preto da marca (#111111), e raios/bordas fora da escala do app
+       (cartões 16px, superfícies #f8fafc, linha #e2e8f0).
+   Nada de JS foi acrescentado: a página continua pronta no HTML que o servidor devolve. */
+:root{--azul:#0D63DB;--azul-fundo:#0B4BA6;--tinta:#111111;--cinza:#64748b;--linha:#e2e8f0;--superficie:#f8fafc}
 *{box-sizing:border-box}
-body{margin:0;font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:var(--tinta);background:#f8fafc;line-height:1.6}
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+body{margin:0;font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:var(--tinta);background:var(--superficie);line-height:1.6}
 a{color:var(--azul);text-decoration:none}a:hover{text-decoration:underline}
-header{background:#111;color:#fff;padding:14px 20px}
-header .in{max-width:1080px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
-header a{color:#fff;font-weight:800;font-size:17px}
-.cta{background:var(--azul);color:#fff!important;padding:9px 18px;border-radius:9px;font-weight:700;font-size:14px;text-decoration:none!important}
+header{background:#111111;color:#fff;padding:12px 20px}
+header .in{max-width:1080px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:16px}
+header .marca{display:flex;align-items:center;gap:10px;min-width:0}
+header .marca img{height:34px;width:auto;display:block;flex-shrink:0}
+header .marca .sublinha{font-family:'League Spartan',sans-serif;font-size:9.5px;font-weight:800;letter-spacing:1.6px;color:#94a3b8;text-transform:uppercase;line-height:1.1}
+.cta{background:var(--azul);color:#fff!important;padding:10px 18px;border-radius:10px;font-weight:700;font-size:14px;text-decoration:none!important;white-space:nowrap;flex-shrink:0}
+.cta:hover{background:var(--azul-fundo)}
 main{max-width:1080px;margin:0 auto;padding:24px 20px 56px}
 .mig{font-size:12.5px;color:var(--cinza);margin-bottom:14px}
-h1{font-size:26px;line-height:1.25;margin:0 0 8px}
-h2{font-size:18px;margin:32px 0 12px}
+h1,h2,h3{font-family:'League Spartan','Inter',sans-serif;letter-spacing:-0.2px}
+h1{font-size:28px;font-weight:900;line-height:1.2;margin:0 0 8px}
+h2{font-size:20px;font-weight:800;margin:32px 0 12px}
 .sub{color:var(--cinza);margin:0 0 22px;font-size:15px}
+@media(max-width:560px){
+  h1{font-size:23px}h2{font-size:18px}
+  main{padding:18px 16px 48px}
+  header{padding:10px 16px}
+  header .marca img{height:30px}
+  header .marca .sublinha{display:none}
+  .cta{padding:9px 14px;font-size:13px}
+}
 .grade{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px}
-.card{background:#fff;border:1px solid var(--linha);border-radius:12px;overflow:hidden;display:flex;flex-direction:column}
+.card{background:#fff;border:1px solid var(--linha);border-radius:16px;overflow:hidden;display:flex;flex-direction:column;transition:box-shadow .15s,border-color .15s}
+.card:hover{box-shadow:0 6px 20px rgba(15,23,42,.08);border-color:#cbd5e1}
 .card img{width:100%;height:150px;object-fit:cover;background:#e2e8f0;display:block}
 .card .c{padding:12px 14px;display:flex;flex-direction:column;gap:4px;flex:1}
 .card .t{font-weight:700;font-size:14px;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .card .l{font-size:12.5px;color:var(--cinza)}
-.card .v{font-size:16px;font-weight:900;margin-top:auto;padding-top:6px}
-.tag{display:inline-block;font-size:11px;font-weight:800;color:#166534;background:#dcfce7;padding:2px 8px;border-radius:999px}
+.card .v{font-size:17px;font-weight:900;color:var(--azul);margin-top:auto;padding-top:6px}
+.tag{display:inline-block;font-size:11px;font-weight:800;color:#15803d;background:#dcfce7;padding:3px 9px;border-radius:999px}
 .lista{display:flex;flex-wrap:wrap;gap:8px;margin:0;padding:0;list-style:none}
-.lista li a{display:inline-block;background:#fff;border:1px solid var(--linha);border-radius:999px;padding:6px 14px;font-size:13.5px}
-.painel{background:#fff;border:1px solid var(--linha);border-radius:14px;padding:20px;margin-bottom:20px}
-.dados{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin:16px 0}
-.dados div span{display:block;font-size:11.5px;color:var(--cinza);text-transform:uppercase;letter-spacing:.4px;font-weight:700}
-.dados div strong{font-size:17px}
+.lista li a{display:inline-block;background:#fff;border:1px solid var(--linha);border-radius:999px;padding:7px 15px;font-size:13.5px;font-weight:600}
+.lista li a:hover{border-color:var(--azul);text-decoration:none}
+.painel{background:#fff;border:1px solid var(--linha);border-radius:16px;padding:22px;margin-bottom:20px}
+/* Ficha de valores no padrão dos cartões do app: rótulo pequeno em caixa alta, número
+   grande. O minmax de 140px cabe em duas colunas num iPhone de 390 e nunca vaza. */
+.dados{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin:18px 0 4px}
+.dados div{background:var(--superficie);border:1px solid var(--linha);border-radius:12px;padding:12px 14px;min-width:0}
+.dados div span{display:block;font-size:10.5px;color:var(--cinza);text-transform:uppercase;letter-spacing:.6px;font-weight:800;margin-bottom:3px}
+.dados div strong{font-size:19px;font-weight:900;line-height:1.25;display:block;overflow-wrap:anywhere}
 .pag{display:flex;gap:10px;justify-content:center;margin-top:28px;font-size:14px}
 /* Busca por cidade — HTML puro, sem JS: a página pública precisa abrir rápido e funcionar
    para o robô do buscador tanto quanto para a pessoa. */
@@ -140,18 +177,24 @@ h2{font-size:18px;margin:32px 0 12px}
 .busca button{padding:12px 22px;border:none;border-radius:10px;background:var(--azul);color:#fff;font-weight:800;font-size:15px;cursor:pointer;font-family:inherit}
 .busca .dica{font-size:12.5px;color:var(--cinza);margin:10px 0 0}
 /* Bloco de cadastro no lote: o que é do assinante fica visível como PROMESSA, não escondido. */
-.trava{background:linear-gradient(180deg,#eff6ff,#fff);border:1px solid #bfdbfe;border-radius:14px;padding:20px;margin:20px 0}
-.trava h3{margin:0 0 10px;font-size:16px}
-.trava ul{margin:0 0 16px;padding-left:20px;color:var(--cinza);font-size:14px;line-height:1.9}
+.trava{background:linear-gradient(180deg,#eff6ff,#fff);border:1px solid #bfdbfe;border-radius:16px;padding:22px;margin:22px 0}
+.trava h3{margin:0 0 12px;font-size:17px;font-weight:800}
+.trava ul{margin:0 0 18px;padding-left:20px;color:#475569;font-size:14px;line-height:1.9}
 .trava .cta{display:inline-block}
-.trava .obs{font-size:12.5px;color:var(--cinza);margin:10px 0 0}
-footer{border-top:1px solid var(--linha);padding:24px 20px;color:var(--cinza);font-size:12.5px}
+.trava .obs{font-size:12.5px;color:var(--cinza);margin:12px 0 0}
+footer{border-top:1px solid var(--linha);padding:26px 20px;color:var(--cinza);font-size:12.5px;background:#fff}
 footer .in{max-width:1080px;margin:0 auto}
-@media(prefers-color-scheme:dark){body{background:#0f1115;color:#e5e7eb}.card,.painel,.lista li a{background:#171a21;border-color:#262b36}.sub,.l,.mig,footer{color:#94a3b8}}
+/* O app é claro em toda tela; a página pública seguia o tema do sistema e ficava escura para
+   metade das pessoas — duas caras para a mesma marca. Mantém-se clara, como o resto. */
 </style>
 </head><body>
 <header><div class="in">
-  <a href="${SITE}/">BidPro Brasil</a>
+  <a class="marca" href="${SITE}/" aria-label="BidPro Brasil — página inicial">
+    <!-- 128×34 é a proporção real do lockup (viewBox 180×48): atributos certos evitam o
+         pulo de layout enquanto o SVG carrega. O CSS manda (height 34, width auto). -->
+    <img src="/logo.svg" alt="BidPro Brasil" width="128" height="34"/>
+    <span class="sublinha">Leilão &amp; Investimentos</span>
+  </a>
   <a class="cta" href="${SITE}/#/login?modo=cadastro">Criar conta grátis</a>
 </div></header>
 <main>
@@ -414,7 +457,7 @@ async function paginaImovel(id) {
     // O H1 segue a mesma lógica do <title>: com mil lotes de título idêntico, um H1 repetido
     // é o segundo sinal que leva o Google a tratar as páginas como cópias.
     corpo: `<h1>${esc([im.titulo || `${t} em leilão em ${im.cidade || ''}`, im.area_m2 > 0 ? `${Math.round(im.area_m2)} m²` : null].filter(Boolean).join(' · '))}</h1>
-      <p class="sub">${esc(t)} em leilão · ${esc(local)}${im.modalidade ? ` · ${esc(im.modalidade)}` : ''}</p>
+      <p class="sub">${esc(t)} em leilão · ${esc(local)}${im.modalidade ? ` · ${esc(MODALIDADE_LABEL[String(im.modalidade).toLowerCase()] || im.modalidade)}` : ''}</p>
       ${!im.ativo ? `<p class="painel"><strong>Este lote não está mais ativo</strong> no acervo — provavelmente foi arrematado ou saiu do edital. <a href="${SITE}/leiloes/${uf.toLowerCase()}${im.cidade_norm ? `/${im.cidade_norm}` : ''}">Ver imóveis disponíveis em ${esc(im.cidade || UF_NOME[uf] || 'sua região')}</a>.</p>` : ''}
       <div class="painel">
         ${im.link_foto ? `<img src="${esc(im.link_foto)}" alt="${esc(t)} em leilão em ${esc(im.cidade || '')}" style="width:100%;max-height:420px;object-fit:cover;border-radius:10px"/>` : ''}
@@ -426,7 +469,7 @@ async function paginaImovel(id) {
           ${linha('Tipo', t)}
           ${linha('Cidade', im.cidade ? `${im.cidade}/${uf}` : null)}
           ${linha('Bairro', im.bairro)}
-          ${linha('Data do leilão', im.data_leilao)}
+          ${linha('Data do leilão', dataBR(im.data_leilao))}
         </div>
       </div>
       ${im.descricao ? `<h2>Descrição do lote</h2><p>${esc(String(im.descricao).slice(0, 1200))}</p>` : ''}
