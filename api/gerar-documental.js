@@ -500,8 +500,17 @@ CUSTOS DO EDITAL (importantes p/ a projeção financeira): capture a comissão d
 REGRA IMPORTANTE: se algum dado (ex.: débitos, ônus, ocupação) NÃO estiver discriminado nos documentos disponíveis, NÃO invente — sinalize como "não consta na documentação analisada" e indique ONDE confirmar (certidão de débitos na Prefeitura; declaração de débitos com a administradora/síndico; matrícula atualizada no Cartório de Registro de Imóveis; cláusulas do edital; SPU para laudêmio/foro).
 
 CLASSIFICAÇÃO DE RISCO — REGRAS ESTRITAS (evite alarmismo; leilão de imóvel tem particularidades legais que o comprador leigo desconhece):
-- FINANCIAMENTO A ASSUMIR EM LEILÃO JUDICIAL = RESSALVA MÁXIMA (pedido do dono, 13/08). A regra
-  geral do leilão judicial é que a arrematação EXTINGUE os ônus e o credor se satisfaz no PREÇO
+- FINANCIAMENTO A ASSUMIR = RESSALVA MÁXIMA, NAS DUAS MODALIDADES (pedido do dono, 13/08).
+  Avalie SEMPRE, seja o leilão JUDICIAL ou EXTRAJUDICIAL, e preencha `financiamentoAssumido`
+  em qualquer um dos dois. A pergunta é uma só: **depois de arrematar e pagar, sobra alguma
+  dívida de financiamento presa ao imóvel?** Se sobra, é ressalva máxima.
+  • No EXTRAJUDICIAL (Lei 9.514, típico Caixa/bancos): em regra a consolidação da propriedade já
+    extinguiu o contrato do ex-mutuário e o arrematante recebe livre daquele saldo. MAS há
+    editais que preveem o contrário, e há vendas em que o comprador assume um financiamento
+    existente (SFH/FGTS) ou se sub-roga no contrato. Leia a cláusula, não presuma. Se o edital
+    for silencioso, isso é LACUNA a confirmar com o agente financeiro, não um "não há dívida".
+  • No JUDICIAL o mesmo achado é ainda MAIS grave, por contrariar a regra do próprio rito: a
+    regra geral do leilão judicial é que a arrematação EXTINGUE os ônus e o credor se satisfaz no PREÇO
   (sub-rogação, art. 908 §1º do CPC e art. 1.499 do Código Civil): quem arremata recebe o imóvel
   livre. Quando o edital diz o CONTRÁRIO — que o arrematante ASSUME um financiamento ou saldo
   devedor existente —, a operação muda de natureza: além do lance, do leiloeiro e das custas,
