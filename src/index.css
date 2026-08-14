@@ -1,4 +1,9 @@
 * { box-sizing: border-box; }
+/* `text-size-adjust` desligado: sem isto o iOS/Android INFLA o texto por conta própria em
+   algumas situações (rotação de tela, coluna estreita), e o layout que cabia passa a vazar —
+   parece defeito de responsividade e é o navegador reescalando a tipografia. Mantém-se em
+   100%, que é o tamanho que o app já definiu. */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 body { font-family: 'Inter', sans-serif; background: #f1f5f9; margin: 0; }
 /* Trava a ROLAGEM/ZOOM HORIZONTAL no mobile: se algum elemento passar da largura da tela,
    o celular fazia "zoom out" e a tela vinha desformatada (menu ☰ cortado). `overflow-x: clip`
@@ -6,6 +11,39 @@ body { font-family: 'Inter', sans-serif; background: #f1f5f9; margin: 0; }
    continua funcionando (ao contrário de `hidden`). Tabelas largas (Admin) têm scroll próprio
    (overflow-x:auto no wrapper), então não são afetadas. */
 #root { overflow-x: clip; }
+
+/* ═══ O ZOOM DO iPHONE QUE NUNCA VOLTA (14/08) ═══════════════════════════════════════════
+   Sintoma relatado pelo dono: "ao navegar de uma tela para outra perde o dimensionamento,
+   tenho que dar zoom out para ver direito". A tela aparece deslocada, com o logo e o menu ☰
+   cortados na lateral.
+
+   NÃO é vazamento de layout — o `overflow-x: clip` acima já cuida disso, e vazamento corta
+   pela DIREITA, enquanto o print do dono está cortado pela ESQUERDA. É o Safari do iOS: ele
+   dá zoom NA PÁGINA INTEIRA quando um campo com `font-size` MENOR QUE 16px recebe foco. E o
+   zoom não volta — nem ao sair do campo, nem ao trocar de tela, porque é escala do viewport
+   VISUAL, não estado da página. Uma vez que o usuário toca num campo, o app fica torto até
+   ele pinçar a tela na mão. No caso relatado foi o campo de bairro dos filtros da Busca
+   (`fontSize: 13`), mas o app tem 468 campos e a maioria usa 11–14px: qualquer um deles
+   produz o mesmo defeito.
+
+   Não dá para resolver pelo viewport: `maximum-scale=1` / `user-scalable=no` são IGNORADOS
+   pelo iOS desde a versão 10 — e, mesmo que funcionassem, tirariam do usuário o zoom de
+   pinça, que é acessibilidade. O único jeito de o iOS não dar o zoom é o campo já estar em
+   16px quando recebe foco.
+
+   `!important` aqui não é preguiça: os 468 campos definem `fontSize` em `style={{…}}` inline,
+   e estilo inline vence folha de estilo. Sem ele a regra não pega em nenhum.
+
+   Só em ponteiro GROSSO (toque): no desktop, onde não existe esse zoom, os campos seguem
+   compactos como estão. Checkbox/radio/range ficam de fora — não têm texto, não disparam
+   zoom, e alguns navegadores dimensionam o controle pelo font-size. */
+@media (pointer: coarse) {
+  input:not([type='checkbox']):not([type='radio']):not([type='range']),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
 @media print {
   @page { margin: 8mm; size: A4 portrait; }
   body, html { background: white !important; margin: 0 !important; padding: 0 !important; }
