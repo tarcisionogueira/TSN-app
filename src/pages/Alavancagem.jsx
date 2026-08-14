@@ -199,7 +199,29 @@ export default function Alavancagem() {
             Não são concorrentes — resolvem problemas diferentes. A pergunta que separa os dois é
             simples: <strong>você precisa do dinheiro agora ou está se preparando?</strong>
           </p>
-          <div style={{ overflowX: 'auto' }}>
+          {/* Em telas estreitas a tabela vira BLOCOS empilhados. Rolagem horizontal dentro de
+              uma tabela de COMPARAÇÃO esconde justamente a coluna que se quer comparar — no
+              iPhone só o Home Equity aparecia, e o Consórcio ficava fora da tela sem aviso. */}
+          <style>{`
+            @media (max-width: 700px) { .cmp-tabela { display: none } }
+            @media (min-width: 701px) { .cmp-blocos { display: none } }
+          `}</style>
+          <div className="cmp-blocos" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {COMPARACAO.map(([rot, he, cs], i) => (
+              <div key={i} style={{ border: '1px solid #e2e8f0', borderRadius: 12, padding: 14 }}>
+                <div style={{ fontSize: 12.5, fontWeight: 800, color: '#111', marginBottom: 10 }}>{rot}</div>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginBottom: 8 }}>
+                  <span style={{ fontSize: 11, fontWeight: 800, color: AZUL, background: '#eff6ff', padding: '3px 8px', borderRadius: 6, flexShrink: 0 }}>Home Equity</span>
+                  <span style={{ fontSize: 13, color: '#334155', lineHeight: 1.5 }}>{he}</span>
+                </div>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                  <span style={{ fontSize: 11, fontWeight: 800, color: '#475569', background: '#f1f5f9', padding: '3px 8px', borderRadius: 6, flexShrink: 0 }}>Consórcio</span>
+                  <span style={{ fontSize: 13, color: '#334155', lineHeight: 1.5 }}>{cs}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="cmp-tabela" style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 560 }}>
               <thead>
                 <tr>
