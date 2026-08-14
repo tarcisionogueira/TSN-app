@@ -53,23 +53,86 @@ async function supervisor() {
     const temSinal = Object.keys(contAnom).length || Object.keys(contVicio).length || (calibradas || []).length;
     if (!temSinal) return { rodou: false, motivo: 'sem sinais na semana' };
 
+    // ═══ O SUPERVISOR PRECISA SABER O QUE CADA VÍCIO SIGNIFICA (14/08) ═══════════════════
+    // Até aqui ele recebia só os NOMES dos vícios com as contagens (`edital_nao_lido: 5`) e,
+    // sem saber o que são, supunha o óbvio: que a IA não estava lendo o edital. As quatro
+    // revisões semanais de 23/07 a 11/08 propuseram, todas, mudanças de PROMPT. Nenhuma
+    // resolveria nada, porque nenhum desses vícios é causado pelo prompt:
+    //   • edital_nao_lido / matricula_nao_lida = `!da.edital` / `!da.matricula` — o documento
+    //     não estava disponível para ler (o leiloeiro não publicou, ou a captura falhou);
+    //   • cnj_nao_consultado = há número de processo e a consulta ao CNJ não voltou;
+    //   • avaliacao_ausente / minimo_ausente = o LOTE não tem esses valores na nossa base;
+    //   • sem_parecer = a geração estourou a reserva de 55s e o parecer não chegou a rodar;
+    //   • mercado_vazio = a pesquisa não achou amostras na praça.
+    // Pedir ao modelo "melhore o prompt" diante disso produz texto plausível e inútil — e
+    // pior, texto que PARECE ter resolvido. Agora ele recebe a legenda e a alavanca de cada
+    // sinal, e é obrigado a classificar cada sugestão pela alavanca certa.
+    const LEGENDA = {
+      edital_nao_lido: { significa: 'o edital não estava disponível para leitura (leiloeiro não publicou ou a captura falhou)', alavanca: 'captura' },
+      matricula_nao_lida: { significa: 'a matrícula não estava disponível para leitura', alavanca: 'captura' },
+      cnj_nao_consultado: { significa: 'o lote tem número de processo, mas a consulta ao CNJ não retornou', alavanca: 'integracao' },
+      modalidade_indefinida: { significa: 'o lote está sem modalidade na base', alavanca: 'captura' },
+      avaliacao_ausente: { significa: 'o lote não tem valor de avaliação na nossa base', alavanca: 'captura' },
+      minimo_ausente: { significa: 'o lote não tem lance mínimo na nossa base', alavanca: 'captura' },
+      mercado_vazio: { significa: 'a pesquisa de comparáveis não achou amostras na praça', alavanca: 'pesquisa' },
+      sem_parecer: { significa: 'a geração estourou o orçamento de tempo e o parecer não rodou', alavanca: 'orcamento' },
+      tem_contradicoes: { significa: 'o laudo se contradiz entre seções', alavanca: 'prompt' },
+      tem_lacunas_criticas: { significa: 'o laudo saiu com lacuna crítica declarada', alavanca: 'prompt' },
+      recomenda_revisao: { significa: 'o laudo pediu revisão humana', alavanca: 'prompt' },
+    };
+    const legendaDosSinais = Object.fromEntries(
+      Object.keys(contVicio).map((k) => [k, LEGENDA[k] || { significa: '(sinal novo, sem legenda)', alavanca: 'desconhecida' }]));
     const resumoSinais = JSON.stringify({ anomalias: contAnom, vicios: contVicio, regioes_calibradas: (calibradas || []).length });
-    const prompt = `Você é um supervisor de qualidade dos relatórios imobiliários da BidPro. Com base nos SINAIS agregados da última semana (contagens, sem dados pessoais), proponha de 2 a 4 ajustes CONCRETOS de prompt/regra que aumentem a precisão das próximas análises. Seja específico e acionável (o que mudar e por quê). Responda em JSON: {"sugestoes":[{"titulo":"","acao":"","porque":""}]}.\n\nSINAIS: ${resumoSinais}`;
+    const prompt = `Você é um supervisor de qualidade dos relatórios imobiliários da BidPro. Recebe os SINAIS agregados da última semana (contagens, sem dados pessoais) e a LEGENDA de cada sinal, com a ALAVANCA que de fato o corrige.
 
+REGRA MAIS IMPORTANTE: só proponha mudança de PROMPT para sinal cuja alavanca é "prompt". Para os demais, a correção é de captura de documento, de integração externa, de orçamento de tempo ou de pesquisa — e um ajuste de prompt ali NÃO resolve nada, só produz texto que parece solução. Nesses casos, descreva a correção na alavanca certa (o que instrumentar, medir ou corrigir fora do prompt).
+
+Proponha de 2 a 4 ajustes CONCRETOS e acionáveis. Se um sinal alto não tiver correção possível pela nossa mão, diga isso em vez de inventar ação.
+
+Responda em JSON: {"sugestoes":[{"titulo":"","alavanca":"prompt|captura|integracao|orcamento|pesquisa","acao":"","porque":""}]}.
+
+SINAIS: ${resumoSinais}
+
+LEGENDA: ${JSON.stringify(legendaDosSinais)}`;
+
+    // `max_tokens` subiu de 1200 para 6000: o Gemini 2.5 Flash gasta orçamento de saída com
+    // RACIOCÍNIO, e o que sobrava para a resposta cortava o JSON no meio. As quatro sugestões
+    // gravadas até hoje têm 147 a 298 caracteres e todas terminam no meio de uma frase — e
+    // como o `JSON.parse` falhava, caíam no ramo `bruto`, que é o ramo de ERRO. Ou seja: as
+    // quatro "sugestões" do histórico são, na verdade, quatro falhas de parse guardadas como
+    // se fossem conteúdo.
     const resp = await geminiFetch({ method: 'POST', body: JSON.stringify({
       system: 'Responda só JSON válido, em português, sem markdown.',
-      messages: [{ role: 'user', content: prompt }], max_tokens: 1200,
-    }) }, { timeoutMs: 20000 });
+      messages: [{ role: 'user', content: prompt }], max_tokens: 6000,
+    }) }, { timeoutMs: 40000 });
     if (!resp) return { rodou: false, motivo: 'gemini indisponível' };
     const data = await resp.json().catch(() => null);
     const texto = data?.content?.[0]?.text || '';
-    let detalhe = null; try { detalhe = JSON.parse(texto.replace(/```json|```/g, '').trim()); } catch { detalhe = { bruto: texto.slice(0, 4000) }; }
+    // Falha de parse não pode mais se disfarçar de sugestão. Grava com `__falhou` e o motivo,
+    // para a tela do Admin distinguir "o supervisor propôs isto" de "o supervisor não
+    // conseguiu responder" — que é a diferença entre revisar e perder tempo.
+    let detalhe = null;
+    try {
+      detalhe = JSON.parse(texto.replace(/```json|```/g, '').trim());
+      if (!Array.isArray(detalhe?.sugestoes) || !detalhe.sugestoes.length) {
+        detalhe = { __falhou: 'JSON sem lista de sugestões', bruto: texto.slice(0, 4000) };
+      }
+    } catch {
+      detalhe = { __falhou: 'resposta não é JSON válido (provável corte por limite de tokens)', bruto: texto.slice(0, 4000) };
+    }
+    const falhou = !!detalhe?.__falhou;
 
     await sb('aprendizado_sugestoes', {
       method: 'POST', headers: { Prefer: 'return=minimal' },
-      body: JSON.stringify({ escopo: 'mercadologico', resumo: `Revisão semanal (${Object.keys(contAnom).length} tipos de anomalia, ${Object.keys(contVicio).length} vícios)`, detalhe: { sinais: { anomalias: contAnom, vicios: contVicio }, sugestoes: detalhe } }),
+      body: JSON.stringify({
+        escopo: 'mercadologico',
+        resumo: falhou
+          ? `Revisão semanal FALHOU — ${detalhe.__falhou}`
+          : `Revisão semanal (${Object.keys(contAnom).length} tipos de anomalia, ${Object.keys(contVicio).length} vícios)`,
+        detalhe: { sinais: { anomalias: contAnom, vicios: contVicio }, legenda: legendaDosSinais, sugestoes: detalhe },
+      }),
     });
-    return { rodou: true };
+    return { rodou: true, falhou };
   } catch (e) { return { rodou: false, motivo: e?.message }; }
 }
 
