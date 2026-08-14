@@ -57,14 +57,25 @@ export default async function handler(req, res) {
     } else if (tipo === 'imovel' && idOk) {
       destino = `/#/imovel/${id}`;
       titulo = 'Imóvel em leilão — BidPro Brasil';
-      const rows = await sb(`imoveis_leilao?id=eq.${encodeURIComponent(id)}&select=titulo,cidade,estado,valor_minimo,valor_avaliacao,link_foto`);
+      // A descrição do preview é a VITRINE do botão Compartilhar: é o que a pessoa de fora vê
+      // no WhatsApp antes de decidir se abre. Área, desconto e data da praça entram porque são
+      // o que faz alguém clicar, custam ZERO (a mesma leitura de sempre, um campo a mais no
+      // select) e já são públicos na página `/leilao/:id` deste mesmo lote desde 02/08 —
+      // nenhuma exposição nova. Endereço, edital, matrícula e análise seguem fora, como manda
+      // a decisão de 08/08. (14/08, pedido do dono.)
+      const rows = await sb(`imoveis_leilao?id=eq.${encodeURIComponent(id)}&select=titulo,cidade,estado,bairro,area_m2,valor_minimo,valor_avaliacao,desconto_percentual,data_leilao,link_foto`);
       const im = rows?.[0];
       if (im) {
         titulo = `${im.titulo || 'Imóvel em leilão'} — BidPro Brasil`;
         const partes = [];
-        if (im.cidade) partes.push(`${im.cidade}${im.estado ? '/' + im.estado : ''}`);
+        const ondeE = [im.bairro, im.cidade].filter(Boolean).join(', ');
+        if (ondeE) partes.push(`${ondeE}${im.estado ? '/' + im.estado : ''}`);
+        if (Number(im.area_m2) > 0) partes.push(`${Math.round(im.area_m2)} m²`);
         const lance = fmtBRL(im.valor_minimo); if (lance) partes.push(`lance a partir de ${lance}`);
         const aval = fmtBRL(im.valor_avaliacao); if (aval) partes.push(`avaliação ${aval}`);
+        const d = Math.round(Number(im.desconto_percentual) || 0); if (d > 0) partes.push(`${d}% abaixo da avaliação`);
+        const praca = String(im.data_leilao || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+        if (praca) partes.push(`praça em ${praca[3]}/${praca[2]}/${praca[1]}`);
         desc = `${partes.join(' · ') || 'Imóvel em leilão'} · Fotos, análise de viabilidade e documentos na BidPro Brasil.`;
         if (/^https?:\/\//.test(im.link_foto || '')) img = im.link_foto;
       }
