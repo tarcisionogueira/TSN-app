@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../utils/supabase';
 import { Loader2, Target, X, ChevronLeft } from 'lucide-react';
-import CidadeAutocomplete from './CidadeAutocomplete';
 
 // Triagem do investidor — modal ONE-TIME no 1º acesso do cliente. Define o perfil-base
 // que direciona os agentes e prioriza o enriquecimento pelas cidades de interesse.
@@ -44,13 +43,22 @@ const STEPS = [
   { titulo: 'Consórcio (nós te conectamos a um parceiro)', campo: 'consorcio_interesse', opts: CONSORCIO },
   { titulo: 'Sua experiência com leilão',                campo: 'experiencia_leilao', opts: EXPERIENCIA },
 ];
-const TOTAL = STEPS.length + 1; // + a cidade (opcional)
+// CIDADE DE INTERESSE SAIU DA TRIAGEM (14/08, decisão do dono ao acompanhar um cadastro ao
+// vivo): a pergunta vinha logo depois da cidade que o próprio cadastro já coletou
+// (`perfis.endereco_cidade`), então a pessoa respondia "onde você mora" e, na tela seguinte,
+// "qual cidade te interessa" — parecia a mesma pergunta duas vezes e alongava o funil no pior
+// momento, que é o primeiro minuto de conta nova. E o dado nem era o melhor disponível: o
+// interesse REAL aparece nos FILTROS SALVOS, que a pessoa monta usando o produto, com raio,
+// tipo, faixa de valor e modalidade — muito mais rico que uma cidade avulsa.
+// `cidades_interesse` continua existindo e sendo lido por quem usa (alertas, enriquecimento):
+// esta mudança só para de PERGUNTAR aqui.
+const TOTAL = STEPS.length;
 
 export default function TriagemPerfil({ userId }) {
   const [mostrar, setMostrar] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [step, setStep] = useState(0);
-  const [f, setF] = useState({ perfil_investidor: '', faixa_capital: '', forma_pagamento: '', consorcio_interesse: '', experiencia_leilao: '', cidade: '', uf: '', raio_km: '50' });
+  const [f, setF] = useState({ perfil_investidor: '', faixa_capital: '', forma_pagamento: '', consorcio_interesse: '', experiencia_leilao: '' });
 
   useEffect(() => {
     if (!userId) return;
@@ -76,16 +84,12 @@ export default function TriagemPerfil({ userId }) {
 
   const salvar = async () => {
     setSalvando(true);
-    const cidades = f.cidade.trim()
-      ? [{ cidade: f.cidade.trim(), uf: f.uf.trim().toUpperCase(), raio_km: Number(f.raio_km) || 50 }]
-      : [];
     await supabase.from('perfis').update({
       perfil_investidor: f.perfil_investidor,
       faixa_capital: f.faixa_capital,
       forma_pagamento: f.forma_pagamento,
       consorcio_interesse: f.consorcio_interesse,
       experiencia_leilao: f.experiencia_leilao,
-      cidades_interesse: cidades,
       triagem_em: new Date().toISOString(),
     }).eq('id', userId);
     setSalvando(false);
@@ -96,8 +100,8 @@ export default function TriagemPerfil({ userId }) {
   // próximo acesso enquanto o perfil não for respondido.
   const depois = () => { try { sessionStorage.setItem('tsn_triagem_dispensada', '1'); } catch { /* ignore */ } setMostrar(false); };
 
-  const ehCidade = step === STEPS.length; // último passo = cidade (opcional)
-  const passo = ehCidade ? null : STEPS[step];
+  const ehUltimo = step === STEPS.length - 1;
+  const passo = STEPS[step];
   const avancar = () => setStep(s => Math.min(TOTAL - 1, s + 1));
   const voltar = () => setStep(s => Math.max(0, s - 1));
   // Ao escolher uma opção, marca e AVANÇA sozinho (fluxo pergunta-a-pergunta).
@@ -124,39 +128,22 @@ export default function TriagemPerfil({ userId }) {
         <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', marginBottom: 8 }}>Pergunta {step + 1} de {TOTAL}</div>
 
         {/* Passo atual */}
-        {passo ? (
-          <div>
-            <div style={{ fontSize: 15, fontWeight: 800, color: '#111', marginBottom: 12 }}>{passo.titulo}</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {passo.opts.map(([v, label, desc]) => {
-                const sel = f[passo.campo] === v;
-                return (
-                  <button key={v} onClick={() => escolher(passo.campo, v)}
-                    style={{ textAlign: 'left', padding: '12px 14px', borderRadius: 10, cursor: 'pointer',
-                      border: sel ? '2px solid #0D63DB' : '1px solid #e2e8f0', background: sel ? '#eff6ff' : 'white' }}>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: sel ? '#0D63DB' : '#111' }}>{label}</div>
-                    {desc && <div style={{ fontSize: 11.5, color: '#64748b', marginTop: 2, lineHeight: 1.4 }}>{desc}</div>}
-                  </button>
-                );
-              })}
-            </div>
+        <div>
+          <div style={{ fontSize: 15, fontWeight: 800, color: '#111', marginBottom: 12 }}>{passo.titulo}</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {passo.opts.map(([v, label, desc]) => {
+              const sel = f[passo.campo] === v;
+              return (
+                <button key={v} onClick={() => escolher(passo.campo, v)}
+                  style={{ textAlign: 'left', padding: '12px 14px', borderRadius: 10, cursor: 'pointer',
+                    border: sel ? '2px solid #0D63DB' : '1px solid #e2e8f0', background: sel ? '#eff6ff' : 'white' }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: sel ? '#0D63DB' : '#111' }}>{label}</div>
+                  {desc && <div style={{ fontSize: 11.5, color: '#64748b', marginTop: 2, lineHeight: 1.4 }}>{desc}</div>}
+                </button>
+              );
+            })}
           </div>
-        ) : (
-          <div>
-            <div style={{ fontSize: 15, fontWeight: 800, color: '#111', marginBottom: 4 }}>Cidade/região de interesse <span style={{ color: '#94a3b8', fontWeight: 600, fontSize: 12 }}>(opcional)</span></div>
-            <div style={{ fontSize: 12, color: '#64748b', marginBottom: 12 }}>Priorizamos os imóveis perto de você. Selecione a cidade na lista para vincular o estado.</div>
-            <CidadeAutocomplete value={f.cidade} placeholder="Digite e selecione sua cidade…"
-              onSelect={({ cidade, uf }) => setF(p => ({ ...p, cidade, uf }))} />
-            <select value={f.raio_km} onChange={e => set('raio_km', e.target.value)}
-              style={{ width: '100%', marginTop: 10, padding: '11px', border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 13 }}>
-              <option value="25">Raio de 25 km</option>
-              <option value="50">Raio de 50 km</option>
-              <option value="100">Raio de 100 km</option>
-              <option value="200">Raio de 200 km</option>
-            </select>
-            {f.cidade && !f.uf && <div style={{ fontSize: 11, color: '#d97706', marginTop: 6 }}>Selecione a cidade na lista para vincular o estado (UF).</div>}
-          </div>
-        )}
+        </div>
 
         {/* Navegação */}
         <div style={{ display: 'flex', gap: 10, marginTop: 20, alignItems: 'center' }}>
@@ -166,7 +153,7 @@ export default function TriagemPerfil({ userId }) {
             </button>
           )}
           <div style={{ flex: 1 }} />
-          {ehCidade ? (
+          {ehUltimo ? (
             <button onClick={salvar} disabled={!podeSalvar || salvando}
               style={{ padding: '11px 20px', background: podeSalvar ? '#0D63DB' : '#e2e8f0', color: podeSalvar ? 'white' : '#94a3b8', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 13, cursor: podeSalvar ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', gap: 8 }}>
               {salvando ? <><Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> Salvando…</> : 'Concluir'}

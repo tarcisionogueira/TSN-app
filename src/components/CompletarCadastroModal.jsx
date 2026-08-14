@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Loader2, ShieldCheck, ArrowLeft } from 'lucide-react';
 import { supabase } from '../utils/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -33,6 +34,8 @@ export default function CompletarCadastroModal() {
   const [erro, setErro] = useState('');
   const [passos, setPassos] = useState([]); // campos que faltam, na ordem
   const [idx, setIdx] = useState(0);
+  const nav = useNavigate();
+  const local = useLocation();
   const [dados, setDados] = useState({ nome: '', telefone: '', cidade: '', uf: '', lgpd: false });
 
   useEffect(() => {
@@ -122,6 +125,17 @@ export default function CompletarCadastroModal() {
       if (error) throw error;
       supabase.auth.updateUser({ data: { nome: patch.nome ?? dados.nome, telefone: patch.telefone } }).catch(() => {});
       setCadastroIncompleto(false); // fecha o popup e libera o app
+      // AO CONCLUIR, A PESSOA VAI PARA A TELA DE INÍCIO (14/08, relato do dono acompanhando um
+      // cadastro ao vivo: "manteve na tela dos planos e não retornou para a tela de início").
+      // O modal só fechava e devolvia a pessoa à tela onde ela estava — que, para quem chegou
+      // pelo "Criar conta grátis" da página de planos, é a de planos. Conta recém-criada
+      // parando na tabela de preços, sem ter visto o produto, é o pior primeiro minuto possível.
+      // NÃO tira de rota que é destino DELIBERADO: checkout (está pagando), produto, imóvel
+      // compartilhado, convite ou membros — nesses casos a pessoa foi mandada ali de propósito
+      // e interromper seria trocar um atrito por outro.
+      const rota = local?.pathname || '/';
+      const destinoProposital = /^\/(checkout|p\/|imovel\/|convite|membros|c\/|t\/)/.test(rota);
+      if (!destinoProposital && rota !== '/') nav('/');
     } catch (e) {
       setErro(e.message || 'Não foi possível salvar. Tente novamente.');
       setSalvando(false);

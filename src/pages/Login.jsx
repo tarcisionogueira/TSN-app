@@ -9,6 +9,7 @@ import { apiCall } from '../utils/apiCall';
 import { buscarTodasCidades } from '../data/cidades';
 import { salvarRef, lerRef } from '../utils/ref';
 import { salvarConvite, lerConvite, limparConvite, CHAVE_EQUIPE, CHAVE_CLIENTE, CHAVE_PLANO } from '../utils/convitePendente';
+import { versaoTermoProduto } from '../utils/termos';
 
 const inp = {
   width: '100%', padding: '11px 14px', border: '1px solid #e2e8f0', borderRadius: 10,
@@ -325,6 +326,14 @@ export default function Login() {
           data: {
             nome: form.nome, telefone: form.telefone.replace(/\D/g, ''), endereco: form.endereco, role: 'explorador',
             lgpd_aceito: true, lgpd_data: new Date().toISOString(),
+            // A VERSÃO ACEITA VIAJA NO CADASTRO (14/08). O checkbox acima é obrigatório — sem
+            // ele o botão nem habilita —, mas a versão aceita não era gravada em lugar nenhum:
+            // `perfis.termos_uso_versao` ficava NULA e o `TermosAtualizadosModal`, que dispara
+            // quando ela difere da vigente, pedia os termos DE NOVO um segundo depois de a
+            // pessoa tê-los aceitado no formulário. Vai no metadata porque, com confirmação de
+            // e-mail ligada, ainda não há sessão para dar UPDATE em `perfis` — quem persiste é
+            // o trigger `handle_new_user` (migração handle_new_user_grava_termos_aceitos).
+            termos_uso_versao: versaoTermoProduto('termos_uso'),
             ref_codigo: refCodigo || undefined,
           },
         },
