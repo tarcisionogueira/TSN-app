@@ -27,8 +27,13 @@ export default function ImovelGate() {
     supabase.from('imoveis_leilao')
       .select('id,titulo,cidade,estado,tipo,valor_minimo,valor_avaliacao,desconto_percentual,link_foto,fonte,fonte_id')
       .eq('id', id).maybeSingle()
-      .then(({ data }) => { if (vivo) setIm(data || {}); })
-      .catch(() => { if (vivo) setIm({}); });
+      // `{ data }` SEM `error` funde "não achei o imóvel" com "não consegui ler" — o
+      // postgrest-js não lança em não-2xx. Numa rota PÚBLICA (as 33 mil páginas indexadas)
+      // isso vira "imóvel não encontrado" para um lote que existe, e o visitante que veio do
+      // Google conclui que o anúncio saiu do ar. `{} = não encontrado` continua valendo; a
+      // falha de leitura agora tem o seu próprio estado. (13/08)
+      .then(({ data, error }) => { if (vivo) setIm(error ? { _falhou: true } : (data || {})); })
+      .catch(() => { if (vivo) setIm({ _falhou: true }); });
     return () => { vivo = false; };
   }, [id]);
 

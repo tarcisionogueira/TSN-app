@@ -373,18 +373,38 @@ Mais duas travas da mesma revisão:
 
 ### 🔴 OS DOIS ITENS QUE FICAM ABERTOS
 
-**1. Um erro de cliente novo, e eu NÃO consegui cravar a origem.**
+**1. Um erro de cliente novo — DIAGNÓSTICO AVANÇOU, causa ainda não cravada.**
 `/imovel/:id` · `Cannot read properties of null (reading 'id')` · **13/08 17:32 UTC** ·
-**usuário anônimo** (`user_id` null) · 1 ocorrência.
-Investiguei os candidatos óbvios e **todos estão guardados**: `lerCotaMercado(supabase, user.id)`
-em `ImovelDetalhe:780` tem `if (!user) return` antes; os três efeitos do `ChatSuporte` (que é
-global, `App.jsx:294`, e portanto renderiza em rota pública) checam `user?.id`. A janela importa:
-17:32 é **depois** do deploy do fluxo dos relatórios (13:20) e **antes** dos meus ajustes de
-`ImovelDetalhe` (20:22) — então não foi causado pelo conserto de layout. `/imovel/:id` é rota
-PÚBLICA (as 33 mil páginas indexadas), então isto bate em visitante que ainda não é cliente.
-**Por onde continuar:** reproduzir em aba anônima abrindo `/imovel/<id>` e olhar o stack no
-console; ou instrumentar `erros_cliente` para gravar o stack, que hoje ele não guarda — essa
-lacuna é o motivo real de eu não ter fechado o diagnóstico daqui.
+**visitante anônimo** · 1 ocorrência · URL real: `/#/imovel/d36e7e4f-0367-47ba-9ea5-cef15bd839dd`.
+
+> ⚠️ **CORREÇÃO de uma afirmação minha, feita 2h antes neste mesmo documento.** Escrevi que
+> "`erros_cliente` não guarda o stack". **Está errado:** a coluna `stack` existe, o front sempre
+> a envia e `api/log-erro-cliente.js` a grava (4.000 chars). Eu havia concluído isso sem
+> conferir o schema — o mesmo atalho que este projeto persegue em toda parte. Fica registrado
+> porque a conclusão errada quase virou uma tarefa de instrumentação que já estava pronta.
+
+**O que o stack revelou:** é erro de **RENDER** (tem `componentStack`), dentro de um `Suspense`,
+e o quadro que lança é `at qs (index-a4hI7HCk.js:33:30918)` — o **chunk principal**, não o da
+página. Eliminei por leitura de código, um a um: `ImovelGate` (tem `if (im === null) return`
+antes de tocar `im.id`), `ChatSuporte` (os três efeitos checam `user?.id`), `SugestaoImovel` e
+`ToastRelatorioPronto` (só montam logado, `App.jsx:288/293`), `BoasVindasModal` (o `curso.id`
+está dentro de um `onClick`). Todos guardados.
+
+**O que impedia fechar, e foi resolvido:** o build não gerava sourcemap, então `qs` não vira
+nome nenhum. **`vite.config.js` agora tem `build.sourcemap: true`** — o repositório é público
+(CLAUDE.md), então o mapa não expõe nada que já não esteja no GitHub, e nenhum segredo vive em
+bundle de front. **Na próxima ocorrência o stack resolve para arquivo e linha**, e a consulta
+que já existe basta:
+```sql
+select msg, url, stack from erros_cliente where not resolvido and rota = '/imovel/:id';
+```
+> A lição vale além deste erro: eu passei a sessão eliminando candidatos por leitura porque a
+> evidência tinha sido apagada no build. Não era falta de zelo na busca — era o sinal ter sido
+> destruído antes de eu precisar dele. É a mesma família do resto do dia, um passo antes.
+
+**Achado colateral, esse já corrigido:** `ImovelGate` lia `{ data }` sem `error` (forma 2). Numa
+rota PÚBLICA — as 33 mil páginas indexadas — uma falha de leitura virava "imóvel não encontrado",
+e quem veio do Google concluiria que o anúncio saiu do ar. Agora a falha tem estado próprio.
 
 **2. `proximidades_vazio_falso` = 440 (limite 300) — mas NÃO é o defeito voltando.**
 A assinatura do defeito (`pontos_proximos='{}'` com `proximidades_vazios=0`, estado que só o job
@@ -396,6 +416,38 @@ em 1.197 cidades, ter ~440 lotes sem NENHUM POI num raio de 4 km (periferia rura
 mapeada) é plausível. Ou o limite de 300 subiu de escala e deve ser recalibrado, ou há vazio
 falso residual de outra origem. **Não recalibrei por conta própria** — mexer no limite sem
 decidir qual das duas é o caso transformaria o alerta em enfeite.
+
+### ⚖️ NOVO — FINANCIAMENTO A ASSUMIR EM LEILÃO JUDICIAL vira ressalva MÁXIMA
+
+> Registro do dono (13/08): *"na avaliação documental, quando é um leilão judicial e você tem que
+> assumir um financiamento, é uma questão muito preocupante. Sei que no laudo documental isso é
+> apresentado, mas é interessante colocar como uma ressalva maior."*
+
+**Por que ele tem razão, e por que era fraco antes.** No leilão judicial a REGRA é a arrematação
+EXTINGUIR os ônus, com o credor se satisfazendo no PREÇO (art. 908 §1º do CPC, art. 1.499 do CC):
+quem arremata recebe o imóvel livre. Quando o edital inverte isso e manda o arrematante ASSUMIR
+um financiamento existente, a operação **muda de natureza** — existe uma dívida que ACOMPANHA o
+imóvel e se soma ao lance, ao leiloeiro e às custas. **O desconto aparente pode ser menor que o
+saldo assumido, ou inexistir.** É a diferença entre comprar um imóvel e comprar a posição de
+devedor. E em alienação fiduciária levada a leilão JUDICIAL pode estar sendo alienado o DIREITO
+DO DEVEDOR FIDUCIANTE, não a propriedade plena.
+
+**O que estava errado:** o modelo **não era sequer perguntado**. Não havia campo nenhum sobre
+isso em `extracao` — o assunto só aparecia se a IA, por conta própria, o mencionasse no texto
+corrido do parecer. Uma ressalva que depende de o modelo lembrar não é uma ressalva.
+
+*Feito, em três camadas:*
+1. **Campo novo na extração:** `financiamentoAssumido` (sim/nao/nao_consta), `financiamentoSaldo`
+   e `financiamentoCredor`, com as expressões a procurar no edital e na matrícula ("assumir o
+   saldo devedor", "sub-rogação no contrato de financiamento", "dívida junto ao agente
+   financeiro") e o aviso de NÃO confundir com a dívida que originou o leilão e se extingue.
+2. **Regra de classificação no prompt:** severidade **bloqueante**, a seção 6 do parecer ABRE por
+   este ponto, e se o saldo não constar é obrigatório dizer com todas as letras que o valor da
+   dívida assumida é desconhecido e precisa vir do agente financeiro ANTES do lance.
+3. **Risco DETERMINÍSTICO montado pelo servidor** (junto do bloco antifraude, `gerar-documental.js`):
+   com `financiamentoAssumido = sim`, o item entra na mesma lista que a tela ordena por
+   severidade — **não depende da redação do parecer para aparecer em destaque**. É a mesma
+   escolha do resto do dia: o que importa não pode depender de o modelo lembrar.
 
 ### 🔥 A PROVA DE FOGO É AMANHÃ ÀS 05h UTC
 
