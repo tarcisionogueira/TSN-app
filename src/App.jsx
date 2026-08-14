@@ -360,14 +360,25 @@ function MainLayout() {
 // só quando HÁ tela anterior DENTRO do app (history.state.idx > 0 — quem entra por link
 // direto não vê) e fora da home/login. Canto inferior ESQUERDO (o chat de suporte ocupa
 // o direito). History API padrão — funciona em qualquer navegador/dispositivo.
+// TELAS QUE JÁ TÊM O SEU PRÓPRIO "voltar" no topo não ganham o flutuante (14/08, dono:
+// "se na tela já tem um botão de voltar em cima não faz sentido nenhum botão de voltar embaixo
+// de novo"). Duplicar o mesmo comando em dois cantos da tela não ajuda ninguém — e no celular
+// o de baixo ainda tapava a barra de ações do imóvel.
+const TEM_VOLTAR_PROPRIO = ['/imovel/', '/analise', '/caso'];
+
 function BotaoVoltar() {
   const nav = useNavigate();
   const loc = useLocation();
   const idx = window.history.state?.idx ?? 0;
   if (idx <= 0 || ['/', '/login'].includes(loc.pathname)) return null;
+  if (TEM_VOLTAR_PROPRIO.some((r) => loc.pathname.startsWith(r))) return null;
   return (
     <button onClick={() => nav(-1)} aria-label="Voltar à tela anterior"
-      style={{ position: 'fixed', bottom: 18, left: 18, zIndex: 1200, display: 'flex', alignItems: 'center', gap: 6,
+      // `--barra-acoes-altura` é declarada pela tela que tem barra fixa embaixo (hoje o imóvel,
+      // no celular). Sem ela a variável não existe e o fallback 0px mantém o botão onde estava.
+      // Assim o flutuante SOBE em vez de tapar a barra, e qualquer tela futura com barra fixa
+      // só precisa declarar a variável — nada aqui muda.
+      style={{ position: 'fixed', bottom: 'calc(18px + var(--barra-acoes-altura, 0px))', left: 18, zIndex: 1200, display: 'flex', alignItems: 'center', gap: 6,
         padding: '10px 16px', borderRadius: 999, border: '1px solid #e2e8f0', background: 'rgba(255,255,255,0.96)',
         color: '#0D63DB', fontSize: 13, fontWeight: 800, cursor: 'pointer', boxShadow: '0 4px 14px rgba(15,23,42,0.18)' }}>
       ← Voltar

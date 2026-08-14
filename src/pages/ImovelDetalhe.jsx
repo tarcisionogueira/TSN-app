@@ -1001,10 +1001,18 @@ export default function ImovelDetalhe() {
       : `Analisar (${cota.restantes} de ${cota.limite} deste mês)`;
   })();
   // A barra fixa do mobile divide a largura com "Acessar leiloeiro" — o rótulo longo estoura.
+  //
+  // O CONTADOR SAIU DAQUI (14/08, dono: "fica uma barra o tempo todo com 3 de 3 análises, isso
+  // acaba ficando cansativo; mostre só na tela onde a pessoa pode selecionar"). Esta barra é
+  // FIXA: acompanha a pessoa por toda a rolagem, então o saldo ficava piscando na frente dela o
+  // tempo inteiro, mesmo enquanto ela só lia a descrição do lote. O saldo continua — e com o
+  // "de N" completo — no botão do CORPO da página, que é onde se decide gerar.
+  // O estado de ESGOTADO fica: ali não é contagem, é aviso de que a ação não vai funcionar, e
+  // esconder isso faria a pessoa clicar para descobrir.
   const rotuloAnaliseCurto = (() => {
     if (!cota || cota.ilimitado) return 'Solicitar Análise';
     if (cota.restantes <= 0) return cota.amostra ? 'Grátis esgotadas' : 'Cota esgotada';
-    return cota.amostra ? `Analisar grátis (${cota.restantes})` : `Analisar (${cota.restantes})`;
+    return 'Solicitar Análise';
   })();
   // LEILÃO ENCERRADO (07/08): o servidor já recusava gerar relatório de lote vencido, mas a tela
   // seguia oferecendo o botão — o cliente só descobria depois de clicar, e para ele o relatório
@@ -1794,6 +1802,10 @@ export default function ImovelDetalhe() {
           .detalhe-grid { grid-template-columns: 1fr !important; }
           .detalhe-sidebar { position: static !important; }
           .detalhe-page { padding-bottom: 96px !important; }
+          /* Altura da barra fixa, publicada para o resto do app. O botão flutuante de voltar e
+             o chat de suporte leem esta variável e SOBEM — antes ficavam por cima da barra,
+             tapando "Leiloeiro" e "Solicitar Análise" (relato do dono, 14/08, com foto). */
+          :root { --barra-acoes-altura: 74px; }
           .acoes-mobile-bar {
             display: flex; gap: 10px; align-items: stretch;
             position: fixed; left: 0; right: 0; bottom: 0; z-index: 900;
