@@ -156,6 +156,93 @@ parecer credora sem ser** — nem assumir risco de crédito sem decidir isso.
 > não move dinheiro, e é o que responde "essa proposta é boa?" — que é a pergunta do Rafael
 > hoje. Contrato e cobrança vêm depois, quando as quatro decisões estiverem tomadas.
 
+#### 4a-bis. Banco Inter, repasse ao investidor e taxa administrativa (dono, 14/08)
+
+> "Podemos avançar com a integração do Banco Inter — o Inter tem boletos gratuitos. O ideal
+> seria fazer o **de pagamento para o investidor**. A ideia é puxar o IPCA e atualizar a parcela
+> mês a mês, mais a **taxa administrativa**, como funciona no financiamento bancário: o cliente
+> recebe o valor corrigido e a gente recebe um percentual administrativo em cima. Veja a
+> legalidade e a melhor forma de estruturar."
+
+**Não sou advogado e isto não é parecer jurídico.** O que segue é o mapa dos pontos que um
+advogado vai olhar, para a conversa com ele começar adiantada — e um deles muda o produto.
+
+##### 🔴 O ponto que muda o produto: 1% a.m. entre PARTICULARES
+
+| | |
+|---|---|
+| 1% a.m. capitalizado | **12,68% a.a.** |
+| Teto da Lei de Usura (Dec. 22.626/1933) para quem **não** é instituição financeira | **12% a.a.** |
+| Excede | **sim, por 0,68 ponto** — e ainda há o IPCA por cima (≈17,75% a.a. com IPCA de 4,5%) |
+
+A Súmula 596 do STF afasta esse teto **para instituições financeiras**. O vendedor do imóvel não
+é uma — é pessoa física ou jurídica comum vendendo a prazo. Some-se a isso a **capitalização
+mensal**, também restrita a quem não é instituição financeira. Ou seja: a taxa proposta está
+exatamente no ponto que se discute em juízo, e a discussão não é teórica — é o argumento padrão
+de quem quer revisar o contrato depois de 18 parcelas pagas.
+
+**Saídas possíveis, em ordem de segurança:**
+1. **Ficar em 1% a.m. simples** (12% a.a. exatos) e deixar a correção monetária (IPCA) fazer o
+   resto — juro e correção são coisas juridicamente distintas, e a correção não é ganho.
+2. **Manter 1% capitalizado com o risco declarado no contrato** e ciência expressa do comprador.
+3. Estruturar via instituição financeira parceira — aí o teto não se aplica, mas o produto deixa
+   de ser nosso.
+
+##### 🟠 O segundo ponto: de quem é o dinheiro no caminho
+
+É aqui que a escolha do Inter decide a exposição regulatória, e **a diferença não aparece na
+tela — só no CNPJ do boleto**:
+
+| Estrutura | Como funciona | Exposição |
+|---|---|---|
+| **A. Boleto na conta do VENDEDOR** *(recomendada)* | a plataforma orquestra a emissão via API do Inter **na conta dele**; o dinheiro vai direto do comprador para o vendedor e **nunca passa por nós** | menor. Somos prestador de serviço, não meio de pagamento |
+| **B. Boleto na conta da BidPro + repasse** | recebemos e transferimos | **gestão de recursos de terceiros** — territorio de arranjo/instituição de pagamento (Lei 12.865/2013 e regulamentação do BCB). Há limiares para autorização obrigatória, mas as regras de conduta valem antes deles |
+| **C. Escrow / conta garantida** | terceiro custodia | mais seguro para as partes, mais caro, e exige parceiro habilitado |
+
+**Recomendação: A.** O dinheiro do comprador não deve tocar a nossa conta. Isso resolve de uma
+vez o risco regulatório, o risco de crédito e a pergunta "quem é o credor?" da armadilha 4.
+
+##### 🟢 O terceiro ponto: a taxa administrativa é serviço, não juro
+
+A analogia com o financiamento bancário é boa para explicar ao cliente e **perigosa se virar a
+estrutura jurídica**. No banco, a taxa administrativa remunera o *credor*, que empresta dinheiro
+próprio. Nós não emprestamos nada: prestamos um serviço de **emissão, correção mensal, cobrança,
+conciliação e prestação de contas**.
+
+Isso é bom — e precisa aparecer assim: contrato de **prestação de serviços** com o vendedor,
+percentual sobre o valor administrado, **nota fiscal de serviço e ISS**. O que não pode é a taxa
+figurar como parte do custo do crédito do comprador, porque aí ela vira encargo de uma operação
+de crédito que não somos autorizados a fazer.
+
+> Consequência prática: **a taxa é cobrada do vendedor** (que contratou o serviço), mesmo que
+> economicamente ele a repasse no preço. Cobrar do comprador nos coloca na operação de crédito.
+
+##### Sobre a integração em si
+
+- API de **Cobrança** do Inter (boleto + PIX no mesmo documento), com **mTLS** (certificado
+  cliente) e OAuth2 — diferente dos gateways que já usamos, que são só chave de API. O
+  certificado é do titular da conta: na estrutura A, é **do vendedor**, e isso muda o
+  onboarding (ele precisa gerar e nos autorizar) e vira o item mais atritoso do fluxo.
+- **Boleto gratuito** é condição comercial da conta PJ e tem limites por faixa — confirmar no
+  contrato vigente antes de prometer "sem custo" ao cliente.
+- Webhook de baixa → conciliação automática, virando lançamento `realizado` (armadilha 1).
+- **O que já temos ajuda:** `api/_webhook-core.js` (HMAC), o padrão de conciliação do Asaas/MP e
+  o `honorarios-split.js` (distribuição por percentual). O Inter entra como **mais um provedor**,
+  não como substituto — o MP continua no checkout de assinaturas.
+
+##### O que levar ao advogado (a lista, pronta)
+
+1. Juros de 1% a.m. **capitalizado** entre particulares × Lei de Usura e Súmula 596.
+2. Estrutura A (boleto na conta do vendedor): confirma que ficamos fora do conceito de arranjo
+   de pagamento?
+3. Taxa administrativa como serviço ao **vendedor** — minuta, ISS, nota.
+4. Correção por IPCA em contrato de compra e venda: periodicidade mínima e índice substituto se
+   o IBGE deixar de publicar.
+5. Inadimplência: garantia (alienação fiduciária do próprio imóvel?), quem executa, e o que a
+   plataforma **não** faz.
+6. Se o comprador for consumidor: CDC, direito à informação do CET e à quitação antecipada com
+   redução proporcional dos juros (art. 52, §2º) — **isto o simulador precisa saber calcular.**
+
 ### 4b. Rateio entre sócios
 Arremate em conjunto é comum. Hoje o portfólio é de um `user_id` só.
 
@@ -228,8 +315,9 @@ O que a plataforma precisa suportar para não perder este caso:
 | 1 | Fluxo de arremate (Decisão 3) | sua resposta sobre o DELETE | sem entrada, o resto é vitrine |
 | 2 | `situacao` previsto/realizado + card do realizado (2 e 4a mínimo) | — | impede o lucro falso; é pequeno |
 | 3 | `arrematados.arrematacao_id` + `imovel_id` UUID (Decisão 1) | — | destrava documentos e evita fazer tudo duas vezes |
-| 4 | **Simulador** de parcelamento (sem cobrança) | 2 | responde "essa proposta é boa?" — a pergunta do Rafael hoje. Barato e não move dinheiro |
-| 5 | Contrato + cobrança MP + conciliação | 4 + as 4 decisões de 4a | vira produto financeiro; só depois do simulador |
+| 4 | **Simulador** de parcelamento (sem cobrança) | 2 | responde "essa proposta é boa?" — a pergunta do Rafael hoje. Barato, não move dinheiro e não depende de advogado |
+| 4.5 | **Parecer jurídico** sobre a lista de 4a-bis | — | a taxa de 1% a.m. capitalizado entre particulares excede o teto da Lei de Usura; decidir isso ANTES de emitir o primeiro boleto |
+| 5 | Contrato + cobrança (Inter, boleto na conta do vendedor) + conciliação | 4 + 4.5 | vira produto financeiro; só depois do simulador e do parecer |
 | 6 | Vitrine `/venda/:id` | suas 3 definições da seção 5 | receita nova, sem depender de terceiro |
 | 7 | Feed XML para portais (OLX etc.) | 6 + contrato comercial | o XML é barato; o contrato é o caminho crítico |
 | 8 | Rateio entre sócios · fechamento fiscal | — | valor real, sem urgência |
