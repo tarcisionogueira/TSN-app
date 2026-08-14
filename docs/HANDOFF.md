@@ -103,6 +103,55 @@ aparecendo várias vezes é rede/timeout a investigar.
 > o tracker emite esse aviso justamente para o 360 não parecer um dia que acaba no meio da tarde,
 > e ele nunca chegava. O aviso contra o silêncio estava sendo silenciado. Os dois entraram.
 
+### 🔴 CONSERTADO: o zoom do iPhone que nunca volta ("perde o dimensionamento ao trocar de tela")
+
+**Relatado pelo dono com print** (tela de filtros da Busca, iPhone): o app aparece deslocado,
+com o logo e o menu ☰ **cortados pela esquerda**, e só volta ao normal dando zoom out na mão.
+Queixa registrada como recorrente.
+
+**Não era vazamento de layout** — e essa distinção é a chave do diagnóstico. Vazamento corta
+pela **direita**, e o `#root { overflow-x: clip }` já cuidava dele. O print está cortado pela
+**esquerda**, o que é outra coisa: a página inteira está **ampliada**, com o viewport visual
+deslocado. Quem faz isso é o Safari do iOS — ele **dá zoom na página inteira quando um campo
+com `font-size` menor que 16px recebe foco**. E o zoom **não volta**: nem ao sair do campo, nem
+ao trocar de tela, porque é escala do viewport visual, não estado da página. Basta o usuário
+tocar UM campo e o app fica torto pelo resto da sessão. No print foi o campo de bairro dos
+filtros (`fontSize: 13`), mas **o app tem 468 campos e a maioria usa 11–14px**: qualquer um
+deles produz exatamente o mesmo efeito. Por isso "já está repetitivo" — cada tela nova era uma
+chance nova de disparar.
+
+Não há saída pelo `<meta viewport>`: `maximum-scale=1` e `user-scalable=no` são **ignorados pelo
+iOS desde a versão 10** — e, se funcionassem, tirariam o zoom de pinça do usuário, que é
+acessibilidade. O único jeito de o iOS não dar o zoom é o campo **já estar em 16px** ao receber
+foco.
+
+*Correção* (`src/index.css`, uma regra, não 468 edições): em ponteiro grosso (toque),
+`input`/`select`/`textarea` vão a 16px. `!important` é obrigatório aqui — os 468 campos definem
+`fontSize` em `style={{…}}` inline, e inline vence folha de estilo. No desktop nada muda: lá não
+existe esse zoom e os campos seguem compactos. Entrou junto `text-size-adjust: 100%`, que impede
+o navegador de inflar a tipografia por conta própria ao girar a tela (outro "parece defeito de
+responsividade" que é o navegador reescalando).
+
+*Medido, não suposto* — Chromium em viewport de iPhone 13 (390×844, toque), comparando o mesmo
+build com a regra ligada e removida do CSSOM:
+
+| Rota | Antes | Depois | Largura |
+|---|---|---|---|
+| `/` | 1/1 campo < 16px | **0** | 390/390 ✅ |
+| `/login` | 2/2 (e-mail e senha, 14px) | **0** | 390/390 ✅ |
+| `/cadastro` | 1/1 | **0** | 390/390 ✅ |
+| `/recuperar-senha` | 1/1 | **0** | 390/390 ✅ |
+| `/planos` | — | — | 390/390 ✅ |
+
+O teste também confirma o ponto que era a única dúvida real: **a regra vence o estilo inline**
+(os campos do login estão inline em 14px e passaram a 16). Nenhuma rota pública vaza na
+horizontal; o único elemento fora da tela é um círculo decorativo com `right: -40px` dentro de um
+card em `/planos`, que deve mesmo ser cortado.
+
+> ⚠️ **O que NÃO foi medido:** as telas atrás do login (a própria Busca do print, Análise,
+> Painel) — o ambiente de teste não tem credencial de cliente. A regra é global e o campo do
+> print está coberto por ela, mas a confirmação visual no iPhone é sua.
+
 ### 🟡 CONSERTADO: a assinatura do defeito de proximidades voltou de 0 para 110 — e NÃO é um quarto escritor
 
 A checagem combinada no fechamento de ontem (`pontos_proximos='{}'` com `proximidades_vazios=0`
