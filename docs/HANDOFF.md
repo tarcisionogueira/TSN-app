@@ -353,6 +353,115 @@ Mais duas travas da mesma revisão:
 
 ---
 
+### ⚠️ ENCERRAMENTO DE 13/08 — estado MEDIDO e o que espera amanhã
+
+> **`main` em `d4f2ca9` · 7 commits no dia · deploy READY · CI verde · working tree limpo.**
+
+**Verificação de fechamento (tudo remedido agora, não de memória):**
+
+| Verificação | Resultado |
+|---|---|
+| `auditoria_seguranca()` | **0 crítico / 0 atenção** |
+| `auditoria_regras_negocio()` | **0 crítico** |
+| KYC ilegível pelo servidor | **0** |
+| Fontes no ponto cego do monitor | **0** |
+| `edital_eq_matricula` | 399 → **0** ✅ |
+| Resíduo de proximidades (assinatura do defeito) | 293 → **0** ✅ |
+| As 3 migrações escritas hoje | **as 3 aplicadas** (conferido em `information_schema`, não no repo) |
+| `verificar:padroes` · `:sintaxe` · `:schema` | **passando** |
+| Erros de cliente abertos | **1** (ver abaixo — não estava lá de manhã) |
+
+### 🔴 OS DOIS ITENS QUE FICAM ABERTOS
+
+**1. Um erro de cliente novo, e eu NÃO consegui cravar a origem.**
+`/imovel/:id` · `Cannot read properties of null (reading 'id')` · **13/08 17:32 UTC** ·
+**usuário anônimo** (`user_id` null) · 1 ocorrência.
+Investiguei os candidatos óbvios e **todos estão guardados**: `lerCotaMercado(supabase, user.id)`
+em `ImovelDetalhe:780` tem `if (!user) return` antes; os três efeitos do `ChatSuporte` (que é
+global, `App.jsx:294`, e portanto renderiza em rota pública) checam `user?.id`. A janela importa:
+17:32 é **depois** do deploy do fluxo dos relatórios (13:20) e **antes** dos meus ajustes de
+`ImovelDetalhe` (20:22) — então não foi causado pelo conserto de layout. `/imovel/:id` é rota
+PÚBLICA (as 33 mil páginas indexadas), então isto bate em visitante que ainda não é cliente.
+**Por onde continuar:** reproduzir em aba anônima abrindo `/imovel/<id>` e olhar o stack no
+console; ou instrumentar `erros_cliente` para gravar o stack, que hoje ele não guarda — essa
+lacuna é o motivo real de eu não ter fechado o diagnóstico daqui.
+
+**2. `proximidades_vazio_falso` = 440 (limite 300) — mas NÃO é o defeito voltando.**
+A assinatura do defeito (`pontos_proximos='{}'` com `proximidades_vazios=0`, estado que só o job
+OSM produzia) está em **0** e não saiu de lá. Os 440 são vazios que o cron **corroborou** com 3+
+observações em execuções distintas: 120 foram confirmados entre 12h30 e 23h45 de hoje, todos com
+`obs >= 3`, acumuladas ao longo de dias. É a corroboração funcionando.
+**A pergunta que sobra é do dono, e é de calibragem, não de bug:** com 14,7 mil lotes com pontos
+em 1.197 cidades, ter ~440 lotes sem NENHUM POI num raio de 4 km (periferia rural de cidade
+mapeada) é plausível. Ou o limite de 300 subiu de escala e deve ser recalibrado, ou há vazio
+falso residual de outra origem. **Não recalibrei por conta própria** — mexer no limite sem
+decidir qual das duas é o caso transformaria o alerta em enfeite.
+
+### 🔥 A PROVA DE FOGO É AMANHÃ ÀS 05h UTC
+
+O job `enriquecer-osm` roda 05:00 UTC. A correção dele foi ao ar às 12h15 de hoje, **depois** da
+execução de hoje — então a rodada de 14/08 é a primeira com o código novo. Conferir:
+```sql
+-- tem que continuar ZERO. Se sair de zero, apareceu um QUARTO escritor.
+select count(*) from imoveis_leilao
+ where ativo and pontos_proximos='{}'::jsonb and coalesce(proximidades_vazios,0)=0;
+```
+E no log do workflow, a linha nova separa `com pontos` de `sem POI (deixados p/ o cron)` — se
+`sem POI` vier alto, o problema é o extrato de POIs, não o Brasil ter ficado sem escolas.
+
+### 🧪 O TESTE QUE DEPENDE DO DONO
+
+**Regerar o mercadológico do imóvel de Lavras** (Av. José Brumatti 2856, Guarulhos) e conferir 3
+coisas: (a) as imobiliárias de Guarulhos aparecem entre as FONTES das amostras? (b) os anúncios
+de R$ 250–270 mil que o dono achou no Google entram? (c) o `baseCalculo` mostra a fórmula e os
+descartes?
+
+> **A ressalva que precisa sobreviver ao fim do dia:** a conta foi consertada e ficou auditável,
+> mas **a diferença para os R$ 250–270 mil era de RECALL DA BUSCA, não de cálculo**. Medido: com
+> as amostras que o sistema achou, o valor determinístico dá R$ 201.300 contra os R$ 202.653 da
+> IA — praticamente igual. Se depois deste deploy os anúncios continuarem não entrando, o
+> gargalo é a cobertura do Gemini grounding, e o próximo passo é uma segunda passada focada no
+> ENDEREÇO exato. Não mexi nisso porque quero o número real antes.
+
+### ⏳ Pendências do DONO (as de 12/08 seguem, nenhuma foi resolvida hoje)
+
+(A) sufixo UTM com `utm_term`/`utm_content` — **medido hoje: 6 cliques do Ads em 14 dias, todos
+com `gclid` e `utm_term` NULO em 6 de 6**; (B) verificação do anunciante Google Ads, prazo 02/09;
+(C) MX do domínio; (D) nome fantasia/objeto social na Junta; (E) Bright Data, teto saturado
+(480/405), decisão marcada para 18/08; (F) "uso ocasional" como coluna.
+
+---
+
+## 🏁 O QUE FOI FEITO EM 13/08 — os 7 commits
+
+1. **`05eedcd` — Proximidades e edital CEF.** O terceiro escritor de `pontos_proximos`
+   (`enriquecer-osm.mjs`) gravava vazio como resposta E recarimbava `proximidades_em` de 12.820
+   dos 13.101 lotes a cada 48h, **desligando a auto-cura de 30 dias criada em 10/08**. Mais: o
+   botão "Edital" de 399 lotes CEF abria a MATRÍCULA.
+2. **`d77e24e` — Fluxo igual nos 3 relatórios.** O laudo arrancava o cliente do hub; documental
+   e laudo não tinham etapas para mostrar. Coluna `progresso` nas 3 tabelas, 4 etapas reais no
+   documental, 2 no laudo, barra unificada.
+3. **`413535f` — Preço do m² ponderado.** A conta saiu da IA e virou código
+   (`api/_valor-mercado.js`).
+4. **`35fadb1` — Busca começa pelas imobiliárias locais.** A hipótese do dono ("erra em
+   localizar") **não se confirmou** — Guarulhos tinha 13 imobiliárias mapeadas e 88 reusos. O
+   defeito era de PRIORIDADE: o prompt punha os portais primeiro e colava a lista da praça no FIM.
+5. **`b9a76d9` — Revisão de custo-benefício.** Pegou um defeito MEU: o bloco novo pedia 4 buscas
+   onde o orçamento é 2, o que desfaria em silêncio a economia de 06/08. Resolvido pela memória
+   (praça conhecida não gasta busca de descoberta) + mínimo de 3 amostras para substituir a IA.
+6. **`ed98bde` — Mobile.** Selos vazando no 360 (`min-width: auto` + `flexShrink: 0`) e rolagem
+   lateral na tela de imóvel (rótulos de largura fixa sem `flexWrap`).
+7. **`d4f2ca9` — As duas classes viraram TRAVA.** `flash-de-vazio-no-carregamento` e
+   `flex-rotulo-fixo-sem-quebra` entram com **linha de base ZERO** (portão duro);
+   `flex-2col-sem-minwidth0` com base de 33 arquivos. **Testadas de ponta a ponta:** arquivo com
+   as construções reprova com `exit=1` e volta a passar quando removido.
+
+**O fio que costura o dia inteiro:** todo defeito de hoje foi *ausência entregue como resposta* —
+o vazio do Overpass, o lance mínimo como comparável de mercado, o aluguel como venda, o spinner
+mudo no lugar da etapa, e o `useState([])` que afirma "nenhum" antes de o servidor responder.
+
+---
+
 ## 🔚 SESSÃO DE 12/08 — leia ESTE bloco primeiro
 
 > **O dia em uma frase:** começou como ritual de verificação e virou a maior varredura da base até
