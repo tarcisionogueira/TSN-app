@@ -242,7 +242,17 @@ async function aprenderNaEmissao(imovel, mercado, temParecer, avalReal, minReal)
       : (Number(imovel?.valor_avaliacao) || Number(imovel?.valorAvaliacao) || null);
     const min  = Number(minReal) > 0 ? Number(minReal)
       : (Number(imovel?.valor_minimo) || Number(imovel?.valorMinimo) || null);
-    const nAmostras = mercado?.amostras?.length || mercado?.comparaveis?.length || mercado?.anuncios?.length || 0;
+    // CAMPO MORTO ATÉ 14/08: lia `amostras`/`comparaveis`/`anuncios`, três nomes que o objeto
+    // `mercado` NUNCA teve — as amostras moram em `nivel1`/`nivel2` (e nas listas achatadas
+    // `vendas`/`locacoes`). Resultado: `n_amostras: 0` em **140 de 140** registros desde 18/07,
+    // justamente o campo que diz se um relatório foi feito sobre 3 amostras ou sobre 30. É o
+    // mesmo defeito de nome que o comentário acima descreve para `valorAvaliacao`, na mesma
+    // função. A expressão certa já existia neste arquivo (linha ~2353, semeadura do Índice).
+    const nAmostras = ((Number(mercado?.nivel1?.totalAmostras) || 0) + (Number(mercado?.nivel2?.totalAmostras) || 0))
+      || ((mercado?.nivel1?.vendas?.length || 0) + (mercado?.nivel1?.locacoes?.length || 0)
+        + (mercado?.nivel2?.vendas?.length || 0) + (mercado?.nivel2?.locacoes?.length || 0))
+      || ((Array.isArray(mercado?.vendas) ? mercado.vendas.length : 0)
+        + (Array.isArray(mercado?.locacoes) ? mercado.locacoes.length : 0));
     const precoM2 = Number(mercado?.precoMedioM2) || null;
     const corpus = {
       valor_avaliacao: aval, valor_minimo: min,
