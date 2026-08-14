@@ -132,7 +132,10 @@ h2{font-size:18px;margin:32px 0 12px}
    para o robô do buscador tanto quanto para a pessoa. */
 .busca{background:#fff;border:1px solid var(--linha);border-radius:14px;padding:18px;margin:0 0 24px}
 .busca form{display:flex;gap:10px;flex-wrap:wrap}
-.busca input{flex:1;min-width:220px;padding:12px 14px;border:1px solid var(--linha);border-radius:10px;font-size:15px;font-family:inherit;color:inherit;background:#fff}
+/* 16px, não 15: abaixo disso o Safari do iOS dá zoom na página inteira ao focar o campo e
+   NÃO desfaz — a pessoa fica com a página torta até pinçar na mão. Mesmo defeito corrigido
+   no app em 14/08; esta página é servida por outro caminho e tem o CSS dela. */
+.busca input{flex:1;min-width:220px;padding:12px 14px;border:1px solid var(--linha);border-radius:10px;font-size:16px;font-family:inherit;color:inherit;background:#fff}
 .busca input:focus{outline:2px solid var(--azul);outline-offset:1px}
 .busca button{padding:12px 22px;border:none;border-radius:10px;background:var(--azul);color:#fff;font-weight:800;font-size:15px;cursor:pointer;font-family:inherit}
 .busca .dica{font-size:12.5px;color:var(--cinza);margin:10px 0 0}
