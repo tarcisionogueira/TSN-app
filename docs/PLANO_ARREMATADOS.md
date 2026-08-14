@@ -774,6 +774,141 @@ Desenho: faixas por quantidade (ex.: 1–3 · 4–10 · 11–30 · 31+), preço 
     qual administradora de consórcio · qual instituição para o home equity. Cada uma é uma
     conversa comercial, e nenhuma depende de código.
 
+#### 4a-sexies. Imóvel fora de leilão, tela do inquilino, preço de mercado e captação (dono, 14/08)
+
+> "De imóveis próprios, onde o cliente pode **anexar a matrícula do seu imóvel mesmo não sendo de
+> leilão**, para administrar a locação ou a venda. O módulo de contratos cobra **mensalidade por
+> quantidade de contratos**. Agora, tendo uma **tela para o inquilino** receber esse boleto para
+> pagar, como se fosse uma tela de **prestação de contas / comunicação**. Concorrentes cobram
+> valores variados para cada função — a ideia é **pesquisar quanto estão cobrando** para cobrar
+> equivalente ou um pouco mais em conta. Quanto ao **crédito com imóvel**, deve ser como o
+> **consórcio**: precisa estruturar uma forma de **captar os usuários** para contratar."
+
+##### A. Imóvel fora de leilão — o item que mais muda o produto, e quase não custa
+
+✅ **Resolve a Decisão 17:** a unidade de cobrança é o **contrato**, não o imóvel cadastrado.
+
+Mas o pedido é maior do que parece. Hoje `arrematados` pende do acervo de leilão. Aceitar
+**matrícula de imóvel qualquer** faz duas coisas:
+
+1. **Escala a Decisão 1.** O caso do Rafael já exigia `arrematacao_id` NULO como estado de
+   primeira classe. Agora é preciso ir além: **imóvel sem origem de leilão nenhuma**, com a
+   matrícula como âncora. Ou seja, `imovel_id` apontando para o acervo deixa de servir como
+   chave — e é muito mais barato nascer assim do que migrar depois.
+2. **Muda o público-alvo.** O produto deixa de ser só para quem arremata e passa a servir
+   **qualquer proprietário**. É a diferença entre um nicho e um mercado — e o caminho de entrada
+   continua sendo o leilão, que é o nosso diferencial.
+
+> 💡 **E destrava um upsell que já está construído:** os relatórios mercadológico, documental e
+> laudo **não dependem de o imóvel ser de leilão**. Proprietário que anexa a matrícula pode gerar
+> avaliação do próprio patrimônio. Custo de IA existe — entra na cota, como hoje —, mas o código
+> é o mesmo. **É receita nova sobre máquina já paga.**
+
+##### B. A tela do inquilino — quatro consequências que não são de código
+
+O inquilino é um **usuário que não é nosso cliente**: não se cadastrou, não paga, e pertence ao
+nosso cliente. Isso tem quatro desdobramentos:
+
+1. **Acesso por link com token, não por conta.** É o padrão que já usamos em `contratos_link`,
+   `og-share` e as rotas públicas — reaproveitável. Conta completa para inquilino é atrito sem
+   retorno, e ainda cria um usuário que não sabemos tratar no funil.
+2. **LGPD: papéis diferentes.** Sobre o dado do inquilino, o **proprietário é o controlador** e a
+   plataforma é **operadora**. Isso precisa de cláusula no contrato do dono — não é detalhe de
+   política de privacidade, é a definição de quem responde.
+3. 🔴 **Marca — e isto toca o enquadramento de 4a-quater.** Se a tela do inquilino tiver a nossa
+   cara, o inquilino entende que **nós administramos o imóvel**, e é exatamente essa a leitura que
+   a decisão de "software para patrimônio próprio" evita. **A tela deve deixar claro que quem
+   administra é o proprietário** (nome dele em primeiro plano, nós como ferramenta). É a mesma
+   lógica da conta por dono nos portais: mais trabalho, e é o que sustenta o enquadramento.
+4. **Comunicação vira prova.** Mensagens entre dono e inquilino sobre atraso, reparo e reajuste
+   são material de despejo. Retenção, exportação e integridade do histórico têm que ser decididas
+   **antes**, não quando alguém pedir.
+
+> ⚠️ **Uma pergunta a decidir, não a assumir:** o inquilino é um lead? Ele é um bom candidato a
+> comprador, a seguro e a consórcio. Mas oferecer produto financeiro dentro da tela de cobrança
+> **do imóvel do nosso cliente** é o comportamento que mais se parece com administradora — e usa
+> dado de que somos apenas operadores. **Recomendação: não ofertar nada ao inquilino na v1.**
+
+##### C. Pesquisa de preço — o que o mercado cobra hoje, e a armadilha da comparação
+
+Levantamento em **14/08/2026**, com a ressalva importante de que **a maioria não publica preço**
+(trabalha com "consulte") e os valores abaixo vêm de páginas públicas e comparativos — servem como
+**ordem de grandeza**, não como tabela:
+
+| Produto | Público | Preço divulgado | Unidade |
+|---|---|---|---|
+| **Superlógica Imobiliárias** | imobiliária (e proprietário) | a partir de **~R$ 49/imóvel/mês** + implantação de **R$ 500 a R$ 3.000** | **por imóvel** |
+| **Kenlo Imob** | imobiliária | **~R$ 247 a R$ 497/mês** | **por imobiliária** |
+| **Jetimob** | imobiliária | a partir de **~R$ 229/mês** no anual, + R$ 29,90/usuário extra e R$ 9,90 a cada 100 imóveis | **por imobiliária + pacotes** |
+| **Piloto Imóveis** | proprietário | **~R$ 49 a R$ 299/mês** | por faixa |
+| **Rentila** | proprietário | **gratuito** (plano base) | — |
+
+🔴 **A armadilha, e é a forma nº 8 do `CLAUDE.md` aplicada a preço:** esses números **não são
+comparáveis entre si**. R$ 49 da Superlógica é **por imóvel**; R$ 247 da Kenlo é **pela
+imobiliária inteira**. Um proprietário com 5 contratos paga ~R$ 245 num e ~R$ 247 no outro — quase
+igual —, mas com 20 contratos paga ~R$ 980 contra os mesmos ~R$ 247. **Comparar preço de tabela
+sem normalizar pela unidade dá um número plausível e errado.** Para decidir a nossa faixa, a
+métrica é uma só: **custo mensal para um dono com N contratos ativos**, N = 1, 3, 5, 10, 20.
+
+**Três achados que valem mais que os preços:**
+
+- **Os incumbentes precificam para IMOBILIÁRIA.** Quem tem 3 imóveis ou paga preço de agência ou
+  paga por imóvel, que escala mal. O nicho **landlord-first** é raro — e é onde o dono acabou de
+  posicionar o produto.
+- **A taxa de implantação é o número invisível.** R$ 500–3.000 é, para um dono com 3 contratos,
+  **o maior custo do primeiro ano** — e some da comparação de tabela. **Zero implantação é
+  diferencial que não nos custa nada.**
+- **"Portal do inquilino" é padrão de mercado, não diferencial.** Vale construir porque a ausência
+  seria notada, mas **não é onde investir para ganhar**. O nosso diferencial continua sendo o que
+  ninguém tem: acervo de leilão, análise e o imóvel entrando pelo arremate.
+
+**O que falta na pesquisa** (e é conversa comercial, não código): preço real por faixa, pedido como
+proposta; e o custo das funções vendidas à parte — assinatura eletrônica, garantia locatícia,
+cobrança —, porque é aí que os pacotes divergem de verdade.
+
+##### D. Captação para crédito com imóvel e consórcio — o funil da família B
+
+O dono está certo em tratar os dois juntos no **problema** (captar) e é preciso separá-los no
+**público** — e é aqui que existe algo que nenhum concorrente consegue fazer:
+
+**Home equity — o sinal já está no nosso banco.** Portfólio com imóvel **quitado** + valor
+estimado que os nossos próprios relatórios calculam = **valor pré-qualificado de crédito com
+garantia, computável sem perguntar nada a ninguém.** Um originador comum compra esse dado; nós o
+produzimos. O funil:
+
+`imóvel quitado no portfólio` → **simulação sem consulta** (não custa, não deixa rastro no score)
+→ interesse → **consentimento explícito** → encaminhamento ao parceiro → acompanhamento do status
+→ comissão.
+
+> A ordem importa por dois motivos: consulta a bureau **custa** e deixa marca no histórico do
+> cliente. **Simular antes, consultar só depois do interesse** é mais barato e mais respeitoso.
+
+**Consórcio — é outro público, e o insight é o oposto.** Consórcio não é crédito: é poupança de
+grupo, para quem **não tem o dinheiro agora**. O nosso melhor candidato não é quem arrematou — é
+**quem acompanha leilão e ainda não conseguiu comprar**: filtro salvo ativo, relatórios gerados,
+zero arremates. Esse público já está identificado na base e hoje não recebe oferta nenhuma.
+
+**Três regras que valem para os dois:**
+
+1. **Consentimento específico** para usar dado do portfólio em oferta financeira — não vale o
+   termo de uso genérico. Encaixa no aceite único que já foi unificado no cadastro.
+2. **Divulgação da remuneração na tela da oferta** (a trava de conflito de 4a-ter e 4a-quinquies).
+3. **Como correspondente, não somos a instituição** e não podemos parecer que somos: quem aprova,
+   quem empresta e quem cobra é o parceiro, e isso tem que estar dito na peça.
+
+##### Decisões que faltam (somam-se às anteriores)
+
+19. **Âncora do imóvel fora de leilão** — matrícula como chave? E como conviver com o `imovel_id`
+    do acervo sem criar duas ideias de "imóvel".
+20. **Relatórios para imóvel próprio fora de leilão** — entram na mesma cota ou viram produto
+    avulso?
+21. **Marca da tela do inquilino** — do proprietário (recomendado), co-marcada, ou nossa.
+22. **Ofertar ou não ao inquilino** — recomendação: não na v1.
+23. **Faixas de preço**, decididas pela métrica normalizada (custo para N contratos), e **se a
+    implantação é zero** (recomendado).
+24. **Ordem da captação da família B:** home equity (sinal pronto no banco) antes de consórcio
+    (público diferente, e depende de parceria com administradora autorizada).
+
 ### 4b. Rateio entre sócios
 Arremate em conjunto é comum. Hoje o portfólio é de um `user_id` só.
 
@@ -889,7 +1024,10 @@ jurídica, de parecer, de capital ou de funding.
 |---|---|---|
 | 11 | O módulo é **software para o dono administrar patrimônio próprio** — sem CRECI, porque não há negócio alheio | 4a-quater |
 | — | A plataforma **executa, não intermedeia**: gera contrato com os dados do dono, cobra, concilia, avisa, presta contas, anuncia em nome dele. **Não procura inquilino nem comprador** | 4a-quinquies |
-| — | Cobrança por **mensalidade por grupo de imóveis** (faixas por quantidade) | 4a-quinquies |
+| — | Cobrança por **mensalidade por faixa de quantidade** | 4a-quinquies |
+| **17** | A unidade de cobrança é o **contrato ativo**, não o imóvel cadastrado — o portfólio segue gratuito | 4a-sexies |
+| — | O cliente pode anexar **matrícula de imóvel próprio fora de leilão** | 4a-sexies |
+| — | Existe **tela do inquilino** (boleto, prestação de contas, comunicação) | 4a-sexies |
 | 5-A | Estrutura do dinheiro **sem** financeira: boleto na conta do vendedor/proprietário | 4a-bis |
 
 ### ⏳ Abertas — em ordem de quanto destravam
@@ -902,8 +1040,13 @@ jurídica, de parecer, de capital ou de funding.
 | **6** | Financeira própria **× IF parceira** (correspondente) | o correspondente entrega quase a mesma experiência por custo ~zero |
 | **14** | **Uma** tabela `contrato` para todas as modalidades × uma por modalidade | decide se a máquina é construída uma vez ou cinco |
 | **15** | Quais modalidades entram, e em que ordem | sugestão: locação + home equity |
-| **17** | **Contrato ativo × imóvel cadastrado** como unidade de cobrança | cobrar por cadastro pune quem usa o portfólio |
+| **19** | **Âncora do imóvel fora de leilão** (matrícula?) sem criar duas ideias de "imóvel" | é muito mais barato nascer assim do que migrar depois — e escala a Decisão 1 |
+| **23** | **Faixas de preço** pela métrica normalizada (custo para N contratos) · implantação zero | comparar tabela sem normalizar a unidade dá número plausível e errado |
+| **24** | Ordem da captação da família B: **home equity antes de consórcio** | o sinal do home equity já está no banco; consórcio depende de parceria |
 | 1 | `arrematacoes` × `arrematados`: uma estrutura ou duas | destrava documentos |
+| 20 | Relatórios para imóvel fora de leilão: mesma cota × produto avulso | receita nova sobre máquina já paga |
+| 21 | **Marca da tela do inquilino** — do proprietário (recomendado) × nossa | tela com a nossa cara sugere que nós administramos, e é o que o enquadramento evita |
+| 22 | Ofertar produto financeiro ao inquilino — recomendação: **não na v1** | é o comportamento que mais se parece com administradora |
 | 2 | Lucro **realizado × potencial** como número principal | impede o lucro falso |
 | 3 | Fluxo de arremate de 06/08 (inclui o DELETE de documento pelo cliente) | sem entrada, o resto é vitrine |
 | 4 | De quem saem os **0,5%** da venda | ver a Decisão 12: a forma de cobrar é prova do enquadramento |
