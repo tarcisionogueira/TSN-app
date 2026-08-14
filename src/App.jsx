@@ -43,6 +43,7 @@ const Membros = lazy(() => import('./pages/Membros'));
 const Cliente360 = lazy(() => import('./pages/Cliente360'));
 const Curso = lazy(() => import('./pages/Curso'));
 const Planos = lazy(() => import('./pages/Planos'));
+const Alavancagem = lazy(() => import('./pages/Alavancagem'));
 const AdminChargebacks = lazy(() => import('./pages/AdminChargebacks'));
 const Login = lazy(() => import('./pages/Login'));
 const CompletarCadastro = lazy(() => import('./pages/CompletarCadastro'));
@@ -298,6 +299,10 @@ function MainLayout() {
           {/* Visitante vê a Landing de marketing; cliente logado vê a Home por plano. */}
           <Route path="/" element={isLoggedIn ? <HomeCliente /> : <Landing />} />
           <Route path="/planos" element={<Planos />} />
+          {/* Alavancagem (Home Equity + Consórcio) — pública, e de propósito NÃO linkada em
+              menu nenhum até o dono aprovar a página (pedido dele, 14/08). O botão na tela
+              inicial entra depois da aprovação. */}
+          <Route path="/alavancagem" element={<Alavancagem />} />
           <Route path="/plano/:key" element={<RedirectPlano />} />
           <Route path="/buscar" element={<PrivateRoute><Busca /></PrivateRoute>} />
           <Route path="/completar-cadastro" element={<PrivateRoute><CompletarCadastro /></PrivateRoute>} />
