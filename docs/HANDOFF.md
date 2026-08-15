@@ -28,6 +28,111 @@
 > Checagem rápida a qualquer momento: `select public.auditoria_seguranca();` → `0 crítico / 0 atenção` = íntegro.
 > **Auditorias ofensivas completas: 15/07/2026 (×2).** Total de correções: 15 (1ª rodada) + escalonamento por convite (CRÍTICO) + IDOR do MP (ALTO) + escala. Refazer a ofensiva quando entrarem rotas/pagamento/RLS novos (a Rotina mensal já faz isso sozinha).
 
+## 🩺 ABERTURA DE 15/08 — o backup off-region não copiava NADA do cliente há 4 dias
+
+> Ritual rodado às 10h30 UTC. Heartbeat carimbado. **Segurança 0/0 · regras de negócio 0 crítico
+> · nenhuma fonte abaixo do piso aprendido · KYC 0 · chamado de cliente sem resposta 0 ·
+> relatórios com falha em 24h: 0.** Dois achados, os dois consertados hoje — e os dois da mesma
+> família: **número plausível cobrindo uma falha que não sabe que falhou.**
+
+### 🔴 1. O backup off-region copiava 100% espelho e 0% arquivo de cliente
+
+**Sintoma que estava à vista e foi lido errado:** `ok: false` com `falhas: 0` e
+`arquivos_iguais: 0` nos dias 12, 13, 14 e 15/08. O CLAUDE.md ensina a ler isso como "o job está
+atrás do crescimento diário" — e foi assim que passou em 14/08. **Era outra coisa.**
+
+**Medido hoje:** o manifesto tinha **11.878 arquivos / 17 GB**, num cron desenhado para ~50
+arquivos / ~14 MB. E dos 49 uploads irrecuperáveis — KYC, contrato, comprovante, matrícula
+manual — **49 estavam FORA da janela**. Zero copiados. Os `658 arquivos novos` da rodada de hoje
+eram 658 PDFs de leiloeiro.
+
+| | 12/08 | 13/08 | 14/08 | 15/08 |
+|---|---|---|---|---|
+| "arquivos novos" | 668 | 613 | 736 | 658 |
+| arquivos de cliente entre eles | **0** | **0** | **0** | **0** |
+
+**Causa-raiz, em duas partes que só juntas produzem o efeito:**
+1. **O filtro anti-raspado ficou para trás.** A regra do desenho é "o que vem do leiloeiro fica
+   de fora, é recuperável pela captura", escrita como `name not ilike '%_auto%'`. O espelhamento
+   de documentos (`api/espelhar-docs-cron.js`) nasceu **depois** gravando `espelho/FONTE/<id>/…`,
+   sem esse sufixo — e entrou inteiro no manifesto.
+2. **`order by updated_at desc` + truncagem do PostgREST.** O espelho grava centenas por dia
+   (3.169 objetos mexidos em 24h) e ocupava sozinho o topo da ordenação, empurrando para fora das
+   1.000 linhas os uploads humanos, que quase nunca mudam. Daí `arquivos_iguais: 0` todo dia: o
+   conjunto dos 1.000 mais recentes muda diariamente. **Uma cópia que nunca converge, do material
+   que nem precisava ser copiado.**
+
+> ⚠️ **A leitura que quase repetiu o erro de ontem:** `arquivos_novos: 658` parece progresso.
+> Progresso e trabalho inútil produzem o mesmo número — só a composição os separa, e o painel não
+> mostrava composição. `rows.length` = 1.000 era indistinguível de "o manifesto tem 1.000
+> arquivos": **corte entregue como conteúdo**, a forma nº 5, num job cuja única razão de existir
+> é proteger o arquivo do cliente contra perda definitiva.
+
+**Correções** (`backup_manifesto_exclui_espelho_e_declara_total.sql`, **já aplicada no banco**, +
+`api/backup-r2-cron.js`):
+- `espelho/` sai do manifesto → **de volta a 49 arquivos / 14 MB**, o desenho original.
+- **Ordenação invertida** (mais antigo primeiro): se o orçamento de tempo cortar a fila de novo,
+  quem fica para depois é o recém-criado, não o arquivo velho que nunca foi copiado.
+- **A função declara o `total` REAL em cada linha** e o cron compara recebido × existente. Com
+  truncagem detectada o run não pode ser `ok` e a limpeza de órfãos não roda — apagar com base em
+  listagem parcial removeria justamente as cópias insubstituíveis. Vale para qualquer crescimento
+  futuro, não só para este.
+
+> 📌 **Efeito colateral que também se resolve:** a limpeza LGPD (passo 3 — o que sai da origem tem
+> de sair do backup) estava **pulada desde 11/08** com `storage_incompleto`, porque a fila nunca
+> terminava. Com o manifesto no tamanho certo ela volta a rodar.
+>
+> ✅ **CONFERIR NA PRÓXIMA ABERTURA** (o cron roda 04:43 UTC de 16/08):
+> ```sql
+> select executado_em, ok, arquivos_total, arquivos_novos, arquivos_iguais, falhas,
+>        detalhe->'storage'->>'truncado' as truncado, detalhe->'limpeza'->>'pulada' as limpeza
+>   from backup_execucoes order by executado_em desc limit 3;
+> ```
+> **Verde é:** `ok: true` · `arquivos_total: ~49` · `truncado: null` · `limpeza.pulada: null`. Na
+> 1ª rodada `arquivos_novos` deve ser ~49 (nenhum estava lá); da 2ª em diante, `arquivos_iguais`
+> alto e `novos` perto de 0 — **é `iguais` subindo que prova que a cópia converge.**
+>
+> 🔵 **DECISÃO DO DONO (não é urgente, mas é uma escolha real):** o espelho ficou **sem cópia
+> off-region**. Ele é PDF público do leiloeiro, e existe justamente porque o leiloeiro pode tirar
+> o arquivo do ar — então não é 100% recapturável. Excluí-lo restaura o desenho e é o certo hoje
+> (17 GB não podem competir com 14 MB pelo mesmo tempo de execução). Se você quiser o espelho
+> protegido também, isso é **manifesto próprio, com orçamento próprio** — e custo de R$ no R2 a
+> dimensionar. Nunca a mesma fila.
+
+### 🔴 2. `/alavancagem` pedia `perfis.whatsapp` — coluna que nunca existiu
+
+Achado em `erros_cliente`: `Supabase 400 em "perfis": column perfis.whatsapp does not exist`, na
+tela que subiu ontem. A única coluna de contato em `perfis` é `telefone`.
+
+**O que o cliente via:** o `error` era conferido (o comentário de ontem previa isso), então a tela
+não quebrava — ela mostrava o cliente logado **sem telefone nenhum**, e o lead chegava à equipe
+**sem número e sem o botão de WhatsApp** do aviso. Numa tela que promete "alguém da equipe entra
+em contato", o contato é o produto. **Corrigido** (`src/pages/Alavancagem.jsx`).
+
+### 🔒 3. A trava de schema passa a conferir as colunas pedidas em `.select()`
+
+Era a lacuna exata que deixou o item 2 passar: `perfis` existe e `whatsapp` não é coluna de data —
+nem o item 1 nem o item 2 do `verificar:schema` a alcançavam. Agora um terceiro item confere
+**toda coluna pedida em `.select('a, b, c')`** contra o schema real.
+
+**Conservador por desenho:** o `select` do PostgREST aceita embed (`perfis(nome)`), alias, cast,
+json path e `*`; se o literal contiver qualquer coisa fora de identificadores simples separados
+por vírgula, ele é **ignorado por inteiro**. Uma trava que grita errado é desligada pela equipe em
+uma semana. **Medido:** 280 pares tabela.coluna conferidos contra o banco → **zero falso-positivo,
+zero achado além do `whatsapp`**; e com o bug reintroduzido, ela reprova.
+
+### 🟠 O que NÃO consertei — e por quê
+
+| O quê | Estado | Leitura |
+|---|---|---|
+| `proximidades_vazio_falso` **745**/300 (era 440 em 13/08, 666 em 14/08) | aberto | **Medi a composição hoje e ela muda o diagnóstico:** são lotes capturados em **13–15/08** (PESTANA 263, LJUD 153, GRUPOLANCE 107), não acervo antigo. Não é relatório mentindo — é a **fila do job OSM (05h UTC) andando mais devagar que a captura**. O limite de 300 mede uma coisa e o alerta virou outra. A calibragem continua sendo sua decisão, mas agora com a causa certa |
+| `bd_teto_saturado` 480/405 | aberto | Decisão sua marcada para **18/08** |
+| `cadastro_barrado` **8**/7 (alerta novo) | aberto | Todas as 8 são a MESMA mensagem: senha fora da regra. **5 delas em 3 minutos, do mesmo cadastro (12/08 15:13–15:16)** — alguém tentou cinco vezes e não conseguiu criar conta. Vale conferir se a tela mostra os requisitos ANTES de tentar, não só depois de recusar |
+| `relatorio_yield_sem_x100` 1/0 | aberto | O relatório de Sorocaba, esperando regeração (o dado de ENTRADA é que está errado) |
+| Os ~22 chamados sem aviso | aberto | Decisão sua, herdada de 14/08 |
+
+---
+
 ## 🏁 FECHAMENTO DE 14/08 — leia ESTE bloco primeiro
 
 **O dia foi de três naturezas diferentes, e misturá-las confunde:** (a) consertos que foram para
