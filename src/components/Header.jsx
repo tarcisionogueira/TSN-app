@@ -4,6 +4,7 @@ import { Briefcase, Search, LayoutDashboard, Home, Menu, X, ChevronRight, Gradua
 import TourGuiado, { TOUR_KEY_EXPORT as TOUR_KEY } from './TourGuiado';
 import AnalisesMenu from './AnalisesMenu';
 import { useAuth } from '../contexts/AuthContext';
+import { chatDisponivelPara } from '../utils/chatDisponivel';
 import { usePlanos } from '../contexts/PlanosContext';
 import { supabase } from '../utils/supabase';
 
@@ -143,6 +144,10 @@ export default function Header() {
   // uma segunda regra: é o mesmo número, exibido em outro lugar. Duas leituras independentes do
   // mesmo fato é como se criam os dois painéis que discordam.
   const [naoLidasChat, setNaoLidasChat] = React.useState(0);
+  // NÃO OFERECER O QUE NÃO EXISTE (15/08). O item de menu nasceu gated só por "logado", mas o
+  // ChatSuporte não se desenha para equipe nem em modo suporte — então o admin via "Assistente",
+  // clicava e não acontecia nada. Agora as duas pontas perguntam à MESMA função.
+  const temChat = chatDisponivelPara({ isLoggedIn: !!user, role: effectiveRole, impersonate });
   React.useEffect(() => {
     const h = (e) => setNaoLidasChat(Number(e?.detail || 0));
     window.addEventListener('tsn:chat-nao-lidas', h);
@@ -324,7 +329,7 @@ export default function Header() {
               atrapalhava, e no desktop virava um elemento solto, fora da navegação, competindo
               com o conteúdo. Como tópico ele fica onde a pessoa procura o que fazer, e o número
               de não lidas continua visível ao lado. */}
-          {!loading && user && (
+          {!loading && temChat && (
             <button onClick={() => window.dispatchEvent(new CustomEvent('tsn:open-chat'))}
               style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', border: 'none', borderRadius: 8, background: 'transparent', color: '#94a3b8', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
               <MessageCircle size={14} /> Assistente
@@ -470,7 +475,7 @@ export default function Header() {
               acesso de um clique tem valor. Aqui a mesma função vira uma linha do menu, que é
               onde a pessoa já procura o que fazer. O `naoLidasChat` mostra o mesmo número do
               badge, para o aviso não sumir junto com o botão. */}
-          {!loading && user && (
+          {!loading && temChat && (
             <button onClick={() => { window.dispatchEvent(new CustomEvent('tsn:open-chat')); setOpen(false); }}
               style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: 'none', borderRadius: 8, background: 'transparent', color: '#94a3b8', fontWeight: 600, fontSize: 14, cursor: 'pointer', textAlign: 'left' }}>
               <MessageCircle size={16} /> Falar com o assistente

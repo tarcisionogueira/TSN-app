@@ -3,8 +3,8 @@ import { X, Send, Paperclip, Bot, Loader2, UserCheck, ArrowLeft, Plus, ChevronRi
 import { supabase } from '../utils/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { apiCall } from '../utils/apiCall';
+import { chatDisponivelPara } from '../utils/chatDisponivel';
 
-const STAFF_ROLES = ['admin', 'analista', 'consultor', 'advogado'];
 // Inatividade: avisar após 2min, fechar após 30min (em ms)
 const AVISO_MS = 2 * 60 * 1000;
 const FECHAR_MS = 30 * 60 * 1000;
@@ -69,7 +69,9 @@ export default function ChatSuporte() {
   // No MODO SUPORTE o admin assume o papel do cliente, mas o chat NÃO deve aparecer (quem está
   // ali é o admin) — por isso `!impersonate`. Já na SIMULAÇÃO de papel o widget APARECE, e tem
   // de aparecer: ver o chat como o explorador vê é parte do que se foi validar.
-  const ehCliente = !STAFF_ROLES.includes(role) && !impersonate;
+  // Mesma pergunta da fonte única — terceira cópia da regra eliminada. Os efeitos que a usam já
+  // exigem `user?.id` por conta própria, então aqui só interessa "é público do chat".
+  const ehCliente = chatDisponivelPara({ isLoggedIn: true, role, impersonate });
 
   // SIMULAR É OLHAR, NUNCA ESCREVER (15/08).
   //
@@ -211,9 +213,8 @@ export default function ChatSuporte() {
     return () => { clearTimeout(avisoTimer.current); clearTimeout(fecharTimer.current); };
   }, [ticket?.id]);
 
-  // Apenas CLIENTES (pelo papel REAL) e NUNCA em modo suporte (o admin assumindo a conta de um
-  // cliente não deve ver/abrir o chat). Equipe/admin respondem pela tela Atendimento.
-  if (!isLoggedIn || impersonate || STAFF_ROLES.includes(role)) return null;
+  // Mesma resposta que o Header usa para DECIDIR SE OFERECE o acesso — ver utils/chatDisponivel.
+  if (!chatDisponivelPara({ isLoggedIn, role, impersonate })) return null;
 
   // Lista TODOS os atendimentos do cliente (abertos e finalizados)
   async function carregarLista() {
