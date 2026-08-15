@@ -760,7 +760,27 @@ export default function Busca() {
   const [showFiltros, setShowFiltros] = useState(true);
   const [selecionados, setSelecionados] = useState([]);
   const [sortBy, setSortBy] = useState(() => { try { return sessionStorage.getItem('busca_sort') || 'desconto_desc'; } catch { return 'desconto_desc'; } });
+  // PÁGINA PERSISTIDA NA SESSÃO (15/08, achado do dono navegando pelo celular).
+  //
+  // Ele estava na página 3, abriu um imóvel, clicou em "Voltar à busca" e caiu na página 1 —
+  // tendo de reavançar a cada ida e volta. O rastro em `eventos_atividade` mostra o ciclo três
+  // vezes em quatro minutos: /buscar → imóvel → volta → "Próxima →" → imóvel → volta →
+  // "Próxima →". Cada retorno custava um clique só para desfazer o estrago.
+  //
+  // A causa não era o botão: `nav(-1)` está correto e o histórico volta para /buscar. É que a
+  // Busca remonta do zero, e `filtros`, `sortBy` e `raio` JÁ sobreviviam por sessionStorage —
+  // **só a página não**. Uma lacuna numa família que já existia, e por isso passava
+  // despercebida: a tela voltava com os filtros certos, o que dava a impressão de que tinha
+  // restaurado tudo.
+  //
+  // `paginaRestaurar` é consumido UMA vez, pela primeira busca automática depois da remontagem.
+  // Depois disso qualquer mudança de filtro volta a zerar para a página 1, que é o certo — um
+  // recorte novo não tem "página 3".
   const [pagina, setPagina] = useState(1);
+  const paginaRestaurar = useRef((() => {
+    try { const n = Number(sessionStorage.getItem('busca_pagina')); return Number.isFinite(n) && n > 1 ? n : null; } catch { return null; }
+  })());
+  useEffect(() => { try { sessionStorage.setItem('busca_pagina', String(pagina)); } catch {} }, [pagina]);
   const [totalResultados, setTotalResultados] = useState(0);
   const POR_PAGINA = 20;
 
@@ -897,6 +917,8 @@ export default function Busca() {
   useEffect(() => {
     if (!filtrosFromUrl || deepLinkDisparado.current) return;
     deepLinkDisparado.current = true;
+    // Link de e-mail é um recorte NOVO: começa na página 1 e descarta a página guardada.
+    paginaRestaurar.current = null;
     const timer = setTimeout(() => {
       buscarPagina(1, filtrosFromUrl, sortBy, null, false, raioKmAtivo, null);
       setFiltrosBusca(filtrosFromUrl);
@@ -930,7 +952,8 @@ export default function Busca() {
 
   const limparFiltros = () => {
     setFiltrosPersist(FILTROS_INICIAL);
-    try { sessionStorage.removeItem('busca_filtros'); sessionStorage.removeItem('busca_sort'); } catch {}
+    try { sessionStorage.removeItem('busca_filtros'); sessionStorage.removeItem('busca_sort'); sessionStorage.removeItem('busca_pagina'); } catch {}
+    paginaRestaurar.current = null;
     setBuscaCidade('');
     setSelecionados([]);
     setPagina(1);
@@ -1297,7 +1320,10 @@ export default function Busca() {
       return;
     }
     setErro('');
-    setPagina(1);
+    // Volta do imóvel: retoma a página em que a pessoa estava, uma única vez.
+    const alvo = paginaRestaurar.current || 1;
+    paginaRestaurar.current = null;
+    setPagina(alvo);
     saveBuscaRecente({ ...filtros, cidade: filtros.cidades.join(', ') });
 
     let centro = centroRaio;
@@ -1320,7 +1346,7 @@ export default function Busca() {
     setRaioAtivoBusca(raioAtivo);
     setRaioKmBusca(raioKmAtivo);
 
-    buscarPagina(1, filtros, sortBy, centro, raioAtivo, raioKmAtivo, cidadesNaArea);
+    buscarPagina(alvo, filtros, sortBy, centro, raioAtivo, raioKmAtivo, cidadesNaArea);
   };
 
   const irParaAnalise = (im) => {

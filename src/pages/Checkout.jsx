@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { salvarConvite, CHAVE_PLANO } from '../utils/convitePendente';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { termosUsoPendente, abrirTermosModal } from '../components/TermosAtualizadosModal';
 import { trackCheckoutIniciado, trackPlanContratado } from '../utils/gtag';
 import { Loader2, CheckCircle2, ExternalLink, Briefcase, ShieldCheck, TrendingUp, Headphones, ArrowUpRight, ArrowDownRight, AlertTriangle, RefreshCw, MapPin } from 'lucide-react';
 import LogoB from '../components/LogoB';
@@ -735,6 +736,11 @@ export default function Checkout() {
 
   const iniciarPagamento = async () => {
     if (!perfilFaturamentoOk) return;
+    // TERMOS NO MOMENTO CERTO (15/08): o upgrade é onde a pessoa está deliberadamente
+    // assumindo um compromisso — é aqui que reler e aceitar faz sentido, e não num popup
+    // avulso ao logar. Barra ANTES de ir ao gateway: aceitar depois de pagar seria pedir
+    // concordância sobre algo já feito.
+    if (user?.id && await termosUsoPendente(user.id)) { abrirTermosModal('upgrade'); return; }
     // Trava anti-duplo-clique SÍNCRONA (ref): o handler faz awaits (salvar faturamento) ANTES
     // de qualquer setLoading, então dois cliques rápidos passariam ambos e gerariam duas
     // preferências/assinaturas no gateway. O ref bloqueia na hora (state async não bloquearia).

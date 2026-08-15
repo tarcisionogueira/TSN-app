@@ -6,6 +6,7 @@
 // Tema: azul BidPro (#0D63DB / #084BA6). Números do nível vêm da RPC `meu_nivel` (auth.uid).
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { termosUsoPendente, abrirTermosModal } from '../components/TermosAtualizadosModal';
 import { supabase } from '../utils/supabase';
 import { apiCall } from '../utils/apiCall';
 import { Users, Copy, Check, ChevronRight, ChevronDown, Award, Search, Wallet, Building2, Lock, ArrowRight, Sparkles, Phone, Mail } from 'lucide-react';
@@ -254,6 +255,15 @@ export default function MinhaRede() {
     const valor = Number(valorSaque);
     if (!valor || valor <= 0) { setMsgSaque({ tipo: 'erro', txt: 'Informe um valor válido.' }); return; }
     if (valor > saldo) { setMsgSaque({ tipo: 'erro', txt: 'Valor maior que o disponível.' }); return; }
+    // TERMOS NO MOMENTO CERTO (15/08). O servidor JÁ exige a versão vigente
+    // (`regra_negocio.saque.exige_termos_vigentes`) — sem este gate o cliente só descobriria
+    // pela RECUSA, que é a pior hora: ele pede o dinheiro e leva um "não" que não sabe
+    // resolver. Aqui ele lê, aceita e o pedido segue no mesmo fluxo.
+    if (user?.id && await termosUsoPendente(user.id)) {
+      abrirTermosModal('saque');
+      setMsgSaque({ tipo: 'erro', txt: 'Antes do saque, confirme os termos atualizados na janela que abriu.' });
+      return;
+    }
     setSacando(true); setMsgSaque(null);
     try {
       const res = await apiCall('/api/saque', { method: 'POST', body: JSON.stringify({ valor }) });

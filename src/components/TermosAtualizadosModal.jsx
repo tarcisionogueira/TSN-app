@@ -45,18 +45,23 @@ export default function TermosAtualizadosModal() {
 
   const termo = termoDoProduto('termos_uso');
 
-  // Ao logar: mostra 1× por sessão de aba se houver termos novos (fechar não re-abre
-  // sozinho; a trava do relatório re-abre quando o usuário tentar gerar).
-  useEffect(() => {
-    if (!user || impersonate) return;
-    let vivo = true;
-    (async () => {
-      if (sessionStorage.getItem('tsn_termos_fechado') === VERSAO_VIGENTE) return;
-      const pendente = await termosUsoPendente(user.id);
-      if (vivo && pendente) { setOrigem(''); setAberto(true); }
-    })();
-    return () => { vivo = false; };
-  }, [user, impersonate]);
+  // NÃO ABRE MAIS SOZINHO AO LOGAR (15/08, decisão do dono: "veja a melhor hora para colocar
+  // para aceitar novamente, como num upgrade de plano ou na hora de solicitar um saque").
+  //
+  // Antes, subir a versão dos termos fazia TODO usuário logado levar um popup de cara ao entrar
+  // — um pedido burocrático no meio de qualquer coisa que a pessoa fosse fazer, e a primeira
+  // coisa que ela via depois de uma atualização de texto que não pediu. Era também mais um
+  // concorrente pela tela, no dia em que descobrimos que seis modais podiam se empilhar.
+  //
+  // O aceite passa a ser pedido NO MOMENTO EM QUE IMPORTA, por quem precisa dele:
+  //   · gerar relatório  → AnalisesContext (já existia)
+  //   · upgrade de plano → Checkout
+  //   · pedido de saque  → Minha Rede (aqui o servidor JÁ exige: `saque.exige_termos_vigentes`;
+  //                        sem este gate o cliente só descobriria pela recusa)
+  // Todos chamam `abrirTermosModal(origem)`, que o efeito abaixo escuta.
+  //
+  // O aceite continua sendo pré-requisito real de saque no servidor — o que mudou é ONDE se
+  // pergunta, não SE se exige. Ninguém passa a sacar sem aceitar.
 
   // Trava do relatório (ou qualquer outro ponto) pede para re-abrir.
   useEffect(() => {
