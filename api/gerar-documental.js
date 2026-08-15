@@ -14,6 +14,7 @@ import { leilaoEncerrado, respostaLeilaoEncerrado } from './_leilao-encerrado.js
 import { fetchViaBrightData } from './_brightdata.js';
 import { capturarDocsLoginOnDemand, temLoginParaFonte } from './_leiloeiro-auth.js';
 import { anthropicFetch } from './_claude.js';
+import { classificarDocumento } from './_doc-leitura.js';
 import { custoRespostaClaude, registrarCustoGeracao } from './_uso.js';
 import { buscarProcessosCNJ } from './_cnj.js';
 import { aprenderNaEmissao, vicioRegen } from './_aprendizado.js';
@@ -425,12 +426,18 @@ async function lerDoc(url, deadline) {
     const ct = resp.headers.get('content-type') || '';
     const buf = Buffer.from(await resp.arrayBuffer().catch(() => new ArrayBuffer(0)));
     if (!buf.length) return null;
-    const ehPdf = /pdf/i.test(ct) || buf.slice(0, 5).toString('latin1') === '%PDF-';
-    if (ehPdf) { if (buf.length > 6_500_000) return null; return { kind: 'pdf', base64: buf.toString('base64'), url }; }
+    // Classificação pelo CONTEÚDO (15/08, `_doc-leitura.js`). Antes, o que não fosse PDF
+    // caía num `toString('utf8')` final: uma matrícula FOTOGRAFADA (JPEG/PNG) virava uma
+    // tira de caracteres aleatórios, ia no prompt como "texto do documento", e a IA
+    // respondia sobre nada enquanto o sistema registrava que tinha lido. Agora a imagem é
+    // enviada como IMAGEM — a IA lê as duas — e o que não dá para ler para aqui.
+    const doc = classificarDocumento(buf, { url, contentType: ct, maxBytes: 6_500_000 });
+    if (doc.kind === 'pdf') return { kind: 'pdf', base64: doc.base64, url };
+    if (doc.kind === 'imagem') return { kind: 'imagem', base64: doc.base64, mediaType: doc.mediaType, url };
     if (ehPdfUrl) return null; // .pdf que não veio PDF = bloqueio/HTML → falha desta tentativa
-    const txt = buf.toString('utf8').replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-    if (txt.length < 80) return null;
-    return { kind: 'text', text: txt.slice(0, 12000), url };
+    if (doc.kind === 'texto') return { kind: 'text', text: doc.texto.slice(0, 12000), url };
+    console.log(`[lerDoc] formato não legível (${doc.motivo || 'desconhecido'}) ${url}`);
+    return null;
   };
 
   // 1) fetch direto (grátis). 2) Bright Data (IP residencial) — fura o 403 da Caixa
@@ -892,8 +899,11 @@ export default async function handler(req, res) {
       // do custo dos 3 relatórios). Além do dinheiro, a duplicata ocupava vaga do cap de
       // leitura e expulsava anexo de verdade num lote judicial (auto de penhora, laudo).
       // O hash é do conteúdo lido, então independe de rótulo, tipo ou origem da URL.
-      const impressao = doc.kind === 'pdf'
-        ? `pdf:${createHash('sha1').update(doc.base64).digest('hex')}`
+      // O hash tem de sair do que o documento REALMENTE é: `doc.text` está vazio num bloco
+      // de imagem, então mandar imagem pelo ramo de texto daria o MESMO hash para todas —
+      // e da segunda em diante cada uma seria descartada como "duplicata".
+      const impressao = (doc.kind === 'pdf' || doc.kind === 'imagem')
+        ? `${doc.kind}:${createHash('sha1').update(doc.base64).digest('hex')}`
         : `txt:${createHash('sha1').update(String(doc.text || '')).digest('hex')}`;
       if (vistosConteudo.has(impressao)) {
         console.log('[documental] duplicata ignorada', JSON.stringify({ rotulo: u.rotulo, tipo: tipoDoc || u.tipo || null }));
@@ -916,7 +926,12 @@ export default async function handler(req, res) {
         } catch { charsTexto = null; } // escaneado/quebrado → null, e a visão segue sendo a única via
       }
       lidos.push({ rotulo: u.rotulo, url: u.url, kind: doc.kind, cache: deCache, tipo: u.tipo || tipoDoc, charsTexto });
+      // PDF vira bloco `document`, IMAGEM vira bloco `image` (matrícula fotografada ou
+      // digitalizada em JPEG/PNG — a IA lê as duas), e texto segue como texto. O `else`
+      // antigo mandava tudo que não fosse PDF como texto, o que transformava imagem em
+      // ruído no prompt. Ver `_doc-leitura.js`.
       if (doc.kind === 'pdf') blocos.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: doc.base64 }, title: u.rotulo });
+      else if (doc.kind === 'imagem') blocos.push({ type: 'image', source: { type: 'base64', media_type: doc.mediaType, data: doc.base64 } });
       else blocos.push({ type: 'text', text: `=== ${u.rotulo} (${u.url}) ===\n${doc.text}` });
     }
     // Texto colado manualmente (inclusão manual / fallback).
@@ -1213,7 +1228,10 @@ export default async function handler(req, res) {
     // SÓ nesses 3 campos, com os documentos de identificação (matrícula/edital), que
     // costuma resgatar (menos distração + instrução p/ ler imagem escaneada).
     if (!docOk && Date.now() < hardDeadline) {
-      const docsIdent = blocos.filter(b => b.type === 'document' || /matr[íi]cula|edital/i.test(b.title || ''));
+      // `image` entra junto (15/08): matrícula digitalizada como JPEG/PNG é documento de
+      // identificação como qualquer outro, e este passe focado existe justamente para
+      // resgatar CPF/nome/processo de página escaneada.
+      const docsIdent = blocos.filter(b => b.type === 'document' || b.type === 'image' || /matr[íi]cula|edital/i.test(b.title || ''));
       if (docsIdent.length) {
         try {
           const fdata = await anthropic({

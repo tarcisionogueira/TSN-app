@@ -12,6 +12,7 @@ import { carregarPDFParse } from './_pdf-safe.js';
 import { extrairDatasLeilao } from './enriquecer-lote.js';
 import { cacheLer, cacheGravar, chaveUrl, chaveConteudo, extrairMatriculaTexto, extrairPagamentoTexto, extrairCustosTexto, extrairIdentidadeTexto } from './_doc-extracao.js';
 import { anthropicFetch } from './_claude.js';
+import { classificarDocumento, blocoParaIA, temTextoUtil } from './_doc-leitura.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -101,8 +102,11 @@ export async function lerTexto(url, deadline) {
     const ct = r.headers.get('content-type') || '';
     const buf = Buffer.from(await r.arrayBuffer());
     if (!buf.length || buf.length > 12_000_000) return null;
-    const ehPdf = /pdf/i.test(ct) || buf.slice(0, 5).toString('latin1') === '%PDF-';
-    if (ehPdf) {
+    // O tipo vem do CONTEÚDO, não da URL — ~2.100 matrículas do acervo são servidas por
+    // endpoint de API sem extensão nenhuma. E o que não é texto de verdade volta `null`
+    // em vez de virar uma tira de bytes com cara de documento lido (ver `_doc-leitura.js`).
+    const doc = classificarDocumento(buf, { url, contentType: ct, maxBytes: 12_000_000, semBase64: true });
+    if (doc.kind === 'pdf') {
       const PDFParse = await carregarPDFParse();
       const parser = new PDFParse({ data: buf });
       try {
@@ -110,9 +114,8 @@ export async function lerTexto(url, deadline) {
         return String(res?.text || '').slice(0, 120000);
       } finally { await parser.destroy().catch(() => {}); }
     }
-    return buf.toString('utf8')
-      .replace(/<script[^]*?<\/script>/gi, ' ').replace(/<style[^]*?<\/style>/gi, ' ')
-      .replace(/<[^>]+>/g, ' ').replace(/&nbsp;|&#160;/gi, ' ').slice(0, 120000);
+    if (doc.kind === 'texto') return doc.texto.slice(0, 120000);
+    return null; // imagem/desconhecido: quem resolve é a visão, não o parser de texto
   } catch { return null; }
 }
 
@@ -238,7 +241,7 @@ export async function extratoEdital(imovelId, { deadline } = {}) {
 async function matriculaPorVisao(url, imovelId, fim) {
   if (!process.env.CLAUDE_API_KEY || !hostExternoSeguro(url)) return null;
   if (fim - Date.now() < 12000) return null; // sem tempo hábil: não começa o que não termina
-  let base64 = null;
+  let bloco = null;
   try {
     const r = await fetchExternoSeguro(url, {
       headers: { 'User-Agent': UA, 'Accept-Language': 'pt-BR,pt;q=0.9' },
@@ -246,9 +249,12 @@ async function matriculaPorVisao(url, imovelId, fim) {
     });
     if (!r.ok) return null;
     const buf = Buffer.from(await r.arrayBuffer());
-    // Só PDF de verdade: HTML de bloqueio virando "documento" faria a IA responder sobre nada.
-    if (!buf.length || buf.length > 6_000_000 || buf.slice(0, 5).toString('latin1') !== '%PDF-') return null;
-    base64 = buf.toString('base64');
+    // Classificação pelo CONTEÚDO: serve PDF (inclusive escaneado) e matrícula fotografada
+    // /digitalizada como JPEG ou PNG — a IA lê os dois. HTML de bloqueio e formato que não
+    // dá para ler voltam `desconhecido` e param aqui, em vez de virar prompt sobre nada.
+    const doc = classificarDocumento(buf, { url, contentType: r.headers.get('content-type') || '' });
+    bloco = blocoParaIA(doc, 'matricula');
+    if (!bloco) { console.log('[matricula-visao] sem leitura', JSON.stringify({ imovel: String(imovelId), motivo: doc.motivo || doc.kind })); return null; }
   } catch { return null; }
   try {
     const resp = await anthropicFetch({
@@ -258,7 +264,7 @@ async function matriculaPorVisao(url, imovelId, fim) {
         model: 'claude-sonnet-4-6', max_tokens: 300,
         system: 'Você é um EXTRATOR de metragem de matrícula de imóvel. Leia com máxima atenção, INCLUSIVE páginas escaneadas/em imagem. Retorne SOMENTE JSON.',
         messages: [{ role: 'user', content: [
-          { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 }, title: 'matricula' },
+          bloco,
           { type: 'text', text: 'Extraia as metragens da DESCRIÇÃO DO IMÓVEL nesta matrícula.\n'
             + '• "areaPrivativaM2": área PRIVATIVA (apartamento/sala) ou CONSTRUÍDA/EDIFICADA (casa) — a área da EDIFICAÇÃO. NÃO é a do terreno/lote, NÃO é a área comum, NÃO é a fração ideal.\n'
             + '• "areaTerrenoM2": área do TERRENO/lote.\n'
@@ -328,7 +334,11 @@ export async function extratoMatricula(imovelId, { deadline } = {}) {
       return { ...hit.campos.matricula, fonteUrl: url, deCache: true };
     }
     const txt = await lerTexto(url, fim);
-    if (!txt) { if (!urlParaVisao) urlParaVisao = url; continue; }
+    // Texto ausente OU insuficiente = página em IMAGEM. São coisas diferentes de "a
+    // matrícula não diz a área", e tratá-las igual foi o que fez 28.355 documentos
+    // disponíveis renderem 5 áreas lidas: o PDF escaneado devolve um punhado de
+    // caracteres de cabeçalho, o regex não acha nada, e ninguém escalava para a visão.
+    if (!txt || !temTextoUtil(txt)) { if (!urlParaVisao) urlParaVisao = url; continue; }
     const mat = extrairMatriculaTexto(txt);
     // PDF escaneado ou redação fora das âncoras: o regex não resolve. NÃO é "não há área" —
     // é "o barato não deu conta", e a diferença é justamente o que fazia o relatório seguir
