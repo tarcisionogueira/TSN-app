@@ -33,12 +33,12 @@ const MODALIDADES = {
     nome: 'Home Equity',
     subtitulo: 'Crédito com garantia de imóvel',
     icone: Home,
-    resumo: 'Você usa um imóvel que já é seu e está quitado como garantia e recebe dinheiro em conta. Como a garantia é forte, o juro é um dos menores do mercado — bem abaixo de cartão, cheque especial e empréstimo pessoal.',
+    resumo: 'Você usa um imóvel que já é seu e está quitado como garantia e recebe dinheiro em conta. Como a garantia é forte, o juro é um dos menores do mercado: fica bem abaixo de cartão, cheque especial e empréstimo pessoal.',
     passos: [
       'A instituição avalia o seu imóvel.',
       'Libera crédito de uma parte do valor avaliado (costuma ficar entre 50% e 60%).',
       'O imóvel é dado em garantia (alienação fiduciária) e registrado em cartório.',
-      'O dinheiro cai na conta — normalmente entre 30 e 45 dias.',
+      'O dinheiro cai na conta, normalmente entre 30 e 45 dias.',
       'Você continua morando nele ou alugando normalmente.',
     ],
     exemplo: {
@@ -49,12 +49,12 @@ const MODALIDADES = {
         ['Prazo', '180 meses'],
         ['Parcela inicial aproximada', `${brl(3300)}/mês`],
       ],
-      nota: 'Cálculo com taxa de 1,15% a.m. mais correção — parâmetro de mercado usado só para dar ordem de grandeza. A taxa real depende da instituição e da análise.',
+      nota: 'Cálculo com taxa de 1,15% a.m. mais correção, parâmetro de mercado usado só para dar ordem de grandeza. A taxa real depende da instituição e da análise.',
     },
-    paraQuem: 'Quem já tem imóvel quitado e precisa de capital agora — para arrematar, reformar para revenda, ou trocar uma dívida cara por uma barata.',
+    paraQuem: 'Quem já tem imóvel quitado e precisa de capital agora, seja para arrematar, reformar para revenda ou trocar uma dívida cara por uma barata.',
     atencao: [
       'O imóvel fica em garantia: deixar de pagar pode levar à perda dele.',
-      'Não é imediato — entre proposta e dinheiro em conta costumam ser 30 a 45 dias.',
+      'Não é imediato: entre proposta e dinheiro em conta costumam ser 30 a 45 dias.',
       'Há custos de avaliação e de registro em cartório.',
     ],
     cta: 'Quero saber sobre Home Equity',
@@ -69,7 +69,7 @@ const MODALIDADES = {
       'Você escolhe o valor da carta de crédito e o prazo.',
       'Paga as parcelas mensais junto com o grupo.',
       'É contemplado por sorteio ou antecipa dando um lance.',
-      'Recebe a carta e compra o imóvel numa compra e venda comum, com escritura e registro — para o vendedor, é pagamento à vista.',
+      'Recebe a carta e compra o imóvel numa compra e venda comum, com escritura e registro. Para o vendedor, é pagamento à vista.',
       'Segue pagando as parcelas restantes.',
     ],
     exemplo: {
@@ -82,11 +82,11 @@ const MODALIDADES = {
       ],
       nota: 'Taxa de administração é o custo do consórcio e varia bastante por administradora. Aqui usamos 20% + 2% só para mostrar como a conta funciona.',
     },
-    paraQuem: 'Quem não precisa do dinheiro agora e quer se preparar para comprar pagando parcela menor — e, em especial, quem vai comprar um imóvel já arrematado: paga o vendedor à vista com a carta e fica com a parcela.',
+    paraQuem: 'Quem não precisa do dinheiro agora e quer se preparar para comprar pagando parcela menor. E, em especial, quem vai comprar um imóvel já arrematado: paga o vendedor à vista com a carta e fica com a parcela.',
     atencao: [
-      'A carta NÃO serve para arrematar em leilão — nem judicial, nem extrajudicial. A administradora só libera contra compra e venda comum, com escritura e registro. Onde ela entra é na compra de um imóvel que JÁ FOI arrematado, direto com quem arrematou.',
+      'A carta NÃO serve para arrematar em leilão, nem judicial, nem extrajudicial. A administradora só libera contra compra e venda comum, com escritura e registro. Onde ela entra é na compra de um imóvel que JÁ FOI arrematado, direto com quem arrematou.',
       'Não existe data garantida de contemplação: pode vir cedo por lance ou demorar por sorteio.',
-      'A taxa de administração é o custo — não há juros, mas não é de graça.',
+      'A taxa de administração é o custo. Não há juros, mas não é de graça.',
       'Desistir no meio tem regras próprias e costuma devolver o dinheiro só ao fim do grupo.',
     ],
     cta: 'Quero saber sobre Consórcio',
@@ -94,10 +94,10 @@ const MODALIDADES = {
 };
 
 const COMPARACAO = [
-  ['Dá para arrematar em leilão?', 'Sim — o dinheiro é seu e entra como pagamento à vista, desde que o crédito saia antes da praça', 'Não, em leilão nenhum. A carta compra o imóvel de quem já arrematou'],
-  ['Quando o dinheiro chega', 'Em 30 a 45 dias, com data previsível', 'Quando você for contemplado — por sorteio ou lance'],
+  ['Dá para arrematar em leilão?', 'Sim, o dinheiro é seu e entra como pagamento à vista, desde que o crédito saia antes da praça', 'Não, em leilão nenhum. A carta compra o imóvel de quem já arrematou'],
+  ['Quando o dinheiro chega', 'Em 30 a 45 dias, com data previsível', 'Quando você for contemplado, por sorteio ou lance'],
   ['Qual é o custo', 'Juros mais correção monetária', 'Taxa de administração (não há juros)'],
-  ['Exige imóvel quitado?', 'Sim — ele é a garantia', 'Não'],
+  ['Exige imóvel quitado?', 'Sim, ele é a garantia', 'Não'],
   ['O que fica em garantia', 'O imóvel que você já tem', 'O imóvel que você vai comprar'],
   ['Serve melhor para', 'Uma oportunidade que está na sua frente agora', 'Comprar um imóvel já arrematado, ou planejar a próxima compra com parcela menor'],
 ];
@@ -187,7 +187,7 @@ export default function Alavancagem() {
                   {m.cta} <ArrowRight size={17} />
                 </button>
                 <div style={{ fontSize: 11.5, color: '#94a3b8', textAlign: 'center', marginTop: 8 }}>
-                  Sem compromisso — alguém da equipe entra em contato para explicar.
+                  Sem compromisso. Alguém da equipe entra em contato para explicar.
                 </div>
               </div>
             );
@@ -198,7 +198,7 @@ export default function Alavancagem() {
         <section style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: 24, marginTop: 28 }}>
           <h2 style={{ fontFamily: "'League Spartan', sans-serif", fontSize: 24, fontWeight: 900, margin: '0 0 6px', color: '#111' }}>Qual dos dois serve para o seu caso</h2>
           <p style={{ fontSize: 14, color: '#64748b', margin: '0 0 20px', lineHeight: 1.6 }}>
-            Não são concorrentes — resolvem problemas diferentes. A pergunta que separa os dois é
+            Não são concorrentes, resolvem problemas diferentes. A pergunta que separa os dois é
             simples: <strong>você precisa do dinheiro agora ou está se preparando?</strong>
           </p>
           {/* Em telas estreitas a tabela vira BLOCOS empilhados. Rolagem horizontal dentro de
@@ -255,13 +255,13 @@ export default function Alavancagem() {
             Leilão tem uma característica que muda tudo: <strong style={{ color: 'white' }}>o pagamento
             é à vista e o prazo é curto</strong>. Quem tem o dinheiro disponível na hora certa compra
             melhor. <strong style={{ color: 'white' }}>O Home Equity resolve esse lado; o consórcio
-            resolve o outro</strong> — o de quem vai comprar o imóvel de você depois. A carta não
+            resolve o outro</strong>, o de quem vai comprar o imóvel de você depois. A carta não
             arremata; ela compra de quem arrematou.
           </p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
             {[
               { icone: Clock, t: 'Capital pronto para o arremate', d: 'O Home Equity transforma um imóvel parado em dinheiro em conta. Com o crédito aprovado antes da praça, você disputa sabendo até onde pode ir.' },
-              { icone: Users, t: 'Consórcio: compra de quem já arrematou', d: 'A carta não arremata — em leilão nenhum, judicial ou extrajudicial. Ela compra o imóvel de quem JÁ arrematou, numa compra e venda comum. Para quem vendeu, é dinheiro à vista e o deságio realizado; para quem compra, é entrar no imóvel pelo valor comercial sem juros, ficando só com a parcela do grupo.' },
+              { icone: Users, t: 'Consórcio: compra de quem já arrematou', d: 'A carta não arremata em leilão nenhum, judicial ou extrajudicial. Ela compra o imóvel de quem JÁ arrematou, numa compra e venda comum. Para quem vendeu, é dinheiro à vista e o deságio realizado; para quem compra, é entrar no imóvel pelo valor comercial sem juros, ficando só com a parcela do grupo.' },
               { icone: TrendingUp, t: 'Girar o mesmo capital', d: 'Arrematar com deságio, revender ou alugar, quitar e repetir. É assim que um patrimônio parado vira uma operação que se paga.' },
             ].map((c, i) => {
               const Ic = c.icone;
@@ -279,7 +279,7 @@ export default function Alavancagem() {
             <div style={{ fontSize: 13, color: '#fde68a', lineHeight: 1.6 }}>
               <strong>Alavancagem multiplica os dois lados.</strong> Se o imóvel não vender no prazo
               que você imaginou, a parcela continua chegando do mesmo jeito. Conte com um prazo de
-              venda maior que o previsto e com um caixa que aguente esse tempo — é a diferença
+              venda maior que o previsto e com um caixa que aguente esse tempo. É a diferença
               entre alavancar e se expor.
             </div>
           </div>
@@ -310,7 +310,7 @@ export default function Alavancagem() {
             não concede crédito, não aprova propostas e não emite cartas. As operações são
             realizadas por instituições parceiras autorizadas, e toda contratação depende de
             análise e aprovação delas. Os valores desta página são <strong>exemplos
-            ilustrativos</strong> para explicar como cada modalidade funciona — não são oferta,
+            ilustrativos</strong> para explicar como cada modalidade funciona. Não são oferta,
             proposta ou garantia de condição. Taxas, prazos e percentuais variam por instituição
             e por análise de cada caso.
           </p>
