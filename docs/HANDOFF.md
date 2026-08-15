@@ -28,6 +28,76 @@
 > Checagem rápida a qualquer momento: `select public.auditoria_seguranca();` → `0 crítico / 0 atenção` = íntegro.
 > **Auditorias ofensivas completas: 15/07/2026 (×2).** Total de correções: 15 (1ª rodada) + escalonamento por convite (CRÍTICO) + IDOR do MP (ALTO) + escala. Refazer a ofensiva quando entrarem rotas/pagamento/RLS novos (a Rotina mensal já faz isso sozinha).
 
+## 🎭 15/08 — A SIMULAÇÃO QUE NÃO SIMULAVA, e o chat que sequestrou a tela do João
+
+### A. Simular Explorador mostrava uma tela que não existe para ninguém
+
+O print do dono: cabeçalho **"Simulando como Explorador"** e, logo abaixo, **"Análises
+ilimitadas"** — que é o que o **admin** tem. Explorador tem **3 amostras vitalícias**.
+
+**Causa de fundo, e é o número que conta:** a simulação vivia só em `effectiveRole`, e o
+acervo estava partido ao meio.
+
+| Leem o papel… | Componentes |
+|---|---|
+| `role` (o **REAL**) | **29** |
+| `effectiveRole` (o simulado) | 12 |
+
+> No modo simulação a **maioria** das telas seguia desenhando para o admin e a minoria
+> desenhava para o explorador. O resultado não era nem um nem outro: **era uma tela que
+> nenhum usuário vê** — inútil justamente para o fim de validar.
+
+Corrigir 29 arquivos teria vida curta: o 30º componente nasceria lendo `role`, como os 29
+nasceram. A regra passa a ser **segura por padrão** — **`role` é o que a pessoa VÊ**; quem
+precisa do papel verdadeiro pede **`roleReal`**, e a exceção fica explícita em quem a usa
+(hoje só `podeImpersonar` e o controle de simulação). `isAdmin` acompanha. **A saída não
+depende disso:** "Voltar ao Admin" vive no banner do Header, desenhado a partir de
+`roleSimulado`, fora da troca — sem isso, simular explorador trancaria o admin fora do
+`/admin` sem porta de volta.
+
+**Causa do número errado:** na simulação de papel o usuário **continua sendo o admin** (ao
+contrário do modo suporte, em que o id muda), então `minhas_cotas` respondia — com toda a
+razão — sobre a linha do admin. Nova RPC **`cotas_do_papel(role)`** (só admin) responde pelo
+PAPEL, chamando `limite_ia`, a mesma fonte de `limite_ia_efetivo`. **Nada de tabela de limites
+no front:** é o defeito documentado em `cotaAnalise.js` — já esteve copiada em 4 telas e as 4
+divergiram, uma delas dando `limite: null` (= "ilimitado") a quem tem 5.
+
+> 🔒 **Trava que a mudança exigiu — SIMULAR É OLHAR, NUNCA ESCREVER.** Com `role` efetivo, o
+> admin simulando explorador satisfaz `ehCliente` e dispararia a saudação proativa contra a
+> conta **dele**: chamado real criado, mensagem gravada e `suporte_saudacao_em` carimbado — o
+> que ainda bloquearia a saudação verdadeira dele por 30 dias. A ferramenta de inspecionar
+> produzindo o dado que deveria só observar.
+
+**Banner:** a frase agora vive dentro de um `<span>`. Em container flex cada trecho de texto
+solto vira item anônimo — o texto quebrava em três peças e o `gap: 12` jogava a vírgula para o
+início da linha de baixo. Era o que aparecia no print.
+
+### B. O chat abriu sozinho e tomou a tela inteira do João
+
+Ele criou a conta e, 4,5 s depois, o chat abriu. No celular o painel era
+`min(420px,100vw) × min(620px,100dvh)` = **a tela inteira**. Ele achou que era erro do site —
+no primeiro contato com o produto.
+
+Decisão do dono: *"apenas um botãozinho em algum local, com um número, assim como funciona no
+Instagram"*. Saíram as **duas** aberturas automáticas — a da saudação e a de resposta nova
+(esta última **revertendo pedido anterior dele**, agora com caso concreto contra).
+
+> ⚠️ **O que quase transformou a correção em silêncio:** o badge contava só
+> `autor_tipo='atendente'`. Tirar a abertura sem mexer nisso deixaria a saudação (que é `'ia'`)
+> **invisível — nem abre, nem avisa**: trocaríamos "interrompe demais" por "não comunica nada".
+> A RPC passa a contar toda mensagem que não seja do cliente.
+
+**Distinção que ficou escrita nos dois lados, porque as regras parecem se contradizer:** em
+`tempo_processo()` a mensagem da IA **NÃO** conta como resposta (lá a pergunta é *"alguém
+atendeu esta pessoa?"*, e bot não é SLA); no badge ela **conta** (a pergunta é *"há algo que o
+cliente ainda não leu?"*, e é exatamente o que ele não leu). **Mesma tabela, perguntas
+diferentes. Não unifique.**
+
+O painel também deixa **64 px de sobra no topo**: folha branca de borda a borda não parece
+painel, parece página quebrada.
+
+---
+
 ## ⚖️ 15/08 — TEMPO ENTRE DESPACHOS: o processo judicial está andando?
 
 Pedido do dono, e **eu tinha entendido errado antes**: "tempo de evolução do processo" é o
