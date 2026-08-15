@@ -84,7 +84,7 @@ const MODALIDADES = {
     },
     paraQuem: 'Quem não precisa do dinheiro agora e quer se preparar para comprar pagando parcela menor — e, em especial, quem vai comprar um imóvel já arrematado: paga o vendedor à vista com a carta e fica com a parcela.',
     atencao: [
-      'A carta NÃO serve para dar lance em leilão judicial: a administradora exige compra e venda com escritura e registro, e o prazo do edital não comporta a liberação. Ela entra na aquisição extrajudicial e na compra do imóvel já arrematado.',
+      'A carta NÃO serve para arrematar em leilão — nem judicial, nem extrajudicial. A administradora só libera contra compra e venda comum, com escritura e registro. Onde ela entra é na compra de um imóvel que JÁ FOI arrematado, direto com quem arrematou.',
       'Não existe data garantida de contemplação: pode vir cedo por lance ou demorar por sorteio.',
       'A taxa de administração é o custo — não há juros, mas não é de graça.',
       'Desistir no meio tem regras próprias e costuma devolver o dinheiro só ao fim do grupo.',
@@ -94,7 +94,7 @@ const MODALIDADES = {
 };
 
 const COMPARACAO = [
-  ['Dá para usar no leilão?', 'Sim — o dinheiro é seu e entra como pagamento à vista, desde que o crédito saia antes da praça', 'Não no leilão judicial. Entra na aquisição extrajudicial e na compra do imóvel já arrematado'],
+  ['Dá para arrematar em leilão?', 'Sim — o dinheiro é seu e entra como pagamento à vista, desde que o crédito saia antes da praça', 'Não, em leilão nenhum. A carta compra o imóvel de quem já arrematou'],
   ['Quando o dinheiro chega', 'Em 30 a 45 dias, com data previsível', 'Quando você for contemplado — por sorteio ou lance'],
   ['Qual é o custo', 'Juros mais correção monetária', 'Taxa de administração (não há juros)'],
   ['Exige imóvel quitado?', 'Sim — ele é a garantia', 'Não'],
@@ -204,11 +204,14 @@ export default function Alavancagem() {
           {/* Em telas estreitas a tabela vira BLOCOS empilhados. Rolagem horizontal dentro de
               uma tabela de COMPARAÇÃO esconde justamente a coluna que se quer comparar — no
               iPhone só o Home Equity aparecia, e o Consórcio ficava fora da tela sem aviso. */}
+          {/* `display` fica SÓ no CSS: estilo inline vence regra de folha de estilo, então um
+              `style={{display:'flex'}}` aqui anularia o `display:none` da media query — e as duas
+              versões apareciam juntas no desktop. */}
           <style>{`
-            @media (max-width: 700px) { .cmp-tabela { display: none } }
-            @media (min-width: 701px) { .cmp-blocos { display: none } }
+            .cmp-blocos { display: none }
+            @media (max-width: 700px) { .cmp-tabela { display: none } .cmp-blocos { display: flex } }
           `}</style>
-          <div className="cmp-blocos" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div className="cmp-blocos" style={{ flexDirection: 'column', gap: 12 }}>
             {COMPARACAO.map(([rot, he, cs], i) => (
               <div key={i} style={{ border: '1px solid #e2e8f0', borderRadius: 12, padding: 14 }}>
                 <div style={{ fontSize: 12.5, fontWeight: 800, color: '#111', marginBottom: 10 }}>{rot}</div>
@@ -252,12 +255,13 @@ export default function Alavancagem() {
             Leilão tem uma característica que muda tudo: <strong style={{ color: 'white' }}>o pagamento
             é à vista e o prazo é curto</strong>. Quem tem o dinheiro disponível na hora certa compra
             melhor. <strong style={{ color: 'white' }}>O Home Equity resolve esse lado; o consórcio
-            resolve o outro</strong> — o de quem vai comprar o imóvel de você depois.
+            resolve o outro</strong> — o de quem vai comprar o imóvel de você depois. A carta não
+            arremata; ela compra de quem arrematou.
           </p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
             {[
               { icone: Clock, t: 'Capital pronto para o arremate', d: 'O Home Equity transforma um imóvel parado em dinheiro em conta. Com o crédito aprovado antes da praça, você disputa sabendo até onde pode ir.' },
-              { icone: Users, t: 'Consórcio: na revenda, não no lance', d: 'A carta não serve para dar lance em leilão judicial — a administradora exige compra e venda com escritura e registro, e o prazo do edital não cabe. Ela entra na aquisição extrajudicial e, principalmente, na compra do imóvel já arrematado: o comprador usa a carta pelo preço comercial, você recebe à vista e ele fica com a parcela.' },
+              { icone: Users, t: 'Consórcio: compra de quem já arrematou', d: 'A carta não arremata — em leilão nenhum, judicial ou extrajudicial. Ela compra o imóvel de quem JÁ arrematou, numa compra e venda comum. Para quem vendeu, é dinheiro à vista e o deságio realizado; para quem compra, é entrar no imóvel pelo valor comercial sem juros, ficando só com a parcela do grupo.' },
               { icone: TrendingUp, t: 'Girar o mesmo capital', d: 'Arrematar com deságio, revender ou alugar, quitar e repetir. É assim que um patrimônio parado vira uma operação que se paga.' },
             ].map((c, i) => {
               const Ic = c.icone;

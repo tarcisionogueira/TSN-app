@@ -1452,15 +1452,27 @@ vira palpite.
 
 ## 13. Onde o consórcio entra de verdade (correção do dono, 14/08)
 
-> "O consórcio **não pode ser utilizado no leilão**. Salvo em **aquisições extrajudiciais**, onde
-> você recompra o imóvel — seja aquisição à vista ou financiada através do consórcio —
-> **capitalizando no preço comercial** do imóvel e ficando com a parcela do consórcio."
+> "Carta de consórcio **não pode ser utilizada para arrematar em leilão, independente de ser
+> judicial ou extrajudicial**. Mas posso utilizar a carta contemplada para **comprar um imóvel
+> arrematado** em um leilão — seja ele à vista ou financiado —, o que é uma ótima estratégia,
+> pois **capitalizo no valor comercial do imóvel**."
 
-**Eu tinha escrito o contrário na tela `/alavancagem`** ("a carta é poder de compra à vista, que é
-justamente o que o leilão exige") e o dono corrigiu. A administradora só libera a carta contra
-**compra e venda com escritura e registro**, com o bem em garantia — e o prazo do edital não
-comporta a análise e a liberação. Do jeito que estava, a página levaria alguém a contar com um
-dinheiro que não sairia a tempo, num negócio com **prazo fatal**. Corrigido em `428f0ae`.
+**A REGRA É ABSOLUTA, e eu errei duas vezes até acertar.** Na primeira versão da tela
+`/alavancagem` escrevi que a carta "é poder de compra à vista, que é justamente o que o leilão
+exige" — errado. Na correção, mantive "aquisição extrajudicial" como exceção — **também errado**,
+e o dono corrigiu de novo. O certo, sem ressalva:
+
+> **A carta de consórcio NÃO arremata — em leilão nenhum.** A administradora só libera contra
+> **compra e venda comum, com escritura e registro**. Ela entra **depois**: comprando o imóvel de
+> quem já arrematou.
+
+Do jeito que estava, a página levaria alguém a contar com um dinheiro que não sairia — num negócio
+com **prazo fatal**. Corrigido em `428f0ae` e `1b4b5b0`.
+
+**Por que a estratégia é boa, na descrição do dono:** quem arrematou compra com deságio e vende
+pelo **valor comercial**; quem compra usa a carta, paga o vendedor **à vista** e fica só com a
+parcela do grupo, **sem juros**. Os dois lados ganham, e a capitalização acontece na diferença
+entre o preço de arremate e o preço comercial.
 
 ### O que isso muda no PLANO, não só na tela
 
@@ -1470,7 +1482,7 @@ operação**, e essa ponta é justamente a que a seção 4a estava tentando reso
 | Ponta | Quem precisa de dinheiro | Instrumento |
 |---|---|---|
 | **Arremate** | o nosso cliente, para pagar a praça | **Home Equity** (crédito aprovado ANTES da praça) |
-| **Revenda** | o comprador do imóvel já arrematado | **Consórcio** — carta pelo preço comercial, o vendedor recebe à vista |
+| **Revenda** | o comprador do imóvel já arrematado | **Consórcio** — carta pelo valor comercial, o vendedor recebe à vista. **Nunca no lance; sempre na compra e venda seguinte** |
 
 > 🟢 **E aqui está o ganho que não é óbvio: o consórcio é uma ALTERNATIVA à venda parcelada de
 > 4a.** Em vez de o nosso cliente financiar o comprador em 24× — assumindo risco de crédito,
