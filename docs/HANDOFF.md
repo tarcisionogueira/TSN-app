@@ -28,6 +28,77 @@
 > Checagem rápida a qualquer momento: `select public.auditoria_seguranca();` → `0 crítico / 0 atenção` = íntegro.
 > **Auditorias ofensivas completas: 15/07/2026 (×2).** Total de correções: 15 (1ª rodada) + escalonamento por convite (CRÍTICO) + IDOR do MP (ALTO) + escala. Refazer a ofensiva quando entrarem rotas/pagamento/RLS novos (a Rotina mensal já faz isso sozinha).
 
+## 📊 15/08 — QUADROS DO RELATÓRIO SE CONTRADIZENDO: "medida ausente" virava "zero"
+
+Achado do dono na tela do mercadológico: o resumo mostrava **"Aluguel médio R$ 0,00/mês"** e
+**"Rentabilidade 0,00% a.a."** e, **duas seções abaixo**, o Índice BidPro da **mesma cidade**
+exibia **R$ 37,25/m²/mês com 20 amostras**. Dois quadros do mesmo relatório, um dizendo que não
+há locação e o outro mostrando locação medida.
+
+**A construção é sempre a mesma: `fmt(x || 0)`.** A busca não achou locações, `aluguelMedio`
+chega `0`/`null` — que significa *"não medi"* — e o `|| 0` o transforma num **número**, que a
+tela imprime como resultado.
+
+> **Por que é mais grave do que parece cosmético:** "R$ 0,00/mês" não é um campo vazio, é a
+> **afirmação** de que o imóvel não rende aluguel. Em rentabilidade vira **conclusão de
+> investimento**, e no PDF vira documento que o cliente arquiva e mostra a terceiros.
+
+**Extensão medida nos 56 relatórios concluídos:**
+| | |
+|---|---|
+| Com a contradição exata (aluguel 0 + Índice com locação) | **1** |
+| Exibindo **"Rentabilidade 0,00% a.a."** | **8** |
+| Exibindo **"Valorização 12M 0,00%"** | **14** |
+| Exibindo preço/m² zero | 1 |
+
+**Correções** (`moedaOuTraco` / `pctOuTraco` em `utils/calculos`, devolvem `—`):
+- resumo, níveis 1 e 2, valorização do FipeZAP;
+- PDF: aluguel líquido, VPL, **"1ª Parcela: R$ 0,00"** e **"Parcela Fixa: R$ 0,00"** (mesmo
+  defeito, num número que o cliente usa para decidir financiamento);
+- na **valorização** o critério é outro de propósito: valorização **negativa é dado legítimo**,
+  o que não é medida ali é o **zero exato**.
+- **Nota de coerência** fecha o vão: sem locação nos anúncios mas com locação na base própria,
+  o relatório passa a **dizer isso**, com R$/m²/mês e nº de amostras. E explica por que **não**
+  projeta o aluguel multiplicando pela área: ela pode não estar confirmada na matrícula.
+
+> ✅ **Não precisa regerar nada.** A correção é de apresentação e lê o mesmo dado já gravado —
+> os 8 relatórios com "0,00%" passam a mostrar `—` na próxima abertura.
+
+### 📐 A área da matrícula no resumo da página do imóvel (pedido do dono)
+
+O bloco de documentação já exibia *"Área privativa (matrícula)"* quando a leitura apura — mas o
+**Resumo** seguia mostrando só a do leiloeiro: a mesma página trazia **dois números de área sem
+dizer que discordavam**. Agora o Resumo mostra a da matrícula e, quando diverge mais de 10% da
+anunciada, **as duas lado a lado** (`236 m² (matrícula) · anúncio: 396 m²`). O número do anúncio
+deixa de passar por medida confirmada.
+
+### 🔒 Trava `medida-ausente-virando-zero`
+
+Acusa `fmt(x||0)` em número exibido. **Escopo:** o que o cliente recebe como laudo (`Analise`,
+`ImovelDetalhe`, `*PDF.jsx`). **Fora:** painel de gestão — ali *"R$ 0,00 recebido"* é medida de
+verdade, e sem esse recorte a regra acusaria 7 linhas legítimas do Admin. Não acusa
+`x > 0 ? fmt(x) : '—'` nem `||0` neutro dentro de conta com guarda externa.
+
+> ⚠️ **Dois defeitos da própria trava, corrigidos antes de subir** — e valem como método:
+> 1. o regex era `fmtPct?\(`, em que o `?` vale **só para o `t`**: casava `fmtPc(` e deixava
+>    passar **`fmt(`**, que é a metade mais comum dos casos;
+> 2. o escopo inicial pegava o Admin.
+>
+> Os dois só apareceram porque **testei a regra contra as formas boas e ruins** antes de
+> confiar nela. É a regra que assumi hoje de manhã: *trava nova só vale depois de vê-la
+> acusar um caso que você sabe que existe — e ignorar um que você sabe que é legítimo.*
+
+### 🟠 O que NÃO foi feito (para não passar por completo)
+
+A varredura foi da **classe** de defeito que o dono mostrou — zero-como-afirmação — e ela está
+coberta nos três relatórios (`DocumentalPDF` e `LaudoPDF` já não tinham nenhuma ocorrência, e a
+trava agora vigia os três). **Não** houve revisão texto a texto de cada parágrafo do documental
+e do laudo, nem auditoria de todos os cruzamentos possíveis entre seções. Os cruzamentos
+tratados hoje foram os dois concretos: **aluguel × Índice BidPro** e **área do anúncio ×
+matrícula**.
+
+---
+
 ## 🚨 15/08 (tarde) — A CORREÇÃO DA MATRÍCULA NÃO CORRIGIA NADA: variável de ambiente errada
 
 O dono regerou o mercadológico de Morada dos Pinheiros às 12:01, **depois** do deploy, e a área
