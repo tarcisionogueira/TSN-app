@@ -18,7 +18,51 @@ const STATUS_IGNORADOS = new Set([
   409,      // conflito de upsert tratado pelo call-site
 ]);
 
+// ─── SIMULAÇÃO É SÓ LEITURA ──────────────────────────────────────────────────
+// Ao simular um papel (admin inspecionando "como o explorador vê"), a SESSÃO continua sendo a
+// do admin: o token é o dele e `auth.uid()` é o dele. Só a tela finge. Então qualquer botão
+// clicado por engano durante a inspeção escreveria na conta REAL do admin — aceitar o programa
+// de parceiros, consumir cota, carimbar uma data. A ferramenta de olhar não pode alterar o que
+// veio olhar.
+//
+// A trava mora aqui porque este `fetch` é o gargalo por onde passa TUDO que o cliente manda ao
+// Supabase — mesma razão pela qual o relato de erro já vive neste ponto. Guardar isso tela a
+// tela seria a lista que envelhece: o próximo botão nasceria fora dela.
+//
+// Ler a flag do `sessionStorage` (a mesma chave que o AuthContext grava) evita ciclo de import
+// entre o cliente e o contexto que o consome.
+//
+// PATCH/PUT/DELETE são bloqueados sempre; POST em tabela é inserção. POST em `/rpc/` passa,
+// porque é ASSIM que a maioria das leituras acontece — exceto os nomes de verbo claramente
+// mutador. A régua é por PREFIXO e propositalmente generosa: aqui um falso positivo apenas
+// deixa a tela simulada mais vazia, e vazio é exatamente o estado de conta nova que se quer
+// mostrar. Um falso NEGATIVO, não: escreve de verdade.
+const RPC_QUE_ESCREVEM = /^(aceitar|consumir|debitar|creditar|gerar|criar|atualizar|marcar|registrar|vincular|salvar|definir|aplicar|distribuir|recalcular|enfileirar|limpar|resolver|excluir|remover|cancelar|encerrar|iniciar|finalizar|aprovar|recusar|upsert|set)_/i;
+
+function bloqueadoNaSimulacao(input, init) {
+  try {
+    if (!sessionStorage.getItem('tsn_sim_role')) return null;
+    const url = typeof input === 'string' ? input : (input?.url || '');
+    if (!url.includes('/rest/v1/')) return null;              // auth e storage não passam por aqui
+    const metodo = String(init?.method || (typeof input === 'object' ? input?.method : '') || 'GET').toUpperCase();
+    const caminho = (url.split('/rest/v1/')[1] || '').split('?')[0];
+    const ehRpc = caminho.startsWith('rpc/');
+    const nomeRpc = ehRpc ? caminho.slice(4) : '';
+    if (metodo === 'GET' || metodo === 'HEAD') return null;
+    if (ehRpc && !RPC_QUE_ESCREVEM.test(nomeRpc)) return null;
+    return ehRpc ? `rpc/${nomeRpc}` : `${metodo} ${caminho}`;
+  } catch { return null; }
+}
+
 async function fetchComRelato(input, init) {
+  // Bloqueio ANTES da rede: nada sai da máquina. Devolve 200 com corpo vazio — a forma que o
+  // postgrest-js entende como "não há linhas", que é o estado correto de uma conta nova. E
+  // avisa no console, para que a escrita barrada não vire um mistério de tela parada.
+  const alvoBloqueado = bloqueadoNaSimulacao(input, init);
+  if (alvoBloqueado) {
+    console.warn('[simulação] escrita BLOQUEADA (modo só-visualização):', alvoBloqueado);
+    return new Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
   const res = await fetch(input, init);
   try {
     if (!res.ok && !STATUS_IGNORADOS.has(res.status)) {

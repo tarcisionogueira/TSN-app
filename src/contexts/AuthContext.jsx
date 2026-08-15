@@ -382,13 +382,44 @@ export function AuthProvider({ children }) {
     setImpersonate(null);
   };
 
+  // Ao ENTRAR na simulação, cai na TELA INICIAL; ao SAIR, volta ao painel de onde se veio
+  // (pedido do dono, 15/08: "parar na tela inicial independente do nível de usuário").
+  // Sem isto o admin ficava onde estava — em `/admin`, de onde a própria troca de papel o
+  // expulsa —, e a simulação começava por um redirecionamento em vez de pela home.
+  // `location.hash` porque o AuthProvider ENVOLVE o HashRouter: aqui não há `useNavigate`.
   const simularRole = (r) => {
-    if (r) { sessionStorage.setItem(SIM_ROLE_KEY, r); setRoleSimulado(r); }
-    else   { sessionStorage.removeItem(SIM_ROLE_KEY); setRoleSimulado(null); }
+    if (r) { sessionStorage.setItem(SIM_ROLE_KEY, r); setRoleSimulado(r); window.location.hash = '#/'; }
+    else   { sessionStorage.removeItem(SIM_ROLE_KEY); setRoleSimulado(null); window.location.hash = '#/admin'; }
   };
 
+  // SIMULAÇÃO MOSTRA UMA CONTA RECÉM-CRIADA (15/08, pedido do dono: "vendo exatamente a tela
+  // como se fosse aquele nível de usuário, como sendo recém criada a conta").
+  //
+  // Trocar o PAPEL não bastava. Na simulação de papel o usuário continua sendo o admin — e o
+  // acervo lê identidade em dois lugares, com a mesma divisão que havia entre `role` e
+  // `effectiveRole`: **151 leituras por `user.id` cru contra 57 por `effectiveUserId`**. Ou
+  // seja, simular "explorador" ainda desenhava os CASOS, as ANÁLISES, a REDE e os CONTRATOS do
+  // admin — a tela do explorador preenchida com a vida de outra pessoa, que é o oposto de
+  // "conta nova".
+  //
+  // Mexer nos 20 arquivos teria a vida curta de sempre: o 21º nasceria lendo `user.id`. Então a
+  // troca acontece na IDENTIDADE, num ponto só — durante a simulação, `user` passa a apontar
+  // para uma conta que NÃO EXISTE. Toda consulta, crua ou efetiva, volta vazia, e vazio é
+  // exatamente o estado de quem acabou de se cadastrar. Não é um mock: é o banco respondendo a
+  // verdade sobre um id sem linhas.
+  //
+  // ⚠️ LIMITE QUE PRECISA FICAR CLARO: isto vale para o que a tela LÊ do banco. Chamada de API
+  // viaja com o token REAL do admin, então um fluxo que grave pelo servidor age como admin, não
+  // como o papel simulado. Por isso o banner diz "só visualização" — e por isso a saudação
+  // proativa do chat já é bloqueada em simulação (ver ChatSuporte.jsx). Escrever direto no
+  // banco, por sua vez, falha fechado: a RLS compara com `auth.uid()`, que nunca será este id.
+  const SIM_USER_ID = '00000000-0000-0000-0000-000000000000';
+  const usuarioVisivel = (roleSimulado && user)
+    ? { ...user, id: SIM_USER_ID, email: `simulacao+${roleSimulado}@bidprobrasil.com.br` }
+    : user;
+
   // Identidade/role efetivos: simulação > suporte > real
-  const effectiveUserId = impersonate?.id || user?.id || null;
+  const effectiveUserId = impersonate?.id || usuarioVisivel?.id || null;
   const effectiveRole   = (((role === 'admin' && roleSimulado) ? roleSimulado : (impersonate?.role || role)) || 'explorador').replace(/_anual$/, '');
   const podeImpersonar  = role === 'admin' || role === 'analista';
 
@@ -415,7 +446,7 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider value={{
-      user, role: roleVisivel, roleReal: role, nome, ativo, inadimplenteDias, loading, cadastroIncompleto, setCadastroIncompleto, planoLegado,
+      user: usuarioVisivel, userReal: user, role: roleVisivel, roleReal: role, nome, ativo, inadimplenteDias, loading, cadastroIncompleto, setCadastroIncompleto, planoLegado,
       isAdmin: roleVisivel === 'admin',
       isLoggedIn: !!user,
       impersonate, iniciarSuporte, encerrarSuporte, podeImpersonar,

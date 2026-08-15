@@ -246,7 +246,7 @@ function RouteTracker() {
 }
 
 function MainLayout() {
-  const { ativo, isLoggedIn, inadimplenteDias, role, loading, user } = useAuth();
+  const { ativo, isLoggedIn, inadimplenteDias, role, loading, user, roleSimulado } = useAuth();
   const loc = useLocation();
   const [showBonus, setShowBonus] = useState(false);
 
@@ -274,7 +274,11 @@ function MainLayout() {
   if (isLoggedIn && !loading) {
     // O admin/dono entra pela HOME normal (como um cliente) e acessa o painel pelo botão
     // "⚙️ Admin" do menu (→ /admin). Antes havia um redirect forçado de "/" → "/admin".
-    if (['analista','consultor','advogado'].includes(role) && loc.pathname === '/') return <Navigate to="/atendimento" replace />;
+    // Em SIMULAÇÃO este desvio não vale: o pedido do dono é "parar na TELA INICIAL independente
+    // do nível de usuário". Sem a exceção, escolher analista/consultor/advogado no simulador
+    // jogava direto no Atendimento e a home daquele papel — que é o que se foi ver — nunca
+    // aparecia. Para o profissional de verdade o desvio continua: ele entra para trabalhar.
+    if (!roleSimulado && ['analista','consultor','advogado'].includes(role) && loc.pathname === '/') return <Navigate to="/atendimento" replace />;
   }
   return (
     <div style={{ minHeight: '100dvh', background: '#f1f5f9', fontFamily: "'Inter', sans-serif", display: 'flex', flexDirection: 'column' }}>

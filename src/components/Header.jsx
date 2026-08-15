@@ -276,7 +276,7 @@ export default function Header() {
       {roleSimulado && (
         <div style={{ background: '#7c3aed', color: 'white', padding: '7px 16px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, fontSize: 13, fontWeight: 600, flexWrap: 'wrap' }}>
           <span style={{ display: 'inline-block', textAlign: 'center', lineHeight: 1.35 }}>
-            🎭 Simulando como <strong style={{ textTransform: 'capitalize' }}>{roleSimulado}</strong> — a tela é a que esse perfil vê
+            🎭 Simulando <strong style={{ textTransform: 'capitalize' }}>{roleSimulado}</strong> em conta nova — só visualização
           </span>
           <button onClick={() => simularRole(null)}
             style={{ padding: '4px 12px', background: 'rgba(255,255,255,0.2)', color: 'white', border: '1px solid rgba(255,255,255,0.4)', borderRadius: 6, fontWeight: 700, fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }}>
