@@ -28,6 +28,52 @@
 > Checagem rápida a qualquer momento: `select public.auditoria_seguranca();` → `0 crítico / 0 atenção` = íntegro.
 > **Auditorias ofensivas completas: 15/07/2026 (×2).** Total de correções: 15 (1ª rodada) + escalonamento por convite (CRÍTICO) + IDOR do MP (ALTO) + escala. Refazer a ofensiva quando entrarem rotas/pagamento/RLS novos (a Rotina mensal já faz isso sozinha).
 
+## 🧪 15/08 — AMOSTRA PARA O DONO REGERAR E INSPECIONAR
+
+**Não consigo gerar por ele:** `/api/gerar-analise` exige token de usuário (`getUser(req)`), e
+não se fabrica token de cliente. A amostra abaixo foi escolhida por **critério**, não por
+conveniência: uma fonte por linha, cada uma exercitando um caminho de leitura DIFERENTE.
+
+| # | Fonte | O que este caso testa | Imóvel | Área do anúncio |
+|---|---|---|---|---|
+| 1 | **PESTANA** | matrícula por **endpoint de API sem `.pdf`** → classificação por magic bytes | `c17e9f72-ec0a-4583-8094-dde34bcda421` · Porto Alegre/RS | 57,9 m² |
+| 2 | **WEBLEILOES** | idem, **e já tem relatório antigo** → compara antes/depois | `e7bd0637-2bec-48d8-b527-7f818ac6d32a` · Guarulhos/SP | 46,08 m² |
+| 3 | **CEF** | PDF da Caixa (precisa passar pelo Bright Data) | `dc88d3a8-d294-44b6-84bd-21ad544f3ffe` · Boa Vista/RR | 387 m² |
+| 4 | **MEGA** | título diz **"Terreno de 378 m²"** → candidato ao mesmo defeito | `60ac13cb-f93c-44d1-8153-80e9065e2d2d` · Planaltina/GO | 378 m² |
+| 5 | **SUPERBID** | mesma fonte do caso original, título diz **"ÁREA TOTAL"** | `0da0063b-c023-48ec-802f-ecb5b27be44f` · Artur Nogueira/SP | 600,3 m² |
+| 6 | **VIP** | título diz **"Área total do terreno"** — divergência quase certa | `c63326c3-f147-46f8-a18c-fb7d32dc559f` · Nova Olinda do MA | 9.282 m² |
+| 7 | **ZUK** | fonte **login-gated** (matrícula sob demanda) | `001b6858-e971-4556-a93e-e1fb1c21b0fb` · Taboão da Serra/SP | 135 m² |
+| 8 | SUPERBID | **Morada dos Pinheiros** — já corrigido, mas o gate de auditoria subiu DEPOIS | `6dc2382e-3157-4426-b547-66f3552b4dba` | 396 m² |
+
+URL: `https://www.bidprobrasil.com.br/#/imovel/<id>`
+
+> **Os casos 4, 5 e 6 são os mais informativos:** o próprio título do leiloeiro já diz que a
+> metragem publicada é do TERRENO / área total. Se a leitura estiver funcionando, o relatório
+> tem de sair com `fonte: "matricula"` e o aviso de divergência — exatamente como Morada dos
+> Pinheiros (396 → 234,6).
+
+**Query de verificação depois de regerar:**
+```sql
+select left(i.titulo,42) titulo, i.fonte,
+       a.result->'mercado'->'metodologia'->'area'->>'fonte'  as fonte_area,
+       a.result->'mercado'->'metodologia'->'area'->>'valor'  as area_usada,
+       a.result->'divergenciaArea'->>'diferencaPct'          as divergencia_pct,
+       jsonb_array_length(coalesce(a.result->'auditoria'->'criticos','[]'::jsonb)) as criticos,
+       jsonb_array_length(coalesce(a.result->'auditoria'->'avisos','[]'::jsonb))   as avisos,
+       a.updated_at
+  from analises_mercado a join imoveis_leilao i on i.id::text = a.imovel_id::text
+ where a.imovel_id::text in (
+   'c17e9f72-ec0a-4583-8094-dde34bcda421','e7bd0637-2bec-48d8-b527-7f818ac6d32a',
+   'dc88d3a8-d294-44b6-84bd-21ad544f3ffe','60ac13cb-f93c-44d1-8153-80e9065e2d2d',
+   '0da0063b-c023-48ec-802f-ecb5b27be44f','c63326c3-f147-46f8-a18c-fb7d32dc559f',
+   '001b6858-e971-4556-a93e-e1fb1c21b0fb','6dc2382e-3157-4426-b547-66f3552b4dba')
+ order by a.updated_at desc;
+```
+**Verde é** `fonte_area = 'matricula'` e `criticos = 0`. Nos logs da Vercel, a linha que conta é
+`[metragem-doc]` — ela agora sai **sempre**, com `leu`, `via`, `janelaMs` e `gastoMs`.
+
+---
+
 ## ✅ 15/08 — A MATRÍCULA DE MORADA DOS PINHEIROS FOI LIDA (confirmado em produção)
 
 Regeração às 12:35, com o deploy da correção da variável de ambiente:
