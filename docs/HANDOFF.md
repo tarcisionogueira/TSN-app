@@ -28,6 +28,81 @@
 > Checagem rápida a qualquer momento: `select public.auditoria_seguranca();` → `0 crítico / 0 atenção` = íntegro.
 > **Auditorias ofensivas completas: 15/07/2026 (×2).** Total de correções: 15 (1ª rodada) + escalonamento por convite (CRÍTICO) + IDOR do MP (ALTO) + escala. Refazer a ofensiva quando entrarem rotas/pagamento/RLS novos (a Rotina mensal já faz isso sozinha).
 
+## 🔁 15/08 — REVISÃO DE TODOS OS RELATÓRIOS: forma de pagamento + proximidade das amostras
+
+### A. Forma de pagamento — a revisão dos 52 imóveis com relatório
+
+| | |
+|---|---|
+| Imóveis com relatório | 52 |
+| Tratados como **à vista** | 34 |
+| Com o erro detectável pelo **título** | **1** (o caso do dono) |
+| **À vista SEM confirmação em documento nenhum** | **29** |
+| Com pagamento confirmado em documento | 9 |
+
+> 🔴 **E aí apareceu o achado grande.** Dos 29 sem confirmação, **21 são da Caixa** — e a
+> `ficha_cef` traz **`financiamento` e `fgts` em TODOS os 24.207 lotes CEF ativos**. O dado está
+> no acervo **desde a captura**, não custa nada, e não era lido em lugar nenhum.
+
+| Situação no acervo CEF | Lotes | Gravados como à vista |
+|---|---|---|
+| `financiamento: true` | 218 | **8** ← erro direto |
+| `fgts: true` | 7.413 | **7.191** |
+
+**Corrigido:** os **8 lotes** com financiamento explícito passaram a `financiado` no acervo
+(update aplicado). E a ficha da Caixa entrou na cascata de forma de pagamento, na posição que
+lhe cabe: **documento lido > edital > ficha oficial da Caixa > título do anúncio** — é a fonte
+mais barata das quatro, sem PDF e sem IA.
+
+> **O padrão que o dia inteiro repetiu:** na maior parte das vezes a informação **já estava lá**,
+> publicada pelo leiloeiro ou pelo vendedor. O defeito era não lê-la — e, pior, transformar a
+> ausência numa **afirmação**.
+
+### B. Proximidade das amostras — por evidência, não por declaração
+
+O `perto()` era `!Number.isFinite(d) || d <= 2`: **amostra sem distância passava**. Como a
+distância vem do modelo, era aprovar por omissão — **a trava nunca reprovou uma amostra sequer**
+em 389.
+
+| Grau (medido sobre as 389 já emitidas) | n | % |
+|---|---|---|
+| **NENHUMA âncora** → passa a ser descartada | **122** | 31% |
+| fraca (outro bairro) | 109 | 28% |
+| média (mesmo bairro) | 54 | 14% |
+| **forte (mesmo condomínio)** → passa a receber a coordenada | **54** | 14% |
+| forte (≤250 m) — já recebia | 36 | 9% |
+| **forte (mesma rua)** → passa a receber | **9** | 2% |
+
+> **Ganho duplo:** descarta as 122 sem âncora **e promove 63** que hoje são rebaixadas apesar de
+> comprovadamente do mesmo lugar. Amostras no recorte mais preciso: **36 → 99 (+175%)**.
+
+O relatório passa a carregar `mercado.proximidadeAmostras` — a assertividade vira **número
+visível**, não promessa do texto. A auditoria avisa quando não há nenhuma amostra forte, ou
+quando os descartes superam os aproveitados.
+
+### C. Diagnóstico do FLUXO COMPLETO — medido, não consertado
+
+| Etapa | Número |
+|---|---|
+| Lotes ativos | 30.853 |
+| Com matrícula disponível | 28.883 |
+| **Matrícula lida** | **428** (1,5%) |
+| **`link_edital` que é HTML, não PDF** | **13.060 de 14.105 (93%)** |
+| Forma de pagamento lida | 2.470 |
+
+Funil: **56 mercadológicos → 17 documentais → 5 laudos → 3 solicitações → 0 reuniões agendadas.**
+
+> 🔵 **A MAIOR ALAVANCA QUE SOBROU: o edital em HTML.** 93% dos `link_edital` apontam para a
+> página da oferta, não para o PDF — foi por isso que o edital do lote do dono nunca foi lido e a
+> forma de pagamento se perdeu. Resolver isso exige extrair o PDF da página, leiloeiro a
+> leiloeiro, e **destrava condições, custos e pagamento para 13 mil lotes de uma vez**.
+>
+> **Também em aberto:** o Índice como funcionalidade separada (só pesquisa mercadológica e ticket
+> médio de venda/locação, sem viabilidade financeira) — não implementado, é trabalho próprio. E
+> as 0 reuniões agendadas com 3 solicitações merecem investigação própria.
+
+---
+
 ## 💸 15/08 — "À VISTA" NUM LOTE ANUNCIADO COMO "ENTRADA 30% + 240X"
 
 Achado do dono. O relatório imprimia **"Custo mensal a suportar: R$ 0,00 · Sem parcela (à
