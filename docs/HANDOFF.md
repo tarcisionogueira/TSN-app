@@ -120,6 +120,22 @@ no painel" — é ninguém ver**.
 > **E continua valendo:** o trigger dá dono à fila, não substitui um analista. Nomear alguém
 > segue sendo decisão do dono; os 42 slots livres continuam livres.
 
+#### 🔴 O invariante ficou verde por engano — e foi corrigido no mesmo dia
+
+Logo depois do backfill, `reuniao_solicitada_parada` **caiu de 3 para 0**. Nada tinha sido
+resolvido: os três pedidos seguem em `status='solicitado'`, `reuniao_em` nulo, desde 1 e 5 de
+julho. **Mudou uma coluna, não o atendimento.**
+
+A causa era o próprio instrumento: ele media `analista_id is null` — *"parado **sem
+analista**"*. Ter dono era **condição** para o atendimento acontecer, não **prova** de que
+aconteceu; usar a condição como métrica faz o alarme se apagar exatamente no primeiro passo,
+que é quando ele mais precisa continuar aceso. É a família de defeito da casa — *resposta de
+erro entregue como conteúdo válido* — desta vez dentro da própria trava.
+
+**A régua passa a ser o que o CLIENTE percebe:** pedido aberto há mais de 3 dias **sem reunião
+marcada**, com dono ou sem (`qa_invariante_reuniao_parada_mede_o_atendimento.sql`). Acusa **3,
+`alerta`** — e vai continuar acusando até alguém de fato atender. É o comportamento correto.
+
 ---
 
 ## 🔁 15/08 — REVISÃO DE TODOS OS RELATÓRIOS: forma de pagamento + proximidade das amostras
