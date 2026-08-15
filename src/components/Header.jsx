@@ -319,6 +319,23 @@ export default function Header() {
 
           {!loading && user && <AnalisesMenu />}
 
+          {/* ASSISTENTE COMO TÓPICO DE MENU, também no DESKTOP (dono, 15/08: "fica melhor e
+              muito profissional"). O botão flutuante redondo saiu de vez — no celular ele
+              atrapalhava, e no desktop virava um elemento solto, fora da navegação, competindo
+              com o conteúdo. Como tópico ele fica onde a pessoa procura o que fazer, e o número
+              de não lidas continua visível ao lado. */}
+          {!loading && user && (
+            <button onClick={() => window.dispatchEvent(new CustomEvent('tsn:open-chat'))}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', border: 'none', borderRadius: 8, background: 'transparent', color: '#94a3b8', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
+              <MessageCircle size={14} /> Assistente
+              {naoLidasChat > 0 && (
+                <span style={{ minWidth: 18, height: 18, padding: '0 5px', borderRadius: 999, background: '#ef4444', color: 'white', fontSize: 10, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {naoLidasChat}
+                </span>
+              )}
+            </button>
+          )}
+
           {effectiveRole === 'leiloeiro' && (
             <button onClick={() => nav('/leiloeiro')}
               style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', border: 'none', borderRadius: 8, background: active('/leiloeiro') ? '#b45309' : '#b4530922', color: '#fcd34d', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>

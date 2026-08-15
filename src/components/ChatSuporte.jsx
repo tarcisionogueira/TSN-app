@@ -83,24 +83,6 @@ export default function ChatSuporte() {
   // banco. Então a única regra segura é: em simulação, nada que grave.
   const simulando = !!roleSimulado;
 
-  // BOTÃO FLUTUANTE SÓ NO DESKTOP (15/08, pedido do dono).
-  //
-  // No celular o "B" redondo fica sobre o conteúdo, disputa o rodapé com a barra de ações e, com
-  // o badge vermelho por cima, foi lido como enfeite quebrado — foi o que ele viu no print. A
-  // função não some: virou uma linha do menu ("Falar com o assistente", com o mesmo número), que
-  // é onde a pessoa já procura o que fazer no telefone. No desktop o flutuante fica: lá sobra
-  // margem e o acesso de um clique vale.
-  //
-  // `matchMedia` com listener, e não uma leitura única de `innerWidth`: girar o aparelho ou
-  // abrir o DevTools muda a largura, e um valor congelado na montagem deixaria o botão sumido
-  // (ou sobrando) até um recarregamento — a tela mentindo sobre o tamanho dela mesma.
-  const [ehDesktop, setEhDesktop] = useState(() => (typeof window === 'undefined' ? true : window.matchMedia('(min-width: 768px)').matches));
-  useEffect(() => {
-    const mq = window.matchMedia('(min-width: 768px)');
-    const h = (e) => setEhDesktop(e.matches);
-    mq.addEventListener('change', h);
-    return () => mq.removeEventListener('change', h);
-  }, []);
 
   useEffect(() => { msgEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [mensagens]);
   useEffect(() => {
@@ -434,28 +416,15 @@ export default function ChatSuporte() {
   return (
     <>
       {/* Botão flutuante, círculo no tema do header (preto) com a marca B */}
-      {!isOpen && ehDesktop && (
-        <button onClick={() => setIsOpen(true)} title="Precisa de ajuda? Fale com a gente"
-          style={{ position: 'fixed', bottom: 'calc(24px + var(--barra-acoes-altura, 0px))', right: 24, zIndex: 9990, height: 58, borderRadius: 999, background: '#111111', color: 'white', border: '1px solid #1f2937', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 0, padding: 0, overflow: 'hidden', boxShadow: '0 8px 24px rgba(17,17,17,0.28)', transition: 'gap 0.2s, padding 0.2s, box-shadow 0.2s, transform 0.15s' }}
-          onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 12px 30px rgba(17,17,17,0.36)'; e.currentTarget.style.gap = '10px'; e.currentTarget.style.paddingRight = '20px'; const lbl = e.currentTarget.querySelector('[data-fab-label]'); if (lbl) { lbl.style.maxWidth = '120px'; lbl.style.opacity = '1'; } }}
-          onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(17,17,17,0.28)'; e.currentTarget.style.gap = '0px'; e.currentTarget.style.paddingRight = '0px'; const lbl = e.currentTarget.querySelector('[data-fab-label]'); if (lbl) { lbl.style.maxWidth = '0px'; lbl.style.opacity = '0'; } }}>
-          {/* Badge de resposta nova (atendente respondeu e o cliente ainda não viu) */}
-          {naoLidas > 0 && (
-            <span style={{ position: 'absolute', top: -3, right: -3, minWidth: 20, height: 20, padding: '0 5px', borderRadius: 999, background: '#ef4444', color: 'white', fontSize: 11, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #111111', zIndex: 1 }}>
-              {naoLidas}
-            </span>
-          )}
-          {/* Disco com a marca + indicador online */}
-          <span style={{ position: 'relative', width: 58, height: 58, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <MarcaBP size={30} />
-            <span style={{ position: 'absolute', top: 12, right: 12, width: 10, height: 10, borderRadius: '50%', background: '#22c55e', border: '2px solid #111111' }} />
-          </span>
-          {/* Rótulo revelado no hover */}
-          <span data-fab-label style={{ maxWidth: 0, opacity: 0, whiteSpace: 'nowrap', overflow: 'hidden', fontSize: 14, fontWeight: 700, letterSpacing: '-0.01em', transition: 'max-width 0.25s, opacity 0.2s' }}>
-            Precisa de ajuda?
-          </span>
-        </button>
-      )}
+      {/* O BOTÃO FLUTUANTE SAIU DE VEZ (15/08, decisão do dono: "fica melhor e muito
+          profissional" como tópico de menu, "também no desktop").
+
+          No celular ele cobria o conteúdo e disputava o rodapé com a barra de ações; no
+          desktop era um elemento solto, fora da navegação. O acesso agora é o item
+          "Assistente" do Header — nas duas larguras —, que carrega o mesmo número de não
+          lidas. Quem abre o painel continua sendo o evento `tsn:open-chat`, então os
+          botões espalhados em Checkout, Consultor e LeiloeiroPortal seguem funcionando
+          sem alteração. */}
 
       {/* Widget de chat.
           `100vw × 100dvh` no celular fazia o painel cobrir a tela SEM SOBRA — e uma folha
