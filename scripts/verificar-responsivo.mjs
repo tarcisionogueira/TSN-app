@@ -32,7 +32,17 @@
 const BASE = process.argv[2] || process.env.BASE_URL || 'http://localhost:4173';
 
 // Só rotas PÚBLICAS: sem login, o script roda em qualquer lugar sem segredo nenhum.
-const ROTAS = (process.env.ROTAS || '/,/alavancagem,/planos,/login,/calculadora,/termos,/privacidade')
+//
+// `/leiloes` entrou em 15/08 e é a única servida FORA do SPA (`api/publico.js`, por rewrite
+// do vercel.json). Ficou de fora da varredura de 14/08 exatamente por isso — e foi onde o
+// dono achou o cabeçalho destoando do resto do site no dia seguinte. Uma rota que ninguém
+// mede é uma rota que só o cliente testa.
+//
+// ⚠️ Ela só existe quando há servidor com o rewrite: contra `dist` estático (o preview
+// local padrão) devolve 404, então rode a varredura completa contra o DEPLOY —
+// `npm run verificar:responsivo https://www.bidprobrasil.com.br` — ou limite as rotas com
+// a variável ROTAS quando estiver medindo só telas do app.
+const ROTAS = (process.env.ROTAS || '/,/alavancagem,/planos,/login,/calculadora,/termos,/privacidade,/leiloes')
   .split(',').map((r) => r.trim()).filter(Boolean);
 
 // Larguras reais de aparelho, do menor Android em uso ao desktop.

@@ -17,6 +17,11 @@ const inp = {
 };
 const lbl = { fontSize: 12, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 6 };
 
+// REGRA DA SENHA EM UM LUGAR SÓ. Ela é usada em três pontos — a validação do envio, o gate
+// do botão e a lista de requisitos ao vivo — e regra de negócio duplicada em três lugares é
+// regra que vai divergir. Ver o comentário do botão de cadastro sobre por que o gate existe.
+const SENHA_FORTE = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/;
+
 export default function Login() {
   const planosCtx = usePlanos();
   const pNome = (key) => planosCtx?.[key]?.nome || { top2: 'Investidor Pro', assessorado: 'Assessoria', clube: 'Leilão Club', explorador: 'Explorador' }[key] || key;
@@ -314,7 +319,7 @@ export default function Login() {
       // usuário e é a base dos alertas por e-mail. CPF NÃO é exigido aqui — só na hora de pagar.
       if (!form.endereco || !form.endereco.trim()) throw new Error('Informe sua cidade — ela filtra os imóveis da sua região e é a base dos seus alertas por e-mail.');
       // Senha forte: 8+ com maiúscula, minúscula, número e caractere especial
-      if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/.test(form.senha)) {
+      if (!SENHA_FORTE.test(form.senha)) {
         throw new Error('A senha deve ter ao menos 8 caracteres, com letra maiúscula, minúscula, número e caractere especial.');
       }
       if (!aceite) throw new Error('É necessário aceitar os Termos de Uso e a Política de Privacidade.');
@@ -658,8 +663,16 @@ export default function Login() {
                 </div>
               )}
               {erro && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#dc2626' }}>{erro}</div>}
-              <button type="submit" disabled={loading || !aceite || emailDuplicado || ((produtoParam || planoEscolhido) && cpfCheck?.temConta)}
-                style={{ width: '100%', padding: '12px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: (loading || !aceite) ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: (loading || !aceite) ? 0.6 : 1 }}>
+              {/* A SENHA ENTRA NO GATE DO BOTÃO (15/08). Em 12/08 a lista de requisitos ao vivo
+                  foi acrescentada porque um visitante tentou criar conta cinco vezes e foi
+                  embora sem conta. A lista INFORMA, mas o botão continuou aceitando o clique
+                  com senha inválida — e o erro só aparecia depois de enviar. O rastro mostra
+                  que não bastou: houve nova tentativa recusada em 13/08 e outra em 15/08,
+                  DEPOIS da correção, de pessoas diferentes. Agora o clique não acontece
+                  enquanto a senha não cumpre a regra, e a lista logo acima diz exatamente o
+                  que falta — informar e impedir são coisas diferentes. */}
+              <button type="submit" disabled={loading || !aceite || !SENHA_FORTE.test(form.senha) || emailDuplicado || ((produtoParam || planoEscolhido) && cpfCheck?.temConta)}
+                style={{ width: '100%', padding: '12px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: (loading || !aceite || !SENHA_FORTE.test(form.senha)) ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: (loading || !aceite || !SENHA_FORTE.test(form.senha)) ? 0.6 : 1 }}>
                 {loading
                   ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Criando conta...</>
                   : planoEscolhido ? 'Criar conta e ir para pagamento →' : 'Criar conta grátis'
