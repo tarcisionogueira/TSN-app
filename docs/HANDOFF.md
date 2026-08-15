@@ -85,6 +85,41 @@ documentos úteis, mas quem os procura é o `extratoMatricula`; aqui só tomaria
 > Nenhuma exceção, nenhum erro, nenhum alarme; só um pedido parado. Invariante
 > **`reuniao_solicitada_parada`** passa a vigiar (acusa **3** hoje, limite 0).
 
+### 👤 A regra do dono: sem analista, o atendimento cai para ele
+
+> Decisão de 15/08, com estas palavras: *"os pedidos de reunião, assim como os chamados, devem
+> cair para mim"*.
+
+O defeito de fundo era **a fila existir sem dono**. Linha com `analista_id` nulo não aparece
+como "minha" para ninguém — some. A regra resolve na raiz: **enquanto não houver analista, o
+pedido é do admin**, desde o instante em que nasce.
+
+**Feito por TRIGGER `before insert`** (`atendimento_cai_para_admin_sem_analista.sql`), não no
+front, porque a solicitação nasce em **três telas diferentes** (`Analise.jsx` ×2, `Painel.jsx`)
+com `insert` direto no banco. *Regra de negócio que mora na tela é regra que a próxima tela
+esquece* — foi assim que o "Explorador indica mas só saca sendo pagante" ficou dois meses
+valendo só no comentário. O trigger **não sequestra trabalho de equipe**: havendo analista (ou
+consultor, no caso do chamado) ativo, ele não age.
+
+| Depois do backfill | Total | Com dono | Órfãos |
+|---|---|---|---|
+| `solicitacoes` | 3 | **3** | **0** |
+| `chamados` abertos | 22 | **22** | **0** |
+
+**Mesma regra em `chamados.atendente_id`** — chamado aberto sem atendente também não era de
+ninguém. E em `api/duvida.js` o **aviso por e-mail à equipe deixou de ser restrito à origem
+`alavancagem`**: o que sustentava a exceção era a ideia de que o fluxo de planos não promete
+contato ativo, mas **sem analista nem consultor ativo, a alternativa ao aviso não é "a equipe vê
+no painel" — é ninguém ver**.
+
+> ⚠️ **Depende do dono:** o aviso só sai com **`ADMIN_EMAIL`** definida no painel da Vercel
+> (pendência aberta desde 14/08). Sem ela o chamado é registrado normalmente e o log diz, com
+> essas palavras, `[duvida] chamado SEM aviso: ADMIN_EMAIL não definido` — a falha declara que
+> falhou, em vez de sumir.
+>
+> **E continua valendo:** o trigger dá dono à fila, não substitui um analista. Nomear alguém
+> segue sendo decisão do dono; os 42 slots livres continuam livres.
+
 ---
 
 ## 🔁 15/08 — REVISÃO DE TODOS OS RELATÓRIOS: forma de pagamento + proximidade das amostras
