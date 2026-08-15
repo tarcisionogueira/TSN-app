@@ -45,6 +45,11 @@ pode aparecer para cliente nenhum.
 | Região de interesse deixando de ser apagada pela triagem + trigger que a deriva da cidade | migrações `perfis_regiao_*` |
 | Botões flutuantes sobrepondo a barra de ações e contador de análises fora da barra fixa | `App.jsx`, `ChatSuporte.jsx`, `ImovelDetalhe.jsx` |
 
+> ⚠️ **DEPENDE DO DONO, e é de um minuto:** o aviso usa `ADMIN_EMAIL` (nome da variável; valor no
+> painel da Vercel). **Se ela não estiver definida em produção, o e-mail não sai** — o código
+> registra `[duvida] lead de alavancagem SEM aviso` no log, mas o lead continua salvo. Vale mandar
+> um interesse de teste pela tela e confirmar que o e-mail chegou.
+
 ### 2. A tela de Alavancagem — o que ela é, e o que ela NÃO é
 
 É **material explicativo + sinalização de interesse**. Não é ficha de proposta, não aprova nada,
@@ -123,6 +128,12 @@ tentou entrar antes de confirmar o e-mail. Vale conferir se a tela explica isso 
 Hoje apareceram **quatro defeitos de tela num dia só** que nenhuma trava pegava, porque nenhuma
 delas **olha a página renderizada**: zoom do iOS ao focar campo com fonte < 16px, rolagem
 horizontal, botões fixos sobrepostos, e uma tabela escondendo uma coluna inteira no celular.
+
+**Estado da medição em 14/08:** `/alavancagem` passou limpa nas 6 larguras. As rotas públicas
+antigas (`/`, `/planos`, `/login`, `/calculadora`, `/termos`, `/privacidade`) **ainda não foram
+medidas** — a varredura é lenta e ficou para a próxima sessão. **Rode `npm run verificar:responsivo`
+na abertura e corrija o que aparecer**; é exatamente o tipo de dívida que só aparece quando alguém
+abre no celular.
 
 `scripts/verificar-responsivo.mjs` abre as rotas públicas em **6 larguras** (320 · 375 · 390 · 430
 · 768 · 1280) e reprova quando encontra: rolagem horizontal, campo com fonte < 16px em tela de
