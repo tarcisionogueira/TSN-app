@@ -2807,15 +2807,27 @@ COMO USAR (obrigatório): dedique um parágrafo aos CUSTOS DA OPERAÇÃO segundo
       // relatório errado. Best-effort: se a leitura falhar, a auditoria roda sem esse sinal.
       let temMatricula = false, pagamentoDoc = null, somenteAVista = false;
       try {
-        const [ix] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=link_matricula,anexos,titulo,forma_pagamento,doc_fatos&limit=1`)).json();
+        const [ix] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=link_matricula,anexos,titulo,forma_pagamento,doc_fatos,ficha_cef&limit=1`)).json();
         temMatricula = !!(ix?.link_matricula || (Array.isArray(ix?.anexos) && ix.anexos.some((a) => a?.tipo === 'matricula')));
         somenteAVista = String(ix?.forma_pagamento || '') === 'a_vista';
+        // A CAIXA JÁ PUBLICA A CONDIÇÃO, E NÓS JÁ GUARDAMOS (15/08). `ficha_cef` traz
+        // `financiamento` e `fgts` em todos os 24 mil lotes CEF ativos — e o relatório os
+        // ignorava. Medido: 8 lotes com `financiamento: true` gravados como `a_vista`
+        // (erro direto) e 7.191 que aceitam FGTS tratados como pagamento à vista. Não é
+        // leitura de documento nem chamada de IA: o dado está no acervo desde a captura.
+        const fc = ix?.ficha_cef || {};
+        const fcFin = String(fc.financiamento ?? '') === 'true' || fc.financiamento === true;
+        const fcFgts = String(fc.fgts ?? '') === 'true' || fc.fgts === true;
+        const pagCef = (fcFin || fcFgts) ? { financiavel: fcFin || null, fgts: fcFgts || null, origem: 'ficha_cef' } : null;
         // CONDIÇÃO DE PAGAMENTO PUBLICADA PELO LEILOEIRO NO PRÓPRIO TÍTULO. "Entrada 30% +
         // 240x" está na chamada da oferta e era simplesmente ignorado — o acervo gravava
         // `a_vista` e a tela desabilitava o cenário financiado. Ler daqui é determinístico
         // e custo zero; a leitura do edital continua sendo a fonte mais forte quando existe.
+        // Ordem de força: o que a leitura do documento apurou > o edital > a ficha oficial
+        // da Caixa > o que o leiloeiro anunciou no título.
         pagamentoDoc = ix?.doc_fatos?.pagamento
           || result?.mercado?.condicoesEdital?.pagamento
+          || pagCef
           || (ix?.titulo ? { ...(extrairPagamentoTexto(String(ix.titulo)) || {}), origem: 'titulo' } : null);
         // Publica na ficha do imóvel para a TELA parar de travar o cenário financiado e o
         // cliente ver a condição real — foi por não estar publicada que ela se perdeu.
