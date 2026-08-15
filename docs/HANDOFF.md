@@ -28,6 +28,84 @@
 > Checagem rápida a qualquer momento: `select public.auditoria_seguranca();` → `0 crítico / 0 atenção` = íntegro.
 > **Auditorias ofensivas completas: 15/07/2026 (×2).** Total de correções: 15 (1ª rodada) + escalonamento por convite (CRÍTICO) + IDOR do MP (ALTO) + escala. Refazer a ofensiva quando entrarem rotas/pagamento/RLS novos (a Rotina mensal já faz isso sozinha).
 
+## 🚨 15/08 (tarde) — A CORREÇÃO DA MATRÍCULA NÃO CORRIGIA NADA: variável de ambiente errada
+
+O dono regerou o mercadológico de Morada dos Pinheiros às 12:01, **depois** do deploy, e a área
+continuou vindo do anúncio. **A causa é minha, e tem três camadas — as três valem como aula.**
+
+### 1. A causa raiz: `CLAUDE_API_KEY` não existe. O projeto usa `CLAUDE_KEY`.
+
+A guarda na primeira linha de `matriculaPorVisao` era `if (!process.env.CLAUDE_API_KEY) return null`.
+O nome certo é **`CLAUDE_KEY`**, usado em 27 arquivos. A guarda batia **sempre**, a função
+devolvia `null` antes de fazer coisa alguma, e a leitura por visão **não rodou uma única vez**.
+
+> **Por que isso é grave além do próprio bug:** o desfecho é *idêntico* a "o documento não tem a
+> área" — que é exatamente o defeito que a função foi escrita para corrigir. `process.env.X`
+> inexistente é `undefined` em silêncio: **compila, passa no lint, passa no build**, e nenhuma
+> ferramenta do projeto pegava.
+
+### 2. Não havia como ver: a função saía calada
+
+O log da geração das 12:00 **não tinha uma linha sobre matrícula** — nem sucesso, nem falha, nem
+"tentei". E o `[metragem-doc]` só era emitido **quando a leitura dava certo**, ou seja, calava-se
+justamente no caso que precisava ser investigado. Agora:
+- `[matricula-visao]` registra **toda** desistência com motivo (sem chave, host bloqueado, sem
+  tempo, download falhou, formato ilegível, IA errou, IA não achou metragem, ok);
+- `[matricula-extrato]` registra o desfecho da cascata (candidatos, se sobrou parcial, sobra de tempo);
+- `[metragem-doc]` virou **incondicional**, com janela, gasto e restante em ms.
+
+### 3. E o orçamento de tempo não cabia — nem com a chave certa teria funcionado
+
+A janela de colheita era `min(16s, restante − 210s)`. Quando a leitura do endereço no documento
+consome tempo — **foi o caso**, o log mostra `[endereco-busca] rua:true` — o `restante()` cai
+abaixo de 210s, a janela vira **zero** e o `colher` resolve `null` no mesmo instante. A "segunda
+chance" mais adiante esperava **2,5 s**, e uma leitura por visão leva dezenas de segundos: era
+decorativa.
+
+Agora a janela vem do tempo realmente disponível — até **45 s** na primeira colheita, **30 s** na
+segunda. A metragem não é enfeite: **todo o valor de mercado pendura nela**, e a busca de
+comparáveis precisa do tamanho certo antes de sair procurando. Também: `urlParaVisao` passa a
+nascer com o primeiro candidato — antes, se o laço saísse por fim de orçamento antes de processar
+qualquer um, a visão nem era tentada.
+
+### 🔒 Trava nova: nome de variável de ambiente que não existe
+
+Regra: nome usado em **um** arquivo cujos segmentos contêm os de outro usado em **dois ou mais**
+é quase sempre typo (`CLAUDE_API_KEY` ⊃ `CLAUDE_KEY`, 1 contra 27). Três pares legítimos do
+acervo entram como exceção declarada em `ENV_PARES_LEGITIMOS` (`ONR_ALERT_EMAIL`,
+`GOOGLE_ADS_LOGIN_CUSTOMER_ID`, `ADMIN_ALERT_EMAIL`). **Provado nos dois sentidos:** passa no
+código correto, reprova com o erro reintroduzido e aponta o arquivo.
+
+> A trava tropeçou uma vez antes de ficar de pé, e vale registrar: usei o removedor de
+> comentários do verificador de schema e ele **se perdeu neste arquivo** — as regras aqui são
+> regexes literais cheias de aspas (`['"]`), o parser lê cada aspa como início de string e
+> dessincroniza; o comentário de bloco sobrevivia e a trava acusava a **própria documentação**.
+> Agora o comentário é ignorado **por linha**, o que para achar `process.env.X` basta e não tem
+> como se perder.
+
+### ✅ O QUE CONFERIR NA PRÓXIMA GERAÇÃO
+
+Regere o mercadológico do lote e olhe **primeiro o log**, não o relatório:
+```
+[metragem-doc]  {"leu":true,"via":"visao","matricula":236,...}
+[matricula-visao] {"motivo":"ok","areaPrivativaM2":236,...}
+```
+E no banco:
+```sql
+select result->'mercado'->'metodologia'->'area' as area, result->'divergenciaArea' as divergencia
+  from analises_mercado where imovel_id::text='6dc2382e-3157-4426-b547-66f3552b4dba'
+ order by created_at desc limit 1;
+```
+**Verde é** `fonte: "matricula"` com `valor: 236`. **Se falhar de novo, o log agora DIZ o motivo** —
+é essa a diferença desta rodada para a anterior.
+
+> ℹ️ **Sobre os "118 m²" que apareceram na tela:** é o número inferido
+> (`avaliação ÷ R$/m²` = 893.125 ÷ 7.575). Ele **saiu do código** no deploy das 11:55 e não é
+> mais exibido; se ainda aparecer, é o bundle antigo no navegador — recarregue com
+> Ctrl+Shift+R. O problema de fundo nunca foi o texto: era a matrícula não ser lida.
+
+---
+
 ## 🔎 15/08 (fim do dia) — INSPEÇÃO 360 DO USO REAL + revisão de não-regressão
 
 Pedido do dono: garantir que os erros do dia não voltem, e inspecionar o sistema **pelo uso
