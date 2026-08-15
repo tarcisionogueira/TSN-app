@@ -77,6 +77,26 @@ não simula contratação. Os dois botões abrem o mesmo formulário curto.
 administradora de consórcio**; a operação é da parceira e depende de análise dela. Os números são
 **exemplos ilustrativos** e cada um diz de onde saiu.
 
+**Cliente logado só CONFIRMA — não preenche nada** (pedido do dono no fim do dia): nome, e-mail e
+WhatsApp aparecem lidos do cadastro, com link para Meu Perfil, e há um único aceite — *"Confirmo
+que tenho interesse e autorizo que a equipe entre em contato comigo"*. O botão só habilita depois
+do aceite, e a autorização fica escrita na mensagem do chamado. **Visitante mantém o formulário**,
+porque a tela é pública e sem ele não haveria como contatar quem não tem conta.
+
+> 🔒 **Duas mudanças que o desenho novo exigiu, e não são cosméticas:**
+> 1. **A identidade do logado vem do TOKEN, nunca do corpo.** O front manda só o `Authorization`;
+>    `api/duvida.js` lê o usuário e usa o e-mail dele. Sem isso, aceitar o e-mail do corpo
+>    permitiria abrir chamado em nome de outra pessoa — e, agora que o chamado nasce com
+>    `user_id`, vinculá-lo a um `user_id` alheio. O `nome` do corpo continua aceito **apenas como
+>    fallback de exibição**.
+> 2. **O chamado do cliente logado carrega `user_id`**, então aparece em "Meus chamados" dele e o
+>    Cliente 360 o liga ao cliente certo, em vez de ficar solto como visitante.
+>
+> E o `verificar:padroes` pegou um defeito **meu** no caminho: eu lia a sessão desestruturando só
+> `data`. Se o `getSession` falhasse, o header não ia, o corpo do logado não leva identidade por
+> desenho, e a pessoa receberia um 400 pedindo "um e-mail válido" — erro sem relação com a causa.
+> Agora o `error` é conferido e a mensagem diz que a sessão expirou.
+
 **Correção do dono, em duas rodadas, que vale decorar:** carta de consórcio **não arremata em
 leilão nenhum**, judicial ou extrajudicial — a administradora só libera contra compra e venda
 comum, com escritura e registro. Ela entra **depois**, comprando o imóvel de quem já arrematou.
