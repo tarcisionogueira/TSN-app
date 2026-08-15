@@ -28,6 +28,83 @@
 > Checagem rápida a qualquer momento: `select public.auditoria_seguranca();` → `0 crítico / 0 atenção` = íntegro.
 > **Auditorias ofensivas completas: 15/07/2026 (×2).** Total de correções: 15 (1ª rodada) + escalonamento por convite (CRÍTICO) + IDOR do MP (ALTO) + escala. Refazer a ofensiva quando entrarem rotas/pagamento/RLS novos (a Rotina mensal já faz isso sozinha).
 
+## ✅ 15/08 — A MATRÍCULA DE MORADA DOS PINHEIROS FOI LIDA (confirmado em produção)
+
+Regeração às 12:35, com o deploy da correção da variável de ambiente:
+```
+[matricula-visao] {"motivo":"ok","areaPrivativaM2":234.6,"areaTerrenoM2":396.8,"numeroMatricula":"5709"}
+[metragem-doc]    {"leu":true,"via":"visao","gastoMs":5512,"anuncio":396,"matricula":234.6,"usadaNaBusca":234.6}
+```
+- `metodologia.area` → **`fonte: "matricula"`, `valor: 234.6`**
+- `divergenciaArea` → **anúncio 396 × matrícula 234,6 = −41%**, agora declarado ao cliente
+- `areaAlerta` → **null** (sumiu: com a área certa, os comparáveis fecham)
+- O valor deixou de ser ancorado na avaliação e passou a **R$ 1.771.561** por comparáveis
+
+> 📌 **E fica provada a hipótese:** a matrícula diz **terreno 396,8 m²** e **construída
+> 234,6 m²**. O leiloeiro publicou a área do TERRENO como área do imóvel — é a origem de
+> todo o problema. A leitura por visão levou **5,5 segundos**.
+
+---
+
+## 🔬 15/08 — INSPEÇÃO FINAL ANTES DE LIBERAR O RELATÓRIO (pedido do dono)
+
+**Por que precisa existir:** todo defeito que chegou ao cliente neste projeto tinha a mesma
+assinatura — **cada peça, isolada, parecia certa**. O que denunciava era o **cruzamento**, e
+ninguém cruzava. Só em agosto: aluguel R$ 0,00 contra o Índice com 20 amostras; área 396 no
+cálculo contra 234,6 na matrícula; rentabilidade em razão onde o certo era percentual.
+
+**`api/_auditoria-relatorio.js`** roda como última etapa da geração e cruza:
+
+| Verifica | Achado |
+|---|---|
+| Rentabilidade × aluguel × valor (a conta fecha?) | `yield_nao_fecha` |
+| Rentabilidade sem aluguel que a sustente | `yield_sem_aluguel` |
+| Yield gravado como razão (falta ×100) | `yield_sem_x100` |
+| Área da metodologia × área que o cálculo usou | `area_divergente_interna` |
+| Valor de mercado × preço/m² × área | `valor_nao_fecha_com_m2` |
+| Preço/m² × FipeZAP **e** Índice ao mesmo tempo | `preco_m2_fora_das_referencias` |
+| Aluguel ausente × locação na base própria | `aluguel_ausente_com_indice` |
+| Área não confirmada havendo matrícula | `area_nao_confirmada` |
+| Sem comparáveis · base fina · sem parecer/valor/preço | `sem_*`, `base_fina` |
+
+> 🔵 **NÃO retém o relatório, e é decisão consciente.** Cliente sem nada, com a cota gasta,
+> troca um erro visível por um prejuízo invisível. O achado é **declarado**: ressalva no topo
+> da tela, e o indicador contraditório entra em `suprimir` e aparece como “—”. Mostrar o
+> número **e** o aviso deixaria o cliente escolher em qual acreditar — que é o que não se
+> quer. É a regra do projeto aplicada a ela mesma.
+
+### 📋 REVISÃO DOS 56 RELATÓRIOS JÁ EMITIDOS
+
+A função é **pura** justamente para poder rodar sobre o acervo sem tocar em nada:
+
+| | |
+|---|---|
+| Com achado **crítico** | **13** |
+| Com informação **faltando** | **3** |
+| Totalmente limpos | **13** |
+
+| Achado | n |
+|---|---|
+| `sem_comparaveis` | **24** |
+| `area_nao_confirmada` | **15** |
+| `yield_nao_fecha` | **12** |
+| `sem_valor_mercado` | 3 |
+| `sem_preco_m2` · `area_incoerente_com_comparaveis` · `yield_sem_x100` · `base_fina` · `aluguel_ausente_com_indice` | 1 cada |
+
+> ✅ **Os 12 `yield_nao_fecha` são TODOS anteriores a 14/08** — data em que o servidor passou
+> a calcular o yield em vez de aceitar o do modelo. **A auditoria confirma que aquela correção
+> funcionou:** nenhum relatório posterior aparece. É o primeiro uso dela como instrumento de
+> verificação, e não só de alarme.
+
+> ⚠️ **Um erro meu no caminho, registrado porque é a lição da semana.** A primeira versão da
+> regra do yield usava `result.valorMercado` como denominador e acusou **13** relatórios. O
+> denominador certo é `consolidado.valorEstimadoImovel` — `valorMercado` pode ter sido
+> **ancorado na avaliação** quando a área é suspeita, e comparar a conta com um número que não
+> a originou **acusa inocente**. Só apareceu porque fui ver os números de quatro casos antes de
+> reportar. Corrigida a regra: 12 dos 13 eram defeito real, 1 era da regra.
+
+---
+
 ## 📊 15/08 — QUADROS DO RELATÓRIO SE CONTRADIZENDO: "medida ausente" virava "zero"
 
 Achado do dono na tela do mercadológico: o resumo mostrava **"Aluguel médio R$ 0,00/mês"** e
