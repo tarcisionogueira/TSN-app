@@ -39,7 +39,7 @@ const STATUS_CASO = {
 
 export default function HomeCliente() {
   const nav = useNavigate();
-  const { user, effectiveRole, effectiveUserId, impersonate } = useAuth();
+  const { user, effectiveRole, effectiveUserId, impersonate, roleSimulado } = useAuth();
   const info = PLANO_INFO[effectiveRole] || PLANO_INFO.explorador;
   // Modo suporte: a saudação é a do CLIENTE visualizado (a equipe navega como ele).
   const primeiroNome = (impersonate?.nome || user?.user_metadata?.nome || user?.email || 'Investidor').split(' ')[0].split('@')[0];
@@ -66,9 +66,9 @@ export default function HomeCliente() {
   useEffect(() => {
     if (!effectiveUserId) { setCotaMercado(null); return; }
     let vivo = true;
-    lerCotas(supabase, effectiveUserId).then((c) => { if (vivo) setCotaMercado(c?.mercado || null); });
+    lerCotas(supabase, effectiveUserId, { roleSimulado }).then((c) => { if (vivo) setCotaMercado(c?.mercado || null); });
     return () => { vivo = false; };
-  }, [effectiveUserId]);
+  }, [effectiveUserId, roleSimulado]);
 
   // Sem cota carregada não mostra selo nenhum. Melhor nenhum número que um número errado.
   const temSelo = !!cotaMercado && !cotaMercado.ilimitado && Number(cotaMercado.limite || 0) > 0;

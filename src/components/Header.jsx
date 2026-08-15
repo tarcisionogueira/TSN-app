@@ -267,12 +267,19 @@ export default function Header() {
           </button>
         </div>
       )}
-      {/* Banner de simulação de role (apenas admin) */}
+      {/* Banner de simulação de role (apenas admin).
+          A frase vive DENTRO de um <span>. Em container flex, cada trecho de texto solto vira
+          um item anônimo — então "🎭 Simulando como", o <strong> e ", a interface está sendo
+          exibida…" quebravam em linhas separadas, com o `gap: 12` empurrando a vírgula para o
+          começo da linha de baixo. Era o que aparecia no celular do dono. Um único filho de
+          texto quebra como frase, não como três peças. */}
       {roleSimulado && (
-        <div style={{ background: '#7c3aed', color: 'white', padding: '7px 20px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, fontSize: 13, fontWeight: 600, flexWrap: 'wrap' }}>
-          🎭 Simulando como <strong style={{ textTransform: 'capitalize' }}>{roleSimulado}</strong>, a interface está sendo exibida conforme esse perfil veria
+        <div style={{ background: '#7c3aed', color: 'white', padding: '7px 16px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, fontSize: 13, fontWeight: 600, flexWrap: 'wrap' }}>
+          <span style={{ display: 'inline-block', textAlign: 'center', lineHeight: 1.35 }}>
+            🎭 Simulando como <strong style={{ textTransform: 'capitalize' }}>{roleSimulado}</strong> — a tela é a que esse perfil vê
+          </span>
           <button onClick={() => simularRole(null)}
-            style={{ padding: '4px 12px', background: 'rgba(255,255,255,0.2)', color: 'white', border: '1px solid rgba(255,255,255,0.4)', borderRadius: 6, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+            style={{ padding: '4px 12px', background: 'rgba(255,255,255,0.2)', color: 'white', border: '1px solid rgba(255,255,255,0.4)', borderRadius: 6, fontWeight: 700, fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }}>
             Voltar ao Admin
           </button>
         </div>

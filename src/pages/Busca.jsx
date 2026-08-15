@@ -615,7 +615,7 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
 export default function Busca() {
   const nav = useNavigate();
   const isMobile = useIsMobile();
-  const { role, user, effectiveRole, effectiveUserId, impersonate, planoLegado } = useAuth();
+  const { role, user, effectiveRole, effectiveUserId, impersonate, planoLegado, roleSimulado } = useAuth();
   const soLeitura = !!impersonate; // modo suporte: só visualiza (não salva/apaga filtro do cliente)
   // Lê filtros pré-ativados via URL (usados no deep-link do email de alerta)
   const loc = typeof window !== 'undefined' ? window.location.hash : '';
@@ -636,9 +636,9 @@ export default function Busca() {
   useEffect(() => {
     if (!effectiveUserId) { setCotaMercado(null); return; }
     let vivo = true;
-    lerCotas(supabase, effectiveUserId).then((c) => { if (vivo) setCotaMercado(c?.mercado || null); });
+    lerCotas(supabase, effectiveUserId, { roleSimulado }).then((c) => { if (vivo) setCotaMercado(c?.mercado || null); });
     return () => { vivo = false; };
-  }, [effectiveUserId]);
+  }, [effectiveUserId, roleSimulado]);
 
   // Sem selo para admin (ilimitado) e para a equipe/quem não gera (limite 0) — nenhum dos dois
   // tem o que exibir, e "0 relatórios disponíveis" seria pior que o silêncio.

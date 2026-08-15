@@ -43,7 +43,7 @@ function MarcaBP({ size = 30, quadrado = true }) {
 }
 
 export default function ChatSuporte() {
-  const { user, role, effectiveRole, isLoggedIn, impersonate } = useAuth();
+  const { user, role, effectiveRole, isLoggedIn, impersonate, roleSimulado } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [view, setView] = useState('lista'); // 'lista' | 'novo' | 'conversa'
   const [listaChamados, setListaChamados] = useState([]);
@@ -63,22 +63,32 @@ export default function ChatSuporte() {
   const avisoTimer = useRef(null);
   const fecharTimer = useRef(null);
   const avisouInatividade = useRef(false);
-  const pularCarregarLista = useRef(false); // saudação proativa abre direto numa conversa
   const saudacaoChecada = useRef(false);
-  const isOpenRef = useRef(false);   // valor atual p/ closures do realtime
-  const naoLidasRef = useRef(0);
 
   const nomeUsuario = user?.user_metadata?.nome || user?.email?.split('@')[0] || 'Cliente';
-  // Usa o papel REAL (não o efetivo): no MODO SUPORTE o admin assume o papel do cliente, mas o chat
-  // NÃO deve aparecer (é o admin, não o cliente). ehCliente também exclui suporte.
+  // No MODO SUPORTE o admin assume o papel do cliente, mas o chat NÃO deve aparecer (quem está
+  // ali é o admin) — por isso `!impersonate`. Já na SIMULAÇÃO de papel o widget APARECE, e tem
+  // de aparecer: ver o chat como o explorador vê é parte do que se foi validar.
   const ehCliente = !STAFF_ROLES.includes(role) && !impersonate;
+
+  // SIMULAR É OLHAR, NUNCA ESCREVER (15/08).
+  //
+  // Desde que `role` passou a ser o papel EFETIVO, o admin simulando "explorador" satisfaz
+  // `ehCliente` — e a saudação proativa dispararia contra o `user.id` DELE: criaria um chamado
+  // de verdade, gravaria a mensagem e carimbaria `suporte_saudacao_em` na conta do admin. A
+  // ferramenta de inspecionar produziria o dado que ela deveria só observar, e o carimbo ainda
+  // bloquearia a saudação real dele por 30 dias.
+  //
+  // A conta continua sendo a do admin durante a simulação — trocar o papel não troca a linha do
+  // banco. Então a única regra segura é: em simulação, nada que grave.
+  const simulando = !!roleSimulado;
 
   useEffect(() => { msgEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [mensagens]);
   useEffect(() => {
     if (isOpen && user) {
-      // A saudação proativa já montou a conversa — não recarrega a lista por cima dela.
-      if (pularCarregarLista.current) pularCarregarLista.current = false;
-      else carregarLista();
+      // (Até 15/08 havia aqui um desvio para quando a saudação proativa montava a conversa
+      // por conta própria. Ela não abre mais nada, então o widget sempre entra pela lista.)
+      carregarLista();
       supabase.from('perfis').select('memoria_ia').eq('id', user.id).single()
         .then(({ data }) => { if (data?.memoria_ia) setMemoriaIA(data.memoria_ia); });
     }
@@ -90,8 +100,6 @@ export default function ChatSuporte() {
     return () => window.removeEventListener('tsn:open-chat', handler);
   }, []);
 
-  useEffect(() => { isOpenRef.current = isOpen; }, [isOpen]);
-  useEffect(() => { naoLidasRef.current = naoLidas; }, [naoLidas]);
 
   // Badge "respondido": conta respostas de atendente ainda não vistas.
   const atualizarNaoLidas = useCallback(async () => {
@@ -101,22 +109,22 @@ export default function ChatSuporte() {
   }, [user?.id, ehCliente]);
   useEffect(() => { atualizarNaoLidas(); }, [atualizarNaoLidas]);
 
-  // Realtime nos chamados do próprio cliente: ao chegar resposta de atendente, atualiza o
-  // badge e — se o widget estiver fechado — ABRE sinalizando que foi respondido (pedido do dono).
+  // Realtime nos chamados do próprio cliente: ao chegar resposta, atualiza o BADGE.
+  //
+  // 15/08 — DEIXOU DE ABRIR O WIDGET SOZINHO, revertendo uma decisão anterior do dono ("abre
+  // sinalizando que foi respondido") por decisão nova dele, com um caso concreto: o João criou
+  // a conta e o chat tomou a TELA INTEIRA do celular (o painel é 100vw × 100dvh abaixo de
+  // 480px). Ele achou que era erro do site — no primeiro contato com o produto.
+  //
+  // A regra passa a ser a do Instagram, nas palavras dele: "apenas um botãozinho em algum
+  // local, com um número". Abrir sozinho é a única forma de aviso que o usuário não pode
+  // recusar; o badge comunica o mesmo e devolve a ele a decisão de quando olhar.
   useEffect(() => {
     if (!user?.id || !ehCliente) return;
     const ch = supabase.channel(`fab-${user.id}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'chamados', filter: `user_id=eq.${user.id}` }, async () => {
-        const antes = naoLidasRef.current;
         const { data } = await supabase.rpc('suporte_respostas_nao_lidas');
-        const agora = Number(data) || 0;
-        setNaoLidas(agora);
-        if (agora > antes && !isOpenRef.current) {
-          const { data: cs } = await supabase.from('chamados').select('*').eq('user_id', user.id)
-            .order('atualizado_em', { ascending: false, nullsFirst: false }).limit(1);
-          if (cs?.[0]) { pularCarregarLista.current = true; setIsOpen(true); abrirChamado(cs[0]); }
-          else setIsOpen(true);
-        }
+        setNaoLidas(Number(data) || 0);
       })
       .subscribe();
     return () => supabase.removeChannel(ch);
@@ -125,16 +133,18 @@ export default function ChatSuporte() {
   // Saudação PROATIVA mensal (só cliente): ao abrir o app, no máx. 1×/30 dias, o assistente
   // se apresenta e pergunta como está sendo a experiência / se há dificuldade.
   useEffect(() => {
-    if (!isLoggedIn || !ehCliente || !user?.id || saudacaoChecada.current) return;
+    if (!isLoggedIn || !ehCliente || !user?.id || simulando || saudacaoChecada.current) return;
     saudacaoChecada.current = true;
     (async () => {
       const { data } = await supabase.from('perfis').select('suporte_saudacao_em').eq('id', user.id).maybeSingle();
       const last = data?.suporte_saudacao_em ? new Date(data.suporte_saudacao_em).getTime() : 0;
       if (Date.now() - last > 30 * 24 * 60 * 60 * 1000) {
-        setTimeout(() => { saudacaoProativa(); }, 4500); // deixa a página assentar antes de abrir
+        // 4,5 s deixavam a página assentar ANTES de abrir o painel. Como nada mais abre, o
+        // atraso agora só evita competir com o carregamento inicial para acender o badge.
+        setTimeout(() => { saudacaoProativa(); }, 4500);
       }
     })();
-  }, [isLoggedIn, ehCliente, user?.id]);
+  }, [isLoggedIn, ehCliente, user?.id, simulando]);
 
   useEffect(() => {
     if (!ticket) return;
@@ -234,7 +244,12 @@ export default function ChatSuporte() {
   }
 
   // Saudação proativa mensal: cria um chamado 'proativo' com a mensagem de apresentação da IA
-  // e abre o widget direto nessa conversa (amigável, sem exigir nada do cliente).
+  // e ACENDE O BADGE do botão flutuante — sem abrir nada por cima do que a pessoa está fazendo.
+  //
+  // Antes ela abria o widget direto na conversa. No celular isso é a tela inteira, e foi como
+  // o João conheceu a plataforma: cadastrou, esperou 4,5 s e levou um painel em cheio, que ele
+  // leu como erro. A mensagem continua sendo criada e continua esperando por ele; o que muda é
+  // que agora ele escolhe a hora de abrir.
   async function saudacaoProativa() {
     if (!user?.id) return;
     const { data: novo } = await supabase.from('chamados').insert({
@@ -243,17 +258,20 @@ export default function ChatSuporte() {
     }).select().single();
     if (!novo) return;
     const saud = `Oi, ${nomeUsuario}! 👋 Sou o assistente virtual da BidPro Brasil. Passei para saber: está gostando de navegar pela plataforma? Está conseguindo achar tudo que precisa, ou esbarrou em alguma dificuldade?\n\nSe algo não estiver funcionando como esperado, me conta (pode colar um print aqui com Ctrl+V que eu ajudo na hora 🙂). E sempre que precisar, é só clicar neste botãozinho aqui embaixo que eu te atendo.`;
-    const { data: msg } = await supabase.from('chamados_mensagens').insert({
+    const ins = await supabase.from('chamados_mensagens').insert({
       chamado_id: novo.id, autor_tipo: 'ia', autor_nome: 'BidPro Assistente', conteudo: saud, anexos: [],
-    }).select().single();
+    });
+    // Sem a mensagem gravada o chamado fica MUDO: o badge acende e a conversa abre vazia.
+    // Antes o resultado do insert ia para uma variável que a tela usava; agora ninguém o
+    // consome, então é aqui que a falha tem de aparecer em vez de sumir.
+    if (ins.error) { console.error('[chat] saudação NÃO gravada', ins.error.message); return; }
     await supabase.from('perfis').update({ suporte_saudacao_em: new Date().toISOString() }).eq('id', user.id);
-    pularCarregarLista.current = true;
-    setTicket(novo);
-    setMensagens(msg ? [msg] : []);
-    setPrecisaAtendente(false);
-    setView('conversa');
-    setIsOpen(true);
-    resetTimers();
+    // NÃO abre, NÃO troca de view e NÃO fixa o ticket: se fixasse, o próximo clique no botão
+    // cairia direto nesta conversa em vez da lista, e a pessoa perderia os outros chamados.
+    // O badge é a única sinalização — e ele vem do banco (`suporte_respostas_nao_lidas`, que
+    // desde 15/08 conta também a mensagem da IA), não de um contador local que poderia
+    // divergir do que existe de fato.
+    await atualizarNaoLidas();
   }
 
   async function criarChamado() {
@@ -419,10 +437,15 @@ export default function ChatSuporte() {
         </button>
       )}
 
-      {/* Widget de chat */}
+      {/* Widget de chat.
+          `100vw × 100dvh` no celular fazia o painel cobrir a tela SEM SOBRA — e uma folha
+          branca de borda a borda não se parece com um painel, se parece com a página tendo
+          quebrado. Foi assim que o João leu (o chat ainda abria sozinho na época). Agora
+          sobram 64px no topo: a tela por trás aparece, e a coisa se lê como algo ABERTO POR
+          CIMA do app, que é o que ela é — inclusive dizendo, sem texto, que dá para fechar. */}
       {isOpen && (
         <div style={{ position: 'fixed', bottom: 0, right: 0, zIndex: 9990,
-          width: 'min(420px, 100vw)', height: 'min(620px, 100dvh)',
+          width: 'min(420px, 100vw)', height: 'min(620px, calc(100dvh - 64px))',
           background: 'white',
           borderRadius: window.innerWidth < 480 ? '20px 20px 0 0' : 20,
           boxShadow: '0 16px 56px rgba(0,0,0,0.25)',

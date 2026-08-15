@@ -30,7 +30,22 @@
  * PINTAR botão e selo — uma falha de rede não pode virar "você não tem análise" nem, pior,
  * um número errado na tela.
  */
-export async function lerCotas(supabase, userId) {
+export async function lerCotas(supabase, userId, { roleSimulado = null } = {}) {
+  // SIMULAÇÃO DE PAPEL (15/08): aqui o usuário continua sendo o ADMIN — diferente do modo
+  // suporte, em que o `userId` muda. Perguntar `minhas_cotas` durante a simulação devolvia,
+  // com toda a razão, a cota do admin: ILIMITADA. O print do dono mostrava "Análises
+  // ilimitadas" numa tela que se anunciava como Explorador (que tem 3 amostras vitalícias).
+  // Papel simulado com dado real — e o dado ganha. `cotas_do_papel` responde pelo PAPEL,
+  // lendo `limite_ia`, a mesma fonte do cliente de verdade.
+  if (roleSimulado) {
+    try {
+      const { data, error } = await supabase.rpc('cotas_do_papel', { p_role: roleSimulado });
+      if (error || !data || data.erro) return null;
+      return data;
+    } catch {
+      return null;
+    }
+  }
   if (!userId) return null;
   try {
     const { data, error } = await supabase.rpc('minhas_cotas', { p_user_id: userId });

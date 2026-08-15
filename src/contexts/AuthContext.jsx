@@ -392,10 +392,31 @@ export function AuthProvider({ children }) {
   const effectiveRole   = (((role === 'admin' && roleSimulado) ? roleSimulado : (impersonate?.role || role)) || 'explorador').replace(/_anual$/, '');
   const podeImpersonar  = role === 'admin' || role === 'analista';
 
+  // `role` EXPOSTO = o EFETIVO. Corrigido em 15/08, achado do dono: "coloquei para simular o
+  // acesso de um explorador, mas ainda assim há vícios na exibição".
+  //
+  // A simulação só existia em `effectiveRole` — e o acervo estava dividido ao meio:
+  // **29 componentes liam `role` (o real) contra 12 que liam `effectiveRole`**. Ou seja, no
+  // modo simulação a maioria das telas continuava desenhando para o ADMIN, e as poucas
+  // corrigidas desenhavam para o explorador. O resultado não era nem uma coisa nem outra: era
+  // uma tela que não existe para usuário nenhum — inútil justamente para o fim de validar.
+  //
+  // Corrigir 29 arquivos um a um teria a mesma vida curta: o 30º componente nasceria lendo
+  // `role`, como os 29 nasceram, e o vício voltaria. A regra passa a ser a segura por padrão:
+  // **`role` é o que a pessoa VÊ**; quem precisa do papel de verdade pede `roleReal`, e a
+  // exceção fica explícita no código de quem a usa (hoje: `podeImpersonar` e o controle de
+  // simulação). `isAdmin` acompanha `role` — simular explorador tem de esconder o que é de
+  // admin, senão a simulação não simula nada.
+  //
+  // A saída NÃO depende disto: o botão "Voltar ao Admin" vive no banner do Header, que é
+  // desenhado a partir de `roleSimulado`, fora desta troca. Sem isso, simular explorador
+  // trancaria o admin fora do /admin sem porta de volta.
+  const roleVisivel = effectiveRole;
+
   return (
     <AuthContext.Provider value={{
-      user, role, nome, ativo, inadimplenteDias, loading, cadastroIncompleto, setCadastroIncompleto, planoLegado,
-      isAdmin: role === 'admin',
+      user, role: roleVisivel, roleReal: role, nome, ativo, inadimplenteDias, loading, cadastroIncompleto, setCadastroIncompleto, planoLegado,
+      isAdmin: roleVisivel === 'admin',
       isLoggedIn: !!user,
       impersonate, iniciarSuporte, encerrarSuporte, podeImpersonar,
       effectiveUserId, effectiveRole,
