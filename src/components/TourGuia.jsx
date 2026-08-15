@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { ChevronRight, ChevronLeft, X, RotateCcw } from 'lucide-react';
 import { supabase } from '../utils/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { useVezDoModal } from '../utils/filaModais';
 
 /**
  * A versão do tour é a MAIS RECENTE PUBLICADA em `tour_etapas` — nunca o mês do relógio.
@@ -142,7 +143,10 @@ export default function TourGuia() {
 
   // Botão flutuante "?" removido a pedido — o tour de boas-vindas ainda abre 1x por
   // login; dúvidas sobre a plataforma são respondidas pela IA do chat de suporte.
-  if (!visivel || etapas.length === 0) return null;
+  // FILA DE MODAIS (15/08): o tour esperava atrás do vídeo de boas-vindas — explicar a tela
+  // por cima de um vídeo não ensina nada. Ver src/utils/filaModais.js.
+  const minhaVez = useVezDoModal('tour', !!(visivel && etapas.length));
+  if (!minhaVez) return null;
 
   const etapa = etapas[indice];
   const total = etapas.length;

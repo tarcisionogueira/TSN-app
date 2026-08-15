@@ -83,6 +83,25 @@ export default function ChatSuporte() {
   // banco. Então a única regra segura é: em simulação, nada que grave.
   const simulando = !!roleSimulado;
 
+  // BOTÃO FLUTUANTE SÓ NO DESKTOP (15/08, pedido do dono).
+  //
+  // No celular o "B" redondo fica sobre o conteúdo, disputa o rodapé com a barra de ações e, com
+  // o badge vermelho por cima, foi lido como enfeite quebrado — foi o que ele viu no print. A
+  // função não some: virou uma linha do menu ("Falar com o assistente", com o mesmo número), que
+  // é onde a pessoa já procura o que fazer no telefone. No desktop o flutuante fica: lá sobra
+  // margem e o acesso de um clique vale.
+  //
+  // `matchMedia` com listener, e não uma leitura única de `innerWidth`: girar o aparelho ou
+  // abrir o DevTools muda a largura, e um valor congelado na montagem deixaria o botão sumido
+  // (ou sobrando) até um recarregamento — a tela mentindo sobre o tamanho dela mesma.
+  const [ehDesktop, setEhDesktop] = useState(() => (typeof window === 'undefined' ? true : window.matchMedia('(min-width: 768px)').matches));
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 768px)');
+    const h = (e) => setEhDesktop(e.matches);
+    mq.addEventListener('change', h);
+    return () => mq.removeEventListener('change', h);
+  }, []);
+
   useEffect(() => { msgEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [mensagens]);
   useEffect(() => {
     if (isOpen && user) {
@@ -105,7 +124,11 @@ export default function ChatSuporte() {
   const atualizarNaoLidas = useCallback(async () => {
     if (!user?.id || !ehCliente) return;
     const { data } = await supabase.rpc('suporte_respostas_nao_lidas');
-    setNaoLidas(Number(data) || 0);
+    const n = Number(data) || 0;
+    setNaoLidas(n);
+    // Publica para o Header desenhar o MESMO número no item de menu do celular (15/08). O
+    // contador continua tendo uma origem só; o que se espalha é a exibição.
+    window.dispatchEvent(new CustomEvent('tsn:chat-nao-lidas', { detail: n }));
   }, [user?.id, ehCliente]);
   useEffect(() => { atualizarNaoLidas(); }, [atualizarNaoLidas]);
 
@@ -122,13 +145,10 @@ export default function ChatSuporte() {
   useEffect(() => {
     if (!user?.id || !ehCliente) return;
     const ch = supabase.channel(`fab-${user.id}`)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'chamados', filter: `user_id=eq.${user.id}` }, async () => {
-        const { data } = await supabase.rpc('suporte_respostas_nao_lidas');
-        setNaoLidas(Number(data) || 0);
-      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'chamados', filter: `user_id=eq.${user.id}` }, () => atualizarNaoLidas())
       .subscribe();
     return () => supabase.removeChannel(ch);
-  }, [user?.id, ehCliente]);
+  }, [user?.id, ehCliente, atualizarNaoLidas]);
 
   // Saudação PROATIVA mensal (só cliente): ao abrir o app, no máx. 1×/30 dias, o assistente
   // se apresenta e pergunta como está sendo a experiência / se há dificuldade.
@@ -414,7 +434,7 @@ export default function ChatSuporte() {
   return (
     <>
       {/* Botão flutuante, círculo no tema do header (preto) com a marca B */}
-      {!isOpen && (
+      {!isOpen && ehDesktop && (
         <button onClick={() => setIsOpen(true)} title="Precisa de ajuda? Fale com a gente"
           style={{ position: 'fixed', bottom: 'calc(24px + var(--barra-acoes-altura, 0px))', right: 24, zIndex: 9990, height: 58, borderRadius: 999, background: '#111111', color: 'white', border: '1px solid #1f2937', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 0, padding: 0, overflow: 'hidden', boxShadow: '0 8px 24px rgba(17,17,17,0.28)', transition: 'gap 0.2s, padding 0.2s, box-shadow 0.2s, transform 0.15s' }}
           onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 12px 30px rgba(17,17,17,0.36)'; e.currentTarget.style.gap = '10px'; e.currentTarget.style.paddingRight = '20px'; const lbl = e.currentTarget.querySelector('[data-fab-label]'); if (lbl) { lbl.style.maxWidth = '120px'; lbl.style.opacity = '1'; } }}

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../utils/supabase';
+import { useVezDoModal } from '../utils/filaModais';
 
 const SESSION_KEY = 'tsn_contrato_dismissed';
 
@@ -29,10 +30,16 @@ export default function ContratoObrigatorio({ userId }) {
     load();
   }, [userId]);
 
-  if (loading || pendentes.length === 0) return null;
-
+  // FILA DE MODAIS (15/08). Contrato tem a MAIOR prioridade: o ramo `expired` é um bloqueio de
+  // tela inteira que não se fecha, e enfileirá-lo atrás de um vídeo de boas-vindas seria pôr o
+  // opcional na frente do que trava a conta. O `dismissed` entra na conta de QUERER: um popup
+  // que a pessoa já dispensou não pode continuar segurando a vez de quem vem atrás — seria uma
+  // fila parada por alguém que nem está mais na tela.
   const now = new Date();
   const expired = pendentes.some(p => p.expira_em && new Date(p.expira_em) <= now);
+  const quer = !loading && pendentes.length > 0 && (expired || !dismissed);
+  const minhaVez = useVezDoModal('contrato', quer);
+  if (!minhaVez) return null;
 
   if (expired) {
     // Full-screen blocker — cannot be dismissed

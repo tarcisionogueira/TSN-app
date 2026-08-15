@@ -5,6 +5,7 @@ import { supabase } from '../utils/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import PlayerVideo from './PlayerVideo';
 import DicaAudioIOS from './DicaAudioIOS';
+import { useVezDoModal } from '../utils/filaModais';
 
 /**
  * POP-UP DE BOAS-VINDAS — o vídeo que recebe quem entra pela primeira vez.
@@ -104,7 +105,10 @@ export default function BoasVindasModal() {
     else { sessionStorage.setItem(DISPENSA_KEY, '1'); setAberto(false); }
   }, [salvando, curso, aulas, idx, user, previa]);
 
-  if (!aberto || !curso || !aulas.length) return null;
+  // FILA DE MODAIS (15/08): a condição de aparecer continua sendo a daqui; a fila só decide
+  // QUANDO. Ver src/utils/filaModais.js.
+  const minhaVez = useVezDoModal('boas-vindas', !!(aberto && curso && aulas.length));
+  if (!minhaVez) return null;
 
   const aula = aulas[idx];
   const ultima = idx + 1 >= aulas.length;

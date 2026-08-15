@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Briefcase, Search, LayoutDashboard, Home, Menu, X, ChevronRight, GraduationCap, User, LogOut, Tag, MessageSquare, FileText, Eye, Calculator, HelpCircle, Headphones, DollarSign, Download, MapPin, Network, Wallet } from 'lucide-react';
+import { Briefcase, Search, LayoutDashboard, Home, Menu, X, ChevronRight, GraduationCap, User, LogOut, Tag, MessageSquare, FileText, Eye, Calculator, HelpCircle, Headphones, DollarSign, Download, MapPin, Network, Wallet, MessageCircle } from 'lucide-react';
 import TourGuiado, { TOUR_KEY_EXPORT as TOUR_KEY } from './TourGuiado';
 import AnalisesMenu from './AnalisesMenu';
 import { useAuth } from '../contexts/AuthContext';
@@ -138,6 +138,16 @@ export default function Header() {
   const nav = useNavigate();
   const loc = useLocation();
   const { user, role, effectiveRole, effectiveUserId, loading, impersonate, encerrarSuporte, roleSimulado, simularRole } = useAuth();
+  // Contador de não lidas do chat, para o item de MENU do celular. Vem por EVENTO do
+  // ChatSuporte, que já consulta `suporte_respostas_nao_lidas` — não é uma segunda consulta nem
+  // uma segunda regra: é o mesmo número, exibido em outro lugar. Duas leituras independentes do
+  // mesmo fato é como se criam os dois painéis que discordam.
+  const [naoLidasChat, setNaoLidasChat] = React.useState(0);
+  React.useEffect(() => {
+    const h = (e) => setNaoLidasChat(Number(e?.detail || 0));
+    window.addEventListener('tsn:chat-nao-lidas', h);
+    return () => window.removeEventListener('tsn:chat-nao-lidas', h);
+  }, []);
   const planosCtx = usePlanos();
   const [open, setOpen] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -436,6 +446,24 @@ export default function Header() {
             </button>
           ))}
           {!loading && user && <AnalisesMenu mobile onNavegar={() => setOpen(false)} />}
+          {/* FALAR COM O ASSISTENTE — entrada de MENU no celular (pedido do dono, 15/08).
+              O botão flutuante redondo com o "B" não funciona bem no telefone: ele fica sobre o
+              conteúdo, disputa espaço com a barra de ações do rodapé e, com o badge vermelho por
+              cima, foi lido como enfeite quebrado. No desktop ele continua — lá sobra margem e o
+              acesso de um clique tem valor. Aqui a mesma função vira uma linha do menu, que é
+              onde a pessoa já procura o que fazer. O `naoLidasChat` mostra o mesmo número do
+              badge, para o aviso não sumir junto com o botão. */}
+          {!loading && user && (
+            <button onClick={() => { window.dispatchEvent(new CustomEvent('tsn:open-chat')); setOpen(false); }}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: 'none', borderRadius: 8, background: 'transparent', color: '#94a3b8', fontWeight: 600, fontSize: 14, cursor: 'pointer', textAlign: 'left' }}>
+              <MessageCircle size={16} /> Falar com o assistente
+              {naoLidasChat > 0 && (
+                <span style={{ marginLeft: 'auto', minWidth: 20, height: 20, padding: '0 6px', borderRadius: 999, background: '#ef4444', color: 'white', fontSize: 11, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {naoLidasChat}
+                </span>
+              )}
+            </button>
+          )}
           {effectiveRole === 'leiloeiro' && (
             <button onClick={() => { nav('/leiloeiro'); setOpen(false); }}
               style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: 'none', borderRadius: 8, background: 'transparent', color: '#fcd34d', fontWeight: 700, fontSize: 14, cursor: 'pointer', textAlign: 'left' }}>

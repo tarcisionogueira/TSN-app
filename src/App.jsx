@@ -15,6 +15,7 @@ import TermosAtualizadosModal from './components/TermosAtualizadosModal';
 import ToastRelatorioPronto from './components/ToastRelatorioPronto';
 import ChatSuporte from './components/ChatSuporte';
 import BoasVindasModal from './components/BoasVindasModal';
+import { useVezDoModal } from './utils/filaModais';
 import SugestaoImovel from './components/SugestaoImovel';
 import PwaInstall from './components/PwaInstall.jsx';
 // Páginas carregadas SOB DEMANDA (code-splitting): cada rota vira um chunk próprio,
@@ -117,7 +118,10 @@ function ContaInativa() {
  */
 function PopupBonusAnalises({ userId, bonus, onFechar }) {
   const [fechado, setFechado] = React.useState(false);
-  if (fechado) return null;
+  // FILA DE MODAIS (15/08): tela inteira com fundo escuro, como o de boas-vindas. Sem a fila,
+  // os dois se cobriam no primeiro acesso — o que o dono viu no celular.
+  const minhaVez = useVezDoModal('bonus', !fechado);
+  if (!minhaVez) return null;
   const n = Number(bonus || 0);
 
   function fechar() {

@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { useVezDoModal } from '../utils/filaModais';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../utils/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -134,7 +135,9 @@ export default function SugestaoImovel() {
     if (restantesRef.current <= 0 || fila.length === 0) setVisivel(false);
   }, [atual, fila.length, registrar]);
 
-  if (!visivel || !atual) return null;
+  // FILA DE MODAIS (15/08): sugestão é o menor custo de ignorar, então espera todo o resto.
+  const minhaVez = useVezDoModal('sugestao', !!(visivel && atual));
+  if (!minhaVez) return null;
 
   return (
     <div style={{ position: 'fixed', right: 16, bottom: 16, zIndex: 900, width: 300, maxWidth: 'calc(100vw - 32px)',

@@ -218,8 +218,25 @@ export default function HomeCliente() {
             <Gift size={18} color="#0D63DB" />
             <div style={{ fontSize: 15, fontWeight: 900, color: '#084BA6' }}>Programa de Parceiros</div>
           </div>
+          {/* A REGRA MUDOU EM 08/08 E ESTE TEXTO NÃO ACOMPANHOU (achado do dono, 15/08).
+              Dizia "para receber as comissões, é preciso ter uma assinatura ativa" — o que
+              contradiz `regra_negocio.comissao.gratis_ganha`, ativa desde 08/08 e aplicada por
+              `pode_ganhar_comissao()`: o parceiro GRATUITO ganha em todos os fluxos, sem teto de
+              ganho, e **a trava fica no SAQUE**. Conferido no banco:
+              `pode_ganhar_comissao('explorador')` = true.
+
+              Não era um detalhe de redação: é a frase que o explorador lê ANTES de decidir
+              convidar alguém, e ela dizia a ele que não receberia. A regra existe para atraí-lo;
+              o texto a desmentia.
+
+              SEM NÚMERO AQUI, DE PROPÓSITO. O teto sem nota fiscal vive em
+              `regra_negocio.saque.teto_sem_nf` e o servidor já o devolve em `/api/saque`
+              (`teto_sem_nf`), que é o que a tela Minha Rede exibe. Escrever "R$ 2.500" aqui
+              criaria a quinta cópia de um número do servidor no front — exatamente o defeito
+              que `src/utils/cotaAnalise.js` documenta (a tabela de limites copiada em 4 telas,
+              as 4 divergindo). Cópia envelhece sozinha; ponteiro não. */}
           <div style={{ fontSize: 12.5, color: '#1e3a8a', lineHeight: 1.65 }}>
-            Convide investidores para a BidPro. <strong>Todos podem convidar.</strong> Suas indicações ficam vinculadas a você; para <strong>receber as comissões</strong>, é preciso ter uma <strong>assinatura ativa</strong>.
+            Convide investidores para a BidPro. <strong>Todos podem convidar e todos ganham</strong> — inclusive no plano gratuito. Suas indicações ficam vinculadas a você. A <strong>assinatura</strong> só entra em cena para <strong>sacar acima do teto mensal</strong>, que aí também pede nota fiscal; o valor do teto aparece em <strong>Indicações</strong>.
           </div>
           <div style={{ background: '#eff6ff', border: '1px dashed #93c5fd', borderRadius: 10, padding: '11px 13px', fontSize: 11.5, color: '#084BA6', lineHeight: 1.6 }}>
             Ative sua participação e <strong>aceite as regras</strong> do Programa. Leva 10 segundos e libera a aba <strong>Indicações</strong> no menu.

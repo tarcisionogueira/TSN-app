@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useVezDoModal } from '../utils/filaModais';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Loader2, ShieldCheck, ArrowLeft } from 'lucide-react';
 import { supabase } from '../utils/supabase';
@@ -90,7 +91,9 @@ export default function CompletarCadastroModal() {
   const vazio = !carregando && cadastroIncompleto && !!user && passos.length === 0;
   useEffect(() => { if (vazio) setCadastroIncompleto(false); }, [vazio, setCadastroIncompleto]);
 
-  if (!cadastroIncompleto || !user || vazio) return null;
+  // FILA DE MODAIS (15/08): pendência que trava a conta vem antes de vídeo e tour.
+  const minhaVez = useVezDoModal('cadastro', !!(cadastroIncompleto && user && !vazio));
+  if (!minhaVez) return null;
 
   const passo = passos[idx];
   const ultimo = idx >= passos.length - 1;
