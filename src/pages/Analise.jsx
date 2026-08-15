@@ -2934,15 +2934,30 @@ export default function Analise() {
               </div>
             ))}
           </div>
-          <div style={{ marginTop:12, padding:'12px 14px', background:'#faf5ff', border:'1px solid #e9d5ff', borderRadius:12 }}>
-            <div style={{ fontSize:12, fontWeight:800, color:'#6b21a8', marginBottom:6 }}>Cenário de locação (segurar e alugar por {indicadores.loc.horizonte} meses, venda ao final)</div>
-            <div style={{ display:'flex', gap:18, flexWrap:'wrap', fontSize:13, color:'#4b5563' }}>
-              <div>Aluguel líquido: <strong>R$ {fmt(indicadores.loc.aluguelLiquido)}/mês</strong></div>
-              <div>VPL: <strong style={{ color: indicadores.loc.vpl>=0?'#10b981':'#ef4444' }}>R$ {fmt(indicadores.loc.vpl,0)}</strong></div>
-              <div>TIR: <strong>{indicadores.loc.tir!=null?fmtPct(indicadores.loc.tir)+' a.a.':'—'}</strong></div>
+          {/* CENÁRIO DE LOCAÇÃO SEM ALUGUEL NÃO É UM CENÁRIO (15/08, 2º achado do dono).
+              O bloco era exibido mesmo com aluguel zero e imprimia "Aluguel líquido
+              R$ 0,00/mês" ao lado de "VPL −R$ 130.025" e "TIR 8,56%" — uma projeção de 60
+              meses inteira construída sobre um número que não existe, apresentada como
+              análise. Pior que o card de resumo: ali era um dado zerado, aqui é uma
+              CONCLUSÃO derivada dele. Sem aluguel apurado o cenário não é calculável, e o
+              honesto é dizer isso. (Reparei que a trava `medida-ausente-virando-zero` não
+              pegou este ponto: aqui era `fmt(x)` sem `|| 0`, e `fmt(0)` imprime "0,00"
+              igual — a regra procurava a construção, não o desfecho.) */}
+          {Number(indicadores.loc?.aluguelLiquido) > 0 ? (
+            <div style={{ marginTop:12, padding:'12px 14px', background:'#faf5ff', border:'1px solid #e9d5ff', borderRadius:12 }}>
+              <div style={{ fontSize:12, fontWeight:800, color:'#6b21a8', marginBottom:6 }}>Cenário de locação (segurar e alugar por {indicadores.loc.horizonte} meses, venda ao final)</div>
+              <div style={{ display:'flex', gap:18, flexWrap:'wrap', fontSize:13, color:'#4b5563' }}>
+                <div>Aluguel líquido: <strong>{moedaOuTraco(indicadores.loc.aluguelLiquido, { sufixo: '/mês' })}</strong></div>
+                <div>VPL: <strong style={{ color: indicadores.loc.vpl>=0?'#10b981':'#ef4444' }}>R$ {fmt(indicadores.loc.vpl,0)}</strong></div>
+                <div>TIR: <strong>{indicadores.loc.tir!=null?fmtPct(indicadores.loc.tir)+' a.a.':'—'}</strong></div>
+              </div>
+              <div style={{ fontSize:10, color:'#a78bfa', marginTop:6 }}>Premissa: compra à vista, aluguel líquido de IPTU/condomínio e venda ao valor de mercado atual no fim do período.</div>
             </div>
-            <div style={{ fontSize:10, color:'#a78bfa', marginTop:6 }}>Premissa: compra à vista, aluguel líquido de IPTU/condomínio e venda ao valor de mercado atual no fim do período.</div>
-          </div>
+          ) : (
+            <div style={{ marginTop:12, padding:'12px 14px', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:12, fontSize:12.5, color:'#475569', lineHeight:1.6 }}>
+              <b style={{ color:'#334155' }}>Cenário de locação: não projetado.</b> A pesquisa não encontrou aluguel para este imóvel, e sem esse número o VPL e a TIR de locação seriam calculados sobre zero — não seriam uma estimativa, seriam um resultado inventado. Os indicadores acima (revenda) não dependem de aluguel e seguem valendo.
+            </div>
+          )}
         </div>
       </div>
 

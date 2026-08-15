@@ -128,6 +128,39 @@ export function auditarMercadologico(result, ctx = {}) {
     avisos.push({ chave: 'base_fina', msg: `Base fina (${nVendas} comparáveis) — margem de erro maior.` });
   }
 
+  // ── A6. PROXIMIDADE DECLARADA, NÃO VERIFICADA ──────────────────────────────────────
+  // O relatório afirma "média ponderada por proximidade (peso 1/(1+d/250m))", mas a
+  // distância de cada comparável vem do MODELO, não de coordenada. Medido em 15/08: das
+  // 385 amostras de nível 1 já emitidas, 279 (72%) não trazem distância nenhuma — e a
+  // trava de 2 km as aprova por omissão (`!Number.isFinite(d) || d <= 2`), porque "não sei
+  // a distância" cai no mesmo ramo de "está perto". A trava nunca reprovou uma amostra
+  // sequer. Não dá para consertar isso aqui dentro (exigiria geocodificar cada anúncio),
+  // mas dá para PARAR DE AFIRMAR o que não se mediu.
+  const amostras = [...(Array.isArray(m.nivel1?.vendas) ? m.nivel1.vendas : []),
+                    ...(Array.isArray(m.nivel2?.vendas) ? m.nivel2.vendas : [])];
+  if (amostras.length) {
+    const semDist = amostras.filter((s) => !Number.isFinite(Number(s?.distanciaKm))).length;
+    // Só vira ressalva quando a MAIORIA não tem distância — com o condomínio/endereço
+    // batendo por texto (o caso do nível 1 bem resolvido), a proximidade está de fato
+    // estabelecida, ainda que por outro caminho que não a coordenada.
+    const comAncora = amostras.filter((s) => String(s?.condominio || '').trim() || String(s?.endereco || '').trim()).length;
+    if (semDist > amostras.length / 2 && comAncora < amostras.length / 2) {
+      avisos.push({ chave: 'proximidade_nao_verificada', msg: `${semDist} de ${amostras.length} comparáveis sem distância informada nem endereço/condomínio — a proximidade não foi verificada.` });
+    }
+  }
+
+  // ── A7. COMPARÁVEIS DE OUTRO TAMANHO ───────────────────────────────────────────────
+  // R$/m² não é constante ao longo do tamanho: comparar um imóvel de 234 m² com casas de
+  // 270–480 m² (caso real de 15/08) puxa o preço para a faixa errada, e nada na tela dizia
+  // isso. Só acusa quando a MEDIANA das amostras destoa muito da área usada no cálculo.
+  const areasAmostras = amostras.map((s) => n(s?.m2)).filter((x) => x > 0).sort((a, b) => a - b);
+  if (areasAmostras.length >= 3 && areaCons > 0) {
+    const mediana = areasAmostras[Math.floor(areasAmostras.length / 2)];
+    if (mediana > 0 && Math.abs(mediana - areaCons) / areaCons > 0.5) {
+      avisos.push({ chave: 'comparaveis_de_outro_tamanho', msg: `Comparáveis têm mediana de ${Math.round(mediana)} m² contra ${areaCons} m² do imóvel — o R$/m² de imóveis desse porte pode não valer para este.` });
+    }
+  }
+
   // ── FALTANDO: o que o relatório promete e não entregou ──────────────────────────────
   if (!String(result?.parecer || '').trim()) faltando.push({ chave: 'sem_parecer', msg: 'Relatório sem parecer escrito.' });
   if (vMercado <= 0) faltando.push({ chave: 'sem_valor_mercado', msg: 'Relatório sem valor de mercado estimado.' });
