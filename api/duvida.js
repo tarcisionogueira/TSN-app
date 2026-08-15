@@ -131,25 +131,33 @@ export default async function handler(req) {
   // não é: ali a plataforma promete, com essas palavras, que "alguém da equipe entra em
   // contato" — e promessa sem aviso é fila.
   //
-  // Fica restrito às origens `alavancagem_*` de propósito: ligar para TODA origem mudaria o
-  // comportamento do fluxo de planos, que hoje não pede nada disso.
+  // 15/08 — DEIXOU DE SER RESTRITO À ALAVANCAGEM, por decisão do dono: "os pedidos de
+  // reunião, assim como os chamados, devem cair para mim". A restrição anterior partia da
+  // ideia de que o fluxo de planos não promete contato ativo; a decisão agora é que TODO
+  // chamado tem dono e aviso. O que sustentava a exceção deixou de valer: não há analista
+  // nem consultor ativo no sistema, então a alternativa ao aviso não é "a equipe vê no
+  // painel" — é ninguém ver. Eram 22 chamados abertos, 11 criados numa semana.
   //
   // O e-mail é desenhado para o contato acontecer em UM clique: `reply_to` é o interessado
   // (responder já fala com ele) e o corpo traz o link direto do WhatsApp quando há telefone.
   // Best-effort: falha de e-mail NUNCA derruba o registro, que já está gravado acima.
-  if (origem.startsWith('alavancagem')) {
+  {
     try {
       const { enviarEmail } = await import('./_email.js');
       const equipe = process.env.ADMIN_EMAIL || process.env.APP_ADMIN_EMAIL;
       if (equipe) {
-        const modalidade = origem.includes('home_equity') ? 'Home Equity' : origem.includes('consorcio') ? 'Consórcio' : 'Alavancagem';
+        const ehAlavancagem = origem.startsWith('alavancagem');
+        const modalidade = origem.includes('home_equity') ? 'Home Equity'
+          : origem.includes('consorcio') ? 'Consórcio'
+          : ehAlavancagem ? 'Alavancagem'
+          : `contato (${origem})`;
         const base = process.env.APP_BASE_URL || 'https://bidprobrasil.com.br';
         const wa = telefone ? `https://wa.me/55${telefone}` : null;
         await enviarEmail({
           to: equipe,
           replyTo: email,
-          subject: `Interesse em ${modalidade}: ${nome || email}`,
-          meta: { tipo: 'lead_alavancagem' },
+          subject: `${ehAlavancagem ? 'Interesse em' : 'Novo chamado —'} ${modalidade}: ${nome || email}`,
+          meta: { tipo: ehAlavancagem ? 'lead_alavancagem' : 'chamado_novo' },
           html: `
             <div style="font-family:Arial,sans-serif;font-size:14px;color:#111;line-height:1.6">
               <p><strong>${nome || '(sem nome)'}</strong> pediu contato sobre <strong>${modalidade}</strong>.</p>
@@ -161,10 +169,10 @@ export default async function handler(req) {
             </div>`,
         });
       } else {
-        console.error('[duvida] lead de alavancagem SEM aviso: ADMIN_EMAIL não definido');
+        console.error('[duvida] chamado SEM aviso: ADMIN_EMAIL não definido', JSON.stringify({ origem }));
       }
     } catch (e) {
-      console.error('[duvida] aviso de alavancagem falhou', String(e?.message || e));
+      console.error('[duvida] aviso de chamado falhou', JSON.stringify({ origem, erro: String(e?.message || e) }));
     }
   }
 
