@@ -296,8 +296,17 @@ function MainLayout() {
       <main style={{ flex: 1 }}>
         <Suspense fallback={<PageLoading />}>
         <Routes>
-          {/* Visitante vê a Landing de marketing; cliente logado vê a Home por plano. */}
-          <Route path="/" element={isLoggedIn ? <HomeCliente /> : <Landing />} />
+          {/* Visitante vê a Landing de marketing; cliente logado vê a Home por plano.
+              ENQUANTO O AUTH NÃO RESOLVE, NÃO SE DECIDE (15/08). Esta era a única decisão de
+              conteúdo do arquivo que olhava só `isLoggedIn` e ignorava `loading` — o
+              PrivateRoute e o ImovelRota logo acima já esperavam. Como `loading` começa
+              `true` e `getSession()` é assíncrono, `isLoggedIn` vale `false` no primeiro
+              render: quem estava logado via a LANDING DE VISITANTE por um instante e a tela
+              trocava sozinha — no login, no F5 e ao reabrir o PWA. Parecia bug porque, do
+              lado de quem acabou de entrar, é exatamente o que um login falho pareceria.
+              Custo do spinner para o visitante: nenhum na prática — sem sessão o
+              AuthContext faz `setLoading(false)` sem ir à rede (lê o localStorage). */}
+          <Route path="/" element={loading ? <PageLoading /> : (isLoggedIn ? <HomeCliente /> : <Landing />)} />
           <Route path="/planos" element={<Planos />} />
           {/* Alavancagem (Home Equity + Consórcio) — pública, e de propósito NÃO linkada em
               menu nenhum até o dono aprovar a página (pedido dele, 14/08). O botão na tela

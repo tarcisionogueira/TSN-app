@@ -198,13 +198,20 @@ export default function Header() {
     ...(mostrarRede ? [{ path: '/minha-rede', label: 'Indicações', icon: Briefcase, tourId: 'indicacoes' }] : []),
     ...(ROLES_CALC.includes(effectiveRole) ? [{ path: '/calculadora', label: 'Calculadora', icon: Calculator, tourId: 'calculadora' }] : []),
   ];
-  // Enquanto auth carrega: mostra links públicos para evitar flash.
+  // Enquanto o auth NÃO resolve, o header não afirma nada (15/08). Antes ele mostrava os
+  // links de VISITANTE nesse intervalo — e como `loading` começa `true`, quem estava logado
+  // via o menu público e o botão "Entrar" por um instante antes de tudo trocar. Era a metade
+  // superior do mesmo pisca que a rota "/" produzia no login/F5: um header dizendo "Entrar"
+  // para quem acabou de entrar é a leitura mais parecida com "o login não funcionou".
+  // Mostrar o menu público não evitava flash, apenas escolhia qual flash mostrar.
   // Logado: mantém "Planos" no topo (pedido do dono) — a tela de planos mostra o plano
   // ATUAL + upgrade/downgrade contextual. A gestão de assinatura detalhada segue em
   // Meu Perfil › Assinatura.
-  const links = (!loading && user)
-    ? [linksPublicos[0], { path: '/planos', label: 'Planos', icon: Tag, tourId: 'planos' }, ...linksPrivados]
-    : linksPublicos;
+  const links = loading
+    ? []
+    : (user
+      ? [linksPublicos[0], { path: '/planos', label: 'Planos', icon: Tag, tourId: 'planos' }, ...linksPrivados]
+      : linksPublicos);
 
   // Tour guiado de "primeiros passos" removido a pedido do dono — no lugar entrará
   // um vídeo. O componente TourGuiado e o gatilho manual (evento 'tsn:open-tour')
@@ -338,8 +345,8 @@ export default function Header() {
             </button>
           )}
 
-          {/* Usuário */}
-          {user ? (
+          {/* Usuário. Enquanto `loading`, nem avatar nem "Entrar": ver a nota dos `links`. */}
+          {loading ? null : user ? (
             <div data-usermenu="true" style={{ position: 'relative', marginLeft: 4 }}>
               <button onClick={() => setShowUserMenu(p => !p)}
                 data-tour="conta"
@@ -485,7 +492,7 @@ export default function Header() {
               <Download size={16} /> Instalar app
             </button>
           )}
-          {user
+          {loading ? null : user
             ? <button onClick={handleLogout} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: 'none', borderRadius: 8, background: 'transparent', color: '#ef4444', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>
                 <LogOut size={16} /> Sair
               </button>

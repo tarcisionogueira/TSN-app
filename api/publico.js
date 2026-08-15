@@ -124,26 +124,66 @@ ${jsonld ? `<script type="application/ld+json">${JSON.stringify(jsonld)}</script
 html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 body{margin:0;font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:var(--tinta);background:var(--superficie);line-height:1.6}
 a{color:var(--azul);text-decoration:none}a:hover{text-decoration:underline}
-header{background:#111111;color:#fff;padding:12px 20px}
-header .in{max-width:1080px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:16px}
-header .marca{display:flex;align-items:center;gap:10px;min-width:0}
-header .marca img{height:34px;width:auto;display:block;flex-shrink:0}
-header .marca .sublinha{font-family:'League Spartan',sans-serif;font-size:9.5px;font-weight:800;letter-spacing:1.6px;color:#94a3b8;text-transform:uppercase;line-height:1.1}
-.cta{background:var(--azul);color:#fff!important;padding:10px 18px;border-radius:10px;font-weight:700;font-size:14px;text-decoration:none!important;white-space:nowrap;flex-shrink:0}
+/* ═══ CABEÇALHO — espelha src/components/Header.jsx (15/08, pedido do dono: "manter o
+   layout, dessa forma fica desconectado do padrão"). A revisão de 14/08 trocou a tinta e a
+   fonte, mas manteve uma casca com medidas próprias, e era isso que destoava ao navegar
+   entre esta página e o app: logo de 34px contra 40px, faixa de 1080 contra 1280, uma
+   sub-linha "LEILÃO & INVESTIMENTOS" que NENHUMA tela do app tem, e — o que mais pesava —
+   nenhum dos links de navegação, então o cabeçalho parecia de outro site.
+   Agora as medidas são as do app: faixa 1280 (o app também usa header mais largo que o
+   conteúdo), altura mínima 62, logo 40, links em 13px/#94a3b8 com o ativo em #084BA6, e o
+   "Entrar" com borda #334155. O "Criar conta grátis" NÃO existe no app e fica: aqui ele é
+   o CTA da página de aquisição, e tirá-lo custaria conversão sem aproximar o layout.
+   Continua sem JS — o menu do celular é um <details>, que é o hambúrguer do app em HTML
+   puro. A página segue pronta no HTML que o servidor devolve. */
+header{background:#111111;color:#fff}
+header .in{max-width:1280px;margin:0 auto;padding:8px 20px;min-height:62px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+header .marca{display:flex;align-items:center;min-width:0;flex-shrink:0}
+header .marca img{height:40px;width:auto;display:block}
+header nav{display:flex;gap:4px;align-items:center;flex-wrap:wrap;justify-content:flex-end;min-width:0}
+header nav a{display:flex;align-items:center;gap:6px;padding:7px 14px;border-radius:8px;color:#94a3b8;font-weight:600;font-size:13px;text-decoration:none!important;white-space:nowrap}
+header nav a:hover{color:#fff}
+header nav a.ativo{background:#084BA6;color:#fff}
+header nav a.entrar{border:1px solid #334155;margin-left:4px}
+.cta{background:var(--azul);color:#fff!important;padding:7px 14px;border-radius:8px;font-weight:700;font-size:13px;text-decoration:none!important;white-space:nowrap;flex-shrink:0;margin-left:4px}
 .cta:hover{background:var(--azul-fundo)}
+/* O CTA existe duas vezes de propósito: dentro da <nav> no desktop (última posição, como
+   um item do menu) e solto ao lado do ☰ no celular, onde a <nav> inteira some. Só um dos
+   dois é exibido por vez. */
+.cta-mob{display:none}
+/* Menu do celular sem uma linha de JS. O <summary> vira o ☰ e o painel abre abaixo do
+   cabeçalho, como o menu mobile do app. */
+.menu-mob{display:none;position:relative;flex-shrink:0}
+.menu-mob summary{list-style:none;cursor:pointer;color:#fff;padding:6px 8px;line-height:1;font-size:22px}
+.menu-mob summary::-webkit-details-marker{display:none}
+.menu-mob .drop{position:absolute;right:0;top:calc(100% + 8px);background:#111111;border:1px solid #1e293b;border-radius:12px;padding:8px;display:flex;flex-direction:column;gap:4px;min-width:210px;z-index:50;box-shadow:0 12px 32px rgba(0,0,0,.4)}
+.menu-mob .drop a{padding:10px 14px;border-radius:8px;color:#94a3b8;font-weight:600;font-size:14px;text-decoration:none!important;white-space:nowrap}
+.menu-mob .drop a.ativo{background:#084BA6;color:#fff}
 main{max-width:1080px;margin:0 auto;padding:24px 20px 56px}
 .mig{font-size:12.5px;color:var(--cinza);margin-bottom:14px}
 h1,h2,h3{font-family:'League Spartan','Inter',sans-serif;letter-spacing:-0.2px}
 h1{font-size:28px;font-weight:900;line-height:1.2;margin:0 0 8px}
 h2{font-size:20px;font-weight:800;margin:32px 0 12px}
 .sub{color:var(--cinza);margin:0 0 22px;font-size:15px}
+/* 768px é o MESMO ponto de virada do app (a regra .hide-mobile/.show-mobile do Header.jsx):
+   abaixo dele os links saem da barra e vão para o ☰, como lá. */
+@media(max-width:768px){
+  header nav{display:none}
+  .menu-mob{display:block}
+  .cta-mob{display:inline-block}
+}
 @media(max-width:560px){
   h1{font-size:23px}h2{font-size:18px}
   main{padding:18px 16px 48px}
-  header{padding:10px 16px}
+  header .in{padding:8px 16px}
+  header .marca img{height:34px}
+  .cta{padding:7px 12px;font-size:12.5px}
+}
+/* 360px e abaixo: o texto do CTA encolhe mais um pouco para caber ao lado do logo e do ☰
+   sem empurrar a barra (o verificador de responsivo reprova rolagem horizontal). */
+@media(max-width:360px){
   header .marca img{height:30px}
-  header .marca .sublinha{display:none}
-  .cta{padding:9px 14px;font-size:13px}
+  .cta{padding:6px 10px;font-size:12px}
 }
 .grade{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px}
 .card{background:#fff;border:1px solid var(--linha);border-radius:16px;overflow:hidden;display:flex;flex-direction:column;transition:box-shadow .15s,border-color .15s}
@@ -190,12 +230,31 @@ footer .in{max-width:1080px;margin:0 auto}
 </head><body>
 <header><div class="in">
   <a class="marca" href="${SITE}/" aria-label="BidPro Brasil — página inicial">
-    <!-- 128×34 é a proporção real do lockup (viewBox 180×48): atributos certos evitam o
-         pulo de layout enquanto o SVG carrega. O CSS manda (height 34, width auto). -->
-    <img src="/logo.svg" alt="BidPro Brasil" width="128" height="34"/>
-    <span class="sublinha">Leilão &amp; Investimentos</span>
+    <!-- 150×40 é a proporção real do lockup (viewBox 180×48) na altura que o app usa:
+         atributos certos evitam o pulo de layout enquanto o SVG carrega. O CSS manda. -->
+    <img src="/logo.svg" alt="BidPro Brasil" width="150" height="40"/>
   </a>
-  <a class="cta" href="${SITE}/#/login?modo=cadastro">Criar conta grátis</a>
+  <!-- Os MESMOS quatro links do menu de visitante do app, na mesma ordem. "Buscar Leilões"
+       entra como ativo porque toda página servida daqui é do acervo público. -->
+  <nav>
+    <a href="${SITE}/">Home</a>
+    <a href="${SITE}/#/calculadora">Calculadora</a>
+    <a class="ativo" href="${SITE}/leiloes">Buscar Leilões</a>
+    <a href="${SITE}/#/planos">Planos</a>
+    <a class="entrar" href="${SITE}/#/login">Entrar</a>
+    <a class="cta" href="${SITE}/#/login?modo=cadastro">Criar conta grátis</a>
+  </nav>
+  <a class="cta cta-mob" href="${SITE}/#/login?modo=cadastro">Criar conta grátis</a>
+  <details class="menu-mob">
+    <summary aria-label="Abrir menu" role="button">&#9776;</summary>
+    <div class="drop">
+      <a href="${SITE}/">Home</a>
+      <a href="${SITE}/#/calculadora">Calculadora</a>
+      <a class="ativo" href="${SITE}/leiloes">Buscar Leilões</a>
+      <a href="${SITE}/#/planos">Planos</a>
+      <a href="${SITE}/#/login">Entrar</a>
+    </div>
+  </details>
 </div></header>
 <main>
 ${migalha.length ? `<nav class="mig">${migalha.map((m, i) => (m.url ? `<a href="${esc(m.url)}">${esc(m.nome)}</a>` : esc(m.nome)) + (i < migalha.length - 1 ? ' › ' : '')).join('')}</nav>` : ''}
