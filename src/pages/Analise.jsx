@@ -1278,6 +1278,11 @@ export default function Analise() {
   // quando os comparáveis passam de 3× o R$/m² implícito na avaliação (ex.: 121 m² × R$10.980
   // = R$1,3M vs avaliação R$329k, que ~30 m² privativos explicariam). Nesse caso não exibimos a
   // base pm²×área inflada: pedimos a Área Privativa e usamos a avaliação como referência.
+  // AUDITORIA FINAL DA GERAÇÃO (15/08). O servidor cruza os campos entre si antes de
+  // liberar e devolve `result.auditoria`. `suprimido(campo)` diz se um indicador saiu
+  // contraditório — nesse caso a tela mostra "—" em vez do número, e a ressalva explica.
+  const auditoria = d?.result?.auditoria || mercado?.auditoria || null;
+  const suprimido = (campo) => Array.isArray(auditoria?.suprimir) && auditoria.suprimir.includes(campo);
   const areaAlerta = mercado?.areaAlerta || null;
   const _aArea = Number(d.areaM2) || Number(d.areaTerrenoM2) || 0;
   const _aPm2 = Number(mercado?.precoMedioM2) || 0;
@@ -3055,8 +3060,12 @@ export default function Analise() {
                   [mercado.fonteEstimativa === 'indice_bidpro' ? 'Preço/m² (Índice BidPro)' : 'Preço Médio/m²', moedaOuTraco(mercado.precoMedioM2), '#0D63DB','#eff6ff'],
                   ...(mercado.locacaoNaoSeAplica ? [] : [
                     ['Aluguel Médio', moedaOuTraco(mercado.aluguelMedio, { sufixo: '/mês' }), '#8b5cf6','#ede9fe'],
-                    ['Rentabilidade Bruta (aluguel)', pctOuTraco(mercado.yieldBruto, { sufixo: ' a.a.' }), '#10b981','#f0fdf4'],
-                    ['Rentabilidade Líquida (aluguel)', pctOuTraco(mercado.yieldLiquido, { sufixo: ' a.a.' }), '#f59e0b','#fef3c7'],
+                    // A auditoria final pode marcar um indicador como incoerente (ex.: yield
+                    // que não fecha com o próprio aluguel). Indicador contraditório NÃO é
+                    // exibido — mostrar o número e o aviso juntos deixaria o cliente decidir
+                    // qual acreditar, que é justamente o que não se quer.
+                    ['Rentabilidade Bruta (aluguel)', suprimido('yieldBruto') ? SEM_MEDIDA : pctOuTraco(mercado.yieldBruto, { sufixo: ' a.a.' }), '#10b981','#f0fdf4'],
+                    ['Rentabilidade Líquida (aluguel)', suprimido('yieldLiquido') ? SEM_MEDIDA : pctOuTraco(mercado.yieldLiquido, { sufixo: ' a.a.' }), '#f59e0b','#fef3c7'],
                   ]),
                 ].map(([l,v,c,bg])=>(
                   <div key={l} style={{background:bg,borderRadius:12,padding:'14px 16px',textAlign:'center',border:`1px solid ${c}30`}}>
@@ -3065,6 +3074,31 @@ export default function Analise() {
                   </div>
                 ))}
               </div>
+              {/* RESSALVA DA INSPEÇÃO FINAL (15/08). O servidor cruza os campos entre si
+                  antes de liberar; o que não fechou aparece aqui, em vez de o cliente
+                  descobrir sozinho comparando duas seções — que foi exatamente como o dono
+                  achou a contradição do aluguel. Crítico e "faltando" em vermelho (algo está
+                  errado ou ausente); avisos em âmbar (o número vale, com ressalva). */}
+              {(auditoria?.criticos?.length > 0 || auditoria?.faltando?.length > 0 || auditoria?.avisos?.length > 0) && (
+                <div style={{ borderRadius:12, padding:'12px 14px', fontSize:12.5, lineHeight:1.6,
+                  background: (auditoria.criticos?.length || auditoria.faltando?.length) ? '#fef2f2' : '#fffbeb',
+                  border: `1px solid ${(auditoria.criticos?.length || auditoria.faltando?.length) ? '#fecaca' : '#fde68a'}`,
+                  color: (auditoria.criticos?.length || auditoria.faltando?.length) ? '#991b1b' : '#92400e' }}>
+                  <b>{(auditoria.criticos?.length || auditoria.faltando?.length)
+                    ? 'Conferência final: este relatório tem ponto que não fecha'
+                    : 'Conferência final: ressalvas sobre a base deste relatório'}</b>
+                  <ul style={{ margin:'6px 0 0', paddingLeft:18 }}>
+                    {[...(auditoria.criticos||[]), ...(auditoria.faltando||[]), ...(auditoria.avisos||[])].map((it) => (
+                      <li key={it.chave} style={{ marginBottom:2 }}>{it.msg}</li>
+                    ))}
+                  </ul>
+                  {(auditoria.suprimir?.length > 0) && (
+                    <div style={{ marginTop:6, fontSize:11.5, opacity:0.9 }}>
+                      Os indicadores contraditórios aparecem como “{SEM_MEDIDA}” — preferimos não mostrar número que não se sustenta.
+                    </div>
+                  )}
+                </div>
+              )}
               {/* COERÊNCIA ENTRE OS QUADROS (15/08). Quando a busca de anúncios não acha
                   locação mas a base própria TEM locação para a cidade, o resumo dizia
                   "R$ 0,00/mês" enquanto o Índice, duas seções abaixo, mostrava R$/m²/mês com

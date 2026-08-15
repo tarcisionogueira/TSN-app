@@ -17,6 +17,7 @@ import { composicaoTemporal, avisoFrescor } from './_indice-composicao.js';
 import { referenciaPonderada } from './_indice-ponderacao.js';
 import { geocodificarCascata, rankNivel, coordValida } from './_geo.js';
 import { extratoEdital, extratoMatricula } from './_edital-extrato.js';
+import { auditarMercadologico } from './_auditoria-relatorio.js';
 import { pagamentoPrior, pagamentoAprender } from './_doc-extracao.js';
 // MESMA função pura que a tela usa para ROI/ROE/capital/teto. Importada aqui para o
 // servidor RECALCULAR a viabilidade depois de descobrir o valor de mercado (ver o bloco
@@ -2741,6 +2742,41 @@ COMO USAR (obrigatório): dedique um parágrafo aos CUSTOS DA OPERAÇÃO segundo
         divergenciaArea };
       return { result, valorMercado, avalDb, vminImovel };
     })()]);
+
+    // ── INSPEÇÃO FINAL ANTES DE LIBERAR (15/08, pedido do dono) ────────────────────────
+    // Última etapa da geração: cruza os campos entre si — rentabilidade contra aluguel e
+    // valor, área da metodologia contra a do cálculo, preço/m² contra FipeZAP e Índice,
+    // aluguel ausente contra a locação da base própria. Todo defeito que chegou ao cliente
+    // neste projeto passava por cada peça isolada parecendo certa; o que denunciava era o
+    // cruzamento, e ninguém cruzava.
+    //
+    // NÃO retém o relatório: cliente sem nada, com a cota gasta, é trocar um erro visível
+    // por um prejuízo invisível. O achado vai gravado no próprio result, a tela mostra a
+    // ressalva no topo, e o que é contraditório entra em `suprimir` para NÃO ser exibido —
+    // a regra do projeto aplicada a ela mesma: quando não dá para afirmar, não se afirma.
+    try {
+      // `temMatricula` é lido aqui mesmo (consulta curta) e não herdado de variável do
+      // bloco de cima: aquelas vivem dentro do IIFE do Promise.race e não alcançam este
+      // escopo — referenciá-las daria ReferenceError bem no passo que existe para evitar
+      // relatório errado. Best-effort: se a leitura falhar, a auditoria roda sem esse sinal.
+      let temMatricula = false;
+      try {
+        const [ix] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=link_matricula,anexos&limit=1`)).json();
+        temMatricula = !!(ix?.link_matricula || (Array.isArray(ix?.anexos) && ix.anexos.some((a) => a?.tipo === 'matricula')));
+      } catch { /* sinal opcional da auditoria */ }
+      const aud = auditarMercadologico(result, { temMatricula });
+      // Gravada nos DOIS lugares de propósito: a tela carrega `mercado` num estado próprio
+      // e nem sempre tem o `result` inteiro em mãos — pendurar a auditoria só na raiz faria
+      // a ressalva sumir justamente onde ela precisa aparecer.
+      result.auditoria = { ...aud, em: new Date().toISOString() };
+      if (result.mercado) result.mercado.auditoria = result.auditoria;
+      if (aud.criticos.length || aud.faltando.length || aud.avisos.length) {
+        console.log('[auditoria-relatorio]', JSON.stringify({ imovel: String(imovelId), criticos: aud.criticos.map((c) => c.chave), faltando: aud.faltando.map((f) => f.chave), avisos: aud.avisos.map((a) => a.chave) }));
+      }
+      for (const c of [...aud.criticos, ...aud.faltando]) {
+        await registrarAnomalia('relatorio_incoerente', '', imovelId, c.chave, c.msg).catch(() => {});
+      }
+    } catch (e) { console.warn('[auditoria-relatorio] falhou:', e?.message); }
 
     await upsertAnalise({ ...base, status: 'concluida', erro: null, result });
     // Aprende NA EMISSÃO (durável, sem IA): corpus + qualidade → agente_aprendizado.
