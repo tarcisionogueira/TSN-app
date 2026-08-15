@@ -173,6 +173,75 @@ spinner do `Suspense`. Custo para o visitante: nenhum na prática — sem sessã
 > **O teste de 10 segundos, que só você pode fazer:** entre no site, aperte **F5** na tela inicial
 > e veja se a landing de visitante ainda pisca antes da sua Home. Depois do deploy, não deve mais.
 
+### 📐 6. A METRAGEM DA MATRÍCULA — a leitura nunca rodou, e a conta virou medida na tela
+
+**Achado do dono**, num relatório de Morada dos Pinheiros gerado às 10:53 de 15/08: lote
+anunciado com **396 m²**, casa de **236 m²** na matrícula, relatório mostrando **~129 m²**.
+
+> 🔵 **NÃO É A IA — e isso importa antes de qualquer decisão de trocar de modelo.** Nenhuma IA
+> leu a matrícula neste relatório. A metragem é lida por **regex determinístico** (custo zero),
+> e o regex não achou nada. Os 129 m² não vieram de leitura nenhuma: são
+> `avaliação ÷ R$/m² dos comparáveis` = `893.125 ÷ 6.903 = 129`. O front imprimia isso como
+> *"os comparáveis indicam cerca de 129 m² privativos"*. **Trocar o modelo não mudaria nada**,
+> porque nenhum modelo foi consultado nesse ponto. Os comparáveis da IA (R$ 6.903/m² em
+> Morada dos Pinheiros) estão plausíveis; o que estava errado era a metragem embaixo deles.
+
+**A extensão, medida — não era caso isolado:**
+| | |
+|---|---|
+| Lotes ativos com matrícula disponível | **28.355** |
+| Deles, com a área lida (`ficha_juridica`) | **5** (0,02%) |
+| Relatórios de mercado com `metodologia.area.fonte = 'matricula'` | **0**, de 56 |
+| Relatórios em 7 dias com matrícula disponível e área não confirmada | **15** |
+
+O caminho "confirmar a metragem ANTES de pesquisar" existe **desde 06/08** e **nunca chegou a
+rodar em produção**. Ninguém media a taxa de sucesso dele — e o defeito é justamente do tipo
+que não aparece: sem área da matrícula, o relatório **segue** com a do anúncio, sem erro.
+
+**As quatro correções, em ordem de custo:**
+1. **Regex ampliado (custo zero).** Três redações comuns de matrícula de casa escapavam:
+   `área construída: 236,00 m²` (o `\s+` era obrigatório antes do separador, e não há espaço
+   antes dos dois-pontos), `área EDIFICADA de …` (qualificador que faltava na lista) e
+   `casa com 236,00 m² de área construída` (número antes do qualificador). **Medido:** 11
+   redações extraem 236, e `área comum` / `fração ideal` / terreno sem benfeitoria continuam
+   **não** virando área privativa.
+2. **Fallback por VISÃO — o degrau que faltava.** Matrícula escaneada não tem camada de texto e
+   **nenhum regex a resolve**: era a causa real dos 0%. Chamada curta (só as três áreas e o
+   número, `max_tokens: 300`), gravada em `doc_extracoes` **por imóvel** — paga-se **uma vez por
+   lote** e mercadológico, documental e laudo herdam. Confiança 85: acima do regex (60), abaixo
+   da visão completa do documental (90), que continua mandando.
+   > Junto, um caso que anulava a cascata: quando o regex lia **só o terreno**, a função
+   > retornava satisfeita. É o pior desfecho possível para dar por encerrado — é o **mesmo
+   > número que o anúncio já trazia**, e devolvê-lo fazia o relatório seguir com a área do lote
+   > achando que tinha confirmado a do imóvel.
+3. **O número inferido saiu da tela.** O aviso agora diz o que se sabe (a área do anúncio não se
+   sustenta contra os comparáveis) sem afirmar o que não se sabe, e aponta o caminho real:
+   gerar o documental, que lê a matrícula.
+4. **A origem da metragem passa a ser declarada.** O gerador já gravava
+   `metodologia.area.fonte`, e o comentário dele afirmava que `'acervo'`/`'informada'` seria
+   *"declarado ao cliente"* — **o campo era gravado e nunca lido no front**. A metragem do
+   anúncio aparecia com a mesma cara de um dado conferido. E o aviso de área suspeita só dispara
+   quando os comparáveis passam de **3×** o R$/m² da avaliação: **abaixo disso o erro passava
+   inteiramente calado**, que é o caso mais comum.
+
+**Para não voltar:** invariante **`relatorio_area_nao_confirmada`** vigia o DESFECHO — relatório
+dos últimos 7 dias, com matrícula disponível, cuja área não veio dela. Hoje **15** (limite 2). É
+o número que tem de cair.
+
+> ⚠️ **O QUE FALTA CONFERIR, e depende de rodar em produção.** A rede externa deste ambiente é
+> bloqueada, então **não consegui baixar o PDF da matrícula** para confirmar os 236 m² nem medir
+> se o regex novo sozinho já resolveria esse caso (suspeita: o PDF é escaneado, e aí quem
+> resolve é a visão). **Depois do deploy, regere o mercadológico desse lote** e confira:
+> ```sql
+> select a.result->'mercado'->'metodologia'->'area' as area,
+>        a.result->'divergenciaArea' as divergencia, a.created_at
+>   from analises_mercado a where a.imovel_id::text='6dc2382e-3157-4426-b547-66f3552b4dba'
+>  order by a.created_at desc limit 2;
+> ```
+> **Verde é** `fonte: "matricula"` e `valor: 236`. Se vier `divergenciaArea` apontando
+> 396 → 236, melhor ainda: é o aviso explícito de que anúncio e matrícula discordam. O log
+> `[matricula-visao]` na Vercel mostra quando a visão entrou.
+
 ### 🟠 O que NÃO consertei — e por quê
 
 | O quê | Estado | Leitura |
