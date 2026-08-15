@@ -138,11 +138,22 @@ export function auditarMercadologico(result, ctx = {}) {
   // mas dá para PARAR DE AFIRMAR o que não se mediu.
   const amostras = [...(Array.isArray(m.nivel1?.vendas) ? m.nivel1.vendas : []),
                     ...(Array.isArray(m.nivel2?.vendas) ? m.nivel2.vendas : [])];
-  if (amostras.length) {
+  // Quando o gerador já classificou a proximidade por evidência, a auditoria usa a
+  // composição — é medida, não inferência sobre os campos.
+  const px = m.proximidadeAmostras;
+  if (px && (n(px.forte) + n(px.media) + n(px.fraca)) > 0) {
+    const usadas = n(px.forte) + n(px.media) + n(px.fraca);
+    if (n(px.forte) === 0) {
+      avisos.push({ chave: 'sem_amostra_de_proximidade_forte', msg: `Nenhum comparável no mesmo condomínio, rua ou raio de 250 m — a base é de bairro/região (${usadas} amostras), não da vizinhança imediata.` });
+    }
+    if (n(px.descartadas) > usadas) {
+      avisos.push({ chave: 'muitas_amostras_descartadas', msg: `${px.descartadas} comparáveis foram descartados por não ter endereço, bairro nem distância — sobraram ${usadas}.` });
+    }
+  } else if (amostras.length) {
     const semDist = amostras.filter((s) => !Number.isFinite(Number(s?.distanciaKm))).length;
-    // Só vira ressalva quando a MAIORIA não tem distância — com o condomínio/endereço
-    // batendo por texto (o caso do nível 1 bem resolvido), a proximidade está de fato
-    // estabelecida, ainda que por outro caminho que não a coordenada.
+    // Fallback para relatórios ANTIGOS, sem a composição: infere pelos campos. Só vira
+    // ressalva quando a maioria não tem distância NEM endereço/condomínio — com essas
+    // âncoras a proximidade está estabelecida, ainda que por outro caminho que a coordenada.
     const comAncora = amostras.filter((s) => String(s?.condominio || '').trim() || String(s?.endereco || '').trim()).length;
     if (semDist > amostras.length / 2 && comAncora < amostras.length / 2) {
       avisos.push({ chave: 'proximidade_nao_verificada', msg: `${semDist} de ${amostras.length} comparáveis sem distância informada nem endereço/condomínio — a proximidade não foi verificada.` });

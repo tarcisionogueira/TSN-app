@@ -510,15 +510,53 @@ async function gravarAmostrasIndice(imDb, mercado, imovelId, segmento = 'apartam
     // relatórios seguintes da microrregião. O prompt agora exige `distanciaKm`; aqui é a trava
     // final — acima de 2km não entra na base, mesmo que a IA insista.
     const LONGE_KM = 2;
-    const perto = (s) => { const d = Number(s?.distanciaKm); return !Number.isFinite(d) || d <= LONGE_KM; };
+    // PROXIMIDADE POR EVIDÊNCIA, não por declaração (15/08, pedido do dono: "garantir o
+    // máximo de assertividade com amostras próximas ao imóvel").
+    //
+    // O `perto()` anterior era `!Number.isFinite(d) || d <= 2` — ou seja, amostra SEM
+    // distância passava. E como a distância vem do modelo, isso significava aprovar por
+    // omissão. Medido em 15/08 sobre as 389 amostras de nível 1 já emitidas: a trava nunca
+    // reprovou uma sequer (0 acima de 2 km), e **122 delas (31%) não têm âncora nenhuma** —
+    // nem condomínio, nem endereço, nem bairro, nem distância. Entravam no recorte mais
+    // próximo, ponderavam o preço do imóvel e semeavam o Índice da microrregião.
+    //
+    // A régua agora é a EVIDÊNCIA que a amostra carrega:
+    //   forte  → mesmo condomínio, ou mesmo logradouro, ou distância declarada ≤ 250 m;
+    //   media  → mesmo bairro do alvo, ou distância declarada ≤ 2 km;
+    //   fraca  → tem bairro (de outro bairro) — serve ao Índice pelo bairro DELA, não ao alvo;
+    //   nenhuma→ nada verificável: NÃO entra.
+    //
+    // Repare no ganho duplo: derruba as 122 sem âncora e ao mesmo tempo PROMOVE a amostra
+    // do mesmo condomínio que não declarou distância — hoje ela não recebia a coordenada do
+    // alvo mesmo sendo, comprovadamente, do mesmo lugar.
+    const condAlvo = _norm(mercado?.condicoesEdital?.identidade?.nomeCondominio || mercado?.identidadeLote?.nomeCondominio || '');
+    const ruaAlvo = _norm(String(imDb?.endereco || '').replace(/,.*$/, ''));
+    const grauProximidade = (s) => {
+      const d = Number(s?.distanciaKm);
+      const cond = _norm(s?.condominio), rua = _norm(String(s?.endereco || '').replace(/,.*$/, '')), bai = _norm(s?.bairro);
+      if (condAlvo && cond && (cond === condAlvo || cond.includes(condAlvo) || condAlvo.includes(cond))) return 'forte';
+      if (ruaAlvo && rua && (rua === ruaAlvo || rua.includes(ruaAlvo) || ruaAlvo.includes(rua))) return 'forte';
+      if (Number.isFinite(d) && d <= 0.25) return 'forte';
+      if (bairroNorm && bai && bai === bairroNorm) return 'media';
+      if (Number.isFinite(d) && d <= LONGE_KM) return 'media';
+      if (bai) return 'fraca';
+      return 'nenhuma';
+    };
+    // Entra na base do Índice quem tem QUALQUER âncora. "Não sei onde fica" deixa de ser
+    // aprovado — é a diferença entre uma base auditável e uma média de coisa nenhuma.
+    const perto = (s) => grauProximidade(s) !== 'nenhuma';
     // A COORDENADA DO ALVO SÓ VALE PARA QUEM ESTÁ MESMO NO RAIO (achado 06/08). Toda amostra
     // herdava lat/lng do imóvel-alvo — inclusive a que a própria IA disse estar a 1,8 km. Como o
     // recorte "nível 1" é ≤250 m, a amostra distante entrava como se fosse da mesma rua. Só
     // carimba a coordenada quando o anúncio declara estar dentro do raio; fora dele a amostra
     // vale pelo BAIRRO (casamento por texto), que é o que ela de fato é.
-    const NO_RAIO_KM = 0.25;
-    const noRaio = (s) => { const d = Number(s?.distanciaKm); return Number.isFinite(d) && d <= NO_RAIO_KM; };
-    const coordDe = (s) => (noRaio(s) ? { geo_grid: geoGrid, lat: latA, lng: lngA } : { geo_grid: '', lat: null, lng: null });
+    // A coordenada do ALVO só é carimbada na amostra com evidência FORTE de que ela está
+    // mesmo ali: mesmo condomínio, mesmo logradouro ou distância declarada ≤ 250 m. Antes
+    // era só a distância — o que excluía a amostra do mesmo condomínio que não a declarou
+    // (a maioria) e a rebaixava a "bairro", perdendo o recorte mais preciso que existe.
+    const coordDe = (s) => (grauProximidade(s) === 'forte'
+      ? { geo_grid: geoGrid, lat: latA, lng: lngA }
+      : { geo_grid: '', lat: null, lng: null });
     // REFERÊNCIA CITÁVEL da amostra (link/endereço/condomínio). Sem ela, um comparável guardado
     // na base não é auditável pelo cliente — e é a base que sustenta o relatório em MODO BASE.
     const refDe = (s) => ({
@@ -526,6 +564,13 @@ async function gravarAmostrasIndice(imDb, mercado, imovelId, segmento = 'apartam
       endereco: s?.endereco ? String(s.endereco).slice(0, 200) : null,
       condominio: s?.condominio ? String(s.condominio).slice(0, 160) : null,
     });
+    // Composição da proximidade — vai ao relatório para que a assertividade seja VISÍVEL,
+    // e não uma promessa do texto ("ponderada por proximidade"). É também o que a auditoria
+    // final lê para saber se a base do valor está ancorada ou é palpite geográfico.
+    const prox = { forte: 0, media: 0, fraca: 0, descartadas: 0 };
+    for (const s of [...vendas, ...locs]) { const g = grauProximidade(s); if (g === 'nenhuma') prox.descartadas++; else prox[g]++; }
+    if (mercado) mercado.proximidadeAmostras = prox;
+
     for (const s of vendas) {
       const m2 = Number(s?.valorM2);
       if (!perto(s)) continue;
