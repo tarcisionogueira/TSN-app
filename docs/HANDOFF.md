@@ -2,6 +2,53 @@
 
 > Cole este documento no início de uma nova sessão do Claude Code (com o **conector Supabase ativo**) para continuar com acesso total ao banco. Peça primeiro uma **auditoria completa dos fluxos** e depois siga pelos "Próximos passos".
 
+---
+
+## 🔔 LEIA ISTO NA PRÓXIMA SESSÃO — logo DEPOIS do ritual de abertura
+
+> Instrução explícita do dono ao encerrar 15/08: *"liste o que ficou pendente da minha parte e me
+> lembre no início da próxima sessão, após as verificações iniciais"*. Ou seja: faça o heartbeat e
+> os diagnósticos do `CLAUDE.md` **primeiro**, e então, ANTES de qualquer trabalho novo, entregue
+> os dois blocos abaixo.
+
+### 1️⃣ Pendências DO DONO — lembrar sem ele precisar perguntar
+
+| # | Item | Por que trava | Como conferir se já foi feito |
+|---|---|---|---|
+| **A** | **Definir `ADMIN_EMAIL` na Vercel** (+ redeploy) | Sem ela o aviso de chamado novo **não sai**. O chamado é registrado e o log diz `[duvida] chamado SEM aviso: ADMIN_EMAIL não definido` | Não dá para checar do banco — **pergunte a ele** |
+| **B** | **Nomear um analista** | `select count(*) from perfis where role='analista' and ativo` deu **0**. Há 42 horários livres e 3 pedidos de reunião parados desde 1 e 5 de julho. O trigger faz o pedido cair para o admin — dá dono à fila, **não substitui a pessoa** | `select count(*) from perfis where role='analista' and ativo;` → > 0 = resolvido |
+
+Detalhe completo e passo a passo: `docs/PENDENCIAS_DONO.md`, seção **"NOVO EM 15/08"**.
+Uma Routine semanal (`trig_0125Q6eF32hazyZk4rVj16Tg`, segundas 9h BRT) também cobra os dois e se
+apaga quando ele confirmar os dois.
+
+### 2️⃣ Assunto que o dono deixou marcado para ESTA sessão
+
+> **"O Google não está atualizando, somente aumentando o investimento, na minha tela de marketing."**
+
+Fiz só o retrato, **sem investigar** (ele pediu para ver na sessão seguinte). E o retrato já
+desloca a hipótese — **a INGESTÃO está viva**:
+
+| | |
+|---|---|
+| Último dia ingerido | **14/08** (a ingestão roda ~10h50 UTC e traz o dia ANTERIOR — em 15/08 isso é o normal, não atraso) |
+| Últimos 14 dias | R$ 326,89 · **222 cliques** · 2 conversões |
+| Cliques e impressões | **variam todo dia** (12, 15, 20, 18, 20, 20, 11…), não estão congelados |
+| `atualizado_em` | avança; a rodada de 15/08 reescreveu os 8 dias mais recentes (janela móvel — esperado) |
+
+> 🔎 **Então o dado do Google chega e se move. A suspeita passa para a TELA.** Hipóteses a testar,
+> todas da família clássica desta base: (a) a tela soma/filtra por coluna de data errada e o
+> PostgREST devolve 400 que vira lista vazia — atenção, `marketing_metricas_dia` usa **`data`**,
+> não `created_at`/`criado_em`; (b) `.limit()` truncando a janela; (c) a tela mostra gasto
+> ACUMULADO e cliques de um recorte diferente, dando a sensação de "só o investimento sobe".
+> **Comece comparando o que a tela consulta com estes números** — se divergirem, o defeito é dela.
+>
+> Vale olhar junto o cruzamento que já era pendência: **222 cliques pagos × 41 visitas com
+> `gclid`** em 14 dias, e **20 cadastros**. A queda entre as três é natural; o TAMANHO dela é que
+> se vigia. E `utm_term` segue em 0 (pendência A do dono, de 14/08).
+
+---
+
 > 📋 **Pendências que dependem do DONO** (painéis/planos): ver `docs/PENDENCIAS_DONO.md`. Ao iniciar sessão, se o dono perguntar "o que falta que depende de mim?", liste de lá. **Topo da fila em 02/08: (-4) Google Search Console + Perfil da Empresa** — as 33 mil páginas novas estão no ar e o Google ainda não sabe; e **(-3) Cloudflare R2**, único item que protege contra perda definitiva de arquivo de cliente. Depois: Resend (URL com `www` + Re-enable), Google Ads (verificação até **02/09** — a data 31/08 que aparece em blocos antigos foi reemitida pelo Google em 03/08), Asaas (reativar webhook), Upstash (grátis). **Novo em 12/08: (-1.5) MX do domínio** — `suporte@` e `privacidade@` são publicados no site e não recebem nada; o inbound já está pronto no código.
 
 > ⏰ **VALIDAR NO PRÓXIMO CICLO (fontes corrigidas em 18/07):**
@@ -27,6 +74,39 @@
 > lote, para que uma parada não leve o trabalho junto.
 > Checagem rápida a qualquer momento: `select public.auditoria_seguranca();` → `0 crítico / 0 atenção` = íntegro.
 > **Auditorias ofensivas completas: 15/07/2026 (×2).** Total de correções: 15 (1ª rodada) + escalonamento por convite (CRÍTICO) + IDOR do MP (ALTO) + escala. Refazer a ofensiva quando entrarem rotas/pagamento/RLS novos (a Rotina mensal já faz isso sozinha).
+
+## 📚 15/08 — ÍNDICE DO DIA (tudo o que entrou, em ordem)
+
+Dia longo. Este índice existe para a próxima sessão achar a seção certa sem reler tudo. **O fio
+condutor foi o mesmo em quase todos os itens: a informação já estava lá e ninguém a lia — ou
+pior, a ausência dela virava uma AFIRMAÇÃO na tela.**
+
+| # | O que foi | Onde ler | Prova / número |
+|---|---|---|---|
+| 1 | **Edital atrás da página do lote** — `pdfsNaPagina` segue os PDFs linkados no HTML | *"EDITAL ATRÁS DA PÁGINA DO LOTE"* | 5.601 lotes (40%), não os 93% que eu havia reportado errado |
+| 2 | **Correção do MEU diagnóstico** — regex case-sensitive; a Caixa publica `.PDF` maiúsculo | idem | 8.504 sempre foram PDF e o código sempre os leu |
+| 3 | **Sem analista, reunião e chamado caem para o admin** (2 triggers + backfill) | *"A regra do dono"* | 3/3 solicitações e 22/22 chamados com dono; 0 órfãos |
+| 4 | **Invariante da reunião ficou verde por engano** — media `analista_id`, não o atendimento | idem, subseção 🔴 | corrigido no mesmo dia; volta a acusar 3 |
+| 5 | **`tempo_processo()`** — agilidade separando relógio da MÁQUINA do HUMANO | *"tempo médio de evolução"* (commit) | mediana 0,3 h de geração × 44,9 dias de reunião parada |
+| 6 | **A armadilha do bot como SLA** — 33 de 34 mensagens são da IA; nunca houve resposta humana | `CLAUDE.md` §1c(d) | mediria "0,0 h, 22 de 22 respondidos" |
+| 7 | **Tempo entre despachos (CNJ)** — nº do processo grátis no edital + série + cadência | *"TEMPO ENTRE DESPACHOS"* | 1.782 lotes judiciais tinham **3** números; monitor 0 → 114 |
+| 8 | **Simulação de papel não simulava** — `role` passa a ser o EFETIVO | *"A SIMULAÇÃO QUE NÃO SIMULAVA"* | 29 componentes liam o papel real × 12 o efetivo |
+| 9 | **Simulação em conta NOVA** — identidade simulada; cai na home em qualquer papel | idem | 151 leituras por `user.id` cru × 57 por `effectiveUserId` |
+| 10 | **Simular é olhar, nunca escrever** — trava no `fetch` do cliente Supabase | idem | 13 leituras conhecidas passando, 7 escritas barradas |
+| 11 | **Chat proativo vira badge** — sem abrir sozinho, sem tomar a tela | *"o chat que sequestrou a tela"* | o painel era 100vw × 100dvh no celular |
+| 12 | **Badge passa a contar a mensagem da IA** | idem | sem isso, a saudação ficaria invisível |
+| 13 | **Auditoria de fechamento** — e a divergência arquivo × banco que ela achou | seção abaixo | 10/10 objetos aplicados; CI verde nas duas travas |
+
+**Migrações aplicadas hoje (8):** `atendimento_cai_para_admin_sem_analista` ·
+`qa_invariante_solicitacao_reuniao_parada` · `qa_invariante_reuniao_parada_mede_o_atendimento` ·
+`tempo_processo_medir_agilidade` (+ `_inclui_fechado_sem_resposta` e `_alinha_banco_ao_arquivo`) ·
+`processo_movimentos_e_cadencia` · `cotas_do_papel_para_simulacao` ·
+`suporte_nao_lidas_conta_mensagem_da_ia`.
+
+**Funções novas para consultar a qualquer momento (custo zero):**
+`public.tempo_processo()` · `public.processo_cadencia(numero)` · `public.cotas_do_papel(papel)`.
+
+---
 
 ## ✅ 15/08 — FECHAMENTO DO DIA: o que foi verificado, e o que NÃO está resolvido
 
