@@ -161,6 +161,30 @@ export function auditarMercadologico(result, ctx = {}) {
     }
   }
 
+  // ── C6. PREMISSA DE PAGAMENTO CONTRARIADA PELO DOCUMENTO/ANÚNCIO ────────────────────
+  // Achado do dono em 15/08: o relatório imprimia "Custo mensal a suportar: R$ 0,00 · Sem
+  // parcela (à vista)" num lote cujo PRÓPRIO TÍTULO anuncia "Entrada 30% + 240x". A
+  // premissa de pagamento não é detalhe: ela define o capital necessário na arrematação,
+  // o custo mensal, o ROI e o teto de lance — o diagnóstico inteiro. E o `forma_pagamento`
+  // do acervo, quando diz `a_vista`, DESABILITA o cenário financiado na tela: o investidor
+  // não vê a opção que o edital lhe dá. Medido: 132 lotes ativos com entrada/parcelamento
+  // no título gravados como `a_vista`, e 164 que citam financiamento.
+  //
+  // Vale para o inverso também (relatório parcelado num lote que o edital exige à vista) e
+  // para a hipoteca, que muda quem paga o quê.
+  const pag = ctx.pagamentoDoc || {};
+  const parcelavel = n(pag.parcelas) >= 2 || n(pag.sinalPct) > 0 || pag.financiavel === true;
+  if (parcelavel && ctx.somenteAVista) {
+    criticos.push({
+      chave: 'pagamento_contradiz_documento',
+      msg: `O relatório assume pagamento à vista, mas ${pag.origem === 'titulo' ? 'o anúncio do lote' : 'o documento'} indica ${[
+        n(pag.sinalPct) > 0 ? `entrada de ${pag.sinalPct}%` : null,
+        n(pag.parcelas) >= 2 ? `${pag.parcelas} parcelas` : null,
+        pag.financiavel === true ? 'financiamento' : null,
+      ].filter(Boolean).join(' + ')} — capital necessário, custo mensal e ROI mudam com isso.`,
+    });
+  }
+
   // ── FALTANDO: o que o relatório promete e não entregou ──────────────────────────────
   if (!String(result?.parecer || '').trim()) faltando.push({ chave: 'sem_parecer', msg: 'Relatório sem parecer escrito.' });
   if (vMercado <= 0) faltando.push({ chave: 'sem_valor_mercado', msg: 'Relatório sem valor de mercado estimado.' });

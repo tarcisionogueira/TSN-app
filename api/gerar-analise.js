@@ -18,6 +18,7 @@ import { referenciaPonderada } from './_indice-ponderacao.js';
 import { geocodificarCascata, rankNivel, coordValida } from './_geo.js';
 import { extratoEdital, extratoMatricula } from './_edital-extrato.js';
 import { auditarMercadologico } from './_auditoria-relatorio.js';
+import { extrairPagamentoTexto } from './_doc-extracao.js';
 import { pagamentoPrior, pagamentoAprender } from './_doc-extracao.js';
 // MESMA função pura que a tela usa para ROI/ROE/capital/teto. Importada aqui para o
 // servidor RECALCULAR a viabilidade depois de descobrir o valor de mercado (ver o bloco
@@ -2759,12 +2760,26 @@ COMO USAR (obrigatório): dedique um parágrafo aos CUSTOS DA OPERAÇÃO segundo
       // bloco de cima: aquelas vivem dentro do IIFE do Promise.race e não alcançam este
       // escopo — referenciá-las daria ReferenceError bem no passo que existe para evitar
       // relatório errado. Best-effort: se a leitura falhar, a auditoria roda sem esse sinal.
-      let temMatricula = false;
+      let temMatricula = false, pagamentoDoc = null, somenteAVista = false;
       try {
-        const [ix] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=link_matricula,anexos&limit=1`)).json();
+        const [ix] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=link_matricula,anexos,titulo,forma_pagamento,doc_fatos&limit=1`)).json();
         temMatricula = !!(ix?.link_matricula || (Array.isArray(ix?.anexos) && ix.anexos.some((a) => a?.tipo === 'matricula')));
-      } catch { /* sinal opcional da auditoria */ }
-      const aud = auditarMercadologico(result, { temMatricula });
+        somenteAVista = String(ix?.forma_pagamento || '') === 'a_vista';
+        // CONDIÇÃO DE PAGAMENTO PUBLICADA PELO LEILOEIRO NO PRÓPRIO TÍTULO. "Entrada 30% +
+        // 240x" está na chamada da oferta e era simplesmente ignorado — o acervo gravava
+        // `a_vista` e a tela desabilitava o cenário financiado. Ler daqui é determinístico
+        // e custo zero; a leitura do edital continua sendo a fonte mais forte quando existe.
+        pagamentoDoc = ix?.doc_fatos?.pagamento
+          || result?.mercado?.condicoesEdital?.pagamento
+          || (ix?.titulo ? { ...(extrairPagamentoTexto(String(ix.titulo)) || {}), origem: 'titulo' } : null);
+        // Publica na ficha do imóvel para a TELA parar de travar o cenário financiado e o
+        // cliente ver a condição real — foi por não estar publicada que ela se perdeu.
+        if (pagamentoDoc && (Number(pagamentoDoc.parcelas) >= 2 || Number(pagamentoDoc.sinalPct) > 0 || pagamentoDoc.financiavel === true)) {
+          await sb(`rpc/registrar_doc_fatos`, { method: 'POST', headers: { Prefer: 'return=minimal' },
+            body: JSON.stringify({ p_imovel_id: String(imovelId), p_fatos: { pagamento: pagamentoDoc, em: new Date().toISOString() } }) }).catch(() => {});
+        }
+      } catch { /* sinais opcionais da auditoria */ }
+      const aud = auditarMercadologico(result, { temMatricula, pagamentoDoc, somenteAVista });
       // Gravada nos DOIS lugares de propósito: a tela carrega `mercado` num estado próprio
       // e nem sempre tem o `result` inteiro em mãos — pendurar a auditoria só na raiz faria
       // a ressalva sumir justamente onde ela precisa aparecer.

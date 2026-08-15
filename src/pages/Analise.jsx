@@ -205,7 +205,19 @@ export default function Analise() {
       valorAvaliacao: imovelInicial.valorAvaliacao||0, valorArrematacao: pracaAlvo.valor || imovelInicial.valorMinimo || 0,
       areaM2: imovelInicial.areaM2||0, leiloeiro: imovelInicial.leiloeiro||'',
       dataLeilao: (pracaAlvo.data ? String(pracaAlvo.data).slice(0,10) : imovelInicial.dataLeilao) || '', origem: imovelInicial.modalidade||'extrajudicial',
-      somenteAVista: !imovelInicial.pagamento?.includes('financiado'),
+      // "SÓ À VISTA" É AFIRMAÇÃO, E PRECISA DE PROVA (15/08, achado do dono). Ela vem do
+      // `forma_pagamento` do acervo e DESABILITA o cenário financiado na tela — o
+      // investidor nem vê a opção. Num lote cujo título anuncia "Entrada 30% + 240x", o
+      // relatório saía com "Custo mensal R$ 0,00 · Sem parcela (à vista)": capital
+      // necessário, custo mensal, ROI e teto de lance, todos calculados sobre a premissa
+      // errada. Medido: 132 lotes ativos com entrada/parcelamento no título gravados como
+      // `a_vista`. Agora, qualquer indício de parcelamento lido no DOCUMENTO ou no anúncio
+      // (`doc_fatos.pagamento`) destrava o cenário — o acervo deixa de ter a última palavra
+      // contra o que o próprio leiloeiro publicou.
+      somenteAVista: !imovelInicial.pagamento?.includes('financiado')
+        && !(Number(imovelInicial.docFatos?.pagamento?.parcelas) >= 2
+          || Number(imovelInicial.docFatos?.pagamento?.sinalPct) > 0
+          || imovelInicial.docFatos?.pagamento?.financiavel === true),
       // Venda direta e Licitação (Caixa) normalmente NÃO têm leiloeiro → sem taxa.
       // Demais: 5% (editável — alguns leiloeiros cobram mais). Confirmar no edital.
       taxaLeiloeiroPercentual: /venda[_ ]?direta|licitac/i.test(imovelInicial.modalidade||'') ? 0 : 5,

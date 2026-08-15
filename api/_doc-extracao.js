@@ -133,7 +133,19 @@ export function extrairPagamentoTexto(texto) {
   const pct = (re) => { const m = t.match(re); const v = m ? numBr(m[1]) : 0; return v > 0 && v <= 100 ? v : null; };
   const out = {
     aVista: /(?:pagamento|arremata[çc][ãa]o|lance)[^.;]{0,60}[àa]\s*vista|[àa]\s*vista[^.;]{0,40}(?:pagamento|arremata)/i.test(t) || null,
-    parcelas: (() => { const m = t.match(/(?:em\s+at[ée]|parcelad[oa]\s+em|at[ée])\s+(\d{1,3})\s*(?:parcelas|vezes|x)\b/i); const n = m ? Number(m[1]) : 0; return n >= 2 && n <= 420 ? n : null; })(),
+    // Duas redações. A primeira é a do EDITAL ("em até 60 parcelas"). A segunda é a do
+    // TÍTULO DO LOTE, e faltava: o leiloeiro anuncia "Entrada 30% + 240x" na própria
+    // chamada da oferta. Medido em 15/08: 132 lotes ativos têm entrada/parcelamento no
+    // título e estão gravados como `a_vista` no acervo — e é o `a_vista` que desabilita o
+    // cenário financiado na tela, então o investidor via "sem parcela, à vista" num lote
+    // anunciado em 240 vezes. O `+` ou o `em` antes do número é o que separa "240x" de
+    // qualquer outro número seguido de x (área, medida, quantidade).
+    parcelas: (() => {
+      const m = t.match(/(?:em\s+at[ée]|parcelad[oa]\s+em|at[ée])\s+(\d{1,3})\s*(?:parcelas|vezes|x)\b/i)
+             || t.match(/(?:\+|em)\s*(\d{1,3})\s*x\b/i);
+      const n = m ? Number(m[1]) : 0;
+      return n >= 2 && n <= 420 ? n : null;
+    })(),
     sinalPct: pct(/(?:sinal|entrada)\s+(?:de\s+|m[íi]nim[oa]\s+de\s+)?(\d{1,2}(?:,\d{1,2})?)\s*%/i),
     caucaoPct: pct(/cau[çc][ãa]o\s+(?:de\s+)?(\d{1,2}(?:,\d{1,2})?)\s*%/i),
     // Comissão: o vão entre a palavra e o percentual muda muito de edital para edital —
