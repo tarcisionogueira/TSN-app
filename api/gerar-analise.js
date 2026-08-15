@@ -1713,8 +1713,22 @@ export default async function handler(req, res) {
   // colhemos dentro de UM limite comum — esperar as duas em sequência dobraria a espera.
   let matriculaPre = null, editalPre = null;
   const areaAnunciada = Number(mercadoInputs?.areaM2) || 0;
-  const limitePre = Date.now() + Math.min(16000, Math.max(0, restante() - 210000));
+  // ORÇAMENTO DA ESPERA — refeito em 15/08 (tarde), depois de a correção da manhã NÃO ter
+  // efeito nenhum em produção. O `extratoMatricula` já recebia 45s de deadline e roda em
+  // paralelo desde o início; o problema era AQUI: a janela de colheita era
+  // `min(16s, restante-210s)`, e quando a leitura do endereço no documento gastava tempo
+  // (foi o caso, `[endereco-busca] rua:true`) o `restante()` caía abaixo de 210s, a janela
+  // virava ZERO e o `colher` resolvia `null` no mesmo instante. A leitura por visão podia
+  // até estar em curso — ninguém esperava por ela, e o relatório saía com a área do anúncio.
+  //
+  // A metragem NÃO é enfeite: todo o valor de mercado pendura nela, e a busca de comparáveis
+  // precisa do tamanho certo ANTES de sair procurando. Então ela ganha janela de verdade
+  // (até 45s, o mesmo do deadline da leitura), ainda protegida pelo tempo restante — e o
+  // desfecho é SEMPRE registrado, porque foi a ausência de log que escondeu isto por um dia.
+  const janelaPre = Math.min(45000, Math.max(0, restante() - 175000));
+  const limitePre = Date.now() + janelaPre;
   const colher = (p) => Promise.race([p, new Promise((r) => setTimeout(() => r(null), Math.max(0, limitePre - Date.now())))]).catch(() => null);
+  const tPre = Date.now();
   try { matriculaPre = await colher(extratoMatriculaP); } catch { matriculaPre = null; }
   try { editalPre = await colher(extratoEditalP); } catch { editalPre = null; }
   if (mercadoInputs && matriculaPre) {
@@ -1722,10 +1736,19 @@ export default async function handler(req, res) {
     const aTer = Number(matriculaPre.areaTerrenoM2) || 0;
     if (aMat >= 5 && aMat <= 100000) mercadoInputs.areaM2 = aMat;
     if (aTer >= 5 && aTer <= 10000000 && !(Number(mercadoInputs.areaTerrenoM2) > 0)) mercadoInputs.areaTerrenoM2 = aTer;
-    if (aMat > 0 || aTer > 0) {
-      console.log('[metragem-doc]', JSON.stringify({ imovel: String(imovelId), anuncio: areaAnunciada || null, matricula: aMat || null, terreno: aTer || null, usadaNaBusca: mercadoInputs.areaM2 || null }));
-    }
   }
+  // Log INCONDICIONAL. A versão anterior só registrava quando a matrícula trazia alguma
+  // metragem — ou seja, calava-se exatamente no caso que precisava ser investigado, e o
+  // silêncio era indistinguível de "não havia matrícula para ler".
+  console.log('[metragem-doc]', JSON.stringify({
+    imovel: String(imovelId),
+    janelaMs: janelaPre, gastoMs: Date.now() - tPre, restanteMs: restante(),
+    leu: !!matriculaPre, via: matriculaPre?.via || null, deCache: matriculaPre?.deCache ?? null,
+    anuncio: areaAnunciada || null,
+    matricula: Number(matriculaPre?.areaPrivativaM2) || null,
+    terreno: Number(matriculaPre?.areaTerrenoM2) || null,
+    usadaNaBusca: mercadoInputs?.areaM2 || null,
+  }));
   // IDENTIDADE lida no edital (06/08): o NOME DO CONDOMÍNIO é a âncora Nível 1 da busca
   // — comparável do MESMO empreendimento vale mais que qualquer média de bairro — e é o
   // que permite classificar tipo e PADRÃO pelo que o mercado pede naquele prédio. Quando
@@ -2102,8 +2125,20 @@ export default async function handler(req, res) {
     let divergenciaArea = null;
     if (areaFonte !== 'matricula') {
       // Reusa o que já foi colhido ANTES da busca; só corre atrás de novo se lá não deu tempo.
+      // A ESPERA ERA DE 2,5s (15/08): uma leitura por visão de matrícula escaneada leva
+      // dezenas de segundos, então essa corrida praticamente sempre devolvia `null` — a
+      // "segunda chance" era decorativa. Agora a janela vem do tempo REALMENTE disponível
+      // (a busca de mercado, que é a parte cara, já terminou neste ponto), com teto de 30s.
       let mat = matriculaPre;
-      if (!mat) { try { mat = await Promise.race([extratoMatriculaP, new Promise(r => setTimeout(() => r(null), 2500))]); } catch { /* best-effort */ } }
+      if (!mat) {
+        const janela2 = Math.min(30000, Math.max(0, restante() - 60000));
+        const t2 = Date.now();
+        try { mat = await Promise.race([extratoMatriculaP, new Promise(r => setTimeout(() => r(null), janela2))]); } catch { /* best-effort */ }
+        console.log('[metragem-doc-2a-chance]', JSON.stringify({
+          imovel: String(imovelId), janelaMs: janela2, gastoMs: Date.now() - t2,
+          leu: !!mat, via: mat?.via || null, privativa: Number(mat?.areaPrivativaM2) || null,
+        }));
+      }
       const aMat = Number(mat?.areaPrivativaM2) || 0;
       if (aMat >= 5 && aMat <= 100000) {
         // A referência da divergência é a área ANUNCIADA, capturada antes de a matrícula

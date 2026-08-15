@@ -333,6 +333,78 @@ if (atualizar) {
   process.exit(0);
 }
 
+/**
+ * VERIFICAÇÃO GLOBAL — nome de variável de ambiente que não existe (15/08).
+ *
+ * POR QUE. A leitura da matrícula por visão foi escrita de manhã lendo
+ * `process.env.CLAUDE_API_KEY`. O projeto inteiro usa `CLAUDE_KEY`. A guarda batia SEMPRE,
+ * a função devolvia `null` na primeira linha e a leitura nunca rodou uma única vez em
+ * produção — com a aparência exata de "o documento não tem a área", que é o defeito que
+ * ela tinha sido escrita para corrigir. Nenhuma trava pegava: o código compila, passa no
+ * lint, passa no build, e `process.env.QUALQUER_COISA` é `undefined` em silêncio.
+ *
+ * A REGRA: um nome usado em UM só arquivo cujos segmentos CONTÊM os de outro nome usado em
+ * dois ou mais é quase sempre typo (`CLAUDE_API_KEY` ⊃ `CLAUDE_KEY`, 1 arquivo contra 27).
+ * Três pares legítimos do acervo entram como exceção declarada — são variáveis realmente
+ * distintas, não erros de digitação.
+ */
+const ENV_PARES_LEGITIMOS = new Set([
+  'ONR_ALERT_EMAIL~ONR_EMAIL',
+  'GOOGLE_ADS_LOGIN_CUSTOMER_ID~GOOGLE_ADS_CUSTOMER_ID',
+  'ADMIN_ALERT_EMAIL~ADMIN_EMAIL',
+]);
+function envsSuspeitas() {
+  // COMENTÁRIO É IGNORADO POR LINHA, não por parser de estado. A primeira tentativa usou o
+  // removedor de comentários do verificador de schema e ele se PERDEU neste arquivo: as
+  // regras aqui são regexes literais cheias de aspas (`['"]`), o parser entende cada aspa
+  // como início de string e dessincroniza — o comentário de bloco sobrevivia inteiro e o
+  // verificador acusava a própria documentação. Uma linha cujo início é `//`, `*` ou `/*`
+  // é comentário; para achar `process.env.X` isso basta e não tem como se perder.
+  const porNome = new Map(); // nome → Set(arquivos)
+  for (const dir of DIRS) {
+    for (const rel of arquivos(dir)) {
+      for (const linha of readFileSync(join(RAIZ, rel), 'utf8').split('\n')) {
+        if (/^\s*(\/\/|\*|\/\*)/.test(linha)) continue;
+        for (const m of linha.matchAll(/process\.env\.([A-Z_][A-Z0-9_]*)/g)) {
+          if (!porNome.has(m[1])) porNome.set(m[1], new Set());
+          porNome.get(m[1]).add(rel);
+        }
+      }
+    }
+  }
+  const seg = (k) => new Set(k.split('_').filter(Boolean));
+  const contido = (a, b) => [...a].every((x) => b.has(x));
+  const achados = [];
+  const nomes = [...porNome.keys()];
+  for (const a of nomes) {
+    if (porNome.get(a).size !== 1) continue;
+    for (const b of nomes) {
+      if (a === b || ENV_PARES_LEGITIMOS.has(`${a}~${b}`)) continue;
+      const sa = seg(a), sb = seg(b);
+      if (sa.size <= sb.size || !contido(sb, sa)) continue;
+      if (porNome.get(b).size >= 2) {
+        achados.push({ suspeita: a, arquivo: [...porNome.get(a)][0], canonica: b, usos: porNome.get(b).size });
+      }
+    }
+  }
+  return achados;
+}
+const envRuins = envsSuspeitas();
+if (envRuins.length && !atualizar) {
+  console.error('\n✗ VARIÁVEL DE AMBIENTE COM NOME PROVAVELMENTE ERRADO.\n');
+  console.error('  `process.env.X` inexistente é `undefined` em silêncio: a guarda que depende');
+  console.error('  dela passa a barrar sempre, e a função devolve o mesmo "não consegui" de');
+  console.error('  quando não há dado. Compila, passa no lint e no build. (Caso de 15/08.)\n');
+  for (const e of envRuins) {
+    console.error(`  ${e.arquivo}`);
+    console.error(`    usa ${e.suspeita} — só aqui no repositório inteiro.`);
+    console.error(`    o projeto usa ${e.canonica}, em ${e.usos} arquivos.\n`);
+  }
+  console.error('Se os dois nomes existem MESMO (variáveis distintas), declare o par em');
+  console.error('ENV_PARES_LEGITIMOS neste script, com o motivo no comentário.\n');
+  process.exit(1);
+}
+
 const base = existsSync(BASELINE) ? JSON.parse(readFileSync(BASELINE, 'utf8')) : {};
 const pioras = [];
 for (const [arq, regras] of Object.entries(atual)) {

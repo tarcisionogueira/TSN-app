@@ -239,27 +239,38 @@ export async function extratoEdital(imovelId, { deadline } = {}) {
  * Só roda quando o grátis falhou E existe documento, respeitando a cascata do arquivo.
  */
 async function matriculaPorVisao(url, imovelId, fim) {
-  if (!process.env.CLAUDE_API_KEY || !hostExternoSeguro(url)) return null;
-  if (fim - Date.now() < 12000) return null; // sem tempo hábil: não começa o que não termina
+  const diag = (motivo, extra = {}) => console.log('[matricula-visao]', JSON.stringify({ imovel: String(imovelId), motivo, ...extra }));
+  // Toda desistência é REGISTRADA. A versão de 15/08 (manhã) saía calada em três pontos
+  // distintos, e o efeito foi uma correção que não corrigia nada sem deixar rastro: o
+  // relatório saiu com a área do anúncio e o log não tinha uma linha sobre o assunto.
+  // `CLAUDE_KEY` é o nome usado no projeto inteiro (gerar-analise, gerar-documental). A
+  // primeira versão desta função leu `CLAUDE_API_KEY`, que não existe em lugar nenhum: a
+  // guarda batia SEMPRE, a função devolvia `null` na primeira linha e a leitura por visão
+  // nunca rodou uma única vez em produção — com a aparência de "o documento não tem a área".
+  // Um erro de nome de variável produzindo exatamente o defeito que a função vinha corrigir.
+  if (!process.env.CLAUDE_KEY) { diag('sem CLAUDE_KEY'); return null; }
+  if (!hostExternoSeguro(url)) { diag('host bloqueado', { url }); return null; }
+  const sobra = fim - Date.now();
+  if (sobra < 12000) { diag('sem tempo hábil', { sobraMs: sobra }); return null; }
   let bloco = null;
   try {
     const r = await fetchExternoSeguro(url, {
       headers: { 'User-Agent': UA, 'Accept-Language': 'pt-BR,pt;q=0.9' },
       signal: AbortSignal.timeout(Math.min(15000, fim - Date.now() - 4000)),
     });
-    if (!r.ok) return null;
+    if (!r.ok) { diag('download falhou', { http: r.status }); return null; }
     const buf = Buffer.from(await r.arrayBuffer());
     // Classificação pelo CONTEÚDO: serve PDF (inclusive escaneado) e matrícula fotografada
     // /digitalizada como JPEG ou PNG — a IA lê os dois. HTML de bloqueio e formato que não
     // dá para ler voltam `desconhecido` e param aqui, em vez de virar prompt sobre nada.
     const doc = classificarDocumento(buf, { url, contentType: r.headers.get('content-type') || '' });
     bloco = blocoParaIA(doc, 'matricula');
-    if (!bloco) { console.log('[matricula-visao] sem leitura', JSON.stringify({ imovel: String(imovelId), motivo: doc.motivo || doc.kind })); return null; }
-  } catch { return null; }
+    if (!bloco) { diag('formato não legível', { kind: doc.kind, detalhe: doc.motivo || null }); return null; }
+  } catch (e) { diag('erro no download', { erro: String(e?.message || e).slice(0, 120) }); return null; }
   try {
     const resp = await anthropicFetch({
       method: 'POST',
-      headers: { 'x-api-key': process.env.CLAUDE_API_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+      headers: { 'x-api-key': process.env.CLAUDE_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
       body: JSON.stringify({
         model: 'claude-sonnet-4-6', max_tokens: 300,
         system: 'Você é um EXTRATOR de metragem de matrícula de imóvel. Leia com máxima atenção, INCLUSIVE páginas escaneadas/em imagem. Retorne SOMENTE JSON.',
@@ -275,11 +286,11 @@ async function matriculaPorVisao(url, imovelId, fim) {
         ] }],
       }),
     }, { retries: 1, timeoutMs: Math.max(15000, Math.min(60000, fim - Date.now())), noFallback: true });
-    if (!resp.ok) return null; // `.ok` ANTES do corpo: erro da API não pode virar "sem área"
+    if (!resp.ok) { diag('IA respondeu erro', { http: resp.status }); return null; } // `.ok` ANTES do corpo
     const data = await resp.json().catch(() => null);
     const texto = (data?.content || []).map((b) => b?.text || '').join('').trim();
     const bruto = texto.match(/\{[\s\S]*\}/);
-    if (!bruto) return null;
+    if (!bruto) { diag('resposta sem JSON', { amostra: texto.slice(0, 80) }); return null; }
     const j = JSON.parse(bruto[0]);
     const num = (v) => { const n = Number(v); return Number.isFinite(n) && n >= 5 && n <= 1000000 ? n : null; };
     const mat = {
@@ -288,14 +299,14 @@ async function matriculaPorVisao(url, imovelId, fim) {
       areaTotalM2: num(j.areaTotalM2),
       numeroMatricula: String(j.numeroMatricula || '').replace(/\D/g, '').slice(0, 40) || null,
     };
-    if (!mat.areaPrivativaM2 && !mat.areaTerrenoM2 && !mat.areaTotalM2) return null;
+    if (!mat.areaPrivativaM2 && !mat.areaTerrenoM2 && !mat.areaTotalM2) { diag('IA não achou metragem'); return null; }
     const meta = { url, imovelId: String(imovelId), tipoDoc: 'matricula', campos: { matricula: mat }, via: 'visao', confianca: 85 };
     await cacheGravar(chaveUrl(url), meta);
     await cacheGravar(`i:${String(imovelId)}`, meta);
     await publicarDocFatos(imovelId, { matricula: mat, fonteMatricula: url });
-    console.log('[matricula-visao]', JSON.stringify({ imovel: String(imovelId), ...mat }));
+    diag('ok', mat);
     return { ...mat, fonteUrl: url, deCache: false, via: 'visao' };
-  } catch { return null; }
+  } catch (e) { diag('erro na chamada à IA', { erro: String(e?.message || e).slice(0, 120) }); return null; }
 }
 
 export async function extratoMatricula(imovelId, { deadline } = {}) {
@@ -323,9 +334,10 @@ export async function extratoMatricula(imovelId, { deadline } = {}) {
     im.link_matricula,
     anexoAcervo?.url,
   ].filter(u => u && /^https?:\/\//i.test(u) && !/matricula\.asp|detalhe-imovel\.asp/i.test(u)))].slice(0, 3);
-  // Guarda o 1º candidato que existe de verdade, para a visão tentar se o regex não resolver,
-  // e o que o regex conseguiu ler sem a privativa (devolvido só se a visão também não vier).
-  let urlParaVisao = null, regexParcial = null;
+  // Alvo da visão: começa no 1º candidato e é refinado pelo loop. Começar JÁ preenchido
+  // cobre o caso em que o laço nem chega a rodar — o `break` por fim de orçamento logo
+  // abaixo deixava `urlParaVisao` nulo e a visão simplesmente não era tentada, sem rastro.
+  let urlParaVisao = cands[0] || null, regexParcial = null;
   for (const url of cands) {
     if (Date.now() > fim) break;
     const hit = await cacheLer(chaveUrl(url));
@@ -365,6 +377,15 @@ export async function extratoMatricula(imovelId, { deadline } = {}) {
     const porVisao = await matriculaPorVisao(urlParaVisao, imovelId, fim);
     if (porVisao?.areaPrivativaM2) return porVisao;
     if (porVisao && !regexParcial) regexParcial = porVisao;
+  } else {
+    console.log('[matricula-extrato]', JSON.stringify({ imovel: String(imovelId), motivo: 'nenhum candidato de matrícula', candidatos: cands.length }));
   }
+  console.log('[matricula-extrato]', JSON.stringify({
+    imovel: String(imovelId), candidatos: cands.length,
+    desfecho: regexParcial ? 'parcial_sem_privativa' : 'nada',
+    privativa: Number(regexParcial?.areaPrivativaM2) || null,
+    terreno: Number(regexParcial?.areaTerrenoM2) || null,
+    sobraMs: fim - Date.now(),
+  }));
   return regexParcial;
 }
