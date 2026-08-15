@@ -121,6 +121,58 @@ por vírgula, ele é **ignorado por inteiro**. Uma trava que grita errado é des
 uma semana. **Medido:** 280 pares tabela.coluna conferidos contra o banco → **zero falso-positivo,
 zero achado além do `whatsapp`**; e com o bug reintroduzido, ela reprova.
 
+### 🎨 4. O cabeçalho de `/leiloes` voltou ao layout do app (pedido do dono)
+
+A revisão de 14/08 acertou tinta e fonte, mas manteve **medidas próprias** — e era isso que
+quebrava a continuidade ao navegar entre a página pública e o app:
+
+| | Antes (`/leiloes`) | App (`Header.jsx`) | Agora |
+|---|---|---|---|
+| Faixa | 1080 | **1280** | 1280 |
+| Logo | 34px | **40px** | 40px |
+| Sub-linha "LEILÃO & INVESTIMENTOS" | tinha | **não existe** | removida |
+| Links de navegação | **nenhum** | Home · Calculadora · Buscar Leilões · Planos | os 4, mesma ordem |
+| Botão | só CTA azul | "Entrar" com borda #334155 | Entrar **+** CTA |
+
+O menu do celular virou um **`<details>`** — o hambúrguer do app em HTML puro, no mesmo ponto de
+virada de 768px. **Nenhuma linha de JS** foi acrescentada: a página continua pronta no HTML que o
+servidor devolve, que é o que a faz servir para o robô do buscador.
+
+> O **"Criar conta grátis" ficou**, e é uma escolha: ele não existe no app, mas aqui é o CTA da
+> página de aquisição — o principal ativo de SEO. Tirá-lo custaria conversão sem aproximar o
+> layout. Se você preferir o cabeçalho idêntico ao app, é só remover os dois `<a class="cta">`.
+
+**Medido:** `/leiloes` em 6 larguras (320→1280), zero achados, com o menu aberto em 320px sem
+vazar. ⚠️ `/leiloes` **não estava** nas 7 rotas testadas em 14/08 (ela é servida por
+`api/publico.js`, fora do SPA) — vale incluí-la nas próximas varreduras.
+
+### ⚡ 5. O pisca de tela ao entrar — validado, e não era impressão
+
+**Causa:** `loading` do AuthContext começa `true` e o `getSession()` é assíncrono, então
+`isLoggedIn` vale `false` no primeiro render **mesmo com sessão válida no storage**. E
+`src/App.jsx:300` decidia a rota `/` só por `isLoggedIn` — **a única decisão de conteúdo do
+arquivo que ignorava `loading`**, enquanto `PrivateRoute` e `ImovelRota` logo acima já esperavam.
+Resultado: quem estava logado via a **Landing de visitante** por um instante, e a tela trocava
+sozinha. Acontece **no login, no F5 e ao reabrir o PWA**.
+
+O cabeçalho fazia a metade de cima do mesmo pisca: durante o `loading` ele mostrava o menu
+público e o botão **"Entrar"** — e dizer "Entrar" para quem acabou de entrar é a leitura mais
+parecida com "o login não funcionou". O comentário no código dizia que isso *evitava* flash; não
+evitava, só escolhia **qual** flash mostrar.
+
+**Correção:** enquanto o auth não resolve, o cabeçalho não afirma nada e a rota `/` mostra o mesmo
+spinner do `Suspense`. Custo para o visitante: nenhum na prática — sem sessão o AuthContext faz
+`setLoading(false)` **sem ir à rede** (lê o localStorage).
+
+> 🔬 **Até onde a validação foi, com honestidade.** A causa é determinística e foi confirmada por
+> leitura: `loading` inicia `true`, `getSession()` é Promise, os providers **não** bloqueiam o
+> render (ambos devolvem `{children}` sempre), e a rota `/` era a única sem o guarda. **O que eu
+> NÃO consegui** foi reproduzir com uma sessão real: o navegador deste ambiente não alcança a
+> internet (proxy) e não há credencial de cliente — plantar um token forjado trava o supabase-js
+> antes do React montar, que é artefato do ambiente, não do produto.
+> **O teste de 10 segundos, que só você pode fazer:** entre no site, aperte **F5** na tela inicial
+> e veja se a landing de visitante ainda pisca antes da sua Home. Depois do deploy, não deve mais.
+
 ### 🟠 O que NÃO consertei — e por quê
 
 | O quê | Estado | Leitura |
