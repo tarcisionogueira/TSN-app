@@ -95,10 +95,29 @@ export function extrairMatriculaTexto(texto) {
     }
     return best || null;
   };
+  // NÚMERO + unidade, reusado nos padrões abaixo.
+  const N = '(\\d{1,3}(?:\\.\\d{3})*,\\d{1,4}|\\d{1,7}(?:,\\d{1,4})?)';
+  const UN = '(?:m²|m2|mts?2|metros?\\s+quadrados?)';
+  // Qualificadores que designam a área EDIFICADA/PRIVATIVA — a que baliza o R$/m².
+  // `comum` e `fração ideal` continuam de fora de propósito.
+  const Q = '(?:privativ|[úu]til|constru[íi]d|edificad)';
+  // 15/08: a redação da matrícula varia muito mais do que o padrão único cobria, e o
+  // custo disso não era um número faltando — era o relatório seguir com a área do
+  // ANÚNCIO (que costuma ser a do terreno) achando que não havia nada a ler. Medido no
+  // acervo: 28.355 lotes ativos com matrícula disponível e 5 com a área lida.
+  // Três formas que escapavam, todas comuns em matrícula de casa:
+  //   • "área construída: 236,00 m²"  → o `\s+` era obrigatório ANTES do separador, e
+  //     não há espaço entre a palavra e os dois-pontos;
+  //   • "área EDIFICADA de 236,00 m²" → o qualificador não estava na lista;
+  //   • "casa com 236,00 m² de área construída" → número ANTES do qualificador.
+  // Também entram "área construída TOTAL de …" e "área TOTAL construída de …", que o
+  // padrão antigo perdia porque exigia o número logo depois do qualificador.
+  const privDireto = new RegExp(`[áa]rea\\s+(?:real\\s+)?(?:total\\s+)?${Q}[a-zíúà-ú]*\\s*(?:total\\s*)?(?:de\\s+|com\\s+|:\\s*|=\\s*)?${N}\\s*${UN}`, 'gi');
+  const privInvertido = new RegExp(`${N}\\s*${UN}\\s+(?:de\\s+|em\\s+)?[áa]rea\\s+(?:real\\s+)?(?:total\\s+)?${Q}`, 'gi');
   const out = {
-    areaPrivativaM2: area(/[áa]rea\s+(?:real\s+)?(?:privativ|[úu]til|constru[íi]d)[a-zíú]*\s+(?:de\s+|com\s+|:\s*)?(\d{1,3}(?:\.\d{3})*,\d{1,4}|\d{1,6}(?:,\d{1,4})?)\s*(?:m²|m2|metros?\s+quadrados?)/gi),
-    areaTotalM2: area(/[áa]rea\s+total\s+(?:de\s+|com\s+|:\s*)?(\d{1,3}(?:\.\d{3})*,\d{1,4}|\d{1,6}(?:,\d{1,4})?)\s*(?:m²|m2|metros?\s+quadrados?)/gi),
-    areaTerrenoM2: area(/(?:[áa]rea\s+d[oe]\s+terreno|terreno\s+(?:medindo|com\s+[áa]rea))\s*(?:de\s+|:\s*)?(\d{1,3}(?:\.\d{3})*,\d{1,4}|\d{1,7}(?:,\d{1,4})?)\s*(?:m²|m2|metros?\s+quadrados?)/gi),
+    areaPrivativaM2: area(privDireto) || area(privInvertido),
+    areaTotalM2: area(new RegExp(`[áa]rea\\s+total\\s*(?:de\\s+|com\\s+|:\\s*)?${N}\\s*${UN}`, 'gi')),
+    areaTerrenoM2: area(new RegExp(`(?:[áa]rea\\s+d[oe]\\s+terreno|terreno\\s+(?:medindo|com\\s+[áa]rea))\\s*(?:de\\s+|:\\s*)?${N}\\s*${UN}`, 'gi')),
     numeroMatricula: (t.match(/matr[íi]cula\s*(?:n[ºo°.]?\s*)?[:.]?\s*(\d{1,3}(?:\.\d{3})+|\d{2,7})\b/i)?.[1] || '').replace(/\./g, '') || null,
   };
   return (out.areaPrivativaM2 || out.areaTotalM2 || out.areaTerrenoM2 || out.numeroMatricula) ? out : null;

@@ -11,6 +11,7 @@ import { hostExternoSeguro, fetchExternoSeguro } from './_allowed-hosts.js';
 import { carregarPDFParse } from './_pdf-safe.js';
 import { extrairDatasLeilao } from './enriquecer-lote.js';
 import { cacheLer, cacheGravar, chaveUrl, chaveConteudo, extrairMatriculaTexto, extrairPagamentoTexto, extrairCustosTexto, extrairIdentidadeTexto } from './_doc-extracao.js';
+import { anthropicFetch } from './_claude.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -213,6 +214,84 @@ export async function extratoEdital(imovelId, { deadline } = {}) {
  * área REAL antes do R$/m². Candidatos: anexos tipo matrícula → link_matricula →
  * anexo do acervo (imovel_anexos). Best-effort: null nunca degrada o relatório.
  */
+/**
+ * ÚLTIMO DEGRAU DA CASCATA: metragem da matrícula por VISÃO (15/08).
+ *
+ * POR QUE EXISTE. O regex só enxerga PDF com camada de texto — matrícula escaneada, que é a
+ * maioria, sai vazia e o mercadológico seguia com a área do ANÚNCIO, que costuma ser a do
+ * terreno. Medido no acervo em 15/08: **28.355 lotes ativos com matrícula disponível e 5 com
+ * a área lida**, e ZERO relatório com `metodologia.area.fonte = 'matricula'`. O caminho
+ * "confirmar a metragem antes de pesquisar" existia desde 06/08 e nunca chegou a rodar.
+ *
+ * O caso que trouxe isto à tona (Morada dos Pinheiros): lote de 396 m² anunciado, casa de
+ * 236 m² na matrícula. Sem leitura, o relatório usou 396, viu que os comparáveis não fechavam
+ * e IMPRIMIU "cerca de 129 m² privativos" — que é `avaliação ÷ R$/m²`, uma conta, não uma
+ * medida. Área derivada exibida em m² é lida como leitura de documento: é a forma clássica
+ * deste projeto, resposta calculada entregue como informação.
+ *
+ * CUSTO × BENEFÍCIO. Uma chamada curta (só as três áreas + o número), `max_tokens: 300`, e
+ * o resultado é gravado em `doc_extracoes` chaveado por IMÓVEL — paga-se UMA vez por lote e
+ * o mercadológico, o documental e o laudo herdam. Confiança 85: acima do regex (60), abaixo
+ * da visão completa do documental (90), que lê o conjunto dos documentos e continua mandando.
+ * Só roda quando o grátis falhou E existe documento, respeitando a cascata do arquivo.
+ */
+async function matriculaPorVisao(url, imovelId, fim) {
+  if (!process.env.CLAUDE_API_KEY || !hostExternoSeguro(url)) return null;
+  if (fim - Date.now() < 12000) return null; // sem tempo hábil: não começa o que não termina
+  let base64 = null;
+  try {
+    const r = await fetchExternoSeguro(url, {
+      headers: { 'User-Agent': UA, 'Accept-Language': 'pt-BR,pt;q=0.9' },
+      signal: AbortSignal.timeout(Math.min(15000, fim - Date.now() - 4000)),
+    });
+    if (!r.ok) return null;
+    const buf = Buffer.from(await r.arrayBuffer());
+    // Só PDF de verdade: HTML de bloqueio virando "documento" faria a IA responder sobre nada.
+    if (!buf.length || buf.length > 6_000_000 || buf.slice(0, 5).toString('latin1') !== '%PDF-') return null;
+    base64 = buf.toString('base64');
+  } catch { return null; }
+  try {
+    const resp = await anthropicFetch({
+      method: 'POST',
+      headers: { 'x-api-key': process.env.CLAUDE_API_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6', max_tokens: 300,
+        system: 'Você é um EXTRATOR de metragem de matrícula de imóvel. Leia com máxima atenção, INCLUSIVE páginas escaneadas/em imagem. Retorne SOMENTE JSON.',
+        messages: [{ role: 'user', content: [
+          { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 }, title: 'matricula' },
+          { type: 'text', text: 'Extraia as metragens da DESCRIÇÃO DO IMÓVEL nesta matrícula.\n'
+            + '• "areaPrivativaM2": área PRIVATIVA (apartamento/sala) ou CONSTRUÍDA/EDIFICADA (casa) — a área da EDIFICAÇÃO. NÃO é a do terreno/lote, NÃO é a área comum, NÃO é a fração ideal.\n'
+            + '• "areaTerrenoM2": área do TERRENO/lote.\n'
+            + '• "areaTotalM2": área TOTAL (privativa + comum), só se a matrícula disser "área total".\n'
+            + '• "numeroMatricula": o número da matrícula.\n'
+            + 'Se o imóvel for terreno sem construção, areaPrivativaM2 = 0. Use ponto decimal. NÃO invente: campo que a matrícula não afirma vai 0 (ou "" no número).\n'
+            + 'Retorne SOMENTE: {"areaPrivativaM2":0,"areaTerrenoM2":0,"areaTotalM2":0,"numeroMatricula":""}' },
+        ] }],
+      }),
+    }, { retries: 1, timeoutMs: Math.max(15000, Math.min(60000, fim - Date.now())), noFallback: true });
+    if (!resp.ok) return null; // `.ok` ANTES do corpo: erro da API não pode virar "sem área"
+    const data = await resp.json().catch(() => null);
+    const texto = (data?.content || []).map((b) => b?.text || '').join('').trim();
+    const bruto = texto.match(/\{[\s\S]*\}/);
+    if (!bruto) return null;
+    const j = JSON.parse(bruto[0]);
+    const num = (v) => { const n = Number(v); return Number.isFinite(n) && n >= 5 && n <= 1000000 ? n : null; };
+    const mat = {
+      areaPrivativaM2: num(j.areaPrivativaM2),
+      areaTerrenoM2: num(j.areaTerrenoM2),
+      areaTotalM2: num(j.areaTotalM2),
+      numeroMatricula: String(j.numeroMatricula || '').replace(/\D/g, '').slice(0, 40) || null,
+    };
+    if (!mat.areaPrivativaM2 && !mat.areaTerrenoM2 && !mat.areaTotalM2) return null;
+    const meta = { url, imovelId: String(imovelId), tipoDoc: 'matricula', campos: { matricula: mat }, via: 'visao', confianca: 85 };
+    await cacheGravar(chaveUrl(url), meta);
+    await cacheGravar(`i:${String(imovelId)}`, meta);
+    await publicarDocFatos(imovelId, { matricula: mat, fonteMatricula: url });
+    console.log('[matricula-visao]', JSON.stringify({ imovel: String(imovelId), ...mat }));
+    return { ...mat, fonteUrl: url, deCache: false, via: 'visao' };
+  } catch { return null; }
+}
+
 export async function extratoMatricula(imovelId, { deadline } = {}) {
   if (!SUPABASE_URL || !SERVICE_KEY) return null;
   const fim = Number(deadline) || (Date.now() + 30000);
@@ -238,6 +317,9 @@ export async function extratoMatricula(imovelId, { deadline } = {}) {
     im.link_matricula,
     anexoAcervo?.url,
   ].filter(u => u && /^https?:\/\//i.test(u) && !/matricula\.asp|detalhe-imovel\.asp/i.test(u)))].slice(0, 3);
+  // Guarda o 1º candidato que existe de verdade, para a visão tentar se o regex não resolver,
+  // e o que o regex conseguiu ler sem a privativa (devolvido só se a visão também não vier).
+  let urlParaVisao = null, regexParcial = null;
   for (const url of cands) {
     if (Date.now() > fim) break;
     const hit = await cacheLer(chaveUrl(url));
@@ -246,9 +328,13 @@ export async function extratoMatricula(imovelId, { deadline } = {}) {
       return { ...hit.campos.matricula, fonteUrl: url, deCache: true };
     }
     const txt = await lerTexto(url, fim);
-    if (!txt) continue;
+    if (!txt) { if (!urlParaVisao) urlParaVisao = url; continue; }
     const mat = extrairMatriculaTexto(txt);
-    if (!mat) continue; // PDF escaneado/sem âncora → fica p/ a visão do documental
+    // PDF escaneado ou redação fora das âncoras: o regex não resolve. NÃO é "não há área" —
+    // é "o barato não deu conta", e a diferença é justamente o que fazia o relatório seguir
+    // com a área do anúncio. Guarda para a visão tentar depois de esgotados os candidatos.
+    if (!mat || !mat.areaPrivativaM2) { if (!urlParaVisao) urlParaVisao = url; }
+    if (!mat) continue;
     // A MATRÍCULA descreve o imóvel melhor que o edital (é dela que sai o nome do
     // empreendimento e o logradouro na forma registral) — lê a identidade no mesmo texto.
     const idm = extrairIdentidadeTexto(txt);
@@ -256,7 +342,19 @@ export async function extratoMatricula(imovelId, { deadline } = {}) {
     await cacheGravar(chaveUrl(url), meta);
     await cacheGravar(chaveConteudo(txt), meta);
     await publicarDocFatos(imovelId, { matricula: mat, identidade: idm, fonteMatricula: url });
-    return { ...mat, fonteUrl: url, deCache: false };
+    // Só encerra aqui se o regex entregou o campo que o mercadológico precisa. Ter lido
+    // APENAS o terreno é o pior desfecho possível para retornar satisfeito: é exatamente o
+    // número que o anúncio já trazia, e devolvê-lo faz o relatório seguir com a área do
+    // lote achando que confirmou a do imóvel. Sem a privativa, a visão ainda tenta.
+    if (mat.areaPrivativaM2) return { ...mat, fonteUrl: url, deCache: false };
+    regexParcial = { ...mat, fonteUrl: url, deCache: false };
   }
-  return null;
+  // Esgotados os candidatos sem a área da edificação: último degrau da cascata (pago, uma
+  // vez por lote, cacheado). Ver o cabeçalho de `matriculaPorVisao`.
+  if (urlParaVisao) {
+    const porVisao = await matriculaPorVisao(urlParaVisao, imovelId, fim);
+    if (porVisao?.areaPrivativaM2) return porVisao;
+    if (porVisao && !regexParcial) regexParcial = porVisao;
+  }
+  return regexParcial;
 }

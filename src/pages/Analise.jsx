@@ -1283,7 +1283,9 @@ export default function Analise() {
   const _aPm2 = Number(mercado?.precoMedioM2) || 0;
   const _aAvalM2 = Number(d.valorAvaliacao) > 0 && _aArea > 0 ? Number(d.valorAvaliacao) / _aArea : 0;
   const areaSuspeita = !!areaAlerta || (_aAvalM2 > 0 && _aPm2 > 0 && _aPm2 > 3 * _aAvalM2);
-  const areaPrivativaImplicita = areaAlerta?.areaPrivativaImplicita || (_aPm2 > 0 && Number(d.valorAvaliacao) > 0 ? Math.round(Number(d.valorAvaliacao) / _aPm2) : 0);
+  // A "área privativa implícita" (avaliação ÷ R$/m²) continua no `areaAlerta` do gerador
+  // como sinal de diagnóstico, mas NÃO é mais exibida: número derivado impresso em m² é
+  // lido como metragem do imóvel, e não é medida de lugar nenhum. Ver o aviso abaixo.
 
   return (
     <div style={{ maxWidth: 1280, margin:'0 auto', padding: isMobile ? '12px' : '20px', display:'flex', flexDirection:'column', gap:14 }}>
@@ -2723,6 +2725,8 @@ export default function Analise() {
              praça + venda estimada no mercado. Os 3 números que o leigo compara. ── */}
         {(() => {
           const area = Number(d.areaM2) || Number(d.areaTerrenoM2) || 0;
+          // 'matricula' | 'acervo' | 'informada' | 'cliente' — gravado pelo gerador.
+          const fonteArea = mercado?.metodologia?.area?.fonte || null;
           const pm2 = Number(mercado?.precoMedioM2) || 0;
           const valorMedia = pm2 && area ? Math.round(pm2 * area) : (Number(d.valorMercado) || 0);
           const sugerido = Number(d.valorMercado) || (valorMedia ? Math.round(valorMedia * 0.9) : 0);
@@ -2762,7 +2766,14 @@ export default function Analise() {
               </div>
               {areaSuspeita ? (
                 <div style={{ fontSize:10.5, marginTop:10, lineHeight:1.5, background:'rgba(250,204,21,0.16)', border:'1px solid rgba(250,204,21,0.55)', borderRadius:8, padding:'8px 10px' }}>
-                  ⚠️ A área informada ({fmt(area)} m²) parece ser a área <strong>total/terreno</strong>, não a privativa: os comparáveis (R$ {fmt(pm2)}/m²) indicam cerca de <strong>{fmt(areaPrivativaImplicita)} m²</strong> privativos. Informe a <strong>Área Privativa (m²)</strong> do edital para estimar o mercado por comparáveis. Enquanto isso, a análise usa a <strong>avaliação do leilão</strong> como referência (não multiplicamos o R$/m² pela área total).
+                  {/* 15/08: este aviso IMPRIMIA a área implícita como se fosse a metragem do
+                      imóvel ("indicam cerca de 129 m² privativos"). Ela não é medida de
+                      lugar nenhum — é `avaliação ÷ R$/m² dos comparáveis`, uma conta que só
+                      vale se os dois números estiverem certos. Um lote de 396 m² com
+                      construção de 236 m² pela matrícula aparecia como "129 m²", e o número
+                      derivado foi lido como leitura do documento. Agora o aviso diz o que
+                      sabe (a área do anúncio não se sustenta) sem afirmar o que não sabe. */}
+                  ⚠️ A área informada ({fmt(area)} m²) <strong>não foi confirmada na matrícula</strong> e parece ser a área <strong>total/terreno</strong>, não a construída: os comparáveis da região (R$ {fmt(pm2)}/m²) são incompatíveis com ela. <strong>Não estimamos a metragem real aqui</strong> — para isso é preciso ler a matrícula. Gere o <strong>relatório documental</strong> deste imóvel (a matrícula é lida por lá) ou informe a <strong>Área Construída/Privativa (m²)</strong> do edital. Enquanto isso, a análise usa a <strong>avaliação do leilão</strong> como referência, sem multiplicar o R$/m² pela área total.
                 </div>
               ) : mercado?.fonteEstimativa === 'indice_bidpro' ? (
                 <div style={{ fontSize:10.5, opacity:0.85, marginTop:10, lineHeight:1.5 }}>
@@ -2775,6 +2786,19 @@ export default function Analise() {
               ) : valorMedia>0 && (
                 <div style={{ fontSize:10.5, opacity:0.8, marginTop:10, lineHeight:1.5 }}>
                   Base de mercado: {pm2 && area ? `R$ ${fmt(pm2)}/m² × ${fmt(area)} m² = R$ ${fmt(valorMedia)}` : `R$ ${fmt(valorMedia)}`}{nAmostras > 0 ? ` — média de ${nAmostras} anúncio${nAmostras > 1 ? 's' : ''} comparáve${nAmostras > 1 ? 'is' : 'l'} (mesmo condomínio/endereço + raio de ~1 km)` : ' (média dos anúncios)'}.{descSugerido > 0 ? ` A venda estimada (R$ ${fmt(sugerido)}) fica ${descSugerido}% abaixo dessa média — margem conservadora para revenda em prazo saudável.` : ' A venda estimada aplica margem conservadora para revenda em prazo saudável.'}
+                </div>
+              )}
+              {/* ORIGEM DA METRAGEM — sempre declarada (15/08).
+                  O gerador já gravava `metodologia.area.fonte`, e o comentário dele dizia que
+                  'acervo'/'informada' seria "declarado ao cliente como o que é: a área do
+                  anúncio, a confirmar na matrícula". Só que essa declaração NUNCA chegou à
+                  tela: o campo era gravado e nunca lido aqui. Resultado prático — a metragem
+                  do anúncio aparecia com a mesma cara de um dado conferido, e todo o valor de
+                  mercado pendura nela. O aviso de área suspeita acima só dispara quando os
+                  comparáveis passam de 3x; abaixo disso o erro passava inteiramente calado. */}
+              {!areaSuspeita && area > 0 && fonteArea !== 'matricula' && (
+                <div style={{ fontSize:10.5, opacity:0.75, marginTop:6, lineHeight:1.5 }}>
+                  Metragem de {fmt(area)} m² {fonteArea === 'cliente' ? 'informada por você' : 'conforme o anúncio do leiloeiro'} — <strong>não confirmada na matrícula</strong>. O valor de mercado é calculado sobre ela; o relatório documental lê a matrícula e confirma a área real.
                 </div>
               )}
             </div>
