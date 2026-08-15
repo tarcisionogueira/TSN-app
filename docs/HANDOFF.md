@@ -28,6 +28,43 @@
 > Checagem rápida a qualquer momento: `select public.auditoria_seguranca();` → `0 crítico / 0 atenção` = íntegro.
 > **Auditorias ofensivas completas: 15/07/2026 (×2).** Total de correções: 15 (1ª rodada) + escalonamento por convite (CRÍTICO) + IDOR do MP (ALTO) + escala. Refazer a ofensiva quando entrarem rotas/pagamento/RLS novos (a Rotina mensal já faz isso sozinha).
 
+## 🚀 15/08 — TUDO DO DIA ESTÁ EM PRODUÇÃO (`main` em `ea5b874`)
+
+Deploy `dpl_2usPX1LTe7vTPoDGCEPKoW1TMurv` **READY**, com `www.bidprobrasil.com.br` apontando
+para ele. Zero erro de runtime e zero `erros_cliente` nos 30 min seguintes.
+
+> ⚠️ **ARMADILHA DO REPOSITÓRIO LOCAL, para a próxima sessão não cair nela.** O branch `main`
+> **local** deste ambiente estava numa **história não relacionada**, parada em 10/08
+> (`8a3547d`, "Fechamento de 09/08"): `git checkout main && git merge` respondeu
+> **"refusing to merge unrelated histories"** e trocou o working tree por arquivos de 6 dias
+> atrás. Nada se perdeu — o trabalho estava commitado e empurrado —, mas um merge feito às
+> pressas ali teria criado uma bagunça de verdade.
+> **O `main` de verdade é o `origin/main`.** Conferido antes de subir: o `main` local não tinha
+> **nenhum** commit posterior a 10/08, então era linha órfã (resquício de reescrita de
+> história), e o `origin/main` (`b7bf990`) era ancestral direto da branch do dia.
+> **O que funcionou, e é o caminho a repetir:**
+> ```bash
+> git push origin <branch-do-dia>:main   # fast-forward b7bf990..ea5b874
+> git branch -f main origin/main         # realinha o local e desarma a armadilha
+> ```
+> O `main` local **já foi realinhado** nesta sessão, então a pegadinha não deve reaparecer.
+
+**Validação rodada antes de subir** (o checklist do CLAUDE.md, mais o que dava para medir):
+| | |
+|---|---|
+| `npm run build` limpo (com `verificar:padroes` + `verificar:sintaxe`) | ✅ |
+| `verificar:responsivo` — 7 rotas × 6 larguras, app **hidratado** | ✅ zero achados |
+| `/leiloes` em 6 larguras + menu aberto em 320px | ✅ zero achados |
+| Deriva código × banco — 87 tabelas e ~290 colunas contra o schema real | ✅ zero |
+| `auditoria_seguranca()` · `auditoria_regras_negocio()` | ✅ 0/0 · 0 crítico |
+
+> O `verificar:schema` não roda neste ambiente (não há `SUPABASE_SERVICE_KEY` aqui). A
+> verificação equivalente foi feita **pelo MCP**, extraindo as referências com
+> `verificar-schema-codigo.mjs --listar` e conferindo tabela a tabela contra
+> `information_schema`. O CI continua sendo quem roda a trava de verdade.
+
+---
+
 ## 🩺 ABERTURA DE 15/08 — o backup off-region não copiava NADA do cliente há 4 dias
 
 > Ritual rodado às 10h30 UTC. Heartbeat carimbado. **Segurança 0/0 · regras de negócio 0 crítico
