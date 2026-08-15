@@ -129,6 +129,20 @@ curto (5–8 linhas) antes de seguir:
    > `falhas: 0` é exatamente isso — nada falhou, só não coube. Foi o estado encontrado em
    > 14/08 (3 dias seguidos no teto), e o backup off-region é a única defesa contra perda
    > definitiva de arquivo de cliente.
+   >
+   > **(d) O PROCESSO ESTÁ ÁGIL? — `select * from public.tempo_processo();`** (pedido do dono,
+   > 15/08). Custo zero. Separa **dois relógios que aqui são opostos**: o da MÁQUINA (geração
+   > de relatório: mediana 0,3 h) e o HUMANO (é onde tudo para). Somar os dois produz a média
+   > que não descreve ninguém.
+   >
+   > ⚠️ **A armadilha que essa função existe para evitar, e que quase virou relatório:** medir
+   > "primeira resposta em chamado" como *qualquer mensagem que não seja do cliente* deu
+   > **0,0 h de mediana, 22 de 22 respondidos** — agilidade excelente e falsa. Das 34 mensagens
+   > de chamado no sistema, **33 são `autor_tipo='ia'`** (saudação proativa, disparada no mesmo
+   > segundo) e 1 é do cliente: **nunca houve uma resposta humana**. E `status='finalizado'`
+   > **não pode filtrar** a conta — o único chamado em que um cliente escreveu foi encerrado 9
+   > dias depois sem ninguém responder; filtrar por status apaga justamente o caso pior.
+   > **Fechar não é responder, e bot não é SLA.**
 2. **Captura — bug bounty dos leiloeiros (AUTO-APRENDIDO)**: o monitor APRENDE o "normal" de
    cada leiloeiro do próprio histórico (`fonte_baseline_aprendida()` = mín. dos runs saudáveis
    × 0,65) e alerta quando o último scrape cai abaixo — **auto-calibra os ATUAIS e ONBOARDA os

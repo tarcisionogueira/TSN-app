@@ -4,7 +4,44 @@
 > variável de ambiente). Cada um traz o **porquê**, o **passo a passo** e **o que o Claude
 > faz depois** que você concluir. Quando estiver no computador, é só ir por aqui.
 >
-> _Última atualização: 03/08/2026 (tarde — sessão ao vivo com o dono nos painéis)._
+> _Última atualização: 15/08/2026._
+
+---
+
+## 🔴 NOVO EM 15/08 — os dois que travam o atendimento
+
+Vieram da investigação das reuniões paradas. O código já foi corrigido e está em produção
+(sem analista, reunião e chamado caem para você); estes dois **só você pode fazer**.
+
+### A. 📧 Definir `ADMIN_EMAIL` na Vercel — ~2 min, grátis
+
+- **Por quê:** todo chamado agora dispara um aviso por e-mail para a equipe — e o aviso é
+  desenhado para o contato acontecer em **um clique** (responder o e-mail já fala com a
+  pessoa; o corpo traz o link direto do WhatsApp quando há telefone). **Sem essa variável o
+  aviso simplesmente não sai.** O chamado continua sendo registrado normalmente, e o log diz,
+  com essas palavras, `[duvida] chamado SEM aviso: ADMIN_EMAIL não definido` — a falha declara
+  que falhou, mas ninguém é avisado.
+- **Passos:** Vercel → projeto `tsn-app` → **Settings → Environment Variables → Add New** →
+  nome `ADMIN_EMAIL`, valor o seu e-mail → marcar **Production + Preview + Development** →
+  Save. **Depois, um redeploy** (variável nova só vale no build seguinte — armadilha já
+  conhecida, item do bloco de 03/08).
+- **O que eu faço depois:** confirmo no log da primeira dúvida que entrar que o aviso saiu.
+
+### B. 👤 Nomear um analista — decisão sua, não tem passo técnico
+
+- **Por quê:** **não existe nenhum perfil com `role='analista'` ativo.** O único papel de
+  equipe cadastrado é o admin. Há **42 horários livres** na agenda e ninguém para ocupá-los;
+  três clientes pediram reunião em 1 e 5 de julho e seguem esperando há **45 dias**.
+- O trigger que subiu hoje faz o pedido **cair para você** em vez de ficar órfão — isso dá
+  dono à fila, **não substitui a pessoa**. Enquanto não houver analista, o atendimento é seu.
+- **Passos:** Admin → Equipe → promover um perfil existente a `analista` (ou me pedir para
+  criar, se preferir que eu faça pelo banco).
+- **O que eu faço depois:** o trigger para de atribuir a você automaticamente e a fila volta
+  a ser da equipe — sem nenhuma mudança de código.
+
+> 📊 **Para acompanhar se o processo está ágil:** `select * from public.tempo_processo();`
+> Separa o relógio da **máquina** (geração de relatório — mediana de 0,3 h) do relógio
+> **humano** (é onde tudo para). Custo zero, roda a qualquer momento.
 
 ---
 
