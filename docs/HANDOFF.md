@@ -28,6 +28,72 @@
 > Checagem rápida a qualquer momento: `select public.auditoria_seguranca();` → `0 crítico / 0 atenção` = íntegro.
 > **Auditorias ofensivas completas: 15/07/2026 (×2).** Total de correções: 15 (1ª rodada) + escalonamento por convite (CRÍTICO) + IDOR do MP (ALTO) + escala. Refazer a ofensiva quando entrarem rotas/pagamento/RLS novos (a Rotina mensal já faz isso sozinha).
 
+## ⚖️ 15/08 — TEMPO ENTRE DESPACHOS: o processo judicial está andando?
+
+Pedido do dono, e **eu tinha entendido errado antes**: "tempo de evolução do processo" é o
+**processo JUDICIAL** — o intervalo entre despachos do juiz num feito ligado ao leilão — não o
+funil interno do cliente. As duas medidas existem agora e não se confundem:
+`tempo_processo()` é o nosso; **`processo_cadencia()` é o do juiz**.
+
+### O que já existia, e por que mesmo assim o número era impossível
+
+A integração com o **DataJud do CNJ** está pronta e é madura (`_cnj.js`, 248 linhas: consulta
+por número ou parte, mapa de 25 riscos, classificação de fase e desfecho). Ainda assim a
+pergunta não tinha resposta, por **três lacunas em série** — todas medidas antes de escrever
+qualquer linha:
+
+| Lacuna | Estado em 15/08 |
+|---|---|
+| **1. A chave** | **1.782 lotes judiciais ativos, 3 com `numero_processo`** (0,17%) |
+| **2. A série** | o cron gravava só `total_mov` e `ultima_data` — **intervalo incalculável por construção** |
+| **3. A conta** | não existia |
+| *(consequência)* | `processos_monitorados` **vazia**, com o cron rodando todo dia sem ter o que checar |
+
+> A lacuna 1 é o padrão da casa outra vez: **o número não faltava na fonte**. Todo edital
+> judicial o traz. Ele só era lido pela **IA do relatório documental**, que roda quando um
+> cliente paga — e foram **17 documentais na história do sistema**. Daí 3 números.
+
+### O que foi feito
+
+**`extrairNumeroProcessoTexto()`** (`_doc-extracao.js`) — regex + **dígito verificador do CNJ**
+(MOD 97-10, Res. 65/2008). O DV não é enfeite: sem ele qualquer sequência de 20 dígitos do
+edital (protocolo, CNPJ concatenado, conta) viraria "processo" e o monitor sairia consultando
+lixo — errando em silêncio. Validado antes de plugar: **8/8 processos reais do acervo
+aprovados, 0/4 lixos aceitos**, e extração correta de texto com CNPJ e protocolo por perto.
+Plugado no `extratoEdital`, que já baixa o edital: **custo zero, sem IA**. Só grava quando o
+edital **pertence ao lote** e **não sobrescreve** número de procedência melhor.
+
+**`processo_movimentos`** — a série, com índice único `(numero, data, codigo, descricao)`. Sem
+essa unicidade o cron duplicaria os mesmos movimentos a cada rodada e **a mediana de intervalo
+tenderia a zero: um "processo muito ágil" fabricado pelo próprio coletor**.
+
+**`processo_cadencia(numero)`** — mediana e média de dias entre despachos, dias desde o último,
+maior intervalo, e um `veredito` de régua **auto-aprendida do próprio processo** (mesma ideia
+de `fonte_baseline_aprendida()`): não existe "rápido" universal — execução fiscal e inventário
+não são comparáveis. O que se pode afirmar é que o processo está mais devagar **do que ele
+vinha**. `andando` · `lento` (>1,5× a própria mediana) · `parado` (>3×) · `sem base` (<3
+intervalos — dizer "ágil" com 2 pontos seria inventar). Matemática validada com série
+sintética nos três vereditos antes de subir.
+
+**Monitor semeado: 0 → 114 processos** (dos editais capturados pelos scrapers + lotes com a
+chave).
+
+### ⏳ O que ainda não dá para responder, e quando dará
+
+**Nenhum movimento foi coletado ainda.** O CNJ está **bloqueado pela política de rede deste
+ambiente** (403 no CONNECT do proxy) — em produção a chamada funciona, daqui não. O
+`cnj-monitor-cron` roda **1×/dia às 10h UTC, 40 processos por rodada**: os 114 levam **~3 dias**
+para o primeiro ciclo completo. Antes disso `processo_cadencia()` devolve vazio, que é o
+correto — e não deve ser lido como "os processos estão parados".
+
+⚠️ **Ressalva que precisa viajar junto com o número:** o DataJud **não é tempo real** e o
+`formatarProcesso` traz os **20 movimentos mais recentes**. A mediana daqui é a cadência
+**recente**, não a história inteira — que é justamente o que "está rápido AGORA?" pergunta. Um
+feito de 1998 não terá seus 400 movimentos aqui; `movimentos_conhecidos` diz quantos entraram
+na conta para ninguém confundir os dois.
+
+---
+
 ## 📑 15/08 — EDITAL ATRÁS DA PÁGINA DO LOTE, e a investigação das reuniões
 
 ### ⚠️ Antes: uma correção do MEU diagnóstico

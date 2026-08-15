@@ -21,6 +21,36 @@ function sb(path, { method = 'GET', body, prefer } = {}) {
 }
 const ultimaData = p => (p?.movimentos || []).map(m => m.data).filter(Boolean).sort().slice(-1)[0] || p?.ultima_atualizacao || '';
 
+/**
+ * PERSISTE A SÉRIE DE MOVIMENTOS (15/08, pedido do dono: "o tempo entre despachos, para saber
+ * se o processo está rápido").
+ *
+ * O snapshot guardava só `total_mov` e `ultima_data` — dava para saber que o processo mexeu,
+ * NUNCA em que ritmo. Intervalo entre despachos é impossível de calcular a partir do último
+ * despacho sozinho; a informação vinha do CNJ a cada rodada e era jogada fora aqui.
+ *
+ * O upsert é `ignore-duplicates` contra o índice único (numero, data, codigo, descricao): o
+ * cron reconsulta todo dia e reencontra os mesmos movimentos. Sem isso a série duplicaria a
+ * cada rodada e a mediana de intervalo tenderia a zero — um "processo muito ágil" fabricado
+ * pelo próprio coletor, que é a família de erro que este projeto persegue.
+ */
+async function gravarMovimentos(numero, movimentos) {
+  const linhas = (movimentos || [])
+    .filter(m => m?.data)
+    .map(m => ({ numero_processo: numero, data: m.data, codigo: m.codigo ?? null,
+                 descricao: String(m.descricao || '').slice(0, 300), risco: m.risco || null }));
+  if (!linhas.length) return 0;
+  const r = await sb('processo_movimentos?on_conflict=numero_processo,data,codigo,descricao', {
+    method: 'POST', prefer: 'resolution=ignore-duplicates,return=minimal', body: linhas });
+  if (!r.ok) {
+    // Falha aqui NÃO pode derrubar o monitoramento (o alerta de risco é o que urge), mas
+    // também não pode sumir: sem série gravada a cadência fica muda e ninguém saberia por quê.
+    console.error('[cnj-monitor] série NÃO gravada', numero, r.status, (await r.text().catch(() => '')).slice(0, 200));
+    return 0;
+  }
+  return linhas.length;
+}
+
 async function avisarCaso(mon, texto) {
   if (!mon.caso_id) return;
   let [ch] = await (await sb(`chamados?caso_id=eq.${encodeURIComponent(mon.caso_id)}&segmento=eq.interno&select=id&limit=1`)).json();
@@ -36,7 +66,7 @@ export default async function handler(req) {
   if (!isCronAuthorized(req)) return new Response('Unauthorized', { status: 401 });
 
   const monitores = await (await sb(`processos_monitorados?ativo=eq.true&select=*&order=ultima_checagem.asc.nullsfirst&limit=40`)).json();
-  let checados = 0, alertas = 0;
+  let checados = 0, alertas = 0, movimentosGravados = 0;
 
   for (const mon of (monitores || [])) {
     try {
@@ -48,6 +78,7 @@ export default async function handler(req) {
         continue;
       }
       const dataMov = ultimaData(proc);
+      movimentosGravados += await gravarMovimentos(proc.numero || mon.numero_processo, proc.movimentos);
       const temSusp = !!proc.tem_suspensiva || !!proc.tem_bloqueante;
       const ant = mon.snapshot || {};
       const mudou = dataMov && dataMov !== mon.ultima_data_mov;
@@ -82,5 +113,5 @@ export default async function handler(req) {
     }
   }
 
-  return new Response(JSON.stringify({ ok: true, checados, alertas }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  return new Response(JSON.stringify({ ok: true, checados, alertas, movimentosGravados }), { status: 200, headers: { 'Content-Type': 'application/json' } });
 }

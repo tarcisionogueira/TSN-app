@@ -10,7 +10,7 @@
 import { hostExternoSeguro, fetchExternoSeguro } from './_allowed-hosts.js';
 import { carregarPDFParse } from './_pdf-safe.js';
 import { extrairDatasLeilao } from './enriquecer-lote.js';
-import { cacheLer, cacheGravar, chaveUrl, chaveConteudo, extrairMatriculaTexto, extrairPagamentoTexto, extrairCustosTexto, extrairIdentidadeTexto } from './_doc-extracao.js';
+import { cacheLer, cacheGravar, chaveUrl, chaveConteudo, extrairMatriculaTexto, extrairPagamentoTexto, extrairCustosTexto, extrairIdentidadeTexto, extrairNumeroProcessoTexto } from './_doc-extracao.js';
 import { anthropicFetch } from './_claude.js';
 import { classificarDocumento, blocoParaIA, temTextoUtil } from './_doc-leitura.js';
 
@@ -180,6 +180,46 @@ async function pdfsNaPagina(url, fim) {
  * (ex.: `vegas_7588`) mas cujo edital publica. Enquanto ninguém pede relatório, ficamos de
  * acordo com o leiloeiro (sem data); ao gerar o relatório, o edital preenche a lacuna.
  */
+/**
+ * Grava o nº do processo no lote e o inscreve no monitor do CNJ — best-effort, custo zero.
+ *
+ * NÃO SOBRESCREVE o que já existe: o número vindo do scraper ou lido pela IA do documental
+ * tem procedência melhor que um regex sobre o PDF inteiro. Aqui a regra é preencher buraco.
+ *
+ * O `on_conflict` no monitor é o que permite chamar isto a cada leitura de edital sem
+ * duplicar inscrição — e sem ele o mesmo processo entraria uma vez por lote do mesmo leilão.
+ */
+async function gravarProcessoDoLote(imovelId, numero) {
+  try {
+    const sel = await fetch(
+      `${SUPABASE_URL}/rest/v1/imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=numero_processo,estado,modalidade&limit=1`,
+      { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` } });
+    if (!sel.ok) return;                                    // `.ok` ANTES do corpo
+    const [im] = await sel.json();
+    if (!im || String(im.numero_processo || '').trim()) return;
+    const up = await fetch(`${SUPABASE_URL}/rest/v1/imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}`, {
+      method: 'PATCH',
+      headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=representation' },
+      body: JSON.stringify({ numero_processo: numero }),
+    });
+    // `return=representation` de propósito: um PATCH que a RLS filtra devolve 200 com lista
+    // VAZIA e nenhum erro. Sem olhar o que voltou, "gravei" seria uma suposição.
+    const linhas = up.ok ? await up.json().catch(() => []) : [];
+    if (!Array.isArray(linhas) || !linhas.length) {
+      console.error('[edital-processo] NÃO gravado', JSON.stringify({ imovel: String(imovelId), http: up.status }));
+      return;
+    }
+    await fetch(`${SUPABASE_URL}/rest/v1/processos_monitorados?on_conflict=numero_processo`, {
+      method: 'POST',
+      headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json', Prefer: 'resolution=ignore-duplicates,return=minimal' },
+      body: JSON.stringify({ numero_processo: numero, uf: im.estado || null, imovel_id: String(imovelId), rotulo: `Lote ${imovelId}`, ativo: true }),
+    });
+    console.log('[edital-processo]', JSON.stringify({ imovel: String(imovelId), processo: numero, monitorado: true }));
+  } catch (e) {
+    console.error('[edital-processo] exceção', String(e?.message || e).slice(0, 120));
+  }
+}
+
 export async function extratoEdital(imovelId, { deadline } = {}) {
   if (!SUPABASE_URL || !SERVICE_KEY) return null;
   const fim = Number(deadline) || (Date.now() + 45000);
@@ -226,12 +266,13 @@ export async function extratoEdital(imovelId, { deadline } = {}) {
     // — ou a regeneração deste — já leu este edital → pula download+parse inteiros.
     // Só os FATOS do documento vêm do cache; `pertenceAoLote` é POR LOTE (o mesmo
     // edital cobre vários) e é sempre recalculado abaixo contra os valores DESTE lote.
-    let cond = null, datas = null, pagamento = null, custos = null, identidade = null, deCache = false;
+    let cond = null, datas = null, pagamento = null, custos = null, identidade = null, processo = null, deCache = false;
     const hit = await cacheLer(chaveUrl(url));
     if (hit?.campos?.condicoes) {
       cond = hit.campos.condicoes; datas = hit.campos.datas || null;
       pagamento = hit.campos.pagamento || null; deCache = true;
       custos = hit.campos.custos || null; identidade = hit.campos.identidade || null;
+      processo = hit.campos.processo || null;
     } else {
       const txt = await lerTexto(url, fim);
       if (!txt) continue;
@@ -249,8 +290,12 @@ export async function extratoEdital(imovelId, { deadline } = {}) {
       // PROJEÇÃO; a identidade ancora a BUSCA e a classificação de tipo/padrão.
       custos = extrairCustosTexto(txt);
       identidade = extrairIdentidadeTexto(txt);
+      // NÚMERO DO PROCESSO (CNJ) — grátis, no texto que já está em mãos. É a chave que abre a
+      // consulta de movimentação e responde "este processo anda rápido?". Até 15/08 só a IA do
+      // relatório documental o lia, e por isso 1.782 lotes judiciais tinham 3 números.
+      processo = extrairNumeroProcessoTexto(txt);
       const mat = extrairMatriculaTexto(txt);
-      const campos = { condicoes: cond, datas, pagamento, custos, identidade, ...(mat ? { matricula: mat } : {}) };
+      const campos = { condicoes: cond, datas, pagamento, custos, identidade, ...(processo ? { processo } : {}), ...(mat ? { matricula: mat } : {}) };
       const meta = { url, imovelId, tipoDoc: 'edital', campos, via: 'regex', confianca: 60 };
       await cacheGravar(chaveUrl(url), meta);
       await cacheGravar(chaveConteudo(txt), meta);
@@ -271,8 +316,12 @@ export async function extratoEdital(imovelId, { deadline } = {}) {
     // engano vira anomalia no chamador e não pode virar "informação confirmada" na tela).
     if (pertence) {
       await publicarDocFatos(imovelId, { identidade, custos, pagamento, fonteEdital: url });
+      // Só grava o processo do edital que PERTENCE a este lote. Edital de outro lote anexado
+      // por engano gravaria o processo errado — e processo errado no monitor não erra alto:
+      // devolve a movimentação de um feito alheio com toda a cara de certa.
+      if (processo?.numeroProcesso) await gravarProcessoDoLote(imovelId, processo.numeroProcesso);
     }
-    return { ...cond, pagamento, custos, identidade, datas, fonteUrl: url, pertenceAoLote: pertence, deCache };
+    return { ...cond, pagamento, custos, identidade, datas, processo, fonteUrl: url, pertenceAoLote: pertence, deCache };
   }
   return null;
 }

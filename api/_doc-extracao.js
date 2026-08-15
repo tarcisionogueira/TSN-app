@@ -240,6 +240,58 @@ export function extrairCustosTexto(texto) {
 }
 
 /**
+ * NÚMERO DO PROCESSO (padrão CNJ) NO TEXTO — custo zero, sem IA.
+ *
+ * POR QUE EXISTE (15/08). Todo edital de leilão JUDICIAL traz o número do processo; é ele que
+ * abre a consulta de movimentação no DataJud do CNJ e responde "este processo anda rápido?".
+ * Medido no acervo: **1.782 lotes judiciais ativos e apenas 3 com `numero_processo`** — 0,17%.
+ * O número não estava faltando na fonte: estava sendo lido só pela IA, dentro do relatório
+ * DOCUMENTAL, que só roda quando um cliente paga por ele. Como foram gerados 17 documentais
+ * na história do sistema, o acervo inteiro ficou sem a chave. É o padrão da casa outra vez —
+ * a informação já estava publicada, faltava lê-la.
+ *
+ * O DÍGITO VERIFICADOR NÃO É ENFEITE. Sem conferi-lo, qualquer sequência de 20 dígitos no
+ * edital (e editais são cheios de números longos: CNPJ concatenado, protocolo, conta) viraria
+ * "processo", e o monitor sairia consultando o CNJ com lixo — errando em silêncio, que é
+ * exatamente o que não se quer aqui. A conferência é o MOD 97-10 da norma CNJ 65/2008:
+ * remove-se o DV, concatena-se o resto na ordem NNNNNNN+AAAA+J+TR+OOOO, acrescenta-se '00',
+ * e o DV correto é 98 menos o resto da divisão por 97.
+ */
+const mod97 = (digitos) => {
+  let r = 0;
+  for (const c of digitos) r = (r * 10 + (c.charCodeAt(0) - 48)) % 97;
+  return r;
+};
+export function numeroProcessoValido(numero) {
+  const d = String(numero || '').replace(/\D/g, '');
+  if (d.length !== 20) return false;
+  const dv = Number(d.slice(7, 9));
+  const base = d.slice(0, 7) + d.slice(9) + '00';
+  return 98 - mod97(base) === dv;
+}
+export function extrairNumeroProcessoTexto(texto) {
+  const t = String(texto || '');
+  if (t.length < 40) return null;
+  const achados = new Map();
+  // Formatado (NNNNNNN-DD.AAAA.J.TR.OOOO) e cru (20 dígitos seguidos). O cru só entra se
+  // passar no DV — é ele que separa processo de protocolo.
+  for (const re of [/\b(\d{7})-?(\d{2})\.?(\d{4})\.?(\d)\.?(\d{2})\.?(\d{4})\b/g, /\b(\d{20})\b/g]) {
+    for (const m of t.matchAll(re)) {
+      const cru = m.slice(1).join('').replace(/\D/g, '');
+      if (cru.length !== 20 || !numeroProcessoValido(cru)) continue;
+      const fmt = `${cru.slice(0, 7)}-${cru.slice(7, 9)}.${cru.slice(9, 13)}.${cru.slice(13, 14)}.${cru.slice(14, 16)}.${cru.slice(16)}`;
+      // Peso pelo CONTEXTO: "processo nº X" vale mais que um número solto no rodapé.
+      const ctx = t.slice(Math.max(0, m.index - 60), m.index).toLowerCase();
+      const peso = /(processo|autos|execu[çc][ãa]o|a[çc][ãa]o)\D{0,20}$/.test(ctx) ? 2 : 1;
+      achados.set(fmt, (achados.get(fmt) || 0) + peso);
+    }
+  }
+  if (!achados.size) return null;
+  const [numero] = [...achados.entries()].sort((a, b) => b[1] - a[1])[0];
+  return { numeroProcesso: numero, candidatos: achados.size };
+}
+
+/**
  * IDENTIDADE DO IMÓVEL NO DOCUMENTO (custo zero): nome do CONDOMÍNIO/empreendimento,
  * logradouro e bairro. Serve à BUSCA (âncora Nível 1: comparáveis do MESMO
  * condomínio/rua valem mais que qualquer média de bairro) e à CLASSIFICAÇÃO de tipo e
