@@ -28,6 +28,65 @@
 > Checagem rápida a qualquer momento: `select public.auditoria_seguranca();` → `0 crítico / 0 atenção` = íntegro.
 > **Auditorias ofensivas completas: 15/07/2026 (×2).** Total de correções: 15 (1ª rodada) + escalonamento por convite (CRÍTICO) + IDOR do MP (ALTO) + escala. Refazer a ofensiva quando entrarem rotas/pagamento/RLS novos (a Rotina mensal já faz isso sozinha).
 
+## 📑 15/08 — EDITAL ATRÁS DA PÁGINA DO LOTE, e a investigação das reuniões
+
+### ⚠️ Antes: uma correção do MEU diagnóstico
+
+Reportei *"13.060 de 14.105 (93%) com edital em HTML"*. **Estava errado.** O regex da minha
+query era **case-sensitive**, e a Caixa publica `.PDF` em **maiúsculo**.
+
+| | |
+|---|---|
+| Com `link_edital` | 14.105 |
+| **PDF de verdade** (case-insensitive) | **8.504** |
+| **HTML de verdade** | **5.601 (40%)** |
+
+Os 8.504 sempre foram PDF, e o código — que usa `/\.pdf/i` — sempre os leu. **Meu
+diagnóstico inflou o problema em mais do dobro; o código estava certo.**
+
+### O problema real, que existe: 5.601 lotes
+
+| Fonte | Lotes com edital em página |
+|---|---|
+| SUPERBID | 1.514 |
+| PESTANA | 1.029 |
+| MEGA | 659 |
+| ZUK | 510 |
+| GRUPOLANCE | 478 |
+| BIASI | 458 |
+
+Essas páginas eram **excluídas dos candidatos de propósito** (*"o valor não está no HTML
+cru"*) — verdade para o VALOR, mas jogava fora o resto: **o edital em PDF quase sempre está
+linkado ali dentro**. Foi por esse caminho que a condição de pagamento do lote de Morada dos
+Pinheiros se perdeu.
+
+**`pdfsNaPagina`** baixa a página, colhe os `href` `.pdf` (resolvendo relativo contra a base) e
+ordena por probabilidade de ser o edital: *"edital"* no href/texto vale **+10**,
+*"regras/condições"* **+5**, e **matrícula/certidão/laudo/foto entram NEGATIVO** (−8) — são
+documentos úteis, mas quem os procura é o `extratoMatricula`; aqui só tomariam a vaga.
+**Genérico: nenhuma regra por leiloeiro.** Só roda quando não há PDF direto.
+
+### 📅 Investigação das reuniões: 3 solicitações, 0 agendadas
+
+| | |
+|---|---|
+| Solicitações | 3, todas em `status='solicitado'` |
+| Desde | **1 e 5 de julho** (41 a 45 dias) |
+| `analista_id` / `reuniao_em` | nulos nas três |
+| Slots futuros disponíveis | **42** |
+| **Perfis com `role='analista'` ativos** | **0** |
+
+> 🔴 **A causa não é de código: não existe nenhum analista cadastrado.** O único papel de equipe
+> no sistema é o admin. Há 42 horários livres e ninguém para ocupá-los. **É decisão do dono
+> nomear alguém.**
+>
+> **O agravante é o de sempre:** ninguém foi avisado. Um cliente pediu para falar com um
+> analista e ficou **45 dias no silêncio** — do lado dele, o pedido simplesmente não existiu.
+> Nenhuma exceção, nenhum erro, nenhum alarme; só um pedido parado. Invariante
+> **`reuniao_solicitada_parada`** passa a vigiar (acusa **3** hoje, limite 0).
+
+---
+
 ## 🔁 15/08 — REVISÃO DE TODOS OS RELATÓRIOS: forma de pagamento + proximidade das amostras
 
 ### A. Forma de pagamento — a revisão dos 52 imóveis com relatório
