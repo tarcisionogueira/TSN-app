@@ -120,6 +120,56 @@ export async function lerTexto(url, deadline) {
 }
 
 /**
+ * PDFs LINKADOS DENTRO DA PÁGINA DO LOTE (15/08, pedido do dono: "resolva o edital em HTML").
+ *
+ * O `link_edital` de 5.601 lotes ativos aponta para a PÁGINA do lote, não para o PDF —
+ * SUPERBID (1.514), PESTANA (1.029), MEGA (659), ZUK (510), GRUPOLANCE (478), BIASI (458)
+ * e mais. Essas páginas eram excluídas dos candidatos de propósito ("o valor não está no
+ * HTML cru"), o que é verdade para o VALOR mas jogou fora o resto: o edital em PDF quase
+ * sempre está LINKADO ali dentro. Foi por esse caminho que a condição de pagamento do lote
+ * de Morada dos Pinheiros se perdeu — `condicoesEdital: null` num lote cujo edital existe.
+ *
+ * Genérico de propósito: nada de regra por leiloeiro. Baixa a página, colhe os `href` que
+ * terminam em .pdf (resolvendo relativo contra a base) e ORDENA por quão provável é ser o
+ * edital — href/texto com "edital" primeiro, depois "regras/condições", depois o resto.
+ * Devolve no máximo 3, porque o chamador tem orçamento de tempo.
+ */
+async function pdfsNaPagina(url, fim) {
+  if (!hostExternoSeguro(url) || fim - Date.now() < 4000) return [];
+  let html = '';
+  try {
+    const r = await fetchExternoSeguro(url, {
+      headers: { 'User-Agent': UA, 'Accept-Language': 'pt-BR,pt;q=0.9' },
+      signal: AbortSignal.timeout(Math.min(12000, fim - Date.now() - 1500)),
+    });
+    if (!r.ok) return [];
+    const buf = Buffer.from(await r.arrayBuffer());
+    if (!buf.length || buf.length > 8_000_000) return [];
+    // Se a própria URL já devolveu um PDF (servidor sem extensão no caminho), não há
+    // página para varrer — quem trata isso é o `lerTexto`, que classifica por conteúdo.
+    if (buf.slice(0, 5).toString('latin1') === '%PDF-') return [];
+    html = buf.toString('utf8');
+  } catch { return []; }
+  const achados = new Map(); // url → pontuação
+  const re = /<a\b[^>]*href\s*=\s*["']([^"']+\.pdf(?:\?[^"']*)?)["'][^>]*>([\s\S]{0,200}?)<\/a>/gi;
+  let m;
+  while ((m = re.exec(html)) && achados.size < 24) {
+    let href = m[1];
+    try { href = new URL(href, url).href; } catch { continue; }
+    if (!/^https?:\/\//i.test(href) || !hostExternoSeguro(href)) continue;
+    const contexto = `${href} ${String(m[2] || '').replace(/<[^>]+>/g, ' ')}`.toLowerCase();
+    // Peso pelo que o link diz ser. `matricula` entra NEGATIVO: é documento útil, mas
+    // quem o procura é o `extratoMatricula` — aqui ele só tomaria a vaga do edital.
+    let peso = 0;
+    if (/edital/.test(contexto)) peso += 10;
+    if (/regras|condi[çc]|venda\s*online|leil[ãa]o/.test(contexto)) peso += 5;
+    if (/matr[íi]cula|certid|laudo|foto/.test(contexto)) peso -= 8;
+    achados.set(href, Math.max(achados.get(href) ?? -99, peso));
+  }
+  return [...achados.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([u]) => u);
+}
+
+/**
  * Lê o edital/regras do lote e devolve { pracas, formaPagamento, avaliacao, pagamento, custos,
  * identidade, datas, fonteUrl, pertenceAoLote } ou null. `pertenceAoLote:false` = o documento lido NÃO bate com os
  * valores do lote (edital de outro lote anexado por engano) — o chamador descarta e
@@ -153,6 +203,23 @@ export async function extratoEdital(imovelId, { deadline } = {}) {
     ...anexos.filter(a => a?.tipo === 'regras' && ehPdfUrl(a.url)).map(a => a.url),
     ...anexos.filter(a => a?.tipo === 'edital' && !ehPdfUrl(a.url)).map(a => a.url),
   ].filter(u => u && /^https?:\/\//i.test(u)))].slice(0, 3);
+  // EDITAL ATRÁS DA PÁGINA DO LOTE (15/08). Quando nenhum candidato é PDF, o `link_edital`
+  // é a página do lote — e o edital costuma estar LINKADO nela. 5.601 lotes ativos estão
+  // nessa situação. Só entra quando não há PDF direto: a página custa um download a mais e
+  // não deve competir com o documento que já temos em mãos.
+  if (!cands.some(ehPdfUrl)) {
+    const paginas = [im.link_edital, ...anexos.filter(a => a?.tipo === 'edital').map(a => a.url)]
+      .filter(u => u && /^https?:\/\//i.test(u) && !ehPdfUrl(u));
+    for (const pag of paginas.slice(0, 2)) {
+      if (Date.now() > fim) break;
+      const achados = await pdfsNaPagina(pag, fim);
+      if (achados.length) {
+        console.log('[edital-html]', JSON.stringify({ imovel: String(imovelId), pagina: pag.slice(0, 110), pdfs: achados.length }));
+        for (const u of achados) if (!cands.includes(u)) cands.push(u);
+        break;
+      }
+    }
+  }
   for (const url of cands) {
     if (Date.now() > fim) break;
     // CACHE-FIRST por URL canônica (querystring de signed URL fora): outro relatório
