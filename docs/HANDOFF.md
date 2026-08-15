@@ -242,6 +242,59 @@ o número que tem de cair.
 > 396 → 236, melhor ainda: é o aviso explícito de que anúncio e matrícula discordam. O log
 > `[matricula-visao]` na Vercel mostra quando a visão entrou.
 
+### 📄 7. A leitura de documento passa a depender do CONTEÚDO, não da extensão da URL
+
+Pedido do dono, na sequência do item 6: **ler a documentação seja qual for o formato e seja
+qual for o relatório**. Mapeando o acervo apareceram duas lacunas reais — não hipotéticas:
+
+| Lacuna | Tamanho no acervo |
+|---|---|
+| **URL sem extensão** — PESTANA/WEBLEILOES/CALIL servem o documento por endpoint de API (`.../lotes/424396/matricula/6863598`) | **10.263** documentos ativos, dos quais **~2.100 são MATRÍCULAS** |
+| **Binário não-PDF virando texto** — os dois caminhos terminavam num `buf.toString('utf8')` | 3 imagens hoje, mas **qualquer** formato novo cairia aí |
+
+> 🔴 **A segunda é a mais perigosa e é a forma nº 1 do CLAUDE.md.** Uma matrícula
+> **fotografada** (JPEG/PNG) virava uma tira de caracteres aleatórios e seguia adiante como
+> "texto do documento" — no documental, **ia dentro do prompt**. A IA respondia sobre nada e o
+> sistema registrava que tinha lido. Todo o código decidia o tipo perguntando "termina em
+> `.pdf`?", e nenhuma das ~2.100 matrículas de API responde sim a essa pergunta.
+
+**`api/_doc-leitura.js`** centraliza a decisão e classifica por **magic bytes** — nunca pela
+URL, nunca só pelo content-type (leiloeiro manda `application/octet-stream` para PDF o tempo
+todo). O que não dá para ler volta `desconhecido` **com motivo**, nunca como texto vazio — que
+é indistinguível de "o documento não diz nada".
+
+**Cobertura depois da mudança:**
+
+| Formato | Mercadológico | Documental |
+|---|---|---|
+| PDF com camada de texto | regex (custo zero) | `document` |
+| **PDF escaneado** | **visão** | `document` |
+| **Imagem JPG/PNG/GIF/WebP** | **visão** | **`image`** (antes: lixo no prompt) |
+| **URL sem extensão** | **magic bytes** | **magic bytes** |
+| TIFF / BMP / DOCX / zip | declarado com motivo | declarado com motivo |
+
+O **laudo** herda de graça: ele consolida mercadológico + documental, não lê documento próprio.
+
+**Três correções que apareceram no caminho:**
+- **`temTextoUtil`** separa *"PDF sem camada de texto"* de *"documento que não diz a área"*.
+  Eram tratados igual — e é por isso que 28.355 matrículas disponíveis rendiam 5 áreas lidas:
+  o escaneado devolve um punhado de caracteres de cabeçalho, o regex não acha nada, e ninguém
+  escalava para a visão.
+- **A dedup por conteúdo do documental** hasheava `doc.text`, que está vazio num bloco de
+  imagem: todas as imagens dariam o **mesmo hash** e, da segunda em diante, cada uma seria
+  descartada como duplicata. (Bug que a própria mudança teria criado, pego antes de subir.)
+- **O passe focado** que resgata CPF/nome/processo filtrava só blocos `document`; passa a
+  incluir `image` — que é justamente onde mora a página escaneada que ele existe para ler.
+
+> 🔵 **DECISÃO CONSCIENTE — TIFF, BMP e DOCX ficam declarados, não convertidos.** A API não os
+> aceita e converter exigiria dependência de imagem nova (`sharp`, ~30 MB com binário nativo)
+> numa serverless, para um acervo que hoje tem **3 imagens no total**. O motivo vai ao log
+> (`[lerDoc] formato não legível`), então **o dia em que passarem a aparecer, aparece medido** —
+> e aí a decisão é informada, não adivinhada. Se quiser antecipar, é meia hora de trabalho.
+
+**Medido:** 11 formatos classificados corretamente, incluindo os 4 que a IA não lê (recusados
+com motivo, sem virar texto) e o binário aleatório.
+
 ### 🟠 O que NÃO consertei — e por quê
 
 | O quê | Estado | Leitura |
