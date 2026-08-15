@@ -5,8 +5,15 @@
  * cobre o Storage (arquivos), e fica tudo na mesma região (sa-east-1). Para recuperação de
  * desastre com cópia "em local distinto", espelhamos no R2:
  *   1) STORAGE IRRECUPERÁVEL: os uploads do próprio usuário (matrícula manual, KYC, contrato,
- *      comprovantes) — hoje 33 arquivos / ~11 MB. Tudo que é `_auto` (matrícula/edital/anexo
- *      raspado dos leiloeiros, ~14 GB) FICA DE FORA: é recuperável pela própria captura.
+ *      comprovantes) — hoje ~49 arquivos / ~14 MB. Tudo que vem do LEILOEIRO fica de fora, seja
+ *      `_auto` (matrícula/edital/anexo raspado) ou `espelho/` (cópia do PDF público, ~17 GB):
+ *      é recuperável pela captura, e o critério vive no manifesto, não aqui.
+ *
+ *      ⚠️ 15/08: por 4 dias este cron copiou 100% espelho e 0% arquivo de cliente, relatando
+ *      600-700 "arquivos novos" por rodada. O espelho nasceu depois do filtro `_auto`, escapou
+ *      dele, e como grava centenas por dia ocupava sozinho o topo do `order by updated_at desc`
+ *      — empurrando para fora da resposta truncada os 49 uploads humanos, que quase nunca mudam.
+ *      Ver `supabase/migrations/backup_manifesto_exclui_espelho_e_declara_total.sql`.
  *   2) SNAPSHOT DO NEGÓCIO: as tabelas irrecuperáveis e pequenas (perfis, arremates, índice,
  *      indicadores, planos) viram JSON e vão para o R2 — cópia off-region do estado do negócio,
  *      complementando o backup nativo do banco.
@@ -231,6 +238,16 @@ async function executar(req, res) {
     if (Array.isArray(rows)) {
       manifestoOk = true;
       out.storage.total = rows.length;
+      // TRUNCAGEM DECLARADA (15/08). `rows.length` sozinho não distingue "o manifesto tem N
+      // arquivos" de "o PostgREST me entregou as N primeiras linhas de um manifesto maior" —
+      // e foi assim que 4 rodadas seguidas relataram progresso copiando só a fatia errada.
+      // A função devolve o total REAL em cada linha; recebido < existente é uma cópia que não
+      // reflete a origem, então a limpeza não roda e o run não pode ser `ok`.
+      const totalReal = Number(rows[0]?.total ?? rows.length);
+      if (Number.isFinite(totalReal) && totalReal > rows.length) {
+        out.storage.total = totalReal;
+        out.storage.truncado = totalReal - rows.length;
+      }
       let proximo = 0;
       const espelhar = async (o) => {
         try {
@@ -254,8 +271,12 @@ async function executar(req, res) {
           await espelhar(rows[proximo++]);
         }
       }));
-      if (proximo >= rows.length) storageCompleto = true;
-      else out.storage.restantes = rows.length - proximo;
+      // Fila inteira percorrida E manifesto inteiro recebido. Ter terminado a fatia que chegou
+      // não é ter varrido o storage: com `truncado > 0` existem arquivos que este run sequer
+      // soube que existiam, e apagar órfão com base numa listagem dessas removeria do backup
+      // exatamente as cópias que ninguém consegue refazer.
+      if (proximo >= rows.length && !out.storage.truncado) storageCompleto = true;
+      else out.storage.restantes = (rows.length - proximo) + (out.storage.truncado || 0);
     }
   } catch { /* storage best-effort */ }
 

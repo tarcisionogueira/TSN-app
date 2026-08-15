@@ -348,7 +348,11 @@ function FormularioInteresse({ modalidade, usuario, onFechar }) {
     if (!logado) return;
     let vivo = true;
     (async () => {
-      const { data, error } = await supabase.from('perfis').select('nome, whatsapp, telefone').eq('id', usuario.id).maybeSingle();
+      // `telefone` é a ÚNICA coluna de contato em `perfis` — não existe `whatsapp`. Pedir uma
+      // coluna inexistente dá 400 no PostgREST, e o 400 aqui não aparecia como erro: caía no
+      // ramo abaixo, a tela mostrava o cliente sem telefone nenhum e o lead chegava à equipe
+      // sem número, sem o botão de WhatsApp do aviso. (Achado em 15/08 por `erros_cliente`.)
+      const { data, error } = await supabase.from('perfis').select('nome, telefone').eq('id', usuario.id).maybeSingle();
       if (!vivo) return;
       // `error` conferido: sem isso, uma falha de leitura viraria "perfil vazio" e a tela
       // mostraria o cliente como se não tivesse contato nenhum cadastrado.
@@ -358,7 +362,7 @@ function FormularioInteresse({ modalidade, usuario, onFechar }) {
   }, [logado, usuario?.id]);
 
   const contatoNome = perfil?.nome || usuario?.user_metadata?.nome || '';
-  const contatoTel = perfil?.whatsapp || perfil?.telefone || '';
+  const contatoTel = perfil?.telefone || '';
 
   const enviar = async () => {
     setEstado({ enviando: true, ok: false, erro: '' });

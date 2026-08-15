@@ -23,6 +23,11 @@
  *   2. toda coluna usada em filtro/ordenação (`.order/.eq/.gte/...('col')`) existe na tabela
  *      daquela cadeia — é aqui que mora o `criado_em` × `created_at`, que em 11/08 esvaziou a
  *      fila da equipe e zerou o painel de produtividade sem um único erro na tela.
+ *   3. toda coluna PEDIDA em `.select('a, b, c')` existe na tabela daquela cadeia (15/08).
+ *      Acrescentado porque `/alavancagem` subiu para produção pedindo `perfis.whatsapp`, coluna
+ *      que nunca existiu: 400 no PostgREST, o cliente logado aparecia sem telefone nenhum e o
+ *      lead chegava à equipe sem número — com a tela prometendo que alguém entraria em contato.
+ *      Os itens 1 e 2 não pegavam: a tabela existe e `whatsapp` não é coluna de data.
  *
  * SILÊNCIO NÃO É APROVAÇÃO. Se faltar credencial ou o banco não responder, este script sai
  * com código 2 e diz que NÃO VERIFICOU. Tratar "não consegui checar" como "está tudo bem"
@@ -126,6 +131,25 @@ function coletarReferencias() {
           vistas.add(col);
           refs.push({ arquivo: rel, linha, tabela: m[1], coluna: col });
         }
+
+        // Colunas PEDIDAS no `.select(...)` — ver item 3 do cabeçalho.
+        //
+        // CONSERVADOR DE PROPÓSITO. O `select` do PostgREST não é uma lista de colunas: aceita
+        // embed (`perfis(nome)`), alias (`x:col`), cast (`col::text`), json path (`meta->>'a'`),
+        // agregação (`count`), negação de embed (`!inner`) e `*`. Interpretar tudo isso daria
+        // falso-positivo, e uma trava que grita errado é desligada pela equipe em uma semana.
+        // Então: se o literal inteiro contiver QUALQUER coisa fora de identificadores simples
+        // separados por vírgula, o select é ignorado por inteiro. Pega o caso comum — que é o
+        // que mordeu — e nunca acusa o que não sabe ler.
+        for (const s of janela.matchAll(/\.select\(\s*(['"])([^'"`]*)\1/g)) {
+          const lista = s[2].trim();
+          if (!lista || !/^[a-zA-Z0-9_]+(\s*,\s*[a-zA-Z0-9_]+)*$/.test(lista)) continue;
+          for (const col of lista.split(',').map((x) => x.trim())) {
+            if (vistas.has(col)) continue;
+            vistas.add(col);
+            refs.push({ arquivo: rel, linha, tabela: m[1], coluna: col, deSelect: true });
+          }
+        }
       }
     }
   }
@@ -178,9 +202,12 @@ async function inventario() {
 if (process.argv.includes('--listar')) {
   const refs = coletarReferencias();
   const tabs = [...new Set(refs.map((r) => r.tabela))].sort();
-  const pares = [...new Set(refs.filter((r) => r.coluna).map((r) => `${r.tabela}.${r.coluna}`))].sort();
+  const par = (f) => [...new Set(refs.filter(f).map((r) => `${r.tabela}.${r.coluna}`))].sort();
+  const datas = par((r) => r.coluna && !r.deSelect);
+  const sels = par((r) => r.deSelect);
   console.log(`${tabs.length} tabelas referenciadas:\n  ${tabs.join(', ')}\n`);
-  console.log(`${pares.length} pares tabela.coluna-de-data:\n  ${pares.join('\n  ')}`);
+  console.log(`${datas.length} pares tabela.coluna-de-data:\n  ${datas.join('\n  ')}\n`);
+  console.log(`${sels.length} pares tabela.coluna pedidos em .select():\n  ${sels.join('\n  ')}`);
   process.exit(0);
 }
 
@@ -201,16 +228,23 @@ for (const r of refs) {
     continue; // coluna de tabela inexistente: a tabela já foi reportada
   }
   if (r.coluna && !cols.has(r.coluna)) {
-    const datas = [...cols].filter((c) => COLUNA_DATA.test(c)).sort();
-    problemas.push({ ...r, tipo: 'COLUNA não existe nessa tabela', sugestao: datas.join(', ') || '(nenhuma coluna de data)' });
+    // Para coluna de data, o útil é ver as datas que a tabela TEM (é `criado_em` × `created_at`
+    // que se procura). Para coluna de `.select()`, o útil é o vizinho parecido — foi
+    // `whatsapp` onde havia `telefone`.
+    const sugestao = r.deSelect
+      ? ([...cols].filter((c) => c.includes(r.coluna) || r.coluna.includes(c) || c.slice(0, 4) === r.coluna.slice(0, 4)).sort().join(', ')
+         || `${cols.size} colunas nessa tabela — confira o nome no schema`)
+      : ([...cols].filter((c) => COLUNA_DATA.test(c)).sort().join(', ') || '(nenhuma coluna de data)');
+    problemas.push({ ...r, tipo: 'COLUNA não existe nessa tabela', sugestao });
   }
 }
 
 const nTab = new Set(refs.map((r) => r.tabela)).size;
-const nCol = refs.filter((r) => r.coluna).length;
+const nCol = refs.filter((r) => r.coluna && !r.deSelect).length;
+const nSel = refs.filter((r) => r.deSelect).length;
 
 if (!problemas.length) {
-  console.log(`✓ Código e banco batem. (${nTab} tabelas e ${nCol} usos de coluna de data conferidos contra o schema real.)`);
+  console.log(`✓ Código e banco batem. (${nTab} tabelas, ${nCol} usos de coluna de data e ${nSel} colunas de .select() conferidos contra o schema real.)`);
   process.exit(0);
 }
 
@@ -219,8 +253,8 @@ console.error('  Lembre do efeito real: não dá tela de erro. O PostgREST devol
 console.error('  `{ data }` sem `error` vira lista vazia, e a tela mente com cara de certa.\n');
 for (const p of problemas) {
   console.error(`  ${p.arquivo}:${p.linha}`);
-  console.error(`    ${p.tipo} → ${p.tabela}${p.coluna ? '.' + p.coluna : ''}`);
-  if (p.sugestao) console.error(`    colunas de data que existem nessa tabela: ${p.sugestao}`);
+  console.error(`    ${p.tipo} → ${p.tabela}${p.coluna ? '.' + p.coluna : ''}${p.deSelect ? '   (pedida no .select)' : ''}`);
+  if (p.sugestao) console.error(`    ${p.deSelect ? 'nomes parecidos que existem' : 'colunas de data que existem nessa tabela'}: ${p.sugestao}`);
   console.error('');
 }
 console.error('O que fazer, em ordem:');
