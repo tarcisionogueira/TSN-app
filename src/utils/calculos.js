@@ -259,3 +259,25 @@ export const fmt = (v, dec = 2) =>
   Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: dec, maximumFractionDigits: dec });
 
 export const fmtPct = (v, dec = 2) => `${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: dec, maximumFractionDigits: dec })}%`;
+
+/**
+ * MEDIDA AUSENTE NÃO É MEDIDA ZERO (15/08, achado do dono no relatório de Morada dos
+ * Pinheiros). A tela mostrava **"Aluguel médio R$ 0,00/mês"** e **"Rentabilidade 0,00% a.a."**
+ * e, duas seções abaixo, o Índice BidPro da mesma cidade exibia **R$ 37,25/m²/mês com 20
+ * amostras**. Os dois quadros vinham do mesmo relatório e diziam coisas opostas.
+ *
+ * A origem é sempre a mesma construção: `fmt(x || 0)`. Quando a busca não encontra locações,
+ * `aluguelMedio` chega `0`/`null` — que significa "não medi" — e o `|| 0` o converte num
+ * NÚMERO, que a tela imprime como se fosse resultado. "R$ 0,00/mês" não é um dado ausente:
+ * é a afirmação de que o imóvel não rende aluguel nenhum, e em rentabilidade vira conclusão
+ * de investimento — a pior classe de erro que este relatório pode cometer.
+ *
+ * `moedaOuTraco` e `pctOuTraco` devolvem `—` quando não há medida. Use-os em todo número que
+ * possa simplesmente não ter sido apurado; `fmt`/`fmtPct` continuam para o que é sempre
+ * calculável (um total, uma diferença, um valor de entrada do próprio usuário).
+ */
+export const SEM_MEDIDA = '—';
+export const moedaOuTraco = (v, { prefixo = 'R$ ', sufixo = '', dec = 2 } = {}) =>
+  (Number(v) > 0 ? `${prefixo}${fmt(v, dec)}${sufixo}` : SEM_MEDIDA);
+export const pctOuTraco = (v, { sufixo = '', dec = 2 } = {}) =>
+  (Number(v) > 0 ? `${fmtPct(v, dec)}${sufixo}` : SEM_MEDIDA);

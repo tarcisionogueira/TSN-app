@@ -43,6 +43,36 @@ const IGNORAR = /node_modules|\/dist\/|\.min\./;
 
 const REGRAS = [
   {
+    id: 'medida-ausente-virando-zero',
+    titulo: 'fmt(x || 0) num número exibido — "não medi" vira "vale zero" na tela do cliente',
+    // ACHADO DO DONO EM 15/08, no relatório de Morada dos Pinheiros: o resumo mostrava
+    // "Aluguel médio R$ 0,00/mês" e "Rentabilidade 0,00% a.a." e, duas seções abaixo, o
+    // Índice BidPro da MESMA cidade exibia R$ 37,25/m²/mês com 20 amostras. Dois quadros do
+    // mesmo relatório dizendo coisas opostas.
+    //
+    // A construção é sempre esta: a busca não achou locação, `aluguelMedio` chega `0`/`null`
+    // — que significa "não medi" — e o `|| 0` o transforma num NÚMERO que a tela imprime
+    // como resultado. Em rentabilidade vira conclusão de investimento ("este imóvel não
+    // rende"), a pior classe de erro que um relatório pode cometer. Use `moedaOuTraco` /
+    // `pctOuTraco` de utils/calculos: devolvem `—` quando não há medida.
+    //
+    // Só acusa em arquivo de TELA/PDF (o defeito é de apresentação) e só quando o valor
+    // formatado é DIRETAMENTE `algumaCoisa || 0`. Duas formas que NÃO são o defeito e
+    // seriam falso-positivo — a segunda estava no próprio arquivo quando a regra nasceu:
+    //   `x > 0 ? fmt(x) : '—'`                      → já trata a ausência, é o jeito certo;
+    //   `fmtPct((1 - (a||0)/b) * 100)`              → o `||0` é neutro DENTRO de uma conta,
+    //                                                 e a guarda está no `b > 0` externo.
+    // `fmt(?:Pct)?\(` e NÃO `fmtPct?\(`: neste o `?` vale só para o `t`, então o padrão
+    // casava "fmtPc(" e "fmtPct(" — e deixava passar justamente `fmt(`, que é a metade mais
+    // comum dos casos. Peguei isso testando a regra contra as duas formas antes de subir.
+    // ESCOPO: o que o CLIENTE recebe como laudo — a tela de análise, a página do imóvel e os
+    // PDFs. Fora ficam painéis de gestão (Admin, financeiro): ali "R$ 0,00 recebido" e
+    // "saldo R$ 0,00" são medidas de verdade, e cobrar traço deles seria ruído — a regra
+    // acusaria 7 linhas legítimas do Admin logo na estreia.
+    testar: (linha, rel) => /^src\/(pages\/(Analise|ImovelDetalhe)\.jsx|components\/\w*PDF\.jsx)$/.test(rel || '')
+      && /fmt(?:Pct)?\(\s*[A-Za-z_$][\w$.?[\]'"]*\s*\|\|\s*0\s*[,)]/.test(linha),
+  },
+  {
     id: 'delete-sem-select',
     titulo: 'DELETE sem .select() — não há como saber se a RLS deixou apagar',
     // `.delete(` seguido, na MESMA cadeia (até o fim do statement), sem `.select(`.
@@ -306,7 +336,10 @@ function contar() {
         const isento = /\/\/\s*padrao-ok:\s*\S/.test(linha) || /\/\/\s*padrao-ok:\s*\S/.test(linhas[i - 1] || '');
         if (isento) continue;
         for (const r of REGRAS) {
-          if (!r.testar(linha)) continue;
+          // O caminho relativo entra na regra (como já acontece em REGRAS_ARQUIVO): algumas
+          // só fazem sentido numa família de arquivos — `medida-ausente-virando-zero` é
+          // defeito de APRESENTAÇÃO e não deve ser cobrada de código de servidor.
+          if (!r.testar(linha, rel.replace(/\\/g, '/'))) continue;
           porArquivo[rel] ||= {};
           (porArquivo[rel][r.id] ||= []).push(i + 1);
         }

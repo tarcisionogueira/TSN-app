@@ -12,7 +12,7 @@ import {
 import { arquivoParaBase64 } from '../utils/arquivo';
 import { reportarErroCliente } from '../utils/reportarErro';
 import { extrairDadosDocumento, extrairDadosDocumentoUrl, gerarParecer } from '../utils/claude';
-import { calcularMetricasCenario, calcularTetoLance, calcularSAC, calcularPrice, calcularVPL, calcularTIR, calcularPayback, calcularMultiplo, fluxoLocacao, TMA_PADRAO, fmt, fmtPct } from '../utils/calculos';
+import { calcularMetricasCenario, calcularTetoLance, calcularSAC, calcularPrice, calcularVPL, calcularTIR, calcularPayback, calcularMultiplo, fluxoLocacao, TMA_PADRAO, fmt, fmtPct, moedaOuTraco, pctOuTraco, SEM_MEDIDA } from '../utils/calculos';
 import { caixaMatriculaUrl, caixaRegrasVendaUrl } from '../utils/caixa';
 import { loadImoveis, saveImoveis, generateId } from '../utils/storage';
 import { useAuth } from '../contexts/AuthContext';
@@ -3052,11 +3052,11 @@ export default function Analise() {
                   falsa: o retorno de um lote é revenda, não aluguel. */}
               <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : (mercado.locacaoNaoSeAplica ? '1fr' : 'repeat(4,1fr)'), gap:10 }}>
                 {[
-                  [mercado.fonteEstimativa === 'indice_bidpro' ? 'Preço/m² (Índice BidPro)' : 'Preço Médio/m²', `R$ ${fmt(mercado.precoMedioM2||0)}`, '#0D63DB','#eff6ff'],
+                  [mercado.fonteEstimativa === 'indice_bidpro' ? 'Preço/m² (Índice BidPro)' : 'Preço Médio/m²', moedaOuTraco(mercado.precoMedioM2), '#0D63DB','#eff6ff'],
                   ...(mercado.locacaoNaoSeAplica ? [] : [
-                    ['Aluguel Médio', `R$ ${fmt(mercado.aluguelMedio||0)}/mês`, '#8b5cf6','#ede9fe'],
-                    ['Rentabilidade Bruta (aluguel)', fmtPct(mercado.yieldBruto||0)+' a.a.', '#10b981','#f0fdf4'],
-                    ['Rentabilidade Líquida (aluguel)', fmtPct(mercado.yieldLiquido||0)+' a.a.', '#f59e0b','#fef3c7'],
+                    ['Aluguel Médio', moedaOuTraco(mercado.aluguelMedio, { sufixo: '/mês' }), '#8b5cf6','#ede9fe'],
+                    ['Rentabilidade Bruta (aluguel)', pctOuTraco(mercado.yieldBruto, { sufixo: ' a.a.' }), '#10b981','#f0fdf4'],
+                    ['Rentabilidade Líquida (aluguel)', pctOuTraco(mercado.yieldLiquido, { sufixo: ' a.a.' }), '#f59e0b','#fef3c7'],
                   ]),
                 ].map(([l,v,c,bg])=>(
                   <div key={l} style={{background:bg,borderRadius:12,padding:'14px 16px',textAlign:'center',border:`1px solid ${c}30`}}>
@@ -3065,6 +3065,21 @@ export default function Analise() {
                   </div>
                 ))}
               </div>
+              {/* COERÊNCIA ENTRE OS QUADROS (15/08). Quando a busca de anúncios não acha
+                  locação mas a base própria TEM locação para a cidade, o resumo dizia
+                  "R$ 0,00/mês" enquanto o Índice, duas seções abaixo, mostrava R$/m²/mês com
+                  N amostras. Dois quadros do mesmo relatório afirmando coisas opostas. O
+                  traço acima já não mente; esta nota fecha o vão, explicando por que um está
+                  vazio e o outro não — e NÃO multiplica o R$/m² do Índice pela área, porque
+                  a área pode não estar confirmada (é o caso deste mesmo lote). */}
+              {!mercado.locacaoNaoSeAplica && !(Number(mercado.aluguelMedio) > 0) && Number(mercado.indiceBidPro?.aluguel_m2) > 0 && (
+                <div style={{ background:'#faf5ff', border:'1px solid #e9d5ff', borderRadius:12, padding:'12px 14px', fontSize:12.5, color:'#5b21b6', lineHeight:1.6 }}>
+                  <b>Sem anúncios de locação encontrados</b> para este imóvel na pesquisa — por isso o aluguel e a rentabilidade aparecem como “{SEM_MEDIDA}”, e não como zero.
+                  {' '}A base própria (Índice BidPro) tem locação para {mercado.indiceBidPro?.nivel === 'cidade' ? 'a cidade' : 'a região'}: <b>R$ {fmt(mercado.indiceBidPro.aluguel_m2)}/m²/mês</b>
+                  {Number(mercado.indiceBidPro?.n_amostras) > 0 ? ` (${mercado.indiceBidPro.n_amostras} amostras)` : ''} — ver a seção de referências.
+                  {' '}Não projetamos o aluguel a partir desse índice porque isso exigiria multiplicar pela área{mercado?.metodologia?.area?.fonte !== 'matricula' ? ', que ainda não foi confirmada na matrícula' : ''}.
+                </div>
+              )}
               {mercado.locacaoNaoSeAplica && (
                 <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:12, padding:'12px 14px', fontSize:12.5, color:'#475569', lineHeight:1.6 }}>
                   <b style={{ color:'#334155' }}>Aluguel e rentabilidade: não se aplica a este imóvel.</b><br/>
@@ -3095,7 +3110,11 @@ export default function Analise() {
                     <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:8, fontSize:12 }}>
                       <div><div style={{ color:'#94a3b8', fontSize:10, fontWeight:700 }}>ANÚNCIOS R$/m²</div><div style={{ fontWeight:800, color:'#0D63DB' }}>R$ {fmt(anuncios)}</div></div>
                       <div><div style={{ color:'#94a3b8', fontSize:10, fontWeight:700 }}>FipeZAP R$/m²</div><div style={{ fontWeight:800, color:'#111' }}>R$ {fmt(fipe)}</div></div>
-                      <div><div style={{ color:'#94a3b8', fontSize:10, fontWeight:700 }}>VALORIZAÇÃO 12M</div><div style={{ fontWeight:800, color: (mercado.referenciaFipeZap.valorizacao12m||0) >= 0 ? '#059669' : '#dc2626' }}>{fmtPct(mercado.referenciaFipeZap.valorizacao12m||0)}</div></div>
+                      {/* Valorização NEGATIVA é dado legítimo (mercado em queda), então aqui
+                          não serve o `> 0` dos outros campos: o que não é medida é o zero
+                          EXATO, que o FipeZAP praticamente nunca publica — é o "não veio no
+                          retorno" virando "o imóvel não valorizou nada", que é conclusão. */}
+                      <div><div style={{ color:'#94a3b8', fontSize:10, fontWeight:700 }}>VALORIZAÇÃO 12M</div><div style={{ fontWeight:800, color: Number(mercado.referenciaFipeZap.valorizacao12m) > 0 ? '#059669' : Number(mercado.referenciaFipeZap.valorizacao12m) < 0 ? '#dc2626' : '#94a3b8' }}>{Number(mercado.referenciaFipeZap.valorizacao12m) ? fmtPct(mercado.referenciaFipeZap.valorizacao12m) : SEM_MEDIDA}</div></div>
                     </div>
                   </div>
                 );
@@ -3344,7 +3363,7 @@ export default function Analise() {
                     <div>
                       <div style={{ fontSize:11, fontWeight:700, color:'#0D63DB', textTransform:'uppercase', marginBottom:8 }}>Venda, {mercado.nivel1.vendas.length} imóveis</div>
                       <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:8, marginBottom:8 }}>
-                        {[['Mín R$/m²',`${fmt(mercado.nivel1.precoMinM2||0)}`,'#ef4444'],['Médio R$/m²',`${fmt(mercado.nivel1.precoMedioM2||0)}`,'#0D63DB'],['Máx R$/m²',`${fmt(mercado.nivel1.precoMaxM2||0)}`,'#10b981']].map(([l,v,c])=>(
+                        {[['Mín R$/m²',moedaOuTraco(mercado.nivel1.precoMinM2,{prefixo:''}),'#ef4444'],['Médio R$/m²',moedaOuTraco(mercado.nivel1.precoMedioM2,{prefixo:''}),'#0D63DB'],['Máx R$/m²',moedaOuTraco(mercado.nivel1.precoMaxM2,{prefixo:''}),'#10b981']].map(([l,v,c])=>(
                           <div key={l} style={{ background:'#f8fafc', borderRadius:8, padding:'8px 10px', textAlign:'center' }}>
                             <div style={{ fontSize:9, color:'#94a3b8', fontWeight:700, textTransform:'uppercase', marginBottom:2 }}>{l}</div>
                             <div style={{ fontSize:14, fontWeight:900, color:c }}>R$ {v}</div>
@@ -3366,7 +3385,7 @@ export default function Analise() {
                       <div style={{ fontSize:11, fontWeight:700, color:'#8b5cf6', textTransform:'uppercase', marginBottom:8 }}>Locação, {mercado.nivel1.locacoes.length} imóveis</div>
                       <div style={{ background:'#f5f3ff', borderRadius:8, padding:'10px 12px', marginBottom:8, textAlign:'center' }}>
                         <div style={{ fontSize:9, color:'#7c3aed', fontWeight:700, textTransform:'uppercase', marginBottom:2 }}>Aluguel Médio</div>
-                        <div style={{ fontSize:20, fontWeight:900, color:'#7c3aed' }}>R$ {fmt(mercado.nivel1.aluguelMedio||0)}/mês</div>
+                        <div style={{ fontSize:20, fontWeight:900, color:'#7c3aed' }}>{moedaOuTraco(mercado.nivel1.aluguelMedio, { sufixo: '/mês' })}</div>
                       </div>
                       <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
                         {mercado.nivel1.locacoes.map((l,i)=>(
@@ -3404,7 +3423,7 @@ export default function Analise() {
                     <div>
                       <div style={{ fontSize:11, fontWeight:700, color:'#10b981', textTransform:'uppercase', marginBottom:8 }}>Venda, {mercado.nivel2.vendas.length} imóveis</div>
                       <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:8, marginBottom:8 }}>
-                        {[['Mín',`${fmt(mercado.nivel2.precoMinM2||0)}`,'#ef4444'],['Médio',`${fmt(mercado.nivel2.precoMedioM2||0)}`,'#10b981'],['Máx',`${fmt(mercado.nivel2.precoMaxM2||0)}`,'#0D63DB']].map(([l,v,c])=>(
+                        {[['Mín',moedaOuTraco(mercado.nivel2.precoMinM2,{prefixo:''}),'#ef4444'],['Médio',moedaOuTraco(mercado.nivel2.precoMedioM2,{prefixo:''}),'#10b981'],['Máx',moedaOuTraco(mercado.nivel2.precoMaxM2,{prefixo:''}),'#0D63DB']].map(([l,v,c])=>(
                           <div key={l} style={{ background:'#f0fdf4', borderRadius:8, padding:'8px 10px', textAlign:'center' }}>
                             <div style={{ fontSize:9, color:'#94a3b8', fontWeight:700, textTransform:'uppercase', marginBottom:2 }}>{l} R$/m²</div>
                             <div style={{ fontSize:14, fontWeight:900, color:c }}>R$ {v}</div>
@@ -3426,7 +3445,7 @@ export default function Analise() {
                       <div style={{ fontSize:11, fontWeight:700, color:'#8b5cf6', textTransform:'uppercase', marginBottom:8 }}>Locação, {mercado.nivel2.locacoes.length} imóveis</div>
                       <div style={{ background:'#f5f3ff', borderRadius:8, padding:'10px 12px', marginBottom:8, textAlign:'center' }}>
                         <div style={{ fontSize:9, color:'#7c3aed', fontWeight:700, textTransform:'uppercase', marginBottom:2 }}>Aluguel Médio</div>
-                        <div style={{ fontSize:20, fontWeight:900, color:'#7c3aed' }}>R$ {fmt(mercado.nivel2.aluguelMedio||0)}/mês</div>
+                        <div style={{ fontSize:20, fontWeight:900, color:'#7c3aed' }}>{moedaOuTraco(mercado.nivel2.aluguelMedio, { sufixo: '/mês' })}</div>
                       </div>
                       <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
                         {mercado.nivel2.locacoes.map((l,i)=>(

@@ -1737,7 +1737,25 @@ export default function ImovelDetalhe() {
                 { label: 'Tipo', value: TIPO_LABEL[imovel.tipo] || imovel.tipo },
                 { label: 'Modalidade', value: MODAL_LABEL[imovel.modalidade] || imovel.modalidade },
                 { label: 'Cidade/UF', value: imovel.cidade ? `${imovel.cidade}/${imovel.estado}` : imovel.estado },
-                { label: 'Área', value: imovel.areaM2 ? `${imovel.areaM2} m²` : null },
+                // A ÁREA DO ANÚNCIO E A DA MATRÍCULA NA MESMA TELA (15/08, pedido do dono).
+                // O bloco de documentação logo acima já exibe "Área privativa (matrícula)"
+                // quando a leitura apura — mas este resumo seguia mostrando SÓ a do
+                // leiloeiro, então a mesma página trazia dois números diferentes de área sem
+                // dizer que discordavam. Agora o resumo mostra a divergência onde ela é vista
+                // primeiro, e o número do anúncio deixa de passar por medida confirmada.
+                {
+                  label: 'Área',
+                  value: (() => {
+                    const anuncio = Number(imovel.areaM2) > 0 ? Number(imovel.areaM2) : 0;
+                    const mat = Number(imovel.docFatos?.matricula?.areaPrivativaM2) || 0;
+                    if (!anuncio && !mat) return null;
+                    if (mat && anuncio && Math.abs(mat - anuncio) / anuncio > 0.10) {
+                      return `${mat} m² (matrícula) · anúncio: ${anuncio} m²`;
+                    }
+                    if (mat) return `${mat} m² (matrícula)`;
+                    return `${anuncio} m² (anúncio)`;
+                  })(),
+                },
                 { label: 'Fonte', value: imovel.fonte },
                 { label: 'Leiloeiro', value: imovel.leiloeiro },
               ].filter(({ value }) => value).map(({ label, value }) => (

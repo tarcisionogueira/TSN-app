@@ -1,4 +1,4 @@
-import { fmt, fmtPct } from '../utils/calculos';
+import { fmt, fmtPct, moedaOuTraco, pctOuTraco } from '../utils/calculos';
 import { imprimirHtml } from './pdfImprimir';
 import { cabecalhoBidPro, ESTILOS_CABECALHO } from './pdfCabecalho';
 import { notaMetodologicaTexto } from './NotaMetodologica';
@@ -158,7 +158,7 @@ ${ind?`
        ['Múltiplo do capital',ind.multiplo!=null?`${fmt(ind.multiplo)}x`:'—','#d97706']].map(([l,v,c])=>`
     <div class="card"><div class="card-l">${l}</div><div class="card-v" style="color:${c}">${v}</div></div>`).join('')}
   </div>
-  <div style="font-size:9px;color:#475569;margin-top:6px;">Locação (${ind.loc?.horizonte||60} meses + venda ao final): aluguel líquido R$ ${fmt(ind.loc?.aluguelLiquido||0)}/mês · VPL R$ ${fmt(ind.loc?.vpl||0,0)} · TIR ${ind.loc?.tir!=null?`${fmtPct(ind.loc.tir)} a.a.`:'—'}.</div>
+  <div style="font-size:9px;color:#475569;margin-top:6px;">Locação (${ind.loc?.horizonte||60} meses + venda ao final): aluguel líquido ${moedaOuTraco(ind.loc?.aluguelLiquido,{sufixo:'/mês'})} · VPL ${moedaOuTraco(ind.loc?.vpl,{dec:0})} · TIR ${ind.loc?.tir!=null?`${fmtPct(ind.loc.tir)} a.a.`:'—'}.</div>
   <div style="margin-top:8px;border:1px solid #e2e8f0;border-radius:6px;background:#f8fafc;padding:8px 10px;">
     <div style="font-size:8.5px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Legenda dos indicadores</div>
     <div style="font-size:9px;color:#475569;line-height:1.6;">
@@ -256,10 +256,13 @@ ${sec.def?`<div class="av"><h2>Defesa da Arrematação</h2><pre>${sec.def}</pre>
 ${mercado?`<div class="av">
 <h2>Avaliação Mercadológica</h2>
 <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px;">
-  ${[['Preço Médio/m²',`R$ ${fmt(mercado.precoMedioM2||0)}`,'#0D63DB'],
-     ['Aluguel Médio',`R$ ${fmt(mercado.aluguelMedio||0)}/mês`,'#7c3aed'],
-     ['Rentab. Bruta',fmtPct(mercado.yieldBruto||0),'#059669'],
-     ['Rentab. Líquida',fmtPct(mercado.yieldLiquido||0),'#d97706']].map(([l,v,c])=>`
+  ${/* Medida ausente vira travessão, nunca "R$ 0,00" — ver `moedaOuTraco` em utils/calculos.
+       O PDF é a versão que o cliente ARQUIVA e mostra a terceiros: um "Rentabilidade 0,00%"
+       impresso aqui vira documento afirmando que o imóvel não rende. (15/08.) */
+    [['Preço Médio/m²',moedaOuTraco(mercado.precoMedioM2),'#0D63DB'],
+     ['Aluguel Médio',moedaOuTraco(mercado.aluguelMedio,{sufixo:'/mês'}),'#7c3aed'],
+     ['Rentab. Bruta',pctOuTraco(mercado.yieldBruto),'#059669'],
+     ['Rentab. Líquida',pctOuTraco(mercado.yieldLiquido),'#d97706']].map(([l,v,c])=>`
   <div class="card"><div class="card-l">${l}</div><div class="card-v" style="color:${c}">${v}</div></div>`).join('')}
 </div>
 ${mercado.indiceBidPro && ((mercado.indiceBidPro.venda_m2||0)>0 || (mercado.indiceBidPro.aluguel_m2||0)>0)?`<div style="font-size:10px;color:#3730a3;margin:0 0 10px;background:#eef2ff;border:1px solid #c7d2fe;padding:8px 10px;border-radius:4px;"><b>Índice BidPro (nossa base própria, ${mercado.indiceBidPro.nivel==='bairro'?'bairro':mercado.indiceBidPro.nivel==='grid'?'microrregião':mercado.indiceBidPro.nivel==='estado'?'estado (referência ampla)':'cidade'} · ${mercado.indiceBidPro.n_amostras||0} amostras):</b> ${(mercado.indiceBidPro.venda_m2||0)>0?`venda R$ ${fmt(mercado.indiceBidPro.venda_m2)}/m²`:''}${(mercado.indiceBidPro.aluguel_m2||0)>0?` · locação R$ ${fmt(mercado.indiceBidPro.aluguel_m2)}/m²/mês`:''}. Referência independente da plataforma para venda e locação, complementar ao FipeZAP.</div>`:''}
@@ -311,13 +314,13 @@ ${!isAVista&&sacTab?.length>0?`<div class="pb av">
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:10px;">
   <div style="background:#f8fafc;border-radius:5px;padding:10px;">
     <div style="font-weight:900;margin-bottom:4px;">SAC</div>
-    <div style="font-size:10px;">1ª Parcela: <b>R$ ${fmt(sacTab[0]?.parcela||0)}</b></div>
+    <div style="font-size:10px;">1ª Parcela: <b>${moedaOuTraco(sacTab[0]?.parcela)}</b></div>
     <div style="font-size:10px;">Última: <b>R$ ${fmt(sacTab[sacTab.length-1]?.parcela||0)}</b></div>
     <div style="font-size:10px;">Total Pago: <b class="rd">R$ ${fmt(sacTotal)}</b></div>
   </div>
   <div style="background:#f8fafc;border-radius:5px;padding:10px;">
     <div style="font-weight:900;margin-bottom:4px;">PRICE</div>
-    <div style="font-size:10px;">Parcela Fixa: <b>R$ ${fmt(priceTab[0]?.parcela||0)}</b></div>
+    <div style="font-size:10px;">Parcela Fixa: <b>${moedaOuTraco(priceTab[0]?.parcela)}</b></div>
     <div style="font-size:10px;">Total Pago: <b class="rd">R$ ${fmt(priceTotal)}</b></div>
     <div style="font-size:10px;">Diferença: <b class="am">R$ ${fmt(Math.abs(priceTotal-sacTotal))} (${priceTotal>sacTotal?'SAC mais barato':'PRICE mais barato'})</b></div>
   </div>
