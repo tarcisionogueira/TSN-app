@@ -28,6 +28,74 @@
 > Checagem rápida a qualquer momento: `select public.auditoria_seguranca();` → `0 crítico / 0 atenção` = íntegro.
 > **Auditorias ofensivas completas: 15/07/2026 (×2).** Total de correções: 15 (1ª rodada) + escalonamento por convite (CRÍTICO) + IDOR do MP (ALTO) + escala. Refazer a ofensiva quando entrarem rotas/pagamento/RLS novos (a Rotina mensal já faz isso sozinha).
 
+## 💸 15/08 — "À VISTA" NUM LOTE ANUNCIADO COMO "ENTRADA 30% + 240X"
+
+Achado do dono. O relatório imprimia **"Custo mensal a suportar: R$ 0,00 · Sem parcela (à
+vista)"** para um lote cujo **próprio título** anuncia *"Entrada 30% + 240x"*.
+
+> **Não é detalhe de apresentação:** a premissa de pagamento define **capital necessário na
+> arrematação, custo mensal, ROI e teto de lance** — o diagnóstico inteiro. E era pior que um
+> número errado: `forma_pagamento='a_vista'` alimenta `somenteAVista`, que **desabilita o botão
+> do cenário financiado**. O investidor não via a opção que o edital lhe dá, e **não tinha como
+> corrigir na mão**.
+
+**Extensão no acervo ativo:** **132** lotes com entrada/parcelamento no título gravados como
+`a_vista` · **164** que citam financiamento no título e também estão como à vista.
+
+**Por que passou:** `link_edital` deste lote aponta para a **página HTML da oferta**, não um PDF
+— então `condicoesEdital` ficou `null` e nada corrigiu o acervo. A informação estava no **título**
+o tempo todo.
+
+**Três correções:**
+1. **Ler a condição do título.** `extrairPagamentoTexto` já pegava a entrada (30%) mas não o
+   `+ 240x` — o padrão de parcelas só cobria a redação do edital ("em até 60 parcelas"). O `+` ou
+   o `em` antes do número é o que separa "240x" de área/medida; testado contra
+   `"medindo 20x25 metros"`, `"396m2"` e `"3x de frente"`, que **não podem** casar.
+2. **O acervo deixa de ter a última palavra** contra o que o leiloeiro publicou: qualquer indício
+   de parcelamento em `doc_fatos.pagamento` **destrava o cenário financiado** na tela, e a
+   condição passa a ser publicada na ficha do imóvel.
+3. **A inspeção final acusa** (`pagamento_contradiz_documento`, **crítico**). Vale para o inverso
+   (relatório parcelado onde o edital exige à vista) e para a **hipoteca**, que muda quem paga o quê.
+
+> É o mesmo defeito de sempre, agora na forma de pagamento: **informação que o leiloeiro
+> publicou, que ninguém leu, e cuja ausência virou uma afirmação — "à vista" — em vez de uma
+> pergunta.**
+
+### ✅ Confirmações desta rodada (logs de produção, 13:16)
+
+```
+[metragem-doc]        {"leu":true,"via":"visao","deCache":true,"gastoMs":762,"matricula":234.6}
+[auditoria-relatorio] {"criticos":[],"faltando":[],"avisos":["base_fina","comparaveis_de_outro_tamanho"]}
+```
+- A **inspeção final está rodando em produção** e já classificou corretamente.
+- A matrícula agora vem **do cache** (762 ms, sem custo de IA) — o "paga uma vez por lote" funciona.
+- O aluguel foi encontrado nesta rodada (**R$ 16.000/mês**), então os campos de locação deixaram
+  de ser o problema deste lote.
+
+### 🔎 O que a inspeção das AMOSTRAS mostrou (pedido do dono)
+
+**Amostras: condizentes.** As 4 do nível 1 são do **mesmo condomínio e da mesma rua**
+(Alameda das Carnaúbas / Residencial Morada dos Pinheiros). R$/m² das amostras: 5.106 · 6.111 ·
+7.111 · 8.542; relatório **7.387**; Índice BidPro 6.827; FipeZAP 8.978 — **o valor cai entre as
+duas referências independentes**.
+
+**Geolocalização do imóvel: boa** — `geocod_nivel: 'rua'`, coordenada coerente com a nuvem de
+lotes da cidade.
+
+> 🔴 **Mas o georreferenciamento das AMOSTRAS não é verificado.** Das 385 amostras de nível 1 já
+> emitidas, **279 (72%) não trazem distância nenhuma** — e a trava de 2 km criada em 03/08 as
+> aprova **por omissão**: `!Number.isFinite(d) || d <= 2` põe *"não sei a distância"* no mesmo
+> ramo de *"está perto"*. **A trava nunca reprovou uma amostra sequer** (0 acima de 2 km em 385).
+> Ausência tratada como aprovação, mais uma vez.
+>
+> **NÃO mudei o comportamento dela, e é deliberado:** exigir distância descartaria 72% das
+> amostras e esvaziaria relatórios hoje corretos por outro caminho — o nível 1 casa por
+> **condomínio e endereço**, âncora de proximidade tão boa quanto coordenada (é o caso deste
+> lote). Entrou só a declaração: `proximidade_nao_verificada` acusa quando não há âncora
+> **nenhuma**. **Mudar a trava é decisão do dono** — afeta o Índice inteiro.
+
+---
+
 ## 🧪 15/08 — AMOSTRA PARA O DONO REGERAR E INSPECIONAR
 
 **Não consigo gerar por ele:** `/api/gerar-analise` exige token de usuário (`getUser(req)`), e
