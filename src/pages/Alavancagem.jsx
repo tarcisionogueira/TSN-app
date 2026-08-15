@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Home, Users, TrendingUp, Check, AlertTriangle, ArrowRight, X, Clock, Shield } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../utils/supabase';
 
 /**
  * /alavancagem — tela ÚNICA apresentando Home Equity e Consórcio (pedido do dono, 14/08).
@@ -323,7 +324,7 @@ export default function Alavancagem() {
         </div>
       </div>
 
-      {aberto && <FormularioInteresse modalidade={MODALIDADES[aberto]} emailPadrao={user?.email || ''} onFechar={() => setAberto(null)} />}
+      {aberto && <FormularioInteresse modalidade={MODALIDADES[aberto]} usuario={user} onFechar={() => setAberto(null)} />}
     </div>
   );
 }
@@ -332,24 +333,61 @@ export default function Alavancagem() {
  * Formulário de INTERESSE — não é proposta. Envia para `/api/duvida`, que registra o lead em
  * `sdr_leads` e abre um chamado no Atendimento, com a `origem` identificando a modalidade.
  */
-function FormularioInteresse({ modalidade, emailPadrao, onFechar }) {
-  const [f, setF] = useState({ nome: '', email: emailPadrao, tel: '', valor: '', obs: '' });
+function FormularioInteresse({ modalidade, usuario, onFechar }) {
+  const logado = !!usuario?.id;
+  const [f, setF] = useState({ nome: '', email: '', tel: '', valor: '', obs: '' });
   const [estado, setEstado] = useState({ enviando: false, ok: false, erro: '' });
+  const [perfil, setPerfil] = useState(logado ? undefined : null); // undefined = carregando
+  const [autorizo, setAutorizo] = useState(false);
+
+  // CLIENTE LOGADO NÃO PREENCHE O QUE JÁ TEMOS (pedido do dono, 14/08): a tela vira
+  // CONFIRMAÇÃO — mostramos os dados de contato e ele só confirma o interesse e autoriza a
+  // ligação. Pedir de novo nome, e-mail e WhatsApp de quem já está logado é atrito puro e
+  // ainda dá a impressão de que a plataforma não sabe quem ele é.
+  useEffect(() => {
+    if (!logado) return;
+    let vivo = true;
+    (async () => {
+      const { data, error } = await supabase.from('perfis').select('nome, whatsapp, telefone').eq('id', usuario.id).maybeSingle();
+      if (!vivo) return;
+      // `error` conferido: sem isso, uma falha de leitura viraria "perfil vazio" e a tela
+      // mostraria o cliente como se não tivesse contato nenhum cadastrado.
+      setPerfil(error ? {} : (data || {}));
+    })();
+    return () => { vivo = false; };
+  }, [logado, usuario?.id]);
+
+  const contatoNome = perfil?.nome || usuario?.user_metadata?.nome || '';
+  const contatoTel = perfil?.whatsapp || perfil?.telefone || '';
 
   const enviar = async () => {
     setEstado({ enviando: true, ok: false, erro: '' });
     const mensagem = [
       `Interesse em ${modalidade.nome} (${modalidade.subtitulo}).`,
-      f.valor ? `Valor pretendido: ${f.valor}` : null,
-      f.obs ? `Observação: ${f.obs}` : null,
-      'Enviado pela tela de Alavancagem.',
+      logado ? 'Cliente CONFIRMOU o interesse e AUTORIZOU o contato pela tela de Alavancagem.' : null,
+      !logado && f.valor ? `Valor pretendido: ${f.valor}` : null,
+      !logado && f.obs ? `Observação: ${f.obs}` : null,
+      logado ? null : 'Enviado pela tela de Alavancagem.',
     ].filter(Boolean).join('\n');
     try {
-      const r = await fetch('/api/duvida', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nome: f.nome, email: f.email, telefone: f.tel, mensagem, origem: `alavancagem_${modalidade.id}` }),
-      });
+      const cab = { 'Content-Type': 'application/json' };
+      // Logado: manda o token e NADA de identidade no corpo — quem diz quem é a pessoa é o
+      // servidor, lendo o token. Assim o chamado também nasce vinculado ao `user_id` dela.
+      if (logado) {
+        // `error` conferido: sem token o corpo NÃO leva identidade nenhuma (é esse o desenho),
+        // então seguir sem ele daria um 400 genérico de "informe um e-mail válido" — erro
+        // confuso para quem está logado. Melhor falhar dizendo o que aconteceu.
+        const { data: s, error: eSessao } = await supabase.auth.getSession();
+        const token = s?.session?.access_token;
+        if (eSessao || !token) throw new Error('Sua sessão expirou. Entre novamente e confirme o interesse.');
+        cab.Authorization = `Bearer ${token}`;
+      }
+      // `nome` do logado vai apenas como FALLBACK de exibição (o servidor prefere o do token).
+      // E-mail e `user_id` nunca vêm do corpo — é o que impede abrir chamado no nome de outro.
+      const corpo = logado
+        ? { nome: contatoNome, telefone: contatoTel, mensagem, origem: `alavancagem_${modalidade.id}` }
+        : { nome: f.nome, email: f.email, telefone: f.tel, mensagem, origem: `alavancagem_${modalidade.id}` };
+      const r = await fetch('/api/duvida', { method: 'POST', headers: cab, body: JSON.stringify(corpo) });
       // `.ok` conferido ANTES do corpo: 400/500 com JSON de erro viraria "enviado" silencioso.
       const d = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(d.error || 'Não foi possível enviar agora. Tente novamente.');
@@ -359,7 +397,9 @@ function FormularioInteresse({ modalidade, emailPadrao, onFechar }) {
     }
   };
 
-  const podeEnviar = f.nome.trim().length >= 2 && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.email.trim()) && !estado.enviando;
+  const podeEnviar = estado.enviando ? false
+    : logado ? (autorizo && perfil !== undefined)
+    : (f.nome.trim().length >= 2 && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.email.trim()));
   const campo = { width: '100%', padding: '12px 14px', borderRadius: 10, border: '1px solid #cbd5e1', fontSize: 15, fontFamily: 'inherit', color: '#111', background: 'white', boxSizing: 'border-box' };
   const rotulo = { fontSize: 12.5, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 6 };
 
@@ -391,28 +431,60 @@ function FormularioInteresse({ modalidade, emailPadrao, onFechar }) {
               Isto <strong>não é uma proposta</strong> e não inicia contratação: é só um aviso de
               que você quer conversar. Alguém da equipe entra em contato.
             </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <div>
-                <label style={rotulo}>Nome</label>
-                <input style={campo} value={f.nome} onChange={(e) => setF({ ...f, nome: e.target.value })} placeholder="Seu nome completo" autoComplete="name" />
+
+            {logado ? (
+              /* CONFIRMAÇÃO: já sabemos quem é. Só mostramos o contato e pedimos a autorização. */
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: 16 }}>
+                  <div style={{ fontSize: 12, fontWeight: 800, color: '#94a3b8', letterSpacing: 0.5, marginBottom: 10 }}>SEUS DADOS DE CONTATO</div>
+                  {perfil === undefined ? (
+                    <div style={{ fontSize: 13.5, color: '#94a3b8' }}>Carregando…</div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                      {contatoNome && <div style={{ fontSize: 14.5, fontWeight: 800, color: '#111' }}>{contatoNome}</div>}
+                      <div style={{ fontSize: 13.5, color: '#334155' }}>{usuario?.email}</div>
+                      <div style={{ fontSize: 13.5, color: contatoTel ? '#334155' : '#94a3b8' }}>
+                        {contatoTel ? `WhatsApp: ${contatoTel}` : 'Sem WhatsApp no cadastro — o contato será por e-mail'}
+                      </div>
+                    </div>
+                  )}
+                  <div style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 12, lineHeight: 1.5 }}>
+                    Para mudar, é em <a href="#/perfil" style={{ color: AZUL, fontWeight: 700 }}>Meu Perfil</a>.
+                  </div>
+                </div>
+
+                <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', cursor: 'pointer', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 12, padding: '13px 15px' }}>
+                  <input type="checkbox" checked={autorizo} onChange={(e) => setAutorizo(e.target.checked)} style={{ marginTop: 2, width: 17, height: 17, accentColor: AZUL, cursor: 'pointer', flexShrink: 0 }} />
+                  <span style={{ fontSize: 13.5, fontWeight: 700, color: '#1e3a5f', lineHeight: 1.55 }}>
+                    Confirmo que tenho interesse em <strong>{modalidade.nome}</strong> e autorizo que
+                    a equipe entre em contato comigo.
+                  </span>
+                </label>
               </div>
-              <div>
-                <label style={rotulo}>E-mail</label>
-                <input style={campo} type="email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} placeholder="voce@email.com" autoComplete="email" />
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div>
+                  <label style={rotulo}>Nome</label>
+                  <input style={campo} value={f.nome} onChange={(e) => setF({ ...f, nome: e.target.value })} placeholder="Seu nome completo" autoComplete="name" />
+                </div>
+                <div>
+                  <label style={rotulo}>E-mail</label>
+                  <input style={campo} type="email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} placeholder="voce@email.com" autoComplete="email" />
+                </div>
+                <div>
+                  <label style={rotulo}>WhatsApp <span style={{ color: '#94a3b8', fontWeight: 500 }}>(opcional)</span></label>
+                  <input style={campo} type="tel" value={f.tel} onChange={(e) => setF({ ...f, tel: e.target.value })} placeholder="(11) 90000-0000" autoComplete="tel" />
+                </div>
+                <div>
+                  <label style={rotulo}>Valor que você tem em mente <span style={{ color: '#94a3b8', fontWeight: 500 }}>(opcional)</span></label>
+                  <input style={campo} value={f.valor} onChange={(e) => setF({ ...f, valor: e.target.value })} placeholder="Ex.: R$ 250.000" />
+                </div>
+                <div>
+                  <label style={rotulo}>Quer contar alguma coisa? <span style={{ color: '#94a3b8', fontWeight: 500 }}>(opcional)</span></label>
+                  <textarea style={{ ...campo, minHeight: 76, resize: 'vertical' }} value={f.obs} onChange={(e) => setF({ ...f, obs: e.target.value })} placeholder="Ex.: tenho um imóvel quitado em Cotia e quero arrematar outro" />
+                </div>
               </div>
-              <div>
-                <label style={rotulo}>WhatsApp <span style={{ color: '#94a3b8', fontWeight: 500 }}>(opcional)</span></label>
-                <input style={campo} type="tel" value={f.tel} onChange={(e) => setF({ ...f, tel: e.target.value })} placeholder="(11) 90000-0000" autoComplete="tel" />
-              </div>
-              <div>
-                <label style={rotulo}>Valor que você tem em mente <span style={{ color: '#94a3b8', fontWeight: 500 }}>(opcional)</span></label>
-                <input style={campo} value={f.valor} onChange={(e) => setF({ ...f, valor: e.target.value })} placeholder="Ex.: R$ 250.000" />
-              </div>
-              <div>
-                <label style={rotulo}>Quer contar alguma coisa? <span style={{ color: '#94a3b8', fontWeight: 500 }}>(opcional)</span></label>
-                <textarea style={{ ...campo, minHeight: 76, resize: 'vertical' }} value={f.obs} onChange={(e) => setF({ ...f, obs: e.target.value })} placeholder="Ex.: tenho um imóvel quitado em Cotia e quero arrematar outro" />
-              </div>
-            </div>
+            )}
 
             {estado.erro && (
               <div style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', borderRadius: 10, padding: 12, fontSize: 13, marginTop: 14, lineHeight: 1.5 }}>
@@ -422,7 +494,7 @@ function FormularioInteresse({ modalidade, emailPadrao, onFechar }) {
 
             <button onClick={enviar} disabled={!podeEnviar}
               style={{ width: '100%', marginTop: 18, padding: '14px', border: 'none', borderRadius: 11, background: podeEnviar ? AZUL : '#cbd5e1', color: 'white', fontSize: 15, fontWeight: 800, cursor: podeEnviar ? 'pointer' : 'not-allowed' }}>
-              {estado.enviando ? 'Enviando…' : 'Quero que entrem em contato'}
+              {estado.enviando ? 'Enviando…' : logado ? 'Confirmar interesse' : 'Quero que entrem em contato'}
             </button>
             <p style={{ fontSize: 11.5, color: '#94a3b8', lineHeight: 1.55, margin: '12px 0 0', textAlign: 'center' }}>
               Usamos seus dados apenas para este contato. A operação, se houver, é feita por

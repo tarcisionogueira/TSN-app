@@ -7,6 +7,7 @@
  *     e-mail do cliente pelo fluxo do Atendimento.
  */
 import { checkRateLimit, getIP, rateLimitedResponse } from './_rate-limit.js';
+import { getAuthUser } from './_auth.js';
 
 export const config = { runtime: 'edge' };
 
@@ -42,8 +43,16 @@ export default async function handler(req) {
   let body;
   try { body = await req.json(); } catch { return json({ error: 'JSON inválido' }, 400); }
 
-  const nome = String(body.nome || '').trim().slice(0, 120);
-  const email = String(body.email || '').trim().toLowerCase().slice(0, 160);
+  // CLIENTE LOGADO: o e-mail e o nome vêm do TOKEN, nunca do corpo (14/08).
+  //
+  // A tela de Alavancagem deixou de pedir dados que já temos e virou confirmação — o front
+  // manda o `Authorization` e nada mais de identidade. Se aceitássemos o e-mail do corpo,
+  // qualquer um poderia abrir chamado em nome de outra pessoa e, pior, vincular `user_id`
+  // alheio. Aqui a identidade é a do token; o corpo só é usado para VISITANTE.
+  const usuario = await getAuthUser(req);
+
+  const nome = String((usuario ? (usuario.user_metadata?.nome || body.nome) : body.nome) || '').trim().slice(0, 120);
+  const email = String((usuario?.email || body.email) || '').trim().toLowerCase().slice(0, 160);
   const telefone = onlyDigits(body.telefone).slice(0, 15);
   const mensagem = String(body.mensagem || '').trim().slice(0, 2000);
   const origem = String(body.origem || 'duvida_planos').slice(0, 40);
@@ -83,7 +92,9 @@ export default async function handler(req) {
     const chamadoRes = await sb('chamados', {
       method: 'POST',
       headers: { Prefer: 'return=representation' },
-      body: JSON.stringify({ user_id: null, user_email: email, user_nome: nome || email, titulo, status: 'aberto', segmento: 'curioso' }),
+      // `user_id` só quando há TOKEN válido: aí o chamado aparece em "Meus chamados" da
+      // pessoa e o Cliente 360 o liga ao cliente certo. Visitante segue com `null`.
+      body: JSON.stringify({ user_id: usuario?.id || null, user_email: email, user_nome: nome || email, titulo, status: 'aberto', segmento: 'curioso' }),
     });
     // O corpo de erro do PostgREST é um OBJETO, não um array: `const [x] = await res.json()`
     // sobre ele lança "not iterable", cai no catch e devolve 500 genérico ao visitante —
