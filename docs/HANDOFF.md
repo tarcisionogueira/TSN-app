@@ -129,16 +129,19 @@ Hoje apareceram **quatro defeitos de tela num dia só** que nenhuma trava pegava
 delas **olha a página renderizada**: zoom do iOS ao focar campo com fonte < 16px, rolagem
 horizontal, botões fixos sobrepostos, e uma tabela escondendo uma coluna inteira no celular.
 
-**Estado da medição em 14/08:** `/alavancagem` passou limpa nas 6 larguras (com o app
-renderizando). As rotas públicas antigas **ainda não têm resultado válido**, por dois motivos que
-valem saber: a varredura é lenta (~90s por rota) e, sem `VITE_SUPABASE_ANON_KEY` no build local, o
-app não hidrata e o script acusa `erro-js: supabaseKey is required` — **e aí a medição de layout
-não vale nada, porque a página nem chegou a ser desenhada**. O script reprova nesse caso em vez de
-passar, que é o comportamento certo (não conseguir verificar não é "está tudo bem"), mas significa
-que **a varredura das rotas antigas precisa rodar contra um build com a chave, ou contra o deploy**:
-`npm run verificar:responsivo https://www.bidprobrasil.com.br`. **Rode `npm run verificar:responsivo`
-na abertura e corrija o que aparecer**; é exatamente o tipo de dívida que só aparece quando alguém
-abre no celular.
+**Estado da medição em 14/08: ✅ 7 rotas × 6 larguras = 42 combinações, ZERO achados.**
+`/` · `/alavancagem` · `/planos` · `/login` · `/calculadora` · `/termos` · `/privacidade`, em
+320 · 375 · 390 · 430 · 768 · 1280. Nenhuma rolagem horizontal, nenhum campo abaixo de 16px em
+tela de toque, nenhum elemento fixo sobreposto, nenhum erro de JavaScript.
+
+> ⚠️ **A armadilha que quase me fez dar esse verde antes da hora, e que vale para quem rodar
+> depois:** na primeira tentativa o build local estava SEM `VITE_SUPABASE_ANON_KEY`, o app não
+> hidratava e o script acusava `erro-js: supabaseKey is required` nas seis larguras. Medir layout
+> numa página que nem chegou a ser desenhada não significa nada — **"nenhum achado" ali seria um
+> falso verde**, exatamente a família de defeito que este projeto cataloga. O script reprova nesse
+> caso em vez de passar, que é o comportamento certo. **Antes de confiar no resultado, confirme que
+> não há `erro-js` na saída.** Rode com um build que tenha a chave, ou contra o deploy:
+> `npm run verificar:responsivo https://www.bidprobrasil.com.br`.
 
 `scripts/verificar-responsivo.mjs` abre as rotas públicas em **6 larguras** (320 · 375 · 390 · 430
 · 768 · 1280) e reprova quando encontra: rolagem horizontal, campo com fonte < 16px em tela de
