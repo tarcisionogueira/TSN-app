@@ -129,9 +129,14 @@ Hoje apareceram **quatro defeitos de tela num dia só** que nenhuma trava pegava
 delas **olha a página renderizada**: zoom do iOS ao focar campo com fonte < 16px, rolagem
 horizontal, botões fixos sobrepostos, e uma tabela escondendo uma coluna inteira no celular.
 
-**Estado da medição em 14/08:** `/alavancagem` passou limpa nas 6 larguras. As rotas públicas
-antigas (`/`, `/planos`, `/login`, `/calculadora`, `/termos`, `/privacidade`) **ainda não foram
-medidas** — a varredura é lenta e ficou para a próxima sessão. **Rode `npm run verificar:responsivo`
+**Estado da medição em 14/08:** `/alavancagem` passou limpa nas 6 larguras (com o app
+renderizando). As rotas públicas antigas **ainda não têm resultado válido**, por dois motivos que
+valem saber: a varredura é lenta (~90s por rota) e, sem `VITE_SUPABASE_ANON_KEY` no build local, o
+app não hidrata e o script acusa `erro-js: supabaseKey is required` — **e aí a medição de layout
+não vale nada, porque a página nem chegou a ser desenhada**. O script reprova nesse caso em vez de
+passar, que é o comportamento certo (não conseguir verificar não é "está tudo bem"), mas significa
+que **a varredura das rotas antigas precisa rodar contra um build com a chave, ou contra o deploy**:
+`npm run verificar:responsivo https://www.bidprobrasil.com.br`. **Rode `npm run verificar:responsivo`
 na abertura e corrija o que aparecer**; é exatamente o tipo de dívida que só aparece quando alguém
 abre no celular.
 
