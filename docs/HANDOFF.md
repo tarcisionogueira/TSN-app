@@ -28,6 +28,65 @@
 > Checagem rápida a qualquer momento: `select public.auditoria_seguranca();` → `0 crítico / 0 atenção` = íntegro.
 > **Auditorias ofensivas completas: 15/07/2026 (×2).** Total de correções: 15 (1ª rodada) + escalonamento por convite (CRÍTICO) + IDOR do MP (ALTO) + escala. Refazer a ofensiva quando entrarem rotas/pagamento/RLS novos (a Rotina mensal já faz isso sozinha).
 
+## ✅ 15/08 — FECHAMENTO DO DIA: o que foi verificado, e o que NÃO está resolvido
+
+Auditoria de encerramento (pedido do dono: *"garanto aqui o resto que esteja resolvido... e que
+esteja tudo em produção"*). Verificado agora, não presumido:
+
+| Checagem | Resultado |
+|---|---|
+| `git status` · HEAD × `origin/main` | limpo · **iguais** (`fb70a48`) |
+| Deploy de produção | **READY**, aliasado em `www.bidprobrasil.com.br` |
+| CI no commit final | **Padrões perigosos** ✅ · **Deriva código × banco** ✅ |
+| `auditoria_seguranca()` | **0 crítico / 0 atenção** |
+| `auditoria_regras_negocio()` | **0 crítico** |
+| Objetos de banco criados hoje | **10 de 10 aplicados** |
+| `verificar:responsivo` | **48 checagens (6 tamanhos × 8 rotas), 0 achados** |
+
+> 🔎 **Uma divergência ACHADA e fechada nesta auditoria — é a forma 7b em miniatura.** O arquivo
+> `tempo_processo_medir_agilidade.sql` escrevia o rótulo `mercadológico → documental` (seta) e o
+> banco tinha `->`, porque apliquei via MCP com o texto transliterado. Recriar o banco pelo
+> repositório mudaria o rótulo. Reaplicado a partir do arquivo: **banco e arquivo idênticos**.
+> Lembrete de que a regra vale para o detalhe também — não só para a lógica.
+
+### ❌ O que NÃO está resolvido (8 invariantes em alerta)
+
+Nenhum destes é regressão do dia; todos têm dono e motivo. **Não leia esta seção como "pendência
+menor" — leia como a lista do que ainda mente se ninguém olhar.**
+
+| Invariante | Valor / limite | Situação |
+|---|---|---|
+| `reuniao_solicitada_parada` | 3 / 0 | **Vermelho por desenho** até alguém de fato atender. Depende do dono (nomear analista) |
+| `backup_sem_arquivo_cliente` | 342 / 0 | **Correção NO AR, ainda não exercitada.** A última execução é de 15/08 04:43, ANTES do conserto do manifesto. A rodada de 16/08 ~04:43 UTC é a prova — conferir `arquivos_total` (esperado ~49, não 1.000) |
+| `proximidades_vazio_falso` | 799 / 300 | Decisão do dono adiada para 18/08 |
+| `bd_teto_saturado` | 480 / 405 | Decisão do dono adiada para 18/08 |
+| `relatorio_area_nao_confirmada` | 14 / 2 | Caminho de GERAÇÃO corrigido; os relatórios ANTIGOS não foram regerados |
+| `relatorio_yield_sem_x100` | 1 / 0 | idem — 1 registro histórico |
+| `cadastro_barrado` | 8 / 7 | marginal, 7 dias |
+| `aval_ausente_com_doc` | 4.137 / 4.000 | gap de captura, marginal |
+
+### ⚠️ O que subiu SEM verificação automática (dito aqui para ninguém supor o contrário)
+
+1. **A simulação de papel não foi testada logada** — este ambiente não tem sessão. Validada por
+   leitura de código e pela conferência da régua de RPC contra os nomes reais do projeto (13
+   leituras conhecidas passando, 7 escritas conhecidas barradas).
+2. **Os 64 px do painel do chat** — `verificar:responsivo` roda DESLOGADO e o painel só existe
+   para cliente logado com ele aberto. Nunca foi exercitado por checagem nenhuma.
+3. **`processo_cadencia()` ainda não tem movimento coletado** — o CNJ é bloqueado pela rede deste
+   ambiente; o cron roda 1×/dia, 40 por rodada, e os 114 monitorados levam ~3 dias.
+4. **A heurística `[edital-html]`** só foi testada contra HTML construído por mim, não contra o
+   site real de um leiloeiro.
+
+### ⏰ Lembrete automático das pendências do dono
+
+Routine semanal **"Pendências do dono — BidPro (semanal)"** (`trig_0125Q6eF32hazyZk4rVj16Tg`),
+segundas 12h UTC (9h BRT), com push e e-mail. Ela **não tem o conector do Supabase** — foi criada
+de uma sessão que não pôde repassá-lo —, então o prompt foi reescrito para NÃO fingir que consulta
+o banco: lembra os dois itens e pede confirmação. Quando o dono disser que resolveu os dois, ela
+se apaga sozinha.
+
+---
+
 ## 🎭 15/08 — A SIMULAÇÃO QUE NÃO SIMULAVA, e o chat que sequestrou a tela do João
 
 ### A. Simular Explorador mostrava uma tela que não existe para ninguém
