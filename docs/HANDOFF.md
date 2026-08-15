@@ -28,6 +28,91 @@
 > Checagem rápida a qualquer momento: `select public.auditoria_seguranca();` → `0 crítico / 0 atenção` = íntegro.
 > **Auditorias ofensivas completas: 15/07/2026 (×2).** Total de correções: 15 (1ª rodada) + escalonamento por convite (CRÍTICO) + IDOR do MP (ALTO) + escala. Refazer a ofensiva quando entrarem rotas/pagamento/RLS novos (a Rotina mensal já faz isso sozinha).
 
+## 🔎 15/08 (fim do dia) — INSPEÇÃO 360 DO USO REAL + revisão de não-regressão
+
+Pedido do dono: garantir que os erros do dia não voltem, e inspecionar o sistema **pelo uso
+real dos últimos dias**, logados e visitantes.
+
+### A. O funil do VISITANTE (sem conta) — 7 dias, medido
+
+| Etapa | Pessoas | % do topo |
+|---|---|---|
+| Visitantes únicos | **166** | 100% |
+| Saíram na 1ª página | 63 | 38% |
+| **Abriram um lote** | **69** | **42%** |
+| Viram planos | 15 | 9% |
+| Clicaram em "criar conta" | 13 | 8% |
+| Chegaram no login | 24 | 14% |
+| Contas criadas (7d) | ~10 | 6% |
+
+Média de 3,6 páginas por visitante. **Entrada:** 73 pessoas pelo Google (84 pageviews, 37 rotas
+distintas — as páginas de SEO estão trazendo gente), 18 diretas, 1 pelo Bing.
+
+> **A leitura:** o topo funciona — 42% abrem um lote. **A queda dura é de lote → planos** (69 →
+> 15). Quem vê o imóvel raramente chega à oferta. Isso conversa com o gargalo de conversão de
+> 14/08 (39 de 44 clientes no plano grátis): o problema não é atrair, é converter.
+
+### B. O que os LOGADOS fizeram — 7 dias
+
+| Papel | Pessoas ativas | Pageviews | Erros |
+|---|---|---|---|
+| explorador | 11 | 144 | 3 |
+| admin (você) | 1 | 485 | 13 |
+| top2 | 1 | 38 | 0 |
+| assessorado | 1 | 8 | 0 |
+
+**Relatórios: 19 mercadológicos concluídos, 3 documentais, 0 laudos. Zero com status de erro.**
+
+> 🔴 **O número que explica o caso de Morada dos Pinheiros:** 19 mercadológicos para 3
+> documentais significa **16 relatórios de mercado gerados sem que ninguém lesse a matrícula**.
+> O caso que você achou **não é exceção — é o padrão**, e é exatamente o que a correção de hoje
+> (leitura por visão + cascata por formato) ataca. O invariante
+> `relatorio_area_nao_confirmada` (15, limite 2) é o placar dessa correção.
+
+### C. Erros que os clientes tomaram — e o que é bug, o que não é
+
+| Alvo | N (7d) | Pessoas | Veredito |
+|---|---|---|---|
+| `login_falha` | 15 | 8 | "Email not confirmed" e senha errada — **atrito real**, ver abaixo |
+| `/api/proximidades-imovel` 502/504 | 9 | 3 | **NÃO é bug.** É o comportamento deliberado de 10/08: quando o Overpass não responde, devolve 502 `retryable` para a tela dizer "tentar novamente" em vez de mentir "não há nada por perto". O tracker registra como `api_erro` — **não confunda com falha** |
+| `cadastro_falha` | 8 | 3 | **Era bug de fluxo. Corrigido hoje** (ver D) |
+| `gerar-analise` | 5 | 1 | Timeouts/500 esparsos, todos na sua conta; nenhum relatório ficou com status de erro |
+| `/api/coleta-cliente` 401 | 2 | 1 | Chamada sem sessão na home; sem efeito para o cliente |
+
+### D. 🔴 O CADASTRO: informar não é impedir (corrigido hoje)
+
+Em 12/08 a lista de requisitos de senha ao vivo entrou justamente porque um visitante tentou
+cinco vezes e foi embora sem conta. **Mas ela informa e não impede:** o botão continuou
+aceitando o clique com senha inválida, e o erro só aparecia depois de enviar.
+
+**O rastro prova que não bastou** — houve recusa em **13/08 (duas seguidas, mesma pessoa)** e
+outra em **15/08**, de pessoas diferentes, ambas **posteriores** àquela correção. Agora a senha
+entra no gate do botão, e a regra virou constante única (`SENHA_FORTE`) usada na validação e no
+gate — estava duplicada em dois lugares.
+
+### E. Revisão de não-regressão — cada erro de hoje × a trava que o pega
+
+| Erro de hoje | O que impede a volta | Estado |
+|---|---|---|
+| Backup copiando espelho, 0 arquivo de cliente | invariante **`backup_sem_arquivo_cliente`** (novo) | acusa **342** hoje; deve zerar amanhã |
+| `perfis.whatsapp` inexistente | `verificar:schema` estendido a `.select()` | 280 pares conferidos, 0 falso-positivo |
+| Área do relatório não confirmada | invariante **`relatorio_area_nao_confirmada`** | acusa **15** (limite 2) |
+| Documento ilegível virando texto | `_doc-leitura.js` + log `[lerDoc] formato não legível` | 11 formatos testados |
+| Cabeçalho de `/leiloes` fora do padrão | **`/leiloes` entrou no `verificar:responsivo`** | era a rota que ninguém media |
+| Cadastro recusado após o clique | gate de senha no botão | — |
+| Pisca de tela no login | *sem trava automática* | **lacuna assumida**: é comportamental, e nenhuma trava barata pega |
+
+> ⚠️ **Dois erros MEUS no caminho, registrados porque a lição é a do dia.** A 1ª versão do
+> invariante do backup comparava o manifesto ATUAL (49, já corrigido) com o processado da
+> execução ANTIGA (658) e dava **0 por subtração negativa** — verde acidental dentro da trava
+> escrita para pegar verde acidental. E a 2ª versão **não chegou a aplicar**: o
+> `regexp_replace` levava a flag `'n'`, que impede o ponto de atravessar quebra de linha, então
+> o replace não casava, o `def` voltava intacto e o `execute` recriava a função **idêntica, em
+> silêncio**. Só apareceu porque conferi o valor contra a execução real (1000−658−0 = 342).
+> **Trava nova só vale depois de vê-la acusar um caso que você sabe que existe.**
+
+---
+
 ## 🚀 15/08 — TUDO DO DIA ESTÁ EM PRODUÇÃO (`main` em `ea5b874`)
 
 Deploy `dpl_2usPX1LTe7vTPoDGCEPKoW1TMurv` **READY**, com `www.bidprobrasil.com.br` apontando
