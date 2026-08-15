@@ -112,5 +112,50 @@ export default async function handler(req) {
     return json({ error: 'Não foi possível registrar sua dúvida agora. Tente novamente.' }, 500);
   }
 
+  // 3. AVISO À EQUIPE (só nas origens que PROMETEM contato ativo).
+  //
+  // Por que existe: o chamado é o REGISTRO, não o aviso. Ninguém é notificado quando um
+  // entra — medido em 14/08: 22 chamados abertos, 11 criados nos últimos 7 dias. Numa dúvida
+  // sobre planos isso é tolerável (a pessoa está navegando e volta). Na tela de Alavancagem
+  // não é: ali a plataforma promete, com essas palavras, que "alguém da equipe entra em
+  // contato" — e promessa sem aviso é fila.
+  //
+  // Fica restrito às origens `alavancagem_*` de propósito: ligar para TODA origem mudaria o
+  // comportamento do fluxo de planos, que hoje não pede nada disso.
+  //
+  // O e-mail é desenhado para o contato acontecer em UM clique: `reply_to` é o interessado
+  // (responder já fala com ele) e o corpo traz o link direto do WhatsApp quando há telefone.
+  // Best-effort: falha de e-mail NUNCA derruba o registro, que já está gravado acima.
+  if (origem.startsWith('alavancagem')) {
+    try {
+      const { enviarEmail } = await import('./_email.js');
+      const equipe = process.env.ADMIN_EMAIL || process.env.APP_ADMIN_EMAIL;
+      if (equipe) {
+        const modalidade = origem.includes('home_equity') ? 'Home Equity' : origem.includes('consorcio') ? 'Consórcio' : 'Alavancagem';
+        const base = process.env.APP_BASE_URL || 'https://bidprobrasil.com.br';
+        const wa = telefone ? `https://wa.me/55${telefone}` : null;
+        await enviarEmail({
+          to: equipe,
+          replyTo: email,
+          subject: `Interesse em ${modalidade}: ${nome || email}`,
+          meta: { tipo: 'lead_alavancagem' },
+          html: `
+            <div style="font-family:Arial,sans-serif;font-size:14px;color:#111;line-height:1.6">
+              <p><strong>${nome || '(sem nome)'}</strong> pediu contato sobre <strong>${modalidade}</strong>.</p>
+              <p>E-mail: <a href="mailto:${email}">${email}</a><br>
+                 ${telefone ? `WhatsApp: <a href="${wa}">${telefone}</a>` : 'WhatsApp: não informado'}</p>
+              <p style="white-space:pre-wrap;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px">${mensagem}</p>
+              <p>${wa ? `<a href="${wa}" style="background:#059669;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none;font-weight:700">Chamar no WhatsApp</a>&nbsp;` : ''}<a href="${base}/#/atendimento" style="background:#0D63DB;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none;font-weight:700">Abrir no Atendimento</a></p>
+              <p style="color:#64748b;font-size:12px">Responder este e-mail fala direto com a pessoa. O chamado já está registrado no Atendimento.</p>
+            </div>`,
+        });
+      } else {
+        console.error('[duvida] lead de alavancagem SEM aviso: ADMIN_EMAIL não definido');
+      }
+    } catch (e) {
+      console.error('[duvida] aviso de alavancagem falhou', String(e?.message || e));
+    }
+  }
+
   return json({ ok: true });
 }

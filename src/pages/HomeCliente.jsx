@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, BarChart3, GraduationCap, Home as HomeIcon, Gift, Copy, Check, ArrowRight, TrendingUp, ShieldCheck, Gavel, Wallet } from 'lucide-react';
+import { Search, BarChart3, GraduationCap, Home as HomeIcon, Gift, Copy, Check, ArrowRight, TrendingUp, ShieldCheck, Gavel, Wallet, Landmark } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
 import { lerCotas, janelaLabel } from '../utils/cotaAnalise';
@@ -164,8 +164,13 @@ export default function HomeCliente() {
           {/* Meus Arrematados (decisão do dono 30/07): o portfólio real é a tela de
               arrematados — /painel é a tela antiga, descartada. */}
           <Acao Icon={HomeIcon} titulo="Meu Portfólio" desc="Acompanhe seus imóveis arrematados, aportes e resultados." cor="#7c3aed" onClick={() => nav('/arrematados')} />
-          <Acao Icon={Wallet} titulo="Meus Créditos" desc="Consultas disponíveis, bônus e saldo — tudo num lugar." cor="#0891b2" onClick={() => nav('/creditos')} />
+          <Acao Icon={Wallet} titulo="Meus Créditos" desc="Consultas disponíveis, bônus e saldo, tudo num lugar." cor="#0891b2" onClick={() => nav('/creditos')} />
           <Acao Icon={GraduationCap} titulo="Área de Membros" desc="Cursos, eBooks e materiais para arrematar com segurança." cor="#059669" onClick={() => nav('/membros')} />
+          {/* Home Equity e Consórcio (dono, 14/08): vitrine de originação, aberta a TODOS os
+              planos, inclusive o Explorador gratuito. Não é módulo pago e não tem gate: quem
+              remunera é a instituição parceira. Fica DEPOIS das ações de leilão de propósito,
+              porque leilão é a base e módulo é "a mais", nunca por cima. */}
+          <Acao Icon={Landmark} titulo="Home Equity e Consórcio" desc="Use o imóvel que você já tem para comprar o próximo. Sem compromisso." cor="#ea580c" onClick={() => nav('/alavancagem')} />
           {/* "Agendar com o time" REMOVIDO (decisão do dono 30/07): o agendamento com o
               analista é dos planos pagos e só APÓS os 3 relatórios prontos — o caminho
               certo já existe dentro do Caso/Minhas Análises, com o gate dos 3 relatórios
@@ -214,7 +219,7 @@ export default function HomeCliente() {
             <div style={{ fontSize: 15, fontWeight: 900, color: '#084BA6' }}>Programa de Parceiros</div>
           </div>
           <div style={{ fontSize: 12.5, color: '#1e3a8a', lineHeight: 1.65 }}>
-            Convide investidores para a BidPro — <strong>todos podem convidar</strong>. Suas indicações ficam vinculadas a você; para <strong>receber as comissões</strong>, é preciso ter uma <strong>assinatura ativa</strong>.
+            Convide investidores para a BidPro. <strong>Todos podem convidar.</strong> Suas indicações ficam vinculadas a você; para <strong>receber as comissões</strong>, é preciso ter uma <strong>assinatura ativa</strong>.
           </div>
           <div style={{ background: '#eff6ff', border: '1px dashed #93c5fd', borderRadius: 10, padding: '11px 13px', fontSize: 11.5, color: '#084BA6', lineHeight: 1.6 }}>
             Ative sua participação e <strong>aceite as regras</strong> do Programa. Leva 10 segundos e libera a aba <strong>Indicações</strong> no menu.
@@ -234,7 +239,7 @@ export default function HomeCliente() {
           <div onClick={e => e.stopPropagation()} style={{ background: 'white', borderRadius: 18, padding: 24, width: '100%', maxWidth: 520, maxHeight: '88vh', overflowY: 'auto' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
               <Gift size={20} color="#7c3aed" />
-              <div style={{ fontSize: 18, fontWeight: 900, color: '#5b21b6' }}>Programa de Parceiros — Regras</div>
+              <div style={{ fontSize: 18, fontWeight: 900, color: '#5b21b6' }}>Programa de Parceiros: Regras</div>
             </div>
             <p style={{ fontSize: 12.5, color: '#475569', lineHeight: 1.6, margin: '0 0 14px' }}>{TERMO_PARCEIRO_PREAMBULO}</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 14, maxHeight: '40vh', overflowY: 'auto', padding: '2px 2px 2px 0' }}>

@@ -28,6 +28,137 @@
 > Checagem rápida a qualquer momento: `select public.auditoria_seguranca();` → `0 crítico / 0 atenção` = íntegro.
 > **Auditorias ofensivas completas: 15/07/2026 (×2).** Total de correções: 15 (1ª rodada) + escalonamento por convite (CRÍTICO) + IDOR do MP (ALTO) + escala. Refazer a ofensiva quando entrarem rotas/pagamento/RLS novos (a Rotina mensal já faz isso sozinha).
 
+## 🏁 FECHAMENTO DE 14/08 — leia ESTE bloco primeiro
+
+**O dia foi de três naturezas diferentes, e misturá-las confunde:** (a) consertos que foram para
+produção, (b) uma tela nova de Alavancagem, (c) um **planejamento longo que NÃO é código** e não
+pode aparecer para cliente nenhum.
+
+### 1. O que entrou em PRODUÇÃO hoje
+
+| O quê | Onde |
+|---|---|
+| **Tela `/alavancagem`** (Home Equity + Consórcio) e o card na home | `src/pages/Alavancagem.jsx`, `src/pages/HomeCliente.jsx` |
+| Aviso à equipe quando chega interesse de alavancagem | `api/duvida.js` |
+| Página pública do lote no código da marca | `api/publico.js` |
+| Três atritos do cadastro (termos repetidos, vídeo, parada na tela de planos) | `Login.jsx`, `TriagemPerfil.jsx`, `CompletarCadastroModal.jsx` |
+| Região de interesse deixando de ser apagada pela triagem + trigger que a deriva da cidade | migrações `perfis_regiao_*` |
+| Botões flutuantes sobrepondo a barra de ações e contador de análises fora da barra fixa | `App.jsx`, `ChatSuporte.jsx`, `ImovelDetalhe.jsx` |
+
+### 2. A tela de Alavancagem — o que ela é, e o que ela NÃO é
+
+É **material explicativo + sinalização de interesse**. Não é ficha de proposta, não aprova nada,
+não simula contratação. Os dois botões abrem o mesmo formulário curto.
+
+**Para onde vai o interesse** (perguntado pelo dono):
+
+`formulário` → `POST /api/duvida` → **lead em `sdr_leads`** (sem duplicar por e-mail/whatsapp) +
+**chamado em `chamados`** com a 1ª mensagem → aparece na tela **`/atendimento`**.
+
+> 🔴 **E foi aqui que apareceu o furo, medido:** o chamado é o REGISTRO, não o aviso. **Ninguém é
+> notificado quando um entra.** Havia **22 chamados abertos, 11 criados nos últimos 7 dias.** Numa
+> dúvida sobre planos isso passa; na Alavancagem não, porque ali a tela **promete** que "alguém da
+> equipe entra em contato". Promessa sem aviso é fila.
+>
+> **Corrigido hoje, restrito às origens `alavancagem_*`:** e-mail para `ADMIN_EMAIL` com
+> `reply_to` do interessado (responder já fala com ele) e **botão de WhatsApp** quando há telefone.
+> Best-effort: falha de e-mail nunca derruba o registro. Ligar o aviso para TODA origem mudaria o
+> comportamento do fluxo de planos, que hoje não promete contato ativo — por isso ficou restrito.
+>
+> **Fica em aberto (decisão do dono):** os outros ~22 chamados continuam sem aviso nenhum. Ou a
+> equipe abre o `/atendimento` como rotina, ou vale estender o alerta.
+
+**Enquadramento, escrito na própria tela:** a BidPro **não é instituição financeira nem
+administradora de consórcio**; a operação é da parceira e depende de análise dela. Os números são
+**exemplos ilustrativos** e cada um diz de onde saiu.
+
+**Correção do dono, em duas rodadas, que vale decorar:** carta de consórcio **não arremata em
+leilão nenhum**, judicial ou extrajudicial — a administradora só libera contra compra e venda
+comum, com escritura e registro. Ela entra **depois**, comprando o imóvel de quem já arrematou.
+Eu errei duas vezes até acertar (primeiro dizendo que servia no leilão, depois mantendo
+"extrajudicial" como exceção). O ganho: **o consórcio é uma ALTERNATIVA à venda parcelada** — o
+comprador paga à vista com a carta, o vendedor realiza o deságio, e nenhum risco de crédito fica
+conosco.
+
+### 3. Cliente 360 e Marketing — a avaliação de hoje
+
+**Saúde: verde.** `clientes_com_erro: 0` · `relatorios_falha_24h: 0` · `erros_invisiveis_24h: 0` ·
+`erros_cliente` não resolvidos em 14 dias: **1** (`/imovel/:id`, "Cannot read properties of null",
+1 ocorrência em 13/08). `relatorios_falha_7d: 5`.
+
+**Marketing — o número que manda:**
+
+| | |
+|---|---|
+| Gasto (29/07 a 13/08) | **R$ 413,46** |
+| Cliques | 270 · CPC médio **R$ 1,53** |
+| Conversões que o Google registra | **1** |
+| Cadastros em 30 dias | 31, dos quais **5** atribuídos ao google |
+| **Custo por cadastro atribuído** | **≈ R$ 83** |
+| **Pagantes vindos do google** | **0** |
+
+> **A leitura honesta: o anúncio traz gente, e a gente não vira pagante.** Dos 44 clientes,
+> **39 são Explorador (grátis)**, 4 Investidor Pro e 1 Assessorado. O gargalo não está no topo do
+> funil, está na conversão para pagante — gastar mais em anúncio hoje só aumenta a base grátis.
+
+**E a medição continua furada, o que impede decidir onde investir:**
+- **210 cliques pagos em 14 dias × 26 visitas com `gclid`** (~12%). Parte é revisita do mesmo
+  dispositivo (o `visita_origem` é primeiro-toque), mas a distância é grande demais para ser só isso.
+- **`utm_term` = 0.** Continua sem saber **qual termo** de busca paga. É a pendência A do dono.
+- **26 dos 31 cadastros do mês entraram sem origem nenhuma.**
+
+**Sinal de atrito capturado no funil público, hoje às 23:03:** `login_falha` com
+`"Email not confirmed"`, precedido de três cliques em "Criar conta grátis". Alguém criou a conta e
+tentou entrar antes de confirmar o e-mail. Vale conferir se a tela explica isso com clareza.
+
+**`qa_invariantes()` — 3 alertas abertos:**
+| Chave | Valor / limite | O que é |
+|---|---|---|
+| `proximidades_vazio_falso` | 666 / 300 | relatório dizendo "nenhum ponto de interesse" em cidade mapeada |
+| `bd_teto_saturado` | 480 / 405 | cota semanal do Bright Data perto do teto |
+| `relatorio_yield_sem_x100` | 1 / 0 | o relatório de Sorocaba, que espera regeração (o dado de ENTRADA é que está errado) |
+
+### 4. Trava nova: `npm run verificar:responsivo`
+
+Hoje apareceram **quatro defeitos de tela num dia só** que nenhuma trava pegava, porque nenhuma
+delas **olha a página renderizada**: zoom do iOS ao focar campo com fonte < 16px, rolagem
+horizontal, botões fixos sobrepostos, e uma tabela escondendo uma coluna inteira no celular.
+
+`scripts/verificar-responsivo.mjs` abre as rotas públicas em **6 larguras** (320 · 375 · 390 · 430
+· 768 · 1280) e reprova quando encontra: rolagem horizontal, campo com fonte < 16px em tela de
+toque, elementos fixos/sticky sobrepostos, ou erro de JavaScript. **Não está no `prebuild`** de
+propósito — precisa de servidor de pé e do Chromium, e pôr isso no caminho do deploy trocaria uma
+classe de falha por outra, como já foi decidido para o `verificar:schema`. **Rode ao mexer em tela.**
+
+### 5. O PLANEJAMENTO — `docs/PLANO_ARREMATADOS.md` (13 seções, nada implementado)
+
+⚠️ **Nada disso é código e nada aparece para cliente.** O documento cresceu numa conversa longa com
+o dono e virou o desenho do produto financeiro e modular. **Ao retomar, comece pela seção 8**, que
+é o mapa: o que já está decidido, as decisões abertas em ordem de quanto destravam, e o que
+depende de advogado, contador, comercial ou BCB.
+
+**As decisões que mais destravam, se o dono só puder responder três:**
+1. **Quem assume o risco de crédito.** É de onde sai toda a conta de capital. Não custa nada
+   responder e destrava a figura jurídica, o funding e o contrato.
+2. **Mensalidade fixa × percentual sobre o negócio.** Deixou de ser escolha comercial: é a
+   principal prova de que a atividade é serviço e não corretagem.
+3. **Resolvedor único de direito de acesso.** Com add-on sobre o Explorador, `role` deixa de
+   significar "é pagante" — e o código usa a mesma variável para as duas coisas. Dois pontos já
+   medidos quebram: `AuthContext.jsx:62` (inadimplência nunca alcança o Explorador que paga
+   módulo) e `Consultor.jsx:496` (cliente pagante contado como não-pagante).
+
+**Achados de planejamento que valem dinheiro e não dependem de nada:**
+- **Home equity via correspondente bancário** — sem capital, sem autorização do BCB, sem risco de
+  crédito, e o público já é nosso: quem arrematou com deságio e tem o imóvel quitado é o perfil
+  ideal, e nós conhecemos o portfólio, coisa que o banco não conhece.
+- **Módulo de contratos + cobrança por assinatura** — a máquina já existe (contratos, recorrência
+  MP, conciliação); fatura sem capital e sem regulador financeiro, e produz o histórico de
+  adimplência que qualquer funding vai exigir depois.
+- **1% a.m. é preço de prazo curto.** Em 240 meses o total vira 2,64× o emprestado antes do IPCA, e
+  a taxa real (12,68% a.a.) é mais que o dobro de um financiamento bancário. Se o prazo vai a 10 ou
+  20 anos, a taxa tem que cair.
+
+
 ## 🩺 ABERTURA DE 14/08 — diagnóstico, 2 consertos e 3 checagens novas na rotina
 
 > Ritual de abertura rodado às 10h UTC. Heartbeat carimbado. **Segurança 0/0, regras de negócio

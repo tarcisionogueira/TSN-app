@@ -27,7 +27,7 @@ export default function Footer() {
         {/* A grafia separada existe de propósito: quem procura "bid pro brasil" hoje é
             corrigido pelo Google para "byd". Ter a forma com espaço escrita na página ajuda
             o buscador a aprender que o termo existe e é uma marca. */}
-        <span style={{ display: 'block', marginTop: 4, color: '#1e293b' }}>BidPro Brasil — também escrito Bid Pro Brasil.</span>
+        <span style={{ display: 'block', marginTop: 4, color: '#1e293b' }}>BidPro Brasil, também escrito Bid Pro Brasil.</span>
       </div>
     </footer>
   );
