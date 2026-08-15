@@ -1467,7 +1467,7 @@ e o dono corrigiu de novo. O certo, sem ressalva:
 > quem já arrematou.
 
 Do jeito que estava, a página levaria alguém a contar com um dinheiro que não sairia — num negócio
-com **prazo fatal**. Corrigido em `428f0ae` e `1b4b5b0`.
+com **prazo fatal**. Corrigido em `428f0ae` e `f119e22`.
 
 **Por que a estratégia é boa, na descrição do dono:** quem arrematou compra com deságio e vende
 pelo **valor comercial**; quem compra usa a carta, paga o vendedor **à vista** e fica só com a
