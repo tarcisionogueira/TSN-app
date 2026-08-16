@@ -107,9 +107,29 @@ por isso a metade com o "BRASIL" aparecia separada. O revisor do Google abre o s
 comparar com o logo declarado; exibir arte diferente criaria sozinho a divergência que o dia
 inteiro serviu para fechar.
 
+**As cinco tarefas foram enviadas no mesmo dia** — nome da empresa, logo, organizações
+afiliadas, relações comerciais e operações comerciais. Análise de 1 a 10 dias.
+
 > O código da G2RS **não** entra em "Pedir a certificação" — aquele formulário é de cripto e
 > produtos especulativos. Vai num formulário dedicado da política de serviços financeiros do
 > Brasil, e só depois da verificação do anunciante. Detalhe em `docs/PENDENCIAS_DONO.md`.
+
+**O que foi declarado — guardar para manter consistência se voltar exigência.** Respostas
+divergentes entre tarefas é o que levanta dúvida no revisor:
+
+| Pergunta | Resposta dada | Por quê |
+|---|---|---|
+| Modelo de negócios | **Proprietário do serviço anunciado** (opção 1) | Vende a PRÓPRIA assinatura; ninguém compra imóvel pela BidPro. "Marketplace" implicaria intermediar venda de terceiro e contradiria a resposta de responsabilidade pela entrega |
+| Responsável pela entrega | NOGUEIRA | Software próprio, sem fabricante |
+| Quem cria o conteúdo | NOGUEIRA | Sem agência |
+| Usa outro nome comercial? | **Sim** — BidPro Brasil (INPI 944274056) e Clube Conselheiro | Marcar "não" seria desmentido pelo Cartão CNPJ, onde **Clube Conselheiro** é o nome fantasia |
+| Usa outras marcas/conteúdo? | **Não** | Não reivindica franquia, endosso, revenda nem licença. A citação a "Caixa" na `/leiloes` é uso nominativo. Marcar "sim" exigiria autorização documental que não existe — nem precisa existir |
+| Licenças | Nenhuma necessária | SaaS. Não é corretagem, crédito nem consórcio |
+
+Nos campos abertos foi declarada, de forma proativa, a página `/alavancagem` como informativa
+sobre home equity e consórcio, com registro de interesse — sem concessão nem administração.
+Deliberado: é provavelmente o que puxou a conta para o regime de serviços financeiros, e
+declarar com o enquadramento certo é melhor que o revisor descobrir e concluir sozinho.
 
 ### O que fica de olho para a próxima sessão
 

@@ -10,34 +10,23 @@
 
 ## 🔴 NOVO EM 16/08 — Google Ads, e o teto que congelou o acervo pago
 
-### A. 🟠 Google Ads — verificação do anunciante: **faltam 2 tarefas** · prazo **15/09**
+### A. ⏳ Google Ads — verificação do anunciante: **TUDO ENTREGUE, aguardando revisão**
 
-O grosso saiu hoje. A **identidade já está verificada como NOGUEIRA EMPREENDIMENTOS LTDA**
-(perfil de pagamentos 3493-7551-9656) — era esse o bloqueio que vinha reprovando tudo, porque
-a conta declarava o seu nome de pessoa física e a G2RS foi emitida para a empresa.
+Concluído em 16/08. **Identidade verificada como NOGUEIRA EMPREENDIMENTOS LTDA** (perfil de
+pagamentos 3493-7551-9656) — era esse o bloqueio que reprovava tudo, porque a conta declarava
+o nome de pessoa física e a G2RS foi emitida para a empresa.
 
-Concluídas: perguntas sobre a organização · envio de documentos · documentos do cliente ·
-nome da empresa · logo · organizações afiliadas. As três últimas estão **em revisão** (a
-análise só começa quando as duas restantes forem entregues).
+As **cinco tarefas** foram enviadas (nome da empresa · logo · organizações afiliadas ·
+relações comerciais · operações comerciais). Análise de **1 a 10 dias**; prazo da conta 15/09.
 
-**Faltam, ~8 min cada:**
-- Responda a algumas perguntas sobre suas **relações comerciais**
-- Responda a algumas perguntas sobre suas **operações comerciais**
+**Nada a fazer enquanto a revisão não voltar.** Se voltar com exigência, as respostas dadas
+estão registradas no HANDOFF (bloco 16/08 · E) para manter consistência na correção — respostas
+divergentes entre tarefas é o que levanta dúvida.
 
-Dados prontos para as duas (do contrato social nº 8, JUCEB 98619869):
-- Sócio **único**: Tarcisio de Souza Nogueira de Araujo, CPF 042.293.535-29 — 15.000 quotas,
-  R$ 15.000,00, **100% do capital**. Administração **isolada** dele.
-- Neuma de Souza Nogueira de Araujo (CPF 442.326.675-04) **retirou-se** em 02/04/2025 — se
-  algum campo sugerir que ela ainda é sócia, corrija.
-- Quem paga os anúncios: **NOGUEIRA EMPREENDIMENTOS LTDA**.
-- Operação: assinatura de software que agrega editais de leilão e entrega relatório de
-  viabilidade, análise documental e parecer. **Não** é intermediação de crédito nem corretagem
-  — descrever como serviço financeiro atrai exigência regulatória que não se aplica.
-- CNAE principal `7490-1/04`; secundárias úteis: `4110-7/00`, `6810-2/01`, `8599-6/99`.
-
-> ⚠️ **"Anúncios financiados por" ainda mostra TARCISIO DE SOUZA NOGUEIRA DE ARAUJO.** Use o
-> "Editar nome" naquele card para pôr a Nogueira. É o texto que aparece publicamente no
-> anúncio; deixá-lo divergente reabre a inconsistência que hoje foi fechada.
+> ⚠️ **Uma coisa ficou pendente e é rápida: "Anúncios financiados por" ainda mostra TARCISIO DE
+> SOUZA NOGUEIRA DE ARAUJO.** Use o "Editar nome" naquele card para pôr a Nogueira. É o texto
+> que aparece publicamente no anúncio; deixá-lo divergente reabre a inconsistência que o dia
+> inteiro serviu para fechar.
 
 ### B. 🔵 Google Ads — código da G2RS: é a etapa 3, e **não** é o "Pedir a certificação"
 
