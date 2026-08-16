@@ -53,24 +53,53 @@ export default async function handler(req) {
 
   const nome = String((usuario ? (usuario.user_metadata?.nome || body.nome) : body.nome) || '').trim().slice(0, 120);
   const email = String((usuario?.email || body.email) || '').trim().toLowerCase().slice(0, 160);
-  const telefone = onlyDigits(body.telefone).slice(0, 15);
+  let telefone = onlyDigits(body.telefone).slice(0, 15);
   const mensagem = String(body.mensagem || '').trim().slice(0, 2000);
   const origem = String(body.origem || 'duvida_planos').slice(0, 40);
 
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return json({ error: 'Informe um e-mail válido para receber a resposta.' }, 400);
   if (mensagem.length < 5) return json({ error: 'Escreva sua dúvida.' }, 400);
 
+  // TELEFONE DO LOGADO VEM DO SERVIDOR, NÃO DO CORPO (16/08).
+  //
+  // A tela de Alavancagem virou CONFIRMAÇÃO: ela lê `perfis.telefone` no navegador e reenvia
+  // no corpo. Se essa leitura falhar ou vier vazia, `setPerfil({})` e o botão continua
+  // habilitado — o lead é gravado sem telefone e o aviso à equipe sai dizendo "WhatsApp: não
+  // informado". O contato em UM clique, que é a razão de existir daquele e-mail, morre em
+  // silêncio: nada dá erro, o cliente vê "Interesse registrado" e ninguém consegue ligar.
+  // Aconteceu no teste do dono em 16/08, com o telefone dele preenchido no perfil o tempo todo.
+  //
+  // Com o token na mão, o servidor não precisa acreditar no cliente: busca com a service key,
+  // sem depender de RLS nem do estado da tela. O corpo vira só um atalho — se veio, prevalece
+  // (é o caminho do VISITANTE, que digita o número na hora e não tem perfil).
+  if (!telefone && usuario?.id) {
+    try {
+      const r = await sb(`perfis?id=eq.${usuario.id}&select=telefone&limit=1`);
+      // `.ok` conferido: um 4xx/5xx aqui não é "cliente sem telefone" — é leitura que não
+      // aconteceu, e tratar as duas como a mesma coisa é o defeito que este bloco corrige.
+      if (r.ok) {
+        const [p] = await r.json().catch(() => []);
+        telefone = onlyDigits(p?.telefone).slice(0, 15);
+      } else {
+        console.error('[duvida] telefone do perfil NÃO lido', r.status, (await r.text().catch(() => '')).slice(0, 200));
+      }
+    } catch (e) { console.error('[duvida] telefone do perfil (exceção)', String(e?.message || e)); }
+  }
+
   // 1. LEAD — não duplica (busca por email ou whatsapp)
   try {
     const filtros = [`email.eq.${encodeURIComponent(email)}`];
     if (telefone) filtros.push(`whatsapp.eq.${encodeURIComponent(telefone)}`);
-    const existentes = await (await sb(`sdr_leads?or=(${filtros.join(',')})&select=id,nome,whatsapp&limit=1`)).json();
+    const existentes = await (await sb(`sdr_leads?or=(${filtros.join(',')})&select=id,nome,whatsapp,user_id&limit=1`)).json();
     if (Array.isArray(existentes) && existentes.length) {
       // Atualiza dados que estavam vazios, sem criar novo lead
       const lead = existentes[0];
       const patch = {};
       if (!lead.nome && nome) patch.nome = nome;
       if (!lead.whatsapp && telefone) patch.whatsapp = telefone;
+      // Preenche o vínculo que faltou nos leads criados antes de 16/08 (e em qualquer um
+      // que tenha nascido de visitante e depois virou conta).
+      if (!lead.user_id && usuario?.id) patch.user_id = usuario.id;
       if (Object.keys(patch).length) {
         await sb(`sdr_leads?id=eq.${lead.id}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(patch) });
       }
@@ -78,7 +107,12 @@ export default async function handler(req) {
       // whatsapp era NOT NULL: dúvida sem telefone (campo opcional na Landing) violava a
       // constraint e o lead sumia no catch. Coluna agora aceita nulo — e o erro, se houver,
       // aparece no log em vez de virar silêncio.
-      const leadRes = await sb('sdr_leads', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ nome, email, whatsapp: telefone || null, origem, status: 'novo' }) });
+      // `user_id` vai junto quando há TOKEN — igual ao chamado logo abaixo, que já fazia isso.
+      // A assimetria custava caro: o chamado nascia ligado ao cliente e o LEAD nascia órfão,
+      // então a mesma pessoa aparecia como cliente numa tela e como estranho na outra, e o
+      // Cliente 360 não conseguia cruzar interesse com conta. Nunca vem do corpo — é o token
+      // que diz quem é, senão daria para abrir lead no nome de outro.
+      const leadRes = await sb('sdr_leads', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ nome, email, whatsapp: telefone || null, user_id: usuario?.id || null, origem, status: 'novo' }) });
       if (!leadRes.ok) {
         const det = await leadRes.text().catch(() => '');
         console.error('[duvida] lead NÃO gravado', leadRes.status, det.slice(0, 300));
