@@ -9696,7 +9696,7 @@ function MarketingTab() {
               </div>
               {cob !== null && cob < 60 && (
                 <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: '#92400e', marginBottom: 10 }}>
-                  ⚠️ <strong>{100 - cob}% do clique pago não vira visita rastreada.</strong> O Google cobrou {ci.cliques_pagos ?? 0} clique(s) e só {ci.visitas ?? 0} chegaram aqui com identificador. Causas usuais: redirect que descarta a query string, bloqueador de anúncios e saída antes do carregamento.
+                  ⚠️ <strong>{ci.visitas ?? 0} dispositivo(s) novo(s) para {ci.cliques_pagos ?? 0} clique(s) cobrado(s).</strong> As duas pontas NÃO são a mesma unidade: o Google cobra por clique e nós gravamos <em>primeiro toque por dispositivo</em> — quem clica de novo no anúncio já não gera linha nova. Então esta razão é um <strong>piso</strong>, não a perda exata. O que se vigia é ela CAIR ao longo do tempo. Perda de verdade vem de página de destino fora do app React (onde o rastreador não roda), bloqueador de anúncios e saída antes do carregamento.
                 </div>
               )}
               {(adsSaude.utm_term?.visitas ?? 0) === 0 && (
