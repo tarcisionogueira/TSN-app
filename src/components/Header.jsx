@@ -309,7 +309,14 @@ export default function Header() {
 
         {/* Logo */}
         <button onClick={() => nav('/')} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
-          <img src="/logo.svg" alt="BidPro Brasil" style={{ height: 40 }} />
+          {/* Arte REGISTRADA (INPI 944274056, marca mista "BIDPRO BRASIL", titular NOGUEIRA
+              EMPREENDIMENTOS LTDA). Trocada em 16/08: o `logo.svg` anterior — quadrado azul
+              com "B" branco, sem o "BRASIL" — não era a arte depositada, e a verificação de
+              anunciante do Google compara o logo declarado com o que o revisor vê no site.
+              Fundo transparente de propósito: o depósito traz a marca sobre retângulo escuro
+              e o header é #111, então o retângulo apareceria como emenda. `width`/`height`
+              explícitos evitam o pulo de layout enquanto a imagem carrega. */}
+          <img src="/logo.png" alt="BidPro Brasil" width={109} height={40} style={{ height: 40, width: 'auto' }} />
         </button>
 
         {/* Nav desktop */}
