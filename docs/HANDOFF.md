@@ -75,6 +75,121 @@ desloca a hipótese — **a INGESTÃO está viva**:
 > Checagem rápida a qualquer momento: `select public.auditoria_seguranca();` → `0 crítico / 0 atenção` = íntegro.
 > **Auditorias ofensivas completas: 15/07/2026 (×2).** Total de correções: 15 (1ª rodada) + escalonamento por convite (CRÍTICO) + IDOR do MP (ALTO) + escala. Refazer a ofensiva quando entrarem rotas/pagamento/RLS novos (a Rotina mensal já faz isso sozinha).
 
+## 🧭 15/08 (noite) — NAVEGAÇÃO, TERMOS E O BUG QUE EU MESMO CRIEI
+
+Rodada final do dia, toda a partir do dono inspecionando pelo celular.
+
+### A. O texto do Programa de Parceiros dizia o CONTRÁRIO da regra
+
+A home afirmava *"para receber as comissões, é preciso ter uma assinatura ativa"*. A regra
+`comissao.gratis_ganha`, ativa desde 08/08 e aplicada por `pode_ganhar_comissao()`, diz o
+oposto — conferido no banco: **`pode_ganhar_comissao('explorador')` = true**.
+
+E o TERMO de parceiro estava pior, em dois itens:
+
+| Item | O que dizia | Por que é grave |
+|---|---|---|
+| 2. Elegibilidade | exigia "assinatura ativa (paga)" para PARTICIPAR | barrava a entrada que a regra abriu |
+| 4. Condições | "a comissão só é devida se, na data da cobrança, sua assinatura estiver em dia" | **negava o ganho já conquistado** |
+
+Reescritos (**v6 → v7**), com o item 5 passando a declarar o teto: até **R$ 2.500/mês** sem NF
+e sem plano pago; acima disso, pagante + nota fiscal do **valor integral sacado no mês**, não só
+do excedente.
+
+> ✅ **A versão sobe e NINGUÉM é obrigado a re-aceitar** — verificado antes de mexer, porque o
+> contrário travaria saques: `aceitar_parceria()` devolve a data existente sem tocar na versão
+> quando já houve aceite, e o gate de saque olha os TERMOS DE USO da plataforma
+> (`saque.exige_termos_vigentes`), não este termo.
+>
+> ⚠️ O "R$ 2.500,00" agora é **cópia** de `regra_negocio.saque.teto_sem_nf`. Em texto jurídico a
+> cópia é inevitável (número por extenso, não ponteiro), mas **quem mudar o teto no banco sobe a
+> versão do termo no mesmo commit** — a consulta de conferência está anotada no arquivo.
+
+### B. Um modal por vez — `src/utils/filaModais.js`
+
+Seis popups podiam querer a tela juntos. O `App.jsx` já os ordenava no JSX com o comentário de
+que boas-vindas "entra por último para nunca cobrir uma pendência que trava a conta" — mas
+**ordem no JSX não é exclusão mútua**: os seis renderizam e quem tem maior `z-index` fica por
+cima. Numa conta nova, vídeo de boas-vindas + tour de 5 passos + botão do chat, empilhados.
+
+Cada modal continua decidindo sozinho **se** quer aparecer; a fila decide **quando**. Prioridade
+por custo de ignorar: `contrato > cadastro > bonus > boas-vindas > tour > sugestao`. Quem espera
+aparece quando o da frente sai — **fila, não filtro**. Id não registrado passa direto com aviso
+no console, em vez de sumir sem explicação.
+
+**E o tour foi desligado** (`tour_etapas.ativo = false` na versão 2026-08, com migração para não
+voltar num banco recriado): a fila resolvia a sobreposição, mas o dono apontou o excesso — *"você
+já tem o vídeo"*. Dois onboardings em sequência continuam sendo dois. Nada apagado; reverter é um
+`update`.
+
+### C. O chat: de botão flutuante a tópico de menu — e o bug que isso criou
+
+O flutuante saiu **de vez** (decisão do dono: tópico de menu "fica melhor e muito profissional",
+**também no desktop**). Antes disso, no mesmo dia, ele já tinha deixado de abrir sozinho e virado
+badge — depois do caso do João, que achou que o site tinha quebrado.
+
+> 🔴 **E aqui eu criei um bug, relatado no minuto seguinte: clicar em "Assistente" não fazia
+> nada.** O botão morava DENTRO do `ChatSuporte` e herdava a condição do componente (equipe e
+> modo suporte não veem o widget — quem atende responde pelo Atendimento). Ao mover o acesso para
+> o Header, **separei o gatilho da coisa que ele aciona**, e as duas pontas passaram a discordar:
+> o menu oferecia para qualquer logado, o chat não desenhava nada para admin.
+>
+> **O que escondeu o defeito de mim:** nos prints anteriores o botão funcionava — porque o dono
+> estava SIMULANDO explorador. Testei o caminho onde funcionava, não o caminho real dele.
+>
+> Correção: `src/utils/chatDisponivel.js`, uma resposta só para as duas pontas (e a terceira
+> cópia, dentro do próprio ChatSuporte, também eliminada). Recebe o papel EFETIVO de propósito —
+> o admin que simula explorador PRECISA ver o chat. Conferido em **7 casos**: admin sem simular
+> (não), admin simulando (sim), modo suporte (não), analista (não), pagante (sim), explorador
+> (sim), deslogado (não).
+
+### D. Voltar do imóvel caía na página 1 da busca
+
+Rastro em `eventos_atividade` — o ciclo três vezes em quatro minutos:
+
+```
+/buscar → imóvel → volta → "Próxima →" → imóvel → volta → "Próxima →" → imóvel → volta → página "3"
+```
+
+**A causa não era o botão:** `nav(-1)` está correto. A Busca remonta do zero, e `filtros`,
+`sortBy` e `raio` **já sobreviviam** por `sessionStorage` — só a página não. Lacuna dentro de uma
+família que já existia, e por isso invisível: a tela voltava com os filtros certos, o que dava a
+impressão de ter restaurado tudo.
+
+A página passa a ser persistida igual, e a restauração é consumida **uma vez**, na primeira busca
+após a remontagem. Mudou filtro → página 1 (recorte novo não tem "página 3"); deep-link de e-mail
+descarta a restauração; "limpar filtros" apaga a página guardada.
+
+### E. Termos passam a ser pedidos no MOMENTO que importa
+
+Decisão do dono: *"veja a melhor hora para colocar para aceitar novamente, como num upgrade de
+plano ou na hora de solicitar um saque"*. O mecanismo de abrir sob demanda **já existia**
+(`abrirTermosModal` + `termosUsoPendente`, usados pelo gate de relatórios); faltava desligar a
+abertura automática no login e ligar os dois momentos:
+
+- **Checkout** — barra ANTES de ir ao gateway (aceitar depois de pagar seria pedir concordância
+  sobre algo já feito);
+- **Minha Rede** — o servidor **já exigia** a versão vigente, então sem este gate o cliente só
+  descobriria **pela recusa**: pede o dinheiro e leva um "não" que não sabe resolver.
+
+**Mudou ONDE se pergunta, não SE se exige.** Ninguém passa a sacar sem aceitar.
+
+### 🧪 Lição de MÉTODO minha, para não repetir
+
+Cometi o mesmo erro **três vezes**: rodar `npm run build` enquanto o `verificar:responsivo`
+estava em execução. O `vite preview` serve do disco, então o app troca debaixo da checagem e os
+achados viram `supabaseKey is required` — ruído meu, não defeito do código. **Essa verificação só
+depois de parar de mexer.** A rodada final, com o código congelado em `9a5ea9b`, fechou
+**✓ 48 checagens (6 tamanhos × 8 rotas), 0 achados**.
+
+### 🔎 Achado de brinde no rastro do dono
+
+Às 23:22, num imóvel que ele abriu: `api_erro` em **`/api/proximidades-imovel`**. É a mesma
+família do invariante `proximidades_vazio_falso`, hoje em **799 / 300** — o que ficou para a
+decisão dele em 18/08. Ele tropeçou nele ao vivo.
+
+---
+
 ## 📚 15/08 — ÍNDICE DO DIA (tudo o que entrou, em ordem)
 
 Dia longo. Este índice existe para a próxima sessão achar a seção certa sem reler tudo. **O fio
@@ -96,8 +211,14 @@ pior, a ausência dela virava uma AFIRMAÇÃO na tela.**
 | 11 | **Chat proativo vira badge** — sem abrir sozinho, sem tomar a tela | *"o chat que sequestrou a tela"* | o painel era 100vw × 100dvh no celular |
 | 12 | **Badge passa a contar a mensagem da IA** | idem | sem isso, a saudação ficaria invisível |
 | 13 | **Auditoria de fechamento** — e a divergência arquivo × banco que ela achou | seção abaixo | 10/10 objetos aplicados; CI verde nas duas travas |
+| 14 | **Texto do parceiro contradizia a regra** — home + termo (itens 2, 4 e 5), v6 → v7 | *"NAVEGAÇÃO, TERMOS…"* A | `pode_ganhar_comissao('explorador')` = true |
+| 15 | **Um modal por vez** (`filaModais.js`) + tour desligado | idem, B | 6 popups disputavam a mesma tela |
+| 16 | **Chat vira tópico de menu** nas duas larguras; flutuante removido | idem, C | — |
+| 17 | **O "Assistente" não abria nada** — bug que EU criei ao mover o botão | idem, C | 7/7 casos conferidos em `chatDisponivel.js` |
+| 18 | **Voltar do imóvel retoma a página da busca** | idem, D | 3 ciclos perdidos em 4 min, no rastro |
+| 19 | **Termos pedidos no upgrade e no saque**, não ao logar | idem, E | — |
 
-**Migrações aplicadas hoje (8):** `atendimento_cai_para_admin_sem_analista` ·
+**Migrações aplicadas hoje (9):** `tour_desativado_video_ja_cobre` + `atendimento_cai_para_admin_sem_analista` ·
 `qa_invariante_solicitacao_reuniao_parada` · `qa_invariante_reuniao_parada_mede_o_atendimento` ·
 `tempo_processo_medir_agilidade` (+ `_inclui_fechado_sem_resposta` e `_alinha_banco_ao_arquivo`) ·
 `processo_movimentos_e_cadencia` · `cotas_do_papel_para_simulacao` ·
@@ -105,6 +226,9 @@ pior, a ausência dela virava uma AFIRMAÇÃO na tela.**
 
 **Funções novas para consultar a qualquer momento (custo zero):**
 `public.tempo_processo()` · `public.processo_cadencia(numero)` · `public.cotas_do_papel(papel)`.
+
+**Utilitários novos no front, cada um existindo para que uma regra tenha UM dono:**
+`src/utils/filaModais.js` (quem ocupa a tela) · `src/utils/chatDisponivel.js` (quem tem chat).
 
 ---
 
@@ -115,13 +239,14 @@ esteja tudo em produção"*). Verificado agora, não presumido:
 
 | Checagem | Resultado |
 |---|---|
-| `git status` · HEAD × `origin/main` | limpo · **iguais** (`fb70a48`) |
+| `git status` · HEAD × `origin/main` | limpo · **iguais** (`9a5ea9b`, revisado ao fim da noite) |
 | Deploy de produção | **READY**, aliasado em `www.bidprobrasil.com.br` |
 | CI no commit final | **Padrões perigosos** ✅ · **Deriva código × banco** ✅ |
 | `auditoria_seguranca()` | **0 crítico / 0 atenção** |
 | `auditoria_regras_negocio()` | **0 crítico** |
 | Objetos de banco criados hoje | **10 de 10 aplicados** |
-| `verificar:responsivo` | **48 checagens (6 tamanhos × 8 rotas), 0 achados** |
+| `verificar:responsivo` | **48 checagens (6 tamanhos × 8 rotas), 0 achados** — refeito sobre `9a5ea9b` |
+| Deploy de `9a5ea9b` | **READY**, aliasado em `www.bidprobrasil.com.br` |
 
 > 🔎 **Uma divergência ACHADA e fechada nesta auditoria — é a forma 7b em miniatura.** O arquivo
 > `tempo_processo_medir_agilidade.sql` escrevia o rótulo `mercadológico → documental` (seta) e o
@@ -150,8 +275,11 @@ menor" — leia como a lista do que ainda mente se ninguém olhar.**
 1. **A simulação de papel não foi testada logada** — este ambiente não tem sessão. Validada por
    leitura de código e pela conferência da régua de RPC contra os nomes reais do projeto (13
    leituras conhecidas passando, 7 escritas conhecidas barradas).
-2. **Os 64 px do painel do chat** — `verificar:responsivo` roda DESLOGADO e o painel só existe
-   para cliente logado com ele aberto. Nunca foi exercitado por checagem nenhuma.
+2. **Tudo o que só existe LOGADO** — `verificar:responsivo` roda deslogado, então não alcança:
+   os 64 px do painel do chat, a **fila de modais**, o **retorno à página da busca**, a
+   **simulação em conta nova** e os gates de termos no checkout/saque. Todos validados por
+   leitura de código e, quando havia regra pura, por teste direto da função (7/7 em
+   `chatDisponivel`). Falta o passeio no aparelho.
 3. **`processo_cadencia()` ainda não tem movimento coletado** — o CNJ é bloqueado pela rede deste
    ambiente; o cron roda 1×/dia, 40 por rodada, e os 114 monitorados levam ~3 dias.
 4. **A heurística `[edital-html]`** só foi testada contra HTML construído por mim, não contra o
