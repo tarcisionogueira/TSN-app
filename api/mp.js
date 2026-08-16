@@ -349,8 +349,9 @@ async function criarAssinaturaTransparente({ plano: planoKey, email, cardTokenId
     external_reference: `${userId}|${planoKey}`,
     payer_email:        email,
     card_token_id:      cardTokenId,
-    // 'authorized' + card_token_id = autoriza e cobra JÁ pelo cartão tokenizado
-    // (fluxo transparente, sem init_point/redirect).
+    // 'authorized' + card_token_id = MANDATO aceito pelo cartão tokenizado (fluxo
+    // transparente, sem init_point/redirect). NÃO quer dizer que a cobrança saiu —
+    // ver o bloco de ativação abaixo.
     status:             'authorized',
     back_url:           `${BASE_URL}/#/checkout?plano=${planoKey}&status=assinatura`,
     notification_url:   WEBHOOK,
@@ -364,15 +365,23 @@ async function criarAssinaturaTransparente({ plano: planoKey, email, cardTokenId
 
   const sub = await mpPost('/preapproval', body);
 
-  // MP autorizou/cobrou já (status 'authorized') → ativa o plano AGORA, sem
-  // depender do webhook. Se a ativação falhar, não derruba o pagamento (o
-  // webhook/reconciliação recupera): loga e segue.
-  let ativado = false;
-  if (sub.status === 'authorized') {
-    try { await ativarRoleInline(userId, planoKey, sub.id); ativado = true; }
-    catch (e) { console.error('[mp] ativação inline falhou:', e.message); }
-  }
-  return { assinaturaId: sub.id, status: sub.status, ativado };
+  // ATIVAÇÃO SÓ COM DINHEIRO NA CONTA (decisão do dono, 16/08).
+  //
+  // Este bloco ativava o plano quando `sub.status === 'authorized'`, com o comentário
+  // "MP autorizou/cobrou já" — e essas são DUAS COISAS, não uma. `authorized` é o
+  // mandato: o MP validou o cartão (transação de R$ 0,00, `card_validation`) e ganhou
+  // permissão de cobrar. A primeira cobrança é assíncrona. No 1º assinante Pro ela veio
+  // 22 minutos depois e foi RECUSADA por antifraude (`cc_rejected_high_risk`), zero real
+  // recebido — mas o mandato estava `authorized` desde o primeiro segundo.
+  //
+  // Ativar aqui dava acesso pago a quem podia nunca pagar (e, com o e-mail de
+  // boas-vindas que saía junto no fluxo do visitante, ainda avisava que estava tudo
+  // certo). Quem ativa agora é `ativarPlanoDireto` no webhook, e só quando a ativação
+  // carrega cobrança RECEBIDA (`gatewayPaymentId` + valor > 0). A recuperação por
+  // reconciliação continua valendo — ela também exige cobrança real.
+  //
+  // `ativado: false` é o retorno honesto: o mandato existe, o acesso ainda não.
+  return { assinaturaId: sub.id, status: sub.status, ativado: false, acesso: 'aguardando_pagamento' };
 }
 
 async function verificar({ paymentId, assinaturaId, userId }) {

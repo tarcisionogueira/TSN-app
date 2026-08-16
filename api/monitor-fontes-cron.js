@@ -180,6 +180,13 @@ async function handler(req) {
     const idadeH = (agoraMs - new Date(u.executado_em).getTime()) / 3600000;
     if (idadeH > MAX_IDADE_H) {
       problemas.push({ fonte, tipo: 'coleta parada', detalhe: `última coleta há ${idadeH.toFixed(0)}h (${u.total} imóveis)` });
+    } else if (u.status === 'sem_cota') {
+      // COTA ESGOTADA NÃO É FONTE QUEBRADA (16/08). A coleta nem foi tentada — o teto
+      // semanal do fornecedor pago recusou. Vira alerta próprio porque a ação é OUTRA:
+      // liberar orçamento, não consertar parser. Misturar com 'falhou' fez 4 fontes
+      // sadias passarem 3 dias contadas como paradas e enterrou a CREPALDI, essa sim
+      // quebrada de verdade — que é como um alerta ruidoso vira alerta ignorado.
+      problemas.push({ fonte, tipo: 'sem cota do fornecedor', detalhe: u.motivo || 'teto de orçamento atingido — coleta não tentada' });
     } else if (u.status === 'falhou') {
       // Fonte declarada PARADA não vira alerta de 'falhou': o zero é conhecido e esperado
       // (leiloeiro sem acervo publicado). A checagem de FRESCOR acima continua valendo, então

@@ -715,10 +715,15 @@ export default function Checkout() {
         if (res.status === 409) { setSuErro('Este e-mail já tem conta. Clique em "Já tenho conta — Entrar".'); setEtapa('ident'); return; }
         throw new Error(data.error || 'Não foi possível concluir a assinatura.');
       }
-      // Conta criada + já confirmada → loga. 'pending' = análise antifraude: o
-      // plano é liberado pelo webhook ao aprovar (ele entra como Explorador por ora).
+      // Conta criada → loga. O plano é liberado pelo WEBHOOK, na primeira cobrança
+      // confirmada (ele entra como Explorador por ora).
       try { await supabase.auth.signInWithPassword({ email, password: senha }); } catch { /* loga manual se falhar */ }
-      if (data.status === 'pending') {
+      // `acesso: 'aguardando_pagamento'` (16/08): o mandato aceito pelo MP — inclusive
+      // com status 'authorized' — NÃO é pagamento recebido. Antes, 'authorized' caía no
+      // ramo verde e a tela dizia "Pagamento aprovado" para quem podia ser recusado
+      // minutos depois; foi o que aconteceu com o 1º assinante Pro. A tela de "Pagamento
+      // em análise" já existia e já dizia a verdade — agora é ela que atende os dois.
+      if (data.acesso === 'aguardando_pagamento' || data.status === 'pending') {
         setPagoPendente(true);
         setTimeout(() => nav('/membros'), 3500);
       } else {

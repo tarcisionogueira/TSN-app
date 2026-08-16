@@ -373,9 +373,16 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false }
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Falha ao criar a assinatura.');
-        if (data.status === 'authorized') { onConfirmado(data.assinaturaId); return; }
-        if (data.status === 'pending') {
-          setErro('Assinatura em processamento. Assim que o banco confirmar, seu plano é liberado automaticamente.');
+        // `authorized` É MANDATO, NÃO PAGAMENTO (16/08). O MP valida o cartão com uma
+        // transação de R$ 0,00 e devolve `authorized` na hora; a primeira cobrança é
+        // assíncrona e pode ser recusada minutos depois — no 1º assinante Pro veio 22
+        // minutos depois e foi recusada por antifraude, com zero real recebido.
+        // Chamar `onConfirmado` aqui fazia a tela dizer "Pagamento aprovado" E disparava
+        // o evento Purchase para Meta Pixel e Google Ads, ou seja, ensinava as campanhas
+        // a otimizar por venda que não aconteceu. Os dois estados agora convergem na
+        // mesma mensagem honesta: quem libera o plano é o webhook, com dinheiro na conta.
+        if (data.status === 'authorized' || data.status === 'pending') {
+          setErro('Assinatura em processamento. Assim que o pagamento for confirmado, seu plano é liberado automaticamente — você recebe um e-mail no mesmo instante.');
           return;
         }
         throw new Error('Não foi possível autorizar a assinatura. Verifique os dados do cartão ou tente outro.');
@@ -404,11 +411,17 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false }
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Não foi possível processar o pagamento. Tente novamente.');
 
-      if (data?.status === 'approved' || data?.status === 'authorized') {
+      // O MESMO ERRO NO PAGAMENTO AVULSO — assessoria, Clube, produtos e recarga (16/08).
+      // Em pagamento simples, `authorized` significa valor AUTORIZADO E NÃO CAPTURADO:
+      // `captured: false`, `status_detail: 'pending_capture'`, `net_received_amount: 0`.
+      // É dinheiro reservado no cartão, não dinheiro recebido — e a captura pode não vir.
+      // Só `approved` é caixa. `authorized` entra no MESMO polling do `in_process`, que
+      // já existia e só confirma quando o servidor diz `confirmado`.
+      if (data?.status === 'approved') {
         onConfirmado(data.paymentId);
         return;
       }
-      if (data?.status === 'in_process' && data?.paymentId) {
+      if ((data?.status === 'in_process' || data?.status === 'authorized') && data?.paymentId) {
         pollingRef.current = setInterval(async () => {
           const checkRes = await apiCall('/api/mp-verificar-pix', {
             method: 'POST',

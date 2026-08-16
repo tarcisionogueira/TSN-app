@@ -22,6 +22,7 @@ import { emitirNFSeServico, nfseAtivo } from './_nfse.js';
 import { cpfDoRegistro } from './_cpf.js';
 import { enviarPurchaseCapi, purchaseEventId } from './_meta-capi.js';
 import { enviarConversaoOffline, googleAdsAtivo } from './_google-ads.js';
+import { enviarEmail } from './_email.js';
 
 // Normaliza o plano para a BASE (top2/clube/assessorado) — o event_id do Purchase precisa
 // bater com o do navegador, que usa a mesma base (sem sufixo _anual/_vista/_mensal).
@@ -185,6 +186,31 @@ export async function ativarPlanoDireto({ userId, planoKey, gateway, cobranca = 
   // toda ativação de plano pago falhava (webhook e reconciliação). role é a fonte.
   const PAGANTES = ['top2', 'assessorado', 'clube', 'top2_anual', 'assessorado_anual', 'clube_anual'];
   const { data: atual } = await supabase.from('perfis').select('role, role_anterior, inadimplente_desde, plano_pago_em, plano_vencimento, ciclo_agendado').eq('id', userId).maybeSingle();
+
+  // ── ACESSO SÓ COM DINHEIRO NA CONTA (decisão do dono, 16/08) ────────────────────
+  // A trava mora AQUI, e não em cada chamador, porque o defeito já tinha aparecido em
+  // quatro portas diferentes (assinar-com-cadastro, mp.js, PagamentoServico, ativar-pro-
+  // anual) e a quinta seria só questão de tempo. Todo caminho de ativação passa por esta
+  // função; travando aqui, um chamador novo nasce protegido em vez de nascer com o furo.
+  //
+  // O QUE ESTAVA ERRADO: `mp-webhook.js` chama esta função com `cobranca=null` na simples
+  // autorização do MANDATO (`subscription_preapproval`), que é o MP dizendo "o cartão é
+  // válido e eu tenho permissão de cobrar" — uma transação de R$ 0,00. A primeira cobrança
+  // é assíncrona. No 1º assinante Pro ela veio 22 minutos depois e foi RECUSADA por
+  // antifraude (`cc_rejected_high_risk`): zero real recebido, mandato `authorized` desde o
+  // primeiro segundo. Sem esta guarda, ele teria plano pago sem ter pago.
+  //
+  // A EXCEÇÃO É DELIBERADA: quem JÁ tem histórico de pagamento (âncora `plano_pago_em`,
+  // role pagante, ou `role_anterior` de uma suspensão) continua podendo ser reativado sem
+  // cobrança nova — é o que a reconciliação faz para CONSERTAR estado de cliente que já
+  // pagou. Negar isso trocaria o buraco de acesso por um buraco de atendimento: cliente
+  // adimplente preso como Explorador porque um webhook se perdeu.
+  const temCobrancaReal = !!(cobranca?.gatewayPaymentId && Number(cobranca.valor) > 0);
+  const semHistoricoDePagamento = !atual?.plano_pago_em && !PAGANTES.includes(atual?.role) && !atual?.role_anterior;
+  if (semHistoricoDePagamento && !temCobrancaReal) {
+    console.log(`[${gateway}] ativação SEGURADA para ${userId} (${planoKey}): mandato aceito, cobrança ainda não recebida`);
+    return { ok: true, skipped: 'aguardando_pagamento' };
+  }
   // O role fica sempre na BASE (top2/clube/assessorado) — o CICLO mora só em plano_ciclo (D5).
   // Assim nenhum gate que leia o sufixo do role classifica o anual como mensal.
   const planoBaseKey = String(planoKey).replace(/_anual$/, '');
@@ -251,6 +277,38 @@ export async function ativarPlanoDireto({ userId, planoKey, gateway, cobranca = 
     }
     // Conversão de anúncio (Meta + Google) — cobrança recorrente RECEBIDA de verdade.
     await registrarConversaoAnuncio({ userId, valor: cobranca.valor, base: planoBase(planoKey), gateway });
+
+    // BOAS-VINDAS DO PLANO — mora AQUI, dentro do ramo de cobrança recebida, e não em
+    // `assinar-com-cadastro.js` (16/08). Lá o gatilho era `preapproval.status ===
+    // 'authorized'`, que é o MANDATO aceito (validação de cartão de R$ 0,00), não
+    // pagamento: o 1º assinante Pro recebeu "Bem-vindo ao Investidor Pro" 22 minutos
+    // ANTES de a cobrança de R$ 49,90 ser recusada por antifraude. Dizer "sua assinatura
+    // foi confirmada" para quem não pagou é pior que não dizer nada — some com a conta e
+    // deixa o cliente achando que tem acesso.
+    // Só na PRIMEIRA ativação: `role_anterior` preenchido indica recuperação de
+    // inadimplência (voltou a pagar), e renovação mensal não é estreia.
+    if (!atual?.plano_pago_em && !PAGANTES.includes(atual?.role) && !atual?.role_anterior) {
+      try {
+        // `error` conferido: sem isso, uma falha de leitura vira "usuário sem e-mail" e o
+        // cliente que ACABOU de pagar simplesmente não recebe aviso nenhum — silêncio que
+        // parece sucesso, que é a família de bugs que este repositório já conhece bem.
+        const { data: u, error: errU } = await supabase.auth.admin.getUserById(userId);
+        if (errU) throw new Error(`getUserById: ${errU.message}`);
+        const paraEmail = u?.user?.email;
+        const primeiroNome = String(u?.user?.user_metadata?.nome || '').trim().split(' ')[0] || '';
+        if (paraEmail) {
+          await enviarEmail({
+            from: process.env.EMAIL_FROM || 'BidPro Brasil <nao-responda@bidprobrasil.com.br>',
+            to: paraEmail,
+            subject: 'Sua assinatura está ativa — BidPro Brasil',
+            html: `<p>Olá, ${primeiroNome}!</p><p>Recebemos o seu pagamento e o plano já está <strong>ativo</strong> na sua conta. É só entrar com o seu e-mail e senha.</p><p>Bons arremates!<br/>BidPro Brasil</p>`,
+            meta: { tipo: 'boas_vindas', userId },
+          });
+        } else {
+          console.error(`[${gateway}] boas-vindas: e-mail do usuário ${userId} não encontrado`);
+        }
+      } catch (e) { console.error(`[${gateway}] boas-vindas:`, e?.message || e); }
+    }
   }
   return { ok: true, plano: planoKey };
 }

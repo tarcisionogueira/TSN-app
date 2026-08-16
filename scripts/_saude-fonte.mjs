@@ -42,7 +42,16 @@ export async function registrarSaude(supabase, fonte, imoveis, estrategia, valid
   const m = validacao?.metricas || metricasColeta(imoveis || []);
   const semCota = validacao?.semCota === true;
   let status = 'ok', motivo = validacao?.motivo || '';
-  if (!m.n) status = 'falhou';
+  // "NÃO TENTEI" NÃO É "FALHOU" (16/08). O `semCota` já era honrado no teste de regressão
+  // logo abaixo e no texto do `motivo` — mas o STATUS, que é o campo que o monitor, os
+  // painéis e `fonte_baseline_aprendida()` de fato leem, continuava gravando 'falhou'.
+  // O efeito prático: quando o teto semanal do Bright Data satura, CALIL, VEGAS, TORRES3 e
+  // RJLEILOES aparecem como fontes quebradas — e ficaram assim 3 dias em 14–16/08, sem
+  // NUNCA terem sido consultadas. Pior: o ruído enterrou o achado real, a CREPALDI, que
+  // falha de verdade há 10 dias. A ação que resolve cada caso é oposta (liberar orçamento
+  // × consertar parser), então o status precisa distinguir os dois.
+  // É a forma #5 do CLAUDE.md pela metade: o freio de custo tem que dizer QUAL "não".
+  if (!m.n) status = semCota ? 'sem_cota' : 'falhou';
   else if (validacao && validacao.ok === false) status = 'degradado';
   try {
     const { data: ant } = await supabase.from('fonte_saude')

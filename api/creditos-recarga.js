@@ -56,7 +56,11 @@ export default async function handler(req, res) {
     });
     if (!mpRes.ok) return res.status(502).json({ error: 'Não foi possível consultar o pagamento' });
     const pg = await mpRes.json();
-    if (!['approved', 'authorized'].includes(pg.status)) {
+    // SÓ `approved` É DINHEIRO (16/08). `authorized` é reserva não capturada
+    // (`net_received_amount: 0`) — creditar em cima disso é dar saldo gastável na
+    // plataforma por dinheiro que ainda pode não entrar. Mesma família da assinatura
+    // liberada por mandato `authorized` e do Pro anual em `ativar-pro-anual.js`.
+    if (pg.status !== 'approved') {
       return res.status(409).json({ error: 'Pagamento ainda não aprovado', status: pg.status });
     }
     const valor = Number(pg.transaction_amount) || 0;

@@ -7,7 +7,12 @@ import { getUser } from './_auth.js';
 import { checkRateLimit, getIP, rateLimitedRes } from './_rate-limit.js';
 
 const MP_BASE = 'https://api.mercadopago.com';
-const STATUS_APROVADO = new Set(['approved', 'authorized']);
+// SÓ `approved` É DINHEIRO (16/08). `authorized` é valor autorizado e NÃO CAPTURADO
+// (`captured: false`, `status_detail: 'pending_capture'`, `net_received_amount: 0`):
+// reserva no cartão, que pode nunca virar caixa. Este endpoint é o CONFIRMADOR que o
+// front consulta a cada 8s — se ele aceitar `authorized`, todo o resto da correção de
+// 16/08 cai junto, porque é justamente para cá que o pagamento pendente é encaminhado.
+const STATUS_APROVADO = new Set(['approved']);
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();

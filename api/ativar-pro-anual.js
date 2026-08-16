@@ -52,7 +52,12 @@ export default async function handler(req, res) {
   }
 
   // 2) Verificações OBRIGATÓRIAS.
-  if (!['approved', 'authorized'].includes(pg.status)) {
+  // SÓ `approved` É DINHEIRO (16/08). `authorized` num pagamento avulso é valor
+  // AUTORIZADO E NÃO CAPTURADO (`captured: false`, `status_detail: 'pending_capture'`,
+  // `net_received_amount: 0`) — reserva no cartão, que pode nunca virar caixa. Aceitá-lo
+  // aqui liberava o Pro ANUAL, o produto de ticket mais alto deste fluxo, sem recebimento.
+  // Mesma família do mandato `authorized` que liberava a assinatura mensal.
+  if (pg.status !== 'approved') {
     return res.status(409).json({ error: 'pagamento_nao_aprovado', status: pg.status });
   }
   if (String(pg.metadata?.user_id || '') !== String(user.id)) {
