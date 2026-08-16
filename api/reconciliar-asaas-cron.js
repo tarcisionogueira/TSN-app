@@ -98,7 +98,15 @@ async function handler(req) {
             // do planoKey. Passando só `mapeado.role`, um pagamento ANUAL (R$ 449,90) era
             // gravado como plano_ciclo='mensal' e a âncora anti-rebaixamento do anual sumia.
             const planoKeyComCiclo = mapeado.ciclo === 'anual' ? `${mapeado.role}_anual` : mapeado.role;
-            await ativarPlanoDireto({ userId: cliente.id, planoKey: planoKeyComCiclo, gateway: 'asaas' });
+            // A COBRANÇA VAI JUNTO (16/08). Este laço já varre só pagamentos CONFIRMED/
+            // RECEIVED — dinheiro que entrou — mas não repassava isso adiante, e a guarda
+            // nova de `ativarPlanoDireto` ("sem histórico de pagamento, sem acesso") barraria
+            // justamente o caso que este cron existe para resolver: cliente que PAGOU pelo
+            // Asaas e ficou como Explorador porque o webhook se perdeu. Com a cobrança
+            // explícita, a rede de segurança volta a funcionar sem reabrir o furo — e a
+            // comissão de rede, idempotente por payment id, passa a ser paga como deve.
+            await ativarPlanoDireto({ userId: cliente.id, planoKey: planoKeyComCiclo, gateway: 'asaas',
+              cobranca: { gatewayPaymentId: String(p.id), valor: Number(p.value) } });
             // Grava o asaas_id p/ o webhook localizar o cliente pelo ID daqui pra frente.
             await supabase.from('perfis').update({ asaas_id: custId }).eq('id', cliente.id);
             corrigidos++;

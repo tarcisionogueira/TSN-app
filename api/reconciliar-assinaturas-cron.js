@@ -96,7 +96,25 @@ async function handler(req) {
           // authorized e este loop re-concederia o plano REEMBOLSADO. Pula se há reembolso.
           const { data: garantia } = await supabase.from('reembolsos_garantia').select('id').eq('user_id', userId).limit(1).maybeSingle();
           if (garantia) continue;
-          try { await ativarPlanoDireto({ userId, planoKey, gateway: 'mercadopago' }); corrigidos++; }
+          // MANDATO AUTORIZADO NÃO É PAGAMENTO (16/08). O laço acima varre
+          // `preapproval/search?status=authorized`, que devolve todo mandato que o MP tem
+          // permissão de cobrar — inclusive o de quem NUNCA pagou. Concedendo o plano só
+          // por estar nessa lista, este cron reproduzia em rotina o mesmo defeito que hoje
+          // foi corrigido nas seis portas do checkout: bastava o cartão ser válido.
+          // Agora exige a fatura: `/authorized_payments` é o histórico de cobranças DESTE
+          // mandato; sem uma processada/aprovada, não há o que reativar. Quando há, ela vai
+          // como `cobranca` — o que também restaura a recuperação legítima de quem pagou e
+          // perdeu o webhook, caso que a guarda de `ativarPlanoDireto` sozinha barraria.
+          const pagos = await mpGet(`/authorized_payments/search?preapproval_id=${encodeURIComponent(sub.id)}&limit=20`);
+          if (pagos === null) { console.error('[reconciliar] histórico de cobranças indisponível para', sub.id, '— não ativa às cegas'); continue; }
+          const cobrado = (pagos?.results || []).find(p =>
+            (p?.status === 'processed' || p?.payment?.status === 'approved') && Number(p?.transaction_amount) > 0);
+          if (!cobrado) continue;
+          try {
+            await ativarPlanoDireto({ userId, planoKey, gateway: 'mercadopago',
+              cobranca: { gatewayPaymentId: String(cobrado.payment?.id || cobrado.id), valor: cobrado.transaction_amount } });
+            corrigidos++;
+          }
           catch (e) { console.error('[reconciliar] ativar', userId, e?.message); }
         }
       }
