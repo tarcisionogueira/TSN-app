@@ -9640,6 +9640,7 @@ function MarketingTab() {
             if (h === null) return CINZA;
             return h <= okH ? VERDE : h <= avisoH ? AMBAR : VERMELHO;
           };
+          const dataCurta = v => { try { const d = new Date(v); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`; } catch { return '—'; } };
           const pv = adsSaude.pageview || {}, ci = adsSaude.click_id || {};
           const cad = adsSaude.cadastro || {}, pl = adsSaude.plano || {}, ing = adsSaude.ingestao || {};
           const cob = ci.cobertura_pct === null || ci.cobertura_pct === undefined ? null : Number(ci.cobertura_pct);
@@ -9654,7 +9655,8 @@ function MarketingTab() {
               label: 'Clique pago rastreado',
               cor: cob === null ? CINZA : cob >= 60 ? VERDE : cob >= 30 ? AMBAR : VERMELHO,
               value: cob === null ? '— sem clique pago' : `${cob}%`,
-              desc: `${ci.visitas ?? 0} visita(s) com gclid de ${ci.cliques_pagos ?? 0} clique(s) cobrado(s)`,
+              desc: `${ci.visitas ?? 0} dispositivo(s) com gclid de ${ci.cliques_pagos ?? 0} clique(s)`
+                + (adsSaude.janela?.recortada ? ` · desde ${dataCurta(adsSaude.janela.cobertura_desde)}` : ''),
             },
             {
               label: 'Conversão: Cadastro',
@@ -9694,9 +9696,14 @@ function MarketingTab() {
                   </div>
                 ))}
               </div>
+              {adsSaude.janela?.recortada && (
+                <div style={{ background: '#eff6ff', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: '#0D63DB', marginBottom: 10 }}>
+                  ℹ️ A cobertura conta <strong>só a partir de {dataCurta(adsSaude.janela.cobertura_desde)}</strong>, quando o rastreamento das páginas públicas entrou no ar. Cliques cobrados antes disso ficam de fora do cálculo de propósito: não havia medição, e dividir por eles transformaria <em>ausência de instrumentação</em> em <em>perda de rastreamento</em>.
+                </div>
+              )}
               {cob !== null && cob < 60 && (
                 <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: '#92400e', marginBottom: 10 }}>
-                  ⚠️ <strong>{ci.visitas ?? 0} dispositivo(s) novo(s) para {ci.cliques_pagos ?? 0} clique(s) cobrado(s).</strong> As duas pontas NÃO são a mesma unidade: o Google cobra por clique e nós gravamos <em>primeiro toque por dispositivo</em> — quem clica de novo no anúncio já não gera linha nova. Então esta razão é um <strong>piso</strong>, não a perda exata. O que se vigia é ela CAIR ao longo do tempo. Perda de verdade vem de página de destino fora do app React (onde o rastreador não roda), bloqueador de anúncios e saída antes do carregamento.
+                  ⚠️ <strong>{ci.visitas ?? 0} dispositivo(s) para {ci.cliques_pagos ?? 0} clique(s) cobrado(s).</strong> As duas pontas não são a mesma unidade — o Google cobra por clique e aqui se grava <em>primeiro toque por dispositivo</em>, então quem volta pelo anúncio não gera linha nova. Esta razão é um <strong>piso</strong>; o que se vigia é ela CAIR. Perda real vem de bloqueador de anúncios e de saída antes do carregamento.
                 </div>
               )}
               {(adsSaude.utm_term?.visitas ?? 0) === 0 && (
