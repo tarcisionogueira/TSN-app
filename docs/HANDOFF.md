@@ -4,6 +4,130 @@
 
 ---
 
+## 🧾 16/08 — O DIA EM QUE `authorized` NÃO ERA PAGAMENTO
+
+Sessão longa, três frentes. A do meio é a que vale ler inteira.
+
+### A. O 1º assinante Pro recebeu "bem-vindo" e nunca pagou
+
+`erik_migli@hotmail.com` assinou o Investidor Pro em 16/08. O Mercado Pago mandou "você tem um
+novo assinante", nós mandamos **"Bem-vindo ao Investidor Pro"** às 11:39:20 — e às 12:01:32 a
+cobrança de R$ 49,90 foi **RECUSADA** (`cc_rejected_high_risk`). `date_approved: null`,
+`net_received_amount: 0`. Zero real entrou. O cliente ficou com dois "parabéns" na caixa de
+entrada e nenhum acesso; o dono achou que a plataforma estava errada, e ela estava certa.
+
+**CAUSA:** `authorized` foi lido como pagamento. Não é. Num preapproval é o **mandato aceito**
+— o MP valida o cartão com uma transação de **R$ 0,00** (`card_validation`) e ganha permissão
+de cobrar; a primeira cobrança é ASSÍNCRONA e pode ser recusada minutos depois. Num pagamento
+avulso, `authorized` é valor autorizado e **não capturado** (`captured:false`,
+`pending_capture`, `net_received_amount: 0`) — reserva no cartão, não caixa.
+
+A varredura pedida pelo dono ("garanta que não se repita, tampouco com outros produtos") achou
+a mesma confusão em **oito** lugares, atingindo assinatura mensal, Pro anual, assessoria,
+Clube, produtos e recarga de crédito — incluindo `PagamentoServico.jsx`, que disparava o evento
+**Purchase para Meta e Google Ads** em cima do mandato, ou seja, ensinava as campanhas a
+otimizar por venda que não aconteceu. E os **dois crons de reconciliação**, que rodam sozinhos:
+o do MP varria `preapproval/search?status=authorized` e concedia o plano a quem estivesse como
+Explorador — **sem olhar pagamento nenhum**. Bastava o cartão ser válido.
+
+**Decisão do dono (opção 1): acesso só com dinheiro na conta.** A trava mora dentro de
+`ativarPlanoDireto` (`api/_webhook-core.js`) de propósito — todo caminho de ativação passa por
+lá, então um chamador novo nasce protegido. A exceção é deliberada: quem **já tem histórico de
+pagamento** continua reativável sem cobrança nova, senão a correção trocaria um buraco de
+acesso por um buraco de atendimento (cliente adimplente preso como Explorador quando um webhook
+se perde). As boas-vindas migraram para o ramo de cobrança RECEBIDA.
+
+> ⚠️ **Dois defeitos se anulavam.** `assinar-com-cadastro.js` também gravava `plano: 'top2'`,
+> que viola `perfis_plano_check`, derrubando o upsert inteiro dentro de um try/catch que só
+> logava — por esse caminho o `role` **nunca** era gravado, nem para quem pagava. Era esse bug
+> que segurava o buraco de acesso. **Corrigir só um abriria o outro.** Quando encontrar dois
+> defeitos que se cancelam, trate-os como um só.
+
+Reparo de dado: `plano_pago_em` do não-pagante foi limpo. Ela é a âncora da garantia de 7 dias
+(CDC art. 49): mantida, queimaria a janela do cliente se o MP cobrasse depois, e ainda furaria a
+trava nova — histórico de pagamento é justamente o que libera sem cobrança.
+
+### B. Duas telas que mediam a própria ausência de medição
+
+**O painel do Google Ads era um desenho.** Quatro caixas com `status: true` escrito à mão, que
+exibiam verde desde o dia em que foram escritas e exibiriam o mesmo com a conta desligada. Ao
+lado, o investimento vinha de dados frescos — daí o relato do dono: *"o Google não atualiza, só
+aumenta o investimento"*. Descrição literal da tela. Os dados nunca foram o problema: batem
+**exato** com o painel do Google nas cinco métricas (235 cliques, R$ 343,81, 3.367 impressões,
+2 conversões, CPC R$ 1,46).
+
+**E o card que substituiu o desenho nasceu com o mesmo defeito.** Ele mostrou "18% de cobertura"
+e me levou a diagnosticar vazamento de rastreamento que não existe. `visita_origem` começa em
+**12/08 21:49** — antes disso não havia rastreador nas páginas públicas. A janela do painel é de
+30 dias: dez dias sem instrumentação entravam no denominador como perda. Medido só onde havia
+medição, a captura é ~1:1 (13/08: 15 cliques → 13 dispositivos; 14/08: 12 → 11; 15/08: 13 → 18).
+
+> **A lição, que é a do CLAUDE.md e mesmo assim foi cometida dentro do card que existe para
+> caçá-la:** não distinguir "não foi medido" de "medido e deu zero". O aviso está escrito seis
+> linhas acima do snippet em `api/publico.js`. Ao criar métrica nova, pergunte **desde quando o
+> denominador é observável** — e faça a tela DIZER que recortou a janela.
+
+### C. O lead que o fluxo entregou sem servir para nada
+
+Rastreio de uma simulação do dono na Alavancagem, 19:35. Por fora tudo verde: lead gravado,
+chamado com `user_id`, aviso à equipe **entregue**, zero erro. O lead saiu **sem telefone** —
+com o número no perfil o tempo todo — e **sem vínculo de conta**. O e-mail para a equipe, que é
+desenhado para o contato em um clique, saiu dizendo "WhatsApp: não informado".
+
+A tela lia `perfis.telefone` no navegador e reenviava no corpo; falhando essa leitura, o estado
+vira `{}` e o botão continua habilitado. Corrigido na raiz: **com o token na mão, o servidor não
+precisa acreditar no cliente** — busca com a service key. E o lead passou a gravar `user_id`,
+coisa que o chamado já fazia no mesmo arquivo.
+
+**Efeito colateral bom:** provou que `ADMIN_EMAIL` já estava definida — pendência aberta desde
+15/08 que ninguém sabia estar resolvida.
+
+### D. Fontes: "não tentei" deixou de ser "falhou"
+
+`_saude-fonte.mjs` gravava `status='falhou'` quando a recusa era de **orçamento**. O `semCota`
+já era honrado no motivo e no teste de regressão — só não no campo que o monitor e os painéis
+leem. Efeito: CALIL, VEGAS, TORRES3 e RJLEILOES contadas 3 dias como paradas **sem nunca terem
+sido tentadas** (teto do Bright Data). Agora existe `sem_cota`, com alerta próprio, porque a
+ação que resolve é oposta: liberar verba × consertar parser.
+
+> Correção de rumo registrada: eu disse que a CREPALDI estava "enterrada no ruído". Não estava —
+> ela já é `FONTES_PARADAS` e o monitor nunca alertou sobre ela. O fato real é que ela **nunca
+> funcionou**: zero lotes na história.
+
+### E. Google Ads — identidade verificada como a empresa certa
+
+A conta declarava o nome de **pessoa física** e a G2RS foi emitida para a **NOGUEIRA
+EMPREENDIMENTOS LTDA** — era essa divergência que reprovava a verificação. Criado o perfil de
+pagamentos da Nogueira (3493-7551-9656) e **verificação concluída**. Cartões de pagamento
+preservados; campanhas não pararam.
+
+O logo do site foi trocado pela **arte registrada no INPI** (944274056, mista, titular Nogueira,
+depósito 30/06/2026), extraída do próprio PDF do INPI — que a guarda **partida em duas faixas**,
+por isso a metade com o "BRASIL" aparecia separada. O revisor do Google abre o site para
+comparar com o logo declarado; exibir arte diferente criaria sozinho a divergência que o dia
+inteiro serviu para fechar.
+
+> O código da G2RS **não** entra em "Pedir a certificação" — aquele formulário é de cripto e
+> produtos especulativos. Vai num formulário dedicado da política de serviços financeiros do
+> Brasil, e só depois da verificação do anunciante. Detalhe em `docs/PENDENCIAS_DONO.md`.
+
+### O que fica de olho para a próxima sessão
+
+- **`proximidades_vazio_falso` cresceu no dia: 924 → 987** (limite 300). É o maior desvio aberto
+  em `qa_invariantes()` e está piorando, não estabilizado.
+- `relatorio_area_nao_confirmada` 14 (limite 2) · `cadastro_barrado` 8 (7) ·
+  `relatorio_yield_sem_x100` 1 (0) · `aval_ausente_com_doc` 4.130 (4.000).
+- `reuniao_solicitada_parada` 3 — mediana de **45,6 dias**. Não tem conserto de código: depende
+  de nomear analista.
+- `/checkout` "Failed to fetch", 3 ocorrências, última 16/08 11:39 — dentro do fluxo do Erik.
+  Não bloqueou a assinatura (a conta foi criada e o MP chamado), e segue **sem causa
+  identificada**. Deixado aberto de propósito em `erros_cliente`.
+- **Amanhã:** conferir em Admin → Marketing se o aviso de `utm_term` sumiu (o sufixo
+  `utm_term={keyword}&utm_content={creative}` foi salvo em 16/08) e se o card de cobertura
+  passou a mostrar "desde 12/08".
+
+---
+
 ## 🔔 LEIA ISTO NA PRÓXIMA SESSÃO — logo DEPOIS do ritual de abertura
 
 > Instrução explícita do dono ao encerrar 15/08: *"liste o que ficou pendente da minha parte e me
@@ -15,14 +139,25 @@
 
 | # | Item | Por que trava | Como conferir se já foi feito |
 |---|---|---|---|
-| **A** | **Definir `ADMIN_EMAIL` na Vercel** (+ redeploy) | Sem ela o aviso de chamado novo **não sai**. O chamado é registrado e o log diz `[duvida] chamado SEM aviso: ADMIN_EMAIL não definido` | Não dá para checar do banco — **pergunte a ele** |
+| ~~**A**~~ | ~~`ADMIN_EMAIL` na Vercel~~ — ✅ **RESOLVIDO 16/08** | Estava definida o tempo todo | Provado: aviso de lead entregue em 16/08 19:35 (`emails_log`, `lead_alavancagem`, `entregue`) |
 | **B** | **Nomear um analista** | `select count(*) from perfis where role='analista' and ativo` deu **0**. Há 42 horários livres e 3 pedidos de reunião parados desde 1 e 5 de julho. O trigger faz o pedido cair para o admin — dá dono à fila, **não substitui a pessoa** | `select count(*) from perfis where role='analista' and ativo;` → > 0 = resolvido |
 
 Detalhe completo e passo a passo: `docs/PENDENCIAS_DONO.md`, seção **"NOVO EM 15/08"**.
 Uma Routine semanal (`trig_0125Q6eF32hazyZk4rVj16Tg`, segundas 9h BRT) também cobra os dois e se
 apaga quando ele confirmar os dois.
 
-### 2️⃣ Assunto que o dono deixou marcado para ESTA sessão
+### 2️⃣ ~~Assunto marcado para a sessão de 16/08~~ — ✅ **RESOLVIDO E EM PRODUÇÃO**
+
+> **A resposta:** o painel do Google Ads era um **array literal** com `status: true` escrito à
+> mão. Não consultava nada — e o investimento ao lado vinha de dados frescos, então a frase do
+> dono descrevia a tela ao pé da letra. Trocado por medição real (RPC `admin_ads_rastreamento`),
+> com relógio por card e capacidade de dizer "não consegui verificar". Ver o bloco **16/08 · B**
+> no topo deste arquivo — inclusive a armadilha em que o card NOVO caiu e como foi corrigida.
+>
+> _O registro histórico abaixo fica porque a hipótese que ele desloca continua válida como
+> método: quando a tela discorda do banco, comece comparando o que a tela consulta._
+
+<details><summary>Retrato original de 15/08 (histórico)</summary>
 
 > **"O Google não está atualizando, somente aumentando o investimento, na minha tela de marketing."**
 
@@ -46,6 +181,13 @@ desloca a hipótese — **a INGESTÃO está viva**:
 > Vale olhar junto o cruzamento que já era pendência: **222 cliques pagos × 41 visitas com
 > `gclid`** em 14 dias, e **20 cadastros**. A queda entre as três é natural; o TAMANHO dela é que
 > se vigia. E `utm_term` segue em 0 (pendência A do dono, de 14/08).
+
+</details>
+
+> ✅ **`utm_term` também foi resolvido em 16/08** — o dono salvou o sufixo de URL final
+> `utm_term={keyword}&utm_content={creative}` no Google Ads. Conferir a partir de 17/08 se o
+> aviso some do painel. E o cruzamento "cliques × visitas com gclid" citado acima **não é** a
+> perda que parecia: ver 16/08 · B.
 
 ---
 

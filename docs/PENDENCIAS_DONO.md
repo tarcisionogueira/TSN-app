@@ -4,7 +4,80 @@
 > variável de ambiente). Cada um traz o **porquê**, o **passo a passo** e **o que o Claude
 > faz depois** que você concluir. Quando estiver no computador, é só ir por aqui.
 >
-> _Última atualização: 15/08/2026._
+> _Última atualização: 16/08/2026._
+
+---
+
+## 🔴 NOVO EM 16/08 — Google Ads, e o teto que congelou o acervo pago
+
+### A. 🟠 Google Ads — verificação do anunciante: **faltam 2 tarefas** · prazo **15/09**
+
+O grosso saiu hoje. A **identidade já está verificada como NOGUEIRA EMPREENDIMENTOS LTDA**
+(perfil de pagamentos 3493-7551-9656) — era esse o bloqueio que vinha reprovando tudo, porque
+a conta declarava o seu nome de pessoa física e a G2RS foi emitida para a empresa.
+
+Concluídas: perguntas sobre a organização · envio de documentos · documentos do cliente ·
+nome da empresa · logo · organizações afiliadas. As três últimas estão **em revisão** (a
+análise só começa quando as duas restantes forem entregues).
+
+**Faltam, ~8 min cada:**
+- Responda a algumas perguntas sobre suas **relações comerciais**
+- Responda a algumas perguntas sobre suas **operações comerciais**
+
+Dados prontos para as duas (do contrato social nº 8, JUCEB 98619869):
+- Sócio **único**: Tarcisio de Souza Nogueira de Araujo, CPF 042.293.535-29 — 15.000 quotas,
+  R$ 15.000,00, **100% do capital**. Administração **isolada** dele.
+- Neuma de Souza Nogueira de Araujo (CPF 442.326.675-04) **retirou-se** em 02/04/2025 — se
+  algum campo sugerir que ela ainda é sócia, corrija.
+- Quem paga os anúncios: **NOGUEIRA EMPREENDIMENTOS LTDA**.
+- Operação: assinatura de software que agrega editais de leilão e entrega relatório de
+  viabilidade, análise documental e parecer. **Não** é intermediação de crédito nem corretagem
+  — descrever como serviço financeiro atrai exigência regulatória que não se aplica.
+- CNAE principal `7490-1/04`; secundárias úteis: `4110-7/00`, `6810-2/01`, `8599-6/99`.
+
+> ⚠️ **"Anúncios financiados por" ainda mostra TARCISIO DE SOUZA NOGUEIRA DE ARAUJO.** Use o
+> "Editar nome" naquele card para pôr a Nogueira. É o texto que aparece publicamente no
+> anúncio; deixá-lo divergente reabre a inconsistência que hoje foi fechada.
+
+### B. 🔵 Google Ads — código da G2RS: é a etapa 3, e **não** é o "Pedir a certificação"
+
+O card "Certificação em Google Ads" leva a um formulário de **cripto e produtos especulativos**
+— as duas únicas opções do menu. Não é o seu caso; não envie por ali.
+
+O código da G2RS entra num **formulário dedicado**, linkado na política de serviços financeiros
+do Brasil: `support.google.com/adspolicy/answer/15332527?hl=pt-BR&co=GENIE.CountryCode%3DBR`.
+A ordem importa: **só depois** de a verificação do anunciante (item A) sair aprovada.
+
+O código está no e-mail da G2RS. **Nunca** colar em arquivo do repositório — ele é público.
+
+### C. 💰 Bright Data — o teto de 450/semana está saturado há 4 semanas
+
+`BRIGHTDATA_MAX_REQ_SEMANA` = **450**. As últimas semanas fecharam em 450, 450, 450 e 480 —
+teto batido, não demanda natural. Quando a cota acaba, as fontes pagas simplesmente **não são
+tentadas**: em 14–16/08, CALIL, VEGAS, TORRES3 e RJLEILOES passaram 3 dias sem coleta e
+voltaram sozinhas às 19h de 16/08, quando houve cota.
+
+Hoje isso deixou de virar alarme falso (o status `sem_cota` foi separado de `falhou`), mas o
+acervo pago segue coletando menos do que poderia.
+
+- **Decisão sua:** subir o teto (custa dinheiro) ou aceitar alguns dias por semana sem coleta
+  nas fontes pagas. Não mexo nisso sozinho porque é orçamento.
+- **Onde:** Vercel → `tsn-app` → Settings → Environment Variables → `BRIGHTDATA_MAX_REQ_SEMANA`.
+
+### D. 🟡 CREPALDI — integração que nunca funcionou (decidir se vale terminar)
+
+Zero lotes na história, zero execuções bem-sucedidas. Não é fonte que quebrou: é integração
+começada e não concluída (configurada como loja SuperbidNet `16139` em `scraper-puppeteer.mjs`).
+Já está em `FONTES_PARADAS`, então **não gera alarme** — só ocupa espaço na lista.
+- **Decisão sua:** terminar a integração (precisa de recon) ou remover a fonte de vez.
+
+---
+
+## ✅ RESOLVIDO EM 16/08 — sai da lista
+
+- **`ADMIN_EMAIL` (pendência A de 15/08): JÁ ESTAVA DEFINIDA.** Provado, não suposto: o teste de
+  interesse na Alavancagem às 19:35 de 16/08 disparou o aviso e ele foi **entregue**
+  (`emails_log`, tipo `lead_alavancagem`, status `entregue`). Nada a fazer.
 
 ---
 
@@ -13,7 +86,11 @@
 Vieram da investigação das reuniões paradas. O código já foi corrigido e está em produção
 (sem analista, reunião e chamado caem para você); estes dois **só você pode fazer**.
 
-### A. 📧 Definir `ADMIN_EMAIL` na Vercel — ~2 min, grátis
+### A. ~~📧 Definir `ADMIN_EMAIL` na Vercel~~ — ✅ **RESOLVIDO (16/08)**
+
+> Estava definida o tempo todo. Confirmado por evidência, não por suposição: o teste de
+> interesse na Alavancagem em 16/08 às 19:35 disparou o aviso e `emails_log` registra
+> `entregue`. O texto abaixo fica como histórico do porquê a variável importa.
 
 - **Por quê:** todo chamado agora dispara um aviso por e-mail para a equipe — e o aviso é
   desenhado para o contato acontecer em **um clique** (responder o e-mail já fala com a
