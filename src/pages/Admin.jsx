@@ -9394,6 +9394,11 @@ function MarketingTab() {
   const [funil, setFunil] = useState(null); // captação por origem (RPC admin_funil_captacao)
   const [gastos, setGastos] = useState([]); // lançamentos de investimento (marketing_gastos)
   const [metricasDia, setMetricasDia] = useState([]); // métricas AUTOMÁTICAS (Ads Script / Meta Insights)
+  // Saúde REAL do rastreamento Ads (RPC admin_ads_rastreamento). `undefined` = ainda
+  // carregando, `null` = a consulta FALHOU. Os dois estados são distintos de propósito:
+  // o painel antigo era hardcoded e não sabia dizer "não consegui verificar" — que é
+  // justamente o defeito que esta troca existe para corrigir.
+  const [adsSaude, setAdsSaude] = useState(undefined);
   const [gastoForm, setGastoForm] = useState({ data: '', canal: 'Google Ads', valor: '', observacao: '' });
   const [gastoBusy, setGastoBusy] = useState(false);
 
@@ -9477,6 +9482,14 @@ function MarketingTab() {
       const { data: md } = await supabase.from('marketing_metricas_dia').select('*')
         .gte('data', thirtyDaysAgo.slice(0, 10)).lte('data', dataFimISO.slice(0, 10));
       setMetricasDia(md || []);
+
+      // Saúde do rastreamento Google Ads — MEDIDA, não declarada. `error` conferido:
+      // sem isso uma falha de leitura viraria "sem sinal" e o painel acusaria uma queda
+      // de rastreamento que não existe — trocaria um verde mentiroso por um vermelho
+      // mentiroso, que não é progresso.
+      const { data: ads, error: errAds } = await supabase.rpc('admin_ads_rastreamento', { p_inicio: thirtyDaysAgo, p_fim: dataFimISO });
+      if (errAds) { console.error('[marketing ads]', errAds.message); setAdsSaude(null); }
+      else setAdsSaude(ads || null);
 
     } catch (e) {
       console.error('MarketingTab error:', e);
@@ -9591,29 +9604,109 @@ function MarketingTab() {
         </span>
       </div>
 
-      {/* Painel Google Ads */}
+      {/* Painel Google Ads — MEDIDO, não declarado.
+          Até 16/08 este bloco era um array literal com `status: true` escrito à mão nas
+          quatro caixas. Não consultava nada: exibia quatro bolinhas verdes desde o dia em
+          que foi escrito, e exibiria o mesmo com a conta do Google desligada. Foi o que
+          produziu o relato "o Google não está atualizando, só aumentando o investimento" —
+          descrição literal da tela, já que o gasto ao lado vem de dados frescos.
+          Agora cada card tem fonte no banco (RPC admin_ads_rastreamento) e um RELÓGIO. */}
       <div style={{ ...S.card, borderRadius: 16, marginBottom: 20 }}>
-        {sectionHeader('Google Ads', 'Integrações e rastreamento ativo')}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, marginBottom: 16 }}>
-          {[
-            { label: 'Tag instalada', value: 'AW-16850175262', status: true, desc: 'Conta 475-979-5747 · todas as páginas' },
-            { label: 'Conversão: Cadastro', value: 'Cadastro — BidPro', status: true, desc: 'Rótulo uwEKCO_… · conta Uma por usuário' },
-            { label: 'Conversão: Plano', value: 'Compra de plano — BidPro', status: true, desc: 'Rótulo 08veCOz… · valor dinâmico por plano' },
-            { label: 'Page Views', value: 'Automático', status: true, desc: 'Toda troca de rota' },
-          ].map(item => (
-            <div key={item.label} style={{ background: '#f8fafc', borderRadius: 10, padding: '14px 16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                <span style={{ width: 8, height: 8, borderRadius: '50%', background: item.status ? '#10b981' : '#f59e0b', flexShrink: 0 }} />
-                <span style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{item.label}</span>
+        {sectionHeader('Google Ads', 'Rastreamento medido no período selecionado — não é configuração declarada')}
+        {(() => {
+          if (adsSaude === undefined) {
+            return <div style={{ color: '#94a3b8', fontSize: 13 }}>Medindo o rastreamento…</div>;
+          }
+          // "Não consegui verificar" NUNCA pode ser pintado de verde — é exatamente o
+          // defeito que este bloco existe para corrigir.
+          if (adsSaude === null) {
+            return (
+              <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '12px 14px', fontSize: 13, color: '#b91c1c' }}>
+                ⚠️ <strong>Não foi possível medir o rastreamento.</strong> A consulta falhou — isto não significa que o rastreamento esteja bom nem ruim, apenas que não foi verificado. Detalhe no console.
               </div>
-              <div style={{ fontSize: 14, fontWeight: 800, color: '#111111', marginBottom: 2 }}>{item.value}</div>
-              <div style={{ fontSize: 11, color: '#94a3b8' }}>{item.desc}</div>
-            </div>
-          ))}
-        </div>
-        <div style={{ background: '#eff6ff', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: '#0D63DB' }}>
-          ℹ️ Status "Inativo" no Google Ads é normal até o primeiro cadastro/assinatura ser disparado. Acesse <strong>www.bidprobrasil.com.br</strong> para ativar a tag de page_view.
-        </div>
+            );
+          }
+          const CINZA = '#94a3b8', VERDE = '#10b981', AMBAR = '#f59e0b', VERMELHO = '#dc2626';
+          const hs = v => (v === null || v === undefined ? null : Number(v));
+          const desde = v => {
+            const h = hs(v);
+            if (h === null) return 'sem sinal no período';
+            if (h < 1) return 'último sinal agora há pouco';
+            if (h < 48) return `último sinal há ${Math.round(h)} h`;
+            return `último sinal há ${Math.round(h / 24)} d`;
+          };
+          const porIdade = (v, okH, avisoH) => {
+            const h = hs(v);
+            if (h === null) return CINZA;
+            return h <= okH ? VERDE : h <= avisoH ? AMBAR : VERMELHO;
+          };
+          const pv = adsSaude.pageview || {}, ci = adsSaude.click_id || {};
+          const cad = adsSaude.cadastro || {}, pl = adsSaude.plano || {}, ing = adsSaude.ingestao || {};
+          const cob = ci.cobertura_pct === null || ci.cobertura_pct === undefined ? null : Number(ci.cobertura_pct);
+
+          const cards = [
+            {
+              label: 'Page views (tag)', cor: porIdade(pv.horas_desde, 24, 72),
+              value: `${pv.visitas ?? 0} visita(s)`,
+              desc: `${desde(pv.horas_desde)} · tag AW-16850175262`,
+            },
+            {
+              label: 'Clique pago rastreado',
+              cor: cob === null ? CINZA : cob >= 60 ? VERDE : cob >= 30 ? AMBAR : VERMELHO,
+              value: cob === null ? '— sem clique pago' : `${cob}%`,
+              desc: `${ci.visitas ?? 0} visita(s) com gclid de ${ci.cliques_pagos ?? 0} clique(s) cobrado(s)`,
+            },
+            {
+              label: 'Conversão: Cadastro',
+              cor: (cad.com_click ?? 0) > 0 ? VERDE : (cad.total ?? 0) > 0 ? AMBAR : CINZA,
+              value: `${cad.com_click ?? 0} de ${cad.total ?? 0}`,
+              desc: (cad.com_click ?? 0) > 0
+                ? 'cadastros atribuídos ao Ads no período'
+                : (cad.total ?? 0) > 0 ? 'houve cadastro, nenhum atribuído ao Ads' : 'nenhum cadastro no período',
+            },
+            {
+              label: 'Conversão: Plano',
+              cor: (pl.com_click ?? 0) > 0 ? VERDE : (pl.total ?? 0) > 0 ? AMBAR : CINZA,
+              value: `${pl.com_click ?? 0} de ${pl.total ?? 0}`,
+              desc: (pl.total ?? 0) > 0
+                ? 'assinaturas pagas atribuídas ao Ads'
+                : 'nenhuma assinatura paga no período',
+            },
+            {
+              label: 'Ingestão de métricas', cor: porIdade(ing.horas_desde, 36, 72),
+              value: ing.ultimo_dia ? `dia ${String(ing.ultimo_dia).slice(8, 10)}/${String(ing.ultimo_dia).slice(5, 7)}` : '— nunca',
+              // A rodada é ~10h50 UTC e traz o dia ANTERIOR: "último dia = ontem" é o
+              // normal. O relógio que vale é o da rodada, não o do dia coberto.
+              desc: `${desde(ing.horas_desde)} · a rodada traz sempre o dia anterior`,
+            },
+          ];
+          return (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, marginBottom: 16 }}>
+                {cards.map(item => (
+                  <div key={item.label} style={{ background: '#f8fafc', borderRadius: 10, padding: '14px 16px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: item.cor, flexShrink: 0 }} />
+                      <span style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{item.label}</span>
+                    </div>
+                    <div style={{ fontSize: 14, fontWeight: 800, color: '#111111', marginBottom: 2 }}>{item.value}</div>
+                    <div style={{ fontSize: 11, color: '#94a3b8' }}>{item.desc}</div>
+                  </div>
+                ))}
+              </div>
+              {cob !== null && cob < 60 && (
+                <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: '#92400e', marginBottom: 10 }}>
+                  ⚠️ <strong>{100 - cob}% do clique pago não vira visita rastreada.</strong> O Google cobrou {ci.cliques_pagos ?? 0} clique(s) e só {ci.visitas ?? 0} chegaram aqui com identificador. Causas usuais: redirect que descarta a query string, bloqueador de anúncios e saída antes do carregamento.
+                </div>
+              )}
+              {(adsSaude.utm_term?.visitas ?? 0) === 0 && (
+                <div style={{ background: '#eff6ff', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: '#0D63DB' }}>
+                  ℹ️ Nenhuma visita trouxe <strong>utm_term</strong> no período — sem ele não dá para saber QUAL palavra-chave trouxe o clique. Ativar em Google Ads → Configurações da conta → Marcação automática / modelo de acompanhamento.
+                </div>
+              )}
+            </>
+          );
+        })()}
       </div>
 
       {/* Captação por origem — de onde vem quem se CADASTRA e quem PAGA (first-touch) */}
