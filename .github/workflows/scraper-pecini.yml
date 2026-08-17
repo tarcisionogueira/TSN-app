@@ -23,6 +23,10 @@ on:
         description: '1 = dumpa os contextos de R$ (recon dos rótulos)'
         required: false
         default: '0'
+      debug_n:
+        description: 'Quantos lotes SAUDÁVEIS dumpar (o dump de quem falhou é sempre)'
+        required: false
+        default: '3'
       # TETO SEMANAL POR DISPARO, não fixo no arquivo (17/08). O freio de custo lê
       # BRIGHTDATA_MAX_REQ_SEMANA (padrão 450 em api/_brightdata.js) e este workflow NÃO
       # passava a variável — então todo run do runner usava 450, mesmo com saldo recarregado
@@ -71,5 +75,6 @@ jobs:
           PECINI_DRYRUN: ${{ github.event.inputs.dryrun || '0' }}
           PECINI_MAX_LOTES: ${{ github.event.inputs.max_lotes || '40' }}
           PECINI_DEBUG: ${{ github.event.inputs.debug || '0' }}
+          PECINI_DEBUG_N: ${{ github.event.inputs.debug_n || '3' }}
           BRIGHTDATA_MAX_REQ_SEMANA: ${{ github.event.inputs.teto_semana || '450' }}
         run: node scripts/scraper-pecini.mjs

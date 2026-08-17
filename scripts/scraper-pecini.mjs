@@ -39,7 +39,7 @@ const BASE = 'https://www.pecinileiloes.com.br';
 const MAX_LOTES = Number(process.env.PECINI_MAX_LOTES || 40);
 const DRYRUN = process.env.PECINI_DRYRUN !== '0'; // default: dry-run (não grava)
 const DEBUG = process.env.PECINI_DEBUG === '1';   // dumpa contexto dos R$ p/ achar os rótulos reais
-let debugRestante = 3;                              // só nos primeiros lotes (log enxuto)
+let debugRestante = Number(process.env.PECINI_DEBUG_N || 3); // primeiros lotes (log enxuto)
 const SB_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_KEY;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -186,18 +186,6 @@ function parseDetalhe(html, rec) {
   const txt = html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ')
     .replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ');
 
-  // RECON: com PECINI_DEBUG=1 dumpa o contexto de cada "R$ ..." (rótulo à esquerda)
-  // p/ descobrir os rótulos REAIS do site sem acesso direto (o proxy bloqueia Pecini).
-  if (DEBUG && debugRestante > 0) {
-    debugRestante--;
-    console.log(`\n[DEBUG ${rec.id}] contextos de R$ (texto):`);
-    for (const m of txt.matchAll(/(.{0,45})R\$\s*([\d.]+(?:,\d{2})?)/g)) {
-      console.log(`   …${m[1].trim()} » R$ ${m[2]}`);
-    }
-    const trimp = [...html.matchAll(/(Valor\w*|Lance\w*|Avalia\w*)["'\s:=]{1,4}R?\$?\s*([\d.]+,\d{2})/gi)].map(x => `${x[1]}=${x[2]}`);
-    if (trimp.length) console.log(`   [trimpath/attrs] ${trimp.join(' · ')}`);
-  }
-
   // Valores pelos rótulos REAIS do Pecini (recon via PECINI_DEBUG):
   //   "Valor de Avaliação (dd/mm/aaaa): R$ X"     → avaliação (a data no meio quebrava o regex antigo)
   //   "1º Público Leilão: R$ X" / "2º Público Leilão: R$ Y" → praças (lance mínimo)
@@ -212,6 +200,23 @@ function parseDetalhe(html, rec) {
   const valorMinimo = pracasValidas.length ? Math.min(...pracasValidas) : 0;
   // A 1ª praça abre pelo valor de avaliação → se não houver rótulo de avaliação, usa a MAIOR praça.
   const avaliacao = avalLabel || (pracasValidas.length ? Math.max(...pracasValidas) : 0);
+
+  // RECON: com PECINI_DEBUG=1 dumpa o contexto de cada "R$ ..." (rótulo à esquerda) p/
+  // descobrir os rótulos REAIS do site sem acesso direto (o proxy bloqueia o Pecini daqui).
+  //
+  // MORA AQUI, e não antes de ler os valores, de propósito (17/08): a coleta perdeu 10 dos 21
+  // lotes novos por `valor_minimo = 0`, e o debug limitado aos 3 PRIMEIROS lotes despeja
+  // justamente os que deram certo — a amostra que não precisa de recon. Agora o dump sai
+  // SEMPRE que o lance não foi lido, que é a única página com algo a ensinar.
+  if (DEBUG && (debugRestante > 0 || !valorMinimo)) {
+    if (debugRestante > 0) debugRestante--;
+    console.log(`\n[DEBUG ${rec.id}] ${valorMinimo ? '' : '(SEM LANCE LIDO) '}contextos de R$ (texto):`);
+    for (const m of txt.matchAll(/(.{0,45})R\$\s*([\d.]+(?:,\d{2})?)/g)) {
+      console.log(`   …${m[1].trim()} » R$ ${m[2]}`);
+    }
+    const trimp = [...html.matchAll(/(Valor\w*|Lance\w*|Avalia\w*)["'\s:=]{1,4}R?\$?\s*([\d.]+,\d{2})/gi)].map(x => `${x[1]}=${x[2]}`);
+    if (trimp.length) console.log(`   [trimpath/attrs] ${trimp.join(' · ')}`);
+  }
 
   // Modalidade: "Público Leilão" (1ª/2ª praça) = leilão, não venda direta (que
   // aparece no menu do site em toda página). "extrajudicial" contém "judicial",
