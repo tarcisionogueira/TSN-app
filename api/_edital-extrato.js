@@ -361,7 +361,7 @@ export async function extratoEdital(imovelId, { deadline } = {}) {
     // — ou a regeneração deste — já leu este edital → pula download+parse inteiros.
     // Só os FATOS do documento vêm do cache; `pertenceAoLote` é POR LOTE (o mesmo
     // edital cobre vários) e é sempre recalculado abaixo contra os valores DESTE lote.
-    let cond = null, datas = null, pagamento = null, custos = null, identidade = null, processo = null, deCache = false;
+    let cond = null, datas = null, pagamento = null, custos = null, identidade = null, processo = null, deCache = false, pracasVisao = null;
     const hit = await cacheLer(chaveUrl(url));
     if (hit?.campos?.condicoes) {
       cond = hit.campos.condicoes; datas = hit.campos.datas || null;
@@ -389,7 +389,16 @@ export async function extratoEdital(imovelId, { deadline } = {}) {
           if (comData.length) datas = { inicio: comData[0].data, fim: comData[comData.length - 1].data, pracas: vis.pracas };
           else datas = { pracas: vis.pracas };
         }
-        const metaVis = { url, imovelId, tipoDoc: 'edital', campos: { identidade, ...(datas ? { datas } : {}) }, via: 'visao', confianca: 80 };
+        // AS PRAÇAS DA VISÃO PRECISAM CHEGAR NO FORMATO QUE O CHAMADOR LÊ. `extrairCondicoes`
+        // devolve {n, valor, data}; a visão devolve {ordem, data, hora, valor}. Sem esta
+        // normalização o dado era extraído, gravado no cache e DESCARTADO na hora de usar —
+        // e `gerar-analise.js:2238` fazia `.find()` sobre `undefined`, derrubando o relatório
+        // inteiro (erro real em 17/08: "Cannot read properties of undefined (reading 'find')"
+        // no lote de Copacabana, cujo edital escaneado tinha 2ª praça em 18/08 por R$ 505.173,65).
+        pracasVisao = (vis.pracas || [])
+          .map((p) => ({ n: Number(p.ordem) || null, valor: Number(p.valor) || 0, data: p.data || null }))
+          .filter((p) => p.n && (p.valor > 0 || p.data));
+        const metaVis = { url, imovelId, tipoDoc: 'edital', campos: { identidade, ...(datas ? { datas } : {}), ...(pracasVisao.length ? { pracasVisao } : {}) }, via: 'visao', confianca: 80 };
         await cacheGravar(chaveUrl(url), metaVis);
         // `cond` segue null de propósito: condições de arremate NÃO foram lidas, e fabricá-las
         // para "completar o registro" seria exatamente o defeito que este arquivo combate.
@@ -444,7 +453,11 @@ export async function extratoEdital(imovelId, { deadline } = {}) {
       // devolve a movimentação de um feito alheio com toda a cara de certa.
       if (processo?.numeroProcesso) await gravarProcessoDoLote(imovelId, processo.numeroProcesso);
     }
-    return { ...(cond || {}), pagamento, custos, identidade, datas, processo, fonteUrl: url, pertenceAoLote: pertence, deCache, condicoesLidas: !!cond };
+    // `pracas` SEMPRE array: o chamador itera sem guarda, e no caminho de visão `cond` é null
+    // de propósito. Vem depois do spread para não ser sobrescrito por um `cond` sem praças.
+    return { ...(cond || {}), pracas: (cond?.pracas?.length ? cond.pracas : (pracasVisao || [])),
+             pagamento, custos, identidade, datas, processo, fonteUrl: url,
+             pertenceAoLote: pertence, deCache, condicoesLidas: !!cond };
   }
   return null;
 }
