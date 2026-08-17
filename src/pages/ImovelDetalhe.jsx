@@ -859,7 +859,20 @@ export default function ImovelDetalhe() {
     // Falta data = sem o início OU sem o ENCERRAMENTO. Só olhar o início fazia o lote parecer
     // completo e nunca buscar o prazo real, que é o que o cliente precisa para dar lance.
     const faltaData = (!imovel.dataLeilao || !imovel.dataLeilao2) && !isVendaDireta;
-    const precisa = isCef ? faltaData : (!temDocs || faltaData);
+    // FALTA TEXTO: metragem ausente OU descrição que é só um eco do título. Sem isto, o
+    // enriquecimento nunca era PEDIDO para o lote que já tinha documento e data — e é
+    // exatamente esse o estado da BIASI (472 lotes ativos, TODOS sem área) e da LJUD.
+    // O servidor ganhou este mesmo teste em 17/08; corrigir só lá não adiantou nada, porque a
+    // requisição não saía do navegador. Duas completudes, uma em cada ponta, decidindo a mesma
+    // coisa por critérios diferentes — quando divergem, vence a mais restritiva e o conserto
+    // do outro lado vira letra morta. As duas agora perguntam a mesma coisa.
+    const descEcoDoTitulo = (() => {
+      const d = String(imovel.descricao || '').trim();
+      const t = String(imovel.titulo || '').trim();
+      return !d || (t && d.replace(t, '').replace(/[\s—·|-]+/g, '').length < 40);
+    })();
+    const faltaTexto = !(Number(imovel.areaM2) > 0) || descEcoDoTitulo;
+    const precisa = isCef ? faltaData : (!temDocs || faltaData || faltaTexto);
     if (!precisa) return;
     let cancel = false;
     apiCall(`/api/enriquecer-lote?imovel_id=${imovel.id}`).then(r => r.json()).then(d => {
