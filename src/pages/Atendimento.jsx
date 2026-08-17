@@ -47,7 +47,18 @@ export default function Atendimento() {
   // clientes por aqui" com 7 chamados abertos no banco. Personificar um cliente serve para VER o
   // app como ele; não pode tirar o atendente da própria fila.
   const papelAtendimento = (role === 'admin' && roleSimulado) ? roleSimulado : role;
-  const escopo = ESCOPO_PAPEL[papelAtendimento] ?? []; // papéis fora da lista não atendem
+  // `?? []` AQUI INVERTIA O ADMIN (17/08). Nesta tabela `null` é um VALOR com significado —
+  // "vê todos" — e `[]` significa o oposto, "não atende clientes". Como `??` considera `null`
+  // nulo, `ESCOPO_PAPEL.admin` (null) virava `[]`: o admin era convertido no contrário do que
+  // a própria tabela declara, dez linhas acima. A fila sumia inteira e o painel dizia
+  // "Seu acesso (admin) é interno. Você não recebe chamados de clientes por aqui." — com 30
+  // chamados pendentes no banco. Ficou invisível porque a mensagem é plausível: parece uma
+  // regra de negócio, não um bug.
+  // O teste certo é PRESENÇA DA CHAVE, não veracidade do valor: quem não está na tabela não
+  // atende; quem está com `null` atende tudo.
+  const escopo = Object.prototype.hasOwnProperty.call(ESCOPO_PAPEL, papelAtendimento)
+    ? ESCOPO_PAPEL[papelAtendimento]
+    : []; // papéis fora da lista não atendem
   const segsVisiveis = (escopo === null ? ORDEM_SEG : ORDEM_SEG.filter(s => escopo.includes(s)));
   const [chamados, setChamados] = useState([]);
   const [filtro, setFiltro] = useState('pendentes');
