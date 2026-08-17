@@ -903,6 +903,12 @@ export default function ImovelDetalhe() {
         if (pontos && Object.keys(pontos).length) {
           setImovel(prev => prev ? { ...prev, pontosProximos: pontos } : prev);
           setProxStatus('ok');
+        } else if (d?.nao_aplicavel) {
+          // "NÃO DÁ PARA MEDIR" NÃO É "MEDI E NÃO HÁ NADA" (17/08). Coordenada de nível
+          // `cidade` é o centroide do município, não o imóvel — 91 lotes do acervo dividem a
+          // mesma. Cair no 'empty' aqui era o que fazia a tela AFIRMAR ausência de escola no
+          // centro de São Paulo. Estado próprio, texto próprio.
+          setProxStatus('na');
         } else {
           setProxStatus('empty'); // resposta válida e vazia (sem POIs mapeados por perto)
         }
@@ -1224,6 +1230,17 @@ export default function ImovelDetalhe() {
                       })}
                     </div>
                   )}
+                  {/* A DISTÂNCIA PRECISA PRECISA DIZER DE ONDE (17/08). Desde hoje lotes de nível
+                      `bairro` também exibem proximidades (calculadas pelo extrato local do OSM,
+                      que antes só atendia `endereco`). O chip mostra "Escola 420 m" — número
+                      exato a partir de uma origem que NÃO é o lote. O selo logo acima já avisa
+                      que a localização é aproximada; esta linha liga uma coisa à outra, para o
+                      número não ser lido como medido da porta do imóvel. */}
+                  {temCoord && !localPrecisa && imovel.pontosProximos && Object.keys(imovel.pontosProximos).length > 0 && (
+                    <div style={{ marginTop: 6, fontSize: 11, color: '#94a3b8' }}>
+                      Distâncias medidas a partir do centro da região indicada acima, não do lote.
+                    </div>
+                  )}
                   {/* Estados explícitos dos pontos próximos (nunca mais "gira p/ sempre") */}
                   {temCoord && proxStatus === 'loading' && (
                     <div style={{ marginTop: 10, fontSize: 12, color: '#64748b', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
@@ -1233,6 +1250,11 @@ export default function ImovelDetalhe() {
                   {temCoord && proxStatus === 'empty' && (
                     <div style={{ marginTop: 10, fontSize: 12, color: '#94a3b8' }}>
                       Nenhum ponto de interesse mapeado nas proximidades.
+                    </div>
+                  )}
+                  {temCoord && proxStatus === 'na' && (
+                    <div style={{ marginTop: 10, fontSize: 12, color: '#64748b' }}>
+                      Localização aproximada (centro da cidade) — proximidades não calculadas para este lote.
                     </div>
                   )}
                   {temCoord && proxStatus === 'error' && (
