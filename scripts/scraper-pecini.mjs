@@ -28,7 +28,7 @@ import { createClient } from '@supabase/supabase-js';
 // 1 e grava `fonte_saude` 'falhou', e o gate só carimba "coletei" com linha no acervo.
 import { fetchViaBrightData, brightDataDisponivel } from '../api/_brightdata.js';
 import { fetchHeadless, fecharHeadless } from './lib/fetch-residencial.mjs';
-import { extrairGenerico, extrairData, checarQualidade } from './lib/scraper-core.mjs';
+import { extrairGenerico, extrairData, checarQualidade, extrairAreaM2} from './lib/scraper-core.mjs';
 import { registrarConhecimento, qualidadeColeta } from './lib/conhecimento.mjs';
 // Monitor de fontes: sem esta linha a fonte fica INVISÍVEL ao bug bounty (ver _saude-fonte.mjs).
 import { registrarSaude } from './_saude-fonte.mjs';
@@ -175,7 +175,14 @@ function parseDetalhe(html, rec) {
     : (temPracas || /extrajudicial/i.test(txt)) ? 'extrajudicial'
     : /venda\s*direta/i.test(txt) ? 'venda_direta'
     : 'extrajudicial';
-  const area = num((txt.match(/([\d.]+,\d{2}|\d+)\s*m²/i) || [])[1]);
+  // ÁREA (17/08): era `txt.match(/(\d+)\s*m²/)` — exigia o caractere `m²` (site que escreve
+  // "m2" saía sem área) e pegava a PRIMEIRA ocorrência da página, que num portal de leilão
+  // costuma ser o filtro de busca, não o imóvel. `extrairAreaM2` prioriza área ROTULADA
+  // (construída/privativa) e aceita as variações de unidade. Procura primeiro na DESCRIÇÃO —
+  // que desde hoje vem do corpo da página, não da meta tag de marketing — e só depois na
+  // página inteira, porque a descrição é o texto que fala do imóvel e o resto é o site.
+  const descImovel = (base.descricao || '');
+  const area = extrairAreaM2(descImovel) || extrairAreaM2(txt);
 
   // Documentos do lote (matrícula/edital/laudo) a partir dos PDFs da própria página.
   const anexos = extrairDocs(html);

@@ -9,7 +9,7 @@
 import { createClient } from '@supabase/supabase-js';
 import puppeteer from 'puppeteer';
 import { vasculharDocumentos, chaveDocCanonica } from '../api/_doc-scan.js';
-import { ehFracaoIdeal } from './lib/scraper-core.mjs';
+import { ehFracaoIdeal, extrairAreaM2 } from './lib/scraper-core.mjs';
 import MUNICIPIOS from '../api/_municipios.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
@@ -813,7 +813,28 @@ async function scraperSuperbidNet(browser, { portalId, stores, fonte, leiloeiro,
       const sub = str(p.subCategory);
       const tipoRaw = (sub && !/im[oó]ve/i.test(sub)) ? sub : titulo;
       const linkURL = str(of.linkURL);
-      const desc = str(of.offerDescription) || titulo;
+      // DESCRIÇÃO (17/08): era `offerDescription || titulo`, e o resultado medido no acervo foi
+      // **1.492 de 1.494 lotes SUPERBID com a descrição igual ao título** — ou seja,
+      // `offerDescription` vem vazio em praticamente toda oferta e caíamos na manchete. Como o
+      // corpo é onde mora a metragem, 377 lotes SUPERBID ficaram sem área (136 deles sem
+      // matrícula nem edital, isto é, sem NENHUMA fonte de onde recuperá-la).
+      //
+      // A API já entrega outros campos no mesmo `fieldList` que pedimos e que estavam sendo
+      // ignorados: `offerDetail` (detalhamento do lote) e `product.shortDesc` (descrição do
+      // bem). Agora eles são CONCATENADOS — não escolhidos por prioridade — porque trazem
+      // fatias diferentes (um costuma ter a condição, o outro a descrição física), e juntá-los
+      // dá ao extrator de área mais chance de achar a metragem rotulada. Duplicatas saem.
+      // O título só entra se, depois de tudo, não sobrar nada — aí é o que temos.
+      const partesDesc = [str(of.offerDescription), str(of.offerDetail), str(p.shortDesc)]
+        .map((x) => x.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim())
+        .filter(Boolean);
+      const vistosDesc = new Set();
+      const descRica = partesDesc.filter((x) => {
+        const k = x.toLowerCase();
+        if (vistosDesc.has(k)) return false;
+        vistosDesc.add(k); return true;
+      }).join(' — ');
+      const desc = descRica || titulo;
       // Área/ocupação vêm no texto (título+descrição) — confirmado nos dados.
       const ext = extrairDaDescricao(`${titulo} ${desc}`);
       // URL da página do lote (vem da API em linkURL). Serve tanto p/ link_edital
@@ -872,7 +893,10 @@ async function scraperSuperbidNet(browser, { portalId, stores, fonte, leiloeiro,
         endereco: toTitleCase(str(loc.street)),
         valor_avaliacao: valAval,
         valor_minimo: valMin,
-        area_m2: ext.area_m2 || 0,
+        // `extrairDaDescricao` tem o regex antigo (exige `m²` literal). `extrairAreaM2` aceita
+        // "m2"/"metros quadrados" e prefere área ROTULADA — entra como rede, nunca sobrescreve
+        // o que o extrator específico já achou.
+        area_m2: ext.area_m2 || extrairAreaM2(desc) || 0,
         ocupacao: ext.ocupacao || null,
         descricao: desc.replace(/<[^>]+>/g, '').slice(0, 500),
         link_edital: loteUrl,
