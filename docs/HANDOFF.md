@@ -4,6 +4,62 @@
 
 ---
 
+## 🧾 17/08 (madrugada) — O LANCE ESTAVA NA PÁGINA, NUMA FORMA QUE NADA AQUI LIA
+
+Fechamento dos dois itens que a coleta da PECINI deixou abertos.
+
+### A. Os 10 lotes perdidos por `valor_minimo = 0` — recon, não palpite
+
+O caminho barato aqui **não era alargar o regex no escuro**. O modo `PECINI_DEBUG=1` existe para
+descobrir os rótulos reais sem acesso ao site (o proxy daqui bloqueia o Pecini), só que estava
+limitado aos **3 primeiros** lotes — e os primeiros a passar são os que deram certo. Agora o dump
+sai **sempre que o lance não foi lido**, que é a única página com algo a ensinar.
+
+Um dry-run com debug (14 lotes, ~15 requests, zero gravação) devolveu a resposta, idêntica nos 7:
+
+```
+26. Lances Iniciais : 1&ordm; Leil&atilde;o: R$ 25.789,00
+                      2&ordm; Leil&atilde;o: R$ 15.473,40
+```
+
+**Duas causas empilhadas** — por isso nenhuma tentativa isolada teria funcionado:
+
+1. O texto contra o qual os regexes rodam só decodificava `&nbsp;`. Nem `1º` nem `Leilão`
+   **existem** nesse texto: há `1&ordm;` e `Leil&atilde;o`. É a **terceira vez no dia** que a
+   mesma entidade não decodificada aparece com outra roupa — rótulo de anexo (a matrícula),
+   descrição do corpo, e agora o lance.
+2. O regex exigia `"Público Leilão"` e a fonte escreve só `"1º Leilão:"`. Mesmo com o texto
+   decodificado, o rótulo não casaria.
+
+Conserto: `txt` passa por `decodificarEntidades`, e o rótulo da praça exige o **ordinal**
+(1º/2º/1ª/2ª) OU a palavra "Público" antes de "Leilão" — um `"Leilão:"` solto aparece em menu e
+em texto corrido, e aceitá-lo transformaria qualquer `R$` da página em lance. Conferido contra as
+7 strings reais do recon + 3 casos de ruído (menu, "Faixa de Preço", formato antigo).
+
+Dois dos 10 agora caem em `DESCARTADO(fracao_ideal)` em vez de `(valor)` — é o gate certo,
+alcançado pela descrição de corpo que passou a ser lida hoje. Regra de negócio funcionando, não
+perda.
+
+**Nota de método que vale guardar:** `min R$0` produzia `desconto_percentual = 100` e
+`score_viabilidade = 100` — o lote mais atraente do acervo, fabricado por não ter lido o preço.
+Não chegou a acontecer: `checarQualidade` descarta sem `valor_minimo`, e a varredura completa
+confirma **0 lotes ativos** com `valor_minimo = 0` e `valor_avaliacao > 0` em TODAS as fontes. O
+gate é a única coisa entre esse cálculo e o cliente — não afrouxar.
+
+### B. `bd_teto_saturado` mirava num número que se moveu
+
+Comparava contra o literal **405** (90% de 450). Desde ontem o teto é parâmetro de disparo (500 na
+última rodada) e o banco não tinha onde lê-lo: 429 requests acusando "perto do teto" contra um
+teto que era 500. Um alarme que dispara sem motivo é um alarme que se aprende a ignorar.
+
+O número existia — `registrar_uso_brightdata(p_teto, …)` recebe o teto em toda chamada, decide com
+ele e joga fora. Agora grava em `brightdata_uso.teto` e o invariante compara contra 90% dele; sem
+teto na linha (semanas anteriores) cai no 450 histórico e o limite continua 405. Hoje: **429/450 =
+ok**. O teto gravado é o da ÚLTIMA chamada permitida, não o maior já usado — o que interessa ao
+alarme é o teto que a PRÓXIMA chamada vai encontrar.
+
+---
+
 ## 🧾 17/08 (noite) — A MATRÍCULA "VEIO" APONTANDO PARA UMA PASTA VAZIA
 
 Coleta da PECINI disparada com o teto do Bright Data em 500. **Rodou de verdade** — sem recusa de
