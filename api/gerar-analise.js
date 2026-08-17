@@ -2235,8 +2235,13 @@ export default async function handler(req, res) {
       }
       // Praças do edital completam as colunas VAZIAS (nunca sobrescrevem o scraper): a
       // escolha da praça de referência abaixo passa a enxergar a 2ª praça/datas reais.
-      const p1 = extratoDoc.pracas.find(p => p.n === 1);
-      const p2 = extratoDoc.pracas.find(p => p.n === 2);
+      // `|| []` como cinto e suspensório: `extratoEdital` passou a SEMPRE devolver `pracas`
+      // (17/08), mas iterar sem guarda sobre o retorno de um módulo best-effort é o que
+      // derrubou a geração inteira quando o caminho de visão apareceu — o relatório do
+      // cliente morreu com "Cannot read properties of undefined (reading 'find')".
+      const pracasEd = extratoDoc.pracas || [];
+      const p1 = pracasEd.find(p => p.n === 1);
+      const p2 = pracasEd.find(p => p.n === 2);
       if (imDb) {
         const patchPr = {};
         if (!(Number(imDb.valor_minimo_2) > 0) && p2?.valor > 0 && p2.valor !== (Number(imDb.valor_minimo) || 0)) {
@@ -2263,7 +2268,7 @@ export default async function handler(req, res) {
       }
       // Vai no result (dentro de mercado): o front/PDF mostram e o parecer cita.
       mercado.condicoesEdital = {
-        pracas: extratoDoc.pracas,
+        pracas: pracasEd,
         datas: extratoDoc.datas || null,
         formaPagamento: extratoDoc.formaPagamento || null,
         avaliacao: aEd || null,
