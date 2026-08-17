@@ -7693,6 +7693,9 @@ function ComercialTab() {
   const [clientes, setClientes] = useState([]);
   const [totalClientes, setTotalClientes] = useState(null); // total REAL (pode passar do lote)
   const [consultores, setConsultores] = useState([]);
+  // Indicadores que NÃO são consultores formais (admin/parceiro/explorador que indicou).
+  // Existem só para o <select> conseguir exibir o vínculo real — ver a nota em `carregar`.
+  const [indicadoresExtra, setIndicadoresExtra] = useState([]);
   const [leadsMap, setLeadsMap] = useState({});
   const [loading, setLoading] = useState(true);
   const [filtro, setFiltro] = useState('todos'); // 'todos' | 'sem' | consultorId
@@ -7708,6 +7711,24 @@ function ComercialTab() {
       supabase.from('sdr_leads').select('user_id, origem').not('user_id', 'is', null),
     ]);
     setClientes(cl || []); setConsultores(cons || []);
+    // QUEM INDICOU NEM SEMPRE É `role='consultor'` (17/08). A consulta acima só traz
+    // consultores formais, mas `indicado_por` aponta para QUEM INDICOU — e 47 dos 49 clientes
+    // do acervo foram indicados pelo próprio ADMIN (que também é parceiro), 2 por exploradores.
+    // Sem uma <option> correspondente, o <select> não acha o `value` e o navegador exibe a
+    // PRIMEIRA opção — "Sem consultor". Resultado: o card dizia 1 (correto) e a coluna dizia
+    // "Sem consultor" em 49 linhas, e as duas leituras do mesmo campo se contradiziam na
+    // mesma tela. O card estava certo o tempo todo; quem mentia era o dropdown.
+    const idsIndicadores = [...new Set((cl || []).map(c => c.indicado_por).filter(Boolean))];
+    const idsConsultor = new Set((cons || []).map(c => c.id));
+    const faltantes = idsIndicadores.filter(id => !idsConsultor.has(id));
+    if (faltantes.length) {
+      // `error` CHECADO: sem isso, falha de leitura devolveria lista vazia e o <select>
+      // voltaria a anunciar "Sem consultor" para quem TEM vínculo — exatamente o defeito que
+      // este bloco existe para corrigir, reintroduzido pela porta do erro. Falhou, preserva o
+      // que já havia (o pior caso vira "rótulo desatualizado", nunca "afirmação errada").
+      const { data: extra, error: errExtra } = await supabase.from('perfis').select('id, nome, role').in('id', faltantes);
+      if (!errExtra) setIndicadoresExtra(extra || []);
+    } else setIndicadoresExtra([]);
     setTotalClientes(typeof totalCl === 'number' ? totalCl : (cl || []).length);
     const m = {}; (leads || []).forEach(l => { if (l.user_id && !m[l.user_id]) m[l.user_id] = l.origem; });
     setLeadsMap(m);
@@ -7811,6 +7832,15 @@ function ComercialTab() {
                         style={{ padding: '4px 8px', borderRadius: 6, border: `1px solid ${c.indicado_por ? '#e2e8f0' : '#f59e0b'}`, fontSize: 12, background: c.indicado_por ? '#fff' : '#fffbeb', color: '#111', cursor: 'pointer' }}>
                         <option value="">Sem consultor</option>
                         {consultores.map(co => <option key={co.id} value={co.id}>{co.nome}</option>)}
+                        {/* Quem indicou sem ser consultor formal. Sem esta linha o <select> cai
+                            na primeira opção e ANUNCIA "Sem consultor" para quem tem vínculo. */}
+                        {(() => {
+                          const ind = c.indicado_por && !consultores.some(co => co.id === c.indicado_por)
+                            ? indicadoresExtra.find(i => i.id === c.indicado_por) : null;
+                          if (!ind) return null;
+                          const rotulo = ind.role === 'admin' ? `${ind.nome || 'Admin'} (interno)` : `${ind.nome || 'Parceiro'} (indicação)`;
+                          return <option value={ind.id}>{rotulo}</option>;
+                        })()}
                       </select>
                     </td>
                     <td style={S.td}>{c.created_at ? new Date(c.created_at).toLocaleDateString('pt-BR') : '—'}</td>
