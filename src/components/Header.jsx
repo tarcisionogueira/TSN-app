@@ -194,6 +194,37 @@ export default function Header() {
   const papelEquipe = (role === 'admin' && roleSimulado) ? roleSimulado : role;
   // "Comissões" (extrato operacional) só p/ a equipe; o parceiro-cliente vê os ganhos em Indicações.
   const ehEquipe = ['admin', 'consultor', 'analista', 'advogado'].includes(papelEquipe);
+
+  // ─── FILA DE ATENDIMENTO: O BOTÃO ERA MUDO (17/08) ──────────────────────────────────────
+  // O dono: "o chamado não aparece para mim em lugar algum". Estava certo, e a causa não era
+  // permissão nem roteamento — os dois funcionam. A RLS deixa o admin ver tudo
+  // (`chamados_staff_escopo`), o gatilho `trg_chamado_cai_para_admin` já atribui todos a ele,
+  // e o botão "Atendimento" aparece no menu. Só que o botão não dizia NADA: o único badge do
+  // Header é o `naoLidasChat`, que é do chat do CLIENTE e nem se desenha para equipe.
+  // Cinco chamados abertos, e nenhum número em lugar nenhum — a fila só existia para quem
+  // lembrasse de ir olhar. Dar dono a uma fila não é o mesmo que avisar que ela tem gente
+  // esperando, que foi a mesma lição dos pedidos de reunião parados há 46 dias.
+  const [filaAtendimento, setFilaAtendimento] = React.useState(0);
+  React.useEffect(() => {
+    if (!ehEquipe) { setFilaAtendimento(0); return; }
+    let vivo = true;
+    const contar = async () => {
+      // `head: true` + `count: 'exact'` não traz linha nenhuma — só o número.
+      const { count, error } = await supabase.from('chamados')
+        .select('id', { count: 'exact', head: true })
+        .in('status', ['aberto', 'aguardando_atendente', 'em_atendimento']);
+      // Erro NÃO vira zero: zero é uma afirmação ("não há ninguém esperando") e seria
+      // exatamente o defeito que este badge existe para corrigir. Falhou, mantém o que tinha.
+      if (vivo && !error) setFilaAtendimento(Number(count) || 0);
+    };
+    contar();
+    // Realtime: chamado novo (ou encerrado) mexe no número sem precisar recarregar a página.
+    const ch = supabase.channel('header-fila-atendimento')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'chamados' }, contar)
+      .subscribe();
+    return () => { vivo = false; supabase.removeChannel(ch); };
+  }, [ehEquipe]);
+
   const abrirInstalarApp = () => window.dispatchEvent(new Event('tsn:pwa-install'));
 
   const ROLES_CALC = ['explorador', 'top2', 'assessorado', 'clube', 'consultor', 'analista', 'advogado', 'admin'];
@@ -374,6 +405,9 @@ export default function Header() {
             <button onClick={() => nav('/atendimento')}
               style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', border: 'none', borderRadius: 8, background: active('/atendimento') ? '#0891b2' : '#0891b222', color: '#67e8f9', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
               <Headphones size={14} /> Atendimento
+              {filaAtendimento > 0 && (
+                <span style={{ marginLeft: 2, minWidth: 18, height: 18, padding: '0 5px', borderRadius: 20, background: '#dc2626', color: 'white', fontSize: 11, fontWeight: 900, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{filaAtendimento}</span>
+              )}
             </button>
           )}
 
@@ -521,6 +555,9 @@ export default function Header() {
             <button onClick={() => { nav('/atendimento'); setOpen(false); }}
               style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: 'none', borderRadius: 8, background: 'transparent', color: '#67e8f9', fontWeight: 700, fontSize: 14, cursor: 'pointer', textAlign: 'left' }}>
               <Headphones size={16} /> Atendimento
+              {filaAtendimento > 0 && (
+                <span style={{ marginLeft: 2, minWidth: 18, height: 18, padding: '0 5px', borderRadius: 20, background: '#dc2626', color: 'white', fontSize: 11, fontWeight: 900, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{filaAtendimento}</span>
+              )}
             </button>
           )}
           {['analista','admin'].includes(papelEquipe) && (

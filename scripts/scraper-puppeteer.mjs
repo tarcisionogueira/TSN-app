@@ -2019,8 +2019,24 @@ function mapLotePestana(lote, leilao) {
     || ((imgs.find(i => i && i.destaque) || imgs[0] || {}).media)
     || null;
   const foto = capaMedia ? `${PESTANA_GED}${encodeURIComponent(capaMedia)}?ims=fit-in/640x0` : null;
+  // MODALIDADE: `bem.origem` é a fonte preferida, mas vem VAZIA em boa parte do acervo da
+  // PESTANA — e o fallback era 'extrajudicial', um palpite AFIRMATIVO sobre a natureza
+  // jurídica do lote. Medido em 17/08: **1.021 lotes ativos** marcados extrajudicial cuja
+  // descrição diz, com todas as letras, "Alienação Judicial Por Venda Direta". O dado estava
+  // ali o tempo todo, em `leilao.nome`; o mapper só não olhava para lá.
+  //
+  // Não é rótulo cosmético: modalidade decide o risco jurídico que o cliente lê, a nota de
+  // Perfil do BidScore e o texto do parecer. Dizer "extrajudicial" para uma alienação
+  // JUDICIAL é afirmar ausência de processo onde há um.
+  //
+  // Ordem importa: 'extrajudicial' CONTÉM 'judicial'. O teste de extra vem primeiro, e o de
+  // judicial usa limite de palavra — as duas defesas, porque foi exatamente essa colisão por
+  // substring que errou a nota de Perfil de 9.589 lotes em src/utils/score.js.
   const origem = String(bem.origem || '').toLowerCase();
-  const modalidade = origem.includes('extra') ? 'extrajudicial' : origem.includes('judicial') ? 'judicial' : 'extrajudicial';
+  const textoModal = `${origem} ${String(leilao.nome || '').toLowerCase()} ${desc.toLowerCase()}`;
+  const modalidade = /extrajudicial/.test(textoModal) ? 'extrajudicial'
+    : /\bjudicial\b/.test(textoModal) ? 'judicial'
+    : 'extrajudicial';
   // DOCUMENTOS. O edital é do LEILÃO (um por leilão). Matrícula/laudo, quando
   // existem, são do LOTE/BEM (por-imóvel): NUNCA usar um doc de leilão como
   // matrícula, senão o mesmo arquivo grudaria em todos os lotes. Varremos os
