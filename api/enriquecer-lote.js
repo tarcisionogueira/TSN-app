@@ -248,8 +248,24 @@ export default async function handler(req, res) {
     } catch { /* best-effort */ }
   }
 
-  // Pula só quando já tem tudo (docs E data) ou tentou há pouco (throttle de 12h).
-  if (!forcar && ((temDocs && !precisaData) || enriqRecente)) {
+  // "COMPLETO" PRECISA INCLUIR O QUE PASSAMOS A EXTRAIR (17/08). Até agora `ja_completo`
+  // significava "tem documento e tem data" — a definição foi escrita quando esta função só
+  // buscava isso. Ao passar a extrair METRAGEM e DESCRIÇÃO, um lote com edital e data era
+  // declarado completo e PULADO, com `area_m2 = 0` — ou seja, a correção nunca rodaria
+  // exatamente onde é necessária. É o mesmo defeito que esta sessão vem catalogando: um teste
+  // de completude que não foi atualizado junto com o que se considera completo.
+  // Medido na BIASI: 472 lotes ativos, TODOS sem área, 49 já com `enriquecido_em`.
+  const descEcoDoTitulo = (() => {
+    const d = String(im.descricao || '').trim();
+    const t = String(im.titulo || '').trim();
+    return !d || (t && d.replace(t, '').replace(/[\s—·|-]+/g, '').length < 40);
+  })();
+  const precisaTexto = !(Number(im.area_m2) > 0) || descEcoDoTitulo;
+
+  // Pula só quando já tem tudo (docs E data E texto) ou tentou há pouco (throttle de 12h).
+  // O throttle de 12h continua valendo por cima: ele existe para não martelar a fonte, e essa
+  // razão não muda por termos mais campos a preencher.
+  if (!forcar && ((temDocs && !precisaData && !precisaTexto) || enriqRecente)) {
     res.status(200).json({ ok: true, pulado: (temDocs && !precisaData) ? 'ja_completo' : 'tentado_recente', alterado: false, anexos: im.anexos || [] }); return;
   }
 
@@ -312,11 +328,10 @@ export default async function handler(req, res) {
     const areaPag = extrairAreaM2(String(html).replace(/<[^>]+>/g, ' '));
     if (areaPag > 0) patch.area_m2 = areaPag;
   }
-  const descAtual = String(im.descricao || '').trim();
-  const tituloAtual = String(im.titulo || '').trim();
-  const descEhEcoDoTitulo = !descAtual
-    || (tituloAtual && descAtual.replace(tituloAtual, '').replace(/[\s—·|-]+/g, '').length < 40);
-  if (descEhEcoDoTitulo) {
+  // Reusa `descEcoDoTitulo` calculado no teste de completude acima — a mesma regra em dois
+  // lugares divergiria no primeiro ajuste, e aí o endpoint decidiria visitar a página por um
+  // critério e gravar por outro.
+  if (descEcoDoTitulo) {
     const descPag = extrairDescricaoDoCorpo(html);
     if (descPag) patch.descricao = descPag.slice(0, 500);
   }
