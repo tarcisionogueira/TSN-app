@@ -150,6 +150,60 @@ data funciona. É parte de por que "já venceu" nunca foi vigiado.
 **Decisão pendente do dono:** qual valor é "o preço" do lote quando há 2 ou 3 praças — decide
 filtro da busca, ordenação, BidScore e a projeção do relatório vendido, de uma vez só.
 
+### F. CENSO COMPLETO DO ACERVO — a metragem que nunca foi capturada (17/08)
+
+Pedido do dono: *"faça uma inspeção completa do acervo… avalie completo e não por amostragem"*.
+30.442 lotes ativos, contados inteiros.
+
+| | lotes |
+|---|---|
+| **sem metragem** | **2.227** |
+| └ e sem matrícula em lugar nenhum | **495** |
+| ⠀⠀├ com edital em PDF (recuperável pela visão) | **337** |
+| ⠀⠀└ sem edital nenhum (sem saída hoje) | **158** |
+
+Por fonte — *sem área / recuperável / sem saída*: PESTANA 584/7/0 · BIASI 472/225/0 ·
+SUPERBID 377/28/**136** · LJUD 258/15/0 · CALIL 92/1/0 · GESTAOLEILOES 88/0/0 ·
+GRUPOLANCE 58/8/0 · LEILOTECH 47/4/0 · **PECINI 42/19/0** (o lote de Sorocaba é um destes) ·
+LEILOFY 35/0/0 · VIP 33/27/0 · SBID9 29/0/0 · VLANCE 25/0/0 · SOLD 21/0/**20**.
+
+**A causa de fundo, medida no mesmo censo:** fora da CEF, a `descricao` do lote **é o título e
+nada mais**.
+
+| fonte | descrição sem conteúdo próprio |
+|---|---|
+| SUPERBID | 1.492 de 1.494 |
+| PESTANA | 1.029 de 1.029 |
+| LJUD | 981 de 981 |
+| MEGA | 649 de 649 |
+| BIASI | 472 de 472 (e **100% sem área**) |
+| GRUPOLANCE | 470 de 470 |
+| ZUK | 420 de 420 |
+
+Os coletores gravam a **manchete** do anúncio e descartam o corpo — que é onde está a metragem
+que o dono lê no site do leiloeiro. **A CEF é a exceção que prova a regra:** a descrição dela
+também é template, mas template **com dado** ("Casa, X de área total, Y de área privativa"), e
+por isso a CEF tem **zero** lote sem área.
+
+> **Método, para quem repetir a inspeção:** descrição de imóvel real é ÚNICA por lote. Duas
+> tentativas falharam antes de acertar — normalizar números agrupou a CEF inteira num molde só
+> (os números *são* o conteúdo dela), e exigir repetição exata não pega quem monta
+> "título + sufixo fixo". O teste que funciona é **remover o título e medir o resíduo**:
+> resíduo vazio = a descrição não acrescenta nada. Mesmo esse escapa da PECINI, cujo título não
+> aparece literal na descrição — daí o critério final ser **operacional** (`área = 0` +
+> `sem matrícula`), que não depende de adivinhar o formato do texto.
+
+**Novo invariante `lote_sem_area_nem_matricula`** (495, limite **400** → em alerta). Havia 23
+invariantes e **nenhum** olhava a metragem do lote: `relatorio_area_nao_confirmada` fala de
+relatório emitido e `aval_ausente_com_doc` fala de avaliação. Por isso os 2.227 cresceram em
+silêncio. O limite ficou ABAIXO do valor atual de propósito — calibrar no valor de hoje faria
+o invariante nascer verde e normalizar o problema, que é o oposto de vigiar.
+
+**Fica aberto:** os **158 sem saída** (SUPERBID 136, SOLD 20) não têm área, matrícula nem
+edital — para eles o conserto é de **captura** (parser por leiloeiro), não de leitura. E o
+scraper da PECINI grava a meta-descrição de marketing do site (*"Pecini Leilões, especialistas
+em leilões judiciais e extrajudiciais"*) no lugar da descrição do imóvel.
+
 ### O que fica para a próxima sessão
 
 - **`aval_ausente_com_doc` 4.158** (limite 4.000) · `relatorio_area_nao_confirmada` 14 (2) ·
