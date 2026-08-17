@@ -10,6 +10,7 @@
  * Entrada: html bruto + a URL base (para resolver caminhos relativos).
  * Saída: { matricula, edital, regras, laudo, foto, anexos:[{nome,url,tipo}] }.
  */
+import { decodificarEntidades } from './_texto-imovel.js';
 
 // Hosts de ruído (analytics, consentimento, fontes, mapas, chat, CDN de biblioteca) —
 // nunca são documento. Ampliado em 03/08 pelo achado do dono (ver RE_ASSET_*): o pixel do
@@ -167,7 +168,15 @@ export function vasculharDocumentos(html, baseUrl, fotoAtual = null) {
   let a;
   while ((a = reA.exec(html)) !== null) {
     const href = a[1];
-    const texto = a[2].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
+    // DECODIFICA ENTIDADES (17/08). O texto da âncora ia CRU para `classificar()`, então um
+    // link rotulado "Matr&#xED;cula" nunca casava com RE_MATRICULA — depois de "Matr" vem
+    // "&#xED;", não "í" — e o documento virava anexo genérico ou sumia. O cliente lia
+    // "Matrícula: no site" com o arquivo publicado na página do leiloeiro.
+    // Este classificador serve TODAS as fontes (via enriquecer-lote), não só a PECINI onde o
+    // caso apareceu. Note que RE_MATRICULA já carregava um remendo para mojibake de charset
+    // ("matrãâ­cula"): era o mesmo problema tratado no sintoma, alargando o regex em vez de
+    // normalizar a entrada. Decodificar aqui ataca a causa dos dois.
+    const texto = decodificarEntidades(a[2].replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim().slice(0, 120);
     if (href && !ancoraTexto.has(href)) ancoraTexto.set(href, texto);
   }
 

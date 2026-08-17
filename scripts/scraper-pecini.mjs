@@ -29,6 +29,7 @@ import { createClient } from '@supabase/supabase-js';
 import { fetchViaBrightData, brightDataDisponivel } from '../api/_brightdata.js';
 import { fetchHeadless, fecharHeadless } from './lib/fetch-residencial.mjs';
 import { extrairGenerico, extrairData, checarQualidade, extrairAreaM2} from './lib/scraper-core.mjs';
+import { decodificarEntidades } from '../api/_texto-imovel.js';
 import { registrarConhecimento, qualidadeColeta } from './lib/conhecimento.mjs';
 // Monitor de fontes: sem esta linha a fonte fica INVISÍVEL ao bug bounty (ver _saude-fonte.mjs).
 import { registrarSaude } from './_saude-fonte.mjs';
@@ -87,7 +88,11 @@ function extrairDocs(html) {
   for (const m of html.matchAll(/<a\b[^>]*href=["']([^"']+\.pdf(?:\?[^"']*)?)["'][^>]*>([\s\S]*?)<\/a>/gi)) {
     const url = absPecini(m[1]);
     if (!url || vistos.has(url)) continue; vistos.add(url);
-    const rotulo = (m[2] || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    // DECODIFICA ENTIDADES ANTES DE CLASSIFICAR (17/08). O rótulo vinha cru: um link
+    // "Matr&#xED;cula" não casava com /matr[íi]cul/ e a matrícula que EXISTE no site do
+    // leiloeiro nunca virava anexo de matrícula — o cliente lia "Matrícula: no site" com o
+    // documento publicado. A prova estava no acervo: anexo gravado como "Edital do Leil&#xE3;o".
+    const rotulo = decodificarEntidades((m[2] || '').replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();
     const alvo = `${rotulo} ${url}`.toLowerCase();
     const tipo = /matr[íi]cul/.test(alvo) ? 'matricula'
       : /edital/.test(alvo) ? 'edital'
@@ -95,6 +100,24 @@ function extrairDocs(html) {
       : 'anexo';
     anexos.push({ nome: (rotulo || tipo).slice(0, 60), url, tipo });
   }
+  // SEGUNDA PASSADA: link cujo RÓTULO diz o que é, mesmo sem terminar em .pdf. O laço acima
+  // só aceita href .pdf — se o leiloeiro serve o documento por rota de download/visualizador
+  // (`/download?id=`, `/documento/123`), ele some. Aqui só entra o que o TEXTO do link
+  // identifica, para não varrer o menu do site inteiro: nada de href genérico.
+  for (const m of html.matchAll(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)) {
+    const url = absPecini(m[1]);
+    if (!url || vistos.has(url) || /\.pdf(\?|$)/i.test(url)) continue;
+    const rotulo = decodificarEntidades((m[2] || '').replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();
+    if (!rotulo || rotulo.length > 60) continue;
+    const tipo = /matr[íi]cul/i.test(rotulo) ? 'matricula'
+      : /edital/i.test(rotulo) ? 'edital'
+      : /laudo|avalia[çc]/i.test(rotulo) ? 'laudo'
+      : null;
+    if (!tipo) continue;
+    vistos.add(url);
+    anexos.push({ nome: rotulo.slice(0, 60), url, tipo });
+  }
+
   const ordem = { matricula: 0, edital: 1, laudo: 2, anexo: 3 };
   anexos.sort((a, b) => (ordem[a.tipo] ?? 9) - (ordem[b.tipo] ?? 9));
   return anexos;
