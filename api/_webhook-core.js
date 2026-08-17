@@ -332,12 +332,40 @@ export async function suspenderPlanoDireto({ userId, gateway }) {
     return { ok: true, ignorado: 'anual_vigente' };
   }
   const ROLES_PAGANTES = ['top2', 'assessorado', 'clube', 'top2_anual', 'assessorado_anual', 'clube_anual'];
-  const update = { inadimplente_desde: new Date().toISOString().slice(0, 10) };
+  // ─── RECORRÊNCIA NÃO TEM INADIMPLÊNCIA (regra do dono, 17/08) ──────────────────────────
+  // "Não há inadimplência em recorrência do Investidor Pro — ele é reduzido a explorador.
+  //  Leilão Clube tem contrato de 12 meses, por isso há inadimplência."
+  //
+  // A distinção é contratual, não técnica: numa assinatura recorrente, cobrança recusada
+  // significa que a assinatura DEIXA DE VIGORAR — não que o cliente ficou devendo. Não há
+  // saldo a cobrar, porque não há período contratado além do mês que não foi pago. Já o
+  // Clube compromete 12 meses, então a parcela não paga é dívida de verdade.
+  //
+  // O QUE ISTO EVITA. Até hoje esta função marcava `inadimplente_desde` para TODO mundo,
+  // antes mesmo de olhar o papel — e essa marca dispara, em cascata: o popup "Não conseguimos
+  // processar a cobrança / Regularize o pagamento" a cada acesso, a etiqueta vermelha
+  // "Inadimplente" no Admin, o corte de elegibilidade de comissão de rede e — o mais grave —
+  // a regra `r1_inadimplente` da retenção, que manda "Regularize para manter seus documentos"
+  // e AGENDA A EXCLUSÃO dos arquivos do cliente em 30 dias. Cobrar quem não deve é ruim;
+  // apagar documento de quem não deve é irreversível.
+  //
+  // Efeito colateral bem-vindo: quem NUNCA pagou é `explorador`, que não está em nenhuma das
+  // duas listas — então não é rebaixado (já está na base) nem marcado. Era o caso do cliente
+  // de 16/08, cuja primeira cobrança foi recusada e que mesmo assim virou "devedor".
+  const ROLES_COM_FIDELIDADE = ['clube', 'clube_anual'];
+  const temFidelidade = ROLES_COM_FIDELIDADE.includes(cliente.role);
+
+  const update = {};
+  if (temFidelidade) update.inadimplente_desde = new Date().toISOString().slice(0, 10);
+  // O rebaixamento vale para TODO plano pago, inclusive o Clube: o acesso acompanha o
+  // pagamento. `role_anterior` é o que permite devolver o degrau quando a cobrança voltar.
   if (ROLES_PAGANTES.includes(cliente.role)) { update.role_anterior = cliente.role; update.role = 'explorador'; }
+  if (!Object.keys(update).length) return { ok: true, ignorado: 'sem_plano_vigente' };
+
   const { error } = await supabase.from('perfis').update(update).eq('id', userId);
   if (error) throw new Error(error.message);
-  console.log(`[${gateway}] assinatura: cliente ${userId} rebaixado por falha de pagamento`);
-  return { ok: true, suspenso: true };
+  console.log(`[${gateway}] assinatura: cliente ${userId} rebaixado por falha de pagamento${temFidelidade ? ' (contrato com fidelidade: marcado inadimplente)' : ' (recorrência: sem inadimplência)'}`);
+  return { ok: true, suspenso: true, inadimplente: temFidelidade };
 }
 
 // ── ESTORNO DE COMISSÃO (chargeback / reembolso) ──────────────────────────────
