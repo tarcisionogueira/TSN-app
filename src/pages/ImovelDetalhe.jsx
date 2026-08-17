@@ -1335,13 +1335,24 @@ export default function ImovelDetalhe() {
                     </>
                   );
                 })()}
-                {imovel.valorAvaliacao && (
+                {/* `> 0`, não truthy: `valor_avaliacao` é `numeric` e o PostgREST serializa SEM
+                    aspas, então chega o NÚMERO 0 — falsy para o `&&` e mesmo assim renderizável
+                    pelo React, que imprime o dígito solto no meio do grid. São 4.456 lotes
+                    ativos com avaliação 0, e quem vê é o cliente LOGADO (o visitante cai no
+                    ImovelGate, que já usa o guard certo). A linha 7 acima já fazia `> 0`: era
+                    omissão, não convenção. */}
+                {imovel.valorAvaliacao > 0 && (
                   <div style={{ background: '#f8fafc', borderRadius: 12, padding: '16px' }}>
                     <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Avaliação</div>
                     <div style={{ fontSize: 22, fontWeight: 900, color: '#64748b' }}>{fmtBRL(imovel.valorAvaliacao)}</div>
                   </div>
                 )}
-                {economia && (
+                {/* `> 0` porque `economia` é `avaliacao - minimo`, e os dois outros desfechos
+                    são piores que não mostrar nada: 0 (3.621 lotes) imprime o dígito solto, e
+                    NEGATIVO (2.283 lotes) estampa "ECONOMIA POTENCIAL R$ -7.431.739,10" dentro
+                    da caixa VERDE — o sinal visual de vantagem anunciando prejuízo. Lance acima
+                    da avaliação existe e é informação legítima; só não é economia. */}
+                {economia > 0 && (
                   <div style={{ background: '#dcfce7', borderRadius: 12, padding: '16px' }}>
                     <div style={{ fontSize: 11, fontWeight: 700, color: '#15803d', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Economia potencial</div>
                     <div style={{ fontSize: 22, fontWeight: 900, color: '#15803d' }}>{fmtBRL(economia)}</div>
