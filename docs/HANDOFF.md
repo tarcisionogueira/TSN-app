@@ -4,6 +4,58 @@
 
 ---
 
+## 🧾 17/08 (noite) — A MATRÍCULA "VEIO" APONTANDO PARA UMA PASTA VAZIA
+
+Coleta da PECINI disparada com o teto do Bright Data em 500. **Rodou de verdade** — sem recusa de
+cota: 52 lotes no sitemap, 31 já no banco, 21 novos processados → **4 gravados**, 10 descartados
+por valor, 7 páginas sem lote. 40 s de execução, e o tempo curto é o normal para 21 páginas.
+
+**E a matrícula NÃO veio.** Ela foi *reconhecida* pela primeira vez — o conserto da tarde
+(decodificar entidades antes de classificar o rótulo) fez o link `Matr&#xED;cula` finalmente
+casar. Só que o href é `https://www.pecinileiloes.com.br/preview/`: **a rota que serve os
+documentos, sem o arquivo**. Os editais da MESMA página vêm completos (`/preview/<uuid>.pdf`).
+
+`link_matricula` ficou NOT NULL nos 4, a ficha anunciaria "matrícula disponível", e quem
+clicasse cairia numa pasta vazia. É a forma da casa — **ausência entregue como presença** —
+migrada do campo de TEXTO para o campo de LINK. Sem erro em lugar nenhum: a coleta gravou com
+sucesso um endereço que não leva a documento algum.
+
+**Varredura completa (não amostra):** 6 âncoras assim entre os 30.446 ativos — 4 matrículas
+PECINI e 2 editais SODRE (que apontavam para a própria página do lote com `#`). Mais 6 em lotes
+encerrados. Os outros 27.896 links de matrícula nomeiam arquivo ou id.
+
+Conserto: `nomeiaUmDocumento()` em `api/_doc-scan.js` (vale para TODAS as fontes, é o vasculhador
+do `enriquecer-lote`) — documento é identificado por segmento final de caminho ou por query
+string; caminho terminado em `/` sem query é a rota. Mesma regra na 2ª passada do
+`scraper-pecini.mjs`, que antes de descartar tenta recuperar o id de um atributo da própria
+âncora. Invariante `doc_link_sem_documento` (limite 0) aplicado; hoje em 0/0.
+
+**No mesmo caminho:** `decodificarEntidades` só tratava entidade NUMÉRICA. As nomeadas passavam
+cruas — a 1ª descrição de corpo da PECINI entrou com `im&oacute;vel` e `&aacute;rea`. A que morde
+de verdade é **`m&sup2;`**, a forma HTML mais comum de m²: sem decodificar, `extrairAreaM2` não
+enxerga a unidade e a área que ESTÁ na página sai 0, sem erro. Hoje o acervo tem 0 ocorrências de
+`&sup2;` gravado — é endurecimento antes de espalhar, não conserto de dano medido.
+
+### O que a coleta expôs e ainda está aberto
+
+- **10 de 21 lotes novos descartados por VALOR** — é a maior perda da PECINI hoje, maior que a
+  área. Padrão no log: `aval R$471263 · min R$0` (3 lotes vieram `aval R$0 · min R$0`). O 2º lance
+  não é lido para metade dos lotes, e sem ele o gate descarta. Próxima ofensiva da PECINI: o
+  parser de praças, não o de metragem.
+- **Área: 0 nos 4 gravados.** Num deles a descrição de corpo veio real ("Mede 9,00m de frente…
+  21,00m da frente aos fundos") — dimensões sem m² declarado, então 0 ali é a resposta honesta,
+  não falha. Nos outros 3 a meta tag institucional ainda prevaleceu (corpo sem sinal forte).
+- **O lote de Sorocaba não foi tocado**: o scraper só processa lotes NOVOS. Os anexos dele ainda
+  guardam o rótulo cru `Edital do Leil&#xE3;o`, prova de que não é relido desde antes do conserto.
+  Zerei `enriquecido_em` em 12 lotes PECINI (Sorocaba incluído) — o freio de 12 h os prendia ao
+  código antigo. A releitura acontece sozinha na próxima abertura da ficha, a 1 request cada.
+- **`bd_teto_saturado` acusando 429 contra limite 405 fixo.** O teto real virou parâmetro de
+  disparo (500 nesta rodada) e o banco não tem onde lê-lo — `brightdata_uso` não guarda `teto`.
+  O alarme erra para o lado seguro (dispara cedo), mas está calibrado num número que se moveu.
+  Conserto certo: a reserva gravar o teto vigente na semana.
+
+---
+
 ## 🧾 17/08 — TRÊS ALARMES, E O ERRADO ERA O INSTRUMENTO NOS TRÊS
 
 Dia de diagnóstico. Os três achados têm a mesma assinatura: **um número que media duas coisas
