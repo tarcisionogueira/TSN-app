@@ -183,8 +183,40 @@ export function modalidadeExigeData(modalidade) {
   return modalidade === 'primeiro_leilao' || modalidade === 'segundo_leilao';
 }
 
+// ─── FRAÇÃO IDEAL NÃO ENTRA NO ACERVO (decisão do dono, 17/08) ──────────────
+// "Frações ideais não são interessantes. Pode excluir."
+//
+// POR QUE VIVE AQUI E NÃO EM CADA COLETOR. A regra JÁ EXISTIA — `scraper-sato.mjs`
+// exclui `parte ideal` no seu `RE_EXCLUIR` e o comentário lá a chama de "padrão do
+// repo". Só que ela morava dentro de UM scraper: os outros nunca souberam dela, e
+// **120 lotes ativos** de parte/fração ideal entraram por eles. Cem estavam
+// classificados como imóvel INTEIRO e 57 com área preenchida, então o R$/m² da
+// análise rodava sobre o bem todo enquanto o cliente compraria uma fração.
+// Regra que vive em comentário de um arquivo não é regra — é intenção. Movida para o
+// portão por onde TODOS os coletores passam, e registrada em `regra_negocio`
+// (migration fracao_ideal_fora_do_acervo.sql) para a auditoria vigiar.
+//
+// Comprar 50% indiviso é outro negócio: vira-se condômino de um desconhecido, sem
+// ocupar nem vender livremente, dependendo de ação de extinção de condomínio. Um
+// relatório que projeta a revenda do bem inteiro sobre isso não está otimista, está
+// errado — e o parecer sai dizendo "operação viável, vale avançar".
+//
+// `nua-propriedade` e `direito creditório` entram pela mesma porta e pela mesma razão
+// (não se compra o imóvel, compra-se um direito sobre ele), espelhando o Sato.
+export const RE_FRACAO_IDEAL = /\b(parte\s+ideal|fra[çc][ãa]o\s+ideal|fra[çc][õo]es\s+ideais|direito[s]?\s+credit[óo]rio|nua[\s-]propriedade)\b/i;
+
+export function ehFracaoIdeal(imovel) {
+  return RE_FRACAO_IDEAL.test(`${imovel?.titulo || ''} ${imovel?.descricao || ''}`);
+}
+
 export function checarQualidade(imovel, { estrito = true } = {}) {
   const faltando = [];
+  // Antes de qualquer checagem de completude: isto sequer deve virar lote. Um registro
+  // de fração ideal COMPLETO (com data, valor, foto e matrícula) passaria por todo o
+  // resto — a qualidade dos campos nada diz sobre o bem ser vendável.
+  if (ehFracaoIdeal(imovel)) {
+    return { ok: false, faltando: ['fracao_ideal'], descartar: true, motivo: 'parte/fração ideal — fora do acervo por decisão de negócio' };
+  }
   const exigeData = modalidadeExigeData(imovel?.modalidade);
   const semData = exigeData && !imovel?.data_leilao;
   if (semData)                                      faltando.push('data');
