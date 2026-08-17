@@ -23,6 +23,17 @@ on:
         description: '1 = dumpa os contextos de R$ (recon dos rótulos)'
         required: false
         default: '0'
+      # TETO SEMANAL POR DISPARO, não fixo no arquivo (17/08). O freio de custo lê
+      # BRIGHTDATA_MAX_REQ_SEMANA (padrão 450 em api/_brightdata.js) e este workflow NÃO
+      # passava a variável — então todo run do runner usava 450, mesmo com saldo recarregado
+      # no fornecedor. Recarregar no Bright Data não levanta o nosso teto: são freios
+      # diferentes, e é de propósito. Fica como INPUT com o padrão de sempre para que subir o
+      # teto seja um ato deliberado de quem dispara, com registro no histórico do run — e não
+      # um número maior esquecido no arquivo, valendo para sempre e sem ninguém lembrar.
+      teto_semana:
+        description: 'Teto semanal de requests Bright Data (padrão 450). Subir = gasto maior.'
+        required: false
+        default: '450'
 
 concurrency:
   group: scraper-pecini
@@ -60,4 +71,5 @@ jobs:
           PECINI_DRYRUN: ${{ github.event.inputs.dryrun || '0' }}
           PECINI_MAX_LOTES: ${{ github.event.inputs.max_lotes || '40' }}
           PECINI_DEBUG: ${{ github.event.inputs.debug || '0' }}
+          BRIGHTDATA_MAX_REQ_SEMANA: ${{ github.event.inputs.teto_semana || '450' }}
         run: node scripts/scraper-pecini.mjs
