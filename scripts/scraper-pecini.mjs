@@ -179,22 +179,38 @@ function parseSitemap(xml) {
   return [...lotes.values()];
 }
 
+// RÓTULO DA PRAÇA. Exige o ORDINAL (1º/2º/1ª/2ª) ou a palavra "Público" antes de "Leilão" —
+// um "Leilão:" solto aparece em menu e em texto corrido, e aceitá-lo transformaria qualquer
+// R$ da página em lance. O regex antigo pedia "Público Leilão" e essa fonte escreve só
+// "1º Leilão:", que é o suficiente para identificar a praça sem abrir a porta.
+const RE_PRACA_ROTULO = /(?:[12]\s*[ºªo°a]\s*|P\S*blico\s+)Leil\S*o/i;
+const RE_PRACA_VALOR = /(?:[12]\s*[ºªo°a]\s*|P\S*blico\s+)Leil\S*o\s*:?\s*R\$\s*([\d.]+,\d{2})/gi;
+
 // Parseia a página de detalhe: base genérica (og/ld+json/valores) + refinamentos
 // específicos do Pecini (rótulos Avaliação/Lance e trimpath ValorMinimoLance...).
 function parseDetalhe(html, rec) {
   const base = extrairGenerico(html, rec.loteUrl) || {};
-  const txt = html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ');
+  // DECODIFICA AS ENTIDADES (17/08). Só o `&nbsp;` era tratado, e o resto do texto chegava cru
+  // aos regexes de rótulo. O recon com PECINI_DEBUG mostrou que a página escreve
+  // `1&ordm; Leil&atilde;o: R$ 25.789,00` — ou seja, nem `1º` nem `Leilão` existem no texto que
+  // era testado. Foi por isso que 10 dos 21 lotes novos saíram com `valor_minimo = 0` e foram
+  // descartados: o lance ESTAVA na página, escrito numa forma que nada aqui conseguia ler.
+  // É a terceira vez no dia que a mesma entidade não decodificada aparece com outra roupa
+  // (rótulo de anexo, descrição do corpo e agora o lance).
+  const txt = decodificarEntidades(
+    html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<[^>]+>/g, ' ')
+  ).replace(/\s+/g, ' ');
 
   // Valores pelos rótulos REAIS do Pecini (recon via PECINI_DEBUG):
   //   "Valor de Avaliação (dd/mm/aaaa): R$ X"     → avaliação (a data no meio quebrava o regex antigo)
-  //   "1º Público Leilão: R$ X" / "2º Público Leilão: R$ Y" → praças (lance mínimo)
+  //   "1º Leilão: R$ X" / "2º Leilão: R$ Y" (com ou sem "Público") → praças (lance mínimo)
   // Ignoramos "Incremento", "Exercício da Preferência" e o filtro "Faixa de Preço".
   // Faixa plausível p/ imóvel: piso R$1.000, teto R$500mi. Sem match → 0 → descartado.
   const plaus = (v) => (v >= 1000 && v <= 500_000_000) ? v : 0;
   const avalLabel = plaus(num((txt.match(/Avalia\S*o[^R]{0,25}R\$\s*([\d.]+,\d{2})/i) || [])[1]));
   const pracas = [];
-  for (const m of txt.matchAll(/P\S*blico\s+Leil\S*o\s*:?\s*R\$\s*([\d.]+,\d{2})/gi)) pracas.push(num(m[1]));
+  for (const m of txt.matchAll(RE_PRACA_VALOR)) pracas.push(num(m[1]));
   for (const m of html.matchAll(/ValorMinimoLance(?:Primeira|Segunda)Praca["'\s:=]+R?\$?\s*([\d.]+,\d{2})/gi)) pracas.push(num(m[1]));
   const pracasValidas = pracas.map(plaus).filter(v => v > 0);
   const valorMinimo = pracasValidas.length ? Math.min(...pracasValidas) : 0;
@@ -221,7 +237,7 @@ function parseDetalhe(html, rec) {
   // Modalidade: "Público Leilão" (1ª/2ª praça) = leilão, não venda direta (que
   // aparece no menu do site em toda página). "extrajudicial" contém "judicial",
   // então usa lookbehind p/ não classificar errado.
-  const temPracas = /P\S*blico\s+Leil\S*o|[12][ªa]\s*pra[çc]a/i.test(txt);
+  const temPracas = RE_PRACA_ROTULO.test(txt) || /[12][ªa]\s*pra[çc]a/i.test(txt);
   const modalidade = /(?<!extra)judicial/i.test(txt) ? 'judicial'
     : (temPracas || /extrajudicial/i.test(txt)) ? 'extrajudicial'
     : /venda\s*direta/i.test(txt) ? 'venda_direta'
