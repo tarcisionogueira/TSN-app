@@ -16,6 +16,7 @@ import { fetchViaBrightData } from './_brightdata.js';
 import { hostExternoSeguro, fetchExternoSeguro } from './_allowed-hosts.js';
 import { vasculharDocumentos, chaveDocCanonica } from './_doc-scan.js';
 import { extrairRegistroMatricula } from './_registro-matricula.js';
+import { extrairDescricaoDoCorpo, extrairAreaM2 } from './_texto-imovel.js';
 import { carregarPDFParse } from './_pdf-safe.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -187,7 +188,7 @@ export default async function handler(req, res) {
   const forcar = params.get('forcar') === '1';
   if (!id) { res.status(400).json({ error: 'imovel_id obrigatório' }); return; }
 
-  const [im] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(id)}&select=id,fonte,modalidade,data_leilao,data_leilao_2,url_lote,link_edital,link_matricula,link_regras_venda,link_foto,anexos,enriquecido_em,ficha_cef,matricula_scan_em&limit=1`)).json();
+  const [im] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(id)}&select=id,fonte,modalidade,data_leilao,data_leilao_2,url_lote,link_edital,link_matricula,link_regras_venda,link_foto,anexos,enriquecido_em,ficha_cef,matricula_scan_em,titulo,descricao,area_m2,valor_avaliacao,valor_minimo&limit=1`)).json();
   if (!im) { res.status(404).json({ error: 'Imóvel não encontrado' }); return; }
 
   // CEF: os LINKS de documento são determinísticos (não precisa vasculhar), MAS a
@@ -293,6 +294,39 @@ export default async function handler(req, res) {
   // registrar, ele ficava eternamente "sem data" e continuava oferecendo relatório.
   if (datas.encerradaEm && !im.data_leilao && !im.data_leilao_2) patch.data_leilao = datas.encerradaEm;
 
+  // ─── METRAGEM E DESCRIÇÃO (17/08) ────────────────────────────────────────────────────────
+  // Esta função já está com o HTML da página do lote em mãos — e até hoje extraía dela
+  // documentos, foto, datas e avaliação, mas NÃO a metragem nem a descrição. Isso deixava
+  // 2.227 lotes ativos sem área (495 sem nem matrícula de onde tirá-la) enquanto a informação
+  // estava na página que acabamos de baixar.
+  //
+  // É o melhor lugar possível para a correção: custo ZERO de requisição (o download já
+  // aconteceu), roda SOB DEMANDA (quando o cliente abre a ficha) e serve TODA fonte de uma vez
+  // — inclusive a BIASI, cujo coletor lê só os cards da listagem e por isso grava `area_m2: 0`
+  // e `descricao: title` fixos no código, em 100% dos 472 lotes.
+  //
+  // Só preenche o que falta, como todo o resto deste patch: área só se não havia, e descrição
+  // só quando a atual não passa de um eco do título (que é o estado de SUPERBID 1.492/1.494,
+  // PESTANA 1.029/1.029, LJUD 981/981, BIASI 472/472). Dado bom nunca é sobrescrito.
+  if (!(Number(im.area_m2) > 0)) {
+    const areaPag = extrairAreaM2(String(html).replace(/<[^>]+>/g, ' '));
+    if (areaPag > 0) patch.area_m2 = areaPag;
+  }
+  const descAtual = String(im.descricao || '').trim();
+  const tituloAtual = String(im.titulo || '').trim();
+  const descEhEcoDoTitulo = !descAtual
+    || (tituloAtual && descAtual.replace(tituloAtual, '').replace(/[\s—·|-]+/g, '').length < 40);
+  if (descEhEcoDoTitulo) {
+    const descPag = extrairDescricaoDoCorpo(html);
+    if (descPag) patch.descricao = descPag.slice(0, 500);
+  }
+
+  // ⚠️ `valor_avaliacao`/`valor_minimo` NÃO vinham no `select` (corrigido em 17/08, junto com
+  // a inclusão de titulo/descricao/area_m2). O guard abaixo lia `undefined`, `avalAtual` dava
+  // sempre 0 e a condição "quando não temos uma válida" nunca conferia nada — a avaliação da
+  // página sobrescrevia a do banco em todo enriquecimento, inclusive por cima de valor bom.
+  // Achado colateral: a coluna que o código lê tem de estar na projeção, e nada avisa quando
+  // não está — `im.campo` ausente é `undefined`, que passa calado por qualquer `Number(...)`.
   // AVALIAÇÃO real da página do lote (quando não temos uma válida) — corrige o
   // "100% abaixo da avaliação" sem valor e recalcula o desconto. O trigger do banco
   // ainda valida (descarta sentinela). Vale p/ todos os leiloeiros.
