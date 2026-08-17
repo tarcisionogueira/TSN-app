@@ -38,11 +38,11 @@ export function extrairDescricaoDoCorpo(html) {
   // Quebra por tags de bloco: cada pedaço é um candidato independente.
   const blocos = corpo
     .split(/<\/(?:p|div|li|td|section|article|h[1-6])>/i)
-    .map(b => b.replace(/<[^>]+>/g, ' ')
-      .replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&')
-      .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCharCode(parseInt(h, 16)))
-      .replace(/&#(\d+);/g, (_, d) => String.fromCharCode(Number(d)))
-      .replace(/\s+/g, ' ').trim())
+    // Decodifica ANTES de pontuar: o vocabulário é testado contra o texto, e "&aacute;rea"
+    // não casa com /área/. O primeiro lote da PECINI com descrição de corpo veio gravado
+    // "confrontando ... a &aacute;rea verde" — o bloco entrou por outros sinais, mas um
+    // texto cujo único sinal fosse a área acentuada teria sido descartado como não-imóvel.
+    .map(b => decodificarEntidades(b.replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim())
     .filter(b => b.length >= 60 && b.length <= 4000 && !RE_RUIDO_SITE.test(b));
 
   let melhor = null, melhorPontos = 0;
@@ -78,7 +78,9 @@ export function extrairDescricaoDoCorpo(html) {
  * EDIFICAÇÃO é a que baliza o R$/m² do relatório (ver `gerar-documental.js`).
  */
 export function extrairAreaM2(texto) {
-  const t = String(texto || '').replace(/\s+/g, ' ');
+  // Decodifica antes de medir: `100 m&sup2;` e `&aacute;rea constru&iacute;da` são a mesma
+  // informação que `100 m²` e `área construída`, e só a segunda forma casa com as regras.
+  const t = decodificarEntidades(texto).replace(/\s+/g, ' ');
   if (!t) return 0;
   const UNI = '(?:m²|m2|mts²|metros?\\s+quadrados?)';
   const NUM = '(\\d{1,3}(?:\\.\\d{3})*(?:,\\d{1,2})?|\\d+(?:[.,]\\d{1,2})?)';
@@ -113,14 +115,40 @@ export function extrairAreaM2(texto) {
  * no acervo: o anexo gravado se chama literalmente "Edital do Leil&#xE3;o".
  * O cliente lia isso na ficha, e a matrícula que existe no site do leiloeiro não chegava aqui.
  */
+const ENTIDADES_NOMEADAS = {
+  nbsp: ' ', amp: '&', quot: '"', apos: "'", lt: '<', gt: '>',
+  // Latin-1 acentuada — a forma que o Pecini (e todo site que salva em ISO) publica.
+  aacute: '\u00e1', agrave: '\u00e0', acirc: '\u00e2', atilde: '\u00e3', auml: '\u00e4', aring: '\u00e5',
+  eacute: '\u00e9', egrave: '\u00e8', ecirc: '\u00ea', euml: '\u00eb',
+  iacute: '\u00ed', igrave: '\u00ec', icirc: '\u00ee', iuml: '\u00ef',
+  oacute: '\u00f3', ograve: '\u00f2', ocirc: '\u00f4', otilde: '\u00f5', ouml: '\u00f6',
+  uacute: '\u00fa', ugrave: '\u00f9', ucirc: '\u00fb', uuml: '\u00fc',
+  ccedil: '\u00e7', ntilde: '\u00f1', yacute: '\u00fd',
+  Aacute: '\u00c1', Agrave: '\u00c0', Acirc: '\u00c2', Atilde: '\u00c3', Auml: '\u00c4',
+  Eacute: '\u00c9', Egrave: '\u00c8', Ecirc: '\u00ca', Euml: '\u00cb',
+  Iacute: '\u00cd', Igrave: '\u00cc', Icirc: '\u00ce', Iuml: '\u00cf',
+  Oacute: '\u00d3', Ograve: '\u00d2', Ocirc: '\u00d4', Otilde: '\u00d5', Ouml: '\u00d6',
+  Uacute: '\u00da', Ugrave: '\u00d9', Ucirc: '\u00db', Uuml: '\u00dc',
+  Ccedil: '\u00c7', Ntilde: '\u00d1',
+  // Símbolos que MUDAM A LEITURA de um número, não só a aparência: `m&sup2;` é a forma
+  // HTML mais comum de "m²", e sem esta linha `extrairAreaM2` não enxerga a unidade —
+  // a área existe na página e sai 0 do coletor, sem erro nenhum no caminho.
+  sup2: '\u00b2', sup3: '\u00b3', ordm: '\u00ba', orda: '\u00aa', deg: '\u00b0',
+  frac12: '\u00bd', frac14: '\u00bc', middot: '\u00b7', times: '\u00d7',
+  ndash: '\u2013', mdash: '\u2014', hellip: '\u2026', laquo: '\u00ab', raquo: '\u00bb',
+  lsquo: '\u2018', rsquo: '\u2019', ldquo: '\u201c', rdquo: '\u201d', bull: '\u2022',
+  reg: '\u00ae', copy: '\u00a9', trade: '\u2122', euro: '\u20ac', pound: '\u00a3',
+};
+
 export function decodificarEntidades(txt) {
   return String(txt || '')
     .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCharCode(parseInt(h, 16)))
     .replace(/&#(\d+);/g, (_, d) => String.fromCharCode(Number(d)))
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/&amp;/gi, '&')
-    .replace(/&quot;/gi, '"')
-    .replace(/&apos;|&#39;/gi, "'")
-    .replace(/&lt;/gi, '<')
-    .replace(/&gt;/gi, '>');
+    // Nomeadas por TABELA, e o `&amp;` por último na tabela não importa: cada entidade é
+    // substituída uma vez só, então "&amp;aacute;" não vira "á" por dupla passagem.
+    .replace(/&([a-zA-Z][a-zA-Z0-9]{1,7});/g, (m, nome) => {
+      if (Object.prototype.hasOwnProperty.call(ENTIDADES_NOMEADAS, nome)) return ENTIDADES_NOMEADAS[nome];
+      const min = nome.toLowerCase();
+      return Object.prototype.hasOwnProperty.call(ENTIDADES_NOMEADAS, min) ? ENTIDADES_NOMEADAS[min] : m;
+    });
 }

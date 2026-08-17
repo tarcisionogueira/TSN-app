@@ -30,6 +30,7 @@ import { fetchViaBrightData, brightDataDisponivel } from '../api/_brightdata.js'
 import { fetchHeadless, fecharHeadless } from './lib/fetch-residencial.mjs';
 import { extrairGenerico, extrairData, checarQualidade, extrairAreaM2} from './lib/scraper-core.mjs';
 import { decodificarEntidades } from '../api/_texto-imovel.js';
+import { nomeiaUmDocumento } from '../api/_doc-scan.js';
 import { registrarConhecimento, qualidadeColeta } from './lib/conhecimento.mjs';
 // Monitor de fontes: sem esta linha a fonte fica INVISÍVEL ao bug bounty (ver _saude-fonte.mjs).
 import { registrarSaude } from './_saude-fonte.mjs';
@@ -82,6 +83,19 @@ function absPecini(href) {
 // /arquivos/Leiloes/Docs/*.pdf. Coleta todo <a href>.pdf, classifica por rótulo/nome e
 // monta os anexos. Zero-regressão: sem PDF na página, retorna [] e o comportamento é o
 // de hoje (link_edital = página do lote, sem matrícula). Só ADICIONA cobertura.
+// Id/caminho do documento escondido num atributo da âncora (`data-arquivo`, `data-url`,
+// `data-id`, `onclick="abrir('...')"`). Só devolve o que JÁ É caminho ou nome de arquivo —
+// nunca inventa a URL a partir do padrão observado noutro link.
+function idDeAtributo(atributos) {
+  const txt = String(atributos || '');
+  for (const re of [/data-(?:arquivo|url|href|src|file|documento)\s*=\s*["']([^"']+)["']/i,
+                    /on[a-z]+\s*=\s*["'][^"']*?['"]([^'"]*\.(?:pdf|jpe?g|png|docx?))['"]/i]) {
+    const v = (txt.match(re) || [])[1];
+    if (v && /[^/]$/.test(v)) return v;
+  }
+  return null;
+}
+
 function extrairDocs(html) {
   const anexos = [];
   const vistos = new Set();
@@ -104,16 +118,25 @@ function extrairDocs(html) {
   // só aceita href .pdf — se o leiloeiro serve o documento por rota de download/visualizador
   // (`/download?id=`, `/documento/123`), ele some. Aqui só entra o que o TEXTO do link
   // identifica, para não varrer o menu do site inteiro: nada de href genérico.
-  for (const m of html.matchAll(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)) {
-    const url = absPecini(m[1]);
-    if (!url || vistos.has(url) || /\.pdf(\?|$)/i.test(url)) continue;
-    const rotulo = decodificarEntidades((m[2] || '').replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();
+  for (const m of html.matchAll(/<a\b([^>]*)href=["']([^"']+)["']([^>]*)>([\s\S]*?)<\/a>/gi)) {
+    const atributos = `${m[1] || ''} ${m[3] || ''}`;
+    let url = absPecini(m[2]);
+    if (!url || /\.pdf(\?|$)/i.test(url)) continue;
+    const rotulo = decodificarEntidades((m[4] || '').replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();
     if (!rotulo || rotulo.length > 60) continue;
     const tipo = /matr[íi]cul/i.test(rotulo) ? 'matricula'
       : /edital/i.test(rotulo) ? 'edital'
       : /laudo|avalia[çc]/i.test(rotulo) ? 'laudo'
       : null;
     if (!tipo) continue;
+    // O href pode ser a ROTA e não o arquivo (`/preview/`), com o id do documento guardado
+    // num atributo que o JS da página usa. Tenta recuperar dali — e SÓ dali: nada é montado
+    // a partir de palpite sobre o formato da URL.
+    if (!nomeiaUmDocumento(url)) url = absPecini(idDeAtributo(atributos)) || url;
+    // Continua sem nomear documento nenhum → não é anexo. Ver `nomeiaUmDocumento`: um link
+    // rotulado "Matrícula" que aponta para a pasta faz a ficha prometer o que não entrega.
+    if (!nomeiaUmDocumento(url)) continue;
+    if (vistos.has(url)) continue;
     vistos.add(url);
     anexos.push({ nome: rotulo.slice(0, 60), url, tipo });
   }
