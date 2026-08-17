@@ -220,6 +220,101 @@ async function gravarProcessoDoLote(imovelId, numero) {
   }
 }
 
+/**
+ * EDITAL POR VISÃO — o caminho que a matrícula tinha e o edital não (17/08).
+ *
+ * POR QUE EXISTE. `doc_extracoes` tinha 18 linhas de matrícula (via 'visao', confiança 85) e
+ * **ZERO de edital**, em toda a história do sistema. Não era azar: a matrícula tem
+ * `matriculaPorVisao` e o edital só tinha o caminho de TEXTO. Edital de leiloeiro é quase
+ * sempre PDF ESCANEADO — sem texto embutido, `lerTexto` volta vazio, o laço faz `continue` e
+ * a leitura morre calada. O cliente então lê na ficha "consulte o documento no site", que é
+ * verdade, mas por um motivo que ninguém enxergava.
+ *
+ * O CASO QUE ESCANCAROU (lote J126858, Sorocaba). Nosso acervo dizia "Apartamento 45 m²",
+ * `descricao` era só o título repetido, sem endereço nem bairro, e a praça saiu como única —
+ * enquanto a própria linha dizia "2 Praças" e o dono, lendo a descrição no site do leiloeiro,
+ * viu uma CASA de ~200 m² construídos. Tudo o que faltava estava no edital, que nunca foi
+ * aberto.
+ *
+ * CUSTO — por que sob demanda é seguro. `extratoEdital` tem UM chamador: `gerar-analise.js`,
+ * a geração de relatório. Nenhum cron o invoca. Então a visão só roda quando um cliente pede
+ * um relatório daquele lote — o gasto é proporcional à receita, e não há varredura de acervo.
+ * NÃO chame esta função de cron sem antes rediscutir orçamento: são 13.939 lotes com edital.
+ *
+ * `max_tokens` é maior que o da matrícula porque aqui se pede a descrição do imóvel e as
+ * praças, não um punhado de números.
+ */
+async function editalPorVisao(url, imovelId, fim) {
+  const diag = (motivo, extra = {}) => console.log('[edital-visao]', JSON.stringify({ imovel: String(imovelId), motivo, ...extra }));
+  // Toda desistência REGISTRADA — foi a ausência disso que deixou o edital não-lido invisível
+  // por meses. `CLAUDE_KEY` é o nome usado no projeto inteiro; ver a nota em matriculaPorVisao
+  // sobre a versão que leu `CLAUDE_API_KEY` e nunca rodou.
+  if (!process.env.CLAUDE_KEY) { diag('sem CLAUDE_KEY'); return null; }
+  if (!hostExternoSeguro(url)) { diag('host bloqueado', { url }); return null; }
+  const sobra = fim - Date.now();
+  if (sobra < 15000) { diag('sem tempo hábil', { sobraMs: sobra }); return null; }
+  let bloco = null;
+  try {
+    const r = await fetchExternoSeguro(url, {
+      headers: { 'User-Agent': UA, 'Accept-Language': 'pt-BR,pt;q=0.9' },
+      signal: AbortSignal.timeout(Math.min(15000, fim - Date.now() - 5000)),
+    });
+    if (!r.ok) { diag('download falhou', { http: r.status }); return null; }
+    const buf = Buffer.from(await r.arrayBuffer());
+    const doc = classificarDocumento(buf, { url, contentType: r.headers.get('content-type') || '' });
+    bloco = blocoParaIA(doc, 'edital');
+    if (!bloco) { diag('formato não legível', { kind: doc.kind, detalhe: doc.motivo || null }); return null; }
+  } catch (e) { diag('erro no download', { erro: String(e?.message || e).slice(0, 120) }); return null; }
+  try {
+    const resp = await anthropicFetch({
+      method: 'POST',
+      headers: { 'x-api-key': process.env.CLAUDE_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6', max_tokens: 900,
+        system: 'Você é um EXTRATOR de dados de edital de leilão de imóvel. Leia com máxima atenção, INCLUSIVE páginas escaneadas/em imagem. Retorne SOMENTE JSON.',
+        messages: [{ role: 'user', content: [
+          bloco,
+          { type: 'text', text: 'Extraia do edital, SOBRE O IMÓVEL DESTE LOTE:\n'
+            + '• "descricaoImovel": a descrição do bem como o edital a redige (texto corrido, até 600 caracteres). É o campo mais importante.\n'
+            + '• "tipoImovel": um de casa, apartamento, terreno, comercial, rural, galpao, outro.\n'
+            + '• "areaConstruidaM2": área construída/edificada/privativa, em m². NÃO é a do terreno.\n'
+            + '• "areaTerrenoM2": área do terreno/lote, em m².\n'
+            + '• "enderecoCompleto": logradouro, número, bairro, cidade/UF, se constarem.\n'
+            + '• "pracas": lista das praças/leilões, cada uma {"ordem":1,"data":"AAAA-MM-DD","hora":"HH:MM","valor":0}. Se houver 2ª praça, INCLUA as duas.\n'
+            + 'NÃO invente: campo que o edital não afirma vai "" (texto), 0 (número) ou [] (lista). Use ponto decimal.\n'
+            + 'Retorne SOMENTE: {"descricaoImovel":"","tipoImovel":"","areaConstruidaM2":0,"areaTerrenoM2":0,"enderecoCompleto":"","pracas":[]}' },
+        ] }],
+      }),
+    }, { retries: 1, timeoutMs: Math.max(15000, Math.min(60000, fim - Date.now())), noFallback: true });
+    if (!resp.ok) { diag('IA respondeu erro', { http: resp.status }); return null; } // `.ok` ANTES do corpo
+    const data = await resp.json().catch(() => null);
+    const texto = (data?.content || []).map((b) => b?.text || '').join('').trim();
+    const bruto = texto.match(/\{[\s\S]*\}/);
+    if (!bruto) { diag('resposta sem JSON', { amostra: texto.slice(0, 80) }); return null; }
+    const j = JSON.parse(bruto[0]);
+    const num = (v) => { const n = Number(v); return Number.isFinite(n) && n > 0 && n <= 1000000 ? n : null; };
+    const pracas = Array.isArray(j.pracas) ? j.pracas
+      .map((p) => ({ ordem: Number(p?.ordem) || null, data: String(p?.data || '').slice(0, 10) || null, hora: String(p?.hora || '').slice(0, 5) || null, valor: num(p?.valor) }))
+      .filter((p) => p.data || p.valor) : [];
+    const out = {
+      descricaoImovel: String(j.descricaoImovel || '').slice(0, 600) || null,
+      tipoImovel: String(j.tipoImovel || '').toLowerCase().slice(0, 20) || null,
+      areaConstruidaM2: num(j.areaConstruidaM2),
+      areaTerrenoM2: num(j.areaTerrenoM2),
+      enderecoCompleto: String(j.enderecoCompleto || '').slice(0, 240) || null,
+      pracas,
+    };
+    // VAZIO NÃO É LEITURA. Se nada de substantivo veio, isto é uma falha — não um edital sem
+    // conteúdo. Registrar `null` aqui evita gravar um "li e não achei nada" que o chamador
+    // trataria como fato.
+    if (!out.descricaoImovel && !out.areaConstruidaM2 && !out.areaTerrenoM2 && !pracas.length) {
+      diag('IA não achou nada de substantivo'); return null;
+    }
+    diag('ok', { area: out.areaConstruidaM2, tipo: out.tipoImovel, pracas: pracas.length });
+    return { ...out, fonteUrl: url, via: 'visao' };
+  } catch (e) { diag('erro na IA', { erro: String(e?.message || e).slice(0, 120) }); return null; }
+}
+
 export async function extratoEdital(imovelId, { deadline } = {}) {
   if (!SUPABASE_URL || !SERVICE_KEY) return null;
   const fim = Number(deadline) || (Date.now() + 45000);
@@ -275,7 +370,30 @@ export async function extratoEdital(imovelId, { deadline } = {}) {
       processo = hit.campos.processo || null;
     } else {
       const txt = await lerTexto(url, fim);
-      if (!txt) continue;
+      // PDF ESCANEADO NÃO É EDITAL AUSENTE (17/08). Sem texto embutido, `lerTexto` volta vazio
+      // e este laço fazia `continue` — descartando o documento sem registrar nada. Era a razão
+      // de `doc_extracoes` não ter UMA linha de edital em toda a história, enquanto a matrícula
+      // tinha 18 pela via de visão. Agora o edital ganha a mesma segunda chance.
+      if (!txt) {
+        const vis = await editalPorVisao(url, imovelId, fim);
+        if (!vis) continue;
+        identidade = {
+          ...(vis.enderecoCompleto ? { endereco: vis.enderecoCompleto } : {}),
+          ...(vis.descricaoImovel ? { descricao: vis.descricaoImovel } : {}),
+          ...(vis.tipoImovel ? { tipo: vis.tipoImovel } : {}),
+          ...(vis.areaConstruidaM2 ? { areaConstruidaM2: vis.areaConstruidaM2 } : {}),
+          ...(vis.areaTerrenoM2 ? { areaTerrenoM2: vis.areaTerrenoM2 } : {}),
+        };
+        if (vis.pracas?.length) {
+          const comData = vis.pracas.filter((p) => p.data).sort((a, b) => String(a.data).localeCompare(String(b.data)));
+          if (comData.length) datas = { inicio: comData[0].data, fim: comData[comData.length - 1].data, pracas: vis.pracas };
+          else datas = { pracas: vis.pracas };
+        }
+        const metaVis = { url, imovelId, tipoDoc: 'edital', campos: { identidade, ...(datas ? { datas } : {}) }, via: 'visao', confianca: 80 };
+        await cacheGravar(chaveUrl(url), metaVis);
+        // `cond` segue null de propósito: condições de arremate NÃO foram lidas, e fabricá-las
+        // para "completar o registro" seria exatamente o defeito que este arquivo combate.
+      } else {
       cond = extrairCondicoes(txt);
       if (!cond) continue;
       // Datas do ATO (início/encerramento) direto do texto — só têm valor quando as
@@ -299,16 +417,21 @@ export async function extratoEdital(imovelId, { deadline } = {}) {
       const meta = { url, imovelId, tipoDoc: 'edital', campos, via: 'regex', confianca: 60 };
       await cacheGravar(chaveUrl(url), meta);
       await cacheGravar(chaveConteudo(txt), meta);
+      }
     }
     const vmin = Number(im.valor_minimo) || 0;
     const aval = Number(im.valor_avaliacao) || 0;
     let pertence = true;
-    if (vmin > 0 && cond.pracas.some(p => p.valor > 0)) {
+    // `cond` é NULL no caminho de visão (o edital escaneado deu identidade/praças, mas as
+    // condições de arremate não foram lidas). Sem esta guarda, `cond.pracas` estouraria — e o
+    // catch do chamador transformaria a leitura bem-sucedida em "sem edital", reintroduzindo
+    // pela porta dos fundos o silêncio que esta mudança veio eliminar.
+    if (vmin > 0 && cond?.pracas?.some(p => p.valor > 0)) {
       // Alguma praça do documento plausível vs o lance do lote (1ª praça ≈ avaliação
       // pode chegar a ~3,4x o lance da 2ª; abaixo de 0,3x ou acima disso = outro lote).
       pertence = cond.pracas.some(p => p.valor > 0 && p.valor >= vmin * 0.3 && p.valor <= vmin * 3.4);
     }
-    if (pertence && aval > 0 && cond.avaliacao > 0) {
+    if (pertence && aval > 0 && cond?.avaliacao > 0) {
       const razao = cond.avaliacao / aval;
       if (razao < 0.5 || razao > 2) pertence = false;
     }
@@ -321,7 +444,7 @@ export async function extratoEdital(imovelId, { deadline } = {}) {
       // devolve a movimentação de um feito alheio com toda a cara de certa.
       if (processo?.numeroProcesso) await gravarProcessoDoLote(imovelId, processo.numeroProcesso);
     }
-    return { ...cond, pagamento, custos, identidade, datas, processo, fonteUrl: url, pertenceAoLote: pertence, deCache };
+    return { ...(cond || {}), pagamento, custos, identidade, datas, processo, fonteUrl: url, pertenceAoLote: pertence, deCache, condicoesLidas: !!cond };
   }
   return null;
 }
