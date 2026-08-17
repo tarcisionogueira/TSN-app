@@ -18,9 +18,26 @@ import { supabase } from '../utils/supabase';
  * seria exatamente o defeito que este projeto cataloga — resposta plausível apresentada como
  * certa. Cada exemplo diz de onde saiu e que não é oferta.
  *
- * ENQUADRAMENTO: a BidPro NÃO é instituição financeira nem administradora de consórcio. A
- * operação é da instituição parceira; nós apresentamos e encaminhamos. Isso está escrito na
- * tela, não só aqui — é a regra de conduta do correspondente.
+ * ENQUADRAMENTO: a BidPro NÃO é instituição financeira nem administradora de consórcio. Esta
+ * página é INFORMATIVA e registra interesse; o contato é feito pela NOSSA equipe. Isso está
+ * escrito na tela, não só aqui.
+ *
+ * ─── POR QUE O TEXTO MUDOU EM 17/08 ────────────────────────────────────────────────────────
+ * A página dizia, em três lugares, que "as operações são realizadas por instituições PARCEIRAS
+ * autorizadas". Não havia parceira: o botão "Confirmar interesse" gera um lead que vai para o
+ * e-mail da NOSSA equipe (`ADMIN_EMAIL`), e para aí. Nenhum contrato assinado, nenhum
+ * encaminhamento a terceiro.
+ *
+ * Isso não era detalhe de redação — foi o que REPROVOU a verificação de anunciante do Google
+ * Ads. O revisor leu a página, concluiu que existia relação comercial com terceiro e abriu a
+ * tarefa "relações comerciais" pedindo nome da organização, site, serviço prestado e um
+ * DOCUMENTO que comprovasse o vínculo (contrato, faturas ou correspondência). Não havia o que
+ * anexar, porque não havia relação.
+ *
+ * A regra que fica: **não descreva na página uma operação que o código não executa.** Aqui o
+ * texto prometia um encaminhamento que não acontece, e o custo não foi de credibilidade — foi
+ * uma conta de anúncios sob ameaça de pausa (prazo 15/09). Se um dia houver contrato assinado,
+ * este texto pode voltar a citar a parceira — e aí a resposta ao Google terá documento.
  */
 
 const AZUL = '#0D63DB';
@@ -308,12 +325,13 @@ export default function Alavancagem() {
           <Shield size={16} color="#94a3b8" style={{ flexShrink: 0, marginTop: 2 }} />
           <p style={{ fontSize: 12, color: '#64748b', lineHeight: 1.65, margin: 0 }}>
             A <strong>BidPro Brasil não é instituição financeira e não administra consórcio</strong>:
-            não concede crédito, não aprova propostas e não emite cartas. As operações são
-            realizadas por instituições parceiras autorizadas, e toda contratação depende de
-            análise e aprovação delas. Os valores desta página são <strong>exemplos
-            ilustrativos</strong> para explicar como cada modalidade funciona. Não são oferta,
-            proposta ou garantia de condição. Taxas, prazos e percentuais variam por instituição
-            e por análise de cada caso.
+            não concede crédito, não aprova propostas e não emite cartas. Esta página é
+            <strong> informativa</strong>: registramos seu interesse e nossa própria equipe entra em
+            contato. Qualquer contratação é feita diretamente com instituição financeira ou
+            administradora de consórcio autorizada pelo Banco Central, e depende de análise e
+            aprovação dela. Os valores desta página são <strong>exemplos ilustrativos</strong> para
+            explicar como cada modalidade funciona. Não são oferta, proposta ou garantia de
+            condição. Taxas, prazos e percentuais variam por instituição e por análise de cada caso.
           </p>
         </div>
 
@@ -501,8 +519,9 @@ function FormularioInteresse({ modalidade, usuario, onFechar }) {
               {estado.enviando ? 'Enviando…' : logado ? 'Confirmar interesse' : 'Quero que entrem em contato'}
             </button>
             <p style={{ fontSize: 11.5, color: '#94a3b8', lineHeight: 1.55, margin: '12px 0 0', textAlign: 'center' }}>
-              Usamos seus dados apenas para este contato. A operação, se houver, é feita por
-              instituição parceira e depende de análise dela.
+              Usamos seus dados apenas para este contato. Registrar interesse não é proposta nem
+              contratação: nossa equipe entra em contato para entender seu caso. Qualquer operação,
+              se houver, é feita por instituição autorizada e depende de análise dela.
             </p>
           </>
         )}
