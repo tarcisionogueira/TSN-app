@@ -98,6 +98,58 @@ chamado em toda a história do sistema**. Dar dono a uma fila não é contar a a
 Novo item no `/api/health-check` (já roda 2×/dia, custo zero, só escreve quando há problema).
 Consulta validada contra o banco: retorna os 3, com a idade certa.
 
+### D. Fração ideal fora do acervo — a regra que existia e não valia
+
+Veio de um print de **relatório PAGO**: "Casa 245 m² — Praia de Fora — Palhoça/SC", desconto
+79,16%, ROI 205,65%, parecer *"Operação viável, vale avançar"*. A descrição do próprio
+leiloeiro dizia **"Casa 245 m² … Judicial Lote 1 3 Praças"** e nós gravamos `tipo='terreno'`:
+a avaliação saiu a R$ 852,63/m² **de terreno**, com a construção valendo **zero**.
+
+> **Falso alarme que quase virou achado, registrado para ninguém repetir:** ROI e TIR idênticos
+> (205,65%) NÃO são bug. A projeção é de 12 meses, e nesse horizonte a TIR anualizada é igual
+> ao ROI por definição. `calcularTIR` (bisseção + anualização) está correto.
+
+Puxando o fio: **120 lotes ativos de parte/fração ideal**, 100 tratados como imóvel INTEIRO e
+57 com área preenchida — o R$/m² rodando sobre o bem todo enquanto o cliente compraria uma
+fatia. Arrematar 50% indiviso é virar condômino de um desconhecido, sem ocupar nem vender
+livremente, dependendo de ação de extinção de condomínio.
+
+**A regra já existia e não valia:** `scraper-sato.mjs` exclui `parte ideal` e o comentário lá a
+chama de "padrão do repo" — mas morava dentro de UM coletor. Dos 120, **117 entraram pelo
+`scraper-puppeteer.mjs`**, que nem passa por `checarQualidade`.
+
+**Decisão do dono:** excluir. Implementado em três camadas — `checarQualidade`, filtro no
+coletor genérico e **gatilho no banco** (o único que sobrevive a um coletor novo escrito sem ler
+o comentário). Testado: forçar `ativo = true` numa linha barrada devolve `false`. Regra gravada
+em `regra_negocio` com `aplicada_por` — auditoria em 0 críticos. Acervo 30.571 → 30.442.
+
+> **Regra do dono para o dia em que alguém pensar em readmiti-las:** valor **proporcional à
+> parte leiloada**; no BidScore, a atratividade comercial **cai quase integralmente**. Está
+> gravada na descrição da regra em `regra_negocio`.
+
+### E. Qualidade de captura — o que o print da VIP escancarou (ABERTO)
+
+Um lote VIP atualizado pelo nosso scraper **no mesmo dia** exibia: 1ª praça **vencida** como
+preço atual (R$ 369.216,42 quando a 2ª praça, em 3 dias, é R$ 221.529,86), *"data a confirmar no
+edital"* com a data publicada na página, e `modalidade='extrajudicial'` num lote com processo do
+TJ-SP. Medido no acervo:
+
+| defeito | lotes ativos |
+|---|---|
+| **sem data de leilão** (dizem "a confirmar no edital") | **16.236** (53%) |
+| **com data já vencida** | **2.900** |
+| descrição diz *judicial* → marcado `extrajudicial` | **1.022** |
+| `casa` classificada como `terreno` | 38 |
+| `casa` com área > 2.000 m² (provável terreno) | 54 |
+| com `numero_processo` preenchido | **3** de 30.571 |
+| **2ª praça capturada fora da CEF** | **0** em 11 fontes |
+
+⚠️ `data_leilao` é coluna **`text`**, não `timestamp` — comparação exige cast e nenhum índice de
+data funciona. É parte de por que "já venceu" nunca foi vigiado.
+
+**Decisão pendente do dono:** qual valor é "o preço" do lote quando há 2 ou 3 praças — decide
+filtro da busca, ordenação, BidScore e a projeção do relatório vendido, de uma vez só.
+
 ### O que fica para a próxima sessão
 
 - **`aval_ausente_com_doc` 4.158** (limite 4.000) · `relatorio_area_nao_confirmada` 14 (2) ·
