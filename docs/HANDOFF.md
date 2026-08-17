@@ -46,6 +46,36 @@ Não chegou a acontecer: `checarQualidade` descarta sem `valor_minimo`, e a varr
 confirma **0 lotes ativos** com `valor_minimo = 0` e `valor_avaliacao > 0` em TODAS as fontes. O
 gate é a única coisa entre esse cálculo e o cliente — não afrouxar.
 
+### A2. Resultado da coleta com o conserto (23:51) — e um terceiro achado no caminho
+
+`6 prontos · 1 descartado · 10 sem detalhe`, contra os 4/10/7 de antes. Os lotes que estavam
+perdidos entraram com preço:
+
+| lote | avaliação | lance (menor praça) | desconto |
+|---|---|---|---|
+| 10499 Campinas | 471.263,27 | **235.631,64** | 50% |
+| 10531 Guarulhos | 704.132,49 | **649.804,17** | 8% |
+| 10478 Limeira | 561.030,90 | **336.618,54** | 40% |
+| 10544 Pereira Barreto | 119.326,04 | **68.412,22** | 43% |
+
+Acervo PECINI: **74 → 80 ativos**. 10531 e 10544 não tinham rótulo de Avaliação nenhum — a
+avaliação veio da 1ª praça, como a regra manda.
+
+**O terceiro achado.** Os 5 últimos lotes saíram com `- 10511: detalhe não veio (teto BD?)`.
+Com interrogação, porque o scraper NÃO SABIA: `fetchViaBrightData` engole o `ErroBrightData` e
+devolve `null` igual para recusa de orçamento e para falha de rede. O ledger sabia:
+**457 de 500 usados, 43 ainda reservados para o RJ** → `reservado_para_outros`. O freio agindo
+exatamente como projetado, e o log adivinhando.
+
+É a forma 5 do CLAUDE.md ("o freio de custo entregue como conteúdo") no seu formato mais brando —
+não virou dado falso porque `bd()` é fallback e o gate exige linha no acervo. Mas foi essa mesma
+indistinção que escondeu 4 semanas de saturação em agosto. Agora `bd()` usa
+`buscarViaBrightData` num try/catch: o chamador continua vendo `null`, o log diz
+`RECUSADO PELO FREIO DE CUSTO: reservado_para_outros (…)`, o laço PARA em vez de repetir a
+recusa lote a lote, e `fonte_saude` grava `sem cota: <motivo>` em vez de "nada pronto".
+
+Os 5 lotes seguem como `novos` e entram na próxima rodada — nada se perdeu.
+
 ### B. `bd_teto_saturado` mirava num número que se moveu
 
 Comparava contra o literal **405** (90% de 450). Desde ontem o teto é parâmetro de disparo (500 na

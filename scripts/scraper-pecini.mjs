@@ -21,12 +21,12 @@
  * Env: BRIGHTDATA_API_TOKEN, BRIGHTDATA_ZONE, VITE_SUPABASE_URL, SUPABASE_SERVICE_KEY.
  */
 import { createClient } from '@supabase/supabase-js';
-// NOTA (11/08): aqui o `null` do fetchViaBrightData é um fallback DELIBERADO (tenta o
-// caminho grátis/residencial, e o pago é a segunda chance) — por isso este arquivo segue
-// na linha de base do verificador de padrões em vez de migrar para `buscarViaBrightData`.
-// O que fecha o buraco perigoso é outra coisa: coleta com zero lote agora sai com código
-// 1 e grava `fonte_saude` 'falhou', e o gate só carimba "coletei" com linha no acervo.
-import { fetchViaBrightData, brightDataDisponivel } from '../api/_brightdata.js';
+// NOTA (11/08, revista em 17/08): o `null` que `bd()` devolve continua sendo um fallback
+// DELIBERADO (tenta o caminho grátis/residencial; o pago é a segunda chance) — o que mudou é
+// que ele deixou de ser MUDO. `bd()` passou de `fetchViaBrightData` para `buscarViaBrightData`
+// dentro de um try/catch: o chamador segue vendo `null`, mas o MOTIVO da recusa vira log e o
+// laço para quando o freio de custo diz não, em vez de repetir a recusa lote a lote.
+import { buscarViaBrightData, brightDataDisponivel, ErroBrightData } from '../api/_brightdata.js';
 import { fetchHeadless, fecharHeadless } from './lib/fetch-residencial.mjs';
 import { extrairGenerico, extrairData, checarQualidade, extrairAreaM2} from './lib/scraper-core.mjs';
 import { decodificarEntidades } from '../api/_texto-imovel.js';
@@ -49,13 +49,28 @@ if (!SB_URL || !SB_KEY) { console.error('Faltam VITE_SUPABASE_URL / SUPABASE_SER
 const supabase = createClient(SB_URL, SB_KEY);
 
 // Busca crua via Web Unlocker (com teto de custo). Retorna o HTML/XML ou null.
+let recusaDeCota = null;   // motivo da última recusa do FREIO DE CUSTO (não de rede)
+
 async function bd(url, { proposito = 'pecini', timeoutMs = 45000 } = {}) {
   if (process.env.PECINI_HEADLESS === '1') {   // runner residencial: Chromium real de IP de casa, SEM Bright Data
     return await fetchHeadless(url, { timeoutMs });
   }
-  const r = await fetchViaBrightData(url, { proposito, timeoutMs });
-  if (!r || !r.ok) return null;
-  return await r.text().catch(() => null);
+  // O `null` daqui segue sendo o fallback deliberado deste arquivo — mas o MOTIVO para de ser
+  // adivinhado. `fetchViaBrightData` engolia o ErroBrightData e o laço imprimia
+  // "detalhe não veio (teto BD?)" com ponto de interrogação: um palpite no lugar do fato que
+  // a RPC já tinha devolvido. Na coleta de 17/08 os 5 últimos lotes pararam em
+  // `reservado_para_outros` (457 de 500 usados, 43 reservados para o RJ) — o freio agindo como
+  // projetado, e o log dizendo "teto?" como se ninguém soubesse.
+  try {
+    const r = await buscarViaBrightData(url, { proposito, timeoutMs, exigirOk: false });
+    if (!r.ok) { console.log(`  · HTTP ${r.status} em ${url}`); return null; }
+    return await r.text().catch(() => null);
+  } catch (e) {
+    if (!(e instanceof ErroBrightData)) throw e;
+    if (e.semCota) recusaDeCota = `${e.motivo}${e.detalhe ? ` — ${e.detalhe}` : ''}`;
+    console.log(`  · ${e.semCota ? 'RECUSADO PELO FREIO DE CUSTO' : 'falha'}: ${e.motivo}${e.detalhe ? ` (${e.detalhe})` : ''}`);
+    return null;
+  }
 }
 
 // Tipo do imóvel a partir do título (normalizarTipo do scraper principal não é
@@ -350,8 +365,9 @@ async function main() {
   const prontos = [];
   let semDetalhe = 0, reprovados = 0;
   for (const rec of alvo) {
+    if (recusaDeCota) { semDetalhe++; continue; }   // o freio já disse não: insistir só repete a recusa
     const html = await bd(rec.loteUrl);
-    if (!html) { semDetalhe++; console.log(`- ${rec.id}: detalhe não veio (teto BD?)`); continue; }
+    if (!html) { semDetalhe++; console.log(`- ${rec.id}: detalhe não veio`); continue; }
     const det = parseDetalhe(html, rec);
     if (det.paginaInvalida) { semDetalhe++; console.log(`- ${rec.id}: página genérica/sem lote (pulado)`); continue; }
     const row = montarRow(rec, det);
@@ -363,13 +379,18 @@ async function main() {
   }
 
   console.log(`\nResumo: ${prontos.length} prontos · ${reprovados} descartados · ${semDetalhe} sem detalhe.`);
+  // "Não coletei porque o orçamento disse não" é uma frase diferente de "a fonte não tinha nada",
+  // e elas não podem sair iguais do mesmo lugar (CLAUDE.md, forma 5).
+  if (recusaDeCota) console.log(`⛔ PAROU POR COTA: ${recusaDeCota} — ${semDetalhe} lote(s) ficaram para a próxima rodada.`);
   // Zero pronto não é "a fonte está vazia" — é coleta quebrada até prova em contrário.
   // Sai com erro E deixa a linha em `fonte_saude`: sem isso a fonte some do monitor
   // (nenhuma linha nova) e o acervo encolhe em silêncio. Ver scraper-rj.mjs, 11/08.
   if (!prontos.length) {
     await registrarSaude(supabase, 'PECINI', [], 'principal',
       { ok: false, metricas: { n: 0, uf_pct: 0, valor_pct: 0, link_pct: 0, foto_pct: 0 },
-        motivo: `nada pronto (${semDetalhe} sem detalhe, ${reprovados} reprovados)` });
+        motivo: recusaDeCota
+          ? `sem cota: ${recusaDeCota} (${semDetalhe} sem detalhe, ${reprovados} reprovados)`
+          : `nada pronto (${semDetalhe} sem detalhe, ${reprovados} reprovados)` });
     console.error('nada a gravar. Saindo com erro para não carimbar coleta que não coletou.');
     process.exitCode = 1;
     return;
