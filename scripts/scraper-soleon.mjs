@@ -226,6 +226,12 @@ function montarRow(tenant, url, det) {
 // Tenants cuja coleta parou por decisão de ORÇAMENTO (cota Bright Data), não por mudança
 // no site. A diferença decide se `fonte_saude` recebe "regressão" ou "sem cota".
 const SEM_COTA = new Set();
+// Quantos lotes a LISTAGEM do tenant devolveu nesta execução — o número que mede a saúde da
+// fonte de verdade. `total` (lotes processados) não serve: com `novos` vazio o coletor cai no
+// fallback e re-raspa até MAX_LOTES já conhecidos, então um dia sem novidade grava 40 e um dia
+// com um lote novo grava 1. Foi essa bimodalidade que acusou a VEGAS de regressão em 17/08
+// (1 lote NOVO capturado corretamente × 40 re-raspagens do dia anterior). Ver `_saude-fonte.mjs`.
+const ENUMERADOS = new Map();
 
 async function enumerarLotes(tenant) {
   const setUrls = new Set();
@@ -243,6 +249,7 @@ async function enumerarLotes(tenant) {
     if (setUrls.size === antes) break;
     await sleep(400);
   }
+  ENUMERADOS.set(tenant.fonte, setUrls.size);
   return { urls: [...setUrls], via };
 }
 
@@ -328,6 +335,7 @@ async function main() {
       await registrarSaude(supabase, tenant.fonte, [], 'soleon', {
         ok: false,
         semCota,
+        enumerados: ENUMERADOS.get(tenant.fonte) ?? null,
         metricas: { n: 0, uf_pct: 0, valor_pct: 0, link_pct: 0, foto_pct: 0 },
         motivo: semCota
           ? 'SEM COTA Bright Data — coleta não tentada (decisão de orçamento, não regressão da fonte)'
@@ -362,10 +370,15 @@ async function main() {
     // O `if (!rows.length) continue` saía ANTES desta linha (corrigido 11/08): o tenant que
     // coletava zero era justamente o que não deixava rastro — o único caso em que o monitor
     // precisava de uma linha, e era o único em que ela não vinha. TORRES3 está com 1 lote ativo.
+    // `enumerados` vai nos DOIS ramos: é justamente no tenant que coletou pouco (ou nada) que
+    // ele decide se houve regressão de verdade. Passar só no ramo de falha deixaria de fora o
+    // caso da VEGAS — que coletou 1 lote com sucesso e mesmo assim foi acusada.
+    const enumerados = ENUMERADOS.get(tenant.fonte) ?? null;
     await registrarSaude(supabase, tenant.fonte, rows, 'soleon',
-      rows.length ? undefined : {
+      rows.length ? { enumerados } : {
         ok: false,
         semCota: SEM_COTA.has(tenant.fonte),
+        enumerados,
         metricas: { n: 0, uf_pct: 0, valor_pct: 0, link_pct: 0, foto_pct: 0 },
         motivo: SEM_COTA.has(tenant.fonte)
           ? 'SEM COTA Bright Data — coleta não tentada (decisão de orçamento, não regressão da fonte)'

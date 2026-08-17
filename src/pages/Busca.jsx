@@ -1394,7 +1394,11 @@ export default function Busca() {
   const totalPaginas = Math.max(1, Math.ceil(totalResultados / POR_PAGINA));
 
   // valorMinimo NULL com avaliação > 0 fazia (1 - null/N)*100 = 100 → badge verde "-100%" falso.
-  const desconto = (im) => im.descontoPercentual ? Number(im.descontoPercentual) : (im.valorAvaliacao>0 && im.valorMinimo>0 ? (1-im.valorMinimo/im.valorAvaliacao)*100 : 0);
+  // `null`, NÃO 0, quando não há como medir (17/08). O `: 0` dizia "desconto zero" para lote
+  // cujo desconto é DESCONHECIDO, e esse 0 era repassado a `scoreBidPro` logo abaixo — onde
+  // `Number(null)` já não distinguia ausência de medição. Ou seja: era este `: 0` que anulava,
+  // na listagem, o guard de ausência da camada Margem. Absence in, absence out.
+  const desconto = (im) => im.descontoPercentual ? Number(im.descontoPercentual) : (im.valorAvaliacao>0 && im.valorMinimo>0 ? (1-im.valorMinimo/im.valorAvaliacao)*100 : null);
   const fmtDesc = (v) => Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   return (
@@ -1978,7 +1982,7 @@ export default function Busca() {
                           <div style={{ fontSize:10, color:'#64748b', marginBottom:4 }}>📍 {im.cidade}, {im.estado}</div>
                           <div style={{ display:'flex', gap:4, alignItems:'center', flexWrap:'wrap' }}>
                             <span style={{ fontSize:12, fontWeight:900, color:'#0D63DB' }}>{fmtBRL(im.valorMinimo)}</span>
-                            {desc && <span style={{ fontSize:10, fontWeight:800, background:'#dcfce7', color:'#16a34a', padding:'0 5px', borderRadius:20 }}>-{fmtDesc(desc)}%</span>}
+                            {desc > 0 && <span style={{ fontSize:10, fontWeight:800, background:'#dcfce7', color:'#16a34a', padding:'0 5px', borderRadius:20 }}>-{fmtDesc(desc)}%</span>}
                             {im.areaM2 > 0 && im.valorMinimo && <span style={{ fontSize:9, fontWeight:700, background:'#f1f5f9', color:'#475569', padding:'0 5px', borderRadius:20 }}>R$ {Number(im.valorMinimo/im.areaM2).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/m²</span>}
                           </div>
                           {(im.dataFim || im.dataLeilao) && <div style={{ fontSize:9, color:'#94a3b8', marginTop:2 }}>📅 {fmtData(im.dataFim || im.dataLeilao)}</div>}
@@ -2018,7 +2022,7 @@ export default function Busca() {
                               <div style={{ fontSize:10, color:'#64748b', margin:'2px 0 4px' }}>📍 {im.cidade}, {im.estado}</div>
                               <div style={{ display:'flex', gap:5, alignItems:'center', flexWrap:'wrap' }}>
                                 <span style={{ fontSize:13, fontWeight:900, color:'#0D63DB' }}>{fmtBRL(im.valorMinimo)}</span>
-                                {desc && <span style={{ fontSize:10, fontWeight:800, background:'#dcfce7', color:'#16a34a', padding:'0 5px', borderRadius:20 }}>-{fmtDesc(desc)}%</span>}
+                                {desc > 0 && <span style={{ fontSize:10, fontWeight:800, background:'#dcfce7', color:'#16a34a', padding:'0 5px', borderRadius:20 }}>-{fmtDesc(desc)}%</span>}
                               </div>
                             </div>
                           </div>

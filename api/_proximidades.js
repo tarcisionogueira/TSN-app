@@ -49,11 +49,17 @@ function falhaEmbutida(data) {
 }
 
 /**
- * Consulta o Overpass e devolve `{ pontos, vazio }`.
+ * Consulta o Overpass e devolve `{ pontos, vazio, espelho }`.
  *   - `vazio: false` → `pontos` tem o mais próximo de cada categoria encontrada.
  *   - `vazio: true`  → um espelho SAUDÁVEL respondeu com zero elementos. É um indício de vazio,
  *                      NÃO um veredito: quem chama precisa de várias observações antes de gravar
  *                      "não há nada aqui" (ver `proximidades_vazios` no cron).
+ *   - `espelho`      → QUAL instância respondeu. Devolvido sempre, e é a informação que faltava:
+ *                      até 17/08 o sistema não guardava isto em lugar nenhum, então "por que este
+ *                      lote deu vazio três vezes" só podia ser INFERIDO. Um espelho com extrato
+ *                      regional ou desatualizado responde 200 com `elements: []` — vazio de
+ *                      aparência saudável, indistinguível do vazio real sem saber a origem. O
+ *                      chamador usa isto para exigir DOIS espelhos distintos antes de confirmar.
  *   - LANÇA           → não foi possível consultar (todos os espelhos fora/limitados).
  *
  * ─── POR QUE ESTE DESENHO (correção da correção, 10/08, mesmo dia) ─────────────────────────
@@ -103,7 +109,7 @@ export async function consultarProximidades(lat, lng, { rodizio = 0 } = {}) {
       const elementos = Array.isArray(json.elements) ? json.elements : [];
       // Zero elementos de um espelho SAUDÁVEL: devolve como indício, não como veredito, e para
       // por aqui — insistir nos outros espelhos só multiplicaria a carga sem trazer certeza.
-      if (!elementos.length) return { pontos: {}, vazio: true };
+      if (!elementos.length) return { pontos: {}, vazio: true, espelho: ep };
 
       const melhores = {};
       for (const el of elementos) {
@@ -119,7 +125,7 @@ export async function consultarProximidades(lat, lng, { rodizio = 0 } = {}) {
       // Veio elemento mas nenhum casou com as CATEGORIAS: é vazio de verdade para a nossa
       // finalidade — e a resposta prova que o espelho estava saudável. Ainda assim entra como
       // indício, pela mesma razão do caso acima.
-      return { pontos: melhores, vazio: Object.keys(melhores).length === 0 };
+      return { pontos: melhores, vazio: Object.keys(melhores).length === 0, espelho: ep };
     } catch (e) {
       erros.push(String(e?.message || e));
     }

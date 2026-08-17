@@ -9,6 +9,7 @@
 import { createClient } from '@supabase/supabase-js';
 import puppeteer from 'puppeteer';
 import { vasculharDocumentos, chaveDocCanonica } from '../api/_doc-scan.js';
+import { ehFracaoIdeal } from './lib/scraper-core.mjs';
 import MUNICIPIOS from '../api/_municipios.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
@@ -222,12 +223,23 @@ async function salvarImoveis(imoveis, fonte) {
     return row;
   });
 
+  // FRAÇÃO IDEAL FORA (decisão do dono, 17/08). Este coletor genérico serve a maioria das
+  // fontes e NÃO passa por `checarQualidade` — foi por aqui que entraram 117 dos 120 lotes de
+  // parte/fração ideal do acervo (LJUD 53, SUPERBID 21, LEILOFY 13, MEGA 10, GRUPOLANCE 8…).
+  // O mesmo `ehFracaoIdeal` do portão compartilhado, para a regra ter UMA definição só: dois
+  // regexes equivalentes em arquivos diferentes divergem no primeiro ajuste, e aí a fonte que
+  // ficou para trás volta a admitir o que a outra barra.
+  const limpos = rows.filter(r => !ehFracaoIdeal(r));
+  const barrados = rows.length - limpos.length;
+  if (barrados) console.log(`  ⛔ ${fonte}: ${barrados} lote(s) de parte/fração ideal barrados (fora do acervo por decisão de negócio)`);
+  if (!limpos.length) { console.log(`  ${fonte}: nada a salvar após o filtro.`); return; }
+
   const { error } = await supabase
     .from('imoveis_leilao')
-    .upsert(rows, { onConflict: 'fonte_id', ignoreDuplicates: false });
+    .upsert(limpos, { onConflict: 'fonte_id', ignoreDuplicates: false });
 
   if (error) console.error(`  Erro ao salvar ${fonte}:`, error.message);
-  else console.log(`  ✅ ${fonte}: ${rows.length} imóveis salvos`);
+  else console.log(`  ✅ ${fonte}: ${limpos.length} imóveis salvos`);
 }
 
 // Salva em lotes de 500 e desativa os obsoletos da fonte (lotes que saíram do

@@ -33,10 +33,26 @@ export function metricasColeta(imoveis) {
  * @param {string} fonte    código da fonte (o mesmo gravado em imoveis_leilao.fonte)
  * @param {Array}  imoveis  lotes coletados nesta execução
  * @param {string} estrategia rótulo livre ('principal', 'api', 'html'…)
- * @param {object} validacao {ok, metricas, motivo, semCota} quando o coletor tem portão de
- *   qualidade. `semCota: true` marca que o zero veio de decisão de ORÇAMENTO (cota do
+ * @param {object} validacao {ok, metricas, motivo, semCota, enumerados} quando o coletor tem
+ *   portão de qualidade. `semCota: true` marca que o zero veio de decisão de ORÇAMENTO (cota do
  *   fornecedor pago negada) e não de mudança na fonte — nesse caso não se acusa regressão,
  *   porque a ação que resolve é liberar cota, não consertar parser.
+ *
+ * ─── `enumerados` — POR QUE A REGRESSÃO NÃO PODE OLHAR PARA `total` (17/08) ────────────────
+ * `total` é quantos lotes a execução PROCESSOU, e esse número mede duas coisas diferentes
+ * conforme o dia. Scrapers como o SOLEON fazem `(novos.length ? novos : urls)`: quando não há
+ * nada novo, eles re-raspam os já conhecidos para atualizar preço e data — trabalho legítimo,
+ * que enche `total` com o teto do lote. Quando há UM lote novo, `total` vale 1.
+ *
+ * O resultado medido na VEGAS: 13/08 e 16/08 gravaram `total: 40` com **ZERO** lotes criados
+ * (re-raspagem pura); 17/08 gravou `total: 1` com **1** lote criado — captura correta de um
+ * site que só tinha um lote novo. O monitor comparou 1 captura contra 40 re-verificações e
+ * gritou "queda vs anterior (1<40)", mandando investigar um scraper que estava certo. As
+ * irmãs de plataforma provam: CALIL e TORRES3, mesmo código, passaram bem no mesmo run.
+ *
+ * `enumerados` = quantos lotes a FONTE LISTA. Esse número não depende de quanto já temos, e é
+ * o que de fato regride quando o site muda: listagem que cai de 40 URLs para 1 é regressão de
+ * verdade. Quando presente nos dois lados, é ele que decide.
  */
 export async function registrarSaude(supabase, fonte, imoveis, estrategia, validacao) {
   const m = validacao?.metricas || metricasColeta(imoveis || []);
@@ -54,17 +70,25 @@ export async function registrarSaude(supabase, fonte, imoveis, estrategia, valid
   if (!m.n) status = semCota ? 'sem_cota' : 'falhou';
   else if (validacao && validacao.ok === false) status = 'degradado';
   try {
+    const enumerados = Number.isFinite(validacao?.enumerados) ? validacao.enumerados : null;
     const { data: ant } = await supabase.from('fonte_saude')
-      .select('total').eq('fonte', fonte).order('executado_em', { ascending: false }).limit(1).maybeSingle();
-    if (ant && ant.total > 0 && m.n < ant.total * 0.5 && !semCota) {
+      .select('total,enumerados').eq('fonte', fonte).order('executado_em', { ascending: false }).limit(1).maybeSingle();
+    // Compara ENUMERADOS com ENUMERADOS quando os dois lados têm o número; só cai para
+    // `total` quando o coletor (ou o histórico) ainda não reporta enumeração. Misturar as
+    // duas escalas seria pior que não comparar: são grandezas diferentes com o mesmo nome.
+    const usaEnum = enumerados != null && Number(ant?.enumerados) > 0;
+    const atual = usaEnum ? enumerados : m.n;
+    const anterior = usaEnum ? Number(ant.enumerados) : Number(ant?.total);
+    const rotulo = usaEnum ? 'listados' : 'coletados';
+    if (anterior > 0 && atual < anterior * 0.5 && !semCota) {
       if (status === 'ok') status = 'degradado';
-      motivo = [motivo, `queda vs anterior (${m.n}<${ant.total})`].filter(Boolean).join('; ');
-      console.log(`  ⚠️ [${fonte}] REGRESSÃO: caiu de ${ant.total} para ${m.n}`);
-    } else if (semCota && ant && ant.total > 0) {
-      console.log(`  💰 [${fonte}] sem cota: coleta não tentada (anterior ${ant.total}). NÃO é regressão da fonte.`);
+      motivo = [motivo, `queda vs anterior (${rotulo} ${atual}<${anterior})`].filter(Boolean).join('; ');
+      console.log(`  ⚠️ [${fonte}] REGRESSÃO: ${rotulo} caiu de ${anterior} para ${atual}`);
+    } else if (semCota && anterior > 0) {
+      console.log(`  💰 [${fonte}] sem cota: coleta não tentada (anterior ${anterior}). NÃO é regressão da fonte.`);
     }
     await supabase.from('fonte_saude').insert({
-      fonte, total: m.n, estrategia: estrategia || null,
+      fonte, total: m.n, enumerados, estrategia: estrategia || null,
       uf_pct: m.uf_pct, valor_pct: m.valor_pct, link_pct: m.link_pct, foto_pct: m.foto_pct,
       status, motivo: motivo || null,
     });

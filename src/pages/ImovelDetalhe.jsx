@@ -903,6 +903,12 @@ export default function ImovelDetalhe() {
         if (pontos && Object.keys(pontos).length) {
           setImovel(prev => prev ? { ...prev, pontosProximos: pontos } : prev);
           setProxStatus('ok');
+        } else if (d?.nao_aplicavel) {
+          // "NÃO DÁ PARA MEDIR" NÃO É "MEDI E NÃO HÁ NADA" (17/08). Coordenada de nível
+          // `cidade` é o centroide do município, não o imóvel — 91 lotes do acervo dividem a
+          // mesma. Cair no 'empty' aqui era o que fazia a tela AFIRMAR ausência de escola no
+          // centro de São Paulo. Estado próprio, texto próprio.
+          setProxStatus('na');
         } else {
           setProxStatus('empty'); // resposta válida e vazia (sem POIs mapeados por perto)
         }
@@ -1224,6 +1230,17 @@ export default function ImovelDetalhe() {
                       })}
                     </div>
                   )}
+                  {/* A DISTÂNCIA PRECISA PRECISA DIZER DE ONDE (17/08). Desde hoje lotes de nível
+                      `bairro` também exibem proximidades (calculadas pelo extrato local do OSM,
+                      que antes só atendia `endereco`). O chip mostra "Escola 420 m" — número
+                      exato a partir de uma origem que NÃO é o lote. O selo logo acima já avisa
+                      que a localização é aproximada; esta linha liga uma coisa à outra, para o
+                      número não ser lido como medido da porta do imóvel. */}
+                  {temCoord && !localPrecisa && imovel.pontosProximos && Object.keys(imovel.pontosProximos).length > 0 && (
+                    <div style={{ marginTop: 6, fontSize: 11, color: '#94a3b8' }}>
+                      Distâncias medidas a partir do centro da região indicada acima, não do lote.
+                    </div>
+                  )}
                   {/* Estados explícitos dos pontos próximos (nunca mais "gira p/ sempre") */}
                   {temCoord && proxStatus === 'loading' && (
                     <div style={{ marginTop: 10, fontSize: 12, color: '#64748b', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
@@ -1233,6 +1250,11 @@ export default function ImovelDetalhe() {
                   {temCoord && proxStatus === 'empty' && (
                     <div style={{ marginTop: 10, fontSize: 12, color: '#94a3b8' }}>
                       Nenhum ponto de interesse mapeado nas proximidades.
+                    </div>
+                  )}
+                  {temCoord && proxStatus === 'na' && (
+                    <div style={{ marginTop: 10, fontSize: 12, color: '#64748b' }}>
+                      Localização aproximada (centro da cidade) — proximidades não calculadas para este lote.
                     </div>
                   )}
                   {temCoord && proxStatus === 'error' && (
@@ -1313,13 +1335,24 @@ export default function ImovelDetalhe() {
                     </>
                   );
                 })()}
-                {imovel.valorAvaliacao && (
+                {/* `> 0`, não truthy: `valor_avaliacao` é `numeric` e o PostgREST serializa SEM
+                    aspas, então chega o NÚMERO 0 — falsy para o `&&` e mesmo assim renderizável
+                    pelo React, que imprime o dígito solto no meio do grid. São 4.456 lotes
+                    ativos com avaliação 0, e quem vê é o cliente LOGADO (o visitante cai no
+                    ImovelGate, que já usa o guard certo). A linha 7 acima já fazia `> 0`: era
+                    omissão, não convenção. */}
+                {imovel.valorAvaliacao > 0 && (
                   <div style={{ background: '#f8fafc', borderRadius: 12, padding: '16px' }}>
                     <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Avaliação</div>
                     <div style={{ fontSize: 22, fontWeight: 900, color: '#64748b' }}>{fmtBRL(imovel.valorAvaliacao)}</div>
                   </div>
                 )}
-                {economia && (
+                {/* `> 0` porque `economia` é `avaliacao - minimo`, e os dois outros desfechos
+                    são piores que não mostrar nada: 0 (3.621 lotes) imprime o dígito solto, e
+                    NEGATIVO (2.283 lotes) estampa "ECONOMIA POTENCIAL R$ -7.431.739,10" dentro
+                    da caixa VERDE — o sinal visual de vantagem anunciando prejuízo. Lance acima
+                    da avaliação existe e é informação legítima; só não é economia. */}
+                {economia > 0 && (
                   <div style={{ background: '#dcfce7', borderRadius: 12, padding: '16px' }}>
                     <div style={{ fontSize: 11, fontWeight: 700, color: '#15803d', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Economia potencial</div>
                     <div style={{ fontSize: 22, fontWeight: 900, color: '#15803d' }}>{fmtBRL(economia)}</div>

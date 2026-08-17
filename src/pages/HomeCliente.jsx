@@ -167,9 +167,12 @@ export default function HomeCliente() {
           <Acao Icon={Wallet} titulo="Meus Créditos" desc="Consultas disponíveis, bônus e saldo, tudo num lugar." cor="#0891b2" onClick={() => nav('/creditos')} />
           <Acao Icon={GraduationCap} titulo="Área de Membros" desc="Cursos, eBooks e materiais para arrematar com segurança." cor="#059669" onClick={() => nav('/membros')} />
           {/* Home Equity e Consórcio (dono, 14/08): vitrine de originação, aberta a TODOS os
-              planos, inclusive o Explorador gratuito. Não é módulo pago e não tem gate: quem
-              remunera é a instituição parceira. Fica DEPOIS das ações de leilão de propósito,
-              porque leilão é a base e módulo é "a mais", nunca por cima. */}
+              planos, inclusive o Explorador gratuito. Não é módulo pago e não tem gate. Fica
+              DEPOIS das ações de leilão de propósito, porque leilão é a base e módulo é "a
+              mais", nunca por cima.
+              17/08: este comentário dizia "quem remunera é a instituição parceira" — não há
+              parceira nem contrato; o interesse vira lead para a nossa própria equipe. A frase
+              equivalente na /alavancagem foi o que reprovou a verificação do Google Ads. */}
           <Acao Icon={Landmark} titulo="Home Equity e Consórcio" desc="Use o imóvel que você já tem para comprar o próximo. Sem compromisso." cor="#ea580c" onClick={() => nav('/alavancagem')} />
           {/* "Agendar com o time" REMOVIDO (decisão do dono 30/07): o agendamento com o
               analista é dos planos pagos e só APÓS os 3 relatórios prontos — o caminho
