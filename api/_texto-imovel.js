@@ -102,3 +102,25 @@ export function extrairAreaM2(texto) {
   }
   return 0;
 }
+
+/**
+ * Decodifica entidades HTML (&#xE3; &#227; &amp; &nbsp;) em texto já sem tags.
+ *
+ * Existe porque a falta disto NÃO aparece como erro — aparece como classificação errada.
+ * Achado em 17/08: `scripts/scraper-pecini.mjs` classifica o anexo testando /matr[íi]cul/
+ * contra o rótulo CRU do link. Um link rotulado "Matr&#xED;cula" nunca casa (depois de
+ * "Matr" vem "&#xED;", não "í") e o documento vira 'anexo' genérico — ou some. A prova está
+ * no acervo: o anexo gravado se chama literalmente "Edital do Leil&#xE3;o".
+ * O cliente lia isso na ficha, e a matrícula que existe no site do leiloeiro não chegava aqui.
+ */
+export function decodificarEntidades(txt) {
+  return String(txt || '')
+    .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCharCode(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (_, d) => String.fromCharCode(Number(d)))
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"')
+    .replace(/&apos;|&#39;/gi, "'")
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>');
+}
