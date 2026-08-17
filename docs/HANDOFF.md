@@ -4,6 +4,119 @@
 
 ---
 
+## 🧾 17/08 — TRÊS ALARMES, E O ERRADO ERA O INSTRUMENTO NOS TRÊS
+
+Dia de diagnóstico. Os três achados têm a mesma assinatura: **um número que media duas coisas
+diferentes sob um nome só**. Nenhum apareceu em varredura de código — os três só existem no
+rastro que deixaram no banco.
+
+### A. Proximidades: o vazio não era do Overpass, era da coordenada
+
+`proximidades_vazio_falso` subiu 924 → 987 → **1.075** em três dias. A causa não era "o Overpass
+às vezes falha": era **quem ele atendia**. Por nível de geocode, nos lotes ativos:
+
+| `geocod_nivel` | vazios | cheios |
+|---|---|---|
+| **endereco** | **0** | 13.077 |
+| cidade | 1.035 | 1.488 |
+| bairro | 272 | 776 |
+| rua | 110 | 185 |
+
+**Zero falso vazio onde a coordenada é precisa.** Os 1.417 vivem todos em coordenada imprecisa —
+exatamente a população que `enriquecer-osm.mjs` recusava (`.eq('geocod_nivel','endereco')`) e que
+sobrava para o Overpass público, o único caminho do sistema capaz de gravar `{}`.
+
+E o vazio é **comprovadamente falso**, não propriedade do lugar: na MESMA coordenada, no MESMO
+dia, o acervo tem os dois desfechos. `-23.5329,-46.6395` (centroide SP): **36 vazios × 55
+cheios**. `-22.9129,-43.2003` (RJ): 33 × 78. Não existe leitura em que o centro de São Paulo não
+tenha escola em 4 km — e a ficha **afirmava** a ausência.
+
+Três defeitos estruturais que a corroboração de 3 observações não pegava:
+
+1. **O contador não era zerado ao confirmar.** O lote voltava da revalidação de 30 dias já com 3,
+   e o PRIMEIRO vazio dava 4 ≥ 3, reconfirmando na hora — a rotina que existe para CURAR o engano
+   carimbava-o. 50 lotes com contador > 3, **dois em 26**: 23 reconfirmações sem uma única
+   segunda opinião.
+2. **As "3 execuções diferentes" não tinham espaçamento nem diversidade.** O cron roda a cada 15
+   min: as 3 cabiam em 45 minutos, mesma janela de carga, sem exigir espelhos distintos. É o erro
+   que o cabeçalho de `_proximidades.js` documenta ("corroboração instantânea não corrobora
+   nada"), reintroduzido pela porta dos fundos — 45 minutos no lugar de 0 segundo.
+3. **O on-demand alimentava o MESMO contador sem espaçamento nenhum.** Cliente recarregando a
+   ficha 3× fabricava a "corroboração temporal" sozinho.
+
+**Decisão do dono:** `cidade` não calcula (a ficha diz "localização aproximada", que é a verdade);
+`rua`/`bairro` passam ao extrato local — mesma fonte com 0 falsos em 13.077 lotes — com rótulo de
+que a distância parte do centro da região. `score_localizacao` segue exclusivo de `endereco`:
+**nota a partir de coordenada aproximada seria enganosa, listar a escola mais próxima não é.**
+Vazio só é aceito com 3 observações espaçadas ≥ 6h **e** de ≥ 2 espelhos distintos.
+
+> `proximidades_vazio_em` **já existia no banco e não era usada em NENHUM ponto do repositório,
+> nem em migração**: uma sessão anterior criou a coluna para este mesmo espaçamento e nunca ligou
+> o fio. É a forma 7b em espelho — o banco tinha o que o código não pedia. Agora é lida e escrita.
+> Nova: `proximidades_espelhos` — até hoje o sistema **não guardava qual espelho respondeu**, e
+> por isso o mecanismo só pôde ser inferido, nunca provado.
+
+Reparo: os 1.418 `{}` voltaram a `null`. **Invariante em 0.**
+
+### B. VEGAS: não regrediu — o alerta comparava coisas diferentes
+
+"queda vs anterior (1<40)" num dia em que o scraper funcionou como deveria:
+
+| dia | `fonte_saude.total` | lotes realmente criados |
+|---|---|---|
+| 13/08 | 40 | **0** |
+| 16/08 | 40 | **0** |
+| 17/08 | 1 | **1** |
+
+Nos dias "saudáveis" a VEGAS **não capturou nada**: `(novos.length ? novos : urls)` — sem
+novidade, o coletor re-raspa até 40 conhecidos para atualizar preço e data, trabalho legítimo que
+enche `total` com o teto do lote. Em 17/08 a listagem tinha UM lote inédito, ele foi capturado, e
+`total` valeu 1. O monitor comparou **1 captura contra 40 re-verificações**. As irmãs de
+plataforma provam o código: CALIL (60) e TORRES3 (2) rodaram o MESMO `scraper-soleon.mjs` no mesmo
+ciclo, sem queixa. **Nada a consertar na captura — o defeito era do instrumento.**
+
+Novo `fonte_saude.enumerados` = quantos lotes a fonte LISTA. Não depende de quanto já temos, e é o
+que regride quando o site muda de verdade. Quando existe nos dois lados, decide.
+
+> ⚠️ **Pendente de propósito:** `fonte_baseline_aprendida()` segue aprendendo o piso a partir de
+> `total`, então o piso das fontes com fallback continua contaminado pela re-raspagem. Trocar
+> agora não ajudaria — não há histórico de `enumerados` para aprender. **Migrar a baseline para
+> `enumerados` depois de alguns dias de coleta.**
+
+### C. Atendimento: atribuir ao admin não é avisar o admin
+
+O dono: *"já tínhamos alinhado que os chamados e agendamentos deveriam ser direcionados para mim
+até ter equipe. Não apareceu nada."* Certo nas duas metades, e elas não se contradizem.
+
+O direcionamento **funciona** — `trg_solicitacao_cai_para_admin` e `trg_chamado_cai_para_admin`
+gravaram o admin como responsável em todos, conferido linha a linha, nenhum órfão. Só que tudo
+acontece **inteiramente dentro do banco**: as solicitações são inseridas direto do navegador
+(`Analise.jsx`), sem endpoint, e `emails_log` **não tem UM registro de aviso de solicitação ou
+chamado em toda a história do sistema**. Dar dono a uma fila não é contar a alguém que ela existe.
+
+3 pedidos parados há 46, 46 e 42 dias, atribuídos corretamente, sem um único sinal sair daqui.
+Novo item no `/api/health-check` (já roda 2×/dia, custo zero, só escreve quando há problema).
+Consulta validada contra o banco: retorna os 3, com a idade certa.
+
+### O que fica para a próxima sessão
+
+- **`aval_ausente_com_doc` 4.158** (limite 4.000) · `relatorio_area_nao_confirmada` 14 (2) ·
+  `cadastro_barrado` 8 (7) · `relatorio_yield_sem_x100` 1 (0). Nenhum foi tocado hoje.
+- **Bright Data: o propósito `docs` está no teto exato** (150/150, reserva 0). O total da semana
+  (295) está longe do limite global (405), então `bd_teto_saturado` não dispara — quem trava é a
+  cota do propósito, e o alarme não olha para ela.
+- **GESTAOLEILOES: 130 lotes ativos, 0% com documento.** Documental sem o que ler.
+- `/checkout` "Failed to fetch" ×3 (última 16/08 11:39) segue sem causa.
+- **Google Ads:** as 9 tarefas estão concluídas, mas o card **"Anúncios financiados por" ainda
+  exibe TARCISIO DE SOUZA NOGUEIRA DE ARAUJO** (pessoa física), resposta dada em 3/08 — antes de
+  toda a frente de identidade. É a mesma classe de divergência que reprovou a verificação. Conferir
+  se atualiza sozinho após a aprovação; se não, editar para NOGUEIRA EMPREENDIMENTOS LTDA.
+- 2 assinantes `top2` (01/07 e 06/08) sem UM relatório em 14 dias — churn em formação.
+- Backup off-region **recuperou** (16 e 17/08 `ok: true`, 49 arquivos) e `utm_term` **chegou**
+  (12 visitas em 14 dias, era 0). As duas pendências de 16/08 estão fechadas.
+
+---
+
 ## 🧾 16/08 — O DIA EM QUE `authorized` NÃO ERA PAGAMENTO
 
 Sessão longa, três frentes. A do meio é a que vale ler inteira.
