@@ -67,6 +67,41 @@ function limparResposta(texto) {
   return out.join('\n').trim() || texto.trim();
 }
 
+// ─── O WEBHOOK ANUNCIA O E-MAIL; O CORPO MORA NA API (18/08) ─────────────────────
+// Contrato REAL do `email.received`, conferido numa entrega de produção (não presumido —
+// foi presumir que custou o primeiro e-mail da história do endpoint): o payload traz
+// attachments, bcc, cc, created_at, EMAIL_ID, from, message_id, received_for, subject, to.
+// text/html NÃO vêm. O corpo se busca em GET /emails/{email_id}, com a mesma chave que
+// já envia os e-mails.
+//
+// Falha aqui NUNCA derruba o webhook: sem corpo, o chamado nasce mesmo assim com o aviso
+// "[mensagem sem texto…]" — visível na fila, onde alguém pergunta "cadê o texto?" — e o
+// log diz o que a API respondeu. Ausência visível, nunca 200 mudo.
+async function buscarCorpoNaApi(emailId) {
+  const key = process.env.RESEND_API_KEY;
+  if (!key || !emailId) return null;
+  try {
+    const r = await fetch(`https://api.resend.com/emails/${encodeURIComponent(emailId)}`, {
+      headers: { Authorization: `Bearer ${key}` },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!r.ok) {
+      console.error('[inbound] corpo: API respondeu', r.status, (await r.text().catch(() => '')).slice(0, 200));
+      return null;
+    }
+    const j = await r.json().catch(() => null);
+    if (!j || (!j.text && !j.html)) {
+      // 200 sem corpo = o contrato é OUTRO. As chaves no log dizem qual.
+      console.error('[inbound] corpo: API 200 sem text/html — keys:', Object.keys(j || {}).join(','));
+      return null;
+    }
+    return { text: j.text || '', html: j.html || '' };
+  } catch (e) {
+    console.error('[inbound] corpo: busca falhou', String(e?.message || e).slice(0, 120));
+    return null;
+  }
+}
+
 function headerMap(data) {
   const h = {};
   const arr = data?.headers || [];
@@ -257,7 +292,7 @@ async function encaminharParaAtendimento(data, headers, messageId) {
     method: 'POST', prefer: 'return=representation',
     body: {
       chamado_id: chamado.id, autor_id: null, autor_nome: nome || endereco,
-      autor_tipo: 'cliente', conteudo: corpo || '[mensagem sem texto]',
+      autor_tipo: 'cliente', conteudo: corpo || `[mensagem sem texto — ler no painel do Resend, id ${data?.email_id || '?'}]`,
       anexos, canal: 'email', email_message_id: messageId || null,
     },
   });
@@ -285,6 +320,12 @@ export default async function handler(req) {
     return json({ ok: true, ignored: evt.type });
   }
   const data = evt?.data || evt;
+  // Hidrata o corpo ANTES de rotear: tanto a devolutiva do advogado quanto o chamado de
+  // atendimento leem data.text/data.html, e o payload não os traz.
+  if (!data?.text && !data?.html && data?.email_id) {
+    const corpo = await buscarCorpoNaApi(data.email_id);
+    if (corpo) { data.text = corpo.text; data.html = corpo.html; }
+  }
   const headers = headerMap(data);
   const messageId = headers['message-id'] || data?.message_id || data?.id || null;
 
