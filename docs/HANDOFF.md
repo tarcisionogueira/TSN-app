@@ -4,6 +4,58 @@
 
 ---
 
+## 🧾 18/08 — CEF/RJ CONGELADO 12 DIAS, COM O RUN VERDE TODO DIA
+
+Pedido do dono: *"ataca a CEF"*. O defeito era outro e maior do que o que eu tinha reportado.
+
+**O RJ estava parado desde 05/08: 7.783 lotes ativos, um terço do acervo CEF**, servidos ao
+cliente com preço e status de 12 dias atrás. O scraper diário rodava, terminava com sucesso e
+imprimia `✅ Scraping concluído. 25407 imóveis processados` — número que INCLUÍA os 8.200 do RJ
+que não entraram. A linha que explicava tudo estava no log, sozinha, entre dois estados:
+
+```
+CEF CSV RJ...
+  CEF CSV RJ: 8200 imóveis, 8200 com foto
+Erro ao salvar: ON CONFLICT DO UPDATE command cannot affect row a second time
+CEF CSV MG...
+```
+
+**Causa-raiz:** o CSV da Caixa repete o mesmo `n do imovel` em algumas UFs. Upsert com duas
+linhas de mesma chave faz o Postgres abortar o COMANDO INTEIRO (21000) — ele se recusa a
+atualizar a mesma linha duas vezes na mesma instrução. Não é erro de UMA linha: é o estado
+inteiro que não entra.
+
+**Três defeitos empilhados**, e é a soma que dá 12 dias de silêncio:
+1. o upsert morria por linha duplicada;
+2. `salvarImoveis` fazia `return` mudo no erro e o laço seguia para a próxima UF;
+3. `total += imoveis.length` somava o LIDO, não o GRAVADO — `fonte_saude` registrava 25.407 e
+   status `ok` justamente no dia em que um terço não foi salvo.
+
+O passo `Notify on failure` existia e nunca era alcançado: exit 0.
+
+Consertos: dedup por `fonte+fonte_id` antes do upsert (com contagem de duplicadas no log),
+`salvarImoveis` devolvendo `{salvos, erro}`, `fonte_saude` só `ok` se NENHUMA UF falhou, e exit 1
+quando alguma UF não grava.
+
+**Por que nenhuma varredura pegou.** `desativar_imoveis_cef_vencidos` compara cada lote com o
+`max(atualizado_em)` do PRÓPRIO estado. Estado inteiro congelado deixa todos igualmente velhos e
+nenhum vira candidato — **o estado parece perfeitamente consistente consigo mesmo**. A métrica é
+relativa ao último scrape, então "não houve scrape" é invisível para ela. É a mesma família do
+teto do Bright Data e da limpeza pulada: *a régua é relativa ao próprio evento que falhou.*
+
+Invariante novo `uf_cef_congelada` compara a UF com o último scrape da FONTE. Acusou RJ com
+286,4 h (11,9 dias).
+
+### CORREÇÃO DE UM NÚMERO MEU (17/08)
+
+Reportei *"CEF: 2.206 lotes ativos com a última praça vencida"* como defeito. **Não é.** São
+lotes de VENDA DIRETA, onde a data é vestigial e a venda é contínua — `leilao_ja_encerrado` os
+exclui de propósito. E os 559 extrajudiciais com 1ª praça passada têm TODOS a 2ª praça no futuro,
+ou seja, corretamente ativos. Apliquei a regra de leilão a quem não é leilão — exatamente o tipo
+de erro que este documento existe para evitar em terceiros.
+
+---
+
 ## 🧾 18/08 — A LIMPEZA DE LOTES ENCERRADOS É PULADA EM SILÊNCIO
 
 Pergunta do dono: *"os 28 fora do sitemap, verifica se ainda estão ativos"*. Estão — e não por

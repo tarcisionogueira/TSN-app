@@ -1631,14 +1631,64 @@ async function salvarImoveis(imoveis) {
   const duplicados = brutos.length - rows.length;
   if (duplicados > 0) console.log(`    ⚠️ ${duplicados} linha(s) duplicada(s) no CSV (mesma chave fonte+fonte_id) — mantida a última de cada`);
 
-  const { error } = await supabase
-    .from('imoveis_leilao')
-    .upsert(rows, { onConflict: 'fonte,fonte_id', ignoreDuplicates: false });
+  // UPSERT EM BLOCOS, COM BISSECÇÃO NA FALHA (18/08).
+  //
+  // O dedup por `fonte+fonte_id` acima NÃO resolveu o RJ: a coleta seguinte acusou ZERO
+  // duplicadas e mesmo assim morreu com o mesmo 21000. Ou seja, a colisão não está na chave
+  // que eu supus — e daqui não dá para baixar o CSV da Caixa (o proxy bloqueia o domínio) para
+  // olhar o dado bruto. Em vez de continuar adivinhando qual é a chave, o código passa a
+  // RESPONDER: manda em blocos e, quando um bloco falha, parte no meio até isolar a linha, que
+  // vai para o log com o `fonte_id`. Na pior hipótese isola 1 linha em ~log2(500) tentativas.
+  //
+  // O ganho imediato independe do diagnóstico: uma linha problemática deixa de derrubar as
+  // outras 8.199. Antes era tudo ou nada, e por 12 dias foi nada.
+  const CHUNK = 500;
+  const gravar = async (lote) => {
+    const { error } = await supabase
+      .from('imoveis_leilao')
+      .upsert(lote, { onConflict: 'fonte,fonte_id', ignoreDuplicates: false });
+    return error;
+  };
+  let salvos = 0;
+  const rejeitadas = [];
+  const colisoes = [];
+  // Dois diagnósticos DIFERENTES, e a bissecção separa um do outro:
+  //  • lote de 1 que falha  → a linha é ruim SOZINHA (dado inválido nela).
+  //  • lote que falha mas cujas DUAS metades passam → não há linha ruim: são duas linhas que
+  //    colidem ENTRE SI na chave de conflito. Separadas, ambas entram. É o caso que o dedup
+  //    por `fonte+fonte_id` deveria ter pego — se cair aqui, a chave real é outra, e o par
+  //    fica registrado no log para a próxima sessão saber por onde começar.
+  const enviar = async (lote) => {
+    const erro = await gravar(lote);
+    if (!erro) { salvos += lote.length; return; }
+    if (lote.length === 1) {
+      rejeitadas.push(`${lote[0].fonte_id}: ${erro.message.slice(0, 90)}`);
+      return;
+    }
+    const antes = { salvos, rej: rejeitadas.length };
+    const meio = Math.floor(lote.length / 2);
+    await enviar(lote.slice(0, meio));
+    await enviar(lote.slice(meio));
+    if (salvos - antes.salvos === lote.length && rejeitadas.length === antes.rej) {
+      colisoes.push(`${lote.length} linha(s) — ex.: ${lote[0].fonte_id} … ${lote[lote.length - 1].fonte_id}`);
+    }
+  };
+  for (let i = 0; i < rows.length; i += CHUNK) await enviar(rows.slice(i, i + CHUNK));
 
+  if (rejeitadas.length) {
+    console.error(`    ⛔ ${rejeitadas.length} linha(s) REJEITADA(S) pelo banco:`);
+    for (const r of rejeitadas.slice(0, 10)) console.error(`       ${r}`);
+    if (rejeitadas.length > 10) console.error(`       … e mais ${rejeitadas.length - 10}`);
+  }
+  if (colisoes.length) {
+    console.error(`    🔎 ${colisoes.length} bloco(s) falharam por COLISÃO ENTRE LINHAS (separadas, todas entram):`);
+    for (const c of colisoes.slice(0, 5)) console.error(`       ${c}`);
+    console.error(`       → a chave de conflito real NÃO é fonte+fonte_id; investigar com estes intervalos.`);
+  }
   // NÃO devolver 0 em silêncio: quem chama soma o "processados" e registra a saúde da fonte.
   // Enquanto isto era um `return` mudo, o total incluía as 8.200 do RJ que nunca foram gravadas.
-  if (error) { console.error('Erro ao salvar:', error.message); return { salvos: 0, erro: error.message }; }
-  console.log(`    ✅ ${rows.length} imóveis salvos`);
+  if (!salvos) return { salvos: 0, erro: rejeitadas[0] || 'nenhuma linha aceita' };
+  console.log(`    ✅ ${salvos} imóveis salvos${rejeitadas.length ? ` (${rejeitadas.length} rejeitada(s))` : ''}`);
 
   // Está no CSV de hoje ⇒ está à VENDA na Caixa: reativa o lote que o sweep de
   // vencidos (desativar_imoveis_cef_vencidos) tirou do ar e que voltou ao CSV.
@@ -1652,7 +1702,15 @@ async function salvarImoveis(imoveis) {
     if (errReativar) console.error('    Erro ao reativar lotes do CSV:', errReativar.message);
     else if (reativados) console.log(`    🔼 ${reativados} lote(s) reativado(s) (voltaram ao CSV)`);
   }
-  return { salvos: rows.length, erro: null };
+  // Uma linha rejeitada não pode fazer a UF inteira contar como falha — mas também não pode
+  // sumir: vai no `erro` para o chamador registrar em `fonte_saude` e o run sair com código 1.
+  // Colisão entre linhas NÃO é falha da UF (todas foram gravadas) — é achado de diagnóstico,
+  // e vira aviso, não erro. Rejeitada de verdade é a que o banco recusou sozinha.
+  return {
+    salvos,
+    erro: rejeitadas.length ? `${rejeitadas.length} linha(s) rejeitada(s): ${rejeitadas[0]}` : null,
+    aviso: colisoes.length ? `${colisoes.length} bloco(s) com colisao entre linhas` : null,
+  };
 }
 
 // ─── MAIN ─────────────────────────────────────────────────────────────────────
@@ -1678,7 +1736,8 @@ async function main() {
     // do RJ que morreram no upsert, e esse número virava o `fonte_saude` da CEF: a fonte
     // aparecia saudável justamente no dia em que um terço dela não entrou.
     total += r.salvos;
-    if (r.erro) { ufsComFalha.push(`${uf} (${r.erro.slice(0, 80)})`); console.error(`    🛑 CEF ${uf}: NADA foi gravado.`); }
+    if (r.erro) { ufsComFalha.push(`${uf} (${r.erro.slice(0, 80)})`); console.error(`    🛑 CEF ${uf}: ${r.salvos} gravado(s), com rejeição.`); }
+    if (r.aviso) console.error(`    🔎 CEF ${uf}: ${r.aviso}`);
     await new Promise(r2 => setTimeout(r2, 800));
   }
   if (ufsComFalha.length) console.error(`\n🛑 UF(s) que não gravaram: ${ufsComFalha.join(' · ')}`);
