@@ -39,7 +39,7 @@ function corpoEmail(nome) {
   const primeiro = String(nome || '').trim().split(' ')[0] || 'investidor';
   return {
     subject: 'Seu acesso ao Investidor Pro — deu algo errado no pagamento?',
-    text: `Olá, ${primeiro}!\n\nVi aqui que você tentou concluir a assinatura na BidPro Brasil e algo deu errado no caminho — em alguns casos foi um problema técnico nosso com extensões de navegador (bloqueadores de anúncio), que já corrigimos.\n\nSe quiser tentar de novo, está funcionando normalmente: https://www.bidprobrasil.com.br/#/checkout?plano=top2\n\nDica: se usar bloqueador de anúncios ou extensão de privacidade, desative para o nosso site só durante o pagamento.\n\nE se preferir, é só responder este e-mail que eu te ajudo a concluir.\n\nAbraço,\nTarcísio — BidPro Brasil`,
+    text: `Olá, ${primeiro}!\n\nVimos que você tentou concluir a assinatura na BidPro Brasil e algo deu errado no caminho — em alguns casos foi um problema técnico nosso com extensões de navegador (bloqueadores de anúncio), que já corrigimos.\n\nSe quiser tentar de novo, está funcionando normalmente: https://www.bidprobrasil.com.br/#/checkout?plano=top2\n\nDica: se usar bloqueador de anúncios ou extensão de privacidade, desative para o nosso site só durante o pagamento.\n\nE se preferir, é só responder este e-mail que a nossa equipe te ajuda a concluir.\n\nAbraço,\nEquipe BidPro Brasil`,
   };
 }
 
