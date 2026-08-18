@@ -2133,7 +2133,7 @@ export default async function handler(req, res) {
     let avalDb = 0, fonteDb = '', areaFonte = 'informada';
     let imDb = null; // reusado depois para semear/ler o Índice BidPro da microrregião
     try {
-      [imDb] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=fonte,valor_avaliacao,valor_minimo,valor_minimo_2,data_leilao,data_leilao_2,area_m2,ficha_juridica,cidade_norm,estado,bairro,latitude,longitude&limit=1`)).json();
+      [imDb] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=fonte,valor_avaliacao,valor_minimo,valor_minimo_2,data_leilao,data_leilao_2,area_m2,ficha_juridica,cidade_norm,estado,bairro,latitude,longitude,tem_matricula_doc&limit=1`)).json();
       const n = Number(imDb?.valor_avaliacao) || 0;
       const vminDb = Number(imDb?.valor_minimo) || 0;
       const sentinela = [999999999, 99999999, 9999999999, 111111111, 123456789].includes(n);
@@ -2207,6 +2207,23 @@ export default async function handler(req, res) {
           try { await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ numero_matricula: String(mat.numeroMatricula).slice(0, 40) }) }); } catch { /* best-effort */ }
         }
       }
+    }
+
+    // ── ÁREA NÃO CONFIRMADA NÃO MORRE EM SILÊNCIO (18/08, caso gl_28430 Vila Velha) ────
+    // A análise concluiu com área NENHUMA (anúncio 0, acervo 0, matrícula não lida a tempo)
+    // e a estimativa saiu ancorada nos comparáveis — o cliente viu "80 m²" que eram dos
+    // VIZINHOS. O lote TINHA a matrícula capturada; faltava alguém mandar ler. Vira regra:
+    // terminou sem área de matrícula e existe documento → entra na fila de leitura (dedup
+    // por imovel_id). A PRÓXIMA geração encontra a área confirmada — o conserto que fiz à
+    // mão para o gl_28430, automatizado para todo o acervo. Best-effort: fila é reforço.
+    if (areaFonte !== 'matricula' && imDb) {
+      try {
+        if (/caixa|cef/i.test(String(imDb.fonte || ''))) {
+          await sb('cef_matricula_fila?on_conflict=imovel_id', { method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates,return=minimal' }, body: JSON.stringify({ imovel_id: String(imovelId), status: 'pendente' }) });
+        } else if (imDb.tem_matricula_doc) {
+          await sb('documentos_fila?on_conflict=imovel_id', { method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates,return=minimal' }, body: JSON.stringify({ imovel_id: String(imovelId), status: 'pendente' }) });
+        }
+      } catch { /* fila é reforço, não caminho crítico da geração */ }
     }
 
     // ── CONDIÇÕES DO EDITAL (colhe o extrato disparado lá no início; a busca de mercado

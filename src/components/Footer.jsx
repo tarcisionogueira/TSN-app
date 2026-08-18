@@ -38,6 +38,10 @@ export default function Footer() {
         <span style={{ display: 'block', marginTop: 10, color: '#334155', lineHeight: 1.6 }}>
           Nogueira Empreendimentos LTDA — CNPJ 02.311.492/0001-61
           <br />
+          {/* Endereço IGUAL ao declarado na verificação do Google/G2RS (fonte: cartão CNPJ) —
+              o site precisa dizer a mesma coisa que os documentos, letra por letra. */}
+          Rua Barra Avenida, SN, Conj. Barra do Mendes, Mangabeira, Feira de Santana/BA — CEP 44.056-536
+          <br />
           <a href="mailto:contato@bidprobrasil.com.br" style={{ color: '#334155' }}>contato@bidprobrasil.com.br</a>
         </span>
       </div>
