@@ -52,6 +52,19 @@ export default async function handler(req, res) {
     encerrados = r3.ok ? await r3.json().catch(() => null) : { erro: (await r3.text().catch(() => '')).slice(0, 200) };
   } catch (e) { encerrados = { erro: String(e?.message || e).slice(0, 200) }; }
 
-  console.log('[limpar-imoveis-stale]', JSON.stringify({ desativados, margem_horas: MARGEM_HORAS, leiloeiro, encerrados }));
-  return res.status(200).json({ ok: true, desativados, leiloeiro, leiloes_encerrados: encerrados });
+  // 4) PINO GENÉRICO (18/08). O trigger `trg_geocode_pino_generico` deixou de escrever na
+  // própria tabela — era a causa do `ON CONFLICT ... cannot affect row a second time` que
+  // derrubava upserts inteiros (12 dias de CEF/RJ congelado). Só que ele tem early-return
+  // quando latitude/longitude/endereço vêm iguais, que é o caso da recoleta rotineira: a linha
+  // IRMÃ nunca reavalia sozinha. Sem esta varredura, coordenada compartilhada por vias
+  // diferentes fica marcada como precisa para sempre — e o cliente vê o pino na porta errada.
+  // Aqui roda FORA de qualquer upsert, então pode tocar várias linhas sem risco de colisão.
+  let pinos = null;
+  try {
+    const r4 = await rpc('demover_pinos_genericos', {});
+    pinos = r4.ok ? await r4.json().catch(() => null) : { erro: (await r4.text().catch(() => '')).slice(0, 200) };
+  } catch (e) { pinos = { erro: String(e?.message || e).slice(0, 200) }; }
+
+  console.log('[limpar-imoveis-stale]', JSON.stringify({ desativados, margem_horas: MARGEM_HORAS, leiloeiro, encerrados, pinos }));
+  return res.status(200).json({ ok: true, desativados, leiloeiro, leiloes_encerrados: encerrados, pinos_genericos: pinos });
 }
