@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { senhaForte, requisitosSenha } from '../lib/senha.js';
 import { salvarConvite, CHAVE_PLANO } from '../utils/convitePendente';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -408,7 +409,7 @@ export default function Checkout() {
     setSuErro('');
     const nome = su.nome.trim(), email = su.email.trim().toLowerCase(), senha = su.senha;
     if (!nome || !email || !senha) { setSuErro('Preencha nome, e-mail e senha.'); return; }
-    if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/.test(senha)) { setSuErro('A senha não atende aos requisitos listados.'); return; }
+    if (!senhaForte(senha)) { setSuErro('A senha não atende aos requisitos listados.'); return; }
     if (!su.aceite) { setSuErro('Aceite os Termos de Uso para continuar.'); return; }
     setSuLoading(true);
     try {
@@ -551,13 +552,7 @@ export default function Checkout() {
                   <input value={su.senha} type="password" placeholder="Crie uma senha" autoComplete="new-password" onChange={e => setSu(p => ({ ...p, senha: e.target.value }))} style={{ ...ckInp, width: '100%' }} />
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 3, margin: '0 2px 10px' }}>
-                  {[
-                    { ok: su.senha.length >= 8, txt: 'Mínimo 8 caracteres' },
-                    { ok: /[A-Z]/.test(su.senha), txt: 'Uma letra maiúscula' },
-                    { ok: /[a-z]/.test(su.senha), txt: 'Uma letra minúscula' },
-                    { ok: /\d/.test(su.senha), txt: 'Um número' },
-                    { ok: /[^A-Za-z0-9]/.test(su.senha), txt: 'Um caractere especial' },
-                  ].map(rr => (
+                  {requisitosSenha(su.senha).map(rr => (
                     <div key={rr.txt} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: rr.ok ? '#059669' : '#94a3b8', fontWeight: rr.ok ? 600 : 400 }}>
                       <span style={{ fontSize: 12, width: 12, display: 'inline-block' }}>{rr.ok ? '✓' : '○'}</span> {rr.txt}
                     </div>
@@ -568,7 +563,7 @@ export default function Checkout() {
                   <span>Li e aceito os <a href="#/termos" target="_blank" style={{ color: '#0D63DB' }}>Termos de Uso</a> e a <a href="#/privacidade" target="_blank" style={{ color: '#0D63DB' }}>Política de Privacidade</a>.</span>
                 </label>
                 {suErro && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '10px 14px', fontSize: 13, color: '#dc2626', marginBottom: 10 }}>{suErro}</div>}
-                <button onClick={criarContaGratis} disabled={suLoading} style={{ width: '100%', padding: '15px', background: suLoading ? '#94a3b8' : '#10b981', color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 16, cursor: suLoading ? 'not-allowed' : 'pointer', marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                <button onClick={criarContaGratis} disabled={suLoading || !senhaForte(su.senha)} style={{ width: '100%', padding: '15px', background: suLoading ? '#94a3b8' : '#10b981', color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 16, cursor: suLoading ? 'not-allowed' : 'pointer', marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                   {suLoading ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Criando conta…</> : 'Criar conta grátis →'}
                 </button>
                 <p style={{ fontSize: 11, color: '#94a3b8', textAlign: 'center', margin: 0 }}>
@@ -628,7 +623,7 @@ export default function Checkout() {
     setSuErro('');
     const nome = su.nome.trim(), email = su.email.trim().toLowerCase(), senha = su.senha;
     if (!nome || !email || !senha) { setSuErro('Preencha nome, e-mail e senha.'); return; }
-    if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/.test(senha)) {
+    if (!senhaForte(senha)) {
       setSuErro('A senha deve ter ao menos 8 caracteres, com maiúscula, minúscula, número e caractere especial.'); return;
     }
     if (!su.aceite) { setSuErro('Aceite os Termos de Uso para continuar.'); return; }
@@ -676,7 +671,7 @@ export default function Checkout() {
     const nome = su.nome.trim(), email = su.email.trim(), senha = su.senha;
     if (!nome || !email || !senha) { setSuErro('Preencha nome, e-mail e senha.'); return; }
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { setSuErro('E-mail inválido.'); return; }
-    if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/.test(senha)) { setSuErro('A senha não atende aos requisitos listados.'); return; }
+    if (!senhaForte(senha)) { setSuErro('A senha não atende aos requisitos listados.'); return; }
     if (!su.aceite) { setSuErro('Aceite os Termos de Uso para continuar.'); return; }
     setEtapa('pgto');
   };
@@ -1482,7 +1477,7 @@ export default function Checkout() {
                     </div>
                   </div>
                   {suErro && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '10px 14px', fontSize: 13, color: '#dc2626', marginBottom: 12 }}>{suErro}</div>}
-                  <button onClick={assinarComCadastro} disabled={suLoading}
+                  <button onClick={assinarComCadastro} disabled={suLoading || !senhaForte(su.senha)}
                     style={{ width: '100%', padding: '15px', background: suLoading ? '#94a3b8' : plano.cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: suLoading ? 'not-allowed' : 'pointer', marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                     {suLoading ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Processando…</> : `Assinar e pagar ${plano.precoLabel || 'R$ 49,90'}`}
                   </button>
@@ -1505,13 +1500,7 @@ export default function Checkout() {
                     <input value={su.senha} type="password" placeholder="Crie uma senha" autoComplete="new-password"
                       onChange={e => setSu(p => ({ ...p, senha: e.target.value }))} style={{ ...ckInp, width: '100%' }} />
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 3, margin: '2px 2px 0' }}>
-                      {[
-                        { ok: su.senha.length >= 8, txt: 'Mínimo 8 caracteres' },
-                        { ok: /[A-Z]/.test(su.senha), txt: 'Uma letra maiúscula' },
-                        { ok: /[a-z]/.test(su.senha), txt: 'Uma letra minúscula' },
-                        { ok: /\d/.test(su.senha), txt: 'Um número' },
-                        { ok: /[^A-Za-z0-9]/.test(su.senha), txt: 'Um caractere especial' },
-                      ].map(r => (
+                      {requisitosSenha(su.senha).map(r => (
                         <div key={r.txt} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: r.ok ? '#059669' : '#94a3b8', fontWeight: r.ok ? 600 : 400 }}>
                           <span style={{ fontSize: 12, width: 12, display: 'inline-block' }}>{r.ok ? '✓' : '○'}</span> {r.txt}
                         </div>
@@ -1523,7 +1512,7 @@ export default function Checkout() {
                     <span>Li e aceito os <a href="#/termos" target="_blank" style={{ color: '#0D63DB' }}>Termos de Uso</a> e a <a href="#/privacidade" target="_blank" style={{ color: '#0D63DB' }}>Política de Privacidade</a>.</span>
                   </label>
                   {suErro && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '10px 14px', fontSize: 13, color: '#dc2626', marginBottom: 12 }}>{suErro}</div>}
-                  <button onClick={planoKey === 'top2' ? irParaPagamento : criarContaInline} disabled={suLoading}
+                  <button onClick={planoKey === 'top2' ? irParaPagamento : criarContaInline} disabled={suLoading || !senhaForte(su.senha)}
                     style={{ width: '100%', padding: '15px', background: suLoading ? '#94a3b8' : plano.cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: suLoading ? 'not-allowed' : 'pointer', marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                     {suLoading ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Processando…</>
                       : (planoKey === 'top2' ? 'Continuar para pagamento →' : 'Criar conta e continuar →')}
