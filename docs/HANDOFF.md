@@ -4,6 +4,76 @@
 
 ---
 
+## 🧾 18/08 (sessão seguinte) — O FREIO DE CUSTO AINDA CHEGAVA COM CARA DE FONTE QUEBRADA
+
+Diagnóstico de abertura limpo em quase tudo: segurança `0/0`, regras de negócio `0`, KYC `0`,
+nenhum chamado de cliente sem resposta, 30.275 lotes ativos com 98,5% atualizados em 24 h, todos
+os deploys `READY`. **O backup off-region recuperou** — 15/08 ainda batia no teto (1.000 arquivos,
+`iguais = 0`); 16, 17 e 18/08 vieram com ~50 e `iguais = 33`, que é o estado saudável descrito no
+CLAUDE.md. **E o rastreio de marketing fechou muito**: `visitas_com_gclid` foi de 19 (14/08) para
+**112** em 294 visitas, e `utm_term` saiu de 0 para 56 — a pendência A do dono, resolvida.
+
+### O achado: a checagem do ritual acusava três fontes sadias
+
+`fonte_baseline_aprendida` apontou CALIL, GESTAOLEILOES e VEGAS abaixo do piso, com `total = 0`.
+Os três acervos estavam **íntegros** (95 · 21 · 130 lotes). Eram duas coisas diferentes:
+
+**1. A consulta do item 2 do CLAUDE.md não filtrava `status`.** CALIL e VEGAS gravam
+`status = 'sem_cota'`, com o motivo escrito por extenso: *"coleta não tentada (decisão de
+orçamento, não regressão da fonte)"*. `monitor-fontes-cron.js:183` sempre soube disso — trata
+`sem_cota` como categoria própria e não empilha o alerta de baseline. Era **a consulta do ritual**
+que pegava a última linha e comparava sem olhar o status: o freio de custo entregue como medição
+da fonte, a forma #5 da lista, dentro da própria rotina que existe para pegá-la.
+
+**2. `scraper-gestao.mjs` não sabia dizer "sem cota" — e por isso o GESTAOLEILOES parecia quebrado.**
+Ele usava `fetchViaBrightData`, o wrapper legado cujo docblock avisa: *"Para COLETA — onde `null`
+vira dado faltando sem ninguém perceber — use `buscarViaBrightData`"*. O wrapper engole o
+`ErroBrightData` (inclusive `semCota`) e devolve `null` → a home não vem em domínio nenhum → 0
+eventos → grava `falhou` com *"nada pronto (0 lotes brutos)"*.
+
+A trava `brightdata-null-em-coletor` existe e pega isso. O arquivo estava isento por uma nota de
+11/08: *"o `null` aqui é um fallback DELIBERADO (tenta o grátis/residencial, o pago é a segunda
+chance)"*. **A justificativa não descrevia o código:** a escolha é por variável de ambiente,
+ANTES da chamada (`GESTAO_HEADLESS === '1'`), e no modo pago o `null` não tinha segunda chance —
+virava `return null` seco. A isenção protegia um fallback inexistente naquele caminho.
+
+Evidência de que já disparava: em **5 de 5 manhãs** (13, 14, 15, 16 e 18/08) o GESTAOLEILOES
+falhou com "nada pronto" no **mesmo segundo de cron** em que CALIL e VEGAS gravaram `sem_cota`
+(09:39:33 · :34 · :35 hoje), enquanto as coletas da tarde passaram (13/08 → 110 lotes, 16/08 →
+130). A recusa vem do teto **global** (475/450), não da sub-cota `gestao` (30/150) — por isso
+atinge os três juntos.
+
+O acervo nunca correu risco: coleta zerada não dispara o sweep destrutivo. O custo era o alerta
+mentiroso, que manda consertar parser intacto — o modo de falha que o próprio comentário do
+monitor descreve: *"é como um alerta ruidoso vira alerta ignorado"*.
+
+### O conserto
+- `scripts/scraper-gestao.mjs` migrado para `buscarViaBrightData`, com `ErroBrightData` capturado
+  em `bd()`. Continua devolvendo `null` ao chamador **de propósito** — deixar a exceção subir
+  mataria a execução antes de gravar `fonte_saude` e sumiria a fonte do monitor, que é o buraco
+  que o `scraper-rj` pagou em 11/08. O que mudou é que o MOTIVO não se perde mais no caminho.
+- O sinal chega aos dois pontos que gravam saúde: no zero vira `status = 'sem_cota'`, e na coleta
+  **parcial** (cota estourada no meio) suprime a acusação de regressão sem mascarar o total.
+- `exitCode = 1` **fica nos dois casos**: "não coletei" é verdade em ambos, e sair com 0 seria o
+  check verde sobre acervo parado de 11/08. Quem separa as duas ações é o status, não o exit.
+- Arquivo REMOVIDO da linha de base de `padroes-perigosos.baseline.json`.
+- A consulta do item 2 do CLAUDE.md ganhou `and u.status <> 'sem_cota'` com o aviso de não remover.
+
+### Como foi verificado (e o que ainda não está provado)
+A trava foi testada nas DUAS direções — reprova o import antigo, passa no novo — porque lint que
+só passa não prova proteção. Os nomes importados foram carregados de verdade (o `ReferenceError`
+que quase escapou ontem não sai no `node --check`). E `registrarSaude` foi exercitada com um
+Supabase falso em 4 casos, **dois deles controles negativos**: zero sem cota continua `falhou`, e
+queda sem o sinal continua `degradado`. O conserto não mascara falha real.
+
+⚠️ **O que continua sendo hipótese:** a causa do zero do GESTAOLEILOES é inferida da coincidência
+de 5/5 e do teto global — não vi o log da execução. A consulta corrigida ainda o mostra, com
+`status = 'falhou'`, porque aquela linha é de ANTES do conserto. **A próxima coleta matinal decide:**
+se vier `sem_cota`, era orçamento e o alerta some; se vier `falhou` de novo, a fonte está quebrada
+de verdade e aí é achado novo. O conserto transformou a suposição em medição — não a confirmou.
+
+---
+
 ## 🧾 18/08 — FECHAMENTO DA SESSÃO (alertas, o que converge sozinho, o que depende do dono)
 
 ### A sessão em uma frase

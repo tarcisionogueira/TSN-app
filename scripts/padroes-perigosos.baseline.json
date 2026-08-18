@@ -417,9 +417,6 @@
   "scripts/recon-sodre-searchlots.mjs": {
     "data-sem-error": 1
   },
-  "scripts/scraper-gestao.mjs": {
-    "brightdata-null-em-coletor": 1
-  },
   "scripts/scraper-pecini.mjs": {
     "brightdata-null-em-coletor": 1,
     "data-sem-error": 1
