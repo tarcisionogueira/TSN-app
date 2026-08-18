@@ -4,6 +4,72 @@
 
 ---
 
+## 🧾 18/08 — FECHAMENTO DA SESSÃO (alertas, o que converge sozinho, o que depende do dono)
+
+### A sessão em uma frase
+Dezoito consertos, todos da MESMA família: **ausência entregue como medição**. O que mudou hoje
+não foi a quantidade de bugs achados — foi o lugar onde eles foram achados. Nenhum dos seis
+piores apareceu em varredura de código; todos apareceram no **rastro que deixaram no banco**.
+
+### Os alertas — o que EU resolvi hoje
+| Invariante | Antes | Agora | Como |
+|---|---|---|---|
+| `uf_cef_congelada` | 1 (RJ, 12 dias) | **0** | causa-raiz do 21000 (trigger `BEFORE` fazendo `update` na própria tabela) + upsert em blocos com bisseção |
+| `doc_link_sem_documento` | 6 | **0** | `nomeiaUmDocumento()` + limpeza de 12 linhas |
+| `bem_movel_no_acervo` | 3 | **0** | gate ancorado no título, com sinal imobiliário — 0 falso-positivo em 31.049 lotes |
+| `pino_generico_como_rua` | 99 | **0** | `demover_pinos_genericos()` na limpeza diária (o trigger não convergia sozinho — eu tinha ASSUMIDO que sim) |
+| `edital_eq_matricula` | 6 | **0** | limpo + `trg_flagrar_edital_suspeito` armado para nomear o culpado na próxima |
+| `reuniao_solicitada_parada` | 3 | **0** | conta interna não é cliente esperando |
+| `documentos_fila` (70% "erro") | 177 erros | **177 `sem_documento`** | "olhei e não tinha" virou estado terminal, não falha retentada 4× |
+
+Além disso, enfileirei as matrículas nunca lidas por trás de `relatorio_area_nao_confirmada`:
+**8 lotes CEF** em `cef_matricula_fila` e **1 WEBLEILOES** em `documentos_fila` (2 já estavam
+na fila). Quando lerem, a área passa a ser confirmada em documento, não declarada pelo anúncio.
+
+### Os alertas que CONVERGEM SOZINHOS — e a data
+Estes não precisam de ninguém. Estão listados para que ninguém os "conserte" à toa:
+- **`cadastro_barrado` (8/7)** — janela móvel de 7 dias. Sai sozinho em **19/08**.
+- **`bd_teto_saturado` (457/450)** e **`limpeza_encerrados_pulada` (1, PECINI)** — os dois são o
+  MESMO fato: a semana do Bright Data saturou. Ela vira em **24/08** e ambos zeram. A limpeza da
+  PECINI foi pulada porque o teto recusou a leitura, não porque a fonte esteja ruim.
+- **`lote_sem_area_nem_matricula` (457/400)** — o backfill ampliado hoje passa a alcançá-los sem
+  UMA requisição a mais. Cai a cada rodada diária.
+
+### O que NÃO converge sozinho — depende de um clique do dono (ver lista de amanhã)
+`analise_sem_mercadologico` (5/4) e `laudo_sem_base` (1/0) são **o mesmo lote**. Confirmei que a
+retenção está CERTA em mantê-lo (`ativo = true`, sem nenhuma data de praça — não é órfão), e que
+`regenerar-relatorios-cron` **não vai pegá-lo**: a janela é de 72 h e o relatório é de 31/07.
+Não consigo disparar daqui (o sandbox não alcança produção — `curl` para o domínio devolve 000).
+Um clique em **Gerar** zera os dois.
+
+### As travas que nasceram hoje (custo zero, sem IA)
+- `sweep-apoiado-no-coletado` em `verificar:padroes` — pega varredura destrutiva apoiada no que
+  foi COLETADO em vez do que foi GRAVADO. **A primeira versão dessa trava passou verde nas duas
+  versões defeituosas do código**: ela testava o arquivo inteiro, e um `console.log` dez linhas
+  adiante a desarmava. A versão que ficou testa a condição do `if` que envolve a varredura, e foi
+  conferida contra o código ANTES e DEPOIS do conserto.
+- Invariantes novos: `doc_link_sem_documento`, `bem_movel_no_acervo`, `uf_cef_congelada`,
+  `limpeza_encerrados_pulada`, `lote_sem_area_nem_matricula`, `edital_eq_matricula`.
+
+### Duas coisas que EU errei hoje, registradas para não repetir
+1. **Assumi convergência em vez de medir.** Tirei o `update` do trigger e afirmei que a regra
+   convergiria "porque a coleta reescreve todas". O trigger retorna cedo quando nada muda:
+   `pino_generico_como_rua` foi de 0 a 99 em minutos. Regra: **quem afirma que converge, mede.**
+2. **Chamei desconhecido de diagnóstico.** O detector de bisseção rotulava como *colisão* qualquer
+   "bloco falhou, metades passaram" — o que também descreve falha transitória. Depois do conserto
+   do trigger, 19 blocos viraram 1, e eu persegui esse 1 à toa. Agora ele lê a mensagem do banco.
+
+### Agendamentos armados ao encerrar
+- **Hoje 12:00 UTC** — PECINI, fila de 5, teto 520.
+- **Segunda 24/08 15:00 UTC** — PECINI `alvo=antigos`, teto 520 (relê o já capturado, mais
+  desatualizado primeiro — é o que traz metragem e matrícula dos lotes de julho).
+
+⚠️ Medido ao encerrar: `usado 457 · teto 500 · reservado para outros 43 · folga para a PECINI 0`.
+**O disparo de hoje será RECUSADO pelo freio de custo** — e isso é o freio funcionando, não falha.
+A semana vira em 24/08. Subir o teto é decisão de gasto, e por isso é do dono.
+
+---
+
 ## 🧾 18/08 — VARREDURA FINAL DA LISTA (itens 6, 8, 10, 13 e a fila de reunião)
 
 ### 6. `edital_eq_matricula` — instrumentado, causa ainda desconhecida
@@ -960,10 +1026,16 @@ declarar com o enquadramento certo é melhor que o revisor descobrir e concluir 
 |---|---|---|---|
 | ~~**A**~~ | ~~`ADMIN_EMAIL` na Vercel~~ — ✅ **RESOLVIDO 16/08** | Estava definida o tempo todo | Provado: aviso de lead entregue em 16/08 19:35 (`emails_log`, `lead_alavancagem`, `entregue`) |
 | **B** | **Nomear um analista** | `select count(*) from perfis where role='analista' and ativo` deu **0**. Há 42 horários livres e 3 pedidos de reunião parados desde 1 e 5 de julho. O trigger faz o pedido cair para o admin — dá dono à fila, **não substitui a pessoa** | `select count(*) from perfis where role='analista' and ativo;` → > 0 = resolvido |
+| **C** | **Regerar o mercadológico de UM lote** — `1d117f3c-b7ed-413d-ac22-f9db9f7bd82c` ("Apartamento, 2 quartos, Praia da Costa, Vila Velha/ES") | Dois alertas vermelhos (`analise_sem_mercadologico`, `laudo_sem_base`) são este único lote. O cron de regeração tem janela de 72 h e o relatório é de 31/07 — não o alcança. **Um clique em Gerar zera os dois** | `select * from public.qa_invariantes() where chave in ('analise_sem_mercadologico','laudo_sem_base');` → `ok` = resolvido |
+| **D** | **Decidir o teto semanal do Bright Data** (hoje 500; sugerido 520) | Medido em 18/08: `usado 457 · reservado p/ outros 43 · folga para a PECINI 0`. Os disparos agendados são **recusados pelo freio de custo** até a semana virar em 24/08. Subir o teto é decisão de GASTO, por isso é sua | `select requests, teto from brightdata_uso u join brightdata_reserva r on true where u.semana = date_trunc('week', now())::date limit 1;` |
+| **E** | **Chaves de API Asaas / Mercado Pago sem escopo de permissão** | Auditoria de segurança pede chave com escopo mínimo; as atuais são plenas | Painel de cada gateway → conferir escopo da chave em uso |
+| **F** | **Google G2RS** (ID `475-979-5747`) e **integração WebISS para NFS-e** | G2RS: ao reenviar, escolher a **segunda** opção — *"avaliada anteriormente… atualizar os campos"* — **nunca** "nova solicitação" (recomeça a fila). WebISS: sem ela, nota fiscal continua manual | Confirmação por e-mail do Google · emissão automática saindo no painel |
 
 Detalhe completo e passo a passo: `docs/PENDENCIAS_DONO.md`, seção **"NOVO EM 15/08"**.
-Uma Routine semanal (`trig_0125Q6eF32hazyZk4rVj16Tg`, segundas 9h BRT) também cobra os dois e se
-apaga quando ele confirmar os dois.
+Uma Routine semanal (`trig_0125Q6eF32hazyZk4rVj16Tg`, segundas 9h BRT) cobra o item **B** e se
+apaga quando ele confirmar. **C e D são de 18/08 e têm prazo curto**: C é um clique e apaga dois
+alertas vermelhos; D precisa de decisão ANTES de 24/08, senão a semana vira e a PECINI passa mais
+uma sem reler os antigos.
 
 ### 2️⃣ ~~Assunto marcado para a sessão de 16/08~~ — ✅ **RESOLVIDO E EM PRODUÇÃO**
 

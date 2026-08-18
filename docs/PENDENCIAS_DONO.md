@@ -4,7 +4,48 @@
 > variável de ambiente). Cada um traz o **porquê**, o **passo a passo** e **o que o Claude
 > faz depois** que você concluir. Quando estiver no computador, é só ir por aqui.
 >
-> _Última atualização: 16/08/2026._
+> _Última atualização: 18/08/2026._
+
+---
+
+## 🔴 NOVO EM 18/08 — dois itens curtos, um deles com prazo
+
+### C. 🖱️ Um clique: regerar o mercadológico de UM lote
+
+**O lote:** `1d117f3c-b7ed-413d-ac22-f9db9f7bd82c` — *"Apartamento, 2 quartos, Praia da Costa,
+Vila Velha/ES"*.
+
+**Por que só você:** dois alertas vermelhos do painel de saúde (`analise_sem_mercadologico` e
+`laudo_sem_base`) são **este único lote**. Ele tem documental e laudo, e não tem o mercadológico
+— o laudo foi consolidado sobre uma base que falta. O cron que regera relatórios olha só as
+últimas **72 horas**, e este é de **31/07**: nunca vai alcançá-lo. E do meu ambiente eu não
+alcanço a produção para disparar.
+
+**Passo a passo:** abrir a análise desse imóvel → botão **Gerar** no cartão *Mercadológico*.
+É uma geração de IA, custo normal de um relatório.
+
+**Como conferir:** `select * from public.qa_invariantes() where chave in
+('analise_sem_mercadologico','laudo_sem_base');` → os dois em `ok`.
+
+**Antes de gerar, confirmei que não é lixo a apagar:** o lote está `ativo`, sem nenhuma data de
+praça, e a retenção está certa em mantê-lo. Não é órfão — é relatório meio-feito.
+
+### D. 💰 Decidir o teto semanal do Bright Data — **antes de 24/08**
+
+**O número medido em 18/08:** `usado 457 · teto 500 · reservado para outros propósitos 43 ·
+folga para a PECINI 0`.
+
+**O que isso significa na prática:** os dois disparos que deixei agendados (hoje 12h UTC e
+segunda 24/08) **serão recusados pelo freio de custo**. Isso é o freio funcionando — ele existe
+justamente para o gasto não passar sem alguém decidir. A semana do fornecedor vira em **24/08**.
+
+**A decisão é sua porque é gasto**, não porque eu não saiba mexer. Sugerido: **520** (o que você
+já havia escolhido). Como aplicar: no disparo manual do workflow *Scraper PECINI*, campo
+`teto_semana`. O teto **não** fica escrito no arquivo de propósito — assim subir o teto é um ato
+deliberado, com registro no histórico do run, e não um número maior esquecido valendo para sempre.
+
+**O que se perde se ficar como está:** a PECINI passa mais uma semana sem reler os lotes antigos
+— são os de julho, capturados antes de o sistema saber extrair metragem e matrícula.
 
 ---
 
