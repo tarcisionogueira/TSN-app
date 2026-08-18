@@ -4,6 +4,57 @@
 
 ---
 
+## 🧾 18/08 — A COLISÃO DO UPSERT: O TRIGGER ESCREVIA NA TABELA QUE ESTAVA SENDO UPSERTADA
+
+Fechado. O `ON CONFLICT DO UPDATE command cannot affect row a second time` (21000) que derrubou
+8.200 lotes da CEF/RJ e manteve o acervo 12 dias congelado **não vinha de chave duplicada**.
+
+**Hipóteses eliminadas, na ordem em que caíram** — vale guardar a lista, porque cada uma parecia
+óbvia na vez dela:
+1. duplicata em `fonte+fonte_id` no payload → o dedup acusa ZERO;
+2. `id` viajando no payload → não viaja;
+3. outra UNIQUE servindo de árbitro → só há `(id)`, `(fonte_id)`, `(fonte, fonte_id)`;
+4. trigger reescrevendo `fonte`/`fonte_id` → nenhum dos 11 toca essas colunas;
+5. collation não-determinística → ambas são determinísticas.
+
+**Causa real.** `trg_geocode_pino_generico` é BEFORE INSERT OR UPDATE em `imoveis_leilao` e, ao
+detectar pino genérico (duas vias diferentes na MESMA coordenada), rodava
+`update public.imoveis_leilao …` — **na própria tabela que o `INSERT … ON CONFLICT` estava
+processando**. Com duas linhas do lote na mesma coordenada, a segunda já tinha sido tocada pelo
+UPDATE do trigger da primeira, e o Postgres se recusa a afetar a mesma linha duas vezes na mesma
+instrução. A colisão era do TRIGGER — por isso a bissecção via "colisão entre linhas" e todas
+entravam quando separadas.
+
+**Por que caiu justo no RJ:** é o estado com mais lotes empilhados na mesma coordenada — 5.106
+linhas em 687 coordenadas (GO 1.139, SP 1.002). Em blocos de 500 o par é quase certo.
+
+**E não é da CEF.** O trigger vale para TODAS as fontes: qualquer coletor que mandasse duas
+linhas coincidentes no mesmo lote perdia o lote inteiro. Este era o item que valia atacar
+primeiro justamente por isso.
+
+**Reproduzido antes de consertar**, com duas linhas reais de `fonte_id` distintos que só
+compartilham a coordenada → `sqlstate=21000`. Depois do conserto, a MESMA instrução passa.
+
+Conserto: o trigger rebaixa SÓ A PRÓPRIA LINHA. A regra não se perde — a detecção não filtra por
+`geocod_nivel`, então a linha irmã se rebaixa quando for escrita, e a coleta reescreve todas
+(conferido: escrever `'rua'` numa linha em conflito devolve `'cidade'`). Passivo de 21 linhas
+rebaixado de uma vez, fora de qualquer upsert.
+
+Invariante `pino_generico_como_rua`, limite 25 e não 0 — há janela legítima entre o lote novo e a
+próxima escrita da irmã. **Convergência que para de acontecer não dá erro**, só deixa pino
+impreciso passando por preciso; é isso que o número vigia.
+
+### A lição de método, que é maior que o bug
+
+Duas ferramentas de diagnóstico foram escritas antes da resposta aparecer, e as duas foram
+decisivas: a **bissecção** (que separou "linha ruim sozinha" de "colisão entre linhas" e provou
+que não havia linha ruim) e a **reprodução em transação com rollback** (que transformou cinco
+hipóteses plausíveis numa medição). Nenhuma leitura de código encontrou isto — o código está
+correto em toda linha isolada; o que não fecha é a INTERAÇÃO entre um BEFORE trigger e o
+`ON CONFLICT` que o chama.
+
+---
+
 ## 🧾 18/08 — REVISÃO DO SETOR: O SWEEP QUE APAGA ACERVO OLHAVA O NÚMERO ERRADO
 
 Pedido do dono: revisar por completo o setor dos defeitos da sessão, não por amostragem. A

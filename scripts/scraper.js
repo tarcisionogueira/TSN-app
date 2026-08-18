@@ -1652,6 +1652,7 @@ async function salvarImoveis(imoveis) {
   let salvos = 0;
   const rejeitadas = [];
   const colisoes = [];
+  const transitorias = [];
   // Dois diagnósticos DIFERENTES, e a bissecção separa um do outro:
   //  • lote de 1 que falha  → a linha é ruim SOZINHA (dado inválido nela).
   //  • lote que falha mas cujas DUAS metades passam → não há linha ruim: são duas linhas que
@@ -1670,7 +1671,14 @@ async function salvarImoveis(imoveis) {
     await enviar(lote.slice(0, meio));
     await enviar(lote.slice(meio));
     if (salvos - antes.salvos === lote.length && rejeitadas.length === antes.rej) {
-      colisoes.push(`${lote.length} linha(s) — ex.: ${lote[0].fonte_id} … ${lote[lote.length - 1].fonte_id}`);
+      // SÓ É COLISÃO SE O BANCO DISSE QUE FOI (18/08). "Falhou e as metades passaram" também é
+      // o retrato de uma falha TRANSITÓRIA — timeout, 5xx, conexão — que some no retry. Rotular
+      // as duas coisas de "colisão" foi exatamente o que me fez perseguir uma causa que já
+      // estava consertada: depois de resolver o trigger, 18 dos 19 blocos sumiram e o 1 que
+      // restou era ruído, anunciado com nome de diagnóstico.
+      const desc = `${lote.length} linha(s) — ex.: ${lote[0].fonte_id} … ${lote[lote.length - 1].fonte_id}`;
+      if (/affect row a second time/i.test(erro.message)) colisoes.push(desc);
+      else transitorias.push(`${desc} — ${erro.message.slice(0, 90)}`);
     }
   };
   for (let i = 0; i < rows.length; i += CHUNK) await enviar(rows.slice(i, i + CHUNK));
@@ -1683,7 +1691,12 @@ async function salvarImoveis(imoveis) {
   if (colisoes.length) {
     console.error(`    🔎 ${colisoes.length} bloco(s) falharam por COLISÃO ENTRE LINHAS (separadas, todas entram):`);
     for (const c of colisoes.slice(0, 5)) console.error(`       ${c}`);
-    console.error(`       → a chave de conflito real NÃO é fonte+fonte_id; investigar com estes intervalos.`);
+    console.error(`       → 21000 de verdade. A causa conhecida (trigger escrevendo na própria tabela) foi`);
+    console.error(`         corrigida em 18/08 — se voltar, é um caminho NOVO, não o antigo.`);
+  }
+  if (transitorias.length) {
+    console.error(`    ↻ ${transitorias.length} bloco(s) falharam e passaram no retry (falha transitória, NÃO colisão):`);
+    for (const t of transitorias.slice(0, 5)) console.error(`       ${t}`);
   }
   // NÃO devolver 0 em silêncio: quem chama soma o "processados" e registra a saúde da fonte.
   // Enquanto isto era um `return` mudo, o total incluía as 8.200 do RJ que nunca foram gravadas.
@@ -1709,7 +1722,9 @@ async function salvarImoveis(imoveis) {
   return {
     salvos,
     erro: rejeitadas.length ? `${rejeitadas.length} linha(s) rejeitada(s): ${rejeitadas[0]}` : null,
-    aviso: colisoes.length ? `${colisoes.length} bloco(s) com colisao entre linhas` : null,
+    aviso: [colisoes.length ? `${colisoes.length} bloco(s) com colisao entre linhas` : null,
+           transitorias.length ? `${transitorias.length} bloco(s) com falha transitoria (passaram no retry)` : null]
+           .filter(Boolean).join(' · ') || null,
   };
 }
 
