@@ -4,6 +4,67 @@
 
 ---
 
+## 🧾 18/08 — VARREDURA FINAL DA LISTA (itens 6, 8, 10, 13 e a fila de reunião)
+
+### 6. `edital_eq_matricula` — instrumentado, causa ainda desconhecida
+Eliminei por leitura de código TODOS os escritores de `link_edital`: `scripts/scraper.js`
+(grava `linkDetalhe`, que é guardado contra PDF de matrícula), `captura-matricula-cef` e
+`backfill-edital-cef` (ambos com `EXCLUI /editais/matricula/` nas DUAS saídas — conferido),
+`enriquecer-lote` (só grava se estiver vazio) e `reativar_imoveis_cef` (só mexe em `ativo`).
+E o INSERT não podia ter produzido aquilo: `url_lote` das linhas afetadas usa `hdnimovel`, que
+só vem do CSV, e nesse caminho `link_edital` recebe o MESMO valor.
+
+Parei de teorizar — foi o que me custou tempo na colisão do upsert — e instrumentei: trigger
+`trg_flagrar_edital_suspeito` + tabela `edital_suspeito_log` registram operação, autor
+(`session_user`), `application_name` e valores quando `link_edital` VIRA um PDF de matrícula.
+Testado em transação com rollback: capturou `UPDATE / postgres`. **A próxima ocorrência diz
+quem foi.**
+
+### 8. Os 457 sem área nem matrícula — o backfill não os alcançava
+416 nunca tinham sido enriquecidos porque `enriquecer-backfill-cron` só mirava quem faltava
+DATA. A metragem mora na MESMA página que ele já baixa: filtro ampliado e extração de área +
+descrição do html já em mãos — **zero requisição a mais** nos lotes que ele já visitaria. A
+descrição só substitui quando é ECO DO TÍTULO; texto que já diz algo nunca é sobrescrito.
+BIASI 225 · SUPERBID 143 · PECINI 24 · SOLD 20 · LJUD 13.
+
+### 10. Os dois invariantes de relatório
+`relatorio_yield_sem_x100` (1): relatório de 31/07 com `yieldBruto = 0,05` — a razão, sem o
+×100. O código calcula no servidor desde 14/08, então é legado. **NÃO multipliquei por 100**:
+`valorEstimadoImovel` está ZERADO no relatório, o número não é recalculável a partir dele, e
+multiplicar seria afirmar o que não dá para conferir. Marcado como `erro` para regeração.
+
+`relatorio_area_nao_confirmada` (16): **não é número mentindo**. A tela já declara "conforme o
+anúncio do leiloeiro — não confirmada na matrícula". É lacuna divulgada.
+
+**E aí veio o achado maior:** `documentos_fila` com 177 erros contra 75 ok (70%), TODOS
+`nenhum_documento_encontrado`. Não é fila quebrada — a exceção só é lançada DEPOIS de a página
+carregar e ser varrida (o anti-bot já foi tratado; quando barra, o Bright Data assume). **É
+medição, não falha.** Arquivada como erro, era retentada 4× para reaprender a mesma coisa e
+afogava falha de verdade na contagem. Virou estado terminal `sem_documento`, com negative-cache
+imediato. 177 linhas reclassificadas.
+
+### 13. Backlog das entidades HTML — de 28 para 12
+Fechados os que ainda decidiam valor: `enriquecer-lote` (`extrairAvaliacao`, serve TODAS as
+fontes), `scraper-core` (título do `<h1>`), `scraper.js` (título dos cards, 4 coletores),
+`scraper-leiloeiros` (descrição do Superbid), `scraper-rj`, `scraper-soleon` (CALIL/VEGAS/
+TORRES3) e `scraper-gestao`. O que sobra é ruído de comentário ou caminho que não decide valor.
+
+**O lint salvou um erro meu:** os imports de `decodificarEntidades` não entraram nos três
+scrapers — minha condição testava se o nome do módulo aparecia no arquivo, e ele aparecia num
+COMENTÁRIO que eu tinha acabado de escrever. Seria `ReferenceError` no primeiro lote. Os cinco
+módulos foram CARREGADOS de verdade depois, não só lintados.
+
+### Fila de reunião: conta interna não é cliente esperando
+Os 3 pedidos parados eram do PRÓPRIO DONO (`role = admin`), de 01 e 05/07, testando a tela.
+Mesmo defeito da retenção que "nudava o admin". O invariante passou a ignorar conta interna.
+
+**O que NÃO mascarei:** `analise_sem_mercadologico` (5) e `laudo_sem_base` (1) subiram por
+causa minha, ao invalidar o relatório de 31/07. Eles medem INTEGRIDADE, não atendimento —
+excluir conta interna ali esconderia bug real que aparecesse primeiro num teste. O lote é do
+dono; regerar o mercadológico zera os dois.
+
+---
+
 ## 🧾 18/08 — DOIS GATES QUE OLHAVAM O NÚMERO ERRADO (limpeza de encerrados + cadastro)
 
 ### 9. A limpeza de encerrados: um teto que se alimentava do próprio erro
