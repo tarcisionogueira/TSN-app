@@ -64,9 +64,19 @@ Um clique em **Gerar** zera os dois.
 - **Segunda 24/08 15:00 UTC** — PECINI `alvo=antigos`, teto 520 (relê o já capturado, mais
   desatualizado primeiro — é o que traz metragem e matrícula dos lotes de julho).
 
-⚠️ Medido ao encerrar: `usado 457 · teto 500 · reservado para outros 43 · folga para a PECINI 0`.
-**O disparo de hoje será RECUSADO pelo freio de custo** — e isso é o freio funcionando, não falha.
-A semana vira em 24/08. Subir o teto é decisão de gasto, e por isso é do dono.
+⚠️ **Medido ao encerrar, e a primeira leitura estava errada.** Com o teto PADRÃO (500) o freio
+recusa: `usado_total 457 · reservado para outros 43 · motivo reservado_para_outros`. Foi isso que
+eu vi primeiro, e quase registrei como "os disparos de hoje serão recusados". **Não serão**: os
+dois triggers passam `teto_semana=520`, que é o número que o dono já escolheu, e com 520 o freio
+responde `permitido: true`. O que estava errado não era o freio nem o agendamento — era eu ter
+medido com um teto que os disparos não usam.
+
+⚠️ **E a checagem cobrou um request.** `registrar_uso_brightdata` é **reserva atômica**: ela
+CONCEDE ao responder, não simula. Usei-a como sonda e o ledger da PECINI ficou em
+`requests 69 · sucessos 68` — uma permissão concedida e nunca gasta. No fornecedor não custou
+nada (nenhum fetch saiu); custou uma unidade do NOSSO teto. Deixei como está, porque corrigir o
+ledger à mão seria pior que o +1 honesto. **Para conferir cota sem gastar, leia
+`brightdata_uso_proposito` e `brightdata_reserva` — nunca chame a função de reserva.**
 
 ---
 
@@ -1027,7 +1037,7 @@ declarar com o enquadramento certo é melhor que o revisor descobrir e concluir 
 | ~~**A**~~ | ~~`ADMIN_EMAIL` na Vercel~~ — ✅ **RESOLVIDO 16/08** | Estava definida o tempo todo | Provado: aviso de lead entregue em 16/08 19:35 (`emails_log`, `lead_alavancagem`, `entregue`) |
 | **B** | **Nomear um analista** | `select count(*) from perfis where role='analista' and ativo` deu **0**. Há 42 horários livres e 3 pedidos de reunião parados desde 1 e 5 de julho. O trigger faz o pedido cair para o admin — dá dono à fila, **não substitui a pessoa** | `select count(*) from perfis where role='analista' and ativo;` → > 0 = resolvido |
 | **C** | **Regerar o mercadológico de UM lote** — `1d117f3c-b7ed-413d-ac22-f9db9f7bd82c` ("Apartamento, 2 quartos, Praia da Costa, Vila Velha/ES") | Dois alertas vermelhos (`analise_sem_mercadologico`, `laudo_sem_base`) são este único lote. O cron de regeração tem janela de 72 h e o relatório é de 31/07 — não o alcança. **Um clique em Gerar zera os dois** | `select * from public.qa_invariantes() where chave in ('analise_sem_mercadologico','laudo_sem_base');` → `ok` = resolvido |
-| **D** | **Decidir o teto semanal do Bright Data** (hoje 500; sugerido 520) | Medido em 18/08: `usado 457 · reservado p/ outros 43 · folga para a PECINI 0`. Os disparos agendados são **recusados pelo freio de custo** até a semana virar em 24/08. Subir o teto é decisão de GASTO, por isso é sua | `select requests, teto from brightdata_uso u join brightdata_reserva r on true where u.semana = date_trunc('week', now())::date limit 1;` |
+| **D** | **Tornar 520 o teto PADRÃO do Bright Data** (hoje o padrão é 500) | Nada está travado: os disparos agendados já passam `teto_semana=520` e o freio autoriza. O risco é o disparo FUTURO feito sem preencher o campo — cai no 500, e com `reservado p/ outros 43` é recusado em silêncio de agenda. Foi assim que a PECINI ficou parada desde julho. Virar padrão é decisão de GASTO, por isso é sua | `select requests, teto from brightdata_uso u join brightdata_reserva r on true where u.semana = date_trunc('week', now())::date limit 1;` |
 | **E** | **Chaves de API Asaas / Mercado Pago sem escopo de permissão** | Auditoria de segurança pede chave com escopo mínimo; as atuais são plenas | Painel de cada gateway → conferir escopo da chave em uso |
 | **F** | **Google G2RS** (ID `475-979-5747`) e **integração WebISS para NFS-e** | G2RS: ao reenviar, escolher a **segunda** opção — *"avaliada anteriormente… atualizar os campos"* — **nunca** "nova solicitação" (recomeça a fila). WebISS: sem ela, nota fiscal continua manual | Confirmação por e-mail do Google · emissão automática saindo no painel |
 
