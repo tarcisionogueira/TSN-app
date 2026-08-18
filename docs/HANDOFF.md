@@ -4,6 +4,99 @@
 
 ---
 
+## 🧾 18/08 (3ª sessão) — O SELO PROMETIA DOCUMENTO QUE NÃO EXISTIA EM 2.170 LOTES
+
+Diagnóstico de abertura limpo no de sempre: segurança `0/0`, regras `0`, KYC `0`, nenhum
+chamado de cliente sem resposta, 30.412 ativos com 98,3% em 24 h, deploys `READY`, backup
+off-region saudável pelo 3º dia (50 arquivos, 33 iguais). Marketing seguiu subindo: 130
+visitas com gclid e 74 com `utm_term` em 322 visitas.
+
+### O achado, e como ele mudou de tamanho no meio do caminho
+`doc_link_sem_documento` foi de **0 para 38** numa coleta só — todos SODRE, gravados às
+11:21. Minha primeira leitura foi *"limpou o dado e não o escritor"*, e eu ia consertar o
+`scraper-puppeteer`. **Medir mudou o alvo inteiro.**
+
+`link_edital = url_lote` é a **convenção da base**: o campo guarda a PÁGINA onde o
+documento está (SUPERBID, GRUPOLANCE, BIASI, SOLD, VIP, SODRE…). A ficha de detalhe sempre
+soube — `ehDocArquivo` exige PDF ou objeto do nosso Storage. A **`Busca.jsx` não**: era a
+única tela SEM cópia da regra, e decidia o selo só por `/^https?:\/\//`.
+
+| | selo "📄 Edital" | selo "📄 Matrícula" |
+|---|---|---|
+| lotes ativos com o selo | 14.287 | 27.936 |
+| **sem arquivo em lugar nenhum** | **2.170** | **337** |
+| piores | SUPERBID 1.425 · MEGA 192 · LJUD 174 | PESTANA 249 · WEBLEILOES 80 |
+
+A SODRE **não aparece em nenhuma das duas listas**: os 38 lotes entregam o edital pelos
+anexos. O invariante acusava quem entrega e não via quem não entrega — falso-positivo e
+falso-negativo na mesma régua. **Não mexi no scraper da SODRE**: o defeito estava em quem
+LIA o campo como se fosse documento.
+
+### O conserto
+- `src/utils/documento.js` — definição única de `ehDocArquivo`/`ehMatriculaValida`/
+  `ehRegrasDoc`. Estava copiada em `ImovelDetalhe` e `Analise`, **ausente na Busca** — foi
+  por onde entrou. Mesmo remédio que `src/lib/senha.js` deu para a regex de senha.
+- `imoveis_leilao.tem_edital_doc` e `tem_matricula_doc`, mantidas por **gatilho**: dizem se
+  existe ARQUIVO no link, nos anexos do leiloeiro **ou** no nosso Storage (`imovel_anexos`
+  é outra tabela — por isso gatilho, não coluna gerada).
+- Os dois selos da Busca (popup do mapa e card da lista) passam a ler esses sinais.
+
+⚠️ **O custo que quase passou.** A primeira versão decidia a matrícula só com link + CEF.
+Removeria as 337 mentiras **e apagaria o selo de 1.168 lotes** — 831 deles COM matrícula
+nos anexos. *Trocar mentira por sumiço não é conserto.* Com o sinal do banco: **−337
+mentiras e +905 selos verdadeiros** que estavam escondidos (link nulo, matrícula no
+Storage ou derivada da CEF). No edital, o selo novo é subconjunto **estrito** do antigo.
+
+### O invariante passa a medir ENTREGA, não formato de URL
+`doc_link_sem_documento` → **`selo_documento_dessincronizado`**. Com o selo preso aos
+sinais, o que vale vigiar é o sinal sair de sincronia: **um UPDATE que não dispara não dá
+erro**, e o selo voltaria a mentir calado.
+
+**Como foi verificado** (o padrão da casa: provar nas duas direções)
+- Espelho SQL `doc_arquivo` × JS nos MESMOS 9 casos → 9/9 concordam.
+- Helper CARREGADO de verdade, 13 casos com controles negativos (`matricula.asp`, rótulo de
+  texto no campo de link, `null`, rota terminada em `/`).
+- Gatilhos em transação desfeita: inserir anexo acende · **apagar o anexo apaga** · gravar
+  `link_edital` PDF acende. Rollback conferido, zero resíduo.
+- Invariante corrompido à mão foi a 1 e a 2. **Invariante que só sabe ficar verde não prova
+  proteção.**
+- Backfill **medido**: 0 divergentes no acervo inteiro, ativos e inativos.
+
+### O `Failed to fetch` do /checkout — não era pagamento, mas tinha parte nossa
+Os 4 registros são de UM usuário. Na tabela inteira, **todos** os "Failed to fetch" são do
+mesmo `user_id`, em 7 rotas + 3 anônimos em `/login` na mesma janela. Stack com quadros
+`<anonymous>` em offset 1:8058 — script injetado. É o **mesmo fenômeno já diagnosticado em
+08/08** e escrito em `reportarErro.js`: extensão que substitui `window.fetch`. O filtro
+`ehStackDeTerceiro` não pega porque a extensão não deixa marca `chrome-extension://`.
+**Não ampliei o filtro** — ele é conservador de propósito, e alargar arriscaria engolir
+erro nosso.
+
+**O que era nosso:** `Checkout.jsx` imprime `e.message` cru em 7 telas de erro. Quem tentou
+assinar o Top2 **quatro vezes entre 06 e 17/08** leu, na tela de pagamento, o texto do
+navegador — *"Failed to fetch"*. Sem idioma, sem causa, sem próximo passo. Segue Explorador
+até hoje. `apiCall` passa a traduzir falha de rede em texto acionável, com o original em
+`cause`, para o app inteiro.
+
+⚠️ **E o conserto exigiu um cuidado:** envolver TODA rejeição de `fetch` trocaria mensagem
+inútil por mensagem **errada** — `AbortSignal.timeout` é usado em `/api/proximidades-imovel`
+(35 s) e `/api/gerar-contrato-ia` (180 s), onde o servidor está lento, não inalcançável. Só
+`TypeError` é tratado como rede; abort e timeout sobem intactos. 6/6 nos erros reais.
+
+### Depende do dono
+- **Venda Top2 perdida há 11 dias**, de uma pessoa identificável que tentou 4×. O conserto
+  não avisa quem já desistiu — vale um contato direto.
+- Continuam de pé: `analise_sem_mercadologico` (5) e `laudo_sem_base` (1) — o mesmo lote,
+  um clique em *Gerar* zera os dois.
+
+### Pendente de medição (a coleta de amanhã decide)
+- **GESTAOLEILOES** ainda aparece `falhou`/0, mas a linha é de **09:39, 29 min antes** do
+  conserto de hoje. Se vier `sem_cota`, era orçamento; se vier `falhou`, é achado novo.
+- **VEGAS** coletou **1 lote em 17/08** (`degradado`, "queda vs anterior 1<40") e ontem
+  entrou `sem_cota`. O filtro de `sem_cota` esconde a linha de 17/08 da consulta do ritual —
+  pode ser regressão real mascarada por um dia de cota. **Vale olhar amanhã.**
+
+---
+
 ## 🧾 18/08 (sessão seguinte) — O FREIO DE CUSTO AINDA CHEGAVA COM CARA DE FONTE QUEBRADA
 
 Diagnóstico de abertura limpo em quase tudo: segurança `0/0`, regras de negócio `0`, KYC `0`,
