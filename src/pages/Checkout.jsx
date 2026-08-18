@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { senhaForte, requisitosSenha } from '../lib/senha.js';
+import { validarNome, normalizarNome } from '../lib/nome.js';
 import { salvarConvite, CHAVE_PLANO } from '../utils/convitePendente';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -407,8 +408,9 @@ export default function Checkout() {
   // cria a conta já confirmada e libera o acesso direto.
   const criarContaGratis = async () => {
     setSuErro('');
-    const nome = su.nome.trim(), email = su.email.trim().toLowerCase(), senha = su.senha;
+    const nome = normalizarNome(su.nome), email = su.email.trim().toLowerCase(), senha = su.senha;
     if (!nome || !email || !senha) { setSuErro('Preencha nome, e-mail e senha.'); return; }
+    { const v = validarNome(nome); if (!v.ok) { setSuErro(v.erro); return; } }
     if (!senhaForte(senha)) { setSuErro('A senha não atende aos requisitos listados.'); return; }
     if (!su.aceite) { setSuErro('Aceite os Termos de Uso para continuar.'); return; }
     setSuLoading(true);
@@ -621,8 +623,9 @@ export default function Checkout() {
   // exige login por segurança (a assinatura é sempre da conta autenticada).
   const criarContaInline = async () => {
     setSuErro('');
-    const nome = su.nome.trim(), email = su.email.trim().toLowerCase(), senha = su.senha;
+    const nome = normalizarNome(su.nome), email = su.email.trim().toLowerCase(), senha = su.senha;
     if (!nome || !email || !senha) { setSuErro('Preencha nome, e-mail e senha.'); return; }
+    { const v = validarNome(nome); if (!v.ok) { setSuErro(v.erro); return; } }
     if (!senhaForte(senha)) {
       setSuErro('A senha deve ter ao menos 8 caracteres, com maiúscula, minúscula, número e caractere especial.'); return;
     }
@@ -668,8 +671,9 @@ export default function Checkout() {
   // antes de mostrar o cartão. Mesma validação que o servidor refaz.
   const irParaPagamento = () => {
     setSuErro('');
-    const nome = su.nome.trim(), email = su.email.trim(), senha = su.senha;
+    const nome = normalizarNome(su.nome), email = su.email.trim(), senha = su.senha;
     if (!nome || !email || !senha) { setSuErro('Preencha nome, e-mail e senha.'); return; }
+    { const v = validarNome(nome); if (!v.ok) { setSuErro(v.erro); return; } }
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { setSuErro('E-mail inválido.'); return; }
     if (!senhaForte(senha)) { setSuErro('A senha não atende aos requisitos listados.'); return; }
     if (!su.aceite) { setSuErro('Aceite os Termos de Uso para continuar.'); return; }

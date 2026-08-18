@@ -10,6 +10,7 @@
 export const config = { runtime: 'nodejs' };
 
 import { checkRateLimit } from './_rate-limit.js';
+import { erroNome, normalizarNome } from './_nome.js';
 import { hashCpf, encryptCpf, validarCPF } from './_cpf.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -39,13 +40,14 @@ export default async function handler(req, res) {
   }
 
   const b = req.body || {};
-  const nome     = String(b.nome || '').trim();
+  const nome     = normalizarNome(b.nome);
   const email    = String(b.email || '').trim().toLowerCase();
   const senha    = String(b.senha || '');
   const cpf      = String(b.cpf || '').replace(/\D/g, '');
   const refCodigo = b.ref_codigo ? String(b.ref_codigo) : undefined;
 
   if (!nome || !email || !senha) return res.status(400).json({ error: 'Preencha nome, e-mail e senha.' });
+  { const e = erroNome(nome); if (e) return res.status(400).json({ error: e }); }
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.status(400).json({ error: 'E-mail inválido.' });
   if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/.test(senha)) {
     return res.status(400).json({ error: 'A senha deve ter ao menos 8 caracteres, com maiúscula, minúscula, número e caractere especial.' });

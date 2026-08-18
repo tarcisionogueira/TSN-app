@@ -53,6 +53,10 @@ curto (5–8 linhas) antes de seguir:
    >        (select requests from brightdata_uso u where u.semana = p.semana) as total_semana
    >   from brightdata_uso_proposito p left join brightdata_reserva r on r.proposito = p.proposito
    >  where p.semana = date_trunc('week', now())::date order by p.requests desc;
+   > -- E O QUE O FREIO RESPONDERIA AGORA, sem gastar nada (funcao `stable`, criada em 18/08
+   > -- justamente porque a unica forma de saber era gastar por ela). Use ESTA para conferir:
+   > select proposito, public.brightdata_decisao(450, proposito) as resposta
+   >   from brightdata_reserva order by proposito;
    > -- inventário de documentos por leiloeiro (0% = documental sem o que ler)
    > select fonte, count(*) ativos,
    >   round(100.0*count(*) filter (where link_matricula is not null

@@ -31,6 +31,14 @@ const BD_TOKEN = process.env.BRIGHTDATA_API_TOKEN;
 const BD_ZONE  = process.env.BRIGHTDATA_ZONE;
 const SB_URL   = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SB_KEY   = process.env.SUPABASE_SERVICE_KEY;
+// TETO: hoje isto e apenas o ULTIMO RECURSO. Desde 18/08 o teto efetivo vem da
+// CONFIGURACAO no banco (`brightdata_uso.teto`), e `registrar_uso_brightdata` ignora este
+// numero quando ha teto configurado. Por que mudou: este default era 450 e os disparos
+// manuais mandavam 520 — o numero que o dono escolheu. Com 488 usados, quem perguntava
+// com 450 batia em limite 424 e era RECUSADO; quem perguntava com 520 batia em 494 e
+// passava. Mesmo instante, mesma fonte, respostas opostas — e CALIL, VEGAS e
+// GESTAOLEILOES ficaram de 14 a 18/08 sem coleta da manha com o acervo INTACTO.
+// Para mudar o teto: escreva em `brightdata_uso.teto`. Mexer nesta env NAO muda o freio.
 const TETO     = parseInt(process.env.BRIGHTDATA_MAX_REQ_SEMANA || '450', 10);
 
 /** Erro tipado: quem chama consegue diferenciar "sem cota" de "a fonte respondeu errado". */

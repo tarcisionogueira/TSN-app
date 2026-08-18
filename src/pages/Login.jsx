@@ -22,6 +22,7 @@ const lbl = { fontSize: 12, fontWeight: 700, color: '#475569', display: 'block',
 // regra que vai divergir. Ver o comentário do botão de cadastro sobre por que o gate existe.
 // Regra de senha: uma definicao so para o front (src/lib/senha.js). Ver o cabecalho de la.
 import { SENHA_FORTE, requisitosSenha } from '../lib/senha.js';
+import { validarNome, normalizarNome } from '../lib/nome.js';
 
 export default function Login() {
   const planosCtx = usePlanos();
@@ -316,6 +317,9 @@ export default function Login() {
     setErro(''); setLoading(true);
     try {
       if (!form.nome || !form.email || !form.senha) throw new Error('Preencha nome, email e senha.');
+      // Nome e sobrenome: um primeiro nome solto nao identifica ninguem na hora de emitir
+      // contrato ou falar com o cliente. Regra unica em src/lib/nome.js.
+      { const v = validarNome(form.nome); if (!v.ok) throw new Error(v.erro); }
       // Cidade é obrigatória (mesmo no explorador grátis): filtra os imóveis da região do
       // usuário e é a base dos alertas por e-mail. CPF NÃO é exigido aqui — só na hora de pagar.
       if (!form.endereco || !form.endereco.trim()) throw new Error('Informe sua cidade — ela filtra os imóveis da sua região e é a base dos seus alertas por e-mail.');
@@ -330,7 +334,7 @@ export default function Login() {
         options: {
           emailRedirectTo: `${window.location.origin}/`,
           data: {
-            nome: form.nome, telefone: form.telefone.replace(/\D/g, ''), endereco: form.endereco, role: 'explorador',
+            nome: normalizarNome(form.nome), telefone: form.telefone.replace(/\D/g, ''), endereco: form.endereco, role: 'explorador',
             lgpd_aceito: true, lgpd_data: new Date().toISOString(),
             // A VERSÃO ACEITA VIAJA NO CADASTRO (14/08). O checkbox acima é obrigatório — sem
             // ele o botão nem habilita —, mas a versão aceita não era gravada em lugar nenhum:
