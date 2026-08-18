@@ -473,6 +473,14 @@ export default async function handler(req, res) {
       // Remove imóveis que saíram da Caixa: sweep temporal — apaga os do estado que
       // NÃO foram tocados neste run (atualizado_em < início). Evita o bug do not.in
       // em chunks (que apagava os recém-inseridos) e não estoura URL.
+      //
+      // padrao-ok: endpoint LEGADO desativado — o handler devolve 410 na primeira linha e este
+      // bloco é inalcançável. Se algum dia for reativado, este sweep precisa ser consertado
+      // ANTES: ele é DELETE físico (não soft-deactivate), o gate olha `imoveis.length` (o
+      // COLETADO, não o gravado), o retorno de `upsertBatch` é descartado e o erro morre num
+      // `.catch(() => {})`. Hoje ele não acerta nada porque filtra `fonte=eq.caixa` e o acervo
+      // usa 'CEF' — é uma arma carregada apontada para um conjunto vazio, e "consertar" só o
+      // nome da fonte a tornaria destrutiva.
       if (imoveis.length > 0) {
         await fetch(
           `${supabaseUrl}/rest/v1/imoveis_leilao?estado=eq.${uf}&fonte=eq.caixa&ativo=eq.true&atualizado_em=lt.${runStart}`,

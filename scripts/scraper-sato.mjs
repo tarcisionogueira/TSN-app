@@ -298,6 +298,11 @@ async function main() {
 
   // Desativação de obsoletos SÓ com coleta saudável (>50) — trava do repo p/ um
   // erro de rede/HTML de challenge não zerar o acervo da fonte.
+  //
+  // padrao-ok: o gate cita o COLETADO (`prontos.length`), mas aqui isso é seguro porque o laço
+  // de upsert acima faz `process.exit(1)` na primeira falha — chegar nesta linha já prova que
+  // TODAS as fatias gravaram. É a diferença para o scraper-puppeteer e o scraper-leiloeiros,
+  // onde o erro do upsert era só um console.error e a execução seguia até o sweep.
   if (prontos.length > 50) {
     const { error, count } = await supabase
       .from('imoveis_leilao')
