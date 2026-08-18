@@ -4,6 +4,60 @@
 
 ---
 
+## 🧾 18/08 — O GATE DE "ISTO É IMÓVEL?" (bem móvel fora do acervo)
+
+Havia um CARRO ativo na plataforma de imóveis: `pecini_10532`, *"VW/SAVEIRO CL 1.6 MI / CL/ C
+1.6 Aeronaves em leilão"*. Os coletores aceitam tudo que a fonte enumera (o sitemap da PECINI
+lista veículos) e `inferirTipo` só o classificava como `'outros'` — não existia gate perguntando
+se o LOTE é um imóvel.
+
+**Censo completo (31.049 ativos).** Três bens móveis, três fontes:
+
+| fonte | título | valor | `tipo` gravado |
+|---|---|---|---|
+| VIP | Honda/CG 150 Titan KS, Ano 2007 | R$ 7.652 | `imovel` |
+| GRUPOLANCE | Veículo LR Evoque Pure P5D, 2011/2012 | R$ 96.763 | **`casa`** |
+| PECINI | VW/SAVEIRO CL 1.6 MI | R$ 15.473 | `outros` |
+
+No caso GRUPOLANCE a URL do próprio leiloeiro é `/imoveis/casas/sp/…` — ele também errou.
+
+**O QUE O CENSO EVITOU, e é o ponto.** Uma regra por PALAVRA SOLTA acusaria 19 lotes, e 16 são
+IMÓVEIS DE VERDADE: `Terreno 480 m² … Furnas IATE Clube` (condomínio), `Apartamento — JOIAS DE
+SANTA BARBARA` (empreendimento, 12 lotes CEF), `Casa — BALNEARIO JOIA` (bairro), `Garagem para
+quatro VEÍCULOS, do Edifício` (**vaga de garagem é imóvel**) e dois apartamentos da SODRE que
+citam "veículo" na descrição. **Barrar 16 imóveis reais para pegar 3 carros seria estrago maior
+que o problema.**
+
+A regra tem duas partes: (a) sinal de móvel ANCORADO NO TÍTULO — começa com "Veículo", categoria
+de móvel, marca com barra (`VW/`, `Honda/`) ou par de anos (`2011/2012`); menção no meio da
+descrição não conta; (b) ausência de sinal IMOBILIÁRIO em título+descrição — se fala de
+apartamento, casa, terreno, garagem, matrícula ou m², o lote FICA.
+
+Conferida contra as 31.049 linhas ANTES de aplicar: 3 barrados, 3 corretos, 0 falso positivo.
+Mais 9 casos sintéticos: 9/9. Mora no BANCO (trigger), como a fração ideal e pelo mesmo motivo —
+gate em JS pega só quem passa por ele. **Sem cópia em JavaScript, de propósito: uma definição
+só.** Regra em `regra_negocio`; `auditoria_regras_negocio()` acusou minha própria regra como
+ÓRFÃ até a função citar a chave `acervo.bem_movel` no corpo — o vínculo é verificado contra o
+CORPO, não contra a intenção. Invariante `bem_movel_no_acervo`, limite 0.
+
+### E o invariante do pino genérico pegou o MEU erro, minutos depois
+
+Ao tirar o `update` de dentro do trigger (item anterior), escrevi que a regra convergiria
+sozinha: *"a linha irmã se rebaixa quando for escrita, e a coleta reescreve todas"*. **Errado.**
+O trigger tem early-return quando latitude/longitude/nível/endereço vêm IGUAIS — o caso da
+recoleta rotineira. A irmã nunca reavalia. `pino_generico_como_rua` foi de 0 → 99 na coleta
+seguinte.
+
+**O registro de método vale mais que o conserto:** eu havia CONFERIDO que a regra ainda funciona
+(escrever `'rua'` numa linha em conflito devolve `'cidade'`) e o teste passou — porque escrever
+MUDA o campo e desarma o early-return. *O teste provou o caminho que eu executei, não o que a
+produção executa.* **Convergência assumida não é convergência medida.**
+
+Conserto: `demover_pinos_genericos()`, varredura periódica fora de qualquer upsert, pendurada no
+cron `limpar-imoveis-stale` (05h UTC). Invariante de volta a 0.
+
+---
+
 ## 🧾 18/08 — A COLISÃO DO UPSERT: O TRIGGER ESCREVIA NA TABELA QUE ESTAVA SENDO UPSERTADA
 
 Fechado. O `ON CONFLICT DO UPDATE command cannot affect row a second time` (21000) que derrubou
