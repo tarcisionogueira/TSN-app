@@ -381,6 +381,46 @@ async function main() {
     : (novos.length ? novos : antigos);
   const alvoLotes = fila.slice(0, MAX_LOTES);
   console.log(`no banco: ${visto.size} · novos: ${novos.length} · antigos: ${antigos.length} · alvo '${ALVO}' · processando: ${alvoLotes.length}`);
+
+  // ─── SAIU DO SITE? PERGUNTE À ENUMERAÇÃO, NÃO À COLETA (18/08) ───────────────────────────
+  //
+  // A limpeza de encerrados (`desativar_imoveis_leiloeiro_stale`) desativa o que "não veio na
+  // última coleta". Isso funciona para coletor de PASSADA COMPLETA, mas aqui a coleta visita
+  // 4–6 lotes por rodada de propósito (cota do Bright Data): quase todo o acervo fica "não
+  // visto" por construção, e a fonte é pulada para sempre — 58 lotes esperando.
+  //
+  // A resposta certa não vem da coleta: vem do SITEMAP, que enumera o acervo INTEIRO em UMA
+  // requisição, sem visitar lote nenhum. Lote ativo no banco que o sitemap não lista saiu do
+  // site — isso é medição, não silêncio.
+  //
+  // O PISO É ABSOLUTO E ISSO É UMA DÍVIDA CONSCIENTE. O CLAUDE.md manda deixar o histórico
+  // aprender os pisos, e é o certo — mas `fonte_baseline_aprendida()` aprende do total
+  // COLETADO (4–6 aqui), que não descreve a enumeração (52). Misturar os dois corromperia o
+  // baseline das duas medidas. Até existir histórico de ENUMERAÇÃO, o piso fica explícito aqui
+  // e o número enumerado vai para o log de toda rodada, que é de onde esse histórico sai.
+  const PISO_ENUMERACAO = 40;   // observado: 52. Sitemap quebrado devolve 0 ou punhado.
+  if (!DRYRUN && lotes.length >= PISO_ENUMERACAO) {
+    const noSitemap = new Set(lotes.map(l => `pecini_${l.id}`));
+    const { data: ativosNoBanco, error: eAtivos } = await supabase
+      .from('imoveis_leilao').select('fonte_id').eq('fonte', 'PECINI').eq('ativo', true);
+    if (eAtivos) {
+      console.error(`  não consegui ler os ativos para a varredura (${eAtivos.message}) — sweep PULADO.`);
+    } else {
+      const sumiram = (ativosNoBanco || []).map(r => r.fonte_id).filter(id => !noSitemap.has(id));
+      if (sumiram.length) {
+        const { data: desativados, error: eDesat } = await supabase
+          .from('imoveis_leilao').update({ ativo: false }).in('fonte_id', sumiram).select('fonte_id');
+        // `.select()` de propósito: update que a RLS/filtro não alcança devolve error null e
+        // zero linha — sem isto, "desativei 58" seria afirmação sem prova (CLAUDE.md, forma 3).
+        if (eDesat) console.error(`  falha ao desativar os que sumiram do sitemap: ${eDesat.message}`);
+        else console.log(`  🔻 ${(desativados || []).length} lote(s) desativado(s): ativos no banco e AUSENTES do sitemap (${lotes.length} enumerados).`);
+      } else {
+        console.log(`  ✓ nenhum lote ativo fora do sitemap (${lotes.length} enumerados).`);
+      }
+    }
+  } else if (!DRYRUN) {
+    console.error(`  ⚠️ sitemap enumerou ${lotes.length} (< piso ${PISO_ENUMERACAO}) — varredura de ausentes PULADA para não zerar a fonte por parse quebrado.`);
+  }
   if (!alvoLotes.length) {
     console.error(`nenhum lote na fila para alvo='${ALVO}'. Nada a fazer.`);
     process.exitCode = 1;
