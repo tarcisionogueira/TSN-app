@@ -15,6 +15,7 @@
 export const config = { runtime: 'nodejs', maxDuration: 300 };
 
 import { normalizarTipo } from './_tipo.js';
+import { decodificarEntidades } from './_texto-imovel.js';
 
 import { fetchViaBrightData, brightDataDisponivel } from './_brightdata.js';
 import { getUser, getUserRoleById, isCronAuthorized } from './_auth.js';
@@ -180,7 +181,7 @@ async function coletarSuperbid(paginas, deadline) {
         valor_avaliacao: sanitizarAval(parseNum(det.referenceValue || det.directSaleValue || of.referenceValue), vmin),
         valor_minimo: vmin,
         area_m2: parseNum(((of.offerDescription || '').match(/(\d+[.,]?\d*)\s*m2/i) || [])[1]),
-        descricao: (of.offerDescription || '').replace(/<[^>]+>/g, '').slice(0, 500) || null,
+        descricao: decodificarEntidades((of.offerDescription || '').replace(/<[^>]+>/g, '')).slice(0, 500) || null,
         link_edital: `https://www.superbid.net/lote/${id}`,
         link_foto: pr.thumbnailUrl || null,
         url_lote: `https://www.superbid.net/lote/${id}`,

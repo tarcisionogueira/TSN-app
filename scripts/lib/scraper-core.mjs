@@ -92,7 +92,8 @@ export function extrairGenerico(html, urlBase) {
   })();
 
   out.titulo = (jsonLd?.name) || og('title') ||
-    (html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i) || [])[1]?.replace(/<[^>]+>/g, '').trim() || null;
+    (() => { const h = (html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i) || [])[1];
+              return h ? decodificarEntidades(h.replace(/<[^>]+>/g, '')).trim() : null; })() || null;
 
   out.link_foto = _abs((jsonLd?.image?.url || jsonLd?.image || og('image')), urlBase) || null;
 
