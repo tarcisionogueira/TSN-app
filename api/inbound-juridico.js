@@ -295,6 +295,10 @@ async function encaminharParaAtendimento(data, headers, messageId) {
     body: {
       chamado_id: chamado.id, autor_id: null, autor_nome: nome || endereco,
       autor_tipo: 'cliente', conteudo: corpo || `[mensagem sem texto — ler no painel do Resend, id ${data?.email_id || '?'}]`,
+      // Versão HTML do e-mail (parágrafos, links, imagens), quando a API a devolveu. A tela
+      // do Atendimento a renderiza SÓ dentro de iframe sandbox — ver o comentário da coluna.
+      // `conteudo` (texto) segue sendo a fonte para IA, busca e notificação.
+      conteudo_html: (typeof data?.html === 'string' && data.html.trim()) ? data.html.slice(0, 300000) : null,
       anexos, canal: 'email', email_message_id: messageId || null,
     },
   });

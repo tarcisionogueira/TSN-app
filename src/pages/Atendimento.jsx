@@ -18,6 +18,43 @@ const STATUS_CFG = {
   finalizado:           { label: 'Finalizado',         cor: '#64748b', bg: '#f1f5f9' },
 };
 
+// ─── RENDER DE MENSAGEM DE E-MAIL (18/08) ─────────────────────────────────────────────
+// O e-mail chega em duas formas: texto plano (fonte para IA/busca) e HTML (parágrafos,
+// links, imagens). Renderizar o HTML CRU aqui seria entregar ao remetente — qualquer um
+// da internet — execução no navegador do ADMIN, a sessão mais privilegiada do sistema.
+// O iframe com `sandbox` SEM allow-scripts e SEM allow-same-origin resolve na raiz:
+// nenhum script executa, nada enxerga a página-mãe; só sobra o layout. Links abrem em
+// aba nova (allow-popups + <base target>). Custo conhecido e aceito: imagens remotas
+// carregam, então o remetente pode saber que o e-mail foi aberto — igual a qualquer
+// cliente de e-mail sem proxy de imagem.
+function EmailHtml({ html }) {
+  const doc = `<!doctype html><html><head><meta charset="utf-8"><base target="_blank">`
+    + `<style>body{margin:8px;font:13px/1.6 -apple-system,Segoe UI,Roboto,sans-serif;color:#111;word-break:break-word}img{max-width:100%;height:auto}</style>`
+    + `</head><body>${html}</body></html>`;
+  return (
+    <iframe
+      title="Mensagem de e-mail"
+      sandbox="allow-popups allow-popups-to-escape-sandbox"
+      srcDoc={doc}
+      style={{ width: '100%', minHeight: 120, height: 320, border: 'none', borderRadius: 8, background: 'white' }}
+    />
+  );
+}
+
+// Texto plano com quebras preservadas e URLs clicáveis. Era `{m.conteudo}` num <div>
+// comum: o HTML colapsa \n em espaço e um e-mail de 4 linhas virava uma linha só.
+// Linkificação por SPLIT (nunca innerHTML): o texto continua texto, só a URL vira <a>.
+function TextoComLinks({ texto }) {
+  const partes = String(texto || '').split(/(https?:\/\/[^\s<>"')\]]+)/g);
+  return (
+    <span style={{ whiteSpace: 'pre-wrap', overflowWrap: 'break-word' }}>
+      {partes.map((p, i) => i % 2
+        ? <a key={i} href={p} target="_blank" rel="noopener noreferrer" style={{ color: '#0D63DB' }}>{p}</a>
+        : p)}
+    </span>
+  );
+}
+
 // Segmento do solicitante — para priorizar e organizar a fila.
 // Ordem = prioridade de atendimento (do cliente mais valioso ao curioso).
 const SEGMENTOS = {
@@ -399,7 +436,7 @@ export default function Atendimento() {
                   )}
                 </div>
                 <div style={{
-                  maxWidth: isSistema ? '90%' : '76%', padding: '10px 14px', borderRadius: 12,
+                  maxWidth: isSistema ? '90%' : m.conteudo_html ? '92%' : '76%', width: m.conteudo_html ? '92%' : undefined, padding: '10px 14px', borderRadius: 12,
                   background: bg, color: '#111111', fontSize: 13, lineHeight: 1.6,
                   fontStyle: isSistema ? 'italic' : 'normal', textAlign: isSistema ? 'center' : 'left',
                   border: `1px solid ${bd}`,
@@ -407,7 +444,9 @@ export default function Atendimento() {
                   {m.autor_tipo === 'ia' && (
                     <div style={{ fontSize: 10, fontWeight: 700, color: '#0D63DB', marginBottom: 5 }}>Resposta automática</div>
                   )}
-                  {m.conteudo}
+                  {m.conteudo_html
+                    ? <EmailHtml html={m.conteudo_html} />
+                    : <TextoComLinks texto={m.conteudo} />}
                   {(m.anexos || []).map((a, i) => a.tipo === 'imagem'
                     ? <img key={i} src={a.url} alt={a.nome} style={{ maxWidth: 200, display: 'block', marginTop: 8, borderRadius: 8 }} />
                     : <a key={i} href={a.url} download={a.nome} style={{ display: 'block', marginTop: 6, fontSize: 12, color: '#0D63DB' }}>{a.nome}</a>
