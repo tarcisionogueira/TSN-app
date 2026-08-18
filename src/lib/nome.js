@@ -61,8 +61,10 @@ export function normalizarNome(s) {
   const v = limparNome(s);
   if (!v) return '';
   return v.split(' ').map((palavra, i) => {
-    // Já tem maiúscula fora da primeira letra → respeita como está.
-    if (/\p{Ll}\p{Lu}/u.test(palavra)) return palavra;
+    // Preserva CamelCase intencional (McDonald, DiCaprio): comeca em maiuscula E tem outra
+    // maiuscula depois de minuscula. A versao anterior testava so `[Ll][Lu]`, que tambem
+    // casa com "jOAO" — erro de digitacao lido como intencao. Pego no teste ponta a ponta.
+    if (/^\p{Lu}/u.test(palavra) && /\p{Ll}\p{Lu}/u.test(palavra)) return palavra;
     const baixa = palavra.toLocaleLowerCase('pt-BR');
     if (i > 0 && PARTICULAS.has(baixa)) return baixa;
     // Capitaliza também depois de hífen e apóstrofo: "anna-maria" → "Anna-Maria".

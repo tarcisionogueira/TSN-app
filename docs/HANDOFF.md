@@ -4,6 +4,107 @@
 
 ---
 
+## 🧾 18/08 (3ª sessão, parte 2) — NOME COM REGRA, TETO COM UM NÚMERO SÓ
+
+Tudo desta seção está **em produção** (`main`).
+
+### 1. Os leiloeiros paralisados não eram fonte quebrada — era o número do teto
+CALIL, VEGAS e GESTAOLEILOES não coletaram **nenhuma manhã entre 14 e 18/08**, com o acervo
+íntegro (95 · 21 · 130) e `tocados_24h = 0`. A coleta da TARDE passava — mesma fonte, mesmo
+dia, mesmo site.
+
+A causa era **quem pergunta**. O teto ia por PARÂMETRO: `api/_brightdata.js` manda
+`BRIGHTDATA_MAX_REQ_SEMANA || 450`; os disparos manuais mandavam **520**, o número que o
+dono escolheu e que está gravado em `brightdata_uso.teto`. Medido com 488 usados e 26
+reservados para outros:
+
+| pergunta com | limite | resultado |
+|---|---|---|
+| 450 | 450 − 26 = **424** | 488 ≥ 424 → **RECUSA** (`teto_global`) |
+| 520 | 520 − 26 = **494** | 488 < 494 → **permite** |
+
+Mesmo instante, mesma fonte, respostas opostas. É a **forma #5** da lista do CLAUDE.md: o
+freio de orçamento entregue como regressão da fonte. Agora o teto vem da CONFIGURAÇÃO
+(semana → último configurado → `p_teto`). **Não afrouxa o freio** — o número passa a ser um
+só. Para mudar o teto, escreva em `brightdata_uso.teto`; mexer na env de um chamador só vale
+para ele, e foi exatamente esse o defeito.
+
+**Conferir cota deixou de custar cota.** A decisão virou `public.brightdata_decisao(...)` —
+`stable`, sem escrita — e `registrar_uso_brightdata` DELEGA a ela. O aviso de 18/08 dizia
+"não use a função de reserva para conferir", mas ler as tabelas soltas **não reproduz a
+regra** (reserva alheia, sub-cota, teto efetivo): a única forma de saber a resposta era
+gastar por ela. O CLAUDE.md já aponta para a função nova.
+
+**Verificado nas duas direções**, em transação desfeita: com o contador em 520 e em 999 a
+resposta continua `permitido: false / teto_global`, e a sub-cota de `docs` (150/150) continua
+recusando. O freio continua freando. Rollback conferido: 488/520 intactos.
+
+### 2. Os dois alertas "pendentes de medição" — nenhum era achado novo
+Os dois eram leitura **anterior** ao conserto:
+- **VEGAS** `degradado` com 1 lote: linha de 17/08 **11:00**; o conserto da bimodalidade
+  (commit `6dd2702`, usa `enumerados` em vez de `total`) entrou 17/08 **12:38**.
+- **GESTAOLEILOES** `falhou`: linha de 18/08 **09:39**; o conserto entrou **10:08**.
+
+As linhas seguintes de CALIL e VEGAS já gravam `enumerados` e `sem_cota` corretamente.
+
+### 3. Nome de cliente: a regra que não existia
+A validação era `if (!form.nome)` — qualquer coisa não-vazia passava. Em 53 perfis: **2 com
+um nome só, 6 todos em minúsculo, 8 todos em maiúsculo**.
+
+Régua nova **deliberadamente baixa**: nome e sobrenome, sem número. Não é barreira de
+entrada — é o mínimo para emitir contrato, conferir CPF ou falar com o cliente.
+- `src/lib/nome.js` (front) · `api/_nome.js` (servidor, cópia deliberada) ·
+  `normalizar_nome()` + gatilho em `perfis` (a capitalização é arrumada onde **nenhum**
+  caminho contorna; o gatilho **nunca rejeita**).
+- Aplicado nos **cinco** pontos de entrada: Login, as **três** telas do Checkout e o
+  ConviteEquipe — exatamente onde a senha havia sangrado em 15/08.
+
+**Backfill:** 24 dos 53 nomes mudaram, todas por capitalização ou espaço — nenhum nome
+alterado em substância. Depois: 0 fora do padrão. Os 2 de nome único (**Daniel**, **Rayane**)
+ficaram como estão: inventar sobrenome de cliente seria pior. *Se quiser fechar, pede o
+sobrenome no próximo login deles — não dá para deduzir.*
+
+⚠️ **BRINDE, no mesmo arquivo:** `ConviteEquipe.jsx` exigia senha de **8 caracteres e nada
+mais**, enquanto Login e Checkout exigem maiúscula, minúscula, número e especial desde
+15/08. Era a cópia que não recebeu o conserto — **no fluxo de EQUIPE**, que entra com mais
+permissão que cliente. Passou a usar `senhaForte`.
+
+⚠️ **UM BUG MEU, achado só no teste ponta a ponta.** A regra "preserva maiúscula interna"
+(para McDonald/DiCaprio) testava apenas `[lower][upper]` — e isso **também casa com
+"jOAO"**. O gatilho devolvia `"jOAO da Silva Neto"`: erro de digitação lido como intenção.
+Estava nas TRÊS cópias (front, servidor, SQL). Corrigido para exigir que a palavra COMECE em
+maiúscula. **Não aparecia em nenhum dos casos que eu mesmo escrevi** — só quando exercitei o
+gatilho de verdade. Registro para a próxima: caso de teste que eu invento tem o meu viés.
+
+### 4. O SDK de cartão barrado era um beco sem saída
+Investigando a venda perdida, apareceu uma assimetria:
+
+| quem | MP falha → |
+|---|---|
+| **já tem conta** | fallback automático para Asaas por **link** (sem SDK) |
+| **chega novo** | *nenhuma rota* |
+
+O fluxo de criar-conta-e-pagar precisa do SDK do Mercado Pago para tokenizar o cartão, e
+`sdk.mercadopago.com` é um dos hosts mais barrados por bloqueador/extensão — a mesma classe
+de extensão que substituiu o `window.fetch` daquela pessoa. E o erro era mudo por um detalhe:
+`s.onerror` rejeita com um **Event**, cujo `.message` é `undefined`, então caía no genérico
+*"Erro ao processar a assinatura."*
+
+Agora a rejeição diz a causa provável e as duas saídas (desativar a extensão, ou "Criar conta
+grátis" — botão que já existe na tela e leva ao caminho com plano B). **Não** reescrevi o
+fluxo de pagamento nem redirecionei ninguém automaticamente: encadear criação de conta com
+cobrança sem decisão do dono trocaria um beco sem saída pelo risco de mandato duplicado, que
+este arquivo já pagou (ANTI-DUPLO-MANDATO P0.2).
+
+### Depende do dono
+- **A venda Top2 perdida** (tentou 4× entre 06 e 17/08, segue Explorador). O conserto ajuda
+  quem chegar agora; **não avisa quem já desistiu** — vale contato direto.
+- `analise_sem_mercadologico` (5) e `laudo_sem_base` (1): mesmo lote, um clique em *Gerar*.
+- **Teto do Bright Data:** 488/520 nesta semana, 32 de folga; a semana vira **24/08**. Agora
+  o número que vale é o de `brightdata_uso.teto` — se quiser outro, é ali.
+
+---
+
 ## 🧾 18/08 (3ª sessão) — O SELO PROMETIA DOCUMENTO QUE NÃO EXISTIA EM 2.170 LOTES
 
 Diagnóstico de abertura limpo no de sempre: segurança `0/0`, regras `0`, KYC `0`, nenhum

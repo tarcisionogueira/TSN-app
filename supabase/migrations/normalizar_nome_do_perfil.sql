@@ -33,9 +33,12 @@ begin
   palavras := regexp_split_to_array(limpo, ' ');
   foreach palavra in array palavras loop
     i := i + 1;
-    -- Maiuscula INTERNA ja digitada (McDonald, DiCaprio): respeita. Quem escreveu assim
-    -- escreveu de proposito, e "corrigir" seria estragar o nome da pessoa.
-    if palavra ~ '[[:lower:]][[:upper:]]' then
+    -- CamelCase INTENCIONAL (McDonald, DiCaprio): respeita — quem escreveu assim escreveu
+    -- de proposito, e "corrigir" seria estragar o nome da pessoa. Exige que a palavra
+    -- COMECE em maiuscula: a primeira versao testava so [[:lower:]][[:upper:]], e isso
+    -- tambem casa com "jOAO" — erro de digitacao lido como intencao. O gatilho devolvia
+    -- "jOAO da Silva Neto". Achado no teste ponta a ponta, nao nos casos que eu escrevi.
+    if palavra ~ '^[[:upper:]]' and palavra ~ '[[:lower:]][[:upper:]]' then
       saida := saida || palavra;
       continue;
     end if;
