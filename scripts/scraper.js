@@ -1578,7 +1578,7 @@ async function uploadFotoStorage(fotoUrl, fonteId) {
 // ─── SALVAR NO SUPABASE ───────────────────────────────────────────────────────
 
 async function salvarImoveis(imoveis) {
-  if (imoveis.length === 0) return;
+  if (imoveis.length === 0) return { salvos: 0, erro: null };
 
   const comViabilidade = await Promise.all(imoveis.map(async (im) => {
     const v = await avaliarViabilidade({ valorMinimo: im.valor_minimo, valorAvaliacao: im.valor_avaliacao });
@@ -1607,14 +1607,38 @@ async function salvarImoveis(imoveis) {
   // Remove campos internos não presentes no schema da tabela imoveis_leilao.
   // ATENÇÃO: dedup_chave NÃO é coluna — se vazar no payload, o PostgREST rejeita
   // o lote inteiro (400) e NADA é salvo (foi o que mantinha o acervo CEF sem atualizar).
-  const rows = comViabilidade.map(({ raw: _raw, _foto_original: _fo, dedup_chave: _dc, ...rest }) => rest);
+  const brutos = comViabilidade.map(({ raw: _raw, _foto_original: _fo, dedup_chave: _dc, ...rest }) => rest);
+
+  // DEDUP POR CHAVE DE CONFLITO — a causa do RJ congelado (18/08).
+  //
+  // O CSV da Caixa repete o mesmo `n do imovel` em algumas UFs. Um upsert com duas linhas
+  // de mesma chave faz o Postgres abortar o COMANDO INTEIRO com
+  // "ON CONFLICT DO UPDATE command cannot affect row a second time" (21000) — ele se recusa a
+  // atualizar a mesma linha duas vezes na mesma instrução. Não é erro de uma linha: são as
+  // 8.200 do estado que não entram.
+  //
+  // O estrago não apareceu porque o laço de UFs seguia para a próxima e o processo saía 0:
+  // o RJ ficou 12 dias parado (05/08 → 17/08), 7.783 lotes servidos ao cliente com preço e
+  // status de duas semanas atrás, com o run VERDE todo dia. E o sweep de vencidos não podia
+  // pegar: ele compara cada lote com o `max(atualizado_em)` do PRÓPRIO estado, então um estado
+  // inteiro congelado parece perfeitamente consistente consigo mesmo.
+  //
+  // Fica a última ocorrência (o CSV é lido de cima para baixo e a repetição costuma ser
+  // reapresentação da mesma linha). Se a duplicidade crescer, o log mostra.
+  const porChave = new Map();
+  for (const r of brutos) porChave.set(`${r.fonte}|${r.fonte_id}`, r);
+  const rows = [...porChave.values()];
+  const duplicados = brutos.length - rows.length;
+  if (duplicados > 0) console.log(`    ⚠️ ${duplicados} linha(s) duplicada(s) no CSV (mesma chave fonte+fonte_id) — mantida a última de cada`);
 
   const { error } = await supabase
     .from('imoveis_leilao')
     .upsert(rows, { onConflict: 'fonte,fonte_id', ignoreDuplicates: false });
 
-  if (error) { console.error('Erro ao salvar:', error.message); return; }
-  console.log(`    ✅ ${comViabilidade.length} imóveis salvos`);
+  // NÃO devolver 0 em silêncio: quem chama soma o "processados" e registra a saúde da fonte.
+  // Enquanto isto era um `return` mudo, o total incluía as 8.200 do RJ que nunca foram gravadas.
+  if (error) { console.error('Erro ao salvar:', error.message); return { salvos: 0, erro: error.message }; }
+  console.log(`    ✅ ${rows.length} imóveis salvos`);
 
   // Está no CSV de hoje ⇒ está à VENDA na Caixa: reativa o lote que o sweep de
   // vencidos (desativar_imoveis_cef_vencidos) tirou do ar e que voltou ao CSV.
@@ -1628,6 +1652,7 @@ async function salvarImoveis(imoveis) {
     if (errReativar) console.error('    Erro ao reativar lotes do CSV:', errReativar.message);
     else if (reativados) console.log(`    🔼 ${reativados} lote(s) reativado(s) (voltaram ao CSV)`);
   }
+  return { salvos: rows.length, erro: null };
 }
 
 // ─── MAIN ─────────────────────────────────────────────────────────────────────
@@ -1645,20 +1670,29 @@ async function main() {
     ? process.env.UFS.split(',').map(s => s.trim().toUpperCase()).filter(u => TODAS_UFS.includes(u))
     : TODAS_UFS);
   if (ufs.length === 0) ufs.push(...TODAS_UFS);
+  const ufsComFalha = [];
   for (const uf of ufs) {
     const imoveis = await scraperCEFcsv(uf);
-    await salvarImoveis(imoveis);
-    total += imoveis.length;
-    await new Promise(r => setTimeout(r, 800));
+    const r = await salvarImoveis(imoveis);
+    // SOMA O QUE FOI GRAVADO, não o que foi lido. `total += imoveis.length` contava as 8.200
+    // do RJ que morreram no upsert, e esse número virava o `fonte_saude` da CEF: a fonte
+    // aparecia saudável justamente no dia em que um terço dela não entrou.
+    total += r.salvos;
+    if (r.erro) { ufsComFalha.push(`${uf} (${r.erro.slice(0, 80)})`); console.error(`    🛑 CEF ${uf}: NADA foi gravado.`); }
+    await new Promise(r2 => setTimeout(r2, 800));
   }
+  if (ufsComFalha.length) console.error(`\n🛑 UF(s) que não gravaram: ${ufsComFalha.join(' · ')}`);
 
   // Registra a saúde da fonte CEF (maior acervo) — antes ela não era monitorada.
   // Alimenta os cards do dashboard e o alerta por e-mail se a coleta quebrar.
   try {
     await supabase.from('fonte_saude').insert({
       fonte: 'CEF', total, estrategia: 'csv',
-      status: total > 0 ? 'ok' : 'falhou',
-      motivo: total > 0 ? null : 'CSV da Caixa não retornou imóveis',
+      // UF que não gravou é 'falhou', mesmo com as outras 26 salvando: coleta parcial
+      // carimbada como 'ok' foi o que deixou o RJ 12 dias fora sem ninguém notar.
+      status: (total > 0 && !ufsComFalha.length) ? 'ok' : 'falhou',
+      motivo: ufsComFalha.length ? `UF(s) sem gravar: ${ufsComFalha.join(' · ')}`.slice(0, 400)
+        : (total > 0 ? null : 'CSV da Caixa não retornou imóveis'),
     });
     console.log(`🩺 fonte_saude CEF registrada: ${total} imóveis`);
   } catch (e) { console.log('registrarSaude CEF erro:', e.message); }
@@ -1677,7 +1711,13 @@ async function main() {
     .eq('ativo', true);
   if (errDesativar) console.error('Erro ao desativar obsoletos:', errDesativar.message);
 
-  console.log(`\n✅ Scraping concluído. ${total} imóveis processados.\n`);
+  console.log(`\n✅ Scraping concluído. ${total} imóveis GRAVADOS.\n`);
+  // Sai com erro para o passo "Notify on failure" do workflow disparar. Antes, uma UF inteira
+  // podia não gravar e o run terminava verde — o alerta existia e nunca era alcançado.
+  if (ufsComFalha.length) {
+    console.error(`Saindo com erro: ${ufsComFalha.length} UF(s) não gravaram.`);
+    process.exitCode = 1;
+  }
 }
 
 main().catch(err => {
