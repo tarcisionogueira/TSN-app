@@ -13,7 +13,8 @@
 
 // Descrição/metragem do imóvel: definidas em `api/_texto-imovel.js` porque o enriquecedor
 // sob demanda (api/) também as usa. A direção scripts → api é a convenção do repo.
-import { extrairDescricaoDoCorpo, extrairAreaM2 } from '../../api/_texto-imovel.js';
+import { extrairDescricaoDoCorpo, extrairAreaM2, decodificarEntidades } from '../../api/_texto-imovel.js';
+import { nomeiaUmDocumento } from '../../api/_doc-scan.js';
 
 // ── Configuração via variáveis de ambiente ──────────────────────────────────
 const CLAUDE_KEY       = process.env.CLAUDE_KEY || '';
@@ -55,7 +56,14 @@ export function normalizarData(s) {
 /** Procura a data do leilão priorizando proximidade de palavras-âncora. */
 export function extrairData(html) {
   if (!html) return null;
-  const texto = html.replace(/<[^>]+>/g, ' ');
+  // DECODIFICA ANTES DE PROCURAR A ÂNCORA (18/08). Sem isto, um site que publica
+  // `Leil&atilde;o` ou `pra&ccedil;a` — forma comum em página salva em ISO — não casa com
+  // NENHUMA das palavras-âncora, e a função cai no fallback "primeira data futura do texto",
+  // que num portal de leilão costuma ser data de cadastro ou de outro lote. O resultado é uma
+  // data ERRADA gravada com cara de certa, sem erro em lugar nenhum. É a mesma forma que
+  // escondeu o lance da PECINI (`1&ordm; Leil&atilde;o`), aqui na biblioteca que serve
+  // RJ, GESTAO, PECINI, SOLEON, SATO e o coletor canônico.
+  const texto = decodificarEntidades(html.replace(/<[^>]+>/g, ' '));
   // Prioriza datas próximas de "leilão", "praça", "data" — evita pegar data de cadastro
   const ancora = texto.match(/(?:leil[ãa]o|pra[çc]a|encerr|data\s+do\s+leil)[^\d]{0,40}(\d{2}\/\d{2}\/\d{4})/i);
   if (ancora) return normalizarData(ancora[1]);
@@ -97,10 +105,18 @@ export function extrairGenerico(html, urlBase) {
 
   // links de documentos por contexto (texto âncora ou href)
   for (const m of html.matchAll(/<a[^>]+href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)) {
-    const href = m[1]; const txt = (m[2] || '').replace(/<[^>]+>/g, '').toLowerCase();
+    const href = m[1];
+    const txt = decodificarEntidades((m[2] || '').replace(/<[^>]+>/g, '')).toLowerCase();
     const low = href.toLowerCase();
-    if (!out.link_edital && (txt.includes('edital') || low.includes('edital'))) out.link_edital = _abs(href, urlBase);
-    if (!out.link_matricula && (txt.includes('matr') || low.includes('matricula'))) out.link_matricula = _abs(href, urlBase);
+    const abs = _abs(href, urlBase);
+    // O LINK PRECISA NOMEAR UM DOCUMENTO (18/08). Uma âncora rotulada "Matrícula" cujo href é
+    // a ROTA que serve os arquivos (`/preview/`, sem o nome do arquivo) virava `link_matricula`
+    // NOT NULL: a ficha anunciava "matrícula disponível" e entregava uma pasta vazia. Consertado
+    // ontem em `api/_doc-scan.js` e no scraper da PECINI; esta cópia na biblioteca compartilhada
+    // tinha ficado para trás, e é a que atende RJ, GESTAO, SOLEON, SATO e o coletor canônico.
+    if (!abs || !nomeiaUmDocumento(abs)) continue;
+    if (!out.link_edital && (txt.includes('edital') || low.includes('edital'))) out.link_edital = abs;
+    if (!out.link_matricula && (txt.includes('matr') || low.includes('matricula'))) out.link_matricula = abs;
   }
 
   // número da matrícula no corpo: "Matrícula nº 12.345"
