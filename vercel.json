@@ -297,6 +297,10 @@
     {
       "path": "/api/divulgacao-cron",
       "schedule": "0 13 * * 3"
+    },
+    {
+      "path": "/api/recuperacao-checkout-cron",
+      "schedule": "0 13 * * *"
     }
   ]
 }
