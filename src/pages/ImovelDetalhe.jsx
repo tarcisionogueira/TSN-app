@@ -10,24 +10,15 @@ import { scoreBidPro, scoreLabel } from '../utils/score';
 import { leilaoEncerrado, pracaMaisDescontada, dataBR } from '../utils/leilaoEncerrado';
 import { caixaMatriculaUrl, caixaRegrasVendaUrl } from '../utils/caixa';
 import { assinarAnexos } from '../utils/docUrl';
+import { ehUrl, ehDocArquivo, ehMatriculaValida, ehRegrasDoc } from '../utils/documento';
 import { formatarDescricaoImovel } from '../utils/descricao';
 import { fotoCandidatos } from '../utils/foto';
 import { trackImovelVisualizado } from '../utils/gtag';
 import { lerCotaMercado } from '../utils/cotaAnalise';
 
-// Botões de documento só aparecem quando o valor é uma URL real — o scraper da
-// Caixa às vezes grava rótulos ("Venda Direta Online", "Leilão SFI - Edital Único").
-const ehUrl = (v) => typeof v === 'string' && /^https?:\/\//i.test(v.trim());
-// Documento REAL = ARQUIVO (PDF, com ou sem querystring) ou objeto no NOSSO Storage.
-// Uma PÁGINA (matricula.asp, detalhe-imovel.asp, /imoveis/…) NÃO é documento — a
-// auditoria por leiloeiro mostrou milhares de "matrículas"/"editais" que na verdade
-// são a página do lote. Sem isto, o botão "Matrícula"/"Edital" abre um site, não o doc.
-const ehDocArquivo = (v) => ehUrl(v) && (/\.pdf(\?|#|$)/i.test(v.trim()) || /\/storage\/v1\/object\/(sign|public)\//i.test(v));
-const ehMatriculaValida = (v) => ehDocArquivo(v) && !/matricula\.asp/i.test(v);
-// "Regras de venda" só é um DOCUMENTO de verdade quando não é a própria página do
-// anúncio no portal (detalhe-imovel.asp da Caixa = mesmo destino do url_lote, já
-// coberto pelo botão "Ver no portal"). Senão o botão abre o site, não um arquivo.
-const ehRegrasDoc = (v, urlLote) => ehUrl(v) && !/detalhe-imovel\.asp/i.test(v) && v.trim() !== (urlLote || '').trim();
+// As regras de "o que é documento" moram em src/utils/documento.js — esta tela já
+// aplicava a versão certa; a busca não tinha cópia nenhuma e prometia edital em 2.170
+// lotes que não tinham arquivo. Definição única para as telas não divergirem de novo.
 
 const TIPO_LABEL = { casa:'Casa', apartamento:'Apartamento', terreno:'Terreno/Lote', comercial:'Comercial', rural:'Rural', galpao:'Galpão', sala:'Sala Comercial', vaga:'Vaga de Garagem', imovel:'Imóvel' };
 

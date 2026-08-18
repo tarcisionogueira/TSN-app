@@ -138,6 +138,9 @@ const COLUNAS_BUSCA = [
   'id','titulo','tipo','modalidade','estado','cidade','bairro','endereco',
   'valor_avaliacao','valor_minimo','valor_minimo_2','valor_minimo_ref','valor_mercado','analise_viavel','desconto_percentual',
   'area_m2','descricao','url_lote','link_edital','link_matricula','link_foto','leiloeiro',
+  // Selos de documento: o LINK não autoriza (é a página do lote na maioria das fontes).
+  // Quem sabe se existe ARQUIVO — no link, nos anexos ou no nosso Storage — é o banco.
+  'tem_edital_doc','tem_matricula_doc',
   'data_leilao','data_fim','forma_pagamento','viavel','score_viabilidade','fracionado',
   'fonte','fonte_id','numero_edital','numero_matricula','numero_processo',
   'latitude','longitude','score_financeiro','score_juridico','score_localizacao',
@@ -301,7 +304,7 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
       const LIMITE_PINS = 2000;
       let q = supabase
         .from('imoveis_leilao')
-        .select('id, titulo, cidade, estado, tipo, modalidade, valor_minimo, valor_minimo_ref, desconto_percentual, forma_pagamento, latitude, longitude, link_foto, geocod_nivel, fonte, fonte_id, area_m2, link_edital, link_matricula, score_juridico, score_financeiro, valor_mercado, analise_viavel')
+        .select('id, titulo, cidade, estado, tipo, modalidade, valor_minimo, valor_minimo_ref, desconto_percentual, forma_pagamento, latitude, longitude, link_foto, geocod_nivel, fonte, fonte_id, area_m2, link_edital, link_matricula, tem_edital_doc, tem_matricula_doc, score_juridico, score_financeiro, valor_mercado, analise_viavel')
         .not('latitude', 'is', null)
         .neq('latitude', 0);
       if (raioAtivo && centroRaio) {
@@ -479,8 +482,8 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
               ${pgtoLabel ? `<span style="font-size:10px;font-weight:700;background:${pgtoBg};color:${pgtoColor};padding:1px 6px;border-radius:20px">${pgtoLabel}</span>` : ''}
               ${nivelLabel ? `<span style="font-size:10px;font-weight:600;background:#fef9c3;color:#92400e;padding:1px 6px;border-radius:20px">${nivelLabel}</span>` : ''}
               ${im.area_m2 > 0 && im.valor_minimo_ref ? `<span style="font-size:10px;font-weight:700;background:#f1f5f9;color:#475569;padding:1px 6px;border-radius:20px">R$ ${Number(im.valor_minimo_ref/im.area_m2).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/m²</span>` : ''}
-              ${/^https?:\/\//i.test(im.link_edital||'') ? `<span style="font-size:10px;font-weight:700;background:#eff6ff;color:#084BA6;padding:1px 6px;border-radius:20px">📄 Edital</span>` : ''}
-              ${/^https?:\/\//i.test(im.link_matricula||'') && !/matricula\.asp/i.test(im.link_matricula||'') ? `<span style="font-size:10px;font-weight:700;background:#f0fdf4;color:#15803d;padding:1px 6px;border-radius:20px">📄 Matrícula</span>` : ''}
+              ${im.tem_edital_doc ? `<span style="font-size:10px;font-weight:700;background:#eff6ff;color:#084BA6;padding:1px 6px;border-radius:20px">📄 Edital</span>` : ''}
+              ${im.tem_matricula_doc ? `<span style="font-size:10px;font-weight:700;background:#f0fdf4;color:#15803d;padding:1px 6px;border-radius:20px">📄 Matrícula</span>` : ''}
             </div>
             <div style="font-size:15px;font-weight:900;color:#0D63DB;margin-bottom:8px">${fmt(im.valor_minimo_ref)}</div>
             <button onclick="window.location.hash='/imovel/${im.id}'" style="width:100%;padding:7px;background:#0D63DB;color:white;border:none;border-radius:6px;cursor:pointer;font-weight:700;font-size:11px">Ver detalhes →</button>
@@ -1194,6 +1197,8 @@ export default function Busca() {
             descricao: im.descricao,
             urlLote: im.url_lote || im.link_edital,
             linkEdital: im.link_edital,
+            temEditalDoc: im.tem_edital_doc,
+            temMatriculaDoc: im.tem_matricula_doc,
             linkMatricula: im.link_matricula,
             foto: im.link_foto,
             leiloeiro: im.leiloeiro,
@@ -1257,6 +1262,8 @@ export default function Busca() {
         descricao: im.descricao,
         urlLote: im.url_lote || im.link_edital,
         linkEdital: im.link_edital,
+        temEditalDoc: im.tem_edital_doc,
+        temMatriculaDoc: im.tem_matricula_doc,
         linkMatricula: im.link_matricula,
         foto: im.link_foto,
         leiloeiro: im.leiloeiro,
@@ -2145,8 +2152,11 @@ export default function Busca() {
                     {/* Indicadores de decisão: R$/m², disponibilidade de docs e score */}
                     {(() => {
                       const m2 = im.areaM2 > 0 && im.valorMinimo ? im.valorMinimo / im.areaM2 : null;
-                      const temEdital = /^https?:\/\//i.test(im.linkEdital || '');
-                      const temMatricula = /^https?:\/\//i.test(im.linkMatricula || '') && !/matricula\.asp/i.test(im.linkMatricula || '');
+                      // Selo = DOCUMENTO existente, não link existente. `linkEdital` é a página
+                      // do lote na maioria das fontes; quem sabe se há edital-ARQUIVO (link,
+                      // anexo do leiloeiro ou nosso Storage) é a coluna mantida no banco.
+                      const temEdital = !!im.temEditalDoc;
+                      const temMatricula = !!im.temMatriculaDoc;
                       if (!m2 && !temEdital && !temMatricula) return null;
                       return (
                         <div style={{ display:'flex', gap:4, flexWrap:'wrap', alignItems:'center' }}>
