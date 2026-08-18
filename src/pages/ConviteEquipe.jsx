@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { validarNome, normalizarNome } from '../lib/nome.js';
+import { senhaForte, MSG_SENHA_FRACA } from '../lib/senha.js';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../utils/supabase';
 import { CheckCircle2, ArrowRight, Loader2, AlertCircle, Eye, EyeOff, Camera, Upload, RefreshCw } from 'lucide-react';
@@ -373,7 +375,13 @@ export default function ConviteEquipe() {
     if (!v) return 'Preencha este campo para continuar.';
     if (passo.key === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) return 'Email inválido.';
     if (passo.key === 'cpf' && v.replace(/\D/g, '').length < 11) return 'CPF deve ter 11 dígitos.';
-    if (passo.key === 'senha' && v.length < 8) return 'A senha deve ter pelo menos 8 caracteres.';
+    // A tela PEDE "nome completo" desde sempre e aceitava um nome só — pedido sem regra é
+    // sugestão. Mesma régua do cadastro comum (src/lib/nome.js).
+    if (passo.key === 'nome') { const vn = validarNome(v); if (!vn.ok) return vn.erro; }
+    // 18/08: aqui a senha exigia só 8 CARACTERES, enquanto Login e Checkout exigem maiúscula,
+    // minúscula, número e especial desde 15/08. Era a cópia que não recebeu o conserto — e no
+    // fluxo de EQUIPE, que entra com mais permissão que cliente. Passa a usar a regra única.
+    if (passo.key === 'senha' && !senhaForte(v)) return MSG_SENHA_FRACA;
     if (passo.key === 'confirma_senha' && v !== form['senha']) return 'As senhas não coincidem.';
     return '';
   };
@@ -414,7 +422,7 @@ export default function ConviteEquipe() {
         password: form.senha,
         options: {
           data: {
-            nome: form.nome.trim(),
+            nome: normalizarNome(form.nome),
             telefone: form.telefone,
             role: roleKey,
             lgpd_aceito: true,
@@ -490,7 +498,7 @@ export default function ConviteEquipe() {
             body: JSON.stringify({
               roleDestino: roleKey,
               emailDestinatario: form.email.trim(),
-              nomeDestinatario: form.nome.trim(),
+              nomeDestinatario: normalizarNome(form.nome),
             }),
           });
         } catch (_) {
