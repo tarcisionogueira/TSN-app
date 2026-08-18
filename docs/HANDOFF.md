@@ -46,6 +46,54 @@ teto do Bright Data e da limpeza pulada: *a régua é relativa ao próprio event
 Invariante novo `uf_cef_congelada` compara a UF com o último scrape da FONTE. Acusou RJ com
 286,4 h (11,9 dias).
 
+### RESULTADO: RJ DESCONGELADO — e o diagnóstico que sobrou aberto
+
+O dedup por `fonte+fonte_id` **não resolveu**: a coleta seguinte acusou ZERO duplicadas e morreu
+com o mesmo 21000. Minha hipótese da chave estava errada, e daqui não dá para baixar o CSV da
+Caixa (o proxy bloqueia o domínio) para olhar o dado bruto.
+
+Em vez de uma terceira adivinhação, o código passou a RESPONDER: upsert em blocos de 500, e
+bloco que falha parte no meio até isolar. A bissecção separa dois diagnósticos que saíam iguais —
+*linha ruim sozinha* (lote de 1 que falha) versus *duas linhas que colidem entre si* (lote falha,
+as duas metades passam).
+
+**Rodada de 18/08 00:34 — `alvo` RJ, com o conserto:**
+
+| | antes | depois |
+|---|---|---|
+| RJ ativos | 7.783 | **8.575** |
+| último scrape do RJ | 05/08 | **18/08 00:35** |
+| gravados | 0 | **8.200** |
+| `uf_cef_congelada` | RJ, 286,4 h | **vazio** |
+| CEF ativos (total) | 23.870 | 24.662 |
+
+Ainda 1.017 lotes reativados (voltaram ao CSV e estavam `ativo=false`).
+
+**O diagnóstico foi COLISÃO ENTRE LINHAS, em 19 blocos** — não há linha ruim; separadas, todas
+as 8.200 entram. Os intervalos que a bissecção registrou se aninham terminando sempre nos mesmos
+ids, o que aponta os envolvidos:
+
+```
+125 linha(s) — cef_1555510299037 … cef_1444403961591
+250 linha(s) — cef_8444426361009 … cef_1444403961591
+ 16 linha(s) — cef_8787701708291 … cef_8787701378780
+ 31 linha(s) — cef_8555539071806 … cef_8787701378780
+ 62 linha(s) — cef_8787701927082 … cef_8787701378780
+```
+
+**O QUE FICA ABERTO, e não é para varrer para baixo do tapete:** *por que* duas linhas com
+`fonte_id` distintos colidem no árbitro `(fonte, fonte_id)` continua **sem explicação**. Checado e
+descartado: não há duplicata em `fonte+fonte_id` (o dedup acusa 0); os quatro ids acima são linhas
+distintas e todas gravaram; o payload não carrega a coluna `id`; `dedup_chave` é removido antes do
+upsert; as três únicas UNIQUE da tabela são `(id)`, `(fonte_id)` e `(fonte, fonte_id)`. Sobra
+investigar os 11 triggers BEFORE INSERT/UPDATE — se algum reescrever `fonte`/`fonte_id`, o
+conflito é avaliado DEPOIS deles, e aí duas linhas distintas na entrada viram a mesma na hora do
+árbitro. **É por aí que a próxima sessão deve começar**, com os intervalos acima.
+
+O efeito está mitigado (nenhuma linha derruba as outras) e instrumentado (o log nomeia o caso a
+cada rodada). Mas mitigado não é entendido, e a distinção importa: se a causa for um trigger,
+ela vale para TODAS as fontes, não só a CEF.
+
 ### CORREÇÃO DE UM NÚMERO MEU (17/08)
 
 Reportei *"CEF: 2.206 lotes ativos com a última praça vencida"* como defeito. **Não é.** São
