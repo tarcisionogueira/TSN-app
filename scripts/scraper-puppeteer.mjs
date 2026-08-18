@@ -106,7 +106,7 @@ const SENTINELAS_VALOR = new Set([999999999, 99999999, 9999999999, 111111111, 12
 const semSentinela = (v) => (SENTINELAS_VALOR.has(Number(v)) ? null : v);
 
 async function salvarImoveis(imoveis, fonte) {
-  if (!imoveis.length) return;
+  if (!imoveis.length) return { salvos: 0, esperados: 0 };
   // Guarda 1: só BRASIL. Descarta estrangeiros / estado inválido ANTES de salvar.
   // Inclui o caso UF-vazia + cidade estrangeira (rede Superbid) via ehEstrangeiroSemUF.
   const totalBruto = imoveis.length;
@@ -232,14 +232,18 @@ async function salvarImoveis(imoveis, fonte) {
   const limpos = rows.filter(r => !ehFracaoIdeal(r));
   const barrados = rows.length - limpos.length;
   if (barrados) console.log(`  ⛔ ${fonte}: ${barrados} lote(s) de parte/fração ideal barrados (fora do acervo por decisão de negócio)`);
-  if (!limpos.length) { console.log(`  ${fonte}: nada a salvar após o filtro.`); return; }
+  if (!limpos.length) { console.log(`  ${fonte}: nada a salvar após o filtro.`); return { salvos: 0, esperados: 0 }; }
 
   const { error } = await supabase
     .from('imoveis_leilao')
     .upsert(limpos, { onConflict: 'fonte_id', ignoreDuplicates: false });
 
-  if (error) console.error(`  Erro ao salvar ${fonte}:`, error.message);
-  else console.log(`  ✅ ${fonte}: ${limpos.length} imóveis salvos`);
+  // O ERRO PRECISA SUBIR (18/08). Antes ele virava só um console.error e a função não devolvia
+  // nada — quem chama seguia como se tivesse gravado, e o sweep logo abaixo desativava a fonte
+  // inteira com base no que foi COLETADO. Ver salvarEFinalizar.
+  if (error) { console.error(`  Erro ao salvar ${fonte}:`, error.message); return { salvos: 0, esperados: limpos.length }; }
+  console.log(`  ✅ ${fonte}: ${limpos.length} imóveis salvos`);
+  return { salvos: limpos.length, esperados: limpos.length };
 }
 
 // Salva em lotes de 500 e desativa os obsoletos da fonte (lotes que saíram do
@@ -247,10 +251,24 @@ async function salvarImoveis(imoveis, fonte) {
 // erro de rede não zerar o acervo. Retorna a quantidade coletada.
 async function salvarEFinalizar(imoveis, fonte) {
   const runStart = new Date().toISOString();
+  let salvos = 0, esperados = 0;
   for (let i = 0; i < imoveis.length; i += 500) {
-    await salvarImoveis(imoveis.slice(i, i + 500), `${fonte} ${i + 1}-${Math.min(i + 500, imoveis.length)}`);
+    const r = await salvarImoveis(imoveis.slice(i, i + 500), `${fonte} ${i + 1}-${Math.min(i + 500, imoveis.length)}`);
+    salvos += r.salvos; esperados += r.esperados;
   }
-  if (imoveis.length > 50) {
+  // O GATE OLHA O GRAVADO, NÃO O COLETADO (18/08). `imoveis.length > 50` mede o que o scrape
+  // BAIXOU; o sweep abaixo desativa tudo que não foi tocado nesta rodada. Se os upserts
+  // falharem, nada é tocado — e a condição, apoiada no número errado, mandava desativar o
+  // acervo INTEIRO da fonte. Este coletor serve MEGA, SUPERBID, LJUD, GRUPOLANCE, ZUK, BIASI e
+  // PESTANA: o grosso do acervo fora da CEF, em uma única chamada.
+  //
+  // `esperados` exclui de propósito os lotes barrados por fração ideal — esses NÃO foram
+  // gravados por decisão de negócio, e é correto que o sweep os aposente.
+  const gravouTudo = salvos === esperados;
+  if (!gravouTudo) {
+    console.error(`  🛑 ${fonte}: sweep PULADO — gravou ${salvos} de ${esperados}. Desativar aqui aposentaria lote por falha nossa.`);
+  }
+  if (salvos > 50 && gravouTudo) {
     const { error, count } = await supabase
       .from('imoveis_leilao')
       .update({ ativo: false }, { count: 'exact' })
@@ -259,8 +277,8 @@ async function salvarEFinalizar(imoveis, fonte) {
       .lt('atualizado_em', runStart);
     if (error) console.error(`  Erro ao desativar ${fonte} obsoletos:`, error.message);
     else console.log(`  🔻 ${fonte}: ${count ?? 0} lotes obsoletos desativados`);
-  } else {
-    console.log(`  ⚠️ ${fonte} coletou ${imoveis.length} (≤50) — pulando desativação por segurança`);
+  } else if (gravouTudo) {
+    console.log(`  ⚠️ ${fonte} gravou ${salvos} (≤50) — pulando desativação por segurança`);
   }
   return imoveis.length;
 }
@@ -3250,31 +3268,16 @@ async function main() {
     if (rodar('MEGA')) {
     console.log('📋 Mega Leilões...');
     {
-      const runStart = new Date().toISOString();
       const imoveis = await scraperMegaLeiloes(browser);
       // Captura os documentos (edital/matrícula/laudo/proposta) da página de detalhe —
       // renderiza JS, então pega o que o on-demand (fetch simples) não vê. Bounded.
       try { await enriquecerDocumentosLote(browser, imoveis, { cap: 150 }); }
       catch (e) { console.log(`  ⚠️ Enriquecimento de documentos Mega falhou (segue sem): ${e.message.slice(0, 80)}`); }
-      // salva em lotes de 500 para não estourar payload
-      for (let i = 0; i < imoveis.length; i += 500) {
-        await salvarImoveis(imoveis.slice(i, i + 500), `Mega ${i + 1}-${Math.min(i + 500, imoveis.length)}`);
-      }
-      total += imoveis.length;
-      // Desativa lotes Mega que saíram do ar (encerrados) — só se a coleta foi
-      // saudável (>50), para um erro de rede não zerar o acervo.
-      if (imoveis.length > 50) {
-        const { error, count } = await supabase
-          .from('imoveis_leilao')
-          .update({ ativo: false }, { count: 'exact' })
-          .eq('fonte', 'MEGA')
-          .eq('ativo', true)
-          .lt('atualizado_em', runStart);
-        if (error) console.error('  Erro ao desativar Mega encerrados:', error.message);
-        else console.log(`  🔻 Mega: ${count ?? 0} lotes encerrados desativados`);
-      } else {
-        console.log('  ⚠️ Mega coletou ≤50 — pulando desativação por segurança');
-      }
+      // USA `salvarEFinalizar` COMO AS OUTRAS 11 FONTES (18/08). Este bloco reimplementava a
+      // função inteira — salvar em lotes de 500 + sweep — e por isso ficou para trás quando o
+      // gate do sweep foi corrigido para olhar o GRAVADO em vez do COLETADO. Duas cópias da
+      // mesma regra divergem no primeiro ajuste, e a que ficou para trás é a que apaga acervo.
+      total += await salvarEFinalizar(imoveis, 'MEGA');
       await registrarSaude('MEGA', imoveis, 'principal', validarColeta(imoveis, 'MEGA'));
     }
     }

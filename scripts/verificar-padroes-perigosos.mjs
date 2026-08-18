@@ -247,6 +247,49 @@ const REGRAS_ARQUIVO = [
       && /^\s*import[\s\S]{0,200}?\bfetchViaBrightData\b[\s\S]{0,200}?from\s*['"]/m.test(texto),
   },
   {
+    id: 'sweep-apoiado-no-coletado',
+    titulo: 'Sweep que desativa acervo apoiado no COLETADO em vez do GRAVADO',
+    // Desativar "tudo que não foi tocado nesta rodada" só é verdade se a rodada REALMENTE
+    // gravou. Com o gate no número de linhas BAIXADAS, uma rodada que baixa 500 e falha em
+    // todos os upserts ainda entra no sweep — e aposenta o acervo inteiro da fonte, porque
+    // nada tem `atualizado_em` novo. É a confusão entre lido e gravado que deixou o CEF/RJ 12
+    // dias parado, aqui com uma ação DESTRUTIVA pendurada.
+    //
+    // Achado em 18/08 em DOIS lugares: `api/scraper-leiloeiros.js` (sold, superbid, mega, mgl,
+    // ccj, biasi, destak, ljud) e `scripts/scraper-puppeteer.mjs`, que ainda tinha o bloco do
+    // MEGA reimplementando a função inteira — e por isso ficou para trás do conserto anterior.
+    //
+    // A regra: no arquivo que faz UPDATE ativo=false + filtro por `atualizado_em`, o gate tem
+    // de citar o contador de GRAVADOS (salvos/upsert/gravad). Se o seu contador tem outro
+    // nome, marque com // padrao-ok: <motivo>.
+    //
+    // A checagem é por JANELA, não por arquivo: testar o arquivo inteiro faz qualquer
+    // `console.log('… imóveis salvos')` desarmar a regra. Foi assim na primeira versão desta
+    // trava, que passou verde nas DUAS versões defeituosas — um guarda que não guarda é pior
+    // que nenhum, porque dá a impressão de cobertura.
+    testar: (texto, rel) => {
+      if (!/^(scripts|api)\//.test(rel)) return false;
+      // Sweep DE RODADA: `atualizado_em` comparado ao instante em que a coleta começou.
+      // Sweep por IDADE (ex.: "sem atualizar há 90 dias") NÃO entra — ali o gate por gravados
+      // não faria sentido, e incluí-lo só produziria alarme falso.
+      const sweeps = [...texto.matchAll(/\.lt\(\s*['"]atualizado_em['"]\s*,\s*(\w+)|atualizado_em=lt\.\$\{(\w+)\}/g)];
+      return sweeps.some(m => {
+        const varAlvo = m[1] || m[2] || '';
+        if (!/^(runStart|inicio|start|inicioRodada|t0)$/i.test(varAlvo)) return false;
+        const antes = texto.slice(Math.max(0, m.index - 900), m.index);
+        if (!/ativo:\s*false|ativo=eq\.true/.test(texto.slice(Math.max(0, m.index - 900), m.index + 400))) return false;
+        // A CONDIÇÃO que libera o sweep é o último `if (...)` antes dele. Testar a JANELA
+        // inteira não serve: na primeira versão desta trava, um `console.log('… imóveis
+        // salvos')` a dez linhas de distância desarmava a regra, e ela passou verde nas DUAS
+        // versões defeituosas. Um guarda que não guarda é pior que nenhum — dá impressão de
+        // cobertura. Esta versão foi conferida contra o código ANTES e DEPOIS do conserto.
+        const ifs = [...antes.matchAll(/if\s*\(([^)]*(?:\([^)]*\)[^)]*)*)\)/g)];
+        const cond = ifs.length ? ifs[ifs.length - 1][1] : '';
+        return !/\b(salvos|gravouTudo|gravados|up)\b/.test(cond);
+      });
+    },
+  },
+  {
     id: 'mesma-janela-em-tabelas-diferentes',
     titulo: 'O MESMO .limit() aplicado a tabelas diferentes no mesmo Promise.all',
     // Repetir a MESMA janela em várias tabelas significa que elas são, para quem escreveu, UM

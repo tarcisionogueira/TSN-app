@@ -554,7 +554,24 @@ export default async function handler(req, res) {
     // SOFT-deactivate (ativo=false), não DELETE físico — alinhado ao scraper
     // canônico (scraper-puppeteer.mjs). O DELETE destruía linhas que o scraper
     // diário gerencia por flag, gerando guerra de sweeps entre os dois sistemas.
-    if (r.rows.length >= 10) {
+    //
+    // O GATE OLHA `up` (GRAVADO), NÃO `r.rows.length` (COLETADO) — 18/08.
+    //
+    // Com o gate no coletado, uma rodada que baixa 500 lotes e falha em TODOS os upserts
+    // (`up = 0`) ainda entrava aqui e desativava tudo que tem `atualizado_em < runStart` —
+    // ou seja, o acervo INTEIRO da fonte, já que nada foi gravado. É a mesma confusão entre
+    // lido e gravado que deixou o CEF/RJ 12 dias parado, aqui com uma ação DESTRUTIVA
+    // pendurada: LJUD tem 869 lotes ativos, SUPERBID 1.474, MEGA 580, BIASI 469, e uma única
+    // rodada com upsert falhando zerava qualquer um deles.
+    //
+    // A segunda condição é igual de importante: coleta PARCIAL não pode desativar. Se parte
+    // das linhas não gravou, os lotes que ficaram de fora aparecem como "não vistos nesta
+    // rodada" e seriam aposentados por um erro nosso, não por terem saído do site.
+    const gravouTudo = up === r.rows.length;
+    if (!gravouTudo && r.rows.length) {
+      console.error(`[leil] ${f.toUpperCase()}: sweep PULADO — gravou ${up} de ${r.rows.length}. Desativar aqui aposentaria lote por falha nossa.`);
+    }
+    if (up >= 10 && gravouTudo) {
       await sb(`imoveis_leilao?fonte=eq.${f.toUpperCase()}&ativo=eq.true&atualizado_em=lt.${runStart}`, {
         method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ ativo: false }),
       }).catch(() => {});
