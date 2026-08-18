@@ -4,6 +4,65 @@
 
 ---
 
+## 🧾 18/08 — A LIMPEZA DE LOTES ENCERRADOS É PULADA EM SILÊNCIO
+
+Pergunta do dono: *"os 28 fora do sitemap, verifica se ainda estão ativos"*. Estão — e não por
+descuido pontual. **Não são 28, são 58**, e a rotina que existe para desativá-los é
+sistematicamente pulada.
+
+`desativar_imoveis_leiloeiro_stale` (cron `limpar-imoveis-stale`, 05h UTC) pega, por fonte, o
+ÚLTIMO scrape (`max(atualizado_em)`) e marca como candidato todo lote ativo não tocado nas 36h
+anteriores a ele — *"não veio no último scrape, logo saiu do site"*. Se os candidatos passarem de
+**40%** do acervo da fonte, ela **PULA**: guarda anti-regressão, para um scrape degradado não
+zerar uma fonte inteira.
+
+**O que a guarda não distingue: scrape DEGRADADO de scrape PARCIAL POR DESENHO.** O scraper da
+PECINI visita só os lotes NOVOS — 4 a 6 por rodada — então todo o resto fica "não visto" por
+construção. Medido em 18/08:
+
+| fonte | candidatos / acervo | % | desfecho |
+|---|---|---|---|
+| PECINI | 58 / 75 | **77,3%** | PULADA (e assim toda vez) |
+| VIP | 61 / 100 | **61,0%** | PULADA — medido hoje, não é projeção |
+| CALIL | 34 / 129 | 26,4% | limpa normalmente (faz passada completa) |
+
+Quanto MENOS completa é a passada do scraper, mais a limpeza é pulada — o contrário do que a
+fonte precisa. E a função já devolve `fontes_puladas` no JSON desde que existe: o cron loga e
+**ninguém lê**. Uma fonte pode passar meses sem ter um único lote encerrado removido, sem uma
+linha de alerta em lugar nenhum.
+
+Novo invariante `limpeza_encerrados_pulada` (limite 0) + função `fontes_com_limpeza_pulada()`,
+aplicados. Hoje acusa 2. A função OMITE de propósito a cláusula `max(atualizado_em) < now() - 2h`
+da original: aquilo é janela de execução, não critério de saúde, e mantê-la faz a fonte
+recém-coletada sumir do diagnóstico logo depois de rodar — foi assim que a PECINI escapou da
+primeira medição.
+
+**O que este achado NÃO autoriza: desativar os 58.** Eles não foram vistos e recusados pelo site
+— eles **não foram olhados**. Marcar como encerrado o que nunca foi verificado é afirmar uma
+medição que não houve. A resposta de verdade vem da passada COMPLETA já agendada para 24/08
+(`PECINI_ALVO=antigos`): depois dela, quem não voltou é que sumiu de fato.
+
+### O susto que não era: 80 → 75 ativos na PECINI
+
+Entre 23h52 e 00h12 a PECINI perdeu 5 ativos e eu quase reportei sumiço de linha. Não houve: os
+5 são lotes com `data_leilao = 2026-08-17` desativados quando o dia virou — a varredura de leilão
+encerrado fazendo o trabalho dela. Some da vista porque a desativação **não toca `atualizado_em`**
+e não existe coluna `desativado_em`: o acervo não guarda QUANDO nem POR QUE um lote foi desativado.
+Isso é um buraco de auditoria de verdade, e é o motivo de eu ter levado quatro consultas para
+descobrir algo que deveria ser uma leitura.
+
+### Dois achados de acervo, de brinde
+
+- **`pecini_10532` é um carro.** Título: *"VW/SAVEIRO CL 1.6 MI — Aeronaves em leilão"*, ativo,
+  numa plataforma de imóveis. O sitemap da PECINI lista veículos e o scraper aceita tudo que
+  vem; `inferirTipo` só o classifica como `outros`. Não há gate de "isto é imóvel?".
+- **CEF: 2.206 lotes ativos com a última praça já vencida**, o mais antigo de 13/07. Fora do
+  escopo desta pergunta, mas é a maior ocorrência do acervo e a CEF é justamente a fonte que o
+  sweep de leiloeiro exclui (`fonte not in ('CEF',…)`) — ela tem o caminho próprio
+  (`desativar_imoveis_cef_vencidos`), que evidentemente não está dando conta.
+
+---
+
 ## 🧾 17/08 (madrugada) — O LANCE ESTAVA NA PÁGINA, NUMA FORMA QUE NADA AQUI LIA
 
 Fechamento dos dois itens que a coleta da PECINI deixou abertos.
