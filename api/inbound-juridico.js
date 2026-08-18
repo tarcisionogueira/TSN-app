@@ -173,15 +173,32 @@ const ENUM_RISCO = ['baixo', 'medio', 'alto'];
 // um caminho de upload não autenticado para o nosso storage (abuso de espaço e,
 // pior, hospedagem de arquivo com URL assinada nossa). Registramos só os NOMES,
 // e o atendente pede reenvio pelo chat se precisar do arquivo.
+// Assinatura do payload SEM o conteúdo: quais chaves vieram e o tamanho de cada corpo.
+// Existe porque em 18/08 o primeiro e-mail REAL da história do endpoint entrou, saiu 200
+// e não deixou rastro — nem chamado, nem log. Descarte silencioso é o defeito da casa.
+function formatoDoPayload(data) {
+  return `keys=[${Object.keys(data || {}).join(',')}] text=${(data?.text || '').length} html=${(data?.html || '').length} anexos=${(data?.attachments || []).length}`;
+}
+
 async function encaminharParaAtendimento(data, headers, messageId) {
   const { endereco, nome } = remetente(data);
-  if (!endereco) return json({ ok: true, ignorado: 'sem_remetente' });
+  if (!endereco) {
+    console.error('[inbound-atendimento] IGNORADO sem_remetente —', formatoDoPayload(data));
+    return json({ ok: true, ignorado: 'sem_remetente' });
+  }
 
   const assunto = String(data?.subject || '').trim().slice(0, 200) || 'Mensagem por e-mail';
   const corpo = limparResposta(data?.text || data?.html?.replace(/<[^>]+>/g, ' ') || '').slice(0, 20000);
   const anexos = (data?.attachments || [])
     .map(a => ({ nome: String(a?.filename || 'anexo').slice(0, 120), tipo: 'email_nao_armazenado' }));
-  if (!corpo && !anexos.length) return json({ ok: true, ignorado: 'vazio' });
+  // Só descarta quando NÃO HÁ NADA: nem corpo, nem anexo, nem assunto. E-mail com assunto e
+  // corpo vazio ainda é um cliente falando (ou o payload do webhook veio sem o corpo — caso
+  // em que descartar esconderia o problema; gravar com '[mensagem sem texto]' o torna visível
+  // na fila, onde alguém pergunta "cadê o texto?" e o defeito aparece).
+  if (!corpo && !anexos.length && !String(data?.subject || '').trim()) {
+    console.error('[inbound-atendimento] IGNORADO vazio —', formatoDoPayload(data));
+    return json({ ok: true, ignorado: 'vazio' });
+  }
 
   // Leitura que LANÇA em não-2xx. Aqui um `{}` silencioso não é inofensivo: falhar em
   // achar o fio existente faz a resposta do cliente virar um chamado NOVO, fragmentando a
@@ -263,7 +280,10 @@ export default async function handler(req) {
   if (!(await verificarAssinatura(req, raw))) return json({ error: 'assinatura inválida' }, 401);
 
   let evt; try { evt = JSON.parse(raw); } catch { return json({ error: 'JSON inválido' }, 400); }
-  if (evt?.type && evt.type !== 'email.received') return json({ ok: true, ignored: evt.type });
+  if (evt?.type && evt.type !== 'email.received') {
+    console.error('[inbound-juridico] IGNORADO tipo de evento:', evt.type);
+    return json({ ok: true, ignored: evt.type });
+  }
   const data = evt?.data || evt;
   const headers = headerMap(data);
   const messageId = headers['message-id'] || data?.message_id || data?.id || null;
