@@ -429,7 +429,7 @@ async function main() {
   console.log(`Processando ${fila.length} imóvel(is)...`);
 
   const browser = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox', '--disable-setuid-sandbox'] });
-  let ok = 0, erros = 0;
+  let ok = 0, erros = 0, semDoc = 0;
   // Negative-cache: quando CHECAMOS o lote e a matrícula NÃO saiu (só edital, ou nada),
   // marca matricula_checada_em. Torna a lacuna CONHECIDA (não silenciosa) e faz o
   // enfileirador respeitar um cooldown de 30d em vez de re-capturar todo dia um lote
@@ -452,15 +452,32 @@ async function main() {
       // Checado com sucesso, mas sem matrícula (pegou só edital/anexo) → negative-cache.
       if (!docs.includes('matricula')) await marcarChecadoSemMatricula(item.imovel_id);
     } catch (e) {
-      await supabase.from('documentos_fila').update({ status: 'erro', erro: String(e.message).slice(0, 300), processado_em: new Date().toISOString() }).eq('imovel_id', item.imovel_id);
-      erros++; console.log(`✗ ${item.imovel_id}: ${e.message}`);
-      // Erro TERMINAL (esgotou as 4 tentativas) sem nunca achar a matrícula → negative-cache.
-      if (tentativaAtual >= 4) await marcarChecadoSemMatricula(item.imovel_id);
+      // "OLHEI E NÃO TINHA" NÃO É FALHA (18/08). `nenhum_documento_encontrado` só é lançado
+      // DEPOIS de a página ter carregado e sido varrida — o anti-bot já foi tratado e, quando
+      // barra, o CAMINHO 3 (Bright Data) assume. Ou seja: é MEDIÇÃO, não erro.
+      //
+      // Arquivado como 'erro', ele era retentado 4 vezes para reaprender a mesma coisa e
+      // inflava a contagem: 177 de 252 linhas da fila em 18/08 (70%), todas deste tipo, o que
+      // afogava qualquer falha de verdade no meio. Agora vira estado TERMINAL 'sem_documento',
+      // com o negative-cache aplicado de imediato, e sai da conta de erros.
+      const semDocumento = /nenhum_documento_encontrado/.test(String(e.message));
+      await supabase.from('documentos_fila').update({
+        status: semDocumento ? 'sem_documento' : 'erro',
+        erro: String(e.message).slice(0, 300), processado_em: new Date().toISOString(),
+      }).eq('imovel_id', item.imovel_id);
+      if (semDocumento) {
+        semDoc++; console.log(`· ${item.imovel_id}: sem documento na página (medido, não será retentado)`);
+        await marcarChecadoSemMatricula(item.imovel_id);
+      } else {
+        erros++; console.log(`✗ ${item.imovel_id}: ${e.message}`);
+        // Erro TERMINAL (esgotou as 4 tentativas) sem nunca achar a matrícula → negative-cache.
+        if (tentativaAtual >= 4) await marcarChecadoSemMatricula(item.imovel_id);
+      }
     }
     await new Promise(r => setTimeout(r, 800));
   }
   await browser.close();
-  console.log(`Concluído: ${ok} ok, ${erros} erro(s).`);
+  console.log(`Concluído: ${ok} ok, ${semDoc} sem documento (medido), ${erros} erro(s) de verdade.`);
 }
 
 main().catch(e => { console.error(e); process.exit(1); });
