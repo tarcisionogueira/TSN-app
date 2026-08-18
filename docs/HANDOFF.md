@@ -4,6 +4,68 @@
 
 ---
 
+## 🧾 18/08 — REVISÃO DO SETOR: O SWEEP QUE APAGA ACERVO OLHAVA O NÚMERO ERRADO
+
+Pedido do dono: revisar por completo o setor dos defeitos da sessão, não por amostragem. A
+varredura das famílias rendeu um achado NOVO e mais grave que todos os do dia.
+
+### O achado: `lido × gravado`, agora com ação DESTRUTIVA
+
+Em DOIS coletores o sweep que desativa "o que saiu do site" se apoiava no número de linhas
+**baixadas**, não nas **gravadas**. Rodada que baixa 500 e falha em todos os upserts tem
+`gravados = 0` e mesmo assim entrava no sweep — aposentando o acervo INTEIRO da fonte, porque
+nada tinha `atualizado_em` novo.
+
+| arquivo | fontes que servem | acervo em risco |
+|---|---|---|
+| `api/scraper-leiloeiros.js` | sold, superbid, mega, mgl, ccj, biasi, destak, ljud | LJUD 869 · SUPERBID 1.474 · MEGA 580 · BIASI 469 |
+| `scripts/scraper-puppeteer.mjs` (canônico) | MEGA, SUPERBID, LJUD, GRUPOLANCE, ZUK, BIASI, PESTANA | o grosso do acervo fora da CEF |
+
+No canônico era pior: `salvarImoveis` engolia o erro do upsert num `console.error` e não devolvia
+nada. E o bloco do MEGA **reimplementava `salvarEFinalizar` inteiro**, por isso ficou de fora de
+consertos anteriores — trocado por uma chamada à função compartilhada. *Duas cópias da mesma
+regra divergem no primeiro ajuste, e a que fica para trás é a que apaga acervo.*
+
+Agora os dois gates olham o gravado, e **coleta parcial nunca desativa**: se parte não gravou, os
+lotes de fora seriam aposentados por falha nossa, não por terem saído do site.
+
+### Nota de método: a primeira versão da trava não guardava nada
+
+A trava `sweep-apoiado-no-coletado` que escrevi passou **verde nas duas versões defeituosas**.
+Ela testava o arquivo inteiro, e um `console.log('… imóveis salvos')` a dez linhas de distância
+desarmava a regra. É a própria família auditada, cometida dentro da ferramenta que a persegue.
+A versão final testa a CONDIÇÃO do `if` que libera o sweep, ignora sweep por IDADE (90 dias) e
+foi conferida contra o código ANTES e DEPOIS do conserto nos dois arquivos. **Trava nova só vale
+depois de provada contra o defeito que ela diz pegar.**
+
+### A biblioteca compartilhada tinha ficado para trás dos dois consertos de ontem
+
+`scripts/lib/scraper-core.mjs` atende RJ, GESTAO, PECINI, SOLEON, SATO e o canônico:
+- `extrairData` não decodificava — site que publica `Leil&atilde;o`/`pra&ccedil;a` não casa com
+  âncora nenhuma e a função cai no fallback "primeira data futura do texto", que num portal é
+  data de cadastro ou de outro lote. **Data errada com cara de certa.**
+- O laço de âncoras aceitava qualquer href — `/preview/` rotulado "Matrícula" virava
+  `link_matricula` NOT NULL. Agora passa por `nomeiaUmDocumento`.
+
+### Dois flagrados benignos, anotados com `padrao-ok` e o motivo
+
+- `api/scraper-caixa.js` — endpoint LEGADO (handler devolve 410 na 1ª linha, bloco inalcançável).
+  Mas é o **pior código dos três**: DELETE FÍSICO, gate em `imoveis.length > 0`, retorno do
+  upsert descartado, erro em `.catch(() => {})`. Só não faz estrago porque filtra `fonte=eq.caixa`
+  e o acervo usa `'CEF'`. **Consertar só o nome da fonte o tornaria destrutivo.**
+- `scripts/scraper-sato.mjs` — gate no coletado, mas o upsert faz `process.exit(1)` na 1ª falha.
+
+### Efeito colateral da coleta do RJ, achado e limpo na mesma passada
+
+`edital_eq_matricula` saltou para 166 (limite 8) — todos CEF/RJ, gravados na madrugada:
+`link_edital` apontando para `/editais/matricula/RJ/*.pdf`, ou seja, o botão "Edital" abria a
+matrícula. `url_lote` mostra que a linha nasceu com o link certo, então **algo sobrescreve
+depois da inserção e não foi identificado**. Dado corrigido (`link_edital = url_lote`, 166
+linhas); a causa fica em aberto e o invariante vigia — se voltar amanhã, é sinal de que o
+escritor ainda está lá.
+
+---
+
 ## 🧾 18/08 — CEF/RJ CONGELADO 12 DIAS, COM O RUN VERDE TODO DIA
 
 Pedido do dono: *"ataca a CEF"*. O defeito era outro e maior do que o que eu tinha reportado.
