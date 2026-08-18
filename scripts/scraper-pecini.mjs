@@ -38,6 +38,7 @@ import { registrarSaude } from './_saude-fonte.mjs';
 const BASE = 'https://www.pecinileiloes.com.br';
 const MAX_LOTES = Number(process.env.PECINI_MAX_LOTES || 40);
 const DRYRUN = process.env.PECINI_DRYRUN !== '0'; // default: dry-run (não grava)
+const ALVO = ['novos', 'antigos', 'todos'].includes(process.env.PECINI_ALVO) ? process.env.PECINI_ALVO : 'novos';
 const DEBUG = process.env.PECINI_DEBUG === '1';   // dumpa contexto dos R$ p/ achar os rótulos reais
 let debugRestante = Number(process.env.PECINI_DEBUG_N || 3); // primeiros lotes (log enxuto)
 const SB_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -350,21 +351,46 @@ async function main() {
     return;
   }
 
-  // Prioriza lotes NOVOS (fonte_id ainda não no banco); execuções seguintes cobrem o resto.
+  // QUEM ESTE RUN VAI VISITAR (PECINI_ALVO, default 'novos' = comportamento de sempre).
+  //
+  // Por que virou opção (18/08): `novos.length ? novos : lotes` significa que os lotes JÁ
+  // capturados só são revisitados quando NÃO HÁ nenhum novo no sitemap. Como quase sempre há,
+  // os antigos nunca eram relidos — os da PECINI estavam parados desde julho, com a metragem
+  // e a matrícula que os consertos de 17/08 passaram a saber extrair, e sem nada que os fosse
+  // buscar. "Rodar os antigos" não era possível pedir: era um efeito colateral de o sitemap
+  // estar sem novidade.
+  //
+  //   novos   → só os que ainda não estão no banco (default; cai nos antigos se não houver novo)
+  //   antigos → só os JÁ capturados, do mais desatualizado para o mais recente
+  //   todos   → novos primeiro, antigos em seguida, na mesma rodada
   const ids = lotes.map(l => `pecini_${l.id}`);
-  const existentes = new Set();
+  const visto = new Map();   // fonte_id → atualizado_em (null = nunca)
   for (let i = 0; i < ids.length; i += 200) {
-    const { data } = await supabase.from('imoveis_leilao').select('fonte_id').in('fonte_id', ids.slice(i, i + 200));
-    for (const r of data || []) existentes.add(r.fonte_id);
+    const { data, error } = await supabase.from('imoveis_leilao')
+      .select('fonte_id,atualizado_em').in('fonte_id', ids.slice(i, i + 200));
+    // Um erro aqui NÃO pode virar "não tem nada no banco": isso reclassificaria o acervo
+    // inteiro como novo e faria a rodada gastar cota recapturando o que já existe.
+    if (error) { console.error(`falha ao ler o acervo (${error.message}). Abortado.`); process.exitCode = 1; return; }
+    for (const r of data || []) visto.set(r.fonte_id, r.atualizado_em || null);
   }
-  const novos = lotes.filter(l => !existentes.has(`pecini_${l.id}`));
-  const alvo = (novos.length ? novos : lotes).slice(0, MAX_LOTES);
-  console.log(`no banco: ${existentes.size} · novos: ${novos.length} · processando: ${alvo.length}`);
+  const novos = lotes.filter(l => !visto.has(`pecini_${l.id}`));
+  const antigos = lotes.filter(l => visto.has(`pecini_${l.id}`))
+    .sort((a, b) => String(visto.get(`pecini_${a.id}`) || '').localeCompare(String(visto.get(`pecini_${b.id}`) || '')));
+  const fila = ALVO === 'antigos' ? antigos
+    : ALVO === 'todos' ? [...novos, ...antigos]
+    : (novos.length ? novos : antigos);
+  const alvoLotes = fila.slice(0, MAX_LOTES);
+  console.log(`no banco: ${visto.size} · novos: ${novos.length} · antigos: ${antigos.length} · alvo '${ALVO}' · processando: ${alvoLotes.length}`);
+  if (!alvoLotes.length) {
+    console.error(`nenhum lote na fila para alvo='${ALVO}'. Nada a fazer.`);
+    process.exitCode = 1;
+    return;
+  }
 
   // 2) Detalhe de cada lote alvo.
   const prontos = [];
   let semDetalhe = 0, reprovados = 0;
-  for (const rec of alvo) {
+  for (const rec of alvoLotes) {
     if (recusaDeCota) { semDetalhe++; continue; }   // o freio já disse não: insistir só repete a recusa
     const html = await bd(rec.loteUrl);
     if (!html) { semDetalhe++; console.log(`- ${rec.id}: detalhe não veio`); continue; }
