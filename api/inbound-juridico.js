@@ -71,8 +71,10 @@ function limparResposta(texto) {
 // Contrato REAL do `email.received`, conferido numa entrega de produção (não presumido —
 // foi presumir que custou o primeiro e-mail da história do endpoint): o payload traz
 // attachments, bcc, cc, created_at, EMAIL_ID, from, message_id, received_for, subject, to.
-// text/html NÃO vêm. O corpo se busca em GET /emails/{email_id}, com a mesma chave que
-// já envia os e-mails.
+// text/html NÃO vêm. O corpo se busca em GET /emails/receiving/{email_id} — endpoint
+// conferido no SDK OFICIAL (resend@npm, src/emails/receiving): a resposta traz text, html,
+// headers e anexos. NÃO é o GET /emails/{id}: esse só serve e-mails ENVIADOS e devolve
+// 404 para os recebidos — foi o que o teste de 18:53 provou, com o log dizendo por extenso.
 //
 // Falha aqui NUNCA derruba o webhook: sem corpo, o chamado nasce mesmo assim com o aviso
 // "[mensagem sem texto…]" — visível na fila, onde alguém pergunta "cadê o texto?" — e o
@@ -81,7 +83,7 @@ async function buscarCorpoNaApi(emailId) {
   const key = process.env.RESEND_API_KEY;
   if (!key || !emailId) return null;
   try {
-    const r = await fetch(`https://api.resend.com/emails/${encodeURIComponent(emailId)}`, {
+    const r = await fetch(`https://api.resend.com/emails/receiving/${encodeURIComponent(emailId)}`, {
       headers: { Authorization: `Bearer ${key}` },
       signal: AbortSignal.timeout(8000),
     });
