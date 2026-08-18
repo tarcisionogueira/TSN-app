@@ -4,6 +4,61 @@
 
 ---
 
+## 🧾 18/08 — DOIS GATES QUE OLHAVAM O NÚMERO ERRADO (limpeza de encerrados + cadastro)
+
+### 9. A limpeza de encerrados: um teto que se alimentava do próprio erro
+
+`desativar_imoveis_leiloeiro_stale` pulava a fonte quando os candidatos passavam de 40% do
+acervo. **Esse teto se alimenta do próprio erro:** fonte que fica para trás acumula lotes não
+vistos, o reap cresce, o teto trava com mais força, e ela nunca se recupera. VIP travada em 61%
+e PECINI em 77% — nenhuma das duas jamais teve UM lote encerrado removido.
+
+A prova de que era a guarda e não a coleta: **a VIP coletou 42–63 lotes todo dia nos últimos 17
+dias**, com o acervo parado em 99. A coleta estava saudável o tempo todo; o acervo é que estava
+inflado por lotes que saíram do site entre 13 e 14/08 — todos com `data_leilao` nulo, então a
+varredura de leilão encerrado também não os alcançava.
+
+O gate deixou de perguntar *"quanto eu removeria?"* (relativo ao acervo, logo contaminado) e
+passou a perguntar **"a última coleta veio saudável?"**, contra o piso APRENDIDO da própria
+fonte. Sem baseline não desativa nada — silêncio não autoriza. Simulado em todas as fontes antes
+de aplicar: VIP 60, CALIL 34 (que já limpava), **0 nas outras 20**, RJLEILOES e TOTALLEILOES
+pulados por falta de baseline. Executado: 94. VIP 99→39, CALIL 129→95.
+
+`fontes_com_limpeza_pulada()` reescrita junto — **invariante que descreve regra revogada é pior
+que invariante nenhum**.
+
+**PECINI ficou de fora por motivo estrutural** e foi resolvida por outro caminho: o coletor dela
+visita 4–6 lotes por rodada de propósito (cota), então o total COLETADO nunca descreve o que o
+site tem. A resposta vem da ENUMERAÇÃO do sitemap — 52 lotes em 1 requisição, sem visitar nada.
+Lote ativo que o sitemap não lista saiu do site: isso é medição, não silêncio. O piso da
+enumeração ficou ABSOLUTO (40) e está anotado como dívida consciente — `fonte_baseline_aprendida`
+aprende do total coletado, e misturar as duas medidas corromperia ambas.
+
+### 11. O conserto do cadastro foi aplicado numa cópia e não na outra
+
+Os 8 eventos de `cadastro_barrado` são todos a mesma causa (senha fora da regra) e todos
+ANTERIORES ao conserto: 12/08 cinco tentativas em 2m16s **da mesma pessoa**, 13/08 duas, 15/08
+às 02:57. As correções do `Login.jsx` entraram em 15/08 às 10:38 e 12:04. Zero falhas desde
+então — o alarme é artefato da janela de 7 dias.
+
+Mas a pergunta rendeu: **o conserto não foi aplicado ao `Checkout.jsx`**. Lá o checklist existe
+e os três botões de criar conta eram desabilitados só por `suLoading` — a pessoa via o que
+faltava, clicava assim mesmo e tomava o erro. No funil PAGANTE.
+
+Causa de fundo: o regex estava copiado em CINCO lugares do front e a lista de requisitos em
+outros três. **Cópia que não recebe o conserto é a que sangra.** Agora `src/lib/senha.js` tem
+uma definição só, e `requisitosSenha()` devolve a MESMA lista que a validação aplica — checklist
+e regra não podem divergir. O servidor mantém a sua checagem: front é conveniência, servidor é
+garantia.
+
+**Bug que eu mesmo introduzi no caminho, para o registro:** ao trocar o `const senhaForte` local
+(booleano) pela função importada de mesmo nome, três usos em `RedefinirSenha.jsx` passaram a
+testar a FUNÇÃO — sempre truthy. O rótulo ficaria "Forte" para qualquer senha e o botão nunca
+travaria. `eslint --quiet` não pega: é código válido. Só apareceu porque reli as linhas que
+tinha tocado.
+
+---
+
 ## 🧾 18/08 — O GATE DE "ISTO É IMÓVEL?" (bem móvel fora do acervo)
 
 Havia um CARRO ativo na plataforma de imóveis: `pecini_10532`, *"VW/SAVEIRO CL 1.6 MI / CL/ C
