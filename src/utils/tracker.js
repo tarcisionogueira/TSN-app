@@ -79,6 +79,11 @@ function origemPrimeiroToque() {
     const g = (k) => q.get(k) || hq.get(k) || null;
     const o = {
       gclid: g('gclid'), gbraid: g('gbraid'), wbraid: g('wbraid'),
+      // fbclid (18/08): o clique do Meta faltava nas TRÊS camadas — aqui, em api/track.js e na
+      // tabela. Como as três concordavam em esquecer, nada dava erro. `perfis.mkt_fbclid` já
+      // cobria o CADASTRO; o que faltava era o nível de VISITA, que é onde se mede a perda
+      // entre o clique pago e a primeira página — a faixa que no Google escondia 90%.
+      fbclid: g('fbclid'),
       utm_source: g('utm_source'), utm_medium: g('utm_medium'), utm_campaign: g('utm_campaign'),
       utm_term: g('utm_term'), utm_content: g('utm_content'),
       // Referrer do PRÓPRIO domínio não é origem — é navegação interna. Sem este filtro, quem

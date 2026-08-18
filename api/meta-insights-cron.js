@@ -5,8 +5,21 @@
  * automáticos do canal Meta Ads).
  *
  * DORMENTE até existirem META_ADS_TOKEN (token com ads_read do Business) e
- * META_AD_ACCOUNT_ID (ex.: act_1114056112873901). Guard: x-cron-secret (padrão dos crons).
+ * META_AD_ACCOUNT_ID (ex.: act_1114056112873901). Guard: `isCronAuthorized` (padrão dos crons).
  * Somente LEITURA no Meta — este token não gerencia campanhas nem gasta orçamento.
+ *
+ * ⚠️ CONSERTO 18/08 — ELE NUNCA RODOU UMA VEZ SEQUER. O guard era artesanal e lia só
+ * `x-cron-secret` e a presença de `x-vercel-cron`; o Vercel Cron autentica mandando
+ * **`Authorization: Bearer <CRON_SECRET>`**, que este handler não olhava. Resultado medido
+ * no log de produção: `08:10:39 GET /api/meta-insights-cron 401`, todo dia, no minuto exato
+ * do agendamento. Morria na porta — nem chegava a testar as envs do Meta.
+ *
+ * A armadilha para quem for diagnosticar isto de novo: a resposta ESPERADA sem as envs é
+ * `200 {skipped:'dormente'}`, e é fácil ler o silêncio em `marketing_metricas_dia` como
+ * "ainda não configurei o token". Eram duas ausências empilhadas, e a de cima escondia a
+ * de baixo. Era o ÚNICO cron do vercel.json com guard próprio incapaz de ler o Bearer —
+ * todos os outros usam `isCronAuthorized`, que aceita as duas formas. Por isso o conserto
+ * é adotar o helper, e não remendar o guard: cópia da regra de auth foi o que divergiu.
  */
 // Sem `config`, herdava o default da Vercel — e este cron faz várias chamadas à Graph API
 // em série (7 dias × campanhas) antes de gravar. Cortado no meio, ele grava METADE do
@@ -14,7 +27,7 @@
 // que faltou dado. Marketing errado para baixo é pior que marketing ausente. (11/08)
 export const config = { runtime: 'nodejs', maxDuration: 120 };
 
-import crypto from 'crypto';
+import { isCronAuthorized } from './_auth.js';
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
@@ -25,12 +38,7 @@ const supabase = createClient(
 const API_VER = (process.env.META_GRAPH_VERSION || 'v21.0').trim();
 
 export default async function handler(req, res) {
-  const cronSecret = (process.env.CRON_SECRET || '').trim();
-  const recebido = String(req.headers['x-cron-secret'] || '');
-  const ehVercelCron = !!req.headers['x-vercel-cron'];
-  const okSecret = cronSecret && recebido.length === cronSecret.length &&
-    crypto.timingSafeEqual(Buffer.from(recebido), Buffer.from(cronSecret));
-  if (!okSecret && !ehVercelCron) return res.status(401).json({ error: 'nao_autorizado' });
+  if (!isCronAuthorized(req)) return res.status(401).json({ error: 'nao_autorizado' });
 
   const token = (process.env.META_ADS_TOKEN || '').trim();
   let conta = (process.env.META_AD_ACCOUNT_ID || '').trim();
