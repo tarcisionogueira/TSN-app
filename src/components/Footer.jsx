@@ -28,6 +28,18 @@ export default function Footer() {
             corrigido pelo Google para "byd". Ter a forma com espaço escrita na página ajuda
             o buscador a aprender que o termo existe e é uma marca. */}
         <span style={{ display: 'block', marginTop: 4, color: '#1e293b' }}>BidPro Brasil, também escrito Bid Pro Brasil.</span>
+        {/* IDENTIFICAÇÃO DO ANUNCIANTE (18/08). O rodapé trazia só a marca: nenhuma razão
+            social, CNPJ ou contato — os dados existiam apenas na página de Termos. Isso importa
+            por dois motivos concretos: (1) a verificação de anunciante do Google passou a exibir
+            NOME e LOCAL nas declarações dos anúncios, e o site precisa dizer a mesma coisa que
+            foi declarada, senão a inconsistência é motivo de reprovação; (2) é a informação que
+            um cliente procura antes de pagar. Os dados são os MESMOS já publicados em /termos —
+            não há divulgação nova aqui. */}
+        <span style={{ display: 'block', marginTop: 10, color: '#334155', lineHeight: 1.6 }}>
+          Nogueira Empreendimentos LTDA — CNPJ 02.311.492/0001-61
+          <br />
+          <a href="mailto:contato@bidprobrasil.com.br" style={{ color: '#334155' }}>contato@bidprobrasil.com.br</a>
+        </span>
       </div>
     </footer>
   );
