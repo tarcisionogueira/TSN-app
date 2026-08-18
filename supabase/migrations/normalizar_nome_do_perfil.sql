@@ -86,3 +86,34 @@ create trigger normaliza_nome_perfil
 
 update public.perfis set nome = public.normalizar_nome(nome)
  where nome is distinct from public.normalizar_nome(nome);
+
+-- =====================================================================================
+-- E A SEGUNDA FONTE DO MESMO NOME (18/08, continuação)
+--
+-- Normalizar `perfis.nome` arrumou a lista do ADMIN e não arrumou o que o CLIENTE vê: o nome
+-- também vive em `auth.users.raw_user_meta_data->>'nome'`, e é DAÍ que saem o cabeçalho
+-- ("Olá, {primeiro nome}"), o chat de suporte, MeusChamados, Atendimento, Alavancagem e o
+-- NOME DE FATURAMENTO do checkout — 12 pontos de leitura no front.
+--
+-- Ou seja: por algumas horas a mesma pessoa teve dois nomes. O admin via "Moacir Everson
+-- Goncalves" e ela via "MOACIR EVERSON GONCALVES". 22 usuários nesse estado.
+--
+-- Os QUATRO pontos de escrita (Login, as 3 telas do Checkout via API, ConviteEquipe) já
+-- gravam normalizado nos dois lugares — e o nome é READ-ONLY no Perfil, então não há outro
+-- caminho de edição. Faltava só o acervo existente.
+--
+-- Testado em transação desfeita antes de aplicar: muda SÓ a chave `nome` (15 chaves antes,
+-- 15 depois — jsonb_set não descarta nada). Depois: 0 fora do padrão nas duas fontes e
+-- 0 divergências entre elas.
+-- =====================================================================================
+update auth.users
+   set raw_user_meta_data = jsonb_set(raw_user_meta_data, '{nome}',
+         to_jsonb(public.normalizar_nome(raw_user_meta_data->>'nome')))
+ where raw_user_meta_data->>'nome' is not null
+   and raw_user_meta_data->>'nome' is distinct from public.normalizar_nome(raw_user_meta_data->>'nome');
+
+-- Dois invariantes novos em `qa_invariantes()` vigiam isto (aplicados via CREATE OR REPLACE
+-- no mesmo dia; ver a função em produção):
+--   `nome_fontes_divergentes` (limite 0) — as duas fontes voltaram a discordar.
+--   `nome_sem_sobrenome`     (limite 2) — os DOIS legados são tolerados de propósito; um
+--                                          terceiro significa que a regra nova vazou.
