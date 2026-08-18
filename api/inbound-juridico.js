@@ -97,11 +97,59 @@ async function buscarCorpoNaApi(emailId) {
       console.error('[inbound] corpo: API 200 sem text/html — keys:', Object.keys(j || {}).join(','));
       return null;
     }
-    return { text: j.text || '', html: j.html || '' };
+    // `attachments` da API traz id/filename/size/content_type (metadados; o binário se
+    // busca por anexo, em /attachments/{id} → download_url). O payload do webhook NÃO
+    // traz o conteúdo — este é o único caminho para o arquivo de verdade.
+    return { text: j.text || '', html: j.html || '', attachments: Array.isArray(j.attachments) ? j.attachments : [] };
   } catch (e) {
     console.error('[inbound] corpo: busca falhou', String(e?.message || e).slice(0, 120));
     return null;
   }
+}
+
+// Baixa o binário de um anexo recebido: GET /emails/receiving/{emailId}/attachments/{id}
+// devolve { download_url } temporária (contrato lido do SDK oficial, como o do corpo).
+// Falha = null e log — anexo perdido vira NOME registrado, nunca erro silencioso.
+async function baixarAnexoApi(emailId, attId) {
+  const key = process.env.RESEND_API_KEY;
+  if (!key || !emailId || !attId) return null;
+  try {
+    const r = await fetch(`https://api.resend.com/emails/receiving/${encodeURIComponent(emailId)}/attachments/${encodeURIComponent(attId)}`, {
+      headers: { Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(10000),
+    });
+    if (!r.ok) { console.error('[inbound] anexo: API', r.status); return null; }
+    const j = await r.json().catch(() => null);
+    if (!j?.download_url) { console.error('[inbound] anexo: sem download_url — keys:', Object.keys(j || {}).join(',')); return null; }
+    const bin = await fetch(j.download_url, { signal: AbortSignal.timeout(30000) });
+    if (!bin.ok) { console.error('[inbound] anexo: download', bin.status); return null; }
+    return new Uint8Array(await bin.arrayBuffer());
+  } catch (e) {
+    console.error('[inbound] anexo: falha', String(e?.message || e).slice(0, 120));
+    return null;
+  }
+}
+
+// Grava um anexo de CHAMADO no bucket privado e devolve a entrada para `anexos` da
+// mensagem. Assina por 1 ano (mesmo prazo do parecer jurídico).
+async function salvarAnexoChamado(chamadoId, nomeCru, contentType, bytes) {
+  try {
+    const nome = String(nomeCru || 'anexo').replace(/[^\w.\-]+/g, '_').slice(0, 120);
+    const path = `chamados/${chamadoId}/${Date.now()}_${nome}`;
+    const up = await fetch(`${SUPABASE_URL}/storage/v1/object/documentos/${path}`, {
+      method: 'POST',
+      headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': contentType || 'application/octet-stream' },
+      body: bytes,
+    });
+    if (!up.ok) { console.error('[inbound] anexo: storage', up.status); return null; }
+    const signed = await fetch(`${SUPABASE_URL}/storage/v1/object/sign/documentos/${path}`, {
+      method: 'POST',
+      headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ expiresIn: 60 * 60 * 24 * 365 }),
+    }).then(r => r.json()).catch(() => null);
+    const url = signed?.signedURL ? `${SUPABASE_URL}/storage/v1${signed.signedURL}` : null;
+    if (!url) return null;
+    return { nome, url, tipo: /^image\//i.test(contentType || '') ? 'imagem' : 'arquivo', tamanho_kb: Math.round(bytes.length / 1024) };
+  } catch { return null; }
 }
 
 function headerMap(data) {
@@ -139,9 +187,9 @@ function remetente(data) {
   return { endereco: (m ? m[1] : endereco).trim().toLowerCase(), nome: nome.trim() };
 }
 
-async function uploadAnexo(imovelId, att) {
+async function uploadAnexo(imovelId, att, bytesApi = null) {
   try {
-    const bytes = Uint8Array.from(atob(att.content), c => c.charCodeAt(0));
+    const bytes = bytesApi || Uint8Array.from(atob(att.content), c => c.charCodeAt(0));
     const nome = (att.filename || 'parecer').replace(/[^\w.\-]+/g, '_');
     const path = `casos/${imovelId}/parecer_${Date.now()}_${nome}`;
     const up = await fetch(`${SUPABASE_URL}/storage/v1/object/documentos/${path}`, {
@@ -206,11 +254,12 @@ const ENUM_RISCO = ['baixo', 'medio', 'alto'];
 //   3. remetente com chamado ABERTO no canal e-mail — cobre quem escreve de novo
 //      em vez de responder o fio. Sem isto, cada mensagem viraria um chamado solto.
 //
-// ANEXOS: o remetente aqui é QUALQUER UM da internet. Guardar o conteúdo criaria
-// um caminho de upload não autenticado para o nosso storage (abuso de espaço e,
-// pior, hospedagem de arquivo com URL assinada nossa). Registramos só os NOMES,
-// e o atendente pede reenvio pelo chat se precisar do arquivo.
-// Assinatura do payload SEM o conteúdo: quais chaves vieram e o tamanho de cada corpo.
+// ANEXOS (política de 18/08): o binário agora é baixado da API DO RESEND — origem
+// autenticada, nunca o corpo do webhook — com teto de 5 anexos × 10 MB e tipos
+// permitidos (PDF, imagem, doc, txt). Isso contém o abuso que a política antiga
+// (registrar só nomes) evitava: o custo de storage tem teto por e-mail, e um e-mail
+// = um chamado visível na fila, não um canal mudo de upload. O que passar do teto,
+// falhar ou ter tipo estranho continua entrando como NOME registrado.
 // Existe porque em 18/08 o primeiro e-mail REAL da história do endpoint entrou, saiu 200
 // e não deixou rastro — nem chamado, nem log. Descarte silencioso é o defeito da casa.
 function formatoDoPayload(data) {
@@ -226,8 +275,9 @@ async function encaminharParaAtendimento(data, headers, messageId) {
 
   const assunto = String(data?.subject || '').trim().slice(0, 200) || 'Mensagem por e-mail';
   const corpo = limparResposta(data?.text || data?.html?.replace(/<[^>]+>/g, ' ') || '').slice(0, 20000);
-  const anexos = (data?.attachments || [])
-    .map(a => ({ nome: String(a?.filename || 'anexo').slice(0, 120), tipo: 'email_nao_armazenado' }));
+  // Metadados de anexo: os da API (têm id → binário alcançável) ou os do payload (só nomes).
+  const anexosMeta = (data?._anexosApi?.length ? data._anexosApi : (data?.attachments || []));
+  let anexos = anexosMeta.map(a => ({ nome: String(a?.filename || 'anexo').slice(0, 120), tipo: 'email_nao_armazenado' }));
   // Só descarta quando NÃO HÁ NADA: nem corpo, nem anexo, nem assunto. E-mail com assunto e
   // corpo vazio ainda é um cliente falando (ou o payload do webhook veio sem o corpo — caso
   // em que descartar esconderia o problema; gravar com '[mensagem sem texto]' o torna visível
@@ -290,6 +340,28 @@ async function encaminharParaAtendimento(data, headers, messageId) {
     await sb(`chamados?id=eq.${chamado.id}`, { method: 'PATCH', body: { status: 'aberto' } });
   }
 
+  const TIPO_ANEXO_OK = /^(application\/pdf|image\/(png|jpe?g|gif|webp)|text\/plain|application\/(msword|vnd\.openxmlformats))/i;
+  if (data?._anexosApi?.length && chamado?.id) {
+    const baixados = [];
+    for (const meta of data._anexosApi.slice(0, 5)) {
+      const tamanhoOk = !Number.isFinite(meta?.size) || meta.size <= 10 * 1024 * 1024;
+      const tipoOk = TIPO_ANEXO_OK.test(meta?.content_type || '');
+      let entrada = null;
+      if (tamanhoOk && tipoOk) {
+        const bytes = await baixarAnexoApi(data.email_id, meta.id);
+        if (bytes && bytes.length <= 10 * 1024 * 1024) {
+          entrada = await salvarAnexoChamado(chamado.id, meta.filename, meta.content_type, bytes);
+        }
+      }
+      baixados.push(entrada || { nome: String(meta?.filename || 'anexo').slice(0, 120), tipo: 'email_nao_armazenado' });
+    }
+    // Alem dos 5 primeiros, os demais ficam so como nome.
+    for (const meta of data._anexosApi.slice(5)) {
+      baixados.push({ nome: String(meta?.filename || 'anexo').slice(0, 120), tipo: 'email_nao_armazenado' });
+    }
+    anexos = baixados;
+  }
+
   const rm = await sb('chamados_mensagens', {
     method: 'POST', prefer: 'return=representation',
     body: {
@@ -330,7 +402,7 @@ export default async function handler(req) {
   // atendimento leem data.text/data.html, e o payload não os traz.
   if (!data?.text && !data?.html && data?.email_id) {
     const corpo = await buscarCorpoNaApi(data.email_id);
-    if (corpo) { data.text = corpo.text; data.html = corpo.html; }
+    if (corpo) { data.text = corpo.text; data.html = corpo.html; data._anexosApi = corpo.attachments; }
   }
   const headers = headerMap(data);
   const messageId = headers['message-id'] || data?.message_id || data?.id || null;
@@ -366,9 +438,14 @@ export default async function handler(req) {
 
   // Anexos do advogado → storage + imovel_anexos
   const anexosSalvos = [];
-  for (const att of (data?.attachments || [])) {
-    if (!att?.content) continue;
-    const salvo = await uploadAnexo(caso.imovel_id, att);
+  // 18/08: o payload do webhook NUNCA traz `content` — o `continue` abaixo pulava TODO
+  // anexo do advogado em silêncio (parecer em PDF perdido, sem log). Com a API, o binário
+  // é baixado pelo id; `content` fica como caminho legado se um dia voltar a existir.
+  for (const att of (data?._anexosApi?.length ? data._anexosApi : (data?.attachments || []))) {
+    let bytesApi = null;
+    if (!att?.content && att?.id) bytesApi = await baixarAnexoApi(data.email_id, att.id);
+    if (!att?.content && !bytesApi) continue;
+    const salvo = await uploadAnexo(caso.imovel_id, att, bytesApi);
     if (salvo) {
       anexosSalvos.push(salvo);
       await sb('imovel_anexos', { method: 'POST', prefer: 'return=minimal',

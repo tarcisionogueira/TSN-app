@@ -5,7 +5,7 @@ import { salvarConvite, CHAVE_PLANO } from '../utils/convitePendente';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { termosUsoPendente, abrirTermosModal } from '../components/TermosAtualizadosModal';
-import { trackCheckoutIniciado, trackPlanContratado } from '../utils/gtag';
+import { trackCheckoutIniciado, trackPlanContratado, trackCadastro } from '../utils/gtag';
 import { Loader2, CheckCircle2, ExternalLink, Briefcase, ShieldCheck, TrendingUp, Headphones, ArrowUpRight, ArrowDownRight, AlertTriangle, RefreshCw, MapPin } from 'lucide-react';
 import LogoB from '../components/LogoB';
 import { PLANOS as PLANOS_STATIC } from '../data/cursos';
@@ -421,6 +421,10 @@ export default function Checkout() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Não foi possível criar a conta.');
+      // 18/08: a conversão de CADASTRO só disparava no Login.jsx — as três telas de criação
+      // de conta do checkout (onde o tráfego PAGO aterrissa) nunca avisavam o Google Ads.
+      // Cadastro pago existia no banco e não existia na campanha.
+      trackCadastro(email, nome);
       try { await supabase.auth.signInWithPassword({ email, password: senha }); } catch { /* loga manual se falhar */ }
       nav('/membros');
     } catch (e) { setSuErro(e.message || 'Erro ao criar a conta.'); }
@@ -654,6 +658,7 @@ export default function Checkout() {
       // Guarda o plano p/ o Login redirecionar de volta ao checkout após o login
       // (Explorador não tem pagamento → não guarda, cai direto na plataforma).
       if (planoKey !== 'explorador') { salvarConvite(CHAVE_PLANO, planoApiKey); }
+      trackCadastro(email, nome); // mesma conversão do Login — ver comentário na tela paga
       setContaCriada(true);
     } catch (e) {
       const m = String(e?.message || '');
@@ -735,6 +740,7 @@ export default function Checkout() {
         if (res.status === 409) { setSuErro('Este e-mail já tem conta. Clique em "Já tenho conta — Entrar".'); setEtapa('ident'); return; }
         throw new Error(data.error || 'Não foi possível concluir a assinatura.');
       }
+      trackCadastro(email, nome); // conversão de cadastro; a de PLANO dispara no webhook de pagamento
       // Conta criada → loga. O plano é liberado pelo WEBHOOK, na primeira cobrança
       // confirmada (ele entra como Explorador por ora).
       try { await supabase.auth.signInWithPassword({ email, password: senha }); } catch { /* loga manual se falhar */ }

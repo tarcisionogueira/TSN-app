@@ -105,6 +105,75 @@ este arquivo já pagou (ANTI-DUPLO-MANDATO P0.2).
 
 ---
 
+## 🧾 18/08 (noite) — O DIA EM QUE O DOMÍNIO PASSOU A RECEBER E-MAIL
+
+### O canal de e-mail, do zero ao helpdesk (com o dono operando DNS/Resend)
+`contato@bidprobrasil.com.br` não recebia: **o MX nunca existiu** — o webhook `email.received`
+e o `INBOUND_WEBHOOK_SECRET` estavam prontos desde 03/08, esperando. Criado o MX (registro.br:
+campo Nome VAZIO, não `@` — o painel sufixa o domínio), a corrente foi provada elo a elo com
+e-mails reais, e cada elo quebrado apareceu porque a instrumentação o fez falar:
+1. **O webhook anuncia, não carrega**: payload real do `email.received` = attachments, bcc, cc,
+   created_at, email_id, from, message_id, received_for, subject, to. SEM text/html. O handler
+   fora escrito contra um payload presumido e descartava o e-mail com 200 mudo.
+2. **O corpo mora em `GET /emails/receiving/{id}`** — NÃO em `/emails/{id}`, que devolve 404
+   (só serve enviados). Contrato lido do SDK OFICIAL (resend@npm) instalado no sandbox, não
+   chutado. Anexos: metadados na mesma resposta; binário em `…/attachments/{id}` → download_url.
+3. **Render**: texto com `pre-wrap` + links clicáveis (linkify por SPLIT, nunca innerHTML);
+   HTML em `chamados_mensagens.conteudo_html`, renderizado SÓ em `<iframe sandbox>` sem
+   allow-scripts/same-origin — remetente é qualquer um, a tela é a do ADMIN.
+4. **Anexos** (política nova): baixados da API (autenticada), teto 5 × 10 MB, tipos permitidos;
+   o resto vira nome registrado. Consertou também o caminho do ADVOGADO, que pulava TODO anexo
+   em silêncio (`if (!att?.content) continue` — o payload nunca traz content).
+O G2RS foi reenviado (18:31) e a confirmação caiu na fila do Atendimento 1 min depois. A
+resposta (até 5 dias) cai lá também.
+
+### NÓS começarmos a conversa não abre chamado
+A fila marcava 27 abertos + 1 em atendimento — **28 com ZERO mensagem de cliente** (saudação
+proativa da IA + canal do /caso criado ao abrir a página). Status novo `saudacao` (fora da
+fila, sem SLA), gatilho `promove_saudacao` promove para `aberto` quando o CLIENTE fala e
+carimba `aberto_em` (o relógio conta DALI, não de quando nós falamos). Fila depois: **0**.
+Invariante `fila_sem_cliente_falar` (limite 0) testado nas duas direções (0 → 28 ao simular).
+
+### Nome e telefone com regra
+`if (!form.nome)` deixou "daniel" e "MOACIR EVERSON GONCALVES" na lista de clientes. Regra
+única em `src/lib/nome.js` (front) + `api/_nome.js` (servidor) + `normalizar_nome()` por
+gatilho no banco (nunca rejeita, só arruma). ⚠️ O nome vive em DUAS fontes — `perfis.nome`
+(admin lê) e `auth.users.raw_user_meta_data.nome` (12 pontos do front do CLIENTE leem,
+inclusive o faturamento do checkout): backfill nas duas, invariantes `nome_fontes_divergentes`
+(0) e `nome_sem_sobrenome` (2 legados tolerados). Telefone: `src/lib/telefone.js` (10-11
+dígitos, DDD) em Login/ConviteEquipe — havia celular com dígito faltando no acervo.
+
+### Bright Data: teto 550 permanente (decisão do dono, 18/08)
+`update brightdata_uso set teto=550` na semana corrente — semana nova HERDA o último teto
+configurado (regra da migração `brightdata_teto_da_configuracao_e_decisao_gratis`). Conferido:
+`brightdata_decisao(450)` responde teto 550 — o número é um só, venha a env que vier.
+
+### Google Ads (campanha 475-979-5747, "Pesquisa — Leilão de Imóveis")
+- **`trackCadastro` (CONV_CADASTRO) só disparava no Login.jsx** — as 3 telas de criação de
+  conta do CHECKOUT (onde o tráfego pago aterrissa) nunca avisavam o Google. Corrigido: as
+  três agora disparam. As "3 conversões" do painel eram só o caminho orgânico do Login.
+- Funil 14d medido: 243 cliques → 135 visitas rastreadas → **2 cadastros com gclid** (22 dos
+  24 cadastros do período vieram de fora do pago). O vazamento é pós-clique, não o anúncio.
+- Tag do Google no painel ainda se chama "Clube Conselheiro" e está marcada **URGENTE** —
+  pendência do dono abrir o "Gerenciar".
+- Rodapé agora identifica o anunciante (razão social + CNPJ + contato) — exigência prática
+  da verificação de anunciante. Falta só o ENDEREÇO (não existe no repo; não inventar).
+
+### Vila Velha (gl_28430, GRUPOLANCE) — a área do relatório
+Regerado pelo dono (22:29; `analise_sem_mercadologico` e `laudo_sem_base` → 0). MAS: o acervo
+tinha `area_m2 = 0`; os "80 m²" que o dono viu eram os COMPARÁVEIS (apartamentos de 80 m² do
+histórico/VivaReal), não o imóvel — o leiloeiro anuncia 168 m² total / 144 m² útil. Aplicado
+`area_m2 = 144` (convenção: útil primeiro) + matrícula enfileirada em `documentos_fila` (o
+lote TEM matrícula capturada). **Relatório atual subestima: vale regerar quando a matrícula
+confirmar a área.**
+
+### Contato comercial pendente (dono)
+Romualdo José Rocha Cronemberger — tentou assinar o Top2 4× entre 06 e 17/08 (extensão do
+navegador bloqueava o fetch), segue explorador. Há uma SAUDAÇÃO dele aberta na fila de 05/08:
+responder por ali chega por e-mail.
+
+---
+
 ## 🧾 18/08 (3ª sessão) — O SELO PROMETIA DOCUMENTO QUE NÃO EXISTIA EM 2.170 LOTES
 
 Diagnóstico de abertura limpo no de sempre: segurança `0/0`, regras `0`, KYC `0`, nenhum

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { validarNome, normalizarNome } from '../lib/nome.js';
+import { validarTelefone } from '../lib/telefone.js';
 import { senhaForte, MSG_SENHA_FRACA } from '../lib/senha.js';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../utils/supabase';
@@ -378,6 +379,7 @@ export default function ConviteEquipe() {
     // A tela PEDE "nome completo" desde sempre e aceitava um nome só — pedido sem regra é
     // sugestão. Mesma régua do cadastro comum (src/lib/nome.js).
     if (passo.key === 'nome') { const vn = validarNome(v); if (!vn.ok) return vn.erro; }
+    if (passo.key === 'telefone') { const vt = validarTelefone(v); if (!vt.ok) return vt.erro; }
     // 18/08: aqui a senha exigia só 8 CARACTERES, enquanto Login e Checkout exigem maiúscula,
     // minúscula, número e especial desde 15/08. Era a cópia que não recebeu o conserto — e no
     // fluxo de EQUIPE, que entra com mais permissão que cliente. Passa a usar a regra única.

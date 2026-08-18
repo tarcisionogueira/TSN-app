@@ -23,6 +23,7 @@ const lbl = { fontSize: 12, fontWeight: 700, color: '#475569', display: 'block',
 // Regra de senha: uma definicao so para o front (src/lib/senha.js). Ver o cabecalho de la.
 import { SENHA_FORTE, requisitosSenha } from '../lib/senha.js';
 import { validarNome, normalizarNome } from '../lib/nome.js';
+import { validarTelefone } from '../lib/telefone.js';
 
 export default function Login() {
   const planosCtx = usePlanos();
@@ -320,6 +321,9 @@ export default function Login() {
       // Nome e sobrenome: um primeiro nome solto nao identifica ninguem na hora de emitir
       // contrato ou falar com o cliente. Regra unica em src/lib/nome.js.
       { const v = validarNome(form.nome); if (!v.ok) throw new Error(v.erro); }
+      // Telefone é opcional; digitado, tem de ser um número discável (2 de 53 perfis
+      // tinham dígito faltando — regra única em src/lib/telefone.js).
+      { const t = validarTelefone(form.telefone); if (!t.ok) throw new Error(t.erro); }
       // Cidade é obrigatória (mesmo no explorador grátis): filtra os imóveis da região do
       // usuário e é a base dos alertas por e-mail. CPF NÃO é exigido aqui — só na hora de pagar.
       if (!form.endereco || !form.endereco.trim()) throw new Error('Informe sua cidade — ela filtra os imóveis da sua região e é a base dos seus alertas por e-mail.');
