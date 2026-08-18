@@ -699,7 +699,28 @@ export default function Checkout() {
     setSuLoading(true);
     try {
       if (!window.MercadoPago) {
-        await new Promise((resolve, reject) => { const s = document.createElement('script'); s.src = 'https://sdk.mercadopago.com/js/v2'; s.onload = resolve; s.onerror = reject; document.head.appendChild(s); });
+        // 18/08: `s.onerror` rejeita com um Event, cujo `.message` e undefined — o catch la
+        // embaixo caia no genérico "Erro ao processar a assinatura." e a pessoa ficava sem
+        // saber o que fazer. E `sdk.mercadopago.com` e um dos hosts que bloqueador de anúncio
+        // e extensão de privacidade barram com mais frequência.
+        //
+        // Importa porque ESTE fluxo (criar conta + pagar de uma vez) é o ÚNICO sem plano B:
+        // o fluxo de quem já tem conta cai automaticamente no Asaas por LINK, que não precisa
+        // de SDK nenhum. Quem chega novo e tem o SDK barrado não tinha rota alguma — foi o
+        // caso de quem tentou o Top2 quatro vezes entre 06 e 17/08 e segue Explorador.
+        //
+        // Não reescrevi o fluxo de pagamento: só deixo de entregar um beco sem saída. A saída
+        // ("Criar conta grátis") já existe nesta mesma tela e leva ao caminho com plano B.
+        await new Promise((resolve, reject) => {
+          const s = document.createElement('script');
+          s.src = 'https://sdk.mercadopago.com/js/v2';
+          s.onload = resolve;
+          s.onerror = () => reject(Object.assign(
+            new Error('Não conseguimos carregar o componente de cartão (ele costuma ser barrado por bloqueador de anúncios ou extensão de privacidade). Desative para este site e tente de novo — ou clique em "Criar conta grátis" acima e assine em seguida, por link de pagamento.'),
+            { sdkBloqueado: true },
+          ));
+          document.head.appendChild(s);
+        });
       }
       const mp = new window.MercadoPago(MP_PUBLIC_KEY);
       const [mes, ano] = card.validade.split('/');
