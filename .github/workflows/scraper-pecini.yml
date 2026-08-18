@@ -23,6 +23,31 @@ on:
         description: '1 = dumpa os contextos de R$ (recon dos rótulos)'
         required: false
         default: '0'
+      debug_n:
+        description: 'Quantos lotes SAUDÁVEIS dumpar (o dump de quem falhou é sempre)'
+        required: false
+        default: '3'
+      # QUEM ESTE RUN VISITA (18/08). O padrão 'novos' é o comportamento de sempre e cai nos
+      # antigos quando o sitemap não traz novidade. 'antigos' existe porque os lotes já
+      # capturados só eram relidos por acaso — os da PECINI estavam parados desde julho, sem
+      # a metragem e a matrícula que os consertos de 17/08 passaram a saber extrair.
+      alvo:
+        description: 'novos (padrão) · antigos (rele o já capturado, mais desatualizado primeiro) · todos'
+        required: false
+        default: 'novos'
+        type: choice
+        options: ['novos', 'antigos', 'todos']
+      # TETO SEMANAL POR DISPARO, não fixo no arquivo (17/08). O freio de custo lê
+      # BRIGHTDATA_MAX_REQ_SEMANA (padrão 450 em api/_brightdata.js) e este workflow NÃO
+      # passava a variável — então todo run do runner usava 450, mesmo com saldo recarregado
+      # no fornecedor. Recarregar no Bright Data não levanta o nosso teto: são freios
+      # diferentes, e é de propósito. Fica como INPUT com o padrão de sempre para que subir o
+      # teto seja um ato deliberado de quem dispara, com registro no histórico do run — e não
+      # um número maior esquecido no arquivo, valendo para sempre e sem ninguém lembrar.
+      teto_semana:
+        description: 'Teto semanal de requests Bright Data (padrão 450). Subir = gasto maior.'
+        required: false
+        default: '450'
 
 concurrency:
   group: scraper-pecini
@@ -60,4 +85,7 @@ jobs:
           PECINI_DRYRUN: ${{ github.event.inputs.dryrun || '0' }}
           PECINI_MAX_LOTES: ${{ github.event.inputs.max_lotes || '40' }}
           PECINI_DEBUG: ${{ github.event.inputs.debug || '0' }}
+          PECINI_DEBUG_N: ${{ github.event.inputs.debug_n || '3' }}
+          PECINI_ALVO: ${{ github.event.inputs.alvo || 'novos' }}
+          BRIGHTDATA_MAX_REQ_SEMANA: ${{ github.event.inputs.teto_semana || '450' }}
         run: node scripts/scraper-pecini.mjs

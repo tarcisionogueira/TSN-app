@@ -14,6 +14,7 @@ import { reportarErroCliente } from '../utils/reportarErro';
 import { extrairDadosDocumento, extrairDadosDocumentoUrl, gerarParecer } from '../utils/claude';
 import { calcularMetricasCenario, calcularTetoLance, calcularSAC, calcularPrice, calcularVPL, calcularTIR, calcularPayback, calcularMultiplo, fluxoLocacao, TMA_PADRAO, fmt, fmtPct, moedaOuTraco, pctOuTraco, SEM_MEDIDA } from '../utils/calculos';
 import { caixaMatriculaUrl, caixaRegrasVendaUrl } from '../utils/caixa';
+import { ehDocArquivo } from '../utils/documento';
 import { loadImoveis, saveImoveis, generateId } from '../utils/storage';
 import { useAuth } from '../contexts/AuthContext';
 import { useAnalises } from '../contexts/AnalisesContext';
@@ -1446,8 +1447,8 @@ export default function Analise() {
               // DOCUMENTO de verdade = ARQUIVO (PDF ou objeto no nosso Storage). Uma PÁGINA
               // (link_edital = página do lote na maioria dos leiloeiros; link_matricula = página)
               // NÃO é doc — se cair aqui, o item vira "via página do leiloeiro" (honesto), não
-              // finge ser a matrícula/edital. Espelha o gate da tela do imóvel.
-              const ehDocArquivo = (v) => /^https?:\/\//i.test(v||'') && (/\.pdf(\?|#|$)/i.test((v||'').trim()) || /\/storage\/v1\/object\/(sign|public)\//i.test(v||''));
+              // finge ser a matrícula/edital. `ehDocArquivo` vem de src/utils/documento.js: era
+              // copiado aqui e na tela do imóvel, e a busca — sem cópia — prometia o que não tinha.
               // Matrícula CEF: PDF estático em /editais/matricula/<UF>/<num>.pdf.
               const matriculaCef = caixaMatriculaUrl({ fonte: imovelInicial?.fonte, estado: imovelInicial?.estado, fonteId: imovelInicial?.fonteId });
               // Fallback "nunca sem documento": se o ARQUIVO não foi coletado, o

@@ -23,13 +23,20 @@
 export const PESOS = { margem: 40, localizacao: 25, perfil: 15, juridico: 10, financeiro: 10 };
 
 // Perfil por MODALIDADE: quanto mais simples/líquida a operação, maior. (0–10)
-// ORDEM IMPORTA (usa o primeiro match): 'judicial' antes de 'leil' para que
-// "leilão judicial" caia em 4 (risco/ocupação), não em 6.
+// ORDEM IMPORTA (usa o primeiro match) e há DUAS colisões por substring, não uma:
+//   1. "leilão judicial" ⊃ "leil"          → 'judicial' tem de vir antes de 'leil'.
+//   2. "extrajudicial"   ⊃ "judicial"      → 'extrajud' tem de vir antes de 'judicial'.
+// O comentário original só previu a primeira, e foi esse ponto cego que deixou 9.639 lotes
+// ativos (31,5% do acervo) — todo extrajudicial — pontuarem 4 em vez de 6, como se
+// carregassem o risco de ocupação e o processo que justamente NÃO têm.
+// A prova de que a intenção sempre foi outra está no motor irmão: `api/calcular-score.js`
+// testa por IGUALDADE e acerta — o `score_financeiro` gravado no banco já dá o bônus de
+// extrajudicial que esta tabela negava. Dois motores discordando sobre o mesmo lote.
 const PERFIL_MODALIDADE = [
   [/venda[\s_-]?direta|venda[\s_-]?online/, 8], // compra direta, sem disputa
   [/licita/, 7],                                 // licitação aberta
+  [/extrajud|sfi|edital[\s_-]?[úu]nico/, 6],      // extrajudicial ANTES de judicial (contém a palavra)
   [/judicial/, 4],                                // judicial: mais risco/ocupação
-  [/extrajud|sfi|edital[\s_-]?[úu]nico/, 6],      // leilão extrajudicial
   [/leil/, 6],                                    // leilão (genérico)
 ];
 // Perfil por TIPO de imóvel: liquidez de revenda/locação. (0–10)
@@ -68,7 +75,19 @@ export function scoreBidPro({ desconto, modalidade, tipo, scoreLocalizacao, scor
   // avaliação (preliminar).
   const vm = Number(valorMercado), vmin = Number(valorMinimo);
   const usaMercado = vm > 0 && vmin > 0;
-  const descEfetivo = usaMercado ? (1 - vmin / vm) * 100 : Number(desconto);
+  // AUSÊNCIA TEM DE SOBREVIVER AO `Number()` (17/08). `Number(null)` é 0 e `isNaN(0)` é
+  // false: sem desconto medido, a camada de MAIOR PESO do score (40%) entrava assim mesmo,
+  // com a nota mínima 2.0 — não porque a margem fosse ruim, mas porque ninguém a mediu.
+  // Medido: 4.465 lotes ativos com `desconto_percentual` nulo, dos quais 4.454 exibiam selo
+  // VERMELHO (< 4). Com o guard, apenas 1 segue vermelho e a média sobe de 3,25 para 5,31.
+  // Foi o defeito do print do dono: margem 2.0 · perfil 6.0 · financeiro 6.0 → 3,5.
+  // As outras quatro camadas deste mesmo arquivo já checam `> 0` sob o comentário logo
+  // abaixo, que declara a regra — a Margem era a única sem ela.
+  // ATENÇÃO ao consertar: o teste é por AUSÊNCIA (`null`/''), não por valor. Desconto 0
+  // com avaliação real (1.758 lotes) e desconto negativo (982) são medições legítimas e
+  // devem continuar pontuando 2.0 — lance acima da avaliação é margem ruim de verdade.
+  const temDesconto = desconto != null && desconto !== '' && !isNaN(Number(desconto));
+  const descEfetivo = usaMercado ? (1 - vmin / vm) * 100 : (temDesconto ? Number(desconto) : NaN);
   if (!isNaN(descEfetivo)) {
     const c = Math.max(0, Math.min(60, descEfetivo));
     camadas.push({ key: 'margem', label: 'Margem', nota: round1(2 + (c / 60) * 8), peso: PESOS.margem, fonte: usaMercado ? 'mercado' : 'avaliacao' });

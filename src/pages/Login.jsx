@@ -20,7 +20,8 @@ const lbl = { fontSize: 12, fontWeight: 700, color: '#475569', display: 'block',
 // REGRA DA SENHA EM UM LUGAR SÓ. Ela é usada em três pontos — a validação do envio, o gate
 // do botão e a lista de requisitos ao vivo — e regra de negócio duplicada em três lugares é
 // regra que vai divergir. Ver o comentário do botão de cadastro sobre por que o gate existe.
-const SENHA_FORTE = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/;
+// Regra de senha: uma definicao so para o front (src/lib/senha.js). Ver o cabecalho de la.
+import { SENHA_FORTE, requisitosSenha } from '../lib/senha.js';
 
 export default function Login() {
   const planosCtx = usePlanos();
@@ -567,13 +568,7 @@ export default function Login() {
                     novo e foi embora sem conta. Tráfego pago entrando pela porta da frente e
                     esbarrando na fechadura. */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 3, margin: '7px 2px 0' }}>
-                  {[
-                    { ok: form.senha.length >= 8, txt: 'Mínimo 8 caracteres' },
-                    { ok: /[A-Z]/.test(form.senha), txt: 'Uma letra maiúscula' },
-                    { ok: /[a-z]/.test(form.senha), txt: 'Uma letra minúscula' },
-                    { ok: /\d/.test(form.senha), txt: 'Um número' },
-                    { ok: /[^A-Za-z0-9]/.test(form.senha), txt: 'Um caractere especial (ex.: ! @ # $)' },
-                  ].map(rr => (
+                  {requisitosSenha(form.senha).map(rr => (
                     <div key={rr.txt} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: rr.ok ? '#059669' : '#94a3b8', fontWeight: rr.ok ? 600 : 400 }}>
                       <span style={{ fontSize: 12, width: 12, display: 'inline-block' }}>{rr.ok ? '✓' : '○'}</span> {rr.txt}
                     </div>

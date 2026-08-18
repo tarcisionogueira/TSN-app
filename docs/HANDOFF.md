@@ -4,6 +4,1044 @@
 
 ---
 
+## 🧾 18/08 (3ª sessão) — O SELO PROMETIA DOCUMENTO QUE NÃO EXISTIA EM 2.170 LOTES
+
+Diagnóstico de abertura limpo no de sempre: segurança `0/0`, regras `0`, KYC `0`, nenhum
+chamado de cliente sem resposta, 30.412 ativos com 98,3% em 24 h, deploys `READY`, backup
+off-region saudável pelo 3º dia (50 arquivos, 33 iguais). Marketing seguiu subindo: 130
+visitas com gclid e 74 com `utm_term` em 322 visitas.
+
+### O achado, e como ele mudou de tamanho no meio do caminho
+`doc_link_sem_documento` foi de **0 para 38** numa coleta só — todos SODRE, gravados às
+11:21. Minha primeira leitura foi *"limpou o dado e não o escritor"*, e eu ia consertar o
+`scraper-puppeteer`. **Medir mudou o alvo inteiro.**
+
+`link_edital = url_lote` é a **convenção da base**: o campo guarda a PÁGINA onde o
+documento está (SUPERBID, GRUPOLANCE, BIASI, SOLD, VIP, SODRE…). A ficha de detalhe sempre
+soube — `ehDocArquivo` exige PDF ou objeto do nosso Storage. A **`Busca.jsx` não**: era a
+única tela SEM cópia da regra, e decidia o selo só por `/^https?:\/\//`.
+
+| | selo "📄 Edital" | selo "📄 Matrícula" |
+|---|---|---|
+| lotes ativos com o selo | 14.287 | 27.936 |
+| **sem arquivo em lugar nenhum** | **2.170** | **337** |
+| piores | SUPERBID 1.425 · MEGA 192 · LJUD 174 | PESTANA 249 · WEBLEILOES 80 |
+
+A SODRE **não aparece em nenhuma das duas listas**: os 38 lotes entregam o edital pelos
+anexos. O invariante acusava quem entrega e não via quem não entrega — falso-positivo e
+falso-negativo na mesma régua. **Não mexi no scraper da SODRE**: o defeito estava em quem
+LIA o campo como se fosse documento.
+
+### O conserto
+- `src/utils/documento.js` — definição única de `ehDocArquivo`/`ehMatriculaValida`/
+  `ehRegrasDoc`. Estava copiada em `ImovelDetalhe` e `Analise`, **ausente na Busca** — foi
+  por onde entrou. Mesmo remédio que `src/lib/senha.js` deu para a regex de senha.
+- `imoveis_leilao.tem_edital_doc` e `tem_matricula_doc`, mantidas por **gatilho**: dizem se
+  existe ARQUIVO no link, nos anexos do leiloeiro **ou** no nosso Storage (`imovel_anexos`
+  é outra tabela — por isso gatilho, não coluna gerada).
+- Os dois selos da Busca (popup do mapa e card da lista) passam a ler esses sinais.
+
+⚠️ **O custo que quase passou.** A primeira versão decidia a matrícula só com link + CEF.
+Removeria as 337 mentiras **e apagaria o selo de 1.168 lotes** — 831 deles COM matrícula
+nos anexos. *Trocar mentira por sumiço não é conserto.* Com o sinal do banco: **−337
+mentiras e +905 selos verdadeiros** que estavam escondidos (link nulo, matrícula no
+Storage ou derivada da CEF). No edital, o selo novo é subconjunto **estrito** do antigo.
+
+### O invariante passa a medir ENTREGA, não formato de URL
+`doc_link_sem_documento` → **`selo_documento_dessincronizado`**. Com o selo preso aos
+sinais, o que vale vigiar é o sinal sair de sincronia: **um UPDATE que não dispara não dá
+erro**, e o selo voltaria a mentir calado.
+
+**Como foi verificado** (o padrão da casa: provar nas duas direções)
+- Espelho SQL `doc_arquivo` × JS nos MESMOS 9 casos → 9/9 concordam.
+- Helper CARREGADO de verdade, 13 casos com controles negativos (`matricula.asp`, rótulo de
+  texto no campo de link, `null`, rota terminada em `/`).
+- Gatilhos em transação desfeita: inserir anexo acende · **apagar o anexo apaga** · gravar
+  `link_edital` PDF acende. Rollback conferido, zero resíduo.
+- Invariante corrompido à mão foi a 1 e a 2. **Invariante que só sabe ficar verde não prova
+  proteção.**
+- Backfill **medido**: 0 divergentes no acervo inteiro, ativos e inativos.
+
+### O `Failed to fetch` do /checkout — não era pagamento, mas tinha parte nossa
+Os 4 registros são de UM usuário. Na tabela inteira, **todos** os "Failed to fetch" são do
+mesmo `user_id`, em 7 rotas + 3 anônimos em `/login` na mesma janela. Stack com quadros
+`<anonymous>` em offset 1:8058 — script injetado. É o **mesmo fenômeno já diagnosticado em
+08/08** e escrito em `reportarErro.js`: extensão que substitui `window.fetch`. O filtro
+`ehStackDeTerceiro` não pega porque a extensão não deixa marca `chrome-extension://`.
+**Não ampliei o filtro** — ele é conservador de propósito, e alargar arriscaria engolir
+erro nosso.
+
+**O que era nosso:** `Checkout.jsx` imprime `e.message` cru em 7 telas de erro. Quem tentou
+assinar o Top2 **quatro vezes entre 06 e 17/08** leu, na tela de pagamento, o texto do
+navegador — *"Failed to fetch"*. Sem idioma, sem causa, sem próximo passo. Segue Explorador
+até hoje. `apiCall` passa a traduzir falha de rede em texto acionável, com o original em
+`cause`, para o app inteiro.
+
+⚠️ **E o conserto exigiu um cuidado:** envolver TODA rejeição de `fetch` trocaria mensagem
+inútil por mensagem **errada** — `AbortSignal.timeout` é usado em `/api/proximidades-imovel`
+(35 s) e `/api/gerar-contrato-ia` (180 s), onde o servidor está lento, não inalcançável. Só
+`TypeError` é tratado como rede; abort e timeout sobem intactos. 6/6 nos erros reais.
+
+### Depende do dono
+- **Venda Top2 perdida há 11 dias**, de uma pessoa identificável que tentou 4×. O conserto
+  não avisa quem já desistiu — vale um contato direto.
+- Continuam de pé: `analise_sem_mercadologico` (5) e `laudo_sem_base` (1) — o mesmo lote,
+  um clique em *Gerar* zera os dois.
+
+### Pendente de medição (a coleta de amanhã decide)
+- **GESTAOLEILOES** ainda aparece `falhou`/0, mas a linha é de **09:39, 29 min antes** do
+  conserto de hoje. Se vier `sem_cota`, era orçamento; se vier `falhou`, é achado novo.
+- **VEGAS** coletou **1 lote em 17/08** (`degradado`, "queda vs anterior 1<40") e ontem
+  entrou `sem_cota`. O filtro de `sem_cota` esconde a linha de 17/08 da consulta do ritual —
+  pode ser regressão real mascarada por um dia de cota. **Vale olhar amanhã.**
+
+---
+
+## 🧾 18/08 (sessão seguinte) — O FREIO DE CUSTO AINDA CHEGAVA COM CARA DE FONTE QUEBRADA
+
+Diagnóstico de abertura limpo em quase tudo: segurança `0/0`, regras de negócio `0`, KYC `0`,
+nenhum chamado de cliente sem resposta, 30.275 lotes ativos com 98,5% atualizados em 24 h, todos
+os deploys `READY`. **O backup off-region recuperou** — 15/08 ainda batia no teto (1.000 arquivos,
+`iguais = 0`); 16, 17 e 18/08 vieram com ~50 e `iguais = 33`, que é o estado saudável descrito no
+CLAUDE.md. **E o rastreio de marketing fechou muito**: `visitas_com_gclid` foi de 19 (14/08) para
+**112** em 294 visitas, e `utm_term` saiu de 0 para 56 — a pendência A do dono, resolvida.
+
+### O achado: a checagem do ritual acusava três fontes sadias
+
+`fonte_baseline_aprendida` apontou CALIL, GESTAOLEILOES e VEGAS abaixo do piso, com `total = 0`.
+Os três acervos estavam **íntegros** (95 · 21 · 130 lotes). Eram duas coisas diferentes:
+
+**1. A consulta do item 2 do CLAUDE.md não filtrava `status`.** CALIL e VEGAS gravam
+`status = 'sem_cota'`, com o motivo escrito por extenso: *"coleta não tentada (decisão de
+orçamento, não regressão da fonte)"*. `monitor-fontes-cron.js:183` sempre soube disso — trata
+`sem_cota` como categoria própria e não empilha o alerta de baseline. Era **a consulta do ritual**
+que pegava a última linha e comparava sem olhar o status: o freio de custo entregue como medição
+da fonte, a forma #5 da lista, dentro da própria rotina que existe para pegá-la.
+
+**2. `scraper-gestao.mjs` não sabia dizer "sem cota" — e por isso o GESTAOLEILOES parecia quebrado.**
+Ele usava `fetchViaBrightData`, o wrapper legado cujo docblock avisa: *"Para COLETA — onde `null`
+vira dado faltando sem ninguém perceber — use `buscarViaBrightData`"*. O wrapper engole o
+`ErroBrightData` (inclusive `semCota`) e devolve `null` → a home não vem em domínio nenhum → 0
+eventos → grava `falhou` com *"nada pronto (0 lotes brutos)"*.
+
+A trava `brightdata-null-em-coletor` existe e pega isso. O arquivo estava isento por uma nota de
+11/08: *"o `null` aqui é um fallback DELIBERADO (tenta o grátis/residencial, o pago é a segunda
+chance)"*. **A justificativa não descrevia o código:** a escolha é por variável de ambiente,
+ANTES da chamada (`GESTAO_HEADLESS === '1'`), e no modo pago o `null` não tinha segunda chance —
+virava `return null` seco. A isenção protegia um fallback inexistente naquele caminho.
+
+Evidência de que já disparava: em **5 de 5 manhãs** (13, 14, 15, 16 e 18/08) o GESTAOLEILOES
+falhou com "nada pronto" no **mesmo segundo de cron** em que CALIL e VEGAS gravaram `sem_cota`
+(09:39:33 · :34 · :35 hoje), enquanto as coletas da tarde passaram (13/08 → 110 lotes, 16/08 →
+130). A recusa vem do teto **global** (475/450), não da sub-cota `gestao` (30/150) — por isso
+atinge os três juntos.
+
+O acervo nunca correu risco: coleta zerada não dispara o sweep destrutivo. O custo era o alerta
+mentiroso, que manda consertar parser intacto — o modo de falha que o próprio comentário do
+monitor descreve: *"é como um alerta ruidoso vira alerta ignorado"*.
+
+### O conserto
+- `scripts/scraper-gestao.mjs` migrado para `buscarViaBrightData`, com `ErroBrightData` capturado
+  em `bd()`. Continua devolvendo `null` ao chamador **de propósito** — deixar a exceção subir
+  mataria a execução antes de gravar `fonte_saude` e sumiria a fonte do monitor, que é o buraco
+  que o `scraper-rj` pagou em 11/08. O que mudou é que o MOTIVO não se perde mais no caminho.
+- O sinal chega aos dois pontos que gravam saúde: no zero vira `status = 'sem_cota'`, e na coleta
+  **parcial** (cota estourada no meio) suprime a acusação de regressão sem mascarar o total.
+- `exitCode = 1` **fica nos dois casos**: "não coletei" é verdade em ambos, e sair com 0 seria o
+  check verde sobre acervo parado de 11/08. Quem separa as duas ações é o status, não o exit.
+- Arquivo REMOVIDO da linha de base de `padroes-perigosos.baseline.json`.
+- A consulta do item 2 do CLAUDE.md ganhou `and u.status <> 'sem_cota'` com o aviso de não remover.
+
+### Como foi verificado (e o que ainda não está provado)
+A trava foi testada nas DUAS direções — reprova o import antigo, passa no novo — porque lint que
+só passa não prova proteção. Os nomes importados foram carregados de verdade (o `ReferenceError`
+que quase escapou ontem não sai no `node --check`). E `registrarSaude` foi exercitada com um
+Supabase falso em 4 casos, **dois deles controles negativos**: zero sem cota continua `falhou`, e
+queda sem o sinal continua `degradado`. O conserto não mascara falha real.
+
+⚠️ **O que continua sendo hipótese:** a causa do zero do GESTAOLEILOES é inferida da coincidência
+de 5/5 e do teto global — não vi o log da execução. A consulta corrigida ainda o mostra, com
+`status = 'falhou'`, porque aquela linha é de ANTES do conserto. **A próxima coleta matinal decide:**
+se vier `sem_cota`, era orçamento e o alerta some; se vier `falhou` de novo, a fonte está quebrada
+de verdade e aí é achado novo. O conserto transformou a suposição em medição — não a confirmou.
+
+---
+
+## 🧾 18/08 — FECHAMENTO DA SESSÃO (alertas, o que converge sozinho, o que depende do dono)
+
+### A sessão em uma frase
+Dezoito consertos, todos da MESMA família: **ausência entregue como medição**. O que mudou hoje
+não foi a quantidade de bugs achados — foi o lugar onde eles foram achados. Nenhum dos seis
+piores apareceu em varredura de código; todos apareceram no **rastro que deixaram no banco**.
+
+### Os alertas — o que EU resolvi hoje
+| Invariante | Antes | Agora | Como |
+|---|---|---|---|
+| `uf_cef_congelada` | 1 (RJ, 12 dias) | **0** | causa-raiz do 21000 (trigger `BEFORE` fazendo `update` na própria tabela) + upsert em blocos com bisseção |
+| `doc_link_sem_documento` | 6 | **0** | `nomeiaUmDocumento()` + limpeza de 12 linhas |
+| `bem_movel_no_acervo` | 3 | **0** | gate ancorado no título, com sinal imobiliário — 0 falso-positivo em 31.049 lotes |
+| `pino_generico_como_rua` | 99 | **0** | `demover_pinos_genericos()` na limpeza diária (o trigger não convergia sozinho — eu tinha ASSUMIDO que sim) |
+| `edital_eq_matricula` | 6 | **0** | limpo + `trg_flagrar_edital_suspeito` armado para nomear o culpado na próxima |
+| `reuniao_solicitada_parada` | 3 | **0** | conta interna não é cliente esperando |
+| `documentos_fila` (70% "erro") | 177 erros | **177 `sem_documento`** | "olhei e não tinha" virou estado terminal, não falha retentada 4× |
+
+Além disso, enfileirei as matrículas nunca lidas por trás de `relatorio_area_nao_confirmada`:
+**8 lotes CEF** em `cef_matricula_fila` e **1 WEBLEILOES** em `documentos_fila` (2 já estavam
+na fila). Quando lerem, a área passa a ser confirmada em documento, não declarada pelo anúncio.
+
+### Os alertas que CONVERGEM SOZINHOS — e a data
+Estes não precisam de ninguém. Estão listados para que ninguém os "conserte" à toa:
+- **`cadastro_barrado` (8/7)** — janela móvel de 7 dias. Sai sozinho em **19/08**.
+- **`bd_teto_saturado` (457/450)** e **`limpeza_encerrados_pulada` (1, PECINI)** — os dois são o
+  MESMO fato: a semana do Bright Data saturou. Ela vira em **24/08** e ambos zeram. A limpeza da
+  PECINI foi pulada porque o teto recusou a leitura, não porque a fonte esteja ruim.
+- **`lote_sem_area_nem_matricula` (457/400)** — o backfill ampliado hoje passa a alcançá-los sem
+  UMA requisição a mais. Cai a cada rodada diária.
+
+### O que NÃO converge sozinho — depende de um clique do dono (ver lista de amanhã)
+`analise_sem_mercadologico` (5/4) e `laudo_sem_base` (1/0) são **o mesmo lote**. Confirmei que a
+retenção está CERTA em mantê-lo (`ativo = true`, sem nenhuma data de praça — não é órfão), e que
+`regenerar-relatorios-cron` **não vai pegá-lo**: a janela é de 72 h e o relatório é de 31/07.
+Não consigo disparar daqui (o sandbox não alcança produção — `curl` para o domínio devolve 000).
+Um clique em **Gerar** zera os dois.
+
+### As travas que nasceram hoje (custo zero, sem IA)
+- `sweep-apoiado-no-coletado` em `verificar:padroes` — pega varredura destrutiva apoiada no que
+  foi COLETADO em vez do que foi GRAVADO. **A primeira versão dessa trava passou verde nas duas
+  versões defeituosas do código**: ela testava o arquivo inteiro, e um `console.log` dez linhas
+  adiante a desarmava. A versão que ficou testa a condição do `if` que envolve a varredura, e foi
+  conferida contra o código ANTES e DEPOIS do conserto.
+- Invariantes novos: `doc_link_sem_documento`, `bem_movel_no_acervo`, `uf_cef_congelada`,
+  `limpeza_encerrados_pulada`, `lote_sem_area_nem_matricula`, `edital_eq_matricula`.
+
+### Duas coisas que EU errei hoje, registradas para não repetir
+1. **Assumi convergência em vez de medir.** Tirei o `update` do trigger e afirmei que a regra
+   convergiria "porque a coleta reescreve todas". O trigger retorna cedo quando nada muda:
+   `pino_generico_como_rua` foi de 0 a 99 em minutos. Regra: **quem afirma que converge, mede.**
+2. **Chamei desconhecido de diagnóstico.** O detector de bisseção rotulava como *colisão* qualquer
+   "bloco falhou, metades passaram" — o que também descreve falha transitória. Depois do conserto
+   do trigger, 19 blocos viraram 1, e eu persegui esse 1 à toa. Agora ele lê a mensagem do banco.
+
+### Agendamentos armados ao encerrar
+- **Hoje 12:00 UTC** — PECINI, fila de 5, teto 520.
+- **Segunda 24/08 15:00 UTC** — PECINI `alvo=antigos`, teto 520 (relê o já capturado, mais
+  desatualizado primeiro — é o que traz metragem e matrícula dos lotes de julho).
+
+⚠️ **Medido ao encerrar, e a primeira leitura estava errada.** Com o teto PADRÃO (500) o freio
+recusa: `usado_total 457 · reservado para outros 43 · motivo reservado_para_outros`. Foi isso que
+eu vi primeiro, e quase registrei como "os disparos de hoje serão recusados". **Não serão**: os
+dois triggers passam `teto_semana=520`, que é o número que o dono já escolheu, e com 520 o freio
+responde `permitido: true`. O que estava errado não era o freio nem o agendamento — era eu ter
+medido com um teto que os disparos não usam.
+
+⚠️ **E a checagem cobrou um request.** `registrar_uso_brightdata` é **reserva atômica**: ela
+CONCEDE ao responder, não simula. Usei-a como sonda e o ledger da PECINI ficou em
+`requests 69 · sucessos 68` — uma permissão concedida e nunca gasta. No fornecedor não custou
+nada (nenhum fetch saiu); custou uma unidade do NOSSO teto. Deixei como está, porque corrigir o
+ledger à mão seria pior que o +1 honesto. **Para conferir cota sem gastar, leia
+`brightdata_uso_proposito` e `brightdata_reserva` — nunca chame a função de reserva.**
+
+---
+
+## 🧾 18/08 — VARREDURA FINAL DA LISTA (itens 6, 8, 10, 13 e a fila de reunião)
+
+### 6. `edital_eq_matricula` — instrumentado, causa ainda desconhecida
+Eliminei por leitura de código TODOS os escritores de `link_edital`: `scripts/scraper.js`
+(grava `linkDetalhe`, que é guardado contra PDF de matrícula), `captura-matricula-cef` e
+`backfill-edital-cef` (ambos com `EXCLUI /editais/matricula/` nas DUAS saídas — conferido),
+`enriquecer-lote` (só grava se estiver vazio) e `reativar_imoveis_cef` (só mexe em `ativo`).
+E o INSERT não podia ter produzido aquilo: `url_lote` das linhas afetadas usa `hdnimovel`, que
+só vem do CSV, e nesse caminho `link_edital` recebe o MESMO valor.
+
+Parei de teorizar — foi o que me custou tempo na colisão do upsert — e instrumentei: trigger
+`trg_flagrar_edital_suspeito` + tabela `edital_suspeito_log` registram operação, autor
+(`session_user`), `application_name` e valores quando `link_edital` VIRA um PDF de matrícula.
+Testado em transação com rollback: capturou `UPDATE / postgres`. **A próxima ocorrência diz
+quem foi.**
+
+### 8. Os 457 sem área nem matrícula — o backfill não os alcançava
+416 nunca tinham sido enriquecidos porque `enriquecer-backfill-cron` só mirava quem faltava
+DATA. A metragem mora na MESMA página que ele já baixa: filtro ampliado e extração de área +
+descrição do html já em mãos — **zero requisição a mais** nos lotes que ele já visitaria. A
+descrição só substitui quando é ECO DO TÍTULO; texto que já diz algo nunca é sobrescrito.
+BIASI 225 · SUPERBID 143 · PECINI 24 · SOLD 20 · LJUD 13.
+
+### 10. Os dois invariantes de relatório
+`relatorio_yield_sem_x100` (1): relatório de 31/07 com `yieldBruto = 0,05` — a razão, sem o
+×100. O código calcula no servidor desde 14/08, então é legado. **NÃO multipliquei por 100**:
+`valorEstimadoImovel` está ZERADO no relatório, o número não é recalculável a partir dele, e
+multiplicar seria afirmar o que não dá para conferir. Marcado como `erro` para regeração.
+
+`relatorio_area_nao_confirmada` (16): **não é número mentindo**. A tela já declara "conforme o
+anúncio do leiloeiro — não confirmada na matrícula". É lacuna divulgada.
+
+**E aí veio o achado maior:** `documentos_fila` com 177 erros contra 75 ok (70%), TODOS
+`nenhum_documento_encontrado`. Não é fila quebrada — a exceção só é lançada DEPOIS de a página
+carregar e ser varrida (o anti-bot já foi tratado; quando barra, o Bright Data assume). **É
+medição, não falha.** Arquivada como erro, era retentada 4× para reaprender a mesma coisa e
+afogava falha de verdade na contagem. Virou estado terminal `sem_documento`, com negative-cache
+imediato. 177 linhas reclassificadas.
+
+### 13. Backlog das entidades HTML — de 28 para 12
+Fechados os que ainda decidiam valor: `enriquecer-lote` (`extrairAvaliacao`, serve TODAS as
+fontes), `scraper-core` (título do `<h1>`), `scraper.js` (título dos cards, 4 coletores),
+`scraper-leiloeiros` (descrição do Superbid), `scraper-rj`, `scraper-soleon` (CALIL/VEGAS/
+TORRES3) e `scraper-gestao`. O que sobra é ruído de comentário ou caminho que não decide valor.
+
+**O lint salvou um erro meu:** os imports de `decodificarEntidades` não entraram nos três
+scrapers — minha condição testava se o nome do módulo aparecia no arquivo, e ele aparecia num
+COMENTÁRIO que eu tinha acabado de escrever. Seria `ReferenceError` no primeiro lote. Os cinco
+módulos foram CARREGADOS de verdade depois, não só lintados.
+
+### Fila de reunião: conta interna não é cliente esperando
+Os 3 pedidos parados eram do PRÓPRIO DONO (`role = admin`), de 01 e 05/07, testando a tela.
+Mesmo defeito da retenção que "nudava o admin". O invariante passou a ignorar conta interna.
+
+**O que NÃO mascarei:** `analise_sem_mercadologico` (5) e `laudo_sem_base` (1) subiram por
+causa minha, ao invalidar o relatório de 31/07. Eles medem INTEGRIDADE, não atendimento —
+excluir conta interna ali esconderia bug real que aparecesse primeiro num teste. O lote é do
+dono; regerar o mercadológico zera os dois.
+
+---
+
+## 🧾 18/08 — DOIS GATES QUE OLHAVAM O NÚMERO ERRADO (limpeza de encerrados + cadastro)
+
+### 9. A limpeza de encerrados: um teto que se alimentava do próprio erro
+
+`desativar_imoveis_leiloeiro_stale` pulava a fonte quando os candidatos passavam de 40% do
+acervo. **Esse teto se alimenta do próprio erro:** fonte que fica para trás acumula lotes não
+vistos, o reap cresce, o teto trava com mais força, e ela nunca se recupera. VIP travada em 61%
+e PECINI em 77% — nenhuma das duas jamais teve UM lote encerrado removido.
+
+A prova de que era a guarda e não a coleta: **a VIP coletou 42–63 lotes todo dia nos últimos 17
+dias**, com o acervo parado em 99. A coleta estava saudável o tempo todo; o acervo é que estava
+inflado por lotes que saíram do site entre 13 e 14/08 — todos com `data_leilao` nulo, então a
+varredura de leilão encerrado também não os alcançava.
+
+O gate deixou de perguntar *"quanto eu removeria?"* (relativo ao acervo, logo contaminado) e
+passou a perguntar **"a última coleta veio saudável?"**, contra o piso APRENDIDO da própria
+fonte. Sem baseline não desativa nada — silêncio não autoriza. Simulado em todas as fontes antes
+de aplicar: VIP 60, CALIL 34 (que já limpava), **0 nas outras 20**, RJLEILOES e TOTALLEILOES
+pulados por falta de baseline. Executado: 94. VIP 99→39, CALIL 129→95.
+
+`fontes_com_limpeza_pulada()` reescrita junto — **invariante que descreve regra revogada é pior
+que invariante nenhum**.
+
+**PECINI ficou de fora por motivo estrutural** e foi resolvida por outro caminho: o coletor dela
+visita 4–6 lotes por rodada de propósito (cota), então o total COLETADO nunca descreve o que o
+site tem. A resposta vem da ENUMERAÇÃO do sitemap — 52 lotes em 1 requisição, sem visitar nada.
+Lote ativo que o sitemap não lista saiu do site: isso é medição, não silêncio. O piso da
+enumeração ficou ABSOLUTO (40) e está anotado como dívida consciente — `fonte_baseline_aprendida`
+aprende do total coletado, e misturar as duas medidas corromperia ambas.
+
+### 11. O conserto do cadastro foi aplicado numa cópia e não na outra
+
+Os 8 eventos de `cadastro_barrado` são todos a mesma causa (senha fora da regra) e todos
+ANTERIORES ao conserto: 12/08 cinco tentativas em 2m16s **da mesma pessoa**, 13/08 duas, 15/08
+às 02:57. As correções do `Login.jsx` entraram em 15/08 às 10:38 e 12:04. Zero falhas desde
+então — o alarme é artefato da janela de 7 dias.
+
+Mas a pergunta rendeu: **o conserto não foi aplicado ao `Checkout.jsx`**. Lá o checklist existe
+e os três botões de criar conta eram desabilitados só por `suLoading` — a pessoa via o que
+faltava, clicava assim mesmo e tomava o erro. No funil PAGANTE.
+
+Causa de fundo: o regex estava copiado em CINCO lugares do front e a lista de requisitos em
+outros três. **Cópia que não recebe o conserto é a que sangra.** Agora `src/lib/senha.js` tem
+uma definição só, e `requisitosSenha()` devolve a MESMA lista que a validação aplica — checklist
+e regra não podem divergir. O servidor mantém a sua checagem: front é conveniência, servidor é
+garantia.
+
+**Bug que eu mesmo introduzi no caminho, para o registro:** ao trocar o `const senhaForte` local
+(booleano) pela função importada de mesmo nome, três usos em `RedefinirSenha.jsx` passaram a
+testar a FUNÇÃO — sempre truthy. O rótulo ficaria "Forte" para qualquer senha e o botão nunca
+travaria. `eslint --quiet` não pega: é código válido. Só apareceu porque reli as linhas que
+tinha tocado.
+
+---
+
+## 🧾 18/08 — O GATE DE "ISTO É IMÓVEL?" (bem móvel fora do acervo)
+
+Havia um CARRO ativo na plataforma de imóveis: `pecini_10532`, *"VW/SAVEIRO CL 1.6 MI / CL/ C
+1.6 Aeronaves em leilão"*. Os coletores aceitam tudo que a fonte enumera (o sitemap da PECINI
+lista veículos) e `inferirTipo` só o classificava como `'outros'` — não existia gate perguntando
+se o LOTE é um imóvel.
+
+**Censo completo (31.049 ativos).** Três bens móveis, três fontes:
+
+| fonte | título | valor | `tipo` gravado |
+|---|---|---|---|
+| VIP | Honda/CG 150 Titan KS, Ano 2007 | R$ 7.652 | `imovel` |
+| GRUPOLANCE | Veículo LR Evoque Pure P5D, 2011/2012 | R$ 96.763 | **`casa`** |
+| PECINI | VW/SAVEIRO CL 1.6 MI | R$ 15.473 | `outros` |
+
+No caso GRUPOLANCE a URL do próprio leiloeiro é `/imoveis/casas/sp/…` — ele também errou.
+
+**O QUE O CENSO EVITOU, e é o ponto.** Uma regra por PALAVRA SOLTA acusaria 19 lotes, e 16 são
+IMÓVEIS DE VERDADE: `Terreno 480 m² … Furnas IATE Clube` (condomínio), `Apartamento — JOIAS DE
+SANTA BARBARA` (empreendimento, 12 lotes CEF), `Casa — BALNEARIO JOIA` (bairro), `Garagem para
+quatro VEÍCULOS, do Edifício` (**vaga de garagem é imóvel**) e dois apartamentos da SODRE que
+citam "veículo" na descrição. **Barrar 16 imóveis reais para pegar 3 carros seria estrago maior
+que o problema.**
+
+A regra tem duas partes: (a) sinal de móvel ANCORADO NO TÍTULO — começa com "Veículo", categoria
+de móvel, marca com barra (`VW/`, `Honda/`) ou par de anos (`2011/2012`); menção no meio da
+descrição não conta; (b) ausência de sinal IMOBILIÁRIO em título+descrição — se fala de
+apartamento, casa, terreno, garagem, matrícula ou m², o lote FICA.
+
+Conferida contra as 31.049 linhas ANTES de aplicar: 3 barrados, 3 corretos, 0 falso positivo.
+Mais 9 casos sintéticos: 9/9. Mora no BANCO (trigger), como a fração ideal e pelo mesmo motivo —
+gate em JS pega só quem passa por ele. **Sem cópia em JavaScript, de propósito: uma definição
+só.** Regra em `regra_negocio`; `auditoria_regras_negocio()` acusou minha própria regra como
+ÓRFÃ até a função citar a chave `acervo.bem_movel` no corpo — o vínculo é verificado contra o
+CORPO, não contra a intenção. Invariante `bem_movel_no_acervo`, limite 0.
+
+### E o invariante do pino genérico pegou o MEU erro, minutos depois
+
+Ao tirar o `update` de dentro do trigger (item anterior), escrevi que a regra convergiria
+sozinha: *"a linha irmã se rebaixa quando for escrita, e a coleta reescreve todas"*. **Errado.**
+O trigger tem early-return quando latitude/longitude/nível/endereço vêm IGUAIS — o caso da
+recoleta rotineira. A irmã nunca reavalia. `pino_generico_como_rua` foi de 0 → 99 na coleta
+seguinte.
+
+**O registro de método vale mais que o conserto:** eu havia CONFERIDO que a regra ainda funciona
+(escrever `'rua'` numa linha em conflito devolve `'cidade'`) e o teste passou — porque escrever
+MUDA o campo e desarma o early-return. *O teste provou o caminho que eu executei, não o que a
+produção executa.* **Convergência assumida não é convergência medida.**
+
+Conserto: `demover_pinos_genericos()`, varredura periódica fora de qualquer upsert, pendurada no
+cron `limpar-imoveis-stale` (05h UTC). Invariante de volta a 0.
+
+---
+
+## 🧾 18/08 — A COLISÃO DO UPSERT: O TRIGGER ESCREVIA NA TABELA QUE ESTAVA SENDO UPSERTADA
+
+Fechado. O `ON CONFLICT DO UPDATE command cannot affect row a second time` (21000) que derrubou
+8.200 lotes da CEF/RJ e manteve o acervo 12 dias congelado **não vinha de chave duplicada**.
+
+**Hipóteses eliminadas, na ordem em que caíram** — vale guardar a lista, porque cada uma parecia
+óbvia na vez dela:
+1. duplicata em `fonte+fonte_id` no payload → o dedup acusa ZERO;
+2. `id` viajando no payload → não viaja;
+3. outra UNIQUE servindo de árbitro → só há `(id)`, `(fonte_id)`, `(fonte, fonte_id)`;
+4. trigger reescrevendo `fonte`/`fonte_id` → nenhum dos 11 toca essas colunas;
+5. collation não-determinística → ambas são determinísticas.
+
+**Causa real.** `trg_geocode_pino_generico` é BEFORE INSERT OR UPDATE em `imoveis_leilao` e, ao
+detectar pino genérico (duas vias diferentes na MESMA coordenada), rodava
+`update public.imoveis_leilao …` — **na própria tabela que o `INSERT … ON CONFLICT` estava
+processando**. Com duas linhas do lote na mesma coordenada, a segunda já tinha sido tocada pelo
+UPDATE do trigger da primeira, e o Postgres se recusa a afetar a mesma linha duas vezes na mesma
+instrução. A colisão era do TRIGGER — por isso a bissecção via "colisão entre linhas" e todas
+entravam quando separadas.
+
+**Por que caiu justo no RJ:** é o estado com mais lotes empilhados na mesma coordenada — 5.106
+linhas em 687 coordenadas (GO 1.139, SP 1.002). Em blocos de 500 o par é quase certo.
+
+**E não é da CEF.** O trigger vale para TODAS as fontes: qualquer coletor que mandasse duas
+linhas coincidentes no mesmo lote perdia o lote inteiro. Este era o item que valia atacar
+primeiro justamente por isso.
+
+**Reproduzido antes de consertar**, com duas linhas reais de `fonte_id` distintos que só
+compartilham a coordenada → `sqlstate=21000`. Depois do conserto, a MESMA instrução passa.
+
+Conserto: o trigger rebaixa SÓ A PRÓPRIA LINHA. A regra não se perde — a detecção não filtra por
+`geocod_nivel`, então a linha irmã se rebaixa quando for escrita, e a coleta reescreve todas
+(conferido: escrever `'rua'` numa linha em conflito devolve `'cidade'`). Passivo de 21 linhas
+rebaixado de uma vez, fora de qualquer upsert.
+
+Invariante `pino_generico_como_rua`, limite 25 e não 0 — há janela legítima entre o lote novo e a
+próxima escrita da irmã. **Convergência que para de acontecer não dá erro**, só deixa pino
+impreciso passando por preciso; é isso que o número vigia.
+
+### A lição de método, que é maior que o bug
+
+Duas ferramentas de diagnóstico foram escritas antes da resposta aparecer, e as duas foram
+decisivas: a **bissecção** (que separou "linha ruim sozinha" de "colisão entre linhas" e provou
+que não havia linha ruim) e a **reprodução em transação com rollback** (que transformou cinco
+hipóteses plausíveis numa medição). Nenhuma leitura de código encontrou isto — o código está
+correto em toda linha isolada; o que não fecha é a INTERAÇÃO entre um BEFORE trigger e o
+`ON CONFLICT` que o chama.
+
+---
+
+## 🧾 18/08 — REVISÃO DO SETOR: O SWEEP QUE APAGA ACERVO OLHAVA O NÚMERO ERRADO
+
+Pedido do dono: revisar por completo o setor dos defeitos da sessão, não por amostragem. A
+varredura das famílias rendeu um achado NOVO e mais grave que todos os do dia.
+
+### O achado: `lido × gravado`, agora com ação DESTRUTIVA
+
+Em DOIS coletores o sweep que desativa "o que saiu do site" se apoiava no número de linhas
+**baixadas**, não nas **gravadas**. Rodada que baixa 500 e falha em todos os upserts tem
+`gravados = 0` e mesmo assim entrava no sweep — aposentando o acervo INTEIRO da fonte, porque
+nada tinha `atualizado_em` novo.
+
+| arquivo | fontes que servem | acervo em risco |
+|---|---|---|
+| `api/scraper-leiloeiros.js` | sold, superbid, mega, mgl, ccj, biasi, destak, ljud | LJUD 869 · SUPERBID 1.474 · MEGA 580 · BIASI 469 |
+| `scripts/scraper-puppeteer.mjs` (canônico) | MEGA, SUPERBID, LJUD, GRUPOLANCE, ZUK, BIASI, PESTANA | o grosso do acervo fora da CEF |
+
+No canônico era pior: `salvarImoveis` engolia o erro do upsert num `console.error` e não devolvia
+nada. E o bloco do MEGA **reimplementava `salvarEFinalizar` inteiro**, por isso ficou de fora de
+consertos anteriores — trocado por uma chamada à função compartilhada. *Duas cópias da mesma
+regra divergem no primeiro ajuste, e a que fica para trás é a que apaga acervo.*
+
+Agora os dois gates olham o gravado, e **coleta parcial nunca desativa**: se parte não gravou, os
+lotes de fora seriam aposentados por falha nossa, não por terem saído do site.
+
+### Nota de método: a primeira versão da trava não guardava nada
+
+A trava `sweep-apoiado-no-coletado` que escrevi passou **verde nas duas versões defeituosas**.
+Ela testava o arquivo inteiro, e um `console.log('… imóveis salvos')` a dez linhas de distância
+desarmava a regra. É a própria família auditada, cometida dentro da ferramenta que a persegue.
+A versão final testa a CONDIÇÃO do `if` que libera o sweep, ignora sweep por IDADE (90 dias) e
+foi conferida contra o código ANTES e DEPOIS do conserto nos dois arquivos. **Trava nova só vale
+depois de provada contra o defeito que ela diz pegar.**
+
+### A biblioteca compartilhada tinha ficado para trás dos dois consertos de ontem
+
+`scripts/lib/scraper-core.mjs` atende RJ, GESTAO, PECINI, SOLEON, SATO e o canônico:
+- `extrairData` não decodificava — site que publica `Leil&atilde;o`/`pra&ccedil;a` não casa com
+  âncora nenhuma e a função cai no fallback "primeira data futura do texto", que num portal é
+  data de cadastro ou de outro lote. **Data errada com cara de certa.**
+- O laço de âncoras aceitava qualquer href — `/preview/` rotulado "Matrícula" virava
+  `link_matricula` NOT NULL. Agora passa por `nomeiaUmDocumento`.
+
+### Dois flagrados benignos, anotados com `padrao-ok` e o motivo
+
+- `api/scraper-caixa.js` — endpoint LEGADO (handler devolve 410 na 1ª linha, bloco inalcançável).
+  Mas é o **pior código dos três**: DELETE FÍSICO, gate em `imoveis.length > 0`, retorno do
+  upsert descartado, erro em `.catch(() => {})`. Só não faz estrago porque filtra `fonte=eq.caixa`
+  e o acervo usa `'CEF'`. **Consertar só o nome da fonte o tornaria destrutivo.**
+- `scripts/scraper-sato.mjs` — gate no coletado, mas o upsert faz `process.exit(1)` na 1ª falha.
+
+### Efeito colateral da coleta do RJ, achado e limpo na mesma passada
+
+`edital_eq_matricula` saltou para 166 (limite 8) — todos CEF/RJ, gravados na madrugada:
+`link_edital` apontando para `/editais/matricula/RJ/*.pdf`, ou seja, o botão "Edital" abria a
+matrícula. `url_lote` mostra que a linha nasceu com o link certo, então **algo sobrescreve
+depois da inserção e não foi identificado**. Dado corrigido (`link_edital = url_lote`, 166
+linhas); a causa fica em aberto e o invariante vigia — se voltar amanhã, é sinal de que o
+escritor ainda está lá.
+
+---
+
+## 🧾 18/08 — CEF/RJ CONGELADO 12 DIAS, COM O RUN VERDE TODO DIA
+
+Pedido do dono: *"ataca a CEF"*. O defeito era outro e maior do que o que eu tinha reportado.
+
+**O RJ estava parado desde 05/08: 7.783 lotes ativos, um terço do acervo CEF**, servidos ao
+cliente com preço e status de 12 dias atrás. O scraper diário rodava, terminava com sucesso e
+imprimia `✅ Scraping concluído. 25407 imóveis processados` — número que INCLUÍA os 8.200 do RJ
+que não entraram. A linha que explicava tudo estava no log, sozinha, entre dois estados:
+
+```
+CEF CSV RJ...
+  CEF CSV RJ: 8200 imóveis, 8200 com foto
+Erro ao salvar: ON CONFLICT DO UPDATE command cannot affect row a second time
+CEF CSV MG...
+```
+
+**Causa-raiz:** o CSV da Caixa repete o mesmo `n do imovel` em algumas UFs. Upsert com duas
+linhas de mesma chave faz o Postgres abortar o COMANDO INTEIRO (21000) — ele se recusa a
+atualizar a mesma linha duas vezes na mesma instrução. Não é erro de UMA linha: é o estado
+inteiro que não entra.
+
+**Três defeitos empilhados**, e é a soma que dá 12 dias de silêncio:
+1. o upsert morria por linha duplicada;
+2. `salvarImoveis` fazia `return` mudo no erro e o laço seguia para a próxima UF;
+3. `total += imoveis.length` somava o LIDO, não o GRAVADO — `fonte_saude` registrava 25.407 e
+   status `ok` justamente no dia em que um terço não foi salvo.
+
+O passo `Notify on failure` existia e nunca era alcançado: exit 0.
+
+Consertos: dedup por `fonte+fonte_id` antes do upsert (com contagem de duplicadas no log),
+`salvarImoveis` devolvendo `{salvos, erro}`, `fonte_saude` só `ok` se NENHUMA UF falhou, e exit 1
+quando alguma UF não grava.
+
+**Por que nenhuma varredura pegou.** `desativar_imoveis_cef_vencidos` compara cada lote com o
+`max(atualizado_em)` do PRÓPRIO estado. Estado inteiro congelado deixa todos igualmente velhos e
+nenhum vira candidato — **o estado parece perfeitamente consistente consigo mesmo**. A métrica é
+relativa ao último scrape, então "não houve scrape" é invisível para ela. É a mesma família do
+teto do Bright Data e da limpeza pulada: *a régua é relativa ao próprio evento que falhou.*
+
+Invariante novo `uf_cef_congelada` compara a UF com o último scrape da FONTE. Acusou RJ com
+286,4 h (11,9 dias).
+
+### RESULTADO: RJ DESCONGELADO — e o diagnóstico que sobrou aberto
+
+O dedup por `fonte+fonte_id` **não resolveu**: a coleta seguinte acusou ZERO duplicadas e morreu
+com o mesmo 21000. Minha hipótese da chave estava errada, e daqui não dá para baixar o CSV da
+Caixa (o proxy bloqueia o domínio) para olhar o dado bruto.
+
+Em vez de uma terceira adivinhação, o código passou a RESPONDER: upsert em blocos de 500, e
+bloco que falha parte no meio até isolar. A bissecção separa dois diagnósticos que saíam iguais —
+*linha ruim sozinha* (lote de 1 que falha) versus *duas linhas que colidem entre si* (lote falha,
+as duas metades passam).
+
+**Rodada de 18/08 00:34 — `alvo` RJ, com o conserto:**
+
+| | antes | depois |
+|---|---|---|
+| RJ ativos | 7.783 | **8.575** |
+| último scrape do RJ | 05/08 | **18/08 00:35** |
+| gravados | 0 | **8.200** |
+| `uf_cef_congelada` | RJ, 286,4 h | **vazio** |
+| CEF ativos (total) | 23.870 | 24.662 |
+
+Ainda 1.017 lotes reativados (voltaram ao CSV e estavam `ativo=false`).
+
+**O diagnóstico foi COLISÃO ENTRE LINHAS, em 19 blocos** — não há linha ruim; separadas, todas
+as 8.200 entram. Os intervalos que a bissecção registrou se aninham terminando sempre nos mesmos
+ids, o que aponta os envolvidos:
+
+```
+125 linha(s) — cef_1555510299037 … cef_1444403961591
+250 linha(s) — cef_8444426361009 … cef_1444403961591
+ 16 linha(s) — cef_8787701708291 … cef_8787701378780
+ 31 linha(s) — cef_8555539071806 … cef_8787701378780
+ 62 linha(s) — cef_8787701927082 … cef_8787701378780
+```
+
+**O QUE FICA ABERTO, e não é para varrer para baixo do tapete:** *por que* duas linhas com
+`fonte_id` distintos colidem no árbitro `(fonte, fonte_id)` continua **sem explicação**. Checado e
+descartado: não há duplicata em `fonte+fonte_id` (o dedup acusa 0); os quatro ids acima são linhas
+distintas e todas gravaram; o payload não carrega a coluna `id`; `dedup_chave` é removido antes do
+upsert; as três únicas UNIQUE da tabela são `(id)`, `(fonte_id)` e `(fonte, fonte_id)`. Sobra
+investigar os 11 triggers BEFORE INSERT/UPDATE — se algum reescrever `fonte`/`fonte_id`, o
+conflito é avaliado DEPOIS deles, e aí duas linhas distintas na entrada viram a mesma na hora do
+árbitro. **É por aí que a próxima sessão deve começar**, com os intervalos acima.
+
+O efeito está mitigado (nenhuma linha derruba as outras) e instrumentado (o log nomeia o caso a
+cada rodada). Mas mitigado não é entendido, e a distinção importa: se a causa for um trigger,
+ela vale para TODAS as fontes, não só a CEF.
+
+### CORREÇÃO DE UM NÚMERO MEU (17/08)
+
+Reportei *"CEF: 2.206 lotes ativos com a última praça vencida"* como defeito. **Não é.** São
+lotes de VENDA DIRETA, onde a data é vestigial e a venda é contínua — `leilao_ja_encerrado` os
+exclui de propósito. E os 559 extrajudiciais com 1ª praça passada têm TODOS a 2ª praça no futuro,
+ou seja, corretamente ativos. Apliquei a regra de leilão a quem não é leilão — exatamente o tipo
+de erro que este documento existe para evitar em terceiros.
+
+---
+
+## 🧾 18/08 — A LIMPEZA DE LOTES ENCERRADOS É PULADA EM SILÊNCIO
+
+Pergunta do dono: *"os 28 fora do sitemap, verifica se ainda estão ativos"*. Estão — e não por
+descuido pontual. **Não são 28, são 58**, e a rotina que existe para desativá-los é
+sistematicamente pulada.
+
+`desativar_imoveis_leiloeiro_stale` (cron `limpar-imoveis-stale`, 05h UTC) pega, por fonte, o
+ÚLTIMO scrape (`max(atualizado_em)`) e marca como candidato todo lote ativo não tocado nas 36h
+anteriores a ele — *"não veio no último scrape, logo saiu do site"*. Se os candidatos passarem de
+**40%** do acervo da fonte, ela **PULA**: guarda anti-regressão, para um scrape degradado não
+zerar uma fonte inteira.
+
+**O que a guarda não distingue: scrape DEGRADADO de scrape PARCIAL POR DESENHO.** O scraper da
+PECINI visita só os lotes NOVOS — 4 a 6 por rodada — então todo o resto fica "não visto" por
+construção. Medido em 18/08:
+
+| fonte | candidatos / acervo | % | desfecho |
+|---|---|---|---|
+| PECINI | 58 / 75 | **77,3%** | PULADA (e assim toda vez) |
+| VIP | 61 / 100 | **61,0%** | PULADA — medido hoje, não é projeção |
+| CALIL | 34 / 129 | 26,4% | limpa normalmente (faz passada completa) |
+
+Quanto MENOS completa é a passada do scraper, mais a limpeza é pulada — o contrário do que a
+fonte precisa. E a função já devolve `fontes_puladas` no JSON desde que existe: o cron loga e
+**ninguém lê**. Uma fonte pode passar meses sem ter um único lote encerrado removido, sem uma
+linha de alerta em lugar nenhum.
+
+Novo invariante `limpeza_encerrados_pulada` (limite 0) + função `fontes_com_limpeza_pulada()`,
+aplicados. Hoje acusa 2. A função OMITE de propósito a cláusula `max(atualizado_em) < now() - 2h`
+da original: aquilo é janela de execução, não critério de saúde, e mantê-la faz a fonte
+recém-coletada sumir do diagnóstico logo depois de rodar — foi assim que a PECINI escapou da
+primeira medição.
+
+**O que este achado NÃO autoriza: desativar os 58.** Eles não foram vistos e recusados pelo site
+— eles **não foram olhados**. Marcar como encerrado o que nunca foi verificado é afirmar uma
+medição que não houve. A resposta de verdade vem da passada COMPLETA já agendada para 24/08
+(`PECINI_ALVO=antigos`): depois dela, quem não voltou é que sumiu de fato.
+
+### O susto que não era: 80 → 75 ativos na PECINI
+
+Entre 23h52 e 00h12 a PECINI perdeu 5 ativos e eu quase reportei sumiço de linha. Não houve: os
+5 são lotes com `data_leilao = 2026-08-17` desativados quando o dia virou — a varredura de leilão
+encerrado fazendo o trabalho dela. Some da vista porque a desativação **não toca `atualizado_em`**
+e não existe coluna `desativado_em`: o acervo não guarda QUANDO nem POR QUE um lote foi desativado.
+Isso é um buraco de auditoria de verdade, e é o motivo de eu ter levado quatro consultas para
+descobrir algo que deveria ser uma leitura.
+
+### Dois achados de acervo, de brinde
+
+- **`pecini_10532` é um carro.** Título: *"VW/SAVEIRO CL 1.6 MI — Aeronaves em leilão"*, ativo,
+  numa plataforma de imóveis. O sitemap da PECINI lista veículos e o scraper aceita tudo que
+  vem; `inferirTipo` só o classifica como `outros`. Não há gate de "isto é imóvel?".
+- **CEF: 2.206 lotes ativos com a última praça já vencida**, o mais antigo de 13/07. Fora do
+  escopo desta pergunta, mas é a maior ocorrência do acervo e a CEF é justamente a fonte que o
+  sweep de leiloeiro exclui (`fonte not in ('CEF',…)`) — ela tem o caminho próprio
+  (`desativar_imoveis_cef_vencidos`), que evidentemente não está dando conta.
+
+---
+
+## 🧾 17/08 (madrugada) — O LANCE ESTAVA NA PÁGINA, NUMA FORMA QUE NADA AQUI LIA
+
+Fechamento dos dois itens que a coleta da PECINI deixou abertos.
+
+### A. Os 10 lotes perdidos por `valor_minimo = 0` — recon, não palpite
+
+O caminho barato aqui **não era alargar o regex no escuro**. O modo `PECINI_DEBUG=1` existe para
+descobrir os rótulos reais sem acesso ao site (o proxy daqui bloqueia o Pecini), só que estava
+limitado aos **3 primeiros** lotes — e os primeiros a passar são os que deram certo. Agora o dump
+sai **sempre que o lance não foi lido**, que é a única página com algo a ensinar.
+
+Um dry-run com debug (14 lotes, ~15 requests, zero gravação) devolveu a resposta, idêntica nos 7:
+
+```
+26. Lances Iniciais : 1&ordm; Leil&atilde;o: R$ 25.789,00
+                      2&ordm; Leil&atilde;o: R$ 15.473,40
+```
+
+**Duas causas empilhadas** — por isso nenhuma tentativa isolada teria funcionado:
+
+1. O texto contra o qual os regexes rodam só decodificava `&nbsp;`. Nem `1º` nem `Leilão`
+   **existem** nesse texto: há `1&ordm;` e `Leil&atilde;o`. É a **terceira vez no dia** que a
+   mesma entidade não decodificada aparece com outra roupa — rótulo de anexo (a matrícula),
+   descrição do corpo, e agora o lance.
+2. O regex exigia `"Público Leilão"` e a fonte escreve só `"1º Leilão:"`. Mesmo com o texto
+   decodificado, o rótulo não casaria.
+
+Conserto: `txt` passa por `decodificarEntidades`, e o rótulo da praça exige o **ordinal**
+(1º/2º/1ª/2ª) OU a palavra "Público" antes de "Leilão" — um `"Leilão:"` solto aparece em menu e
+em texto corrido, e aceitá-lo transformaria qualquer `R$` da página em lance. Conferido contra as
+7 strings reais do recon + 3 casos de ruído (menu, "Faixa de Preço", formato antigo).
+
+Dois dos 10 agora caem em `DESCARTADO(fracao_ideal)` em vez de `(valor)` — é o gate certo,
+alcançado pela descrição de corpo que passou a ser lida hoje. Regra de negócio funcionando, não
+perda.
+
+**Nota de método que vale guardar:** `min R$0` produzia `desconto_percentual = 100` e
+`score_viabilidade = 100` — o lote mais atraente do acervo, fabricado por não ter lido o preço.
+Não chegou a acontecer: `checarQualidade` descarta sem `valor_minimo`, e a varredura completa
+confirma **0 lotes ativos** com `valor_minimo = 0` e `valor_avaliacao > 0` em TODAS as fontes. O
+gate é a única coisa entre esse cálculo e o cliente — não afrouxar.
+
+### A2. Resultado da coleta com o conserto (23:51) — e um terceiro achado no caminho
+
+`6 prontos · 1 descartado · 10 sem detalhe`, contra os 4/10/7 de antes. Os lotes que estavam
+perdidos entraram com preço:
+
+| lote | avaliação | lance (menor praça) | desconto |
+|---|---|---|---|
+| 10499 Campinas | 471.263,27 | **235.631,64** | 50% |
+| 10531 Guarulhos | 704.132,49 | **649.804,17** | 8% |
+| 10478 Limeira | 561.030,90 | **336.618,54** | 40% |
+| 10544 Pereira Barreto | 119.326,04 | **68.412,22** | 43% |
+
+Acervo PECINI: **74 → 80 ativos**. 10531 e 10544 não tinham rótulo de Avaliação nenhum — a
+avaliação veio da 1ª praça, como a regra manda.
+
+**O terceiro achado.** Os 5 últimos lotes saíram com `- 10511: detalhe não veio (teto BD?)`.
+Com interrogação, porque o scraper NÃO SABIA: `fetchViaBrightData` engole o `ErroBrightData` e
+devolve `null` igual para recusa de orçamento e para falha de rede. O ledger sabia:
+**457 de 500 usados, 43 ainda reservados para o RJ** → `reservado_para_outros`. O freio agindo
+exatamente como projetado, e o log adivinhando.
+
+É a forma 5 do CLAUDE.md ("o freio de custo entregue como conteúdo") no seu formato mais brando —
+não virou dado falso porque `bd()` é fallback e o gate exige linha no acervo. Mas foi essa mesma
+indistinção que escondeu 4 semanas de saturação em agosto. Agora `bd()` usa
+`buscarViaBrightData` num try/catch: o chamador continua vendo `null`, o log diz
+`RECUSADO PELO FREIO DE CUSTO: reservado_para_outros (…)`, o laço PARA em vez de repetir a
+recusa lote a lote, e `fonte_saude` grava `sem cota: <motivo>` em vez de "nada pronto".
+
+Os 5 lotes seguem como `novos` e entram na próxima rodada — nada se perdeu.
+
+### B. `bd_teto_saturado` mirava num número que se moveu
+
+Comparava contra o literal **405** (90% de 450). Desde ontem o teto é parâmetro de disparo (500 na
+última rodada) e o banco não tinha onde lê-lo: 429 requests acusando "perto do teto" contra um
+teto que era 500. Um alarme que dispara sem motivo é um alarme que se aprende a ignorar.
+
+O número existia — `registrar_uso_brightdata(p_teto, …)` recebe o teto em toda chamada, decide com
+ele e joga fora. Agora grava em `brightdata_uso.teto` e o invariante compara contra 90% dele; sem
+teto na linha (semanas anteriores) cai no 450 histórico e o limite continua 405. Hoje: **429/450 =
+ok**. O teto gravado é o da ÚLTIMA chamada permitida, não o maior já usado — o que interessa ao
+alarme é o teto que a PRÓXIMA chamada vai encontrar.
+
+---
+
+## 🧾 17/08 (noite) — A MATRÍCULA "VEIO" APONTANDO PARA UMA PASTA VAZIA
+
+Coleta da PECINI disparada com o teto do Bright Data em 500. **Rodou de verdade** — sem recusa de
+cota: 52 lotes no sitemap, 31 já no banco, 21 novos processados → **4 gravados**, 10 descartados
+por valor, 7 páginas sem lote. 40 s de execução, e o tempo curto é o normal para 21 páginas.
+
+**E a matrícula NÃO veio.** Ela foi *reconhecida* pela primeira vez — o conserto da tarde
+(decodificar entidades antes de classificar o rótulo) fez o link `Matr&#xED;cula` finalmente
+casar. Só que o href é `https://www.pecinileiloes.com.br/preview/`: **a rota que serve os
+documentos, sem o arquivo**. Os editais da MESMA página vêm completos (`/preview/<uuid>.pdf`).
+
+`link_matricula` ficou NOT NULL nos 4, a ficha anunciaria "matrícula disponível", e quem
+clicasse cairia numa pasta vazia. É a forma da casa — **ausência entregue como presença** —
+migrada do campo de TEXTO para o campo de LINK. Sem erro em lugar nenhum: a coleta gravou com
+sucesso um endereço que não leva a documento algum.
+
+**Varredura completa (não amostra):** 6 âncoras assim entre os 30.446 ativos — 4 matrículas
+PECINI e 2 editais SODRE (que apontavam para a própria página do lote com `#`). Mais 6 em lotes
+encerrados. Os outros 27.896 links de matrícula nomeiam arquivo ou id.
+
+Conserto: `nomeiaUmDocumento()` em `api/_doc-scan.js` (vale para TODAS as fontes, é o vasculhador
+do `enriquecer-lote`) — documento é identificado por segmento final de caminho ou por query
+string; caminho terminado em `/` sem query é a rota. Mesma regra na 2ª passada do
+`scraper-pecini.mjs`, que antes de descartar tenta recuperar o id de um atributo da própria
+âncora. Invariante `doc_link_sem_documento` (limite 0) aplicado; hoje em 0/0.
+
+**No mesmo caminho:** `decodificarEntidades` só tratava entidade NUMÉRICA. As nomeadas passavam
+cruas — a 1ª descrição de corpo da PECINI entrou com `im&oacute;vel` e `&aacute;rea`. A que morde
+de verdade é **`m&sup2;`**, a forma HTML mais comum de m²: sem decodificar, `extrairAreaM2` não
+enxerga a unidade e a área que ESTÁ na página sai 0, sem erro. Hoje o acervo tem 0 ocorrências de
+`&sup2;` gravado — é endurecimento antes de espalhar, não conserto de dano medido.
+
+### O que a coleta expôs e ainda está aberto
+
+- **10 de 21 lotes novos descartados por VALOR** — é a maior perda da PECINI hoje, maior que a
+  área. Padrão no log: `aval R$471263 · min R$0` (3 lotes vieram `aval R$0 · min R$0`). O 2º lance
+  não é lido para metade dos lotes, e sem ele o gate descarta. Próxima ofensiva da PECINI: o
+  parser de praças, não o de metragem.
+- **Área: 0 nos 4 gravados.** Num deles a descrição de corpo veio real ("Mede 9,00m de frente…
+  21,00m da frente aos fundos") — dimensões sem m² declarado, então 0 ali é a resposta honesta,
+  não falha. Nos outros 3 a meta tag institucional ainda prevaleceu (corpo sem sinal forte).
+- **O lote de Sorocaba não foi tocado**: o scraper só processa lotes NOVOS. Os anexos dele ainda
+  guardam o rótulo cru `Edital do Leil&#xE3;o`, prova de que não é relido desde antes do conserto.
+  Zerei `enriquecido_em` em 12 lotes PECINI (Sorocaba incluído) — o freio de 12 h os prendia ao
+  código antigo. A releitura acontece sozinha na próxima abertura da ficha, a 1 request cada.
+- **`bd_teto_saturado` acusando 429 contra limite 405 fixo.** O teto real virou parâmetro de
+  disparo (500 nesta rodada) e o banco não tem onde lê-lo — `brightdata_uso` não guarda `teto`.
+  O alarme erra para o lado seguro (dispara cedo), mas está calibrado num número que se moveu.
+  Conserto certo: a reserva gravar o teto vigente na semana.
+
+---
+
+## 🧾 17/08 — TRÊS ALARMES, E O ERRADO ERA O INSTRUMENTO NOS TRÊS
+
+Dia de diagnóstico. Os três achados têm a mesma assinatura: **um número que media duas coisas
+diferentes sob um nome só**. Nenhum apareceu em varredura de código — os três só existem no
+rastro que deixaram no banco.
+
+### A. Proximidades: o vazio não era do Overpass, era da coordenada
+
+`proximidades_vazio_falso` subiu 924 → 987 → **1.075** em três dias. A causa não era "o Overpass
+às vezes falha": era **quem ele atendia**. Por nível de geocode, nos lotes ativos:
+
+| `geocod_nivel` | vazios | cheios |
+|---|---|---|
+| **endereco** | **0** | 13.077 |
+| cidade | 1.035 | 1.488 |
+| bairro | 272 | 776 |
+| rua | 110 | 185 |
+
+**Zero falso vazio onde a coordenada é precisa.** Os 1.417 vivem todos em coordenada imprecisa —
+exatamente a população que `enriquecer-osm.mjs` recusava (`.eq('geocod_nivel','endereco')`) e que
+sobrava para o Overpass público, o único caminho do sistema capaz de gravar `{}`.
+
+E o vazio é **comprovadamente falso**, não propriedade do lugar: na MESMA coordenada, no MESMO
+dia, o acervo tem os dois desfechos. `-23.5329,-46.6395` (centroide SP): **36 vazios × 55
+cheios**. `-22.9129,-43.2003` (RJ): 33 × 78. Não existe leitura em que o centro de São Paulo não
+tenha escola em 4 km — e a ficha **afirmava** a ausência.
+
+Três defeitos estruturais que a corroboração de 3 observações não pegava:
+
+1. **O contador não era zerado ao confirmar.** O lote voltava da revalidação de 30 dias já com 3,
+   e o PRIMEIRO vazio dava 4 ≥ 3, reconfirmando na hora — a rotina que existe para CURAR o engano
+   carimbava-o. 50 lotes com contador > 3, **dois em 26**: 23 reconfirmações sem uma única
+   segunda opinião.
+2. **As "3 execuções diferentes" não tinham espaçamento nem diversidade.** O cron roda a cada 15
+   min: as 3 cabiam em 45 minutos, mesma janela de carga, sem exigir espelhos distintos. É o erro
+   que o cabeçalho de `_proximidades.js` documenta ("corroboração instantânea não corrobora
+   nada"), reintroduzido pela porta dos fundos — 45 minutos no lugar de 0 segundo.
+3. **O on-demand alimentava o MESMO contador sem espaçamento nenhum.** Cliente recarregando a
+   ficha 3× fabricava a "corroboração temporal" sozinho.
+
+**Decisão do dono:** `cidade` não calcula (a ficha diz "localização aproximada", que é a verdade);
+`rua`/`bairro` passam ao extrato local — mesma fonte com 0 falsos em 13.077 lotes — com rótulo de
+que a distância parte do centro da região. `score_localizacao` segue exclusivo de `endereco`:
+**nota a partir de coordenada aproximada seria enganosa, listar a escola mais próxima não é.**
+Vazio só é aceito com 3 observações espaçadas ≥ 6h **e** de ≥ 2 espelhos distintos.
+
+> `proximidades_vazio_em` **já existia no banco e não era usada em NENHUM ponto do repositório,
+> nem em migração**: uma sessão anterior criou a coluna para este mesmo espaçamento e nunca ligou
+> o fio. É a forma 7b em espelho — o banco tinha o que o código não pedia. Agora é lida e escrita.
+> Nova: `proximidades_espelhos` — até hoje o sistema **não guardava qual espelho respondeu**, e
+> por isso o mecanismo só pôde ser inferido, nunca provado.
+
+Reparo: os 1.418 `{}` voltaram a `null`. **Invariante em 0.**
+
+### B. VEGAS: não regrediu — o alerta comparava coisas diferentes
+
+"queda vs anterior (1<40)" num dia em que o scraper funcionou como deveria:
+
+| dia | `fonte_saude.total` | lotes realmente criados |
+|---|---|---|
+| 13/08 | 40 | **0** |
+| 16/08 | 40 | **0** |
+| 17/08 | 1 | **1** |
+
+Nos dias "saudáveis" a VEGAS **não capturou nada**: `(novos.length ? novos : urls)` — sem
+novidade, o coletor re-raspa até 40 conhecidos para atualizar preço e data, trabalho legítimo que
+enche `total` com o teto do lote. Em 17/08 a listagem tinha UM lote inédito, ele foi capturado, e
+`total` valeu 1. O monitor comparou **1 captura contra 40 re-verificações**. As irmãs de
+plataforma provam o código: CALIL (60) e TORRES3 (2) rodaram o MESMO `scraper-soleon.mjs` no mesmo
+ciclo, sem queixa. **Nada a consertar na captura — o defeito era do instrumento.**
+
+Novo `fonte_saude.enumerados` = quantos lotes a fonte LISTA. Não depende de quanto já temos, e é o
+que regride quando o site muda de verdade. Quando existe nos dois lados, decide.
+
+> ⚠️ **Pendente de propósito:** `fonte_baseline_aprendida()` segue aprendendo o piso a partir de
+> `total`, então o piso das fontes com fallback continua contaminado pela re-raspagem. Trocar
+> agora não ajudaria — não há histórico de `enumerados` para aprender. **Migrar a baseline para
+> `enumerados` depois de alguns dias de coleta.**
+
+### C. Atendimento: atribuir ao admin não é avisar o admin
+
+O dono: *"já tínhamos alinhado que os chamados e agendamentos deveriam ser direcionados para mim
+até ter equipe. Não apareceu nada."* Certo nas duas metades, e elas não se contradizem.
+
+O direcionamento **funciona** — `trg_solicitacao_cai_para_admin` e `trg_chamado_cai_para_admin`
+gravaram o admin como responsável em todos, conferido linha a linha, nenhum órfão. Só que tudo
+acontece **inteiramente dentro do banco**: as solicitações são inseridas direto do navegador
+(`Analise.jsx`), sem endpoint, e `emails_log` **não tem UM registro de aviso de solicitação ou
+chamado em toda a história do sistema**. Dar dono a uma fila não é contar a alguém que ela existe.
+
+3 pedidos parados há 46, 46 e 42 dias, atribuídos corretamente, sem um único sinal sair daqui.
+Novo item no `/api/health-check` (já roda 2×/dia, custo zero, só escreve quando há problema).
+Consulta validada contra o banco: retorna os 3, com a idade certa.
+
+### D. Fração ideal fora do acervo — a regra que existia e não valia
+
+Veio de um print de **relatório PAGO**: "Casa 245 m² — Praia de Fora — Palhoça/SC", desconto
+79,16%, ROI 205,65%, parecer *"Operação viável, vale avançar"*. A descrição do próprio
+leiloeiro dizia **"Casa 245 m² … Judicial Lote 1 3 Praças"** e nós gravamos `tipo='terreno'`:
+a avaliação saiu a R$ 852,63/m² **de terreno**, com a construção valendo **zero**.
+
+> **Falso alarme que quase virou achado, registrado para ninguém repetir:** ROI e TIR idênticos
+> (205,65%) NÃO são bug. A projeção é de 12 meses, e nesse horizonte a TIR anualizada é igual
+> ao ROI por definição. `calcularTIR` (bisseção + anualização) está correto.
+
+Puxando o fio: **120 lotes ativos de parte/fração ideal**, 100 tratados como imóvel INTEIRO e
+57 com área preenchida — o R$/m² rodando sobre o bem todo enquanto o cliente compraria uma
+fatia. Arrematar 50% indiviso é virar condômino de um desconhecido, sem ocupar nem vender
+livremente, dependendo de ação de extinção de condomínio.
+
+**A regra já existia e não valia:** `scraper-sato.mjs` exclui `parte ideal` e o comentário lá a
+chama de "padrão do repo" — mas morava dentro de UM coletor. Dos 120, **117 entraram pelo
+`scraper-puppeteer.mjs`**, que nem passa por `checarQualidade`.
+
+**Decisão do dono:** excluir. Implementado em três camadas — `checarQualidade`, filtro no
+coletor genérico e **gatilho no banco** (o único que sobrevive a um coletor novo escrito sem ler
+o comentário). Testado: forçar `ativo = true` numa linha barrada devolve `false`. Regra gravada
+em `regra_negocio` com `aplicada_por` — auditoria em 0 críticos. Acervo 30.571 → 30.442.
+
+> **Regra do dono para o dia em que alguém pensar em readmiti-las:** valor **proporcional à
+> parte leiloada**; no BidScore, a atratividade comercial **cai quase integralmente**. Está
+> gravada na descrição da regra em `regra_negocio`.
+
+### E. Qualidade de captura — o que o print da VIP escancarou (ABERTO)
+
+Um lote VIP atualizado pelo nosso scraper **no mesmo dia** exibia: 1ª praça **vencida** como
+preço atual (R$ 369.216,42 quando a 2ª praça, em 3 dias, é R$ 221.529,86), *"data a confirmar no
+edital"* com a data publicada na página, e `modalidade='extrajudicial'` num lote com processo do
+TJ-SP. Medido no acervo:
+
+| defeito | lotes ativos |
+|---|---|
+| **sem data de leilão** (dizem "a confirmar no edital") | **16.236** (53%) |
+| **com data já vencida** | **2.900** |
+| descrição diz *judicial* → marcado `extrajudicial` | **1.022** |
+| `casa` classificada como `terreno` | 38 |
+| `casa` com área > 2.000 m² (provável terreno) | 54 |
+| com `numero_processo` preenchido | **3** de 30.571 |
+| **2ª praça capturada fora da CEF** | **0** em 11 fontes |
+
+⚠️ `data_leilao` é coluna **`text`**, não `timestamp` — comparação exige cast e nenhum índice de
+data funciona. É parte de por que "já venceu" nunca foi vigiado.
+
+**Decisão pendente do dono:** qual valor é "o preço" do lote quando há 2 ou 3 praças — decide
+filtro da busca, ordenação, BidScore e a projeção do relatório vendido, de uma vez só.
+
+### F. CENSO COMPLETO DO ACERVO — a metragem que nunca foi capturada (17/08)
+
+Pedido do dono: *"faça uma inspeção completa do acervo… avalie completo e não por amostragem"*.
+30.442 lotes ativos, contados inteiros.
+
+| | lotes |
+|---|---|
+| **sem metragem** | **2.227** |
+| └ e sem matrícula em lugar nenhum | **495** |
+| ⠀⠀├ com edital em PDF (recuperável pela visão) | **337** |
+| ⠀⠀└ sem edital nenhum (sem saída hoje) | **158** |
+
+Por fonte — *sem área / recuperável / sem saída*: PESTANA 584/7/0 · BIASI 472/225/0 ·
+SUPERBID 377/28/**136** · LJUD 258/15/0 · CALIL 92/1/0 · GESTAOLEILOES 88/0/0 ·
+GRUPOLANCE 58/8/0 · LEILOTECH 47/4/0 · **PECINI 42/19/0** (o lote de Sorocaba é um destes) ·
+LEILOFY 35/0/0 · VIP 33/27/0 · SBID9 29/0/0 · VLANCE 25/0/0 · SOLD 21/0/**20**.
+
+**A causa de fundo, medida no mesmo censo:** fora da CEF, a `descricao` do lote **é o título e
+nada mais**.
+
+| fonte | descrição sem conteúdo próprio |
+|---|---|
+| SUPERBID | 1.492 de 1.494 |
+| PESTANA | 1.029 de 1.029 |
+| LJUD | 981 de 981 |
+| MEGA | 649 de 649 |
+| BIASI | 472 de 472 (e **100% sem área**) |
+| GRUPOLANCE | 470 de 470 |
+| ZUK | 420 de 420 |
+
+Os coletores gravam a **manchete** do anúncio e descartam o corpo — que é onde está a metragem
+que o dono lê no site do leiloeiro. **A CEF é a exceção que prova a regra:** a descrição dela
+também é template, mas template **com dado** ("Casa, X de área total, Y de área privativa"), e
+por isso a CEF tem **zero** lote sem área.
+
+> **Método, para quem repetir a inspeção:** descrição de imóvel real é ÚNICA por lote. Duas
+> tentativas falharam antes de acertar — normalizar números agrupou a CEF inteira num molde só
+> (os números *são* o conteúdo dela), e exigir repetição exata não pega quem monta
+> "título + sufixo fixo". O teste que funciona é **remover o título e medir o resíduo**:
+> resíduo vazio = a descrição não acrescenta nada. Mesmo esse escapa da PECINI, cujo título não
+> aparece literal na descrição — daí o critério final ser **operacional** (`área = 0` +
+> `sem matrícula`), que não depende de adivinhar o formato do texto.
+
+**Novo invariante `lote_sem_area_nem_matricula`** (495, limite **400** → em alerta). Havia 23
+invariantes e **nenhum** olhava a metragem do lote: `relatorio_area_nao_confirmada` fala de
+relatório emitido e `aval_ausente_com_doc` fala de avaliação. Por isso os 2.227 cresceram em
+silêncio. O limite ficou ABAIXO do valor atual de propósito — calibrar no valor de hoje faria
+o invariante nascer verde e normalizar o problema, que é o oposto de vigiar.
+
+**Fica aberto:** os **158 sem saída** (SUPERBID 136, SOLD 20) não têm área, matrícula nem
+edital — para eles o conserto é de **captura** (parser por leiloeiro), não de leitura. E o
+scraper da PECINI grava a meta-descrição de marketing do site (*"Pecini Leilões, especialistas
+em leilões judiciais e extrajudiciais"*) no lugar da descrição do imóvel.
+
+### O que fica para a próxima sessão
+
+- **`aval_ausente_com_doc` 4.158** (limite 4.000) · `relatorio_area_nao_confirmada` 14 (2) ·
+  `cadastro_barrado` 8 (7) · `relatorio_yield_sem_x100` 1 (0). Nenhum foi tocado hoje.
+- **Bright Data: o propósito `docs` está no teto exato** (150/150, reserva 0). O total da semana
+  (295) está longe do limite global (405), então `bd_teto_saturado` não dispara — quem trava é a
+  cota do propósito, e o alarme não olha para ela.
+- **GESTAOLEILOES: 130 lotes ativos, 0% com documento.** Documental sem o que ler.
+- `/checkout` "Failed to fetch" ×3 (última 16/08 11:39) segue sem causa.
+- **Google Ads:** as 9 tarefas estão concluídas, mas o card **"Anúncios financiados por" ainda
+  exibe TARCISIO DE SOUZA NOGUEIRA DE ARAUJO** (pessoa física), resposta dada em 3/08 — antes de
+  toda a frente de identidade. É a mesma classe de divergência que reprovou a verificação. Conferir
+  se atualiza sozinho após a aprovação; se não, editar para NOGUEIRA EMPREENDIMENTOS LTDA.
+- 2 assinantes `top2` (01/07 e 06/08) sem UM relatório em 14 dias — churn em formação.
+- Backup off-region **recuperou** (16 e 17/08 `ok: true`, 49 arquivos) e `utm_term` **chegou**
+  (12 visitas em 14 dias, era 0). As duas pendências de 16/08 estão fechadas.
+
+---
+
 ## 🧾 16/08 — O DIA EM QUE `authorized` NÃO ERA PAGAMENTO
 
 Sessão longa, três frentes. A do meio é a que vale ler inteira.
@@ -161,10 +1199,16 @@ declarar com o enquadramento certo é melhor que o revisor descobrir e concluir 
 |---|---|---|---|
 | ~~**A**~~ | ~~`ADMIN_EMAIL` na Vercel~~ — ✅ **RESOLVIDO 16/08** | Estava definida o tempo todo | Provado: aviso de lead entregue em 16/08 19:35 (`emails_log`, `lead_alavancagem`, `entregue`) |
 | **B** | **Nomear um analista** | `select count(*) from perfis where role='analista' and ativo` deu **0**. Há 42 horários livres e 3 pedidos de reunião parados desde 1 e 5 de julho. O trigger faz o pedido cair para o admin — dá dono à fila, **não substitui a pessoa** | `select count(*) from perfis where role='analista' and ativo;` → > 0 = resolvido |
+| **C** | **Regerar o mercadológico de UM lote** — `1d117f3c-b7ed-413d-ac22-f9db9f7bd82c` ("Apartamento, 2 quartos, Praia da Costa, Vila Velha/ES") | Dois alertas vermelhos (`analise_sem_mercadologico`, `laudo_sem_base`) são este único lote. O cron de regeração tem janela de 72 h e o relatório é de 31/07 — não o alcança. **Um clique em Gerar zera os dois** | `select * from public.qa_invariantes() where chave in ('analise_sem_mercadologico','laudo_sem_base');` → `ok` = resolvido |
+| **D** | **Tornar 520 o teto PADRÃO do Bright Data** (hoje o padrão é 500) | Nada está travado: os disparos agendados já passam `teto_semana=520` e o freio autoriza. O risco é o disparo FUTURO feito sem preencher o campo — cai no 500, e com `reservado p/ outros 43` é recusado em silêncio de agenda. Foi assim que a PECINI ficou parada desde julho. Virar padrão é decisão de GASTO, por isso é sua | `select proposito, requests, sucessos from brightdata_uso_proposito where semana = date_trunc('week', now())::date order by 2 desc;` (leitura pura — **não** chamar `registrar_uso_brightdata`, que concede ao responder) |
+| **E** | **Chaves de API Asaas / Mercado Pago sem escopo de permissão** | Auditoria de segurança pede chave com escopo mínimo; as atuais são plenas | Painel de cada gateway → conferir escopo da chave em uso |
+| **F** | **Google G2RS** (ID `475-979-5747`) e **integração WebISS para NFS-e** | G2RS: ao reenviar, escolher a **segunda** opção — *"avaliada anteriormente… atualizar os campos"* — **nunca** "nova solicitação" (recomeça a fila). WebISS: sem ela, nota fiscal continua manual | Confirmação por e-mail do Google · emissão automática saindo no painel |
 
 Detalhe completo e passo a passo: `docs/PENDENCIAS_DONO.md`, seção **"NOVO EM 15/08"**.
-Uma Routine semanal (`trig_0125Q6eF32hazyZk4rVj16Tg`, segundas 9h BRT) também cobra os dois e se
-apaga quando ele confirmar os dois.
+Uma Routine semanal (`trig_0125Q6eF32hazyZk4rVj16Tg`, segundas 9h BRT) cobra o item **B** e se
+apaga quando ele confirmar. **C e D são de 18/08 e têm prazo curto**: C é um clique e apaga dois
+alertas vermelhos; D precisa de decisão ANTES de 24/08, senão a semana vira e a PECINI passa mais
+uma sem reler os antigos.
 
 ### 2️⃣ ~~Assunto marcado para a sessão de 16/08~~ — ✅ **RESOLVIDO E EM PRODUÇÃO**
 

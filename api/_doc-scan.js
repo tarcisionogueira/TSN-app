@@ -10,6 +10,7 @@
  * Entrada: html bruto + a URL base (para resolver caminhos relativos).
  * Saída: { matricula, edital, regras, laudo, foto, anexos:[{nome,url,tipo}] }.
  */
+import { decodificarEntidades } from './_texto-imovel.js';
 
 // Hosts de ruído (analytics, consentimento, fontes, mapas, chat, CDN de biblioteca) —
 // nunca são documento. Ampliado em 03/08 pelo achado do dono (ver RE_ASSET_*): o pixel do
@@ -129,9 +130,34 @@ function ehPaginaDoSite(url, baseUrl) {
   return false;
 }
 
+/**
+ * A URL NOMEIA um documento, ou só aponta para a rota que os serve?
+ *
+ * Achado em 17/08 (PECINI): a página do lote traz uma âncora rotulada "Matrícula" cujo href é
+ * `https://www.pecinileiloes.com.br/preview/` — a rota, sem o arquivo (os editais da MESMA
+ * página vêm como `/preview/<uuid>.pdf`). O rótulo casava com /matrícula/, o link virava anexo,
+ * e `link_matricula` ficava NOT NULL: a ficha anunciava "matrícula disponível" e entregava ao
+ * cliente uma pasta vazia. É a forma da casa — ausência entregue como presença — só que no
+ * campo de link em vez de no de texto. Quatro lotes gravados assim antes de a regra existir.
+ *
+ * Regra: um documento é identificado por um SEGMENTO FINAL de caminho (arquivo/id) ou por uma
+ * query string (`?id=`, `?doc=`). Caminho terminado em `/` sem query não identifica nada —
+ * e `null` ali é a resposta honesta ("não localizei"), que a ficha já sabe exibir.
+ */
+export function nomeiaUmDocumento(url) {
+  try {
+    const u = new URL(url);
+    if (u.search && u.search.length > 1) return true;   // ?id=123 identifica o arquivo
+    const seg = u.pathname.split('/').filter(Boolean);
+    if (!seg.length) return false;                       // origem nua
+    return !/\/$/.test(u.pathname);                      // termina em '/' → é a rota, não o doc
+  } catch { return false; }
+}
+
 // É um link que vale guardar como documento?
 function ehDocumento(url, label, baseUrl) {
   if (!url || HOST_RUIDO.test(url)) return false;
+  if (!nomeiaUmDocumento(url)) return false;
   // Só http(s): âncora "Consulte o edital" com href javascript:_gt(... passava no
   // filtro por citar 'edital' e virava um anexo-lixo inabrível (visto na ZUK).
   if (!/^https?:\/\//i.test(url)) return false;
@@ -167,7 +193,15 @@ export function vasculharDocumentos(html, baseUrl, fotoAtual = null) {
   let a;
   while ((a = reA.exec(html)) !== null) {
     const href = a[1];
-    const texto = a[2].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
+    // DECODIFICA ENTIDADES (17/08). O texto da âncora ia CRU para `classificar()`, então um
+    // link rotulado "Matr&#xED;cula" nunca casava com RE_MATRICULA — depois de "Matr" vem
+    // "&#xED;", não "í" — e o documento virava anexo genérico ou sumia. O cliente lia
+    // "Matrícula: no site" com o arquivo publicado na página do leiloeiro.
+    // Este classificador serve TODAS as fontes (via enriquecer-lote), não só a PECINI onde o
+    // caso apareceu. Note que RE_MATRICULA já carregava um remendo para mojibake de charset
+    // ("matrãâ­cula"): era o mesmo problema tratado no sintoma, alargando o regex em vez de
+    // normalizar a entrada. Decodificar aqui ataca a causa dos dois.
+    const texto = decodificarEntidades(a[2].replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim().slice(0, 120);
     if (href && !ancoraTexto.has(href)) ancoraTexto.set(href, texto);
   }
 

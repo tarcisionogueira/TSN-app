@@ -39,6 +39,7 @@
  * Env: BRIGHTDATA_API_TOKEN, BRIGHTDATA_ZONE, VITE_SUPABASE_URL, SUPABASE_SERVICE_KEY.
  */
 import { createClient } from '@supabase/supabase-js';
+import { decodificarEntidades } from '../api/_texto-imovel.js';
 import { buscarViaBrightData, brightDataDisponivel, ErroBrightData } from '../api/_brightdata.js';
 import { fetchHeadless, fecharHeadless } from './lib/fetch-residencial.mjs';
 import { extrairGenerico, extrairData, checarQualidade } from './lib/scraper-core.mjs';
@@ -167,8 +168,11 @@ function limparCidade(bruta) {
 // Parseia a página de detalhe: base genérica (og/ld+json/valores) + refinamentos RJ.
 function parseDetalhe(html, url) {
   const base = extrairGenerico(html, url) || {};
-  const txt = html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ');
+  // Decodifica entidades antes de qualquer regex (18/08): `Leil&atilde;o`, `1&ordm;`,
+  // `matr&iacute;cula` e `m&sup2;` nao casam com regex acentuada, e o resultado nao e erro —
+  // e valor faltando com cara de ausencia. Ver `api/_texto-imovel.js`.
+  const txt = decodificarEntidades(html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ');
 
   const plaus = v => (v >= 1000 && v <= 500_000_000) ? v : 0;
 
@@ -208,7 +212,7 @@ function parseDetalhe(html, url) {
   // Documentos: PDFs e links rotulados (matrícula/edital/laudo).
   const docs = [];
   for (const m of html.matchAll(/<a[^>]+href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)) {
-    const href = m[1]; const label = (m[2] || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    const href = m[1]; const label = decodificarEntidades((m[2] || '').replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();
     if (/\.pdf(\?|#|$)/i.test(href) || /edital|matr[íi]cula|laudo/i.test(label)) {
       let abs; try { abs = new URL(href, url).href; } catch { continue; }
       docs.push({ url: abs, label: label.slice(0, 60) });
@@ -296,7 +300,7 @@ async function debugRecon() {
     const dh = await bd(alvo, { timeoutMs: 90000 });
     const det = parseDetalhe(dh, alvo);
     console.log('   parseDetalhe →', JSON.stringify({ ...det, anexos: (det.anexos || []).length + ' docs' }, null, 2));
-    const t = dh.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+    const t = decodificarEntidades(dh.replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ');
     console.log('   R$ contexto:');
     for (const m of t.matchAll(/(.{0,45})R\$\s*([\d.]+,\d{2})/g)) console.log(`     …${m[1].trim()} » R$ ${m[2]}`);
     console.log('   matrícula ctx:', (t.match(/.{0,25}matr[íi]cula.{0,45}/i) || [''])[0].trim());

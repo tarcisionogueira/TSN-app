@@ -143,9 +143,17 @@ function avaliar(lat, lng) {
 async function buscarCandidatos() {
   const PAG = 1000, out = [];
   while (out.length < LIMITE) {
+    // ─── RUA E BAIRRO ENTRAM (17/08) ──────────────────────────────────────────────────────
+    // Por nível de geocode, os vazios falsos do acervo eram: `endereco` ZERO (13.077 lotes,
+    // servidos por ESTE job) × `cidade` 1.035 × `bairro` 272 × `rua` 110. Ou seja: onde este
+    // job atendia não havia UM caso; o dano inteiro estava na população que ele recusava e que
+    // sobrava para o Overpass público. O extrato Geofabrik cobre o Brasil inteiro e já é
+    // baixado todo dia — restringi-lo a `endereco` deixava de fora justamente quem precisava.
+    // `cidade` continua de fora, e de propósito: é o centroide do município (91 lotes na mesma
+    // coordenada em SP), do qual não se mede distância de imóvel nenhum.
     const { data, error } = await supabase.from('imoveis_leilao')
-      .select('id, latitude, longitude, pontos_proximos')
-      .eq('ativo', true).eq('geocod_nivel', 'endereco')
+      .select('id, latitude, longitude, pontos_proximos, geocod_nivel')
+      .eq('ativo', true).in('geocod_nivel', ['endereco', 'rua', 'bairro'])
       .not('latitude', 'is', null).neq('latitude', 0)
       .order('proximidades_em', { ascending: true, nullsFirst: true })
       .range(out.length, out.length + PAG - 1);
@@ -189,7 +197,13 @@ async function main() {
       //
       // Agora: sem POI encontrado, grava só o `score_localizacao` e NÃO toca em
       // `pontos_proximos` nem em `proximidades_em` — o lote segue para o cron corroborar.
-      const patch = { score_localizacao: score };
+      // O SCORE CONTINUA SÓ PARA `endereco` — a regra validada com o dono no topo deste arquivo
+      // ("não calcula em bairro/cidade") não mudou. O que mudou é que ela deixou de arrastar
+      // junto as PROXIMIDADES: nota de localização a partir de uma coordenada aproximada seria
+      // enganosa, mas listar a escola mais próxima, rotulada como origem aproximada, é
+      // informação honesta — e infinitamente melhor que o "nenhum ponto de interesse" que estes
+      // lotes recebiam do Overpass. Duas perguntas diferentes, dois critérios diferentes.
+      const patch = im.geocod_nivel === 'endereco' ? { score_localizacao: score } : {};
       if (achou) {
         // Preserva as categorias que ESTE job não sabe calcular. `praia` só existe no helper
         // do Overpass (`api/_proximidades.js`); sem esta mesclagem, os 411 lotes de praia
@@ -199,6 +213,10 @@ async function main() {
         patch.pontos_proximos = { ...soDoOverpass, ...nearest };
         patch.proximidades_em = new Date().toISOString();
       }
+      // Nada a gravar (rua/bairro sem POI: não tem score a escrever e não se toca no vazio) —
+      // sai sem chamar o banco. Um `update({})` seria uma ida ao PostgREST sem efeito, e o
+      // resultado dela entraria na contagem como se fosse trabalho feito.
+      if (!Object.keys(patch).length) { vazios++; feitos++; continue; }
       const { error } = await supabase.from('imoveis_leilao').update(patch).eq('id', im.id);
       if (error) falhas++;
       else if (achou) ok++;

@@ -24,12 +24,23 @@
  * Env: BRIGHTDATA_API_TOKEN, BRIGHTDATA_ZONE, VITE_SUPABASE_URL, SUPABASE_SERVICE_KEY.
  */
 import { createClient } from '@supabase/supabase-js';
-// NOTA (11/08): aqui o `null` do fetchViaBrightData é um fallback DELIBERADO (tenta o
-// caminho grátis/residencial, e o pago é a segunda chance) — por isso este arquivo segue
-// na linha de base do verificador de padrões em vez de migrar para `buscarViaBrightData`.
-// O que fecha o buraco perigoso é outra coisa: coleta com zero lote agora sai com código
-// 1 e grava `fonte_saude` 'falhou', e o gate só carimba "coletei" com linha no acervo.
-import { fetchViaBrightData, brightDataDisponivel } from '../api/_brightdata.js';
+import { decodificarEntidades } from '../api/_texto-imovel.js';
+// CORRIGIDO (18/08). A nota de 11/08 dizia que o `null` do `fetchViaBrightData` era um
+// fallback DELIBERADO ("tenta o caminho grátis/residencial, e o pago é a segunda chance") e
+// por isso o arquivo seguia na linha de base do verificador. **A justificativa não descrevia
+// este código:** a escolha entre residencial e pago é feita por VARIÁVEL DE AMBIENTE, antes
+// da chamada (`GESTAO_HEADLESS === '1'`, em `bd()`); no modo pago o `null` não tinha segunda
+// chance nenhuma — virava `return null` seco. Ou seja, a isenção protegia um fallback que
+// não existe neste caminho.
+//
+// O efeito medido: quando o teto SEMANAL do Bright Data recusa, todo fetch volta `null`, a
+// home não vem em nenhum domínio, e a execução gravava `fonte_saude` como 'falhou' com
+// "nada pronto (0 lotes brutos)". Em 5 manhãs (13, 14, 15, 16 e 18/08) isso aconteceu no
+// MESMO segundo de cron em que CALIL e VEGAS — que passam pelo caminho honesto — gravaram
+// 'sem_cota'. A recusa é do teto GLOBAL (475/450), não da sub-cota 'gestao' (30/150), então
+// atinge os três juntos. Duas ações opostas (liberar orçamento × consertar parser) estavam
+// saindo com o mesmo rótulo, e o rótulo errado é o que manda consertar o que não quebrou.
+import { buscarViaBrightData, ErroBrightData, brightDataDisponivel } from '../api/_brightdata.js';
 import { checarQualidade, normalizarData } from './lib/scraper-core.mjs';
 import { registrarConhecimento, qualidadeColeta } from './lib/conhecimento.mjs';
 // Monitor de fontes: sem esta linha a fonte fica INVISÍVEL ao bug bounty (ver _saude-fonte.mjs).
@@ -52,13 +63,33 @@ const num = s => parseFloat(String(s || '').replace(/[^\d.,]/g, '').replace(/\./
 if (!SB_URL || !SB_KEY) { console.error('Faltam VITE_SUPABASE_URL / SUPABASE_SERVICE_KEY'); process.exit(1); }
 const supabase = createClient(SB_URL, SB_KEY);
 
+// O freio de custo agiu em ALGUM fetch desta execução? É a única coisa que separa "a fonte
+// mudou" de "eu não fui olhar". Fica no módulo porque a decisão acontece lá embaixo, no
+// fetch, e só é PERGUNTADA no fim, quando se grava a saúde da fonte.
+let semCotaVisto = false;
+
 // Busca via Web Unlocker e DECODIFICA windows-1252 (o back-office serve latin1).
 async function bd(url, { timeoutMs = 60000 } = {}) {
   if (process.env.GESTAO_HEADLESS === '1') {   // runner residencial: Chromium real já decodifica o charset (sem mojibake) e passa Cloudflare, SEM Bright Data
     return await fetchHeadless(url, { timeoutMs });
   }
-  const r = await fetchViaBrightData(url, { proposito: 'gestao', timeoutMs });
+  // `buscarViaBrightData` LANÇA com o motivo em vez de devolver `null` para quatro causas
+  // diferentes. Continuamos devolvendo `null` ao chamador — a enumeração por domínio/evento é
+  // tolerante a falha de propósito, e deixar a exceção subir mataria a execução ANTES de
+  // gravar `fonte_saude`, fazendo a fonte sumir do monitor (o buraco que o scraper-rj pagou em
+  // 11/08). O que muda é que agora o motivo não se perde no caminho.
+  let r;
+  try {
+    r = await buscarViaBrightData(url, { proposito: 'gestao', timeoutMs, exigirOk: false });
+  } catch (e) {
+    if (!(e instanceof ErroBrightData)) throw e;   // erro de verdade não vira "página vazia"
+    if (e.semCota) semCotaVisto = true;
+    console.error(`  [bd] ${url}: ${e.message}`);
+    return null;
+  }
   if (!r || !r.ok) return null;
+  // Decodificação em catch PRÓPRIO: corpo ilegível sempre foi `null` aqui, e continuar
+  // deixando-o subir junto do erro de transporte trocaria uma falha silenciosa por outra.
   try {
     const buf = await r.arrayBuffer();
     return new TextDecoder('windows-1252').decode(buf);
@@ -139,7 +170,10 @@ function fatiarCards(html) {
 
 function parseCard(card, ctx) {
   const html = card.html;
-  const txt = html.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ').trim();
+  // Decodifica entidades antes de qualquer regex (18/08): `Leil&atilde;o`, `1&ordm;`,
+  // `matr&iacute;cula` e `m&sup2;` nao casam com regex acentuada, e o resultado nao e erro —
+  // e valor faltando com cara de ausencia. Ver `api/_texto-imovel.js`.
+  const txt = decodificarEntidades(html.replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();
 
   // CATEGORIA (filtro imóvel × móveis/veículos).
   const categoria = (txt.match(/CATEGORIA:\s*([A-Za-zÀ-ÿ ]+?)\s+(?:ESTADO|ID\d|[A-Z]{2,})/i) || [])[1]
@@ -244,7 +278,7 @@ async function coletarEvento(dominio, idLeilao) {
   const url = `https://${dominio}/leilao.php?idLeilao=${idLeilao}`;
   const html = await bd(url);
   if (!paginaOk(html)) return { rows: [], bloqueado: true };
-  const cabecalho = html.slice(0, 6000).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  const cabecalho = decodificarEntidades(html.slice(0, 6000).replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ');
   const ctx = {
     dominio, idLeilao,
     leiloeiro: leiloeiroDoTitulo(html, dominio),
@@ -321,10 +355,18 @@ async function main() {
   // Sai com erro E deixa a linha em `fonte_saude`: sem isso a fonte some do monitor
   // (nenhuma linha nova) e o acervo encolhe em silêncio. Ver scraper-rj.mjs, 11/08.
   if (!prontos.length) {
+    // ZERO POR ORÇAMENTO ≠ ZERO POR QUEBRA. `semCota` faz `registrarSaude` gravar status
+    // 'sem_cota' em vez de 'falhou' e suprimir a acusação de regressão — a ação que resolve é
+    // liberar cota, não mexer no parser. O exit 1 FICA nos dois casos: "não coletei" é
+    // verdade em ambos, e sair com 0 seria o check verde sobre acervo parado de 11/08.
     await registrarSaude(supabase, 'GESTAOLEILOES', [], 'principal',
-      { ok: false, metricas: { n: 0, uf_pct: 0, valor_pct: 0, link_pct: 0, foto_pct: 0 },
-        motivo: `nada pronto (${todos.length} lotes brutos, ${bloq} evento(s) bloqueado(s))` });
-    console.error('nada a gravar. Saindo com erro para não carimbar coleta que não coletou.');
+      { ok: false, semCota: semCotaVisto, metricas: { n: 0, uf_pct: 0, valor_pct: 0, link_pct: 0, foto_pct: 0 },
+        motivo: semCotaVisto
+          ? 'SEM COTA Bright Data — coleta não tentada (decisão de orçamento, não regressão da fonte)'
+          : `nada pronto (${todos.length} lotes brutos, ${bloq} evento(s) bloqueado(s))` });
+    console.error(semCotaVisto
+      ? 'sem cota do fornecedor: nada coletado. Saindo com erro — não coletei, mas a fonte não é a culpada.'
+      : 'nada a gravar. Saindo com erro para não carimbar coleta que não coletou.');
     process.exitCode = 1;
     return;
   }
@@ -340,7 +382,12 @@ async function main() {
   console.log(`✅ ${prontos.length} imóveis do cluster Gestão de Leilões gravados/atualizados.`);
   // SAÚDE DA FONTE (08/08): entra no monitor de regressão junto das demais. Antes esta fonte
   // não escrevia em `fonte_saude`, então nunca ganhava piso aprendido e uma quebra passaria batido.
-  await registrarSaude(supabase, 'GESTAOLEILOES', prontos, 'principal');
+  // COLETA PARCIAL TAMBÉM PRECISA DO SINAL: se a cota acabou no MEIO da rodada, o total sai
+  // legitimamente menor e o teste de regressão gritaria "queda vs anterior" sobre um número
+  // que a nossa própria decisão de orçamento encolheu. `semCota` suprime a acusação sem
+  // mascarar o total — o número gravado continua sendo o que de fato foi coletado.
+  await registrarSaude(supabase, 'GESTAOLEILOES', prontos, 'principal',
+    semCotaVisto ? { semCota: true } : undefined);
   await registrarConhecimento(supabase, {
     fonte: 'GESTAOLEILOES', plataforma: 'GestaoDeLeiloes(PHP)', acesso: 'brightdata', custo: 'pago',
     anti_bot: 'cloudflare', enumeracao: 'home_idLeilao→evento_inline', url_lote: '/lote.php?idLote={id}',

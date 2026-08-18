@@ -6,6 +6,7 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
+import { decodificarEntidades } from '../api/_texto-imovel.js';
 import https from 'https';
 import http from 'http';
 import { Buffer } from 'buffer';
@@ -771,7 +772,7 @@ async function scraperMegaLeiloes(uf) {
       if (!href || seen.has(href)) continue;
       seen.add(href);
 
-      const titulo = card.match(/<h[2-4][^>]*>([\s\S]*?)<\/h[2-4]>/i)?.[1]?.replace(/<[^>]+>/g,'').trim() || '';
+      const titulo = decodificarEntidades(card.match(/<h[2-4][^>]*>([\s\S]*?)<\/h[2-4]>/i)?.[1] || '').replace(/<[^>]+>/g,'').trim();
       const valorMatch = card.match(/R\$\s*([\d.,]+)/);
       const valor = valorMatch ? parseFloat(valorMatch[1].replace(/\./g,'').replace(',','.')) : 0;
       if (!valor) continue;
@@ -1211,7 +1212,7 @@ async function scraperSeuImovelBB(page = 0) {
       const href = card.match(/href="([^"]*(?:imovel|lote|detalhe)[^"]*)"/i)?.[1] || '';
       if (!href || seen.has(href)) continue;
       seen.add(href);
-      const titulo = card.match(/<h[2-4][^>]*>([\s\S]*?)<\/h[2-4]>/i)?.[1]?.replace(/<[^>]+>/g,'').trim() || '';
+      const titulo = decodificarEntidades(card.match(/<h[2-4][^>]*>([\s\S]*?)<\/h[2-4]>/i)?.[1] || '').replace(/<[^>]+>/g,'').trim();
       const valorMatch = card.match(/R\$\s*([\d.,]+)/);
       const valor = valorMatch ? parseFloat(valorMatch[1].replace(/\./g,'').replace(',','.')) : 0;
       if (!valor) continue;
@@ -1578,7 +1579,7 @@ async function uploadFotoStorage(fotoUrl, fonteId) {
 // ─── SALVAR NO SUPABASE ───────────────────────────────────────────────────────
 
 async function salvarImoveis(imoveis) {
-  if (imoveis.length === 0) return;
+  if (imoveis.length === 0) return { salvos: 0, erro: null };
 
   const comViabilidade = await Promise.all(imoveis.map(async (im) => {
     const v = await avaliarViabilidade({ valorMinimo: im.valor_minimo, valorAvaliacao: im.valor_avaliacao });
@@ -1607,14 +1608,101 @@ async function salvarImoveis(imoveis) {
   // Remove campos internos não presentes no schema da tabela imoveis_leilao.
   // ATENÇÃO: dedup_chave NÃO é coluna — se vazar no payload, o PostgREST rejeita
   // o lote inteiro (400) e NADA é salvo (foi o que mantinha o acervo CEF sem atualizar).
-  const rows = comViabilidade.map(({ raw: _raw, _foto_original: _fo, dedup_chave: _dc, ...rest }) => rest);
+  const brutos = comViabilidade.map(({ raw: _raw, _foto_original: _fo, dedup_chave: _dc, ...rest }) => rest);
 
-  const { error } = await supabase
-    .from('imoveis_leilao')
-    .upsert(rows, { onConflict: 'fonte,fonte_id', ignoreDuplicates: false });
+  // DEDUP POR CHAVE DE CONFLITO — a causa do RJ congelado (18/08).
+  //
+  // O CSV da Caixa repete o mesmo `n do imovel` em algumas UFs. Um upsert com duas linhas
+  // de mesma chave faz o Postgres abortar o COMANDO INTEIRO com
+  // "ON CONFLICT DO UPDATE command cannot affect row a second time" (21000) — ele se recusa a
+  // atualizar a mesma linha duas vezes na mesma instrução. Não é erro de uma linha: são as
+  // 8.200 do estado que não entram.
+  //
+  // O estrago não apareceu porque o laço de UFs seguia para a próxima e o processo saía 0:
+  // o RJ ficou 12 dias parado (05/08 → 17/08), 7.783 lotes servidos ao cliente com preço e
+  // status de duas semanas atrás, com o run VERDE todo dia. E o sweep de vencidos não podia
+  // pegar: ele compara cada lote com o `max(atualizado_em)` do PRÓPRIO estado, então um estado
+  // inteiro congelado parece perfeitamente consistente consigo mesmo.
+  //
+  // Fica a última ocorrência (o CSV é lido de cima para baixo e a repetição costuma ser
+  // reapresentação da mesma linha). Se a duplicidade crescer, o log mostra.
+  const porChave = new Map();
+  for (const r of brutos) porChave.set(`${r.fonte}|${r.fonte_id}`, r);
+  const rows = [...porChave.values()];
+  const duplicados = brutos.length - rows.length;
+  if (duplicados > 0) console.log(`    ⚠️ ${duplicados} linha(s) duplicada(s) no CSV (mesma chave fonte+fonte_id) — mantida a última de cada`);
 
-  if (error) { console.error('Erro ao salvar:', error.message); return; }
-  console.log(`    ✅ ${comViabilidade.length} imóveis salvos`);
+  // UPSERT EM BLOCOS, COM BISSECÇÃO NA FALHA (18/08).
+  //
+  // O dedup por `fonte+fonte_id` acima NÃO resolveu o RJ: a coleta seguinte acusou ZERO
+  // duplicadas e mesmo assim morreu com o mesmo 21000. Ou seja, a colisão não está na chave
+  // que eu supus — e daqui não dá para baixar o CSV da Caixa (o proxy bloqueia o domínio) para
+  // olhar o dado bruto. Em vez de continuar adivinhando qual é a chave, o código passa a
+  // RESPONDER: manda em blocos e, quando um bloco falha, parte no meio até isolar a linha, que
+  // vai para o log com o `fonte_id`. Na pior hipótese isola 1 linha em ~log2(500) tentativas.
+  //
+  // O ganho imediato independe do diagnóstico: uma linha problemática deixa de derrubar as
+  // outras 8.199. Antes era tudo ou nada, e por 12 dias foi nada.
+  const CHUNK = 500;
+  const gravar = async (lote) => {
+    const { error } = await supabase
+      .from('imoveis_leilao')
+      .upsert(lote, { onConflict: 'fonte,fonte_id', ignoreDuplicates: false });
+    return error;
+  };
+  let salvos = 0;
+  const rejeitadas = [];
+  const colisoes = [];
+  const transitorias = [];
+  // Dois diagnósticos DIFERENTES, e a bissecção separa um do outro:
+  //  • lote de 1 que falha  → a linha é ruim SOZINHA (dado inválido nela).
+  //  • lote que falha mas cujas DUAS metades passam → não há linha ruim: são duas linhas que
+  //    colidem ENTRE SI na chave de conflito. Separadas, ambas entram. É o caso que o dedup
+  //    por `fonte+fonte_id` deveria ter pego — se cair aqui, a chave real é outra, e o par
+  //    fica registrado no log para a próxima sessão saber por onde começar.
+  const enviar = async (lote) => {
+    const erro = await gravar(lote);
+    if (!erro) { salvos += lote.length; return; }
+    if (lote.length === 1) {
+      rejeitadas.push(`${lote[0].fonte_id}: ${erro.message.slice(0, 90)}`);
+      return;
+    }
+    const antes = { salvos, rej: rejeitadas.length };
+    const meio = Math.floor(lote.length / 2);
+    await enviar(lote.slice(0, meio));
+    await enviar(lote.slice(meio));
+    if (salvos - antes.salvos === lote.length && rejeitadas.length === antes.rej) {
+      // SÓ É COLISÃO SE O BANCO DISSE QUE FOI (18/08). "Falhou e as metades passaram" também é
+      // o retrato de uma falha TRANSITÓRIA — timeout, 5xx, conexão — que some no retry. Rotular
+      // as duas coisas de "colisão" foi exatamente o que me fez perseguir uma causa que já
+      // estava consertada: depois de resolver o trigger, 18 dos 19 blocos sumiram e o 1 que
+      // restou era ruído, anunciado com nome de diagnóstico.
+      const desc = `${lote.length} linha(s) — ex.: ${lote[0].fonte_id} … ${lote[lote.length - 1].fonte_id}`;
+      if (/affect row a second time/i.test(erro.message)) colisoes.push(desc);
+      else transitorias.push(`${desc} — ${erro.message.slice(0, 90)}`);
+    }
+  };
+  for (let i = 0; i < rows.length; i += CHUNK) await enviar(rows.slice(i, i + CHUNK));
+
+  if (rejeitadas.length) {
+    console.error(`    ⛔ ${rejeitadas.length} linha(s) REJEITADA(S) pelo banco:`);
+    for (const r of rejeitadas.slice(0, 10)) console.error(`       ${r}`);
+    if (rejeitadas.length > 10) console.error(`       … e mais ${rejeitadas.length - 10}`);
+  }
+  if (colisoes.length) {
+    console.error(`    🔎 ${colisoes.length} bloco(s) falharam por COLISÃO ENTRE LINHAS (separadas, todas entram):`);
+    for (const c of colisoes.slice(0, 5)) console.error(`       ${c}`);
+    console.error(`       → 21000 de verdade. A causa conhecida (trigger escrevendo na própria tabela) foi`);
+    console.error(`         corrigida em 18/08 — se voltar, é um caminho NOVO, não o antigo.`);
+  }
+  if (transitorias.length) {
+    console.error(`    ↻ ${transitorias.length} bloco(s) falharam e passaram no retry (falha transitória, NÃO colisão):`);
+    for (const t of transitorias.slice(0, 5)) console.error(`       ${t}`);
+  }
+  // NÃO devolver 0 em silêncio: quem chama soma o "processados" e registra a saúde da fonte.
+  // Enquanto isto era um `return` mudo, o total incluía as 8.200 do RJ que nunca foram gravadas.
+  if (!salvos) return { salvos: 0, erro: rejeitadas[0] || 'nenhuma linha aceita' };
+  console.log(`    ✅ ${salvos} imóveis salvos${rejeitadas.length ? ` (${rejeitadas.length} rejeitada(s))` : ''}`);
 
   // Está no CSV de hoje ⇒ está à VENDA na Caixa: reativa o lote que o sweep de
   // vencidos (desativar_imoveis_cef_vencidos) tirou do ar e que voltou ao CSV.
@@ -1628,6 +1716,17 @@ async function salvarImoveis(imoveis) {
     if (errReativar) console.error('    Erro ao reativar lotes do CSV:', errReativar.message);
     else if (reativados) console.log(`    🔼 ${reativados} lote(s) reativado(s) (voltaram ao CSV)`);
   }
+  // Uma linha rejeitada não pode fazer a UF inteira contar como falha — mas também não pode
+  // sumir: vai no `erro` para o chamador registrar em `fonte_saude` e o run sair com código 1.
+  // Colisão entre linhas NÃO é falha da UF (todas foram gravadas) — é achado de diagnóstico,
+  // e vira aviso, não erro. Rejeitada de verdade é a que o banco recusou sozinha.
+  return {
+    salvos,
+    erro: rejeitadas.length ? `${rejeitadas.length} linha(s) rejeitada(s): ${rejeitadas[0]}` : null,
+    aviso: [colisoes.length ? `${colisoes.length} bloco(s) com colisao entre linhas` : null,
+           transitorias.length ? `${transitorias.length} bloco(s) com falha transitoria (passaram no retry)` : null]
+           .filter(Boolean).join(' · ') || null,
+  };
 }
 
 // ─── MAIN ─────────────────────────────────────────────────────────────────────
@@ -1645,20 +1744,30 @@ async function main() {
     ? process.env.UFS.split(',').map(s => s.trim().toUpperCase()).filter(u => TODAS_UFS.includes(u))
     : TODAS_UFS);
   if (ufs.length === 0) ufs.push(...TODAS_UFS);
+  const ufsComFalha = [];
   for (const uf of ufs) {
     const imoveis = await scraperCEFcsv(uf);
-    await salvarImoveis(imoveis);
-    total += imoveis.length;
-    await new Promise(r => setTimeout(r, 800));
+    const r = await salvarImoveis(imoveis);
+    // SOMA O QUE FOI GRAVADO, não o que foi lido. `total += imoveis.length` contava as 8.200
+    // do RJ que morreram no upsert, e esse número virava o `fonte_saude` da CEF: a fonte
+    // aparecia saudável justamente no dia em que um terço dela não entrou.
+    total += r.salvos;
+    if (r.erro) { ufsComFalha.push(`${uf} (${r.erro.slice(0, 80)})`); console.error(`    🛑 CEF ${uf}: ${r.salvos} gravado(s), com rejeição.`); }
+    if (r.aviso) console.error(`    🔎 CEF ${uf}: ${r.aviso}`);
+    await new Promise(r2 => setTimeout(r2, 800));
   }
+  if (ufsComFalha.length) console.error(`\n🛑 UF(s) que não gravaram: ${ufsComFalha.join(' · ')}`);
 
   // Registra a saúde da fonte CEF (maior acervo) — antes ela não era monitorada.
   // Alimenta os cards do dashboard e o alerta por e-mail se a coleta quebrar.
   try {
     await supabase.from('fonte_saude').insert({
       fonte: 'CEF', total, estrategia: 'csv',
-      status: total > 0 ? 'ok' : 'falhou',
-      motivo: total > 0 ? null : 'CSV da Caixa não retornou imóveis',
+      // UF que não gravou é 'falhou', mesmo com as outras 26 salvando: coleta parcial
+      // carimbada como 'ok' foi o que deixou o RJ 12 dias fora sem ninguém notar.
+      status: (total > 0 && !ufsComFalha.length) ? 'ok' : 'falhou',
+      motivo: ufsComFalha.length ? `UF(s) sem gravar: ${ufsComFalha.join(' · ')}`.slice(0, 400)
+        : (total > 0 ? null : 'CSV da Caixa não retornou imóveis'),
     });
     console.log(`🩺 fonte_saude CEF registrada: ${total} imóveis`);
   } catch (e) { console.log('registrarSaude CEF erro:', e.message); }
@@ -1677,7 +1786,13 @@ async function main() {
     .eq('ativo', true);
   if (errDesativar) console.error('Erro ao desativar obsoletos:', errDesativar.message);
 
-  console.log(`\n✅ Scraping concluído. ${total} imóveis processados.\n`);
+  console.log(`\n✅ Scraping concluído. ${total} imóveis GRAVADOS.\n`);
+  // Sai com erro para o passo "Notify on failure" do workflow disparar. Antes, uma UF inteira
+  // podia não gravar e o run terminava verde — o alerta existia e nunca era alcançado.
+  if (ufsComFalha.length) {
+    console.error(`Saindo com erro: ${ufsComFalha.length} UF(s) não gravaram.`);
+    process.exitCode = 1;
+  }
 }
 
 main().catch(err => {

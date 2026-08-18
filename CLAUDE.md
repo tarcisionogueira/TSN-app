@@ -149,9 +149,26 @@ curto (5–8 linhas) antes de seguir:
    FUTUROS, sem hardcode** (NÃO recalibre pisos de acervo na mão; deixe o histórico aprender).
    O `monitor-fontes-cron` faz isso todo dia (Seção C3) + grava o snapshot em `fonte_metricas_hist`.
    Cheque rápido no início:
-   `select b.fonte,b.ativos_piso,b.ativos_mediana,u.total from public.fonte_baseline_aprendida() b
-   join lateral (select total from fonte_saude s where s.fonte=b.fonte order by executado_em desc limit 1) u on true
-   where b.tem_baseline and u.total < b.ativos_piso;` → vazio = íntegro. Rode a **OFENSIVA de
+   ```sql
+   select b.fonte, b.ativos_piso, b.ativos_mediana, u.total, u.status
+     from public.fonte_baseline_aprendida() b
+     join lateral (select total, status from fonte_saude s where s.fonte = b.fonte
+                    order by executado_em desc limit 1) u on true
+    where b.tem_baseline and u.total < b.ativos_piso
+      and u.status <> 'sem_cota';   -- ⬅️ NÃO REMOVA ESTA LINHA. Ver abaixo.
+   ```
+   → vazio = íntegro.
+   > ⚠️ **O filtro de `sem_cota` é o conserto de 18/08, e a versão sem ele acusa fonte sadia.**
+   > Quando o teto semanal do Bright Data recusa, a coleta NÃO É TENTADA e a linha entra com
+   > `total = 0` e `status = 'sem_cota'` — o motivo diz por extenso *"decisão de orçamento, não
+   > regressão da fonte"*. Comparar esse zero contra o piso aprendido é entregar o **freio de
+   > custo como se fosse medição da fonte** (a forma #5 da lista lá em cima), e manda consertar
+   > parser que está intacto: em 18/08 acusou CALIL, VEGAS e GESTAOLEILOES com os três acervos
+   > íntegros (95 · 21 · 130 lotes). `monitor-fontes-cron.js` sempre soube distinguir — trata
+   > `sem_cota` como categoria própria e não empilha o alerta de baseline; era **esta consulta**
+   > que não sabia. Zero com `status = 'falhou'` continua sendo alarme de verdade.
+   
+   Rode a **OFENSIVA de
    captura** (recon da estrutura VIVA do site × premissas do scraper — como o recon que achou a
    regressão do BIASI: dedup global + `?pagina` desconhecido) quando: uma fonte regredir, um
    leiloeiro NOVO for integrado, ou houver suspeita de mudança estrutural. Depois, atualize

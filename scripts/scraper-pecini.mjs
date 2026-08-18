@@ -21,14 +21,16 @@
  * Env: BRIGHTDATA_API_TOKEN, BRIGHTDATA_ZONE, VITE_SUPABASE_URL, SUPABASE_SERVICE_KEY.
  */
 import { createClient } from '@supabase/supabase-js';
-// NOTA (11/08): aqui o `null` do fetchViaBrightData é um fallback DELIBERADO (tenta o
-// caminho grátis/residencial, e o pago é a segunda chance) — por isso este arquivo segue
-// na linha de base do verificador de padrões em vez de migrar para `buscarViaBrightData`.
-// O que fecha o buraco perigoso é outra coisa: coleta com zero lote agora sai com código
-// 1 e grava `fonte_saude` 'falhou', e o gate só carimba "coletei" com linha no acervo.
-import { fetchViaBrightData, brightDataDisponivel } from '../api/_brightdata.js';
+// NOTA (11/08, revista em 17/08): o `null` que `bd()` devolve continua sendo um fallback
+// DELIBERADO (tenta o caminho grátis/residencial; o pago é a segunda chance) — o que mudou é
+// que ele deixou de ser MUDO. `bd()` passou de `fetchViaBrightData` para `buscarViaBrightData`
+// dentro de um try/catch: o chamador segue vendo `null`, mas o MOTIVO da recusa vira log e o
+// laço para quando o freio de custo diz não, em vez de repetir a recusa lote a lote.
+import { buscarViaBrightData, brightDataDisponivel, ErroBrightData } from '../api/_brightdata.js';
 import { fetchHeadless, fecharHeadless } from './lib/fetch-residencial.mjs';
-import { extrairGenerico, extrairData, checarQualidade } from './lib/scraper-core.mjs';
+import { extrairGenerico, extrairData, checarQualidade, extrairAreaM2} from './lib/scraper-core.mjs';
+import { decodificarEntidades } from '../api/_texto-imovel.js';
+import { nomeiaUmDocumento } from '../api/_doc-scan.js';
 import { registrarConhecimento, qualidadeColeta } from './lib/conhecimento.mjs';
 // Monitor de fontes: sem esta linha a fonte fica INVISÍVEL ao bug bounty (ver _saude-fonte.mjs).
 import { registrarSaude } from './_saude-fonte.mjs';
@@ -36,8 +38,9 @@ import { registrarSaude } from './_saude-fonte.mjs';
 const BASE = 'https://www.pecinileiloes.com.br';
 const MAX_LOTES = Number(process.env.PECINI_MAX_LOTES || 40);
 const DRYRUN = process.env.PECINI_DRYRUN !== '0'; // default: dry-run (não grava)
+const ALVO = ['novos', 'antigos', 'todos'].includes(process.env.PECINI_ALVO) ? process.env.PECINI_ALVO : 'novos';
 const DEBUG = process.env.PECINI_DEBUG === '1';   // dumpa contexto dos R$ p/ achar os rótulos reais
-let debugRestante = 3;                              // só nos primeiros lotes (log enxuto)
+let debugRestante = Number(process.env.PECINI_DEBUG_N || 3); // primeiros lotes (log enxuto)
 const SB_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_KEY;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -47,13 +50,28 @@ if (!SB_URL || !SB_KEY) { console.error('Faltam VITE_SUPABASE_URL / SUPABASE_SER
 const supabase = createClient(SB_URL, SB_KEY);
 
 // Busca crua via Web Unlocker (com teto de custo). Retorna o HTML/XML ou null.
+let recusaDeCota = null;   // motivo da última recusa do FREIO DE CUSTO (não de rede)
+
 async function bd(url, { proposito = 'pecini', timeoutMs = 45000 } = {}) {
   if (process.env.PECINI_HEADLESS === '1') {   // runner residencial: Chromium real de IP de casa, SEM Bright Data
     return await fetchHeadless(url, { timeoutMs });
   }
-  const r = await fetchViaBrightData(url, { proposito, timeoutMs });
-  if (!r || !r.ok) return null;
-  return await r.text().catch(() => null);
+  // O `null` daqui segue sendo o fallback deliberado deste arquivo — mas o MOTIVO para de ser
+  // adivinhado. `fetchViaBrightData` engolia o ErroBrightData e o laço imprimia
+  // "detalhe não veio (teto BD?)" com ponto de interrogação: um palpite no lugar do fato que
+  // a RPC já tinha devolvido. Na coleta de 17/08 os 5 últimos lotes pararam em
+  // `reservado_para_outros` (457 de 500 usados, 43 reservados para o RJ) — o freio agindo como
+  // projetado, e o log dizendo "teto?" como se ninguém soubesse.
+  try {
+    const r = await buscarViaBrightData(url, { proposito, timeoutMs, exigirOk: false });
+    if (!r.ok) { console.log(`  · HTTP ${r.status} em ${url}`); return null; }
+    return await r.text().catch(() => null);
+  } catch (e) {
+    if (!(e instanceof ErroBrightData)) throw e;
+    if (e.semCota) recusaDeCota = `${e.motivo}${e.detalhe ? ` — ${e.detalhe}` : ''}`;
+    console.log(`  · ${e.semCota ? 'RECUSADO PELO FREIO DE CUSTO' : 'falha'}: ${e.motivo}${e.detalhe ? ` (${e.detalhe})` : ''}`);
+    return null;
+  }
 }
 
 // Tipo do imóvel a partir do título (normalizarTipo do scraper principal não é
@@ -81,13 +99,30 @@ function absPecini(href) {
 // /arquivos/Leiloes/Docs/*.pdf. Coleta todo <a href>.pdf, classifica por rótulo/nome e
 // monta os anexos. Zero-regressão: sem PDF na página, retorna [] e o comportamento é o
 // de hoje (link_edital = página do lote, sem matrícula). Só ADICIONA cobertura.
+// Id/caminho do documento escondido num atributo da âncora (`data-arquivo`, `data-url`,
+// `data-id`, `onclick="abrir('...')"`). Só devolve o que JÁ É caminho ou nome de arquivo —
+// nunca inventa a URL a partir do padrão observado noutro link.
+function idDeAtributo(atributos) {
+  const txt = String(atributos || '');
+  for (const re of [/data-(?:arquivo|url|href|src|file|documento)\s*=\s*["']([^"']+)["']/i,
+                    /on[a-z]+\s*=\s*["'][^"']*?['"]([^'"]*\.(?:pdf|jpe?g|png|docx?))['"]/i]) {
+    const v = (txt.match(re) || [])[1];
+    if (v && /[^/]$/.test(v)) return v;
+  }
+  return null;
+}
+
 function extrairDocs(html) {
   const anexos = [];
   const vistos = new Set();
   for (const m of html.matchAll(/<a\b[^>]*href=["']([^"']+\.pdf(?:\?[^"']*)?)["'][^>]*>([\s\S]*?)<\/a>/gi)) {
     const url = absPecini(m[1]);
     if (!url || vistos.has(url)) continue; vistos.add(url);
-    const rotulo = (m[2] || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    // DECODIFICA ENTIDADES ANTES DE CLASSIFICAR (17/08). O rótulo vinha cru: um link
+    // "Matr&#xED;cula" não casava com /matr[íi]cul/ e a matrícula que EXISTE no site do
+    // leiloeiro nunca virava anexo de matrícula — o cliente lia "Matrícula: no site" com o
+    // documento publicado. A prova estava no acervo: anexo gravado como "Edital do Leil&#xE3;o".
+    const rotulo = decodificarEntidades((m[2] || '').replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();
     const alvo = `${rotulo} ${url}`.toLowerCase();
     const tipo = /matr[íi]cul/.test(alvo) ? 'matricula'
       : /edital/.test(alvo) ? 'edital'
@@ -95,6 +130,33 @@ function extrairDocs(html) {
       : 'anexo';
     anexos.push({ nome: (rotulo || tipo).slice(0, 60), url, tipo });
   }
+  // SEGUNDA PASSADA: link cujo RÓTULO diz o que é, mesmo sem terminar em .pdf. O laço acima
+  // só aceita href .pdf — se o leiloeiro serve o documento por rota de download/visualizador
+  // (`/download?id=`, `/documento/123`), ele some. Aqui só entra o que o TEXTO do link
+  // identifica, para não varrer o menu do site inteiro: nada de href genérico.
+  for (const m of html.matchAll(/<a\b([^>]*)href=["']([^"']+)["']([^>]*)>([\s\S]*?)<\/a>/gi)) {
+    const atributos = `${m[1] || ''} ${m[3] || ''}`;
+    let url = absPecini(m[2]);
+    if (!url || /\.pdf(\?|$)/i.test(url)) continue;
+    const rotulo = decodificarEntidades((m[4] || '').replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();
+    if (!rotulo || rotulo.length > 60) continue;
+    const tipo = /matr[íi]cul/i.test(rotulo) ? 'matricula'
+      : /edital/i.test(rotulo) ? 'edital'
+      : /laudo|avalia[çc]/i.test(rotulo) ? 'laudo'
+      : null;
+    if (!tipo) continue;
+    // O href pode ser a ROTA e não o arquivo (`/preview/`), com o id do documento guardado
+    // num atributo que o JS da página usa. Tenta recuperar dali — e SÓ dali: nada é montado
+    // a partir de palpite sobre o formato da URL.
+    if (!nomeiaUmDocumento(url)) url = absPecini(idDeAtributo(atributos)) || url;
+    // Continua sem nomear documento nenhum → não é anexo. Ver `nomeiaUmDocumento`: um link
+    // rotulado "Matrícula" que aponta para a pasta faz a ficha prometer o que não entrega.
+    if (!nomeiaUmDocumento(url)) continue;
+    if (vistos.has(url)) continue;
+    vistos.add(url);
+    anexos.push({ nome: rotulo.slice(0, 60), url, tipo });
+  }
+
   const ordem = { matricula: 0, edital: 1, laudo: 2, anexo: 3 };
   anexos.sort((a, b) => (ordem[a.tipo] ?? 9) - (ordem[b.tipo] ?? 9));
   return anexos;
@@ -133,18 +195,54 @@ function parseSitemap(xml) {
   return [...lotes.values()];
 }
 
+// RÓTULO DA PRAÇA. Exige o ORDINAL (1º/2º/1ª/2ª) ou a palavra "Público" antes de "Leilão" —
+// um "Leilão:" solto aparece em menu e em texto corrido, e aceitá-lo transformaria qualquer
+// R$ da página em lance. O regex antigo pedia "Público Leilão" e essa fonte escreve só
+// "1º Leilão:", que é o suficiente para identificar a praça sem abrir a porta.
+const RE_PRACA_ROTULO = /(?:[12]\s*[ºªo°a]\s*|P\S*blico\s+)Leil\S*o/i;
+const RE_PRACA_VALOR = /(?:[12]\s*[ºªo°a]\s*|P\S*blico\s+)Leil\S*o\s*:?\s*R\$\s*([\d.]+,\d{2})/gi;
+
 // Parseia a página de detalhe: base genérica (og/ld+json/valores) + refinamentos
 // específicos do Pecini (rótulos Avaliação/Lance e trimpath ValorMinimoLance...).
 function parseDetalhe(html, rec) {
   const base = extrairGenerico(html, rec.loteUrl) || {};
-  const txt = html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ');
+  // DECODIFICA AS ENTIDADES (17/08). Só o `&nbsp;` era tratado, e o resto do texto chegava cru
+  // aos regexes de rótulo. O recon com PECINI_DEBUG mostrou que a página escreve
+  // `1&ordm; Leil&atilde;o: R$ 25.789,00` — ou seja, nem `1º` nem `Leilão` existem no texto que
+  // era testado. Foi por isso que 10 dos 21 lotes novos saíram com `valor_minimo = 0` e foram
+  // descartados: o lance ESTAVA na página, escrito numa forma que nada aqui conseguia ler.
+  // É a terceira vez no dia que a mesma entidade não decodificada aparece com outra roupa
+  // (rótulo de anexo, descrição do corpo e agora o lance).
+  const txt = decodificarEntidades(
+    html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<[^>]+>/g, ' ')
+  ).replace(/\s+/g, ' ');
 
-  // RECON: com PECINI_DEBUG=1 dumpa o contexto de cada "R$ ..." (rótulo à esquerda)
-  // p/ descobrir os rótulos REAIS do site sem acesso direto (o proxy bloqueia Pecini).
-  if (DEBUG && debugRestante > 0) {
-    debugRestante--;
-    console.log(`\n[DEBUG ${rec.id}] contextos de R$ (texto):`);
+  // Valores pelos rótulos REAIS do Pecini (recon via PECINI_DEBUG):
+  //   "Valor de Avaliação (dd/mm/aaaa): R$ X"     → avaliação (a data no meio quebrava o regex antigo)
+  //   "1º Leilão: R$ X" / "2º Leilão: R$ Y" (com ou sem "Público") → praças (lance mínimo)
+  // Ignoramos "Incremento", "Exercício da Preferência" e o filtro "Faixa de Preço".
+  // Faixa plausível p/ imóvel: piso R$1.000, teto R$500mi. Sem match → 0 → descartado.
+  const plaus = (v) => (v >= 1000 && v <= 500_000_000) ? v : 0;
+  const avalLabel = plaus(num((txt.match(/Avalia\S*o[^R]{0,25}R\$\s*([\d.]+,\d{2})/i) || [])[1]));
+  const pracas = [];
+  for (const m of txt.matchAll(RE_PRACA_VALOR)) pracas.push(num(m[1]));
+  for (const m of html.matchAll(/ValorMinimoLance(?:Primeira|Segunda)Praca["'\s:=]+R?\$?\s*([\d.]+,\d{2})/gi)) pracas.push(num(m[1]));
+  const pracasValidas = pracas.map(plaus).filter(v => v > 0);
+  const valorMinimo = pracasValidas.length ? Math.min(...pracasValidas) : 0;
+  // A 1ª praça abre pelo valor de avaliação → se não houver rótulo de avaliação, usa a MAIOR praça.
+  const avaliacao = avalLabel || (pracasValidas.length ? Math.max(...pracasValidas) : 0);
+
+  // RECON: com PECINI_DEBUG=1 dumpa o contexto de cada "R$ ..." (rótulo à esquerda) p/
+  // descobrir os rótulos REAIS do site sem acesso direto (o proxy bloqueia o Pecini daqui).
+  //
+  // MORA AQUI, e não antes de ler os valores, de propósito (17/08): a coleta perdeu 10 dos 21
+  // lotes novos por `valor_minimo = 0`, e o debug limitado aos 3 PRIMEIROS lotes despeja
+  // justamente os que deram certo — a amostra que não precisa de recon. Agora o dump sai
+  // SEMPRE que o lance não foi lido, que é a única página com algo a ensinar.
+  if (DEBUG && (debugRestante > 0 || !valorMinimo)) {
+    if (debugRestante > 0) debugRestante--;
+    console.log(`\n[DEBUG ${rec.id}] ${valorMinimo ? '' : '(SEM LANCE LIDO) '}contextos de R$ (texto):`);
     for (const m of txt.matchAll(/(.{0,45})R\$\s*([\d.]+(?:,\d{2})?)/g)) {
       console.log(`   …${m[1].trim()} » R$ ${m[2]}`);
     }
@@ -152,30 +250,22 @@ function parseDetalhe(html, rec) {
     if (trimp.length) console.log(`   [trimpath/attrs] ${trimp.join(' · ')}`);
   }
 
-  // Valores pelos rótulos REAIS do Pecini (recon via PECINI_DEBUG):
-  //   "Valor de Avaliação (dd/mm/aaaa): R$ X"     → avaliação (a data no meio quebrava o regex antigo)
-  //   "1º Público Leilão: R$ X" / "2º Público Leilão: R$ Y" → praças (lance mínimo)
-  // Ignoramos "Incremento", "Exercício da Preferência" e o filtro "Faixa de Preço".
-  // Faixa plausível p/ imóvel: piso R$1.000, teto R$500mi. Sem match → 0 → descartado.
-  const plaus = (v) => (v >= 1000 && v <= 500_000_000) ? v : 0;
-  const avalLabel = plaus(num((txt.match(/Avalia\S*o[^R]{0,25}R\$\s*([\d.]+,\d{2})/i) || [])[1]));
-  const pracas = [];
-  for (const m of txt.matchAll(/P\S*blico\s+Leil\S*o\s*:?\s*R\$\s*([\d.]+,\d{2})/gi)) pracas.push(num(m[1]));
-  for (const m of html.matchAll(/ValorMinimoLance(?:Primeira|Segunda)Praca["'\s:=]+R?\$?\s*([\d.]+,\d{2})/gi)) pracas.push(num(m[1]));
-  const pracasValidas = pracas.map(plaus).filter(v => v > 0);
-  const valorMinimo = pracasValidas.length ? Math.min(...pracasValidas) : 0;
-  // A 1ª praça abre pelo valor de avaliação → se não houver rótulo de avaliação, usa a MAIOR praça.
-  const avaliacao = avalLabel || (pracasValidas.length ? Math.max(...pracasValidas) : 0);
-
   // Modalidade: "Público Leilão" (1ª/2ª praça) = leilão, não venda direta (que
   // aparece no menu do site em toda página). "extrajudicial" contém "judicial",
   // então usa lookbehind p/ não classificar errado.
-  const temPracas = /P\S*blico\s+Leil\S*o|[12][ªa]\s*pra[çc]a/i.test(txt);
+  const temPracas = RE_PRACA_ROTULO.test(txt) || /[12][ªa]\s*pra[çc]a/i.test(txt);
   const modalidade = /(?<!extra)judicial/i.test(txt) ? 'judicial'
     : (temPracas || /extrajudicial/i.test(txt)) ? 'extrajudicial'
     : /venda\s*direta/i.test(txt) ? 'venda_direta'
     : 'extrajudicial';
-  const area = num((txt.match(/([\d.]+,\d{2}|\d+)\s*m²/i) || [])[1]);
+  // ÁREA (17/08): era `txt.match(/(\d+)\s*m²/)` — exigia o caractere `m²` (site que escreve
+  // "m2" saía sem área) e pegava a PRIMEIRA ocorrência da página, que num portal de leilão
+  // costuma ser o filtro de busca, não o imóvel. `extrairAreaM2` prioriza área ROTULADA
+  // (construída/privativa) e aceita as variações de unidade. Procura primeiro na DESCRIÇÃO —
+  // que desde hoje vem do corpo da página, não da meta tag de marketing — e só depois na
+  // página inteira, porque a descrição é o texto que fala do imóvel e o resto é o site.
+  const descImovel = (base.descricao || '');
+  const area = extrairAreaM2(descImovel) || extrairAreaM2(txt);
 
   // Documentos do lote (matrícula/edital/laudo) a partir dos PDFs da própria página.
   const anexos = extrairDocs(html);
@@ -261,23 +351,89 @@ async function main() {
     return;
   }
 
-  // Prioriza lotes NOVOS (fonte_id ainda não no banco); execuções seguintes cobrem o resto.
+  // QUEM ESTE RUN VAI VISITAR (PECINI_ALVO, default 'novos' = comportamento de sempre).
+  //
+  // Por que virou opção (18/08): `novos.length ? novos : lotes` significa que os lotes JÁ
+  // capturados só são revisitados quando NÃO HÁ nenhum novo no sitemap. Como quase sempre há,
+  // os antigos nunca eram relidos — os da PECINI estavam parados desde julho, com a metragem
+  // e a matrícula que os consertos de 17/08 passaram a saber extrair, e sem nada que os fosse
+  // buscar. "Rodar os antigos" não era possível pedir: era um efeito colateral de o sitemap
+  // estar sem novidade.
+  //
+  //   novos   → só os que ainda não estão no banco (default; cai nos antigos se não houver novo)
+  //   antigos → só os JÁ capturados, do mais desatualizado para o mais recente
+  //   todos   → novos primeiro, antigos em seguida, na mesma rodada
   const ids = lotes.map(l => `pecini_${l.id}`);
-  const existentes = new Set();
+  const visto = new Map();   // fonte_id → atualizado_em (null = nunca)
   for (let i = 0; i < ids.length; i += 200) {
-    const { data } = await supabase.from('imoveis_leilao').select('fonte_id').in('fonte_id', ids.slice(i, i + 200));
-    for (const r of data || []) existentes.add(r.fonte_id);
+    const { data, error } = await supabase.from('imoveis_leilao')
+      .select('fonte_id,atualizado_em').in('fonte_id', ids.slice(i, i + 200));
+    // Um erro aqui NÃO pode virar "não tem nada no banco": isso reclassificaria o acervo
+    // inteiro como novo e faria a rodada gastar cota recapturando o que já existe.
+    if (error) { console.error(`falha ao ler o acervo (${error.message}). Abortado.`); process.exitCode = 1; return; }
+    for (const r of data || []) visto.set(r.fonte_id, r.atualizado_em || null);
   }
-  const novos = lotes.filter(l => !existentes.has(`pecini_${l.id}`));
-  const alvo = (novos.length ? novos : lotes).slice(0, MAX_LOTES);
-  console.log(`no banco: ${existentes.size} · novos: ${novos.length} · processando: ${alvo.length}`);
+  const novos = lotes.filter(l => !visto.has(`pecini_${l.id}`));
+  const antigos = lotes.filter(l => visto.has(`pecini_${l.id}`))
+    .sort((a, b) => String(visto.get(`pecini_${a.id}`) || '').localeCompare(String(visto.get(`pecini_${b.id}`) || '')));
+  const fila = ALVO === 'antigos' ? antigos
+    : ALVO === 'todos' ? [...novos, ...antigos]
+    : (novos.length ? novos : antigos);
+  const alvoLotes = fila.slice(0, MAX_LOTES);
+  console.log(`no banco: ${visto.size} · novos: ${novos.length} · antigos: ${antigos.length} · alvo '${ALVO}' · processando: ${alvoLotes.length}`);
+
+  // ─── SAIU DO SITE? PERGUNTE À ENUMERAÇÃO, NÃO À COLETA (18/08) ───────────────────────────
+  //
+  // A limpeza de encerrados (`desativar_imoveis_leiloeiro_stale`) desativa o que "não veio na
+  // última coleta". Isso funciona para coletor de PASSADA COMPLETA, mas aqui a coleta visita
+  // 4–6 lotes por rodada de propósito (cota do Bright Data): quase todo o acervo fica "não
+  // visto" por construção, e a fonte é pulada para sempre — 58 lotes esperando.
+  //
+  // A resposta certa não vem da coleta: vem do SITEMAP, que enumera o acervo INTEIRO em UMA
+  // requisição, sem visitar lote nenhum. Lote ativo no banco que o sitemap não lista saiu do
+  // site — isso é medição, não silêncio.
+  //
+  // O PISO É ABSOLUTO E ISSO É UMA DÍVIDA CONSCIENTE. O CLAUDE.md manda deixar o histórico
+  // aprender os pisos, e é o certo — mas `fonte_baseline_aprendida()` aprende do total
+  // COLETADO (4–6 aqui), que não descreve a enumeração (52). Misturar os dois corromperia o
+  // baseline das duas medidas. Até existir histórico de ENUMERAÇÃO, o piso fica explícito aqui
+  // e o número enumerado vai para o log de toda rodada, que é de onde esse histórico sai.
+  const PISO_ENUMERACAO = 40;   // observado: 52. Sitemap quebrado devolve 0 ou punhado.
+  if (!DRYRUN && lotes.length >= PISO_ENUMERACAO) {
+    const noSitemap = new Set(lotes.map(l => `pecini_${l.id}`));
+    const { data: ativosNoBanco, error: eAtivos } = await supabase
+      .from('imoveis_leilao').select('fonte_id').eq('fonte', 'PECINI').eq('ativo', true);
+    if (eAtivos) {
+      console.error(`  não consegui ler os ativos para a varredura (${eAtivos.message}) — sweep PULADO.`);
+    } else {
+      const sumiram = (ativosNoBanco || []).map(r => r.fonte_id).filter(id => !noSitemap.has(id));
+      if (sumiram.length) {
+        const { data: desativados, error: eDesat } = await supabase
+          .from('imoveis_leilao').update({ ativo: false }).in('fonte_id', sumiram).select('fonte_id');
+        // `.select()` de propósito: update que a RLS/filtro não alcança devolve error null e
+        // zero linha — sem isto, "desativei 58" seria afirmação sem prova (CLAUDE.md, forma 3).
+        if (eDesat) console.error(`  falha ao desativar os que sumiram do sitemap: ${eDesat.message}`);
+        else console.log(`  🔻 ${(desativados || []).length} lote(s) desativado(s): ativos no banco e AUSENTES do sitemap (${lotes.length} enumerados).`);
+      } else {
+        console.log(`  ✓ nenhum lote ativo fora do sitemap (${lotes.length} enumerados).`);
+      }
+    }
+  } else if (!DRYRUN) {
+    console.error(`  ⚠️ sitemap enumerou ${lotes.length} (< piso ${PISO_ENUMERACAO}) — varredura de ausentes PULADA para não zerar a fonte por parse quebrado.`);
+  }
+  if (!alvoLotes.length) {
+    console.error(`nenhum lote na fila para alvo='${ALVO}'. Nada a fazer.`);
+    process.exitCode = 1;
+    return;
+  }
 
   // 2) Detalhe de cada lote alvo.
   const prontos = [];
   let semDetalhe = 0, reprovados = 0;
-  for (const rec of alvo) {
+  for (const rec of alvoLotes) {
+    if (recusaDeCota) { semDetalhe++; continue; }   // o freio já disse não: insistir só repete a recusa
     const html = await bd(rec.loteUrl);
-    if (!html) { semDetalhe++; console.log(`- ${rec.id}: detalhe não veio (teto BD?)`); continue; }
+    if (!html) { semDetalhe++; console.log(`- ${rec.id}: detalhe não veio`); continue; }
     const det = parseDetalhe(html, rec);
     if (det.paginaInvalida) { semDetalhe++; console.log(`- ${rec.id}: página genérica/sem lote (pulado)`); continue; }
     const row = montarRow(rec, det);
@@ -289,13 +445,18 @@ async function main() {
   }
 
   console.log(`\nResumo: ${prontos.length} prontos · ${reprovados} descartados · ${semDetalhe} sem detalhe.`);
+  // "Não coletei porque o orçamento disse não" é uma frase diferente de "a fonte não tinha nada",
+  // e elas não podem sair iguais do mesmo lugar (CLAUDE.md, forma 5).
+  if (recusaDeCota) console.log(`⛔ PAROU POR COTA: ${recusaDeCota} — ${semDetalhe} lote(s) ficaram para a próxima rodada.`);
   // Zero pronto não é "a fonte está vazia" — é coleta quebrada até prova em contrário.
   // Sai com erro E deixa a linha em `fonte_saude`: sem isso a fonte some do monitor
   // (nenhuma linha nova) e o acervo encolhe em silêncio. Ver scraper-rj.mjs, 11/08.
   if (!prontos.length) {
     await registrarSaude(supabase, 'PECINI', [], 'principal',
       { ok: false, metricas: { n: 0, uf_pct: 0, valor_pct: 0, link_pct: 0, foto_pct: 0 },
-        motivo: `nada pronto (${semDetalhe} sem detalhe, ${reprovados} reprovados)` });
+        motivo: recusaDeCota
+          ? `sem cota: ${recusaDeCota} (${semDetalhe} sem detalhe, ${reprovados} reprovados)`
+          : `nada pronto (${semDetalhe} sem detalhe, ${reprovados} reprovados)` });
     console.error('nada a gravar. Saindo com erro para não carimbar coleta que não coletou.');
     process.exitCode = 1;
     return;

@@ -12,6 +12,7 @@ export const config = { runtime: 'nodejs', maxDuration: 120 };
 
 import { isCronAuthorized } from './_auth.js';
 import { fetchLote, extrairDatasLeilao } from './enriquecer-lote.js';
+import { extrairAreaM2, extrairDescricaoDoCorpo } from './_texto-imovel.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -49,11 +50,16 @@ export default async function handler(req, res) {
   //    evita o encoding frágil do filtro in.() com acentos/espaços).
   // Falta data = sem INÍCIO **ou** sem ENCERRAMENTO (antes só olhava data_leilao, então lote
   // com início já gravado nunca voltava aqui e o prazo real nunca era capturado).
+  // ALVO AMPLIADO PARA A METRAGEM (18/08). Antes só entrava quem faltava DATA — e por isso os
+  // 457 lotes sem área nem matrícula nunca eram visitados por aqui: 416 deles jamais tinham
+  // sido enriquecidos. A metragem mora na MESMA página que este cron já baixa para ler a data,
+  // então cobri-la não custa uma requisição a mais nos lotes que ele já visitaria, e abre
+  // cobertura para os que só têm o buraco da área.
   const filtro = [
-    'or=(data_leilao.is.null,data_leilao_2.is.null)',
+    'or=(data_leilao.is.null,data_leilao_2.is.null,area_m2.is.null,area_m2.eq.0)',
     'modalidade=not.ilike.*venda*direta*',
     'ativo=not.is.false',
-    'select=id,url_lote,link_edital,cidade,fonte,data_leilao,data_leilao_2',
+    'select=id,url_lote,link_edital,cidade,fonte,data_leilao,data_leilao_2,area_m2,titulo,descricao',
     'order=enriquecido_em.asc.nullsfirst',
     `limit=${LOTE_MAX * 5}`,
   ].join('&');
@@ -70,7 +76,7 @@ export default async function handler(req, res) {
   }
   const lista = pool.slice(0, LOTE_MAX);
 
-  let comData = 0, comFim = 0, semConteudo = 0, prioridade = 0;
+  let comData = 0, comFim = 0, semConteudo = 0, prioridade = 0, comArea = 0, comTexto = 0;
   const agora = new Date().toISOString();
   for (const im of lista) {
     if (cidadeSet.has(String(im.cidade || '').toLowerCase())) prioridade++;
@@ -82,6 +88,17 @@ export default async function handler(req, res) {
         const { inicio, fim } = extrairDatasLeilao(html);
         if (inicio && !im.data_leilao) { patch.data_leilao = inicio; comData++; }
         if (fim && !im.data_leilao_2) { patch.data_leilao_2 = fim; comFim++; }
+        // TEXTO E METRAGEM, do MESMO html que já está na mão — zero requisição extra.
+        // A descrição só é substituída quando a atual é ECO DO TÍTULO (o defeito medido em
+        // 17/08: fora da CEF, `descricao` era o título e nada mais em 7 fontes inteiras).
+        // Nunca sobrescreve texto que já diz algo — o dia é fonte da verdade só do que traz.
+        if (!(Number(im.area_m2) > 0)) {
+          const corpo = extrairDescricaoDoCorpo(html);
+          const ecoDoTitulo = !im.descricao || im.descricao.trim() === String(im.titulo || '').trim();
+          if (corpo && ecoDoTitulo) { patch.descricao = corpo.slice(0, 2000); comTexto++; }
+          const area = extrairAreaM2(corpo || '') || extrairAreaM2(html);
+          if (area > 0) { patch.area_m2 = area; comArea++; }
+        }
       } else {
         semConteudo++;
         // Vazio recorrente = teto do Bright Data atingido → para de martelar.
@@ -91,5 +108,5 @@ export default async function handler(req, res) {
     await marcar(im.id, patch);
   }
 
-  res.status(200).json({ ok: true, processados: lista.length, com_data: comData, com_encerramento: comFim, sem_conteudo: semConteudo, de_cidades_de_usuarios: prioridade });
+  res.status(200).json({ ok: true, processados: lista.length, com_data: comData, com_encerramento: comFim, com_area: comArea, com_texto: comTexto, sem_conteudo: semConteudo, de_cidades_de_usuarios: prioridade });
 }

@@ -23,7 +23,7 @@ export default async function handler(req) {
   const id = new URL(req.url).searchParams.get('imovel_id');
   if (!id) return json({ error: 'imovel_id obrigatório' }, 400);
 
-  const [im] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(id)}&select=latitude,longitude,pontos_proximos,proximidades_em,proximidades_vazios`)).json();
+  const [im] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(id)}&select=latitude,longitude,pontos_proximos,proximidades_em,proximidades_vazios,proximidades_vazio_em,proximidades_espelhos,geocod_nivel`)).json();
   if (!im) return json({ error: 'Imóvel não encontrado' }, 404);
 
   const lat = Number(im.latitude), lng = Number(im.longitude);
@@ -53,8 +53,15 @@ export default async function handler(req) {
 
   if (!lat || !lng) return json({ pontos: null, sem_coordenada: true });
 
+  // COORDENADA DE CIDADE NÃO RESPONDE ESTA PERGUNTA (17/08). O nível `cidade` é o centroide do
+  // município — 91 lotes do acervo compartilham -23.5329,-46.6395 —, então "farmácia a 300 m"
+  // medido dali é uma distância precisa a partir de uma origem que não é a do imóvel. A ficha
+  // passa a dizer "localização aproximada", e a diferença entre `nao_aplicavel` e o vazio comum
+  // é justamente o que separa "não dá para medir" de "medi e não há nada".
+  if (im.geocod_nivel === 'cidade') return json({ pontos: null, nao_aplicavel: true, motivo: 'coordenada aproximada (centro da cidade)' });
+
   try {
-    const { pontos, vazio } = await consultarProximidades(lat, lng);
+    const { pontos, vazio, espelho } = await consultarProximidades(lat, lng);
 
     if (vazio) {
       // UMA observação de vazio NÃO autoriza dizer ao cliente "não há nada por perto" (10/08).
@@ -64,18 +71,27 @@ export default async function handler(req) {
       // Quando o cron confirmar o vazio em execuções diferentes, ele grava `{}` e AÍ a tela
       // passa a dizer "nenhum ponto de interesse" — que nesse momento é verdade.
       // Gravar `{}` aqui era o que congelava o engano: o cache devolvia o vazio para sempre.
-      await sb(`imoveis_leilao?id=eq.${encodeURIComponent(id)}`, {
-        method: 'PATCH', headers: { Prefer: 'return=minimal' },
-        // `proximidades_vazios` incrementado no servidor seria melhor, mas PostgREST não faz
-        // expressão em PATCH; ler-e-somar aqui é aceitável porque um contador de corroboração
-        // que perde uma contagem por concorrência apenas ADIA a conclusão — nunca a antecipa.
-        body: JSON.stringify({ proximidades_vazios: (Number(im.proximidades_vazios) || 0) + 1 }),
-      }).catch(() => { /* padrao-ok: contagem best-effort; perder uma só adia a conclusão */ });
+      // ESPAÇAMENTO DE 6h TAMBÉM AQUI (17/08). Este caminho dispara a cada ABERTURA da ficha e
+      // alimenta o MESMO contador que o cron usa como "corroboração temporal": um cliente
+      // recarregando a página três vezes seguidas fabricava as três observações sozinho, em
+      // segundos, e o próximo vazio do cron condenava o lote. Contagem sem espaçamento não é
+      // uma segunda observação — é a mesma observação de novo.
+      const ultimo = im.proximidades_vazio_em ? Date.parse(im.proximidades_vazio_em) : 0;
+      if (!ultimo || (Date.now() - ultimo) >= 6 * 3600000) {
+        const espelhos = Array.from(new Set([...(im.proximidades_espelhos || []), espelho].filter(Boolean)));
+        await sb(`imoveis_leilao?id=eq.${encodeURIComponent(id)}`, {
+          method: 'PATCH', headers: { Prefer: 'return=minimal' },
+          // `proximidades_vazios` incrementado no servidor seria melhor, mas PostgREST não faz
+          // expressão em PATCH; ler-e-somar aqui é aceitável porque um contador de corroboração
+          // que perde uma contagem por concorrência apenas ADIA a conclusão — nunca a antecipa.
+          body: JSON.stringify({ proximidades_vazios: (Number(im.proximidades_vazios) || 0) + 1, proximidades_vazio_em: new Date().toISOString(), proximidades_espelhos: espelhos }),
+        }).catch(() => { /* padrao-ok: contagem best-effort; perder uma só adia a conclusão */ });
+      }
       return json({ pontos: null, indeterminado: true, retryable: true }, 502);
     }
 
     await sb(`imoveis_leilao?id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' },
-      body: JSON.stringify({ pontos_proximos: pontos, proximidades_em: new Date().toISOString(), proximidades_vazios: 0 }) });
+      body: JSON.stringify({ pontos_proximos: pontos, proximidades_em: new Date().toISOString(), proximidades_vazios: 0, proximidades_vazio_em: null, proximidades_espelhos: null }) });
     return json({ pontos });
   } catch (e) {
     // Falha REAL (Overpass fora/limite em todos os espelhos) → status de ERRO, não

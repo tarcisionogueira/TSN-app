@@ -22,6 +22,7 @@
  * Env: BRIGHTDATA_API_TOKEN, BRIGHTDATA_ZONE, VITE_SUPABASE_URL, SUPABASE_SERVICE_KEY.
  */
 import { createClient } from '@supabase/supabase-js';
+import { decodificarEntidades } from '../api/_texto-imovel.js';
 // NOTA (11/08, REVISTA EM 12/08): a decisão anterior era manter o `null` do
 // `fetchViaBrightData` como fallback deliberado — grátis primeiro, pago como segunda
 // chance. O fallback continua certo; o `null` é que era cego. Em 12/08 a cota semanal
@@ -146,8 +147,11 @@ function idDaUrl(url) {
 // Incremento/Comissão; fallbacks robustos; cidade/UF por "CIDADE/UF".
 function parseDetalhe(html, url) {
   const base = extrairGenerico(html, url) || {};
-  const txt = html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ');
+  // Decodifica entidades antes de qualquer regex (18/08): `Leil&atilde;o`, `1&ordm;`,
+  // `matr&iacute;cula` e `m&sup2;` nao casam com regex acentuada, e o resultado nao e erro —
+  // e valor faltando com cara de ausencia. Ver `api/_texto-imovel.js`.
+  const txt = decodificarEntidades(html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ');
 
   const plaus = v => (v >= 1000 && v <= 500_000_000) ? v : 0;
   const rotLance = plaus(num((txt.match(/lance\s*(?:inicial|m[íi]nimo|atual)[^R]{0,25}R\$\s*([\d.]+,\d{2})/i) || [])[1]));
@@ -169,7 +173,7 @@ function parseDetalhe(html, url) {
 
   const docs = [];
   for (const m of html.matchAll(/<a[^>]+href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)) {
-    const href = m[1]; const label = (m[2] || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    const href = m[1]; const label = decodificarEntidades((m[2] || '').replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();
     if (/\.pdf(\?|#|$)/i.test(href) || /edital|matr[íi]cula|laudo/i.test(label)) {
       let abs; try { abs = new URL(href, url).href; } catch { continue; }
       docs.push({ url: abs, label: label.slice(0, 60) });
@@ -226,6 +230,12 @@ function montarRow(tenant, url, det) {
 // Tenants cuja coleta parou por decisão de ORÇAMENTO (cota Bright Data), não por mudança
 // no site. A diferença decide se `fonte_saude` recebe "regressão" ou "sem cota".
 const SEM_COTA = new Set();
+// Quantos lotes a LISTAGEM do tenant devolveu nesta execução — o número que mede a saúde da
+// fonte de verdade. `total` (lotes processados) não serve: com `novos` vazio o coletor cai no
+// fallback e re-raspa até MAX_LOTES já conhecidos, então um dia sem novidade grava 40 e um dia
+// com um lote novo grava 1. Foi essa bimodalidade que acusou a VEGAS de regressão em 17/08
+// (1 lote NOVO capturado corretamente × 40 re-raspagens do dia anterior). Ver `_saude-fonte.mjs`.
+const ENUMERADOS = new Map();
 
 async function enumerarLotes(tenant) {
   const setUrls = new Set();
@@ -243,6 +253,7 @@ async function enumerarLotes(tenant) {
     if (setUrls.size === antes) break;
     await sleep(400);
   }
+  ENUMERADOS.set(tenant.fonte, setUrls.size);
   return { urls: [...setUrls], via };
 }
 
@@ -266,7 +277,7 @@ async function debugRecon() {
         const det = parseDetalhe(dh, alvo);
         console.log(`  ── detalhe ${alvo} (via ${dv})`);
         console.log('     parseDetalhe →', JSON.stringify({ ...det, anexos: (det.anexos || []).length + ' docs' }));
-        const t = dh.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+        const t = decodificarEntidades(dh.replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ');
         console.log('     R$ ctx:', JSON.stringify([...t.matchAll(/.{0,40}R\$\s*[\d.]+,\d{2}/g)].map(m => m[0].trim()).slice(0, 8)));
       }
     }
@@ -328,6 +339,7 @@ async function main() {
       await registrarSaude(supabase, tenant.fonte, [], 'soleon', {
         ok: false,
         semCota,
+        enumerados: ENUMERADOS.get(tenant.fonte) ?? null,
         metricas: { n: 0, uf_pct: 0, valor_pct: 0, link_pct: 0, foto_pct: 0 },
         motivo: semCota
           ? 'SEM COTA Bright Data — coleta não tentada (decisão de orçamento, não regressão da fonte)'
@@ -362,10 +374,15 @@ async function main() {
     // O `if (!rows.length) continue` saía ANTES desta linha (corrigido 11/08): o tenant que
     // coletava zero era justamente o que não deixava rastro — o único caso em que o monitor
     // precisava de uma linha, e era o único em que ela não vinha. TORRES3 está com 1 lote ativo.
+    // `enumerados` vai nos DOIS ramos: é justamente no tenant que coletou pouco (ou nada) que
+    // ele decide se houve regressão de verdade. Passar só no ramo de falha deixaria de fora o
+    // caso da VEGAS — que coletou 1 lote com sucesso e mesmo assim foi acusada.
+    const enumerados = ENUMERADOS.get(tenant.fonte) ?? null;
     await registrarSaude(supabase, tenant.fonte, rows, 'soleon',
-      rows.length ? undefined : {
+      rows.length ? { enumerados } : {
         ok: false,
         semCota: SEM_COTA.has(tenant.fonte),
+        enumerados,
         metricas: { n: 0, uf_pct: 0, valor_pct: 0, link_pct: 0, foto_pct: 0 },
         motivo: SEM_COTA.has(tenant.fonte)
           ? 'SEM COTA Bright Data — coleta não tentada (decisão de orçamento, não regressão da fonte)'

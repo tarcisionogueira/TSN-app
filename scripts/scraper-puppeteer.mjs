@@ -9,6 +9,7 @@
 import { createClient } from '@supabase/supabase-js';
 import puppeteer from 'puppeteer';
 import { vasculharDocumentos, chaveDocCanonica } from '../api/_doc-scan.js';
+import { ehFracaoIdeal, extrairAreaM2 } from './lib/scraper-core.mjs';
 import MUNICIPIOS from '../api/_municipios.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
@@ -105,7 +106,7 @@ const SENTINELAS_VALOR = new Set([999999999, 99999999, 9999999999, 111111111, 12
 const semSentinela = (v) => (SENTINELAS_VALOR.has(Number(v)) ? null : v);
 
 async function salvarImoveis(imoveis, fonte) {
-  if (!imoveis.length) return;
+  if (!imoveis.length) return { salvos: 0, esperados: 0 };
   // Guarda 1: só BRASIL. Descarta estrangeiros / estado inválido ANTES de salvar.
   // Inclui o caso UF-vazia + cidade estrangeira (rede Superbid) via ehEstrangeiroSemUF.
   const totalBruto = imoveis.length;
@@ -222,12 +223,27 @@ async function salvarImoveis(imoveis, fonte) {
     return row;
   });
 
+  // FRAÇÃO IDEAL FORA (decisão do dono, 17/08). Este coletor genérico serve a maioria das
+  // fontes e NÃO passa por `checarQualidade` — foi por aqui que entraram 117 dos 120 lotes de
+  // parte/fração ideal do acervo (LJUD 53, SUPERBID 21, LEILOFY 13, MEGA 10, GRUPOLANCE 8…).
+  // O mesmo `ehFracaoIdeal` do portão compartilhado, para a regra ter UMA definição só: dois
+  // regexes equivalentes em arquivos diferentes divergem no primeiro ajuste, e aí a fonte que
+  // ficou para trás volta a admitir o que a outra barra.
+  const limpos = rows.filter(r => !ehFracaoIdeal(r));
+  const barrados = rows.length - limpos.length;
+  if (barrados) console.log(`  ⛔ ${fonte}: ${barrados} lote(s) de parte/fração ideal barrados (fora do acervo por decisão de negócio)`);
+  if (!limpos.length) { console.log(`  ${fonte}: nada a salvar após o filtro.`); return { salvos: 0, esperados: 0 }; }
+
   const { error } = await supabase
     .from('imoveis_leilao')
-    .upsert(rows, { onConflict: 'fonte_id', ignoreDuplicates: false });
+    .upsert(limpos, { onConflict: 'fonte_id', ignoreDuplicates: false });
 
-  if (error) console.error(`  Erro ao salvar ${fonte}:`, error.message);
-  else console.log(`  ✅ ${fonte}: ${rows.length} imóveis salvos`);
+  // O ERRO PRECISA SUBIR (18/08). Antes ele virava só um console.error e a função não devolvia
+  // nada — quem chama seguia como se tivesse gravado, e o sweep logo abaixo desativava a fonte
+  // inteira com base no que foi COLETADO. Ver salvarEFinalizar.
+  if (error) { console.error(`  Erro ao salvar ${fonte}:`, error.message); return { salvos: 0, esperados: limpos.length }; }
+  console.log(`  ✅ ${fonte}: ${limpos.length} imóveis salvos`);
+  return { salvos: limpos.length, esperados: limpos.length };
 }
 
 // Salva em lotes de 500 e desativa os obsoletos da fonte (lotes que saíram do
@@ -235,10 +251,24 @@ async function salvarImoveis(imoveis, fonte) {
 // erro de rede não zerar o acervo. Retorna a quantidade coletada.
 async function salvarEFinalizar(imoveis, fonte) {
   const runStart = new Date().toISOString();
+  let salvos = 0, esperados = 0;
   for (let i = 0; i < imoveis.length; i += 500) {
-    await salvarImoveis(imoveis.slice(i, i + 500), `${fonte} ${i + 1}-${Math.min(i + 500, imoveis.length)}`);
+    const r = await salvarImoveis(imoveis.slice(i, i + 500), `${fonte} ${i + 1}-${Math.min(i + 500, imoveis.length)}`);
+    salvos += r.salvos; esperados += r.esperados;
   }
-  if (imoveis.length > 50) {
+  // O GATE OLHA O GRAVADO, NÃO O COLETADO (18/08). `imoveis.length > 50` mede o que o scrape
+  // BAIXOU; o sweep abaixo desativa tudo que não foi tocado nesta rodada. Se os upserts
+  // falharem, nada é tocado — e a condição, apoiada no número errado, mandava desativar o
+  // acervo INTEIRO da fonte. Este coletor serve MEGA, SUPERBID, LJUD, GRUPOLANCE, ZUK, BIASI e
+  // PESTANA: o grosso do acervo fora da CEF, em uma única chamada.
+  //
+  // `esperados` exclui de propósito os lotes barrados por fração ideal — esses NÃO foram
+  // gravados por decisão de negócio, e é correto que o sweep os aposente.
+  const gravouTudo = salvos === esperados;
+  if (!gravouTudo) {
+    console.error(`  🛑 ${fonte}: sweep PULADO — gravou ${salvos} de ${esperados}. Desativar aqui aposentaria lote por falha nossa.`);
+  }
+  if (salvos > 50 && gravouTudo) {
     const { error, count } = await supabase
       .from('imoveis_leilao')
       .update({ ativo: false }, { count: 'exact' })
@@ -247,8 +277,8 @@ async function salvarEFinalizar(imoveis, fonte) {
       .lt('atualizado_em', runStart);
     if (error) console.error(`  Erro ao desativar ${fonte} obsoletos:`, error.message);
     else console.log(`  🔻 ${fonte}: ${count ?? 0} lotes obsoletos desativados`);
-  } else {
-    console.log(`  ⚠️ ${fonte} coletou ${imoveis.length} (≤50) — pulando desativação por segurança`);
+  } else if (gravouTudo) {
+    console.log(`  ⚠️ ${fonte} gravou ${salvos} (≤50) — pulando desativação por segurança`);
   }
   return imoveis.length;
 }
@@ -801,7 +831,28 @@ async function scraperSuperbidNet(browser, { portalId, stores, fonte, leiloeiro,
       const sub = str(p.subCategory);
       const tipoRaw = (sub && !/im[oó]ve/i.test(sub)) ? sub : titulo;
       const linkURL = str(of.linkURL);
-      const desc = str(of.offerDescription) || titulo;
+      // DESCRIÇÃO (17/08): era `offerDescription || titulo`, e o resultado medido no acervo foi
+      // **1.492 de 1.494 lotes SUPERBID com a descrição igual ao título** — ou seja,
+      // `offerDescription` vem vazio em praticamente toda oferta e caíamos na manchete. Como o
+      // corpo é onde mora a metragem, 377 lotes SUPERBID ficaram sem área (136 deles sem
+      // matrícula nem edital, isto é, sem NENHUMA fonte de onde recuperá-la).
+      //
+      // A API já entrega outros campos no mesmo `fieldList` que pedimos e que estavam sendo
+      // ignorados: `offerDetail` (detalhamento do lote) e `product.shortDesc` (descrição do
+      // bem). Agora eles são CONCATENADOS — não escolhidos por prioridade — porque trazem
+      // fatias diferentes (um costuma ter a condição, o outro a descrição física), e juntá-los
+      // dá ao extrator de área mais chance de achar a metragem rotulada. Duplicatas saem.
+      // O título só entra se, depois de tudo, não sobrar nada — aí é o que temos.
+      const partesDesc = [str(of.offerDescription), str(of.offerDetail), str(p.shortDesc)]
+        .map((x) => x.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim())
+        .filter(Boolean);
+      const vistosDesc = new Set();
+      const descRica = partesDesc.filter((x) => {
+        const k = x.toLowerCase();
+        if (vistosDesc.has(k)) return false;
+        vistosDesc.add(k); return true;
+      }).join(' — ');
+      const desc = descRica || titulo;
       // Área/ocupação vêm no texto (título+descrição) — confirmado nos dados.
       const ext = extrairDaDescricao(`${titulo} ${desc}`);
       // URL da página do lote (vem da API em linkURL). Serve tanto p/ link_edital
@@ -860,7 +911,10 @@ async function scraperSuperbidNet(browser, { portalId, stores, fonte, leiloeiro,
         endereco: toTitleCase(str(loc.street)),
         valor_avaliacao: valAval,
         valor_minimo: valMin,
-        area_m2: ext.area_m2 || 0,
+        // `extrairDaDescricao` tem o regex antigo (exige `m²` literal). `extrairAreaM2` aceita
+        // "m2"/"metros quadrados" e prefere área ROTULADA — entra como rede, nunca sobrescreve
+        // o que o extrator específico já achou.
+        area_m2: ext.area_m2 || extrairAreaM2(desc) || 0,
         ocupacao: ext.ocupacao || null,
         descricao: desc.replace(/<[^>]+>/g, '').slice(0, 500),
         link_edital: loteUrl,
@@ -2007,8 +2061,24 @@ function mapLotePestana(lote, leilao) {
     || ((imgs.find(i => i && i.destaque) || imgs[0] || {}).media)
     || null;
   const foto = capaMedia ? `${PESTANA_GED}${encodeURIComponent(capaMedia)}?ims=fit-in/640x0` : null;
+  // MODALIDADE: `bem.origem` é a fonte preferida, mas vem VAZIA em boa parte do acervo da
+  // PESTANA — e o fallback era 'extrajudicial', um palpite AFIRMATIVO sobre a natureza
+  // jurídica do lote. Medido em 17/08: **1.021 lotes ativos** marcados extrajudicial cuja
+  // descrição diz, com todas as letras, "Alienação Judicial Por Venda Direta". O dado estava
+  // ali o tempo todo, em `leilao.nome`; o mapper só não olhava para lá.
+  //
+  // Não é rótulo cosmético: modalidade decide o risco jurídico que o cliente lê, a nota de
+  // Perfil do BidScore e o texto do parecer. Dizer "extrajudicial" para uma alienação
+  // JUDICIAL é afirmar ausência de processo onde há um.
+  //
+  // Ordem importa: 'extrajudicial' CONTÉM 'judicial'. O teste de extra vem primeiro, e o de
+  // judicial usa limite de palavra — as duas defesas, porque foi exatamente essa colisão por
+  // substring que errou a nota de Perfil de 9.589 lotes em src/utils/score.js.
   const origem = String(bem.origem || '').toLowerCase();
-  const modalidade = origem.includes('extra') ? 'extrajudicial' : origem.includes('judicial') ? 'judicial' : 'extrajudicial';
+  const textoModal = `${origem} ${String(leilao.nome || '').toLowerCase()} ${desc.toLowerCase()}`;
+  const modalidade = /extrajudicial/.test(textoModal) ? 'extrajudicial'
+    : /\bjudicial\b/.test(textoModal) ? 'judicial'
+    : 'extrajudicial';
   // DOCUMENTOS. O edital é do LEILÃO (um por leilão). Matrícula/laudo, quando
   // existem, são do LOTE/BEM (por-imóvel): NUNCA usar um doc de leilão como
   // matrícula, senão o mesmo arquivo grudaria em todos os lotes. Varremos os
@@ -3198,31 +3268,16 @@ async function main() {
     if (rodar('MEGA')) {
     console.log('📋 Mega Leilões...');
     {
-      const runStart = new Date().toISOString();
       const imoveis = await scraperMegaLeiloes(browser);
       // Captura os documentos (edital/matrícula/laudo/proposta) da página de detalhe —
       // renderiza JS, então pega o que o on-demand (fetch simples) não vê. Bounded.
       try { await enriquecerDocumentosLote(browser, imoveis, { cap: 150 }); }
       catch (e) { console.log(`  ⚠️ Enriquecimento de documentos Mega falhou (segue sem): ${e.message.slice(0, 80)}`); }
-      // salva em lotes de 500 para não estourar payload
-      for (let i = 0; i < imoveis.length; i += 500) {
-        await salvarImoveis(imoveis.slice(i, i + 500), `Mega ${i + 1}-${Math.min(i + 500, imoveis.length)}`);
-      }
-      total += imoveis.length;
-      // Desativa lotes Mega que saíram do ar (encerrados) — só se a coleta foi
-      // saudável (>50), para um erro de rede não zerar o acervo.
-      if (imoveis.length > 50) {
-        const { error, count } = await supabase
-          .from('imoveis_leilao')
-          .update({ ativo: false }, { count: 'exact' })
-          .eq('fonte', 'MEGA')
-          .eq('ativo', true)
-          .lt('atualizado_em', runStart);
-        if (error) console.error('  Erro ao desativar Mega encerrados:', error.message);
-        else console.log(`  🔻 Mega: ${count ?? 0} lotes encerrados desativados`);
-      } else {
-        console.log('  ⚠️ Mega coletou ≤50 — pulando desativação por segurança');
-      }
+      // USA `salvarEFinalizar` COMO AS OUTRAS 11 FONTES (18/08). Este bloco reimplementava a
+      // função inteira — salvar em lotes de 500 + sweep — e por isso ficou para trás quando o
+      // gate do sweep foi corrigido para olhar o GRAVADO em vez do COLETADO. Duas cópias da
+      // mesma regra divergem no primeiro ajuste, e a que ficou para trás é a que apaga acervo.
+      total += await salvarEFinalizar(imoveis, 'MEGA');
       await registrarSaude('MEGA', imoveis, 'principal', validarColeta(imoveis, 'MEGA'));
     }
     }

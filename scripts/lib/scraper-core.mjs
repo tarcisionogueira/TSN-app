@@ -11,6 +11,11 @@
  * acesso pago e custo é `api/_brightdata.js`.
  */
 
+// Descrição/metragem do imóvel: definidas em `api/_texto-imovel.js` porque o enriquecedor
+// sob demanda (api/) também as usa. A direção scripts → api é a convenção do repo.
+import { extrairDescricaoDoCorpo, extrairAreaM2, decodificarEntidades } from '../../api/_texto-imovel.js';
+import { nomeiaUmDocumento } from '../../api/_doc-scan.js';
+
 // ── Configuração via variáveis de ambiente ──────────────────────────────────
 const CLAUDE_KEY       = process.env.CLAUDE_KEY || '';
 
@@ -51,7 +56,14 @@ export function normalizarData(s) {
 /** Procura a data do leilão priorizando proximidade de palavras-âncora. */
 export function extrairData(html) {
   if (!html) return null;
-  const texto = html.replace(/<[^>]+>/g, ' ');
+  // DECODIFICA ANTES DE PROCURAR A ÂNCORA (18/08). Sem isto, um site que publica
+  // `Leil&atilde;o` ou `pra&ccedil;a` — forma comum em página salva em ISO — não casa com
+  // NENHUMA das palavras-âncora, e a função cai no fallback "primeira data futura do texto",
+  // que num portal de leilão costuma ser data de cadastro ou de outro lote. O resultado é uma
+  // data ERRADA gravada com cara de certa, sem erro em lugar nenhum. É a mesma forma que
+  // escondeu o lance da PECINI (`1&ordm; Leil&atilde;o`), aqui na biblioteca que serve
+  // RJ, GESTAO, PECINI, SOLEON, SATO e o coletor canônico.
+  const texto = decodificarEntidades(html.replace(/<[^>]+>/g, ' '));
   // Prioriza datas próximas de "leilão", "praça", "data" — evita pegar data de cadastro
   const ancora = texto.match(/(?:leil[ãa]o|pra[çc]a|encerr|data\s+do\s+leil)[^\d]{0,40}(\d{2}\/\d{2}\/\d{4})/i);
   if (ancora) return normalizarData(ancora[1]);
@@ -80,7 +92,8 @@ export function extrairGenerico(html, urlBase) {
   })();
 
   out.titulo = (jsonLd?.name) || og('title') ||
-    (html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i) || [])[1]?.replace(/<[^>]+>/g, '').trim() || null;
+    (() => { const h = (html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i) || [])[1];
+              return h ? decodificarEntidades(h.replace(/<[^>]+>/g, '')).trim() : null; })() || null;
 
   out.link_foto = _abs((jsonLd?.image?.url || jsonLd?.image || og('image')), urlBase) || null;
 
@@ -93,10 +106,18 @@ export function extrairGenerico(html, urlBase) {
 
   // links de documentos por contexto (texto âncora ou href)
   for (const m of html.matchAll(/<a[^>]+href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)) {
-    const href = m[1]; const txt = (m[2] || '').replace(/<[^>]+>/g, '').toLowerCase();
+    const href = m[1];
+    const txt = decodificarEntidades((m[2] || '').replace(/<[^>]+>/g, '')).toLowerCase();
     const low = href.toLowerCase();
-    if (!out.link_edital && (txt.includes('edital') || low.includes('edital'))) out.link_edital = _abs(href, urlBase);
-    if (!out.link_matricula && (txt.includes('matr') || low.includes('matricula'))) out.link_matricula = _abs(href, urlBase);
+    const abs = _abs(href, urlBase);
+    // O LINK PRECISA NOMEAR UM DOCUMENTO (18/08). Uma âncora rotulada "Matrícula" cujo href é
+    // a ROTA que serve os arquivos (`/preview/`, sem o nome do arquivo) virava `link_matricula`
+    // NOT NULL: a ficha anunciava "matrícula disponível" e entregava uma pasta vazia. Consertado
+    // ontem em `api/_doc-scan.js` e no scraper da PECINI; esta cópia na biblioteca compartilhada
+    // tinha ficado para trás, e é a que atende RJ, GESTAO, SOLEON, SATO e o coletor canônico.
+    if (!abs || !nomeiaUmDocumento(abs)) continue;
+    if (!out.link_edital && (txt.includes('edital') || low.includes('edital'))) out.link_edital = abs;
+    if (!out.link_matricula && (txt.includes('matr') || low.includes('matricula'))) out.link_matricula = abs;
   }
 
   // número da matrícula no corpo: "Matrícula nº 12.345"
@@ -106,11 +127,33 @@ export function extrairGenerico(html, urlBase) {
   // data do leilão/praça: "leilão ... 12/07/2026" ou "1ª praça: 12/07/2026"
   out.data_leilao = jsonLd?.startDate ? normalizarData(jsonLd.startDate) : extrairData(html);
 
-  out.descricao = og('description') || jsonLd?.description ||
+  // ─── DESCRIÇÃO: O CORPO ANTES DA META TAG (17/08) ────────────────────────────────────────
+  // Até hoje esta linha lia SOMENTE meta tags (og:description → JSON-LD → meta name). Meta
+  // description é, por definição, o texto de SEO do SITE — normalmente o mesmo em todas as
+  // páginas. Resultado medido no acervo: fora da CEF, a `descricao` do lote é o título e nada
+  // mais (SUPERBID 1.492/1.494 · PESTANA 1.029/1.029 · LJUD 981/981 · BIASI 472/472 · ZUK
+  // 420/420), e na PECINI vinha literalmente "Pecini Leilões, especialistas em leilões
+  // judiciais e extrajudiciais" — a assinatura de marketing, no lugar do imóvel.
+  //
+  // O custo disso não é estético: a METRAGEM mora no corpo. São 2.227 lotes ativos sem área,
+  // 495 sem nem matrícula de onde tirá-la. O dono lê "200 m² construídos" no site do leiloeiro
+  // e o nosso relatório imprime "ÁREA NÃO INFORMADA".
+  //
+  // A correção é CONSERVADORA de propósito, porque esta função é compartilhada por PECINI,
+  // GESTAOLEILOES, RJ, SOLEON (CALIL/VEGAS/TORRES3) e SATO: o corpo só substitui a meta tag
+  // quando é COMPROVADAMENTE melhor — tem vocabulário de imóvel e é mais informativo. Sem
+  // candidato bom, o comportamento antigo vale integralmente. Trocar às cegas arriscaria
+  // regredir cinco coletores de uma vez para consertar um.
+  const metaDesc = og('description') || jsonLd?.description ||
     (html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i) || [])[1] || null;
+  const corpoDesc = extrairDescricaoDoCorpo(html);
+  out.descricao = corpoDesc || metaDesc || null;
 
   return out;
 }
+
+// Reexporta para os coletores que já importam daqui — a definição é uma só.
+export { extrairDescricaoDoCorpo, extrairAreaM2 };
 
 /** Extrai URLs de páginas de detalhe a partir de uma página de listagem. */
 export function extrairLinksListagem(html, urlBase) {
@@ -183,8 +226,40 @@ export function modalidadeExigeData(modalidade) {
   return modalidade === 'primeiro_leilao' || modalidade === 'segundo_leilao';
 }
 
+// ─── FRAÇÃO IDEAL NÃO ENTRA NO ACERVO (decisão do dono, 17/08) ──────────────
+// "Frações ideais não são interessantes. Pode excluir."
+//
+// POR QUE VIVE AQUI E NÃO EM CADA COLETOR. A regra JÁ EXISTIA — `scraper-sato.mjs`
+// exclui `parte ideal` no seu `RE_EXCLUIR` e o comentário lá a chama de "padrão do
+// repo". Só que ela morava dentro de UM scraper: os outros nunca souberam dela, e
+// **120 lotes ativos** de parte/fração ideal entraram por eles. Cem estavam
+// classificados como imóvel INTEIRO e 57 com área preenchida, então o R$/m² da
+// análise rodava sobre o bem todo enquanto o cliente compraria uma fração.
+// Regra que vive em comentário de um arquivo não é regra — é intenção. Movida para o
+// portão por onde TODOS os coletores passam, e registrada em `regra_negocio`
+// (migration fracao_ideal_fora_do_acervo.sql) para a auditoria vigiar.
+//
+// Comprar 50% indiviso é outro negócio: vira-se condômino de um desconhecido, sem
+// ocupar nem vender livremente, dependendo de ação de extinção de condomínio. Um
+// relatório que projeta a revenda do bem inteiro sobre isso não está otimista, está
+// errado — e o parecer sai dizendo "operação viável, vale avançar".
+//
+// `nua-propriedade` e `direito creditório` entram pela mesma porta e pela mesma razão
+// (não se compra o imóvel, compra-se um direito sobre ele), espelhando o Sato.
+export const RE_FRACAO_IDEAL = /\b(parte\s+ideal|fra[çc][ãa]o\s+ideal|fra[çc][õo]es\s+ideais|direito[s]?\s+credit[óo]rio|nua[\s-]propriedade)\b/i;
+
+export function ehFracaoIdeal(imovel) {
+  return RE_FRACAO_IDEAL.test(`${imovel?.titulo || ''} ${imovel?.descricao || ''}`);
+}
+
 export function checarQualidade(imovel, { estrito = true } = {}) {
   const faltando = [];
+  // Antes de qualquer checagem de completude: isto sequer deve virar lote. Um registro
+  // de fração ideal COMPLETO (com data, valor, foto e matrícula) passaria por todo o
+  // resto — a qualidade dos campos nada diz sobre o bem ser vendável.
+  if (ehFracaoIdeal(imovel)) {
+    return { ok: false, faltando: ['fracao_ideal'], descartar: true, motivo: 'parte/fração ideal — fora do acervo por decisão de negócio' };
+  }
   const exigeData = modalidadeExigeData(imovel?.modalidade);
   const semData = exigeData && !imovel?.data_leilao;
   if (semData)                                      faltando.push('data');

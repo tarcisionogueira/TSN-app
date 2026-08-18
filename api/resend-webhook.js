@@ -27,21 +27,62 @@ export default async function handler(req, res) {
   try {
     const b = req.body || {};
     const tipo = b.type || '';
-    const emailId = b.data?.email_id || b.data?.id || null;
     const at = b.created_at || new Date().toISOString();
+
+    // ─── QUAL É O ID DO E-MAIL NESTE EVENTO? (18/08, medido) ─────────────────────
+    // Medição de 18/08, com uma semana de eventos reais: `delivered` casou 89 de 115,
+    // `opened` 33 de 58, `bounced` 2 de 2 — e **`clicked` ZERO de 9**. Zero absoluto, em
+    // cinco dias diferentes, não é retenção nem coincidência: o identificador que eu
+    // extraía do evento de CLIQUE não é o id do e-mail. `email_id || id` funciona para os
+    // outros porque neles o `id` É o e-mail; no clique o `id` é do próprio evento.
+    //
+    // Em vez de adivinhar a chave certa, tentamos as conhecidas EM ORDEM e — se nenhuma
+    // casar — gravamos o diagnóstico (abaixo). Uma tentativa de adivinhação a mais custaria
+    // outra semana de espera para descobrir que errei de novo.
+    const cands = [b.data?.email_id, b.data?.emailId, b.data?.email?.id, b.data?.id, b.email_id]
+      .filter((x) => typeof x === 'string' && x.length > 8);
+    const emailId = cands[0] || null;
+
     if (emailId && SB && KEY) {
+      // `return=representation` não é estilo: é o que faz o PATCH DIZER quantas linhas
+      // alcançou. Com `return=minimal` um PATCH que não encontra nada devolve 204 —
+      // exatamente igual a um que funcionou. Foi assim que 9 cliques sumiram sem um erro.
       const patch = async (campo, cond = '') => {
-        await fetch(`${SB}/rest/v1/emails_log?resend_id=eq.${encodeURIComponent(emailId)}${cond}`, {
-          method: 'PATCH',
-          headers: { apikey: KEY, Authorization: `Bearer ${KEY}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-          body: JSON.stringify(campo), signal: AbortSignal.timeout(4000),
-        }).catch(() => {});
+        for (const cand of cands) {
+          try {
+            const r = await fetch(`${SB}/rest/v1/emails_log?resend_id=eq.${encodeURIComponent(cand)}${cond}`, {
+              method: 'PATCH',
+              headers: { apikey: KEY, Authorization: `Bearer ${KEY}`, 'Content-Type': 'application/json', Prefer: 'return=representation' },
+              body: JSON.stringify(campo), signal: AbortSignal.timeout(4000),
+            });
+            if (r.ok) {
+              const linhas = await r.json().catch(() => []);
+              if (Array.isArray(linhas) && linhas.length) return true;   // achou e carimbou
+            }
+          } catch { /* tenta o próximo candidato */ }
+        }
+        return false;
       };
-      if (tipo === 'email.delivered') await patch({ entregue_em: at, status: 'entregue' }, '&entregue_em=is.null');
-      else if (tipo === 'email.opened') await patch({ aberto_em: at }, '&aberto_em=is.null');
-      else if (tipo === 'email.clicked') await patch({ clicado_em: at }, '&clicado_em=is.null');
-      else if (tipo === 'email.bounced') await patch({ status: 'bounce' });
-      else if (tipo === 'email.complained') await patch({ status: 'reclamacao' });
+
+      let casou = null;   // null = evento que não carimba nada (não é falha)
+      if (tipo === 'email.delivered') casou = await patch({ entregue_em: at, status: 'entregue' }, '&entregue_em=is.null');
+      else if (tipo === 'email.opened') casou = await patch({ aberto_em: at }, '&aberto_em=is.null');
+      else if (tipo === 'email.clicked') casou = await patch({ clicado_em: at }, '&clicado_em=is.null');
+      else if (tipo === 'email.bounced') casou = await patch({ status: 'bounce' });
+      else if (tipo === 'email.complained') casou = await patch({ status: 'reclamacao' });
+
+      // NÃO ACHOU A LINHA: registra as CHAVES do payload em vez de sumir em silêncio.
+      // Só as chaves e o tamanho — nunca o conteúdo, que traz endereço de cliente. Com isso,
+      // o PRÓXIMO clique não casado responde qual campo usar, sem esperar outra semana.
+      if (casou === false) {
+        const chaves = Object.keys(b.data || {}).slice(0, 20).join(',');
+        await fetch(`${SB}/rest/v1/webhook_eventos_processados`, {
+          method: 'POST',
+          headers: { apikey: KEY, Authorization: `Bearer ${KEY}`, 'Content-Type': 'application/json', Prefer: 'resolution=ignore-duplicates,return=minimal' },
+          body: JSON.stringify({ gateway: 'resend', gateway_payment_id: emailId, evento: `${tipo}:sem_match:${chaves}`.slice(0, 200) }),
+          signal: AbortSignal.timeout(4000),
+        }).catch(() => {});
+      }
 
       // REGISTRA O TIPO QUE CHEGOU — mesmo o que não sabemos tratar (11/08).
       // Sem isto, `aberturas = 0` tem DUAS leituras que não se distinguem: "ninguém abriu"

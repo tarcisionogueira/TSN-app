@@ -10,24 +10,15 @@ import { scoreBidPro, scoreLabel } from '../utils/score';
 import { leilaoEncerrado, pracaMaisDescontada, dataBR } from '../utils/leilaoEncerrado';
 import { caixaMatriculaUrl, caixaRegrasVendaUrl } from '../utils/caixa';
 import { assinarAnexos } from '../utils/docUrl';
+import { ehUrl, ehDocArquivo, ehMatriculaValida, ehRegrasDoc } from '../utils/documento';
 import { formatarDescricaoImovel } from '../utils/descricao';
 import { fotoCandidatos } from '../utils/foto';
 import { trackImovelVisualizado } from '../utils/gtag';
 import { lerCotaMercado } from '../utils/cotaAnalise';
 
-// Botões de documento só aparecem quando o valor é uma URL real — o scraper da
-// Caixa às vezes grava rótulos ("Venda Direta Online", "Leilão SFI - Edital Único").
-const ehUrl = (v) => typeof v === 'string' && /^https?:\/\//i.test(v.trim());
-// Documento REAL = ARQUIVO (PDF, com ou sem querystring) ou objeto no NOSSO Storage.
-// Uma PÁGINA (matricula.asp, detalhe-imovel.asp, /imoveis/…) NÃO é documento — a
-// auditoria por leiloeiro mostrou milhares de "matrículas"/"editais" que na verdade
-// são a página do lote. Sem isto, o botão "Matrícula"/"Edital" abre um site, não o doc.
-const ehDocArquivo = (v) => ehUrl(v) && (/\.pdf(\?|#|$)/i.test(v.trim()) || /\/storage\/v1\/object\/(sign|public)\//i.test(v));
-const ehMatriculaValida = (v) => ehDocArquivo(v) && !/matricula\.asp/i.test(v);
-// "Regras de venda" só é um DOCUMENTO de verdade quando não é a própria página do
-// anúncio no portal (detalhe-imovel.asp da Caixa = mesmo destino do url_lote, já
-// coberto pelo botão "Ver no portal"). Senão o botão abre o site, não um arquivo.
-const ehRegrasDoc = (v, urlLote) => ehUrl(v) && !/detalhe-imovel\.asp/i.test(v) && v.trim() !== (urlLote || '').trim();
+// As regras de "o que é documento" moram em src/utils/documento.js — esta tela já
+// aplicava a versão certa; a busca não tinha cópia nenhuma e prometia edital em 2.170
+// lotes que não tinham arquivo. Definição única para as telas não divergirem de novo.
 
 const TIPO_LABEL = { casa:'Casa', apartamento:'Apartamento', terreno:'Terreno/Lote', comercial:'Comercial', rural:'Rural', galpao:'Galpão', sala:'Sala Comercial', vaga:'Vaga de Garagem', imovel:'Imóvel' };
 
@@ -859,7 +850,20 @@ export default function ImovelDetalhe() {
     // Falta data = sem o início OU sem o ENCERRAMENTO. Só olhar o início fazia o lote parecer
     // completo e nunca buscar o prazo real, que é o que o cliente precisa para dar lance.
     const faltaData = (!imovel.dataLeilao || !imovel.dataLeilao2) && !isVendaDireta;
-    const precisa = isCef ? faltaData : (!temDocs || faltaData);
+    // FALTA TEXTO: metragem ausente OU descrição que é só um eco do título. Sem isto, o
+    // enriquecimento nunca era PEDIDO para o lote que já tinha documento e data — e é
+    // exatamente esse o estado da BIASI (472 lotes ativos, TODOS sem área) e da LJUD.
+    // O servidor ganhou este mesmo teste em 17/08; corrigir só lá não adiantou nada, porque a
+    // requisição não saía do navegador. Duas completudes, uma em cada ponta, decidindo a mesma
+    // coisa por critérios diferentes — quando divergem, vence a mais restritiva e o conserto
+    // do outro lado vira letra morta. As duas agora perguntam a mesma coisa.
+    const descEcoDoTitulo = (() => {
+      const d = String(imovel.descricao || '').trim();
+      const t = String(imovel.titulo || '').trim();
+      return !d || (t && d.replace(t, '').replace(/[\s—·|-]+/g, '').length < 40);
+    })();
+    const faltaTexto = !(Number(imovel.areaM2) > 0) || descEcoDoTitulo;
+    const precisa = isCef ? faltaData : (!temDocs || faltaData || faltaTexto);
     if (!precisa) return;
     let cancel = false;
     apiCall(`/api/enriquecer-lote?imovel_id=${imovel.id}`).then(r => r.json()).then(d => {
@@ -903,6 +907,12 @@ export default function ImovelDetalhe() {
         if (pontos && Object.keys(pontos).length) {
           setImovel(prev => prev ? { ...prev, pontosProximos: pontos } : prev);
           setProxStatus('ok');
+        } else if (d?.nao_aplicavel) {
+          // "NÃO DÁ PARA MEDIR" NÃO É "MEDI E NÃO HÁ NADA" (17/08). Coordenada de nível
+          // `cidade` é o centroide do município, não o imóvel — 91 lotes do acervo dividem a
+          // mesma. Cair no 'empty' aqui era o que fazia a tela AFIRMAR ausência de escola no
+          // centro de São Paulo. Estado próprio, texto próprio.
+          setProxStatus('na');
         } else {
           setProxStatus('empty'); // resposta válida e vazia (sem POIs mapeados por perto)
         }
@@ -1224,6 +1234,17 @@ export default function ImovelDetalhe() {
                       })}
                     </div>
                   )}
+                  {/* A DISTÂNCIA PRECISA PRECISA DIZER DE ONDE (17/08). Desde hoje lotes de nível
+                      `bairro` também exibem proximidades (calculadas pelo extrato local do OSM,
+                      que antes só atendia `endereco`). O chip mostra "Escola 420 m" — número
+                      exato a partir de uma origem que NÃO é o lote. O selo logo acima já avisa
+                      que a localização é aproximada; esta linha liga uma coisa à outra, para o
+                      número não ser lido como medido da porta do imóvel. */}
+                  {temCoord && !localPrecisa && imovel.pontosProximos && Object.keys(imovel.pontosProximos).length > 0 && (
+                    <div style={{ marginTop: 6, fontSize: 11, color: '#94a3b8' }}>
+                      Distâncias medidas a partir do centro da região indicada acima, não do lote.
+                    </div>
+                  )}
                   {/* Estados explícitos dos pontos próximos (nunca mais "gira p/ sempre") */}
                   {temCoord && proxStatus === 'loading' && (
                     <div style={{ marginTop: 10, fontSize: 12, color: '#64748b', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
@@ -1233,6 +1254,11 @@ export default function ImovelDetalhe() {
                   {temCoord && proxStatus === 'empty' && (
                     <div style={{ marginTop: 10, fontSize: 12, color: '#94a3b8' }}>
                       Nenhum ponto de interesse mapeado nas proximidades.
+                    </div>
+                  )}
+                  {temCoord && proxStatus === 'na' && (
+                    <div style={{ marginTop: 10, fontSize: 12, color: '#64748b' }}>
+                      Localização aproximada (centro da cidade) — proximidades não calculadas para este lote.
                     </div>
                   )}
                   {temCoord && proxStatus === 'error' && (
@@ -1313,13 +1339,24 @@ export default function ImovelDetalhe() {
                     </>
                   );
                 })()}
-                {imovel.valorAvaliacao && (
+                {/* `> 0`, não truthy: `valor_avaliacao` é `numeric` e o PostgREST serializa SEM
+                    aspas, então chega o NÚMERO 0 — falsy para o `&&` e mesmo assim renderizável
+                    pelo React, que imprime o dígito solto no meio do grid. São 4.456 lotes
+                    ativos com avaliação 0, e quem vê é o cliente LOGADO (o visitante cai no
+                    ImovelGate, que já usa o guard certo). A linha 7 acima já fazia `> 0`: era
+                    omissão, não convenção. */}
+                {imovel.valorAvaliacao > 0 && (
                   <div style={{ background: '#f8fafc', borderRadius: 12, padding: '16px' }}>
                     <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Avaliação</div>
                     <div style={{ fontSize: 22, fontWeight: 900, color: '#64748b' }}>{fmtBRL(imovel.valorAvaliacao)}</div>
                   </div>
                 )}
-                {economia && (
+                {/* `> 0` porque `economia` é `avaliacao - minimo`, e os dois outros desfechos
+                    são piores que não mostrar nada: 0 (3.621 lotes) imprime o dígito solto, e
+                    NEGATIVO (2.283 lotes) estampa "ECONOMIA POTENCIAL R$ -7.431.739,10" dentro
+                    da caixa VERDE — o sinal visual de vantagem anunciando prejuízo. Lance acima
+                    da avaliação existe e é informação legítima; só não é economia. */}
+                {economia > 0 && (
                   <div style={{ background: '#dcfce7', borderRadius: 12, padding: '16px' }}>
                     <div style={{ fontSize: 11, fontWeight: 700, color: '#15803d', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Economia potencial</div>
                     <div style={{ fontSize: 22, fontWeight: 900, color: '#15803d' }}>{fmtBRL(economia)}</div>

@@ -16,6 +16,7 @@ import { fetchViaBrightData } from './_brightdata.js';
 import { hostExternoSeguro, fetchExternoSeguro } from './_allowed-hosts.js';
 import { vasculharDocumentos, chaveDocCanonica } from './_doc-scan.js';
 import { extrairRegistroMatricula } from './_registro-matricula.js';
+import { extrairDescricaoDoCorpo, extrairAreaM2, decodificarEntidades } from './_texto-imovel.js';
 import { carregarPDFParse } from './_pdf-safe.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -148,7 +149,10 @@ export function extrairDataLeilao(html) {
 // avaliação na listagem em massa (ou mandam sentinela), então buscamos on-demand.
 export function extrairAvaliacao(html) {
   if (!html) return null;
-  const txt = html.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ');
+  // Decodifica antes de procurar o rotulo (18/08): `Avalia&ccedil;&atilde;o` nao casa com
+  // /avalia[cç][aã]o/, e o resultado nao e erro — e avaliacao ausente com cara de "o leiloeiro
+  // nao informou". Esta funcao atende TODAS as fontes no enriquecimento sob demanda.
+  const txt = decodificarEntidades(html.replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ');
   const re = /avalia[cç][aã]?[o]?\w*[^R$\d]{0,18}R?\$?\s*(\d{1,3}(?:\.\d{3})+,\d{2}|\d+,\d{2})/gi;
   let m;
   while ((m = re.exec(txt))) {
@@ -187,7 +191,7 @@ export default async function handler(req, res) {
   const forcar = params.get('forcar') === '1';
   if (!id) { res.status(400).json({ error: 'imovel_id obrigatório' }); return; }
 
-  const [im] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(id)}&select=id,fonte,modalidade,data_leilao,data_leilao_2,url_lote,link_edital,link_matricula,link_regras_venda,link_foto,anexos,enriquecido_em,ficha_cef,matricula_scan_em&limit=1`)).json();
+  const [im] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(id)}&select=id,fonte,modalidade,data_leilao,data_leilao_2,url_lote,link_edital,link_matricula,link_regras_venda,link_foto,anexos,enriquecido_em,ficha_cef,matricula_scan_em,titulo,descricao,area_m2,valor_avaliacao,valor_minimo&limit=1`)).json();
   if (!im) { res.status(404).json({ error: 'Imóvel não encontrado' }); return; }
 
   // CEF: os LINKS de documento são determinísticos (não precisa vasculhar), MAS a
@@ -247,8 +251,24 @@ export default async function handler(req, res) {
     } catch { /* best-effort */ }
   }
 
-  // Pula só quando já tem tudo (docs E data) ou tentou há pouco (throttle de 12h).
-  if (!forcar && ((temDocs && !precisaData) || enriqRecente)) {
+  // "COMPLETO" PRECISA INCLUIR O QUE PASSAMOS A EXTRAIR (17/08). Até agora `ja_completo`
+  // significava "tem documento e tem data" — a definição foi escrita quando esta função só
+  // buscava isso. Ao passar a extrair METRAGEM e DESCRIÇÃO, um lote com edital e data era
+  // declarado completo e PULADO, com `area_m2 = 0` — ou seja, a correção nunca rodaria
+  // exatamente onde é necessária. É o mesmo defeito que esta sessão vem catalogando: um teste
+  // de completude que não foi atualizado junto com o que se considera completo.
+  // Medido na BIASI: 472 lotes ativos, TODOS sem área, 49 já com `enriquecido_em`.
+  const descEcoDoTitulo = (() => {
+    const d = String(im.descricao || '').trim();
+    const t = String(im.titulo || '').trim();
+    return !d || (t && d.replace(t, '').replace(/[\s—·|-]+/g, '').length < 40);
+  })();
+  const precisaTexto = !(Number(im.area_m2) > 0) || descEcoDoTitulo;
+
+  // Pula só quando já tem tudo (docs E data E texto) ou tentou há pouco (throttle de 12h).
+  // O throttle de 12h continua valendo por cima: ele existe para não martelar a fonte, e essa
+  // razão não muda por termos mais campos a preencher.
+  if (!forcar && ((temDocs && !precisaData && !precisaTexto) || enriqRecente)) {
     res.status(200).json({ ok: true, pulado: (temDocs && !precisaData) ? 'ja_completo' : 'tentado_recente', alterado: false, anexos: im.anexos || [] }); return;
   }
 
@@ -293,6 +313,38 @@ export default async function handler(req, res) {
   // registrar, ele ficava eternamente "sem data" e continuava oferecendo relatório.
   if (datas.encerradaEm && !im.data_leilao && !im.data_leilao_2) patch.data_leilao = datas.encerradaEm;
 
+  // ─── METRAGEM E DESCRIÇÃO (17/08) ────────────────────────────────────────────────────────
+  // Esta função já está com o HTML da página do lote em mãos — e até hoje extraía dela
+  // documentos, foto, datas e avaliação, mas NÃO a metragem nem a descrição. Isso deixava
+  // 2.227 lotes ativos sem área (495 sem nem matrícula de onde tirá-la) enquanto a informação
+  // estava na página que acabamos de baixar.
+  //
+  // É o melhor lugar possível para a correção: custo ZERO de requisição (o download já
+  // aconteceu), roda SOB DEMANDA (quando o cliente abre a ficha) e serve TODA fonte de uma vez
+  // — inclusive a BIASI, cujo coletor lê só os cards da listagem e por isso grava `area_m2: 0`
+  // e `descricao: title` fixos no código, em 100% dos 472 lotes.
+  //
+  // Só preenche o que falta, como todo o resto deste patch: área só se não havia, e descrição
+  // só quando a atual não passa de um eco do título (que é o estado de SUPERBID 1.492/1.494,
+  // PESTANA 1.029/1.029, LJUD 981/981, BIASI 472/472). Dado bom nunca é sobrescrito.
+  if (!(Number(im.area_m2) > 0)) {
+    const areaPag = extrairAreaM2(String(html).replace(/<[^>]+>/g, ' '));
+    if (areaPag > 0) patch.area_m2 = areaPag;
+  }
+  // Reusa `descEcoDoTitulo` calculado no teste de completude acima — a mesma regra em dois
+  // lugares divergiria no primeiro ajuste, e aí o endpoint decidiria visitar a página por um
+  // critério e gravar por outro.
+  if (descEcoDoTitulo) {
+    const descPag = extrairDescricaoDoCorpo(html);
+    if (descPag) patch.descricao = descPag.slice(0, 500);
+  }
+
+  // ⚠️ `valor_avaliacao`/`valor_minimo` NÃO vinham no `select` (corrigido em 17/08, junto com
+  // a inclusão de titulo/descricao/area_m2). O guard abaixo lia `undefined`, `avalAtual` dava
+  // sempre 0 e a condição "quando não temos uma válida" nunca conferia nada — a avaliação da
+  // página sobrescrevia a do banco em todo enriquecimento, inclusive por cima de valor bom.
+  // Achado colateral: a coluna que o código lê tem de estar na projeção, e nada avisa quando
+  // não está — `im.campo` ausente é `undefined`, que passa calado por qualquer `Number(...)`.
   // AVALIAÇÃO real da página do lote (quando não temos uma válida) — corrige o
   // "100% abaixo da avaliação" sem valor e recalcula o desconto. O trigger do banco
   // ainda valida (descarta sentinela). Vale p/ todos os leiloeiros.

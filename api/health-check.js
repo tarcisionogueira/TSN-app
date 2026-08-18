@@ -153,6 +153,35 @@ export default async function handler(req) {
     return { status: 'aviso', detalhe: `${presos.length} chamado(s) DO CLIENTE sem resposta há +7 dias — REVISAR na aba Suporte (não fecho sozinho; mais antigo: ${antigo}).${proativosSemResposta ? ` Além deles, ${proativosSemResposta} abordagem(ns) proativa(s) sem retorno (ignoradas).` : ''}` };
   }));
 
+  // ── 3a1b. PEDIDO DE REUNIÃO PARADO ──────────────────────────────────────────────────────
+  // POR QUE ESTE ITEM EXISTE (17/08). O dono: *"já tínhamos alinhado que os chamados e
+  // agendamentos deveriam ser direcionados para mim até ter equipe. Não apareceu nada."* Ele
+  // estava certo nas duas metades, e elas não se contradizem: o direcionamento FUNCIONA — o
+  // trigger `trg_solicitacao_cai_para_admin` gravou o admin como responsável nos 3 pedidos —,
+  // só que ele acontece INTEIRAMENTE dentro do banco. As solicitações são inseridas direto do
+  // navegador (`src/pages/Analise.jsx`), sem passar por endpoint nenhum, e `emails_log` não
+  // tem UM registro de aviso de solicitação em toda a história do sistema.
+  //
+  // Dar dono a uma fila não é o mesmo que contar a alguém que a fila existe. Os 3 pedidos
+  // estavam parados há mediana de 46 dias, atribuídos corretamente, e nenhum sinal saiu daqui
+  // para lugar nenhum — nem e-mail, nem alerta. "Atribuído" virou o carimbo que fazia o
+  // problema parecer resolvido, que é a forma nº 1 do CLAUDE.md aplicada a atendimento.
+  //
+  // Vai no health-check em vez de virar cron novo de propósito: ele já roda 2×/dia, já é
+  // gratuito (não usa IA), já manda e-mail SÓ quando há problema e já vai para o ADMIN_EMAIL.
+  itens.push(await check('Atendimento — pedido de reunião parado', async () => {
+    const limite = new Date(Date.now() - 3 * 24 * 3600 * 1000).toISOString();
+    // `created_at` (não `criado_em`): `solicitacoes` é das tabelas novas — ver a forma nº 6 do
+    // CLAUDE.md. A coluna errada aqui daria 400, e o 400 sairia como "nenhum pedido parado".
+    const r = await sb(`solicitacoes?select=id,tipo,created_at&status=eq.solicitado&reuniao_em=is.null&created_at=lt.${limite}&order=created_at.asc&limit=100`);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const parados = await r.json();
+    if (!parados.length) return { status: 'ok', detalhe: 'Nenhum pedido de reunião parado' };
+    const dias = Math.floor((Date.now() - new Date(parados[0].created_at).getTime()) / 86400000);
+    const tipos = [...new Set(parados.map(s => s.tipo).filter(Boolean))].join(', ');
+    return { status: 'aviso', detalhe: `${parados.length} pedido(s) de reunião do cliente sem data marcada (${tipos}) — o mais antigo há ${dias} dias. Marcar em Admin → Atendimento.` };
+  }));
+
   // ── 3a2. Índice PRÓPRIO de mercado (cidade_indicadores) — base dos filtros revenda/locação ──
   // Coloca sob a saúde o índice criado nesta frente: precisa estar POPULADO e SEM valores
   // absurdos (R$/m² fora de 200–50.000 = contaminação de área total×privativa). Não escala p/
