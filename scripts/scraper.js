@@ -6,6 +6,7 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
+import { decodificarEntidades } from '../api/_texto-imovel.js';
 import https from 'https';
 import http from 'http';
 import { Buffer } from 'buffer';
@@ -771,7 +772,7 @@ async function scraperMegaLeiloes(uf) {
       if (!href || seen.has(href)) continue;
       seen.add(href);
 
-      const titulo = card.match(/<h[2-4][^>]*>([\s\S]*?)<\/h[2-4]>/i)?.[1]?.replace(/<[^>]+>/g,'').trim() || '';
+      const titulo = decodificarEntidades(card.match(/<h[2-4][^>]*>([\s\S]*?)<\/h[2-4]>/i)?.[1] || '').replace(/<[^>]+>/g,'').trim();
       const valorMatch = card.match(/R\$\s*([\d.,]+)/);
       const valor = valorMatch ? parseFloat(valorMatch[1].replace(/\./g,'').replace(',','.')) : 0;
       if (!valor) continue;
@@ -1211,7 +1212,7 @@ async function scraperSeuImovelBB(page = 0) {
       const href = card.match(/href="([^"]*(?:imovel|lote|detalhe)[^"]*)"/i)?.[1] || '';
       if (!href || seen.has(href)) continue;
       seen.add(href);
-      const titulo = card.match(/<h[2-4][^>]*>([\s\S]*?)<\/h[2-4]>/i)?.[1]?.replace(/<[^>]+>/g,'').trim() || '';
+      const titulo = decodificarEntidades(card.match(/<h[2-4][^>]*>([\s\S]*?)<\/h[2-4]>/i)?.[1] || '').replace(/<[^>]+>/g,'').trim();
       const valorMatch = card.match(/R\$\s*([\d.,]+)/);
       const valor = valorMatch ? parseFloat(valorMatch[1].replace(/\./g,'').replace(',','.')) : 0;
       if (!valor) continue;

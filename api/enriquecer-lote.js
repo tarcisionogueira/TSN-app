@@ -16,7 +16,7 @@ import { fetchViaBrightData } from './_brightdata.js';
 import { hostExternoSeguro, fetchExternoSeguro } from './_allowed-hosts.js';
 import { vasculharDocumentos, chaveDocCanonica } from './_doc-scan.js';
 import { extrairRegistroMatricula } from './_registro-matricula.js';
-import { extrairDescricaoDoCorpo, extrairAreaM2 } from './_texto-imovel.js';
+import { extrairDescricaoDoCorpo, extrairAreaM2, decodificarEntidades } from './_texto-imovel.js';
 import { carregarPDFParse } from './_pdf-safe.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -149,7 +149,10 @@ export function extrairDataLeilao(html) {
 // avaliação na listagem em massa (ou mandam sentinela), então buscamos on-demand.
 export function extrairAvaliacao(html) {
   if (!html) return null;
-  const txt = html.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ');
+  // Decodifica antes de procurar o rotulo (18/08): `Avalia&ccedil;&atilde;o` nao casa com
+  // /avalia[cç][aã]o/, e o resultado nao e erro — e avaliacao ausente com cara de "o leiloeiro
+  // nao informou". Esta funcao atende TODAS as fontes no enriquecimento sob demanda.
+  const txt = decodificarEntidades(html.replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ');
   const re = /avalia[cç][aã]?[o]?\w*[^R$\d]{0,18}R?\$?\s*(\d{1,3}(?:\.\d{3})+,\d{2}|\d+,\d{2})/gi;
   let m;
   while ((m = re.exec(txt))) {

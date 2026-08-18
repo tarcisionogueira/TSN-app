@@ -22,6 +22,7 @@
  * Env: BRIGHTDATA_API_TOKEN, BRIGHTDATA_ZONE, VITE_SUPABASE_URL, SUPABASE_SERVICE_KEY.
  */
 import { createClient } from '@supabase/supabase-js';
+import { decodificarEntidades } from '../api/_texto-imovel.js';
 // NOTA (11/08, REVISTA EM 12/08): a decisão anterior era manter o `null` do
 // `fetchViaBrightData` como fallback deliberado — grátis primeiro, pago como segunda
 // chance. O fallback continua certo; o `null` é que era cego. Em 12/08 a cota semanal
@@ -146,8 +147,11 @@ function idDaUrl(url) {
 // Incremento/Comissão; fallbacks robustos; cidade/UF por "CIDADE/UF".
 function parseDetalhe(html, url) {
   const base = extrairGenerico(html, url) || {};
-  const txt = html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ');
+  // Decodifica entidades antes de qualquer regex (18/08): `Leil&atilde;o`, `1&ordm;`,
+  // `matr&iacute;cula` e `m&sup2;` nao casam com regex acentuada, e o resultado nao e erro —
+  // e valor faltando com cara de ausencia. Ver `api/_texto-imovel.js`.
+  const txt = decodificarEntidades(html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ');
 
   const plaus = v => (v >= 1000 && v <= 500_000_000) ? v : 0;
   const rotLance = plaus(num((txt.match(/lance\s*(?:inicial|m[íi]nimo|atual)[^R]{0,25}R\$\s*([\d.]+,\d{2})/i) || [])[1]));
@@ -169,7 +173,7 @@ function parseDetalhe(html, url) {
 
   const docs = [];
   for (const m of html.matchAll(/<a[^>]+href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)) {
-    const href = m[1]; const label = (m[2] || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    const href = m[1]; const label = decodificarEntidades((m[2] || '').replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();
     if (/\.pdf(\?|#|$)/i.test(href) || /edital|matr[íi]cula|laudo/i.test(label)) {
       let abs; try { abs = new URL(href, url).href; } catch { continue; }
       docs.push({ url: abs, label: label.slice(0, 60) });
@@ -273,7 +277,7 @@ async function debugRecon() {
         const det = parseDetalhe(dh, alvo);
         console.log(`  ── detalhe ${alvo} (via ${dv})`);
         console.log('     parseDetalhe →', JSON.stringify({ ...det, anexos: (det.anexos || []).length + ' docs' }));
-        const t = dh.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+        const t = decodificarEntidades(dh.replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ');
         console.log('     R$ ctx:', JSON.stringify([...t.matchAll(/.{0,40}R\$\s*[\d.]+,\d{2}/g)].map(m => m[0].trim()).slice(0, 8)));
       }
     }

@@ -24,6 +24,7 @@
  * Env: BRIGHTDATA_API_TOKEN, BRIGHTDATA_ZONE, VITE_SUPABASE_URL, SUPABASE_SERVICE_KEY.
  */
 import { createClient } from '@supabase/supabase-js';
+import { decodificarEntidades } from '../api/_texto-imovel.js';
 // NOTA (11/08): aqui o `null` do fetchViaBrightData é um fallback DELIBERADO (tenta o
 // caminho grátis/residencial, e o pago é a segunda chance) — por isso este arquivo segue
 // na linha de base do verificador de padrões em vez de migrar para `buscarViaBrightData`.
@@ -139,7 +140,10 @@ function fatiarCards(html) {
 
 function parseCard(card, ctx) {
   const html = card.html;
-  const txt = html.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ').trim();
+  // Decodifica entidades antes de qualquer regex (18/08): `Leil&atilde;o`, `1&ordm;`,
+  // `matr&iacute;cula` e `m&sup2;` nao casam com regex acentuada, e o resultado nao e erro —
+  // e valor faltando com cara de ausencia. Ver `api/_texto-imovel.js`.
+  const txt = decodificarEntidades(html.replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();
 
   // CATEGORIA (filtro imóvel × móveis/veículos).
   const categoria = (txt.match(/CATEGORIA:\s*([A-Za-zÀ-ÿ ]+?)\s+(?:ESTADO|ID\d|[A-Z]{2,})/i) || [])[1]
@@ -244,7 +248,7 @@ async function coletarEvento(dominio, idLeilao) {
   const url = `https://${dominio}/leilao.php?idLeilao=${idLeilao}`;
   const html = await bd(url);
   if (!paginaOk(html)) return { rows: [], bloqueado: true };
-  const cabecalho = html.slice(0, 6000).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  const cabecalho = decodificarEntidades(html.slice(0, 6000).replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ');
   const ctx = {
     dominio, idLeilao,
     leiloeiro: leiloeiroDoTitulo(html, dominio),
