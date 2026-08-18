@@ -6,6 +6,12 @@ import { apiCall } from '../utils/apiCall';
 import ConviteParceiro from '../components/ConviteParceiro';
 
 const STATUS_CFG = {
+  // 18/08: NÓS começarmos a conversa não abre chamado. Dois criadores caem aqui — a saudação
+  // proativa da IA (27 dos 27 "abertos" eram ela, com zero mensagem do cliente) e o canal do
+  // /caso, criado ao ABRIR a página (era o "1 EM AT.": zero mensagens, nenhum atendente).
+  // Seguem visíveis na aba "Todos" — é bom ver que o canal existe —, mas não são fila e não
+  // têm SLA. O gatilho `promove_saudacao` transforma em 'aberto' quando o CLIENTE fala.
+  saudacao:             { label: 'Sem interação',      cor: '#7c3aed', bg: '#f3e8ff' },
   aberto:               { label: 'Aberto',             cor: '#10b981', bg: '#d1fae5' },
   aguardando_atendente: { label: 'Aguarda atendente',  cor: '#f59e0b', bg: '#fef3c7' },
   em_atendimento:       { label: 'Em atendimento',     cor: '#0D63DB', bg: '#dbeafe' },
@@ -106,7 +112,7 @@ export default function Atendimento() {
     else if (filtro !== 'todos') q = q.eq('status', filtro);
     const { data, error } = await q;
     if (!error) {
-      const ordem = { aguardando_atendente: 0, aberto: 1, em_atendimento: 2, finalizado: 3 };
+      const ordem = { aguardando_atendente: 0, aberto: 1, em_atendimento: 2, saudacao: 3, finalizado: 4 };
       const sorted = (data || []).sort((a, b) => (ordem[a.status] ?? 9) - (ordem[b.status] ?? 9));
       setChamados(sorted);
     }
@@ -298,7 +304,7 @@ export default function Atendimento() {
                     {(() => { const sg = SEGMENTOS[segOf(c)] || SEGMENTOS.outro; return (
                       <span style={{ fontSize: 9, fontWeight: 800, padding: '1px 6px', borderRadius: 8, background: sg.bg, color: sg.cor }}>{sg.curto}</span>
                     ); })()}
-                    <span><User size={10} style={{ verticalAlign: 'middle', marginRight: 3 }} />{c.user_nome || c.user_email?.split('@')[0]}{' · '}{fmtData(c.criado_em)}</span>
+                    <span><User size={10} style={{ verticalAlign: 'middle', marginRight: 3 }} />{c.user_nome || c.user_email?.split('@')[0]}{' · '}{fmtData(c.aberto_em || c.criado_em)}</span>
                   </div>
                   {c.atendente_nome && (
                     <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>Atend.: {c.atendente_nome}</div>

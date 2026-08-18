@@ -197,7 +197,7 @@ export default function ChatSuporte() {
       const { error: errFim } = await supabase.from('chamados').update({
         status: 'finalizado', atendente_nome: 'Sistema (inatividade)',
         atualizado_em: new Date().toISOString(),
-      }).eq('id', ticket.id).eq('status', 'aberto');
+      }).eq('id', ticket.id).in('status', ['aberto', 'saudacao']);
       if (!errFim) {
         await supabase.from('chamados_mensagens').insert({
           chamado_id: ticket.id, autor_tipo: 'ia', autor_nome: 'BidPro Assistente',
@@ -258,6 +258,12 @@ export default function ChatSuporte() {
     const { data: novo } = await supabase.from('chamados').insert({
       user_id: user.id, user_email: user.email, user_nome: nomeUsuario,
       titulo: 'Como está sendo sua experiência?', segmento: segmentoDoRole(effectiveRole), origem: 'proativo',
+      // 18/08: NÓS começarmos a conversa não abre chamado. Antes nascia 'aberto' (default da
+      // coluna) e entrava na fila do atendimento: 27 dos 27 "abertos" eram esta saudação, com
+      // ZERO mensagem do cliente, cada uma "aberta há N dias" contando de quando NÓS falamos.
+      // `saudacao` não é fila, não tem SLA. O gatilho `promove_saudacao` no banco promove para
+      // 'aberto' no instante em que o cliente responde — e o relógio começa ALI.
+      status: 'saudacao',
     }).select().single();
     if (!novo) return;
     const saud = `Oi, ${nomeUsuario}! 👋 Sou o assistente virtual da BidPro Brasil. Passei para saber: está gostando de navegar pela plataforma? Está conseguindo achar tudo que precisa, ou esbarrou em alguma dificuldade?\n\nSe algo não estiver funcionando como esperado, me conta (pode colar um print aqui com Ctrl+V que eu ajudo na hora 🙂). E sempre que precisar, é só clicar neste botãozinho aqui embaixo que eu te atendo.`;

@@ -40,7 +40,10 @@ export default function MeusChamados() {
 
   async function carregarChamados() {
     setLoading(true);
-    const statusFiltro = aba === 'abertos' ? ['aberto', 'em_atendimento'] : ['finalizado'];
+    // 'saudacao' entra AQUI de propósito: para o atendimento ela não é fila, mas para o
+    // cliente é uma conversa que existe e espera resposta dele — sumir da lista dele
+    // esconderia a mensagem que a IA mandou.
+    const statusFiltro = aba === 'abertos' ? ['saudacao', 'aberto', 'em_atendimento'] : ['finalizado'];
     const { data } = await supabase.from('chamados').select('*').eq('user_id', user.id)
       .in('status', statusFiltro).order('atualizado_em', { ascending: false });
     setChamados(data || []);

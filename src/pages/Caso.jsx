@@ -676,7 +676,13 @@ export default function Caso() {
           titulo: `Análise: ${casoData.imovel_endereco || 'Imóvel'}`,
           // `descricao` NÃO existe em `chamados` (08/08) — o insert devolvia 400 e o canal de
           // atendimento do caso nunca era criado. O contexto já vive no título e no caso_id.
-          status: 'em_atendimento',
+          //
+          // 18/08: nascia 'em_atendimento' e por isso ENTRAVA na fila — este canal é criado ao
+          // ABRIR a página do caso, sem ninguém pedir nada. Era o "1 EM AT." do painel: um
+          // chamado de 08/08 com ZERO mensagens e nenhum atendente. Mesma regra da saudação da
+          // IA: canal que o sistema abriu não é chamado até alguém falar. O gatilho
+          // `promove_saudacao` o transforma em 'aberto' quando o cliente escrever.
+          status: 'saudacao',
         }).select('id').single();
         chamado = novoChamado;
       }
