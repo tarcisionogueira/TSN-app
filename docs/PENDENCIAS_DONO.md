@@ -32,20 +32,24 @@ praça, e a retenção está certa em mantê-lo. Não é órfão — é relatór
 
 ### D. 💰 Decidir o teto semanal do Bright Data — **antes de 24/08**
 
-**O número medido em 18/08:** `usado 457 · teto 500 · reservado para outros propósitos 43 ·
-folga para a PECINI 0`.
+**O número medido em 18/08:** `usado_total 458 · reservado para outros propósitos 43`. Com o
+teto **padrão (500)** o freio recusa (`motivo: reservado_para_outros`); com **520** ele autoriza.
 
-**O que isso significa na prática:** os dois disparos que deixei agendados (hoje 12h UTC e
-segunda 24/08) **serão recusados pelo freio de custo**. Isso é o freio funcionando — ele existe
-justamente para o gasto não passar sem alguém decidir. A semana do fornecedor vira em **24/08**.
+**O que isso significa na prática:** os dois disparos que deixei agendados (hoje 12h UTC e segunda
+24/08) já passam `teto_semana=520` — o número que você escolheu — então **vão rodar**. Não há
+nada travado hoje. O que sobra aqui é a decisão PERMANENTE: 520 vale por disparo, escrito no
+formulário do workflow, e é assim de propósito (o teto não fica no arquivo para ninguém subi-lo
+por esquecimento). Se você quiser que 520 seja o padrão, é uma linha em `api/_brightdata.js` ou a
+variável `BRIGHTDATA_MAX_REQ_SEMANA` no painel — me diga e eu faço.
 
 **A decisão é sua porque é gasto**, não porque eu não saiba mexer. Sugerido: **520** (o que você
 já havia escolhido). Como aplicar: no disparo manual do workflow *Scraper PECINI*, campo
 `teto_semana`. O teto **não** fica escrito no arquivo de propósito — assim subir o teto é um ato
 deliberado, com registro no histórico do run, e não um número maior esquecido valendo para sempre.
 
-**O que se perde se ficar como está:** a PECINI passa mais uma semana sem reler os lotes antigos
-— são os de julho, capturados antes de o sistema saber extrair metragem e matrícula.
+**O que se perde se NÃO virar padrão:** nada hoje. O risco é o disparo futuro que alguém faça sem
+preencher o campo — ele cai no 500 e é recusado em silêncio de agenda, que foi exatamente como a
+PECINI ficou parada desde julho.
 
 ---
 
