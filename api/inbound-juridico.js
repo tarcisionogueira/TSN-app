@@ -13,6 +13,13 @@ import { anthropicFetch } from './_claude.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
+
+// Tipos de anexo aceitos para gravar no Storage — MESMA lista nos dois ramos (atendimento
+// e juridico). content_type e declarado (falsificavel), mas combinado com o teto de tamanho
+// e a lista fechada impede hospedar HTML/SVG executavel sob URL assinada nossa.
+const TIPO_ANEXO_OK = /^(application\/pdf|image\/(png|jpe?g|gif|webp)|text\/plain|application\/(msword|vnd\.openxmlformats))/i;
+const ANEXO_MAX_BYTES = 10 * 1024 * 1024;
+const ANEXO_MAX_QTD = 5;
 const CLAUDE_KEY   = process.env.CLAUDE_KEY;
 const WH_SECRET    = process.env.INBOUND_WEBHOOK_SECRET; // whsec_... (Svix)
 
@@ -320,6 +327,26 @@ async function encaminharParaAtendimento(data, headers, messageId) {
 
   let novo = false;
   if (!chamado) {
+    // RATE LIMIT (19/08, decisao do dono: 15/remetente/hora). So na CRIACAO de chamado novo
+    // — resposta a fio existente ja passou pelos matchers acima e nao chega aqui. O webhook
+    // e assinado pelo Resend, entao a assinatura NAO contem flood: qualquer um manda e-mail
+    // para contato@ e cada assunto novo abriria um chamado. Conta os criados por este
+    // remetente na ultima hora; no teto, DESCARTA com 200 (nao 500 — 500 faria o Resend
+    // reentregar e amplificar). `error` checado: se a contagem falhar, deixa passar (nao
+    // barrar cliente legitimo por falha nossa de leitura) mas loga.
+    const h1 = new Date(Date.now() - 3600 * 1000).toISOString();
+    let recentes = 0, rateOk = true;
+    try {
+      const rc = await sb(`chamados?canal=eq.email&user_email=eq.${encodeURIComponent(endereco)}&criado_em=gte.${encodeURIComponent(h1)}&select=id`,
+        { method: 'HEAD', prefer: 'count=exact' });
+      if (!rc.ok) { rateOk = false; console.error('[inbound-atendimento] rate-check HTTP', rc.status); }
+      else recentes = Number((rc.headers.get('content-range') || '0-0/0').split('/')[1]) || 0;
+    } catch (e) { rateOk = false; console.error('[inbound-atendimento] rate-check erro (deixa passar):', String(e?.message || e)); }
+    // Falha na contagem NAO barra cliente legitimo (rateOk=false → passa), mas fica no log.
+    if (rateOk && recentes >= 15) {
+      console.error(`[inbound-atendimento] RATE LIMIT: ${endereco} com ${recentes} chamados na ultima hora — descartado`);
+      return json({ ok: true, rate_limited: true, remetente_chamados_1h: recentes });
+    }
     const token = crypto.randomUUID().replace(/-/g, '').slice(0, 20);
     const r = await sb('chamados', {
       method: 'POST', prefer: 'return=representation',
@@ -340,23 +367,22 @@ async function encaminharParaAtendimento(data, headers, messageId) {
     await sb(`chamados?id=eq.${chamado.id}`, { method: 'PATCH', body: { status: 'aberto' } });
   }
 
-  const TIPO_ANEXO_OK = /^(application\/pdf|image\/(png|jpe?g|gif|webp)|text\/plain|application\/(msword|vnd\.openxmlformats))/i;
   if (data?._anexosApi?.length && chamado?.id) {
     const baixados = [];
-    for (const meta of data._anexosApi.slice(0, 5)) {
-      const tamanhoOk = !Number.isFinite(meta?.size) || meta.size <= 10 * 1024 * 1024;
+    for (const meta of data._anexosApi.slice(0, ANEXO_MAX_QTD)) {
+      const tamanhoOk = !Number.isFinite(meta?.size) || meta.size <= ANEXO_MAX_BYTES;
       const tipoOk = TIPO_ANEXO_OK.test(meta?.content_type || '');
       let entrada = null;
       if (tamanhoOk && tipoOk) {
         const bytes = await baixarAnexoApi(data.email_id, meta.id);
-        if (bytes && bytes.length <= 10 * 1024 * 1024) {
+        if (bytes && bytes.length <= ANEXO_MAX_BYTES) {
           entrada = await salvarAnexoChamado(chamado.id, meta.filename, meta.content_type, bytes);
         }
       }
       baixados.push(entrada || { nome: String(meta?.filename || 'anexo').slice(0, 120), tipo: 'email_nao_armazenado' });
     }
     // Alem dos 5 primeiros, os demais ficam so como nome.
-    for (const meta of data._anexosApi.slice(5)) {
+    for (const meta of data._anexosApi.slice(ANEXO_MAX_QTD)) {
       baixados.push({ nome: String(meta?.filename || 'anexo').slice(0, 120), tipo: 'email_nao_armazenado' });
     }
     anexos = baixados;
@@ -441,10 +467,18 @@ export default async function handler(req) {
   // 18/08: o payload do webhook NUNCA traz `content` — o `continue` abaixo pulava TODO
   // anexo do advogado em silêncio (parecer em PDF perdido, sem log). Com a API, o binário
   // é baixado pelo id; `content` fica como caminho legado se um dia voltar a existir.
-  for (const att of (data?._anexosApi?.length ? data._anexosApi : (data?.attachments || []))) {
+  // 19/08: os MESMOS tetos do ramo de atendimento (a ofensiva de seguranca achou a
+  // assimetria — este ramo subia TODOS os anexos, sem cap de qtd/tamanho/tipo). Gated por
+  // conhecer um juridico_token, mas defesa em profundidade: um advogado (ou quem forjar o
+  // fio) nao hospeda arquivo arbitrario no nosso bucket.
+  for (const att of (data?._anexosApi?.length ? data._anexosApi : (data?.attachments || [])).slice(0, ANEXO_MAX_QTD)) {
+    const tamanhoOk = !Number.isFinite(att?.size) || att.size <= ANEXO_MAX_BYTES;
+    const tipoOk = TIPO_ANEXO_OK.test(att?.content_type || '');
+    if (!tamanhoOk || !tipoOk) { console.error('[inbound-juridico] anexo recusado (tipo/tamanho):', att?.content_type, att?.size); continue; }
     let bytesApi = null;
     if (!att?.content && att?.id) bytesApi = await baixarAnexoApi(data.email_id, att.id);
     if (!att?.content && !bytesApi) continue;
+    if (bytesApi && bytesApi.length > ANEXO_MAX_BYTES) { console.error('[inbound-juridico] anexo excede 10MB apos download'); continue; }
     const salvo = await uploadAnexo(caso.imovel_id, att, bytesApi);
     if (salvo) {
       anexosSalvos.push(salvo);

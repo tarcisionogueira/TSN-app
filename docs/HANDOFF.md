@@ -4,6 +4,82 @@
 
 ---
 
+## 📌 PENDÊNCIAS ABERTAS (para esta sessão — leia primeiro)
+_Última atualização: 19/08 manhã. Tudo abaixo de "resolvido" está em produção na `main`._
+
+### 🎉 Estado: G2RS APROVADA (chegou 06:13 de 19/08 na fila do Atendimento)
+Campanha Google e canal de e-mail 100% do nosso lado. O que falta é decisão/relógio.
+
+### 🔵 Dependem do DONO
+1. ~~**Google Ads — formulário de serviços financeiros**~~ → ✅ **ENVIADO (19/08 à noite,
+   com o Claude conduzindo)**: formulário dedicado do Google preenchido como "anunciante de
+   serviços não financeiros", com o código da G2RS e dados idênticos ao envio (razão social,
+   CNPJ, domínio). Confirmação "Seu e-mail foi enviado" na tela. **Aguardando resposta do
+   Google por e-mail** — a tarja alaranjada só sai quando o caso for processado. Atenção ao
+   caminho: o botão "Corrigir" da tarja leva à G2RS (etapa JÁ aprovada — não reenviar por lá);
+   o formulário certo é support.google.com/google-ads/contact/google_ads_financial_services_verification.
+2. ~~**Google Ads — conversão de CADASTRO como "principal"**~~ → ✅ **JÁ ERA principal e
+   ativa** (3 conversões na quinzena) — e a conferência de 19/08 rendeu um SANEAMENTO: a conta
+   tinha 5 ações de conversão e o código dispara só 2. As reais ("Cadastro — BidPro" e "Compra
+   de plano — BidPro", rótulos em src/utils/gtag.js) ficaram principais; as 3 mortas ("Plano
+   Contratado BidPro" 7658576769 e "Cadastro concluído" — abandonadas em 15/08 — e
+   "Visualização de página") foram rebaixadas a secundárias. O "Conversões pendentes" da Compra
+   de plano é normal: espera a 1ª venda paga. **Bônus da mesma sessão:** negativas por NÚCLEO
+   de marca em frase (12 termos, ex.: "zuk", "arremata ai"±acento, "foi leiloado") aplicadas no
+   nível da CAMPANHA — as variações que escapavam das exatas custaram R$ 21 na quinzena.
+3. **Tag "Urgente"**: os 2 issues foram consertados no código (tag nas páginas de SEO + guarda
+   de hostname). O Google re-escaneia em ~5 dias e o selo regride sozinho. Só reabrir se
+   continuar vermelho depois disso.
+4. **Revisão da campanha** (~26/08, com 7 dias de dados limpos): decidir landing por cidade
+   (`/leiloes/uf/cidade`), migração de lance p/ conversões, orçamento. Os termos já chegam
+   sozinhos ao banco (`marketing_termos_dia`) — peça a análise no ritual.
+
+### 🟡 Aguardando o SINAL do dono (patches prontos)
+5. **Hardening baixo de segurança** (4 itens, 1 commit quando autorizar): comparação
+   timing-safe na assinatura Svix (`inbound-juridico.js`); remover
+   `allow-popups-to-escape-sandbox` do iframe (`Atendimento.jsx`); allowlist de host no
+   `download_url` de anexo; `REVOKE EXECUTE` de `brightdata_decisao` para anon.
+6. **Bug bounty de COMPORTAMENTO**: ✅ RODOU em 19/08 (3 agentes: pré-login · telas logadas ·
+   api/) — ~30 achados, top 5 confirmados linha a linha (ver seção "VARREDURA" do 19/08 abaixo:
+   inadimplência perdida em silêncio nos webhooks, "Arrematei" que não protege os relatórios,
+   Checkout deslogando quem pagou, MP 429→200, Caso.jsx gravando como admin no modo suporte).
+   **O que falta é o CONSERTO** — aguardando sinal do dono para a ordem de ataque.
+7. **Runner residencial** (~185 req/semana de economia de Bright Data): infra pronta no código
+   (`GESTAO_HEADLESS`, `SOLEON_NO_BD`, `scripts/lib/fetch-residencial.mjs`) — falta uma máquina
+   ligada em casa. Cloudflare bloqueia datacenter, por isso não roda no GitHub Actions.
+
+### ⏳ Convergem sozinhos (NÃO "consertar")
+- **`docs` do Bright Data**: rateio de 25/dia passa a governar a partir de SEGUNDA (semana
+  nova). Esta semana já bateu o cap semanal de 150 — normal.
+- **Search Console 19/08 "bloqueada pelo robots.txt"**: VERIFICADO, é intencional — o
+  robots.txt nasceu em 15/08 e só bloqueia /api/ e as rotas de preview (/c/ /t/ /i/ /p/, já
+  noindex); as páginas de SEO (/leiloes*, /leilao/*) e o sitemap estão fora dos Disallow.
+  Fecho de 1 min do dono: no relatório do SC, conferir que as URLs de exemplo são só desses
+  prefixos.
+- **`cadastro_barrado` 8/7**: janela móvel, converge. **`limpeza_encerrados_pulada` 1**: vira
+  domingo. **`lote_sem_area` 404↓**: cai a cada rodada.
+- **PECINI `alvo=antigos`**: agendada segunda 24/08 15:00 UTC (metragem/matrícula de julho).
+
+### 🟢 Resolvido em 18–19/08 (não retocar — está certo)
+Canal de e-mail completo (MX + webhook + corpo via API + anexos + rate limit 15/h + tetos de
+anexo nos 2 ramos) · fila de chamados honesta (status `saudacao`) · nome+telefone com regra
+única · teto BD 550 permanente + rateio diário · conversão de cadastro nas 3 telas do checkout
+· tag Google nas páginas de SEO · recuperação de venda (cron diário, assina "Equipe BidPro") ·
+XSS de sessão fechado (JSON-LD + popup do mapa) · Vila Velha regerado (144 m²). Ofensiva de
+segurança de 3 frentes: `auditoria_seguranca()` = 0/0, 1 XSS alto consertado, 2 médios
+resolvidos, resto bem defendido.
+
+### ⚠️ Dívidas registradas (com alarme em cima, sem pressa)
+- Nome do cliente em 2 fontes: `perfis.nome` (admin) + `auth.raw_user_meta_data` (12 telas do
+  cliente). Sincronizados hoje; vigiados por `nome_fontes_divergentes` (limite 0). Refatorar
+  as 12 leituras para lerem `perfis` é o conserto definitivo — não urgente.
+- 2 cadastros legados com nome único (`nome_sem_sobrenome` limite 2 — um 3º = regra vazou).
+- Piso ABSOLUTO da PECINI no baseline (dívida consciente, ver seção da PECINI).
+
+---
+
+---
+
 ## 🧾 19/08 — O INVARIANTE DE ONTEM PEGOU O PRÓPRIO CONSERTO DE ONTEM (7.721 SELOS)
 
 **Aplicado em produção** (migração `selo_edital_calcula_depois_de_preservar.sql`).
@@ -109,6 +185,7 @@ dos 3 agentes ficaram na sessão de 19/08.
 
 ---
 
+
 ## 🧾 18/08 (3ª sessão, parte 2) — NOME COM REGRA, TETO COM UM NÚMERO SÓ
 
 Tudo desta seção está **em produção** (`main`).
@@ -207,6 +284,61 @@ este arquivo já pagou (ANTI-DUPLO-MANDATO P0.2).
 - `analise_sem_mercadologico` (5) e `laudo_sem_base` (1): mesmo lote, um clique em *Gerar*.
 - **Teto do Bright Data:** 488/520 nesta semana, 32 de folga; a semana vira **24/08**. Agora
   o número que vale é o de `brightdata_uso.teto` — se quiser outro, é ali.
+
+---
+
+## 🧾 19/08 (manhã) — VEREDITOS + OFENSIVA DE SEGURANÇA
+
+### 🎉 G2RS APROVADA
+"A solicitação foi aprovada" chegou na fila do Atendimento às 06:13 (canal e-mail, de
+g2no-reply@g2risksolutions.com). O canal de e-mail construído em 18/08 entregou seu
+primeiro documento crítico. **Próximo passo do dono:** só agora (após a aprovação da G2RS)
+preencher o formulário de serviços financeiros no Google, com dados idênticos aos do envio.
+
+### Os quatro vereditos operacionais
+1. **GESTAOLEILOES: era ORÇAMENTO, não fonte quebrada.** A coleta matinal de 19/08 gravou
+   `sem_cota` (09:20), não `falhou` — o conserto de 18/08 (migrar para buscarViaBrightData +
+   propagar semCota) validado em produção. VEGAS idem (09:25). O alerta morre. Hipótese que
+   ficou aberta ontem: **confirmada**.
+2. **Recuperação de venda funcionou.** Cron de 13:00 enviou 1 e-mail — para o Romualdo
+   (rcronemberger@gmail.com), status `entregue` 13:00:56. Dedup e anti-spam corretos (1 de 1).
+3. **Prova das negativas do Ads — LIMPA.** Gasto em marca de terceiro por dia:
+   16/08 R$1,24 · 17/08 R$1,33 · **18/08 R$0,00 · 19/08 R$0,00**. As negativas aplicadas na
+   noite de 18/08 zeraram o desperdício no mesmo dia. E o script v2 alimenta
+   `marketing_termos_dia` sozinho (9 dias no banco) — auditoria de termos virou query do
+   ritual, sem exportar zip.
+4. **Bright Data 541/550.** GESTAOLEILOES/VEGAS levaram `sem_cota` de manhã = freio legítimo
+   sob o teto 550 que o dono escolheu. `docs` está em 150/150 SEMANAL (rateio diário de 25
+   governa a partir de segunda, com a semana nova). Consumo sob controle.
+
+### A ofensiva de segurança (autorizada pelo dono) — 3 frentes
+**1 achado ALTO consertado na hora + deploy** (`4988e40`): XSS de roubo de sessão — campo
+scraped (título de lote) chegando a HTML sem escape, na mesma origem do app logado (token do
+Supabase no localStorage). Dois sinks: JSON-LD das páginas de SEO (`api/publico.js:124` —
+`JSON.stringify` não neutraliza `</script>`; agora escapa <,>,U+2028/9) e popup do mapa
+(`Busca.jsx` — Leaflet bindPopup=innerHTML; helper `escHtml` em 4 pontos). O do popup era
+PREEXISTENTE. Ambos provados (JSON reparseia idêntico; `</script>` literal some).
+
+**Confirmados BEM DEFENDIDOS** (as três frentes reportaram explicitamente): RLS das tabelas
+novas (fail-closed), funções de cota só service_role, bypass de cota impossível (teto vem da
+config), promoção de chamado não forjável, spam de terceiros fechado (user_id sempre do
+token), injeção PostgREST (encodeURIComponent em todos os pontos), sandbox do iframe de
+e-mail (sem allow-scripts/same-origin), ReDoS sem risco. `auditoria_seguranca()` = 0/0.
+
+**RESOLVIDOS (19/08, após aprovação do dono):**
+- ✅ **Rate limiting no inbound**: 15 chamados/remetente/hora, só na CRIAÇÃO de chamado novo
+  (resposta a fio existente não conta). Descarta com 200 (não 500, que faria o Resend
+  reentregar). Falha na contagem deixa passar (não barra cliente legítimo por erro nosso).
+- ✅ **Tetos no ramo jurídico de anexo**: `TIPO_ANEXO_OK` + `ANEXO_MAX_QTD`(5) +
+  `ANEXO_MAX_BYTES`(10MB) agora em escopo de módulo, aplicados nos DOIS ramos. Um só lugar.
+- Hardening baixo: comparação timing-safe na assinatura Svix; remover
+  `allow-popups-to-escape-sandbox`; allowlist de host no download de anexo; REVOKE EXECUTE de
+  brightdata_decisao para anon.
+
+### Invariantes (nenhum de segurança)
+`bd_teto_saturado` 541 (freio vivo) · `cadastro_barrado` 8/7 (janela móvel, converge) ·
+`limpeza_encerrados_pulada` 1 (vira domingo) · `lote_sem_area` 404↓ · `relatorio_area_nao_
+confirmada` 13 (filas encaminhadas, observando).
 
 ---
 
