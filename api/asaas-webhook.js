@@ -55,8 +55,11 @@ export default async function handler(req, res) {
   }
   const received = req.headers['asaas-access-token']
     || req.headers['authorization']?.replace('Bearer ', '');
-  const tokOk = received && received.length === webhookToken.length &&
-    crypto.timingSafeEqual(Buffer.from(received), Buffer.from(webhookToken));
+  // 19/08: length em caracteres × timingSafeEqual em bytes — multibyte dava RangeError/500.
+  const bufReceived = Buffer.from(String(received || ''));
+  const bufToken = Buffer.from(webhookToken);
+  const tokOk = !!received && bufReceived.length === bufToken.length &&
+    crypto.timingSafeEqual(bufReceived, bufToken);
   if (!tokOk) {
     console.warn('[asaas] token inválido ou ausente');
     return res.status(401).json({ error: 'Não autorizado' });

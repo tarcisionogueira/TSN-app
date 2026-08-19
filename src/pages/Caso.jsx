@@ -30,15 +30,21 @@ const mesRef = () => { const d = new Date(); return new Date(d.getFullYear(), d.
 // mercado = relatórios mercadológico + viabilidade financeira
 // documental = relatórios análise documental e jurídica
 // O analista pode conceder +2 de cada tipo manualmente (extras_mercado / extras_documental)
+// 19/08: os números abaixo divergiam do banco (explorador 5 vs 3; top2/assessorado/clube 15
+// vs 10; consultor 999 vs 5) — a 5ª cópia da tabela que `src/utils/cotaAnalise.js` existe
+// para matar. Alinhados a `limite_ia` (migração cota_10_10_3_grandfather). Este objeto é só
+// o DEFAULT local do fluxo do caso (linhas já gravadas em `cotas_analise` mantêm o limite
+// delas); quem decide de verdade é o servidor. Reuniões não existem em `minhas_cotas`, por
+// isso a tabela local sobrevive — não recopiar em tela nova.
 const COTAS_PLANO = {
-  explorador: { mercado:5,   documental:0,  reunioes:0 },
-  top2:       { mercado:15,  documental:15, reunioes:2 },
-  assessorado:{ mercado:15,  documental:15, reunioes:2 },
-  clube:      { mercado:15,  documental:15, reunioes:4 },
-  analista:   { mercado:999, documental:999, reunioes:999 },
-  advogado:   { mercado:999, documental:999, reunioes:999 },
+  explorador: { mercado:3,   documental:0,  reunioes:0 },
+  top2:       { mercado:10,  documental:10, reunioes:2 },
+  assessorado:{ mercado:10,  documental:10, reunioes:2 },
+  clube:      { mercado:10,  documental:10, reunioes:4 },
+  analista:   { mercado:100, documental:100, reunioes:999 },
+  advogado:   { mercado:100, documental:100, reunioes:999 },
   admin:      { mercado:999, documental:999, reunioes:999 },
-  consultor:  { mercado:999, documental:999, reunioes:999 },
+  consultor:  { mercado:5,   documental:5,  reunioes:0 },
 };
 
 const PLANOS_JURIDICO = ['assessorado','clube','analista','advogado','admin'];
@@ -635,7 +641,9 @@ export default function Caso() {
         supabase.from('analise_juridica').select('*').eq('caso_id', casoData.id).maybeSingle(),
         supabase.from('arrematacoes').select('*').eq('caso_id', casoData.id).maybeSingle(),
         supabase.from('procuracoes').select('*').eq('caso_id', casoData.id).order('versao', {ascending:false}).limit(1).maybeSingle(),
-        supabase.from('cotas_analise').select('*').eq('usuario_id', user.id).eq('mes_ref', mesRef()).maybeSingle(),
+        // 19/08: no modo suporte a cota lida/gravada é a do CLIENTE visualizado, nunca a da
+        // equipe — `user.id` aqui fazia o staff ler (e adiante queimar) a própria cota.
+        supabase.from('cotas_analise').select('*').eq('usuario_id', effectiveUserId || user.id).eq('mes_ref', mesRef()).maybeSingle(),
         supabase.from('config_honorarios').select('*').eq('id', 1).maybeSingle(),
         casoData.imovel_id
           // Tabela e coluna CERTAS (08/08): não existe `imoveis` nem `link_leilao` — é
@@ -645,6 +653,12 @@ export default function Caso() {
           : Promise.resolve({ data: null }),
       ]);
 
+      // 19/08: nenhuma das nove leituras checava `error` — falha de leitura virava lista
+      // vazia e REABILITAVA botões já usados (gerar procuração de novo, refazer arrematação).
+      // Falha de leitura é erro na tela, nunca estado "não existe".
+      for (const r of [jobsR, relR, reunR, jurR, arrR, procR, cotaR]) {
+        if (r?.error) throw r.error;
+      }
       setJobs(jobsR.data || []);
       setRelatorios(relR.data || []);
       setReunioes(reunR.data || []);
@@ -714,7 +728,10 @@ export default function Caso() {
     if (!caso?.imovel_id) return;
     let cancel = false;
     (async () => {
-      const { data } = await supabase.from('analises_documental').select('result').eq('imovel_id', caso.imovel_id).limit(8);
+      // 19/08: sem o filtro de usuário, staff (que enxerga várias linhas por RLS) podia
+      // receber o checklist de certidões do laudo de OUTRO cliente. O laudo que vale é o do
+      // cliente DESTE caso.
+      const { data } = await supabase.from('analises_documental').select('result').eq('imovel_id', caso.imovel_id).eq('user_id', caso.cliente_id).limit(8);
       if (cancel) return;
       let lista = [];
       for (const r of (data || [])) {
@@ -729,9 +746,12 @@ export default function Caso() {
 
   const toggleCert = async (nome) => {
     const k = slugCert(nome);
+    const anterior = certStatus;
     const novo = { ...certStatus, [k]: !certStatus[k] };
     setCertStatus(novo);
-    try { await supabase.from('casos').update({ certidoes_status: novo }).eq('id', caso.id); } catch { /* best-effort */ }
+    // 19/08: o update era descartado — RLS/falha deixava a tela marcada e o banco não.
+    const { error } = await supabase.from('casos').update({ certidoes_status: novo }).eq('id', caso.id);
+    if (error) { setCertStatus(anterior); setMsg('Não foi possível salvar o checklist. Tente de novo.'); }
   };
 
   // Scroll chat
@@ -765,9 +785,11 @@ export default function Caso() {
         }
       }
 
-      // Cria job
+      // Cria job. 19/08: `ignoreDuplicates` é ON CONFLICT DO NOTHING — sem `.select()`, o 2º
+      // clique no mesmo tipo devolvia `error: null` com ZERO linhas, nenhum job novo, e a
+      // cota era queimada mesmo assim. `.select()` prova o que foi criado.
       const prazoLimite = new Date(Date.now() + 48*60*60*1000).toISOString();
-      const { error } = await supabase.from('analise_jobs').upsert({
+      const { data: jobCriado, error } = await supabase.from('analise_jobs').upsert({
         caso_id: caso.id,
         tipo,
         status: 'aguardando',
@@ -779,21 +801,28 @@ export default function Caso() {
           imovel_valor: caso.imovel_valor,
           tipo_leilao: caso.tipo_leilao,
         },
-      }, { onConflict: 'caso_id,tipo', ignoreDuplicates: true });
+      }, { onConflict: 'caso_id,tipo', ignoreDuplicates: true }).select();
       if (error) throw error;
+      if (!jobCriado?.length) {
+        setMsg('Esta análise já foi solicitada para este caso — nada foi cobrado.');
+        return;
+      }
 
-      // Incrementa cota se cliente
+      // Incrementa cota se cliente — SÓ quando o job foi de fato criado, e sempre na cota do
+      // CLIENTE do caso (no modo suporte, `user.id` é o staff — era a cota errada).
       if (isCliente) {
         const mes = mesRef();
-        await supabase.from('cotas_analise').upsert({
-          usuario_id: user.id,
+        const cotaUserId = effectiveUserId || user.id;
+        const { error: errCota } = await supabase.from('cotas_analise').upsert({
+          usuario_id: cotaUserId,
           mes_ref: mes,
           analises_usadas: (cota?.analises_usadas || 0) + 1,
-          analises_limite: COTAS_PLANO[role]?.mercado || 3,
+          analises_limite: cota?.analises_limite || COTAS_PLANO[role]?.mercado || 3,
           reunioes_usadas: cota?.reunioes_usadas || 0,
-          reunioes_limite: COTAS_PLANO[role]?.reunioes || 0,
+          reunioes_limite: cota?.reunioes_limite || COTAS_PLANO[role]?.reunioes || 0,
         }, { onConflict: 'usuario_id,mes_ref' });
-        setCota(p => ({ ...p, analises_usadas: (p?.analises_usadas||0)+1 }));
+        if (errCota) console.error('[caso] cota não incrementada:', errCota.message);
+        else setCota(p => ({ ...p, analises_usadas: (p?.analises_usadas||0)+1 }));
       }
 
       setMsg('Análise solicitada! Você receberá notificação quando o relatório estiver pronto.');
@@ -871,10 +900,13 @@ export default function Caso() {
 
       const honorariosValor = valor * (honorariosConfig.total_pct / 100);
 
+      // 19/08: `user.id` aqui era o defeito de identidade do modo suporte — o staff
+      // registrando pelo cliente gravava a arrematação EM NOME DO ADMIN (e o rateio de
+      // honorários usa `arrematante_id`). O dono da arrematação é o cliente do CASO.
       const { data: arr, error } = await supabase.from('arrematacoes').upsert({
         caso_id: caso.id,
-        cliente_id: user.id,
-        arrematante_id: user.id,            // compat com api/arrematacoes.js (honorários)
+        cliente_id: caso.cliente_id,
+        arrematante_id: caso.cliente_id,    // compat com api/arrematacoes.js (honorários)
         imovel_id: caso.imovel_id || null,  // pode ser nulo em arremate manual (fora da base)
         status: 'registrado',
         tipo_leilao: arrForm.tipo_leilao,
@@ -892,7 +924,8 @@ export default function Caso() {
       }, { onConflict: 'caso_id' }).select().single();
       if (error) throw error;
 
-      await supabase.from('casos').update({ status_etapa:'arrematado' }).eq('id', caso.id);
+      const { error: errEtapaArr } = await supabase.from('casos').update({ status_etapa:'arrematado' }).eq('id', caso.id);
+      if (errEtapaArr) throw errEtapaArr;
       setArrematacao(arr);
       setMsg(`Arrematação registrada! Honorários de ${fmt(honorariosValor)} serão cobrados (${Number(honorariosConfig.total_pct).toFixed(2)}%).`);
       await carregarCaso();
@@ -946,7 +979,9 @@ export default function Caso() {
       const { data: proc, error } = await supabase.from('procuracoes').insert({
         caso_id: caso.id,
         arrematacao_id: arrematacao.id,
-        cliente_id: user.id,
+        // 19/08: era `user.id` — no modo suporte a procuração nascia em nome do ADMIN
+        // enquanto o `dados_outorgante` era do cliente. O dono do documento é o cliente.
+        cliente_id: caso.cliente_id,
         advogado_id: advId || null,
         dados_outorgante: dadosOutorgante,
         dados_outorgado: dadosOutorgado,
@@ -973,15 +1008,24 @@ export default function Caso() {
   const assinarProcuracao = async () => {
     if (!procuracao) return;
     try {
-      await supabase.from('procuracoes').update({
+      // 19/08: sem `.select()`, a RLS (só o CLIENTE assina — staff em modo suporte não) casava
+      // ZERO linhas com `error: null` e a tela dizia "Procuração assinada!" sobre um documento
+      // com efeito jurídico que ninguém assinou. Só `.select()` prova o que mudou (forma #3).
+      const { data: assinadas, error: errAss } = await supabase.from('procuracoes').update({
         assinado: true,
         assinado_em: new Date().toISOString(),
         ip_assinatura: 'cliente',
         advogado_notificado: true,
         admin_notificado: true,
-      }).eq('id', procuracao.id);
+      }).eq('id', procuracao.id).select('id');
+      if (errAss) throw errAss;
+      if (!assinadas?.length) {
+        setMsg('A assinatura é pessoal do cliente: peça para ele assinar pela conta dele. Nada foi alterado.');
+        return;
+      }
 
-      await supabase.from('casos').update({ status_etapa:'procuracao_assinada' }).eq('id', caso.id);
+      const { error: errEtapa } = await supabase.from('casos').update({ status_etapa:'procuracao_assinada' }).eq('id', caso.id);
+      if (errEtapa) throw errEtapa;
       await carregarCaso();
       setMsg('Procuração assinada! Advogado e administrador foram notificados.');
     } catch (e) {

@@ -62,7 +62,13 @@ export default async function handler(req) {
   // que checa o Auth sem expor qual usuário.
   if (email && !cpf) {
     const r = await sb('rpc/email_existe', { method: 'POST', body: JSON.stringify({ p_email: email }) });
-    const existe = await r.json().catch(() => false);
+    // 19/08: sem checar `.ok`, um erro do PostgREST (timeout, 5xx) devolvia `{code,message}`,
+    // `existe === true` dava false e o endpoint respondia 200 `{temConta:false}` — o front
+    // (endurecido em Login.jsx:116 justamente contra isso) lia "e-mail livre" e o cadastro
+    // caía no caminho fantasma do Supabase. Falha de leitura é 503, nunca "não tem conta".
+    if (!r.ok) return new Response(JSON.stringify({ error: 'Não foi possível verificar agora. Tente novamente.' }), { status: 503, headers });
+    const existe = await r.json().catch(() => null);
+    if (existe === null) return new Response(JSON.stringify({ error: 'Não foi possível verificar agora. Tente novamente.' }), { status: 503, headers });
     return new Response(JSON.stringify({ temConta: existe === true, campo: 'email' }), { status: 200, headers });
   }
 

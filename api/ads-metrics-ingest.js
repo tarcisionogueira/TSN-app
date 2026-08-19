@@ -25,8 +25,12 @@ export default async function handler(req, res) {
   const secret = (process.env.ADS_INGEST_SECRET || '').trim();
   if (!secret) return res.status(503).json({ error: 'ingest_inativo', dica: 'Defina ADS_INGEST_SECRET no Vercel.' });
   const recebido = String(req.headers['x-ads-secret'] || '');
-  const okSecret = recebido.length === secret.length &&
-    crypto.timingSafeEqual(Buffer.from(recebido), Buffer.from(secret));
+  // 19/08: length em CARACTERES × timingSafeEqual em BYTES — header multibyte do tamanho
+  // "certo" dava RangeError (500 em vez de 401). Compara os BUFFERS.
+  const bufRecebido = Buffer.from(recebido);
+  const bufSecret = Buffer.from(secret);
+  const okSecret = bufRecebido.length === bufSecret.length &&
+    crypto.timingSafeEqual(bufRecebido, bufSecret);
   if (!okSecret) return res.status(401).json({ error: 'nao_autorizado' });
 
   const linhas = Array.isArray(req.body?.linhas) ? req.body.linhas.slice(0, 200) : [];

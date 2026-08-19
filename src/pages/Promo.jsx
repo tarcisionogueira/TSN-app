@@ -4,6 +4,7 @@ import { Check, Zap, ShieldCheck, Users, TrendingUp, Clock, ArrowRight, AlertCir
 import { supabase } from '../utils/supabase';
 import { PLANOS } from '../data/cursos';
 import { useAuth } from '../contexts/AuthContext';
+import { senhaForte, MSG_SENHA_FRACA } from '../lib/senha';
 
 // Ícones decorativos por plano
 const ICONE_PLANO = { top2: '⚖️', assessorado: '🤝', clube: '👑' };
@@ -121,7 +122,9 @@ export default function Promo() {
       setErroSdr('Preencha nome e um WhatsApp válido (com DDD).'); return;
     }
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(contato.email.trim())) { setErroSdr('Informe um e-mail válido.'); return; }
-    if (contato.senha.length < 6) { setErroSdr('Crie uma senha de ao menos 6 caracteres.'); return; }
+    // 19/08: era `length < 6` — a cópia que não recebeu a régua de senha forte de 15/08,
+    // num link público de aquisição que cria conta efetiva. Regra única de src/lib/senha.js.
+    if (!senhaForte(contato.senha)) { setErroSdr(MSG_SENHA_FRACA); return; }
     setEnviandoSdr(true); setErroSdr('');
     try {
       const respArr = perguntas.map(p => ({ pergunta: p.texto, resposta: respostas[p.id] ?? '' }));

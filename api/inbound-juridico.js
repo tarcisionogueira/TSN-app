@@ -481,6 +481,20 @@ export default async function handler(req) {
   const corpoBruto = data?.text || data?.html?.replace(/<[^>]+>/g, ' ') || '';
   const devolutiva = limparResposta(corpoBruto);
 
+  // 19/08: a compilação vem para ANTES de qualquer escrita. O caminho antigo de "IA
+  // indisponível" mantinha o caso em revisão "para a próxima passada" — mas gravava a
+  // auditoria de entrada, e o dedup por message_id descartava a reentrega do Resend como
+  // duplicada: a próxima passada NUNCA existia e o parecer ficava órfão (sem veredito
+  // estruturado, sem juridico_aprendizado), com nenhum cron para recompilar. Agora, IA
+  // fora = 503 SEM efeito colateral → o Resend reentrega com backoff e a tentativa
+  // seguinte refaz do zero. A compilação só precisa do texto + relatório preliminar.
+  const [docPrel] = await (await sb(`analise_relatorios?caso_id=eq.${encodeURIComponent(caso.id)}&tipo=eq.juridica_preliminar&select=conteudo_md&order=versao.desc&limit=1`)).json();
+  const compilado = await compilarComIA(devolutiva, docPrel?.conteudo_md);
+  if (compilado?.__falhouIA) {
+    console.warn('[inbound-juridico] IA indisponível — 503 para o Resend reentregar (nenhuma escrita feita)', caso.id);
+    return json({ ok: false, erro: 'ia_indisponivel_reentregar' }, 503);
+  }
+
   // Anexos do advogado → storage + imovel_anexos
   const anexosSalvos = [];
   // 18/08: o payload do webhook NUNCA traz `content` — o `continue` abaixo pulava TODO
@@ -506,9 +520,7 @@ export default async function handler(req) {
     }
   }
 
-  // Relatório documental para comparar
-  const [doc] = await (await sb(`analise_relatorios?caso_id=eq.${encodeURIComponent(caso.id)}&tipo=eq.juridica_preliminar&select=conteudo_md&order=versao.desc&limit=1`)).json();
-  const compilado = await compilarComIA(devolutiva, doc?.conteudo_md);
+  // (compilado já veio de cima, antes de qualquer escrita — ver comentário no topo do ramo)
 
   // Persiste parecer em analise_juridica (upsert por caso)
   const resultado = ENUM_RESULT.includes(compilado?.resultado) ? compilado.resultado : null;
@@ -530,17 +542,10 @@ export default async function handler(req) {
       body: { caso_id: caso.id, imovel_id: caso.imovel_id, campo: d.campo || null, valor_ia: d.valor_ia || null, valor_advogado: d.valor_advogado || null, observacao: d.observacao || null } });
   }
 
-  // Atualiza o caso. Se a IA FALHOU (indisponibilidade da Anthropic), o caso NÃO é publicado:
-  // fica em revisão para a próxima passada compilar de verdade. Publicar aqui apagaria o
-  // veredito estruturado e ainda tiraria o caso do juridico-lembretes-cron, que só varre
-  // `em_revisao` — o parecer do advogado ficaria órfão sem ninguém perceber. O texto dele já
-  // está preservado em `relatorio_md` acima, então nada se perde ao adiar.
-  if (compilado?.__falhouIA) {
-    console.warn('[inbound-juridico] IA indisponível — caso mantido em revisão para recompilar', caso.id);
-  } else {
-    await sb(`casos?id=eq.${caso.id}`, { method: 'PATCH', prefer: 'return=minimal',
-      body: { status_etapa: 'juridico_concluido', juridico_status: 'publicado' } });
-  }
+  // Atualiza o caso (o ramo de IA indisponível já saiu com 503 lá em cima, antes de
+  // qualquer escrita — chegou aqui, a compilação é real).
+  await sb(`casos?id=eq.${caso.id}`, { method: 'PATCH', prefer: 'return=minimal',
+    body: { status_etapa: 'juridico_concluido', juridico_status: 'publicado' } });
 
   // Auditoria do e-mail recebido
   await sb('juridico_emails', { method: 'POST', prefer: 'return=minimal',

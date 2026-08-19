@@ -111,6 +111,8 @@ export default function HomeCliente() {
     try {
       const { data, error } = await supabase.rpc('aceitar_parceria', { p_versao: TERMO_PARCEIRO_VERSAO });
       if (!error) { setAceite(data || new Date().toISOString()); setShowTermo(false); window.dispatchEvent(new Event('tsn:parceiro-atualizado')); nav('/minha-rede'); }
+      // 19/08: o ramo de erro não existia — o botão "Aceitar" simplesmente não fazia nada.
+      else alert(`Não foi possível registrar o aceite: ${error.message}. Tente novamente.`);
     } finally { setAceitando(false); }
   };
 

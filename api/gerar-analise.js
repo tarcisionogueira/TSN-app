@@ -2883,13 +2883,18 @@ COMO USAR (obrigatório): dedique um parágrafo aos CUSTOS DA OPERAÇÃO segundo
     // sem custo. Antes, um relatório "concluído mas vazio" consumia o crédito injustamente.
     // O flag foi calculado junto do result (acima) e será re-tentado pelo self-heal por 48h.
     const mercadoVazio = !!result.mercadoVazio;
-    if (mercadoVazio && cota && cota.ok && cota.tipo) {
+    // 19/08: `semParecer` era calculado DEPOIS dos blocos de cobrança e nenhum deles o
+    // considerava — o cliente recebia relatório sem parecer ("entrega incompleta", como o
+    // próprio log admite) e mesmo assim a cota não era estornada e o crédito era debitado.
+    // O documental já estorna nas suas 4 saídas de falha; o mercadológico não estornava nesta.
+    const semParecer = !mercadoVazio && !(result.parecer || '').trim();
+    if ((mercadoVazio || semParecer) && cota && cota.ok && cota.tipo) {
       try { await sb('rpc/estornar_analise_por', { method: 'POST', body: JSON.stringify({ p_user_id: user.id, p_tipo: cota.tipo }) }); cota.estornada = true; } catch { /* estorno best-effort */ }
     }
     // Cobra o CRÉDITO quando esta geração usou crédito (cota mensal esgotada) e o relatório
-    // NÃO saiu vazio. Débito = custo real medido × multiplicador; debitar_credito nunca deixa
-    // negativo (já pré-autorizamos). Best-effort: não trava a entrega do relatório já pronto.
-    if (cobrarCredito && !mercadoVazio) {
+    // saiu COMPLETO (mercado + parecer). Débito = custo real medido × multiplicador;
+    // debitar_credito nunca deixa negativo (já pré-autorizamos). Best-effort.
+    if (cobrarCredito && !mercadoVazio && !semParecer) {
       try {
         const dc = await sb('rpc/debitar_credito', { method: 'POST', body: JSON.stringify({
           p_user_id: user.id, p_func: 'mercadologico', p_custo_micro: Math.round(_custoMicroReq),
@@ -2910,7 +2915,7 @@ COMO USAR (obrigatório): dedique um parágrafo aos CUSTOS DA OPERAÇÃO segundo
       // é um evento próprio (relatorio_parecer_vazio) com o motivo (__diagParecer), rastreável no
       // Cliente 360. O self-heal do cron re-gera; o evento fica como trilha do que aconteceu.
       const dp = m.__diagParecer || null;
-      const semParecer = !mercadoVazio && !(result.parecer || '').trim();
+      // `semParecer` agora vem de cima (também governa estorno/débito).
       const evento = mercadoVazio ? 'relatorio_mercado_vazio' : semParecer ? 'relatorio_parecer_vazio' : 'relatorio_mercado_ok';
       const detalhe = mercadoVazio
         ? `Sem estimativa de mercado${m.__erroApi ? ` (API: ${m.__erroApi})` : ' (sem comparáveis ativos)'}`

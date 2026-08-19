@@ -79,7 +79,7 @@ async function handler(req) {
 
   const AGORA = Date.now();
   const DIA = 86400000;
-  let verificados = 0, avisados = 0, semEmail = 0;
+  let verificados = 0, avisados = 0, semEmail = 0, paginacaoInterrompida = null;
 
   // E-mail do assinante: fica em `auth.users` (GoTrue admin), não em `perfis` nem no MP.
   // Mesmo caminho que enviar-alertas-cron/saldo-abandono-cron já usam.
@@ -97,7 +97,9 @@ async function handler(req) {
       const r = await fetch(`https://api.mercadopago.com/preapproval/search?status=authorized&offset=${offset}&limit=100`, {
         headers: { Authorization: `Bearer ${MP_TOKEN}` },
       });
-      if (!r.ok) break;
+      // 19/08: `break` mudo tratava 429/5xx do MP como "fim das paginas" — as paginas
+      // restantes sumiam do resumo de sucesso. A interrupcao agora e NOMEADA na resposta.
+      if (!r.ok) { paginacaoInterrompida = `http_${r.status}@offset_${offset}`; break; }
       const data = await r.json();
       const results = data?.results || [];
       if (!results.length) break;
@@ -241,5 +243,5 @@ async function handler(req) {
   // `sem_email` é REPORTADO, não engolido: foi um skip invisível que segurou 100% dos avisos
   // por semanas. Assinante dentro da janela e sem e-mail resolvível tem que aparecer no retorno.
   if (semEmail) console.error(`[renovacao-avisos] ${semEmail} assinante(s) na janela SEM e-mail resolvível`);
-  return new Response(JSON.stringify({ ok: true, verificados, avisados, sem_email: semEmail }), { headers: { 'Content-Type': 'application/json' } });
+  return new Response(JSON.stringify({ ok: !paginacaoInterrompida, verificados, avisados, sem_email: semEmail, paginacao_interrompida: paginacaoInterrompida }), { headers: { 'Content-Type': 'application/json' } });
 }

@@ -217,8 +217,11 @@ function ImoveisSimilares({ imovel, nav }) {
   useEffect(() => {
     if (!imovel?.cidade) return;
     (async () => {
+      // 19/08: `valor_minimo` cru é a 1ª praça — a Busca exibe/filtra/ordena por
+      // `valor_minimo_ref` (a praça mais descontada) e pelo `desconto_percentual` da coluna.
+      // Este card mostrava o MESMO lote caro aqui e barato na lista (2 praças = 2 réguas).
       let q = supabase.from('imoveis_leilao')
-        .select('id,titulo,bairro,cidade,estado,valor_minimo,valor_avaliacao,link_foto,tipo,area_m2,fonte,fonte_id')
+        .select('id,titulo,bairro,cidade,estado,valor_minimo,valor_minimo_ref,desconto_percentual,valor_avaliacao,link_foto,tipo,area_m2,fonte,fonte_id')
         .eq('ativo', true).eq('cidade', imovel.cidade).neq('id', imovel.id).limit(12);
       // SEMPRE junto do estado: há cidades homônimas em UFs diferentes (ex.: Palmas/TO
       // e Palmas/PR). Sem este filtro, os "semelhantes" misturavam imóveis de outro estado.
@@ -240,7 +243,10 @@ function ImoveisSimilares({ imovel, nav }) {
       </h2>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 14 }}>
         {itens.map(it => {
-          const desc = it.valor_avaliacao > 0 && it.valor_minimo ? Math.round((1 - it.valor_minimo / it.valor_avaliacao) * 100) : null;
+          const valorRef = it.valor_minimo_ref || it.valor_minimo;
+          const desc = Number(it.desconto_percentual) > 0
+            ? Math.round(Number(it.desconto_percentual))
+            : (it.valor_avaliacao > 0 && valorRef ? Math.round((1 - valorRef / it.valor_avaliacao) * 100) : null);
           // Foto: mesma regra da Busca/detalhe (utils/foto.js). Tenta o link_foto
           // real primeiro e cai no padrão da Caixa/proxy — antes esta cópia ignorava
           // o link_foto do CEF e montava F<id>21.jpg (URL errada → "Sem foto").
@@ -265,7 +271,7 @@ function ImoveisSimilares({ imovel, nav }) {
               <div style={{ padding: '10px 12px' }}>
                 <div style={{ fontSize: 12, fontWeight: 700, color: '#111', lineHeight: 1.3, height: 32, overflow: 'hidden' }}>{it.bairro || it.titulo}</div>
                 <div style={{ fontSize: 11, color: '#94a3b8', margin: '2px 0 6px' }}>{it.cidade}/{it.estado}{it.area_m2 ? ` · ${it.area_m2} m²` : ''}</div>
-                <div style={{ fontSize: 16, fontWeight: 900, color: '#0D63DB' }}>{fmtBRL(it.valor_minimo)}</div>
+                <div style={{ fontSize: 16, fontWeight: 900, color: '#0D63DB' }}>{fmtBRL(valorRef)}</div>
               </div>
             </button>
           );

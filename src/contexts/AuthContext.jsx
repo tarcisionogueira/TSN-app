@@ -60,10 +60,14 @@ async function fetchPerfil(userId) {
   // Roles operacionais (admin, analista, advogado, consultor) nunca são downgradeados.
   const ROLES_OPERACIONAIS = ['admin', 'analista', 'advogado', 'consultor'];
   if (inadimplenteDias > 5 && data?.role && data.role !== 'explorador' && !ROLES_OPERACIONAIS.includes(data.role)) {
-    await supabase.from('perfis').update({
+    // 19/08: o resultado era descartado — se a RLS barrasse a escrita, a UI rebaixava e o
+    // banco não, divergência sem rastro. A UI continua rebaixando (a regra dos 5 dias vale
+    // de qualquer forma na sessão), mas a falha da persistência fica registrada.
+    const { error: errDown } = await supabase.from('perfis').update({
       role_anterior: data.role,
       role: 'explorador',
     }).eq('id', userId);
+    if (errDown) console.error('[auth] downgrade por inadimplência não persistiu:', errDown.message);
     return { role: 'explorador', ativo: data?.ativo !== false, inadimplenteDias, cadastroIncompleto: cadastroFalta, planoLegado: false, falhouLeitura };
   }
 

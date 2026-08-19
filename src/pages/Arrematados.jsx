@@ -178,7 +178,11 @@ function Detalhe({ arr, onBack, onChange, soLeitura, podeRemover = false, permit
     if (!error && data) { setLancs(prev => [data, ...prev]); setNovo(n => ({ ...n, descricao: '', valor: '' })); }
   };
   const delLanc = async (id) => {
-    await supabase.from('arrematado_lancamentos').delete().eq('id', id);
+    // 19/08: delete sem `.select()` — RLS que filtra linhas devolve error:null com ZERO
+    // apagadas, e a lista sumia da tela com o dado intacto no banco (mesma lição do delDoc
+    // deste arquivo). Só remove da tela o que o banco PROVOU que apagou.
+    const { data: apagados, error } = await supabase.from('arrematado_lancamentos').delete().eq('id', id).select('id');
+    if (error || !apagados?.length) { alert('Não foi possível remover o lançamento.'); return; }
     setLancs(prev => prev.filter(l => l.id !== id));
   };
 
@@ -617,7 +621,10 @@ export default function Arrematados() {
   const remover = async (id, e) => {
     e.stopPropagation();
     if (!confirm('Remover este arrematado? Os lançamentos e a lista de documentos serão apagados.')) return;
-    await supabase.from('arrematados').delete().eq('id', id);
+    // 19/08: mesma prova do delLanc — o diálogo diz "não há como desfazer"; a tela não pode
+    // dizer que apagou o que a RLS não deixou.
+    const { data: apagados, error } = await supabase.from('arrematados').delete().eq('id', id).select('id');
+    if (error || !apagados?.length) { alert('Não foi possível remover este arrematado.'); return; }
     setArrematados(prev => prev.filter(a => a.id !== id));
   };
 

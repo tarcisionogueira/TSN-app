@@ -27,13 +27,15 @@ async function handler(req) {
   }
   const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 
-  let vistos = 0, gravados = 0, truncado = false;
+  let vistos = 0, gravados = 0, truncado = false, paginacaoInterrompida = null, falhasGravacao = 0;
   try {
     for (let offset = 0; offset <= MAX_OFFSET; offset += 100) {
       const r = await fetch(`https://api.mercadopago.com/v1/payments/search?sort=date_created&criteria=desc&limit=100&offset=${offset}`, {
         headers: { Authorization: `Bearer ${MP_TOKEN}` },
       });
-      if (!r.ok) break;
+      // 19/08: `break` mudo tratava 429/5xx do MP como "fim das paginas" — as paginas
+      // restantes sumiam do resumo de sucesso. A interrupcao agora e NOMEADA na resposta.
+      if (!r.ok) { paginacaoInterrompida = `http_${r.status}@offset_${offset}`; break; }
       const data = await r.json();
       const results = data?.results || [];
       if (!results.length) break;
@@ -59,6 +61,7 @@ async function handler(req) {
           atualizado_em: new Date().toISOString(),
         }, { onConflict: 'mp_payment_id' });
         if (!error) gravados++;
+        else { falhasGravacao++; console.error('[backfill-mp] upsert falhou', p.id, error.message); }
       }
 
       const total = Number(data?.paging?.total || 0);
@@ -69,5 +72,5 @@ async function handler(req) {
     return new Response(JSON.stringify({ error: e.message }), { status: 500 });
   }
   if (truncado) console.warn(`[backfill-mp-pagamentos] teto ${MAX_OFFSET} atingido — histórico mais antigo não varrido nesta execução.`);
-  return new Response(JSON.stringify({ ok: true, vistos, gravados, truncado }), { headers: { 'Content-Type': 'application/json' } });
+  return new Response(JSON.stringify({ ok: !paginacaoInterrompida, vistos, gravados, falhas_gravacao: falhasGravacao, truncado, paginacao_interrompida: paginacaoInterrompida }), { headers: { 'Content-Type': 'application/json' } });
 }

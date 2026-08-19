@@ -313,9 +313,14 @@ export function AnalisesProvider({ children }) {
     setDocumentais(prev => prev.filter(a => a.imovelId !== imovelId));
     setLaudos(prev => prev.filter(a => a.imovelId !== imovelId));
     if (uid) {
-      try { await supabase.from('analises_mercado').delete().eq('user_id', uid).eq('imovel_id', imovelId); } catch {}
-      try { await supabase.from('analises_documental').delete().eq('user_id', uid).eq('imovel_id', imovelId); } catch {}
-      try { await supabase.from('analises_laudo').delete().eq('user_id', uid).eq('imovel_id', imovelId); } catch {}
+      // 19/08: postgrest-js NÃO lança (o try/catch era decorativo) e o resultado era
+      // descartado — o cliente confirmava um diálogo "não há como desfazer" e via o card
+      // voltar sem explicação quando a exclusão falhava. Erro agora tem log e a lista é
+      // recarregada pelo chamador de qualquer forma.
+      for (const tabela of ['analises_mercado', 'analises_documental', 'analises_laudo']) {
+        const { error: errDel } = await supabase.from(tabela).delete().eq('user_id', uid).eq('imovel_id', imovelId);
+        if (errDel) console.error(`[analises] exclusão em ${tabela} falhou:`, errDel.message);
+      }
     }
   }, [uid]);
 

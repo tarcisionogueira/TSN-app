@@ -104,14 +104,17 @@ async function handler(req) {
       // ciclo. (enviarEmail devolve {ok:true} no sucesso e {ok:false} em falha.)
       if (!email) continue;
       const e = emailAviso(nivel, saldo, restam);
-      let enviado = false;
+      // 19/08: a marca de dedup era gravada DEPOIS do envio e com resultado descartado — se
+      // o update falhasse, o MESMO aviso sairia de novo a cada execução (spam diário). Agora
+      // marca ANTES (padrão do boas-vindas): perder um aviso é mais barato que repetir todos.
+      const { error: errMarca } = await supabase.from('perfis')
+        .update({ abandono_avisos: nivel, abandono_avisado_em: new Date().toISOString() }).eq('id', p.id);
+      if (errMarca) { console.error(`[abandono] marca falhou p/ ${p.id}: ${errMarca.message} — aviso NÃO enviado`); continue; }
       try {
         const envio = await enviarEmail({ from: FROM, to: email, subject: e.subject, html: e.html, meta: { tipo: `abandono_aviso_${nivel}`, userId: p.id } });
-        enviado = envio?.ok === true;
-      } catch { enviado = false; }
-      if (!enviado) continue;
-      await supabase.from('perfis').update({ abandono_avisos: nivel, abandono_avisado_em: new Date().toISOString() }).eq('id', p.id);
-      avisos++;
+        if (envio?.ok === true) avisos++;
+        else console.error(`[abandono] envio falhou p/ ${p.id} (nível ${nivel} já marcado — não repete)`);
+      } catch (errEnv) { console.error(`[abandono] envio falhou p/ ${p.id}: ${errEnv?.message}`); }
     }
   } catch (e) {
     return new Response(JSON.stringify({ error: e.message }), { status: 500 });

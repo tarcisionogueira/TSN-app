@@ -111,7 +111,7 @@ function maskTel(v) {
 }
 
 // ─── Componente de Foto KYC ───────────────────────────────────────────────────
-function PastoFoto({ cor, instrucao, validacaoTipo, onCapturada }) {
+function PastoFoto({ cor, instrucao, validacaoTipo, onCapturada, onRefazer }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
@@ -205,6 +205,10 @@ function PastoFoto({ cor, instrucao, validacaoTipo, onCapturada }) {
     setFoto(null);
     setValidacaoOk(null);
     setMsgValidacao('');
+    // 19/08: refazer limpava só o estado LOCAL — se a nova foto fosse recusada, o form do
+    // pai ainda guardava a foto ANTIGA aprovada e o "Continuar" seguia habilitado: o KYC
+    // prosseguia com uma foto que não é a da tela. Refazer limpa o pai também.
+    onRefazer?.();
     iniciarCam();
   };
 
@@ -425,7 +429,9 @@ export default function ConviteEquipe() {
         options: {
           data: {
             nome: normalizarNome(form.nome),
-            telefone: form.telefone,
+            // 19/08: ia com máscara "(27) 99999-9999" enquanto todos os outros fluxos gravam
+            // só dígitos — perfis de EQUIPE ficavam em formato diferente do resto da base.
+            telefone: form.telefone.replace(/\D/g, ''),
             role: roleKey,
             lgpd_aceito: true,
             lgpd_data: new Date().toISOString(),
@@ -494,7 +500,11 @@ export default function ConviteEquipe() {
       // Gerar e enviar contrato operacional automaticamente (exceto admin)
       if (roleKey !== 'admin' && signUpData?.user?.id) {
         try {
-          await apiCall('/api/contratos-operacional', {
+          // 19/08: `apiCall` DEVOLVE a Response (não lança em não-2xx) — o `.ok` nunca era
+          // checado e um 400/500 passava como sucesso: o novo membro da equipe entrava na
+          // operação SEM contrato, sem erro na tela e sem rastro. Não bloqueia o cadastro,
+          // mas a ausência tem que ser VISÍVEL para alguém correr atrás.
+          const rc = await apiCall('/api/contratos-operacional', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -503,8 +513,9 @@ export default function ConviteEquipe() {
               nomeDestinatario: normalizarNome(form.nome),
             }),
           });
-        } catch (_) {
-          // Falha no envio do contrato não bloqueia o cadastro
+          if (!rc.ok) throw new Error(`HTTP ${rc.status}`);
+        } catch (e) {
+          alert(`Cadastro concluído, mas o CONTRATO OPERACIONAL não foi enviado (${e.message || 'falha'}). Avise o administrador para reenviá-lo — sem ele você não deve iniciar atendimentos.`);
         }
       }
 
@@ -572,6 +583,7 @@ export default function ConviteEquipe() {
               instrucao={passo.instrucao}
               validacaoTipo={passo.validacao_tipo}
               onCapturada={(url) => setVal(passo.key, url)}
+              onRefazer={() => setVal(passo.key, null)}
             />
           )}
 

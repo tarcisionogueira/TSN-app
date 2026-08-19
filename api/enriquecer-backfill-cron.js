@@ -63,8 +63,14 @@ export default async function handler(req, res) {
     'order=enriquecido_em.asc.nullsfirst',
     `limit=${LOTE_MAX * 5}`,
   ].join('&');
-  const pool = await (await sb(`imoveis_leilao?${filtro}`)).json().catch(() => []);
-  if (!Array.isArray(pool) || !pool.length) {
+  // 19/08: o corpo de ERRO do PostgREST é um objeto — `Array.isArray` falso fazia o cron
+  // reportar `ok:true, sem_candidatos`, indistinguível de banco vazio. Falha de leitura
+  // agora se apresenta como falha.
+  const poolRes = await sb(`imoveis_leilao?${filtro}`);
+  if (!poolRes.ok) { res.status(200).json({ ok: false, motivo: `leitura_falhou_http_${poolRes.status}` }); return; }
+  const pool = await poolRes.json().catch(() => null);
+  if (!Array.isArray(pool)) { res.status(200).json({ ok: false, motivo: 'resposta_invalida' }); return; }
+  if (!pool.length) {
     res.status(200).json({ ok: true, processados: 0, com_data: 0, motivo: 'sem_candidatos' }); return;
   }
   if (cidadeSet.size) {
@@ -83,7 +89,11 @@ export default async function handler(req, res) {
     const alvo = im.url_lote || im.link_edital;
     const patch = { enriquecido_em: agora };
     if (alvo && /^https?:\/\//.test(alvo)) {
-      const { html } = await fetchLote(alvo);
+      const { html, semCota } = await fetchLote(alvo);
+      // 19/08: recusa de ORÇAMENTO não é visita — carimbar `enriquecido_em` aqui jogava o
+      // lote para o fim da fila sem nunca tê-lo lido (forma #5). Sem cota, para o run
+      // inteiro sem carimbar ninguém: o freio vale para todos os próximos também.
+      if (semCota) { semConteudo++; console.error('[backfill] sem cota Bright Data — run interrompido sem carimbar os restantes'); break; }
       if (html) {
         const { inicio, fim } = extrairDatasLeilao(html);
         if (inicio && !im.data_leilao) { patch.data_leilao = inicio; comData++; }

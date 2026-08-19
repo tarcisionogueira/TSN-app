@@ -37,15 +37,23 @@ export default async function handler(req, res) {
   if (!user.email) return res.status(200).json({ ok: true, enviado: false, motivo: 'sem_email' });
 
   // Só envia se ainda não foi enviado (idempotente).
+  // 19/08: sem `.ok`, o corpo de ERRO do PostgREST é um OBJETO — `const [perfil] = {...}`
+  // lançava TypeError fora do try (500 no primeiro login). E se a leitura falhar, NÃO dá
+  // para saber se já foi enviado: não envia (o próximo login tenta de novo).
   const perfilRes = await sb(`perfis?id=eq.${encodeURIComponent(user.id)}&select=nome,boas_vindas_em`);
-  const [perfil] = await perfilRes.json().catch(() => []);
+  if (!perfilRes.ok) return res.status(200).json({ ok: false, enviado: false, motivo: 'leitura_falhou' });
+  const linhas = await perfilRes.json().catch(() => null);
+  const perfil = Array.isArray(linhas) ? linhas[0] : null;
   if (perfil?.boas_vindas_em) return res.status(200).json({ ok: true, enviado: false, motivo: 'ja_enviado' });
 
   // Marca ANTES de enviar (guarda contra corrida/duplo-envio em logins concorrentes).
-  await sb(`perfis?id=eq.${encodeURIComponent(user.id)}`, {
+  // 19/08: a marca era best-effort — se o PATCH falhasse, o e-mail sairia de novo a CADA
+  // login (a idempotência prometida no cabeçalho deixava de existir). Sem marca, sem envio.
+  const marca = await sb(`perfis?id=eq.${encodeURIComponent(user.id)}`, {
     method: 'PATCH', headers: { Prefer: 'return=minimal' },
     body: JSON.stringify({ boas_vindas_em: new Date().toISOString() }),
-  }).catch(() => {});
+  }).catch(() => null);
+  if (!marca?.ok) return res.status(200).json({ ok: false, enviado: false, motivo: 'marca_falhou' });
 
   const r = await enviarBoasVindas({ to: user.email, nome: perfil?.nome, origin, userId: user.id }).catch(() => ({ ok: false }));
   return res.status(200).json({ ok: true, enviado: !!r?.ok });

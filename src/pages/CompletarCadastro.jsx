@@ -6,6 +6,8 @@ import { supabase } from '../utils/supabase';
 import { apiCall } from '../utils/apiCall';
 import { useAuth } from '../contexts/AuthContext';
 import CidadeAutocomplete from '../components/CidadeAutocomplete';
+import { validarNome, normalizarNome } from '../lib/nome';
+import { validarTelefone } from '../lib/telefone';
 
 const inp = {
   width: '100%', padding: '11px 14px', border: '1px solid #e2e8f0', borderRadius: 10,
@@ -77,9 +79,10 @@ export default function CompletarCadastro() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErro('');
-    if (!form.nome || form.nome.trim().length < 3) { setErro('Informe seu nome completo.'); return; }
+    // 19/08: cópias sem o conserto (aceitavam "ana" e telefone inválido) — regra única.
+    { const v = validarNome(form.nome); if (!v.ok) { setErro(v.erro); return; } }
     if (!cpfJaTem && !cpfValido(form.cpf)) { setErro('Informe um CPF válido.'); return; }
-    if (!form.telefone || form.telefone.replace(/\D/g, '').length < 10) { setErro('Informe um telefone/WhatsApp válido com DDD.'); return; }
+    { const t = validarTelefone(form.telefone); if (!t.ok || form.telefone.replace(/\D/g, '').length < 10) { setErro(t.erro || 'Informe um telefone/WhatsApp válido com DDD.'); return; } }
     if (!form.cidade || !form.uf) { setErro('Selecione sua cidade na lista (com o estado).'); return; }
     if (!aceite) { setErro('É necessário aceitar os Termos de Uso e a Política de Privacidade.'); return; }
     if (!user?.id) { setErro('Sessão expirada. Entre novamente.'); return; }
@@ -89,7 +92,7 @@ export default function CompletarCadastro() {
       // cidades_interesse (o que a Busca usa nos filtros) — com a UF, os filtros não
       // quebram mais por "cidade sem estado".
       const patch = {
-        nome: form.nome.trim(),
+        nome: normalizarNome(form.nome),
         telefone: form.telefone.replace(/\D/g, ''),
         endereco: `${form.cidade} - ${form.uf}`,
         endereco_cidade: form.cidade,

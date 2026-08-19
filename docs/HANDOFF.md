@@ -38,6 +38,49 @@ Campanha Google e canal de e-mail 100% do nosso lado. O que falta é decisão/re
 - **Runner residencial:** NÃO está rodando (a coleta do GESTAO segue consumindo Bright Data —
   32 req nesta semana). O código está pronto; falta a máquina de casa (ver seção do runner).
 
+### ✅ ONDA 2 DE 19/08 (madrugada) — Caso.jssx/Admin + RESTO DO BUG BOUNTY, tudo em produção
+Sinal do dono: "ataque o bloco do Caso.jsx e o resto do bug bounty". ~25 consertos, travas
+verdes (a linha de base de padrões perigosos CAIU 415→399) e build limpo. O que mudou:
+- **Caso.jsx**: escritas com a identidade do CLIENTE do caso (arrematação/procuração eram
+  gravadas como ADMIN no modo suporte — e o rateio de honorários usa esse id); cota lida e
+  queimada do cliente visualizado; upsert `ignoreDuplicates` com `.select()` (2º clique não
+  cobra mais cota por job que não foi criado); "assinar procuração" com prova (RLS que casa 0
+  linhas não vira mais "Procuração assinada!"); tabela local de limites alinhada ao banco
+  (explorador 3, pagantes 10, consultor 5); leituras do Promise.all com error checado;
+  checklist de certidões escopado ao cliente do caso.
+- **Admin.jsx**: concessão do painel de solicitações via RPC `admin_conceder_cota` (o
+  read-modify-write podia ZERAR o bônus acumulado e não registrava em cota_concessoes);
+  telas de saque/analítico/docs-PJ com `.ok`/`error` checados (falha de leitura não vira mais
+  "nenhum saque pendente"/"parceiro sem KYC"); honorários não salvam mais total 0 por campo
+  vazio; saveRole/toggleAtivo com prova contra o gatilho protetor.
+- **Pré-login**: `handle_new_user` grava `endereco_cidade`/`uf`/`cidades_interesse` do
+  "Cidade - UF" do cadastro (migração `handle_new_user_grava_cidade_estruturada`, APLICADA;
+  mata o modal que pedia a cidade de novo e os alertas sem região; backfill: 1 perfil);
+  nome/telefone via libs no CompletarCadastro(Modal) — fechava o buraco do cadastro GOOGLE
+  ("ana" passava); senha FORTE em Promo/ProdutoLanding + api/promo-capturar + api/sdr-capturar
+  (eram 6 chars); verificar-cpf devolve 503 em falha (não mais "e-mail livre"); boas-vindas
+  sem TypeError e sem reenvio quando a marca falha; ConviteEquipe: contrato que falha agora
+  GRITA, telefone sem máscara, refazer foto limpa a aprovada.
+- **api/**: radar-editais não carimba `ia_extraido` com a IA fora (lote não queima mais) e
+  corte por tempo registra run parcial como erro (o gate do dia repuxa); gerar-analise
+  ESTORNA cota/crédito na entrega sem parecer; enriquecer-lote/backfill no caminho novo do
+  Bright Data (`semCota` não carimba lote como visitado — forma #5); renovacao-avisos e
+  backfill-mp nomeiam paginação interrompida (429 ≠ fim das páginas); meta-insights no
+  `isCronAuthorized` (aceitava `x-vercel-cron` como credencial) + segue paging; timingSafeEqual
+  por BYTES em ads-metrics-ingest/asaas-webhook (RangeError→500); inbound-juridico: IA fora =
+  503 SEM efeitos colaterais (o Resend reentrega; antes o parecer do advogado ficava órfão
+  para sempre atrás do dedup); saldo-abandono marca dedup ANTES de enviar; criar-conta-checkout
+  upsert com log alto.
+- **Telas**: "semelhantes" da ficha com `valor_minimo_ref`/`desconto_percentual` (mesma régua
+  da Busca); lixeiras de Arrematados com `.select()`; AceitarParceria com erro visível;
+  mudarPlano lê text antes de JSON; asaas_id/downgrade com binding.
+- **Runner residencial CONFIRMADO ativo**: coletas residenciais 10/08, 13/08, 16/08 e 19/08
+  ~19h BRT (PECINI/RJ/VLANCE; gate 72h) — a "tela preta" do Windows É o runner. RJ de 19/08
+  saiu "degradado (paginação interrompida)": não fechar a janela no meio. GESTAO/SOLEON
+  ficaram para o próximo disparo. Se o dono quiser janela invisível, wrapper do Agendador.
+- Fora de escopo por decisão: e-mail de "pagante sem uso" (dono dispensou); mandato órfão do
+  assinar-com-cadastro em timeout pós-criação (mexe no fluxo de pagamento — projetar antes).
+
 ### 🔵 Dependem do DONO
 1. ~~**Google Ads — formulário de serviços financeiros**~~ → ✅ **ENVIADO (19/08 à noite,
    com o Claude conduzindo)**: formulário dedicado do Google preenchido como "anunciante de

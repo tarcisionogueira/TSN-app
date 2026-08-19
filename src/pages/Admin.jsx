@@ -1051,8 +1051,16 @@ function UsuariosTab() {
     return { txt: cfg?.nome || role, pago };
   };
 
+  // 19/08: os três updates abaixo eram otimistas sem prova — o gatilho
+  // `proteger_campos_sensiveis_perfil` reverte em silêncio campos sensíveis para quem não é
+  // admin de verdade, e a tela mostraria o role/ativo trocado com o banco intacto. Só
+  // `.select()` prova o que mudou (forma #3).
   async function saveRole(id) {
-    await supabase.from('perfis').update({ role: newRole }).eq('id', id);
+    const { data: mudou, error } = await supabase.from('perfis').update({ role: newRole }).eq('id', id).select('id, role');
+    if (error || !mudou?.length || mudou[0].role !== newRole) {
+      alert(`Não foi possível alterar o papel${error?.message ? `: ${error.message}` : ' (a alteração não foi aplicada pelo banco).'}`);
+      return;
+    }
     setUsers(users.map(u => u.id === id ? { ...u, role: newRole } : u));
     setEditingId(null);
   }
@@ -1061,11 +1069,13 @@ function UsuariosTab() {
     const estaAtivo = u.ativo !== false;
     if (estaAtivo) {
       // Desativar um vendedor faz perder o comissionamento DE VEZ (não volta ao reativar).
-      await supabase.from('perfis').update({ ativo: false, role_anterior: u.role, comissionamento_bloqueado: true }).eq('id', u.id);
+      const { data: mudou, error } = await supabase.from('perfis').update({ ativo: false, role_anterior: u.role, comissionamento_bloqueado: true }).eq('id', u.id).select('id, ativo');
+      if (error || !mudou?.length || mudou[0].ativo !== false) { alert(`Não foi possível desativar${error?.message ? `: ${error.message}` : '.'}`); return; }
       setUsers(users.map(x => x.id === u.id ? { ...x, ativo: false, role_anterior: u.role } : x));
     } else {
       const roleRestaurado = u.role_anterior || u.role;
-      await supabase.from('perfis').update({ ativo: true, role: roleRestaurado, role_anterior: null }).eq('id', u.id);
+      const { data: mudou, error } = await supabase.from('perfis').update({ ativo: true, role: roleRestaurado, role_anterior: null }).eq('id', u.id).select('id, ativo');
+      if (error || !mudou?.length || mudou[0].ativo !== true) { alert(`Não foi possível reativar${error?.message ? `: ${error.message}` : '.'}`); return; }
       setUsers(users.map(x => x.id === u.id ? { ...x, ativo: true, role: roleRestaurado, role_anterior: null } : x));
     }
   }
@@ -2220,6 +2230,13 @@ function ConfigTab() {
   async function salvarHonorarios() {
     setHonorariosErr('');
     const total = Number(honorarios.total_pct) || 0;
+    // 19/08: campo total VAZIO virava 0, a soma 0+0+0+0 "batia", e `config_honorarios`
+    // gravava total_pct: 0 com tique verde — e é essa linha que o /caso usa para calcular
+    // os honorários do arremate. Zero de honorário é decisão explícita, nunca campo vazio.
+    if (!(total > 0)) {
+      setHonorariosErr('Informe o percentual TOTAL (maior que zero). Se a intenção é realmente zerar os honorários, me avise que faço com registro.');
+      return;
+    }
     const soma = (Number(honorarios.admin_pct) || 0) + (Number(honorarios.advogado_pct) || 0) + (Number(honorarios.analista_pct) || 0) + (Number(honorarios.consultor_pct) || 0);
     if (Math.abs(soma - total) > 0.01) {
       setHonorariosErr(`A soma dos percentuais (${soma.toFixed(2)}%) deve ser igual ao total (${total.toFixed(2)}%).`);
@@ -8030,15 +8047,17 @@ function SolicitacaoModal({ sol, membros, onClose, onSaved }) {
     if (extrasMercado < 0 || extrasDocumental < 0) { setMsgConcessao('Valores inválidos.'); return; }
     if (extrasMercado === 0 && extrasDocumental === 0) { setMsgConcessao('Selecione ao menos 1 análise para conceder.'); return; }
     setConcedendo(true); setMsgConcessao('');
-    const { data: perfil } = await supabase.from('perfis').select('bonus_mercado, bonus_documental').eq('id', sol.user_id).single();
-    const atualMercado = perfil?.bonus_mercado || 0;
-    const atualDocumental = perfil?.bonus_documental || 0;
-    const { error } = await supabase.from('perfis').update({
-      bonus_mercado: atualMercado + extrasMercado,
-      bonus_documental: atualDocumental + extrasDocumental,
-    }).eq('id', sol.user_id);
-    if (error) {
-      setMsgConcessao('Erro ao conceder análises.');
+    // 19/08: este caminho fazia read-modify-write direto em `perfis` — uma leitura falha
+    // (perfil = null) tornava a base 0 e o update SOBRESCREVIA o bônus acumulado; e nada era
+    // gravado em `cota_concessoes` (a concessão sumia da tela de Créditos do cliente e da
+    // auditoria). A RPC `admin_conceder_cota` — usada pelo OUTRO caminho deste mesmo arquivo —
+    // incrementa atômico, faz clamp e registra a concessão. Um caminho só.
+    const { data: conc, error } = await supabase.rpc('admin_conceder_cota', {
+      p_user_id: sol.user_id, p_mercado: extrasMercado, p_documental: extrasDocumental,
+      p_indice: 0, p_motivo: 'Concessão via painel de solicitações',
+    });
+    if (error || !conc?.ok) {
+      setMsgConcessao(conc?.erro === 'sem_permissao' ? 'Sem permissão.' : `Erro ao conceder análises${error?.message ? `: ${error.message}` : '.'}`);
     } else {
       const partes = [];
       if (extrasMercado > 0) partes.push(`${extrasMercado} mercadológica${extrasMercado > 1 ? 's' : ''}`);
@@ -9016,12 +9035,19 @@ function PrestacaoContasTab() {
     try {
       const res = await apiCall('/api/saque?todos=1');
       const data = await res.json();
+      // 19/08: sem checar `res.ok`, um 401/500 com `{error}` no corpo passava pelos
+      // Array.isArray como listas vazias — "nenhum saque pendente" com cara de resposta,
+      // na tela onde se paga gente. Falha de leitura tem que aparecer como falha.
+      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
       setSaldos(Array.isArray(data.saldos) ? data.saldos : []);
       setPendentes(Array.isArray(data.pendentes) ? data.pendentes : []);
       setEmValidacaoPJ(Array.isArray(data.em_validacao_pj) ? data.em_validacao_pj : []);
       setHojeSexta(!!data.hoje_sexta);
       setProximaLib(data.proxima_liberacao || null);
-    } catch { setSaldos([]); setPendentes([]); setEmValidacaoPJ([]); }
+    } catch (e) {
+      setSaldos([]); setPendentes([]); setEmValidacaoPJ([]);
+      setMsg(`Não foi possível carregar os saques (${e.message || 'erro'}). Recarregue a página — a lista vazia abaixo NÃO significa "sem pendências".`);
+    }
     await carregarReembolsos();
     setLoading(false);
   }, [carregarReembolsos]);
@@ -9113,10 +9139,16 @@ function PrestacaoContasTab() {
     if (docsPJ[userId]) { setDocsPJ(d => { const n = { ...d }; delete n[userId]; return n; }); return; }
     setDocsPJ(d => ({ ...d, [userId]: { loading: true } }));
     try {
-      const { data } = await supabase.from('usuario_docs').select('tipo,nome,url,criado_em')
+      // 19/08: `error` não era checado — falha de leitura virava "o parceiro não enviou
+      // contrato social/KYC" na tela onde se APROVA ou REPROVA o saque dele.
+      const { data, error } = await supabase.from('usuario_docs').select('tipo,nome,url,criado_em')
         .eq('user_id', userId).in('tipo', ['pj_contrato_social', 'pj_nota_fiscal', 'kyc_selfie', 'kyc_documento', 'kyc_documento_frente', 'kyc_documento_verso']).order('criado_em', { ascending: false });
+      if (error) throw error;
       setDocsPJ(d => ({ ...d, [userId]: { loading: false, docs: Array.isArray(data) ? data : [] } }));
-    } catch { setDocsPJ(d => ({ ...d, [userId]: { loading: false, docs: [] } })); }
+    } catch (e) {
+      setDocsPJ(d => ({ ...d, [userId]: { loading: false, docs: [], erro: e.message || 'falha ao ler' } }));
+      setMsg(`Não foi possível ler os documentos deste parceiro (${e.message || 'erro'}) — a ausência abaixo é FALHA DE LEITURA, não documento faltando.`);
+    }
   };
 
   // Abre/fecha o analítico venda→repasse de um beneficiário (para conferência).
@@ -9126,8 +9158,13 @@ function PrestacaoContasTab() {
     try {
       const res = await apiCall(`/api/saque?analitico=1&user_id=${userId}`);
       const data = await res.json();
+      // 19/08: sem `res.ok`, um erro imprimia "R$ 0,00 de repasse devido" com cara de conta.
+      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
       setAnalitico(a => ({ ...a, [userId]: { loading: false, linhas: data.linhas || [], total: data.total_repasse || 0 } }));
-    } catch { setAnalitico(a => ({ ...a, [userId]: { loading: false, linhas: [], total: 0 } })); }
+    } catch (e) {
+      setAnalitico(a => { const n = { ...a }; delete n[userId]; return n; });
+      setMsg(`Não foi possível carregar o analítico (${e.message || 'erro'}). Tente de novo.`);
+    }
   };
 
   const S2 = {

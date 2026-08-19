@@ -169,6 +169,16 @@ ${String(texto || '').slice(0, 8000)}`;
     headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
     body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 500, messages: [{ role: 'user', content: prompt }] }),
   });
+  // 19/08: `anthropicFetch` DEVOLVE a Response não-ok depois dos retries — não lança. Sem
+  // checar `.ok`, um 429/529 virava `data.content` undefined → return null, e o chamador
+  // carimbava `ia_extraido: true` assim mesmo: janela de indisponibilidade da IA queimava o
+  // lote de 10 editais PARA SEMPRE (a fila filtra por ia_extraido=false). Indisponível
+  // LANÇA com marca própria; null passa a significar "a IA respondeu e não veio edital".
+  if (!res || !res.ok) {
+    const err = new Error(`ia_http_${res?.status || 'rede'}`);
+    err.indisponivel = true;
+    throw err;
+  }
   const data = await res.json().catch(() => null);
   const txt = String(data?.content?.[0]?.text || '').trim();
   const m = txt.match(/\{[\s\S]*\}/);
@@ -195,7 +205,12 @@ async function enriquecerEditaisComIA(supabase, ehIntegrado, t0) {
   for (const e of pend || []) {
     if (Date.now() - t0 > IA_HARD_MS) break;
     let out = null;
-    try { out = await extrairEditalIA(e.texto_integral); } catch { /* segue */ }
+    try { out = await extrairEditalIA(e.texto_integral); }
+    catch (err) {
+      // IA indisponível (429/529/rede): NÃO carimba e para o lote — insistir nos próximos
+      // só queimaria requests contra o mesmo muro. A fila fica intacta para o próximo run.
+      if (err?.indisponivel) { console.error(`[radar] IA indisponível (${err.message}) — lote interrompido sem carimbar`); break; }
+    }
     const upd = { ia_extraido: true };
     if (out && out.nao_edital) {
       upd.status = 'nao_edital'; // IA confirmou que é despacho/decisão, não edital → telas ignoram
@@ -218,7 +233,12 @@ async function enriquecerEditaisComIA(supabase, ehIntegrado, t0) {
       if (out.ocupacao === 'ocupado' || out.ocupacao === 'desocupado') upd.ocupacao = out.ocupacao;
       upd.status = 'processado';
     }
-    try { await supabase.from('editais_leilao').update(upd).eq('id', e.id); feitos++; } catch { /* segue */ }
+    // 19/08: `feitos++` contava mesmo com o update falho (resultado descartado).
+    try {
+      const { error: eUpd } = await supabase.from('editais_leilao').update(upd).eq('id', e.id);
+      if (!eUpd) feitos++;
+      else console.error(`[radar] update do edital ${e.id} falhou:`, eUpd.message);
+    } catch { /* segue */ }
   }
   return feitos;
 }
@@ -312,12 +332,17 @@ async function handler(req) {
     return false;
   };
 
-  let vistos = 0, novos = 0, descartados = 0, erroGeral = null, enriquecidos = 0;
+  let vistos = 0, novos = 0, descartados = 0, erroGeral = null, enriquecidos = 0, cortadoPorTempo = false;
   if (!pulouPull) {
    try {
     for (const tribunal of TRIBUNAIS) {
+      if (cortadoPorTempo) break;
       for (const termo of TERMOS) {
-        if (Date.now() - t0 > HARD_MS) break;
+        // 19/08: o break por HARD_MS só saía do laço de TERMOS (reentrava a cada tribunal) e
+        // NÃO setava erroGeral — o run parcial gravava `erro: null` e o gate do dia
+        // (`.is('erro', null)`) fazia TODOS os runs seguintes pularem o pull: 3 de N
+        // tribunais coletados encerravam a captura do dia inteiro anunciando sucesso.
+        if (Date.now() - t0 > HARD_MS) { cortadoPorTempo = true; break; }
         let items = [];
         try { items = await buscarDJEN(tribunal, termo, ini, fim, t0); }
         catch (e) { erroGeral = `${tribunal}/${termo}: ${String(e.message).slice(0, 80)}`; continue; }
@@ -386,7 +411,9 @@ async function handler(req) {
     try {
       await supabase.from('monitor_runs').insert({
         fonte: 'radar-editais-djen', janela_inicio: ini, janela_fim: fim,
-        itens_vistos: vistos, itens_novos: novos, duracao_ms: Date.now() - t0, erro: erroGeral,
+        itens_vistos: vistos, itens_novos: novos, duracao_ms: Date.now() - t0,
+        // Run parcial não é sucesso: registrado como erro para o gate do dia re-tentar.
+        erro: erroGeral || (cortadoPorTempo ? 'corte_por_tempo (run parcial — repuxar)' : null),
       });
     } catch { /* nunca quebra por causa do log */ }
   }

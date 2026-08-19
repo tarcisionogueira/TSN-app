@@ -12,7 +12,7 @@
 export const config = { runtime: 'nodejs', maxDuration: 30 };
 
 import { getUser } from './_auth.js';
-import { fetchViaBrightData } from './_brightdata.js';
+import { buscarViaBrightData } from './_brightdata.js';
 import { hostExternoSeguro, fetchExternoSeguro } from './_allowed-hosts.js';
 import { vasculharDocumentos, chaveDocCanonica } from './_doc-scan.js';
 import { extrairRegistroMatricula } from './_registro-matricula.js';
@@ -41,10 +41,16 @@ export async function fetchLote(url) {
     const text = await resp.text().catch(() => '');
     if (text && text.length > 500) return { html: text, finalUrl: resp.url || url, via: 'direct' };
   }
-  const bd = await fetchViaBrightData(url);
-  if (bd && bd.ok) {
+  // 19/08: era o `fetchViaBrightData` LEGADO, que devolve null tanto para "teto de cota"
+  // quanto para "página vazia" — a forma #5 que o próprio _brightdata.js documenta como
+  // resolvida. A recusa de ORÇAMENTO carimbava o lote como visitado (enriquecido_em) e o
+  // jogava para o fim da fila. Agora ela chega NOMEADA (`semCota: true`) ao chamador.
+  try {
+    const bd = await buscarViaBrightData(url, { proposito: 'geral' });
     const text = await bd.text().catch(() => '');
     if (text) return { html: text, finalUrl: url, via: 'brightdata' };
+  } catch (e) {
+    if (e?.semCota) return { html: '', finalUrl: url, via: 'sem_cota', semCota: true };
   }
   return { html: '', finalUrl: url, via: 'fail' };
 }

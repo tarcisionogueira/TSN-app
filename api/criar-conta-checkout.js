@@ -76,12 +76,19 @@ export default async function handler(req, res) {
   if (userId) {
     try {
       const [cpf_hash, cpf_enc] = cpf ? await Promise.all([hashCpf(cpf), encryptCpf(cpf)]) : [null, null];
-      await sb('perfis?on_conflict=id', {
+      // 19/08: o `.ok` não era checado — o irmão assinar-com-cadastro ganhou exatamente esta
+      // checagem depois de o upsert falhar EM SILÊNCIO por semanas. Continua best-effort
+      // (perfil nasce pelo trigger), mas a falha agora GRITA no log.
+      const up = await sb('perfis?on_conflict=id', {
         method: 'POST',
         headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
         body: JSON.stringify({ id: userId, nome, cpf_hash, cpf_enc, role: 'explorador', lgpd_aceito: true, lgpd_data: meta.lgpd_data }),
       });
-    } catch { /* best-effort; app tolera ausência de perfil */ }
+      if (!up.ok) {
+        const corpo = await up.text().catch(() => '');
+        console.error('[criar-conta-checkout] upsert de perfis FALHOU', up.status, String(corpo).slice(0, 300));
+      }
+    } catch (e) { console.error('[criar-conta-checkout] upsert de perfis lançou:', e?.message); }
   }
 
   // O e-mail de boas-vindas/aviso é disparado de forma UNIVERSAL no 1º login (AuthContext →

@@ -6,6 +6,8 @@ import { supabase } from '../utils/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import CidadeAutocomplete from './CidadeAutocomplete';
 import LogoB from './LogoB';
+import { validarNome, normalizarNome } from '../lib/nome';
+import { validarTelefone } from '../lib/telefone';
 
 // Popup pós-login que completa o cadastro pedindo UM campo por vez (só o que falta).
 // Base do explorador grátis: nome, cidade+UF, telefone e aceite LGPD. O CPF NÃO entra
@@ -99,9 +101,12 @@ export default function CompletarCadastroModal() {
   const ultimo = idx >= passos.length - 1;
 
   const validarPasso = () => {
-    if (passo === 'nome') return dados.nome.trim().length >= 3 ? true : 'Informe seu nome completo.';
+    // 19/08: eram a 3ª/4ª cópias sem o conserto — `length >= 3` aceitava "ana", e este modal
+    // é o ÚNICO ponto que ainda barra o cadastro via GOOGLE (que não passa pelo Login).
+    // Regra única de src/lib/nome.js e src/lib/telefone.js, como nos outros cinco fluxos.
+    if (passo === 'nome') { const v = validarNome(dados.nome); return v.ok ? true : v.erro; }
     if (passo === 'cidade') return (dados.cidade && dados.uf) ? true : 'Selecione sua cidade na lista (com o estado).';
-    if (passo === 'telefone') return dados.telefone.replace(/\D/g, '').length >= 10 ? true : 'Informe um telefone/WhatsApp com DDD.';
+    if (passo === 'telefone') { const t = validarTelefone(dados.telefone); return (t.ok && dados.telefone.replace(/\D/g, '').length >= 10) ? true : (t.erro || 'Informe um telefone/WhatsApp com DDD.'); }
     if (passo === 'lgpd') return dados.lgpd ? true : 'É necessário aceitar os Termos e a Política de Privacidade.';
     return true;
   };
@@ -115,7 +120,7 @@ export default function CompletarCadastroModal() {
     setSalvando(true);
     try {
       const patch = {};
-      if (passos.includes('nome')) patch.nome = dados.nome.trim();
+      if (passos.includes('nome')) patch.nome = normalizarNome(dados.nome);
       if (passos.includes('telefone')) patch.telefone = dados.telefone.replace(/\D/g, '');
       if (passos.includes('cidade')) {
         patch.endereco = `${dados.cidade} - ${dados.uf}`;

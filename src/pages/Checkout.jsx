@@ -879,7 +879,10 @@ export default function Checkout() {
       const ids = { subscriptionId: data.subscriptionId || null, paymentId: data.paymentId || null };
       setAsaasIds(ids);
       if (data.customerId && user?.id) {
-        supabase.from('perfis').update({ asaas_id: data.customerId }).eq('id', user.id).then(() => {});
+        // 19/08: resultado era descartado — falha aqui perdia o vínculo cliente↔gateway
+        // que a conciliação usa. Continua não-bloqueante, mas a falha GRITA no console.
+        supabase.from('perfis').update({ asaas_id: data.customerId }).eq('id', user.id)
+          .then(({ error: eAsaas }) => { if (eAsaas) console.error('[checkout] asaas_id não gravado:', eAsaas.message); });
       }
     } catch (err) {
       setErro(err.message);
@@ -961,7 +964,11 @@ export default function Checkout() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'gerenciar_assinatura', email: user.email, plano: planoKey }),
       });
-      const data = await res.json();
+      // 19/08: `res.json()` antes de qualquer checagem — uma página de erro HTML da Vercel
+      // virava exceção de parse exibida crua no fluxo de upgrade (mesmo defeito que o
+      // IndiceConsulta já resolveu). Lê como texto e tenta o JSON depois.
+      const bruto = await res.text().catch(() => '');
+      let data = {}; try { data = JSON.parse(bruto); } catch { data = { error: bruto.slice(0, 120) || `HTTP ${res.status}` }; }
       if (res.status === 404) {
         // 404 do Asaas = a assinatura está no MP (o gateway PRINCIPAL).
         if (ehUpgrade) { setLoading(false); return await gerarLink(); }

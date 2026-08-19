@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
+import { senhaForte, MSG_SENHA_FRACA } from '../lib/senha';
 
 const PLANOS_INFO = {
   top2: {
@@ -263,7 +264,8 @@ function CapturaLanding({ id }) {
     if (!form.nome.trim()) return setErro('Informe seu nome completo.');
     if (!form.email.trim() || !/\S+@\S+\.\S+/.test(form.email)) return setErro('Informe um e-mail válido.');
     if (wa.length < 10) return setErro('Informe um WhatsApp válido.');
-    if (form.senha.length < 6) return setErro('A senha deve ter pelo menos 6 caracteres.');
+    // 19/08: era `length < 6` — cópia sem a régua de senha forte de 15/08 (regra única).
+    if (!senhaForte(form.senha)) return setErro(MSG_SENHA_FRACA);
     setEnviando(true);
     try {
       // Todo o trabalho sensível roda no backend (sorteio do consultor, vínculo

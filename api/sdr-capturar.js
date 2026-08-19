@@ -59,7 +59,10 @@ export default async function handler(req, res) {
   if (!UUID_RE.test(produtoId)) return res.status(400).json({ error: 'Produto inválido.' });
   if (!nome || !email) return res.status(400).json({ error: 'Preencha nome e e-mail.' });
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.status(400).json({ error: 'E-mail inválido.' });
-  if (senha.length < 6) return res.status(400).json({ error: 'A senha deve ter ao menos 6 caracteres.' });
+  // 19/08: era `length < 6` — o servidor é a garantia (a tela é conveniência); cópia
+  // deliberada da regra de src/lib/senha.js, como api/_nome.js faz com o nome.
+  const SENHA_FORTE = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/;
+  if (!SENHA_FORTE.test(senha)) return res.status(400).json({ error: 'A senha deve ter ao menos 8 caracteres, com letra maiúscula, minúscula, número e caractere especial.' });
   if (whatsapp.length < 10) return res.status(400).json({ error: 'WhatsApp inválido.' });
 
   // Confere que o produto existe e está ativo (nunca confia no cliente).
