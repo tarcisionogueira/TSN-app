@@ -385,8 +385,10 @@ async function main() {
       motivosFalha.set(m, (motivosFalha.get(m) || 0) + 1);
       console.error(`  ${idDaUrl(url)} · SEM DETALHE (${m})`);
       // Cota esgotada no meio do lote: insistir só queima tempo, e cada tentativa já
-      // recebeu o "não" do freio. Para aqui e reporta o que conseguiu.
-      if (e.motivo === 'teto_global' || e.motivo === 'subcota' || e.motivo === 'reservado_para_outros') break;
+      // recebeu o "não" do freio. Para aqui e reporta o que conseguiu. `e.semCota` é o
+      // catálogo ÚNICO (em _brightdata.js) — a lista enumerada aqui era a cópia que não
+      // recebia motivo novo: `subcota_dia` (rateio de 18/08) já teria ficado de fora.
+      if (e.semCota) break;
       continue;
     }
     const row = montarRow(url, parseDetalhe(html, url));

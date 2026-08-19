@@ -49,7 +49,9 @@ export class ErroBrightData extends Error {
     this.motivo = motivo;   // sem_config | teto_global | subcota | reservado_para_outros | cota_indisponivel | rede | http
     this.detalhe = detalhe || null;
     // Só o teto/sub-cota é "o sistema decidiu não gastar"; o resto é falha de verdade.
-    this.semCota = ['teto_global', 'subcota', 'reservado_para_outros', 'cota_indisponivel'].includes(motivo);
+    // `subcota_dia` (18/08): rateio diario da sub-cota — recusa de ORCAMENTO igual as outras.
+    // Sem ele aqui, o rateio chegaria como falha da fonte: a forma #5 de novo.
+    this.semCota = ['teto_global', 'subcota', 'subcota_dia', 'reservado_para_outros', 'cota_indisponivel'].includes(motivo);
   }
 }
 
