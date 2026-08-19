@@ -167,6 +167,25 @@ histórico/VivaReal), não o imóvel — o leiloeiro anuncia 168 m² total / 144
 lote TEM matrícula capturada). **Relatório atual subestima: vale regerar quando a matrícula
 confirmar a área.**
 
+### Fechamento da noite (últimas horas da sessão)
+- **Recuperação de venda virou rotina**: `recuperacao-checkout-cron` (diário 13:00 UTC).
+  Rastro = erros_cliente em /checkout + eventos de pagamento falho; anti-spam: só explorador,
+  1 e-mail/30 dias, teto 20/dia, janela 10 dias. A trava `verificar:padroes` reprovou a
+  primeira versão DUAS vezes (dedup descartado; leitura sem checar error) — corrigido
+  abortando. **Comunicação automatizada assina "Equipe BidPro Brasil", NUNCA nome de pessoa**
+  (decisão do dono) — o e-mail e a mensagem in-app já enviada foram ajustados.
+- **Romualdo**: mensagem in-app enviada (chamado 9f286177…); o e-mail sai no 1º disparo do
+  cron. Verificar o resultado (`enviados` no log do cron) na próxima sessão.
+- **Negativas aplicadas pelo dono no Ads** (conferidas por print): variações de arremata aí,
+  smartleiloes, leilãomap, zuk, smartcaixa, checkmovel, leilaoimovel, auket, bid imoveis,
+  arrematadorcaixa, "meu imovel foi leiloado". Origem: relatório de termos 04–17/08 — 76,6%
+  do gasto rastreável era marca de TERCEIRO com zero conversões.
+- **Falta no Ads (dono)**: colar o script v2 (`docs/google-ads-script-bidpro.js`) e abrir o
+  "URGENTE" da tag Google ("Clube Conselheiro") na Central de dados.
+- **Vila Velha regerado**: 144 m² (fonte acervo, declarado), valor R$ 846k → R$ 1,63 mi.
+  Matrícula foi lida pela fila mas sem área extraível (provável escaneada) — ressalva "não
+  confirmada" segue na tela, o que é verdadeiro.
+
 ### Contato comercial pendente (dono)
 Romualdo José Rocha Cronemberger — tentou assinar o Top2 4× entre 06 e 17/08 (extensão do
 navegador bloqueava o fetch), segue explorador. Há uma SAUDAÇÃO dele aberta na fila de 05/08:
