@@ -4,6 +4,54 @@
 
 ---
 
+## 🧾 19/08 — O INVARIANTE DE ONTEM PEGOU O PRÓPRIO CONSERTO DE ONTEM (7.721 SELOS)
+
+**Aplicado em produção** (migração `selo_edital_calcula_depois_de_preservar.sql`).
+
+### `selo_documento_dessincronizado` = 7.721 no primeiro dia de vida — e era ORDEM de gatilho
+O diagnóstico de abertura achou o invariante criado em 18/08 estourado: 7.721 lotes, **100%
+CEF, 100% na direção "arquivo existe, selo desligado"** — todos tocados pelo scraper matinal
+das 09:23–09:28. Causa-raiz, provada com repro em transação desfeita:
+
+1. O upsert diário da CEF manda a **página do lote** em `link_edital` (bootstrap deliberado,
+   `scripts/scraper.js:380` — o CSV da Caixa não traz o PDF; quem protege o PDF conquistado é
+   `trg_preservar_link_edital`).
+2. Gatilhos BEFORE disparam em **ordem alfabética**: `set_tem_edital_doc` (s) rodava ANTES de
+   `trg_preservar_link_edital` (t). O cálculo do selo via o não-PDF do payload → `false`; o
+   preservador restaurava o PDF **depois**. Linha final: link = PDF, selo = false.
+3. Todo dia o sync re-apagava os selos: **7.721 editais verdadeiros escondidos na Busca**
+   (CEF com selo: 187 → **7.908** após o conserto).
+
+**Conserto:** rename do gatilho para `zzzz_set_tem_edital_doc` (ordena depois de todos os
+`trg_*`; o cálculo passa a ver o NEW já preservado) + ressincronização do acervo. Verificado:
+invariante de volta a **0**, ordem confirmada em `pg_trigger`. É exatamente a classe que o
+invariante foi criado para pegar ("um UPDATE que não dispara não dá erro") — pegou em 24 h.
+**Lição para gatilho novo em `imoveis_leilao`: a ordem é alfabética; gatilho que LÊ o que
+outro gatilho ARRUMA precisa ordenar depois dele.**
+
+### Resto do diagnóstico de abertura (19/08)
+- Segurança `0/0` · regras de negócio `0` · KYC `0` · baseline de fontes limpo (filtro
+  `sem_cota` ativo) · fontes cegas `0` · deploys `READY` · backup off-region saudável 4º dia.
+- Bright Data 541/550 na semana (vira 24/08); freio respondendo certo (`brightdata_decisao`:
+  só `rj` com folga, resto `reservado_para_outros`/`subcota` — decisão de orçamento, não fonte).
+- `cadastro_barrado` 8>7: **todas** as 8 recusas são a régua de senha forte (última 15/08) —
+  validação funcionando, não bug; se a régua estiver espantando cadastro pago é decisão de dono.
+- `relatorio_area_nao_confirmada` 13>2 e `lote_sem_area_nem_matricula` 404>400: fila de
+  matrícula existe e roda; acompanhar.
+- Atendimento: 3 pedidos de reunião sem data (o mais antigo há 48 dias — pendência do DONO) e
+  2 chamados com cliente falando sem resposta humana (~0,5 dia) — a régua de `tempo_processo`
+  segue mostrando que o relógio humano é onde tudo para.
+- Cliente 360: 4 pagantes sem relatório em 14 dias (2 top2 antigos, 1 assessorado, 1 top2 de
+  17/08) — churn em formação, vale contato.
+- Marketing: conversões voltaram a aparecer no painel (3 na quinzena), 165 visitas com gclid ×
+  283 cliques pagos (razão bem melhor que os 19/214 de 14/08), `utm_term` populando (109).
+- `erros_cliente` 14d: `/checkout` Failed to fetch ×4 (caso Romualdo, recuperação já virou
+  cron) e 1 null-read em `/imovel/:id` (13/08, ocorrência única).
+- `gerar-analise` com 3 erros invisíveis em 7d (2 clientes, último 17/08,
+  "Cannot read properties of undefined (reading 'find')") — investigar na próxima rodada.
+
+---
+
 ## 🧾 18/08 (3ª sessão, parte 2) — NOME COM REGRA, TETO COM UM NÚMERO SÓ
 
 Tudo desta seção está **em produção** (`main`).
