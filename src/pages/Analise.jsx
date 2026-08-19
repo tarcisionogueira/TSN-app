@@ -1174,9 +1174,16 @@ export default function Analise() {
           }
         }
         // Sincroniza o flag arrematado nas análises geradas (regra de limpeza: o
-        // cron só apaga as NÃO arrematadas 15 dias após o leilão) — mercado + documental.
-        await supabase.from('analises_mercado').update({ arrematado: isArrematado }).eq('user_id', user.id).eq('imovel_id', payload.imovel_id);
-        await supabase.from('analises_documental').update({ arrematado: isArrematado }).eq('user_id', user.id).eq('imovel_id', payload.imovel_id);
+        // cron só apaga as NÃO arrematadas 15 dias após o leilão). 19/08: SÓ escreve
+        // quando é arremate — `d.status` nunca vale 'arrematado' nesta tela, então o
+        // update incondicional gravava `false` SEMPRE e apagaria a proteção que o
+        // /api/sinalizar-arremate gravou. Flag de arremate nunca regride por aqui.
+        if (isArrematado) {
+          for (const tabela of ['analises_mercado', 'analises_documental', 'analises_laudo']) {
+            const { error: errFlag } = await supabase.from(tabela).update({ arrematado: true }).eq('user_id', user.id).eq('imovel_id', payload.imovel_id);
+            if (errFlag) console.error(`[portfolio] flag arrematado em ${tabela} falhou:`, errFlag.message);
+          }
+        }
       } catch { /* portfólio local já foi salvo, erro de rede não bloqueia o usuário */ }
     }
 

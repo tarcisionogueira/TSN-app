@@ -173,9 +173,20 @@ export default async function handler(req) {
     const limite = new Date(Date.now() - 3 * 24 * 3600 * 1000).toISOString();
     // `created_at` (não `criado_em`): `solicitacoes` é das tabelas novas — ver a forma nº 6 do
     // CLAUDE.md. A coluna errada aqui daria 400, e o 400 sairia como "nenhum pedido parado".
-    const r = await sb(`solicitacoes?select=id,tipo,created_at&status=eq.solicitado&reuniao_em=is.null&created_at=lt.${limite}&order=created_at.asc&limit=100`);
+    const r = await sb(`solicitacoes?select=id,tipo,created_at,user_id&status=eq.solicitado&reuniao_em=is.null&created_at=lt.${limite}&order=created_at.asc&limit=100`);
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    const parados = await r.json();
+    let parados = await r.json();
+    // 19/08: EXCLUI contas internas (admin/analista/juridico) — o invariante
+    // `reuniao_solicitada_parada` já excluía e este check não: 3 testes do próprio dono
+    // (de 01-05/07, invisíveis na fila da plataforma) saíram como "pedido do CLIENTE
+    // parado há 48 dias" em todo relatório. As duas réguas agora medem a mesma população.
+    if (parados.length) {
+      const ids = [...new Set(parados.map(s => s.user_id).filter(Boolean))];
+      const rp = await sb(`perfis?select=id,role&id=in.(${ids.join(',')})`);
+      if (!rp.ok) throw new Error(`HTTP ${rp.status} (perfis)`);
+      const roles = new Map((await rp.json()).map(p => [p.id, p.role]));
+      parados = parados.filter(s => !['admin', 'analista', 'juridico'].includes(roles.get(s.user_id) || ''));
+    }
     if (!parados.length) return { status: 'ok', detalhe: 'Nenhum pedido de reunião parado' };
     const dias = Math.floor((Date.now() - new Date(parados[0].created_at).getTime()) / 86400000);
     const tipos = [...new Set(parados.map(s => s.tipo).filter(Boolean))].join(', ');

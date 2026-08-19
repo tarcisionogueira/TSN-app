@@ -10,6 +10,34 @@ _Última atualização: 19/08 manhã. Tudo abaixo de "resolvido" está em produ�
 ### 🎉 Estado: G2RS APROVADA (chegou 06:13 de 19/08 na fila do Atendimento)
 Campanha Google e canal de e-mail 100% do nosso lado. O que falta é decisão/relógio.
 
+### ✅ FEITO EM 19/08 (noite) — sessão dono+Claude, tudo em produção
+- **Webhooks de pagamento (CRÍTICO):** `processarVencido`/`processarRecusado`/`setExpiracaoDocumentos`
+  agora LANÇAM em erro de escrita (antes descartavam e devolviam ok — a marca de idempotência
+  ficava e a inadimplência se perdia para sempre); `mpGet` do mp-webhook distingue 404 de
+  429/5xx (erro do MP virava 200 e o MP parava de reentregar — ativação de plano pago perdida);
+  a blindagem "outro mandato ativo" agora falha FECHADA (busca falhou → 5xx/reentrega, nunca
+  suspender às cegas).
+- **"Arrematei" protege os RELATÓRIOS:** `sinalizar-arremate` marca `arrematado=true` nas TRÊS
+  `analises_*` (a retenção decide por elas; antes só documentos eram protegidos e o cron
+  apagava os relatórios do imóvel comprado). `Analise.jsx` parou de gravar `false`
+  incondicional (apagaria a proteção) e ganhou o laudo.
+- **Checkout não desloga quem pagou:** `signInWithPassword` não lança — o `{error}` agora é
+  tratado nos 2 fluxos do Checkout e no ProdutoLanding (padrão do Promo.jsx).
+- **Atendimento:** mensagem duplicada na tela corrigida (dedup por id contra o realtime) +
+  guard de `enviando` no Enter (2 Enters rápidos inseriam 2× no banco).
+- **Hardening baixo (os 4):** comparação timing-safe na assinatura Svix · iframe de e-mail sem
+  `allow-popups-to-escape-sandbox` · allowlist de host no `download_url` de anexo · REVOKE de
+  `brightdata_decisao` (era PUBLIC/anon/authenticated; ficou service_role — migração
+  `brightdata_decisao_sem_anon.sql`, aplicada).
+- **Reuniões "paradas há 48 dias" eram 3 TESTES do dono** (todas de tarcisioaraujo@, role
+  admin, 01-05/07, invisíveis na fila) → canceladas; o health-check agora exclui contas
+  internas, igual ao invariante (as duas réguas mediam populações diferentes).
+- **4 pagantes sem entrega:** VERIFICADO — recebem e-mails normais (oportunidades/divulgação,
+  entregues, último 19/08). Não existe e-mail específico de "pagante sem uso"; criar é decisão
+  de comunicação do dono.
+- **Runner residencial:** NÃO está rodando (a coleta do GESTAO segue consumindo Bright Data —
+  32 req nesta semana). O código está pronto; falta a máquina de casa (ver seção do runner).
+
 ### 🔵 Dependem do DONO
 1. ~~**Google Ads — formulário de serviços financeiros**~~ → ✅ **ENVIADO (19/08 à noite,
    com o Claude conduzindo)**: formulário dedicado do Google preenchido como "anunciante de

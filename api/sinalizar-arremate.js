@@ -91,6 +91,24 @@ export default async function handler(req) {
       }
     }
 
+    // 2b) PROTEGE OS RELATÓRIOS (19/08). A retenção (`limpar_analises_orfas`) decide por
+    //     `bool_or(arrematado)` lido das TRÊS tabelas `analises_*` — e nada as marcava: o
+    //     botão prometia "manter o relatório" enquanto o cron apagava mercadológico,
+    //     documental e laudo 15 dias após a praça do imóvel que o cliente COMPROU.
+    //     Escreve nas três; falha aqui é falha do pedido (o cliente re-tenta; tudo acima é
+    //     idempotente) — proteger documento e não proteger relatório era meia promessa.
+    for (const tabela of ['analises_mercado', 'analises_documental', 'analises_laudo']) {
+      const r = await sb(`${tabela}?user_id=eq.${user.id}&imovel_id=eq.${encodeURIComponent(imovelId)}&arrematado=eq.false`, {
+        method: 'PATCH', headers: { Prefer: 'return=minimal' },
+        body: JSON.stringify({ arrematado: true }),
+      });
+      if (!r.ok) {
+        const corpo = await r.text().catch(() => '');
+        console.error(`[sinalizar-arremate] proteger ${tabela} falhou`, r.status, String(corpo).slice(0, 200));
+        return new Response(JSON.stringify({ error: 'Arremate registrado, mas não conseguimos proteger os relatórios ainda. Toque em "Arrematei" novamente.' }), { status: 502, headers });
+      }
+    }
+
     // 2/3) Só quando o imovel_id é um UUID real (imóvel do acervo): protege os
     //      documentos e cancela avisos de retenção pendentes daquele imóvel.
     if (UUID_RE.test(imovelId)) {

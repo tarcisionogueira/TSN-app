@@ -103,7 +103,14 @@ export default async function handler(req, res) {
   const ACCESS_TOKEN = process.env.MP_ACCESS_TOKEN;
   const mpGet = async (path) => {
     const r = await fetch(`${MP_BASE}${path}`, { headers: { Authorization: `Bearer ${ACCESS_TOKEN}` } });
-    return r.ok ? r.json() : null;
+    if (r.ok) return r.json();
+    // 19/08: 429/5xx do MP virava `null`, o chamador respondia 200 ("não encontrado") e o
+    // MP parava de reentregar — ativação de plano pago perdida sem rastro. Só o 404 é
+    // "não existe" de verdade; o resto LANÇA, o catch do ramo devolve 5xx e o MP reentrega.
+    if (r.status === 404) return null;
+    const e = new Error(`MP ${r.status} em ${path}`);
+    e.mpStatus = r.status;
+    throw e;
   };
 
   // ── Assinaturas (checkout transparente / recorrência) ──────────────────────
@@ -253,7 +260,10 @@ export default async function handler(req, res) {
     const r = await fetch(`${MP_BASE}/v1/payments/${dataId}`, {
       headers: { Authorization: `Bearer ${ACCESS_TOKEN}` },
     });
-    if (!r.ok) return res.status(200).json({ ok: true, erro: 'payment not found' });
+    // 19/08: só o 404 é "pagamento não existe". 429/5xx devolvia 200 e o MP parava de
+    // reentregar — a notificação do pagamento se perdia de vez. Agora força reentrega.
+    if (r.status === 404) return res.status(200).json({ ok: true, erro: 'payment not found' });
+    if (!r.ok) return res.status(500).json({ error: `MP ${r.status} ao buscar pagamento — reentregar` });
     pagamento = await r.json();
   } catch (e) {
     console.error('[mp-webhook] erro ao buscar pagamento:', e.message);

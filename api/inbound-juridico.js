@@ -48,7 +48,15 @@ async function verificarAssinatura(req, raw) {
     const signed = `${id}.${ts}.${raw}`;
     const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(signed));
     const expected = btoa(String.fromCharCode(...new Uint8Array(sig)));
-    return sigHeader.split(' ').some(p => p.split(',')[1] === expected);
+    // 19/08 (hardening): comparação em TEMPO CONSTANTE — `===` retorna no primeiro byte
+    // diferente e vaza, por timing, quantos bytes do HMAC o atacante já acertou.
+    const igualConstante = (a, b) => {
+      if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false;
+      let diff = 0;
+      for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+      return diff === 0;
+    };
+    return sigHeader.split(' ').some(p => igualConstante(p.split(',')[1] || '', expected));
   } catch { return false; }
 }
 
@@ -127,6 +135,17 @@ async function baixarAnexoApi(emailId, attId) {
     if (!r.ok) { console.error('[inbound] anexo: API', r.status); return null; }
     const j = await r.json().catch(() => null);
     if (!j?.download_url) { console.error('[inbound] anexo: sem download_url — keys:', Object.keys(j || {}).join(',')); return null; }
+    // 19/08 (hardening): allowlist de host — a URL vem da API do Resend, mas quem baixa é
+    // o NOSSO servidor com timeout de 30s: se a resposta for adulterada/inesperada, isto
+    // impede o fetch de virar SSRF para host arbitrário. https + domínios do Resend/S3.
+    let hostOk = false;
+    try {
+      const u = new URL(j.download_url);
+      hostOk = u.protocol === 'https:' && (
+        u.hostname === 'resend.com' || u.hostname.endsWith('.resend.com') ||
+        u.hostname.endsWith('.amazonaws.com') || u.hostname.endsWith('.cloudflarestorage.com'));
+    } catch { hostOk = false; }
+    if (!hostOk) { console.error('[inbound] anexo: download_url com host fora da allowlist — ignorado:', String(j.download_url).slice(0, 80)); return null; }
     const bin = await fetch(j.download_url, { signal: AbortSignal.timeout(30000) });
     if (!bin.ok) { console.error('[inbound] anexo: download', bin.status); return null; }
     return new Uint8Array(await bin.arrayBuffer());

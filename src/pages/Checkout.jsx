@@ -425,7 +425,15 @@ export default function Checkout() {
       // de conta do checkout (onde o tráfego PAGO aterrissa) nunca avisavam o Google Ads.
       // Cadastro pago existia no banco e não existia na campanha.
       trackCadastro(email, nome);
-      try { await supabase.auth.signInWithPassword({ email, password: senha }); } catch { /* loga manual se falhar */ }
+      // 19/08: signInWithPassword NÃO lança — devolve { error }; o try/catch antigo era
+      // código morto e a falha de login mandava a pessoa DESLOGADA para /membros (o
+      // PrivateRoute jogava no /login sem explicação). Mesmo tratamento do Promo.jsx.
+      const { error: erroLogin } = await supabase.auth.signInWithPassword({ email, password: senha });
+      if (erroLogin) {
+        setSuErro('Conta criada! Não conseguimos entrar automaticamente — clique em "Já tenho conta — Entrar" e use o e-mail e a senha que você acabou de cadastrar.');
+        setSuLoading(false);
+        return;
+      }
       nav('/membros');
     } catch (e) { setSuErro(e.message || 'Erro ao criar a conta.'); }
     setSuLoading(false);
@@ -743,7 +751,12 @@ export default function Checkout() {
       trackCadastro(email, nome); // conversão de cadastro; a de PLANO dispara no webhook de pagamento
       // Conta criada → loga. O plano é liberado pelo WEBHOOK, na primeira cobrança
       // confirmada (ele entra como Explorador por ora).
-      try { await supabase.auth.signInWithPassword({ email, password: senha }); } catch { /* loga manual se falhar */ }
+      // 19/08: signInWithPassword NÃO lança — devolve { error }; o try/catch antigo era
+      // código morto. Aqui o MANDATO JÁ FOI AUTORIZADO: a tela de sucesso continua (é
+      // verdade), mas o destino do redirect vira /login quando a sessão não abriu — antes
+      // a pessoa PAGAVA e caía deslogada em /membros → tela de login sem explicação.
+      const { error: erroLoginPos } = await supabase.auth.signInWithPassword({ email, password: senha });
+      const destinoPos = erroLoginPos ? '/login' : null;
       // `acesso: 'aguardando_pagamento'` (16/08): o mandato aceito pelo MP — inclusive
       // com status 'authorized' — NÃO é pagamento recebido. Antes, 'authorized' caía no
       // ramo verde e a tela dizia "Pagamento aprovado" para quem podia ser recusado
@@ -751,11 +764,11 @@ export default function Checkout() {
       // em análise" já existia e já dizia a verdade — agora é ela que atende os dois.
       if (data.acesso === 'aguardando_pagamento' || data.status === 'pending') {
         setPagoPendente(true);
-        setTimeout(() => nav('/membros'), 3500);
+        setTimeout(() => nav(destinoPos || '/membros'), 3500);
       } else {
         setPago(true);
         // Pro ativo agora → se veio do fluxo guiado da assessoria, segue direto p/ ela.
-        setTimeout(() => nav(aposPlano ? `/checkout?plano=${aposPlano}` : '/membros'), 3000);
+        setTimeout(() => nav(destinoPos || (aposPlano ? `/checkout?plano=${aposPlano}` : '/membros')), 3000);
       }
     } catch (e) {
       setSuErro(e.message || 'Erro ao processar a assinatura.');

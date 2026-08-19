@@ -579,7 +579,12 @@ export async function processarVencido({ gatewayCustomerId, email, gateway }) {
     // re-concedem top2 sobre dinheiro devolvido (P2.2). ciclo_agendado também é limpo.
     update.plano_vencimento = null;
     update.ciclo_agendado = null;
-    await supabase.from('perfis').update(update).eq('id', cliente.id);
+    // 19/08: o resultado era DESCARTADO — as irmãs deste arquivo lançam (`:365`, `:493`),
+    // e só o throw faz o webhook devolver 5xx, desfazer a marca de idempotência e o
+    // gateway reentregar. Engolir o erro aqui = cliente vencido mantém role pago para
+    // sempre, e a reentrega é descartada como `duplicado`.
+    const { error } = await supabase.from('perfis').update(update).eq('id', cliente.id);
+    if (error) throw new Error(error.message);
     // LGPD Art. 16 — documentos pessoais retidos por 90 dias após cancelamento
     await setExpiracaoDocumentos(cliente.id);
   }
@@ -691,11 +696,13 @@ export async function processarReembolso({ valor, email, gatewayCustomerId, gate
 
 async function setExpiracaoDocumentos(userId) {
   const expira = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
-  // Só seta em docs que ainda não têm expira_em (não sobrescreve prazo já existente)
-  await supabase.from('usuario_docs')
+  // Só seta em docs que ainda não têm expira_em (não sobrescreve prazo já existente).
+  // O update é idempotente — em caso de throw, a reentrega do webhook refaz sem efeito duplo.
+  const { error } = await supabase.from('usuario_docs')
     .update({ expira_em: expira })
     .eq('user_id', userId)
     .is('expira_em', null);
+  if (error) throw new Error(error.message);
 }
 
 // ── PAGAMENTO RECUSADO ────────────────────────────────────────────────────────
@@ -715,19 +722,23 @@ export async function processarRecusado({ gatewayCustomerId, email, motivo, gate
     // O guard de `ehProdutoMp` no webhook cobria só PRODUTO; serviço passava reto.
     // Falha de cobrança avulsa registra o erro, mas NUNCA suspende o plano vigente.
     if (servico) {
-      await supabase.from('perfis').update(update).eq('id', cliente.id);
+      const { error } = await supabase.from('perfis').update(update).eq('id', cliente.id);
+      if (error) throw new Error(error.message);
       return { ok: true, servico: true, suspensao_ignorada: true };
     }
-    // Só suspende se ainda não está inadimplente (evita sobrescrever role_anterior já salvo)
+    // Só suspende se ainda não está inadimplente (evita sobrescrever role_anterior já salvo).
+    // 19/08: os três updates abaixo descartavam o erro — ver o comentário em processarVencido.
     if (ROLES_PAGANTES.includes(cliente.role) && !cliente.inadimplente_desde) {
       update.inadimplente_desde = new Date().toISOString().slice(0, 10);
       update.role_anterior = cliente.role;
       update.role = 'explorador';
-      await supabase.from('perfis').update(update).eq('id', cliente.id);
+      const { error } = await supabase.from('perfis').update(update).eq('id', cliente.id);
+      if (error) throw new Error(error.message);
       // LGPD Art. 16 — documentos pessoais retidos por 90 dias após cancelamento
       await setExpiracaoDocumentos(cliente.id);
     } else {
-      await supabase.from('perfis').update(update).eq('id', cliente.id);
+      const { error } = await supabase.from('perfis').update(update).eq('id', cliente.id);
+      if (error) throw new Error(error.message);
     }
   }
   return { ok: true };

@@ -34,7 +34,7 @@ function EmailHtml({ html }) {
   return (
     <iframe
       title="Mensagem de e-mail"
-      sandbox="allow-popups allow-popups-to-escape-sandbox"
+      sandbox="allow-popups"
       srcDoc={doc}
       style={{ width: '100%', minHeight: 120, height: 320, border: 'none', borderRadius: 8, background: 'white' }}
     />
@@ -179,7 +179,9 @@ export default function Atendimento() {
   }
 
   async function enviarMensagem() {
-    if ((!texto.trim() && !anexos.length) || !chamadoAtivo) return;
+    // 19/08: o guard de `enviando` só existia no BOTÃO — o Enter chamava direto e dois
+    // Enters rápidos inseriam a mensagem duas vezes no banco.
+    if (enviando || (!texto.trim() && !anexos.length) || !chamadoAtivo) return;
     setEnviando(true);
     const { data: msg, error: msgErr } = await supabase.from('chamados_mensagens').insert({
       chamado_id: chamadoAtivo.id, autor_id: user.id, autor_nome: nomeAtendente,
@@ -189,7 +191,10 @@ export default function Atendimento() {
       canal: chamadoAtivo.canal === 'email' ? 'email' : null,
     }).select().single();
     if (msgErr) { alert('Erro ao enviar mensagem. Tente novamente.'); setEnviando(false); return; }
-    if (msg) setMensagens(prev => [...prev, msg]);
+    // 19/08: dedup por id — quando o push do realtime chega ANTES da resposta deste
+    // insert, a assinatura (que deduplica) já anexou a mensagem; anexar de novo aqui
+    // era o que fazia a mesma mensagem aparecer DUAS vezes na tela (uma linha no banco).
+    if (msg) setMensagens(prev => prev.find(m => m.id === msg.id) ? prev : [...prev, msg]);
     await supabase.from('chamados').update({ atualizado_em: new Date().toISOString() }).eq('id', chamadoAtivo.id);
     // Notifica o cliente por e-mail (essencial para leads sem conta)
     if (texto.trim() && chamadoAtivo.user_email) {

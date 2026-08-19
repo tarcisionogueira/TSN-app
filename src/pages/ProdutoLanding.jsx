@@ -287,8 +287,15 @@ function CapturaLanding({ id }) {
         setEnviando(false);
         return;
       }
-      // Já loga o visitante (conta confirmada) para acesso imediato — best-effort.
-      try { await supabase.auth.signInWithPassword({ email: form.email.trim(), password: form.senha }); } catch (_) {}
+      // Já loga o visitante (conta confirmada) para acesso imediato.
+      // 19/08: signInWithPassword NÃO lança — devolve { error }; o try/catch era código
+      // morto e "acesso liberado" aparecia para quem ficou DESLOGADO.
+      const { error: erroLogin } = await supabase.auth.signInWithPassword({ email: form.email.trim(), password: form.senha });
+      if (erroLogin) {
+        setErro('Conta criada! Não conseguimos entrar automaticamente — faça login com o e-mail e a senha cadastrados para acessar.');
+        setEnviando(false);
+        return;
+      }
       setStep('sucesso');
     } catch (_) {
       setErro('Erro inesperado. Tente novamente.');
