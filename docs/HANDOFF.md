@@ -4,6 +4,64 @@
 
 ---
 
+## 📌 PENDÊNCIAS ABERTAS (para esta sessão — leia primeiro)
+_Última atualização: 19/08 manhã. Tudo abaixo de "resolvido" está em produção na `main`._
+
+### 🎉 Estado: G2RS APROVADA (chegou 06:13 de 19/08 na fila do Atendimento)
+Campanha Google e canal de e-mail 100% do nosso lado. O que falta é decisão/relógio.
+
+### 🔵 Dependem do DONO
+1. **Google Ads — formulário de serviços financeiros**: agora que a G2RS aprovou, preencher
+   com o código G2RS e dados IDÊNTICOS aos do envio. Era a etapa que o aviso vermelho proibia
+   antes da aprovação.
+2. **Google Ads — conferir a ação de conversão de CADASTRO como "principal"** (Ferramentas →
+   Conversões). O checkout dispara cadastro+compra desde 18/08; ser "principal" é o que faz o
+   Smart Bidding otimizar por ela.
+3. **Tag "Urgente"**: os 2 issues foram consertados no código (tag nas páginas de SEO + guarda
+   de hostname). O Google re-escaneia em ~5 dias e o selo regride sozinho. Só reabrir se
+   continuar vermelho depois disso.
+4. **Revisão da campanha** (~26/08, com 7 dias de dados limpos): decidir landing por cidade
+   (`/leiloes/uf/cidade`), migração de lance p/ conversões, orçamento. Os termos já chegam
+   sozinhos ao banco (`marketing_termos_dia`) — peça a análise no ritual.
+
+### 🟡 Aguardando o SINAL do dono (patches prontos)
+5. **Hardening baixo de segurança** (4 itens, 1 commit quando autorizar): comparação
+   timing-safe na assinatura Svix (`inbound-juridico.js`); remover
+   `allow-popups-to-escape-sandbox` do iframe (`Atendimento.jsx`); allowlist de host no
+   `download_url` de anexo; `REVOKE EXECUTE` de `brightdata_decisao` para anon.
+6. **Bug bounty de COMPORTAMENTO** (item 6 do ritual, multi-agente — achou 28 bugs em 10/08):
+   NÃO rodou nas últimas sessões. Candidato a sessão própria (custo de vários agentes).
+7. **Runner residencial** (~185 req/semana de economia de Bright Data): infra pronta no código
+   (`GESTAO_HEADLESS`, `SOLEON_NO_BD`, `scripts/lib/fetch-residencial.mjs`) — falta uma máquina
+   ligada em casa. Cloudflare bloqueia datacenter, por isso não roda no GitHub Actions.
+
+### ⏳ Convergem sozinhos (NÃO "consertar")
+- **`docs` do Bright Data**: rateio de 25/dia passa a governar a partir de SEGUNDA (semana
+  nova). Esta semana já bateu o cap semanal de 150 — normal.
+- **`cadastro_barrado` 8/7**: janela móvel, converge. **`limpeza_encerrados_pulada` 1**: vira
+  domingo. **`lote_sem_area` 404↓**: cai a cada rodada.
+- **PECINI `alvo=antigos`**: agendada segunda 24/08 15:00 UTC (metragem/matrícula de julho).
+
+### 🟢 Resolvido em 18–19/08 (não retocar — está certo)
+Canal de e-mail completo (MX + webhook + corpo via API + anexos + rate limit 15/h + tetos de
+anexo nos 2 ramos) · fila de chamados honesta (status `saudacao`) · nome+telefone com regra
+única · teto BD 550 permanente + rateio diário · conversão de cadastro nas 3 telas do checkout
+· tag Google nas páginas de SEO · recuperação de venda (cron diário, assina "Equipe BidPro") ·
+XSS de sessão fechado (JSON-LD + popup do mapa) · Vila Velha regerado (144 m²). Ofensiva de
+segurança de 3 frentes: `auditoria_seguranca()` = 0/0, 1 XSS alto consertado, 2 médios
+resolvidos, resto bem defendido.
+
+### ⚠️ Dívidas registradas (com alarme em cima, sem pressa)
+- Nome do cliente em 2 fontes: `perfis.nome` (admin) + `auth.raw_user_meta_data` (12 telas do
+  cliente). Sincronizados hoje; vigiados por `nome_fontes_divergentes` (limite 0). Refatorar
+  as 12 leituras para lerem `perfis` é o conserto definitivo — não urgente.
+- 2 cadastros legados com nome único (`nome_sem_sobrenome` limite 2 — um 3º = regra vazou).
+- Piso ABSOLUTO da PECINI no baseline (dívida consciente, ver seção da PECINI).
+
+---
+
+---
+
 ## 🧾 18/08 (3ª sessão, parte 2) — NOME COM REGRA, TETO COM UM NÚMERO SÓ
 
 Tudo desta seção está **em produção** (`main`).
