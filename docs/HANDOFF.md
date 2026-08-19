@@ -50,6 +50,63 @@ outro gatilho ARRUMA precisa ordenar depois dele.**
 - `gerar-analise` com 3 erros invisíveis em 7d (2 clientes, último 17/08,
   "Cannot read properties of undefined (reading 'find')") — investigar na próxima rodada.
 
+### Varredura multi-agente de abertura (item 6 do ritual) — 3 agentes, ~30 achados, TOP 5 confirmados no código
+**Nenhum conserto aplicado ainda** (só o do selo, acima) — a lista abaixo está confirmada por
+leitura direta do código e aguarda priorização do dono. Os cinco que valem a fila:
+
+1. **[CRÍTICO · dinheiro] `api/_webhook-core.js:582/718/726/730`** — `processarVencido` e
+   `processarRecusado` descartam o `error` do update em `perfis` e devolvem `{ok:true}`,
+   enquanto as irmãs do MESMO arquivo (`:365`, `:493`) fazem `if (error) throw`. Como o
+   webhook grava a marca de idempotência ANTES do efeito e só desfaz no `catch`, uma falha
+   transitória de escrita vira HTTP 200: o gateway não reentrega, a reentrega é descartada
+   como `duplicado`, e o cliente com cobrança vencida/recusada **mantém role pago para
+   sempre, sem rastro**. Colateral: `setExpiracaoDocumentos` (`:696`) na mesma família
+   (prazo LGPD de 90 dias falha calado).
+2. **[CRÍTICO · promessa quebrada] "Arrematei" não protege os relatórios** —
+   `api/sinalizar-arremate.js` protege `arrematados` + `imovel_anexos` e **nunca toca
+   `analises_mercado/documental/laudo`**; a retenção (`analises_retencao_por_imovel.sql:46-56`)
+   decide por `bool_or(arrematado)` **dessas três**. Único escritor: `Analise.jsx:1178-1179`,
+   a partir de `d.status === 'arrematado'` que nunca é setado na tela (= grava sempre
+   `false`, e sem `analises_laudo`). Cliente arremata, clica no botão que promete "manter o
+   relatório", e 15 dias depois da praça o cron apaga os 3 relatórios do imóvel comprado.
+3. **[ALTO · venda] `Checkout.jsx:428` e `:746`** — `try { await
+   supabase.auth.signInWithPassword(...) } catch {}`: a função **não lança**, devolve
+   `{error}` — o catch é código morto. No fluxo PAGO (`:746`) o mandato já foi autorizado no
+   MP e a pessoa cai em `/membros` **sem sessão** → PrivateRoute joga no login → "e-mail já
+   tem conta". Pagou e não entrou. A cópia certa existe em `Promo.jsx:135-152`. Mesmo defeito
+   em `ProdutoLanding.jsx:291`.
+4. **[ALTO · dinheiro] `api/mp-webhook.js:104-107, :133, :178-183, :256`** — `mpGet` devolve
+   `null` em 429/5xx do MP e os chamadores respondem **200** ("não encontrado") → o MP para de
+   reentregar: ativação de plano pago perdida sem rastro. E a blindagem "outro mandato ativo"
+   falha para o lado destrutivo (suspende pagante quando a BUSCA falha).
+5. **[ALTO · identidade] `Caso.jsx` no modo suporte grava como ADMIN** — `user.id` cru em
+   `:876-877` (arrematação nasce atribuída ao admin, e o rateio de honorários usa esse id),
+   `:949` (procuração), `:638/:789` (cota lida/queimada do admin); e `:976-986` "assinar
+   procuração" sem `.select()` numa policy só-cliente = "Procuração assinada!" sobre zero
+   linhas. Além disso `Caso.jsx:33-42` é a 5ª cópia da tabela de limites, divergente do banco
+   (explorador 5 vs 3; top2 15 vs 10), e `:770-797` cobra cota sobre upsert
+   `ignoreDuplicates` que não criou nada.
+
+**Resto da varredura (confirmado pelos agentes, não re-conferido linha a linha):** cota/crédito
+cobrados em relatório sem parecer (`gerar-analise.js:2886-2913`, `semParecer` calculado DEPOIS
+da cobrança); `radar-editais-cron.js:172/199` carimba `ia_extraido: true` com a IA fora (lote
+sai da fila para sempre) e run truncado por tempo grava "sucesso do dia" (`:333/:387`);
+concessão de cota do Admin faz read-modify-write sem a RPC `admin_conceder_cota` e pode ZERAR
+bônus (`Admin.jsx:8028-8049`); painel de saques lê `.json()` sem `.ok` → "nenhum saque
+pendente" falso (`Admin.jsx:9017/9127`); cidade obrigatória do cadastro nunca chega a
+`endereco_cidade/uf` (modal pede de novo + alertas sem região — `Login.jsx:341` vs trigger
+`handle_new_user`); 3ª/4ª cópias da regra de nome/telefone sem o conserto no funil Google
+(`CompletarCadastroModal.jsx:102/104`, `CompletarCadastro.jsx:80/82`); senha mínima 6 em
+`Promo.jsx:124` + `ProdutoLanding.jsx:266` + servidores; `verificar-cpf.js:64` devolve 200
+"e-mail livre" em erro de RPC; paginação MP que trata 429 como "fim das páginas"
+(`renovacao-avisos-cron.js:100`, `backfill-mp-pagamentos-cron.js:37`);
+`enriquecer-backfill-cron.js` ainda usa o caminho LEGADO do Bright Data (recusa de cota
+carimba lote como visitado — forma #5); devolutiva jurídica com IA fora fica órfã por dedup
+(`inbound-juridico.js:485-493`); `meta-insights-cron.js:30` aceita header `x-vercel-cron` como
+credencial (único cron fora de `isCronAuthorized`); "semelhantes" da ficha usa `valor_minimo`
+cru onde a Busca usa `valor_minimo_ref` (`ImovelDetalhe.jsx:220-243`). Relatórios completos
+dos 3 agentes ficaram na sessão de 19/08.
+
 ---
 
 ## 🧾 18/08 (3ª sessão, parte 2) — NOME COM REGRA, TETO COM UM NÚMERO SÓ
