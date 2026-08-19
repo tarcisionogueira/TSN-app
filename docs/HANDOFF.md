@@ -105,6 +105,63 @@ este arquivo já pagou (ANTI-DUPLO-MANDATO P0.2).
 
 ---
 
+## 🧾 19/08 (manhã) — VEREDITOS + OFENSIVA DE SEGURANÇA
+
+### 🎉 G2RS APROVADA
+"A solicitação foi aprovada" chegou na fila do Atendimento às 06:13 (canal e-mail, de
+g2no-reply@g2risksolutions.com). O canal de e-mail construído em 18/08 entregou seu
+primeiro documento crítico. **Próximo passo do dono:** só agora (após a aprovação da G2RS)
+preencher o formulário de serviços financeiros no Google, com dados idênticos aos do envio.
+
+### Os quatro vereditos operacionais
+1. **GESTAOLEILOES: era ORÇAMENTO, não fonte quebrada.** A coleta matinal de 19/08 gravou
+   `sem_cota` (09:20), não `falhou` — o conserto de 18/08 (migrar para buscarViaBrightData +
+   propagar semCota) validado em produção. VEGAS idem (09:25). O alerta morre. Hipótese que
+   ficou aberta ontem: **confirmada**.
+2. **Recuperação de venda funcionou.** Cron de 13:00 enviou 1 e-mail — para o Romualdo
+   (rcronemberger@gmail.com), status `entregue` 13:00:56. Dedup e anti-spam corretos (1 de 1).
+3. **Prova das negativas do Ads — LIMPA.** Gasto em marca de terceiro por dia:
+   16/08 R$1,24 · 17/08 R$1,33 · **18/08 R$0,00 · 19/08 R$0,00**. As negativas aplicadas na
+   noite de 18/08 zeraram o desperdício no mesmo dia. E o script v2 alimenta
+   `marketing_termos_dia` sozinho (9 dias no banco) — auditoria de termos virou query do
+   ritual, sem exportar zip.
+4. **Bright Data 541/550.** GESTAOLEILOES/VEGAS levaram `sem_cota` de manhã = freio legítimo
+   sob o teto 550 que o dono escolheu. `docs` está em 150/150 SEMANAL (rateio diário de 25
+   governa a partir de segunda, com a semana nova). Consumo sob controle.
+
+### A ofensiva de segurança (autorizada pelo dono) — 3 frentes
+**1 achado ALTO consertado na hora + deploy** (`4988e40`): XSS de roubo de sessão — campo
+scraped (título de lote) chegando a HTML sem escape, na mesma origem do app logado (token do
+Supabase no localStorage). Dois sinks: JSON-LD das páginas de SEO (`api/publico.js:124` —
+`JSON.stringify` não neutraliza `</script>`; agora escapa <,>,U+2028/9) e popup do mapa
+(`Busca.jsx` — Leaflet bindPopup=innerHTML; helper `escHtml` em 4 pontos). O do popup era
+PREEXISTENTE. Ambos provados (JSON reparseia idêntico; `</script>` literal some).
+
+**Confirmados BEM DEFENDIDOS** (as três frentes reportaram explicitamente): RLS das tabelas
+novas (fail-closed), funções de cota só service_role, bypass de cota impossível (teto vem da
+config), promoção de chamado não forjável, spam de terceiros fechado (user_id sempre do
+token), injeção PostgREST (encodeURIComponent em todos os pontos), sandbox do iframe de
+e-mail (sem allow-scripts/same-origin), ReDoS sem risco. `auditoria_seguranca()` = 0/0.
+
+**PENDENTE — 2 achados MÉDIOS + hardening BAIXO, aguardando decisão do dono:**
+- **Rate limiting no inbound de e-mail** (médio): qualquer pessoa manda N e-mails → N
+  chamados + até 50MB de storage/e-mail. Sem limite por remetente/janela. O NÚMERO é decisão
+  de produto (ex.: 10 chamados/remetente/hora?).
+- **Tetos no ramo JURÍDICO de anexo** (médio): `inbound-juridico.js:444` sobe TODOS os
+  anexos sem os tetos (5×10MB, tipos permitidos) que o ramo de atendimento já tem. Gated por
+  conhecer um juridico_token. Fix mecânico: aplicar `TIPO_ANEXO_OK` + slice(0,5) + cap de
+  bytes. PRONTO para aplicar quando o dono aprovar.
+- Hardening baixo: comparação timing-safe na assinatura Svix; remover
+  `allow-popups-to-escape-sandbox`; allowlist de host no download de anexo; REVOKE EXECUTE de
+  brightdata_decisao para anon.
+
+### Invariantes (nenhum de segurança)
+`bd_teto_saturado` 541 (freio vivo) · `cadastro_barrado` 8/7 (janela móvel, converge) ·
+`limpeza_encerrados_pulada` 1 (vira domingo) · `lote_sem_area` 404↓ · `relatorio_area_nao_
+confirmada` 13 (filas encaminhadas, observando).
+
+---
+
 ## 🧾 18/08 (noite) — O DIA EM QUE O DOMÍNIO PASSOU A RECEBER E-MAIL
 
 ### O canal de e-mail, do zero ao helpdesk (com o dono operando DNS/Resend)
