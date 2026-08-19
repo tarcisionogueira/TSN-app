@@ -64,23 +64,32 @@ export default async function handler(req, res) {
 
   let termosGravados = 0;
   if (termos.length) {
-    const tRows = [];
+    // AGREGA por (data, campanha, termo) ANTES do upsert. O search_term_view devolve o
+    // MESMO termo repetido — uma linha por palavra-chave que o acionou — e um lote com a
+    // chave duplicada derruba o upsert inteiro: "ON CONFLICT DO UPDATE cannot affect row
+    // a second time" (falhou exatamente assim no primeiro envio real, 19/08 00:51).
+    // Somamos as métricas e guardamos a primeira palavra-chave.
+    const porChave = new Map();
     for (const t of termos) {
       const data = String(t?.data || '').slice(0, 10);
       const termo = String(t?.termo || '').trim().slice(0, 200);
       if (!DATA_RE.test(data) || !termo) continue;
-      tRows.push({
-        data,
-        campanha: String(t?.campanha || '').slice(0, 120),
-        termo,
+      const campanha = String(t?.campanha || '').slice(0, 120);
+      const k = `${data}\u0000${campanha}\u0000${termo}`;
+      const acc = porChave.get(k) || {
+        data, campanha, termo,
         palavra_chave: t?.palavra_chave ? String(t.palavra_chave).slice(0, 200) : null,
-        gasto: Math.max(0, Number(t?.gasto) || 0),
-        cliques: Math.max(0, Math.trunc(Number(t?.cliques) || 0)),
-        impressoes: Math.max(0, Math.trunc(Number(t?.impressoes) || 0)),
-        conversoes: t?.conversoes == null ? null : Math.max(0, Number(t.conversoes) || 0),
+        gasto: 0, cliques: 0, impressoes: 0, conversoes: null,
         atualizado_em: new Date().toISOString(),
-      });
+      };
+      acc.gasto += Math.max(0, Number(t?.gasto) || 0);
+      acc.cliques += Math.max(0, Math.trunc(Number(t?.cliques) || 0));
+      acc.impressoes += Math.max(0, Math.trunc(Number(t?.impressoes) || 0));
+      if (t?.conversoes != null) acc.conversoes = (acc.conversoes || 0) + Math.max(0, Number(t.conversoes) || 0);
+      if (!acc.palavra_chave && t?.palavra_chave) acc.palavra_chave = String(t.palavra_chave).slice(0, 200);
+      porChave.set(k, acc);
     }
+    const tRows = [...porChave.values()].map(r => ({ ...r, gasto: Math.round(r.gasto * 100) / 100 }));
     if (tRows.length) {
       const { error: e2 } = await supabase.from('marketing_termos_dia')
         .upsert(tRows, { onConflict: 'data,campanha,termo' });
