@@ -143,14 +143,12 @@ config), promoção de chamado não forjável, spam de terceiros fechado (user_i
 token), injeção PostgREST (encodeURIComponent em todos os pontos), sandbox do iframe de
 e-mail (sem allow-scripts/same-origin), ReDoS sem risco. `auditoria_seguranca()` = 0/0.
 
-**PENDENTE — 2 achados MÉDIOS + hardening BAIXO, aguardando decisão do dono:**
-- **Rate limiting no inbound de e-mail** (médio): qualquer pessoa manda N e-mails → N
-  chamados + até 50MB de storage/e-mail. Sem limite por remetente/janela. O NÚMERO é decisão
-  de produto (ex.: 10 chamados/remetente/hora?).
-- **Tetos no ramo JURÍDICO de anexo** (médio): `inbound-juridico.js:444` sobe TODOS os
-  anexos sem os tetos (5×10MB, tipos permitidos) que o ramo de atendimento já tem. Gated por
-  conhecer um juridico_token. Fix mecânico: aplicar `TIPO_ANEXO_OK` + slice(0,5) + cap de
-  bytes. PRONTO para aplicar quando o dono aprovar.
+**RESOLVIDOS (19/08, após aprovação do dono):**
+- ✅ **Rate limiting no inbound**: 15 chamados/remetente/hora, só na CRIAÇÃO de chamado novo
+  (resposta a fio existente não conta). Descarta com 200 (não 500, que faria o Resend
+  reentregar). Falha na contagem deixa passar (não barra cliente legítimo por erro nosso).
+- ✅ **Tetos no ramo jurídico de anexo**: `TIPO_ANEXO_OK` + `ANEXO_MAX_QTD`(5) +
+  `ANEXO_MAX_BYTES`(10MB) agora em escopo de módulo, aplicados nos DOIS ramos. Um só lugar.
 - Hardening baixo: comparação timing-safe na assinatura Svix; remover
   `allow-popups-to-escape-sandbox`; allowlist de host no download de anexo; REVOKE EXECUTE de
   brightdata_decisao para anon.
