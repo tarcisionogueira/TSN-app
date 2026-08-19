@@ -91,6 +91,23 @@ function pagina({ titulo, desc, canonical, corpo, jsonld, indexar = true, migalh
   return `<!doctype html><html lang="pt-BR"><head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
+<!-- Tag do Google (18/08): estas páginas serviam TODO o tráfego de SEO sem tag nenhuma —
+     era o "páginas de destino sem tags" do diagnóstico de Qualidade de Tag, e deixava
+     invisível justamente o tráfego para onde os anúncios devem apontar. Mesmos IDs do
+     index.html; a guarda de hostname impede preview (*.vercel.app) de disparar — a causa
+     do "outros domínios detectados" do mesmo diagnóstico. -->
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  if (/(^|\\.)bidprobrasil\\.com\\.br$/.test(location.hostname)) {
+    var _gs = document.createElement('script'); _gs.async = true;
+    _gs.src = 'https://www.googletagmanager.com/gtag/js?id=G-5YNHQB5F81';
+    document.head.appendChild(_gs);
+    gtag('js', new Date());
+    gtag('config', 'G-5YNHQB5F81');
+    gtag('config', 'AW-16850175262');
+  }
+</script>
 <title>${esc(titulo)}</title>
 <meta name="description" content="${esc(desc)}"/>
 <meta name="robots" content="${indexar ? 'index, follow, max-image-preview:large' : 'noindex, follow'}"/>

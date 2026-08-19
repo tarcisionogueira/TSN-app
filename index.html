@@ -84,14 +84,21 @@
     </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&family=League+Spartan:wght@700;800;900&display=swap" rel="stylesheet">
-    <!-- Google tag (gtag.js) -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-5YNHQB5F81"></script>
+    <!-- Google tag (gtag.js). Guarda de hostname (18/08): os deploys de PREVIEW
+         (*.vercel.app) carregavam a tag e apareciam no diagnóstico como "outros domínios
+         detectados", poluindo a medição com tráfego interno. Só o domínio oficial dispara;
+         `gtag` continua definida em preview para os trackers serem no-ops inofensivos. -->
     <script>
       window.dataLayer = window.dataLayer || [];
       function gtag(){dataLayer.push(arguments);}
-      gtag('js', new Date());
-      gtag('config', 'G-5YNHQB5F81');
-      gtag('config', 'AW-16850175262');
+      if (/(^|\.)bidprobrasil\.com\.br$/.test(location.hostname)) {
+        var _gs = document.createElement('script'); _gs.async = true;
+        _gs.src = 'https://www.googletagmanager.com/gtag/js?id=G-5YNHQB5F81';
+        document.head.appendChild(_gs);
+        gtag('js', new Date());
+        gtag('config', 'G-5YNHQB5F81');
+        gtag('config', 'AW-16850175262');
+      }
     </script>
   </head>
   <body>
