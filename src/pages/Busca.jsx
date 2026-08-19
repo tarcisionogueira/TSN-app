@@ -145,6 +145,10 @@ const COLUNAS_BUSCA = [
   'fonte','fonte_id','numero_edital','numero_matricula','numero_processo',
   'latitude','longitude','score_financeiro','score_juridico','score_localizacao',
 ].join(',');
+// Escapa campo SCRAPED antes de ir para innerHTML do popup Leaflet (bindPopup). Sem isto,
+// um titulo de imovel malicioso ("<img onerror>") executava no app LOGADO — mesma origem,
+// roubo do token do Supabase no localStorage. A forma classica da casa: scraped -> sink HTML.
+const escHtml = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 const fmtBRL = (v) => v ? 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits:2, maximumFractionDigits:2 }) : '—';
 
 // Carrega imagem apenas quando o elemento entra na viewport
@@ -473,10 +477,10 @@ function MapaEmbutido({ filtros, resultados, nav, centroRaio, raioKm, raioAtivo,
               const cands = fotoCandidatos({ foto: im.link_foto, fonte: im.fonte, fonteId: im.fonte_id });
               if (!cands.length) return '';
               const resto = JSON.stringify(cands.slice(1)).replace(/'/g, '&#39;');
-              return `<img src="${cands[0]}" data-cands='${resto}' onerror="(function(el){try{var c=JSON.parse(el.getAttribute('data-cands')||'[]');if(c.length){el.setAttribute('data-cands',JSON.stringify(c.slice(1)));el.src=c[0];}else{el.style.display='none';}}catch(e){el.style.display='none';}})(this)" style="width:100%;height:100px;object-fit:cover;border-radius:6px;margin-bottom:8px;display:block"/>`;
+              return `<img src="${escHtml(cands[0])}" data-cands='${resto}' onerror="(function(el){try{var c=JSON.parse(el.getAttribute('data-cands')||'[]');if(c.length){el.setAttribute('data-cands',JSON.stringify(c.slice(1)));el.src=c[0];}else{el.style.display='none';}}catch(e){el.style.display='none';}})(this)" style="width:100%;height:100px;object-fit:cover;border-radius:6px;margin-bottom:8px;display:block"/>`;
             })()}
-            <div style="font-weight:700;font-size:12px;color:#111;margin-bottom:3px;line-height:1.3">${im.titulo || 'Imóvel'}</div>
-            <div style="font-size:11px;color:#64748b;margin-bottom:6px">📍 ${im.cidade}, ${im.estado}</div>
+            <div style="font-weight:700;font-size:12px;color:#111;margin-bottom:3px;line-height:1.3">${escHtml(im.titulo || 'Imóvel')}</div>
+            <div style="font-size:11px;color:#64748b;margin-bottom:6px">📍 ${escHtml(im.cidade)}, ${escHtml(im.estado)}</div>
             <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px">
               ${desc ? `<span style="font-size:10px;font-weight:800;background:#dcfce7;color:#16a34a;padding:1px 6px;border-radius:20px">-${desc}%</span>` : ''}
               ${pgtoLabel ? `<span style="font-size:10px;font-weight:700;background:${pgtoBg};color:${pgtoColor};padding:1px 6px;border-radius:20px">${pgtoLabel}</span>` : ''}
