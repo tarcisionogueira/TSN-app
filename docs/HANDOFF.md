@@ -9984,3 +9984,15 @@ sumareleiloes (Laravel); kronbergleiloes (WordPress+wpcasa); palaciodosleiloes (
 2. **Confirmar cluster GESTAO** (vip/milan/centraljudicial) no recon profundo do scraper-gestao.
 3. **Scraper novo** por ordem de acervo: LeilãoPro Core (leffa+oscar), Nordeste (SPA), Jussiara, Flávio Costa, Alfa.
 4. **Recon profundo puppeteer** nos 3 "Carregando…": cunha, albertomacedo, gaia.
+
+### ⚠️ CORREÇÃO 20/08 (validação) — Vlance por fingerprint NÃO é ganho barato
+Testei somar os 13 tenants "Vlance" ao `scraper_vlance.py` e rodei coleta (dryrun, run
+32354774514). **Todos os 13 voltaram 0 lote.** O fingerprint de HTML batia
+(`/Core/V1/js/Ajax/Ajax_Leiloes*.js`), mas os endpoints `/core/api/get-leiloes` e
+`/core/api/get-lotes` respondem NÃO-JSON ("Expecting value: line 1 column 1") — outra
+versão da API Vlance e/ou o desafio Cloudflare (vários marcados "(challenge)"/cloudflare:true)
+devolvendo HTML. Pior: os 13 gastaram ~16 dos 20 min do job em Bright Data falhando em loop.
+**Revertido** (commit 1b15ae7); voltou aos 7 tenants que funcionam (38 imóveis). Lição: os
+"14 Vlance" do placar acima NÃO são plug-and-play — cada um precisa do endpoint mapeado no
+navegador (grampo fetch/XHR, ver RECON_LEILOEIROS_PLAYBOOK.md) antes de reintegrar. Reclassificar
+esses 13 de "scraper existente" para "recon runtime pendente".
