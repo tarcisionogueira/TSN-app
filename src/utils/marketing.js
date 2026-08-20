@@ -76,9 +76,16 @@ export function capturarMarketing() {
     //     guardada; senão uma visita orgânica posterior derrubaria o gclid e a campanha
     //     apareceria sem converter.
     const temAnuncio = Object.values(dados).some(Boolean);
-    const registro = JSON.stringify({ ...dados, referrer, landing, ts: Date.now() });
-    if (temAnuncio) localStorage.setItem(KEY, registro);
-    else if (referrer && !localStorage.getItem(KEY)) localStorage.setItem(KEY, registro);
+    // SEM BURACO NEGRO (20/08): antes, quando NÃO havia anúncio E o referrer vinha vazio
+    // (navegação interna, digitação direta, ou in-app browser que zera o document.referrer —
+    // o caso do Instagram), NADA era gravado → lerMarketing() nulo no cadastro → o perfil caía
+    // em "(nada capturado)". Eram 18 dos 40 cadastros de 30 dias. Agora o first-touch SEMPRE
+    // grava algo: 'direto' na falta de referrer externo. Assim todo cadastro tem origem, e a
+    // bio do Instagram com ?utm_source=instagram entra como 'instagram' (é anúncio → sobrescreve).
+    const ref2 = referrer || 'direto';
+    const registro = JSON.stringify({ ...dados, referrer: ref2, landing, ts: Date.now() });
+    if (temAnuncio) localStorage.setItem(KEY, registro);          // veio de anúncio/utm → sobrescreve sempre
+    else if (!localStorage.getItem(KEY)) localStorage.setItem(KEY, registro); // first-touch: grava mesmo sem referrer
   } catch { /* ignore */ }
 }
 
