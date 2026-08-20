@@ -12,7 +12,7 @@ export default function ProdutoPublico({ tipo }) {
   const nav = useNavigate();
   const [params] = useSearchParams();
   const ref = params.get('ref') || '';
-  const { user, role } = useAuth();
+  const { user, role, nome: nomePerfil } = useAuth();
   const [produto, setProduto] = useState(null);
   const [aulas, setAulas] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -53,7 +53,7 @@ export default function ProdutoPublico({ tipo }) {
     setErroCompra(''); setComprando(true);
     try {
       const refCod = ref || lerRef();
-      const nome = user.user_metadata?.nome || user.user_metadata?.full_name || '';
+      const nome = nomePerfil || user.user_metadata?.nome || user.user_metadata?.full_name || '';
       const payload = { produto_tipo: tipo, produto_id: id, ref: refCod, nome, email: user.email };
       let link = null, jaTem = false;
 

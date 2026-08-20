@@ -12,7 +12,7 @@ const FEEDBACK_KEY = 'tsn_feedback_email';
 const DEFAULT_FEEDBACK_EMAIL = 'tarcisioaraujo@reimob.com.br';
 function getEmailFeedback() { return localStorage.getItem(FEEDBACK_KEY) || DEFAULT_FEEDBACK_EMAIL; }
 
-function ModalFeedback({ user, onClose }) {
+function ModalFeedback({ user, nomePerfil, onClose }) {
   const [queixa, setQueixa] = React.useState('');
   const [solucao, setSolucao] = React.useState('');
   const [resolvido, setResolvido] = React.useState('');
@@ -20,7 +20,7 @@ function ModalFeedback({ user, onClose }) {
   const [enviando, setEnviando] = React.useState(false);
   const [enviado, setEnviado] = React.useState(false);
   const [erro, setErro] = React.useState('');
-  const nome = user?.user_metadata?.nome || user?.email?.split('@')[0] || 'Visitante';
+  const nome = nomePerfil || user?.user_metadata?.nome || user?.email?.split('@')[0] || 'Visitante';
   const email = user?.email || '';
 
   async function enviar() {
@@ -138,7 +138,7 @@ const ROLE_LABELS_STATIC = {
 export default function Header() {
   const nav = useNavigate();
   const loc = useLocation();
-  const { user, role, effectiveRole, effectiveUserId, loading, impersonate, encerrarSuporte, roleSimulado, simularRole } = useAuth();
+  const { user, role, effectiveRole, effectiveUserId, loading, impersonate, encerrarSuporte, roleSimulado, simularRole, nome: nomePerfil } = useAuth();
   // Contador de não lidas do chat, para o item de MENU do celular. Vem por EVENTO do
   // ChatSuporte, que já consulta `suporte_respostas_nao_lidas` — não é uma segunda consulta nem
   // uma segunda regra: é o mesmo número, exibido em outro lugar. Duas leituras independentes do
@@ -298,7 +298,7 @@ export default function Header() {
 
   // Modo suporte: a experiência é a do CLIENTE (nome, avatar e etiqueta de plano do
   // usuário visualizado — o banner laranja é quem lembra que é a equipe navegando).
-  const nomeUsuario = impersonate?.nome || user?.user_metadata?.nome || user?.email?.split('@')[0] || 'Usuário';
+  const nomeUsuario = impersonate?.nome || nomePerfil || user?.user_metadata?.nome || user?.email?.split('@')[0] || 'Usuário';
   const roleEtiqueta = impersonate ? (impersonate.role || 'explorador') : role;
 
   return (
@@ -604,7 +604,7 @@ export default function Header() {
         </div>
       )}
 
-      {showFeedback && <ModalFeedback user={user} onClose={() => setShowFeedback(false)} />}
+      {showFeedback && <ModalFeedback user={user} nomePerfil={impersonate?.nome || nomePerfil} onClose={() => setShowFeedback(false)} />}
       {showTour && <TourGuiado onClose={() => setShowTour(false)} />}
 
       <style>{`

@@ -39,10 +39,10 @@ const STATUS_CASO = {
 
 export default function HomeCliente() {
   const nav = useNavigate();
-  const { user, effectiveRole, effectiveUserId, impersonate, roleSimulado } = useAuth();
+  const { user, effectiveRole, effectiveUserId, impersonate, roleSimulado, nome: nomePerfil } = useAuth();
   const info = PLANO_INFO[effectiveRole] || PLANO_INFO.explorador;
   // Modo suporte: a saudação é a do CLIENTE visualizado (a equipe navega como ele).
-  const primeiroNome = (impersonate?.nome || user?.user_metadata?.nome || user?.email || 'Investidor').split(' ')[0].split('@')[0];
+  const primeiroNome = (impersonate?.nome || nomePerfil || user?.user_metadata?.nome || user?.email || 'Investidor').split(' ')[0].split('@')[0];
 
   const [cotaMercado, setCotaMercado] = useState(null);
   const [copiado, setCopiado] = useState(false);

@@ -78,8 +78,37 @@ verdes (a linha de base de padrões perigosos CAIU 415→399) e build limpo. O q
   ~19h BRT (PECINI/RJ/VLANCE; gate 72h) — a "tela preta" do Windows É o runner. RJ de 19/08
   saiu "degradado (paginação interrompida)": não fechar a janela no meio. GESTAO/SOLEON
   ficaram para o próximo disparo. Se o dono quiser janela invisível, wrapper do Agendador.
-- Fora de escopo por decisão: e-mail de "pagante sem uso" (dono dispensou); mandato órfão do
-  assinar-com-cadastro em timeout pós-criação (mexe no fluxo de pagamento — projetar antes).
+- Fora de escopo por decisão: e-mail de "pagante sem uso" (dono dispensou). O mandato órfão
+  foi resolvido na ONDA 3 (abaixo).
+
+### ✅ ONDA 3 DE 19/08 (madrugada) — mandato órfão, erro do 'find' e dívidas registradas
+Sinal do dono: "resolva o que consegue sem mim do mandato, dos 3 erros e dívida registradas".
+- **Mandato órfão (assinar-com-cadastro), em DUAS camadas:** (1) timeout/5xx na criação do
+  preapproval deixou de ser tratado como recusa — agora re-tenta 1x (o X-Idempotency-Key faz o
+  MP devolver o MESMO mandato) e, persistindo a dúvida, BUSCA o mandato por payer_email; se
+  nem assim dá para saber, a conta NÃO é apagada (503 orientando a não refazer o pagamento) —
+  apagar era a única jogada irreversível. (2) Rede de segurança no mp-webhook: mandato cujo
+  external_reference aponta para usuário INEXISTENTE é CANCELADO no MP com log alto — fecha o
+  fantasma cobrado por qualquer origem, não só esta.
+- **Os "3 erros do 'find'": caso ENCERRADO por cronologia.** Todas as ocorrências (última
+  22:53 UTC de 17/08) são ANTERIORES ao conserto do guard `pracasEd = extratoDoc.pracas || []`
+  (commit a395092, 23:46 UTC de 17/08 — caminho de visão do edital). O "cliente" era o
+  PRÓPRIO DONO testando um lote inativo de Copacabana com praça passada; há 3 gerações dele
+  DEPOIS do conserto, todas ok. A análise-teste presa em status 'erro' foi apagada (painel
+  360 limpa).
+- **Dívida "nome em 2 fontes" PAGA:** as ~12 leituras de `user_metadata.nome` no front agora
+  preferem `perfis.nome` (que o AuthContext já expunha), na ordem `impersonate?.nome →
+  nomePerfil → metadata` — o modo suporte continua mostrando o nome do CLIENTE. Arquivos:
+  Header (inclui ModalFeedback), ChatSuporte, HomeCliente, Atendimento, ProdutoPublico,
+  Checkout, Perfil, MeusChamados, OnrRegistro, Contratos. O metadata segue como fallback e o
+  invariante `nome_fontes_divergentes` segue de guarda.
+- **Dívida do piso ABSOLUTO da PECINI: DESTRAVADA (não forçada).** A baseline não pode migrar
+  para `enumerados` ainda — medido: 0-1 run com `enumerados` por fonte (histórico magro; migrar
+  agora criaria baseline de mentira). O bloqueio real era a PECINI nunca GRAVAR o número: ela
+  só visita lotes novos (total 4-6/run, mediana nunca alcança o gate). Agora os DOIS
+  registrarSaude dela gravam `enumerados = lotes.length` (o sitemap inteiro — o que a fonte
+  LISTA). Com ~3 runs, o piso aprendido assume sozinho. Migrar `fonte_baseline_aprendida()`
+  para preferir `enumerados` fica agendado para quando o histórico existir (~1 semana).
 
 ### 🔵 Dependem do DONO
 1. ~~**Google Ads — formulário de serviços financeiros**~~ → ✅ **ENVIADO (19/08 à noite,
@@ -141,11 +170,11 @@ segurança de 3 frentes: `auditoria_seguranca()` = 0/0, 1 XSS alto consertado, 2
 resolvidos, resto bem defendido.
 
 ### ⚠️ Dívidas registradas (com alarme em cima, sem pressa)
-- Nome do cliente em 2 fontes: `perfis.nome` (admin) + `auth.raw_user_meta_data` (12 telas do
-  cliente). Sincronizados hoje; vigiados por `nome_fontes_divergentes` (limite 0). Refatorar
-  as 12 leituras para lerem `perfis` é o conserto definitivo — não urgente.
+- ~~Nome do cliente em 2 fontes~~ → ✅ PAGA na ONDA 3 de 19/08: as 12 leituras do front agora
+  preferem `perfis.nome` via AuthContext (metadata só como fallback); invariante segue de guarda.
 - 2 cadastros legados com nome único (`nome_sem_sobrenome` limite 2 — um 3º = regra vazou).
-- Piso ABSOLUTO da PECINI no baseline (dívida consciente, ver seção da PECINI).
+- Piso ABSOLUTO da PECINI: DESTRAVADO em 19/08 (scraper grava `enumerados`); migrar a
+  baseline para `enumerados` quando houver ≥3 amostras (~1 semana) — aí a dívida morre.
 
 ---
 

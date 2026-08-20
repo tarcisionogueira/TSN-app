@@ -43,7 +43,7 @@ function MarcaBP({ size = 30, quadrado = true }) {
 }
 
 export default function ChatSuporte() {
-  const { user, role, effectiveRole, isLoggedIn, impersonate, roleSimulado } = useAuth();
+  const { user, role, effectiveRole, isLoggedIn, impersonate, roleSimulado, nome: nomePerfil } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [view, setView] = useState('lista'); // 'lista' | 'novo' | 'conversa'
   const [listaChamados, setListaChamados] = useState([]);
@@ -65,7 +65,7 @@ export default function ChatSuporte() {
   const avisouInatividade = useRef(false);
   const saudacaoChecada = useRef(false);
 
-  const nomeUsuario = user?.user_metadata?.nome || user?.email?.split('@')[0] || 'Cliente';
+  const nomeUsuario = impersonate?.nome || nomePerfil || user?.user_metadata?.nome || user?.email?.split('@')[0] || 'Cliente';
   // No MODO SUPORTE o admin assume o papel do cliente, mas o chat NÃO deve aparecer (quem está
   // ali é o admin) — por isso `!impersonate`. Já na SIMULAÇÃO de papel o widget APARECE, e tem
   // de aparecer: ver o chat como o explorador vê é parte do que se foi validar.

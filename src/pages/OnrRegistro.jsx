@@ -30,7 +30,7 @@ function calcItbi(valor, aliquota = 2) {
 export default function OnrRegistro() {
   const { imovelId } = useParams();
   const nav = useNavigate();
-  const { user } = useAuth();
+  const { user, nome: nomePerfil } = useAuth();
 
   const [etapa, setEtapa] = useState('imovel');
   const [imovel, setImovel] = useState(null);
@@ -100,7 +100,7 @@ export default function OnrRegistro() {
   // decifrado do backend (é o próprio titular; não fica mais em texto claro).
   useEffect(() => {
     if (!user) return;
-    const nome = user.user_metadata?.nome || '';
+    const nome = nomePerfil || user.user_metadata?.nome || '';
     setForm(p => ({ ...p, nome_arrematante: p.nome_arrematante || nome }));
     apiCall('/api/cpf-revelar', { method: 'POST', body: JSON.stringify({ ids: [user.id], full: true }) })
       .then(r => r.json()).then(d => { const c = d?.cpfs?.[user.id]; if (c) setForm(p => ({ ...p, cpf_arrematante: p.cpf_arrematante || c })); })

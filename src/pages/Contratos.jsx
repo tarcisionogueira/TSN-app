@@ -45,7 +45,7 @@ const S = {
 export default function Contratos() {
   const nav = useNavigate();
   const isMobile = useIsMobile();
-  const { user, effectiveUserId, loading: authLoading, role } = useAuth();
+  const { user, effectiveUserId, loading: authLoading, role, nome: nomePerfil } = useAuth();
   const isStaff = STAFF.includes(role);
   const isAdmin = role === 'admin';
   const [grupos, setGrupos] = useState([]);       // [{ rep, linhas, total, assinados, statusAgg }]
@@ -154,7 +154,7 @@ export default function Contratos() {
       const carimbo = new Date().toISOString();
       const hash = await sha256(aberto.conteudo + '|' + assinatura + '|' + carimbo);
       const payload = {
-        status: 'assinado', assinatura_data: assinatura, assinante_nome: user?.user_metadata?.nome || '',
+        status: 'assinado', assinatura_data: assinatura, assinante_nome: nomePerfil || user?.user_metadata?.nome || '',
         assinante_cpf: cpfAssinante.trim() || null, assinatura_hash: hash, assinado_em: carimbo,
         latitude: geo?.lat || null, longitude: geo?.lng || null,
       };

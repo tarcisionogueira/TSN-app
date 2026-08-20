@@ -11,7 +11,7 @@ const STATUS = {
 };
 
 export default function MeusChamados() {
-  const { user } = useAuth();
+  const { user, impersonate, nome: nomePerfil } = useAuth();
   const [aba, setAba] = useState('abertos');
   const [chamados, setChamados] = useState([]);
   const [chamadoAtivo, setChamadoAtivo] = useState(null);
@@ -24,7 +24,7 @@ export default function MeusChamados() {
   const fileRef = useRef();
   const msgEndRef = useRef();
 
-  const nomeUsuario = user?.user_metadata?.nome || user?.email?.split('@')[0] || 'Cliente';
+  const nomeUsuario = impersonate?.nome || nomePerfil || user?.user_metadata?.nome || user?.email?.split('@')[0] || 'Cliente';
 
   useEffect(() => { if (user) carregarChamados(); }, [user?.id, aba]);
   useEffect(() => { msgEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [mensagens]);

@@ -454,6 +454,7 @@ async function main() {
   if (!prontos.length) {
     await registrarSaude(supabase, 'PECINI', [], 'principal',
       { ok: false, metricas: { n: 0, uf_pct: 0, valor_pct: 0, link_pct: 0, foto_pct: 0 },
+        enumerados: lotes.length,
         motivo: recusaDeCota
           ? `sem cota: ${recusaDeCota} (${semDetalhe} sem detalhe, ${reprovados} reprovados)`
           : `nada pronto (${semDetalhe} sem detalhe, ${reprovados} reprovados)` });
@@ -474,7 +475,11 @@ async function main() {
   console.log(`✅ ${prontos.length} imóveis PECINI gravados/atualizados.`);
   // SAÚDE DA FONTE (08/08): entra no monitor de regressão junto das demais. Antes esta fonte
   // não escrevia em `fonte_saude`, então nunca ganhava piso aprendido e uma quebra passaria batido.
-  await registrarSaude(supabase, 'PECINI', prontos, 'principal');
+  // 19/08 (paga a dívida do "piso ABSOLUTO"): a PECINI só visita lotes NOVOS, então `total`
+  // por run é 4-6 e a mediana nunca alcança o gate de baseline — ficava presa no piso fixo
+  // para sempre. `enumerados` = o sitemap INTEIRO (o que a fonte LISTA), que é o número que
+  // a regressão deve vigiar; com ~3 runs gravando isto, o piso aprendido assume sozinho.
+  await registrarSaude(supabase, 'PECINI', prontos, 'principal', { enumerados: lotes.length });
   // Auto-aprendizado: registra o que este scraper sabe na base de conhecimento.
   await registrarConhecimento(supabase, {
     fonte: 'PECINI', plataforma: 'ASP.NET-DefaultClean', acesso: 'brightdata', custo: 'pago',

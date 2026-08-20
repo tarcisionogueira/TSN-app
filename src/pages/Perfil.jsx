@@ -205,7 +205,7 @@ function PerfilInvestidorCard({ userId, isMobile }) {
 }
 
 export default function Perfil() {
-  const { user, role, effectiveRole } = useAuth();
+  const { user, role, effectiveRole, impersonate, nome: nomePerfil } = useAuth();
   const isMobile = useIsMobile();
   const nav = useNavigate();
   const loc = useLocation();
@@ -220,7 +220,7 @@ export default function Perfil() {
     if (a) setAba(a);
   }, [loc.search]);
 
-  const [nome, setNome] = useState(user?.user_metadata?.nome || '');
+  const [nome, setNome] = useState(impersonate?.nome || nomePerfil || user?.user_metadata?.nome || '');
   const [cpf, setCpf] = useState('');
   const [cpfInput, setCpfInput] = useState('');   // entrada quando ainda não há CPF salvo
   const [salvandoCpf, setSalvandoCpf] = useState(false);

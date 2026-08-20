@@ -166,7 +166,7 @@ function IdentificacaoCpfAssessoria({ nav, refCode, proLabel, assParcLabel, assV
 export default function Checkout() {
   const nav = useNavigate();
   const [params] = useSearchParams();
-  const { user, role, refreshPerfil } = useAuth();
+  const { user, role, refreshPerfil, nome: nomePerfil } = useAuth();
   const planoKey = params.get('plano');
   // Fluxo GUIADO da assessoria: quem não é Pro assina o Investidor Pro primeiro e, ao
   // ativar, volta direto para contratar isto (ex.: ?plano=top2&apos=assessorado). Assim o
@@ -397,7 +397,7 @@ export default function Checkout() {
       const dia = new Date().toISOString().slice(0, 10).replace(/-/g, '');
       const eventID = user?.id ? `pur_${user.id}_${base}_${dia}` : undefined;
       // Enhanced Conversions (Google): dados primários do titular p/ casar a conversão.
-      const userData = { email: user?.email, nome: nomeFat || user?.user_metadata?.nome, cidade: end.cidade, uf: end.uf, cep: end.cep };
+      const userData = { email: user?.email, nome: nomeFat || nomePerfil || user?.user_metadata?.nome, cidade: end.cidade, uf: end.uf, cep: end.cep };
       trackPlanContratado(planoApiKey || planoKey, Number(plano?.preco) || 0, eventID, userData);
     } catch { /* nunca bloqueia o fluxo */ }
   }, [pago]);
@@ -592,7 +592,7 @@ export default function Checkout() {
     );
   }
 
-  const nomeUsuario = nomeFat || user?.user_metadata?.nome || user?.email?.split('@')[0] || '';
+  const nomeUsuario = nomeFat || nomePerfil || user?.user_metadata?.nome || user?.email?.split('@')[0] || '';
   const cpfDigits = (cpf || '').replace(/\D/g, '');
   const cpfUsuario = cpfDigits || user?.user_metadata?.cpf || '';
 

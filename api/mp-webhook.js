@@ -141,6 +141,36 @@ export default async function handler(req, res) {
       const [userId, planoKey] = String(preapproval.external_reference || '').split('|');
       if (!userId) return res.status(200).json({ ok: true, status: preapproval.status });
 
+      // 19/08: MANDATO ÓRFÃO — rede de segurança. Se o external_reference aponta para um
+      // usuário que NÃO existe (ex.: o rollback do assinar-com-cadastro apagou a conta
+      // depois de um timeout, mas o mandato ficou vivo no MP), o fantasma seria COBRADO
+      // todo mês sem nenhum webhook achar ninguém. Usuário inexistente + mandato vivo =
+      // CANCELA o mandato no MP, loga alto e encerra. Falha na checagem segue o fluxo
+      // normal (buscarCliente decide) — nunca cancela por não ter conseguido ler.
+      if (UUID_RE.test(userId)) {
+        try {
+          const pr = await fetch(`${_SB_URL}/rest/v1/perfis?id=eq.${userId}&select=id&limit=1`, {
+            headers: { apikey: _SB_SVC, Authorization: `Bearer ${_SB_SVC}` }, signal: AbortSignal.timeout(8000),
+          });
+          if (pr.ok) {
+            const existe = ((await pr.json().catch(() => [])) || []).length > 0;
+            if (!existe) {
+              if (['authorized', 'pending'].includes(preapproval.status)) {
+                const c = await fetch(`${MP_BASE}/preapproval/${preapproval.id}`, {
+                  method: 'PUT',
+                  headers: { Authorization: `Bearer ${ACCESS_TOKEN}`, 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ status: 'cancelled' }),
+                });
+                console.error(`[mp-webhook] MANDATO ÓRFÃO cancelado: preapproval=${preapproval.id} user_inexistente=${userId} payer=${preapproval.payer_email || '?'} cancelamento_http=${c.status}`);
+                return res.status(200).json({ ok: true, mandato_orfao_cancelado: c.ok, preapproval: String(preapproval.id) });
+              }
+              console.error(`[mp-webhook] mandato de usuário inexistente (status=${preapproval.status}) — nada a cobrar/cancelar: ${preapproval.id}`);
+              return res.status(200).json({ ok: true, mandato_orfao: true, status: preapproval.status });
+            }
+          }
+        } catch { /* checagem best-effort: segue o fluxo normal */ }
+      }
+
       // Espelho local (financeiro). mp_assinaturas = estado da assinatura (para contar
       // assinantes ativos); a cobrança recorrente PROCESSADA vira uma "mensalidade recebida"
       // em mp_pagamentos (origem='recorrente'). Idempotente por id; não bloqueia o fluxo.

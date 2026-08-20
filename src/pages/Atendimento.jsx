@@ -80,7 +80,7 @@ const ESCOPO_PAPEL = {
 };
 
 export default function Atendimento() {
-  const { user, role, roleSimulado, impersonate } = useAuth();
+  const { user, role, roleSimulado, impersonate, nome: nomePerfil } = useAuth();
   // Papel de ATENDIMENTO: o papel REAL do atendente — ou o simulado, quando o admin escolhe ver
   // a fila como consultor/analista (isso é o propósito da simulação).
   // NÃO usar `effectiveRole`: ele também carrega a PERSONIFICAÇÃO de um cliente (iniciarSuporte,
@@ -116,7 +116,7 @@ export default function Atendimento() {
   const fileRef = useRef();
   const msgEndRef = useRef();
 
-  const nomeAtendente = user?.user_metadata?.nome || user?.email?.split('@')[0] || 'Atendente';
+  const nomeAtendente = nomePerfil || user?.user_metadata?.nome || user?.email?.split('@')[0] || 'Atendente';
 
   useEffect(() => { carregarChamados(); }, [filtro]);
   useEffect(() => { msgEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [mensagens]);

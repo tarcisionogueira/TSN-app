@@ -107,25 +107,63 @@ export default async function handler(req, res) {
   };
 
   // 2) Cria a assinatura transparente no MP (preapproval por card_token).
+  // 19/08: TIMEOUT/5xx depois de o MP ter CRIADO o mandato era tratado como recusa → o
+  // rollback apagava o usuário e o mandato ficava ÓRFÃO cobrando um fantasma. Agora o
+  // desfecho DESCONHECIDO é separado da recusa explícita: (a) re-tenta 1x — o
+  // X-Idempotency-Key torna o retry seguro (o MP devolve o MESMO mandato, não cria outro);
+  // (b) persiste a dúvida → busca o mandato por payer_email/external_reference; (c) se nem
+  // assim dá para saber, NUNCA apaga o usuário (ver o bloco 3b). A recusa explícita (4xx
+  // com motivo) continua fazendo rollback como sempre.
   let sub, subErro = '';
+  let desfechoDesconhecido = false;
+  const criarPreapproval = () => fetch(`${MP_URL}/preapproval`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${MP_TOKEN}`, 'Content-Type': 'application/json', 'X-Idempotency-Key': `${userId}-${plano}` },
+    body: JSON.stringify({
+      reason: cfg.nome,
+      external_reference: `${userId}|${plano}`,
+      payer_email: email,
+      card_token_id: cardTokenId,
+      status: 'authorized',
+      back_url: `${BASE_URL}/#/checkout?plano=${plano}&status=assinatura`,
+      notification_url: `${BASE_URL}/api/mp-webhook`,
+      auto_recurring: { frequency: 1, frequency_type: 'months', transaction_amount: Number(cfg.valor), currency_id: 'BRL' },
+    }),
+    signal: AbortSignal.timeout(25000),
+  });
   try {
-    const r = await fetch(`${MP_URL}/preapproval`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${MP_TOKEN}`, 'Content-Type': 'application/json', 'X-Idempotency-Key': `${userId}-${plano}` },
-      body: JSON.stringify({
-        reason: cfg.nome,
-        external_reference: `${userId}|${plano}`,
-        payer_email: email,
-        card_token_id: cardTokenId,
-        status: 'authorized',
-        back_url: `${BASE_URL}/#/checkout?plano=${plano}&status=assinatura`,
-        notification_url: `${BASE_URL}/api/mp-webhook`,
-        auto_recurring: { frequency: 1, frequency_type: 'months', transaction_amount: Number(cfg.valor), currency_id: 'BRL' },
-      }),
-    });
+    const r = await criarPreapproval();
     sub = await r.json().catch(() => ({}));
-    if (!r.ok) subErro = sub?.message || sub?.cause?.[0]?.description || 'Falha no pagamento';
-  } catch (e) { subErro = String(e?.message || e); }
+    if (!r.ok) {
+      if (r.status >= 500) desfechoDesconhecido = true;
+      subErro = sub?.message || sub?.cause?.[0]?.description || 'Falha no pagamento';
+    }
+  } catch (e) { desfechoDesconhecido = true; subErro = String(e?.message || e); }
+
+  // (a) retry idempotente — resolve a maioria dos timeouts sem risco de mandato duplicado
+  if (desfechoDesconhecido) {
+    try {
+      const r2 = await criarPreapproval();
+      const sub2 = await r2.json().catch(() => ({}));
+      if (r2.ok) { sub = sub2; subErro = ''; desfechoDesconhecido = false; }
+      else if (r2.status < 500) { sub = sub2; subErro = sub2?.message || sub2?.cause?.[0]?.description || subErro; desfechoDesconhecido = false; }
+    } catch { /* segue desconhecido */ }
+  }
+  // (b) reconciliação — o mandato foi criado na tentativa que "falhou"?
+  if (desfechoDesconhecido) {
+    try {
+      const s = await fetch(`${MP_URL}/preapproval/search?payer_email=${encodeURIComponent(email)}&limit=30`, {
+        headers: { Authorization: `Bearer ${MP_TOKEN}` }, signal: AbortSignal.timeout(15000),
+      });
+      if (s.ok) {
+        const encontrados = (await s.json().catch(() => ({})))?.results || [];
+        const meu = encontrados.find(p => String(p.external_reference || '') === `${userId}|${plano}` && ['authorized', 'pending'].includes(p.status));
+        if (meu) { sub = meu; subErro = ''; desfechoDesconhecido = false; }
+        else { desfechoDesconhecido = false; subErro = subErro || 'Falha no pagamento'; }
+        // busca respondeu e o mandato não está lá → a criação não aconteceu: recusa normal
+      }
+    } catch { /* segue desconhecido */ }
+  }
 
   // 3) Recusada de fato → rollback (nada fica gravado). 'pending' NÃO é recusa
   //    (análise antifraude / 3D Secure): mantém a conta; o webhook ativa o plano
@@ -144,6 +182,19 @@ export default async function handler(req, res) {
   // Regra desde então (decisão do dono, 16/08 — "opção 1"): ACESSO SÓ COM DINHEIRO NA
   // CONTA. Aqui não se grava role nem se manda boas-vindas; quem faz as duas coisas é
   // `ativarPlanoDireto` no webhook, e só quando a ativação carrega cobrança RECEBIDA.
+  // 3b) DESFECHO DESCONHECIDO (19/08): retry e reconciliação não conseguiram responder se
+  // o mandato existe. Apagar o usuário aqui é a única jogada IRREVERSÍVEL — se o mandato
+  // existir, vira cobrança de fantasma. Fica a conta (grátis, sem role), o cliente é
+  // orientado a NÃO refazer o pagamento, e as redes de segurança fecham o resto: o webhook
+  // cancela mandato de usuário inexistente e ativa o plano se a cobrança confirmar.
+  if (desfechoDesconhecido) {
+    console.error(`[assinar-com-cadastro] DESFECHO DESCONHECIDO user=${userId} email=${email} plano=${plano} — conta MANTIDA sem rollback: ${subErro}`);
+    return res.status(503).json({
+      error: 'Não conseguimos confirmar sua assinatura agora. NÃO refaça o pagamento: se o cartão foi autorizado, seu acesso será ativado automaticamente em alguns minutos. Sua conta foi criada — você já pode entrar com o e-mail e a senha cadastrados.',
+      status: 'desconhecido',
+    });
+  }
+
   const mandatoOk = sub?.status === 'authorized' || sub?.status === 'pending';
   if (subErro || !mandatoOk) {
     await rollback();
