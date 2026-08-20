@@ -9933,3 +9933,54 @@ Telas: `Perfil.jsx` (saldo + solicitar saque), `Comissoes.jsx` (extrato), `Admin
 - Senha forte (8+ maiúscula/minúscula/número/especial) validada no front; leaked-password do Supabase exige plano Pro.
 - Commits desta sessão: prefixo de fixes/feat, autor `noreply@anthropic.com`, em `main` e na branch de dev.
 </content>
+
+---
+
+## 🏠 RECON BACKLOG LEILOEIROS — consolidado 20/08 (SP Sindicato + BA JUCEB)
+
+Varredura de recon (plataforma × imóvel-vs-veículo) sobre 69 domínios das duas listas
+(Sindicato-SP + JUCEB-BA), via `recon-leiloeiros-backlog.yml` (Bright Data Web Unlocker),
+16 levas de 4–5 domínios. **Atuamos SOMENTE com imóveis** — cada casa classificada por
+veredito de conteúdo (imóvel/veículo/misto/indefinido) e por ALAVANCA de scraper.
+
+### Placar
+- **55 casas de imóveis integráveis** ao todo.
+- **39 já cobertas por scraper que JÁ EXISTE** (só adicionar domínio/config — esforço ~zero).
+- **16 exigem scraper novo** (independentes) — mas leffa+oscar compartilham plataforma, então ~14 famílias.
+- **3 em recon profundo** (SPA "Carregando…", exigem puppeteer): cunhaleiloeiro, albertomacedo, gaialeiloes.
+- **19 descartadas**: 5 veículo-predominante + 14 vazias/estacionadas/404/indefinido-final.
+
+### INTEGRAR via scraper EXISTENTE (39 casas — prioridade 1, ganho barato)
+- **Vlance** (`scripts/scraper_vlance.py` — multi-tenant, só add domínio em `TENANTS_PADRAO`) — **14 casas**:
+  crisleiloes, franklinleiloes, impactoleiloes, zallileiloes, fernandoleiloeiro, teza, destakleiloes,
+  agsleiloes, emiliomatosleiloes (⭐ acervo enorme), falleirosleiloes, jonasleiloeiro, lucasleiloeiro,
+  positivoleiloes, silvaleiloes.
+- **SOLEON** (`soleon.s3`, trilha `/lotes/search?tipo=imovel`) — **15 casas**:
+  lanceja, ricoleiloes, leiloesgold, tmleiloes, wspleiloes, lanceleiloes, centraldosleiloes,
+  clicleiloes (SCHMITZ), cravoleiloes, danielgarcialeiloes, hastaleiloes, isabelleiloes,
+  kcleiloes (58 imóveis), patiorochaleiloes, rafaelaribeiroleiloes.
+- **SUPORTE white-label** (já raspamos) — **3 casas, ~2.322 imóveis**:
+  leilaobrasil (1.786!), vecchileiloes (463, fazendas GO), saraivaleiloes (73). ⭐⭐ maior ganho isolado.
+- **SODRÉ/SUPERBID rede** (já raspamos) — **4 casas**: alexandridis, rmoyses, bezerraleiloes, hoppeleiloes.
+- **Cluster GESTAO** (`d335luupugsy2.cloudfront`, a CONFIRMAR no recon profundo) — **3 casas**:
+  vipleiloes, milanleiloes, centraljudicial.
+
+### INTEGRAR via scraper NOVO (independentes — 16 casas)
+Ordenar por volume: **leffaleiloes (124)** + **oscarleiloes (28)** = plataforma **"LeilãoPro Core"**
+(`/leilaoprocore/js/`, `/leilao/lotes/imoveis`) → **1 scraper cobre os dois** (nova alavanca);
+**nordesteleiloes (115, Next.js SPA — precisa recon runtime)**; **jussiaraleiloes (91, TRT5-BA)**;
+**hastaleilao / Flávio Costa (83, TJPE)**; **alfaleiloes (34, 100% imóvel)**; lancecertoleiloes (24, ASP.NET);
+leilaoonline.net; hatoryleiloes; leiloeiroeduardo (socket.io); damasioleiloes; bastonleiloes;
+sumareleiloes (Laravel); kronbergleiloes (WordPress+wpcasa); palaciodosleiloes (8); aguialeiloes (baixa prio).
+
+### DESCARTAR (19)
+- **Veículo-predominante**: conceitoleiloes, ccjleiloes, celsocunhaleiloes, focoleiloes, guariglialeiloes.
+- **Vazio / estacionado / 404 / indefinido-final**: arremateleilao, 3rleiloes, carrollruralleiloes (agro),
+  dgleiloes, franciscofreitasleiloes, hleiloes, jocaleiloesagro (agro), lamurleiloes, leiloescostaesilva,
+  lopesleiloes, lubreleiloes, marcoantonioleiloeiro (parking), mikedutraleiloeiro, msoleiloes (404).
+
+### Próximos passos sugeridos (não executados — decisão do dono)
+1. **Barato primeiro**: adicionar os 14 domínios Vlance + confirmar SOLEON/SUPORTE/SODRÉ já cobrem as 39.
+2. **Confirmar cluster GESTAO** (vip/milan/centraljudicial) no recon profundo do scraper-gestao.
+3. **Scraper novo** por ordem de acervo: LeilãoPro Core (leffa+oscar), Nordeste (SPA), Jussiara, Flávio Costa, Alfa.
+4. **Recon profundo puppeteer** nos 3 "Carregando…": cunha, albertomacedo, gaia.
