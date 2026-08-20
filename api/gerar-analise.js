@@ -2400,6 +2400,43 @@ export default async function handler(req, res) {
       if (mercado) mercado.valorPonderado = { aplicado: false, motivo: `erro: ${String(e?.message || e).slice(0, 120)}` };
     }
 
+    // ── LOCAÇÃO PELA MESMA RÉGUA DA VENDA (decisão do dono, 20/08) ──────────────────────
+    // "Faça o tíquete médio de venda E DE LOCAÇÃO para TODAS as unidades." A venda já é
+    // determinística acima: R$/m² (nível 1+2 ponderado) × área. A locação vinha como a MEDIANA
+    // do `valorMensal` dos comparáveis (bloco ~2000) — que NÃO escala com a área: um studio de
+    // 33,5 m² herdava o aluguel de comps de 55 m². Aqui trazemos a locação para a MESMA régua:
+    // mediana do R$/m²·mês (nível 1+2) × área do imóvel. Só age com ≥3 locações plausíveis
+    // (0,5–500 R$/m²·mês) e área conhecida; senão preserva o valor anterior. Terreno não aluga
+    // (zerado acima). Recalcula o yield da renda nova sobre o valor final — yield é conta.
+    if (baseTipo !== 'terreno' && areaM2 > 0 && mercado) {
+      const locs = [...(mercado.nivel1?.locacoes || []), ...(mercado.nivel2?.locacoes || []), ...(Array.isArray(mercado.locacoes) ? mercado.locacoes : [])];
+      const m2mes = locs
+        .map((l) => { const v = Number(l?.valorMensal) || 0; const a = Number(l?.m2) || 0; return (v > 0 && a > 0) ? v / a : 0; })
+        .filter((x) => x >= 0.5 && x <= 500)
+        .sort((a, b) => a - b);
+      if (m2mes.length >= 3) {
+        const locM2 = m2mes.length % 2 ? m2mes[(m2mes.length - 1) / 2] : (m2mes[m2mes.length / 2 - 1] + m2mes[m2mes.length / 2]) / 2;
+        const aluguelEstimado = Math.round(locM2 * areaM2);
+        if (aluguelEstimado > 0) {
+          const antes = Number(mercado.aluguelMedio) || 0;
+          mercado.aluguelMedio = aluguelEstimado;
+          if (mercado.consolidado) {
+            mercado.consolidado.aluguelMedio = aluguelEstimado;
+            mercado.consolidado.aluguelM2 = Math.round(locM2 * 100) / 100;
+            const vImv = Number(mercado.consolidado.valorEstimadoImovel) || 0;
+            if (vImv > 0) {
+              const yB = Number(((aluguelEstimado * 12 / vImv) * 100).toFixed(2));
+              mercado.consolidado.yieldBruto = yB;
+              mercado.consolidado.yieldLiquido = Number((yB * 0.85).toFixed(2));
+            }
+          }
+          mercado.yieldBruto = mercado.consolidado?.yieldBruto || 0;
+          mercado.yieldLiquido = mercado.consolidado?.yieldLiquido || 0;
+          mercado.__diagAluguelM2 = { antes, precoLocacaoM2: Math.round(locM2 * 100) / 100, area: areaM2, aluguelEstimado, nAmostras: m2mes.length, metodo: 'R$/m2.mes (nivel1+2) x area — decisao do dono 20/08' };
+        }
+      }
+    }
+
     const vEstIA = Number(mercado?.consolidado?.valorEstimadoImovel) || 0;
     let valorMercado = null;
     if (vEstIA > 0) valorMercado = Math.round(vEstIA);
