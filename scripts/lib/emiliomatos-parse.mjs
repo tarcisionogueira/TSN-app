@@ -69,10 +69,32 @@ function cidadeUF(txt, titulo = '') {
 }
 const limparTitulo = t => (t || '').replace(/\s*[-–|]\s*(?:Lance Inicial|Avalia[çc][ãa]o|Valor|Emilio Matos|Emílio Matos).*$/i, '').replace(/\s+/g, ' ').trim();
 
-// true = todas as praças encerradas/sem praça viva → NÃO ingerir.
-export function estaEncerrado(txt) {
-  const temAberto = /pra[çc]a\s*(?:aberta|em\s*andamento)|recebendo\s*lances|em\s*andamento|agendad|aceita(?:ndo)?\s*lances|dispon[íi]vel\s*para\s*lance|aberto\s*para\s*lances/i.test(txt);
-  const temMorto = /pra[çc]a\s*encerrada|arrematad|vendido|finaliz|leil[ãa]o\s*encerrado|encerrado|deserto|cancelad|suspenso/i.test(txt);
+const MESES = { jan: 0, fev: 1, mar: 2, abr: 3, mai: 4, jun: 5, jul: 6, ago: 7, set: 8, out: 9, nov: 10, dez: 11 };
+// Datas de PRAÇA do texto (dd/mm/aaaa e "dd de mês de aaaa"). Foca no contexto de leilão/praça
+// quando dá; senão pega todas. (Só 20xx — evita "1ª"/CEPs.)
+function datasPraca(txt) {
+  const ds = [];
+  const push = (dd, mm, yy) => { const d = new Date(+yy, +mm - 1, +dd); if (!isNaN(d)) ds.push(d); };
+  for (const m of txt.matchAll(/(\d{1,2})\/(\d{1,2})\/(20\d{2})/g)) push(m[1], m[2], m[3]);
+  for (const m of txt.matchAll(/(\d{1,2})\s+de\s+([a-zç]{3,})\s+de\s+(20\d{2})/gi)) {
+    const mes = MESES[m[2].toLowerCase().slice(0, 3)]; if (mes != null) push(m[1], mes + 1, m[3]);
+  }
+  return ds;
+}
+// true = leilão morto (NÃO ingerir). DATA MANDA: se há praça FUTURA, está vivo (ainda que a 1ª
+// praça já tenha encerrado). Só é morto se todas as datas são passadas, ou arrematado/deserto
+// sem sinal de praça aberta. (Bug de 20/08: lotes com 2ª praça em 08/09/2026 eram marcados
+// encerrados porque a 1ª dizia "Praça Encerrada" — a data desempata.)
+export function estaEncerrado(txt, agora = new Date()) {
+  const hoje = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate());
+  const datas = datasPraca(txt);
+  if (datas.some(d => d >= hoje)) return false;            // praça futura → vivo
+  const arrematado = /arrematad|vendido|deserto|cancelad|suspenso/i.test(txt);
+  const temAberto = /recebendo\s*lances|em\s*andamento|aberto\s*para\s*lances|aceita(?:ndo)?\s*lances|agendad/i.test(txt);
+  if (arrematado && !temAberto) return true;
+  if (datas.length && !datas.some(d => d >= hoje)) return true;   // só datas passadas → morto
+  // sem datas legíveis: cai no rótulo (conservador)
+  const temMorto = /pra[çc]a\s*encerrada|leil[ãa]o\s*encerrado|encerrado/i.test(txt);
   return temMorto && !temAberto;
 }
 
