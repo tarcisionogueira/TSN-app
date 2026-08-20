@@ -1,15 +1,20 @@
 name: Recon LeilãoPro Core (leffa/oscar)
 
-# Recon runtime da plataforma "LeilãoPro Core" (leffaleiloes/oscarleiloes): confirma a
-# estrutura VIVA (SSR vs SPA, rota de listagem, paginação, endpoints do bundle) antes de
-# codar o scraper. Só disparo manual. Não grava nada.
+# Validação do parser de produção (lib/leilaopro-parse) sobre lotes VIVOS via Bright Data —
+# imprime cada campo para conferência ANTES de liberar a grava no acervo. Só disparo manual.
+# (Os recons exploratórios — estrutura, card/detalhe, preços — vivem em scripts/recon-leilaopro*.mjs
+# e podem ser rodados à mão quando a fonte mudar; não rodam aqui para poupar cota Bright Data.)
 on:
   workflow_dispatch:
     inputs:
-      tenants:
-        description: 'hosts separados por vírgula'
+      tenant:
+        description: 'leffa | oscar'
         required: false
-        default: 'leffaleiloes.com.br,oscarleiloes.com.br'
+        default: 'leffa'
+      max:
+        description: 'máx. de lotes a validar'
+        required: false
+        default: '8'
 
 jobs:
   recon:
@@ -20,19 +25,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Recon estrutura + endpoints
+      - name: DRY-RUN do parser de produção (valida campo-a-campo)
         env:
           BRIGHTDATA_API_TOKEN: ${{ secrets.BRIGHTDATA_API_TOKEN }}
           BRIGHTDATA_ZONE: ${{ secrets.BRIGHTDATA_ZONE }}
-          LEILAOPRO_TENANTS: ${{ github.event.inputs.tenants }}
-        run: node scripts/recon-leilaopro.mjs
-      - name: Recon profundo (card + detalhe p/ desenhar o parser)
-        env:
-          BRIGHTDATA_API_TOKEN: ${{ secrets.BRIGHTDATA_API_TOKEN }}
-          BRIGHTDATA_ZONE: ${{ secrets.BRIGHTDATA_ZONE }}
-        run: node scripts/recon-leilaopro-lotes.mjs
-      - name: Recon focado no bloco de preços/praças
-        env:
-          BRIGHTDATA_API_TOKEN: ${{ secrets.BRIGHTDATA_API_TOKEN }}
-          BRIGHTDATA_ZONE: ${{ secrets.BRIGHTDATA_ZONE }}
-        run: node scripts/recon-leilaopro-preco.mjs
+          LEILAOPRO_TENANT: ${{ github.event.inputs.tenant }}
+          LEILAOPRO_MAX: ${{ github.event.inputs.max }}
+        run: node scripts/recon-leilaopro-parse.mjs
