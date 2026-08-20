@@ -48,7 +48,11 @@ import requests
 # bomnegocio + paulistana: Round 35 (30/07) confirmou ambos na Vlance (vlanceConfigContainer
 # + core/api/get-leiloes). paulistana hoje só tem leilão de SIMULAÇÃO (acervo ~0) — fica
 # armado para quando publicar de verdade; o loop por domínio tolera tenant vazio.
-TENANTS_PADRAO = ["verdeamareloleiloes.com.br", "sudesteleiloes.com.br", "capitalvalorleiloes.com.br", "sanchesleiloes.com.br", "destakleiloes.com.br", "bomnegocioleiloes.com.br", "paulistanaleiloes.com.br"]
+# Recon backlog 20/08 (SP Sindicato + BA JUCEB): +13 tenants identificados por fingerprint
+# Vlance no HTML (/Core/V1/js/Ajax/Ajax_Leiloes*.js). Ainda NÃO confirmados no runtime
+# /core/api/get-lotes — o loop por domínio só loga e segue se algum não responder ao padrão,
+# então somá-los é zero risco para os demais (emiliomatos e jonas têm acervo grande).
+TENANTS_PADRAO = ["verdeamareloleiloes.com.br", "sudesteleiloes.com.br", "capitalvalorleiloes.com.br", "sanchesleiloes.com.br", "destakleiloes.com.br", "bomnegocioleiloes.com.br", "paulistanaleiloes.com.br", "crisleiloes.com.br", "franklinleiloes.com.br", "impactoleiloes.com.br", "zallileiloes.com.br", "fernandoleiloeiro.com.br", "teza.com.br", "agsleiloes.com.br", "emiliomatosleiloes.com.br", "falleirosleiloes.com.br", "jonasleiloeiro.com.br", "lucasleiloeiro.com.br", "positivoleiloes.com.br", "silvaleiloes.com.br"]
 EP_LEILOES = "/core/api/get-leiloes"
 EP_LOTES = "/core/api/get-lotes"
 
