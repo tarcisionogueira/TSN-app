@@ -14,6 +14,10 @@ let contador = 0;          // teto por sessão (anti-flood + economia)
 const TETO = 3000;
 let avisouTeto = false;
 let timer = null;
+// Último clique (rótulo + hora) — para CORRELACIONAR uma falha que aparece na tela logo depois.
+// É o que faltava no caso do Fábio: o clique em "Cadastrar empresa" foi registrado 10×, mas nada
+// dizia que CADA um FALHOU (CNPJ recusado no cliente, sem chamar API). Agora o desfecho entra junto.
+let ultimoClique = { alvo: '', em: 0 };
 
 // Nunca deixa TOKEN de auth virar "rota": no fluxo implícito do Supabase com HashRouter, a URL
 // pós-login (magic link/OAuth/recuperação) vem como #access_token=...&refresh_token=... — isso é
@@ -155,7 +159,9 @@ export function instalarTracker() {
         }
       }
       if (!el) return;
-      registrarEvento('click', { alvo: rotuloDe(el) || el.tagName?.toLowerCase() || 'elemento' });
+      const rot = rotuloDe(el) || el.tagName?.toLowerCase() || 'elemento';
+      ultimoClique = { alvo: rot, em: Date.now() };
+      registrarEvento('click', { alvo: rot });
     } catch { /* ignora */ }
   }, { capture: true });
 
@@ -179,6 +185,60 @@ export function instalarTracker() {
       registrarEvento('change', { alvo: rotuloControle(el), detalhe: det });
     } catch { /* ignora */ }
   }, { capture: true });
+
+  // DESFECHO AUTOMÁTICO — "a função do botão performou?" (pedido do dono, 20/08). Muita FALHA é
+  // client-side e NÃO chama API (validação, gate, no-op), então nem o `api_erro` nem um throw a
+  // pegam: a tela só mostra uma mensagem vermelha ("CNPJ inválido") e o Cliente 360 via SÓ o
+  // clique, sem o desfecho — foi o caso do Fábio (10× "Cadastrar empresa", zero registro de que
+  // falhou). Aqui um MutationObserver ENXUTO detecta a mensagem de erro que aparece logo após um
+  // clique e registra `erro_ui` com o rótulo do clique — assim o 360 mostra clique → falha.
+  //
+  // Guardas de performance (roda no navegador de todo usuário): o callback só EMPILHA nós (sem ler
+  // layout), com teto de fila; a análise cara (texto/cor) roda em lote a cada 600ms; dedup + teto
+  // próprio por sessão. `textContent` (barato) no lugar de `innerText` (força reflow).
+  const RE_ERRO = /\b(inv[aá]lid|incorret|obrigat[oó]ri|n[aã]o foi poss[ií]vel|falh(?:ou|a|ada)|recusad|expirad|n[aã]o coincid|n[aã]o confere|preencha|no m[ií]nimo|tente novamente|erro)\b/i;
+  const CORES_ERRO = new Set(['rgb(220, 38, 38)', 'rgb(185, 28, 28)', 'rgb(239, 68, 68)', 'rgb(153, 27, 27)', 'rgb(220, 38, 38)']);
+  const errosVistos = new Set();   // dedup por texto normalizado
+  let contErroUi = 0;              // teto próprio (além do TETO global): erro_ui é secundário
+  let pend = [];
+  let obsTimer = null;
+  const processarPend = () => {
+    obsTimer = null;
+    const lote = pend.splice(0, 40); pend = [];
+    if (contErroUi >= 60) return;
+    for (const el of lote) {
+      try {
+        if (!el.isConnected) continue;
+        const txt = String(el.textContent || '').replace(/\s+/g, ' ').trim();
+        if (!txt || txt.length > 160 || !RE_ERRO.test(txt)) continue;
+        let cor = ''; try { cor = getComputedStyle(el).color; } catch { /* ok */ }
+        // Confirma erro por COR vermelha OU por palavra inequívoca (evita falso positivo de texto
+        // neutro que por acaso contém "erro" numa explicação).
+        const ehErro = CORES_ERRO.has(cor) || /\b(inv[aá]lid|recusad|falh|incorret|obrigat)/i.test(txt);
+        if (!ehErro) continue;
+        const chave = txt.toLowerCase().replace(/\d+/g, '#').slice(0, 90);
+        if (errosVistos.has(chave)) continue;
+        errosVistos.add(chave);
+        contErroUi++;
+        const ctx = (Date.now() - ultimoClique.em < 6000) ? ultimoClique.alvo : '';
+        registrarEvento('erro_ui', { alvo: ctx || 'tela', detalhe: txt.slice(0, 160) });
+      } catch { /* ignora item */ }
+    }
+  };
+  try {
+    const obs = new MutationObserver((muts) => {
+      if (pend.length > 200) return;   // sob rajada de re-render, não acumula sem limite
+      for (const m of muts) {
+        if (m.addedNodes && m.addedNodes.length) {
+          for (const n of m.addedNodes) if (n.nodeType === 1) pend.push(n);
+        } else if (m.type === 'characterData' && m.target?.parentElement) {
+          pend.push(m.target.parentElement);
+        }
+      }
+      if (pend.length && !obsTimer) obsTimer = setTimeout(processarPend, 600);
+    });
+    obs.observe(document.body, { childList: true, subtree: true, characterData: true });
+  } catch { /* MutationObserver indisponível: segue sem o desfecho automático */ }
 
   // Envia o que estiver na fila ao sair / trocar de aba.
   window.addEventListener('pagehide', flush);

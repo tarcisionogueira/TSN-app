@@ -24,7 +24,7 @@ const KEY = process.env.SUPABASE_SERVICE_KEY;
 // aviso desde 11/08 justamente para que o 360 não pareça um dia que acaba no meio da tarde —
 // mas ele nunca chegou: ficava de fora daqui e era descartado. O aviso contra o silêncio
 // estava sendo silenciado; corrigido em 14/08 junto com o de cima.
-const TIPOS = new Set(['pageview', 'click', 'submit', 'change', 'api_erro', 'api_vazio', 'api_falha_rede', 'pdf_gerado', 'pdf_falha', 'geracao_recuperada', 'limite_sessao']);
+const TIPOS = new Set(['pageview', 'click', 'submit', 'change', 'api_erro', 'api_vazio', 'api_falha_rede', 'pdf_gerado', 'pdf_falha', 'geracao_recuperada', 'limite_sessao', 'erro_ui']);
 
 // Defesa em profundidade: NUNCA persistir token/segredo no log de atividade, mesmo que um cliente
 // antigo/adulterado mande (ex.: #access_token=... do fluxo implícito, ou um JWT eyJ...). Redige.
@@ -45,7 +45,7 @@ export default async function handler(req, res) {
     // retenção de 30d seguem valendo). Sem isto, quem clicava num link de venda e não
     // cadastrava era invisível — impossível distinguir "ninguém clicou" de "página quebrou".
     const anonId = typeof b.anon_id === 'string' ? (b.anon_id.replace(/[^\w-]/g, '').slice(0, 48) || null) : null;
-    const TIPOS_ANON = new Set(['pageview', 'click', 'submit', 'api_erro', 'api_falha_rede']);
+    const TIPOS_ANON = new Set(['pageview', 'click', 'submit', 'api_erro', 'api_falha_rede', 'erro_ui']);
     // `leiloes` entrou em 12/08 e é a correção mais cara da lista: são as ~33 mil páginas de
     // acervo público (servidas por /api/publico, FORA do React), o principal ativo de aquisição
     // do site. Sem esta palavra, o evento chegava aqui e era descartado com 204 — silêncio dos

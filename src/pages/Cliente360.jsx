@@ -764,6 +764,11 @@ ${Array.isArray(base._truncado) && base._truncado.length ? `<div style="margin-t
                     api_erro:        { rot: 'Falha de API',    cor: '#dc2626' },
                     api_falha_rede:  { rot: 'Falha de rede',   cor: '#dc2626' },
                     api_vazio:       { rot: 'Sem resultado',   cor: '#b45309' },
+                    // Ação que NÃO performou: uma mensagem de erro apareceu na tela logo após o
+                    // clique (validação/gate client-side, sem chamar API). É o desfecho que
+                    // faltava — antes o 360 via só o clique (ex.: Fábio, "Cadastrar empresa" 10×,
+                    // sem nada dizendo que CNPJ foi recusado). `alvo` = o botão; `detalhe` = o erro.
+                    erro_ui:         { rot: 'Ação falhou (erro na tela)', cor: '#dc2626' },
                     // Erro que o cliente NÃO viu: a conexão caiu no meio da geração, o servidor
                     // seguiu e concluiu, e a tela nunca acusou falha. Fica âmbar (não vermelho)
                     // de propósito — não houve prejuízo ao cliente —, mas PRECISA aparecer: se
