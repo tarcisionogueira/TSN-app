@@ -1,0 +1,29 @@
+name: Recon DOM (navegador, genérico)
+
+on:
+  workflow_dispatch:
+    inputs:
+      base:
+        description: 'RECON_BASE (ex: https://www.alfaleiloes.com.br)'
+        required: true
+      rotas:
+        description: 'RECON_ROTAS csv (ex: /,/lote/10399/leilao-de-fazenda-em-manhumirim-mg)'
+        required: true
+
+jobs:
+  recon:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - name: Install Puppeteer
+        run: npm i puppeteer@23 --no-save
+      - name: Chromium deps
+        run: npx puppeteer browsers install chrome
+      - name: Recon DOM
+        env:
+          RECON_BASE: ${{ github.event.inputs.base }}
+          RECON_ROTAS: ${{ github.event.inputs.rotas }}
+        run: node scripts/recon-dom-browser.mjs
