@@ -10256,3 +10256,20 @@ formato. Elimina o "cada fonte é um scraper do zero".
 
 **Já GRAVADO nesta rodada de integração:** leffa/oscar (LeilãoPro, 8) · emiliomatos (37) ·
 vecchi/saraiva (SUPORTE, 23). **Mapa acima = base para o redesenho `fetch × parse`.**
+
+### 🔎 Correção do mapa (recon fino de alfa + leilaobrasil, 20/08 noite)
+Ao dissecar de perto, os dois "viáveis" do mapa são mais duros do que o 1º passo sugeriu —
+registro para não repetir o otimismo:
+- **alfaleiloes:** home tem **11 lotes** (não 34), com slugs ricos (`/lote/<id>/leilao-de-fazenda-em-
+  manhumirim-mg` → tipo+cidade+UF no slug). MAS o **detalhe é shell de SPA (8.3KB, og vazio)** — o
+  dado dos 11 mora num BLOB JSON da HOME que o `farejar` não isolou numa passada. Acervo pequeno +
+  precisa decodificar o blob (ou parsear tipo/cidade do slug e achar o preço no blob). 1 recon a mais.
+- **leilaobrasil:** a home de 1,87MB traz **só 7 lotes em destaque** e **sem paginação**; os 632 R$
+  são renderizados no cliente, não presos a cards de catálogo. O catálogo dos ~1.786 está atrás de
+  **Cloudflare + busca client-side — NÃO é SSR**. Ou seja, o "parser barato, só o fetch BD" estava
+  errado: é projeto de Cloudflare-SPA (BD por busca ou Puppeteer), não N páginas SSR baratas.
+**Conclusão honesta:** os ganhos BARATOS (SSR limpo) acabaram — leffa/oscar, emiliomatos, vecchi/
+saraiva (**68 imóveis** nesta sessão). Todo o RESTANTE (alfa-blob, leilaobrasil, hasta, nordeste,
+jussiara/lancecerto/sumaré, GESTAO, PGFN) exige exatamente o **redesenho** que o dono marcou p/
+"posteriormente": um motor de DOM (Puppeteer) e/ou de blob-JSON, mais o eixo de FETCH (BD/residencial).
+Não vale queimar BD caçando blob de fonte de 11 lotes nem varrer catálogo Cloudflare sem esse motor.
