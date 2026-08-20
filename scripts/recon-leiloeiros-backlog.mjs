@@ -75,6 +75,26 @@ function detectarStack(html) {
   return s;
 }
 
+// 20/08 — a BidPro atua SÓ com imóveis. Antes de decidir integrar, o recon precisa dizer se
+// o site VENDE imóvel (e se é misto com veículo). Conta sinais no HTML da home: termos de
+// imóvel × termos de veículo/rural. Verdicto: 'imoveis' (só/majoritário), 'misto', 'veiculos'
+// (sem imóvel — descartar), 'indefinido' (home JS-only/challenge — precisa recon profundo).
+function sinalImovel(html) {
+  const h = html.toLowerCase();
+  const cont = (re) => (h.match(re) || []).length;
+  const imo = cont(/im[oó]ve(?:l|is)|apartamento|\bcasa\b|terreno|\bgalp[aã]o\b|\bloja\b|sala comercial|studio|kitnet|cobertura|chácara|s[ií]tio|fazenda|matr[ií]cula/gi);
+  const vei = cont(/ve[ií]culo|autom[oó]vel|carro|motocicleta|\bmoto\b|caminh[aã]o|sucata|\bsinistr|\bmontador|aeronave|embarca[çc][aã]o/gi);
+  const cat = /leil[aã]o de im[oó]veis|categoria[^<]{0,20}im[oó]ve/i.test(html);
+  let verdito;
+  if (imo === 0 && vei === 0) verdito = 'indefinido';       // home sem catálogo no HTML (SPA/challenge)
+  else if (imo === 0) verdito = 'veiculos';                 // sinal só de veículo → descartar
+  else if (cat && vei <= 1) verdito = 'imoveis';
+  else if (imo >= vei * 2) verdito = 'imoveis';
+  else if (vei >= imo * 2) verdito = 'veiculos';
+  else verdito = 'misto';
+  return { verdito, imo, vei };
+}
+
 function classificar(html) {
   const plats = PLATAFORMAS.filter(p => p.re.test(html)).map(p => p.nome);
   const next = /id=["']__NEXT_DATA__["']/.test(html);
@@ -112,7 +132,9 @@ function classificar(html) {
     try {
       const { status, html } = await bdFetch(url);
       const c = classificar(html);
+      const si = sinalImovel(html);
       console.log(`\n════ ${dom}  → HTTP ${status}  len=${html.length}${c.cloudflare ? '  (challenge)' : ''}`);
+      console.log(`   🏠 IMÓVEL: ${si.verdito.toUpperCase()} (imóvel=${si.imo} · veículo=${si.vei})`);
       console.log(`   título: ${c.titulo}`);
       if (c.generator) console.log(`   generator: ${c.generator}`);
       console.log(`   STACK/linguagem: ${c.stack.length ? c.stack.join(' · ') : '— (não identificada no HTML)'}`);
@@ -122,7 +144,7 @@ function classificar(html) {
       if (c.cdns.length) console.log(`   CDNs: ${JSON.stringify(c.cdns)}`);
       if (c.scripts.length) console.log(`   scripts: ${JSON.stringify(c.scripts)}`);
       if (c.loteLinks.length) console.log(`   links lote: ${JSON.stringify(c.loteLinks)}`);
-      resumo.push({ dom, status, plats: c.plats, stack: c.stack, apis: c.apis, next: c.next, nuxt: c.nuxt, hasApi: c.apis.length > 0 || c.jsonEnd.length > 0, cloudflare: c.cloudflare });
+      resumo.push({ dom, status, imovel: si.verdito, plats: c.plats, stack: c.stack, apis: c.apis, next: c.next, nuxt: c.nuxt, hasApi: c.apis.length > 0 || c.jsonEnd.length > 0, cloudflare: c.cloudflare });
     } catch (e) {
       console.log(`\n════ ${dom}  → ERRO: ${String(e.message).slice(0, 120)}`);
       resumo.push({ dom, status: 'ERRO', erro: String(e.message).slice(0, 80) });
@@ -137,6 +159,13 @@ function classificar(html) {
   }
   for (const [k, doms] of Object.entries(porPlat).sort((a, b) => b[1].length - a[1].length)) {
     console.log(`  ${k} (${doms.length}): ${doms.join(', ')}`);
+  }
+  // 20/08 — veredito por IMÓVEL (é o que decide se integramos: só atuamos com imóveis).
+  console.log('\n═══════════ VEREDITO IMÓVEL ═══════════');
+  const porImo = {};
+  for (const r of resumo) (porImo[r.imovel || r.status] ??= []).push(r.dom);
+  for (const chave of ['imoveis', 'misto', 'veiculos', 'indefinido', 'ERRO']) {
+    if (porImo[chave]?.length) console.log(`  ${chave.toUpperCase()} (${porImo[chave].length}): ${porImo[chave].join(', ')}`);
   }
   console.log('\n💡 SPA (next/nuxt/Vue/Vlance) sem APIs no HTML? As chamadas JSON só aparecem em');
   console.log('   RUNTIME. Mapeie no navegador (console + grampo fetch/XHR) — ver docs/RECON_LEILOEIROS_PLAYBOOK.md');
