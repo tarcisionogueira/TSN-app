@@ -1,0 +1,26 @@
+name: Recon Nordeste (Next.js SPA)
+
+# Recon runtime de nordesteleiloes (Next.js): extrai __NEXT_DATA__ (buildId + arrays de lote) e
+# endpoints dos bundles, para desenhar o parser. Só disparo manual. Não grava nada.
+on:
+  workflow_dispatch:
+    inputs:
+      base:
+        description: 'base URL'
+        required: false
+        default: 'https://www.nordesteleiloes.com.br'
+
+jobs:
+  recon:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - name: Recon estrutura Next.js
+        env:
+          BRIGHTDATA_API_TOKEN: ${{ secrets.BRIGHTDATA_API_TOKEN }}
+          BRIGHTDATA_ZONE: ${{ secrets.BRIGHTDATA_ZONE }}
+          NORDESTE_BASE: ${{ github.event.inputs.base }}
+        run: node scripts/recon-nordeste.mjs
