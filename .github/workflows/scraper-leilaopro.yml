@@ -1,0 +1,62 @@
+name: Scraper LEILAOPRO (LeilãoPro Core — leffa/oscar)
+
+# Plataforma "LeilãoPro Core" (artisticweb/leilaodetran, SSR). Serve leffaleiloes/oscarleiloes.
+# Categoria imóveis /leilao/lotes/imoveis; lote /leilao/<slug>/lote_id/<ID>. Site atrás de
+# Cloudflare → Bright Data (cota via proposito 'leilaopro') ou IP residencial. Recon-first:
+# DEBUG → dry → grava. No cron GRAVA; no dispatch é dry-run por padrão (dryrun=0 p/ gravar).
+on:
+  schedule:
+    - cron: '50 10 * * 4'   # 1x/semana (quinta), 10:50 UTC — fora do horário dos outros scrapers
+  workflow_dispatch:
+    inputs:
+      debug:
+        description: '1 = RECON (dumpa listagem + 1 detalhe)'
+        required: false
+        default: '0'
+      dryrun:
+        description: '1 = dry-run (não grava); 0 = grava'
+        required: false
+        default: '1'
+      tenants:
+        description: 'tenants csv (leffa,oscar)'
+        required: false
+        default: 'leffa'
+      max_lotes:
+        description: 'Máx. de lotes NOVOS por execução (por tenant)'
+        required: false
+        default: '40'
+
+jobs:
+  scraper-leilaopro:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm ci
+      # REDE DE SEGURANÇA: o cron pago só roda se o runner residencial (grátis) não coletou
+      # LEFFA nos últimos 7 dias. Dispatch manual ignora o freio (quem clica sabe o que quer).
+      - name: Freio residencial (pula se coletado de casa há < 7 dias)
+        id: freio
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: node scripts/coleta-recente.mjs LEFFA 7 >> "$GITHUB_OUTPUT"
+      - name: Rodar scraper LEILAOPRO
+        if: github.event_name != 'schedule' || steps.freio.outputs.pular != '1'
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          BRIGHTDATA_API_TOKEN: ${{ secrets.BRIGHTDATA_API_TOKEN }}
+          BRIGHTDATA_ZONE: ${{ secrets.BRIGHTDATA_ZONE }}
+          BRIGHTDATA_MAX_REQ_SEMANA: ${{ secrets.BRIGHTDATA_MAX_REQ_SEMANA }}
+          LEILAOPRO_DEBUG: ${{ github.event.inputs.debug || '0' }}
+          LEILAOPRO_DRYRUN: ${{ github.event.inputs.dryrun || '0' }}
+          LEILAOPRO_TENANTS: ${{ github.event.inputs.tenants || 'leffa' }}
+          LEILAOPRO_MAX_LOTES: ${{ github.event.inputs.max_lotes || '40' }}
+        run: node scripts/scraper-leilaopro.mjs

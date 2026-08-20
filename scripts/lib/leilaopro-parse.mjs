@@ -27,7 +27,7 @@ export const TENANTS = {
 
 const num = s => parseFloat(String(s || '').replace(/[^\d.,]/g, '').replace(/\./g, '').replace(',', '.')) || 0;
 const plaus = v => (v >= 1000 && v <= 500_000_000) ? v : 0;
-const titleCase = s => String(s || '').toLowerCase().replace(/(^|\s|')([a-zà-ú])/g, (_, a, b) => a + b.toUpperCase())
+const titleCase = s => String(s || '').toLowerCase().replace(/(^|\s|'|-)([a-zà-ú])/g, (_, a, b) => a + b.toUpperCase())
   .replace(/\b(De|Do|Da|Dos|Das|E)\b/g, m => m.toLowerCase()).replace(/^\w/, c => c.toUpperCase());
 
 export function inferirTipo(titulo = '', url = '') {
@@ -54,14 +54,15 @@ export const idDaUrl = url => (String(url).match(/\/lote_id\/(\d+)/) || [])[1] |
 // Fallback: último "<Cidade>/<UF>" solto (1–3 palavras), sem conector inicial. O foro ("Comarca…/UF")
 // é raro no título (mora no corpo), mas o filtro abaixo o evita mesmo assim.
 export function cidadeUF(titulo = '', descricao = '') {
+  // Classe de palavra de cidade inclui HÍFEN — senão "Xangri-Lá/RS" capturava só "Lá" (20/08).
   const fontes = [titulo, descricao];
   for (const s of fontes) {
-    const m = String(s || '').match(/(?:cidade|munic[íi]pio)\s+de\s+([A-ZÀ-Ÿ][A-Za-zÀ-ÿ'.]+(?:\s+[A-Za-zÀ-ÿ'.]+){0,4}?)\s*\/\s*([A-Z]{2})\b/i);
+    const m = String(s || '').match(/(?:cidade|munic[íi]pio)\s+de\s+([A-ZÀ-Ÿ][A-Za-zÀ-ÿ'.\-]+(?:\s+[A-Za-zÀ-ÿ'.\-]+){0,4}?)\s*\/\s*([A-Z]{2})\b/i);
     if (m) return { cidade: titleCase(m[1].trim()).slice(0, 60), estado: m[2].toUpperCase() };
   }
   for (const s of fontes) {
     const limpo = String(s || '').replace(/\b(?:comarca|vara|tribunal|foro|ju[íi]zo)[^/]{0,40}?\/\s*[A-Z]{2}\b/gi, ' ');
-    const ms = [...limpo.matchAll(/([A-ZÀ-Ÿ][A-Za-zÀ-ÿ'.]+(?:\s+(?:de|do|da|dos|das|e|[A-ZÀ-Ÿ][A-Za-zÀ-ÿ'.]+)){0,3})\s*\/\s*([A-Z]{2})\b/g)];
+    const ms = [...limpo.matchAll(/([A-ZÀ-Ÿ][A-Za-zÀ-ÿ'.\-]+(?:\s+(?:de|do|da|dos|das|e|[A-ZÀ-Ÿ][A-Za-zÀ-ÿ'.\-]+)){0,3})\s*\/\s*([A-Z]{2})\b/g)];
     if (ms.length) {
       const m = ms[ms.length - 1];
       return { cidade: titleCase(m[1].trim().replace(/^(?:de|do|da|dos|das|e)\s+/i, '')).slice(0, 60), estado: m[2].toUpperCase() };
