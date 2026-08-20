@@ -10049,3 +10049,12 @@ Todos foram pegos ANTES de sujar o acervo, pela regra "validar cada campo num lo
 ### Recon BA+SP — DIGERIDO
 69 domínios (23 SP Sindicato + 46 BA JUCEB), 16 levas, fila zerada, consolidado no bloco "RECON BACKLOG
 LEILOEIROS" acima: 55 imóveis integráveis (39 por scraper existente + 16 scraper novo), 19 descartes.
+
+### 💰 Pendência COMERCIAL — 1 venda Top2 presa no bloqueador (20/08)
+1 cliente (Explorador desde 05/08, com código de indicação) tentou assinar o **Top2 4×**
+entre 06 e 17/08 e tomou "Failed to fetch" toda vez — bloqueador de anúncios/extensão
+barrando o Mercado Pago. **Causa de código já corrigida** (18/08 + commit 20/08: mensagem
+amigável + plano B por link). Falta o **contato comercial**: mandar o link de pagamento
+Asaas direto (não depende de SDK/cartão no browser) para fechar a venda. Dados do cliente
+(nome/e-mail/tel) e texto de abordagem estão no chat da sessão / no banco (user_id em
+`erros_cliente`/`perfis`) — NÃO reproduzidos aqui porque o repo é PÚBLICO (PII). Ação do dono.
