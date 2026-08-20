@@ -1,0 +1,21 @@
+name: Recon emiliomatos (extrai API do bundle)
+
+# Recon runtime (estático) de emiliomatosleiloes.com.br: baixa o shell + bundles Vite via
+# Bright Data e extrai os endpoints de API embutidos no JS. Só disparo manual.
+on:
+  workflow_dispatch:
+
+jobs:
+  recon:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Recon
+        env:
+          BRIGHTDATA_API_TOKEN: ${{ secrets.BRIGHTDATA_API_TOKEN }}
+          BRIGHTDATA_ZONE: ${{ secrets.BRIGHTDATA_ZONE }}
+        run: node scripts/recon-emiliomatos.mjs
