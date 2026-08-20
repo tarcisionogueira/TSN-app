@@ -48,11 +48,18 @@ import requests
 # bomnegocio + paulistana: Round 35 (30/07) confirmou ambos na Vlance (vlanceConfigContainer
 # + core/api/get-leiloes). paulistana hoje só tem leilão de SIMULAÇÃO (acervo ~0) — fica
 # armado para quando publicar de verdade; o loop por domínio tolera tenant vazio.
-# Recon backlog 20/08 (SP Sindicato + BA JUCEB): +13 tenants identificados por fingerprint
-# Vlance no HTML (/Core/V1/js/Ajax/Ajax_Leiloes*.js). Ainda NÃO confirmados no runtime
-# /core/api/get-lotes — o loop por domínio só loga e segue se algum não responder ao padrão,
-# então somá-los é zero risco para os demais (emiliomatos e jonas têm acervo grande).
-TENANTS_PADRAO = ["verdeamareloleiloes.com.br", "sudesteleiloes.com.br", "capitalvalorleiloes.com.br", "sanchesleiloes.com.br", "destakleiloes.com.br", "bomnegocioleiloes.com.br", "paulistanaleiloes.com.br", "crisleiloes.com.br", "franklinleiloes.com.br", "impactoleiloes.com.br", "zallileiloes.com.br", "fernandoleiloeiro.com.br", "teza.com.br", "agsleiloes.com.br", "emiliomatosleiloes.com.br", "falleirosleiloes.com.br", "jonasleiloeiro.com.br", "lucasleiloeiro.com.br", "positivoleiloes.com.br", "silvaleiloes.com.br"]
+# Recon backlog 20/08 (SP Sindicato + BA JUCEB): tentei somar 13 tenants identificados por
+# fingerprint Vlance no HTML (/Core/V1/js/Ajax/Ajax_Leiloes*.js). VALIDAÇÃO REPROVOU: a
+# coleta dryrun (run 32354774514) devolveu 0 lote em TODOS os 13 — os endpoints
+# /core/api/get-leiloes e /core/api/get-lotes respondem NÃO-JSON ("Expecting value: line 1
+# column 1"), sinal de outra versão da API Vlance e/ou o desafio Cloudflare (vários vinham
+# marcados "(challenge)"/cloudflare:true no recon) devolvendo HTML. Pior: os 13 gastaram ~16
+# dos 20 min do job em chamadas Bright Data que falham em loop, quase estourando o timeout e
+# queimando cota à toa. Removidos até mapear o endpoint REAL de cada um no navegador (ver
+# docs/RECON_LEILOEIROS_PLAYBOOK.md — grampo fetch/XHR). Candidatos p/ recon runtime:
+# cris, franklin, impacto, zalli, fernando, teza, ags, emiliomatos, falleiros, jonas, lucas,
+# positivo, silva. Reintegrar UM de cada vez, só depois de confirmar que traz lote > 0.
+TENANTS_PADRAO = ["verdeamareloleiloes.com.br", "sudesteleiloes.com.br", "capitalvalorleiloes.com.br", "sanchesleiloes.com.br", "destakleiloes.com.br", "bomnegocioleiloes.com.br", "paulistanaleiloes.com.br"]
 EP_LEILOES = "/core/api/get-leiloes"
 EP_LOTES = "/core/api/get-lotes"
 
