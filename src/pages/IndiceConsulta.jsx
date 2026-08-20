@@ -196,7 +196,10 @@ export default function IndiceConsulta() {
           <select value={form.tipo}
             onChange={e => { const nf = { ...form, tipo: e.target.value }; setForm(nf); if (nf.cidade && nf.uf) autoConsultar(nf); }}
             style={{ width: '100%', padding: '10px 8px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 14, background: 'white', boxSizing: 'border-box' }}>
-            <option value="todos">Todos os tipos</option>
+            {/* "Todos os tipos" saiu (20/08, pedido do dono): consultar os 4 tipos de uma vez
+                gerava CONFLITO na triagem — cada tipo tem preço/m² e amostragem próprios, e
+                misturá-los num só resultado confundia a leitura. Uma consulta = um tipo, igual
+                à geração (que já é 1-por-vez desde 06/08). Default: apartamento (form.tipo). */}
             <option value="apartamento">Apartamento</option>
             <option value="casa">Casa / condomínio</option>
             <option value="terreno">Terreno / área</option>

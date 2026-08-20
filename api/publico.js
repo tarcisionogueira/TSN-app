@@ -211,6 +211,23 @@ h2{font-size:20px;font-weight:800;margin:32px 0 12px}
 .card .l{font-size:12.5px;color:var(--cinza)}
 .card .v{font-size:17px;font-weight:900;color:var(--azul);margin-top:auto;padding-top:6px}
 .tag{display:inline-block;font-size:11px;font-weight:800;color:#15803d;background:#dcfce7;padding:3px 9px;border-radius:999px}
+/* Cartão do acervo público no MESMO padrão visual da tela de busca logada (Busca.jsx): o
+   visitante que cria conta já reconhece o layout. Só campos que a linha JÁ traz (custo zero):
+   foto com selo de desconto graduado, chips de tipo/modalidade, R$/m², selos de documento,
+   data da praça e o par Lance mínimo/Avaliação. Sem Score/análise/mapa (produto pago + custo). */
+.card .foto{position:relative;line-height:0}
+.card .badge-desc{position:absolute;top:8px;left:8px;font-size:12px;font-weight:900;color:#fff;padding:3px 8px;border-radius:999px;letter-spacing:.2px}
+.card .badge-desc.alto{background:#15803d}.card .badge-desc.medio{background:#d97706}.card .badge-desc.baixo{background:#64748b}
+.card .chips{display:flex;flex-wrap:wrap;gap:5px}
+.card .chip{font-size:10.5px;font-weight:800;padding:2px 8px;border-radius:999px;background:#eff6ff;color:#0D63DB;text-transform:uppercase;letter-spacing:.3px}
+.card .chip.modal{background:#f1f5f9;color:#475569}
+.card .selos{display:flex;flex-wrap:wrap;gap:6px;margin-top:2px}
+.card .selo{font-size:11px;font-weight:700;color:#475569;background:var(--superficie);border:1px solid var(--linha);padding:2px 7px;border-radius:8px}
+.card .praca{font-size:11.5px;color:var(--cinza);font-weight:600}
+.card .valores{display:flex;align-items:flex-end;justify-content:space-between;gap:8px;margin-top:auto;padding-top:8px}
+.card .valores .lbl{font-size:9.5px;color:var(--cinza);text-transform:uppercase;letter-spacing:.5px;font-weight:800}
+.card .valores .lance{font-size:17px;font-weight:900;color:var(--azul);line-height:1.15}
+.card .valores .aval{font-size:12px;font-weight:800;color:#94a3b8;text-align:right}
 .lista{display:flex;flex-wrap:wrap;gap:8px;margin:0;padding:0;list-style:none}
 .lista li a{display:inline-block;background:#fff;border:1px solid var(--linha);border-radius:999px;padding:7px 15px;font-size:13.5px;font-weight:600}
 .lista li a:hover{border-color:var(--azul);text-decoration:none}
@@ -330,20 +347,43 @@ ${corpo}
 </body></html>`;
 }
 
+// Rótulo curto de modalidade p/ o chip (o label longo fica na ficha do imóvel).
+const MODAL_CURTO = { judicial: 'Judicial', extrajudicial: 'Extrajudicial', licitacao_aberta: 'Licitação', venda_direta: 'Venda direta' };
+
 function cardImovel(im) {
   const t = TIPO_LABEL[String(im.tipo || '').toLowerCase()] || 'Imóvel';
   const local = [im.bairro, im.cidade, im.estado].filter(Boolean).join(', ');
   const lance = brl(im.valor_minimo);
   const aval = brl(im.valor_avaliacao);
-  const desc = Number(im.desconto_percentual) > 0 ? `${im.desconto_percentual}% abaixo da avaliação` : null;
+  const pct = Number(im.desconto_percentual) || 0;
+  // Selo de desconto graduado (mesma leitura da Busca: quanto maior o abatimento, mais verde).
+  const grau = pct >= 40 ? 'alto' : pct >= 20 ? 'medio' : 'baixo';
+  const modal = MODAL_CURTO[String(im.modalidade || '').toLowerCase()] || null;
+  // R$/m² a partir de colunas já selecionadas (custo zero, só divisão).
+  const area = Number(im.area_m2) || 0;
+  const min = Number(im.valor_minimo) || 0;
+  const m2 = area > 0 && min > 0 ? `R$ ${Math.round(min / area).toLocaleString('pt-BR')}/m²` : null;
+  const praca = dataBR(im.data_leilao);
+  const selos = [
+    m2 ? `<span class="selo">${esc(m2)}</span>` : '',
+    im.tem_edital_doc ? '<span class="selo">📄 Edital</span>' : '',
+    im.tem_matricula_doc ? '<span class="selo">📄 Matrícula</span>' : '',
+  ].filter(Boolean).join('');
   return `<article class="card">
-    ${im.link_foto ? `<img src="${esc(im.link_foto)}" alt="${esc(t)} em leilão em ${esc(im.cidade || '')}" loading="lazy"/>` : ''}
+    <div class="foto">
+      ${im.link_foto ? `<img src="${esc(im.link_foto)}" alt="${esc(t)} em leilão em ${esc(im.cidade || '')}" loading="lazy"/>` : '<img alt="" loading="lazy"/>'}
+      ${pct > 0 ? `<span class="badge-desc ${grau}">-${pct}%</span>` : ''}
+    </div>
     <div class="c">
+      <div class="chips"><span class="chip">${esc(t)}</span>${modal ? `<span class="chip modal">${esc(modal)}</span>` : ''}</div>
       <a class="t" href="${SITE}/leilao/${esc(im.id)}/${slug(im.titulo || t)}">${esc(im.titulo || `${t} em leilão`)}</a>
-      <div class="l">${esc(t)}${im.area_m2 > 0 ? ` · ${Math.round(im.area_m2)} m²` : ''}</div>
-      <div class="l">${esc(local)}</div>
-      ${desc ? `<div><span class="tag">${esc(desc)}</span></div>` : ''}
-      <div class="v">${lance ? esc(lance) : aval ? esc(aval) : 'Consulte'}</div>
+      <div class="l">${esc(local)}${area > 0 ? ` · ${Math.round(area)} m²` : ''}</div>
+      ${selos ? `<div class="selos">${selos}</div>` : ''}
+      ${praca ? `<div class="praca">🗓 Praça: ${esc(praca)}</div>` : ''}
+      <div class="valores">
+        <div><div class="lbl">Lance mínimo</div><div class="lance">${lance ? esc(lance) : aval ? esc(aval) : 'Consulte'}</div></div>
+        ${aval && lance ? `<div><div class="lbl">Avaliação</div><div class="aval">${esc(aval)}</div></div>` : ''}
+      </div>
     </div>
   </article>`;
 }
@@ -436,7 +476,8 @@ async function paginaUF(uf) {
 // ── /leiloes/:uf/:cidade ─────────────────────────────────────────────────────
 async function paginaCidade(uf, cidadeNorm, page) {
   const desloc = (page - 1) * POR_PAGINA;
-  const campos = 'id,titulo,tipo,cidade,estado,bairro,area_m2,valor_minimo,valor_avaliacao,desconto_percentual,link_foto';
+  // Campos do cartão alinhado à Busca — todos já na linha (custo zero; a página é edge-cached).
+  const campos = 'id,titulo,tipo,cidade,estado,bairro,area_m2,valor_minimo,valor_avaliacao,desconto_percentual,link_foto,modalidade,data_leilao,tem_edital_doc,tem_matricula_doc';
   const { linhas, total } = await sb(
     `imoveis_leilao?ativo=eq.true&estado=eq.${uf}&cidade_norm=eq.${encodeURIComponent(cidadeNorm)}` +
     `&select=${campos}&order=desconto_percentual.desc.nullslast&offset=${desloc}&limit=${POR_PAGINA}`);

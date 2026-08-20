@@ -84,6 +84,11 @@ export default function Membros() {
   const [cancelMsg, setCancelMsg] = useState('');
   const [cursos, setCursos] = useState([]);
   const [ebooks, setEbooks] = useState([]);
+  // Carregando o catálogo: enquanto true, o Hero mostra "—" no lugar de zeros. Sem isto,
+  // a tela abria com "0 Aulas · 0 Cursos · 0 eBooks" por um instante até o fetch resolver —
+  // parecia bug (o dono reportou "aparece tudo zerado e num instante carrega"). Zero é uma
+  // RESPOSTA (não há cursos); "—" é "ainda carregando" — a distinção que faltava.
+  const [carregando, setCarregando] = useState(true);
   const [leitura, setLeitura] = useState({});   // { [ebook_id]: {pct, pagina, total_paginas} }
   // Preços dos planos: começa no estático (render imediato) e é sobrescrito com os
   // valores AO VIVO do admin (planos_config). Antes usava só o estático (cursos.js),
@@ -112,6 +117,7 @@ export default function Membros() {
   // Carregar cursos, aulas e ebooks
   useEffect(() => {
     async function fetchData() {
+      try {
       const { data: cs } = await supabase.from('cursos_admin').select('*').eq('ativo', true).order('ordem');
       const { data: as } = await supabase.from('aulas_admin').select('*').order('ordem');
       // Defesa em profundidade: além de ativo=true, exige o ARQUIVO do ebook — um registro
@@ -132,7 +138,7 @@ export default function Membros() {
 
       setCursos(cursosComModulos);
       setEbooks(es || []);
-
+      } finally { setCarregando(false); }
     }
     fetchData();
     // Preços dos planos AO VIVO do admin (planos_config).
@@ -247,7 +253,9 @@ export default function Membros() {
             Sua trilha de conhecimento<br/>em leilões imobiliários
           </h1>
           <p style={{ margin:'0 0 24px', fontSize:15, color:'#94a3b8', maxWidth:500, lineHeight:1.7 }}>
-            Do zero ao portfólio profissional. {cursos.length} cursos, {totalAulas} aulas com metodologia exclusiva BidPro Brasil.
+            {carregando
+              ? 'Do zero ao portfólio profissional, com metodologia exclusiva BidPro Brasil.'
+              : `Do zero ao portfólio profissional. ${cursos.length} cursos, ${totalAulas} aulas com metodologia exclusiva BidPro Brasil.`}
           </p>
           <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
             <div style={{ display:'flex', gap:20, flexWrap:'wrap' }}>
@@ -259,7 +267,8 @@ export default function Membros() {
                 ['∞', 'Acesso'],
               ].map(([v,l])=>(
                 <div key={l} style={{ textAlign:'center' }}>
-                  <div style={{ fontSize:26, fontWeight:900, color:'white' }}>{v}</div>
+                  {/* "—" enquanto carrega (v numérico ainda em 0); '∞' e afins são string e passam direto. */}
+                  <div style={{ fontSize:26, fontWeight:900, color:'white' }}>{carregando && typeof v === 'number' ? '—' : v}</div>
                   <div style={{ fontSize:11, color:'#64748b', fontWeight:600, textTransform:'uppercase' }}>{l}</div>
                 </div>
               ))}
