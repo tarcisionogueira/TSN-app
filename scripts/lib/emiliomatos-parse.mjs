@@ -53,18 +53,27 @@ function pegaCidade(str) {
   const m = ms[ms.length - 1];   // no título, o par cidade/UF fica no fim
   return { cidade: m[1].trim().replace(/\s+/g, ' ').replace(/^(?:de|do|da|dos|das|e)\s+/i, '').slice(0, 60), estado: m[2].toUpperCase() };
 }
-function cidadeUF(txt, titulo = '') {
+const limpaCid = c => c.trim().replace(/\s+/g, ' ').replace(/^(?:de|do|da|dos|das|e)\s+/i, '').slice(0, 60);
+function cidadeUF(txt, titulo = '', descricao = '') {
   // 1) do TÍTULO (fonte confiável da cidade do IMÓVEL)
   const noTitulo = pegaCidade(titulo);
   if (noTitulo) return noTitulo;
-  // 2) fallback: corpo, ignorando o foro ("Comarca/Vara/Tribunal … de Cidade/UF")
+  // 2) da DESCRIÇÃO (og:description costuma repetir "… em Cidade/UF")
+  const noDesc = pegaCidade(descricao);
+  if (noDesc) return noDesc;
+  // corpo sem o FORO ("Comarca/Vara/Tribunal/Foro … /UF" — não é a cidade do imóvel)
   const limpo = String(txt || '').replace(/\b(?:comarca|vara|tribunal|foro|ju[íi]zo)[^.]{0,40}?\/\s*[A-Z]{2}\b/gi, ' ');
+  // 3) ÂNCORA no imóvel: "Cidade/UF" seguida do contexto do lote (…, Cidade/UF Lote 1 Leilão…).
+  //    Isso descarta o endereço do LEILOEIRO (Brasília/DF no rodapé), que NÃO precede "Lote/Leilão".
+  const anc = limpo.match(/([A-ZÀ-Ý][A-Za-zÀ-ÿ'.]+(?:\s+(?:de|do|da|dos|das|e|[A-ZÀ-Ý][A-Za-zÀ-ÿ'.]+)){0,4})\s*\/\s*([A-Z]{2})\b(?=[^.]{0,45}?\b(?:lote|leil[ãa]o|pra[çc]a|edital|1[ªa]\s*pra|2[ªa]\s*pra)\b)/i);
+  if (anc) return { cidade: limpaCid(anc[1]), estado: anc[2].toUpperCase() };
+  // 4) "em/de/no/na Cidade/UF"
   const m = limpo.match(/\b(?:em|de|no|na)\s+([A-ZÀ-Ý][A-Za-zÀ-ÿ'.]+(?:\s+(?:de|do|da|dos|das|e|[A-ZÀ-Ý][A-Za-zÀ-ÿ'.]+)){0,4})\s*\/\s*([A-Z]{2})\b/);
-  if (m) return { cidade: m[1].trim().replace(/\s+/g, ' ').replace(/^(?:de|do|da|dos|das|e)\s+/i, '').slice(0, 60), estado: m[2].toUpperCase() };
-  // 2b) último recurso: 1º "Cidade/UF" solto no corpo já sem o foro
+  if (m) return { cidade: limpaCid(m[1]), estado: m[2].toUpperCase() };
+  // 5) último recurso: 1º "Cidade/UF" solto no corpo já sem o foro
   RE_CIDADE_UF.lastIndex = 0;
   const bare = RE_CIDADE_UF.exec(limpo);
-  if (bare) return { cidade: bare[1].trim().replace(/\s+/g, ' ').replace(/^(?:de|do|da|dos|das|e)\s+/i, '').slice(0, 60), estado: bare[2].toUpperCase() };
+  if (bare) return { cidade: limpaCid(bare[1]), estado: bare[2].toUpperCase() };
   return { cidade: null, estado: null };
 }
 const limparTitulo = t => (t || '').replace(/\s*[-–|]\s*(?:Lance Inicial|Avalia[çc][ãa]o|Valor|Emilio Matos|Emílio Matos).*$/i, '').replace(/\s+/g, ' ').trim();
@@ -116,7 +125,7 @@ export function parseDetalhe(html, url) {
     : /extrajudicial/i.test(txt) ? 'extrajudicial'
     : /venda\s*direta/i.test(txt) ? 'venda_direta' : 'extrajudicial';
   const area = num((txt.match(/([\d.]+,\d{2}|\d+)\s*m[²2]\b/i) || [])[1]);
-  const { cidade, estado } = cidadeUF(txt, base.titulo || '');
+  const { cidade, estado } = cidadeUF(txt, base.titulo || '', base.descricao || '');
   const mat = (txt.match(/matr[íi]cula[^\d]{0,20}([\d.\-\/]{2,})/i) || [])[1] || null;
 
   const docs = [];
