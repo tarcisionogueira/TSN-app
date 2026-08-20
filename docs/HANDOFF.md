@@ -10011,3 +10011,41 @@ reversa de JSON.
 - Já temos tooling da família: `scripts/recon-sodre-*.mjs`, `captura-docs-sodre.mjs` (Sodré é rede Superbid).
 - **LIÇÃO:** fingerprint de HTML ≠ contrato de API. Antes de somar tenant "Vlance" por HTML,
   validar o endpoint runtime (o recon-emiliomatos*.mjs é o modelo).
+
+---
+
+## ✅ EMILIOMATOS integrado + lições da integração (20/08)
+
+### Evolução
+- **emiliomatos** (recon dizia "Vlance" no backlog) era **Superbid/MBV (SSR)**. Integrado do zero:
+  `scripts/scraper-emiliomatos.mjs` + `scripts/lib/emiliomatos-parse.mjs` (parser puro, compartilhado
+  entre validação e produção) + `.github/workflows/scraper-emiliomatos.yml` (cron quarta 10h40 UTC +
+  dispatch, freio residencial 7d) + migração `brightdata_reserva_emiliomatos.sql` (proposito registrado).
+- **37 imóveis vivos** gravados (`fonte=EMILIOMATOS`): 100% cidade/UF/valor/foto, praça 2026, 10 estados.
+  Enumeração `/busca/segmento/imoveis?page=N` (30/pág), lote `/imoveis/<tipo>/<slug>-<ID>`.
+- `leiloeiro_conhecimento` (EMILIOMATOS) atualizado. Cota Bright Data: bump temporário 550→620 p/ o
+  grava (gastou 68 req), **restaurado a 550** (freio de volta).
+
+### ⚠️ Erros que ocorreram nesta integração — REVISAR p/ não repetir
+Todos foram pegos ANTES de sujar o acervo, pela regra "validar cada campo num lote real antes de gravar":
+1. **Fingerprint de HTML ≠ contrato de API.** 13 "Vlance" somados por fingerprint (`Ajax_Leiloes.js`)
+   voltaram **0 lote** — os endpoints `/core/api/get-lotes` não respondiam. Revertidos. **Antes de somar
+   tenant por HTML, validar o endpoint runtime** (dryrun conta > 0).
+2. **Preço por RÓTULO, não por max/min.** O detalhe Superbid/MBV lista `OFERTA INICIAL` (lance/praça) +
+   `Entrada`/`Parcela` (plano de pagamento). O parser genérico pegaria uma **parcela** como valor_minimo
+   → desconto falso de ~98%. Fix: valor só de `OFERTA INICIAL` (avaliação=maior, mínimo=menor).
+3. **Cidade do IMÓVEL ≠ foro.** `cidadeUF` pegava "Comarca de Brasília/DF" (foro) no corpo. Fix: título
+   primeiro, depois descrição, depois **âncora no lote** (`Cidade/UF` seguida de "Lote/Leilão"), ignorando
+   o endereço do leiloeiro. (1 linha já gravada corrigida na mão: emiliomatos_98857 → Três Corações/MG.)
+4. **Status por DATA, não por rótulo.** `estaEncerrado` marcava lote com 2ª praça em 08/09/2026 como
+   morto porque a 1ª dizia "Praça Encerrada". Fix: se há praça FUTURA, está vivo; só morto se todas as
+   datas são passadas (ou arrematado/deserto). Sem isso, ingeriria zero (ou leilão morto).
+
+### Erros de runtime abertos (não desta sessão — vigiar)
+- `/checkout` "Failed to fetch" · 4 ocorrências · última 17/08 (nenhuma desde). Investigar se é rede do
+  cliente ou chamada MP/Asaas client-side falhando.
+- `/imovel/:id` "Cannot read properties of null (reading 'id')" · 1 · última 13/08. Null-deref na ficha.
+
+### Recon BA+SP — DIGERIDO
+69 domínios (23 SP Sindicato + 46 BA JUCEB), 16 levas, fila zerada, consolidado no bloco "RECON BACKLOG
+LEILOEIROS" acima: 55 imóveis integráveis (39 por scraper existente + 16 scraper novo), 19 descartes.
