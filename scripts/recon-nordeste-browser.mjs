@@ -60,14 +60,32 @@ for (const rota of ROTAS) {
     console.log(`\n=== navegando ${url} ===`);
     await page.goto(url, { waitUntil: 'networkidle2', timeout: 45000 });
     await new Promise(r => setTimeout(r, 2500));   // deixa XHR pós-hydration completar
-    // Conta sinais na página renderizada (após JS): R$ e links de lote.
+    // Página renderizada (após JS): conta R$, dumpa TODOS os hrefs (p/ achar padrão de lote +
+    // link de catálogo) e o HTML do CARD ao redor do 1º R$ (estrutura p/ o scraper de DOM).
     const info = await page.evaluate(() => {
       const reais = (document.body.innerText.match(/R\$\s?[\d.]+,\d{2}/g) || []).length;
-      const hrefs = [...document.querySelectorAll('a[href]')].map(a => a.getAttribute('href'))
-        .filter(h => h && /(lote|imovel|leilao)/i.test(h));
-      return { reais, hrefsAmostra: [...new Set(hrefs)].slice(0, 8) };
+      const hrefs = [...new Set([...document.querySelectorAll('a[href]')].map(a => a.getAttribute('href')).filter(Boolean))];
+      // Card: sobe do 1º nó com "R$" até um <a> ancestral (o card costuma ser um link).
+      let cardHtml = '', cardHref = '';
+      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+      let n;
+      while ((n = walker.nextNode())) {
+        if (/R\$\s?[\d.]+,\d{2}/.test(n.nodeValue)) {
+          let el = n.parentElement, saltos = 0;
+          while (el && saltos < 8) { if (el.tagName === 'A' && el.getAttribute('href')) { cardHref = el.getAttribute('href'); break; } el = el.parentElement; saltos++; }
+          const card = (el && el.tagName === 'A') ? el : n.parentElement?.closest('article, li, [class*="card"], div');
+          cardHtml = (card?.outerHTML || '').slice(0, 1400);
+          break;
+        }
+      }
+      return { reais, hrefs: hrefs.slice(0, 45), cardHref, cardHtml };
     });
-    console.log(`   render: R$=${info.reais} · links lote:`, JSON.stringify(info.hrefsAmostra));
+    console.log(`   render: R$=${info.reais}`);
+    console.log(`   hrefs (${info.hrefs.length}):`, JSON.stringify(info.hrefs));
+    if (info.cardHref || info.cardHtml) {
+      console.log(`   card href: ${info.cardHref}`);
+      console.log(`   card HTML: ${info.cardHtml.replace(/\s+/g, ' ')}`);
+    }
   } catch (e) { console.log(`   erro: ${String(e.message).slice(0, 100)}`); }
 }
 
