@@ -137,7 +137,14 @@ export default function Analise() {
   const location = useLocation();
   const nav = useNavigate();
   const isMobile = useIsMobile();
-  const { user, role, nome, planoLegado } = useAuth();
+  const { user, role, nome, planoLegado, effectiveUserId } = useAuth();
+  // MODO SUPORTE (20/08): a cota tem de ser a de QUEM se está vendo, não a do admin logado.
+  // `minhas_cotas` aceita p_user_id e libera admin/analista a ler de terceiros — mas a tela
+  // passava `user.id` (o admin). Resultado ao ver a conta do Marcelo: contador "0/0" (cota do
+  // admin) e, pior, o botão de gerar/atualizar TRAVADO (bloqueado(0/0)=true) — o dono clicava em
+  // "atualizar pesquisa" e nada acontecia. `effectiveUserId` = impersonado no suporte, senão o
+  // próprio usuário (fallback user.id). Sem suporte, é o mesmo id de antes: comportamento igual.
+  const cotaUid = effectiveUserId || user?.id;
   const imovelInicial = location.state?.imovel;
   // Arremate atribuído pela equipe: gera os relatórios EM NOME DO cliente (paraUserId)
   // para que eles pertençam a ele (aparecem nas Análises/acompanhamento do cliente).
@@ -174,12 +181,12 @@ export default function Analise() {
   // Lê a cota do BANCO (minhas_cotas espelha exatamente o que consumir_analise_por escreve).
   // O CONSUMO é server-side; aqui só LEMOS para pintar a tela — no mount e após cada geração.
   const carregarCota = React.useCallback(async () => {
-    if (!user || semLimite) return;
-    const c = await lerCotas(supabase, user.id);
+    if (!cotaUid || semLimite) return;
+    const c = await lerCotas(supabase, cotaUid);   // no suporte, a cota do cliente visto (não a do admin)
     // `credito_saldo` vem no TOPO do retorno, não dentro de `mercado`: sem carregá-lo junto,
     // a tela não sabe que o cliente recarregou e segue barrando o que o servidor liberaria.
     if (c?.mercado) setCotaMercado({ ...c.mercado, credito_saldo: Number(c.credito_saldo || 0) });
-  }, [user, semLimite]);
+  }, [cotaUid, semLimite]);
 
   useEffect(() => { carregarCota(); }, [carregarCota]);
 
