@@ -1,0 +1,26 @@
+name: Recon família probe (SSR)
+
+# Sonda vários leiloeiros candidatos e mede SSR-ness (R$ no HTML cru) p/ escolher a próxima
+# família fácil. Só disparo manual. Não grava nada.
+on:
+  workflow_dispatch:
+    inputs:
+      doms:
+        description: 'domínios separados por vírgula'
+        required: false
+        default: ''
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - name: Probe SSR
+        env:
+          BRIGHTDATA_API_TOKEN: ${{ secrets.BRIGHTDATA_API_TOKEN }}
+          BRIGHTDATA_ZONE: ${{ secrets.BRIGHTDATA_ZONE }}
+          PROBE_DOMS: ${{ github.event.inputs.doms }}
+        run: node scripts/recon-familia-probe.mjs
