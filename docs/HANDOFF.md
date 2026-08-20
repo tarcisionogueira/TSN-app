@@ -10335,7 +10335,8 @@ a guarda de cada uma. TOP GAPS sem trava estática (rede de segurança só de DA
 2. ~~**Cobrar cota/crédito em fluxo que falhou (classe 26)**~~ — **FECHADO 20/08** (ver seção no fim
    do arquivo): bugs ativos já corrigidos + trava estática `cobranca-sem-estorno` (todo `consumir_*_por`
    adiantado exige `estornar_*_por`; índice cobra-no-sucesso, filtrado).
-3. **`fetch().json()` sem `.ok` na forma de 2 linhas (classe 3)** — trava atual só pega a inline.
+3. ~~**`fetch().json()` sem `.ok` na forma de 2 linhas (classe 3)**~~ — **FECHADO 20/08** (ver seção
+   no fim): trava `json-2linhas-sem-ok` (base 72), bug ativo já corrigido; reincidência coberta.
 4. Função mudada no banco sem migração (classe 9) — sem trava barata.
 5. Validação de ingestão externa (classe 10) — só invariante do Censo.
 Recomendação registrada para as próximas sessões fecharem por prioridade.
@@ -10384,3 +10385,44 @@ e esquece o estorno nele. A trava pega isso no momento da escrita: todo arquivo 
 **Recomendação de projeto:** ao criar cobrança nova, **prefira o padrão do índice** (cobrar depois
 do resultado existir). Só use cobrança adiantada quando o custo precede o resultado (busca web paga),
 e aí a trava garante que exista o caminho de volta.
+
+---
+
+## 20/08 — GAP #3 FECHADO: `fetch().json()` sem `.ok` na forma de 2 linhas (classe 3)
+
+**Pedido do dono:** *"Siga para o gap #3"* — a forma de DUAS LINHAS da classe 3, que a trava
+`json-inline-sem-resposta` (só a inline `await (await f()).json()`) não pegava. Foi a **causa-raiz
+do "relatório vazio"** que o Marcelo viu.
+
+**O defeito.** `const r = await sb(...)` vincula a resposta, e aí `const d = await r.json()`
+consome o corpo SEM checar `r.ok`/`r.status`. O corpo do erro NÃO é vazio: PostgREST devolve
+`{code,message}` (400 de coluna errada, timeout, 5xx), Overpass devolve `remark` num 200, Anthropic
+devolve `{type:'error'}`. `r.json()` funde "falhou" com "resposta" — e o relatório sai vazio com
+cara de pronto.
+
+**A trava: `json-2linhas-sem-ok`** (`verificar:padroes`, per-ocorrência, base **72** em 45 arquivos).
+Detecta `await X.json(` cujo X foi ligado por `const/let X = await fetch|sb|sbGet|sbFetch|
+anthropicFetch|iaGeminiPrimary|geminiFetch(` até 40 linhas acima, SEM `X.ok`/`.status`/`.statusText`
+na janela `[ligação .. json+10]`.
+
+**As duas armadilhas que o detector teve de vencer** (documentadas porque quase viraram falso
+positivo, o defeito #5 — trava que grita em código sadio):
+1. **`X?.ok` (optional chaining).** A 1ª versão só casava `X.ok`; `if (!res?.ok)` (idioma comum
+   nesta base, ex.: verificar-cpf) escapava e a trava acusava a linha SEGUINTE como se não
+   checasse. Corrigido: o regex aceita `X?.ok`. (3 falsos positivos a menos.)
+2. **`json` ANTES do `.ok` é o idioma CERTO, não o defeito.** Para EXTRAIR a mensagem de erro do
+   corpo, o padrão correto é `const d = await r.json(); if (!r.ok) throw new Error(d.message)` —
+   lê primeiro, checa depois. A 1ª versão só olhava para TRÁS e acusava 46 leituras corretas
+   (mp.js, _gcal.js, asaas.js, Arrematados…). Corrigido: a janela vai da ligação até `json+10`,
+   para frente também. Restaram **72** (de 118) — as que não checam em ponto nenhum.
+
+**Escopo — o bug ATIVO já estava corrigido.** Os 5 pontos de `gerar-analise.js` no baseline
+(L372/388/1656/1662/2940) são leituras PERIFÉRICAS best-effort (cota/crédito/índice ponderado,
+todas com `.catch(()=>null)` e checagem de forma a jusante), NÃO o caminho de conteúdo do
+relatório — esse (parecer do Claude, busca de mercado) já checa `.ok` e por isso NÃO aparece nos
+72. A trava fecha a REINCIDÊNCIA: leitura nova de resposta HTTP tem de checar `.ok` (antes OU
+logo depois, para extrair o erro) ou declarar `// padrao-ok: <motivo>` (best-effort: CEP/geocode
+que o usuário refaz).
+
+**Provada nos 3 cenários:** sem `.ok` → REPROVA; `json`-depois-`ok` → passa; `ok`-antes-`json` →
+passa.

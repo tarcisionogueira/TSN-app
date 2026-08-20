@@ -134,6 +134,41 @@ const REGRAS = [
     testar: (linha) => /await\s*\(\s*await\s+[^)]*\)\s*\)?\s*\.json\(\)/.test(linha),
   },
   {
+    id: 'json-2linhas-sem-ok',
+    titulo: 'await X.json() com X de fetch/sb sem checar X.ok — erro do fornecedor vira conteúdo (relatório vazio)',
+    // GAP #3 (classe 3): a forma de DUAS LINHAS do `json-inline-sem-resposta`. Ali a resposta nem
+    // era vinculada; aqui ELA É (`const r = await sb(...)`), mas ninguém checa `r.ok`/`r.status`
+    // antes de consumir o corpo. E o corpo do ERRO não é vazio: o PostgREST devolve `{code,message}`
+    // (400 de coluna/tabela errada, timeout, 5xx), o Overpass devolve `remark` num 200, o Anthropic
+    // devolve `{type:'error'}`. `r.json()` funde "falhou" com "resposta" — foi a causa-raiz do
+    // "relatório vazio" que o Marcelo viu, e a forma que a trava inline não pegava.
+    //
+    // DETECÇÃO por ocorrência: `await X.json(` cujo X foi ligado por `const/let X = await
+    // fetch|sb|sbGet|sbFetch|anthropicFetch|iaGeminiPrimary|geminiFetch(` até 40 linhas acima, SEM
+    // `X.ok`/`.status`/`.statusText` em nenhum ponto da janela [ligação .. json+10].
+    //
+    // O IDIOMA CERTO NÃO É ACUSADO: ler o corpo e logo em seguida `if (!X.ok) throw` (para extrair a
+    // mensagem de erro do JSON antes de lançar) põe o `.ok` DENTRO da janela para frente — mp.js,
+    // _gcal.js, asaas.js, Arrematados saíram todos por isso. Sem esse recorte a trava acusaria 46
+    // leituras corretas. Leitura DELIBERADAMENTE best-effort (CEP/geocode que o usuário refaz):
+    // marque `// padrao-ok: <motivo>` na linha do `.json()` ou logo acima.
+    testar: (linha, rel, _texto, i, linhas) => {
+      if (!Array.isArray(linhas)) return false; // só roda no laço por-linha (que passa o contexto)
+      if (!/^(api|src|scripts)\/.*\.(js|jsx|mjs)$/.test(rel || '')) return false;
+      const mj = linha.match(/\bawait\s+(\w+)\s*\.\s*json\s*\(/);
+      if (!mj) return false;
+      const v = mj[1];
+      if (v === 'req' || v === 'request') return false; // o corpo da REQUISIÇÃO, não uma resposta de fetch
+      const bind = new RegExp(`\\b(?:const|let)\\s+${v}\\s*=\\s*await\\s+(?:fetch|sb|sbGet|sbFetch|anthropicFetch|iaGeminiPrimary|geminiFetch)\\s*\\(`);
+      const okRe = new RegExp(`\\b${v}\\s*\\??\\.\\s*(?:ok|status|statusText)\\b`); // aceita X?.ok
+      let b = -1;
+      for (let k = i; k >= Math.max(0, i - 40); k--) { if (bind.test(linhas[k])) { b = k; break; } }
+      if (b < 0) return false; // sem ligação fetchish → não é uma resposta HTTP (ex.: cache.json())
+      for (let k = b; k <= Math.min(linhas.length - 1, i + 10); k++) { if (okRe.test(linhas[k])) return false; }
+      return true;
+    },
+  },
+  {
     id: 'mutacao-sem-binding',
     titulo: 'update/insert/upsert cujo resultado é DESCARTADO — falha vira sucesso silencioso',
     // Irmã do `data-sem-error`, mas pior: ali pelo menos `data` é lido. Aqui o statement começa
@@ -438,7 +473,9 @@ function contar() {
           // O caminho relativo entra na regra (como já acontece em REGRAS_ARQUIVO): algumas
           // só fazem sentido numa família de arquivos — `medida-ausente-virando-zero` é
           // defeito de APRESENTAÇÃO e não deve ser cobrada de código de servidor.
-          if (!r.testar(linha, rel.replace(/\\/g, '/'))) continue;
+          // Algumas regras precisam do ARQUIVO ao redor (a ligação `const r = await fetch(`
+          // mora numa linha e o `r.json()` em outra): passamos texto, o índice e as linhas.
+          if (!r.testar(linha, rel.replace(/\\/g, '/'), texto, i, linhas)) continue;
           porArquivo[rel] ||= {};
           (porArquivo[rel][r.id] ||= []).push(i + 1);
         }

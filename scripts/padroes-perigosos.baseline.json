@@ -2,10 +2,16 @@
   "api/_arremate-aprendizado.js": {
     "json-inline-sem-resposta": 8
   },
+  "api/_edital-extrato.js": {
+    "json-2linhas-sem-ok": 3
+  },
   "api/_webhook-core.js": {
     "delete-sem-select": 1,
     "data-sem-error": 16,
     "mutacao-sem-binding": 3
+  },
+  "api/ab-mercadologica.js": {
+    "json-2linhas-sem-ok": 1
   },
   "api/admin-chargebacks.js": {
     "json-inline-sem-resposta": 1
@@ -17,9 +23,11 @@
     "json-inline-sem-resposta": 2
   },
   "api/agendar-ciclo.js": {
+    "json-2linhas-sem-ok": 2,
     "json-inline-sem-resposta": 1
   },
   "api/agendar-reuniao.js": {
+    "json-2linhas-sem-ok": 2,
     "json-inline-sem-resposta": 2
   },
   "api/anexo-url.js": {
@@ -28,9 +36,27 @@
   "api/arrematado-ancora.js": {
     "json-inline-sem-resposta": 2
   },
+  "api/assinar-contrato.js": {
+    "json-2linhas-sem-ok": 2
+  },
+  "api/assinar-testemunha.js": {
+    "json-2linhas-sem-ok": 1
+  },
+  "api/ativacao-nudge-cron.js": {
+    "json-2linhas-sem-ok": 1
+  },
+  "api/ativar-pro-anual.js": {
+    "json-2linhas-sem-ok": 1
+  },
+  "api/ativar-vendedor.js": {
+    "json-2linhas-sem-ok": 1
+  },
   "api/auto-contrato.js": {
     "data-sem-error": 2,
     "mutacao-sem-binding": 1
+  },
+  "api/baixar-doc.js": {
+    "json-2linhas-sem-ok": 1
   },
   "api/captura-handoff.js": {
     "json-inline-sem-resposta": 1
@@ -38,8 +64,17 @@
   "api/capturar-matricula-cef.js": {
     "json-inline-sem-resposta": 1
   },
+  "api/chat-suporte.js": {
+    "json-2linhas-sem-ok": 1
+  },
   "api/cnj-monitor-cron.js": {
     "json-inline-sem-resposta": 1
+  },
+  "api/coleta-oportunista.js": {
+    "json-2linhas-sem-ok": 1
+  },
+  "api/complementar-assinatura.js": {
+    "json-2linhas-sem-ok": 1
   },
   "api/conciliacao-sync-cron.js": {
     "json-inline-sem-resposta": 1
@@ -60,6 +95,9 @@
   "api/documental-retry-cron.js": {
     "json-inline-sem-resposta": 1
   },
+  "api/endereco-autocomplete.js": {
+    "json-2linhas-sem-ok": 2
+  },
   "api/enriquecer-backfill-cron.js": {
     "json-inline-sem-resposta": 1
   },
@@ -67,31 +105,41 @@
     "json-inline-sem-resposta": 1
   },
   "api/enviar-juridico-email.js": {
+    "json-2linhas-sem-ok": 1,
     "json-inline-sem-resposta": 4
   },
   "api/espelhar-docs-cron.js": {
     "json-inline-sem-resposta": 1
   },
   "api/garantia-cancelar.js": {
+    "json-2linhas-sem-ok": 2,
     "json-inline-sem-resposta": 1
   },
   "api/gerar-analise.js": {
+    "json-2linhas-sem-ok": 5,
     "json-inline-sem-resposta": 3
   },
   "api/gerar-contrato.js": {
     "data-sem-error": 1
   },
   "api/gerar-documental.js": {
-    "json-inline-sem-resposta": 3
+    "json-inline-sem-resposta": 3,
+    "json-2linhas-sem-ok": 3
   },
   "api/gerar-laudo-viabilidade.js": {
     "json-inline-sem-resposta": 3
+  },
+  "api/indice-aprendizado-cron.js": {
+    "json-2linhas-sem-ok": 1
   },
   "api/juridico-destinatarios.js": {
     "json-inline-sem-resposta": 2
   },
   "api/juridico-eficiencia.js": {
     "json-inline-sem-resposta": 3
+  },
+  "api/juridico-lembretes-cron.js": {
+    "json-2linhas-sem-ok": 1
   },
   "api/laudo-retry-cron.js": {
     "json-inline-sem-resposta": 1
@@ -105,17 +153,29 @@
   "api/monitorar-processo.js": {
     "json-inline-sem-resposta": 1
   },
+  "api/mp-admin.js": {
+    "json-2linhas-sem-ok": 1
+  },
   "api/mp-checkout.js": {
     "json-inline-sem-resposta": 1
   },
+  "api/mp-webhook.js": {
+    "json-2linhas-sem-ok": 1
+  },
   "api/notificar-cliente.js": {
     "json-inline-sem-resposta": 1
+  },
+  "api/onr-health.js": {
+    "json-2linhas-sem-ok": 1
   },
   "api/pj-revalidacao-cron.js": {
     "data-sem-error": 1
   },
   "api/processar-analise.js": {
     "json-inline-sem-resposta": 1
+  },
+  "api/push-send.js": {
+    "json-2linhas-sem-ok": 2
   },
   "api/radar-editais-cron.js": {
     "data-sem-error": 4,
@@ -131,15 +191,46 @@
   "api/regenerar-relatorios-cron.js": {
     "json-inline-sem-resposta": 4
   },
+  "api/registrar-compra-produto.js": {
+    "json-2linhas-sem-ok": 2
+  },
+  "api/resumir-ticket.js": {
+    "json-2linhas-sem-ok": 4
+  },
+  "api/retencao-avisos-cron.js": {
+    "json-2linhas-sem-ok": 3
+  },
   "api/saldo-abandono-cron.js": {
     "data-sem-error": 2,
     "mutacao-sem-binding": 1
+  },
+  "api/setup-daily-webhook.js": {
+    "json-2linhas-sem-ok": 1
+  },
+  "api/sinalizar-arremate.js": {
+    "json-2linhas-sem-ok": 1
+  },
+  "api/sinalizar-revenda.js": {
+    "json-2linhas-sem-ok": 2
   },
   "api/upload-anexo.js": {
     "json-inline-sem-resposta": 1
   },
   "api/validar-anexos-arremate.js": {
-    "json-inline-sem-resposta": 1
+    "json-inline-sem-resposta": 1,
+    "json-2linhas-sem-ok": 1
+  },
+  "api/validar-pj-socio.js": {
+    "json-2linhas-sem-ok": 1
+  },
+  "api/validar-selfie.js": {
+    "json-2linhas-sem-ok": 2
+  },
+  "api/verificar-cpf.js": {
+    "json-2linhas-sem-ok": 4
+  },
+  "api/verificar-identidade-kyc.js": {
+    "json-2linhas-sem-ok": 2
   },
   "src/components/BoasVindasModal.jsx": {
     "flex-2col-sem-minwidth0": 1,
@@ -173,6 +264,9 @@
   "src/components/LeitorPaginado.jsx": {
     "data-sem-error": 1,
     "mutacao-sem-binding": 1
+  },
+  "src/components/PagamentoServico.jsx": {
+    "json-2linhas-sem-ok": 1
   },
   "src/components/SugestaoImovel.jsx": {
     "user-id-cru-em-dado-de-cliente": 1
@@ -222,6 +316,7 @@
   "src/pages/Arrematados.jsx": {
     "data-sem-error": 9,
     "user-id-cru-em-dado-de-cliente": 1,
+    "json-2linhas-sem-ok": 1,
     "mutacao-sem-binding": 1
   },
   "src/pages/Atendimento.jsx": {
@@ -232,6 +327,7 @@
   "src/pages/Busca.jsx": {
     "flex-2col-sem-minwidth0": 1,
     "data-sem-error": 3,
+    "json-2linhas-sem-ok": 2,
     "user-id-cru-em-dado-de-cliente": 3,
     "delete-sem-select": 1
   },
@@ -248,6 +344,7 @@
     "mutacao-sem-binding": 3
   },
   "src/pages/Checkout.jsx": {
+    "json-2linhas-sem-ok": 1,
     "mutacao-sem-binding": 1,
     "data-sem-error": 1
   },
@@ -351,7 +448,8 @@
     "mutacao-sem-binding": 1
   },
   "src/pages/Perfil.jsx": {
-    "flex-2col-sem-minwidth0": 1
+    "flex-2col-sem-minwidth0": 1,
+    "json-2linhas-sem-ok": 1
   },
   "src/pages/Planos.jsx": {
     "data-sem-error": 2
@@ -366,6 +464,9 @@
   },
   "src/pages/Promo.jsx": {
     "data-sem-error": 1
+  },
+  "src/utils/cnpjCep.js": {
+    "json-2linhas-sem-ok": 1
   },
   "src/utils/logUso.js": {
     "mutacao-sem-binding": 1
@@ -386,6 +487,7 @@
   },
   "scripts/captura-docs-sodre.mjs": {
     "data-sem-error": 1,
+    "json-2linhas-sem-ok": 1,
     "mutacao-sem-binding": 1
   },
   "scripts/captura-documentos.mjs": {
@@ -416,6 +518,9 @@
   "scripts/debug-grupolance-puppeteer.mjs": {
     "data-sem-error": 1
   },
+  "scripts/debug-leiloeiros.mjs": {
+    "json-2linhas-sem-ok": 1
+  },
   "scripts/enriquecer-datas-cef.mjs": {
     "mutacao-sem-binding": 1
   },
@@ -438,10 +543,14 @@
   "scripts/recon-login-leiloeiro.mjs": {
     "data-sem-error": 1
   },
+  "scripts/recon-sodre-api.mjs": {
+    "json-2linhas-sem-ok": 1
+  },
   "scripts/recon-sodre-searchlots.mjs": {
     "data-sem-error": 1
   },
   "scripts/scraper-powerbi-mj.mjs": {
+    "json-2linhas-sem-ok": 1,
     "delete-sem-select": 1
   },
   "scripts/scraper-puppeteer.mjs": {
