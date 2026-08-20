@@ -10058,3 +10058,12 @@ amigável + plano B por link). Falta o **contato comercial**: mandar o link de p
 Asaas direto (não depende de SDK/cartão no browser) para fechar a venda. Dados do cliente
 (nome/e-mail/tel) e texto de abordagem estão no chat da sessão / no banco (user_id em
 `erros_cliente`/`perfis`) — NÃO reproduzidos aqui porque o repo é PÚBLICO (PII). Ação do dono.
+
+### 🔁 Troca de gateway agora é PARTE DO FLUXO no visitante (20/08, pedido do dono)
+O fluxo logado já caía MP→Asaas sozinho (`gerarLink`→`pagarAsaas`). Faltava no fluxo VISITANTE
+(`assinarComCadastro`, cria conta + paga por cartão): quando o SDK/cartão do MP é barrado por
+bloqueador, agora **recupera automático** — cria a conta (explorador) e gera o link Asaas
+(bancário, não depende de SDK), abrindo em nova aba. Só dispara quando a falha é ANTES da
+cobrança (SDK/fetch bloqueado) → sem risco de duplo-mandato. Se a recuperação falhar, mensagem
+amigável (desativar bloqueador / responder o e-mail p/ link direto). `src/pages/Checkout.jsx`
+`recuperarVisitanteComAsaas`. ⚠️ Testar no navegador com um pagamento real antes de confiar 100%.

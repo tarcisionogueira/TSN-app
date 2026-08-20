@@ -773,16 +773,56 @@ export default function Checkout() {
     } catch (e) {
       // 20/08: o conserto de 18/08 tratou o SDK que não CARREGA (s.onerror). Faltava o outro
       // meio-caminho: o SDK carrega, mas a chamada INTERNA do createCardToken ao MP é barrada
-      // pelo bloqueador → estoura "Failed to fetch" (TypeError de rede) e a pessoa via a
-      // mensagem crua, sem saber que existe o plano B. É a MESMA causa (extensão/adblock),
-      // então mostra a MESMA saída amigável — e não um beco sem saída travestido de erro técnico.
+      // pelo bloqueador → estoura "Failed to fetch" (TypeError de rede). É a MESMA causa
+      // (extensão/adblock) e acontece ANTES de qualquer cobrança (o /api/assinar-com-cadastro
+      // nem rodou), então trocar de gateway aqui é SEGURO (sem risco de duplo-mandato).
+      // Pedido do dono (20/08): a troca de gateway na tentativa não-concluída deve ser PARTE
+      // DO FLUXO, não um beco com instrução. Então caímos AUTOMÁTICO no Asaas por link.
       const m = String(e?.message || '');
       const bloqueado = e?.sdkBloqueado || /failed to fetch|load failed|networkerror|net::err|fetch/i.test(m);
-      setSuErro(bloqueado
-        ? 'Não conseguimos falar com o processador de cartão (costuma ser bloqueador de anúncios ou extensão de privacidade). Desative para este site e tente de novo — ou clique em "Criar conta grátis" acima e assine em seguida por link de pagamento.'
-        : (m || 'Erro ao processar a assinatura.'));
+      if (bloqueado) { assinandoRef.current = false; await recuperarVisitanteComAsaas(); return; }
+      setSuErro(m || 'Erro ao processar a assinatura.');
     } finally {
       assinandoRef.current = false;
+      setSuLoading(false);
+    }
+  };
+
+  // Recuperação AUTOMÁTICA da venda quando o cartão/MP é barrado no visitante (SDK ou fetch
+  // bloqueado): cria a conta (explorador) e gera o link Asaas — que NÃO depende de SDK/cartão
+  // no navegador. É a versão "em-fluxo" do plano B (antes exigia o clique manual em "Criar
+  // conta grátis"). Só é chamada quando a falha ocorre ANTES da cobrança, então não duplica
+  // mandato. Se a própria recuperação falhar, mostra a saída amigável como último recurso.
+  const recuperarVisitanteComAsaas = async () => {
+    const nome = normalizarNome(su.nome), email = su.email.trim().toLowerCase(), senha = su.senha;
+    setSuLoading(true); setSuErro('');
+    try {
+      // 1) garante a conta. signUp não lança p/ e-mail já cadastrado (identities []) — ok,
+      //    a conta existe e o webhook do pagamento vai anexar o plano pelo e-mail.
+      await supabase.auth.signUp({
+        email, password: senha,
+        options: { emailRedirectTo: `${window.location.origin}/`,
+          data: { nome, role: 'explorador', lgpd_aceito: true, lgpd_data: new Date().toISOString(), ...(promoCode ? { ref_codigo: promoCode } : {}) } },
+      });
+      // 2) tenta logar (best-effort; se a senha divergir de uma conta antiga, o pagamento
+      //    ainda vale — o plano cai pelo e-mail no webhook).
+      try { await supabase.auth.signInWithPassword({ email, password: senha }); } catch { /* segue */ }
+      trackCadastro(email, nome);
+      // 3) gera o link Asaas (bancário, seguro) e abre em nova aba.
+      const res = await apiCall('/api/asaas', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'criar_assinatura', nome, email, cpf: cpfDigits, plano: 'top2' }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.linkPagamento) throw new Error(data.error || 'Não foi possível gerar o link de pagamento.');
+      setGatewayUsado('asaas');
+      setLinkPagamento(data.linkPagamento);
+      setAsaasIds({ subscriptionId: data.subscriptionId || null, paymentId: data.paymentId || null });
+      window.open(data.linkPagamento, '_blank', 'noopener');
+      setPagoPendente(true); // tela "aguardando confirmação"; o webhook do Asaas libera o Pro
+    } catch (err) {
+      setSuErro('O cartão foi barrado pelo navegador e não consegui abrir o link de pagamento agora. Tente novamente em instantes, desative o bloqueador de anúncios para este site, ou responda o e-mail de confirmação que enviamos o link direto. (' + (err?.message || 'falha') + ')');
+    } finally {
       setSuLoading(false);
     }
   };
