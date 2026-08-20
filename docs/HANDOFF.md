@@ -10067,3 +10067,39 @@ bloqueador, agora **recupera automático** — cria a conta (explorador) e gera 
 cobrança (SDK/fetch bloqueado) → sem risco de duplo-mandato. Se a recuperação falhar, mensagem
 amigável (desativar bloqueador / responder o e-mail p/ link direto). `src/pages/Checkout.jsx`
 `recuperarVisitanteComAsaas`. ⚠️ Testar no navegador com um pagamento real antes de confiar 100%.
+
+---
+
+## ✅ Follow-ups de código revisados sequencialmente (20/08, tarde)
+Pedido do dono: "pegue o edital PDF da ZUK, resolva os outros sequencialmente e dê feedback".
+Ao investigar, dois dos quatro itens já estavam FEITOS (a nota estava velha) e um tinha premissa
+errada — a disciplina do "isto está feito de verdade?" evitou trabalho inerte:
+
+1. **ZUK edital PDF — JÁ FEITO e rodando (não era pendência).** A captura vive em
+   `enriquecerDatasZuk` (`scripts/scraper-puppeteer.mjs:1133`) desde o recon de 18/07: na
+   re-visita da página do lote (que já roda p/ pegar a DATA, custo zero), o `<a>` "Edital de
+   venda" → PDF em `documentacaoleilao.portalzuk.com.br` é gravado em `anexos` (tipo=edital),
+   sem tocar em `link_edital`. **Verificado no acervo:** de 1.020 ZUK ativos, **827 têm o PDF
+   real** (81%) e 878 têm anexo de edital. Coberto.
+2. **ZUK metragem útil/privativa — JÁ FEITO (mesma visita).** `scraper-puppeteer.mjs:1128`
+   lê "Metragem útil" (privativa) e cai p/ "Metragem total" só na falta — 705/1.020 com área.
+   Era a correção que impedia o mercado de SUPERESTIMAR (área total infla, subestima R$/m²).
+3. **Mercado gravar `regen_motivo` — NÃO plugado de propósito; resolvido pelo lado certo.**
+   A premissa da nota era errada: o mercado **não** usa `regen_motivo`. Sua regeneração roda
+   por loops DEDICADOS e mais específicos no `regenerar-relatorios-cron` (`mercadoVazio`,
+   `parecer` vazio, timeout), e o mercado **não está** no laço genérico `AGENTES`. Plugar
+   `vicioRegen` no upsert seria **inerte** (nenhum loop leria) e ainda **enganoso**:
+   `vicioRegen` inclui `avaliacao_ausente`/`minimo_ausente`, que no mercado não têm
+   backfill→regeneração — apareceriam como "pendente" para sempre, um número que nunca drena
+   (o anti-padrão "contar não é validar"). **O que o dono queria de fato** — o moderador
+   supervisionar o mercado também — foi feito lendo o sinal REAL da auto-cura:
+   migração `moderador_supervisao_mercado.sql` adiciona `aprendizado:regen:mercado` contando
+   `mercadoVazio`/`parecer vazio`/timeout sob o teto de tentativas. Como lê o sinal que dispara
+   a cura, **drena sozinho** quando a fonte volta. Hoje: 0 em auto-cura (pipeline saudável).
+4. **16 leiloeiros "scraper novo" — é PROGRAMA, não follow-up.** Cada família exige recon
+   runtime (Bright Data no Actions) + parser + validação campo-a-campo antes de gravar (o
+   processo do emiliomatos). **Não dá p/ avançar do sandbox** (o proxy do agente bloqueia os
+   hosts de leiloeiro — 403; recon de produção roda no Actions/BD). Melhor próxima alavanca,
+   pela ordem de acervo: **LeilãoPro Core = leffaleiloes (124) + oscarleiloes (28) = 152
+   imóveis, 1 scraper cobre os dois** (`/leilaoprocore/js/`, `/leilao/lotes/imoveis`). Fica
+   como próximo trabalho focado, com o aval do dono para o gasto de BD (emiliomatos custou ~68 req).
