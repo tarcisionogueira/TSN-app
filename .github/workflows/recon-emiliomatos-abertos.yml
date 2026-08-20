@@ -1,0 +1,18 @@
+name: Recon emiliomatos ABERTOS (amostra espalhada)
+
+# Checa se há lote de imóvel ABERTO amostrando páginas distintas (1,6,11,15). Só disparo manual.
+on: { workflow_dispatch: {} }
+
+jobs:
+  recon:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - name: Amostra de abertos
+        env:
+          BRIGHTDATA_API_TOKEN: ${{ secrets.BRIGHTDATA_API_TOKEN }}
+          BRIGHTDATA_ZONE: ${{ secrets.BRIGHTDATA_ZONE }}
+        run: node scripts/recon-emiliomatos-abertos.mjs
