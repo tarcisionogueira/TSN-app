@@ -2746,6 +2746,11 @@ const SUPORTE_TENANTS = [
   // Backlog TRT-15 (recon 23/07 confirmou white-label SUPORTE, com imóveis reais):
   { domain: 'valeroleiloes.com.br', leiloeiro: 'Valero Leilões' },
   { domain: 'gustavoreisleiloes.com.br', leiloeiro: 'Gustavo Reis Leilões' },
+  // Backlog SUPORTE (recon-suporte 20/08, GRÁTIS via Puppeteer): confirmados /buscador?categoria=2
+  // com imóveis reais e SEM redirect PGFN. leilaobrasil ficou de fora (voltou 0 lotes — mudou de
+  // estrutura ou catálogo em outro lugar; precisa de recon próprio antes de entrar).
+  { domain: 'vecchileiloes.com.br', leiloeiro: 'Vecchi Leilões' },
+  { domain: 'saraivaleiloes.com.br', leiloeiro: 'Saraiva Leilões' },
 ];
 
 function mapLoteSuporte(l, tenant) {
@@ -2753,8 +2758,17 @@ function mapLoteSuporte(l, tenant) {
   const titulo = String(l.descricao || l.tipo || '').replace(/\s+/g, ' ').trim();
   const loc = String(l.local || '').replace(/\s+/g, ' ').trim();
   const lm = loc.match(/^(.*?)\s*[-–]\s*([A-Za-z]{2})\s*$/);
-  const cidade = lm ? lm[1].trim() : '';
-  const uf = lm ? lm[2].toUpperCase() : '';
+  let cidade = lm ? lm[1].trim() : '';
+  let uf = lm ? lm[2].toUpperCase() : '';
+  // FALLBACK cidade/UF da DESCRIÇÃO (recon-suporte 20/08): alguns tenants (vecchi) deixam o
+  // campo `.r2`/local VAZIO e põem a cidade no texto — "GOIÂNIA/GO - UM APARTAMENTO…" (começo)
+  // ou "…, BELO HORIZONTE/MG" (fim). Sem isto, o lote entrava SEM cidade/UF (geocode falha, o
+  // relatório imprime "não informada"). Só age quando `local` não resolveu — não toca quem já tem.
+  if (!cidade || !uf) {
+    const dm = titulo.match(/^\s*([A-Za-zÀ-ÿ .'-]{2,40})\s*\/\s*([A-Z]{2})\b/)
+      || [...String(titulo).matchAll(/([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ .'-]{1,39})\s*\/\s*([A-Z]{2})\b/g)].pop();
+    if (dm) { cidade = cidade || dm[1].trim(); uf = uf || dm[2].toUpperCase(); }
+  }
   const ext = extrairDaDescricao(titulo);
   const tenantKey = tenant.domain.replace(/\..*/, '');
   const link = l.href ? (l.href.startsWith('http') ? l.href : `https://${tenant.domain}${l.href}`) : `https://${tenant.domain}/buscador?categoria=2`;
