@@ -43,39 +43,57 @@ function farejarLotes(obj, prof = 0, achados = { arrays: [], amostra: null }) {
 
 (async () => {
   console.log(`Recon Nordeste (Next.js) — ${BASE}\n`);
-  const rotas = ['/', '/imoveis', '/leiloes/imoveis', '/busca?categoria=imoveis', '/categoria/imoveis', '/leiloes'];
-  let buildId = null;
-  for (const rota of rotas) {
-    const r = await bdFetch(BASE + rota);
-    const nd = nextData(r.body);
-    const isNext = /__NEXT_DATA__|\/_next\//.test(r.body);
-    console.log(`${rota} → HTTP ${r.status} len=${r.body.length} next=${isNext} nextData=${!!nd}`);
-    if (nd) {
-      buildId = buildId || nd.buildId;
-      const props = nd.props?.pageProps || {};
-      const far = farejarLotes(props);
-      if (far.arrays.length) {
-        console.log(`   pageProps arrays de lote:`, JSON.stringify(far.arrays));
-        console.log(`   amostra de 1 lote:`, JSON.stringify(far.amostra).slice(0, 900));
-      } else {
-        console.log(`   pageProps chaves: ${Object.keys(props).slice(0, 15).join(', ')}`);
-      }
-    }
-  }
-  console.log(`\nbuildId: ${buildId || '(não achado)'}`);
-
-  // Endpoints /api/ e /_next/data nos bundles.
+  // APP ROUTER (recon v2, 20/08): a home é SSR de 216KB SEM __NEXT_DATA__ — Next.js App Router
+  // embute os dados como chunks de FLIGHT em `self.__next_f.push([1,"..."])`, não em pageProps.
+  // Estratégia: (1) dump dos HREFS da home p/ achar o padrão de URL de lote + a rota de listagem
+  // REAL (as adivinhadas voltaram shell de 12KB); (2) contexto ao redor de "R$" (preço); (3)
+  // tenta decodificar os chunks de flight e farejar arrays de lote.
   const home = await bdFetch(BASE + '/');
+  console.log(`/ → HTTP ${home.status} len=${home.body.length} appRouter=${/__next_f|self\.__next/.test(home.body)}\n`);
+
+  // 1) HREFS — agrupa por "forma" de caminho p/ revelar o padrão de lote e a listagem.
+  const hrefs = [...new Set([...home.body.matchAll(/href=["']([^"']+)["']/gi)].map(m => m[1]))]
+    .filter(h => h.startsWith('/') && !h.startsWith('//') && !/\.(css|js|png|jpe?g|svg|ico|webp|woff2?)$/i.test(h));
+  const loteLike = hrefs.filter(h => /(lote|imovel|imoveis|bem|leilao|leiloes)/i.test(h) || /\/\d{3,}(?:[/?#]|$)/.test(h));
+  console.log(`HREFS totais ${hrefs.length}; parecidos com lote/listagem (${loteLike.length}):`);
+  loteLike.slice(0, 40).forEach(h => console.log('   ' + h));
+
+  // 2) PREÇO — quantos R$ e o contexto ao redor do 1º (confirma que a home traz lotes).
+  const reais = [...home.body.matchAll(/R\$\s?[\d.]+,\d{2}/g)];
+  console.log(`\nR$ na home: ${reais.length}`);
+  const iR = home.body.search(/R\$\s?[\d.]+,\d{2}/);
+  if (iR >= 0) console.log('   contexto 1º R$:', home.body.slice(Math.max(0, iR - 160), iR + 40).replace(/\s+/g, ' '));
+
+  // 3) FLIGHT — decodifica os chunks self.__next_f.push([1,"...json..."]) e fareja arrays de lote.
+  console.log('\n— flight chunks (App Router) —');
+  let achou = 0;
+  for (const m of home.body.matchAll(/self\.__next_f\.push\(\[1,\s*"((?:\\.|[^"\\])*)"\]\)/g)) {
+    let s; try { s = JSON.parse(`"${m[1]}"`); } catch { continue; }
+    // Dentro do chunk pode haver JSON embutido; procura objetos com cara de lote.
+    if (!/(valor|lance|avaliac|imovel|lote|cidade|slug|endereco|praca|matricula)/i.test(s)) continue;
+    for (const jm of s.matchAll(/\{[^{}]{40,900}\}/g)) {
+      try {
+        const o = JSON.parse(jm[0]);
+        const keys = Object.keys(o);
+        if (keys.some(k => /(valor|lance|avaliac|slug|cidade|titulo|endereco|imovel|lote)/i.test(k)) && keys.length >= 4) {
+          console.log(`   objeto-lote (${keys.length} campos):`, JSON.stringify(o).slice(0, 700));
+          if (++achou >= 3) break;
+        }
+      } catch { /* não é JSON puro */ }
+    }
+    if (achou >= 3) break;
+  }
+  if (!achou) console.log('   (nenhum objeto-lote isolável nos chunks; ver hrefs/preço acima p/ decidir SSR-HTML vs XHR)');
+
+  // 4) bundles: endpoints de API (App Router pode ter route handlers /api/… ou backend externo).
   const scripts = [...new Set([...home.body.matchAll(/src=["']([^"']*\/_next\/static\/[^"']+\.js)["']/gi)].map(m => m[1]))];
-  console.log(`\nbundles Next: ${scripts.length}`);
   const eps = new Set();
-  for (const s of scripts.slice(0, 8)) {
+  for (const s of scripts.slice(0, 10)) {
     const u = s.startsWith('http') ? s : BASE + s;
     const b = await bdFetch(u);
-    for (const m of b.body.matchAll(/["'`](\/(?:api|_next\/data|imoveis?|leiloes?|lotes?|busca|filtro)[A-Za-z0-9/_\-{}.:?=&]*)["'`]/gi)) eps.add(m[1]);
-    for (const m of b.body.matchAll(/(?:fetch|axios\.(?:get|post))\s*\(\s*["'`]([^"'`]+)["'`]/gi)) if (/^[/h]/.test(m[1])) eps.add(m[1]);
+    for (const mm of b.body.matchAll(/["'`](https?:\/\/[a-z0-9.-]*(?:api|back|admin|painel)[a-z0-9.-]*\/[A-Za-z0-9/_\-{}.:?=&]*)["'`]/gi)) eps.add(mm[1]);
+    for (const mm of b.body.matchAll(/["'`](\/(?:api|imoveis?|leiloes?|lotes?|busca|filtro)[A-Za-z0-9/_\-{}.:?=&]*)["'`]/gi)) eps.add(mm[1]);
   }
-  console.log(`endpoints candidatos (${eps.size}):`);
+  console.log(`\nendpoints candidatos (${eps.size}):`);
   [...eps].sort().slice(0, 40).forEach(e => console.log('   ' + e));
-  if (buildId) console.log(`\nDica: dados da página via https://.../_next/data/${buildId}/imoveis.json (ou o slug real).`);
 })();
