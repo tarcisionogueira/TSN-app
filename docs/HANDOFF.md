@@ -10152,3 +10152,37 @@ Seguiu o modelo emiliomatos (recon runtime → parser → validação campo-a-ca
 
 **Próximas alavancas LeilãoPro** (mesma plataforma, quando o dono quiser): confirmar oscar no
 novo domínio; e as demais famílias do backlog de 16 (Nordeste SPA, Jussiara, Flávio Costa, Alfa).
+
+---
+
+## 🔎 Próxima família de leiloeiro — resultado do recon (20/08, tarde)
+Pedido do dono: "siga para a próxima família". Fiz recon runtime das candidatas do backlog.
+Resultado honesto: **a alavanca fácil (LeilãoPro/LEFFA) já foi gravada nesta sessão; as demais
+independentes são SPAs modernas ou plataforma de governo com WAF — não raspáveis barato via
+HTML/Bright Data.** Tooling de recon fica no repo p/ futuras tentativas.
+
+- **nordesteleiloes (115)** — Next.js **App Router SPA**. Home é marketing (0 R$, 0 link de lote);
+  catálogo carrega client-side; **0 XHR/JSON** interceptado até com Puppeteer; rotas de catálogo
+  adivinhadas = shell vazio; conteúdo de lote **nem renderiza de forma confiável** no headless (13
+  R$ numa run, 0 na seguinte). 5 iterações de recon (`recon-nordeste.mjs`, `-browser.mjs`) — esforço
+  desproporcional a 115 lotes. **Adiado** (precisaria achar a rota real do catálogo + vencer o
+  anti-bot + DOM scrape flaky).
+- **Probe de SSR** (`recon-familia-probe.mjs`, 5 sites): jussiara **SPA** (R$=0), lancecerto **SPA**
+  (Vite+ASP.NET), sumaré **Laravel** (home R$=0; `/leiloes/imoveis` 154KB mas sem R$ no cru),
+  **hastaleilao R$=31 no HTML cru** (único SSR aparente).
+- **hastaleilao / Flávio Costa (83)** — a home lista **18 cards SSR** com preço, mas as páginas de
+  DETALHE são **SPA Vite** (HTML idêntico p/ lotes diferentes; dado real via JS). **Descoberta que
+  importa:** o "sinal de paginação" aponta p/ **`comprei.pgfn.gov.br/anuncio?vendedor=7509-2`** — o
+  hastaleilao é só um **front-end da plataforma FEDERAL da PGFN** (Comprei), filtrando este leiloeiro.
+  Os lotes são leilões da União. O slug já dá cidade/UF (`/leilao-tjpe-comarca-de-cabrobo` → Cabrobó/PE).
+- **comprei.pgfn.gov.br (PGFN, federal — alvo grande)** — query REST real (`ufs/page/size/sort`),
+  cobre leilões federais **nacionais**. MAS o WAF do gov **devolve 200 com corpo VAZIO** para o
+  Bright Data (IP de datacenter/estrangeiro). `recon-comprei-pgfn.mjs` provou: home e todos os
+  caminhos de API = `200 len=0`. **Bloqueado** para a nossa infra atual — precisaria de proxy
+  **residencial brasileiro** (ou a API pública oficial da PGFN, se houver) p/ destravar. Se
+  destravar, é a MAIOR alavanca de todas (acervo federal, fonte estável de governo).
+
+**Recomendação:** a próxima integração barata não está nos independentes restantes — está em (a)
+confirmar o **cluster GESTAO** (vip/milan/centraljudicial) que já compartilha `scraper-gestao`, ou
+(b) as casas **SUPORTE white-label** (leilaobrasil 1.786!, vecchi 463) que já raspamos. PGFN Comprei
+vale um esp="teste com proxy residencial" à parte (decisão de custo do dono).
