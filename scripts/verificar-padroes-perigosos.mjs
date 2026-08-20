@@ -251,6 +251,34 @@ const REGRAS_ARQUIVO = [
     testar: (texto) => /\.auth\.signUp\s*\(/.test(texto) && !/identities/.test(texto),
   },
   {
+    id: 'cobranca-sem-estorno',
+    titulo: 'Endpoint cobra cota ADIANTADA (consumir_*_por) sem NENHUM caminho de estorno — a falha cobra o cliente',
+    // GAP #2 (20/08). A cobrança ADIANTADA de cota — `consumir_analise_por`/`consumir_documental_por`,
+    // chamada ANTES de saber se o relatório vai sair — obriga a devolver a cota em TODO caminho de
+    // falha: mercado vazio, parecer vazio, timeout, faltam documentos. Cada nova rota que cobra
+    // assim é uma chance de esquecer o estorno em UM desses caminhos, e o cliente fica sem o
+    // relatório E sem a cota. Foi a raiz dos consertos de 19/08 (gerar-analise: estorno em
+    // `mercadoVazio || semParecer`; gerar-documental: 4 caminhos de falha). A regra exige que TODO
+    // arquivo que cobra adiantado tenha PELO MENOS uma referência a `estornar_*_por` — sem ela é
+    // estruturalmente impossível a cota voltar quando a geração falha.
+    //
+    // O ÍNDICE está FORA de propósito: `consumir_indice_por` roda só DEPOIS de o resultado existir
+    // (cobra-no-sucesso), então não tem o que estornar — é o padrão À PROVA de vazamento, e por
+    // isso é filtrado aqui em vez de precisar de `// padrao-ok:`. PREFIRA esse padrão ao criar
+    // cobrança nova: cobrar só no sucesso elimina a classe inteira, em vez de depender de lembrar
+    // do estorno em cada saída de erro. `debitar_credito` também não entra: nesta base ele é
+    // sempre cobrado no sucesso (gerar-analise/indice-mercado), não adiantado.
+    // Base ZERO: os quatro arquivos que cobram hoje passam (os dois adiantados têm estorno; os
+    // dois de índice cobram no sucesso). Ocorrência nova reprova.
+    testar: (texto, rel) => {
+      if (!/^api\/.*\.js$/.test(rel)) return false;
+      const adiantadas = [...texto.matchAll(/\bconsumir_(\w+)_por\b/g)]
+        .map((m) => m[1]).filter((tipo) => tipo !== 'indice');
+      if (!adiantadas.length) return false;
+      return !/\bestornar_\w+_por\b/.test(texto);
+    },
+  },
+  {
     id: 'coletor-sem-registrar-saude',
     titulo: 'Coletor que grava no acervo sem chamar registrarSaude — nasce cego ao monitor',
     // A fonte que não escreve em `fonte_saude` não ganha piso aprendido, logo o alerta de

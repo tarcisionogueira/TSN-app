@@ -10332,8 +10332,55 @@ a guarda de cada uma. TOP GAPS sem trava estática (rede de segurança só de DA
 1. **`user.id` cru no modo suporte (classe 27) — RISCO ALTO.** ~151 leituras cruas no acervo
    (HANDOFF:1955); só a cota ganhou trava agora. Arremate/procuração/rateio ainda podem gravar
    como ADMIN. Fechar com trava estática de `user.id` novo em telas que importam effectiveUserId.
-2. **Cobrar cota/crédito em fluxo que falhou (classe 26)** — sem trava; reincidiu em gerar-analise/Caso.
+2. ~~**Cobrar cota/crédito em fluxo que falhou (classe 26)**~~ — **FECHADO 20/08** (ver seção no fim
+   do arquivo): bugs ativos já corrigidos + trava estática `cobranca-sem-estorno` (todo `consumir_*_por`
+   adiantado exige `estornar_*_por`; índice cobra-no-sucesso, filtrado).
 3. **`fetch().json()` sem `.ok` na forma de 2 linhas (classe 3)** — trava atual só pega a inline.
 4. Função mudada no banco sem migração (classe 9) — sem trava barata.
 5. Validação de ingestão externa (classe 10) — só invariante do Censo.
 Recomendação registrada para as próximas sessões fecharem por prioridade.
+
+---
+
+## 20/08 — GAP #2 FECHADO: "cobrar cota em fluxo que falhou" (classe 26)
+
+**Pedido do dono:** *"feche o gap #2, cobrar cota em fluxo que falhou"* — a classe 26 do catálogo
+acima, a única de dinheiro que reincidiu (gerar-analise 19/08, Caso 19/08) e que não tinha trava.
+
+**1) Bugs ATIVOS — todos já corrigidos, verificados caso a caso.** Varri os 7 arquivos que cobram
+ou estornam (`consumir_*_por`/`debitar_credito`/`estornar_*_por`):
+- `gerar-analise.js` — cobra adiantado (`consumir_analise_por` linha ~1655); estorna em
+  `mercadoVazio || semParecer` (bloco ~2928) e no `catch` final (~3001). ✓
+- `gerar-documental.js` — cobra adiantado; estorna em 4 caminhos de falha (`estornar_documental_por`
+  linhas 740, 1032, …). ✓
+- `gerar-laudo-viabilidade.js` — **não cobra por geração** (é gated por plano); `catch` só marca
+  `status='erro'`. Nada a estornar. ✓
+- `indice-gerar.js` e `indice-mercado.js` — **cobra-no-sucesso**: `consumir_indice_por` roda só
+  DEPOIS de o resultado existir. É o padrão À PROVA de vazamento — não há o que estornar. ✓
+- `Caso.jsx` — corrigido 19/08 (`.select()` prova o que foi criado antes de queimar cota). ✓
+- `regenerar-relatorios-cron.js` — só estorna, não cobra. ✓
+
+**2) Por que NÃO virou invariante de DADO (e a armadilha que isso evitou).** A assinatura ingênua
+seria `status='concluida' AND falhou (mercadoVazio|parecer vazio) AND cota_estornada=false`. Rodei
+no banco: acusou **1 linha** — e ela era um FALSO POSITIVO. Regeneração no **modo suporte** (o dono
+vendo a conta do Marcelo, `onBehalf=true` → `cota=null`, **nada foi cobrado**), parecer vazio,
+`cota_estornada=false` porque não havia o que estornar. O problema é estrutural: `cota_estornada`
+funde TRÊS estados — (a) cobrado-e-manteve, (b) **nunca cobrado**, (c) cobrado-e-não-devolvido = o
+vazamento real. Sem uma coluna durável "foi cobrado?" na linha, o invariante dispara em (b) —
+justamente as regenerações de suporte, que são saudáveis. Um invariante que grita em caso sadio é a
+forma #5 da lista de cima (freio/estado normal entregue como falha). Rejeitado de propósito.
+
+**3) A trava que fecha o gap: `cobranca-sem-estorno`** (`verificar:padroes`, custo zero, base ZERO).
+A causa-raiz da classe 26 é **autoral**: uma rota que cobra ADIANTADO abre um caminho de falha novo
+e esquece o estorno nele. A trava pega isso no momento da escrita: todo arquivo `api/` que chama
+`consumir_*_por` (cobrança adiantada) tem de ter PELO MENOS uma referência a `estornar_*_por`.
+- **Índice é filtrado** (não exige estorno): `consumir_indice_por` é cobra-no-sucesso por
+  construção. A trava documenta isso e **recomenda esse padrão** para cobrança nova — cobrar só no
+  sucesso elimina a classe inteira em vez de depender de lembrar do estorno em cada saída de erro.
+- `debitar_credito` fora do gatilho: nesta base é sempre cobrado no sucesso, não adiantado.
+- **Provada nos dois sentidos:** endpoint fictício com `consumir_laudo_por` sem estorno → REPROVA;
+  com o `estornar_laudo_por` no caminho de falha → passa. Os 4 arquivos reais que cobram hoje passam.
+
+**Recomendação de projeto:** ao criar cobrança nova, **prefira o padrão do índice** (cobrar depois
+do resultado existir). Só use cobrança adiantada quando o custo precede o resultado (busca web paga),
+e aí a trava garante que exista o caminho de volta.
