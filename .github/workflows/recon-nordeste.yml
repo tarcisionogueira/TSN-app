@@ -18,9 +18,22 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: '22' }
-      - name: Recon estrutura Next.js
+      - name: Recon estrutura Next.js (estático)
         env:
           BRIGHTDATA_API_TOKEN: ${{ secrets.BRIGHTDATA_API_TOKEN }}
           BRIGHTDATA_ZONE: ${{ secrets.BRIGHTDATA_ZONE }}
           NORDESTE_BASE: ${{ github.event.inputs.base }}
         run: node scripts/recon-nordeste.mjs
+      - name: Install dependencies (Puppeteer)
+        run: npm ci
+      - name: Install Chromium system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            libatk-bridge2.0-0 libdrm2 libxkbcommon0 libxcomposite1 \
+            libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2t64 \
+            libpango-1.0-0 libcairo2 libatspi2.0-0 libgtk-3-0
+      - name: Recon runtime com navegador (intercepta XHR/JSON)
+        env:
+          NORDESTE_BASE: ${{ github.event.inputs.base }}
+        run: node scripts/recon-nordeste-browser.mjs
