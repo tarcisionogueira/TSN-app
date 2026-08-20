@@ -116,7 +116,14 @@ function proximaData(txt, agora = new Date()) {
 export function parseDetalhe(html, url) {
   const base = extrairGenerico(html, url) || {};
   const titulo = limparTitulo(base.titulo);
-  const descricao = decodificarEntidades(base.descricao || '');
+  // DESCRIÇÃO do og:description (nível do título: endereço + área), NÃO do corpo. O corpo do
+  // LeilãoPro traz a matrícula inteira, e todo APARTAMENTO cita "com a fração ideal de terreno"
+  // (a parte comum do condomínio — inerente a qualquer unidade). Usar o corpo fazia o detector
+  // de fração ideal EXCLUIR apartamentos inteiros (falso positivo: 7208/7246 em Torres/RS, com
+  // "área real privativa de 103m²"). O og:description casa com a calibração do RE_FRACAO_IDEAL
+  // nas outras fontes (título/desc curta) e ainda é uma descrição mais limpa para o cliente.
+  const ogDesc = (html.match(/property=["']og:description["'][^>]*content=["']([^"']+)["']/i) || [])[1];
+  const descricao = decodificarEntidades(ogDesc || base.descricao || '');
   const txt = decodificarEntidades(html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ')
     .replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ');
 
