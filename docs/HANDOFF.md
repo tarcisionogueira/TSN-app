@@ -110,6 +110,20 @@ Sinal do dono: "resolva o que consegue sem mim do mandato, dos 3 erros e dívida
   LISTA). Com ~3 runs, o piso aprendido assume sozinho. Migrar `fonte_baseline_aprendida()`
   para preferir `enumerados` fica agendado para quando o histórico existir (~1 semana).
 
+### 📋 LEILOEIROS DO SINDICATO-SP × ACERVO (20/08, pedido do dono — PDF de sindleiloeiro.com.br)
+73 leiloeiros sindicalizados no PDF; **~25 casas já cobertas** (Sodré, Calil, Vegas, Lance
+Total/extrajust, Lance no Leilão, Líder, Topo, Valero, 3 Torres, Gustavo Reis, SOLD…; GAIA,
+RMoysés e Alberto Macedo chegam via agregadores). **29 casas FORA do acervo**, por site:
+ricoleiloes (4 leiloeiros!), lanceja (Lance Já), milanleiloes (⚠️ Milan ≠ MILANI do acervo),
+vipleiloes (⚠️ ≠ nosso Leilão VIP/leilaovip), leilaoonline.net (2), destakleiloes (2),
+3rleiloes.net (2), crisleiloes, franklinleiloes, impactoleiloes, zallileiloes,
+fernandoleiloeiro, arremateleilao, teza, leiloesgold, e-leiloeiro, damasioleiloes,
+centraljudicial, conceitoleiloes, tmleiloes, leilaobrasil, alexandridisleiloes,
+cunhaleiloeiro, bastonleiloes, wspleiloes, lanceleiloes, sumareleiloes, agsleiloes,
+kronbergleiloes (⚠️ conferir vs KRON do acervo). Próximo passo: recon de estrutura (ofensiva
+de captura) nos priorizados pelo dono — muitos são só veículos/judicial, o recon diz quem tem
+IMÓVEL antes de gastar integração. Lista completa com JUCESP/e-mail no chat de 20/08.
+
 ### 🔵 Dependem do DONO
 1. ~~**Google Ads — formulário de serviços financeiros**~~ → ✅ **ENVIADO (19/08 à noite,
    com o Claude conduzindo)**: formulário dedicado do Google preenchido como "anunciante de
