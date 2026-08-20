@@ -10213,3 +10213,46 @@ valor: os 12 do vecchi entraram COM cidade apesar do `local` vazio.
 
 **Follow-ups:** milan/central (BD quando o teto reabrir); leilaobrasil (recon próprio — a estrutura
 mudou); PGFN Comprei (proxy residencial, se o dono topar o custo — maior alavanca de todas).
+
+---
+
+## 🗺️ MAPA DE FONTES + BRIEF DE REDESENHO (20/08, noite — BD autorizado p/ mapear)
+Pedido do dono: "resolva todos, mesmo usando Bright Data, para mapearmos o fluxo e redesenharmos
+posteriormente". `scripts/mapa-fontes.mjs` (recon direto via BD, fora do ledger/teto) mapeou cada
+família pendente por PLATAFORMA × ONDE-MORAM-OS-DADOS × BLOQUEIO. Resultado:
+
+| Família | Plataforma | Dados no HTML | Bloqueio | Padrão de lote | Veredito |
+|---|---|---|---|---|---|
+| **leilaobrasil** (~1.786) | Vite/SUPORTE | **SSR — R$=632 na home** | Cloudflare | `/eventos/leilao/<slug>/lote/<id>/<slug>` | 🟢 **PRÊMIO: parser barato, só o FETCH precisa BD** |
+| **alfaleiloes** (~34) | genérico | **blob JSON-script** | — (livre) | `/lote/<id>/<slug>` | 🟡 parsear o JSON embutido (médio, sem BD) |
+| **hasta** (Flávio Costa ~83) | Vite | bloco R$ compartilhado; matrícula por-lote | — | `/lote/<id>/<slug>` | 🟡 SPA — achar API/blob ou Puppeteer DOM |
+| **nordeste** (~115) | Next App Router | RSC flight, 0 XHR | — | (sem catálogo scrapeável) | 🔴 Puppeteer DOM (sem API) |
+| **jussiara** (~91) | genérico | BD voltou 0b | Cloudflare forte | — | ⛔ BD + recon fino |
+| **lancecerto** (~24) | Vite/ASP.NET | shell | Cloudflare | — | ⛔ BD + DOM |
+| **sumare** | Laravel | home 162KB, R$=0 | Cloudflare | — | ⛔ BD + recon |
+| **GESTAO** milan/central | (cluster VIP) | — | Cloudflare + **teto BD estourado** | — | ⛔ BD quando o teto reabrir |
+| **PGFN Comprei** (federal) | gov | API/HTML | **WAF federal** | — | 🔴 proxy residencial BR |
+
+### O insight do redesenho (a arquitetura que o mapa pede)
+Hoje o coletor mistura FETCH e PARSE por fonte. O mapa mostra que toda fonte é o **produto de
+duas escolhas independentes**:
+- **Motor de FETCH** (como obter o HTML): `grátis` (fetch direto do runner) · `BD` (Cloudflare) ·
+  `residencial` (WAF gov) · `Puppeteer` (SPA sem SSR).
+- **Motor de PARSE** (onde estão os dados): `HTML-SSR` (regex/og no HTML cru) · `blob-JSON`
+  (JSON embutido no `<script>`) · `DOM` (renderizado) · `RSC` (flight do Next App).
+
+**leilaobrasil é a prova:** é `HTML-SSR` (parser IGUAL ao do leffa) × `BD` (só porque é
+Cloudflare). Ou seja, o parser é barato — só o fetch muda. O redesenho = uma matriz
+`fetch × parse` onde cada fonte declara seu par, e reaproveita o parser de quem tem o mesmo
+formato. Elimina o "cada fonte é um scraper do zero".
+
+### Ordem recomendada de "resolver" (pós-mapa)
+1. **leilaobrasil** — maior acervo (1.786), parser barato (SSR), só custa o fetch BD. Melhor ROI.
+2. **alfaleiloes** — blob JSON, sem BD (grátis), ~34 lotes. Rápido.
+3. **hasta** — precisa achar a API/blob do Vite (1 recon a mais) ou cair p/ Puppeteer.
+4. **GESTAO milan/central** — quando o teto do BD reabrir (barato: já tem scraper).
+5. **jussiara/lancecerto/sumare** — Cloudflare+SPA, ROI menor; BD + recon fino.
+6. **PGFN / nordeste** — exigem infra nova (residencial / DOM); projetos à parte.
+
+**Já GRAVADO nesta rodada de integração:** leffa/oscar (LeilãoPro, 8) · emiliomatos (37) ·
+vecchi/saraiva (SUPORTE, 23). **Mapa acima = base para o redesenho `fetch × parse`.**
