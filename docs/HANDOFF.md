@@ -10273,3 +10273,30 @@ saraiva (**68 imóveis** nesta sessão). Todo o RESTANTE (alfa-blob, leilaobrasi
 jussiara/lancecerto/sumaré, GESTAO, PGFN) exige exatamente o **redesenho** que o dono marcou p/
 "posteriormente": um motor de DOM (Puppeteer) e/ou de blob-JSON, mais o eixo de FETCH (BD/residencial).
 Não vale queimar BD caçando blob de fonte de 11 lotes nem varrer catálogo Cloudflare sem esse motor.
+
+---
+
+## ✅ PASSO 0 do redesenho fetch × parse — CONCLUÍDO (20/08, noite)
+Dono aprovou o motor genérico (artifact do desenho) e mandou começar pelo Passo 0: extrair o
+runner comum SEM mudar comportamento. Feito:
+- **`scripts/lib/motor/fetch-fonte.mjs`** — motor de FETCH (grátis → Bright Data por `proposito`),
+  extraído do `fetchLP`/`fetchEM` que os dois scrapers traziam copiado.
+- **`scripts/lib/motor/runner.mjs`** — runner ÚNICO (enumerar → dedup por fonte_id → detalhe →
+  parse → filtrar encerrado/qualidade → DRY-RUN ou upsert → registrarSaude/Conhecimento). É o
+  fluxo do scraper-leilaopro (o mais completo, com `fonteVazia`), agora parametrizado por config.
+- **`scripts/lib/motor/fontes/{leilaopro,emiliomatos}.mjs`** — cada fonte é só DADO (par
+  fetch×parse + catálogo + tenants + metadados). Os parsers puros viram plugins `html-ssr` sem cópia.
+- **`scraper-leilaopro.mjs` / `scraper-emiliomatos.mjs`** — agora wrappers finos (leem env,
+  chamam `rodarFonte`). Env e defaults inalterados.
+
+**Validação (a disciplina do "roda de verdade?"):**
+- **leilaopro DRY-RUN pelo motor = BYTE-IDÊNTICO ao anterior** (run 32422885529): `[LEFFA]
+  enumerados 8 · no banco 8 · novos 0 · 8 prontos · 0 encerrados · 0 descartados`, mesmas linhas
+  (leffa_7208 Torres 1.180.000→590.000/50%/103.25 · 7246 cobertura 965.000/275.27 · 7270
+  Montenegro 350.000/146.62), mesma via grátis, mesmo freio residencial.
+- **emiliomatos RECON pelo motor OK** (run 32423075977): base/catálogo certos
+  (`/busca/segmento/imoveis`), 0 lotes tratado sem crash (BD/Cloudflare, pré-existente — não é bug
+  do motor). Parse idêntico por código compartilhado + parser inalterado (gravou 37 antes).
+
+Guards: eslint · verificar:padroes · verificar:sintaxe limpos. Deploy em `main` (scrapers só rodam
+por cron/dispatch; Vercel não muda). **Próximo (Passo 1):** motor `blob-json` → alfaleiloes.
