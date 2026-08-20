@@ -1,11 +1,10 @@
 /**
- * Recon PROFUNDO LeilãoPro Core (v2) — foca a CATEGORIA imóveis e o card real do lote.
- * Imprime: hrefs candidatos a detalhe (com id), HTML cru ao redor do 1º "Lance", e o
- * detalhe de 1 lote de imóvel. Env: BRIGHTDATA_API_TOKEN, BRIGHTDATA_ZONE. Não grava nada.
+ * Recon PROFUNDO LeilãoPro Core (v3) — enumera lotes de imóvel na listagem e disseca 1 detalhe.
+ * Padrão de detalhe descoberto: /leilao/<slug>/lote_id/<ID>. Env: BRIGHTDATA_API_TOKEN, ZONE.
  */
 const TOKEN = process.env.BRIGHTDATA_API_TOKEN;
 const ZONE = process.env.BRIGHTDATA_ZONE;
-const ALVOS = (process.env.LEILAOPRO_ALVOS || 'https://www.leffaleiloes.com.br').split(',').map(s => s.trim()).filter(Boolean);
+const BASE = process.env.LEILAOPRO_BASE || 'https://www.leffaleiloes.com.br';
 
 if (!TOKEN || !ZONE) { console.log('⚠️ BRIGHTDATA_API_TOKEN/ZONE ausentes.'); process.exit(1); }
 
@@ -20,49 +19,48 @@ async function bdFetch(url, timeoutMs = 60000) {
 }
 
 (async () => {
-  for (const BASE of ALVOS) {
-    console.log(`\n╔═══════════════ ${BASE}/leilao/lotes/imoveis ═══════════════╗`);
-    const L = await bdFetch(BASE + '/leilao/lotes/imoveis');
-    const html = L.body;
-    console.log(`HTTP ${L.status} len=${html.length}`);
+  const L = await bdFetch(BASE + '/leilao/lotes/imoveis');
+  const html = L.body;
+  console.log(`LISTAGEM imóveis → HTTP ${L.status} len=${html.length}`);
 
-    // TODOS os hrefs distintos (para achar o padrão de detalhe do lote).
-    const todos = [...new Set([...html.matchAll(/href=["']([^"'#]+)["']/gi)].map(m => m[1]))];
-    // candidatos a DETALHE: contêm dígito e não são categoria/nav/asset.
-    const det = todos.filter(h => /\d/.test(h)
-      && !/\.(css|js|png|jpe?g|svg|ico|woff2?)/i.test(h)
-      && !/\/lotes\/[a-z-]+$/i.test(h)
-      && !/(facebook|instagram|whats|tel:|mailto:|login|cadastr)/i.test(h));
-    console.log(`\n[detalhe?] ${det.length} href(s) com id. Amostra:`);
-    det.slice(0, 12).forEach(h => console.log('   ' + h));
+  // Lotes: /leilao/<slug>/lote_id/<ID>
+  const lotes = [...new Set([...html.matchAll(/href=["'](\/leilao\/[^"']*?\/lote_id\/(\d+))["']/gi)].map(m => m[1]))];
+  const ids = [...new Set([...html.matchAll(/\/lote_id\/(\d+)/g)].map(m => m[1]))];
+  console.log(`\n[lotes de imóvel] ${lotes.length} link(s), ${ids.length} id(s) únicos: ${ids.join(',')}`);
+  lotes.slice(0, 20).forEach(h => console.log('   ' + h));
 
-    // HTML cru ao redor do 1º "Lance" (o card do lote).
-    const iL = html.search(/lance\s*inicial|lance\s*atual|1[ªa]\s*pra/i);
-    if (iL > 0) {
-      const trecho = html.slice(Math.max(0, iL - 1500), iL + 400).replace(/\s+/g, ' ').trim();
-      console.log(`\n[card cru ao redor do 1º "Lance"]:\n${trecho.slice(0, 1900)}`);
-    } else {
-      console.log('\n[card cru] não achei "Lance" no HTML da categoria.');
-    }
+  // Paginação? procura links de página na categoria.
+  const pag = [...new Set([...html.matchAll(/lotes\/imoveis[^"']*?[?&](?:pagina|page)=(\d+)/gi)].map(m => m[1]))];
+  console.log(`[paginação categoria] ${pag.length ? pag.join(',') : '(nenhuma — página única)'}`);
 
-    // Detalhe do 1º candidato.
-    if (det.length) {
-      const durl = det[0].startsWith('http') ? det[0] : BASE + (det[0].startsWith('/') ? det[0] : '/' + det[0]);
-      const D = await bdFetch(durl);
-      const b = D.body;
-      const dtxt = b.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-      console.log(`\n[detalhe] ${durl} → HTTP ${D.status} len=${b.length}`);
-      console.log('   h1:', (b.match(/<h1[^>]*>([\s\S]{0,160}?)<\/h1>/i) || [])[1]?.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim());
-      console.log('   title tag:', (b.match(/<title[^>]*>([\s\S]{0,160}?)<\/title>/i) || [])[1]?.trim());
-      console.log('   R$ (8):', (dtxt.match(/R\$\s?[\d.,]+/g) || []).slice(0, 8).join(' | '));
-      console.log('   cidade/UF:', (dtxt.match(/[A-Za-zÀ-ú .]{3,40}\/[A-Z]{2}\b/g) || []).slice(0, 8).join(' | '));
-      console.log('   m²:', (dtxt.match(/[\d.,]+\s*m²/gi) || []).slice(0, 4).join(' | '));
-      console.log('   datas:', (dtxt.match(/\d{2}\/\d{2}\/\d{4}(?:\s+\d{2}:\d{2})?/g) || []).slice(0, 8).join(' | '));
-      console.log('   1ª/2ª praça trecho:', (dtxt.match(/1[ªa][^]{0,120}?2[ªa][^]{0,60}/i) || [])[0]?.slice(0, 220));
-      console.log('   PDFs:', [...new Set([...b.matchAll(/href=["']([^"']*\.pdf[^"']*)["']/gi)].map(m => m[1]))].slice(0, 6).join(' | '));
-      console.log('   og:image:', (b.match(/property=["']og:image["'][^>]*content=["']([^"']+)["']/i) || [])[1]);
-      console.log('   corpo (1100c):', dtxt.slice(0, 1100));
-    }
+  if (!lotes.length) { console.log('Sem lotes — nada a dissecar.'); return; }
+
+  // DETALHE do 1º lote real.
+  const durl = BASE + lotes[0];
+  const D = await bdFetch(durl);
+  const b = D.body;
+  console.log(`\n╔═══ DETALHE ${durl} → HTTP ${D.status} len=${b.length} ═══╗`);
+  console.log('title:', (b.match(/<title[^>]*>([\s\S]{0,180}?)<\/title>/i) || [])[1]?.trim());
+  console.log('h1:', (b.match(/<h1[^>]*>([\s\S]{0,200}?)<\/h1>/i) || [])[1]?.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim());
+  console.log('og:title:', (b.match(/property=["']og:title["'][^>]*content=["']([^"']+)["']/i) || [])[1]);
+  console.log('og:image:', (b.match(/property=["']og:image["'][^>]*content=["']([^"']+)["']/i) || [])[1]);
+  console.log('og:description:', (b.match(/property=["']og:description["'][^>]*content=["']([^"']+)["']/i) || [])[1]?.slice(0, 200));
+
+  // valores com rótulo: capturo trechos "…Lance…R$…", "…Avaliação…R$…", "1ª Praça…R$…"
+  const dtxt = b.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ').trim();
+  const rotulos = ['lance inicial', 'lance atual', 'lance m[íi]nimo', 'avalia[çc][ãa]o', '1[ªa]\\s*pra[çc]a', '2[ªa]\\s*pra[çc]a', 'valor', 'incremento'];
+  console.log('\n[valores rotulados]');
+  for (const r of rotulos) {
+    const m = dtxt.match(new RegExp(`(${r})[^R]{0,40}(R\\$\\s?[\\d.,]+)`, 'i'));
+    if (m) console.log(`   ${m[1]} → ${m[2]}`);
   }
-  console.log('\nFim v2.');
+  console.log('\ntodos R$ (12):', (dtxt.match(/R\$\s?[\d.,]+/g) || []).slice(0, 12).join(' | '));
+  console.log('cidade/UF no texto:', (dtxt.match(/[A-Za-zÀ-ú .]{3,45}\/[A-Z]{2}\b/g) || []).slice(0, 6).join(' | '));
+  console.log('m²:', (dtxt.match(/[\d.,]+\s*m²/gi) || []).slice(0, 5).join(' | '));
+  console.log('datas:', (dtxt.match(/\d{2}\/\d{2}\/\d{4}(?:\s+\d{2}:\d{2})?/g) || []).slice(0, 8).join(' | '));
+  console.log('praças (trecho):', (dtxt.match(/1[ªa][\s\S]{0,200}/i) || [])[0]?.replace(/\s+/g, ' ').slice(0, 260));
+  console.log('modalidade/tipo pistas:', (dtxt.match(/(judicial|extrajudicial|venda direta|desocupad|ocupad|matr[íi]cula|processo)[^.]{0,60}/gi) || []).slice(0, 5).join(' | '));
+  console.log('PDFs:', [...new Set([...b.matchAll(/href=["']([^"']*\.pdf[^"']*)["']/gi)].map(m => m[1]))].slice(0, 6).join(' | '));
+  console.log('imgs lote:', [...new Set([...b.matchAll(/<img[^>]+src=["']([^"']+)["']/gi)].map(m => m[1]))].filter(u => /lote|imovel|upload|storage|foto/i.test(u)).slice(0, 4).join(' | '));
+  console.log('\ncorpo (1400c):', dtxt.slice(0, 1400));
 })();
