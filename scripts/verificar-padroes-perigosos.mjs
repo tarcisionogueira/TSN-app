@@ -97,6 +97,21 @@ const REGRAS = [
         || /minhas_cotas['"]\s*,\s*\{\s*p_user_id\s*:\s*user\??\.id\b/.test(linha)),
   },
   {
+    id: 'user-id-cru-em-dado-de-cliente',
+    titulo: 'user.id cru em acesso a dado de cliente (tela) — sob modo suporte grava/lê como ADMIN',
+    // Classe #27 da auditoria de 20/08 (a de MAIOR risco: dinheiro + identidade). No modo
+    // suporte o admin VÊ a conta de um cliente; ler/gravar dado do cliente por `user.id` cru
+    // pega o ADMIN. Foi o bug do contador 0/0 (cota) e a raiz de arremate/procuração/rateio
+    // nascendo atribuídos ao admin. O certo é `effectiveUserId` (impersonado no suporte, senão
+    // o próprio usuário — fallback user.id). Linha de base aceita os legados (dívida
+    // conhecida); ocorrência NOVA tem de DECIDIR. Marque `// padrao-ok:` só quando for
+    // comprovadamente ação do PRÓPRIO usuário logado que deve ser do admin mesmo no suporte
+    // (auth/sessão, aceite de termo, mensagem de suporte assinada por quem responde).
+    testar: (linha, rel) => /^src\/(pages|components)\/.*\.jsx$/.test(rel || '')
+      && (/(user_id|cliente_id|indicado_por|p_user_id)\s*:\s*user\??\.id\b/.test(linha)
+        || /\.eq\(\s*['"](user_id|cliente_id|indicado_por)['"]\s*,\s*user\??\.id\b/.test(linha)),
+  },
+  {
     id: 'proporcao-em-elemento-substituido',
     titulo: 'aspectRatio no próprio <img>/<video> — o Safari usa a proporção do ARQUIVO',
     // Em elemento SUBSTITUÍDO (img, video, iframe com conteúdo próprio) com `height` automático,

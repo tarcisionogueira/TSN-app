@@ -5,7 +5,7 @@
   "api/_webhook-core.js": {
     "delete-sem-select": 1,
     "data-sem-error": 16,
-    "mutacao-sem-binding": 7
+    "mutacao-sem-binding": 3
   },
   "api/admin-chargebacks.js": {
     "json-inline-sem-resposta": 1
@@ -61,12 +61,9 @@
     "json-inline-sem-resposta": 1
   },
   "api/enriquecer-backfill-cron.js": {
-    "json-inline-sem-resposta": 2
-  },
-  "api/enriquecer-datas-cron.js": {
     "json-inline-sem-resposta": 1
   },
-  "api/enriquecer-proximidades.js": {
+  "api/enriquecer-datas-cron.js": {
     "json-inline-sem-resposta": 1
   },
   "api/enviar-juridico-email.js": {
@@ -136,7 +133,7 @@
   },
   "api/saldo-abandono-cron.js": {
     "data-sem-error": 2,
-    "mutacao-sem-binding": 2
+    "mutacao-sem-binding": 1
   },
   "api/upload-anexo.js": {
     "json-inline-sem-resposta": 1
@@ -145,12 +142,14 @@
     "json-inline-sem-resposta": 1
   },
   "src/components/BoasVindasModal.jsx": {
-    "flex-2col-sem-minwidth0": 1
+    "flex-2col-sem-minwidth0": 1,
+    "user-id-cru-em-dado-de-cliente": 2
   },
   "src/components/ChatSuporte.jsx": {
     "flex-2col-sem-minwidth0": 1,
-    "data-sem-error": 11,
-    "mutacao-sem-binding": 10
+    "data-sem-error": 8,
+    "mutacao-sem-binding": 10,
+    "user-id-cru-em-dado-de-cliente": 3
   },
   "src/components/ConciliacaoBancaria.jsx": {
     "flex-2col-sem-minwidth0": 1
@@ -159,38 +158,51 @@
     "data-sem-error": 1
   },
   "src/components/FinanciamentoTracker.jsx": {
-    "flex-2col-sem-minwidth0": 1
+    "flex-2col-sem-minwidth0": 1,
+    "user-id-cru-em-dado-de-cliente": 2
   },
   "src/components/Footer.jsx": {
     "flex-2col-sem-minwidth0": 1
   },
+  "src/components/Header.jsx": {
+    "user-id-cru-em-dado-de-cliente": 1
+  },
+  "src/components/KycParceiroModal.jsx": {
+    "user-id-cru-em-dado-de-cliente": 1
+  },
   "src/components/LeitorPaginado.jsx": {
     "data-sem-error": 1,
     "mutacao-sem-binding": 1
+  },
+  "src/components/SugestaoImovel.jsx": {
+    "user-id-cru-em-dado-de-cliente": 1
   },
   "src/components/TermosAtualizadosModal.jsx": {
     "data-sem-error": 1
   },
   "src/components/TourGuia.jsx": {
     "flex-2col-sem-minwidth0": 1,
-    "data-sem-error": 3
+    "data-sem-error": 3,
+    "user-id-cru-em-dado-de-cliente": 3
   },
   "src/components/TriagemPerfil.jsx": {
     "mutacao-sem-binding": 1
   },
+  "src/components/VitrineMaterial.jsx": {
+    "user-id-cru-em-dado-de-cliente": 1
+  },
   "src/contexts/AnalisesContext.jsx": {
     "mesma-janela-em-tabelas-diferentes": 1,
-    "delete-sem-select": 3
+    "delete-sem-select": 1
   },
   "src/contexts/AuthContext.jsx": {
-    "mutacao-sem-binding": 1,
     "data-sem-error": 2
   },
   "src/pages/Admin.jsx": {
     "flex-2col-sem-minwidth0": 1,
-    "data-sem-error": 34,
+    "data-sem-error": 32,
     "delete-sem-select": 9,
-    "mutacao-sem-binding": 18
+    "mutacao-sem-binding": 15
   },
   "src/pages/AdminChargebacks.jsx": {
     "flex-2col-sem-minwidth0": 1
@@ -204,11 +216,12 @@
   "src/pages/Analise.jsx": {
     "flex-2col-sem-minwidth0": 1,
     "data-sem-error": 1,
-    "mutacao-sem-binding": 4
+    "user-id-cru-em-dado-de-cliente": 5,
+    "mutacao-sem-binding": 2
   },
   "src/pages/Arrematados.jsx": {
     "data-sem-error": 9,
-    "delete-sem-select": 2,
+    "user-id-cru-em-dado-de-cliente": 1,
     "mutacao-sem-binding": 1
   },
   "src/pages/Atendimento.jsx": {
@@ -219,18 +232,20 @@
   "src/pages/Busca.jsx": {
     "flex-2col-sem-minwidth0": 1,
     "data-sem-error": 3,
+    "user-id-cru-em-dado-de-cliente": 3,
     "delete-sem-select": 1
   },
   "src/pages/Calculadora.jsx": {
     "flex-2col-sem-minwidth0": 1
   },
   "src/pages/CancelarAlertas.jsx": {
+    "user-id-cru-em-dado-de-cliente": 2,
     "mutacao-sem-binding": 1
   },
   "src/pages/Caso.jsx": {
     "flex-2col-sem-minwidth0": 1,
     "data-sem-error": 8,
-    "mutacao-sem-binding": 7
+    "mutacao-sem-binding": 3
   },
   "src/pages/Checkout.jsx": {
     "mutacao-sem-binding": 1,
@@ -247,6 +262,7 @@
   },
   "src/pages/Consultor.jsx": {
     "flex-2col-sem-minwidth0": 1,
+    "user-id-cru-em-dado-de-cliente": 1,
     "mutacao-sem-binding": 3
   },
   "src/pages/ContratoLink.jsx": {
@@ -275,9 +291,11 @@
   },
   "src/pages/Curso.jsx": {
     "flex-2col-sem-minwidth0": 1,
-    "data-sem-error": 4
+    "data-sem-error": 4,
+    "user-id-cru-em-dado-de-cliente": 3
   },
   "src/pages/EbookPage.jsx": {
+    "user-id-cru-em-dado-de-cliente": 1,
     "data-sem-error": 2
   },
   "src/pages/HomeCliente.jsx": {
@@ -286,6 +304,7 @@
   "src/pages/ImovelDetalhe.jsx": {
     "flex-2col-sem-minwidth0": 1,
     "data-sem-error": 2,
+    "user-id-cru-em-dado-de-cliente": 3,
     "mutacao-sem-binding": 2,
     "delete-sem-select": 1
   },
@@ -303,11 +322,13 @@
     "flex-2col-sem-minwidth0": 1
   },
   "src/pages/Membros.jsx": {
-    "data-sem-error": 4
+    "data-sem-error": 4,
+    "user-id-cru-em-dado-de-cliente": 1
   },
   "src/pages/MeusChamados.jsx": {
     "flex-2col-sem-minwidth0": 1,
     "data-sem-error": 2,
+    "user-id-cru-em-dado-de-cliente": 1,
     "mutacao-sem-binding": 2
   },
   "src/pages/MinhaRede.jsx": {
@@ -319,10 +340,12 @@
   },
   "src/pages/OnrRegistro.jsx": {
     "flex-2col-sem-minwidth0": 1,
-    "data-sem-error": 3
+    "data-sem-error": 3,
+    "user-id-cru-em-dado-de-cliente": 1
   },
   "src/pages/Painel.jsx": {
     "flex-2col-sem-minwidth0": 1,
+    "user-id-cru-em-dado-de-cliente": 9,
     "data-sem-error": 1,
     "delete-sem-select": 2,
     "mutacao-sem-binding": 1
@@ -338,6 +361,7 @@
     "data-sem-error": 3
   },
   "src/pages/ProdutoPublico.jsx": {
+    "user-id-cru-em-dado-de-cliente": 2,
     "data-sem-error": 4
   },
   "src/pages/Promo.jsx": {
@@ -415,10 +439,6 @@
     "data-sem-error": 1
   },
   "scripts/recon-sodre-searchlots.mjs": {
-    "data-sem-error": 1
-  },
-  "scripts/scraper-pecini.mjs": {
-    "brightdata-null-em-coletor": 1,
     "data-sem-error": 1
   },
   "scripts/scraper-powerbi-mj.mjs": {
