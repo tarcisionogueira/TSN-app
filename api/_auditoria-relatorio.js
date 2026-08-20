@@ -160,17 +160,14 @@ export function auditarMercadologico(result, ctx = {}) {
     }
   }
 
-  // ── A7. COMPARÁVEIS DE OUTRO TAMANHO ───────────────────────────────────────────────
-  // R$/m² não é constante ao longo do tamanho: comparar um imóvel de 234 m² com casas de
-  // 270–480 m² (caso real de 15/08) puxa o preço para a faixa errada, e nada na tela dizia
-  // isso. Só acusa quando a MEDIANA das amostras destoa muito da área usada no cálculo.
-  const areasAmostras = amostras.map((s) => n(s?.m2)).filter((x) => x > 0).sort((a, b) => a - b);
-  if (areasAmostras.length >= 3 && areaCons > 0) {
-    const mediana = areasAmostras[Math.floor(areasAmostras.length / 2)];
-    if (mediana > 0 && Math.abs(mediana - areaCons) / areaCons > 0.5) {
-      avisos.push({ chave: 'comparaveis_de_outro_tamanho', msg: `Comparáveis têm mediana de ${Math.round(mediana)} m² contra ${areaCons} m² do imóvel — o R$/m² de imóveis desse porte pode não valer para este.` });
-    }
-  }
+  // ── A7. (REMOVIDA 20/08, decisão do dono) COMPARÁVEIS DE OUTRO TAMANHO ──────────────
+  // Antes: avisava quando a mediana da área das amostras destoava >50% da área do imóvel,
+  // sob a premissa de que "R$/m² varia com o tamanho". O DONO decidiu o contrário e é a
+  // metodologia oficial: **o valor do m² é o que define; o tamanho da unidade é INDIFERENTE
+  // à amostragem de R$/m²** — a média do R$/m² (nível 1 + nível 2) × área é o valor, e ponto.
+  // O aviso contradizia isso e fazia o relatório duvidar de uma estimativa correta (caso
+  // Marcelo: studio de 33,5 m² em Pinheiros com comps de 55 m² — o aviso assustava à toa).
+  // Mantida a numeração A7 só como registro; não gera mais aviso.
 
   // ── C6. PREMISSA DE PAGAMENTO CONTRARIADA PELO DOCUMENTO/ANÚNCIO ────────────────────
   // Achado do dono em 15/08: o relatório imprimia "Custo mensal a suportar: R$ 0,00 · Sem
