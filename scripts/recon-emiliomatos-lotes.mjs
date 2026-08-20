@@ -103,15 +103,19 @@ function totalAnunciado(html) {
     const ogT = (d.html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i) || [])[1];
     const ogImg = (d.html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) || [])[1];
     const txt = d.html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
-    const reais = [...txt.matchAll(/.{0,32}R\$\s*[\d.]+,\d{2}/g)].map(m => m[0].trim()).slice(0, 8);
+    const reais = [...txt.matchAll(/.{0,40}R\$\s*[\d.]+,\d{2}/g)].map(m => m[0].trim()).slice(0, 24);
     const m2 = (txt.match(/[\d.]+,\d{2}\s*m[²2]|\d+\s*m[²2]/i) || [])[0];
     const cid = (txt.match(/\b[A-ZÀ-Ý][A-Za-zÀ-ÿ'.]+(?:\s+[A-ZÀ-Ý][A-Za-zÀ-ÿ'.]+){0,2}\s*\/\s*[A-Z]{2}\b/) || [])[0];
+    // contexto dos RÓTULOS de preço da Superbid/MBV (mapear certo avaliação × oferta × parcela)
+    const rotulos = [...txt.matchAll(/[^.]{0,45}(avalia[çc][ãa]o|oferta\s*inicial|lance|1[ºo]?\s*leil|2[ºo]?\s*leil|valor\s+de\s+refer|entrada|parcela)[^.]{0,45}/gi)]
+      .map(m => m[0].trim().replace(/\s+/g, ' ')).slice(0, 14);
     console.log(`  HTTP ${d.status}  len=${d.html.length}`);
     console.log(`  og:title = ${ogT || '(faltou)'}`);
     console.log(`  og:image = ${ogImg ? 'ok' : '(faltou)'}`);
-    console.log(`  R$ ctx   = ${JSON.stringify(reais)}`);
     console.log(`  m²       = ${m2 || '(faltou)'}`);
     console.log(`  cidade/UF= ${cid || '(faltou)'}`);
+    console.log(`  R$ (24)  = ${JSON.stringify(reais)}`);
+    console.log(`  RÓTULOS  = ${JSON.stringify(rotulos)}`);
   }
   console.log(`\nSe os IDs > 0 e a paginação anda, o alvo do scraper de produção é ${SEG}?${esquema || 'page'}=N, parseando href '-<ID>' sob /imoveis.`);
 })();
