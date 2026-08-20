@@ -1,0 +1,28 @@
+name: Recon LeilãoPro Core (leffa/oscar)
+
+# Recon runtime da plataforma "LeilãoPro Core" (leffaleiloes/oscarleiloes): confirma a
+# estrutura VIVA (SSR vs SPA, rota de listagem, paginação, endpoints do bundle) antes de
+# codar o scraper. Só disparo manual. Não grava nada.
+on:
+  workflow_dispatch:
+    inputs:
+      tenants:
+        description: 'hosts separados por vírgula'
+        required: false
+        default: 'leffaleiloes.com.br,oscarleiloes.com.br'
+
+jobs:
+  recon:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Recon estrutura + endpoints
+        env:
+          BRIGHTDATA_API_TOKEN: ${{ secrets.BRIGHTDATA_API_TOKEN }}
+          BRIGHTDATA_ZONE: ${{ secrets.BRIGHTDATA_ZONE }}
+          LEILAOPRO_TENANTS: ${{ github.event.inputs.tenants }}
+        run: node scripts/recon-leilaopro.mjs
