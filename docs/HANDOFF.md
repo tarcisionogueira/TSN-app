@@ -10300,3 +10300,40 @@ runner comum SEM mudar comportamento. Feito:
 
 Guards: eslint · verificar:padroes · verificar:sintaxe limpos. Deploy em `main` (scrapers só rodam
 por cron/dispatch; Vercel não muda). **Próximo (Passo 1):** motor `blob-json` → alfaleiloes.
+
+---
+
+## 🔧 Sessão 20/08 (noite) — caso Marcelo: metodologia de valor + auditoria de contadores + catálogo de erros
+
+**Contexto:** dono no modo suporte vendo a conta do Marcelo (top2). Relatório "muito ruim",
+contador "0/0", "apagou análises?".
+
+**1) "Apagou as outras?" → NÃO.** Marcelo pediu exatamente 2 relatórios (Vila Formosa + Pinheiros),
+os dois presentes. Nada apagado.
+
+**2) Contador "0/0" + botão "atualizar" travado → BUG do modo suporte, corrigido.**
+`Analise.jsx` e `ImovelDetalhe.jsx` liam `minhas_cotas`/`lerCota*` com `user.id` (o ADMIN logado)
+em vez de `effectiveUserId` (cliente visto). Resultado: contador 0/0 (cota do admin) e
+`bloqueado(0/0)=true` TRAVAVA o botão — por isso "atualizar pesquisa" não fazia nada. Corrigidos
+os dois; HomeCliente/Busca/Créditos já usavam effectiveUserId; Caso já fora corrigido;
+IndiceConsulta não tem contador. **Trava nova `cota-por-user-id-cru`** em `verificar:padroes`
+reprova qualquer `lerCota*`/`minhas_cotas` novo lido por `user.id` em `.jsx`.
+
+**3) METODOLOGIA DE VALOR (decisão do dono):** o R$/m² é o que define; **tamanho da unidade é
+INDIFERENTE** à amostragem de R$/m². Ações:
+- Removido o aviso `comparaveis_de_outro_tamanho` (`_auditoria-relatorio.js` A7) — contradizia a regra.
+- **Locação alinhada à venda:** era a MEDIANA do `valorMensal` dos comps (não escala com área);
+  agora **mediana do R$/m²·mês (nível1+2) × área**, yield recalculado. `gerar-analise.js` ~2403.
+  (Venda já era `precoMedioM2×área`.) Índice já guarda venda+locação por m² (nativo) → já atende.
+- ⚠️ Vale para relatórios NOVOS: os 2 do Marcelo mantêm os números até regerar (botão destravado).
+
+**4) CATÁLOGO DE ERROS RESOLVIDOS (auditoria completa, pedido do dono) — 32 classes mapeadas com
+a guarda de cada uma. TOP GAPS sem trava estática (rede de segurança só de DADO ou manual):**
+1. **`user.id` cru no modo suporte (classe 27) — RISCO ALTO.** ~151 leituras cruas no acervo
+   (HANDOFF:1955); só a cota ganhou trava agora. Arremate/procuração/rateio ainda podem gravar
+   como ADMIN. Fechar com trava estática de `user.id` novo em telas que importam effectiveUserId.
+2. **Cobrar cota/crédito em fluxo que falhou (classe 26)** — sem trava; reincidiu em gerar-analise/Caso.
+3. **`fetch().json()` sem `.ok` na forma de 2 linhas (classe 3)** — trava atual só pega a inline.
+4. Função mudada no banco sem migração (classe 9) — sem trava barata.
+5. Validação de ingestão externa (classe 10) — só invariante do Censo.
+Recomendação registrada para as próximas sessões fecharem por prioridade.
