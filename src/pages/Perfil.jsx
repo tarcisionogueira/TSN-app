@@ -5,6 +5,7 @@ import { supabase } from '../utils/supabase';
 import { useIsMobile } from '../utils/useIsMobile';
 import { BarChart2, Bell, BellOff, Camera, ShieldCheck, MapPin, CreditCard, ArrowRight, ArrowDownCircle, Check } from 'lucide-react';
 import { apiCall } from '../utils/apiCall';
+import { limparCnpj, cnpjValido } from '../utils/cnpj';
 import { pushSuportado, statusPermissao, ativarPush, desativarPush, getSubscriptionAtiva } from '../utils/push';
 import { ESTADOS_UF } from '../data/cidades';
 import CidadeAutocomplete from '../components/CidadeAutocomplete';
@@ -84,7 +85,7 @@ const INV_EXPERIENCIA = [
 
 // Card editável do perfil de investidor. Autossuficiente (carrega/salva sozinho),
 // independente do formulário de dados cadastrais.
-function PerfilInvestidorCard({ userId, isMobile }) {
+function PerfilInvestidorCard({ userId, isMobile, readOnly = false }) {
   const [f, setF] = useState(null); // null = carregando
   const [orig, setOrig] = useState(null);
   const [salvando, setSalvando] = useState(false);
@@ -114,6 +115,7 @@ function PerfilInvestidorCard({ userId, isMobile }) {
   const dirty = orig && JSON.stringify(f) !== JSON.stringify(orig);
 
   const salvar = async () => {
+    if (readOnly) { setMsg({ ok: false, texto: 'Modo suporte: visualização apenas.' }); return; }
     setSalvando(true); setMsg(null);
     const cidades = f.cidade.trim()
       ? [{ cidade: f.cidade.trim(), uf: (f.uf || '').trim().toUpperCase(), raio_km: Number(f.raio_km) || 50 }]
@@ -206,6 +208,21 @@ function PerfilInvestidorCard({ userId, isMobile }) {
 
 export default function Perfil() {
   const { user, role, effectiveRole, impersonate, nome: nomePerfil } = useAuth();
+  // MODO SUPORTE (admin/analista visualizando a conta de um cliente). Duas correções (20/08):
+  //  • LEITURA: todos os dados são lidos por `uid` = a conta VISUALIZADA (impersonate) e não a
+  //    do admin logado — senão o Perfil mostrava os dados do PRÓPRIO admin durante o suporte
+  //    (vazamento reportado: "simulo o acesso e ainda traz os MEUS dados").
+  //  • ESCRITA: TODA ação de mutação é bloqueada no suporte. As APIs (saque, cpf-set,
+  //    lgpd-excluir, troca de senha via supabase.auth) usam a SESSÃO do admin — no suporte
+  //    elas agiriam sobre a conta DO ADMIN (excluir/trocar senha do admin!). Suporte é só
+  //    diagnóstico/visualização; para alterar, sai-se do modo suporte.
+  const uid = impersonate?.id || user?.id;
+  const emSuporte = !!impersonate;
+  const guardaSuporte = (setMsg) => {
+    if (!emSuporte) return false;
+    setMsg?.({ tipo: 'erro', texto: 'Modo suporte: visualização apenas. Saia do modo suporte para alterar dados desta conta.' });
+    return true;
+  };
   const isMobile = useIsMobile();
   const nav = useNavigate();
   const loc = useLocation();
@@ -244,13 +261,13 @@ export default function Perfil() {
   const selfieRef = useRef();
 
   useEffect(() => {
-    if (!user?.id || !ROLES_SELFIE.includes(role)) return;
-    supabase.from('perfis').select('identidade_validada, identidade_pendente').eq('id', user.id).single()
+    if (!uid || !ROLES_SELFIE.includes(role)) return;
+    supabase.from('perfis').select('identidade_validada, identidade_pendente').eq('id', uid).single()
       .then(({ data }) => {
         setIdentValidada(data?.identidade_validada || false);
         setIdentPendente(data?.identidade_pendente || false);
       });
-  }, [user?.id, role]); // eslint-disable-line
+  }, [uid, role]); // eslint-disable-line
 
   // Assinatura / cancelamento (garantia de 7 dias)
   const ROLES_PAGANTES = ['top2', 'assessorado', 'clube', 'top2_anual', 'assessorado_anual', 'clube_anual'];
@@ -260,15 +277,16 @@ export default function Perfil() {
   const [cancelMsg, setCancelMsg] = useState(null);
 
   useEffect(() => {
-    if (!user?.id || !ROLES_PAGANTES.includes(role)) return;
-    supabase.from('perfis').select('plano_pago_em').eq('id', user.id).single()
+    if (!uid || !ROLES_PAGANTES.includes(role)) return;
+    supabase.from('perfis').select('plano_pago_em').eq('id', uid).single()
       .then(({ data }) => setPlanoPagoEm(data?.plano_pago_em || null));
-  }, [user?.id, role]); // eslint-disable-line
+  }, [uid, role]); // eslint-disable-line
 
   const dentroGarantia = planoPagoEm && (Date.now() - new Date(planoPagoEm).getTime() <= 7 * 24 * 3600 * 1000);
   const diasRestantesGarantia = planoPagoEm ? Math.max(0, 7 - Math.floor((Date.now() - new Date(planoPagoEm).getTime()) / 86400000)) : 0;
 
   async function confirmarCancelamento() {
+    if (emSuporte) { setCancelMsg({ ok: false, texto: 'Modo suporte: cancelamento desativado (agiria sobre a conta do admin).' }); return; }
     setCancelando(true); setCancelMsg(null);
     try {
       const res = await apiCall('/api/garantia-cancelar', { method: 'POST' });
@@ -358,17 +376,17 @@ export default function Perfil() {
   // CPF é mostrado mascarado (o valor cheio nunca vem para o navegador; a chave
   // de decifra fica só no backend). O próprio dono recebe a máscara.
   useEffect(() => {
-    if (!user?.id) return;
-    apiCall('/api/cpf-revelar', { method: 'POST', body: JSON.stringify({ ids: [user.id] }) })
-      .then(r => r.json()).then(d => setCpf(d?.cpfs?.[user.id] || '')).catch(() => {});
-  }, [user?.id]);
+    if (!uid) return;
+    apiCall('/api/cpf-revelar', { method: 'POST', body: JSON.stringify({ ids: [uid] }) })
+      .then(r => r.json()).then(d => setCpf(d?.cpfs?.[uid] || '')).catch(() => {});
+  }, [uid]);
 
   // Carrega dados cadastrais (nome fixo + telefone/endereço/pix editáveis)
   useEffect(() => {
-    if (!user?.id) return;
+    if (!uid) return;
     supabase.from('perfis')
       .select('nome,telefone,chave_pix,endereco_cep,endereco_logradouro,endereco_numero,endereco_complemento,endereco_bairro,endereco_cidade,endereco_uf')
-      .eq('id', user.id).single()
+      .eq('id', uid).single()
       .then(({ data }) => {
         if (!data) return;
         const snap = {
@@ -386,7 +404,7 @@ export default function Perfil() {
         setEnd(snap.end);
         setOriginal(snap);
       });
-  }, [user?.id]);
+  }, [uid]);
 
   // Há alterações não salvas? (compara com o snapshot original)
   const dirty = !!original && (
@@ -471,6 +489,9 @@ export default function Perfil() {
   };
 
   const carregarSaldo = async () => {
+    // No modo suporte NÃO buscamos o saldo: /api/saque usa a SESSÃO do admin e devolveria o
+    // saldo DO ADMIN como se fosse o do cliente (foi o "R$ 74,88" que aparecia no suporte).
+    if (emSuporte) return;
     try {
       const res = await apiCall('/api/saque');
       const data = await res.json();
@@ -492,8 +513,8 @@ export default function Perfil() {
       const [{ data }, { data: docs }] = await Promise.all([
         supabase.from('perfis')
           .select('cnpj,razao_social,pj_chave_pix,pj_validada_em,pj_validada_via,identidade_validada,identidade_pendente,pj_revalidacao_pendente,pj_revalidacao_motivo')
-          .eq('id', user.id).maybeSingle(),
-        supabase.from('usuario_docs').select('tipo').eq('user_id', user.id).like('tipo', 'kyc%'),
+          .eq('id', uid).maybeSingle(),
+        supabase.from('usuario_docs').select('tipo').eq('user_id', uid).like('tipo', 'kyc%'),
       ]);
       if (data) setPj((p) => ({ ...p, ...data }));
       const tipos = new Set((docs || []).map((d) => d.tipo));
@@ -513,24 +534,28 @@ export default function Perfil() {
     if (!temComissao) return;
     carregarSaldo();
     carregarPJ();
-  }, [temComissao, user.id]); // eslint-disable-line
+  }, [temComissao, uid]); // eslint-disable-line
 
   // Relatório do Programa de Parceiros (rede multinível) — sintético + analítico.
   useEffect(() => {
-    if (!ehParceiro) return;
+    // relatorio_comissoes_rede usa auth.uid() (a rede do ADMIN) — não faz sentido no suporte.
+    if (!ehParceiro || emSuporte) return;
     supabase.rpc('relatorio_comissoes_rede').then(({ data }) => { if (data && !data.erro) setRelRede(data); }).catch(() => {});
-  }, [ehParceiro, user.id]); // eslint-disable-line
+  }, [ehParceiro, uid]); // eslint-disable-line
 
   // Salva os dados da empresa (PJ). cnpj/razao/pix não são campos protegidos → update direto.
   async function salvarPJ() {
-    const cnpjDigits = (pj.cnpj || '').replace(/\D/g, '');
-    if (cnpjDigits && cnpjDigits.length !== 14) { setPjMsg({ tipo: 'erro', texto: 'CNPJ deve ter 14 dígitos.' }); return; }
+    if (guardaSuporte(setPjMsg)) return;
+    // Mesma normalização/validação robusta do MinhaRede (dígitos Unicode "sósia" + DV de verdade).
+    const cnpjDigits = limparCnpj(pj.cnpj);
+    if (cnpjDigits && cnpjDigits.length !== 14) { setPjMsg({ tipo: 'erro', texto: 'CNPJ incompleto — informe os 14 caracteres.' }); return; }
+    if (cnpjDigits && !cnpjValido(cnpjDigits)) { setPjMsg({ tipo: 'erro', texto: 'CNPJ inválido — confira os números digitados.' }); return; }
     setSavingPj(true); setPjMsg(null);
     try {
       const { error } = await supabase.from('perfis').update({
-        cnpj: pj.cnpj || null, razao_social: pj.razao_social || null, pj_chave_pix: pj.pj_chave_pix || null,
+        cnpj: cnpjDigits || null, razao_social: pj.razao_social || null, pj_chave_pix: pj.pj_chave_pix || null,
         pj_dados_atualizados_em: new Date().toISOString(), // reseta o relógio de abandono (90d)
-      }).eq('id', user.id);
+      }).eq('id', uid);
       if (error) throw error;
       carregarSaldo();
       // VERIFICA NA HORA (08/08, pedido do dono: "não precisa ter o botão de verificar na
@@ -546,6 +571,7 @@ export default function Perfil() {
   // Verificação automática (grátis): confere se o CPF consta no quadro societário do CNPJ (Receita).
   // `silencioso` = chamada logo após salvar; a mensagem de "consultando…" já está na tela.
   async function verificarPJAuto({ silencioso = false } = {}) {
+    if (guardaSuporte(setPjMsg)) return;
     setVerificandoPj(true);
     if (!silencioso) setPjMsg(null);
     try {
@@ -563,8 +589,11 @@ export default function Perfil() {
   // Armazena um arquivo no bucket privado 'documentos' + registra em usuario_docs (auditoria).
   const dataUrlDe = (file) => new Promise((resolve, reject) => { const fr = new FileReader(); fr.onload = () => resolve(fr.result); fr.onerror = reject; fr.readAsDataURL(file); });
   async function armazenarDoc(file, tipo, prefixo) {
+    // Choke-point de TODO upload de KYC/documento: no suporte, para aqui (o upload é do
+    // ADMIN — bucket pj/<admin> e usuario_docs do admin). Lança p/ o chamador exibir o motivo.
+    if (emSuporte) throw new Error('Modo suporte: envio de documentos desativado.');
     const ext = ((file.name || '').split('.').pop() || 'jpg').toLowerCase();
-    const path = `pj/${user.id}/${prefixo}-${Date.now()}.${ext}`;
+    const path = `pj/${uid}/${prefixo}-${Date.now()}.${ext}`;
     const { error: upErr } = await supabase.storage.from('documentos').upload(path, file, { upsert: false });
     if (upErr) throw upErr;
     // Grava o PATH, de propósito (08/08): quem assina é o SERVIDOR, na hora, com a service key
@@ -574,7 +603,7 @@ export default function Perfil() {
     // de verdade, para obter algo que já não é usado.
     // Checa o insert: sem isso, uma falha (ex.: RLS) mostrava "documento recebido" mas o
     // servidor nunca via o doc → o KYC nunca concluía (selfie retornava falta_documento).
-    const { error: insErr } = await supabase.from('usuario_docs').insert({ user_id: user.id, tipo, nome: file.name || `${prefixo}.${ext}`, url: path, tamanho_kb: Math.round((file.size || 0) / 1024) });
+    const { error: insErr } = await supabase.from('usuario_docs').insert({ user_id: uid, tipo, nome: file.name || `${prefixo}.${ext}`, url: path, tamanho_kb: Math.round((file.size || 0) / 1024) });
     if (insErr) throw insErr;
   }
 
@@ -639,6 +668,7 @@ export default function Perfil() {
   // O celular concluiu documento + selfie pelo QR. Igual ao modal do parceiro: o telefone só
   // entrega as fotos; a conferência é pedida por ESTA sessão, com a selfie já no acervo.
   async function concluirKycPeloCelular() {
+    if (guardaSuporte(setPjMsg)) return;
     setDocFotos((d) => ({ ...d, frente: true }));
     setKycBusy(true); setPjMsg(null);
     try {
@@ -660,6 +690,7 @@ export default function Perfil() {
   const maskCpf = (v) => (v || '').replace(/\D/g, '').slice(0, 11)
     .replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d{1,2})$/, '$1-$2');
   async function salvarCpf() {
+    if (guardaSuporte(setMsgCpf)) return;
     const digits = cpfInput.replace(/\D/g, '');
     if (digits.length !== 11) { setMsgCpf({ tipo: 'erro', texto: 'Informe um CPF válido (11 dígitos).' }); return; }
     setSalvandoCpf(true); setMsgCpf(null);
@@ -668,8 +699,8 @@ export default function Perfil() {
       const d = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(d.error || 'Não foi possível salvar o CPF.');
       // Re-lê o CPF mascarado e reavalia a habilitação de saque.
-      apiCall('/api/cpf-revelar', { method: 'POST', body: JSON.stringify({ ids: [user.id] }) })
-        .then(rr => rr.json()).then(dd => setCpf(dd?.cpfs?.[user.id] || '')).catch(() => {});
+      apiCall('/api/cpf-revelar', { method: 'POST', body: JSON.stringify({ ids: [uid] }) })
+        .then(rr => rr.json()).then(dd => setCpf(dd?.cpfs?.[uid] || '')).catch(() => {});
       if (temComissao) carregarSaldo();
       setCpfInput('');
       setMsgCpf({ tipo: 'sucesso', texto: 'CPF salvo! Será usado nos seus pagamentos e saques.' });
@@ -680,6 +711,7 @@ export default function Perfil() {
   }
 
   async function solicitarSaque() {
+    if (guardaSuporte(setMsgSaque)) return;
     const valor = Number(valorSaque);
     if (!valor || valor <= 0) { setMsgSaque({ tipo: 'erro', texto: 'Informe um valor válido.' }); return; }
     setSolicitandoSaque(true);
@@ -711,6 +743,7 @@ export default function Perfil() {
   async function salvar(e) {
     e?.preventDefault();
     setMensagem(null);
+    if (guardaSuporte(setMensagem)) return;
 
     if (novaSenha && novaSenha !== confirmarSenha) {
       setMensagem({ tipo: 'erro', texto: 'As senhas não coincidem.' });
@@ -749,7 +782,7 @@ export default function Perfil() {
       };
       if (temComissao) perfilUpdate.chave_pix = chavePix || null;
 
-      const { error: e2 } = await supabase.from('perfis').update(perfilUpdate).eq('id', user.id);
+      const { error: e2 } = await supabase.from('perfis').update(perfilUpdate).eq('id', uid);
       if (e2) throw e2;
 
       setNovaSenha('');
@@ -765,6 +798,7 @@ export default function Perfil() {
   }
 
   async function baixarDados() {
+    if (emSuporte) { setLgpdErro('Modo suporte: visualização apenas — a exportação usa a conta do admin.'); return; }
     setBaixando(true);
     setLgpdErro(null);
     try {
@@ -788,6 +822,9 @@ export default function Perfil() {
   }
 
   async function excluirConta() {
+    // TRAVA CRÍTICA: /api/lgpd-excluir usa a sessão do admin — no suporte apagaria a conta DO
+    // ADMIN. Nunca no modo suporte.
+    if (emSuporte) { setLgpdErro('Modo suporte: exclusão desativada (agiria sobre a conta do admin).'); return; }
     if (textoConfirmacao !== 'EXCLUIR') return;
     setExcluindo(true);
     setLgpdErro(null);
@@ -865,6 +902,14 @@ export default function Perfil() {
           <h1 style={{ fontSize: isMobile ? 22 : 26, fontWeight: 900, color: '#111111', margin: 0 }}>Meu Perfil</h1>
           <p style={{ color: '#64748b', fontSize: 14, marginTop: 6 }}>Gerencie sua assinatura, seus dados e suas preferências</p>
         </div>
+
+        {/* MODO SUPORTE: aviso de que a tela é só leitura da conta visualizada. As mutações
+            estão travadas nos handlers (agiriam sobre a conta do admin logado). */}
+        {emSuporte && (
+          <div style={{ marginBottom: 16, background: '#fff7ed', border: '1px solid #fed7aa', color: '#9a3412', borderRadius: 12, padding: '12px 14px', fontSize: 13, fontWeight: 700 }}>
+            👁️ Modo suporte — você está <strong>visualizando</strong> a conta de {impersonate?.nome || 'um cliente'}. As alterações estão desativadas; saia do modo suporte para editar.
+          </div>
+        )}
 
         {/* Sub-abas por funcionalidade */}
         <div style={{ display: 'flex', gap: 6, marginBottom: 22, overflowX: 'auto', paddingBottom: 4, WebkitOverflowScrolling: 'touch' }}>
@@ -1047,7 +1092,7 @@ export default function Perfil() {
           {/* Perfil de investidor (editável) — direciona a recomendação por e-mail.
               Só para clientes; equipe (admin/analista/etc.) não recebe recomendação. */}
           {['explorador','top2','top2_anual','assessorado','assessorado_anual','clube','clube_anual'].includes(role) && (
-            <PerfilInvestidorCard userId={user?.id} isMobile={isMobile} />
+            <PerfilInvestidorCard userId={uid} isMobile={isMobile} readOnly={emSuporte} />
           )}
           </>
         )}
