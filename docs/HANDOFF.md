@@ -9996,3 +9996,18 @@ devolvendo HTML. Pior: os 13 gastaram ~16 dos 20 min do job em Bright Data falha
 "14 Vlance" do placar acima NÃO são plug-and-play — cada um precisa do endpoint mapeado no
 navegador (grampo fetch/XHR, ver RECON_LEILOEIROS_PLAYBOOK.md) antes de reintegrar. Reclassificar
 esses 13 de "scraper existente" para "recon runtime pendente".
+
+### 🔎 emiliomatos NÃO é Vlance — é Superbid/MBV (recon runtime 20/08)
+Recon dos bundles Vite (run 32357329191, `scripts/recon-emiliomatos.mjs`) mostrou que
+emiliomatosleiloes.com.br é **plataforma Superbid/MBV**, não Vlance — o fingerprint "Vlance"
+do recon de backlog foi FALSO POSITIVO (a string estava no HTML, mas a API é outra; por isso
+`/core/api/get-lotes` deu 0). Assinaturas Superbid/MBV: `mbv-live-default-rtdb.firebaseio.com`
+(lances ao vivo), rotas `/busca/segmento/<seg>`, `/busca/redeColaborativa/<rede>`,
+`/busca/categoriaEvento/<cat>`, slugs de lote `/imoveis/<tipo>/<slug>-<ID>`. Site é **SSR**
+(home = 2,5 MB de HTML com os lotes embutidos), então dá para raspar por HTML sem engenharia
+reversa de JSON.
+- **Endpoint de listagem (imóveis só):** `https://emiliomatosleiloes.com.br/busca/segmento/imoveis`
+- Config: `/api/config`. Favoritos: `/busca-favoritos`.
+- Já temos tooling da família: `scripts/recon-sodre-*.mjs`, `captura-docs-sodre.mjs` (Sodré é rede Superbid).
+- **LIÇÃO:** fingerprint de HTML ≠ contrato de API. Antes de somar tenant "Vlance" por HTML,
+  validar o endpoint runtime (o recon-emiliomatos*.mjs é o modelo).
