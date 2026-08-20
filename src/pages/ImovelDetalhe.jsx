@@ -282,7 +282,7 @@ function ImoveisSimilares({ imovel, nav }) {
 }
 
 function SecaoArrematacao({ imovelId, imovelTitulo }) {
-  const { user, role } = useAuth();
+  const { user, role, effectiveUserId } = useAuth();
   const nav = useNavigate();
   const [dados, setDados] = useState(null); // { arrematacao, anexos, docs }
   const [fluxoOk, setFluxoOk] = useState(false); // pipeline completo (até parecer jurídico)
@@ -711,7 +711,7 @@ export default function ImovelDetalhe() {
   const nav = useNavigate();
   const loc = useLocation();
   const { id: paramId } = useParams();
-  const { user, role } = useAuth();
+  const { user, role, effectiveUserId } = useAuth();
   const [imovel, setImovel] = useState(loc.state?.imovel || null);
   const [cota, setCota] = useState(null); // quanto ainda dá para analisar — vira o texto do botão
   const [anexosDocs, setAnexosDocs] = useState([]);
@@ -772,11 +772,12 @@ export default function ImovelDetalhe() {
   // leitura falhar, `cota` fica null e o botão volta ao texto genérico — falha de rede não pode
   // virar "você não tem análise".
   useEffect(() => {
-    if (!user) { setCota(null); return; }
+    const uid = effectiveUserId || user?.id;   // no modo suporte, a cota do cliente visto (não a do admin)
+    if (!uid) { setCota(null); return; }
     let vivo = true;
-    lerCotaMercado(supabase, user.id).then((c) => { if (vivo) setCota(c); });
+    lerCotaMercado(supabase, uid).then((c) => { if (vivo) setCota(c); });
     return () => { vivo = false; };
-  }, [user]);
+  }, [user, effectiveUserId]);
 
   useEffect(() => {
     // A busca por raio passa o imóvel no state SEM edital/matrícula/descrição.

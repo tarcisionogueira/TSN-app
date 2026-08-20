@@ -84,6 +84,19 @@ const REGRAS = [
     testar: (linha) => /(const|let)\s*\{\s*data\s*(:\s*\w+\s*)?\}\s*=\s*await\s+(supabase|sb)\b/.test(linha),
   },
   {
+    id: 'cota-por-user-id-cru',
+    titulo: 'Cota de relatórios lida por user.id cru — no modo suporte mostra a cota do ADMIN',
+    // A cota TEM de ser a de QUEM se está vendo (`effectiveUserId`), não a do admin logado.
+    // Bug de 20/08 (Analise.jsx + ImovelDetalhe.jsx): ao ver a conta de um cliente pelo modo
+    // suporte, `lerCota*(supabase, user.id)` / `minhas_cotas({p_user_id: user.id})` devolvia a
+    // cota do ADMIN → contador "0/0" e o botão de gerar/atualizar TRAVADO (bloqueado(0/0)=true).
+    // O certo é `effectiveUserId` (impersonado no suporte, senão o próprio usuário — fallback
+    // user.id). Marque `// padrao-ok:` só se comprovadamente NÃO houver caminho de suporte.
+    testar: (linha, rel) => /^src\/.*\.jsx$/.test(rel || '')
+      && (/(lerCotas|lerCotaMercado)\s*\(\s*supabase\s*,\s*user\??\.id\b/.test(linha)
+        || /minhas_cotas['"]\s*,\s*\{\s*p_user_id\s*:\s*user\??\.id\b/.test(linha)),
+  },
+  {
     id: 'proporcao-em-elemento-substituido',
     titulo: 'aspectRatio no próprio <img>/<video> — o Safari usa a proporção do ARQUIVO',
     // Em elemento SUBSTITUÍDO (img, video, iframe com conteúdo próprio) com `height` automático,
