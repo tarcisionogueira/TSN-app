@@ -10103,3 +10103,52 @@ errada — a disciplina do "isto está feito de verdade?" evitou trabalho inerte
    pela ordem de acervo: **LeilãoPro Core = leffaleiloes (124) + oscarleiloes (28) = 152
    imóveis, 1 scraper cobre os dois** (`/leilaoprocore/js/`, `/leilao/lotes/imoveis`). Fica
    como próximo trabalho focado, com o aval do dono para o gasto de BD (emiliomatos custou ~68 req).
+
+---
+
+## ✅ Sessão 20/08 (tarde) — 3 ajustes de UX + LEILAOPRO integrado (item 4)
+
+### UX (deploy em produção)
+1. **Índice sem "Todos os tipos"** (`IndiceConsulta.jsx`): consultar os 4 tipos de uma vez
+   misturava preço/m² e amostragem distintos e confundia a triagem. Agora uma consulta = um
+   tipo (a geração já era 1-por-vez desde 06/08). Default: apartamento.
+2. **Área de Membros sem flash de zeros** (`Membros.jsx`): o Hero mostrava "0 Aulas · 0 Cursos
+   · 0 eBooks" por um instante até o fetch resolver (parecia bug). Novo estado `carregando`
+   pinta "—" no lugar dos zeros e neutraliza o subtítulo até os dados chegarem.
+3. **Acervo público no padrão da Busca** (`api/publico.js`, SSR): o cartão do acervo aberto
+   (sem login) agora espelha o cartão da tela de Busca logada — selo de desconto graduado na
+   foto, chips de tipo/modalidade, R$/m², selos de Edital/Matrícula, data da praça e o par
+   Lance mínimo/Avaliação. Só colunas que a linha JÁ traz (custo zero, página edge-cached).
+   **Fora de propósito (produto pago + custo):** Score/análise/mapa/raio ficam atrás do cadastro.
+
+### LEILAOPRO — nova família de scraper integrada (item 4, "como sugerido")
+Plataforma **"LeilãoPro Core"** (artisticweb/leilaodetran, SSR) — serve leffa e oscar.
+Seguiu o modelo emiliomatos (recon runtime → parser → validação campo-a-campo → grava):
+- **Recon** (workflow `recon-leilaopro`, Bright Data): SSR, categoria `/leilao/lotes/imoveis`
+  (página única), lote `/leilao/<slug>/lote_id/<ID>`. **Preço POR RÓTULO** (não adivinhar):
+  `LANCE INICIAL` = avaliação (1º leilão) · `LANCE INICIAL 2º LEILÃO` = mínimo (≈50%) ·
+  incremento/caução IGNORADOS. Cidade/UF do título ("…CIDADE DE <x>/<UF>"), área do m² do
+  título, docs em `/uploads/media/documentos_leilao` (edital) e `/documentos_bem` (matrícula).
+- **Parser** `scripts/lib/leilaopro-parse.mjs` (puro, compartilhado validação↔produção),
+  multi-tenant (fonte por leiloeiro: LEFFA, OSCAR). **Scraper** `scripts/scraper-leilaopro.mjs`
+  + workflow `scraper-leilaopro.yml` (cron quinta 10:50 UTC grava · dispatch dry-run · freio
+  residencial 7d). Migração `brightdata_reserva_leilaopro.sql` (proposito, teto 120).
+- **Resultado: 8 imóveis LEFFA vivos** (`fonte=LEFFA`), 100% com cidade/UF/valor/foto, praças
+  set-nov/2026, RS+SC. **Custo Bright Data: ZERO** — o fetch direto do runner funciona para o
+  LeilãoPro (a via grátis do scraper resolve; BD é só fallback). O teto semanal (550, saturado
+  em 618) não foi tocado.
+- **Bugs pegos ANTES/na validação** (disciplina "validar cada campo num lote real"):
+  (a) cidade hifenizada "Xangri-Lá" vinha "Lá" — hífen fora da classe de palavra e do titleCase;
+  (b) **apartamento inteiro descartado como "fração ideal"** — a descrição vinha do CORPO (a
+  matrícula inteira, que em todo apto cita "fração ideal de terreno" = parte comum do condomínio);
+  passou a vir do `og:description` (endereço+área), alinhado à calibração das outras fontes —
+  recuperou os 2 aptos de Torres/RS (área privativa 103m²/275m²).
+- **oscar NÃO coletado**: o domínio migrou para `oscar.leilao.br` e a listagem de imóveis
+  voltou VAZIA no recon (0 lotes). Fica fora do default (`LEILAOPRO_TENANTS=leffa`); quando o
+  dono quiser, precisa de recon próprio do novo domínio.
+- **Saúde**: `fonte_saude` registra o count DO RUN (padrão dos scrapers incrementais); em runs
+  só-de-novos o número fica baixo ("degradado") — o monitor auto-onboarda e calibra o baseline
+  pelo histórico. Um run completo (sem novos) grava o count cheio (8).
+
+**Próximas alavancas LeilãoPro** (mesma plataforma, quando o dono quiser): confirmar oscar no
+novo domínio; e as demais famílias do backlog de 16 (Nordeste SPA, Jussiara, Flávio Costa, Alfa).
