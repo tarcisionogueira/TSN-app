@@ -1,0 +1,17 @@
+name: Recon Comprei PGFN (federal)
+
+on: { workflow_dispatch: {} }
+
+jobs:
+  recon:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - name: Recon comprei.pgfn
+        env:
+          BRIGHTDATA_API_TOKEN: ${{ secrets.BRIGHTDATA_API_TOKEN }}
+          BRIGHTDATA_ZONE: ${{ secrets.BRIGHTDATA_ZONE }}
+        run: node scripts/recon-comprei-pgfn.mjs
