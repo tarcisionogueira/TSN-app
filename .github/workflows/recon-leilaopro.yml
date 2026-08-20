@@ -26,3 +26,8 @@ jobs:
           BRIGHTDATA_ZONE: ${{ secrets.BRIGHTDATA_ZONE }}
           LEILAOPRO_TENANTS: ${{ github.event.inputs.tenants }}
         run: node scripts/recon-leilaopro.mjs
+      - name: Recon profundo (card + detalhe p/ desenhar o parser)
+        env:
+          BRIGHTDATA_API_TOKEN: ${{ secrets.BRIGHTDATA_API_TOKEN }}
+          BRIGHTDATA_ZONE: ${{ secrets.BRIGHTDATA_ZONE }}
+        run: node scripts/recon-leilaopro-lotes.mjs
