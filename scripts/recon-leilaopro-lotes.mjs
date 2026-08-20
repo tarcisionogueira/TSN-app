@@ -1,12 +1,11 @@
 /**
- * Recon PROFUNDO LeilãoPro Core — dump da estrutura de card + detalhe p/ desenhar o parser.
- * Imprime: paginação, HTML cru de 2 cards da listagem, hrefs de lote, e o detalhe de 1 lote.
- * Env: BRIGHTDATA_API_TOKEN, BRIGHTDATA_ZONE. Não grava nada.
+ * Recon PROFUNDO LeilãoPro Core (v2) — foca a CATEGORIA imóveis e o card real do lote.
+ * Imprime: hrefs candidatos a detalhe (com id), HTML cru ao redor do 1º "Lance", e o
+ * detalhe de 1 lote de imóvel. Env: BRIGHTDATA_API_TOKEN, BRIGHTDATA_ZONE. Não grava nada.
  */
 const TOKEN = process.env.BRIGHTDATA_API_TOKEN;
 const ZONE = process.env.BRIGHTDATA_ZONE;
-// leffa é o alvo grande; oscar migrou p/ oscar.leilao.br (recon anterior).
-const ALVOS = (process.env.LEILAOPRO_ALVOS || 'https://www.leffaleiloes.com.br,https://www.oscar.leilao.br').split(',').map(s => s.trim()).filter(Boolean);
+const ALVOS = (process.env.LEILAOPRO_ALVOS || 'https://www.leffaleiloes.com.br').split(',').map(s => s.trim()).filter(Boolean);
 
 if (!TOKEN || !ZONE) { console.log('⚠️ BRIGHTDATA_API_TOKEN/ZONE ausentes.'); process.exit(1); }
 
@@ -22,51 +21,48 @@ async function bdFetch(url, timeoutMs = 60000) {
 
 (async () => {
   for (const BASE of ALVOS) {
-    console.log(`\n╔═══════════════ ${BASE} ═══════════════╗`);
+    console.log(`\n╔═══════════════ ${BASE}/leilao/lotes/imoveis ═══════════════╗`);
     const L = await bdFetch(BASE + '/leilao/lotes/imoveis');
-    console.log(`LISTAGEM → HTTP ${L.status} len=${L.body.length}`);
     const html = L.body;
+    console.log(`HTTP ${L.status} len=${html.length}`);
 
-    // 1) PAGINAÇÃO: links com ?pagina= / ?page= e rel=next; e "última página".
-    const pag = [...new Set([...html.matchAll(/[?&](?:pagina|page)=(\d+)/gi)].map(m => Number(m[1])))].sort((a, b) => a - b);
-    console.log(`\n[paginação] valores de pagina/page vistos: ${pag.join(',') || '(nenhum)'}`);
-    const relNext = (html.match(/rel=["']next["'][^>]*href=["']([^"']+)["']|href=["']([^"']+)["'][^>]*rel=["']next["']/i) || []).slice(1).filter(Boolean)[0];
-    if (relNext) console.log(`[paginação] rel=next → ${relNext}`);
+    // TODOS os hrefs distintos (para achar o padrão de detalhe do lote).
+    const todos = [...new Set([...html.matchAll(/href=["']([^"'#]+)["']/gi)].map(m => m[1]))];
+    // candidatos a DETALHE: contêm dígito e não são categoria/nav/asset.
+    const det = todos.filter(h => /\d/.test(h)
+      && !/\.(css|js|png|jpe?g|svg|ico|woff2?)/i.test(h)
+      && !/\/lotes\/[a-z-]+$/i.test(h)
+      && !/(facebook|instagram|whats|tel:|mailto:|login|cadastr)/i.test(h));
+    console.log(`\n[detalhe?] ${det.length} href(s) com id. Amostra:`);
+    det.slice(0, 12).forEach(h => console.log('   ' + h));
 
-    // 2) HREFS de lote individual (padrão /leilao/lote/... ou /lote/...).
-    const hrefs = [...new Set([...html.matchAll(/href=["']([^"']*\/(?:leilao\/lote|lote|lotes)\/[^"'#]+)["']/gi)].map(m => m[1]))]
-      .filter(h => !/\/lotes\/(veiculos|imoveis|maquinas|sucatas|animais|equipamentos|diversos|eletronicos|semoventes|implementos)/i.test(h));
-    console.log(`\n[lotes] ${hrefs.length} href(s) de lote. Amostra:`);
-    hrefs.slice(0, 6).forEach(h => console.log('   ' + h));
-
-    // 3) HTML CRU de 1 card (bloco ao redor do 1º href de lote).
-    if (hrefs.length) {
-      const alvo = hrefs[0];
-      const idx = html.indexOf(alvo);
-      if (idx > 0) {
-        const ini = html.lastIndexOf('<', Math.max(0, idx - 1200));
-        const trecho = html.slice(Math.max(0, idx - 1200), idx + 900).replace(/\s+/g, ' ').trim();
-        console.log(`\n[card cru] ao redor de ${alvo}:\n${trecho.slice(0, 1600)}`);
-      }
+    // HTML cru ao redor do 1º "Lance" (o card do lote).
+    const iL = html.search(/lance\s*inicial|lance\s*atual|1[ªa]\s*pra/i);
+    if (iL > 0) {
+      const trecho = html.slice(Math.max(0, iL - 1500), iL + 400).replace(/\s+/g, ' ').trim();
+      console.log(`\n[card cru ao redor do 1º "Lance"]:\n${trecho.slice(0, 1900)}`);
+    } else {
+      console.log('\n[card cru] não achei "Lance" no HTML da categoria.');
     }
 
-    // 4) DETALHE de 1 lote.
-    if (hrefs.length) {
-      const durl = hrefs[0].startsWith('http') ? hrefs[0] : BASE + hrefs[0];
+    // Detalhe do 1º candidato.
+    if (det.length) {
+      const durl = det[0].startsWith('http') ? det[0] : BASE + (det[0].startsWith('/') ? det[0] : '/' + det[0]);
       const D = await bdFetch(durl);
-      console.log(`\n[detalhe] ${durl} → HTTP ${D.status} len=${D.body.length}`);
-      const dtxt = D.body.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-      // campos-chave por rótulo
-      const acha = (re) => (dtxt.match(re) || [])[1];
-      console.log('   título(h1):', (D.body.match(/<h1[^>]*>([\s\S]{0,140}?)<\/h1>/i) || [])[1]?.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim());
-      console.log('   R$ (primeiros 6):', (dtxt.match(/R\$\s?[\d.,]+/g) || []).slice(0, 6).join(' | '));
-      console.log('   cidade/UF candidatos:', (dtxt.match(/[A-Za-zÀ-ú .]+\/[A-Z]{2}\b/g) || []).slice(0, 6).join(' | '));
-      console.log('   área:', acha(/([\d.,]+\s*m²)/i));
-      console.log('   datas:', (dtxt.match(/\d{2}\/\d{2}\/\d{4}(?:\s+\S+\s+\d{2}:\d{2})?/g) || []).slice(0, 6).join(' | '));
-      console.log('   praça/leilão trecho:', (dtxt.match(/(1[ªa]?\s*pra[çc]a|2[ªa]?\s*pra[çc]a|leil[ãa]o|encerr)[^.]{0,80}/i) || [])[0]);
-      console.log('   docs (edital/matrícula):', [...new Set([...D.body.matchAll(/href=["']([^"']*\.pdf[^"']*)["']/gi)].map(m => m[1]))].slice(0, 5).join(' | '));
-      console.log('   trecho corpo (900c):', dtxt.slice(0, 900));
+      const b = D.body;
+      const dtxt = b.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+      console.log(`\n[detalhe] ${durl} → HTTP ${D.status} len=${b.length}`);
+      console.log('   h1:', (b.match(/<h1[^>]*>([\s\S]{0,160}?)<\/h1>/i) || [])[1]?.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim());
+      console.log('   title tag:', (b.match(/<title[^>]*>([\s\S]{0,160}?)<\/title>/i) || [])[1]?.trim());
+      console.log('   R$ (8):', (dtxt.match(/R\$\s?[\d.,]+/g) || []).slice(0, 8).join(' | '));
+      console.log('   cidade/UF:', (dtxt.match(/[A-Za-zÀ-ú .]{3,40}\/[A-Z]{2}\b/g) || []).slice(0, 8).join(' | '));
+      console.log('   m²:', (dtxt.match(/[\d.,]+\s*m²/gi) || []).slice(0, 4).join(' | '));
+      console.log('   datas:', (dtxt.match(/\d{2}\/\d{2}\/\d{4}(?:\s+\d{2}:\d{2})?/g) || []).slice(0, 8).join(' | '));
+      console.log('   1ª/2ª praça trecho:', (dtxt.match(/1[ªa][^]{0,120}?2[ªa][^]{0,60}/i) || [])[0]?.slice(0, 220));
+      console.log('   PDFs:', [...new Set([...b.matchAll(/href=["']([^"']*\.pdf[^"']*)["']/gi)].map(m => m[1]))].slice(0, 6).join(' | '));
+      console.log('   og:image:', (b.match(/property=["']og:image["'][^>]*content=["']([^"']+)["']/i) || [])[1]);
+      console.log('   corpo (1100c):', dtxt.slice(0, 1100));
     }
   }
-  console.log('\nFim. Usar os padrões acima p/ escrever lib/leilaopro-parse.mjs.');
+  console.log('\nFim v2.');
 })();
