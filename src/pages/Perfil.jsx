@@ -6,6 +6,7 @@ import { useIsMobile } from '../utils/useIsMobile';
 import { BarChart2, Bell, BellOff, Camera, ShieldCheck, MapPin, CreditCard, ArrowRight, ArrowDownCircle, Check } from 'lucide-react';
 import { apiCall } from '../utils/apiCall';
 import { limparCnpj, cnpjValido } from '../utils/cnpj';
+import { reportarErroCliente } from '../utils/reportarErro';
 import { pushSuportado, statusPermissao, ativarPush, desativarPush, getSubscriptionAtiva } from '../utils/push';
 import { ESTADOS_UF } from '../data/cidades';
 import CidadeAutocomplete from '../components/CidadeAutocomplete';
@@ -548,8 +549,9 @@ export default function Perfil() {
     if (guardaSuporte(setPjMsg)) return;
     // Mesma normalização/validação robusta do MinhaRede (dígitos Unicode "sósia" + DV de verdade).
     const cnpjDigits = limparCnpj(pj.cnpj);
-    if (cnpjDigits && cnpjDigits.length !== 14) { setPjMsg({ tipo: 'erro', texto: 'CNPJ incompleto — informe os 14 caracteres.' }); return; }
-    if (cnpjDigits && !cnpjValido(cnpjDigits)) { setPjMsg({ tipo: 'erro', texto: 'CNPJ inválido — confira os números digitados.' }); return; }
+    // MAPA no Cliente 360: recusa de CNPJ trava o saque e não deixava rastro. Só motivo/comprimento.
+    if (cnpjDigits && cnpjDigits.length !== 14) { setPjMsg({ tipo: 'erro', texto: 'CNPJ incompleto — informe os 14 caracteres.' }); reportarErroCliente({ msg: `CNPJ recusado no cadastro de PJ (incompleto: ${cnpjDigits.length}/14 caracteres)`, url: typeof location !== 'undefined' ? location.href : '' }); return; }
+    if (cnpjDigits && !cnpjValido(cnpjDigits)) { setPjMsg({ tipo: 'erro', texto: 'CNPJ inválido — confira os números digitados.' }); reportarErroCliente({ msg: 'CNPJ recusado no cadastro de PJ (dígito verificador inválido)', url: typeof location !== 'undefined' ? location.href : '' }); return; }
     setSavingPj(true); setPjMsg(null);
     try {
       const { error } = await supabase.from('perfis').update({

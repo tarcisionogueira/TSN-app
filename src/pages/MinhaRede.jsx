@@ -10,6 +10,7 @@ import { termosUsoPendente, abrirTermosModal } from '../components/TermosAtualiz
 import { supabase } from '../utils/supabase';
 import { apiCall } from '../utils/apiCall';
 import { limparCnpj, cnpjValido, formatarCnpj } from '../utils/cnpj';
+import { reportarErroCliente } from '../utils/reportarErro';
 import { Users, Copy, Check, ChevronRight, ChevronDown, Award, Search, Wallet, Building2, Lock, ArrowRight, Sparkles, Phone, Mail } from 'lucide-react';
 
 const card = { background: 'white', border: '1px solid #e2e8f0', borderRadius: 16, padding: '18px 20px' };
@@ -221,10 +222,14 @@ export default function MinhaRede() {
     const cnpjDigits = limparCnpj(pj.cnpj);
     if (cnpjDigits.length !== 14) {
       setMsgPj({ tipo: 'erro', txt: 'CNPJ incompleto — informe os 14 caracteres.' });
+      // MAPA no Cliente 360: recusa de CNPJ trava o saque e antes não deixava rastro nenhum
+      // (Fábio bateu nisso várias vezes e o admin não via). Só o comprimento/motivo, sem o número.
+      reportarErroCliente({ msg: `CNPJ recusado no cadastro de PJ (incompleto: ${cnpjDigits.length}/14 caracteres)`, url: typeof location !== 'undefined' ? location.href : '' });
       setSalvandoPj(false); return;
     }
     if (!cnpjValido(cnpjDigits)) {
       setMsgPj({ tipo: 'erro', txt: 'CNPJ inválido — confira os números digitados.' });
+      reportarErroCliente({ msg: 'CNPJ recusado no cadastro de PJ (dígito verificador inválido)', url: typeof location !== 'undefined' ? location.href : '' });
       setSalvandoPj(false); return;
     }
     const payload = {
