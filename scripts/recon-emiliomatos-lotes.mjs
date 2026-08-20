@@ -92,5 +92,26 @@ function totalAnunciado(html) {
   console.log(`  total anunciado na página: ${anunciado || '(não achado)'}`);
   console.log(`  paginação: ${esquema ? '?' + esquema + '=N' : 'não detectada'}`);
   console.log(`  amostra: ${[...todos].slice(0, 15).join(', ')}`);
-  console.log(`\nSe os IDs > 0 e a paginação anda, o alvo do scraper de produção é ${SEG}?${esquema || 'pagina'}=N, parseando href '-<ID>' sob /imoveis.`);
+
+  // Valida os SINAIS que o parseDetalhe do scraper de produção lê, numa página de lote real
+  // (via Bright Data DIRETO — fora do ledger de cota, para não depender do teto semanal).
+  const umLote = [...p1.html.matchAll(/href=["'](\/imoveis\/[^"']+?-\d{4,})["']/gi)][0]?.[1];
+  if (umLote) {
+    const url = umLote.startsWith('http') ? umLote : BASE + umLote;
+    console.log(`\n── DETALHE (validação do parser): ${url}`);
+    const d = await bdFetch(url);
+    const ogT = (d.html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i) || [])[1];
+    const ogImg = (d.html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) || [])[1];
+    const txt = d.html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+    const reais = [...txt.matchAll(/.{0,32}R\$\s*[\d.]+,\d{2}/g)].map(m => m[0].trim()).slice(0, 8);
+    const m2 = (txt.match(/[\d.]+,\d{2}\s*m[²2]|\d+\s*m[²2]/i) || [])[0];
+    const cid = (txt.match(/\b[A-ZÀ-Ý][A-Za-zÀ-ÿ'.]+(?:\s+[A-ZÀ-Ý][A-Za-zÀ-ÿ'.]+){0,2}\s*\/\s*[A-Z]{2}\b/) || [])[0];
+    console.log(`  HTTP ${d.status}  len=${d.html.length}`);
+    console.log(`  og:title = ${ogT || '(faltou)'}`);
+    console.log(`  og:image = ${ogImg ? 'ok' : '(faltou)'}`);
+    console.log(`  R$ ctx   = ${JSON.stringify(reais)}`);
+    console.log(`  m²       = ${m2 || '(faltou)'}`);
+    console.log(`  cidade/UF= ${cid || '(faltou)'}`);
+  }
+  console.log(`\nSe os IDs > 0 e a paginação anda, o alvo do scraper de produção é ${SEG}?${esquema || 'page'}=N, parseando href '-<ID>' sob /imoveis.`);
 })();

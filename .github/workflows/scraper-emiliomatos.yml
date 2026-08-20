@@ -1,0 +1,62 @@
+name: Scraper EMILIOMATOS (Superbid/MBV SSR)
+
+# emiliomatosleiloes.com.br — plataforma Superbid/MBV white-label, SSR. Listagem
+# /busca/segmento/imoveis?page=N. Site atrás de Cloudflare → Bright Data (respeitando a cota
+# semanal via proposito 'emiliomatos') ou IP residencial. Fluxo recon-first: DEBUG → dry → grava.
+# No cron GRAVA; no dispatch manual é dry-run por padrão (dryrun=0 p/ gravar).
+on:
+  schedule:
+    - cron: '40 10 * * 3'   # 1x/semana (quarta), 10:40 UTC — fora do horário dos outros scrapers
+  workflow_dispatch:
+    inputs:
+      debug:
+        description: '1 = RECON (dumpa listagem + 1 detalhe)'
+        required: false
+        default: '0'
+      dryrun:
+        description: '1 = dry-run (não grava); 0 = grava'
+        required: false
+        default: '1'
+      max_lotes:
+        description: 'Máx. de lotes NOVOS por execução'
+        required: false
+        default: '40'
+      max_pages:
+        description: 'Máx. de páginas da listagem a enumerar'
+        required: false
+        default: '15'
+
+jobs:
+  scraper-emiliomatos:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm ci
+      # REDE DE SEGURANÇA: o cron pago só roda se o runner residencial (grátis) não coletou
+      # a fonte nos últimos 7 dias. Dispatch manual ignora o freio (quem clica sabe o que quer).
+      - name: Freio residencial (pula se coletado de casa há < 7 dias)
+        id: freio
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: node scripts/coleta-recente.mjs EMILIOMATOS 7 >> "$GITHUB_OUTPUT"
+      - name: Rodar scraper EMILIOMATOS
+        if: github.event_name != 'schedule' || steps.freio.outputs.pular != '1'
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          BRIGHTDATA_API_TOKEN: ${{ secrets.BRIGHTDATA_API_TOKEN }}
+          BRIGHTDATA_ZONE: ${{ secrets.BRIGHTDATA_ZONE }}
+          BRIGHTDATA_MAX_REQ_SEMANA: ${{ secrets.BRIGHTDATA_MAX_REQ_SEMANA }}
+          EMILIOMATOS_DEBUG: ${{ github.event.inputs.debug || '0' }}
+          EMILIOMATOS_DRYRUN: ${{ github.event.inputs.dryrun || '0' }}
+          EMILIOMATOS_MAX_LOTES: ${{ github.event.inputs.max_lotes || '40' }}
+          EMILIOMATOS_MAX_PAGES: ${{ github.event.inputs.max_pages || '15' }}
+        run: node scripts/scraper-emiliomatos.mjs
