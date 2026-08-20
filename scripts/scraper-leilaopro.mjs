@@ -28,7 +28,7 @@ import {
 } from './lib/leilaopro-parse.mjs';
 
 const CAT = '/leilao/lotes/imoveis';
-const TENANTS_ALVO = (process.env.LEILAOPRO_TENANTS || 'leffa').split(',').map(s => s.trim()).filter(Boolean);
+const TENANTS_ALVO = (process.env.LEILAOPRO_TENANTS || 'leffa,oscar').split(',').map(s => s.trim()).filter(Boolean);
 const MAX_LOTES = Number(process.env.LEILAOPRO_MAX_LOTES || 40);
 const MAX_PAGES = Number(process.env.LEILAOPRO_MAX_PAGES || 3);
 const DRYRUN = process.env.LEILAOPRO_DRYRUN !== '0';
@@ -70,17 +70,19 @@ async function fetchLP(url, { timeoutMs = 45000 } = {}) {
 
 async function enumerar(tenant) {
   const urls = new Map();
-  for (let p = 1; p <= MAX_PAGES; p++) {
+  let fetchOk = false;   // a listagem RESPONDEU (mesmo que sem lotes) — distingue "fonte vazia"
+  for (let p = 1; p <= MAX_PAGES; p++) {   // de "não consegui buscar" (challenge/teto).
     const url = `${tenant.base}${CAT}${p > 1 ? `?pagina=${p}` : ''}`;
     const { html, via } = await fetchLP(url);
     if (!html) break;
+    fetchOk = true;
     const antes = urls.size;
     for (const [id, u] of extrairUrlsDeLote(html, tenant.base)) urls.set(id, u);
     if (DEBUG) console.log(`   [${tenant.fonte}] pág ${p} (${via}): +${urls.size - antes} (total ${urls.size})`);
     if (urls.size === antes) break;   // página única (LeilãoPro não pagina de verdade) → para
     await sleep(400);
   }
-  return [...urls.values()];
+  return { urls: [...urls.values()], fetchOk };
 }
 
 async function debugRecon() {
@@ -100,7 +102,7 @@ async function debugRecon() {
 }
 
 async function coletarTenant(tenant) {
-  const urls = await enumerar(tenant);
+  const { urls, fetchOk } = await enumerar(tenant);
   console.log(`[${tenant.fonte}] enumerados ${urls.length} lote(s)`);
   let prontos = [], encerrados = 0, sem = 0, reprov = 0;
   if (urls.length) {
@@ -127,7 +129,9 @@ async function coletarTenant(tenant) {
     }
   }
   console.log(`[${tenant.fonte}] ${prontos.length} prontos · ${encerrados} encerrados · ${reprov} descartados · ${sem} sem detalhe`);
-  return { prontos, encerrados };
+  // fonteVazia = a listagem respondeu, sem NENHUM lote (não é falha: o leiloeiro só não tem
+  // imóveis agora — caso do oscar em 20/08). Não é "não consegui coletar" (SEM_COTA/challenge).
+  return { prontos, encerrados, fonteVazia: fetchOk && urls.length === 0 };
 }
 
 async function main() {
@@ -141,9 +145,13 @@ async function main() {
   for (const key of TENANTS_ALVO) {
     const tenant = TENANTS[key];
     if (!tenant) { console.log(`tenant '${key}' desconhecido — pulando`); continue; }
-    const { prontos, encerrados } = await coletarTenant(tenant);
+    const { prontos, encerrados, fonteVazia } = await coletarTenant(tenant);
 
     if (!prontos.length) {
+      // FONTE VAZIA (respondeu, 0 imóveis) NÃO é falha: não escreve linha de saúde — senão o
+      // oscar (0 imóveis hoje) viraria alarme toda semana. Só registra saúde quando houve
+      // ERRO real (sem cota / challenge) ou quando havia lotes mas nenhum ficou pronto.
+      if (fonteVazia) { console.log(`[${tenant.fonte}] sem imóveis no momento — fonte vazia (sem alarme).`); continue; }
       await registrarSaude(supabase, tenant.fonte, [], 'leilaopro', {
         ok: false, semCota: SEM_COTA,
         metricas: { n: 0, uf_pct: 0, valor_pct: 0, link_pct: 0, foto_pct: 0 },

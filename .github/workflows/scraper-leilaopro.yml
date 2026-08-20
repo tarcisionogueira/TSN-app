@@ -20,7 +20,7 @@ on:
       tenants:
         description: 'tenants csv (leffa,oscar)'
         required: false
-        default: 'leffa'
+        default: 'leffa,oscar'
       max_lotes:
         description: 'Máx. de lotes NOVOS por execução (por tenant)'
         required: false
@@ -57,6 +57,6 @@ jobs:
           BRIGHTDATA_MAX_REQ_SEMANA: ${{ secrets.BRIGHTDATA_MAX_REQ_SEMANA }}
           LEILAOPRO_DEBUG: ${{ github.event.inputs.debug || '0' }}
           LEILAOPRO_DRYRUN: ${{ github.event.inputs.dryrun || '0' }}
-          LEILAOPRO_TENANTS: ${{ github.event.inputs.tenants || 'leffa' }}
+          LEILAOPRO_TENANTS: ${{ github.event.inputs.tenants || 'leffa,oscar' }}
           LEILAOPRO_MAX_LOTES: ${{ github.event.inputs.max_lotes || '40' }}
         run: node scripts/scraper-leilaopro.mjs
