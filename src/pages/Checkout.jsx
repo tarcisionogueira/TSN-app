@@ -771,7 +771,16 @@ export default function Checkout() {
         setTimeout(() => nav(destinoPos || (aposPlano ? `/checkout?plano=${aposPlano}` : '/membros')), 3000);
       }
     } catch (e) {
-      setSuErro(e.message || 'Erro ao processar a assinatura.');
+      // 20/08: o conserto de 18/08 tratou o SDK que não CARREGA (s.onerror). Faltava o outro
+      // meio-caminho: o SDK carrega, mas a chamada INTERNA do createCardToken ao MP é barrada
+      // pelo bloqueador → estoura "Failed to fetch" (TypeError de rede) e a pessoa via a
+      // mensagem crua, sem saber que existe o plano B. É a MESMA causa (extensão/adblock),
+      // então mostra a MESMA saída amigável — e não um beco sem saída travestido de erro técnico.
+      const m = String(e?.message || '');
+      const bloqueado = e?.sdkBloqueado || /failed to fetch|load failed|networkerror|net::err|fetch/i.test(m);
+      setSuErro(bloqueado
+        ? 'Não conseguimos falar com o processador de cartão (costuma ser bloqueador de anúncios ou extensão de privacidade). Desative para este site e tente de novo — ou clique em "Criar conta grátis" acima e assine em seguida por link de pagamento.'
+        : (m || 'Erro ao processar a assinatura.'));
     } finally {
       assinandoRef.current = false;
       setSuLoading(false);
