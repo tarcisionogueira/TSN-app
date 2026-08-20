@@ -10186,3 +10186,30 @@ HTML/Bright Data.** Tooling de recon fica no repo p/ futuras tentativas.
 confirmar o **cluster GESTAO** (vip/milan/centraljudicial) que já compartilha `scraper-gestao`, ou
 (b) as casas **SUPORTE white-label** (leilaobrasil 1.786!, vecchi 463) que já raspamos. PGFN Comprei
 vale um esp="teste com proxy residencial" à parte (decisão de custo do dono).
+
+---
+
+## ✅ Integração barata "na ordem" (20/08, noite) — GESTAO bloqueado, SUPORTE gravado
+Pedido do dono: "faça como sugerido, siga na ordem" (1º GESTAO cluster, 2º SUPORTE white-label).
+
+**1) GESTAO (milan/central) — BLOQUEADO pelo teto do Bright Data.** O recon (DEBUG dry-run via o
+próprio `scraper-gestao`, domínios `milanleiloes.com.br,centraljudicial.com.br`) voltou
+`brightdata:teto_global — 618/550` nos dois domínios: "home não veio (challenge/teto)". São
+Cloudflare-fronted → exigem Bright Data, e o teto SEMANAL está estourado (618/550). **Não bumpei
+um teto já acima do orçamento por uma confirmação nice-to-have** (prioridade do dono é o freio de
+custo). Fica p/ a próxima janela de BD ou o runner residencial (`GESTAO_HEADLESS=1`). VIP já está
+integrado (fonte própria, 44 ativos); só milan/central faltam confirmar.
+
+**2) SUPORTE white-label — GRAVADO (grátis, sem BD).** `recon-suporte.mjs` (Puppeteer no runner,
+como leffa) confirmou em `/buscador?categoria=2`, sem redirect PGFN:
+- **vecchileiloes** ✅ e **saraivaleiloes** ✅ (imóveis reais, foto em `static.suporteleiloes.com.br`).
+- **leilaobrasil ❌ FICOU DE FORA:** voltou **0 lotes** (mudou de estrutura / catálogo em outro
+  lugar). Não adiciono tenant que não confirma — precisa de recon próprio.
+Adicionados a `SUPORTE_TENANTS` (`scraper-puppeteer.mjs`) + **fallback de cidade/UF da descrição**
+(vecchi deixa o campo `local` vazio e põe a cidade no texto: "GOIÂNIA/GO - …"). Grava disparada
+(`SCRAPER_FONTES=SUPORTE`, Puppeteer, **custo BD zero**). Resultado no acervo: **vecchi 12 ativos
+(100% cidade/valor/foto) + saraiva 11 (100%)** = **+23 imóveis** campo-completos. O fallback provou
+valor: os 12 do vecchi entraram COM cidade apesar do `local` vazio.
+
+**Follow-ups:** milan/central (BD quando o teto reabrir); leilaobrasil (recon próprio — a estrutura
+mudou); PGFN Comprei (proxy residencial, se o dono topar o custo — maior alavanca de todas).
