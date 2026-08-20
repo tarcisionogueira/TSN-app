@@ -9,6 +9,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { termosUsoPendente, abrirTermosModal } from '../components/TermosAtualizadosModal';
 import { supabase } from '../utils/supabase';
 import { apiCall } from '../utils/apiCall';
+import { limparCnpj, cnpjValido, formatarCnpj } from '../utils/cnpj';
 import { Users, Copy, Check, ChevronRight, ChevronDown, Award, Search, Wallet, Building2, Lock, ArrowRight, Sparkles, Phone, Mail } from 'lucide-react';
 
 const card = { background: 'white', border: '1px solid #e2e8f0', borderRadius: 16, padding: '18px 20px' };
@@ -215,9 +216,15 @@ export default function MinhaRede() {
 
   async function salvarPj() {
     setSalvandoPj(true); setMsgPj(null);
-    const cnpjDigits = (pj.cnpj || '').replace(/\D/g, '');
+    // Normaliza (inclui dígitos Unicode "sósia" do teclado do celular/WhatsApp, que o \D antigo
+    // apagava — fazendo um CNPJ VÁLIDO cair para <14 e ser recusado) e valida os DV de verdade.
+    const cnpjDigits = limparCnpj(pj.cnpj);
     if (cnpjDigits.length !== 14) {
-      setMsgPj({ tipo: 'erro', txt: 'CNPJ inválido — informe os 14 dígitos.' });
+      setMsgPj({ tipo: 'erro', txt: 'CNPJ incompleto — informe os 14 caracteres.' });
+      setSalvandoPj(false); return;
+    }
+    if (!cnpjValido(cnpjDigits)) {
+      setMsgPj({ tipo: 'erro', txt: 'CNPJ inválido — confira os números digitados.' });
       setSalvandoPj(false); return;
     }
     const payload = {
@@ -550,7 +557,11 @@ export default function MinhaRede() {
                 cuida da sua parte. É rápido: se ainda não tem, dá para abrir um MEI grátis.
               </div>
               <div style={{ display: 'grid', gap: 8, marginTop: 12 }}>
-                <input value={pj.cnpj} onChange={e => setPj(p => ({ ...p, cnpj: e.target.value }))} placeholder="CNPJ da empresa"
+                {/* onBlur formata/normaliza: um CNPJ colado com dígitos "sósia" (largura total do
+                    WhatsApp) vira ASCII limpo à vista, e o numérico ganha a máscara — o parceiro
+                    confere o que o sistema leu antes de cadastrar. */}
+                <input value={pj.cnpj} onChange={e => setPj(p => ({ ...p, cnpj: e.target.value }))}
+                  onBlur={() => setPj(p => (p.cnpj ? { ...p, cnpj: formatarCnpj(p.cnpj) } : p))} placeholder="CNPJ da empresa"
                   style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: '9px 11px', fontSize: 13 }} />
                 <input value={pj.razao_social} onChange={e => setPj(p => ({ ...p, razao_social: e.target.value }))} placeholder="Razão social"
                   style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: '9px 11px', fontSize: 13 }} />
