@@ -29,3 +29,8 @@ jobs:
           BRIGHTDATA_API_TOKEN: ${{ secrets.BRIGHTDATA_API_TOKEN }}
           BRIGHTDATA_ZONE: ${{ secrets.BRIGHTDATA_ZONE }}
         run: node scripts/recon-emiliomatos-parse.mjs
+      - name: Recon do filtro de leilões ABERTOS
+        env:
+          BRIGHTDATA_API_TOKEN: ${{ secrets.BRIGHTDATA_API_TOKEN }}
+          BRIGHTDATA_ZONE: ${{ secrets.BRIGHTDATA_ZONE }}
+        run: node scripts/recon-emiliomatos-filtro.mjs

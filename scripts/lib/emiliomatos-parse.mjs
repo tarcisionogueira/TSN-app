@@ -42,12 +42,30 @@ export function extrairUrlsDeLote(html, base = BASE) {
 }
 export const idDaUrl = url => (String(url).match(/-(\d{4,})(?:[/?#]|$)/) || [])[1] || String(url).replace(/[?#].*/, '').split('/').filter(Boolean).pop();
 
+// Cidade/UF. Palavra de cidade = Capitalizada OU conector minúsculo (de/do/da/dos/das/e),
+// para pegar "Águas Lindas de Goiás", "Três Corações". PRIORIDADE ao TÍTULO (formato
+// Superbid "<desc>, Cidade/UF"): pega o ÚLTIMO "Cidade/UF" do título — o corpo tem "Comarca
+// de Brasília/DF" (foro), que NÃO é a cidade do imóvel e enganava o parser antigo.
+const RE_CIDADE_UF = /([A-ZÀ-Ý][A-Za-zÀ-ÿ'.]+(?:\s+(?:de|do|da|dos|das|e|[A-ZÀ-Ý][A-Za-zÀ-ÿ'.]+)){0,4})\s*\/\s*([A-Z]{2})\b/g;
+function pegaCidade(str) {
+  const ms = [...String(str || '').matchAll(RE_CIDADE_UF)];
+  if (!ms.length) return null;
+  const m = ms[ms.length - 1];   // no título, o par cidade/UF fica no fim
+  return { cidade: m[1].trim().replace(/\s+/g, ' ').replace(/^(?:de|do|da|dos|das|e)\s+/i, '').slice(0, 60), estado: m[2].toUpperCase() };
+}
 function cidadeUF(txt, titulo = '') {
-  const fonte = `${titulo} ${txt}`;
-  let m = fonte.match(/\b(?:em|de|no|na)\s+([A-ZÀ-Ý][A-Za-zÀ-ÿ'.]+(?:\s+[A-ZÀ-Ý][A-Za-zÀ-ÿ'.]+){0,2})\s*[\/-]\s*([A-Z]{2})\b/);
-  if (!m) m = fonte.match(/\b([A-ZÀ-Ý][A-Za-zÀ-ÿ'.]+(?:\s+[A-ZÀ-Ý][A-Za-zÀ-ÿ'.]+){0,2})\s*[\/-]\s*([A-Z]{2})\b/);
-  if (!m) return { cidade: null, estado: null };
-  return { cidade: m[1].trim().replace(/\s+/g, ' ').slice(0, 60), estado: (m[2] || '').toUpperCase() || null };
+  // 1) do TÍTULO (fonte confiável da cidade do IMÓVEL)
+  const noTitulo = pegaCidade(titulo);
+  if (noTitulo) return noTitulo;
+  // 2) fallback: corpo, ignorando o foro ("Comarca/Vara/Tribunal … de Cidade/UF")
+  const limpo = String(txt || '').replace(/\b(?:comarca|vara|tribunal|foro|ju[íi]zo)[^.]{0,40}?\/\s*[A-Z]{2}\b/gi, ' ');
+  const m = limpo.match(/\b(?:em|de|no|na)\s+([A-ZÀ-Ý][A-Za-zÀ-ÿ'.]+(?:\s+(?:de|do|da|dos|das|e|[A-ZÀ-Ý][A-Za-zÀ-ÿ'.]+)){0,4})\s*\/\s*([A-Z]{2})\b/);
+  if (m) return { cidade: m[1].trim().replace(/\s+/g, ' ').replace(/^(?:de|do|da|dos|das|e)\s+/i, '').slice(0, 60), estado: m[2].toUpperCase() };
+  // 2b) último recurso: 1º "Cidade/UF" solto no corpo já sem o foro
+  RE_CIDADE_UF.lastIndex = 0;
+  const bare = RE_CIDADE_UF.exec(limpo);
+  if (bare) return { cidade: bare[1].trim().replace(/\s+/g, ' ').replace(/^(?:de|do|da|dos|das|e)\s+/i, '').slice(0, 60), estado: bare[2].toUpperCase() };
+  return { cidade: null, estado: null };
 }
 const limparTitulo = t => (t || '').replace(/\s*[-–|]\s*(?:Lance Inicial|Avalia[çc][ãa]o|Valor|Emilio Matos|Emílio Matos).*$/i, '').replace(/\s+/g, ' ').trim();
 
