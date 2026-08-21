@@ -1,8 +1,12 @@
 name: Scraper DOM (Passo 2) — alfa/hasta/nordeste
 
 # Fontes `dom` do motor fetch × parse (Puppeteer no runner, 0 Bright Data). O push na
-# branch de trabalho roda os três em DRY-RUN (validação do Passo 2 — não grava). Para
-# GRAVAR: dispatch com gravar=1 (só depois do merge/decisão do dono).
+# branch de trabalho roda alfa+nordeste em DRY-RUN (validação do Passo 2 — não grava).
+# HASTA NÃO roda no push: o site bloqueia IP de datacenter, então daqui ele SEMPRE
+# falha — e o DRY-RUN grava fonte_saude 'falhou/0', ruído que engana o monitor de
+# baseline (aconteceu em 21/08 19:27 UTC, no meio da 1ª carga residencial de verdade).
+# HASTA é do runner RESIDENCIAL; no dispatch manual segue disponível para quem pedir.
+# Para GRAVAR: dispatch com gravar=1 (só depois do merge/decisão do dono).
 on:
   push:
     branches: [ 'claude/handoff-bidpro-brasil-verificacoes-7h3pat' ]
@@ -19,9 +23,9 @@ on:
   workflow_dispatch:
     inputs:
       fontes:
-        description: 'csv: alfa,hasta,nordeste'
+        description: 'csv: alfa,hasta,nordeste (hasta so funciona de IP residencial — de datacenter falha sempre)'
         required: false
-        default: 'alfa,hasta,nordeste'
+        default: 'alfa,nordeste'
       gravar:
         description: '1 = grava no banco (default DRY-RUN)'
         required: false
@@ -57,7 +61,7 @@ jobs:
         run: node scripts/scraper-alfa.mjs
 
       - name: Hasta
-        if: ${{ !cancelled() && (github.event_name == 'push' || contains(github.event.inputs.fontes, 'hasta')) }}
+        if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' && contains(github.event.inputs.fontes, 'hasta') }}
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
