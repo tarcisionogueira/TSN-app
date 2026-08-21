@@ -11,7 +11,7 @@
  *   • Slug carrega tipo+cidade+UF: "leilao-de-fazenda-em-manhumirim-mg".
  *   • Sem API escondida (XHR só /filters/, 2.8KB de filtros).
  */
-import { inferirTipo, cidadeUF, extrairArea, estaEncerrado, proximaData, checarQualidade } from './leilaopro-parse.mjs';
+import { inferirTipo, cidadeUF, extrairArea, proximaData, checarQualidade } from './leilaopro-parse.mjs';
 import { textoDe, valorPorRotulo, tituloDeSlug, cidadeUFDeSlug, anexosDeHtml, montarRowDom } from './dom-parse-util.mjs';
 
 export const TENANTS = {
@@ -54,9 +54,13 @@ export function parseDetalhe(html, url) {
     valor_avaliacao: avaliacao, valor_minimo: minimo,
     modalidade, area_m2: area,
     descricao: null,
-    data_leilao: proximaData(txt.slice(0, 2500)),
+    data_leilao: proximaData(txt.slice(0, 4000)),
     numero_matricula: mat, ...docs,
-    encerrado: estaEncerrado(txt.slice(0, 2500)),
+    // NÃO usar estaEncerrado genérico aqui: a página renderizada carrega o MENU do site, que
+    // tem o link "Leilões Encerrados" — o /encerrad/i marcou os 11 lotes ATIVOS do catálogo
+    // como mortos no 1º DRY-RUN (21/08). O catálogo /imoveis só lista ativos; morto de
+    // verdade é só o sinal explícito de desfecho no TOPO da página (a seção do lote).
+    encerrado: /\b(arrematado|vendido|deserto|cancelad[oa]|suspens[oa])\b/i.test(txt.slice(0, 2500)),
   };
 }
 

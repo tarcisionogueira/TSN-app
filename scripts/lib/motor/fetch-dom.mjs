@@ -32,7 +32,11 @@ export function criarMotorDom({ esperaMs = 2500, timeoutMs = 45000 } = {}) {
       await page.setViewport({ width: 1366, height: 900 });
       const resp = await page.goto(url, { waitUntil: 'networkidle2', timeout: timeoutMs });
       // 4xx/5xx de verdade não é página: não entregar o corpo de erro como conteúdo.
-      if (resp && resp.status() >= 400) return { html: null, via: `dom-${resp.status()}` };
+      // E SEMPRE com log — o HASTA falhou mudo no 1º DRY-RUN e o "0 enumerados" não dizia porquê.
+      if (resp && resp.status() >= 400) {
+        console.error(`   [dom] HTTP ${resp.status()} em ${url}`);
+        return { html: null, via: `dom-${resp.status()}` };
+      }
       await new Promise(r => setTimeout(r, esperaMs));   // hidratação após network idle
       const html = await page.content();
       return { html: html || null, via: 'dom' };
