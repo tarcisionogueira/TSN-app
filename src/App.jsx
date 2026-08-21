@@ -37,6 +37,7 @@ const Painel = lazy(() => import('./pages/Painel'));
 const Consultor = lazy(() => import('./pages/Consultor'));
 const MinhaRede = lazy(() => import('./pages/MinhaRede'));
 const Comercial = lazy(() => import('./pages/Comercial'));
+const NpsAlavancagem = lazy(() => import('./pages/NpsAlavancagem'));
 const AtivarVendedor = lazy(() => import('./pages/AtivarVendedor'));
 const Contratos = lazy(() => import('./pages/Contratos'));
 const Calculadora = lazy(() => import('./pages/Calculadora'));
@@ -397,6 +398,9 @@ function MainLayout() {
           <Route path="/atendimento" element={<PrivateRoute><AtendimentoRota /></PrivateRoute>} />
           <Route path="/advogado" element={<PrivateRoute roles={['advogado','admin']}><AdvogadoPortal /></PrivateRoute>} />
           <Route path="/termos" element={<Termos />} />
+          {/* Pesquisa de satisfação (NPS) do cliente de consórcio/home equity — PÚBLICA:
+              a credencial é o token do e-mail, sem login (F5 do plano comercial). */}
+          <Route path="/nps" element={<NpsAlavancagem />} />
           <Route path="/privacidade" element={<Privacidade />} />
           <Route path="/cancelar-alertas" element={<CancelarAlertas />} />
           <Route path="/continuar/:codigo" element={<ContinuarCaptura />} />

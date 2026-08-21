@@ -10984,3 +10984,27 @@ cron+token — reativar regra comercial.nps_cliente_15d), F6 (CSV + invariantes 
   usuário e o filtro da fila usa `lead_id ∈ meus leads` via comercial_meus_leads).
 Validação: 2 chamados vinculados, 2 policies criadas, auditoria de segurança 0/0,
 build ok. Restam F5 (NPS cron+token+regra) e F6 (CSV + invariantes).
+
+## ✅ 21/08 (noite 12) — Consultor Comercial FASE 5: NPS do cliente no ar
+A contraprova independente do rastreio (decisão do dono): 15 dias após o consultor marcar
+"Atendimento realizado", o cliente recebe e-mail com link tokenizado perguntando se
+contratou + nota 0-10 + comentário.
+- **Migração `consultor_comercial_fase5.sql`** (partes 5/5b/5c aplicadas):
+  `nps_alavancagem_pendentes()` (lê dias/gatilho da regra comercial.nps_cliente_15d —
+  mudar os 15 dias é UPDATE em regra_negocio, sem deploy; cria token e lista num passo
+  só), `nps_alavancagem_marcar_enviado()` (só após envio real) e
+  `nps_alavancagem_responder(token, …)` (uma resposta por lead; exceções nomeadas).
+  Tropeços que as sub-migrações consertaram: gen_random_bytes é do pgcrypto no schema
+  `extensions` (fora do search_path da função) → token = 2×gen_random_uuid (64 hex);
+  e out-params lead_id/token colidiam com colunas → pragma variable_conflict use_column.
+- **`api/nps-alavancagem-cron.js`** (vercel.json: diário 13:30 UTC): transporta — e-mail
+  via Resend (com email_log automático do helper) e marca enviado SÓ com r.ok; falha de
+  marcação é logada (re-envio amanhã: melhor duplicado que envio fantasma).
+- **`api/nps-alavancagem.js`** (edge, público, rate limit 10/min): valida token/nota e
+  traduz as exceções do banco em mensagens humanas (já respondida / link inválido).
+- **`/nps` (NpsAlavancagem.jsx, rota pública)**: 3 perguntas, estados de sucesso/erro
+  educados, `.ok` conferido antes do corpo.
+Validação (rollback): gatilho de 16 dias → 1 pendente, token 64 hex, resposta gravada
+(contratou=true, nota 9), eventos nps_enviado+nps_respondido na trilha. Regra
+comercial.nps_cliente_15d ATIVA (aplicada_por nps_alavancagem_pendentes); auditorias
+0 crítico. Falta só a F6 (CSV + invariantes: nps_contradiz_resultado etc.).
