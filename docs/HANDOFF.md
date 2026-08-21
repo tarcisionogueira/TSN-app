@@ -11028,3 +11028,55 @@ comissoes), SLA definitivo do invariante de 2d, e se o consultor vê a carteira 
 indicou. Operacional: para estrear um parceiro real, gerar convite de consultor
 (convites_vendedor tipo consultor) → ativação seta vendedor_tipo e as telas
 /comercial + /atendimento abrem sozinhas.
+
+═══════════════════════════════════════════════════════════════════════════════════════
+## 🏁 ENCERRAMENTO DA SESSÃO DE 21/08 — resumo executivo do dia (para a próxima sessão)
+═══════════════════════════════════════════════════════════════════════════════════════
+
+**O dia em uma linha:** fonte HASTA no ar com 579 imóveis + dedup automática com a CEF,
+matrícula CEF consertada de ponta a ponta, Cliente 360 blindado, e o SISTEMA DO CONSULTOR
+COMERCIAL inteiro (planejado, aprovado e implementado F1→F6 no mesmo dia).
+
+### O que entrou em produção hoje (tudo em main, deploys READY, banco migrado)
+1. **HASTA (hastaleiloes.com.br)** — a fonte nasceu: domínio real descoberto pelo dono
+   (o singular era casca estática; 17 registros-lixo deletados), parser por rótulo
+   validado contra o CSV de 579 lotes do dono, coleta residencial completa
+   (579/579 · 100% UF/valor/área/data · 99% matrícula), retry de página no fetch-dom,
+   gate 2x/semana ativo. Monitor aprende o baseline sozinho nas próximas rodadas.
+2. **Dedup HASTA×CEF (opção A do dono)** — 539 gêmeos CEF suprimidos (mesmo leilão,
+   valores divergentes); trigger impede o upsert diário da CEF de ressuscitá-los;
+   reconciliação diária no monitor-fontes-cron reativa quando a praça passa.
+3. **Matrícula CEF** — o 404 cru do IIS virou: verificação antes do hotlink
+   (api/verificar-doc), modal com orientação + anexo pelo usuário, clique enfileira a
+   captura; detector da captura corrigido (não imprime mais a página como "matrícula" —
+   e com o conserto a matrícula REAL de 3,2 MB do imóvel do dono foi capturada).
+4. **Cliente 360 do dia** — AuthContext blindado contra storage indisponível (Firefox),
+   filtro de Solicitações honesto (status desconhecido não vira mais "Solicitado";
+   as 3 do banco eram 'cancelado'), P1-P4 da fila resolvidos de manhã.
+5. **CONSULTOR COMERCIAL COMPLETO (F1-F6)** — docs/PLANO_CONSULTOR_COMERCIAL.md:
+   trilha append-only + NPS + RPCs de colunas mínimas (F1) · tela /comercial com
+   "Receber cliente" revelando contato com registro (F2) · atribuição ?ref no servidor +
+   manual no Admin (F3) · Atendimento escopado por posse do lead (F4) · NPS do cliente
+   15d com cron+token+página /nps (F5) · 5 invariantes de vigilância + CSV com trilha
+   (F6). Auditorias 0 crítico em todas as fases; cada RPC lê as regras de regra_negocio.
+
+### O que a PRÓXIMA SESSÃO deve conferir (custo zero, além do ritual)
+- `select * from qa_invariantes() where categoria='Comercial'` → 5 linhas (verdes hoje).
+- 1ª rodada do cron do NPS (22/08 ~13:30 UTC) e a reconciliação de gêmeos no JSON do
+  monitor-fontes-cron (22/08 ~15h UTC): {suprimidos≈0, reativados, gemeos_vivos}.
+- HASTA: 2ª coleta na próxima janela do runner residencial do dono (gate 2x/semana).
+- 7 alertas pré-existentes de qa_invariantes (backlog conhecido — ver seções anteriores).
+
+### Segue com o DONO
+- Plano comercial §9: % de comissão · SLA definitivo do invariante de 2 dias · carteira.
+- Estrear parceiro real: convite de consultor → ativação liga tudo sozinha.
+- Testar na tela: /comercial (2 leads atribuídos), /nps, Admin › Comercial (CSV).
+- Antigas: ADMIN_EMAIL na Vercel + nomear analista · 4 pagantes sem relatório ·
+  priorizar 29 leiloeiros do sindicato-SP · PGFN Comprei (custo) · casos no relógio humano.
+
+### Janeladas (a partir de 24/08, reset do teto Bright Data)
+GESTAO milan/central · recon leilaobrasil · fila de docs de matrícula · PECINI
+alvo=antigos (agendado 24/08 15h UTC) · revisão Google Ads ~26/08.
+
+*Sessão de 21/08 encerrada. Branch de trabalho claude/handoff-bidpro-brasil-verificacoes-7h3pat
+== main (tudo mergeado). Nenhum trigger/rotina pendente desta sessão.*
