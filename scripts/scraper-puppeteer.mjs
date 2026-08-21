@@ -2041,10 +2041,20 @@ function cidadeUfPestana(bem, desc) {
   return { cidade, uf: temUf() ? uf : '' };
 }
 
-function mapLotePestana(lote, leilao) {
+function mapLotePestana(lote, leilao, leiloesPorId) {
   const bens = Array.isArray(lote.bens) ? lote.bens : [];
   const bem = bens.find(b => b && b.tipoBem && Number(b.tipoBem.id) === PESTANA_TIPOBEM_IMOVEL);
   if (!bem) return null; // não é imóvel (veículo/outros)
+  // O LEILÃO DONO é `lote.leilao`, NÃO o leilão cuja LISTA trouxe o lote. A Pestana tem leilões
+  // AGREGADORES (venda direta) que listam lotes de OUTROS leilões: o lote de Barueri/SP aparecia
+  // na lista do #5872 "Venda Direta - Eldorado/RS" (data 26/10) mas pertence ao #6154 "Leilão de
+  // Imóveis Santander" (data 25/08 11h — o pregão real). Usar o leilão da iteração dava a MESMA
+  // data errada aos 1.031 lotes (e nome/UF/modalidade do agregador). Resolvido pelo dono; se o
+  // dono não estiver no mapa, cai no leilão da lista (comportamento antigo, seguro).
+  if (leiloesPorId && lote && lote.leilao != null) {
+    const dono = leiloesPorId.get(Number(lote.leilao));
+    if (dono) leilao = dono;
+  }
   const valor = Number(lote.lanceMinimo || lote.valorInicial || lote.valorFiltro || 0) || 0;
   const desc = String(lote.descricao || bem.descricao || '').replace(/\s+/g, ' ').trim();
   const { cidade, uf } = cidadeUfPestana(bem, desc);
@@ -2160,6 +2170,9 @@ async function scraperPestana(browser) {
     // 2) Só leilões que contêm IMÓVEIS (subTipoBens com tipoBem 462).
     const imovLeiloes = leiloes.filter(l => Array.isArray(l.subTipoBens) && l.subTipoBens.some(s => Number(s.tipoBem) === PESTANA_TIPOBEM_IMOVEL));
     console.log(`    Pestana: ${imovLeiloes.length}/${leiloes.length} leilões com imóveis`);
+    // Mapa de TODOS os leilões (não só os com imóveis) por id — para o mapper resolver o
+    // `lote.leilao` (o leilão DONO real) em vez de usar o leilão-agregador da lista.
+    const leiloesPorId = new Map(leiloes.filter(l => l && l.id != null).map(l => [Number(l.id), l]));
 
     // 3) Lotes por leilão (fetch same-origin dentro da página).
     for (const leilao of imovLeiloes) {
@@ -2170,7 +2183,7 @@ async function scraperPestana(browser) {
       if (!Array.isArray(lotes)) continue;
       for (const lote of lotes) {
         if (lote && lote.situacaoId != null && Number(lote.situacaoId) !== 1) continue; // só Disponível
-        const row = mapLotePestana(lote, leilao);
+        const row = mapLotePestana(lote, leilao, leiloesPorId);
         if (!row || !row.valor_minimo || seen.has(row.fonte_id)) continue;
         seen.add(row.fonte_id);
         imoveis.push(row);
