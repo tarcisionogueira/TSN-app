@@ -10889,3 +10889,21 @@ Migração `consultor_comercial_fase1.sql` escrita E aplicada (partes 1/1b/1c no
 - Auditorias pós-migração: segurança 0 crítico/0 atenção · regras 0 crítico.
 **Próximas fases:** F2 tela /comercial · F3 atribuição (?ref + admin) · F4 Atendimento
 com escopo · F5 NPS (cron+rota token) · F6 Admin visão total + invariantes.
+
+## ✅ 21/08 (noite 7) — Consultor Comercial FASE 2: tela /comercial no ar
+`src/pages/Comercial.jsx` (nova) + rota `/comercial` (PrivateRoute SEM filtro de role — o
+acesso é CAPACIDADE, decidida pela RPC comercial_gate no servidor; sem acesso, a tela
+explica em vez de dar erro) + card de entrada na MinhaRede (sonda a própria RPC; "sem
+acesso" esconde o card em silêncio).
+A tela: cabeçalho explicativo · KPIs (aguardando/em atendimento/finalizados) · card por
+lead com nome/produto/status/dias parado, SEM contato até o **Receber cliente em 2
+cliques** (o 2º é a confirmação; o contato aparece com botão de WhatsApp — DDI 55 sem
+duplicar) · Acompanhamento (trilha de eventos + feedback) · **Atendimento realizado**
+(explica que o cliente recebe a pesquisa em 15 dias) · **Finalizar** (modal: resultado +
+motivo quando perdido + comentário obrigatório — a validação REAL é da RPC; a tela só
+conduz). Toda leitura confere `error` (forma #2); falhas reportadas ao erros_cliente.
+Para o dono TESTAR: os 2 leads reais de alavancagem (as aplicações de teste dele de
+16/08) foram atribuídos ao admin com evento 'atribuido' — /comercial já mostra os dois
+aguardando o Receber. Fases restantes: F3 (?ref + atribuição manual no Admin) · F4
+(Atendimento com escopo) · F5 (NPS: cron + rota token) · F6 (Admin visão total + CSV +
+invariantes).

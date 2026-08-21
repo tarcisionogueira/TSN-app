@@ -77,6 +77,36 @@ function Nodo({ nodo, filhosDe, expandido, toggle, nivel }) {
   );
 }
 
+// Entrada da ÁREA COMERCIAL (consórcio/home equity) — só aparece para quem tem a
+// capacidade: sonda a própria RPC (comercial_meus_leads); "sem acesso comercial" é
+// resposta esperada para a maioria e simplesmente esconde o card, sem erro.
+function CardComercial() {
+  const [info, setInfo] = useState(null); // null=sem acesso/carregando · {total, pendentes}
+  useEffect(() => {
+    let vivo = true;
+    supabase.rpc('comercial_meus_leads').then(({ data, error }) => {
+      if (!vivo || error || !Array.isArray(data)) return;
+      setInfo({ total: data.length, pendentes: data.filter(l => !l.recebido_em && !l.finalizado_em).length });
+    }).catch(() => { /* falha de rede: card apenas não aparece */ });
+    return () => { vivo = false; };
+  }, []);
+  if (!info) return null;
+  return (
+    <a href="#/comercial" style={{ ...card, display: 'flex', alignItems: 'center', gap: 14, textDecoration: 'none', borderColor: info.pendentes ? '#fbbf24' : '#e2e8f0', background: info.pendentes ? '#fffbeb' : 'white' }}>
+      <span style={{ width: 42, height: 42, borderRadius: 12, background: '#0D63DB', color: 'white', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>💼</span>
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ display: 'block', fontSize: 14.5, fontWeight: 800, color: '#111' }}>Área Comercial — Consórcio & Home Equity</span>
+        <span style={{ display: 'block', fontSize: 12.5, color: info.pendentes ? '#b45309' : '#64748b', fontWeight: info.pendentes ? 700 : 500 }}>
+          {info.pendentes
+            ? `${info.pendentes} cliente${info.pendentes > 1 ? 's' : ''} aguardando você receber`
+            : (info.total ? `${info.total} cliente${info.total > 1 ? 's' : ''} na sua carteira` : 'Sem clientes atribuídos no momento')}
+        </span>
+      </span>
+      <ArrowRight size={18} color="#0D63DB" style={{ flexShrink: 0 }} />
+    </a>
+  );
+}
+
 export default function MinhaRede() {
   const { user, effectiveUserId, effectiveRole } = useAuth();
   const isAdmin = effectiveRole === 'admin';
@@ -356,6 +386,9 @@ export default function MinhaRede() {
           ))}
         </div>
       </div>
+
+      {/* Parceiro comercial (consórcio/home equity): atalho com contagem de pendentes */}
+      <CardComercial />
 
       {/* Aviso: só GANHA comissão quem tem assinatura ativa — aparece só p/ quem ainda NÃO atende
           o requisito (não-pagante); some quando assina. Nunca para admin. */}

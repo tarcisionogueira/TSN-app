@@ -36,6 +36,7 @@ const HomeCliente = lazy(() => import('./pages/HomeCliente'));
 const Painel = lazy(() => import('./pages/Painel'));
 const Consultor = lazy(() => import('./pages/Consultor'));
 const MinhaRede = lazy(() => import('./pages/MinhaRede'));
+const Comercial = lazy(() => import('./pages/Comercial'));
 const AtivarVendedor = lazy(() => import('./pages/AtivarVendedor'));
 const Contratos = lazy(() => import('./pages/Contratos'));
 const Calculadora = lazy(() => import('./pages/Calculadora'));
@@ -347,6 +348,10 @@ function MainLayout() {
           <Route path="/consultor" element={<Navigate to="/minha-rede" replace />} />
           <Route path="/afiliado" element={<Navigate to="/minha-rede" replace />} />
           <Route path="/minha-rede" element={<PrivateRoute><MinhaRede /></PrivateRoute>} />
+          {/* Área do parceiro comercial (consórcio/home equity). SEM filtro de role aqui:
+              o acesso é CAPACIDADE (perfis.vendedor_tipo='consultor'), não role — quem
+              decide é a RPC comercial_gate no servidor; sem acesso, a tela explica. */}
+          <Route path="/comercial" element={<PrivateRoute><Comercial /></PrivateRoute>} />
           <Route path="/ativar-vendedor/:token" element={<AtivarVendedor />} />
           <Route path="/contratos" element={<PrivateRoute><Contratos /></PrivateRoute>} />
           <Route path="/contratos/novo" element={<PrivateRoute roles={['admin','consultor','analista','advogado']}><CriarContrato /></PrivateRoute>} />
