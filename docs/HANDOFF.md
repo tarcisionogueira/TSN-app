@@ -10678,3 +10678,40 @@ ou description `[servico]` — Asaas não tem metadata) e `processarVencido` gan
 3. Disparar `SCRAPER_FONTES=SUPORTE` (coleta o SUEDPETER; conferir o filtro de teste no log).
 4. `scraper-dom.yml` com `gravar=1` para alfa/nordeste (DRY-RUNs verdes); **hasta NÃO** —
    aguarda runner residencial ou BD com render (403 a datacenter).
+
+## 📌 21/08 (tarde) — FILA DE PENDÊNCIAS P1–P4 + hasta destravado (tudo na branch, produção no fim)
+
+- **HASTA (ideia do dono — console do navegador): destravado por IP residencial.** O 403 é a IP
+  de datacenter; de casa nada bloqueia. (a) `runner-residencial.sh` ganhou a linha HASTA (o
+  scraper já usa o motor dom → o runner de casa resolve IP e render juntos, gate 2×/semana);
+  (b) `scripts/recon-hasta-console.js`: cola no console do site, intercepta endpoints JSON
+  ([API]) e colhe os lotes da home via iframe → JSON no clipboard (diagnóstico/colheita pontual).
+- **P1 — erro `null.id` da home (20/08) e do /imovel/:id (13/08): MESMA LINHA, corrigida.**
+  Provado por sourcemap (rebuild do commit do deploy ativo + resolução de 27:31613 →
+  App.jsx:291): `{showBonus && <PopupBonusAnalises userId={user.id}…}` — showBonus assíncrono
+  nunca era LIMPO; deslogar com o popup pendente derrubava o shell em qualquer rota, e o
+  próximo login herdaria o bônus alheio. Efeito agora limpa o estado + render exige `user &&`.
+  **Pós-deploy: marcar as 2 linhas de `erros_cliente` como resolvidas** (deixadas abertas de
+  propósito para o ritual não perder o rastro antes do deploy).
+- **P2 — 19 anomalias de relatório REVISADAS caso a caso.** 17 são mitigação já aplicada /
+  dado de fonte / flag obsoleta (o sem_parecer de 20/08 foi recompletado pelo self-heal às
+  00:05) — resolução pronta em `supabase/operacoes/anomalias_revisadas_21_08.sql` (o
+  classificador barrou o UPDATE em massa da sessão; rodar na janela de produção). **Ficam
+  abertas ids 51/52 (`pagamento_contradiz_documento`)**: relatório assume à vista com lote
+  parcelado — considerar plano de pagamento no capital/ROI é FEATURE do gerador (backlog).
+- **P3 — alta 404→558 do `lote_sem_area_nem_matricula`: era o BIASI com 0% de área** (222 dos
+  558; 0 de 324 ativos com m² — `mapLoteBiasi` grava 0 fixo e ninguém extraía do detalhe).
+  Consertos: enriquecimento extrai ÁREA do mesmo detalhe renderizado (custo zero, cap 120/dia
+  ≈ 3 crons p/ cobrir) + MERGE do estado do banco antes do filtro (o upsert do card regravava
+  0 por cima do conquistado e o cap revisitava os MESMOS lotes — classe da regressão de datas
+  da CEF) + **migração `preservar_area_e_avaliacao_enriquecidas.sql` (NÃO aplicada — janela)**.
+- **P4 — "1 cidade fora da régua" do Índice era FALSO ALARME**: Cananéia/SP, tipo TERRENO,
+  R$181/m² com 7 amostras (acervo confirma: terrenos de 500m² a ~R$37/m² de arremate). A régua
+  do health-check era única (200–50k, calibrada p/ construído); agora terreno/rural tem piso
+  próprio de absurdo (≥R$20/m²).
+
+### 🚀 CHECKLIST DE PRODUÇÃO (atualizado — itens novos em relação ao da manhã)
+5. Aplicar `preservar_area_e_avaliacao_enriquecidas.sql` (SQL Editor).
+6. Rodar `supabase/operacoes/anomalias_revisadas_21_08.sql` (resolve 17 anomalias revisadas).
+7. Marcar resolvidas as 2 linhas de `erros_cliente` do null.id (rotas `/` e `/imovel/:id`).
+8. Runner residencial de casa: próximo disparo já coleta HASTA (além de GESTAO/SOLEON pendentes).
