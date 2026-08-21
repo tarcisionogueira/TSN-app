@@ -69,10 +69,16 @@ for (const rota of ROTAS) {
       while ((n = walker.nextNode())) {
         if (/R\$\s?[\d.]+,\d{2}/.test(n.nodeValue)) { cardHtml = (n.parentElement?.closest('article, li, [class*="card"], [class*="lote"], div')?.outerHTML || '').slice(0, 1200); break; }
       }
-      return { nReais: reais.length, rotulado, area, cidade, cardHtml };
+      // hrefs RENDERIZADOS que parecem lote/listagem — é o que decide o padrão de URL do
+      // enumerador (a lição do nordeste: a home crua não linka nada; o DOM sim).
+      const hrefs = [...new Set([...document.querySelectorAll('a[href]')].map(a => a.getAttribute('href') || ''))]
+        .filter(h => /lote|leilao|leiloes|imove|evento|agenda/i.test(h) && !/facebook|instagram|whatsapp|wa\.me|blog|\.pdf$/i.test(h))
+        .slice(0, 60);
+      return { nReais: reais.length, rotulado, area, cidade, cardHtml, hrefs };
     });
     console.log(`   render: R$=${info.nReais} · área="${info.area}" · cidade="${info.cidade}"`);
     info.rotulado.forEach(r => console.log(`     ${r}`));
+    console.log(`   hrefs lote/listagem (${info.hrefs.length}): ${JSON.stringify(info.hrefs)}`);
     if (info.cardHtml) console.log(`   card: ${info.cardHtml.replace(/\s+/g, ' ')}`);
   } catch (e) { console.log(`   erro: ${String(e.message).slice(0, 100)}`); }
 }

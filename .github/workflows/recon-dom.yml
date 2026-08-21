@@ -1,6 +1,13 @@
 name: Recon DOM (navegador, genérico)
 
 on:
+  # Push path-filtrado na branch de trabalho: roda as DUAS sondas do Passo 2 (alfa catálogo +
+  # nordeste página de evento) — o dispatch por API só enxerga o workflow da branch default.
+  push:
+    branches: [ 'claude/handoff-bidpro-brasil-verificacoes-7h3pat' ]
+    paths:
+      - 'scripts/recon-dom-browser.mjs'
+      - '.github/workflows/recon-dom.yml'
   workflow_dispatch:
     inputs:
       base:
@@ -23,7 +30,22 @@ jobs:
       - name: Chromium deps
         run: npx puppeteer browsers install chrome
       - name: Recon DOM
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         env:
           RECON_BASE: ${{ github.event.inputs.base }}
           RECON_ROTAS: ${{ github.event.inputs.rotas }}
+        run: node scripts/recon-dom-browser.mjs
+
+      # Sondas fixas do Passo 2 (rodam no push da branch de trabalho):
+      - name: Sonda alfa (catálogo completo)
+        if: ${{ github.event_name == 'push' }}
+        env:
+          RECON_BASE: https://www.alfaleiloes.com.br
+          RECON_ROTAS: /,/lotes,/leiloes,/imoveis,/proximos-leiloes,/busca
+        run: node scripts/recon-dom-browser.mjs
+      - name: Sonda nordeste (página de evento → padrão de lote)
+        if: ${{ github.event_name == 'push' }}
+        env:
+          RECON_BASE: https://www.nordesteleiloes.com.br
+          RECON_ROTAS: /leiloes/186-tribunal-regional-do-trabalho-da-5-regiao,/leiloes/128-vara-federal-civel-e-criminal-da-ssj-de-jequie-ba
         run: node scripts/recon-dom-browser.mjs
