@@ -1,0 +1,35 @@
+name: Recon leiloeiros ES (JUCEES)
+
+# Detecção de plataforma + sonda de histórico dos leiloeiros do ES (lista JUCEES).
+# Responde as duas perguntas do dono por site: (1) roda plataforma que já suportamos?
+# (2) "0 leilão" é agora ou nunca? Só diagnostica; NÃO grava nada. Manual.
+# Ver scripts/recon-leiloeiros-es.mjs e docs/RECONCILIACAO_LEILOEIROS_ES_JUCEES.md.
+# Default: só SUEDPETER (o único candidato com atividade) — ampliar via input gasta
+# Bright Data à toa nos 14 sites sem histórico.
+on:
+  workflow_dispatch:
+    inputs:
+      doms:
+        description: 'Domínios (csv). Vazio = todos os 15 da lista JUCEES'
+        required: false
+        default: 'suedpeterleiloes.com.br'
+
+jobs:
+  recon:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm ci
+      - name: Recon
+        env:
+          PROBE_DOMS: ${{ github.event.inputs.doms }}
+          BRIGHTDATA_API_TOKEN: ${{ secrets.BRIGHTDATA_API_TOKEN }}
+          BRIGHTDATA_ZONE: ${{ secrets.BRIGHTDATA_ZONE }}
+        run: node scripts/recon-leiloeiros-es.mjs
