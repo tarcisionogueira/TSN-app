@@ -10924,3 +10924,21 @@ mais rico; reativa após a praça); (b) esconder o HASTA e ficar com o portal; (
 dois com selo "mesmo imóvel". Recomendação: (a).
 Obs: checagem por matrícula+cidade deu 0 — FALSO negativo (CEF tem 0 matrículas
 preenchidas; a forma #8 quase passou de novo). A chave que funciona é o id da Caixa.
+
+## ✅ 21/08 (noite 9) — Dedup HASTA×CEF no ar (opção A do dono): 539 gêmeos CEF suprimidos
+Migração `gemeos_hasta_cef.sql` (escrita + aplicada):
+- Coluna `imoveis_leilao.suprimido_motivo` + trigger `trg_preservar_supressao_gemeo` —
+  NECESSÁRIO porque o importador diário da CEF upserta `ativo: true` e ressuscitaria o
+  gêmeo toda madrugada. Regra do trigger: linha com motivo preenchido não reativa; o único
+  caminho de volta é limpar o motivo NO MESMO update (só a reconciliação faz).
+- `reconciliar_gemeos_hasta_cef()` (operação, revogada de anon/authenticated): suprime o
+  gêmeo CEF de leilão HASTA VIVO (data hoje/futura) e REATIVA o que nós suprimimos quando
+  a praça passa ou o lote HASTA sai. Chave: "IMOVEL <id>" da descrição × dígitos do
+  fonte_id. data_leilao é TEXT — cast guardado por regex (pegou na 1ª aplicação).
+- Pendurada no `monitor-fontes-cron` (1×/dia 15h UTC, DEPOIS do sync CEF ~12:30); o
+  resultado {suprimidos, reativados, gemeos_vivos} sai no JSON do cron — dedup parada
+  fica visível, não silenciosa.
+Validação: 1ª rodada suprimiu exatamente os 539 medidos (CEF ativos 23.431→22.892);
+2ª rodada 0/0 (idempotente); upsert simulado tentando ativo=true FICOU suprimido
+(trigger ok, testado com rollback). Cliente não vê mais o mesmo leilão 2× com preços
+diferentes — vale o lote HASTA (dado por praça, mais fresco).

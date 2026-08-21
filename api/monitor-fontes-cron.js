@@ -154,6 +154,18 @@ async function handler(req) {
   }
   const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 
+  // GÊMEOS HASTA×CEF (opção (a) do dono, 21/08): o mesmo leilão da Caixa aparecia 2×
+  // (portal CEF + leiloeiro HASTA) com valores divergentes. A reconciliação suprime o
+  // gêmeo CEF enquanto o leilão HASTA está vivo e o REATIVA quando a praça passa — e
+  // precisa rodar TODO DIA porque o importador CEF upserta ativo:true (um trigger
+  // segura a ressurreição até esta rodada). `error` conferido: falha aqui não derruba
+  // o monitor, mas aparece no relatório (silêncio esconderia a dedup parada).
+  let gemeos = null;
+  {
+    const { data, error: eGem } = await supabase.rpc('reconciliar_gemeos_hasta_cef');
+    gemeos = eGem ? { erro: eGem.message } : data;
+  }
+
   // 15 dias: cobre TODAS as fontes que reportam saúde (não só uma allowlist de 8 —
   // BIASI/PESTANA/etc. degradavam e passavam batido). Última linha por fonte = estado.
   const desde = new Date(Date.now() - 15 * 24 * 3600 * 1000).toISOString();
@@ -399,7 +411,7 @@ async function handler(req) {
     // condição limpa: zera o estado p/ que uma recorrência futura volte a avisar.
     const st = await lerEstadoAlerta(supabase, 'monitor_fontes');
     if (!st || st.assinatura !== '') await gravarEstadoAlerta(supabase, 'monitor_fontes', '', null);
-    return new Response(JSON.stringify({ ok: true, problemas: 0, fontes: Object.keys(ultima).length }), {
+    return new Response(JSON.stringify({ ok: true, problemas: 0, fontes: Object.keys(ultima).length, gemeos }), {
       headers: { 'Content-Type': 'application/json' },
     });
   }
@@ -457,7 +469,7 @@ async function handler(req) {
   // Uma fonte degradada perdia a única boca que tinha. Sem envio, não grava → re-tenta amanhã.
   if (enviar && emailEnviado) await gravarEstadoAlerta(supabase, 'monitor_fontes', assinatura, new Date().toISOString());
 
-  return new Response(JSON.stringify({ ok: true, problemas: problemas.length, enviado: emailEnviado, alerta_pendente: enviar && !emailEnviado, detalhes: problemas }), {
+  return new Response(JSON.stringify({ ok: true, problemas: problemas.length, enviado: emailEnviado, alerta_pendente: enviar && !emailEnviado, detalhes: problemas, gemeos }), {
     headers: { 'Content-Type': 'application/json' },
   });
 }
