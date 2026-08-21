@@ -25,7 +25,7 @@ const DISPENSA_KEY = 'tsn_vitrine_dispensada';   // por sessão: volta no próxi
 const ROLES_CLIENTE = ['explorador', 'top2', 'top2_anual', 'assessorado', 'clube'];
 
 export default function VitrineMaterial() {
-  const { user, role, impersonate } = useAuth();
+  const { user, role, impersonate, effectiveUserId } = useAuth();
   const nav = useNavigate();
   const [item, setItem] = useState(null);
 
@@ -42,7 +42,7 @@ export default function VitrineMaterial() {
           .eq('ativo', true).eq('destaque', true).eq('onboarding', false).order('criado_em', { ascending: false }),
         supabase.from('ebooks_admin').select('id, titulo, descricao, capa_url, preco')
           .eq('ativo', true).eq('destaque', true).order('criado_em', { ascending: false }),
-        supabase.from('aula_progresso').select('curso_id').eq('user_id', user.id),
+        supabase.from('aula_progresso').select('curso_id').eq('user_id', effectiveUserId || user.id),
       ]);
       if (!vivo) return;
       // Falha de leitura não vira "não há destaque": simplesmente não mostramos a faixa

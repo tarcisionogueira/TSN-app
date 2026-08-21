@@ -75,7 +75,7 @@ export default function KycParceiroModal() {
     // assinar neste bucket, então ela SEMPRE falhava com 400 e o handler global registrava o
     // erro em `erros_cliente` (3 ocorrências em /minha-rede). Ruído que escondia erro de verdade,
     // para obter algo que já não é usado.
-    const { error: insErr } = await supabase.from('usuario_docs').insert({ user_id: user.id, tipo, nome: file.name || `${prefixo}.${ext}`, url: path, tamanho_kb: Math.round((file.size || 0) / 1024) });
+    const { error: insErr } = await supabase.from('usuario_docs').insert({ user_id: user.id, tipo, nome: file.name || `${prefixo}.${ext}`, url: path, tamanho_kb: Math.round((file.size || 0) / 1024) }); // padrao-ok: KYC é do PRÓPRIO parceiro logado — admin nunca deve subir documento como o cliente
     if (insErr) throw insErr;
   }
 

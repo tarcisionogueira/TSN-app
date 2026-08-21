@@ -30,7 +30,7 @@ function calcItbi(valor, aliquota = 2) {
 export default function OnrRegistro() {
   const { imovelId } = useParams();
   const nav = useNavigate();
-  const { user, nome: nomePerfil } = useAuth();
+  const { user, impersonate, nome: nomePerfil } = useAuth();
 
   const [etapa, setEtapa] = useState('imovel');
   const [imovel, setImovel] = useState(null);
@@ -158,12 +158,15 @@ export default function OnrRegistro() {
   };
 
   const salvarProtocolo = async () => {
+    // MODO SUPORTE é só visualização: gravar aqui registraria o protocolo no nome do ADMIN
+    // (RLS impede gravar como o cliente) — mesmo padrão do bloqueio em Analise/MinhasAnalises.
+    if (impersonate) { setErros({ protocolo: 'Modo suporte é somente visualização — o registro deve ser feito pelo cliente.' }); return; }
     if (!protocoloNum.trim()) { setErros({ protocolo: 'Informe o número do protocolo' }); return; }
     setSalvando(true);
     try {
       const payload = {
         imovel_id:         imovelId || null,
-        user_id:           user.id,
+        user_id:           user.id, // padrao-ok: bloqueado sob suporte logo acima; sempre o próprio cliente logado
         numero_protocolo:  protocoloNum.trim(),
         data_protocolo:    protocoloData || new Date().toISOString().split('T')[0],
         cartorio_nome:     form.cartorio_nome.trim() || null,

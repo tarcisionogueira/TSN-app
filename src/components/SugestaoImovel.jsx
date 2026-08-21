@@ -125,7 +125,7 @@ export default function SugestaoImovel() {
     if (suporte || !user?.id) return;
     try {
       await supabase.from('feedback_imovel')
-        .upsert({ user_id: user.id, imovel_id: imovelId, sinal, contexto: 'sugestao_widget' }, { onConflict: 'user_id,imovel_id,sinal' });
+        .upsert({ user_id: user.id, imovel_id: imovelId, sinal, contexto: 'sugestao_widget' }, { onConflict: 'user_id,imovel_id,sinal' }); // padrao-ok: guard `if (suporte…) return` logo acima — nunca roda sob suporte
     } catch { /* silencioso */ }
   }, [suporte, user?.id]);
 

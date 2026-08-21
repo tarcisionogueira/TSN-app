@@ -32,7 +32,7 @@ const ROLES_CLIENTE = ['explorador', 'top2', 'top2_anual', 'assessorado', 'clube
 const DISPENSA_KEY = 'tsn_boasvindas_dispensado';   // por SESSÃO: volta no próximo acesso
 
 export default function BoasVindasModal() {
-  const { user, role, impersonate } = useAuth();
+  const { user, role, impersonate, effectiveUserId } = useAuth();
   const nav = useNavigate();
   const [curso, setCurso] = useState(null);
   const [aulas, setAulas] = useState([]);
@@ -66,7 +66,7 @@ export default function BoasVindasModal() {
 
       const [{ data: as, error: eA }, { data: prog }] = await Promise.all([
         supabase.from('aulas_admin').select('id, titulo, video_url, modulo').eq('curso_id', c.id).order('ordem'),
-        supabase.from('aula_progresso').select('aula_id, concluida').eq('user_id', user.id).eq('curso_id', c.id),
+        supabase.from('aula_progresso').select('aula_id, concluida').eq('user_id', effectiveUserId || user.id).eq('curso_id', c.id),
       ]);
       if (eA || cancelado) return;
       const lista = (as || []).filter((a) => String(a.video_url || '').trim());
@@ -96,7 +96,8 @@ export default function BoasVindasModal() {
       if (previa) throw new Error('previa');   // conferir não altera dado de ninguém
       // Mesmo registro da área de membros — o progresso daqui aparece lá.
       const { error } = await supabase.from('aula_progresso')
-        .upsert({ user_id: user.id, curso_id: curso.id, aula_id: aula.id, concluida: true },
+        .upsert({ user_id: user.id, curso_id: curso.id, aula_id: aula.id, concluida: true }, // padrao-ok: progresso é de QUEM assiste; o ramo `previa` acima já impede gravar em conferência
+
           { onConflict: 'user_id,aula_id' });
       if (error) console.warn('[boas-vindas] progresso:', error.message);
     } catch (e) { if (e?.message !== 'previa') console.warn('[boas-vindas] progresso:', e?.message); }

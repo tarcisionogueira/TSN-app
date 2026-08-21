@@ -10,7 +10,7 @@ import LeitorPaginado from '../components/LeitorPaginado';
 export default function EbookPage() {
   const { id } = useParams();
   const nav = useNavigate();
-  const { user, role } = useAuth();
+  const { user, role, effectiveUserId } = useAuth();
 
   const [ebook, setEbook] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -40,10 +40,11 @@ export default function EbookPage() {
   // Verifica compra avulsa para ebooks pagos
   useEffect(() => {
     if (!user || !id || !ebook || Number(ebook.preco || 0) === 0) return;
+    // Posse é de quem se está VENDO (modo suporte mostra a compra do cliente, não a do admin).
     supabase.from('compras_produtos')
-      .select('id').eq('user_id', user.id).eq('produto_tipo', 'ebook').eq('produto_id', id).eq('status', 'ativo')
+      .select('id').eq('user_id', effectiveUserId || user.id).eq('produto_tipo', 'ebook').eq('produto_id', id).eq('status', 'ativo')
       .then(({ data }) => { if (data?.length > 0) setComprouAvulso(true); });
-  }, [user, id, ebook]);
+  }, [user, effectiveUserId, id, ebook]);
 
   const roleEff = role || 'explorador';
   const temPlano = user && ['top2','assessorado','clube','consultor','analista','advogado','admin'].includes(roleEff);

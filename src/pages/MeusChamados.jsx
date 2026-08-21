@@ -11,7 +11,7 @@ const STATUS = {
 };
 
 export default function MeusChamados() {
-  const { user, impersonate, nome: nomePerfil } = useAuth();
+  const { user, impersonate, effectiveUserId, nome: nomePerfil } = useAuth();
   const [aba, setAba] = useState('abertos');
   const [chamados, setChamados] = useState([]);
   const [chamadoAtivo, setChamadoAtivo] = useState(null);
@@ -44,7 +44,8 @@ export default function MeusChamados() {
     // cliente é uma conversa que existe e espera resposta dele — sumir da lista dele
     // esconderia a mensagem que a IA mandou.
     const statusFiltro = aba === 'abertos' ? ['saudacao', 'aberto', 'em_atendimento'] : ['finalizado'];
-    const { data } = await supabase.from('chamados').select('*').eq('user_id', user.id)
+    // Sob suporte a lista é a do CLIENTE visto — user.id cru mostrava os chamados do admin.
+    const { data } = await supabase.from('chamados').select('*').eq('user_id', effectiveUserId || user.id)
       .in('status', statusFiltro).order('atualizado_em', { ascending: false });
     setChamados(data || []);
     setLoading(false);

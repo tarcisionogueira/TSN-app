@@ -173,7 +173,7 @@ function Detalhe({ arr, onBack, onChange, soLeitura, podeRemover = false, permit
     const valor = Number(String(novo.valor).replace(/\./g, '').replace(',', '.'));
     if (!valor || valor <= 0) return;
     const { data: { user } } = await supabase.auth.getUser();
-    const row = { arrematado_id: arr.id, user_id: user.id, tipo: novo.tipo, categoria: novo.categoria, descricao: novo.descricao.trim() || null, valor, data: novo.data || null };
+    const row = { arrematado_id: arr.id, user_id: user.id, tipo: novo.tipo, categoria: novo.categoria, descricao: novo.descricao.trim() || null, valor, data: novo.data || null }; // padrao-ok: o form "Novo lançamento" inteiro fica oculto sob suporte (soLeitura = !!impersonate)
     const { data, error } = await supabase.from('arrematado_lancamentos').insert(row).select().single();
     if (!error && data) { setLancs(prev => [data, ...prev]); setNovo(n => ({ ...n, descricao: '', valor: '' })); }
   };

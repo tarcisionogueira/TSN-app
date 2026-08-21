@@ -282,7 +282,7 @@ function ImoveisSimilares({ imovel, nav }) {
 }
 
 function SecaoArrematacao({ imovelId, imovelTitulo }) {
-  const { user, role, effectiveUserId } = useAuth();
+  const { user, role, effectiveUserId, impersonate } = useAuth();
   const nav = useNavigate();
   const [dados, setDados] = useState(null); // { arrematacao, anexos, docs }
   const [fluxoOk, setFluxoOk] = useState(false); // pipeline completo (até parecer jurídico)
@@ -347,6 +347,9 @@ function SecaoArrematacao({ imovelId, imovelTitulo }) {
 
   const uploadAnexo = async (file, tabela) => {
     if (!file) return;
+    // MODO SUPORTE é só visualização: o insert em usuario_docs gravaria no nome do ADMIN
+    // (RLS impede gravar como o cliente) — mesmo padrão do bloqueio em Analise/MinhasAnalises.
+    if (impersonate) { alert('Modo suporte é somente visualização — o documento deve ser enviado pelo cliente.'); return; }
     const key = `${tabela}_${file.name}`;
     setUploadando(u => ({ ...u, [key]: true }));
     try {
@@ -374,7 +377,7 @@ function SecaoArrematacao({ imovelId, imovelTitulo }) {
         });
         if (!r.ok) alert('Erro ao registrar anexo');
       } else {
-        await supabase.from('usuario_docs').insert({ user_id: user.id, arrematacao_id: arrId, tipo, nome: file.name, url: publicUrl, tamanho_kb: Math.round(file.size / 1024) });
+        await supabase.from('usuario_docs').insert({ user_id: user.id, arrematacao_id: arrId, tipo, nome: file.name, url: publicUrl, tamanho_kb: Math.round(file.size / 1024) }); // padrao-ok: bloqueado sob suporte no topo do uploadAnexo
       }
       carregar();
     } finally { setUploadando(u => ({ ...u, [key]: false })); }
@@ -388,8 +391,9 @@ function SecaoArrematacao({ imovelId, imovelTitulo }) {
   };
 
   const deletarDocPessoal = async (id) => {
+    if (impersonate) { alert('Modo suporte é somente visualização.'); return; }
     if (!confirm('Remover documento?')) return;
-    await supabase.from('usuario_docs').delete().eq('id', id).eq('user_id', user.id);
+    await supabase.from('usuario_docs').delete().eq('id', id).eq('user_id', user.id); // padrao-ok: bloqueado sob suporte acima; doc pessoal do próprio logado
     carregar();
   };
 
@@ -504,6 +508,7 @@ function SecaoArrematacao({ imovelId, imovelTitulo }) {
                   <div style={{ marginTop: 10 }}>
                     <input ref={inputPessoalRef} type="file" style={{ display: 'none' }} onChange={async e => {
                       const file = e.target.files[0]; if (!file) return;
+                      if (impersonate) { alert('Modo suporte é somente visualização — o documento deve ser enviado pelo cliente.'); return; }
                       const key = `pessoal_${file.name}`; setUploadando(u => ({ ...u, [key]: true }));
                       try {
                         const t = await token();
@@ -514,7 +519,7 @@ function SecaoArrematacao({ imovelId, imovelTitulo }) {
                         const { signedURL, publicUrl } = await signR.json();
                         const upR = await fetch(signedURL, { method: 'PUT', body: file, headers: { 'Content-Type': file.type || 'application/octet-stream' } });
                         if (!upR.ok) { alert('Erro no upload'); return; }
-                        await supabase.from('usuario_docs').insert({ user_id: user.id, arrematacao_id: arrId, tipo: 'outro', nome: file.name, url: publicUrl, tamanho_kb: Math.round(file.size / 1024) });
+                        await supabase.from('usuario_docs').insert({ user_id: user.id, arrematacao_id: arrId, tipo: 'outro', nome: file.name, url: publicUrl, tamanho_kb: Math.round(file.size / 1024) }); // padrao-ok: bloqueado sob suporte no início do handler
                         carregar();
                       } finally { setUploadando(u => ({ ...u, [key]: false })); e.target.value = ''; }
                     }} />

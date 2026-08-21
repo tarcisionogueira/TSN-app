@@ -28,7 +28,7 @@ function ModalFeedback({ user, nomePerfil, onClose }) {
     setEnviando(true); setErro('');
     try {
       const { error } = await supabase.from('feedbacks').insert({
-        user_id: user?.id || null,
+        user_id: user?.id || null, // padrao-ok: feedback assinado por QUEM escreve (mesmo no suporte, a queixa é do admin)
         user_nome: nome,
         user_email: email,
         queixa: queixa.trim(),

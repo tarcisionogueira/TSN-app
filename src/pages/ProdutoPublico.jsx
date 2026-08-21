@@ -12,7 +12,7 @@ export default function ProdutoPublico({ tipo }) {
   const nav = useNavigate();
   const [params] = useSearchParams();
   const ref = params.get('ref') || '';
-  const { user, role, nome: nomePerfil } = useAuth();
+  const { user, role, effectiveUserId, nome: nomePerfil } = useAuth();
   const [produto, setProduto] = useState(null);
   const [aulas, setAulas] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -30,17 +30,18 @@ export default function ProdutoPublico({ tipo }) {
   // Verifica compra avulsa para produtos pagos
   useEffect(() => {
     if (!user || !id || !produto || Number(produto.preco || 0) === 0) return;
+    // Posse é de quem se está VENDO (modo suporte mostra a compra do cliente, não a do admin).
     supabase.from('compras_produtos')
-      .select('id').eq('user_id', user.id).eq('produto_tipo', tipo).eq('produto_id', id).eq('status', 'ativo')
+      .select('id').eq('user_id', effectiveUserId || user.id).eq('produto_tipo', tipo).eq('produto_id', id).eq('status', 'ativo')
       .then(({ data }) => { if (data?.length > 0) setComprouAvulso(true); });
-  }, [user, id, produto, tipo]);
+  }, [user, effectiveUserId, id, produto, tipo]);
 
   // Enquanto aguarda o pagamento (aba do Asaas aberta), faz polling da compra → libera sozinho.
   useEffect(() => {
     if (!aguardando || !user || !id) return;
     const t = setInterval(async () => {
       const { data } = await supabase.from('compras_produtos')
-        .select('id').eq('user_id', user.id).eq('produto_tipo', tipo).eq('produto_id', id).eq('status', 'ativo').limit(1);
+        .select('id').eq('user_id', effectiveUserId || user.id).eq('produto_tipo', tipo).eq('produto_id', id).eq('status', 'ativo').limit(1);
       if (data?.length) { setComprouAvulso(true); setAguardando(false); }
     }, 5000);
     return () => clearInterval(t);

@@ -1100,7 +1100,7 @@ export default function Busca() {
     //      lote fora da área que pediu.
     const filtrosComRaio = { ...filtros, __raio: (raioAtivo && centroRaio) ? { km: raioKmAtivo, centro: centroRaio } : null };
     const { data, error } = await supabase.from('filtros_salvos').insert({
-      user_id: user.id, nome: nomeFiltro.trim(), filtros: filtrosComRaio,
+      user_id: user.id, nome: nomeFiltro.trim(), filtros: filtrosComRaio, // padrao-ok: filtro salvo é preferência de QUEM navega; sob suporte salva o do admin, não polui o cliente
     }).select().single();
     if (error) { alert('Erro ao salvar filtro. Tente novamente.'); return; }
     if (data) setFiltrosSalvos(p => [data, ...p]);
@@ -1297,7 +1297,7 @@ export default function Busca() {
       if (!soLeitura) try {
         const sid = sessionStorage.getItem('tsn_session_id') || (() => { const s = Math.random().toString(36).slice(2); sessionStorage.setItem('tsn_session_id', s); return s; })();
         supabase.from('busca_historico').insert({
-          user_id: user?.id || null, session_id: sid, filtros: filtrosAtivos,
+          user_id: user?.id || null, session_id: sid, filtros: filtrosAtivos, // padrao-ok: telemetria de QUEM navega, e o bloco já é pulado sob suporte (!soLeitura)
           resultados_count: totalBusca, cidade: filtrosAtivos.cidades?.join(', ') || null,
           estado: filtrosAtivos.estado || null, tipo_imovel: filtrosAtivos.tipos?.join(',') || null,
           valor_min: filtrosAtivos.valorMin ? Number(filtrosAtivos.valorMin) : null,
@@ -1311,7 +1311,7 @@ export default function Busca() {
       if (!soLeitura && user?.id && (filtrosAtivos.estado || filtrosAtivos.cidades?.length > 0)) {
         try {
           supabase.from('alertas_email').upsert({
-            user_id: user.id, filtros: filtrosAtivos,
+            user_id: user.id, filtros: filtrosAtivos, // padrao-ok: bloco pulado sob suporte (!soLeitura); alerta é de quem navega
             descricao: [filtrosAtivos.cidades?.join(', ') || filtrosAtivos.estado, filtrosAtivos.tipos?.join(', ')].filter(Boolean).join(' · ') || 'Preferência geral',
             ativo: true,
           }, { onConflict: 'user_id' }).then(() => {}).catch(() => {});

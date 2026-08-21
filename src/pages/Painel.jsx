@@ -225,11 +225,14 @@ export default function Painel() {
       // `error` checado nas TRÊS: dentro de um Promise.all um 400 vira `undefined` e o `|| []`
       // o transforma em "não há nada" — foi assim que o card de reuniões sumiu sem sintoma
       // quando `reuniao_em` ainda não existia na tabela (11–12/08).
+      // padrao-ok (x3 abaixo): o Painel inteiro é acoplado ao portfólio LOCAL do navegador
+      // (localStorage) — sob suporte a tela é do LOGADO, coerente com o que ele vê; rotear
+      // on-behalf de verdade é a feature registrada no HANDOFF (item 4 da lista de 21/08).
       const [{ data: solics, error: e1 }, { data: agends, error: e2 }, { data: reunioes, error: e3 }] = await Promise.all([
-        supabase.from('solicitacoes').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
-        supabase.from('agendamentos').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
-        supabase.from('solicitacoes').select('id,imovel_nome,imovel_cidade,reuniao_em,reuniao_duracao_min,google_meet_link')
-          .eq('user_id', user.id).not('reuniao_em', 'is', null).not('google_meet_link', 'is', null)
+        supabase.from('solicitacoes').select('*').eq('user_id', user.id).order('created_at', { ascending: false }), // padrao-ok: ver bloco acima
+        supabase.from('agendamentos').select('*').eq('user_id', user.id).order('created_at', { ascending: false }), // padrao-ok: ver bloco acima
+        supabase.from('solicitacoes').select('id,imovel_nome,imovel_cidade,reuniao_em,reuniao_duracao_min,google_meet_link') // padrao-ok: ver bloco acima
+          .eq('user_id', user.id).not('reuniao_em', 'is', null).not('google_meet_link', 'is', null) // padrao-ok: ver bloco acima (tela do logado)
           .gte('reuniao_em', new Date().toISOString()).order('reuniao_em', { ascending: true }).limit(5),
       ]);
       // Lista vazia por FALHA deixa rastro em `erros_cliente` — o mesmo canal que o ritual
@@ -279,8 +282,8 @@ export default function Painel() {
     setImoveis(updated);
     saveImoveis(updated);
     if (id && user?.id) {
-      supabase.from('analises_mercado').delete().eq('user_id', user.id).eq('imovel_id', String(id)).then(()=>{}).catch(()=>{});
-      supabase.from('analises_documental').delete().eq('user_id', user.id).eq('imovel_id', String(id)).then(()=>{}).catch(()=>{});
+      supabase.from('analises_mercado').delete().eq('user_id', user.id).eq('imovel_id', String(id)).then(()=>{}).catch(()=>{}); // padrao-ok: apaga o do PRÓPRIO logado, espelhando o portfólio LOCAL que ele acabou de remover
+      supabase.from('analises_documental').delete().eq('user_id', user.id).eq('imovel_id', String(id)).then(()=>{}).catch(()=>{}); // padrao-ok: idem
     }
   };
 
@@ -292,8 +295,8 @@ export default function Painel() {
     if (id && user?.id) {
       const arrematou = ['arrematado','em_reforma','venda','alugado','concluido'].includes(status);
       if (arrematou) {
-        supabase.from('analises_mercado').update({ arrematado: true }).eq('user_id', user.id).eq('imovel_id', String(id)).then(()=>{}).catch(()=>{});
-        supabase.from('analises_documental').update({ arrematado: true }).eq('user_id', user.id).eq('imovel_id', String(id)).then(()=>{}).catch(()=>{});
+        supabase.from('analises_mercado').update({ arrematado: true }).eq('user_id', user.id).eq('imovel_id', String(id)).then(()=>{}).catch(()=>{}); // padrao-ok: flag no dado do PRÓPRIO logado (portfólio local)
+        supabase.from('analises_documental').update({ arrematado: true }).eq('user_id', user.id).eq('imovel_id', String(id)).then(()=>{}).catch(()=>{}); // padrao-ok: idem
       }
     }
   };
@@ -322,7 +325,7 @@ export default function Painel() {
     // Processual: registra no Supabase com prazo de 24h
     const prazoAte = new Date(Date.now() + 24*3600*1000).toISOString();
     const { error } = await supabase.from('solicitacoes').insert({
-      user_id: user.id,
+      user_id: user.id, // padrao-ok: solicitação sobre imóvel do portfólio LOCAL do logado (ver bloco do carregarAnalise)
       imovel_ref: im.id,
       imovel_nome: im.nome || im.endereco || 'Imóvel',
       imovel_cidade: im.cidade || '',
@@ -352,7 +355,7 @@ export default function Painel() {
       await supabase.from('agendamentos').update({ status:'cancelado', updated_at: new Date().toISOString() }).eq('id', agExistente.id);
     }
     const { error } = await supabase.from('agendamentos').insert({
-      user_id: user.id,
+      user_id: user.id, // padrao-ok: agendamento sobre imóvel do portfólio LOCAL do logado
       imovel_ref: im.id,
       imovel_nome: im.nome || im.endereco || 'Imóvel',
       imovel_cidade: im.cidade || '',

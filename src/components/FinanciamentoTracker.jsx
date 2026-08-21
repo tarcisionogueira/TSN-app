@@ -21,7 +21,7 @@ function Field({ label, children }) {
 }
 
 export default function FinanciamentoTracker({ imovelId, imovelNome, onSalvo }) {
-  const { user } = useAuth();
+  const { user, effectiveUserId, impersonate } = useAuth();
   const [dados, setDados] = useState({ ...VAZIO, imovel_nome: imovelNome || '' });
   const [salvando, setSalvando] = useState(false);
   const [carregandoIA, setCarregandoIA] = useState(false);
@@ -34,7 +34,8 @@ export default function FinanciamentoTracker({ imovelId, imovelNome, onSalvo }) 
   // Carrega financiamento existente se imovelId fornecido
   useEffect(() => {
     if (!user?.id || !imovelId) return;
-    supabase.from('financiamentos').select('*').eq('user_id', user.id).eq('imovel_id', imovelId).maybeSingle()
+    // Sob suporte, o financiamento mostrado é o do CLIENTE visto.
+    supabase.from('financiamentos').select('*').eq('user_id', effectiveUserId || user.id).eq('imovel_id', imovelId).maybeSingle()
       .then(({ data }) => {
         if (data) {
           setFinanciamentoId(data.id);
@@ -54,7 +55,7 @@ export default function FinanciamentoTracker({ imovelId, imovelNome, onSalvo }) 
           });
         }
       });
-  }, [user?.id, imovelId]);
+  }, [user?.id, effectiveUserId, imovelId]);
 
   const upd = e => {
     const { name, value, type, checked } = e.target;
@@ -123,10 +124,13 @@ export default function FinanciamentoTracker({ imovelId, imovelNome, onSalvo }) 
 
   const handleSalvar = async () => {
     if (!user?.id) return;
+    // MODO SUPORTE é só visualização: gravar aqui criaria o financiamento no nome do ADMIN
+    // (RLS impede gravar como o cliente) — mesmo padrão do bloqueio em Analise/MinhasAnalises.
+    if (impersonate) { setMsg({ tipo: 'erro', texto: 'Modo suporte é somente visualização — o financiamento deve ser salvo pelo cliente.' }); return; }
     setSalvando(true);
     setMsg(null);
     const payload = {
-      user_id: user.id,
+      user_id: user.id, // padrao-ok: bloqueado sob suporte logo acima; aqui é sempre o próprio cliente logado
       imovel_id: imovelId || null,
       imovel_nome: dados.imovel_nome || imovelNome || null,
       valor_imovel: Number(dados.valor_imovel) || null,

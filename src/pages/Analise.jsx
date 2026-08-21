@@ -816,7 +816,7 @@ export default function Analise() {
       if (user && !externoNotificado && !impersonate) {
         const dominio = dominioDoLink(link);
         const { error } = await supabase.from('solicitacoes').insert({
-          user_id: user.id,
+          user_id: user.id, // padrao-ok: gate !impersonate acima — sob suporte a solicitação nem é criada
           imovel_ref: d.id || 'externo',
           imovel_nome: d.nome || d.endereco || 'Imóvel fora da base',
           imovel_cidade: d.cidade || '',
@@ -1178,7 +1178,7 @@ export default function Analise() {
         const isArrematado = d.status === 'arrematado';
         const expiraEm = isArrematado ? null : new Date(Date.now() + 90*24*60*60*1000).toISOString();
         const payload = {
-          user_id: user.id,
+          user_id: user.id, // padrao-ok: espelho do portfólio LOCAL (localStorage) de quem navega; on-behalf real é feature (HANDOFF item 4 de 21/08)
           imovel_id: imovelInicial?.id || d.id,
           imovel_nome: d.nome,
           imovel_cidade: d.cidade,
@@ -1194,7 +1194,7 @@ export default function Analise() {
           expira_em: expiraEm,
         };
         const { data: existing, error: existErr } = await supabase.from('relatorios')
-          .select('id').eq('user_id', user.id).eq('imovel_id', payload.imovel_id).maybeSingle();
+          .select('id').eq('user_id', user.id).eq('imovel_id', payload.imovel_id).maybeSingle(); // padrao-ok: mesma linha do payload acima (portfólio local do logado)
         if (!existErr) {
           if (existing?.id) {
             await supabase.from('relatorios').update(payload).eq('id', existing.id);
@@ -1209,7 +1209,7 @@ export default function Analise() {
         // /api/sinalizar-arremate gravou. Flag de arremate nunca regride por aqui.
         if (isArrematado) {
           for (const tabela of ['analises_mercado', 'analises_documental', 'analises_laudo']) {
-            const { error: errFlag } = await supabase.from(tabela).update({ arrematado: true }).eq('user_id', user.id).eq('imovel_id', payload.imovel_id);
+            const { error: errFlag } = await supabase.from(tabela).update({ arrematado: true }).eq('user_id', user.id).eq('imovel_id', payload.imovel_id); // padrao-ok: análises do PRÓPRIO logado (RLS); portfólio local
             if (errFlag) console.error(`[portfolio] flag arrematado em ${tabela} falhou:`, errFlag.message);
           }
         }
@@ -1299,7 +1299,7 @@ export default function Analise() {
     if (!user || solicitando || solicitado) return;
     setSolicitando(true);
     const { error } = await supabase.from('solicitacoes').insert({
-      user_id: user.id,
+      user_id: user.id, // padrao-ok: bloqueado sob suporte logo acima
       imovel_ref: d.id || null,
       imovel_nome: d.nome || d.endereco || 'Imóvel sem nome',
       imovel_cidade: d.cidade || '',

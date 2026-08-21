@@ -73,7 +73,7 @@ function EbookCapa({ capa, titulo }) {
 
 export default function Membros() {
   const nav = useNavigate();
-  const { user, role } = useAuth();
+  const { user, role, effectiveUserId } = useAuth();
   const [categoria, setCategoria] = useState('Todos');
   const [busca, setBusca] = useState('');
   const [progresso, setProgresso] = useState(getProgressoLocal());
@@ -168,7 +168,7 @@ export default function Membros() {
     supabase
       .from('aula_progresso')
       .select('aula_id, concluida')
-      .eq('user_id', user.id)
+      .eq('user_id', effectiveUserId || user.id)   // suporte vê o progresso do CLIENTE
       .then(({ data, error }) => {
         if (!error && data && data.length > 0) {
           const map = {};
@@ -177,7 +177,7 @@ export default function Membros() {
         }
       })
       .catch(() => {});
-  }, [user]);
+  }, [user, effectiveUserId]);
 
   const cursosFiltrados = cursos.filter(c => {
     const matchCat = categoria === 'Todos' || c.categoria === categoria;

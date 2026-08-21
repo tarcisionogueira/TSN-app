@@ -44,7 +44,7 @@ function podeAssistir(licao, plano, comprouAvulso = false, planosGratis = [], cu
 export default function Curso() {
   const { id } = useParams();
   const nav = useNavigate();
-  const { user, role } = useAuth();
+  const { user, role, effectiveUserId } = useAuth();
   // Curso ESTÁTICO (slug legado, ex. 'onboarding') OU do BANCO (cursos_admin, uuid).
   // O estático vence quando o id bate; senão, carrega do banco (destrava os cursos
   // criados no admin + honra o planos_gratis do cadastro).
@@ -89,10 +89,11 @@ export default function Curso() {
   // Verifica compra avulsa (curso pago standalone)
   useEffect(() => {
     if (!user || !id || PLANOS_PAGOS.includes(plano)) return;
+    // Posse é de quem se está VENDO (modo suporte mostra a compra do cliente, não a do admin).
     supabase.from('compras_produtos')
-      .select('id').eq('user_id', user.id).eq('produto_tipo', 'curso').eq('produto_id', id).eq('status', 'ativo')
+      .select('id').eq('user_id', effectiveUserId || user.id).eq('produto_tipo', 'curso').eq('produto_id', id).eq('status', 'ativo')
       .then(({ data }) => { if (data?.length > 0) setComprouAvulso(true); });
-  }, [user, id, plano]);
+  }, [user, effectiveUserId, id, plano]);
 
   // Video progress simulation ref (tracks "watched" percentage)
 
@@ -107,7 +108,7 @@ export default function Curso() {
     supabase
       .from('aula_progresso')
       .select('aula_id, concluida')
-      .eq('user_id', user.id)
+      .eq('user_id', effectiveUserId || user.id)   // suporte vê o progresso do CLIENTE
       .eq('curso_id', id)
       .then(({ data, error }) => {
         if (!error && data) {
@@ -120,7 +121,7 @@ export default function Curso() {
         setLoadingProgresso(false);
       })
       .catch(() => setLoadingProgresso(false));
-  }, [user, id]);
+  }, [user, effectiveUserId, id]);
 
   // ── Salvar progresso no Supabase + localStorage ─────────────────────────────
   const salvarProgresso = useCallback(async (aulaid, feito) => {
@@ -131,7 +132,7 @@ export default function Curso() {
       await supabase
         .from('aula_progresso')
         .upsert(
-          { user_id: user.id, aula_id: aulaid, curso_id: id, concluida: feito },
+          { user_id: user.id, aula_id: aulaid, curso_id: id, concluida: feito }, // padrao-ok: progresso é de QUEM assiste; sob suporte grava o do admin (RLS) e não contamina o do cliente
           { onConflict: 'user_id,aula_id' }
         );
     } catch (_) { /* table may not exist yet, local fallback is fine */ }

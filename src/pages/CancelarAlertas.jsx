@@ -12,7 +12,7 @@ export default function CancelarAlertas() {
 
   useEffect(() => {
     if (!user?.id) return;
-    supabase.from('alertas_email').select('ativo').eq('user_id', user.id).single()
+    supabase.from('alertas_email').select('ativo').eq('user_id', user.id).single() // padrao-ok: rota acessada pelo LINK DO E-MAIL do próprio usuário; não há caminho de suporte
       .then(({ data }) => setStatus(data?.ativo !== false));
   }, [user?.id]);
 
@@ -20,7 +20,7 @@ export default function CancelarAlertas() {
     if (!user?.id) return;
     setSalvando(true);
     const novoStatus = !status;
-    await supabase.from('alertas_email').upsert({ user_id: user.id, ativo: novoStatus, filtros: {} }, { onConflict: 'user_id' });
+    await supabase.from('alertas_email').upsert({ user_id: user.id, ativo: novoStatus, filtros: {} }, { onConflict: 'user_id' }); // padrao-ok: rota do link do e-mail do próprio usuário; não há caminho de suporte
     setStatus(novoStatus);
     setSalvando(false);
   }

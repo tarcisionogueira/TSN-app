@@ -70,7 +70,7 @@ export default function TourGuia() {
       const { data: prog } = await supabase
         .from('tour_progresso')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', user.id) // padrao-ok: estado do tour é de quem NAVEGA (sob suporte o admin não deve consumir as visualizações do cliente)
         .eq('versao', atual)
         .maybeSingle();
 
@@ -98,7 +98,7 @@ export default function TourGuia() {
         .eq('id', prog.id);
     } else {
       await supabase.from('tour_progresso')
-        .insert({ user_id: user.id, versao, visualizacoes: 1 });
+        .insert({ user_id: user.id, versao, visualizacoes: 1 }); // padrao-ok: estado do tour é de quem NAVEGA
     }
   }
 
@@ -108,7 +108,7 @@ export default function TourGuia() {
     if (indice >= etapas.length - 1 && user) {
       await supabase.from('tour_progresso')
         .update({ completo: true })
-        .eq('user_id', user.id)
+        .eq('user_id', user.id) // padrao-ok: estado do tour é de quem NAVEGA
         .eq('versao', versaoVendo);
     }
   };

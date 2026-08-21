@@ -220,7 +220,7 @@ export default function ChatSuporte() {
   async function carregarLista() {
     setCarregando(true);
     const { data } = await supabase.from('chamados').select('*')
-      .eq('user_id', user.id)
+      .eq('user_id', user.id) // padrao-ok: o chat flutuante é do LOGADO (mensagem assinada por quem escreve); a visão do cliente sob suporte é MeusChamados/Atendimento
       .order('atualizado_em', { ascending: false, nullsFirst: false })
       .order('criado_em', { ascending: false });
     const lista = data || [];
@@ -256,7 +256,7 @@ export default function ChatSuporte() {
   async function saudacaoProativa() {
     if (!user?.id) return;
     const { data: novo } = await supabase.from('chamados').insert({
-      user_id: user.id, user_email: user.email, user_nome: nomeUsuario,
+      user_id: user.id, user_email: user.email, user_nome: nomeUsuario, // padrao-ok: chamado do PRÓPRIO logado (chat flutuante), nunca em nome de terceiro
       titulo: 'Como está sendo sua experiência?', segmento: segmentoDoRole(effectiveRole), origem: 'proativo',
       // 18/08: NÓS começarmos a conversa não abre chamado. Antes nascia 'aberto' (default da
       // coluna) e entrava na fila do atendimento: 27 dos 27 "abertos" eram esta saudação, com
@@ -287,7 +287,7 @@ export default function ChatSuporte() {
     if (!descricao.trim()) return;
     setEnviando(true);
     const { data: novo } = await supabase.from('chamados').insert({
-      user_id: user.id, user_email: user.email, user_nome: nomeUsuario,
+      user_id: user.id, user_email: user.email, user_nome: nomeUsuario, // padrao-ok: chamado do PRÓPRIO logado (chat flutuante), nunca em nome de terceiro
       titulo: descricao.slice(0, 80), segmento: segmentoDoRole(effectiveRole),
     }).select().single();
     if (!novo) { setEnviando(false); return; }
