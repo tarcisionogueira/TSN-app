@@ -2909,6 +2909,18 @@ COMO USAR (obrigatório): dedique um parágrafo aos CUSTOS DA OPERAÇÃO segundo
       }
     } catch (e) { console.warn('[auditoria-relatorio] falhou:', e?.message); }
 
+    // ENTREGA INCOMPLETA HONESTA (21/08 — caso Marcelo): quando o mercado veio mas o PARECER
+    // saiu vazio (a redação falhou), o relatório era salvo como 'concluida' e o cliente via um
+    // relatório "pronto" SEM texto e SEM botão de PDF (podeExportarPDF exige parecer) — sem uma
+    // linha explicando. A impressão é "gerei e não saiu nada". Marcamos o result com
+    // `parecerPendente` para a TELA mostrar "em finalização, gerando de novo" em vez do vazio
+    // mudo; o self-heal (regenerar-relatorios-cron, branch result->>parecer='') completa e o
+    // gerador LIMPA o flag ao reemitir com parecer. status segue 'concluida' de propósito: é o
+    // que o cron re-visita e o que mantém contagem/lista coerentes.
+    const _parecerPendente = !result.mercadoVazio && !(result.parecer || '').trim();
+    if (_parecerPendente) result.parecerPendente = true;
+    else if (result.parecerPendente) delete result.parecerPendente;
+
     await upsertAnalise({ ...base, status: 'concluida', erro: null, result });
     // Aprende NA EMISSÃO (durável, sem IA): corpus + qualidade → agente_aprendizado.
     // mercado/parecer vivem DENTRO do Promise.race acima; aqui usamos o result (que os

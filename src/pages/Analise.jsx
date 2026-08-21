@@ -389,6 +389,15 @@ export default function Analise() {
   // false para sempre e as duas metades do gate liam fontes diferentes. Agora leem a MESMA
   // fonte de verdade, então o card reflete o estado real ao reabrir.
   const relMercadoGerado = analiseEntry?.status === 'concluida' && !!analiseEntry?.result;
+  // ENTREGA INCOMPLETA (caso Marcelo, 21/08): relatório 'concluida' cujo mercado veio mas o
+  // PARECER saiu vazio (a redação falhou). Sem sinalizar, a tela mostrava um relatório "pronto"
+  // sem texto e sem botão de PDF (podeExportarPDF exige parecer) — e o cliente entende "gerei e
+  // não saiu nada". O servidor marca `parecerPendente`; aqui a tela fica HONESTA (banner) e
+  // dispara UMA regeração automática (sem custo — o imóvel já tem relatório, isNovo=false),
+  // fechando a janela que antes só o self-heal do cron fechava, horas depois.
+  const relMercadoIncompleto = relMercadoGerado
+    && !analiseEntry?.result?.mercadoVazio
+    && (analiseEntry?.result?.parecerPendente === true || !(analiseEntry?.result?.parecer || '').trim());
   // "concluida" com precisaDocumentos NÃO é pronto — ainda está capturando/faltando
   // documentos. Separar os dois estados evita a incoerência "Pronto na lista / abre
   // Preparando ainda" (o mesmo status precisa valer em TODA a tela).
@@ -1127,6 +1136,18 @@ export default function Analise() {
     if (s.etapa === 2 && ambosRelatorios && !relLaudoGerado && !gerandoLaudo) { s.etapa = 3; gerarRelLaudo(); }
   }, [autoGerar, relMercadoGerado, relDocumentalGerado, relLaudoGerado, gerandoDocumental, gerandoLaudo, relDocumentalPreparando, ambosRelatorios, analiseEntry?.status]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // AUTO-HEAL do parecer vazio (caso Marcelo): ao abrir um relatório concluído com o parecer em
+  // branco, dispara UMA regeração — sem custo (isNovo=false) e sem loop (ref por imóvel). Fecha a
+  // janela em que o cliente veria um relatório "pronto" sem texto/PDF, em vez de esperar o cron.
+  const autoHealRef = React.useRef(null);
+  useEffect(() => {
+    if (!relMercadoIncompleto || gerandoMercado || analisesBloqueado) return;
+    if (!(d?.endereco || d?.cidade)) return;              // espera os dados do imóvel carregarem
+    if (autoHealRef.current === analiseImovelId) return;  // já tentou p/ este imóvel nesta sessão
+    autoHealRef.current = analiseImovelId;
+    gerarRelMercado();
+  }, [relMercadoIncompleto, gerandoMercado, analisesBloqueado, d?.endereco, d?.cidade, analiseImovelId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ─── Reunião com analista → ACOMPANHAMENTO (fluxo real no Caso) ─────────────
   // O agendamento de verdade (escolher analista+horário, o analista dar o parecer
   // e só então liberar o jurídico) vive na tela do Caso. Aqui apenas levamos o
@@ -1388,6 +1409,27 @@ export default function Analise() {
 
       {msg.text && <div style={{ padding:'10px 16px', borderRadius:10, background:msg.type==='error'?'#fee2e2':'#d1fae5', color:msg.type==='error'?'#dc2626':'#065f46', fontSize:12, fontWeight:700 }}>{msg.text}</div>}
 
+      {/* ENTREGA INCOMPLETA — parecer vazio (caso Marcelo). A tela fica HONESTA em vez de mostrar
+          um relatório "pronto" sem texto e sem PDF. O auto-heal já disparou; isto explica e dá saída. */}
+      {relMercadoIncompleto && (
+        <div style={{ background:'#eef2ff', border:'1px solid #c7d2fe', borderRadius:12, padding:'12px 16px', display:'flex', gap:10, alignItems:'flex-start' }}>
+          <Loader2 size={18} color="#4338ca" style={{ flexShrink:0, marginTop:1, animation:'spin 1s linear infinite' }} />
+          <div style={{ fontSize:12.5, color:'#3730a3', lineHeight:1.5 }}>
+            <strong>Relatório em finalização.</strong> A avaliação de mercado já saiu, mas a redação do
+            parecer ainda está sendo concluída — {gerandoMercado ? 'estamos gerando agora' : 'o sistema termina isso automaticamente'} e
+            costuma levar poucos minutos. O PDF fica disponível assim que o parecer ficar pronto.
+            {!gerandoMercado && (
+              <div style={{ marginTop:8 }}>
+                <button onClick={() => gerarRelMercado()}
+                  style={{ padding:'6px 14px', background:'#4338ca', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer' }}>
+                  Gerar novamente (sem consumir cota)
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ALERTA BLOQUEANTE */}
       {riscosBloqueantes.length>0 && (
         <div style={{ background:'#fef2f2', border:'2px solid #dc2626', borderRadius:14, padding:'14px 18px', display:'flex', gap:12 }}>
@@ -1586,7 +1628,7 @@ export default function Analise() {
             <div style={{ fontSize:11, fontWeight:800, color:'#94a3b8', textTransform:'uppercase', letterSpacing:1, marginBottom:10 }}>Relatórios</div>
             <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
               {[
-                { k:'mercado', label:'Mercadológico + Viabilidade', ok: relMercadoGerado, busy: gerandoMercado },
+                { k:'mercado', label:'Mercadológico + Viabilidade', ok: relMercadoGerado && !relMercadoIncompleto, busy: gerandoMercado || relMercadoIncompleto },
                 { k:'documental', label:'Documental + Processo', ok: relDocumentalGerado, busy: gerandoDocumental || relDocumentalPreparando },
                 { k:'laudo', label:'Laudo de Viabilidade', ok: relLaudoGerado, busy: gerandoLaudo },
               ].map(it => {
@@ -1708,7 +1750,7 @@ export default function Analise() {
               )}
               <div style={{ display:'grid', gridTemplateColumns: isMobile?'1fr':'1fr 1fr', gap:14 }}>
                 {[
-                  { k:'mercado', cor:'#0d9488', bg:'#f0fdfa', Icon:BarChart3, titulo:'Mercadológico + Viabilidade Financeira', desc:'Avaliação de mercado (níveis 1 e 2), estrutura de custos, cenários, ROI/ROE e teto de lance.', ok:relMercadoGerado, gerando:gerandoMercado, fn:gerarRelMercado, block: analisesBloqueado, seqBloqueado:false, ordem:1, entry: analiseEntry },
+                  { k:'mercado', cor:'#0d9488', bg:'#f0fdfa', Icon:BarChart3, titulo:'Mercadológico + Viabilidade Financeira', desc:'Avaliação de mercado (níveis 1 e 2), estrutura de custos, cenários, ROI/ROE e teto de lance.', ok:relMercadoGerado && !relMercadoIncompleto, gerando:gerandoMercado || relMercadoIncompleto, fn:gerarRelMercado, block: analisesBloqueado, seqBloqueado:false, ordem:1, entry: analiseEntry },
                   { k:'documental', cor:'#1e3a8a', bg:'#eef2ff', Icon:Scale, titulo:'Análise Documental + Processo', desc:'Leitura do edital/matrícula (ônus e gravames) e consulta do processo no CNJ + certidões fiscais.', ok:relDocumentalGerado, gerando:gerandoDocumental, preparando:relDocumentalPreparando, faltamDocs:relDocumentalFaltamDocs, fn:gerarRelDocumental, block:false, seqBloqueado: !relMercadoGerado && !relDocumentalGerado, planoBloqueado: ROLES_SEM_DOCUMENTAL.includes(role), ordem:2, entry: docEntry },
                   { k:'laudo', cor:'#111111', bg:'#f1f5f9', Icon:Award, titulo:'Laudo de Viabilidade (Parecer Final)', desc:'Consolida os dois relatórios acima num veredito de defesa (aprovado/condicional/reprovado), com condições e diligências. Não reprocessa fontes, sintetiza o que já foi gerado.', ok:relLaudoGerado, gerando:gerandoLaudo, fn:gerarRelLaudo, block:false, seqBloqueado: !ambosRelatorios && !relLaudoGerado, planoBloqueado: ROLES_SEM_DOCUMENTAL.includes(role), ordem:3, entry: laudoEntry },
                 ].map(c => {

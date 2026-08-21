@@ -89,7 +89,9 @@ export default function MinhasAnalises() {
     const r = result || null;
     if (tipo === 'documental') return { precisaDocumentos: !!r?.precisaDocumentos, emCaptura: !!r?.emCaptura, nivelRisco: r?.nivelRisco || null };
     if (tipo === 'laudo') return { precisaRelatorios: !!r?.precisaRelatorios, veredito: r?.veredito || null };
-    return { temResultado: !!r };
+    // mercado: `parecerPendente` = mercado veio mas a redação do parecer saiu vazia (caso Marcelo).
+    // Concluída na tabela, mas NÃO é "pronta" — o self-heal está recompletando.
+    return { temResultado: !!r, parecerPendente: !!r?.parecerPendente || (!!r && !r?.mercadoVazio && !(r?.parecer || '').trim()) };
   };
 
   const itens = React.useMemo(() => {
@@ -172,6 +174,10 @@ export default function MinhasAnalises() {
     if (it.reports.documental?.status === 'concluida' && !it.reports.mercado) {
       return { Icon: FileWarning, cor: '#b45309', txt: 'Mercadológico pendente — gere primeiro', spin: false };
     }
+    // Mercado concluído mas com o PARECER em branco (caso Marcelo): finalizando, não "pronto".
+    if (it.reports.mercado?.status === 'concluida' && it.reports.mercado.flags?.parecerPendente) {
+      return { Icon: Loader2, cor: '#4338ca', txt: 'Finalizando relatório…', spin: true };
+    }
     const anyOk = rs.some(r => r.status === 'concluida');
     const anyErr = rs.some(r => r.status === 'erro');
     if (anyErr && !anyOk) return { Icon: XCircle, cor: '#dc2626', txt: 'Erro ao gerar' };
@@ -184,7 +190,7 @@ export default function MinhasAnalises() {
   const tresProntos = (it) => {
     const r = it.reports || {};
     const ok = (x) => x?.status === 'concluida';
-    return ok(r.mercado)
+    return ok(r.mercado) && !r.mercado?.flags?.parecerPendente
       && ok(r.documental) && !r.documental?.flags?.precisaDocumentos
       && ok(r.laudo) && !r.laudo?.flags?.precisaRelatorios;
   };
@@ -207,7 +213,9 @@ export default function MinhasAnalises() {
     const rs = it.reports, out = [];
     if (rs.mercado?.status === 'concluida') {
       const v = it.imovel?.analise_viavel;
-      out.push(v === true ? { t: 'Mercado: viável', ...CHIP.verde } : v === false ? { t: 'Mercado: reprovado', ...CHIP.vermelho } : { t: 'Mercado ✓', ...CHIP.neutro });
+      out.push(rs.mercado.flags?.parecerPendente
+        ? { t: 'Mercado: finalizando…', ...CHIP.neutro }
+        : v === true ? { t: 'Mercado: viável', ...CHIP.verde } : v === false ? { t: 'Mercado: reprovado', ...CHIP.vermelho } : { t: 'Mercado ✓', ...CHIP.neutro });
     }
     if (rs.documental?.status === 'concluida' && !rs.documental.flags?.precisaDocumentos) {
       const nr = rs.documental.flags?.nivelRisco;
