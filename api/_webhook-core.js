@@ -565,7 +565,11 @@ export async function processarConfirmado({ valor, descricao, email, gatewayCust
 }
 
 // ── PAGAMENTO VENCIDO ─────────────────────────────────────────────────────────
-export async function processarVencido({ gatewayCustomerId, email, gateway }) {
+export async function processarVencido({ gatewayCustomerId, email, gateway, servico = false }) {
+  // Mesmo guard do processarRecusado (19/08): cobrança avulsa de SERVIÇO vencida não é
+  // inadimplência de assinatura — sem isto, o assinante em dia que abandona um boleto de
+  // serviço seria rebaixado a explorador com documentos em prazo de expiração.
+  if (servico) return { ok: true, servico: true, suspensao_ignorada: true };
   const cliente = await buscarCliente({ gatewayCustomerId, email, gateway });
   if (cliente && !cliente.inadimplente_desde) {
     const ROLES_PAGANTES = ['top2', 'assessorado', 'clube', 'top2_anual', 'assessorado_anual', 'clube_anual'];

@@ -110,6 +110,7 @@ export default async function handler(req, res) {
   const cust = pagReal.customer;
   const custId    = typeof cust === 'string' ? cust : (cust?.id || null);
   const custEmail = (cust && typeof cust === 'object') ? (cust.email || null) : null;
+  const extRef = String(pagReal.externalReference || '').trim();
   const contexto  = {
     gateway:           'asaas',
     valor,
@@ -117,11 +118,17 @@ export default async function handler(req, res) {
     email:             custEmail,
     gatewayCustomerId: custId,
     gatewayPaymentId:  pagReal.id,
+    // Guard `servico` alinhado ao MP (preventivo — hoje serviço avulso só existe via
+    // mp-checkout, com metadata.tipo='servico'). O Asaas não tem metadata; a CONVENÇÃO
+    // para uma futura cobrança de serviço por aqui é externalReference 'servico|…' (ou
+    // ':') ou description iniciando com '[servico]'. Sem este campo, processarConfirmado
+    // mapearia o valor para PLANO (elevação indevida) e processarRecusado suspenderia a
+    // assinatura por um serviço recusado — os dois buracos que o MP já fecha.
+    servico: /^servico[|:]/i.test(extRef) || /^\[servico\]/i.test(pagReal.description || ''),
   };
 
   // Produto avulso? externalReference = compras_produtos.id (uuid). Roteia para o
   // fluxo de PRODUTO (nunca para o de plano) — não pode elevar assinatura.
-  const extRef = String(pagReal.externalReference || '').trim();
   const ehProduto = UUID_RE.test(extRef);
 
   try {
