@@ -28,6 +28,15 @@
  *      que nunca existiu: 400 no PostgREST, o cliente logado aparecia sem telefone nenhum e o
  *      lead chegava à equipe sem número — com a tela prometendo que alguém entraria em contato.
  *      Os itens 1 e 2 não pegavam: a tabela existe e `whatsapp` não é coluna de data.
+ *   4. toda RPC chamada no código (`rpc/NOME`, `.rpc('NOME')`) existe como função no banco —
+ *      forma #7 do CLAUDE.md, agora para FUNÇÕES (o item 1 só cobria TABELAS). Acrescentado em
+ *      21/08 (gap #4) depois de achar `registrar-compra-produto.js` chamando
+ *      `vincular_indicacao_compra`, função que NUNCA existiu: PGRST202 engolido no `catch`, a
+ *      indicação de toda compra de produto perdida em silêncio.
+ *   5. toda FUNÇÃO do banco tem um `create function` em supabase/migrations/ — forma #7b: função
+ *      criada no SQL Editor e nunca backportada some se o banco for recriado do repo (foi assim
+ *      que `admin_metricas_negocio` divergiu e imprimiu "0% venda"). Entra COM linha de base
+ *      (scripts/funcoes-sem-migracao.baseline.json): a dívida atual é aceita, só CRESCER reprova.
  *
  * SILÊNCIO NÃO É APROVAÇÃO. Se faltar credencial ou o banco não responder, este script sai
  * com código 2 e diz que NÃO VERIFICOU. Tratar "não consegui checar" como "está tudo bem"
@@ -39,7 +48,7 @@
  *   node scripts/verificar-schema-codigo.mjs
  *   Env: VITE_SUPABASE_URL (ou SUPABASE_URL) + SUPABASE_SERVICE_KEY
  */
-import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
 const RAIZ = new URL('..', import.meta.url).pathname.replace(/\/$/, '');
@@ -49,6 +58,12 @@ const IGNORAR = /node_modules|\/dist\/|\.min\./;
 
 const SB_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_KEY;
+
+// Linha de base da forma #7b: funções que HOJE existem no banco sem um `create function`
+// correspondente nas migrações (criadas no SQL Editor e nunca backportadas). São dívida
+// ACEITA — a trava não obriga a escrever 59 migrações de uma vez; só impede que a lista
+// CRESÇA (função nova no banco sem migração reprova). `--atualizar-funcoes` regrava.
+const BASELINE_FUNCS = join(RAIZ, 'scripts', 'funcoes-sem-migracao.baseline.json');
 
 // Colunas que o código monta em tempo de execução (nome vindo de variável/template) não têm
 // como ser verificadas estaticamente — e não são o alvo. O alvo é o literal.
@@ -156,13 +171,63 @@ function coletarReferencias() {
   return refs;
 }
 
-async function inventario() {
-  if (!SB_URL || !SB_KEY) {
-    return { erro: 'faltam VITE_SUPABASE_URL e/ou SUPABASE_SERVICE_KEY no ambiente' };
+// RPCs chamadas no código: forma de path do PostgREST (sb de rpc barra nome) e a do client
+// supabase-js (ponto-rpc de nome). LINHA A LINHA, pulando linhas de comentário — pelo MESMO
+// motivo que envsSuspeitas: semComentarios se perde nos regexes cheios de aspas DESTE arquivo
+// (a 1ª versão leu o `rpc/NAME` do próprio comentário aqui e acusou uma função "name"
+// inexistente). Uma linha que começa por //, * ou /* é comentário; isso basta e não desincroniza.
+function coletarRpcs() {
+  const refs = [];
+  const vistos = new Set();
+  const marcada = (t) => /\/\/\s*(schema|padrao)-ok:\s*\S/.test(t || '');
+  const re = /rpc\/([a-zA-Z0-9_]+)|\.rpc\(\s*['"]([a-zA-Z0-9_]+)['"]/g;
+  for (const dir of DIRS) {
+    for (const rel of arquivos(dir)) {
+      const linhas = readFileSync(join(RAIZ, rel), 'utf8').split('\n');
+      for (let i = 0; i < linhas.length; i++) {
+        const linha = linhas[i];
+        if (/^\s*(\/\/|\*|\/\*)/.test(linha)) continue; // comentário
+        if (marcada(linha) || marcada(linhas[i - 1])) continue;
+        let m;
+        re.lastIndex = 0;
+        while ((m = re.exec(linha))) {
+          const nome = (m[1] || m[2]).toLowerCase();
+          const chave = `${rel}::${nome}`;
+          if (vistos.has(chave)) continue; // uma ocorrência por (arquivo,nome) basta
+          vistos.add(chave);
+          refs.push({ arquivo: rel, linha: i + 1, nome });
+        }
+      }
+    }
   }
+  return refs;
+}
+
+/**
+ * Nomes de função declarados por `create [or replace] function [if not exists] [schema.]NOME(`
+ * nas migrações. Whole-file e multi-linha DE PROPÓSITO: a assinatura costuma quebrar a linha
+ * logo após o nome, e um parser por-linha perdia CREATEs válidos — fazendo função COM migração
+ * aparecer como deriva (falso positivo). É o mesmo cuidado do resto da base: não acusar o que
+ * não sabe ler.
+ */
+function funcsDeMigracoes() {
+  const dir = join(RAIZ, 'supabase', 'migrations');
+  const nomes = new Set();
+  if (!existsSync(dir)) return nomes;
+  const re = /create\s+(?:or\s+replace\s+)?function\s+(?:if\s+not\s+exists\s+)?(?:"?[a-zA-Z0-9_]+"?\s*\.\s*)?"?([a-zA-Z0-9_]+)"?\s*\(/gis;
+  for (const nome of readdirSync(dir)) {
+    if (!nome.endsWith('.sql')) continue;
+    const t = readFileSync(join(dir, nome), 'utf8');
+    let m;
+    while ((m = re.exec(t))) nomes.add(m[1].toLowerCase());
+  }
+  return nomes;
+}
+
+async function chamarRpc(nome) {
   let r;
   try {
-    r = await fetch(`${SB_URL}/rest/v1/rpc/schema_inventario`, {
+    r = await fetch(`${SB_URL}/rest/v1/rpc/${nome}`, {
       method: 'POST',
       headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' },
       body: '{}',
@@ -171,9 +236,18 @@ async function inventario() {
   } catch (e) {
     return { erro: `banco inacessível: ${String(e?.message || e).slice(0, 120)}` };
   }
-  // `.ok` ANTES do corpo: um 401/404 aqui não é "o schema está vazio", é "não consegui ler".
-  if (!r.ok) return { erro: `RPC schema_inventario devolveu HTTP ${r.status}` };
-  const obj = await r.json().catch(() => null);
+  // `.ok` ANTES do corpo: um 401/404 aqui não é "vazio", é "não consegui ler".
+  if (!r.ok) return { erro: `RPC ${nome} devolveu HTTP ${r.status}` };
+  return { corpo: await r.json().catch(() => null) };
+}
+
+async function inventario() {
+  if (!SB_URL || !SB_KEY) {
+    return { erro: 'faltam VITE_SUPABASE_URL e/ou SUPABASE_SERVICE_KEY no ambiente' };
+  }
+  const inv = await chamarRpc('schema_inventario');
+  if (inv.erro) return { erro: inv.erro };
+  const obj = inv.corpo;
 
   // A RPC devolve UM jsonb {tabela: [colunas]}, e a forma importa. A primeira versão devolvia
   // uma linha por coluna — 2.136 linhas — e o PostgREST corta em 1.000 SEM ERRO: o verificador
@@ -193,7 +267,15 @@ async function inventario() {
   // Sanidade grosseira: este projeto tem ~175 tabelas. Um inventário minúsculo é bug de
   // leitura, não schema vazio — e reprovar aqui é melhor do que acusar meio código.
   if (tabelas.size < 50) return { erro: `inventário implausível: só ${tabelas.size} tabelas` };
-  return { tabelas };
+
+  // Inventário de FUNÇÕES (schema_funcoes) — array jsonb de nomes. Mesma honestidade: se a RPC
+  // não existe/não responde, é "não consegui checar", não "não há funções". Exit 2, não passa.
+  const fx = await chamarRpc('schema_funcoes');
+  if (fx.erro) return { erro: `${fx.erro} (schema_funcoes — aplique supabase/migrations/schema_funcoes_inventario.sql)` };
+  if (!Array.isArray(fx.corpo)) return { erro: 'schema_funcoes devolveu forma inesperada (esperado ARRAY jsonb de nomes)' };
+  if (fx.corpo.length < 50) return { erro: `inventário de funções implausível: só ${fx.corpo.length}` };
+  const funcoes = new Set(fx.corpo.map((s) => String(s).toLowerCase()));
+  return { tabelas, funcoes };
 }
 
 // `--listar` mostra o que o extrator VÊ, sem tocar no banco. Serve para depurar a própria
@@ -219,6 +301,20 @@ if (inv.erro) {
   process.exit(2);
 }
 
+// --- FORMA #7b: função no banco sem migração. Deriva = banco − migrações. ---
+const migFuncs = funcsDeMigracoes();
+const driftFuncs = [...inv.funcoes].filter((f) => !migFuncs.has(f)).sort();
+
+if (process.argv.includes('--atualizar-funcoes')) {
+  writeFileSync(BASELINE_FUNCS, JSON.stringify(driftFuncs, null, 2) + '\n');
+  console.log(`Linha de base de funções regravada: ${driftFuncs.length} função(ões) no banco sem migração.`);
+  process.exit(0);
+}
+
+const baseFuncs = existsSync(BASELINE_FUNCS) ? JSON.parse(readFileSync(BASELINE_FUNCS, 'utf8')) : [];
+const baseSet = new Set(baseFuncs);
+const funcsNovasSemMigracao = driftFuncs.filter((f) => !baseSet.has(f)); // deriva NOVA
+
 const refs = coletarReferencias();
 const problemas = [];
 for (const r of refs) {
@@ -239,22 +335,49 @@ for (const r of refs) {
   }
 }
 
+// --- FORMA #7: RPC chamada no código que não existe no banco. ---
+const rpcs = coletarRpcs();
+for (const r of rpcs) {
+  if (inv.funcoes.has(r.nome)) continue;
+  // Vizinhos parecidos ajudam a flagrar typo/renome (foi `vincular_indicacao_compra` onde havia
+  // `vincular_indicacao`/`comprar_produto_iniciar`).
+  const sug = [...inv.funcoes].filter((f) => f.includes(r.nome) || r.nome.includes(f) || f.slice(0, 5) === r.nome.slice(0, 5)).sort().slice(0, 5).join(', ');
+  problemas.push({ arquivo: r.arquivo, linha: r.linha, tipo: 'FUNÇÃO/RPC não existe no banco', tabela: r.nome, coluna: null, sugestao: sug || null, ehRpc: true });
+}
+
 const nTab = new Set(refs.map((r) => r.tabela)).size;
 const nCol = refs.filter((r) => r.coluna && !r.deSelect).length;
 const nSel = refs.filter((r) => r.deSelect).length;
 
-if (!problemas.length) {
-  console.log(`✓ Código e banco batem. (${nTab} tabelas, ${nCol} usos de coluna de data e ${nSel} colunas de .select() conferidos contra o schema real.)`);
+if (!problemas.length && !funcsNovasSemMigracao.length) {
+  console.log(`✓ Código e banco batem. (${nTab} tabelas, ${nCol} usos de coluna de data, ${nSel} colunas de .select(), ${rpcs.length} RPCs e ${inv.funcoes.size} funções conferidas contra o banco real; ${driftFuncs.length} funções sem migração na linha de base.)`);
   process.exit(0);
 }
+
+// Deriva #7b nova (função no banco sem migração e fora da base) reprova por si só.
+if (funcsNovasSemMigracao.length) {
+  console.error('\n✗ FUNÇÃO NO BANCO SEM MIGRAÇÃO (forma #7b) — recriar o banco a partir do repo a perderia.\n');
+  console.error('  Alguém criou/alterou uma função direto no SQL Editor e o `create function` não');
+  console.error('  entrou em supabase/migrations/. `admin_metricas_negocio` já divergiu assim (a chave');
+  console.error('  `pct_dom_venda` só existia em produção) e imprimiu "0% venda" com cara de resposta.\n');
+  for (const f of funcsNovasSemMigracao) console.error(`    ${f}()  — sem create function em nenhuma migração`);
+  console.error('\n  Escreva o `.sql` da função em supabase/migrations/ (no MESMO commit da mudança).');
+  console.error('  Se for deliberadamente aceita como dívida: node scripts/verificar-schema-codigo.mjs --atualizar-funcoes\n');
+  if (!problemas.length) process.exit(1);
+}
+
+if (!problemas.length) process.exit(0);
 
 console.error('\n✗ DERIVA ENTRE CÓDIGO E BANCO — é a família de 12/08 tentando voltar.\n');
 console.error('  Lembre do efeito real: não dá tela de erro. O PostgREST devolve 400, o');
 console.error('  `{ data }` sem `error` vira lista vazia, e a tela mente com cara de certa.\n');
 for (const p of problemas) {
   console.error(`  ${p.arquivo}:${p.linha}`);
-  console.error(`    ${p.tipo} → ${p.tabela}${p.coluna ? '.' + p.coluna : ''}${p.deSelect ? '   (pedida no .select)' : ''}`);
-  if (p.sugestao) console.error(`    ${p.deSelect ? 'nomes parecidos que existem' : 'colunas de data que existem nessa tabela'}: ${p.sugestao}`);
+  console.error(`    ${p.tipo} → ${p.tabela}${p.coluna ? '.' + p.coluna : ''}${p.ehRpc ? '()' : ''}${p.deSelect ? '   (pedida no .select)' : ''}`);
+  if (p.sugestao) {
+    const rotulo = p.ehRpc ? 'funções parecidas que existem' : p.deSelect ? 'nomes parecidos que existem' : 'colunas de data que existem nessa tabela';
+    console.error(`    ${rotulo}: ${p.sugestao}`);
+  }
   console.error('');
 }
 console.error('O que fazer, em ordem:');

@@ -10337,7 +10337,10 @@ a guarda de cada uma. TOP GAPS sem trava estática (rede de segurança só de DA
    adiantado exige `estornar_*_por`; índice cobra-no-sucesso, filtrado).
 3. ~~**`fetch().json()` sem `.ok` na forma de 2 linhas (classe 3)**~~ — **FECHADO 20/08** (ver seção
    no fim): trava `json-2linhas-sem-ok` (base 72), bug ativo já corrigido; reincidência coberta.
-4. Função mudada no banco sem migração (classe 9) — sem trava barata.
+4. ~~Função mudada no banco sem migração (classe 9)~~ — **FECHADO 21/08** (ver seção no fim):
+   `verificar:schema` agora confere RPC-existe (forma #7) e função-tem-migração (forma #7b, base 59);
+   achou e corrigiu um bug vivo (`vincular_indicacao_compra` inexistente). Só a deriva de CORPO
+   segue com a regra manual (mudou função no banco → escreva a migração no mesmo commit).
 5. Validação de ingestão externa (classe 10) — só invariante do Censo.
 Recomendação registrada para as próximas sessões fecharem por prioridade.
 
@@ -10426,3 +10429,48 @@ que o usuário refaz).
 
 **Provada nos 3 cenários:** sem `.ok` → REPROVA; `json`-depois-`ok` → passa; `ok`-antes-`json` →
 passa.
+
+---
+
+## 21/08 — GAP #4 FECHADO: função mudada/faltando no banco vs migração (classe 9 · formas #7 e #7b)
+
+**Pedido do dono:** *"Sigo para o gap #4"* — a classe "função no banco sem migração", que o
+catálogo listava como "sem trava barata". `verificar:schema` conferia TABELAS e COLUNAS mas nunca
+FUNÇÕES; as duas direções da deriva ficavam de fora.
+
+**BUG VIVO ACHADO E CORRIGIDO (forma #7).** A varredura de RPCs contra o banco achou **uma** RPC
+chamada no código que não existe: `registrar-compra-produto.js` chamava `rpc/vincular_indicacao_compra`
+— função que NUNCA existiu. PostgREST devolvia PGRST202 (404), o `catch (_) {}` engolia, e **a
+indicação do consultor em toda compra de produto era perdida em silêncio** (o consultor não recebia
+a atribuição/comissão). O endpoint era ainda código MORTO: ninguém chama `/registrar-compra-produto`;
+o fluxo vivo é `mp.js → comprar_produto_iniciar(p_ref)` (atômico, lê o preço do banco, grava
+`ref_codigo`+`comissao_pct`) → webhook `confirmar_compra_produto`. **Corrigido**: o endpoint agora
+DELEGA a `comprar_produto_iniciar` — some a função fantasma, some a duplicação não-atômica, e a
+indicação passa a ser gravada.
+
+**A NOVA função de banco `schema_funcoes()`** (migração `schema_funcoes_inventario.sql`, aplicada)
+espelha `schema_inventario`: STABLE SECURITY DEFINER, só `service_role`, devolve UM array jsonb de
+nomes (imune ao corte de 1.000 do PostgREST), exclui funções de extensão.
+
+**`verificar:schema` ganhou dois itens** (rodam no mesmo CI: push/PR/diário 11h UTC):
+- **Item 4 — RPC existe (forma #7):** toda `rpc/NOME`/`.rpc('NOME')` do código tem de existir no
+  banco. Coleta LINHA A LINHA pulando comentários — `semComentarios` se perde nos regexes cheios
+  de aspas deste próprio arquivo (a 1ª versão leu o `rpc/NAME` do meu comentário e acusou uma
+  função "name"; consertado do mesmo jeito que `envsSuspeitas`). Base zero — reprova RPC nova sem função.
+- **Item 5 — função tem migração (forma #7b):** toda função do banco precisa de um `create function`
+  em `supabase/migrations/`. Parser multi-linha (a assinatura quebra a linha após o nome). Entra
+  COM linha de base: **59 funções** existem hoje só no banco (criadas no SQL Editor e nunca
+  backportadas — `is_admin`, `registrar_uso`, `solicitar_saque`…). É dívida ACEITA
+  (`scripts/funcoes-sem-migracao.baseline.json`); a trava só impede que a lista CRESÇA. Função
+  nova no banco sem migração reprova; `--atualizar-funcoes` regrava a base conscientemente.
+
+**O que continua fora (honestidade):** DERIVA DE CORPO — função que existe nos dois lados mas com
+corpo divergente (o caso `pct_dom_venda` em `admin_metricas_negocio`). Comparar corpos normalizados
+é frágil e o CLAUDE.md já optou pela **regra manual**: *mudou função no banco, escreva a migração no
+mesmo commit*. A trava de item 5 cobre o caso estrutural (função só-no-banco); o corpo-divergente
+segue com a regra manual.
+
+**Validação (sem credencial no shell — mock com os payloads REAIS de schema_inventario/schema_funcoes):**
+verde no estado atual (161 RPCs, 287 funções, 59 na base); REPROVA com RPC inexistente; REPROVA com
+função nova no banco fora da base; exit 2 (NÃO VERIFICADO) se `schema_funcoes` não responde;
+`--atualizar-funcoes` idempotente. `npm run build` e as travas de padrões/sintaxe passam.

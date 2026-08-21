@@ -22,7 +22,7 @@ export default async function handler(req) {
   const authUser = await getAuthUser(req);
   if (!authUser?.id) return unauthorized();
 
-  const { user_id, produto_tipo, produto_id, valor, ref_codigo } = await req.json();
+  const { user_id, produto_tipo, produto_id, ref_codigo } = await req.json();
 
   if (!user_id || !produto_tipo || !produto_id) {
     return new Response(JSON.stringify({ error: 'Dados incompletos' }), { status: 400, headers });
@@ -33,33 +33,24 @@ export default async function handler(req) {
     return new Response(JSON.stringify({ error: 'Ação não permitida' }), { status: 403, headers });
   }
 
-  // Verifica se já existe compra ativa para evitar duplicata. produto_tipo/produto_id vêm
-  // do corpo → encodeURIComponent (evita injeção de parâmetros na query PostgREST).
-  const rc = await sb(`compras_produtos?user_id=eq.${encodeURIComponent(user_id)}&produto_tipo=eq.${encodeURIComponent(produto_tipo)}&produto_id=eq.${encodeURIComponent(produto_id)}&status=eq.ativo&select=id`);
-  const existentes = await rc.json();
-  if (Array.isArray(existentes) && existentes.length > 0) {
-    return new Response(JSON.stringify({ ok: true, duplicata: true }), { status: 200, headers });
-  }
-
-  // Registra a compra como PENDENTE — nunca 'ativo' direto a partir do cliente
-  // (senão qualquer usuário logado liberaria conteúdo pago sem pagar). A ativação
-  // (status 'ativo') só pode vir do webhook de pagamento confirmado.
-  const ri = await sb('compras_produtos', {
+  // Delega ao fluxo transacional ÚNICO (`comprar_produto_iniciar`), o mesmo que o checkout usa
+  // em api/mp.js. Ele: (a) valida disponibilidade e lê o PREÇO do banco — o cliente não fixa
+  // `valor`, então não dá para forjar; (b) checa duplicata/acesso-já-concedido; (c) resolve o
+  // código do consultor e grava `ref_codigo` + `comissao_pct` na compra PENDENTE, para o webhook
+  // (`confirmar_compra_produto`) pagar a comissão na ativação. A ativação nunca sai daqui.
+  //
+  // 21/08 (gap #4): antes, este endpoint fazia um insert manual e chamava
+  // `rpc/vincular_indicacao_compra` — função que NUNCA existiu no banco. O PostgREST devolvia
+  // 404 (PGRST202), o `catch (_) {}` engolia, e a indicação em compra de produto era perdida em
+  // silêncio. Delegar ao avaliador único elimina a função fantasma e a duplicação do fluxo.
+  const r = await sb('rpc/comprar_produto_iniciar', {
     method: 'POST',
-    body: JSON.stringify({ user_id, produto_tipo, produto_id, valor: Number(valor) || 0, status: 'pendente' }),
-    headers: { Prefer: 'return=representation' },
+    body: JSON.stringify({ p_user_id: user_id, p_produto_tipo: produto_tipo, p_produto_id: produto_id, p_ref: ref_codigo || null }),
   });
-  const inserido = await ri.json();
-
-  // Vincula indicação se vier com ref do consultor
-  if (ref_codigo) {
-    try {
-      await sb('rpc/vincular_indicacao_compra', {
-        method: 'POST',
-        body: JSON.stringify({ p_user_id: user_id, p_codigo: ref_codigo, p_produto_tipo: produto_tipo, p_produto_id: produto_id }),
-      });
-    } catch (_) {}
+  const out = await r.json().catch(() => null);
+  if (!r.ok || !out || out.ok === false) {
+    return new Response(JSON.stringify({ error: 'Não foi possível registrar a compra', motivo: out?.erro || null }), { status: 400, headers });
   }
 
-  return new Response(JSON.stringify({ ok: true, compra: inserido }), { status: 200, headers });
+  return new Response(JSON.stringify(out), { status: 200, headers });
 }
