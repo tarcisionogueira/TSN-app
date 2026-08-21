@@ -302,8 +302,9 @@ export function AuthProvider({ children }) {
             } catch (e) { console.warn('[convite-equipe] resgate adiado:', e?.message || e); }
           }
           // Redirect pós-login social (Google) ao destino preservado antes do OAuth.
+          let oauthDest = null;   // usado também no resgate do plano abaixo (só resgata sem redirect pendente)
           try {
-            const oauthDest = sessionStorage.getItem('tsn_oauth_redirect');
+            oauthDest = sessionStorage.getItem('tsn_oauth_redirect');
             if (oauthDest) {
               sessionStorage.removeItem('tsn_oauth_redirect');
               if (window.location.hash.replace(/^#/, '') !== oauthDest) window.location.hash = oauthDest;
