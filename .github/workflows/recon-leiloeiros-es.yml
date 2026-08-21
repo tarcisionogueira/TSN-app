@@ -7,10 +7,18 @@ name: Recon leiloeiros ES (JUCEES)
 # Default: só SUEDPETER (o único candidato com atividade) — ampliar via input gasta
 # Bright Data à toa nos 14 sites sem histórico.
 on:
+  # Dispara ao empurrar este workflow/script para a branch de trabalho (path-filtrado).
+  # É como rodamos recon "em produção" sem tocar em main — o dispatch por API só
+  # funciona para workflow que já está na branch default.
+  push:
+    branches: [ 'claude/handoff-bidpro-brasil-verificacoes-7h3pat' ]
+    paths:
+      - 'scripts/recon-leiloeiros-es.mjs'
+      - '.github/workflows/recon-leiloeiros-es.yml'
   workflow_dispatch:
     inputs:
       doms:
-        description: 'Domínios (csv). Vazio = todos os 15 da lista JUCEES'
+        description: 'Domínios (csv). Para os 15 da JUCEES, colar a lista do .mjs'
         required: false
         default: 'suedpeterleiloes.com.br'
 
@@ -29,7 +37,8 @@ jobs:
         run: npm ci
       - name: Recon
         env:
-          PROBE_DOMS: ${{ github.event.inputs.doms }}
+          # No gatilho de push não há inputs — cai no default SUEDPETER (não sondar os 15)
+          PROBE_DOMS: ${{ github.event.inputs.doms || 'suedpeterleiloes.com.br' }}
           BRIGHTDATA_API_TOKEN: ${{ secrets.BRIGHTDATA_API_TOKEN }}
           BRIGHTDATA_ZONE: ${{ secrets.BRIGHTDATA_ZONE }}
         run: node scripts/recon-leiloeiros-es.mjs
