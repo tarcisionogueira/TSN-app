@@ -3,9 +3,13 @@
 > Pedido do dono (21/08): o convite de consultor passa a habilitar um PARCEIRO COMERCIAL
 > que recebe as aplicações de consórcio e home equity e faz o atendimento até o fechamento.
 > Sem integração com a financeira → o rastreio interno é a única prova na negociação.
-> Status: **PLANO PARA APROVAÇÃO — v2** (revisado 21/08 com as melhorias do dono:
-> escopo confirmado, contato só após "Receber cliente", NPS do cliente em 15 dias).
-> Nada aqui foi implementado ainda.
+> Status: **F1 CONCLUÍDA (21/08)** — migrações aplicadas em produção e no repo
+> (supabase/migrations/consultor_comercial_fase1.sql): trilha sdr_lead_eventos,
+> sdr_lead_nps, colunas de ciclo, RPCs comercial_* lendo as regras de regra_negocio
+> via public.regra() (auditoria 2b: 0 crítico; segurança: 0/0), CHECK de status de
+> sdr_leads ampliado (o antigo era só vocabulário SDR e recusava o ciclo comercial —
+> o teste de mesa pegou). Ciclo validado com rollback: contato oculto → Receber
+> revela+registra → feedback na trilha. Próxima: **F2 (tela /comercial)**.
 
 ## 1. Princípios (do pedido, viram regra_negocio)
 
@@ -142,7 +146,7 @@ revelação de contato logada) e o **cliente** (NPS) — nenhuma delas sozinha f
 
 | Fase | Entrega | Tamanho |
 |---|---|---|
-| F1 | Migrações (eventos + NPS + colunas + RPCs + RLS) e regra_negocio | 1 sessão |
+| F1 ✅ | Migrações (eventos + NPS + colunas + RPCs + RLS) e regra_negocio — concluída 21/08 | feita |
 | F2 | Tela /comercial completa (lista sem contato + Receber cliente + acompanhamento + atendimento realizado + finalizar) | 1 sessão |
 | F3 | Atribuição: ?ref no link + stamped no api/duvida + atribuição manual no Admin | ½ sessão |
 | F4 | Atendimento com escopo do consultor (vínculo chamado↔lead) | ½ sessão |

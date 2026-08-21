@@ -10870,3 +10870,22 @@ Atendimento, comissoes, regra_negocio. Pontos-chave: RPC com colunas MÍNIMAS
 deve ser alargada para vendedor_tipo), trilha append-only sdr_lead_eventos (anti-"passado
 para trás" sem integração com a financeira), atribuição por ?ref resolvida no servidor +
 manual pelo admin, 5 fases, 4 decisões em aberto para o dono responder.
+
+## ✅ 21/08 (noite 6) — Consultor Comercial FASE 1 no ar (banco) — autorizada pelo dono
+Migração `consultor_comercial_fase1.sql` escrita E aplicada (partes 1/1b/1c no Supabase):
+- `sdr_lead_eventos` (trilha append-only: sem policy de UPDATE/DELETE; escrita só pelas
+  RPCs) + `sdr_lead_nps` (contraprova do cliente; envio na F5) + colunas de ciclo em
+  sdr_leads (recebido_em/finalizado_em/resultado/resultado_motivo).
+- RPCs `comercial_meus_leads` / `comercial_receber_lead` / `comercial_registrar_evento` /
+  `admin_comercial_visao` — todas LENDO as regras de `regra_negocio` via `public.regra()`
+  (1ª versão citava as regras só no plano; a auditoria 2b acusou 4 críticos "regra órfã"
+  e forçou o padrão certo — regra é dado). Fallbacks sempre RESTRITIVOS.
+- 4 regras novas em regra_negocio (escopo alavancagem_%, contato_apos_receber,
+  finalizar_exige_comentario ativas; nps_cliente_15d INATIVA até a F5 ter o cron).
+- **Bug pego pelo teste de mesa:** o CHECK antigo de `sdr_leads.status` era vocabulário
+  SDR (novo/contatado/…) e recusava `em_atendimento` — ampliado mantendo os valores
+  antigos (1c). Ciclo completo validado numa transação com rollback: contato oculto
+  antes de Receber → revelado+registrado depois → feedback na trilha.
+- Auditorias pós-migração: segurança 0 crítico/0 atenção · regras 0 crítico.
+**Próximas fases:** F2 tela /comercial · F3 atribuição (?ref + admin) · F4 Atendimento
+com escopo · F5 NPS (cron+rota token) · F6 Admin visão total + invariantes.
