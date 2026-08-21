@@ -7893,7 +7893,12 @@ const STATUS_SOL_COLORS = {
   solicitado:   { bg: '#fef9c3', color: '#854d0e', label: 'Solicitado' },
   em_andamento: { bg: '#dbeafe', color: '#084BA6', label: 'Em Andamento' },
   concluido:    { bg: '#d1fae5', color: '#065f46', label: 'Concluído' },
+  cancelado:    { bg: '#fee2e2', color: '#991b1b', label: 'Cancelado' },
 };
+// Status fora do mapa vira badge NEUTRO com o valor cru — nunca "Solicitado" de mentira.
+// (Achado do dono 21/08: 3 solicitações 'cancelado' apareciam como "Solicitado" no Todas
+// e sumiam dos outros filtros — o fallback antigo mascarava o status real.)
+const statusSolDe = (status) => STATUS_SOL_COLORS[status] || { bg: '#f1f5f9', color: '#475569', label: status || '—' };
 
 function RoleBadge({ role }) {
   const rc = ROLE_BADGE_COLORS[role] || { bg: '#f1f5f9', color: '#475569' };
@@ -8069,7 +8074,7 @@ function SolicitacaoModal({ sol, membros, onClose, onSaved }) {
 
   const meetCreateUrl = buildMeetCreateUrl();
 
-  const statusSol = STATUS_SOL_COLORS[sol.status] || STATUS_SOL_COLORS.solicitado;
+  const statusSol = statusSolDe(sol.status);
 
   return (
     <div style={S.overlay} onClick={onClose}>
@@ -8135,6 +8140,7 @@ function SolicitacaoModal({ sol, membros, onClose, onSaved }) {
                 <option value="solicitado">Solicitado</option>
                 <option value="em_andamento">Em Andamento</option>
                 <option value="concluido">Concluído</option>
+                <option value="cancelado">Cancelado</option>
               </select>
             </div>
 
@@ -8467,6 +8473,7 @@ function EquipeTab() {
   const solFiltradas = filtroStatus === 'todas' ? solicitacoes
     : filtroStatus === 'aguardando' ? solicitacoes.filter(s => s.status === 'solicitado')
     : filtroStatus === 'andamento' ? solicitacoes.filter(s => s.status === 'em_andamento')
+    : filtroStatus === 'canceladas' ? solicitacoes.filter(s => s.status === 'cancelado')
     : solicitacoes.filter(s => s.status === 'concluido');
 
   if (loading) return <p style={{ color: '#94a3b8' }}>Carregando…</p>;
@@ -8618,7 +8625,7 @@ function EquipeTab() {
 
       {/* Filter tabs */}
       <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
-        {[['todas','Todas'], ['aguardando','Aguardando'], ['andamento','Em Andamento'], ['concluidas','Concluídas']].map(([k,l]) => (
+        {[['todas','Todas'], ['aguardando','Aguardando'], ['andamento','Em Andamento'], ['concluidas','Concluídas'], ['canceladas','Canceladas']].map(([k,l]) => (
           <button key={k} onClick={() => setFiltroStatus(k)}
             style={{ padding: '6px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 13, background: filtroStatus === k ? '#111111' : '#f1f5f9', color: filtroStatus === k ? '#fff' : '#475569' }}>
             {l}
@@ -8639,7 +8646,7 @@ function EquipeTab() {
           </tr></thead>
           <tbody>
             {solFiltradas.map(s => {
-              const st = STATUS_SOL_COLORS[s.status] || STATUS_SOL_COLORS.solicitado;
+              const st = statusSolDe(s.status);
               const analista = membros.find(m => m.id === s.analista_id);
               return (
                 <tr key={s.id}>

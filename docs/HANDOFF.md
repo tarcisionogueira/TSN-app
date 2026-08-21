@@ -10852,3 +10852,21 @@ antes do href como no edital; (b) anexo falso deletado (imovel_anexos + storage)
 resetada para pendente — com o conserto, o desfecho honesto esperado é 'parcial' após 4
 tentativas → o verificar-doc passa a responder "não localizada" e o modal orienta o anexo
 manual. A cadeia inteira (clique → verificar-doc → fila → modal → upload) fica correta.
+
+## ✅ 21/08 (noite 5) — Filtro das Solicitações de Análise mentia o status + plano do Consultor Comercial
+**Bug (achado do dono):** as 3 solicitações do banco estão TODAS com status 'cancelado'
+(julho) — a tela não conhecia esse status, o fallback do badge imprimia "Solicitado"
+(mentira visual) e os filtros, comparando com o valor real, não achavam nada fora do
+"Todas". A forma da casa de novo: ausência entregue como presença, agora no fallback de
+UI. Conserto em Admin.jsx: STATUS_SOL_COLORS ganha 'cancelado', fallback honesto
+(statusSolDe — status desconhecido aparece cru, nunca "Solicitado"), aba "Canceladas" e a
+opção no select do modal.
+**Plano (aprovação pendente do dono):** `docs/PLANO_CONSULTOR_COMERCIAL.md` — evolução do
+convite de consultor para PARCEIRO COMERCIAL de consórcio/home equity. Fundações que já
+existem e o plano aproveita: perfis.vendedor_tipo (capacidade sem trocar role — pedido
+central), sdr_leads.consultor_id (coluna já criada), api/duvida (lead+chamado), Consultor.jsx,
+Atendimento, comissoes, regra_negocio. Pontos-chave: RPC com colunas MÍNIMAS
+(nome/telefone/email — a RLS atual `leads_equipe` dá acesso total ao role consultor e NÃO
+deve ser alargada para vendedor_tipo), trilha append-only sdr_lead_eventos (anti-"passado
+para trás" sem integração com a financeira), atribuição por ?ref resolvida no servidor +
+manual pelo admin, 5 fases, 4 decisões em aberto para o dono responder.
