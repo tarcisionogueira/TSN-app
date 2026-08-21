@@ -9,7 +9,7 @@
 > via public.regra() (auditoria 2b: 0 crítico; segurança: 0/0), CHECK de status de
 > sdr_leads ampliado (o antigo era só vocabulário SDR e recusava o ciclo comercial —
 > o teste de mesa pegou). Ciclo validado com rollback: contato oculto → Receber
-> revela+registra → feedback na trilha. Próxima: **F2 (tela /comercial)**.
+> revela+registra → feedback na trilha. Concluídas F2 (tela /comercial) e F3 (atribuição ?ref + Admin). Próxima: **F4 (Atendimento com escopo)**.
 
 ## 1. Princípios (do pedido, viram regra_negocio)
 
@@ -147,8 +147,8 @@ revelação de contato logada) e o **cliente** (NPS) — nenhuma delas sozinha f
 | Fase | Entrega | Tamanho |
 |---|---|---|
 | F1 ✅ | Migrações (eventos + NPS + colunas + RPCs + RLS) e regra_negocio — concluída 21/08 | feita |
-| F2 | Tela /comercial completa (lista sem contato + Receber cliente + acompanhamento + atendimento realizado + finalizar) | 1 sessão |
-| F3 | Atribuição: ?ref no link + stamped no api/duvida + atribuição manual no Admin | ½ sessão |
+| F2 ✅ | Tela /comercial completa (lista sem contato + Receber cliente + acompanhamento + atendimento realizado + finalizar) — concluída 21/08 | feita |
+| F3 ✅ | Atribuição: ?ref no link + stamped no api/duvida + atribuição manual no Admin — concluída 21/08 | feita |
 | F4 | Atendimento com escopo do consultor (vínculo chamado↔lead) | ½ sessão |
 | F5 | NPS: rota pública tokenizada + cron 15d + e-mail Resend + invariantes de contradição | 1 sessão |
 | F6 | Admin › Comercial (visão total + trilha + NPS + CSV) + invariantes qa + convite no Equipe | 1 sessão |

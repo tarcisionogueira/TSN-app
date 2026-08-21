@@ -10942,3 +10942,25 @@ Validação: 1ª rodada suprimiu exatamente os 539 medidos (CEF ativos 23.431→
 2ª rodada 0/0 (idempotente); upsert simulado tentando ativo=true FICOU suprimido
 (trigger ok, testado com rollback). Cliente não vê mais o mesmo leilão 2× com preços
 diferentes — vale o lote HASTA (dado por praça, mais fresco).
+
+## ✅ 21/08 (noite 10) — Consultor Comercial FASE 3: atribuição automática (?ref) e manual (Admin)
+- **Migração `consultor_comercial_fase3.sql`** (escrita + aplicada): RPC
+  `admin_comercial_atribuir(p_lead, p_consultor)` — só admin; valida capacidade do
+  consultor; REATRIBUIÇÃO zera recebido_em (o novo dono re-Recebe para ver o contato,
+  coerente com contato_apos_receber) e tudo vira evento na trilha. aplicada_por da regra
+  de escopo atualizado com as 4 funções que a leem. Validada em transação com rollback
+  (atribuição + evento; cuidado com teste de `limit 1` SEM order by — subconsultas pegavam
+  linhas diferentes e o no-op parecia bug).
+- **api/duvida.js**: lead de alavancagem SEM dono + `body.ref` → resolve o código NO
+  SERVIDOR (id ou codigo_indicacao; só quem tem vendedor_tipo='consultor' ou role
+  consultor/admin), PATCH com guarda `consultor_id=is.null` (corrida: se outro atribuiu
+  antes, não sobrescreve nem grava evento) + evento 'atribuido' (papel sistema).
+  Insert do lead novo passou a return=representation para alimentar a atribuição.
+- **Alavancagem.jsx**: corpo envia `ref: lerRef()` (mesma janela de 30 dias da indicação;
+  o link do consultor já é o `#/?ref=<codigo>` que a MinhaRede gera — sem link novo).
+- **Admin › Comercial**: seção "Aplicações de Consórcio & Home Equity" —
+  admin_comercial_visao com cliente/produto/status/consultor (dropdown → RPC)/último
+  registro/resultado+NPS. Elegíveis no dropdown: vendedor_tipo='consultor' + roles
+  consultor/admin.
+Auditorias: regras 0 crítico · segurança 0/0. Restam F4 (Atendimento escopo), F5 (NPS
+cron+token — reativar regra comercial.nps_cliente_15d), F6 (CSV + invariantes qa).

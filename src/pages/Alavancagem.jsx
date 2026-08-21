@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Home, Users, TrendingUp, Check, AlertTriangle, ArrowRight, X, Clock, Shield } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
+import { lerRef } from '../utils/ref';
 
 /**
  * /alavancagem — tela ÚNICA apresentando Home Equity e Consórcio (pedido do dono, 14/08).
@@ -406,9 +407,13 @@ function FormularioInteresse({ modalidade, usuario, onFechar }) {
       }
       // `nome` do logado vai apenas como FALLBACK de exibição (o servidor prefere o do token).
       // E-mail e `user_id` nunca vêm do corpo — é o que impede abrir chamado no nome de outro.
+      // `ref`: o CÓDIGO do consultor que trouxe a pessoa (janela de 30 dias, mesmo
+      // storage da indicação). O servidor resolve o código e só atribui a quem tem a
+      // capacidade comercial — daqui vai só o texto do código, nunca um id decidido aqui.
+      const ref = lerRef() || undefined;
       const corpo = logado
-        ? { nome: contatoNome, telefone: contatoTel, mensagem, origem: `alavancagem_${modalidade.id}` }
-        : { nome: f.nome, email: f.email, telefone: f.tel, mensagem, origem: `alavancagem_${modalidade.id}` };
+        ? { nome: contatoNome, telefone: contatoTel, mensagem, origem: `alavancagem_${modalidade.id}`, ref }
+        : { nome: f.nome, email: f.email, telefone: f.tel, mensagem, origem: `alavancagem_${modalidade.id}`, ref };
       const r = await fetch('/api/duvida', { method: 'POST', headers: cab, body: JSON.stringify(corpo) });
       // `.ok` conferido ANTES do corpo: 400/500 com JSON de erro viraria "enviado" silencioso.
       const d = await r.json().catch(() => ({}));

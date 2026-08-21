@@ -87,13 +87,15 @@ export default async function handler(req) {
   }
 
   // 1. LEAD — não duplica (busca por email ou whatsapp)
+  let leadId = null, leadConsultorId = null, leadStatus = null;
   try {
     const filtros = [`email.eq.${encodeURIComponent(email)}`];
     if (telefone) filtros.push(`whatsapp.eq.${encodeURIComponent(telefone)}`);
-    const existentes = await (await sb(`sdr_leads?or=(${filtros.join(',')})&select=id,nome,whatsapp,user_id&limit=1`)).json();
+    const existentes = await (await sb(`sdr_leads?or=(${filtros.join(',')})&select=id,nome,whatsapp,user_id,consultor_id,status&limit=1`)).json();
     if (Array.isArray(existentes) && existentes.length) {
       // Atualiza dados que estavam vazios, sem criar novo lead
       const lead = existentes[0];
+      leadId = lead.id; leadConsultorId = lead.consultor_id || null; leadStatus = lead.status || null;
       const patch = {};
       if (!lead.nome && nome) patch.nome = nome;
       if (!lead.whatsapp && telefone) patch.whatsapp = telefone;
@@ -112,13 +114,47 @@ export default async function handler(req) {
       // então a mesma pessoa aparecia como cliente numa tela e como estranho na outra, e o
       // Cliente 360 não conseguia cruzar interesse com conta. Nunca vem do corpo — é o token
       // que diz quem é, senão daria para abrir lead no nome de outro.
-      const leadRes = await sb('sdr_leads', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ nome, email, whatsapp: telefone || null, user_id: usuario?.id || null, origem, status: 'novo' }) });
+      // `return=representation`: o id do lead novo alimenta a atribuição por ?ref abaixo.
+      const leadRes = await sb('sdr_leads', { method: 'POST', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ nome, email, whatsapp: telefone || null, user_id: usuario?.id || null, origem, status: 'novo' }) });
       if (!leadRes.ok) {
         const det = await leadRes.text().catch(() => '');
         console.error('[duvida] lead NÃO gravado', leadRes.status, det.slice(0, 300));
+      } else {
+        const [novo] = await leadRes.json().catch(() => []);
+        if (novo?.id) { leadId = novo.id; leadConsultorId = null; leadStatus = 'novo'; }
       }
     }
   } catch (e) { console.error('[duvida] lead NÃO gravado (exceção)', String(e?.message || e)); }
+
+  // 1b. ATRIBUIÇÃO PELO LINK DO CONSULTOR (?ref) — F3 do plano comercial (21/08).
+  // Só para lead de ALAVANCAGEM ainda SEM dono. O corpo manda apenas o CÓDIGO; quem
+  // resolve para uma pessoa é o servidor, e só aceita quem tem a capacidade comercial
+  // (vendedor_tipo='consultor' ou role consultor/admin) — consultor_id nunca vem do
+  // cliente. Best-effort: falha aqui não derruba o registro do interesse.
+  try {
+    const refCodigo = String(body.ref || '').trim().slice(0, 80);
+    if (leadId && !leadConsultorId && refCodigo && origem.startsWith('alavancagem')) {
+      const campo = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(refCodigo) ? 'id' : 'codigo_indicacao';
+      const consRes = await sb(`perfis?${campo}=eq.${encodeURIComponent(refCodigo)}&select=id,nome,role,vendedor_tipo&limit=1`);
+      const [cons] = consRes.ok ? await consRes.json().catch(() => []) : [];
+      const elegivel = cons && (cons.vendedor_tipo === 'consultor' || ['consultor', 'admin'].includes(cons.role));
+      if (elegivel) {
+        const upd = await sb(`sdr_leads?id=eq.${leadId}&consultor_id=is.null`, {
+          method: 'PATCH', headers: { Prefer: 'return=representation' },
+          body: JSON.stringify({ consultor_id: cons.id, ...(leadStatus === 'novo' ? { status: 'atribuido' } : {}) }),
+        });
+        const atualizados = upd.ok ? await upd.json().catch(() => []) : [];
+        // Só registra o evento se a atribuição ACONTECEU (o filtro consultor_id=is.null
+        // perde a corrida se outro processo atribuiu antes — e aí não é nosso evento).
+        if (Array.isArray(atualizados) && atualizados.length) {
+          await sb('sdr_lead_eventos', {
+            method: 'POST', headers: { Prefer: 'return=minimal' },
+            body: JSON.stringify({ lead_id: leadId, autor_id: cons.id, autor_papel: 'sistema', tipo: 'atribuido', comentario: `Atribuído pelo link do consultor (?ref) — ${cons.nome || cons.id}` }),
+          });
+        }
+      }
+    }
+  } catch (e) { console.error('[duvida] atribuicao por ref falhou', String(e?.message || e)); }
 
   // 2. CHAMADO + 1ª mensagem (consultor responde pelo Atendimento)
   try {

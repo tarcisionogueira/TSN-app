@@ -7717,6 +7717,12 @@ function ComercialTab() {
   const [loading, setLoading] = useState(true);
   const [filtro, setFiltro] = useState('todos'); // 'todos' | 'sem' | consultorId
   const [busca, setBusca] = useState('');
+  // Aplicações de CONSÓRCIO/HOME EQUITY (leads de alavancagem) — F3: atribuição manual
+  // via RPC admin_comercial_atribuir (garante o evento na trilha; update direto não).
+  const [aplicacoes, setAplicacoes] = useState([]);
+  const [aplicErro, setAplicErro] = useState('');
+  const [consultoresCap, setConsultoresCap] = useState([]); // quem PODE atender (capacidade ou role)
+  const [atribuindoLead, setAtribuindoLead] = useState('');
 
   const carregar = useCallback(async () => {
     setLoading(true);
@@ -7749,9 +7755,31 @@ function ComercialTab() {
     setTotalClientes(typeof totalCl === 'number' ? totalCl : (cl || []).length);
     const m = {}; (leads || []).forEach(l => { if (l.user_id && !m[l.user_id]) m[l.user_id] = l.origem; });
     setLeadsMap(m);
+    // Aplicações de alavancagem + quem pode atendê-las. `error` conferido nas duas:
+    // falha de leitura vira aviso na tela, nunca "nenhuma aplicação" de mentira.
+    const [{ data: aplic, error: eAplic }, { data: cap, error: eCap }] = await Promise.all([
+      supabase.rpc('admin_comercial_visao'),
+      supabase.from('perfis').select('id, nome').or('vendedor_tipo.eq.consultor,role.in.(consultor,admin)').order('nome'),
+    ]);
+    setAplicErro(eAplic ? `Não foi possível carregar as aplicações: ${eAplic.message}` : '');
+    setAplicacoes(Array.isArray(aplic) ? aplic : []);
+    if (!eCap) setConsultoresCap(cap || []);
     setLoading(false);
   }, []);
   useEffect(() => { carregar(); }, [carregar]);
+
+  const atribuirAplicacao = async (leadId, consultorId) => {
+    if (!consultorId) return;
+    setAtribuindoLead(leadId);
+    const { error } = await supabase.rpc('admin_comercial_atribuir', { p_lead: leadId, p_consultor: consultorId });
+    if (error) setAplicErro(error.message || 'Erro ao atribuir.');
+    else {
+      setAplicErro('');
+      const { data, error: eR } = await supabase.rpc('admin_comercial_visao');
+      if (!eR && Array.isArray(data)) setAplicacoes(data);
+    }
+    setAtribuindoLead('');
+  };
 
   const atribuir = async (clienteId, consultorId) => {
     await supabase.from('perfis').update({ indicado_por: consultorId || null }).eq('id', clienteId);
@@ -7789,6 +7817,69 @@ function ComercialTab() {
     <div>
       <h2 style={{ fontSize: 18, fontWeight: 700, color: '#111111', margin: '0 0 4px' }}>Comercial</h2>
       <div style={{ fontSize: 12, color: '#64748b', marginBottom: 18 }}>Todos os clientes (pagantes e não pagantes), por consultor. Quem entrou por link de consultor já vem vinculado; os demais aparecem em “sem consultor” para você atribuir.</div>
+
+      {/* ── APLICAÇÕES DE CONSÓRCIO & HOME EQUITY (F3) ──────────────────────────────
+          Leads de alavancagem com dono, trilha e NPS (admin_comercial_visao). A
+          atribuição passa pela RPC (evento garantido na trilha); reatribuir zera o
+          Receber — o novo dono revela o contato em nome próprio. */}
+      <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '16px 18px', marginBottom: 22 }}>
+        <div style={{ fontSize: 15, fontWeight: 800, color: '#111111', marginBottom: 2 }}>💼 Aplicações de Consórcio & Home Equity</div>
+        <div style={{ fontSize: 12, color: '#64748b', marginBottom: 12 }}>
+          Quem pediu contato na tela de Alavancagem. Atribua ao parceiro comercial — ele recebe, atende e finaliza
+          na tela <b>/comercial</b>; cada passo fica na trilha e você vê tudo aqui.
+        </div>
+        {aplicErro && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '8px 12px', marginBottom: 10, fontSize: 12.5, color: '#b91c1c' }}>{aplicErro}</div>}
+        {!aplicErro && aplicacoes.length === 0 && <div style={{ fontSize: 12.5, color: '#94a3b8' }}>Nenhuma aplicação registrada ainda.</div>}
+        {aplicacoes.length > 0 && (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+              <thead><tr>
+                {['Cliente', 'Produto', 'Status', 'Consultor', 'Último registro', 'Resultado'].map(h => (
+                  <th key={h} style={{ textAlign: 'left', padding: '6px 8px', color: '#94a3b8', fontSize: 11, fontWeight: 700, borderBottom: '1px solid #f1f5f9', whiteSpace: 'nowrap' }}>{h}</th>
+                ))}
+              </tr></thead>
+              <tbody>
+                {aplicacoes.map(a => {
+                  const prod = a.origem === 'alavancagem_home_equity' ? 'Home Equity' : a.origem === 'alavancagem_consorcio' ? 'Consórcio' : a.origem;
+                  const ult = Array.isArray(a.eventos) && a.eventos.length ? a.eventos[a.eventos.length - 1] : null;
+                  const finalizado = !!a.finalizado_em;
+                  return (
+                    <tr key={a.id}>
+                      <td style={{ padding: '7px 8px', borderBottom: '1px solid #f8fafc', fontWeight: 600, color: '#111' }}>
+                        <div>{a.nome || '—'}</div>
+                        <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 500 }}>{a.whatsapp || ''}{a.whatsapp && a.email ? ' · ' : ''}{a.email || ''}</div>
+                      </td>
+                      <td style={{ padding: '7px 8px', borderBottom: '1px solid #f8fafc' }}>
+                        <span style={{ fontSize: 11, fontWeight: 800, color: prod === 'Consórcio' ? '#084BA6' : '#0f766e', background: prod === 'Consórcio' ? '#dbeafe' : '#ccfbf1', borderRadius: 999, padding: '2px 8px', whiteSpace: 'nowrap' }}>{prod}</span>
+                      </td>
+                      <td style={{ padding: '7px 8px', borderBottom: '1px solid #f8fafc', whiteSpace: 'nowrap' }}>
+                        {finalizado ? 'Finalizado' : a.recebido_em ? 'Em atendimento' : a.consultor_id ? 'Aguardando Receber' : 'Sem consultor'}
+                      </td>
+                      <td style={{ padding: '7px 8px', borderBottom: '1px solid #f8fafc' }}>
+                        <select value={a.consultor_id || ''} disabled={finalizado || atribuindoLead === a.id}
+                          onChange={e => atribuirAplicacao(a.id, e.target.value)}
+                          style={{ padding: '6px 8px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12, background: 'white', maxWidth: 190 }}>
+                          <option value="">— atribuir —</option>
+                          {consultoresCap.map(c => <option key={c.id} value={c.id}>{c.nome || c.id}</option>)}
+                        </select>
+                      </td>
+                      <td style={{ padding: '7px 8px', borderBottom: '1px solid #f8fafc', fontSize: 11.5, color: '#64748b', maxWidth: 260 }}>
+                        {ult ? <>{new Date(ult.em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} · <b>{ult.tipo}</b>{ult.comentario ? ` — ${String(ult.comentario).slice(0, 60)}` : ''}</> : '—'}
+                      </td>
+                      <td style={{ padding: '7px 8px', borderBottom: '1px solid #f8fafc', whiteSpace: 'nowrap', fontSize: 11.5 }}>
+                        {finalizado
+                          ? <b style={{ color: a.resultado === 'ganho' ? '#15803d' : '#b91c1c' }}>{a.resultado}{a.resultado_motivo ? ` (${a.resultado_motivo})` : ''}</b>
+                          : '—'}
+                        {a.nps?.respondido_em && <div style={{ color: '#7c3aed', fontWeight: 700 }}>NPS {a.nps.nota ?? '—'} · {a.nps.contratou ? 'contratou' : 'não contratou'}</div>}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
       {/* Aviso HONESTO quando o lote não cobre a base inteira — o número na tela passa a ser
           "de X carregados", nunca um total silenciosamente errado. */}
