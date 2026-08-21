@@ -10523,3 +10523,31 @@ Todos os cinco top-gaps sem trava do catálogo de erros (auditoria de 20/08) est
 #1 user.id cru no suporte · #2 cobrar cota em fluxo que falhou · #3 fetch().json() sem .ok (2 linhas)
 · #4 função no banco sem migração · #5 validação de ingestão externa. Cada um com trava (estática ou
 de dado) calibrada para 0 falso-positivo hoje e provada que REPROVA a regressão.
+
+---
+
+## 21/08 — CONTAGEM DE RELATÓRIOS: deriva do REAL, não de contador que derrapa
+
+**Achado do dono:** Marcelo (top2, 2 relatórios) via **"10 de 10 análises disponíveis"** — deveria
+ver **8 de 10**. E antes disso eu já tinha "resolvido" o contador do modo suporte (effectiveUserId)
+— mas o número ainda vinha errado.
+
+**Causa real:** o "usado" vinha de `perfis.analises_count`, um contador que SÓ `consumir_analise_por`
+incrementa — e ele NÃO roda quando o relatório é gerado no **modo suporte (on-behalf)** nem por
+**cron**. Os 2 do Marcelo foram on-behalf → contador 0 → "10 de 10". O mesmo contador derrapa em
+estorno, virada de mês e qualquer bug de cobrança.
+
+**Conserto (self-correcting): `usado = GREATEST(contador, real)`** — em `minhas_cotas` (display) E
+em `consumir_*_por` (enforcement), então nunca divergem.
+- **REAL** = `analises_usadas_mes()` — relatórios que o cliente REALMENTE tem, por **conteúdo atual**
+  (concluída, com valor de mercado e parecer), distinto por imóvel. Sobe o contador quando ele
+  ficou abaixo da realidade (on-behalf/cron).
+- **CONTADOR** = PISO: cobrança é permanente → apagar o relatório NÃO devolve a vaga (anti-abuso).
+- Índice fica no contador (cobra-no-sucesso, sem drift de on-behalf).
+
+**Cobre TODAS as telas de uma vez:** Home, Busca, Créditos, Análise, Caso, ImovelDetalhe leem via
+`lerCotas`/`lerCotaMercado` → `minhas_cotas`. Nenhuma mudança de front-end.
+
+**Verificado:** Marcelo agora deriva usado=2 (8 de 10). Varredura nos 6 pagantes: 2 corrigidos p/
+cima (drift on-behalf), 0 acima do limite, nenhum bloqueio indevido (`greatest` só sobe).
+Migração: `supabase/migrations/cotas_derivam_do_real.sql`.
