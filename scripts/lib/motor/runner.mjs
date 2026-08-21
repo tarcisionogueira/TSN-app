@@ -16,6 +16,7 @@
 import { registrarConhecimento, qualidadeColeta } from '../conhecimento.mjs';
 import { registrarSaude } from '../../_saude-fonte.mjs';
 import { criarMotorFetch } from './fetch-fonte.mjs';
+import { criarMotorDom } from './fetch-dom.mjs';
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const idFonte = (tenant, id) => `${tenant.fonte.toLowerCase()}_${id}`;
@@ -36,6 +37,27 @@ async function enumerar(fetchFonte, tenant, cfg, { maxPages, debug, semBD }) {
     if (debug) console.log(`   [${tenant.fonte}] pág ${p} (${r.via}): +${urls.size - antes} (total ${urls.size})`);
     if (urls.size === antes) break;
     await sleep(400);
+  }
+
+  // NÍVEL 2 (opcional — fontes em que o catálogo lista EVENTOS e o lote mora dentro, ex.:
+  // nordeste: home → /leiloes/<evento> → lotes). `extrairUrlsDeEvento` devolve Map id→url de
+  // evento; cada evento é buscado e passa pelo MESMO extrairUrlsDeLote. Falha de UM evento
+  // não derruba a enumeração — mas zera o `fetchOk` só se NENHUMA página respondeu.
+  if (cfg.parse.extrairUrlsDeEvento && fetchOk) {
+    const r0 = await fetchFonte(`${tenant.base}${cfg.catalogo}`, { semBD });
+    if (r0.html) {
+      const eventos = [...cfg.parse.extrairUrlsDeEvento(r0.html, tenant.base).values()]
+        .slice(0, cfg.maxEventos ?? 12);
+      if (debug) console.log(`   [${tenant.fonte}] nível 2: ${eventos.length} evento(s)`);
+      for (const ev of eventos) {
+        const re = await fetchFonte(ev, { semBD });
+        if (!re.html) continue;
+        const antes = urls.size;
+        for (const [id, u] of cfg.parse.extrairUrlsDeLote(re.html, tenant.base)) urls.set(id, u);
+        if (debug) console.log(`   [${tenant.fonte}] evento ${ev.slice(-60)}: +${urls.size - antes}`);
+        await sleep(400);
+      }
+    }
   }
   return { urls: [...urls.values()], fetchOk, via };
 }
@@ -77,11 +99,15 @@ async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debu
 export async function rodarFonte(cfg, opts) {
   const { supabase, maxLotes = 40, dryrun = true, debug = false, exitCodeSeFalha = false, semBD = false } = opts;
   const rotulo = (cfg.chave || 'fonte').toUpperCase();
-  const { fetchFonte, estado } = criarMotorFetch(cfg.chave);
+  // Eixo de FETCH da matriz: 'dom' renderiza num Chromium (SPA sem SSR); default é o motor
+  // grátis→Bright Data. O contrato é o mesmo; o runner não distingue.
+  const motor = cfg.fetch === 'dom' ? criarMotorDom(cfg.dom) : criarMotorFetch(cfg.chave);
+  const { fetchFonte, estado } = motor;
   cfg.maxPages = opts.maxPages ?? cfg.maxPages ?? 3;
 
   const tenants = opts.tenants || cfg.tenants;   // wrapper pode filtrar (ex.: LEILAOPRO_TENANTS)
-  if (debug) { await debugRecon(fetchFonte, { ...cfg, tenants }); return; }
+  if (debug) { try { await debugRecon(fetchFonte, { ...cfg, tenants }); } finally { await motor.fechar?.(); } return; }
+  try {
   console.log(`${rotulo} ${dryrun ? '(DRY-RUN — não grava)' : '(GRAVANDO)'} · tenants: ${tenants.map(t => t.fonte).join(',')} · max ${maxLotes}/tenant`);
 
   for (const tenant of tenants) {
@@ -114,6 +140,7 @@ export async function rodarFonte(cfg, opts) {
     await registrarConhecimento(supabase, { fonte: tenant.fonte, ...cfg.conhecimento, qualidade: qualidadeColeta(prontos) });
   }
   if (dryrun) console.log(`\nPara gravar, rode com ${rotulo}_DRYRUN=0.`);
+  } finally { await motor.fechar?.(); }
 }
 
 // Recon: enumera 1 tenant e disseca o 1º lote (o mesmo debugRecon dos scrapers de origem).

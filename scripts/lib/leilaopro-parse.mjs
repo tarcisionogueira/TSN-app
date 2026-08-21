@@ -104,7 +104,8 @@ export function estaEncerrado(txt, agora = new Date()) {
   return /encerrad/i.test(txt) && !temAberto;
 }
 // Data do próximo leilão: a mais próxima no futuro; se todas passadas, a mais recente.
-function proximaData(txt, agora = new Date()) {
+// (Exportada: os parsers `dom` do Passo 2 — alfa/hasta/nordeste — usam a mesma régua.)
+export function proximaData(txt, agora = new Date()) {
   const hoje = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate());
   const datas = datasPraca(txt).sort((a, b) => a - b);
   if (!datas.length) return null;

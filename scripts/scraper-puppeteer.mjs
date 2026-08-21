@@ -2764,7 +2764,14 @@ const SUPORTE_TENANTS = [
   // estrutura ou catálogo em outro lugar; precisa de recon próprio antes de entrar).
   { domain: 'vecchileiloes.com.br', leiloeiro: 'Vecchi Leilões' },
   { domain: 'saraivaleiloes.com.br', leiloeiro: 'Saraiva Leilões' },
+  // ES/JUCEES (recon-leiloeiros-es + recon-suporte 21/08): white-label confirmada com 12 lotes
+  // na 1ª página — único do lote JUCEES com atividade (21 leilões no histórico da junta).
+  { domain: 'suedpeterleiloes.com.br', leiloeiro: 'Sued Peter Leilões' },
 ];
+
+// Lote de TESTE do próprio leiloeiro (SUEDPETER 21/08: "LEILÃO TESTE - LOTE 02" no evento
+// /leilao-eletronico-somente-teste/). Não é imóvel — barrar por título/URL antes de gravar.
+const RE_SUPORTE_TESTE = /\bleil[ãa]o[\s-]*(?:eletr[ôo]nico[\s-]*)?(?:somente[\s-]*)?teste\b|\bsomente[\s-]*teste\b|\b(?:lote|bem)[\s-]*(?:de[\s-]*)?teste\b|\bteste[\s-]*lote\b/i;
 
 function mapLoteSuporte(l, tenant) {
   if (!l || !l.id) return null;
@@ -2857,6 +2864,7 @@ async function scraperSuporteTenant(browser, tenant) {
   const imoveis = [];
   const seen = new Set();
   for (const l of bens.values()) {
+    if (RE_SUPORTE_TESTE.test(`${l.descricao || ''} ${l.tipo || ''} ${l.href || ''}`)) continue;
     const row = mapLoteSuporte(l, tenant);
     if (!row || !row.valor_minimo || seen.has(row.fonte_id)) continue;
     seen.add(row.fonte_id);

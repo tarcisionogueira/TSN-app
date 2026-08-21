@@ -1,0 +1,73 @@
+name: Scraper DOM (Passo 2) — alfa/hasta/nordeste
+
+# Fontes `dom` do motor fetch × parse (Puppeteer no runner, 0 Bright Data). O push na
+# branch de trabalho roda os três em DRY-RUN (validação do Passo 2 — não grava). Para
+# GRAVAR: dispatch com gravar=1 (só depois do merge/decisão do dono).
+on:
+  push:
+    branches: [ 'claude/handoff-bidpro-brasil-verificacoes-7h3pat' ]
+    paths:
+      - 'scripts/lib/motor/**'
+      - 'scripts/lib/alfa-parse.mjs'
+      - 'scripts/lib/hasta-parse.mjs'
+      - 'scripts/lib/nordeste-parse.mjs'
+      - 'scripts/lib/dom-parse-util.mjs'
+      - 'scripts/scraper-alfa.mjs'
+      - 'scripts/scraper-hasta.mjs'
+      - 'scripts/scraper-nordeste.mjs'
+      - '.github/workflows/scraper-dom.yml'
+  workflow_dispatch:
+    inputs:
+      fontes:
+        description: 'csv: alfa,hasta,nordeste'
+        required: false
+        default: 'alfa,hasta,nordeste'
+      gravar:
+        description: '1 = grava no banco (default DRY-RUN)'
+        required: false
+        default: '0'
+
+jobs:
+  scraper-dom:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Chromium system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            libatk-bridge2.0-0 libdrm2 libxkbcommon0 libxcomposite1 \
+            libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2t64 \
+            libpango-1.0-0 libcairo2 libatspi2.0-0 libgtk-3-0
+
+      - name: Alfa
+        if: ${{ github.event_name == 'push' || contains(github.event.inputs.fontes, 'alfa') }}
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          ALFA_DRYRUN: ${{ github.event.inputs.gravar == '1' && '0' || '1' }}
+        run: node scripts/scraper-alfa.mjs
+
+      - name: Hasta
+        if: ${{ !cancelled() && (github.event_name == 'push' || contains(github.event.inputs.fontes, 'hasta')) }}
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          HASTA_DRYRUN: ${{ github.event.inputs.gravar == '1' && '0' || '1' }}
+        run: node scripts/scraper-hasta.mjs
+
+      - name: Nordeste
+        if: ${{ !cancelled() && (github.event_name == 'push' || contains(github.event.inputs.fontes, 'nordeste')) }}
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          NORDESTE_DRYRUN: ${{ github.event.inputs.gravar == '1' && '0' || '1' }}
+        run: node scripts/scraper-nordeste.mjs

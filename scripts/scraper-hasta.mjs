@@ -1,0 +1,23 @@
+/**
+ * Scraper HASTA — hastaleilao.com.br (fonte `dom` do Passo 2: todo /lote/ é shell no HTML
+ * cru; renderiza no runner, custo Bright Data ZERO). Wrapper fino do motor; fonte em
+ * lib/motor/fontes/hasta.mjs; parser puro em lib/hasta-parse.mjs.
+ *
+ * Env: HASTA_MAX_LOTES (40) · HASTA_DRYRUN (default '1') · HASTA_DEBUG.
+ * Env infra: VITE_SUPABASE_URL, SUPABASE_SERVICE_KEY.
+ */
+import { createClient } from '@supabase/supabase-js';
+import { rodarFonte } from './lib/motor/runner.mjs';
+import cfg from './lib/motor/fontes/hasta.mjs';
+
+const SB_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+const SB_KEY = process.env.SUPABASE_SERVICE_KEY;
+if (!SB_URL || !SB_KEY) { console.error('Faltam VITE_SUPABASE_URL / SUPABASE_SERVICE_KEY'); process.exit(1); }
+
+rodarFonte(cfg, {
+  supabase: createClient(SB_URL, SB_KEY),
+  maxLotes: Number(process.env.HASTA_MAX_LOTES || 40),
+  maxPages: Number(process.env.HASTA_MAX_PAGES || 1),
+  dryrun: process.env.HASTA_DRYRUN !== '0',
+  debug: process.env.HASTA_DEBUG === '1',
+}).catch(e => { console.error(e); process.exit(1); });
