@@ -95,7 +95,8 @@ export function parseDetalhe(html, url) {
     data_leilao: fut ? fut.toISOString().slice(0, 10) : null,
     numero_matricula: mat, ...docs,
     encerrado,
-    tipo_hint: tipoDesc.toLowerCase(),
+    // sem acento p/ casar com o mapa ("GALPÃO" → galpao; a CEF costuma vir sem acento, mas custa nada)
+    tipo_hint: tipoDesc.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''),
   };
 }
 
@@ -103,7 +104,9 @@ export const montarRow = (url, det, tenant) => {
   const row = montarRowDom(url, det, tenant, idDaUrl(url), inferirTipo);
   // O TIPO vem por extenso na descrição do site ("TIPO APARTAMENTO") — mais confiável que
   // inferir do título; usa quando o mapa conhece.
-  const mapa = { apartamento: 'apartamento', casa: 'casa', terreno: 'terreno', comercial: 'comercial', sala: 'comercial', loja: 'comercial', rural: 'rural', fazenda: 'rural', sitio: 'rural' };
+  // Universo observado no CSV de 579 lotes (21/08): APARTAMENTO 349 · CASA 194 · TERRENO 28
+  // · SALA 5 · GALPAO 1 · COMERCIAL 1 · PREDIO 1.
+  const mapa = { apartamento: 'apartamento', casa: 'casa', terreno: 'terreno', comercial: 'comercial', sala: 'comercial', loja: 'comercial', galpao: 'comercial', predio: 'comercial', rural: 'rural', fazenda: 'rural', sitio: 'rural' };
   if (det.tipo_hint && mapa[det.tipo_hint]) row.tipo = mapa[det.tipo_hint];
   if (det.endereco) row.endereco = det.endereco;
   return row;

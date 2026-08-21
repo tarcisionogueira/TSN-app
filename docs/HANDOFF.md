@@ -10765,3 +10765,32 @@ vigiar duplicidade com a fonte CEF ("Número do Bem" = id do portal Caixa).
 **Próximo passo (dono, de casa):** `git -C ~/tsn-app pull && HASTA_DRYRUN=1 node scripts/scraper-hasta.mjs`
 → amostra com valores DISTINTOS por lote = eu reativo o gate (ativo=true + ultima_em=null)
 e o runner coleta na sequência.
+
+## ✅ 21/08 (noite 2) — HASTA: CSV do dono com o ACERVO COMPLETO (579 lotes) valida o parser e redimensiona a coleta
+O dono exportou a listagem inteira de hastaleiloes.com.br em CSV (579 lotes, IDs 10151–10729
+SEM NENHUM buraco — sequência perfeita). O que o cruzamento com o parser mudou:
+- **Paginação era o gargalo silencioso:** 579 lotes a 30/pág ≈ 20 páginas; o wrapper forçava
+  `HASTA_MAX_PAGES=1` (default) → a coleta veria só ~30. Corrigido: default 20 no wrapper e na
+  config (o motor já para sozinho quando uma página não traz URL nova, então não custa nada
+  quando o acervo encolher).
+- **Teto de lotes:** linha do runner residencial agora passa `HASTA_MAX_LOTES=600` (1ª carga
+  cobre o acervo inteiro, ~40-60 min; rodada com lote novo processa só os novos; sem novo,
+  refresca o acervo completo — atualiza praça/valor).
+- **Tipos reais do acervo:** APARTAMENTO 349 · CASA 194 · TERRENO 28 · SALA 5 · GALPAO 1 ·
+  COMERCIAL 1 · PREDIO 1 → mapa ganhou galpao/predio→comercial e o tipo_hint perdeu acento
+  (GALPÃO→galpao) antes de casar com o mapa.
+- **⚠️ 116 dos 579 lotes têm lance do 2º leilão MAIOR que o do 1º** — magnitude NÃO ordena
+  praça nesta fonte. O parser já lê POR RÓTULO ("Data 1º/2º Leilão"), nunca por max/min; o CSV
+  confirma que qualquer atalho por magnitude estaria errado em 20% do acervo.
+- **Qualidade da fonte é alta:** 0 lotes sem área, 0 sem matrícula (todas numéricas), 0 sem
+  cidade; 558 "Aberto para Lances" + 21 sem status; lances entre R$48 mil e R$7,8 mi (dentro
+  do `plaus`); cidades com hífen/apóstrofo (Ceará-Mirim, Santa Bárbara D'Oeste) passam no
+  regex de cidade. 24 UFs — RJ 128 · SP 104 · GO 51 · MG 51 lideram.
+- **Escala do overlap CEF:** com comitente CAIXA e 579 lotes, a duplicidade HASTA×CEF deixa
+  de ser hipótese e vira certeza estatística — conferir no acervo após a 1ª carga
+  (matrícula + cidade iguais em fontes diferentes).
+**Segue pendente:** DRY-RUN do dono (`git -C ~/tsn-app pull && HASTA_DRYRUN=1
+HASTA_MAX_LOTES=5 node scripts/scraper-hasta.mjs` — MAX_LOTES=5 só p/ amostra rápida) →
+valores distintos por lote = reativar gate (`update coleta_cliente set ativo=true,
+ultima_em=null where fonte='HASTA'`) e rodar o runner. E a URL da matrícula CEF
+(`…/editais/matricula/SP/10306958.pdf`) ainda sem resposta do dono.

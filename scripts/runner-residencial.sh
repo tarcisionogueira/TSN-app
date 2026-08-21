@@ -79,10 +79,12 @@ rodar RJ env RJ_HEADLESS=1 RJ_DRYRUN=0 node scripts/scraper-rj.mjs
 # PECINI — Cloudflare (só saía via Web Unlocker pago): Chromium real residencial, sem BD.
 rodar PECINI env PECINI_HEADLESS=1 PECINI_DRYRUN=0 node scripts/scraper-pecini.mjs
 
-# HASTA (Flávio Costa, agrega TRT-5/TJPE) — SPA que só renderiza o dado no navegador E devolve
-# 403 a IP de datacenter (DRY-RUN de 21/08). Do IP residencial o motor `dom` (Puppeteer) do
-# scraper resolve os dois problemas de uma vez. ~19 páginas por rodada, gate 2x/semana.
-rodar HASTA env HASTA_DRYRUN=0 node scripts/scraper-hasta.mjs
+# HASTA (hastaleiloes.com.br — comitente CAIXA) — SPA que só renderiza no navegador E bloqueia
+# IP de datacenter; do IP residencial o motor `dom` (Puppeteer) resolve os dois de uma vez.
+# Acervo real ≈ 579 lotes em ~20 páginas (CSV do dono, 21/08): MAX_LOTES=600 cobre o acervo
+# inteiro. Rodada com lote NOVO processa só os novos (rápida); sem novo, o runner refresca o
+# acervo completo (~40-60 min — atualiza praça/valor). Gate 2x/semana.
+rodar HASTA env HASTA_DRYRUN=0 HASTA_MAX_LOTES=600 node scripts/scraper-hasta.mjs
 
 # Vlance (verdeamarelo/sudeste/capitalvalor) — API JSON que dá 403 em datacenter, mas do IP
 # RESIDENCIAL o fetch DIRETO funciona e é GRÁTIS. VLANCE_NO_BD=1 = 100% residencial (sem Bright

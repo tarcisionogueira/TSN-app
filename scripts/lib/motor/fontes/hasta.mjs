@@ -19,7 +19,9 @@ export default {
   dom: { esperaMs: 3500 },
   catalogo: '/lotes/imovel',
   paginaParam: 'page',
-  maxPages: 3,
+  // Acervo real ≈ 579 lotes (CSV do dono, 21/08) a 30/pág → ~20 páginas. O motor para
+  // sozinho quando uma página não traz URL nova, então o teto alto não custa nas menores.
+  maxPages: 20,
   tenants: Object.values(TENANTS),
   parse: { extrairUrlsDeLote, idDaUrl, parseDetalhe, montarRow, checarQualidade },
   conhecimento: {
