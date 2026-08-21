@@ -255,11 +255,18 @@ function MainLayout() {
   const [showBonus, setShowBonus] = useState(false);
 
   useEffect(() => {
-    if (!isLoggedIn || role !== 'explorador' || !user?.id) return;
+    // LIMPAR no logout/troca de usuário, não só "não buscar": o `return` puro deixava o
+    // showBonus do usuário anterior vivo no estado — deslogar com o popup pendente derrubava
+    // o shell inteiro com `user.id` de null (o TypeError da home de 20/08 e do /imovel/:id de
+    // 13/08, mesmo erro em builds diferentes), e o próximo login no mesmo mount herdaria um
+    // bônus que não era dele.
+    if (!isLoggedIn || role !== 'explorador' || !user?.id) { setShowBonus(false); return; }
+    let vivo = true;
     supabase.from('perfis').select('bonus_mercado, bonus_exibido').eq('id', user.id).single()
       .then(({ data }) => {
-        if (data?.bonus_mercado > 0 && !data?.bonus_exibido) setShowBonus(data.bonus_mercado);
+        if (vivo && data?.bonus_mercado > 0 && !data?.bonus_exibido) setShowBonus(data.bonus_mercado);
       });
+    return () => { vivo = false; };
   }, [isLoggedIn, role, user?.id]);
 
   // Regularizou (não está mais inadimplente): zera o contador de avisos, para uma
@@ -288,7 +295,9 @@ function MainLayout() {
     <div style={{ minHeight: '100dvh', background: '#f1f5f9', fontFamily: "'Inter', sans-serif", display: 'flex', flexDirection: 'column' }}>
       <Header />
       {isLoggedIn && inadimplenteDias > 0 && <PopupInadimplente dias={inadimplenteDias} />}
-      {showBonus && <PopupBonusAnalises userId={user.id} bonus={showBonus} onFechar={() => setShowBonus(false)} />}
+      {/* `user &&` além do estado: o popup depende de user.id e o showBonus é assíncrono —
+          sem o guard, a corrida logout×estado quebra o shell em QUALQUER rota. */}
+      {showBonus && user && <PopupBonusAnalises userId={user.id} bonus={showBonus} onFechar={() => setShowBonus(false)} />}
       {isLoggedIn && <TourGuia />}
       {user && <ContratoObrigatorio userId={user.id} />}
       {user && <CompletarCadastroModal />}
