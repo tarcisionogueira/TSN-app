@@ -10341,7 +10341,10 @@ a guarda de cada uma. TOP GAPS sem trava estática (rede de segurança só de DA
    `verificar:schema` agora confere RPC-existe (forma #7) e função-tem-migração (forma #7b, base 59);
    achou e corrigiu um bug vivo (`vincular_indicacao_compra` inexistente). Só a deriva de CORPO
    segue com a regra manual (mudou função no banco → escreva a migração no mesmo commit).
-5. Validação de ingestão externa (classe 10) — só invariante do Censo.
+5. ~~Validação de ingestão externa (classe 10)~~ — **FECHADO 21/08** (ver seção no fim): 5
+   invariantes de plausibilidade+âncora em `qa_invariantes()` para o Censo (`cidade_socio`),
+   pegando as 4 formas do #8. A regra vale para a classe: ao ingerir fonte nova, ancore num caso
+   conhecido de cabeça.
 Recomendação registrada para as próximas sessões fecharem por prioridade.
 
 ---
@@ -10474,3 +10477,49 @@ segue com a regra manual.
 verde no estado atual (161 RPCs, 287 funções, 59 na base); REPROVA com RPC inexistente; REPROVA com
 função nova no banco fora da base; exit 2 (NÃO VERIFICADO) se `schema_funcoes` não responde;
 `--atualizar-funcoes` idempotente. `npm run build` e as travas de padrões/sintaxe passam.
+
+---
+
+## 21/08 — GAP #5 FECHADO: validação de ingestão externa (classe 10 · forma #8)
+
+**Pedido do dono:** *"Sigo para o gap #5"* — o último item do catálogo: "validação de ingestão
+externa, só invariante do Censo". Forma #8: **contar não-nulos não é validar**. A ingestão do IBGE
+gravou `ok=true`, 5.570 linhas e `rotulos_ignorados:[]` por 9 dias trazendo 1 de 4 colunas; e deu
+número plausível-e-errado por separador decimal (SP 1.521.202 km²), rótulo ambíguo (SP 265
+domicílios) e colisão de rótulo (nascimentos=100 no Brasil). **Contagem de preenchidos passou nos
+quatro.**
+
+**Cinco invariantes novos em `qa_invariantes()`** (categoria `Ingestao`, limite 0, verdes no acervo
+de 21/08 com 5.570 cidades). Cada um mira uma das quatro formas + o erro sistêmico, calibrado com
+folga contra a distribuição REAL para não gritar em cidade sadia (o defeito #5 na versão "trava boa
+demais"):
+
+| invariante | pega | folga real |
+|---|---|---|
+| `socio_ingestao_parcial` | cidade com 1–3 das 4 colunas (a "1 de 4") | exclui a cidade NOVA (0 de 4, placeholder pós-Censo: Boa Esperança do Norte/MT) e a completa |
+| `socio_moradores_por_domicilio` | pop/domicílios > 8 ("SP 265 dom." = 43.000) | máx real 5,58 |
+| `socio_nascimentos_implausivel` | fora de 0,1%–15% da pop ("=100" = 0,0009%) | real 0,167%–9,79% |
+| `socio_densidade_incoerente` | \|densidade − pop/área\| > 10% (separador decimal na área) | real 0 fora de 5% |
+| `socio_ancora_fora_da_faixa` | SP/RJ/DF fora da faixa sabida de cabeça (erro de escala) | verde hoje |
+
+**Por que em `qa_invariantes` e não em função nova:** é o net canônico — a ritualística
+(`select * from qa_invariantes() where status<>'ok'`), o `/api/health-check`, o `monitor-fontes-cron`
+e o painel admin (`admin_qa_invariantes`) já o consomem, então os cinco aparecem em todos sem tocar
+em consumidor nenhum. Migração via **cirurgia de string sobre o `prosrc` VIVO** (mesmo idioma de
+`selo_matricula_so_com_arquivo.sql`): idempotente, não retranscreve o corpo de 300 linhas, vale no
+banco de produção e no reconstruído das migrações — e satisfaz a trava do gap #4 (a migração tem o
+`create function`).
+
+**Provado nos dois sentidos:** verde (0) nos cinco no acervo real; e sobre um overlay corrompido
+(sem tocar na tabela) cada um dos cinco vai a 1 na sua forma-alvo — mpd/nascimentos/densidade/parcial/âncora.
+
+**O que fica de regra (não de trava), por honestidade:** a forma #8 é semântica — nenhuma trava
+cobre TODA fonte externa. `marketing_metricas_dia` (admin-facing) e futuras fontes seguem a REGRA:
+**ao ingerir fonte nova, ancore num caso que você conhece de cabeça** e valide a coerência interna,
+não só o preenchimento. O Censo agora é o exemplar aplicado.
+
+### Fim da varredura dos gaps do catálogo (#1–#5)
+Todos os cinco top-gaps sem trava do catálogo de erros (auditoria de 20/08) estão fechados:
+#1 user.id cru no suporte · #2 cobrar cota em fluxo que falhou · #3 fetch().json() sem .ok (2 linhas)
+· #4 função no banco sem migração · #5 validação de ingestão externa. Cada um com trava (estática ou
+de dado) calibrada para 0 falso-positivo hoje e provada que REPROVA a regressão.
