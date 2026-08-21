@@ -22,6 +22,7 @@ const lbl = { fontSize: 12, fontWeight: 700, color: '#475569', display: 'block',
 // regra que vai divergir. Ver o comentário do botão de cadastro sobre por que o gate existe.
 // Regra de senha: uma definicao so para o front (src/lib/senha.js). Ver o cabecalho de la.
 import { SENHA_FORTE, requisitosSenha } from '../lib/senha.js';
+import { traduzErroAuth } from '../lib/erroAuth.js';
 import { validarNome, normalizarNome } from '../lib/nome.js';
 import { validarTelefone } from '../lib/telefone.js';
 
@@ -250,23 +251,6 @@ export default function Login() {
     }
   };
 
-  // Traduz mensagens de erro do Supabase Auth para português
-  const traduzErroAuth = (msg = '') => {
-    const m = String(msg);
-    if (/invalid login credentials/i.test(m)) return 'Email ou senha incorretos.';
-    if (/email not confirmed/i.test(m)) return 'Seu e-mail ainda não foi confirmado. Verifique sua caixa de entrada e o spam, ou reenvie a confirmação abaixo.';
-    if (/already registered|already been registered/i.test(m)) return 'Este e-mail já está cadastrado. Faça login ou recupere a senha.';
-    if (/password should be at least/i.test(m)) return 'A senha é muito curta. Use ao menos 8 caracteres.';
-    // Verificação de senha VAZADA do Supabase — não é regra de complexidade, então a pessoa vê
-    // os cinco requisitos com ✓ e mesmo assim é recusada. Sem esta linha a mensagem caía em
-    // inglês na tela (4 ocorrências, 2 pessoas nos últimos 30 dias) e virava beco sem saída.
-    if (/known to be weak|pwned|leaked password/i.test(m)) return 'Esta senha apareceu em vazamentos públicos e não pode ser usada. Escolha outra — ela pode cumprir todos os requisitos acima e ainda assim ser conhecida.';
-    if (/email rate limit|over_email_send_rate/i.test(m)) return 'Muitas tentativas de envio de e-mail. Aguarde alguns minutos e tente novamente.';
-    if (/for security purposes|rate limit|too many requests/i.test(m)) return 'Muitas tentativas em pouco tempo. Aguarde um instante e tente de novo.';
-    if (/invalid email|unable to validate email|email address.*invalid/i.test(m)) return 'E-mail inválido. Confira o endereço digitado.';
-    if (/new password should be different/i.test(m)) return 'A nova senha deve ser diferente da anterior.';
-    return m || 'Ocorreu um erro. Tente novamente.';
-  };
 
   const reenviarConfirmacao = async () => {
     if (!form.email) { setErro('Informe seu e-mail no campo acima para reenviar a confirmação.'); return; }

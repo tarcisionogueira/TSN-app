@@ -77,7 +77,19 @@ export default function Promo() {
 
   const ehPlano = !link.produto_tipo || link.produto_tipo === 'plano';
   const plano = ehPlano ? PLANOS[link.produto] : null;
-  if (ehPlano && !plano) return null;
+  // 21/08: `return null` = TELA BRANCA quando o link é de um plano fora do estático (typo do
+  // admin, ou plano à vista `assessorado_vista`/`clube_vista` que não vive em PLANOS). Visitante
+  // vindo de anúncio/consultor caía em nada. Mostra o mesmo aviso amigável de "oferta não achada".
+  if (ehPlano && !plano) return (
+    <div style={{ maxWidth: 520, margin: '80px auto', textAlign: 'center', padding: '0 20px' }}>
+      <AlertCircle size={48} color="#dc2626" style={{ margin: '0 auto 16px' }} />
+      <h2 style={{ color: '#111111', marginBottom: 8 }}>Oferta não encontrada</h2>
+      <p style={{ color: '#64748b', marginBottom: 24 }}>Este link aponta para um plano que não está mais disponível.</p>
+      <button onClick={() => nav('/planos')} style={{ padding: '10px 24px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, cursor: 'pointer' }}>
+        Ver todos os planos
+      </button>
+    </div>
+  );
   const cor = plano?.cor || '#0D63DB';
 
   // Desconto só vale se ainda estiver dentro da validade do desconto (pode ser
@@ -212,7 +224,7 @@ export default function Promo() {
                   <input value={contato.nome} onChange={e => setContato(c => ({ ...c, nome: e.target.value }))} placeholder="Seu nome" style={{ width: '100%', padding: '13px 16px', border: '1px solid #e2e8f0', borderRadius: 12, fontSize: 15, color: '#111', boxSizing: 'border-box' }} />
                   <input value={contato.whatsapp} onChange={e => setContato(c => ({ ...c, whatsapp: e.target.value }))} placeholder="WhatsApp (com DDD)" inputMode="tel" style={{ width: '100%', padding: '13px 16px', border: '1px solid #e2e8f0', borderRadius: 12, fontSize: 15, color: '#111', boxSizing: 'border-box' }} />
                   <input value={contato.email} onChange={e => setContato(c => ({ ...c, email: e.target.value }))} placeholder="E-mail" inputMode="email" style={{ width: '100%', padding: '13px 16px', border: '1px solid #e2e8f0', borderRadius: 12, fontSize: 15, color: '#111', boxSizing: 'border-box' }} />
-                  <input value={contato.senha} onChange={e => setContato(c => ({ ...c, senha: e.target.value }))} placeholder="Crie uma senha (mín. 6)" type="password" style={{ width: '100%', padding: '13px 16px', border: '1px solid #e2e8f0', borderRadius: 12, fontSize: 15, color: '#111', boxSizing: 'border-box' }} />
+                  <input value={contato.senha} onChange={e => setContato(c => ({ ...c, senha: e.target.value }))} placeholder="Senha: mín. 8, com maiúscula, minúscula, número e símbolo" type="password" style={{ width: '100%', padding: '13px 16px', border: '1px solid #e2e8f0', borderRadius: 12, fontSize: 15, color: '#111', boxSizing: 'border-box' }} />
                 </div>
               </>
             )}
@@ -272,7 +284,7 @@ export default function Promo() {
           {exigeGate ? 'Responda algumas perguntas rápidas para liberar o seu acesso.' : 'Garanta o seu acesso agora.'}
         </p>
         <div style={{ background: 'white', borderRadius: 20, padding: '28px 30px', display: 'inline-block', minWidth: 300, boxShadow: '0 24px 60px rgba(0,0,0,0.4)' }}>
-          <button onClick={() => { if (perguntas.length) { setSdrAberto(true); setPasso(0); setErroSdr(''); } else nav('/login'); }}
+          <button onClick={() => { if (perguntas.length) { setSdrAberto(true); setPasso(0); setErroSdr(''); } else nav(`/login?promo=${link.codigo}`); }}
             style={{ width: '100%', padding: '15px 28px', background: cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
             {exigeGate ? 'Responder e liberar acesso' : 'Quero acessar'} <ArrowRight size={18} />
           </button>

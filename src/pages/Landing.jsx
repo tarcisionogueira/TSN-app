@@ -98,7 +98,7 @@ export default function Landing() {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ nome: dv.nome, email: dv.email, telefone: dv.tel, mensagem: dv.msg, origem: 'duvida_landing' }),
       });
-      const d = await r.json();
+      const d = await r.json().catch(() => ({})); // 500 com corpo HTML não vira "Unexpected token <"
       if (!r.ok) throw new Error(d.error || 'Erro ao enviar');
       setDv(s => ({ ...s, enviando: false, ok: true }));
     } catch (e) { setDv(s => ({ ...s, enviando: false, erro: e.message })); }

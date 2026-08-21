@@ -331,7 +331,7 @@ function CapturaLanding({ id }) {
           <div>
             <label style={labelStyle}>Senha *</label>
             <div style={{ position: 'relative' }}>
-              <input type={verSenha ? 'text' : 'password'} value={form.senha} onChange={e => setForm(f => ({ ...f, senha: e.target.value }))} placeholder="Mínimo 6 caracteres" required style={{ ...inputStyle, paddingRight: 48 }} />
+              <input type={verSenha ? 'text' : 'password'} value={form.senha} onChange={e => setForm(f => ({ ...f, senha: e.target.value }))} placeholder="Mín. 8: maiúscula, minúscula, número e símbolo" required style={{ ...inputStyle, paddingRight: 48 }} />
               <button type="button" onClick={() => setVerSenha(v => !v)}
                 style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: 13 }}>
                 {verSenha ? 'Ocultar' : 'Ver'}

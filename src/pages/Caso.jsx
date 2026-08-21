@@ -447,7 +447,7 @@ export default function Caso() {
   const location = useLocation();
   const nav = useNavigate();
   const isMobile = useIsMobile();
-  const { user, role, nome, impersonate, effectiveUserId } = useAuth();
+  const { user, role, roleReal, nome, impersonate, effectiveUserId } = useAuth();
 
   const imovelInit = location.state?.imovel;
 
@@ -1048,7 +1048,14 @@ export default function Caso() {
         chamado_id: chamadoId,
         autor_id: user.id,
         autor_nome: nome || 'Usuário',
-        autor_tipo: role === 'cliente' ? 'cliente' : 'atendente',
+        // 21/08: era `role === 'cliente'` — condição MORTA (nenhum papel se chama 'cliente':
+        // são explorador/top2/.../analista/advogado/admin), então 100% das mensagens gravavam
+        // 'atendente', até a do próprio cliente. Isso escondia a fala do cliente da fila de
+        // Atendimento (incoming exige 'cliente') e envenenava o SLA (`tempo_processo`/health-check
+        // contava a fala do cliente como "resposta humana"). Decide pelo papel REAL de quem digita
+        // (`roleReal`, não o efetivo): cliente de verdade → 'cliente'; staff, mesmo em suporte,
+        // → 'atendente'. É o que o SLA precisa.
+        autor_tipo: ['analista', 'advogado', 'admin', 'consultor'].includes(roleReal) ? 'atendente' : 'cliente',
         conteudo: chatInput.trim(),
         anexos: [],
         remetente_role: role,

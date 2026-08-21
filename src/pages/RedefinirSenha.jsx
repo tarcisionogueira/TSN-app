@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { senhaForte } from '../lib/senha.js';
+import { traduzErroAuth } from '../lib/erroAuth.js';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../utils/supabase';
 import { Briefcase, Eye, EyeOff, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
@@ -51,10 +52,9 @@ export default function RedefinirSenha() {
       // Redireciona para o login automaticamente após redefinir a senha
       setTimeout(() => nav('/login'), 2500);
     } catch (err) {
-      const m = err.message || '';
-      setErro(/new password should be different/i.test(m)
-        ? 'A nova senha deve ser diferente da anterior.'
-        : (m || 'Erro ao redefinir senha.'));
+      // 21/08: só "new password should be different" era traduzido; senha-vazada e rate-limit
+      // saíam CRUS em inglês. Reusa o tradutor compartilhado do Login (fonte única).
+      setErro(traduzErroAuth(err.message) || 'Erro ao redefinir senha.');
     }
     setLoading(false);
   };

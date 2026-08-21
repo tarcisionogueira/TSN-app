@@ -413,16 +413,23 @@ async function coletarLJUD(paginas, deadline) {
   const melhor = probes.slice().sort((a, b) => (b.itens || 0) - (a.itens || 0))[0];
   const vencedora = variantes.find(v => v.nome === melhor?.variante) || variantes[0];
   const seen = new Set();
+  // `completo`: a paginação chegou ao FIM natural (página vazia ou totalPages), sem parar por
+  // teto de cota / erro de rede / tempo. O sweep destrutivo lá embaixo EXIGE isto — sem ele, uma
+  // coleta truncada por orçamento vira "gravouTudo" e aposenta lote vivo (formas #4 e #5).
+  let completo = true;
   if (melhor && melhor.itens > 0) {
     const totalReg = melhor.total || (paginas * 48);
     const totalPages = Math.min(paginas, Math.ceil(totalReg / 48) || paginas);
     for (let p = 1; p <= totalPages; p++) {
-      if (Date.now() > deadline) break;
+      if (Date.now() > deadline) { completo = false; break; } // tempo esgotado: coleta PARCIAL
       const url = `${API}?pg=${p}&qtd_por_pagina=48&${vencedora.qs}`;
       const bd = await fetchViaBrightData(url, { method: 'POST', headers: hdrs, proposito: 'ljud' });
-      let data = null; try { data = JSON.parse(bd ? await bd.text() : ''); } catch { /* */ }
+      // `null` = teto de cota do Bright Data OU erro de rede — NÃO é "fim das páginas". Tratá-lo
+      // como fim faria a coleta parcial parecer completa. Marca PARCIAL e para aqui.
+      if (!bd) { completo = false; break; }
+      let data = null; try { data = JSON.parse(await bd.text()); } catch { /* */ }
       const items = ljudItens(data);
-      if (!items.length) break;
+      if (!items.length) break; // fim genuíno da paginação (completo permanece true)
       for (const it of items) {
         // só imóveis (id_categoria 3 ou imovel_id preenchido) — a API mistura veículos/jóias/etc.
         const ehImovel = Number(it.id_categoria) === 3 || it.imovel_id != null || /im[óo]ve/i.test(it.nm_categoria || '');
@@ -437,7 +444,7 @@ async function coletarLJUD(paginas, deadline) {
       }
     }
   }
-  return { rows: out, via, diag: { probes, vencedora: vencedora.nome, coletados: out.length } };
+  return { rows: out, via, completo, diag: { probes, vencedora: vencedora.nome, coletados: out.length, completo } };
 }
 
 // ─── RECON: descobre o endpoint de DETALHE da LJUD que traz as DATAS de praça ──
@@ -569,10 +576,18 @@ export default async function handler(req, res) {
     // das linhas não gravou, os lotes que ficaram de fora aparecem como "não vistos nesta
     // rodada" e seriam aposentados por um erro nosso, não por terem saído do site.
     const gravouTudo = up === r.rows.length;
+    // Coleta TRUNCADA (teto de cota / rede / tempo) não pode disparar o sweep: os lotes que
+    // ficaram de fora da rodada parcial apareceriam como "não vistos" e seriam aposentados por
+    // um freio de custo, não por terem saído do site. `completo !== false` mantém as fontes que
+    // não sinalizam (todas menos LJUD hoje) no comportamento atual.
+    const coletaCompleta = r.completo !== false;
     if (!gravouTudo && r.rows.length) {
       console.error(`[leil] ${f.toUpperCase()}: sweep PULADO — gravou ${up} de ${r.rows.length}. Desativar aqui aposentaria lote por falha nossa.`);
     }
-    if (up >= 10 && gravouTudo) {
+    if (!coletaCompleta) {
+      console.error(`[leil] ${f.toUpperCase()}: sweep PULADO — coleta PARCIAL (teto de cota/rede/tempo). Desativar aqui aposentaria lote vivo por freio de custo.`);
+    }
+    if (up >= 10 && gravouTudo && coletaCompleta) {
       await sb(`imoveis_leilao?fonte=eq.${f.toUpperCase()}&ativo=eq.true&atualizado_em=lt.${runStart}`, {
         method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ ativo: false }),
       }).catch(() => {});
