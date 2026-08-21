@@ -10722,3 +10722,18 @@ Invariante `fonte_data_leilao_uniforme` = **0 (ok)**. Distribuição real de dat
 **25/08 (269 — o pregão Santander que o dono viu na fonte)** · 24/08 (53) · 21/08 (40) e mais
 uma dúzia de datas. O alerta deliberado de 21/08-madrugada cumpriu o papel e morreu sozinho —
 nada a disparar manualmente.
+
+# ✅ 21/08 13:40 UTC — CHECKLIST DE PRODUÇÃO EXECUTADO (autorizado pelo dono: "Pode subir")
+1. Merge fast-forward `d699f3d → 0e80e0a` (16 commits) · deploy Vercel **READY**.
+2. Migração de MARKETING aplicada — `qa_invariantes()` com 5 chaves `mkt_*`, todas **ok**.
+3. Operação das anomalias — **17 resolvidas** com nota de revisão; abertas só ids 51/52
+   (`pagamento_contradiz_documento` = feature ROI parcelado, backlog).
+4. Os 2 `erros_cliente` do null.id (rotas `/` e `/imovel/:id`) marcados **resolvidos** (conserto no ar).
+5. Migração `preservar_area_e_avaliacao_enriquecidas` aplicada — gatilho confirmado em
+   `pg_trigger`, ordenando antes de sanitiza/zz/zzzz.
+6. Coleta SUPORTE disparada — **SUEDPETER: 10 imóveis reais gravados** (filtro de teste barrou os
+   "LEILÃO TESTE"); SUPORTE total 49, saúde ok.
+7. `scraper-dom` com gravar=1 — **ALFA: 11 gravados** (9 c/ área) · **NORDESTE: 20 gravados**
+   (19 c/ cidade); saúde ok nas duas. **Duas fontes NOVAS no acervo pelo motor `dom`.**
+8. (Dono) Runner residencial de casa: próximo disparo coleta HASTA + GESTAO/SOLEON.
+**Acervo ganhou 41 imóveis novos (ALFA 11 + NORDESTE 20 + SUEDPETER 10) nesta subida.**
