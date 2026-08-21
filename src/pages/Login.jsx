@@ -92,14 +92,27 @@ export default function Login() {
   });
   const [erro, setErro] = useState('');
   const [emailNaoConfirmado, setEmailNaoConfirmado] = useState(false);
+  // "Email ou senha incorretos" é o 2º maior ponto de perda do funil (8 pessoas, 3 não voltaram):
+  // a pessoa esqueceu a senha e o "Esqueci minha senha" fica pequeno no canto, desligado do erro.
+  // Aqui, quando o erro é ESSE, oferecemos o caminho de recuperação em destaque, na hora.
+  const [credencialInvalida, setCredencialInvalida] = useState(false);
   const [reenviando, setReenviando] = useState(false);
   const [reenviado, setReenviado] = useState(false);
+  // Cooldown do reenvio: o Supabase limita ("only request this after N seconds") e a mensagem
+  // crua virava beco. Um contador desativa o botão e mostra QUANDO poderá reenviar.
+  const [cooldownReenvio, setCooldownReenvio] = useState(0);
   const [showSenha, setShowSenha] = useState(false);
   const [cpfCheck, setCpfCheck] = useState(null); // null | { temConta, temAcesso, role }
   const [cpfChecking, setCpfChecking] = useState(false);
   const [emailDuplicado, setEmailDuplicado] = useState(false);
 
   const [aceite, setAceite] = useState(false);
+  // Conta regressiva do cooldown de reenvio (1 tick/s até zerar).
+  useEffect(() => {
+    if (cooldownReenvio <= 0) return;
+    const t = setTimeout(() => setCooldownReenvio(s => s - 1), 1000);
+    return () => clearTimeout(t);
+  }, [cooldownReenvio]);
 
   const [form, setForm] = useState({
     email: '', senha: '', nome: '', cpf: '', telefone: '', endereco: '',
@@ -257,6 +270,7 @@ export default function Login() {
 
   const reenviarConfirmacao = async () => {
     if (!form.email) { setErro('Informe seu e-mail no campo acima para reenviar a confirmação.'); return; }
+    if (cooldownReenvio > 0) return;
     setReenviando(true);
     try {
       const { error } = await supabase.auth.resend({
@@ -266,8 +280,12 @@ export default function Login() {
       });
       if (error) throw error;
       setReenviado(true); setErro('');
+      setCooldownReenvio(30); // evita o "only request this after N seconds" no clique seguinte
     } catch (err) {
       registrarEvento('api_erro', { alvo: 'reenvio_confirmacao_falha', detalhe: String(err?.message || '').slice(0, 150) });
+      // Se o próprio Supabase disse "after N seconds", respeita o N no contador.
+      const seg = Number((String(err?.message || '').match(/after (\d+) seconds?/i) || [])[1]);
+      if (seg > 0) setCooldownReenvio(seg);
       setErro(traduzErroAuth(err.message));
     }
     setReenviando(false);
@@ -275,7 +293,7 @@ export default function Login() {
 
   const handleLogin = async (e) => {
     e.preventDefault();
-    setErro(''); setEmailNaoConfirmado(false); setReenviado(false); setLoading(true);
+    setErro(''); setEmailNaoConfirmado(false); setCredencialInvalida(false); setReenviado(false); setLoading(true);
     try {
       const { data: signInData, error } = await supabase.auth.signInWithPassword({ email: form.email, password: form.senha });
       if (error) throw error;
@@ -308,6 +326,7 @@ export default function Login() {
       // Falha de LOGIN agora deixa rastro (antes: zero registro — gap da auditoria E1.6).
       registrarEvento('api_erro', { alvo: 'login_falha', detalhe: String(err?.message || '').slice(0, 150) });
       if (/email not confirmed/i.test(err.message || '')) setEmailNaoConfirmado(true);
+      if (/invalid login credentials/i.test(err.message || '')) setCredencialInvalida(true);
       setErro(traduzErroAuth(err.message));
     }
     setLoading(false);
@@ -421,14 +440,25 @@ export default function Login() {
         {modo === 'sucesso' && (
           <div style={{ textAlign: 'center', padding: '20px 0' }}>
             <CheckCircle2 size={48} color="#10b981" style={{ margin: '0 auto 16px' }} />
-            <h2 style={{ margin: '0 0 8px', fontWeight: 900, color: '#111111' }}>Cadastro realizado!</h2>
-            <p style={{ color: '#64748b', fontSize: 14, lineHeight: 1.6, marginBottom: 24 }}>
-              Verifique seu email para confirmar o cadastro e depois faça login.
-              {planoEscolhido && <><br /><strong style={{ color: '#084BA6' }}>Após o login você será direcionado para o pagamento do Plano {pNome(planoEscolhido)}.</strong></>}
+            <h2 style={{ margin: '0 0 8px', fontWeight: 900, color: '#111111' }}>Falta um passo: confirme seu e-mail</h2>
+            {/* O maior ponto de perda do funil (16 pessoas) é "Email not confirmed" no login: a
+                pessoa se cadastra e tenta ENTRAR antes de clicar no link do e-mail. Por isso a tela
+                de sucesso agora PEDE a confirmação em destaque (com o endereço e o aviso de spam) e
+                oferece o reenvio aqui — em vez de convidar para o login antes da hora. */}
+            <p style={{ color: '#64748b', fontSize: 14, lineHeight: 1.6, marginBottom: 16 }}>
+              Enviamos um link de confirmação para {form.email ? <strong style={{ color: '#111' }}>{form.email}</strong> : 'seu e-mail'}.
+              Clique no link para ativar sua conta — <strong>o login só funciona depois disso</strong>. Não chegou? Confira o <strong>spam</strong> ou reenvie abaixo.
+              {planoEscolhido && <><br /><strong style={{ color: '#084BA6' }}>Depois de ativar e entrar, você vai direto para o pagamento do Plano {pNome(planoEscolhido)}.</strong></>}
             </p>
+            {reenviado
+              ? <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#15803d', marginBottom: 12 }}>✅ Confirmação reenviada. Verifique a caixa de entrada e o spam.</div>
+              : <button type="button" onClick={reenviarConfirmacao} disabled={reenviando || cooldownReenvio > 0}
+                  style={{ width: '100%', padding: '10px', background: '#fff7ed', color: '#9a3412', border: '1px solid #fed7aa', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: (reenviando || cooldownReenvio > 0) ? 'default' : 'pointer', opacity: cooldownReenvio > 0 ? 0.7 : 1, marginBottom: 12 }}>
+                  {reenviando ? 'Reenviando…' : cooldownReenvio > 0 ? `Aguarde ${cooldownReenvio}s para reenviar` : 'Reenviar e-mail de confirmação'}
+                </button>}
             <button onClick={() => setModo('login')}
-              style={{ width: '100%', padding: '12px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
-              Ir para Login
+              style={{ width: '100%', padding: '12px', background: 'white', color: '#0D63DB', border: '1px solid #bfdbfe', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
+              Já confirmei — ir para o login
             </button>
           </div>
         )}
@@ -462,10 +492,20 @@ export default function Login() {
                 </button>
               </div>
               {erro && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#dc2626' }}>{erro}</div>}
+              {/* Senha errada → oferece a recuperação AQUI, no momento do erro (o link do topo é
+                  discreto e a pessoa que esqueceu a senha não o associa ao "incorretos"). */}
+              {credencialInvalida && (
+                <button type="button" onClick={() => { setEmailRecuperar(form.email); setModo('recuperar'); setErro(''); setCredencialInvalida(false); }}
+                  style={{ width: '100%', padding: '10px', background: '#eff6ff', color: '#0D63DB', border: '1px solid #bfdbfe', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+                  Esqueceu a senha? Redefinir agora
+                </button>
+              )}
               {emailNaoConfirmado && !reenviado && (
-                <button type="button" onClick={reenviarConfirmacao} disabled={reenviando}
-                  style={{ width: '100%', padding: '10px', background: '#fff7ed', color: '#9a3412', border: '1px solid #fed7aa', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
-                  {reenviando ? 'Reenviando…' : 'Reenviar e-mail de confirmação'}
+                <button type="button" onClick={reenviarConfirmacao} disabled={reenviando || cooldownReenvio > 0}
+                  style={{ width: '100%', padding: '10px', background: '#fff7ed', color: '#9a3412', border: '1px solid #fed7aa', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: (reenviando || cooldownReenvio > 0) ? 'default' : 'pointer', opacity: cooldownReenvio > 0 ? 0.7 : 1 }}>
+                  {reenviando ? 'Reenviando…'
+                    : cooldownReenvio > 0 ? `Aguarde ${cooldownReenvio}s para reenviar`
+                    : form.email ? `Reenviar confirmação para ${form.email}` : 'Reenviar e-mail de confirmação'}
                 </button>
               )}
               {reenviado && (
