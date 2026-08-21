@@ -10907,3 +10907,20 @@ Para o dono TESTAR: os 2 leads reais de alavancagem (as aplicações de teste de
 aguardando o Receber. Fases restantes: F3 (?ref + atribuição manual no Admin) · F4
 (Atendimento com escopo) · F5 (NPS: cron + rota token) · F6 (Admin visão total + CSV +
 invariantes).
+
+## ✅ 21/08 (noite 8) — HASTA: 1ª carga residencial COMPLETA (579/579) + dimensão real do overlap CEF
+Runner de casa concluiu 22:33 UTC: **579 lotes gravados** (fonte_saude ok, gate concluído).
+Qualidade da carga: **100% UF · 100% valor · 100% área · 100% data · 99% matrícula** —
+208 cidades, 24 UFs, lances R$48 mil–7,76 mi (bate 1:1 com o CSV do dono). O retry do
+fetch-dom segurou a paginação inteira (0 lotes perdidos por timeout desta vez).
+**Overlap HASTA×CEF medido pela chave EXATA** (o "IMOVEL <id>" da descrição HASTA = dígitos
+do fonte_id CEF): 554/579 têm o id da Caixa; **550 existem no acervo CEF, 539 ATIVOS —
+93% de duplicidade**. E é o MESMO leilão: os 539 gêmeos CEF são 'extrajudicial' com
+**535 na mesma data** — porém **0 com o mesmo valor mínimo** (o portal CEF e o leiloeiro
+divergem no lance exibido; o HASTA lê por praça rotulada e tende a ser o mais fresco).
+⚠️ Cliente veria o MESMO imóvel 2× com preços diferentes. NÃO agi — decisão de produto do
+dono. Opções: (a) esconder o gêmeo CEF enquanto o leilão HASTA está vivo (dado por praça é
+mais rico; reativa após a praça); (b) esconder o HASTA e ficar com o portal; (c) manter os
+dois com selo "mesmo imóvel". Recomendação: (a).
+Obs: checagem por matrícula+cidade deu 0 — FALSO negativo (CEF tem 0 matrículas
+preenchidas; a forma #8 quase passou de novo). A chave que funciona é o id da Caixa.
