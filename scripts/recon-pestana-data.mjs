@@ -64,11 +64,15 @@ function camposDeData(obj, prefixo = '') {
       if (!Array.isArray(lotes)) continue;
       const hit = lotes.find(x => JSON.stringify(x).includes(ALVO));
       if (hit) {
-        console.log(`ACHADO no leilão #${l.id} "${l.nome}"`);
-        console.log('  CHAVES do lote:', Object.keys(hit).join(', '));
-        console.log('  CAMPOS DE DATA do LOTE:', JSON.stringify(camposDeData(hit), null, 2));
-        console.log('  CAMPOS DE DATA do LEILÃO dono:', JSON.stringify(camposDeData(l), null, 2));
-        console.log('  leilao.data (o que usamos hoje):', l.data, '| leilao.nome:', l.nome);
+        console.log(`ACHADO na LISTA do leilão #${l.id} "${l.nome}" (data ${l.data})`);
+        console.log('  lote.leilao (o leilão REAL a que o lote pertence):', hit.leilao);
+        const real = leiloes.find(x => Number(x.id) === Number(hit.leilao));
+        if (real) {
+          console.log(`  >>> LEILÃO REAL #${real.id} "${real.nome}" · data=${real.data} · leiloeiro=${real.leiloeiro || ''}`);
+        } else {
+          console.log('  >>> leilão real NÃO está na lista /api/v2/leilao (id', hit.leilao, ')');
+        }
+        console.log('  HOJE usamos a data da LISTA (', l.data, ') via mapLotePestana(lote, leilao-da-iteração).');
         break;
       }
     }
