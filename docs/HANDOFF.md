@@ -10737,3 +10737,15 @@ nada a disparar manualmente.
    (19 c/ cidade); saúde ok nas duas. **Duas fontes NOVAS no acervo pelo motor `dom`.**
 8. (Dono) Runner residencial de casa: próximo disparo coleta HASTA + GESTAO/SOLEON.
 **Acervo ganhou 41 imóveis novos (ALFA 11 + NORDESTE 20 + SUEDPETER 10) nesta subida.**
+
+## ⚠️ 21/08 ~14:00 UTC — HASTA: 1ª coleta residencial GRAVOU LIXO; removida e gate travado
+O runner de casa coletou 17/20 (3 × HTTP 502 do site), gate carimbou com prova — mas a
+QUALIDADE reprovou: **17/17 com a MESMA cidade ("Cabrobó Ponto Comercial…"), MESMO valor
+(R$ 3.780), sem data/avaliação** = o parser colheu o bloco COMPARTILHADO da página (a forma
+"resposta que parece dado"), não o lote. Ou o detalhe renderizado por URL direta não hidrata o
+dado do lote, ou o parser pega a mobília antes do conteúdo. **Ações imediatas:** os 17
+registros DELETADOS do acervo (eram visíveis ao cliente) e `coleta_cliente.HASTA.ativo=false`
+(não recoleta até validar). **Diagnóstico em curso:** o dono vai rodar
+`scripts/recon-hasta-console.js` no navegador de casa — o dump por lote decide entre as duas
+hipóteses e o espião [API] revela o endpoint real da SPA ao navegar. Só reativar o gate após
+DRY-RUN com valores DISTINTOS por lote.
