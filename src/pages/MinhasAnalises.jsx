@@ -30,7 +30,7 @@ const CHIP = {
 
 export default function MinhasAnalises() {
   const { analises, documentais, laudos, emAndamento, remover } = useAnalises();
-  const { effectiveUserId } = useAuth();
+  const { effectiveUserId, impersonate } = useAuth();
   const nav = useNavigate();
   const isMobile = useIsMobile();
 
@@ -135,6 +135,9 @@ export default function MinhasAnalises() {
   const [sinalizando, setSinalizando] = React.useState(null);
   const sinalizarArremate = async (e, a) => {
     e.stopPropagation();
+    // Modo suporte é só visualização: /api/sinalizar-arremate usa o token REAL (admin) e
+    // registraria o arremate na conta do admin, não do cliente. Bloqueia.
+    if (impersonate) { window.alert('No modo suporte a conta é só para visualização. Saia do suporte para registrar em seu próprio nome.'); return; }
     if (sinalizados[a.imovelId] || sinalizando) return;
     const raw = window.prompt(`Confirme o arremate de "${a.titulo || 'este imóvel'}".\n\nPor quanto você arrematou? (somente números inteiros em reais, ex: 250000)`);
     if (raw == null) return; // cancelou

@@ -137,7 +137,7 @@ export default function Analise() {
   const location = useLocation();
   const nav = useNavigate();
   const isMobile = useIsMobile();
-  const { user, role, nome, planoLegado, effectiveUserId } = useAuth();
+  const { user, role, nome, planoLegado, effectiveUserId, impersonate } = useAuth();
   // MODO SUPORTE (20/08): a cota tem de ser a de QUEM se está vendo, não a do admin logado.
   // `minhas_cotas` aceita p_user_id e libera admin/analista a ler de terceiros — mas a tela
   // passava `user.id` (o admin). Resultado ao ver a conta do Marcelo: contador "0/0" (cota do
@@ -811,8 +811,9 @@ export default function Analise() {
       } else if (temDoc) {
         await extrairDoc();
       }
-      // 2) Avisa a equipe para avaliar integrar este leiloeiro (uma única vez)
-      if (user && !externoNotificado) {
+      // 2) Avisa a equipe para avaliar integrar este leiloeiro (uma única vez).
+      // No modo suporte NÃO cria a solicitação: gravaria em nome do admin, não do cliente.
+      if (user && !externoNotificado && !impersonate) {
         const dominio = dominioDoLink(link);
         const { error } = await supabase.from('solicitacoes').insert({
           user_id: user.id,
@@ -1292,6 +1293,9 @@ export default function Analise() {
   };
 
   const solicitarAnalista = async () => {
+    // MODO SUPORTE é só visualização: um insert direto grava com o id do ADMIN (ou falha na RLS),
+    // nunca em nome do cliente visto. Bloqueia para não criar solicitação atribuída errado.
+    if (impersonate) { showMsg('No modo suporte a conta é só para visualização — saia do suporte para agir como você mesmo.', 'error'); return; }
     if (!user || solicitando || solicitado) return;
     setSolicitando(true);
     const { error } = await supabase.from('solicitacoes').insert({
