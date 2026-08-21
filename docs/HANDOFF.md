@@ -10551,3 +10551,47 @@ em `consumir_*_por` (enforcement), então nunca divergem.
 **Verificado:** Marcelo agora deriva usado=2 (8 de 10). Varredura nos 6 pagantes: 2 corrigidos p/
 cima (drift on-behalf), 0 acima do limite, nenhum bloqueio indevido (`greatest` só sobe).
 Migração: `supabase/migrations/cotas_derivam_do_real.sql`.
+
+---
+
+# 📌 FECHAMENTO DA SESSÃO — 21/08/2026 (estado + o que falta)
+
+Branch de trabalho: `claude/handoff-bidpro-brasil-checks-n0f1cv` (15 commits à frente de `main`).
+O dono pediu para **NÃO ir para produção até sinalizar** — vale para o DEPLOY do app (Vercel).
+
+## ✅ JÁ NO AR (aplicado direto no banco — Supabase não tem staging)
+Estas mudanças são de FUNÇÃO/DADO no banco e já valem para todos os usuários AGORA:
+- **Contagem de relatórios deriva do real** (`cotas_derivam_do_real.sql`): `minhas_cotas` e
+  `consumir_*_por` usam `greatest(contador, real)`. O Marcelo já vê "8 de 10". Cobre todas as telas.
+- **qa_invariantes** ganhou: os 5 do Censo (gap #5) e `fonte_data_leilao_uniforme` (PESTANA).
+  `fonte_data_leilao_uniforme` está em **ALERTA** de propósito até a PESTANA ser recoletada.
+- **SUEDPETER** candidato em `leiloeiro_conhecimento`.
+
+## ⏳ NA BRANCH, ESPERANDO MERGE (código de app/api/scraper — só valem após deploy)
+- Marcelo: tela honesta de parecer-vazio + auto-heal (Analise/MinhasAnalises).
+- Funil de login: recuperação contextual, reenvio com e-mail+cooldown, tela de sucesso reescrita.
+- Varredura multi-agente: **Caso.jsx autor_tipo** (mensagem do cliente ia como 'atendente' — corrompia SLA),
+  **LJUD sweep** (coleta truncada por cota não desativa mais lote vivo), placeholders de senha, `RedefinirSenha` traduzido, `limpar-eventos-cron` em fatias.
+- Edge do modo suporte: escritas por `user.id` bloqueadas no suporte.
+- **PESTANA mapper**: usa o leilão DONO (`lote.leilao`) — corrige data (25/08, não 26/10), rótulo e modalidade.
+- Travas estáticas dos gaps #1–#3 (verificar:padroes) e #4 (verificar:schema confere funções).
+
+## 🔜 O QUE FALTA (pendências, por prioridade)
+1. **MERGEAR a branch para `main`** → publica todos os consertos de app acima. Enquanto não mergear,
+   Marcelo continua vendo a tela de parecer-vazio antiga, o funil de login antigo, etc.
+2. **PESTANA — scrape corretivo**: os **1.031 lotes** seguem com data errada (26/10) até o scraper
+   `leiloeiros-puppeteer.yml` rodar com o mapper novo. Ou (a) mergear + esperar o cron diário, ou
+   (b) disparar um scrape corretivo da PESTANA na hora (escreve na base). Decisão do dono.
+3. **Recon do SUEDPETER** (plataforma) — a Rotina mensal "Bug bounty dos leiloeiros" já cobre, ou
+   rodar `recon-leiloeiros-es.mjs`/`recon-pestana` sob demanda.
+4. **Engine de captura Passo 2** (motor DOM/Puppeteer) — destrava alfa/hasta/nordeste/leilaobrasil.
+5. **Dívida de `user.id` cru no modo suporte** (~151 leituras): só a cota e as escritas sinalizadas
+   foram tratadas; o resto está na linha de base da trava. O roteamento on-behalf de verdade
+   (solicitacoes/arremate pelo servidor com paraUserId) é feature, não feito — hoje estão bloqueados.
+6. **Validação de ingestão de MARKETING** (`marketing_metricas_dia`) — o gap #5 só cobriu o Censo.
+7. **asaas-webhook**: alinhar o guard `servico` ao do MP (preventivo, não é bug hoje).
+8. **Pendências do DONO** (Rotina semanal já lembra): definir `ADMIN_EMAIL` na Vercel + nomear um analista.
+
+## Rotinas/CI criados nesta sessão
+- Rotina mensal "Bug bounty dos leiloeiros" agora inclui o onboarding dos leiloeiros do ES (passo 6).
+- Workflow `recon-pestana.yml` (GitHub Actions, manual/por push) — diagnóstico, não grava.
