@@ -24,7 +24,7 @@ export function criarMotorDom({ esperaMs = 2500, timeoutMs = 45000 } = {}) {
     return browser;
   }
 
-  async function fetchFonte(url) {   // 2º arg (opts do contrato) não se aplica ao dom
+  async function navegar(url) {
     let page = null;
     try {
       page = await (await garantir()).newPage();
@@ -35,17 +35,36 @@ export function criarMotorDom({ esperaMs = 2500, timeoutMs = 45000 } = {}) {
       // E SEMPRE com log — o HASTA falhou mudo no 1º DRY-RUN e o "0 enumerados" não dizia porquê.
       if (resp && resp.status() >= 400) {
         console.error(`   [dom] HTTP ${resp.status()} em ${url}`);
-        return { html: null, via: `dom-${resp.status()}` };
+        return { html: null, via: `dom-${resp.status()}`, definitivo: true };
       }
       await new Promise(r => setTimeout(r, esperaMs));   // hidratação após network idle
       const html = await page.content();
       return { html: html || null, via: 'dom' };
     } catch (e) {
-      console.error(`   [dom] falha em ${url}: ${String(e.message || e).slice(0, 120)}`);
+      const msg = String(e.message || e);
+      console.error(`   [dom] falha em ${url}: ${msg.slice(0, 120)}`);
+      // Chromium morto (Target closed/Protocol error) não se recupera na mesma instância:
+      // derruba a referência para o retry relançar o navegador do zero.
+      if (/Target closed|Protocol error|disconnected/i.test(msg)) {
+        await browser?.close().catch(() => {}); browser = null;
+      }
       return { html: null, via: 'dom-falha' };
     } finally {
       if (page) await page.close().catch(() => {});
     }
+  }
+
+  // UM retry para falha transitória (timeout de navegação, navegador caído). Sem isso, um
+  // único timeout no meio da paginação encerrava a enumeração inteira: no DRY-RUN de 21/08
+  // do HASTA, a página 10 estourou 45s e a listagem parou em 270 dos ~579 lotes. HTTP ≥400
+  // é resposta DEFINITIVA (não transitória) e não é retentado.
+  async function fetchFonte(url) {   // 2º arg (opts do contrato) não se aplica ao dom
+    const r1 = await navegar(url);
+    if (r1.html || r1.definitivo) return { html: r1.html, via: r1.via };
+    await new Promise(r => setTimeout(r, 2000));
+    console.error(`   [dom] retentando ${url}`);
+    const r2 = await navegar(url);
+    return { html: r2.html, via: r2.via };
   }
 
   async function fechar() {

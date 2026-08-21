@@ -10826,3 +10826,29 @@ disponibilizou e orientar a baixar e ANEXAR. Implementado:
 **Verificar depois:** desfecho da fila para 10306958 (ok/parcial) e, com Vercel bloqueada
 pela Caixa, quantos cliques caem no ramo inconclusivo (se todos, avaliar mover a checagem
 CEF inteira para o oráculo da fila).
+
+## ✅ 21/08 (noite 4) — HASTA VALIDADO (gate reativado) + falso positivo na captura de matrícula CEF
+**HASTA — DRY-RUN de casa validou o parser:** amostra de 5 lotes com valores DISTINTOS e o
+10151 batendo exatamente com o CSV do dono (aval 162.164,57 · mín 97.298,74 · 40% · 57,67 m²
+· Maceió/AL). Duas observações da amostra que NÃO são bug: o título "…— Maceió/" truncado é
+só o `.slice(0,50)` do print do DRY-RUN (o dado completo tem /AL); e o 10152 com desc -1 é o
+dado real (2º lance 179.242,73 > avaliação 176.600 — CSV confirma; regra CEF). Bug REAL
+achado: a página 10 estourou os 45s de navegação e a enumeração parou em 270/579 — um único
+timeout matava a paginação inteira. Conserto: `fetch-dom.mjs` ganhou UM retry para falha
+transitória (com relançamento do Chromium se Target closed); HTTP ≥400 segue definitivo, sem
+retry. **Gate HASTA reativado** (ativo=true, ultima_em=null) — próxima rodada do runner
+residencial faz a 1ª carga completa (~40-60 min).
+
+**Matrícula CEF 10306958 — a captura disse 'ok' e era a página impressa.** A fila capturou
+"matrícula" 20 min após o enfileiramento… byte-idêntica às condições de venda (231.432 =
+231.432 — o tamanho igual denunciou). Causa: o 4º fallback do seletor ("qualquer link
+rotulado matrícula") pegava âncora href='#', que resolve para a PRÓPRIA detalhe-imovel.asp,
+e o capturarUrl imprimia a página do imóvel como se fosse o documento. Varredura no acervo:
+**1 caso em 12** — os outros 11 têm tamanhos distintos (matrículas reais da rota da página).
+O defeito morde exatamente quando o PDF estático dá 404 E a página não tem link real — ou
+seja, o caso do dono. Consertos: (a) detecção reescrita — candidato tem que resolver para
+URL diferente da página atual E parecer documento (matricula no caminho ou .pdf), onclick
+antes do href como no edital; (b) anexo falso deletado (imovel_anexos + storage) e fila
+resetada para pendente — com o conserto, o desfecho honesto esperado é 'parcial' após 4
+tentativas → o verificar-doc passa a responder "não localizada" e o modal orienta o anexo
+manual. A cadeia inteira (clique → verificar-doc → fila → modal → upload) fica correta.

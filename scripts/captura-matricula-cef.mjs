@@ -164,16 +164,29 @@ async function processar(page, item) {
         //    lotes JUDICIAIS — nesses casos a matrícula fica como link na página do
         //    imóvel. Sem esta rota, o lote judicial ficava sem a matrícula (só regras).
         if (!capturados.includes('matricula')) {
+          // CORRIGIDO 21/08 (lote 10306958/SP, achado pelo dono): o fallback "qualquer link
+          // rotulado matrícula" pegava âncora href='#' — que resolve para a PRÓPRIA
+          // detalhe-imovel.asp —, o capturarUrl imprimia a página do imóvel e o lote saía
+          // 'ok' com uma "matrícula" byte-idêntica às condições de venda (231.432 bytes
+          // iguais; foi o tamanho igual que denunciou). Agora o candidato tem que (a)
+          // resolver para URL DIFERENTE da página atual e (b) parecer documento (contém
+          // 'matricula' no caminho ou termina .pdf); onclick lido ANTES do href, igual ao
+          // edital (a Caixa esconde o caminho real no onclick).
           const matriculaPdf = await page.evaluate(() => {
-            const as = Array.from(document.querySelectorAll('a[href]'));
-            const rot = a => `${a.href} ${a.textContent || ''}`;
-            // Detecção AMPLA (a matrícula da Caixa aparece com formatos variados de link):
-            const rotulada =
-                 as.find(a => /matr[íi]cula/i.test(rot(a)) && /\.pdf(\?|#|$)/i.test(a.href))       // PDF rotulado matrícula
-              || as.find(a => /\/matricula\//i.test(a.href) && /\.pdf(\?|#|$)/i.test(a.href))      // caminho /matricula/<uf>/<n>.pdf
-              || as.find(a => /matr[íi]cula/i.test(rot(a)) && /\.(pdf|asp)(\?|#|$)/i.test(a.href))  // .asp/.pdf rotulado
-              || as.find(a => /matr[íi]cula/i.test(a.textContent || '') && a.href);                 // qualquer link rotulado matrícula
-            return rotulada ? rotulada.href : null;
+            const atual = location.href.split('#')[0];
+            const abs = (u) => { try { return new URL(u, location.href).href; } catch { return null; } };
+            const acha = (txt) => {
+              const ms = String(txt || '').match(/(?:https?:\/\/[^\s"'<>()]*)?\/[^\s"'<>()]+\.(?:pdf|asp)x?(?:\?[^\s"'<>()]*)?/gi) || [];
+              return ms.map(abs).filter(Boolean)
+                .find(u => u.split('#')[0] !== atual && (/matr[íi]cula/i.test(u) || /\.pdf(\?|#|$)/i.test(u))) || null;
+            };
+            for (const a of document.querySelectorAll('a')) {
+              const rot = `${a.textContent || ''} ${a.getAttribute('href') || ''} ${a.getAttribute('onclick') || ''}`;
+              if (!/matr[íi]cula/i.test(rot)) continue;
+              const u = acha(a.getAttribute('onclick')) || acha(a.getAttribute('href'));
+              if (u) return u;
+            }
+            return null;
           });
           if (matriculaPdf) {
             // PDF estático → download direto; só cai no navegador se não for um PDF
