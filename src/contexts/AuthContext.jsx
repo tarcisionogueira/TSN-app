@@ -12,15 +12,21 @@ const SIM_ROLE_KEY     = 'tsn_sim_role';
 const LAST_ACTIVITY_KEY = 'tsn_last_activity';
 const SESSION_TIMEOUT_MS = 24 * 60 * 60 * 1000; // 24h
 
-// Atualiza o timestamp de atividade a cada interação
+// Atualiza o timestamp de atividade a cada interação.
+// TRY/CATCH obrigatório (21/08): num Firefox com a cota de storage cheia/bloqueada, este
+// setItem lançava QuotaExceededError A CADA interação — 4 rotas de um mesmo usuário em
+// erros_cliente num minuto, e a exceção morria no meio de quem chamou. Storage indisponível
+// não pode derrubar nada: sem o carimbo, a sessão simplesmente não expira por inatividade.
 function updateActivity() {
-  localStorage.setItem(LAST_ACTIVITY_KEY, Date.now().toString());
+  try { localStorage.setItem(LAST_ACTIVITY_KEY, Date.now().toString()); } catch { /* storage cheio/bloqueado — segue sem carimbo */ }
 }
 
 function isSessionExpired() {
-  const last = localStorage.getItem(LAST_ACTIVITY_KEY);
-  if (!last) return false;
-  return Date.now() - Number(last) > SESSION_TIMEOUT_MS;
+  try {
+    const last = localStorage.getItem(LAST_ACTIVITY_KEY);
+    if (!last) return false;
+    return Date.now() - Number(last) > SESSION_TIMEOUT_MS;
+  } catch { return false; } // storage bloqueado (Firefox sem cookies) → nunca expira à força
 }
 
 async function fetchPerfil(userId) {
@@ -130,7 +136,10 @@ export function AuthProvider({ children }) {
   // Modo suporte: admin/analista visualizando a conta de um cliente
   const [impersonate, setImpersonate] = useState(loadImpersonate);
   // Simulação de role: admin testa a UI como outro tipo de usuário
-  const [roleSimulado, setRoleSimulado] = useState(() => sessionStorage.getItem(SIM_ROLE_KEY) || null);
+  // try/catch no INICIALIZADOR (21/08): com cookies/site-data bloqueados o Firefox lança
+  // SecurityError já no getItem — sem a guarda, o AuthProvider morria na montagem e o app
+  // inteiro virava tela branca para esse navegador.
+  const [roleSimulado, setRoleSimulado] = useState(() => { try { return sessionStorage.getItem(SIM_ROLE_KEY) || null; } catch { return null; } });
 
   useEffect(() => {
     // Captura GLOBAL da indicação do parceiro (?ref=), venha ANTES ou DEPOIS do # (HashRouter).
@@ -162,8 +171,7 @@ export function AuthProvider({ children }) {
       const u = data.session?.user ?? null;
       if (u && isSessionExpired() && !ehRecovery) {
         supabase.auth.signOut();
-        localStorage.removeItem(LAST_ACTIVITY_KEY);
-        localStorage.removeItem(PERFIL_CACHE_KEY);
+        try { localStorage.removeItem(LAST_ACTIVITY_KEY); localStorage.removeItem(PERFIL_CACHE_KEY); } catch { /* storage bloqueado */ }
         setLoading(false);
         return;
       }
@@ -191,9 +199,11 @@ export function AuthProvider({ children }) {
       if (event === 'PASSWORD_RECOVERY') updateActivity();
       // Limpeza do modo suporte no logout (não usa supabase → pode ser síncrono).
       if (event === 'SIGNED_OUT') {
-        sessionStorage.removeItem(IMPERSONATE_KEY);
-        localStorage.removeItem(LAST_ACTIVITY_KEY);
-        localStorage.removeItem(PERFIL_CACHE_KEY);
+        try {
+          sessionStorage.removeItem(IMPERSONATE_KEY);
+          localStorage.removeItem(LAST_ACTIVITY_KEY);
+          localStorage.removeItem(PERFIL_CACHE_KEY);
+        } catch { /* storage bloqueado — o estado React abaixo limpa o que importa */ }
         setImpersonate(null);
       }
       // IMPORTANTE: NÃO chamar funções async do supabase DENTRO do callback do
@@ -292,11 +302,13 @@ export function AuthProvider({ children }) {
             } catch (e) { console.warn('[convite-equipe] resgate adiado:', e?.message || e); }
           }
           // Redirect pós-login social (Google) ao destino preservado antes do OAuth.
-          const oauthDest = sessionStorage.getItem('tsn_oauth_redirect');
-          if (oauthDest) {
-            sessionStorage.removeItem('tsn_oauth_redirect');
-            if (window.location.hash.replace(/^#/, '') !== oauthDest) window.location.hash = oauthDest;
-          }
+          try {
+            const oauthDest = sessionStorage.getItem('tsn_oauth_redirect');
+            if (oauthDest) {
+              sessionStorage.removeItem('tsn_oauth_redirect');
+              if (window.location.hash.replace(/^#/, '') !== oauthDest) window.location.hash = oauthDest;
+            }
+          } catch { /* storage bloqueado — sem redirect preservado, fica na rota atual */ }
           // PLANO ESCOLHIDO ANTES DO CADASTRO — resgatado aqui (10/08). `CHAVE_PLANO` era
           // GRAVADA em três lugares (Login, Checkout) e LIDA só dentro do Login.jsx, no
           // `handleLogin`/`handleGoogle`. Só que o caminho mais comum não passa por nenhum dos
@@ -378,11 +390,11 @@ export function AuthProvider({ children }) {
   // Inicia o modo suporte. Os dados continuam protegidos por RLS: admin/analista
   // só conseguem ler o que as policies de equipe permitem.
   const iniciarSuporte = (alvo) => {
-    sessionStorage.setItem(IMPERSONATE_KEY, JSON.stringify(alvo));
+    try { sessionStorage.setItem(IMPERSONATE_KEY, JSON.stringify(alvo)); } catch { /* sem persistência entre reloads; o modo ainda funciona nesta aba */ }
     setImpersonate(alvo);
   };
   const encerrarSuporte = () => {
-    sessionStorage.removeItem(IMPERSONATE_KEY);
+    try { sessionStorage.removeItem(IMPERSONATE_KEY); } catch { /* idem */ }
     setImpersonate(null);
   };
 
@@ -392,8 +404,9 @@ export function AuthProvider({ children }) {
   // expulsa —, e a simulação começava por um redirecionamento em vez de pela home.
   // `location.hash` porque o AuthProvider ENVOLVE o HashRouter: aqui não há `useNavigate`.
   const simularRole = (r) => {
-    if (r) { sessionStorage.setItem(SIM_ROLE_KEY, r); setRoleSimulado(r); window.location.hash = '#/'; }
-    else   { sessionStorage.removeItem(SIM_ROLE_KEY); setRoleSimulado(null); window.location.hash = '#/admin'; }
+    try { if (r) sessionStorage.setItem(SIM_ROLE_KEY, r); else sessionStorage.removeItem(SIM_ROLE_KEY); } catch { /* sem persistência */ }
+    if (r) { setRoleSimulado(r); window.location.hash = '#/'; }
+    else   { setRoleSimulado(null); window.location.hash = '#/admin'; }
   };
 
   // SIMULAÇÃO MOSTRA UMA CONTA RECÉM-CRIADA (15/08, pedido do dono: "vendo exatamente a tela
