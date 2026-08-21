@@ -10599,3 +10599,77 @@ webhook). O `prebuild` passou (`verificar:padroes` + `verificar:sintaxe`) e o `v
 ## Rotinas/CI criados nesta sessão
 - Rotina mensal "Bug bounty dos leiloeiros" agora inclui o onboarding dos leiloeiros do ES (passo 6).
 - Workflow `recon-pestana.yml` (GitHub Actions, manual/por push) — diagnóstico, não grava.
+
+---
+
+# 📌 SESSÃO 21/08 (manhã/tarde) — lista de 21/08 atacada em sequência (branch `claude/handoff-bidpro-brasil-verificacoes-7h3pat`, SEM merge)
+
+**Decisão do dono:** "siga os itens sequencialmente e vá resolvendo; produção fica para depois."
+O Bright Data acima do teto (618/550) foi **autorizado pelo dono** — não investigar como furo.
+⚠️ **NADA desta sessão está em produção**: código na branch de trabalho; a única escrita no banco
+foi a nota de recon em `leiloeiro_conhecimento` (SUEDPETER). Checklist de produção no fim.
+
+## Item 1 — PESTANA (scrape corretivo): AGUARDANDO o cron de ~11:50 UTC
+Às 09:30 o invariante `fonte_data_leilao_uniforme` ainda alertava (1.031 lotes com 26/10; último
+scrape 20/08 11:50, ANTES do mapper novo). Checagem agendada via send_later para 13:12 UTC:
+conferir o invariante zerar; se não zerar, ver o log do `leiloeiros-puppeteer` e oferecer disparo
+manual ao dono.
+
+## Item 2 — SUEDPETER: ✅ é SUPORTE white-label; tenant adicionado (na branch)
+- `recon-leiloeiros-es.yml` (workflow novo; dispara por push na branch de trabalho — dispatch por
+  API exige main) + `recon-suporte` com `doms=suedpeterleiloes.com.br` confirmaram:
+  `/buscador?categoria=2` com **12 lotes na 1ª pág (~2 págs)**, foto em
+  static.suporteleiloes.com.br/suedpeterleiloescombr → mesma plataforma do vecchi/saraiva.
+- `SUPORTE_TENANTS` ganhou o suedpeter **+ filtro `RE_SUPORTE_TESTE`** (o leiloeiro tem lotes
+  "LEILÃO TESTE — SOMENTE TESTE" que entrariam no acervo). Entra na coleta no merge.
+- `leiloeiro_conhecimento` (SUEDPETER) atualizado com o achado (plataforma + observação).
+
+## Item 3 — Engine de captura Passo 2: motor `dom` PRONTO; nordeste validado, alfa/hasta em ajuste
+- **`scripts/lib/motor/fetch-dom.mjs`** — eixo de fetch `dom` (Chromium/Puppeteer no runner,
+  0 Bright Data; mesmo contrato do motor grátis→BD; falha devolve html:null e loga HTTP ≥400).
+- **runner.mjs** — seleção de motor por `cfg.fetch`, `fechar()` do browser, e **enumeração em 2
+  NÍVEIS** opcional (`extrairUrlsDeEvento`) para catálogo→evento→lote.
+- Parsers por RÓTULO + slug: `alfa-parse` (Valor da Avaliação/Lance Mínimo; catálogo `/imoveis`
+  — a home mistura veículos), `hasta-parse` (1º/2º LEILÃO·Lance Inicial; comarca→cidade,
+  tribunal→UF), `nordeste-parse` (cards 1º/2º Leilão; datas "25 ago de 2026"; estado por extenso;
+  área em hectares→m²). Compartilhado em `dom-parse-util.mjs`; wrappers
+  `scraper-{alfa,hasta,nordeste}.mjs` (DRY-RUN default) e workflow **`scraper-dom.yml`**
+  (push na branch = DRY-RUN dos 3; gravar SÓ por dispatch `gravar=1`).
+- **DRY-RUN 1 (run 32469832461):** NORDESTE ✅ (21 lotes por 2 níveis, 20 prontos, amostra
+  perfeita: Amargosa/BA aval 316.020, Nilo Peçanha 110.000→55.000/50%…). ALFA enumerou 11 mas o
+  `estaEncerrado` genérico matou os 11 pelo link "Leilões Encerrados" do MENU renderizado —
+  corrigido (morto = só sinal explícito de desfecho no topo). HASTA: fetch falhou MUDO (0
+  enumerados) — o motor agora loga o status; o DRY-RUN 2 diz se o site barra IP de datacenter
+  (aí hasta vira fetch-BD + parse-dom, não grátis).
+- **leilaobrasil** (Cloudflare) fica para quando o teto BD reabrir (24/08) — precisa de BD por
+  busca; o motor dom serve de base.
+
+## Item 4 — Dívida `user.id` cru no modo suporte: ✅ 47/47 ocorrências viraram DECISÃO
+Critério aplicado (commit f2eca58): leitura de posse/estado do cliente → `effectiveUserId`
+(compras, aula_progresso, chamados, indicados, financiamentos — a classe do contador 0/0);
+escrita que gravaria como admin → **bloqueada sob suporte** (uploads/exclusão usuario_docs no
+ImovelDetalhe, salvar financiamento, protocolo ONR — padrão Analise/MinhasAnalises); ação do
+próprio logado → `padrao-ok` com motivo (telemetria, tour, chat, KYC, progresso, filtros,
+Arrematados já oculto). Painel/Analise (portfólio localStorage) documentados como tela-do-logado;
+**o roteamento on-behalf real segue como FEATURE pendente**. Linha de base 516→453.
+
+## Item 5 — Ingestão de MARKETING: ✅ migração escrita e validada; ⚠️ NÃO aplicada
+`supabase/migrations/qa_invariantes_ingestao_marketing.sql` — 5 invariantes (mkt_ingestao_atrasada
+D-3+ · mkt_gasto_implausivel >20× mediana 28d · mkt_conversoes_maior_que_cliques ·
+mkt_valor_negativo · mkt_clique_pago_sem_rastreio <20% gclid/cliques 7d), calibrados VERDES no
+dado real e validados por repro em transação DESFEITA (do-block + select + rollback; prosrc
+intacto). **Aplicar na janela de produção** — é a forma #7 ao contrário se esquecer: a migração
+existe no repo e o banco ainda não a tem.
+
+## Item 6 — asaas-webhook: ✅ guard `servico` alinhado ao MP (preventivo)
+Contexto do asaas-webhook ganhou `servico` (convenção: externalReference `servico|…`/`servico:…`
+ou description `[servico]` — Asaas não tem metadata) e `processarVencido` ganhou o MESMO guard do
+`processarRecusado` de 19/08 (serviço vencido ≠ inadimplência de assinatura).
+
+## 🚀 CHECKLIST DE PRODUÇÃO (quando o dono autorizar)
+1. Merge da branch `claude/handoff-bidpro-brasil-verificacoes-7h3pat` → `main` (deploy Vercel).
+2. **Aplicar** `qa_invariantes_ingestao_marketing.sql` no SQL Editor e conferir
+   `select * from qa_invariantes() where chave like 'mkt_%'` = 5 linhas ok.
+3. Disparar `SCRAPER_FONTES=SUPORTE` (coleta o SUEDPETER; conferir o filtro de teste no log).
+4. `scraper-dom.yml` com `gravar=1` para alfa/nordeste (após DRY-RUN 2 verde); hasta conforme o
+   diagnóstico do fetch.
