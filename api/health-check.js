@@ -202,10 +202,13 @@ export default async function handler(req) {
     if (!rc.ok) throw new Error(`HTTP ${rc.status}`);
     const cnt = (await rc.json())?.[0]?.count ?? 0;
     if (cnt === 0) return { status: 'aviso', detalhe: 'Índice de mercado vazio — nenhuma cidade indexada ainda.' };
-    const ro = await sb('cidade_indicadores?select=cidade_norm,uf,venda_m2&or=(venda_m2.gt.50000,venda_m2.lt.200)&limit=20');
+    // Piso por TIPO (21/08): TERRENO/RURAL abaixo de R$200/m² é mercado real (Cananéia/SP:
+    // terrenos de 500m² arrematados a ~R$37/m², índice em R$181/m² com 7 amostras — o aviso
+    // era falso). Para eles vale só o piso do absurdo (R$20/m²); construído mantém 200–50k.
+    const ro = await sb('cidade_indicadores?select=cidade_norm,uf,tipo,venda_m2&or=(venda_m2.gt.50000,venda_m2.lt.20,and(venda_m2.lt.200,tipo.not.in.(terreno,rural)))&limit=20');
     const out = ro.ok ? await ro.json() : [];
     if (Array.isArray(out) && out.length) {
-      return { status: 'aviso', detalhe: `${cnt} cidades indexadas; ${out.length} com R$/m² fora de 200–50k (contaminação de área — revisar/calibrar).` };
+      return { status: 'aviso', detalhe: `${cnt} cidades indexadas; ${out.length} com R$/m² fora da régua (construído 200–50k; terreno/rural ≥20) — contaminação de área, revisar/calibrar.` };
     }
     return { status: 'ok', detalhe: `${cnt} cidades no índice de venda, R$/m² dentro do esperado.` };
   }));
