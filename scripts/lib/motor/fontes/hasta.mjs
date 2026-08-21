@@ -1,11 +1,11 @@
 /**
- * FONTE (config) — HASTA (hastaleilao.com.br, Flávio Costa). Fonte `dom` do Passo 2: todo
- * /lote/ devolve o MESMO shell no HTML cru; o dado só existe renderizado.
- *
- * ⚠️ BLOQUEADA NO RUNNER (DRY-RUN 21/08): o site devolve **HTTP 403 a IP de datacenter**
- * (o recon de 20/08 só passou porque foi via Bright Data). Como o dado exige RENDER, nem o
- * BD cru resolve (devolve o shell). Destravar = runner RESIDENCIAL (mesma infra do
- * GESTAO_HEADLESS) ou BD com render JS. O parser está pronto e testado em mesa — é só fetch.
+ * FONTE (config) — HASTA (hastaleiloes.com.br, o site REAL — plural; ver a história do
+ * domínio errado no cabeçalho de lib/hasta-parse.mjs). Fonte `dom` do Passo 2: o site não
+ * responde a datacenter (render vazio no runner do GitHub), então a coleta roda pelo
+ * runner RESIDENCIAL (linha HASTA no runner-residencial.sh, gate coleta_cliente).
+ * Estrutura mapeada pelo DONO via console do navegador (21/08): listagem /lotes/imovel
+ * (30/pág) → lote /item/<ID>/detalhes. Comitente observado: CAIXA (vigiar duplicidade
+ * com a fonte CEF). Parser puro em lib/hasta-parse.mjs.
  */
 import {
   TENANTS, extrairUrlsDeLote, idDaUrl, parseDetalhe, montarRow, checarQualidade,
@@ -16,15 +16,15 @@ export const TENANTS_POR_CHAVE = TENANTS;
 export default {
   chave: 'hasta',
   fetch: 'dom',
-  dom: { esperaMs: 3000 },
-  catalogo: '/',
+  dom: { esperaMs: 3500 },
+  catalogo: '/lotes/imovel',
   paginaParam: 'page',
-  maxPages: 1,
+  maxPages: 3,
   tenants: Object.values(TENANTS),
   parse: { extrairUrlsDeLote, idDaUrl, parseDetalhe, montarRow, checarQualidade },
   conhecimento: {
-    plataforma: 'Vite SPA (agrega TRT-5/TJPE; shell único no HTML cru)', acesso: 'dom-puppeteer',
-    custo: 'gratis', anti_bot: 'nenhum', enumeracao: '/ (home renderizada)',
-    url_lote: '/lote/<ID>/<slug>', scraper: 'scraper-hasta.mjs',
+    plataforma: 'Hasta Leilões (SPA própria; render exige IP residencial)', acesso: 'dom-puppeteer-residencial',
+    custo: 'gratis', anti_bot: 'bloqueio a datacenter', enumeracao: '/lotes/imovel (renderizado)',
+    url_lote: '/item/<ID>/detalhes', scraper: 'scraper-hasta.mjs (runner residencial)',
   },
 };

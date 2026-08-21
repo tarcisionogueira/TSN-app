@@ -10749,3 +10749,19 @@ registros DELETADOS do acervo (eram visíveis ao cliente) e `coleta_cliente.HAST
 `scripts/recon-hasta-console.js` no navegador de casa — o dump por lote decide entre as duas
 hipóteses e o espião [API] revela o endpoint real da SPA ao navegar. Só reativar o gate após
 DRY-RUN com valores DISTINTOS por lote.
+
+## ✅ 21/08 (noite) — HASTA reescrito para o DOMÍNIO REAL (hastaleiloes.com.br, plural)
+Achado do dono: o site que scrapeávamos (hastaleilao.com.br, singular) **não é o site do
+leiloeiro** — é template/casca estática (daí os 17 registros idênticos). O real é
+**hastaleiloes.com.br**, mapeado pelo dono via console do navegador (dump de listagem +
+detalhe). Parser reescrito com o dado real: listagem `/lotes/imovel` → lote
+`/item/<ID>/detalhes`; rótulos "Data 1º/2º Leilão + Lance Inicial", "Valor de Avaliação"
+explícito (pode ser MENOR que o 1º lance — regra CEF), "Cidade: X/UF", matrícula com rótulo
+duplicado, descrição estruturada (TIPO/AREA), comissão/incremento ignorados, ordinal °/º
+ambos aceitos. Mesa com o dump real: aval 162.164,57 · mín 97.298,74/40% · 57,67 m² ·
+Maceió/AL · 28/08 · matrícula 140518 · apartamento. **Comitente é a CAIXA** (leilão 557) —
+vigiar duplicidade com a fonte CEF ("Número do Bem" = id do portal Caixa).
+**Datacenter não renderiza o site** → coleta SÓ pelo runner residencial.
+**Próximo passo (dono, de casa):** `git -C ~/tsn-app pull && HASTA_DRYRUN=1 node scripts/scraper-hasta.mjs`
+→ amostra com valores DISTINTOS por lote = eu reativo o gate (ativo=true + ultima_em=null)
+e o runner coleta na sequência.
