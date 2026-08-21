@@ -10794,3 +10794,35 @@ HASTA_MAX_LOTES=5 node scripts/scraper-hasta.mjs` — MAX_LOTES=5 só p/ amostra
 valores distintos por lote = reativar gate (`update coleta_cliente set ativo=true,
 ultima_em=null where fonte='HASTA'`) e rodar o runner. E a URL da matrícula CEF
 (`…/editais/matricula/SP/10306958.pdf`) ainda sem resposta do dono.
+
+## ✅ 21/08 (noite 3) — Matrícula indisponível: fim da tela de erro crua (pedido do dono)
+O dono abriu a matrícula CEF de SP/10306958 e caiu no 404 CRU do IIS da Caixa — o PDF não
+existe no caminho padrão (o IIS confirma "file does not exist"; 404 real, não bloqueio).
+Pedido: nunca despejar o cliente numa tela dessas — informar que o leiloeiro não
+disponibilizou e orientar a baixar e ANEXAR. Implementado:
+- **`api/verificar-doc.js` (novo):** POST {imovel_id}, autenticado. Ordem: (1) anexo nosso
+  no Storage → assina e devolve; (2) fila `cef_matricula_fila` como ORÁCULO ('parcial' =
+  4 tentativas dentro da página sem achar = indisponível DEFINITIVO, sem rede); (3) testa o
+  hotlink lendo só o 1º chunk (assinatura %PDF-). Três estados na resposta: true / false /
+  **null (inconclusivo)** — a Caixa bloqueia IP de datacenter, então "não consegui checar"
+  JAMAIS vira "não existe" (forma #5). Efeito colateral deliberado: CEF sem resposta
+  positiva ENFILEIRA a captura (antes o clique na ficha não enfileirava nada — só o fluxo
+  de análise; foi por isso que o 404 chegou cru). Sem SSRF: URL montada no servidor a
+  partir do banco, nunca do cliente.
+- **`ImovelDetalhe.jsx`:** botão Matrícula agora (a) prefere a CÓPIA NOSSA
+  (imovel_anexos tipo=matricula) quando existe — sai da lista "Documentos do lote" para o
+  botão oficial; (b) sem cópia: intercepta o clique, abre a aba SÍNCRONA (anti pop-up
+  blocker) e consulta verificar-doc — confirmado abre, indisponível fecha a aba e mostra
+  MODAL (o que houve + o que já fizemos + passo a passo baixar/anexar + upload), 
+  inconclusivo abre o hotlink como hoje MAS deixa a "saída de socorro" ao lado do botão
+  ("apareceu página de erro? anexe aqui"); (c) upload reusa `/api/upload-anexo` (validação
+  de assinatura real + anti-poisoning já existentes) e o anexo entra na hora no estado.
+- **Bônus de observabilidade:** o clique na matrícula agora passa por API própria — o
+  Cliente 360 enxerga o desfecho (era o gap "hotlink externo invisível" de hoje cedo).
+- **Fila NÃO estava quebrada** (diagnóstico de hoje corrigido): 29 ok / 2 erro / 0
+  pendente — "parada desde 18/08" era fila VAZIA; o cron */30min está saudável. O imóvel
+  do dono foi enfileirado manualmente (f1f43f15…, hdniip 10306958) — a captura tenta a
+  rota alternativa (matrícula linkada dentro da página do imóvel, caso típico judicial).
+**Verificar depois:** desfecho da fila para 10306958 (ok/parcial) e, com Vercel bloqueada
+pela Caixa, quantos cliques caem no ramo inconclusivo (se todos, avaliar mover a checagem
+CEF inteira para o oráculo da fila).

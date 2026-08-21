@@ -722,6 +722,13 @@ export default function ImovelDetalhe() {
   const [anexosDocs, setAnexosDocs] = useState([]);
   const [buscandoDocs, setBuscandoDocs] = useState('');
   const [filaDocs, setFilaDocs] = useState(null); // status da fila de captura CEF (persiste no F5)
+  // Matrícula indisponível (pedido do dono, 21/08): o hotlink da Caixa pode dar 404 cru do
+  // IIS quando o PDF não foi publicado. Verificamos ANTES de mandar o cliente para lá e, no
+  // pior caso, orientamos a baixar no leiloeiro e ANEXAR — nunca a tela de erro sem saída.
+  const [verifMatricula, setVerifMatricula] = useState(false);
+  const [matModal, setMatModal] = useState(null);   // {verificado, busca, anexada?, erro?}
+  const [matAviso, setMatAviso] = useState(false);  // hotlink aberto SEM conferência — saída de socorro
+  const [enviandoMatricula, setEnviandoMatricula] = useState(false);
   const [loading, setLoading] = useState(!loc.state?.imovel);
   const [imgIdx, setImgIdx] = useState(0); // índice do candidato de foto atual (fallback em cascata)
   const [compartilhado, setCompartilhado] = useState(false); // feedback "link copiado"
@@ -798,7 +805,7 @@ export default function ImovelDetalhe() {
     if (jaCarregado) return;
     if (!id) { nav('/buscar'); return; }
     // Navegou para outro imóvel (ex.: card de similares) → recarrega do zero.
-    if (!imovel || imovel.id !== id) { setLoading(true); setImgIdx(0); setAnexosDocs([]); }
+    if (!imovel || imovel.id !== id) { setLoading(true); setImgIdx(0); setAnexosDocs([]); setMatAviso(false); setMatModal(null); }
     supabase.from('imoveis_leilao').select('*').eq('id', id).single()
       .then(({ data }) => {
         if (!data) { if (!imovel) nav('/buscar'); return; }
@@ -1048,6 +1055,75 @@ export default function ImovelDetalhe() {
   // dá 404). Hotlink direto funciona no navegador do usuário.
   const matriculaUrl = caixaMatriculaUrl({ fonte: imovel.fonte, estado: imovel.estado, fonteId: imovel.fonteId })
     || (ehMatriculaValida(imovel.linkMatricula) ? imovel.linkMatricula : null);
+  // Matrícula que JÁ está no nosso Storage (capturada pela fila ou anexada por alguém):
+  // é a melhor cópia — o botão oficial abre ELA, sem depender do hotlink do leiloeiro.
+  const matriculaAnexo = (Array.isArray(anexosDocs) ? anexosDocs : [])
+    .find(a => a.tipo === 'matricula' && ehDocArquivo(a.url)) || null;
+  const matriculaHref = matriculaAnexo?.url || matriculaUrl;
+
+  // Clique na Matrícula SEM cópia nossa: confere no servidor antes de mandar o cliente ao
+  // hotlink. Três desfechos: confirmada → abre; indisponível (404 real da Caixa ou fila de
+  // captura esgotada) → modal com orientação + anexo; inconclusivo (a Caixa bloqueia IP de
+  // datacenter, o servidor pode não conseguir checar) → abre como hoje, com saída de
+  // socorro ao lado do botão. A aba é aberta SÍNCRONA (window.open antes do await) para o
+  // bloqueador de pop-up não engolir o documento no caso bom.
+  const verificarMatricula = async (e) => {
+    if (matriculaAnexo || !user || !imovel?.id) return;   // cópia nossa (ou sem sessão): link normal
+    e.preventDefault();
+    const w = window.open('', '_blank');
+    setVerifMatricula(true);
+    try {
+      const res = await apiCall('/api/verificar-doc', { method: 'POST', body: JSON.stringify({ imovel_id: imovel.id }) });
+      const d = res.ok ? await res.json().catch(() => null) : null;
+      if (d && d.disponivel === false) {
+        try { w?.close(); } catch { /* ignora */ }
+        setMatModal({ verificado: true, motivo: d.motivo || null, busca: d.busca || null });
+        return;
+      }
+      const destino = (d && d.disponivel === true && d.url) ? d.url : matriculaUrl;
+      if (w) w.location = destino; else window.open(destino, '_blank', 'noopener');
+      if (!d || d.disponivel === null) setMatAviso(true);   // abriu sem conferência — deixa a saída à vista
+    } catch {
+      if (w) { try { w.location = matriculaUrl; } catch { /* ignora */ } }
+      setMatAviso(true);
+    } finally { setVerifMatricula(false); }
+  };
+
+  // Anexo manual da matrícula (último caso): mesmo /api/upload-anexo da tela de análise —
+  // valida assinatura real do arquivo no servidor e o documento vira cache do lote (a
+  // análise documental passa a ler ele; anti-poisoning: doc da equipe não é sobrescrito).
+  const anexarMatricula = async (file) => {
+    if (!file || !imovel?.id) return;
+    const tiposOk = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg'];
+    if (!tiposOk.includes(file.type)) { setMatModal(m => ({ ...(m || {}), erro: 'Envie a matrícula em PDF (ou foto JPG/PNG).' })); return; }
+    if (file.size > 20 * 1024 * 1024) { setMatModal(m => ({ ...(m || {}), erro: 'Arquivo acima de 20 MB.' })); return; }
+    setEnviandoMatricula(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('imovel_id', imovel.id);
+      fd.append('tipo', 'matricula');
+      if (imovel.dataLeilao) fd.append('data_leilao', String(imovel.dataLeilao).slice(0, 10));
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/api/upload-anexo', {
+        method: 'POST',
+        headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
+        body: fd,
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || 'Falha no envio');
+      setAnexosDocs(prev => [{ id: d.anexo_id, tipo: 'matricula', nome: file.name, url: d.url_publica },
+        ...(Array.isArray(prev) ? prev.filter(x => x.tipo !== 'matricula') : [])]);
+      setMatModal(m => ({ ...(m || {}), anexada: true, erro: null }));
+      setMatAviso(false);
+    } catch (err) {
+      setMatModal(m => ({ ...(m || {}), erro: err.message || 'Erro ao enviar o documento.' }));
+    } finally { setEnviandoMatricula(false); }
+  };
+  // Página do imóvel no leiloeiro (passo 1 da orientação do modal).
+  const paginaLeiloeiroUrl = (ehUrl(imovel.urlLote) ? imovel.urlLote : null)
+    || (((imovel.fonte === 'CEF' || /caixa/i.test(imovel.fonte || '')) && String(imovel.fonteId || '').replace(/\D/g, ''))
+      ? `https://venda-imoveis.caixa.gov.br/sistema/detalhe-imovel.asp?hdnimovel=${String(imovel.fonteId || '').replace(/\D/g, '')}` : null);
   // Venda direta → "Regras de venda online"; leilão → "Edital". MAS só rotulamos
   // como o documento quando o link é um ARQUIVO de verdade. Quando é apenas a
   // página do anúncio no portal (detalhe-imovel.asp = mesmo destino do url_lote),
@@ -1090,7 +1166,7 @@ export default function ImovelDetalhe() {
   // (matrícula/edital) nem o que já está em "Documentos do lote" (capturado no nosso Storage).
   const chaveNome = (a) => String(a?.nome || '').toLowerCase().replace(/\s+/g, ' ').trim();
   const dedupDocs = (arr) => { const seen = new Set(); const out = []; for (const a of arr) { const k = chaveNome(a) || a.url; if (seen.has(k)) continue; seen.add(k); out.push(a); } return out; };
-  const urlsOficiais = new Set([matriculaUrl, regrasEditalUrl].filter(Boolean));
+  const urlsOficiais = new Set([matriculaUrl, matriculaAnexo?.url, regrasEditalUrl].filter(Boolean));
   // Documentos capturados no nosso Storage (PDF de alta qualidade) — a fonte mais confiável; vêm primeiro.
   const anexosCapturados = dedupDocs((Array.isArray(anexosDocs) ? anexosDocs : [])
     .filter(a => a && a.url && !urlsOficiais.has(a.url)));
@@ -1100,7 +1176,7 @@ export default function ImovelDetalhe() {
   const anexosLeiloeiro = dedupDocs((Array.isArray(imovel.anexos) ? imovel.anexos : [])
     .filter(a => a && a.url && !urlsOficiais.has(a.url)
       && !(chaveNome(a) && chavesCap.has(chaveNome(a))) && !chavesCap.has(a.url)));
-  const temCardDocumentos = !!matriculaUrl || !!regrasEditalUrl || temNumerosRef || anexosLeiloeiro.length > 0 || anexosCapturados.length > 0;
+  const temCardDocumentos = !!matriculaHref || !!regrasEditalUrl || temNumerosRef || anexosLeiloeiro.length > 0 || anexosCapturados.length > 0;
   const TIPO_DOC_LABEL = { matricula: 'Matrícula', edital: 'Edital', regras: 'Regras de venda', regras_venda: 'Regras de venda', laudo: 'Laudo de avaliação', outro: 'Documento', anexo: 'Anexo' };
 
   // Localização no Google: Street View por coordenadas (quando geocodificado) ou
@@ -1515,12 +1591,12 @@ export default function ImovelDetalhe() {
                 {/* Botões DIRETOS: Matrícula + Regras de venda online/Edital.
                     Montados na hora a partir dos dados, abrem direto o PDF/portal da
                     Caixa no navegador (sem captura/espera). */}
-                {(matriculaUrl || regrasEditalUrl) && (
+                {(matriculaHref || regrasEditalUrl) && (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-                    {matriculaUrl && (
-                      <a href={matriculaUrl} target="_blank" rel="noopener noreferrer"
-                        style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, color: '#15803d', fontWeight: 700, fontSize: 13, textDecoration: 'none' }}>
-                        <FileText size={15} /> Matrícula
+                    {matriculaHref && (
+                      <a href={matriculaHref} target="_blank" rel="noopener noreferrer" onClick={verificarMatricula}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, color: '#15803d', fontWeight: 700, fontSize: 13, textDecoration: 'none', opacity: verifMatricula ? 0.7 : 1 }}>
+                        <FileText size={15} /> {verifMatricula ? 'Verificando…' : 'Matrícula'}
                       </a>
                     )}
                     {regrasEditalUrl && (
@@ -1529,6 +1605,82 @@ export default function ImovelDetalhe() {
                         {regrasEhDocReal ? <ScrollText size={15} /> : <ExternalLink size={15} />} {regrasEditalLabel}
                       </a>
                     )}
+                  </div>
+                )}
+
+                {/* Saída de socorro: o hotlink foi aberto SEM conferência (o servidor não
+                    conseguiu checar na Caixa). Se o cliente caiu numa página de erro, a
+                    explicação e o caminho do anexo já estão aqui — nunca só o erro. */}
+                {matAviso && !matModal && (
+                  <div style={{ marginTop: 10, padding: '10px 14px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, fontSize: 13, color: '#92400e', lineHeight: 1.55 }}>
+                    A matrícula abriu em outra aba. <b>Apareceu uma página de erro em vez do documento?</b>{' '}
+                    Então o leiloeiro ainda não publicou o arquivo — já acionamos nossa busca automática, e você
+                    também pode{' '}
+                    <button onClick={() => { setMatAviso(false); setMatModal({ verificado: false, busca: 'acionada' }); }}
+                      style={{ background: 'none', border: 'none', padding: 0, color: '#b45309', fontWeight: 800, fontSize: 13, cursor: 'pointer', textDecoration: 'underline' }}>
+                      baixar e anexar aqui
+                    </button>.
+                  </div>
+                )}
+
+                {/* Modal "matrícula indisponível": a mensagem diz O QUE houve (não é erro do
+                    acesso), O QUE JÁ FIZEMOS (busca automática) e COMO RESOLVER AGORA
+                    (baixar no leiloeiro e anexar) — pedido do dono em 21/08. */}
+                {matModal && (
+                  <div onClick={() => setMatModal(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.55)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+                    <div onClick={e => e.stopPropagation()} style={{ background: 'white', borderRadius: 16, maxWidth: 480, width: '100%', maxHeight: '90vh', overflowY: 'auto', padding: '22px 22px 18px', boxShadow: '0 24px 60px rgba(15,23,42,0.35)' }}>
+                      {matModal.anexada ? (
+                        <>
+                          <div style={{ fontSize: 34, marginBottom: 8 }}>✅</div>
+                          <div style={{ fontWeight: 800, fontSize: 17, color: '#166534', marginBottom: 8 }}>Matrícula anexada!</div>
+                          <p style={{ fontSize: 13.5, color: '#334155', lineHeight: 1.6, margin: '0 0 16px' }}>
+                            O documento já aparece nesta ficha e será usado nos seus relatórios de análise.
+                            Obrigado — o arquivo também fica disponível para as suas próximas consultas a este imóvel.
+                          </p>
+                          <button onClick={() => setMatModal(null)} style={{ width: '100%', padding: '11px 0', background: '#15803d', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 14, cursor: 'pointer' }}>Fechar</button>
+                        </>
+                      ) : (
+                        <>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                            <FileText size={20} color="#b45309" />
+                            <div style={{ fontWeight: 800, fontSize: 16.5, color: '#1e293b' }}>
+                              {matModal.verificado ? 'Matrícula ainda não disponível' : 'Anexar a matrícula do imóvel'}
+                            </div>
+                          </div>
+                          <p style={{ fontSize: 13.5, color: '#334155', lineHeight: 1.6, margin: '0 0 10px' }}>
+                            {matModal.verificado
+                              ? <>Verificamos agora e o leiloeiro ainda não publicou o arquivo da matrícula deste imóvel no endereço padrão — <b>não é um problema do seu acesso</b>. Isso é comum em imóveis recém-anunciados e em lotes de leilão judicial.</>
+                              : <>Quando o leiloeiro ainda não publicou o arquivo no endereço padrão, o link abre uma página de erro — <b>não é um problema do seu acesso</b>. Você pode obter a matrícula direto na página do imóvel e anexá-la aqui.</>}
+                          </p>
+                          <p style={{ fontSize: 13, color: '#475569', lineHeight: 1.6, margin: '0 0 14px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '9px 12px' }}>
+                            {matModal.busca === 'esgotada'
+                              ? <>Nossa busca automática já vasculhou a página do imóvel no site do leiloeiro e não localizou o arquivo — neste caso, só o próprio leiloeiro pode fornecê-lo.</>
+                              : <><b>O que já estamos fazendo:</b> acionamos a busca automática, que procura a matrícula dentro da própria página do imóvel. Se ela for localizada, o documento aparece nesta ficha em “Documentos do lote” (em geral, em até 30 minutos).</>}
+                          </p>
+                          <div style={{ fontWeight: 800, fontSize: 13.5, color: '#1e293b', marginBottom: 8 }}>Como obter agora (leva ~2 minutos):</div>
+                          <ol style={{ margin: '0 0 14px', paddingLeft: 20, fontSize: 13, color: '#334155', lineHeight: 1.7 }}>
+                            <li>
+                              Abra a página do imóvel no site do leiloeiro
+                              {paginaLeiloeiroUrl && <> — <a href={paginaLeiloeiroUrl} target="_blank" rel="noopener noreferrer" style={{ color: '#0D63DB', fontWeight: 700 }}>abrir página do imóvel</a></>}.
+                            </li>
+                            <li>Procure a seção de documentos do lote — na Caixa, os links ficam próximos de “Baixar edital e anexos”.</li>
+                            <li>Baixe o PDF da matrícula no seu computador ou celular.</li>
+                            <li>Volte aqui e anexe o arquivo no botão abaixo — sua análise documental passa a usar o documento.</li>
+                          </ol>
+                          {matModal.erro && (
+                            <div style={{ marginBottom: 10, padding: '8px 12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, color: '#b91c1c', fontSize: 13 }}>{matModal.erro}</div>
+                          )}
+                          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                            <label style={{ flex: 1, minWidth: 180, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '11px 16px', background: enviandoMatricula ? '#86efac' : '#15803d', color: 'white', borderRadius: 10, fontWeight: 800, fontSize: 13.5, cursor: enviandoMatricula ? 'default' : 'pointer' }}>
+                              <Upload size={15} /> {enviandoMatricula ? 'Enviando…' : 'Anexar matrícula (PDF)'}
+                              <input type="file" accept="application/pdf,image/jpeg,image/png" disabled={enviandoMatricula}
+                                onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; anexarMatricula(f); }} style={{ display: 'none' }} />
+                            </label>
+                            <button onClick={() => setMatModal(null)} style={{ padding: '11px 16px', background: '#f1f5f9', color: '#475569', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13.5, cursor: 'pointer' }}>Agora não</button>
+                          </div>
+                        </>
+                      )}
+                    </div>
                   </div>
                 )}
 
