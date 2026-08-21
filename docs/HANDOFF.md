@@ -11008,3 +11008,23 @@ Validação (rollback): gatilho de 16 dias → 1 pendente, token 64 hex, respost
 (contratou=true, nota 9), eventos nps_enviado+nps_respondido na trilha. Regra
 comercial.nps_cliente_15d ATIVA (aplicada_por nps_alavancagem_pendentes); auditorias
 0 crítico. Falta só a F6 (CSV + invariantes: nps_contradiz_resultado etc.).
+
+## 🏁 21/08 (noite 13) — Consultor Comercial FASE 6 (última): invariantes + CSV — PLANO COMPLETO
+- **Migração `consultor_comercial_fase6_invariantes.sql`** (cirurgia de string idempotente
+  no prosrc vivo, âncora lote_sem_area_nem_matricula — mesmo idioma do marketing):
+  5 invariantes 'Comercial', todos limite 0 e VERDES na estreia:
+  `lead_alavancagem_sem_dono_3d` · `lead_recebido_parado_2d` (SLA provisório 2d — decisão
+  em aberto nº 3 do plano) · `lead_finalizado_sem_comentario` (vigia a porta dos fundos da
+  RPC) · **`nps_contradiz_resultado`** (o cruzamento-chave: perdido×contratou = fechamento
+  por fora; ganho×não-contratou = registro inflado) · `nps_vencido_nao_enviado` (17d = 15
+  da regra + 2 de folga do cron). qa_invariantes: 48 no total, função íntegra (7 alertas
+  pré-existentes do backlog conhecido, nenhum dos novos).
+- **Admin › Comercial**: botão "Exportar CSV (com trilha)" — lead + contato + dono +
+  datas + resultado/motivo + NPS + trilha completa compactada; BOM+';' (Excel BR). É a
+  prova datada para a negociação com a financeira.
+**O PLANO DO CONSULTOR COMERCIAL ESTÁ COMPLETO (F1-F6 no mesmo dia da concepção).**
+Pendências que seguem com o dono (§9 do plano): % de comissão (estrutura pronta em
+comissoes), SLA definitivo do invariante de 2d, e se o consultor vê a carteira que
+indicou. Operacional: para estrear um parceiro real, gerar convite de consultor
+(convites_vendedor tipo consultor) → ativação seta vendedor_tipo e as telas
+/comercial + /atendimento abrem sozinhas.

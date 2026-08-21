@@ -7768,6 +7768,28 @@ function ComercialTab() {
   }, []);
   useEffect(() => { carregar(); }, [carregar]);
 
+  // Exporta a visão comercial COMPLETA (lead + dono + trilha + NPS) — é a "prova
+  // datada" para a negociação com a financeira (sem integração, o rastro interno é o
+  // que existe). BOM + ';' = abre certo no Excel BR.
+  const exportarAplicacoesCsv = () => {
+    const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const prodDe = (o) => o === 'alavancagem_home_equity' ? 'Home Equity' : o === 'alavancagem_consorcio' ? 'Consórcio' : (o || '');
+    const linhas = [['cliente', 'whatsapp', 'email', 'produto', 'status', 'criado_em', 'recebido_em', 'finalizado_em', 'resultado', 'motivo', 'consultor', 'nps_nota', 'nps_contratou', 'nps_comentario', 'trilha'].join(';')];
+    for (const a of aplicacoes) {
+      const trilha = (Array.isArray(a.eventos) ? a.eventos : [])
+        .map(ev => `${new Date(ev.em).toLocaleString('pt-BR')} ${ev.tipo}(${ev.papel})${ev.comentario ? ': ' + ev.comentario : ''}`)
+        .join(' | ');
+      linhas.push([a.nome, a.whatsapp, a.email, prodDe(a.origem), a.status, a.criado_em, a.recebido_em,
+        a.finalizado_em, a.resultado, a.resultado_motivo, a.consultor_nome, a.nps?.nota,
+        a.nps?.contratou == null ? '' : (a.nps.contratou ? 'sim' : 'nao'), a.nps?.comentario, trilha].map(esc).join(';'));
+    }
+    const blob = new Blob(['﻿' + linhas.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const aEl = document.createElement('a');
+    aEl.href = url; aEl.download = `aplicacoes-comercial-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(aEl); aEl.click(); aEl.remove(); URL.revokeObjectURL(url);
+  };
+
   const atribuirAplicacao = async (leadId, consultorId) => {
     if (!consultorId) return;
     setAtribuindoLead(leadId);
@@ -7823,7 +7845,15 @@ function ComercialTab() {
           atribuição passa pela RPC (evento garantido na trilha); reatribuir zera o
           Receber — o novo dono revela o contato em nome próprio. */}
       <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '16px 18px', marginBottom: 22 }}>
-        <div style={{ fontSize: 15, fontWeight: 800, color: '#111111', marginBottom: 2 }}>💼 Aplicações de Consórcio & Home Equity</div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', marginBottom: 2 }}>
+          <div style={{ fontSize: 15, fontWeight: 800, color: '#111111' }}>💼 Aplicações de Consórcio & Home Equity</div>
+          {aplicacoes.length > 0 && (
+            <button onClick={exportarAplicacoesCsv}
+              style={{ padding: '7px 14px', background: '#111111', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+              ⬇ Exportar CSV (com trilha)
+            </button>
+          )}
+        </div>
         <div style={{ fontSize: 12, color: '#64748b', marginBottom: 12 }}>
           Quem pediu contato na tela de Alavancagem. Atribua ao parceiro comercial — ele recebe, atende e finaliza
           na tela <b>/comercial</b>; cada passo fica na trilha e você vê tudo aqui.
