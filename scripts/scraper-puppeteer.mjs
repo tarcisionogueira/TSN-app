@@ -3039,6 +3039,31 @@ function extrairAvaliacaoHtml(html) {
 // (mesmo ritmo do CEF). NUNCA lança — enriquece em memória; se um lote falhar, ele
 // segue com o que já tinha e o scrape/salvamento continua normalmente.
 async function enriquecerDocumentosLote(browser, imoveis, { cap = 150, deadlineMs = 8 * 60 * 1000 } = {}) {
+  // MERGE do que o BANCO já tem ANTES de decidir quem visitar (P3 de 21/08). Sem isto,
+  // dois defeitos da mesma classe da regressão de datas da CEF: (a) o upsert diário do
+  // card regrava 0 por cima da avaliação/área que o enriquecimento conquistou ontem;
+  // (b) faltaAval/faltaArea olhavam só a linha FRESCA (sempre 0 p/ BIASI/GL/SODRE/VIP),
+  // então o cap revisitava os MESMOS primeiros lotes todo dia e a cauda nunca chegava.
+  // Best-effort: erro de leitura → segue como antes (revisita; upsert idempotente).
+  try {
+    const ids = (imoveis || []).map(im => im.fonte_id).filter(Boolean);
+    for (let i = 0; i < ids.length; i += 200) {
+      // padrao-ok: leitura best-effort de merge; falha só faz revisitar lote conhecido, nunca corrompe
+      const { data } = await supabase.from('imoveis_leilao')
+        .select('fonte_id, area_m2, valor_avaliacao, link_matricula, link_regras_venda, anexos')
+        .in('fonte_id', ids.slice(i, i + 200));
+      for (const db of data || []) {
+        const im = imoveis.find(x => x.fonte_id === db.fonte_id);
+        if (!im) continue;
+        if (!(Number(im.area_m2) > 0) && Number(db.area_m2) > 0) im.area_m2 = Number(db.area_m2);
+        if (!(Number(im.valor_avaliacao) > 0) && Number(db.valor_avaliacao) > 0) im.valor_avaliacao = Number(db.valor_avaliacao);
+        if (!im.link_matricula && db.link_matricula) im.link_matricula = db.link_matricula;
+        if (!im.link_regras_venda && db.link_regras_venda) im.link_regras_venda = db.link_regras_venda;
+        if (!(Array.isArray(im.anexos) && im.anexos.length) && Array.isArray(db.anexos) && db.anexos.length) im.anexos = db.anexos;
+      }
+    }
+  } catch { /* merge é otimização — nunca derruba o enriquecimento */ }
+
   const alvos = (imoveis || []).filter(im => {
     const url = im.url_lote || im.link_edital;
     if (!url || !/^https?:\/\//.test(url)) return false;
@@ -3047,7 +3072,12 @@ async function enriquecerDocumentosLote(browser, imoveis, { cap = 150, deadlineM
     // listagem, só no detalhe): o valor é extraído do MESMO HTML que já renderizamos
     // p/ os documentos — custo marginal zero. Bounded pelos mesmos cap + deadline.
     const faltaAval = !(Number(im.valor_avaliacao) > 0);
-    return !jaTemDocs || faltaAval;
+    // E lotes SEM ÁREA, pelo mesmo motivo (P3 de 21/08): o card do BIASI não traz m² e o
+    // mapper gravava area_m2:0 fixo — a fonte inteira (324 ativos) ficou 0% de área e foi
+    // ela quem empurrou o invariante lote_sem_area_nem_matricula de 404→558. A área mora
+    // no MESMO detalhe renderizado dos docs/avaliação.
+    const faltaArea = !(Number(im.area_m2) > 0);
+    return !jaTemDocs || faltaAval || faltaArea;
   }).slice(0, cap);
   if (!alvos.length) return 0;
 
@@ -3070,6 +3100,13 @@ async function enriquecerDocumentosLote(browser, imoveis, { cap = 150, deadlineM
           const av = extrairAvaliacaoHtml(html);
           const vm = Number(im.valor_minimo) || 0;
           if (av && av > vm && (vm <= 0 || av <= vm * 10)) im.valor_avaliacao = av;
+        }
+        // ÁREA do detalhe renderizado (mesmo HTML, custo zero): extrairAreaM2 prioriza
+        // "área construída/privativa/útil" e tem régua de plausibilidade (8–1M m²).
+        if (!(Number(im.area_m2) > 0)) {
+          const texto = html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ');
+          const a2 = extrairAreaM2(texto);
+          if (a2 > 0) im.area_m2 = a2;
         }
         const docs = vasculharDocumentos(html, url, im.link_foto || null);
         const achouAlgo = docs.matricula || docs.laudo || (Array.isArray(docs.anexos) && docs.anexos.length);
