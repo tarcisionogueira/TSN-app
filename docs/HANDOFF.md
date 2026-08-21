@@ -10638,9 +10638,14 @@ manual ao dono.
 - **DRY-RUN 1 (run 32469832461):** NORDESTE ✅ (21 lotes por 2 níveis, 20 prontos, amostra
   perfeita: Amargosa/BA aval 316.020, Nilo Peçanha 110.000→55.000/50%…). ALFA enumerou 11 mas o
   `estaEncerrado` genérico matou os 11 pelo link "Leilões Encerrados" do MENU renderizado —
-  corrigido (morto = só sinal explícito de desfecho no topo). HASTA: fetch falhou MUDO (0
-  enumerados) — o motor agora loga o status; o DRY-RUN 2 diz se o site barra IP de datacenter
-  (aí hasta vira fetch-BD + parse-dom, não grátis).
+  corrigido (morto = só sinal explícito de desfecho no topo).
+- **DRY-RUN 2 (run 32470996156):** ALFA ✅ 11 prontos (Manhumirim/MG com aval→mín/50% exatos);
+  dois defeitos de slug corrigidos em seguida (sufixo "-lote-01-do-edital" anulava a cidade;
+  "-no-bairro-<x>-sp" entregava o BAIRRO como cidade — agora bairro→cidade null). NORDESTE ✅ de
+  novo (20/21; 1 timeout transitório de navegação). **HASTA ❌ HTTP 403 a IP de datacenter** — o
+  recon de 20/08 só passou porque foi via Bright Data, e como o dado exige RENDER, nem o BD cru
+  resolve (shell). Destravar = runner RESIDENCIAL (infra GESTAO_HEADLESS) ou BD com render JS;
+  o parser fica pronto e testado em mesa. Vai para o mesmo balde do GESTAO milan/central.
 - **leilaobrasil** (Cloudflare) fica para quando o teto BD reabrir (24/08) — precisa de BD por
   busca; o motor dom serve de base.
 
@@ -10671,5 +10676,5 @@ ou description `[servico]` — Asaas não tem metadata) e `processarVencido` gan
 2. **Aplicar** `qa_invariantes_ingestao_marketing.sql` no SQL Editor e conferir
    `select * from qa_invariantes() where chave like 'mkt_%'` = 5 linhas ok.
 3. Disparar `SCRAPER_FONTES=SUPORTE` (coleta o SUEDPETER; conferir o filtro de teste no log).
-4. `scraper-dom.yml` com `gravar=1` para alfa/nordeste (após DRY-RUN 2 verde); hasta conforme o
-   diagnóstico do fetch.
+4. `scraper-dom.yml` com `gravar=1` para alfa/nordeste (DRY-RUNs verdes); **hasta NÃO** —
+   aguarda runner residencial ou BD com render (403 a datacenter).

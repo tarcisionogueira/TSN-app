@@ -1,7 +1,11 @@
 /**
  * FONTE (config) — HASTA (hastaleilao.com.br, Flávio Costa). Fonte `dom` do Passo 2: todo
- * /lote/ devolve o MESMO shell no HTML cru; o dado só existe renderizado. Sem Cloudflare —
- * grátis no runner. Parser puro em lib/hasta-parse.mjs.
+ * /lote/ devolve o MESMO shell no HTML cru; o dado só existe renderizado.
+ *
+ * ⚠️ BLOQUEADA NO RUNNER (DRY-RUN 21/08): o site devolve **HTTP 403 a IP de datacenter**
+ * (o recon de 20/08 só passou porque foi via Bright Data). Como o dado exige RENDER, nem o
+ * BD cru resolve (devolve o shell). Destravar = runner RESIDENCIAL (mesma infra do
+ * GESTAO_HEADLESS) ou BD com render JS. O parser está pronto e testado em mesa — é só fetch.
  */
 import {
   TENANTS, extrairUrlsDeLote, idDaUrl, parseDetalhe, montarRow, checarQualidade,

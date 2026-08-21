@@ -39,8 +39,17 @@ export function parseDetalhe(html, url) {
   if (!avaliacao) avaliacao = minimo;
 
   const titulo = tituloDeSlug(slug);
-  const deSlug = cidadeUFDeSlug(slug);
-  const { cidade, estado } = deSlug.cidade ? deSlug : cidadeUF('', txt.slice(0, 2500));
+  // Sufixo "-lote-01-do-edital" depois da UF quebrava a cidade (Perdizes/MG saiu null no
+  // DRY-RUN 2); e "-no-bairro-<x>-sp" entregava o BAIRRO como cidade ("Mooca") — geocode e
+  // relatório errariam. Bairro → cidade null (o texto renderizado decide, se tiver).
+  const slugLimpo = slug.replace(/-lote-\d+(?:-do-edital)?\/?$/, '');
+  let { cidade, estado } = cidadeUFDeSlug(slugLimpo);
+  if (/-no-bairro-|-na-vila-|-no-jardim-/.test(slugLimpo)) cidade = null;
+  if (!cidade) {
+    const doTexto = cidadeUF('', txt.slice(0, 2500));
+    cidade = doTexto.cidade || null;
+    estado = estado || doTexto.estado || null;
+  }
 
   // Área: só do começo do texto (a seção do lote); o carrossel vem depois.
   const area = extrairArea(titulo || '', '') || extrairArea(txt.slice(0, 1500));
