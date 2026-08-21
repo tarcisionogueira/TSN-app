@@ -10715,3 +10715,10 @@ ou description `[servico]` — Asaas não tem metadata) e `processarVencido` gan
 6. Rodar `supabase/operacoes/anomalias_revisadas_21_08.sql` (resolve 17 anomalias revisadas).
 7. Marcar resolvidas as 2 linhas de `erros_cliente` do null.id (rotas `/` e `/imovel/:id`).
 8. Runner residencial de casa: próximo disparo já coleta HASTA (além de GESTAO/SOLEON pendentes).
+
+## ✅ 21/08 13:20 UTC — PESTANA CONFIRMADA (item 1 da lista: fechado)
+Cron `leiloeiros-puppeteer` de 11:38 UTC rodou com o mapper novo (1.020 lotes, saúde ok).
+Invariante `fonte_data_leilao_uniforme` = **0 (ok)**. Distribuição real de datas: 18/09 (571) ·
+**25/08 (269 — o pregão Santander que o dono viu na fonte)** · 24/08 (53) · 21/08 (40) e mais
+uma dúzia de datas. O alerta deliberado de 21/08-madrugada cumpriu o papel e morreu sozinho —
+nada a disparar manualmente.
