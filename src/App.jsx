@@ -227,6 +227,27 @@ function PrivateRoute({ children, roles }) {
   return children;
 }
 
+// Atendimento: equipe entra pelo ROLE; o parceiro comercial entra pela CAPACIDADE
+// (perfis.vendedor_tipo='consultor' — o role do plano não muda, F4 de 21/08). A cerca
+// de dados é a RLS (posse do lead); este gate só decide quem vê a tela.
+function AtendimentoRota() {
+  const { user, role } = useAuth();
+  const [cap, setCap] = useState(undefined);   // undefined = sondando
+  const ehEquipe = ['analista', 'consultor', 'admin', 'advogado'].includes(role);
+  useEffect(() => {
+    if (!user || ehEquipe) { setCap(null); return; }
+    let vivo = true;
+    supabase.from('perfis').select('vendedor_tipo').eq('id', user.id).maybeSingle()
+      .then(({ data, error }) => { if (vivo) setCap(error ? null : (data?.vendedor_tipo || null)); })
+      .catch(() => { if (vivo) setCap(null); });
+    return () => { vivo = false; };
+  }, [user, ehEquipe]);
+  if (ehEquipe) return <Atendimento />;
+  if (cap === undefined) return null;          // sondando — não decide ainda
+  if (cap === 'consultor') return <Atendimento />;
+  return <Navigate to="/" replace />;
+}
+
 // Imóvel: logado vê a página completa; VISITANTE (link compartilhado) vê o teaser
 // embaçado com CTA de login/cadastro (ImovelGate), em vez de ser jogado direto no
 // login. Depois de entrar, o ?next leva de volta a este mesmo imóvel.
@@ -373,7 +394,7 @@ function MainLayout() {
               MLM abrange clientes pagantes, não só equipe). A página é escopada ao user.id. */}
           <Route path="/comissoes" element={<PrivateRoute><Comissoes /></PrivateRoute>} />
           <Route path="/admin/chargebacks" element={<PrivateRoute roles={['admin']}><AdminChargebacks /></PrivateRoute>} />
-          <Route path="/atendimento" element={<PrivateRoute roles={['analista','consultor','admin','advogado']}><Atendimento /></PrivateRoute>} />
+          <Route path="/atendimento" element={<PrivateRoute><AtendimentoRota /></PrivateRoute>} />
           <Route path="/advogado" element={<PrivateRoute roles={['advogado','admin']}><AdvogadoPortal /></PrivateRoute>} />
           <Route path="/termos" element={<Termos />} />
           <Route path="/privacidade" element={<Privacidade />} />

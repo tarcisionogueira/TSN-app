@@ -99,9 +99,38 @@ export default function Atendimento() {
   // regra de negócio, não um bug.
   // O teste certo é PRESENÇA DA CHAVE, não veracidade do valor: quem não está na tabela não
   // atende; quem está com `null` atende tudo.
-  const escopo = Object.prototype.hasOwnProperty.call(ESCOPO_PAPEL, papelAtendimento)
-    ? ESCOPO_PAPEL[papelAtendimento]
-    : []; // papéis fora da lista não atendem
+  // MODO PARCEIRO COMERCIAL (F4, 21/08): quem tem a CAPACIDADE vendedor_tipo='consultor'
+  // (role do plano intacto — explorador, investidor pro…) atende os chamados dos SEUS
+  // leads de consórcio/home equity. A cerca real é a RLS (posse do lead via
+  // chamados.lead_id); aqui o modo só ajusta a tela: escopo de segmento vira "todos"
+  // (a RLS já entrega só o permitido) e a fila esconde os chamados em que ele é o
+  // CLIENTE (esses moram em /meus-chamados).
+  // undefined = carregando (não decide nada ainda); null = sem capacidade.
+  const [vendedorTipo, setVendedorTipo] = useState(undefined);
+  const papelEquipe = Object.prototype.hasOwnProperty.call(ESCOPO_PAPEL, papelAtendimento);
+  useEffect(() => {
+    if (!user) { setVendedorTipo(null); return; }
+    if (papelEquipe) { setVendedorTipo(null); return; }  // equipe não precisa da sonda
+    let vivo = true;
+    supabase.from('perfis').select('vendedor_tipo').eq('id', user.id).maybeSingle()
+      .then(({ data, error }) => { if (vivo) setVendedorTipo(error ? null : (data?.vendedor_tipo || null)); })
+      .catch(() => { if (vivo) setVendedorTipo(null); });
+    return () => { vivo = false; };
+  }, [user, papelEquipe]);
+  const ehComercial = !papelEquipe && vendedorTipo === 'consultor';
+  const [meusLeadIds, setMeusLeadIds] = useState(null); // Set de leads do parceiro (modo comercial)
+  useEffect(() => {
+    if (!ehComercial) { setMeusLeadIds(null); return; }
+    let vivo = true;
+    supabase.rpc('comercial_meus_leads')
+      .then(({ data, error }) => { if (vivo && !error && Array.isArray(data)) setMeusLeadIds(new Set(data.map(l => l.id))); })
+      .catch(() => {});
+    return () => { vivo = false; };
+  }, [ehComercial]);
+
+  const escopo = papelEquipe ? ESCOPO_PAPEL[papelAtendimento]
+    : ehComercial ? null            // RLS restringe as linhas; segmento não filtra por cima
+    : []; // papéis fora da lista (e sem capacidade) não atendem
   const segsVisiveis = (escopo === null ? ORDEM_SEG : ORDEM_SEG.filter(s => escopo.includes(s)));
   const [chamados, setChamados] = useState([]);
   const [filtro, setFiltro] = useState('pendentes');
@@ -236,6 +265,9 @@ export default function Atendimento() {
   const contSeg = seg => chamadosNoEscopo.filter(c => segOf(c) === seg).length;
   const buscaLower = busca.toLowerCase();
   const chamadosFiltrados = chamados.filter(c => {
+    // Modo comercial: fila = SÓ chamados dos leads dele (a RLS também entrega os
+    // chamados em que ele é o CLIENTE — esses ficam no /meus-chamados, não aqui).
+    if (ehComercial) { if (!c.lead_id || !(meusLeadIds?.has(c.lead_id))) return false; }
     if (escopo !== null && !escopo.includes(segOf(c))) return false; // escopo do papel (simulação fiel + defesa em profundidade)
     if (segFiltro !== 'todos' && segOf(c) !== segFiltro) return false;
     if (!busca.trim()) return true;
@@ -250,6 +282,13 @@ export default function Atendimento() {
 
       {/* Programa de Parceiros — opt-in da equipe (vira parceiro / pega o link de venda) */}
       <div style={{ gridColumn: '1 / -1' }}><ConviteParceiro maxWidth={1160} style={{ margin: 0 }} /></div>
+
+      {/* Modo parceiro comercial: escopo explicado (a RLS já limita — isto é transparência) */}
+      {ehComercial && (
+        <div style={{ gridColumn: '1 / -1', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 12, padding: '10px 16px', fontSize: 12.5, color: '#084BA6', fontWeight: 600 }}>
+          💼 Modo parceiro comercial — aqui você vê e responde <b>apenas os chamados dos seus clientes de consórcio e home equity</b>. Seus próprios chamados de suporte ficam em “Meus chamados”.
+        </div>
+      )}
 
       {/* ===== SIDEBAR — FILA ===== */}
       <div>

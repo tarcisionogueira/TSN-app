@@ -164,7 +164,9 @@ export default async function handler(req) {
       headers: { Prefer: 'return=representation' },
       // `user_id` só quando há TOKEN válido: aí o chamado aparece em "Meus chamados" da
       // pessoa e o Cliente 360 o liga ao cliente certo. Visitante segue com `null`.
-      body: JSON.stringify({ user_id: usuario?.id || null, user_email: email, user_nome: nome || email, titulo, status: 'aberto', segmento: 'curioso' }),
+      // `lead_id` (F4): vincula o chamado ao lead — é o que dá ao parceiro comercial o
+      // escopo do Atendimento (a RLS dele autoriza pela posse do lead).
+      body: JSON.stringify({ user_id: usuario?.id || null, user_email: email, user_nome: nome || email, titulo, status: 'aberto', segmento: 'curioso', lead_id: leadId || null }),
     });
     // O corpo de erro do PostgREST é um OBJETO, não um array: `const [x] = await res.json()`
     // sobre ele lança "not iterable", cai no catch e devolve 500 genérico ao visitante —

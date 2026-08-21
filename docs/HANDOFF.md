@@ -10964,3 +10964,23 @@ diferentes — vale o lote HASTA (dado por praça, mais fresco).
   consultor/admin.
 Auditorias: regras 0 crítico · segurança 0/0. Restam F4 (Atendimento escopo), F5 (NPS
 cron+token — reativar regra comercial.nps_cliente_15d), F6 (CSV + invariantes qa).
+
+## ✅ 21/08 (noite 11) — Consultor Comercial FASE 4: Atendimento com escopo do parceiro
+- **Migração `consultor_comercial_fase4.sql`** (escrita + aplicada): `chamados.lead_id`
+  (+índice) vincula o chamado da aplicação ao lead; policies
+  `chamados_consultor_comercial`/`mensagens_consultor_comercial` — a autorização é a
+  POSSE do lead (consultor_id = auth.uid(); só quem tem capacidade recebe lead, então a
+  posse embute a capacidade). FOR ALL: o parceiro assume/finaliza/responde SÓ os
+  chamados dos leads dele. Backfill: 2 chamados de alavancagem antigos vinculados
+  (título 'Interesse em %' + e-mail = lead).
+- **api/duvida.js**: chamado nasce com lead_id — todo lead novo de alavancagem já entra
+  com o Atendimento escopado.
+- **App.jsx**: rota /atendimento saiu do filtro fixo de roles → `AtendimentoRota`
+  (equipe pelo role; parceiro pela capacidade vendedor_tipo, sondada em perfis;
+  sondando = null, sem flicker de redirect).
+- **Atendimento.jsx**: modo comercial — banner explicando o escopo, segmentos liberados
+  (a RLS já entrega só o permitido) e a fila esconde os chamados em que o parceiro é o
+  CLIENTE (esses ficam em /meus-chamados; a RLS os entrega pela policy de próprio
+  usuário e o filtro da fila usa `lead_id ∈ meus leads` via comercial_meus_leads).
+Validação: 2 chamados vinculados, 2 policies criadas, auditoria de segurança 0/0,
+build ok. Restam F5 (NPS cron+token+regra) e F6 (CSV + invariantes).
