@@ -21,9 +21,9 @@
 --       deles: o dinheiro está indo, o rastreador não está vendo (razão real hoje: 132%).
 --
 -- Idempotente, cirurgia de string sobre o prosrc VIVO (mesmo idioma de
--- qa_invariantes_ingestao_externa.sql). ⚠️ Escrita em 21/08 na branch de trabalho e AINDA
--- NÃO aplicada (decisão do dono: produção mais tarde) — aplicar no SQL Editor junto com o
--- deploy, e conferir `select * from qa_invariantes() where chave like 'mkt_%'` = 5 linhas ok.
+-- qa_invariantes_ingestao_externa.sql). APLICADA em produção em 21/08 (5 chaves mkt_* ok).
+-- ⚠️ 22/08: a cirurgia de string recria qa_invariantes SEM reemitir `set search_path` — ver
+-- qa_invariantes_restaura_search_path.sql. Toda futura recriação por prosrc DEVE reincluí-lo.
 -- =====================================================================================
 do $outer$
 declare corpo text; novo text; bloco text;

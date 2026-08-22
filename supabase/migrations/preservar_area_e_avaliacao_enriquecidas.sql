@@ -9,8 +9,7 @@
 --
 -- Trigger BEFORE UPDATE: zero/nulo NOVO não apaga valor existente; valor novo NÃO-zero
 -- continua sobrescrevendo normalmente. Protege independentemente de qual scraper escreve.
--- Idempotente. ⚠️ Escrita em 21/08 na branch de trabalho e AINDA NÃO APLICADA (produção
--- fica para o fim, decisão do dono) — aplicar no SQL Editor junto com o checklist.
+-- Idempotente. APLICADA em produção em 21/08 (gatilho confirmado em pg_trigger).
 -- Nome com prefixo trg_ (ordem alfabética dos gatilhos: roda antes do zzzz_set_* que LÊ).
 create or replace function public.preservar_area_e_avaliacao()
 returns trigger

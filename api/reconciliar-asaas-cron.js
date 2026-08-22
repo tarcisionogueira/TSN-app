@@ -79,6 +79,15 @@ async function handler(req) {
           // VALOR: um produto cujo preço bata com o de um plano (ex.: R$ 49,90) promovia o
           // comprador a Investidor Pro de graça.
           if (UUID_RE.test(String(p.externalReference || '').trim())) continue;
+          // SERVIÇO avulso também não vira plano (22/08). O webhook (api/asaas-webhook.js)
+          // reconhece serviço pela convenção externalReference 'servico|…'/'servico:…' ou
+          // description '[servico]…' — esta rede de segurança precisa da MESMA régua, senão um
+          // pagamento de serviço cujo valor bata com um plano (R$ 49,90) promove o comprador de
+          // graça (e ainda credita comissão de rede em cima). Espelha o guard do webhook.
+          {
+            const extRef = String(p.externalReference || '').trim();
+            if (/^servico[|:]/i.test(extRef) || /^\[servico\]/i.test(p.description || '')) continue;
+          }
           verificados++;
 
           // Vínculo: asaas_id (se já salvo) OU e-mail do customer no Asaas.

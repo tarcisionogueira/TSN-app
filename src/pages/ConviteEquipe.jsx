@@ -6,6 +6,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../utils/supabase';
 import { CheckCircle2, ArrowRight, Loader2, AlertCircle, Eye, EyeOff, Camera, Upload, RefreshCw } from 'lucide-react';
 import { apiCall } from '../utils/apiCall';
+import { useAuth } from '../contexts/AuthContext';
 import { salvarConvite, lerConvite, limparConvite, CHAVE_EQUIPE, CHAVE_CLIENTE } from '../utils/convitePendente';
 
 const ROLE_CONFIG = {
@@ -300,7 +301,12 @@ async function comprimirImagem(dataUrl) {
 export default function ConviteEquipe() {
   const { token } = useParams();
   const nav = useNavigate();
+  const { user, refreshPerfil } = useAuth();
 
+  const [ativandoConsultor, setAtivandoConsultor] = useState(false);
+  const [ativarErro, setAtivarErro] = useState('');
+  const [faltando, setFaltando] = useState(null); // null=carregando · []=completo · [...]=o que falta
+  const [compl, setCompl] = useState({ nome: '', telefone: '', cidade: '', uf: '', cpf: '' });
   const [convite, setConvite] = useState(null);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState('');
@@ -311,6 +317,31 @@ export default function ConviteEquipe() {
   const [concluido, setConcluido] = useState(false);
   const [precisaConfirmarEmail, setPrecisaConfirmarEmail] = useState(false);
   const [erroPasso, setErroPasso] = useState('');
+
+  // CONSULTOR + usuário logado: descobre o que FALTA para completar o cadastro do role e os
+  // requisitos de parceiro (nome completo, telefone, cidade/UF, CPF) — o convite pede só o que
+  // falta antes de habilitar a função (pedido do dono, 22/08).
+  useEffect(() => {
+    if (!convite || !user) return;
+    if ((convite.roles?.[0]) !== 'consultor') return;
+    let vivo = true;
+    (async () => {
+      // padrao-ok: falha de leitura → p indefinido → todos os campos entram como "faltando" (a tela pede tudo); nunca pula dado exigido
+      const { data: p } = await supabase.from('perfis').select('nome, telefone, endereco_cidade, endereco_uf').eq('id', user.id).single();
+      let temCpf = false;
+      try {
+        const r = await apiCall('/api/cpf-revelar', { method: 'POST', body: JSON.stringify({ ids: [user.id] }) });
+        if (r.ok) { const d = await r.json().catch(() => ({})); temCpf = !!d?.cpfs?.[user.id]; }
+      } catch { /* sem cpf-revelar → trata como ausente e pede */ }
+      const falta = [];
+      if (!validarNome(p?.nome || '').ok) falta.push('nome');
+      if (!(p?.telefone || '').replace(/\D/g, '')) falta.push('telefone');
+      if (!(p?.endereco_cidade || '').trim() || !(p?.endereco_uf || '').trim()) falta.push('cidade');
+      if (!temCpf) falta.push('cpf');
+      if (vivo) { setCompl(c => ({ ...c, nome: p?.nome || '', telefone: p?.telefone || '', cidade: p?.endereco_cidade || '', uf: p?.endereco_uf || '' })); setFaltando(falta); }
+    })();
+    return () => { vivo = false; };
+  }, [convite, user]);
 
   useEffect(() => {
     if (!token) return;
@@ -347,6 +378,88 @@ export default function ConviteEquipe() {
 
   const roleKey = convite.roles?.[0] || 'analista';
   const cfg = ROLE_CONFIG[roleKey] || ROLE_CONFIG.analista;
+
+  // CONSULTOR + USUÁRIO JÁ LOGADO (22/08): o convite de consultor habilita uma CAPACIDADE
+  // (vendedor_tipo='consultor'), não um cadastro novo. Quem já tem conta não precisa refazer
+  // signup/KYC — só confirmar a identificação (já está logado) e ativar. A RPC preserva o role.
+  const ativarConsultorLogado = async () => {
+    setAtivandoConsultor(true); setAtivarErro('');
+    const falta = faltando || [];
+    // Valida e SALVA o que falta ANTES de habilitar (exigências do role + parceiro).
+    try {
+      if (falta.includes('nome')) { const v = validarNome(compl.nome); if (!v.ok) throw new Error(v.erro); }
+      if (falta.includes('telefone')) { const v = validarTelefone(compl.telefone); if (!v.ok) throw new Error(v.erro); }
+      if (falta.includes('cidade') && (!compl.cidade.trim() || !/^[A-Za-z]{2}$/.test(compl.uf.trim()))) throw new Error('Informe cidade e UF (ex.: Palmas / TO).');
+      if (falta.includes('cpf') && compl.cpf.replace(/\D/g, '').length !== 11) throw new Error('Informe um CPF válido (11 dígitos).');
+
+      const patch = {};
+      if (falta.includes('nome')) patch.nome = normalizarNome(compl.nome);
+      if (falta.includes('telefone')) patch.telefone = compl.telefone.replace(/\D/g, '');
+      if (falta.includes('cidade')) { patch.endereco_cidade = compl.cidade.trim(); patch.endereco_uf = compl.uf.trim().toUpperCase(); }
+      if (Object.keys(patch).length) {
+        const { error: ePerf } = await supabase.from('perfis').update(patch).eq('id', user.id).select().single();
+        if (ePerf) throw new Error('Não foi possível salvar seus dados. Tente novamente.');
+      }
+      if (falta.includes('cpf')) {
+        const rc = await apiCall('/api/cpf-set', { method: 'POST', body: JSON.stringify({ cpf: compl.cpf.replace(/\D/g, '') }) });
+        if (!rc.ok) throw new Error('Não foi possível salvar o CPF. Tente novamente.');
+      }
+    } catch (e) { setAtivarErro(e.message || 'Complete os dados para ativar.'); setAtivandoConsultor(false); return; }
+
+    // padrao-ok: ativa a capacidade do PRÓPRIO usuário logado; a RPC exige auth.uid()=p_user_id (efetivo/suporte seria rejeitado)
+    const { data, error } = await supabase.rpc('usar_convite_equipe', { p_token: token, p_user_id: user.id });
+    if (error || !data?.ok) {
+      setAtivarErro(data?.erro || error?.message || 'Não foi possível ativar agora. Tente novamente.');
+      setAtivandoConsultor(false);
+      return;
+    }
+    try { await refreshPerfil?.(); } catch { /* segue: a capacidade já foi gravada */ }
+    setConcluido(true);
+    setTimeout(() => nav('/consultor'), 1600);
+  };
+
+  if (user && roleKey === 'consultor' && !concluido) {
+    const falta = faltando || [];
+    const inp = { width: '100%', padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 14, outline: 'none', boxSizing: 'border-box' };
+    return (
+    <div style={{ minHeight: '100vh', background: '#111111', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+      <div style={{ maxWidth: 460, width: '100%', background: 'white', borderRadius: 20, padding: '36px 30px', textAlign: 'center', boxShadow: '0 24px 60px rgba(0,0,0,0.4)' }}>
+        <div style={{ fontSize: 34, marginBottom: 12 }}>{cfg.emoji}</div>
+        <h1 style={{ fontSize: 22, fontWeight: 900, color: '#111', margin: '0 0 10px' }}>Ativar função de Consultor</h1>
+        <p style={{ color: '#475569', fontSize: 14.5, lineHeight: 1.7, marginBottom: 20 }}>
+          Você já está identificado na sua conta. Ao ativar, você atua como <strong>Consultor</strong> (seu plano atual continua o mesmo) e ganha seu link de indicação.
+        </p>
+        {faltando === null ? (
+          <div style={{ color: '#94a3b8', fontSize: 13, padding: '10px 0' }}><Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /></div>
+        ) : (
+          <>
+            {falta.length > 0 && (
+              <div style={{ textAlign: 'left', display: 'grid', gap: 10, marginBottom: 18 }}>
+                <p style={{ fontSize: 12.5, color: '#64748b', margin: 0 }}>Complete os dados exigidos para atuar como parceiro:</p>
+                {falta.includes('nome') && <input style={inp} placeholder="Nome completo" value={compl.nome} onChange={e => setCompl(c => ({ ...c, nome: e.target.value }))} />}
+                {falta.includes('telefone') && <input style={inp} placeholder="WhatsApp / telefone" value={compl.telefone} onChange={e => setCompl(c => ({ ...c, telefone: maskTel(e.target.value) }))} />}
+                {falta.includes('cidade') && (
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <input style={{ ...inp, flex: 1 }} placeholder="Cidade" value={compl.cidade} onChange={e => setCompl(c => ({ ...c, cidade: e.target.value }))} />
+                    <input style={{ ...inp, width: 70 }} maxLength={2} placeholder="UF" value={compl.uf} onChange={e => setCompl(c => ({ ...c, uf: e.target.value.toUpperCase() }))} />
+                  </div>
+                )}
+                {falta.includes('cpf') && <input style={inp} placeholder="CPF" value={compl.cpf} onChange={e => setCompl(c => ({ ...c, cpf: maskCPF(e.target.value) }))} />}
+              </div>
+            )}
+            {ativarErro && <p style={{ color: '#dc2626', fontSize: 13, marginBottom: 14 }}>{ativarErro}</p>}
+            <button onClick={ativarConsultorLogado} disabled={ativandoConsultor}
+              style={{ padding: '13px 28px', background: cfg.cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: ativandoConsultor ? 'default' : 'pointer', opacity: ativandoConsultor ? 0.6 : 1, display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+              {ativandoConsultor ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <CheckCircle2 size={16} />}
+              {ativandoConsultor ? 'Ativando…' : (falta.length ? 'Salvar e ativar' : 'Ativar minha função de consultor')}
+            </button>
+          </>
+        )}
+        <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
+      </div>
+    </div>
+    );
+  }
 
   const passos = [
     ...PASSOS_BASE,
