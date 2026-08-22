@@ -5,7 +5,49 @@
 ---
 
 ## 📌 PENDÊNCIAS ABERTAS (para esta sessão — leia primeiro)
-_Última atualização: 19/08 manhã. Tudo abaixo de "resolvido" está em produção na `main`._
+_Última atualização: 22/08. Tudo abaixo de "resolvido" está em produção na `main`._
+
+### ✅ SESSÃO 22/08 — EM PRODUÇÃO (PR #305 mesclado, deploy READY, commit 5412214)
+Bug bounty de abertura (3 agentes) + pedidos do dono. Migrações aplicadas via MCP
+(retrocompatíveis); `auditoria_seguranca` 0/0. O que entrou:
+- **qa_invariantes / brightdata_decisao**: `set search_path` restaurado (as cirurgias de
+  string da F6/marketing removiam o proconfig → a aba Qualidade do Admin quebrava via
+  `admin_qa_invariantes`, definer com path vazio; monitor/health-check chamam direto e
+  escondiam a regressão). **Regra nova:** toda recriação de qa_invariantes por prosrc DEVE
+  reemitir `set search_path to 'public'`.
+- **RLS comercial** (vazamento fechado): removido INSERT público em `sdr_leads`; FOR ALL de
+  equipe segmentado (admin FOR ALL · analista SELECT · consultor lê só os próprios); F4
+  chamados/mensagens → SELECT+UPDATE / SELECT+INSERT (sem DELETE da trilha nem edição de
+  msg alheia). `duvida.js`: regex de e-mail sem reservados do PostgREST (injeção no `or=()`);
+  atribuição por `?ref` exige a origem REAL do lead ser `alavancagem_`. `sdr-capturar` não
+  injeta origem alavancagem.
+- **Dedup HASTA×CEF** (era bomba p/ 28/08): só reativa gêmeo CEF ainda vendável (status+praça);
+  alvo usa a última praça (`data_leilao_2` ou 1ª+45d); regex ancorado + multi-unidade; parser
+  grava `data_leilao_2`; falha da reconciliação vira alerta no monitor. HOJE: 539 suprimidos,
+  0 reativados por engano.
+- **Modo suporte**: MeusChamados não grava como cliente; Consultor consistente + escritas
+  bloqueadas; `supabase.js`+AuthContext com flag de simulação EM MEMÓRIA (a trava de escrita
+  não falha mais aberta com storage bloqueado).
+- **Asaas/serviço**: reembolso/chargeback/reconciliação de SERVIÇO não suspende nem eleva
+  assinatura. **health-check do Índice**: lança em recusa do PostgREST (erro não vira "ok").
+  **BIASI**: `extrairAreaM2` só ancorada na página inteira (fim da área de banner).
+- **MODELO EQUIPE = usuário de plano + função adicional** (regra do dono): consultor/parceiro
+  nasce explorador + `vendedor_tipo='consultor'` (plano preservado); `usar_convite_equipe`
+  revisada; convite ativa após identificação **pedindo o que falta** (nome/telefone/cidade-UF/
+  CPF). Fundação: coluna `funcao_equipe` + helper `eh_funcao()`/`eh_admin()` SUPERSET (reconhece
+  funcao_equipe OU role legado). **Fábio Tavares** habilitado consultor (cód. 3896A1). Lead do
+  **Antônio Valbeni** sem dono (atribuir ao Fábio em Admin › Comercial). Lead de teste do dono
+  apagado.
+
+#### ⏳ PENDÊNCIAS que sobraram desta sessão
+1. **Fase dedicada (autz):** virar o `role` do staff interno (analista/advogado/admin) para
+   tier de plano, migrando as ~230 checagens (82 RLS + 33 funções + api + front) para
+   `eh_funcao()`. Sem impacto hoje (só o admin existe; helper é superset). Fazer com teste
+   quando houver equipe interna real.
+2. **Dono:** atribuir o lead do Antônio ao Fábio em Admin › Comercial.
+3. **Cliente Erik Migliorini** (erik_migli@hotmail.com): 1ª cobrança MP recusada
+   `cc_rejected_high_risk` (antifraude do MP, NÃO é saldo nem falha nossa). Mandato vivo →
+   recuperação de venda é decisão de comunicação do dono.
 
 ### 🎉 Estado: G2RS APROVADA (chegou 06:13 de 19/08 na fila do Atendimento)
 Campanha Google e canal de e-mail 100% do nosso lado. O que falta é decisão/relógio.
