@@ -6,7 +6,8 @@ import { Copy, Check, Gavel, BarChart3, Link2, Settings, RefreshCw, AlertCircle 
 import ConviteParceiro from '../components/ConviteParceiro';
 
 export default function LeiloeiroPortal() {
-  const { user, role } = useAuth();
+  const { user, role, impersonate, effectiveUserId } = useAuth();
+  const alvoId = effectiveUserId || user.id; // suporte: dados do leiloeiro visto
   const nav = useNavigate();
   const [perfil, setPerfil] = useState(null);
   const [stats, setStats] = useState({ imoveis: 0, visualizacoes: 0, interessados: 0 });
@@ -23,7 +24,7 @@ export default function LeiloeiroPortal() {
 
   async function carregar() {
     setLoading(true);
-    const { data: p } = await supabase.from('perfis').select('*').eq('id', user.id).single();
+    const { data: p } = await supabase.from('perfis').select('*').eq('id', alvoId).single();
     setPerfil(p);
     setWebhookKey(p?.leiloeiro_webhook_key || '');
 
@@ -31,7 +32,7 @@ export default function LeiloeiroPortal() {
     const { count: totalImoveis } = await supabase
       .from('imoveis_leilao')
       .select('*', { count: 'exact', head: true })
-      .eq('fonte', `webhook_${user.id}`)
+      .eq('fonte', `webhook_${alvoId}`)
       .eq('ativo', true);
 
     setStats({ imoveis: totalImoveis || 0, visualizacoes: 0, interessados: 0 });
@@ -39,6 +40,7 @@ export default function LeiloeiroPortal() {
   }
 
   async function gerarWebhookKey() {
+    if (impersonate) return; // suporte: não gera/grava chave no perfil do admin
     setGerandoKey(true);
     const key = 'leil_' + Array.from(crypto.getRandomValues(new Uint8Array(24)))
       .map(b => b.toString(16).padStart(2, '0')).join('');

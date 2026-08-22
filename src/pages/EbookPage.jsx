@@ -286,7 +286,7 @@ export default function EbookPage() {
 // copia o link público de venda do eBook — /#/p/ebook/:id?ref=CÓDIGO. Quem comprar por
 // esse link gera comissão para o parceiro (comissao_pct do produto).
 function CompartilharVender({ ebookId }) {
-  const { user } = useAuth();
+  const { user, effectiveUserId } = useAuth();
   const [copiado, setCopiado] = useState(false);
   const [busy, setBusy] = useState(false);
   if (!user) return null;
@@ -294,9 +294,12 @@ function CompartilharVender({ ebookId }) {
   async function gerarECopiar() {
     setBusy(true);
     try {
-      let { data: perfil } = await supabase.from('perfis').select('codigo_indicacao').eq('id', user.id).single();
+      // Suporte: link de afiliado do usuário VISTO; não gera código como admin.
+      const alvoId = effectiveUserId || user.id;
+      const suporte = alvoId !== user.id;
+      let { data: perfil } = await supabase.from('perfis').select('codigo_indicacao').eq('id', alvoId).single();
       let codigo = perfil?.codigo_indicacao;
-      if (!codigo) {
+      if (!codigo && !suporte) {
         await supabase.rpc('gerar_codigo_indicacao', { p_id: user.id });
         const { data: p2 } = await supabase.from('perfis').select('codigo_indicacao').eq('id', user.id).single();
         codigo = p2?.codigo_indicacao;

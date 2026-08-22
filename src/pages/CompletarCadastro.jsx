@@ -31,7 +31,7 @@ function cpfValido(cpf) {
 
 export default function CompletarCadastro() {
   const nav = useNavigate();
-  const { user, setCadastroIncompleto } = useAuth();
+  const { user, impersonate, setCadastroIncompleto } = useAuth();
   const [form, setForm] = useState({ nome: '', cpf: '', telefone: '', cidade: '', uf: '' });
   const [cpfJaTem, setCpfJaTem] = useState(false);   // CPF já no banco (hash) → não pede de novo
   const [lgpdJaTem, setLgpdJaTem] = useState(false); // aceite LGPD já registrado
@@ -86,6 +86,7 @@ export default function CompletarCadastro() {
     if (!form.cidade || !form.uf) { setErro('Selecione sua cidade na lista (com o estado).'); return; }
     if (!aceite) { setErro('É necessário aceitar os Termos de Uso e a Política de Privacidade.'); return; }
     if (!user?.id) { setErro('Sessão expirada. Entre novamente.'); return; }
+    if (impersonate) { setErro('Modo suporte: visualização apenas.'); return; }
     setLoading(true);
     try {
       // Cidade + UF resolvidos pelo autocomplete: gravam em endereco (exibição) E em

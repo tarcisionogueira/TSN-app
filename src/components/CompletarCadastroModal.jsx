@@ -31,7 +31,7 @@ const CAMPO = {
 };
 
 export default function CompletarCadastroModal() {
-  const { user, cadastroIncompleto, setCadastroIncompleto } = useAuth();
+  const { user, impersonate, cadastroIncompleto, setCadastroIncompleto } = useAuth();
   const [carregando, setCarregando] = useState(true);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState('');
@@ -116,6 +116,8 @@ export default function CompletarCadastroModal() {
     const v = validarPasso();
     if (v !== true) { setErro(v); return; }
     if (!ultimo) { setIdx(i => i + 1); return; }
+    // Modo suporte: não grava o cadastro (seria escrita no perfil do admin). Só observação.
+    if (impersonate) { setErro('Modo suporte: visualização apenas.'); return; }
     // Último passo → grava só o que faltava.
     setSalvando(true);
     try {
