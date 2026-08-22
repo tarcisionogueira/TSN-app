@@ -3105,7 +3105,10 @@ async function enriquecerDocumentosLote(browser, imoveis, { cap = 150, deadlineM
         // "área construída/privativa/útil" e tem régua de plausibilidade (8–1M m²).
         if (!(Number(im.area_m2) > 0)) {
           const texto = html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ');
-          const a2 = extrairAreaM2(texto);
+          // Página INTEIRA → sem o regex solto: só área ANCORADA (construída/privativa/útil/
+          // total/terreno). O fallback `NUM m²` sobre a página toda pegava metragem de banner/
+          // rodapé/outro lote e o trigger de preservação a tornava permanente (caso BIASI).
+          const a2 = extrairAreaM2(texto, { permitirSolta: false });
           if (a2 > 0) im.area_m2 = a2;
         }
         const docs = vasculharDocumentos(html, url, im.link_foto || null);

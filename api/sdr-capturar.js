@@ -114,7 +114,11 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         produto_id: produtoId, nome, whatsapp, email,
         respostas, user_id: userId, consultor_id: consultorId,
-        origem: String(b.origem || '').slice(0, 500) || null, status: 'novo',
+        // 22/08 — a origem NÃO pode ser 'alavancagem_*': essa é a fila comercial (consórcio/home
+        // equity), lida por comercial_meus_leads e atribuída via ?ref no /api/duvida. Deixar a
+        // captura de EBOOK aceitar essa origem do corpo injetaria lead no escopo do consultor
+        // (com dono sorteado), pulando a atribuição da F3. Coage para uma origem de captura.
+        origem: (/^alavancagem/i.test(String(b.origem || '')) ? 'ebook' : String(b.origem || '').slice(0, 500)) || null, status: 'novo',
       }),
     });
     // NUNCA falhar em silêncio: era assim que o lead sumia (schema sem respostas/user_id/

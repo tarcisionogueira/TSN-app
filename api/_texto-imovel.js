@@ -77,7 +77,12 @@ export function extrairDescricaoDoCorpo(html) {
  * plausível. Terreno vem por último de propósito — quando existem as duas, a área da
  * EDIFICAÇÃO é a que baliza o R$/m² do relatório (ver `gerar-documental.js`).
  */
-export function extrairAreaM2(texto) {
+export function extrairAreaM2(texto, { permitirSolta = true } = {}) {
+  // `permitirSolta=false` (22/08): quando o texto é a PÁGINA INTEIRA (e não uma descrição
+  // recortada), o último recurso `NUM m²` casa "área de lazer 300 m²", a metragem de OUTRO lote
+  // no rodapé ou um banner — foi assim que o BIASI gravou área inventada, que o trigger de
+  // preservação e o merge em memória tornaram permanente e invisível. Os padrões ANCORADOS
+  // (construída/privativa/útil/total/terreno) continuam confiáveis mesmo na página toda.
   // Decodifica antes de medir: `100 m&sup2;` e `&aacute;rea constru&iacute;da` são a mesma
   // informação que `100 m²` e `área construída`, e só a segunda forma casa com as regras.
   const t = decodificarEntidades(texto).replace(/\s+/g, ' ');
@@ -96,7 +101,7 @@ export function extrairAreaM2(texto) {
     new RegExp(`${NUM}\\s*${UNI}\\s+de\\s+área\\s+(?:constru[íi]da|privativa|edificada|útil)`, 'i'),
     new RegExp(`área\\s+total[^\\d]{0,20}${NUM}\\s*${UNI}`, 'i'),
     new RegExp(`área\\s+do\\s+terreno[^\\d]{0,20}${NUM}\\s*${UNI}`, 'i'),
-    new RegExp(`${NUM}\\s*${UNI}`, 'i'), // solta, último recurso
+    ...(permitirSolta ? [new RegExp(`${NUM}\\s*${UNI}`, 'i')] : []), // solta, último recurso (só em texto recortado)
   ];
   for (const re of tentativas) {
     const v = plausivel(paraNumero((t.match(re) || [])[1]));

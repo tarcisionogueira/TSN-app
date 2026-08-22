@@ -1,0 +1,31 @@
+-- 22/08 — RESTAURA o `search_path` de qa_invariantes() e brightdata_decisao().
+--
+-- POR QUÊ (achado do bug bounty de abertura, confirmado por repro):
+-- A definição canônica de qa_invariantes (qa_invariantes.sql:8) é
+-- `language sql set search_path to 'public'`. As migrações posteriores que reescrevem
+-- a função por "cirurgia de string" (a partir de pg_proc.prosrc) — F6 comercial,
+-- ingestão de marketing/externa, data_leilao_uniforme, selo_matricula — reconstroem o
+-- corpo com `language sql stable as $corpo$...` e PERDEM a cláusula `set search_path`,
+-- porque `prosrc` guarda só o corpo, não o proconfig. Resultado em produção:
+-- `proconfig = null`.
+--
+-- O CORPO referencia as tabelas SEM qualificar (`from imoveis_leilao`, `from perfis`,
+-- `from sdr_leads`...). O único chamador da UI é admin_qa_invariantes() (qa_invariantes.sql:39),
+-- que é `security definer set search_path to ''` e chama qa_invariantes por dentro — a
+-- função interna herda o search_path VAZIO e falha com "relation imoveis_leilao does not
+-- exist". A aba admin "Qualidade" ficava morta. O monitor diário (monitor-fontes-cron) e o
+-- health-check chamam qa_invariantes DIRETO como service_role (search_path=public) e por
+-- isso nunca pararam — foi o que escondeu a regressão.
+--
+-- brightdata_decisao() também estava com proconfig=null e referencia tabelas sem qualificar;
+-- hoje só é chamada por service_role (search_path=public), mas restauramos o config por
+-- defesa em profundidade (uma chamada futura via definer com path vazio quebraria igual).
+--
+-- FIX MÍNIMO: ALTER FUNCTION restaura o proconfig sem tocar no corpo (que hoje é muito maior
+-- que o do arquivo canônico). Idempotente.
+--
+-- REGRA PARA O FUTURO: toda migração que recriar qa_invariantes por cirurgia de string DEVE
+-- reemitir `set search_path to 'public'` no `create or replace` — senão reabre este buraco.
+
+alter function public.qa_invariantes() set search_path to 'public';
+alter function public.brightdata_decisao(integer, text) set search_path to 'public';

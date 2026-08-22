@@ -84,6 +84,10 @@ export function parseDetalhe(html, url) {
   const datas = pracas.map(p => { const [d, mo, y] = p.data.split('/').map(Number); return new Date(y, mo - 1, d); })
     .filter(d => !isNaN(d)).sort((a, b) => a - b);
   const fut = datas.find(d => d >= hoje) || datas[datas.length - 1] || null;
+  // ÚLTIMA praça (2ª, quando há duas): a dedup HASTA×CEF precisa saber quando o leilão TERMINA
+  // de fato, não só a próxima praça. Sem isto, `data_leilao` guardava só a 1ª e o gêmeo CEF
+  // reaparecia no intervalo entre praças (22/08). Só emite quando há 2+ datas distintas.
+  const ultima = datas.length >= 2 && datas[datas.length - 1] > (fut || datas[0]) ? datas[datas.length - 1] : null;
   const encerrado = datas.length > 0 && !datas.some(d => d >= hoje) && !/ABERTO\s+PARA\s+LANCES/i.test(txt);
 
   const docs = anexosDeHtml(html, url);
@@ -93,6 +97,7 @@ export function parseDetalhe(html, url) {
     modalidade, area_m2: area,
     descricao,
     data_leilao: fut ? fut.toISOString().slice(0, 10) : null,
+    data_leilao_2: ultima ? ultima.toISOString() : null,
     numero_matricula: mat, ...docs,
     encerrado,
     // sem acento p/ casar com o mapa ("GALPÃO" → galpao; a CEF costuma vir sem acento, mas custa nada)

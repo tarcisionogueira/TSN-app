@@ -57,7 +57,12 @@ export default async function handler(req) {
   const mensagem = String(body.mensagem || '').trim().slice(0, 2000);
   const origem = String(body.origem || 'duvida_planos').slice(0, 40);
 
-  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return json({ error: 'Informe um e-mail válido para receber a resposta.' }, 400);
+  // Regex de e-mail SEM caracteres reservados do PostgREST (`,` `(` `)` `"`): esse valor entra
+  // no filtro `or=(email.eq.<valor>)` da busca de lead, e o PostgREST decodifica o percent-encoding
+  // ANTES de rodar o parser de filtros — uma vírgula no valor viraria um NOVO termo do `or`
+  // (ex.: `a@b.co,consultor_id.is.null` casaria o 1º lead órfão da base). E-mail real nunca tem
+  // esses caracteres; barrá-los aqui fecha a injeção na origem.
+  if (!/^[^\s@,()"]+@[^\s@,()"]+\.[^\s@,()"]+$/.test(email)) return json({ error: 'Informe um e-mail válido para receber a resposta.' }, 400);
   if (mensagem.length < 5) return json({ error: 'Escreva sua dúvida.' }, 400);
 
   // TELEFONE DO LOGADO VEM DO SERVIDOR, NÃO DO CORPO (16/08).
@@ -87,15 +92,15 @@ export default async function handler(req) {
   }
 
   // 1. LEAD — não duplica (busca por email ou whatsapp)
-  let leadId = null, leadConsultorId = null, leadStatus = null;
+  let leadId = null, leadConsultorId = null, leadStatus = null, leadOrigem = null;
   try {
     const filtros = [`email.eq.${encodeURIComponent(email)}`];
     if (telefone) filtros.push(`whatsapp.eq.${encodeURIComponent(telefone)}`);
-    const existentes = await (await sb(`sdr_leads?or=(${filtros.join(',')})&select=id,nome,whatsapp,user_id,consultor_id,status&limit=1`)).json();
+    const existentes = await (await sb(`sdr_leads?or=(${filtros.join(',')})&select=id,nome,whatsapp,user_id,consultor_id,status,origem&limit=1`)).json();
     if (Array.isArray(existentes) && existentes.length) {
       // Atualiza dados que estavam vazios, sem criar novo lead
       const lead = existentes[0];
-      leadId = lead.id; leadConsultorId = lead.consultor_id || null; leadStatus = lead.status || null;
+      leadId = lead.id; leadConsultorId = lead.consultor_id || null; leadStatus = lead.status || null; leadOrigem = lead.origem || null;
       const patch = {};
       if (!lead.nome && nome) patch.nome = nome;
       if (!lead.whatsapp && telefone) patch.whatsapp = telefone;
@@ -121,7 +126,7 @@ export default async function handler(req) {
         console.error('[duvida] lead NÃO gravado', leadRes.status, det.slice(0, 300));
       } else {
         const [novo] = await leadRes.json().catch(() => []);
-        if (novo?.id) { leadId = novo.id; leadConsultorId = null; leadStatus = 'novo'; }
+        if (novo?.id) { leadId = novo.id; leadConsultorId = null; leadStatus = 'novo'; leadOrigem = novo.origem || origem; }
       }
     }
   } catch (e) { console.error('[duvida] lead NÃO gravado (exceção)', String(e?.message || e)); }
@@ -131,9 +136,18 @@ export default async function handler(req) {
   // resolve para uma pessoa é o servidor, e só aceita quem tem a capacidade comercial
   // (vendedor_tipo='consultor' ou role consultor/admin) — consultor_id nunca vem do
   // cliente. Best-effort: falha aqui não derruba o registro do interesse.
+  //
+  // 22/08 — A guarda de "só alavancagem" olha a origem REAL DO LEAD (lida do banco), não a
+  // `origem` do CORPO. Antes o gate era `origem.startsWith('alavancagem')` sobre body.origem
+  // (controlado pelo atacante): bastava um POST com o e-mail de um cliente qualquer +
+  // `origem:'alavancagem_*'` + o ref de um consultor para o lead PRÉ-EXISTENTE daquela pessoa
+  // (nascido de ebook/duvida) receber consultor_id — e, pela RLS da F4, o consultor passava a
+  // ler/atender os chamados de suporte da vítima. Agora o vínculo só ocorre quando o próprio
+  // lead é de alavancagem. `refCodigo` restrito a alfanumérico+hífen (é UUID ou código gerado).
   try {
-    const refCodigo = String(body.ref || '').trim().slice(0, 80);
-    if (leadId && !leadConsultorId && refCodigo && origem.startsWith('alavancagem')) {
+    const refCodigo = String(body.ref || '').trim().slice(0, 80).replace(/[^A-Za-z0-9-]/g, '');
+    const leadEhAlavancagem = String(leadOrigem || '').startsWith('alavancagem');
+    if (leadId && !leadConsultorId && refCodigo && leadEhAlavancagem) {
       const campo = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(refCodigo) ? 'id' : 'codigo_indicacao';
       const consRes = await sb(`perfis?${campo}=eq.${encodeURIComponent(refCodigo)}&select=id,nome,role,vendedor_tipo&limit=1`);
       const [cons] = consRes.ok ? await consRes.json().catch(() => []) : [];

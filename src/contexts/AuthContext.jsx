@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { supabase } from '../utils/supabase';
+import { supabase, marcarSimulacao } from '../utils/supabase';
 import { ativarPushAutomatico } from '../utils/push';
 import { salvarRef, lerRef, limparRef } from '../utils/ref';
 import { lerMarketing } from '../utils/marketing';
@@ -139,7 +139,7 @@ export function AuthProvider({ children }) {
   // try/catch no INICIALIZADOR (21/08): com cookies/site-data bloqueados o Firefox lança
   // SecurityError já no getItem — sem a guarda, o AuthProvider morria na montagem e o app
   // inteiro virava tela branca para esse navegador.
-  const [roleSimulado, setRoleSimulado] = useState(() => { try { return sessionStorage.getItem(SIM_ROLE_KEY) || null; } catch { return null; } });
+  const [roleSimulado, setRoleSimulado] = useState(() => { try { const r = sessionStorage.getItem(SIM_ROLE_KEY) || null; marcarSimulacao(r); return r; } catch { return null; } });
 
   useEffect(() => {
     // Captura GLOBAL da indicação do parceiro (?ref=), venha ANTES ou DEPOIS do # (HashRouter).
@@ -405,7 +405,10 @@ export function AuthProvider({ children }) {
   // expulsa —, e a simulação começava por um redirecionamento em vez de pela home.
   // `location.hash` porque o AuthProvider ENVOLVE o HashRouter: aqui não há `useNavigate`.
   const simularRole = (r) => {
-    try { if (r) sessionStorage.setItem(SIM_ROLE_KEY, r); else sessionStorage.removeItem(SIM_ROLE_KEY); } catch { /* sem persistência */ }
+    // A flag EM MEMÓRIA é marcada ANTES (e independente) do sessionStorage: é ela que faz a
+    // trava de escrita da simulação (supabase.js) funcionar mesmo com storage bloqueado/cheio.
+    marcarSimulacao(r || null);
+    try { if (r) sessionStorage.setItem(SIM_ROLE_KEY, r); else sessionStorage.removeItem(SIM_ROLE_KEY); } catch { /* sem persistência: a flag de memória cobre */ }
     if (r) { setRoleSimulado(r); window.location.hash = '#/'; }
     else   { setRoleSimulado(null); window.location.hash = '#/admin'; }
   };

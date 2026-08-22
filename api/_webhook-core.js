@@ -601,7 +601,7 @@ export async function processarVencido({ gatewayCustomerId, email, gateway, serv
 // TODO (pendência): submissão AUTOMÁTICA da defesa via API de disputas do MP.
 // Adiado até poder validar contra a API real — ver docs/PENDENCIAS_PAGAMENTOS.md.
 // Hoje o dossiê fica pronto e copiável em /admin/chargebacks (envio manual).
-export async function processarChargeback({ valor, descricao, email, gatewayCustomerId, gatewayPaymentId, gatewaySubscriptionId, gateway, evento, motivo, raw }) {
+export async function processarChargeback({ valor, descricao, email, gatewayCustomerId, gatewayPaymentId, gatewaySubscriptionId, gateway, evento, motivo, raw, servico = false }) {
   const cliente = await buscarCliente({ gatewayCustomerId, email, gateway });
 
   // Busca o aceite mais relevante (por pagamento → por usuário → por email)
@@ -657,8 +657,10 @@ export async function processarChargeback({ valor, descricao, email, gatewayCust
     console.error(`[${gateway}] insert chargeback:`, e.message);
   }
 
-  // Suspende o acesso (mesmo efeito de inadimplência) enquanto a disputa corre
-  try { await processarVencido({ gatewayCustomerId, email, gateway }); } catch (_) {}
+  // Suspende o acesso (mesmo efeito de inadimplência) enquanto a disputa corre — EXCETO
+  // chargeback de SERVIÇO avulso, que não é a assinatura (22/08). O dossiê e o estorno de
+  // comissão abaixo continuam valendo (são daquele pagamento); só a suspensão de acesso é pulada.
+  if (!servico) { try { await processarVencido({ gatewayCustomerId, email, gateway }); } catch (_) {} }
 
   // Estorna a comissão de afiliado deste pagamento (o dinheiro voltou → a comissão
   // não é mais devida). Evita "refund + comissão paga" (perda dupla).
@@ -684,18 +686,24 @@ export async function processarChargeback({ valor, descricao, email, gatewayCust
 // mais devida (senão: indicar → comissão vira 'disponivel' → reembolso → sacar = fraude).
 // `suspender` (padrão true no reembolso TOTAL) rebaixa o acesso; no PARCIAL fica false
 // (o cliente pagou a maior parte) — a reconciliação re-ativa se a assinatura seguir ativa.
-export async function processarReembolso({ valor, email, gatewayCustomerId, gatewayPaymentId, gateway, suspender = true }) {
-  if (suspender) {
+export async function processarReembolso({ valor, email, gatewayCustomerId, gatewayPaymentId, gateway, suspender = true, servico = false }) {
+  // 22/08: SERVIÇO avulso reembolsado NÃO derruba a assinatura. O guard já existia em
+  // processarVencido/processarRecusado, mas processarReembolso não recebia `servico` e chamava
+  // processarVencido sem ele — um assinante `clube` em dia que reembolsa uma assessoria avulsa
+  // pelo Asaas era rebaixado a explorador (inadimplente_desde, docs em prazo LGPD). O MP já
+  // fecha isto; agora o núcleo fecha para os dois gateways.
+  const suspendeAcesso = suspender && !servico;
+  if (suspendeAcesso) {
     try { await processarVencido({ gatewayCustomerId, email, gateway }); } catch (_) { /* não bloqueia o estorno */ }
   }
   let estorno = null;
   try { estorno = await estornarComissao({ gatewayPaymentId, gateway, motivo: 'reembolso' }); } catch (e) { estorno = { erro: e?.message || String(e) }; }
   alertarErro({
     rota: `webhook/${gateway}/reembolso`,
-    erro: `Reembolso processado — ${email || gatewayPaymentId} — R$ ${Number(valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}. Comissão de rede estornada${suspender ? '; acesso suspenso' : ' (reembolso parcial — acesso mantido)'}.`,
+    erro: `Reembolso processado — ${email || gatewayPaymentId} — R$ ${Number(valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}. Comissão de rede estornada${suspendeAcesso ? '; acesso suspenso' : (servico ? ' (serviço avulso — assinatura mantida)' : ' (reembolso parcial — acesso mantido)')}.`,
     extra: { gatewayPaymentId },
   });
-  return { ok: true, reembolso: true, suspenso: suspender, estorno };
+  return { ok: true, reembolso: true, suspenso: suspendeAcesso, servico, estorno };
 }
 
 async function setExpiracaoDocumentos(userId) {

@@ -206,7 +206,12 @@ export default async function handler(req) {
     // terrenos de 500m² arrematados a ~R$37/m², índice em R$181/m² com 7 amostras — o aviso
     // era falso). Para eles vale só o piso do absurdo (R$20/m²); construído mantém 200–50k.
     const ro = await sb('cidade_indicadores?select=cidade_norm,uf,tipo,venda_m2&or=(venda_m2.gt.50000,venda_m2.lt.20,and(venda_m2.lt.200,tipo.not.in.(terreno,rural)))&limit=20');
-    const out = ro.ok ? await ro.json() : [];
+    // 22/08: a árvore lógica `or(and(not.in))` é frágil — se o PostgREST recusar (400), o
+    // `ro.ok ? ... : []` transformava a recusa em "0 fora da régua" = status 'ok' PARA SEMPRE,
+    // e este é o único vigia contra contaminação de área total×privativa. Erro de leitura NÃO é
+    // "nada fora da régua": lança, como a linha 202 já faz, para o check acusar em vez de mentir.
+    if (!ro.ok) throw new Error(`HTTP ${ro.status} (filtro de outliers)`);
+    const out = await ro.json();
     if (Array.isArray(out) && out.length) {
       return { status: 'aviso', detalhe: `${cnt} cidades indexadas; ${out.length} com R$/m² fora da régua (construído 200–50k; terreno/rural ≥20) — contaminação de área, revisar/calibrar.` };
     }

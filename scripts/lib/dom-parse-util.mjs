@@ -76,7 +76,7 @@ export function montarRowDom(url, det, tenant, id, inferirTipo) {
     link_edital: det.link_edital || url, url_lote: url, link_foto: det.link_foto || null,
     numero_matricula: det.numero_matricula || null, link_matricula: det.link_matricula || null,
     anexos: det.anexos || [],
-    leiloeiro: tenant.leiloeiro, data_leilao: det.data_leilao || null, forma_pagamento: 'a_vista',
+    leiloeiro: tenant.leiloeiro, data_leilao: det.data_leilao || null, data_leilao_2: det.data_leilao_2 || null, forma_pagamento: 'a_vista',
     ativo: true,
     viavel: va > 0 ? (1 - vm / va) >= 0.3 : null,
     score_viabilidade: va > 0 ? Math.min(100, Math.round((1 - vm / va) * 150)) : 30,

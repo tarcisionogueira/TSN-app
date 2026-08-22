@@ -81,15 +81,20 @@ export default function Consultor() {
   useEffect(() => {
     if (!user || !podeVer) { setLoading(false); return; }
     async function load() {
+      // 22/08 — TODAS as leituras com escopo de consultor usam o alvo (o consultor VISTO sob
+      // suporte, ou o próprio logado). Antes só a carteira (indicados) estava roteada e o resto
+      // (código de indicação, comissões, links promo/convite, leads) vinha do ADMIN — a tela
+      // virava um Frankenstein: indicados da consultora ao lado do LINK e das comissões do admin,
+      // e o botão de copiar entregava o código do admin.
+      const alvoId = effectiveUserId || user.id;
       const [{ data: p }, { data: cli }, { data: com }, { data: cs }, { data: eb }, { data: lp }, { data: lc }, { data: pc }, { data: sdrProd }] = await Promise.all([
-        supabase.from('perfis').select('codigo_indicacao, comissao_afiliado_pct, asaas_wallet_id').eq('id', user.id).single(),
-        // Sob suporte, os indicados são os do CONSULTOR visto — user.id cru listava os do admin.
-        supabase.from('perfis').select('id, nome, telefone, role, plano, created_at').eq('indicado_por', effectiveUserId || user.id).order('created_at', { ascending: false }),
-        supabase.from('comissoes').select('*').eq('beneficiario_id', user.id).order('created_at', { ascending: false }),
+        supabase.from('perfis').select('codigo_indicacao, comissao_afiliado_pct, asaas_wallet_id').eq('id', alvoId).single(),
+        supabase.from('perfis').select('id, nome, telefone, role, plano, created_at').eq('indicado_por', alvoId).order('created_at', { ascending: false }),
+        supabase.from('comissoes').select('*').eq('beneficiario_id', alvoId).order('created_at', { ascending: false }),
         supabase.from('cursos_admin').select('id, titulo, subtitulo, preco, emoji, cor, comissao_pct').eq('ativo', true).order('ordem'),
         supabase.from('ebooks_admin').select('id, titulo, preco, comissao_pct').eq('ativo', true).order('criado_em', { ascending: false }),
-        supabase.from('links_promo').select('*').eq('ativo', true).or(`compartilhado.eq.true,criado_por.eq.${user.id}`).order('criado_em', { ascending: false }),
-        supabase.from('links_convite').select('*').eq('criado_por', user.id).order('criado_em', { ascending: false }),
+        supabase.from('links_promo').select('*').eq('ativo', true).or(`compartilhado.eq.true,criado_por.eq.${alvoId}`).order('criado_em', { ascending: false }),
+        supabase.from('links_convite').select('*').eq('criado_por', alvoId).order('criado_em', { ascending: false }),
         supabase.from('planos_config').select('plano_key,nome,preco,preco_vista,comissao_pct').eq('ativo', true),
         supabase.from('sdr_produtos').select('id, nome, tipo').eq('ativo', true).order('criado_em', { ascending: false }),
       ]);
@@ -109,11 +114,18 @@ export default function Consultor() {
 
   useEffect(() => {
     if (!user || !podeVer) return;
-    supabase.from('sdr_leads').select('*, sdr_produtos(nome, perguntas)').eq('consultor_id', user.id).order('criado_em', { ascending: false })
+    supabase.from('sdr_leads').select('*, sdr_produtos(nome, perguntas)').eq('consultor_id', effectiveUserId || user.id).order('criado_em', { ascending: false })
       .then(({ data }) => setLeadsSDR(data || []));
   }, [user, podeVer]);
 
+  // MODO SUPORTE (22/08): visualização apenas. Toda ação de escrita desta tela grava com a
+  // identidade do ADMIN (user.id) — gerar código/link/convite, reunião, mensagem. Sob suporte
+  // isso misturaria os dados do admin com a visão do consultor, então bloqueamos e orientamos.
+  const suporte = !!(effectiveUserId && user && effectiveUserId !== user.id);
+  const bloqueiaSuporte = () => { if (suporte) { alert('Modo suporte: visualização apenas. As ações do consultor (gerar código, links, convites, reuniões) ficam desabilitadas.'); return true; } return false; };
+
   const gerarCodigo = async () => {
+    if (bloqueiaSuporte()) return;
     const { data, error } = await supabase.rpc('gerar_codigo_indicacao', { p_id: user.id });
     if (error) { alert('Erro ao gerar código: ' + error.message); return; }
     if (data) setPerfil(p => ({ ...p, codigo_indicacao: data }));
@@ -143,6 +155,7 @@ export default function Consultor() {
   }
 
   const criarLinkPromo = async () => {
+    if (bloqueiaSuporte()) return;
     setSalvandoPromo(true);
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     const cod = Array.from({ length: 8 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
@@ -160,17 +173,20 @@ export default function Consultor() {
   };
 
   const togglePromo = async (lp) => {
+    if (bloqueiaSuporte()) return;
     await supabase.from('links_promo').update({ ativo: !lp.ativo }).eq('id', lp.id);
     setLinksPromo(ps => ps.map(p => p.id === lp.id ? { ...p, ativo: !p.ativo } : p));
   };
 
   const gerarConvite = async () => {
+    if (bloqueiaSuporte()) return;
     const codigo = Math.random().toString(36).substring(2, 10).toUpperCase();
     const { data, error } = await supabase.from('links_convite').insert({ codigo, criado_por: user.id }).select().single();
     if (!error && data) setLinksConvite(p => [data, ...p]);
   };
 
   const toggleConvite = async (c) => {
+    if (bloqueiaSuporte()) return;
     await supabase.from('links_convite').update({ ativo: !c.ativo }).eq('id', c.id);
     setLinksConvite(ps => ps.map(p => p.id === c.id ? { ...p, ativo: !p.ativo } : p));
   };
@@ -252,6 +268,7 @@ export default function Consultor() {
 
   async function enviarMensagem() {
     if (!msgForm.conteudo.trim()) return;
+    if (bloqueiaSuporte()) return;
     setEnviandoMsg(true);
     await supabase.from('mensagens_diretas').insert({
       de_consultor_id: user.id,
@@ -267,6 +284,7 @@ export default function Consultor() {
 
   async function criarReuniao() {
     if (!reuniaoForm.data) return;
+    if (bloqueiaSuporte()) return;
     setCriandoReuniao(true);
     setReuniaoInfo(null);
     setEstendeuMsg('');
@@ -286,6 +304,7 @@ export default function Consultor() {
 
   async function estenderReuniao(min) {
     if (!reuniaoInfo?.roomName) return;
+    if (bloqueiaSuporte()) return;
     setEstendendo(true);
     setEstendeuMsg('');
     try {

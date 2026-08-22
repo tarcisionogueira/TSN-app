@@ -60,6 +60,12 @@ export default function MeusChamados() {
 
   async function enviarMensagem() {
     if ((!texto.trim() && !anexos.length) || !chamadoAtivo) return;
+    // MODO SUPORTE (22/08): esta tela lista os chamados do CLIENTE visto (effectiveUserId), mas
+    // a escrita gravava `autor_id: user.id` (admin), `autor_nome` = nome do cliente e
+    // `autor_tipo:'cliente'` — ou seja, o admin postava uma mensagem FORJADA como se fosse o
+    // cliente, corrompendo o histórico e o SLA (tempo_processo mede min(criado_em) where
+    // autor_tipo='cliente'). O admin responde pelo /atendimento, não por aqui. Bloqueado.
+    if (impersonate) { alert('Modo suporte: você está vendo os chamados do cliente. Para responder, use a tela de Atendimento.'); return; }
     setEnviando(true);
     const { data: msg, error: errMsg } = await supabase.from('chamados_mensagens').insert({
       chamado_id: chamadoAtivo.id, autor_id: user.id, autor_nome: nomeUsuario,
@@ -192,6 +198,11 @@ export default function MeusChamados() {
                   ))}
                 </div>
               )}
+              {impersonate ? (
+                <div style={{ padding: '10px 12px', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 10, fontSize: 12.5, color: '#9a3412' }}>
+                  Modo suporte — você está vendo os chamados de <strong>{impersonate?.nome || 'cliente'}</strong>. Responda pela tela de <strong>Atendimento</strong> (aqui a resposta gravaria como se fosse o cliente).
+                </div>
+              ) : (
               <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
                 <button onClick={() => fileRef.current?.click()}
                   style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: 8, borderRadius: 8 }}>
@@ -210,6 +221,7 @@ export default function MeusChamados() {
                 </button>
                 <input ref={fileRef} type="file" accept="image/*,.pdf,.doc,.docx" style={{ display: 'none' }} onChange={handleFile} />
               </div>
+              )}
             </div>
           ) : (
             <div style={{ padding: '12px 20px', background: '#f8fafc', borderTop: '1px solid #f1f5f9', fontSize: 13, color: '#64748b', textAlign: 'center' }}>

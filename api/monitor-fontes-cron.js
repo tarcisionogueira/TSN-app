@@ -186,6 +186,13 @@ async function handler(req) {
   const agoraMs = Date.now();
   const problemas = [];
 
+  // A4 (22/08): a falha da reconciliação de gêmeos precisa VIRAR problema — antes só saía no
+  // corpo HTTP (que ninguém lê), então se a RPC sumisse/perdesse permissão a dedup ficava parada
+  // e 539 duplicados voltavam SEM UM ÚNICO alarme. Agora entra na lista → dispara e-mail/assinatura.
+  if (gemeos?.erro) {
+    problemas.push({ fonte: 'GÊMEOS HASTA×CEF', tipo: 'reconciliação falhou', detalhe: `dedup parada — ${gemeos.erro}` });
+  }
+
   // A) TODAS as fontes que reportam saúde: coleta parada / falhou / degradado.
   for (const [fonte, u] of Object.entries(ultima)) {
     if (FONTES_INTERNAS.includes(fonte)) continue;

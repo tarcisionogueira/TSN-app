@@ -39,9 +39,20 @@ const STATUS_IGNORADOS = new Set([
 // mostrar. Um falso NEGATIVO, não: escreve de verdade.
 const RPC_QUE_ESCREVEM = /^(aceitar|consumir|debitar|creditar|gerar|criar|atualizar|marcar|registrar|vincular|salvar|definir|aplicar|distribuir|recalcular|enfileirar|limpar|resolver|excluir|remover|cancelar|encerrar|iniciar|finalizar|aprovar|recusar|upsert|set)_/i;
 
+// Flag de simulação EM MEMÓRIA (22/08): não pode depender só do sessionStorage. Com storage
+// bloqueado/cheio (Firefox com site-data off, cota estourada — a MESMA população que a
+// blindagem de storage atende), o `getItem` LANÇA e o catch devolvia null = "não está
+// simulando" → PATCH/POST/DELETE passavam gravando como ADMIN. É o falso NEGATIVO que o
+// comentário acima diz ser o único inaceitável. O AuthContext chama `marcarSimulacao` ao
+// entrar/sair da simulação e ao restaurar na montagem, então o bloqueio vale mesmo sem storage.
+let _simRoleMem = null;
+export function marcarSimulacao(role) { _simRoleMem = role || null; }
+
 function bloqueadoNaSimulacao(input, init) {
   try {
-    if (!sessionStorage.getItem('tsn_sim_role')) return null;
+    let simulando = _simRoleMem;
+    if (!simulando) { try { simulando = sessionStorage.getItem('tsn_sim_role'); } catch { /* storage off: cai na flag de memória */ } }
+    if (!simulando) return null;
     const url = typeof input === 'string' ? input : (input?.url || '');
     if (!url.includes('/rest/v1/')) return null;              // auth e storage não passam por aqui
     const metodo = String(init?.method || (typeof input === 'object' ? input?.method : '') || 'GET').toUpperCase();
