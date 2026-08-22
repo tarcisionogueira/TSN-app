@@ -6,6 +6,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../utils/supabase';
 import { CheckCircle2, ArrowRight, Loader2, AlertCircle, Eye, EyeOff, Camera, Upload, RefreshCw } from 'lucide-react';
 import { apiCall } from '../utils/apiCall';
+import { useAuth } from '../contexts/AuthContext';
 import { salvarConvite, lerConvite, limparConvite, CHAVE_EQUIPE, CHAVE_CLIENTE } from '../utils/convitePendente';
 
 const ROLE_CONFIG = {
@@ -300,7 +301,10 @@ async function comprimirImagem(dataUrl) {
 export default function ConviteEquipe() {
   const { token } = useParams();
   const nav = useNavigate();
+  const { user, refreshPerfil } = useAuth();
 
+  const [ativandoConsultor, setAtivandoConsultor] = useState(false);
+  const [ativarErro, setAtivarErro] = useState('');
   const [convite, setConvite] = useState(null);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState('');
@@ -347,6 +351,42 @@ export default function ConviteEquipe() {
 
   const roleKey = convite.roles?.[0] || 'analista';
   const cfg = ROLE_CONFIG[roleKey] || ROLE_CONFIG.analista;
+
+  // CONSULTOR + USUÁRIO JÁ LOGADO (22/08): o convite de consultor habilita uma CAPACIDADE
+  // (vendedor_tipo='consultor'), não um cadastro novo. Quem já tem conta não precisa refazer
+  // signup/KYC — só confirmar a identificação (já está logado) e ativar. A RPC preserva o role.
+  const ativarConsultorLogado = async () => {
+    setAtivandoConsultor(true); setAtivarErro('');
+    // padrao-ok: ativa a capacidade do PRÓPRIO usuário logado; a RPC exige auth.uid()=p_user_id (efetivo/suporte seria rejeitado)
+    const { data, error } = await supabase.rpc('usar_convite_equipe', { p_token: token, p_user_id: user.id });
+    if (error || !data?.ok) {
+      setAtivarErro(data?.erro || error?.message || 'Não foi possível ativar agora. Tente novamente.');
+      setAtivandoConsultor(false);
+      return;
+    }
+    try { await refreshPerfil?.(); } catch { /* segue: a capacidade já foi gravada */ }
+    setConcluido(true);
+    setTimeout(() => nav('/consultor'), 1600);
+  };
+
+  if (user && roleKey === 'consultor' && !concluido) return (
+    <div style={{ minHeight: '100vh', background: '#111111', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+      <div style={{ maxWidth: 460, width: '100%', background: 'white', borderRadius: 20, padding: '36px 30px', textAlign: 'center', boxShadow: '0 24px 60px rgba(0,0,0,0.4)' }}>
+        <div style={{ fontSize: 34, marginBottom: 12 }}>{cfg.emoji}</div>
+        <h1 style={{ fontSize: 22, fontWeight: 900, color: '#111', margin: '0 0 10px' }}>Ativar função de Consultor</h1>
+        <p style={{ color: '#475569', fontSize: 14.5, lineHeight: 1.7, marginBottom: 24 }}>
+          Você já está identificado na sua conta. Ao ativar, você passa a atuar como <strong>Consultor</strong> (seu plano atual continua o mesmo) e ganha seu link de indicação.
+        </p>
+        {ativarErro && <p style={{ color: '#dc2626', fontSize: 13, marginBottom: 16 }}>{ativarErro}</p>}
+        <button onClick={ativarConsultorLogado} disabled={ativandoConsultor}
+          style={{ padding: '13px 28px', background: cfg.cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: ativandoConsultor ? 'default' : 'pointer', opacity: ativandoConsultor ? 0.6 : 1, display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+          {ativandoConsultor ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <CheckCircle2 size={16} />}
+          {ativandoConsultor ? 'Ativando…' : 'Ativar minha função de consultor'}
+        </button>
+        <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
+      </div>
+    </div>
+  );
 
   const passos = [
     ...PASSOS_BASE,
