@@ -45,7 +45,9 @@ const soDigitos = (t) => String(t || '').replace(/\D/g, '');
 const waNumero = (t) => { const d = soDigitos(t); return (d.startsWith('55') && d.length >= 12) ? d : `55${d}`; };
 
 export default function Comercial() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, impersonate, loading: authLoading } = useAuth();
+  const suporte = !!impersonate; // admin vendo a conta de um consultor (modo suporte)
+  const bloqueiaSuporte = (leadId) => { if (suporte) { pingCard(leadId, 'erro', 'Modo suporte: visualização apenas. As ações do consultor ficam desabilitadas.'); return true; } return false; };
   const [leads, setLeads] = useState([]);
   const [loading, setLoading] = useState(true);
   const [semAcesso, setSemAcesso] = useState(false);
@@ -62,7 +64,9 @@ export default function Comercial() {
   const carregar = useCallback(async () => {
     // A RPC nega com "sem acesso comercial" para quem não tem a capacidade — esse
     // erro é ESTADO da tela (área restrita), não falha para o Cliente 360.
-    const { data, error } = await supabase.rpc('comercial_meus_leads');
+    // Modo suporte: admin vê os leads do consultor visto (p_como). A RPC exige eh_admin()
+    // para aceitar p_como; sem suporte, p_como fica null e a RPC usa o próprio auth.uid().
+    const { data, error } = await supabase.rpc('comercial_meus_leads', impersonate?.id ? { p_como: impersonate.id } : {});
     if (error) {
       if (/sem acesso|nao autenticado/i.test(error.message || '')) setSemAcesso(true);
       else {
@@ -74,7 +78,7 @@ export default function Comercial() {
       setSemAcesso(false); setErro('');
     }
     setLoading(false);
-  }, []);
+  }, [impersonate?.id]);
 
   useEffect(() => { if (!authLoading && user) carregar(); }, [authLoading, user, carregar]);
 
@@ -102,6 +106,7 @@ export default function Comercial() {
   // "Receber cliente" em DOIS cliques — o segundo é a confirmação pedida pelo dono:
   // receber = declarar que o atendimento começou, com registro em nome do consultor.
   const receber = async (lead) => {
+    if (bloqueiaSuporte(lead.id)) return;
     if (confirmaRec !== lead.id) { setConfirmaRec(lead.id); return; }
     setConfirmaRec(null);
     setBusy(`${lead.id}:receber`);
@@ -118,6 +123,7 @@ export default function Comercial() {
   };
 
   const registrar = async (lead, tipo, comentario, extras = {}) => {
+    if (bloqueiaSuporte(lead.id)) return;
     setBusy(`${lead.id}:${tipo}`);
     const { error } = await supabase.rpc('comercial_registrar_evento', {
       p_lead: lead.id, p_tipo: tipo, p_comentario: comentario || null,

@@ -498,6 +498,39 @@ export function SinteseFinanceira() {
   );
 }
 
+// RECUSAS DE PAGAMENTO (22/08): o código do Mercado Pago traduzido para o motivo + ação.
+// Antes só dava para ler no banco/equipe; aqui o admin vê por que uma cobrança não passou
+// (ex.: "alto risco" do antifraude do MP ≠ falta de saldo) e decide a recuperação.
+function AbaRecusas() {
+  const [rows, setRows] = useState(null);
+  const [erro, setErro] = useState('');
+  useEffect(() => {
+    supabase.rpc('admin_pagamentos_recusados', { p_dias: 90 })
+      .then(({ data, error }) => { if (error) setErro(error.message || 'Falha ao carregar.'); else setRows(Array.isArray(data) ? data : []); })
+      .catch(e => setErro(String(e?.message || e)));
+  }, []);
+  const fmt = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+  const data = (s) => { try { return new Date(s).toLocaleString('pt-BR'); } catch { return s; } };
+  if (erro) return <div style={{ color: '#dc2626', fontSize: 14 }}>{erro}</div>;
+  if (rows === null) return <div style={{ color: '#94a3b8' }}>Carregando…</div>;
+  if (!rows.length) return <div style={{ background: '#fff', borderRadius: 12, padding: 24, textAlign: 'center', color: '#64748b' }}>Nenhuma cobrança recusada nos últimos 90 dias. 🎉</div>;
+  return (
+    <div style={{ display: 'grid', gap: 12 }}>
+      <p style={{ fontSize: 13, color: '#64748b', margin: 0 }}>Cobranças recusadas (Mercado Pago) nos últimos 90 dias — {rows.length}. O motivo já vem traduzido do código da operadora.</p>
+      {rows.map((r, i) => (
+        <div key={i} style={{ background: '#fff', borderRadius: 12, padding: '14px 16px', border: '1px solid #fee2e2' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+            <div style={{ fontWeight: 800, color: '#111' }}>{r.nome || r.email || '(sem nome)'} <span style={{ fontWeight: 500, color: '#64748b' }}>· {r.email || ''}</span></div>
+            <div style={{ fontWeight: 800, color: '#b91c1c' }}>{fmt(r.valor)} {r.plano ? `· ${r.plano}` : ''}</div>
+          </div>
+          <div style={{ fontSize: 13.5, color: '#334155', marginTop: 6 }}>{r.motivo}</div>
+          <div style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 6 }}>código: <code>{r.codigo || '—'}</code> · {r.metodo || ''} · {r.origem || ''} · {data(r.em)}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function AdminFinanceiro() {
   const navigate = useNavigate();
   // Abre já na aba que o atalho do Admin pediu (Extrato / Conciliação / Monitor). Sem isto,
@@ -525,7 +558,7 @@ export default function AdminFinanceiro() {
       <div style={{ maxWidth: 900, margin: '0 auto', padding: '32px 20px' }}>
         {/* Seletor de visão: Fluxo de caixa × Assinaturas */}
         <div style={{ display: 'flex', gap: 4, marginBottom: 24, background: '#e2e8f0', padding: 4, borderRadius: 10, width: 'fit-content' }}>
-          {[['sintese', '📊 Síntese'], ['caixa', '💰 Fluxo de caixa'], ['extrato', '🏦 Extrato'], ['conciliacao', '📒 Conciliação'], ['monitor', '📈 Monitor'], ['assinaturas', '👥 Assinaturas']].map(([k, label]) => (
+          {[['sintese', '📊 Síntese'], ['caixa', '💰 Fluxo de caixa'], ['extrato', '🏦 Extrato'], ['conciliacao', '📒 Conciliação'], ['monitor', '📈 Monitor'], ['assinaturas', '👥 Assinaturas'], ['recusas', '⛔ Recusas']].map(([k, label]) => (
             <button key={k} onClick={() => setAba(k)}
               style={{ padding: '8px 18px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 700,
                 background: aba === k ? '#fff' : 'transparent', color: aba === k ? '#0D63DB' : '#64748b',
@@ -548,6 +581,8 @@ export default function AdminFinanceiro() {
         {/* MONITOR: para onde o dinheiro vai, a fila de credores a classificar e o diagnóstico
             da operação. É a leitura de decisão — a conciliação é o trabalho que a alimenta. */}
         {aba === 'monitor' && <MonitorFinanceiro />}
+        {/* RECUSAS: por que uma cobrança não passou (código do MP traduzido) — base para recuperação. */}
+        {aba === 'recusas' && <AbaRecusas />}
       </div>
     </div>
   );
