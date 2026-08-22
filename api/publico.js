@@ -48,6 +48,9 @@ const brl = (v) => (Number(v) > 0 ? `R$ ${Math.round(Number(v)).toLocaleString('
 // mostrava "2026-08-31" ao visitante, que é data de banco, não de gente.
 const dataBR = (s) => { const t = String(s || '').trim(); if (!t) return null;
   const m = t.match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? `${m[3]}/${m[2]}/${m[1]}` : t.slice(0, 40); };
+// ISO puro (YYYY-MM-DD) para a contagem regressiva no navegador — só quando a data da praça
+// vem em formato reconhecível. Sem isto, o "encerra em N dias" viraria conta sobre texto solto.
+const isoData = (s) => { const m = String(s || '').trim().match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? `${m[1]}-${m[2]}-${m[3]}` : null; };
 const MODALIDADE_LABEL = { judicial: 'Leilão judicial', extrajudicial: 'Leilão extrajudicial', licitacao_aberta: 'Licitação aberta', venda_direta: 'Venda direta' };
 const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
 const slug = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 70);
@@ -260,6 +263,58 @@ footer{border-top:1px solid var(--linha);padding:26px 20px;color:var(--cinza);fo
 footer .in{max-width:1080px;margin:0 auto}
 /* O app é claro em toda tela; a página pública seguia o tema do sistema e ficava escura para
    metade das pessoas — duas caras para a mesma marca. Mantém-se clara, como o resto. */
+/* ── URGÊNCIA: contagem regressiva. Preenchida por um script mínimo no rodapé, para não ser
+   congelada pelo cache da borda (a data é dia; o cache é de hora). Sem JS ou para o robô, o
+   selo fica oculto e a DATA continua exibida como fato — nada some do que o Google lê. ── */
+.prazo-badge{display:inline-flex;align-items:center;gap:4px;font-size:11.5px;font-weight:800;padding:3px 9px;border-radius:999px;line-height:1.3}
+.prazo-badge.prazo-hoje{background:#fee2e2;color:#b91c1c}
+.prazo-badge.prazo-quente{background:#fef3c7;color:#b45309}
+.prazo-badge.prazo-normal{background:#eff6ff;color:#1d4ed8}
+.prazo-badge.prazo-fim{background:#f1f5f9;color:#64748b}
+.card .prazo-badge{align-self:flex-start;margin-top:2px}
+/* Selo da fonte/leiloeiro na foto do card, como na busca logada (Caixa em laranja). */
+.card .foto .fonte{position:absolute;bottom:8px;left:8px;font-size:10px;font-weight:800;color:#fff;background:rgba(15,23,42,.82);padding:3px 8px;border-radius:8px;letter-spacing:.3px;text-transform:uppercase}
+.card .foto .fonte.caixa{background:#c2410c}
+/* ── FICHA DO IMÓVEL no padrão da tela interna (ImovelDetalhe.jsx): 2 colunas com sidebar
+   sticky, cartões de seção com ícone, e o que é produto pago exibido como TEASER bloqueado
+   (promessa visível, não parede) — mapa e análise mostram QUE existem e chamam o cadastro. ── */
+.ficha{display:grid;grid-template-columns:1fr 320px;gap:22px;align-items:start;margin-top:4px}
+.ficha-main{display:flex;flex-direction:column;gap:18px;min-width:0}
+.ficha-side{position:sticky;top:20px;display:flex;flex-direction:column;gap:16px}
+@media(max-width:860px){.ficha{grid-template-columns:1fr}.ficha-side{position:static}}
+.foto-hero{position:relative;border-radius:16px;overflow:hidden;background:#111;line-height:0;min-height:200px}
+.foto-hero img{width:100%;height:auto;max-height:420px;object-fit:cover;display:block;min-height:200px}
+.foto-hero .over-tl{position:absolute;top:14px;left:14px;display:flex;gap:8px;flex-wrap:wrap}
+.foto-hero .over-tr{position:absolute;top:14px;right:14px}
+.foto-hero .over-bl{position:absolute;bottom:14px;left:14px}
+.ficha .over-tl .chip{font-size:11px;font-weight:800;padding:3px 9px;border-radius:999px;background:rgba(17,17,17,.82);color:#fff;text-transform:uppercase;letter-spacing:.3px}
+.ficha .over-tl .chip.modal{background:rgba(11,75,166,.9)}
+.ficha .over-tr .badge-desc{font-size:16px;font-weight:900;color:#fff;padding:5px 12px;border-radius:10px;letter-spacing:.2px}
+.ficha .over-tr .badge-desc.alto{background:#15803d}.ficha .over-tr .badge-desc.medio{background:#d97706}.ficha .over-tr .badge-desc.baixo{background:#64748b}
+.ficha .over-bl .fonte{font-size:11px;font-weight:800;color:#fff;background:rgba(15,23,42,.82);padding:3px 9px;border-radius:8px;letter-spacing:.3px;text-transform:uppercase}
+.ficha .over-bl .fonte.caixa{background:#c2410c}
+.secao{background:#fff;border:1px solid var(--linha);border-radius:16px;padding:20px}
+.secao>h2{font-size:17px;font-weight:800;margin:0 0 14px;display:flex;align-items:center;gap:8px}
+.secao>h2 .ic{font-size:18px;line-height:1}
+.secao .dados{margin:0}
+.trava-vis{position:relative;border-radius:14px;overflow:hidden;border:1px solid var(--linha);min-height:140px}
+.trava-vis .blur{position:absolute;inset:0;background:repeating-linear-gradient(45deg,#e2e8f0 0 16px,#eef2f7 16px 32px);filter:blur(1px);opacity:.55}
+.trava-vis .lock{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:26px 18px;gap:6px;min-height:140px}
+.trava-vis .lock .cad{font-size:26px;line-height:1}
+.trava-vis .lock .tt{font-weight:800;font-size:14.5px;color:#1e293b}
+.trava-vis .lock .ds{font-size:12.5px;color:#64748b;max-width:360px;line-height:1.5}
+.acao{background:#fff;border:1px solid var(--linha);border-radius:16px;padding:20px}
+.acao .lance-lbl{font-size:10.5px;color:var(--cinza);text-transform:uppercase;letter-spacing:.6px;font-weight:800}
+.acao .lance-val{font-size:28px;font-weight:900;color:var(--azul);line-height:1.1;margin:2px 0 8px;overflow-wrap:anywhere}
+.acao .desc-pill{display:inline-block;font-size:12px;font-weight:800;color:#15803d;background:#dcfce7;padding:4px 10px;border-radius:999px;margin-bottom:14px}
+.score-lock{display:flex;align-items:center;gap:12px;background:var(--superficie);border:1px dashed #cbd5e1;border-radius:12px;padding:12px 14px;margin-bottom:14px}
+.score-lock .n{width:44px;height:44px;border-radius:12px;background:#e2e8f0;color:#94a3b8;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
+.score-lock .tx{font-size:12px;color:#475569;line-height:1.4}
+.score-lock .tx b{color:#1e293b}
+.acao .cta{display:block;text-align:center;margin:0 0 12px}
+.acao .bullets{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:7px}
+.acao .bullets li{font-size:12.5px;color:#475569;display:flex;gap:7px;align-items:flex-start}
+.acao .bullets li::before{content:'✓';color:#16a34a;font-weight:900}
 </style>
 </head><body>
 <header><div class="in">
@@ -299,6 +354,26 @@ ${corpo}
   Também escrito como <em>Bid Pro Brasil</em>.</p>
   <p><a href="${SITE}/leiloes">Imóveis em leilão por estado</a> · <a href="${SITE}/#/planos">Planos</a> · <a href="${SITE}/#/termos">Termos</a> · <a href="${SITE}/#/privacidade">Privacidade</a></p>
 </div></footer>
+<!-- URGÊNCIA: preenche os selos de contagem regressiva (.prazo-badge[data-prazo]) no cliente.
+     Fica fora do HTML servido de propósito (o cache da borda é de hora, a contagem é de dia);
+     para o robô e sem JS o selo permanece oculto e a data segue visível como fato. -->
+<script>
+(function(){try{
+  var now=new Date();now.setHours(0,0,0,0);
+  var els=document.querySelectorAll('.prazo-badge[data-prazo]');
+  for(var i=0;i<els.length;i++){(function(el){
+    var p=el.getAttribute('data-prazo');if(!p)return;
+    var d=new Date(p+'T00:00:00');if(isNaN(d.getTime()))return;
+    var dias=Math.round((d-now)/86400000),txt,cls;
+    if(dias<0){txt='Praça encerrada';cls='prazo-fim';}
+    else if(dias===0){txt='🔴 Encerra hoje';cls='prazo-hoje';}
+    else if(dias===1){txt='🔴 Encerra amanhã';cls='prazo-hoje';}
+    else if(dias<=7){txt='🔥 Encerra em '+dias+' dias';cls='prazo-quente';}
+    else{txt='🗓 Praça em '+dias+' dias';cls='prazo-normal';}
+    el.textContent=txt;el.className='prazo-badge '+cls;el.style.display='';
+  })(els[i]);}
+}catch(e){}})();
+</script>
 <!-- MEDIÇÃO DO ACERVO PÚBLICO (12/08). Estas páginas são servidas FORA do React, então o
      tracker de src/utils/tracker.js — que monta no main.jsx — nunca rodou aqui: as ~33 mil
      páginas de SEO, o principal ativo de aquisição, eram um ponto cego total. Não dava para
@@ -378,6 +453,10 @@ function cardImovel(im) {
   const min = Number(im.valor_minimo) || 0;
   const m2 = area > 0 && min > 0 ? `R$ ${Math.round(min / area).toLocaleString('pt-BR')}/m²` : null;
   const praca = dataBR(im.data_leilao);
+  const prazoISO = isoData(im.data_leilao);
+  const fonteRaw = String(im.fonte || '').trim();
+  const ehCaixa = /caixa|cef/i.test(fonteRaw);
+  const fonteLabel = ehCaixa ? 'CAIXA' : (fonteRaw ? fonteRaw.toUpperCase().slice(0, 16) : '');
   const selos = [
     m2 ? `<span class="selo">${esc(m2)}</span>` : '',
     im.tem_edital_doc ? '<span class="selo">📄 Edital</span>' : '',
@@ -387,6 +466,7 @@ function cardImovel(im) {
     <div class="foto">
       ${im.link_foto ? `<img src="${esc(im.link_foto)}" alt="${esc(t)} em leilão em ${esc(im.cidade || '')}" loading="lazy"/>` : '<img alt="" loading="lazy"/>'}
       ${pct > 0 ? `<span class="badge-desc ${grau}">-${pct}%</span>` : ''}
+      ${fonteLabel ? `<span class="fonte${ehCaixa ? ' caixa' : ''}">${esc(fonteLabel)}</span>` : ''}
     </div>
     <div class="c">
       <div class="chips"><span class="chip">${esc(t)}</span>${modal ? `<span class="chip modal">${esc(modal)}</span>` : ''}</div>
@@ -394,6 +474,7 @@ function cardImovel(im) {
       <div class="l">${esc(local)}${area > 0 ? ` · ${Math.round(area)} m²` : ''}</div>
       ${selos ? `<div class="selos">${selos}</div>` : ''}
       ${praca ? `<div class="praca">🗓 Praça: ${esc(praca)}</div>` : ''}
+      ${prazoISO ? `<span class="prazo-badge" data-prazo="${prazoISO}" style="display:none"></span>` : ''}
       <div class="valores">
         <div><div class="lbl">Lance mínimo</div><div class="lance">${lance ? esc(lance) : aval ? esc(aval) : 'Consulte'}</div></div>
         ${aval && lance ? `<div><div class="lbl">Avaliação</div><div class="aval">${esc(aval)}</div></div>` : ''}
@@ -491,7 +572,7 @@ async function paginaUF(uf) {
 async function paginaCidade(uf, cidadeNorm, page) {
   const desloc = (page - 1) * POR_PAGINA;
   // Campos do cartão alinhado à Busca — todos já na linha (custo zero; a página é edge-cached).
-  const campos = 'id,titulo,tipo,cidade,estado,bairro,area_m2,valor_minimo,valor_avaliacao,desconto_percentual,link_foto,modalidade,data_leilao,tem_edital_doc,tem_matricula_doc';
+  const campos = 'id,titulo,tipo,cidade,estado,bairro,area_m2,valor_minimo,valor_avaliacao,desconto_percentual,link_foto,modalidade,data_leilao,tem_edital_doc,tem_matricula_doc,fonte';
   const { linhas, total } = await sb(
     `imoveis_leilao?ativo=eq.true&estado=eq.${uf}&cidade_norm=eq.${encodeURIComponent(cidadeNorm)}` +
     `&select=${campos}&order=desconto_percentual.desc.nullslast&offset=${desloc}&limit=${POR_PAGINA}`);
@@ -565,6 +646,17 @@ async function paginaImovel(id) {
   migalha.push({ nome: t });
 
   const linha = (r, v) => (v ? `<div><span>${esc(r)}</span><strong>${esc(v)}</strong></div>` : '');
+  // Enriquecimento visual da ficha (tudo derivado do que a linha JÁ traz — custo zero).
+  const pct = Number(im.desconto_percentual) || 0;
+  const grau = pct >= 40 ? 'alto' : pct >= 20 ? 'medio' : 'baixo';
+  const lance2 = brl(im.valor_minimo_2);
+  const areaN = Number(im.area_m2) || 0, minN = Number(im.valor_minimo) || 0;
+  const m2 = areaN > 0 && minN > 0 ? `R$ ${Math.round(minN / areaN).toLocaleString('pt-BR')}/m²` : null;
+  const prazoISO = isoData(im.data_leilao);
+  const modalCurto = MODAL_CURTO[String(im.modalidade || '').toLowerCase()] || null;
+  const fonteRaw = String(im.fonte || '').trim();
+  const ehCaixa = /caixa|cef/i.test(fonteRaw);
+  const fonteLabel = ehCaixa ? 'CAIXA' : (fonteRaw ? fonteRaw.toUpperCase().slice(0, 18) : '');
   return pagina({
     // TÍTULO PRECISA SER ÚNICO (08/08 — resposta ao "Cópia, o Google e o usuário selecionaram
     // uma página canônica diferente" do Search Console). Medido no acervo: 1.000 lotes ativos
@@ -590,46 +682,107 @@ async function paginaImovel(id) {
     corpo: `<h1>${esc([im.titulo || `${t} em leilão em ${im.cidade || ''}`, im.area_m2 > 0 ? `${Math.round(im.area_m2)} m²` : null].filter(Boolean).join(' · '))}</h1>
       <p class="sub">${esc(t)} em leilão · ${esc(local)}${im.modalidade ? ` · ${esc(MODALIDADE_LABEL[String(im.modalidade).toLowerCase()] || im.modalidade)}` : ''}</p>
       ${!im.ativo ? `<p class="painel"><strong>Este lote não está mais ativo</strong> no acervo — provavelmente foi arrematado ou saiu do edital. <a href="${SITE}/leiloes/${uf.toLowerCase()}${im.cidade_norm ? `/${im.cidade_norm}` : ''}">Ver imóveis disponíveis em ${esc(im.cidade || UF_NOME[uf] || 'sua região')}</a>.</p>` : ''}
-      <div class="painel">
-        ${im.link_foto ? `<img src="${esc(im.link_foto)}" alt="${esc(t)} em leilão em ${esc(im.cidade || '')}" style="width:100%;max-height:420px;object-fit:cover;border-radius:10px"/>` : ''}
-        <div class="dados">
-          ${linha('Lance mínimo', lance)}
-          ${linha('Avaliação', aval)}
-          ${linha('Desconto', Number(im.desconto_percentual) > 0 ? `${im.desconto_percentual}%` : null)}
-          ${linha('Área', im.area_m2 > 0 ? `${Math.round(im.area_m2)} m²` : null)}
-          ${linha('Tipo', t)}
-          ${linha('Cidade', im.cidade ? `${im.cidade}/${uf}` : null)}
-          ${linha('Bairro', im.bairro)}
-          ${linha('Data do leilão', dataBR(im.data_leilao))}
+      <!-- FICHA no padrão da tela interna: 2 colunas com sidebar de ação sticky. O layout é o
+           do ImovelDetalhe, mas o conteúdo respeita o gate — mapa e análise aparecem como
+           TEASER bloqueado (promessa), nunca o produto pago em si. Robô e pessoa veem o mesmo. -->
+      <div class="ficha">
+        <div class="ficha-main">
+          <div class="foto-hero">
+            ${im.link_foto ? `<img src="${esc(im.link_foto)}" alt="${esc(t)} em leilão em ${esc(im.cidade || '')}"/>` : `<div style="height:240px;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:14px">Sem foto disponível</div>`}
+            <div class="over-tl"><span class="chip">${esc(t)}</span>${modalCurto ? `<span class="chip modal">${esc(modalCurto)}</span>` : ''}</div>
+            ${pct > 0 ? `<div class="over-tr"><span class="badge-desc ${grau}">-${pct}%</span></div>` : ''}
+            ${fonteLabel ? `<div class="over-bl"><span class="fonte${ehCaixa ? ' caixa' : ''}">${esc(fonteLabel)}</span></div>` : ''}
+          </div>
+
+          <div class="secao">
+            <h2><span class="ic">💰</span> Valores</h2>
+            <div class="dados">
+              ${linha('Lance mínimo', lance)}
+              ${lance2 ? linha('Lance 2ª praça', lance2) : ''}
+              ${linha('Avaliação', aval)}
+              ${linha('Desconto', pct > 0 ? `${pct}%` : null)}
+              ${m2 ? linha('Preço por m²', m2) : ''}
+              ${linha('Área', im.area_m2 > 0 ? `${Math.round(im.area_m2)} m²` : null)}
+            </div>
+          </div>
+
+          <div class="secao">
+            <h2><span class="ic">📋</span> Sobre o imóvel</h2>
+            <div class="dados">
+              ${linha('Tipo', t)}
+              ${im.modalidade ? linha('Modalidade', MODALIDADE_LABEL[String(im.modalidade).toLowerCase()] || im.modalidade) : ''}
+              ${linha('Cidade', im.cidade ? `${im.cidade}/${uf}` : null)}
+              ${linha('Bairro', im.bairro)}
+              ${linha('Data do leilão', dataBR(im.data_leilao))}
+            </div>
+            ${prazoISO ? `<div style="margin-top:12px"><span class="prazo-badge" data-prazo="${prazoISO}" style="display:none"></span></div>` : ''}
+          </div>
+
+          ${im.descricao ? `<div class="secao"><h2><span class="ic">📝</span> Descrição do lote</h2><p style="margin:0;color:#334155">${esc(String(im.descricao).slice(0, 1200))}</p></div>` : ''}
+
+          <!-- TEASER de localização: mostra QUE existe mapa e chama o cadastro, sem revelar o
+               endereço exato (que é do produto). Miolo borrado por CSS, sem dado real. -->
+          <div class="secao">
+            <h2><span class="ic">📍</span> Localização e mapa</h2>
+            <div class="trava-vis"><div class="blur"></div><div class="lock">
+              <span class="cad">🔒</span>
+              <span class="tt">Endereço exato e mapa interativo</span>
+              <span class="ds">A localização precisa, o mapa e os pontos de interesse ao redor (transporte, comércio, escolas) abrem ao criar sua conta grátis.</span>
+            </div></div>
+          </div>
+
+          <div class="secao">
+            <h2><span class="ic">⚖️</span> Análise e parecer</h2>
+            <div class="trava-vis"><div class="blur"></div><div class="lock">
+              <span class="cad">🔒</span>
+              <span class="tt">BidScore, análise de mercado e parecer jurídico</span>
+              <span class="ds">Nossa nota de 0 a 10 da viabilidade, quanto o imóvel vale de verdade no bairro e o raio-X jurídico (ocupação, dívidas e ônus na matrícula).</span>
+            </div></div>
+          </div>
+
+          <!-- O GATE (08/08). PROMESSA VISÍVEL, não parede. Estas ~31 mil páginas são o ativo de
+               busca orgânica: só rankeiam porque têm conteúdo legível, e mostrar ao Google algo
+               diferente do que a pessoa vê é cloaking (penalidade). O público vê o FATO (preço,
+               área, cidade, desconto); o cadastro abre o que é NOSSO (endereço, edital, matrícula,
+               análise, lance máximo). Robô e pessoa veem exatamente a mesma coisa. -->
+          <div class="trava">
+            <h3>Crie sua conta grátis para ver a ficha completa deste imóvel</h3>
+            <ul>
+              <li><strong>Endereço exato</strong> e localização no mapa</li>
+              <li><strong>Edital e matrícula</strong> do lote, quando o leiloeiro publica</li>
+              <li><strong>Análise de mercado</strong> — quanto vale de verdade no bairro</li>
+              <li><strong>Parecer jurídico</strong> — ocupação, dívidas e ônus na matrícula</li>
+              <li><strong>Lance máximo</strong> que ainda preserva o seu lucro</li>
+            </ul>
+            <a class="cta" href="${SITE}/#/login?modo=cadastro&amp;imovel=${esc(im.id)}">Criar conta grátis e ver a ficha</a>
+            <p class="obs">São 3 análises gratuitas ao criar a conta, sem cartão. Já tem conta? <a href="${SITE}/#/imovel/${esc(im.id)}">Entrar e abrir este imóvel</a>.</p>
+          </div>
+
+          <div class="secao">
+            <h2><span class="ic">✅</span> O que checar antes de dar um lance</h2>
+            <p class="sub" style="margin:0">Desconto sozinho não decide nada. O que decide é o preço real de mercado do bairro, os débitos que vêm junto (IPTU, condomínio, ônus na matrícula), a situação de ocupação e o risco jurídico do processo.</p>
+          </div>
+
+          ${im.cidade_norm && UF_NOME[uf] ? `<p><a href="${SITE}/leiloes/${uf.toLowerCase()}/${im.cidade_norm}">← Todos os imóveis em leilão em ${esc(im.cidade)}/${esc(uf)}</a></p>` : ''}
         </div>
-      </div>
-      ${im.descricao ? `<h2>Descrição do lote</h2><p>${esc(String(im.descricao).slice(0, 1200))}</p>` : ''}
 
-      <!-- O GATE (08/08, pedido do dono: "ao abrir o imóvel ele solicita o cadastro para ver
-           as informações"). Feito como PROMESSA VISÍVEL, não como parede.
-           POR QUE NÃO ESCONDER TUDO: estas 31 mil páginas são o ativo de busca orgânica da
-           empresa — elas só rankeiam porque têm conteúdo legível. Página que exige login não
-           é indexada, e mostrar ao Google algo diferente do que a pessoa vê é cloaking, que
-           dá penalidade. Então o público continua vendo o FATO (o que qualquer site de
-           leilão mostra: preço, área, cidade, desconto) e o cadastro abre o que é NOSSO e
-           ninguém mais tem: endereço exato, edital, matrícula, análise e lance máximo.
-           Robô e pessoa veem exatamente a mesma coisa. -->
-      <div class="trava">
-        <h3>Crie sua conta grátis para ver a ficha completa deste imóvel</h3>
-        <ul>
-          <li><strong>Endereço exato</strong> e localização no mapa</li>
-          <li><strong>Edital e matrícula</strong> do lote, quando o leiloeiro publica</li>
-          <li><strong>Análise de mercado</strong> — quanto vale de verdade no bairro</li>
-          <li><strong>Parecer jurídico</strong> — ocupação, dívidas e ônus na matrícula</li>
-          <li><strong>Lance máximo</strong> que ainda preserva o seu lucro</li>
-        </ul>
-        <a class="cta" href="${SITE}/#/login?modo=cadastro&amp;imovel=${esc(im.id)}">Criar conta grátis e ver a ficha</a>
-        <p class="obs">São 3 análises gratuitas ao criar a conta, sem cartão. Já tem conta? <a href="${SITE}/#/imovel/${esc(im.id)}">Entrar e abrir este imóvel</a>.</p>
-      </div>
-
-      <h2>O que checar antes de dar um lance</h2>
-      <p class="sub">Desconto sozinho não decide nada. O que decide é o preço real de mercado do bairro, os débitos que vêm junto (IPTU, condomínio, ônus na matrícula), a situação de ocupação e o risco jurídico do processo.</p>
-      ${im.cidade_norm && UF_NOME[uf] ? `<p><a href="${SITE}/leiloes/${uf.toLowerCase()}/${im.cidade_norm}">← Todos os imóveis em leilão em ${esc(im.cidade)}/${esc(uf)}</a></p>` : ''}`,
+        <aside class="ficha-side">
+          <div class="acao">
+            <div class="lance-lbl">Lance mínimo</div>
+            <div class="lance-val">${lance ? esc(lance) : aval ? esc(aval) : 'Consulte'}</div>
+            ${pct > 0 ? `<span class="desc-pill">${pct}% abaixo da avaliação</span>` : ''}
+            <div class="score-lock"><div class="n">🔒</div><div class="tx"><b>BidScore</b> — nossa nota de 0 a 10 da viabilidade do arremate. Crie conta para ver.</div></div>
+            <a class="cta" href="${SITE}/#/login?modo=cadastro&amp;imovel=${esc(im.id)}">Criar conta grátis e ver a ficha</a>
+            <ul class="bullets">
+              <li>3 análises gratuitas, sem cartão</li>
+              <li>Endereço exato e mapa</li>
+              <li>Edital, matrícula e parecer jurídico</li>
+              <li>Lance máximo que preserva o lucro</li>
+            </ul>
+            ${prazoISO ? `<div style="margin-top:14px;text-align:center"><span class="prazo-badge" data-prazo="${prazoISO}" style="display:none"></span></div>` : ''}
+          </div>
+        </aside>
+      </div>`,
     // JSON-LD do lote. Campos acrescentados em 04/08 respondendo aos avisos NÃO CRÍTICOS
     // de "Snippets do produto" do Search Console — os dois clássicos são identificador
     // global ausente e `priceValidUntil` ausente. Ambos são preenchíveis com dado REAL que
