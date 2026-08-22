@@ -21,7 +21,7 @@ const buildFAQS = ({ precoMesLabel, mesAnualLabel, anoLabel, economiaPctLabel })
 
 export default function Planos() {
   const nav = useNavigate();
-  const { user, role } = useAuth();
+  const { user, role, effectiveUserId } = useAuth();
   const [PLANOS, setPLANOS] = useState(PLANOS_STATIC);
   const [faqAberto, setFaqAberto] = useState(null);
   const [periodo, setPeriodo] = useState('mensal');
@@ -79,18 +79,21 @@ export default function Planos() {
     let vivo = true;
     (async () => {
       try {
-        const { data: p } = await supabase.from('perfis').select('parceiro_aceite_em, codigo_indicacao').eq('id', user.id).maybeSingle();
+        // Suporte: código de indicação do usuário VISTO; não gera código como admin.
+        const alvoId = effectiveUserId || user.id;
+        const suporte = alvoId !== user.id;
+        const { data: p } = await supabase.from('perfis').select('parceiro_aceite_em, codigo_indicacao').eq('id', alvoId).maybeSingle();
         if (!vivo) return;
         setSouParceiro(!!p?.parceiro_aceite_em);
         let cod = p?.codigo_indicacao;
-        if (!cod && p?.parceiro_aceite_em) {
+        if (!cod && p?.parceiro_aceite_em && !suporte) {
           try { await supabase.rpc('gerar_codigo_indicacao', { p_id: user.id }); const { data: p2 } = await supabase.from('perfis').select('codigo_indicacao').eq('id', user.id).maybeSingle(); cod = p2?.codigo_indicacao; } catch { /* fallback no uid */ }
         }
         if (vivo && cod) setMeuCodigo(cod);
       } catch { /* mantém não-parceiro */ }
     })();
     return () => { vivo = false; };
-  }, [user?.id]);
+  }, [user?.id, effectiveUserId]);
 
   // Compartilha o link de venda do plano (leva a indicação do parceiro).
   // Aponta para a TELA ESPECÍFICA do plano (/checkout?plano=KEY) — igual aos ebooks/cursos,

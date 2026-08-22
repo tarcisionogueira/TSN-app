@@ -15,7 +15,7 @@ const ETAPA_LABEL = {
 
 export default function AdvogadoPortal() {
   const nav = useNavigate();
-  const { user } = useAuth();
+  const { user, effectiveUserId } = useAuth();
   const [aba, setAba] = useState('escritorio');
 
   return (
@@ -35,7 +35,7 @@ export default function AdvogadoPortal() {
       </div>
 
       {aba === 'escritorio' && <SecaoEscritorio />}
-      {aba === 'casos' && <SecaoCasos user={user} nav={nav} />}
+      {aba === 'casos' && <SecaoCasos user={user} alvoId={effectiveUserId || user.id} nav={nav} />}
       {aba === 'atendimentos' && <SecaoAtendimentos />}
     </div>
   );
@@ -203,13 +203,13 @@ function SecaoEscritorio() {
   );
 }
 
-function SecaoCasos({ user, nav }) {
+function SecaoCasos({ user, alvoId, nav }) {
   const [casos, setCasos] = useState([]);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     (async () => {
       const { data } = await supabase.from('casos').select('id,imovel_endereco,status_etapa,tipo_leilao,juridico_enviado_em,created_at')
-        .eq('advogado_id', user.id).order('juridico_enviado_em', { ascending: false, nullsFirst: false });
+        .eq('advogado_id', alvoId || user.id).order('juridico_enviado_em', { ascending: false, nullsFirst: false });
       setCasos(data || []); setLoading(false);
     })();
   }, [user?.id]);

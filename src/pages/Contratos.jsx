@@ -45,7 +45,8 @@ const S = {
 export default function Contratos() {
   const nav = useNavigate();
   const isMobile = useIsMobile();
-  const { user, effectiveUserId, loading: authLoading, role, nome: nomePerfil } = useAuth();
+  const { user, effectiveUserId, impersonate, loading: authLoading, role, nome: nomePerfil } = useAuth();
+  const [notaSuporte, setNotaSuporte] = useState('');
   const isStaff = STAFF.includes(role);
   const isAdmin = role === 'admin';
   const [grupos, setGrupos] = useState([]);       // [{ rep, linhas, total, assinados, statusAgg }]
@@ -101,20 +102,32 @@ export default function Contratos() {
   const carregar = useCallback(async () => {
     if (!user) { setLoading(false); return; }
     setLoading(true);
+    // MODO SUPORTE: os contratos são filtrados por e-mail (contratos_link não tem user_id) e o
+    // objeto de suporte não carrega o e-mail do usuário visto — filtrar por user.email mostraria
+    // os contratos do ADMIN. Em vez de vazar, exibe nota (os contratos aparecem na conta do
+    // próprio usuário). Sem suporte, comportamento normal.
+    if (impersonate) {
+      setGrupos([]);
+      setNotaSuporte('Modo suporte — os contratos aparecem na conta do próprio usuário (esta lista é filtrada por e-mail e não reflete o usuário visto).');
+      setLoading(false);
+      return;
+    }
+    setNotaSuporte('');
     // ADMIN: todos os contratos. Demais: só os do próprio e-mail (RLS já garante o escopo).
     let q = supabase.from('contratos_link').select('*').neq('status', 'cancelado').order('criado_em', { ascending: false });
     if (!isAdmin) q = q.eq('assinante_email', user.email);
     const { data } = await q;
     setGrupos(agrupar(data || []));
     setLoading(false);
-  }, [user, isAdmin]);
+  }, [user, isAdmin, impersonate]);
   useEffect(() => { carregar(); }, [carregar]);
 
   useEffect(() => {
     if (!user) return;
-    apiCall('/api/cpf-revelar', { method: 'POST', body: JSON.stringify({ ids: [user.id], full: true }) })
-      .then(r => r.json()).then(d => { const c = d?.cpfs?.[user.id]; if (c) setCpfAssinante(c); }).catch(() => {});
-  }, [user]);
+    const alvo = effectiveUserId || user.id; // suporte: CPF do usuário visto, não do admin
+    apiCall('/api/cpf-revelar', { method: 'POST', body: JSON.stringify({ ids: [alvo], full: true }) })
+      .then(r => r.json()).then(d => { const c = d?.cpfs?.[alvo]; if (c) setCpfAssinante(c); }).catch(() => {});
+  }, [user, effectiveUserId]);
 
   // ── Roster (assinantes) — comum aos dois modos ──
   const verAssinantes = async (g) => {
@@ -303,6 +316,9 @@ export default function Contratos() {
 
   return (
     <div style={{ maxWidth: 920, margin: '0 auto', padding: isMobile ? '16px 12px' : '28px 20px' }}>
+      {notaSuporte && (
+        <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', color: '#9a3412', borderRadius: 10, padding: '10px 14px', fontSize: 13, marginBottom: 16 }}>{notaSuporte}</div>
+      )}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 24 }}>
         <div>
           <h1 style={{ fontSize: 26, fontWeight: 900, color: '#111111', margin: '0 0 4px' }}>{isAdmin ? 'Contratos' : 'Meus Contratos'}</h1>

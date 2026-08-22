@@ -24,7 +24,9 @@ function fmtData(d) {
 }
 
 export default function Comissoes() {
-  const { user, role } = useAuth();
+  const { user, role, impersonate, effectiveUserId } = useAuth();
+  const suporte = !!impersonate; // admin vendo a conta de um parceiro (modo suporte) → só leitura
+  const alvoId = effectiveUserId || user.id;
   const nav = useNavigate();
   const isMobile = useIsMobile();
 
@@ -61,12 +63,20 @@ export default function Comissoes() {
   const carregar = useCallback(async () => {
     setLoading(true);
     const [{ data: c }, { data: p }, { data: cf }, saqueRes] = await Promise.all([
-      supabase.from('comissoes').select('*').eq('beneficiario_id', user.id).order('created_at', { ascending: false }),
-      supabase.from('perfis').select('chave_pix').eq('id', user.id).maybeSingle(),
+      supabase.from('comissoes').select('*').eq('beneficiario_id', alvoId).order('created_at', { ascending: false }),
+      supabase.from('perfis').select('chave_pix').eq('id', alvoId).maybeSingle(),
       supabase.from('config_financeira').select('*'),
       apiCall('/api/saque'),
     ]);
     setComissoes(c || []);
+    // MODO SUPORTE: as comissões acima já são as do parceiro visto (alvoId). Mas o saldo e o
+    // saque vêm de /api/saque, que usa o TOKEN do admin — seria o saldo do admin. Não exibimos
+    // (evita Frankenstein) e o painel de saque fica oculto; a lista de comissões dele aparece.
+    if (suporte) {
+      setErroSaldo('Modo suporte — visualização apenas. Saldo e saque só aparecem na conta do próprio parceiro; as comissões abaixo são as dele.');
+      setLoading(false);
+      return;
+    }
     try {
       // Mesmo motivo do MinhaRede: `apiCall` não lança em erro HTTP, então sem checar `.ok` um
       // 401/500 virava saldo R$ 0,00 e extrato vazio — a tela dizia, com toda a calma, que o
@@ -93,7 +103,7 @@ export default function Comissoes() {
       setCfinConfig(m);
     }
     setLoading(false);
-  }, [user.id]);
+  }, [alvoId]);
 
   useEffect(() => {
     if (!ROLES_ELEGÍVEIS.includes(role)) { nav('/'); return; }
@@ -101,6 +111,7 @@ export default function Comissoes() {
   }, [role, carregar]);
 
   async function salvarPix() {
+    if (suporte) { setMsgPix({ tipo: 'erro', txt: 'Modo suporte: visualização apenas.' }); return; }
     setSalvandoPix(true);
     setMsgPix(null);
     const { error } = await supabase.from('perfis').update({ chave_pix: pixKey.trim() }).eq('id', user.id);
@@ -111,6 +122,7 @@ export default function Comissoes() {
   }
 
   async function solicitarSaque() {
+    if (suporte) { setMsgSaque({ tipo: 'erro', txt: 'Modo suporte: visualização apenas.' }); return; }
     const valor = Number(valorSaque);
     if (!valor || valor <= 0) { setMsgSaque({ tipo: 'erro', txt: 'Informe um valor válido.' }); return; }
     if (valor > totalDisponivel) { setMsgSaque({ tipo: 'erro', txt: 'Valor maior que o disponível.' }); return; }
@@ -144,6 +156,7 @@ export default function Comissoes() {
   // sacado." O arquivo sobe para o bucket privado e o servidor confere: dados da nota
   // contra o pedido e, quando houver link/QR da prefeitura, a emissão de verdade.
   async function enviarNotaFiscal(file) {
+    if (suporte) return;
     if (!file || !nf?.exigido) return;
     setNf(n => ({ ...n, enviando: true, status: null, motivo: null }));
     try {

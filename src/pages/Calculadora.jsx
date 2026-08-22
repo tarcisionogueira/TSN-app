@@ -87,7 +87,7 @@ export default function Calculadora() {
   const imPre = locCalc.state?.imovel || null;
   const fjPre = imPre?.fichaJuridica || imPre?.ficha_juridica || null;
   const [searchParams] = useSearchParams();
-  const { user, role, effectiveRole, loading: authLoading } = useAuth();
+  const { user, role, effectiveRole, effectiveUserId, loading: authLoading } = useAuth();
 
   // Captura e persiste o código de referência do consultor
   const refAtualUrl = searchParams.get('ref') || '';
@@ -168,9 +168,9 @@ export default function Calculadora() {
 
   useEffect(() => {
     if (!user || (role !== 'consultor' && role !== 'admin')) return;
-    supabase.from('perfis').select('codigo_indicacao').eq('id', user.id).single()
+    supabase.from('perfis').select('codigo_indicacao').eq('id', effectiveUserId || user.id).single()
       .then(({ data }) => { if (data?.codigo_indicacao) setCodigoRef(data.codigo_indicacao); });
-  }, [user, role]);
+  }, [user, role, effectiveUserId]);
 
   // Ajusta os defaults conforme a origem:
   //  • JUDICIAL (CPC 895): 25% de entrada + 30 parcelas, sem juros.

@@ -103,16 +103,20 @@ export default function Membros() {
   const [meuCodigo, setMeuCodigo] = useState('');
   useEffect(() => {
     if (!user?.id) { setEhParceiro(false); return; }
-    supabase.from('perfis').select('parceiro_aceite_em, codigo_indicacao').eq('id', user.id).maybeSingle()
+    // Suporte: o código de indicação (link de afiliado) é o do usuário VISTO, não o do admin.
+    const alvoId = effectiveUserId || user.id;
+    const suporte = alvoId !== user.id;
+    supabase.from('perfis').select('parceiro_aceite_em, codigo_indicacao').eq('id', alvoId).maybeSingle()
       .then(async ({ data }) => {
         const parceiro = !!data?.parceiro_aceite_em || role === 'admin';
         setEhParceiro(parceiro);
         if (!parceiro) return;
         let cod = data?.codigo_indicacao;
-        if (!cod) { try { await supabase.rpc('gerar_codigo_indicacao', { p_id: user.id }); const { data: p2 } = await supabase.from('perfis').select('codigo_indicacao').eq('id', user.id).maybeSingle(); cod = p2?.codigo_indicacao; } catch { /* fallback no uid */ } }
-        setMeuCodigo(cod || user.id);
+        // Não GERA código no suporte (seria escrita como admin); só usa o existente/uid.
+        if (!cod && !suporte) { try { await supabase.rpc('gerar_codigo_indicacao', { p_id: user.id }); const { data: p2 } = await supabase.from('perfis').select('codigo_indicacao').eq('id', user.id).maybeSingle(); cod = p2?.codigo_indicacao; } catch { /* fallback no uid */ } }
+        setMeuCodigo(cod || alvoId);
       }).catch(() => {});
-  }, [user?.id, role]);
+  }, [user?.id, role, effectiveUserId]);
 
   // Carregar cursos, aulas e ebooks
   useEffect(() => {
