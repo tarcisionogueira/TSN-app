@@ -333,6 +333,20 @@ ${corpo}
       var temAlgo=false;for(var k in o){if(k!=='landing'&&o[k])temAlgo=true;}
       if(temAlgo){orig=o;localStorage.setItem('bp_orig',JSON.stringify(o));}}
   }catch(e){}
+  // ATRIBUICAO PARA O CADASTRO (22/08): esta pagina de SEO e a porta do Ads, mas o SPA le a
+  // origem da chave 'tsn_mkt' (src/utils/marketing.js) no signup — que so era gravada pelo app,
+  // NUNCA aqui. Por isso o gclid ia para visita_origem mas perfis.mkt_* ficava vazio (0 cadastros
+  // atribuidos ao Google apesar de centenas de visitas com gclid). localStorage e por dominio, entao
+  // gravar aqui a MESMA chave/formato/precedencia do capturarMarketing() faz o cadastro atribuir.
+  try{
+    var Q=new URLSearchParams(location.search),g2=function(k){return (Q.get(k)||'').slice(0,300);};
+    var mkt={gclid:g2('gclid'),fbclid:g2('fbclid'),utm_source:g2('utm_source'),utm_medium:g2('utm_medium'),utm_campaign:g2('utm_campaign')};
+    var temAnuncio=false;for(var kk in mkt){if(mkt[kk])temAnuncio=true;}
+    var refM=(ref==='(direto)'||ref==='(interno)')?'direto':ref;
+    var reg=JSON.stringify({gclid:mkt.gclid,fbclid:mkt.fbclid,utm_source:mkt.utm_source,utm_medium:mkt.utm_medium,utm_campaign:mkt.utm_campaign,referrer:refM,landing:location.pathname,ts:Date.now()});
+    if(temAnuncio)localStorage.setItem('tsn_mkt',reg);              // veio de anuncio → sobrescreve sempre
+    else if(!localStorage.getItem('tsn_mkt'))localStorage.setItem('tsn_mkt',reg); // first-touch
+  }catch(e){}
   var env=function(tipo,alvo,det){try{fetch('/api/track',{method:'POST',headers:{'Content-Type':'application/json'},keepalive:true,
     body:JSON.stringify({anon_id:id,origem:orig,eventos:[{tipo:tipo,rota:location.pathname,alvo:alvo||null,detalhe:det||null,ts:Date.now()}]})});}catch(e){}};
   env('pageview',location.pathname,ref);
