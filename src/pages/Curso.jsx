@@ -5,6 +5,7 @@ import {
   ChevronDown, ChevronUp, Award, Crown, ArrowRight, ArrowLeft, ChevronRight, Share2,
 } from 'lucide-react';
 import { supabase } from '../utils/supabase';
+import { setItemSeguro } from '../utils/storageSeguro.js';
 import { useAuth } from '../contexts/AuthContext';
 import CapaCurso from '../components/CapaCurso';
 import { videoEmbed } from '../utils/videoEmbed';
@@ -19,7 +20,7 @@ function getProgressoLocal() {
 function salvarProgressoLocal(id, feito) {
   const p = getProgressoLocal();
   p[id] = feito;
-  localStorage.setItem('tsn_progresso', JSON.stringify(p));
+  setItemSeguro('tsn_progresso', JSON.stringify(p));
 }
 function getPlano() { return localStorage.getItem('tsn_plano_membro') || 'explorador'; }
 

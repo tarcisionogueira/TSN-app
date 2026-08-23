@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { storageAuthSeguro } from './storageSeguro.js';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://zuwfiwokkdytvjixiwac.supabase.co';
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
@@ -94,6 +95,12 @@ async function fetchComRelato(input, init) {
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   global: { fetch: fetchComRelato },
+  // Sessão gravada por escrita SEGURA (23/08): o storage padrão do SDK usa
+  // localStorage.setItem cru — com a cota estourada pelos caches de relatório, o
+  // login/refresh LANÇAVA QuotaExceededError no cliente (visto em erros_cliente,
+  // stack no chunk do AuthContext). O adapter limpa caches descartáveis e, em
+  // último caso, mantém a sessão em memória — nunca quebra o fluxo de auth.
+  auth: { storage: storageAuthSeguro },
 });
 
 // ─── AUTH ────────────────────────────────────────────────────────────────────

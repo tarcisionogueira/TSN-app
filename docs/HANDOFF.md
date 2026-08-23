@@ -7,6 +7,30 @@
 ## 📌 PENDÊNCIAS ABERTAS (para esta sessão — leia primeiro)
 _Última atualização: 23/08. Tudo abaixo de "resolvido" está em produção na `main`._
 
+### 🔶 SESSÃO 23/08 (tarde) — branch `claude/hand-of-initial-checks-u1c0t9` (aguarda merge)
+Ritual de abertura completo (heartbeat + 1b/1c/2/2b/3 verdes; segurança 0/0). Dois consertos
+de raiz, build limpo, migração APLICADA no banco:
+- **QuotaExceededError (pendência 5 de 23/08) RESOLVIDO na raiz:** quem lançava era a gravação
+  da SESSÃO pelo SDK do Supabase (setItem cru) com o storage cheio pelos caches de relatório
+  (`bidpro_analises_*` = 12 análises inteiras × 3 chaves). Novo `src/utils/storageSeguro.js`
+  (escrita que nunca lança + faxina SÓ de caches reconstruíveis, nunca dado do usuário) +
+  `auth.storage` seguro no cliente Supabase (fallback em memória: login sobrevive com storage
+  cheio/bloqueado) + escritas desprotegidas roteadas. Marcar os 4 erros como resolvidos em
+  `erros_cliente` DEPOIS do deploy.
+- **`pino_generico_como_rua` 45→92 explicado e consertado:** a varredura diária
+  `demover_pinos_genericos()` morria em **statement timeout (57014)** no cron das 05h e o cron
+  devolvia ok:true (falha entregue como sucesso). Migração
+  `demover_pinos_genericos_uma_passada.sql` (APLICADA): mesma regra numa passada só — medido,
+  mesmos 92 lotes em 1,1 s. E `limpar-imoveis-stale-cron.js` agora ALERTA quando um passo
+  best-effort devolve `{erro}`. **Conferir no dia seguinte ao merge:** invariante ~0 após as
+  05h UTC e log do cron sem `pinos.erro`.
+- **Investigado, sem ação (decisão/custo):** anomalia `avaliacao_ausente` de 22/08 é um lote
+  SUPERBID (Cajamar, `valor_avaliacao=0`, matrícula+2 anexos presentes) — o gerador sinalizou
+  certo, revisar se a fonte publica avaliação; as 2 `relatorio_incoerente` (15 e 17/08,
+  "à vista × entrada parcelada") pedem decisão sobre regerar relatório de cliente (custo IA).
+  Bright Data saturado (618/550) destrava sozinho na 2ª feira. "Avise-me" com 0 inscritos
+  ainda (no ar há horas — teste ponta a ponta segue pendente, item 1 abaixo).
+
 ### ✅ SESSÃO 23/08 — EM PRODUÇÃO (PRs #308–#313 mesclados, deploys READY, `main` em commit babdab9)
 Sessão de **conversão + aparência da área pública** (pedidos do dono). `auditoria_seguranca` 0/0
 com a tabela nova. O que entrou:

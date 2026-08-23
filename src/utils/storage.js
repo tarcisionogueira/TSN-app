@@ -1,3 +1,5 @@
+import { setItemSeguro } from './storageSeguro.js';
+
 const KEYS = {
   imoveis: 'tsn_imoveis_v2',
   favoritos: 'tsn_favoritos',
@@ -6,7 +8,9 @@ const KEYS = {
 };
 
 const get = (key) => { try { return JSON.parse(localStorage.getItem(key) || 'null'); } catch { return null; } };
-const set = (key, val) => localStorage.setItem(key, JSON.stringify(val));
+// Escrita segura (23/08): o setItem cru lançava QuotaExceededError com o storage cheio
+// (favoritos/portfólio são dado do usuário — a faxina do helper só sacrifica caches).
+const set = (key, val) => setItemSeguro(key, JSON.stringify(val));
 
 export const loadImoveis = () => get(KEYS.imoveis) || [];
 export const saveImoveis = (d) => set(KEYS.imoveis, d);

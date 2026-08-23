@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { CheckCircle2, Circle, ChevronDown, ChevronUp, Scale, FileSearch, AlertTriangle, Info, ExternalLink } from 'lucide-react';
+import { setItemSeguro } from '../utils/storageSeguro.js';
 
 // ── Dados dos checklists ──────────────────────────────────────────────────────
 
@@ -118,7 +119,7 @@ export default function GuiaPosArrematacao({ modalidade = 'extrajudicial', imove
   });
 
   useEffect(() => {
-    localStorage.setItem(storageKey, JSON.stringify(marcados));
+    setItemSeguro(storageKey, JSON.stringify(marcados));
   }, [marcados, storageKey]);
 
   const toggleItem = useCallback((id) => {
