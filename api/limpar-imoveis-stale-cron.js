@@ -7,6 +7,7 @@
 export const config = { runtime: 'nodejs', maxDuration: 60 };
 
 import { isCronAuthorized } from './_auth.js';
+import { alertarErro } from './_error-alert.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -64,6 +65,17 @@ export default async function handler(req, res) {
     const r4 = await rpc('demover_pinos_genericos', {});
     pinos = r4.ok ? await r4.json().catch(() => null) : { erro: (await r4.text().catch(() => '')).slice(0, 200) };
   } catch (e) { pinos = { erro: String(e?.message || e).slice(0, 200) }; }
+
+  // Best-effort NÃO pode ser invisível (23/08): a varredura do pino genérico morreu em
+  // statement timeout por DIAS com o cron devolvendo ok:true — o {erro} só existia no log
+  // e ninguém lê log de cron que "deu certo". Uma falha aqui não derruba os outros passos,
+  // mas vira alerta (e-mail do health) para não crescer em silêncio de novo.
+  const falhas = Object.entries({ leiloeiro, encerrados, pinos })
+    .filter(([, v]) => v && typeof v === 'object' && v.erro)
+    .map(([k, v]) => `${k}: ${v.erro}`);
+  if (falhas.length) {
+    try { alertarErro({ rota: 'limpar-imoveis-stale', erro: `Passo(s) da limpeza diária falhou(aram): ${falhas.join(' · ')}`, extra: { desativados } }); } catch { /* alerta é best-effort */ }
+  }
 
   console.log('[limpar-imoveis-stale]', JSON.stringify({ desativados, margem_horas: MARGEM_HORAS, leiloeiro, encerrados, pinos }));
   return res.status(200).json({ ok: true, desativados, leiloeiro, leiloes_encerrados: encerrados, pinos_genericos: pinos });

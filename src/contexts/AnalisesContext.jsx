@@ -4,6 +4,7 @@ import { apiCall } from '../utils/apiCall';
 import { registrarEvento } from '../utils/tracker.js';
 import { supabase } from '../utils/supabase';
 import { termosUsoPendente, abrirTermosModal } from '../components/TermosAtualizadosModal';
+import { setItemSeguro } from '../utils/storageSeguro.js';
 
 // Acompanhamento GLOBAL das análises (mercadológica E documental).
 // A GERAÇÃO RODA NO SERVIDOR (/api/gerar-analise e /api/gerar-documental): o
@@ -68,9 +69,11 @@ export function AnalisesProvider({ children }) {
   const [documentais, setDocumentais] = useState(() => loadCache(LS_KEY_DOC));
   const [laudos, setLaudos] = useState(() => loadCache(LS_KEY_LAUDO));
 
-  useEffect(() => { try { localStorage.setItem(LS_KEY, JSON.stringify(analises.slice(0, MAX))); } catch {} }, [analises]);
-  useEffect(() => { try { localStorage.setItem(LS_KEY_DOC, JSON.stringify(documentais.slice(0, MAX))); } catch {} }, [documentais]);
-  useEffect(() => { try { localStorage.setItem(LS_KEY_LAUDO, JSON.stringify(laudos.slice(0, MAX))); } catch {} }, [laudos]);
+  // setItemSeguro (23/08): estes caches guardam relatórios INTEIROS e são quem enche a
+  // cota — a escrita segura sacrifica os caches mais frios para o mais recente caber.
+  useEffect(() => { setItemSeguro(LS_KEY, JSON.stringify(analises.slice(0, MAX))); }, [analises]);
+  useEffect(() => { setItemSeguro(LS_KEY_DOC, JSON.stringify(documentais.slice(0, MAX))); }, [documentais]);
+  useEffect(() => { setItemSeguro(LS_KEY_LAUDO, JSON.stringify(laudos.slice(0, MAX))); }, [laudos]);
 
   // Imóveis FIXADOS: os que alguma tela pediu explicitamente por id (ver garantirCarregado).
   // Sem isto o corte em MAX descartaria, no mesmo instante, a análise antiga que acabamos de

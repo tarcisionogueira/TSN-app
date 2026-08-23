@@ -9,6 +9,7 @@ import { driveImage } from '../utils/driveUrl';
 import CapaCurso from '../components/CapaCurso';
 import { fetchPlanosComConfig } from '../utils/planosConfig';
 import { supabase } from '../utils/supabase';
+import { setItemSeguro } from '../utils/storageSeguro.js';
 import { useAuth } from '../contexts/AuthContext';
 import { apiCall } from '../utils/apiCall';
 
@@ -207,7 +208,7 @@ export default function Membros() {
   useEffect(() => { if (role) setPlano(role); }, [role]);
 
   const ativarPlano = (p) => {
-    localStorage.setItem('tsn_plano_membro', p);
+    setItemSeguro('tsn_plano_membro', p);
     setPlano(p);
     setShowPlanos(false);
   };

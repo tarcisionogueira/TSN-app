@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { setItemSeguro } from '../utils/storageSeguro.js';
 
 const TOUR_KEY = 'tsn_tour_feito';
 
@@ -174,7 +175,7 @@ export default function TourGuiado({ onClose }) {
   };
   const voltar = () => { if (idx > 0) setIdx(i => i - 1); };
   const fechar = () => {
-    localStorage.setItem(TOUR_KEY, '1');
+    setItemSeguro(TOUR_KEY, '1');
     onClose();
   };
 

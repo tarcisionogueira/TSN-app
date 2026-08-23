@@ -13,6 +13,7 @@ import { tituloProduto, termoDoProduto } from '../utils/termos';
 import { TERMO_PARCEIRO, TERMO_PARCEIRO_PREAMBULO } from '../components/ConviteParceiro';
 import Contratos from './Contratos'; // tela ÚNICA de contratos (mesma de "Meus Contratos", modo admin)
 import { arquivoParaBase64 } from '../utils/arquivo';
+import { setItemSeguro } from '../utils/storageSeguro.js';
 
 export const DEFAULT_FEEDBACK_EMAIL = 'tarcisioaraujo@reimob.com.br';
 const FEEDBACK_KEY = 'tsn_feedback_email';
@@ -2424,7 +2425,7 @@ function ConfigTab() {
   }
 
   function salvarEmail() {
-    localStorage.setItem(FEEDBACK_KEY, email.trim() || DEFAULT_FEEDBACK_EMAIL);
+    setItemSeguro(FEEDBACK_KEY, email.trim() || DEFAULT_FEEDBACK_EMAIL);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   }
