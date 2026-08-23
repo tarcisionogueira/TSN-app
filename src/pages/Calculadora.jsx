@@ -87,7 +87,7 @@ export default function Calculadora() {
   const imPre = locCalc.state?.imovel || null;
   const fjPre = imPre?.fichaJuridica || imPre?.ficha_juridica || null;
   const [searchParams] = useSearchParams();
-  const { user, role, effectiveRole, effectiveUserId, loading: authLoading } = useAuth();
+  const { user, role, effectiveRole, effectiveUserId, impersonate, loading: authLoading } = useAuth();
 
   // Captura e persiste o código de referência do consultor
   const refAtualUrl = searchParams.get('ref') || '';
@@ -166,25 +166,35 @@ export default function Calculadora() {
   const [copiado, setCopiado] = useState(false);
   const [codigoRef, setCodigoRef] = useState('');
 
-  // QUEM PODE COMPARTILHAR = QUEM TEM CÓDIGO DE INDICAÇÃO (23/08, pedido do dono).
-  // O gate anterior era `role === 'consultor' | 'admin'` e, desde o MODELO EQUIPE de 22/08
-  // (parceiro = usuário de plano + função adicional), ele exclui justamente o parceiro: dos 9
-  // perfis com código hoje, 7 são `explorador` — o botão apareceria só para o admin. Ter
-  // código É a credencial do programa (ele nasce no aceite da parceria, em MinhaRede), então
-  // é ele que decide. Sem código, nada aparece.
+  // QUEM PODE COMPARTILHAR = QUEM ACEITOU A PARCERIA (`parceiro_aceite_em`), o MESMO critério
+  // que o Header usa para mostrar "Indicações" (23/08, pergunta do dono: "é exclusivo para
+  // parceiros, certo?").
+  //
+  // Duas versões erradas antes desta, e cada uma errava para um lado:
+  //   • `role === 'consultor' | 'admin'` — desde o MODELO EQUIPE de 22/08 o parceiro é usuário
+  //     de plano + função adicional, então 7 dos 9 perfis com código são `explorador`: o botão
+  //     apareceria só para o admin.
+  //   • ter `codigo_indicacao` — proxy INDIRETO. Hoje bate (9 com código, 10 com aceite, zero
+  //     código sem aceite), mas não por garantia: o "compartilhar" de Curso e E-book gera
+  //     código para QUALQUER usuário logado, sem checar parceria. Bastava um cliente clicar ali
+  //     para passar a ver este bloco. Aceite é o fato; código é consequência.
+  //
+  // Admin fora do modo suporte também vê (espelha o Header). Sob suporte, vale o CLIENTE visto.
   useEffect(() => {
     if (!user) return;
     let vivo = true;
-    supabase.from('perfis').select('codigo_indicacao').eq('id', effectiveUserId || user.id).maybeSingle()
+    supabase.from('perfis').select('codigo_indicacao, parceiro_aceite_em')
+      .eq('id', effectiveUserId || user.id).maybeSingle()
       .then(({ data, error }) => {
         if (!vivo) return;
         // `error` checado de propósito: falha de leitura NÃO pode virar "não é parceiro" em
         // silêncio — o parceiro clicaria em nada e ninguém saberia por quê (forma #2).
-        if (error) { console.error('[calculadora] código de indicação:', error.message); return; }
-        if (data?.codigo_indicacao) setCodigoRef(data.codigo_indicacao);
+        if (error) { console.error('[calculadora] parceria/código:', error.message); return; }
+        const ehParceiro = !!data?.parceiro_aceite_em || (role === 'admin' && !impersonate);
+        if (ehParceiro && data?.codigo_indicacao) setCodigoRef(data.codigo_indicacao);
       });
     return () => { vivo = false; };
-  }, [user, effectiveUserId]);
+  }, [user, effectiveUserId, role, impersonate]);
 
   // Ajusta os defaults conforme a origem:
   //  • JUDICIAL (CPC 895): 25% de entrada + 30 parcelas, sem juros.
@@ -294,8 +304,12 @@ export default function Calculadora() {
 
   const nomeTabela = tabela === 'sac' ? 'SAC' : tabela === 'price' ? 'PRICE' : 'Hipoteca';
 
+  // LINK CURTO (23/08, pedido do dono): /r/CODIGO redireciona para a calculadora com o ?ref=
+  // (api/r.js + rewrite no vercel.json). Encurta o que é compartilhado e, principalmente, tira
+  // o `#` do meio — alguns mensageiros cortam o endereço a partir dele e levariam junto o
+  // `?ref`, que é justamente a indicação do parceiro.
   const linkAfiliado = codigoRef
-    ? `${window.location.origin}${window.location.pathname}#/calculadora?ref=${codigoRef}`
+    ? `${window.location.origin}/r/${codigoRef}`
     : '';
 
   const copiarLink = () => {
@@ -620,11 +634,6 @@ export default function Calculadora() {
                 <button onClick={copiarLink} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: copiado ? '#059669' : '#0D63DB', color: 'white', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
                   {copiado ? <><Check size={14} /> Copiado</> : <><Copy size={14} /> Copiar</>}
                 </button>
-                <a href={`https://wa.me/?text=${encodeURIComponent(`Calcule quanto vale a pena dar de lance num leilão de imóvel: ${linkAfiliado}`)}`}
-                   target="_blank" rel="noopener noreferrer"
-                   style={{ padding: '8px 14px', background: '#25D366', color: 'white', borderRadius: 8, fontSize: 12, fontWeight: 700, textDecoration: 'none' }}>
-                  WhatsApp
-                </a>
               </div>
             </div>
           )}
