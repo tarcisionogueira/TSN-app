@@ -1,6 +1,15 @@
 /**
  * GET /r/:codigo — link CURTO de indicação (23/08/2026, pedido do dono).
  *
+ * O ARQUIVO PRECISOU DE NOME LONGO. Nasceu como `api/r.js` e a rota simplesmente não
+ * existia em produção: `/api/r` caía no index.html do SPA, enquanto `/api/track`,
+ * `/api/verificar-pagamento` (último alfabético — descarta teto de funções) e
+ * `/api/alerta-publico` (edge, como este — descarta o runtime) respondiam normalmente.
+ * A única variável restante era o nome de UMA LETRA — daí este nome longo. Se um dia
+ * `/api/redirecionar` também sumir, a hipótese do nome estava errada e o suspeito passa a
+ * ser o rewrite. De todo modo, o aviso vale: quando um endpoint de `api/` não vira rota, a
+ * falha é SILENCIOSA — não há erro de build, o pedido só escorrega para o index.html do SPA.
+ *
  * `bidprobrasil.com.br/r/C39C0C` → 302 → `/#/calculadora?ref=C39C0C`.
  *
  * Por que um endpoint e não só encurtar o texto na tela: o link é COMPARTILHADO (WhatsApp,

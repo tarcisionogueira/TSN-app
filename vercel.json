@@ -6,7 +6,7 @@
     },
     {
       "source": "/r/:codigo",
-      "destination": "/api/r?codigo=:codigo"
+      "destination": "/api/redirecionar?codigo=:codigo"
     },
     {
       "source": "/c/:token",
