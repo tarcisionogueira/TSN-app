@@ -5,7 +5,72 @@
 ---
 
 ## 📌 PENDÊNCIAS ABERTAS (para esta sessão — leia primeiro)
-_Última atualização: 22/08. Tudo abaixo de "resolvido" está em produção na `main`._
+_Última atualização: 23/08. Tudo abaixo de "resolvido" está em produção na `main`._
+
+### ✅ SESSÃO 23/08 — EM PRODUÇÃO (PRs #308–#313 mesclados, deploys READY, `main` em commit babdab9)
+Sessão de **conversão + aparência da área pública** (pedidos do dono). `auditoria_seguranca` 0/0
+com a tabela nova. O que entrou:
+- **#308 Atribuição de marketing:** a landing de SEO (`/api/publico`) passa a gravar a chave
+  `localStorage['tsn_mkt']` — a MESMA que o cadastro lê (`src/utils/marketing.js`), no mesmo
+  formato/precedência. Antes o `gclid` entrava em `visita_origem` mas `perfis.mkt_*` ficava
+  vazio (a página de servidor não roda o `capturarMarketing()` do SPA). Fecha o funil
+  anúncio → visita → cadastro. Sem migração.
+- **#309 Ficha pública repaginada** (`/leilao/:id`) no padrão do `ImovelDetalhe`: 2 colunas +
+  sidebar de ação sticky, mini-cards de valores (com 2ª praça e R$/m²), seções com ícone, e o
+  produto pago como **TEASER bloqueado** (mapa/BidScore/análise borrados com cadeado — promessa,
+  não parede; respeita o gate de 08/08, robô e pessoa veem o mesmo FATO). Cards da grade ganham
+  **selo do leiloeiro** + **urgência "encerra em N dias"** (script no cliente, imune ao cache da
+  borda; sem JS/robô o selo some e a data segue como fato). Tudo server-rendered, sem migração.
+- **#310 Ímã "avise-me" (captura leve PRÉ-CONTA)** + **Google no topo do cadastro**:
+  - `supabase/migrations/alerta_publico_ima.sql` (APLICADA): tabela `alerta_publico` **ISOLADA**
+    de perfis/sdr_leads (insert forjado não vira lead comercial nem usuário). **RLS ligada e SEM
+    política anon/authenticated** → só a service key escreve. Dedup `alerta_publico_enviados`.
+    Token = capability aleatória (64 hex) p/ confirmar/descadastrar sem login nem segredo.
+  - `api/alerta-publico.js` (edge): rate-limit por IP + honeypot + regex de e-mail sem reservados
+    do PostgREST; **duplo opt-in** (confirmado=false + e-mail de confirmação). `alerta-confirmar`/
+    `alerta-descadastrar` (GET por token). `alertas-publicos-cron` (Vercel cron **14h UTC**,
+    throttle 3 dias, teto 500/rodada **com log**). Caixa "avise-me" nas páginas de cidade e UF.
+  - **Google OAuth no TOPO do cadastro** (só em ambiente não-frágil; em navegador in-app segue
+    embaixo com o aviso). Tira o gargalo da confirmação de e-mail (maior perda do funil) sem
+    guardar senha.
+- **#311 → #312 FOUT (o "pulo" de tamanho do título na 1ª visita):** era troca de fonte
+  (display=swap → League Spartan, mais estreita, trocava ~1s depois). Conserto definitivo:
+  **League Spartan AUTO-HOSPEDADA** (`public/fonts/league-spartan-latin.woff2`, variável 700–900,
+  **precarregada**) + `@font-face 'League Spartan Fallback'` (base Arial) com **size-adjust 87.79%
+  + ascent/descent-override** calculados das MÉTRICAS REAIS do arquivo (fonttools; upm 2000, asc
+  1400, desc −440, xWidthAvg 775). Fallback ocupa o mesmo espaço → sem CLS. Inter segue do Google
+  com swap. **Regra nova:** trocar/editar a fonte de título exige recalcular os overrides.
+- **#313 Landing direto ao cadastro:** CTAs primários (herói + CTA final) → `/login?modo=cadastro`;
+  "Ver planos" fica como botão secundário. Menos uma etapa no funil.
+
+#### 🔎 Verificação final 23/08 (custo zero — só leitura)
+- **Cliente 360:** 24h **limpo** (0 falha de relatório / 0 erro invisível). 7d: 4 falhas, 1 erro
+  invisível **antigo** (gerar-analise, 17/08). 58 clientes (52 explorador · 5 pró · 1 assessorado);
+  **26 sem triagem** (deixa o e-mail de oportunidade genérico).
+- **Saúde:** health-check **0 erros** (avisos: 2 "relatório incoerente" + **`QuotaExceededError`**
+  = localStorage cheio em `/minha-rede` e `/`, 4×/24h — investigar). **Backup off-region
+  RECUPERADO** (ok, falhas 0, `arquivos_iguais` 33–44, 50–60/rodada — **não está mais no teto de
+  1.000**; sair da vigilância). `qa_invariantes`: 6 alertas **operacionais pré-existentes** (Bright
+  Data teto 618/495 + limpeza de encerrados pulada; sem_foto 1.802; área não confirmada 12; pino
+  genérico 45; PESTANA data uniforme 1).
+- **Orientações Google/Ads:** rastreamento de **VISITA saudável** (14d: 405 cliques × **384 gclid**
+  ~95%; **utm_term agora 328** — pendência antiga "utm_term=0" resolvida). Atribuição de **CADASTRO
+  ainda baixa** (30d: 5 google / 37 sem origem) **mas** cobre período ANTERIOR ao #308 → acompanhar
+  subir. **Conversões no painel baixas (6 em 13d)** — checar tag de conversão do Ads + realocar verba.
+
+#### ⏳ PENDÊNCIAS que sobraram desta sessão
+1. **Verificar em produção** (não deu p/ testar da sessão — proxy bloqueia o domínio): ímã
+   "avise-me" ponta a ponta (e-mail de confirmação chega? cron faz o 1º disparo amanhã 14h UTC?);
+   Alavancagem em **aba anônima** (título sem pulo); Google acima do formulário no cadastro.
+2. **Acompanhar `perfis.mkt_*` subir** nos próximos dias (efeito do #308 só em cadastros novos).
+3. **Prova social em VÍDEO — adiada pelo dono.** Ele tem vídeos (não prints). Caminho: subir 3–6
+   depoimentos em **YouTube não listado** (ou Panda/Bunny, já usados nos cursos) e mandar
+   link+nome+cidade → montar seção "Depoimentos em vídeo" (nomes abreviados; só conteúdo real).
+   ⚠️ **Embed direto do Instagram NÃO** — o CSP não libera `instagram.com` (iframe/script) e o IG
+   não dá URL de vídeo estável.
+4. **Marketing (dono):** realocar verba do Ads (pausar palavras 0-conversão, reforçar "sites de
+   leilão de imóveis", 6 sitelinks); conferir a **tag de conversão**; cartão válido no Supabase.
+5. **`QuotaExceededError`** (localStorage cheio) em `/minha-rede` e `/` — investigar a causa.
 
 ### ✅ SESSÃO 22/08 — EM PRODUÇÃO (PR #305 mesclado, deploy READY, commit 5412214)
 Bug bounty de abertura (3 agentes) + pedidos do dono. Migrações aplicadas via MCP
