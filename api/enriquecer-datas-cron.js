@@ -61,8 +61,21 @@ export default async function handler(req, res) {
   for (const im of candidatos) {
     const alvo = im.url_lote || im.link_edital;
     if (!alvo || !/^https?:\/\//.test(alvo)) continue;
-    const { html } = await fetchLote(alvo);
+    const { html, semCota } = await fetchLote(alvo);
     const patch = { enriquecido_em: agora };
+    // RECUSA DE ORÇAMENTO NÃO É VISITA (23/08 — a forma #5 de novo, aqui). O
+    // `enriquecer-backfill-cron` recebeu este conserto em 19/08; ESTE cron, que é
+    // justamente o dedicado a DATAS, ficou para trás e seguia lendo só `{ html }`:
+    // com o teto do Bright Data saturado (semanas a fio), cada rodada queimava 5
+    // lotes, carimbava `enriquecido_em` neles e os mandava para o fim da fila SEM
+    // NUNCA TÊ-LOS LIDO. Efeito medido em 23/08: GRUPOLANCE 449 lotes sem data com
+    // só 54 "tentados", BIASI 304 com 3, VIP 87 com ZERO — ~1.010 lotes ativos que
+    // o cliente vê sem data de leilão. Sem cota, para o run inteiro sem carimbar
+    // ninguém: o freio vale para todos os próximos também.
+    if (semCota) {
+      console.error('[enriquecer-datas] sem cota Bright Data — run interrompido sem carimbar os restantes');
+      break;
+    }
     if (html) {
       const { inicio, fim, encerradaEm } = extrairDatasLeilao(html);
       if (inicio && !im.data_leilao) { patch.data_leilao = inicio; comData++; }
