@@ -491,6 +491,16 @@ async function scraperSuperbid(pageNumber = 1) {
       const det = of.offerDetail || {};
       const isJudicial = (of.auction?.subMarketplaces || []).some(s => s.desc === 'Judicial');
 
+      // PRAÇA VIGENTE × ÚLTIMA PRAÇA (23/08, caso Ville de Lyon — Feira de Santana).
+      // `of.endDate` é o fim da ÚLTIMA praça da OFERTA; `of.auction.endDate` é o fim
+      // do LEILÃO vigente (1ª praça). Gravar só of.endDate escondia a 1ª praça: o
+      // cliente via "24/09" com a 1ª praça encerrando em 25/08 — a dois dias. A 1ª
+      // praça vai em data_leilao (é a data acionável) e a última em data_leilao_2.
+      // Comparação de string funciona: formato "YYYY-MM-DD HH:MM:SS".
+      const fimPraca1 = of.auction?.endDate || null;
+      const fimUltima = of.endDate || null;
+      const duasPracas = Boolean(fimPraca1 && fimUltima && fimPraca1 < fimUltima);
+
       // Extrai área da descrição
       const areaMatch = (of.offerDescription || '').match(/(\d+[\.,]?\d*)\s*m2/i);
       const area = areaMatch ? parseFloat(areaMatch[1].replace(',', '.')) : 0;
@@ -518,7 +528,8 @@ async function scraperSuperbid(pageNumber = 1) {
         link_edital: `https://www.superbid.net/lote/${of.id}`,
         link_foto: p.thumbnailUrl || null,
         leiloeiro: of.store?.name || of.seller?.name || 'Superbid',
-        data_leilao: of.endDate || null,
+        data_leilao: duasPracas ? fimPraca1 : (fimUltima || fimPraca1),
+        data_leilao_2: duasPracas ? fimUltima : null,
         forma_pagamento: 'a_vista',
       };
     }).filter(im => im.valor_minimo > 0);
@@ -725,6 +736,11 @@ async function scraperSuperbidAlt(pageNumber = 1) {
     return offers.map(of => {
       const p = of.product || of;
       const loc = p.location || of.location || {};
+      // Mesma regra do scraper principal (caso Ville de Lyon): 1ª praça em
+      // data_leilao, última em data_leilao_2 — of.endDate sozinho esconde a 1ª.
+      const fimPraca1 = of.auction?.endDate || null;
+      const fimUltima = of.endDate || null;
+      const duasPracas = Boolean(fimPraca1 && fimUltima && fimPraca1 < fimUltima);
       return {
         fonte: 'SUPERBID',
         fonte_id: `sbid_${of.id || of.offerId}`,
@@ -742,7 +758,8 @@ async function scraperSuperbidAlt(pageNumber = 1) {
         link_edital: `https://www.superbid.net/lote/${of.id || of.offerId}`,
         link_foto: p.thumbnailUrl || null,
         leiloeiro: of.store?.name || 'Superbid',
-        data_leilao: of.endDate || null,
+        data_leilao: duasPracas ? fimPraca1 : (fimUltima || fimPraca1),
+        data_leilao_2: duasPracas ? fimUltima : null,
         forma_pagamento: 'a_vista',
       };
     }).filter(im => im.valor_minimo > 0);
