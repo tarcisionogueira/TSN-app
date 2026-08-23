@@ -166,11 +166,25 @@ export default function Calculadora() {
   const [copiado, setCopiado] = useState(false);
   const [codigoRef, setCodigoRef] = useState('');
 
+  // QUEM PODE COMPARTILHAR = QUEM TEM CÓDIGO DE INDICAÇÃO (23/08, pedido do dono).
+  // O gate anterior era `role === 'consultor' | 'admin'` e, desde o MODELO EQUIPE de 22/08
+  // (parceiro = usuário de plano + função adicional), ele exclui justamente o parceiro: dos 9
+  // perfis com código hoje, 7 são `explorador` — o botão apareceria só para o admin. Ter
+  // código É a credencial do programa (ele nasce no aceite da parceria, em MinhaRede), então
+  // é ele que decide. Sem código, nada aparece.
   useEffect(() => {
-    if (!user || (role !== 'consultor' && role !== 'admin')) return;
-    supabase.from('perfis').select('codigo_indicacao').eq('id', effectiveUserId || user.id).single()
-      .then(({ data }) => { if (data?.codigo_indicacao) setCodigoRef(data.codigo_indicacao); });
-  }, [user, role, effectiveUserId]);
+    if (!user) return;
+    let vivo = true;
+    supabase.from('perfis').select('codigo_indicacao').eq('id', effectiveUserId || user.id).maybeSingle()
+      .then(({ data, error }) => {
+        if (!vivo) return;
+        // `error` checado de propósito: falha de leitura NÃO pode virar "não é parceiro" em
+        // silêncio — o parceiro clicaria em nada e ninguém saberia por quê (forma #2).
+        if (error) { console.error('[calculadora] código de indicação:', error.message); return; }
+        if (data?.codigo_indicacao) setCodigoRef(data.codigo_indicacao);
+      });
+    return () => { vivo = false; };
+  }, [user, effectiveUserId]);
 
   // Ajusta os defaults conforme a origem:
   //  • JUDICIAL (CPC 895): 25% de entrada + 30 parcelas, sem juros.
@@ -584,8 +598,36 @@ export default function Calculadora() {
             </div>
           )}
 
-          {/* (Removido) Link de afiliado da calculadora — captação de marketing fica fora do
-              Programa de Parceiros; a indicação do parceiro é feita pelo link em "Indicações". */}
+          {/* COMPARTILHAR A CALCULADORA (23/08, pedido do dono). Este bloco existiu, foi
+              removido quando o Programa de Parceiros nasceu ("captação de marketing fica fora
+              do Programa") e volta por decisão do dono: a calculadora é a melhor isca do
+              produto, e quem a compartilha deve receber a indicação. O `?ref=` já é lido no
+              topo desta tela (salvarRef, janela de 30 dias) e viaja até o cadastro — a
+              atribuição funciona sem nada novo no back. */}
+          {linkAfiliado && (
+            <div style={{ marginTop: 18, padding: 16, border: '1px solid #bfdbfe', borderRadius: 12, background: '#eff6ff' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                <Share2 size={16} color="#0D63DB" />
+                <strong style={{ fontSize: 13, color: '#0D63DB' }}>Compartilhe esta calculadora</strong>
+              </div>
+              <p style={{ fontSize: 12, color: '#475569', margin: '0 0 10px', lineHeight: 1.5 }}>
+                Quem entrar por este link e criar conta fica registrado como sua indicação.
+              </p>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                <code style={{ flex: '1 1 240px', fontSize: 11, color: '#334155', background: 'white', border: '1px solid #dbeafe', borderRadius: 8, padding: '8px 10px', wordBreak: 'break-all' }}>
+                  {linkAfiliado.replace(/^https?:\/\/(www\.)?/, '')}
+                </code>
+                <button onClick={copiarLink} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: copiado ? '#059669' : '#0D63DB', color: 'white', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                  {copiado ? <><Check size={14} /> Copiado</> : <><Copy size={14} /> Copiar</>}
+                </button>
+                <a href={`https://wa.me/?text=${encodeURIComponent(`Calcule quanto vale a pena dar de lance num leilão de imóvel: ${linkAfiliado}`)}`}
+                   target="_blank" rel="noopener noreferrer"
+                   style={{ padding: '8px 14px', background: '#25D366', color: 'white', borderRadius: 8, fontSize: 12, fontWeight: 700, textDecoration: 'none' }}>
+                  WhatsApp
+                </a>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
