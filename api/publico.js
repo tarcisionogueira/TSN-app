@@ -315,6 +315,19 @@ footer .in{max-width:1080px;margin:0 auto}
 .acao .bullets{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:7px}
 .acao .bullets li{font-size:12.5px;color:#475569;display:flex;gap:7px;align-items:flex-start}
 .acao .bullets li::before{content:'✓';color:#16a34a;font-weight:900}
+/* ── ÍMÃ "avise-me": captura leve de e-mail (pré-conta). POST para /api/alerta-publico via
+   o script no rodapé; duplo opt-in por e-mail. ── */
+.avise{background:linear-gradient(180deg,#eff6ff,#fff);border:1px solid #bfdbfe;border-radius:16px;padding:20px;margin:24px 0}
+.avise-t{font-weight:800;font-size:16px;margin:0 0 4px}
+.avise-s{font-size:13px;color:var(--cinza);margin:0 0 12px}
+.avise form{display:flex;gap:10px;flex-wrap:wrap;margin:0}
+.avise input[type=email]{flex:1;min-width:220px;padding:11px 14px;border:1px solid var(--linha);border-radius:10px;font-size:16px;font-family:inherit;color:inherit;background:#fff}
+.avise input[type=email]:focus{outline:2px solid var(--azul);outline-offset:1px}
+.avise .avise-hp{position:absolute;left:-9999px;width:1px;height:1px;opacity:0}
+.avise button{padding:11px 20px;border:none;border-radius:10px;background:var(--azul);color:#fff;font-weight:800;font-size:14px;cursor:pointer;font-family:inherit}
+.avise button:hover{background:var(--azul-fundo)}
+.avise button:disabled{opacity:.6;cursor:default}
+.avise-ok{font-size:13px;font-weight:600;margin:10px 0 0;color:#15803d}
 </style>
 </head><body>
 <header><div class="in">
@@ -372,6 +385,38 @@ ${corpo}
     else{txt='🗓 Praça em '+dias+' dias';cls='prazo-normal';}
     el.textContent=txt;el.className='prazo-badge '+cls;el.style.display='';
   })(els[i]);}
+}catch(e){}})();
+</script>
+<!-- ÍMÃ "avise-me": envia a caixa de captura para /api/alerta-publico (mesma origem → CSP ok).
+     Duplo opt-in: o back-end manda o e-mail de confirmação; aqui só mostramos o retorno. -->
+<script>
+(function(){try{
+  var boxes=document.querySelectorAll('.avise');
+  for(var i=0;i<boxes.length;i++){(function(box){
+    var f=box.querySelector('form');if(!f)return;
+    f.addEventListener('submit',function(ev){
+      ev.preventDefault();
+      var email=(f.email&&f.email.value||'').trim();
+      var hp=(f.website&&f.website.value||'').trim();
+      var btn=f.querySelector('button');
+      var ok=box.querySelector('.avise-ok');
+      if(!email)return;
+      if(btn){btn.disabled=true;btn.textContent='Enviando…';}
+      fetch('/api/alerta-publico',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({email:email,uf:box.getAttribute('data-uf'),cidade:box.getAttribute('data-cidade'),website:hp,origem:location.pathname})})
+        .then(function(r){return r.json().catch(function(){return {};});})
+        .then(function(d){
+          if(d&&d.ok){
+            f.style.display='none';
+            if(ok){ok.style.display='block';ok.style.color='#15803d';ok.textContent=d.jaConfirmado?'✅ Você já recebe alertas para este local.':'📬 Enviamos um e-mail para confirmar seu alerta. Confira sua caixa de entrada (e a pasta de spam).';}
+          }else{
+            if(btn){btn.disabled=false;btn.textContent='Quero ser avisado';}
+            if(ok){ok.style.display='block';ok.style.color='#b91c1c';ok.textContent=(d&&d.error)||'Não foi possível agora. Tente novamente.';}
+          }
+        }).catch(function(){if(btn){btn.disabled=false;btn.textContent='Quero ser avisado';}
+          if(ok){ok.style.display='block';ok.style.color='#b91c1c';ok.textContent='Não foi possível agora. Tente novamente.';}});
+    });
+  })(boxes[i]);}
 }catch(e){}})();
 </script>
 <!-- MEDIÇÃO DO ACERVO PÚBLICO (12/08). Estas páginas são servidas FORA do React, então o
@@ -497,6 +542,22 @@ function caixaBusca(valor = '') {
   </div>`;
 }
 
+// Ímã "avise-me" — captura leve de e-mail (sem criar conta). `cidade` vazio = alerta por UF.
+// O envio é feito pelo script no rodapé (POST /api/alerta-publico); duplo opt-in por e-mail.
+function caixaAviseMe(cidade, uf) {
+  const alvo = cidade ? `${esc(cidade)}/${esc(uf)}` : esc(UF_NOME[uf] || uf);
+  return `<div class="avise" data-uf="${esc(uf)}" data-cidade="${esc(cidade || '')}">
+    <div class="avise-t">📩 Avise-me quando surgir imóvel em ${alvo}</div>
+    <div class="avise-s">Deixe seu e-mail e avisamos quando entrarem novos lotes em ${alvo} — sem precisar criar conta. Você confirma por e-mail e cancela quando quiser.</div>
+    <form onsubmit="return false">
+      <input type="email" name="email" placeholder="seu@email.com" aria-label="Seu e-mail" required/>
+      <input type="text" name="website" class="avise-hp" tabindex="-1" autocomplete="off" aria-hidden="true"/>
+      <button type="submit">Quero ser avisado</button>
+    </form>
+    <div class="avise-ok" role="status" style="display:none"></div>
+  </div>`;
+}
+
 // ── /leiloes/buscar?cidade= ──────────────────────────────────────────────────
 async function paginaBusca(termo) {
   const q = String(termo || '').trim().slice(0, 60);
@@ -562,6 +623,7 @@ async function paginaUF(uf) {
       ${caixaBusca()}
       <h2>Cidades de ${esc(nomeUF)}</h2>
       <ul class="lista">${cidades.map(([cn, c]) => `<li><a href="${SITE}/leiloes/${uf.toLowerCase()}/${cn}">${esc(c.nome)} <strong>(${c.n.toLocaleString('pt-BR')})</strong></a></li>`).join('')}</ul>
+      ${caixaAviseMe('', uf)}
       <h2>Antes de dar um lance em ${esc(nomeUF)}</h2>
       <p class="sub">Cada imóvel de leilão tem uma história: ocupação, dívidas de condomínio e IPTU, ônus na matrícula, prazo de desocupação. A BidPro Brasil produz a análise de mercado, o parecer jurídico e o cálculo de viabilidade de cada lote. <a href="${SITE}/#/login?modo=cadastro">Comece grátis</a>.</p>`,
     jsonld: { '@context': 'https://schema.org', '@type': 'CollectionPage', name: `Imóveis em leilão em ${nomeUF}`, url: `${SITE}/leiloes/${uf.toLowerCase()}` },
@@ -610,6 +672,7 @@ async function paginaCidade(uf, cidadeNorm, page) {
         <span>página ${page} de ${ultima}</span>
         ${page < ultima ? `<a href="${base}?pagina=${page + 1}">próxima →</a>` : ''}
       </nav>` : ''}
+      ${caixaAviseMe(nomeCidade, uf)}
       <h2>Vale a pena arrematar em ${esc(nomeCidade)}?</h2>
       <p class="sub">Desconto grande nem sempre é bom negócio: o que decide é o valor de mercado do bairro, os débitos que vêm junto e o risco jurídico do processo.
       A BidPro Brasil entrega os três relatórios por imóvel — mercadológico, documental e jurídico —
