@@ -82,8 +82,10 @@ export default function Landing() {
   const nav = useNavigate();
   const [faqAberto, setFaqAberto] = useState(null);
 
-  // Toda a landing funila para UMA tela de planos (/planos), onde o cadastro
-  // acontece. Sem busca sem conta; sem páginas de plano paralelas.
+  // CTAs primários vão DIRETO ao cadastro (/login?modo=cadastro) — 23/08, decisão do dono:
+  // a etapa extra por /planos custava conversão, e a SEO já leva direto ao cadastro. Os botões
+  // de COMPARAR preços seguem para /planos (secundário no herói e no CTA final, + a seção de
+  // planos). O cadastro é grátis; quem quiser comparar plano ainda chega lá.
 
   // Dúvida pública (sem login): nome/email/telefone/mensagem → /api/duvida, que
   // abre um chamado na tela de Atendimento. A resposta do analista chega por
@@ -122,9 +124,13 @@ export default function Landing() {
             A <strong style={{ color: '#ffffff', fontWeight: 800 }}>Bid Pro Brasil</strong> lê o edital, <strong style={{ color: '#e2e8f0', fontWeight: 700 }}>mapeia os riscos jurídicos</strong> e calcula a <strong style={{ color: '#e2e8f0', fontWeight: 700 }}>viabilidade financeira</strong> de cada imóvel e te dá uma resposta clara <span style={{ color: '#34d399', fontWeight: 700 }}>antes do primeiro lance</span>.
           </p>
           <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
-            <button onClick={() => nav('/planos')}
+            <button onClick={() => nav('/login?modo=cadastro')}
               style={{ padding: '15px 34px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 9, boxShadow: '0 8px 28px rgba(13,99,219,0.45)' }}>
-              Ver planos e começar <ArrowRight size={17} />
+              Criar conta grátis <ArrowRight size={17} />
+            </button>
+            <button onClick={() => nav('/planos')}
+              style={{ padding: '15px 28px', background: 'transparent', color: '#e2e8f0', border: '1px solid rgba(255,255,255,0.22)', borderRadius: 12, fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>
+              Ver planos e preços
             </button>
           </div>
           <p style={{ color: '#475569', fontSize: 12, marginTop: 18 }}>Comece grátis · sem cartão de crédito</p>
@@ -554,10 +560,16 @@ export default function Landing() {
           <p style={{ color: '#94a3b8', fontSize: 16, lineHeight: 1.7, margin: '0 0 36px' }}>
             Crie sua conta gratuitamente e comece a explorar oportunidades em todo o Brasil, sem cartão, sem compromisso.
           </p>
-          <button onClick={() => nav('/planos')}
-            style={{ padding: '16px 40px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 12, fontWeight: 900, fontSize: 17, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 10, boxShadow: '0 8px 32px rgba(13,99,219,0.5)' }}>
-            Veja o plano ideal para começar <ArrowRight size={18} />
-          </button>
+          <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
+            <button onClick={() => nav('/login?modo=cadastro')}
+              style={{ padding: '16px 40px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 12, fontWeight: 900, fontSize: 17, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 10, boxShadow: '0 8px 32px rgba(13,99,219,0.5)' }}>
+              Criar minha conta grátis <ArrowRight size={18} />
+            </button>
+            <button onClick={() => nav('/planos')}
+              style={{ padding: '16px 30px', background: 'transparent', color: '#e2e8f0', border: '1px solid rgba(255,255,255,0.22)', borderRadius: 12, fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>
+              Ver planos
+            </button>
+          </div>
           <p style={{ color: '#475569', fontSize: 12, marginTop: 16 }}>Comece grátis · sem cartão · cancele quando quiser</p>
         </div>
       </section>
