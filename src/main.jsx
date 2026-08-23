@@ -6,13 +6,18 @@ import 'leaflet.markercluster/dist/MarkerCluster.css'
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css'
 import './index.css'
 import { registrarServiceWorker } from './utils/push.js'
+import { vigiarAtualizacaoDoApp } from './utils/swAtualizacao.js'
 import { reportarErroCliente, instalarCapturaErros, ehErroDeChunk, recarregarPorChunkStale, recarregarComGuarda, houveChunkRecente } from './utils/reportarErro.js'
 import { instalarTracker } from './utils/tracker.js'
 import { initMetaPixel, capturarMarketing } from './utils/marketing.js'
 
-// Registra o service worker em produção
+// Registra o service worker em produção e VIGIA atualização: sem isso o PWA instalado
+// segue rodando a versão que baixou (fechar e reabrir NÃO busca versão nova — ver
+// utils/swAtualizacao.js). Foi o que fez uma tela nova não aparecer no app em 23/08.
 if (import.meta.env.PROD) {
-  registrarServiceWorker().catch(() => {});
+  registrarServiceWorker()
+    .then(reg => { if (reg) vigiarAtualizacaoDoApp(reg); })
+    .catch(() => {});
 }
 
 // Captura erros de runtime ASSÍNCRONOS (window.onerror / unhandledrejection) que o
