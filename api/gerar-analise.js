@@ -2279,6 +2279,31 @@ export default async function handler(req, res) {
           if (!imDb.data_leilao && dEd.inicio) { imDb.data_leilao = dEd.inicio; patchPr.data_leilao = dEd.inicio; }
           if (!imDb.data_leilao_2 && dEd.fim) { imDb.data_leilao_2 = dEd.fim; patchPr.data_leilao_2 = dEd.fim; }
         }
+        // CONFERIR ≠ só COMPLETAR (23/08, regra do dono após o caso Ville de Lyon: o
+        // acervo dizia 24/09 — o teto de encerramento da plataforma — e o edital,
+        // "praça única — 25/08 15h"; o preenche-só-vazio jamais corrigiria). Quando o
+        // edital traz data de PRAÇA EXPLÍCITA divergindo em mais de 1 dia do acervo, o
+        // DOCUMENTO oficial vence: corrige o lote e deixa rastro em relatorio_anomalias
+        // (a mesma divergência repetindo numa fonte = o scraper dela lê o campo errado).
+        // Só as praças estruturadas (p1/p2) corrigem; as datas ancoradas genéricas (dEd)
+        // seguem completando vazio — confiança menor não sobrescreve dado existente.
+        const DIA_MS = 86400000;
+        const divergeDoAcervo = (doc, atual) => {
+          const a = Date.parse(doc), b = Date.parse(atual);
+          return Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) > DIA_MS;
+        };
+        if (p1?.data && imDb.data_leilao && divergeDoAcervo(p1.data, imDb.data_leilao)) {
+          try { await registrarAnomalia('data_divergente_edital', fonteDb, imovelId, 'data_leilao', `Acervo dizia ${imDb.data_leilao}; edital diz ${p1.data} — corrigido pelo documento.`); } catch { /* rastro best-effort */ }
+          imDb.data_leilao = p1.data; patchPr.data_leilao = p1.data;
+        }
+        if (p2?.data && imDb.data_leilao_2 && divergeDoAcervo(p2.data, imDb.data_leilao_2)) {
+          imDb.data_leilao_2 = p2.data; patchPr.data_leilao_2 = p2.data;
+        }
+        // Edital com PRAÇA ÚNICA e acervo carregando uma "2ª praça": ela não existe —
+        // apaga (a praça fantasma inventava um mês de folga que custaria o leilão).
+        if (p1?.data && !p2 && pracasEd.length === 1 && imDb.data_leilao_2) {
+          imDb.data_leilao_2 = null; patchPr.data_leilao_2 = null;
+        }
         if (Object.keys(patchPr).length) {
           try { await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(patchPr) }); } catch { /* best-effort */ }
         }
