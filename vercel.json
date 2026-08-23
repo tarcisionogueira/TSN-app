@@ -119,6 +119,10 @@
       "schedule": "0 11 * * *"
     },
     {
+      "path": "/api/alertas-publicos-cron",
+      "schedule": "0 14 * * *"
+    },
+    {
       "path": "/api/geocodificar",
       "schedule": "0 * * * *"
     },
