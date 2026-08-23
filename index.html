@@ -2,15 +2,19 @@
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
-    <!-- LINK CURTO /r/CODIGO (23/08) — resolvido AQUI, no cliente, e não na Vercel.
+    <!-- LINK CURTO /r/CODIGO (23/08) — servido por rewrite para ESTE arquivo e desviado AQUI.
+         O `vercel.json` manda `/r/:codigo` para `/index.html` (arquivo estático, que existe
+         sempre) e o script abaixo troca para a rota da calculadora antes do app subir.
          Duas tentativas no servidor falharam em produção, ambas em silêncio: rewrite para
          função (api/r.js, depois api/redirecionar.js — a rota nunca existiu, o pedido caía
          neste index.html) e `redirects` declarativo no vercel.json (idem). Descartados por
          teste direto: teto de funções, runtime edge, nome do arquivo e o instrumento de
          medição — e as OUTRAS regras do vercel.json funcionam (a rota SEO /leiloes/:uf/:cidade
-         responde do servidor). Por que a regra de /r/ não pega segue em aberto.
-         O que é FATO observado: /r/QUALQUERCOISA entrega este arquivo. Então é aqui que o
-         desvio acontece, antes do app subir — sem depender de nada que possa não existir.
+         responde do servidor). Por que a regra de /r/ apontada para uma FUNÇÃO não pega segue
+         em aberto; apontada para este arquivo, pega.
+         E o teste que fechou o diagnóstico: ao remover a regra, /r/ passou a devolver 404 —
+         este projeto NÃO tem fallback de SPA para caminho desconhecido. Ou seja, sem a regra
+         o script abaixo nunca rodaria, porque a página não chegaria a ser servida.
          `replace` para não deixar o /r/ no histórico (voltar levaria a um loop de redirect). -->
     <script>
       (function () {
