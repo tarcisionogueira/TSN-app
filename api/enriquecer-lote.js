@@ -86,7 +86,12 @@ export async function fetchLote(url) {
  */
 const RE_DATA_LOTE = /(\d{2})\/(\d{2})\/(\d{2,4})(?:[^0-9]{0,12}(\d{1,2})[:h](\d{2}))?/g;
 const CTX_ANCORA = /leil|pra[cçÇ]|encerr|in[íi]cio|inicio|abertura|t[eé]rmino|termino|licita|aliena|data/i;
-const CTX_FIM    = /encerr|t[eé]rmino|termino|fim d|final d|limite|at[ée] |2[ªa°]?\s*pra[cç]a|segunda\s*pra[cç]a/i;
+// `fechamento` entrou em 23/08: é como a plataforma de Gustavo Reis/Valero/Sued Peter
+// (fonte SUPORTE) rotula o PRAZO — "1ª Leilão Abertura 06/10 14:30 Fechamento 09/10 14:30".
+// Sem ele, a janela de 90 caracteres antes da data pegava o "Abertura" da frase e TODAS as
+// datas caíam no balde de início: `fim` saía nulo e o prazo para dar lance nunca era gravado.
+// Medido nas 3 páginas amostradas da fonte, todas assim.
+const CTX_FIM    = /encerr|t[eé]rmino|termino|fim d|final d|limite|at[ée] |fechamento|2[ªa°]?\s*pra[cç]a|segunda\s*pra[cç]a/i;
 const CTX_INICIO = /in[íi]cio|inicio|abertura|come[cç]|1[ªa°]?\s*pra[cç]a|primeira\s*pra[cç]a|abre/i;
 
 // Âncora ESTRITA, para ler datas do TEXTO DO EDITAL (não da página do lote): num edital a
@@ -141,6 +146,28 @@ export function extrairDatasLeilao(html, { estrito = false } = {}) {
     : (neutros.length >= 2 ? iso(Math.max(...neutros)) : null);
   // Fim igual ao início não acrescenta nada (e viraria ruído na tela).
   if (fim && inicio && fim.slice(0, 10) === inicio) fim = null;
+  // …MAS anular aqui não pode APAGAR uma 2ª praça que a página publica (23/08, WEBLEILOES).
+  // A página traz um contador "Encerra em 31/08" (vira FIM) junto de "1º Leilão … 31/08" e
+  // "2º Leilão … 23/09" (viram NEUTROS, sem rótulo de praça). O FIM do contador é o MESMO dia
+  // do início, colapsava para null pela regra acima, e o prazo REAL — 23/09, a 2ª praça — se
+  // perdia: o lote ficava sem prazo nenhum. Quando isso acontece, vale a regra que a própria
+  // função já documenta para duas datas sem rótulo: a mais TARDE é o prazo.
+  if (!fim && inicio && neutros.length) {
+    const maiorNeutro = Math.max(...neutros);
+    if (dia(maiorNeutro) > inicio) fim = iso(maiorNeutro);
+  }
+  // LEILÃO NÃO ENCERRA ANTES DE COMEÇAR. A classificação vive de uma janela de 90 caracteres
+  // antes da data, e quando as datas ficam muito próximas no texto essa janela pode alcançar a
+  // palavra-âncora da data VIZINHA — aí a 1ª praça cai no balde "fim" e a 2ª no "início", e sai
+  // um par invertido (visto ao montar o teste desta mudança). Par incoerente na tela é pior que
+  // dado faltando: o cliente leria "leilão 23/09, prazo 31/08". Ordenar é o que o texto de fato
+  // sustenta — a data mais cedo abre, a mais tarde encerra.
+  if (fim && inicio && fim.slice(0, 10) < inicio) {
+    const todas = [...fins, ...inicios, ...neutros];
+    const abre = dia(Math.min(...todas));
+    const encerra = iso(Math.max(...todas));
+    return { inicio: abre, fim: encerra.slice(0, 10) > abre ? encerra : null, encerradaEm: null };
+  }
   return { inicio, fim, encerradaEm: null };
 }
 
