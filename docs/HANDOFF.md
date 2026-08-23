@@ -7,6 +7,55 @@
 ## 📌 PENDÊNCIAS ABERTAS (para esta sessão — leia primeiro)
 _Última atualização: 23/08. Tudo abaixo de "resolvido" está em produção na `main`._
 
+### 🚨 SESSÃO 23/08 (fim da tarde) — DATA DE LEILÃO ERRADA NA FRENTE DO CLIENTE (PRs #317–#322, em produção)
+Gatilho: o dono gerou relatório do **Ed. Ville de Lyon** (Feira de Santana, SUPERBID, leilão
+judicial da SENAD) e a data divergia ~1 mês da do leiloeiro. Virou uma varredura geral de datas.
+
+**O ERRO QUE EU COMETI, e é a lição do dia:** achei no JSON da página `auction.endDate=25/08`
+e `offers[0].endDate=24/09` e **deduzi** "1ª e 2ª praça" — publiquei assim (PR #319). O dono
+mandou o EDITAL: *"praça única — 25/08 15h"*. O 24/09 é `maxEnddateOffer`, o **teto da
+plataforma** para o encerramento em cascata dos lotes (cláusula 1.3 do edital), não uma praça.
+Eu tinha o documento a um clique e concluí pelo campo do JSON. **Nome de campo não é semântica;
+o edital é que diz o que a data significa.**
+
+- **#319 → #320 (o conserto que vale):** `data_leilao = auction.endDate` nos dois mapeadores
+  Superbid; NUNCA derivar `data_leilao_2` de `of.endDate`. Banco corrigido na hora: Ville de
+  Lyon = **25/08 15:00, praça única**; as 6 `data_leilao_2` fantasmas da SUPERBID zeradas.
+  Conferido depois: nenhuma fonte com 2ª praça anterior à 1ª; as 5.111 da CEF são legítimas.
+- **#320 — REGRA NOVA DO DONO (a que impede a próxima):** o extrato do edital deixou de só
+  COMPLETAR coluna vazia. Ao gerar relatório, praça explícita do edital divergindo >1 dia do
+  acervo → **o documento vence**: corrige `data_leilao`/`data_leilao_2`, APAGA 2ª praça que o
+  edital não tem, e registra `data_divergente_edital` em `relatorio_anomalias` (o rastro que
+  denuncia scraper lendo campo errado). Datas ancoradas genéricas seguem só preenchendo vazio.
+- **#317 — Auditoria amostral permanente** (`Auditoria amostral de datas`, sob demanda no
+  Actions): 1/20 dos lotes ativos por fonte, visita a página VIVA e confere. **376 lotes,
+  0 divergências** nos sites legíveis. ⚠️ Ela confirma PRESENÇA da data na página, não que
+  seja a certa — deu "OK" no Ville de Lyon (o 24/09 estava lá). Não substitui o edital.
+- **#321 — A FORMA #5 DE NOVO, no cron dedicado a DATAS:** ~1.010 lotes ativos chegam ao
+  cliente **sem data** (GRUPOLANCE 449, BIASI 304, VIP 87, WEBLEILOES 67, SUPORTE 62, GESTAO
+  40 — venda direta fora). `enriquecer-datas-cron` lia só `{ html }` e ignorava o `semCota`:
+  com o teto do Bright Data saturado há semanas, cada rodada tratava a recusa de ORÇAMENTO
+  como "visitei e não achei", carimbava `enriquecido_em` em 5 lotes e os mandava ao fim da
+  fila SEM TÊ-LOS LIDO (dos 449 do GRUPOLANCE só 54 constam tentados; VIP tinha ZERO). O irmão
+  `enriquecer-backfill-cron` recebeu esse mesmo conserto em **19/08** — o cron das datas ficou
+  para trás. **Ao consertar uma forma conhecida, varra os IRMÃOS no mesmo commit.**
+- **#322 — o extrator perdia data que a página PUBLICA** (medido, não deduzido — script
+  `diagnostico-datas-fontes.mjs` roda o extrator de produção contra a página real):
+  `Fechamento` não era âncora de FIM (SUPORTE: 3/3 páginas sem prazo); o contador "Encerra em"
+  do WEBLEILOES colapsava e APAGAVA a 2ª praça publicada ao lado; e par invertido virava
+  "leilão 23/09, prazo 31/08" (guarda de coerência nova). `scripts/teste-extrair-datas.mjs`:
+  6 casos com texto REAL, sem rede — **o espaçamento faz parte do caso** (a classificação lê 90
+  chars antes da data; texto colado muda o resultado, e foi assim que a guarda apareceu).
+
+#### ⏳ O que falta nesta frente
+1. **GRUPOLANCE (449) + GESTAOLEILOES (40): 403 no fetch direto** → dependem do Bright Data,
+   cuja cota vira na 2ª feira. Com o #321, a fila deixa de ser queimada; acompanhar a drenagem.
+2. **VIP (87): `TypeError` no fetch** (leilaovip.com.br) — não é 403 nem JS; investigar (TLS?).
+3. **Reprocessar** SUPORTE/WEBLEILOES com o extrator novo (o cron passa por eles sozinho).
+4. Fontes que bloqueiam robô simples (HASTA, CALIL, TORRES3, VEGAS, LEILOTECH, EMILIOMATOS) e
+   as 100% JS (LJUD 61, VLANCE, SBID9/21) seguem **inconclusivas** na auditoria — cobrir exige
+   versão com navegador.
+
 ### ✅ SESSÃO 23/08 (tarde) — EM PRODUÇÃO (PR #315 mesclado, deploy READY, `main` em 1ea1c3b)
 Ritual de abertura completo (heartbeat + 1b/1c/2/2b/3 verdes; segurança 0/0). Dois consertos
 de raiz, build limpo, migração APLICADA no banco:
