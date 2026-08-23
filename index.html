@@ -83,7 +83,17 @@
     }
     </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&family=League+Spartan:wght@700;800;900&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <!-- Fontes separadas por `display` (23/08). A League Spartan (títulos) é uma fonte de
+         DISPLAY bem mais estreita que a do sistema; com display=swap ela trocava ~1s após o
+         primeiro carregamento e o título "pulava" de tamanho na frente do usuário (FOUT) —
+         parecia bug, sobretudo no <h1> grande da Alavancagem. `optional` dá uma janela curta:
+         se a fonte chega, aparece; se não, o navegador FICA no fallback e NÃO troca no meio
+         (sem pulo). Em cache (visitas seguintes) aparece na hora. A Inter (corpo) é
+         métricamente próxima do sistema, então segue com swap (troca imperceptível). O
+         preconnect ao gstatic (onde mora o .woff2) encurta o download e diminui o fallback. -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=League+Spartan:wght@700;800;900&display=optional" rel="stylesheet">
     <!-- Google tag (gtag.js). Guarda de hostname (18/08): os deploys de PREVIEW
          (*.vercel.app) carregavam a tag e apareciam no diagnóstico como "outros domínios
          detectados", poluindo a medição com tráfego interno. Só o domínio oficial dispara;
