@@ -7,6 +7,87 @@
 ## 📌 PENDÊNCIAS ABERTAS (para esta sessão — leia primeiro)
 _Última atualização: 23/08. Tudo abaixo de "resolvido" está em produção na `main`._
 
+### 🔜 PRÓXIMA SESSÃO — COMECE POR AQUI (lista de retomada, fechada em 23/08 fim do dia)
+Ordem sugerida: **(A)** conferir o que ficou medindo sozinho → **(B)** minha fila técnica →
+**(C)** cobrar/destravar o que depende do dono. Detalhe de cada item nas seções da sessão abaixo.
+
+**(A) VERIFICAR NA ABERTURA — são consequências já em produção, custo zero, só leitura**
+1. `pino_generico_como_rua` voltou a ~0 depois das 05h UTC? E o log do `limpar-imoveis-stale`
+   saiu **sem** `pinos.erro`? (PR #315 — a varredura morria em statement timeout em silêncio.)
+2. Lotes **sem data** caindo? Base de 23/08: GRUPOLANCE 449 · BIASI 304 · VIP 87 · WEBLEILOES 67
+   · SUPORTE 62 · GESTAO 40. A cota do Bright Data vira na 2ª feira; com o #321 a fila deixou de
+   ser queimada. Query no item 1b do CLAUDE.md ou: `select fonte, count(*) from imoveis_leilao
+   where ativo and data_leilao is null and data_leilao_2 is null and data_fim is null and fonte
+   not in ('CEF','caixa') and coalesce(modalidade,'') not ilike '%venda%direta%' group by 1;`
+3. `select tipo, count(*) from relatorio_anomalias where not resolvido group by 1;` — apareceu
+   **`data_divergente_edital`**? Cada ocorrência é um lote em que o EDITAL corrigiu o acervo:
+   se repetir na mesma fonte, o scraper dela lê o campo errado (foi assim na SUPERBID).
+4. Os 4 `QuotaExceededError` seguem resolvidos (fingerprints não reapareceram)? (PR #315.)
+5. `perfis.mkt_*` subindo nos cadastros novos (efeito do #308, atribuição de marketing).
+
+**(B) MINHA FILA TÉCNICA (não depende do dono)**
+1. **VIP (87 lotes)**: `TypeError` no fetch de `leilaovip.com.br` — não é 403 nem página JS.
+   Investigar (TLS/cadeia de certificado?) — é a única fonte cujo motivo ainda não conheço.
+2. **GRUPOLANCE (449) + GESTAOLEILOES (40)**: 403 no fetch direto, dependem de Bright Data.
+   Acompanhar a drenagem depois da virada de cota; se não drenar, revisar o caminho de acesso.
+3. **Confirmar o reprocessamento** de SUPORTE/WEBLEILOES com o extrator novo (o cron passa por
+   eles sozinho; conferir que `data_leilao_2` passou a existir nessas fontes).
+4. **BIASI publica só UMA data** ("Data: 26/08") — não há prazo na página. Decidir se vale buscar
+   o prazo no edital (são 304 lotes) ou se a data única basta.
+5. **Auditoria com NAVEGADOR** para o que o método atual não cobre: fontes que bloqueiam robô
+   simples (HASTA 29, CALIL, TORRES3, VEGAS, LEILOTECH, EMILIOMATOS) e as 100% JS (LJUD 61,
+   VLANCE, SBID9/21). Hoje elas saem **inconclusivas**, que não é o mesmo que "ok".
+6. **Marketing — cruzamento termo × cadastro**: desde 18/08 o CPC caiu (~R$1,50 → ~R$0,33) e os
+   cliques quadruplicaram sem mexer a conversão. Com ~1 semana de dados pós-mudança + a medição
+   consertada (item C1), dá para dizer QUAIS termos pagar e quais cortar.
+7. Backlog antigo que segue de pé: **fase autz** (virar `role` do staff para tier de plano,
+   migrando ~230 checagens para `eh_funcao()`) e os **gaps de escala** (índices, chunking, quotas).
+
+**(C) DEPENDE DO DONO — cobrar/destravar (passo a passo detalhado no chat de 23/08)**
+1. 🔴 **Medição de conversão (faça antes de mexer em verba):** conferir no Tag Assistant se a tag
+   de conversão do Ads dispara no cadastro real **e** marcar os eventos-chave no GA4 — hoje a
+   propriedade BidPro Brasil está com **ZERO** key events, então o Google otimiza às cegas.
+   ⚠️ Não importar a conversão do GA4 para o Ads como "principal" (a tag nativa já conta; duplicaria).
+2. **Realocar verba do Ads**: pausar palavras com 0 conversão, reforçar "sites de leilão de
+   imóveis", 6 sitelinks. Fazer DEPOIS do item 1, senão é palpite.
+3. **Instagram — a ponte que falta**: `@tarcisionogueiraleiloes` alcançou ~22.900 pessoas em 14
+   dias (picos de 3.654 e 7.271) e **só ~20 sessões** chegaram ao site; `@bidprobrasil` está
+   parado (~20 de alcance/dia). Link na bio com `?utm_source=instagram` + CTA nos posts de leilão.
+4. **Meta Ads**: as 4 contas conectadas têm **0 veiculação** em 14 dias. Se entrar, começar por
+   remarketing sobre quem já visitou — e só depois da medição limpa.
+5. **Lead do Antônio Valbeni** → atribuir ao Fábio em Admin › Comercial (segue sem dono).
+6. **Cliente Erik Migliorini**: 1ª cobrança recusada pelo antifraude do MP
+   (`cc_rejected_high_risk`, não é saldo). Mandato vivo → recuperação é decisão de comunicação.
+7. **4 pagantes sem entrega** em 14+ dias (3 top2 + 1 assessorado, dois desde julho) — churn em
+   formação. O e-mail automático foi dispensado em 19/08; vale um contato pessoal.
+8. **2 `relatorio_incoerente`** (15 e 17/08, "à vista × entrada parcelada"): regerar toca relatório
+   já entregue e custa IA — decisão sua.
+9. **1 `avaliacao_ausente`** (SUPERBID, terreno em Cajamar, `valor_avaliacao=0` com matrícula e 2
+   anexos): confirmar se a fonte publica avaliação.
+10. **Testar em produção** (o proxy da sessão bloqueia o domínio): ímã "avise-me" ponta a ponta
+    (e-mail de confirmação chega?) — segue com **0 inscritos**; Alavancagem em aba anônima (título
+    sem pulo); botão Google acima do formulário no cadastro.
+11. **Vídeos de depoimento**: subir 3–6 em YouTube não listado (ou Panda/Bunny) e mandar
+    link+nome+cidade. ⚠️ Embed do Instagram não passa no CSP.
+12. **Cartão válido** no painel do Supabase.
+13. **Leiloeiros do Sindicato-SP**: dizer quais das 29 casas fora do acervo priorizar para recon.
+
+### 📊 SESSÃO 23/08 — MARKETING: WINDSOR × NOSSAS APIS (conector novo do dono)
+Confronto dos 14 dias. **Google Ads bate**: Windsor R$ 343 / 498 cliques / 5 conversões ×
+`marketing_metricas_dia` R$ 335 / 476 / 5 — a diferença é só o dia corrente (nossa ingestão traz
+D-1). Rastreio de visita saudável (405 gclid ≈ 81% dos cliques). **O que os números disseram:**
+- **Virada de 18/08**: cliques 12–27/dia → 46–77/dia com o MESMO gasto (CPC ~R$1,50 → ~R$0,33,
+  impressões ~200 → 1.000–1.700). Conversões seguiram 0–1/dia. Tráfego muito mais barato e amplo
+  **sem melhora de conversão** = ou a tag não mede, ou os termos novos trazem gente errada.
+- **GA4 com ZERO eventos-chave** — nada do funil tem conversão medida lá (item C1).
+- **Meta Ads parado**: 4 contas conectadas, 0 veiculação em 14 dias (o GA4 confirma: facebook.com
+  trouxe 2 sessões). Qualquer estratégia de Meta parte do zero.
+- **Instagram**: `@tarcisionogueiraleiloes` VIVO (alcance ~22.900 em 14d, +61 seguidores, 1.177
+  curtidas) × `@bidprobrasil` parado (~20/dia, +13). Mas só ~20 sessões vieram do IG para o site:
+  a audiência pessoal não cruza a ponte para o produto (item C3).
+- **GA4 por origem (14d)**: google/cpc 268 sessões · direto 243 · google orgânico 188 · IG ~20 ·
+  facebook 2. O SEO orgânico já rende ~70% do tráfego pago, a custo zero.
+
 ### 🚨 SESSÃO 23/08 (fim da tarde) — DATA DE LEILÃO ERRADA NA FRENTE DO CLIENTE (PRs #317–#322, em produção)
 Gatilho: o dono gerou relatório do **Ed. Ville de Lyon** (Feira de Santana, SUPERBID, leilão
 judicial da SENAD) e a data divergia ~1 mês da do leiloeiro. Virou uma varredura geral de datas.
@@ -143,7 +224,9 @@ com a tabela nova. O que entrou:
    não dá URL de vídeo estável.
 4. **Marketing (dono):** realocar verba do Ads (pausar palavras 0-conversão, reforçar "sites de
    leilão de imóveis", 6 sitelinks); conferir a **tag de conversão**; cartão válido no Supabase.
-5. **`QuotaExceededError`** (localStorage cheio) em `/minha-rede` e `/` — investigar a causa.
+5. ~~**`QuotaExceededError`** (localStorage cheio) em `/minha-rede` e `/`~~ → ✅ **RESOLVIDO na
+   raiz em 23/08 (PR #315)**: quem lançava era a gravação da SESSÃO pelo SDK do Supabase, com o
+   storage cheio pelos caches de relatório. Ver a seção da tarde de 23/08.
 
 ### ✅ SESSÃO 22/08 — EM PRODUÇÃO (PR #305 mesclado, deploy READY, commit 5412214)
 Bug bounty de abertura (3 agentes) + pedidos do dono. Migrações aplicadas via MCP
