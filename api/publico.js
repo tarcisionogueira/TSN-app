@@ -126,7 +126,10 @@ function pagina({ titulo, desc, canonical, corpo, jsonld, indexar = true, migalh
 <meta name="twitter:card" content="summary_large_image"/>
 ${jsonld ? `<script type="application/ld+json">${JSON.stringify(jsonld).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029')}</script>` : ''}
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&family=League+Spartan:wght@700;800;900&display=swap" rel="stylesheet">
+<!-- League Spartan (títulos) com display=optional: sem o "pulo" de tamanho do FOUT na 1ª
+     visita (ver index.html). Inter (corpo) segue com swap, troca imperceptível. -->
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=League+Spartan:wght@700;800;900&display=optional" rel="stylesheet">
 <style>
 /* ═══ Alinhado ao docs/MARCA.md (14/08, pedido do dono: "revisar o layout para ficar de
    acordo com os padrões"). O conteúdo desta página já estava certo; o que destoava era a
