@@ -4054,11 +4054,14 @@ function PromoTab() {
   const fechar = () => { setWizard(false); setEditId(null); setForm(defaultPromo()); setStep(0); };
 
   const itemLabel = () => {
+    if (form.produto_tipo === 'calculadora') return 'Calculadora de Lances';
     if (form.produto_tipo === 'plano') return PRODUTOS_PROMO.find(p => p.key === form.produto)?.label || form.produto;
     if (form.produto_tipo === 'curso') return cursos.find(c => String(c.id) === String(form.produto_ref_id))?.titulo || '(selecione)';
     return ebooks.find(e => String(e.id) === String(form.produto_ref_id))?.titulo || '(selecione)';
   };
-  const produtoOk = form.produto_tipo === 'plano' ? !!form.produto : !!form.produto_ref_id;
+  // Calculadora não tem item a selecionar (é a ferramenta em si) — sempre ok.
+  const produtoOk = form.produto_tipo === 'calculadora' ? true
+    : form.produto_tipo === 'plano' ? !!form.produto : !!form.produto_ref_id;
   const perguntasValidas = (form.perguntas || []).filter(p => p && String(p.texto || '').trim());
 
   const podeAvancar = () => {
@@ -4077,7 +4080,7 @@ function PromoTab() {
       produto_tipo: form.produto_tipo,
       produto: form.produto_tipo === 'plano' ? form.produto : form.produto_tipo,
       produto_ref_id: form.produto_tipo === 'plano' ? null : (form.produto_ref_id || null),
-      desconto_pct: Math.max(0, Math.min(100, Number(form.desconto_pct) || 0)),
+      desconto_pct: form.produto_tipo === 'calculadora' ? 0 : Math.max(0, Math.min(100, Number(form.desconto_pct) || 0)),
       desconto_valor: 0,
       validade_ate: form.validade_ate ? new Date(form.validade_ate).toISOString() : null,
       desconto_validade_ate: form.desconto_validade_ate ? new Date(form.desconto_validade_ate).toISOString() : null,
@@ -4112,8 +4115,9 @@ function PromoTab() {
   const toggleAtivo = async (l) => { await supabase.from('links_promo').update({ ativo: !l.ativo }).eq('id', l.id); await carregar(); };
   const copiarLink = (cod) => navigator.clipboard.writeText(`${window.location.origin}${window.location.pathname.replace(/\/$/, '')}#/promo/${cod}`);
 
-  const tipoLabel = (t) => t === 'curso' ? 'Curso' : t === 'ebook' ? 'E-book' : 'Plano';
+  const tipoLabel = (t) => t === 'curso' ? 'Curso' : t === 'ebook' ? 'E-book' : t === 'calculadora' ? 'Calculadora' : 'Plano';
   const nomeDoLink = (l) => {
+    if (l.produto_tipo === 'calculadora') return 'Calculadora de Lances';
     if (!l.produto_tipo || l.produto_tipo === 'plano') return PRODUTOS_PROMO.find(p => p.key === l.produto)?.label || l.produto;
     if (l.produto_tipo === 'curso') return cursos.find(c => String(c.id) === String(l.produto_ref_id))?.titulo || 'Curso';
     return ebooks.find(e => String(e.id) === String(l.produto_ref_id))?.titulo || 'E-book';
@@ -4187,12 +4191,20 @@ function PromoTab() {
               <div>
                 <label style={S.label}>1. O que este link entrega?</label>
                 <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-                  {[['plano', 'Plano'], ['curso', 'Curso'], ['ebook', 'E-book']].map(([t, lbl]) => (
+                  {[['plano', 'Plano'], ['curso', 'Curso'], ['ebook', 'E-book'], ['calculadora', 'Calculadora']].map(([t, lbl]) => (
                     <button key={t} onClick={() => up('produto_tipo', t)}
                       style={{ flex: 1, padding: '10px', borderRadius: 10, border: `2px solid ${form.produto_tipo === t ? '#0D63DB' : '#e2e8f0'}`, background: form.produto_tipo === t ? '#eff6ff' : 'white', color: '#111', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{lbl}</button>
                   ))}
                 </div>
-                {form.produto_tipo === 'plano' ? (
+                {form.produto_tipo === 'calculadora' ? (
+                  /* CAPTAÇÃO PELA FERRAMENTA (23/08, pedido do dono): a Calculadora de Lances é
+                     isca, não produto — não há item a escolher nem preço a descontar. O link
+                     leva à ferramenta; com perguntas de SDR, qualifica antes de entregar. */
+                  <div style={{ padding: '12px 14px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, fontSize: 12, color: '#1e40af', lineHeight: 1.5 }}>
+                    <strong>Calculadora de Lances</strong> — link de captação. Quem entrar cria conta e vai direto para a ferramenta;
+                    o lead cai na carteira do consultor igual aos demais. Ferramenta gratuita: o passo de desconto não se aplica.
+                  </div>
+                ) : form.produto_tipo === 'plano' ? (
                   <select value={form.produto} onChange={e => up('produto', e.target.value)} style={S.input}>
                     {PRODUTOS_PROMO.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
                   </select>
@@ -4220,7 +4232,17 @@ function PromoTab() {
             )}
 
             {/* STEP 2 — Desconto */}
-            {step === 2 && (
+            {step === 2 && form.produto_tipo === 'calculadora' && (
+              /* Ferramenta gratuita não tem preço a descontar. Mostrar o slider aqui deixaria o
+                 admin definir um percentual que o `salvar` zera — desconto digitado e descartado
+                 em silêncio, e depois a dúvida de por que o link "perdeu" a oferta. */
+              <div style={{ padding: '14px 16px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 13, color: '#475569', lineHeight: 1.6 }}>
+                <strong style={{ color: '#111' }}>Sem desconto nesta etapa.</strong><br />
+                A Calculadora de Lances é gratuita — o valor do link está na captação, não no preço.
+                Siga para as perguntas de qualificação (SDR), que é o que transforma o acesso em lead.
+              </div>
+            )}
+            {step === 2 && form.produto_tipo !== 'calculadora' && (
               <div>
                 <label style={S.label}>3. Desconto do benefício (0 a 100%)</label>
                 <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 6 }}>
@@ -4298,7 +4320,7 @@ function PromoTab() {
                 <div style={{ background: '#f8fafc', borderRadius: 10, padding: '12px 14px', fontSize: 13, color: '#334155', lineHeight: 1.8 }}>
                   <div><strong>Entrega:</strong> {tipoLabelFn(form.produto_tipo)} — {itemLabel()}</div>
                   <div><strong>Validade do link:</strong> {form.validade_ate ? new Date(form.validade_ate).toLocaleDateString('pt-BR') : 'sem expiração'}</div>
-                  <div><strong>Desconto:</strong> {Number(form.desconto_pct) > 0 ? `${Number(form.desconto_pct)}%` : 'nenhum'}{form.desconto_validade_ate ? ` (até ${new Date(form.desconto_validade_ate).toLocaleDateString('pt-BR')})` : ''}</div>
+                  <div><strong>Desconto:</strong> {form.produto_tipo === 'calculadora' ? 'não se aplica (ferramenta gratuita)' : <>{Number(form.desconto_pct) > 0 ? `${Number(form.desconto_pct)}%` : 'nenhum'}{form.desconto_validade_ate ? ` (até ${new Date(form.desconto_validade_ate).toLocaleDateString('pt-BR')})` : ''}</>}</div>
                   <div><strong>Perguntas SDR:</strong> {form.exige_perguntas ? `obrigatórias — ${perguntasValidas.length} pergunta(s)` : 'não'}</div>
                 </div>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#475569', marginTop: 14, cursor: 'pointer' }}>

@@ -76,6 +76,10 @@ export default function Promo() {
   );
 
   const ehPlano = !link.produto_tipo || link.produto_tipo === 'plano';
+  // CAPTAÇÃO PELA CALCULADORA (23/08, pedido do dono): link cuja entrega é a FERRAMENTA,
+  // não um produto comprado. Não há preço, desconto nem concessão de acesso — o destino
+  // é /calculadora, e o que o link faz é qualificar (SDR) e criar a conta antes.
+  const ehCalculadora = link.produto_tipo === 'calculadora';
   const plano = ehPlano ? PLANOS[link.produto] : null;
   // 21/08: `return null` = TELA BRANCA quando o link é de um plano fora do estático (typo do
   // admin, ou plano à vista `assessorado_vista`/`clube_vista` que não vive em PLANOS). Visitante
@@ -167,6 +171,13 @@ export default function Promo() {
       // Curso/e-book: a CONCESSÃO acontece AQUI, no servidor, com o usuário autenticado. Antes a
       // tela dizia "Acesso liberado!" sem nada ter sido liberado — nenhuma linha em
       // compras_produtos, que é o que o Curso/E-book exigem — e o cliente batia no paywall.
+      // Calculadora: não há acesso a conceder (ferramenta aberta a quem tem conta). Chamar a RPC
+      // aqui devolveria erro/`ok:false` e a tela diria "não foi possível liberar" sobre algo que
+      // nunca precisou de liberação — vazio de erro entregue como falha.
+      if (ehCalculadora) {
+        if (!erroLogin) { nav(`/calculadora?promo=${link.codigo}${refQS}`); return; }
+        setContaNova(!data.jaExistia); setAcessoLiberado(false); setSdrAberto(false); setConcluido(true); return;
+      }
       let liberado = false;
       if (!erroLogin) {
         const { data: res, error: erroConceder } = await supabase.rpc('conceder_acesso_promo', { p_codigo: link.codigo });
@@ -268,6 +279,31 @@ export default function Promo() {
         </p>
         <button onClick={() => nav('/membros')} style={{ padding: '12px 26px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, cursor: 'pointer' }}>Acessar agora</button>
       </div>
+    </div>
+  );
+
+  // Página da CALCULADORA (ferramenta gratuita usada como isca de captação).
+  if (ehCalculadora) return (
+    <div style={{ background: '#111', minHeight: '100vh', padding: '0 0 80px' }}>
+      <div style={{ textAlign: 'center', padding: '70px 20px 0', maxWidth: 640, margin: '0 auto' }}>
+        <div style={{ fontSize: 52, marginBottom: 12 }}>🧮</div>
+        <div style={{ display: 'inline-block', background: '#dbeafe', color: '#1e40af', fontSize: 12, fontWeight: 800, padding: '5px 14px', borderRadius: 20, marginBottom: 16, textTransform: 'uppercase', letterSpacing: 1 }}>
+          Ferramenta gratuita
+        </div>
+        <h1 style={{ fontSize: 38, fontWeight: 900, color: 'white', margin: '0 0 14px', lineHeight: 1.15 }}>Calculadora de Lances</h1>
+        <p style={{ color: '#94a3b8', fontSize: 17, margin: '0 0 30px' }}>
+          Descubra até quanto vale a pena dar de lance num leilão de imóvel — custos, financiamento e retorno, sem achismo.
+          {exigeGate ? ' Responda algumas perguntas rápidas para começar.' : ''}
+        </p>
+        <div style={{ background: 'white', borderRadius: 20, padding: '28px 30px', display: 'inline-block', minWidth: 300, boxShadow: '0 24px 60px rgba(0,0,0,0.4)' }}>
+          <button onClick={() => { if (perguntas.length) { setSdrAberto(true); setPasso(0); setErroSdr(''); } else nav(`/calculadora?promo=${link.codigo}${refParam ? `&ref=${encodeURIComponent(refParam)}` : ''}`); }}
+            style={{ width: '100%', padding: '15px 28px', background: cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+            {exigeGate ? 'Responder e abrir a calculadora' : 'Abrir a calculadora'} <ArrowRight size={18} />
+          </button>
+          <div style={{ marginTop: 12, fontSize: 12, color: '#64748b' }}>Sem cartão. Leva menos de um minuto.</div>
+        </div>
+      </div>
+      {sdrOverlay}
     </div>
   );
 
