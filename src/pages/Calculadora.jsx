@@ -654,10 +654,15 @@ export default function Calculadora() {
         const irAssinar = () => nav('/checkout?plano=top2');
 
         return (
-          <div style={{ marginTop: 32, background: 'linear-gradient(135deg,#1e3a5f 0%,#084BA6 100%)', borderRadius: 16, padding: '28px 32px', color: 'white', border: '1px solid #3b82f6' }}>
+          <div className="calc-upsell" style={{ marginTop: 32, background: 'linear-gradient(135deg,#1e3a5f 0%,#084BA6 100%)', borderRadius: 16, padding: '28px 32px', color: 'white', border: '1px solid #3b82f6' }}>
+            {/* O selo aparece para quem chegou por link de indicação (`?ref=`). Dizia "ACESSO
+                EXCLUSIVO PELO SEU CONSULTOR" e confundia — inclusive o dono, que o viu ao abrir
+                o próprio link curto (23/08). Prometia o que não existe: a calculadora é pública
+                e gratuita, ninguém tem acesso exclusivo a ela. O que é FATO é o caminho: a
+                pessoa veio pelo convite de um parceiro. É isso que o selo diz agora. */}
             {temRef && (
               <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#0D63DB', borderRadius: 20, padding: '4px 14px', fontSize: 11, fontWeight: 800, letterSpacing: 1, marginBottom: 14 }}>
-                🎯 ACESSO EXCLUSIVO PELO SEU CONSULTOR
+                🤝 VOCÊ VEIO PELO CONVITE DE UM PARCEIRO
               </div>
             )}
 
@@ -708,11 +713,18 @@ export default function Calculadora() {
             {temRef && (
               <form onSubmit={submeterLead} style={{ marginTop: 20, borderTop: '1px solid rgba(255,255,255,0.15)', paddingTop: 20, display: 'flex', flexDirection: 'column', gap: 10 }}>
                 <div style={{ fontSize: 12, fontWeight: 700, color: '#93c5fd', marginBottom: 2 }}>Ou deixe seu contato para receber mais informações:</div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                {/* DUAS COLUNAS SÓ QUANDO CABEM (23/08 — o e-mail saía da tela no celular).
+                    `boxSizing: border-box` não bastava: item de grid não encolhe abaixo da
+                    largura MÍNIMA INTRÍNSECA, e um <input> traz ~180px por conta do atributo
+                    `size` padrão. Duas colunas + gap passavam da largura do aparelho. O conserto
+                    é o par: `minmax(0, …)` (ou `minWidth: 0`) libera o encolhimento, e
+                    `auto-fit` empilha sozinho quando não há espaço para as duas — sem media
+                    query, então vale para qualquer largura, inclusive telas futuras. */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 190px), 1fr))', gap: 10 }}>
                   <input value={leadCpf} onChange={e => setLeadCpf(e.target.value)} placeholder="CPF (opcional)"
-                    style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #3b82f6', background: 'rgba(255,255,255,0.08)', color: 'white', fontSize: 13, boxSizing: 'border-box' }} />
+                    style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #3b82f6', background: 'rgba(255,255,255,0.08)', color: 'white', fontSize: 13, boxSizing: 'border-box', minWidth: 0, width: '100%' }} />
                   <input required type="email" value={leadEmail} onChange={e => setLeadEmail(e.target.value)} placeholder="seu@email.com *"
-                    style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #3b82f6', background: 'rgba(255,255,255,0.08)', color: 'white', fontSize: 13, boxSizing: 'border-box' }} />
+                    style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #3b82f6', background: 'rgba(255,255,255,0.08)', color: 'white', fontSize: 13, boxSizing: 'border-box', minWidth: 0, width: '100%' }} />
                 </div>
                 {leadMsg && <div style={{ fontSize: 12, color: '#fca5a5' }}>{leadMsg}</div>}
                 <button type="submit" disabled={leadEnviando}
@@ -725,7 +737,12 @@ export default function Calculadora() {
         );
       })()}
 
-      <style>{`@media (max-width: 820px){ .calc-grid{ grid-template-columns: 1fr !important; } }`}</style>
+      {/* No celular, 32px de padding de cada lado comiam ~1/6 da largura útil do card e
+          espremiam os campos (23/08). 18px devolvem o espaço sem mudar nada no desktop. */}
+      <style>{`
+        @media (max-width: 820px){ .calc-grid{ grid-template-columns: 1fr !important; } }
+        @media (max-width: 560px){ .calc-upsell{ padding: 22px 18px !important; } }
+      `}</style>
     </div>
   );
 }
