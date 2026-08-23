@@ -2,6 +2,24 @@
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
+    <!-- LINK CURTO /r/CODIGO (23/08) — resolvido AQUI, no cliente, e não na Vercel.
+         Duas tentativas no servidor falharam em produção, ambas em silêncio: rewrite para
+         função (api/r.js, depois api/redirecionar.js — a rota nunca existiu, o pedido caía
+         neste index.html) e `redirects` declarativo no vercel.json (idem). Descartados por
+         teste direto: teto de funções, runtime edge, nome do arquivo e o instrumento de
+         medição — e as OUTRAS regras do vercel.json funcionam (a rota SEO /leiloes/:uf/:cidade
+         responde do servidor). Por que a regra de /r/ não pega segue em aberto.
+         O que é FATO observado: /r/QUALQUERCOISA entrega este arquivo. Então é aqui que o
+         desvio acontece, antes do app subir — sem depender de nada que possa não existir.
+         `replace` para não deixar o /r/ no histórico (voltar levaria a um loop de redirect). -->
+    <script>
+      (function () {
+        try {
+          var m = location.pathname.match(/^\/r\/([A-Za-z0-9]{4,16})\/?$/);
+          if (m) location.replace('/#/calculadora?ref=' + encodeURIComponent(m[1].toUpperCase()));
+        } catch (e) { /* pathname exótico: segue para o app normalmente */ }
+      })();
+    </script>
     <!-- Favicon (tile PRETO com o "B"). O Google exibe o favicon no resultado de
          busca, mas costuma NÃO renderizar SVG puro — por isso servimos PNGs 48/96/192
          (o que o Google prefere) além do SVG para navegadores modernos. -->
