@@ -5,10 +5,6 @@
       "destination": "/api/$1"
     },
     {
-      "source": "/r/:codigo",
-      "destination": "/api/redirecionar?codigo=:codigo"
-    },
-    {
       "source": "/c/:token",
       "destination": "/api/og-share?tipo=contrato&id=:token"
     },
@@ -55,6 +51,13 @@
     {
       "source": "/sitemap-leiloes.xml",
       "destination": "/api/sitemap-leiloes"
+    }
+  ],
+  "redirects": [
+    {
+      "source": "/r/:codigo",
+      "destination": "/#/calculadora?ref=:codigo",
+      "permanent": false
     }
   ],
   "headers": [
