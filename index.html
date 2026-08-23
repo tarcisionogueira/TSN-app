@@ -84,16 +84,34 @@
     </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <!-- Fontes separadas por `display` (23/08). A League Spartan (títulos) é uma fonte de
-         DISPLAY bem mais estreita que a do sistema; com display=swap ela trocava ~1s após o
-         primeiro carregamento e o título "pulava" de tamanho na frente do usuário (FOUT) —
-         parecia bug, sobretudo no <h1> grande da Alavancagem. `optional` dá uma janela curta:
-         se a fonte chega, aparece; se não, o navegador FICA no fallback e NÃO troca no meio
-         (sem pulo). Em cache (visitas seguintes) aparece na hora. A Inter (corpo) é
-         métricamente próxima do sistema, então segue com swap (troca imperceptível). O
-         preconnect ao gstatic (onde mora o .woff2) encurta o download e diminui o fallback. -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=League+Spartan:wght@700;800;900&display=optional" rel="stylesheet">
+    <!-- League Spartan (títulos) AUTO-HOSPEDADA (23/08) — some o FOUT de forma definitiva.
+         O arquivo vem da NOSSA origem (rápido) e é PRECARREGADO, então em geral já pinta com
+         a fonte da marca. E, mesmo na janela em que o fallback aparece, usa-se 'League Spartan
+         Fallback': um Arial com size-adjust + overrides calculados das MÉTRICAS REAIS do
+         arquivo (upm 2000, ascent 1400, descent -440, xWidthAvg 775 ponderado; base Arial),
+         que ocupa o MESMO espaço. Resultado: a fonte pode trocar, mas o texto NÃO muda de
+         tamanho (sem CLS/pulo). Variável: um único woff2 cobre 700–900. Inter (corpo) segue
+         do Google com swap (métrica próxima do sistema, troca imperceptível). -->
+    <link rel="preload" as="font" type="font/woff2" href="/fonts/league-spartan-latin.woff2" crossorigin>
+    <style>
+      @font-face {
+        font-family: 'League Spartan';
+        font-style: normal;
+        font-weight: 100 900;
+        font-display: swap;
+        src: url('/fonts/league-spartan-latin.woff2') format('woff2');
+      }
+      /* Fallback com MÉTRICAS CASADAS (base Arial) — evita o pulo enquanto a real carrega. */
+      @font-face {
+        font-family: 'League Spartan Fallback';
+        src: local('Arial');
+        size-adjust: 87.79%;
+        ascent-override: 79.74%;
+        descent-override: 25.06%;
+        line-gap-override: 0%;
+      }
+    </style>
     <!-- Google tag (gtag.js). Guarda de hostname (18/08): os deploys de PREVIEW
          (*.vercel.app) carregavam a tag e apareciam no diagnóstico como "outros domínios
          detectados", poluindo a medição com tráfego interno. Só o domínio oficial dispara;

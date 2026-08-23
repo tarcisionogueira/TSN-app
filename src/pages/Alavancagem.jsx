@@ -134,7 +134,7 @@ export default function Alavancagem() {
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,0.14)', padding: '6px 14px', borderRadius: 999, fontSize: 12, fontWeight: 800, letterSpacing: 0.4, marginBottom: 18 }}>
             <TrendingUp size={14} /> ALAVANCAGEM PATRIMONIAL
           </div>
-          <h1 style={{ fontFamily: "'League Spartan', sans-serif", fontSize: 'clamp(28px, 5vw, 44px)', fontWeight: 900, lineHeight: 1.1, margin: 0, letterSpacing: -0.5 }}>
+          <h1 style={{ fontFamily: "'League Spartan', 'League Spartan Fallback', sans-serif", fontSize: 'clamp(28px, 5vw, 44px)', fontWeight: 900, lineHeight: 1.1, margin: 0, letterSpacing: -0.5 }}>
             Use o imóvel que você já tem<br />para comprar o próximo
           </h1>
           <p style={{ fontSize: 'clamp(15px, 2.2vw, 18px)', lineHeight: 1.6, marginTop: 18, marginBottom: 0, color: '#dbeafe', maxWidth: 680 }}>
@@ -157,7 +157,7 @@ export default function Alavancagem() {
                     <Icone size={22} color="white" strokeWidth={2.2} />
                   </div>
                   <div>
-                    <h2 style={{ fontFamily: "'League Spartan', sans-serif", fontSize: 24, fontWeight: 900, margin: 0, color: '#111', lineHeight: 1.1 }}>{m.nome}</h2>
+                    <h2 style={{ fontFamily: "'League Spartan', 'League Spartan Fallback', sans-serif", fontSize: 24, fontWeight: 900, margin: 0, color: '#111', lineHeight: 1.1 }}>{m.nome}</h2>
                     <div style={{ fontSize: 13, color: '#64748b', fontWeight: 600, marginTop: 2 }}>{m.subtitulo}</div>
                   </div>
                 </div>
@@ -215,7 +215,7 @@ export default function Alavancagem() {
 
         {/* ===== COMPARAÇÃO ===== */}
         <section style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: 24, marginTop: 28 }}>
-          <h2 style={{ fontFamily: "'League Spartan', sans-serif", fontSize: 24, fontWeight: 900, margin: '0 0 6px', color: '#111' }}>Qual dos dois serve para o seu caso</h2>
+          <h2 style={{ fontFamily: "'League Spartan', 'League Spartan Fallback', sans-serif", fontSize: 24, fontWeight: 900, margin: '0 0 6px', color: '#111' }}>Qual dos dois serve para o seu caso</h2>
           <p style={{ fontSize: 14, color: '#64748b', margin: '0 0 20px', lineHeight: 1.6 }}>
             Não são concorrentes, resolvem problemas diferentes. A pergunta que separa os dois é
             simples: <strong>você precisa do dinheiro agora ou está se preparando?</strong>
@@ -269,7 +269,7 @@ export default function Alavancagem() {
 
         {/* ===== ALAVANCAGEM EM LEILÃO ===== */}
         <section style={{ background: '#111', color: 'white', borderRadius: 16, padding: 28, marginTop: 28 }}>
-          <h2 style={{ fontFamily: "'League Spartan', sans-serif", fontSize: 24, fontWeight: 900, margin: '0 0 8px' }}>Como isso vira alavancagem em leilão</h2>
+          <h2 style={{ fontFamily: "'League Spartan', 'League Spartan Fallback', sans-serif", fontSize: 24, fontWeight: 900, margin: '0 0 8px' }}>Como isso vira alavancagem em leilão</h2>
           <p style={{ fontSize: 14.5, color: '#cbd5e1', margin: '0 0 22px', lineHeight: 1.65, maxWidth: 720 }}>
             Leilão tem uma característica que muda tudo: <strong style={{ color: 'white' }}>o pagamento
             é à vista e o prazo é curto</strong>. Quem tem o dinheiro disponível na hora certa compra
@@ -306,7 +306,7 @@ export default function Alavancagem() {
 
         {/* ===== BOTÕES FINAIS ===== */}
         <section style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: 28, marginTop: 28, textAlign: 'center' }}>
-          <h2 style={{ fontFamily: "'League Spartan', sans-serif", fontSize: 24, fontWeight: 900, margin: '0 0 8px', color: '#111' }}>Quer entender qual faz sentido no seu caso?</h2>
+          <h2 style={{ fontFamily: "'League Spartan', 'League Spartan Fallback', sans-serif", fontSize: 24, fontWeight: 900, margin: '0 0 8px', color: '#111' }}>Quer entender qual faz sentido no seu caso?</h2>
           <p style={{ fontSize: 14.5, color: '#64748b', margin: '0 auto 22px', lineHeight: 1.6, maxWidth: 560 }}>
             Sinalize seu interesse e alguém da equipe entra em contato para explicar, sem
             compromisso. Nada é contratado por aqui.
@@ -434,7 +434,7 @@ function FormularioInteresse({ modalidade, usuario, onFechar }) {
     <div onClick={onFechar} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.55)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, overflowY: 'auto' }}>
       <div onClick={(e) => e.stopPropagation()} style={{ background: 'white', borderRadius: 16, padding: 24, width: '100%', maxWidth: 460, maxHeight: '92dvh', overflowY: 'auto', boxShadow: '0 20px 50px rgba(15,23,42,0.30)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 6 }}>
-          <h3 style={{ fontFamily: "'League Spartan', sans-serif", fontSize: 21, fontWeight: 900, margin: 0, color: '#111', lineHeight: 1.15 }}>
+          <h3 style={{ fontFamily: "'League Spartan', 'League Spartan Fallback', sans-serif", fontSize: 21, fontWeight: 900, margin: 0, color: '#111', lineHeight: 1.15 }}>
             {estado.ok ? 'Interesse registrado' : `Tenho interesse em ${modalidade.nome}`}
           </h3>
           <button onClick={onFechar} aria-label="Fechar" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 0, lineHeight: 0, flexShrink: 0 }}>
