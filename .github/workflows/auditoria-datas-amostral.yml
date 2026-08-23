@@ -19,6 +19,10 @@ on:
         description: 'DEBUG: id de oferta Superbid p/ despejar campos de data (pula a amostra)'
         required: false
         default: ''
+      diag_fontes:
+        description: 'DIAG: fontes sem data (ex.: GRUPOLANCE,BIASI) — página × extrator; pula a amostra'
+        required: false
+        default: ''
 
 concurrency:
   group: auditoria-datas-amostral
@@ -41,8 +45,28 @@ jobs:
           OFERTA_ID: ${{ github.event.inputs.oferta_sbid }}
         run: node scripts/debug-oferta-superbid.mjs
 
+  # Diagnóstico das fontes que chegam SEM data ao cliente: a página publica data e
+  # o extrator não lê, ou a página não publica? São consertos diferentes.
+  diag-fontes-sem-data:
+    if: ${{ github.event.inputs.diag_fontes != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm ci
+      - name: Diagnosticar datas por fonte
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          DIAG_FONTES: ${{ github.event.inputs.diag_fontes }}
+        run: node scripts/diagnostico-datas-fontes.mjs
+
   auditar:
-    if: ${{ github.event.inputs.oferta_sbid == '' }}
+    if: ${{ github.event.inputs.oferta_sbid == '' && github.event.inputs.diag_fontes == '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
