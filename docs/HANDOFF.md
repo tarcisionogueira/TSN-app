@@ -24,6 +24,10 @@ Ordem sugerida: **(A)** conferir o que ficou medindo sozinho → **(B)** minha f
    se repetir na mesma fonte, o scraper dela lê o campo errado (foi assim na SUPERBID).
 4. Os 4 `QuotaExceededError` seguem resolvidos (fingerprints não reapareceram)? (PR #315.)
 5. `perfis.mkt_*` subindo nos cadastros novos (efeito do #308, atribuição de marketing).
+6. **Os 2 impulsionamentos do Instagram apareceram no Meta Ads?** (turbinados em 23/08 — ver a
+   seção do Instagram abaixo). Se o conector `facebook` seguir VAZIO amanhã, não é atraso de
+   ingestão: é a conta de anúncio do "turbinar" estar fora das 4 conectadas ao Windsor, e aí
+   o gasto desses impulsionamentos fica invisível para nós — investigar qual conta o app usou.
 
 **(B) MINHA FILA TÉCNICA (não depende do dono)**
 1. **VIP (87 lotes)**: `TypeError` no fetch de `leilaovip.com.br` — não é 403 nem página JS.
@@ -40,7 +44,15 @@ Ordem sugerida: **(A)** conferir o que ficou medindo sozinho → **(B)** minha f
 6. **Marketing — cruzamento termo × cadastro**: desde 18/08 o CPC caiu (~R$1,50 → ~R$0,33) e os
    cliques quadruplicaram sem mexer a conversão. Com ~1 semana de dados pós-mudança + a medição
    consertada (item C1), dá para dizer QUAIS termos pagar e quais cortar.
-7. Backlog antigo que segue de pé: **fase autz** (virar `role` do staff para tier de plano,
+7. **DÍVIDA NOVA (23/08, noite): endpoint novo em `api/` não vira rota neste projeto.**
+   Descoberto ao fazer o link curto: `/api/r` e depois `/api/redirecionar` caíam no index.html,
+   com o arquivo correto na `main` e o deploy READY. Descartados por teste direto: teto de
+   funções (`/api/verificar-pagamento`, o último dos 197, responde), runtime edge
+   (`/api/alerta-publico` responde), nome do arquivo e o próprio instrumento de medição
+   (`/api/track` responde 405 real). O link curto foi resolvido por outro caminho (rewrite para
+   `/index.html` + script no `<head>`), então NÃO bloqueia nada hoje — mas vai morder o próximo
+   endpoint, e a falha é SILENCIOSA (sem erro de build, sem 404; o pedido escorrega para o SPA).
+8. Backlog antigo que segue de pé: **fase autz** (virar `role` do staff para tier de plano,
    migrando ~230 checagens para `eh_funcao()`) e os **gaps de escala** (índices, chunking, quotas).
 
 **(C) DEPENDE DO DONO — cobrar/destravar (passo a passo detalhado no chat de 23/08)**
@@ -50,9 +62,13 @@ Ordem sugerida: **(A)** conferir o que ficou medindo sozinho → **(B)** minha f
    ⚠️ Não importar a conversão do GA4 para o Ads como "principal" (a tag nativa já conta; duplicaria).
 2. **Realocar verba do Ads**: pausar palavras com 0 conversão, reforçar "sites de leilão de
    imóveis", 6 sitelinks. Fazer DEPOIS do item 1, senão é palpite.
-3. **Instagram — a ponte que falta**: `@tarcisionogueiraleiloes` alcançou ~22.900 pessoas em 14
-   dias (picos de 3.654 e 7.271) e **só ~20 sessões** chegaram ao site; `@bidprobrasil` está
-   parado (~20 de alcance/dia). Link na bio com `?utm_source=instagram` + CTA nos posts de leilão.
+3. 🔴 **Instagram — a ponte que falta (agora com mais urgência):** em 23/08 o dono subiu a
+   cadência para 7–9 posts/dia e turbinou 2 vídeos; o alcance dobrou (22/08 foi o melhor dia:
+   7.271). Mesmo assim, `profile_links_taps` = **0 nos 7 dias** e o GA4 mostra **~20 sessões**
+   vindas do IG em 14 dias. Alcance nós temos; travessia, não — e impulsionar aumenta o topo do
+   funil, não constrói a ponte. O elo é o mesmo: link na bio com `?utm_source=instagram` (dá
+   para usar o link curto novo, `/r/CODIGO`, que já leva à calculadora com atribuição) + CTA nos
+   posts. Enquanto isso não existir, cada real de impulsionamento compra alcance que não volta.
 4. **Meta Ads**: as 4 contas conectadas têm **0 veiculação** em 14 dias. Se entrar, começar por
    remarketing sobre quem já visitou — e só depois da medição limpa.
 5. **Lead do Antônio Valbeni** → atribuir ao Fábio em Admin › Comercial (segue sem dono).
@@ -71,6 +87,46 @@ Ordem sugerida: **(A)** conferir o que ficou medindo sozinho → **(B)** minha f
     link+nome+cidade. ⚠️ Embed do Instagram não passa no CSP.
 12. **Cartão válido** no painel do Supabase.
 13. **Leiloeiros do Sindicato-SP**: dizer quais das 29 casas fora do acervo priorizar para recon.
+
+### 📱 INSTAGRAM 23/08 (noite) — O QUE O CONECTOR MOSTRA DEPOIS DAS MUDANÇAS DO DONO
+Leitura feita pelo Windsor a pedido do dono ("fiz alterações no meu Instagram e hoje tenho 2
+vídeos impulsionados pelo botão turbinar"). Números do perfil **@tarcisionogueiraleiloes**:
+
+| Data | Novos seg. | Alcance | Views | Interações |
+|---|---|---|---|---|
+| 17/08 | 5 | 1.990 | 3.481 | 111 |
+| 18/08 | 3 | 714 | 3.756 | 238 |
+| 19/08 | 2 | 855 | 1.814 | 55 |
+| 20/08 | 14 | 2.369 | 3.766 | 182 |
+| 21/08 | 7 | 1.297 | 2.336 | 90 |
+| **22/08** | **16** | **7.271** | **10.712** | 325 |
+| 23/08 (parcial) | 0 | 4.324 | 5.656 | 275 |
+
+**O que mudou, pelo rastro:** a CADÊNCIA saltou — 7 a 9 publicações/dia, com horários fixos
+(10h45 · 14h45 · 17h45 · 20h45, cara de agendamento) mais Reels avulsos. E o formato: os Reels
+dominam. Efeito visível: o alcance dobrou/triplicou na semana e 22/08 foi o melhor dia
+registrado.
+
+**OS 2 IMPULSIONAMENTOS — inferência FORTE, mas NÃO confirmada pelo lado do anúncio.**
+O que o dado sustenta: hoje o alcance do PERFIL foi 4.324, enquanto a soma do alcance dos posts
+PUBLICADOS hoje é 268 (143 + 77 + 48). Ou seja, ~4.000 de alcance foram para conteúdo ANTIGO —
+que é exatamente o que um impulsionamento produz. Os dois candidatos óbvios, ambos de 22/08,
+com alcance 20× o normal da conta (~180–250):
+- `DcWaueENtkP` — Reels 22/08 17h11 · alcance **4.880** · 7.167 views · 183 curtidas
+- `DcWpn_lN50M` — Reels 22/08 19h21 · alcance **3.940** · 4.627 views · 172 curtidas
+(link: instagram.com/reel/CODIGO). ⚠️ **Não é confirmação:** o conector do Meta Ads devolve
+VAZIO para os últimos 7 dias, incluindo hoje — então gasto, campanha e resultado do anúncio
+ainda não são visíveis. Três explicações possíveis, a checar amanhã: (a) a ingestão do Meta é
+D-1 e o impulsionamento começou hoje; (b) o "turbinar" criou os anúncios numa conta de anúncio
+FORA das 4 conectadas ao Windsor; (c) o impulsionamento pelo app do Instagram às vezes usa uma
+conta ligada ao perfil, não à empresa.
+
+**O QUE ISSO NÃO RESOLVEU — e continua sendo a pergunta central:** nada disso virou visita ao
+site. `profile_links_taps` (botões de contato do perfil) = **0 em todos os 7 dias**; a métrica
+do link da BIO foi descontinuada pela API, então quem mede a ponte de verdade é o GA4 — e ele
+mostrou **~20 sessões vindas do Instagram em 14 dias** contra ~22.900 de alcance. Alcance a
+gente tem; travessia, não. **Impulsionar aumenta o topo do funil, não constrói a ponte** — o
+elo que falta é o mesmo de manhã: link na bio com `?utm_source=instagram` e CTA nos posts.
 
 ### 📊 SESSÃO 23/08 — MARKETING: WINDSOR × NOSSAS APIS (conector novo do dono)
 Confronto dos 14 dias. **Google Ads bate**: Windsor R$ 343 / 498 cliques / 5 conversões ×
