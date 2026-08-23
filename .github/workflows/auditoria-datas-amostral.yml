@@ -15,13 +15,34 @@ on:
         description: 'IDs (UUID) sempre incluídos, separados por vírgula'
         required: false
         default: ''
+      oferta_sbid:
+        description: 'DEBUG: id de oferta Superbid p/ despejar campos de data (pula a amostra)'
+        required: false
+        default: ''
 
 concurrency:
   group: auditoria-datas-amostral
   cancel-in-progress: false
 
 jobs:
+  # Debug pontual: com oferta_sbid preenchido, só despeja os campos de data da
+  # oferta da Superbid (caso Ville de Lyon) — não roda a amostra.
+  debug-superbid:
+    if: ${{ github.event.inputs.oferta_sbid != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Despejar datas da oferta
+        env:
+          OFERTA_ID: ${{ github.event.inputs.oferta_sbid }}
+        run: node scripts/debug-oferta-superbid.mjs
+
   auditar:
+    if: ${{ github.event.inputs.oferta_sbid == '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
