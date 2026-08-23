@@ -1,0 +1,42 @@
+name: Auditoria amostral de datas (banco × site do leiloeiro)
+
+# Amostra 1 a cada N lotes ativos por fonte e confere se a data de leilão que
+# mostramos ao cliente existe na página VIVA do leiloeiro. Criada em 23/08 após
+# o caso Ville de Lyon (SUPERBID, data ~1 mês divergente). Sob demanda — não é
+# cron: o resultado orienta conserto de scraper, não substitui o monitor diário.
+on:
+  workflow_dispatch:
+    inputs:
+      passo:
+        description: 'Amostra 1 a cada N lotes por fonte'
+        required: false
+        default: '20'
+      forcar_ids:
+        description: 'IDs (UUID) sempre incluídos, separados por vírgula'
+        required: false
+        default: ''
+
+concurrency:
+  group: auditoria-datas-amostral
+  cancel-in-progress: false
+
+jobs:
+  auditar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Auditar datas (amostral)
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          AMOSTRA_PASSO: ${{ github.event.inputs.passo || '20' }}
+          FORCAR_IDS: ${{ github.event.inputs.forcar_ids || '' }}
+        run: node scripts/auditoria-datas-amostral.mjs
