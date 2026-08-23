@@ -7,7 +7,7 @@
 ## 📌 PENDÊNCIAS ABERTAS (para esta sessão — leia primeiro)
 _Última atualização: 23/08. Tudo abaixo de "resolvido" está em produção na `main`._
 
-### 🔶 SESSÃO 23/08 (tarde) — branch `claude/hand-of-initial-checks-u1c0t9` (aguarda merge)
+### ✅ SESSÃO 23/08 (tarde) — EM PRODUÇÃO (PR #315 mesclado, deploy READY, `main` em 1ea1c3b)
 Ritual de abertura completo (heartbeat + 1b/1c/2/2b/3 verdes; segurança 0/0). Dois consertos
 de raiz, build limpo, migração APLICADA no banco:
 - **QuotaExceededError (pendência 5 de 23/08) RESOLVIDO na raiz:** quem lançava era a gravação
@@ -15,8 +15,8 @@ de raiz, build limpo, migração APLICADA no banco:
   (`bidpro_analises_*` = 12 análises inteiras × 3 chaves). Novo `src/utils/storageSeguro.js`
   (escrita que nunca lança + faxina SÓ de caches reconstruíveis, nunca dado do usuário) +
   `auth.storage` seguro no cliente Supabase (fallback em memória: login sobrevive com storage
-  cheio/bloqueado) + escritas desprotegidas roteadas. Marcar os 4 erros como resolvidos em
-  `erros_cliente` DEPOIS do deploy.
+  cheio/bloqueado) + escritas desprotegidas roteadas. Os 4 erros foram MARCADOS RESOLVIDOS em
+  `erros_cliente` após o deploy — se o fingerprint reaparecer, é regressão de verdade.
 - **`pino_generico_como_rua` 45→92 explicado e consertado:** a varredura diária
   `demover_pinos_genericos()` morria em **statement timeout (57014)** no cron das 05h e o cron
   devolvia ok:true (falha entregue como sucesso). Migração
