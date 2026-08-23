@@ -5,6 +5,10 @@
       "destination": "/api/$1"
     },
     {
+      "source": "/r/:codigo",
+      "destination": "/api/r?codigo=:codigo"
+    },
+    {
       "source": "/c/:token",
       "destination": "/api/og-share?tipo=contrato&id=:token"
     },
