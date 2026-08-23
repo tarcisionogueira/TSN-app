@@ -126,11 +126,15 @@ function pagina({ titulo, desc, canonical, corpo, jsonld, indexar = true, migalh
 <meta name="twitter:card" content="summary_large_image"/>
 ${jsonld ? `<script type="application/ld+json">${JSON.stringify(jsonld).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029')}</script>` : ''}
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<!-- League Spartan (títulos) com display=optional: sem o "pulo" de tamanho do FOUT na 1ª
-     visita (ver index.html). Inter (corpo) segue com swap, troca imperceptível. -->
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet">
-<link href="https://fonts.googleapis.com/css2?family=League+Spartan:wght@700;800;900&display=optional" rel="stylesheet">
+<!-- League Spartan (títulos) AUTO-HOSPEDADA + fallback com métricas casadas: sem FOUT/pulo
+     na 1ª visita (mesmo esquema do index.html). Precarregada; @font-face abaixo, no <style>. -->
+<link rel="preload" as="font" type="font/woff2" href="/fonts/league-spartan-latin.woff2" crossorigin>
 <style>
+/* League Spartan auto-hospedada (variável, 700–900) + fallback com métricas casadas (Arial)
+   — sem FOUT/pulo. Valores calculados das métricas reais do woff2 (ver index.html). */
+@font-face{font-family:'League Spartan';font-style:normal;font-weight:100 900;font-display:swap;src:url('/fonts/league-spartan-latin.woff2') format('woff2')}
+@font-face{font-family:'League Spartan Fallback';src:local('Arial');size-adjust:87.79%;ascent-override:79.74%;descent-override:25.06%;line-gap-override:0%}
 /* ═══ Alinhado ao docs/MARCA.md (14/08, pedido do dono: "revisar o layout para ficar de
    acordo com os padrões"). O conteúdo desta página já estava certo; o que destoava era a
    casca — ela nasceu como HTML de SEO e não seguia o código da marca:
@@ -184,7 +188,7 @@ header nav a.entrar{border:1px solid #334155;margin-left:4px}
 .menu-mob .drop a.ativo{background:#084BA6;color:#fff}
 main{max-width:1080px;margin:0 auto;padding:24px 20px 56px}
 .mig{font-size:12.5px;color:var(--cinza);margin-bottom:14px}
-h1,h2,h3{font-family:'League Spartan','Inter',sans-serif;letter-spacing:-0.2px}
+h1,h2,h3{font-family:'League Spartan','League Spartan Fallback','Inter',sans-serif;letter-spacing:-0.2px}
 h1{font-size:28px;font-weight:900;line-height:1.2;margin:0 0 8px}
 h2{font-size:20px;font-weight:800;margin:32px 0 12px}
 .sub{color:var(--cinza);margin:0 0 22px;font-size:15px}

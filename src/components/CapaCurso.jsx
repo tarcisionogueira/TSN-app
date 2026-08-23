@@ -84,7 +84,7 @@ export default function CapaCurso({
         color: 'white',
         letterSpacing: '-0.02em',
         lineHeight: 1,
-        fontFamily: "'League Spartan', 'Inter', sans-serif",
+        fontFamily: "'League Spartan', 'League Spartan Fallback', 'Inter', sans-serif",
       }}>
         {iniciaisCurso(curso?.titulo)}
       </span>
