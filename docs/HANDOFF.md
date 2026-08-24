@@ -4,6 +4,65 @@
 
 ---
 
+## 🧾 24/08 (noite) — O FUNIL NÃO ENXERGAVA QUEM PAGOU
+
+### O defeito, e por que era o pior lugar para ele
+O painel **Captação por origem** mostrava, no mesmo período: `44 cadastros · 26 engajados ·
+**0 contrataram** · R$ 0,00 de receita · ROAS 0.00×`, e na linha do Google Ads
+*"CAC/assinante: sem assinante"* ao lado de **R$ 658,63 gastos**.
+
+O banco, na mesma janela, tinha **4 assinantes `top2` ativos** com cobrança recorrente aprovada
+no Mercado Pago, somando **R$ 299,40**. Não era "ninguém contratou" — era a consulta olhando
+para o lugar errado e devolvendo zero com cara de resposta.
+
+**Causa:** `admin_funil_captacao` contava contratação só por `aceites_plano.valor > 0`. O fluxo
+de assinatura recorrente do Mercado Pago grava em `mp_pagamentos`/`mp_assinaturas` e **não cria
+aceite com valor** — dos 4 assinantes, só um (01/07, fluxo antigo do Asaas) tinha aceite com
+valor. **Quem paga por cartão recorrente era invisível para o funil.**
+
+Este painel é o denominador de toda decisão de verba: CAC por assinante e ROAS por canal saem
+dele. Com contratantes = 0, o ROAS é estruturalmente 0.00× em qualquer canal, para sempre — e a
+leitura natural ("o anúncio não converte") vira conclusão sobre o negócio tirada de consulta
+incompleta. Aconteceu no mesmo dia em que o dono colocou dinheiro em Meta Ads.
+
+### As três decisões (o dono delegou o critério)
+1. **Contratante = pagamento aprovado no gateway** dentro do período. Dinheiro que entrou, não
+   intenção declarada. `aceites_plano` segue valendo como caminho legado, **só para quem não tem
+   pagamento no período** — o `not exists` impede dupla contagem (o assinante de 01/07 tem 2
+   cobranças de R$ 49,90 no MP e 4 aceites do mesmo valor; somar daria R$ 299,40 para uma pessoa).
+2. **Pagamento sem `user_id` fica fora.** Há 47 lançamentos "avulso" (pix e saldo MP) somando
+   **R$ 5.047,49** sem perfil vinculado. Sem usuário não há canal, então não há o que atribuir —
+   entrariam inflando o ROAS de todos os canais igualmente. E não está verificado que sejam venda
+   do produto; podem ser movimentações da conta Mercado Pago capturadas pela conciliação.
+   **Pendência para o dono: dizer o que são.**
+3. **Conta interna não é cliente** (`role = 'admin'` fora), mesma regra já usada no alarme de
+   reunião parada e na retenção.
+
+### O que o painel passa a mostrar
+| Canal | Cadastros | Contratantes | Receita | Gasto |
+|---|---|---|---|---|
+| Orgânico / Direto | 36 | **4** | **R$ 299,40** | — |
+| **Google Ads** | 6 | **0** | R$ 0,00 | **R$ 658,63** |
+| Indicação (parceiro) | 2 | 0 | R$ 0,00 | — |
+
+ROAS geral: `0.00×` → **0,45×**. E aparece o fato que estava encoberto: **o Google Ads gastou
+R$ 658,63 e não gerou um único assinante.** Toda a receita vem do orgânico.
+
+### O achado de brinde: o Instagram já converteu, e ninguém sabia
+O assinante de **17/08** entrou por `/#/checkout?plano=top2&ref=C39C0C` — `C39C0C` é o link
+curto da **calculadora na bio do Instagram**. O Instagram já trouxe um pagante, e o painel o
+classifica como "(sem origem)", porque `/r/C39C0C` não carrega UTM. Os 4 assinantes estão todos
+como "(sem origem)": nenhum tem `gclid`, `fbclid` ou `utm_source`.
+
+**Consertar a receita não conserta a atribuição.** Enquanto os links da bio e do encurtador não
+carregarem UTM, o canal continua desconhecido — e a decisão "onde investir" segue sem base.
+
+### Erro meu, registrado
+Ao aplicar a migração eu troquei os acentos dos rótulos (`Organico`, `Indicacao`), o que
+quebraria o mapa de cores do painel, que casa pelo texto. Peguei na conferência seguinte e
+restaurei por edição cirúrgica com `pg_get_functiondef` + `replace`, abortando se a âncora não
+existisse. Lição: rótulo é chave — trocar acento é trocar identificador, não formatar texto.
+
 ## 🧾 24/08 — O LEILÃO DE HOJE MORRIA ÀS 00:00 DE HOJE
 
 ### O defeito
