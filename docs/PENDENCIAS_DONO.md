@@ -30,26 +30,28 @@ alcanço a produção para disparar.
 **Antes de gerar, confirmei que não é lixo a apagar:** o lote está `ativo`, sem nenhuma data de
 praça, e a retenção está certa em mantê-lo. Não é órfão — é relatório meio-feito.
 
-### D. 💰 Decidir o teto semanal do Bright Data — **antes de 24/08**
+### D. ~~Decidir o teto semanal do Bright Data~~ — ✅ **RESOLVIDO: não era pendência**
 
-**O número medido em 18/08:** `usado_total 458 · reservado para outros propósitos 43`. Com o
-teto **padrão (500)** o freio recusa (`motivo: reservado_para_outros`); com **520** ele autoriza.
+Medido em 24/08: **o teto da frota não é 450 nem 520.** Ele vem de um **secret do repositório**
+(`BRIGHTDATA_MAX_REQ_SEMANA`, valor definido no painel do GitHub) que **6 workflows** já usam —
+captura-documentos, leilaopro, rj, soleon, gestao e emiliomatos. A **PECINI é a única exceção**:
+o workflow dela lê o input `teto_semana`, com padrão 450.
 
-**O que isso significa na prática:** os dois disparos que deixei agendados (hoje 12h UTC e segunda
-24/08) já passam `teto_semana=520` — o número que você escolheu — então **vão rodar**. Não há
-nada travado hoje. O que sobra aqui é a decisão PERMANENTE: 520 vale por disparo, escrito no
-formulário do workflow, e é assim de propósito (o teto não fica no arquivo para ninguém subi-lo
-por esquecimento). Se você quiser que 520 seja o padrão, é uma linha em `api/_brightdata.js` ou a
-variável `BRIGHTDATA_MAX_REQ_SEMANA` no painel — me diga e eu faço.
+Foi essa exceção que produziu a conversa toda de 17-18/08 — eu media o teto pela PECINI e
+concluía sobre a frota inteira. **Você não tem nada a decidir aqui.**
 
-**A decisão é sua porque é gasto**, não porque eu não saiba mexer. Sugerido: **520** (o que você
-já havia escolhido). Como aplicar: no disparo manual do workflow *Scraper PECINI*, campo
-`teto_semana`. O teto **não** fica escrito no arquivo de propósito — assim subir o teto é um ato
-deliberado, com registro no histórico do run, e não um número maior esquecido valendo para sempre.
+O que sobra é a incoerência, e ela é técnica, não sua: faz pouco sentido uma fonte usar um teto
+diferente das outras seis. Duas saídas, quando você quiser — (a) a PECINI passa a usar o mesmo
+secret, e o input vira só um override para dispatch manual; ou (b) fica como está, e o input
+manual continua sendo o freio deliberado para a única fonte que se relê sob demanda.
 
-**O que se perde se NÃO virar padrão:** nada hoje. O risco é o disparo futuro que alguém faça sem
-preencher o campo — ele cai no 500 e é recusado em silêncio de agenda, que foi exatamente como a
-PECINI ficou parada desde julho.
+**Como conferir o consumo sem gastar cota:**
+```sql
+select proposito, requests, sucessos from brightdata_uso_proposito
+ where semana = date_trunc('week', now())::date order by 2 desc;
+```
+⚠️ **Nunca** chame `registrar_uso_brightdata` para "consultar": ela é reserva atômica e
+**concede ao responder** — usá-la como sonda custa um request (aconteceu comigo em 18/08).
 
 ---
 
