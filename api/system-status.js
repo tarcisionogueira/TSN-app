@@ -34,6 +34,15 @@ export default async function handler(req) {
     // src/utils/marketing.js → VITE_META_PIXEL_ID · api/_meta-capi.js → META_CAPI_TOKEN.
     metaPixel:{ ok: !!(process.env.VITE_META_PIXEL_ID || process.env.META_PIXEL_ID), label: 'Pixel do Meta (Facebook/Instagram)', grupo: 'aquisicao', impacto: 'crescimento' },
     meta:     { ok: !!process.env.META_CAPI_TOKEN,         label: 'Meta — Conversões API (server-side)', grupo: 'aquisicao', impacto: 'crescimento' },
+    // 24/08: o painel cobria Pixel e CAPI e NÃO cobria a ingestão de GASTO do Meta — que
+    // é o que alimenta marketing_metricas_dia e, por consequência, o CAC/ROAS do canal.
+    // `/api/meta-insights-cron` roda 08h10 todo dia e devolve HTTP 200 `{skipped:'dormente'}`
+    // quando as envs faltam: sucesso no log, nada na tabela, e ninguém sabe. Enquanto isso o
+    // painel de Marketing mostrava só Google Ads — com cara de "o Meta não gastou", que é
+    // conclusão sobre o negócio tirada de uma integração que nunca foi ligada.
+    // É a forma da casa (CLAUDE.md, forma 5) no lugar mais caro: decisão de verba.
+    metaAds:  { ok: !!(process.env.META_ADS_TOKEN && process.env.META_AD_ACCOUNT_ID),
+                label: 'Meta Ads — gasto diário no painel de Marketing', grupo: 'aquisicao', impacto: 'crescimento' },
     // Conversão OFFLINE do Google (api/_google-ads.js): é o que faz o PIX pago FORA do
     // checkout contar como venda no Google. Sem ela, a campanha é otimizada às cegas nesse
     // trecho. Rótulo diz para que serve — "opcional" seco parecia pendência esquecida.
