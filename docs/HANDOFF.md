@@ -63,6 +63,45 @@ quebraria o mapa de cores do painel, que casa pelo texto. Peguei na conferência
 restaurei por edição cirúrgica com `pg_get_functiondef` + `replace`, abortando se a âncora não
 existisse. Lição: rótulo é chave — trocar acento é trocar identificador, não formatar texto.
 
+---
+
+## 📌 24/08 — O QUE FICOU PENDENTE
+
+### Depende de decisão ou ação do dono
+| # | Pendência | Por que importa |
+|---|---|---|
+| 1 | **O que são os 47 pagamentos "avulso"** (R$ 5.047,49, pix e saldo MP, sem `user_id`) | Se forem venda do produto, a receita real é 17× maior que os R$ 299,40 que o painel mostra e o ROAS muda de figura. Se forem movimentação da conta MP, está certo como está. **Só o dono sabe.** |
+| 2 | **UTM nos links da bio do Instagram** — o da calculadora (`/r/C39C0C`) não tem | Foi por ele que entrou o assinante de 17/08, e o painel o classifica como "(sem origem)". Sem UTM, o Instagram continua invisível mesmo convertendo |
+| 3 | **Felipe Scarafiz: Acesso total + Finanças** no portfólio Meta | Controle completo, incluindo forma de pagamento. Está inativo. (igor queiroz já removido da conta de anúncios — falta confirmar em *Usuários → Parceiros* do portfólio) |
+| 4 | **Nanda Oliveira** com acesso à Página `tarcisionogueiraleiloes` sem estar no portfólio | O aviso da Meta sugere adicionar; a pergunta anterior é se o acesso ainda faz sentido |
+| 5 | **Confirmar `VITE_META_PIXEL_ID` = `683455009174779`** | A campanha otimiza por esse pixel. Se o site alimenta o "Pixel Tarcisio" (`533681443970197`), os dois nunca se falam e o relatório dirá "0 conversões" |
+| 6 | Renomear `BR - 25-60 - ABERTO` → `BR - 25MAIS - ABERTO` | A segmentação real é 25+ (Advantage+ só aceita idade mínima). O nome vira `utm_term` nos relatórios |
+| 7 | **Verificação do anunciante no Meta**, com **NOGUEIRA EMPREENDIMENTOS (02.311.492/0001-61)** | Mesmo descasamento de entidade que reprovou a verificação do Google até 16/08 |
+| 8 | Nomear analista · chaves Asaas/MP com escopo mínimo · WebISS para NFS-e | Pendências antigas, sem mudança |
+
+### A decisão de negócio que o conserto do funil colocou na mesa
+**O Google Ads gastou R$ 658,63 no período e não gerou um único assinante** (6 cadastros, 0
+contratações). Isso agora é fato medido, não artefato de consulta quebrada. Toda a receita —
+R$ 299,40, 4 assinantes — veio de **Orgânico / Direto**. Vale decidir se o Google continua, muda
+de campanha ou pausa enquanto o Meta é testado.
+
+### Dívidas técnicas registradas hoje (nenhuma urgente)
+- **O sweep do sitemap é de mão única:** desativa lote ausente, nunca reativa quem volta. Hoje
+  não causou dano (os 10 lotes conferidos eram praça vencida + o veículo barrado pelo gate), mas
+  é um caminho sem volta e o check `✓ nenhum lote fora do sitemap` só olha numa direção.
+- **`perfis.mkt_*` não tem `utm_content` nem `utm_term`.** A visita (`visita_origem`) identifica
+  o ANÚNCIO; o cadastro identifica só a CAMPANHA. Ligar anúncio→cadastro exige coluna nova.
+- **Atribuição fraca:** os 4 assinantes estão todos como "(sem origem)" — nenhum tem `gclid`,
+  `fbclid` ou `utm_source`. Consertar a receita não consertou de onde ela veio.
+- **10 dos 13 lotes novos da PECINI** devolvem "página genérica" e são sempre os mesmos ids. O
+  conserto de hoje (separar "sem foto" de "página inexistente") não os alcança — o site
+  realmente não serve aquelas páginas.
+
+### Rodando sozinho
+- **Amanhã 08h10 UTC** — `/api/meta-insights-cron` traz o primeiro dia de gasto do Meta.
+- **Amanhã 09h15 UTC** — meu check-in automático confere e reporta por medição.
+- PECINI (cron semanal), health-check 2×/dia, monitor de fontes, backfill de metragem.
+
 ## 🧾 24/08 — O LEILÃO DE HOJE MORRIA ÀS 00:00 DE HOJE
 
 ### O defeito
