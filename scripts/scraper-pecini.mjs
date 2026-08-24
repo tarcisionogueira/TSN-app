@@ -274,9 +274,22 @@ function parseDetalhe(html, rec) {
 
   // Página genérica (lote inexistente/redirect p/ a home): og:image é o ícone do
   // site (apple-touch-icon / Themes) e/ou título institucional. Marca p/ pular.
-  const paginaInvalida = !base.link_foto
-    || /apple-touch-icon|Themes\/DefaultClean|\/Content\/images\//i.test(base.link_foto || '')
+  //
+  // 24/08: `!base.link_foto` SOZINHO marcava a página como inexistente — "não tem foto"
+  // entregue como "não tem lote". É a forma da casa: ausência de um campo virando veredito
+  // sobre a página inteira, e o lote real sem og:image sendo descartado em silêncio, sem
+  // sequer aparecer no log como descarte. A prova de que a conflação era real está no próprio
+  // log: o ramo `foto NÃO` da linha de resumo é INALCANÇÁVEL, porque todo lote sem foto era
+  // pulado antes de chegar lá — em 578 lotes visitados, nunca uma única linha `foto NÃO`.
+  //
+  // Agora o sinal de "página institucional" decide sozinho (ícone do tema, título do site),
+  // e a falta de foto só pesa quando a página TAMBÉM não tem nenhum sinal de lote — nenhum
+  // valor e nenhum documento. Um lote de verdade tem pelo menos um dos dois.
+  const pareceInstitucional =
+    /apple-touch-icon|Themes\/DefaultClean|\/Content\/images\//i.test(base.link_foto || '')
     || /^Pecini Leil[õo]es\s*[|-]/i.test((base.titulo || '').trim());
+  const semSinalDeLote = !avaliacao && !valorMinimo && !anexos.length;
+  const paginaInvalida = pareceInstitucional || (!base.link_foto && semSinalDeLote);
 
   return {
     titulo: (base.titulo || `Imóvel Pecini ${rec.id}`).slice(0, 180),

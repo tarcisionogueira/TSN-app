@@ -4,6 +4,63 @@
 
 ---
 
+## 🧾 24/08 — O LEILÃO DE HOJE MORRIA ÀS 00:00 DE HOJE
+
+### O defeito
+`leilao_ja_encerrado()` compara `max(data_leilao, data_leilao_2, data_fim + 1d - 1s) < now()`.
+**Só o `data_fim` ganhava a extensão até o fim do dia.** `data_leilao` é `text` e, sem hora
+(`'2026-08-24'`), `::timestamptz` resolve para MEIA-NOITE — então o lote era desativado às 00:00
+do próprio dia do pregão e sumia da busca exatamente no dia em que o leilão acontece. Sem erro,
+sem log: um DELETE lógico correto rodando sobre uma comparação errada.
+
+**Como apareceu:** dois lotes da PECINI em Eusébio/CE (10564, 10566) foram relidos com sucesso
+na coleta das 15h — avaliação, lance e foto frescos — e estavam `ativo = false`. A coleta gravou
+dado bom numa linha invisível.
+
+**Alcance medido (não amostra):** 835 lotes ATIVOS na única forma que nada segura —
+`data_leilao` sem hora, `data_leilao_2` nula, `data_fim` nula:
+**CEF 796** (praça 26/08) · PECINI 16 · WEBLEILOES 15 · BIASI 6 · SUPORTE 2 (25/08+).
+
+**Conserto** (`supabase/migrations/leilao_do_dia_morre_a_meia_noite.sql`, aplicado): data COM
+hora continua exata; data seca vale até 23:59:59. Ensaio antes de aplicar: de 36.586 linhas com
+data, **2** mudaram de veredito e **nenhuma** passou a ser considerada encerrada.
+
+**Reativação cirúrgica: 2 lotes**, só os de praça HOJE. Os 41 inativos com praça FUTURA (ZUK 32,
+CEF 8, WEBLEILOES 1) foram desativados por OUTRA causa — o bug da meia-noite só dispara no dia
+da praça — e reativá-los em massa seria afirmar medição que não houve.
+
+### "Sem foto" entregue como "página não existe" (scraper-pecini)
+`paginaInvalida` tinha `!base.link_foto` como primeira cláusula: **lote real sem `og:image` era
+descartado como página inexistente**, sem sequer aparecer no log como descarte. A prova estava no
+próprio log: o ramo `foto NÃO` da linha de resumo é **inalcançável** — em centenas de lotes
+visitados, nunca uma única linha `foto NÃO`. Agora o sinal institucional (ícone do tema, título
+do site) decide sozinho, e a falta de foto só pesa quando a página também não tem NENHUM valor
+nem documento. Por análise de casos, a única página que passa a ser aceita é a que tem lote de
+verdade e não tem foto.
+
+### Instagram: a conta do impulsionamento, e o que o Meta Ads mostra
+O dono confirmou (print da troca de contas) que turbinou pelo perfil **`tarcisionogueiraleiloes`**
+— não pelo `bidprobrasil`. As duas contas existem e as duas estão no Windsor.
+
+Isso resolve a dúvida de 23/08, e a resposta não é nenhuma das três hipóteses levantadas lá:
+- Há uma conta de anúncio conectada que casa com o perfil: **"CA - Tacísio Nogueira Leilões"**
+  (uma das 4 do conector `facebook`).
+- **A última linha de QUALQUER conta Meta no Windsor é 05/05/2026.** Não é atraso D-1 — são 3
+  meses e meio sem um único registro. Ou o dono parou de anunciar no Meta em 05/05, ou a
+  ingestão quebrou ali; ele sabe qual, e é a única pergunta que sobra.
+- **`marketing_metricas_dia` só tem `Google Ads`** (27 dias, 29/07→24/08, R$ 658,63). O Meta
+  nunca alimentou a nossa tabela — o painel de marketing é cego para ele **por construção**, não
+  por falha. Mesmo que o Windsor voltasse a trazer, a tela não mostraria.
+
+**Consequência prática:** o impulsionamento de 22/08 não é mensurável em lugar nenhum hoje. O
+alcance aparece no orgânico; o gasto, não.
+
+### Item D da lista do dono: cancelado, não era pendência
+O teto do Bright Data da frota vem de um **secret do repositório**
+(`BRIGHTDATA_MAX_REQ_SEMANA`, valor no painel) que **6 workflows** usam. A PECINI é a **única**
+exceção — lê o input `teto_semana`, padrão 450. A conversa inteira de 17-18/08 mediu o teto pela
+exceção e concluiu sobre a frota. Nada a decidir; sobra só a incoerência técnica.
+
 ## 📌 PENDÊNCIAS ABERTAS (para esta sessão — leia primeiro)
 _Última atualização: 23/08. Tudo abaixo de "resolvido" está em produção na `main`._
 
@@ -2059,7 +2116,7 @@ declarar com o enquadramento certo é melhor que o revisor descobrir e concluir 
 | ~~**A**~~ | ~~`ADMIN_EMAIL` na Vercel~~ — ✅ **RESOLVIDO 16/08** | Estava definida o tempo todo | Provado: aviso de lead entregue em 16/08 19:35 (`emails_log`, `lead_alavancagem`, `entregue`) |
 | **B** | **Nomear um analista** | `select count(*) from perfis where role='analista' and ativo` deu **0**. Há 42 horários livres e 3 pedidos de reunião parados desde 1 e 5 de julho. O trigger faz o pedido cair para o admin — dá dono à fila, **não substitui a pessoa** | `select count(*) from perfis where role='analista' and ativo;` → > 0 = resolvido |
 | **C** | **Regerar o mercadológico de UM lote** — `1d117f3c-b7ed-413d-ac22-f9db9f7bd82c` ("Apartamento, 2 quartos, Praia da Costa, Vila Velha/ES") | Dois alertas vermelhos (`analise_sem_mercadologico`, `laudo_sem_base`) são este único lote. O cron de regeração tem janela de 72 h e o relatório é de 31/07 — não o alcança. **Um clique em Gerar zera os dois** | `select * from public.qa_invariantes() where chave in ('analise_sem_mercadologico','laudo_sem_base');` → `ok` = resolvido |
-| **D** | **Tornar 520 o teto PADRÃO do Bright Data** (hoje o padrão é 500) | Nada está travado: os disparos agendados já passam `teto_semana=520` e o freio autoriza. O risco é o disparo FUTURO feito sem preencher o campo — cai no 500, e com `reservado p/ outros 43` é recusado em silêncio de agenda. Foi assim que a PECINI ficou parada desde julho. Virar padrão é decisão de GASTO, por isso é sua | `select proposito, requests, sucessos from brightdata_uso_proposito where semana = date_trunc('week', now())::date order by 2 desc;` (leitura pura — **não** chamar `registrar_uso_brightdata`, que concede ao responder) |
+| ~~**D**~~ | ~~Decidir o teto do Bright Data~~ — ✅ **NÃO ERA PENDÊNCIA (medido em 24/08)** | O teto da frota já vem de um **secret do repositório** (`BRIGHTDATA_MAX_REQ_SEMANA`), usado por 6 workflows (captura-documentos, leilaopro, rj, soleon, gestao, emiliomatos). A PECINI é a **única** que não o usa — lê o input `teto_semana`, padrão 450 — e foi por isso que a conversa de 17-18/08 girou em torno de 450/520 como se fosse o teto de todo mundo. Não era. Nada a decidir aqui; o que resta é a incoerência de a PECINI ser a exceção | `select proposito, requests, sucessos from brightdata_uso_proposito where semana = date_trunc('week', now())::date order by 2 desc;` (leitura pura — **não** chamar `registrar_uso_brightdata`, que concede ao responder) |
 | **E** | **Chaves de API Asaas / Mercado Pago sem escopo de permissão** | Auditoria de segurança pede chave com escopo mínimo; as atuais são plenas | Painel de cada gateway → conferir escopo da chave em uso |
 | **F** | **Google G2RS** (ID `475-979-5747`) e **integração WebISS para NFS-e** | G2RS: ao reenviar, escolher a **segunda** opção — *"avaliada anteriormente… atualizar os campos"* — **nunca** "nova solicitação" (recomeça a fila). WebISS: sem ela, nota fiscal continua manual | Confirmação por e-mail do Google · emissão automática saindo no painel |
 
