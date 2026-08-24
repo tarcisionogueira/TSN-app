@@ -41,6 +41,19 @@ export default async function handler(req, res) {
     'or=(data_leilao.is.null,data_leilao_2.is.null)',
     'fonte=not.in.(CEF,caixa)',
     'modalidade=not.ilike.*venda*direta*',
+    // LOTE INATIVO NÃO É CANDIDATO (24/08). Este filtro faltava — e só ele. O cron
+    // sempre respondeu `ok: true, processados: 40` e nunca errou nada: ele lia a
+    // página, extraía a data e gravava. Só que 14.534 dos 21.148 candidatos estavam
+    // DESATIVADOS, e a ordem (`data_leilao` nulo primeiro, nunca-tentado antes) põe
+    // justamente os piores na frente: os 40 primeiros da fila eram 40 lotes inativos.
+    // Fila real medida hoje: 2.312 inativos nunca tentados NA FRENTE dos 933 ativos
+    // sem data — a ~56 lotes/dia, 41 dias de Bright Data gasto em lote que cliente
+    // nenhum enxerga, antes de tocar no primeiro que ele enxerga. Foi por isso que
+    // GRUPOLANCE (448), BIASI (304) e VIP (87) não drenaram nem depois do #321: o
+    // freio de custo estava consertado, a fila é que apontava para o lugar errado.
+    // `not.is.false` (e não `eq.true`) para acompanhar o irmão `enriquecer-backfill-cron`,
+    // que já nasceu com esta guarda — a convenção do projeto era esta desde sempre.
+    'ativo=not.is.false',
     'link_edital=ilike.*//*/*', // tem barra após o domínio → página de lote, não home
     'select=id,link_edital,url_lote,modalidade,data_leilao,data_leilao_2',
     // Ordem: primeiro quem não tem data NENHUMA (`data_leilao` nulo). É o lote em que o gate
