@@ -50,6 +50,10 @@ const REVENDA_DESCONTO_MIN = 30;
 // CHAVE do checkbox; mandar a chave crua para a RPC não casava com nada e o filtro de
 // pagamento simplesmente não existia no e-mail.
 const PAG_CANON = { aVista: 'a_vista', financiado: 'financiado', hipotecado: 'hipotecado' };
+// TETO DE CAPITAL por faixa da triagem (folga ~30% cobre entrada+financiamento;
+// 'acima_1mi' = 0 = sem teto). Estava declarado DENTRO do laco por usuario, depois do
+// passo 1 — por isso o caminho dos filtros salvos nunca o enxergava. Ver `tetoEfetivo`.
+const TETO_FAIXA = { ate_150k: 200000, '150_400k': 520000, '400k_1mi': 1300000, acima_1mi: 0 };
 const pagCanon = (l) => [...new Set((Array.isArray(l) ? l : [])
   .map(k => PAG_CANON[k] || (Object.values(PAG_CANON).includes(k) ? k : null)).filter(Boolean))];
 
@@ -284,7 +288,22 @@ async function handler(req) {
   // receber; qualquer chave que o cron não conheça vira um filtro SILENCIOSAMENTE ignorado,
   // e o e-mail passa a mandar imóvel que a tela não mostraria. Ao acrescentar um filtro novo
   // na Busca, inclua-o AQUI TAMBÉM (além de aplicarFiltrosImoveis + RPC + api/busca-raio.js).
-  const condFiltro = (f) => {
+  // TETO EFETIVO de um filtro salvo: o menor entre o valorMax que o cliente digitou NAQUELE
+  // filtro e o teto da faixa de capital declarada na triagem. Zero = sem teto.
+  //
+  // 25/08: o cabecalho deste arquivo diz "mantem o teto — acima do capital do cliente NAO
+  // ENTRA NUNCA", mas o `tetoPerfil` so era aplicado nos caminhos de cidade-do-cadastro
+  // (raio crescente, similares, pais). O caminho dos FILTROS SALVOS aplicava apenas
+  // `f.valorMax`, e quem deixou esse campo vazio ficava sem teto algum. Medido antes de
+  // consertar: 36 envios acima do teto da propria faixa, em 12 clientes, o maior a
+  // R$ 6.148.488 — e um cliente de faixa "ate 150k" recebeu lote de R$ 2.045.762.
+  // Intencao declarada e codigo divergiam; agora os dois caminhos usam o mesmo teto.
+  const tetoEfetivo = (f, tetoFaixa) => {
+    const tf = numOnly(f?.valorMax);
+    return (tf && tetoFaixa) ? Math.min(tf, tetoFaixa) : (tf || tetoFaixa || 0);
+  };
+
+  const condFiltro = (f, tetoFaixa = 0) => {
     const p = [];
     const tipos = Array.isArray(f.tipos) ? f.tipos.filter(Boolean) : [];
     // INTENÇÃO (revenda/locação/temporada) restringe os TIPOS por cima da escolha do
@@ -302,7 +321,8 @@ async function handler(req) {
     const mods = Array.isArray(f.modalidades) ? f.modalidades.filter(Boolean) : [];
     if (mods.length) p.push(`modalidade=in.(${mods.map(encodeURIComponent).join(',')})`);
     if (f.valorMin) p.push(`valor_minimo=gte.${numOnly(f.valorMin)}`);
-    if (f.valorMax) p.push(`valor_minimo=lte.${numOnly(f.valorMax)}`);
+    const tetoF = tetoEfetivo(f, tetoFaixa);
+    if (tetoF) p.push(`valor_minimo=lte.${tetoF}`);
     // Desconto: piso de DESC_MIN (o filtro do cliente pode exigir MAIS, nunca menos).
     // Revenda tem piso próprio de viabilidade (30%), abaixo do DESC_MIN do e-mail.
     p.push(`desconto_percentual=gte.${Math.max(DESC_MIN, Number(f.descontoMin) || 0, f.intencao === 'revenda' ? REVENDA_DESCONTO_MIN : 0)}`);
@@ -345,7 +365,7 @@ async function handler(req) {
   // cidade virava uma busca NACIONAL, e o cliente recebia imóvel a 900 km do círculo que ele
   // desenhou no mapa. No modo raio a cidade é só o CENTRO (não filtra) e o bairro é ignorado
   // — exatamente como na tela.
-  const buscarPorRaio = async (f, lim) => {
+  const buscarPorRaio = async (f, lim, tetoFaixa = 0) => {
     const c = f.__raio?.centro; const km = Number(f.__raio?.km) || 0;
     if (!c || !km || !Number.isFinite(Number(c.lat)) || !Number.isFinite(Number(c.lng))) return null;
     const tipos = Array.isArray(f.tipos) ? f.tipos.filter(Boolean) : [];
@@ -365,16 +385,16 @@ async function handler(req) {
       pagamentos_filtro: pagCanon(f.pagamento),
       desconto_min: Math.max(DESC_MIN, Number(f.descontoMin) || 0, f.intencao === 'revenda' ? REVENDA_DESCONTO_MIN : 0),
       ...(numOnly(f.valorMin) ? { valor_min: numOnly(f.valorMin) } : {}),
-      ...(numOnly(f.valorMax) ? { valor_max: numOnly(f.valorMax) } : {}),
+      ...(tetoEfetivo(f, tetoFaixa) ? { valor_max: tetoEfetivo(f, tetoFaixa) } : {}),
     });
     // A RPC ordena por DISTÂNCIA; o e-mail leva sempre o maior desconto primeiro.
     return (linhas || []).sort((a, b) => (Number(b.desconto_percentual) || 0) - (Number(a.desconto_percentual) || 0));
   };
 
-  const buscarPorFiltro = async (f, lim) => {
-    const porRaio = await buscarPorRaio(f, lim);
+  const buscarPorFiltro = async (f, lim, tetoFaixa = 0) => {
+    const porRaio = await buscarPorRaio(f, lim, tetoFaixa);
     if (porRaio) return porRaio;
-    return sbGet(`imoveis_leilao?select=${SEL}&ativo=eq.true${condFiltro(f)}&order=desconto_percentual.desc&limit=${lim}`);
+    return sbGet(`imoveis_leilao?select=${SEL}&ativo=eq.true${condFiltro(f, tetoFaixa)}&order=desconto_percentual.desc&limit=${lim}`);
   };
 
   let enviados = 0;
@@ -435,6 +455,11 @@ async function handler(req) {
         }
       };
 
+      // Teto da faixa de capital: calculado AQUI, antes do passo 1, porque o caminho dos
+      // filtros salvos precisa dele. Antes de 25/08 ele nascia mais abaixo e por isso o
+      // passo 1 mandava imóvel acima do capital do cliente.
+      const tetoFaixa = TETO_FAIXA[perfil.faixa_capital] || 0;
+
       // 1) COTA DOS FILTROS SALVOS (regra do dono: DIVIDIR as 12 entre os critérios).
       //    Com cidade+perfil TAMBÉM presentes → metade das vagas (6) p/ os filtros
       //    salvos, distribuída entre eles; sem cidade de referência → filtros levam
@@ -445,7 +470,7 @@ async function handler(req) {
         const porFiltro = Math.max(1, Math.ceil(cotaFiltros / savedFilters.length));
         for (const f of savedFilters) {
           if (pool.size >= cotaFiltros) break;
-          despejar(await buscarPorFiltro(f, porFiltro * 4), porFiltro);
+          despejar(await buscarPorFiltro(f, porFiltro * 4, tetoFaixa), porFiltro);
         }
       }
 
@@ -461,12 +486,10 @@ async function handler(req) {
       // a visita/arremate p/ a maioria dos investidores — melhor mandar menos que mandar
       // imóvel a 400km. (Já foi 400km; antes disso, quase-nacional colava RJ p/ cliente SP.)
       const RAIOS_M = [50000, 100000, 200000];
-      // Teto de capital pela faixa da triagem (folga ~30% cobre entrada+financiamento;
-      // 'acima_1mi' = sem teto). O valorMax do alerta, quando menor, prevalece.
-      const TETO_FAIXA = { ate_150k: 200000, '150_400k': 520000, '400k_1mi': 1300000, acima_1mi: 0 };
-      const tetoFiltro = numOnly(filtroBase.valorMax);
-      const tetoFaixa = TETO_FAIXA[perfil.faixa_capital] || 0;
-      const tetoPerfil = tetoFiltro && tetoFaixa ? Math.min(tetoFiltro, tetoFaixa) : (tetoFiltro || tetoFaixa);
+      // Teto usado nos caminhos de cidade-do-cadastro. `tetoFaixa` e `TETO_FAIXA` agora
+      // vivem acima (o passo 1 também precisa deles). O valorMax do alerta, quando menor,
+      // prevalece — é exatamente o que `tetoEfetivo` faz.
+      const tetoPerfil = tetoEfetivo(filtroBase, tetoFaixa);
       const tiposPref = Array.isArray(filtroBase.tipos) ? filtroBase.tipos.filter(Boolean) : [];
       const modsPref = Array.isArray(filtroBase.modalidades) ? filtroBase.modalidades.filter(Boolean) : [];
       // pagCanon: o filtro salvo guarda a CHAVE do checkbox ('aVista'); a RPC espera o valor
