@@ -4,6 +4,71 @@
 
 ---
 
+## 🧾 25/08 (tarde) — A ABA QUE VIGIA OS DEFEITOS ERA A QUE NÃO ABRIA
+
+Sessão inteira sobre **travas**. O saldo mais importante não é quantos defeitos foram
+consertados — é que **4 dos 6 invariantes que estavam acusando não apontavam defeito nenhum**,
+e um deles estava *degradando dado correto todo dia*.
+
+### O defeito real, e o que ele escondia
+`erros_cliente` tinha um 500 de 23/08: `/admin`, `rpc/admin_qa_invariantes`, statement timeout.
+`qa_invariantes()` levava **11,7 s** — CPU, não I/O (`shared hit=450687`, zero leitura de
+disco) — contra um teto de **8 s** que vale para `authenticated` (o /admin) **e** para
+`service_role` (`rolconfig` nulo → herda o `authenticator`).
+
+E o pior não era a tela: o **monitor diário lê o mesmo RPC**, com `const { data: inv }` sem
+checar `error` e um `catch` vazio. Estourando o teto, `inv` vinha nulo e o monitor concluía
+que *nenhum* dos 48 invariantes tinha alerta. **A trava de corretude do produto estava
+desarmada em silêncio.**
+
+| | antes | depois |
+|---|---|---|
+| `qa_invariantes()` | 11.710 ms | **2.668 ms** (33% do teto) |
+| invariantes | 48 | 50 |
+| alertas | 5 | 2 (`sem_foto`, `bd_teto_saturado`) |
+
+### As quatro travas que acusavam o funcionamento correto
+1. **`pino_generico_como_rua` (49)** — 46 eram falso positivo. `Rua Mauro Portugal (antiga R
+   Projetada A)` e `Rua Projetada A` são a MESMA rua; `via_normalizada` comparava string. E o
+   gatilho `trg_geocode_pino_generico` **rebaixava o pino** por causa disso: **106 lotes** em
+   22 coordenadas viraram "nível cidade" no mapa do cliente. Regra nova (`mesma_via`) em 4
+   consumidoras; 106 devolvidos à fila de re-geocode.
+2. **`fonte_data_leilao_uniforme`** — HASTA, 579 lotes com a mesma data. É verdade: leilão
+   extrajudicial nacional único (572 valores distintos em 579 linhas provam leitura por lote).
+   Dispensa presa ao par (fonte, data) verificado — muda a data, o alerta volta sozinho.
+3. **`relatorio_area_nao_confirmada` (10)** — o cliente **já é avisado** na tela, e a área
+   anunciada bate com a da matrícula onde dá para comparar. Passa a medir **contradição** (>5%).
+4. **`limpeza_encerrados_pulada` (4)** — dos 79 candidatos, **zero encerrados por data**. São
+   lotes VIVOS não revistos numa coleta truncada por falta de cota: o freio acertando.
+
+### Dois defeitos de verdade achados no caminho
+- **O "sem imagem" do leiloeiro gravado como foto.** TORRES3 tinha 39 de 50 lotes apontando
+  para `/site/images/sem-imagem-lote.jpg`. O cliente via o slot preenchido, e `sem_foto`
+  **subcontava**. 60 linhas normalizadas, gatilho na escrita, e trava genérica
+  (`foto_repetida_como_lote`) para o placeholder de nome desconhecido.
+- **A cota do Bright Data queimava em 2 dias** (517/550 em 1,5 dia; 618/550 na semana de
+  17/08). Era a causa, três camadas adiante, do item 4. Rateio diário aplicado por decisão do
+  dono, sem mexer no teto global.
+
+### O que ficou aberto
+| # | Item | Por quê |
+|---|---|---|
+| 1 | **HASTA: 579 lotes ativos, ZERO fotos (100%)** | `hasta-parse.mjs` não devolve `link_foto`. É a maior parcela de `sem_foto` (1.928). Não consertei porque não consigo buscar uma página da HASTA deste ambiente (proxy recusa CONNECT) e escrever o seletor no escuro seria adivinhar |
+| 2 | `geral` (99/semana) e `pecini` (63) sem teto por propósito | Únicos sem linha em `brightdata_reserva`; só esbarram no global |
+| 3 | Rateio diário soma 207/dia contra ~78/dia do teto global | Impede um propósito de comer a semana, mas não garante 7 dias de cobertura |
+| 4 | **4 dos 6 pagantes sem gerar relatório em 14 dias** | Churn em formação — assinaturas de 01/07, 06/07, 07/07 e 06/08 |
+| 5 | **7 casos parados em `analise_solicitada` há mediana de 32 dias** | Nenhum caso passou dessa etapa até hoje |
+| 6 | **7 chamados FECHADOS sem uma resposta humana** | Bot não é SLA; fechar não é responder |
+| 7 | 26 de 60 clientes (43%) sem perfil de triagem | Faz o e-mail de oportunidade sair genérico |
+
+### Marketing — a ponte de rastreio consertou
+614 cliques pagos × **527 visitas com `gclid`** em 14 dias (em 14/08 eram 214 × 19). `utm_term`
+em 498 visitas — a pendência A do dono, resolvida. Meta: R$ 4,16, 25 cliques, CPC R$ 0,17,
+27 visitas `instagram/cpc`, **0 cadastros** ainda. As duas correções de ontem estão de fato
+aplicadas no banco (conferido com `pg_get_functiondef`, não só no repo).
+
+---
+
 ## 🧾 25/08 — A PRIMEIRA MEDIÇÃO DO META, E O DEFEITO QUE ELA REVELOU
 
 ### Funcionou
