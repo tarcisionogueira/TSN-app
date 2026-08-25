@@ -19,6 +19,11 @@
  *      explicitamente: entra primeiro e pode levar as 12 vagas, distribuídas ENTRE os
  *      filtros para que um prolífico não engula os outros. Exige TUDO o que ele marcou,
  *      inclusive forma de pagamento, mais o teto de capital da triagem.
+ *      ESCADA DE RAIO (25/08): o filtro NÃO pode devolver vazio. Se a lista de cidades
+ *      (ou o círculo que o cliente desenhou) não fechar as vagas, abre a geografia em
+ *      anéis 25→50→100→200km em volta da cidade do filtro — ou da CIDADE DO CADASTRO,
+ *      quando o filtro não tem cidade — mantendo todo o resto do critério e parando no
+ *      primeiro anel que fecha. Continua sendo o que ele pediu, um pouco mais longe.
  *   2. REGIÃO — só as vagas que sobraram. Ancorada na CIDADE DO CADASTRO
  *      (perfis.endereco_cidade/uf), que vale SEMPRE: antes ela era substituída pela
  *      cidade do filtro salvo mais recente, e quem morava em Barueri com um filtro de
@@ -372,9 +377,9 @@ async function handler(req) {
   // cidade virava uma busca NACIONAL, e o cliente recebia imóvel a 900 km do círculo que ele
   // desenhou no mapa. No modo raio a cidade é só o CENTRO (não filtra) e o bairro é ignorado
   // — exatamente como na tela.
-  const buscarPorRaio = async (f, lim, tetoFaixa = 0) => {
-    const c = f.__raio?.centro; const km = Number(f.__raio?.km) || 0;
-    if (!c || !km || !Number.isFinite(Number(c.lat)) || !Number.isFinite(Number(c.lng))) return null;
+  // Os critérios do filtro salvo traduzidos para a RPC de raio, SEM a geografia — assim o
+  // mesmo filtro pode ser buscado em qualquer raio (ver a escada em `buscarPorFiltro`).
+  const criteriosRpc = (f, lim, tetoFaixa) => {
     const tipos = Array.isArray(f.tipos) ? f.tipos.filter(Boolean) : [];
     const limIntencao = f.intencao === 'revenda' ? TIPOS_LIQUIDOS
       : (f.intencao === 'locacao' || f.intencao === 'temporada') ? TIPOS_RESIDENCIAL : null;
@@ -383,8 +388,7 @@ async function handler(req) {
     const tiposRpc = (tipos.length && limIntencao)
       ? (tipos.filter(t => limIntencao.includes(t)).length ? tipos.filter(t => limIntencao.includes(t)) : ['__sem_tipo__'])
       : (tipos.length ? tipos : (limIntencao || []));
-    const linhas = await rpc('buscar_por_raio_v2', {
-      lat: Number(c.lat), lng: Number(c.lng), raio_metros: km * 1000,
+    return {
       lim: Math.min(200, Math.max(lim * 4, 40)),
       tipos_filtro: tiposRpc,
       estado_filtro: f.estado || '',
@@ -393,15 +397,67 @@ async function handler(req) {
       desconto_min: Math.max(DESC_MIN, Number(f.descontoMin) || 0, f.intencao === 'revenda' ? REVENDA_DESCONTO_MIN : 0),
       ...(numOnly(f.valorMin) ? { valor_min: numOnly(f.valorMin) } : {}),
       ...(tetoEfetivo(f, tetoFaixa) ? { valor_max: tetoEfetivo(f, tetoFaixa) } : {}),
-    });
-    // A RPC ordena por DISTÂNCIA; o e-mail leva sempre o maior desconto primeiro.
-    return (linhas || []).sort((a, b) => (Number(b.desconto_percentual) || 0) - (Number(a.desconto_percentual) || 0));
+    };
   };
 
-  const buscarPorFiltro = async (f, lim, tetoFaixa = 0) => {
+  const porDesconto = (a, b) => (Number(b.desconto_percentual) || 0) - (Number(a.desconto_percentual) || 0);
+
+  const buscarNoRaio = async (f, lim, tetoFaixa, lat, lng, raioMetros) => {
+    const linhas = await rpc('buscar_por_raio_v2', {
+      lat, lng, raio_metros: raioMetros, ...criteriosRpc(f, lim, tetoFaixa),
+    });
+    // A RPC ordena por DISTÂNCIA; o e-mail leva sempre o maior desconto primeiro.
+    return (linhas || []).sort(porDesconto);
+  };
+
+  const buscarPorRaio = async (f, lim, tetoFaixa = 0) => {
+    const c = f.__raio?.centro; const km = Number(f.__raio?.km) || 0;
+    if (!c || !km || !Number.isFinite(Number(c.lat)) || !Number.isFinite(Number(c.lng))) return null;
+    return buscarNoRaio(f, lim, tetoFaixa, Number(c.lat), Number(c.lng), km * 1000);
+  };
+
+  // ESCADA DE RAIO DO CONTRATO (regra do dono, 25/08): "não pode mandar que não encontrou".
+  //
+  // O passo do contrato casava LISTA DE CIDADES exata e parava ali — não tinha raio nenhum.
+  // Um filtro salvo cujas cidades não têm oferta na semana devolvia zero e ficava zero, e a
+  // única saída era o e-mail vir curto. Medido no caso que originou a regra: as cidades
+  // exatas do cliente (Barueri, Santana de Parnaíba) rendiam 0 sob o teto dele, enquanto o
+  // MESMO filtro num raio de 25 km em volta de Barueri rende 15 — o alcance nunca foi o
+  // problema, a ausência do raio era.
+  //
+  // A escada mantém TODO o resto do filtro (tipo, modalidade, pagamento, desconto, teto,
+  // UF) e abre SÓ a geografia, do anel menor para o maior, parando assim que fecha as
+  // vagas. Ou seja: continua sendo o que o cliente pediu, um pouco mais longe.
+  //
+  // Teto de 200 km preservado (regra do dono, 01/08: acima disso o deslocamento inviabiliza
+  // a visita/arremate). Se nem a 200 km fechar, manda menos — nunca "não encontramos".
+  const RAIOS_ESCADA = [25000, 50000, 100000, 200000];
+
+  const buscarPorFiltro = async (f, lim, tetoFaixa = 0, cidadeCadastro = '', ufCadastro = '') => {
+    const achados = new Map();
+    const juntar = (lista) => { for (const im of (lista || [])) if (im?.id && !achados.has(im.id)) achados.set(im.id, im); };
+
+    // 1) O recorte que o cliente desenhou: o círculo dele (__raio) ou a lista de cidades.
     const porRaio = await buscarPorRaio(f, lim, tetoFaixa);
-    if (porRaio) return porRaio;
-    return sbGet(`imoveis_leilao?select=${SEL}&ativo=eq.true${condFiltro(f, tetoFaixa)}&order=desconto_percentual.desc&limit=${lim}`);
+    if (porRaio) juntar(porRaio);
+    else juntar(await sbGet(`imoveis_leilao?select=${SEL}&ativo=eq.true${condFiltro(f, tetoFaixa)}&order=desconto_percentual.desc&limit=${lim}`));
+    if (achados.size >= lim) return [...achados.values()].sort(porDesconto);
+
+    // 2) Não fechou — abre o raio. Centro: o círculo do cliente, senão a 1ª cidade do
+    //    filtro, senão a cidade do CADASTRO (a âncora que vale sempre).
+    const cCli = f.__raio?.centro;
+    const centro = (cCli && Number.isFinite(Number(cCli.lat)) && Number.isFinite(Number(cCli.lng)))
+      ? { lat: Number(cCli.lat), lng: Number(cCli.lng) }
+      : centroide((Array.isArray(f.cidades) && f.cidades[0]) || cidadeCadastro, f.estado || ufCadastro);
+    if (!centro) return [...achados.values()].sort(porDesconto);
+
+    const jaCoberto = (Number(f.__raio?.km) || 0) * 1000;
+    for (const raio of RAIOS_ESCADA) {
+      if (achados.size >= lim) break;
+      if (raio <= jaCoberto) continue;   // o círculo do cliente já varreu este anel
+      juntar(await buscarNoRaio(f, lim, tetoFaixa, centro.lat, centro.lng, raio));
+    }
+    return [...achados.values()].sort(porDesconto);
   };
 
   let enviados = 0;
@@ -486,7 +542,7 @@ async function handler(req) {
         const porFiltro = Math.max(1, Math.ceil(LIMITE / savedFilters.length));
         for (const f of savedFilters) {
           if (pool.size >= LIMITE) break;
-          despejar(await buscarPorFiltro(f, porFiltro * 4, tetoFaixa), porFiltro, 'filtro');
+          despejar(await buscarPorFiltro(f, porFiltro * 4, tetoFaixa, perfil.endereco_cidade, perfil.endereco_uf), porFiltro, 'filtro');
         }
       }
 
