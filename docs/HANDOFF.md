@@ -4,6 +4,51 @@
 
 ---
 
+## 🧾 25/08 — A PRIMEIRA MEDIÇÃO DO META, E O DEFEITO QUE ELA REVELOU
+
+### Funcionou
+`marketing_metricas_dia` recebeu o primeiro dado às **08h10:04**:
+
+| Dia | Gasto | Cliques | Impressões |
+|---|---|---|---|
+| 24/08 | R$ 3,65 | 22 | 591 |
+| 25/08 (parcial) | R$ 0,51 | 3 | 69 |
+
+**CPC de R$ 0,17.** E do lado da visita: **25 linhas** em `visita_origem` com
+`utm_source=instagram` + `utm_medium=cpc` — exatamente os 25 cliques que o Meta reportou.
+Os macros chegaram preenchidos, não literais: `utm_campaign = TRF - SITE - LEILOES - AGO26`,
+`utm_content = REEL-2408-PASSO-A-PASSO-VENDA-DIRETA`, `utm_term = BR - 25-60 - ABERTO`.
+
+**Correção do meu próprio indicador:** eu disse que "o primeiro `fbclid` é a prova de que a
+ponte existe". `fbclid` veio **zero** nas 25 — a Meta não anexou o parâmetro. A prova veio pela
+UTM, que é o que de fato configuramos. Escolhi o indicador errado para declarar vitória.
+
+### E o defeito que isso revelou, consertado antes de morder
+Sem `fbclid`, `admin_funil_captacao` classificaria o primeiro cadastro desta campanha como
+**`UTM: instagram`** — enquanto o GASTO está sob **`Meta Ads`**. O painel junta cadastro e gasto
+pelo NOME do canal: as duas linhas nunca se encontrariam. Daria *"Meta Ads: R$ 4,16, 0
+cadastros"* ao lado de *"UTM: instagram: N cadastros, sem gasto"* — CAC e ROAS quebrados de
+novo, um dia depois de consertados, pela mesma família (a consulta olhando para um sinal que não
+veio, com o sinal que veio do lado).
+
+Pegou-se a tempo: **25 visitas, 0 cadastros** até agora. Se um cadastro tivesse entrado, a
+atribuição do primeiro cliente pago do canal ficaria errada no registro, e isso não se recupera.
+Migração `cadastro_do_meta_caia_fora_do_canal_meta.sql`: fonte de anúncio passa a ser
+reconhecida por `utm_source` + `utm_medium` pago, nos dois canais; `gclid`/`fbclid` mantêm
+precedência quando existem.
+
+### Duas observações do dado
+- **4 das 25 visitas gravaram `+` no lugar dos espaços** (`TRF+-+SITE+-+LEILOES+-+AGO26`). São
+  as 4 mais antigas, todas em 2 segundos (24/08 21:44) — cheiro de preview/bot, não de tráfego
+  real. Mas polui `group by utm_campaign`: a mesma campanha vira duas linhas. Não normalizei
+  ainda porque a correção tem trade-off (nome legítimo pode conter `+`).
+- **25 visitas, 0 cadastros.** É cedo (a campanha tem menos de 24h e segue em aprendizado), mas
+  é o número a vigiar: no Google são 133 visitas com `gclid` em 2 dias e 1 cadastro.
+
+### Invariantes: nada novo quebrou
+Os mesmos 4 de ontem — `relatorio_area_nao_confirmada` (10), `sem_foto` (1.841),
+`limpeza_encerrados_pulada` (4), `fonte_data_leilao_uniforme` (2).
+
 ## 🧾 24/08 (noite) — O FUNIL NÃO ENXERGAVA QUEM PAGOU
 
 ### O defeito, e por que era o pior lugar para ele
