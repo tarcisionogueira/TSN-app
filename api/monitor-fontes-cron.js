@@ -363,14 +363,42 @@ async function handler(req) {
   //     alerta quando um invariante REGRIDE: documento trocado, avaliação mis-read, valor
   //     sentinela, perfil sem role, ou uma lacuna de captura que CRESCEU além do teto.
   //     Complementa a Seção C (acervo/quantidade) com CORRETUDE por funcionalidade. Aditivo.
+  //     25/08: este bloco lia `const { data: inv }` SEM checar `error`, e o `catch` vazio
+  //     engolia o resto. Quando `qa_invariantes()` passou de 11,7s e cruzou o teto de 8s do
+  //     PostgREST (service_role tem rolconfig nulo e herda o authenticator), `inv` vinha
+  //     NULO, o laco nao iterava, e o monitor concluia que NENHUM dos 48 invariantes tinha
+  //     alerta: a trava de corretude do produto desarmada em silencio. Agora falha ao ler e
+  //     PROBLEMA relatado, nunca "nada a reportar" — e cronometramos, porque nao havia
+  //     numero nenhum sobre o custo desta chamada ate ela quebrar na cara do cliente.
+  let msInv = null, invOk = false;
   try {
-    const { data: inv } = await supabase.rpc('qa_invariantes');
-    for (const i of inv || []) {
-      if (i.status !== 'alerta') continue;
-      problemas.push({ fonte: 'QA', tipo: `invariante ${i.chave}`,
-        detalhe: `${i.titulo}: ${i.valor} (limite ${i.limite}; ${i.gravidade})` });
+    const t0 = Date.now();
+    const { data: inv, error: eInv } = await supabase.rpc('qa_invariantes');
+    msInv = Date.now() - t0;
+    if (eInv) {
+      problemas.push({ fonte: 'QA', tipo: 'invariantes NAO avaliados',
+        detalhe: `falha ao ler qa_invariantes apos ${msInv}ms: ${eInv.message}. As assercoes de corretude nao rodaram nesta rodada — silencio aqui NAO significa acervo sao.` });
+    } else {
+      invOk = true;
+      for (const i of inv || []) {
+        if (i.status !== 'alerta') continue;
+        problemas.push({ fonte: 'QA', tipo: `invariante ${i.chave}`,
+          detalhe: `${i.titulo}: ${i.valor} (limite ${i.limite}; ${i.gravidade})` });
+      }
     }
-  } catch { /* QA é aditivo — nunca derruba o monitor */ }
+  } catch (e) {
+    problemas.push({ fonte: 'QA', tipo: 'invariantes NAO avaliados',
+      detalhe: `excecao ao ler qa_invariantes: ${String(e?.message || e)}` });
+  }
+  // A medicao alimenta o invariante `qa_invariantes_lenta` (limite 5.000ms = 62% do teto de
+  // 8s), que acusa a aproximacao ANTES de virar 500 na tela. Sem medicao ha 3+ dias ele
+  // devolve 9999 e acusa tambem — "nao consegui checar" reprova, nao aprova.
+  if (msInv !== null) {
+    const { error: eMedida } = await supabase
+      .from('qa_invariantes_execucao')
+      .insert({ ms: msInv, ok: invOk });
+    if (eMedida) console.error('[qa] nao gravou a duracao dos invariantes:', eMedida.message);
+  }
 
   // D) VARREDURA "só Brasil" pós-geocode (rede Superbid). O guard do scraper
   //    (ehEstrangeiroSemUF) só reconhece estrangeiro quando a CIDADE já vem preenchida;
@@ -428,7 +456,10 @@ async function handler(req) {
   const assinatura = problemas.map(p => `${p.fonte}:${p.tipo}`).sort().join('|');
   const estado = await lerEstadoAlerta(supabase, 'monitor_fontes');
   const mudou = !estado || estado.assinatura !== assinatura;
-  const outageSerio = problemas.some(p => /coleta parada|falhou|sem coleta|sem acervo/i.test(p.tipo));
+  // `invariantes NAO avaliados` entra aqui de proposito: sem o heartbeat, o dedup por
+  // assinatura mandaria UM e-mail no dia em que a trava de corretude caiu e depois ficaria
+  // quieto enquanto ela seguisse caida — silencio de novo, so que mais educado.
+  const outageSerio = problemas.some(p => /coleta parada|falhou|sem coleta|sem acervo|invariantes NAO avaliados/i.test(p.tipo));
   const heartbeat = outageSerio && estado?.enviado_em &&
     (Date.now() - new Date(estado.enviado_em).getTime()) > REENVIO_DIAS * 86400000;
   const enviar = mudou || heartbeat;
