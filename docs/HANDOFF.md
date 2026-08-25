@@ -4,6 +4,136 @@
 
 ---
 
+## 🚨 25/08 (noite) — O GOOGLE PAROU DE TRAZER GENTE HOJE
+
+**Não é falha de rastreamento. O tráfego parou mesmo.** Medido às 22h UTC:
+
+| dia | visitas Google pago |
+|---|---|
+| 19–24/08 | 51 · 62 · 71 · 61 · 86 · 60 |
+| **25/08 (hoje)** | **0** |
+
+Comparando maçã com maçã — **hoje até agora: 0. Ontem até a mesma hora: 60.**
+
+### Como sei que não é o rastreador nem o site
+- **O rastreador funciona:** 77 visitas hoje, sendo 41 do Meta e 32 diretas, a última às 22:18 UTC.
+- **O site está no ar:** essas 77 visitas são gente navegando agora. (Não consegui `curl` daqui —
+  o proxy do ambiente recusa o CONNECT com 403 — então a prova é o nosso próprio rastro, não um teste externo.)
+- **Não é o `gclid` que sumiu:** todo dia `google/cpc` tem ~97% de gclid, com cauda normal de 1–5 sem.
+  Hoje foram **2 visitas, ambas sem gclid** — o tamanho exato da cauda. Se o auto-tagging tivesse
+  quebrado, veríamos ~60 visitas com UTM e zero gclid. O que caiu foi o VOLUME.
+- **Nenhum erro novo em `erros_cliente`** nos últimos 3 dias.
+
+### O que a fonte diz (Windsor/Google Ads) — e o que ela ainda não diz
+Até **24/08** a campanha "Pesquisa — Leilão de Imóveis (BR)" está `ENABLED` / `ELIGIBLE`, com
+`campaign_primary_status_reasons` **nulo** — sem bloqueio de política, orçamento ou pagamento.
+E gastou **R$ 19,72 de um orçamento de R$ 25**: nem consumiu a verba do dia.
+
+⚠️ **Windsor e a nossa ingestão são D-1: nenhum dos dois enxerga 25/08 ainda.** Então a causa de
+HOJE não está visível de dentro do sistema.
+
+### O sinal que já vinha antes da queda
+As impressões vinham caindo há 4 dias, com o gasto diário abaixo do teto:
+
+| dia | 20 | 21 | 22 | 23 | 24 |
+|---|---|---|---|---|---|
+| impressões | **1.723** | 1.275 | 1.284 | 1.107 | **830** |
+| gasto | 22,37 | 24,93 | 24,85 | 27,32 | **19,72** |
+
+Perder alcance sem gastar o orçamento é sinal de **queda de participação no leilão** (lance,
+índice de qualidade, concorrência) ou de restrição na conta — não de verba esgotada.
+
+### 👉 O que só você pode verificar, agora
+Abrir o Google Ads e olhar, nesta ordem: **faturamento/forma de pagamento** (cartão recusado
+para a conta inteira, que é a causa mais comum de parada abrupta sem aviso de política) ·
+**status da conta** · **anúncios reprovados** · se alguém pausou ou mexeu em lance/orçamento
+ontem/hoje. Amanhã às 08h10 UTC a ingestão traz o dia 25 e confirma se o gasto foi zero — mas
+esperar custa um dia de veiculação.
+
+---
+
+## 📌 25/08 — PENDÊNCIAS CONSOLIDADAS
+
+### 🔴 Urgente
+| # | Pendência | Estado |
+|---|---|---|
+| 1 | **Google Ads parou de trazer visita hoje** | 0 contra ~60/dia. Só você enxerga a conta |
+| 2 | **HASTA: 579 lotes ativos, ZERO fotos (100%)** | `hasta-parse.mjs` não devolve `link_foto`. É a maior parcela do `sem_foto` (1.928). Não consegui buscar a página daqui (proxy) para descobrir o seletor |
+
+### ⏳ Depende de decisão ou ação sua (herdadas, sem mudança)
+| # | Pendência |
+|---|---|
+| 3 | **O que são os 47 pagamentos "avulso"** (R$ 5.047,49, sem `user_id`) |
+| 4 | **UTM nos links da bio do Instagram** — o da calculadora (`/r/C39C0C`) não tem |
+| 5 | Felipe Scarafiz: acesso total + Finanças no portfólio Meta |
+| 6 | Nanda Oliveira com acesso à Página sem estar no portfólio |
+| 7 | Confirmar `VITE_META_PIXEL_ID` = `683455009174779` |
+| 8 | Renomear `BR - 25-60 - ABERTO` → `BR - 25MAIS - ABERTO` |
+| 9 | Verificação do anunciante no Meta (NOGUEIRA EMPREENDIMENTOS) |
+| 10 | Nomear analista · chaves Asaas/MP com escopo mínimo · WebISS para NFS-e |
+
+### 👥 Operação (o relógio humano)
+| # | Pendência | Número de hoje |
+|---|---|---|
+| 11 | Pagantes sem gerar relatório em 14 dias | **3** (era 4) |
+| 12 | Casos parados em `analise_solicitada` | mediana **32 dias**, nenhum passou desta etapa |
+| 13 | Chamados FECHADOS sem uma resposta humana | **7** |
+| 14 | Clientes sem perfil de triagem | **26 de 60** |
+
+### 🔧 Técnicas sem urgência
+| # | Pendência |
+|---|---|
+| 15 | `geral` (99/semana) e `pecini` (63) sem teto por propósito no Bright Data |
+| 16 | Rateio diário soma 207/dia contra ~78/dia que o teto global comportaria |
+| 17 | Sweep do sitemap é de mão única (desativa quem some, nunca reativa quem volta) |
+| 18 | `perfis.mkt_*` não tem `utm_content` nem `utm_term` (liga campanha, não anúncio) |
+| 19 | 10 dos 13 lotes novos da PECINI devolvem "página genérica" |
+
+---
+
+## ✅ 31/08 (SEGUNDA) — CONFERÊNCIA OBRIGATÓRIA DO E-MAIL DE OPORTUNIDADES
+
+O cron roda **segunda às 11h UTC**. Toda a cadeia nova (teto de capital, contrato antes da
+região, escada de raio, cabeçalhos, registro de cobertura) foi testada por unidade e contra o
+banco, mas **nenhum e-mail real saiu ainda**. Esta é a primeira prova de fogo. Rodar DEPOIS das
+11h UTC de 31/08:
+
+```sql
+-- 1) Saiu e-mail? Quantos, e com que assunto (o assunto agora deve trazer a cidade do CADASTRO)
+select assunto, status, count(*) , min(enviado_em), max(enviado_em)
+  from emails_log where tipo='oportunidades' and enviado_em > current_date - 1
+ group by 1,2 order by 3 desc;
+
+-- 2) O TETO DE CAPITAL foi respeitado? Tem que dar ZERO. (a trava alerta_acima_do_capital
+--    tambem zera sozinha 7 dias depois do conserto, mas aqui a conferencia e direta)
+with t as (select 'ate_150k' f,200000 v union all select '150_400k',520000
+           union all select '400k_1mi',1300000)
+select count(*) as enviados_acima_do_teto, max(i.valor_minimo) as maior
+  from alertas_enviados ae join perfis p on p.id=ae.user_id
+  join t on t.f=p.faixa_capital join imoveis_leilao i on i.id=ae.imovel_id
+ where ae.enviado_em > current_date - 1 and i.valor_minimo > t.v;
+
+-- 3) COBERTURA: alguem ficou sem fechar as 12 mesmo com a escada ate 200km?
+--    Linha aqui = providencia (ver tambem o card "Alerta incompleto" no Cliente 360)
+select p.nome, p.role, c.encontrados, c.vagas, c.contrato, c.regiao,
+       round(c.raio_max_m/1000.0) as km_percorridos, c.cidade_ref, c.uf_ref
+  from alerta_cobertura c left join perfis p on p.id=c.user_id
+ where c.executado_em > current_date - 1 order by c.encontrados;
+
+-- 4) A ANCORA funcionou? O e-mail do Erik deve sair com assunto "Barueri", nao "Sao Paulo",
+--    e a lista deve misturar lotes do FILTRO (SP, que ele salvou) com lotes da REGIAO (Barueri)
+select i.cidade, i.valor_minimo, i.desconto_percentual, i.forma_pagamento
+  from alertas_enviados ae join imoveis_leilao i on i.id = ae.imovel_id
+ where ae.user_id='d48bd3b7-1c6d-4c33-b642-dee7cc1835b7'
+   and ae.enviado_em > current_date - 1 order by i.cidade;
+```
+
+**Verde =** e-mails enviados · item 2 devolve **0** · item 4 mostra Barueri E São Paulo na mesma
+lista, todos ≤ R$ 200 mil. **Vermelho =** qualquer linha no item 2, ou o Erik recebendo só São
+Paulo (a âncora do cadastro não pegou).
+
+---
+
 ## 🧾 25/08 (tarde) — A ABA QUE VIGIA OS DEFEITOS ERA A QUE NÃO ABRIA
 
 Sessão inteira sobre **travas**. O saldo mais importante não é quantos defeitos foram
