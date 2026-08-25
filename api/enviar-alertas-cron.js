@@ -12,17 +12,24 @@
  * na busca (praça/tipo/valor/desconto/bairros), o e-mail respeita ESSE perfil e NÃO
  * cai no fallback amplo por estado — melhor não mandar do que mandar irrelevante.
  *
- * Seleção por usuário (ordem de interesse):
- * As 12 vagas são DIVIDIDAS entre os critérios (regra do dono): com filtros salvos
- * E cidade+perfil → 6 vagas p/ os filtros salvos + 6 p/ cidade+perfil; a sobra de um
- * critério é preenchida pelo outro. Só um critério presente → ele leva as 12.
- *   1. Filtros salvos na busca (filtros_salvos) — sinal de interesse explícito.
- *   2. Cidade do cadastro/triagem (perfis.endereco_cidade/uf) com RAIO CRESCENTE
- *      (50→100→200km, MÁXIMO 200km — deslocamento viável p/ o investidor) RESPEITANDO
- *      O PERFIL DO INVESTIDOR: 1º passe com tipo/modalidade/pagamento (filtros do
- *      alerta + forma_pagamento da triagem) e TETO de capital (faixa_capital da
- *      triagem × valorMax do alerta, o menor); 2º passe relaxa as preferências mas
- *      mantém o teto — acima do capital do cliente não entra nunca.
+ * Seleção por usuário — CONTRATO PRIMEIRO, REGIÃO DEPOIS (regra do dono, 25/08).
+ * Substituiu a divisão fixa de 6+6, que reservava metade do e-mail para sugestão mesmo
+ * quando o filtro do cliente tinha material de sobra.
+ *   1. CONTRATO — filtros salvos (filtros_salvos). É o que o cliente pediu
+ *      explicitamente: entra primeiro e pode levar as 12 vagas, distribuídas ENTRE os
+ *      filtros para que um prolífico não engula os outros. Exige TUDO o que ele marcou,
+ *      inclusive forma de pagamento, mais o teto de capital da triagem.
+ *   2. REGIÃO — só as vagas que sobraram. Ancorada na CIDADE DO CADASTRO
+ *      (perfis.endereco_cidade/uf), que vale SEMPRE: antes ela era substituída pela
+ *      cidade do filtro salvo mais recente, e quem morava em Barueri com um filtro de
+ *      São Paulo recebia "12 oportunidades em São Paulo" sem nada da própria região.
+ *      Raio crescente 50→100→200km (MÁXIMO 200km — deslocamento viável). Respeita teto
+ *      de capital e TIPO, mas NÃO exige forma de pagamento: medido em Barueri+25km sob
+ *      o teto do cliente, são 100 imóveis no perfil dele e apenas 1 exigindo
+ *      "financiado" — exigir pagamento aqui transformava sugestão em e-mail vazio.
+ *      Acima do capital do cliente não entra nunca, em nenhum dos dois passos.
+ *   ORDEM no e-mail: bloco do contrato primeiro, bloco da região depois, cada um por
+ *   maior desconto, com cabeçalho separando os dois quando há os dois.
  *   3. Se tiver arrematação registrada → inclui similares (mesmo tipo/estado, ≤ teto).
  *   4. Sem nenhuma referência de região → melhores do país (≤ teto);
  *      se não fechar 12, manda os que houver, por maior desconto.
@@ -428,20 +435,28 @@ async function handler(req) {
       const savedFilters = filtroListMap[perfil.id] || [];
       const temPerfil = savedFilters.length > 0;
       const filtroBase = savedFilters[0] || a?.filtros || {};
-      const cidadesRef = (Array.isArray(filtroBase.cidades) && filtroBase.cidades.length)
-        ? filtroBase.cidades.filter(Boolean)
-        : [perfil.endereco_cidade].filter(Boolean);
+      // 25/08 (regra do dono): a CIDADE DO CADASTRO é a âncora geográfica e vale SEMPRE.
+      // Antes ela só entrava quando NÃO havia filtro salvo com cidade — e como `filtroBase` é
+      // o filtro mais RECENTE (order=criado_em.desc), um filtro salvo de outra cidade a
+      // substituía por inteiro. Foi o que aconteceu com o cliente que perguntou por que não
+      // recebia: mora em Barueri, salvou um filtro de São Paulo, e o e-mail virou
+      // "12 oportunidades em São Paulo — SP", sem um único imóvel da região dele.
+      const cidadesRegiao = [perfil.endereco_cidade, ...(Array.isArray(filtroBase.cidades) ? filtroBase.cidades : [])]
+        .map(c => String(c || '').trim()).filter(Boolean)
+        .filter((c, i, arr) => arr.findIndex(x => normCid(x) === normCid(c)) === i);
+      const cidadesRef = cidadesRegiao;
       const cidade = cidadesRef[0] || '';
-      const uf = filtroBase.estado || perfil.endereco_uf || '';
+      // UF do CADASTRO primeiro, pelo mesmo motivo.
+      const uf = perfil.endereco_uf || filtroBase.estado || '';
 
       const enviadosSet = enviadosMap[perfil.id] || new Set();
       const LIMITE = 12;
       const pool = new Map();
-      const add = (im, isNovo) => { if (im && im.id && !pool.has(im.id)) pool.set(im.id, { im, isNovo }); };
+      const add = (im, isNovo, origem) => { if (im && im.id && !pool.has(im.id)) pool.set(im.id, { im, isNovo, origem }); };
       // O e-mail SÓ leva imóveis NOVOS (nunca enviados a este usuário) — sempre novas
       // oportunidades, sem repetir. Se não houver novidade suficiente, manda menos (não
       // recicla). Cada fonte já vem ordenada por maior desconto (>40% lideram).
-      const despejar = (lista, limite) => {
+      const despejar = (lista, limite, origem = 'regiao') => {
         // LEILÃO ENCERRADO nunca entra no e-mail (07/08). Mandar toda segunda um lote cujo prazo
         // já passou é pior que mandar menos: o cliente clica, se interessa e descobre que não dá
         // mais para dar lance. Ponto de estrangulamento único — TODAS as fontes de lote (filtro
@@ -451,7 +466,7 @@ async function handler(req) {
         let n = 0;
         for (const im of frescos) {
           if (n >= limite || pool.size >= LIMITE) break;
-          if (!pool.has(im.id)) { add(im, true); n++; }
+          if (!pool.has(im.id)) { add(im, true, origem); n++; }
         }
       };
 
@@ -460,17 +475,18 @@ async function handler(req) {
       // passo 1 mandava imóvel acima do capital do cliente.
       const tetoFaixa = TETO_FAIXA[perfil.faixa_capital] || 0;
 
-      // 1) COTA DOS FILTROS SALVOS (regra do dono: DIVIDIR as 12 entre os critérios).
-      //    Com cidade+perfil TAMBÉM presentes → metade das vagas (6) p/ os filtros
-      //    salvos, distribuída entre eles; sem cidade de referência → filtros levam
-      //    as 12. A sobra de um critério é preenchida pelo outro (passo 2 e 2b).
-      const temCidadeRef = cidadesRef.length > 0;
+      // 1) O CONTRATO — os filtros salvos (regra do dono, 25/08).
+      //    Era uma COTA de 6 de 12; virou PRIORIDADE: o que o cliente pediu explicitamente
+      //    entra primeiro e pode levar as 12 vagas. Só o que sobrar é preenchido pelo
+      //    passo 2 (região do cadastro). A divisão fixa em 6 reservava metade do e-mail
+      //    para sugestão mesmo quando o filtro do cliente tinha material de sobra.
+      //    As 12 continuam distribuídas ENTRE os filtros salvos, para que um filtro
+      //    prolífico não engula os outros três.
       if (temPerfil) {
-        const cotaFiltros = temCidadeRef ? Math.round(LIMITE / 2) : LIMITE; // 6 de 12
-        const porFiltro = Math.max(1, Math.ceil(cotaFiltros / savedFilters.length));
+        const porFiltro = Math.max(1, Math.ceil(LIMITE / savedFilters.length));
         for (const f of savedFilters) {
-          if (pool.size >= cotaFiltros) break;
-          despejar(await buscarPorFiltro(f, porFiltro * 4, tetoFaixa), porFiltro);
+          if (pool.size >= LIMITE) break;
+          despejar(await buscarPorFiltro(f, porFiltro * 4, tetoFaixa), porFiltro, 'filtro');
         }
       }
 
@@ -495,11 +511,15 @@ async function handler(req) {
       // pagCanon: o filtro salvo guarda a CHAVE do checkbox ('aVista'); a RPC espera o valor
       // canônico ('a_vista'). Sem converter, a preferência de pagamento do cliente ia para a
       // RPC como string desconhecida e não casava nada.
-      const pagPref = new Set(pagCanon(filtroBase.pagamento));
-      if (['a_vista', 'financiado'].includes(perfil.forma_pagamento)) pagPref.add(perfil.forma_pagamento);
-      const temPref = tiposPref.length || modsPref.length || pagPref.size;
+      // 25/08 (regra do dono): o preenchimento por REGIÃO respeita teto de capital e TIPO,
+      // mas NÃO exige a forma de pagamento. Motivo medido no caso que originou a mudança:
+      // em Barueri + 25 km, sob o teto do cliente, há 100 imóveis no perfil dele — mas só
+      // 1 quando se exige "financiado". Exigir pagamento aqui transformava a sugestão de
+      // região em e-mail vazio. O CONTRATO (passo 1) continua exigindo tudo, inclusive
+      // pagamento: lá é o que o cliente pediu, aqui é o que a região dele oferece.
+      const temPref = tiposPref.length || modsPref.length;
       const passes = temPref
-        ? [{ tipos: tiposPref, mods: modsPref, pags: [...pagPref] }, { tipos: [], mods: [], pags: [] }]
+        ? [{ tipos: tiposPref, mods: modsPref, pags: [] }, { tipos: [], mods: [], pags: [] }]
         : [{ tipos: [], mods: [], pags: [] }];
       for (const pass of passes) {
         if (pool.size >= LIMITE) break;
@@ -526,14 +546,10 @@ async function handler(req) {
         }
       }
 
-      // 2b) SOBRA da divisão: se cidade+perfil não fechou a parte dele, os filtros
-      //     salvos completam ALÉM da própria cota (nenhuma vaga fica ociosa à toa).
-      if (temPerfil && pool.size < LIMITE) {
-        for (const f of savedFilters) {
-          if (pool.size >= LIMITE) break;
-          despejar(await buscarPorFiltro(f, (LIMITE - pool.size) * 2), LIMITE - pool.size);
-        }
-      }
+      // 2b) REMOVIDO em 25/08. Existia para devolver aos filtros salvos a sobra da cota de
+      //     6; com o passo 1 varrendo TODOS os filtros já com as 12 vagas, este bloco
+      //     repetia exatamente as mesmas consultas e não podia achar nada novo — só
+      //     gastava chamada e embaralhava a ordem entre contrato e região.
 
       // 3) Similares às arrematações do usuário (mesmo tipo), se ainda faltar.
       if (pool.size < LIMITE) {
@@ -558,16 +574,45 @@ async function handler(req) {
       // qualquer que tenha sido o caminho de seleção. Exclui 1ª praça / valor perto da
       // avaliação (ex.: extrajudicial da Caixa antes da 2ª praça, desconto ~0 ou negativo).
       // Ordena por MAIOR desconto e pega até 12.
-      const top = [...pool.values()].map(v => v.im)
-        .filter(im => (Number(im.desconto_percentual) || 0) >= DESC_MIN)
-        .sort((x, y) => (Number(y.desconto_percentual) || 0) - (Number(x.desconto_percentual) || 0))
+      // ORDEM (regra do dono, 25/08): primeiro o que o cliente PEDIU (filtro salvo), depois
+      // o que a REGIÃO DELE oferece — cada bloco pelo maior desconto. Antes tudo era
+      // ordenado só por desconto, e uma sugestão de região podia abrir o e-mail à frente do
+      // imóvel que casava exatamente com o filtro que ele mesmo montou.
+      const selec = [...pool.values()]
+        .filter(v => (Number(v.im.desconto_percentual) || 0) >= DESC_MIN)
+        .sort((x, y) => {
+          const px = x.origem === 'filtro' ? 0 : 1;
+          const py = y.origem === 'filtro' ? 0 : 1;
+          if (px !== py) return px - py;
+          return (Number(y.im.desconto_percentual) || 0) - (Number(x.im.desconto_percentual) || 0);
+        })
         .slice(0, LIMITE);
+      const top = selec.map(v => v.im);
       if (!top.length) continue;
+      const nContrato = selec.filter(v => v.origem === 'filtro').length;
 
       const local = [cidade, uf].filter(Boolean).join(' — ') || 'Brasil';
       const unsubUrl = `${BASE}/api/cancelar-alertas?token=${assinarUnsub(perfil.id)}`; // one-click LGPD (sem login)
 
-      const cards = top.map(im => {
+      // Cabeçalho de cada bloco. Sem isto o cliente não distingue o que ele pediu do que a
+      // plataforma sugeriu — foi a confusão que gerou a pergunta ("fiz 4 filtros e recebo
+      // imóvel de outra cidade"). Só aparece quando há os dois tipos no mesmo e-mail.
+      const tituloBloco = (txt, sub) => `
+        <div style="margin:4px 0 12px;">
+          <div style="font-size:13px;font-weight:800;color:#0f172a;">${escapeHtml(txt)}</div>
+          <div style="font-size:11px;color:#94a3b8;margin-top:2px;">${escapeHtml(sub)}</div>
+        </div>`;
+      const temOsDois = nContrato > 0 && nContrato < selec.length;
+
+      const cards = selec.map(({ im, origem }, idx) => {
+        let cabecalho = '';
+        if (temOsDois && idx === 0) {
+          cabecalho = tituloBloco('Do seu filtro salvo', 'Bate com os critérios que você montou na Busca');
+        } else if (temOsDois && idx === nContrato) {
+          cabecalho = tituloBloco(`Da sua região — ${cidade || 'seu cadastro'}`,
+            'Dentro do seu perfil de investidor, para completar a semana');
+        }
+        void origem;
         const url = `${BASE}/#/imovel/${im.id}`;
         const fotoUrl = fotoParaEmail(im, BASE);
         const foto = fotoUrl ? `<a href="${url}"><img src="${fotoUrl}" alt="" style="width:100%;height:130px;object-fit:cover;display:block;border-radius:10px 10px 0 0;"></a>` : '';
@@ -577,7 +622,7 @@ async function handler(req) {
         // não o dia em que o leilão abriu.
         const dataLabel = fmtData(im.data_fim || im.data_leilao);
         const dataTag = dataLabel ? `<span style="display:inline-block;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;margin-left:4px;">📅 ${dataLabel}</span>` : '';
-        return `
+        return `${cabecalho}
         <div style="border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;margin-bottom:12px;background:#fff;">
           ${foto}
           <div style="padding:14px 16px;">
