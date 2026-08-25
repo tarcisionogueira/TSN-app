@@ -433,7 +433,7 @@ async function handler(req) {
   // a visita/arremate). Se nem a 200 km fechar, manda menos — nunca "não encontramos".
   const RAIOS_ESCADA = [25000, 50000, 100000, 200000];
 
-  const buscarPorFiltro = async (f, lim, tetoFaixa = 0, cidadeCadastro = '', ufCadastro = '') => {
+  const buscarPorFiltro = async (f, lim, tetoFaixa = 0, cidadeCadastro = '', ufCadastro = '', alcance = null) => {
     const achados = new Map();
     const juntar = (lista) => { for (const im of (lista || [])) if (im?.id && !achados.has(im.id)) achados.set(im.id, im); };
 
@@ -456,6 +456,9 @@ async function handler(req) {
       if (achados.size >= lim) break;
       if (raio <= jaCoberto) continue;   // o círculo do cliente já varreu este anel
       juntar(await buscarNoRaio(f, lim, tetoFaixa, centro.lat, centro.lng, raio));
+      // Registra o alcance: sem isto, o sinal no Cliente 360 diria "faltou" sem dizer
+      // até onde procuramos — e a providência do dono depende exatamente disso.
+      if (alcance) alcance.max = Math.max(alcance.max || 0, raio);
     }
     return [...achados.values()].sort(porDesconto);
   };
@@ -530,6 +533,8 @@ async function handler(req) {
       // filtros salvos precisa dele. Antes de 25/08 ele nascia mais abaixo e por isso o
       // passo 1 mandava imóvel acima do capital do cliente.
       const tetoFaixa = TETO_FAIXA[perfil.faixa_capital] || 0;
+      // Até onde a busca precisou ir. Vira `raio_max_m` no registro do Cliente 360.
+      const alcance = { max: 0 };
 
       // 1) O CONTRATO — os filtros salvos (regra do dono, 25/08).
       //    Era uma COTA de 6 de 12; virou PRIORIDADE: o que o cliente pediu explicitamente
@@ -542,7 +547,7 @@ async function handler(req) {
         const porFiltro = Math.max(1, Math.ceil(LIMITE / savedFilters.length));
         for (const f of savedFilters) {
           if (pool.size >= LIMITE) break;
-          despejar(await buscarPorFiltro(f, porFiltro * 4, tetoFaixa, perfil.endereco_cidade, perfil.endereco_uf), porFiltro, 'filtro');
+          despejar(await buscarPorFiltro(f, porFiltro * 4, tetoFaixa, perfil.endereco_cidade, perfil.endereco_uf, alcance), porFiltro, 'filtro');
         }
       }
 
@@ -590,6 +595,7 @@ async function handler(req) {
               tipos_filtro: pass.tipos, modalidades_filtro: pass.mods, pagamentos_filtro: pass.pags,
               ...(tetoPerfil ? { valor_max: tetoPerfil } : {}),
             }), LIMITE - pool.size);
+            alcance.max = Math.max(alcance.max, raio);
           }
         }
       }
@@ -646,6 +652,31 @@ async function handler(req) {
       const top = selec.map(v => v.im);
       if (!top.length) continue;
       const nContrato = selec.filter(v => v.origem === 'filtro').length;
+
+      // COBERTURA INCOMPLETA → registro no Cliente 360 (regra do dono, 25/08).
+      // O teto de 200 km fica de pé (regra de 01/08: acima disso o deslocamento inviabiliza
+      // visita e arremate). Mas quando nem os 200 km fecham as 12, o e-mail sai curto — e
+      // isso NÃO pode acontecer em silêncio: grava aqui, aparece no Cliente 360, e o dono
+      // decide a providência. Só grava quando FALTA; e-mail completo não deixa rastro.
+      if (!testeEmail && top.length < LIMITE) {
+        try {
+          const rCob = await fetch(`${URL_}/rest/v1/alerta_cobertura`, {
+            method: 'POST',
+            headers: { ...hdr, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+            body: JSON.stringify({
+              user_id: perfil.id, vagas: LIMITE, encontrados: top.length,
+              contrato: nContrato, regiao: top.length - nContrato,
+              raio_max_m: alcance.max || null,
+              cidade_ref: cidade || null, uf_ref: uf || null,
+            }),
+            signal: AbortSignal.timeout(15000),
+          });
+          // Checar .ok de propósito: se a gravação falhar em silêncio, o Cliente 360 mostra
+          // "0 clientes com cobertura incompleta" — ausência de registro entregue como
+          // ausência de problema, que é o defeito que este registro existe para evitar.
+          if (!rCob.ok) console.error('[alertas] cobertura', rCob.status, (await rCob.text().catch(() => '')).slice(0, 200));
+        } catch (e) { console.error('[alertas] cobertura erro', e?.message); }
+      }
 
       const local = [cidade, uf].filter(Boolean).join(' — ') || 'Brasil';
       const unsubUrl = `${BASE}/api/cancelar-alertas?token=${assinarUnsub(perfil.id)}`; // one-click LGPD (sem login)

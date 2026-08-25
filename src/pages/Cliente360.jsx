@@ -355,6 +355,10 @@ ${Array.isArray(base._truncado) && base._truncado.length ? `<div style="margin-t
               // vermelho: não houve prejuízo. Mas fica à vista porque é o único lugar onde ele
               // aparece — na tela do cliente, por decisão, ele não aparece mais.
               ['Rede recup. (7d)', stats.erros_invisiveis_7d, stats.erros_invisiveis_7d > 0 ? '#b45309' : '#059669'],
+              // E-mail semanal que não fechou as 12 vagas NEM esgotando a escada de raio até
+              // 200 km (regra do dono, 25/08: o teto fica, mas quando não basta tem que
+              // aparecer aqui para virar providência). Só conta quem ficou faltando.
+              ['Alerta incompleto (7d)', stats.alerta_incompleto_7d, stats.alerta_incompleto_7d > 0 ? '#d97706' : '#059669'],
             ].map(([l, v, c]) => (
               <div key={l} style={{ background: '#f8fafc', borderRadius: 10, padding: '10px 12px' }}>
                 <div style={{ fontSize: 22, fontWeight: 900, color: c }}>{v ?? 0}</div>
@@ -390,6 +394,31 @@ ${Array.isArray(base._truncado) && base._truncado.length ? `<div style="margin-t
                 <div><div style={{ ...label, marginBottom: 5 }}>Tipos mais buscados</div>
                   <div style={{ fontSize: 12, color: '#334155' }}>{stats.top_tipos.map((t) => `${t.tipo_imovel} (${t.n})`).join(' · ')}</div></div>
               )}
+            </div>
+          )}
+          {/* COBERTURA INCOMPLETA — cliente cujo e-mail semanal saiu com menos de 12 imóveis
+              mesmo depois de a escada de raio esgotar os 200 km. Âmbar, não vermelho: nada
+              quebrou, o acervo é que não tinha o que ele pediu por perto. É a lista que o
+              dono pediu para "tomar uma providência" — mudar o filtro com o cliente, ampliar
+              a captura naquela praça, ou rever o teto de 200 km para o caso dele. */}
+          {stats.alerta_incompleto_recentes?.length > 0 && (
+            <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '10px 12px' }}>
+              <div style={{ ...label, marginBottom: 6, color: '#b45309' }}>
+                Alerta incompleto — {stats.alerta_incompleto_clientes} cliente(s) em 7 dias · nem a 200 km fechou as 12
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {stats.alerta_incompleto_recentes.map((c, i) => (
+                  <div key={i} style={{ fontSize: 11.5, color: '#78350f', display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
+                      <b>{c.nome || 'cliente'}</b>{c.role ? ` (${c.role})` : ''} · <b>{c.encontrados}</b> de {c.vagas}
+                      {' '}<span style={{ color: '#92400e' }}>({c.contrato} do filtro · {c.regiao} da região)</span>
+                      {c.cidade_ref ? ` · ${c.cidade_ref}${c.uf_ref ? '/' + c.uf_ref : ''}` : ''}
+                      {c.raio_max_m ? ` · buscou até ${Math.round(c.raio_max_m / 1000)} km` : ''}
+                    </span>
+                    <span style={{ whiteSpace: 'nowrap', color: '#a16207' }}>{new Date(c.executado_em).toLocaleDateString('pt-BR')}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
           {/* FALHAS DE RELATÓRIO (24h) — o que quebrou, em qual cidade e POR QUÊ (causa da API).
