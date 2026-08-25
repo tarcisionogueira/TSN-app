@@ -370,6 +370,26 @@ async function handler(req) {
   //     alerta: a trava de corretude do produto desarmada em silencio. Agora falha ao ler e
   //     PROBLEMA relatado, nunca "nada a reportar" — e cronometramos, porque nao havia
   //     numero nenhum sobre o custo desta chamada ate ela quebrar na cara do cliente.
+  // MEDICAO CARA, FORA DO CAMINHO DO CLIQUE. `pino_generico_como_rua` custa ~2,8s: rodar
+  // isso a cada abertura do /admin comeria metade do teto de 8s que o conserto de hoje
+  // recuperou. Medimos AQUI, uma vez por dia, e o invariante le o numero gravado. Tem que
+  // vir ANTES do rpc abaixo — senao o painel mostra a medicao de ontem.
+  try {
+    const { data: pinos, error: ePin } = await supabase.rpc('qa_pinos_genericos');
+    if (ePin) {
+      problemas.push({ fonte: 'QA', tipo: 'medicao de pinos genericos falhou',
+        detalhe: `${ePin.message}. O invariante pino_generico_como_rua vai acusar 9999 ate voltar a ser medido — de proposito.` });
+    } else {
+      const { error: eGrava } = await supabase
+        .from('qa_medida_externa')
+        .upsert({ chave: 'pino_generico_como_rua', valor: pinos, medido_em: new Date().toISOString() },
+                { onConflict: 'chave' });
+      if (eGrava) console.error('[qa] nao gravou a medicao de pinos genericos:', eGrava.message);
+    }
+  } catch (e) {
+    problemas.push({ fonte: 'QA', tipo: 'medicao de pinos genericos falhou', detalhe: String(e?.message || e) });
+  }
+
   let msInv = null, invOk = false;
   try {
     const t0 = Date.now();
