@@ -28,6 +28,23 @@ divergência. `verificar:sintaxe`, `verificar:padroes` e `npm run build` passara
 | `86be102` | Índice nacional lista as 27 UFs, não só as que têm lote |
 | `f45f41a` | Invariante `estado_fora_do_padrao` + verificação represada |
 
+### ✅ Conferido no ar, não deduzido
+`https://www.bidprobrasil.com.br/leiloes` foi buscada depois do deploy (`x-vercel-cache: MISS`,
+HTTP 200) e devolve o layout novo com dado REAL:
+
+- **29.353 lotes em 27 estados** — os 27 com lote, **nenhum** cartão "sem lote hoje".
+- **Bahia: 995 lotes**, presente na lista. A pergunta do dono ("por que aparece sem lotes se
+  temos lotes?") era efeito da prévia fictícia, não do acervo. Fica registrado para não voltar
+  como suspeita.
+- Hero, busca no topo, cartões de UF e a faixa branca — todos servidos no HTML do servidor.
+
+Maior: RJ 8.454 · GO 4.549 · SP 4.530 · PE 1.375 · RS 1.279 · MG 1.224 · PR 1.051 · BA 995.
+Menor: RR 7 · AP 6.
+
+Isso **não dispensa** o invariante `estado_fora_do_padrao`: a página mostra o que sobrou DEPOIS
+do filtro por sigla, então linha malformada continua invisível aqui — é exatamente por isso que
+a vigilância tem que ser no banco, não na tela.
+
 ### ⚠️ O que o deploy NÃO faz por si
 `supabase/migrations/qa_invariante_estado_fora_do_padrao.sql` **precisa ser aplicado à mão** no
 SQL Editor. Migração no repo não é migração aplicada — é a forma de falha nº 7 do CLAUDE.md, e já
