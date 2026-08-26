@@ -16,6 +16,9 @@ export default function ProdutoPublico({ tipo }) {
   const [produto, setProduto] = useState(null);
   const [erroLeitura, setErroLeitura] = useState(false);
   const [upsell, setUpsell] = useState([]);
+  const [bumps, setBumps] = useState([]);        // ofertas configuradas, já com preço
+  const [aceitos, setAceitos] = useState([]);    // o que o cliente foi aceitando
+
   const [aulas, setAulas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [comprouAvulso, setComprouAvulso] = useState(false);
@@ -57,7 +60,10 @@ export default function ProdutoPublico({ tipo }) {
     try {
       const refCod = ref || lerRef();
       const nome = nomePerfil || user.user_metadata?.nome || user.user_metadata?.full_name || '';
-      const payload = { produto_tipo: tipo, produto_id: id, ref: refCod, nome, email: user.email };
+      // Só os IDs vão para o servidor. O preço de cada extra é recalculado lá pelo cadastro —
+      // mandar valor daqui deixaria comprar um curso de R$ 1.497 por R$ 1,00.
+      const extras = aceitos.map(a => ({ tipo: a.tipo, id: a.id }));
+      const payload = { produto_tipo: tipo, produto_id: id, ref: refCod, nome, email: user.email, extras };
       let link = null, jaTem = false;
 
       // 1) Mercado Pago (Checkout Pro hospedado)
@@ -121,7 +127,7 @@ export default function ProdutoPublico({ tipo }) {
         // Página PÚBLICA: seleciona só metadados — NUNCA arquivo_url/pdf_url (link
         // do PDF pago). O arquivo é entregue só na leitura, para quem tem acesso.
         const { data: e, error: eE } = await supabase.from('ebooks_admin')
-          .select('id, titulo, descricao, capa_url, preco, gratuito, ativo, upsell_produtos')
+          .select('id, titulo, descricao, capa_url, preco, gratuito, ativo, upsell_produtos, bump_produtos')
           .eq('id', id).eq('ativo', true).single();
         if (eE && eE.code !== 'PGRST116') setErroLeitura(true);
         setProduto(e);
@@ -130,6 +136,41 @@ export default function ProdutoPublico({ tipo }) {
     }
     load();
   }, [id, tipo]);
+
+  // ── ORDER BUMP (26/08) ──────────────────────────────────────────────────────
+  // Resolve os produtos oferecidos como "quer incluir também?". O preço com desconto é
+  // calculado aqui só para EXIBIR — quem cobra é a RPC, que recalcula pelo cadastro. Se
+  // esta conta e a do servidor discordarem, quem vale é a do servidor.
+  useEffect(() => {
+    const lista = Array.isArray(produto?.bump_produtos) ? produto.bump_produtos : [];
+    if (!lista.length) { setBumps([]); return; }
+    let cancelado = false;
+    (async () => {
+      const ids = { curso: [], ebook: [] };
+      lista.forEach(it => { if (ids[it?.tipo]) ids[it.tipo].push(it.id); });
+      const achados = [];
+      if (ids.curso.length) {
+        const { data } = await supabase.from('cursos_admin') // padrao-ok: oferta opcional — falha some com o bump, a compra principal segue
+          .select('id, titulo, subtitulo, preco, cor, emoji, capa_url').in('id', ids.curso).eq('ativo', true);
+        (data || []).forEach(c => achados.push({ ...c, tipo: 'curso' }));
+      }
+      if (ids.ebook.length) {
+        const { data } = await supabase.from('ebooks_admin') // padrao-ok: oferta opcional — falha some com o bump, a compra principal segue
+          .select('id, titulo, descricao, preco, capa_url').in('id', ids.ebook).eq('ativo', true);
+        (data || []).forEach(e => achados.push({ ...e, tipo: 'ebook' }));
+      }
+      // Mantém a ORDEM do cadastro: é ela que decide o que se oferece primeiro.
+      const ordenados = lista.map(cfg => {
+        const achado = achados.find(a => a.id === cfg.id && a.tipo === cfg.tipo);
+        if (!achado) return null;
+        const pct = Math.max(0, Math.min(90, Number(cfg.desconto_pct) || 0));
+        return { ...achado, desconto_pct: pct, valor_cheio: Number(achado.preco) || 0,
+                 valor_com_desconto: Math.round((Number(achado.preco) || 0) * (1 - pct / 100) * 100) / 100 };
+      }).filter(Boolean);
+      if (!cancelado) setBumps(ordenados);
+    })();
+    return () => { cancelado = true; };
+  }, [produto]);
 
   // ── UPSELL (26/08) ──────────────────────────────────────────────────────────
   // Os produtos que o cadastro marcou como "oferecidos à parte". São SUGESTÃO: não liberam
@@ -177,6 +218,13 @@ export default function ProdutoPublico({ tipo }) {
       </div>
     )
     : <div style={{ textAlign: 'center', padding: 80, color: '#94a3b8' }}>Produto não encontrado.</div>;
+
+  // A PRÓXIMA oferta: a primeira da ordem do cadastro que ainda não foi aceita e que o
+  // cliente ainda não possui. `undefined` esconde o bloco — fim das ofertas.
+  const proximoBump = bumps.find(b =>
+    !aceitos.some(a => a.id === b.id && a.tipo === b.tipo));
+  const totalComExtras = (Number(produto?.preco) || 0)
+    + aceitos.reduce((soma, a) => soma + (Number(a.valor_com_desconto) || 0), 0);
 
   const temPlano = user && ['top2','assessorado','clube','analista','advogado','admin'].includes(role);
   const temAcesso = temPlano || comprouAvulso;
@@ -318,6 +366,60 @@ export default function ProdutoPublico({ tipo }) {
                     ? '📦 Adquira o acesso a este conteúdo'
                     : '⭐ Disponível para assinantes Investidor Pro'}
                 </div>
+                {/* ── ORDER BUMP: um de cada vez ──────────────────────────────
+                    Mostra a PRÓXIMA oferta ainda não aceita. Ao aceitar, a seguinte
+                    aparece — é assim que se chega a dois ou três cursos sem despejar
+                    tudo de uma vez na cara de quem só queria um. */}
+                {isPago && proximoBump && (
+                  <div style={{ border: '2px dashed #7C3AED', background: '#faf5ff', borderRadius: 12, padding: '14px 15px', marginBottom: 16 }}>
+                    <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', cursor: 'pointer' }}>
+                      <input type="checkbox" checked={false} onChange={() => setAceitos([...aceitos, proximoBump])}
+                        style={{ marginTop: 3, width: 17, height: 17, flexShrink: 0, cursor: 'pointer' }} />
+                      <div>
+                        <div style={{ fontSize: 12, fontWeight: 800, color: '#6D28D9', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 4 }}>
+                          Sim, quero incluir também
+                        </div>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: '#111', lineHeight: 1.35, marginBottom: 4 }}>
+                          {proximoBump.tipo === 'curso' ? '🎓' : '📖'} {proximoBump.titulo}
+                        </div>
+                        <div style={{ fontSize: 13.5 }}>
+                          <span style={{ color: '#94a3b8', textDecoration: 'line-through', marginRight: 6 }}>
+                            R$ {proximoBump.valor_cheio.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                          <strong style={{ color: '#047857', fontSize: 15 }}>
+                            R$ {proximoBump.valor_com_desconto.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </strong>
+                          <span style={{ color: '#6D28D9', fontWeight: 700, marginLeft: 6 }}>−{proximoBump.desconto_pct}%</span>
+                        </div>
+                      </div>
+                    </label>
+                  </div>
+                )}
+
+                {/* O que já foi aceito — com como TIRAR. Bump sem saída vira arrependimento
+                    no cartão, e chargeback custa mais que a venda extra. */}
+                {aceitos.length > 0 && (
+                  <div style={{ marginBottom: 16 }}>
+                    {aceitos.map(a => (
+                      <div key={`ac-${a.tipo}-${a.id}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 9, padding: '9px 11px', marginBottom: 6 }}>
+                        <div style={{ fontSize: 13, color: '#166534', fontWeight: 600, lineHeight: 1.3 }}>
+                          ✓ {a.titulo}
+                          <span style={{ display: 'block', fontWeight: 700, marginTop: 2 }}>
+                            + R$ {a.valor_com_desconto.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                        <button type="button" onClick={() => setAceitos(aceitos.filter(x => !(x.id === a.id && x.tipo === a.tipo)))}
+                          style={{ background: 'none', border: 'none', color: '#64748b', fontSize: 12, cursor: 'pointer', textDecoration: 'underline', flexShrink: 0 }}>
+                          remover
+                        </button>
+                      </div>
+                    ))}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 15, fontWeight: 800, color: '#111', paddingTop: 8, borderTop: '1px solid #e5e7eb' }}>
+                      <span>Total</span>
+                      <span>R$ {totalComExtras.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+                  </div>
+                )}
                 {user ? (
                   <>
                     {isPago && (

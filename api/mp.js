@@ -271,12 +271,22 @@ async function criarPreferenciaSimples({ titulo, valor, email, nome, cpf, userId
  * (uuid) → o webhook casa como PRODUTO e ativa + credita a comissão do parceiro.
  * Preço SEMPRE do servidor (RPC lê o cadastro), nunca do cliente.
  */
-async function criarPreferenciaProduto({ produto_tipo, produto_id, ref, email, nome, cpf, userId }) {
+// O extrato do cartão precisa bater com o que a pessoa aceitou: cobrar por dois cursos e
+// descrever um só gera contestação com razão.
+function tituloComExtras(ini) {
+  const base = String(ini?.titulo || 'Produto BidPro');
+  const n = Array.isArray(ini?.extras) ? ini.extras.length : 0;
+  return (n > 0 ? `${base} + ${n} item${n > 1 ? 'ns' : ''}` : base).slice(0, 250);
+}
+
+async function criarPreferenciaProduto({ produto_tipo, produto_id, ref, email, nome, cpf, userId, extras }) {
   if (!['ebook', 'curso'].includes(produto_tipo) || !produto_id) throw new Error('Produto inválido');
   const iniRes = await fetch(`${SB_URL}/rest/v1/rpc/comprar_produto_iniciar`, {
     method: 'POST',
     headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ p_user_id: userId, p_produto_tipo: produto_tipo, p_produto_id: produto_id, p_ref: ref || null }),
+    // `extras` diz QUAIS itens o cliente aceitou no order bump. O preço deles NÃO vem daqui:
+    // a RPC confere cada um contra o cadastro e recalcula. O total cobrado é sempre ini.valor.
+    body: JSON.stringify({ p_user_id: userId, p_produto_tipo: produto_tipo, p_produto_id: produto_id, p_ref: ref || null, p_extras: Array.isArray(extras) ? extras : [] }),
   });
   const ini = iniRes.ok ? await iniRes.json() : null;
   if (!ini?.ok) throw new Error(ini?.erro || 'nao_iniciado');
@@ -284,7 +294,7 @@ async function criarPreferenciaProduto({ produto_tipo, produto_id, ref, email, n
 
   const back = `${BASE_URL}/#/p/${produto_tipo}/${produto_id}`;
   const pref = await mpPost('/checkout/preferences', {
-    items: [{ id: String(produto_id), title: String(ini.titulo || 'Produto BidPro').slice(0, 250), quantity: 1, currency_id: 'BRL', unit_price: Number(ini.valor) }],
+    items: [{ id: String(produto_id), title: tituloComExtras(ini), quantity: 1, currency_id: 'BRL', unit_price: Number(ini.valor) }],
     payer: { name: nome, email, identification: cpf ? { type: 'CPF', number: cpf.replace(/\D/g, '') } : undefined },
     back_urls: { success: `${back}?pago=1`, pending: `${back}?pago=pending`, failure: `${back}?pago=fail` },
     auto_return: 'approved',

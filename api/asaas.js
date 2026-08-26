@@ -249,7 +249,8 @@ export default async function handler(req, res) {
       const iniRes = await fetch(`${SB}/rest/v1/rpc/comprar_produto_iniciar`, {
         method: 'POST',
         headers: { apikey: SVC, Authorization: `Bearer ${SVC}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ p_user_id: authUser.id, p_produto_tipo: produto_tipo, p_produto_id: produto_id, p_ref: ref || null }),
+        // Order bump: a tela manda QUAIS extras; a RPC valida e precifica cada um pelo cadastro.
+        body: JSON.stringify({ p_user_id: authUser.id, p_produto_tipo: produto_tipo, p_produto_id: produto_id, p_ref: ref || null, p_extras: Array.isArray(body.extras) ? body.extras : [] }),
       });
       const ini = iniRes.ok ? await iniRes.json() : null;
       if (!ini?.ok) return res.status(400).json({ error: ini?.erro || 'nao_iniciado' });

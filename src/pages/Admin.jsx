@@ -116,7 +116,7 @@ const PLANOS_ACESSO = [
 ];
 
 function defaultCurso() {
-  return { titulo: '', subtitulo: '', descricao: '', capa_url: '', cor: '#0D63DB', nivel: 'Iniciante', categoria: 'Fundamentos', preco: '', gratuito: false, destaque: false, onboarding: false, comissao_pct: 30, planos_gratis: [], concede_plano: '', concede_meses: 6, bonus_produtos: [], upsell_produtos: [], modulos: [] };
+  return { titulo: '', subtitulo: '', descricao: '', capa_url: '', cor: '#0D63DB', nivel: 'Iniciante', categoria: 'Fundamentos', preco: '', gratuito: false, destaque: false, onboarding: false, comissao_pct: 30, planos_gratis: [], concede_plano: '', concede_meses: 6, bonus_produtos: [], upsell_produtos: [], bump_produtos: [], modulos: [] };
 }
 function defaultModulo(idx) { return { _key: String(Date.now() + idx), titulo: '', aulas: [] }; }
 function defaultAula() { return { _key: String(Date.now() + Math.random()), titulo: '', duracao: '', video_url: '', descricao: '', gratis: false, materiais: [] }; }
@@ -365,7 +365,7 @@ function CursosTab() {
       // não vai para a loja/área de membros; fica só para o admin concluir depois.
       const faltam = faltamCampos(form);
       const completo = faltam.length === 0;
-      const cursoPayload = { titulo: rest.titulo, subtitulo: rest.subtitulo || '', descricao: rest.descricao || '', capa_url: rest.capa_url || null, cor: rest.cor || '#0D63DB', nivel: rest.nivel || 'Iniciante', categoria: rest.categoria || 'Fundamentos', preco: Number(rest.preco) || 0, gratuito: rest.gratuito || false, destaque: rest.destaque || false, onboarding: rest.onboarding || false, comissao_pct: Number(rest.comissao_pct) || 30, planos_gratis: Array.isArray(rest.planos_gratis) ? rest.planos_gratis : [], concede_plano: rest.concede_plano || null, concede_meses: rest.concede_plano ? (Number(rest.concede_meses) || 6) : null, bonus_produtos: Array.isArray(rest.bonus_produtos) ? rest.bonus_produtos : [], upsell_produtos: Array.isArray(rest.upsell_produtos) ? rest.upsell_produtos : [], ativo: completo ? (rest.ativo !== false) : false };
+      const cursoPayload = { titulo: rest.titulo, subtitulo: rest.subtitulo || '', descricao: rest.descricao || '', capa_url: rest.capa_url || null, cor: rest.cor || '#0D63DB', nivel: rest.nivel || 'Iniciante', categoria: rest.categoria || 'Fundamentos', preco: Number(rest.preco) || 0, gratuito: rest.gratuito || false, destaque: rest.destaque || false, onboarding: rest.onboarding || false, comissao_pct: Number(rest.comissao_pct) || 30, planos_gratis: Array.isArray(rest.planos_gratis) ? rest.planos_gratis : [], concede_plano: rest.concede_plano || null, concede_meses: rest.concede_plano ? (Number(rest.concede_meses) || 6) : null, bonus_produtos: Array.isArray(rest.bonus_produtos) ? rest.bonus_produtos : [], upsell_produtos: Array.isArray(rest.upsell_produtos) ? rest.upsell_produtos : [], bump_produtos: Array.isArray(rest.bump_produtos) ? rest.bump_produtos : [], ativo: completo ? (rest.ativo !== false) : false };
 
       let cursoId;
       if (modal === 'new') {
@@ -637,6 +637,12 @@ function CursosTab() {
                 titulo="Upsell — oferecido à parte"
                 ajuda="O cliente é CONVIDADO a comprar estes materiais. Aparecem como sugestão na página do produto e NÃO liberam acesso nenhum." />
             )}
+            {!form.gratuito && (
+              <BumpSelector
+                valor={form.bump_produtos}
+                onChange={v => setForm({ ...form, bump_produtos: v })}
+                catalogo={catalogo} excluirId={form.id} />
+            )}
             <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:8, padding:'9px 12px', fontSize:12, color:'#084BA6', marginBottom:14 }}>
               💡 Preço e comissão são configurados na aba <strong>Configurações</strong>.
             </div>
@@ -740,6 +746,54 @@ function ProdutosSelector({ valor, onChange, catalogo, excluirId, titulo, ajuda,
                 border: `1px solid ${on ? cor : '#e2e8f0'}`, background: on ? `${cor}14` : '#fff', color: on ? cor : '#64748b' }}>
               {on ? '✓ ' : ''}{it.tipo === 'curso' ? '🎓' : '📖'} {it.titulo}
             </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// Order bump: mesma lista dos outros dois seletores, mas cada item ligado ganha um
+// desconto próprio — é o desconto que faz o cliente aceitar na hora em vez de "depois eu vejo".
+function BumpSelector({ valor, onChange, catalogo, excluirId }) {
+  const sel = Array.isArray(valor) ? valor : [];
+  const achar = (it) => sel.find(x => x.id === it.id && x.tipo === it.tipo);
+  const toggle = (it) => onChange(
+    achar(it) ? sel.filter(x => !(x.id === it.id && x.tipo === it.tipo))
+              : [...sel, { tipo: it.tipo, id: it.id, desconto_pct: 30 }]);
+  const setDesc = (it, v) => onChange(sel.map(x =>
+    (x.id === it.id && x.tipo === it.tipo) ? { ...x, desconto_pct: Math.max(0, Math.min(90, Number(v) || 0)) } : x));
+  const itens = (catalogo || []).filter(it => it.id !== excluirId);
+  if (!itens.length) return null;
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#334155', marginBottom: 2 }}>
+        Order bump — “quer incluir também?” antes do checkout
+      </label>
+      <div style={{ fontSize: 12, color: '#64748b', marginBottom: 8 }}>
+        Oferecidos <strong>um por vez</strong> na página, com desconto, entrando na mesma compra.
+        Assinatura não entra aqui — só cursos e eBooks.
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {itens.map(it => {
+          const on = achar(it);
+          return (
+            <div key={`bump-${it.tipo}-${it.id}`} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <button type="button" onClick={() => toggle(it)}
+                style={{ padding: '6px 12px', borderRadius: 20, fontSize: 12, fontWeight: 700, cursor: 'pointer', flexShrink: 0,
+                  border: `1px solid ${on ? '#7C3AED' : '#e2e8f0'}`, background: on ? '#f5f3ff' : '#fff', color: on ? '#6D28D9' : '#64748b' }}>
+                {on ? '✓ ' : ''}{it.tipo === 'curso' ? '🎓' : '📖'} {it.titulo}
+              </button>
+              {on && (
+                <label style={{ fontSize: 12.5, color: '#475569', display: 'flex', alignItems: 'center', gap: 5 }}>
+                  com
+                  <input type="number" min="0" max="90" value={on.desconto_pct ?? 30}
+                    onChange={e => setDesc(it, e.target.value)}
+                    style={{ width: 58, padding: '5px 7px', border: '1px solid #cbd5e1', borderRadius: 6, fontSize: 13 }} />
+                  % de desconto
+                </label>
+              )}
+            </div>
           );
         })}
       </div>
