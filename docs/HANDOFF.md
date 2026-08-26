@@ -4,6 +4,84 @@
 
 ---
 
+## 🏁 26/08 — FECHAMENTO DO DIA
+
+**Produção atualizada.** `main` foi de `68e8c05` para **`f45f41a`** — 14 commits, todo o trabalho
+das sessões de 25 e 26/08, autorizado pelo dono ("coloque em produção"). Fast-forward limpo, sem
+divergência. `verificar:sintaxe`, `verificar:padroes` e `npm run build` passaram antes do push.
+
+### O que entrou no ar
+| Commit | O quê |
+|---|---|
+| `2794aef` | `qa_invariantes()` de 11.710 ms → 2.668 ms. **A aba que vigia os defeitos era a que não abria** — e o monitor diário lia o mesmo RPC sem checar `error`: a trava de corretude estava desarmada em silêncio |
+| `0c2232b` | O gatilho rebaixava o pino porque a rua mudou de nome — **106 lotes** em 22 coordenadas viraram "nível cidade" no mapa do cliente |
+| `68c68bc` | Três travas que acusavam o funcionamento correto (fadiga de alerta) |
+| `e1c3d13` | O "sem imagem" do leiloeiro gravado como foto do imóvel (60 linhas) |
+| `db62760` | Rateio diário da cota Bright Data — o teto semanal queimava em 1,5 dia |
+| `f3a7aa9` | **O e-mail mandava imóvel acima do capital declarado** — 36 envios, 12 clientes, até R$ 6.148.488 |
+| `5349219` | Contrato primeiro, região do cadastro depois (regra do dono) |
+| `9ec4566` | Escada de raio até 200 km: filtro salvo não pode devolver vazio |
+| `9c8a73f` | Cobertura incompleta vira registro no Cliente 360 |
+| `47a1201` | HANDOFF: Google, pendências, conferência de 31/08 |
+| `7c74244` | **A despesa da conta virava faturamento** — `vendas` R$ 4.883,29 → R$ 0,00 |
+| `e19dc8f` | Layout do /leiloes alinhado à marca: hero escuro, busca no topo, cartões |
+| `86be102` | Índice nacional lista as 27 UFs, não só as que têm lote |
+| `f45f41a` | Invariante `estado_fora_do_padrao` + verificação represada |
+
+### ⚠️ O que o deploy NÃO faz por si
+`supabase/migrations/qa_invariante_estado_fora_do_padrao.sql` **precisa ser aplicado à mão** no
+SQL Editor. Migração no repo não é migração aplicada — é a forma de falha nº 7 do CLAUDE.md, e já
+nos custou um e-mail de reunião fantasma enviado ao cliente.
+
+---
+
+## 📋 26/08 — PENDÊNCIAS, ESTADO ATUAL (substitui a lista de 25/08)
+
+### 🔴 Dependem de você, agora
+| # | Pendência | Onde |
+|---|---|---|
+| 1 | **Aplicar `qa_invariante_estado_fora_do_padrao.sql`** | Supabase → SQL Editor |
+| 2 | **Google Ads: confirmar se voltou a veicular** depois do pagamento da campanha | Painel do Google Ads |
+| 3 | **Felipe Scarafiz** — Configurações do Negócio → Pessoas → Remover (como admin não exige o 2FA dele). Se a chave USB for pedida para a SUA conta, usar "Tentar outra forma". Último recurso: suporte do Business para usuário inativo, que depende do item 6 | Meta Business |
+
+### ⏳ Dependem de você, sem pressa
+| # | Pendência |
+|---|---|
+| 4 | Confirmar `VITE_META_PIXEL_ID` |
+| 5 | Renomear campanha `BR - 25-60 - ABERTO` → `BR - 25MAIS - ABERTO` |
+| 6 | Verificação do anunciante no Meta (NOGUEIRA EMPREENDIMENTOS) — **destrava o item 3** |
+| 7 | UTM nos links da bio do Instagram (o da calculadora, trocado em 26/08, não tem) |
+| 8 | Nomear analista · chaves Asaas/MP com escopo mínimo · WebISS para NFS-e |
+
+### 👥 Operação — o relógio HUMANO, que é onde tudo para
+Nenhum destes é bug. Nenhuma trava de código resolve. São os números que `tempo_processo()` separa
+justamente para não serem diluídos na média da máquina (mediana de 0,3 h para gerar relatório).
+
+| # | Pendência | Número |
+|---|---|---|
+| 9 | Pagantes sem gerar um relatório em 14 dias — **churn em formação** | **3** |
+| 10 | Casos parados em `analise_solicitada` | mediana **32 dias**; nenhum caso passou desta etapa até hoje |
+| 11 | Chamados FECHADOS sem uma resposta humana | **7** |
+| 12 | Clientes sem perfil de triagem (faz o e-mail de oportunidade sair genérico) | **26 de 60** |
+
+### 🔧 Minhas, na próxima sessão com banco
+| # | Pendência | Por que travou |
+|---|---|---|
+| 13 | **Conferência obrigatória de 31/08** do e-mail de oportunidades (seção própria abaixo) | Primeira execução real da cadeia nova; roda segunda 11h UTC |
+| 14 | **HASTA: 579 lotes ativos, ZERO fotos** | `hasta-parse.mjs` não devolve `link_foto`. Não consigo abrir uma página da HASTA daqui (o proxy recusa CONNECT) e escrever o seletor no escuro seria adivinhar |
+| 15 | Bright Data: `geral` (99/sem) e `pecini` (63) sem teto por propósito | Únicos sem linha em `brightdata_reserva` |
+| 16 | Rateio diário soma 207/dia contra ~78/dia que o teto global comporta | Impede um propósito de comer a semana, mas não garante 7 dias de cobertura |
+| 17 | Sweep do sitemap é de mão única (desativa quem some, nunca reativa quem volta) | |
+| 18 | `perfis.mkt_*` sem `utm_content`/`utm_term` — liga campanha, não anúncio | |
+| 19 | 10 dos 13 lotes novos da PECINI devolvem "página genérica" | |
+
+### 🔎 Proposta aberta, aguardando decisão do dono
+| # | O quê |
+|---|---|
+| 20 | **Cortar o sitemap de 2.125 para ~294 cidades com 10+ lotes** e pôr conteúdo real nas 139 com 30+. É o único item da lista técnica que ataca o problema que incomoda o dono — a ausência de busca orgânica. Hoje oferecemos ao Google 2.125 páginas, a maioria com um ou dois lotes, e página rasa em volume derruba a reputação do site inteiro (já rendeu aviso de "cópia" no Search Console) |
+
+---
+
 ## 🔌 26/08 — VERIFICAÇÃO REPRESADA: O BANCO FICOU INACESSÍVEL NESTA SESSÃO
 
 O conector Supabase devolveu **"You do not have permission to perform this action"** em toda
@@ -137,7 +215,7 @@ esperar custa um dia de veiculação.
 
 ---
 
-## 📌 25/08 — PENDÊNCIAS CONSOLIDADAS
+## 📌 25/08 — PENDÊNCIAS CONSOLIDADAS  ⛔ SUPERADA PELA LISTA DE 26/08 (acima) — mantida por histórico
 
 ### 🔴 Urgente
 | # | Pendência | Estado |
