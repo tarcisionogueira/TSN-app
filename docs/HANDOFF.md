@@ -54,6 +54,40 @@ Regras de negócio 0 · backup ok (63 arquivos, longe do teto de 1.000) · KYC 0
 nenhum chamado de cliente sem resposta · `relatorios_falha_24h` 0 · `erros_cliente` só 1 registro
 (o timeout de `admin_qa_invariantes` de 23/08, anterior ao commit `2794aef` que o corrigiu).
 
+### 🟢 GOOGLE ADS: A CAUSA DA PARADA DE 25/08 ESTÁ CONFIRMADA — ERA CARTÃO RECUSADO
+
+Achado em 26/08 no Gmail do dono (ele autorizou a consulta ao perguntar sobre o plano do
+Workspace). Fecha a pendência aberta desde 25/08, que dizia "só você pode verificar:
+faturamento/forma de pagamento".
+
+| Quando | O quê |
+|---|---|
+| **24/08 19h43** | E-mail `payments-noreply@google.com`: *"o pagamento pelo domínio 475-979-5747 foi recusado"* — cartão ELO recusado pela instituição financeira |
+| **25/08** | Tráfego do Google vai a **ZERO** (contra ~60/dia) |
+| **25/08** | Pagamento de **R$ 400,00** enviado ao Google Ads |
+| **26/08** | Volta a veicular — 24 visitas até 10h UTC |
+
+**Não era política, lance nem índice de qualidade** — as três hipóteses que a Windsor não
+conseguia descartar por ser D-1. Era a conta suspensa por falta de pagamento, exatamente a
+causa mais comum de parada abrupta sem aviso, que foi o que se suspeitou em 25/08.
+
+⚠️ **PADRÃO A VIGIAR:** houve recusa também em **01/08**, no Workspace E no Google Ads, com
+DOIS cartões diferentes (Mastercard e ELO). Duas recusas em três semanas, em serviços
+distintos, apontam para limite/bloqueio do emissor e não para falha pontual. **No meio de um
+lançamento isso para o tráfego no dia seguinte, sem aviso** — recomendado deixar um segundo
+cartão de reserva cadastrado no Google Ads antes de investir em captação.
+
+### 🖥️ GOOGLE WORKSPACE: O PLANO É **BUSINESS STANDARD** (não Plus)
+
+Confirmado pelo e-mail de 01/08 (`workspace-noreply@google.com`): *"Falha no pagamento do
+Google Workspace **Business Standard** para reimob.com.br"* — depois regularizado
+(R$ 169,87). O dono supunha ser o Plus.
+
+**Para o lançamento, resolve:** 150 participantes, 24h de duração e **gravação no Drive** —
+confirmada também pela pasta `Meet Recordings`, que existe no Drive dele desde abril/2025.
+Não é preciso contratar Zoom nem Daily: o Meet cobre a aula de venda e as aulas da turma, e
+a gravação (que vira o curso gravado) sai de graça.
+
 ### 🟢 GOOGLE ADS VOLTOU (pendência #2 de 25-26/08 — RESOLVIDA)
 | dia | visitas Google |
 |---|---|
