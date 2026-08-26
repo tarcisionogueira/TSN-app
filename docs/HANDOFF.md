@@ -4,6 +4,186 @@
 
 ---
 
+## 🏁 26/08 (sessão 2) — DIAGNÓSTICO COM BANCO + PLANEJAMENTO DO LANÇAMENTO
+
+O conector Supabase **voltou a responder** nesta sessão (na anterior recusou tudo). A verificação
+represada foi rodada e **deu vermelho**. Além disso, o dono trouxe o desafio do dia: estruturar o
+ManyChat e o lançamento dos cursos de leilão judicial/extrajudicial.
+
+### 📋 O plano de lançamento está publicado
+**https://claude.ai/code/artifact/c6a748dc-e7cf-40d2-a44a-f9c2d72479f6** — oferta, matemática,
+cronograma de 5 semanas, fluxos e regras anti-bloqueio do ManyChat, e o que falta na plataforma.
+
+### 🔴 A verificação represada: 71 lotes ativos SEM ESTADO
+
+```sql
+select coalesce(estado,'(nulo)'), count(*) from imoveis_leilao where ativo
+ and (estado is null or estado !~ '^[A-Za-z]{2}$') group by 1;
+```
+→ **70 com string vazia + 1 nulo.** Por fonte: SUPERBID 52 · LEILOTECH 8 · SOLD 5 · PESTANA 2 ·
+SUPORTE 2 · GESTAOLEILOES 1 · WEBLEILOES 1.
+
+⚠️ **Não é o caso "São Paulo vs SP" que a migração previa** — é estado AUSENTE. O efeito prático é
+o mesmo e igualmente silencioso: o lote existe, está ativo, e não pertence a UF nenhuma. Não
+aparece em `/leiloes/<uf>`, não é contado em `acervo_uf_contagem()`, e o total do topo sai menor
+que o acervo. Ninguém erra, ninguém loga.
+
+**O conserto continua sendo em três passos, nesta ordem:** (1) normalizar na ORIGEM — o parser da
+SUPERBID é o dono de 73% do problema; (2) backfill; (3) só então o invariante fecha em zero.
+
+### 🔴 CALIL: 9 lotes contra piso aprendido de 18 (mediana 36)
+`status = 'ok'`, **não** é `sem_cota` — ou seja, a coleta foi tentada e voltou com um quarto do
+acervo. É regressão de captura de verdade, candidata à ofensiva de recon (Seção 2 do CLAUDE.md).
+
+### ⚠️ Invariantes em alerta (3)
+| chave | valor | limite |
+|---|---|---|
+| `bd_teto_saturado` | 517 | 495 |
+| `alerta_acima_do_capital` | 4 | 0 |
+| `sem_foto` | 1.925 | 1.600 |
+
+`alerta_acima_do_capital` merece atenção: o conserto de 25/08 (commit `f3a7aa9`) entrou, mas ainda
+há 4 registros. Conferir se são anteriores ao commit ou se o teto ainda vaza.
+
+### ⚠️ Segurança: 1 atenção (0 crítico)
+`fontes_com_limpeza_pulada` — função SECURITY DEFINER executável por anônimo fora da allowlist.
+Objeto novo; decidir se entra na allowlist ou se o `execute` de anon sai.
+
+### ✅ O que está verde
+Regras de negócio 0 · backup ok (63 arquivos, longe do teto de 1.000) · KYC 0 documento ilegível ·
+nenhum chamado de cliente sem resposta · `relatorios_falha_24h` 0 · `erros_cliente` só 1 registro
+(o timeout de `admin_qa_invariantes` de 23/08, anterior ao commit `2794aef` que o corrigiu).
+
+### 🟢 GOOGLE ADS VOLTOU (pendência #2 de 25-26/08 — RESOLVIDA)
+| dia | visitas Google |
+|---|---|
+| 24/08 | 61 |
+| **25/08** | **2** ← o dia da parada |
+| **26/08 (até 10h UTC)** | **24** |
+
+Voltou a veicular. A linha de gasto do dia 25 entra na ingestão das 10h50 UTC de hoje.
+
+### 🟢 `utm_term` RESOLVIDO (pendência A do dono, aberta desde 14/08)
+**562 de 1.053 visitas** dos últimos 14 dias têm `utm_term` — era **0**. E o cruzamento que
+importa melhorou junto: **664 cliques pagos × 551 visitas com gclid** (83%), contra os
+214 × 19 de 14/08.
+
+### ⚠️ FALSO ALARME MEU, registrado para não voltar
+Cheguei a medir "85% dos cadastros sem origem" filtrando `mkt_utm_source is null and mkt_gclid is
+null` — **e essa consulta ignora `mkt_referrer`**, que é justamente a coluna que a correção de
+20/08 criou para fechar o buraco negro. Refeita com a coluna certa: dos 21 dias, só 2 cadastros
+sem captura, ambos anteriores à correção. **A atribuição está sã.** É a forma de falha nº 6 do
+CLAUDE.md (a coluna não é a mesma em todas as tabelas) aplicada a mim mesmo.
+
+---
+
+## 🎓 26/08 — O QUE FOI DESCOBERTO SOBRE O CURSO (base do planejamento)
+
+**A plataforma de curso já está construída** e isso muda o plano inteiro:
+
+| Existe e funciona | Não existe |
+|---|---|
+| `cursos_admin` + `aulas_admin` + `aula_progresso` | **Vídeo. Zero.** 0 `videoUrl` em 59 aulas |
+| Player, progresso, trava por plano (`podeAssistir`) | Produto **combo** (dois cursos com 20% off) |
+| Compra avulsa MP (`criar_preferencia_produto`) | **Concessão dos 6 meses de Pro na compra** |
+| `/p/curso/:id` pública com preço | Os cursos Judicial/Extrajudicial cadastrados |
+| Comissão de afiliado por curso (`comissao_pct`) | Página de inscrição da aula ao vivo |
+
+**7 cursos catalogados, 59 aulas com título/descrição/duração escritos** em `src/data/cursos.js` —
+incluindo "Leilão Judicial vs Extrajudicial". `compras_produtos` está vazia (nenhuma venda ainda).
+
+### 🚨 O RISCO QUE PRECISA SER RESOLVIDO ANTES DA PRIMEIRA VENDA
+`roleAposPagamento()` decide o plano concedido **pela FAIXA DE VALOR** do pagamento
+(`api/_webhook-core.js`, `dentroFaixa`). O combo custa **R$ 2.395,20 e não cai em nenhuma faixa** →
+"pagamento não mapeado → não mexe". Traduzindo: **o cliente pagaria R$ 2.395,20 e não receberia os
+6 meses de Investidor Pro prometidos** — sem erro, sem log, sem nada. É a forma de falha nº 1 do
+CLAUDE.md (o vazio que não sabe que falhou), agora em cima de dinheiro do cliente.
+
+O mecanismo de acesso com prazo **já existe**: `perfis.plano_vencimento` + `plano_ciclo`, usado
+hoje pelo plano anual (`_webhook-core.js:231`). O caminho é conceder por COMPRA DE PRODUTO, não
+por faixa de valor. E a regra tem de ser gravada em `regra_negocio` com `aplicada_por` — senão a
+auditoria acusa, que é exatamente o ponto.
+
+### 💰 A matemática que justifica o lançamento
+| | |
+|---|---|
+| Gasto de anúncio, 30 dias | R$ 686,79 |
+| Cadastros | 47 |
+| **Pagantes novos** | **2** |
+| **CAC por assinante** | **R$ 343** |
+| Ticket Investidor Pro | R$ 49,90/mês → **payback de 7 meses** |
+| **Combo (R$ 2.395,20)** | paga **7 CAC** no ato |
+
+**Gancho de urgência REAL, já no banco:** `planos_config.top2.preco_agendado` = R$ 89,90 com
+`preco_vigencia` = **01/10/2026**. Os 6 meses de Pro do combo valem R$ 539,40 pelo preço novo, e a
+data cai no fim do cronograma de 5 semanas. Escassez verdadeira, não fabricada.
+
+### ⚠️ O GARGALO QUE NÃO É TÉCNICO: a base é de 64 contatos
+57 exploradores + 6 pagantes + 1. Aula ao vivo converte 1–3% dos PRESENTES, e comparecem 25–40%
+dos inscritos: 64 inscritos → ~20 presentes → **0 a 1 venda**. A meta do plano é **1.500
+inscritos**, e é disso que o ManyChat é a infraestrutura, não um acessório.
+
+**Melhor lista de convidados que já temos:** os **41 clientes travados no mercadológico** há 13,5
+dias de mediana (`tempo_processo()`). Já provaram o produto e pararam exatamente onde o curso
+ensina a continuar.
+
+---
+
+## 📋 26/08 (sessão 2) — PENDÊNCIAS
+
+### 🔴 Dependem de você, agora
+| # | Pendência | Onde |
+|---|---|---|
+| 1 | **Aplicar `qa_invariante_estado_fora_do_padrao.sql`** (segue não aplicada) | Supabase → SQL Editor |
+| 2 | **Decidir o que implemento primeiro do lançamento** — a concessão dos 6 meses no combo é pré-requisito da 1ª venda | — |
+| 3 | **Quantos seguidores / alcance médio no Instagram?** Sem isso a meta de 1.500 inscritos é cenário, não previsão | — |
+| 4 | **Há caixa para tráfego de captação?** 1.000 inscritos custam R$ 4.000–8.000 | — |
+| 5 | Felipe Scarafiz — Configurações do Negócio → Pessoas → Remover | Meta Business |
+| ~~6~~ | ~~Google Ads: confirmar se voltou~~ — **RESOLVIDO, voltou (24 visitas hoje)** | — |
+
+### ⏳ Dependem de você, sem pressa
+| # | Pendência |
+|---|---|
+| 7 | Confirmar `VITE_META_PIXEL_ID` |
+| 8 | Renomear campanha `BR - 25-60 - ABERTO` → `BR - 25MAIS - ABERTO` |
+| 9 | Verificação do anunciante no Meta (NOGUEIRA EMPREENDIMENTOS) — destrava o item 5 |
+| 10 | UTM nos links da bio do Instagram (o da calculadora não tem) — **vira urgente no lançamento** |
+| 11 | Nomear analista · chaves Asaas/MP com escopo mínimo · WebISS para NFS-e |
+
+### 👥 Operação — o relógio HUMANO
+| # | Pendência | Número (26/08) |
+|---|---|---|
+| 12 | **Clientes travados no mercadológico** (nunca pediram o documental) | **41**, mediana 13,5 dias |
+| 13 | Travados no documental (nunca pediram o laudo) | 13, mediana 13,4 dias |
+| 14 | Casos parados em `analise_solicitada` | 8, mediana **25,9 dias** |
+| 15 | Casos parados em `arrematado` | 2, mediana 39,1 dias |
+| 16 | Chamados FECHADOS sem uma resposta humana | **7** |
+| 17 | Clientes sem perfil de triagem | **27 de 64** |
+
+### 🔧 Minhas, na próxima sessão
+| # | Pendência | Por quê |
+|---|---|---|
+| 18 | **71 lotes sem estado — normalizar no parser da SUPERBID (52) e backfill** | Acima |
+| 19 | **CALIL 9/18 — ofensiva de recon** | Regressão real, não cota |
+| 20 | `alerta_acima_do_capital` = 4 — conferir se é resíduo pré-`f3a7aa9` | |
+| 21 | `fontes_com_limpeza_pulada` exposta a anon | |
+| 22 | **Conferência obrigatória de 31/08** do e-mail de oportunidades | Roda segunda 11h UTC |
+| 23 | HASTA: 579 lotes ativos, ZERO fotos | Proxy recusa CONNECT daqui |
+| 24 | Bright Data: `geral` (99/sem) e `pecini` (63) sem teto por propósito | |
+| 25 | Sweep do sitemap é de mão única | |
+| 26 | `perfis.mkt_*` sem `utm_content` — liga campanha, não anúncio | |
+| 27 | 10 dos 13 lotes novos da PECINI devolvem "página genérica" | |
+
+### 🔎 Proposta aberta, aguardando decisão
+| # | O quê |
+|---|---|
+| 28 | **Cortar o sitemap de 2.125 para ~294 cidades com 10+ lotes.** Único item técnico que ataca a ausência de busca orgânica |
+
+
+---
+
+# 📚 HISTÓRICO ANTERIOR
+
 ## 🏁 26/08 — FECHAMENTO DO DIA
 
 **Produção atualizada.** `main` foi de `68e8c05` para **`f45f41a`** — 14 commits, todo o trabalho
