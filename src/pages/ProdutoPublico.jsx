@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../utils/supabase';
+import { AZUL, corDoProduto } from '../utils/marca';
 import { useAuth } from '../contexts/AuthContext';
 import { driveImage } from '../utils/driveUrl';
 import { apiCall } from '../utils/apiCall';
@@ -214,7 +215,9 @@ export default function ProdutoPublico({ tipo }) {
   const temPlano = user && ['top2','assessorado','clube','analista','advogado','admin'].includes(role);
   const temAcesso = temPlano || comprouAvulso;
   const isPago = Number(produto.preco) > 0;
-  const cor = produto.cor || '#0D63DB';
+  // A cor vem da MARCA, não do cadastro (26/08): produto não escolhe mais identidade
+  // visual. `produto.cor` continua no banco e é ignorado aqui de propósito.
+  const cor = corDoProduto(produto);
   const bgCor = cor + '20';
   // (refParam saiu junto com os links da vitrine: os cartões agora incluem no carrinho
   // em vez de levar a outra página, então não há mais link para propagar o ?ref=.)
@@ -310,7 +313,7 @@ export default function ProdutoPublico({ tipo }) {
                       background: noCarrinho ? '#f0fdf4' : '#fff', display: 'flex', flexDirection: 'column' }}>
                     {u.capa_url
                       ? <img src={u.capa_url} alt="" style={{ width: '100%', height: 118, objectFit: 'cover', display: 'block' }} />
-                      : <div style={{ height: 118, background: `linear-gradient(135deg, ${u.cor || '#0D63DB'} 0%, ${(u.cor || '#0D63DB')}88 100%)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 38 }}>{u.tipo === 'curso' ? (u.emoji || '🎓') : '📖'}</div>}
+                      : <div style={{ height: 118, background: `linear-gradient(135deg, ${AZUL} 0%, ${AZUL}88 100%)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 38 }}>{u.tipo === 'curso' ? (u.emoji || '🎓') : '📖'}</div>}
                     <div style={{ padding: '13px 14px', display: 'flex', flexDirection: 'column', flex: 1 }}>
                       <div style={{ fontSize: 10, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>{u.tipo === 'curso' ? 'Curso' : 'eBook'}</div>
                       <div style={{ fontSize: 14.5, fontWeight: 700, color: '#111', lineHeight: 1.3, marginBottom: 5 }}>{u.titulo}</div>

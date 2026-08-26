@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '../utils/supabase';
 import { lerMarketing } from '../utils/marketing';
+import { NAVY, LATAO } from '../utils/marca';
 
 /**
  * /live/:slug — landing de inscrição da aula ao vivo.
@@ -40,7 +41,7 @@ function useContagem(alvo) {
   }, [alvo, agora]);
 }
 
-const NAVY = '#0B1B33';
+
 
 export default function LiveInscricao() {
   const { slug } = useParams();
@@ -119,7 +120,7 @@ export default function LiveInscricao() {
           </p>
           {erroCarga && (
             <button onClick={() => window.location.reload()}
-              style={{ padding: '12px 24px', background: '#D8A94A', color: NAVY, border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 14, cursor: 'pointer' }}>
+              style={{ padding: '12px 24px', background: LATAO, color: NAVY, border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 14, cursor: 'pointer' }}>
               Tentar de novo
             </button>
           )}
@@ -128,7 +129,8 @@ export default function LiveInscricao() {
     );
   }
 
-  const cor = evento.cor || '#D8A94A';
+  // Acento da marca, não do cadastro do evento — mesma decisão de 26/08.
+  const cor = LATAO;
   const quando = new Date(evento.data_hora).toLocaleString('pt-BR', {
     timeZone: 'America/Bahia', weekday: 'long', day: '2-digit', month: 'long', hour: '2-digit', minute: '2-digit',
   });

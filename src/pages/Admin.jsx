@@ -4,6 +4,7 @@ import CapaCurso from '../components/CapaCurso';
 import { usePlanos, PlanosProvider } from '../contexts/PlanosContext';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../utils/supabase';
+import { AZUL } from '../utils/marca';
 import { apiCall } from '../utils/apiCall';
 import { extrairDadosDocumento, consolidarDocsImovel } from '../utils/claude';
 import { FinanceiroCaixa, AbaAssinaturas } from './AdminFinanceiro';
@@ -116,7 +117,7 @@ const PLANOS_ACESSO = [
 ];
 
 function defaultCurso() {
-  return { titulo: '', subtitulo: '', descricao: '', capa_url: '', cor: '#0D63DB', nivel: 'Iniciante', categoria: 'Fundamentos', preco: '', gratuito: false, destaque: false, onboarding: false, comissao_pct: 30, planos_gratis: [], concede_plano: '', concede_meses: 6, bonus_produtos: [], upsell_produtos: [], bump_produtos: [], modulos: [] };
+  return { titulo: '', subtitulo: '', descricao: '', capa_url: '', cor: AZUL, nivel: 'Iniciante', categoria: 'Fundamentos', preco: '', gratuito: false, destaque: false, onboarding: false, comissao_pct: 30, planos_gratis: [], concede_plano: '', concede_meses: 6, bonus_produtos: [], upsell_produtos: [], bump_produtos: [], modulos: [] };
 }
 function defaultModulo(idx) { return { _key: String(Date.now() + idx), titulo: '', aulas: [] }; }
 function defaultAula() { return { _key: String(Date.now() + Math.random()), titulo: '', duracao: '', video_url: '', descricao: '', gratis: false, materiais: [] }; }
@@ -365,7 +366,7 @@ function CursosTab() {
       // não vai para a loja/área de membros; fica só para o admin concluir depois.
       const faltam = faltamCampos(form);
       const completo = faltam.length === 0;
-      const cursoPayload = { titulo: rest.titulo, subtitulo: rest.subtitulo || '', descricao: rest.descricao || '', capa_url: rest.capa_url || null, cor: rest.cor || '#0D63DB', nivel: rest.nivel || 'Iniciante', categoria: rest.categoria || 'Fundamentos', preco: Number(rest.preco) || 0, gratuito: rest.gratuito || false, destaque: rest.destaque || false, onboarding: rest.onboarding || false, comissao_pct: Number(rest.comissao_pct) || 30, planos_gratis: Array.isArray(rest.planos_gratis) ? rest.planos_gratis : [], concede_plano: rest.concede_plano || null, concede_meses: rest.concede_plano ? (Number(rest.concede_meses) || 6) : null, bonus_produtos: Array.isArray(rest.bonus_produtos) ? rest.bonus_produtos : [], upsell_produtos: Array.isArray(rest.upsell_produtos) ? rest.upsell_produtos : [], bump_produtos: Array.isArray(rest.bump_produtos) ? rest.bump_produtos : [], ativo: completo ? (rest.ativo !== false) : false };
+      const cursoPayload = { titulo: rest.titulo, subtitulo: rest.subtitulo || '', descricao: rest.descricao || '', capa_url: rest.capa_url || null, cor: AZUL, nivel: rest.nivel || 'Iniciante', categoria: rest.categoria || 'Fundamentos', preco: Number(rest.preco) || 0, gratuito: rest.gratuito || false, destaque: rest.destaque || false, onboarding: rest.onboarding || false, comissao_pct: Number(rest.comissao_pct) || 30, planos_gratis: Array.isArray(rest.planos_gratis) ? rest.planos_gratis : [], concede_plano: rest.concede_plano || null, concede_meses: rest.concede_plano ? (Number(rest.concede_meses) || 6) : null, bonus_produtos: Array.isArray(rest.bonus_produtos) ? rest.bonus_produtos : [], upsell_produtos: Array.isArray(rest.upsell_produtos) ? rest.upsell_produtos : [], bump_produtos: Array.isArray(rest.bump_produtos) ? rest.bump_produtos : [], ativo: completo ? (rest.ativo !== false) : false };
 
       let cursoId;
       if (modal === 'new') {
@@ -501,15 +502,14 @@ function CursosTab() {
           <div style={S.modal}>
             <h3 style={{ ...S.sectionTitle, marginBottom: 20 }}>{modal === 'new' ? 'Novo Curso' : 'Editar Curso'}</h3>
 
-            <div style={S.row}>
-              <div style={{ ...S.col, flex: 3 }}>
-                <label style={S.label}>Título *</label>
-                <input style={S.input} value={form.titulo} onChange={e => setForm({ ...form, titulo: e.target.value })} />
-              </div>
-              <div style={{ ...S.col, flex: 1 }}>
-                <label style={S.label}>Cor</label>
-                <input type="color" style={{ ...S.input, padding: 4, height: 38 }} value={form.cor} onChange={e => setForm({ ...form, cor: e.target.value })} />
-              </div>
+            {/* A ESCOLHA DE COR SAIU (26/08, decisão do dono): "deve sempre seguir as cores
+                do sistema/marca em todas as telas". Cada curso escolhendo a própria cor
+                fazia dois produtos da mesma casa não parecerem da mesma casa, e quem
+                cadastrava decidia identidade visual sem querer. A cor agora vem de
+                src/utils/marca.js. */}
+            <div style={{ marginBottom: 14 }}>
+              <label style={S.label}>Título *</label>
+              <input style={S.input} value={form.titulo} onChange={e => setForm({ ...form, titulo: e.target.value })} />
             </div>
 
             <div style={{ marginBottom: 14 }}>
