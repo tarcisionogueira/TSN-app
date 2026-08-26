@@ -629,19 +629,22 @@ function CursosTab() {
                 ajuda="O cliente RECEBE estes materiais ao comprar, sem pagar a mais. Entram como acesso liberado na hora, com valor zero (não contam como venda no faturamento)." />
             )}
             {!form.gratuito && (
-              <ProdutosSelector
-                valor={form.upsell_produtos}
-                onChange={v => setForm({ ...form, upsell_produtos: v })}
-                catalogo={catalogo} excluirId={form.id}
-                cor="#B45309"
-                titulo="Upsell — oferecido à parte"
-                ajuda="O cliente é CONVIDADO a comprar estes materiais. Aparecem como sugestão na página do produto e NÃO liberam acesso nenhum." />
-            )}
-            {!form.gratuito && (
               <BumpSelector
                 valor={form.bump_produtos}
                 onChange={v => setForm({ ...form, bump_produtos: v })}
-                catalogo={catalogo} excluirId={form.id} />
+                catalogo={catalogo} excluirId={form.id}
+                cor="#7C3AED" descPadrao={30}
+                titulo="Oferta em destaque — “quer incluir também?”"
+                ajuda="Aparece dentro da caixa de compra, UMA POR VEZ: ao aceitar a primeira, a próxima surge. Entra na mesma compra. Assinatura não entra aqui — só cursos e eBooks." />
+            )}
+            {!form.gratuito && (
+              <BumpSelector
+                valor={form.upsell_produtos}
+                onChange={v => setForm({ ...form, upsell_produtos: v })}
+                catalogo={catalogo} excluirId={form.id}
+                cor="#B45309" descPadrao={0}
+                titulo="Vitrine — “leve também”"
+                ajuda="Aparece abaixo do conteúdo, com foto e descrição, TODOS de uma vez. O cliente marca os que quiser e eles entram na mesma compra, sem sair da página. Desconto 0 = preço cheio." />
             )}
             <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:8, padding:'9px 12px', fontSize:12, color:'#084BA6', marginBottom:14 }}>
               💡 Preço e comissão são configurados na aba <strong>Configurações</strong>.
@@ -755,25 +758,20 @@ function ProdutosSelector({ valor, onChange, catalogo, excluirId, titulo, ajuda,
 
 // Order bump: mesma lista dos outros dois seletores, mas cada item ligado ganha um
 // desconto próprio — é o desconto que faz o cliente aceitar na hora em vez de "depois eu vejo".
-function BumpSelector({ valor, onChange, catalogo, excluirId }) {
+function BumpSelector({ valor, onChange, catalogo, excluirId, titulo, ajuda, cor = '#7C3AED', descPadrao = 30 }) {
   const sel = Array.isArray(valor) ? valor : [];
   const achar = (it) => sel.find(x => x.id === it.id && x.tipo === it.tipo);
   const toggle = (it) => onChange(
     achar(it) ? sel.filter(x => !(x.id === it.id && x.tipo === it.tipo))
-              : [...sel, { tipo: it.tipo, id: it.id, desconto_pct: 30 }]);
+              : [...sel, { tipo: it.tipo, id: it.id, desconto_pct: descPadrao }]);
   const setDesc = (it, v) => onChange(sel.map(x =>
     (x.id === it.id && x.tipo === it.tipo) ? { ...x, desconto_pct: Math.max(0, Math.min(90, Number(v) || 0)) } : x));
   const itens = (catalogo || []).filter(it => it.id !== excluirId);
   if (!itens.length) return null;
   return (
     <div style={{ marginBottom: 14 }}>
-      <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#334155', marginBottom: 2 }}>
-        Order bump — “quer incluir também?” antes do checkout
-      </label>
-      <div style={{ fontSize: 12, color: '#64748b', marginBottom: 8 }}>
-        Oferecidos <strong>um por vez</strong> na página, com desconto, entrando na mesma compra.
-        Assinatura não entra aqui — só cursos e eBooks.
-      </div>
+      <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#334155', marginBottom: 2 }}>{titulo}</label>
+      <div style={{ fontSize: 12, color: '#64748b', marginBottom: 8 }}>{ajuda}</div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {itens.map(it => {
           const on = achar(it);
@@ -781,7 +779,7 @@ function BumpSelector({ valor, onChange, catalogo, excluirId }) {
             <div key={`bump-${it.tipo}-${it.id}`} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <button type="button" onClick={() => toggle(it)}
                 style={{ padding: '6px 12px', borderRadius: 20, fontSize: 12, fontWeight: 700, cursor: 'pointer', flexShrink: 0,
-                  border: `1px solid ${on ? '#7C3AED' : '#e2e8f0'}`, background: on ? '#f5f3ff' : '#fff', color: on ? '#6D28D9' : '#64748b' }}>
+                  border: `1px solid ${on ? cor : '#e2e8f0'}`, background: on ? `${cor}12` : '#fff', color: on ? cor : '#64748b' }}>
                 {on ? '✓ ' : ''}{it.tipo === 'curso' ? '🎓' : '📖'} {it.titulo}
               </button>
               {on && (

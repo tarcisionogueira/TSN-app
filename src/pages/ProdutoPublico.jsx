@@ -172,11 +172,10 @@ export default function ProdutoPublico({ tipo }) {
     return () => { cancelado = true; };
   }, [produto]);
 
-  // ── UPSELL (26/08) ──────────────────────────────────────────────────────────
-  // Os produtos que o cadastro marcou como "oferecidos à parte". São SUGESTÃO: não liberam
-  // acesso e não entram no preço desta página. Falha ao carregar não quebra a venda
-  // principal — o bloco simplesmente não aparece, e é por isso que aqui a leitura pode ser
-  // best-effort, ao contrário da leitura do próprio produto.
+  // ── VITRINE "LEVE TAMBÉM" (26/08) ─────────────────────────────────────────
+  // Mesma mecânica do bump — entra na MESMA compra — mudando só a apresentação: aqui
+  // aparecem TODOS de uma vez, com foto e descrição, para o cliente marcar o que quiser.
+  // Não leva a outra página: mandar alguém embora no meio da compra perde as duas vendas.
   useEffect(() => {
     const lista = Array.isArray(produto?.upsell_produtos) ? produto.upsell_produtos : [];
     if (!lista.length) { setUpsell([]); return; }
@@ -184,43 +183,29 @@ export default function ProdutoPublico({ tipo }) {
     (async () => {
       const ids = { curso: [], ebook: [] };
       lista.forEach(it => { if (ids[it?.tipo]) ids[it.tipo].push(it.id); });
-      const out = [];
+      const achados = [];
       if (ids.curso.length) {
-        const { data } = await supabase.from('cursos_admin') // padrao-ok: sugestão opcional — falha esconde o bloco, nunca afeta a compra principal
-          .select('id, titulo, subtitulo, preco, cor, emoji, capa_url').in('id', ids.curso).eq('ativo', true);
-        (data || []).forEach(c => out.push({ ...c, tipo: 'curso' }));
+        const { data } = await supabase.from('cursos_admin') // padrao-ok: vitrine opcional — falha esconde o bloco, a compra principal segue
+          .select('id, titulo, subtitulo, descricao, preco, cor, emoji, capa_url').in('id', ids.curso).eq('ativo', true);
+        (data || []).forEach(c => achados.push({ ...c, tipo: 'curso' }));
       }
       if (ids.ebook.length) {
-        const { data } = await supabase.from('ebooks_admin') // padrao-ok: sugestão opcional — falha esconde o bloco, nunca afeta a compra principal
+        const { data } = await supabase.from('ebooks_admin') // padrao-ok: vitrine opcional — falha esconde o bloco, a compra principal segue
           .select('id, titulo, descricao, preco, capa_url').in('id', ids.ebook).eq('ativo', true);
-        (data || []).forEach(e => out.push({ ...e, tipo: 'ebook' }));
+        (data || []).forEach(e => achados.push({ ...e, tipo: 'ebook' }));
       }
-      if (!cancelado) setUpsell(out);
+      const ordenados = lista.map(cfg => {
+        const achado = achados.find(a => a.id === cfg.id && a.tipo === cfg.tipo);
+        if (!achado) return null;
+        const pct = Math.max(0, Math.min(90, Number(cfg.desconto_pct) || 0));
+        return { ...achado, desconto_pct: pct, valor_cheio: Number(achado.preco) || 0,
+                 valor_com_desconto: Math.round((Number(achado.preco) || 0) * (1 - pct / 100) * 100) / 100 };
+      }).filter(Boolean);
+      if (!cancelado) setUpsell(ordenados);
     })();
     return () => { cancelado = true; };
   }, [produto]);
 
-  if (loading) return <div style={{ textAlign: 'center', padding: 80, color: '#94a3b8' }}>Carregando…</div>;
-  // "Não existe" e "não consegui ler" são coisas diferentes, e imprimir a primeira no lugar
-  // da segunda manda embora um comprador que estava com o cartão na mão.
-  if (!produto) return erroLeitura
-    ? (
-      <div style={{ maxWidth: 460, margin: '80px auto', textAlign: 'center', padding: '0 24px' }}>
-        <div style={{ fontSize: 40, marginBottom: 12 }}>⚠️</div>
-        <div style={{ fontSize: 17, fontWeight: 700, color: '#111', marginBottom: 8 }}>Não conseguimos carregar esta página agora</div>
-        <div style={{ fontSize: 14, color: '#64748b', marginBottom: 20, lineHeight: 1.6 }}>
-          O material continua disponível — foi uma falha momentânea de conexão nossa.
-        </div>
-        <button onClick={() => window.location.reload()}
-          style={{ padding: '12px 24px', background: '#0D63DB', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
-          Tentar de novo
-        </button>
-      </div>
-    )
-    : <div style={{ textAlign: 'center', padding: 80, color: '#94a3b8' }}>Produto não encontrado.</div>;
-
-  // A PRÓXIMA oferta: a primeira da ordem do cadastro que ainda não foi aceita e que o
-  // cliente ainda não possui. `undefined` esconde o bloco — fim das ofertas.
   const proximoBump = bumps.find(b =>
     !aceitos.some(a => a.id === b.id && a.tipo === b.tipo));
   const totalComExtras = (Number(produto?.preco) || 0)
@@ -231,7 +216,8 @@ export default function ProdutoPublico({ tipo }) {
   const isPago = Number(produto.preco) > 0;
   const cor = produto.cor || '#0D63DB';
   const bgCor = cor + '20';
-  const refParam = ref ? `?ref=${ref}` : '';
+  // (refParam saiu junto com os links da vitrine: os cartões agora incluem no carrinho
+  // em vez de levar a outra página, então não há mais link para propagar o ?ref=.)
 
   const modulos = aulas.reduce((acc, a) => {
     const mod = a.modulo || 'Conteúdo';
@@ -303,36 +289,66 @@ export default function ProdutoPublico({ tipo }) {
           )}
         </div>
 
-        {/* ── UPSELL: o que mais pode interessar ────────────────────────────────
-            Fica DEPOIS do conteúdo do produto e FORA da caixa de compra, de propósito:
-            é sugestão, não parte da oferta. Misturar com o preço faria o cliente achar
-            que precisa levar tudo. */}
-        {upsell.length > 0 && (
+        {/* ── VITRINE "LEVE TAMBÉM" ─────────────────────────────────────────────
+            Foto, descrição e um botão que INCLUI NO CARRINHO. Fica fora da caixa de
+            compra (é escolha, não parte da oferta), mas soma no mesmo pedido — o cliente
+            nunca sai desta página. */}
+        {isPago && upsell.length > 0 && (
           <div style={{ marginTop: 36, paddingTop: 28, borderTop: '1px solid #e5e7eb' }}>
             <div style={{ fontSize: 13, fontWeight: 800, color: '#111111', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>
-              Quem levou este, também levou
+              Leve também
             </div>
             <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 16 }}>
-              Aquisição separada — não está incluída no preço acima.
+              Marque o que quiser levar junto — soma no mesmo pagamento, sem sair daqui.
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: 14 }}>
-              {upsell.map(u => (
-                <a key={`${u.tipo}-${u.id}`} href={`#/p/${u.tipo}/${u.id}${refParam}`}
-                  style={{ textDecoration: 'none', color: 'inherit', border: '1px solid #e5e7eb', borderRadius: 12, overflow: 'hidden', background: '#fff', display: 'block' }}>
-                  {u.capa_url
-                    ? <img src={u.capa_url} alt="" style={{ width: '100%', height: 104, objectFit: 'cover', display: 'block' }} />
-                    : <div style={{ height: 104, background: `linear-gradient(135deg, ${u.cor || '#0D63DB'} 0%, ${(u.cor || '#0D63DB')}88 100%)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 34 }}>{u.tipo === 'curso' ? (u.emoji || '🎓') : '📖'}</div>}
-                  <div style={{ padding: '12px 13px' }}>
-                    <div style={{ fontSize: 10, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>{u.tipo === 'curso' ? 'Curso' : 'eBook'}</div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: '#111', lineHeight: 1.3, marginBottom: 6 }}>{u.titulo}</div>
-                    <div style={{ fontSize: 14, fontWeight: 800, color: '#047857' }}>
-                      {Number(u.preco) > 0
-                        ? `R$ ${Number(u.preco).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                        : 'Gratuito'}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 14 }}>
+              {upsell.map(u => {
+                const noCarrinho = aceitos.some(a => a.id === u.id && a.tipo === u.tipo);
+                return (
+                  <div key={`up-${u.tipo}-${u.id}`}
+                    style={{ border: `1px solid ${noCarrinho ? '#10b981' : '#e5e7eb'}`, borderRadius: 12, overflow: 'hidden',
+                      background: noCarrinho ? '#f0fdf4' : '#fff', display: 'flex', flexDirection: 'column' }}>
+                    {u.capa_url
+                      ? <img src={u.capa_url} alt="" style={{ width: '100%', height: 118, objectFit: 'cover', display: 'block' }} />
+                      : <div style={{ height: 118, background: `linear-gradient(135deg, ${u.cor || '#0D63DB'} 0%, ${(u.cor || '#0D63DB')}88 100%)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 38 }}>{u.tipo === 'curso' ? (u.emoji || '🎓') : '📖'}</div>}
+                    <div style={{ padding: '13px 14px', display: 'flex', flexDirection: 'column', flex: 1 }}>
+                      <div style={{ fontSize: 10, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>{u.tipo === 'curso' ? 'Curso' : 'eBook'}</div>
+                      <div style={{ fontSize: 14.5, fontWeight: 700, color: '#111', lineHeight: 1.3, marginBottom: 5 }}>{u.titulo}</div>
+                      {/* Descrição curta: o suficiente para decidir, sem virar outra página */}
+                      {(u.subtitulo || u.descricao) && (
+                        <div style={{ fontSize: 12.5, color: '#64748b', lineHeight: 1.45, marginBottom: 10,
+                          display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                          {u.subtitulo || u.descricao}
+                        </div>
+                      )}
+                      <div style={{ marginTop: 'auto' }}>
+                        <div style={{ fontSize: 14, marginBottom: 9 }}>
+                          {u.desconto_pct > 0 && (
+                            <span style={{ color: '#94a3b8', textDecoration: 'line-through', marginRight: 6, fontSize: 13 }}>
+                              R$ {u.valor_cheio.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
+                          )}
+                          <strong style={{ color: '#047857', fontSize: 15.5 }}>
+                            R$ {u.valor_com_desconto.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </strong>
+                          {u.desconto_pct > 0 && (
+                            <span style={{ color: '#B45309', fontWeight: 700, marginLeft: 6, fontSize: 12.5 }}>−{u.desconto_pct}%</span>
+                          )}
+                        </div>
+                        <button type="button"
+                          onClick={() => setAceitos(noCarrinho
+                            ? aceitos.filter(a => !(a.id === u.id && a.tipo === u.tipo))
+                            : [...aceitos, u])}
+                          style={{ width: '100%', padding: '9px', borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                            border: noCarrinho ? '1px solid #10b981' : '1px solid #cbd5e1',
+                            background: noCarrinho ? '#10b981' : '#fff', color: noCarrinho ? '#fff' : '#334155' }}>
+                          {noCarrinho ? '✓ No carrinho — remover' : '+ Incluir na compra'}
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </a>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}

@@ -11,10 +11,16 @@
 -- entregue como BÔNUS de um produto que a inclui (regra `produto.bonus_e_upsell`), nunca
 -- como item avulso empurrado no fim da compra.
 --
--- COMO SE DISTINGUE DAS DUAS COISAS QUE JÁ EXISTEM:
+-- COMO SE DISTINGUE DO QUE JÁ EXISTE:
 --   • BÔNUS      — vem junto, de graça, sem o cliente escolher.
---   • UPSELL     — vitrine "veja também", leva a OUTRA página, outra compra.
---   • ORDER BUMP — entra NA MESMA compra, com desconto, num clique. É este arquivo.
+--   • ORDER BUMP — oferta em destaque, UMA POR VEZ, dentro da caixa de compra.
+--   • UPSELL     — vitrine com foto e descrição, VÁRIOS ao mesmo tempo, abaixo do conteúdo.
+--
+-- Bump e upsell são o MESMO mecanismo com apresentações diferentes: os dois entram na
+-- MESMA compra, num clique. Correção de 26/08, pedido do dono: "o upsell não pode ir a
+-- outra página — ideal ter a foto e uma descrição básica do produto para selecionar e
+-- incluir no carrinho". Mandar o cliente para outra página no meio da compra é perder as
+-- duas vendas: ele sai da que ia fechar e raramente fecha a nova.
 --
 -- ⚠️ A TRAVA QUE IMPORTA: o cliente diz QUAIS extras quer; o PREÇO vem sempre do banco.
 -- Aceitar valor vindo da tela deixaria comprar um curso de R$ 1.497 por R$ 1,00 — e a
@@ -49,7 +55,7 @@ create or replace function public.comprar_produto_iniciar(
 returns jsonb language plpgsql security definer set search_path to 'public' as $function$
 declare
   v_titulo text; v_preco numeric; v_com numeric; v_ativo boolean; v_gratis text[];
-  v_role text; v_ref_cod text; v_compra_id uuid; v_bumps jsonb;
+  v_role text; v_ref_cod text; v_compra_id uuid; v_bumps jsonb; v_upsell jsonb; v_ofertas jsonb;
   v_item jsonb; v_et text; v_eid uuid; v_epreco numeric; v_eativo boolean;
   v_desc numeric; v_cobrado numeric; v_extras_ok jsonb := '[]'::jsonb; v_total numeric;
 begin
@@ -59,10 +65,14 @@ begin
   if p_produto_tipo = 'ebook' then
     select titulo, coalesce(preco,0), coalesce(comissao_pct,0), coalesce(ativo,false), coalesce(planos_gratis,'{}'), coalesce(bump_produtos,'[]'::jsonb)
       into v_titulo, v_preco, v_com, v_ativo, v_gratis, v_bumps from ebooks_admin where id = p_produto_id;
+    select coalesce(upsell_produtos,'[]'::jsonb) into v_upsell from ebooks_admin where id = p_produto_id;
   else
     select titulo, coalesce(preco,0), coalesce(comissao_pct,0), coalesce(ativo,false), coalesce(planos_gratis,'{}'), coalesce(bump_produtos,'[]'::jsonb)
       into v_titulo, v_preco, v_com, v_ativo, v_gratis, v_bumps from cursos_admin where id = p_produto_id;
+    select coalesce(upsell_produtos,'[]'::jsonb) into v_upsell from cursos_admin where id = p_produto_id;
   end if;
+  -- As duas listas valem para o carrinho. O que muda é só COMO a tela apresenta cada uma.
+  v_ofertas := coalesce(v_bumps,'[]'::jsonb) || coalesce(v_upsell,'[]'::jsonb);
   if v_titulo is null or not v_ativo then return jsonb_build_object('ok',false,'erro','indisponivel'); end if;
   if v_preco <= 0 then return jsonb_build_object('ok',false,'erro','gratuito'); end if;
 
@@ -92,11 +102,14 @@ begin
 
       -- Tem de estar OFERECIDO por este produto. Sem esta checagem, qualquer um montaria
       -- uma requisição pedindo um curso caro com o desconto de outro.
-      select (b->>'desconto_pct')::numeric into v_desc
-        from jsonb_array_elements(v_bumps) b
+      -- Precisa estar oferecido por este produto, em qualquer das duas listas. `found`
+      -- separa "não está na lista" (recusa) de "está, mas sem desconto" (preço cheio) —
+      -- desconto nulo é 0%, não é motivo para barrar a venda.
+      select coalesce((b->>'desconto_pct')::numeric, 0) into v_desc
+        from jsonb_array_elements(v_ofertas) b
        where b->>'id' = v_eid::text and b->>'tipo' = v_et
        limit 1;
-      continue when v_desc is null;
+      continue when not found;
       v_desc := least(greatest(coalesce(v_desc,0), 0), 90);   -- desconto sensato: 0 a 90%
 
       if v_et = 'ebook' then
