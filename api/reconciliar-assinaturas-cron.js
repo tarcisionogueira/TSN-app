@@ -229,10 +229,18 @@ async function handler(req) {
     // rebaixa a explorador e limpa a âncora. GRAÇA de 5 dias evita rebaixar um recorrente
     // cuja renovação está sendo processada perto do vencimento.
     const grace = new Date(Date.now() - 5 * 24 * 3600 * 1000).toISOString();
-    const { data: anuaisVencidos } = await supabase.from('perfis')
+    // 'cortesia' entra junto com 'anual' (26/08): a compra de produto passou a conceder
+    // plano por N meses (regra `produto.concede_plano`), e o acesso concedido precisa
+    // VENCER. Filtrar só por 'anual' deixaria a cortesia sem rebaixamento nenhum — o
+    // cliente ganharia 6 meses e ficaria com eles para sempre, sem erro e sem log.
+    const { data: anuaisVencidos, error: eVenc } = await supabase.from('perfis')
       .select('id, role, plano_ciclo, plano_vencimento, ciclo_agendado, asaas_id, mp_preapproval_id')
-      .eq('plano_ciclo', 'anual').lt('plano_vencimento', grace)
+      .in('plano_ciclo', ['anual', 'cortesia']).lt('plano_vencimento', grace)
       .in('role', ['top2', 'top2_anual']);
+    // Sem esta checagem, uma falha de leitura vira "ninguém a rebaixar" — a lista vazia
+    // que não sabe que falhou (forma nº 2 do CLAUDE.md). Um DELETE/UPDATE que não alcança
+    // nada não dá erro, e o acesso pago seguiria de graça em silêncio.
+    if (eVenc) throw new Error(`leitura de vencidos falhou: ${eVenc.message}`);
     for (const p of (anuaisVencidos || [])) {
       // FAIL-SAFE (B3): só rebaixa com CONFIRMAÇÃO de que não há mandato ativo. Qualquer
       // INCERTEZA (erro/timeout de gateway) → pula — um 5xx transitório na janela de renovação

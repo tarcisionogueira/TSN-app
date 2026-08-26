@@ -116,7 +116,7 @@ const PLANOS_ACESSO = [
 ];
 
 function defaultCurso() {
-  return { titulo: '', subtitulo: '', descricao: '', capa_url: '', cor: '#0D63DB', nivel: 'Iniciante', categoria: 'Fundamentos', preco: '', gratuito: false, destaque: false, onboarding: false, comissao_pct: 30, planos_gratis: [], modulos: [] };
+  return { titulo: '', subtitulo: '', descricao: '', capa_url: '', cor: '#0D63DB', nivel: 'Iniciante', categoria: 'Fundamentos', preco: '', gratuito: false, destaque: false, onboarding: false, comissao_pct: 30, planos_gratis: [], concede_plano: '', concede_meses: 6, modulos: [] };
 }
 function defaultModulo(idx) { return { _key: String(Date.now() + idx), titulo: '', aulas: [] }; }
 function defaultAula() { return { _key: String(Date.now() + Math.random()), titulo: '', duracao: '', video_url: '', descricao: '', gratis: false, materiais: [] }; }
@@ -347,7 +347,7 @@ function CursosTab() {
       // não vai para a loja/área de membros; fica só para o admin concluir depois.
       const faltam = faltamCampos(form);
       const completo = faltam.length === 0;
-      const cursoPayload = { titulo: rest.titulo, subtitulo: rest.subtitulo || '', descricao: rest.descricao || '', capa_url: rest.capa_url || null, cor: rest.cor || '#0D63DB', nivel: rest.nivel || 'Iniciante', categoria: rest.categoria || 'Fundamentos', preco: Number(rest.preco) || 0, gratuito: rest.gratuito || false, destaque: rest.destaque || false, onboarding: rest.onboarding || false, comissao_pct: Number(rest.comissao_pct) || 30, planos_gratis: Array.isArray(rest.planos_gratis) ? rest.planos_gratis : [], ativo: completo ? (rest.ativo !== false) : false };
+      const cursoPayload = { titulo: rest.titulo, subtitulo: rest.subtitulo || '', descricao: rest.descricao || '', capa_url: rest.capa_url || null, cor: rest.cor || '#0D63DB', nivel: rest.nivel || 'Iniciante', categoria: rest.categoria || 'Fundamentos', preco: Number(rest.preco) || 0, gratuito: rest.gratuito || false, destaque: rest.destaque || false, onboarding: rest.onboarding || false, comissao_pct: Number(rest.comissao_pct) || 30, planos_gratis: Array.isArray(rest.planos_gratis) ? rest.planos_gratis : [], concede_plano: rest.concede_plano || null, concede_meses: rest.concede_plano ? (Number(rest.concede_meses) || 6) : null, ativo: completo ? (rest.ativo !== false) : false };
 
       let cursoId;
       if (modal === 'new') {
@@ -556,6 +556,44 @@ function CursosTab() {
             {!form.gratuito && (
               <div style={{ marginBottom: 14 }}>
                 <PlanosGratisSelector valor={form.planos_gratis} onChange={v => setForm({ ...form, planos_gratis: v })} />
+              </div>
+            )}
+            {/* ── O QUE A COMPRA CONCEDE (26/08) ──────────────────────────────────────
+                Não confundir com "Grátis por plano" acima: aquilo é o curso liberado a quem
+                JÁ assina; isto é o contrário — a compra do curso dá acesso à plataforma.
+                É a oferta do combo (os dois cursos = 6 meses de Investidor Pro), e vive aqui
+                como DADO porque a concessão por faixa de valor do pagamento não alcança
+                preço novo: o combo de R$ 2.395,20 não cai em faixa nenhuma e o cliente
+                pagaria sem receber o plano. Regra `produto.concede_plano`. */}
+            {!form.gratuito && (
+              <div style={{ marginBottom: 14, background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:8, padding:'12px 14px' }}>
+                <div style={{ fontSize:13, fontWeight:700, color:'#334155', marginBottom:8 }}>Comprar este curso dá acesso à plataforma?</div>
+                <div style={{ display:'flex', gap:10, flexWrap:'wrap', alignItems:'center' }}>
+                  <select
+                    value={form.concede_plano || ''}
+                    onChange={e => setForm({ ...form, concede_plano: e.target.value })}
+                    style={{ padding:'7px 10px', border:'1px solid #cbd5e1', borderRadius:6, fontSize:14 }}>
+                    <option value="">Não concede</option>
+                    <option value="top2">Investidor Pro</option>
+                    <option value="assessorado">Assessoria</option>
+                    <option value="clube">Leilão Club</option>
+                  </select>
+                  {form.concede_plano && (
+                    <label style={{ fontSize:14, color:'#374151', display:'flex', alignItems:'center', gap:6 }}>
+                      por
+                      <input type="number" min="1" max="60" value={form.concede_meses ?? 6}
+                        onChange={e => setForm({ ...form, concede_meses: e.target.value })}
+                        style={{ width:66, padding:'7px 8px', border:'1px solid #cbd5e1', borderRadius:6, fontSize:14 }} />
+                      meses
+                    </label>
+                  )}
+                </div>
+                {form.concede_plano && (
+                  <div style={{ fontSize:12, color:'#64748b', marginTop:8, lineHeight:1.5 }}>
+                    O acesso <strong>vence</strong> na data e o cliente volta a Explorador. Quem já tem plano maior
+                    não é rebaixado, e quem já tem acesso pago mais longo não perde os dias que comprou.
+                  </div>
+                )}
               </div>
             )}
             <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:8, padding:'9px 12px', fontSize:12, color:'#084BA6', marginBottom:14 }}>
