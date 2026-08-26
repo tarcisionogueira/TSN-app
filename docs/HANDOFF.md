@@ -4,6 +4,91 @@
 
 ---
 
+## 🔌 26/08 — VERIFICAÇÃO REPRESADA: O BANCO FICOU INACESSÍVEL NESTA SESSÃO
+
+O conector Supabase devolveu **"You do not have permission to perform this action"** em toda
+consulta desta sessão — `execute_sql` e `list_tables`, do começo ao fim. Nada foi lido do banco.
+Isto NÃO é falha do produto: é o acesso desta sessão. Mas deixa **uma verificação em aberto**, e
+ela é a primeira coisa a rodar na próxima sessão com conexão.
+
+### Rodar assim que o Supabase responder
+
+```sql
+-- (a) O acervo por estado — a resposta à pergunta do dono ("por que aparece 'sem lote hoje'?")
+select upper(estado) as uf, count(*) as lotes
+  from imoveis_leilao where ativo and coalesce(estado,'') <> ''
+ group by 1 order by 2 desc;
+
+-- (b) O DEFEITO QUE A TELA ESCONDERIA — vale mais que a (a). Verde = ZERO linhas.
+select coalesce(estado,'(nulo)') as estado_gravado, count(*) as lotes
+  from imoveis_leilao where ativo
+   and (estado is null or estado !~ '^[A-Za-z]{2}$')
+ group by 1 order by 2 desc;
+```
+
+**Por que a (b) importa.** `/leiloes` casa o retorno de `acervo_uf_contagem()` com a tabela de
+siglas `UF_NOME` em `api/publico.js`. Um lote gravado como `São Paulo`, `Sao Paulo` ou `sp `
+(com espaço) **é contado pela RPC e descartado pela página** — sem erro, sem log, sem exceção.
+Ele não pertence a estado nenhum, o total do topo sai menor que o acervo, e o estado pode
+aparecer como "sem lote hoje" **tendo lote**. É a forma de falha nº 3/nº 9 da lista do CLAUDE.md:
+o vazio que não sabe que falhou. `acervo_cidades_uf(p_uf)` tem o mesmo ponto cego
+(`upper(estado) = upper(p_uf)` nunca casa `São Paulo` com `SP`).
+
+### O invariante já está escrito — aplicar é o primeiro passo, não o último
+
+`supabase/migrations/qa_invariante_estado_fora_do_padrao.sql` **está no repo e ainda NÃO foi
+aplicado** (SQL Editor do Supabase, como toda migração aqui). Depois de aplicado, ele responde a
+consulta (b) sozinho, todo dia, dentro de `qa_invariantes()` — limite **0**, severidade `bug`:
+
+```sql
+select * from public.qa_invariantes() where chave = 'estado_fora_do_padrao';
+```
+
+**Verde (0):** está íntegro, "sem lote hoje" só aparece em estado realmente vazio.
+**Vermelho:** conserto em três passos, NESTA ordem — (1) normalizar na **origem**, no parser do
+leiloeiro que gravou assim, senão volta amanhã; (2) backfill das linhas existentes; (3) só então
+o invariante fecha em zero e vira vigia em vez de relatório. A migração traz a consulta que
+mostra **qual fonte** gravou errado.
+
+⚠️ **Não confundir com a prévia.** As telas de layout que mandei ao dono em 26/08 foram
+renderizadas com um **dublê de dados fictício** (5 UFs escritas na mão). Os 22 "sem lote hoje"
+daquela imagem são do dublê, não do acervo — a imagem não é diagnóstico.
+
+---
+
+## 🎨 26/08 — LAYOUT DO /leiloes ALINHADO À MARCA (commits `e19dc8f`, `86be102`)
+
+Pedido do dono: *"não está comercialmente agradável, foge dos temas da landing page e ainda está
+toda branca, o que cansa a vista"* + *"que a pessoa busque a sua cidade ou estado e então
+visualize"*.
+
+**Por que destoava, e é bom não esquecer:** `/leiloes` **não é o app React**. É um documento HTML
+montado no servidor por `api/publico.js`, com o CSS dele. A landing pode mudar de cara inteira que
+esta página não fica sabendo — era a única tela do produto sem o navy da marca. Toda mudança de
+identidade visual precisa ser aplicada **nos dois lugares**.
+
+- **Hero escuro** no topo de toda página de lista, com o gradiente navy da `Landing.jsx` e o
+  degradê azul→verde no destaque do título.
+- **A busca por cidade subiu para dentro do hero** — é o primeiro elemento acionável da página.
+  Descer por Brasil → estado → cidade virou alternativa, não obrigação.
+- **Estados e cidades viraram cartões em grade** (nome + contagem em selo), no lugar das pílulas.
+- Blocos de texto em **cartão branco sobre fundo cinza**, criando o ritmo claro/escuro da landing.
+- Cidade sem lote ganhou busca + explicação, em vez de um parágrafo de desculpa.
+- **O índice nacional passa a listar as 27 UFs**, não só as que têm lote: quem é da Bahia abria
+  `/leiloes`, não via a Bahia e concluía que não cobrimos o estado dele. UF sem lote aparece
+  apagada, com "sem lote hoje" e **sem link** (clicar levaria a página vazia).
+- O texto de apoio conta os estados que **têm** lote (`comLote`), não o tamanho da lista — senão
+  anunciaria "27 estados" sempre, que é número plausível descrevendo outra coisa.
+- Plurais: cidade de lote único imprimia "1 lotes ativos", e UF de uma cidade só, "1 cidades".
+- `caixaBusca()` e o CSS `.busca` viraram código morto e saíram; a nota do zoom do Safari iOS
+  (16px no campo) foi movida para o campo que passou a existir.
+
+**Ainda não está em produção:** os commits estão em `claude/handoff-bidpro-brasil-checks-42w0rg`.
+`main` (`68e8c05`) segue com o layout antigo — foi por isso que, ao clicar na prévia, o dono caiu
+numa tela fora do padrão: o formulário da prévia aponta para o site real, que ainda é o velho.
+
+---
+
 ## 🚨 25/08 (noite) — O GOOGLE PAROU DE TRAZER GENTE HOJE
 
 **Não é falha de rastreamento. O tráfego parou mesmo.** Medido às 22h UTC:
@@ -63,10 +148,10 @@ esperar custa um dia de veiculação.
 ### ⏳ Depende de decisão ou ação sua (herdadas, sem mudança)
 | # | Pendência |
 |---|---|
-| 3 | **O que são os 47 pagamentos "avulso"** (R$ 5.047,49, sem `user_id`) |
+| ~~3~~ | ~~**O que são os 47 pagamentos "avulso"**~~ — **RESOLVIDO 25/08.** O dono confirmou: é **aporte dele**, e o faturamento é o das assinaturas. Era `backfill-mp-pagamentos-cron.js` puxando qualquer movimento da conta MP para a receita. Commit `7c74244`: `vendas` R$ 4.883,29 → **R$ 0,00**; `mensalidades` R$ 299,40. Mesma correção no `mp-webhook.js` |
 | 4 | **UTM nos links da bio do Instagram** — o da calculadora (`/r/C39C0C`) não tem |
-| 5 | Felipe Scarafiz: acesso total + Finanças no portfólio Meta |
-| 6 | Nanda Oliveira com acesso à Página sem estar no portfólio |
+| 5 | Felipe Scarafiz: acesso total + Finanças no portfólio Meta. **26/08:** a Meta pede chave de segurança USB. Caminho: remover por **Configurações do Negócio → Pessoas → Remover** (como admin, não exige o 2FA dele). Se a chave for pedida para a conta DO DONO, usar "Tentar outra forma". Último recurso: suporte do Business para usuário inativo — que depende da verificação do anunciante (item 9) |
+| ~~6~~ | ~~Nanda Oliveira com acesso à Página sem estar no portfólio~~ — **DISPENSADO 26/08:** é a esposa do dono, acesso intencional |
 | 7 | Confirmar `VITE_META_PIXEL_ID` = `683455009174779` |
 | 8 | Renomear `BR - 25-60 - ABERTO` → `BR - 25MAIS - ABERTO` |
 | 9 | Verificação do anunciante no Meta (NOGUEIRA EMPREENDIMENTOS) |
