@@ -308,13 +308,18 @@ export default async function handler(req, res) {
   {
     const ext = String(pagamento.external_reference || '').trim();
     const [refUser, refPlano] = ext.includes('|') ? ext.split('|') : [];
+    const usuario = refUser || pagamento.metadata?.user_id || pagamento.metadata?.userId || null;
     await upsertTabela('mp_pagamentos', 'mp_payment_id', {
       mp_payment_id: String(pagamento.id),
-      user_id: refUser || pagamento.metadata?.user_id || pagamento.metadata?.userId || null,
+      user_id: usuario,
       plano_key: refPlano || pagamento.metadata?.planoKey || null,
       valor: pagamento.transaction_amount ?? null, status,
       status_detalhe: pagamento.status_detail || null, metodo: pagamento.payment_method_id || null,
-      external_ref: ext || null, origem: pagamento.operation_type === 'recurring_payment' ? 'recorrente' : 'avulso',
+      external_ref: ext || null,
+      // 25/08: sem vinculo com usuario NAO e venda nossa — e a conta pagando fornecedor
+      // (Anthropic/Supabase/Meta) ou Pix de terceiro. Mesma regra do backfill; sem ela o
+      // financeiro somava despesa como faturamento.
+      origem: !usuario ? 'terceiro' : (pagamento.operation_type === 'recurring_payment' ? 'recorrente' : 'avulso'),
       dados_mp: pagamento, atualizado_em: new Date().toISOString(),
     });
   }

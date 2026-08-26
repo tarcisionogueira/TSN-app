@@ -47,16 +47,24 @@ async function handler(req) {
         if (op && op !== 'regular_payment' && op !== 'recurring_payment') continue;
         const ext = String(p.external_reference || '').trim();
         const [refUser, refPlano] = ext.includes('|') ? ext.split('|') : [];
+        const usuario = refUser || p.metadata?.user_id || p.metadata?.userId || null;
         const { error } = await supabase.from('mp_pagamentos').upsert({
           mp_payment_id: String(p.id),
-          user_id: refUser || p.metadata?.user_id || p.metadata?.userId || null,
+          user_id: usuario,
           plano_key: refPlano || p.metadata?.planoKey || null,
           valor: p.transaction_amount ?? null,
           status: p.status || null,
           status_detalhe: p.status_detail || null,
           metodo: p.payment_method_id || null,
           external_ref: ext || null,
-          origem: op === 'recurring_payment' ? 'recorrente' : 'avulso',
+          // 25/08: o filtro por operation_type acima NAO basta. O /v1/payments/search da conta
+          // devolve regular_payment tambem para o que a CONTA PAGA — a assinatura do Claude, a
+          // fatura do Supabase, o Meta Ads — e para Pix de terceiros. Tudo isso entrava como
+          // 'avulso' e financeiro_resumo somava como VENDA: R$ 4.883,29 de faturamento que nao
+          // existia, ao lado de R$ 299,40 de receita real. Venda nossa SEMPRE carrega vinculo
+          // com usuario (external_reference no formato `userId|planoKey`, ou metadata.user_id):
+          // medido, 7 de 7 pagamentos com user_id tinham external_ref. Sem vinculo = nao e nosso.
+          origem: !usuario ? 'terceiro' : (op === 'recurring_payment' ? 'recorrente' : 'avulso'),
           dados_mp: p,
           atualizado_em: new Date().toISOString(),
         }, { onConflict: 'mp_payment_id' });
