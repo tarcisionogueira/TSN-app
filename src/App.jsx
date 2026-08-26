@@ -66,6 +66,7 @@ const ContratoLink = lazy(() => import('./pages/ContratoLink'));
 const TestemunhaLink = lazy(() => import('./pages/TestemunhaLink'));
 const ProdutoLanding = lazy(() => import('./pages/ProdutoLanding'));
 const ProdutoPublico = lazy(() => import('./pages/ProdutoPublico'));
+const LiveInscricao = lazy(() => import('./pages/LiveInscricao'));
 const CancelarAlertas = lazy(() => import('./pages/CancelarAlertas'));
 // Tela que abre NO CELULAR pelo QR code do desktop (envio de foto). Pública de propósito: o
 // telefone não tem sessão — quem autoriza é o código de uso único do QR, validado no servidor.
@@ -383,6 +384,8 @@ function MainLayout() {
           <Route path="/calculadora" element={<Calculadora />} />
           <Route path="/indice" element={<PrivateRoute><IndiceConsulta /></PrivateRoute>} />
           <Route path="/p/curso/:id" element={<ProdutoPublico tipo="curso" />} />
+          {/* Landing da aula ao vivo: pública, sem login, é a porta de entrada da campanha */}
+          <Route path="/live/:slug" element={<LiveInscricao />} />
           <Route path="/p/ebook/:id" element={<ProdutoPublico tipo="ebook" />} />
           <Route path="/membros" element={<PrivateRoute><Membros /></PrivateRoute>} />
           <Route path="/cliente-360" element={<PrivateRoute roles={['admin','analista']}><Cliente360 /></PrivateRoute>} />
