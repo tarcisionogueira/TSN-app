@@ -2,7 +2,10 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '../utils/supabase';
 import { lerMarketing } from '../utils/marketing';
-import { NAVY, LATAO } from '../utils/marca';
+import { NAVY, LATAO, AZUL } from '../utils/marca';
+
+// Sora: display com caráter, sem cair no Inter/Space Grotesk que toda landing usa.
+const FONTE = "'Sora', system-ui, -apple-system, sans-serif";
 
 /**
  * /live/:slug — landing de inscrição da aula ao vivo.
@@ -59,9 +62,10 @@ export default function LiveInscricao() {
     (async () => {
       // O `error` é checado: numa página de campanha, "evento não encontrado" impresso por
       // causa de falha de rede manda embora quem clicou no anúncio — e o clique já foi pago.
-      const { data, error } = await supabase.from('eventos_live')
-        .select('id, slug, titulo, subtitulo, descricao, data_hora, duracao_min, capa_url, cor, vagas_max')
-        .eq('slug', slug).eq('ativo', true).maybeSingle();
+      // `live_proxima` em vez da tabela: ela resolve a recorrência e devolve a data da
+      // PRÓXIMA aula. Assim o link da campanha (bio, anúncio, ManyChat) nunca precisa mudar
+      // — e link que muda é link que uma hora aponta para página morta com anúncio pago rodando.
+      const { data, error } = await supabase.rpc('live_proxima', { p_slug: slug });
       if (cancelado) return;
       if (error) setErroCarga(true);
       setEvento(data || null);
@@ -144,113 +148,195 @@ export default function LiveInscricao() {
     </div>
   );
 
+  // Passos do que vai acontecer na aula. Numerados porque é SEQUÊNCIA de verdade — uma
+  // coisa depende da anterior —, não decoração.
+  const PASSOS = [
+    { t: 'Judicial x extrajudicial', d: 'As duas modalidades, o que muda no risco e qual serve para quem está começando.' },
+    { t: 'Busca ao vivo', d: 'Abro a plataforma e procuro na sua frente, com os filtros que eu uso de verdade.' },
+    { t: 'Laudo gerado na hora', d: 'Escolhemos um imóvel e a IA monta o relatório de viabilidade ali, do zero.' },
+    { t: 'O lance máximo', d: 'Como calcular o teto que preserva a sua margem — e por que quase todo mundo erra aqui.' },
+  ];
+
   return (
-    <div style={{ minHeight: '100vh', background: NAVY, color: '#EAF0F8' }}>
-      <div style={{ maxWidth: 980, margin: '0 auto', padding: '40px 22px 60px' }}>
+    <div style={{ minHeight: '100vh', background: NAVY, color: '#EAF0F8', fontFamily: FONTE }}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&display=swap');`}</style>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr)', gap: 30 }}>
-          <div>
-            <div style={{ display: 'inline-block', background: `${cor}22`, border: `1px solid ${cor}55`, color: cor, fontSize: 11.5, fontWeight: 800, letterSpacing: 1.4, textTransform: 'uppercase', padding: '6px 13px', borderRadius: 30, marginBottom: 18 }}>
-              Aula ao vivo · gratuita
-            </div>
-            <h1 style={{ fontSize: 'clamp(28px,5vw,46px)', fontWeight: 900, lineHeight: 1.08, letterSpacing: '-0.02em', margin: '0 0 14px', color: '#fff', textWrap: 'balance' }}>
-              {evento.titulo}
-            </h1>
-            {evento.subtitulo && (
-              <p style={{ fontSize: 'clamp(15px,2vw,18.5px)', color: '#B9C8DC', lineHeight: 1.55, margin: '0 0 22px', maxWidth: '58ch' }}>
-                {evento.subtitulo}
-              </p>
-            )}
-            <div style={{ fontSize: 14.5, color: '#D6E1EF', marginBottom: 6, textTransform: 'capitalize' }}>📅 {quando}</div>
-            <div style={{ fontSize: 13, color: '#8FA4BF' }}>
-              Horário de Brasília · {evento.duracao_min || 90} minutos
-              {typeof inscritos === 'number' && inscritos >= 5 && ` · ${inscritos} inscritos`}
-            </div>
-
-            {contagem && !contagem.comecou && (
-              <div style={{ display: 'flex', gap: 16, marginTop: 26, padding: '18px 20px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 14, width: 'fit-content', flexWrap: 'wrap' }}>
-                <Bloco v={contagem.dias} l="dias" />
-                <Bloco v={contagem.horas} l="horas" />
-                <Bloco v={contagem.min} l="min" />
-                <Bloco v={contagem.seg} l="seg" />
-              </div>
-            )}
-            {contagem?.comecou && (
-              <div style={{ marginTop: 24, padding: '14px 18px', background: '#166534', borderRadius: 12, fontWeight: 700, fontSize: 15 }}>
-                🔴 A aula está começando — inscreva-se para receber o link
-              </div>
-            )}
-          </div>
-
-          {/* ── O FORMULÁRIO ─────────────────────────────────────────────────
-              Três campos, e nenhum a mais. Senha não é pedida: a conta é criada e a
-              pessoa define depois, pelo e-mail de confirmação. */}
-          <div style={{ background: '#fff', color: '#0f172a', borderRadius: 16, padding: '26px 24px', boxShadow: '0 10px 40px rgba(0,0,0,0.3)', maxWidth: 460, width: '100%' }}>
-            {pronto ? (
-              <div>
-                <div style={{ fontSize: 40, marginBottom: 10 }}>✅</div>
-                <h2 style={{ fontSize: 21, fontWeight: 800, margin: '0 0 8px' }}>Vaga garantida!</h2>
-                <p style={{ fontSize: 14.5, color: '#475569', lineHeight: 1.6, margin: '0 0 18px' }}>
-                  Enviamos a confirmação para <strong>{form.email}</strong>.
-                  {pronto.contaNova && ' Criamos também o seu acesso à plataforma — o e-mail traz o link para definir a senha.'}
-                </p>
-                {pronto.link_grupo && (
-                  <>
-                    <p style={{ fontSize: 14.5, color: '#0f172a', fontWeight: 600, margin: '0 0 12px' }}>
-                      Falta um passo: entre no grupo do WhatsApp para receber o link da sala e o lembrete.
-                    </p>
-                    <a href={pronto.link_grupo} target="_blank" rel="noopener noreferrer"
-                      style={{ display: 'block', textAlign: 'center', background: '#16a34a', color: '#fff', textDecoration: 'none', padding: '14px', borderRadius: 12, fontWeight: 800, fontSize: 15 }}>
-                      Entrar no grupo do WhatsApp →
-                    </a>
-                  </>
-                )}
-              </div>
-            ) : (
-              <form onSubmit={inscrever}>
-                <h2 style={{ fontSize: 19, fontWeight: 800, margin: '0 0 4px' }}>Garanta a sua vaga</h2>
-                <p style={{ fontSize: 13.5, color: '#64748b', margin: '0 0 18px' }}>É gratuito. Leva 20 segundos.</p>
-
-                {[
-                  { k: 'nome', ph: 'Seu nome', type: 'text', mode: undefined, ac: 'name' },
-                  { k: 'email', ph: 'Seu melhor e-mail', type: 'email', mode: 'email', ac: 'email' },
-                  { k: 'whatsapp', ph: 'WhatsApp com DDD', type: 'tel', mode: 'tel', ac: 'tel' },
-                ].map(f => (
-                  <input key={f.k} type={f.type} inputMode={f.mode} autoComplete={f.ac} placeholder={f.ph}
-                    value={form[f.k]} onChange={e => setForm({ ...form, [f.k]: e.target.value })}
-                    style={{ width: '100%', padding: '13px 15px', border: '1px solid #cbd5e1', borderRadius: 11, fontSize: 16, marginBottom: 10, boxSizing: 'border-box', color: '#0f172a' }} />
-                ))}
-
-                {erro && (
-                  <div style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#991b1b', borderRadius: 9, padding: '10px 12px', fontSize: 13, marginBottom: 10 }}>
-                    {erro}
-                  </div>
-                )}
-
-                <button type="submit" disabled={enviando}
-                  style={{ width: '100%', padding: '15px', background: enviando ? '#94a3b8' : '#0D63DB', color: '#fff', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 16, cursor: enviando ? 'default' : 'pointer' }}>
-                  {enviando ? 'Inscrevendo…' : 'Quero participar'}
-                </button>
-                <p style={{ fontSize: 11.5, color: '#94a3b8', lineHeight: 1.5, margin: '12px 0 0', textAlign: 'center' }}>
-                  Ao se inscrever você concorda em receber comunicações sobre a aula.
-                  Seus dados não são compartilhados com terceiros.
-                </p>
-              </form>
-            )}
-          </div>
+      {/* ── HERO, centralizado ────────────────────────────────────────────────
+          Centralizado de propósito: numa página de campanha o olho entra pelo meio,
+          e texto alinhado à esquerda com o formulário ao lado divide a atenção logo
+          no momento em que ela precisa estar inteira na promessa. */}
+      <div style={{ maxWidth: 760, margin: '0 auto', padding: '56px 22px 0', textAlign: 'center' }}>
+        <div style={{ display: 'inline-block', background: `${cor}1F`, border: `1px solid ${cor}55`, color: cor, fontSize: 11.5, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', padding: '7px 15px', borderRadius: 30, marginBottom: 22 }}>
+          Aula ao vivo · gratuita{evento.recorrencia === 'semanal' ? ' · toda quarta' : ''}
+        </div>
+        <h1 style={{ fontSize: 'clamp(30px,5.4vw,50px)', fontWeight: 800, lineHeight: 1.1, letterSpacing: '-0.025em', margin: '0 0 18px', color: '#fff', textWrap: 'balance' }}>
+          {evento.titulo}
+        </h1>
+        {evento.subtitulo && (
+          <p style={{ fontSize: 'clamp(16px,2.1vw,19.5px)', color: '#B9C8DC', lineHeight: 1.6, margin: '0 auto 26px', maxWidth: '54ch' }}>
+            {evento.subtitulo}
+          </p>
+        )}
+        <div style={{ fontSize: 15.5, color: '#fff', fontWeight: 600, marginBottom: 4, textTransform: 'capitalize' }}>{quando}</div>
+        <div style={{ fontSize: 13, color: '#8FA4BF' }}>
+          Horário de Brasília · {evento.duracao_min || 90} minutos
+          {typeof inscritos === 'number' && inscritos >= 5 && ` · ${inscritos} inscritos`}
         </div>
 
-        {evento.descricao && (
-          <div style={{ marginTop: 44, paddingTop: 30, borderTop: '1px solid rgba(255,255,255,0.1)', maxWidth: '68ch' }}>
-            <div style={{ fontSize: 12, fontWeight: 800, color: cor, textTransform: 'uppercase', letterSpacing: 1.3, marginBottom: 12 }}>
-              O que você vai ver
-            </div>
-            <div style={{ fontSize: 15.5, lineHeight: 1.75, color: '#C9D6E6', whiteSpace: 'pre-line' }}>
-              {evento.descricao}
-            </div>
+        {contagem && !contagem.comecou && (
+          <div style={{ display: 'flex', gap: 14, marginTop: 28, padding: '18px 22px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 14, justifyContent: 'center', flexWrap: 'wrap' }}>
+            <Bloco v={contagem.dias} l="dias" /><Bloco v={contagem.horas} l="horas" />
+            <Bloco v={contagem.min} l="min" /><Bloco v={contagem.seg} l="seg" />
+          </div>
+        )}
+        {contagem?.comecou && (
+          <div style={{ marginTop: 26, padding: '15px 20px', background: '#166534', borderRadius: 12, fontWeight: 700, fontSize: 15.5 }}>
+            🔴 A aula está começando — inscreva-se para receber o link
           </div>
         )}
       </div>
+
+      {/* ── FORMULÁRIO, centralizado logo abaixo da promessa ─────────────────── */}
+      <div style={{ maxWidth: 470, margin: '32px auto 0', padding: '0 22px' }}>
+        <div style={{ background: '#fff', color: '#0f172a', borderRadius: 18, padding: '28px 26px', boxShadow: '0 14px 50px rgba(0,0,0,0.35)' }}>
+          {pronto ? (
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: 42, marginBottom: 10 }}>✅</div>
+              <h2 style={{ fontSize: 22, fontWeight: 800, margin: '0 0 8px' }}>Vaga garantida!</h2>
+              <p style={{ fontSize: 14.5, color: '#475569', lineHeight: 1.6, margin: '0 0 18px' }}>
+                Enviamos a confirmação para <strong>{form.email}</strong>.
+                {pronto.contaNova && ' Criamos também o seu acesso à plataforma — o e-mail traz o link para definir a senha.'}
+              </p>
+              {pronto.link_grupo && (
+                <>
+                  <p style={{ fontSize: 14.5, color: '#0f172a', fontWeight: 600, margin: '0 0 12px' }}>
+                    Falta um passo: entre no grupo do WhatsApp para receber o link da sala e o lembrete.
+                  </p>
+                  <a href={pronto.link_grupo} target="_blank" rel="noopener noreferrer"
+                    style={{ display: 'block', textAlign: 'center', background: '#16a34a', color: '#fff', textDecoration: 'none', padding: '15px', borderRadius: 12, fontWeight: 800, fontSize: 15.5 }}>
+                    Entrar no grupo do WhatsApp →
+                  </a>
+                </>
+              )}
+            </div>
+          ) : (
+            <form onSubmit={inscrever}>
+              <h2 style={{ fontSize: 20, fontWeight: 800, margin: '0 0 4px', textAlign: 'center' }}>Garanta a sua vaga</h2>
+              <p style={{ fontSize: 13.5, color: '#64748b', margin: '0 0 20px', textAlign: 'center' }}>É gratuito. Leva 20 segundos.</p>
+              {[
+                { k: 'nome', ph: 'Seu nome', type: 'text', mode: undefined, ac: 'name' },
+                { k: 'email', ph: 'Seu melhor e-mail', type: 'email', mode: 'email', ac: 'email' },
+                { k: 'whatsapp', ph: 'WhatsApp com DDD', type: 'tel', mode: 'tel', ac: 'tel' },
+              ].map(f => (
+                <input key={f.k} type={f.type} inputMode={f.mode} autoComplete={f.ac} placeholder={f.ph}
+                  value={form[f.k]} onChange={e => setForm({ ...form, [f.k]: e.target.value })}
+                  style={{ width: '100%', padding: '14px 16px', border: '1px solid #cbd5e1', borderRadius: 11, fontSize: 16, marginBottom: 10, boxSizing: 'border-box', color: '#0f172a', fontFamily: 'inherit' }} />
+              ))}
+              {erro && (
+                <div style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#991b1b', borderRadius: 9, padding: '10px 12px', fontSize: 13, marginBottom: 10 }}>{erro}</div>
+              )}
+              <button type="submit" disabled={enviando}
+                style={{ width: '100%', padding: '16px', background: enviando ? '#94a3b8' : AZUL, color: '#fff', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 16.5, cursor: enviando ? 'default' : 'pointer', fontFamily: 'inherit' }}>
+                {enviando ? 'Inscrevendo…' : 'Quero participar'}
+              </button>
+              <p style={{ fontSize: 11.5, color: '#94a3b8', lineHeight: 1.5, margin: '12px 0 0', textAlign: 'center' }}>
+                Ao se inscrever você concorda em receber comunicações sobre a aula. Seus dados não são compartilhados.
+              </p>
+            </form>
+          )}
+        </div>
+      </div>
+
+      {/* ── COMO VAI FUNCIONAR ────────────────────────────────────────────────
+          A numeração aqui é informação, não enfeite: a aula acontece nesta ordem. */}
+      <div style={{ maxWidth: 820, margin: '64px auto 0', padding: '0 22px' }}>
+        <div style={{ textAlign: 'center', marginBottom: 30 }}>
+          <div style={{ fontSize: 11.5, fontWeight: 700, color: cor, textTransform: 'uppercase', letterSpacing: 1.6, marginBottom: 10 }}>Como vai funcionar</div>
+          <h2 style={{ fontSize: 'clamp(23px,3.4vw,31px)', fontWeight: 800, margin: 0, color: '#fff', letterSpacing: '-0.02em' }}>
+            Sem slide. Com a plataforma aberta.
+          </h2>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 18 }}>
+          {PASSOS.map((p, i) => (
+            <div key={p.t} style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.09)', borderRadius: 14, padding: '22px 20px' }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: cor, marginBottom: 10, letterSpacing: 1 }}>
+                {String(i + 1).padStart(2, '0')}
+              </div>
+              <div style={{ fontSize: 16.5, fontWeight: 700, color: '#fff', marginBottom: 7, lineHeight: 1.3 }}>{p.t}</div>
+              <div style={{ fontSize: 14, color: '#A7B9CE', lineHeight: 1.6 }}>{p.d}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── TELAS DO SISTEMA ──────────────────────────────────────────────────
+          Só aparece quando há imagens cadastradas. Uma seção "veja a plataforma" com
+          espaços vazios seria pior que não ter seção nenhuma. */}
+      {Array.isArray(evento.imagens) && evento.imagens.length > 0 && (
+        <div style={{ maxWidth: 1000, margin: '64px auto 0', padding: '0 22px' }}>
+          <div style={{ textAlign: 'center', marginBottom: 28 }}>
+            <div style={{ fontSize: 11.5, fontWeight: 700, color: cor, textTransform: 'uppercase', letterSpacing: 1.6, marginBottom: 10 }}>A plataforma</div>
+            <h2 style={{ fontSize: 'clamp(23px,3.4vw,31px)', fontWeight: 800, margin: 0, color: '#fff', letterSpacing: '-0.02em' }}>
+              É isto que você vai ver funcionando
+            </h2>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))', gap: 18 }}>
+            {evento.imagens.map((img, i) => (
+              <figure key={i} style={{ margin: 0, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.09)', borderRadius: 14, overflow: 'hidden' }}>
+                {/* A proporção fica no WRAPPER, não no <img>: o Safari usa a proporção do
+                    ARQUIVO quando aspect-ratio está na própria imagem, e a tela do sistema
+                    sairia deformada justamente no iPhone, que é onde o público vai abrir. */}
+                <div style={{ position: 'relative', width: '100%', aspectRatio: '16/10', overflow: 'hidden' }}>
+                  <img src={img.url} alt={img.legenda || ''} loading="lazy"
+                    style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                </div>
+                {img.legenda && (
+                  <figcaption style={{ fontSize: 13.5, color: '#A7B9CE', padding: '13px 16px', lineHeight: 1.5 }}>{img.legenda}</figcaption>
+                )}
+              </figure>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── O QUE MAIS ────────────────────────────────────────────────────────── */}
+      {evento.descricao && (
+        <div style={{ maxWidth: 660, margin: '58px auto 0', padding: '0 22px' }}>
+          <div style={{ fontSize: 11.5, fontWeight: 700, color: cor, textTransform: 'uppercase', letterSpacing: 1.6, marginBottom: 14, textAlign: 'center' }}>
+            No detalhe
+          </div>
+          <div style={{ fontSize: 16, lineHeight: 1.85, color: '#C9D6E6', whiteSpace: 'pre-line' }}>
+            {evento.descricao}
+          </div>
+        </div>
+      )}
+
+      {/* ── QUEM APRESENTA ───────────────────────────────────────────────────── */}
+      {evento.apresentador && (
+        <div style={{ maxWidth: 620, margin: '58px auto 0', padding: '0 22px', textAlign: 'center' }}>
+          {evento.apresentador_foto && (
+            <img src={evento.apresentador_foto} alt="" style={{ width: 82, height: 82, borderRadius: '50%', objectFit: 'cover', marginBottom: 14, border: `2px solid ${cor}66` }} />
+          )}
+          <div style={{ fontSize: 11.5, fontWeight: 700, color: cor, textTransform: 'uppercase', letterSpacing: 1.6, marginBottom: 8 }}>Quem apresenta</div>
+          <div style={{ fontSize: 19, fontWeight: 700, color: '#fff', marginBottom: 8 }}>{evento.apresentador}</div>
+          {evento.apresentador_bio && (
+            <p style={{ fontSize: 14.5, color: '#A7B9CE', lineHeight: 1.7, margin: 0 }}>{evento.apresentador_bio}</p>
+          )}
+        </div>
+      )}
+
+      {/* ── CHAMADA FINAL ────────────────────────────────────────────────────── */}
+      {!pronto && (
+        <div style={{ maxWidth: 560, margin: '62px auto 0', padding: '0 22px 70px', textAlign: 'center' }}>
+          <button type="button" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+            style={{ padding: '16px 34px', background: cor, color: NAVY, border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 16, cursor: 'pointer', fontFamily: 'inherit' }}>
+            Garantir minha vaga
+          </button>
+          <div style={{ fontSize: 13, color: '#8FA4BF', marginTop: 14 }}>
+            {evento.recorrencia === 'semanal' ? 'Toda quarta, às 19h.' : 'Vaga gratuita.'}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
