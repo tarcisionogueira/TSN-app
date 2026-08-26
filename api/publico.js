@@ -90,7 +90,8 @@ async function rpc(nome, corpo = {}) {
 // ── Casca HTML. Uma só, para todas as páginas ────────────────────────────────
 // Sem framework e sem JS de aplicação: a página tem que estar PRONTA no HTML que o
 // servidor devolve. Se depender de JS para aparecer, volta ao problema de origem.
-function pagina({ titulo, desc, canonical, corpo, jsonld, indexar = true, migalha = [] }) {
+function pagina({ titulo, desc, canonical, corpo, jsonld, indexar = true, migalha = [], hero = '' }) {
+  const migHtml = migalha.length ? migalha.map((m, i) => (m.url ? `<a href="${esc(m.url)}">${esc(m.nome)}</a>` : esc(m.nome)) + (i < migalha.length - 1 ? ' › ' : '')).join('') : '';
   return `<!doctype html><html lang="pt-BR"><head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -212,6 +213,38 @@ h2{font-size:20px;font-weight:800;margin:32px 0 12px}
   header .marca img{height:30px}
   .cta{padding:6px 10px;font-size:12px}
 }
+/* HERO (25/08, pedido do dono) — esta página servia TODO o tráfego de busca, e agora o de
+   anúncio, num documento chapado e branco do início ao fim: não conversava com a landing e
+   cansava a vista. O hero traz o mesmo gradiente navy da Landing.jsx, o mesmo degradê
+   azul→verde no destaque e o mesmo azul de CTA, e põe a BUSCA no lugar mais alto da página —
+   a pessoa procura a cidade dela antes de qualquer lista. */
+.hero{background:linear-gradient(135deg,#080f1a 0%,#0a1f3d 60%,#0d2a50 100%);color:#fff;padding:38px 20px 44px}
+.hero-in{max-width:1100px;margin:0 auto}
+.hero h1{color:#fff;font-size:34px;margin:0 0 10px}
+.hero .destaque{background:linear-gradient(90deg,#60a5fa 0%,#34d399 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent}
+.hero .sub{color:#c7d6ea;font-size:16px;margin:0 0 22px;max-width:680px}
+.mig-hero{color:#8fa9c6;margin-bottom:16px;font-size:12.5px}
+.mig-hero a{color:#bcd2ea}
+.busca-hero{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);border-radius:16px;padding:16px}
+.busca-hero form{display:flex;gap:10px;flex-wrap:wrap}
+/* 16px no campo, não 15: abaixo disso o Safari do iOS dá zoom na página inteira ao focar e
+   NÃO desfaz — a pessoa fica com a página torta até pinçar na mão. Mesmo defeito corrigido
+   no app em 14/08; esta página é servida por outro caminho e tem o CSS dela. */
+.busca-hero input{flex:1;min-width:220px;padding:14px 16px;border:1px solid rgba(255,255,255,.18);border-radius:12px;font-size:16px;font-family:inherit;background:#fff;color:#111}
+.busca-hero input:focus{outline:3px solid rgba(96,165,250,.65);outline-offset:1px}
+.busca-hero button{padding:14px 26px;background:var(--azul);color:#fff;border:none;border-radius:12px;font-weight:800;font-size:15px;cursor:pointer;box-shadow:0 8px 24px rgba(13,99,219,.42);font-family:inherit}
+.busca-hero button:hover{background:var(--azul-fundo)}
+.busca-hero .dica{margin:10px 2px 0;font-size:12.5px;color:#9fb6d0}
+/* Estado/cidade como CARTÃO com peso visual, não pílula chapada em fila. */
+.ufs{list-style:none;padding:0;margin:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(196px,1fr));gap:10px}
+.ufs a{display:flex;align-items:center;justify-content:space-between;gap:8px;background:#fff;border:1px solid var(--linha);border-radius:12px;padding:13px 15px;font-weight:700;font-size:14.5px;color:var(--tinta);transition:box-shadow .15s,border-color .15s,transform .15s}
+.ufs a:hover{border-color:var(--azul);box-shadow:0 6px 18px rgba(13,99,219,.13);transform:translateY(-1px);text-decoration:none}
+.ufs .n{font-size:12.5px;font-weight:800;color:var(--azul);background:#eff6ff;border-radius:999px;padding:3px 10px;white-space:nowrap}
+/* Faixa em cartão para quebrar o branco contínuo do miolo. */
+.faixa{background:#fff;border:1px solid var(--linha);border-radius:18px;padding:26px 24px;margin:30px 0 0}
+.faixa h2{margin-top:0}
+.faixa .sub{margin-bottom:0}
+@media(max-width:560px){.hero{padding:26px 16px 32px}.hero h1{font-size:25px}.hero .sub{font-size:14.5px}}
 .grade{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px}
 .card{background:#fff;border:1px solid var(--linha);border-radius:16px;overflow:hidden;display:flex;flex-direction:column;transition:box-shadow .15s,border-color .15s}
 .card:hover{box-shadow:0 6px 20px rgba(15,23,42,.08);border-color:#cbd5e1}
@@ -249,17 +282,6 @@ h2{font-size:20px;font-weight:800;margin:32px 0 12px}
 .dados div span{display:block;font-size:10.5px;color:var(--cinza);text-transform:uppercase;letter-spacing:.6px;font-weight:800;margin-bottom:3px}
 .dados div strong{font-size:19px;font-weight:900;line-height:1.25;display:block;overflow-wrap:anywhere}
 .pag{display:flex;gap:10px;justify-content:center;margin-top:28px;font-size:14px}
-/* Busca por cidade — HTML puro, sem JS: a página pública precisa abrir rápido e funcionar
-   para o robô do buscador tanto quanto para a pessoa. */
-.busca{background:#fff;border:1px solid var(--linha);border-radius:14px;padding:18px;margin:0 0 24px}
-.busca form{display:flex;gap:10px;flex-wrap:wrap}
-/* 16px, não 15: abaixo disso o Safari do iOS dá zoom na página inteira ao focar o campo e
-   NÃO desfaz — a pessoa fica com a página torta até pinçar na mão. Mesmo defeito corrigido
-   no app em 14/08; esta página é servida por outro caminho e tem o CSS dela. */
-.busca input{flex:1;min-width:220px;padding:12px 14px;border:1px solid var(--linha);border-radius:10px;font-size:16px;font-family:inherit;color:inherit;background:#fff}
-.busca input:focus{outline:2px solid var(--azul);outline-offset:1px}
-.busca button{padding:12px 22px;border:none;border-radius:10px;background:var(--azul);color:#fff;font-weight:800;font-size:15px;cursor:pointer;font-family:inherit}
-.busca .dica{font-size:12.5px;color:var(--cinza);margin:10px 0 0}
 /* Bloco de cadastro no lote: o que é do assinante fica visível como PROMESSA, não escondido. */
 .trava{background:linear-gradient(180deg,#eff6ff,#fff);border:1px solid #bfdbfe;border-radius:16px;padding:22px;margin:22px 0}
 .trava h3{margin:0 0 12px;font-size:17px;font-weight:800}
@@ -365,8 +387,12 @@ footer .in{max-width:1080px;margin:0 auto}
     </div>
   </details>
 </div></header>
+${hero ? `<section class="hero"><div class="hero-in">
+${migHtml ? `<nav class="mig mig-hero">${migHtml}</nav>` : ''}
+${hero}
+</div></section>` : ''}
 <main>
-${migalha.length ? `<nav class="mig">${migalha.map((m, i) => (m.url ? `<a href="${esc(m.url)}">${esc(m.nome)}</a>` : esc(m.nome)) + (i < migalha.length - 1 ? ' › ' : '')).join('')}</nav>` : ''}
+${!hero && migHtml ? `<nav class="mig">${migHtml}</nav>` : ''}
 ${corpo}
 </main>
 <footer><div class="in">
@@ -535,17 +561,17 @@ function cardImovel(im) {
   </article>`;
 }
 
-// Caixa de busca por cidade. Aparece no topo das páginas de lista — é o caminho que o
-// visitante de anúncio espera ("digito minha cidade e vejo o que tem"), em vez de descer
-// por Brasil → estado → cidade. Formulário GET simples: sem JS, funciona no robô e no
-// celular ruim, e a URL do resultado é compartilhável.
-function caixaBusca(valor = '') {
-  return `<div class="busca">
+// Caixa de busca por cidade — o PRIMEIRO elemento acionável de toda página de lista, dentro
+// do hero escuro (25/08). É o caminho que o visitante de anúncio espera ("digito minha cidade
+// e vejo o que tem"), em vez de descer por Brasil → estado → cidade. Formulário GET simples:
+// sem JS, funciona no robô e no celular ruim, e a URL do resultado é compartilhável.
+function caixaBuscaHero(valor = '', dica = 'Ou escolha o estado logo abaixo.') {
+  return `<div class="busca-hero">
     <form action="${SITE}/leiloes/buscar" method="get">
-      <input name="cidade" value="${esc(valor)}" placeholder="Digite a cidade — ex.: Campinas, Rio de Janeiro, Goiânia" aria-label="Cidade" autocomplete="off"/>
+      <input name="cidade" value="${esc(valor)}" placeholder="Digite a sua cidade — ex.: Campinas, Rio de Janeiro, Goiânia" aria-label="Cidade" autocomplete="off"/>
       <button type="submit">Ver imóveis</button>
     </form>
-    <p class="dica">Ou navegue por estado abaixo.</p>
+    <p class="dica">${esc(dica)}</p>
   </div>`;
 }
 
@@ -579,13 +605,13 @@ async function paginaBusca(termo) {
     desc: 'Encontre imóveis em leilão pela cidade.',
     canonical: `${SITE}/leiloes`, indexar: false,
     migalha: [{ nome: 'Início', url: `${SITE}/` }, { nome: 'Imóveis em leilão', url: `${SITE}/leiloes` }, { nome: 'Busca' }],
-    corpo: `<h1>${q ? `Resultados para “${esc(q)}”` : 'Buscar imóveis em leilão'}</h1>
-      ${caixaBusca(q)}
-      ${!q || q.length < 2 ? '<p class="sub">Digite ao menos duas letras do nome da cidade.</p>' : ''}
+    hero: `<h1>${q ? `Resultados para <span class="destaque">${esc(q)}</span>` : 'Buscar imóveis em <span class="destaque">leilão</span>'}</h1>
+      ${caixaBuscaHero(q, 'Digite o nome da cidade — mostramos quantos lotes estão ativos hoje.')}`,
+    corpo: `${!q || q.length < 2 ? '<p class="sub">Digite ao menos duas letras do nome da cidade.</p>' : ''}
       ${q.length >= 2 && !lista.length ? `<p class="sub">Não encontramos lotes ativos em uma cidade com esse nome. O acervo muda toda semana —
         <a href="${SITE}/leiloes">veja todos os estados</a> ou tente outra grafia.</p>` : ''}
       ${lista.length ? `<p class="sub">${lista.length === 1 ? '1 cidade encontrada' : `${lista.length} cidades encontradas`}. Clique para ver os lotes.</p>
-      <ul class="lista">${lista.map((c) => `<li><a href="${SITE}/leiloes/${String(c.uf).toLowerCase()}/${esc(c.cidade_norm)}">${esc(c.cidade)}/${esc(c.uf)} <strong>(${Number(c.total).toLocaleString('pt-BR')})</strong></a></li>`).join('')}</ul>` : ''}`,
+      <ul class="ufs">${lista.map((c) => `<li><a href="${SITE}/leiloes/${String(c.uf).toLowerCase()}/${esc(c.cidade_norm)}"><span>${esc(c.cidade)}/${esc(c.uf)}</span><span class="n">${Number(c.total).toLocaleString('pt-BR')}</span></a></li>`).join('')}</ul>` : ''}`,
   });
 }
 
@@ -600,14 +626,16 @@ async function paginaBrasil() {
     desc: `${total.toLocaleString('pt-BR')} imóveis em leilão judicial e extrajudicial em ${ufs.length} estados. Veja lance mínimo, avaliação e desconto — e analise a viabilidade antes de arrematar.`,
     canonical: `${SITE}/leiloes`,
     migalha: [{ nome: 'Início', url: `${SITE}/` }, { nome: 'Imóveis em leilão' }],
-    corpo: `<h1>Imóveis em leilão no Brasil</h1>
-      <p class="sub">${total.toLocaleString('pt-BR')} imóveis de leilão judicial e extrajudicial acompanhados hoje, em ${ufs.length} estados.</p>
-      ${caixaBusca()}
-      <h2>Ou escolha o estado</h2>
-      <ul class="lista">${ufs.map(([uf, n]) => `<li><a href="${SITE}/leiloes/${uf.toLowerCase()}">${esc(UF_NOME[uf])} <strong>(${n.toLocaleString('pt-BR')})</strong></a></li>`).join('')}</ul>
+    hero: `<h1>Imóveis em <span class="destaque">leilão</span> no Brasil</h1>
+      <p class="sub">${total.toLocaleString('pt-BR')} imóveis de leilão judicial e extrajudicial acompanhados hoje, em ${ufs.length} estados. Comece pela sua cidade.</p>
+      ${caixaBuscaHero('', 'Não sabe o nome exato? Escolha o estado logo abaixo.')}`,
+    corpo: `<h2>Escolha o estado</h2>
+      <ul class="ufs">${ufs.map(([uf, n]) => `<li><a href="${SITE}/leiloes/${uf.toLowerCase()}"><span>${esc(UF_NOME[uf])}</span><span class="n">${n.toLocaleString('pt-BR')}</span></a></li>`).join('')}</ul>
+      <div class="faixa">
       <h2>Como funciona a BidPro Brasil</h2>
       <p class="sub">Reunimos os lotes dos leiloeiros e da Caixa num só lugar e entregamos, para cada imóvel, uma análise de mercado, um parecer jurídico e o cálculo de viabilidade do arremate — o que ninguém consegue fazer sozinho antes de dar um lance.
-      <a href="${SITE}/#/login?modo=cadastro">Crie uma conta grátis</a> para ver a ficha completa de qualquer imóvel.</p>`,
+      <a href="${SITE}/#/login?modo=cadastro">Crie uma conta grátis</a> para ver a ficha completa de qualquer imóvel.</p>
+      </div>`,
     jsonld: { '@context': 'https://schema.org', '@type': 'CollectionPage', name: 'Imóveis em leilão no Brasil', url: `${SITE}/leiloes`, isPartOf: { '@type': 'WebSite', name: 'BidPro Brasil', url: SITE } },
   });
 }
@@ -625,14 +653,16 @@ async function paginaUF(uf) {
     canonical: `${SITE}/leiloes/${uf.toLowerCase()}`,
     indexar: total > 0,
     migalha: [{ nome: 'Início', url: `${SITE}/` }, { nome: 'Imóveis em leilão', url: `${SITE}/leiloes` }, { nome: nomeUF }],
-    corpo: `<h1>Imóveis em leilão em ${esc(nomeUF)}</h1>
-      <p class="sub">${total.toLocaleString('pt-BR')} imóveis em leilão em ${cidades.length} cidades de ${esc(nomeUF)}.</p>
-      ${caixaBusca()}
-      <h2>Cidades de ${esc(nomeUF)}</h2>
-      <ul class="lista">${cidades.map(([cn, c]) => `<li><a href="${SITE}/leiloes/${uf.toLowerCase()}/${cn}">${esc(c.nome)} <strong>(${c.n.toLocaleString('pt-BR')})</strong></a></li>`).join('')}</ul>
+    hero: `<h1>Imóveis em <span class="destaque">leilão</span> em ${esc(nomeUF)}</h1>
+      <p class="sub">${total === 1 ? '1 imóvel em leilão' : `${total.toLocaleString('pt-BR')} imóveis em leilão`} em ${cidades.length === 1 ? '1 cidade' : `${cidades.length} cidades`} de ${esc(nomeUF)}.</p>
+      ${caixaBuscaHero('', 'Ou escolha a cidade na lista abaixo.')}`,
+    corpo: `<h2>Cidades de ${esc(nomeUF)}</h2>
+      <ul class="ufs">${cidades.map(([cn, c]) => `<li><a href="${SITE}/leiloes/${uf.toLowerCase()}/${cn}"><span>${esc(c.nome)}</span><span class="n">${c.n.toLocaleString('pt-BR')}</span></a></li>`).join('')}</ul>
       ${caixaAviseMe('', uf)}
+      <div class="faixa">
       <h2>Antes de dar um lance em ${esc(nomeUF)}</h2>
-      <p class="sub">Cada imóvel de leilão tem uma história: ocupação, dívidas de condomínio e IPTU, ônus na matrícula, prazo de desocupação. A BidPro Brasil produz a análise de mercado, o parecer jurídico e o cálculo de viabilidade de cada lote. <a href="${SITE}/#/login?modo=cadastro">Comece grátis</a>.</p>`,
+      <p class="sub">Cada imóvel de leilão tem uma história: ocupação, dívidas de condomínio e IPTU, ônus na matrícula, prazo de desocupação. A BidPro Brasil produz a análise de mercado, o parecer jurídico e o cálculo de viabilidade de cada lote. <a href="${SITE}/#/login?modo=cadastro">Comece grátis</a>.</p>
+      </div>`,
     jsonld: { '@context': 'https://schema.org', '@type': 'CollectionPage', name: `Imóveis em leilão em ${nomeUF}`, url: `${SITE}/leiloes/${uf.toLowerCase()}` },
   });
 }
@@ -659,9 +689,15 @@ async function paginaCidade(uf, cidadeNorm, page) {
       desc: `No momento não há lotes ativos em ${nomeCidade}/${uf}. Veja as demais cidades de ${UF_NOME[uf]}.`,
       canonical: base, indexar: false,
       migalha: [{ nome: 'Início', url: `${SITE}/` }, { nome: 'Imóveis em leilão', url: `${SITE}/leiloes` }, { nome: UF_NOME[uf], url: `${SITE}/leiloes/${uf.toLowerCase()}` }, { nome: nomeCidade }],
-      corpo: `<h1>Imóveis em leilão em ${esc(nomeCidade)}</h1>
-        <p class="sub">Nenhum lote ativo nesta cidade agora — o acervo muda toda semana.
-        <a href="${SITE}/leiloes/${uf.toLowerCase()}">Ver outras cidades de ${esc(UF_NOME[uf])}</a>.</p>`,
+      hero: `<h1>Imóveis em <span class="destaque">leilão</span> em ${esc(nomeCidade)}</h1>
+        <p class="sub">Nenhum lote ativo nesta cidade agora — o acervo muda toda semana. Busque uma cidade vizinha, ou
+        <a href="${SITE}/leiloes/${uf.toLowerCase()}">veja as outras cidades de ${esc(UF_NOME[uf])}</a>.</p>
+        ${caixaBuscaHero('', 'Digite outra cidade para ver o que está ativo hoje.')}`,
+      corpo: `<div class="faixa">
+        <h2>Por que uma cidade fica sem lote?</h2>
+        <p class="sub">O acervo é o que os leiloeiros e a Caixa têm em praça AGORA — quando um lote é arrematado ou o leilão encerra, ele sai da lista. Cidades menores passam semanas sem nada e voltam de uma vez.
+        <a href="${SITE}/#/login?modo=cadastro">Crie uma conta grátis</a> e receba um aviso quando entrar imóvel na sua região.</p>
+        </div>`,
     });
   }
 
@@ -671,19 +707,22 @@ async function paginaCidade(uf, cidadeNorm, page) {
     desc: `Casas, apartamentos e terrenos em leilão em ${nomeCidade}/${uf}${menor ? `, a partir de ${brl(menor)}` : ''}. Lance mínimo, avaliação, desconto e análise de viabilidade antes de arrematar.`,
     canonical: page > 1 ? `${base}?pagina=${page}` : base,
     migalha: [{ nome: 'Início', url: `${SITE}/` }, { nome: 'Imóveis em leilão', url: `${SITE}/leiloes` }, { nome: UF_NOME[uf], url: `${SITE}/leiloes/${uf.toLowerCase()}` }, { nome: nomeCidade }],
-    corpo: `<h1>Imóveis em leilão em ${esc(nomeCidade)}/${esc(uf)}</h1>
-      <p class="sub">${total.toLocaleString('pt-BR')} lotes ativos${menor ? `, a partir de <strong>${esc(brl(menor))}</strong>` : ''}. Ordenados pelo maior desconto sobre a avaliação.</p>
-      <div class="grade">${itens.map(cardImovel).join('')}</div>
+    hero: `<h1>Imóveis em <span class="destaque">leilão</span> em ${esc(nomeCidade)}/${esc(uf)}</h1>
+      <p class="sub">${total === 1 ? '1 lote ativo' : `${total.toLocaleString('pt-BR')} lotes ativos`}${menor ? `, a partir de <strong>${esc(brl(menor))}</strong>` : ''}. Ordenados pelo maior desconto sobre a avaliação.</p>
+      ${caixaBuscaHero('', 'Procurando em outra cidade? Digite o nome acima.')}`,
+    corpo: `<div class="grade">${itens.map(cardImovel).join('')}</div>
       ${ultima > 1 ? `<nav class="pag">
         ${page > 1 ? `<a href="${base}${page - 1 > 1 ? `?pagina=${page - 1}` : ''}">← anterior</a>` : ''}
         <span>página ${page} de ${ultima}</span>
         ${page < ultima ? `<a href="${base}?pagina=${page + 1}">próxima →</a>` : ''}
       </nav>` : ''}
       ${caixaAviseMe(nomeCidade, uf)}
+      <div class="faixa">
       <h2>Vale a pena arrematar em ${esc(nomeCidade)}?</h2>
       <p class="sub">Desconto grande nem sempre é bom negócio: o que decide é o valor de mercado do bairro, os débitos que vêm junto e o risco jurídico do processo.
       A BidPro Brasil entrega os três relatórios por imóvel — mercadológico, documental e jurídico —
-      além do lance máximo que preserva o seu lucro. <a href="${SITE}/#/login?modo=cadastro">Crie sua conta grátis</a>.</p>`,
+      além do lance máximo que preserva o seu lucro. <a href="${SITE}/#/login?modo=cadastro">Crie sua conta grátis</a>.</p>
+      </div>`,
     jsonld: {
       '@context': 'https://schema.org', '@type': 'ItemList',
       name: `Imóveis em leilão em ${nomeCidade}/${uf}`, numberOfItems: total,
