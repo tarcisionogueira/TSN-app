@@ -116,7 +116,7 @@ const PLANOS_ACESSO = [
 ];
 
 function defaultCurso() {
-  return { titulo: '', subtitulo: '', descricao: '', capa_url: '', cor: '#0D63DB', nivel: 'Iniciante', categoria: 'Fundamentos', preco: '', gratuito: false, destaque: false, onboarding: false, comissao_pct: 30, planos_gratis: [], concede_plano: '', concede_meses: 6, modulos: [] };
+  return { titulo: '', subtitulo: '', descricao: '', capa_url: '', cor: '#0D63DB', nivel: 'Iniciante', categoria: 'Fundamentos', preco: '', gratuito: false, destaque: false, onboarding: false, comissao_pct: 30, planos_gratis: [], concede_plano: '', concede_meses: 6, bonus_produtos: [], upsell_produtos: [], modulos: [] };
 }
 function defaultModulo(idx) { return { _key: String(Date.now() + idx), titulo: '', aulas: [] }; }
 function defaultAula() { return { _key: String(Date.now() + Math.random()), titulo: '', duracao: '', video_url: '', descricao: '', gratis: false, materiais: [] }; }
@@ -258,6 +258,11 @@ function CursosTab() {
   const [saving, setSaving] = useState(false);
   const [anunciando, setAnunciando] = useState(null);
 
+  // Catálogo para os seletores de bônus e upsell: cursos E eBooks, porque os dois podem
+  // ser oferecidos em qualquer das duas listas.
+  const [catalogo, setCatalogo] = useState([]);
+  const [catalogoErro, setCatalogoErro] = useState(null);
+
   const loadCursos = useCallback(async () => {
     setLoading(true);
     const { data: cs } = await supabase.from('cursos_admin').select('*').order('ordem');
@@ -265,6 +270,19 @@ function CursosTab() {
     const counts = {};
     (as || []).forEach(a => { counts[a.curso_id] = (counts[a.curso_id] || 0) + 1; });
     setCursos((cs || []).map(c => ({ ...c, _aulaCount: counts[c.id] || 0 })));
+    // O eBook entra no catálogo mesmo sem estar ativo: um bônus pode ser preparado antes de
+    // o material ir para a loja.
+    //
+    // O `error` é CHECADO porque aqui a lista vazia mente de um jeito caro: sem os eBooks o
+    // seletor simplesmente não os mostra, e quem está cadastrando conclui que não há material
+    // para incluir como bônus — e salva o curso sem eles. O produto sai errado e ninguém vê
+    // erro nenhum. Falhando a leitura, o catálogo fica só com cursos e a tela DIZ o que faltou.
+    const { data: ebs, error: eEbs } = await supabase.from('ebooks_admin').select('id, titulo');
+    setCatalogoErro(eEbs ? 'Não foi possível carregar os eBooks agora — a lista abaixo está incompleta. Recarregue antes de salvar bônus ou upsell.' : null);
+    setCatalogo([
+      ...(cs || []).map(c => ({ tipo: 'curso', id: c.id, titulo: c.titulo })),
+      ...(ebs || []).map(e => ({ tipo: 'ebook', id: e.id, titulo: e.titulo })),
+    ]);
     setLoading(false);
   }, []);
 
@@ -347,7 +365,7 @@ function CursosTab() {
       // não vai para a loja/área de membros; fica só para o admin concluir depois.
       const faltam = faltamCampos(form);
       const completo = faltam.length === 0;
-      const cursoPayload = { titulo: rest.titulo, subtitulo: rest.subtitulo || '', descricao: rest.descricao || '', capa_url: rest.capa_url || null, cor: rest.cor || '#0D63DB', nivel: rest.nivel || 'Iniciante', categoria: rest.categoria || 'Fundamentos', preco: Number(rest.preco) || 0, gratuito: rest.gratuito || false, destaque: rest.destaque || false, onboarding: rest.onboarding || false, comissao_pct: Number(rest.comissao_pct) || 30, planos_gratis: Array.isArray(rest.planos_gratis) ? rest.planos_gratis : [], concede_plano: rest.concede_plano || null, concede_meses: rest.concede_plano ? (Number(rest.concede_meses) || 6) : null, ativo: completo ? (rest.ativo !== false) : false };
+      const cursoPayload = { titulo: rest.titulo, subtitulo: rest.subtitulo || '', descricao: rest.descricao || '', capa_url: rest.capa_url || null, cor: rest.cor || '#0D63DB', nivel: rest.nivel || 'Iniciante', categoria: rest.categoria || 'Fundamentos', preco: Number(rest.preco) || 0, gratuito: rest.gratuito || false, destaque: rest.destaque || false, onboarding: rest.onboarding || false, comissao_pct: Number(rest.comissao_pct) || 30, planos_gratis: Array.isArray(rest.planos_gratis) ? rest.planos_gratis : [], concede_plano: rest.concede_plano || null, concede_meses: rest.concede_plano ? (Number(rest.concede_meses) || 6) : null, bonus_produtos: Array.isArray(rest.bonus_produtos) ? rest.bonus_produtos : [], upsell_produtos: Array.isArray(rest.upsell_produtos) ? rest.upsell_produtos : [], ativo: completo ? (rest.ativo !== false) : false };
 
       let cursoId;
       if (modal === 'new') {
@@ -596,6 +614,29 @@ function CursosTab() {
                 )}
               </div>
             )}
+            {!form.gratuito && catalogoErro && (
+              <div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:8, padding:'9px 12px', fontSize:12.5, color:'#991b1b', marginBottom:12 }}>
+                ⚠️ {catalogoErro}
+              </div>
+            )}
+            {!form.gratuito && (
+              <ProdutosSelector
+                valor={form.bonus_produtos}
+                onChange={v => setForm({ ...form, bonus_produtos: v })}
+                catalogo={catalogo} excluirId={form.id}
+                cor="#047857"
+                titulo="Bônus — vem junto na compra"
+                ajuda="O cliente RECEBE estes materiais ao comprar, sem pagar a mais. Entram como acesso liberado na hora, com valor zero (não contam como venda no faturamento)." />
+            )}
+            {!form.gratuito && (
+              <ProdutosSelector
+                valor={form.upsell_produtos}
+                onChange={v => setForm({ ...form, upsell_produtos: v })}
+                catalogo={catalogo} excluirId={form.id}
+                cor="#B45309"
+                titulo="Upsell — oferecido à parte"
+                ajuda="O cliente é CONVIDADO a comprar estes materiais. Aparecem como sugestão na página do produto e NÃO liberam acesso nenhum." />
+            )}
             <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:8, padding:'9px 12px', fontSize:12, color:'#084BA6', marginBottom:14 }}>
               💡 Preço e comissão são configurados na aba <strong>Configurações</strong>.
             </div>
@@ -670,6 +711,42 @@ function CursosTab() {
 function defaultEbook() { return { titulo: '', descricao: '', capa_url: '', arquivo_url: '', preco: '', destaque: false, planos_gratis: [] }; }
 
 // Seletor reutilizável de "planos com acesso grátis" (chips clicáveis).
+// ── BÔNUS x UPSELL (26/08) ────────────────────────────────────────────────────
+// Duas listas com a MESMA aparência e significados opostos, então o rótulo tem de
+// carregar a diferença: bônus o cliente RECEBE ao comprar; upsell ele é CONVIDADO a
+// comprar à parte. Trocar um pelo outro no cadastro é entregar de graça o que era para
+// vender, ou cobrar de novo pelo que já foi prometido junto.
+function ProdutosSelector({ valor, onChange, catalogo, excluirId, titulo, ajuda, cor }) {
+  const sel = Array.isArray(valor) ? valor : [];
+  const marcado = (it) => sel.some(x => x.id === it.id && x.tipo === it.tipo);
+  const toggle = (it) => onChange(
+    marcado(it) ? sel.filter(x => !(x.id === it.id && x.tipo === it.tipo))
+                : [...sel, { tipo: it.tipo, id: it.id }]);
+  // O próprio produto nunca entra na própria lista — incluir a si mesmo não significa nada
+  // e, no bônus, seria uma volta a mais para o banco descartar.
+  const itens = (catalogo || []).filter(it => it.id !== excluirId);
+  if (!itens.length) return null;
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#334155', marginBottom: 2 }}>{titulo}</label>
+      <div style={{ fontSize: 12, color: '#64748b', marginBottom: 8 }}>{ajuda}</div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+        {itens.map(it => {
+          const on = marcado(it);
+          return (
+            <button key={`${it.tipo}-${it.id}`} type="button" onClick={() => toggle(it)}
+              title={it.tipo === 'curso' ? 'Curso' : 'eBook'}
+              style={{ padding: '6px 12px', borderRadius: 20, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                border: `1px solid ${on ? cor : '#e2e8f0'}`, background: on ? `${cor}14` : '#fff', color: on ? cor : '#64748b' }}>
+              {on ? '✓ ' : ''}{it.tipo === 'curso' ? '🎓' : '📖'} {it.titulo}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function PlanosGratisSelector({ valor, onChange }) {
   const sel = Array.isArray(valor) ? valor : [];
   const toggle = (k) => onChange(sel.includes(k) ? sel.filter(x => x !== k) : [...sel, k]);

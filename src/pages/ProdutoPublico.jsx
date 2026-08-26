@@ -14,6 +14,8 @@ export default function ProdutoPublico({ tipo }) {
   const ref = params.get('ref') || '';
   const { user, role, effectiveUserId, nome: nomePerfil } = useAuth();
   const [produto, setProduto] = useState(null);
+  const [erroLeitura, setErroLeitura] = useState(false);
+  const [upsell, setUpsell] = useState([]);
   const [aulas, setAulas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [comprouAvulso, setComprouAvulso] = useState(false);
@@ -104,7 +106,12 @@ export default function ProdutoPublico({ tipo }) {
       // RASCUNHO não é público: só produtos ATIVOS abrem na página pública (o incompleto
       // fica de rascunho no painel admin, fora da loja/links).
       if (tipo === 'curso') {
-        const { data: c } = await supabase.from('cursos_admin').select('*').eq('id', id).eq('ativo', true).single();
+        // O `error` importa AQUI mais do que em qualquer outra tela: esta é a página de
+        // venda. Descartá-lo faz uma falha transitória de leitura virar "produto não
+        // encontrado" — o comprador vai embora achando que o curso não existe, e não fica
+        // registro nenhum de que houve uma venda perdida.
+        const { data: c, error: eC } = await supabase.from('cursos_admin').select('*').eq('id', id).eq('ativo', true).single();
+        if (eC && eC.code !== 'PGRST116') setErroLeitura(true);   // PGRST116 = 0 linhas: aí é "não existe" mesmo
         if (c) {
           const { data: as } = await supabase.from('aulas_admin').select('titulo, modulo, duracao, gratis').eq('curso_id', id).order('ordem');
           setAulas(as || []);
@@ -113,9 +120,10 @@ export default function ProdutoPublico({ tipo }) {
       } else {
         // Página PÚBLICA: seleciona só metadados — NUNCA arquivo_url/pdf_url (link
         // do PDF pago). O arquivo é entregue só na leitura, para quem tem acesso.
-        const { data: e } = await supabase.from('ebooks_admin')
-          .select('id, titulo, descricao, capa_url, preco, gratuito, ativo')
+        const { data: e, error: eE } = await supabase.from('ebooks_admin')
+          .select('id, titulo, descricao, capa_url, preco, gratuito, ativo, upsell_produtos')
           .eq('id', id).eq('ativo', true).single();
+        if (eE && eE.code !== 'PGRST116') setErroLeitura(true);
         setProduto(e);
       }
       setLoading(false);
@@ -123,8 +131,52 @@ export default function ProdutoPublico({ tipo }) {
     load();
   }, [id, tipo]);
 
+  // ── UPSELL (26/08) ──────────────────────────────────────────────────────────
+  // Os produtos que o cadastro marcou como "oferecidos à parte". São SUGESTÃO: não liberam
+  // acesso e não entram no preço desta página. Falha ao carregar não quebra a venda
+  // principal — o bloco simplesmente não aparece, e é por isso que aqui a leitura pode ser
+  // best-effort, ao contrário da leitura do próprio produto.
+  useEffect(() => {
+    const lista = Array.isArray(produto?.upsell_produtos) ? produto.upsell_produtos : [];
+    if (!lista.length) { setUpsell([]); return; }
+    let cancelado = false;
+    (async () => {
+      const ids = { curso: [], ebook: [] };
+      lista.forEach(it => { if (ids[it?.tipo]) ids[it.tipo].push(it.id); });
+      const out = [];
+      if (ids.curso.length) {
+        const { data } = await supabase.from('cursos_admin') // padrao-ok: sugestão opcional — falha esconde o bloco, nunca afeta a compra principal
+          .select('id, titulo, subtitulo, preco, cor, emoji, capa_url').in('id', ids.curso).eq('ativo', true);
+        (data || []).forEach(c => out.push({ ...c, tipo: 'curso' }));
+      }
+      if (ids.ebook.length) {
+        const { data } = await supabase.from('ebooks_admin') // padrao-ok: sugestão opcional — falha esconde o bloco, nunca afeta a compra principal
+          .select('id, titulo, descricao, preco, capa_url').in('id', ids.ebook).eq('ativo', true);
+        (data || []).forEach(e => out.push({ ...e, tipo: 'ebook' }));
+      }
+      if (!cancelado) setUpsell(out);
+    })();
+    return () => { cancelado = true; };
+  }, [produto]);
+
   if (loading) return <div style={{ textAlign: 'center', padding: 80, color: '#94a3b8' }}>Carregando…</div>;
-  if (!produto) return <div style={{ textAlign: 'center', padding: 80, color: '#94a3b8' }}>Produto não encontrado.</div>;
+  // "Não existe" e "não consegui ler" são coisas diferentes, e imprimir a primeira no lugar
+  // da segunda manda embora um comprador que estava com o cartão na mão.
+  if (!produto) return erroLeitura
+    ? (
+      <div style={{ maxWidth: 460, margin: '80px auto', textAlign: 'center', padding: '0 24px' }}>
+        <div style={{ fontSize: 40, marginBottom: 12 }}>⚠️</div>
+        <div style={{ fontSize: 17, fontWeight: 700, color: '#111', marginBottom: 8 }}>Não conseguimos carregar esta página agora</div>
+        <div style={{ fontSize: 14, color: '#64748b', marginBottom: 20, lineHeight: 1.6 }}>
+          O material continua disponível — foi uma falha momentânea de conexão nossa.
+        </div>
+        <button onClick={() => window.location.reload()}
+          style={{ padding: '12px 24px', background: '#0D63DB', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
+          Tentar de novo
+        </button>
+      </div>
+    )
+    : <div style={{ textAlign: 'center', padding: 80, color: '#94a3b8' }}>Produto não encontrado.</div>;
 
   const temPlano = user && ['top2','assessorado','clube','analista','advogado','admin'].includes(role);
   const temAcesso = temPlano || comprouAvulso;
@@ -202,6 +254,40 @@ export default function ProdutoPublico({ tipo }) {
             </div>
           )}
         </div>
+
+        {/* ── UPSELL: o que mais pode interessar ────────────────────────────────
+            Fica DEPOIS do conteúdo do produto e FORA da caixa de compra, de propósito:
+            é sugestão, não parte da oferta. Misturar com o preço faria o cliente achar
+            que precisa levar tudo. */}
+        {upsell.length > 0 && (
+          <div style={{ marginTop: 36, paddingTop: 28, borderTop: '1px solid #e5e7eb' }}>
+            <div style={{ fontSize: 13, fontWeight: 800, color: '#111111', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>
+              Quem levou este, também levou
+            </div>
+            <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 16 }}>
+              Aquisição separada — não está incluída no preço acima.
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: 14 }}>
+              {upsell.map(u => (
+                <a key={`${u.tipo}-${u.id}`} href={`#/p/${u.tipo}/${u.id}${refParam}`}
+                  style={{ textDecoration: 'none', color: 'inherit', border: '1px solid #e5e7eb', borderRadius: 12, overflow: 'hidden', background: '#fff', display: 'block' }}>
+                  {u.capa_url
+                    ? <img src={u.capa_url} alt="" style={{ width: '100%', height: 104, objectFit: 'cover', display: 'block' }} />
+                    : <div style={{ height: 104, background: `linear-gradient(135deg, ${u.cor || '#0D63DB'} 0%, ${(u.cor || '#0D63DB')}88 100%)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 34 }}>{u.tipo === 'curso' ? (u.emoji || '🎓') : '📖'}</div>}
+                  <div style={{ padding: '12px 13px' }}>
+                    <div style={{ fontSize: 10, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>{u.tipo === 'curso' ? 'Curso' : 'eBook'}</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: '#111', lineHeight: 1.3, marginBottom: 6 }}>{u.titulo}</div>
+                    <div style={{ fontSize: 14, fontWeight: 800, color: '#047857' }}>
+                      {Number(u.preco) > 0
+                        ? `R$ ${Number(u.preco).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                        : 'Gratuito'}
+                    </div>
+                  </div>
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Coluna direita, CTA (buy box estilo Amazon) */}
         <div style={{ position: 'sticky', top: 88 }}>
