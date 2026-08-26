@@ -240,6 +240,10 @@ h2{font-size:20px;font-weight:800;margin:32px 0 12px}
 .ufs a{display:flex;align-items:center;justify-content:space-between;gap:8px;background:#fff;border:1px solid var(--linha);border-radius:12px;padding:13px 15px;font-weight:700;font-size:14.5px;color:var(--tinta);transition:box-shadow .15s,border-color .15s,transform .15s}
 .ufs a:hover{border-color:var(--azul);box-shadow:0 6px 18px rgba(13,99,219,.13);transform:translateY(-1px);text-decoration:none}
 .ufs .n{font-size:12.5px;font-weight:800;color:var(--azul);background:#eff6ff;border-radius:999px;padding:3px 10px;white-space:nowrap}
+/* UF sem lote hoje: aparece (para ninguém concluir que não cobrimos o estado), mas apagada e
+   SEM link — clicar levaria a uma página vazia, que é pior que não clicar. */
+.ufs .vazio{display:flex;align-items:center;justify-content:space-between;gap:8px;background:transparent;border:1px dashed var(--linha);border-radius:12px;padding:13px 15px;font-size:14.5px;font-weight:600;color:#94a3b8}
+.ufs .n0{font-size:11.5px;font-weight:700;color:#94a3b8;white-space:nowrap}
 /* Faixa em cartão para quebrar o branco contínuo do miolo. */
 .faixa{background:#fff;border:1px solid var(--linha);border-radius:18px;padding:26px 24px;margin:30px 0 0}
 .faixa h2{margin-top:0}
@@ -618,19 +622,31 @@ async function paginaBusca(termo) {
 // ── /leiloes — índice nacional ───────────────────────────────────────────────
 async function paginaBrasil() {
   const dados = await rpc('acervo_uf_contagem');
-  const ufs = (Array.isArray(dados) ? dados : [])
-    .filter((r) => UF_NOME[r.uf]).map((r) => [r.uf, Number(r.total) || 0]);
+  // A RPC só devolve UF QUE TEM lote hoje — é a pergunta certa para o sitemap e a errada para
+  // a pessoa. Quem é da Bahia abre /leiloes, não vê a Bahia na lista e conclui que não
+  // cobrimos o estado dele; e o acervo esvazia e enche por UF toda semana, então a lista
+  // mudava de tamanho sozinha. Pedido do dono (26/08): "todos ou nenhum". Mostramos as 27,
+  // com a contagem em quem tem e um rótulo honesto em quem não tem — sem link, para não
+  // mandar ninguém a uma página vazia.
+  const contagem = new Map((Array.isArray(dados) ? dados : [])
+    .filter((r) => UF_NOME[r.uf]).map((r) => [r.uf, Number(r.total) || 0]));
+  const ufs = Object.keys(UF_NOME)
+    .map((uf) => [uf, contagem.get(uf) || 0])
+    .sort((a, b) => b[1] - a[1] || UF_NOME[a[0]].localeCompare(UF_NOME[b[0]], 'pt-BR'));
   const total = ufs.reduce((s, [, n]) => s + n, 0);
+  const comLote = ufs.filter(([, n]) => n > 0).length;
   return pagina({
     titulo: 'Imóveis em leilão no Brasil — casas, apartamentos e terrenos | BidPro Brasil',
-    desc: `${total.toLocaleString('pt-BR')} imóveis em leilão judicial e extrajudicial em ${ufs.length} estados. Veja lance mínimo, avaliação e desconto — e analise a viabilidade antes de arrematar.`,
+    desc: `${total.toLocaleString('pt-BR')} imóveis em leilão judicial e extrajudicial em ${comLote} estados. Veja lance mínimo, avaliação e desconto — e analise a viabilidade antes de arrematar.`,
     canonical: `${SITE}/leiloes`,
     migalha: [{ nome: 'Início', url: `${SITE}/` }, { nome: 'Imóveis em leilão' }],
     hero: `<h1>Imóveis em <span class="destaque">leilão</span> no Brasil</h1>
-      <p class="sub">${total.toLocaleString('pt-BR')} imóveis de leilão judicial e extrajudicial acompanhados hoje, em ${ufs.length} estados. Comece pela sua cidade.</p>
+      <p class="sub">${total.toLocaleString('pt-BR')} imóveis de leilão judicial e extrajudicial acompanhados hoje, em ${comLote} ${comLote === 1 ? 'estado' : 'estados'}. Comece pela sua cidade.</p>
       ${caixaBuscaHero('', 'Não sabe o nome exato? Escolha o estado logo abaixo.')}`,
     corpo: `<h2>Escolha o estado</h2>
-      <ul class="ufs">${ufs.map(([uf, n]) => `<li><a href="${SITE}/leiloes/${uf.toLowerCase()}"><span>${esc(UF_NOME[uf])}</span><span class="n">${n.toLocaleString('pt-BR')}</span></a></li>`).join('')}</ul>
+      <ul class="ufs">${ufs.map(([uf, n]) => (n
+        ? `<li><a href="${SITE}/leiloes/${uf.toLowerCase()}"><span>${esc(UF_NOME[uf])}</span><span class="n">${n.toLocaleString('pt-BR')}</span></a></li>`
+        : `<li class="vazio"><span>${esc(UF_NOME[uf])}</span><span class="n0">sem lote hoje</span></li>`)).join('')}</ul>
       <div class="faixa">
       <h2>Como funciona a BidPro Brasil</h2>
       <p class="sub">Reunimos os lotes dos leiloeiros e da Caixa num só lugar e entregamos, para cada imóvel, uma análise de mercado, um parecer jurídico e o cálculo de viabilidade do arremate — o que ninguém consegue fazer sozinho antes de dar um lance.
