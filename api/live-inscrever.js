@@ -69,7 +69,7 @@ export default async function handler(req, res) {
   if (cidade.length < 2) return res.status(400).json({ error: 'Informe a sua cidade.' });
 
   // O evento tem de existir e estar ativo — nunca confiar no que a tela mandou.
-  const evRes = await sb(`eventos_live?slug=eq.${encodeURIComponent(slug)}&ativo=eq.true&select=id,titulo,data_hora,link_grupo,vagas_max`);
+  const evRes = await sb(`eventos_live?slug=eq.${encodeURIComponent(slug)}&ativo=eq.true&select=id,titulo,data_hora,link_grupo,whatsapp_direto,vagas_max`);
   const evs = evRes.ok ? await evRes.json().catch(() => []) : [];
   const ev = Array.isArray(evs) && evs[0];
   if (!ev) return res.status(404).json({ error: 'Esta aula não está com inscrições abertas.' });
@@ -192,5 +192,8 @@ export default async function handler(req, res) {
 
   return res.status(200).json({
     ok: true, contaNova, link_grupo: ev.link_grupo || null, titulo: ev.titulo, data_hora: ev.data_hora,
+    // Número vem do BANCO e não do bundle: variável VITE_ obriga novo deploy para
+    // trocar, e numa página de campanha isso é número errado no ar até alguém lembrar.
+    whatsapp_direto: String(ev.whatsapp_direto || '').replace(/\D/g, '') || null,
   });
 }

@@ -11085,6 +11085,13 @@ function LiveTab() {
           <div style={{ fontSize:11.5, color:'#64748b', marginTop:6, lineHeight:1.5 }}>
             Aparece na confirmação da inscrição e no e-mail. É o canal do lançamento.
           </div>
+          <label style={{ ...S.label, marginTop:12 }}>WhatsApp direto (botão "Falar comigo")</label>
+          <input style={S.input} value={ev.whatsapp_direto || ''} placeholder="5571900000000"
+            onChange={e => setEv({ ...ev, whatsapp_direto: e.target.value.replace(/\D/g, '') })}
+            onBlur={() => salvar({ whatsapp_direto: ev.whatsapp_direto || null })} />
+          <div style={{ fontSize:11.5, color:'#64748b', marginTop:6, lineHeight:1.5 }}>
+            Só dígitos, com 55 e DDD. Vazio = some o botão. Vale na hora, sem precisar de deploy.
+          </div>
         </div>
       </div>
 
