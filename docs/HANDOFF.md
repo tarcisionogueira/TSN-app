@@ -4,6 +4,50 @@
 
 ---
 
+## 🔎 27/08 (sessão 7) — LJUD: O PARSER NÃO ESTÁ QUEBRADO (e a prova)
+
+462 lotes ativos sem foto, a 2ª maior parcela do `sem_foto`. **Diferente da HASTA, aqui não
+há o que consertar no código** — e isso foi medido, não presumido.
+
+### As quatro evidências
+| | |
+|---|---|
+| 843 dos 1.305 ativos TÊM foto (65%) | o parser funciona |
+| **97 grupos (dia × leiloeiro) com foto E sem foto no MESMO run** | ex.: 26/08 alvaroleiloes, 29 com / 2 sem. Parser quebrado traria o run inteiro vazio |
+| taxa varia **16% a 85% POR LEILOEIRO** | assinatura de quem publica ou não, não de defeito |
+| **0 de 462** têm imagem nos anexos | não há de onde tirar |
+
+### ⚠️ O QUE EU **NÃO** FIZ, DE PROPÓSITO
+144 dos 462 têm "irmão" (mesmo leiloeiro + mesma cidade) COM foto. **Não herdei.** Na HASTA
+existia o **número único do imóvel da Caixa** provando ser o mesmo bem; aqui, "mesmo leiloeiro
+e mesma cidade" não prova nada — dois terrenos diferentes em Guaíra não dividem foto. Colar
+seria exatamente o *foto errada é pior que foto ausente* que a HASTA respeitou.
+
+### O recon que FECHA a questão (`scripts/recon-ljud-foto.mjs` + workflow)
+Indício não é veredito. O script pega no NOSSO banco os lotes sem foto, procura cada um na API
+pública do LJUD e responde de forma inequívoca **nos dois sentidos**:
+- **API tem imagem** → é bug nosso, e imprime *quais campos* carregam a URL, para o parser ler;
+- **API também não tem** → encerrado, é ausência na origem e para de ser dívida técnica.
+
+Procura por QUALQUER valor que pareça imagem, em qualquer campo (inclusive aninhado e em
+array) — procurar por campo chamado "foto" assumiria a resposta. E confere `.ok` da API: um
+4xx virando "nenhum lote" produziria o veredito falso "a fonte não tem".
+
+### 🔴 O PROBLEMA REAL DO LJUD É OUTRO — e é nosso
+**Os 1.305 lotes ativos apontam para o DOMÍNIO do leiloeiro, não para a página do lote.**
+| semana | lotes | com URL do lote |
+|---|---|---|
+| 06/07 | 275 | 158 |
+| 20/07 | 312 | 45 |
+| 03/08 → hoje | 1.491 | **0** |
+
+**Não é regressão acidental:** `recon-ljud-url.mjs` existe justamente porque `/lote/{id}` dava
+*"Leilão não encontrado"*, e trocaram para o domínio para não mandar o cliente a uma página de
+erro. O efeito colateral é que hoje ele cai na **home** e tem de caçar o imóvel. A URL certa
+depende do recon rodar — daqui o proxy recusa a API e o portal.
+
+---
+
 ## 💸 27/08 (sessão 6) — O ALARME DE GEOCODE ACUSAVA O PRÓPRIO FREIO FUNCIONANDO
 
 `geocode_acima_da_cota` marcava **11.119 contra 10.000** e parecia dinheiro vazando. Não era.
