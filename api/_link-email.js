@@ -46,9 +46,12 @@ export function conferirClique(userId, tipo, caminho, sig) {
   return esperado.length === recebido.length && crypto.timingSafeEqual(esperado, recebido);
 }
 
+// A convenção de UTM dos links de e-mail vive em `_utm.js`, e NÃO aqui: este módulo
+// importa `crypto`/`Buffer` do Node, e quem monta UTM também roda no Edge.
+
 /**
  * Monta o link rastreado. `caminho` é interno e DEVE começar com '/'
- * (ex.: '/#/buscar?utm_source=email_ativacao').
+ * (ex.: `/#/buscar?${utmEmail('ativacao')}`).
  *
  * Sem `userId` (e-mail para quem ainda não tem conta) devolve o link direto: rastrear sem
  * saber de quem é o clique não serve para nada, e um link a mais na cadeia só adiciona um

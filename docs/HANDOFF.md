@@ -4,6 +4,62 @@
 
 ---
 
+## 🏷️ 27/08 (sessão 4) — O MESMO CANAL CONTADO COM DOIS NOMES
+
+Ao responder "de onde vieram os cadastros de hoje", o relatório de canais apareceu
+fragmentado. Nenhum era bug de código: **são links montados à mão** (bio do Instagram,
+criativo da campanha).
+
+| antes | depois |
+|---|---|
+| `instagram` 154 · **`ig` 7** | **`instagram` 161** |
+| `TRF - SITE - LEILOES - AGO26` 136 · **`TRF+-+SITE+…` 4** | **140** |
+| `email_alerta` / `email_ativacao` como SOURCE | `utm_source=email` + campanha distingue |
+
+### Por que normalizar na ESCRITA, e não só nos links que geramos
+Consertar só o que a plataforma emite deixaria de fora **a origem do problema** — o link da
+bio, digitado fora daqui e que vai continuar sendo. Gatilho `BEFORE` em `visita_origem` +
+a mesma regra em `registrar_marketing()`: vale para qualquer link, presente ou futuro.
+Mesmo caminho do gatilho que barra o placeholder de foto (25/08) — conserto na CLASSE.
+
+**Regras conservadoras, só o que o dado prova:** `source`/`medium` → minúsculas + trim;
+`campaign`/`content`/`term` → só `+`→espaço e trim, **a caixa é preservada** (rebaixar
+`REEL-2408-PASSO-A-PASSO` destruiria informação). Um único apelido: `ig` → `instagram`.
+
+### A convenção dos links que a plataforma gera (`api/_utm.js`)
+`utm_source` é o **CANAL**, nunca o nome do disparo. Era o contrário — `email_alerta` e
+`email_ativacao` iam como source, então cada e-mail novo nascia como um canal próprio e o
+e-mail nunca somava. Agora: `utm_source=email` · `utm_medium=email` · `utm_campaign=<disparo>`.
+
+### 🧨 O ERRO QUE QUASE FOI PARA PRODUÇÃO — e a lição
+Coloquei `utmEmail` dentro de `_link-email.js`. **`api/email-alerta.js` roda em
+`runtime: 'edge'` e `_link-email.js` importa `crypto`/`Buffer` do Node** — o import teria
+derrubado o endpoint com **500 em produção**. E nem `verificar:sintaxe` nem `vite build`
+pegam: o arquivo faz parse, e `api/` não é compilado.
+**Por isso `_utm.js` nasceu como módulo PURO** (só `URLSearchParams`, que existe nos dois
+runtimes), com o aviso no topo. ⚠️ **Ao criar helper novo em `api/`, confira o `runtime` de
+QUEM VAI IMPORTAR antes de escolher onde ele mora.**
+
+### 🔎 NÃO TOCADO, de propósito (precisa de decisão sua)
+- **`utm_medium` `bio` (14) × `social` (7)** — dois padrões de link na bio, um antigo e um
+  novo. Fundir exigiria adivinhar sua intenção. **Padronize na bio e isto se resolve.**
+- **`pesquisa-leilao` (6) × `pesquisa-leilao-imoveis` (5)** em `perfis` — pode ser renomeação
+  real da campanha no Google Ads, não variação de escrita.
+- **`chatgpt.com` como utm_source** (7 visitas) — não é erro: o ChatGPT carimba assim os
+  links que cita. Vale notar que **estamos aparecendo em resposta de IA**.
+
+### 📌 SOBRE A ORIGEM DOS CADASTROS — o que ficou sabido
+**Em 14 de 14 cadastros rastreáveis (60 dias), a conta foi criada na MESMA sessão, em menos
+de 30 minutos. Ninguém voltou depois.** O funil é de decisão imediata — quem não cadastra na
+primeira visita não volta. Reforça o valor do remarketing: hoje nada recupera essa gente.
+
+**Limites do rastreio, para não confiar demais:** o in-app browser do Instagram zera o
+`document.referrer` (as 161 visitas só aparecem porque os links TÊM UTM — link sem UTM cai em
+"direto"); o login com Google mascara a origem como `accounts.google.com`; e visita em outro
+aparelho não é vista (o rastro vive no `localStorage` daquele navegador).
+
+---
+
 ## 💸 27/08 (sessão 3) — A VENDA NUNCA VOLTOU PARA O GOOGLE ADS
 
 ### ⚠️ PRIMEIRO: A SUSPEITA QUE EU LEVANTEI NÃO SE CONFIRMOU

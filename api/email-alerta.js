@@ -2,6 +2,7 @@ export const config = { runtime: 'edge' };
 
 import { getAuthUser, unauthorized } from './_auth.js';
 import { checkRateLimit, getIP, rateLimitedResponse } from './_rate-limit.js';
+import { utmEmail } from './_utm.js';
 
 // Assina o token de descadastro no MESMO esquema de cancelar-alertas.js
 // (base64url(userId).hmac_sha256(userId, SECRET)[0..16]), aqui via WebCrypto (edge).
@@ -22,8 +23,10 @@ async function assinarUnsubEdge(userId) {
 function gerarEmailHTML(userName, imoveis, filtros, filtroDesc, unsubToken, baseUrl) {
   // UTM params identificam tráfego vindo de alertas de email no GA4
   // GA4 lê a query string ANTES do #, não dentro do hash (SPA routing)
-  // Relatório GA4: Aquisição → Tráfego → utm_source = "email_alerta"
-  const utm = `utm_source=email_alerta&utm_medium=email&utm_campaign=alerta_imoveis`;
+  // Relatório GA4: Aquisição → Tráfego → utm_source = "email", utm_campaign = "alerta_imoveis".
+  // O source deixou de ser "email_alerta" em 27/08: nome do disparo em SOURCE fazia cada
+  // e-mail virar um canal próprio, e o e-mail nunca somava no relatório. Ver `utmEmail`.
+  const utm = utmEmail('alerta_imoveis');
 
   // Link busca: UTMs na query string real + filtros no hash (lidos pelo SPA)
   const filtroParams = new URLSearchParams();

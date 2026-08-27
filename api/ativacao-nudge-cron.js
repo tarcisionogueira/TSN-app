@@ -36,6 +36,7 @@ import { isCronAuthorized } from './_auth.js';
 import { enviarEmail } from './_email.js';
 import { assinarUnsub } from './cancelar-alertas.js';
 import { linkRastreado } from './_link-email.js';
+import { utmEmail } from './_utm.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -79,7 +80,7 @@ async function escolherImoveis(cidade, uf) {
 // por padrão, e um cabeçalho que depende de PNG aparece vazio justamente na primeira impressão.
 // Cores oficiais de docs/MARCA.md — azul #0D63DB → #0B4BA6, o "B" branco no quadrado azul.
 function cabecalho(L) {
-  const home = L('/?utm_source=email_ativacao&utm_medium=email&utm_campaign=ativacao');
+  const home = L(`/?${utmEmail('ativacao')}`);
   return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;background:#0D63DB;background-image:linear-gradient(135deg,#0D63DB 0%,#0B4BA6 100%);border-radius:14px 14px 0 0;">
     <tr><td align="center" style="padding:22px 20px;">
       <a href="${home}" style="text-decoration:none;display:inline-block;" target="_blank">
@@ -100,7 +101,7 @@ function cabecalho(L) {
 }
 
 function cardImovel(im, L) {
-  const url = L(`/#/imovel/${im.id}?utm_source=email_ativacao&utm_medium=email&utm_campaign=ativacao`);
+  const url = L(`/#/imovel/${im.id}?${utmEmail('ativacao')}`);
   const desc = Math.round(Number(im.desconto_percentual) || 0);
   // O card SEMPRE foi um link (o `<a>` envolve tudo) — o que faltava era PARECER clicável.
   // Sem pista visual, o leitor lê como cartaz e não clica: a barra azul à esquerda e o
@@ -136,9 +137,9 @@ export function corpo({ nome, etapa, imoveis, cidade, unsubUrl, userId }) {
        avaliação, mas é depois de somar ITBI, comissão do leiloeiro e reforma que dá para saber se o
        negócio fecha. É exatamente isso que o relatório calcula. Veja três imóveis${ondeTxt}:</p>`;
 
-  const cta = L('/#/buscar?utm_source=email_ativacao&utm_medium=email&utm_campaign=ativacao');
+  const cta = L(`/#/buscar?${utmEmail('ativacao')}`);
 
-  const home = L('/?utm_source=email_ativacao&utm_medium=email&utm_campaign=ativacao');
+  const home = L(`/?${utmEmail('ativacao')}`);
   // Estrutura em TABELA e estilo INLINE: é o que sobrevive ao Outlook e ao Gmail. Nada de
   // flexbox/grid aqui — o que renderiza bem no navegador costuma quebrar no cliente de e-mail.
   return `<div style="font-family:Arial,Helvetica,sans-serif;background:#f1f5f9;padding:22px 12px;">
