@@ -4,6 +4,106 @@
 
 ---
 
+## 🩺 27/08 (sessão 2) — DIAGNÓSTICO DE ABERTURA + DOIS CONSERTOS
+
+Auditorias no fim: **0 crítico em regras, 0 crítico em segurança** (a única atenção segue
+sendo `fontes_com_limpeza_pulada`, pré-existente).
+
+### ✅ O QUE ESTÁ VERDE
+Deploys READY · acervo 28.172 ativos, 892 tocados em 24h, **0 sem geocode** · **backup ok**
+(63 arquivos, 47 iguais — o alarme de teto de 14/08 está morto, o job alcançou o acervo) ·
+0 chamado de cliente sem resposta · 0 KYC ilegível · 0 fonte no ponto cego ·
+`relatorios_falha_24h` 0.
+
+### 🔴 4 INVARIANTES EM ALERTA
+| chave | valor | limite | leitura |
+|---|---|---|---|
+| `geocode_acima_da_cota` | **11.119** | 10.000 | 🆕 projeção do mês passou o gratuito do Google → **vira cobrança** |
+| `bd_teto_saturado` | 530 | 495 | `geral` 99/100 e `pecini` 63/70 estourados |
+| `sem_foto` | 1.973 | 1.600 | piorou (era 1.925 em 26/08) |
+| `alerta_acima_do_capital` | 2 | 0 | ✅ **resíduo, fecha a pendência #20** — os dois são de 24/08 11:01, ANTERIORES ao commit `f3a7aa9` (25/08). O teto **não** vaza; sai da janela de 7d em 31/08 |
+
+### 📣 MARKETING — melhor dia da série em 26/08
+Google Ads R$ 43,81 / **134 cliques** (recorde) · Meta R$ 8,65 / 77. Rastreio: 894 cliques
+pagos × **668 visitas com gclid (75%)**; `utm_term` em 757 de 1.266. Atribuição sã: **1
+cadastro sem captura em 11** depois da correção de 20/08.
+
+⚠️ **A vigiar:** 5 conversões em 14 dias, e **zero nos dois dias de maior volume** (24/08 com
+66 cliques, 26/08 com 134). Ou o rastreio de conversão perde evento, ou o tráfego novo é pior
+que o antigo. Investigar ANTES de subir verba para o lançamento.
+
+### ✉️ E-MAILS — o inventário que o dono pediu
+**Mantêm (funcionam):** `oportunidades` (130/30d, 29 abertos) · `boas_vindas` (49, 37% de
+abertura) · `ativacao` (40, **4 cliques — melhor taxa da casa**) · `alerta_publico_confirmacao`
+(9, 56%) · `contrato`.
+
+**🛑 `divulgacao_produto` — ZERO cliques em 90 dias.** 62 envios (12/08: 37 · 19/08: 15 ·
+26/08: 10), 19 aberturas, 0 cliques absolutos; o disparo de 26/08 teve **0 aberturas em 10**.
+**Conferi que o rastreio FUNCIONA** — `_produto-email.js` envolve os links no `/api/clique`
+pelo `linkRastreado`, o mesmo mecanismo que registrou os 4 cliques do `ativacao`. O zero é
+real. Causa provável: o catálogo tem **dois itens — um curso grátis e um eBook de R$ 14,90**.
+**Recomendado pausar o cron de quarta até os cursos entrarem**; queimar a lista de 62 com
+divulgação genérica na semana do lançamento é o pior momento possível. *(Não pausei — é
+decisão comercial do dono.)*
+
+**Conta interna recebe `oportunidades` DE PROPÓSITO** — `enviar-alertas-cron.js:176` inclui
+`admin` no `ROLES` com o comentário "o dono acompanha os disparos". 4 envios/30d. Não é bug.
+
+**`lancamento-remarketing-cron` roda 4×/dia e nunca enviou nada — e está CERTO:**
+`live_inscricoes` = 0. Não há falha silenciosa ali.
+
+### 🔧 CONSERTO 1 — GATE DE SUPRESSÃO (commit `7325c44`)
+`_email.js` não checava nada antes de enviar; o webhook carimbava `status='bounce'` e ninguém
+lia. Dois endereços que bounçaram em 10/08 receberam mais dois e-mails cada, até 24/08.
+
+⚠️ **A regra ingênua estaria errada em metade dos casos.** `domicianosousa03@gmail.com`
+bounçou em 10 e 12/08 e foi **ENTREGUE em 24/08** (transitório, caixa cheia);
+`triciatoyr@tahoo.com.br` bounçou 3× e tem **zero entregas** (typo de `yahoo`). Três regras:
+permanente suprime na hora · 3 transitórios seguidos sem entrega suprimem · **qualquer
+entrega zera e reativa** (exceto reclamação de spam). Os 5 caminhos foram testados contra o
+histórico real.
+
+O webhook descartava `bounce.type`, que é o campo que decide — agora é lido, e na dúvida
+trata como transitório. **O gate não podia ficar só no helper:** `enviar-alertas-cron.js`
+fala com o Resend DIRETO e é ele que manda o `oportunidades`, o maior volume e o disparo que
+reincidiu. Filtro exportado e aplicado lá também. Novo invariante
+`email_para_endereco_suprimido` (limite 0) vigia o próprio gate.
+
+⚠️ **AINDA FORA DO GATE, de propósito:** 13 arquivos falam com o Resend direto. A maioria é
+alerta INTERNO para o dono (health-check, monitor, auditoria) e **não deve ser suprimida
+nunca**. Os de cliente que sobram são transacionais e pontuais (`notificar-cliente`,
+`notificar-reuniao`, `agendar-reuniao`, `financiamento-alertas`) — baixo volume, não
+reincidem. Ficam para uma próxima passada.
+
+### 🔧 CONSERTO 2 — O ALARME ACUSAVA A FONTE SÃ E POUPAVA A DOENTE (commit `9271384`)
+A consulta do ritual acusou **LEILOFY** (12 lotes contra piso 37). **Não era regressão:** os
+51 lotes que saíram em 25/08 tinham TODOS `data_leilao = 25/08` — o leilão aconteceu e a
+limpeza fez o trabalho dela. Os 8 restantes têm praça futura. **Parser intacto.**
+
+**Terceira vez que o instrumento é o errado** (17/08, 18/08, agora), mesma assinatura: algo
+que não é medição da fonte comparado contra o piso da fonte.
+
+**E a consulta errava nos DOIS sentidos:** o **CALIL** (9 lotes contra piso 18) estava
+INVISÍVEL, porque a última LINHA dele era `sem_cota` e a consulta olhava a última linha — uma
+fonte podia se esconder atrás do freio de orçamento indefinidamente.
+
+Virou `public.fonte_regressao_suspeita()`: desconta expiração legítima recente e avalia a
+última **medição**, não a última linha. Consulta em documento não é testada e envelhece
+calada — foi exatamente o que aconteceu. CLAUDE.md atualizado.
+
+### 📌 PENDENTE DESTA SESSÃO
+1. **MERGE PARA `main`** — os dois commits estão na branch `claude/bidpro-brasil-initial-checks-del33b`.
+   ⚠️ As **migrações já estão aplicadas em produção**, mas o CÓDIGO não: o gate só passa a
+   filtrar depois do merge. Aplicado ≠ ativo.
+2. **CALIL — regressão REAL, continua aberta.** A ofensiva de recon precisa da página viva do
+   leiloeiro, e o proxy daqui **recusa CONNECT** para o site (mesma limitação da HASTA).
+   Escrever o seletor no escuro seria adivinhar.
+3. **Geocode acima da cota** (11.119/10.000) — novo, vira dinheiro no fim do mês.
+4. **Conversões zeradas nos dias de maior tráfego** — investigar antes de subir verba.
+5. **Decisão do dono:** pausar ou não a `divulgacao_produto`.
+
+---
+
 ## 🏁 27/08 — A MÁQUINA DE LANÇAMENTO (janela, upsell, downsell, remarketing)
 
 Dia inteiro construindo a estrutura comercial do lançamento. **Tudo em produção.**
