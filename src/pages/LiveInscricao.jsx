@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '../utils/supabase';
 import { lerMarketing } from '../utils/marketing';
+import CidadeAutocomplete from '../components/CidadeAutocomplete';
 import { NAVY, LATAO, AZUL } from '../utils/marca';
 
 // Sora: display com caráter, sem cair no Inter/Space Grotesk que toda landing usa.
@@ -59,6 +60,11 @@ export default function LiveInscricao() {
   const [erroCarga, setErroCarga] = useState(false);
   const [inscritos, setInscritos] = useState(null);
   const [form, setForm] = useState({ nome: '', email: '', whatsapp: '', cidade: '', uf: '' });
+  // null = ainda carregando a base do IBGE; 0 = a base NÃO veio. Só no segundo caso o
+  // campo de UF reaparece — sem ele, quem se inscreve com o IBGE fora ficaria sem estado
+  // e cairia fora de todos os filtros de proximidade, calado.
+  const [cidadesCarregadas, setCidadesCarregadas] = useState(null);
+  const [numeros, setNumeros] = useState(null);
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState('');
   const [pronto, setPronto] = useState(null);
@@ -79,6 +85,10 @@ export default function LiveInscricao() {
       if (data) {
         const { data: n } = await supabase.rpc('live_inscritos', { p_slug: slug }); // padrao-ok: prova social opcional — sem o número a página funciona igual
         if (!cancelado) setInscritos(typeof n === 'number' ? n : null);
+        // Números do acervo, vivos. Se não vierem, a faixa some — número de credencial
+        // é o tipo de coisa que não pode aparecer errado nem por um dia.
+        const { data: num } = await supabase.rpc('live_plataforma_numeros'); // padrao-ok: faixa de credencial opcional — sem os números a página funciona igual
+        if (!cancelado) setNumeros(num && num.lotes ? num : null);
       }
     })();
     return () => { cancelado = true; };
@@ -296,16 +306,24 @@ export default function LiveInscricao() {
                   value={form[f.k]} onChange={e => setForm({ ...form, [f.k]: e.target.value })}
                   style={{ width: '100%', padding: '14px 16px', border: '1px solid #cbd5e1', borderRadius: 11, fontSize: 16, marginBottom: 10, boxSizing: 'border-box', color: '#0f172a', fontFamily: 'inherit' }} />
               ))}
-              {/* Cidade e UF na mesma linha: são um dado só na cabeça de quem preenche, e
-                  dois campos empilhados fariam o formulário parecer mais longo do que é. */}
-              <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
-                <input type="text" autoComplete="address-level2" placeholder="Sua cidade"
-                  value={form.cidade} onChange={e => setForm({ ...form, cidade: e.target.value })}
-                  style={{ flex: 1, minWidth: 0, padding: '14px 16px', border: '1px solid #cbd5e1', borderRadius: 11, fontSize: 16, boxSizing: 'border-box', color: '#0f172a', fontFamily: 'inherit' }} />
-                <input type="text" autoComplete="address-level1" placeholder="UF" maxLength={2}
+              {/* UM campo só: a pessoa digita e escolhe "Cidade - UF" da base do IBGE, e a UF
+                  vem junto. Dois campos separados produziam grafia livre e UF em branco — e
+                  cidade sem estado não casa com nenhum filtro de proximidade da Busca, que é
+                  exatamente o que eu prometo fazer ao vivo com o endereço dela. */}
+              <CidadeAutocomplete
+                value={form.cidade}
+                placeholder="Sua cidade (comece a digitar)"
+                onListaPronta={setCidadesCarregadas}
+                onSelect={({ cidade, uf }) => setForm(f => ({ ...f, cidade, uf: uf || f.uf }))}
+                style={{ marginBottom: 10 }}
+                inputStyle={{ padding: '14px 16px', border: '1px solid #cbd5e1', borderRadius: 11, fontSize: 16, color: '#0f172a', fontFamily: 'inherit' }} />
+              {/* A base do IBGE não respondeu: sem ela não há UF para resolver, então o campo
+                  volta. Seguir sem estado seria gravar meio endereço e chamar de sucesso. */}
+              {cidadesCarregadas === 0 && (
+                <input type="text" autoComplete="address-level1" placeholder="UF (ex.: BA)" maxLength={2}
                   value={form.uf} onChange={e => setForm({ ...form, uf: e.target.value.toUpperCase().replace(/[^A-Z]/g, '') })}
-                  style={{ width: 74, flexShrink: 0, padding: '14px 12px', border: '1px solid #cbd5e1', borderRadius: 11, fontSize: 16, boxSizing: 'border-box', color: '#0f172a', textAlign: 'center', fontFamily: 'inherit' }} />
-              </div>
+                  style={{ width: '100%', padding: '14px 16px', border: '1px solid #cbd5e1', borderRadius: 11, fontSize: 16, marginBottom: 10, boxSizing: 'border-box', color: '#0f172a', fontFamily: 'inherit' }} />
+              )}
               {erro && (
                 <div style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#991b1b', borderRadius: 9, padding: '10px 12px', fontSize: 13, marginBottom: 10 }}>{erro}</div>
               )}
@@ -385,17 +403,55 @@ export default function LiveInscricao() {
         </div>
       )}
 
-      {/* ── QUEM APRESENTA ───────────────────────────────────────────────────── */}
+      {/* ── QUEM APRESENTA ─────────────────────────────────────────────────────
+          Cartão, e não texto solto no fundo escuro: este bloco responde "por que eu
+          deveria ouvir esse cara?", e é a única parte da página em que a resposta é a
+          PESSOA. Solto, ele lia como rodapé.
+
+          Foto à esquerda e texto à direita no desktop; empilhado no celular, onde a
+          maioria vai abrir. A faixa de números fecha o bloco porque credencial aqui não
+          é adjetivo — é o acervo que ele vai abrir ao vivo dali a poucos dias. */}
       {evento.apresentador && (
-        <div style={{ maxWidth: 620, margin: '58px auto 0', padding: '0 22px', textAlign: 'center' }}>
-          {evento.apresentador_foto && (
-            <img src={evento.apresentador_foto} alt="" style={{ width: 82, height: 82, borderRadius: '50%', objectFit: 'cover', marginBottom: 14, border: `2px solid ${cor}66` }} />
-          )}
-          <div style={{ fontSize: 11.5, fontWeight: 700, color: cor, textTransform: 'uppercase', letterSpacing: 1.6, marginBottom: 8 }}>Quem apresenta</div>
-          <div style={{ fontSize: 19, fontWeight: 700, color: '#fff', marginBottom: 8 }}>{evento.apresentador}</div>
-          {evento.apresentador_bio && (
-            <p style={{ fontSize: 14.5, color: '#A7B9CE', lineHeight: 1.7, margin: 0 }}>{evento.apresentador_bio}</p>
-          )}
+        <div style={{ maxWidth: 760, margin: '64px auto 0', padding: '0 22px' }}>
+          <div style={{ fontSize: 11.5, fontWeight: 700, color: cor, textTransform: 'uppercase', letterSpacing: 1.6, marginBottom: 14, textAlign: 'center' }}>
+            Quem apresenta
+          </div>
+          <div style={{ background: 'rgba(255,255,255,0.045)', border: '1px solid rgba(255,255,255,0.10)', borderRadius: 18, padding: '28px 26px' }}>
+            <div style={{ display: 'flex', gap: 22, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+              {evento.apresentador_foto && (
+                <img src={evento.apresentador_foto} alt={evento.apresentador}
+                  style={{ width: 104, height: 104, borderRadius: 16, objectFit: 'cover', flexShrink: 0, border: `2px solid ${cor}55` }} />
+              )}
+              <div style={{ flex: '1 1 300px', minWidth: 0 }}>
+                <div style={{ fontSize: 22, fontWeight: 800, color: '#fff', letterSpacing: '-0.01em' }}>{evento.apresentador}</div>
+                {evento.apresentador_cargo && (
+                  <div style={{ fontSize: 13, fontWeight: 700, color: LATAO, marginTop: 3, marginBottom: 12 }}>
+                    {evento.apresentador_cargo}
+                  </div>
+                )}
+                {evento.apresentador_bio && (
+                  <p style={{ fontSize: 15, color: '#C9D6E6', lineHeight: 1.75, margin: 0, whiteSpace: 'pre-line' }}>
+                    {evento.apresentador_bio}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {numeros && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 14, marginTop: 24, paddingTop: 22, borderTop: '1px solid rgba(255,255,255,0.10)' }}>
+                {[
+                  { v: Number(numeros.lotes).toLocaleString('pt-BR'), l: 'lotes em leilão monitorados agora' },
+                  { v: Number(numeros.leiloeiros).toLocaleString('pt-BR'), l: 'leiloeiros acompanhados todo dia' },
+                  { v: Number(numeros.cidades).toLocaleString('pt-BR'), l: 'cidades brasileiras com acervo' },
+                ].map(n => (
+                  <div key={n.l}>
+                    <div style={{ fontSize: 25, fontWeight: 800, color: '#fff', letterSpacing: '-0.02em' }}>{n.v}</div>
+                    <div style={{ fontSize: 12.5, color: '#8FA5BE', lineHeight: 1.45, marginTop: 2 }}>{n.l}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
 

@@ -11109,6 +11109,38 @@ function LiveTab() {
         </label>
       </div>
 
+      {/* Quem apresenta — é o bloco que responde "por que ouvir esse cara?". Fica aqui,
+          editável, e não escrito no código: a bio muda mais que a página. */}
+      <div style={{ marginBottom:18, borderTop:'1px solid #e5e7eb', paddingTop:16 }}>
+        <h4 style={{ fontSize:15, fontWeight:800, margin:'0 0 10px' }}>Quem apresenta</h4>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(230px, 1fr))', gap:12 }}>
+          <div>
+            <label style={S.label}>Nome</label>
+            <input style={S.input} value={ev.apresentador || ''}
+              onChange={e => setEv({ ...ev, apresentador: e.target.value })}
+              onBlur={() => salvar({ apresentador: ev.apresentador || null })} />
+          </div>
+          <div>
+            <label style={S.label}>Cargo (linha sob o nome)</label>
+            <input style={S.input} value={ev.apresentador_cargo || ''} placeholder="Fundador da BidPro Brasil"
+              onChange={e => setEv({ ...ev, apresentador_cargo: e.target.value })}
+              onBlur={() => salvar({ apresentador_cargo: ev.apresentador_cargo || null })} />
+          </div>
+        </div>
+        <label style={{ ...S.label, marginTop:10 }}>Foto (URL)</label>
+        <input style={S.input} value={ev.apresentador_foto || ''} placeholder="https://…/foto.jpg"
+          onChange={e => setEv({ ...ev, apresentador_foto: e.target.value })}
+          onBlur={() => salvar({ apresentador_foto: ev.apresentador_foto || null })} />
+        <label style={{ ...S.label, marginTop:10 }}>Bio</label>
+        <textarea style={{ ...S.input, minHeight:110, fontFamily:'inherit' }} value={ev.apresentador_bio || ''}
+          onChange={e => setEv({ ...ev, apresentador_bio: e.target.value })}
+          onBlur={() => salvar({ apresentador_bio: ev.apresentador_bio || null })} />
+        <div style={{ fontSize:11.5, color:'#64748b', marginTop:6, lineHeight:1.5 }}>
+          Os números embaixo da bio (lotes, leiloeiros, cidades) saem do acervo em tempo real —
+          não precisa escrever, e não envelhecem.
+        </div>
+      </div>
+
       <h4 style={{ fontSize:15, fontWeight:800, margin:'22px 0 10px' }}>
         Inscritos <span style={{ color:'#0D63DB' }}>({inscritos.length})</span>
       </h4>

@@ -10,14 +10,30 @@ import { buscarTodasCidades } from '../data/cidades';
 // corromper). Assim "vitória" e "vitoria" batem igual.
 const norm = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 
-export default function CidadeAutocomplete({ value = '', onSelect, placeholder = 'Digite a cidade…', style }) {
+export default function CidadeAutocomplete({ value = '', onSelect, placeholder = 'Digite a cidade…', style, inputStyle, onListaPronta }) {
   const [q, setQ] = useState(value);
   const [todas, setTodas] = useState([]);
   const [sugestoes, setSugestoes] = useState([]);
   const [aberto, setAberto] = useState(false);
   const ref = useRef(null);
 
-  useEffect(() => { buscarTodasCidades().then(l => setTodas(Array.isArray(l) ? l : [])); }, []);
+  // `onListaPronta` recebe QUANTAS cidades vieram, e é chamada só depois da promessa
+  // resolver. Existe porque `buscarTodasCidades` devolve [] tanto quando o IBGE está fora
+  // quanto antes de carregar: sem esse aviso, quem depende da UF resolvida aqui não teria
+  // como distinguir "ainda carregando" de "a lista não veio" — e cairia no vazio que não
+  // sabe que falhou. Com o aviso, o chamador consegue oferecer o campo de UF de volta.
+  const avisar = useRef(onListaPronta);
+  useEffect(() => { avisar.current = onListaPronta; });
+  useEffect(() => {
+    let vivo = true;
+    buscarTodasCidades().then(l => {
+      if (!vivo) return;
+      const lista = Array.isArray(l) ? l : [];
+      setTodas(lista);
+      avisar.current?.(lista.length);
+    });
+    return () => { vivo = false; };
+  }, []);
   useEffect(() => { setQ(value); }, [value]);
   useEffect(() => {
     const t = norm(q).trim();
@@ -60,7 +76,7 @@ export default function CidadeAutocomplete({ value = '', onSelect, placeholder =
     <div ref={ref} style={{ position: 'relative', ...style }}>
       <input value={q} onFocus={() => setAberto(true)} onChange={e => { setQ(e.target.value); setAberto(true); onSelect?.({ cidade: e.target.value, uf: '' }); }}
         placeholder={placeholder}
-        style={{ width: '100%', padding: '11px 14px', border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 14, background: 'white', color: '#111', boxSizing: 'border-box' }} />
+        style={{ width: '100%', padding: '11px 14px', border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 14, background: 'white', color: '#111', boxSizing: 'border-box', ...inputStyle }} />
       {aberto && sugestoes.length > 0 && (
         <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 60, background: 'white', border: '1px solid #e2e8f0', borderRadius: 10, marginTop: 4, boxShadow: '0 8px 24px rgba(0,0,0,0.14)', maxHeight: 240, overflowY: 'auto' }}>
           {sugestoes.map(item => (
