@@ -11122,6 +11122,10 @@ function LiveTab() {
   const [inscritos, setInscritos] = useState([]);
   const [erro, setErro] = useState('');
   const [salvando, setSalvando] = useState(false);
+  // Carimbo do ultimo save BEM-SUCEDIDO. Sem sinal na tela, salvar no `onBlur` e invisivel:
+  // o dono nao tem botao para apertar nem confirmacao para ver, e so descobre que nao gravou
+  // quando abre a pagina publica. Aconteceu duas vezes hoje.
+  const [salvoEm, setSalvoEm] = useState(0);
   const [criandoSala, setCriandoSala] = useState(false);
   const [catalogo, setCatalogo] = useState([]);
   const SLUG = 'leilao-ao-vivo';
@@ -11163,7 +11167,25 @@ function LiveTab() {
       .update(campos).eq('slug', SLUG).select('id');
     if (error) setErro('Não salvou: ' + error.message);
     else if (!data?.length) setErro('Não salvou: nenhuma linha foi alterada (permissão ou aula inexistente). Nada foi gravado.');
-    else await carregar();
+    else {
+      // ⚠️ NÃO chamar `carregar()` aqui. Ele faz `setEv(dataDoBanco)`, ou seja, SOBRESCREVE O
+      // FORMULÁRIO INTEIRO — inclusive campos que o usuário está editando e ainda não salvou.
+      // Como cada campo salva no `onBlur` (e o checkbox "Inscrições abertas" salva no
+      // `onChange`), o ciclo era: edito a bio → mexo em qualquer outro campo → o save DAQUELE
+      // campo recarrega tudo → minha bio editada é trocada pela do banco → o blur da bio
+      // finalmente dispara e grava o texto VELHO. O dono perdeu a mesma edição duas vezes
+      // assim, e das duas o banco confirmou "salvo": a linha era alcançada, só que com o
+      // conteúdo antigo.
+      //
+      // O estado local já é a verdade — acabou de ser gravado. Aplicar só o que foi salvo
+      // preserva o que está em edição noutro campo.
+      setEv(prev => (prev ? { ...prev, ...campos } : prev));
+      setSalvoEm(Date.now());
+      // A data exibida ("próxima aula") é derivada no servidor, então essa sim precisa
+      // reler — mas ela não toca no formulário.
+      const { data: p } = await supabase.rpc('live_proxima', { p_slug: SLUG }); // padrao-ok: só a data exibida — o formulário funciona sem ela
+      if (p) setProx(p);
+    }
     setSalvando(false);
   }
 
@@ -11186,6 +11208,17 @@ function LiveTab() {
     <div>
       <h3 style={S.sectionTitle}>🎥 Aula ao vivo — captação</h3>
       {erro && <div style={{ background:'#fef2f2', border:'1px solid #fecaca', color:'#991b1b', borderRadius:8, padding:'10px 13px', fontSize:13, marginBottom:14 }}>{erro}</div>}
+      {/* Cada campo grava ao PERDER O FOCO — não há botão de salvar. Sem um sinal na tela isso
+          é invisível: o dono não tem o que apertar nem o que ver, e só descobre que não gravou
+          ao abrir a página pública. Aconteceu duas vezes em 27/08. */}
+      <div style={{ fontSize:12, marginBottom:14, color: salvando ? '#92400e' : (salvoEm ? '#166534' : '#64748b'),
+                    background: salvando ? '#fffbeb' : (salvoEm ? '#f0fdf4' : '#f8fafc'),
+                    border:'1px solid ' + (salvando ? '#fde68a' : (salvoEm ? '#bbf7d0' : '#e2e8f0')),
+                    borderRadius:8, padding:'8px 12px' }}>
+        {salvando ? '⏳ Salvando…'
+          : salvoEm ? '✓ Salvo — cada campo grava sozinho ao sair dele (clique fora para confirmar)'
+          : 'Cada campo grava sozinho ao SAIR do campo. Clique fora depois de editar.'}
+      </div>
 
       <div style={{ background:'#0B1B33', color:'#fff', borderRadius:12, padding:'18px 20px', marginBottom:16 }}>
         <div style={{ fontSize:11.5, color:'#8FA4BF', textTransform:'uppercase', letterSpacing:1.2, fontWeight:700, marginBottom:8 }}>
