@@ -7,6 +7,10 @@ import { NAVY, LATAO, AZUL } from '../utils/marca';
 // Sora: display com caráter, sem cair no Inter/Space Grotesk que toda landing usa.
 const FONTE = "'Sora', system-ui, -apple-system, sans-serif";
 
+// Reusa a MESMA variável do suporte (VITE_WHATSAPP_NUMERO) em vez de fixar um número aqui:
+// número em duas fontes vira número desatualizado em uma delas.
+const WHATSAPP_NUMERO = String(import.meta.env.VITE_WHATSAPP_NUMERO || '').replace(/\D/g, '');
+
 /**
  * /live/:slug — landing de inscrição da aula ao vivo.
  *
@@ -224,6 +228,27 @@ export default function LiveInscricao() {
                     Entrar no grupo do WhatsApp →
                   </a>
                 </>
+              )}
+
+              {/* ── ABRIR CONVERSA DIRETA ────────────────────────────────────
+                  Botão que faz a PESSOA mandar mensagem, e não o contrário. É essa direção
+                  que abre a janela de conversa do WhatsApp: quem escreve primeiro é ela, e a
+                  partir daí dá para responder sem depender de modelo aprovado.
+                  Complementa o grupo em vez de substituí-lo — o grupo aquece o conjunto, a
+                  conversa individual é onde uma venda de ticket alto se fecha. */}
+              {WHATSAPP_NUMERO && (
+                <div style={{ marginTop: 16 }}>
+                  <a href={`https://wa.me/${WHATSAPP_NUMERO}?text=${encodeURIComponent(
+                        `Oi! Acabei de me inscrever na aula de ${diaSemanaCurto} sobre leilão.` +
+                        `${form.cidade ? ` Sou de ${form.cidade}.` : ''} Pode me avisar por aqui quando começar?`)}`}
+                    target="_blank" rel="noopener noreferrer"
+                    style={{ display: 'block', textAlign: 'center', background: '#fff', color: '#166534', border: '2px solid #16a34a', textDecoration: 'none', padding: '13px', borderRadius: 12, fontWeight: 800, fontSize: 14.5 }}>
+                    Falar comigo no WhatsApp →
+                  </a>
+                  <p style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', margin: '8px 0 0', lineHeight: 1.5 }}>
+                    Prefere falar direto comigo em vez do grupo? É por aqui.
+                  </p>
+                </div>
               )}
 
               {/* ── ENQUANTO A AULA NÃO CHEGA ────────────────────────────────
