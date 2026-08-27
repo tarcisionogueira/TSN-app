@@ -52,7 +52,7 @@ export default function LiveInscricao() {
   const [carregando, setCarregando] = useState(true);
   const [erroCarga, setErroCarga] = useState(false);
   const [inscritos, setInscritos] = useState(null);
-  const [form, setForm] = useState({ nome: '', email: '', whatsapp: '' });
+  const [form, setForm] = useState({ nome: '', email: '', whatsapp: '', cidade: '', uf: '' });
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState('');
   const [pronto, setPronto] = useState(null);
@@ -86,6 +86,7 @@ export default function LiveInscricao() {
     if (!form.nome.trim() || form.nome.trim().length < 2) return setErro('Informe o seu nome.');
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.email.trim())) return setErro('Informe um e-mail válido.');
     if (form.whatsapp.replace(/\D/g, '').length < 10) return setErro('Informe o WhatsApp com DDD.');
+    if (form.cidade.trim().length < 2) return setErro('Informe a sua cidade.');
     setEnviando(true);
     try {
       const mkt = lerMarketing() || {};
@@ -138,6 +139,12 @@ export default function LiveInscricao() {
   const quando = new Date(evento.data_hora).toLocaleString('pt-BR', {
     timeZone: 'America/Bahia', weekday: 'long', day: '2-digit', month: 'long', hour: '2-digit', minute: '2-digit',
   });
+
+  // "até quarta" em vez de "até dia 2": quem se inscreve pensa no dia da semana, e é
+  // assim que a aula vai ser lembrada.
+  const diaSemanaCurto = new Date(evento.data_hora)
+    .toLocaleDateString('pt-BR', { timeZone: 'America/Bahia', weekday: 'long' })
+    .replace('-feira', '');
 
   const Bloco = ({ v, l }) => (
     <div style={{ textAlign: 'center', minWidth: 62 }}>
@@ -218,11 +225,37 @@ export default function LiveInscricao() {
                   </a>
                 </>
               )}
+
+              {/* ── ENQUANTO A AULA NÃO CHEGA ────────────────────────────────
+                  A conta já foi criada na inscrição — só falta a pessoa saber disso e usar.
+                  Uma semana de espera sem nada para fazer é uma semana esfriando; quem entra
+                  e mexe na plataforma chega na aula entendendo do que eu vou falar.
+                  Fica DEPOIS do grupo de propósito: o grupo é o passo que não pode ser
+                  perdido, e dois botões de mesmo peso dividiriam o clique. */}
+              <div style={{ marginTop: 22, paddingTop: 20, borderTop: '1px solid #e5e7eb', textAlign: 'left' }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: '#0f172a', marginBottom: 6 }}>
+                  Quer ir se familiarizando até {diaSemanaCurto}?
+                </div>
+                <p style={{ fontSize: 13.5, color: '#475569', lineHeight: 1.6, margin: '0 0 14px' }}>
+                  Seu acesso à BidPro Brasil já está criado. É a ferramenta que eu vou usar ao vivo
+                  para localizar e avaliar leilões no país inteiro — entre e procure
+                  {form.cidade ? <> em <strong>{form.cidade}</strong></> : ' na sua cidade'}.
+                </p>
+                <a href="/#/redefinir-senha"
+                  style={{ display: 'block', textAlign: 'center', background: '#fff', color: AZUL, border: `2px solid ${AZUL}`, textDecoration: 'none', padding: '13px', borderRadius: 12, fontWeight: 800, fontSize: 15 }}>
+                  Definir minha senha e explorar →
+                </a>
+              </div>
             </div>
           ) : (
             <form onSubmit={inscrever}>
               <h2 style={{ fontSize: 20, fontWeight: 800, margin: '0 0 4px', textAlign: 'center' }}>Garanta a sua vaga</h2>
-              <p style={{ fontSize: 13.5, color: '#64748b', margin: '0 0 20px', textAlign: 'center' }}>É gratuito. Leva 20 segundos.</p>
+              <p style={{ fontSize: 13.5, color: '#64748b', margin: '0 0 20px', textAlign: 'center' }}>
+                É gratuito. Leva 20 segundos.<br />
+                {/* Dizer POR QUE pedimos a cidade: campo sem motivo aparente é o que faz a
+                    pessoa desistir no meio do formulário. */}
+                <span style={{ fontSize: 12.5 }}>A cidade é para eu buscar imóveis perto de você, ao vivo.</span>
+              </p>
               {[
                 { k: 'nome', ph: 'Seu nome', type: 'text', mode: undefined, ac: 'name' },
                 { k: 'email', ph: 'Seu melhor e-mail', type: 'email', mode: 'email', ac: 'email' },
@@ -232,6 +265,16 @@ export default function LiveInscricao() {
                   value={form[f.k]} onChange={e => setForm({ ...form, [f.k]: e.target.value })}
                   style={{ width: '100%', padding: '14px 16px', border: '1px solid #cbd5e1', borderRadius: 11, fontSize: 16, marginBottom: 10, boxSizing: 'border-box', color: '#0f172a', fontFamily: 'inherit' }} />
               ))}
+              {/* Cidade e UF na mesma linha: são um dado só na cabeça de quem preenche, e
+                  dois campos empilhados fariam o formulário parecer mais longo do que é. */}
+              <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
+                <input type="text" autoComplete="address-level2" placeholder="Sua cidade"
+                  value={form.cidade} onChange={e => setForm({ ...form, cidade: e.target.value })}
+                  style={{ flex: 1, minWidth: 0, padding: '14px 16px', border: '1px solid #cbd5e1', borderRadius: 11, fontSize: 16, boxSizing: 'border-box', color: '#0f172a', fontFamily: 'inherit' }} />
+                <input type="text" autoComplete="address-level1" placeholder="UF" maxLength={2}
+                  value={form.uf} onChange={e => setForm({ ...form, uf: e.target.value.toUpperCase().replace(/[^A-Z]/g, '') })}
+                  style={{ width: 74, flexShrink: 0, padding: '14px 12px', border: '1px solid #cbd5e1', borderRadius: 11, fontSize: 16, boxSizing: 'border-box', color: '#0f172a', textAlign: 'center', fontFamily: 'inherit' }} />
+              </div>
               {erro && (
                 <div style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#991b1b', borderRadius: 9, padding: '10px 12px', fontSize: 13, marginBottom: 10 }}>{erro}</div>
               )}

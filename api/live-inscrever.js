@@ -58,12 +58,15 @@ export default async function handler(req, res) {
   const nome     = String(b.nome || '').trim().slice(0, 120);
   const email    = String(b.email || '').trim().toLowerCase().slice(0, 160);
   const whatsapp = String(b.whatsapp || '').replace(/\D/g, '').slice(0, 15);
+  const cidade   = String(b.cidade || '').trim().slice(0, 90);
+  const uf       = String(b.uf || '').trim().toUpperCase().slice(0, 2);
   const utm      = (b.utm && typeof b.utm === 'object') ? b.utm : {};
 
   if (!slug) return res.status(400).json({ error: 'Evento não informado.' });
   if (!nome || nome.length < 2) return res.status(400).json({ error: 'Informe o seu nome.' });
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.status(400).json({ error: 'E-mail inválido.' });
   if (whatsapp.length < 10) return res.status(400).json({ error: 'Informe um WhatsApp com DDD.' });
+  if (cidade.length < 2) return res.status(400).json({ error: 'Informe a sua cidade.' });
 
   // O evento tem de existir e estar ativo — nunca confiar no que a tela mandou.
   const evRes = await sb(`eventos_live?slug=eq.${encodeURIComponent(slug)}&ativo=eq.true&select=id,titulo,data_hora,link_grupo,vagas_max`);
@@ -119,6 +122,10 @@ export default async function handler(req, res) {
             headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
             body: JSON.stringify({
               id: userId, nome, telefone: whatsapp, role: 'explorador',
+              // A cidade vira o primeiro filtro útil do novo usuário: quem entra na
+              // plataforma sem região definida vê o acervo do país inteiro e não
+              // reconhece nada — a pior primeira impressão possível.
+              endereco_cidade: cidade || null, endereco_uf: uf || null,
               lgpd_aceito: true, lgpd_data: meta.lgpd_data,
               mkt_utm_source: utm.utm_source || null, mkt_utm_medium: utm.utm_medium || null,
               mkt_utm_campaign: utm.utm_campaign || null, mkt_gclid: utm.gclid || null,
@@ -138,7 +145,7 @@ export default async function handler(req, res) {
     method: 'POST',
     headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
     body: JSON.stringify({
-      evento_id: ev.id, user_id: userId, nome, email, whatsapp,
+      evento_id: ev.id, user_id: userId, nome, email, whatsapp, cidade: cidade || null, uf: uf || null,
       origem: String(b.origem || utm.utm_source || utm.referrer || '').slice(0, 200) || null,
       utm,
     }),

@@ -11013,7 +11013,7 @@ function LiveTab() {
     // A lista de inscritos é o produto desta tela. Falha aqui NÃO pode virar "ninguém se
     // inscreveu": é a diferença entre uma aula vazia e um erro de leitura.
     const { data: ins, error: eIns } = await supabase.from('live_inscricoes')
-      .select('nome, email, whatsapp, origem, criado_em').eq('evento_id', data?.id || '00000000-0000-0000-0000-000000000000')
+      .select('nome, email, whatsapp, cidade, uf, origem, criado_em').eq('evento_id', data?.id || '00000000-0000-0000-0000-000000000000')
       .order('criado_em', { ascending: false });
     if (eIns) setErro('Inscrições não carregaram: ' + eIns.message);
     else setInscritos(ins || []);
@@ -11111,7 +11111,7 @@ function LiveTab() {
         <div style={{ overflowX:'auto', border:'1px solid #e5e7eb', borderRadius:8 }}>
           <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13.5 }}>
             <thead><tr style={{ background:'#f8fafc' }}>
-              {['Nome','E-mail','WhatsApp','Origem','Quando'].map(h =>
+              {['Nome','E-mail','WhatsApp','Cidade','Origem','Quando'].map(h =>
                 <th key={h} style={{ padding:'9px 12px', textAlign:'left', fontSize:11, textTransform:'uppercase', color:'#64748b', letterSpacing:0.5 }}>{h}</th>)}
             </tr></thead>
             <tbody>
@@ -11120,6 +11120,7 @@ function LiveTab() {
                   <td style={{ padding:'9px 12px' }}>{i.nome}</td>
                   <td style={{ padding:'9px 12px', color:'#475569' }}>{i.email}</td>
                   <td style={{ padding:'9px 12px', color:'#475569' }}>{i.whatsapp}</td>
+                  <td style={{ padding:'9px 12px', color:'#475569' }}>{i.cidade ? `${i.cidade}${i.uf ? '/' + i.uf : ''}` : '—'}</td>
                   <td style={{ padding:'9px 12px', color:'#64748b' }}>{i.origem || '—'}</td>
                   <td style={{ padding:'9px 12px', color:'#94a3b8', whiteSpace:'nowrap' }}>
                     {new Date(i.criado_em).toLocaleDateString('pt-BR')}
