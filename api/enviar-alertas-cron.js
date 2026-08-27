@@ -211,6 +211,22 @@ async function handler(req) {
   }
   const emailMap = await emailsDoLote(perfisRaw);
 
+  // ─── SUPRESSÃO (27/08) ───────────────────────────────────────────────────────────────
+  // Este cron não passa pelo `enviarEmail` — fala com o Resend direto, logo abaixo — então
+  // o gate do helper não o cobre. E é ELE o disparo que reincidiu: dois endereços que
+  // bounçaram em 10/08 receberam `oportunidades` de novo em 24/08.
+  //
+  // Uma consulta por LOTE, não por usuário. E o motivo do "não" já está gravado em
+  // `emails_supressao` com data e contador, então NÃO gravamos uma linha em `emails_log`
+  // por dia por endereço morto: isso trocaria e-mail repetido por log repetido. O que sai
+  // daqui é o CONTADOR no rastro da varredura, que é onde se olha.
+  let suprimidosNoLote = new Set();
+  try {
+    const { consultarSupressao } = await import('./_email.js');
+    const r = await consultarSupressao([...emailMap.values()], 'oportunidades');
+    suprimidosNoLote = r.suprimidos;
+  } catch { /* não consegui checar: segue enviando, como antes deste commit */ }
+
   // Continuação encadeada: dispara a PRÓXIMA invocação (best-effort; o timeout curto só
   // garante que a próxima já foi acionada — ela roda independente). Não encadeia em teste.
   // ORÇAMENTO DE TEMPO (10/08). O `continuar()` só era chamado DEPOIS de processar o lote
@@ -464,6 +480,7 @@ async function handler(req) {
   };
 
   let enviados = 0;
+  let suprimidos = 0;
   const isSegunda = new Date().getUTCDay() === 1; // 11h UTC de segunda = 8h BRT de segunda
 
   for (const perfil of perfis) {
@@ -473,6 +490,10 @@ async function handler(req) {
     if (!testeEmail && Date.now() - T0 > ORCAMENTO_MS) { cortadoPorTempo = true; break; }
     try {
       const email = emailMap.get(perfil.id); if (!email || !RESEND_KEY) continue;
+      // Endereço morto: não insiste. Fica ANTES de qualquer trabalho caro (RPC de raio,
+      // montagem do HTML) — o motivo já está gravado em `emails_supressao`, e o contador
+      // abaixo é o que aparece no rastro da varredura.
+      if (suprimidosNoLote.has(email)) { suprimidos++; continue; }
       const a = alertaMap[perfil.id];
       if (!testeEmail) {
         if (a && a.ativo === false) continue;                       // opt-out (descadastrado)
@@ -806,11 +827,11 @@ async function handler(req) {
       headers: { ...hdr, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },
       body: JSON.stringify({
         chave: 'enviar_alertas_cron',
-        assinatura: JSON.stringify({ enviados, lote: perfis.length, cortado_por_tempo: cortadoPorTempo, cursor_proximo: cortadoPorTempo ? ultimoProcessado : (loteCheio ? ultimoIdLote : null) }),
+        assinatura: JSON.stringify({ enviados, suprimidos, lote: perfis.length, cortado_por_tempo: cortadoPorTempo, cursor_proximo: cortadoPorTempo ? ultimoProcessado : (loteCheio ? ultimoIdLote : null) }),
         atualizado_em: new Date().toISOString(),
       }),
       signal: AbortSignal.timeout(8000),
     });
   } catch { /* rastro é best-effort — nunca derruba o envio */ }
-  return new Response(JSON.stringify({ ok: true, enviados, lote: perfis.length, cortado_por_tempo: cortadoPorTempo, cursor_proximo: cortadoPorTempo ? ultimoProcessado : (loteCheio ? ultimoIdLote : null) }), { headers: { 'Content-Type': 'application/json' } });
+  return new Response(JSON.stringify({ ok: true, enviados, suprimidos, lote: perfis.length, cortado_por_tempo: cortadoPorTempo, cursor_proximo: cortadoPorTempo ? ultimoProcessado : (loteCheio ? ultimoIdLote : null) }), { headers: { 'Content-Type': 'application/json' } });
 }

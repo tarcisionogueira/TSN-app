@@ -47,6 +47,10 @@ export default async function handler(req, res) {
       // `return=representation` não é estilo: é o que faz o PATCH DIZER quantas linhas
       // alcançou. Com `return=minimal` um PATCH que não encontra nada devolve 204 —
       // exatamente igual a um que funcionou. Foi assim que 9 cliques sumiram sem um erro.
+      // `atingidos` guarda as linhas que o PATCH alcançou — é de lá que sai o DESTINATÁRIO
+      // para a lista de supressão (27/08). Tirar o endereço do payload seria depender do
+      // formato do evento; tirar da linha que casou usa o dado que já é nosso.
+      let atingidos = [];
       const patch = async (campo, cond = '') => {
         for (const cand of cands) {
           try {
@@ -57,19 +61,50 @@ export default async function handler(req, res) {
             });
             if (r.ok) {
               const linhas = await r.json().catch(() => []);
-              if (Array.isArray(linhas) && linhas.length) return true;   // achou e carimbou
+              if (Array.isArray(linhas) && linhas.length) { atingidos = linhas; return true; }   // achou e carimbou
             }
           } catch { /* tenta o próximo candidato */ }
         }
         return false;
       };
 
+      // Chama uma das RPCs da lista de supressão para cada destinatário alcançado.
+      const supressao = async (rpc, extra = {}) => {
+        const alvos = [...new Set(atingidos.map((l) => l?.destinatario).filter(Boolean))];
+        for (const dest of alvos) {
+          await fetch(`${SB}/rest/v1/rpc/${rpc}`, {
+            method: 'POST',
+            headers: { apikey: KEY, Authorization: `Bearer ${KEY}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ p_destinatario: dest, ...extra }),
+            signal: AbortSignal.timeout(4000),
+          }).catch(() => {});   // best-effort: nunca derruba o webhook
+        }
+      };
+
       let casou = null;   // null = evento que não carimba nada (não é falha)
-      if (tipo === 'email.delivered') casou = await patch({ entregue_em: at, status: 'entregue' }, '&entregue_em=is.null');
-      else if (tipo === 'email.opened') casou = await patch({ aberto_em: at }, '&aberto_em=is.null');
+      if (tipo === 'email.delivered') {
+        casou = await patch({ entregue_em: at, status: 'entregue' }, '&entregue_em=is.null');
+        // ENTREGA ZERA O CONTADOR. Sem esta linha, três caixas cheias ao longo de meses
+        // suprimiriam um cliente ativo — foi o que quase aconteceu com um endereço real que
+        // bounçou em 10 e 12/08 e recebeu normalmente em 24/08.
+        if (casou) await supressao('emails_registrar_entrega');
+      } else if (tipo === 'email.opened') casou = await patch({ aberto_em: at }, '&aberto_em=is.null');
       else if (tipo === 'email.clicked') casou = await patch({ clicado_em: at }, '&clicado_em=is.null');
-      else if (tipo === 'email.bounced') casou = await patch({ status: 'bounce' });
-      else if (tipo === 'email.complained') casou = await patch({ status: 'reclamacao' });
+      else if (tipo === 'email.bounced') {
+        casou = await patch({ status: 'bounce' });
+        // O TIPO DO BOUNCE É A INFORMAÇÃO QUE DECIDE, e era exatamente a que se perdia aqui.
+        // `Permanent` = o endereço não existe (suprime na hora); `Transient` = caixa cheia ou
+        // servidor fora (só suprime no 3º seguido). Na dúvida — campo ausente ou nome novo —
+        // tratamos como TRANSITÓRIO: errar para o lado de continuar tentando devolve e-mail
+        // a quem está vivo; errar para o outro corta cliente em silêncio.
+        const bnc = b.data?.bounce || {};
+        const rotulo = String(bnc.type || bnc.bounceType || bnc.subType || bnc.subtype || '');
+        const permanente = /perman|hard/i.test(rotulo);
+        if (casou) await supressao('emails_registrar_bounce', { p_permanente: permanente, p_detalhe: rotulo.slice(0, 300) });
+      } else if (tipo === 'email.complained') {
+        casou = await patch({ status: 'reclamacao' });
+        if (casou) await supressao('emails_registrar_reclamacao');
+      }
 
       // NÃO ACHOU A LINHA: registra as CHAVES do payload em vez de sumir em silêncio.
       // Só as chaves e o tamanho — nunca o conteúdo, que traz endereço de cliente. Com isso,
