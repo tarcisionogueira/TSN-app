@@ -4,6 +4,59 @@
 
 ---
 
+## 💸 27/08 (sessão 6) — O ALARME DE GEOCODE ACUSAVA O PRÓPRIO FREIO FUNCIONANDO
+
+`geocode_acima_da_cota` marcava **11.119 contra 10.000** e parecia dinheiro vazando. Não era.
+
+### O instrumento, pela QUARTA vez
+Ele projeta linearmente (`consumido × 30 / dia_do_mês`). O consumo real do mês:
+| 22/08 | 23/08 | 24/08 | 25/08 | 26/08 | 27/08 |
+|---|---|---|---|---|---|
+| 1.298 | 957 | **0** | 6 | 1 | **0** |
+
+**Os últimos quatro dias somam SETE chamadas.** A projeção extrapolava um ritmo que não
+existe mais e ia gritar até o fim do mês com o Google já desligado.
+
+⚠️ **E gritava o FREIO DE CUSTO FUNCIONANDO** — forma nº 5 do CLAUDE.md. `googleGeocode` tem
+trava mensal (`GOOGLE_GEOCODE_MAX_MES` = 10.000): batido o teto, vira no-op e a cascata segue
+nas rotas gratuitas + LocationIQ. **Os 10.007 do mês SÃO o teto**; os 7 a mais são corrida
+entre chamadas concorrentes, **US$ 0,04**. Não havia vazamento: havia trava funcionando.
+
+### 💸 MAS O CAMINHO ACHOU UM DEFEITO DE VERDADE, e esse é caro
+`registrarUso('google_geocode','geocode',{ unidades: 1 })` **nunca passava `custo_usd_micro`**
+→ gravava **0**. O painel "Custos & Uso" mostrou **US$ 0 em julho — mês de 34.695 chamadas,
+~US$ 123 acima do tier grátis.** Não era custo zero: era **custo NÃO MEDIDO**, entregue com
+cara de resposta. Mesma coisa no LocationIQ. É a forma nº 1 em cima de dinheiro.
+
+| mês | requests | custo real | o que o painel dizia |
+|---|---|---|---|
+| Julho | 34.695 | **~US$ 123** | **US$ 0** |
+| Agosto | 10.007 | ~US$ 0,04 | US$ 0 |
+
+### 🔧 O QUE FOI FEITO
+1. **`api/_geo.js` mede o custo.** O tier grátis do GOOGLE (10k/mês) virou constante própria
+   (`GOOGLE_GEOCODE_FREE_MES`), **separada da NOSSA trava** — quem subir a trava amanhã passa
+   a ver a conta sozinho, sem depender de lembrar de mexer aqui. Validado simulando as 34.695
+   chamadas de julho uma a uma: a fórmula grava **US$ 123,47**.
+2. **LocationIQ lê o preço de `LOCATIONIQ_USD_POR_1000`.** Não hardcoded: **eu não sei qual
+   plano está contratado**, e chutar um número repetiria o mesmo defeito com outro valor.
+3. **Invariante trocado:** `geocode_acima_da_cota` (projeção) → **`geocode_pago_no_mes`**
+   (excedente REAL, limite 200 ≈ US$ 1). Hoje: **7/200, verde**.
+4. **Novo `geocode_sem_preco`** — zero gravado num provedor que está consumindo não é "de
+   graça", é "ninguém mediu". Foi assim que os US$ 123 sumiram.
+
+### 📌 PENDÊNCIAS QUE ISSO ABRE (dono)
+- 🔴 **`geocode_sem_preco` = 985** — defina `LOCATIONIQ_USD_POR_1000` no Vercel e o alarme
+  fecha sozinho. **Só você sabe o plano contratado.**
+- 💰 **Conferir o billing do Google de JULHO** (~US$ 123 estimados). O painel daqui dizia zero;
+  a fatura real é a fonte de verdade, e vale confirmar que a trava entrou depois disso.
+- ⚠️ **5.509 lotes ativos com geocode impreciso** (`cidade`/`falhou`). Não é custo — é
+  qualidade. O `regeocod-imprecisos` roda domingo; com a trava do Google no teto, ele vai
+  refazer pelas rotas gratuitas, que são justamente as menos precisas.
+- ✅ Acervo **100% geocodificado** (`sem_coordenada = 0`).
+
+---
+
 ## 📣 27/08 (sessão 5) — PRODUTO NOVO NÃO ESPERA A FILA
 
 **Decisão do dono, contra a minha sugestão de pausar:** *"não precisa pausa a

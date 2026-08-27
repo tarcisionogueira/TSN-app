@@ -243,6 +243,22 @@ export async function nominatimTextoLivre(q) {
 // configurada no Vercel). Só roda se houver a chave; crédito grátis mensal cobre. Devolve o
 // nível conforme a precisão (ROOFTOP/RANGE = endereço exato). É a 1ª opção da
 // cascata; sem a chave, cai no Nominatim normalmente.
+// ─── PREÇO DO GEOCODE (27/08) ─────────────────────────────────────────────────────────────
+// Tier grátis do Google para o SKU Geocoding: 10.000 chamadas/MÊS. Acima disso, US$ 5 por
+// 1.000 = 5.000 micro-USD por chamada.
+//
+// ⚠️ Este número é do GOOGLE e é diferente de `GOOGLE_GEOCODE_MAX_MES`, que é a NOSSA trava.
+// Separá-los é o ponto: hoje a trava está no mesmo valor e por isso não pagamos quase nada,
+// mas quem subir a trava amanhã passa a pagar — e o painel precisa mostrar isso sem depender
+// de ninguém lembrar de mexer aqui também.
+export const GOOGLE_GEOCODE_FREE_MES = 10000;
+export const GOOGLE_GEOCODE_MICRO_POR_REQ = 5000;   // US$ 5 / 1.000
+
+/** Custo em micro-USD da PRÓXIMA chamada, dado quanto já se usou no mês. */
+export function custoGeocodeMicro(usadasNoMes) {
+  return (Number(usadasNoMes) || 0) >= GOOGLE_GEOCODE_FREE_MES ? GOOGLE_GEOCODE_MICRO_POR_REQ : 0;
+}
+
 export async function googleGeocode(enderecoCompleto) {
   // Chave de SERVIDOR: nunca aceitar de var VITE_* (essas vão para o bundle público
   // do front por definição do Vite → chave paga exposta a qualquer visitante).
@@ -255,7 +271,11 @@ export async function googleGeocode(enderecoCompleto) {
   // bem abaixo do teto. GOOGLE_GEOCODE_MAX_DIA (default 0/desligado) é um sub-teto DIÁRIO
   // opcional anti-spike/smoothing; 0 em qualquer um = sem aquele teto.
   const LIMITE_MES = Number(process.env.GOOGLE_GEOCODE_MAX_MES ?? 10000);
-  if (LIMITE_MES > 0 && (await unidadesUsadasMes('google_geocode')) >= LIMITE_MES) return null;
+  // Lido SEMPRE, não só quando há teto: este número é o que diz se a PRÓXIMA chamada cai
+  // dentro do tier grátis ou já é paga. Sem ele, o custo só podia ser gravado como 0 — e foi
+  // exatamente o que aconteceu (ver `custoGeocodeMicro` abaixo).
+  const usadasMes = await unidadesUsadasMes('google_geocode');
+  if (LIMITE_MES > 0 && usadasMes >= LIMITE_MES) return null;
   const LIMITE_DIA = Number(process.env.GOOGLE_GEOCODE_MAX_DIA ?? 0);
   if (LIMITE_DIA > 0 && (await unidadesUsadasHoje('google_geocode')) >= LIMITE_DIA) return null;
   const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(enderecoCompleto)}&region=br&language=pt-BR&key=${key}`;
@@ -274,7 +294,16 @@ export async function googleGeocode(enderecoCompleto) {
     // volta GEOMETRIC_CENTER e vira 'rua' no centro da cidade (mesmo bug do Nominatim,
     // achado 05/08). O `types` manda; a precisão só refina dentro do que o tipo permite.
     const nivel = capNivel(porPrecisao, nivelGoogle(r));
-    registrarUso('google_geocode', 'geocode', { unidades: 1 }); // grátis até 10k/mês; custo além disso no painel
+    // CUSTO MEDIDO, e não presumido zero (27/08). `registrarUso` sem `custo_usd_micro`
+    // grava 0 — e o painel "Custos & Uso" mostrou **US$ 0 em julho, mês de 34.695 chamadas
+    // (~US$ 123 acima do tier grátis)**. Não era custo zero: era custo NÃO MEDIDO, entregue
+    // com cara de resposta. O tier grátis é do GOOGLE (10k/mês) e não se confunde com
+    // `LIMITE_MES`, que é a NOSSA trava: subir a trava passa a custar de verdade, e a conta
+    // tem de acompanhar sozinha.
+    registrarUso('google_geocode', 'geocode', {
+      unidades: 1,
+      custo_usd_micro: custoGeocodeMicro(usadasMes),
+    });
     return { lat: loc.lat, lng: loc.lng, nivel };
   } catch { return null; }
 }
@@ -334,7 +363,16 @@ export async function geocoderPago(enderecoCompleto) {
     // O catch-all 'bairro' era otimista: LocationIQ fala o dialeto do Nominatim, então o
     // nó do MUNICÍPIO cai aqui e virava 'bairro'. Mesmo teto pelo resultado das outras rotas.
     const nivel = capNivel(porTipo, nivelNominatim(r));
-    registrarUso('locationiq', 'geocode', { unidades: 1 }); // geocoder pago (por chamada)
+    // Preço por 1.000 vem da ENV, não hardcoded: o LocationIQ tem planos diferentes e eu
+    // NÃO SEI qual está contratado. Chutar um número aqui repetiria, com outro valor, o
+    // defeito que o Google tinha — custo inventado é tão ruim quanto custo presumido zero.
+    // Enquanto a env não existir, o painel mostra 0 E o invariante `geocode_sem_preco`
+    // acusa, para que o zero não passe por medição. Basta setar LOCATIONIQ_USD_POR_1000.
+    const usd1k = Number(process.env.LOCATIONIQ_USD_POR_1000 || 0);
+    registrarUso('locationiq', 'geocode', {
+      unidades: 1,
+      custo_usd_micro: Math.round((usd1k / 1000) * 1e6),
+    });
     return { lat, lng, nivel };
   } catch { return null; }
 }
