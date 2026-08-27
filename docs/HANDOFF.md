@@ -4,6 +4,64 @@
 
 ---
 
+## 📣 27/08 (sessão 5) — PRODUTO NOVO NÃO ESPERA A FILA
+
+**Decisão do dono, contra a minha sugestão de pausar:** *"não precisa pausa a
+divulgacao_produto até os cursos entrarem. é ajustar a configuração. ideal ao cadastrar um
+produto avisar e produtos que o usuario ainda não visualizou ele receber 1x a divulgação
+daquele produto. divulgações não se repetem. produtos novos devem ser divulgados."*
+
+### 🔍 E ELE ESTAVA CERTO — o zero clique não era da fila
+| | |
+|---|---|
+| `divulgacao_envio` | **62 envios · 62 pessoas · 1 único produto** |
+| catálogo ativo divulgável | **1 eBook de R$ 14,90** |
+
+A regra "não repete" **já funcionava**: cada pessoa recebeu UMA vez, e os 62 e-mails eram
+todos o mesmo eBook. **Não era a fila que estava errada — era o catálogo que só tem um item.**
+Pausar teria escondido o sintoma de um problema que não existia ali.
+
+### O que faltava, e a causa era UMA linha
+Duas das quatro regras já valiam (UNIQUE `(user_id, tipo, produto_id)` com claim antes do
+envio; exclusão de comprado e de curso com progresso). O que faltava vinha da quinzena ser
+**por PESSOA, não por produto**: quem recebesse qualquer coisa há 3 dias só veria um material
+NOVO em 11. O lançamento entrava na fila em vez de avisar.
+
+**Agora são dois caminhos, que nunca deveriam dividir o mesmo freio:**
+| | quando | quinzena | mensagem |
+|---|---|---|---|
+| **NOVIDADE** | cadastrado há ≤ `DIAS_NOVIDADE` (14) | **fura** | "Novo curso na BidPro: X" |
+| **RESGATE** | material antigo nunca aberto | **mantém** | "Você ainda não viu este curso: X" |
+
+O contexto do e-mail segue o sinal `novidade` da RPC, não dedução no cron: dizer *"você ainda
+não viu"* sobre algo que **acabou de sair** soa a cobrança por algo que nunca esteve lá, e
+queima a novidade que era o motivo do e-mail.
+
+⚠️ **O que impede rajada:** `distinct on (uid)` continua entregando **no máximo UM material
+por pessoa por execução**. Cadastrar cinco produtos de uma vez manda **um** e-mail, não cinco.
+
+### Cron passou a DIÁRIO (`0 13 * * *`, era `0 13 * * 3`)
+**Não é aumento de volume** — o ritmo continua sendo a quinzena por pessoa (resgate) e o
+UNIQUE (tudo). O que muda é a **latência**: com o cron semanal, material cadastrado na quinta
+só seria anunciado na quarta seguinte, e "avisar ao cadastrar" viraria "avisar em até 6 dias".
+
+### ✅ TESTADO com rollback, contra os dados reais
+| verificação | resultado |
+|---|---|
+| candidatos SEM produto novo | 3 (só quem saiu da quinzena) |
+| candidatos COM produto novo | **65 — furou a quinzena, alcançou a base toda** |
+| máximo de materiais por pessoa | **1** ✓ |
+| já divulgados reaparecendo | **0** ✓ |
+
+O curso fictício não persistiu (conferido: 0 sobraram).
+
+### 📌 O QUE ISSO SIGNIFICA PARA O LANÇAMENTO
+Ao cadastrar Judicial e Extrajudicial, **a base inteira (65 pessoas) é avisada em até 24h,
+uma vez cada, automaticamente** — sem depender de ninguém lembrar de disparar o
+`/api/anunciar-produto` manual.
+
+---
+
 ## 🏷️ 27/08 (sessão 4) — O MESMO CANAL CONTADO COM DOIS NOMES
 
 Ao responder "de onde vieram os cadastros de hoje", o relatório de canais apareceu

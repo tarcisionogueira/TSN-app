@@ -1,8 +1,20 @@
 /**
- * /api/divulgacao-cron — DIVULGAÇÃO QUINZENAL E SEGMENTADA de curso/eBook.
+ * /api/divulgacao-cron — DIVULGAÇÃO SEGMENTADA de curso/eBook: anúncio do que é novo +
+ * resgate quinzenal do que a pessoa nunca abriu.
  *
  * REGRA DO DONO (11/08), na palavra dele: "quinzenal até zerar os materiais que já foram
  * divulgados para não ficar repetindo também".
+ *
+ * AJUSTE DO DONO (27/08): "ao cadastrar um produto avisar e produtos que o usuário ainda não
+ * visualizou ele receber 1x a divulgação daquele produto. divulgações não se repetem.
+ * produtos novos devem ser divulgados."
+ *
+ * Passaram a existir DOIS caminhos, porque nunca deveriam ter dividido o mesmo freio:
+ *   NOVIDADE — material cadastrado há pouco (DIAS_NOVIDADE) FURA a quinzena e sai como
+ *              anúncio ("Novo curso na BidPro"). O UNIQUE segue garantindo 1x por pessoa.
+ *   RESGATE  — material antigo que a pessoa nunca abriu MANTÉM a quinzena, e sai como
+ *              lembrete. É dele que o freio anti-spam sempre foi.
+ * Quem separa os dois é `divulgacao_candidatos` (coluna `novidade`), não dedução aqui.
  *
  * Não é newsletter — é uma FILA PESSOAL QUE ESVAZIA. Cada cliente recebe UM material que
  * ainda não abriu, no máximo a cada 14 dias. Quando o catálogo dele acaba, ele para de
@@ -23,8 +35,13 @@
  *     manda de novo. `email_ok` é atualizado depois com o desfecho real.
  *   • Interruptor no banco: app_config.divulgacao_ativa = 'false' desliga sem deploy.
  *
- * Agendado semanalmente; quem impõe a quinzena é a RPC (14 dias desde o ÚLTIMO envio ÀQUELA
- * PESSOA). Assim quem entrou ontem não espera duas semanas por causa do calendário do cron.
+ * Agendado DIARIAMENTE desde 27/08 (era semanal). Não é aumento de volume: quem impõe o
+ * ritmo continua sendo a RPC — a quinzena por PESSOA no resgate e o UNIQUE em tudo. O que
+ * muda é a LATÊNCIA: com o cron semanal, um material cadastrado na quinta só seria anunciado
+ * na quarta seguinte, e "avisar ao cadastrar" viraria "avisar em até 6 dias".
+ *
+ * ⚠️ O QUE IMPEDE RAJADA: a RPC devolve NO MÁXIMO UM material por pessoa por execução
+ * (`distinct on`). Cadastrar cinco produtos de uma vez manda um e-mail, não cinco.
  */
 export const config = { runtime: 'nodejs', maxDuration: 300 };
 
@@ -38,6 +55,9 @@ const SVC = process.env.SUPABASE_SERVICE_KEY;
 const BASE = process.env.APP_BASE_URL || 'https://bidprobrasil.com.br';
 const FROM = process.env.APP_ALERTS_FROM || 'BidPro Brasil <noreply@bidprobrasil.com.br>';
 const INTERVALO_DIAS = Number(process.env.DIVULGACAO_INTERVALO_DIAS || 14);
+// Por quantos dias um material recem-cadastrado conta como NOVIDADE — e, sendo novidade,
+// fura a quinzena (regra do dono, 27/08: "produtos novos devem ser divulgados").
+const DIAS_NOVIDADE = Number(process.env.DIVULGACAO_DIAS_NOVIDADE || 14);
 const TETO = Number(process.env.DIVULGACAO_TETO || 500); // teto por execução (base pequena)
 const CONC = 5;                                          // ritmo tranquilo no Resend
 
@@ -65,7 +85,7 @@ export default async function handler(req, res) {
   // Candidatos: no máximo 1 material por pessoa, já filtrado por opt-out, role e quinzena.
   const rCand = await sb('rpc/divulgacao_candidatos', {
     method: 'POST',
-    body: JSON.stringify({ p_limite: TETO, p_intervalo_dias: INTERVALO_DIAS }),
+    body: JSON.stringify({ p_limite: TETO, p_intervalo_dias: INTERVALO_DIAS, p_dias_novidade: DIAS_NOVIDADE }),
   });
   // `.ok` checado: falha de leitura NÃO é "ninguém para divulgar". Sem isto, uma RPC quebrada
   // devolveria `enviados: 0` com cara de dia tranquilo, e a divulgação morreria em silêncio.
@@ -89,8 +109,9 @@ export default async function handler(req, res) {
   if (seco) {
     // Prévia sem enviar nem gravar — para o dono conferir quem receberia o quê.
     const porProduto = {};
-    for (const c of cands) { const k = `${c.tipo}:${c.titulo}`; porProduto[k] = (porProduto[k] || 0) + 1; }
-    res.status(200).json({ ok: true, seco: true, candidatos: cands.length, por_produto: porProduto });
+    for (const c of cands) { const k = `${c.tipo}:${c.titulo}${c.novidade ? ' (novidade)' : ''}`; porProduto[k] = (porProduto[k] || 0) + 1; }
+    res.status(200).json({ ok: true, seco: true, candidatos: cands.length,
+      novidades: cands.filter((c) => c.novidade === true).length, por_produto: porProduto });
     return;
   }
 
@@ -98,7 +119,7 @@ export default async function handler(req, res) {
   const comEmail = cands.filter((c) => emailMap.has(c.user_id));
   const semEmail = cands.length - comEmail.length;
 
-  let enviados = 0, falhas = 0, jaClamados = 0;
+  let enviados = 0, falhas = 0, jaClamados = 0, novidades = 0;
   for (let i = 0; i < comEmail.length; i += CONC) {
     const bloco = comEmail.slice(i, i + CONC);
     const res1 = await Promise.all(bloco.map(async (c) => {
@@ -114,10 +135,20 @@ export default async function handler(req, res) {
       const [linha] = await rIns.json().catch(() => []);
 
       const produto = { id: c.produto_id, titulo: c.titulo, descricao: c.descricao, capa_url: c.capa_url, preco: c.preco, cor: c.cor };
-      const html = corpoEmailProduto({ tipo: c.tipo, produto, nome: c.nome, contexto: 'lembrete', userId: c.user_id, tipoEmail: 'divulgacao_produto' })
-        .replace('{{UNSUB}}', `${BASE}/api/cancelar-alertas?token=${assinarUnsub(c.user_id)}`);
+      // O CONTEXTO SEGUE O SINAL DA RPC, e isso não é detalhe de texto: dizer "você ainda não
+      // viu" sobre um material que ACABOU DE SAIR soa a cobrança por algo que nunca esteve lá,
+      // e queima a novidade que era o motivo do e-mail. `novidade` vem de `criado_em`, não de
+      // dedução aqui — quem decide o que é lançamento é a mesma consulta que decide quem recebe.
+      const ehNovidade = c.novidade === true;
+      const html = corpoEmailProduto({
+        tipo: c.tipo, produto, nome: c.nome,
+        contexto: ehNovidade ? 'novidade' : 'lembrete',
+        userId: c.user_id, tipoEmail: 'divulgacao_produto',
+      }).replace('{{UNSUB}}', `${BASE}/api/cancelar-alertas?token=${assinarUnsub(c.user_id)}`);
       const rotulo = c.tipo === 'curso' ? 'curso' : 'eBook';
-      const assunto = `Você ainda não viu este ${rotulo}: ${c.titulo || ''}`.trim().slice(0, 120);
+      const assunto = (ehNovidade
+        ? `Novo ${rotulo} na BidPro: ${c.titulo || ''}`
+        : `Você ainda não viu este ${rotulo}: ${c.titulo || ''}`).trim().slice(0, 120);
 
       const env = await enviarEmail({
         from: FROM, to: emailMap.get(c.user_id), subject: assunto, html,
@@ -130,6 +161,7 @@ export default async function handler(req, res) {
           body: JSON.stringify({ email_ok: !!env?.ok }),
         }).catch(() => {});
       }
+      if (env?.ok && ehNovidade) novidades++;
       return env?.ok ? 'ok' : 'falha';
     }));
     for (const r of res1) {
@@ -139,7 +171,9 @@ export default async function handler(req, res) {
     }
   }
 
-  const saida = { candidatos: cands.length, enviados, falhas, sem_email: semEmail, ja_clamados: jaClamados, intervalo_dias: INTERVALO_DIAS };
+  const saida = { candidatos: cands.length, enviados, novidades, resgates: enviados - novidades,
+                  falhas, sem_email: semEmail, ja_clamados: jaClamados,
+                  intervalo_dias: INTERVALO_DIAS, dias_novidade: DIAS_NOVIDADE };
   console.log('[divulgacao]', JSON.stringify(saida));
   res.status(200).json({ ok: true, ...saida });
 }

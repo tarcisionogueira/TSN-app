@@ -308,7 +308,7 @@
     },
     {
       "path": "/api/divulgacao-cron",
-      "schedule": "0 13 * * 3"
+      "schedule": "0 13 * * *"
     },
     {
       "path": "/api/recuperacao-checkout-cron",
