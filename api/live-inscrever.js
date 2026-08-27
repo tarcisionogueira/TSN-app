@@ -10,6 +10,13 @@
  * com senha aleatória e a pessoa recebe o link para defini-la junto com a confirmação.
  * Exigir senha numa página de inscrição derruba conversão e não acrescenta nada agora.
  *
+ * Mínimo NÃO é frouxo (27/08): os três campos passam pela MESMA régua do cadastro
+ * (`_nome.js`, `_telefone.js`), porque esta rota CRIA CONTA — dado que entra por aqui é o
+ * mesmo dado que o resto do sistema usa para emitir contrato e para ligar para o cliente.
+ * Enquanto a régua daqui era `nome.length >= 2` e `whatsapp.length >= 10`, a landing era a
+ * porta dos fundos por onde entrava exatamente o que o cadastro recusa: a inscrição de
+ * teste gravou "tarcisio", primeiro nome solto, e teria aceitado celular sem o 9.
+ *
  * E-MAIL JÁ CADASTRADO NÃO É ERRO. Aqui isso é o caso NORMAL (cliente que já usa a
  * plataforma e quer assistir): inscreve e segue. Barrar quem já é cliente seria recusar o
  * público mais quente que existe.
@@ -18,6 +25,8 @@ export const config = { runtime: 'nodejs' };
 
 import { checkRateLimit } from './_rate-limit.js';
 import { enviarEmail } from './_email.js';
+import { erroNome, normalizarNome } from './_nome.js';
+import { erroTelefone, limparTelefone, normalizarTelefoneBR } from './_telefone.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -55,17 +64,25 @@ export default async function handler(req, res) {
 
   const b = req.body || {};
   const slug     = String(b.slug || '').trim().slice(0, 80);
-  const nome     = String(b.nome || '').trim().slice(0, 120);
+  const nome     = normalizarNome(String(b.nome || '').slice(0, 120));
   const email    = String(b.email || '').trim().toLowerCase().slice(0, 160);
-  const whatsapp = String(b.whatsapp || '').replace(/\D/g, '').slice(0, 15);
+  // `normalizarTelefoneBR` tira o "+55" do autopreenchimento ANTES de validar: 13 dígitos
+  // reprovariam por tamanho, e reprovar um número certo é tão ruim quanto aceitar um errado.
+  const whatsapp = normalizarTelefoneBR(b.whatsapp).slice(0, 15);
   const cidade   = String(b.cidade || '').trim().slice(0, 90);
   const uf       = String(b.uf || '').trim().toUpperCase().slice(0, 2);
   const utm      = (b.utm && typeof b.utm === 'object') ? b.utm : {};
 
   if (!slug) return res.status(400).json({ error: 'Evento não informado.' });
-  if (!nome || nome.length < 2) return res.status(400).json({ error: 'Informe o seu nome.' });
+  const eNome = erroNome(nome);
+  if (eNome) return res.status(400).json({ error: eNome });
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.status(400).json({ error: 'E-mail inválido.' });
-  if (whatsapp.length < 10) return res.status(400).json({ error: 'Informe um WhatsApp com DDD.' });
+  // `erroTelefone` deixa passar o VAZIO por contrato (obrigatoriedade é decisão de quem
+  // chama). Aqui o WhatsApp é o canal do lembrete e do link da sala: sem ele a inscrição
+  // não serve para nada, então o vazio é checado à parte.
+  if (!limparTelefone(whatsapp)) return res.status(400).json({ error: 'Informe o seu WhatsApp com DDD.' });
+  const eTel = erroTelefone(whatsapp);
+  if (eTel) return res.status(400).json({ error: eTel });
   if (cidade.length < 2) return res.status(400).json({ error: 'Informe a sua cidade.' });
 
   // O evento tem de existir e estar ativo — nunca confiar no que a tela mandou.

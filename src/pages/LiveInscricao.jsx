@@ -2,6 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '../utils/supabase';
 import { lerMarketing } from '../utils/marketing';
+import { validarNome } from '../lib/nome';
+import { validarTelefone, limparTelefone, formatarTelefone } from '../lib/telefone';
 import CidadeAutocomplete from '../components/CidadeAutocomplete';
 import { NAVY, LATAO, AZUL } from '../utils/marca';
 
@@ -99,9 +101,18 @@ export default function LiveInscricao() {
   async function inscrever(e) {
     e.preventDefault();
     setErro('');
-    if (!form.nome.trim() || form.nome.trim().length < 2) return setErro('Informe o seu nome.');
+    // MESMA RÉGUA DO CADASTRO, e de propósito (27/08). Aqui não é rigor por rigor: o nome
+    // vai para o contrato e para a conta que nasce nesta inscrição, e o WhatsApp é por onde
+    // sai o link da sala. `validarNome` já exige nome + sobrenome; `validarTelefone` já
+    // recusa dígito a menos ou a mais. Reusar as duas em vez de escrever régua nova é o que
+    // impede a landing de virar a porta dos fundos por onde entra o dado que o resto do
+    // sistema recusa — foi assim que a inscrição de teste do dono gravou "tarcisio" sozinho.
+    const vn = validarNome(form.nome);
+    if (!vn.ok) return setErro(vn.erro);
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.email.trim())) return setErro('Informe um e-mail válido.');
-    if (form.whatsapp.replace(/\D/g, '').length < 10) return setErro('Informe o WhatsApp com DDD.');
+    if (!limparTelefone(form.whatsapp)) return setErro('Informe o seu WhatsApp com DDD.');
+    const vt = validarTelefone(form.whatsapp);
+    if (!vt.ok) return setErro(vt.erro);
     if (form.cidade.trim().length < 2) return setErro('Informe a sua cidade.');
     setEnviando(true);
     try {
@@ -298,12 +309,18 @@ export default function LiveInscricao() {
                 <span style={{ fontSize: 12.5 }}>A cidade é para eu buscar imóveis perto de você, ao vivo.</span>
               </p>
               {[
-                { k: 'nome', ph: 'Seu nome', type: 'text', mode: undefined, ac: 'name' },
-                { k: 'email', ph: 'Seu melhor e-mail', type: 'email', mode: 'email', ac: 'email' },
-                { k: 'whatsapp', ph: 'WhatsApp com DDD', type: 'tel', mode: 'tel', ac: 'tel' },
+                { k: 'nome', ph: 'Nome e sobrenome', type: 'text', mode: undefined, ac: 'name', max: 80 },
+                { k: 'email', ph: 'Seu melhor e-mail', type: 'email', mode: 'email', ac: 'email', max: 160 },
+                // `max: 15` é o tamanho de "(11) 91234-5678" JÁ formatado, e `formatarTelefone`
+                // (a MESMA função de src/lib/telefone.js, não uma cópia) corta em 11 dígitos:
+                // o campo para de aceitar dígito sobrando na origem, em vez de só reclamar
+                // depois que a pessoa terminou de digitar. Ela também tira o "+55" que o
+                // autopreenchimento do celular insere — sem isso o número vira outro, calado.
+                { k: 'whatsapp', ph: 'WhatsApp com DDD', type: 'tel', mode: 'tel', ac: 'tel', max: 15, mascara: formatarTelefone },
               ].map(f => (
-                <input key={f.k} type={f.type} inputMode={f.mode} autoComplete={f.ac} placeholder={f.ph}
-                  value={form[f.k]} onChange={e => setForm({ ...form, [f.k]: e.target.value })}
+                <input key={f.k} type={f.type} inputMode={f.mode} autoComplete={f.ac} placeholder={f.ph} maxLength={f.max}
+                  value={form[f.k]}
+                  onChange={e => setForm({ ...form, [f.k]: f.mascara ? f.mascara(e.target.value) : e.target.value })}
                   style={{ width: '100%', padding: '14px 16px', border: '1px solid #cbd5e1', borderRadius: 11, fontSize: 16, marginBottom: 10, boxSizing: 'border-box', color: '#0f172a', fontFamily: 'inherit' }} />
               ))}
               {/* UM campo só: a pessoa digita e escolhe "Cidade - UF" da base do IBGE, e a UF
