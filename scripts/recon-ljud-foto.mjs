@@ -52,21 +52,51 @@ function camposComImagem(obj, prefixo = '', achados = []) {
   return achados;
 }
 
+// Acha a lista de lotes SEM depender do nome da chave. A 1ª execução (27/08) provou por que:
+// a API respondeu 200, `j?.data || j?.bens || j?.items` não casou, e o script imprimiu
+// "a API não devolveu nada" — ou seja, cometeu DENTRO DE SI o defeito que existe para
+// diagnosticar: tratou "não sei ler o formato" como "não há lotes". Agora ele procura o maior
+// array de objetos em qualquer profundidade e, se não achar, DESPEJA o que veio.
+function acharLista(j, prof = 0) {
+  if (prof > 4 || !j || typeof j !== 'object') return null;
+  if (Array.isArray(j)) return j.length && typeof j[0] === 'object' ? j : null;
+  let melhor = null;
+  for (const v of Object.values(j)) {
+    const c = acharLista(v, prof + 1);
+    if (c && (!melhor || c.length > melhor.length)) melhor = c;
+  }
+  return melhor;
+}
+
 async function paginaApi(pg) {
-  const r = await fetch(`${API}?tipo=3&pg=${pg}`, {
+  const url = `${API}?tipo=3&pg=${pg}`;
+  const r = await fetch(url, {
     headers: {
       'User-Agent': UA, Accept: 'application/json',
       Origin: 'https://www.leiloesjudiciais.com.br', Referer: 'https://www.leiloesjudiciais.com.br/',
     },
     signal: AbortSignal.timeout(30000),
   });
+  const bruto = await r.text();
   // `.ok` conferido: um 4xx devolvendo HTML viraria "a API não tem lote nenhum" — e o recon
   // concluiria "encerrado, a fonte não tem foto" a partir de um erro de rede. É o defeito que
   // este projeto já pagou várias vezes; aqui ele produziria um veredito falso e definitivo.
-  if (!r.ok) throw new Error(`API HTTP ${r.status}`);
-  const j = await r.json();
-  const items = j?.data || j?.bens || j?.items || (Array.isArray(j) ? j : []);
-  if (!Array.isArray(items)) throw new Error('corpo inesperado da API');
+  if (!r.ok) throw new Error(`API HTTP ${r.status} · corpo: ${bruto.slice(0, 200)}`);
+
+  let j;
+  try { j = JSON.parse(bruto); }
+  catch { throw new Error(`resposta NÃO É JSON (${bruto.length}B): ${bruto.slice(0, 200)}`); }
+
+  const items = acharLista(j);
+  if (!items) {
+    // NÃO devolve [] aqui: lista vazia e formato ilegível são coisas diferentes, e confundi-las
+    // é o que estragou a primeira execução. Despeja a forma da resposta para o próximo run
+    // saber ler, em vez de custar outra rodada de adivinhação.
+    const forma = j && typeof j === 'object' && !Array.isArray(j)
+      ? Object.entries(j).map(([k, v]) => `${k}:${Array.isArray(v) ? `array(${v.length})` : typeof v}`).join(', ')
+      : typeof j;
+    throw new Error(`não achei lista de lotes. Forma da resposta → ${forma}\n     amostra: ${bruto.slice(0, 400)}`);
+  }
   return items;
 }
 
@@ -85,14 +115,35 @@ async function paginaApi(pg) {
 
   // 2) O QUE A API DIZ
   const vistos = new Map();
+  let falhaApi = null;
   for (let pg = 1; pg <= PAGINAS; pg++) {
     let items;
-    try { items = await paginaApi(pg); } catch (e) { console.log(`  pg ${pg}: ${e.message}`); break; }
-    if (!items.length) break;
-    for (const it of items) vistos.set(String(it.lote_id ?? it.bem_id ?? ''), it);
+    try {
+      items = await paginaApi(pg);
+    } catch (e) {
+      falhaApi = e.message;
+      console.log(`  pg ${pg}: FALHOU → ${e.message}`);
+      break;
+    }
+    if (!items.length) { console.log(`  pg ${pg}: 0 itens — fim da paginação`); break; }
+    // A chave do lote também não pode ser adivinhada em silêncio: sem ela o cruzamento não
+    // acontece e o recon diria "nenhum coincidiu", que soa a resposta e é ignorância.
+    for (const it of items) {
+      const id = String(it.lote_id ?? it.bem_id ?? it.id ?? it.loteId ?? '');
+      if (id) vistos.set(id, it);
+    }
     console.log(`  pg ${pg}: ${items.length} itens (acumulado ${vistos.size})`);
+    if (pg === 1 && vistos.size === 0) {
+      console.log(`     ⚠️ vieram itens mas NENHUM id reconhecido. Chaves do 1º: ${Object.keys(items[0] || {}).join(', ')}`);
+    }
   }
-  if (!vistos.size) { console.log('\nA API não devolveu nada — recon INCONCLUSIVO (não confunda com "sem foto").'); process.exit(2); }
+  if (!vistos.size) {
+    console.log('\n══════════════════ INCONCLUSIVO ══════════════════');
+    console.log(falhaApi ? `  A API não pôde ser lida: ${falhaApi}` : '  A API respondeu, mas nenhum lote teve id reconhecível.');
+    console.log('  ⚠️ Isto NÃO é "a fonte não tem foto" — é "não consegui perguntar".');
+    console.log('══════════════════════════════════════════════════');
+    process.exit(2);
+  }
 
   // 3) O CRUZAMENTO — só os lotes que aqui estão vazios
   const cruzados = [...vistos.entries()].filter(([id]) => idsSemFoto.has(id));
