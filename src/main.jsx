@@ -7,7 +7,7 @@ import 'leaflet.markercluster/dist/MarkerCluster.Default.css'
 import './index.css'
 import { registrarServiceWorker } from './utils/push.js'
 import { vigiarAtualizacaoDoApp } from './utils/swAtualizacao.js'
-import { reportarErroCliente, instalarCapturaErros, ehErroDeChunk, recarregarPorChunkStale, recarregarComGuarda, houveChunkRecente } from './utils/reportarErro.js'
+import { reportarErroCliente, instalarCapturaErros, ehErroDeChunk, recarregarPorChunkStale, recarregarComGuarda, houveChunkRecente, mostrarAvisoPreso } from './utils/reportarErro.js'
 import { instalarTracker } from './utils/tracker.js'
 import { initMetaPixel, capturarMarketing } from './utils/marketing.js'
 
@@ -51,16 +51,39 @@ class RootErrorBoundary extends React.Component {
     window.addEventListener('popstate', this._reset);
     window.addEventListener('hashchange', this._reset);
   }
+
+  componentDidUpdate(_prevProps, prevState) {
+    // "Atualizando…" NÃO PODE SER ESTADO FINAL (27/08). O reload que essa tela anuncia
+    // pode nunca acontecer — orçamento esgotado, sessionStorage bloqueado, reload que o
+    // navegador engoliu. Quando isso acontecia, a pessoa ficava com um spinner girando
+    // para sempre numa página que não ia atualizar nada; na `/live/leilao-ao-vivo` isso
+    // é o visitante pago indo embora.
+    //
+    // O relógio começa quando a tela neutra APARECE, não quando o boundary monta: na
+    // montagem ainda não há erro nenhum, e um timer armado ali dispararia no vazio muito
+    // antes do chunk falhar. 8s é folga generosa — um reload de verdade já teria trocado
+    // a página bem antes, então isto só chega ao fim quando ele não veio.
+    if (this.state.chunk && !prevState.chunk) {
+      clearTimeout(this._vigia);
+      this._vigia = setTimeout(() => {
+        if (this.state.error && this.state.chunk) mostrarAvisoPreso();
+      }, 8000);
+    }
+  }
+
   componentWillUnmount() {
     window.removeEventListener('popstate', this._reset);
     window.removeEventListener('hashchange', this._reset);
+    clearTimeout(this._vigia);
   }
   componentDidCatch(error, info) {
     // Chunk velho → recarrega sozinho (pega o index novo); anti-loop de 10s no helper.
-    if (ehErroDeChunk(error?.message)) { recarregarPorChunkStale(error?.message); return; }
+    // Recusado pelo orçamento = a recarga não vai acontecer: avisa em vez de deixar a
+    // tela neutra girando sozinha (o `return` daqui encerra o tratamento deste erro).
+    if (ehErroDeChunk(error?.message)) { if (!recarregarPorChunkStale(error?.message)) mostrarAvisoPreso(); return; }
     // Erro DERIVADO de um chunk velho (React.lazy undefined) logo após o preloadError:
     // recarrega e NÃO loga (não é bug acionável, é o mesmo chunk stale).
-    if (houveChunkRecente()) { recarregarComGuarda(); return; }
+    if (houveChunkRecente()) { if (!recarregarComGuarda()) mostrarAvisoPreso(); return; }
     // Registra o erro no servidor (persiste em erros_cliente + Runtime Logs) p/ a saúde
     // enxergar — em produção o boundary não mostra o stack ao usuário, então sem isso
     // ficamos cegos. Centralizado em reportarErroCliente (dedup/teto/token do usuário).

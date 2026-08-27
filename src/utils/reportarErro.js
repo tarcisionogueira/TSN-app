@@ -87,17 +87,116 @@ export function ehErroDeChunk(msg = '') {
     || m.includes('module script failed')
     || m.includes("'text/html' is not a valid javascript mime type"); // chunk 404 devolveu HTML
 }
-// Recarrega UMA vez, com guarda anti-loop de 10s. Extraído para o ErrorBoundary poder
-// forçar o reload nos ERROS DERIVADOS de um chunk velho (ver houveChunkRecente).
+// Recarrega quando um chunk falha, com ORÇAMENTO em vez de trava seca (27/08).
+//
+// O que havia antes: um único reload por janela de 10s, e o segundo pedido dentro dessa
+// janela era simplesmente recusado. Quem caía nisso ficava PRESO na tela "Atualizando…"
+// para sempre — sem botão, sem mensagem, sem segunda tentativa. Aconteceu em 27/08 na
+// `/live/leilao-ao-vivo`, que é a página que recebe a verba da campanha: dois deploys em
+// sequência curta, e o visitante ficou olhando um spinner que não ia atualizar nada.
+//
+// Duas mudanças, e as duas importam:
+//
+//  (a) DUAS tentativas por rajada, não uma. A segunda vai com CACHE-BUSTING, porque o
+//      motivo mais comum da primeira não resolver é o `index.html` voltar do cache (SW
+//      ou borda de CDN) apontando para os MESMOS chunks que acabaram de sumir — recarregar
+//      de novo sem forçar rede repete o erro por construção.
+//  (b) O orçamento se RENOVA depois de um minuto calmo. `sessionStorage` sobrevive ao
+//      reload, então um contador vitalício deixaria uma aba aberta o dia inteiro sem
+//      auto-recuperação depois do segundo deploy do dia.
+//
+// O teto continua existindo — reload em loop é pior que tela parada. Mas quando o teto
+// estoura, agora a pessoa é AVISADA (ver `mostrarAvisoPreso`), em vez de ficar sozinha
+// com um spinner mentindo que algo está acontecendo.
+const RAJADA_MS = 10000;   // "ainda falhando" = nova falha < 10s depois da última tentativa
+const CALMARIA_MS = 60000; // um minuto sem incidente renova o orçamento da aba
+const TENTATIVAS_POR_RAJADA = 2;
+
 export function recarregarComGuarda() {
+  let tentativa = 0;
   try {
     const agora = Date.now();
     const ultimo = Number(sessionStorage.getItem('__chunk_reload_at') || 0);
-    if (agora - ultimo < 10000) return false; // já recarregou há pouco — evita loop
+    const desde = agora - ultimo;
+    tentativa = desde > CALMARIA_MS ? 0 : Number(sessionStorage.getItem('__chunk_reload_n') || 0);
+    if (desde < RAJADA_MS && tentativa >= TENTATIVAS_POR_RAJADA) return false; // esgotou — quem chamou avisa
     sessionStorage.setItem('__chunk_reload_at', String(agora));
+    sessionStorage.setItem('__chunk_reload_n', String(tentativa + 1));
   } catch { /* sessionStorage indisponível: 1 reload ainda é aceitável */ }
+
+  // Segunda tentativa da rajada: força ida à rede. `location.replace` para não empilhar
+  // histórico — quem clicar em "voltar" tem que sair da página, não revisitar a falha.
+  if (tentativa >= 1) {
+    try {
+      const u = new URL(location.href);
+      u.searchParams.set('_r', String(Date.now()));  // antes do #, então a rota do HashRouter fica intacta
+      location.replace(u.toString());
+      return true;
+    } catch { /* URL indisponível: cai no reload simples abaixo */ }
+  }
   location.reload();
   return true;
+}
+
+/**
+ * Última linha de defesa: a recarga automática desistiu e a pessoa PRECISA saber.
+ *
+ * DOM cru, sem React, de propósito — quando isto roda, o módulo da tela pode nem ter
+ * carregado, e um componente não teria como aparecer. Também não depende do
+ * ErrorBoundary: o `vite:preloadError` chega pelo handler global, fora do ciclo de render.
+ *
+ * Idempotente: várias falhas em sequência mostram UM aviso só.
+ */
+export function mostrarAvisoPreso() {
+  try {
+    if (typeof document === 'undefined' || document.getElementById('bp-preso')) return;
+    const cx = document.createElement('div');
+    cx.id = 'bp-preso';
+    cx.setAttribute('role', 'alert');
+    cx.style.cssText = 'position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;'
+      + 'justify-content:center;padding:24px;background:#f1f5f9;font-family:system-ui,-apple-system,sans-serif';
+    const cartao = document.createElement('div');
+    cartao.style.cssText = 'background:#fff;border-radius:16px;padding:32px 28px;max-width:400px;width:100%;'
+      + 'text-align:center;box-shadow:0 12px 40px rgba(0,0,0,.12)';
+    const h = document.createElement('div');
+    h.style.cssText = 'font-size:17px;font-weight:800;color:#0f172a;margin-bottom:8px';
+    h.textContent = 'Não conseguimos terminar de carregar a página';
+    const p = document.createElement('p');
+    p.style.cssText = 'font-size:14px;color:#475569;line-height:1.6;margin:0 0 22px';
+    // A causa NÃO é conhecida daqui — um chunk que não carrega tem as duas explicações, e
+    // afirmar a errada é o mesmo defeito que este aviso existe para consertar. `onLine` é
+    // o único sinal barato que separa as duas; na dúvida (undefined) fica a mais provável.
+    p.textContent = (typeof navigator !== 'undefined' && navigator.onLine === false)
+      ? 'Parece que a sua conexão caiu. Confira a internet e recarregue — você volta para esta mesma página.'
+      : 'Costuma ser uma versão nova publicada enquanto você estava aqui. Recarregar resolve — você volta para esta mesma página.';
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.style.cssText = 'width:100%;padding:14px;background:#0D63DB;color:#fff;border:none;border-radius:11px;'
+      + 'font-weight:800;font-size:15px;cursor:pointer;font-family:inherit';
+    b.textContent = 'Recarregar a página';
+    // Clique manual ignora o orçamento — é a pessoa pedindo, não o automático insistindo.
+    b.onclick = () => {
+      try { sessionStorage.removeItem('__chunk_reload_n'); sessionStorage.removeItem('__chunk_reload_at'); } catch { /* ignore */ }
+      try {
+        const u = new URL(location.href);
+        u.searchParams.set('_r', String(Date.now()));
+        location.replace(u.toString());
+      } catch { location.reload(); }
+    };
+    cartao.append(h, p, b);
+    cx.append(cartao);
+    document.body.appendChild(cx);
+
+    // SAI SOZINHO AO NAVEGAR, mesma regra que o RootErrorBoundary já usa. Este aviso cobre
+    // a tela inteira com z-index máximo: se o app se recuperar por outro caminho (a pessoa
+    // volta para uma rota cujo chunk já está carregado), um cartaz eterno estaria bloqueando
+    // uma página que funciona — trocar um beco sem saída por outro.
+    const sair = () => { try { cx.remove(); } catch { /* ignore */ } finally {
+      window.removeEventListener('hashchange', sair); window.removeEventListener('popstate', sair);
+    } };
+    window.addEventListener('hashchange', sair);
+    window.addEventListener('popstate', sair);
+  } catch { /* nunca deixar o aviso derrubar a página */ }
 }
 export function recarregarPorChunkStale(msg = '') {
   if (!ehErroDeChunk(msg)) return false;
@@ -129,6 +228,7 @@ export function instalarCapturaErros() {
     // pelo anti-loop (recarregou há < 10s e ainda falha) = chunk genuinamente preso, aí sim avisa.
     if (!recarregarPorChunkStale('failed to fetch dynamically imported module')) {
       reportarErroCliente({ msg: 'vite:preloadError PRESO (recarga bloqueada pelo anti-loop)', url: location.href });
+      mostrarAvisoPreso(); // logar sem avisar deixava a pessoa sozinha com o spinner
     }
   });
   window.addEventListener('error', (e) => {
@@ -137,7 +237,10 @@ export function instalarCapturaErros() {
     // Chunk velho → recarrega e não loga (só loga se preso). Demais erros → loga normal.
     if (ehErroDeChunk(e.message) || houveChunkRecente()) {
       marcarChunkErro();
-      if (!recarregarComGuarda()) reportarErroCliente({ msg: e.message, stack: e.error?.stack, url: location.href });
+      if (!recarregarComGuarda()) {
+        reportarErroCliente({ msg: e.message, stack: e.error?.stack, url: location.href });
+        mostrarAvisoPreso();
+      }
       return;
     }
     reportarErroCliente({ msg: e.message, stack: e.error?.stack, url: location.href });
@@ -147,7 +250,10 @@ export function instalarCapturaErros() {
     const msg = r?.message || String(r);
     if (ehErroDeChunk(msg) || houveChunkRecente()) {
       marcarChunkErro();
-      if (!recarregarComGuarda()) reportarErroCliente({ msg, stack: r?.stack, url: location.href });
+      if (!recarregarComGuarda()) {
+        reportarErroCliente({ msg, stack: r?.stack, url: location.href });
+        mostrarAvisoPreso();
+      }
       return;
     }
     reportarErroCliente({ msg, stack: r?.stack, url: location.href });
