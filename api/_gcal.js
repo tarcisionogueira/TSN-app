@@ -66,6 +66,14 @@ export async function criarEventoAgenda({
   duracaoMin = 30,
   convidados = [],   // [{ email, nome }]
   timeZone = 'America/Sao_Paulo',
+  // GERAR SALA DO MEET (26/08). O Google cria o link junto com o evento quando pedimos
+  // `conferenceData` — não existe API para "criar um Meet avulso". Por isso a sala da aula
+  // nasce de um evento na agenda, e não de uma chamada separada.
+  comMeet = false,
+  // Regra RRULE (ex.: 'RRULE:FREQ=WEEKLY;BYDAY=WE'). Num evento recorrente o Google
+  // mantém o MESMO link do Meet em todas as ocorrências — que é exatamente o que a aula
+  // semanal precisa: um link que não muda toda quarta.
+  recorrencia = null,
 }) {
   const c = creds();
   if (!c) return null;
@@ -95,7 +103,23 @@ export async function criarEventoAgenda({
     },
   };
 
-  const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?sendUpdates=all`;
+  if (recorrencia) body.recurrence = [recorrencia];
+  if (comMeet) {
+    // `requestId` precisa ser único por pedido; repetir um id devolve a MESMA conferência,
+    // o que aqui seria um bug silencioso (duas aulas dividindo a sala).
+    body.conferenceData = {
+      createRequest: {
+        requestId: `bidpro-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+        conferenceSolutionKey: { type: 'hangoutsMeet' },
+      },
+    };
+  }
+
+  // `conferenceDataVersion=1` é OBRIGATÓRIO para o Google honrar o conferenceData. Sem ele
+  // a chamada responde 200, o evento é criado — e vem SEM sala, sem erro nenhum. É o vazio
+  // que não sabe que falhou, do jeito mais caro: a aula estreia sem link.
+  const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`
+    + `?sendUpdates=all${comMeet ? '&conferenceDataVersion=1' : ''}`;
   const res = await fetch(url, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -105,7 +129,19 @@ export async function criarEventoAgenda({
   if (!res.ok || !data.id) {
     throw new Error(`Google Calendar insert: ${data.error?.message || res.status}`);
   }
-  return { eventId: data.id, htmlLink: data.htmlLink };
+  // O link do Meet pode vir em `hangoutLink` ou dentro de `conferenceData.entryPoints`,
+  // dependendo de como a conta está configurada. Ler só um dos dois devolveria "sem sala"
+  // metade das vezes.
+  const meet = data.hangoutLink
+    || (data.conferenceData?.entryPoints || []).find(e => e.entryPointType === 'video')?.uri
+    || null;
+  if (comMeet && !meet) {
+    // Não lançamos: o evento existe e a aula pode acontecer com link posto à mão. Mas quem
+    // chamou PRECISA saber que a sala não veio, senão confirma para o público uma aula sem
+    // endereço.
+    console.error('[gcal] evento criado SEM sala do Meet', data.id);
+  }
+  return { eventId: data.id, htmlLink: data.htmlLink, meetLink: meet };
 }
 
 /**

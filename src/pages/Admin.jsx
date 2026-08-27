@@ -10987,6 +10987,153 @@ function QualidadeTab() {
   );
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// AULA AO VIVO — a landing de captação (26/08)
+//
+// Fica em Comercial, não em Cursos, porque não é conteúdo de aluno: é a porta de entrada
+// da campanha, e quem a opera está pensando em anúncio e inscrito, não em módulo e aula.
+// A página em si (/live/:slug) é PÚBLICA e não aparece em menu nenhum do produto — o
+// usuário logado não deve topar com ela; o público chega por link de campanha.
+// ═══════════════════════════════════════════════════════════════════════════════
+function LiveTab() {
+  const [ev, setEv] = useState(null);
+  const [prox, setProx] = useState(null);
+  const [inscritos, setInscritos] = useState([]);
+  const [erro, setErro] = useState('');
+  const [salvando, setSalvando] = useState(false);
+  const [criandoSala, setCriandoSala] = useState(false);
+  const SLUG = 'leilao-ao-vivo';
+
+  const carregar = useCallback(async () => {
+    const { data, error } = await supabase.from('eventos_live').select('*').eq('slug', SLUG).maybeSingle();
+    if (error) { setErro('Não foi possível carregar a aula: ' + error.message); return; }
+    setEv(data || null);
+    const { data: p } = await supabase.rpc('live_proxima', { p_slug: SLUG }); // padrao-ok: só a data exibida — o formulário funciona sem ela
+    setProx(p || null);
+    // A lista de inscritos é o produto desta tela. Falha aqui NÃO pode virar "ninguém se
+    // inscreveu": é a diferença entre uma aula vazia e um erro de leitura.
+    const { data: ins, error: eIns } = await supabase.from('live_inscricoes')
+      .select('nome, email, whatsapp, origem, criado_em').eq('evento_id', data?.id || '00000000-0000-0000-0000-000000000000')
+      .order('criado_em', { ascending: false });
+    if (eIns) setErro('Inscrições não carregaram: ' + eIns.message);
+    else setInscritos(ins || []);
+  }, []);
+  useEffect(() => { carregar(); }, [carregar]);
+
+  async function salvar(campos) {
+    setSalvando(true); setErro('');
+    const { error } = await supabase.from('eventos_live').update(campos).eq('slug', SLUG);
+    if (error) setErro('Não salvou: ' + error.message); else await carregar();
+    setSalvando(false);
+  }
+
+  async function gerarSala() {
+    setCriandoSala(true); setErro('');
+    try {
+      const r = await apiCall('/api/live-criar-sala', { method: 'POST', body: JSON.stringify({ slug: SLUG }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || j?.error) throw new Error(j?.error || 'Falhou');
+      await carregar();
+      alert(j.ja_existia ? 'A aula já tinha sala.' : `Sala criada!\n${j.link_sala}${j.recorrente ? '\n\nComo a aula é semanal, este link vale para todas as quartas.' : ''}`);
+    } catch (e) { setErro(String(e.message || e)); }
+    setCriandoSala(false);
+  }
+
+  const url = `${window.location.origin}/#/live/${SLUG}`;
+  if (!ev) return <div style={{ padding: 20, color: '#64748b' }}>{erro || 'Carregando…'}</div>;
+
+  return (
+    <div>
+      <h3 style={S.sectionTitle}>🎥 Aula ao vivo — captação</h3>
+      {erro && <div style={{ background:'#fef2f2', border:'1px solid #fecaca', color:'#991b1b', borderRadius:8, padding:'10px 13px', fontSize:13, marginBottom:14 }}>{erro}</div>}
+
+      <div style={{ background:'#0B1B33', color:'#fff', borderRadius:12, padding:'18px 20px', marginBottom:16 }}>
+        <div style={{ fontSize:11.5, color:'#8FA4BF', textTransform:'uppercase', letterSpacing:1.2, fontWeight:700, marginBottom:8 }}>
+          O link da campanha — use este em tudo
+        </div>
+        <div style={{ fontFamily:'monospace', fontSize:14, wordBreak:'break-all', marginBottom:10 }}>{url}</div>
+        <button onClick={() => { navigator.clipboard?.writeText(url); alert('Link copiado!'); }}
+          style={{ padding:'8px 16px', background:'#D8A94A', color:'#0B1B33', border:'none', borderRadius:8, fontWeight:800, fontSize:13, cursor:'pointer' }}>
+          Copiar link
+        </button>
+        {prox?.data_hora && (
+          <div style={{ fontSize:13, color:'#B9C8DC', marginTop:12 }}>
+            Próxima aula: <strong style={{ color:'#fff' }}>
+              {new Date(prox.data_hora).toLocaleString('pt-BR', { timeZone:'America/Bahia', weekday:'long', day:'2-digit', month:'long', hour:'2-digit', minute:'2-digit' })}
+            </strong>
+          </div>
+        )}
+      </div>
+
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(280px,1fr))', gap:14, marginBottom:18 }}>
+        <div>
+          <label style={S.label}>Sala do Google Meet</label>
+          <input style={S.input} value={ev.link_sala || ''} placeholder="Gere automaticamente ou cole aqui"
+            onChange={e => setEv({ ...ev, link_sala: e.target.value })} onBlur={() => salvar({ link_sala: ev.link_sala || null })} />
+          <button onClick={gerarSala} disabled={criandoSala}
+            style={{ marginTop:8, padding:'9px 15px', background: criandoSala ? '#94a3b8' : '#0D63DB', color:'#fff', border:'none', borderRadius:8, fontWeight:700, fontSize:13, cursor: criandoSala ? 'default' : 'pointer' }}>
+            {criandoSala ? 'Criando…' : '🎦 Gerar sala automaticamente'}
+          </button>
+          <div style={{ fontSize:11.5, color:'#64748b', marginTop:6, lineHeight:1.5 }}>
+            Cria o evento na sua agenda com sala do Meet. Sendo semanal, o mesmo link vale para todas as quartas.
+          </div>
+        </div>
+        <div>
+          <label style={S.label}>Grupo de WhatsApp</label>
+          <input style={S.input} value={ev.link_grupo || ''} placeholder="https://chat.whatsapp.com/…"
+            onChange={e => setEv({ ...ev, link_grupo: e.target.value })} onBlur={() => salvar({ link_grupo: ev.link_grupo || null })} />
+          <div style={{ fontSize:11.5, color:'#64748b', marginTop:6, lineHeight:1.5 }}>
+            Aparece na confirmação da inscrição e no e-mail. É o canal do lançamento.
+          </div>
+        </div>
+      </div>
+
+      <div style={{ marginBottom:18 }}>
+        <label style={S.label}>Título</label>
+        <input style={S.input} value={ev.titulo || ''} onChange={e => setEv({ ...ev, titulo: e.target.value })} onBlur={() => salvar({ titulo: ev.titulo })} />
+        <label style={{ ...S.label, marginTop:10 }}>Subtítulo</label>
+        <input style={S.input} value={ev.subtitulo || ''} onChange={e => setEv({ ...ev, subtitulo: e.target.value })} onBlur={() => salvar({ subtitulo: ev.subtitulo })} />
+        <label style={{ ...S.label, marginTop:10 }}>Detalhes (uma linha por item)</label>
+        <textarea style={{ ...S.input, minHeight:90, fontFamily:'inherit' }} value={ev.descricao || ''}
+          onChange={e => setEv({ ...ev, descricao: e.target.value })} onBlur={() => salvar({ descricao: ev.descricao })} />
+        <label style={{ display:'flex', alignItems:'center', gap:8, fontSize:14, color:'#374151', marginTop:12 }}>
+          <input type="checkbox" checked={ev.ativo !== false} onChange={e => salvar({ ativo: e.target.checked })} />
+          Inscrições abertas {salvando && <span style={{ fontSize:12, color:'#94a3b8' }}>salvando…</span>}
+        </label>
+      </div>
+
+      <h4 style={{ fontSize:15, fontWeight:800, margin:'22px 0 10px' }}>
+        Inscritos <span style={{ color:'#0D63DB' }}>({inscritos.length})</span>
+      </h4>
+      {inscritos.length === 0 ? (
+        <div style={{ fontSize:13.5, color:'#64748b' }}>Ninguém ainda. Divulgue o link acima.</div>
+      ) : (
+        <div style={{ overflowX:'auto', border:'1px solid #e5e7eb', borderRadius:8 }}>
+          <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13.5 }}>
+            <thead><tr style={{ background:'#f8fafc' }}>
+              {['Nome','E-mail','WhatsApp','Origem','Quando'].map(h =>
+                <th key={h} style={{ padding:'9px 12px', textAlign:'left', fontSize:11, textTransform:'uppercase', color:'#64748b', letterSpacing:0.5 }}>{h}</th>)}
+            </tr></thead>
+            <tbody>
+              {inscritos.map((i, k) => (
+                <tr key={k} style={{ borderTop:'1px solid #f1f5f9' }}>
+                  <td style={{ padding:'9px 12px' }}>{i.nome}</td>
+                  <td style={{ padding:'9px 12px', color:'#475569' }}>{i.email}</td>
+                  <td style={{ padding:'9px 12px', color:'#475569' }}>{i.whatsapp}</td>
+                  <td style={{ padding:'9px 12px', color:'#64748b' }}>{i.origem || '—'}</td>
+                  <td style={{ padding:'9px 12px', color:'#94a3b8', whiteSpace:'nowrap' }}>
+                    {new Date(i.criado_em).toLocaleDateString('pt-BR')}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Menus agrupados por área — navegação mais fácil que a lista corrida de abas.
 // FONTE ÚNICA das abas: os botões, o tab default e o render saem daqui (não há mais
 // lista `TABS` paralela p/ dessincronizar). `flatMap` dá o conjunto plano quando preciso.
@@ -11000,7 +11147,7 @@ function QualidadeTab() {
 const GRUPOS_ADMIN = [
   { nome: 'Início',        icone: '🏠', desc: 'Visão geral do dia',            tabs: ['Dashboard'] },
   { nome: 'Administrativo',icone: '🏢', desc: 'Pessoas, contratos e ajustes',  tabs: ['Usuários', 'Convites', 'Equipe', 'Contratos', 'Configurações'] },
-  { nome: 'Comercial',     icone: '📣', desc: 'Vendas, ofertas e conteúdo',    tabs: ['Comercial', 'Marketing', 'Promoções', 'Cursos', 'eBooks'] },
+  { nome: 'Comercial',     icone: '📣', desc: 'Vendas, ofertas e conteúdo',    tabs: ['Comercial', 'Marketing', 'Promoções', 'Aula ao vivo', 'Cursos', 'eBooks'] },
   { nome: 'Financeiro',    icone: '💰', desc: 'Fluxo de caixa e conciliação',  tabs: ['Financeiro'] },
   { nome: 'Operacional',   icone: '⚙️', desc: 'Coleta, dados e qualidade',     tabs: ['Scrapers', 'Registros', 'CNJ', 'Editais', 'Qualidade', 'Demografia'] },
 ];
@@ -11015,6 +11162,7 @@ const ROTULO_TAB = {
   Qualidade: '✅ Qualidade',
   Demografia: '👥 Demografia',
   Marketing: '📣 Marketing',
+  'Aula ao vivo': '🎥 Aula ao vivo',
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -11898,6 +12046,7 @@ export default function Admin() {
         </div>
 
         {tab === 'Dashboard'      && <DashboardTab irParaTab={mudarTab} />}
+        {tab === 'Aula ao vivo'   && <LiveTab />}
         {tab === 'Cursos'         && <CursosTab />}
         {tab === 'eBooks'         && <EbooksTab />}
         {tab === 'Contratos'      && <Contratos />}
