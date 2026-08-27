@@ -103,5 +103,26 @@ export default async function handler(req, res) {
     }
   }
 
-  return res.status(200).json({ ok: true, gravadas: rows.length, termos: termosGravados });
+  // ─── RECONCILIA A ATRIBUIÇÃO PAGA (27/08) ────────────────────────────────────────────
+  // Aqui, e não num cron novo, porque este endpoint JÁ é o pulso diário do marketing: se
+  // chegou dado de anúncio, é hora de casar clique com cliente.
+  //
+  // O que ela conserta: o gclid vive em `visita_origem` (por anon_id) e nem sempre chega a
+  // `perfis.mkt_gclid` — cookie limpo, outro aparelho, ou o in-app browser do Instagram, que
+  // isola o storage. Sem gclid no perfil, `_webhook-core.js` NÃO envia a conversão offline, e
+  // o Google Ads nunca fica sabendo da venda. Medido em 27/08: dos 7 pagantes, ZERO tinham
+  // gclid — o lance automático vinha otimizando sem ter visto um único desfecho de receita.
+  //
+  // Best-effort e nunca derruba a ingestão: métrica gravada é o trabalho principal daqui.
+  // Mas FALA quando falha — o invariante `atribuicao_paga_perdida` é quem cobra o resultado.
+  let reconciliados = null;
+  try {
+    const { data, error } = await supabase.rpc('mkt_reconciliar_gclid');
+    if (error) console.error('[ads-ingest] reconciliar gclid:', error.message);
+    else reconciliados = data ?? 0;
+  } catch (e) {
+    console.error('[ads-ingest] reconciliar gclid:', e?.message || e);
+  }
+
+  return res.status(200).json({ ok: true, gravadas: rows.length, termos: termosGravados, reconciliados });
 }

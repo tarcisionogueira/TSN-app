@@ -50,7 +50,10 @@ grant execute on function public.qa_invariantes_supressao() to service_role, aut
 do $$
 declare
   d      text := pg_get_functiondef('public.qa_invariantes()'::regprocedure);
-  ancora text := E'), 400)\n  )';
+  -- Ancora GENERICA: o fecho do bloco `inv(...)`, que nao depende de qual invariante e o
+  -- ultimo. Ancorar no ultimo item faz duas migracoes do mesmo dia disputarem o mesmo
+  -- ponto — a primeira a rodar consome a ancora e a segunda aborta.
+  ancora text := E'\n  )\n  select chave, titulo, categoria, gravidade,';
 begin
   if position('email_para_endereco_suprimido' in d) > 0 then
     raise notice 'invariante ja presente — nada a fazer'; return;
@@ -60,10 +63,10 @@ begin
   end if;
 
   execute replace(d, ancora,
-    E'), 400),\n'
+    E',\n'
     '     -- 27/08: vigia do gate de supressao. Um envio que deveria ter sido barrado e nao\n'
     '     -- foi nao produz erro nenhum — so chega no endereco morto e gasta reputacao.\n'
     '     (''email_para_endereco_suprimido'',''E-mail enviado para endereco na lista de supressao (o gate furou)'',''Atendimento'',''bug'',\n'
-    '       public.qa_invariantes_supressao(), 0)\n'
-    '  )');
+    '       public.qa_invariantes_supressao(), 0)'
+    || ancora);
 end $$;

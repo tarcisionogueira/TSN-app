@@ -4,6 +4,83 @@
 
 ---
 
+## 💸 27/08 (sessão 3) — A VENDA NUNCA VOLTOU PARA O GOOGLE ADS
+
+### ⚠️ PRIMEIRO: A SUSPEITA QUE EU LEVANTEI NÃO SE CONFIRMOU
+Eu tinha apontado "conversões zeradas nos dias de maior tráfego (24 e 26/08)" como possível
+bug. **Não é.** Duas razões, ambas verificadas:
+1. O Google credita a conversão ao dia do **CLIQUE**, não ao dia em que ela acontece — então
+   comparar dia a dia com o nosso cadastro é comparar coisas diferentes. Prova no dado: em
+   12/08 o Google reporta 1 conversão e tivemos **0 cadastros**; em 17/08 reporta 1 e tivemos 5.
+2. **7 conversões em 20 dias** é volume baixo demais para ler padrão diário.
+A ingestão, aliás, está **sã**: o script reenvia 7 dias e o `atualizado_em` confirma que cada
+dia foi corrigido por exatamente 7 dias. Registro o alarme falso para não voltar.
+
+*(Cheguei a notar uma alternância 1,0,1,0… perfeita de 17 a 26/08 e testei arredondamento —
+a coluna é `numeric` sem escala e os valores são inteiros de verdade. Sem mecanismo, não
+insisto no padrão.)*
+
+### 🔴 MAS O CAMINHO LEVOU AO DEFEITO REAL — e ele é de dinheiro
+`registrar_marketing()` terminava com:
+```sql
+mkt_capturado_em = coalesce(mkt_capturado_em, now())
+where id = auth.uid() and mkt_capturado_em is null;
+```
+**A primeira chamada fecha a porta para sempre.** A RPC roda em todo `SIGNED_IN`/
+`INITIAL_SESSION`, e desde a correção de 20/08 ("sem buraco negro") o first-touch SEMPRE grava
+algo — nem que seja `referrer='direto'`. Logo: **quem visita organicamente primeiro nunca mais
+registra um gclid**, mesmo clicando no anúncio depois.
+
+⚠️ **Intenção declarada × código, de novo** (mesmo padrão da regra de saque de 08/08).
+`src/utils/marketing.js` diz em comentário: *"Chegou com anúncio → SOBRESCREVE sempre… quem
+visitou organicamente ontem e clicou no anúncio hoje tem que ficar registrado como vindo do
+anúncio."* O localStorage sobrescrevia; **o banco recusava.**
+
+**Medido — a divisão é limpa:**
+| primeiro toque | perfis | com gclid |
+|---|---|---|
+| `direto` | 16 | **0** |
+| `google` | 9 | **8** |
+
+### 💸 O QUE ISSO CUSTOU
+`_webhook-core.js:176` só envia a **conversão offline** ao Google Ads se `perfis.mkt_gclid`
+existir. Dos **7 pagantes, ZERO tinham gclid** — ou seja, **nenhuma venda jamais voltou para o
+Google.** O Smart Bidding vem otimizando sem ter visto um único desfecho de receita, e o
+"conversões" do painel nunca mediu dinheiro. É a forma nº 1 do CLAUDE.md em cima de verba.
+
+### 🔧 TRÊS CONSERTOS (migração `atribuicao_paga_travada_pelo_first_touch.sql`)
+1. **Porta aberta** — removido o `where mkt_capturado_em is null`. Todo SET já era
+   `coalesce(campo, novo)`, então o first-touch de CADA campo segue protegido; o `where` só
+   impedia preencher campo VAZIO depois, que é exatamente o caso do gclid da segunda visita.
+2. **Rede servidor `mkt_reconciliar_gclid()`** — o conserto 1 depende do localStorage, que
+   cookie limpo / outro aparelho / in-app browser do Instagram destroem. O gclid, porém, está
+   em `visita_origem` (por `anon_id`) e `eventos_atividade` liga `anon_id`→`user_id`. A função
+   casa os dois (last paid touch, 90 dias, só preenche NULO). **Chamada no
+   `ads-metrics-ingest`**, que já é o pulso diário do marketing — sem cron novo.
+3. **Invariante `atribuicao_paga_perdida`** (limite 0) — atribuição perdida não dá erro
+   nenhum; o cadastro entra, a venda acontece, e o Google só não fica sabendo.
+
+**Backfill: 8 → 10 perfis com gclid, invariante em 0.** ⚠️ Os 2 recuperados são exploradores:
+**nenhuma venda passada é recuperável** e o histórico de conversão no Google segue perdido.
+
+### 🧨 ARMADILHA QUE MORDEU E FICA REGISTRADA
+As duas migrações de hoje editam `qa_invariantes()` por âncora de texto. A primeira consumiu
+`), 400)\n  )` e a segunda **abortou** (o guard funcionou — melhor falhar alto que corromper a
+função). **Ambas agora ancoram no fecho genérico do bloco `inv(...)`**, que não depende de qual
+invariante é o último. Quem for acrescentar invariante por âncora: use a genérica.
+
+E na verificação eu mesmo caí num clássico: medi "antes/depois" nos ramos de um `UNION ALL`,
+**cuja ordem de avaliação o Postgres não garante** — deu a impressão de que o UPDATE não
+gravara. Medido em query separada: gravou.
+
+### 📌 O QUE ISTO ABRE PARA O DONO
+- A partir de agora a venda volta ao Google — mas **só para clientes novos**. O histórico não.
+- Vale conferir no Google Ads **qual ação está configurada como conversão** (as 7 de 20 dias
+  não são venda; provavelmente cadastro ou pageview). Antes de subir verba, a conversão que
+  o lance otimiza deveria ser a que gera receita.
+
+---
+
 ## 🩺 27/08 (sessão 2) — DIAGNÓSTICO DE ABERTURA + DOIS CONSERTOS
 
 Auditorias no fim: **0 crítico em regras, 0 crítico em segurança** (a única atenção segue
