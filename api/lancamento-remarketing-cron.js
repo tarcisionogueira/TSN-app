@@ -32,7 +32,7 @@
  *
  * ⚠️ O DOWNSELL É A ÚNICA ETAPA QUE RODA COM A JANELA FECHADA. Isso é de propósito: mandar
  * "última chance" depois do fim seria mentira, e mandar o degrau menor ANTES do fim
- * canibalizaria a venda principal — quem ia pagar R$ 1.497 aceita R$ 37/mês se as duas
+ * canibalizaria a venda principal — quem ia pagar o curso aceita a mensalidade se as duas
  * portas estiverem abertas ao mesmo tempo.
  *
  * REGRAS ANTI-SPAM (as mesmas do cron de recuperação, pelos mesmos motivos):

@@ -4,6 +4,183 @@
 
 ---
 
+## 🏁 27/08 — A MÁQUINA DE LANÇAMENTO (janela, upsell, downsell, remarketing)
+
+Dia inteiro construindo a estrutura comercial do lançamento. **Tudo em produção.**
+Auditorias no fim: **0 crítico em regras, 0 crítico em segurança.**
+
+### A decisão que orienta tudo: estrutura NO PRODUTO, não em página de oferta
+
+> *"não é para criar uma pagina, pois cada curso e ebook deve ter essa estrutura de upsell e
+> downsell com os gatilhos certos ao acessar a tela"* — dono, 27/08
+
+Eu tinha começado a desenhar uma `/oferta/:slug`. Está descartado. Página de lançamento à parte
+teria que ser refeita a cada produto novo; campo no cadastro nasce valendo para todos. Bônus,
+order bump e vitrine já eram assim — agora janela de oferta e downsell também.
+
+### O que existe agora em cada curso/eBook
+
+| Campo | O que faz |
+|---|---|
+| `oferta_abre_em` / `oferta_fecha_em` / `oferta_preco` | A janela. Sem prazo não há lançamento, há catálogo |
+| `downsell_oferta` (jsonb) | Oferta de menor compromisso para quem não compra o principal |
+| `bump_produtos` / `upsell_produtos` | Já existiam. Agora cada entrada aceita `concede_plano`/`concede_meses` como **sobrescrita** |
+| `concede_plano` / `concede_meses` | Já existia. Agora **SOMA** entre produto principal e extras |
+
+**Quatro gatilhos na tela do produto:**
+1. janela aberta → contagem regressiva + preço cheio riscado
+2. ainda não abriu → "abre em [data]" (distinto de encerrada: dizer que acabou o que nem começou
+   manda embora quem chegou cedo)
+3. segunda opção na buy box → o downsell no lugar do botão genérico de assinatura
+4. intenção de saída → cartão do downsell, 1× por sessão. Cursor saindo pelo topo no desktop,
+   fim da página no celular. **Nunca sequestrar o botão voltar.**
+
+### 🧮 O COMBO NÃO É PRODUTO — é upsell, e os benefícios SOMAM
+
+> *"não ha cadastro de combo, seria um upsell de incluir o outro curso e ter o desconto"*
+> *"ambos os cursos eu colocaria este benefício isoladamente em 3 meses para cada curso"*
+
+Modelo final: **cada curso concede 3 meses de Investidor Pro no cadastro dele.** Quem leva os dois
+pelo upsell soma 3 + 3 = 6. O benefício é do curso; o combo é a consequência — e assim o benefício
+acompanha o produto para onde ele for, sem precisar ser redeclarado em cada oferta.
+
+**Duas travas, porque agora soma:**
+- Soma dentro do MESMO plano. Planos diferentes → vence o mais alto com os meses DELE; os meses do
+  degrau menor não entram (somar entre degraus entregaria Assessoria que ninguém prometeu).
+- **Teto de 36 meses.** Sem teto, "3" digitado como "36" em cinco produtos vira acesso vitalício
+  de graça — e a escada só sobe, o erro não voltaria sozinho.
+
+**O benefício do extra é capturado em `itens_extras` no INÍCIO da compra**, não relido na
+confirmação. Dois motivos: (a) a linha do extra nasce `via_bonus` e o gatilho de entrega não a
+reprocessa, então o cadastro dele nunca seria lido; (b) congela o prometido contra edição feita
+entre iniciar e confirmar.
+
+### 💠 A AULA PODE VENDER PLANO (Investidor Pro / Assessoria)
+
+`eventos_live.oferta_plano_key`, ao lado de `oferta_produto_id`. **A primeira aula (02/09) está
+configurada para vender o Investidor Pro**, com a condição encerrando **05/09 23h59 BRT**.
+
+⚠️ **O prazo de oferta de plano é do BÔNUS, não do preço.** Plano não tem janela própria porque o
+preço dele é global (`planos_config`) — inventar uma janela mudaria o preço do site inteiro. Então
+o prazo é o da AULA, e o que fecha é a condição anunciada ao vivo. Prometer "preço só até sexta"
+num plano cujo preço não muda é desmentido por quem abrir a página de planos — que é justamente o
+mais interessado.
+
+Oferta de plano **não tem etapa de downsell**: não há degrau abaixo da assinatura. E o público
+exclui quem já está no plano ou acima — convidar um assessorado a virar Investidor Pro é oferecer
+rebaixamento como oportunidade.
+
+### 💰 O ANUAL NÃO É MENSALIDADE
+
+> *"esse valor de 37 do plano não é mensal pois ele passa o valor integral e parcela"*
+
+Eu dividia R$ 449,90 por 12 e escrevia "R$ 37,49/mês". Errado: o anual é cobrado **integral**, e o
+parcelamento é do cartão, não do plano. Quem chega no checkout vê R$ 449,90 e a conta não bate.
+**Ao falar do Investidor Pro, a mensalidade é R$ 49,90**; o anual se cita pelo valor cheio, com a
+economia do ano em reais. Corrigido no cartão de downsell e nos textos.
+
+E o **ciclo é escolha de quem paga**, na tela de pagamento — nenhuma tela ou e-mail pode anunciar
+um ciclo como decidido, e nenhum link carrega `&ciclo=` (o checkout não lê esse parâmetro).
+
+### 📧 `api/lancamento-remarketing-cron.js` — a sequência (4×/dia)
+
+Etapas tiradas do **relógio da oferta**, não da data da aula:
+
+| Etapa | Quando | Conteúdo |
+|---|---|---|
+| abertura | falta > 40h | o link está no ar |
+| véspera | 12h a 40h | a objeção mais comum, respondida |
+| última chamada | < 12h | fecha hoje |
+| downsell | até 36h **depois** | o degrau menor (só em oferta de PRODUTO) |
+
+**O downsell é a única etapa que roda com a janela fechada, e é deliberado:** "última chance"
+depois do fim é mentira, e abrir o degrau menor antes do fim canibaliza a venda principal.
+
+Não colide com `recuperacao-checkout-cron.js` (quem começou a comprar e parou é do outro cron; a
+fila daqui exclui essa pessoa). Anti-spam: conta interna nunca, inativo fora, 1× por
+usuário+oferta+ETAPA para sempre, 1 e-mail por pessoa por execução, teto 60. Toda leitura tem
+`error` checado e **aborta** — lista vazia por falha viraria "ninguém recebeu ainda" e reenviaria
+para todos.
+
+`lancamento_publico(slug)` resolve o público no banco e trata os dois casos (produto e plano).
+
+### 🐛 ACHADO NO CAMINHO DO DINHEIRO: duas `comprar_produto_iniciar`
+
+Existiam a de **4 argumentos** (antiga, sem order bump) e a de **5** (atual). O
+`api/registrar-compra-produto.js` chama com 4 nomes e caía na **antiga**, que não conhece
+`itens_extras`. Esse caminho não manda extras hoje, então **nada vazou** — mas eram duas funções
+de dinheiro com regra divergente, e a alcançável era a desatualizada. A de 4 foi removida; o
+chamador segue funcionando pelo DEFAULT.
+
+### ⚠️ REGRESSÃO MINHA, PEGA PELA AUDITORIA DE REGRAS — leia antes de mexer em função de dinheiro
+
+Ao reescrever `confirmar_compra_produto` eu parti do **`.sql` que a criou**, não da **função
+viva** — que já tinha ganhado depois o bloco de entrega de **bônus**. O resultado teria sido:
+cliente paga o curso e **não recebe o material prometido junto**, sem erro nenhum. Build, lint e
+teste de front passariam todos.
+
+Quem pegou foi `auditoria_regras_negocio()`: a regra `produto.bonus_e_upsell` declara essa função
+como quem a aplica, e a função parou de mencioná-la.
+
+> **REGRA NOVA, custo zero:** ao recriar função de dinheiro, a base é `pg_get_functiondef` do
+> banco, **NUNCA** o arquivo `.sql` que a criou. O arquivo é o começo da história dela, não o
+> estado dela. (Corolário da forma de falha nº 7b do CLAUDE.md.)
+
+### 🔒 Segurança: fechei o que o auditor apontou nas funções novas
+
+`produto_preco_vigente` respondia sobre produto **inativo** — pouco explorável (exige adivinhar um
+uuid), mas é vazamento de rascunho: título e preço de curso não lançado, legíveis por anônimo.
+Passou a exigir `ativo`.
+
+As quatro leituras públicas (`live_proxima`, `live_plataforma_numeros`, `produto_preco_vigente`,
+`produto_downsell`) entraram na allowlist do auditor — são anônimas por desenho e nenhuma devolve
+PII. `fontes_com_limpeza_pulada` ficou **de fora de propósito**: é achado real e pendente, e
+silenciá-lo seria usar a allowlist para esconder dívida.
+
+### 🎥 A landing da aula (`/live/leilao-ao-vivo`)
+
+- **Cidade com autocompletar do IBGE**, campo de UF removido — a UF vem resolvida da escolha.
+  O componente avisa **quantas** cidades vieram: `buscarTodasCidades` devolve `[]` tanto enquanto
+  carrega quanto com o IBGE fora, e sem distinguir os dois a inscrição gravaria meio endereço em
+  silêncio. Se a base não vier, o campo de UF reaparece.
+- **WhatsApp saiu da variável de ambiente e virou dado** (`eventos_live.whatsapp_direto`). Variável
+  `VITE_` é compilada no bundle — salvá-la como Secret na Vercel é contradição, e trocar o número
+  exigiria novo deploy. Agora é editável no admin e vale na hora.
+- **Bloco "Quem apresenta" refeito**, com faixa de números vindos do acervo em tempo real
+  (`live_plataforma_numeros`): 28.784 lotes · 30 leiloeiros · 2.366 cidades. Número escrito à mão
+  em bio envelhece em silêncio. *(Não devolve `estados`: há 28 valores distintos para 27 UFs
+  possíveis — é o rastro dos 71 lotes sem estado. Publicar seria imprimir o defeito como
+  resultado.)*
+- **Bio reescrita a partir dos livros do dono** (lidos no Drive: *Lucre Antes de Arrematar* e
+  *Arrematando imóveis na Caixa*): engenheiro civil desde 2016, primeira arrematação em 2019,
+  o caso do imóvel de R$ 200 mil arrematado por R$ 16 mil e revendido por R$ 170 mil em menos de
+  dois meses, e o erro do "efeito suspensivo" que travou capital por meses. **Os erros vendem mais
+  que os acertos** — autoridade que só conta acerto soa a vendedor.
+
+---
+
+## 📌 PRÓXIMOS PASSOS (para a próxima sessão)
+
+### Do dono, antes de 02/09
+1. **Gravar os cursos** e cadastrá-los (Judicial e Extrajudicial, R$ 1.497 cada).
+2. **Marcar cada curso como upsell do outro**, com desconto, e `concede_plano=top2` /
+   `concede_meses=3` **no cadastro de cada um** (somam para 6 no combo).
+3. **Foto do apresentador** — `apresentador_foto` está vazio e o cartão reserva o espaço.
+4. **Vídeo da campanha** + despausar a campanha Meta (`120249356357440420`, R$ 10/dia).
+5. **Inscrição de teste** em `/live/leilao-ao-vivo` de ponta a ponta antes de divulgar.
+6. **Reaquecer o grupo de 147** (frio há meses) — sequência de 4 toques até 02/09.
+
+### Técnico, pendente
+- **71 lotes ativos sem estado** — normalizar no parser da SUPERBID (73% do problema) + backfill.
+- **CALIL: 9 lotes contra piso 18** (`status='ok'`, não é cota) — ofensiva de recon.
+- `fontes_com_limpeza_pulada` exposta a anon (atenção, deliberadamente ainda sinalizada).
+- **HASTA: 579 lotes sem foto.**
+- `alerta_acima_do_capital` = 4 — conferir.
+- **31/08: verificação obrigatória** do cron de e-mail de oportunidade.
+- **Backup off-region no teto de 1.000 arquivos/rodada** — está atrás do crescimento diário.
+
+---
+
 ## 🏁 26/08 (sessão 2) — DIAGNÓSTICO COM BANCO + PLANEJAMENTO DO LANÇAMENTO
 
 O conector Supabase **voltou a responder** nesta sessão (na anterior recusou tudo). A verificação

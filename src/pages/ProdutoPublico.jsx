@@ -306,21 +306,23 @@ export default function ProdutoPublico({ tipo }) {
   // Usado em dois lugares (dentro da buy box e no aviso de saída), então mora aqui.
   //
   // O CICLO É DE QUEM PAGA (correção do dono, 27/08). Mensal ou anual se escolhe na tela
-  // de pagamento, então este cartão não pode anunciar "no plano anual" como se estivesse
-  // decidido — a pessoa chegaria no checkout e veria outra coisa. Ele mostra o menor valor
-  // possível como "a partir de", e diz de quem é a escolha.
+  // de pagamento, então este cartão não pode anunciar um ciclo como se estivesse decidido.
+  //
+  // ⚠️ E O ANUAL NÃO É MENSALIDADE (segunda correção do dono, 27/08). Eu dividia o anual por
+  // 12 e escrevia "R$ 37,49/mês" — mas o plano anual é cobrado INTEGRAL, e o parcelamento é
+  // do cartão, não do plano. Anunciar assim promete uma mensalidade que não existe: quem
+  // chega no checkout vê R$ 449,90 e a conta não bate. O cartão mostra a MENSALIDADE real
+  // e cita o anual pelo valor cheio, dizendo o que ele é.
   //
   // O link também não carrega `&ciclo=`: o checkout não lê esse parâmetro, e mandar um que
   // ninguém lê é prometer na URL o que a tela seguinte não cumpre.
   const CartaoDownsell = ({ compacto }) => {
     if (!downsell) return null;
     const ehPlano = downsell.tipo === 'plano';
-    const anual = Number(downsell.preco_anual) || 0;
+    const anual = Number(downsell.preco_anual) || 0;   // valor CHEIO do ano, não dividido
     const mensal = Number(downsell.preco_mensal) || 0;
-    // Nem todo plano tem anual (a Assessoria não tem). Sem ele, o mensal é o único valor.
-    const mensalNoAnual = anual > 0 ? anual / 12 : 0;
-    const menorMensal = mensalNoAnual > 0 && mensal > 0 ? Math.min(mensalNoAnual, mensal)
-                      : (mensalNoAnual || mensal);
+    // Economia do ano em reais — comparação honesta: 12 mensalidades contra o anual cheio.
+    const economiaAnual = anual > 0 && mensal > 0 ? (mensal * 12) - anual : 0;
     const titulo = downsell.titulo
       || (ehPlano ? 'Ainda não é hora de investir no curso?' : 'Talvez este seja o seu ponto de partida');
     const texto = downsell.texto
@@ -334,14 +336,14 @@ export default function ProdutoPublico({ tipo }) {
         {ehPlano ? (
           <>
             <div style={{ fontSize: 20, fontWeight: 900, color: '#0f172a', marginBottom: 2 }}>
-              {mensalNoAnual > 0 && mensalNoAnual < mensal ? 'a partir de ' : ''}
-              R$ {menorMensal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}<span style={{ fontSize: 14, fontWeight: 700 }}>/mês</span>
+              R$ {(mensal || anual).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              {mensal > 0 && <span style={{ fontSize: 14, fontWeight: 700 }}>/mês</span>}
             </div>
             <div style={{ fontSize: 12, color: '#64748b', marginBottom: 12, lineHeight: 1.5 }}>
               {downsell.nome}
-              {mensalNoAnual > 0 && mensalNoAnual < mensal && (
-                <> — mensal por R$ {mensal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} ou anual por
-                  {' '}R$ {anual.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}.
+              {anual > 0 && (
+                <> — ou R$ {anual.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} no plano anual
+                  {economiaAnual > 0 && <>, economizando R$ {economiaAnual.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} no ano</>}.
                   <strong> Você escolhe no pagamento.</strong></>
               )}
             </div>

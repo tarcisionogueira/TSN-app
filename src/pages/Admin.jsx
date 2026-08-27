@@ -657,7 +657,7 @@ function CursosTab() {
                 catalogo={catalogo} excluirId={form.id}
                 cor="#7C3AED" descPadrao={30}
                 titulo="Oferta em destaque — “quer incluir também?”"
-                ajuda="Aparece dentro da caixa de compra, UMA POR VEZ: ao aceitar a primeira, a próxima surge. Entra na mesma compra. Assinatura não é vendida aqui — mas pode ser CONCEDIDA como bônus de quem leva os dois (é assim que se monta o combo, sem cadastrar um produto combo)." />
+                ajuda="Aparece dentro da caixa de compra, UMA POR VEZ: ao aceitar a primeira, a próxima surge. Entra na mesma compra. Os BENEFÍCIOS SOMAM: se cada curso concede 3 meses de Investidor Pro no cadastro dele, quem leva os dois recebe 6 — é assim que se monta o combo, sem cadastrar um produto combo." />
             )}
             {!form.gratuito && (
               <BumpSelector
@@ -890,7 +890,9 @@ function BumpSelector({ valor, onChange, catalogo, excluirId, titulo, ajuda, cor
               )}
               {on && (
                 <label style={{ fontSize: 12.5, color: '#475569', display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
-                  <span style={{ color: '#94a3b8' }}>|</span> levando os dois, ganha
+                  <span style={{ color: '#94a3b8' }}>|</span>
+                  <span title="Por padrão vale o benefício que o próprio produto já concede, e os meses SOMAM. Preencha aqui só para sobrescrever, quando o bônus for da combinação e não do produto."
+                    style={{ borderBottom: '1px dotted #94a3b8', cursor: 'help' }}>sobrescrever benefício:</span>
                   <select value={on.concede_plano || ''}
                     onChange={e => setPlano(it, { concede_plano: e.target.value || undefined,
                                                  concede_meses: e.target.value ? (on.concede_meses || 6) : undefined })}

@@ -17,6 +17,11 @@
 --    "concede_plano":"top2","concede_meses":6}
 -- Só quem ACEITA o extra recebe o plano.
 --
+-- ⚠️ SUPERSEDIDA EM PARTE, no mesmo dia, por `concessoes_somam_no_combo.sql`: o modelo do
+-- dono é o benefício NO PRODUTO (3 meses em cada curso) SOMANDO no upsell (3+3=6), e não
+-- um benefício declarado na combinação. A concessão na oferta continua existindo como
+-- SOBRESCRITA. Leia aquele arquivo para o estado final destas duas funções.
+--
 -- ── 2. A ESCADA VIRA FUNÇÃO ──────────────────────────────────────────────────
 -- Com duas origens de concessão (produto e oferta), as regras — só sobe, vencimento
 -- estende e nunca encurta, papel de equipe intocado — passariam a existir em dois lugares.
