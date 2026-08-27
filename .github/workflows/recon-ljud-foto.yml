@@ -21,6 +21,13 @@ jobs:
           node-version: '22'
       - name: Install dependencies
         run: npm ci
+      - name: Install Chromium system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            libatk-bridge2.0-0 libdrm2 libxkbcommon0 libxcomposite1 \
+            libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2t64 \
+            libpango-1.0-0 libcairo2 libatspi2.0-0 libgtk-3-0
       - name: Recon LJUD foto
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}

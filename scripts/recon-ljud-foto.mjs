@@ -24,10 +24,25 @@
  *   • a API também não tem                              → ENCERRADO: não é defeito, é
  *     ausência na origem, e o número para de ser tratado como dívida técnica.
  *
+ * ⚠️ POR QUE PUPPETEER E NÃO `fetch` (aprendido na marra, 27/08). As duas primeiras execuções
+ * falharam, a segunda com o diagnóstico exato: a API respondeu **HTTP 200** com a string
+ * `"Metodo não permitido!"`. A causa já estava DOCUMENTADA em `api/scraper-leiloeiros.js`:
+ *
+ *     "A API get-bens-por-estados entrega dados só ao fingerprint TLS de um Chrome real
+ *      (Node fetch recebe 200 vazio)."
+ *
+ * Escrevi um recon novo sem ler o que o repositório já sabia sobre falar com esta API — e o
+ * `.ok` não pega nada disso, porque o erro vem DENTRO de um 200 (forma nº 1 do CLAUDE.md).
+ *
+ * O scraper resolve isso com Bright Data, que tem o fingerprint. Aqui NÃO: a cota semanal
+ * está em 543/550 e o freio já recusa. Chrome de verdade tem o mesmo fingerprint e é de
+ * graça — então a chamada sai de DENTRO da página do portal, com Origin/Referer nativos.
+ *
  * Só leitura, não grava nada. Roda no GitHub Actions (recon-ljud-foto.yml), onde a rede
  * funciona. Secrets: VITE_SUPABASE_URL, SUPABASE_SERVICE_KEY.
  */
 import { createClient } from '@supabase/supabase-js';
+import puppeteer from 'puppeteer';
 
 const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 const API = 'https://api.leiloesjudiciais.com.br/core/api/get-bens-por-estados';
@@ -68,34 +83,31 @@ function acharLista(j, prof = 0) {
   return melhor;
 }
 
-async function paginaApi(pg) {
-  const url = `${API}?tipo=3&pg=${pg}`;
-  const r = await fetch(url, {
-    headers: {
-      'User-Agent': UA, Accept: 'application/json',
-      Origin: 'https://www.leiloesjudiciais.com.br', Referer: 'https://www.leiloesjudiciais.com.br/',
-    },
-    signal: AbortSignal.timeout(30000),
-  });
-  const bruto = await r.text();
-  // `.ok` conferido: um 4xx devolvendo HTML viraria "a API não tem lote nenhum" — e o recon
-  // concluiria "encerrado, a fonte não tem foto" a partir de um erro de rede. É o defeito que
-  // este projeto já pagou várias vezes; aqui ele produziria um veredito falso e definitivo.
-  if (!r.ok) throw new Error(`API HTTP ${r.status} · corpo: ${bruto.slice(0, 200)}`);
+// A chamada sai de DENTRO da página do portal: fingerprint TLS de Chrome real, e
+// Origin/Referer nativos em vez de forjados. `page` é injetada pelo main.
+async function paginaApi(page, pg) {
+  const r = await page.evaluate(async (url) => {
+    try {
+      const resp = await fetch(url, { headers: { Accept: 'application/json' }, credentials: 'include' });
+      return { status: resp.status, txt: (await resp.text()).slice(0, 200000) };
+    } catch (e) { return { status: 0, txt: '', erro: String(e).slice(0, 200) }; }
+  }, `${API}?tipo=3&pg=${pg}&qtd_por_pagina=48`);
+
+  if (r.erro) throw new Error(`fetch na página falhou: ${r.erro}`);
+  // `.ok` conferido — mas ele NÃO basta aqui, e essa é a lição: a API sinaliza erro dentro
+  // de um 200 ("Metodo não permitido!"). Quem pega isso é a leitura do formato, abaixo.
+  if (r.status < 200 || r.status >= 300) throw new Error(`API HTTP ${r.status} · corpo: ${r.txt.slice(0, 200)}`);
 
   let j;
-  try { j = JSON.parse(bruto); }
-  catch { throw new Error(`resposta NÃO É JSON (${bruto.length}B): ${bruto.slice(0, 200)}`); }
+  try { j = JSON.parse(r.txt); }
+  catch { throw new Error(`resposta NÃO É JSON (${r.txt.length}B): ${r.txt.slice(0, 200)}`); }
 
   const items = acharLista(j);
   if (!items) {
-    // NÃO devolve [] aqui: lista vazia e formato ilegível são coisas diferentes, e confundi-las
-    // é o que estragou a primeira execução. Despeja a forma da resposta para o próximo run
-    // saber ler, em vez de custar outra rodada de adivinhação.
     const forma = j && typeof j === 'object' && !Array.isArray(j)
       ? Object.entries(j).map(([k, v]) => `${k}:${Array.isArray(v) ? `array(${v.length})` : typeof v}`).join(', ')
-      : typeof j;
-    throw new Error(`não achei lista de lotes. Forma da resposta → ${forma}\n     amostra: ${bruto.slice(0, 400)}`);
+      : `${typeof j} → ${JSON.stringify(j).slice(0, 120)}`;
+    throw new Error(`não achei lista de lotes. Forma da resposta → ${forma}\n     amostra: ${r.txt.slice(0, 400)}`);
   }
   return items;
 }
@@ -114,12 +126,20 @@ async function paginaApi(pg) {
   console.log(`Nosso banco: ${idsSemFoto.size} lotes ATIVOS sem foto.\n`);
 
   // 2) O QUE A API DIZ
+  const browser = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'] });
+  const page = await browser.newPage();
+  await page.setUserAgent(UA);
+  // Precisa ESTAR no portal: a API exige Origin/Referer dele, e forjá-los por header não
+  // resolve o fingerprint. Estando na página, os dois saem nativos.
+  await page.goto('https://www.leiloesjudiciais.com.br/', { waitUntil: 'domcontentloaded', timeout: 45000 });
+  await new Promise((r) => setTimeout(r, 2000));
+
   const vistos = new Map();
   let falhaApi = null;
   for (let pg = 1; pg <= PAGINAS; pg++) {
     let items;
     try {
-      items = await paginaApi(pg);
+      items = await paginaApi(page, pg);
     } catch (e) {
       falhaApi = e.message;
       console.log(`  pg ${pg}: FALHOU → ${e.message}`);
@@ -138,6 +158,7 @@ async function paginaApi(pg) {
     }
   }
   if (!vistos.size) {
+    await browser.close();
     console.log('\n══════════════════ INCONCLUSIVO ══════════════════');
     console.log(falhaApi ? `  A API não pôde ser lida: ${falhaApi}` : '  A API respondeu, mas nenhum lote teve id reconhecível.');
     console.log('  ⚠️ Isto NÃO é "a fonte não tem foto" — é "não consegui perguntar".');
@@ -180,4 +201,5 @@ async function paginaApi(pg) {
       .forEach(([campo, n]) => console.log(`       ${campo}  (em ${n} lotes)`));
   }
   console.log('══════════════════════════════════════════════');
+  await browser.close();
 })();
