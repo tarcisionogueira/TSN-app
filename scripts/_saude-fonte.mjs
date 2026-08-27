@@ -73,10 +73,12 @@ export async function registrarSaude(supabase, fonte, imoveis, estrategia, valid
   // COLETA CORTADA PELO ORÇAMENTO NO MEIO (27/08) — o buraco que a correção de 16/08 deixou.
   // Aquela cobria o tudo-ou-nada: `m.n === 0` vira 'sem_cota' em vez de 'falhou'. Mas quando
   // a cota acaba DEPOIS de alguns lotes, `m.n > 0` e a linha saía como 'ok' — com um total
-  // que não mede a fonte, e sim até onde o dinheiro deu. O CALIL enumerou 75 lotes em 26/08,
-  // gravou 9 com todos os campos completos, e foi acusado de regressão contra o piso 18:
-  // exatamente o desfecho que o status 'sem_cota' existe para impedir, escapando pela fresta
-  // do run parcial. `parcial_cota` é o mesmo "não" do orçamento, dito com o número junto.
+  // que não mede a fonte, e sim até onde o dinheiro deu. Esse total ia parar em dois lugares
+  // onde faz estrago: `fonte_regressao_suspeita()`, que o compara contra o piso e manda
+  // consertar parser intacto, e `fonte_baseline_aprendida()`, que filtra por `status = 'ok'`
+  // e portanto APRENDE com ele, puxando o piso para baixo a cada coleta truncada.
+  // `parcial_cota` é o mesmo "não" do orçamento que o 'sem_cota' já dizia, agora com o
+  // número junto — e sai das duas amostras de uma vez.
   else if (cotaNegada > 0) {
     status = 'parcial_cota';
     motivo = [motivo, `coleta interrompida pelo teto de orçamento: ${cotaNegada} lote(s) por buscar `

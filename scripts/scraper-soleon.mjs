@@ -311,13 +311,22 @@ async function coletarTenant(tenant) {
     // `fetchTenant` SEMPRE soube dizer qual "não" (devolve `semCota: true` quando o teto
     // recusou), e aqui o valor era jogado fora no destructuring `const { html } = …`:
     // a página recusada por ORÇAMENTO virava um `sem++` idêntico ao de um erro de rede, a
-    // coleta seguia, e o run gravava `status: ok` com um total parcial.
+    // coleta seguia, e o run gravava `status: ok` com um total parcial — um número que não
+    // mede o acervo do leiloeiro, e sim até onde o dinheiro deu. É a forma #5 do CLAUDE.md
+    // DENTRO de um run bem-sucedido: a correção de 12/08 só cobria o tudo-ou-nada
+    // (`prontos.length === 0`), e a coleta cortada no lote 9 de 40 passava pela fresta.
     //
-    // O estrago medido no CALIL: 26/08 enumerou 75 lotes no site e gravou 9, com todos os
-    // campos 100% completos — e `fonte_regressao_suspeita()` acusou regressão de parser
-    // contra o piso 18. Parser intacto; o que faltava era cota. É a forma #5 do CLAUDE.md
-    // pela terceira vez nesta base, agora DENTRO de um run bem-sucedido: a correção de
-    // 12/08 só cobria o tudo-ou-nada (`prontos.length === 0`).
+    // QUEM ISTO ATINGE, aqui: o TORRES3 — é o único tenant deste cluster atrás de
+    // Cloudflare, e portanto o único cujo detalhe cai no Bright Data (CALIL e VEGAS são
+    // fetch grátis; ver o cabeçalho do workflow). Vale também para toda fonte do motor
+    // genérico que use o caminho pago.
+    //
+    // NÃO é a explicação da queda do CALIL, embora tenha sido investigando o CALIL que
+    // isto apareceu — e a distinção importa para quem ler depois: o ledger
+    // (`brightdata_uso_proposito_dia`) mostra ZERO requisição 'soleon' tanto no dia bom
+    // (20/08, 166 listados → 36 lotes) quanto no ruim (26/08, 75 → 9). Bright Data não
+    // está no caminho do CALIL. A causa dele continua aberta e é de OUTRA natureza: o
+    // fetch grátis falhando nas páginas de detalhe.
     //
     // Recusou uma, recusa as seguintes — insistir só gasta tempo. Para aqui e conta o que
     // ficou para trás, que é o número honesto: não é "a fonte tem 9", é "vi 9 de 40".

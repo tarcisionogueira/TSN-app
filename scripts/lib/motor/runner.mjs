@@ -84,9 +84,10 @@ async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debu
       // `semCota: true` quando o teto recusa, e aqui isso era descartado no destructuring
       // `const { html } = …`: a página recusada por ORÇAMENTO virava um `sem++` igual ao de
       // um erro de rede, a coleta seguia e a saúde gravava `ok` com total parcial — o freio
-      // de custo entregue como medição da fonte (forma #5). Diagnosticado no CALIL, que
-      // enumerou 75 lotes, gravou 9 e foi acusado de regressão de parser contra o piso 18.
-      // Recusou uma, recusa as próximas: para aqui e conta o que ficou por buscar.
+      // de custo entregue como medição da fonte (forma #5), agora DENTRO de um run que deu
+      // certo: a correção de 12/08 só cobria o tudo-ou-nada. Atinge qualquer fonte cujo
+      // detalhe caia no caminho pago. Recusou uma, recusa as próximas: para aqui e conta o
+      // que ficou por buscar — o número honesto não é "a fonte tem 9", é "vi 9 de 40".
       if (r?.semCota) {
         cotaNegada = alvo.length - i;
         console.log(`💰 [${tenant.fonte}] teto de orçamento no lote ${i + 1}/${alvo.length} — ${cotaNegada} por buscar. NÃO é regressão da fonte.`);

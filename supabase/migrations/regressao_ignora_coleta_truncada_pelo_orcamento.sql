@@ -5,11 +5,14 @@
 -- Esse run gravava `status = 'ok'` com um total que não mede o acervo do leiloeiro, e sim até
 -- onde o dinheiro deu — e era comparado contra o piso aprendido como se fosse regressão.
 --
--- Foi o que aconteceu com o CALIL: em 26/08 o site listou 75 lotes, a coleta gravou 9 com
--- TODOS os campos 100% completos (uf, valor, link, foto), e a função acusou "9 contra piso 18".
--- Parser intacto; o que faltava era cota. É a quarta vez nesta base que o instrumento é o
--- errado, e a assinatura é sempre a mesma: algo que NÃO é medição da fonte comparado contra o
--- piso da fonte.
+-- É a quarta vez nesta base que o instrumento é o errado, e a assinatura é sempre a mesma:
+-- algo que NÃO é medição da fonte comparado contra o piso da fonte.
+--
+-- RESSALVA para quem vier depois: isto apareceu enquanto se investigava o CALIL, mas NÃO é a
+-- causa da queda dele. O ledger (`brightdata_uso_proposito_dia`) mostra zero requisição
+-- 'soleon' tanto no dia bom (20/08: 166 listados → 36 lotes) quanto no ruim (26/08: 75 → 9),
+-- e o CALIL usa fetch grátis — Bright Data não está no caminho dele. Quem esta correção
+-- protege de verdade é o TORRES3 e as fontes do motor genérico que usam o caminho pago.
 --
 -- O scraper passa a gravar `parcial_cota` nesses runs (ver `_saude-fonte.mjs`). Aqui só
 -- ensinamos a função a tratá-lo como o irmão que já era tratado. Efeito colateral bem-vindo:
