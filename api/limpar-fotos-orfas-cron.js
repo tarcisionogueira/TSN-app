@@ -1,5 +1,7 @@
 /**
- * /api/limpar-fotos-orfas-cron — higiene do bucket `imoveis-fotos`.
+ * /api/limpar-fotos-orfas-cron — manutencao do bucket `imoveis-fotos`: ADOTA a foto que
+ * falta (herdar_foto_da_caixa) e so depois APAGA a que ninguem usa. As duas pontas no
+ * mesmo cron, nesta ordem, de proposito — ver o bloco HERDAR ANTES DE LIMPAR.
  *
  * POR QUÊ: fotos ficam órfãs por dois caminhos normais — o lote sai do acervo (a linha do
  * imóvel some) e o backfill de fotos re-hospeda com nome novo (a antiga fica para trás).
@@ -35,6 +37,30 @@ export default async function handler(req, res) {
 
   const hdr = { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' };
   let apagadas = 0, bytes = 0, rodadas = 0, descartadas = 0;
+
+  // ─── HERDAR ANTES DE LIMPAR (27/08) ────────────────────────────────────────────────────
+  // A ORDEM É O MOTIVO DE ESTAR AQUI, e não em outro cron. Leiloeiro que REVENDE imóvel da
+  // Caixa (HASTA, TORRES3) não publica foto própria: o lote nasce sem imagem, embora a foto
+  // do MESMO imóvel já esteja no nosso bucket, trazida pela CEF. `herdar_foto_da_caixa()`
+  // aponta uma para a outra — e isso CRIA REFERÊNCIAS NOVAS a arquivos que, até um segundo
+  // atrás, estavam órfãos. Rodando depois da limpeza, a foto seria apagada na mesma execução
+  // em que foi adotada, e o lote voltaria a ficar sem imagem para sempre.
+  //
+  // Medido em 27/08: 581 lotes adotaram foto (HASTA 547 de 579, TORRES3 34), e `sem_foto`
+  // caiu de 1.973 para 1.392 — abaixo do limite de 1.600 pela primeira vez.
+  //
+  // Best-effort: falhar aqui não pode impedir a higiene do bucket. Mas FALA — herança que
+  // para de acontecer não dá erro nenhum, o acervo só volta a ficar sem foto devagar.
+  let fotosHerdadas = null;
+  try {
+    const rh = await fetch(`${SUPABASE_URL}/rest/v1/rpc/herdar_foto_da_caixa`, {
+      method: 'POST', headers: hdr, body: '{}', signal: AbortSignal.timeout(20000),
+    });
+    if (!rh.ok) console.error('[fotos-orfas] herdar_foto_da_caixa:', rh.status, (await rh.text().catch(() => '')).slice(0, 200));
+    else fotosHerdadas = await rh.json().catch(() => null);
+  } catch (e) {
+    console.error('[fotos-orfas] herdar_foto_da_caixa:', e?.message || e);
+  }
 
   try {
     for (let i = 0; i < LOTES_POR_RUN; i++) {
@@ -79,5 +105,5 @@ export default async function handler(req, res) {
   }
 
   console.log('[fotos-orfas]', JSON.stringify({ apagadas, mb: Math.round(bytes / 1048576), rodadas, descartadas }));
-  return res.status(200).json({ ok: true, apagadas, mb_liberados: Math.round(bytes / 1048576), rodadas });
+  return res.status(200).json({ ok: true, fotos_herdadas: fotosHerdadas, apagadas, mb_liberados: Math.round(bytes / 1048576), rodadas });
 }
