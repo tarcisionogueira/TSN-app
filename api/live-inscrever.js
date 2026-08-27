@@ -129,6 +129,9 @@ export default async function handler(req, res) {
               lgpd_aceito: true, lgpd_data: meta.lgpd_data,
               mkt_utm_source: utm.utm_source || null, mkt_utm_medium: utm.utm_medium || null,
               mkt_utm_campaign: utm.utm_campaign || null, mkt_gclid: utm.gclid || null,
+              // content/term entraram em 27/08: sem eles a inscricao na aula sabia a CAMPANHA
+              // mas nao a PECA — e e a peca que decide qual criativo recebe verba.
+              mkt_utm_content: utm.utm_content || null, mkt_utm_term: utm.utm_term || null,
               mkt_fbclid: utm.fbclid || null, mkt_referrer: utm.referrer || null,
               mkt_landing: `/live/${slug}`, mkt_capturado_em: new Date().toISOString(),
             }),

@@ -44,7 +44,17 @@ export function capturarMarketing() {
     const h = window.location.hash || ''; const iq = h.indexOf('?');
     const hq = iq >= 0 ? new URLSearchParams(h.slice(iq)) : new URLSearchParams();
     const get = (k) => (qs.get(k) || hq.get(k) || '').slice(0, 300);
-    const dados = { gclid: get('gclid'), fbclid: get('fbclid'), utm_source: get('utm_source'), utm_medium: get('utm_medium'), utm_campaign: get('utm_campaign') };
+    // `utm_content` e `utm_term` entraram em 27/08, e a falta deles era um buraco de MEDIÇÃO,
+    // não de captura: `visita_origem` guardava os dois desde sempre (o tracker os lê), mas
+    // aqui eles nunca eram capturados — então o CADASTRO só sabia a campanha, nunca a PEÇA.
+    // Na prática: dava para ver que 140 visitas vieram da campanha do Instagram, e não dava
+    // para dizer se o cadastro veio do reels ou do link da bio. Sem isso não há como comparar
+    // criativo com criativo, que é a decisão que gasta verba.
+    const dados = {
+      gclid: get('gclid'), fbclid: get('fbclid'),
+      utm_source: get('utm_source'), utm_medium: get('utm_medium'), utm_campaign: get('utm_campaign'),
+      utm_content: get('utm_content'), utm_term: get('utm_term'),
+    };
 
     // REFERRER E PÁGINA DE ENTRADA (11/08). Até aqui só gravávamos quem chegava com
     // gclid/fbclid/utm — ou seja, só quem veio de anúncio. Quem chega do Instagram, de um

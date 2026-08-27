@@ -11154,8 +11154,16 @@ function LiveTab() {
 
   async function salvar(campos) {
     setSalvando(true); setErro('');
-    const { error } = await supabase.from('eventos_live').update(campos).eq('slug', SLUG);
-    if (error) setErro('Não salvou: ' + error.message); else await carregar();
+    // `.select()` NÃO é enfeite: é o que PROVA que a gravação alcançou a linha. Até 27/08 este
+    // update só olhava `error` — e RLS que filtra linha NÃO É ERRO. A tabela tinha só política
+    // de SELECT, então todo salvamento daqui alcançava ZERO linhas, voltava `error: null`, caía
+    // no `else`, recarregava e parecia ter salvo. A aula inteira era editada no vazio.
+    // Com o retorno em mãos, "não alcancei ninguém" vira erro visível em vez de sucesso falso.
+    const { data, error } = await supabase.from('eventos_live')
+      .update(campos).eq('slug', SLUG).select('id');
+    if (error) setErro('Não salvou: ' + error.message);
+    else if (!data?.length) setErro('Não salvou: nenhuma linha foi alterada (permissão ou aula inexistente). Nada foi gravado.');
+    else await carregar();
     setSalvando(false);
   }
 
