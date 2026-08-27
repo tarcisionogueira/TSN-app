@@ -11,9 +11,16 @@
  * produto — senão a pessoa recebe dois e-mails diferentes sobre a mesma venda no mesmo dia,
  * e os dois parecem robô.
  *
- * A QUEM: inscritos da aula ao vivo (`live_inscricoes`) do evento que aponta para o produto
- * (`eventos_live.oferta_produto_id`), que ainda não compraram. Quem é o público sai da RPC
- * `lancamento_publico`, não de dedução aqui.
+ * A QUEM: inscritos da aula ao vivo (`live_inscricoes`) do evento, que ainda não têm o que
+ * ela vende. Quem é o público sai da RPC `lancamento_publico`, não de dedução aqui.
+ *
+ * A AULA PODE VENDER DUAS COISAS (27/08):
+ *   - PRODUTO (curso/eBook) — prazo = a janela de oferta do produto;
+ *   - PLANO (Investidor Pro, Assessoria) — prazo = `eventos_live.oferta_fecha_em`, porque
+ *     plano não tem janela própria: o preço dele é global e mudá-lo mexeria no site inteiro.
+ *     Nesse caso o que fecha é a CONDIÇÃO anunciada na aula (bônus, acompanhamento), não o
+ *     preço — e os textos daqui dizem exatamente isso, para não prometer desconto que a
+ *     página de planos desmente em dois cliques.
  *
  * AS ETAPAS saem do RELÓGIO DA OFERTA, não da data da aula. É o prazo que faz decidir, e é
  * ele que a pessoa precisa ouvir:
@@ -21,6 +28,7 @@
  *   vespera        (12h a 40h)          — a objeção mais comum, respondida
  *   ultima_chamada (menos de 12h)       — fecha hoje
  *   downsell       (até 36h DEPOIS)     — a oferta fechou; existe um degrau menor
+ *                                        (só em oferta de PRODUTO — ver etapaPor)
  *
  * ⚠️ O DOWNSELL É A ÚNICA ETAPA QUE RODA COM A JANELA FECHADA. Isso é de propósito: mandar
  * "última chance" depois do fim seria mentira, e mandar o degrau menor ANTES do fim
@@ -53,12 +61,16 @@ const TETO_ENVIOS = 60;
 const BASE = 'https://www.bidprobrasil.com.br';
 
 // Etapa a partir das horas que faltam para a oferta fechar. Negativo = já fechou.
-function etapaPor(horas) {
+function etapaPor(horas, ofertaTipo) {
   if (horas > 40) return 'abertura';
   if (horas > 12) return 'vespera';
   if (horas > 0) return 'ultima_chamada';
-  if (horas > -36) return 'downsell';
-  return null; // fechou há tempo demais: o lançamento acabou, não há o que mandar
+  // O downsell existe para quem não comprou o CURSO: o degrau menor é a assinatura. Numa
+  // aula que já vende a assinatura, não há degrau abaixo para oferecer — insistir depois do
+  // prazo seria mandar de novo a mesma oferta com outra roupa, que é o que faz o inscrito
+  // marcar como spam.
+  if (horas > -36 && ofertaTipo === 'produto') return 'downsell';
+  return null; // fechou há tempo demais (ou não há degrau): o lançamento acabou
 }
 
 function prazoTexto(fechaEm) {
@@ -68,13 +80,24 @@ function prazoTexto(fechaEm) {
   });
 }
 
-function corpo(etapa, { nome, titulo, link, fechaEm, linkPlano }) {
+function corpo(etapa, { nome, titulo, link, fechaEm, linkPlano, ofertaTipo }) {
   const primeiro = String(nome || '').trim().split(' ')[0] || 'investidor';
   const prazo = prazoTexto(fechaEm);
   const assinar = `\n\nAbraço,\nTarcísio Nogueira\nBidPro Brasil`;
+  const ehPlano = ofertaTipo === 'plano';
 
   if (etapa === 'abertura') {
-    return {
+    // Em oferta de PLANO o texto fala da CONDIÇÃO, nunca do preço: o valor da assinatura é
+    // o mesmo antes e depois da aula, e prometer desconto que a página de planos desmente
+    // queima a confiança justamente de quem foi conferir — que é o mais interessado.
+    return ehPlano ? {
+      subject: `${titulo} — a condição da aula vale até ${prazo}`,
+      text: `Olá, ${primeiro}!\n\nComo combinei na aula, é por aqui: ${link}\n\n`
+        + `A condição que eu apresentei ao vivo vale até ${prazo}. O plano em si continua o `
+        + `mesmo depois — o que fecha é o combinado da aula.\n\n`
+        + `O ciclo de cobrança (mensal ou anual) você escolhe na própria tela de pagamento.\n\n`
+        + `Dúvida antes de decidir? Responda este e-mail que eu mesmo respondo.${assinar}`,
+    } : {
       subject: `${titulo} — a condição da aula está no ar até ${prazo}`,
       text: `Olá, ${primeiro}!\n\nComo combinei na aula, o link está aqui: ${link}\n\n`
         + `A condição especial vale até ${prazo}. Depois disso a página volta ao valor normal — `
@@ -83,6 +106,17 @@ function corpo(etapa, { nome, titulo, link, fechaEm, linkPlano }) {
     };
   }
   if (etapa === 'vespera') {
+    if (ehPlano) {
+      return {
+        subject: 'A pergunta que mais me fazem sobre a plataforma',
+        text: `Olá, ${primeiro}!\n\n"Isso serve para quem está começando?"\n\n`
+          + `Serve, e por um motivo que eu mostrei ao vivo: o trabalho que eu levava dias para `
+          + `fazer no braço — varrer leiloeiro por leiloeiro, ler edital e matrícula, calcular se `
+          + `a conta fecha — a ferramenta faz em minutos. Quem está começando é justamente quem `
+          + `mais perde tempo (e dinheiro) fazendo isso errado.\n\n${link}\n\n`
+          + `A condição da aula vale até ${prazo}.${assinar}`,
+      };
+    }
     return {
       subject: `A dúvida que mais me perguntam sobre ${titulo}`,
       text: `Olá, ${primeiro}!\n\nA pergunta que mais recebo é: "eu preciso ter muito dinheiro para começar?".\n\n`
@@ -96,7 +130,8 @@ function corpo(etapa, { nome, titulo, link, fechaEm, linkPlano }) {
   if (etapa === 'ultima_chamada') {
     return {
       subject: `Encerra hoje: ${titulo}`,
-      text: `Olá, ${primeiro}!\n\nA condição do ${titulo} encerra hoje, ${prazo}.\n\n${link}\n\n`
+      text: `Olá, ${primeiro}!\n\nA condição ${ehPlano ? 'que apresentei na aula' : `do ${titulo}`} `
+        + `encerra hoje, ${prazo}.\n\n${link}\n\n`
         + `Se for para deixar passar, tudo bem — só não quero que passe por esquecimento.${assinar}`,
     };
   }
@@ -116,9 +151,12 @@ export default async function handler(req, res) {
   if (!isCronAuthorized(req)) return res.status(401).json({ error: 'nao_autorizado' });
 
   // ── 1. Quais aulas têm oferta ligada ───────────────────────────────────────
+  // Produto OU plano. O `or` do PostgREST em vez de dois `not is null` empilhados: com
+  // `and` implícito, uma aula que vende só plano ficaria de fora e nunca mandaria nada.
   const { data: eventos, error: eEv } = await supabase.from('eventos_live')
-    .select('slug, titulo, oferta_produto_tipo, oferta_produto_id')
-    .eq('ativo', true).not('oferta_produto_id', 'is', null);
+    .select('slug, titulo, oferta_produto_tipo, oferta_produto_id, oferta_plano_key')
+    .eq('ativo', true)
+    .or('oferta_produto_id.not.is.null,oferta_plano_key.not.is.null');
   // Leitura falhou NÃO vira "nenhum lançamento em curso": aborta para o cron acusar.
   if (eEv) return res.status(500).json({ error: 'eventos_ilegiveis', detalhe: eEv.message });
   if (!eventos?.length) return res.status(200).json({ ok: true, eventos: 0, enviados: 0 });
@@ -133,10 +171,14 @@ export default async function handler(req, res) {
 
     // A etapa é a MESMA para todo o público do evento: ela vem do relógio da oferta.
     const fechaEm = publico[0].fecha_em;
-    if (!fechaEm) { porEvento.push({ slug: ev.slug, publico: publico.length, etapa: 'sem_janela' }); continue; }
+    const ofertaTipo = publico[0].oferta_tipo;
+    // Sem prazo não há sequência. Vale para os dois casos: curso sem janela cadastrada e
+    // aula de plano sem `oferta_fecha_em`. Mandar "encerra hoje" sem data de encerramento
+    // seria urgência inventada — e a pessoa percebe.
+    if (!fechaEm) { porEvento.push({ slug: ev.slug, publico: publico.length, etapa: 'sem_prazo' }); continue; }
     const horas = (new Date(fechaEm).getTime() - Date.now()) / 3600000;
-    const etapa = etapaPor(horas);
-    porEvento.push({ slug: ev.slug, publico: publico.length, horas: Math.round(horas), etapa });
+    const etapa = etapaPor(horas, ofertaTipo);
+    porEvento.push({ slug: ev.slug, tipo: ofertaTipo, publico: publico.length, horas: Math.round(horas), etapa });
     if (!etapa) continue;
 
     const ids = publico.map(p => p.user_id);
@@ -144,7 +186,11 @@ export default async function handler(req, res) {
     // Dedup: quem já recebeu ESTA etapa deste produto sai. `error` checado e ABORTA —
     // se esta leitura virasse lista vazia, "ninguém recebeu ainda" e todo mundo receberia
     // de novo. Melhor não mandar hoje do que mandar duas vezes.
-    const alvo = `${ev.oferta_produto_id}|${etapa}`;
+    // Chave de dedup por OFERTA, não por produto: a mesma pessoa pode passar por um
+    // lançamento de curso e depois por um de assinatura, e são sequências diferentes.
+    const alvo = ofertaTipo === 'plano'
+      ? `plano:${ev.oferta_plano_key}|${etapa}`
+      : `${ev.oferta_produto_id}|${etapa}`;
     const { data: jaEnviados, error: eDedup } = await supabase.from('eventos_atividade')
       .select('user_id').eq('tipo', 'lancamento_email').eq('alvo', alvo).in('user_id', ids);
     if (eDedup) return res.status(500).json({ error: 'dedup_ilegivel', detalhe: eDedup.message });
@@ -152,11 +198,16 @@ export default async function handler(req, res) {
 
     // Quem tem compra PENDENTE recente é do outro cron (recuperação de checkout). Mandar
     // os dois no mesmo dia sobre a mesma venda faz os dois parecerem automação cega.
-    const { data: pendentes, error: ePend } = await supabase.from('compras_produtos')
-      .select('user_id').eq('produto_id', ev.oferta_produto_id).eq('status', 'pendente')
-      .in('user_id', ids).gte('criado_em', new Date(Date.now() - 10 * 86400000).toISOString());
-    if (ePend) return res.status(500).json({ error: 'pendentes_ilegiveis', detalhe: ePend.message });
-    const emRecuperacao = new Set((pendentes || []).map(r => r.user_id));
+    // Só se aplica a oferta de PRODUTO: assinatura abandonada não deixa linha em
+    // compras_produtos, e filtrar por um id nulo devolveria lista vazia com cara de "ninguém".
+    let emRecuperacao = new Set();
+    if (ofertaTipo === 'produto') {
+      const { data: pendentes, error: ePend } = await supabase.from('compras_produtos')
+        .select('user_id').eq('produto_id', ev.oferta_produto_id).eq('status', 'pendente')
+        .in('user_id', ids).gte('criado_em', new Date(Date.now() - 10 * 86400000).toISOString());
+      if (ePend) return res.status(500).json({ error: 'pendentes_ilegiveis', detalhe: ePend.message });
+      emRecuperacao = new Set((pendentes || []).map(r => r.user_id));
+    }
 
     const { data: perfis, error: ePerfis } = await supabase.from('perfis')
       .select('id, nome, role, ativo').in('id', ids);
@@ -173,9 +224,13 @@ export default async function handler(req, res) {
       if (etapa === 'downsell' && ROLES_PAGANTES.has(role)) continue;
       if (fila.some(f => f.userId === p.id)) continue;   // um e-mail por pessoa por execução
       fila.push({
-        userId: p.id, nome: p.nome || alvoPub.nome, etapa, alvo,
+        userId: p.id, nome: p.nome || alvoPub.nome, etapa, alvo, ofertaTipo,
         titulo: alvoPub.titulo || ev.titulo,
-        link: `${BASE}/#/p/${alvoPub.produto_tipo}/${alvoPub.produto_id}`,
+        // Sem `&ciclo=`: mensal ou anual é escolha da pessoa na tela de pagamento, e um
+        // parâmetro que o checkout não lê prometeria na URL o que a tela não cumpre.
+        link: ofertaTipo === 'plano'
+          ? `${BASE}/#/checkout?plano=${alvoPub.plano_key}`
+          : `${BASE}/#/p/${alvoPub.produto_tipo}/${alvoPub.produto_id}`,
         linkPlano: `${BASE}/#/checkout?plano=top2`,
         fechaEm,
       });

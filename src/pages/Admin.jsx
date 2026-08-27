@@ -657,7 +657,7 @@ function CursosTab() {
                 catalogo={catalogo} excluirId={form.id}
                 cor="#7C3AED" descPadrao={30}
                 titulo="Oferta em destaque — “quer incluir também?”"
-                ajuda="Aparece dentro da caixa de compra, UMA POR VEZ: ao aceitar a primeira, a próxima surge. Entra na mesma compra. Assinatura não entra aqui — só cursos e eBooks." />
+                ajuda="Aparece dentro da caixa de compra, UMA POR VEZ: ao aceitar a primeira, a próxima surge. Entra na mesma compra. Assinatura não é vendida aqui — mas pode ser CONCEDIDA como bônus de quem leva os dois (é assim que se monta o combo, sem cadastrar um produto combo)." />
             )}
             {!form.gratuito && (
               <BumpSelector
@@ -859,6 +859,10 @@ function BumpSelector({ valor, onChange, catalogo, excluirId, titulo, ajuda, cor
               : [...sel, { tipo: it.tipo, id: it.id, desconto_pct: descPadrao }]);
   const setDesc = (it, v) => onChange(sel.map(x =>
     (x.id === it.id && x.tipo === it.tipo) ? { ...x, desconto_pct: Math.max(0, Math.min(90, Number(v) || 0)) } : x));
+  // Concessão de plano na OFERTA, não no produto: é assim que "levar os dois cursos dá 6
+  // meses de Investidor Pro" existe sem um produto combo. Só recebe quem ACEITA este item.
+  const setPlano = (it, campos) => onChange(sel.map(x =>
+    (x.id === it.id && x.tipo === it.tipo) ? { ...x, ...campos } : x));
   const itens = (catalogo || []).filter(it => it.id !== excluirId);
   if (!itens.length) return null;
   return (
@@ -882,6 +886,28 @@ function BumpSelector({ valor, onChange, catalogo, excluirId, titulo, ajuda, cor
                     onChange={e => setDesc(it, e.target.value)}
                     style={{ width: 58, padding: '5px 7px', border: '1px solid #cbd5e1', borderRadius: 6, fontSize: 13 }} />
                   % de desconto
+                </label>
+              )}
+              {on && (
+                <label style={{ fontSize: 12.5, color: '#475569', display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
+                  <span style={{ color: '#94a3b8' }}>|</span> levando os dois, ganha
+                  <select value={on.concede_plano || ''}
+                    onChange={e => setPlano(it, { concede_plano: e.target.value || undefined,
+                                                 concede_meses: e.target.value ? (on.concede_meses || 6) : undefined })}
+                    style={{ padding: '5px 7px', border: '1px solid #cbd5e1', borderRadius: 6, fontSize: 12.5 }}>
+                    <option value="">nada</option>
+                    <option value="top2">Investidor Pro</option>
+                    <option value="assessorado">Assessoria</option>
+                  </select>
+                  {on.concede_plano && (
+                    <>
+                      por
+                      <input type="number" min="1" max="36" value={on.concede_meses ?? 6}
+                        onChange={e => setPlano(it, { concede_meses: Math.max(1, Math.min(36, Number(e.target.value) || 6)) })}
+                        style={{ width: 52, padding: '5px 7px', border: '1px solid #cbd5e1', borderRadius: 6, fontSize: 13 }} />
+                      meses
+                    </>
+                  )}
                 </label>
               )}
             </div>
@@ -11194,26 +11220,64 @@ function LiveTab() {
               cobrar de QUEM. Aula sem produto vinculado é simplesmente ignorada por ele. */}
           <label style={{ ...S.label, marginTop:12 }}>Produto que esta aula vende</label>
           <select style={S.input}
-            value={ev.oferta_produto_id ? `${ev.oferta_produto_tipo}:${ev.oferta_produto_id}` : ''}
+            value={ev.oferta_produto_id ? `produto:${ev.oferta_produto_tipo}:${ev.oferta_produto_id}`
+                 : ev.oferta_plano_key ? `plano:${ev.oferta_plano_key}` : ''}
             onChange={e => {
-              const [t, i] = e.target.value.split(':');
-              const campos = e.target.value
-                ? { oferta_produto_tipo: t, oferta_produto_id: i }
-                : { oferta_produto_tipo: null, oferta_produto_id: null };
+              const v = e.target.value;
+              // Os dois campos são exclusivos: escolher um LIMPA o outro na mesma gravação.
+              // Deixar o antigo preenchido faria a aula ter duas ofertas, e o resolvedor
+              // desempata pelo produto — a assinatura recém-escolhida ficaria invisível.
+              let campos = { oferta_produto_tipo: null, oferta_produto_id: null, oferta_plano_key: null };
+              if (v.startsWith('produto:')) {
+                const [, t, i] = v.split(':');
+                campos = { ...campos, oferta_produto_tipo: t, oferta_produto_id: i };
+              } else if (v.startsWith('plano:')) {
+                campos = { ...campos, oferta_plano_key: v.split(':')[1] };
+              }
               setEv({ ...ev, ...campos });
               salvar(campos);
             }}>
             <option value="">Nenhum (sem remarketing de lançamento)</option>
-            {catalogo.map(c => (
-              <option key={`${c.tipo}:${c.id}`} value={`${c.tipo}:${c.id}`}>
-                {c.tipo === 'curso' ? '🎓' : '📘'} {c.titulo}{c.oferta_fecha_em ? ' · com janela' : ' · SEM JANELA'}
-              </option>
-            ))}
+            <optgroup label="Assinatura">
+              <option value="plano:top2">💠 Investidor Pro</option>
+              <option value="plano:assessorado">💠 Assessoria</option>
+            </optgroup>
+            <optgroup label="Curso / eBook">
+              {catalogo.map(c => (
+                <option key={`${c.tipo}:${c.id}`} value={`produto:${c.tipo}:${c.id}`}>
+                  {c.tipo === 'curso' ? '🎓' : '📘'} {c.titulo}{c.oferta_fecha_em ? ' · com janela' : ' · SEM JANELA'}
+                </option>
+              ))}
+            </optgroup>
           </select>
+
+          {/* Prazo próprio: só faz sentido em oferta de PLANO. Curso tem a janela no
+              cadastro dele, e ter dois campos de prazo para o mesmo caso é convite a
+              divergirem — quem resolve qual vale é `lancamento_publico`, num lugar só. */}
+          {ev.oferta_plano_key && (
+            <>
+              <label style={{ ...S.label, marginTop:10 }}>A condição da aula encerra em</label>
+              <input type="datetime-local" style={S.input}
+                value={ev._fecha_em_campo ?? (ev.oferta_fecha_em ? (() => {
+                  const d = new Date(ev.oferta_fecha_em); const p2 = n => String(n).padStart(2,'0');
+                  return `${d.getFullYear()}-${p2(d.getMonth()+1)}-${p2(d.getDate())}T${p2(d.getHours())}:${p2(d.getMinutes())}`;
+                })() : '')}
+                onChange={e => setEv({ ...ev, _fecha_em_campo: e.target.value })}
+                onBlur={() => salvar({ oferta_fecha_em: ev._fecha_em_campo ? new Date(ev._fecha_em_campo).toISOString() : null })} />
+              <div style={{ fontSize:11.5, color:'#7f1d1d', marginTop:6, lineHeight:1.5 }}>
+                ⚠️ Este prazo é o do <strong>bônus/condição que você anuncia na aula</strong>, não do
+                preço: o valor da assinatura é global e continua o mesmo depois. Prometer "preço só
+                até sexta" é desmentido por qualquer pessoa que abra a página de planos.
+                E o ciclo (mensal ou anual) quem escolhe é o cliente, no pagamento.
+              </div>
+            </>
+          )}
+
           <div style={{ fontSize:11.5, color:'#64748b', marginTop:6, lineHeight:1.5 }}>
-            A sequência (abertura → véspera → última chamada → downsell) sai do prazo da
-            <strong> janela de oferta do produto</strong>, não da data da aula. Produto marcado
-            "SEM JANELA" recebe o vínculo mas não dispara e-mail nenhum até ter prazo.
+            A sequência (abertura → véspera → última chamada{ev.oferta_plano_key ? '' : ' → downsell'}) sai
+            do prazo da oferta, não da data da aula. Sem prazo, nenhum e-mail sai — urgência sem
+            data de encerramento a pessoa percebe.
+            {ev.oferta_plano_key && ' Oferta de assinatura não tem downsell: não há degrau abaixo dela.'}
           </div>
 
           <label style={{ ...S.label, marginTop:12 }}>WhatsApp direto (botão "Falar comigo")</label>

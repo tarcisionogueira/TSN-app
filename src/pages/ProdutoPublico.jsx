@@ -304,14 +304,23 @@ export default function ProdutoPublico({ tipo }) {
 
   // ── O CARTÃO DO DOWNSELL ───────────────────────────────────────────────────
   // Usado em dois lugares (dentro da buy box e no aviso de saída), então mora aqui.
-  // O link do plano NÃO carrega `&ciclo=anual`: o checkout escolhe o ciclo no próprio
-  // formulário e ignoraria o parâmetro — mandar um que ninguém lê é prometer na URL o
-  // que a tela seguinte não cumpre.
+  //
+  // O CICLO É DE QUEM PAGA (correção do dono, 27/08). Mensal ou anual se escolhe na tela
+  // de pagamento, então este cartão não pode anunciar "no plano anual" como se estivesse
+  // decidido — a pessoa chegaria no checkout e veria outra coisa. Ele mostra o menor valor
+  // possível como "a partir de", e diz de quem é a escolha.
+  //
+  // O link também não carrega `&ciclo=`: o checkout não lê esse parâmetro, e mandar um que
+  // ninguém lê é prometer na URL o que a tela seguinte não cumpre.
   const CartaoDownsell = ({ compacto }) => {
     if (!downsell) return null;
     const ehPlano = downsell.tipo === 'plano';
     const anual = Number(downsell.preco_anual) || 0;
+    const mensal = Number(downsell.preco_mensal) || 0;
+    // Nem todo plano tem anual (a Assessoria não tem). Sem ele, o mensal é o único valor.
     const mensalNoAnual = anual > 0 ? anual / 12 : 0;
+    const menorMensal = mensalNoAnual > 0 && mensal > 0 ? Math.min(mensalNoAnual, mensal)
+                      : (mensalNoAnual || mensal);
     const titulo = downsell.titulo
       || (ehPlano ? 'Ainda não é hora de investir no curso?' : 'Talvez este seja o seu ponto de partida');
     const texto = downsell.texto
@@ -325,14 +334,16 @@ export default function ProdutoPublico({ tipo }) {
         {ehPlano ? (
           <>
             <div style={{ fontSize: 20, fontWeight: 900, color: '#0f172a', marginBottom: 2 }}>
-              {mensalNoAnual > 0
-                ? `R$ ${mensalNoAnual.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mês`
-                : `R$ ${Number(downsell.preco_mensal || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mês`}
+              {mensalNoAnual > 0 && mensalNoAnual < mensal ? 'a partir de ' : ''}
+              R$ {menorMensal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}<span style={{ fontSize: 14, fontWeight: 700 }}>/mês</span>
             </div>
-            <div style={{ fontSize: 12, color: '#64748b', marginBottom: 12 }}>
-              {mensalNoAnual > 0
-                ? `${downsell.nome} no plano anual (R$ ${anual.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}/ano)`
-                : downsell.nome}
+            <div style={{ fontSize: 12, color: '#64748b', marginBottom: 12, lineHeight: 1.5 }}>
+              {downsell.nome}
+              {mensalNoAnual > 0 && mensalNoAnual < mensal && (
+                <> — mensal por R$ {mensal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} ou anual por
+                  {' '}R$ {anual.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}.
+                  <strong> Você escolhe no pagamento.</strong></>
+              )}
             </div>
             <button onClick={() => { setMostrarDownsell(false); nav(`/checkout?plano=${downsell.plano}${ref ? `&ref=${ref}` : ''}`); }}
               style={{ width: '100%', padding: '13px', background: cor, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 14.5, cursor: 'pointer' }}>
