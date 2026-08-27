@@ -11365,10 +11365,32 @@ function LiveTab() {
               onBlur={() => salvar({ apresentador_cargo: ev.apresentador_cargo || null })} />
           </div>
         </div>
-        <label style={{ ...S.label, marginTop:10 }}>Foto (URL)</label>
-        <input style={S.input} value={ev.apresentador_foto || ''} placeholder="https://…/foto.jpg"
-          onChange={e => setEv({ ...ev, apresentador_foto: e.target.value })}
-          onBlur={() => salvar({ apresentador_foto: ev.apresentador_foto || null })} />
+        {/* FOTO: o campo era só URL, e foi por isso que ficou vazio a campanha inteira —
+            exigia hospedar o JPEG em algum lugar antes de poder colar aqui. `UploadMidia`
+            já existe neste arquivo e resolve os dois problemas de uma vez: sobe para o
+            bucket público `membros-capas` e RE-CODIFICA a imagem no navegador antes de
+            enviar. Essa re-codificação não é zelo: foi o conserto da capa cortada do
+            "Leilões caixa" (03/08) — HEIC do iPhone exportado como JPEG quebrado passa em
+            qualquer checagem de tipo e só aparece como imagem cortada na tela do cliente.
+            O campo de URL continua, para quem já tem a foto hospedada. */}
+        <label style={{ ...S.label, marginTop:10 }}>Foto do apresentador</label>
+        <div style={{ display:'flex', gap:10, alignItems:'flex-start', flexWrap:'wrap' }}>
+          {ev.apresentador_foto && (
+            <img src={ev.apresentador_foto} alt="" style={{ width:64, height:64, borderRadius:10, objectFit:'cover', border:'1px solid #e5e7eb', flexShrink:0 }} />
+          )}
+          <div style={{ flex:'1 1 240px', minWidth:0 }}>
+            <input style={S.input} value={ev.apresentador_foto || ''} placeholder="https://…/foto.jpg (ou envie ao lado)"
+              onChange={e => setEv({ ...ev, apresentador_foto: e.target.value })}
+              onBlur={() => salvar({ apresentador_foto: ev.apresentador_foto || null })} />
+          </div>
+          {/* `salvar(url)` com o valor DIRETO, não lido de `ev`: setState é assíncrono, e
+              gravar a partir do estado aqui salvaria a foto anterior — a mesma armadilha
+              que apagou a edição da bio hoje de manhã. */}
+          <UploadMidia kind="capa" small onDone={url => {
+            setEv(prev => (prev ? { ...prev, apresentador_foto: url } : prev));
+            salvar({ apresentador_foto: url });
+          }} />
+        </div>
         <label style={{ ...S.label, marginTop:10 }}>Bio</label>
         <textarea style={{ ...S.input, minHeight:110, fontFamily:'inherit' }} value={ev.apresentador_bio || ''}
           onChange={e => setEv({ ...ev, apresentador_bio: e.target.value })}
