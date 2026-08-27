@@ -11095,6 +11095,7 @@ function LiveTab() {
   const [erro, setErro] = useState('');
   const [salvando, setSalvando] = useState(false);
   const [criandoSala, setCriandoSala] = useState(false);
+  const [catalogo, setCatalogo] = useState([]);
   const SLUG = 'leilao-ao-vivo';
 
   const carregar = useCallback(async () => {
@@ -11110,6 +11111,16 @@ function LiveTab() {
       .order('criado_em', { ascending: false });
     if (eIns) setErro('Inscrições não carregaram: ' + eIns.message);
     else setInscritos(ins || []);
+    // Catálogo para escolher o que a aula vende. É esse vínculo que o remarketing usa
+    // para saber QUAL oferta cobrar de quem — sem ele o cron não considera a aula.
+    const [{ data: cs }, { data: es }] = await Promise.all([
+      supabase.from('cursos_admin').select('id, titulo, preco, oferta_fecha_em').eq('ativo', true).order('titulo'), // padrao-ok: seletor auxiliar — vazio some com a lista, o resto da aba funciona
+      supabase.from('ebooks_admin').select('id, titulo, preco, oferta_fecha_em').eq('ativo', true).order('titulo'), // padrao-ok: seletor auxiliar — vazio some com a lista, o resto da aba funciona
+    ]);
+    setCatalogo([
+      ...(cs || []).map(c => ({ ...c, tipo: 'curso' })),
+      ...(es || []).map(e => ({ ...e, tipo: 'ebook' })),
+    ]);
   }, []);
   useEffect(() => { carregar(); }, [carregar]);
 
@@ -11178,6 +11189,33 @@ function LiveTab() {
           <div style={{ fontSize:11.5, color:'#64748b', marginTop:6, lineHeight:1.5 }}>
             Aparece na confirmação da inscrição e no e-mail. É o canal do lançamento.
           </div>
+          {/* ── O QUE ESTA AULA VENDE ────────────────────────────────────
+              Sem isto o remarketing não roda: é este vínculo que diz ao cron QUAL oferta
+              cobrar de QUEM. Aula sem produto vinculado é simplesmente ignorada por ele. */}
+          <label style={{ ...S.label, marginTop:12 }}>Produto que esta aula vende</label>
+          <select style={S.input}
+            value={ev.oferta_produto_id ? `${ev.oferta_produto_tipo}:${ev.oferta_produto_id}` : ''}
+            onChange={e => {
+              const [t, i] = e.target.value.split(':');
+              const campos = e.target.value
+                ? { oferta_produto_tipo: t, oferta_produto_id: i }
+                : { oferta_produto_tipo: null, oferta_produto_id: null };
+              setEv({ ...ev, ...campos });
+              salvar(campos);
+            }}>
+            <option value="">Nenhum (sem remarketing de lançamento)</option>
+            {catalogo.map(c => (
+              <option key={`${c.tipo}:${c.id}`} value={`${c.tipo}:${c.id}`}>
+                {c.tipo === 'curso' ? '🎓' : '📘'} {c.titulo}{c.oferta_fecha_em ? ' · com janela' : ' · SEM JANELA'}
+              </option>
+            ))}
+          </select>
+          <div style={{ fontSize:11.5, color:'#64748b', marginTop:6, lineHeight:1.5 }}>
+            A sequência (abertura → véspera → última chamada → downsell) sai do prazo da
+            <strong> janela de oferta do produto</strong>, não da data da aula. Produto marcado
+            "SEM JANELA" recebe o vínculo mas não dispara e-mail nenhum até ter prazo.
+          </div>
+
           <label style={{ ...S.label, marginTop:12 }}>WhatsApp direto (botão "Falar comigo")</label>
           <input style={S.input} value={ev.whatsapp_direto || ''} placeholder="5571900000000"
             onChange={e => setEv({ ...ev, whatsapp_direto: e.target.value.replace(/\D/g, '') })}

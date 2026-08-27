@@ -313,6 +313,22 @@
     {
       "path": "/api/recuperacao-checkout-cron",
       "schedule": "0 13 * * *"
+    },
+    {
+      "path": "/api/lancamento-remarketing-cron",
+      "schedule": "0 12 * * *"
+    },
+    {
+      "path": "/api/lancamento-remarketing-cron",
+      "schedule": "0 16 * * *"
+    },
+    {
+      "path": "/api/lancamento-remarketing-cron",
+      "schedule": "0 22 * * *"
+    },
+    {
+      "path": "/api/lancamento-remarketing-cron",
+      "schedule": "0 1 * * *"
     }
   ]
 }
