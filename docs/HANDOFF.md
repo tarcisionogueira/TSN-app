@@ -4,6 +4,154 @@
 
 ---
 
+## 🎥 27/08 (sessão 8) — A CAMPANHA DA AULA: O QUE JÁ SEGURA, E OS DOIS BURACOS QUE FALTAM
+
+Aula ao vivo em **02/09, 19h** (`leilao-ao-vivo`). Sala já existe e é **recorrente** —
+`meet.google.com/nvz-bfgq-mrs`, o mesmo link toda quarta, então bio e anúncio não precisam
+mudar. Oferta configurada: **plano `top2`**, janela fechando **05/09 23:59**. Isso responde uma
+dúvida que ficou de pé por dias: **os dois cursos NÃO bloqueiam a aula** — o que ela vende é
+plano, não curso.
+
+### O que subiu (5 commits, `2c011b2` → `bdca332`)
+
+**1. `6178d32` — a landing era a porta dos fundos do cadastro.** Ela CRIA CONTA, mas validava
+com régua própria e mais frouxa: `nome.length >= 2` e `whatsapp.length >= 10`, no front **e** no
+servidor. Ou seja, o dado que o cadastro recusa desde 18/08 entrava por aqui — a inscrição de
+teste gravou `tarcisio`, primeiro nome solto. O invariante `nome_sem_sobrenome` está em **2/2, no
+limite**, e essa tela era o único caminho aberto para estourá-lo. Agora reusa `validarNome` /
+`validarTelefone`, com máscara de digitação. Criado `api/_telefone.js`, cópia-espelho de
+`src/lib/telefone.js`, na mesma divisão que `api/_nome.js` documenta. **Mudou a régua num lado,
+mude no outro.**
+> Dois detalhes que a máscara resolve na ORIGEM: dígito sobrando fica impossível (corte em 11 +
+> `maxLength` do formato), e o **`+55` do autopreenchimento** — sem tirar o 55, um corte cego em
+> 11 dígitos transforma `+55 71 99650-2234` em `(55) 71996-5022`, **o número errado com cara de
+> certo**, no campo pelo qual sai o link da sala. `normalizarTelefoneBR` só tira quando o resto
+> sobra com tamanho de telefone, então o DDD 55 (Santa Maria/RS) fica intacto.
+
+**2. `c18a172` — "Atualizando…" era estado FINAL na landing da campanha.** `erros_cliente`
+registrou às 14:09 em `/live/leilao-ao-vivo`: `vite:preloadError PRESO`. O anti-loop permitia UMA
+recarga por janela de 10s e recusava a segunda **em silêncio** — a pessoa ficava num spinner que
+nunca ia atualizar nada. O comentário no código já admitia: *"(Se o anti-loop bloquear o reload,
+some por navegação)"* — e numa landing não existe navegação, a pessoa fecha a aba.
+Virou **orçamento**: 2 tentativas por rajada (a segunda com cache-busting `?_r=` antes do `#`,
+porque o motivo mais comum de a 1ª não resolver é o `index.html` voltar do cache apontando para
+os mesmos chunks que sumiram), orçamento que renova após 1 minuto calmo, e **quando estoura a
+pessoa é avisada com botão**. O aviso é DOM cru (o módulo da tela pode nem ter carregado), some
+ao navegar, e o texto não afirma a causa que não pode verificar (`navigator.onLine` separa
+"versão nova" de "conexão caiu").
+
+**3. `3e4901e` + `3c5a27e` — o `semCota` era descartado no destructuring (e a lição sobre
+diagnóstico).** `fetchTenant` sempre soube dizer qual "não" — devolve `semCota: true` quando o
+teto do Bright Data recusa — e o chamador fazia `const { html } = await fetchTenant(url)`,
+jogando o resto fora. A recusa por ORÇAMENTO virava um `sem++` idêntico ao de erro de rede, a
+coleta seguia e a saúde gravava `status: ok` com total parcial. A correção de 12/08 só cobria o
+tudo-ou-nada (`prontos.length === 0`); a coleta cortada no lote 9 de 40 passava pela fresta.
+Mesmo defeito em `lib/motor/runner.mjs:82`. Corrigido nos 4 pontos da cadeia + status novo
+**`parcial_cota`**, que sai do teste de regressão **e** da amostra que ENSINA o piso
+(`fonte_baseline_aprendida` filtra por `status='ok'` — coletas truncadas vinham puxando o piso
+para baixo).
+
+> ⚠️ **ERRO MEU, CORRIGIDO EM `3c5a27e` — vale mais que o conserto.** Atribuí a queda do CALIL a
+> esse bug. Está **errado**. O workflow diz por extenso (`scraper-soleon.yml:4`) que calil/vegas
+> usam **fetch grátis** — só o 3torres cai no Bright Data — e `brightdata_uso_proposito_dia` não
+> tem **nenhuma** requisição `soleon` em 26/08, nem em 20/08, o dia bom. Liguei os dois porque a
+> assinatura batia com um padrão conhecido (forma #5) e **não conferi o caminho de rede antes de
+> afirmar** — o mesmo erro que o CLAUDE.md descreve, cometido dentro da investigação dele.
+> A correção protege o **TORRES3** e as fontes do motor que usam o caminho pago. A queda do CALIL
+> continua **ABERTA**.
+
+**4. `bdca332` — a foto do apresentador não faltava; faltava onde pôr.** O campo era só "Foto
+(URL)": para preenchê-lo era preciso hospedar o JPEG antes. Por isso atravessou a campanha vazio.
+Agora tem botão de upload (`UploadMidia kind="capa"`), que sobe para o bucket **público**
+`membros-capas` (conferido — URL assinada quebraria para o visitante anônimo, que é todo mundo
+vindo do anúncio) e **re-codifica a imagem no navegador**: foi o conserto da capa cortada do
+"Leilões caixa" (03/08), e HEIC de iPhone exportado como JPEG quebrado passa em qualquer checagem
+de tipo. Exibe em **104×104 com recorte central** — rosto precisa estar centralizado.
+
+### 🔴 OS DOIS BURACOS DA CAMPANHA (achados no fim da sessão, NÃO consertados)
+
+**A. O e-mail de confirmação promete um lembrete que ninguém envia.** O texto diz literalmente
+*"Entre no grupo do WhatsApp para receber o link da sala **e o lembrete antes de começar**"*. Mas:
+`link_sala` **não é nem lido** em `api/live-inscrever.js:89` (seleciona `link_grupo`), e **não
+existe cron de lembrete** — procurei nos 56 agendados; `lancamento-remarketing-cron` é a sequência
+do *depois* da aula. Quem se inscreve recebe a confirmação e **silêncio até quarta**. A entrega do
+link depende de duas coisas manuais: a pessoa entrar no grupo, e alguém lembrar de postar lá.
+É **uma promessa entregue como se fosse mecanismo** — e está sobre tráfego pago.
+> Desenho proposto: cron de hora em hora, 24h antes (link do Meet + "adicione na agenda") e ~30min
+> antes ("estamos começando"), dedup por inscrito **e** por janela.
+
+**B. O Meta não aprende nada com as inscrições.** `api/_meta-capi.js` só sabe disparar
+**`Purchase`**, do webhook de pagamento. Não existe evento `Lead` — nem navegador nem servidor — e
+**`metaTrack` está definido e nunca é chamado em lugar nenhum do app**. Consequência: o Meta
+otimiza por **clique**, porque é o único sinal que recebe; nunca sabe quem se inscreveu, logo não
+há lookalike nem público de remarketing de inscritos. Numa campanha de captação é a diferença
+entre pagar por curioso e pagar por inscrito.
+
+### 🩺 VERIFICAÇÃO FINAL — CLIENTE 360 (27/08, fim do dia)
+
+| | |
+|---|---|
+| `relatorios_falha_24h` | **0** ✅ |
+| `erros_invisiveis_24h` / `7d` | **0 / 0** ✅ |
+| `alerta_incompleto_7d` | **0** ✅ |
+| `falhas_recentes` | `[]` ✅ |
+| `clientes_com_erro` | **1** ⚠️ (verde é 0) |
+| `relatorios_falha_7d` | 1 |
+| Clientes | 68 — `explorador` 62, `top2` 5, `assessorado` 1 |
+| Relatórios | mercado 60 · documental 19 · laudo 4 |
+| Tráfego 7d | **1.050 visitantes**, 4.332 pageviews — `/leiloes` (663) puxado por Google orgânico |
+
+**🔴 O achado do 360: metade dos pagantes não está usando.** 3 dos 6:
+| perfil | plano | assinou | relatórios | último |
+|---|---|---|---|---|
+| `37c2d966` | top2 | **06/08** | **0** | nunca |
+| `b93b2411` | top2 | 01/07 | 1 | 01/07 |
+| `6b35b390` | assessorado | 06/07 | 2 | 04/08 |
+
+O `37c2d966` é o mais agudo: **3 semanas pagando e nunca gerou um relatório**. Churn em formação —
+mais barato ver aqui do que na fatura.
+
+**`sem_perfil`: 28 de 68 (41%)** não responderam a triagem — é o que faz o e-mail de oportunidade
+sair genérico.
+
+**Erros abertos (3):** 2× `postMessage: Java object is gone` em `/` (assinatura de WebView / navegador
+in-app — provavelmente Instagram, e é de onde vem o tráfego da campanha) e 1× `/admin`
+`rpc/admin_qa_invariantes` **500 statement timeout** (23/08), esse real e nosso.
+
+---
+
+## 📌 PENDÊNCIAS PARA 28/08 — ORDEM SUGERIDA
+
+**Trava a aula de quarta (5 dias):**
+1. **Lembrete pré-aula** (buraco A) — decidir 24h+30min ou só uma janela, e se o WhatsApp direto
+   entra no e-mail junto com o link da sala. É o que decide **quantas pessoas aparecem**.
+2. **Evento `Lead` no Meta** (buraco B) — pouco código, muita verba. Reaproveita `_meta-capi.js`.
+
+**Depende do dono:**
+3. `apresentador_foto` — **agora tem botão de upload**, é só enviar (Comercial → Aula ao vivo).
+4. `LOCATIONIQ_USD_POR_1000` na Vercel — fecha o invariante `geocode_sem_preco` (985 chamadas já
+   consumidas sem preço configurado).
+5. Fatura do Google de julho (~US$ 123 estimados).
+6. Os dois cursos (R$ 1.497 cada) — **não bloqueiam a aula**, a oferta é o plano `top2`.
+
+**Técnico:**
+7. **CALIL — ABERTO.** 9 lotes contra piso 18, `expirados_recentes: 0`. A queda é no **fetch
+   grátis** falhando nas páginas de detalhe, com a listagem também encolhendo (166 → 125 → 75).
+   ⚠️ **O recon do SOLEON não serve para diagnosticar isto, e é o próximo conserto:** rodei em
+   27/08 e ele imprimiu `listagem não veio (challenge/teto)` em **0,5 s** e saiu com **exit 0**.
+   Dois defeitos numa linha — funde as duas causas numa string só (é a forma #5 dentro da própria
+   ferramenta de diagnóstico) e **sai verde sem ter medido nada**. Some isso ao fato de o Actions
+   rodar em IP de datacenter, que o CALIL bloqueia: quem coleta de verdade é o runner residencial.
+8. `alerta_acima_do_capital` **2/0** — dois lotes foram por e-mail a cliente acima do teto de
+   capital que ele declarou na triagem.
+9. `/admin` `admin_qa_invariantes` **500 por statement timeout** (23/08) — a tela de invariantes do
+   admin está quebrando para o dono.
+10. **`37c2d966`** — pagante desde 06/08 com zero relatórios. Ativação, não bug.
+11. **LJUD** — cota Bright Data reseta **segunda 31/08** (está 543/495, saturada).
+12. **31/08 (segunda)** — verificação obrigatória do cron de e-mail de oportunidade.
+
+---
+
 ## 🔎 27/08 (sessão 7) — LJUD: O PARSER NÃO ESTÁ QUEBRADO (e a prova)
 
 462 lotes ativos sem foto, a 2ª maior parcela do `sem_foto`. **Diferente da HASTA, aqui não
