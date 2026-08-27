@@ -57,6 +57,8 @@ export function metricasColeta(imoveis) {
 export async function registrarSaude(supabase, fonte, imoveis, estrategia, validacao) {
   const m = validacao?.metricas || metricasColeta(imoveis || []);
   const semCota = validacao?.semCota === true;
+  // Quantos lotes ficaram POR BUSCAR porque o teto de orçamento recusou NO MEIO da coleta.
+  const cotaNegada = Number(validacao?.cotaNegada) || 0;
   let status = 'ok', motivo = validacao?.motivo || '';
   // "NÃO TENTEI" NÃO É "FALHOU" (16/08). O `semCota` já era honrado no teste de regressão
   // logo abaixo e no texto do `motivo` — mas o STATUS, que é o campo que o monitor, os
@@ -68,7 +70,18 @@ export async function registrarSaude(supabase, fonte, imoveis, estrategia, valid
   // × consertar parser), então o status precisa distinguir os dois.
   // É a forma #5 do CLAUDE.md pela metade: o freio de custo tem que dizer QUAL "não".
   if (!m.n) status = semCota ? 'sem_cota' : 'falhou';
-  else if (validacao && validacao.ok === false) status = 'degradado';
+  // COLETA CORTADA PELO ORÇAMENTO NO MEIO (27/08) — o buraco que a correção de 16/08 deixou.
+  // Aquela cobria o tudo-ou-nada: `m.n === 0` vira 'sem_cota' em vez de 'falhou'. Mas quando
+  // a cota acaba DEPOIS de alguns lotes, `m.n > 0` e a linha saía como 'ok' — com um total
+  // que não mede a fonte, e sim até onde o dinheiro deu. O CALIL enumerou 75 lotes em 26/08,
+  // gravou 9 com todos os campos completos, e foi acusado de regressão contra o piso 18:
+  // exatamente o desfecho que o status 'sem_cota' existe para impedir, escapando pela fresta
+  // do run parcial. `parcial_cota` é o mesmo "não" do orçamento, dito com o número junto.
+  else if (cotaNegada > 0) {
+    status = 'parcial_cota';
+    motivo = [motivo, `coleta interrompida pelo teto de orçamento: ${cotaNegada} lote(s) por buscar `
+      + `(decisão de orçamento, não regressão da fonte)`].filter(Boolean).join('; ');
+  } else if (validacao && validacao.ok === false) status = 'degradado';
   try {
     const enumerados = Number.isFinite(validacao?.enumerados) ? validacao.enumerados : null;
     const { data: ant } = await supabase.from('fonte_saude')
@@ -80,10 +93,14 @@ export async function registrarSaude(supabase, fonte, imoveis, estrategia, valid
     const atual = usaEnum ? enumerados : m.n;
     const anterior = usaEnum ? Number(ant.enumerados) : Number(ant?.total);
     const rotulo = usaEnum ? 'listados' : 'coletados';
-    if (anterior > 0 && atual < anterior * 0.5 && !semCota) {
+    // `cotaNegada` entra junto com `semCota`: comparar um total truncado pelo orçamento
+    // contra a execução anterior acusa queda que o leiloeiro não teve.
+    if (anterior > 0 && atual < anterior * 0.5 && !semCota && !cotaNegada) {
       if (status === 'ok') status = 'degradado';
       motivo = [motivo, `queda vs anterior (${rotulo} ${atual}<${anterior})`].filter(Boolean).join('; ');
       console.log(`  ⚠️ [${fonte}] REGRESSÃO: ${rotulo} caiu de ${anterior} para ${atual}`);
+    } else if (cotaNegada && anterior > 0) {
+      console.log(`  💰 [${fonte}] coleta parcial: ${cotaNegada} lote(s) não buscados por orçamento (anterior ${anterior}). NÃO é regressão da fonte.`);
     } else if (semCota && anterior > 0) {
       console.log(`  💰 [${fonte}] sem cota: coleta não tentada (anterior ${anterior}). NÃO é regressão da fonte.`);
     }

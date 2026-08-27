@@ -5,6 +5,8 @@
  * por e-mail quando uma conexão que já funcionava quebra ou piora:
  *   - fonte esperada sem coleta recente (> MAX_IDADE_H) → scraper parou / seletor mudou
  *   - status 'falhou' (0 imóveis) ou 'degradado' (validação de qualidade reprovou)
+ *   - status 'sem_cota' (nem tentou) ou 'parcial_cota' (tentou e o teto cortou no meio) —
+ *     os dois pedem a MESMA ação, liberar orçamento, e nenhum é regressão do leiloeiro
  *   - queda de volume registrada pelo próprio scraper
  * Só envia e-mail se houver problema. Idempotente. Autorizado por CRON_SECRET.
  *
@@ -199,13 +201,21 @@ async function handler(req) {
     const idadeH = (agoraMs - new Date(u.executado_em).getTime()) / 3600000;
     if (idadeH > MAX_IDADE_H) {
       problemas.push({ fonte, tipo: 'coleta parada', detalhe: `última coleta há ${idadeH.toFixed(0)}h (${u.total} imóveis)` });
-    } else if (u.status === 'sem_cota') {
+    } else if (u.status === 'sem_cota' || u.status === 'parcial_cota') {
       // COTA ESGOTADA NÃO É FONTE QUEBRADA (16/08). A coleta nem foi tentada — o teto
       // semanal do fornecedor pago recusou. Vira alerta próprio porque a ação é OUTRA:
       // liberar orçamento, não consertar parser. Misturar com 'falhou' fez 4 fontes
       // sadias passarem 3 dias contadas como paradas e enterrou a CREPALDI, essa sim
       // quebrada de verdade — que é como um alerta ruidoso vira alerta ignorado.
-      problemas.push({ fonte, tipo: 'sem cota do fornecedor', detalhe: u.motivo || 'teto de orçamento atingido — coleta não tentada' });
+      // `parcial_cota` (27/08) entra AQUI e não numa vala própria: a ação que resolve é a
+      // mesma — liberar orçamento. A diferença é que este tentou e foi cortado no meio, então
+      // o acervo ficou incompleto sem ninguém ver. Sem esta linha ele não cairia em NENHUM
+      // ramo do encadeamento e sumiria do alerta, que é como o CALIL passou despercebido.
+      problemas.push({
+        fonte,
+        tipo: u.status === 'parcial_cota' ? 'coleta cortada por orçamento' : 'sem cota do fornecedor',
+        detalhe: u.motivo || 'teto de orçamento atingido — coleta não tentada',
+      });
     } else if (u.status === 'falhou') {
       // Fonte declarada PARADA não vira alerta de 'falhou': o zero é conhecido e esperado
       // (leiloeiro sem acervo publicado). A checagem de FRESCOR acima continua valendo, então

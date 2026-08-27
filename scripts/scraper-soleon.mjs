@@ -236,6 +236,10 @@ const SEM_COTA = new Set();
 // com um lote novo grava 1. Foi essa bimodalidade que acusou a VEGAS de regressão em 17/08
 // (1 lote NOVO capturado corretamente × 40 re-raspagens do dia anterior). Ver `_saude-fonte.mjs`.
 const ENUMERADOS = new Map();
+// Quantos lotes ficaram POR BUSCAR por decisão de orçamento. Diferente de SEM_COTA, que só
+// marca a fonte cuja LISTAGEM foi recusada: aqui é a coleta que começou, andou e foi cortada
+// no meio — o caso que passava despercebido até 27/08 (ver o bloco em `coletarTenant`).
+const COTA_NEGADA = new Map();
 
 async function enumerarLotes(tenant) {
   const setUrls = new Set();
@@ -300,17 +304,38 @@ async function coletarTenant(tenant) {
   console.log(`  [${tenant.fonte}] via ${via} · enumerados ${urls.length} · no banco ${existentes.size} · novos ${novos.length} · processando ${alvo.length}`);
 
   const prontos = [];
-  let sem = 0, reprov = 0;
-  for (const url of alvo) {
-    const { html } = await fetchTenant(url);
-    if (!html) { sem++; continue; }
-    const row = montarRow(tenant, url, parseDetalhe(html, url));
+  let sem = 0, reprov = 0, cotaNegada = 0;
+  for (let i = 0; i < alvo.length; i++) {
+    const r = await fetchTenant(alvo[i]);
+    // ─── O FREIO DE ORÇAMENTO NO MEIO DA COLETA (27/08) ──────────────────────────────
+    // `fetchTenant` SEMPRE soube dizer qual "não" (devolve `semCota: true` quando o teto
+    // recusou), e aqui o valor era jogado fora no destructuring `const { html } = …`:
+    // a página recusada por ORÇAMENTO virava um `sem++` idêntico ao de um erro de rede, a
+    // coleta seguia, e o run gravava `status: ok` com um total parcial.
+    //
+    // O estrago medido no CALIL: 26/08 enumerou 75 lotes no site e gravou 9, com todos os
+    // campos 100% completos — e `fonte_regressao_suspeita()` acusou regressão de parser
+    // contra o piso 18. Parser intacto; o que faltava era cota. É a forma #5 do CLAUDE.md
+    // pela terceira vez nesta base, agora DENTRO de um run bem-sucedido: a correção de
+    // 12/08 só cobria o tudo-ou-nada (`prontos.length === 0`).
+    //
+    // Recusou uma, recusa as seguintes — insistir só gasta tempo. Para aqui e conta o que
+    // ficou para trás, que é o número honesto: não é "a fonte tem 9", é "vi 9 de 40".
+    if (r.semCota) {
+      cotaNegada = alvo.length - i;
+      COTA_NEGADA.set(tenant.fonte, cotaNegada);
+      SEM_COTA.add(tenant.fonte);
+      console.log(`  💰 [${tenant.fonte}] teto de orçamento no lote ${i + 1}/${alvo.length} — ${cotaNegada} por buscar. NÃO é regressão da fonte.`);
+      break;
+    }
+    if (!r.html) { sem++; continue; }
+    const row = montarRow(tenant, alvo[i], parseDetalhe(r.html, alvo[i]));
     const q = checarQualidade(row, { estrito: false });
     if (q.descartar) { reprov++; continue; }
     prontos.push(row);
     await sleep(350);
   }
-  console.log(`  [${tenant.fonte}] ${prontos.length} prontos · ${reprov} descartados · ${sem} sem detalhe`);
+  console.log(`  [${tenant.fonte}] ${prontos.length} prontos · ${reprov} descartados · ${sem} sem detalhe · ${cotaNegada} sem cota`);
   return prontos;
 }
 
@@ -378,8 +403,13 @@ async function main() {
     // ele decide se houve regressão de verdade. Passar só no ramo de falha deixaria de fora o
     // caso da VEGAS — que coletou 1 lote com sucesso e mesmo assim foi acusada.
     const enumerados = ENUMERADOS.get(tenant.fonte) ?? null;
+    // `cotaNegada` vai no ramo de SUCESSO também, e é o ponto: a coleta cortada no meio
+    // pelo orçamento devolve lotes de verdade, então cai aqui — e sem este número a linha
+    // sairia como medição sadia da fonte.
+    const cotaNegada = COTA_NEGADA.get(tenant.fonte) || 0;
     await registrarSaude(supabase, tenant.fonte, rows, 'soleon',
-      rows.length ? { enumerados } : {
+      rows.length ? { enumerados, cotaNegada } : {
+        cotaNegada,
         ok: false,
         semCota: SEM_COTA.has(tenant.fonte),
         enumerados,

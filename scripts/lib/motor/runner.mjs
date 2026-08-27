@@ -65,7 +65,7 @@ async function enumerar(fetchFonte, tenant, cfg, { maxPages, debug, semBD }) {
 async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debug, semBD }) {
   const { urls, fetchOk, via } = await enumerar(fetchFonte, tenant, cfg, { maxPages: cfg.maxPages, debug, semBD });
   console.log(`[${tenant.fonte}] enumerados ${urls.length} lote(s)${via ? ` (via ${via})` : ''}`);
-  const prontos = []; let encerrados = 0, sem = 0, reprov = 0;
+  const prontos = []; let encerrados = 0, sem = 0, reprov = 0, cotaNegada = 0;
   if (urls.length) {
     const ids = urls.map(u => idFonte(tenant, cfg.parse.idDaUrl(u)));
     const existentes = new Set();
@@ -77,8 +77,22 @@ async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debu
     const novos = urls.filter(u => !existentes.has(idFonte(tenant, cfg.parse.idDaUrl(u))));
     const alvo = (novos.length ? novos : urls).slice(0, maxLotes);
     console.log(`[${tenant.fonte}] no banco ${existentes.size} · novos ${novos.length} · processando ${alvo.length}`);
-    for (const url of alvo) {
-      const { html } = await fetchFonte(url, { semBD });
+    for (let i = 0; i < alvo.length; i++) {
+      const url = alvo[i];
+      const r = await fetchFonte(url, { semBD });
+      // O FREIO DE ORÇAMENTO NO MEIO DA COLETA (27/08). O fetch de cada fonte já devolve
+      // `semCota: true` quando o teto recusa, e aqui isso era descartado no destructuring
+      // `const { html } = …`: a página recusada por ORÇAMENTO virava um `sem++` igual ao de
+      // um erro de rede, a coleta seguia e a saúde gravava `ok` com total parcial — o freio
+      // de custo entregue como medição da fonte (forma #5). Diagnosticado no CALIL, que
+      // enumerou 75 lotes, gravou 9 e foi acusado de regressão de parser contra o piso 18.
+      // Recusou uma, recusa as próximas: para aqui e conta o que ficou por buscar.
+      if (r?.semCota) {
+        cotaNegada = alvo.length - i;
+        console.log(`💰 [${tenant.fonte}] teto de orçamento no lote ${i + 1}/${alvo.length} — ${cotaNegada} por buscar. NÃO é regressão da fonte.`);
+        break;
+      }
+      const html = r?.html;
       if (!html) { sem++; continue; }
       const det = cfg.parse.parseDetalhe(html, url);
       if (det.encerrado) { encerrados++; continue; }
@@ -89,9 +103,9 @@ async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debu
       await sleep(350);
     }
   }
-  console.log(`[${tenant.fonte}] ${prontos.length} prontos · ${encerrados} encerrados · ${reprov} descartados · ${sem} sem detalhe`);
+  console.log(`[${tenant.fonte}] ${prontos.length} prontos · ${encerrados} encerrados · ${reprov} descartados · ${sem} sem detalhe · ${cotaNegada} sem cota`);
   // fonteVazia = respondeu mas 0 lotes (não é falha: o leiloeiro só não tem imóveis agora).
-  return { prontos, encerrados, fonteVazia: fetchOk && urls.length === 0, enumerados: urls.length };
+  return { prontos, encerrados, fonteVazia: fetchOk && urls.length === 0, enumerados: urls.length, cotaNegada };
 }
 
 // Roda a coleta de uma fonte inteira (todos os tenants). opts:
@@ -111,12 +125,12 @@ export async function rodarFonte(cfg, opts) {
   console.log(`${rotulo} ${dryrun ? '(DRY-RUN — não grava)' : '(GRAVANDO)'} · tenants: ${tenants.map(t => t.fonte).join(',')} · max ${maxLotes}/tenant`);
 
   for (const tenant of tenants) {
-    const { prontos, encerrados, fonteVazia, enumerados } = await coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debug, semBD });
+    const { prontos, encerrados, fonteVazia, enumerados, cotaNegada } = await coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debug, semBD });
 
     if (!prontos.length) {
       if (fonteVazia) { console.log(`[${tenant.fonte}] sem imóveis no momento — fonte vazia (sem alarme).`); continue; }
       await registrarSaude(supabase, tenant.fonte, [], cfg.chave, {
-        ok: false, semCota: estado.semCota, enumerados,
+        ok: false, semCota: estado.semCota || cotaNegada > 0, cotaNegada, enumerados,
         metricas: { n: 0, uf_pct: 0, valor_pct: 0, link_pct: 0, foto_pct: 0 },
         motivo: estado.semCota
           ? 'SEM COTA Bright Data — coleta não tentada (orçamento, não regressão da fonte)'
@@ -136,7 +150,9 @@ export async function rodarFonte(cfg, opts) {
     const { error } = await supabase.from('imoveis_leilao').upsert(prontos, { onConflict: 'fonte_id', ignoreDuplicates: false });
     if (error) { console.error(`[${tenant.fonte}] erro ao gravar:`, error.message); process.exitCode = 1; continue; }
     console.log(`✅ [${tenant.fonte}] ${prontos.length} imóveis gravados/atualizados.`);
-    await registrarSaude(supabase, tenant.fonte, prontos, cfg.chave, { enumerados });
+    // `cotaNegada` no ramo de SUCESSO: coleta cortada no meio pelo orçamento devolve lotes
+    // de verdade e cai aqui — sem este número a linha vira medição sadia da fonte.
+    await registrarSaude(supabase, tenant.fonte, prontos, cfg.chave, { enumerados, cotaNegada });
     await registrarConhecimento(supabase, { fonte: tenant.fonte, ...cfg.conhecimento, qualidade: qualidadeColeta(prontos) });
   }
   if (dryrun) console.log(`\nPara gravar, rode com ${rotulo}_DRYRUN=0.`);
