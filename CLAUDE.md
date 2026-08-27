@@ -154,14 +154,24 @@ curto (5–8 linhas) antes de seguir:
    O `monitor-fontes-cron` faz isso todo dia (Seção C3) + grava o snapshot em `fonte_metricas_hist`.
    Cheque rápido no início:
    ```sql
-   select b.fonte, b.ativos_piso, b.ativos_mediana, u.total, u.status
-     from public.fonte_baseline_aprendida() b
-     join lateral (select total, status from fonte_saude s where s.fonte = b.fonte
-                    order by executado_em desc limit 1) u on true
-    where b.tem_baseline and u.total < b.ativos_piso
-      and u.status <> 'sem_cota';   -- ⬅️ NÃO REMOVA ESTA LINHA. Ver abaixo.
+   select * from public.fonte_regressao_suspeita();
    ```
-   → vazio = íntegro.
+   → vazio = íntegro. Cada linha traz `faltando` (o tamanho do buraco depois dos descontos),
+   `expirados_recentes` e `medido_em` — é o bastante para decidir se vale a ofensiva de recon.
+
+   > ⚠️ **Era uma CONSULTA solta aqui até 27/08, e ela errava nos DOIS sentidos.** Trocada por
+   > função porque consulta em documento não é testada e envelhece calada.
+   > **Falso positivo:** acusou o LEILOFY com 12 lotes contra piso 37 — mas os 51 que saíram
+   > em 25/08 tinham todos `data_leilao = 25/08`. O leilão ACONTECEU, a limpeza horária fez o
+   > trabalho dela, e o acervo esvaziou como devia. Parser intacto; "consertar" parser são é o
+   > pior desfecho possível de um alarme.
+   > **Falso negativo, no mesmo instante:** o CALIL (9 lotes contra piso 18) estava invisível,
+   > porque a última LINHA dele era `sem_cota` e a consulta olhava a última linha — uma fonte
+   > podia se esconder atrás do freio de orçamento indefinidamente.
+   > A função corrige os dois: desconta expiração legítima recente e avalia a última
+   > **medição** (`status <> 'sem_cota'`), não a última linha. É a **terceira vez** que o
+   > instrumento é o errado nesta base (17/08, 18/08 e agora) e a assinatura é sempre a
+   > mesma: algo que NÃO é medição da fonte comparado contra o piso da fonte.
    > ⚠️ **O filtro de `sem_cota` é o conserto de 18/08, e a versão sem ele acusa fonte sadia.**
    > Quando o teto semanal do Bright Data recusa, a coleta NÃO É TENTADA e a linha entra com
    > `total = 0` e `status = 'sem_cota'` — o motivo diz por extenso *"decisão de orçamento, não
