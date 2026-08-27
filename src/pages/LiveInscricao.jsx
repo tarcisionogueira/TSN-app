@@ -439,11 +439,17 @@ export default function LiveInscricao() {
 
             {numeros && (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 14, marginTop: 24, paddingTop: 22, borderTop: '1px solid rgba(255,255,255,0.10)' }}>
+                {/* "leiloeiros acompanhados" SAIU em 27/08, por decisão do dono: contagem de
+                    FONTES é a única métrica aqui em que o número maior vence, e agregador que
+                    só lista sempre vai ter mais. Exibir 30 ao lado dos "900+" que o concorrente
+                    anuncia convida a comparação errada — como se o produto fosse quantidade de
+                    fontes, e não o que se sabe sobre cada imóvel. No lugar entra o lote com
+                    desconto real, que só quem cruza avaliação × lance consegue produzir. */}
                 {[
                   { v: Number(numeros.lotes).toLocaleString('pt-BR'), l: 'lotes em leilão monitorados agora' },
-                  { v: Number(numeros.leiloeiros).toLocaleString('pt-BR'), l: 'leiloeiros acompanhados todo dia' },
+                  { v: Number(numeros.com_desconto ?? 0).toLocaleString('pt-BR'), l: 'com 50% ou mais de desconto' },
                   { v: Number(numeros.cidades).toLocaleString('pt-BR'), l: 'cidades brasileiras com acervo' },
-                ].map(n => (
+                ].filter(n => n.v && n.v !== '0').map(n => (
                   <div key={n.l}>
                     <div style={{ fontSize: 25, fontWeight: 800, color: '#fff', letterSpacing: '-0.02em' }}>{n.v}</div>
                     <div style={{ fontSize: 12.5, color: '#8FA5BE', lineHeight: 1.45, marginTop: 2 }}>{n.l}</div>
