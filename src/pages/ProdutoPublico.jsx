@@ -27,6 +27,13 @@ export default function ProdutoPublico({ tipo }) {
   const [aguardando, setAguardando] = useState(false);
   const [erroCompra, setErroCompra] = useState('');
   const [aceitouTermo, setAceitouTermo] = useState(false); // termo próprio de curso/ebook
+  // Preço e janela de oferta vêm do SERVIDOR (produto_preco_vigente). A tela nunca decide
+  // preço: se o relógio do visitante estiver adiantado, ou alguém editar o payload, quem
+  // manda continua sendo a RPC que cobra.
+  const [vigente, setVigente] = useState(null);
+  const [downsell, setDownsell] = useState(null);
+  const [mostrarDownsell, setMostrarDownsell] = useState(false);
+  const [agora, setAgora] = useState(() => Date.now());
 
   // Persiste código de referência do consultor
   useEffect(() => {
@@ -95,7 +102,7 @@ export default function ProdutoPublico({ tipo }) {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             produto_ref: `${tipo}_${id}`,
-            valor: Number(produto?.preco || 0),
+            valor: precoBase,
             user_agent: navigator.userAgent,
             termos_versao: versaoTermoProduto(`${tipo}_${id}`),
           }),
@@ -128,7 +135,10 @@ export default function ProdutoPublico({ tipo }) {
         // Página PÚBLICA: seleciona só metadados — NUNCA arquivo_url/pdf_url (link
         // do PDF pago). O arquivo é entregue só na leitura, para quem tem acesso.
         const { data: e, error: eE } = await supabase.from('ebooks_admin')
-          .select('id, titulo, descricao, capa_url, preco, gratuito, ativo, upsell_produtos, bump_produtos')
+          // As colunas da janela e do downsell PRECISAM estar aqui: a lista é explícita, e
+          // coluna que não se pede volta `undefined` — a oferta simplesmente não existiria
+          // para eBook, sem erro nenhum para acusar.
+          .select('id, titulo, descricao, capa_url, preco, gratuito, ativo, upsell_produtos, bump_produtos, oferta_abre_em, oferta_fecha_em, oferta_preco, downsell_oferta')
           .eq('id', id).eq('ativo', true).single();
         if (eE && eE.code !== 'PGRST116') setErroLeitura(true);
         setProduto(e);
@@ -207,18 +217,152 @@ export default function ProdutoPublico({ tipo }) {
     return () => { cancelado = true; };
   }, [produto]);
 
+  // ── PREÇO VIGENTE E DOWNSELL, PELO SERVIDOR ────────────────────────────────
+  // Duas RPCs em vez de conta na tela. A da esquerda decide QUANTO custa agora (janela de
+  // oferta aberta ou preço cheio); a da direita diz o que oferecer a quem não vai comprar.
+  useEffect(() => {
+    if (!produto?.id) return undefined;
+    let cancelado = false;
+    (async () => {
+      const [{ data: v, error: eV }, { data: d }] = await Promise.all([
+        supabase.rpc('produto_preco_vigente', { p_tipo: tipo, p_id: produto.id }),
+        supabase.rpc('produto_downsell', { p_tipo: tipo, p_id: produto.id }), // padrao-ok: downsell é oferta secundária — sem ela a venda principal segue inteira
+      ]);
+      if (cancelado) return;
+      // Falha aqui NÃO pode virar "produto gratuito" nem "oferta encerrada": sem resposta
+      // do servidor a tela cai no preço do cadastro, que é o comportamento de sempre.
+      if (eV) setErroLeitura(true);
+      setVigente(v || null);
+      setDownsell(d || null);
+    })();
+    return () => { cancelado = true; };
+  }, [produto?.id, tipo]);
+
+  // Relógio da contagem regressiva. Só liga quando há prazo à frente — intervalo rodando
+  // à toa gasta bateria em página de venda, que é onde a pessoa mais demora.
+  const fechaEm = vigente?.em_janela ? new Date(vigente.fecha_em).getTime() : 0;
+  useEffect(() => {
+    if (!fechaEm || fechaEm <= Date.now()) return undefined;
+    const t = setInterval(() => setAgora(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [fechaEm]);
+
   const proximoBump = bumps.find(b =>
     !aceitos.some(a => a.id === b.id && a.tipo === b.tipo));
-  const totalComExtras = (Number(produto?.preco) || 0)
+  // `precoBase` é o do servidor quando ele respondeu; o do cadastro é a rede de segurança.
+  const precoBase = Number(vigente?.preco ?? produto?.preco) || 0;
+  const totalComExtras = precoBase
     + aceitos.reduce((soma, a) => soma + (Number(a.valor_com_desconto) || 0), 0);
+
+  // Quanto falta, em texto. Dias só aparecem quando existem: "0d 04h" faz o prazo parecer
+  // maior do que é, e é o oposto do que a contagem existe para provocar.
+  const restante = (() => {
+    if (!fechaEm) return '';
+    const s = Math.floor((fechaEm - agora) / 1000);
+    if (s <= 0) return '';
+    const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600);
+    const m = Math.floor((s % 3600) / 60), sec = s % 60;
+    if (d > 0) return `${d}d ${String(h).padStart(2, '0')}h ${String(m).padStart(2, '0')}min`;
+    return `${String(h).padStart(2, '0')}h ${String(m).padStart(2, '0')}min ${String(sec).padStart(2, '0')}s`;
+  })();
 
   const temPlano = user && ['top2','assessorado','clube','analista','advogado','admin'].includes(role);
   const temAcesso = temPlano || comprouAvulso;
-  const isPago = Number(produto.preco) > 0;
+  const isPago = precoBase > 0;
+
+  // ── GATILHO 4: INTENÇÃO DE SAÍDA ───────────────────────────────────────────
+  // Dispara UMA vez por sessão, só para quem não tem acesso e tem downsell configurado.
+  // No desktop, o cursor saindo pelo topo da janela é o sinal clássico. No celular não
+  // existe "sair pelo topo": lá o gatilho é chegar ao fim da página sem ter comprado —
+  // e nunca sequestrar o botão voltar, que é hostil e o usuário percebe.
+  useEffect(() => {
+    if (!downsell || temAcesso || mostrarDownsell) return undefined;
+    let jaViu = false;
+    try { jaViu = sessionStorage.getItem(`ds_${tipo}_${id}`) === '1'; } catch { /* sessão indisponível: mostra */ }
+    if (jaViu) return undefined;
+
+    const abrir = () => {
+      setMostrarDownsell(true);
+      try { sessionStorage.setItem(`ds_${tipo}_${id}`, '1'); } catch { /* segue sem lembrar */ }
+    };
+    const aoSair = (e) => { if (e.clientY <= 0) abrir(); };
+    document.addEventListener('mouseout', aoSair);
+
+    let obs = null;
+    const fim = document.getElementById('fim-da-pagina');
+    if (fim && 'IntersectionObserver' in window) {
+      obs = new IntersectionObserver(es => { if (es.some(x => x.isIntersecting)) abrir(); }, { threshold: 0.6 });
+      obs.observe(fim);
+    }
+    return () => { document.removeEventListener('mouseout', aoSair); obs?.disconnect(); };
+  }, [downsell, temAcesso, mostrarDownsell, tipo, id]);
+
   // A cor vem da MARCA, não do cadastro (26/08): produto não escolhe mais identidade
   // visual. `produto.cor` continua no banco e é ignorado aqui de propósito.
   const cor = corDoProduto(produto);
   const bgCor = cor + '20';
+
+  // ── O CARTÃO DO DOWNSELL ───────────────────────────────────────────────────
+  // Usado em dois lugares (dentro da buy box e no aviso de saída), então mora aqui.
+  // O link do plano NÃO carrega `&ciclo=anual`: o checkout escolhe o ciclo no próprio
+  // formulário e ignoraria o parâmetro — mandar um que ninguém lê é prometer na URL o
+  // que a tela seguinte não cumpre.
+  const CartaoDownsell = ({ compacto }) => {
+    if (!downsell) return null;
+    const ehPlano = downsell.tipo === 'plano';
+    const anual = Number(downsell.preco_anual) || 0;
+    const mensalNoAnual = anual > 0 ? anual / 12 : 0;
+    const titulo = downsell.titulo
+      || (ehPlano ? 'Ainda não é hora de investir no curso?' : 'Talvez este seja o seu ponto de partida');
+    const texto = downsell.texto
+      || (ehPlano
+          ? 'Comece usando a ferramenta. Você encontra e avalia os leilões, e faz o curso quando fizer sentido.'
+          : 'Um passo menor para começar hoje.');
+    return (
+      <div style={{ background: '#f8fafc', border: `1px solid ${cor}44`, borderRadius: 12, padding: compacto ? '14px 15px' : '18px 20px' }}>
+        <div style={{ fontSize: compacto ? 14 : 16, fontWeight: 800, color: '#0f172a', marginBottom: 5 }}>{titulo}</div>
+        <p style={{ fontSize: 13, color: '#475569', lineHeight: 1.6, margin: '0 0 12px' }}>{texto}</p>
+        {ehPlano ? (
+          <>
+            <div style={{ fontSize: 20, fontWeight: 900, color: '#0f172a', marginBottom: 2 }}>
+              {mensalNoAnual > 0
+                ? `R$ ${mensalNoAnual.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mês`
+                : `R$ ${Number(downsell.preco_mensal || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mês`}
+            </div>
+            <div style={{ fontSize: 12, color: '#64748b', marginBottom: 12 }}>
+              {mensalNoAnual > 0
+                ? `${downsell.nome} no plano anual (R$ ${anual.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}/ano)`
+                : downsell.nome}
+            </div>
+            <button onClick={() => { setMostrarDownsell(false); nav(`/checkout?plano=${downsell.plano}${ref ? `&ref=${ref}` : ''}`); }}
+              style={{ width: '100%', padding: '13px', background: cor, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 14.5, cursor: 'pointer' }}>
+              Assinar o {downsell.nome} →
+            </button>
+          </>
+        ) : (
+          <>
+            <div style={{ fontSize: 20, fontWeight: 900, color: '#0f172a', marginBottom: 2 }}>
+              R$ {Number(downsell.preco || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              {Number(downsell.desconto_pct) > 0 && (
+                <span style={{ fontSize: 14, fontWeight: 600, color: '#9ca3af', textDecoration: 'line-through', marginLeft: 8 }}>
+                  R$ {Number(downsell.preco_cheio || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                </span>
+              )}
+            </div>
+            <div style={{ fontSize: 12, color: '#64748b', marginBottom: 12 }}>{downsell.nome}</div>
+            {/* Leva à página do produto em vez de "incluir no carrinho": o downsell é OUTRO
+                produto, e a RPC de compra só precifica extras que estão na lista de ofertas
+                deste aqui. Um botão de carrinho que o servidor recusaria seria uma venda
+                perdida sem erro visível. Para somar ao carrinho, cadastre como upsell. */}
+            <button onClick={() => { setMostrarDownsell(false); nav(`/p/${downsell.produto_tipo}/${downsell.produto_id}${ref ? `?ref=${ref}` : ''}`); }}
+              style={{ width: '100%', padding: '13px', background: cor, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 14.5, cursor: 'pointer' }}>
+              Ver {downsell.nome} →
+            </button>
+          </>
+        )}
+      </div>
+    );
+  };
   // (refParam saiu junto com os links da vitrine: os cartões agora incluem no carrinho
   // em vez de levar a outra página, então não há mais link para propagar o ?ref=.)
 
@@ -359,12 +503,40 @@ export default function ProdutoPublico({ tipo }) {
         {/* Coluna direita, CTA (buy box estilo Amazon) */}
         <div style={{ position: 'sticky', top: 88 }}>
           <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e5e7eb', padding: '26px 24px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+            {/* ── GATILHO 1: A JANELA ESTÁ ABERTA ────────────────────────────
+                Preço cheio riscado + quanto falta para fechar. A contagem fica ACIMA do
+                preço porque é ela que explica por que o número está mais baixo hoje. */}
+            {vigente?.em_janela && (
+              <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '10px 12px', marginBottom: 12 }}>
+                <div style={{ fontSize: 11, fontWeight: 800, color: '#991b1b', textTransform: 'uppercase', letterSpacing: 0.8 }}>
+                  Oferta por tempo limitado
+                </div>
+                <div style={{ fontSize: 13.5, color: '#991b1b', fontWeight: 700, marginTop: 3 }}>
+                  {restante ? `Encerra em ${restante}` : 'Encerrando agora'}
+                </div>
+              </div>
+            )}
             <div style={{ fontSize: 32, fontWeight: 900, color: '#111111', marginBottom: 2 }}>
-              {isPago ? `R$ ${Number(produto.preco).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'Gratuito'}
+              {isPago ? `R$ ${precoBase.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'Gratuito'}
+              {vigente?.em_janela && Number(vigente.preco_cheio) > precoBase && (
+                <span style={{ fontSize: 17, fontWeight: 600, color: '#9ca3af', textDecoration: 'line-through', marginLeft: 10 }}>
+                  R$ {Number(vigente.preco_cheio).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              )}
             </div>
             <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 22 }}>
               {isPago ? 'Pagamento único' : 'Incluído na assinatura Investidor Pro'}
             </div>
+
+            {/* ── GATILHO 2: AINDA NÃO ABRIU ─────────────────────────────────
+                Distinto de "encerrada" de propósito: dizer que acabou o que ainda nem
+                começou manda embora justamente quem chegou cedo. */}
+            {vigente?.aguardando && (
+              <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '11px 13px', marginBottom: 16, fontSize: 13, color: '#1e40af', lineHeight: 1.55 }}>
+                A condição especial abre em{' '}
+                <strong>{new Date(vigente.abre_em).toLocaleString('pt-BR', { timeZone: 'America/Bahia', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</strong>.
+              </div>
+            )}
 
             {temAcesso ? (
               /* Já tem acesso */
@@ -450,7 +622,7 @@ export default function ProdutoPublico({ tipo }) {
                           <details style={{ marginTop: 4 }}>
                             <summary style={{ color: '#0D63DB', cursor: 'pointer', fontWeight: 600 }}>Ver termo (versão {versaoTermoProduto(`${tipo}_${id}`)})</summary>
                             <p style={{ margin: '6px 0 0', fontSize: 11.5, color: '#64748b', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px 10px', whiteSpace: 'pre-wrap' }}>
-                              {termoDoProduto(`${tipo}_${id}`, { nome: produto?.titulo, valorLabel: `R$ ${Number(produto?.preco || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` }).texto}
+                              {termoDoProduto(`${tipo}_${id}`, { nome: produto?.titulo, valorLabel: `R$ ${precoBase.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` }).texto}
                             </p>
                           </details>
                         </span>
@@ -461,7 +633,7 @@ export default function ProdutoPublico({ tipo }) {
                       <button onClick={comprar} disabled={comprando || aguardando || !aceitouTermo}
                         title={!aceitouTermo ? 'Marque o aceite do termo para continuar' : undefined}
                         style={{ width: '100%', padding: '15px', background: cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: (comprando || aguardando || !aceitouTermo) ? 'default' : 'pointer', marginBottom: 10, opacity: (comprando || aguardando || !aceitouTermo) ? 0.7 : 1 }}>
-                        {comprando ? 'Abrindo pagamento…' : aguardando ? 'Aguardando pagamento…' : `Comprar por R$ ${Number(produto.preco).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                        {comprando ? 'Abrindo pagamento…' : aguardando ? 'Aguardando pagamento…' : `Comprar por R$ ${precoBase.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                       </button>
                     ) : (
                       <button onClick={() => nav(`/checkout?plano=top2${ref ? `&ref=${ref}` : ''}`)}
@@ -469,12 +641,18 @@ export default function ProdutoPublico({ tipo }) {
                         Assinar Investidor Pro →
                       </button>
                     )}
-                    {isPago && (
+                    {/* ── GATILHO 3: A SEGUNDA OPÇÃO ─────────────────────────────
+                        Quando o produto tem downsell cadastrado, ele ocupa este lugar: é a
+                        mesma função do botão genérico de assinatura, só que específica e
+                        escrita para este produto. Sem downsell, o botão genérico continua. */}
+                    {isPago && (downsell ? (
+                      <div style={{ marginBottom: 12 }}><CartaoDownsell compacto /></div>
+                    ) : (
                       <button onClick={() => nav(`/checkout?plano=top2${ref ? `&ref=${ref}` : ''}`)}
                         style={{ width: '100%', padding: '12px', background: 'white', color: '#374151', border: '1px solid #e2e8f0', borderRadius: 12, fontWeight: 600, fontSize: 14, cursor: 'pointer', marginBottom: 12 }}>
                         Ou assine e desbloqueie todo o acervo
                       </button>
-                    )}
+                    ))}
                     {aguardando && (
                       <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '10px 12px', fontSize: 12.5, color: '#92400e', marginBottom: 8 }}>
                         Finalize o pagamento na aba que abriu. Esta página libera o acesso sozinha assim que o Asaas confirmar.
@@ -510,6 +688,30 @@ export default function ProdutoPublico({ tipo }) {
           </div>
         </div>
       </div>
+
+      {/* Sentinela do gatilho de saída no celular: chegar aqui sem ter comprado é o
+          equivalente móvel do cursor saindo pelo topo da janela. */}
+      <div id="fim-da-pagina" style={{ height: 1 }} />
+
+      {/* ── GATILHO 4: O AVISO DE SAÍDA ────────────────────────────────────────
+          Aparece uma vez por sessão e fecha em qualquer clique fora, no X ou no Esc.
+          Nada de segurar a pessoa na página: quem quer sair vai sair, e prender só
+          garante que ela não volte. */}
+      {mostrarDownsell && downsell && !temAcesso && (
+        <div role="dialog" aria-modal="true" onClick={() => setMostrarDownsell(false)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.55)', zIndex: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 18 }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background: '#fff', borderRadius: 16, maxWidth: 420, width: '100%', padding: '22px 20px', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
+            <button onClick={() => setMostrarDownsell(false)} aria-label="Fechar"
+              style={{ float: 'right', background: 'none', border: 'none', fontSize: 20, color: '#94a3b8', cursor: 'pointer', lineHeight: 1 }}>×</button>
+            <CartaoDownsell />
+            <button onClick={() => setMostrarDownsell(false)}
+              style={{ width: '100%', marginTop: 10, background: 'none', border: 'none', color: '#94a3b8', fontSize: 12.5, cursor: 'pointer' }}>
+              Agora não, obrigado
+            </button>
+          </div>
+        </div>
+      )}
 
       <style>{`@media (max-width: 700px) { .produto-grid { grid-template-columns: 1fr !important; } }`}</style>
     </div>

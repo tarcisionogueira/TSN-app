@@ -117,7 +117,7 @@ const PLANOS_ACESSO = [
 ];
 
 function defaultCurso() {
-  return { titulo: '', subtitulo: '', descricao: '', capa_url: '', cor: AZUL, nivel: 'Iniciante', categoria: 'Fundamentos', preco: '', gratuito: false, destaque: false, onboarding: false, comissao_pct: 30, planos_gratis: [], concede_plano: '', concede_meses: 6, bonus_produtos: [], upsell_produtos: [], bump_produtos: [], modulos: [] };
+  return { titulo: '', subtitulo: '', descricao: '', capa_url: '', cor: AZUL, nivel: 'Iniciante', categoria: 'Fundamentos', preco: '', gratuito: false, destaque: false, onboarding: false, comissao_pct: 30, planos_gratis: [], concede_plano: '', concede_meses: 6, bonus_produtos: [], upsell_produtos: [], bump_produtos: [], oferta_abre_em: '', oferta_fecha_em: '', oferta_preco: '', downsell_tipo: '', downsell_plano: 'top2', downsell_titulo: '', downsell_texto: '', modulos: [] };
 }
 function defaultModulo(idx) { return { _key: String(Date.now() + idx), titulo: '', aulas: [] }; }
 function defaultAula() { return { _key: String(Date.now() + Math.random()), titulo: '', duracao: '', video_url: '', descricao: '', gratis: false, materiais: [] }; }
@@ -299,7 +299,29 @@ function CursosTab() {
       if (!modulosMap[mod]) modulosMap[mod] = { _key: mod + i, titulo: mod, aulas: [] };
       modulosMap[mod].aulas.push({ _key: a.id, titulo: a.titulo || '', duracao: a.duracao || '', video_url: a.video_url || '', descricao: a.descricao || '', gratis: a.gratis || false, materiais: Array.isArray(a.materiais) ? a.materiais : [] });
     });
-    setForm({ ...c, modulos: Object.values(modulosMap) });
+    // O banco guarda timestamptz; o <input type="datetime-local"> só aceita
+    // 'YYYY-MM-DDTHH:mm' NO FUSO LOCAL. Jogar o ISO cru no campo faz o navegador recusar
+    // em silêncio e o campo abrir VAZIO — e salvar em seguida apagaria a janela sem que
+    // ninguém tivesse pedido isso.
+    const paraCampo = (iso) => {
+      if (!iso) return '';
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return '';
+      const p2 = (n) => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}T${p2(d.getHours())}:${p2(d.getMinutes())}`;
+    };
+    const ds = c.downsell_oferta && typeof c.downsell_oferta === 'object' ? c.downsell_oferta : null;
+    setForm({
+      ...c,
+      modulos: Object.values(modulosMap),
+      oferta_abre_em: paraCampo(c.oferta_abre_em),
+      oferta_fecha_em: paraCampo(c.oferta_fecha_em),
+      oferta_preco: c.oferta_preco ?? '',
+      downsell_tipo: ds?.tipo || '',
+      downsell_plano: ds?.plano || 'top2',
+      downsell_titulo: ds?.titulo || '',
+      downsell_texto: ds?.texto || '',
+    });
     setModal('edit');
   }
 
@@ -366,7 +388,7 @@ function CursosTab() {
       // não vai para a loja/área de membros; fica só para o admin concluir depois.
       const faltam = faltamCampos(form);
       const completo = faltam.length === 0;
-      const cursoPayload = { titulo: rest.titulo, subtitulo: rest.subtitulo || '', descricao: rest.descricao || '', capa_url: rest.capa_url || null, cor: AZUL, nivel: rest.nivel || 'Iniciante', categoria: rest.categoria || 'Fundamentos', preco: Number(rest.preco) || 0, gratuito: rest.gratuito || false, destaque: rest.destaque || false, onboarding: rest.onboarding || false, comissao_pct: Number(rest.comissao_pct) || 30, planos_gratis: Array.isArray(rest.planos_gratis) ? rest.planos_gratis : [], concede_plano: rest.concede_plano || null, concede_meses: rest.concede_plano ? (Number(rest.concede_meses) || 6) : null, bonus_produtos: Array.isArray(rest.bonus_produtos) ? rest.bonus_produtos : [], upsell_produtos: Array.isArray(rest.upsell_produtos) ? rest.upsell_produtos : [], bump_produtos: Array.isArray(rest.bump_produtos) ? rest.bump_produtos : [], ativo: completo ? (rest.ativo !== false) : false };
+      const cursoPayload = { titulo: rest.titulo, subtitulo: rest.subtitulo || '', descricao: rest.descricao || '', capa_url: rest.capa_url || null, cor: AZUL, nivel: rest.nivel || 'Iniciante', categoria: rest.categoria || 'Fundamentos', preco: Number(rest.preco) || 0, gratuito: rest.gratuito || false, destaque: rest.destaque || false, onboarding: rest.onboarding || false, comissao_pct: Number(rest.comissao_pct) || 30, planos_gratis: Array.isArray(rest.planos_gratis) ? rest.planos_gratis : [], concede_plano: rest.concede_plano || null, concede_meses: rest.concede_plano ? (Number(rest.concede_meses) || 6) : null, bonus_produtos: Array.isArray(rest.bonus_produtos) ? rest.bonus_produtos : [], upsell_produtos: Array.isArray(rest.upsell_produtos) ? rest.upsell_produtos : [], bump_produtos: Array.isArray(rest.bump_produtos) ? rest.bump_produtos : [], oferta_abre_em: rest.oferta_abre_em ? new Date(rest.oferta_abre_em).toISOString() : null, oferta_fecha_em: rest.oferta_fecha_em ? new Date(rest.oferta_fecha_em).toISOString() : null, oferta_preco: rest.oferta_preco === '' || rest.oferta_preco == null ? null : Number(rest.oferta_preco), downsell_oferta: rest.downsell_tipo === 'plano' ? { tipo: 'plano', plano: rest.downsell_plano || 'top2', ciclo: 'anual', titulo: rest.downsell_titulo || null, texto: rest.downsell_texto || null } : null, ativo: completo ? (rest.ativo !== false) : false };
 
       let cursoId;
       if (modal === 'new') {
@@ -646,6 +668,77 @@ function CursosTab() {
                 titulo="Vitrine — “leve também”"
                 ajuda="Aparece abaixo do conteúdo, com foto e descrição, TODOS de uma vez. O cliente marca os que quiser e eles entram na mesma compra, sem sair da página. Desconto 0 = preço cheio." />
             )}
+            {/* ── JANELA DE OFERTA ────────────────────────────────────────────
+                É o que separa lançamento de catálogo. Dentro da janela a tela do produto
+                mostra o preço promocional com contagem regressiva; fora, o preço cheio.
+                Quem COBRA é o servidor (produto_preco_vigente): mexer no relógio do
+                computador não compra mais barato. */}
+            {!form.gratuito && (
+              <div style={{ border:'1px solid #fecaca', background:'#fff7f7', borderRadius:10, padding:'14px 15px', marginBottom:14 }}>
+                <div style={{ fontSize:13.5, fontWeight:800, color:'#991b1b', marginBottom:3 }}>Janela de oferta (lançamento)</div>
+                <div style={{ fontSize:11.5, color:'#7f1d1d', marginBottom:11, lineHeight:1.5 }}>
+                  Preencha os três para valer. Sem preço promocional OU sem fechamento, não há
+                  janela — o produto segue no preço cheio.
+                </div>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(180px, 1fr))', gap:10 }}>
+                  <div>
+                    <label style={S.label}>Abre em</label>
+                    <input type="datetime-local" style={S.input} value={form.oferta_abre_em || ''}
+                      onChange={e => setForm({ ...form, oferta_abre_em: e.target.value })} />
+                  </div>
+                  <div>
+                    <label style={S.label}>Fecha em</label>
+                    <input type="datetime-local" style={S.input} value={form.oferta_fecha_em || ''}
+                      onChange={e => setForm({ ...form, oferta_fecha_em: e.target.value })} />
+                  </div>
+                  <div>
+                    <label style={S.label}>Preço na janela (R$)</label>
+                    <input type="number" step="0.01" min="0" style={S.input} value={form.oferta_preco ?? ''}
+                      placeholder="ex.: 1197.00"
+                      onChange={e => setForm({ ...form, oferta_preco: e.target.value })} />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── DOWNSELL ────────────────────────────────────────────────────
+                Para quem NÃO vai comprar este produto. Aparece na caixa de compra e uma
+                vez quando a pessoa dá sinal de sair. Não é desconto neste produto — isso
+                puniria quem pagou o preço cheio. */}
+            {!form.gratuito && (
+              <div style={{ border:'1px solid #bfdbfe', background:'#f5f9ff', borderRadius:10, padding:'14px 15px', marginBottom:14 }}>
+                <div style={{ fontSize:13.5, fontWeight:800, color:'#084BA6', marginBottom:3 }}>Downsell — para quem não vai comprar</div>
+                <div style={{ fontSize:11.5, color:'#1e40af', marginBottom:11, lineHeight:1.5 }}>
+                  Aparece na caixa de compra e uma vez quando a pessoa esboça sair da página.
+                  O preço da assinatura vem sempre de <strong>Planos</strong> — não se escreve aqui,
+                  senão a tela anunciaria um valor que o checkout não cobra.
+                </div>
+                <label style={S.label}>O que oferecer</label>
+                <select style={S.input} value={form.downsell_tipo || ''}
+                  onChange={e => setForm({ ...form, downsell_tipo: e.target.value })}>
+                  <option value="">Nada (usa o botão padrão de assinatura)</option>
+                  <option value="plano">Assinatura no plano anual</option>
+                </select>
+                {form.downsell_tipo === 'plano' && (
+                  <>
+                    <label style={{ ...S.label, marginTop:10 }}>Plano</label>
+                    <select style={S.input} value={form.downsell_plano || 'top2'}
+                      onChange={e => setForm({ ...form, downsell_plano: e.target.value })}>
+                      <option value="top2">Investidor Pro</option>
+                    </select>
+                    <label style={{ ...S.label, marginTop:10 }}>Título (opcional)</label>
+                    <input style={S.input} value={form.downsell_titulo || ''}
+                      placeholder="Ainda não é hora de investir no curso?"
+                      onChange={e => setForm({ ...form, downsell_titulo: e.target.value })} />
+                    <label style={{ ...S.label, marginTop:10 }}>Texto (opcional)</label>
+                    <textarea style={{ ...S.input, minHeight:70, fontFamily:'inherit' }} value={form.downsell_texto || ''}
+                      placeholder="Comece usando a ferramenta. Você encontra e avalia os leilões, e faz o curso quando fizer sentido."
+                      onChange={e => setForm({ ...form, downsell_texto: e.target.value })} />
+                  </>
+                )}
+              </div>
+            )}
+
             <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:8, padding:'9px 12px', fontSize:12, color:'#084BA6', marginBottom:14 }}>
               💡 Preço e comissão são configurados na aba <strong>Configurações</strong>.
             </div>
