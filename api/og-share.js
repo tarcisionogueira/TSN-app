@@ -169,7 +169,11 @@ export default async function handler(req, res) {
   // 17 cadastros aparecerem como "indicado pelo dono" em 11/08.
   // `capturarMarketing` lê os parâmetros ANTES ou DEPOIS do "#", então basta repassá-los.
   const repassa = new URLSearchParams(u.search);
-  repassa.delete('tipo'); repassa.delete('id');   // internos do rewrite, não são do anunciante
+  // Internos, não são do anunciante: `tipo`/`id` são nossos, e o Vercel ainda ACRESCENTA o
+  // parâmetro nomeado do rewrite (`/aula/:slug` manda `slug=…` junto; `/r/:codigo`, `codigo=…`)
+  // — visto no primeiro teste em produção, sujando a URL final do visitante. `_vercel_share` é
+  // do preview protegido e também não pertence ao destino.
+  for (const k of ['tipo', 'id', 'slug', 'codigo', '_vercel_share']) repassa.delete(k);
   const extraQs = repassa.toString();
   if (extraQs) destino += (destino.includes('?') ? '&' : '?') + extraQs;
 
