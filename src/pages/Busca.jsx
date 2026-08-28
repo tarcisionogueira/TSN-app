@@ -76,6 +76,27 @@ const INTENCAO_OPTS = [
   ['locacao',   '🏠 Locação',   `Residencial com desconto ≥ ${LOCACAO_DESCONTO_MIN}% — o mínimo para o aluguel de mercado pagar 1% ao mês sobre o investido. É triagem: o veredito é do relatório e da assessoria.`],
   ['temporada', '🏖️ Temporada', 'Residencial em destino turístico/sazonal (praia, serra, termas, histórica, parques)'],
 ];
+// TOOLTIPS DOS FILTROS (pedido do dono, 28/08). A intenção já explicava o que fazia ao
+// passar o mouse; os demais botões não explicavam nada — e "Hipotecado" ou "Venda Direta"
+// não são autoexplicativos para quem está começando em leilão. Ficam como DADO, ao lado das
+// opções, e não como string solta no meio do JSX, para não nascerem duplicados.
+const TIPO_OPTS = [
+  ['apartamento', 'Apartamento',          'Unidades em condomínio vertical — inclui cobertura, kitnet e flat.'],
+  ['casa',        'Casa',                 'Casas e sobrados, em rua ou em condomínio fechado.'],
+  ['terreno',     'Terreno',              'Lotes e glebas sem construção.'],
+  ['comercial',   'Comercial/Industrial', 'Salas, lojas, galpões, barracões e prédios comerciais.'],
+  ['rural',       'Rural/Fazenda',        'Áreas rurais: sítios, chácaras e fazendas.'],
+];
+const MODALIDADE_OPTS = [
+  ['extrajudicial', 'Extrajudicial', 'Leilão do próprio credor, fora do Judiciário (alienação fiduciária). Costuma ser mais rápido e com regras no edital do banco.'],
+  ['judicial',      'Judicial',      'Leilão determinado dentro de um processo (execução, falência, inventário). O edital e os autos mandam.'],
+  ['venda_direta',  'Venda Direta',  'Sem pregão: o banco vende direto e a proposta pode ser feita a qualquer momento, pelo valor anunciado.'],
+];
+const PAGAMENTO_OPTS = [
+  ['aVista',     'À Vista',    '',                        'Pagamento integral no prazo do edital.'],
+  ['financiado', 'Financiado', 'parcela extrajudicial',   'Aceita financiamento bancário — o parcelamento típico dos leilões da Caixa.'],
+  ['hipotecado', 'Hipotecado', 'parcela judicial',        'Parcelamento no leilão judicial (art. 895 do CPC), com o imóvel hipotecado ao juízo até quitar.'],
+];
 // Rótulo curto por intenção, DERIVADO de INTENCAO_OPTS (sem o emoji) — usado para dizer ao
 // cliente de onde vem um piso que ele não escolheu. Derivar em vez de redigitar evita a
 // segunda cópia que um dia discorda da primeira.
@@ -1476,16 +1497,10 @@ export default function Busca() {
               <div>
                 <label style={lbl}>Tipo de Imóvel</label>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  {[
-                    { val: 'apartamento', label: 'Apartamento' },
-                    { val: 'casa', label: 'Casa' },
-                    { val: 'terreno', label: 'Terreno' },
-                    { val: 'comercial', label: 'Comercial/Industrial' },
-                    { val: 'rural', label: 'Rural/Fazenda' },
-                  ].map(({ val, label }) => {
+                  {TIPO_OPTS.map(([val, label, desc]) => {
                     const ativo = filtros.tipos?.includes(val);
                     return (
-                      <button key={val} onClick={() => {
+                      <button key={val} title={desc} onClick={() => {
                         const arr = filtros.tipos || [];
                         setFiltrosPersist(p => ({ ...p, tipos: ativo ? arr.filter(v => v !== val) : [...arr, val] }));
                       }}
@@ -1499,14 +1514,10 @@ export default function Busca() {
               <div>
                 <label style={lbl}>Modalidade</label>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  {[
-                    { val: 'extrajudicial', label: 'Extrajudicial' },
-                    { val: 'judicial', label: 'Judicial' },
-                    { val: 'venda_direta', label: 'Venda Direta' },
-                  ].map(({ val, label }) => {
+                  {MODALIDADE_OPTS.map(([val, label, desc]) => {
                     const ativo = filtros.modalidades?.includes(val);
                     return (
-                      <button key={val} onClick={() => {
+                      <button key={val} title={desc} onClick={() => {
                         const arr = filtros.modalidades || [];
                         setFiltrosPersist(p => ({ ...p, modalidades: ativo ? arr.filter(v => v !== val) : [...arr, val] }));
                       }}
@@ -1729,6 +1740,7 @@ export default function Busca() {
                   <span style={{ display:'flex', alignItems:'center', gap:5 }}><MapPin size={11}/> Buscar por raio</span>
                   <button
                     onClick={toggleRaio}
+                    title="Procura em volta da cidade selecionada, cruzando divisas de município. Lote sem localização cadastrada fica de fora."
                     style={{ background: raioAtivo ? '#0D63DB' : '#e2e8f0', border:'none', borderRadius:20, width:36, height:20, cursor:'pointer', position:'relative', transition:'background 0.2s', flexShrink:0 }}>
                     <span style={{ position:'absolute', top:2, left: raioAtivo ? 18 : 2, width:16, height:16, borderRadius:'50%', background:'white', transition:'left 0.2s', display:'block' }}/>
                   </button>
@@ -1840,7 +1852,10 @@ export default function Busca() {
                     const ativo = descontoEfetivo === p;
                     return (
                       <button key={p} onClick={() => up('descontoMin', p)}
-                        title={abaixoDoPiso ? `A intenção “${INTENCAO_LABEL[filtros.intencao] || filtros.intencao}” já exige ${pisoIntencao}%+` : undefined}
+                        title={abaixoDoPiso
+                          ? `A intenção “${INTENCAO_LABEL[filtros.intencao] || filtros.intencao}” já exige ${pisoIntencao}%+`
+                          : (p === 0 ? 'Sem piso de desconto — traz também lote com pouca ou nenhuma diferença para a avaliação.'
+                                     : `Só lotes cujo lance está pelo menos ${p}% abaixo da avaliação do leilão. Lote sem avaliação cadastrada fica de fora.`)}
                         style={{ padding:'4px 10px', borderRadius:20, border:`1px solid ${ativo ? '#10b981' : '#e2e8f0'}`, background: ativo ? '#ecfdf5' : 'white', color: ativo ? '#059669' : '#64748b', fontSize:11, fontWeight:700, cursor:'pointer', opacity: abaixoDoPiso && !ativo ? 0.45 : 1 }}>
                         {p===0 ? 'Todos' : `${p}%+`}
                       </button>
@@ -1858,8 +1873,8 @@ export default function Busca() {
                 {/* Multi-seleção: pode marcar mais de uma (união no filtro). Financiado
                     = parcela extrajudicial (CEF); Hipotecado = parcela judicial (art. 895 CPC).
                     Quem compra parcelado usa os dois, devem poder ser combinados. */}
-                {[['aVista','À Vista',''],['financiado','Financiado','parcela extrajudicial'],['hipotecado','Hipotecado','parcela judicial']].map(([v,l,sub])=>(
-                  <label key={v} style={{ display:'flex', alignItems:'center', gap:7, cursor:'pointer', fontSize:12, color:'#334155', marginBottom:5 }}>
+                {PAGAMENTO_OPTS.map(([v,l,sub,desc])=>(
+                  <label key={v} title={desc} style={{ display:'flex', alignItems:'center', gap:7, cursor:'pointer', fontSize:12, color:'#334155', marginBottom:5 }}>
                     <input type="checkbox" checked={filtros.pagamento.includes(v)} onChange={()=>togglePagamento(v)} style={{ width:14, height:14 }}/>
                     <span>{l}{sub && <span style={{ color:'#94a3b8', fontSize:10 }}> · {sub}</span>}</span>
                   </label>
@@ -1881,7 +1896,7 @@ export default function Busca() {
                   <Loader2 size={14} style={{animation:'spin 1s linear infinite'}}/> Buscando...
                 </div>
               )}
-              <button onClick={limparFiltros}
+              <button onClick={limparFiltros} title="Zera todos os filtros e recomeça a busca do zero."
                 style={{ width:'100%', padding:'9px', background:'none', color:'#64748b', border:'1px solid #e2e8f0', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer' }}>
                 ✕ Limpar filtros
               </button>
@@ -1908,7 +1923,7 @@ export default function Busca() {
             ))}
             {soLeitura && filtrosSalvos.length === 0 && <span style={{ fontSize: 12, color: '#94a3b8' }}>o assinante não tem filtros salvos</span>}
             {!soLeitura && !showSalvarModal && (
-              <button onClick={() => setShowSalvarModal(true)} style={{ padding: '5px 12px', borderRadius: 8, border: '1px solid #e2e8f0', background: 'white', color: '#475569', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+              <button onClick={() => setShowSalvarModal(true)} title="Guarda esta combinação de filtros com um nome — dá para reaplicar num clique e é ela que alimenta o alerta por e-mail." style={{ padding: '5px 12px', borderRadius: 8, border: '1px solid #e2e8f0', background: 'white', color: '#475569', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
                 + Salvar filtros atuais
               </button>
             )}
@@ -1939,11 +1954,11 @@ export default function Busca() {
             </div>
             {/* Alternador Lista / Mapa */}
             <div style={{ display:'flex', background:'#f1f5f9', borderRadius:10, padding:3, gap:2 }}>
-              <button onClick={() => escolherVista('lista')}
+              <button onClick={() => escolherVista('lista')} title="Ver os resultados em lista, com foto, lance e desconto."
                 style={{ padding:'6px 16px', borderRadius:8, border:'none', fontWeight:700, fontSize:12, cursor:'pointer', background: vista==='lista' ? 'white' : 'transparent', color: vista==='lista' ? '#111111' : '#64748b', boxShadow: vista==='lista' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}>
                 ☰ Lista
               </button>
-              <button onClick={() => escolherVista('mapa')}
+              <button onClick={() => escolherVista('mapa')} title="Ver os resultados no mapa. Lote sem coordenada cadastrada não aparece."
                 style={{ padding:'6px 16px', borderRadius:8, border:'none', fontWeight:700, fontSize:12, cursor:'pointer', background: vista==='mapa' ? 'white' : 'transparent', color: vista==='mapa' ? '#111111' : '#64748b', boxShadow: vista==='mapa' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}>
                 🗺️ Mapa
               </button>
@@ -1952,7 +1967,7 @@ export default function Busca() {
           {/* Linha 2: controles (só quando há resultados) */}
           {buscaFeita && !loading && (
             <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap', paddingTop:10, borderTop:'1px solid #f1f5f9' }}>
-              <select value={sortBy} onChange={e=>{ setSortBy(e.target.value); try { sessionStorage.setItem('busca_sort', e.target.value); } catch {} setPagina(1); buscarPagina(1, filtros, e.target.value, centroRaio, raioAtivo, raioKmAtivo); }}
+              <select title="Ordem dos resultados na página." value={sortBy} onChange={e=>{ setSortBy(e.target.value); try { sessionStorage.setItem('busca_sort', e.target.value); } catch {} setPagina(1); buscarPagina(1, filtros, e.target.value, centroRaio, raioAtivo, raioKmAtivo); }}
                 style={{ padding:'7px 10px', border:'1px solid #e2e8f0', borderRadius:8, fontSize:12, fontWeight:600, color:'#334155', background:'white', cursor:'pointer' }}>
                 <option value="desconto_desc">Maior desconto primeiro</option>
                 <option value="desconto_asc">Menor desconto primeiro</option>
@@ -1962,11 +1977,13 @@ export default function Busca() {
               </select>
               {selecionados.length>0 && (
                 <button onClick={()=>irParaAnalise(resultados.find(r=>r.id===selecionados[0]))}
+                  title="Abre o lote marcado na Análise, já com os dados do leilão preenchidos."
                   style={{ padding:'7px 14px', background:'#10b981', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', display:'flex', alignItems:'center', gap:6 }}>
                   <ArrowRight size={13}/> Analisar selecionado
                 </button>
               )}
               <button onClick={() => buscarPagina(pagina, filtros, sortBy, centroRaio, raioAtivo, raioKmAtivo)}
+                title="Refaz a busca com os mesmos filtros — o acervo muda ao longo do dia."
                 style={{ padding:'7px 12px', background:'#f1f5f9', border:'1px solid #e2e8f0', borderRadius:8, fontSize:12, fontWeight:700, color:'#475569', cursor:'pointer', display:'flex', alignItems:'center', gap:5 }}>
                 <RefreshCw size={12}/> Atualizar
               </button>
