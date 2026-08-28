@@ -24,35 +24,56 @@
  * Antes de subir um redesenho, olhe o recorte quadrado REDUZIDO A 100px: se não ler ali, não
  * adianta ler no monitor.
  *
+ * ⚠️ A IMAGEM PRECISA DIZER DO QUE É A AULA. A v3 tinha "AULA AO VIVO" gigante — legível, e
+ * sobre nada: o formato ocupava o lugar do TEMA. Quem recebe o link já vê "ao vivo" no texto
+ * do cartão; o que a imagem tem de entregar em 100px é o assunto. Agora o que domina é
+ * "IMÓVEIS DE LEILÃO" + o ícone de casa/martelo, e o quando vira o selo embaixo.
+ *
+ * ⚠️ JPEG, E SEM QUERY STRING NA URL. O PNG do degradê dava 185 KB e a imagem chegou a NÃO
+ * aparecer no WhatsApp; o JPEG 88 dá ~55 KB sem perda visível num fundo de degradê. E a
+ * versão vai no NOME do arquivo, não em `?v=`: robô de preview e CDN lidam com caminho novo
+ * de forma previsível, com query nem sempre.
+ *
  * Como rodar (precisa do Chromium do Playwright):
  *   node scripts/arte/capa-aula.mjs && npx playwright screenshot ... (ver README do diretório)
  */
 import fs from 'node:fs';
 const NAVY = '#0B1B33', AZUL = '#0D63DB', LATAO = '#D8A94A';
+// Ícone: casa + martelo de leilão, desenhado em SVG (emoji não é confiável no headless).
+const icone = `<svg width="150" height="150" viewBox="0 0 64 64" fill="none" stroke="${LATAO}" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M8 28 L28 12 L48 28"/>
+  <path d="M13 26 V50 H43 V26"/>
+  <path d="M24 50 V38 H32 V50"/>
+  <g transform="rotate(-38 47 22)">
+    <rect x="38" y="15" width="20" height="9" rx="2.5" fill="${LATAO}" stroke="none"/>
+    <path d="M48 24 V40" stroke-width="4"/>
+  </g>
+  <path d="M40 52 H58" stroke-width="5"/>
+</svg>`;
 const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><style>
   *{box-sizing:border-box}
   body{margin:0;width:1200px;height:630px;font-family:'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;
        background:${NAVY};overflow:hidden;position:relative;display:flex;align-items:center;justify-content:center}
   .glow{position:absolute;border-radius:50%;filter:blur(110px)}
 </style></head><body>
-  <div class="glow" style="width:760px;height:760px;background:${AZUL};left:50%;top:50%;transform:translate(-50%,-50%);opacity:.5"></div>
-  <div style="position:relative;width:620px;display:flex;flex-direction:column;align-items:center;gap:26px;text-align:center">
-    <div style="font-size:118px;font-weight:900;line-height:.92;letter-spacing:-3px;color:#fff;text-shadow:0 4px 30px rgba(0,0,0,.35)">
-      AULA<br>AO VIVO
+  <div class="glow" style="width:780px;height:780px;background:${AZUL};left:50%;top:50%;transform:translate(-50%,-50%);opacity:.52"></div>
+  <div style="position:relative;width:640px;display:flex;flex-direction:column;align-items:center;gap:18px;text-align:center">
+    ${icone}
+    <div style="font-size:104px;font-weight:900;line-height:.94;letter-spacing:-3px;color:#fff;text-shadow:0 4px 30px rgba(0,0,0,.4)">
+      IMÓVEIS<br>DE LEILÃO
     </div>
-    <div style="background:${LATAO};color:${NAVY};font-size:56px;font-weight:900;letter-spacing:-1px;
-                padding:14px 34px;border-radius:14px;white-space:nowrap">QUARTA · 19H</div>
-    <div style="font-size:29px;font-weight:800;color:#9FB3CC;letter-spacing:.5px">imóveis de leilão · grátis</div>
+    <div style="background:${LATAO};color:${NAVY};font-size:41px;font-weight:900;letter-spacing:-.5px;
+                padding:12px 28px;border-radius:12px;white-space:nowrap">AO VIVO · QUARTA 19H</div>
   </div>
 </body></html>`;
 fs.writeFileSync(new URL('./capa.html', import.meta.url), html);
 
-console.log('HTML escrito em scripts/arte/capa.html. Para virar PNG + os dois testes:');
+console.log('HTML escrito em scripts/arte/capa.html. Para virar JPEG + o teste de miniatura:');
 console.log(`  node -e "import('playwright').then(async({chromium})=>{
     const b=await chromium.launch({executablePath:'/opt/pw-browsers/chromium'});
     const p=await b.newPage({viewport:{width:1200,height:630}});
     await p.goto('file://'+process.cwd()+'/scripts/arte/capa.html');
-    await p.screenshot({path:'public/capa-aula-leilao-ao-vivo.png'});
-    await p.screenshot({path:'/tmp/capa-quadrada.png',clip:{x:285,y:0,width:630,height:630}});
+    await p.screenshot({path:'public/capa-aula-imoveis-leilao.jpg',type:'jpeg',quality:88});
+    await p.screenshot({path:'/tmp/capa-quadrada.jpg',type:'jpeg',quality:88,clip:{x:285,y:0,width:630,height:630}});
     await b.close()})"`);
-console.log('Depois olhe /tmp/capa-quadrada.png REDUZIDO a 100px — é o tamanho real da miniatura.');
+console.log('Olhe /tmp/capa-quadrada.jpg REDUZIDO a 100px: e o tamanho real da miniatura no celular.');
