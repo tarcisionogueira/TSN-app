@@ -817,6 +817,11 @@ export default function ImovelDetalhe() {
           urlLote: data.url_lote || data.link_edital || data.link_regras_venda, linkEdital: data.link_edital, linkMatricula: data.link_matricula, linkRegrasVenda: data.link_regras_venda,
           foto: data.link_foto, leiloeiro: data.leiloeiro, dataLeilao: data.data_leilao,
           valorMinimo2: data.valor_minimo_2 ?? null, dataLeilao2: data.data_leilao_2 ?? null,
+          // O `select('*')` sempre trouxe estas colunas; faltava MAPEAR. Sem elas o
+          // `leilaoEncerrado` da tela decidia pelo início da 2ª praça e dava por encerrado
+          // um lote em pregão (Guarulhos, 28/08). Mapear é o conserto, não consultar mais.
+          dataFim: data.data_fim ?? null,
+          praca1Fim: data.praca1_fim ?? null, praca2Fim: data.praca2_fim ?? null,
           pagamento: [data.forma_pagamento], fonte: data.fonte, fonteId: data.fonte_id,
           numeroEdital: data.numero_edital, numeroMatricula: data.numero_matricula,
           numeroProcesso: data.numero_processo, anexos: data.anexos || null, enriquecidoEm: data.enriquecido_em,

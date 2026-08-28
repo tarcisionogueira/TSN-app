@@ -54,7 +54,8 @@ function limite(v) {
 export function encerradoPorDatas(row) {
   if (!row) return { encerrado: false, ultimaData: null };
   if (/venda[_\s-]?direta/i.test(String(row.modalidade || ''))) return { encerrado: false, ultimaData: null };
-  const validas = [limite(row.data_leilao), limite(row.data_leilao_2), limite(row.data_fim)].filter(Boolean);
+  const validas = [limite(row.data_leilao), limite(row.data_leilao_2), limite(row.data_fim),
+                   limite(row.praca1_fim), limite(row.praca2_fim)].filter(Boolean);
   if (!validas.length) return { encerrado: false, ultimaData: null }; // sem data → não afirma nada
   const ultima = validas.reduce((a, b) => (b.fim > a.fim ? b : a));
   return { encerrado: ultima.fim < Date.now(), ultimaData: ultima.dia };
@@ -70,14 +71,17 @@ export async function leilaoEncerrado(sb, imovelId, dataDoCliente = null) {
   const candidatas = [];
   try {
     const [row] = await (await sb(
-      `imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=data_leilao,data_leilao_2,data_fim,modalidade,ativo&limit=1`
+      `imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=data_leilao,data_leilao_2,data_fim,praca1_fim,praca2_fim,modalidade,ativo&limit=1`
     )).json();
     if (row) {
       // Venda direta: a data que a fonte publica não é praça e não vence o lote (ver nota 3).
       if (/venda[_\s-]?direta/i.test(String(row.modalidade || ''))) return { encerrado: false, ultimaData: null };
       // `data_fim` é o "último prazo relevante" mantido pelo banco (trigger trg_data_fim_leilao):
       // ficava de fora e, em lote cujo prazo real só vive nela, o gate não enxergava nada.
-      candidatas.push(limite(row.data_leilao), limite(row.data_leilao_2), limite(row.data_fim));
+      // `praca1_fim`/`praca2_fim` (28/08): o ENCERRAMENTO da praça. `data_leilao_2` é o
+      // início da 2ª — usá-lo como prazo recusava relatório de lote ainda em pregão.
+      candidatas.push(limite(row.data_leilao), limite(row.data_leilao_2), limite(row.data_fim),
+                      limite(row.praca1_fim), limite(row.praca2_fim));
       // Lote ATIVO sem nenhuma data conhecida: não dá para afirmar que encerrou.
       if (row.ativo && !candidatas.some(Boolean)) return { encerrado: false, ultimaData: null };
     }

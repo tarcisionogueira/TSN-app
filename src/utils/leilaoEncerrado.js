@@ -53,6 +53,12 @@ export function leilaoEncerrado(im) {
     limite(im.data_leilao ?? im.dataLeilao),
     limite(im.data_leilao_2 ?? im.dataLeilao2),
     limite(im.data_fim ?? im.dataFim),
+    // ENCERRAMENTO DA PRAÇA (28/08). `data_leilao_2` é o INÍCIO da 2ª praça; o prazo para dar
+    // lance é o fim dela, e ele vive nestas colunas quando o edital publica o intervalo. Sem
+    // lê-las, a tela declarava encerrado um lote em pregão: o apartamento de Guarulhos tinha
+    // 2ª praça aberta até 10/09 e a ficha dizia "encerrado em 19/08".
+    limite(im.praca1_fim ?? im.praca1Fim),
+    limite(im.praca2_fim ?? im.praca2Fim),
   ].filter(Boolean);
 
   if (!datas.length) return { encerrado: false, ultimaData: null, semData: true };

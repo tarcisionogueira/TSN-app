@@ -2261,7 +2261,19 @@ export default async function handler(req, res) {
       const p2 = pracasEd.find(p => p.n === 2);
       if (imDb) {
         const patchPr = {};
-        if (!(Number(imDb.valor_minimo_2) > 0) && p2?.valor > 0 && p2.valor !== (Number(imDb.valor_minimo) || 0)) {
+        // TRAVA DE COERÊNCIA ANTES DE GRAVAR O VALOR (28/08). O único teste era `p2.valor !==
+        // valor_minimo`, e por isso entrou R$ 136.999,99 num lote avaliado em R$ 267.052,71 —
+        // 60% de R$ 228.333,33, uma avaliação que não é a deste imóvel. O erro só apareceu na
+        // tela porque o preço do site é `least()` entre as praças: valor errado PARA BAIXO
+        // sempre vira a manchete, o filtro de busca e o selo de desconto. O viés é o ponto —
+        // um erro para cima seria ignorado em silêncio, um para baixo é sempre visível.
+        // A defesa principal está no extrator (o percentual declarado no edital vence o "R$"
+        // solto); aqui fica a rede: 2ª praça acima da avaliação é impossível.
+        const p2Coerente = p2?.valor > 0 && (!(avalDb > 0) || p2.valor <= avalDb);
+        if (p2?.valor > 0 && !p2Coerente) {
+          try { await registrarAnomalia('valor_praca_incoerente', fonteDb, imovelId, 'valor_minimo_2', `Edital deu 2ª praça R$ ${p2.valor} contra avaliação R$ ${avalDb} — descartado.`); } catch { /* rastro best-effort */ }
+        }
+        if (!(Number(imDb.valor_minimo_2) > 0) && p2Coerente && p2.valor !== (Number(imDb.valor_minimo) || 0)) {
           imDb.valor_minimo_2 = p2.valor; patchPr.valor_minimo_2 = p2.valor;
         }
         // A DATA da 2ª praça é o PRAZO PARA DAR LANCE (vira `data_fim`) e NÃO pode ficar
@@ -2292,12 +2304,49 @@ export default async function handler(req, res) {
           const a = Date.parse(doc), b = Date.parse(atual);
           return Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) > DIA_MS;
         };
+        // ENCERRAMENTO DA PRAÇA: o documento SEMPRE vence, porque aqui ele leu um prazo E
+        // SABE que é um prazo ("se encerrará no dia 10/09/2026"). É a única leitura sobre a
+        // qual não há ambiguidade, e por isso é a única autorizada a encurtar a janela.
+        if (p1?.fim) { imDb.praca1_fim = p1.fim; patchPr.praca1_fim = p1.fim; }
+        if (p2?.fim) { imDb.praca2_fim = p2.fim; patchPr.praca2_fim = p2.fim; }
+
+        // ⚠️ A REGRA DE 23/08 ("o documento oficial vence") ESTAVA CERTA NA INTENÇÃO E ERRADA
+        // NA DIREÇÃO (28/08). Ela venceu com uma leitura PIOR: o extrator pegava a primeira
+        // data da janela — sempre o INÍCIO da praça — e sobrescrevia o prazo correto que o
+        // scraper tinha capturado. O rastro de hoje diz tudo: "Acervo dizia 2026-09-10T14:30;
+        // edital diz 2026-08-17 — corrigido pelo documento". O acervo estava certo. Em 25/08
+        // aconteceu o mesmo (31/08 → 26/08): as duas moveram a data PARA TRÁS, porque o
+        // início é sempre anterior ao fim. O viés era sistemático, não azar.
+        //
+        // Agora `p.data` é declaradamente o INÍCIO e vai para as colunas de início. Ele só
+        // sobrescreve um valor existente quando NÃO encurta o prazo efetivo — e a assimetria
+        // é o motivo: encurtar por engano some com o lote e recusa o relatório de quem ainda
+        // pode dar lance (custo alto e silencioso); manter um dia a mais apenas adia uma
+        // baixa que o próprio scraper faz quando o lote some da fonte.
+        //
+        // A EXCEÇÃO PRESERVA O CASO VILLE DE LYON (23/08): quando o edital declara PRAÇA
+        // ÚNICA, ele é completo sobre a estrutura do leilão, e aí encurtar é legítimo — era
+        // o acervo carregando o teto de encerramento da plataforma (24/09) contra uma praça
+        // única em 25/08.
+        const pracaUnica = pracasEd.length === 1 && !p2;
+        const encurtaPrazo = (novaData, atual) => {
+          const a = Date.parse(novaData), b = Date.parse(atual);
+          return Number.isFinite(a) && Number.isFinite(b) && a < b;
+        };
         if (p1?.data && imDb.data_leilao && divergeDoAcervo(p1.data, imDb.data_leilao)) {
-          try { await registrarAnomalia('data_divergente_edital', fonteDb, imovelId, 'data_leilao', `Acervo dizia ${imDb.data_leilao}; edital diz ${p1.data} — corrigido pelo documento.`); } catch { /* rastro best-effort */ }
-          imDb.data_leilao = p1.data; patchPr.data_leilao = p1.data;
+          const recuaSemProva = encurtaPrazo(p1.data, imDb.data_leilao) && !p1.fim && !pracaUnica;
+          try {
+            await registrarAnomalia('data_divergente_edital', fonteDb, imovelId, 'data_leilao',
+              `Acervo dizia ${imDb.data_leilao}; edital diz ${p1.data} — ${recuaSemProva ? 'MANTIDO o acervo (o edital recuaria o prazo sem dizer que é encerramento).' : 'corrigido pelo documento.'}`);
+          } catch { /* rastro best-effort */ }
+          if (!recuaSemProva) { imDb.data_leilao = p1.data; patchPr.data_leilao = p1.data; }
         }
         if (p2?.data && imDb.data_leilao_2 && divergeDoAcervo(p2.data, imDb.data_leilao_2)) {
-          imDb.data_leilao_2 = p2.data; patchPr.data_leilao_2 = p2.data;
+          const recuaSemProva = encurtaPrazo(p2.data, imDb.data_leilao_2) && !p2.fim;
+          if (!recuaSemProva) { imDb.data_leilao_2 = p2.data; patchPr.data_leilao_2 = p2.data; }
+          else {
+            try { await registrarAnomalia('data_divergente_edital', fonteDb, imovelId, 'data_leilao_2', `Acervo dizia ${imDb.data_leilao_2}; edital diz ${p2.data} — MANTIDO o acervo (recuo sem encerramento declarado).`); } catch { /* rastro best-effort */ }
+          }
         }
         // Edital com PRAÇA ÚNICA e acervo carregando uma "2ª praça": ela não existe —
         // apaga (a praça fantasma inventava um mês de folga que custaria o leilão).

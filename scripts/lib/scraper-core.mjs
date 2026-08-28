@@ -248,8 +248,53 @@ export function modalidadeExigeData(modalidade) {
 // (não se compra o imóvel, compra-se um direito sobre ele), espelhando o Sato.
 export const RE_FRACAO_IDEAL = /\b(parte\s+ideal|fra[çc][ãa]o\s+ideal|fra[çc][õo]es\s+ideais|direito[s]?\s+credit[óo]rio|nua[\s-]propriedade)\b/i;
 
+// A CLÁUSULA QUE DESCREVE UM APARTAMENTO NÃO É A FATIA QUE SE VENDE (28/08). Toda matrícula
+// de unidade em condomínio traz, por forma cartorial, "e a fração ideal de 1,79088% no
+// terreno e demais coisas comuns do condomínio" — o apartamento é vendido INTEIRO e essa
+// fração é só como o registro descreve a cota de terreno que acompanha a unidade. Existe em
+// todo apartamento do país.
+//
+// O efeito era PERVERSO: quanto melhor a ficha (enriquecida com o texto da matrícula), maior
+// a chance de o lote ser barrado — sumia justamente o acervo mais bem documentado, e em
+// silêncio, porque o lote só fica `ativo=false` por trigger, sem erro em lugar nenhum.
+// Achado no apartamento de Vila Galvão/Guarulhos cujo relatório o dono gerou em 28/08.
+//
+// A ÂNCORA É O CONTEXTO DE CONDOMÍNIO, NÃO A PREPOSIÇÃO. A primeira tentativa exigia "no/do
+// terreno" e deixava barrados dois apartamentos inteiros que escrevem "fração ideal de
+// 0,05015% SOBRE o terreno e áreas comuns" — a mesma cláusula com outra preposição. Isso só
+// apareceu porque a regra foi testada contra 25 textos REAIS do acervo, e não contra
+// exemplos imaginados. O que de fato separa os dois casos é o entorno: a cláusula cartorial
+// de unidade autônoma sempre vem cercada de condomínio / área privativa / área útil / áreas
+// comuns; a venda de uma fatia de terreno nu não traz nada disso.
+//
+// MEDIDO: dos 399 lotes barrados, 367 seguem barrados e 32 foram liberados (25 apartamentos,
+// 4 casas, 2 comerciais, 1 imóvel). ZERO lote com termo de fatia — no título ou no texto — escapou.
+// A cláusula cartorial escreve o número dos DOIS lados da âncora — as duas ordens
+// apareceram ao testar contra 120 textos reais:
+//   "fração ideal de 1,79088% no terreno"          (número ANTES)
+//   "fração ideal no terreno de 0,31413500%"       (número DEPOIS)
+//   "fração ideal de 561/100.000 sobre o terreno"  (fração com barra)
+const RE_CLAUSULA_NUM_ANTES = /fra[çc][ãa]o\s+ideal\s+de\s+[0-9][0-9./,]*\s*%?\s*(no|do|na|da|nas|das|em|sobre)\s+(o\s+|a\s+|os\s+|as\s+)?([áa]rea|terreno|solo)/i;
+const RE_CLAUSULA_NUM_DEPOIS = /fra[çc][ãa]o\s+ideal\s+(de\s+|do\s+|no\s+|na\s+|em\s+|sobre\s+)?(o\s+|a\s+)?(terreno|solo|[áa]rea\s+comum)\s*(condominial\s*)?(e\s+[^,;.]{0,40})?\s*(de\s+|em\s+)?[0-9]/i;
+const RE_CONTEXTO_CONDOMINIO = /(condom[íi]nio|[áa]rea\s+privativa|[áa]rea\s+[úu]til|[áa]rea\s+real|unidade\s+aut[ôo]noma|coisas\s+comuns|[áa]reas\s+comuns|coisas\s+de\s+uso\s+comum)/i;
+// Termos que NUNCA são cláusula descritiva. Se qualquer um aparecer, a exceção não vale.
+const RE_FATIA_INEQUIVOCA = /\b(parte\s+ideal|fra[çc][õo]es\s+ideais|direito[s]?\s+credit[óo]rio|nua[\s-]propriedade)\b/i;
+
+// ESPELHA `public.fracao_ideal_barrada(text,text)` no banco (migration
+// fracao_ideal_clausula_condominio_v3.sql). Mudou a régua aqui, mude lá.
 export function ehFracaoIdeal(imovel) {
-  return RE_FRACAO_IDEAL.test(`${imovel?.titulo || ''} ${imovel?.descricao || ''}`);
+  const titulo = imovel?.titulo || '';
+  const txt = `${titulo} ${imovel?.descricao || ''}`;
+  // Menção no TÍTULO nunca é descritiva: é o que está à venda. Barra sempre.
+  if (RE_FRACAO_IDEAL.test(titulo)) return true;
+  if (!RE_FRACAO_IDEAL.test(txt)) return false;
+  // Os dois erros não custam o mesmo: deixar entrar uma fatia gera um relatório que projeta
+  // a revenda do bem INTEIRO e conclui "viável"; barrar um apartamento apenas o esconde.
+  // Por isso a exceção exige as três condições juntas.
+  const clausulaDescritiva = (RE_CLAUSULA_NUM_ANTES.test(txt) || RE_CLAUSULA_NUM_DEPOIS.test(txt))
+    && RE_CONTEXTO_CONDOMINIO.test(txt)
+    && !RE_FATIA_INEQUIVOCA.test(txt);
+  return !clausulaDescritiva;
 }
 
 export function checarQualidade(imovel, { estrito = true } = {}) {

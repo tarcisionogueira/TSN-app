@@ -61,6 +61,18 @@ export function extrairCondicoes(texto) {
   // Praças/leilões: nº + data/valor na JANELA logo após a menção — janela FIXA de 240
   // chars cortada na próxima menção de praça (lookahead lazy falhava quando a última
   // praça ia até o fim do texto). 1ª ocorrência de cada nº vence.
+  //
+  // ⚠️ TODAS AS DATAS DA JANELA, NÃO A PRIMEIRA (28/08). Era `jan.match(/dd\/mm\/aaaa/)`,
+  // que devolve a PRIMEIRA — e o edital publica um INTERVALO por praça: "o 2º Leilão terá
+  // início no dia 20/08/2026 às 14:31 e se encerrará no dia 10/09/2026 às 14:30". A primeira
+  // data é sempre o INÍCIO, e o início é justamente a data que NÃO responde a pergunta que o
+  // sistema inteiro faz ("ainda dá para dar lance?"). No lote de Guarulhos isso gravou 20/08
+  // como prazo de uma praça aberta até 10/09: o gate recusou o relatório, o cron desativou o
+  // lote, e o cliente viu "leilão encerrado" faltando 13 dias de pregão.
+  //
+  // `data` continua sendo o INÍCIO (é o que a ficha mostra como "data da praça") e `fim`
+  // passa a carregar o encerramento. Separados de propósito: são duas perguntas diferentes,
+  // e foi juntá-las num campo só que produziu o defeito.
   const vistos = new Set();
   const reMencao = /([12])\s*[ºªo°.]{0,2}\s*(?:leil[ãa]o|pra[çc]a|hasta)/gi;
   let m;
@@ -70,11 +82,32 @@ export function extrairCondicoes(texto) {
     let jan = t.slice(m.index + m[0].length, m.index + m[0].length + 240);
     const prox = jan.search(/[12]\s*[ºªo°.]{0,2}\s*(?:leil[ãa]o|pra[çc]a|hasta)/i);
     if (prox > 0) jan = jan.slice(0, prox);
-    const dm = jan.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+    const datas = [...jan.matchAll(/(\d{2})\/(\d{2})\/(\d{4})/g)].map(d => `${d[3]}-${d[2]}-${d[1]}`);
+    const data = datas[0] || null;
+    // Só chama de "fim" o que o texto ANCORA como encerramento. Duas datas soltas na janela
+    // podem ser outra coisa (data de publicação, prazo de pagamento); inventar um prazo maior
+    // do que o edital dá é pior que não ter prazo nenhum — mantém no ar um lote já encerrado.
+    const ancoraFim = /(encerrar|encerramento|t[ée]rmino|terminar|at[ée]\s+o?\s*dia)/i.test(jan);
+    const fim = (datas.length > 1 && ancoraFim && datas[datas.length - 1] > data)
+      ? datas[datas.length - 1] : null;
     const vm = jan.match(/R\$\s*(\d{1,3}(?:\.\d{3})+,\d{2}|\d+,\d{2})/);
-    const valor = vm ? parseValor(vm[1]) : 0;
-    const data = dm ? `${dm[3]}-${dm[2]}-${dm[1]}` : null;
-    if (valor > 0 || data) { vistos.add(n); out.pracas.push({ n, valor, data }); }
+    let valor = vm ? parseValor(vm[1]) : 0;
+    // PERCENTUAL DECLARADO VENCE O R$ SOLTO (28/08). O edital diz a REGRA — "lances com no
+    // mínimo 60% (sessenta por cento) do valor da avaliação" — e é ela que define o lance
+    // mínimo da praça. O primeiro "R$" da janela pode ser qualquer coisa (débito, avaliação
+    // de outro lote): no lote de Guarulhos entrou R$ 136.999,99, que é 60% de R$ 228.333,33,
+    // um valor que não é a avaliação deste imóvel (R$ 267.052,71). Como o preço do site é
+    // `least()` entre as praças, um valor errado PARA BAIXO sempre vira a manchete — o erro
+    // é enviesado para aparecer.
+    const pm = jan.match(/(\d{1,3})\s*%[^.;]{0,40}?d[oae]s?\s+(?:valor\s+d[ae]\s+)?avalia[çc][ãa]o/i);
+    const pct = pm ? Number(pm[1]) : 0;
+    if (pct > 0 && pct <= 100 && out.avaliacao > 0) {
+      const doPercentual = Math.round(out.avaliacao * pct) / 100;
+      // Diverge do R$ lido em mais de 2%? A regra do edital manda — ela é texto normativo,
+      // o R$ é um número solto que pode pertencer a outra frase.
+      if (!(valor > 0) || Math.abs(valor - doPercentual) / doPercentual > 0.02) valor = doPercentual;
+    }
+    if (valor > 0 || data) { vistos.add(n); out.pracas.push({ n, valor, data, fim }); }
   }
   out.pracas.sort((a, b) => a.n - b.n);
   // Forma de pagamento: FRASES ORIGINAIS do edital com termos de condição (fiel, sem
@@ -280,7 +313,17 @@ async function editalPorVisao(url, imovelId, fim) {
             + '• "areaConstruidaM2": área construída/edificada/privativa, em m². NÃO é a do terreno.\n'
             + '• "areaTerrenoM2": área do terreno/lote, em m².\n'
             + '• "enderecoCompleto": logradouro, número, bairro, cidade/UF, se constarem.\n'
-            + '• "pracas": lista das praças/leilões, cada uma {"ordem":1,"data":"AAAA-MM-DD","hora":"HH:MM","valor":0}. Se houver 2ª praça, INCLUA as duas.\n'
+            // A PRAÇA É UM INTERVALO (28/08). O prompt pedia uma "data" por praça e não dizia
+            // QUAL — e o edital publica duas ("terá início no dia 20/08 e se encerrará no dia
+            // 10/09"). Um modelo melhor não resolvia isso: não havia onde escrever a resposta,
+            // e a data que ele devolvia era a que qualquer leitor chamaria de "a data do 2º
+            // leilão" — o início, justamente a que não responde "ainda dá para dar lance?".
+            + '• "pracas": lista das praças/leilões, cada uma {"ordem":1,"inicio":"AAAA-MM-DD","fim":"AAAA-MM-DD","hora":"HH:MM","valor":0}.\n'
+            + '  - "inicio": quando a praça ABRE para lances. "fim": quando ela SE ENCERRA (a data-limite para dar lance).\n'
+            + '  - O edital costuma dizer as duas na mesma frase ("terá início no dia X e se encerrará no dia Y"). Nesse caso preencha as duas.\n'
+            + '  - Se o edital der uma data só para a praça, ponha em "inicio" e deixe "fim" vazio. NÃO deduza o encerramento.\n'
+            + '  - "valor": o lance mínimo da praça. Se o edital der uma REGRA em vez de um número ("no mínimo 60% do valor da avaliação"), calcule sobre a avaliação DESTE lote.\n'
+            + '  - Se houver 2ª praça, INCLUA as duas.\n'
             + 'NÃO invente: campo que o edital não afirma vai "" (texto), 0 (número) ou [] (lista). Use ponto decimal.\n'
             + 'Retorne SOMENTE: {"descricaoImovel":"","tipoImovel":"","areaConstruidaM2":0,"areaTerrenoM2":0,"enderecoCompleto":"","pracas":[]}' },
         ] }],
@@ -293,8 +336,21 @@ async function editalPorVisao(url, imovelId, fim) {
     if (!bruto) { diag('resposta sem JSON', { amostra: texto.slice(0, 80) }); return null; }
     const j = JSON.parse(bruto[0]);
     const num = (v) => { const n = Number(v); return Number.isFinite(n) && n > 0 && n <= 1000000 ? n : null; };
+    // `data` aceita o nome antigo por compatibilidade com resposta que ainda venha no formato
+    // anterior; `inicio` é o campo pedido hoje. `fim` só é aceito se for DEPOIS do início —
+    // encerramento anterior à abertura é leitura errada, e gravá-lo daria o lote por vencido.
     const pracas = Array.isArray(j.pracas) ? j.pracas
-      .map((p) => ({ ordem: Number(p?.ordem) || null, data: String(p?.data || '').slice(0, 10) || null, hora: String(p?.hora || '').slice(0, 5) || null, valor: num(p?.valor) }))
+      .map((p) => {
+        const inicio = String(p?.inicio || p?.data || '').slice(0, 10) || null;
+        const bruto = String(p?.fim || '').slice(0, 10) || null;
+        return {
+          ordem: Number(p?.ordem) || null,
+          data: inicio,
+          fim: (bruto && inicio && bruto > inicio) ? bruto : null,
+          hora: String(p?.hora || '').slice(0, 5) || null,
+          valor: num(p?.valor),
+        };
+      })
       .filter((p) => p.data || p.valor) : [];
     const out = {
       descricaoImovel: String(j.descricaoImovel || '').slice(0, 600) || null,
@@ -395,8 +451,11 @@ export async function extratoEdital(imovelId, { deadline } = {}) {
         // e `gerar-analise.js:2238` fazia `.find()` sobre `undefined`, derrubando o relatório
         // inteiro (erro real em 17/08: "Cannot read properties of undefined (reading 'find')"
         // no lote de Copacabana, cujo edital escaneado tinha 2ª praça em 18/08 por R$ 505.173,65).
+        // `fim` entra aqui junto (28/08): o caminho de VISÃO lê o mesmo edital escaneado e
+        // passou a devolver o encerramento. Esquecer de normalizá-lo faria o lote com edital
+        // em imagem continuar sem prazo real — o defeito consertado só no caminho de texto.
         pracasVisao = (vis.pracas || [])
-          .map((p) => ({ n: Number(p.ordem) || null, valor: Number(p.valor) || 0, data: p.data || null }))
+          .map((p) => ({ n: Number(p.ordem) || null, valor: Number(p.valor) || 0, data: p.data || null, fim: p.fim || null }))
           .filter((p) => p.n && (p.valor > 0 || p.data));
         const metaVis = { url, imovelId, tipoDoc: 'edital', campos: { identidade, ...(datas ? { datas } : {}), ...(pracasVisao.length ? { pracasVisao } : {}) }, via: 'visao', confianca: 80 };
         await cacheGravar(chaveUrl(url), metaVis);
