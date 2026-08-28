@@ -34,6 +34,13 @@ export default async function handler(req) {
     // src/utils/marketing.js → VITE_META_PIXEL_ID · api/_meta-capi.js → META_CAPI_TOKEN.
     metaPixel:{ ok: !!(process.env.VITE_META_PIXEL_ID || process.env.META_PIXEL_ID), label: 'Pixel do Meta (Facebook/Instagram)', grupo: 'aquisicao', impacto: 'crescimento' },
     meta:     { ok: !!process.env.META_CAPI_TOKEN,         label: 'Meta — Conversões API (server-side)', grupo: 'aquisicao', impacto: 'crescimento' },
+    // OpenAI Ads (ChatGPT Ads), 28/08. Entra aqui pelo mesmo motivo que o Pixel do Meta
+    // entrou: o código é DORMENTE sem a env e um pixel dormente é indistinguível de um
+    // pixel funcionando — ambos ficam calados. Aconteceu na primeira tentativa de ligar:
+    // a env foi criada, o deploy saiu, e o bundle publicado trazia a chave como string
+    // VAZIA (o build reaproveitado não viu a variável nova). Só dava para descobrir lendo
+    // o JavaScript compilado em produção. Agora o painel responde.
+    openaiPixel: { ok: !!process.env.VITE_OPENAI_PIXEL_ID, label: 'Pixel do OpenAI Ads (ChatGPT Ads)', grupo: 'aquisicao', impacto: 'crescimento' },
     // 24/08: o painel cobria Pixel e CAPI e NÃO cobria a ingestão de GASTO do Meta — que
     // é o que alimenta marketing_metricas_dia e, por consequência, o CAC/ROAS do canal.
     // `/api/meta-insights-cron` roda 08h10 todo dia e devolve HTTP 200 `{skipped:'dormente'}`
