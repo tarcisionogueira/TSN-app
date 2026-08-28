@@ -187,21 +187,25 @@ export default function MinhasAnalises() {
     return null; // pronto: os chips por relatório mostram o veredito
   };
 
-  // "Arrematei" SÓ aparece quando os 3 relatórios estão realmente prontos — é o gatilho da
+  // "Arrematei" SÓ aparece quando os relatórios estão realmente prontos — é o gatilho da
   // retenção (guardar os documentos do arremate). Antes o botão aparecia em qualquer análise,
   // mesmo incompleta/em um só relatório, o que confundia (parecia disponível "para todos").
-  const tresProntos = (it) => {
+  //
+  // 28/08: o Laudo de Viabilidade saiu do fluxo e SAIU DESTE GATE junto. Mantê-lo aqui esconderia
+  // "Arrematei" para sempre em toda análise nova — o cliente que comprou de verdade não teria
+  // como registrar, e perderia relatórios e documentos do imóvel na retenção. O nome da função
+  // ficou `doisProntos` para não sobrar um "três" descrevendo dois.
+  const doisProntos = (it) => {
     const r = it.reports || {};
     const ok = (x) => x?.status === 'concluida';
     return ok(r.mercado) && !r.mercado?.flags?.parecerPendente
-      && ok(r.documental) && !r.documental?.flags?.precisaDocumentos
-      && ok(r.laudo) && !r.laudo?.flags?.precisaRelatorios;
+      && ok(r.documental) && !r.documental?.flags?.precisaDocumentos;
   };
 
   // JANELA PARA REGISTRAR O ARREMATE (regra do dono, 07/08). Desde hoje o lote com data vencida
   // sai da busca, e o relatório é apagado depois do prazo — então o investidor que GANHOU o
   // leilão precisa conseguir registrar isso, e precisa ser lembrado. Duas consequências aqui:
-  //   • depois do leilão, "Arrematei" aparece SEMPRE. O gate dos 3 relatórios existe para não
+  //   • depois do leilão, "Arrematei" aparece SEMPRE. O gate dos relatórios existe para não
   //     confundir quem ainda está analisando; depois do pregão ele só impediria o registro de uma
   //     compra real — e sem registro o cliente perde relatório e documentos do imóvel que comprou.
   //   • o card avisa, com a data, que a janela está correndo.
@@ -337,7 +341,7 @@ export default function MinhasAnalises() {
                   </button>
                 )}
                 {/* "Arrematei" é AÇÃO de sinalizar — some quando o imóvel já está arrematado. */}
-                {!jaArr && (tresProntos(a) || leilaoPassou(a)) && (
+                {!jaArr && (doisProntos(a) || leilaoPassou(a)) && (
                 <button onClick={(e) => sinalizarArremate(e, a)}
                   disabled={sinalizando === a.imovelId}
                   title="Confirmo que arrematei este imóvel (mantém os documentos)"

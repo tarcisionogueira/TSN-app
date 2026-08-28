@@ -65,23 +65,25 @@ export default async function handler(req) {
   // 1.5. GATE: a reunião com o analista só é liberada com os TRÊS relatórios concluídos
   // (Mercadológico + Documental + Laudo de Viabilidade). O gate do front (Analise.jsx) é
   // burlável por POST direto, então revalidamos no servidor. Aplica só à 1ª reunião — a 2ª é a
-  // aprovação pós-análise, já dentro do fluxo assistido. Paridade com o front: documental/laudo
-  // só contam quando NÃO estão pendentes (precisaDocumentos/precisaRelatorios != true).
+  // aprovação pós-análise, já dentro do fluxo assistido. Paridade com o front: o documental
+  // só conta quando NÃO está pendente (precisaDocumentos != true).
   if (Number(reuniao_numero) === 1 && caso.imovel_id) {
     const enc = encodeURIComponent(caso.imovel_id);
     const uid = encodeURIComponent(user.id);
     try {
-      const [mR, dR, lR] = await Promise.all([
+      // O LAUDO SAIU DO GATE (28/08). Ele deixou de ser gerado — a tela não o oferece mais —,
+      // e um gate de servidor exigindo relatório que o produto não produz é um 403 que ninguém
+      // consegue satisfazer: o cliente veria o botão liberado e a API recusando, sem caminho.
+      // Mudar a tela sem mudar esta linha teria trocado um passo a mais por um beco sem saída.
+      const [mR, dR] = await Promise.all([
         sb(`analises_mercado?user_id=eq.${uid}&imovel_id=eq.${enc}&status=eq.concluida&select=imovel_id&limit=1`),
         sb(`analises_documental?user_id=eq.${uid}&imovel_id=eq.${enc}&status=eq.concluida&select=result&limit=1`),
-        sb(`analises_laudo?user_id=eq.${uid}&imovel_id=eq.${enc}&status=eq.concluida&select=result&limit=1`),
       ]);
-      const [m, d2, l] = await Promise.all([mR.json(), dR.json(), lR.json()]);
+      const [m, d2] = await Promise.all([mR.json(), dR.json()]);
       const mercadoOk = Array.isArray(m) && m.length > 0;
       const docOk = Array.isArray(d2) && d2.length > 0 && d2[0]?.result?.precisaDocumentos !== true;
-      const laudoOk = Array.isArray(l) && l.length > 0 && l[0]?.result?.precisaRelatorios !== true;
-      if (!(mercadoOk && docOk && laudoOk)) {
-        return new Response(JSON.stringify({ error: 'É necessário gerar os três relatórios (Mercadológico, Documental e Laudo de Viabilidade) antes de agendar a reunião com o analista.' }), { status: 403 });
+      if (!(mercadoOk && docOk)) {
+        return new Response(JSON.stringify({ error: 'É necessário gerar o Relatório Mercadológico e a Análise Documental antes de agendar a reunião com o analista.' }), { status: 403 });
       }
     } catch {
       return new Response(JSON.stringify({ error: 'Não foi possível validar seus relatórios agora. Tente novamente em instantes.' }), { status: 503 });

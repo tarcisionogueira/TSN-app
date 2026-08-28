@@ -27,12 +27,28 @@ export async function calcularDistribuicao(db, arr) {
   // Envolvidos designados no fluxo daquele cliente.
   const advogadoId = arr.advogado_id || null;
   const analistaId = arr.analista_id || null;
+  // O INDICANTE DO CLIENTE (28/08). Antes, só entrava quem tivesse papel `consultor` — ou
+  // seja, equipe interna. Parceiro comum (explorador, Investidor Pro) trazia o cliente, o
+  // cliente arrematava, e o parceiro não participava do êxito: a regra do dono é que QUALQUER
+  // parceiro recebe, com as mesmas condições dos outros fluxos.
+  //
+  // O gate é o MESMO de `distribuir_comissao_rede` (aceite do Programa + ativo + adimplente),
+  // e não é burocracia: sem `parceiro_aceite_em` não há termo aceito, e pagar comissão a quem
+  // não aderiu ao Programa é repasse sem contrato. Papel de EQUIPE (analista, advogado, admin)
+  // fica de fora — eles já têm fatia própria no split e receberiam duas vezes pelo mesmo caso.
   let   consultorId = null;
   if (arr.arrematante_id) {
     const cli = (await db(`perfis?id=eq.${arr.arrematante_id}&select=indicado_por`)).data?.[0];
     if (cli?.indicado_por) {
-      const ind = (await db(`perfis?id=eq.${cli.indicado_por}&select=id,role,ativo`)).data?.[0];
-      if (ind && ind.role === 'consultor' && ind.ativo !== false) consultorId = ind.id;
+      const ind = (await db(`perfis?id=eq.${cli.indicado_por}&select=id,role,ativo,parceiro_aceite_em,inadimplente_desde,plano_vencimento`)).data?.[0];
+      const hoje = new Date().toISOString().slice(0, 10);
+      const elegivel = ind
+        && ind.ativo !== false
+        && !!ind.parceiro_aceite_em
+        && !ind.inadimplente_desde
+        && (!ind.plano_vencimento || ind.plano_vencimento >= hoje)
+        && !['admin', 'analista', 'advogado'].includes(ind.role);
+      if (elegivel) consultorId = ind.id;
     }
   }
 
@@ -51,6 +67,9 @@ export async function calcularDistribuicao(db, arr) {
   const envolvidos = [];
   if (advogadoId) envolvidos.push({ papel: 'advogado', id: advogadoId, nome: perfis[advogadoId]?.nome || null, pct: pctDe(advogadoId, cfg.advogado_pct) });
   if (analistaId) envolvidos.push({ papel: 'analista', id: analistaId, nome: perfis[analistaId]?.nome || null, pct: pctDe(analistaId, cfg.analista_pct) });
+  // `papel: 'consultor'` e a coluna `consultor_pct` ficam com o NOME ANTIGO de propósito: é o
+  // slot do indicante no split, e renomear quebraria os snapshots já gravados em
+  // `arrematacoes.honorarios_split`, que é o registro do que foi efetivamente pago.
   if (consultorId) envolvidos.push({ papel: 'consultor', id: consultorId, nome: perfis[consultorId]?.nome || null, pct: pctDe(consultorId, cfg.consultor_pct) });
 
   const somaEnvolvidos = envolvidos.reduce((s, e) => s + e.pct, 0);

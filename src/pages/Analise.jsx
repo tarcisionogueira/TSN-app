@@ -1101,11 +1101,24 @@ export default function Analise() {
   }, [docEntry?.status, docEntry?.updatedAt, analiseImovelId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const ambosRelatorios = relMercadoGerado && relDocumentalGerado;
-  // Gate do AGENDAMENTO com o analista: só após os TRÊS relatórios concluídos (Mercadológico +
-  // Documental + Laudo de Viabilidade). Antes usava `ambosRelatorios` (só 2) e liberava o
-  // agendamento no 2º relatório. NÃO reutilizar `ambosRelatorios` aqui: ele libera a GERAÇÃO do
-  // Laudo (que exige só os 2 anteriores) — por isso é uma variável separada.
-  const relatoriosConcluidos = relMercadoGerado && relDocumentalGerado && relLaudoGerado;
+
+  // ── O LAUDO DE VIABILIDADE SAIU DE CENA (28/08, decisão do dono) ─────────────
+  // Ele não trazia informação nova: consolidava o Mercadológico e o Documental num veredito.
+  // Como terceira etapa OBRIGATÓRIA, custava uma espera a mais entre o cliente e a conversa
+  // com o analista — que é onde a decisão realmente acontece.
+  //
+  // "Tirar da tela, manter o que existe": não se gera laudo NOVO, e quem já tem um continua
+  // vendo o seu. Por isso a visibilidade é `relLaudoGerado`, não uma constante: laudo que o
+  // cliente já gerou é entrega paga, e apagá-lo da tela seria tirar dele o que recebeu.
+  const LAUDO_NOVO_ATIVO = false;
+  const laudoVisivel = relLaudoGerado;   // só aparece para quem JÁ tem
+
+  // Gate do AGENDAMENTO com o analista: agora os DOIS relatórios bastam.
+  // ⚠️ Este gate TINHA de mudar junto: ele exigia `relLaudoGerado`, e tirar o laudo da tela
+  // sem mexer aqui deixaria o agendamento travado para sempre — o botão pedindo um relatório
+  // que não existe mais em lugar nenhum para ser gerado. Retirar uma etapa é mexer em tudo
+  // que a esperava.
+  const relatoriosConcluidos = relMercadoGerado && relDocumentalGerado;
 
   // ─── Relatório 3: Laudo de Viabilidade (Agente de Defesa / parecer final) ───
   // Consolida os DOIS relatórios anteriores num veredito. Roda no servidor
@@ -1135,7 +1148,7 @@ export default function Analise() {
     const s = autoSeqRef.current;
     if (s.etapa === 0 && !relMercadoGerado && analiseEntry?.status !== 'gerando') { s.etapa = 1; gerarRelMercado(); return; }
     if (s.etapa === 1 && relMercadoGerado && !relDocumentalGerado && !gerandoDocumental && !relDocumentalPreparando) { s.etapa = 2; gerarRelDocumental(true); return; }
-    if (s.etapa === 2 && ambosRelatorios && !relLaudoGerado && !gerandoLaudo) { s.etapa = 3; gerarRelLaudo(); }
+    if (s.etapa === 2 && ambosRelatorios && LAUDO_NOVO_ATIVO && !relLaudoGerado && !gerandoLaudo) { s.etapa = 3; gerarRelLaudo(); }
   }, [autoGerar, relMercadoGerado, relDocumentalGerado, relLaudoGerado, gerandoDocumental, gerandoLaudo, relDocumentalPreparando, ambosRelatorios, analiseEntry?.status]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // AUTO-HEAL do parecer vazio (caso Marcelo): ao abrir um relatório concluído com o parecer em
@@ -1156,7 +1169,7 @@ export default function Analise() {
   // cliente para lá — o Caso cria/abre o caso deste imóvel e mostra o agendamento.
   // Isso substitui o antigo stub (flags locais + "marcar realizada" pelo cliente).
   const irParaAcompanhamento = () => {
-    if (!relatoriosConcluidos) { showMsg('Gere os três relatórios (Mercadológico, Documental e Laudo de Viabilidade) antes de agendar.', 'error'); return; }
+    if (!relatoriosConcluidos) { showMsg('Gere o Mercadológico e a Análise Documental antes de agendar.', 'error'); return; }
     const imv = imovelInicial || {
       id: d.id, endereco: d.endereco, cidade: d.cidade, estado: d.estado,
       valorMinimo: d.valorArrematacao, valorAvaliacao: d.valorAvaliacao, modalidade: d.origem,
@@ -1635,7 +1648,9 @@ export default function Analise() {
               {[
                 { k:'mercado', label:'Mercadológico + Viabilidade', ok: relMercadoGerado && !relMercadoIncompleto, busy: gerandoMercado || relMercadoIncompleto },
                 { k:'documental', label:'Documental + Processo', ok: relDocumentalGerado, busy: gerandoDocumental || relDocumentalPreparando },
-                { k:'laudo', label:'Laudo de Viabilidade', ok: relLaudoGerado, busy: gerandoLaudo },
+                // `laudoVisivel` = já existe um laudo deste imóvel. Quem nunca gerou não vê a
+                // linha; quem gerou continua abrindo o dele.
+                ...(laudoVisivel ? [{ k:'laudo', label:'Laudo de Viabilidade', ok: relLaudoGerado, busy: gerandoLaudo }] : []),
               ].map(it => {
                 // Clicável quando pronto OU em andamento (para abrir e ver o status).
                 const clicavel = it.ok || it.busy;
@@ -1662,7 +1677,7 @@ export default function Analise() {
             </button>
             <div style={{ fontSize:10, color:'#94a3b8', textAlign:'center', lineHeight:1.4 }}>
               {!relatoriosConcluidos
-                ? 'Disponível após gerar os três relatórios (Mercadológico, Documental e Laudo de Viabilidade).'
+                ? 'Disponível após gerar o Mercadológico e a Análise Documental.'
                 : 'Você escolhe o horário; após a reunião o analista dá o parecer e libera o jurídico.'}
             </div>
           </div>
@@ -1757,7 +1772,8 @@ export default function Analise() {
                 {[
                   { k:'mercado', cor:'#0d9488', bg:'#f0fdfa', Icon:BarChart3, titulo:'Mercadológico + Viabilidade Financeira', desc:'Avaliação de mercado (níveis 1 e 2), estrutura de custos, cenários, ROI/ROE e teto de lance.', ok:relMercadoGerado && !relMercadoIncompleto, gerando:gerandoMercado || relMercadoIncompleto, fn:gerarRelMercado, block: analisesBloqueado, seqBloqueado:false, ordem:1, entry: analiseEntry },
                   { k:'documental', cor:'#1e3a8a', bg:'#eef2ff', Icon:Scale, titulo:'Análise Documental + Processo', desc:'Leitura do edital/matrícula (ônus e gravames) e consulta do processo no CNJ + certidões fiscais.', ok:relDocumentalGerado, gerando:gerandoDocumental, preparando:relDocumentalPreparando, faltamDocs:relDocumentalFaltamDocs, fn:gerarRelDocumental, block:false, seqBloqueado: !relMercadoGerado && !relDocumentalGerado, planoBloqueado: ROLES_SEM_DOCUMENTAL.includes(role), ordem:2, entry: docEntry },
-                  { k:'laudo', cor:'#111111', bg:'#f1f5f9', Icon:Award, titulo:'Laudo de Viabilidade (Parecer Final)', desc:'Consolida os dois relatórios acima num veredito de defesa (aprovado/condicional/reprovado), com condições e diligências. Não reprocessa fontes, sintetiza o que já foi gerado.', ok:relLaudoGerado, gerando:gerandoLaudo, fn:gerarRelLaudo, block:false, seqBloqueado: !ambosRelatorios && !relLaudoGerado, planoBloqueado: ROLES_SEM_DOCUMENTAL.includes(role), ordem:3, entry: laudoEntry },
+                  // O card do laudo só existe para quem JÁ gerou um (ver LAUDO_NOVO_ATIVO acima).
+                  ...(laudoVisivel ? [{ k:'laudo', cor:'#111111', bg:'#f1f5f9', Icon:Award, titulo:'Laudo de Viabilidade (Parecer Final)', desc:'Consolida os dois relatórios acima num veredito de defesa. Não é mais gerado para novas análises — o parecer agora vem do analista, na reunião.', ok:relLaudoGerado, gerando:gerandoLaudo, fn:gerarRelLaudo, block:false, seqBloqueado:false, planoBloqueado: ROLES_SEM_DOCUMENTAL.includes(role), ordem:3, entry: laudoEntry }] : []),
                 ].map(c => {
                   const travado = c.gerando || c.preparando || c.block || c.seqBloqueado || c.planoBloqueado || (loteEncerrado.encerrado && !c.ok);
                   return (
@@ -2142,14 +2158,14 @@ export default function Analise() {
               <div style={{ flex:1, minWidth:0 }}>
                 <div style={{ fontSize:14, fontWeight:900, color:'#5b21b6', marginBottom:4 }}>Antes de dar o lance, valide com um especialista</div>
                 <div style={{ fontSize:12.5, color:'#4c1d95', lineHeight:1.7, marginBottom:12 }}>
-                  Arrematar é uma <strong>operação de risco</strong> e deve ser conduzida profissionalmente. Com os três relatórios prontos, <strong>agende uma reunião com um analista BidPro</strong> para revisar a operação, tirar dúvidas e decidir com segurança.
+                  Arrematar é uma <strong>operação de risco</strong> e deve ser conduzida profissionalmente. Com o Mercadológico e a Documental prontos, o passo seguinte é <strong>agendar uma reunião com um analista BidPro</strong> para revisar a operação, tirar dúvidas e decidir com segurança.
                 </div>
                 <button onClick={irParaAcompanhamento} disabled={!relatoriosConcluidos}
-                  title={!relatoriosConcluidos ? 'Gere o Laudo de Viabilidade para liberar' : ''}
+                  title={!relatoriosConcluidos ? 'Gere o Mercadológico e a Análise Documental para liberar' : ''}
                   style={{ padding:'11px 18px', background: !relatoriosConcluidos?'#cbd5e1':'#7c3aed', color:'white', border:'none', borderRadius:10, fontWeight:800, fontSize:13, cursor:!relatoriosConcluidos?'default':'pointer', display:'inline-flex', alignItems:'center', gap:8 }}>
                   <Calendar size={15}/> Agendar reunião com analista
                 </button>
-                {!relatoriosConcluidos && <div style={{ fontSize:11, color:'#7c3aed', marginTop:8 }}>Gere os três relatórios (Mercadológico, Documental e Laudo de Viabilidade) para liberar o agendamento.</div>}
+                {!relatoriosConcluidos && <div style={{ fontSize:11, color:'#7c3aed', marginTop:8 }}>Gere o Mercadológico e a Análise Documental para liberar o agendamento.</div>}
               </div>
             </div>
           )}
@@ -3930,6 +3946,34 @@ export default function Analise() {
           de texto fixo: rodapé que repete a mesma frase em todo relatório não resguarda nada. */}
       <NotaMetodologica tipo="mercadologico" dados={analiseEntry?.result || { mercado }} />
 
+      {/* ── PRÓXIMO PASSO: A ANÁLISE DOCUMENTAL (28/08, pedido do dono) ──────────────────
+          O mercadológico responde QUANTO vale e a que preço fecha a conta. Ele não responde
+          se o imóvel PODE ser arrematado com segurança — ônus na matrícula, ocupação, dívida
+          que passa para o arrematante, processo. Um cliente que lê só este relatório sai com
+          meia decisão e a impressão de decisão inteira, que é o pior desfecho possível.
+          Só aparece quando ainda FALTA gerar o documental — pronto, o card vira convite a
+          agendar (o CTA roxo no painel documental). */}
+      {!isStaffAnalise && !relDocumentalGerado && (
+        <div style={{ background:'#eef2ff', border:'2px solid #c7d2fe', borderRadius:16, padding:'18px 20px', display:'flex', gap:14, alignItems:'flex-start', marginTop:14 }}>
+          <Scale size={22} color="#1e3a8a" style={{ flexShrink:0, marginTop:2 }}/>
+          <div style={{ flex:1, minWidth:0 }}>
+            <div style={{ fontSize:14, fontWeight:900, color:'#1e3a8a', marginBottom:4 }}>Próximo passo: a Análise Documental e Jurídica</div>
+            <div style={{ fontSize:12.5, color:'#1e40af', lineHeight:1.7, marginBottom:12 }}>
+              Este relatório mostrou <strong>quanto o imóvel vale e a que preço a conta fecha</strong>. Ele não diz se dá para arrematar com segurança: <strong>ônus e gravames na matrícula, ocupação, dívidas que passam para o arrematante</strong> e a situação do processo. É a Análise Documental que responde isso — e é ela que muda um lance bom em um lance seguro.
+            </div>
+            <button onClick={() => { setRelSel(null); setTimeout(() => gerarRelDocumental(false), 0); }}
+              disabled={gerandoDocumental || relDocumentalPreparando || ROLES_SEM_DOCUMENTAL.includes(role)}
+              title={ROLES_SEM_DOCUMENTAL.includes(role) ? 'Disponível a partir do plano Investidor Pro' : ''}
+              style={{ padding:'11px 18px', background: (gerandoDocumental || relDocumentalPreparando || ROLES_SEM_DOCUMENTAL.includes(role)) ? '#cbd5e1' : '#1e3a8a', color:'white', border:'none', borderRadius:10, fontWeight:800, fontSize:13, cursor: (gerandoDocumental || relDocumentalPreparando || ROLES_SEM_DOCUMENTAL.includes(role)) ? 'default' : 'pointer', display:'inline-flex', alignItems:'center', gap:8 }}>
+              <Scale size={15}/> {gerandoDocumental || relDocumentalPreparando ? 'Gerando a Documental…' : 'Gerar a Análise Documental'}
+            </button>
+            {ROLES_SEM_DOCUMENTAL.includes(role) && (
+              <div style={{ fontSize:11, color:'#1e3a8a', marginTop:8 }}>A Análise Documental está disponível a partir do plano Investidor Pro.</div>
+            )}
+          </div>
+        </div>
+      )}
+
       </>)}
 
       {/* Guia Pós-Arrematação, Financiamento e registro ONR foram movidos para o
@@ -3962,7 +4006,7 @@ export default function Analise() {
                   ? (ehAmostra
                       ? `Suas ${limiteRole} análises gratuitas são de amostra e não renovam no mês seguinte. Assine o Investidor Pro para ter 10 relatórios mercadológicos por mês.`
                       : `Você atingiu o limite de ${limiteRole} análises mensais. Assine o Investidor Pro e continue analisando com folga.`)
-                  : `${upgrade.titulo ? `"${upgrade.titulo}" faz parte do ` : 'Faz parte do '}Investidor Pro: a leitura jurídica e o parecer final que decidem o lance com segurança.`}
+                  : `${upgrade.titulo ? `"${upgrade.titulo}" faz parte do ` : 'Faz parte do '}Investidor Pro: a leitura jurídica e a reunião com analista que decidem o lance com segurança.`}
               </div>
             </div>
             <div style={{ padding:'20px 24px' }}>
@@ -3970,7 +4014,10 @@ export default function Analise() {
               <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
                 {[
                   ['⚖️','Análise Documental + Jurídica','Edital e matrícula lidos (ônus, gravames, ocupação) mais o processo no CNJ e as certidões.'],
-                  ['🏆','Laudo de Viabilidade (Parecer Final)','O veredito de defesa que cruza mercado e jurídico, com o resumo da operação.'],
+                  // 28/08: aqui anunciava o "Laudo de Viabilidade (Parecer Final)". Ele saiu do
+                  // fluxo, e vitrine de plano pago que promete entrega descontinuada é promessa
+                  // de venda que o produto não cumpre. O parecer final passou a ser a reunião.
+                  ['🗓️','Reunião com um analista BidPro','O parecer final sobre a operação, com um especialista, depois dos dois relatórios.'],
                   ['📊','Mais análises por mês','Volume de relatórios mercadológicos folgado para investir sem travar.'],
                 ].map(([ic,t,ds],i) => (
                   <div key={i} style={{ display:'flex', gap:10, alignItems:'flex-start' }}>
