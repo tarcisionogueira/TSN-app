@@ -11770,7 +11770,7 @@ function DemografiaTab() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// AGENDA TAB — Disponibilidade dos analistas e geração de slots
+// AGENDA TAB — Disponibilidade de quem atende a reunião e geração de slots
 // ═══════════════════════════════════════════════════════════════════════════════
 const DIAS_SEMANA = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
 
@@ -11786,9 +11786,20 @@ function AgendaTab() {
   const [msg, setMsg] = React.useState('');
   const [novaDisp, setNovaDisp] = React.useState({ dia_semana: 1, hora_inicio: '09:00', hora_fim: '12:00' });
 
+  // O ADVOGADO ENTRA AQUI (28/08). Decisão do dono: o advogado cadastrado também faz a função
+  // de analista na reunião — é ele que tira as dúvidas do investidor —, e o termo dele passa a
+  // exigir que mantenha agenda disponível. Sem incluir o papel nesta lista, o termo prometeria
+  // uma agenda que o sistema não deixa publicar: só `analista` e `admin` podiam ter horários,
+  // então o advogado assinaria uma obrigação impossível de cumprir na plataforma.
+  //
+  // O resto do fluxo já é agnóstico a papel: `agendar-reuniao.js` pega o dono do slot e o grava
+  // em `casos.analista_id` sem checar `role`. Era só esta tela que barrava.
+  //
+  // A coluna e a tabela seguem com o nome `analista_*` de propósito: renomear quebraria os
+  // registros de reunião já gravados, e o nome do campo não é o que decide quem atende.
   React.useEffect(() => {
-    supabase.from('perfis').select('id,nome').in('role', ['analista','admin']).order('nome')
-      .then(({ data }) => { setAnalistas(data || []); if (data?.length) setAnalistaSel(data[0].id); });
+    supabase.from('perfis').select('id,nome,role').in('role', ['analista','advogado','admin']).order('nome')
+      .then(({ data }) => { setAnalistas((data || []).map(p => ({ ...p, nome: p.role === 'advogado' ? `${p.nome} (advogado)` : p.nome }))); if (data?.length) setAnalistaSel(data[0].id); });
   }, []);
 
   React.useEffect(() => {

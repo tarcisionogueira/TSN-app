@@ -108,9 +108,14 @@ export async function calcularDistribuicao(db, arr) {
   const somaEnvolvidos = envolvidos.reduce((s, e) => s + e.pct, 0);
   const adminPct = Math.max(0, +(total - somaEnvolvidos).toFixed(4)); // admin equilibra o restante
 
+  // Linha de 0% não entra no rateio (28/08). Com `analista_pct = 0` e o ADVOGADO passando a
+  // atender a reunião — virando também o `analista_id` do caso —, o comprovante sairia com uma
+  // linha "analista … 0% … R$ 0,00" para a mesma pessoa que já aparece como advogado. Num
+  // documento financeiro isso não informa nada e sugere um pagamento que não existe. Quem
+  // participou do caso está registrado em `casos`, que é onde essa informação pertence.
   const linhas = [
     { papel: 'admin', id: adminRow?.id || null, nome: adminRow?.nome || 'Admin (backup)', pct: adminPct, valor: +(valor * adminPct / 100).toFixed(2) },
-    ...envolvidos.map(e => ({ ...e, valor: +(valor * e.pct / 100).toFixed(2) })),
+    ...envolvidos.filter(e => e.pct > 0).map(e => ({ ...e, valor: +(valor * e.pct / 100).toFixed(2) })),
   ];
   return { total, valor, adminPct, linhas };
 }
