@@ -29,6 +29,7 @@ import { gerarCombinadoPDF } from '../components/CombinadoPDF';
 import { scoreBidPro, scoreLabel } from '../utils/score';
 import { apiCall } from '../utils/apiCall';
 import NotaMetodologica from '../components/NotaMetodologica';
+import { COMISSAO_LEILOEIRO_PCT, ITBI_REGISTRO_PCT } from '../lib/rentabilidade';
 
 // Rótulos do tipo de ocupação no Raio-X jurídico (Fase 1).
 const OCUP_LABEL_A = {
@@ -2721,8 +2722,12 @@ export default function Analise() {
           <div>
             <div style={{ fontSize:11, fontWeight:800, color:'#8b5cf6', textTransform:'uppercase', letterSpacing:1, marginBottom:10, paddingBottom:6, borderBottom:'2px solid #ede9fe' }}>Custos e Encargos</div>
             <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(3,1fr)', gap:12 }}>
-              <Field label="Taxa Leiloeiro (%)" name="taxaLeiloeiroPercentual" value={d.taxaLeiloeiroPercentual||5} onChange={upN} type="number"/>
-              <Field label="ITBI + Registro (%)" name="itbiPercentual" value={d.itbiPercentual||3} onChange={upN} type="number"/>
+              {/* `??`, não `||`: em venda direta/licitação a comissão é legitimamente 0 (linha
+                  ~231) e o `||` mostrava 5% no campo enquanto a conta usava 0 — o cliente lia
+                  uma premissa e o relatório aplicava outra. O ITBI caía para 3 aqui e nascia 5
+                  no estado inicial; a régua única é a de src/lib/rentabilidade.js. */}
+              <Field label="Taxa Leiloeiro (%)" name="taxaLeiloeiroPercentual" value={d.taxaLeiloeiroPercentual ?? COMISSAO_LEILOEIRO_PCT} onChange={upN} type="number"/>
+              <Field label="ITBI + Registro (%)" name="itbiPercentual" value={d.itbiPercentual ?? ITBI_REGISTRO_PCT} onChange={upN} type="number"/>
               {/* Honorários BidPro (taxa de ÊXITO do escritório, partilhada com jurídico/
                   analista quando ativos): 10% por padrão, aplica-se a TODO arremate
                   (judicial E extrajudicial), NÃO é sucumbência. Editável; entra nos

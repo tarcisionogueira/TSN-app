@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { TIPOS_RESIDENCIAL, TIPOS_LIQUIDOS, REVENDA_DESCONTO_MIN, ajustarFiltrosPorIntencao } from '../lib/intencao';
+import { ALUGUEL_ALVO_PCT_MES, PREMISSAS_TEXTO, COMISSAO_LEILOEIRO_PCT, ITBI_REGISTRO_PCT, aluguelAlvoMensal } from '../lib/rentabilidade';
 import { useNavigate } from 'react-router-dom';
 import {
   Search, Loader2, Filter, ChevronDown, ChevronUp,
@@ -1387,9 +1388,11 @@ export default function Busca() {
         objetivoCompra: 'investimento',
         updatedAt: new Date().toISOString(),
         lancamentosFinanceiros: [],
-        taxaLeiloeiroPercentual: 5,
+        taxaLeiloeiroPercentual: COMISSAO_LEILOEIRO_PCT,
         honorariosPercentual: 10,
-        itbiPercentual: 3,
+        // Era 3% aqui e 5% no relatório: o mesmo imóvel nascia com um custo e era analisado
+        // com outro. A régua única vive em src/lib/rentabilidade.js.
+        itbiPercentual: ITBI_REGISTRO_PCT,
         somenteAVista: !im.pagamento?.includes('financiado'),
         prazoMeses: 360, cetAnual: 12, sinalPercentual: 5, prazoVendaMeses: 12,
       };
@@ -2188,6 +2191,14 @@ export default function Busca() {
                       <div style={{ fontWeight:900, color:'#111111', fontSize: isMobile ? 18 : 15 }}>{fmtBRL(im.valorMinimo)}</div>
                       {im.valorAvaliacao>0 && (
                         <div style={{ fontSize:10, color:'#64748b' }}>Aval. {fmtBRL(im.valorAvaliacao)}</div>
+                      )}
+                      {/* Quem buscou para ALUGAR vê aqui a régua de 1% a.m. — ALVO, não previsão.
+                          A premissa vai junto no `title`, senão o número vira número mágico. */}
+                      {filtros.intencao === 'locacao' && aluguelAlvoMensal(im.valorMinimo) && (
+                        <div title={`Para render ${ALUGUEL_ALVO_PCT_MES}% ao mês sobre o investido (${PREMISSAS_TEXTO}), este lote precisaria alugar por esse valor. Não é previsão de aluguel — o praticado na região sai no relatório.`}
+                          style={{ fontSize:10, color:'#0D63DB', fontWeight:800, marginTop:2 }}>
+                          Alvo {ALUGUEL_ALVO_PCT_MES}% a.m.: {fmtBRL(aluguelAlvoMensal(im.valorMinimo))}/mês
+                        </div>
                       )}
                     </div>
 

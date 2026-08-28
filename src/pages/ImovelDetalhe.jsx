@@ -15,6 +15,8 @@ import { formatarDescricaoImovel } from '../utils/descricao';
 import { fotoCandidatos } from '../utils/foto';
 import { trackImovelVisualizado } from '../utils/gtag';
 import { lerCotaMercado } from '../utils/cotaAnalise';
+import { CUSTO_AQUISICAO_PCT, ALUGUEL_ALVO_PCT_MES, PREMISSAS_TEXTO, aluguelAlvoMensal, investidoTotal } from '../lib/rentabilidade';
+import { TIPOS_LIQUIDOS } from '../lib/intencao';
 
 // As regras de "o que é documento" moram em src/utils/documento.js — esta tela já
 // aplicava a versão certa; a busca não tinha cópia nenhuma e prometia edital em 2.170
@@ -1487,7 +1489,10 @@ export default function ImovelDetalhe() {
               // onde havia negócio: no acervo, −6,1% de desconto médio pela 1ª contra +23,5% pela 2ª.
               const praca = pracaMaisDescontada(imovel);
               const lance = praca.valor || imovel.valorMinimo;
-              const custosAquisicao = lance * 0.095; // ITBI ~3% + registro ~1,5% + comissão leiloeiro 5%
+              // A régua de custo é UMA só e mora em src/lib/rentabilidade.js. Esta linha usava
+              // 9,5% enquanto o relatório usava 10% (5% de comissão + 5% de ITBI/registro):
+              // duas contas do mesmo custo na mesma jornada, e o relatório é a autoridade.
+              const custosAquisicao = lance * (CUSTO_AQUISICAO_PCT / 100);
               const revendaRef = imovel.valorAvaliacao;
               const comissaoVenda = revendaRef * 0.05;
               const lucro = revendaRef - lance - custosAquisicao - comissaoVenda;
@@ -1506,7 +1511,7 @@ export default function ImovelDetalhe() {
                     Estimativa com base no <strong>valor de avaliação do leilão</strong> e custos médios. A <strong>avaliação mercadológica real</strong> e a viabilidade financeira completa são feitas no <strong>relatório</strong>.
                   </p>
                   {linha(praca.qual === '2a_praca' ? 'Lance mínimo (2ª praça)' : 'Lance mínimo', fmtBRL(lance))}
-                  {linha('Custos de aquisição (est. ~9,5%)', '− ' + fmtBRL(custosAquisicao), '#b45309')}
+                  {linha(`Custos de aquisição (est. ~${CUSTO_AQUISICAO_PCT}%)`, '− ' + fmtBRL(custosAquisicao), '#b45309')}
                   {linha('Revenda de referência (avaliação)', fmtBRL(revendaRef))}
                   {linha('Comissão de venda (5%)', '− ' + fmtBRL(comissaoVenda), '#b45309')}
                   <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0 0', fontSize: 15 }}>
@@ -1517,6 +1522,34 @@ export default function ImovelDetalhe() {
                     style={{ marginTop: 14, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 16px', background: '#eff6ff', color: '#0D63DB', border: '1px solid #bfdbfe', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
                     <BarChart2 size={14} /> Simular na Calculadora
                   </button>
+                </div>
+              );
+            })()}
+
+            {/* ALUGUEL-ALVO (1% a.m.) — é ALVO, não previsão. Ver src/lib/rentabilidade.js. */}
+            {(() => {
+              const lance = pracaMaisDescontada(imovel).valor || imovel.valorMinimo;
+              const alvo = aluguelAlvoMensal(lance);
+              // Terreno e rural ficam de fora: a régua de 1% é de imóvel que se aluga pronto.
+              if (!alvo || !TIPOS_LIQUIDOS.includes(String(imovel.tipo || '').toLowerCase())) return null;
+              const investido = investidoTotal(lance);
+              return (
+                <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: '24px' }}>
+                  <h2 style={{ fontSize: 16, fontWeight: 800, color: '#111111', margin: '0 0 6px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Banknote size={18} color="#0D63DB" /> Aluguel-alvo ({ALUGUEL_ALVO_PCT_MES}% a.m.)
+                  </h2>
+                  <p style={{ fontSize: 12, color: '#94a3b8', margin: '0 0 14px', lineHeight: 1.5 }}>
+                    Quanto este lote <strong>precisaria</strong> render por mês para pagar {ALUGUEL_ALVO_PCT_MES}% sobre o valor investido.
+                    Não é previsão de aluguel: o <strong>aluguel praticado na região</strong> sai no relatório mercadológico.
+                  </p>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', fontSize: 13, borderBottom: '1px dashed #f1f5f9' }}>
+                    <span style={{ color: '#64748b' }}>Investido ({PREMISSAS_TEXTO})</span>
+                    <span style={{ fontWeight: 700, color: '#111' }}>{fmtBRL(investido)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0 0', fontSize: 15 }}>
+                    <span style={{ fontWeight: 800, color: '#111' }}>Aluguel-alvo</span>
+                    <span style={{ fontWeight: 900, color: '#0D63DB' }}>{fmtBRL(alvo)}<span style={{ fontSize: 12, fontWeight: 700, color: '#64748b' }}> /mês</span></span>
+                  </div>
                 </div>
               );
             })()}

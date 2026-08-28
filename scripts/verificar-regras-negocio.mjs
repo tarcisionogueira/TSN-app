@@ -16,6 +16,7 @@
  * que ela existe para pegar.
  */
 import { ajustarFiltrosPorIntencao } from '../src/lib/intencao.js';
+import { aluguelAlvoMensal } from '../src/lib/rentabilidade.js';
 
 const URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -60,9 +61,37 @@ for (const intencao of INTENCOES) {
   if (!falhas) console.log(`✓ ${intencao.padEnd(10)} tipos=${js.tipos.length}  desconto_min=${js.descontoMin}%`);
 }
 
+// ── ALUGUEL-ALVO DE 1% A.M. ──────────────────────────────────────────────────────────────
+// Mesma lógica: a régua é APLICADA em src/lib/rentabilidade.js (ficha e card da Busca) e
+// DECLARADA em public.aluguel_alvo_mensal. Compara-se o RESULTADO, não os percentuais soltos:
+// é o número que o cliente lê na tela, e é ele que não pode divergir do que a auditoria vê.
+for (const lance of [100000, 185969, 1234567]) {
+  let banco;
+  try {
+    const r = await fetch(`${URL}/rest/v1/rpc/aluguel_alvo_mensal`, {
+      method: 'POST',
+      headers: { apikey: KEY, Authorization: `Bearer ${KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ p_lance: lance }),
+    });
+    if (!r.ok) { console.error(`✗ aluguel-alvo: RPC aluguel_alvo_mensal devolveu HTTP ${r.status}`); process.exit(2); }
+    banco = await r.json();
+  } catch (e) {
+    console.error(`✗ aluguel-alvo: não consegui chamar aluguel_alvo_mensal — ${e?.message || e}`);
+    process.exit(2);
+  }
+  const js = aluguelAlvoMensal(lance);
+  // Centavos: o banco arredonda em 2 casas, o JS não. Diferença acima de 1 centavo é régua
+  // diferente, abaixo é arredondamento.
+  if (js === null || Math.abs(Number(banco) - js) > 0.01) {
+    console.error(`✗ aluguel-alvo · lance ${lance} — código: ${js}  ·  banco: ${banco}`);
+    falhas++;
+  }
+}
+if (!falhas) console.log(`✓ ${'aluguel-alvo'.padEnd(10)} 1% a.m. sobre o investido — código e banco batem`);
+
 if (falhas) {
-  console.error(`\n✗ ${falhas} divergência(s) entre src/lib/intencao.js e public.intencao_filtro.`);
+  console.error(`\n✗ ${falhas} divergência(s) entre o código (src/lib/) e a declaração no banco.`);
   console.error('  Alinhe os dois: a regra que o cliente sente é a do CÓDIGO, a que a auditoria vê é a do BANCO.\n');
   process.exit(1);
 }
-console.log('\n✓ A régua da intenção é a mesma no código e no banco.');
+console.log('\n✓ As réguas de negócio são as mesmas no código e no banco.');
