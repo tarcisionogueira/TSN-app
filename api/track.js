@@ -69,7 +69,7 @@ export default async function handler(req, res) {
     // Medido antes da correção: `visita_origem` tinha ZERO linhas com landing `/live/%`,
     // desde sempre. Não dava para distinguir "o anúncio não traz ninguém" de "não estamos
     // medindo" — os dois diagnósticos opostos de sempre.
-    const ROTA_PUBLICA = /^\/($|p\/|leil(ao|oes)|live|planos|login|cadastro|termos|privacidade|convite|cadastro-parceiro|contrato|testemunha|ativar|redefinir|recuperar|\(auth-redirect\))/;
+    const ROTA_PUBLICA = /^\/($|p\/|leil(ao|oes)|live|r\/|planos|login|cadastro|termos|privacidade|convite|cadastro-parceiro|contrato|testemunha|ativar|redefinir|recuperar|\(auth-redirect\))/;
     let lista = eventos;
     if (!userId) {
       if (!anonId) { res.status(204).end(); return; }

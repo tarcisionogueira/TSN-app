@@ -19,6 +19,7 @@
  *   /i/<id>       → imóvel: título, cidade/UF, lance e FOTO         (destino /#/imovel/<id>)
  *   /p/curso/<id> · /p/ebook/<id> → nome/descrição do produto       (destino /#/p/...)
  *   /aula/<slug>  → aula ao vivo: título, data/hora e capa           (destino /#/live/<slug>)
+ *   /r/<codigo>   → link CURTO de indicação do parceiro    (destino /#/calculadora?ref=<codigo>)
  * PRIVACIDADE: nunca expõe nome/CPF/e-mail/conteúdo — só o TÍTULO do documento (quem tem o
  * link já abre o documento; o preview não vaza nada além do título).
  */
@@ -32,7 +33,7 @@ const SITE = 'https://www.bidprobrasil.com.br';
 const OG_PADRAO = {
   titulo: 'BidPro Brasil — Leilões de imóveis com inteligência e segurança',
   desc: 'Imóveis de leilão em todo o Brasil com até 50% abaixo do mercado. Análise jurídica e de viabilidade por IA + assessoria para arrematar com segurança.',
-  img: `${SITE}/og-image.png?v=4`,
+  img: `${SITE}/og-image.jpg`,
 };
 
 const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -103,6 +104,19 @@ export default async function handler(req, res) {
       const p = (tipo === 'curso' ? CURSOS : EBOOKS || []).find((x) => String(x.id) === id);
       titulo = p ? `${rot}: ${p.titulo} — BidPro Brasil` : `${rot} — BidPro Brasil`;
       desc = String(p?.descricao || p?.subtitulo || 'Conteúdo educacional sobre leilões de imóveis, da BidPro Brasil.').slice(0, 200);
+    } else if (tipo === 'convite' && idOk) {
+      // LINK CURTO DE INDICAÇÃO. `/r/<codigo>` existia no `vercel.json` apontando para o
+      // `index.html`, e o comentário da Calculadora dizia "api/r.js + rewrite" — só que
+      // `api/r.js` NUNCA existiu. Consequência muito pior que o cartão feio: o código do
+      // parceiro vai no CAMINHO (`/r/C39C0C`) e a captura só lê `?ref=` (AuthContext), então
+      // o visitante caía na home SEM indicação nenhuma e, 24h depois, o cron de upline padrão
+      // adotava a conta para o dono. O parceiro perdia a comissão em silêncio.
+      // Aqui o link vira o que sempre prometeu ser: cartão próprio + destino com o `?ref=`.
+      destino = `/#/calculadora?ref=${encodeURIComponent(id)}`;
+      titulo = 'Imóveis de leilão com análise de viabilidade — BidPro Brasil';
+      desc = 'Acervo nacional de leilões, simulador de arrematação e relatório de viabilidade por IA. Você foi convidado: crie sua conta pelo link.';
+      // Sem o NOME de quem indicou, de propósito: a regra de privacidade no topo deste arquivo
+      // vale para o cartão inteiro, e o código do parceiro já viaja na URL.
     } else if (tipo === 'live' && idOk) {
       // AULA AO VIVO — a peça de captação da campanha. O link que o dono divulga é
       // `/#/live/<slug>`, e robô de preview NÃO lê nada depois do "#": WhatsApp, Instagram e
@@ -149,7 +163,7 @@ export default async function handler(req, res) {
 
   const pathPub = tipo === 'contrato' ? `/c/${id}` : tipo === 'testemunha' ? `/t/${id}`
     : tipo === 'imovel' ? `/i/${id}` : (tipo === 'curso' || tipo === 'ebook') ? `/p/${tipo}/${id}`
-    : tipo === 'live' ? `/aula/${id}` : '/';
+    : tipo === 'live' ? `/aula/${id}` : tipo === 'convite' ? `/r/${id}` : '/';
   const html = `<!doctype html><html lang="pt-BR"><head>
 <meta charset="utf-8"/>
 <title>${esc(titulo)}</title>

@@ -122,7 +122,7 @@ function pagina({ titulo, desc, canonical, corpo, jsonld, indexar = true, migalh
 <meta property="og:title" content="${esc(titulo)}"/>
 <meta property="og:description" content="${esc(desc)}"/>
 <meta property="og:url" content="${esc(canonical)}"/>
-<meta property="og:image" content="${SITE}/og-image.png?v=4"/>
+<meta property="og:image" content="${SITE}/og-image.jpg"/>
 <meta property="og:locale" content="pt_BR"/>
 <meta name="twitter:card" content="summary_large_image"/>
 ${jsonld ? `<script type="application/ld+json">${JSON.stringify(jsonld).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029')}</script>` : ''}

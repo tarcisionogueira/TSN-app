@@ -6,7 +6,7 @@
     },
     {
       "source": "/r/:codigo",
-      "destination": "/index.html"
+      "destination": "/api/og-share?tipo=convite&id=:codigo"
     },
     {
       "source": "/c/:token",
