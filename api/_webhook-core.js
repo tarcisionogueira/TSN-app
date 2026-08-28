@@ -272,6 +272,17 @@ export async function ativarPlanoDireto({ userId, planoKey, gateway, cobranca = 
         p_comprador: userId, p_tipo, p_valor: Number(cobranca.valor), p_gateway_payment_id: String(cobranca.gatewayPaymentId),
       });
       if (dist && dist.ok === false) console.warn(`[${gateway}] comissao_rede (recorrente):`, JSON.stringify(dist).slice(0, 200));
+      // VENDA DA ASSESSORIA pelo advogado que conduziu a reunião (28/08). Chamada à parte, e não
+      // dentro de `distribuir_comissao_rede`, porque o vínculo é OUTRO: aquela percorre a cadeia
+      // `indicado_por`, e o advogado é encontrado pelo CASO. A RPC decide sozinha se há alguém
+      // elegível — `sem_advogado_elegivel` é resposta correta, não erro.
+      if (planoBase(planoKey) === 'assessorado') {
+        const { data: cv, error: eCv } = await supabase.rpc('comissao_venda_assessoria', {
+          p_comprador: userId, p_valor: Number(cobranca.valor), p_gateway_payment_id: String(cobranca.gatewayPaymentId),
+        });
+        if (eCv) console.error(`[${gateway}] comissao_venda_assessoria:`, eCv.message);
+        else if (cv?.sem_comissao) console.warn(`[${gateway}] venda assessoria sem comissao: ${cv.sem_comissao}`);
+      }
     } catch (e) {
       console.error(`[${gateway}] comissao_rede (recorrente):`, e.message);
     }
@@ -543,6 +554,17 @@ export async function processarConfirmado({ valor, descricao, email, gatewayCust
         p_comprador: cliente.id, p_tipo, p_valor: valor, p_gateway_payment_id: gatewayPaymentId,
       });
       if (dist && dist.ok === false) console.warn(`[${gateway}] comissao_rede:`, JSON.stringify(dist).slice(0, 200));
+      // Mesma comissão de venda da assessoria, no outro caminho de pagamento. Precisa estar nos
+      // DOIS: um pagamento de assessoria pode chegar por qualquer um deles, e cobrir só um faria
+      // a comissão sair ou não conforme o caminho — que é a pior forma de erro em dinheiro,
+      // porque parece funcionar na metade dos casos.
+      if (mapeado.plano === 'assessorado') {
+        const { data: cv, error: eCv } = await supabase.rpc('comissao_venda_assessoria', {
+          p_comprador: cliente.id, p_valor: valor, p_gateway_payment_id: gatewayPaymentId,
+        });
+        if (eCv) console.error(`[${gateway}] comissao_venda_assessoria:`, eCv.message);
+        else if (cv?.sem_comissao) console.warn(`[${gateway}] venda assessoria sem comissao: ${cv.sem_comissao}`);
+      }
     } catch (e) {
       console.error(`[${gateway}] comissao_rede:`, e.message);
       // alertarErro é SÍNCRONO e recebe UM objeto { rota, erro, extra } — chamá-lo com args

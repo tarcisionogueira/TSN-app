@@ -12,6 +12,7 @@
 // ponteiro, mas cópia envelhece. Quem mudar o split no banco sobe a versão DESTE termo no mesmo
 // commit. Consulta para conferir antes de mexer:
 //   select total_pct, advogado_pct, admin_pct, analista_pct, consultor_pct from config_honorarios where id = 1;
+//   select valor->>'pct' from regra_negocio where chave = 'comissao.venda_assessoria';  -- item 5
 //
 // A estrutura espelha `ConviteParceiro.jsx` de propósito (versão + preâmbulo + array de
 // cláusulas + modal): a auditoria de LGPD do Admin já sabe ler esse formato, e um segundo
@@ -24,7 +25,7 @@
 // novo, esta cláusula vira letra morta — mexeu num, confira o outro.
 import React from 'react';
 
-export const TERMO_JURIDICO_VERSAO = 'v4-2026-08';
+export const TERMO_JURIDICO_VERSAO = 'v5-2026-08';
 
 export const TERMO_JURIDICO_PREAMBULO = 'Este Termo de Adesão rege a sua atuação como Advogado Parceiro da BidPro Brasil na análise jurídica de editais, matrículas e processos de leilão, e na condução jurídica dos casos que lhe forem designados. Ele complementa os Termos de Uso e a Política de Privacidade da plataforma. Ao aceitar, você concorda com as condições abaixo.';
 
@@ -47,7 +48,7 @@ export const TERMO_JURIDICO = [
   },
   {
     t: '5. Apresentação da Assessoria na reunião',
-    d: 'A reunião não é só esclarecimento técnico: é nela que o investidor decide como vai conduzir a arrematação. Cabe a você APRESENTAR A ASSESSORIA da BidPro Brasil quando ela for adequada ao caso — explicando o que ela cobre, como funciona o acompanhamento e o que muda em relação a arrematar sozinho — e responder às dúvidas do investidor sobre a contratação. É a sua leitura jurídica do caso que dá base a essa conversa, e por isso a apresentação é sua e não de um vendedor. Duas obrigações que vêm junto: (a) a recomendação deve ser HONESTA — se o caso não pede assessoria, ou se o parecer aponta risco que desaconselha a arrematação, diga isso, ainda que implique não haver contratação; e (b) nada do que você apresentar pode contrariar o seu próprio parecer. Você NÃO é remunerado por venda de assessoria: sua participação é o êxito do item 6, que só existe se a arrematação se concretizar. Isso é deliberado — sua recomendação não deve ter incentivo para empurrar contratação que o caso não justifica.',
+    d: 'A reunião não é só esclarecimento técnico: é nela que o investidor decide como vai conduzir a arrematação. Cabe a você APRESENTAR A ASSESSORIA da BidPro Brasil quando ela for adequada ao caso — explicando o que ela cobre, como funciona o acompanhamento e o que muda em relação a arrematar sozinho — e responder às dúvidas do investidor sobre a contratação. É a sua leitura jurídica do caso que dá base a essa conversa, e por isso a apresentação é sua e não de um vendedor. Duas obrigações que vêm junto: (a) a recomendação deve ser HONESTA — se o caso não pede assessoria, ou se o parecer aponta risco que desaconselha a arrematação, diga isso, ainda que implique não haver contratação; e (b) nada do que você apresentar pode contrariar o seu próprio parecer. Pela Assessoria efetivamente CONTRATADA e PAGA por indicação sua na reunião, você recebe 10% do valor pago, em paridade com o parceiro que indicou o cliente — e essa comissão acumula com a de indicação, caso você também seja o indicante. O crédito é apurado sobre a cobrança recebida, nunca sobre contrato assinado, e é estornado se o pagamento for cancelado ou reembolsado. Note que essa comissão é uma fração pequena do que você recebe se a arrematação se concretizar (item 6): a intenção é reconhecer o trabalho da apresentação sem criar incentivo para recomendar contratação que o caso não justifica. Recomendar Assessoria em caso que não a pede, ou contrariando o seu próprio parecer para viabilizar a contratação, é infração deste Termo e acarreta o cancelamento da comissão e as medidas do item 9.',
   },
   {
     t: '6. Como você é remunerado',
