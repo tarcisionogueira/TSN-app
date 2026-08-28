@@ -223,14 +223,32 @@ qualquer visitante. Revogada. **Estado final: segurança 0/0, regras de negócio
    convite → ele aceita o termo na tela → 1º login carimba → Admin → Agenda cadastra a
    disponibilidade → gera slots.
 2. **Termo do `analista`** — não existe, e o papel está com 0%. Decisão do dono.
-3. **Nenhum produto pago no catálogo** (o único curso ativo tem preço 0), então a comissão de
-   produto ainda não pode ser exercitada em produção.
+3. ~~Nenhum produto pago no catálogo~~ — **ERRADO, corrigido em 28/08 ao revisar a lista.** Eu
+   olhei só os CURSOS (o único ativo tem preço 0) e concluí demais. O **eBook "Leilões caixa"
+   está ATIVO a R$ 14,90**, agora com `comissao_pct = 25`. Ou seja, a comissão de produto — e o
+   fallback para o vínculo gravado — **pode ser exercitada em produção hoje**, com uma compra
+   de R$ 14,90. É o teste mais barato que existe para fechar aquele caminho.
+   > A lição vale mais que o item: *"não há produto pago"* foi conclusão tirada de metade da
+   > evidência (uma tabela de duas). O acervo tem `cursos_admin` E `ebooks_admin`.
 4. **`plano_vencimento` nulo em todos os top2** — nada expira sozinho hoje. E `plano_pago_em`
    vazio na Neuma, apesar de 2 pagamentos aprovados.
 5. **Mercadológico "sem dados concretos"** — a investigação parou: há reaproveitamento de pesquisa
    por imóvel com janela de 7 dias (`ANALISE_REUSE_DIAS`), e a hipótese é que ele serviu valores
    antigos até o dono forçar a regeração. Falta o dono dizer **o que exatamente estava errado**
    (valor de venda, de aluguel, ou os dois) para atacar a causa em vez do sintoma.
+6. **🔴 A REUNIÃO COM ANALISTA NUNCA ACONTECEU — e é o gargalo do produto.** Medido em 28/08:
+   `reunioes` = **0**, com **8 casos** parados em `analise_solicitada` (Alessandra 5, Rafael 3),
+   os mais antigos de 22/07. Há 3 disponibilidades e 6 slots futuros cadastrados, então o
+   mecanismo funciona — **falta gente atendendo**: `analista` = 0 e `advogado` = 0 na base.
+   > Dos 8 casos, só **1** tem os dois relatórios prontos (Rafael, Rua José Miguel Ackel) — e
+   > esse ficou agendável HOJE, por causa da saída do Laudo do gate. Os outros 7 não têm nem
+   > relatório: são casos abertos e nunca analisados, o que é um gap de OPERAÇÃO, não de código.
+   > E **nenhum dos 8 tem laudo**, o que confirma pelo dado que o terceiro relatório já não
+   > estava sendo produzido na prática — a decisão de removê-lo descreveu o que já acontecia.
+7. **`admin_qa_invariantes` deu timeout no `/admin`** em 23/08 (Supabase 500, *canceling statement
+   due to statement timeout*). Uma ocorrência, não resolvida. A função é a que alimenta o painel
+   de invariantes — quando ela estoura, o painel fica vazio e isso é indistinguível de "está
+   tudo ok", que é a forma da casa. Vale medir o tempo dela antes que vire rotina.
 
 ---
 
