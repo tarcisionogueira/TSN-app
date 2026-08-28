@@ -390,6 +390,54 @@ grande lado a lado.
 
 ---
 
+### 🎥 A CAMPANHA DA AULA — dois defeitos no caminho do dinheiro, e o cartão que faltava
+
+Estado medido em 28/08, a 5 dias da aula (**02/09, 19h**; oferta `top2` fechando 05/09 23:59):
+**1 inscrito**, e **nenhuma verba apontando para a aula** — as duas campanhas ativas levam a
+outro lugar:
+
+| campanha | canal | 14 dias | cliques | destino real |
+|---|---|---|---|---|
+| Pesquisa — Leilão de Imóveis (BR) | Google | R$ 325,27 | 790 | `/leiloes` |
+| TRF - SITE - LEILOES - AGO26 | Meta | R$ 27,65 | 228 | `/` |
+
+**🔴 A sequência de venda começava ANTES da aula.** O relógio das etapas é o da OFERTA (certo),
+mas nada verificava se a AULA já tinha acontecido: o único inscrito recebeu em **28/08 12:00**
+o e-mail *"a condição da aula vale até sábado, 05/09"* — de uma aula que só acontece em 02/09.
+O dano não é o e-mail fora de hora: **o dedup é por etapa e para sempre**, então a `abertura` —
+a peça que explica o que tem dentro — ficou **queimada** e nunca chegaria no dia em que a oferta
+realmente abre. Com a campanha ligada, isso se repetiria para **cada novo inscrito**. Agora o
+cron pula enquanto `data_hora + duracao_min` não passou e registra `etapa: 'antes_da_aula'`
+(pular calado seria o mesmo defeito). O registro do e-mail já enviado **não** foi apagado: ele
+foi enviado de verdade, e apagar faria o log mentir.
+
+**🔴 A landing da aula não era medida — 3ª vez na MESMA lista.** `/live/<slug>` não estava na
+allowlist de rotas públicas do `/api/track`. Visitante anônimo entrava, lia, ia embora, e o
+evento voltava 204 — e, pior, o bloco de ORIGEM nem era alcançado (o `return` antecipado da
+lista vazia), então **gclid/fbclid de quem chega pelo anúncio não virava linha em
+`visita_origem`**. Medido: **zero** linhas com landing `/live/%`, desde sempre. As duas
+ocorrências anteriores (`leiloes`, `leilao`) estão narradas no próprio arquivo, e as três têm a
+mesma assinatura: a página que ia receber o dinheiro é a que ficou de fora da medição.
+
+**🖼️ O cartão de compartilhamento (`/aula/<slug>`).** O link divulgado era `/#/live/<slug>`, e
+robô de preview **não lê nada depois do `#`** — WhatsApp, Instagram e Telegram mostravam o
+cartão genérico do site em cima de um convite que tem título, data, hora e apresentador. Agora
+`/aula/<slug>` serve o cartão certo (`api/og-share`, tipo `live`) e leva a pessoa para a mesma
+tela. O Admin passou a mostrar esse link como "o link da campanha", com a diferença explicada.
+
+> **Dois erros que o teste pegou ANTES de subir** (o handler foi exercitado de verdade, com a
+> linha real do evento e um `fetch` de mentira): a hora saía em **UTC** — o cartão anunciaria
+> **22h** numa aula que começa **19h**, o erro que mais estraga convite —, e o título saía
+> *"…, ao vivo — ao vivo, 02/09"*, porque o título deste evento já termina em "ao vivo".
+> Aula semanal com data já passada vira *"toda quarta, às 19h"* em vez de anunciar data morta.
+
+**E o campo que não existia:** `eventos_live.capa_url` estava na tabela e **não tinha por onde
+ser preenchido** — nenhum campo na tela da aula. Por isso o cartão cairia sempre na imagem
+genérica. Agora tem upload (mesmo componente e mesma mecânica da foto do apresentador) e o
+aviso de proporção **1200×630**, porque imagem em pé aparece cortada no WhatsApp.
+
+---
+
 ### 🪞 ERROS MEUS NESTA SESSÃO — handoff que só registra acerto ensina a repetir o erro
 
 1. **Refiz uma verificação já vencida.** Tratei Pixel/CAPI do Meta como possivelmente
