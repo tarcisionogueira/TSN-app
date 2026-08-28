@@ -22,6 +22,11 @@
  *     preço — e os textos daqui dizem exatamente isso, para não prometer desconto que a
  *     página de planos desmente em dois cliques.
  *
+ * QUANDO A SEQUÊNCIA COMEÇA: só DEPOIS de a aula terminar (`data_hora` + `duracao_min`).
+ * A oferta é apresentada NA aula; começar antes manda "a condição da aula vale até sábado"
+ * para quem ainda não assistiu — e, como o dedup é por etapa e para sempre, queima a etapa
+ * de abertura antes da hora. Aconteceu em 28/08 com o único inscrito.
+ *
  * AS ETAPAS saem do RELÓGIO DA OFERTA, não da data da aula. É o prazo que faz decidir, e é
  * ele que a pessoa precisa ouvir:
  *   abertura       (falta mais de 40h)  — o link está no ar, isto é o que tem dentro
@@ -154,7 +159,7 @@ export default async function handler(req, res) {
   // Produto OU plano. O `or` do PostgREST em vez de dois `not is null` empilhados: com
   // `and` implícito, uma aula que vende só plano ficaria de fora e nunca mandaria nada.
   const { data: eventos, error: eEv } = await supabase.from('eventos_live')
-    .select('slug, titulo, oferta_produto_tipo, oferta_produto_id, oferta_plano_key')
+    .select('slug, titulo, data_hora, duracao_min, oferta_produto_tipo, oferta_produto_id, oferta_plano_key')
     .eq('ativo', true)
     .or('oferta_produto_id.not.is.null,oferta_plano_key.not.is.null');
   // Leitura falhou NÃO vira "nenhum lançamento em curso": aborta para o cron acusar.
@@ -165,6 +170,27 @@ export default async function handler(req, res) {
   const porEvento = [];
 
   for (const ev of eventos) {
+    // ── A SEQUÊNCIA NÃO COMEÇA ANTES DA AULA ACONTECER (28/08) ────────────────
+    // O relógio das etapas é o da OFERTA, e isso está certo — mas nada verificava se a AULA
+    // já tinha ocorrido. Uma aula marcada para daqui a 5 dias, com oferta fechando depois,
+    // caía direto em `abertura` e o inscrito recebia "a condição da aula vale até sábado"
+    // ANTES da aula. Aconteceu de verdade: o único inscrito do `leilao-ao-vivo` recebeu em
+    // 28/08 12:00 a abertura de uma aula de 02/09.
+    // O dano não é só o e-mail fora de hora: o dedup é POR ETAPA E PARA SEMPRE, então a
+    // abertura — o e-mail que explica o que tem dentro — ficou QUEIMADA para ele, e nunca
+    // chegará no dia em que a oferta realmente abrir. Com a campanha ligada, isso queimaria
+    // a melhor peça da sequência para cada novo inscrito, um a um.
+    // `data_hora` é a data da próxima ocorrência e NÃO é rolada por nenhum job (a
+    // recorrência semanal só vira RRULE no Google Agenda) — então, passada a aula, a
+    // condição fica verdadeira até alguém marcar a próxima, que é o comportamento certo:
+    // aula nova, ciclo novo.
+    const fimDaAula = ev.data_hora
+      ? new Date(ev.data_hora).getTime() + (Number(ev.duracao_min) || 90) * 60000
+      : null;
+    if (fimDaAula && Date.now() < fimDaAula) {
+      porEvento.push({ slug: ev.slug, etapa: 'antes_da_aula', aula_em: ev.data_hora });
+      continue;
+    }
     const { data: publico, error: ePub } = await supabase.rpc('lancamento_publico', { p_evento_slug: ev.slug });
     if (ePub) return res.status(500).json({ error: 'publico_ilegivel', evento: ev.slug, detalhe: ePub.message });
     if (!publico?.length) { porEvento.push({ slug: ev.slug, publico: 0 }); continue; }

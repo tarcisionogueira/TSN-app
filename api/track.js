@@ -59,7 +59,17 @@ export default async function handler(req, res) {
     // que é onde o SEO de cauda longa entrega gente — continuava descartada com 204 silencioso.
     // Pego no primeiro dado real: uma visita orgânica do Google caiu em
     // `/leilao/.../restaurante-desocupado-...-araxa-mg`, gravou a origem e perdeu o pageview.
-    const ROTA_PUBLICA = /^\/($|p\/|leil(ao|oes)|planos|login|cadastro|termos|privacidade|convite|cadastro-parceiro|contrato|testemunha|ativar|redefinir|recuperar|\(auth-redirect\))/;
+    // `live` entrou em 28/08 e é a TERCEIRA vez que esta lista deixa de fora justamente a
+    // página que estava recebendo o dinheiro (as duas anteriores estão narradas acima:
+    // `leiloes` e `leilao`). `/live/<slug>` é a landing da aula ao vivo — a peça de captação
+    // sobre a qual a campanha vai ser ligada. Sem esta palavra o visitante anônimo entrava,
+    // lia, ia embora, e o evento voltava 204: nenhum pageview, nenhum clique e, pior, o
+    // bloco de ORIGEM lá embaixo nem era alcançado (o `return` antecipado da lista vazia),
+    // então gclid/fbclid de quem chega pelo anúncio NÃO virava linha em `visita_origem`.
+    // Medido antes da correção: `visita_origem` tinha ZERO linhas com landing `/live/%`,
+    // desde sempre. Não dava para distinguir "o anúncio não traz ninguém" de "não estamos
+    // medindo" — os dois diagnósticos opostos de sempre.
+    const ROTA_PUBLICA = /^\/($|p\/|leil(ao|oes)|live|planos|login|cadastro|termos|privacidade|convite|cadastro-parceiro|contrato|testemunha|ativar|redefinir|recuperar|\(auth-redirect\))/;
     let lista = eventos;
     if (!userId) {
       if (!anonId) { res.status(204).end(); return; }
