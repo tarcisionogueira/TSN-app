@@ -161,6 +161,18 @@ export default async function handler(req, res) {
     }
   } catch { /* preview best-effort: cai no padrão */ }
 
+  // ── A ATRIBUIÇÃO TEM QUE SOBREVIVER AO REDIRECIONAMENTO (28/08) ─────────────────────────
+  // Estas rotas existem para serem ANUNCIADAS (`/aula/<slug>` é a landing da campanha,
+  // `/r/<codigo>` é o link do parceiro), e o redirecionamento jogava fora a query inteira:
+  // um clique em `/aula/leilao-ao-vivo?utm_source=openai&utm_campaign=…` chegava ao app SEM
+  // utm nenhum. O anúncio seria pago e a origem, desconhecida — o mesmo buraco que fez 10 de
+  // 17 cadastros aparecerem como "indicado pelo dono" em 11/08.
+  // `capturarMarketing` lê os parâmetros ANTES ou DEPOIS do "#", então basta repassá-los.
+  const repassa = new URLSearchParams(u.search);
+  repassa.delete('tipo'); repassa.delete('id');   // internos do rewrite, não são do anunciante
+  const extraQs = repassa.toString();
+  if (extraQs) destino += (destino.includes('?') ? '&' : '?') + extraQs;
+
   const pathPub = tipo === 'contrato' ? `/c/${id}` : tipo === 'testemunha' ? `/t/${id}`
     : tipo === 'imovel' ? `/i/${id}` : (tipo === 'curso' || tipo === 'ebook') ? `/p/${tipo}/${id}`
     : tipo === 'live' ? `/aula/${id}` : tipo === 'convite' ? `/r/${id}` : '/';
