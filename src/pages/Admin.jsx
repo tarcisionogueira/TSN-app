@@ -12,6 +12,7 @@ import { gerarContratoPDF } from '../components/ContratoPDF';
 import { imprimirHtml } from '../components/pdfImprimir';
 import { tituloProduto, termoDoProduto } from '../utils/termos';
 import { TERMO_PARCEIRO, TERMO_PARCEIRO_PREAMBULO } from '../components/ConviteParceiro';
+import { TERMO_JURIDICO, TERMO_JURIDICO_PREAMBULO } from '../components/TermoJuridico';
 import Contratos from './Contratos'; // tela ÚNICA de contratos (mesma de "Meus Contratos", modo admin)
 import { arquivoParaBase64 } from '../utils/arquivo';
 import { setItemSeguro } from '../utils/storageSeguro.js';
@@ -1379,7 +1380,7 @@ function UsuariosTab() {
         // Aceites que moram no PERFIL: cadastro/LGPD e adesão ao Programa de Parceiros —
         // sem isto o modal parecia "Nenhum registro" para usuário que só se cadastrou.
         // identidade_validada/_em: para carimbar o KYC no comprovante do parceiro/assessoria/clube.
-        supabase.from('perfis').select('nome, lgpd_aceito, lgpd_data, parceiro_aceite_em, parceiro_aceite_versao, created_at, identidade_validada, identidade_validada_em').eq('id', userId).maybeSingle(),
+        supabase.from('perfis').select('nome, lgpd_aceito, lgpd_data, parceiro_aceite_em, parceiro_aceite_versao, juridico_aceite_em, juridico_aceite_versao, role, created_at, identidade_validada, identidade_validada_em').eq('id', userId).maybeSingle(),
         // Fotos do KYC (selfie + documento) para EMBUTIR no comprovante como prova de identidade.
         supabase.from('usuario_docs').select('tipo, nome, url, criado_em').eq('user_id', userId)
           .in('tipo', ['kyc_selfie', 'kyc_documento_frente', 'kyc_documento_verso', 'kyc_documento', 'kyc_documento_digital'])
@@ -1814,6 +1815,24 @@ ${hash ? `<h2>Verificação de integridade</h2><div class="kv muted">${esc(hashL
                             })}>Comprovante</button>
                           )}
                         </div>
+
+                        {/* TERMO DO JURÍDICO (28/08). Só aparece para quem é ou foi advogado —
+                            numa ficha de cliente comum a linha seria ruído. A ausência do aceite
+                            num advogado ATIVO é achado, não detalhe: é ele que autoriza o repasse
+                            de 4,5% e firma o dever de sigilo sobre documento de terceiro. */}
+                        {(pf.role === 'advogado' || pf.juridico_aceite_em) && (
+                          <div style={linha}>
+                            <span>{pf.juridico_aceite_em ? '✅' : '⚠️'} <b>Termo de Adesão — Advogado Parceiro</b>{pf.juridico_aceite_em ? ` — aderiu em ${dtHora(pf.juridico_aceite_em)}${pf.juridico_aceite_versao ? ` (termo ${pf.juridico_aceite_versao})` : ''}` : ' — NÃO aderiu (o portal exige o aceite no próximo acesso)'}</span>
+                            {pf.juridico_aceite_em && (
+                              <button style={btn} onClick={() => gerarComprovanteAceite({
+                                titulo: 'Termo de Adesão — Advogado Parceiro',
+                                linhas: [['Advogado', `${pf.nome || auditoriaUser?.nome || '—'}`], ['ID do usuário', auditoriaUser?.id || '—'], ['Aderiu em', dtHora(pf.juridico_aceite_em)], ['Versão do termo', pf.juridico_aceite_versao || '—'], ['Registro', 'perfis.juridico_aceite_em / juridico_aceite_versao']],
+                                canonico: `${auditoriaUser?.id}|juridico|${pf.juridico_aceite_em}|${pf.juridico_aceite_versao || ''}`,
+                                termoTexto: `${TERMO_JURIDICO_PREAMBULO} ${TERMO_JURIDICO.map((s) => `${s.t}: ${s.d}`).join(' ')}`,
+                              })}>Comprovante</button>
+                            )}
+                          </div>
+                        )}
                       </>
                     );
                   })()}

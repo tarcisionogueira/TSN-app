@@ -4,6 +4,7 @@ import { Scale, Building2, Mail, FileText, DollarSign, Plus, Trash2, Save, Loade
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
 import { apiCall } from '../utils/apiCall';
+import { TERMO_JURIDICO_VERSAO, TermoJuridicoModal } from '../components/TermoJuridico';
 
 const ETAPA_LABEL = {
   analise_solicitada: 'Análise solicitada', analises_prontas: 'Análises prontas',
@@ -15,11 +16,68 @@ const ETAPA_LABEL = {
 
 export default function AdvogadoPortal() {
   const nav = useNavigate();
-  const { user, effectiveUserId } = useAuth();
+  const { user, effectiveUserId, role } = useAuth();
   const [aba, setAba] = useState('escritorio');
+
+  // ── TERMO DE ADESÃO DO ADVOGADO (28/08) ─────────────────────────────────────
+  // O portal é a porta por onde TODO advogado passa, venha ele de convite de equipe ou de
+  // atribuição manual do admin — por isso o aceite é exigido aqui, e não só no convite: um
+  // gate no convite deixaria de fora quem foi promovido a advogado pelo Admin, que é como o
+  // primeiro deles provavelmente vai entrar.
+  //
+  // BLOQUEANTE de propósito. Este termo é o que define o repasse de 4,5% do valor arrematado
+  // e o dever de sigilo sobre documento de cliente; deixar navegar antes de aceitar seria dar
+  // acesso a matrícula e processo de terceiro sem contrato nenhum assinado.
+  const [aceite, setAceite] = useState(undefined);   // undefined = ainda lendo
+  const [concordo, setConcordo] = useState(false);
+  const [aceitando, setAceitando] = useState(false);
+  const [erroAceite, setErroAceite] = useState('');
+  const alvo = effectiveUserId || user?.id;
+  useEffect(() => {
+    if (!alvo) return;
+    let vivo = true;
+    (async () => {
+      // `error` conferido: sem isso um 400 viraria "não aceitou" e o advogado veria o termo
+      // de novo a cada carga, ou — pior, se a leitura falhasse do outro lado — passaria direto.
+      const { data, error } = await supabase.from('perfis').select('juridico_aceite_em').eq('id', alvo).maybeSingle();
+      if (!vivo) return;
+      if (error) { console.error('[AdvogadoPortal] leitura do aceite falhou:', error.message); setAceite(null); return; }
+      setAceite(data?.juridico_aceite_em || null);
+    })();
+    return () => { vivo = false; };
+  }, [alvo]);
+
+  const registrarAceite = async () => {
+    setAceitando(true); setErroAceite('');
+    const { data, error } = await supabase.rpc('aceitar_termo_juridico', { p_versao: TERMO_JURIDICO_VERSAO });
+    setAceitando(false);
+    // A RPC devolve NULL quando o papel não é advogado/admin. Sem checar isso, a tela diria
+    // "aceito" e o banco continuaria sem carimbo — o aceite que ninguém registrou.
+    if (error || !data) {
+      setErroAceite(error?.message || 'Não foi possível registrar o aceite. Confirme que seu perfil está como Advogado e tente de novo.');
+      return;
+    }
+    setAceite(data);
+  };
+
+  // Só o próprio advogado assina. O admin vê o portal sem o bloqueio (ele revisa o fluxo,
+  // e o termo dele não é este).
+  const precisaAceitar = role === 'advogado' && aceite === null;
 
   return (
     <div style={{ maxWidth: 980, margin: '0 auto', padding: '24px 20px 80px' }}>
+      {precisaAceitar && (
+        <>
+          <TermoJuridicoModal
+            bloqueante
+            onAceitar={registrarAceite}
+            concordo={concordo} setConcordo={setConcordo} aceitando={aceitando}
+          />
+          {erroAceite && (
+            <div style={{ position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)', zIndex: 4100, background: '#fef2f2', border: '1px solid #fecaca', color: '#991b1b', padding: '10px 16px', borderRadius: 10, fontSize: 13, fontWeight: 700 }}>{erroAceite}</div>
+          )}
+        </>
+      )}
       <h1 style={{ fontSize: 24, fontWeight: 900, color: '#111', margin: '0 0 4px', display: 'flex', alignItems: 'center', gap: 10 }}>
         <Scale size={24} color="#7c3aed" /> Área do Advogado
       </h1>
