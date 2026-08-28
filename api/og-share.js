@@ -4,7 +4,16 @@
  * CAUSA: o app é SPA com HashRouter (/#/rota) e os robôs de preview NÃO leem nada após o
  * "#" — todo link caía no OG genérico do index.html. SOLUÇÃO: rotas SEM hash (rewrites no
  * vercel.json → este endpoint) que servem og:title/description/image ESPECÍFICOS e
- * redirecionam o humano para a rota real (meta refresh + JS; o robô não segue, a pessoa sim).
+ * redirecionam o humano para a rota real.
+ *
+ * ⚠️ O REDIRECIONAMENTO É SÓ POR JAVASCRIPT — o `<meta http-equiv="refresh">` foi REMOVIDO em
+ * 28/08. Ele estava aqui na premissa de que "o robô não segue, a pessoa sim", e a premissa é
+ * falsa: o crawler do Facebook/WhatsApp SEGUE meta refresh. Resultado: ele lia estas tags,
+ * era mandado para `/#/live/...`, caía no `index.html` e mostrava o cartão GENÉRICO do site —
+ * exatamente o defeito que este arquivo existe para consertar, cometido pelo próprio conserto.
+ * Medido em 28/08: a página servia o cartão certo (conferido no ar) e o WhatsApp mostrava o
+ * genérico. Robô não executa JavaScript, então o `location.replace` abaixo leva a PESSOA e
+ * deixa o robô com as tags. Sem JS (raro), o link "continuar" no corpo resolve.
  *   /c/<token>    → "Assinatura de documento" + título do contrato (destino /#/c/<token>)
  *   /t/<token>    → assinatura da TESTEMUNHA                        (destino /#/t/<token>)
  *   /i/<id>       → imóvel: título, cidade/UF, lance e FOTO         (destino /#/imovel/<id>)
@@ -155,7 +164,6 @@ export default async function handler(req, res) {
 <meta name="twitter:description" content="${esc(desc)}"/>
 <meta name="twitter:image" content="${esc(img)}"/>
 <meta name="robots" content="noindex"/>
-<meta http-equiv="refresh" content="0;url=${esc(destino)}"/>
 <script>${tipo === 'imovel' && idOk ? `
 // Quem tem sessão válida do Supabase (chave sb-<ref>-auth-token no localStorage) vai para a
 // tela COMPLETA do app; os demais para a página pública do lote. Sessão EXPIRADA conta como
@@ -173,7 +181,9 @@ export default async function handler(req, res) {
   } catch (e) { /* storage bloqueado (aba privada): trata como visitante */ }
   location.replace(logado ? app : publico);
 })();` : `location.replace(${JSON.stringify(destino)});`}</script>
-</head><body>Redirecionando… <a href="${esc(destino)}">continuar</a></body></html>`;
+</head><body style="font-family:system-ui,sans-serif;padding:28px;color:#334155">
+Redirecionando… <a href="${esc(destino)}" style="color:#0D63DB;font-weight:700">continuar</a>
+</body></html>`;
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=600');
   res.status(200).send(html);
