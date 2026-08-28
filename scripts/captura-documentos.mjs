@@ -20,6 +20,7 @@ import { createHash } from 'node:crypto';
 import { fetchViaBrightData, brightDataDisponivel } from '../api/_brightdata.js';
 import { carregarPDFParse } from '../api/_pdf-safe.js';
 import { extrairMatriculaTexto, extrairPagamentoTexto, extrairCustosTexto, extrairIdentidadeTexto } from '../api/_doc-extracao.js';
+import { ehDocInstitucional } from '../api/_doc-scan.js';
 
 const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 const BUCKET = 'documentos';
@@ -177,7 +178,13 @@ function linksDocDeHtml(html, base) {
     const alvo = `${txt} ${href}`;
     const ehPdf = /\.pdf(\?|#|$)/i.test(href);
     const ehDoc = /edital|matr[ií]cula|laudo|documento|anexo|processo|arquivo|download/i.test(alvo);
-    const ehGenerico = /modelo|proposta|como.?comprar|termos|pol[ií]tica|privacidade|cadastr|manual|passo.?a.?passo|transpar[êe]ncia|igualdade.?salarial|quem.?somos|imprensa|investidor|carreira|institucional|c[óo]digo.?de.?[ée]tica|governan[çc]a/i.test(alvo);
+    // O ruído CORPORATIVO vem da régua canônica (`api/_doc-scan.js`), não de uma cópia local:
+    // esta linha tinha a própria lista e faltava nela a palavra "cookie" — foi assim que o
+    // "Aviso de Cookies" do site do leiloeiro virou DOCUMENTO DO LOTE em 1.122 imóveis. O
+    // resto do padrão continua aqui porque é específico da CAPTURA (material de apoio à
+    // compra: não é ruído corporativo, mas também não é documento deste lote).
+    const ehGenerico = ehDocInstitucional(alvo)
+      || /modelo|proposta|como.?comprar|cadastr|manual|passo.?a.?passo|imprensa|investidor|carreira|institucional/i.test(alvo);
     if ((!ehPdf && !ehDoc) || ehGenerico) continue;
     vistos.add(href);
     out.push({ href, txt });
@@ -274,7 +281,20 @@ async function processar(browser, item) {
 
   // ─── CAMINHO 2 — Puppeteer (renderiza JS, abre abas/acordeões, intercepta PDFs) ───
   let bloqueado = false; // vira true se o navegador for barrado (anti-bot) → escala p/ CAMINHO 3
-  if (paginaLote) {
+  // ── NÃO VASCULHAR A RAIZ DO SITE (28/08) ────────────────────────────────────────────────
+  // Causa-raiz do "Aviso de Cookies" em 1.100 lotes ativos: no LJUD o `url_lote` é, DE
+  // PROPÓSITO, o domínio do leiloeiro — a página de lote do agregador responde "Leilão não
+  // encontrado" para muitos lotes (ver `mapLoteLJUD_pp`). Só que aí esta rotina navegava para
+  // a HOME e colhia o que existe em toda home: aviso de cookies, termos, institucional. Não é
+  // documento deste lote; não é documento de lote nenhum. Página sem caminho não tem o que
+  // vasculhar, e vasculhar mesmo assim custou 1.826 arquivos guardados à toa.
+  const paginaLoteEhRaiz = (() => {
+    if (!paginaLote) return false;
+    try { const u = new URL(paginaLote); return (u.pathname === '/' || u.pathname === '') && !u.search; }
+    catch { return false; }
+  })();
+  if (paginaLoteEhRaiz) console.log(`    ↷ ${item.imovel_id}: url_lote é a raiz do site (${paginaLote}) — nada a vasculhar`);
+  if (paginaLote && !paginaLoteEhRaiz) {
     try {
       await page.goto(paginaLote, { waitUntil: 'networkidle2', timeout: 45000 });
       // Anti-bot (Cloudflare "just a moment"): espera o desafio JS resolver e o
@@ -376,7 +396,13 @@ async function processar(browser, item) {
     // de proposta, "como comprar", termos, cadastro, e material CORPORATIVO do
     // leiloeiro (relatório de transparência, igualdade salarial, quem somos,
     // imprensa, investidores, carreira) — evita salvar lixo como "edital"/"outro".
-    const ehGenerico = /modelo|proposta|como.?comprar|termos|pol[ií]tica|privacidade|cadastr|manual|passo.?a.?passo|transpar[êe]ncia|igualdade.?salarial|quem.?somos|imprensa|investidor|carreira|institucional|c[óo]digo.?de.?[ée]tica|governan[çc]a/i.test(alvo);
+    // O ruído CORPORATIVO vem da régua canônica (`api/_doc-scan.js`), não de uma cópia local:
+    // esta linha tinha a própria lista e faltava nela a palavra "cookie" — foi assim que o
+    // "Aviso de Cookies" do site do leiloeiro virou DOCUMENTO DO LOTE em 1.122 imóveis. O
+    // resto do padrão continua aqui porque é específico da CAPTURA (material de apoio à
+    // compra: não é ruído corporativo, mas também não é documento deste lote).
+    const ehGenerico = ehDocInstitucional(alvo)
+      || /modelo|proposta|como.?comprar|cadastr|manual|passo.?a.?passo|imprensa|investidor|carreira|institucional/i.test(alvo);
     if ((!ehPdfHref && !ehDocTxt) || ehGenerico) continue;
     const buf = await baixarPdf(page, l.href, paginaLote);
     // Passa o CONTEXTO (rótulo da seção) além do texto do link para classificar

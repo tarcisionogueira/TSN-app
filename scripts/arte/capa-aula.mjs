@@ -34,6 +34,11 @@
  * versão vai no NOME do arquivo, não em `?v=`: robô de preview e CDN lidam com caminho novo
  * de forma previsível, com query nem sempre.
  *
+ * ⚠️ RENDER EM 2× (2400×1260), não 1200×630. O WhatsApp REAMOSTRA a imagem para a miniatura, e
+ * reamostrar a partir de 1200px de largura serrilha a borda da letra — o dono descreveu como
+ * "quadriculada". Com o dobro de pixels na origem a redução fica limpa, e o JPEG 92 ainda cabe
+ * em ~150 KB.
+ *
  * Como rodar (precisa do Chromium do Playwright):
  *   node scripts/arte/capa-aula.mjs && npx playwright screenshot ... (ver README do diretório)
  */
@@ -71,9 +76,9 @@ fs.writeFileSync(new URL('./capa.html', import.meta.url), html);
 console.log('HTML escrito em scripts/arte/capa.html. Para virar JPEG + o teste de miniatura:');
 console.log(`  node -e "import('playwright').then(async({chromium})=>{
     const b=await chromium.launch({executablePath:'/opt/pw-browsers/chromium'});
-    const p=await b.newPage({viewport:{width:1200,height:630}});
+    const p=await b.newPage({viewport:{width:1200,height:630},deviceScaleFactor:2});
     await p.goto('file://'+process.cwd()+'/scripts/arte/capa.html');
-    await p.screenshot({path:'public/capa-aula-imoveis-leilao.jpg',type:'jpeg',quality:88});
-    await p.screenshot({path:'/tmp/capa-quadrada.jpg',type:'jpeg',quality:88,clip:{x:285,y:0,width:630,height:630}});
+    await p.screenshot({path:'public/capa-aula-imoveis-leilao.jpg',type:'jpeg',quality:92});
+    await p.screenshot({path:'/tmp/capa-quadrada.jpg',type:'jpeg',quality:92,clip:{x:285,y:0,width:630,height:630}});
     await b.close()})"`);
 console.log('Olhe /tmp/capa-quadrada.jpg REDUZIDO a 100px: e o tamanho real da miniatura no celular.');

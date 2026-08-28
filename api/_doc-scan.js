@@ -155,6 +155,17 @@ export function nomeiaUmDocumento(url) {
 }
 
 // É um link que vale guardar como documento?
+/**
+ * O filtro de RUÍDO INSTITUCIONAL, exportado (28/08). Ele já existia aqui e havia uma SEGUNDA
+ * cópia, mais pobre, em `scripts/captura-documentos.mjs` — sem a palavra "cookie". Resultado:
+ * o "Aviso de Cookies" do site do leiloeiro foi baixado e guardado como DOCUMENTO DO LOTE em
+ * 1.122 imóveis (1.100 deles ativos), aparecendo em verde na ficha do cliente. Duas cópias da
+ * mesma regra é uma que um dia discorda da outra — aqui discordou por uma palavra.
+ */
+export function ehDocInstitucional(texto) {
+  return RE_DOC_INSTITUCIONAL.test(String(texto || ''));
+}
+
 function ehDocumento(url, label, baseUrl) {
   if (!url || HOST_RUIDO.test(url)) return false;
   if (!nomeiaUmDocumento(url)) return false;
