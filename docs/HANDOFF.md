@@ -4,6 +4,172 @@
 
 ---
 
+## 🗓️ 28/08 (sessão 12) — A AGENDA IA ACABAR EM DOIS DIAS, E O CRON DIZIA QUE ESTAVA TUDO BEM
+
+O dono pediu duas coisas simples — "por que esses 7 casos não têm relatório" e "sem advogado, a
+reunião cai para mim". A primeira não era bug. A segunda destravou um cron que falhava em
+silêncio havia 18 dias e ia deixar o produto sem porta de entrada.
+
+---
+
+### 🔎 OS 7 CASOS SEM RELATÓRIO — não é bug de geração
+
+Três causas somadas, nenhuma delas o sistema falhando:
+
+1. **O leilão passou.** 6 dos 7 imóveis estão inativos, com leilão entre 20/07 e 26/08; um sequer
+   tem data. O único vivo é o do Rafael (Rua José Miguel Ackel, leilão **31/08**) — e esse tem os
+   dois relatórios prontos.
+2. **A documental nunca foi gerada.** Alessandra é `top2`, tinha direito, e está com
+   `documental_count = 0` nos 5 casos dela: parou no primeiro relatório, sempre. Sem documental o
+   caso nunca chegava ao agendamento (e antes de 28/08 ainda precisava do laudo).
+3. **A retenção apagou o rastro.** `analises_count = 3` para a Alessandra com só 2 análises no
+   banco; Rafael, 4 contra 2. O cron limpa 15 dias após a última praça — então parte dos casos
+   aparece "sem relatório" porque o relatório **foi apagado depois do leilão**, não porque nunca
+   existiu.
+
+> **O que isso revela como PRODUTO:** o `caso` sobrevive à retenção do relatório. Fica em
+> `analise_solicitada` para sempre, apontando para um leilão que já aconteceu — e é isso que
+> enche a fila com 8 itens não acionáveis. **Vale encerrar automaticamente caso cujo leilão
+> passou sem arremate.** (não implementado — decisão do dono)
+
+---
+
+### 🔴 O ACHADO DO DIA — o cron de slots falhava em silêncio havia 18 dias
+
+O pedido era "sem advogado, a reunião cai para mim". Ela **já cai**: o dono é o único com
+disponibilidade cadastrada (seg/qua/sex, 09h–12h), então qualquer reserva vira
+`casos.analista_id = ele`. O problema era outro e maior: **a agenda estava a dois dias de secar.**
+
+```
+126 slots no banco · criados em 01/07, 20/07 e 10/08 · só 6 ainda no futuro, todos em 31/08
+```
+
+**A causa.** `api/gerar-slots.js` roda 01:00 todo dia e gera os próximos 21 dias, mas o INSERT
+usava `resolution=ignore-duplicates` **sem `on_conflict`**. Sem alvo declarado o PostgREST
+resolve pela PRIMARY KEY — e o `id` é gerado, então nunca há conflito de PK; o lote seguia até
+bater na UNIQUE real `(analista_id, data_hora)`, que derruba o **INSERT INTEIRO** com 409. Como
+o cron gera SEMPRE os próximos 21 dias, todo lote contém dias que já existem: **todo lote
+falhava**.
+
+**E ninguém soube** porque o endpoint devolvia **HTTP 200** com `ok: false` no corpo. Para o cron
+da Vercel isso é sucesso: 18 dias sem gerar agenda, zero alertas. O campo `gerados` também
+reportava o que foi TENTADO, não o que foi gravado — o log diria "gerados: 54" com zero no banco.
+
+Consertado nos dois eixos: `on_conflict=analista_id,data_hora` (conflito ignorado linha a linha,
+dias novos entram) e **falha alto com 500**. Um cron que não consegue fazer o trabalho tem de
+dizer isso no código de status — é a diferença entre um problema que aparece e um que só é
+descoberto quando o cliente não consegue marcar.
+
+Agenda **reposta na migração** (não dava para esperar a próxima 01:00 com a agenda a dois dias do
+fim): **54 horários livres, 9 dias, de 31/08 a 18/09**.
+
+> **A forma, para a lista do CLAUDE.md:** *upsert em lote sem `on_conflict` explícito falha por
+> inteiro quando existe UNIQUE além da PK* — e falha exatamente quando o lote mistura o que já
+> existe com o que é novo, que é o caso normal de todo job idempotente.
+
+#### 🔴 A VARREDURA: o mesmo defeito em mais SETE pontos (não corrigidos)
+
+Procurei `resolution=ignore-duplicates` sem `on_conflict=` no acervo e cruzei cada alvo com as
+UNIQUE/índices únicos do banco. **Sete pontos correm exatamente o mesmo risco** — lote inteiro
+rejeitado com 409, em silêncio, sempre que misturar linha nova com linha existente:
+
+| onde | tabela | chave que derruba o lote |
+|---|---|---|
+| `conciliacao-sync-cron.js:61` | `conciliacao_lancamento` | `(banco, chave_origem)` |
+| `conciliacao.js:185` e `:225` | `conciliacao_lancamento` | idem |
+| `gerar-analise.js:616` e `:661` | `indice_amostra` | `uq_indice_amostra_deduce` |
+| `sinalizar-revenda.js:99` | `indice_amostra` | idem |
+| `cnj-monitor-cron.js:44` | `processo_movimentos` | `processo_movimentos_unico_cols` |
+| `_edital-extrato.js:247` | `processos_monitorados` | `(numero_processo)` |
+| `importar-emails-resend.js:89` | `emails_log` | `uq_emails_log_resend_id` |
+
+✅ **`enviar-alertas-cron.js:802` está CERTO** e é o contraexemplo que explica a regra: em
+`alertas_enviados` a chave de dedupe `(user_id, imovel_id)` **é a própria PRIMARY KEY**, que é o
+que o `ignore-duplicates` resolve por padrão. Só quebra quando a chave real não é a PK.
+
+**O conserto é mecânico** — acrescentar `?on_conflict=<colunas>` na URL, exatamente como foi feito
+em `gerar-slots` — mas são 7 arquivos e cada um merece conferir se o job já não estava perdendo
+dado. O mais barato de medir primeiro: `indice_amostra` (alimenta o Índice BidPro) e
+`emails_log` (histórico de e-mail). **Não corrigido nesta sessão — aguarda o dono.**
+
+---
+
+### 💰 O ADVOGADO VENDE A ASSESSORIA E RECEBE 10% — e o teste pegou um CHECK antes da produção
+
+Decisão do dono: paridade com o parceiro indicante. **R$ 600 numa assessoria de R$ 6.000**,
+creditado quando o pagamento entra, acumulando com a comissão de indicação se ele também for o
+indicante.
+
+**Não pôde pegar carona em `distribuir_comissao_rede`:** aquela função percorre a cadeia
+`indicado_por`, e o advogado que conduziu a reunião normalmente NÃO está nela — ele é encontrado
+pelo **caso**. São dois vínculos diferentes com o mesmo cliente, e espremer um no outro faria a
+comissão ir para a pessoa errada ou não sair. Ficou em `comissao_venda_assessoria`, chamada nos
+**dois** caminhos de pagamento do webhook — cobrir só um faria a comissão sair ou não conforme o
+caminho, que é a pior forma de erro em dinheiro porque *parece funcionar na metade dos casos*.
+
+O gate exige `juridico_aceite_em`: sem o termo aceito ele não assumiu as obrigações que tornam a
+venda defensável. `sem_advogado_elegivel` é resposta **correta**, não erro.
+
+**Escopo deliberado: assessoria apenas.** O Leilão Club fica fora — 10% de R$ 60.000 são R$ 6.000
+por venda, decisão de negócio que o dono não tomou. Incluir por analogia seria decidir sozinho o
+tamanho de um repasse que ninguém autorizou. **Pendência do dono.**
+
+> ⚠️ **O TESTE PEGOU UM DEFEITO ANTES DA PRODUÇÃO.** `comissoes.tipo` tem CHECK que lista os
+> tipos um a um e não aceitava `venda_assessoria`. Sem isso, o primeiro pagamento REAL de
+> assessoria com advogado designado estouraria dentro do webhook — e como a RPC roda **depois**
+> da ativação do plano, o cliente teria acesso normalmente e só a comissão sumiria: erro num log
+> que ninguém lê, advogado sem receber, nada na tela dizendo por quê. É o tipo de falha que só
+> aparece quando alguém reclama do dinheiro que não chegou.
+
+Provado em transação desfeita (nada persistiu, conferido): 1ª chamada credita R$ 600 · repetida
+devolve `ja_creditado` · sem termo aceito devolve `sem_advogado_elegivel` · exatamente 1
+lançamento e 1 comissão.
+
+---
+
+### ⚖️ TERMO DO ADVOGADO — v3 → v5 no mesmo dia
+
+- **v4** — cláusula 5 nova, *Apresentação da Assessoria na reunião*. Com as duas obrigações que a
+  tornam defensável: a recomendação tem de ser **honesta** (se o caso não pede assessoria, ou o
+  parecer desaconselha arrematar, ele diz isso mesmo que não haja contratação) e nada do que
+  apresentar pode contrariar o próprio parecer.
+- **v5** — a mesma cláusula dizia *"você NÃO é remunerado por venda de assessoria"*. Reescrita com
+  o percentual, o acúmulo com a indicação, o estorno em cancelamento, e a ressalva que sustenta a
+  regra: a comissão é fração pequena do êxito **de propósito**, e recomendar assessoria
+  contrariando o próprio parecer é infração do Termo, com cancelamento da comissão.
+
+---
+
+### 💸 O REPASSE DA ASSESSORIA, CONFIRMADO
+
+**R$ 6.000 · trilho `venda_direta` · parceiro direto 10% = R$ 600.** A rede abaixo também recebe:
+N2 4% · N3 3% · N4 2% · N5 2% · N6 1%. **Com a cadeia inteira povoada sai 22% = R$ 1.320** — o
+número que o dono declarou (10%) é só o primeiro nível. Some os 10% do advogado quando houver, e
+o teto vai a 32%. Hoje só existe 1 nível, então na prática são os R$ 600.
+
+A assessoria carrega também `honorarios_exito_pct = 10` — o êxito já discutido na sessão 11.
+
+> 🦴 **TERCEIRA COLUNA-FÓSSIL DO DIA.** `planos_config.comissao_pct` dizia **10%** para o
+> Investidor Pro contra os 25% da regra vigente. Nada vivo lê (o único consumidor é a
+> `Consultor.jsx` aposentada), mas fóssil que mente sobre dinheiro é o pior tipo: quem abrir a
+> tabela para conferir o repasse lê o número errado. Alinhada ao trilho real de cada plano.
+> As três do dia: `perfis.plano` · `config_honorarios.advogado_pct` · `planos_config.comissao_pct`.
+
+---
+
+### 📣 OPENAI ADS — as etapas 3 e 4
+
+**A 3 se marca sozinha.** O evento já está implantado (foi ele que apareceu no fluxo como
+`lead_created` via `pixel_sdk`); falta um `lead_created` chegar DEPOIS de a conversão ter sido
+criada. `live_inscricoes` segue em 1, então nenhuma inscrição nova aconteceu.
+⚠️ **Não usar o "Usar Codex" dessa etapa** — instrumentaria o site de novo e o evento passaria a
+disparar em dobro, estragando a medição do canal recém-ligado.
+
+**A 4 é necessária e está travada pelo faturamento.** Sem vincular o evento à campanha, o leilão
+otimiza por CLIQUE e não por conversão — que era o motivo de instalar o pixel.
+
+---
+
 ## 💰 28/08 (sessão 11) — O PAINEL DIZIA QUE ELE PAGOU, O BANCO DIZIA QUE NÃO. O BANCO ESTAVA CERTO
 
 Começou com uma pergunta do dono sobre um nome numa lista — "Erik Migliorini não é Investidor
@@ -238,14 +404,24 @@ qualquer visitante. Revogada. **Estado final: segurança 0/0, regras de negócio
    (valor de venda, de aluguel, ou os dois) para atacar a causa em vez do sintoma.
 6. **🔴 A REUNIÃO COM ANALISTA NUNCA ACONTECEU — e é o gargalo do produto.** Medido em 28/08:
    `reunioes` = **0**, com **8 casos** parados em `analise_solicitada` (Alessandra 5, Rafael 3),
-   os mais antigos de 22/07. Há 3 disponibilidades e 6 slots futuros cadastrados, então o
-   mecanismo funciona — **falta gente atendendo**: `analista` = 0 e `advogado` = 0 na base.
+   os mais antigos de 22/07. **Falta gente atendendo**: `analista` = 0 e `advogado` = 0 na base.
+   > ✅ **A parte MECÂNICA foi resolvida na sessão 12** (topo): o cron de slots estava falhando
+   > em silêncio e a agenda ia secar em 31/08. Consertado e reposta — 54 horários, até 18/09.
+   > O que sobra deste item é humano: quem atende.
    > Dos 8 casos, só **1** tem os dois relatórios prontos (Rafael, Rua José Miguel Ackel) — e
    > esse ficou agendável HOJE, por causa da saída do Laudo do gate. Os outros 7 não têm nem
    > relatório: são casos abertos e nunca analisados, o que é um gap de OPERAÇÃO, não de código.
    > E **nenhum dos 8 tem laudo**, o que confirma pelo dado que o terceiro relatório já não
    > estava sendo produzido na prática — a decisão de removê-lo descreveu o que já acontecia.
-7. **`admin_qa_invariantes` deu timeout no `/admin`** em 23/08 (Supabase 500, *canceling statement
+7. **🔴 SETE upserts com o mesmo defeito do cron de slots** — lista completa (arquivo → tabela →
+   chave) na seção da sessão 12, no topo. Conserto mecânico (`?on_conflict=`), mas vale medir
+   antes quanto dado já se perdeu, começando por `indice_amostra` e `emails_log`.
+8. **Leilão Club fora da comissão de venda do advogado** — a de 10% cobre só a Assessoria.
+   10% de R$ 60.000 são R$ 6.000 por venda, e isso é decisão do dono, não analogia minha.
+9. **Encerrar automaticamente caso cujo leilão passou sem arremate.** Hoje o `caso` sobrevive à
+   retenção do relatório e fica em `analise_solicitada` para sempre, apontando para um leilão que
+   já aconteceu — é o que enche a fila com 8 itens não acionáveis (ver sessão 12).
+10. **`admin_qa_invariantes` deu timeout no `/admin`** em 23/08 (Supabase 500, *canceling statement
    due to statement timeout*). Uma ocorrência, não resolvida. A função é a que alimenta o painel
    de invariantes — quando ela estoura, o painel fica vazio e isso é indistinguível de "está
    tudo ok", que é a forma da casa. Vale medir o tempo dela antes que vire rotina.
