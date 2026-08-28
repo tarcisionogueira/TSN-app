@@ -8114,8 +8114,25 @@ function ComercialTab() {
     setAtribuindoLead('');
   };
 
+  // CARIMBA A ORIGEM (28/08). O update gravava só `indicado_por`, e `indicacao_origem` ficava
+  // NULL: o conserto manual virava indistinguível de uma indicação real de parceiro — que é
+  // exatamente o defeito que a coluna foi criada para evitar em 11/08. Prova encontrada no
+  // banco: Edvaldo Benicio (15/08), upline = dono, origem NULL, atribuído aqui na mão.
+  // E o resultado passa a ser LIDO: `update` que não alcança linha nenhuma (RLS, id errado)
+  // devolve `error: null`, e a tela repintava o novo consultor sobre um banco que não mudou.
   const atribuir = async (clienteId, consultorId) => {
-    await supabase.from('perfis').update({ indicado_por: consultorId || null }).eq('id', clienteId);
+    const { data, error } = await supabase.from('perfis')
+      .update({
+        indicado_por: consultorId || null,
+        indicacao_origem: consultorId ? 'manual' : null,
+        ultima_indicacao_em: consultorId ? new Date().toISOString() : null,
+      })
+      .eq('id', clienteId)
+      .select('id');
+    if (error || !data?.length) {
+      alert('Não foi possível atribuir o consultor' + (error?.message ? `: ${error.message}` : ' (nenhuma linha alterada).'));
+      return;
+    }
     setClientes(prev => prev.map(c => c.id === clienteId ? { ...c, indicado_por: consultorId || null } : c));
   };
 

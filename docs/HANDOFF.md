@@ -333,16 +333,34 @@ conserto manual fica indistinguível de uma indicação real, que é precisament
 coluna `indicacao_origem` foi criada para evitar em 11/08. Prova no banco: Edvaldo Benicio
 (15/08), `indicado_por` = dono, `indicacao_origem` NULL.
 
-> ⚠️ **POR QUE NÃO CONSERTEI DIRETO, e a decisão é do dono.** O conserto óbvio — default no
-> servidor, no momento em que o perfil nasce — **rouba a indicação do parceiro**:
-> `vincular_upline` só grava `where indicado_por is null`, e no cadastro por Google o `?ref=` é
-> resolvido no navegador **depois** do perfil existir. Preencher antes fecha a porta. As duas
-> saídas:
-> **(a)** cron com carência (ex.: 24h) que adota os ainda-órfãos como `padrao_dono` — não mexe
-> na regra de comissão, custa uma janela curta de "Sem consultor";
-> **(b)** deixar `vincular_upline` **sobrepor** um upline cuja origem seja `padrao_dono` — é
-> instantâneo, mas abre a porta para alguém mudar de carteira clicando num link depois.
-> Recomendo a **(a)**. Falta a palavra do dono.
+> ⚠️ **POR QUE NÃO PODE SER DEFAULT NO NASCIMENTO.** Preencher o upline quando o perfil nasce
+> **rouba a indicação do parceiro**: `vincular_upline` só grava `where indicado_por is null`, e
+> no cadastro por Google o `?ref=` é resolvido no navegador **depois** de o perfil existir —
+> preencher antes fecha a porta do parceiro para sempre. A alternativa (deixar o `?ref=`
+> sobrepor um upline `padrao_dono`) seria instantânea, mas abriria a porta para alguém mudar de
+> carteira clicando num link depois. **O dono escolheu a carência**, e é o que está no ar.
+
+**✅ CONSERTADO no mesmo dia (opção (a) + carimbo manual):**
+
+- **`public.adotar_orfaos_padrao_dono(p_horas)`** + **`/api/adotar-orfaos-cron`** (diário,
+  09:10 UTC): adota como `padrao_dono` quem passou de **24h** ainda sem upline. É a MESMA
+  regra de `vincular_owner_default`, com os mesmos guardas e o mesmo carimbo — muda só quem
+  chama: lá o navegador, aqui o cron, para o caso em que navegador não há.
+- **A carência se provou na primeira execução:** adotou **Nede** (2 dias, órfão de verdade) e
+  **deixou Alexandre** (3 horas de vida) esperando — a janela do link de parceiro dele ainda
+  estava aberta. É exatamente o comportamento pelo qual a opção (a) foi escolhida.
+- **Carimbo manual no Admin:** `atribuir()` agora grava `indicacao_origem = 'manual'` e
+  `ultima_indicacao_em`, **e lê o resultado do update** — antes descartava, e um `update` que
+  não alcança linha nenhuma (RLS, id errado) devolve `error: null`: a tela repintava o
+  consultor novo sobre um banco que não tinha mudado.
+- **`indicacao_origem` entrou na trava de campos sensíveis do perfil.** O `indicado_por` já
+  era protegido, o CARIMBO não: o usuário não conseguia mudar de carteira, mas conseguia
+  rotular a própria origem como `link_parceiro`. Rótulo mentiroso em cima de dado correto
+  estraga o relatório do mesmo jeito.
+- **A regra virou declarada:** `regra_negocio.comercial.upline_padrao`, com **dois**
+  aplicadores. E aqui a auditoria pegou uma regressão minha no mesmo minuto — declarei os dois
+  e só o novo mencionava a chave, deixando `vincular_owner_default` como aplicadora órfã. Foi
+  o trabalho para o qual ela existe; a menção entrou no corpo.
 
 ---
 

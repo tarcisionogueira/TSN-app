@@ -333,6 +333,10 @@
     {
       "path": "/api/live-lembrete-cron",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/adotar-orfaos-cron",
+      "schedule": "10 9 * * *"
     }
   ]
 }
