@@ -277,6 +277,75 @@ passaram a ser **derivados das constantes**.
 
 ---
 
+### 💬 DICA DE MOUSE EM TODOS OS BOTÕES DA BUSCA (pedido do dono)
+
+Só a **Intenção** explicava o que fazia ao passar o mouse. "Hipotecado", "Venda Direta" e
+"Comercial/Industrial" **não são autoexplicativos** para quem está começando em leilão, e o
+cliente ficava adivinhando o que cada botão filtra.
+
+Ganharam `title`: os 5 chips de **Tipo de Imóvel**, os 3 de **Modalidade**, as 3 formas de
+**Pagamento**, os chips de **Desconto** (o aviso do piso da intenção continua tendo
+precedência quando o chip está abaixo dele), o interruptor de **raio**, **Limpar filtros**,
+**Salvar filtros atuais**, **Lista/Mapa**, **Atualizar** e **Analisar selecionado**.
+
+Duas decisões que valem manter:
+
+1. **Os textos ficam como DADO** (`TIPO_OPTS`, `MODALIDADE_OPTS`, `PAGAMENTO_OPTS`), ao lado
+   das próprias opções — não como string solta no meio do JSX. Opção e descrição viram a mesma
+   lista: não dá para acrescentar um tipo e esquecer a dica. É o mesmo remédio do chip
+   "Revenda" que ainda dizia 30% quando o filtro já exigia 40%.
+2. **Cada dica diz o que o filtro EXCLUI**, quando isso surpreende: *"lote sem avaliação
+   cadastrada fica de fora"* (desconto), *"lote sem localização cadastrada fica de fora"*
+   (raio), *"lote sem coordenada não aparece"* (mapa). É exatamente onde o cliente acha que
+   sumiu imóvel e abre chamado.
+
+---
+
+### 🕵️ "SEM CONSULTOR" — quem entra sem passar pelo navegador fica órfão (diagnóstico)
+
+O dono apontou duas linhas com **"Sem consultor"** no Comercial. A investigação achou uma
+causa única, e a correlação no banco é perfeita:
+
+| entrou e **logou** | entrou e **NUNCA logou** |
+|---|---|
+| 67 clientes · **67 com consultor** | 3 clientes · **2 sem consultor** |
+
+**A regra do upline padrão só existe no navegador.** `vincular_owner_default()` é chamada pelo
+`AuthContext`, no evento `SIGNED_IN`/`INITIAL_SESSION`. **Quem nunca faz login nunca passa por
+lá** — e o perfil já existe, criado pelo trigger `handle_new_user` ou pelo próprio endpoint.
+
+**Os dois caminhos que produziram os órfãos:**
+
+1. **Inscrição na aula ao vivo** (`api/live-inscrever.js`) — Alexandre Carmo, 28/08. O endpoint
+   cria a conta com a service key e faz upsert em `perfis` gravando **todo o marketing**
+   (`mkt_landing = /live/leilao-ao-vivo`, referrer, utm) — e **não grava `indicado_por`**. A
+   pessoa recebe o e-mail e não entra no app: ninguém roda o padrão.
+2. **Cadastro normal não confirmado** — Nede Tome, 26/08. `email_confirmed_at` NULL,
+   `last_sign_in_at` NULL, nenhuma captura de marketing e nenhum registro em nenhuma outra
+   tabela. O trigger criou o perfil a partir da metadata do `signUp`; a pessoa nunca confirmou.
+
+**Um terceiro caso, latente:** `api/criar-conta-checkout.js` tem a mesma lacuna (cria perfil sem
+`indicado_por`) e ainda não gerou órfão só porque quem paga entra logo depois.
+
+**E um efeito de segunda ordem:** quando o dono corrige na mão pelo Admin
+(`Admin.jsx:8118`), o update grava `indicado_por` e **não grava `indicacao_origem`** — o
+conserto manual fica indistinguível de uma indicação real, que é precisamente o defeito que a
+coluna `indicacao_origem` foi criada para evitar em 11/08. Prova no banco: Edvaldo Benicio
+(15/08), `indicado_por` = dono, `indicacao_origem` NULL.
+
+> ⚠️ **POR QUE NÃO CONSERTEI DIRETO, e a decisão é do dono.** O conserto óbvio — default no
+> servidor, no momento em que o perfil nasce — **rouba a indicação do parceiro**:
+> `vincular_upline` só grava `where indicado_por is null`, e no cadastro por Google o `?ref=` é
+> resolvido no navegador **depois** do perfil existir. Preencher antes fecha a porta. As duas
+> saídas:
+> **(a)** cron com carência (ex.: 24h) que adota os ainda-órfãos como `padrao_dono` — não mexe
+> na regra de comissão, custa uma janela curta de "Sem consultor";
+> **(b)** deixar `vincular_upline` **sobrepor** um upline cuja origem seja `padrao_dono` — é
+> instantâneo, mas abre a porta para alguém mudar de carteira clicando num link depois.
+> Recomendo a **(a)**. Falta a palavra do dono.
+
+---
+
 ### 🖼️ O RENDER PEGOU UM DEFEITO QUE A LEITURA DO CÓDIGO NÃO PEGARIA
 
 O dono pediu para ver como o bloco novo ficou na tela. Renderizei a ficha no Chromium com
