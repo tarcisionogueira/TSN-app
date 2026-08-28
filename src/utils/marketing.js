@@ -32,6 +32,66 @@ export function metaTrack(evento, params, eventID) {
   } catch { /* ignore */ }
 }
 
+// ── PIXEL DO OPENAI ADS (ChatGPT Ads) ────────────────────────────────────────
+// O canal abriu no Brasil em 11/08/2026 e cobra por CPM, CPC e oCPC — e é o oCPC que muda o
+// jogo: sem conversão declarada, o leilão só sabe otimizar por CLIQUE, que é comprar curioso.
+// Mesmo padrão do Meta: DORMENTE até existir `VITE_OPENAI_PIXEL_ID`. Setar a env e
+// redeployar liga o pixel sem tocar no código.
+//
+// ⚠️ SEM FILA IMPROVISADA. O snippet oficial cria um `window.oaiq` que enfileira chamadas, e
+// copiar o formato interno dessa fila seria adivinhar: se o SDK ler outra propriedade, as
+// chamadas somem em silêncio — a família de defeito que este projeto cataloga. Aqui só se usa
+// a API PÚBLICA (`oaiq('init'|'measure', …)`): o script é carregado, e o que acontecer antes
+// dele ficar pronto espera numa fila NOSSA, esvaziada no `onload`. Nada se perde e nada
+// depende do que não está documentado.
+const OPENAI_PIXEL_ID = String(import.meta.env.VITE_OPENAI_PIXEL_ID || '').trim();
+const SDK_OPENAI = 'https://bzrcdn.openai.com/sdk/oaiq.min.js';
+let oaiPronto = false;
+const oaiFila = [];
+
+function oaiEnviar(evento, props) {
+  try { window.oaiq('measure', evento, props || { type: 'customer_action' }); } catch { /* ignore */ }
+}
+
+export function initOpenAIPixel() {
+  if (!OPENAI_PIXEL_ID || oaiPronto || typeof window === 'undefined') return;
+  if (document.querySelector(`script[src="${SDK_OPENAI}"]`)) return;
+  const t = document.createElement('script');
+  t.async = true; t.src = SDK_OPENAI;
+  t.onload = () => {
+    try {
+      window.oaiq('init', { pixelId: OPENAI_PIXEL_ID });
+      oaiPronto = true;
+      // `page_viewed` é explícito: o pixel do OpenAI NÃO rastreia página sozinho.
+      oaiEnviar('page_viewed', { type: 'customer_action' });
+      while (oaiFila.length) { const [e, p] = oaiFila.shift(); oaiEnviar(e, p); }
+    } catch { /* ignore */ }
+  };
+  // Falha de rede/bloqueador não pode quebrar a tela — o pixel é acessório.
+  t.onerror = () => { oaiFila.length = 0; };
+  document.head.appendChild(t);
+}
+
+/**
+ * Conversão no OpenAI Ads. Eventos padrão: page_viewed, contents_viewed, items_added,
+ * checkout_started, order_created, lead_created, registration_completed,
+ * appointment_scheduled, subscription_created, trial_started.
+ * ⚠️ VALOR EM UNIDADE MENOR E INTEIRA (ISO 4217): R$ 25,99 → 2599. Passar 25.99 aqui seria
+ * declarar 26 centavos, e o leilão otimizaria por uma receita 100× menor que a real.
+ */
+export function openaiTrack(evento, props) {
+  if (!OPENAI_PIXEL_ID || typeof window === 'undefined') return;
+  const dados = { type: 'customer_action', ...(props || {}) };
+  if (oaiPronto) oaiEnviar(evento, dados);
+  else { oaiFila.push([evento, dados]); initOpenAIPixel(); }
+}
+
+/** Reais → centavos inteiros, como o OpenAI Ads exige. `null` quando não há valor. */
+export function valorMenor(reais) {
+  const v = Number(reais);
+  return Number.isFinite(v) && v > 0 ? Math.round(v * 100) : null;
+}
+
 // ── ATRIBUIÇÃO (gclid/fbclid/utm) ─────────────────────────────────────────────
 // Captura os parâmetros de anúncio da URL (antes ou depois do # do HashRouter) e persiste por 90
 // dias (janela de atribuição). Consumido no cadastro/login (AuthContext → registrar_marketing).
@@ -51,7 +111,10 @@ export function capturarMarketing() {
     // para dizer se o cadastro veio do reels ou do link da bio. Sem isso não há como comparar
     // criativo com criativo, que é a decisão que gasta verba.
     const dados = {
-      gclid: get('gclid'), fbclid: get('fbclid'),
+      // `oppref` é o identificador de clique do OpenAI Ads (o gclid deles). O próprio pixel o
+      // guarda no cookie `__oppref`; capturamos aqui pelo MESMO motivo do gclid — para o
+      // NOSSO banco saber a origem mesmo quando o pixel está bloqueado ou dormente.
+      gclid: get('gclid'), fbclid: get('fbclid'), oppref: get('oppref'),
       utm_source: get('utm_source'), utm_medium: get('utm_medium'), utm_campaign: get('utm_campaign'),
       utm_content: get('utm_content'), utm_term: get('utm_term'),
     };

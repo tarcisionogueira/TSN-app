@@ -9,7 +9,7 @@ import { registrarServiceWorker } from './utils/push.js'
 import { vigiarAtualizacaoDoApp } from './utils/swAtualizacao.js'
 import { reportarErroCliente, instalarCapturaErros, ehErroDeChunk, recarregarPorChunkStale, recarregarComGuarda, houveChunkRecente, mostrarAvisoPreso } from './utils/reportarErro.js'
 import { instalarTracker } from './utils/tracker.js'
-import { initMetaPixel, capturarMarketing } from './utils/marketing.js'
+import { initMetaPixel, initOpenAIPixel, capturarMarketing } from './utils/marketing.js'
 
 // Registra o service worker em produção e VIGIA atualização: sem isso o PWA instalado
 // segue rodando a versão que baixou (fechar e reabrir NÃO busca versão nova — ver
@@ -31,6 +31,7 @@ instalarTracker();
 // Marketing: liga o Meta Pixel (se VITE_META_PIXEL_ID existir) e captura a atribuição do anúncio
 // (gclid/fbclid/utm) que trouxe o visitante — consumida no cadastro p/ medir a captação por origem.
 initMetaPixel();
+initOpenAIPixel();
 capturarMarketing();
 
 class RootErrorBoundary extends React.Component {

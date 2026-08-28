@@ -1,4 +1,4 @@
-import { metaTrack } from './marketing';
+import { metaTrack, openaiTrack, valorMenor } from './marketing';
 
 const GA4_ID = 'G-5YNHQB5F81';
 const AW_ID = 'AW-16850175262';
@@ -69,11 +69,15 @@ export function trackCadastro(email, nome) {
   gtag('event', 'sign_up', { method: 'email', send_to: AW_ID });
   gtag('event', 'conversion', { send_to: CONV_CADASTRO });
   metaTrack('CompleteRegistration');
+  // OpenAI Ads: mesmo ponto, mesma verdade. Um canal novo não ganha um lugar novo para
+  // disparar conversão — senão um dia o Meta conta e o outro não, e ninguém sabe qual mente.
+  openaiTrack('registration_completed');
 }
 
 export function trackCheckoutIniciado(plano, valor) {
   gtag('event', 'begin_checkout', { currency: 'BRL', value: valor, items: [{ item_name: plano }], send_to: AW_ID });
   metaTrack('InitiateCheckout', { currency: 'BRL', value: valor, content_name: plano });
+  openaiTrack('checkout_started', { currency: 'BRL', amount: valorMenor(valor) });
 }
 
 // eventID (opcional): id determinístico compartilhado com o servidor (Meta CAPI) para
@@ -85,16 +89,20 @@ export function trackPlanContratado(plano, valor, eventID, userData) {
   // transaction_id: dedup no Google Ads (mesmo id → não conta a conversão duas vezes).
   gtag('event', 'conversion', { send_to: CONV_PLANO, value: valor, currency: 'BRL', transaction_id: eventID || '' });
   metaTrack('Purchase', { currency: 'BRL', value: valor, content_name: plano }, eventID);
+  // `amount` em CENTAVOS INTEIROS — exigência do OpenAI Ads (ISO 4217, unidade menor).
+  openaiTrack('subscription_created', { currency: 'BRL', amount: valorMenor(valor) });
 }
 
 export function trackAlertaCriado() {
   gtag('event', 'generate_lead', { send_to: AW_ID });
   metaTrack('Lead');
+  openaiTrack('lead_created');
 }
 
 export function trackImovelVisualizado(imovelId, tipo, valor) {
   gtag('event', 'view_item', { currency: 'BRL', value: valor, items: [{ item_id: imovelId, item_category: tipo }], send_to: AW_ID });
   metaTrack('ViewContent', { currency: 'BRL', value: valor, content_ids: [imovelId], content_type: tipo });
+  openaiTrack('contents_viewed');
 }
 
 export function trackBuscaRealizada(filtros) {

@@ -28,6 +28,7 @@ Este documento existe para responder "já foi configurado?" sem custo, não para
 | Nome | Para quê |
 |---|---|
 | `VITE_META_PIXEL_ID` | Pixel do Meta no navegador (`src/utils/marketing.js`) |
+| `VITE_OPENAI_PIXEL_ID` | ⏳ **AINDA NÃO CRIADA** — Pixel do OpenAI Ads / ChatGPT Ads (`src/utils/marketing.js`). O código está no ar e **dormente**: sem esta env, nenhum evento é enviado e nada quebra. Criar com o Pixel ID do Ads Manager e redeployar liga o canal |
 | `META_CAPI_TOKEN` | Meta Conversions API server-side (`api/_meta-capi.js`) |
 | `META_ADS_TOKEN` | Ingestão do gasto diário do Meta Ads (`api/meta-insights-cron.js`) |
 | `META_AD_ACCOUNT_ID` | idem |

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '../utils/supabase';
-import { lerMarketing, metaTrack } from '../utils/marketing';
+import { lerMarketing, metaTrack, openaiTrack } from '../utils/marketing';
 import { validarNome } from '../lib/nome';
 import { validarTelefone, limparTelefone, formatarTelefone } from '../lib/telefone';
 import CidadeAutocomplete from '../components/CidadeAutocomplete';
@@ -149,6 +149,10 @@ export default function LiveInscricao() {
       // marketing jamais derrube a confirmação de vaga que a pessoa está vendo na tela.
       try {
         metaTrack('Lead', { content_name: slug, content_category: 'aula_ao_vivo', currency: 'BRL', value: 0 }, j?.lead_event_id);
+        // OpenAI Ads (ChatGPT Ads): a MESMA inscrição, no mesmo instante e sob a mesma
+        // condição do `.ok`. É este evento que permite sair do CPC e usar oCPC — sem ele o
+        // leilão do canal só sabe otimizar por clique, que é comprar curioso.
+        openaiTrack('lead_created', { type: 'customer_action' });
       } catch { /* nunca quebra a inscrição */ }
     } catch (err) {
       setErro(err?.message || 'Não foi possível concluir a inscrição.');
