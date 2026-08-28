@@ -41,6 +41,17 @@ jobs:
         # seria cometer, dentro da própria trava, exatamente o defeito que ela existe para pegar.
         run: node scripts/verificar-schema-codigo.mjs
 
+      # A REGRA DE NEGOCIO TAMBEM DERIVA (28/08). A regua da intencao da Busca e APLICADA em
+      # src/lib/intencao.js e DECLARADA em public.intencao_filtro (que e o que a
+      # auditoria_regras_negocio enxerga). Duas moradas para o mesmo fato so nao viram duas
+      # verdades porque alguem confere — e e este passo. Mesma politica de saida: 1 = divergiu,
+      # 2 = nao consegui verificar, e as duas reprovam.
+      - name: Regra de negocio (codigo x banco)
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: node scripts/verificar-regras-negocio.mjs
+
       # `cancelled()` junto com `failure()` — a lição do próprio 12/08: timeout não é failure.
       - name: Notify on failure
         if: failure() || cancelled()

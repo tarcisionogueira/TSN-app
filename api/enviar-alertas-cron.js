@@ -52,12 +52,14 @@ import { ALLOWED_HOSTS } from './_allowed-hosts.js';
 import { enviarWebPush } from './_webpush.js';
 import { encerradoPorDatas } from './_leilao-encerrado.js';
 import { CIDADES_TEMPORADA } from './_temporada.js';
+import { TIPOS_RESIDENCIAL, TIPOS_LIQUIDOS, REVENDA_DESCONTO_MIN } from '../src/lib/intencao.js';
 
 // Espelho das constantes da Busca (src/pages/Busca.jsx) — a INTENÇÃO salva no filtro
 // restringe tipo/desconto e precisa valer também no e-mail. Ao mexer lá, mexa aqui.
-const TIPOS_RESIDENCIAL = ['apartamento', 'casa', 'imovel'];              // locação/temporada
-const TIPOS_LIQUIDOS    = ['apartamento', 'casa', 'comercial', 'imovel']; // revenda (flip)
-const REVENDA_DESCONTO_MIN = 30;
+// A régua da INTENÇÃO vem de `src/lib/intencao.js` — a MESMA que a Busca usa. Até 28/08
+// eram duas cópias com o mesmo valor, e o piso da revenda mudou de 30% para 40% no mesmo dia
+// em que descobrimos que `valor_minimo_ref` fora aplicado na Busca e não aqui: duas cópias da
+// mesma regra é uma que um dia discorda da outra, e discorda calada.
 // Checkbox da Busca ('aVista') → valor canônico do banco ('a_vista'). O filtro salvo guarda a
 // CHAVE do checkbox; mandar a chave crua para a RPC não casava com nada e o filtro de
 // pagamento simplesmente não existia no e-mail.

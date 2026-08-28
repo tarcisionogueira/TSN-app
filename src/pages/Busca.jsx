@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { TIPOS_RESIDENCIAL, TIPOS_LIQUIDOS, REVENDA_DESCONTO_MIN, ajustarFiltrosPorIntencao } from '../lib/intencao';
 import { useNavigate } from 'react-router-dom';
 import {
   Search, Loader2, Filter, ChevronDown, ChevronUp,
@@ -77,9 +78,9 @@ const INTENCAO_OPTS = [
 const INTENCAO_LABEL = Object.fromEntries(
   INTENCAO_OPTS.map(([val, label]) => [val, label.replace(/^\S+\s*/, '')]),
 );
-const TIPOS_RESIDENCIAL = ['apartamento', 'casa', 'imovel'];              // locação/temporada
-const TIPOS_LIQUIDOS    = ['apartamento', 'casa', 'comercial', 'imovel']; // revenda (flip)
-const REVENDA_DESCONTO_MIN = 30; // piso de lucro do sistema (viável = desconto ≥ 30%)
+// TIPOS_RESIDENCIAL / TIPOS_LIQUIDOS / REVENDA_DESCONTO_MIN e a tradução da intenção vêm
+// de `src/lib/intencao.js` — a MESMA régua que o cron de alertas usa (ver o topo daquele
+// arquivo). Antes de 28/08 havia duas cópias, e cópia é o que diverge.
 // Cidades de temporada (cidade_norm — sem espaços/acentos). Curada a partir do acervo real
 // (litoral + destinos turísticos). AJUSTÁVEL: acrescente/remova conforme a operação crescer.
 const CIDADES_TEMPORADA = [
@@ -111,21 +112,6 @@ const CIDADES_TEMPORADA = [
   // PARQUES / NATUREZA / AVENTURA
   'fozdoiguacu','bonito','brotas','socorro','altoparaisodegoias','capitolio','lencois','barreirinhas','jijocadejericoacoara',
 ];
-// Traduz a intenção para as restrições de tipo/desconto que ambos os caminhos (query direta e
-// RPC de raio) entendem. Interseção com os tipos já escolhidos pelo usuário; se ficar vazia,
-// devolve um sentinela que não casa nada (contradição → 0 resultados, em vez de "todos").
-function ajustarFiltrosPorIntencao(intencao, tiposUsuario, descontoMinUsuario) {
-  const base = Array.isArray(tiposUsuario) ? tiposUsuario : [];
-  const interseccao = (lista) => {
-    if (!base.length) return lista;
-    const inter = base.filter(t => lista.includes(t));
-    return inter.length ? inter : ['__sem_tipo__'];
-  };
-  let tipos = base, descontoMin = Number(descontoMinUsuario) || 0;
-  if (intencao === 'revenda')   { tipos = interseccao(TIPOS_LIQUIDOS);   descontoMin = Math.max(descontoMin, REVENDA_DESCONTO_MIN); }
-  else if (intencao === 'locacao' || intencao === 'temporada') { tipos = interseccao(TIPOS_RESIDENCIAL); }
-  return { tipos, descontoMin };
-}
 const MODAL_LABEL = { primeiro_leilao:'1ª Praça', segundo_leilao:'2ª Praça', venda_direta:'Venda Direta', licitacao_aberta:'Licitação Aberta', judicial:'Judicial', extrajudicial:'Extrajudicial' };
 
 /**
