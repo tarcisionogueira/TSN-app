@@ -4,6 +4,204 @@
 
 ---
 
+## 🗓️ 28/08 (sessão 9) — A PRAÇA É UM INTERVALO, E TUDO QUE ISSO DERRUBAVA
+
+9 commits (`8f98b22` → `e34dada`), **tudo em `main` e em produção** (deploy
+`dpl_9BW5CtBLrUoHJAs9K4c7iKaYd9eH` READY às 12:13 UTC). 25 arquivos, +1.173/−34.
+Migrações **aplicadas no banco** e escritas no repo, na mesma leva.
+
+> ⚠️ **Ao subir para `main`:** o `main` LOCAL desta máquina estava em `3afa795`, uma
+> história **não relacionada** ao `origin/main` — o remoto foi reescrito em algum momento e
+> `git merge` recusa com *"unrelated histories"*. O caminho certo é
+> `git checkout -B main origin/main` e então o fast-forward. Não force merge.
+
+---
+
+### 🔴 O ACHADO DO DIA — o leitor de edital DESTRUÍA a data certa
+
+O dono gerou um relatório de um apartamento em Guarulhos (MEGA) e recebeu **"Leilão
+encerrado em 19/08"**. O edital diz que a 2ª praça vai até **10/09/2026 14:30** — faltavam
+13 dias de pregão. O rastro que o próprio sistema deixou às 11:08 conta a história inteira:
+
+> `data_divergente_edital`: *"Acervo dizia **2026-09-10T14:30:00-03:00**; edital diz
+> **2026-08-17** — corrigido pelo documento."*
+
+**O scraper tinha capturado o prazo CORRETO. A leitura do edital gravou o errado por cima.**
+Em 25/08 aconteceu igual (31/08 → 26/08). As duas moveram a data **para trás** — porque o
+início é sempre anterior ao fim. Viés sistemático, não azar.
+
+**Não era a IA.** Quatro defeitos independentes, e trocar de modelo não conserta nenhum:
+
+1. **A pergunta não tinha resposta certa.** O edital publica um INTERVALO por praça ("terá
+   início no dia 20/08 e se encerrará no dia 10/09") e havia UM campo por praça. A regex
+   usava `.match()`, que devolve a PRIMEIRA data = o início. O prompt da IA pedia
+   `{"ordem":2,"data":"..."}` **sem dizer se era início ou fim**. Um modelo melhor devolve a
+   mesma coisa: não existia onde escrever a resposta.
+   → colunas `praca1_fim`/`praca2_fim`; `matchAll` ancorado em "se encerrará"; prompt pedindo
+   `inicio` **e** `fim`, com ordem explícita de NÃO deduzir o que o edital não diz.
+2. **"O documento vence o acervo" (23/08) estava certa na intenção e errada na direção** —
+   venceu com uma leitura pior. Agora o encerramento lido COMO encerramento sempre vence (é
+   a única leitura sem ambiguidade), mas uma data de INÍCIO não encurta mais um prazo
+   existente: registra a divergência e mantém o acervo. A assimetria decide — encurtar por
+   engano some com o lote e recusa relatório de quem ainda pode dar lance; manter um dia a
+   mais só adia uma baixa que o scraper faz sozinho. **A exceção de praça única preserva o
+   caso Ville de Lyon.**
+3. **O valor era calculado sobre a base errada.** "1ª praça R$ 228.333,33 / 2ª R$ 136.999,99"
+   — 60% de uma avaliação que não é a deste lote (R$ 267.052,71). Como o preço do site é
+   `least()` entre as praças, valor errado **para baixo sempre vira a manchete**: o card dizia
+   49% abaixo e o relatório 40%, na mesma página. Agora o **percentual declarado no edital**
+   ("no mínimo 60% do valor da avaliação") vence o "R$" solto.
+4. **O prazo não chegava na tela.** `ImovelDetalhe` faz `select('*')` e **nunca MAPEAVA**
+   `data_fim`; o helper decidia pelo início da 2ª praça, que é `timestamptz` gravado à
+   meia-noite UTC — 21h BRT do dia anterior. Daí o "19/08" em vez de 20/08.
+
+**Cascata:** data errada → trigger recalculou `data_fim` de 10/09 para 20/08 → gate recusou o
+relatório → e o cron de desativação tira o lote do acervo. Não é só um relatório: **é o lote
+inteiro sumindo da vitrine no dia em que a 2ª praça, a mais barata, abre.**
+
+> 🕵️ **E o lote estava inativo por OUTRO motivo, não pela data.** Estava barrado como "fração
+> ideal" — e o texto que disparou a regra é a cláusula que **toda matrícula de apartamento**
+> tem: *"e a fração ideal de 1,79088% no terreno e demais coisas comuns do condomínio"*. O
+> efeito era perverso: **quanto melhor a ficha (enriquecida com a matrícula), maior a chance
+> de o lote sumir** — e em silêncio, porque o lote só fica `ativo=false` por trigger.
+> Medido: 399 barrados → **367**, com **32 unidades inteiras liberadas** (25 apartamentos) e
+> **zero** venda-de-fatia escapando. 6 lotes vivos voltaram para a vitrine.
+
+---
+
+### ✅ O resto do que subiu
+
+**`8f98b22` — Lembrete pré-aula (buraco A do handoff anterior).** A confirmação prometia "o
+lembrete antes de começar" e **nenhum cron enviava** (conferido nos 56). `live-lembrete-cron`
+de hora em hora, duas etapas, **as duas levando o `link_sala`** — que nem era lido em
+`live-inscrever.js`. Dedup em `live_lembretes`, com chave `(evento_id, email, etapa)` e **não**
+o id da inscrição: as linhas de teste de 27/08 foram gravadas (log da API mostra POST 201 e
+200) e depois removidas direto no banco; dedup pendurado na linha sumiria junto e o reenvio
+sairia como primeira vez.
+
+**`7b7b1a6` + `5cb7bee` — Evento `Lead` no Meta (buraco B).** Pixel + Conversions API, com o
+`event_id` saindo do SERVIDOR e voltando na resposta (o `Purchase` duplica a fórmula nos dois
+lados; duas cópias de uma regra que só funciona enquanto forem idênticas é uma que vai
+divergir). Rastro do desfecho em `eventos_atividade` (`tipo='meta_lead'`), porque helper
+dormente devolve silêncio idêntico ao de quem funcionou. `/api/meta-capi-test?evento=lead`
+valida sem inscrição real.
+> **Buraco achado no caminho:** 30 dias de Meta Ads pagando cliques e **ZERO visita com
+> `fbclid`**. A coluna existia e `marketing.js` já capturava — mas `tracker.js` não punha no
+> objeto que alimenta a tabela e `api/track.js` não gravava. Sem `fbclid` não há `fbc`, e sem
+> `fbc` o Lead casa com muito menos gente: o buraco esvaziava o evento que o commit criava.
+
+**`c2d1076` — Os 71 lotes de praça impossível.** O nome do invariante sugeria data invertida;
+o dado disse outra coisa. **68 eram DUPLICATA** — o scraper põe a data seca em `data_leilao` e
+o MESMO pregão, com hora, em `data_leilao_2`. O ZUK denuncia sozinho: horas distintas por lote
+no mesmo dia (13:56, 13:48, 13:29) são sessão única escalonada. Os outros 3 tinham
+`data_leilao_2` **sete dias antes** da 1ª. Corrigido por **trigger** (`trg_a_normaliza_praca_duplicada`),
+não por UPDATE pontual — os scrapers escrevem cada um por sua conta e a coleta refaria amanhã.
+A hora é **preservada**, subindo para `data_leilao` em ISO quando plausível (07h–21h); 14.562
+lotes já gravam assim. **Consequência:** com a hora presente, o lote sai do ar às 17h, quando
+o pregão fecha, em vez de seguir oferecido até 23h59.
+
+**`7c633d5` — LocationIQ.** Plano **gratuito** (confirmado pelo dono). O invariante acusava
+"requests > 0 e custo = 0", o que funde duas respostas OPOSTAS: *ninguém configurou* e *o
+plano é grátis, o preço É zero*. No segundo caso **nenhum valor de env fecha o alerta** —
+setar 0 produz custo 0. A declaração passou a morar em `integracao_preco`, onde o banco
+enxerga. **NÃO crie `LOCATIONIQ_USD_POR_1000`.**
+
+**`e34dada` — `alerta_acima_do_capital`, e o que ele escondia.** Dos 3 acusados, **1 era falso
+positivo** (o invariante comparava a praça cara) e 2 eram de 24/08, véspera do conserto do
+gate. Mas a investigação achou o que importa: a regra de 17/08 — *"use `valor_minimo_ref`, não
+`valor_minimo`, em qualquer lugar que apresente preço ao cliente"* — **nunca se propagou** para
+o cron de alertas (4 caminhos de filtro **e o preço exibido no e-mail**), nem para
+`buscar_por_raio_v2`, nem para o próprio invariante.
+> **O efeito é o contrário do que o nome sugere.** Comparar a praça CARA contra o teto é mais
+> restritivo: nunca deixou passar lote caro — **escondia lote barato**. Medido no acervo ativo
+> com 20%+ de desconto: **672 lotes destravados** na faixa `ate_150k` (praça cara R$ 244k,
+> preço real R$ 154k), 33 em `150_400k`, 20 em `400k_1mi`. A faixa com mais clientes deixou de
+> ver 672 imóveis que cabiam no bolso dela. E nada caro entra: `_ref` é `least(...)`, sempre
+> ≤ `valor_minimo` (conferido: 0 lotes com `_ref` maior).
+> ⚠️ E `Busca.jsx:252` afirma em comentário que *"os dois caminhos precisam concordar"* — eles
+> **já não concordavam**: a lista filtrava por `_ref` e o raio pela praça cara.
+
+**`55addb1` — `docs/ENVS_VERCEL.md`.** Pedido do dono: parar de perguntar se as envs existem.
+**Leia esse arquivo antes de perguntar.** Pixel e CAPI do Meta estão no ar desde 29/07;
+`META_PIXEL_ID` sem o prefixo `VITE_` **não precisa existir** (há fallback no código e a
+Vercel expõe todas as envs ao runtime Node).
+
+---
+
+### 🪞 ERROS MEUS NESTA SESSÃO — handoff que só registra acerto ensina a repetir o erro
+
+1. **Refiz uma verificação já vencida.** Tratei Pixel/CAPI do Meta como possivelmente
+   desligados e pedi print do painel. O dono chamou de retrabalho, com razão — e o pior:
+   **o mesmo erro já estava catalogado em `api/system-status.js`**, que um dia checou nomes de
+   env inexistentes e mostrava "Pendente" para integração funcionando. O comentário de lá vale
+   como regra: *"painel que mente sobre o que está pronto faz perder tempo reconfigurando o
+   que já funciona"*. Daí nasceu o `docs/ENVS_VERCEL.md`.
+2. **Errei DUAS versões da exceção de fração ideal** por tentar adivinhar a forma da frase
+   (exigi "no/do terreno", depois o número antes da âncora). Só apareceu **testando contra 120
+   descrições REAIS do acervo**, não contra exemplos que eu inventei. A versão que ficou ancora
+   no CONTEXTO de condomínio, não na preposição.
+3. **Escrevi dois defeitos no cron de lembrete** e só peguei porque exercitei a função de
+   verdade: "amanhã" é conta de CALENDÁRIO (a janela alcança 6h da manhã do próprio dia), e a
+   janela da etapa do dia era alcançada por UMA única rodada — se ela falhasse, ninguém
+   receberia o link, numa aula que acontece uma vez só.
+4. **Dei nome impreciso a um invariante.** `praca2_antes_da_praca1` sugeria inversão; o dado
+   era duplicata. O nome dirigiu meu diagnóstico por um tempo.
+5. **Quebrei um comando de shell** com aspas na mensagem de commit e criei um arquivo `0` no
+   repo, removido em `86e6863`.
+
+### ✏️ Correção ao handoff da sessão 8
+
+Ele afirma que **"`metaTrack` está definido e nunca é chamado em lugar nenhum do app"**. Não é
+bem isso: `src/utils/gtag.js` chama `metaTrack` em **7 lugares**, e `trackAlertaCriado` já
+disparava `Lead`. O que era verdade — e é o que importa — é que **`trackAlertaCriado` não tinha
+nenhum call site** e `LiveInscricao.jsx` não chamava tracking nenhum.
+
+---
+
+### 📊 Estado do painel ao fim da sessão
+
+| invariante | antes | agora |
+|---|---|---|
+| `geocode_sem_preco` | 1.653 🔴 | **ok** ✅ |
+| `praca2_antes_da_praca1` | 71 🔴 | **0** ✅ |
+| `praca_fim_antes_do_inicio` | (novo) | **0** ✅ |
+| `leilao_vencido_ativo` | 1 🔴 (falso) | **0** ✅ |
+| `alerta_acima_do_capital` | 3 🔴 | **2** (era 1 falso positivo) |
+
+**Restam 4, nenhum de código:** `bd_teto_saturado` 550/495 · `sem_cidade` 221 ·
+`alerta_acima_do_capital` 2 · `data_edital_recuou_prazo` 2.
+
+---
+
+## 📌 PENDÊNCIAS PARA 29/08 EM DIANTE
+
+**Trava a aula (02/09, 19h):**
+1. **TESTAR a inscrição em `/live/leilao-ao-vivo`** — ninguém percorreu o caminho depois das
+   mudanças. Valida três coisas de uma vez: a inscrição grava (**`live_inscricoes` está
+   VAZIA**), o e-mail de confirmação sai com o texto novo, e o Lead chega ao Meta
+   (`select detalhe, criado_em from eventos_atividade where tipo='meta_lead' order by 1 desc`).
+   **O primeiro lembrete dispara 01/09 13:00 BRT** — depois disso não dá para consertar o texto.
+2. `apresentador_foto` segue vazio (Comercial → Aula ao vivo; já tem botão de upload).
+
+**Vigiar:**
+3. **31/08 (domingo) — a rodada semanal de alertas.** É o teste REAL do gate de capital: as
+   últimas saíram para 1–2 clientes/dia contra **43 em 24/08**, então o silêncio até aqui é
+   falta de volume, não evidência de conserto.
+4. **31/08 (segunda) — cota do Bright Data reseta.** Está 550/495 desde 28/08; enquanto isso as
+   fontes pagas saem `sem_cota` e o Actions manda e-mail de falha (é orçamento, não regressão).
+5. `data_edital_recuou_prazo` **2** — as duas divergências que hoje passaram a ser *registradas
+   em vez de aplicadas*. Precisam de revisão humana dos dois lotes.
+
+**Aberto de antes:**
+6. **CALIL — a queda continua ABERTA** (9 lotes contra piso 18). Quem coleta de verdade é o
+   runner residencial; o Actions roda em IP de datacenter, que o CALIL bloqueia.
+7. `sem_cidade` **221** (limite 30) — trabalho de captura.
+8. `37c2d966` — pagante desde 06/08 com zero relatórios. Ativação, não bug.
+9. **`sem_perfil` 28 de 68 (41%)** — não responderam a triagem; é o que faz o e-mail de
+   oportunidade sair genérico.
+
+---
+
 ## 🎥 27/08 (sessão 8) — A CAMPANHA DA AULA: O QUE JÁ SEGURA, E OS DOIS BURACOS QUE FALTAM
 
 Aula ao vivo em **02/09, 19h** (`leilao-ao-vivo`). Sala já existe e é **recorrente** —
@@ -120,7 +318,7 @@ in-app — provavelmente Instagram, e é de onde vem o tráfego da campanha) e 1
 
 ---
 
-## 📌 PENDÊNCIAS PARA 28/08 — ORDEM SUGERIDA
+## 📌 PENDÊNCIAS PARA 28/08 — ORDEM SUGERIDA  ·  ⚠️ HISTÓRICO (fechadas na sessão 9; ver o topo)
 
 **Trava a aula de quarta (5 dias):**
 1. **Lembrete pré-aula** (buraco A) — decidir 24h+30min ou só uma janela, e se o WhatsApp direto
