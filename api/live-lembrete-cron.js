@@ -36,6 +36,11 @@
  *
  * COMO REENVIAR (para testar): apague a linha em `live_lembretes`. A chave é
  * (evento_id, email, etapa) e o dedup é a única coisa que segura o reenvio.
+ *
+ * ELE TAMBÉM ROLA A AULA SEMANAL (28/08). Antes de procurar o que lembrar, chama
+ * `live_rolar_recorrentes()`: passada a aula E fechada a janela de oferta, `data_hora` avança
+ * para a quarta seguinte. Sem isso, "recorrência semanal" era só um texto na landing — e este
+ * cron nunca mais teria o que fazer, porque ele só olha aula no FUTURO.
  */
 import { isCronAuthorized } from './_auth.js';
 import { createClient } from '@supabase/supabase-js';
@@ -166,6 +171,22 @@ export function corpo(etapa, { nome, ev, agora = Date.now() }) {
 export default async function handler(req, res) {
   if (!isCronAuthorized(req)) return res.status(401).json({ error: 'nao_autorizado' });
 
+  // ── 0. A AULA SEMANAL ROLA PARA A PRÓXIMA OCORRÊNCIA ───────────────────────
+  // `recorrencia = 'semanal'` era promessa sem mecanismo: a landing dizia "toda quarta", o
+  // Google Agenda recebia a RRULE e `data_hora` ficava parada na primeira ocorrência. Passada
+  // a aula, a página anunciava data vencida e ESTE cron não tinha mais o que lembrar — a
+  // consulta abaixo pede `data_hora > agora`. Aqui, antes de tudo, o banco avança a data
+  // (só depois de a aula terminar E a janela de oferta fechar; o porquê está na migração
+  // `live_rolar_aula_recorrente.sql`). Erro NÃO aborta o lembrete: rolar é manutenção, mandar
+  // o lembrete de uma aula que já está marcada é a obrigação — e a segunda não depende da
+  // primeira.
+  let rolagem = null;
+  try {
+    const { data, error } = await supabase.rpc('live_rolar_recorrentes');
+    if (error) console.error('[live-lembrete] rolagem falhou:', error.message);
+    else { rolagem = data; if (data?.roladas > 0) console.log('[live-lembrete] aula(s) roladas:', JSON.stringify(data.eventos)); }
+  } catch (e) { console.error('[live-lembrete] rolagem lançou:', e?.message); }
+
   // ── 1. Aulas dentro do horizonte ───────────────────────────────────────────
   // 31h para a frente cobre a janela da véspera com folga. `data_hora` é a PRÓXIMA
   // ocorrência concreta, inclusive num evento recorrente — é ela que manda.
@@ -178,7 +199,7 @@ export default async function handler(req, res) {
   // Leitura que falhou NÃO é "não há aula". Aborta para o cron acusar, em vez de sair
   // verde tendo mandado zero e-mail na véspera da única aula do mês.
   if (eEv) return res.status(500).json({ error: 'eventos_ilegiveis', detalhe: eEv.message });
-  if (!eventos?.length) return res.status(200).json({ ok: true, eventos: 0, enviados: 0 });
+  if (!eventos?.length) return res.status(200).json({ ok: true, eventos: 0, enviados: 0, rolagem });
 
   const fila = [];
   const porEvento = [];
@@ -245,5 +266,5 @@ export default async function handler(req, res) {
     }
   }
 
-  return res.status(200).json({ ok: true, eventos: porEvento, aptos: fila.length, enviados, falhas: falhas.length, detalhe_falhas: falhas.slice(0, 5) });
+  return res.status(200).json({ ok: true, rolagem, eventos: porEvento, aptos: fila.length, enviados, falhas: falhas.length, detalhe_falhas: falhas.slice(0, 5) });
 }
