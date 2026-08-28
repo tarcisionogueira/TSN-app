@@ -71,6 +71,12 @@ const INTENCAO_OPTS = [
   ['locacao',   '🏠 Locação',   'Residencial para renda de aluguel'],
   ['temporada', '🏖️ Temporada', 'Residencial em destino turístico/sazonal (praia, serra, termas, histórica, parques)'],
 ];
+// Rótulo curto por intenção, DERIVADO de INTENCAO_OPTS (sem o emoji) — usado para dizer ao
+// cliente de onde vem um piso que ele não escolheu. Derivar em vez de redigitar evita a
+// segunda cópia que um dia discorda da primeira.
+const INTENCAO_LABEL = Object.fromEntries(
+  INTENCAO_OPTS.map(([val, label]) => [val, label.replace(/^\S+\s*/, '')]),
+);
 const TIPOS_RESIDENCIAL = ['apartamento', 'casa', 'imovel'];              // locação/temporada
 const TIPOS_LIQUIDOS    = ['apartamento', 'casa', 'comercial', 'imovel']; // revenda (flip)
 const REVENDA_DESCONTO_MIN = 30; // piso de lucro do sistema (viável = desconto ≥ 30%)
@@ -950,6 +956,15 @@ export default function Busca() {
   }, [filtros, raioAtivo, raioKmAtivo]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const up = (name, val) => setFiltrosPersist(p => ({ ...p, [name]: val }));
+
+  // O QUE O SERVIDOR VAI DE FATO APLICAR (28/08). Sai de `ajustarFiltrosPorIntencao`, a MESMA
+  // função que os dois caminhos de consulta usam — não de uma regra reescrita aqui. Se o piso
+  // da revenda mudar um dia, a tela acompanha sozinha, em vez de virar a cópia desatualizada.
+  const descontoEfetivo = ajustarFiltrosPorIntencao(
+    filtros.intencao, filtros.tipos || [], Number(filtros.descontoMin) || 0,
+  ).descontoMin;
+  // Quanto do desconto vem da INTENÇÃO e não da escolha explícita do cliente.
+  const pisoIntencao = ajustarFiltrosPorIntencao(filtros.intencao, filtros.tipos || [], 0).descontoMin;
   const togglePagamento = (v) => up('pagamento', filtros.pagamento.includes(v) ? filtros.pagamento.filter(x=>x!==v) : [...filtros.pagamento, v]);
   const toggleSelecionado = (id) => setSelecionados(p => p.includes(id) ? p.filter(x=>x!==id) : [...p, id]);
   const isSelecionado = (id) => selecionados.includes(id);
@@ -1585,7 +1600,14 @@ export default function Busca() {
                               onMouseLeave={e=>{ if (dropdownIndex !== idx) e.currentTarget.style.background='none'; }}>
                               <span>{c}</span>
                               {(() => { const n = cidadeCounts[normCidade(c)]; return (
-                                <span style={{ fontSize:10, fontWeight:700, color: n ? '#16a34a' : '#94a3b8', background: n ? '#f0fdf4' : '#f1f5f9', borderRadius:12, padding:'1px 7px', flexShrink:0 }}>
+                                /* Mesma natureza do contador de bairro (28/08): é o total ATIVO
+                                   da cidade, não o resultado da sua busca. Rotulado aqui pelo
+                                   mesmo motivo — número que promete mais do que a lista entrega
+                                   parece defeito, e foi assim que apareceu. */
+                                <span style={{ fontSize:10, fontWeight:700, color: n ? '#16a34a' : '#94a3b8', background: n ? '#f0fdf4' : '#f1f5f9', borderRadius:12, padding:'1px 7px', flexShrink:0 }}
+                                  title={n
+                                    ? `${n} imóvel(is) ativo(s) nesta cidade. É o total da cidade — os outros filtros ainda se aplicam à lista.`
+                                    : 'Sem imóvel ativo agora. Selecione para monitorar e receber por e-mail quando surgir.'}>
                                   {n ? `${n} imóveis` : 'monitorar'}
                                 </span>
                               ); })()}
@@ -1647,7 +1669,7 @@ export default function Busca() {
                     <div style={{ fontSize:10, color:'#94a3b8', marginBottom:6 }}>
                       {bairrosCarregando
                         ? 'Carregando bairros…'
-                        : 'Digite para buscar ou monitorar um bairro/praça, mesmo sem imóvel agora (avisamos por e-mail quando surgir). O número é a oferta atual.'}
+                        : 'Digite para buscar ou monitorar um bairro/praça, mesmo sem imóvel agora (avisamos por e-mail quando surgir). O número é o total ATIVO do bairro e não considera os demais filtros — a lista abaixo pode trazer menos.'}
                     </div>
                     {gruposSel.length > 0 && (
                       <div style={{ display:'flex', flexWrap:'wrap', gap:4, marginBottom:6 }}>
@@ -1682,7 +1704,21 @@ export default function Busca() {
                         return (
                           <button key={g.chave} onClick={() => toggleGrupo(g)}
                             style={{ padding:'4px 10px', borderRadius:20, border:`1px solid ${ativo ? '#16a34a' : '#e2e8f0'}`, background: ativo ? '#16a34a' : '#f8fafc', color: ativo ? 'white' : '#475569', fontSize:12, fontWeight: ativo ? 700 : 400, cursor:'pointer' }}>
-                            {g.label} <span style={{ opacity:0.75, fontWeight:700 }}>{g.count > 0 ? `· ${g.count}` : '· monitorar'}</span>
+                            {g.label}{' '}
+                            {/* O NÚMERO CONTA GEOGRAFIA, A LISTA APLICA TUDO (28/08). Este
+                                badge sai de uma consulta por estado+cidade+bairro e ignora
+                                tipo, modalidade, intenção, valor e desconto; a lista aplica
+                                todos. Enquanto nenhum filtro está ligado os dois coincidem —
+                                por isso a divergência aparecia só às vezes, e parecia bug.
+                                Dizer o que ele conta custa um `title` e resolve; recontar a
+                                cada mudança de filtro custaria uma consulta por interação na
+                                tela mais usada do site. */}
+                            <span style={{ opacity:0.75, fontWeight:700 }}
+                              title={g.count > 0
+                                ? `${g.count} imóvel(is) ativo(s) neste bairro. É o total do bairro — os outros filtros (tipo, intenção, valor, desconto) ainda se aplicam à lista.`
+                                : 'Sem imóvel ativo agora. Selecione para monitorar e receber por e-mail quando surgir.'}>
+                              {g.count > 0 ? `· ${g.count}` : '· monitorar'}
+                            </span>
                           </button>
                         );
                       })}
@@ -1784,8 +1820,17 @@ export default function Busca() {
               </div>
               <div>
                 <label style={lbl}>Desconto mínimo (avaliação × lance)</label>
-                <div style={{ fontSize:11, color:'#475569', fontWeight:700, marginBottom:8 }}>
-                  {filtros.descontoMin ? `A partir de ${filtros.descontoMin}%` : 'Qualquer desconto'}
+                {/* PISO IMPOSTO PELA INTENÇÃO (28/08). "Revenda" aplica desconto >= 30% no
+                    servidor (`ajustarFiltrosPorIntencao`), e a tela mostrava "Qualquer
+                    desconto / Todos" selecionado enquanto o filtro real era 30%+. O dono viu
+                    um bairro com "· 1" no chip e a lista devolvendo 0: o lote tinha 23%.
+                    Tela que afirma uma coisa e servidor que faz outra é a familia de defeito
+                    que este projeto cataloga — aqui ela some porque o piso passa a ser DITO. */}
+                <div style={{ fontSize:11, color: pisoIntencao > (Number(filtros.descontoMin)||0) ? '#b45309' : '#475569', fontWeight:700, marginBottom:8 }}>
+                  {descontoEfetivo ? `A partir de ${descontoEfetivo}%` : 'Qualquer desconto'}
+                  {pisoIntencao > (Number(filtros.descontoMin)||0) && (
+                    <span style={{ fontWeight:600 }}> — mínimo da intenção “{INTENCAO_LABEL[filtros.intencao] || filtros.intencao}”</span>
+                  )}
                 </div>
                 <input type="range" min={0} max={90} step={5}
                   value={Number(filtros.descontoMin) || 0}
@@ -1794,10 +1839,17 @@ export default function Busca() {
                 />
                 <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginTop:10 }}>
                   {[0,20,30,40,50].map(p => {
-                    const ativo = (Number(filtros.descontoMin)||0) === p;
+                    // O chip aceso é o do desconto EFETIVO, não o do valor guardado: com
+                    // "revenda" ligada, "Todos" aceso seria mentira. E os abaixo do piso
+                    // ficam esmaecidos com o motivo no title — clicá-los não muda o
+                    // resultado, e um botão que não faz nada sem explicar é pior que um
+                    // botão desabilitado.
+                    const abaixoDoPiso = p < pisoIntencao;
+                    const ativo = descontoEfetivo === p;
                     return (
                       <button key={p} onClick={() => up('descontoMin', p)}
-                        style={{ padding:'4px 10px', borderRadius:20, border:`1px solid ${ativo ? '#10b981' : '#e2e8f0'}`, background: ativo ? '#ecfdf5' : 'white', color: ativo ? '#059669' : '#64748b', fontSize:11, fontWeight:700, cursor:'pointer' }}>
+                        title={abaixoDoPiso ? `A intenção “${INTENCAO_LABEL[filtros.intencao] || filtros.intencao}” já exige ${pisoIntencao}%+` : undefined}
+                        style={{ padding:'4px 10px', borderRadius:20, border:`1px solid ${ativo ? '#10b981' : '#e2e8f0'}`, background: ativo ? '#ecfdf5' : 'white', color: ativo ? '#059669' : '#64748b', fontSize:11, fontWeight:700, cursor:'pointer', opacity: abaixoDoPiso && !ativo ? 0.45 : 1 }}>
                         {p===0 ? 'Todos' : `${p}%+`}
                       </button>
                     );
