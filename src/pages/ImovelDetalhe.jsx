@@ -1498,8 +1498,8 @@ export default function ImovelDetalhe() {
               const lucro = revendaRef - lance - custosAquisicao - comissaoVenda;
               const margem = (lance + custosAquisicao) > 0 ? (lucro / (lance + custosAquisicao)) * 100 : 0;
               const linha = (rot, val, cor) => (
-                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', fontSize: 13, borderBottom: '1px dashed #f1f5f9' }}>
-                  <span style={{ color: '#64748b' }}>{rot}</span><span style={{ fontWeight: 700, color: cor || '#111' }}>{val}</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, padding: '6px 0', fontSize: 13, borderBottom: '1px dashed #f1f5f9' }}>
+                  <span style={{ color: '#64748b' }}>{rot}</span><span style={{ fontWeight: 700, color: cor || '#111', whiteSpace: 'nowrap' }}>{val}</span>
                 </div>
               );
               return (
@@ -1514,9 +1514,9 @@ export default function ImovelDetalhe() {
                   {linha(`Custos de aquisição (est. ~${CUSTO_AQUISICAO_PCT}%)`, '− ' + fmtBRL(custosAquisicao), '#b45309')}
                   {linha('Revenda de referência (avaliação)', fmtBRL(revendaRef))}
                   {linha('Comissão de venda (5%)', '− ' + fmtBRL(comissaoVenda), '#b45309')}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0 0', fontSize: 15 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, padding: '10px 0 0', fontSize: 15 }}>
                     <span style={{ fontWeight: 800, color: '#111' }}>Lucro estimado</span>
-                    <span style={{ fontWeight: 900, color: lucro >= 0 ? '#15803d' : '#dc2626' }}>{fmtBRL(lucro)} <span style={{ fontSize: 12, fontWeight: 700 }}>({margem.toFixed(2)}%)</span></span>
+                    <span style={{ fontWeight: 900, color: lucro >= 0 ? '#15803d' : '#dc2626', whiteSpace: 'nowrap' }}>{fmtBRL(lucro)} <span style={{ fontSize: 12, fontWeight: 700 }}>({margem.toFixed(2)}%)</span></span>
                   </div>
                   <button onClick={() => nav('/calculadora', { state: { imovel } })}
                     style={{ marginTop: 14, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 16px', background: '#eff6ff', color: '#0D63DB', border: '1px solid #bfdbfe', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
@@ -1542,13 +1542,19 @@ export default function ImovelDetalhe() {
                     Quanto este lote <strong>precisaria</strong> render por mês para pagar {ALUGUEL_ALVO_PCT_MES}% sobre o valor investido.
                     Não é previsão de aluguel: o <strong>aluguel praticado na região</strong> sai no relatório mercadológico.
                   </p>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', fontSize: 13, borderBottom: '1px dashed #f1f5f9' }}>
-                    <span style={{ color: '#64748b' }}>Investido ({PREMISSAS_TEXTO})</span>
-                    <span style={{ fontWeight: 700, color: '#111' }}>{fmtBRL(investido)}</span>
+                  {/* A premissa vai em linha PRÓPRIA, não entre parênteses no rótulo: no
+                      celular (e já em 560px) ela empurrava o valor e quebrava "R$ 198.593,92"
+                      no meio. `nowrap` no número pelo mesmo motivo. */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 12, padding: '6px 0', fontSize: 13, borderBottom: '1px dashed #f1f5f9' }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ color: '#64748b' }}>Investido</div>
+                      <div style={{ color: '#94a3b8', fontSize: 11, lineHeight: 1.4 }}>{PREMISSAS_TEXTO}</div>
+                    </div>
+                    <span style={{ fontWeight: 700, color: '#111', whiteSpace: 'nowrap' }}>{fmtBRL(investido)}</span>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0 0', fontSize: 15 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, padding: '10px 0 0', fontSize: 15 }}>
                     <span style={{ fontWeight: 800, color: '#111' }}>Aluguel-alvo</span>
-                    <span style={{ fontWeight: 900, color: '#0D63DB' }}>{fmtBRL(alvo)}<span style={{ fontSize: 12, fontWeight: 700, color: '#64748b' }}> /mês</span></span>
+                    <span style={{ fontWeight: 900, color: '#0D63DB', whiteSpace: 'nowrap' }}>{fmtBRL(alvo)}<span style={{ fontSize: 12, fontWeight: 700, color: '#64748b' }}> /mês</span></span>
                   </div>
                 </div>
               );
