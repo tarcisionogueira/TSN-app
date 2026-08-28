@@ -483,7 +483,7 @@ ${corpo}
     var sv=localStorage.getItem('bp_orig');
     if(sv){orig=JSON.parse(sv);}
     else{var q=new URLSearchParams(location.search),gt=function(k){return q.get(k)||null;};
-      var o={gclid:gt('gclid'),gbraid:gt('gbraid'),wbraid:gt('wbraid'),utm_source:gt('utm_source'),
+      var o={gclid:gt('gclid'),gbraid:gt('gbraid'),wbraid:gt('wbraid'),oppref:gt('oppref'),utm_source:gt('utm_source'),
         utm_medium:gt('utm_medium'),utm_campaign:gt('utm_campaign'),utm_term:gt('utm_term'),
         utm_content:gt('utm_content'),referrer_host:(ref==='(direto)'||ref==='(interno)')?null:ref,
         landing:location.pathname};
@@ -497,10 +497,10 @@ ${corpo}
   // gravar aqui a MESMA chave/formato/precedencia do capturarMarketing() faz o cadastro atribuir.
   try{
     var Q=new URLSearchParams(location.search),g2=function(k){return (Q.get(k)||'').slice(0,300);};
-    var mkt={gclid:g2('gclid'),fbclid:g2('fbclid'),utm_source:g2('utm_source'),utm_medium:g2('utm_medium'),utm_campaign:g2('utm_campaign')};
+    var mkt={gclid:g2('gclid'),fbclid:g2('fbclid'),oppref:g2('oppref'),utm_source:g2('utm_source'),utm_medium:g2('utm_medium'),utm_campaign:g2('utm_campaign')};
     var temAnuncio=false;for(var kk in mkt){if(mkt[kk])temAnuncio=true;}
     var refM=(ref==='(direto)'||ref==='(interno)')?'direto':ref;
-    var reg=JSON.stringify({gclid:mkt.gclid,fbclid:mkt.fbclid,utm_source:mkt.utm_source,utm_medium:mkt.utm_medium,utm_campaign:mkt.utm_campaign,referrer:refM,landing:location.pathname,ts:Date.now()});
+    var reg=JSON.stringify({gclid:mkt.gclid,fbclid:mkt.fbclid,oppref:mkt.oppref,utm_source:mkt.utm_source,utm_medium:mkt.utm_medium,utm_campaign:mkt.utm_campaign,referrer:refM,landing:location.pathname,ts:Date.now()});
     if(temAnuncio)localStorage.setItem('tsn_mkt',reg);              // veio de anuncio → sobrescreve sempre
     else if(!localStorage.getItem('tsn_mkt'))localStorage.setItem('tsn_mkt',reg); // first-touch
   }catch(e){}
