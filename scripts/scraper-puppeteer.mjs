@@ -1741,16 +1741,28 @@ function mapLoteLJUD_pp(it) {
   const valMin = parseFloat(it.vl_lanceminimo || it.vl_ordenacao || 0) || 0;
   const foto = it.fotos?.[0]?.nm_path_completo ? it.fotos[0].nm_path_completo.replace('/196x146/', '/640x480/') : null;
   const loteId = it.lote_id || it.id;
-  // O portal é AGREGADOR: cada lote vem de um leiloeiro oficial (nm_url_leiloeiro). A página
-  // /lote/{id} do agregador é um SPA frágil que responde "Leilão não encontrado" p/ muitos
-  // lotes (a rota interna não é o lote_id cru, ou o lote foi re-listado com outro id) — mesmo
-  // quando os documentos (anexos S3) vieram certos. Então o destino HONESTO do botão
-  // "Acessar leiloeiro" é o SITE DO LEILOEIRO real; só caímos no agregador quando o portal
-  // não informou o domínio de origem. url_lote é reescrito pelo scraper todo dia e o doc-scan
-  // (enriquecer-lote só grava link_edital vazio) NUNCA o sobrescreve → o domínio fica preservado.
+  // O portal é AGREGADOR: cada lote vem de um leiloeiro oficial (nm_url_leiloeiro), e a página
+  // /lote/{id} do agregador responde "Leilão não encontrado" para muitos lotes. Por isso o
+  // destino era o SITE do leiloeiro — que resolvia o erro e criava outro: a HOME não mostra o
+  // imóvel, e um dos domínios devolve literalmente "Leiloeiro não cadastrado!".
+  //
+  // RECON DE 28/08 (`scripts/recon-ljud-url.mjs`, rodado no Actions) testou as quatro formas
+  // em 3 lotes abertos e a resposta foi limpa:
+  //   /lote/{lote_id}            → 2 de 3 "Leilão não encontrado"
+  //   /leilao/{leilao_id}        → 3 de 3 ABREM, e num deles o <title> é o próprio imóvel
+  //                                ("Alto Parnaíba/MA - Fazenda São Bento c/ 16.040 hectares")
+  //   /leilao/{id}/lote/{id}     → 500 nos 3
+  //   domínio do leiloeiro       → home; num caso, "Leiloeiro não cadastrado!"
+  // Então o destino passa a ser a PÁGINA DO LEILÃO no agregador, que é a que existe. O site do
+  // leiloeiro vira o segundo degrau (quando o portal não informa `leilao_id`), e o /lote/ some
+  // da escada: ele é o único que já sabemos que costuma falhar.
+  //
+  // url_lote é reescrito pelo scraper todo dia e o doc-scan (enriquecer-lote só grava
+  // link_edital vazio) NUNCA o sobrescreve → a próxima coleta conserta os 1.358 lotes ativos.
   const siteLeiloeiro = siteLeiloeiroLJUD(it.nm_url_leiloeiro);
-  const loteUrlAgg = loteId ? `https://www.leiloesjudiciais.com.br/lote/${loteId}` : null;
-  const loteUrl = siteLeiloeiro || loteUrlAgg || 'https://www.leiloesjudiciais.com.br';
+  const leilaoId = it.leilao_id;
+  const loteUrlAgg = leilaoId ? `https://www.leiloesjudiciais.com.br/leilao/${leilaoId}` : null;
+  const loteUrl = loteUrlAgg || siteLeiloeiro || 'https://www.leiloesjudiciais.com.br';
   // `anexos`: documentos REAIS do lote (edital, matrícula, laudo…) com URL S3 direta.
   const anexosArr = (Array.isArray(it.anexos) ? it.anexos : [])
     .filter(a => a && a.nm_path_completo)
