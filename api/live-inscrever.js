@@ -67,6 +67,11 @@ export default async function handler(req, res) {
   const slug     = String(b.slug || '').trim().slice(0, 80);
   const nome     = normalizarNome(String(b.nome || '').slice(0, 120));
   const email    = String(b.email || '').trim().toLowerCase().slice(0, 160);
+  // INDICAÇÃO DO PARCEIRO (28/08). A aula passa a ser material de divulgação dos parceiros, e
+  // sem isto o link deles produziria o oposto do combinado: a conta nasce aqui, no servidor,
+  // SEM upline — e 24h depois o cron `adotar_orfaos_padrao_dono` a adotaria para o DONO. O
+  // parceiro divulgaria, traria o inscrito e perderia a carteira, em silêncio.
+  const ref      = String(b.ref || '').trim().slice(0, 40);
   // `normalizarTelefoneBR` tira o "+55" do autopreenchimento ANTES de validar: 13 dígitos
   // reprovariam por tamanho, e reprovar um número certo é tão ruim quanto aceitar um errado.
   const whatsapp = normalizarTelefoneBR(b.whatsapp).slice(0, 15);
@@ -116,6 +121,26 @@ export default async function handler(req, res) {
     userId = lista.find(u => String(u.email || '').toLowerCase() === email)?.id || null;
   }
 
+  // Quem indicou? Aceita o CÓDIGO do parceiro (o que vai no link) ou o id cru, do mesmo jeito
+  // que `vincular_upline` aceita no caminho do navegador. Resolver ANTES de criar a conta é o
+  // que permite gravar o vínculo no mesmo upsert do perfil — um `update` depois poderia falhar
+  // sozinho e deixar a conta órfã com cara de vinculada.
+  let upline = null;
+  if (ref) {
+    const ehUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(ref);
+    const filtro = ehUuid
+      ? `id=eq.${encodeURIComponent(ref)}`
+      : `codigo_indicacao=eq.${encodeURIComponent(ref.toUpperCase())}`;
+    try {
+      const r = await sb(`perfis?${filtro}&select=id,ativo&limit=1`);
+      // `.ok` antes do corpo: um 400 daqui viraria "parceiro não existe" e o crédito iria
+      // para o dono na rolagem de 24h — o vazio entregue como resposta, custando comissão.
+      if (r.ok) { const [p] = await r.json().catch(() => []); if (p?.id && p.ativo !== false) upline = p.id; }
+      else console.error('[live-inscrever] leitura do parceiro falhou', r.status, ref);
+    } catch (e) { console.error('[live-inscrever] leitura do parceiro lançou:', e?.message); }
+    if (!upline) console.warn('[live-inscrever] ref sem parceiro correspondente:', ref);
+  }
+
   if (!userId) {
     const meta = { nome, whatsapp, role: 'explorador', lgpd_aceito: true, lgpd_data: new Date().toISOString(), origem_live: slug };
     const cRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users`, {
@@ -142,6 +167,12 @@ export default async function handler(req, res) {
             headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
             body: JSON.stringify({
               id: userId, nome, telefone: whatsapp, role: 'explorador',
+              // O vínculo entra AQUI, na criação — e só quando há parceiro de verdade. Nunca
+              // sobrescreve nada: esta linha só roda para conta NOVA. `indicacao_origem`
+              // carimba a procedência, para o painel não confundir com o upline padrão.
+              ...(upline && upline !== userId
+                ? { indicado_por: upline, indicacao_origem: 'link_parceiro', ultima_indicacao_em: new Date().toISOString() }
+                : {}),
               // A cidade vira o primeiro filtro útil do novo usuário: quem entra na
               // plataforma sem região definida vê o acervo do país inteiro e não
               // reconhece nada — a pior primeira impressão possível.

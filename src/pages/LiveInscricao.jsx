@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '../utils/supabase';
 import { lerMarketing, metaTrack, openaiTrack } from '../utils/marketing';
+import { lerRef } from '../utils/ref';
 import { validarNome } from '../lib/nome';
 import { validarTelefone, limparTelefone, formatarTelefone } from '../lib/telefone';
 import CidadeAutocomplete from '../components/CidadeAutocomplete';
@@ -132,7 +133,11 @@ export default function LiveInscricao() {
         // `_fbp` só existe no navegador (é cookie que o próprio Pixel escreve) e é um dos
         // campos que mais levantam a correspondência do Lead no Meta. O servidor não tem como
         // obtê-lo sozinho, então ele viaja junto da inscrição.
-        body: JSON.stringify({ slug, ...form, utm: mkt, fbp: lerFbp() }),
+        // `ref`: o código do parceiro que divulgou a aula. Vem do localStorage (janela de 30
+        // dias, gravada pelo AuthContext em qualquer ponto de entrada), e não da URL — assim
+        // vale mesmo se a pessoa abriu o link do parceiro, saiu e voltou depois para se
+        // inscrever. Quem resolve o código e grava o vínculo é o servidor, na criação da conta.
+        body: JSON.stringify({ slug, ...form, utm: mkt, fbp: lerFbp(), ref: lerRef() || null }),
       });
       const j = await r.json().catch(() => ({}));
       // `.ok` checado ANTES de comemorar: dizer "inscrito" sobre uma resposta de erro é
