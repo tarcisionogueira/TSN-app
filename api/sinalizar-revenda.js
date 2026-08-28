@@ -61,15 +61,27 @@ export default async function handler(req) {
 
     // Resolve cidade/UF/área do imóvel (para R$/m² e a chave do Índice).
     let cidadeNorm = norm(arr.cidade), uf = String(arr.estado || '').toUpperCase(), area = Number(body.area_m2) || null;
+    // ÂNCORA DE LOCALIZAÇÃO — sem ela a amostra NUNCA entrou (28/08). `indice_amostra` tem o
+    // CHECK `indice_amostra_ancora_check`: precisa de bairro, endereço OU condomínio. Este
+    // insert mandava `bairro_norm: ''` e mais nada, então violava o CHECK em TODA revenda desde
+    // que a regra da âncora existe (07/08). Medido: `origem = 'revenda'` tinha ZERO amostras no
+    // Índice — a revenda do cliente, que o comentário abaixo chama de "o GABARITO que calibra as
+    // estimativas", nunca calibrou uma única vez. O `.ok` estava certo e reportava a falha; o
+    // que faltava era alguém olhar. Agora o lugar vem do imóvel, junto com cidade e UF.
+    let bairro = '', endereco = null, condominio = null;
     if (UUID_RE.test(iid)) {
-      const ilRes = await sb(`imoveis_leilao?id=eq.${iid}&select=cidade_norm,estado,area_m2&limit=1`);
+      const ilRes = await sb(`imoveis_leilao?id=eq.${iid}&select=cidade_norm,estado,area_m2,bairro,endereco,nomecondominio&limit=1`);
       const il = (await ilRes.json().catch(() => []))?.[0];
       if (il) {
         if (il.cidade_norm) cidadeNorm = il.cidade_norm;
         if (il.estado) uf = String(il.estado).toUpperCase();
         if (!area && Number(il.area_m2) > 0) area = Number(il.area_m2);
+        bairro = norm(il.bairro || '') || '';
+        endereco = il.endereco || null;
+        condominio = il.nomecondominio || null;
       }
     }
+    const temAncora = !!(bairro || endereco || condominio);
     const valorM2 = area > 0 ? Math.round(valor / area) : null;
 
     // 1) Gabarito na tabela do arremate.
@@ -94,17 +106,26 @@ export default async function handler(req) {
     // resposta, mas também NÃO pode ser reportada como sucesso — `amostra` passa a refletir o
     // que de fato entrou, porque é isso que a tela mostra ao cliente.
     let amostra = false;
-    if (cidadeNorm && uf && valorM2 && valorM2 >= 200 && valorM2 <= 50000) {
-      const ins = await sb('indice_amostra', {
-        method: 'POST', headers: { Prefer: 'return=minimal,resolution=ignore-duplicates' },
-        body: JSON.stringify({
-          cidade_norm: cidadeNorm, uf, bairro_norm: '', geo_grid: '', tipo: 'residencial',
+    if (cidadeNorm && uf && valorM2 && valorM2 >= 200 && valorM2 <= 50000 && temAncora) {
+      // Via RPC (28/08): `resolution=ignore-duplicates` sem `on_conflict` resolve pela PRIMARY
+      // KEY — aqui um `id` gerado, que nunca conflita —, e o insert ia bater no índice de dedupe
+      // real (`uq_indice_amostra_deduce`, sobre EXPRESSÕES) e voltar 409. `on_conflict=` na URL
+      // não serve: o parâmetro aceita nomes de coluna, não expressões. A RPC usa
+      // `on conflict do nothing` SEM alvo, que cobre qualquer índice único.
+      const ins = await sb('rpc/indice_amostra_inserir', {
+        method: 'POST',
+        body: JSON.stringify({ p_linhas: [{
+          cidade_norm: cidadeNorm, uf, bairro_norm: bairro, geo_grid: '', tipo: 'residencial',
           especie: 'venda', valor_m2: valorM2, valor_total: valor, area_m2: area,
           data_ref: dataRef, fonte: 'Revenda (cliente)', origem: 'revenda', imovel_id: iid,
-        }),
+          endereco, condominio,
+        }] }),
       });
       amostra = ins.ok;
       if (!ins.ok) console.error('[sinalizar-revenda] amostra do Índice não entrou', ins.status);
+    } else if (cidadeNorm && uf && valorM2 && !temAncora) {
+      // Diz POR QUE não entrou. Antes o silêncio e a falha eram indistinguíveis.
+      console.warn('[sinalizar-revenda] amostra sem âncora de localização (bairro/endereço/condomínio) — imóvel', iid);
     }
 
     // Log de atividade (Cliente 360) — best-effort, mesmo padrão do sinalizar-arremate.

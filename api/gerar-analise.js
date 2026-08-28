@@ -120,6 +120,12 @@ function sb(path, opts = {}) {
     headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json', ...(opts.headers || {}) },
   });
 }
+// Chamada de RPC. Existe porque `indice_amostra` deduplica por um índice de EXPRESSÃO, e o
+// `on_conflict=` do PostgREST só aceita nomes de coluna — ver o comentário longo no bloco que
+// grava as amostras.
+function sbRpc(fn, body) {
+  return sb(`rpc/${fn}`, { method: 'POST', body: JSON.stringify(body) });
+}
 async function upsertAnalise(row) {
   // upsert por (user_id, imovel_id)
   await sb('analises_mercado?on_conflict=user_id,imovel_id', {
@@ -613,7 +619,14 @@ async function gravarAmostrasIndice(imDb, mercado, imovelId, segmento = 'apartam
     const comAnc = rows.filter(r => String(r.bairro_norm || '').trim() || r.endereco || r.condominio);
     if (comAnc.length !== rows.length) console.log('[indice-ancora] descartadas', rows.length - comAnc.length, 'de', rows.length);
     if (!comAnc.length) return;
-    await sb('indice_amostra', { method: 'POST', headers: { Prefer: 'return=minimal,resolution=ignore-duplicates' }, body: JSON.stringify(comAnc) });
+    // Via RPC, e não POST direto (28/08). `resolution=ignore-duplicates` sem `on_conflict`
+    // resolve pela PRIMARY KEY — que aqui é o `id`, gerado, e portanto nunca conflita. O lote
+    // seguia até bater no índice de dedupe REAL (`uq_indice_amostra_deduce`, sobre EXPRESSÕES)
+    // e voltava 409, levando junto as amostras NOVAS. Medido em 28/08: três relatórios da mesma
+    // cidade, e só o primeiro gravou — os outros dois perderam tudo por terem amostra repetida.
+    // `on_conflict=` na URL não resolve: o parâmetro aceita nomes de coluna, não expressões.
+    const rIdx = await sbRpc('indice_amostra_inserir', { p_linhas: comAnc });
+    if (!rIdx.ok) console.error('[indice-ancora] amostras NAO gravadas', rIdx.status);
   } catch { /* aprendizado é best-effort: nunca bloqueia o relatório */ }
 }
 
@@ -658,7 +671,10 @@ async function gravarOutrasTipologias(imDb, outras, imovelId, segAlvo = '') {
     }
     const comAnc2 = comAncora(rows);
     if (!comAnc2.length) return 0;
-    await sb('indice_amostra', { method: 'POST', headers: { Prefer: 'return=minimal,resolution=ignore-duplicates' }, body: JSON.stringify(comAnc2) });
+    // Mesma troca do bloco acima: RPC com `on conflict do nothing` SEM alvo, que é o único
+    // caminho que cobre um índice único de expressão.
+    const rIdx2 = await sbRpc('indice_amostra_inserir', { p_linhas: comAnc2 });
+    if (!rIdx2.ok) console.error('[outras-tipologias] amostras NAO gravadas', rIdx2.status);
     console.log('[outras-tipologias]', JSON.stringify({ imovel: String(imovelId), n: rows.length, cidade: imDb.cidade_norm }));
     return rows.length;
   } catch { return 0; }
