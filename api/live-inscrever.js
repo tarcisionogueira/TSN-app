@@ -27,6 +27,7 @@ import { checkRateLimit } from './_rate-limit.js';
 import { enviarEmail } from './_email.js';
 import { erroNome, normalizarNome } from './_nome.js';
 import { erroTelefone, limparTelefone, normalizarTelefoneBR } from './_telefone.js';
+import { enviarLeadCapi, leadEventId, capiAtivo } from './_meta-capi.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -180,6 +181,44 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Não conseguimos concluir a sua inscrição. Tente de novo em instantes.' });
   }
 
+  // ── Meta: evento Lead ──────────────────────────────────────────────────────
+  // AQUI, e não antes: a inscrição já está gravada (o `if (!insRes.ok)` acima aborta), então
+  // este Lead descreve um fato. Disparado antes, ensinaria o Meta a comprar o público de uma
+  // inscrição que não aconteceu — e o erro só apareceria semanas depois, na forma de verba
+  // otimizada para o lado errado.
+  //
+  // O `fbc` é reconstruído a partir do `fbclid` que a landing capturou (`marketing.js` grava
+  // a atribuição de primeiro toque). O formato é o que o Meta especifica: fb.1.<ms>.<fbclid>.
+  // Sem ele o evento chega, mas casa com muito menos gente.
+  const evId = leadEventId(slug, email);
+  const fbclid = String(utm.fbclid || '').trim();
+  const leadRes = await enviarLeadCapi({
+    eventoSlug: slug, email, telefone: whatsapp, nome, cidade, uf, userId,
+    eventId: evId,
+    fbc: fbclid ? `fb.1.${Date.now()}.${fbclid}` : null,
+    fbp: String(b.fbp || '').trim() || null,
+    clientIp: ip !== 'sem-ip' ? ip : null,
+    userAgent: req.headers['user-agent'] || null,
+    sourceUrl: `${APP_URL}/live/${slug}`,
+  }).catch((e) => ({ ok: false, erro: String(e?.message || e) }));
+
+  // RASTRO DO DESFECHO. O CAPI é dormente até as envs existirem, e um helper dormente devolve
+  // silêncio — exatamente igual a um que funcionou. Sem esta linha, "o Lead está sendo
+  // enviado?" só teria resposta abrindo o Events Manager do Meta e torcendo. Agora a resposta
+  // está no banco, e `skipped: capi_inativo` diz por extenso QUAL não foi o motivo.
+  try {
+    await sb('eventos_atividade', {
+      method: 'POST',
+      headers: { Prefer: 'return=minimal' },
+      body: JSON.stringify({
+        user_id: userId, tipo: 'meta_lead', alvo: `live:${slug}`,
+        detalhe: leadRes?.ok ? `enviado (${evId})`
+          : leadRes?.skipped ? `NAO enviado — ${leadRes.skipped}`
+          : `FALHOU — ${leadRes?.http || leadRes?.erro || 'desconhecido'}`,
+      }),
+    });
+  } catch { /* rastro best-effort: nunca derruba a inscrição */ }
+
   // ── Confirmação por e-mail ─────────────────────────────────────────────────
   // Falha de e-mail NÃO derruba a inscrição (ela já está gravada, que é o que importa),
   // mas vai para o log: uma confirmação que não chega vira falta na aula.
@@ -215,6 +254,14 @@ export default async function handler(req, res) {
 
   return res.status(200).json({
     ok: true, contaNova, link_grupo: ev.link_grupo || null, titulo: ev.titulo, data_hora: ev.data_hora,
+    // O NAVEGADOR RECEBE O ID PRONTO, não a regra para calculá-lo. Pixel e CAPI mandando o
+    // mesmo `event_id` fazem o Meta contar UMA conversão em vez de duas; duplicar a fórmula
+    // nos dois lados seria criar duas cópias de uma regra que só funciona enquanto forem
+    // idênticas — e o Purchase já carrega essa dívida (ver _meta-capi.js).
+    lead_event_id: evId,
+    // Diz à tela se vale a pena disparar o Pixel. Não é obrigatório para funcionar (o
+    // `metaTrack` já é no-op sem pixel), mas deixa o estado VISÍVEL em vez de suposto.
+    meta_capi: capiAtivo(),
     // Número vem do BANCO e não do bundle: variável VITE_ obriga novo deploy para
     // trocar, e numa página de campanha isso é número errado no ar até alguém lembrar.
     whatsapp_direto: String(ev.whatsapp_direto || '').replace(/\D/g, '') || null,

@@ -82,7 +82,13 @@ function origemPrimeiroToque() {
     const hq = new URLSearchParams((window.location.hash.split('?')[1] || ''));
     const g = (k) => q.get(k) || hq.get(k) || null;
     const o = {
-      gclid: g('gclid'), gbraid: g('gbraid'), wbraid: g('wbraid'),
+      // `fbclid` (28/08): a coluna existe em `visita_origem` desde sempre e o cliente já o
+      // capturava em `marketing.js` (para `perfis.mkt_fbclid`) — mas ESTE objeto, que é o que
+      // alimenta a tabela, nunca o incluiu, e `api/track.js` também não o gravava. Resultado
+      // medido: 30 dias de Meta Ads pagando cliques e ZERO visita com fbclid registrada.
+      // Sem fbclid não há `fbc`, e sem `fbc` o Lead do Conversions API casa com muito menos
+      // gente — que é justamente o que o evento existe para fazer.
+      gclid: g('gclid'), gbraid: g('gbraid'), wbraid: g('wbraid'), fbclid: g('fbclid'),
       utm_source: g('utm_source'), utm_medium: g('utm_medium'), utm_campaign: g('utm_campaign'),
       utm_term: g('utm_term'), utm_content: g('utm_content'),
       // Referrer do PRÓPRIO domínio não é origem — é navegação interna. Sem este filtro, quem

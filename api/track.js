@@ -100,7 +100,9 @@ export default async function handler(req, res) {
       };
       const linha = {
         anon_id: anonId,
-        gclid: txt(o.gclid), gbraid: txt(o.gbraid), wbraid: txt(o.wbraid),
+        // `fbclid` fecha o par do gclid: sem ele, campanha do Meta não deixa rastro nenhum
+        // em `visita_origem`, e o Lead do CAPI perde o `fbc` que faz a correspondência.
+        gclid: txt(o.gclid), gbraid: txt(o.gbraid), wbraid: txt(o.wbraid), fbclid: txt(o.fbclid),
         utm_source: txt(o.utm_source, 60), utm_medium: txt(o.utm_medium, 60),
         utm_campaign: txt(o.utm_campaign, 120), utm_term: txt(o.utm_term, 120), utm_content: txt(o.utm_content, 120),
         referrer_host: txt(o.referrer_host, 120), landing: txt(o.landing, 200),

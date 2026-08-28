@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '../utils/supabase';
-import { lerMarketing } from '../utils/marketing';
+import { lerMarketing, metaTrack } from '../utils/marketing';
 import { validarNome } from '../lib/nome';
 import { validarTelefone, limparTelefone, formatarTelefone } from '../lib/telefone';
 import CidadeAutocomplete from '../components/CidadeAutocomplete';
@@ -15,6 +15,16 @@ const FONTE = "'Sora', system-ui, -apple-system, sans-serif";
 // exigiria um deploy novo — numa página de campanha isso é número errado no ar. A env var
 // segue valendo para eventos sem número próprio (e é a mesma que o chat de suporte usa).
 const WHATSAPP_PADRAO = String(import.meta.env.VITE_WHATSAPP_NUMERO || '').replace(/\D/g, '');
+
+// Cookie `_fbp`, escrito pelo próprio Meta Pixel. Vai junto da inscrição para o Lead do
+// servidor poder casar o mesmo navegador — sem ele o evento chega, mas casa com menos gente.
+function lerFbp() {
+  try {
+    if (typeof document === 'undefined') return null;
+    const m = document.cookie.match(/(?:^|;\s*)_fbp=([^;]+)/);
+    return m ? decodeURIComponent(m[1]) : null;
+  } catch { return null; }
+}
 
 /**
  * /live/:slug — landing de inscrição da aula ao vivo.
@@ -119,7 +129,10 @@ export default function LiveInscricao() {
       const mkt = lerMarketing() || {};
       const r = await fetch('/api/live-inscrever', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ slug, ...form, utm: mkt }),
+        // `_fbp` só existe no navegador (é cookie que o próprio Pixel escreve) e é um dos
+        // campos que mais levantam a correspondência do Lead no Meta. O servidor não tem como
+        // obtê-lo sozinho, então ele viaja junto da inscrição.
+        body: JSON.stringify({ slug, ...form, utm: mkt, fbp: lerFbp() }),
       });
       const j = await r.json().catch(() => ({}));
       // `.ok` checado ANTES de comemorar: dizer "inscrito" sobre uma resposta de erro é
@@ -127,6 +140,16 @@ export default function LiveInscricao() {
       if (!r.ok || j?.error) throw new Error(j?.error || 'Não foi possível concluir a inscrição.');
       setPronto(j);
       setInscritos(n => (typeof n === 'number' ? n + 1 : n));
+      // ── Meta: Lead do NAVEGADOR ────────────────────────────────────────────
+      // Só DEPOIS do `.ok` — o evento descreve uma inscrição que existe, não uma tentativa.
+      // O `event_id` vem do SERVIDOR (`lead_event_id`): os dois lados mandam o mesmo id e o
+      // Meta conta UMA conversão. É o par do envio via Conversions API, que é o que continua
+      // chegando quando bloqueador de anúncio, iOS ou aba fechada matam este beacon.
+      // `metaTrack` é no-op enquanto o pixel não estiver ligado, e o try/catch garante que
+      // marketing jamais derrube a confirmação de vaga que a pessoa está vendo na tela.
+      try {
+        metaTrack('Lead', { content_name: slug, content_category: 'aula_ao_vivo', currency: 'BRL', value: 0 }, j?.lead_event_id);
+      } catch { /* nunca quebra a inscrição */ }
     } catch (err) {
       setErro(err?.message || 'Não foi possível concluir a inscrição.');
     }
