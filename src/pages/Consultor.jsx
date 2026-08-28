@@ -390,18 +390,6 @@ export default function Consultor() {
                   <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
                     {[
                       {
-                        // AULA AO VIVO (28/08). O link do parceiro para a aula é `/aula/<slug>`,
-                        // não `/#/live/<slug>`: a rota sem "#" é a que serve o cartão com título,
-                        // data e capa quando o parceiro cola no WhatsApp — robô de preview não lê
-                        // nada depois do "#". Ela repassa o `?ref=` para a inscrição, e o servidor
-                        // grava o vínculo na criação da conta (`api/live-inscrever.js`).
-                        emoji: '🎥',
-                        label: 'Aula ao vivo — gratuita',
-                        sub: 'Toda quarta, 19h · quem se inscrever fica vinculado a você',
-                        url: `${origin}/aula/leilao-ao-vivo${codigo?`?ref=${codigo}`:''}`,
-                        comissao: null,
-                      },
-                      {
                         emoji: '🧮',
                         label: 'Calculadora de Lances',
                         sub: 'Ferramenta gratuita · com chamada para a plataforma',

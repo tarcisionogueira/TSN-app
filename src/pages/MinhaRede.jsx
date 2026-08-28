@@ -143,6 +143,10 @@ export default function MinhaRede() {
   const [pjSalva, setPjSalva] = useState(false);
   const [salvandoPj, setSalvandoPj] = useState(false);
   const [msgPj, setMsgPj] = useState(null);
+  // AULA AO VIVO como material do parceiro (28/08). Carregada do banco, nunca fixa no código:
+  // o card só aparece quando existe aula ATIVA e AINDA POR ACONTECER. Link para aula encerrada
+  // seria pior que link nenhum — o parceiro divulgaria um convite morto sem saber.
+  const [aula, setAula] = useState(null);
   // Saque
   const [valorSaque, setValorSaque] = useState('');
   const [msgSaque, setMsgSaque] = useState(null);
@@ -155,6 +159,20 @@ export default function MinhaRede() {
   const linkIndicacao = `${window.location.origin}${window.location.pathname.replace(/\/$/, '')}#/?ref=${codigo || uid || ''}`;
   const linkDisplay = linkIndicacao.replace(/^https?:\/\/(www\.)?/, '');
   const copiar = () => { navigator.clipboard?.writeText(linkIndicacao); setCopiado(true); setTimeout(() => setCopiado(false), 2000); };
+  // Link da AULA: rota SEM "#" de proposito. Robo de preview (WhatsApp/Instagram/Telegram) nao le
+  // nada depois do "#", e `/aula/<slug>` e servida por `api/og-share` com titulo, data e capa — e
+  // repassa o `?ref=` adiante para `/#/live/<slug>`. Com `#` o parceiro compartilharia o cartao
+  // generico do site em cima de um convite com hora marcada.
+  const linkAula = aula ? `${window.location.origin}/aula/${aula.slug}?ref=${codigo || uid || ''}` : '';
+  const linkAulaDisplay = linkAula.replace(/^https?:\/\/(www\.)?/, '');
+  const [copiadoAula, setCopiadoAula] = useState(false);
+  const copiarAula = () => { navigator.clipboard?.writeText(linkAula); setCopiadoAula(true); setTimeout(() => setCopiadoAula(false), 2000); };
+  const quandoAula = (() => {
+    if (!aula?.data_hora) return '';
+    try {
+      return new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Bahia', weekday: 'long', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(aula.data_hora));
+    } catch { return ''; }
+  })();
   const fmtLib = (iso) => { try { return new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit' }).format(new Date(iso)); } catch { return null; } };
 
   const carregar = useCallback(async () => {
@@ -211,6 +229,21 @@ export default function MinhaRede() {
       setPjSalva(temPj);
     } catch { /* ignora */ }
     finally { setCodigoPronto(true); }
+    // Proxima aula ao vivo (ativa e futura). `error` conferido: o postgrest-js NAO lanca em
+    // nao-2xx, entao `const { data } = ...` funde "nao ha aula" com "nao consegui ler" — e o
+    // card sumiria em silencio, que aqui significa parceiro sem material para divulgar.
+    try {
+      const { data: ev, error: errEv } = await supabase
+        .from('eventos_live')
+        .select('slug, titulo, data_hora')
+        .eq('ativo', true)
+        .gte('data_hora', new Date().toISOString())
+        .order('data_hora', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      if (errEv) { console.error('[MinhaRede] leitura da aula falhou:', errEv.message); setAula(null); }
+      else setAula(ev || null);
+    } catch (e) { console.error('[MinhaRede] leitura da aula lancou:', e?.message); setAula(null); }
   }, [uid]);
   useEffect(() => { carregarMeu(); }, [carregarMeu]);
 
@@ -420,6 +453,24 @@ export default function MinhaRede() {
           </>
         )}
       </div>
+
+      {/* AULA AO VIVO — material de divulgação do parceiro. Quem entra por este link cria conta
+          já vinculada a ele (api/live-inscrever grava `indicado_por` na CRIAÇÃO da conta). Sem
+          isso o parceiro traria o inscrito e perderia a carteira: a conta nasce no servidor sem
+          upline e o cron de órfãos a adotaria para o dono 24h depois. */}
+      {aula && codigoPronto && (
+        <div style={{ ...card, border: '1px solid #bbf7d0', background: '#f0fdf4' }}>
+          <div style={{ fontSize: 13, fontWeight: 800, color: '#166534', marginBottom: 4 }}>🎥 Convide para a aula ao vivo — gratuita</div>
+          <div style={{ fontSize: 12.5, color: '#15803d', lineHeight: 1.6, marginBottom: 10 }}>
+            <strong>{aula.titulo}</strong>{quandoAula ? <> — {quandoAula} (horário de Brasília)</> : null}.
+            <br />Quem se inscrever por este link fica <strong>vinculado a você</strong>, com conta criada na plataforma.
+          </div>
+          <div style={{ background: '#ffffff', border: '1px solid #dcfce7', borderRadius: 10, padding: '10px 12px', fontSize: 12, color: '#166534', wordBreak: 'break-all', fontFamily: 'monospace', marginBottom: 10 }}>{linkAulaDisplay}</div>
+          <button onClick={copiarAula} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 18px', background: '#16a34a', color: 'white', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 13, cursor: 'pointer' }}>
+            {copiadoAula ? <><Check size={16} /> Link copiado!</> : <><Copy size={16} /> Copiar link da aula</>}
+          </button>
+        </div>
+      )}
 
       {/* SEU NÍVEL — hero + comissões (indicação e loja) + progresso pro próximo. Mostra
           também para o admin (o dono quer ver a mesma visão do parceiro). */}
