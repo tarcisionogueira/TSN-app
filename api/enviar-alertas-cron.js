@@ -75,7 +75,12 @@ function centroide(cidade, uf) {
   const c = MUNICIPIOS[`${String(uf).toUpperCase()}|${norm(cidade)}`];
   return Array.isArray(c) ? { lat: c[0], lng: c[1] } : null;
 }
-const SEL = 'id,titulo,endereco,cidade,estado,tipo,modalidade,valor_minimo,valor_avaliacao,desconto_percentual,data_leilao,data_leilao_2,data_fim,link_foto,fonte,fonte_id';
+// `valor_minimo_ref` (28/08) é o PREÇO do lote — o menor entre as praças, coluna gerada
+// criada em 17/08 justamente para que exibição, filtro e ordenação leiam o mesmo número.
+// Este arquivo nunca a adotou: filtrava e MOSTRAVA a 1ª praça. `praca1_fim`/`praca2_fim`
+// entram porque `encerradoPorDatas` passou a lê-las — sem vir no SELECT, o e-mail decidiria
+// o prazo pelo início da 2ª praça e descartaria lote ainda em pregão.
+const SEL = 'id,titulo,endereco,cidade,estado,tipo,modalidade,valor_minimo,valor_minimo_ref,valor_avaliacao,desconto_percentual,data_leilao,data_leilao_2,data_fim,praca1_fim,praca2_fim,link_foto,fonte,fonte_id';
 
 // Foto para o E-MAIL: url ÚNICA e confiável (o e-mail não tem fallback onError como o
 // site). Motivo do "sem foto" em alguns cards: fontes como a Caixa BLOQUEIAM hotlink de
@@ -348,9 +353,12 @@ async function handler(req) {
     if (tiposFinal) p.push(`tipo=in.(${tiposFinal.map(encodeURIComponent).join(',')})`);
     const mods = Array.isArray(f.modalidades) ? f.modalidades.filter(Boolean) : [];
     if (mods.length) p.push(`modalidade=in.(${mods.map(encodeURIComponent).join(',')})`);
-    if (f.valorMin) p.push(`valor_minimo=gte.${numOnly(f.valorMin)}`);
+    // Piso e teto sobre `valor_minimo_ref`: comparar a praça CARA contra o teto não deixa
+    // passar lote caro — ESCONDE lote barato. O cliente de 150-400k nunca recebia um imóvel
+    // cuja 2ª praça sai por R$ 325 mil, porque a 1ª era R$ 542 mil. Perda silenciosa.
+    if (f.valorMin) p.push(`valor_minimo_ref=gte.${numOnly(f.valorMin)}`);
     const tetoF = tetoEfetivo(f, tetoFaixa);
-    if (tetoF) p.push(`valor_minimo=lte.${tetoF}`);
+    if (tetoF) p.push(`valor_minimo_ref=lte.${tetoF}`);
     // Desconto: piso de DESC_MIN (o filtro do cliente pode exigir MAIS, nunca menos).
     // Revenda tem piso próprio de viabilidade (30%), abaixo do DESC_MIN do e-mail.
     p.push(`desconto_percentual=gte.${Math.max(DESC_MIN, Number(f.descontoMin) || 0, f.intencao === 'revenda' ? REVENDA_DESCONTO_MIN : 0)}`);
@@ -625,7 +633,7 @@ async function handler(req) {
       if (pool.size < LIMITE) {
         for (const cid of cidadesRef.slice(0, 3)) {
           if (pool.size >= LIMITE) break;
-          despejar(await sbGet(`imoveis_leilao?select=${SEL}&ativo=eq.true${uf ? `&estado=eq.${encodeURIComponent(uf)}` : ''}&cidade=ilike.*${encodeURIComponent(cid)}*&desconto_percentual=gte.${DESC_MIN}${tetoPerfil ? `&valor_minimo=lte.${tetoPerfil}` : ''}&order=desconto_percentual.desc&limit=24`), LIMITE - pool.size);
+          despejar(await sbGet(`imoveis_leilao?select=${SEL}&ativo=eq.true${uf ? `&estado=eq.${encodeURIComponent(uf)}` : ''}&cidade=ilike.*${encodeURIComponent(cid)}*&desconto_percentual=gte.${DESC_MIN}${tetoPerfil ? `&valor_minimo_ref=lte.${tetoPerfil}` : ''}&order=desconto_percentual.desc&limit=24`), LIMITE - pool.size);
         }
       }
 
@@ -640,7 +648,7 @@ async function handler(req) {
         const tipos = [...new Set(meus.map(i => arremInfo[i]?.tipo).filter(Boolean))];
         for (const t of tipos.slice(0, 2)) {
           if (pool.size >= LIMITE) break;
-          despejar(await sbGet(`imoveis_leilao?select=${SEL}&ativo=eq.true&tipo=eq.${encodeURIComponent(t)}${uf ? `&estado=eq.${uf}` : ''}&desconto_percentual=gte.${DESC_MIN}${tetoPerfil ? `&valor_minimo=lte.${tetoPerfil}` : ''}&order=desconto_percentual.desc&limit=8`), LIMITE - pool.size);
+          despejar(await sbGet(`imoveis_leilao?select=${SEL}&ativo=eq.true&tipo=eq.${encodeURIComponent(t)}${uf ? `&estado=eq.${uf}` : ''}&desconto_percentual=gte.${DESC_MIN}${tetoPerfil ? `&valor_minimo_ref=lte.${tetoPerfil}` : ''}&order=desconto_percentual.desc&limit=8`), LIMITE - pool.size);
         }
       }
 
@@ -650,7 +658,7 @@ async function handler(req) {
       //    menos que mandar imóvel de outro estado (push/e-mail seguem cidade+filtros).
       const temRegiao = !!(uf || (cidadesRef && cidadesRef.length));
       if (pool.size < LIMITE && !temRegiao) {
-        despejar(await sbGet(`imoveis_leilao?select=${SEL}&ativo=eq.true&desconto_percentual=gte.${DESC_MIN}${tetoPerfil ? `&valor_minimo=lte.${tetoPerfil}` : ''}&order=desconto_percentual.desc&limit=40`), LIMITE - pool.size);
+        despejar(await sbGet(`imoveis_leilao?select=${SEL}&ativo=eq.true&desconto_percentual=gte.${DESC_MIN}${tetoPerfil ? `&valor_minimo_ref=lte.${tetoPerfil}` : ''}&order=desconto_percentual.desc&limit=40`), LIMITE - pool.size);
       }
 
       // Rede de segurança: só oportunidade ATRATIVA (desconto ≥ DESC_MIN) entra no e-mail,
@@ -738,7 +746,7 @@ async function handler(req) {
             <div style="font-size:12px;color:#64748b;margin-bottom:8px;">📍 ${escapeHtml(im.cidade || '')}${im.estado ? ' — ' + escapeHtml(im.estado) : ''}</div>
             <div style="margin-bottom:10px;">${descTag}${dataTag}</div>
             <div style="display:flex;justify-content:space-between;align-items:center;">
-              <div><div style="font-size:11px;color:#94a3b8;">Lance mínimo</div><div style="font-size:16px;font-weight:800;color:#0f172a;">${fmtBRL(im.valor_minimo)}</div></div>
+              <div><div style="font-size:11px;color:#94a3b8;">Lance mínimo</div><div style="font-size:16px;font-weight:800;color:#0f172a;">${fmtBRL(im.valor_minimo_ref ?? im.valor_minimo)}</div></div>
               <a href="${url}" style="background:#0D63DB;color:#fff;text-decoration:none;padding:8px 16px;border-radius:8px;font-size:12px;font-weight:700;">Ver imóvel →</a>
             </div>
           </div>
@@ -807,7 +815,7 @@ async function handler(req) {
           await enviarPushOportunidades(
             perfil.id,
             `🏠 ${top.length} oportunidade${top.length > 1 ? 's' : ''} em ${local}`,
-            top[0] ? `${(top[0].titulo || top[0].endereco || 'Imóvel em leilão').slice(0, 80)} — ${fmtBRL(top[0].valor_minimo)}` : 'Veja as oportunidades selecionadas para você.',
+            top[0] ? `${(top[0].titulo || top[0].endereco || 'Imóvel em leilão').slice(0, 80)} — ${fmtBRL(top[0].valor_minimo_ref ?? top[0].valor_minimo)}` : 'Veja as oportunidades selecionadas para você.',
           );
         }
       }
