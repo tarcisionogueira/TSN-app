@@ -6,7 +6,7 @@
 
 ## 🗓️ 28/08 (sessão 9) — A PRAÇA É UM INTERVALO, E TUDO QUE ISSO DERRUBAVA
 
-17 commits (`8f98b22` → o topo de `main`), **tudo em `main` e em produção**.
+20 commits (`8f98b22` → `5424ebe`), **tudo em `main` e em produção**.
 Migrações **aplicadas no banco** e escritas no repo, na mesma leva.
 
 > ⚠️ **Ao subir para `main`:** o `main` LOCAL desta máquina estava em `3afa795`, uma
@@ -301,7 +301,7 @@ Duas decisões que valem manter:
 
 ---
 
-### 🕵️ "SEM CONSULTOR" — quem entra sem passar pelo navegador fica órfão (diagnóstico)
+### 🕵️ "SEM CONSULTOR" — quem entra sem passar pelo navegador ficava órfão
 
 O dono apontou duas linhas com **"Sem consultor"** no Comercial. A investigação achou uma
 causa única, e a correlação no banco é perfeita:
@@ -327,6 +327,11 @@ lá** — e o perfil já existe, criado pelo trigger `handle_new_user` ou pelo p
 **Um terceiro caso, latente:** `api/criar-conta-checkout.js` tem a mesma lacuna (cria perfil sem
 `indicado_por`) e ainda não gerou órfão só porque quem paga entra logo depois.
 
+> 💡 **Por que UMA REDE e não três remendos.** Dava para gravar `indicado_por` em cada um dos
+> três endpoints. Não foi feito de propósito: o quarto caminho — o que ninguém previu — nasceria
+> órfão do mesmo jeito, e é justamente esse que não aparece em revisão de código. O cron não
+> pergunta por onde a pessoa entrou; pergunta se, passada a carência, alguém a reivindicou.
+
 **E um efeito de segunda ordem:** quando o dono corrige na mão pelo Admin
 (`Admin.jsx:8118`), o update grava `indicado_por` e **não grava `indicacao_origem`** — o
 conserto manual fica indistinguível de uma indicação real, que é precisamente o defeito que a
@@ -342,8 +347,9 @@ coluna `indicacao_origem` foi criada para evitar em 11/08. Prova no banco: Edval
 
 **✅ CONSERTADO no mesmo dia (opção (a) + carimbo manual):**
 
-- **`public.adotar_orfaos_padrao_dono(p_horas)`** + **`/api/adotar-orfaos-cron`** (diário,
-  09:10 UTC): adota como `padrao_dono` quem passou de **24h** ainda sem upline. É a MESMA
+- **`public.adotar_orfaos_padrao_dono(p_horas)`** + **`api/adotar-orfaos-cron.js`** (diário,
+  09:10 UTC, `vercel.json`; migração `upline_padrao_com_carencia.sql`, aplicada no banco):
+  adota como `padrao_dono` quem passou de **24h** ainda sem upline. É a MESMA
   regra de `vincular_owner_default`, com os mesmos guardas e o mesmo carimbo — muda só quem
   chama: lá o navegador, aqui o cron, para o caso em que navegador não há.
 - **A carência se provou na primeira execução:** adotou **Nede** (2 dias, órfão de verdade) e
@@ -453,13 +459,23 @@ nenhum call site** e `LiveInscricao.jsx` não chamava tracking nenhum.
    fontes pagas saem `sem_cota` e o Actions manda e-mail de falha (é orçamento, não regressão).
 5. `data_edital_recuou_prazo` **2** — as duas divergências que hoje passaram a ser *registradas
    em vez de aplicadas*. Precisam de revisão humana dos dois lotes.
+6. **29/08 09:10 UTC — a PRIMEIRA rodada de `/api/adotar-orfaos-cron`.** Confirme que ela
+   rodou e que **Alexandre Carmo** deixou de aparecer como "Sem consultor" (ele ficou de fora
+   da primeira execução manual por ter só 3h de vida — a carência funcionando). Um cron que
+   nunca dispara é silencioso por natureza; a prova é uma consulta:
+   ```sql
+   select nome, indicacao_origem, ultima_indicacao_em from perfis
+    where indicacao_origem = 'padrao_dono' order by ultima_indicacao_em desc limit 5;
+   select count(*) as ainda_orfaos from perfis
+    where indicado_por is null and role not in ('admin','analista','advogado','consultor');
+   ```
 
 **Aberto de antes:**
-6. **CALIL — a queda continua ABERTA** (9 lotes contra piso 18). Quem coleta de verdade é o
+7. **CALIL — a queda continua ABERTA** (9 lotes contra piso 18). Quem coleta de verdade é o
    runner residencial; o Actions roda em IP de datacenter, que o CALIL bloqueia.
-7. `sem_cidade` **221** (limite 30) — trabalho de captura.
-8. `37c2d966` — pagante desde 06/08 com zero relatórios. Ativação, não bug.
-9. **`sem_perfil` 28 de 68 (41%)** — não responderam a triagem; é o que faz o e-mail de
+8. `sem_cidade` **221** (limite 30) — trabalho de captura.
+9. `37c2d966` — pagante desde 06/08 com zero relatórios. Ativação, não bug.
+10. **`sem_perfil` 28 de 68 (41%)** — não responderam a triagem; é o que faz o e-mail de
    oportunidade sair genérico.
 
 ---
