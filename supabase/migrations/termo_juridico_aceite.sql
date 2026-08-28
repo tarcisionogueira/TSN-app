@@ -110,3 +110,19 @@ update public.config_honorarios
 -- qualquer papel futuro herdavam execução.
 revoke all on function public.fontes_com_limpeza_pulada(interval, numeric) from public, anon;
 grant execute on function public.fontes_com_limpeza_pulada(interval, numeric) to authenticated, service_role;
+
+-- ── AJUSTE 28/08 (mesma sessão): a divisão do êxito virou PROPORCIONAL ────────────────────
+-- Regra do dono: jurídico e plataforma dividem meio a meio o que sobra DEPOIS do parceiro.
+--   com parceiro:  1,0 parceiro → 4,5 jurídico · 4,5 plataforma
+--   sem parceiro:  0            → 5,0 jurídico · 5,0 plataforma
+-- E o advogado que TAMBÉM indicou o cliente acumula as duas fatias (4,5 + 1,0 = 5,5).
+--
+-- O cálculo passou para `api/_honorarios.js`, que deriva o padrão do jurídico como metade do
+-- restante. Consequência a registrar: `advogado_pct` e `admin_pct` NÃO SÃO MAIS LIDOS. Ficam
+-- como registro do acordo vigente — mudar esses números aqui não muda o que se paga. Quem
+-- decide é `total_pct`, `consultor_pct`, `analista_pct` e o override em
+-- `perfis.honorario_exito_pct`. Os valores abaixo refletem o caso COM parceiro.
+update public.config_honorarios
+   set total_pct = 10, advogado_pct = 4.5, admin_pct = 4.5, analista_pct = 0, consultor_pct = 1,
+       atualizado_em = now()
+ where id = 1;

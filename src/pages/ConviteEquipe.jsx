@@ -7,7 +7,9 @@ import { supabase } from '../utils/supabase';
 import { CheckCircle2, ArrowRight, Loader2, AlertCircle, Eye, EyeOff, Camera, Upload, RefreshCw } from 'lucide-react';
 import { apiCall } from '../utils/apiCall';
 import { useAuth } from '../contexts/AuthContext';
-import { salvarConvite, lerConvite, limparConvite, CHAVE_EQUIPE, CHAVE_CLIENTE } from '../utils/convitePendente';
+import { salvarConvite, lerConvite, limparConvite, salvarTermosAceitos, CHAVE_EQUIPE, CHAVE_CLIENTE } from '../utils/convitePendente';
+import { TERMO_PARCEIRO, TERMO_PARCEIRO_PREAMBULO, TERMO_PARCEIRO_VERSAO } from '../components/ConviteParceiro';
+import { TERMO_JURIDICO, TERMO_JURIDICO_PREAMBULO, TERMO_JURIDICO_VERSAO } from '../components/TermoJuridico';
 
 const ROLE_CONFIG = {
   analista: {
@@ -100,6 +102,22 @@ const PASSO_SELFIE_DOC = {
   instrucao: 'Segure o documento aberto ao lado do rosto. Ambos devem estar nítidos e visíveis.',
   validacao_tipo: 'ambos',
 };
+
+// ── QUEM RECEBE VALORES ASSINA UM TERMO, E ASSINA AQUI (28/08, regra do dono) ───────────────
+// "Todo usuário que envolve receber valores deve ter o termo explícito." O aceite passa a ser
+// um PASSO do convite, com o documento aberto na tela — não uma linha de letra miúda no fim.
+//
+// O papel decide QUAL termo: advogado assina o do jurídico (é ele que rege o repasse do êxito
+// e o sigilo profissional); consultor e afiliado assinam o do Programa de Parceiros.
+// `analista` fica de fora por ora — o percentual dele é 0 e NÃO existe termo próprio; inventar
+// um agora seria escrever contrato para uma remuneração que ainda não foi decidida.
+const TERMO_POR_PAPEL = {
+  advogado:  { chave: 'juridico', versao: TERMO_JURIDICO_VERSAO, titulo: 'Termo de Adesão — Advogado Parceiro', preambulo: TERMO_JURIDICO_PREAMBULO, clausulas: TERMO_JURIDICO, declaracao: 'Li e concordo com o Termo de Adesão do Advogado Parceiro, e declaro que minha inscrição na OAB está regular e ativa.' },
+  consultor: { chave: 'parceiro', versao: TERMO_PARCEIRO_VERSAO, titulo: 'Termo de Adesão — Programa de Parceiros', preambulo: TERMO_PARCEIRO_PREAMBULO, clausulas: TERMO_PARCEIRO, declaracao: 'Li e concordo com o Termo de Adesão do Programa de Parceiros.' },
+  afiliado:  { chave: 'parceiro', versao: TERMO_PARCEIRO_VERSAO, titulo: 'Termo de Adesão — Programa de Parceiros', preambulo: TERMO_PARCEIRO_PREAMBULO, clausulas: TERMO_PARCEIRO, declaracao: 'Li e concordo com o Termo de Adesão do Programa de Parceiros.' },
+};
+
+const PASSO_TERMO = { key: 'termo_aceito', label: 'Leia e aceite o termo da sua parceria', tipo: 'termo' };
 
 const PASSO_SENHA    = { key: 'senha',           label: 'Crie uma senha de acesso',               tipo: 'password', placeholder: 'Mínimo 8 caracteres' };
 const PASSO_CONFIRMA = { key: 'confirma_senha',  label: 'Confirme sua senha',                     tipo: 'password', placeholder: 'Repita a senha' };
@@ -461,12 +479,15 @@ export default function ConviteEquipe() {
     );
   }
 
+  const termoDoPapel = TERMO_POR_PAPEL[roleKey] || null;
   const passos = [
     ...PASSOS_BASE,
     ...cfg.passos_extras,
     PASSO_SELFIE_ROSTO,
     PASSO_DOC,
     PASSO_SELFIE_DOC,
+    // O termo vem ANTES da senha: quem não concorda para aqui, sem ter criado conta nenhuma.
+    ...(termoDoPapel ? [PASSO_TERMO] : []),
     PASSO_SENHA,
     PASSO_CONFIRMA,
   ];
@@ -488,6 +509,9 @@ export default function ConviteEquipe() {
   const validarPasso = () => {
     if (isFoto) {
       return form[passo.key] ? '' : 'Capture ou envie uma foto para continuar.';
+    }
+    if (passo.tipo === 'termo') {
+      return form.termo_aceito ? '' : 'É preciso ler e aceitar o termo para continuar.';
     }
     const v = (form[passo.key] || '').trim();
     if (!v) return 'Preencha este campo para continuar.';
@@ -533,6 +557,14 @@ export default function ConviteEquipe() {
       // usar_convite_equipe agora exige sessão e só eleva o próprio perfil; se o
       // cadastro exigir confirmação de e-mail, o AuthContext resgata no 1º login).
       if (token) salvarConvite(CHAVE_EQUIPE, token);
+      // O ACEITE VIAJA COM O CONVITE. O carimbo no banco exige sessão, e o link de confirmação
+      // de e-mail abre em outra aba (às vezes em outro aparelho) — foi assim que convite e
+      // indicação já se perderam antes. Guardado aqui, o AuthContext o transforma em registro
+      // no primeiro login, DEPOIS de resgatar o convite (a RPC do jurídico exige o papel já
+      // elevado). Sem isto, a pessoa leria e aceitaria o termo e o banco ficaria sem prova.
+      if (termoDoPapel && form.termo_aceito) {
+        salvarTermosAceitos({ [termoDoPapel.chave]: termoDoPapel.versao });
+      }
 
       const extraData = Object.fromEntries(cfg.passos_extras.map(p => [p.key, form[p.key] || '']));
 
@@ -698,6 +730,32 @@ export default function ConviteEquipe() {
               onCapturada={(url) => setVal(passo.key, url)}
               onRefazer={() => setVal(passo.key, null)}
             />
+          )}
+
+          {/* TERMO — o documento ABERTO na tela (o dono pediu que ele seja visualizado, não
+              apenas referenciado por link). Rolagem própria para não empurrar o botão de
+              avançar para fora da dobra em telas pequenas. */}
+          {passo.tipo === 'termo' && termoDoPapel && (
+            <div>
+              <div style={{ fontSize: 13.5, fontWeight: 800, color: cfg.cor, marginBottom: 6 }}>{termoDoPapel.titulo}</div>
+              <div style={{ border: '2px solid #e2e8f0', borderRadius: 12, padding: '14px 16px', maxHeight: 300, overflowY: 'auto', background: '#f8fafc' }}>
+                <p style={{ fontSize: 12, color: '#475569', lineHeight: 1.6, margin: '0 0 12px' }}>{termoDoPapel.preambulo}</p>
+                {termoDoPapel.clausulas.map((c, i) => (
+                  <div key={i} style={{ marginBottom: 10 }}>
+                    <div style={{ fontSize: 12.5, fontWeight: 800, color: cfg.cor }}>{c.t}</div>
+                    <div style={{ fontSize: 12, color: '#334155', lineHeight: 1.6 }}>{c.d}</div>
+                  </div>
+                ))}
+                <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 8 }}>
+                  Complementa os <a href="#/termos" target="_blank" rel="noreferrer" style={{ color: cfg.cor, fontWeight: 700 }}>Termos de Uso</a> e a <a href="#/privacidade" target="_blank" rel="noreferrer" style={{ color: cfg.cor, fontWeight: 700 }}>Política de Privacidade</a>. Versão {termoDoPapel.versao}.
+                </div>
+              </div>
+              <label style={{ display: 'flex', gap: 9, alignItems: 'flex-start', marginTop: 14, cursor: 'pointer' }}>
+                <input type="checkbox" checked={!!form.termo_aceito} onChange={e => setVal('termo_aceito', e.target.checked ? termoDoPapel.versao : '')}
+                  style={{ marginTop: 3, width: 16, height: 16, cursor: 'pointer' }} />
+                <span style={{ fontSize: 13, color: '#334155', lineHeight: 1.5 }}>{termoDoPapel.declaracao}</span>
+              </label>
+            </div>
           )}
 
           {/* Select */}

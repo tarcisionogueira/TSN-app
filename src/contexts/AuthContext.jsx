@@ -3,7 +3,7 @@ import { supabase, marcarSimulacao } from '../utils/supabase';
 import { ativarPushAutomatico } from '../utils/push';
 import { salvarRef, lerRef, limparRef } from '../utils/ref';
 import { lerMarketing } from '../utils/marketing';
-import { salvarConvite, lerConvite, limparConvite, CHAVE_EQUIPE, CHAVE_CLIENTE, CHAVE_PLANO } from '../utils/convitePendente';
+import { salvarConvite, lerConvite, limparConvite, lerTermosAceitos, limparTermosAceitos, CHAVE_EQUIPE, CHAVE_CLIENTE, CHAVE_PLANO } from '../utils/convitePendente';
 
 const AuthContext = createContext(null);
 
@@ -301,6 +301,29 @@ export function AuthProvider({ children }) {
               if (rEq?.ok === false) console.warn('[convite-equipe] não resgatado:', rEq?.erro);
             } catch (e) { console.warn('[convite-equipe] resgate adiado:', e?.message || e); }
           }
+          // TERMOS ACEITOS NO CONVITE — carimbo no banco (28/08). A pessoa leu e aceitou antes
+          // de a conta existir; aqui, na primeira sessão, o aceite vira registro. Roda DEPOIS
+          // do resgate do convite de propósito: as RPCs exigem o papel já elevado (advogado
+          // para o jurídico), e invertendo a ordem o carimbo do jurídico voltaria NULL na
+          // estreia — aceite lido, aceite perdido.
+          try {
+            const termos = lerTermosAceitos();
+            const pend = Object.entries(termos).filter(([, v]) => !!v);
+            if (pend.length) {
+              const feitos = [];
+              for (const [qual, versao] of pend) {
+                const rpc = qual === 'juridico' ? 'aceitar_termo_juridico' : qual === 'parceiro' ? 'aceitar_parceria' : null;
+                if (!rpc) { feitos.push(qual); continue; }   // chave desconhecida não fica presa para sempre
+                const { data, error } = await supabase.rpc(rpc, { p_versao: versao });
+                // `data` NULO = a RPC recusou (papel ainda não elevado, por exemplo). NÃO
+                // limpar nesse caso: a próxima sessão tenta de novo. Tratar recusa como
+                // sucesso apagaria a prova de um aceite que existiu.
+                if (!error && data) feitos.push(qual);
+                else console.warn(`[termo:${qual}] carimbo adiado:`, error?.message || 'RPC devolveu vazio');
+              }
+              if (feitos.length === pend.length) limparTermosAceitos();
+            }
+          } catch (e) { console.warn('[termos] carimbo adiado:', e?.message || e); }
           // Redirect pós-login social (Google) ao destino preservado antes do OAuth.
           let oauthDest = null;   // usado também no resgate do plano abaixo (só resgata sem redirect pendente)
           try {

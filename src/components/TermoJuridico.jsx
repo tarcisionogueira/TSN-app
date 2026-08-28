@@ -18,7 +18,7 @@
 // formato significaria uma segunda tela de auditoria para manter.
 import React from 'react';
 
-export const TERMO_JURIDICO_VERSAO = 'v1-2026-08';
+export const TERMO_JURIDICO_VERSAO = 'v2-2026-08';
 
 export const TERMO_JURIDICO_PREAMBULO = 'Este Termo de Adesão rege a sua atuação como Advogado Parceiro da BidPro Brasil na análise jurídica de editais, matrículas e processos de leilão, e na condução jurídica dos casos que lhe forem designados. Ele complementa os Termos de Uso e a Política de Privacidade da plataforma. Ao aceitar, você concorda com as condições abaixo.';
 
@@ -37,7 +37,7 @@ export const TERMO_JURIDICO = [
   },
   {
     t: '4. Como você é remunerado',
-    d: 'A remuneração é por ÊXITO. Quando a arrematação de um cliente que você acompanhou se concretiza, a BidPro Brasil recebe honorário de êxito de 10% sobre o valor arrematado, e desse total você recebe 4,5 pontos percentuais — ou seja, 4,5% do valor arrematado, o equivalente a 45% do honorário recebido. Os demais 5,5 pontos remuneram a plataforma (4,5) e o parceiro que indicou o cliente (1,0). Você pode ter um percentual individual diferente, registrado no seu perfil, que prevalece sobre o padrão quando existir. NÃO há remuneração fixa, por hora, por parecer emitido ou por caso que não resulte em arrematação. O valor é calculado sobre o estado vigente das regras no momento em que a arrematação é distribuída; casos já distribuídos não são recalculados.',
+    d: 'A remuneração é por ÊXITO. Quando a arrematação de um cliente que você acompanhou se concretiza, a BidPro Brasil recebe honorário de êxito de 10% sobre o valor arrematado, e esse honorário é dividido MEIO A MEIO entre você e a plataforma, depois de descontada a participação do parceiro que indicou o cliente, quando houver. Na prática: (a) SEM parceiro envolvido, você recebe 50% do honorário — 5% do valor arrematado; (b) COM parceiro, o parceiro recebe 1 ponto percentual e o restante é dividido meio a meio, cabendo a você 4,5% do valor arrematado. O desconto do parceiro sai igualmente dos dois lados, nunca só do seu. (c) Se VOCÊ MESMO for o parceiro que indicou o cliente, acumula as duas participações — 5,5% do valor arrematado —, desde que também tenha aderido ao Programa de Parceiros. Você pode ter um percentual individual diferente, registrado no seu perfil, que prevalece sobre o padrão quando existir. NÃO há remuneração fixa, por hora, por parecer emitido ou por caso que não resulte em arrematação. O valor é calculado sobre o estado vigente das regras no momento em que a arrematação é distribuída; casos já distribuídos não são recalculados.',
   },
   {
     t: '5. Quando e como você recebe',

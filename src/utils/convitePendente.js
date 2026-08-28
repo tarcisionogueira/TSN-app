@@ -57,3 +57,35 @@ export function limparConvite(chave) {
   try { localStorage.removeItem(chave); } catch { /* ignore */ }
   try { sessionStorage.removeItem(chave); } catch { /* ignore */ }
 }
+
+// TERMOS ACEITOS NO CONVITE (28/08) — mesma doença, mesmo remédio.
+//
+// O aceite passou a acontecer NO CONVITE, antes da conta existir (decisão do dono: "o termo
+// deve abrir para que visualize o documento e ele aceitar"). Só que o carimbo no banco exige
+// sessão, e o link de confirmação de e-mail abre em OUTRA aba/aparelho — exatamente o caminho
+// que já tinha comido convite e indicação antes. Sem persistir aqui, a pessoa leria e aceitaria
+// o termo, e o banco ficaria sem registro nenhum: o pior desfecho possível para um documento
+// cuja única função é ser prova.
+//
+// Guarda QUAIS termos e em QUE versão, para o AuthContext carimbar no primeiro login.
+export const CHAVE_TERMOS = 'tsn_termos_aceitos';
+
+export function salvarTermosAceitos(mapa) {
+  if (!mapa || !Object.keys(mapa).length) return;
+  try { localStorage.setItem(CHAVE_TERMOS, JSON.stringify({ termos: mapa, ts: Date.now() })); } catch { /* ignore */ }
+}
+
+/** @returns {{parceiro?:string, juridico?:string}} — vazio se ausente/expirado. */
+export function lerTermosAceitos() {
+  try {
+    const raw = localStorage.getItem(CHAVE_TERMOS);
+    if (!raw) return {};
+    const o = JSON.parse(raw);
+    if (o?.ts && (Date.now() - Number(o.ts)) > JANELA_MS) { limparTermosAceitos(); return {}; }
+    return o?.termos && typeof o.termos === 'object' ? o.termos : {};
+  } catch { return {}; }
+}
+
+export function limparTermosAceitos() {
+  try { localStorage.removeItem(CHAVE_TERMOS); } catch { /* ignore */ }
+}

@@ -34,8 +34,13 @@ export async function calcularDistribuicao(db, arr) {
   //
   // O gate é o MESMO de `distribuir_comissao_rede` (aceite do Programa + ativo + adimplente),
   // e não é burocracia: sem `parceiro_aceite_em` não há termo aceito, e pagar comissão a quem
-  // não aderiu ao Programa é repasse sem contrato. Papel de EQUIPE (analista, advogado, admin)
-  // fica de fora — eles já têm fatia própria no split e receberiam duas vezes pelo mesmo caso.
+  // não aderiu ao Programa é repasse sem contrato.
+  //
+  // O ADVOGADO PODE SER O INDICANTE, e acumula (regra do dono): quem trouxe o cliente E conduz
+  // o jurídico do caso leva as duas fatias. Só o ADMIN fica de fora — a fatia da plataforma já
+  // é dele, e somar a do parceiro seria pagar-se duas vezes pelo mesmo valor. Note que ele
+  // acumula porque cumpre as DUAS condições: aceitou o termo do jurídico (para conduzir) e o
+  // do parceiro (para indicar). Sem o segundo aceite, não leva a segunda fatia.
   let   consultorId = null;
   if (arr.arrematante_id) {
     const cli = (await db(`perfis?id=eq.${arr.arrematante_id}&select=indicado_por`)).data?.[0];
@@ -47,7 +52,7 @@ export async function calcularDistribuicao(db, arr) {
         && !!ind.parceiro_aceite_em
         && !ind.inadimplente_desde
         && (!ind.plano_vencimento || ind.plano_vencimento >= hoje)
-        && !['admin', 'analista', 'advogado'].includes(ind.role);
+        && ind.role !== 'admin';
       if (elegivel) consultorId = ind.id;
     }
   }
@@ -64,13 +69,41 @@ export async function calcularDistribuicao(db, arr) {
     return ov == null || ov === '' ? (Number(papelPct) || 0) : Math.max(0, Number(ov) || 0);
   };
 
+  // ── A DIVISÃO É PROPORCIONAL, NÃO UM NÚMERO FIXO (28/08, regra do dono) ─────────────────
+  // "Jurídico e plataforma dividem meio a meio o que sobra depois do parceiro."
+  //   com parceiro:  parceiro 1,0 → restam 9,0 → jurídico 4,5 · plataforma 4,5
+  //   sem parceiro:  parceiro 0   → restam 10  → jurídico 5,0 · plataforma 5,0
+  //
+  // Por isso `advogado_pct` NÃO pode ser lido direto da config como valor fixo: gravado 4,5, o
+  // caso sem parceiro daria jurídico 4,5 e plataforma 5,5 — o desconto do parceiro sairia
+  // inteiro do bolso do jurídico mesmo quando não há parceiro nenhum para descontar.
+  //
+  // ⚠️ CONSEQUÊNCIA: `config_honorarios.advogado_pct` e `.admin_pct` deixam de ser LIDOS — o
+  // padrão do jurídico é calculado, e o admin sempre foi derivado. Ficam como registro do
+  // acordo vigente, e é assim que devem ser tratados: mudar aquele número no banco NÃO muda
+  // mais o que se paga. Quem lê a tabela esperando a fonte da verdade vai errar — é a mesma
+  // armadilha de `perfis.plano`, e por isso está escrito aqui em vez de descoberto depois.
+  // O que DECIDE hoje: `total_pct`, `consultor_pct`, `analista_pct` e o override individual
+  // em `perfis.honorario_exito_pct`, que continua vencendo o padrão calculado.
+  const analistaPct = analistaId ? pctDe(analistaId, cfg.analista_pct) : 0;
+  const parceiroPct = consultorId ? pctDe(consultorId, cfg.consultor_pct) : 0;
+  const metadeDoRestante = Math.max(0, +((total - parceiroPct - analistaPct) / 2).toFixed(4));
+  const advogadoOverride = perfis[advogadoId]?.honorario_exito_pct;
+  const advogadoPct = advogadoId
+    ? (advogadoOverride == null || advogadoOverride === '' ? metadeDoRestante : Math.max(0, Number(advogadoOverride) || 0))
+    : 0;
+
   const envolvidos = [];
-  if (advogadoId) envolvidos.push({ papel: 'advogado', id: advogadoId, nome: perfis[advogadoId]?.nome || null, pct: pctDe(advogadoId, cfg.advogado_pct) });
-  if (analistaId) envolvidos.push({ papel: 'analista', id: analistaId, nome: perfis[analistaId]?.nome || null, pct: pctDe(analistaId, cfg.analista_pct) });
+  if (advogadoId) envolvidos.push({ papel: 'advogado', id: advogadoId, nome: perfis[advogadoId]?.nome || null, pct: advogadoPct });
+  if (analistaId) envolvidos.push({ papel: 'analista', id: analistaId, nome: perfis[analistaId]?.nome || null, pct: analistaPct });
   // `papel: 'consultor'` e a coluna `consultor_pct` ficam com o NOME ANTIGO de propósito: é o
   // slot do indicante no split, e renomear quebraria os snapshots já gravados em
   // `arrematacoes.honorarios_split`, que é o registro do que foi efetivamente pago.
-  if (consultorId) envolvidos.push({ papel: 'consultor', id: consultorId, nome: perfis[consultorId]?.nome || null, pct: pctDe(consultorId, cfg.consultor_pct) });
+  //
+  // Quando o indicante É o advogado do caso, saem DUAS linhas para a mesma pessoa (4,5 + 1,0).
+  // Somar numa linha só esconderia de onde vem cada parte: o comprovante e a conferência
+  // precisam mostrar que uma fatia é pelo trabalho jurídico e a outra pela indicação.
+  if (consultorId) envolvidos.push({ papel: 'consultor', id: consultorId, nome: perfis[consultorId]?.nome || null, pct: parceiroPct });
 
   const somaEnvolvidos = envolvidos.reduce((s, e) => s + e.pct, 0);
   const adminPct = Math.max(0, +(total - somaEnvolvidos).toFixed(4)); // admin equilibra o restante
