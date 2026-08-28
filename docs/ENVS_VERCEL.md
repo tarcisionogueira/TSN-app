@@ -48,11 +48,18 @@ chegam, crons rodam, cobrança processa). Tratar como configuradas:
 - **IA:** `CLAUDE_KEY`, `GEMINI_API_KEY`
 - **Operação:** `BRIGHTDATA_API_TOKEN`, `BRIGHTDATA_ZONE`, `BRIGHTDATA_MAX_REQ_SEMANA`, `DAILY_API_KEY`
 
-## ❌ Sabidamente AUSENTE (esta sim é pendência real)
+## ✅ `LOCATIONIQ_USD_POR_1000` — resolvido, e NÃO precisa existir
 
-- **`LOCATIONIQ_USD_POR_1000`** — o invariante `geocode_sem_preco` acusa **1.653** chamadas
-  consumidas sem preço configurado (28/08; eram 985 em 27/08 — está crescendo). Enquanto
-  faltar, o custo do geocode não entra em conta nenhuma.
+Era listado aqui como pendência. **Não é.** O dono confirmou em 28/08 que o LocationIQ está
+no **plano gratuito**: não há cobrança por chamada, então custo zero é o valor *real*, e não
+ausência de medição. Foi declarado em `integracao_preco` (`provedor='locationiq'`,
+`usd_por_1000=0`), e é a declaração que fecha o invariante `geocode_sem_preco`.
+
+**Não crie a env.** Numa integração gratuita ela não teria o que carregar, e setá-la como `0`
+seria indistinguível de não tê-la — que era exatamente o defeito consertado.
+
+Se um dia o plano virar pago: atualize a linha em `integracao_preco` **e** crie
+`LOCATIONIQ_USD_POR_1000` na Vercel com o mesmo número.
 
 ## Opcionais que podem estar ou não (confirme em `/api/system-status`, não no chute)
 

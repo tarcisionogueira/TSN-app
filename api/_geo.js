@@ -366,8 +366,14 @@ export async function geocoderPago(enderecoCompleto) {
     // Preço por 1.000 vem da ENV, não hardcoded: o LocationIQ tem planos diferentes e eu
     // NÃO SEI qual está contratado. Chutar um número aqui repetiria, com outro valor, o
     // defeito que o Google tinha — custo inventado é tão ruim quanto custo presumido zero.
-    // Enquanto a env não existir, o painel mostra 0 E o invariante `geocode_sem_preco`
-    // acusa, para que o zero não passe por medição. Basta setar LOCATIONIQ_USD_POR_1000.
+    // Enquanto NINGUÉM DECLARAR o preço, o painel mostra 0 E o invariante `geocode_sem_preco`
+    // acusa, para que o zero não passe por medição.
+    //
+    // Há DOIS caminhos para fechar aquele alerta, e a distinção é o conserto de 28/08:
+    //   • plano PAGO  → setar LOCATIONIQ_USD_POR_1000 (o custo passa a aparecer aqui);
+    //   • plano GRÁTIS→ declarar em `integracao_preco`, porque aí o custo real É zero e
+    //                   nenhum valor de env conseguiria distingui-lo de "não configurado".
+    // Hoje o plano é gratuito (confirmado pelo dono em 28/08) e a env NÃO deve ser criada.
     const usd1k = Number(process.env.LOCATIONIQ_USD_POR_1000 || 0);
     registrarUso('locationiq', 'geocode', {
       unidades: 1,
