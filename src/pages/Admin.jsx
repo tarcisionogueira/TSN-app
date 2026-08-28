@@ -11218,7 +11218,12 @@ function LiveTab() {
     setCriandoSala(false);
   }
 
-  const url = `${window.location.origin}/#/live/${SLUG}`;
+  // O LINK DA CAMPANHA É O SEM "#" (28/08). `/#/live/<slug>` é a rota real do app, mas robô
+  // de preview não lê nada depois do "#": WhatsApp, Instagram e Telegram mostravam o cartão
+  // GENÉRICO do site em cima de um convite que tem data, hora e apresentador. `/aula/<slug>`
+  // serve o cartão certo (api/og-share) e manda a pessoa para a mesma tela.
+  const url = `${window.location.origin}/aula/${SLUG}`;
+  const urlApp = `${window.location.origin}/#/live/${SLUG}`;
   if (!ev) return <div style={{ padding: 20, color: '#64748b' }}>{erro || 'Carregando…'}</div>;
 
   return (
@@ -11241,7 +11246,13 @@ function LiveTab() {
         <div style={{ fontSize:11.5, color:'#8FA4BF', textTransform:'uppercase', letterSpacing:1.2, fontWeight:700, marginBottom:8 }}>
           O link da campanha — use este em tudo
         </div>
-        <div style={{ fontFamily:'monospace', fontSize:14, wordBreak:'break-all', marginBottom:10 }}>{url}</div>
+        <div style={{ fontFamily:'monospace', fontSize:14, wordBreak:'break-all', marginBottom:6 }}>{url}</div>
+        <div style={{ fontSize:11.5, color:'#8FA4BF', lineHeight:1.5, marginBottom:10 }}>
+          É este que mostra o cartão com <strong>título, data e capa</strong> quando alguém cola no
+          WhatsApp ou no Instagram — e leva para a mesma tela de inscrição. O endereço interno
+          (<span style={{ fontFamily:'monospace' }}>{urlApp}</span>) continua valendo, mas
+          compartilhado ele aparece como o cartão genérico do site.
+        </div>
         <button onClick={() => { navigator.clipboard?.writeText(url); alert('Link copiado!'); }}
           style={{ padding:'8px 16px', background:'#D8A94A', color:'#0B1B33', border:'none', borderRadius:8, fontWeight:800, fontSize:13, cursor:'pointer' }}>
           Copiar link
@@ -11253,6 +11264,35 @@ function LiveTab() {
             </strong>
           </div>
         )}
+      </div>
+
+      {/* CAPA DA AULA — a imagem do cartão de compartilhamento. O campo não existia em lugar
+          nenhum desta tela: `eventos_live.capa_url` estava na tabela e não tinha por onde ser
+          preenchido, então o cartão caía sempre na imagem genérica do site. Mesmo componente
+          e mesma mecânica da foto do apresentador (upload + re-codificação no navegador +
+          `salvar(url)` com o valor DIRETO, porque setState é assíncrono). */}
+      <div style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:12, padding:'14px 16px', marginBottom:16 }}>
+        <label style={S.label}>Capa da aula — é a imagem do cartão compartilhado</label>
+        <div style={{ display:'flex', gap:12, alignItems:'flex-start', flexWrap:'wrap' }}>
+          {ev.capa_url
+            ? <img src={ev.capa_url} alt="" style={{ width:200, height:105, objectFit:'cover', borderRadius:8, border:'1px solid #e5e7eb', flexShrink:0 }} />
+            : <div style={{ width:200, height:105, borderRadius:8, border:'1px dashed #cbd5e1', background:'#f8fafc', color:'#94a3b8', fontSize:11, display:'flex', alignItems:'center', justifyContent:'center', textAlign:'center', padding:8, flexShrink:0 }}>
+                sem capa — o cartão usa a imagem genérica do site
+              </div>}
+          <div style={{ flex:'1 1 240px', minWidth:0 }}>
+            <input style={S.input} value={ev.capa_url || ''} placeholder="https://…/capa.jpg (ou envie ao lado)"
+              onChange={e => setEv({ ...ev, capa_url: e.target.value })}
+              onBlur={() => salvar({ capa_url: ev.capa_url || null })} />
+            <div style={{ fontSize:11.5, color:'#64748b', marginTop:6, lineHeight:1.5 }}>
+              Proporção do cartão é <strong>1200×630</strong> (paisagem). Imagem em pé aparece
+              cortada em cima e embaixo no WhatsApp.
+            </div>
+          </div>
+          <UploadMidia kind="capa" small onDone={url => {
+            setEv(prev => (prev ? { ...prev, capa_url: url } : prev));
+            salvar({ capa_url: url });
+          }} />
+        </div>
       </div>
 
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(280px,1fr))', gap:14, marginBottom:18 }}>

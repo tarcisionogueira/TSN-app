@@ -29,6 +29,10 @@
       "destination": "/api/og-share?tipo=ebook&id=:id"
     },
     {
+      "source": "/aula/:slug",
+      "destination": "/api/og-share?tipo=live&id=:slug"
+    },
+    {
       "source": "/leiloes",
       "destination": "/api/publico?tipo=brasil"
     },

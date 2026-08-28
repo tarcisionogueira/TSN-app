@@ -9,6 +9,7 @@
  *   /t/<token>    → assinatura da TESTEMUNHA                        (destino /#/t/<token>)
  *   /i/<id>       → imóvel: título, cidade/UF, lance e FOTO         (destino /#/imovel/<id>)
  *   /p/curso/<id> · /p/ebook/<id> → nome/descrição do produto       (destino /#/p/...)
+ *   /aula/<slug>  → aula ao vivo: título, data/hora e capa           (destino /#/live/<slug>)
  * PRIVACIDADE: nunca expõe nome/CPF/e-mail/conteúdo — só o TÍTULO do documento (quem tem o
  * link já abre o documento; o preview não vaza nada além do título).
  */
@@ -93,11 +94,53 @@ export default async function handler(req, res) {
       const p = (tipo === 'curso' ? CURSOS : EBOOKS || []).find((x) => String(x.id) === id);
       titulo = p ? `${rot}: ${p.titulo} — BidPro Brasil` : `${rot} — BidPro Brasil`;
       desc = String(p?.descricao || p?.subtitulo || 'Conteúdo educacional sobre leilões de imóveis, da BidPro Brasil.').slice(0, 200);
+    } else if (tipo === 'live' && idOk) {
+      // AULA AO VIVO — a peça de captação da campanha. O link que o dono divulga é
+      // `/#/live/<slug>`, e robô de preview NÃO lê nada depois do "#": WhatsApp, Instagram e
+      // Telegram mostravam o cartão genérico do site em cima de um convite com data e hora.
+      // Numa campanha cujo principal meio de distribuição é alguém REPASSAR o link, o cartão
+      // é o que decide o clique de quem recebe.
+      destino = `/#/live/${id}`;
+      const rows = await sb(`eventos_live?slug=eq.${encodeURIComponent(id)}&ativo=eq.true&select=titulo,subtitulo,descricao,data_hora,capa_url,apresentador,recorrencia,recorrencia_dia,recorrencia_hora`);
+      const ev = rows?.[0];
+      if (ev) {
+        // A hora vai no fuso da AULA, não em UTC. `data_hora` é timestamptz: imprimir sem
+        // fuso mostraria 22h numa aula que começa 19h — o erro que mais estraga convite.
+        const TZ = 'America/Bahia';
+        const dia = new Intl.DateTimeFormat('pt-BR', { timeZone: TZ, day: '2-digit', month: '2-digit' });
+        const hr = new Intl.DateTimeFormat('pt-BR', { timeZone: TZ, hour: '2-digit', minute: '2-digit' });
+        const t = ev.data_hora ? Date.parse(ev.data_hora) : NaN;
+        const DIAS = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
+        // Data já passada numa aula SEMANAL vira "toda quarta, às 19h": anunciar a data morta
+        // seria pior que não ter cartão — o convite diria, com todas as letras, que o evento
+        // já aconteceu. Sem recorrência, mantém a data (é uma aula única que de fato passou,
+        // e inventar "em breve" seria pior).
+        const passou = Number.isFinite(t) && t < Date.now();
+        const semanal = ev.recorrencia === 'semanal' && ev.recorrencia_dia != null;
+        const quando = (passou && semanal)
+          ? `toda ${DIAS[ev.recorrencia_dia]}, às ${ev.recorrencia_hora ?? 19}h`
+          : (Number.isFinite(t) ? `${dia.format(t)} às ${hr.format(t).replace(':00', 'h').replace(':', 'h')}` : null);
+        // "…, ao vivo — ao vivo, 02/09" foi o que saiu no primeiro teste: o título DESTE evento
+        // já termina em "ao vivo". Se o título da aula já diz, o cartão só acrescenta o quando.
+        const base0 = String(ev.titulo || 'Aula ao vivo').trim();
+        const jaDizAoVivo = /ao vivo/i.test(base0);
+        titulo = quando
+          ? `${base0} — ${jaDizAoVivo ? '' : 'ao vivo, '}${quando}`
+          : (jaDizAoVivo ? base0 : `${base0} — ao vivo`);
+        const base = String(ev.subtitulo || ev.descricao || '').replace(/\s+/g, ' ').trim();
+        desc = [base.slice(0, 150), `Gratuita e ao vivo${ev.apresentador ? ` com ${ev.apresentador}` : ''}. Inscreva-se pelo link.`]
+          .filter(Boolean).join(' · ');
+        if (/^https?:\/\//.test(ev.capa_url || '')) img = ev.capa_url;
+      } else {
+        titulo = 'Aula ao vivo — BidPro Brasil';
+        desc = 'Aula gratuita e ao vivo sobre como encontrar e avaliar um imóvel de leilão. Inscreva-se pelo link.';
+      }
     }
   } catch { /* preview best-effort: cai no padrão */ }
 
   const pathPub = tipo === 'contrato' ? `/c/${id}` : tipo === 'testemunha' ? `/t/${id}`
-    : tipo === 'imovel' ? `/i/${id}` : (tipo === 'curso' || tipo === 'ebook') ? `/p/${tipo}/${id}` : '/';
+    : tipo === 'imovel' ? `/i/${id}` : (tipo === 'curso' || tipo === 'ebook') ? `/p/${tipo}/${id}`
+    : tipo === 'live' ? `/aula/${id}` : '/';
   const html = `<!doctype html><html lang="pt-BR"><head>
 <meta charset="utf-8"/>
 <title>${esc(titulo)}</title>
