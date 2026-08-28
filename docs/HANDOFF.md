@@ -4,6 +4,152 @@
 
 ---
 
+## 🔗 28/08 (sessão 10) — O LINK DO PARCEIRO ESTAVA NUMA TELA QUE NÃO EXISTE, E A COMISSÃO NÃO SEGUIA O VÍNCULO
+
+Pedido do dono: publicar a aula ao vivo como material de divulgação dos parceiros, com quem
+se inscrever ficando vinculado a quem indicou — e a confirmação de que **em qualquer
+contratação o indicante recebe**. As duas coisas tinham um buraco, e nenhum dos dois aparece
+em revisão de código.
+
+---
+
+### 🔴 ACHADO 1 — o card foi escrito numa página APOSENTADA
+
+O dono não encontrou o link na tela de indicações. A razão: o card tinha sido escrito em
+`src/pages/Consultor.jsx`, que está aposentado desde antes desta sessão. `App.jsx:369` diz
+isso com todas as letras e a rota `/consultor` redireciona para `/minha-rede`.
+
+**Por que nada acusou:** o componente continua importado (`lazy`), o arquivo compila, o JSX
+está correto e o `npm run build` passa. Só a **rota** sabe que ele não é mais renderizado.
+Lint não pega, teste de front não pega, e a trava de padrões não tem como pegar — o código
+está certo; ele só não é alcançável. É o primo do defeito da forma 7 (código correto cujo
+banco nunca recebeu o objeto): aqui é **tela correta que nenhuma rota chama**.
+
+> **Regra que fica:** ao adicionar UI, confirme a rota antes do arquivo —
+> `grep -n "path=" src/App.jsx | grep <tela>`. Nome de arquivo não prova que a tela existe.
+
+Movido para `MinhaRede.jsx`, logo abaixo do "Seu link de indicação", e a versão boa corrige
+duas coisas que a versão morta tinha:
+
+- **A aula vem do banco, não do código.** A versão anterior fixava o slug `leilao-ao-vivo` e
+  o texto "Toda quarta, 19h". Data escrita à mão em tela de divulgação envelhece calada:
+  bastava mudar o horário no admin para os parceiros passarem a convidar para uma hora que
+  não existe. Agora lê `eventos_live` (ativa e futura, a próxima pela data) e imprime título
+  e horário no fuso da aula.
+- **O card só existe se houver aula.** Sem evento futuro ativo, não há link — divulgar
+  convite para aula encerrada é pior que não ter botão.
+- `error` do postgrest conferido na leitura (forma 2): `const { data }` sozinho fundiria
+  "não há aula" com "não consegui ler", e o card sumiria em silêncio bem quando o parceiro
+  precisa dele.
+
+Link publicado: `https://www.bidprobrasil.com.br/aula/<slug>?ref=CODIGO` — rota **sem `#`**,
+a que serve o cartão com título, data e capa no WhatsApp e repassa o `?ref=` até a inscrição.
+
+---
+
+### ✅ O VÍNCULO — testado de ponta a ponta, duas vezes
+
+Duas inscrições de teste feitas pelo dono, ambas conferidas no banco e **apagadas depois**
+(conta, perfil, inscrição, rastro de atividade e log de e-mail — verificado zero em todas).
+
+| | teste 1 (sem ref) | teste 2 (pelo link do parceiro) |
+|---|---|---|
+| inscrição gravada | ✅ | ✅ |
+| conta + perfil `explorador` | ✅ | ✅ |
+| cidade vira `cidades_interesse` | ✅ MS | ✅ DF |
+| Meta CAPI | `enviado` | `enviado` |
+| e-mail de confirmação | `enviado` | **`entregue`** |
+| `indicado_por` | `null` (esperado) | **C39C0C** ✅ |
+| `indicacao_origem` | — | **`link_parceiro`** ✅ |
+
+O que prova que o vínculo entrou no **mesmo upsert** que criou a conta, e não num `update`
+posterior: `created_at 19:31:49.844` e `ultima_indicacao_em 19:31:49.914` — 70 ms. Um update
+separado pode falhar sozinho e deixar a conta órfã com cara de vinculada.
+
+> ⚠️ **Um campo que engana na auditoria:** a inscrição gravou `origem: direto` e
+> `landing: /#/live/...` mesmo tendo vindo pelo link do parceiro. Não é falha. São dois
+> armazenamentos distintos: o bloco `utm` é **primeiro toque por dispositivo** e não se
+> renova em revisita (por desenho — a primeira campanha mantém o crédito), enquanto o `ref`
+> viaja em chave própria (`tsn_ref_codigo`, janela de 30 dias). **Ao auditar atribuição de
+> parceiro, o campo que responde é `indicacao_origem`, nunca `origem`.**
+
+---
+
+### 🔴 ACHADO 2 — "em qualquer contratação o indicante recebe" era VERDADE PELA METADE
+
+A pergunta do dono obrigou a olhar o caminho do dinheiro, e os dois fluxos usavam fontes de
+atribuição **diferentes**:
+
+| contratação | de onde vem o indicante | o vínculo da aula pagava? |
+|---|---|---|
+| **Assinatura de plano** (Investidor Pro, Assessoria, Clube) | `perfis.indicado_por`, via `distribuir_comissao_rede` | **SIM** ✅ |
+| **Produto avulso** (curso / eBook) | `compras_produtos.ref_codigo` — o código do **navegador** no instante da compra | **NÃO** ❌ |
+| **Honorário de êxito** | `indicado_por`, mas só se o indicante tiver papel `consultor` | por desenho |
+| Recarga de crédito | não comissiona | por desenho |
+
+O buraco: o `indicado_por` é gravado **para sempre**, mas o código no navegador **expira em
+30 dias** (`src/utils/ref.js`). Passada a janela, o indicado comprava um curso e a comissão
+**nem chegava a ser criada** — sem erro, sem log, sem linha em `comissoes`. O parceiro trazia
+o cliente, o cliente comprava, e o parceiro nunca ficava sabendo que deixou de receber.
+
+E o buraco era **maior justamente para quem vem pela aula**: a conta nasce no servidor e a
+pessoa costuma voltar dias depois pelo e-mail, às vezes de outro aparelho.
+
+**Conserto** (`comissao_produto_cai_no_vinculo_gravado.sql`, aplicada e no repo):
+`comprar_produto_iniciar` passa a resolver o indicante em duas etapas —
+1. **last-touch continua vencendo**: o código que o comprador traz no navegador tem
+   precedência, como sempre teve (quem trouxe o lead por último leva);
+2. **na ausência dele, cai no vínculo gravado** (`perfis.indicado_por`), exigindo upline
+   ativo e com `codigo_indicacao` — sem código, `confirmar_compra_produto` não o reencontra,
+   e gravar um `ref_codigo` que não resolve seria o mesmo vazio com outro nome.
+
+Nenhuma atribuição existente muda de dono. O que muda é o caso em que **ninguém** recebia.
+
+**Provado nos dois sentidos**, chamando a função de verdade dentro de transação desfeita
+(preço temporário + `raise` no fim, nada persistiu — conferido: preço 0, 0 compras):
+```
+sem p_ref          -> ref_codigo = C39C0C   (o vínculo gravado)   ✅
+com p_ref=2836B3   -> ref_codigo = 2836B3   (last-touch venceu)   ✅
+```
+
+Regra gravada em `regra_negocio` como **`comissao.atribuicao_produto`**, com `aplicada_por`
+preenchido. `select public.auditoria_regras_negocio();` → **0 crítico**.
+
+> **O que este conserto NÃO faz, de propósito:** não transforma produto em comissão de REDE
+> (produto segue **nível único**, com o `comissao_pct` do próprio produto), e não mexe no
+> honorário de êxito. Os dois são decisão de negócio, não conserto de defeito — se o dono
+> quiser produto pagando multinível, é conversa à parte.
+
+---
+
+### 💰 RESPOSTA CURTA À PERGUNTA DO DONO
+
+**Fica vinculado?** Sim, para sempre, gravado na criação da conta.
+
+**O indicante recebe em qualquer contratação?** Agora sim, nos fluxos que comissionam
+(assinatura e produto). Com **três condições que valem para todos** e que estão no código,
+não na promessa — o indicante precisa ter:
+1. **aceitado o Programa de Parceiros** (`parceiro_aceite_em` preenchido) — sem isso ganha
+   **zero**, e a comissão é comprimida para o upline DELE;
+2. estar **ativo e adimplente**, com plano em dia (quando tiver plano);
+3. para produto, ter `codigo_indicacao` gerado (nasce ao abrir `/minha-rede`).
+
+**Parceiro no plano grátis GANHA** — `comissao.gratis_ganha` está ativo; a trava é no saque,
+não no ganho.
+
+---
+
+### 📌 O que ficou aberto desta sessão
+
+- **Nenhum produto pago no catálogo** — o único curso ativo (`Comece aqui`) está com preço 0,
+  então a comissão de produto não tem como ser exercitada em produção ainda. O teste acima é
+  a prova possível hoje.
+- Cadastrar `lead_created` como **evento de conversão** no OpenAI Ads (o pixel já está
+  confirmado no ar: `page_viewed` e `lead_created` chegaram pelo canal `pixel_sdk`).
+- Crédito de US$ 100 no OpenAI Ads para iniciar o tráfego (início de setembro).
+
+---
+
 ## 🗓️ 28/08 (sessão 9) — A PRAÇA É UM INTERVALO, E TUDO QUE ISSO DERRUBAVA
 
 29 commits (`8f98b22` → `ef6eac0`), **tudo em `main` e em produção**.
@@ -576,17 +722,17 @@ nenhum call site** e `LiveInscricao.jsx` não chamava tracking nenhum.
 ## 📌 PENDÊNCIAS PARA 29/08 EM DIANTE
 
 **Trava a aula (02/09, 19h):**
-1. **TESTAR a inscrição em `/live/leilao-ao-vivo` com o e-mail do dono** — é a única parte do
-   fluxo que ainda NÃO foi exercitada de ponta a ponta pelo código novo. Valida o **texto novo
-   do e-mail de confirmação** (o que atribuía o lembrete ao WhatsApp) e o **Lead disparando
-   sozinho** no caminho normal — não pelo retro.
-   > A gravação já está provada: **`live_inscricoes` NÃO está mais vazia** — Alexandre Carmo
-   > (Nova Iguaçu/RJ) inscreveu-se em 28/08 às 10:50, pelo código ANTIGO, e o Lead dele foi
-   > recuperado depois pelo `live-lead-retro`. O e-mail que ele recebeu tem o texto velho.
+1. ✅ **FECHADO na sessão 10 (28/08).** Duas inscrições de teste exercitaram o fluxo inteiro
+   — uma direta e uma pelo link do parceiro —, ambas conferidas no banco e apagadas depois.
+   Cobriu o que faltava: o **texto novo do e-mail de confirmação** (saiu com status
+   `entregue`) e o **Lead disparando sozinho** no caminho normal, não pelo retro
+   (`eventos_atividade` → `meta_lead: enviado`). Detalhes na seção da sessão 10, no topo.
+   > O único inscrito REAL segue sendo **Alexandre Carmo** (Nova Iguaçu/RJ, 28/08 10:50),
+   > que entrou pelo código ANTIGO — o Lead dele foi recuperado depois pelo `live-lead-retro`
+   > e **o e-mail que ele recebeu tem o texto velho**, atribuindo o lembrete ao WhatsApp.
    >
-   > **O primeiro lembrete dispara 01/09 13:00 BRT** — depois disso não dá para consertar o
-   > texto. Há um check-in agendado (`trig_01W929X922Gmwr1DQaVU6cGi`) para 01/09 17:00 UTC
-   > relatar o resultado ao dono.
+   > **O primeiro lembrete dispara 01/09 13:00 BRT.** Há um check-in agendado
+   > (`trig_01W929X922Gmwr1DQaVU6cGi`) para 01/09 17:00 UTC relatar o resultado ao dono.
 2. `apresentador_foto` segue vazio (Comercial → Aula ao vivo; já tem botão de upload).
 
 **Vigiar:**
