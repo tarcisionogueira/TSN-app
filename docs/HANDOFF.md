@@ -4,6 +4,236 @@
 
 ---
 
+## 💰 28/08 (sessão 11) — O PAINEL DIZIA QUE ELE PAGOU, O BANCO DIZIA QUE NÃO. O BANCO ESTAVA CERTO
+
+Começou com uma pergunta do dono sobre um nome numa lista — "Erik Migliorini não é Investidor
+Pro, ou é?" — e terminou em dois defeitos de dado, três divergências de comissão contra a regra
+declarada, um contrato que não existia e um termo que negava por escrito o que o sistema paga.
+
+---
+
+### 🔴 ACHADO 1 — pagamento RECUSADO espelhado como aprovado
+
+O Erik aparecia em "Últimas contratações" como **top2 · R$ 49,90**. Ele é `explorador`, com
+`role_anterior = top2`. O rebaixamento estava certo; **o painel é que mentia.**
+
+A cobrança recorrente dele em 16/08 voltou do Mercado Pago assim:
+
+```
+ap.status          = "processed"    ← o EVENTO foi processado
+ap.payment.status  = "rejected"     ← o DINHEIRO não entrou
+status_detail      = payment_method_not_ready   (4 tentativas)
+```
+
+`api/mp-webhook.js` lia `ap.status === 'processed'` e gravava `status: 'approved'` **fixo**. Leu
+o envelope e ignorou o conteúdo — a **forma 1** do CLAUDE.md no lugar mais caro. Como
+`funil_publico` filtra por `status in ('approved','authorized')` e o comentário dele diz
+literalmente *"DINHEIRO QUE ENTROU no gateway"*, o painel passou a contar **R$ 49,90 que nunca
+entraram**, exibindo um assinante que o próprio banco já sabia não existir.
+
+> ⚠️ O outro ponto de escrita em `mp-webhook.js` (linha ~312, pagamento avulso) e o
+> `backfill-mp-pagamentos-cron.js` **sempre estiveram corretos** — usam `pagamento.status`, o
+> status real. Era só o ramo do RECORRENTE. Duas cópias certas e uma errada é a assinatura de
+> um conserto que não foi propagado.
+
+Agora grava-se o status verdadeiro, `rejected` inclusive — é informação, mostra a recusa e as
+retentativas — mais um `console.error` por recusa. A linha existente foi corrigida pelo mesmo
+critério. **Varredura nos 7 pagamentos da base: só o dele estava errado**; os outros 6 são
+`accredited` de verdade. A receita cai R$ 49,90, e esse é o número certo.
+
+---
+
+### 🔴 ACHADO 2 — `perfis.plano` dizia "gratuito" para TODOS os pagantes
+
+Rafael (assessorado), Neuma, Marcelo, Antonio e Alessandra (top2): todos `plano = 'gratuito'`.
+A coluna é escrita uma vez no cadastro e nunca mais — nenhum dos caminhos que mudam `role`
+(ativação, vencido, recusado, chargeback, reconciliação) a toca.
+
+**E não era só desatualização.** O CHECK da coluna aceitava apenas
+`('gratuito','analista','gestor')` — vocabulário de um produto ANTERIOR. Os planos vendidos hoje
+não cabiam ali: a coluna estava **fisicamente impedida de dizer a verdade**, então a deriva não
+era um bug que apareceu, era o único estado possível.
+
+Nenhuma tela quebrou porque todas migraram para `role` (`minha_rede` devolve `p.role as plano`;
+`admin_360_estatisticas` agrupa por `role`). Mas quem consulta o banco lia que o cliente de
+R$ 99,80 é gratuito.
+
+Constraint ampliada e um **TRIGGER** passa a manter `plano` em sincronia com `role`. Trigger, e
+não um campo a mais no update da ativação: `role` muda em cinco lugares, consertar um deixaria
+quatro divergindo — que é exatamente como isto nasceu.
+
+---
+
+### 💸 A COMISSÃO DO PARCEIRO — três divergências contra a regra do dono
+
+Regra declarada: **25% assinatura · 25% curso/eBook · 10% assessoria e Leilão Club · 10% do
+êxito**. O que o sistema fazia:
+
+| Regra | Sistema | |
+|---|---|---|
+| 25% assinatura | `comissao_regras.assinatura` N1 = 25 | ✅ |
+| 25% curso/eBook | curso pagava **30%**, o eBook à venda pagava **10%** | ❌ |
+| 10% assessoria/clube | `venda_direta` N1 = 10 | ✅ |
+| 10% do êxito | **zero** — `consultor_pct = 0` e só entrava papel `consultor` | ❌ |
+
+E o **Termo de Adesão dizia por escrito**: *"NÃO há recompensa sobre honorários de êxito"*.
+Termo que contradiz o que o sistema paga é promessa escrita valendo contra a empresa.
+
+**O SPLIT DO ÊXITO virou proporcional** (e essa foi uma correção do dono sobre a minha primeira
+versão, que era um número fixo). Jurídico e plataforma dividem meio a meio o que sobra **depois**
+do parceiro:
+
+```
+com parceiro:  1,0 parceiro  →  4,5 jurídico · 4,5 plataforma
+sem parceiro:  0             →  5,0 jurídico · 5,0 plataforma
+advogado que TAMBÉM indicou: 4,5 + 1,0 = 5,5 (duas linhas, mesma pessoa)
+sem advogado:  9,0 plataforma · 1,0 parceiro
+```
+
+> Com `advogado_pct` fixo em 4,5, o caso **sem parceiro** pagaria jurídico 4,5 e plataforma 5,5 —
+> o desconto do parceiro sairia inteiro do bolso do jurídico mesmo sem parceiro para descontar.
+> Por isso o padrão do jurídico é CALCULADO, não lido.
+
+> ⚠️ **`config_honorarios.advogado_pct` e `.admin_pct` NÃO SÃO MAIS LIDOS** (um é calculado, o
+> outro sempre foi derivado). Ficam como registro do acordo: **mudar aqueles números no banco não
+> muda mais o que se paga.** É a mesma armadilha do `perfis.plano` deste mesmo dia, e está
+> escrita no código e na migração para não ser descoberta depois. Quem decide: `total_pct`,
+> `consultor_pct`, `analista_pct` e o override em `perfis.honorario_exito_pct`.
+
+Conferido chamando `calcularDistribuicao` de verdade num arremate de R$ 300 mil — **os cinco
+cenários somam 10,00%**, incluindo o novo (advogado que também atende a reunião), sem linha
+zerada.
+
+---
+
+### ⚖️ O CONTRATO QUE NÃO EXISTIA — Termo do Advogado Parceiro (v3)
+
+O Programa de Parceiros tinha termo desde o início; **o jurídico não tinha nenhum**. O advogado
+era convidado, informava OAB, e passava a receber casos e a ter direito ao maior repasse da casa
+sem um documento dizendo o que deve, quando recebe, o que é sigiloso e o que acontece se sair no
+meio de um caso.
+
+12 cláusulas. As que existem por causa do fluxo real, e não de modelo genérico: responsabilidade
+técnica pelo parecer (Estatuto da OAB), **o dever de devolver a designação ANTES do prazo em vez
+de silenciar**, sigilo sobre documento de terceiro, vedação de captação particular com dado da
+plataforma, e a regra de que a leitura automatizada é **insumo** — não substitui a análise dele.
+
+**v3 (o advogado também atende a reunião):** decisão do dono de que o advogado faz a função de
+analista, tirando as dúvidas do investidor, remunerado dentro do êxito. Item 3 ganhou a alínea
+(d); item 4 é novo — *Agenda e atendimento ao investidor*: manter agenda disponível é parte da
+parceria, remarcar exige antecedência, e o atendimento está incluído no êxito.
+
+> ⚠️ **O TERMO IA PROMETER UMA AGENDA QUE O SISTEMA NÃO DEIXAVA PUBLICAR.** `AgendaTab` no Admin
+> listava só `role in ('analista','admin')` como quem pode ter disponibilidade. O advogado
+> assinaria a obrigação e não teria onde cadastrar horário: cláusula impossível de cumprir, que é
+> pior que cláusula ausente porque cria inadimplência de mentira. O resto do fluxo já era
+> agnóstico a papel (`agendar-reuniao.js` lê `slot.analista_id` e grava em `casos.analista_id`
+> sem checar `role`) — era só aquela tela. **Ao escrever cláusula que promete mecanismo, teste o
+> mecanismo.**
+
+---
+
+### ✍️ O ACEITE VIRA PASSO DO CONVITE — e o carimbo não cabia lá
+
+Regra do dono: *"todo usuário que envolve receber valores deve ter o termo explícito"*, com o
+documento **aberto na tela**, no link de convite, antes da senha. Advogado assina o do jurídico;
+consultor e afiliado, o do Programa de Parceiros.
+
+> **`analista` ficou de fora de propósito:** percentual 0 e nenhum termo próprio. Inventar um
+> seria escrever contrato para remuneração que ainda não foi decidida. **Pendência do dono.**
+
+**O carimbo não cabia no convite, e é a parte que se perderia calada:** gravar exige sessão, e o
+link de confirmação de e-mail abre em OUTRA aba — às vezes outro aparelho. É exatamente o caminho
+que já comeu convite e indicação nesta base (ver `convitePendente.js`). O aceite viaja em
+localStorage com janela, junto do token, e o `AuthContext` o carimba no primeiro login — **depois**
+de resgatar o convite, porque a RPC do jurídico exige o papel já elevado; na ordem inversa o
+carimbo voltaria vazio justamente na estreia. **RPC que devolve vazio NÃO limpa o pendente**:
+tratar recusa como sucesso apagaria a prova de um aceite que existiu.
+
+O gate do portal do advogado fica como rede — pega quem for promovido pelo Admin, que não passa
+por convite nenhum.
+
+> 🔐 **BURACO DE SEGURANÇA que só apareceu por construir isso:**
+> `proteger_campos_sensiveis_perfil` **não protegia os carimbos de aceite**. `parceiro_aceite_em`
+> era gravável por PATCH no próprio perfil **desde sempre** — qualquer autenticado podia inventar
+> data e versão de um aceite que nunca houve, ou apagar o real. *Prova que o provado pode escrever
+> não é prova.* Os quatro campos de aceite entraram na proteção, mais `honorario_exito_pct`: quem
+> recebe não define quanto recebe.
+
+---
+
+### 📄 O TERCEIRO RELATÓRIO SAIU DE CENA
+
+Decisão do dono: o Laudo de Viabilidade consolidava os outros dois e não trazia informação nova —
+como etapa obrigatória, custava uma espera entre o cliente e a conversa com o analista, que é onde
+a decisão acontece. **Tirado da tela, mantido o que existe** (`laudoVisivel = relLaudoGerado`):
+laudo já gerado é entrega paga.
+
+O Mercadológico passa a **recomendar a Documental**, com o motivo por extenso (ele responde quanto
+vale; não responde se dá para arrematar com segurança) e botão que gera na hora. A Documental já
+recomendava agendar com o analista; o gate caiu para os dois relatórios.
+
+> ⚠️ **QUATRO lugares esperavam o laudo, e três não estão na tela de análise.** Tirar só o card
+> teria trocado uma etapa a mais por um beco sem saída:
+> · `relatoriosConcluidos` → agendamento travado para sempre, pedindo um relatório que não existe
+>   mais para ser gerado;
+> · **`api/agendar-reuniao.js` tinha o MESMO gate no SERVIDOR** → botão liberado e 403 na API;
+> · `MinhasAnalises.tresProntos` → "Arrematei" sumiria em toda análise nova, e sem registro o
+>   cliente perde relatórios e documentos do imóvel que comprou de verdade;
+> · a vitrine do Investidor Pro anunciava o Laudo como entrega do plano — vendendo o que o produto
+>   não entrega mais.
+> **Retirar uma etapa é mexer em tudo que a esperava.**
+
+---
+
+### 🔎 RESPOSTAS DE DIAGNÓSTICO (sem código, mas o dono perguntou)
+
+**Quem clicou em "Atualizar Pesquisa de Mercado" — sim, há rastro.** Não está no Cliente 360; está
+em `eventos_atividade`. 11 cliques: **10 do dono** (admin), 1 do Rafael em 29/07.
+```sql
+select e.criado_em, p.nome, p.role, e.rota from eventos_atividade e
+  left join perfis p on p.id = e.user_id
+ where e.tipo='click' and e.alvo = 'Atualizar Pesquisa de Mercado' order by 1 desc;
+```
+
+**`utm_source = chatgpt.com` é tráfego ORGÂNICO de dentro do ChatGPT**, não a campanha. 7 visitas
+desde 18/08, a maioria caindo nas páginas SEO de lote (`/leilao/<id>/<slug>`) — o ChatGPT está
+lendo e citando o acervo. Não confundir com a linha `utm_source=openai / cpc / aula-02set`, que é
+teste da URL do anúncio.
+
+**Anexar documento manualmente:** `/arrematados` → abre o arremate → Documentos → tipo. Docs de
+arremate nascem `arrematado: true` e o cron de retenção nunca os apaga. A carta do Rafael **já
+estava lá** desde 22/08. Para o 2º imóvel dele (caso `a82825e0`, Guarulhos), enquanto estiver em
+`analise_solicitada` não há arremate onde pendurar documento de arremate.
+
+**Conta de teste apagada:** `teste@teste.com.br` com role `top2` — era ela que fazia o painel dizer
+6 pagantes; são **5 reais**. Levou junto um saldo de teste de R$ 50 ("fluxo de saque PJ").
+Conferido antes: zero comissões, indicados, casos e pagamentos. Clientes 71 → **70**.
+
+**Segurança:** a auditoria de fechamento acusou `fontes_com_limpeza_pulada` executável por
+**anônimo** (o `=X/postgres` da ACL é o PUBLIC) — entregava o mapa de qual fonte está degradada a
+qualquer visitante. Revogada. **Estado final: segurança 0/0, regras de negócio 0 crítico.**
+
+---
+
+### 📌 Aberto desta sessão
+
+1. **Nenhum advogado cadastrado.** Enquanto não houver, os 4,5% do jurídico ficam com a
+   plataforma (o admin absorve fatia de papel sem pessoa designada). Sequência quando cadastrar:
+   convite → ele aceita o termo na tela → 1º login carimba → Admin → Agenda cadastra a
+   disponibilidade → gera slots.
+2. **Termo do `analista`** — não existe, e o papel está com 0%. Decisão do dono.
+3. **Nenhum produto pago no catálogo** (o único curso ativo tem preço 0), então a comissão de
+   produto ainda não pode ser exercitada em produção.
+4. **`plano_vencimento` nulo em todos os top2** — nada expira sozinho hoje. E `plano_pago_em`
+   vazio na Neuma, apesar de 2 pagamentos aprovados.
+5. **Mercadológico "sem dados concretos"** — a investigação parou: há reaproveitamento de pesquisa
+   por imóvel com janela de 7 dias (`ANALISE_REUSE_DIAS`), e a hipótese é que ele serviu valores
+   antigos até o dono forçar a regeração. Falta o dono dizer **o que exatamente estava errado**
+   (valor de venda, de aluguel, ou os dois) para atacar a causa em vez do sintoma.
+
+---
+
 ## 🔗 28/08 (sessão 10) — O LINK DO PARCEIRO ESTAVA NUMA TELA QUE NÃO EXISTE, E A COMISSÃO NÃO SEGUIA O VÍNCULO
 
 Pedido do dono: publicar a aula ao vivo como material de divulgação dos parceiros, com quem
@@ -721,6 +951,10 @@ nenhum call site** e `LiveInscricao.jsx` não chamava tracking nenhum.
 
 ## 📌 PENDÊNCIAS PARA 29/08 EM DIANTE
 
+> ⚠️ **A sessão 11 (topo) abriu 5 itens próprios** — advogado por cadastrar, termo do analista,
+> catálogo sem produto pago, `plano_vencimento` nulo em todos os top2 e o mercadológico à espera
+> de um detalhe do dono. Estão listados no fim daquela seção e valem junto com esta lista.
+
 **Trava a aula (02/09, 19h):**
 1. ✅ **FECHADO na sessão 10 (28/08).** Duas inscrições de teste exercitaram o fluxo inteiro
    — uma direta e uma pelo link do parceiro —, ambas conferidas no banco e apagadas depois.
@@ -744,8 +978,12 @@ nenhum call site** e `LiveInscricao.jsx` não chamava tracking nenhum.
 5. `data_edital_recuou_prazo` **2** — as duas divergências que hoje passaram a ser *registradas
    em vez de aplicadas*. Precisam de revisão humana dos dois lotes.
 6. **29/08 09:10 UTC — a PRIMEIRA rodada de `/api/adotar-orfaos-cron`.** Confirme que ela
-   rodou e que **Alexandre Carmo** deixou de aparecer como "Sem consultor" (ele ficou de fora
-   da primeira execução manual por ter só 3h de vida — a carência funcionando). Um cron que
+   rodou. ⚠️ **Mas o Alexandre NÃO será adotado nessa rodada** (medido na sessão 11): ele nasceu
+   28/08 às 10:50 UTC e a carência é de 24h, então só fica elegível às 10:50 de 29/08 — **1h40
+   depois** do cron das 09:10. Ele entra na rodada de 30/08. Efeito de agenda a considerar:
+   **quem se cadastra depois das 09:10 espera de 24 a 48h**, não 24 — horário fixo contra
+   carência relativa. Se incomodar, rodar de 6 em 6 horas resolve. O carimbo manual no Admin
+   atribui na hora, se não quiser esperar. Um cron que
    nunca dispara é silencioso por natureza; a prova é uma consulta:
    ```sql
    select nome, indicacao_origem, ultima_indicacao_em from perfis
