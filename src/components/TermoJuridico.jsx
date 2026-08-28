@@ -7,7 +7,7 @@
 // acontece se ele sair no meio de um caso. Trabalho de advogado sem contrato escrito é o tipo
 // de lacuna que só aparece quando já virou conflito.
 //
-// ⚠️ OS PERCENTUAIS DO ITEM 5 SÃO CÓPIA de `config_honorarios` (id = 1) — mesma regra do
+// ⚠️ OS PERCENTUAIS DO ITEM 6 SÃO CÓPIA de `config_honorarios` (id = 1) — mesma regra do
 // "R$ 2.500,00" no termo do parceiro: termo jurídico precisa do número por extenso, não de um
 // ponteiro, mas cópia envelhece. Quem mudar o split no banco sobe a versão DESTE termo no mesmo
 // commit. Consulta para conferir antes de mexer:
@@ -24,7 +24,7 @@
 // novo, esta cláusula vira letra morta — mexeu num, confira o outro.
 import React from 'react';
 
-export const TERMO_JURIDICO_VERSAO = 'v3-2026-08';
+export const TERMO_JURIDICO_VERSAO = 'v4-2026-08';
 
 export const TERMO_JURIDICO_PREAMBULO = 'Este Termo de Adesão rege a sua atuação como Advogado Parceiro da BidPro Brasil na análise jurídica de editais, matrículas e processos de leilão, e na condução jurídica dos casos que lhe forem designados. Ele complementa os Termos de Uso e a Política de Privacidade da plataforma. Ao aceitar, você concorda com as condições abaixo.';
 
@@ -39,42 +39,48 @@ export const TERMO_JURIDICO = [
   },
   {
     t: '3. O que você faz',
-    d: 'Ao aceitar um caso designado na plataforma, você se responsabiliza por: (a) analisar edital, matrícula, ônus e gravames e a situação processual do bem; (b) emitir parecer jurídico fundamentado sobre riscos e viabilidade da arrematação; (c) apontar as diligências necessárias; (d) ATENDER O INVESTIDOR NA REUNIÃO que ele agendar, esclarecendo as dúvidas sobre a operação e sobre o seu parecer; e (e) acompanhar juridicamente o caso até a etapa contratada. Aceitar um caso é assumir o prazo dele. Se não puder cumprir, recuse ou devolva a designação ANTES do prazo — devolver a tempo é conduta esperada; o silêncio no prazo é que prejudica o cliente.',
+    d: 'Ao aceitar um caso designado na plataforma, você se responsabiliza por: (a) analisar edital, matrícula, ônus e gravames e a situação processual do bem; (b) emitir parecer jurídico fundamentado sobre riscos e viabilidade da arrematação; (c) apontar as diligências necessárias; (d) ATENDER O INVESTIDOR NA REUNIÃO que ele agendar, esclarecendo as dúvidas sobre a operação e sobre o seu parecer e apresentando a Assessoria quando ela couber (item 5); e (e) acompanhar juridicamente o caso até a etapa contratada. Aceitar um caso é assumir o prazo dele. Se não puder cumprir, recuse ou devolva a designação ANTES do prazo — devolver a tempo é conduta esperada; o silêncio no prazo é que prejudica o cliente.',
   },
   {
     t: '4. Agenda e atendimento ao investidor',
-    d: 'Ao aderir, você se compromete a MANTER AGENDA DISPONÍVEL na plataforma para as reuniões com os investidores dos casos que aceitar. Você define os dias e as faixas de horário da sua disponibilidade, e a partir delas o sistema publica os horários que o investidor pode reservar; a reunião acontece por vídeo, pela própria plataforma. Manter a agenda atualizada faz parte da parceria: agenda vazia significa que o investidor não consegue marcar, e o caso trava numa etapa que depende de você. Se precisar remarcar ou ficar indisponível por um período, atualize a disponibilidade e comunique com antecedência — cancelar em cima da hora, ou não comparecer, é falta contratual. O atendimento nessas reuniões está INCLUÍDO na remuneração por êxito do item 5; não há cobrança adicional por reunião, nem pagamento por reunião que não resulte em arrematação.',
+    d: 'Ao aderir, você se compromete a MANTER AGENDA DISPONÍVEL na plataforma para as reuniões com os investidores dos casos que aceitar. Você define os dias e as faixas de horário da sua disponibilidade, e a partir delas o sistema publica os horários que o investidor pode reservar; a reunião acontece por vídeo, pela própria plataforma. Manter a agenda atualizada faz parte da parceria: agenda vazia significa que o investidor não consegue marcar, e o caso trava numa etapa que depende de você. Se precisar remarcar ou ficar indisponível por um período, atualize a disponibilidade e comunique com antecedência — cancelar em cima da hora, ou não comparecer, é falta contratual. O atendimento nessas reuniões está INCLUÍDO na remuneração por êxito do item 6; não há cobrança adicional por reunião, nem pagamento por reunião que não resulte em arrematação.',
   },
   {
-    t: '5. Como você é remunerado',
+    t: '5. Apresentação da Assessoria na reunião',
+    d: 'A reunião não é só esclarecimento técnico: é nela que o investidor decide como vai conduzir a arrematação. Cabe a você APRESENTAR A ASSESSORIA da BidPro Brasil quando ela for adequada ao caso — explicando o que ela cobre, como funciona o acompanhamento e o que muda em relação a arrematar sozinho — e responder às dúvidas do investidor sobre a contratação. É a sua leitura jurídica do caso que dá base a essa conversa, e por isso a apresentação é sua e não de um vendedor. Duas obrigações que vêm junto: (a) a recomendação deve ser HONESTA — se o caso não pede assessoria, ou se o parecer aponta risco que desaconselha a arrematação, diga isso, ainda que implique não haver contratação; e (b) nada do que você apresentar pode contrariar o seu próprio parecer. Você NÃO é remunerado por venda de assessoria: sua participação é o êxito do item 6, que só existe se a arrematação se concretizar. Isso é deliberado — sua recomendação não deve ter incentivo para empurrar contratação que o caso não justifica.',
+  },
+  {
+    t: '6. Como você é remunerado',
+  },
+  {
     d: 'A remuneração é por ÊXITO. Quando a arrematação de um cliente que você acompanhou se concretiza, a BidPro Brasil recebe honorário de êxito de 10% sobre o valor arrematado, e esse honorário é dividido MEIO A MEIO entre você e a plataforma, depois de descontada a participação do parceiro que indicou o cliente, quando houver. Na prática: (a) SEM parceiro envolvido, você recebe 50% do honorário — 5% do valor arrematado; (b) COM parceiro, o parceiro recebe 1 ponto percentual e o restante é dividido meio a meio, cabendo a você 4,5% do valor arrematado. O desconto do parceiro sai igualmente dos dois lados, nunca só do seu. (c) Se VOCÊ MESMO for o parceiro que indicou o cliente, acumula as duas participações — 5,5% do valor arrematado —, desde que também tenha aderido ao Programa de Parceiros. Você pode ter um percentual individual diferente, registrado no seu perfil, que prevalece sobre o padrão quando existir. Essa participação remunera TODO o seu trabalho no caso — a análise, o parecer, a reunião com o investidor e o acompanhamento —, e não há cobrança nem pagamento à parte por nenhuma dessas etapas. NÃO há remuneração fixa, por hora, por parecer emitido, por reunião realizada ou por caso que não resulte em arrematação. O valor é calculado sobre o estado vigente das regras no momento em que a arrematação é distribuída; casos já distribuídos não são recalculados.',
   },
   {
-    t: '6. Quando e como você recebe',
+    t: '7. Quando e como você recebe',
     d: 'O crédito é apurado quando a arrematação é registrada e distribuída na plataforma, e fica disponível no seu saldo. O pagamento é feito por PIX, após conferência, contra nota fiscal de serviços emitida por você ou pela sua sociedade de advogados. Valores relativos a operações posteriormente desfeitas, canceladas, anuladas judicialmente ou identificadas como fraude são estornados do saldo e podem ser descontados de pagamentos seguintes. Os tributos incidentes são de sua responsabilidade exclusiva.',
   },
   {
-    t: '7. Sigilo profissional e proteção de dados',
+    t: '8. Sigilo profissional e proteção de dados',
     d: 'Os documentos e dados dos clientes a que você tem acesso — matrículas, editais, processos, dados pessoais e financeiros — são confidenciais e cobertos pelo sigilo profissional. Você se compromete a usá-los EXCLUSIVAMENTE para a condução do caso designado, a não os repassar a terceiros e a não os utilizar para finalidade diversa, inclusive após o término da parceria. O tratamento segue a Lei nº 13.709/2018 (LGPD) e a Política de Privacidade da BidPro Brasil; ao acessar esses dados você atua como CORRESPONSÁVEL pelo tratamento. Para prevenção a fraudes, registramos metadados do seu aceite e dos seus acessos (data/hora, IP e dispositivo).',
   },
   {
-    t: '8. Conduta, captação e conflito de interesses',
+    t: '9. Conduta, captação e conflito de interesses',
     d: 'É VEDADO usar os dados de clientes da plataforma para captação particular, oferecer serviços fora da plataforma a cliente designado pela BidPro Brasil, ou atuar simultaneamente por parte contrária no mesmo caso. É igualmente vedada qualquer forma de captação de clientela em desacordo com o Código de Ética da OAB. A violação acarreta o cancelamento dos créditos relacionados e o encerramento da parceria, sem prejuízo das medidas legais e disciplinares cabíveis.',
   },
   {
-    t: '9. Responsabilidade técnica',
+    t: '10. Responsabilidade técnica',
     d: 'O parecer é seu e leva a sua assinatura e o seu número de inscrição na OAB. A BidPro Brasil não revisa nem responde pelo conteúdo técnico do seu parecer, e não pode ser responsabilizada por erro, omissão ou perda de prazo de sua autoria. A plataforma disponibiliza documentos, leitura automatizada e informações de apoio: eles são INSUMO, não substituem sua análise, e cabe a você conferir a fonte antes de concluir.',
   },
   {
-    t: '10. Alterações do Programa',
+    t: '11. Alterações do Programa',
     d: 'A BidPro Brasil pode alterar regras, condições e percentuais mediante aviso prévio razoável pelos canais oficiais. A continuidade da atuação após o aviso implica concordância. Alterações não afetam créditos já apurados nem casos já distribuídos.',
   },
   {
-    t: '11. Vigência e encerramento',
+    t: '12. Vigência e encerramento',
     d: 'A adesão vigora por prazo indeterminado. Qualquer das partes pode encerrá-la a qualquer tempo, mediante comunicação. O encerramento não prejudica créditos já apurados de boa-fé, e você se compromete a concluir ou a transferir de forma ordenada os casos em andamento, preservando o interesse do cliente e o sigilo profissional.',
   },
   {
-    t: '12. Legislação e foro',
+    t: '13. Legislação e foro',
     d: 'Aplica-se a legislação brasileira, o Estatuto da Advocacia e o Código de Ética e Disciplina da OAB. Fica eleito o foro do domicílio do advogado para dirimir controvérsias.',
   },
 ];

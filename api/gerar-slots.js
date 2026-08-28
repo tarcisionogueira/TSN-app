@@ -96,15 +96,40 @@ export default async function handler(req) {
     return new Response(JSON.stringify({ msg: 'Nenhum slot gerado', gerados: 0 }), { status: 200 });
   }
 
-  // Upsert — ignora conflitos (slot já existe)
-  const insertRes = await sb('slots_reuniao', {
+  // ⚠️ `on_conflict` É OBRIGATÓRIO AQUI, e a falta dele parou a agenda por 18 dias (28/08).
+  //
+  // `resolution=ignore-duplicates` SEM `on_conflict` resolve pela CHAVE PRIMÁRIA. O `id` é
+  // gerado, então nunca há conflito de PK — e o lote seguia em frente até bater na UNIQUE real
+  // (`slots_reuniao_analista_id_data_hora_key`), que derruba o INSERT INTEIRO com 409.
+  //
+  // Como o cron gera SEMPRE os próximos 21 dias, todo lote contém dias que já existem. Logo
+  // TODO lote falhava, e nenhum slot novo era criado desde 10/08: 126 slots no banco, criados
+  // em 01/07, 20/07 e 10/08, e só 6 ainda no futuro. A agenda ia simplesmente acabar em 31/08 —
+  // o cliente veria "Nenhum horário disponível" e a reunião, que é o gargalo do produto, ficaria
+  // sem porta de entrada.
+  //
+  // Com o alvo declarado, o conflito é ignorado linha a linha e os dias novos entram.
+  const insertRes = await sb('slots_reuniao?on_conflict=analista_id,data_hora', {
     method: 'POST',
     headers: { Prefer: 'resolution=ignore-duplicates,return=minimal' },
     body: JSON.stringify(todosSlots),
   });
 
+  // E FALHA ALTO. A versão anterior devolvia HTTP 200 com `ok: false` no corpo: para o cron da
+  // Vercel isso é sucesso, então 18 dias de agenda vazia não geraram um único alerta. Um cron
+  // que não consegue fazer o trabalho tem de dizer isso no código de status — é a diferença
+  // entre um problema que aparece e um que só é descoberto quando o cliente não consegue
+  // marcar. `gerados` também passa a distinguir o que foi TENTADO do que foi GRAVADO.
+  if (!insertRes.ok) {
+    const det = await insertRes.text().catch(() => '');
+    console.error('[gerar-slots] INSERT falhou', insertRes.status, det.slice(0, 300));
+    return new Response(JSON.stringify({
+      error: 'slots_nao_gravados', http: insertRes.status, tentados: todosSlots.length, detalhe: det.slice(0, 300),
+    }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+  }
+
   return new Response(JSON.stringify({
-    gerados: todosSlots.length,
-    ok: insertRes.ok,
+    tentados: todosSlots.length,
+    ok: true,
   }), { status: 200, headers: { 'Content-Type': 'application/json' } });
 }
