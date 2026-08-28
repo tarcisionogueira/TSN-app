@@ -78,8 +78,10 @@ export default async function handler(req, res) {
   if (eNome) return res.status(400).json({ error: eNome });
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.status(400).json({ error: 'E-mail inválido.' });
   // `erroTelefone` deixa passar o VAZIO por contrato (obrigatoriedade é decisão de quem
-  // chama). Aqui o WhatsApp é o canal do lembrete e do link da sala: sem ele a inscrição
-  // não serve para nada, então o vazio é checado à parte.
+  // chama). Aqui o WhatsApp é o canal de contato direto e o do grupo, então o vazio é
+  // checado à parte. (Desde 28/08 o LEMBRETE e o link da sala saem por e-mail, no
+  // `live-lembrete-cron` — antes disso esta linha dizia que saíam pelo WhatsApp, o que
+  // descrevia uma intenção e não um mecanismo: não havia cron nenhum enviando.)
   if (!limparTelefone(whatsapp)) return res.status(400).json({ error: 'Informe o seu WhatsApp com DDD.' });
   const eTel = erroTelefone(whatsapp);
   if (eTel) return res.status(400).json({ error: eTel });
@@ -197,13 +199,14 @@ export default async function handler(req, res) {
           📅 <strong>${esc(quando)}</strong><br>
           <span style="font-size:13px;color:#475569">Horário de Brasília</span>
         </p>
-        ${ev.link_grupo ? `<p style="font-size:14px;line-height:1.7">Entre no grupo do WhatsApp para receber o link da sala e o lembrete antes de começar:</p>
+        <p style="font-size:14px;line-height:1.7">O <strong>link da sala</strong> chega neste mesmo e-mail: um lembrete no dia anterior e outro pouco antes de começar. Não precisa fazer mais nada.</p>
+        ${ev.link_grupo ? `<p style="font-size:14px;line-height:1.7">Se quiser acompanhar os avisos por lá também, o grupo está aberto:</p>
         <p style="margin:18px 0"><a href="${esc(ev.link_grupo)}" style="background:#16a34a;color:#fff;text-decoration:none;padding:12px 22px;border-radius:10px;font-weight:700;font-size:14px">Entrar no grupo do WhatsApp →</a></p>` : ''}
         ${contaNova ? `<p style="font-size:14px;line-height:1.7">Também criamos o seu acesso à plataforma, onde vou mostrar as oportunidades ao vivo. Defina a sua senha quando quiser: <a href="${esc(linkSenha)}">${esc(linkSenha)}</a></p>` : ''}
         <p style="font-size:13px;line-height:1.7;color:#475569">Se não puder comparecer, é só responder este e-mail avisando.</p>
         <p style="font-size:12px;color:#94a3b8;margin-top:24px">BidPro Brasil</p>
       </div>`,
-      text: `Olá, ${primeiro}!\n\nSua vaga está garantida em ${ev.titulo}.\n\n${quando} (horário de Brasília)\n${ev.link_grupo ? `\nGrupo do WhatsApp: ${ev.link_grupo}\n` : ''}${contaNova ? `\nSeu acesso à plataforma foi criado. Defina a sua senha em: ${linkSenha}\n` : ''}\nBidPro Brasil`,
+      text: `Olá, ${primeiro}!\n\nSua vaga está garantida em ${ev.titulo}.\n\n${quando} (horário de Brasília)\n\nO link da sala chega neste mesmo e-mail: um lembrete no dia anterior e outro pouco antes de começar.\n${ev.link_grupo ? `\nGrupo do WhatsApp (opcional): ${ev.link_grupo}\n` : ''}${contaNova ? `\nSeu acesso à plataforma foi criado. Defina a sua senha em: ${linkSenha}\n` : ''}\nBidPro Brasil`,
       meta: { userId, tipo: 'live_inscricao' },
     });
   } catch (e) {

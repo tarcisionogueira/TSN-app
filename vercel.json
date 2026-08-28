@@ -329,6 +329,10 @@
     {
       "path": "/api/lancamento-remarketing-cron",
       "schedule": "0 1 * * *"
+    },
+    {
+      "path": "/api/live-lembrete-cron",
+      "schedule": "0 * * * *"
     }
   ]
 }
