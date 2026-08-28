@@ -6,9 +6,8 @@
 
 ## 🗓️ 28/08 (sessão 9) — A PRAÇA É UM INTERVALO, E TUDO QUE ISSO DERRUBAVA
 
-9 commits (`8f98b22` → `e34dada`), **tudo em `main` e em produção** (deploy
-`dpl_9BW5CtBLrUoHJAs9K4c7iKaYd9eH` READY às 12:13 UTC). 25 arquivos, +1.173/−34.
-Migrações **aplicadas no banco** e escritas no repo, na mesma leva.
+12 commits (`8f98b22` → `360b617`), **tudo em `main` e em produção**. 29 arquivos,
++1.584/−42. Migrações **aplicadas no banco** e escritas no repo, na mesma leva.
 
 > ⚠️ **Ao subir para `main`:** o `main` LOCAL desta máquina estava em `3afa795`, uma
 > história **não relacionada** ao `origin/main` — o remoto foi reescrito em algum momento e
@@ -128,6 +127,59 @@ Vercel expõe todas as envs ao runtime Node).
 
 ---
 
+### 🖥️ Depois do handoff: dois defeitos DE TELA, achados olhando o painel
+
+Os dois vieram de prints do dono, e nenhum tinha rastro no banco nem nos logs. São a
+lembrança de que **nem tudo que está quebrado deixa marca em `erros_cliente`**.
+
+**`b9fc383` — o painel dizia "Ninguém ainda" com um inscrito na mesa.**
+`eventos_live.sql` escreveu a intenção (*"o dono lê pelo painel"*) e criou só a política do
+DONO DA INSCRIÇÃO (`user_id = auth.uid()`). `Admin.jsx:11141` lê `live_inscricoes` direto
+pelo cliente, então a RLS devolvia **zero linhas para o admin**. O painel então imprimia
+**"Inscritos (0) — Ninguém ainda. Divulgue o link acima."**: uma frase que manda gastar mais
+verba, apoiada numa lista que a RLS filtrou.
+> ⚠️ **O comentário da própria consulta já avisava, e mirava no alvo errado:** *"A lista de
+> inscritos é o produto desta tela. Falha aqui NÃO pode virar 'ninguém se inscreveu'"*. Ele
+> guarda contra **erro** — e RLS não dá erro, devolve lista vazia com `error: null`. É a forma
+> nº 3 do CLAUDE.md derrotando uma guarda escrita justamente para esse sintoma.
+> **Guardar do erro não guarda do silêncio.** Conferido sob RLS com o JWT do dono: antes 0,
+> agora 1.
+
+**`b9fc383` (2ª parte) — `api/live-lead-retro.js`.** Alexandre Carmo inscreveu-se às 10:50 e
+o evento `Lead` só entrou no ar às ~11:46: um inscrito REAL que a otimização do Meta nunca
+viu, e que a tela não recupera (a inscrição não acontece duas vezes). O endpoint é **dry-run
+por padrão** — escreve numa plataforma de anúncios, e disparo errado não se apaga. Idempotente
+em dois níveis: pula quem já tem rastro com o mesmo `event_id` **e** usa o id determinístico,
+então um escape seria unido pelo Meta em vez de contar duas conversões.
+> ✅ **Executado e confirmado**: `enviados: 1`, e o rastro em `eventos_atividade` traz
+> `enviado RETROATIVO (lead_leilao-ao-vivo_80e70a049cae8468)`. O `event_id` bateu exatamente
+> com o previsto antes do disparo — prova de que o determinismo funciona. O dry-run seguinte
+> passa a dizer `mandaria: 0`.
+
+**`360b617` — "Jardim Paulistano · 1" no chip, e a lista devolvendo 0.** Nenhum dos dois
+estava errado: **eles respondem perguntas diferentes**, e nada na tela dizia isso. O chip conta
+por GEOGRAFIA (estado + cidade + bairro); a lista aplica tipo, modalidade, intenção, valor e
+desconto. Sem filtro ligado os dois coincidem — por isso a divergência aparecia só às vezes,
+e parecia defeito.
+> **O que excluía o lote:** ele tem 23% de desconto e a intenção **"Revenda" impõe piso de
+> 30%** no servidor, enquanto a tela mostrava **"Qualquer desconto / Todos" ACESO**. Tela
+> afirmando uma coisa e servidor fazendo outra — a mesma família do resto do dia, agora
+> visível ao cliente, na tela mais usada do site.
+>
+> Escolha do dono: **tornar os números honestos**, não recontar a cada mudança de filtro
+> (recontar deixaria o badge exato e custaria uma consulta por interação na Busca; o custo do
+> problema aqui é confusão, não dado errado). O rótulo passa a mostrar o desconto EFETIVO e a
+> dizer de onde vem o piso; o chip aceso vira o do efetivo (com revenda, "Todos" aceso era
+> mentira); os chips abaixo do piso ficam esmaecidos com o motivo no `title`. Contadores de
+> bairro **e** de cidade ganharam `title` explicando que são o total ATIVO da região.
+>
+> `descontoEfetivo` e `pisoIntencao` saem da PRÓPRIA `ajustarFiltrosPorIntencao` — a mesma
+> função que os dois caminhos de consulta usam. Reescrever a regra na tela criaria a segunda
+> cópia que um dia discorda da primeira, que é exatamente o defeito do `valor_minimo_ref`
+> consertado horas antes.
+
+---
+
 ### 🪞 ERROS MEUS NESTA SESSÃO — handoff que só registra acerto ensina a repetir o erro
 
 1. **Refiz uma verificação já vencida.** Tratei Pixel/CAPI do Meta como possivelmente
@@ -176,11 +228,17 @@ nenhum call site** e `LiveInscricao.jsx` não chamava tracking nenhum.
 ## 📌 PENDÊNCIAS PARA 29/08 EM DIANTE
 
 **Trava a aula (02/09, 19h):**
-1. **TESTAR a inscrição em `/live/leilao-ao-vivo`** — ninguém percorreu o caminho depois das
-   mudanças. Valida três coisas de uma vez: a inscrição grava (**`live_inscricoes` está
-   VAZIA**), o e-mail de confirmação sai com o texto novo, e o Lead chega ao Meta
-   (`select detalhe, criado_em from eventos_atividade where tipo='meta_lead' order by 1 desc`).
-   **O primeiro lembrete dispara 01/09 13:00 BRT** — depois disso não dá para consertar o texto.
+1. **TESTAR a inscrição em `/live/leilao-ao-vivo` com o e-mail do dono** — é a única parte do
+   fluxo que ainda NÃO foi exercitada de ponta a ponta pelo código novo. Valida o **texto novo
+   do e-mail de confirmação** (o que atribuía o lembrete ao WhatsApp) e o **Lead disparando
+   sozinho** no caminho normal — não pelo retro.
+   > A gravação já está provada: **`live_inscricoes` NÃO está mais vazia** — Alexandre Carmo
+   > (Nova Iguaçu/RJ) inscreveu-se em 28/08 às 10:50, pelo código ANTIGO, e o Lead dele foi
+   > recuperado depois pelo `live-lead-retro`. O e-mail que ele recebeu tem o texto velho.
+   >
+   > **O primeiro lembrete dispara 01/09 13:00 BRT** — depois disso não dá para consertar o
+   > texto. Há um check-in agendado (`trig_01W929X922Gmwr1DQaVU6cGi`) para 01/09 17:00 UTC
+   > relatar o resultado ao dono.
 2. `apresentador_foto` segue vazio (Comercial → Aula ao vivo; já tem botão de upload).
 
 **Vigiar:**
