@@ -67,30 +67,52 @@ fim): **54 horários livres, 9 dias, de 31/08 a 18/09**.
 > inteiro quando existe UNIQUE além da PK* — e falha exatamente quando o lote mistura o que já
 > existe com o que é novo, que é o caso normal de todo job idempotente.
 
-#### 🔴 A VARREDURA: o mesmo defeito em mais SETE pontos (não corrigidos)
+#### ⚠️ A VARREDURA QUE EU ERREI — eram SETE, é UM (corrigido em seguida)
 
-Procurei `resolution=ignore-duplicates` sem `on_conflict=` no acervo e cruzei cada alvo com as
-UNIQUE/índices únicos do banco. **Sete pontos correm exatamente o mesmo risco** — lote inteiro
-rejeitado com 409, em silêncio, sempre que misturar linha nova com linha existente:
+> **Registro do erro, porque o método importa mais que o resultado:** varri com `grep` LINHA A
+> LINHA um padrão que se espalha por VÁRIAS linhas — o `on_conflict` vive na linha do `sb(...)`
+> e o `Prefer` na seguinte. Marquei como defeituosos sete arquivos que estavam corretos. Refeita
+> lendo o BLOCO da chamada, a lista real é outra.
+>
+> **E quase todos os que de fato não têm `on_conflict` estão CERTOS**, por um motivo que vale
+> guardar: neles a chave de dedupe **É a PRIMARY KEY**, que é exatamente o que o
+> `ignore-duplicates` resolve por padrão — `alerta_publico_enviados` (alerta_id, imovel_id),
+> `alertas_enviados` (user_id, imovel_id), `webhook_eventos_processados` (gateway, payment_id,
+> evento), `visita_origem` (anon_id). **Só quebra quando a chave real não é a PK.**
 
-| onde | tabela | chave que derruba o lote |
-|---|---|---|
-| `conciliacao-sync-cron.js:61` | `conciliacao_lancamento` | `(banco, chave_origem)` |
-| `conciliacao.js:185` e `:225` | `conciliacao_lancamento` | idem |
-| `gerar-analise.js:616` e `:661` | `indice_amostra` | `uq_indice_amostra_deduce` |
-| `sinalizar-revenda.js:99` | `indice_amostra` | idem |
-| `cnj-monitor-cron.js:44` | `processo_movimentos` | `processo_movimentos_unico_cols` |
-| `_edital-extrato.js:247` | `processos_monitorados` | `(numero_processo)` |
-| `importar-emails-resend.js:89` | `emails_log` | `uq_emails_log_resend_id` |
+#### 🔴 O CASO REAL ERA UM: `indice_amostra` — e estava comendo dado
 
-✅ **`enviar-alertas-cron.js:802` está CERTO** e é o contraexemplo que explica a regra: em
-`alertas_enviados` a chave de dedupe `(user_id, imovel_id)` **é a própria PRIMARY KEY**, que é o
-que o `ignore-duplicates` resolve por padrão. Só quebra quando a chave real não é a PK.
+`indice_amostra` deduplica por índice de **EXPRESSÃO** (`uq_indice_amostra_deduce`: cidade, uf,
+espécie, COALESCE(valor_m2,-1), COALESCE(valor_total,-1), data_ref, COALESCE(fonte,'')) — chave
+que **não é a PK**. Três pontos gravavam nela sem `on_conflict`: `gerar-analise.js:616` e `:661`,
+`sinalizar-revenda.js:99`.
 
-**O conserto é mecânico** — acrescentar `?on_conflict=<colunas>` na URL, exatamente como foi feito
-em `gerar-slots` — mas são 7 arquivos e cada um merece conferir se o job já não estava perdendo
-dado. O mais barato de medir primeiro: `indice_amostra` (alimenta o Índice BidPro) e
-`emails_log` (histórico de e-mail). **Não corrigido nesta sessão — aguarda o dono.**
+**MEDIDO, e é o que fecha o diagnóstico:** em 28/08 o dono gerou três relatórios da MESMA cidade
+(Campo Grande) às 17:21, 17:58 e 18:01. **Só o primeiro gravou amostras — 17 linhas. Os outros
+dois gravaram ZERO**, por terem amostra repetida. Os chamadores engoliam tudo num `try/catch` sem
+checar `.ok`.
+
+**`on_conflict=` na URL não resolve este caso**: o parâmetro do PostgREST aceita nomes de COLUNA,
+e o índice é sobre EXPRESSÕES. Daí a RPC `indice_amostra_inserir`, com `on conflict do nothing`
+**sem alvo** — que cobre qualquer índice único — devolvendo QUANTAS linhas entraram, não um "ok".
+
+#### 🔴 E UM SEGUNDO DEFEITO, INDEPENDENTE: a revenda do cliente NUNCA entrou no Índice
+
+Apareceu ao testar a RPC. `sinalizar-revenda` mandava `bairro_norm: ''` e mais nada, violando
+`indice_amostra_ancora_check` (precisa de bairro, endereço **ou** condomínio) em **toda** revenda
+desde que a âncora existe (07/08). **Medido: `origem = 'revenda'` tem ZERO amostras.** A revenda
+do cliente — que o comentário do próprio arquivo chama de *"o GABARITO que calibra as
+estimativas do Índice"* — nunca calibrou uma única vez. O `.ok` estava certo e reportava a falha;
+faltava alguém olhar. Agora o lugar vem do imóvel (`bairro`/`endereco`/`nomecondominio`) e, sem
+âncora, loga o motivo em vez de tentar.
+
+> **Dois aprendizados que os testes da RPC pegaram**, escritos na migração:
+> · `jsonb_to_recordset` devolve NULL para campo ausente, enquanto o PostgREST OMITE a coluna e
+>   deixa o DEFAULT agir — trocar o mecanismo de escrita sem reproduzir os defaults transformaria
+>   "campo ausente" em "NULL explícito". **O comportamento que importava estava no DDL, não no
+>   chamador.**
+> · Uma linha inválida derrubava o lote pelo CHECK — mesmo defeito, outra causa. A validação
+>   passou a viver **ao lado do INSERT**, onde nenhum chamador escapa dela.
 
 ---
 
@@ -413,9 +435,10 @@ qualquer visitante. Revogada. **Estado final: segurança 0/0, regras de negócio
    > relatório: são casos abertos e nunca analisados, o que é um gap de OPERAÇÃO, não de código.
    > E **nenhum dos 8 tem laudo**, o que confirma pelo dado que o terceiro relatório já não
    > estava sendo produzido na prática — a decisão de removê-lo descreveu o que já acontecia.
-7. **🔴 SETE upserts com o mesmo defeito do cron de slots** — lista completa (arquivo → tabela →
-   chave) na seção da sessão 12, no topo. Conserto mecânico (`?on_conflict=`), mas vale medir
-   antes quanto dado já se perdeu, começando por `indice_amostra` e `emails_log`.
+7. ✅ ~~SETE upserts com o mesmo defeito~~ — **eu errei a varredura; era UM** (`indice_amostra`,
+   3 pontos), e foi corrigido junto com um segundo defeito que apareceu no teste (a revenda nunca
+   entrou no Índice). Ver a seção da sessão 12. **Vale medir quanto dado do Índice se perdeu**
+   desde 07/08 — as amostras que não entraram não deixaram rastro.
 8. **Leilão Club fora da comissão de venda do advogado** — a de 10% cobre só a Assessoria.
    10% de R$ 60.000 são R$ 6.000 por venda, e isso é decisão do dono, não analogia minha.
 9. **Encerrar automaticamente caso cujo leilão passou sem arremate.** Hoje o `caso` sobrevive à
