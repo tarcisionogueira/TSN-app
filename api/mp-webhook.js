@@ -179,13 +179,33 @@ export default async function handler(req, res) {
         plano_key: planoKey || null, status: preapproval.status || null,
         dados_mp: preapproval, atualizado_em: new Date().toISOString(),
       });
-      if (tipo === 'subscription_authorized_payment' && ap && ap.status === 'processed') {
+      // ⚠️ O STATUS AQUI É O DO PAGAMENTO, NÃO O DO ENVELOPE (28/08).
+      // Até hoje esta linha era `ap.status === 'processed'` → grava `status: 'approved'`. Mas
+      // `ap.status` é o estado da TENTATIVA de cobrança recorrente ("o MP processou o evento"),
+      // e não o desfecho do dinheiro. O desfecho está em `ap.payment.status`.
+      //
+      // Custo real: a cobrança do Erik Migliorini em 16/08 voltou `ap.status: 'processed'` com
+      // `ap.payment.status: 'rejected'` (cartão recusado, 4 tentativas). Foi espelhada como
+      // APROVADA, e `funil_publico` — cujo próprio comentário diz "DINHEIRO QUE ENTROU no
+      // gateway" — passou a contar R$ 49,90 de receita que nunca entrou e a exibi-lo em
+      // "Últimas contratações" como assinante top2, enquanto o perfil dele já estava
+      // corretamente rebaixado para explorador. O painel contradizia o próprio banco.
+      //
+      // É a forma 1 do CLAUDE.md no lugar mais caro: o erro morava DENTRO de um envelope de
+      // sucesso. Agora grava-se o status VERDADEIRO — inclusive `rejected`, que é informação
+      // (mostra a recusa e as retentativas), e o funil já filtra por approved/authorized.
+      if (tipo === 'subscription_authorized_payment' && ap && ap.payment?.id) {
+        const statusReal = String(ap.payment?.status || '').trim() || null;
         await upsertTabela('mp_pagamentos', 'mp_payment_id', {
-          mp_payment_id: String(ap.payment?.id || ap.id), user_id: userId || null, plano_key: planoKey || null,
-          valor: ap.transaction_amount ?? ap.payment?.transaction_amount ?? null, status: 'approved',
+          mp_payment_id: String(ap.payment.id), user_id: userId || null, plano_key: planoKey || null,
+          valor: ap.transaction_amount ?? ap.payment?.transaction_amount ?? null, status: statusReal,
+          status_detalhe: ap.payment?.status_detail || ap.rejection_code || null,
           metodo: 'recorrente', origem: 'recorrente', external_ref: preapproval.external_reference || null,
           dados_mp: ap, atualizado_em: new Date().toISOString(),
         });
+        if (statusReal && statusReal !== 'approved') {
+          console.error(`[mp-webhook] cobranca recorrente NAO aprovada: user=${userId} status=${statusReal} detalhe=${ap.payment?.status_detail || ap.rejection_code || '?'} tentativa=${ap.retry_attempt ?? '?'}`);
+        }
       }
 
       // Idempotência POR TRANSIÇÃO: o preapproval_id se repete durante todo o
