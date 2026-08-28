@@ -52,14 +52,14 @@ import { ALLOWED_HOSTS } from './_allowed-hosts.js';
 import { enviarWebPush } from './_webpush.js';
 import { encerradoPorDatas } from './_leilao-encerrado.js';
 import { CIDADES_TEMPORADA } from './_temporada.js';
-import { TIPOS_RESIDENCIAL, TIPOS_LIQUIDOS, REVENDA_DESCONTO_MIN } from '../src/lib/intencao.js';
+import { ajustarFiltrosPorIntencao } from '../src/lib/intencao.js';
 
-// Espelho das constantes da Busca (src/pages/Busca.jsx) — a INTENÇÃO salva no filtro
-// restringe tipo/desconto e precisa valer também no e-mail. Ao mexer lá, mexa aqui.
-// A régua da INTENÇÃO vem de `src/lib/intencao.js` — a MESMA que a Busca usa. Até 28/08
-// eram duas cópias com o mesmo valor, e o piso da revenda mudou de 30% para 40% no mesmo dia
-// em que descobrimos que `valor_minimo_ref` fora aplicado na Busca e não aqui: duas cópias da
-// mesma regra é uma que um dia discorda da outra, e discorda calada.
+// A régua da INTENÇÃO vem de `src/lib/intencao.js` — a MESMA função que a Busca chama, não
+// um espelho das constantes dela. A distinção custou caro: até 28/08 este arquivo importava
+// TIPOS_* e REVENDA_DESCONTO_MIN e reescrevia a interseção e o piso aqui dentro. Isso é a
+// mesma cópia com outra roupa — o valor batia, a LÓGICA é que podia divergir, e divergiu no
+// instante em que a locação ganhou piso de desconto: teria valido na tela e não no e-mail,
+// exatamente como `valor_minimo_ref`, aplicado na Busca e não aqui até horas antes.
 // Checkbox da Busca ('aVista') → valor canônico do banco ('a_vista'). O filtro salvo guarda a
 // CHAVE do checkbox; mandar a chave crua para a RPC não casava com nada e o filtro de
 // pagamento simplesmente não existia no e-mail.
@@ -345,14 +345,11 @@ async function handler(req) {
     // cliente — mesma semântica de aplicarFiltrosImoveis, onde os dois `.in('tipo', …)`
     // se combinam em AND (interseção). Interseção vazia = contradição → sentinela que
     // não casa nada, em vez de "todos" (que era o que o e-mail mandava antes).
-    const limIntencao = f.intencao === 'revenda' ? TIPOS_LIQUIDOS
-      : (f.intencao === 'locacao' || f.intencao === 'temporada') ? TIPOS_RESIDENCIAL : null;
-    const tiposBase = tipos.length ? [...tipos, 'imovel'] : null;
-    const tiposFinal = (tiposBase && limIntencao)
-      ? (tiposBase.filter(t => limIntencao.includes(t)).length
-        ? tiposBase.filter(t => limIntencao.includes(t)) : ['__sem_tipo__'])
-      : (tiposBase || limIntencao);
-    if (tiposFinal) p.push(`tipo=in.(${tiposFinal.map(encodeURIComponent).join(',')})`);
+    // A interseção é feita pela PRÓPRIA `ajustarFiltrosPorIntencao` — até 28/08 este arquivo
+    // importava as constantes e reescrevia a lógica, que é a mesma cópia com outra roupa: ao
+    // ganhar piso de desconto, a locação teria valido na tela e não no e-mail.
+    const aj = ajustarFiltrosPorIntencao(f.intencao, tipos.length ? [...tipos, 'imovel'] : [], 0);
+    if (aj.tipos.length) p.push(`tipo=in.(${aj.tipos.map(encodeURIComponent).join(',')})`);
     const mods = Array.isArray(f.modalidades) ? f.modalidades.filter(Boolean) : [];
     if (mods.length) p.push(`modalidade=in.(${mods.map(encodeURIComponent).join(',')})`);
     // Piso e teto sobre `valor_minimo_ref`: comparar a praça CARA contra o teto não deixa
@@ -362,8 +359,8 @@ async function handler(req) {
     const tetoF = tetoEfetivo(f, tetoFaixa);
     if (tetoF) p.push(`valor_minimo_ref=lte.${tetoF}`);
     // Desconto: piso de DESC_MIN (o filtro do cliente pode exigir MAIS, nunca menos).
-    // Revenda tem piso próprio de viabilidade (30%), abaixo do DESC_MIN do e-mail.
-    p.push(`desconto_percentual=gte.${Math.max(DESC_MIN, Number(f.descontoMin) || 0, f.intencao === 'revenda' ? REVENDA_DESCONTO_MIN : 0)}`);
+    // A intenção tem piso próprio (revenda 40%, locação 50%) — vem de `aj`, nunca reescrito.
+    p.push(`desconto_percentual=gte.${Math.max(DESC_MIN, Number(f.descontoMin) || 0, aj.descontoMin)}`);
     const bairros = Array.isArray(f.bairros) ? f.bairros.filter(Boolean) : [];
     const cidades = Array.isArray(f.cidades) ? f.cidades.filter(Boolean) : [];
     // Bairro só filtra COM cidade selecionada (nomes de bairro se repetem entre cidades) —
@@ -407,20 +404,17 @@ async function handler(req) {
   // mesmo filtro pode ser buscado em qualquer raio (ver a escada em `buscarPorFiltro`).
   const criteriosRpc = (f, lim, tetoFaixa) => {
     const tipos = Array.isArray(f.tipos) ? f.tipos.filter(Boolean) : [];
-    const limIntencao = f.intencao === 'revenda' ? TIPOS_LIQUIDOS
-      : (f.intencao === 'locacao' || f.intencao === 'temporada') ? TIPOS_RESIDENCIAL : null;
     // Aqui a interseção NÃO acrescenta 'imovel' — a própria RPC já aceita `tipo='imovel'`
     // como curinga; é a mesma tradução que a tela faz no caminho do raio.
-    const tiposRpc = (tipos.length && limIntencao)
-      ? (tipos.filter(t => limIntencao.includes(t)).length ? tipos.filter(t => limIntencao.includes(t)) : ['__sem_tipo__'])
-      : (tipos.length ? tipos : (limIntencao || []));
+    const aj = ajustarFiltrosPorIntencao(f.intencao, tipos, 0);
+    const tiposRpc = aj.tipos;
     return {
       lim: Math.min(200, Math.max(lim * 4, 40)),
       tipos_filtro: tiposRpc,
       estado_filtro: f.estado || '',
       modalidades_filtro: Array.isArray(f.modalidades) ? f.modalidades.filter(Boolean) : [],
       pagamentos_filtro: pagCanon(f.pagamento),
-      desconto_min: Math.max(DESC_MIN, Number(f.descontoMin) || 0, f.intencao === 'revenda' ? REVENDA_DESCONTO_MIN : 0),
+      desconto_min: Math.max(DESC_MIN, Number(f.descontoMin) || 0, aj.descontoMin),
       ...(numOnly(f.valorMin) ? { valor_min: numOnly(f.valorMin) } : {}),
       ...(tetoEfetivo(f, tetoFaixa) ? { valor_max: tetoEfetivo(f, tetoFaixa) } : {}),
     };

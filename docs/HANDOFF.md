@@ -6,8 +6,8 @@
 
 ## 🗓️ 28/08 (sessão 9) — A PRAÇA É UM INTERVALO, E TUDO QUE ISSO DERRUBAVA
 
-15 commits (`8f98b22` → `42f2b67`), **tudo em `main` e em produção**. 34 arquivos,
-+1.741/−66. Migrações **aplicadas no banco** e escritas no repo, na mesma leva.
+17 commits (`8f98b22` → o topo de `main`), **tudo em `main` e em produção**.
+Migrações **aplicadas no banco** e escritas no repo, na mesma leva.
 
 > ⚠️ **Ao subir para `main`:** o `main` LOCAL desta máquina estava em `3afa795`, uma
 > história **não relacionada** ao `origin/main` — o remoto foi reescrito em algum momento e
@@ -228,6 +228,72 @@ a morar em `src/lib/rentabilidade.js` — declarada no banco em `negocio.aluguel
 direta/licitação a comissão é legitimamente **0** — e o campo exibia **5%** enquanto a conta
 aplicava 0. O cliente lia uma premissa e o relatório usava outra. Trocado por `??`. É a
 forma #1 da lista do CLAUDE.md vestida de front-end: **zero tratado como ausência**.
+
+---
+
+### 🔁 CORREÇÃO DE RUMO DO DONO — o 1% era para FILTRAR, não só para exibir
+
+Entreguei a régua de 1% como **alvo exibido** e registrei em `busca.intencao_locacao` a
+justificativa: *"não há piso de rendimento no filtro porque o acervo não carrega aluguel por
+lote"*. O dono corrigiu: o 1% é para **filtrar** — reduzir a Busca aos lotes que atendem à
+condição, que **ainda assim serão avaliados no relatório e pela assessoria**.
+
+A objeção continuava verdadeira (aluguel real em 48 dos 29.447 ativos) — o erro foi concluir
+dela que **a regra não podia virar filtro**. Podia: não sobre o aluguel, que quase não existe,
+mas sobre o **desconto**, que existe em todo lote. Quanto mais fundo o lance está abaixo da
+avaliação, menor o aluguel necessário para pagar 1% do investido.
+
+**A conta, com números medidos nos NOSSOS relatórios** (não estimados de fora):
+
+| grandeza | valor | fonte |
+|---|---|---|
+| alvo mensal | 1,10% do lance | lance × 1,10 (custo de aquisição) × 1% |
+| aluguel plausível | 0,56% do valor de mercado/mês | **mediana de 48 relatórios** (p25 0,44 · p75 0,74) |
+| valor de mercado | 95,8% da avaliação do leilão | **mediana de 37 relatórios** |
+
+`0,958 × aval × 0,0056 ≥ lance × 0,011` → `lance/aval ≤ 0,4877` → **desconto ≥ 51,2%**.
+
+**Piso adotado: 50%.** Os 1,2 pontos de folga são deliberados — **1.002 lotes ativos estão
+exatamente em 50%** (a 2ª praça clássica, metade da avaliação), e cortá-los por 1,2 pp de uma
+mediana amostral de 48 casos seria fingir precisão que a amostra não tem. São justamente os
+lotes que o relatório existe para julgar. No acervo: **5.671 dos 25.646 residenciais ativos
+passam (22%)** — contra 8.897 em 45% e 4.669 em 51%.
+
+> ⚠️ **O que o piso NÃO garante:** que a avaliação do leilão seja crível. Desconto fundo sobre
+> avaliação inflada continua passando — quem derruba isso é o relatório mercadológico, que
+> pesquisa preço real. O filtro é **triagem**, não veredito, que é o desenho que o dono
+> descreveu. **Temporada não herda o piso**: diária de alta estação não se compara com aluguel
+> mensal, e piso inventado seria pior que piso nenhum.
+
+**E o caminho achou a terceira cópia da régua.** `api/enviar-alertas-cron.js` *importava* as
+constantes de `src/lib/intencao.js` e **reescrevia a lógica** (interseção de tipos e piso de
+desconto, em dois blocos). Valor igual, lógica duplicada — e no instante em que a locação
+ganhou piso, ele teria valido **na tela e não no e-mail**, exatamente como o `valor_minimo_ref`
+horas antes. Agora o cron **chama `ajustarFiltrosPorIntencao`**, como a Busca.
+
+**Outro achado no mesmo arquivo:** o chip "Revenda" ainda dizia ao cliente *"desconto ≥ 30%"*
+enquanto o filtro já exigia 40% — a tela mentindo sobre a própria régua. Os textos dos chips
+passaram a ser **derivados das constantes**.
+
+---
+
+### 🖼️ O RENDER PEGOU UM DEFEITO QUE A LEITURA DO CÓDIGO NÃO PEGARIA
+
+O dono pediu para ver como o bloco novo ficou na tela. Renderizei a ficha no Chromium com
+dados reais de um lote (apartamento 58 m², Jaboatão dos Guararapes-PE) e o **próprio print
+mostrou o defeito**: a premissa entre parênteses no rótulo — *"Investido (lance + comissão do
+leiloeiro (5%) + ITBI/registro (5%))"* — empurrava o número e **quebrava "R$ 198.593,92" no
+meio da coluna**, já em 560px e pior no celular.
+
+Corrigido: premissa em linha própria, menor e em cinza; `white-space: nowrap` no valor. De
+quebra, as linhas da **Simulação rápida** ganharam o mesmo tratamento — elas já quebravam
+"R$ 18.053,99" em duas linhas **antes desta sessão**, e ninguém tinha visto porque ninguém
+tinha olhado a tela nessa largura.
+
+**A lição, que é de método:** `npm run build` passa, o ESLint passa, a lógica está certa — e a
+tela está errada. **Olhar o pixel é uma verificação diferente de rodar o teste**, e as duas
+pegam coisas diferentes. Vale abrir a tela sempre que o bloco novo tiver texto longo ou número
+grande lado a lado.
 
 ---
 

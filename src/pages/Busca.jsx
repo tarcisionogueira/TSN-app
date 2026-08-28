@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { TIPOS_RESIDENCIAL, TIPOS_LIQUIDOS, REVENDA_DESCONTO_MIN, ajustarFiltrosPorIntencao } from '../lib/intencao';
+import { TIPOS_RESIDENCIAL, TIPOS_LIQUIDOS, REVENDA_DESCONTO_MIN, LOCACAO_DESCONTO_MIN, ajustarFiltrosPorIntencao } from '../lib/intencao';
 import { ALUGUEL_ALVO_PCT_MES, PREMISSAS_TEXTO, COMISSAO_LEILOEIRO_PCT, ITBI_REGISTRO_PCT, aluguelAlvoMensal } from '../lib/rentabilidade';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -69,8 +69,11 @@ const TIPO_LABEL = { casa:'Casa', apartamento:'Apartamento', terreno:'Terreno/Lo
 //  • locacao   = residencial (o que se aluga a longo prazo: apto/casa).
 //  • temporada = residencial em cidade litorânea/turística (lista curada abaixo).
 const INTENCAO_OPTS = [
-  ['revenda',   '🔁 Revenda',   'Maior margem de flip (desconto ≥ 30%)'],
-  ['locacao',   '🏠 Locação',   'Residencial para renda de aluguel'],
+  // O texto do piso é DERIVADO da constante. Escrito à mão, ele envelhece calado: até 28/08
+  // esta linha prometia "≥ 30%" enquanto o filtro já exigia 40% — a tela mentindo sobre a
+  // própria régua, que é a mesma família de defeito das duas cópias da regra.
+  ['revenda',   '🔁 Revenda',   `Maior margem de flip (desconto ≥ ${REVENDA_DESCONTO_MIN}%)`],
+  ['locacao',   '🏠 Locação',   `Residencial com desconto ≥ ${LOCACAO_DESCONTO_MIN}% — o mínimo para o aluguel de mercado pagar 1% ao mês sobre o investido. É triagem: o veredito é do relatório e da assessoria.`],
   ['temporada', '🏖️ Temporada', 'Residencial em destino turístico/sazonal (praia, serra, termas, histórica, parques)'],
 ];
 // Rótulo curto por intenção, DERIVADO de INTENCAO_OPTS (sem o emoji) — usado para dizer ao
@@ -226,7 +229,7 @@ function aplicarFiltrosImoveis(base, f, cidadesFiltro) {
   if (f.descontoMin) q = q.gte('desconto_percentual', Number(f.descontoMin));
   // Intenção da busca — filtra DE FATO pelo objetivo (combina em AND com os demais filtros).
   if (f.intencao === 'revenda')        q = q.in('tipo', TIPOS_LIQUIDOS).gte('desconto_percentual', REVENDA_DESCONTO_MIN);
-  else if (f.intencao === 'locacao')   q = q.in('tipo', TIPOS_RESIDENCIAL);
+  else if (f.intencao === 'locacao')   q = q.in('tipo', TIPOS_RESIDENCIAL).gte('desconto_percentual', LOCACAO_DESCONTO_MIN);
   else if (f.intencao === 'temporada') q = q.in('tipo', TIPOS_RESIDENCIAL).in('cidade_norm', CIDADES_TEMPORADA);
   if (cidadesFiltro?.length) q = q.in('cidade_norm', cidadesFiltro.map(normCidade));
   // Bairros: valores EXATOS do banco (vindos da própria listagem de bairros da

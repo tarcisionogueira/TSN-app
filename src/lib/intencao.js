@@ -27,6 +27,35 @@ export const TIPOS_LIQUIDOS    = ['apartamento', 'casa', 'comercial', 'imovel'];
 export const REVENDA_DESCONTO_MIN = 40;
 
 /**
+ * PISO DE DESCONTO DA LOCAÇÃO — o "1% ao mês" do dono virando FILTRO (28/08).
+ *
+ * A regra é "o aluguel tem que pagar 1% sobre o valor investido". Ela não pode ser filtrada
+ * direto: o acervo não carrega aluguel por lote (48 dos 29.447 ativos, e só onde já houve
+ * relatório). Mas ela PODE ser traduzida no que o acervo tem em todo lote — o desconto —,
+ * porque quanto mais fundo o lance está abaixo da avaliação, menor o aluguel necessário.
+ *
+ * A conta, com números MEDIDOS nos nossos relatórios (não estimados de fora):
+ *   alvo mensal        = lance × 1,10 × 1%  = 1,10% do lance          (custo de aquisição 10%)
+ *   aluguel plausível  ≈ valor de mercado × 0,56%/mês                 (mediana de 48 relatórios)
+ *   valor de mercado   ≈ 95,8% da avaliação do leilão                 (mediana de 37 relatórios)
+ *   0,958 × aval × 0,0056 ≥ lance × 0,011  →  lance/aval ≤ 0,4877  →  desconto ≥ 51,2%
+ *
+ * Fica em 50, e o 1,2 ponto de folga é deliberado: 1.002 lotes ativos estão EXATAMENTE em
+ * 50% — é a 2ª praça clássica (metade da avaliação). Cortá-los por 1,2 pp de uma mediana
+ * amostral de 48 casos seria fingir precisão que a amostra não tem, e são justamente os
+ * lotes que o relatório e a assessoria existem para julgar. O filtro é TRIAGEM, não veredito.
+ *
+ * ⚠️ O que este piso NÃO garante: que a avaliação do leilão seja crível. Desconto fundo sobre
+ * avaliação inflada continua passando — é o relatório mercadológico, que pesquisa o preço
+ * real, quem derruba esse caso. Aqui só se promete reduzir o acervo ao que MERECE relatório.
+ */
+export const LOCACAO_DESCONTO_MIN = 50;
+// Os três números medidos que sustentam o piso acima (mantidos explícitos para que revisar a
+// régua seja refazer a conta, não adivinhar de onde veio o 50).
+export const LOCACAO_YIELD_MEDIANO_PCT = 0.56;   // aluguel/mês ÷ valor de mercado, 48 relatórios
+export const MERCADO_SOBRE_AVALIACAO_PCT = 95.8; // valor de mercado ÷ avaliação, 37 relatórios
+
+/**
  * Traduz a intenção nas restrições que TODOS os caminhos de consulta entendem (query direta,
  * RPC de raio e o cron de alertas). Interseção com os tipos já escolhidos pelo usuário; se a
  * interseção ficar vazia, devolve um sentinela que não casa nada — contradição vira 0
@@ -43,7 +72,13 @@ export function ajustarFiltrosPorIntencao(intencao, tiposUsuario, descontoMinUsu
   if (intencao === 'revenda') {
     tipos = interseccao(TIPOS_LIQUIDOS);
     descontoMin = Math.max(descontoMin, REVENDA_DESCONTO_MIN);
-  } else if (intencao === 'locacao' || intencao === 'temporada') {
+  } else if (intencao === 'locacao') {
+    tipos = interseccao(TIPOS_RESIDENCIAL);
+    descontoMin = Math.max(descontoMin, LOCACAO_DESCONTO_MIN);
+  } else if (intencao === 'temporada') {
+    // Temporada NÃO herda o piso da locação: a diária de alta estação não se compara com
+    // aluguel mensal, e a régua de 1% foi dita para locação. Enquanto não houver número
+    // medido de temporada, piso inventado seria pior que piso nenhum.
     tipos = interseccao(TIPOS_RESIDENCIAL);
   }
   return { tipos, descontoMin };
