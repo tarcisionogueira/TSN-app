@@ -11164,6 +11164,10 @@ function LiveTab() {
   const [salvoEm, setSalvoEm] = useState(0);
   const [criandoSala, setCriandoSala] = useState(false);
   const [catalogo, setCatalogo] = useState([]);
+  // Convite da base: `previa` é o resultado do modo seco (conta sem enviar); `enviando`
+  // trava o botão durante o disparo, que é o único momento em que dedo duplo custa caro.
+  const [previa, setPrevia] = useState(null);
+  const [enviando, setEnviando] = useState(false);
   const SLUG = 'leilao-ao-vivo';
 
   const carregar = useCallback(async () => {
@@ -11237,6 +11241,27 @@ function LiveTab() {
     setCriandoSala(false);
   }
 
+  // CONVIDAR A BASE — sempre em dois tempos. `seco` conta quem receberia sem enviar nada;
+  // só depois o disparo real. Numa base de 72 pessoas não há segunda chance de causar boa
+  // impressão, e o endpoint recusa reenvio na mesma edição (UNIQUE em live_convite_envio).
+  async function convidarBase(modo) {
+    if (modo === 'enviar' && !window.confirm(`Enviar o convite agora para ${previa?.receberiam ?? '?'} clientes?\n\nQuem já está inscrito e quem pediu para não receber e-mail ficam de fora. O envio não se repete nesta edição.`)) return;
+    setEnviando(true); setErro('');
+    try {
+      const r = await apiCall('/api/convidar-live', {
+        method: 'POST',
+        body: JSON.stringify({ slug: SLUG, seco: modo === 'seco', teste: modo === 'teste' }),
+      });
+      const j = await r.json().catch(() => ({}));
+      // `.ok` checado: o endpoint devolve 502 com corpo JSON quando uma LEITURA falha, e um
+      // `.json()` direto viraria "convidei zero pessoas com sucesso" — o vazio como resposta.
+      if (!r.ok || j?.error) throw new Error(j?.error || 'Falhou');
+      if (modo === 'teste') alert(`Teste enviado para ${j.enviado_para}.\n\nEle não conta como convite: ninguém da base foi tocado.`);
+      else { setPrevia(j); if (modo === 'enviar') alert(`Convite enviado.\n\nEnviados: ${j.enviados}\nFalhas: ${j.falhas}\nSem e-mail: ${j.sem_email}`); }
+    } catch (e) { setErro('Convite: ' + String(e.message || e)); }
+    setEnviando(false);
+  }
+
   // O LINK DA CAMPANHA É O SEM "#" (28/08). `/#/live/<slug>` é a rota real do app, mas robô
   // de preview não lê nada depois do "#": WhatsApp, Instagram e Telegram mostravam o cartão
   // GENÉRICO do site em cima de um convite que tem data, hora e apresentador. `/aula/<slug>`
@@ -11281,6 +11306,43 @@ function LiveTab() {
             Próxima aula: <strong style={{ color:'#fff' }}>
               {new Date(prox.data_hora).toLocaleString('pt-BR', { timeZone:'America/Bahia', weekday:'long', day:'2-digit', month:'long', hour:'2-digit', minute:'2-digit' })}
             </strong>
+          </div>
+        )}
+      </div>
+
+      {/* CONVITE DA BASE — a peça que realmente enche a aula. Fica aqui, colado no link da
+          campanha, porque é a mesma decisão: divulgar esta edição. */}
+      <div style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:12, padding:'14px 16px', marginBottom:16 }}>
+        <label style={S.label}>Convidar a base de clientes por e-mail</label>
+        <div style={{ fontSize:11.5, color:'#64748b', lineHeight:1.6, marginBottom:10 }}>
+          Vai só para <strong>clientes</strong> — nunca equipe nem admin. Ficam de fora quem
+          pediu para não receber e-mail e <strong>quem já está inscrito</strong> (essa pessoa já
+          recebe o lembrete da véspera e do dia). O envio não se repete nesta edição.
+        </div>
+        <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+          <button onClick={() => convidarBase('teste')} disabled={enviando}
+            style={{ padding:'9px 15px', background:'#fff', color:'#475569', border:'1px solid #cbd5e1', borderRadius:8, fontWeight:700, fontSize:13, cursor: enviando ? 'default' : 'pointer' }}>
+            1. Enviar teste para mim
+          </button>
+          <button onClick={() => convidarBase('seco')} disabled={enviando}
+            style={{ padding:'9px 15px', background:'#fff', color:'#0D63DB', border:'1px solid #0D63DB', borderRadius:8, fontWeight:700, fontSize:13, cursor: enviando ? 'default' : 'pointer' }}>
+            {enviando ? 'Conferindo…' : '2. Ver quem receberia'}
+          </button>
+          <button onClick={() => convidarBase('enviar')} disabled={enviando || !previa?.seco || !previa?.receberiam}
+            style={{ padding:'9px 15px', background: (enviando || !previa?.seco || !previa?.receberiam) ? '#94a3b8' : '#0D63DB', color:'#fff', border:'none', borderRadius:8, fontWeight:700, fontSize:13, cursor: (enviando || !previa?.seco || !previa?.receberiam) ? 'default' : 'pointer' }}>
+            {enviando ? 'Enviando…' : '3. Enviar convite'}
+          </button>
+        </div>
+        {previa && (
+          <div style={{ marginTop:10, fontSize:12.5, color:'#0f172a', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:8, padding:'10px 12px', lineHeight:1.7 }}>
+            {previa.seco
+              ? <><strong>{previa.receberiam}</strong> receberiam o convite da edição de {previa.edicao}.</>
+              : <><strong>{previa.enviados}</strong> enviados · {previa.falhas} falhas · {previa.sem_email} sem e-mail.</>}
+            <div style={{ color:'#64748b', marginTop:4 }}>
+              Base: {previa.clientes} clientes · fora: {previa.ja_inscritos} já inscritos,
+              {' '}{previa.opt_out} sem e-mail por opção, {previa.ja_convidados} já convidados.
+            </div>
+            <div style={{ color:'#64748b', marginTop:4 }}>Assunto: “{previa.assunto}”</div>
           </div>
         )}
       </div>
