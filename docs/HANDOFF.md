@@ -6,8 +6,8 @@
 
 ## 🗓️ 28/08 (sessão 9) — A PRAÇA É UM INTERVALO, E TUDO QUE ISSO DERRUBAVA
 
-12 commits (`8f98b22` → `360b617`), **tudo em `main` e em produção**. 29 arquivos,
-+1.584/−42. Migrações **aplicadas no banco** e escritas no repo, na mesma leva.
+15 commits (`8f98b22` → `42f2b67`), **tudo em `main` e em produção**. 34 arquivos,
++1.741/−66. Migrações **aplicadas no banco** e escritas no repo, na mesma leva.
 
 > ⚠️ **Ao subir para `main`:** o `main` LOCAL desta máquina estava em `3afa795`, uma
 > história **não relacionada** ao `origin/main` — o remoto foi reescrito em algum momento e
@@ -177,6 +177,57 @@ e parecia defeito.
 > função que os dois caminhos de consulta usam. Reescrever a regra na tela criaria a segunda
 > cópia que um dia discorda da primeira, que é exatamente o defeito do `valor_minimo_ref`
 > consertado horas antes.
+
+---
+
+### 💰 As três intenções viram REGRA DECLARADA, e a locação ganha número
+
+**`cc256ce` — revenda a 40%, régua unificada, três regras no banco.**
+O piso da revenda subiu de **30% para 40%** (decisão do dono). Medido ANTES de mexer, no
+acervo ativo de tipos líquidos: **19.174 lotes passavam com 30%, 17.077 passam com 40%** —
+saem 2.097 (11%), sobra 89% do material.
+
+O que mudou junto vale mais que o número: `REVENDA_DESCONTO_MIN` vivia em **duas cópias**
+(`src/pages/Busca.jsx` e `api/enviar-alertas-cron.js`). Mudar uma e esquecer a outra faz a
+tela e o e-mail discordarem calados — a mesma forma do `valor_minimo_ref` aplicado na Busca
+e não no alerta, consertada horas antes no mesmo dia. Agora a régua é **uma**
+(`src/lib/intencao.js`, importada pelos dois) e é **declarada no banco**
+(`regra_negocio` + `public.intencao_filtro`), que é o único lugar onde
+`auditoria_regras_negocio()` enxerga. `npm run verificar:regras` compara as duas no CI —
+sem essa comparação seriam duas cópias de novo, e a auditoria ficaria verde sobre uma regra
+que mudou só de um lado.
+
+**`42f2b67` — aluguel-alvo de 1% a.m., e a régua de custo passa a ser UMA só.**
+A intenção "locação" filtrava só o TIPO do imóvel e não dizia nada sobre renda. A regra do
+dono é *"1% ao mês sobre o valor investido"*, e ela **não pode virar filtro**: o acervo
+conhece aluguel de mercado em **44 dos 29.447 lotes ativos** — filtrar por rendimento REAL
+esconderia 99,8% do material. O que dá para calcular do que sempre existe (o lance) é o
+ALVO: *"para render 1% a.m., este lote precisaria alugar por R$ X"*. Sai na ficha do lote e
+no card da Busca quando a intenção é locação — **25.643 lotes residenciais ativos, alvo
+mediano de R$ 1.030/mês**.
+
+> ⚠️ **É ALVO, NÃO PREVISÃO**, e as telas dizem isso junto do número, com a premissa por
+> extenso. O aluguel PRATICADO na região continua sendo assunto do relatório mercadológico,
+> único lugar onde esse número existe. Número sem premissa vira número mágico, e número
+> mágico vira reclamação.
+
+**A régua de custo era TRÊS**, para o mesmo custo e na mesma jornada do cliente:
+
+| onde | comissão | ITBI/registro | total |
+|---|---|---|---|
+| relatório (`Analise.jsx`) — a autoridade | 5% | 5% | **10%** |
+| simulação rápida da ficha | — | — | 9,5% |
+| registro semeado ao marcar "Arrematei" na Busca | 5% | 3% | 8% |
+
+O relatório é o que o cliente paga para ler, então **10% vale para os três**, e a régua passa
+a morar em `src/lib/rentabilidade.js` — declarada no banco em `negocio.aluguel_alvo_1pct` +
+`public.aluguel_alvo_mensal(numeric)`, com `verificar:regras` conferindo os dois lados
+(3 lances de prova; tolerância de 1 centavo é arredondamento, acima disso é régua diferente).
+
+**Defeito achado no caminho:** os campos de premissa do relatório usavam `||`. Em venda
+direta/licitação a comissão é legitimamente **0** — e o campo exibia **5%** enquanto a conta
+aplicava 0. O cliente lia uma premissa e o relatório usava outra. Trocado por `??`. É a
+forma #1 da lista do CLAUDE.md vestida de front-end: **zero tratado como ausência**.
 
 ---
 
