@@ -6,7 +6,7 @@
 
 ## 🗓️ 28/08 (sessão 9) — A PRAÇA É UM INTERVALO, E TUDO QUE ISSO DERRUBAVA
 
-20 commits (`8f98b22` → `5424ebe`), **tudo em `main` e em produção**.
+29 commits (`8f98b22` → `ef6eac0`), **tudo em `main` e em produção**.
 Migrações **aplicadas no banco** e escritas no repo, na mesma leva.
 
 > ⚠️ **Ao subir para `main`:** o `main` LOCAL desta máquina estava em `3afa795`, uma
@@ -435,6 +435,96 @@ tela. O Admin passou a mostrar esse link como "o link da campanha", com a difere
 ser preenchido** — nenhum campo na tela da aula. Por isso o cartão cairia sempre na imagem
 genérica. Agora tem upload (mesmo componente e mesma mecânica da foto do apresentador) e o
 aviso de proporção **1200×630**, porque imagem em pé aparece cortada no WhatsApp.
+
+---
+
+### 🔗 A REVISÃO DOS LINKS COMPARTILHADOS — e o que ela destapou
+
+Começou com o dono colando o link da aula no WhatsApp e voltando o cartão genérico do site.
+Terminou em quatro defeitos, três deles bem maiores que o sintoma.
+
+**1. O `<meta http-equiv="refresh">` levava o robô embora (`2f7a14f`).** A página servia o
+cartão CERTO — conferido no ar — e o WhatsApp mostrava o genérico. O redirecionamento estava
+ali desde 30/07 com a premissa escrita no próprio arquivo: *"o robô não segue, a pessoa sim"*.
+**A premissa é falsa**: o crawler do Facebook/WhatsApp segue meta refresh, caía no `index.html`
+e lia as tags de lá. Era o defeito que o arquivo existe para consertar, cometido pelo conserto.
+Agora o redirecionamento é só por JavaScript — robô não executa JS. **Valia para os cinco
+cartões** (`/i/`, `/c/`, `/t/`, `/p/curso|ebook/`, `/aula/`), não só o da aula.
+
+**2. A arte, em três rodadas, cada uma achando o defeito seguinte.** Enquadramento →
+tamanho → tema:
+
+| rodada | o que o dono viu | a lição que ficou no gerador |
+|---|---|---|
+| v1 | "eu encontro e aval / óvel de leilão" | a miniatura é um **recorte quadrado do centro** (x 285→915 num 1200×630) |
+| v2 | enquadrado e ilegível | a miniatura tem **~100px**: nenhum título de 3 linhas se lê |
+| v3 | legível, mas "não é chamativo para o tema" | a imagem carrega o **assunto**; o formato já está no texto do cartão |
+| v4 | ✅ | e "quadriculada" → render em **2×**, porque o WhatsApp reamostra |
+
+A arte virou código (`scripts/arte/`), com as quatro regras escritas e o comando que gera o
+recorte quadrado — para o próximo redesenho nascer conferido em 100px, não no WhatsApp.
+
+**3. `/r/<codigo>` nunca existiu como endpoint (`8b04619`) — e isso custava comissão.** O
+`vercel.json` mandava para o `index.html`; o comentário da Calculadora dizia "api/r.js +
+rewrite" e **`api/r.js` jamais foi escrito**. O código do parceiro viaja no CAMINHO e a captura
+só lê `?ref=`: quem clicava caía na home **sem indicação**, e 24h depois o cron de upline
+padrão (feito hoje de manhã) adotava a conta para o dono. Medido: **1** perfil vinculado por
+`link_parceiro` contra **28** no padrão, com 9 parceiros tendo código.
+
+**4. A query morria no redirecionamento (`ef6eac0`).** Descoberto ao montar o link de anúncio:
+`/aula/<slug>?utm_source=…` chegava ao app **sem utm nenhum** — anúncio pago, origem
+desconhecida. É o mesmo buraco que fez 10 de 17 cadastros aparecerem como "indicado pelo dono"
+em 11/08. O og-share agora repassa a query (menos `tipo`/`id`) para o destino.
+
+E o **cartão padrão do site** (`og-image.jpg`) foi refeito com as mesmas regras: é a imagem da
+home, do link de indicação, dos contratos e de **todo link com `#`** — trocar uma imagem
+melhorou todos de uma vez.
+
+---
+
+### 🍪 "AVISO DE COOKIES" ERA DOCUMENTO DO LOTE EM 1.100 IMÓVEIS
+
+O dono clicou num anexo e recebeu `AccessDenied`; clicou em "acessar leiloeiro" e caiu na
+listagem. Os dois sintomas tinham **uma causa** — que produziu um terceiro problema que
+ninguém tinha visto: **3.031 linhas** de "documento do lote" que eram aviso de cookies, termos
+de uso e política de privacidade **do site**, em **2.666 imóveis**, 274 MB no bucket, **ainda
+entrando naquele dia**.
+
+A cadeia: no LJUD o `url_lote` era, de propósito, o domínio do leiloeiro (a página de lote do
+agregador quebra). Só que `scripts/captura-documentos.mjs` usa esse campo como "página do lote"
+para vasculhar — e vasculhava a **home**, onde o único "documento" é o rodapé.
+
+Dois consertos na raiz (`e89db10`): **página sem caminho não é vasculhada** (o que está na home
+é do site, não do lote — de lote nenhum) e **o filtro de ruído institucional passa a ser um
+só**. Ele já existia em `api/_doc-scan.js` **com "cookie" na lista**; havia uma segunda cópia
+mais pobre no capturador, duplicada em dois pontos do mesmo arquivo, **sem essa palavra**.
+Limpeza: 3.031 linhas apagadas; os arquivos ficam órfãos sob `casos/` e são o caso 1 de
+`storage_limpeza_candidatos()`, que já existe para isso.
+
+---
+
+### 🔎 O RECON QUE TERMINAVA VERDE SEM MEDIR NADA
+
+Para achar a URL certa do lote do LJUD, rodei `recon-ljud-url.mjs` no Actions. Ele imprimiu
+**"API: 0 itens"**, escreveu **"=== FIM ==="** e **saiu com sucesso**. Chamava a API com GET do
+Node e só `tipo=3&pg=1`, enquanto o scraper que funciona faz **POST com corpo `{}`, o conjunto
+completo de parâmetros e o fetch DENTRO da página** (TLS do Chrome real). Um recon que não
+consegue medir e termina verde é o vazio entregue como resposta — o diagnóstico quase virou
+"o portal não tem lotes abertos". Reescrito (`0cee6c2`) e agora **sai com código 1** sem lote
+para sondar.
+
+**E aí ele mediu (`9a5242f`), 3 de 3 lotes:**
+
+| candidata | resultado |
+|---|---|
+| `/lote/{lote_id}` — a que existia | **2 de 3** "Leilão não encontrado" |
+| **`/leilao/{leilao_id}`** | **3 de 3 abrem**; num deles o `<title>` é o próprio imóvel |
+| `/leilao/{id}/lote/{id}` | 500 nos 3 |
+| domínio do leiloeiro — o destino em uso | home; num caso, **"Leiloeiro não cadastrado!"** |
+
+Destino trocado para a página do LEILÃO. `url_lote` é reescrito pelo scraper todo dia, então os
+**1.358 lotes ativos se consertam na próxima coleta**, sem migração — e a captura de documentos
+volta a ter caminho para vasculhar nesta fonte.
 
 ---
 
