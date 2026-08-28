@@ -364,6 +364,12 @@ Duas decisões de projeto que valem entender antes de mexer:
 Todas configuradas no painel Vercel. Para adicionar nova variável:
 Settings → Environment Variables → Add New → marcar Production + Preview + Development
 
+> 📋 **ANTES de perguntar se uma variável de ambiente existe, leia `docs/ENVS_VERCEL.md`.**
+> O que já está configurado na Vercel está listado lá (nomes, nunca valores), e a checagem
+> viva é `/api/system-status`. Pedir print do painel para algo já vencido é retrabalho — e já
+> aconteceu mais de uma vez, inclusive tratando o Pixel/CAPI do Meta como desligados quando
+> estavam no ar desde 29/07.
+
 > 🔴 **O repositório `tarcisionogueira/TSN-app` é PÚBLICO** (confirmado em 03/08 via API do
 > GitHub: `visibility: public`). **NUNCA escreva o VALOR de um segredo em arquivo do repo** —
 > nem em `docs/*.md`, nem em comentário de código. Cite sempre o NOME da variável
