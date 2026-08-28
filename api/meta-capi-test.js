@@ -9,7 +9,7 @@
  * admin — abrir a URL direto no navegador não manda o token e retorna 401).
  */
 import { getUser, getUserRoleById } from './_auth.js';
-import { enviarPurchaseCapi, capiAtivo } from './_meta-capi.js';
+import { enviarPurchaseCapi, enviarLeadCapi, capiAtivo } from './_meta-capi.js';
 
 export default async function handler(req, res) {
   const user = await getUser(req).catch(() => null);
@@ -25,6 +25,30 @@ export default async function handler(req, res) {
   }
 
   const testCode = String(req.query?.test_event_code || req.query?.code || '').trim() || undefined;
+
+  // ?evento=lead — valida o Lead da inscricao na aula (28/08). Sem isto, a unica forma de
+  // saber se o evento novo chega ao Meta seria fazer uma inscricao de verdade na campanha,
+  // criando conta e mandando e-mail para conferir tracking. `Purchase` segue sendo o padrao
+  // para nao mudar o que ja existia.
+  if (String(req.query?.evento || '').toLowerCase() === 'lead') {
+    const rl = await enviarLeadCapi({
+      eventoSlug: String(req.query?.slug || 'diagnostico'),
+      email: user.email,
+      userId: user.id,
+      // id UNICO: um diagnostico nunca pode deduplicar contra o Lead real de um inscrito —
+      // o Meta uniria os dois e a inscricao de verdade sumiria da conta.
+      eventId: `diag_lead_${user.id}_${Date.now()}`,
+      sourceUrl: 'https://www.bidprobrasil.com.br/live/leilao-ao-vivo',
+      testCode,
+    });
+    return res.status(rl?.ok ? 200 : 502).json({
+      capi: 'ativo', evento: 'Lead', enviado: rl, test_event_code: testCode || null,
+      dica: testCode
+        ? 'Events Manager -> aba "Testar eventos": o Lead de diagnostico deve aparecer em segundos.'
+        : 'Passe ?test_event_code=TESTxxxx (da aba Testar eventos) para ve-lo aparecer la.',
+    });
+  }
+
   const r = await enviarPurchaseCapi({
     userId: user.id,
     email: user.email,
