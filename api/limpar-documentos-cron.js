@@ -19,6 +19,33 @@
 // o Response é ignorado, pendurando a função até o timeout.
 export const config = { runtime: 'nodejs', maxDuration: 300 };
 
+// ⚠️ 29/08 — RESSURREIÇÃO DE ARQUIVO APAGADO (defeito introduzido HOJE, fechado no mesmo dia).
+// A publicação do espelho (`registrar_anexos_do_espelho`, criada hoje) PREENCHE o `storage_path`
+// de todo `imovel_anexos` que está nulo. E a limpeza abaixo faz exatamente isto: apaga o arquivo
+// do bucket e **anula o storage_path**. Sem o aviso, o ciclo ficava assim:
+//
+//   limpeza apaga espelho/FONTE/<id>/matricula-x.pdf e anula a linha
+//     → 4h depois o cron do espelho republica a MESMA linha com o MESMO caminho
+//       → o relatório tenta assinar um objeto que não existe mais
+//
+// Ou seja: a retenção continuaria funcionando e o efeito dela seria desfeito sozinho, deixando
+// para trás um ponteiro para arquivo inexistente — pior que não ter apagado, porque parece que
+// o documento está lá. Marcar o espelho como `purgado` fecha o laço na origem: a função de
+// publicação só considera `status = 'copiado'`.
+async function marcarEspelhoPurgado(paths) {
+  const doEspelho = (paths || []).filter((p) => String(p).startsWith('espelho/'));
+  if (!doEspelho.length) return;
+  try {
+    const lista = doEspelho.map((p) => `"${p.replace(/"/g, '')}"`).join(',');
+    // padrao-ok: aviso best-effort — falhar aqui reabre a ressurreição, mas NUNCA pode impedir
+    // a limpeza em si (que é o que protege o custo de storage). O invariante abaixo vigia.
+    await sb(`documento_espelho?storage_path=in.(${lista})`, {
+      method: 'PATCH', headers: { Prefer: 'return=minimal' },
+      body: JSON.stringify({ status: 'purgado', motivo: 'apagado pela retencao em camadas' }),
+    });
+  } catch { /* ver comentário acima */ }
+}
+
 import { isCronAuthorized } from './_auth.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
@@ -77,6 +104,7 @@ async function handler(req) {
     // (mantém a linha para auditoria).
     await storage(`object/${BUCKET}`, { method: 'DELETE', body: JSON.stringify({ prefixes: paths }) });
     await sb(`imovel_anexos?id=in.(${ids.join(',')})`, { method: 'PATCH', body: JSON.stringify({ storage_path: null, url: null }) });
+    await marcarEspelhoPurgado(paths);
 
     // Zera TAMBÉM o link denormalizado imoveis_leilao.link_matricula quando o ARQUIVO da
     // matrícula é apagado (senão o botão "Matrícula" fica 404). Deriva o imovel_id do path.
@@ -110,6 +138,7 @@ async function handler(req) {
     const ids   = anexos.map(a => a.id);
     await storage(`object/${BUCKET}`, { method: 'DELETE', body: JSON.stringify({ prefixes: paths }) });
     await sb(`imovel_anexos?id=in.(${ids.join(',')})`, { method: 'PATCH', body: JSON.stringify({ storage_path: null, url: null }) });
+    await marcarEspelhoPurgado(paths);
 
     const idsMatricula = [...new Set(paths
       .map(p => (String(p).match(/^casos\/([0-9a-f-]{36})\/[^/]*matr[ií]cul[^/]*\.pdf$/i) || [])[1])
