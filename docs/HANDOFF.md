@@ -4,6 +4,61 @@
 
 ---
 
+## 🗓️ 29/08 (sessão 14d) — A "CORTESIA" NÃO ERA CORTESIA DE CURSO, E A DATA NÃO VENCIA NADA
+
+Fecho da dúvida levantada em 14c. O dono perguntou **onde** essa cortesia é aplicada — se era a
+do curso (3 meses por curso judicial/extrajudicial) ou a promoção "contrata até fim de setembro".
+Rastreado antes de mexer, e **não era nenhuma das duas**:
+
+| Hipótese | Evidência que a derrubou |
+|---|---|
+| Cortesia de **curso** | O caminho existe (`regra_negocio['produto.concede_plano']` → `conceder_plano_usuario()`) e carimba `plano_ciclo='cortesia'`. Medido: **`cursos` = 0, `compras` = 0, `compras_produtos` = 0** — nunca rodou — e as duas contas estavam com `plano_ciclo='mensal'` |
+| Promoção de **setembro** | As datas são **+365 dias exatos** de concessões feitas em 14/07/2026 e 21/07/2026 |
+
+Eram duas **concessões manuais de 1 ano**. O dono decidiu: **por tempo indeterminado, limpar a
+data nas duas.** Feito.
+
+### 🎯 A data era a forma nº 10 em estado puro
+
+Um campo com nome de regra que ninguém aplica. O cron de vencimento
+(`reconciliar-assinaturas-cron.js`) filtra `plano_ciclo in ('anual','cortesia')` **E**
+`role in ('top2','top2_anual')` — um `assessorado` com ciclo `'mensal'` **não passa em nenhum
+dos dois**. O acesso já era permanente; a data só fazia quem lê o painel acreditar no contrário.
+
+Saiu junto o `plano_ciclo='mensal'`, que descrevia um ciclo de cobrança inexistente (zero
+pagamento, zero mandato) e faria a conta se passar por assinatura paga em qualquer leitura futura.
+
+### ✅ Conferido ANTES: limpar a data não expõe a outro rebaixamento
+
+Trocar um problema por outro seria pior que não mexer. Os três caminhos que rebaixam para
+explorador, e por que nenhum alcança estas contas:
+
+1. `reconciliar-assinaturas-cron:259` — loop de vencimento. Com `plano_vencimento` nulo o `.lt()`
+   nunca casa: a limpeza **reforça** o indeterminado em vez de arriscá-lo.
+2. `garantia-cancelar.js:137` — só por ação do próprio cliente.
+3. `suspenderPlanoDireto` (webhook vencido/chargeback) — exige evento de gateway, e as duas
+   contas não têm `mp_preapproval_id` nem `asaas_id`.
+   (`reconciliar-asaas-cron` só ATIVA — pula quem não é explorador.)
+
+**Alvo por CONDIÇÃO, não por UUID** ("tem vencimento, nunca pagou, sem mandato em gateway"):
+legível num banco recriado e sem fixar identificador de cliente em repo público. Dry-run antes:
+2 linhas, as duas esperadas.
+
+**Estado final:** `6b35b390` segue `assessorado` e `ativo`, agora indeterminado de verdade; os
+**4 pagantes reais ficaram intactos** (âncoras e `plano_ciclo='mensal'` preservados — a condição
+os exclui por terem cobrança aprovada); **nenhuma data decorativa sobrou** na base.
+`auditoria_seguranca()` 0/0 · `auditoria_regras_negocio()` 0 crítico · nenhum invariante novo.
+
+> 📌 Para a próxima sessão: `6b35b390` é concessão manual **indeterminada e intencional** (decisão
+> do dono, 29/08). Não tratar como bug de cobrança nem como pagante — ele aparece em `por_plano`
+> do 360 sem nunca ter pago. Quando o curso for cadastrado, a cortesia de **3 meses por curso**
+> (judicial/extrajudicial) passa pelo caminho próprio, que carimba `plano_ciclo='cortesia'`.
+
+**Arquivos:** `supabase/migrations/concessao_manual_indeterminada_limpa_data_decorativa.sql`
+(aplicada).
+
+---
+
 ## 🗓️ 29/08 (sessão 14c) — A ÂNCORA DO CDC TINHA TRÊS CÉREBROS E NENHUM DONO
 
 Fechamento da pendência aberta em 14b, a pedido do dono. `perfis.plano_pago_em` é a âncora do
