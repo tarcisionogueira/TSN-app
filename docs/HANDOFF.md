@@ -62,10 +62,12 @@ select tipo, alvo, detalhe, count(*) vezes, count(distinct user_id) pessoas
  group by 1,2,3 order by pessoas desc, vezes desc;
 ```
 
-### De quebra
-`TriagemPerfil` ganhou `.select()` no update do perfil: sem ele, uma triagem barrada pela RLS
-"salvava" com `error: null` e zero linhas, e a pessoa responderia tudo de novo no acesso seguinte
-sem entender por quê. Agora a tela diz que não salvou.
+### Nada mais sobrou desta frente
+O `.select()` que eu tinha posto no update da triagem saiu junto, a pedido do dono:
+`TriagemPerfil.jsx` está **idêntico** ao estado anterior a `d3abe90`. Fica anotado, para quem
+mexer ali um dia, que o update segue sem binding — uma triagem barrada pela RLS "salva" com
+`error: null` e zero linhas, e a pessoa responde tudo de novo no acesso seguinte sem entender
+por quê. Não é achado novo; é a linha de base do arquivo.
 
 ---
 
