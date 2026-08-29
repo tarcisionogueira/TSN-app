@@ -49,6 +49,13 @@ jobs:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           SCRAPER_FONTES: ${{ github.event.inputs.fontes }}
+          # VENDASGOV saiu daqui em 29/08: o WAF do SERPRO nao deixa este runner (datacenter)
+          # nem CARREGAR a pagina — as 5 rotas davam "Navigation timeout of 45000 ms" e a fonte
+          # colhia ZERO desde pelo menos 15/08, queimando 22 min por dia. Esses 22 min saiam do
+          # orcamento das fontes do FIM da lista, que o aviso abaixo ja dizia serem as cortadas.
+          # Passou para o runner RESIDENCIAL (runner-residencial.sh), o mesmo caminho de
+          # HASTA/RJ/PECINI. Rodar so ela na mao continua possivel: SCRAPER_FONTES=VENDASGOV.
+          SCRAPER_EXCLUIR: VENDASGOV
           LJUD_DEBUG: ${{ github.event.inputs.ljud_debug || '0' }}
         run: node scripts/scraper-puppeteer.mjs
 

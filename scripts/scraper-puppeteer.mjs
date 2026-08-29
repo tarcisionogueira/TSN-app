@@ -1977,10 +1977,33 @@ async function scraperVendasGov(browser) {
   try {
     await page.setUserAgent(USER_AGENT);
     await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
+    // ⚠️ FALHA RÁPIDA (29/08). Medido no log do run de hoje: as CINCO rotas deram
+    // `Navigation timeout of 45000 ms exceeded` e mesmo assim cada uma seguia para a espera
+    // de 6 s e para o laço de rolagem — sobre uma página que nunca carregou. Custo real:
+    // **22 minutos** (15:40 → 16:02) por dia, todo dia, para colher ZERO. E não é tempo
+    // barato: o cabeçalho deste workflow avisa que a rodada é cortada por timeout e que
+    // "as fontes do FIM da lista (SUPORTE, GRUPOLANCE, WEBLEILOES) podem não ter coletado"
+    // — ou seja, os 22 min mortos daqui saíam do orçamento de três fontes que funcionam.
+    // Se a PRIMEIRA rota não navega e nada foi interceptado, o site não está acessível deste
+    // runner: as outras quatro são 18 minutos para confirmar o que a primeira já disse.
+    let rotasSemNavegar = 0;
     for (const { sala, url } of VG_ROTAS) {
       const antes = bens.size;
+      let navegou = true;
       try { await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 }); }
-      catch (e) { console.log(`    VendasGov/${sala}: goto (${String(e.message).slice(0, 35)})`); }
+      catch (e) {
+        navegou = false; rotasSemNavegar++;
+        console.log(`    VendasGov/${sala}: goto FALHOU (${String(e.message).slice(0, 40)})`);
+      }
+      if (!navegou) {
+        // Rolar uma página que não carregou não colhe nada — só queima o relógio.
+        if (rotasSemNavegar === 1 && bens.size === 0) {
+          console.log('    VendasGov: a 1ª rota não carregou e nada foi interceptado — abortando as demais.');
+          console.log('    (o WAF do SERPRO barra datacenter; deste runner o site é inalcançável. Coleta roda no runner RESIDENCIAL.)');
+          break;
+        }
+        continue;
+      }
       await new Promise(r => setTimeout(r, 6000)); // SPA boota + carrega a 1ª página
       // Rola para disparar a paginação por scroll (novos XHR interceptados).
       // Para quando parar de crescer por 3 rolagens seguidas (teto 40).
@@ -3494,8 +3517,13 @@ async function main() {
   // Filtro opcional de fontes (env SCRAPER_FONTES="VENDASGOV" ou "MEGA,SOLD").
   // Vazio = roda todas. Útil para testar/reprocessar uma fonte isolada sem re-scrapear tudo.
   const ONLY = String(process.env.SCRAPER_FONTES || '').toUpperCase().split(',').map(s => s.trim()).filter(Boolean);
-  const rodar = (f) => !ONLY.length || ONLY.includes(f);
+  // SCRAPER_EXCLUIR (29/08): tirar UMA fonte da rodada sem ter de listar as outras vinte no
+  // include — foi o que a VENDASGOV pediu ao migrar para o residencial. `SCRAPER_FONTES` continua
+  // vencendo quando presente (rodar só ela na mão é justamente como se testa a migração).
+  const EXCLUIR = String(process.env.SCRAPER_EXCLUIR || '').toUpperCase().split(',').map(s => s.trim()).filter(Boolean);
+  const rodar = (f) => (ONLY.length ? ONLY.includes(f) : !EXCLUIR.includes(f));
   if (ONLY.length) console.log(`⚙️  SCRAPER_FONTES ativo — rodando apenas: ${ONLY.join(', ')}\n`);
+  if (!ONLY.length && EXCLUIR.length) console.log(`⚙️  SCRAPER_EXCLUIR ativo — fora desta rodada: ${EXCLUIR.join(', ')}\n`);
 
   // Modo descoberta da Leiloaria Smart (Leilofy): mapeia a API e encerra.
   if (rodar('LEILOFY_RECON')) {
@@ -3605,8 +3633,8 @@ async function main() {
     // EXCLUSIVO (não duplica leiloeiros). Captura multi-rota de documentos: a foto
     // (capa) vem direto da API; edital/laudo/matrícula são vasculhados na página de
     // detalhe renderizada (enriquecerDocumentosLote), igual ao fluxo do Mega.
-    console.log('\n📋 Imóveis da União (VendasGov)...');
     if (rodar('VENDASGOV')) try {
+      console.log('\n📋 Imóveis da União (VendasGov)...');
       const imoveis = await scraperVendasGov(browser);
       // A FOTO já vem da API (capa). NÃO usamos enriquecerDocumentosLote aqui: as
       // páginas de detalhe são SPA (Angular) e vasculharDocumentos não enxerga os PDFs
