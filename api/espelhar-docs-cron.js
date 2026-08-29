@@ -233,8 +233,29 @@ export default async function handler(req, res) {
   // PostgREST: uma rodada que faz 1 leitura e termina antes do orçamento está batendo em
   // algum limite que não é o tempo. Sem esses dois números, isso só apareceu comparando
   // cópias entre dois dias — caro demais para um dado que cabe no log.
+  // ── PUBLICA O QUE FOI COPIADO (29/08) ────────────────────────────────────────────────────
+  // Copiar não era o fim do trabalho, era o meio. `documento_espelho` acumulou **33.066
+  // arquivos** no bucket `documentos` e era lido por NINGUÉM: a análise documental consulta
+  // `imovel_anexos`, e por isso o cliente recebia "matrícula não disponível" em cima de um PDF
+  // que já estava pago, baixado e guardado. Uma tabela que só o próprio produtor lê é
+  // indistinguível de trabalho jogado fora.
+  //
+  // O backfill de 29/08 publicou 12.062 registros (6.324 preenchendo linha de link que já
+  // existia + 5.738 novas) e levou a matrícula legível do acervo JUDICIAL de 70% para 86%.
+  // Esta chamada existe para o buraco não voltar a se abrir: o que for copiado nesta rodada
+  // fica visível na próxima.
+  let publicados = null;
+  try {
+    const r = await sb('rpc/registrar_anexos_do_espelho', {
+      method: 'POST', body: JSON.stringify({ p_limite: 2000 }),
+    });
+    // `.ok` checado: publicação que falha calada devolveria a cópia como sucesso completo, e o
+    // sintoma reapareceria só no relatório do cliente — que é como este defeito nasceu.
+    publicados = r.ok ? await r.json().catch(() => null) : `HTTP ${r.status}`;
+  } catch (e) { publicados = String(e?.message || e).slice(0, 80); }
+
   const saida = {
-    enfileirados, processados, copiados, falhas, ignorados,
+    enfileirados, processados, copiados, falhas, ignorados, publicados,
     sem_tempo: semTempo, pendentes, leituras, ms: Date.now() - t0,
     ...(erroLeitura ? { erro_leitura: erroLeitura } : {}),
     ...(enfileirarErro ? { erro_enfileirar: enfileirarErro } : {}),
