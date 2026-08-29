@@ -1,0 +1,27 @@
+name: Recon — onde esta a data nas 5 fontes sem data (nao grava)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  recon:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci
+      - name: Chromium deps
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            libatk-bridge2.0-0 libdrm2 libxkbcommon0 libxcomposite1 \
+            libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2t64 \
+            libpango-1.0-0 libcairo2 libatspi2.0-0 libgtk-3-0
+      - name: Recon
+        run: node scripts/recon-datas-fontes.mjs
+      - name: Falhou
+        if: ${{ failure() || cancelled() }}
+        run: echo "::error::Recon nao concluiu."
