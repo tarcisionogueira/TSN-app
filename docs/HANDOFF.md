@@ -4,6 +4,69 @@
 
 ---
 
+## 🗓️ 29/08 (sessão 14t) — RECON DA HASTA: O PARSER ESTÁ INTACTO, O ALARME ERA O INSTRUMENTO (4ª vez)
+
+### O veredito, em dois números
+```
+run de 29/08 20:17  →  enumerados: 592   ·   total: 5
+acervo HASTA ativo  →  584 lotes, 579 com 2ª praça em 03/09
+```
+**592 enumerados é MAIS que os 579 conhecidos** — o nível 2 (`/leilao/<id>/lotes`) que entrou
+hoje recuperou a listagem inteira. Os 5 são o **dedup funcionando**: `runner.mjs` processa
+`novos.length ? novos : urls`, e com 579 já no banco sobraram ~13 novos, dos quais 5 passaram na
+qualidade. **`total` = quantos lotes ESTE RUN processou. Não é o tamanho da fonte.**
+
+Não se mexe no parser. Consertar parser são é o pior desfecho possível de um alarme — foi o que
+quase aconteceu com o LEILOFY em 27/08.
+
+### O defeito real: os dois lados da checagem comparavam a grandeza errada
+`fonte_baseline_aprendida()` aprendia o piso a partir de `total`; `fonte_regressao_suspeita()`
+comparava `total` contra esse piso. **Eles só coincidem na PRIMEIRA coleta cheia.** Depois dela,
+todo run saudável de fonte grande parece regressão — o alarme cresce junto com o sucesso da coleta.
+
+É a **quarta vez** nesta base com a mesma assinatura (17/08, 18/08, 27/08 e agora): algo que NÃO é
+medição do tamanho da fonte comparado contra o piso da fonte. E o detalhe que dói: **o lado JS já
+sabia.** `scripts/_saude-fonte.mjs` tem, desde 17/08, um cabeçalho chamado *"`enumerados` — POR
+QUE A REGRESSÃO NÃO PODE OLHAR PARA `total`"*, e usa `enumerados` na comparação dele. A lição
+estava escrita, testada e **não atravessou para o SQL**.
+
+### A correção
+Uma expressão — `coalesce(nullif(enumerados,0), total)` — aplicada nos **dois** lados, para que
+sigam comparáveis. `enumerados` é nulo nas fontes com scraper próprio, e ali o `coalesce` cai em
+`total`: **comportamento inalterado para 24 das 34 fontes**.
+
+⚠️ **Mudar só um dos lados trocaria um erro por outro.** Comparar `enumerados` contra um piso
+aprendido de `total` deixaria a checagem **cega** em toda fonte cujo enumerado é múltiplo do
+processado — hoje: CALIL 81/11 · EMILIOMATOS 240/37 · PECINI 48/4 · TORRES3 180/37 · LEFFA 13/5 ·
+HASTA 592/5.
+
+**Ensaio em seco antes de aplicar** (derivando o corpo do `prosrc` de produção — réplica mediria
+a réplica), confirmado depois:
+```
+antes:  ALFA · EMILIOMATOS · NORDESTE (medicao_velha) · HASTA (regressao) · VENDASGOV (zerou)
+depois: ALFA · EMILIOMATOS · NORDESTE (medicao_velha) ·                     VENDASGOV (zerou)
+```
+Sai exatamente a linha falsa e nenhuma verdadeira. E a checagem ficou **mais estrita**, não mais
+cega: o piso da HASTA subiu de **149 → 290**, porque agora aprende do que a fonte lista.
+
+> ⚠️ **O primeiro ensaio acusou o LEILOFY, e era erro MEU:** usei `p_dias_expiracao = 3` quando o
+> default é **7**, e o desconto de expiração é justamente o que protege o LEILOFY desde 27/08.
+> Parâmetro errado fabrica achado — conferir os defaults faz parte do ensaio.
+
+### 🟡 Ficou para o dono decidir: o acervo antigo de uma fonte não é relido
+`const alvo = (novos.length ? novos : urls).slice(0, maxLotes)` — enquanto **existir ao menos uma
+URL nova**, os lotes já conhecidos não são reprocessados. Medido na HASTA: 584 ativos, **5 tocados
+em 36 h**; os outros 579 estão com `atualizado_em` de 25/08. E `maxLotes` é **40**, então mesmo o
+ramo de fallback relê no máximo 40 por run.
+
+**Não é urgente e não mexi:** os 579 têm as duas praças gravadas (`valor_minimo_2` preenchido) e
+`valor_minimo_ref` é `least(...)`, então o preço mostrado ao cliente acompanha a praça pela DATA
+sem precisar de releitura. O risco residual é o lote cujo preço ou data **mudou na fonte** depois
+de gravado: esse não se atualiza enquanto houver lote novo aparecendo. Trocar isso custa fetch
+(e a HASTA é residencial, custo zero, mas as pagas não são) — decisão de orçamento, do dono.
+
+---
+
 ## 🗓️ 29/08 (sessão 14s) — O LOTE QUE TRAZ A PESSOA É DESCARTADO NO `/login` (medindo antes de consertar)
 
 ### O achado, lendo o código
