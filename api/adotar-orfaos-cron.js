@@ -42,7 +42,12 @@ async function handler(req) {
       throw new Error(`rpc adotar_orfaos_padrao_dono: HTTP ${r.status} ${String(corpo).slice(0, 200)}`);
     }
     const out = await r.json();
-    if (out?.adotados > 0) console.log(`[adotar-orfaos] ${out.adotados} perfil(is) adotado(s) como padrao_dono (carência ${CARENCIA_HORAS}h)`);
+    // Log SEMPRE, inclusive o zero — mesma regra de `desativar-encerrados-cron`. Na 1ª conferência
+    // (29/08) o cron rodou às 09:10:21 e adotou 0 legitimamente (o único órfão ainda estava na
+    // carência), mas como só falava quando adotava alguém, "rodou e não tinha o que fazer" e "não
+    // rodou" ficaram indistinguíveis no log da função — foi preciso ir ao log de ACESSO da Vercel
+    // para separar os dois. Silêncio não é prova de nada.
+    console.log(`[adotar-orfaos] ${out?.adotados ?? '?'} adotado(s) · carência ${CARENCIA_HORAS}h · corte ${out?.corte || '?'}`);
     return new Response(JSON.stringify(out), { headers: { 'Content-Type': 'application/json' } });
   } catch (e) {
     console.error('[adotar-orfaos] falhou:', e?.message);
