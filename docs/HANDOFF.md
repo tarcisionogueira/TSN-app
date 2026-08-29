@@ -45,7 +45,7 @@ armado, ou a aula foi remarcada e a data deixou de casar), e ninguém teria sido
 |---|---|
 | `api/_convite-live.js` | Núcleo: template, as 3 exclusões, dedup e claim antes do envio |
 | `api/convidar-live.js` | Botão do admin, em 3 tempos: teste para si · prévia contada · envio |
-| `api/convidar-live-cron.js` | Disparo agendado, **domingos 13h UTC**, só quando ARMADO |
+| `api/convidar-live-cron.js` | Disparo agendado, **domingos 11h UTC (8h de Brasília)**, só quando ARMADO |
 | `live_convite_envio` | Claim antes do envio, UNIQUE (evento, pessoa, **edição**) |
 | Card em Admin › Live | Colado no link da campanha |
 
@@ -92,6 +92,34 @@ cliente, e o link pessoal dentro do e-mail do convite da base.
 
 ---
 
+### 🧭 "NÃO CHEGOU O E-MAIL" — meia hora perdida numa aba velha
+
+O teste não chegava, duas vezes seguidas. O diagnóstico foi por eliminação, e vale como método:
+
+| Evidência | O que ela descartou |
+|---|---|
+| `GET /api/convidar-live` → **405**, não 404 | A função ESTÁ publicada e viva (405 = existe, só não aceita GET) |
+| Zero requisições a `/api/convidar-live` nos logs da Vercel | Ninguém chamou o endpoint |
+| Zero linhas em `emails_log` com `tipo='convite_live'` | Não foi spam nem bounce — o `enviarEmail` registra **até o que falha** (sem chave do Resend vira `falha`; endereço suprimido vira `suprimido`) |
+
+Causa: **a aba do Admin estava aberta desde antes do deploy.** O React serve um pacote
+versionado (`Admin-<hash>.js`); a página já carregada continua rodando o pacote antigo, que não
+tem o botão. `Ctrl + Shift + R` resolveu.
+
+> **Lição operacional:** ao entregar botão novo no Admin, dizer junto que é preciso recarregar
+> à força. E o par "405 vs 404" é o teste mais barato para separar *"não subiu"* de *"subiu e
+> ninguém usou"* — vale para qualquer endpoint novo.
+
+### 🎨 ALINHAMENTO DO E-MAIL (pedido do dono)
+
+Bloco "Quer trazer alguém?" e assinatura passaram a ser **centralizados**, acompanhando o CTA
+logo acima; texto corrido e lista de tópicos seguem à esquerda, que é onde se lê. No app o
+conserto foi pela raiz: `ConvideAmigo` deixou de impor `textAlign: left` e passou a **seguir o
+container** por prop — a confirmação da inscrição é centralizada, a Home é à esquerda, e fixar
+um dos dois deixaria o card torto no outro.
+
+---
+
 ### 📣 CAMPANHA DO META — no ar, e o que ela vale
 
 `CONV - AULA 02SET - INSCRICAO` (`120249379691430420`) · `BR - ADV+ - AULA 02SET`
@@ -115,6 +143,27 @@ o anúncio é complemento.**
 
 Só UM criativo no ar, de propósito: com ~R$ 40 até quarta a campanha produz 4 a 6 inscrições, e
 dois criativos não produziriam um vencedor — produziriam dois anúncios sem dados.
+
+**A CADEIA ESTÁ PROVADA DE PONTA A PONTA.** Minutos depois de ligar apareceu a primeira visita
+rastreada com `utm_source=meta · utm_campaign=aula-02set · utm_content=REEL-2808-LIVE` — ou seja,
+o anúncio leva ao `/aula/…`, o rewrite serve o cartão, o redirecionamento preserva as UTMs e o
+rastreador grava a origem. A landing respondeu **200 nas 58 chamadas** da primeira hora (a
+maioria é robô de prévia do Facebook; só uma virou visita de gente).
+
+> ⚠️ **Os dois `utm_campaign` são diferentes de propósito, e é bom saber antes de estranhar:**
+> o do Meta é `aula-02set` (fixo, digitado no anúncio) e o do e-mail é `aula-2026-09-02`
+> (deriva da edição, então rola sozinho toda semana). Quem separa os canais no relatório é o
+> `utm_source` (`meta` × `email`), que é o que interessa.
+
+### 📌 PENDÊNCIAS DO DONO (não são código)
+
+- **Link da bio do Instagram** — são três (site, calculadora, live). O da live é o terceiro e
+  **não tem UTM**, enquanto os outros dois têm: toda inscrição vinda da bio entra como origem
+  desconhecida. Sugerido: subir a live para o primeiro lugar até quarta e trocar por
+  `…/aula/leilao-ao-vivo?utm_source=instagram&utm_medium=bio&utm_campaign=aula-02set`.
+- **OpenAI Ads** — registrar `lead_created` como evento de conversão e adicionar o crédito de
+  US$ 100; o passo de vincular evento à campanha segue travado no faturamento.
+- **Segundo reels** (`Dci5qJStqaw`) guardado para quando houver verba que sustente um teste A/B.
 
 ---
 
