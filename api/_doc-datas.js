@@ -63,6 +63,63 @@ async function baixar(storagePath) {
  * tentar o caminho pago. `lido:true, achou:false` = o documento existe, foi lido e não diz
  * a data; insistir no pago por este lote costuma ser dinheiro jogado fora.
  */
+/**
+ * ENDEREÇO DO BEM — a segunda tentativa, com âncora e três guardas (item 9, 29/08).
+ *
+ * A PRIMEIRA TENTATIVA FOI MEDIDA E REPROVADA: `extrairIdentidadeTexto` pega o PRIMEIRO
+ * logradouro do texto, e num edital o primeiro logradouro é o de quem PUBLICA. A validação em
+ * seco mostrou 22 de 23 lotes recebendo endereço — e seis imóveis distintos, em São Paulo,
+ * Porto Alegre, Santos e Penha de França, recebendo TODOS "Avenida Fagundes Filho", que é o
+ * escritório do leiloeiro. Teria movido o pino do mapa de 22 lotes para o mesmo lugar errado.
+ *
+ * As três guardas, e cada uma barra um caso real visto naquele teste:
+ *
+ *  1. ÂNCORA NO BEM — só procura DEPOIS de "descrição do imóvel", "do imóvel:", "matrícula nº"
+ *     ou "imóvel objeto". O cabeçalho, onde mora o endereço do leiloeiro e o da vara, fica fora
+ *     da janela por construção.
+ *
+ *  2. NÃO PODE ESTAR NO CABEÇALHO — se o mesmo logradouro também aparece antes da primeira
+ *     âncora, é do documento e não do bem. Foi exatamente o caso da "Avenida Fagundes Filho",
+ *     que aparecia no topo de todos os seis editais.
+ *
+ *  3. TEM DE CASAR COM A CIDADE QUE O ACERVO JÁ CONHECE — a cidade do lote precisa aparecer na
+ *     janela do bem. Um imóvel em Santos cujo trecho só fala de São Paulo não teve o endereço
+ *     lido: teve o endereço de outro lote do mesmo edital (edital com vários bens é a regra,
+ *     não a exceção).
+ *
+ * Sem cidade no acervo, devolve null: não há como aplicar a guarda 3, e endereço sem validação
+ * é o que este módulo existe para não gravar. Melhor sem endereço que com endereço de outro.
+ */
+const RE_ANCORA_BEM = /descri[çc][ãa]o\s+do\s+(?:im[óo]vel|bem|lote)|do\s+im[óo]vel\s*:|im[óo]vel\s+objeto|matr[íi]cula\s*n?[º°]?\s*[\d.]{2,}/i;
+const RE_LOGRADOURO = /\b((?:Rua|Avenida|Av\.|Travessa|Alameda|Rodovia|Estrada|Pra[çc]a)\s+[A-ZÀ-Ý][A-Za-zÀ-ÿ0-9'.\- ]{2,48}?)(?=\s*[,;.\n]|\s+n[º°]|\s+\d)/;
+
+export function extrairEnderecoDoBem(texto, { cidade } = {}) {
+  const t = String(texto || '').replace(/\s+/g, ' ');
+  const cid = String(cidade || '').trim();
+  if (t.length < 200 || cid.length < 3) return null;      // guarda 3 exige cidade conhecida
+
+  const m = RE_ANCORA_BEM.exec(t);
+  if (!m) return null;
+  const cabecalho = t.slice(0, m.index);                   // tudo antes da 1ª âncora
+  const janela = t.slice(m.index, m.index + 1400);         // o trecho que descreve o bem
+
+  // Guarda 3: a cidade do acervo tem de estar na janela do bem. Comparação sem acento e sem
+  // caixa — edital escreve "SAO PAULO", o acervo guarda "São Paulo".
+  const norm = (x) => x.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  if (!norm(janela).includes(norm(cid))) return null;
+
+  const lg = RE_LOGRADOURO.exec(janela);
+  if (!lg) return null;
+  const logradouro = lg[1].replace(/\s+/g, ' ').trim();
+  if (logradouro.length < 8) return null;
+
+  // Guarda 2: se o mesmo logradouro está no cabeçalho, é do documento — não do bem.
+  if (norm(cabecalho).includes(norm(logradouro))) return null;
+
+  const bai = janela.match(/bairro\s+(?:d[eoa]s?\s+)?([A-Za-zÀ-ÿ'’ -]{3,40}?)\s*(?:[,.;]|\bna\b|\bem\b|\bcidade\b|$)/i);
+  return { logradouro: logradouro.slice(0, 200), bairro: bai ? bai[1].trim().slice(0, 60) : null };
+}
+
 export async function enriquecerPeloDocumento(imovelId, atual = {}) {
   const vazio = (motivo) => ({ lido: false, achou: false, tipo: null, patch: {}, motivo });
   if (!SUPABASE_URL || !SERVICE_KEY || !imovelId) return vazio('sem_config');
@@ -114,6 +171,11 @@ export async function enriquecerPeloDocumento(imovelId, atual = {}) {
     if (fim && !atual.data_leilao_2) patch.data_leilao_2 = fim;
     if (encerradaEm && !atual.data_leilao && !atual.data_leilao_2) patch.data_leilao = encerradaEm;
 
+    // ENDEREÇO ANCORADO: calculado e DEVOLVIDO, mas ainda fora do `patch` — quem grava é o
+    // chamador, e só depois da validação em seco dizer qual a precisão. Medir antes de gravar
+    // é o que barrou a primeira versão; não vou pular a etapa na segunda.
+    const enderecoBem = extrairEnderecoDoBem(texto, { cidade: atual.cidade });
+
     // ⚠️ ENDEREÇO E DESCRIÇÃO **NÃO** SÃO GRAVADOS, e isto é uma decisão MEDIDA, não cautela
     // teórica. A validação em seco de 29/08 mostrou o extrator acertando 22 de 23 lotes… com o
     // endereço ERRADO: seis imóveis diferentes — em São Paulo, Porto Alegre, Santos e Penha de
@@ -130,7 +192,7 @@ export async function enriquecerPeloDocumento(imovelId, atual = {}) {
     // A DATA fica, porque a validação a mediu certa: 6 de 23 (26%) — e data errada não passa
     // pelo filtro de plausibilidade de `extrairDatasLeilao` do mesmo jeito que endereço passa.
 
-    return { lido: true, achou: Object.keys(patch).length > 0, tipo: a.tipo, patch, motivo: null };
+    return { lido: true, achou: Object.keys(patch).length > 0, tipo: a.tipo, patch, enderecoBem, motivo: null };
   }
   return vazio(ultimoMotivo);
 }
