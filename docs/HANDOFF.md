@@ -155,6 +155,58 @@ maioria é robô de prévia do Facebook; só uma virou visita de gente).
 > (deriva da edição, então rola sozinho toda semana). Quem separa os canais no relatório é o
 > `utm_source` (`meta` × `email`), que é o que interessa.
 
+### 🏛️ JUCEMG — 236 LEILOEIROS, 6 NO SISTEMA, E 45 LOTES NOVOS NO MESMO DIA
+
+O dono trouxe o PDF da Junta Comercial de MG e pediu o diff + a complexidade de trazer os que
+faltam. Extraído (o PDF usa fontes com CMap próprio — decodificação necessária) e cruzado:
+
+| | |
+|---|---|
+| Leiloeiros na JUCEMG | **236** |
+| Já no sistema | **6** por nome de fonte + **7** que eram tenants de fontes multi-tenant |
+| Sites distintos a integrar | **141** |
+| Sem site próprio (só e-mail genérico) | **85** — não há o que raspar |
+| Matrícula suplementar (base em outro estado) | 71 |
+
+> ⚠️ **O primeiro cruzamento errou por comparar NOMES DE FONTE.** Várias fontes nossas são
+> multi-tenant: `liderleiloes`, `saraivaleiloes` e `valeroleiloes` já coletavam pela fonte
+> SUPORTE. Ao comparar acervo com lista externa, **compare os tenants**, não a chave da fonte.
+
+**A triagem** (`scripts/recon-triagem-jucemg.mjs` + workflow manual, só via GRÁTIS) classificou
+os 141 e gravou em `leiloeiro_triagem`:
+
+| Classe | Sites | Situação |
+|---|---|---|
+| Bloqueiam o acesso grátis (40 em HTTP 403) | **53** | exigem Bright Data → **pago** |
+| Plataforma **Suporte Leilões** | 19 | parser pronto ✅ |
+| Família **Superbid** | 11 | parser existe, mas single-tenant |
+| Domínio morto (DNS/conexão) | 13 | nada a fazer |
+| `leiloesjudiciais` / `leilao.pro` / `suaplataformadeleilao` | 7 / 3 / 2 | famílias novas |
+
+**INTEGRADO NO MESMO DIA, de graça:** 17 tenants novos no `SUPORTE_TENANTS`. A prova não foi
+inferência — 19 sites carregam de `static.suporteleiloes.com.br` e **três já eram tenants
+nossos em produção**. Sete renderam no 1º run: porto 12 · marcoantonio 12 · rodrigo 12 ·
+rofrem 6 · sandrasantos 3 · serpa 2 · stefanelli 1. **SUPORTE: 81 → 92 ativos; +23 lotes em MG.**
+
+> **Os 10 que vieram com zero FICAM** (revisto depois do run): a plataforma é comprovadamente a
+> mesma, então zero não é "não sei ler" — é "hoje não há imóvel neste catálogo". Custa ~2 s por
+> rodada e preserva a captura automática de quem listar imóvel depois.
+>
+> **E dois dos cinco marcados como risco PGFN trouxeram 12 imóveis cada.** Barrá-los pela
+> suposição de que link para a PGFN significa catálogo redirecionado teria custado 24 lotes.
+
+**PROJEÇÃO DOS 53 PAGOS.** Consumo real por fonte paga hoje: `soleon` 112 req/semana para 3
+tenants (~37 cada), `rj` 60, `pecini` 63, `gestao` 60 → **~45 requisições/semana por fonte**.
+53 × 45 ≈ **2.400 req/semana**, contra um teto de **550 que está em 550/550 nesta semana** (e a
+semana de 17/08 estourou, 618). Ou seja: **~4,4× o orçamento inteiro de hoje**, e não há folga
+para uma única fonte nova sem aumentar o teto ou desligar outra coisa.
+
+Duas duplas dessa lista têm nome grande e podem valer sozinhas: `iarremate.com`,
+`bolsadeleiloes.com.br`, `lanceja.com.br`, `mgl.com.br` (3 leiloeiros), `milhaoleiloes.com.br`.
+
+**MG está sub-representada e é o argumento de negócio:** 1.263 lotes ativos, dos quais só 435 de
+leiloeiro — atrás de PR (600) e RS (618), sendo o 2º PIB do país.
+
 ### 📌 PENDÊNCIAS DO DONO (não são código)
 
 - **Link da bio do Instagram** — são três (site, calculadora, live). O da live é o terceiro e

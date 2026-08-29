@@ -2786,12 +2786,22 @@ const SUPORTE_TENANTS = [
   // — e TRÊS deles já eram tenants nossos que coletam hoje (lider, saraiva, valero). Ou seja,
   // não é palpite de que "parece a mesma plataforma": é a MESMA, provada por quem já funciona.
   //
-  // Por isso entram por configuração, sem código novo. Se algum não render lote, sai daqui —
-  // é a diferença entre um tenant a mais e um parser a mais.
+  // Por isso entram por configuração, sem código novo.
+  //
+  // RESULTADO DO 1º RUN (29/08): 7 dos 17 renderam — porto 12, marcoantonio 12, rodrigo 12,
+  // rofrem 6, sandrasantos 3, serpa 2, stefanelli 1. Total SUPORTE: 81 → 92 lotes ativos, 23
+  // deles em MG.
+  //
+  // OS 10 QUE VIERAM COM ZERO FICAM. Eu tinha escrito que sairiam, e reconsiderei olhando o
+  // resultado: a plataforma é comprovadamente a mesma (o parser leu 7 tenants novos sem um
+  // ajuste), então zero aqui não é "não sei ler" — é "hoje não há imóvel neste catálogo".
+  // Leiloeiro que só tem veículo esta semana pode ter imóvel no mês que vem, e um tenant custa
+  // ~2 s por rodada num job que tem 150 min de teto. Tirar economizaria 20 s e perderia a
+  // captura automática. Ficam.
   //
   // ⚠️ Os cinco marcados PGFN têm link para `comprei.pgfn.gov.br` na home. Isso NÃO os torna
-  // 100% PGFN (o alerta lá em cima é sobre tenants que REDIRECIONAM o catálogo inteiro) — mas
-  // é o sinal de risco, e o primeiro run diz: catálogo redirecionado devolve 0 lotes.
+  // 100% PGFN — e o run confirmou: DOIS deles (marcoantonio, rodrigo) trouxeram 12 imóveis
+  // cada. Barrá-los por suposição teria custado 24 lotes.
   { domain: 'anandaleiloes.com.br', leiloeiro: 'Ananda Leilões' },
   { domain: 'donizetteleiloes.com.br', leiloeiro: 'Donizette Leilões' },
   { domain: 'goldenlance.com.br', leiloeiro: 'Golden Lance Leilões' },
