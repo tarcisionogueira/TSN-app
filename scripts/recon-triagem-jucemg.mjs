@@ -36,7 +36,18 @@ const CONC = Number(process.env.TRIAGEM_CONC || 6);
 const LIMITE = Number(process.env.TRIAGEM_LIMITE || 0);
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36';
 
-const lista = JSON.parse(readFileSync(new URL('./dados/jucemg-dominios.json', import.meta.url), 'utf8'));
+// ── MOTOR REPETÍVEL, NÃO SCRIPT DE UMA VEZ (item 8, 29/08) ──────────────────────────────────
+// Classificar os 141 sites da JUCEMG levou 2 minutos e custou zero. O mesmo script serve
+// qualquer junta comercial — JUCESP, JUCERJA, JUCEES — trocando o arquivo de entrada. Em vez de
+// descobrir leiloeiro por acaso, vira varredura por junta.
+//
+// `TRIAGEM_LISTA` aponta o arquivo (default: a JUCEMG). O formato é o mesmo:
+//   [{ "dominio": "exemplo.com.br", "leiloeiros": ["Fulano de Tal"] }, …]
+// e `scripts/dados/` guarda um por junta. O extrator do PDF vive em `docs/` como receita —
+// juntas publicam a lista em PDF com fonte de CMap próprio, que precisa ser decodificado.
+const ARQUIVO = process.env.TRIAGEM_LISTA || './dados/jucemg-dominios.json';
+const lista = JSON.parse(readFileSync(new URL(ARQUIVO, import.meta.url), 'utf8'));
+console.log(`[triagem] lista: ${ARQUIVO} · ${lista.length} domínio(s)`);
 const alvos = LIMITE ? lista.slice(0, LIMITE) : lista;
 
 /**
