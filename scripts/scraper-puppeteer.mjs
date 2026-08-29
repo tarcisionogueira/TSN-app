@@ -2857,7 +2857,58 @@ const SUPORTE_TENANTS = [
 // /leilao-eletronico-somente-teste/). Não é imóvel — barrar por título/URL antes de gravar.
 const RE_SUPORTE_TESTE = /\bleil[ãa]o[\s-]*(?:eletr[ôo]nico[\s-]*)?(?:somente[\s-]*)?teste\b|\bsomente[\s-]*teste\b|\b(?:lote|bem)[\s-]*(?:de[\s-]*)?teste\b|\bteste[\s-]*lote\b/i;
 
-function mapLoteSuporte(l, tenant) {
+/**
+ * DATAS DE PRAÇA DA FAMÍLIA SUPORTE LEILÕES (29/08) — serve SUPORTE **e** WEBLEILÕES, que rodam
+ * a mesma plataforma (os dois carregam de `static.suporteleiloes.com.br`).
+ *
+ * POR QUE EXISTE: os dois mapeadores escreviam `data_leilao: null` fixo — nunca procuraram. São
+ * 185 lotes ativos que, sem data, nunca expiram por prazo e deixam o gate de leilão encerrado
+ * FALHAR ABERTO, com o cliente gastando cota num leilão que já aconteceu.
+ *
+ * A LISTAGEM NÃO TEM A DATA (o recon confirmou: só "Aberto para Lances · 1ª leilão"). Ela mora
+ * na PÁGINA DO LOTE, em duas marcações irmãs que o recon mapeou:
+ *   <li class="data-atual"><strong>1º Leilão<span>R$ …</span></strong> <small>31/08/2026 às 14h00</small></li>
+ *   <li class="data-off"><div class="data-left"><strong>1º Leilão</strong> <span>26/08/2026 14:00</span></div>…
+ * Daí a extração ser por TEXTO do bloco, e não por seletor de um layout só: as duas variantes
+ * põem "1º/2º Leilão" e a data no mesmo `li`, e é essa vizinhança que identifica a praça.
+ */
+function datasPracaSuporte(html) {
+  const out = { primeira: null, segunda: null };
+  if (!html) return out;
+  // Cada <li> que contenha "Nº Leilão" e uma data. `[^]` no lugar de `.` porque o HTML vem
+  // com quebra de linha dentro do bloco.
+  const blocos = String(html).match(/<li[^>]*>[^]*?<\/li>/gi) || [];
+  for (const b of blocos) {
+    const txt = b.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ').trim();
+    const praca = txt.match(/\b([12])\s*[ºªo°]?\s*Leil[ãa]o\b/i);
+    const data = txt.match(/\b(\d{2})\/(\d{2})\/(\d{4})\b/);
+    if (!praca || !data) continue;
+    const iso = dataBRparaISO(data[0]);
+    if (!iso) continue;
+    if (praca[1] === '1' && !out.primeira) out.primeira = iso;
+    if (praca[1] === '2' && !out.segunda) out.segunda = iso;
+  }
+  return out;
+}
+
+/**
+ * dd/mm/aaaa → aaaa-mm-dd. NUNCA `new Date(texto)`: "03/09/2026" seria lido como mês 03,
+ * dia 09 — trocado em 11 de cada 12 casos e PLAUSÍVEL em todos, a forma nº 10 do CLAUDE.md.
+ * Fora do formato ou fora da janela de plausibilidade → null: melhor sem data que com data
+ * errada, porque data errada expira lote vivo e mantém vivo lote encerrado.
+ */
+function dataBRparaISO(txt) {
+  const m = String(txt || '').match(/\b(\d{2})\/(\d{2})\/(\d{4})\b/);
+  if (!m) return null;
+  const [, d, mes, ano] = m;
+  const dd = Number(d), mm = Number(mes), aa = Number(ano);
+  if (mm < 1 || mm > 12 || dd < 1 || dd > 31) return null;
+  const agora = new Date().getFullYear();
+  if (aa < agora - 2 || aa > agora + 3) return null;
+  return `${ano}-${mes}-${d}`;
+}
+
+function mapLoteSuporte(l, tenant, datas = null) {
   if (!l || !l.id) return null;
   const titulo = String(l.descricao || l.tipo || '').replace(/\s+/g, ' ').trim();
   const loc = String(l.local || '').replace(/\s+/g, ' ').trim();
@@ -2895,7 +2946,8 @@ function mapLoteSuporte(l, tenant) {
     url_lote: link,
     link_foto: (l.foto && /^https?:\/\//.test(l.foto)) ? l.foto : null,
     leiloeiro: tenant.leiloeiro,
-    data_leilao: null,
+    data_leilao: datas?.primeira || null,
+    data_leilao_2: datas?.segunda || null,
     forma_pagamento: 'a_vista',
   };
 }
@@ -2947,9 +2999,39 @@ async function scraperSuporteTenant(browser, tenant) {
 
   const imoveis = [];
   const seen = new Set();
+  // VISITA À PÁGINA DO LOTE PARA PEGAR AS PRAÇAS (29/08). A listagem não traz data — o recon
+  // confirmou: só "Aberto para Lances · 1ª leilão". Só entra aqui quem tem `href` de lote real,
+  // e o teto por rodada existe para a visita não virar o gargalo do job (que já roda ~87 min
+  // com todas as fontes). É acesso GRÁTIS: mesma origem que a listagem, sem Bright Data.
+  const MAX_DETALHE = Number(process.env.SUPORTE_MAX_DETALHE || 60);
+  const paginaLote = await browser.newPage();
+  await paginaLote.setUserAgent(USER_AGENT);
+  let visitados = 0, comData = 0;
+  const datasPorLote = new Map();
+  try {
+    for (const l of bens.values()) {
+      if (visitados >= MAX_DETALHE) break;
+      const href = l.href ? (l.href.startsWith('http') ? l.href : `https://${tenant.domain}${l.href}`) : '';
+      if (!href || !/\/lote\//.test(href)) continue;
+      try {
+        await paginaLote.goto(href, { waitUntil: 'domcontentloaded', timeout: 30000 });
+        const html = await paginaLote.content();
+        const d = datasPracaSuporte(html);
+        if (d.primeira || d.segunda) { datasPorLote.set(l.id, d); comData++; }
+        visitados++;
+        await new Promise(r => setTimeout(r, 250));
+      } catch (e) {
+        // Motivo preservado: "não abriu" e "abriu e não tem praça" pedem consertos diferentes.
+        visitados++;
+        console.log(`    [${tenant.domain}] lote ${l.id} sem detalhe: ${String(e?.message || e).slice(0, 60)}`);
+      }
+    }
+  } finally { await paginaLote.close().catch(() => {}); }
+  if (visitados) console.log(`    [${tenant.domain}] detalhe: ${comData}/${visitados} com praça`);
+
   for (const l of bens.values()) {
     if (RE_SUPORTE_TESTE.test(`${l.descricao || ''} ${l.tipo || ''} ${l.href || ''}`)) continue;
-    const row = mapLoteSuporte(l, tenant);
+    const row = mapLoteSuporte(l, tenant, datasPorLote.get(l.id) || null);
     if (!row || !row.valor_minimo || seen.has(row.fonte_id)) continue;
     seen.add(row.fonte_id);
     imoveis.push(row);
