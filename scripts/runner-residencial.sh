@@ -158,8 +158,12 @@ rodar VLANCE env VLANCE_NO_BD=1 python3 scripts/scraper_vlance.py --supabase --i
 # `erro: null` quando o pull passa, e o freio do cron pago só libera o Bright Data depois de 7
 # dias sem NENHUM sucesso. Rodando aqui todo dia, o caminho pago simplesmente nunca acorda.
 # Falha aqui não derruba a rodada: o acervo do dia já entrou nos passos acima.
+# A mensagem de falha NÃO diz "nada foi gravado": um run pode gravar dezenas de editais e ainda
+# assim sair 1 porque UM combo tribunal×termo caiu (foi o caso da 1ª rodada real: 98 editais
+# gravados, `exit 1` por `TRT15: fetch failed`). Dizer "sem efeito" ali seria o instrumento
+# reportando outra coisa — leia os `vistos=/novos=` da linha acima, que são o que de fato entrou.
 node scripts/radar-editais-residencial.mjs \
-  || echo "  (radar de editais falhou — sem efeito no acervo; a rede de segurança paga entra após 7 dias sem sucesso)"
+  || echo "  (radar: run PARCIAL ou falho — o que entrou está no 'novos=' acima; não conta como sucesso, e a rede de segurança paga entra após 7 dias sem NENHUM sucesso)"
 
 # ── TRIAGEM RESIDENCIAL DOS BLOQUEADOS (29/08) ──────────────────────────────────────────────
 # NÃO coleta lote: descobre QUAL PLATAFORMA rodam os sites que recusaram o acesso grátis.

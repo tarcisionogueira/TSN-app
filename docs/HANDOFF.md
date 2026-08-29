@@ -4,6 +4,69 @@
 
 ---
 
+## 🗓️ 29/08 (sessão 14l) — O RADAR RODOU DE CASA: 98 EDITAIS POR R$ 0 (migração validada)
+
+```
+[radar-residencial] janela 2026-08-23 → 2026-08-29 (6 dia(s); último sucesso: 2026-08-25T00:03:03)
+[radar-residencial] vistos=2093 novos=98 descartados=1927 duracao=91.4s
+```
+
+**A migração está provada em produção.** O DJEN responde ao IP residencial sem intermediário:
+2.093 itens lidos, **98 editais novos gravados**, 91 s, **zero Bright Data**. E a janela
+auto-alargou para 6 dias sozinha (último sucesso 25/08) — exatamente o mecanismo criado para não
+perder edital numa ausência.
+
+### 🔧 O defeito que a 1ª rodada real revelou: retry só no caminho pago
+
+O run foi carimbado **FALHA** por **um combo em doze** — `TRT15/edital de leilão: fetch failed`,
+erro de **rede**, não do DJEN (o mesmo `fetch failed` apareceu no gate do SOLEON no início da
+rodada: oscilação do link, não do CNJ).
+
+Causa: escrevi `transporteDireto` **sem retry nenhum**, enquanto o caminho pago tinha 2. **A
+assimetria estava no sentido errado** — link doméstico oscila MAIS que datacenter, não menos.
+Consequência se ficasse assim: quase toda rodada de casa teria um combo caindo, o residencial
+**nunca registraria sucesso**, e o Bright Data voltaria a cada 7 dias para refazer de graça o que
+já tinha sido feito.
+
+**Corrigido** (`RADAR_DIRETO_RETRIES`, padrão 2, backoff 1,5 s→3 s — igual ao pago). Rodado em
+seco com `fetch` stubado:
+
+| sequência | resultado | tentativas |
+|---|---|---|
+| rede, rede, 200 | sucesso | 3 |
+| rede sempre | lança `fetch failed` | 3 |
+| **404** | lança `HTTP 404` | **1** — resposta definitiva, não re-tenta |
+| 503, 200 | sucesso | 2 |
+
+Também corrigi a mensagem do runner: ela dizia *"falhou — sem efeito no acervo"* numa rodada que
+**gravou 98 editais**. Instrumento reportando outra coisa (forma nº 10), na minha própria linha.
+
+### 🔴 HASTA: regressão CONFIRMADA, e não é Chromium
+
+`puppeteer ok` na máquina do dono — a hipótese de ambiente **caiu**. E não é o caso LEILOFY
+(leilão que aconteceu e esvaziou o acervo): medido agora,
+
+| ativos | com prazo vencido | desativados 10d | data do leilão | última escrita |
+|---|---|---|---|---|
+| **579** | **0** | 0 | **03/09** (daqui a 5 dias) | 25/08 |
+
+Os 579 lotes estão vivos, com praça **futura**, e a listagem devolve **0**. É regressão de
+captura de verdade. O gate recusou carimbar (`sem_gravacao`), então a janela segue aberta, e com
+a correção da sessão 14k o próximo run grava `degradado` + `queda vs anterior (listados 0<579)`
+em vez de sumir do monitor.
+
+> ⚠️ O recon da HASTA **tem de rodar da máquina residencial** — o site bloqueia datacenter, então
+> nem a CI nem esta sessão conseguem olhar a página.
+
+### ℹ️ Nota de operação: o runner rodou em `8be909fa`, não na versão mais nova
+
+`AVISO: git pull não avançou` (junto com o `fetch failed` do gate do SOLEON = oscilação de rede
+no início). Isso **confirma por outro caminho** o diagnóstico da 14k: desta vez o script já
+começou com o bloco do radar presente, e o radar rodou. Da vez anterior o bloco chegou **durante**
+a execução e foi pulado. A correção do `exec` está em `9ee6b5f` e entra no próximo pull.
+
+---
+
 ## 🗓️ 29/08 (sessão 14k) — A AUTO-ATUALIZAÇÃO DO RUNNER PULAVA O PASSO NOVO, EM SILÊNCIO
 
 A 1ª rodada diária do runner rodou, terminou com `fim.` e exit 0 — e **o radar não rodou**. O

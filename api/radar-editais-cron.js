@@ -48,6 +48,15 @@ const DJEN_HEADERS = {
 const MAX_PAGINAS = 8;           // teto por (tribunal×termo): 8×100 = 800 itens
 const HARD_MS = 200000;          // teto do PULL (~200s) — garante fatia p/ a IA depois
 const BD_RETRIES = 2;            // re-tentativas do Bright Data qdo o DJEN dá 403/5xx (instável)
+// RE-TENTATIVAS DO CAMINHO DIRETO (29/08, medido na 1ª rodada residencial de verdade).
+// Eu tinha escrito o `transporteDireto` sem retry NENHUM enquanto o caminho pago tinha 2 — e a
+// assimetria estava no sentido errado: link doméstico oscila MAIS que datacenter, não menos.
+// O resultado apareceu na primeira rodada: `vistos=2093 novos=98` (o pull funcionou e gravou
+// 98 editais) e mesmo assim o run foi carimbado como FALHA por UM combo em 12 —
+// `TRT15/edital de leilão: fetch failed`, erro de rede, não do DJEN. Sem retry, quase toda
+// rodada de casa teria um combo caindo, o residencial NUNCA registraria sucesso e o Bright Data
+// voltaria a cada 7 dias para fazer o que já tinha sido feito de graça.
+const DIRETO_RETRIES = Number(process.env.RADAR_DIRETO_RETRIES || 2);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '')
@@ -315,14 +324,25 @@ async function transporteBrightData(url, t0, hardMs) {
  * não por assinatura de requisição — é exatamente por isso que o Bright Data, que sai por IP
  * residencial, sempre passou. De casa o IP já é residencial, então o intermediário é dispensável.
  */
-export async function transporteDireto(url) {
-  const ctrl = new AbortController();
-  const to = setTimeout(() => ctrl.abort(), 30000);
-  try {
-    const resp = await fetch(url, { headers: DJEN_HEADERS, signal: ctrl.signal });
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    return await resp.json();
-  } finally { clearTimeout(to); }
+export async function transporteDireto(url, _t0, _hardMs, tentativas = DIRETO_RETRIES) {
+  let ultimo;
+  for (let tent = 0; tent <= tentativas; tent++) {
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), 30000);
+    let definitivo = false;
+    try {
+      const resp = await fetch(url, { headers: DJEN_HEADERS, signal: ctrl.signal });
+      if (resp.ok) return await resp.json();
+      ultimo = new Error(`HTTP ${resp.status}`);
+      // 4xx que não seja 429 é resposta DEFINITIVA: re-tentar só gasta tempo.
+      definitivo = resp.status < 500 && resp.status !== 429;
+    } catch (e) {
+      ultimo = e;   // rede/timeout/JSON inválido — transiente, vale re-tentar
+    } finally { clearTimeout(to); }
+    if (definitivo || tent === tentativas) break;
+    await sleep(1500 * (tent + 1)); // 1,5s, depois 3s — igual ao caminho pago
+  }
+  throw ultimo || new Error('sem resposta');
 }
 
 async function buscarDJEN(tribunal, termo, ini, fim, t0, transporte, hardMs) {
