@@ -516,9 +516,21 @@ export default function Analise() {
   const isViavel = isUsoProprio ? true : metricas.roi >= META;
   // Pesquisa de mercado veio VAZIA (fonte instável no momento): sem valor de mercado o
   // ROI daria "-100%/reprovada" — enganoso. Nesse caso mostramos "não estimado".
-  const mercadoSemDados = !(Number(d.valorMercado) > 0)
-    && !(Number(mercado?.precoMedioM2) > 0)
-    && (((mercado?.nivel1?.vendas?.length || 0) + (mercado?.nivel2?.vendas?.length || 0)) === 0);
+  //
+  // ⚠️ 29/08 — A GUARDA EXISTIA E NÃO PEGAVA, porque exigia TRÊS coisas ao mesmo tempo:
+  //     !(valorMercado>0) && !(precoMedioM2>0) && (comparáveis === 0)
+  // Bastava a pesquisa devolver UM comparável, ou um preço/m² que não virou valor final, para
+  // `mercadoSemDados` ficar FALSO — e aí o cliente lia **"Operação reprovada, retorno
+  // insuficiente · ROI −100%"** na mesma linha em que "Desconto vs. mercado" mostrava "—",
+  // porque aquela célula testa só `d.valorMercado>0`. **A mesma página julgava o mesmo fato de
+  // duas maneiras, e a versão frouxa era a que assinava o veredito para o cliente.**
+  // Medido em 29/08 num relatório real (APARTAMENTO — SÃO PAULO/SP, aval. R$ 340.000):
+  // venda estimada vazia, desconto "—", e mesmo assim "reprovada" com ROI −100%.
+  //
+  // O teste certo é UM só, e é o da grandeza que origina tudo: ROI, TIR, desconto e teto de
+  // lance são todos derivados de `valorMercado`. Sem ele, nenhum desses números existe —
+  // independentemente de quantos comparáveis a pesquisa tenha listado.
+  const mercadoSemDados = !(Number(d.valorMercado) > 0);
   const riscosBloqueantes = (d.riscos||[]).filter(r => r.tipo === 'bloqueante');
 
   // ─── Cenários de disputa (relatório mercadológico) ─────────────────────────

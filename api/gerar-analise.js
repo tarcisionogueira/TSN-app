@@ -2882,10 +2882,25 @@ COMO USAR (obrigatório): dedique um parágrafo aos CUSTOS DA OPERAÇÃO segundo
       // Serve para (a) o front mostrar "não estimado" e o servidor NÃO cobrar cota, e (b) o
       // self-heal (regenerar-relatorios-cron) re-tentar com orçamento fresco por até 48h. Uma
       // pesquisa que se PREENCHE numa próxima tentativa limpa o flag e para de ser re-tentada.
-      const mercadoVazio = !reaproveitado
-        && !(Number(valorMercado) > 0)
-        && !(Number(mercado?.precoMedioM2) > 0)
-        && (((mercado?.nivel1?.vendas?.length || 0) + (mercado?.nivel2?.vendas?.length || 0)) === 0);
+      //
+      // ⚠️ 29/08 — A CONDIÇÃO EXIGIA TRÊS COISAS, E POR ISSO QUASE NUNCA ERA VERDADE.
+      // Bastava a pesquisa devolver UM comparável (ou um preço/m² que não virou valor final)
+      // para `mercadoVazio` ficar FALSO com `valorMercado = 0`. E aqui isso não é só cosmético,
+      // porque este flag decide DINHEIRO e CONSERTO:
+      //   • `if (cobrarCredito && !mercadoVazio …)` → **o cliente é cobrado** por um relatório
+      //     que não estimou mercado;
+      //   • o self-heal (`regenerar-relatorios-cron`) só re-tenta o que está marcado como vazio
+      //     → o auto-conserto ficava desligado **exatamente no caso que ele existe para curar**.
+      // Medido: das 66 análises com resultado, **2 têm `valorMercado = 0` e as duas gravaram
+      // `mercadoVazio: false`** — uma delas com `precoMedioM2 > 0`. Foi a que o dono abriu e leu
+      // "Operação reprovada, retorno insuficiente · ROI −100%" com a venda estimada em branco.
+      //
+      // O teste certo é UM só, o da grandeza que origina tudo: valorMercado. ROI, TIR, desconto
+      // e teto de lance são todos derivados dele — sem ele nenhum desses números existe, tenha a
+      // pesquisa listado 0 ou 40 comparáveis. `src/pages/Analise.jsx` carregava a MESMA condição
+      // em cópia e foi corrigido junto: regra duplicada é como o defeito sobrevive nos dois lados
+      // (a lição do `roteiarDatasPraca`, 29/08).
+      const mercadoVazio = !reaproveitado && !(Number(valorMercado) > 0);
       // valorAvaliacao: fecha o loop servidor→tela — o valor confirmado no edital (garantir
       // Valores/extrato) chegava ao BANCO mas nunca voltava ao card já aberto ("Não informada").
       // ── NOTA METODOLÓGICA (pedido do dono, 06/08) ───────────────────────────────────────
