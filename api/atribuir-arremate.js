@@ -15,6 +15,19 @@
  * do usuário — o role e as cotas de relatórios/Índice ficam como estão (explorador
  * mantém as de explorador, Investidor Pro as do Pro). O acesso ao acompanhamento vem
  * do VÍNCULO ao caso (RLS por cliente_id + "Meus acompanhamentos"), não do role.
+ *
+ * ─── 29/08: A PROMOÇÃO VOLTA, MAS COMO ESCOLHA EXPLÍCITA ────────────────────────────────
+ * O dono relatou um cliente atribuído manualmente que "já deveria ser assessorado". As duas
+ * intenções não se contradizem: 30/07 protegia a atribuição de ESTUDO (alimentar a IA com uma
+ * arrematação real sem dar plano de graça); o caso novo é cliente que contratou de fato. O que
+ * faltava era DISTINGUIR os dois — e essa distinção não pode morar na cabeça de quem clica.
+ * Agora é uma caixa na tela: `promover_assessorado` (padrão FALSE, ou seja, 30/07 segue valendo
+ * para quem não marca).
+ *
+ * ⚠️ A regra saiu do comentário e virou DADO: `regra_negocio['atribuicao.promove_assessorado']`,
+ * aplicada por `promover_para_assessorado()`. A de 30/07 viveu um mês só aqui, e por isso nem o
+ * dono tinha como consultá-la antes de pedir o contrário — é literalmente o achado de 08/08 que
+ * criou aquela tabela. `auditoria_regras_negocio()` agora vigia as duas pontas.
  */
 export const config = { runtime: 'edge' };
 
@@ -44,7 +57,8 @@ export default async function handler(req) {
 
   let body;
   try { body = await req.json(); } catch { return json({ error: 'JSON inválido' }, 400); }
-  const { user_id, imovel_endereco, imovel_valor, tipo_leilao, cidade, estado, tipo_imovel, numero_processo, valor_avaliacao } = body || {};
+  const { user_id, imovel_endereco, imovel_valor, tipo_leilao, cidade, estado, tipo_imovel, numero_processo, valor_avaliacao,
+          promover_assessorado } = body || {};
   if (!user_id) return json({ error: 'user_id obrigatório' }, 400);
   const numProc = (String(numero_processo || '').trim()) || null;
   const avaliacao = Number(String(valor_avaliacao ?? '').toString().replace(/\./g, '').replace(',', '.')) || null;
@@ -150,10 +164,26 @@ export default async function handler(req) {
     }
   }
 
-  // 3) Regra do dono (30/07): atribuição manual NÃO mexe no role nem nas cotas do
-  //    usuário — o acompanhamento (Caso + "Meus acompanhamentos") vem do vínculo ao
-  //    caso via RLS, e os direitos de relatórios/Índice seguem os do plano que ele
-  //    já tem. (Antes promovia para 'assessorado' + plano_vencimento, o que dava a
-  //    um explorador as cotas 10/10/3 do Pro sem cobrança — removido.)
-  return json({ ok: true, caso_id: caso?.id, imovel_id: imovelId, role: alvo.role, role_alterado: false });
+  // 3) PROMOÇÃO — só quando o admin MARCOU. Sem a marcação vale a regra de 30/07: atribuição
+  //    não mexe em role nem em cotas, e o acompanhamento vem do vínculo ao caso via RLS.
+  //    Quem aplica é `promover_para_assessorado()` (SECURITY DEFINER, sem grant para anon /
+  //    authenticated), e não um `update` solto aqui: é a função que a regra em `regra_negocio`
+  //    declara como sua aplicadora, e é isso que a `auditoria_regras_negocio()` confere.
+  let roleFinal = alvo.role, rolePromovido = false;
+  if (promover_assessorado === true) {
+    const r = await sb('rpc/promover_para_assessorado', {
+      method: 'POST',
+      body: JSON.stringify({ p_user_id: user_id, p_motivo: `atribuicao manual por ${user.id}` }),
+    });
+    // `.ok` checado de propósito: uma promoção que falha em silêncio devolveria "role_alterado"
+    // conforme a INTENÇÃO e não conforme o BANCO — o admin fecharia a tela achando que promoveu.
+    if (r.ok) {
+      roleFinal = (await r.json().catch(() => null)) || alvo.role;
+      rolePromovido = roleFinal !== alvo.role;
+    } else {
+      return json({ ok: true, caso_id: caso?.id, imovel_id: imovelId, role: alvo.role, role_alterado: false,
+        aviso: `caso criado, mas a promocao para assessorado FALHOU (HTTP ${r.status}) — promova pela tela de usuarios` }, 200);
+    }
+  }
+  return json({ ok: true, caso_id: caso?.id, imovel_id: imovelId, role: roleFinal, role_alterado: rolePromovido });
 }

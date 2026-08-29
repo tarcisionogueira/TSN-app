@@ -1147,7 +1147,9 @@ function UsuariosTab() {
   const [auditoriaData, setAuditoriaData] = useState(null);
   const [auditoriaLoading, setAuditoriaLoading] = useState(false);
   const [atribUser, setAtribUser] = useState(null);   // usuário recebendo a atribuição de arremate
-  const [atribForm, setAtribForm] = useState({ endereco: '', valor: '', tipo: 'extrajudicial', cidade: '', estado: '', numero_processo: '' });
+  // `promover` (29/08): a atribuição volta a poder promover, mas por ESCOLHA — ver a regra
+  // `atribuicao.promove_assessorado` em regra_negocio. Padrão false = regra de 30/07 mantida.
+  const [atribForm, setAtribForm] = useState({ endereco: '', valor: '', tipo: 'extrajudicial', cidade: '', estado: '', numero_processo: '', promover: false });
   const [atribExtraindo, setAtribExtraindo] = useState('');   // '' | 'lendo' | 'ok' | 'erro'
   const [atribDocs, setAtribDocs] = useState([]);             // [{ nome, status }] dos anexos lidos
   const atribFilesRef = useRef([]);                           // File[] p/ persistir no imóvel-âncora
@@ -1504,19 +1506,21 @@ ${hash ? `<h2>Verificação de integridade</h2><div class="kv muted">${esc(hashL
     loadAuditoria(u.id);
   }
 
-  // Atribui um arremate ao usuário: cria o caso (arrematado) e o promove a Assessorado.
+  // Atribui um arremate ao usuário: cria o caso (arrematado) e, SE o admin marcar a caixa,
+  // promove a Assessorado. Sem a marcação vale a regra de 30/07 (nada de role/cotas).
   async function atribuirArremate() {
     if (!atribUser) return;
     setAtribLoad(true);
     try {
       const res = await apiCall('/api/atribuir-arremate', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: atribUser.id, imovel_endereco: atribForm.endereco, imovel_valor: atribForm.valor, tipo_leilao: atribForm.tipo, cidade: atribForm.cidade || null, estado: atribForm.estado || null, numero_processo: atribForm.numero_processo || null, valor_avaliacao: atribForm.valor_avaliacao || null }),
+        body: JSON.stringify({ user_id: atribUser.id, imovel_endereco: atribForm.endereco, imovel_valor: atribForm.valor, tipo_leilao: atribForm.tipo, cidade: atribForm.cidade || null, estado: atribForm.estado || null, numero_processo: atribForm.numero_processo || null, valor_avaliacao: atribForm.valor_avaliacao || null, promover_assessorado: !!atribForm.promover }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Falha ao atribuir');
-      // Regra do dono (30/07): atribuição manual NÃO muda role/cotas — o servidor
-      // devolve o role real (inalterado); o acesso ao caso vem do vínculo (RLS).
+      // O servidor devolve o role REAL depois da operação (promovido ou não) — nunca o que a
+      // tela supôs. Se a promoção falhar, vem `aviso` e o role antigo: a tela tem que mostrar o
+      // banco, não a intenção.
       if (data.role) setUsers(users.map(u => u.id === atribUser.id ? { ...u, role: data.role } : u));
       const casoId = data.caso_id;
       const imovelId = data.imovel_id;   // imóvel-âncora: chave dos anexos e dos 3 relatórios
@@ -1755,10 +1759,24 @@ ${hash ? `<h2>Verificação de integridade</h2><div class="kv muted">${esc(hashL
                 <input value={atribForm.valor} onChange={e => setAtribForm(p => ({ ...p, valor: e.target.value }))} placeholder="0,00" style={S.input} />
               </div>
             </div>
+            {/* 29/08 — O RÓTULO DO BOTÃO DIZIA "Atribuir e tornar Assessorado" E NÃO TORNAVA:
+                a promoção foi removida em 30/07 e o texto ficou. Foi essa promessa que fez o
+                dono esperar um cliente assessorado que continuava explorador. Agora quem decide
+                é a caixa, e o botão diz o que vai acontecer. */}
+            {atribUser?.role === 'explorador' && (
+              <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginTop: 16, padding: '10px 12px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, cursor: 'pointer' }}>
+                <input type="checkbox" checked={!!atribForm.promover} onChange={e => setAtribForm(p => ({ ...p, promover: e.target.checked }))} style={{ marginTop: 2 }} />
+                <span style={{ fontSize: 12, color: '#78350f', lineHeight: 1.45 }}>
+                  <b>Promover para Assessorado</b> — marque quando o cliente <b>contratou de fato</b>.
+                  Deixe desmarcado na atribuição de <b>estudo</b> (alimentar a IA com uma arrematação
+                  real): promover dá as cotas do plano sem cobrança.
+                </span>
+              </label>
+            )}
             <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
               <button onClick={() => setAtribUser(null)} style={{ flex: 1, padding: '10px', border: '1px solid #e2e8f0', borderRadius: 8, background: 'white', color: '#64748b', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
               <button onClick={atribuirArremate} disabled={atribLoad} style={{ flex: 2, padding: '10px', background: atribLoad ? '#cbd5e1' : '#a16207', color: 'white', border: 'none', borderRadius: 8, fontWeight: 800, fontSize: 13, cursor: atribLoad ? 'default' : 'pointer' }}>
-                {atribLoad ? 'Atribuindo…' : 'Atribuir e tornar Assessorado'}
+                {atribLoad ? 'Atribuindo…' : (atribForm.promover && atribUser?.role === 'explorador' ? 'Atribuir e promover a Assessorado' : 'Atribuir arremate')}
               </button>
             </div>
           </div>
