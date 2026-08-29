@@ -23,6 +23,21 @@ import { decodificarEntidades } from '../../api/_texto-imovel.js';
 export const TENANTS = {
   leffa: { fonte: 'LEFFA', leiloeiro: 'Leffa Leilões', base: 'https://www.leffaleiloes.com.br' },
   oscar: { fonte: 'OSCAR', leiloeiro: 'Oscar Leilões', base: 'https://www.oscar.leilao.br' },
+  // ─── JUCEMG (recon de 29/08) ───────────────────────────────────────────────────────────
+  // A triagem separou estes três numa "família nova" chamada `leilao.pro` (pelas pistas
+  // js.pusher.com + cdn.onesignal.com + www.leilao.pro). O recon mostrou que NÃO é família
+  // nova: o menu do Versalles lista **"IMÓVEIS … → /leilao/lotes/imoveis"**, que é exatamente
+  // o `catalogo` desta configuração. É a MESMA plataforma que já parseamos — a triagem só não
+  // tinha como saber, porque classifica por assinatura de HTML e não abre o catálogo.
+  //
+  // ⚠️ O recon também mostrou o Versalles com **"IMÓVEIS 0 itens"** hoje. Isso é acervo vazio
+  // no momento, não plataforma diferente — e é justamente por isso que eles entram como tenants
+  // (custo zero, o `fonteVazia` do runner já trata leiloeiro sem imóvel sem soar alarme) e não
+  // como parser novo. O dry-run diz quem tem lote agora; quem vier vazio fica e volta a render
+  // quando publicar, como os 10 do SUPORTE.
+  ileiloes:   { fonte: 'ILEILOES',  leiloeiro: 'iLeilões',          base: 'https://www.ileiloes.com.br' },
+  luis:       { fonte: 'LUISLEIL',  leiloeiro: 'Luis Leiloeiro',    base: 'https://www.luisleiloeiro.com.br' },
+  versalles:  { fonte: 'VERSALLES', leiloeiro: 'Versalles Leilões', base: 'https://www.versallesleiloes.com.br' },
 };
 
 const num = s => parseFloat(String(s || '').replace(/[^\d.,]/g, '').replace(/\./g, '').replace(',', '.')) || 0;
