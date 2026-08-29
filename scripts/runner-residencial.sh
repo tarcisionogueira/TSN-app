@@ -16,6 +16,9 @@
 # passos que NÃO passam pelo gate — o radar de editais (o DJEN publica todo dia; é isso que
 # tira o radar do Bright Data) e a triagem dos bloqueados.
 set -uo pipefail
+# Caminho ABSOLUTO de mim mesmo, capturado ANTES do cd — o re-exec da auto-atualização
+# depende dele, e depois do cd um "$0" relativo pode não resolver mais.
+_SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
 cd "$(dirname "$0")/.." || exit 1
 [ -f "$HOME/.bidpro-runner.env" ] && { set -a; . "$HOME/.bidpro-runner.env"; set +a; }
 
@@ -57,9 +60,32 @@ fi
 # falha e o runner segue com o que tem — nunca sobrescreve trabalho local nem para a coleta
 # por causa de git. E registra a versão que está rodando, para "está atualizado?" virar dado
 # em vez de suposição.
+# ⚠️ E O PULL PRECISA REINICIAR O RUNNER (29/08) — defeito REAL, medido no log do dono.
+# O bash lê o script SOB DEMANDA, por posição de BYTE. Quando o `git pull` reescreve o arquivo
+# que está sendo executado, o bash continua lendo no MESMO offset do arquivo NOVO — e o commit
+# que insere linhas no topo desloca tudo. Na 1ª rodada diária (8be909fa) isso **pulou o passo do
+# radar inteiro em silêncio**: o log foi de VLANCE direto para a triagem, sem uma linha do radar,
+# e ainda assim terminou com "fim." e exit 0.
+# Reproduzido em seco: script que se sobrescreve no meio ou salta bloco ou quebra em linha
+# partida. Ou seja: **quanto maior a correção que eu mandar, maior a chance de ela não rodar** —
+# o pior tipo de bug, porque some justamente na rodada que traz o conserto.
+# O `exec` resolve na raiz: relê o arquivo do zero. `RUNNER_REEXEC` impede laço infinito, e o
+# `exec 9>` lá em cima reabre a trava (fecha a antiga, então não conflita consigo mesmo).
 if [ "${RUNNER_SEM_AUTOUPDATE:-0}" != "1" ]; then
+  _antes="$(git rev-parse HEAD 2>/dev/null || echo '?')"
   if git -C "$(pwd)" pull --ff-only --quiet 2>/dev/null; then
-    echo "[$(date)] código atualizado ($(git rev-parse --short HEAD))"
+    _depois="$(git rev-parse HEAD 2>/dev/null || echo '?')"
+    if [ "$_depois" != "$_antes" ]; then
+      if [ "${RUNNER_REEXEC:-0}" = "1" ]; then
+        echo "[$(date)] AVISO: código mudou DE NOVO no mesmo ciclo ($_antes → $_depois); seguindo sem reiniciar."
+      else
+        echo "[$(date)] código atualizado ($(git rev-parse --short "$_antes" 2>/dev/null || echo '?') → $(git rev-parse --short HEAD)) — reiniciando na versão nova"
+        export RUNNER_REEXEC=1
+        exec "$_SELF" "$@"
+      fi
+    else
+      echo "[$(date)] código já atualizado ($(git rev-parse --short HEAD))"
+    fi
   else
     echo "[$(date)] AVISO: git pull não avançou — rodando com $(git rev-parse --short HEAD 2>/dev/null || echo 'versão desconhecida'). Alteração local pendente?"
   fi

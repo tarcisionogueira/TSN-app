@@ -4,6 +4,71 @@
 
 ---
 
+## 🗓️ 29/08 (sessão 14k) — A AUTO-ATUALIZAÇÃO DO RUNNER PULAVA O PASSO NOVO, EM SILÊNCIO
+
+A 1ª rodada diária do runner rodou, terminou com `fim.` e exit 0 — e **o radar não rodou**. O
+log foi de VLANCE **direto para a triagem**, sem uma linha do radar, nem a mensagem de falha do
+`|| echo`.
+
+### 🔎 A causa: o bash lê o script por POSIÇÃO DE BYTE
+
+O `git pull` da auto-atualização (11/08) reescreve **o arquivo que está sendo executado**. O bash
+lê scripts sob demanda, por offset — quando o arquivo muda, ele continua no **mesmo byte do
+arquivo NOVO**. O commit do dia inseriu ~1 KB no topo (a guarda de PATH) e ~1,3 KB no meio (o
+bloco do radar): o offset caiu depois do radar, e ele foi pulado.
+
+Reproduzido em seco — script que se sobrescreve no meio ou salta bloco ou quebra em linha
+partida:
+
+```
+PASSO 1
+./alvo.sh: line 4: syntax error near unexpected token `)'
+```
+
+> ⚠️ **É o pior formato possível de bug: quanto MAIOR a correção enviada, maior a chance de ela
+> não rodar** — e ela some justamente na rodada que traz o conserto. Latente desde 11/08, só
+> mordeu quando um commit mudou os offsets.
+
+**Conserto:** pull que muda o HEAD faz `exec "$_SELF" "$@"` — relê o arquivo do zero.
+`RUNNER_REEXEC` impede laço; `_SELF` é capturado **antes** do `cd`; o `exec 9>` reabre a trava
+(fecha a antiga, então não conflita consigo mesma). Testado: muda → reinicia **uma** vez e roda o
+corpo; não muda → roda direto, sem reinício.
+
+### 🔴 Achado no mesmo log: fonte vazia não deixava rastro
+
+```
+[HASTA] enumerados 0 lote(s) (via dom)
+[HASTA] sem imóveis no momento — fonte vazia (sem alarme).
+```
+
+A HASTA tinha **579 lotes em 25/08**. E o `fonteVazia` do `motor/runner.mjs` era um `continue`
+que **não registrava nada** — sem linha em `fonte_saude`, o monitor não podia acusar regressão
+(não havia medição), e a fonte só reapareceria **108 h depois** como `medicao_velha`. A pergunta
+de revisão do CLAUDE.md em estado puro: *este vazio é resposta, ou é falha que não sabe que
+falhou?*
+
+**Conserto:** vazio agora **registra**, e quem decide o alarme é `registrarSaude` comparando com
+a execução anterior — mesmo princípio do `sem_cota` de 16/08 (o motivo do zero muda a ação, então
+muda o status). Rodado em seco:
+
+| histórico | status gravado |
+|---|---|
+| sem acervo anterior | `vazio` — leiloeiro pequeno entre leilões, sem ruído |
+| tinha 579 (HASTA) | **`degradado`** · `queda vs anterior (listados 0<579)` |
+
+O gate já tinha feito a parte dele: recusou carimbar (`sem_gravacao`), então a janela da HASTA
+segue aberta.
+
+### ⏭️ Pendência aberta: por que a HASTA enumerou 0
+
+Ainda **não sabemos**. A rodada inteira levou 22 s e a HASTA é o único passo Puppeteer que
+passou pelo gate — as outras (GESTAO/RJ/PECINI) foram puladas por já terem rodado em 28-29/08.
+Duas hipóteses, e a diferença importa: **Chromium/Puppeteer não funcionando na máquina** (aí
+GESTAO/RJ/PECINI quebram junto quando o gate abrir) **ou** mudança no site. Checar com:
+`node -e "import('puppeteer').then(p=>p.launch()).then(b=>b.close()).then(()=>console.log('ok'))"`
+
+---
+
 ## 🗓️ 29/08 (sessão 14j) — RADAR MIGRADO PARA O RESIDENCIAL (o 2º maior consumidor sai da cota)
 
 Decisão do dono: *"vou rodar diariamente, migra o radar; caso fique 7 dias sem rodar no

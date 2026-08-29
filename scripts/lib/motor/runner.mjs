@@ -135,7 +135,25 @@ export async function rodarFonte(cfg, opts) {
     const { prontos, encerrados, fonteVazia, enumerados, cotaNegada } = await coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debug, semBD });
 
     if (!prontos.length) {
-      if (fonteVazia) { console.log(`[${tenant.fonte}] sem imóveis no momento — fonte vazia (sem alarme).`); continue; }
+      // ⚠️ 29/08 — FONTE VAZIA PRECISA VIRAR LINHA, NÃO SILÊNCIO. Isto era um `continue` que
+      // NÃO registrava nada, e o efeito foi medido no dia: a HASTA enumerou 0 lotes (tinha 579
+      // em 25/08), imprimiu "sem alarme" e **não deixou registro nenhum em `fonte_saude`** — o
+      // monitor não podia acusar regressão porque não havia medição, e a fonte só reapareceria
+      // 108 h depois como `medicao_velha`. É a pergunta de revisão do CLAUDE.md em estado puro:
+      // *este vazio é resposta, ou é falha que não sabe que falhou?*
+      // Quem responde não é este `if` — é `registrarSaude`, comparando com a execução anterior:
+      // sem histórico de acervo fica 'vazio' (leiloeiro pequeno entre leilões, sem ruído); com
+      // acervo anterior vira 'degradado' com "queda vs anterior". O mesmo conserto que o
+      // `fonte_regressao_suspeita` recebeu em 29/08: "não consegui verificar" é uma LINHA.
+      if (fonteVazia) {
+        console.log(`[${tenant.fonte}] respondeu e enumerou 0 lote(s) — registrando a medição.`);
+        await registrarSaude(supabase, tenant.fonte, [], cfg.chave, {
+          ok: false, vazio: true, enumerados: 0,
+          metricas: { n: 0, uf_pct: 0, valor_pct: 0, link_pct: 0, foto_pct: 0 },
+          motivo: 'respondeu 200 e enumerou 0 lote(s)',
+        });
+        continue;
+      }
       await registrarSaude(supabase, tenant.fonte, [], cfg.chave, {
         ok: false, semCota: estado.semCota || cotaNegada > 0, cotaNegada, enumerados,
         metricas: { n: 0, uf_pct: 0, valor_pct: 0, link_pct: 0, foto_pct: 0 },
