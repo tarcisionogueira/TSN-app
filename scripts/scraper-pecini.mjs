@@ -465,11 +465,17 @@ async function main() {
   // Sai com erro E deixa a linha em `fonte_saude`: sem isso a fonte some do monitor
   // (nenhuma linha nova) e o acervo encolhe em silêncio. Ver scraper-rj.mjs, 11/08.
   if (!prontos.length) {
+    // `semCota` NO CAMPO, não só na prosa (29/08). O motivo já dizia "sem cota: …" — mas
+    // quem lê o estado da fonte é o STATUS, e sem esta flag `registrarSaude` gravava
+    // 'falhou': o monitor acusava o leiloeiro por uma decisão de orçamento nossa. Aconteceu
+    // em 19/08 (`reservado_para_outros`, 1 linha). É a forma #5 do CLAUDE.md — o freio de
+    // custo tem de dizer QUAL "não", e dizer no lugar em que alguém escuta.
     await registrarSaude(supabase, 'PECINI', [], 'principal',
-      { ok: false, metricas: { n: 0, uf_pct: 0, valor_pct: 0, link_pct: 0, foto_pct: 0 },
+      { ok: false, semCota: !!recusaDeCota,
+        metricas: { n: 0, uf_pct: 0, valor_pct: 0, link_pct: 0, foto_pct: 0 },
         enumerados: lotes.length,
         motivo: recusaDeCota
-          ? `sem cota: ${recusaDeCota} (${semDetalhe} sem detalhe, ${reprovados} reprovados)`
+          ? `SEM COTA Bright Data (${recusaDeCota}) — coleta não tentada (decisão de orçamento, não regressão da fonte); ${semDetalhe} sem detalhe, ${reprovados} reprovados`
           : `nada pronto (${semDetalhe} sem detalhe, ${reprovados} reprovados)` });
     console.error('nada a gravar. Saindo com erro para não carimbar coleta que não coletou.');
     process.exitCode = 1;

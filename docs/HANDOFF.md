@@ -4,6 +4,101 @@
 
 ---
 
+## 🗓️ 29/08 (sessão 14) — O INSTRUMENTO DO RITUAL VIA 22 DE 32 FONTES E DIZIA "ÍNTEGRO"
+
+Abertura de sessão com o ritual completo (heartbeat carimbado, 360 · marketing · saúde). O dia
+amanheceu no estado em que 13d fechou — `auditoria_seguranca()` 0/0, deploys READY, acervo com
+97% atualizado em 24 h. O trabalho saiu do item 2 do ritual, e o achado é **sobre o instrumento,
+não sobre os leiloeiros**.
+
+### 🔴 `fonte_regressao_suspeita()` tinha DOIS pontos cegos, e os dois devolvem silêncio
+
+Ela é lida no ritual com a regra *"vazio = íntegro"* e **não tem um único chamador em código** —
+é instrumento de leitura humana, e por isso envelheceu calada. É a **quarta vez** que o
+instrumento é o errado nesta base (17/08, 18/08, 27/08 e agora).
+
+| Ponto cego | O que escondia |
+|---|---|
+| **A — o gate `mediana >= 20`** de `fonte_baseline_aprendida().tem_baseline` | **10 das 32 fontes, PARA SEMPRE.** Leiloeiro pequeno era invisível por ser pequeno, não por estar são. Escondia **VEGAS com 2 lotes contra mediana 15** e as duas fontes PAGAS RJLEILOES e VENDASGOV |
+| **B — nenhuma checagem de IDADE** | A última medição real era comparada com o piso como se fosse de agora. **EMILIOMATOS com 9 dias**, ALFA e NORDESTE com 8 — todas respondendo "sem regressão" a partir de leitura da semana passada |
+
+O B é pior justamente hoje: com o teto do Bright Data saturado (**550/550**), a função pula as
+linhas `sem_cota` — corretamente — e a última medição real **recua um dia a cada dia**, sem nada
+mudar na tela.
+
+> ⚠️ **Correção de rota registrada:** no diagnóstico eu disse que *o monitor* era cego a isso.
+> **Errado** — `monitor-fontes-cron.js` pega frescor em `MAX_IDADE_H = 108`, e ALFA/NORDESTE
+> estavam na assinatura do e-mail de 28/08 como `coleta parada`. O cego era o instrumento SQL do
+> ritual, não o cron. Confirmar antes de acusar vale para o próprio diagnóstico.
+
+**A função reescrita devolve `motivo` nomeado** (`zerou` · `regressao` · `medicao_velha`), porque
+a lição de 13c foi essa: contador agregado descreve o sintoma e esconde a causa. `faltando` agora
+vem **nulo fora de `regressao`** — ali ele sairia negativo e plausível (*"faltando -19"*),
+descrevendo uma comparação que a função se recusa a fazer. Porte virou critério **por ramo**, não
+porteira de entrada. E "não consegui verificar" virou uma **linha**, não um vazio — mesmo
+princípio do `verificar:schema`, que reprova quando não consegue checar.
+
+```
+antes: 1 linha (CALIL)      depois: 6 linhas
+  zerou         VENDASGOV
+  regressao     CALIL (9/18) · VEGAS (2/8, invisível pelo gate)
+  medicao_velha EMILIOMATOS 216h · NORDESTE 191h · ALFA 191h
+```
+
+### 🚨 O PRÉ-REQUISITO — a forma nº 5 ainda viva em dois coletores
+
+Antes de mexer no instrumento apareceu o motivo pelo qual ele **não podia** ganhar um ramo
+`zerou` como estava: **21 linhas de `fonte_saude` gravaram recusa de ORÇAMENTO como
+`status='falhou'`** — e o filtro de `sem_cota`/`parcial_cota` (o conserto de 18/08) era
+contornado por elas, porque diziam `falhou`.
+
+- **`scraper-rj.mjs`** — a classe `FalhaDeAcesso` copiava só o `.motivo` do `ErroBrightData` e
+  **descartava o `.semCota` que ele já calculava**, um frame acima de onde era usado.
+  **8 linhas entre 13/08 e 29/08 (hoje)**, todas com `teto_global` escrito no motivo ao lado de
+  um status que dizia o contrário. Pior: várias ganharam um **`queda vs anterior (coletados 0<5)`
+  FABRICADO** por cima, porque `registrarSaude` comparou um zero de orçamento com a coleta
+  anterior. O conserto de 16/08 em `_saude-fonte.mjs` não alcançou este arquivo — ele monta o
+  objeto de validação por conta própria.
+- **`scraper-pecini.mjs`** — escrevia `sem cota: …` **na prosa do motivo e não no campo**
+  (1 linha, 19/08). É *literalmente* o que o comentário de 16/08 descreve como já corrigido.
+
+Corrigidos os dois na raiz, e o RJ ganhou também o `parcial_cota` que faltava: quando a cota
+corta **no meio**, ele gravava `ok` com um total truncado — que o piso aprendido **absorve**,
+puxando a linha de base para baixo a cada rodada cortada.
+
+**As 21 linhas foram reclassificadas** para `sem_cota` (conferidas uma a uma antes do `update`:
+todas com `total = 0` e o motivo dizendo "orçamento" por extenso, nenhuma ambígua).
+
+### 🔒 A trava contra a reincidência
+
+Consertar dois coletores não impede o terceiro. Novo invariante
+**`fonte_orcamento_como_falha`** (Captura/bug, limite 0, janela de 7 dias) acusa o sintoma no
+rastro do banco: linha `falhou` cujo motivo confessa orçamento. O casamento de prosa fica **aqui**
+— onde o trabalho é acusar a contradição — e **não** dentro da função de regressão, que trocaria
+um instrumento frágil por outro. Lê **0** agora.
+
+**Arquivos:** `supabase/migrations/fonte_regressao_diz_o_motivo_e_enxerga_o_que_nao_mediu.sql`
+(aplicada), `scripts/scraper-rj.mjs`, `scripts/scraper-pecini.mjs`, `CLAUDE.md`.
+Travas: `verificar:padroes` ✅ · `verificar:sintaxe` ✅ · `npm run build` ✅.
+
+### 📋 O QUE FICA PARA A PRÓXIMA SESSÃO (além do que 13d já listou)
+
+1. **CALIL e VEGAS têm regressão de verdade** (9/18 e 2/8) e **não dá para confirmar até
+   segunda**: o teto global recusa os 13 propósitos, e a última medição real das duas é de 26/08.
+   Quando a semana virar (31/08), medir ANTES de mexer em parser.
+2. **EMILIOMATOS 9 dias sem medição** — é o P4 de 13d, agora com número em cima.
+3. **ALFA e NORDESTE, 8 dias** — NORDESTE está com **0 lotes ativos** no acervo.
+4. **`Meta Ads` grava `conversoes: null` em todas as linhas** de `marketing_metricas_dia`
+   enquanto o Google grava número. `null` não é zero: hoje não dá para saber se a verba do Meta
+   comprou alguém.
+5. **Os "7 chamados fechados sem resposta humana" de `tempo_processo()` são 2.** A ingestão de
+   e-mail carimba `autor_tipo='cliente'` em tudo que chega na caixa — 3 dos 8 são **e-mails
+   transacionais NOSSOS** voltando ("A solicitação foi aprovada") e 3 são testes do dono. O
+   instrumento mede *"mensagem rotulada cliente"* e reporta *"o cliente falou"* (forma nº 10).
+   Os 2 reais: o lead de **Consórcio** (16/08) e **"Deu erro no meu relatório"** (06/07).
+
+---
+
 ## 🗓️ 29/08 (sessão 13d — ENCERRAMENTO) — O CLIENTE 360 ACHOU A PÁGINA QUE A VERBA PAGA
 
 Fechamento do dia a pedido do dono: *"Verifique o cliente 360 antes de encerrarmos para garantir

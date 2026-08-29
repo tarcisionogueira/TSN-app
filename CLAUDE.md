@@ -156,8 +156,27 @@ curto (5–8 linhas) antes de seguir:
    ```sql
    select * from public.fonte_regressao_suspeita();
    ```
-   → vazio = íntegro. Cada linha traz `faltando` (o tamanho do buraco depois dos descontos),
-   `expirados_recentes` e `medido_em` — é o bastante para decidir se vale a ofensiva de recon.
+   → vazio = íntegro. **Cada linha diz o `motivo` por extenso** — e os três pedem ações
+   diferentes, então leia o motivo antes de agir:
+   - **`zerou`** — a fonte parou de trazer lote. Zero não é oscilação: é o achado mais duro
+     da lista, mesmo em leiloeiro pequeno.
+   - **`regressao`** — volume abaixo do piso aprendido. Só aqui `faltando` tem sentido (é o
+     tamanho do buraco depois de descontar expiração legítima); nos outros vem **nulo de
+     propósito**, porque ali o número sairia plausível e mediria outra coisa (forma nº 10).
+   - **`medicao_velha`** — não houve medição real recente (> `horas_sem_medir`, teto 108 h =
+     o `MAX_IDADE_H` do `monitor-fontes-cron.js`). **Não é "está tudo bem", é "não consigo
+     verificar"** — e vale ainda mais quando o teto do Bright Data está saturado, porque aí
+     a última medição real recua um dia a cada dia sem nada mudar na tela.
+
+   > ⚠️ **Reescrita em 29/08 porque ela enxergava 22 de 32 fontes e chamava isso de íntegro.**
+   > Dois pontos cegos, os dois devolvendo silêncio: (a) o gate `mediana >= 20` do
+   > `tem_baseline` excluía **10 fontes PARA SEMPRE** — leiloeiro pequeno era invisível por
+   > ser pequeno, não por estar são (escondia VEGAS com 2 lotes contra mediana 15, e as duas
+   > fontes PAGAS RJLEILOES e VENDASGOV); (b) **não havia checagem de idade** — EMILIOMATOS
+   > respondia "sem regressão" a partir de leitura de 9 dias antes. O porte agora é critério
+   > por ramo, não porteira de entrada, e "não consegui verificar" virou uma LINHA em vez de
+   > um vazio — o mesmo princípio que o `verificar:schema` já aplica ao reprovar quando não
+   > consegue checar.
 
    > ⚠️ **Era uma CONSULTA solta aqui até 27/08, e ela errava nos DOIS sentidos.** Trocada por
    > função porque consulta em documento não é testada e envelhece calada.
