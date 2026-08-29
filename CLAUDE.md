@@ -311,12 +311,35 @@ Três invariantes novos em `qa_invariantes()` vigiam isso no rastro do banco:
 `analise_sem_mercadologico`, `laudo_sem_base` e `analise_vencida_nao_limpa` (este último é o
 que grita se a retenção parar de funcionar — um DELETE que não apaga não dá erro).
 
+**10. O INSTRUMENTO MEDE UMA COISA E REPORTA COM O NOME DE OUTRA (29/08).** As nove formas
+acima descrevem *ausência entregue como resposta*. Esta é a irmã que engana quem está
+investigando: o número existe, é plausível, e descreve outra coisa. **Quatro instâncias numa
+sessão só**, todas encontradas por MEDIR o resultado em vez de ler o código:
+
+- a triagem de leiloeiros gravava em `status_http` o status do **último caminho que eu chutei**
+  (`/lotes/imovel`) e não o da home — 34 sites apareceram como "404" com a home respondendo 200;
+- o cruzamento do acervo com a lista da JUCEMG comparou **nomes de fonte**, e escondeu 7
+  leiloeiros que já coletavam como *tenants* de fontes multi-tenant (ao cruzar com lista externa,
+  **compare os tenants**, não a chave da fonte);
+- o validador imprimiu **"23 de 23 requisições evitadas"** com **zero** documentos lidos;
+- `catch { continue; }` transformou "chamei a classe `PDFParse` sem `new`" em "PDF escaneado",
+  e a medição saiu **23 de 23 sem camada de texto** — perfeitamente plausível, completamente
+  errada.
+
+Já havia três ocorrências anteriores sem nome (17/08, 18/08 e 27/08 — todas comparando algo que
+NÃO era medição da fonte contra o piso da fonte). **A pergunta que pega:** *este número mede
+exatamente o que o nome dele diz, ou mede o que foi mais fácil de coletar?* E o antídoto que
+funcionou nas quatro: **rodar em seco sobre dado real antes de gravar** — nenhuma delas apareceria
+em revisão de código.
+
 ## 🔒 As duas travas automáticas (custo zero, sem IA)
 
 | Trava | Onde roda | O que pega |
 |---|---|---|
 | `npm run verificar:padroes` | `prebuild` (todo `npm run build` e o deploy da Vercel) + CI `verificar-padroes.yml` | As formas 1–6 acima **e**, desde 12/08: `mutacao-sem-binding` (update/insert cujo resultado é descartado — a forma que mandou o e-mail de reunião fantasma), `notify-sem-cancelled` (passo de alerta com `if: failure()` sem `cancelled()`, que deixou 3 dias de coleta truncada sem aviso) e `mesma-janela-em-tabelas-diferentes` (o MESMO `.limit()` em tabelas diferentes no mesmo `Promise.all` — ver a forma 9) |
 | `npm run verificar:schema` | CI `verificar-schema.yml` — push, PR e **diário 11h UTC** | A forma 7: toda tabela em `.from('x')` e toda coluna de data em filtro/ordenação, conferidas contra o schema REAL (RPC `schema_inventario()`) |
+| `brightdata-fora-do-ledger` (dentro de `verificar:padroes`) | idem | Chamada CRUA à Web Unlocker fora de `api/_brightdata.js`. Em 29/08 eram **22 arquivos por fora contra 18 por dentro** — o teto semanal vigiava menos da metade do gasto, e era essa a causa da distância entre o ledger (~2.549) e os ~780 créditos do painel. Porta única em JS: `_brightdata.js`; em Python: `scripts/scraper_vlance.py`; recon: `scripts/lib/bd-ledger.mjs` |
+| `catch-que-engole-o-motivo` (idem) | idem | `catch` em volta de I/O (`await`/`fetch`) que não deixa NENHUM rastro do motivo — sem comentário, sem `console`, sem `throw`, sem campo de erro no retorno. Só vale para I/O: `try { new URL(x) } catch { return false }` é idioma correto, a falha É a resposta |
 | `npm run verificar:sintaxe` | `prebuild` (bloqueia o deploy) | **ERRO de parse em `api/`, `scripts/` e `src/`.** O `vite build` só compila `src/` — `api/` vai para a Vercel sem ninguém olhar, e um arquivo quebrado ali é 500 em produção. Só ERROS reprovam; avisos históricos seguem tolerados |
 
 Ambas são **linha de base por arquivo**: só reprovam ocorrência NOVA, o acervo histórico fica como

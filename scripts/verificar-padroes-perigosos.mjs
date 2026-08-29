@@ -209,6 +209,55 @@ const REGRAS = [
     testar: (linha, arquivo) => /api\.brightdata\.com/.test(linha)
       && !/_brightdata\.js$/.test(String(arquivo || '')),
   },
+  {
+    id: 'catch-que-engole-o-motivo',
+    titulo: 'catch sem motivo registrado — o erro some e o sintoma vira outro',
+    // POR QUE (29/08): DOIS defeitos da mesma sessão ficaram invisíveis por isto, e um deles
+    // quase foi para produção. Em `_doc-datas.js`, `carregarPDFParse()` devolve a CLASSE
+    // `PDFParse` e ela foi chamada como função; o `Class constructor cannot be invoked without
+    // 'new'` caiu num `catch { continue; }` e TODO documento passou a ser reportado como "PDF
+    // sem camada de texto". A validação mediu 23 de 23 documentos "escaneados" — número
+    // perfeitamente plausível, e completamente errado.
+    //
+    // O ponto não é proibir best-effort: o projeto vive de leitura que não pode derrubar nada.
+    // O ponto é que o motivo tem de SOBREVIVER em algum lugar — um comentário dizendo por que
+    // se ignora, um `console.error`, um `throw`, ou a variável do erro sendo usada. Um bloco
+    // vazio transforma "o código está errado" em "o dado é assim", e essa troca custa dias.
+    //
+    // Passa: `catch { /* preview best-effort */ }`, `catch (e) { console.error(e) }`,
+    // `catch (e) { motivo = e.message; }`, `catch { throw ... }`.
+    // Reprova: `catch {}`, `catch { continue; }`, `catch (e) { return null; }` sem uma linha
+    // dizendo por quê.
+    testar: (linha, arquivo, texto, i, linhas) => {
+      if (!/\bcatch\s*(\([^)]*\))?\s*\{/.test(linha)) return false;
+      // ⚠️ SÓ VALE PARA `try` COM I/O. A primeira versão desta regra acusou 242 ocorrências —
+      // ruído puro — porque pegava o idioma correto `try { new URL(x) } catch { return false }`,
+      // onde a falha É a resposta e não há motivo a preservar: um URL inválido é inválido, ponto.
+      // O que precisa de motivo é o `catch` em volta de rede, arquivo ou banco, onde "falhou" e
+      // "não achou" são coisas diferentes e a distinção se perde no bloco vazio. Foi exatamente
+      // aí que o PDFParse chamado errado virou "PDF escaneado".
+      const inicio = Math.max(0, i - 14);
+      const antes = linhas.slice(inicio, i + 1).join('\n');
+      const t = antes.lastIndexOf('try');
+      if (t < 0) return false;
+      if (!/\bawait\b|\bfetch\s*\(/.test(antes.slice(t))) return false;
+      const bloco = linhas.slice(i, i + 7).join('\n');
+      const fim = bloco.indexOf('}', bloco.search(/\bcatch\s*(\([^)]*\))?\s*\{/));
+      const corpo = fim >= 0 ? bloco.slice(0, fim + 1) : bloco;
+      if (/\/\/|\/\*/.test(corpo)) return false;                    // motivo documentado
+      if (/console\.|throw\b|alertarErro|reportarErro|registrar/i.test(corpo)) return false;
+      // O motivo também sobrevive quando volta DENTRO do valor de retorno — é o caso de
+      // `catch { return { ok:false, erro:'Timeout Receita' }; }`, que diz qual "não" foi. Quem
+      // chama consegue distinguir falha de ausência, que é tudo o que esta regra quer garantir.
+      if (/\b(erro|error|motivo|indisponivel|indisponível|semCota|falhou)\b/i.test(corpo)) return false;
+      if (/catch\s*\(\s*([A-Za-z_$][\w$]*)\s*\)/.test(corpo)) {   // usa a variável do erro?
+        const v = corpo.match(/catch\s*\(\s*([A-Za-z_$][\w$]*)\s*\)/)[1];
+        const depois = corpo.slice(corpo.indexOf('{'));
+        if (new RegExp(`\\b${v}\\b`).test(depois)) return false;
+      }
+      return true;
+    },
+  },
 ];
 
 // Regras de WORKFLOW (.github/workflows/*.yml): o defeito mora no YAML, não no JS.

@@ -1,9 +1,50 @@
 {
   "api/_arremate-aprendizado.js": {
+    "catch-que-engole-o-motivo": 1,
     "json-inline-sem-resposta": 8
   },
+  "api/_auth.js": {
+    "catch-que-engole-o-motivo": 3
+  },
+  "api/_cnj.js": {
+    "catch-que-engole-o-motivo": 1
+  },
+  "api/_cpf.js": {
+    "catch-que-engole-o-motivo": 1
+  },
+  "api/_doc-datas.js": {
+    "catch-que-engole-o-motivo": 1
+  },
+  "api/_doc-extracao.js": {
+    "catch-que-engole-o-motivo": 2
+  },
   "api/_edital-extrato.js": {
+    "catch-que-engole-o-motivo": 4,
     "json-2linhas-sem-ok": 3
+  },
+  "api/_gcal.js": {
+    "catch-que-engole-o-motivo": 1
+  },
+  "api/_geo.js": {
+    "catch-que-engole-o-motivo": 5
+  },
+  "api/_grupolance-auth.js": {
+    "catch-que-engole-o-motivo": 2
+  },
+  "api/_pj-socio.js": {
+    "catch-que-engole-o-motivo": 1
+  },
+  "api/_produto-email.js": {
+    "catch-que-engole-o-motivo": 1
+  },
+  "api/_rate-limit.js": {
+    "catch-que-engole-o-motivo": 1
+  },
+  "api/_storage.js": {
+    "catch-que-engole-o-motivo": 1
+  },
+  "api/_uso.js": {
+    "catch-que-engole-o-motivo": 2
   },
   "api/_webhook-core.js": {
     "delete-sem-select": 1,
@@ -16,6 +57,9 @@
   "api/admin-chargebacks.js": {
     "json-inline-sem-resposta": 1
   },
+  "api/admin-usuario-360.js": {
+    "catch-que-engole-o-motivo": 2
+  },
   "api/advogado-atendimentos.js": {
     "json-inline-sem-resposta": 2
   },
@@ -24,6 +68,7 @@
   },
   "api/agendar-ciclo.js": {
     "json-2linhas-sem-ok": 2,
+    "catch-que-engole-o-motivo": 1,
     "json-inline-sem-resposta": 1
   },
   "api/agendar-reuniao.js": {
@@ -33,8 +78,23 @@
   "api/anexo-url.js": {
     "json-inline-sem-resposta": 1
   },
+  "api/anunciar-produto.js": {
+    "catch-que-engole-o-motivo": 1
+  },
+  "api/aplicar-precos-agendados-cron.js": {
+    "catch-que-engole-o-motivo": 1
+  },
+  "api/arrematacoes.js": {
+    "catch-que-engole-o-motivo": 2
+  },
   "api/arrematado-ancora.js": {
     "json-inline-sem-resposta": 2
+  },
+  "api/arremate-aprendizado.js": {
+    "catch-que-engole-o-motivo": 2
+  },
+  "api/asaas.js": {
+    "catch-que-engole-o-motivo": 2
   },
   "api/assinar-contrato.js": {
     "json-2linhas-sem-ok": 2
@@ -43,7 +103,8 @@
     "json-2linhas-sem-ok": 1
   },
   "api/ativacao-nudge-cron.js": {
-    "json-2linhas-sem-ok": 1
+    "json-2linhas-sem-ok": 1,
+    "catch-que-engole-o-motivo": 1
   },
   "api/ativar-pro-anual.js": {
     "json-2linhas-sem-ok": 1
@@ -53,7 +114,11 @@
   },
   "api/auto-contrato.js": {
     "data-sem-error": 2,
+    "catch-que-engole-o-motivo": 1,
     "mutacao-sem-binding": 1
+  },
+  "api/backup-r2-cron.js": {
+    "catch-que-engole-o-motivo": 4
   },
   "api/baixar-doc.js": {
     "json-2linhas-sem-ok": 1
@@ -65,13 +130,15 @@
     "json-inline-sem-resposta": 1
   },
   "api/chat-suporte.js": {
-    "json-2linhas-sem-ok": 1
+    "json-2linhas-sem-ok": 1,
+    "catch-que-engole-o-motivo": 1
   },
   "api/cnj-monitor-cron.js": {
     "json-inline-sem-resposta": 1
   },
   "api/coleta-oportunista.js": {
-    "json-2linhas-sem-ok": 1
+    "json-2linhas-sem-ok": 1,
+    "catch-que-engole-o-motivo": 2
   },
   "api/complementar-assinatura.js": {
     "json-2linhas-sem-ok": 1
@@ -83,17 +150,21 @@
     "json-inline-sem-resposta": 3
   },
   "api/cpf-migrar.js": {
-    "json-inline-sem-resposta": 1
+    "json-inline-sem-resposta": 1,
+    "catch-que-engole-o-motivo": 1
   },
   "api/daily-webhook.js": {
     "data-sem-error": 1,
+    "catch-que-engole-o-motivo": 1,
     "mutacao-sem-binding": 3
   },
   "api/diagnostico-ia.js": {
+    "catch-que-engole-o-motivo": 2,
     "json-inline-sem-resposta": 1
   },
   "api/documental-retry-cron.js": {
-    "json-inline-sem-resposta": 1
+    "json-inline-sem-resposta": 1,
+    "catch-que-engole-o-motivo": 1
   },
   "api/endereco-autocomplete.js": {
     "json-2linhas-sem-ok": 2
@@ -104,8 +175,15 @@
   "api/enriquecer-datas-cron.js": {
     "json-inline-sem-resposta": 1
   },
+  "api/enriquecer-lote.js": {
+    "catch-que-engole-o-motivo": 2
+  },
+  "api/enviar-alertas-cron.js": {
+    "catch-que-engole-o-motivo": 1
+  },
   "api/enviar-juridico-email.js": {
     "json-2linhas-sem-ok": 1,
+    "catch-que-engole-o-motivo": 1,
     "json-inline-sem-resposta": 4
   },
   "api/espelhar-docs-cron.js": {
@@ -113,9 +191,11 @@
   },
   "api/garantia-cancelar.js": {
     "json-2linhas-sem-ok": 2,
+    "catch-que-engole-o-motivo": 1,
     "json-inline-sem-resposta": 1
   },
   "api/gerar-analise.js": {
+    "catch-que-engole-o-motivo": 15,
     "json-2linhas-sem-ok": 5,
     "json-inline-sem-resposta": 3
   },
@@ -123,14 +203,31 @@
     "data-sem-error": 1
   },
   "api/gerar-documental.js": {
+    "catch-que-engole-o-motivo": 6,
     "json-inline-sem-resposta": 3,
     "json-2linhas-sem-ok": 3
   },
   "api/gerar-laudo-viabilidade.js": {
+    "catch-que-engole-o-motivo": 1,
     "json-inline-sem-resposta": 3
+  },
+  "api/health-check.js": {
+    "catch-que-engole-o-motivo": 1
+  },
+  "api/img-caixa.js": {
+    "catch-que-engole-o-motivo": 2
   },
   "api/indice-aprendizado-cron.js": {
     "json-2linhas-sem-ok": 1
+  },
+  "api/indice-consulta.js": {
+    "catch-que-engole-o-motivo": 1
+  },
+  "api/indice-mercado.js": {
+    "catch-que-engole-o-motivo": 4
+  },
+  "api/indice-reforco-cron.js": {
+    "catch-que-engole-o-motivo": 2
   },
   "api/juridico-destinatarios.js": {
     "json-inline-sem-resposta": 2
@@ -139,21 +236,33 @@
     "json-inline-sem-resposta": 3
   },
   "api/juridico-lembretes-cron.js": {
-    "json-2linhas-sem-ok": 1
+    "json-2linhas-sem-ok": 1,
+    "catch-que-engole-o-motivo": 1
   },
   "api/laudo-retry-cron.js": {
     "json-inline-sem-resposta": 1
   },
+  "api/limpar-analises-cron.js": {
+    "catch-que-engole-o-motivo": 1
+  },
+  "api/marcar-posse.js": {
+    "catch-que-engole-o-motivo": 1
+  },
   "api/marcar-reuniao.js": {
     "json-inline-sem-resposta": 1
   },
+  "api/moderador-cron.js": {
+    "catch-que-engole-o-motivo": 1
+  },
   "api/monitor-fontes-cron.js": {
-    "data-sem-error": 8
+    "data-sem-error": 7,
+    "catch-que-engole-o-motivo": 1
   },
   "api/monitorar-processo.js": {
     "json-inline-sem-resposta": 1
   },
   "api/mp-admin.js": {
+    "catch-que-engole-o-motivo": 1,
     "json-2linhas-sem-ok": 1
   },
   "api/mp-checkout.js": {
@@ -162,22 +271,38 @@
   "api/mp-webhook.js": {
     "json-2linhas-sem-ok": 1
   },
+  "api/mp.js": {
+    "catch-que-engole-o-motivo": 1
+  },
   "api/notificar-cliente.js": {
     "json-inline-sem-resposta": 1
   },
+  "api/notify-scraper.js": {
+    "catch-que-engole-o-motivo": 1
+  },
+  "api/og-share.js": {
+    "catch-que-engole-o-motivo": 1
+  },
   "api/onr-health.js": {
-    "json-2linhas-sem-ok": 1
+    "json-2linhas-sem-ok": 1,
+    "catch-que-engole-o-motivo": 1
   },
   "api/pj-revalidacao-cron.js": {
-    "data-sem-error": 1
+    "data-sem-error": 1,
+    "catch-que-engole-o-motivo": 1
   },
   "api/processar-analise.js": {
-    "json-inline-sem-resposta": 1
+    "json-inline-sem-resposta": 1,
+    "catch-que-engole-o-motivo": 4
+  },
+  "api/publico.js": {
+    "catch-que-engole-o-motivo": 3
   },
   "api/push-send.js": {
     "json-2linhas-sem-ok": 2
   },
   "api/radar-editais-cron.js": {
+    "catch-que-engole-o-motivo": 2,
     "data-sem-error": 4,
     "mutacao-sem-binding": 1
   },
@@ -186,23 +311,37 @@
   },
   "api/reconciliar-assinaturas-cron.js": {
     "mutacao-sem-binding": 2,
-    "data-sem-error": 7
+    "data-sem-error": 6
   },
   "api/regenerar-relatorios-cron.js": {
-    "json-inline-sem-resposta": 4
+    "json-inline-sem-resposta": 4,
+    "catch-que-engole-o-motivo": 1
   },
-  "api/registrar-compra-produto.js": {
-    "json-2linhas-sem-ok": 2
+  "api/renovacao-avisos-cron.js": {
+    "catch-que-engole-o-motivo": 2
   },
   "api/resumir-ticket.js": {
     "json-2linhas-sem-ok": 4
   },
   "api/retencao-avisos-cron.js": {
+    "catch-que-engole-o-motivo": 2,
     "json-2linhas-sem-ok": 3
   },
   "api/saldo-abandono-cron.js": {
     "data-sem-error": 2,
     "mutacao-sem-binding": 1
+  },
+  "api/saque-nf.js": {
+    "catch-que-engole-o-motivo": 1
+  },
+  "api/saque.js": {
+    "catch-que-engole-o-motivo": 2
+  },
+  "api/scraper-leiloeiros.js": {
+    "catch-que-engole-o-motivo": 1
+  },
+  "api/scraper-status.js": {
+    "catch-que-engole-o-motivo": 1
   },
   "api/setup-daily-webhook.js": {
     "json-2linhas-sem-ok": 1
@@ -213,110 +352,120 @@
   "api/sinalizar-revenda.js": {
     "json-2linhas-sem-ok": 2
   },
+  "api/sistema-debug.js": {
+    "catch-que-engole-o-motivo": 1
+  },
+  "api/trigger-scraper.js": {
+    "catch-que-engole-o-motivo": 1
+  },
   "api/upload-anexo.js": {
     "json-inline-sem-resposta": 1
   },
   "api/validar-anexos-arremate.js": {
+    "catch-que-engole-o-motivo": 1,
     "json-inline-sem-resposta": 1,
     "json-2linhas-sem-ok": 1
   },
   "api/validar-pj-socio.js": {
+    "catch-que-engole-o-motivo": 1,
     "json-2linhas-sem-ok": 1
   },
   "api/validar-selfie.js": {
-    "json-2linhas-sem-ok": 2
+    "json-2linhas-sem-ok": 2,
+    "catch-que-engole-o-motivo": 4
   },
   "api/verificar-cpf.js": {
     "json-2linhas-sem-ok": 4
   },
+  "api/verificar-doc.js": {
+    "catch-que-engole-o-motivo": 3
+  },
   "api/verificar-identidade-kyc.js": {
     "json-2linhas-sem-ok": 2
   },
-  "src/components/BoasVindasModal.jsx": {
-    "flex-2col-sem-minwidth0": 1,
-    "user-id-cru-em-dado-de-cliente": 2
+  "api/verificar-pagamento.js": {
+    "catch-que-engole-o-motivo": 1
   },
   "src/components/ChatSuporte.jsx": {
-    "flex-2col-sem-minwidth0": 1,
     "data-sem-error": 8,
-    "mutacao-sem-binding": 10,
-    "user-id-cru-em-dado-de-cliente": 3
+    "mutacao-sem-binding": 10
   },
   "src/components/ConciliacaoBancaria.jsx": {
-    "flex-2col-sem-minwidth0": 1
+    "flex-2col-sem-minwidth0": 1,
+    "catch-que-engole-o-motivo": 3
+  },
+  "src/components/ContinuarNoCelular.jsx": {
+    "catch-que-engole-o-motivo": 1
   },
   "src/components/ContratoObrigatorio.jsx": {
     "data-sem-error": 1
   },
-  "src/components/FinanciamentoTracker.jsx": {
-    "flex-2col-sem-minwidth0": 1,
-    "user-id-cru-em-dado-de-cliente": 2
+  "src/components/EnderecoAutocomplete.jsx": {
+    "catch-que-engole-o-motivo": 1
+  },
+  "src/components/ExtratoUnificado.jsx": {
+    "catch-que-engole-o-motivo": 1
   },
   "src/components/Footer.jsx": {
     "flex-2col-sem-minwidth0": 1
   },
   "src/components/Header.jsx": {
-    "user-id-cru-em-dado-de-cliente": 1
-  },
-  "src/components/KycParceiroModal.jsx": {
-    "user-id-cru-em-dado-de-cliente": 1
+    "catch-que-engole-o-motivo": 1
   },
   "src/components/LeitorPaginado.jsx": {
     "data-sem-error": 1,
     "mutacao-sem-binding": 1
   },
+  "src/components/MonitorFinanceiro.jsx": {
+    "catch-que-engole-o-motivo": 4
+  },
   "src/components/PagamentoServico.jsx": {
     "json-2linhas-sem-ok": 1
   },
-  "src/components/SugestaoImovel.jsx": {
-    "user-id-cru-em-dado-de-cliente": 1
-  },
   "src/components/TermosAtualizadosModal.jsx": {
-    "data-sem-error": 1
+    "data-sem-error": 1,
+    "catch-que-engole-o-motivo": 1
   },
   "src/components/TourGuia.jsx": {
-    "flex-2col-sem-minwidth0": 1,
-    "data-sem-error": 3,
-    "user-id-cru-em-dado-de-cliente": 3
+    "data-sem-error": 3
   },
   "src/components/TriagemPerfil.jsx": {
     "mutacao-sem-binding": 1
-  },
-  "src/components/VitrineMaterial.jsx": {
-    "user-id-cru-em-dado-de-cliente": 1
   },
   "src/contexts/AnalisesContext.jsx": {
     "mesma-janela-em-tabelas-diferentes": 1,
     "delete-sem-select": 1
   },
   "src/contexts/AuthContext.jsx": {
+    "catch-que-engole-o-motivo": 1,
     "data-sem-error": 2
   },
   "src/pages/Admin.jsx": {
-    "flex-2col-sem-minwidth0": 1,
+    "catch-que-engole-o-motivo": 10,
     "data-sem-error": 32,
     "delete-sem-select": 9,
-    "mutacao-sem-binding": 15
+    "mutacao-sem-binding": 14
   },
   "src/pages/AdminChargebacks.jsx": {
     "flex-2col-sem-minwidth0": 1
   },
   "src/pages/AdminFinanceiro.jsx": {
-    "flex-2col-sem-minwidth0": 1
+    "flex-2col-sem-minwidth0": 1,
+    "catch-que-engole-o-motivo": 2
   },
   "src/pages/AdvogadoPortal.jsx": {
+    "catch-que-engole-o-motivo": 1,
     "data-sem-error": 1
   },
   "src/pages/Analise.jsx": {
-    "flex-2col-sem-minwidth0": 1,
     "data-sem-error": 1,
-    "user-id-cru-em-dado-de-cliente": 5,
+    "catch-que-engole-o-motivo": 1,
     "mutacao-sem-binding": 2
   },
   "src/pages/Arrematados.jsx": {
     "data-sem-error": 9,
-    "user-id-cru-em-dado-de-cliente": 1,
     "json-2linhas-sem-ok": 1,
+    "catch-que-engole-o-motivo": 4,
     "mutacao-sem-binding": 1
   },
   "src/pages/Atendimento.jsx": {
@@ -325,18 +474,13 @@
     "mutacao-sem-binding": 3
   },
   "src/pages/Busca.jsx": {
-    "flex-2col-sem-minwidth0": 1,
     "data-sem-error": 3,
+    "catch-que-engole-o-motivo": 5,
     "json-2linhas-sem-ok": 2,
-    "user-id-cru-em-dado-de-cliente": 3,
     "delete-sem-select": 1
   },
   "src/pages/Calculadora.jsx": {
     "flex-2col-sem-minwidth0": 1
-  },
-  "src/pages/CancelarAlertas.jsx": {
-    "user-id-cru-em-dado-de-cliente": 2,
-    "mutacao-sem-binding": 1
   },
   "src/pages/Caso.jsx": {
     "flex-2col-sem-minwidth0": 1,
@@ -344,12 +488,14 @@
     "mutacao-sem-binding": 3
   },
   "src/pages/Checkout.jsx": {
+    "catch-que-engole-o-motivo": 1,
     "json-2linhas-sem-ok": 1,
     "mutacao-sem-binding": 1,
     "data-sem-error": 1
   },
   "src/pages/Cliente360.jsx": {
-    "flex-2col-sem-minwidth0": 1
+    "flex-2col-sem-minwidth0": 1,
+    "catch-que-engole-o-motivo": 3
   },
   "src/pages/Comissoes.jsx": {
     "flex-2col-sem-minwidth0": 1
@@ -359,22 +505,28 @@
   },
   "src/pages/Consultor.jsx": {
     "flex-2col-sem-minwidth0": 1,
-    "user-id-cru-em-dado-de-cliente": 1,
-    "mutacao-sem-binding": 3
+    "mutacao-sem-binding": 3,
+    "catch-que-engole-o-motivo": 1
+  },
+  "src/pages/ContinuarCaptura.jsx": {
+    "catch-que-engole-o-motivo": 2
   },
   "src/pages/ContratoLink.jsx": {
     "flex-2col-sem-minwidth0": 1,
+    "catch-que-engole-o-motivo": 2,
     "data-sem-error": 1
   },
   "src/pages/Contratos.jsx": {
     "flex-2col-sem-minwidth0": 1,
     "data-sem-error": 5,
+    "catch-que-engole-o-motivo": 4,
     "delete-sem-select": 2
   },
   "src/pages/Convite.jsx": {
     "data-sem-error": 1
   },
   "src/pages/ConviteEquipe.jsx": {
+    "catch-que-engole-o-motivo": 1,
     "data-sem-error": 1
   },
   "src/pages/ConviteLeiloeiro.jsx": {
@@ -387,26 +539,20 @@
     "data-sem-error": 2
   },
   "src/pages/Curso.jsx": {
-    "flex-2col-sem-minwidth0": 1,
-    "data-sem-error": 4,
-    "user-id-cru-em-dado-de-cliente": 3
+    "data-sem-error": 4
   },
   "src/pages/EbookPage.jsx": {
-    "user-id-cru-em-dado-de-cliente": 1,
     "data-sem-error": 2
   },
   "src/pages/HomeCliente.jsx": {
     "data-sem-error": 2
   },
   "src/pages/ImovelDetalhe.jsx": {
-    "flex-2col-sem-minwidth0": 1,
-    "data-sem-error": 2,
-    "user-id-cru-em-dado-de-cliente": 3,
-    "mutacao-sem-binding": 2,
-    "delete-sem-select": 1
+    "data-sem-error": 2
   },
   "src/pages/IndiceConsulta.jsx": {
-    "flex-2col-sem-minwidth0": 1
+    "flex-2col-sem-minwidth0": 1,
+    "catch-que-engole-o-motivo": 1
   },
   "src/pages/Landing.jsx": {
     "flex-2col-sem-minwidth0": 1
@@ -415,36 +561,35 @@
     "data-sem-error": 1,
     "mutacao-sem-binding": 1
   },
+  "src/pages/Login.jsx": {
+    "catch-que-engole-o-motivo": 1
+  },
   "src/pages/MapaImoveis.jsx": {
     "flex-2col-sem-minwidth0": 1
   },
   "src/pages/Membros.jsx": {
     "data-sem-error": 4,
-    "user-id-cru-em-dado-de-cliente": 1
+    "catch-que-engole-o-motivo": 1
   },
   "src/pages/MeusChamados.jsx": {
     "flex-2col-sem-minwidth0": 1,
     "data-sem-error": 2,
-    "user-id-cru-em-dado-de-cliente": 1,
-    "mutacao-sem-binding": 2
+    "mutacao-sem-binding": 2,
+    "catch-que-engole-o-motivo": 1
   },
   "src/pages/MinhaRede.jsx": {
     "flex-2col-sem-minwidth0": 1,
-    "data-sem-error": 6
+    "data-sem-error": 6,
+    "catch-que-engole-o-motivo": 2
   },
   "src/pages/MinhasAnalises.jsx": {
     "flex-2col-sem-minwidth0": 1
   },
   "src/pages/OnrRegistro.jsx": {
-    "flex-2col-sem-minwidth0": 1,
-    "data-sem-error": 3,
-    "user-id-cru-em-dado-de-cliente": 1
+    "data-sem-error": 3
   },
   "src/pages/Painel.jsx": {
-    "flex-2col-sem-minwidth0": 1,
-    "user-id-cru-em-dado-de-cliente": 9,
     "data-sem-error": 1,
-    "delete-sem-select": 2,
     "mutacao-sem-binding": 1
   },
   "src/pages/Perfil.jsx": {
@@ -452,24 +597,35 @@
     "json-2linhas-sem-ok": 1
   },
   "src/pages/Planos.jsx": {
-    "data-sem-error": 2
+    "data-sem-error": 2,
+    "catch-que-engole-o-motivo": 1
   },
   "src/pages/ProdutoLanding.jsx": {
     "flex-2col-sem-minwidth0": 1,
     "data-sem-error": 3
   },
   "src/pages/ProdutoPublico.jsx": {
-    "user-id-cru-em-dado-de-cliente": 2,
-    "data-sem-error": 4
+    "data-sem-error": 2
   },
   "src/pages/Promo.jsx": {
     "data-sem-error": 1
   },
+  "src/utils/claude.js": {
+    "catch-que-engole-o-motivo": 1
+  },
   "src/utils/cnpjCep.js": {
-    "json-2linhas-sem-ok": 1
+    "json-2linhas-sem-ok": 1,
+    "catch-que-engole-o-motivo": 1
+  },
+  "src/utils/cotaAnalise.js": {
+    "catch-que-engole-o-motivo": 2
+  },
+  "src/utils/docUrl.js": {
+    "catch-que-engole-o-motivo": 1
   },
   "src/utils/logUso.js": {
-    "mutacao-sem-binding": 1
+    "mutacao-sem-binding": 1,
+    "catch-que-engole-o-motivo": 1
   },
   "src/utils/planosConfig.js": {
     "data-sem-error": 1
@@ -482,6 +638,9 @@
     "data-sem-error": 1,
     "mutacao-sem-binding": 2
   },
+  "scripts/auditoria-claude.mjs": {
+    "catch-que-engole-o-motivo": 1
+  },
   "scripts/captura-docs-grupolance.mjs": {
     "data-sem-error": 3
   },
@@ -492,7 +651,8 @@
   },
   "scripts/captura-documentos.mjs": {
     "data-sem-error": 5,
-    "mutacao-sem-binding": 4
+    "mutacao-sem-binding": 4,
+    "catch-que-engole-o-motivo": 3
   },
   "scripts/captura-matricula-cef.mjs": {
     "data-sem-error": 4,
@@ -519,13 +679,24 @@
     "data-sem-error": 1
   },
   "scripts/debug-leiloeiros.mjs": {
+    "catch-que-engole-o-motivo": 6,
     "json-2linhas-sem-ok": 1
   },
+  "scripts/debug-sold.mjs": {
+    "catch-que-engole-o-motivo": 1
+  },
+  "scripts/enriquecer-cartorio-matricula.mjs": {
+    "catch-que-engole-o-motivo": 1
+  },
   "scripts/enriquecer-datas-cef.mjs": {
+    "catch-que-engole-o-motivo": 2,
     "mutacao-sem-binding": 1
   },
   "scripts/espelhar-docs-criticos.mjs": {
     "data-sem-error": 1
+  },
+  "scripts/explorar-frazao.mjs": {
+    "catch-que-engole-o-motivo": 2
   },
   "scripts/foto-cef.mjs": {
     "data-sem-error": 1,
@@ -543,11 +714,19 @@
   "scripts/recon-login-leiloeiro.mjs": {
     "data-sem-error": 1
   },
+  "scripts/recon-pestana-data.mjs": {
+    "catch-que-engole-o-motivo": 2
+  },
   "scripts/recon-sodre-api.mjs": {
+    "catch-que-engole-o-motivo": 1,
     "json-2linhas-sem-ok": 1
   },
   "scripts/recon-sodre-searchlots.mjs": {
-    "data-sem-error": 1
+    "data-sem-error": 1,
+    "catch-que-engole-o-motivo": 1
+  },
+  "scripts/scraper-gestao.mjs": {
+    "catch-que-engole-o-motivo": 1
   },
   "scripts/scraper-powerbi-mj.mjs": {
     "json-2linhas-sem-ok": 1,
@@ -555,12 +734,14 @@
   },
   "scripts/scraper-puppeteer.mjs": {
     "data-sem-error": 3,
-    "mutacao-sem-binding": 2
+    "mutacao-sem-binding": 2,
+    "catch-que-engole-o-motivo": 17
   },
   "scripts/scraper-soleon.mjs": {
     "data-sem-error": 1
   },
   "scripts/scraper.js": {
+    "catch-que-engole-o-motivo": 3,
     "mutacao-sem-binding": 1
   },
   "scripts/verificar-padroes-perigosos.mjs": {
