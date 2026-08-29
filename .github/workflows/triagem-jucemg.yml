@@ -1,0 +1,40 @@
+name: Triagem JUCEMG (classifica plataforma dos leiloeiros)
+
+# Manual: é um levantamento, não uma rotina. Roda quando há lista nova para classificar.
+on:
+  workflow_dispatch:
+    inputs:
+      limite:
+        description: 'Quantos domínios triar (0 = todos os 141)'
+        required: false
+        default: '0'
+
+jobs:
+  triagem:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Triar
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          TRIAGEM_LIMITE: ${{ inputs.limite }}
+        run: node scripts/recon-triagem-jucemg.mjs
+
+      # `cancelled()` junto com `failure()`: sem isso um cancelamento passa como sucesso
+      # silencioso — a trava `notify-sem-cancelled` existe por causa de 3 dias de coleta
+      # truncada sem aviso.
+      - name: Falhou
+        if: ${{ failure() || cancelled() }}
+        run: echo "::error::Triagem JUCEMG não concluiu — ver log acima."
