@@ -53,17 +53,40 @@ cega: o piso da HASTA subiu de **149 → 290**, porque agora aprende do que a fo
 > default é **7**, e o desconto de expiração é justamente o que protege o LEILOFY desde 27/08.
 > Parâmetro errado fabrica achado — conferir os defaults faz parte do ensaio.
 
-### 🟡 Ficou para o dono decidir: o acervo antigo de uma fonte não é relido
-`const alvo = (novos.length ? novos : urls).slice(0, maxLotes)` — enquanto **existir ao menos uma
-URL nova**, os lotes já conhecidos não são reprocessados. Medido na HASTA: 584 ativos, **5 tocados
-em 36 h**; os outros 579 estão com `atualizado_em` de 25/08. E `maxLotes` é **40**, então mesmo o
-ramo de fallback relê no máximo 40 por run.
+### ✅ RESOLVIDO no mesmo dia: o acervo antigo passa a ser relido com a SOBRA do orçamento
+`const alvo = (novos.length ? novos : urls).slice(0, maxLotes)` era tudo-ou-nada: com a fonte já
+coletada, um punhado de lotes novos consumia `novos.length` do teto e **o resto do teto era
+jogado fora**. Medido na HASTA: **5 lotes tocados em 36 h contra 584 ativos**, os outros 579 com
+`atualizado_em` de 25/08.
 
-**Não é urgente e não mexi:** os 579 têm as duas praças gravadas (`valor_minimo_2` preenchido) e
-`valor_minimo_ref` é `least(...)`, então o preço mostrado ao cliente acompanha a praça pela DATA
-sem precisar de releitura. O risco residual é o lote cujo preço ou data **mudou na fonte** depois
-de gravado: esse não se atualiza enquanto houver lote novo aparecendo. Trocar isso custa fetch
-(e a HASTA é residencial, custo zero, mas as pagas não são) — decisão de orçamento, do dono.
+**O teto declarado (`maxLotes`, 40) não muda.** O que muda é não desperdiçar a folga: novos
+primeiro, e a sobra vira releitura do acervo conhecido.
+
+**Duas garantias de custo, nesta ordem:**
+1. **Novo vem primeiro** — uma recusa de orçamento custa releitura, nunca lote novo.
+2. **A releitura aborta no instante em que um detalhe volta `via: 'bd'`.** *Releitura nunca paga.*
+   Lote novo pode pagar (vale o crédito); relê-lo não vale, ainda mais com o teto semanal
+   saturado. É decisão **medida por fetch**, não adivinhada por fonte: se a fonte deixar de ser
+   desafiada, a releitura volta sozinha. `cfg.maxRefresh: 0` desliga por fonte.
+
+Fila da releitura: **praça próxima primeiro** (é onde o dado muda), depois o mais velho, e
+`fonte_id` só para desempatar — sem desempate estável a ordem varia entre runs e o acervo nunca
+cicla inteiro. Lote já inativo não volta.
+
+**A conta virou função pura exportada (`planejarAlvo`) porque é ela que decide gasto:** um
+off-by-one em `iReleitura` faz o guard mirar no lote errado, um erro na `folga` estoura o teto,
+um sort instável relê sempre os mesmos. Nada disso quebra build, aparece em lint ou falha o run —
+sai um número plausível e mais caro. `npm run testar:motor` roda 8 cenários em seco, sem rede e
+sem banco (fonte nunca coletada segue no caminho antigo · sobra vira releitura · novos enchem o
+teto e a releitura zera · teto total nunca ultrapassado · `maxRefresh:0` desliga · praça iminente
+na frente do mais velho · inativo fora · desempate estável). **8/8 passam.**
+
+⚠️ **A ordem dos dois consertos deste dia importa.** A releitura faz `total` subir; se ela
+tivesse entrado ANTES de a baseline passar a aprender de `enumerados`, o piso derivaria de novo —
+exatamente o defeito que o conserto anterior removeu.
+
+**Ciclo do acervo, honesto:** com 40/run e ~13 novos, a HASTA relê ~27/run. 579 lotes levam ~21
+runs — cerca de 3 semanas em cadência diária. É lento, mas é grátis e limitado; antes era zero.
 
 ---
 
