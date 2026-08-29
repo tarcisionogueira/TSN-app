@@ -2779,6 +2779,39 @@ const SUPORTE_TENANTS = [
   // ES/JUCEES (recon-leiloeiros-es + recon-suporte 21/08): white-label confirmada com 12 lotes
   // na 1ª página — único do lote JUCEES com atividade (21 leilões no histórico da junta).
   { domain: 'suedpeterleiloes.com.br', leiloeiro: 'Sued Peter Leilões' },
+
+  // ─── JUCEMG (triagem 29/08) ────────────────────────────────────────────────────────────
+  // O dono trouxe a lista oficial da Junta Comercial de MG (236 leiloeiros). A triagem
+  // (`recon-triagem-jucemg.mjs`) achou 19 sites carregando de `static.suporteleiloes.com.br`
+  // — e TRÊS deles já eram tenants nossos que coletam hoje (lider, saraiva, valero). Ou seja,
+  // não é palpite de que "parece a mesma plataforma": é a MESMA, provada por quem já funciona.
+  //
+  // Por isso entram por configuração, sem código novo. Se algum não render lote, sai daqui —
+  // é a diferença entre um tenant a mais e um parser a mais.
+  //
+  // ⚠️ Os cinco marcados PGFN têm link para `comprei.pgfn.gov.br` na home. Isso NÃO os torna
+  // 100% PGFN (o alerta lá em cima é sobre tenants que REDIRECIONAM o catálogo inteiro) — mas
+  // é o sinal de risco, e o primeiro run diz: catálogo redirecionado devolve 0 lotes.
+  { domain: 'anandaleiloes.com.br', leiloeiro: 'Ananda Leilões' },
+  { domain: 'donizetteleiloes.com.br', leiloeiro: 'Donizette Leilões' },
+  { domain: 'goldenlance.com.br', leiloeiro: 'Golden Lance Leilões' },
+  { domain: 'lilianportugal.com.br', leiloeiro: 'Lilian Portugal Leilões' },
+  { domain: 'marianoleiloes.com.br', leiloeiro: 'Mariano Leilões' },
+  { domain: 'mjleiloes.com.br', leiloeiro: 'MJ Leilões' },
+  { domain: 'pelesleiloes.com.br', leiloeiro: 'Peles Leilões' },
+  { domain: 'portoleiloes.com.br', leiloeiro: 'Porto Leilões' },
+  { domain: 'rofremleiloes.com.br', leiloeiro: 'Rofrem Leilões' },
+  { domain: 'sandrasantosleiloes.com.br', leiloeiro: 'Sandra Santos Leilões' },
+  { domain: 'serpaleiloes.com.br', leiloeiro: 'Serpa Leilões' },
+  { domain: 'stefanellileiloes.com.br', leiloeiro: 'Stefanelli Leilões' },
+  { domain: 'luizlobatoleiloeiro.com.br', leiloeiro: 'Luiz Lobato Leilões' },          // PGFN na home
+  { domain: 'marcoantonioleiloeiro.com.br', leiloeiro: 'Marco Antônio Leilões' },      // PGFN na home
+  { domain: 'rafaelleiloeiro.com.br', leiloeiro: 'Rafael Araújo Leilões' },            // PGFN na home
+  { domain: 'rodrigoleiloeiro.com.br', leiloeiro: 'Rodrigo Collyer Leilões' },         // PGFN na home
+  { domain: 'wermelingerleiloes.com.br', leiloeiro: 'Wermelinger Leilões' },           // PGFN na home
+  // `donizetteleiloes.leilao.br` é o MESMO site do .com.br (mesmo `arrematante.` e mesmo
+  // static). Fora de propósito: o `tenantKey` deriva do domínio antes do primeiro ponto, então
+  // os dois gerariam o mesmo `fonte_id` e um sobrescreveria o outro sem nada aparecer.
 ];
 
 // Lote de TESTE do próprio leiloeiro (SUEDPETER 21/08: "LEILÃO TESTE - LOTE 02" no evento
