@@ -4,6 +4,75 @@
 
 ---
 
+## 🗓️ 29/08 (sessão 14c) — A ÂNCORA DO CDC TINHA TRÊS CÉREBROS E NENHUM DONO
+
+Fechamento da pendência aberta em 14b, a pedido do dono. `perfis.plano_pago_em` é a âncora do
+**direito de arrependimento (CDC art. 49)**: `garantia-cancelar.js:105` faz
+`dentro7 = plano_pago_em && …`, então **âncora nula = reembolso NEGADO**, sem erro e sem rastro.
+
+### 🔴 O DEFEITO — "role pagante" usado como sinônimo de "já ancorado"
+
+A decisão estava em TRÊS pontos de JS (`ativarPlanoDireto`, `processarConfirmado`,
+`mp.js/ativarRoleInline`), sempre assim:
+
+```js
+if (!plano_pago_em && !PAGANTES.includes(role)) { ancora }
+```
+
+Quem vira pagante por um caminho que **não grava** a âncora (concessão manual, cortesia,
+ativação antiga) ficava preso: **o role pagante passava a bloquear para sempre a gravação que
+faltou.** Medido: **1 dos 4 pagantes reais** (`top2`, cobranças em 01/07 e 01/08, âncora nula).
+E o vetor estava vivo — a conta `assessorado` de cortesia cairia nele no dia em que pagasse.
+
+### ✅ A REGRA FOI PARA O BANCO, COMO CÉREBRO ÚNICO
+
+Não bastava consertar os três `if`. `auditoria_regras_negocio()` termina verificando que
+`solicitar_saque_ledger` delega a `saque_avaliar` — *"voltaram os dois cérebros"*. Regra de
+DINHEIRO com três cópias em JS é a mesma doença que fez *"explorador não saca"* virar letra
+morta em 08/08. Então:
+
+- **`public.garantia_7d_avaliar(uuid)`** — avaliador único, devolve `{ancorar, motivo, regra}`
+  com o **motivo nomeado** (`estreia` · `ja_ancorado` · `promovido_sem_cobranca` ·
+  `pagante_com_historico` · `perfil_nao_encontrado`).
+- **`regra_negocio['garantia.ancora_7d']`** com `aplicada_por = ['garantia_7d_avaliar']` — a
+  regra virou DADO, e o auditor confere sozinho que ela existe e é aplicada.
+- **`api/_ancora-cdc.js`** é só transporte (fetch puro — `mp.js` é Edge e não pode carregar o
+  `@supabase/supabase-js` do `_webhook-core.js`). Os três pontos agora consultam a mesma porta.
+
+**Verificado contra o dado real, nos 5 perfis de role pagante:**
+
+| | decisão |
+|---|---|
+| 4 pagantes já ancorados | `ja_ancorado` → não reancora (renovação não reinicia a janela) |
+| conta de **cortesia** | **`promovido_sem_cobranca` → ancora** — era o buraco vivo |
+
+E os ramos que precisavam continuar valendo: recontratação após cancelar cai em `estreia`
+(o `garantia-cancelar` rebaixa a explorador), então **ganha uma janela nova** — correto, e o
+reembolso em si segue limitado a UMA VEZ POR CPF via `reembolsos_garantia`.
+
+> ⚠️ **"Não consegui checar" não pode virar "pode ancorar".** Falha de rede, HTTP não-2xx ou
+> corpo inesperado devolvem `false` — preserva o comportamento vigente em vez de abrir uma
+> janela de reembolso por causa de um erro transitório. 5/5 nos testes de falha do transporte.
+
+### 🧾 O resíduo corrigido pela data REAL, não por `now()`
+
+O pagante sem âncora foi ancorado em **01/07/2026 21:01:49** — `dados_mp.date_approved` da
+primeira cobrança, que é quando o direito de fato começou. **Não usei `now()`**: isso inventaria
+uma janela de 7 dias vencida há 59 dias. Conferido no dry-run antes de rodar:
+**1 linha, `janela_ja_vencida: true`** — a correção **não concede reembolso nenhum**, só faz o
+registro dizer a verdade (o AdminFinanceiro imprimia "pgto —" para quem pagou duas vezes).
+
+### 🔒 A trava
+
+**`pagante_sem_ancora_cdc`** (Financeiro/**crítico**, limite 0): pagante com cobrança aprovada e
+`plano_pago_em` nulo. Lê **0**. O estado corrompido não volta em silêncio.
+
+**Arquivos:** `supabase/migrations/garantia_7d_um_cerebro_so_e_a_ancora_deixa_de_sumir.sql`
+(aplicada), `api/_ancora-cdc.js` (novo), `api/_webhook-core.js`, `api/mp.js`.
+`auditoria_regras_negocio()` **0 crítico** · `auditoria_seguranca()` **0/0** · build ✅.
+
+---
+
 ## 🗓️ 29/08 (sessão 14b) — "PAGANTE SEM ENTREGA" NÃO ERA CHURN: O BOTÃO ESTAVA QUEBRADO
 
 Investigação dos 3 pagantes sem entrega que o 360 apontou. **Nenhum dos três era o que o

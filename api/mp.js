@@ -15,6 +15,7 @@ export const config = { runtime: 'edge' };
 import { getAuthUser } from './_auth.js';
 import { podeContratarAssessoria } from './_assessoria.js';
 import { cpfDoRegistro } from './_cpf.js';
+import { deveAncorarGarantia } from './_ancora-cdc.js';
 
 const MP_URL    = 'https://api.mercadopago.com';
 const TOKEN     = (process.env.MP_ACCESS_TOKEN || '').trim();
@@ -98,8 +99,10 @@ async function ativarRoleInline(userId, planoKey, mpId) {
       ? escadaSobe(perfil.role_anterior, planoBaseKey)
       : planoBaseKey;
     roleFinal = escadaSobe(perfil?.role, candidato);
-    const PAGANTES = ['top2', 'top2_anual', 'assessorado', 'assessorado_anual', 'clube', 'clube_anual'];
-    jaAncorado = !!perfil?.plano_pago_em || PAGANTES.includes(perfil?.role);
+    // Regra única em `_ancora-cdc.js` (ver o comentário lá): `PAGANTES.includes(role)`
+    // não é sinônimo de "já ancorado", e tratá-lo como tal negava o reembolso de 7 dias
+    // a quem virou pagante por um caminho que não gravou a âncora.
+    jaAncorado = !(await deveAncorarGarantia(userId));
     temAncoraVenc = !!perfil?.plano_vencimento;
   } catch { /* sem leitura, segue com planoBaseKey (comportamento antigo) */ }
   // ANUAL: ancora a vigência de 12m na 1ª ativação (sem âncora ainda). Renovação real vem
