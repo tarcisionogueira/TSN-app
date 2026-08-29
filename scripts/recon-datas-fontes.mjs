@@ -31,11 +31,15 @@ import puppeteer from 'puppeteer';
 //    A data está na página do lote — daí o alvo virar uma oferta concreta.
 //  · BIASI: o cartão que a heurística pegou era o `div.card-lot` interno, que só tem preço.
 //    O scraper já busca `/sale/detail?id=`, então é ESSE retorno que precisa ser inspecionado.
+// ALVOS DA 3ª RODADA (29/08) — URLs REAIS, tiradas do NOSSO acervo (`imoveis_leilao.url_lote`)
+// em vez de adivinhadas. As duas rodadas anteriores perderam três alvos por chute meu:
+// `/busca?tipo=imoveis` (404), `sale/detail?id=1` (id inexistente, redirecionou para a home) e
+// `liderleiloes` (tenant com zero lotes). O acervo já sabia o endereço certo de cada um — usar
+// o que se tem antes de supor é a mesma regra que fez o "documento primeiro" existir.
 const ALVOS = [
-  { fonte: 'GRUPOLANCE', url: 'https://www.grupolance.com.br/', espera: 'domcontentloaded', links: true },
-  { fonte: 'SUPORTE',    url: 'https://www.portoleiloes.com.br/buscador?categoria=2', espera: 'domcontentloaded' },
-  { fonte: 'WEBLEILOES', url: 'https://www.webleiloes.com.br/oferta/leilao/imoveis/casas/80/id-1111/casas-336-00m-vila-carrao-sao-paulo-sp', espera: 'networkidle2' },
-  { fonte: 'BIASI',      url: 'https://www.biasileiloes.com.br/sale/detail?id=1', espera: 'domcontentloaded' },
+  { fonte: 'BIASI',      url: 'https://www.biasileiloes.com.br/sale/detail?id=62174', espera: 'domcontentloaded' },
+  { fonte: 'GRUPOLANCE', url: 'https://www.grupolance.com.br/imoveis/imoveis-comerciais/ba/salvador/sala-comercial-edificio-cosmopolitan-mix-salvador-ba-28321', espera: 'domcontentloaded' },
+  { fonte: 'SUPORTE',    url: 'https://rodrigoleiloeiro.com.br/eventos/leilao/imovel-rural-12-85-68-ha-fazenda-imbutaia-bom-jd-de-minas-mg-possibilidade-de-parcelamento/lote/10532/imovel-rural-12-85-68-ha-fazenda-imbutaia-bom-jd-de-minas-mg-possibilidade-de-parcelamento', espera: 'domcontentloaded' },
 ];
 
 const RE_DATA = /\b\d{1,2}\s*[\/.-]\s*\d{1,2}\s*[\/.-]\s*\d{2,4}\b|\b\d{1,2}\s+de\s+[a-zç]+\s+de\s+\d{4}\b/gi;
@@ -57,12 +61,20 @@ for (const a of ALVOS) {
     const achado = await page.evaluate(() => {
       // Heurística de cartão: o menor elemento repetido que contém um preço em R$.
       const todos = [...document.querySelectorAll('article, li, .card, [class*="lote"], [class*="item"], [class*="card"]')];
-      const comPreco = todos.filter(el => /R\$\s?[\d.]{3,}/.test(el.textContent || '') && (el.textContent || '').length < 3000);
+      // Agora aceita elemento com PREÇO **ou** com DATA. A versão anterior exigia R$ e por isso
+      // devolveu "0 cartões" em páginas onde a data mora num bloco separado do valor — e "0
+      // cartões" parecia "a página não tem data", que é a forma nº 10 outra vez.
+      const temDinheiro = (t) => /R\$\s?[\d.]{3,}/.test(t);
+      const temData = (t) => /\b\d{1,2}\s*\/\s*\d{1,2}\s*\/\s*\d{2,4}\b/.test(t);
+      const comPreco = todos.filter(el => {
+        const t = el.textContent || '';
+        return (temDinheiro(t) || temData(t)) && t.length < 3000;
+      });
       // Mais interno primeiro: evita pegar o container da lista inteira.
       comPreco.sort((x, y) => (x.textContent || '').length - (y.textContent || '').length);
       return {
         totalCandidatos: comPreco.length,
-        cartoes: comPreco.slice(0, 2).map(el => ({
+        cartoes: comPreco.slice(0, 4).map(el => ({
           classe: el.className || '(sem classe)',
           texto: (el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 700),
           html: el.outerHTML.replace(/\s+/g, ' ').slice(0, 1800),
