@@ -4,7 +4,58 @@
 
 ---
 
-## 🔚 29/08 — FECHAMENTO DO DIA (mapa das sessões 14o → 14t)
+## 🗓️ 29/08 (sessão 14u) — VENDASGOV: 15 DIAS COLHENDO ZERO, E 22 MIN/DIA TIRADOS DE QUEM FUNCIONA
+
+### Não era regressão nova — era invisibilidade
+`fonte_saude` tem `falhou` com `total 0` **todo dia desde pelo menos 15/08**. Só apareceu agora
+porque a `fonte_regressao_suspeita()` reescrita hoje parou de esconder fonte pequena — é
+literalmente o caso que a reescrita citava ("as duas fontes PAGAS RJLEILOES e VENDASGOV"). O
+acervo inteiro da fonte são **4 lotes**, todos de 09/07, três já inativos.
+
+> 🔧 **Correção de fato:** eu disse hoje, ecoando o CLAUDE.md, que a VENDASGOV é fonte **paga**.
+> **Não é.** Ela roda no workflow `leiloeiros-puppeteer.yml`, cujo próprio cabeçalho diz
+> *"fontes GRÁTIS (puppeteer, 0 Bright Data)"*, e o coletor é puppeteer puro interceptando o XHR
+> do site. O que ela custa é **tempo de runner**, não crédito.
+
+### O log disse o que nenhuma leitura de código diria (job 99117537578)
+```
+VendasGov/leilao:       goto (Navigation timeout of 45000 ms exce)
+VendasGov/concorrencia: goto (Navigation timeout of 45000 ms exce)
+VendasGov/venda:        goto (Navigation timeout of 45000 ms exce)
+VendasGov/pai:          goto (Navigation timeout of 45000 ms exce)
+VendasGov/fundo:        goto (Navigation timeout of 45000 ms exce)
+VendasGov: 0 imóveis mapeados (0 colhidos)
+```
+As **cinco** rotas, só timeout de navegação: a página nunca carrega. Não é o parser, não é a
+interceptação do XHR, não é o mapeamento — **o site é inalcançável desse runner**.
+
+E **15:40 → 16:02 = 22 minutos por dia** para colher zero, porque cada rota seguia para a espera
+de 6 s e para o laço de rolagem **sobre uma página que não carregou**. Esses 22 min não são de
+graça: o cabeçalho do próprio workflow avisa que a rodada é cortada por timeout e que *"as fontes
+do FIM da lista (SUPORTE, GRUPOLANCE, WEBLEILOES) podem não ter coletado"*.
+
+### Três mudanças
+1. **Falha rápida** — rota que não navega não rola página; e se a **primeira** não navega e nada
+   foi interceptado, aborta as outras quatro. **22 min viram ~1.** Vale onde quer que ela rode.
+2. **`SCRAPER_EXCLUIR`** — tirar UMA fonte da rodada sem listar as outras vinte no include.
+   `SCRAPER_FONTES` continua vencendo quando presente (é como se testa a fonte isolada na mão).
+   Verificado **avaliando as três linhas reais do arquivo** (extraídas, não redigitadas): 5/5.
+3. **VENDASGOV sai do GitHub Actions e entra no runner residencial** — mesmo remédio de HASTA,
+   RJ e PECINI. Custo zero (puppeteer local, sem Bright Data).
+
+### ⚠️ O que NÃO está provado
+A hipótese do **WAF do SERPRO barrando datacenter** é a mais provável pelo padrão (as 5 rotas,
+todo dia, só timeout) e o próprio comentário do scraper já dizia que ele bloqueia fetch de
+datacenter com 403 — **mas não deu para provar daqui**: o proxy de saída deste ambiente recusa o
+host, e chamar isso de confirmação seria entregar bloqueio meu como medição da fonte.
+
+**Se estourar timeout TAMBÉM na máquina residencial, o problema não é o IP e sim o site** — e o
+próximo passo é recon da SPA, não outra troca de runner. Com a falha rápida, descobrir isso custa
+~1 min em vez de 22.
+
+---
+
+## 🔚 29/08 — FECHAMENTO DO DIA (mapa das sessões 14o → 14u)
 
 > O fechamento das sessões 14 → 14n está mais abaixo, no seu lugar. Este cobre o resto do dia.
 
@@ -16,6 +67,7 @@
 | **14r** | 54 contas novas → 4 relatórios | 1º relatório automático **construído e descartado pelo dono**; ficou a medição da `/analise` |
 | **14s** | O lote que traz a pessoa some no `/login` | `origem_lote` mede quanto disso acontece; cabeçalho passa a carregar o lote |
 | **14t** | HASTA acusada de regressão | **Parser intacto** — o alarme era o instrumento, 4ª vez; releitura do acervo passa a existir |
+| **14u** | VENDASGOV `zerou` | 15 dias colhendo zero e **22 min/dia** tirados de três fontes que funcionam; falha rápida + migração para o residencial |
 
 ### As duas lições do dia que valem mais que os consertos
 1. **A 4ª ocorrência da forma nº 10, e a lição já estava escrita.** `_saude-fonte.mjs` tem desde
@@ -30,7 +82,9 @@
 ### 📌 PENDÊNCIAS AO ENTRAR EM 30/08 (esta lista substitui a de "PRÓXIMA SESSÃO (30/08)" abaixo)
 
 **Captura** — `select * from public.fonte_regressao_suspeita();` devolve 4 linhas, todas verdadeiras:
-- 🔴 **VENDASGOV** `zerou` (fonte **paga**) · 🟠 **ALFA · EMILIOMATOS · NORDESTE** `medicao_velha`
+- ✅ **VENDASGOV** tratada na 14u (não é fonte paga — era `puppeteer` grátis; foi para o
+  residencial). **Confirmar na próxima rodada residencial se ela volta a colher.**
+- 🟠 **ALFA · EMILIOMATOS · NORDESTE** `medicao_velha`
   (201–226 h) — o teto do Bright Data vira **segunda 31/08** e parte disso se resolve sozinha.
 - ✅ **CALIL e VEGAS saíram** da lista. ✅ **HASTA** resolvida (era o instrumento).
 
