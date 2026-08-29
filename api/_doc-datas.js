@@ -173,6 +173,23 @@ export async function enriquecerPeloDocumento(imovelId, atual = {}) {
     if (texto.replace(/\s+/g, '').length < 200) { ultimoMotivo = 'sem_camada_de_texto'; continue; }
 
     const patch = {};
+    // ⚠️ SEM `{estrito:true}` — E ISSO FOI MEDIDO, NÃO ESQUECIDO (29/08).
+    // A âncora ESTRITA existe para texto de edital (o comentário dela diz: num edital a
+    // palavra "data" aparece o tempo todo, "a contar da data do pagamento"), então a troca
+    // parecia óbvia. Medida em 22 editais REAIS da LJUD (a maior fonte documental, 1.040
+    // lotes com documento), todos com camada de texto:
+    //
+    //   20 de 22 IDÊNTICOS entre solto e estrito — a troca quase não muda nada;
+    //   2 DIVERGEM, e nos DOIS o estrito PERDEU o início que o solto achava;
+    //   contra a data do acervo (a listagem da LJUD entrega data em 100% dos lotes):
+    //     solto  → achou início em 7/22, BATE em 6
+    //     estrito→ achou início em 5/22, BATE em 4
+    //
+    // O estrito é estritamente PIOR nesta amostra: perde dado e não corrige nenhum erro. A
+    // razão é que ele remove `início|inicio|abertura|data` da âncora — e "abertura"/"início"
+    // são exatamente as palavras que rotulam a data da praça em muitos editais.
+    // Se for revisitar: mede de novo, em mais de uma fonte. Aqui só a LJUD era alcançável
+    // (o bucket `documentos` é privado e o proxy do ambiente bloqueia os CDNs dos outros).
     const datas = extrairDatasLeilao(texto);
     const { inicio, encerradaEm } = datas;
     if (inicio && !atual.data_leilao) patch.data_leilao = inicio;

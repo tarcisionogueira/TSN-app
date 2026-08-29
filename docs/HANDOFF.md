@@ -72,13 +72,37 @@ nada acusar. A vigilância contínua já existe em `praca_fim_antes_do_inicio` e
 **Acusa agora (valor 1), de propósito** — é o estado real até o pipeline rodar. Zera quando
 `enriquecer-datas-cron`/`_doc-datas` lerem o primeiro edital que publique encerramento.
 
-### 📌 Observação que NÃO virou mudança (fica para decisão)
+### 📌 O `{estrito:true}` no `_doc-datas`: MEDIDO E DESCARTADO
 
-`_doc-datas.js` lê **texto de edital** e chama `extrairDatasLeilao(texto)` **sem `{estrito:true}`**
-— mas a âncora estrita existe exatamente para isso, e o comentário dela diz por quê: *"num edital
-a palavra 'data' aparece o tempo todo ('a contar da data do pagamento'), então lá ela não serve de
-âncora"*. Trocar isso mudaria quais datas são extraídas de ~2.900 lotes, então **não mexi sem
-medir** — bundlar essa mudança aqui seria arriscar o prazo do acervo por um palpite.
+`_doc-datas.js` lê texto de edital sem `{estrito:true}`, e a âncora estrita existe exatamente
+para isso — parecia troca óbvia. **Medida em 22 editais REAIS da LJUD** (maior fonte documental,
+1.040 lotes com documento), todos com camada de texto, zero falhas de download:
+
+| | achou início | bate com o acervo |
+|---|---|---|
+| **solto** (atual) | 7/22 | **6** |
+| **estrito** | 5/22 | **4** |
+
+**20 de 22 idênticos.** Os 2 que divergem: nos DOIS o estrito **perdeu** o início que o solto
+achava, e nos dois o solto **batia com o acervo**. O estrito é estritamente PIOR — perde dado e
+não corrige erro nenhum. A razão: ele remove `início|inicio|abertura|data` da âncora, e
+"abertura"/"início" são justamente as palavras que rotulam a data da praça em muitos editais.
+**Não trocado**, e a medição ficou escrita no próprio arquivo para ninguém "consertar" isso depois.
+
+⚠️ **Limite honesto da amostra:** só a LJUD era alcançável — o bucket `documentos` é privado
+(sem service key na sessão) e o proxy do ambiente bloqueia os CDNs dos outros leiloeiros
+(`CONNECT tunnel failed, 403`). Revisitar exige medir em mais de uma fonte.
+
+### ✅ E a medição VALIDOU o produtor de praça recém-escrito
+
+Dos 22 editais, **4 (18%) produziram `encerramento`** — e os quatro caem 7 a 14 dias depois da 1ª
+praça (09/02→09/16 · 09/14→09/21 · 09/11→09/25 · 09/21→10/05), que é o intervalo clássico de 2ª
+praça. Nenhum valor absurdo. É exatamente o insumo que `praca1_fim`/`praca2_fim` precisavam e que
+nenhuma outra via fornece.
+
+E o dado que sustenta a decisão de 29/08 (*"ler edital NÃO é o caminho para data"*) aparece de
+novo: só **7 de 22** editais entregam a data de início, enquanto a listagem da LJUD entrega
+**100%**. O valor do edital aqui é o **encerramento**, não o início.
 
 **Arquivos:** `api/enriquecer-lote.js`, `api/_doc-datas.js`,
 `supabase/migrations/praca_fim_ganha_produtor_e_uma_trava_de_partida.sql` (aplicada).
