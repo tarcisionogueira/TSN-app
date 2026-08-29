@@ -4,6 +4,109 @@
 
 ---
 
+## 🗓️ 29/08 (sessão 14q) — O FUNIL CONTAVA NAVEGADOR, E O BURACO ESTAVA DEPOIS DELE
+
+### O que o dono viu na tela, e por que os números não fechavam
+`2.234 → 1.699 (76%) → 85 (4%) → 99 (4%) → 34 (34%) → 71 (3%)`.
+**"Criaram conta 71" maior que "Tentaram criar conta 34" é impossível num funil encaixado** — e a
+impossibilidade era o sintoma. Dois instrumentos mediam outra coisa (forma nº 10 do CLAUDE.md):
+
+| Degrau | O que o nome dizia | O que o código media | Valor honesto |
+|---|---|---|---|
+| Criaram conta | pessoas que se cadastraram | `anon_id` distinto que em algum momento apareceu logado | **45** (era 71) |
+| Tentaram criar conta | tentativas de cadastro | `submit` em `/login` **com `user_id is null`** | **52** (era 34) |
+
+- **71 navegadores ↔ 57 pessoas ↔ 52 com conta nascida na janela.** Quem entrou do celular e do
+  desktop contava duas vezes, e **cliente ANTIGO que só fez login entrava como aquisição** — num
+  painel cujo título é "quem ainda **não** é cliente".
+- **`tentou` perdia o envio que DEU CERTO.** O rastreador carimba `user_id` assim que a sessão
+  existe, e o cadastro bem-sucedido *cria* a sessão. O recorte certo é o **conjunto de anônimos da
+  janela**, não o estado do evento.
+- **Base misturada numa coluna só** (`src/pages/Admin.jsx:5552`): esse degrau usava
+  `foi_ao_cadastro` como divisor e todos os outros usavam `visitantes`. Resultado: 34 pessoas
+  impressas como **"34%"** logo abaixo de 99 pessoas impressas como **"4%"**. Não é formatação —
+  inverte a leitura de qual degrau é o gargalo. 34/2.234 = **1,5%**.
+- **O rótulo também mentia:** `/login` hospeda *entrar*, *cadastrar* e *recuperar senha* — o
+  rastreador só grava `alvo: 'FORM'` e não sabe distinguir; e **quem entra pelo Google não gera
+  envio nenhum**. Passou a se chamar "Enviaram o formulário".
+
+### O degrau que faltava — e é onde o negócio realmente vaza
+O funil parava em "criou conta". **Medido em 30 dias: 54 contas novas, 4 geraram relatório (7%).**
+A aquisição está saudável (2.234 → 45 = **2,0%** de visitante para conta, cold traffic); a
+**ativação é o problema**. "Geraram o 1º relatório" entra na tela.
+
+**Funil corrigido (30 d):** `2.236 → 1.701 → 99 → 52 → 45 → 4`  — monótono, mesma base em todos.
+
+**Nada mudou na coleta.** Os três números sempre estiveram no rastro; mudou o que a consulta
+pergunta a ele. Migração `funil_contava_navegador_e_parava_antes_do_buraco.sql` (aplicada).
+
+### Diagnóstico de adesão — o que o rastro mostra depois do cadastro (54 contas / 30 d)
+| Sinal | Nº | Leitura |
+|---|---|---|
+| Responderam a triagem (`faixa_capital`) | 34 | o topo funciona |
+| Receberam e-mail de oportunidade | 46 | a máquina de retenção está entregando |
+| Abriram um imóvel | 32 | chegam ao acervo |
+| **Abriram a tela `/analise`** | **22** | chegaram à porta do produto |
+| **Geraram ao menos 1 relatório** | **4** | **18 pessoas chegaram à porta e saíram sem nada** |
+| Salvaram um filtro | 4 | quase ninguém arma o alerta próprio |
+| Viram `/planos` logados | 15 | |
+| Chegaram ao `/checkout` | 5 | |
+| Viraram pagante | 2 | |
+| **Sumiram na 1ª hora** | **37 de 54** | a sessão de cadastro é única e curta |
+| Voltaram depois de 24 h | 10 | |
+
+**Barreiras de acesso (30 d) — nenhuma é estrutural:** "Email not confirmed" 19 pessoas (7 nunca
+voltaram) é a maior, mas **só 2 contas seguem sem confirmar até hoje** — é transitório, a pessoa
+tenta entrar antes de clicar no link. "Invalid login credentials" 8 (3 perderam). Regra de senha
+3 + "Password is known to be weak" 3 — **6 pessoas barradas pela política de senha, 4 não
+voltaram**, e essa é a única barreira 100% nossa.
+
+**Erro de cliente pagante já resolvido:** `new row violates RLS for "analise_jobs"` (2 pagantes,
+23–25/08, botão "Solicitar" do próprio caso) — a política de INSERT foi criada em **28/08**
+(`rls_fluxo_caso_analise.sql`). Reproduzido hoje sob o JWT do próprio cliente: **passa**. Fechado.
+
+---
+
+## 🗓️ 29/08 (sessão 14p) — A ASSESSORIA GANHOU CICLO DE VIDA (contrata → vincula → entrega → encerra)
+
+### O caso que abriu a frente
+Rafael concluiu uma assessoria (carta de arrematação entregue) e **contratou outra, pagando por
+fora do sistema**. Não havia onde registrar: `plano_assinaturas` tinha tela e **nenhum produtor**.
+E o contrato dele **existia** — feito pelo módulo de contratos (`contratos_link`); minha primeira
+medição olhou a tabela `contratos`, que está morta com 0 linhas, e me fez dizer ao dono que não
+havia contrato. **O dono corrigiu, e estava certo.**
+
+### As quatro portas que passaram a existir
+1. **Contrato assinado promove e vincula** — `api/assinar-contrato.js`: depois da promoção de
+   papel, cria a assinatura com `p_forma_pagamento: 'contrato'` e `p_imovel_id` vindo de
+   `contrato.arremate_imovel_id`. O caminho normal de contratação passa a deixar rastro.
+2. **Pagamento por fora tem onde ser registrado** — `api/registrar-assinatura.js` (novo, edge,
+   admin-only) → `registrar_assinatura_manual`, com campo de imóvel. Botão **"📝 Registrar
+   assessoria"** no Admin. `'contrato'` foi **deliberadamente excluído** de `FORMAS`: essa forma é
+   privativa do fluxo automático, senão o registro manual passa a poder forjar contrato.
+3. **Atribuir arremate promove a assessorado** — `api/atribuir-arremate.js` aceita
+   `promover_assessorado` e chama `rpc/promover_para_assessorado` **com `.ok` checado**; checkbox
+   no modal do Admin e rótulo honesto no botão. Era o caso do Matheus: atribuído manualmente
+   desde 30/07 e nunca promovido — o botão prometia o que não fazia.
+4. **A assessoria termina com DOCUMENTO, não com calendário** — regra do dono: *encerra com a
+   carta de arrematação e a matrícula do registro*. `api/concluir-assessorias-cron.js` (diário,
+   07h40) → `concluir_assessorias_entregues`. `src/pages/Caso.jsx` ganhou o bloco **"Encerramento
+   da assessoria"** com as duas linhas de upload, e `api/upload-anexo.js` passou a tratar
+   `carta_arrematacao` e `matricula_registrada` como **tipos únicos** — sem isso o botão
+   "Substituir" mentia (empilhava em vez de trocar). Índice parcial no banco garante uma por
+   imóvel.
+
+### Regras como dado, não como comentário
+`atribuicao.promove_assessorado` e `assessoria.encerramento` entraram em `regra_negocio` com
+`aplicada_por` preenchido. `auditoria_regras_negocio()` acusou órfã **três vezes** durante o
+trabalho até as funções citarem a chave da regra no próprio corpo — que é exatamente o ponto da
+auditoria.
+
+**⚠️ Operacional:** a equipe precisa marcar o upload como `matricula_registrada` (e não como
+`matricula`) para o encerramento automático disparar.
+
+---
+
 ## 🗓️ 29/08 (sessão 14o) — A PRAÇA DO CARD, E A TRIAGEM DOS 7 ABERTOS
 
 ### 🃏 Card "Lance mínimo (praça atual)" — decisão do dono: **praça atual por DATA**
