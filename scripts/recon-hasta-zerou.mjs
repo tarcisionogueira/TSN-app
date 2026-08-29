@@ -36,7 +36,8 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { createClient } from '@supabase/supabase-js';
 import { fetchHeadless, fecharHeadless } from './lib/fetch-residencial.mjs';
-import { extrairUrlsDeLote, parseDetalhe, TENANTS } from './lib/hasta-parse.mjs';
+import { extrairUrlsDeLote, extrairUrlsDeEvento, parseDetalhe, TENANTS } from './lib/hasta-parse.mjs';
+import cfgHasta from './lib/motor/fontes/hasta.mjs';
 import { textoDe } from './lib/dom-parse-util.mjs';
 
 // O `runner-residencial.sh` carrega o ~/.bidpro-runner.env por nós; rodado NA MÃO, ninguém
@@ -180,6 +181,39 @@ const linha = (rot, r) => `  ${rot.padEnd(38)} ${String(r.bytes).padStart(7)}B �
     const html = await fetchHeadless(`${BASE}${c}`, { timeoutMs: 90000, esperaMs: 8000 });
     if (html == null) { console.log(`  ${c.padEnd(38)} não consegui ler`); continue; }
     console.log(linha(c, radiografia(html)));
+  }
+
+  // ── 4) A CONFIGURAÇÃO NOVA SE SUSTENTA? Duas suposições foram escritas em `hasta.mjs` a
+  //       partir da seção 3, e suposição escrita em produção é como o defeito volta. Aqui elas
+  //       viram medição, ANTES de rodar a coleta:
+  //         (a) o `catalogo` configurado publica os eventos? (`/leiloes` → /leilao/<id>/lotes)
+  //         (b) o evento PAGINA com `paginaParam`? Se `?page=2` repetir os mesmos ids, a
+  //             coleta traria 30 de ~579 — parcial com cara de completa.
+  console.log(`\n4) A CONFIG NOVA (catalogo='${cfgHasta.catalogo}', paginaParam='${cfgHasta.paginaParam}') se sustenta?`);
+  const htmlCat = await fetchHeadless(`${BASE}${cfgHasta.catalogo}`, { timeoutMs: 90000, esperaMs: 8000 });
+  const eventos = htmlCat ? extrairUrlsDeEvento(htmlCat, BASE) : new Map();
+  console.log(`  (a) ${cfgHasta.catalogo} publica ${eventos.size} evento(s): ${JSON.stringify([...eventos.keys()].slice(0, 12))}`);
+  if (!eventos.size) console.log(`      ⚠️ ZERO — o catalogo configurado NÃO serve; use um dos caminhos da seção 3 que listou evento.`);
+
+  let maior = null;
+  for (const ev of [...eventos.values()].slice(0, 6)) {
+    const h = await fetchHeadless(ev, { timeoutMs: 90000, esperaMs: 8000 });
+    const n = h ? extrairUrlsDeLote(h, BASE).size : 0;
+    console.log(`      ${ev.replace(BASE, '').padEnd(26)} pág 1 → ${n} lote(s)`);
+    if (!maior || n > maior.n) maior = { ev, n };
+  }
+  if (maior?.n) {
+    const sep = maior.ev.includes('?') ? '&' : '?';
+    const h1 = await fetchHeadless(maior.ev, { timeoutMs: 90000, esperaMs: 8000 });
+    const h2 = await fetchHeadless(`${maior.ev}${sep}${cfgHasta.paginaParam}=2`, { timeoutMs: 90000, esperaMs: 8000 });
+    const ids1 = new Set(h1 ? extrairUrlsDeLote(h1, BASE).keys() : []);
+    const ids2 = new Set(h2 ? extrairUrlsDeLote(h2, BASE).keys() : []);
+    const inéditos = [...ids2].filter((id) => !ids1.has(id)).length;
+    console.log(`  (b) ${maior.ev.replace(BASE, '')} · pág1=${ids1.size} · pág2=${ids2.size} · ids NOVOS na pág2=${inéditos}`);
+    console.log(inéditos > 0
+      ? `      ✅ pagina de verdade — a coleta vai além dos ${ids1.size} primeiros.`
+      : `      ⚠️ pág2 NÃO traz id novo: ou o evento cabe numa página, ou '${cfgHasta.paginaParam}' é o parâmetro errado.\n`
+        + `      Se o acervo é maior que ${ids1.size}, ache o parâmetro certo ANTES de coletar — senão entram ${ids1.size} de ~579.`);
   }
 
   // ── VEREDITO — cada desfecho tem uma AÇÃO diferente, e é isso que precisa sair escrito.

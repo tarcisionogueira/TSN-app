@@ -4,6 +4,53 @@
 
 ---
 
+## 🗓️ 29/08 (sessão 14m) — HASTA: O CATÁLOGO MUDOU DE FORMA (e o parser está intacto)
+
+O recon residencial fechou o caso. **Não é regressão de parser** — consertá-lo seria o pior
+desfecho, como quase aconteceu com o LEILOFY em 27/08.
+
+### 🔎 As quatro medições
+
+1. **Não é render lento.** `/lotes/imovel` com esperas de 3,5 s → 25 s devolveu
+   `19294B · 19294B · 19295B · 19295B`, **0 lote em todas**. A página *renderiza* (19 KB, sem
+   challenge) e mostra estado vazio.
+2. **O acervo existe — 3/3 lotes conhecidos ABREM** (48 KB, valores lidos):
+   `hasta_10728 · mínimo=237.561,24 · aval=240.000` · `hasta_10727 · mínimo=134.558,90`.
+   Quem não mostra os lotes é a **listagem**.
+3. **`/leilao/557/lotes` devolve 30 lotes** (a paginação de 30/pág) — e **557 é o mesmo leilão
+   do dump original** no cabeçalho de `hasta-parse.mjs`, comitente CAIXA.
+4. **A vitrine por categoria funciona:** `/lotes/diversos` = 13, `/lotes/veiculo` = 0.
+   O que sumiu dela foram **os imóveis**, não a listagem.
+
+**A cronologia amarra:** 1ª praça 28/08, 1º zero 29/08. E nos lotes que ainda abrem a página
+agora mostra **uma só praça, 03/09** (a 2ª) — o site reescreve o lote ao passar a 1ª praça, e é
+aí que ele deixa a vitrine por categoria.
+
+### ✅ O conserto usa máquina que já existia
+
+O motor já tinha **NÍVEL 2** (`extrairUrlsDeEvento`), construído para o NORDESTE: catálogo lista
+EVENTOS, o lote mora dentro. A HASTA passa a usá-lo — `catalogo: '/leiloes'` →
+`/leilao/<id>/lotes`.
+
+> ⚠️ **Apontar direto para `/leilao/557/lotes` seria mais curto e estaria errado.** Leilão
+> ACABA: a coleta pararia sozinha em 03/09 e ninguém saberia. É o mesmo erro que o recon do
+> EMILIOMATOS documentou hoje de manhã.
+
+**E o nível 2 ganhou paginação** — ele lia UMA página por evento, o que bastava para o NORDESTE
+(evento de uma página) e quebraria aqui: 30 de ~579 é **coleta parcial com cara de completa**.
+Que a plataforma pagina por `page` não é palpite: o `url_lote` no nosso acervo é
+`/item/10729/detalhes?page=20`. O laço para quando uma página não traz id novo, então degrada
+para o comportamento antigo se algum evento ignorar o parâmetro.
+
+### 🔬 Duas suposições viraram medição ANTES da coleta (seção 4 do recon)
+
+Suposição escrita em produção é como o defeito volta. O recon agora verifica o que eu configurei:
+**(a)** `/leiloes` publica os eventos? **(b)** o evento pagina com `page` — a pág. 2 traz id
+**novo**? Se (b) falhar, o log manda achar o parâmetro certo **antes** de coletar, em vez de
+deixar entrar 30 de 579.
+
+---
+
 ## 🗓️ 29/08 (sessão 14l) — O RADAR RODOU DE CASA: 98 EDITAIS POR R$ 0 (migração validada)
 
 ```

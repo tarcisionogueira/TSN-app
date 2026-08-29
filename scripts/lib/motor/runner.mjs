@@ -55,12 +55,28 @@ async function enumerar(fetchFonte, tenant, cfg, { maxPages, debug, semBD }) {
       const eventos = [...cfg.parse.extrairUrlsDeEvento(r0.html, tenant.base).values()]
         .slice(0, cfg.maxEventos ?? 12);
       if (debug) console.log(`   [${tenant.fonte}] nível 2: ${eventos.length} evento(s)`);
+      // ⚠️ O EVENTO TAMBÉM PAGINA (29/08). Isto lia UMA página por evento — o que bastava para o
+      // NORDESTE, cujo evento cabe numa página. A HASTA quebrou essa premissa: o leilão 557 tem
+      // ~579 lotes a 30/pág, e uma página só traria 30 — **coleta parcial com cara de completa**,
+      // que é justamente o desfecho que o `fonte_saude` acusaria como regressão sem haver
+      // regressão nenhuma. Que a plataforma pagina por `page` não é palpite: o `url_lote` que já
+      // temos no acervo é `/item/10729/detalhes?page=20`, ou seja, o link veio da página 20.
+      // O laço para sozinho quando uma página não traz id novo — então, se algum evento ignorar
+      // o parâmetro, ele degrada para o comportamento antigo (1 página) em vez de repetir à toa.
+      const maxPagEvento = cfg.maxPagesEvento ?? cfg.maxPages ?? 3;
       for (const ev of eventos) {
-        const re = await fetchFonte(ev, { semBD });
-        if (!re.html) continue;
-        const antes = urls.size;
-        for (const [id, u] of cfg.parse.extrairUrlsDeLote(re.html, tenant.base)) urls.set(id, u);
-        if (debug) console.log(`   [${tenant.fonte}] evento ${ev.slice(-60)}: +${urls.size - antes}`);
+        const antesEvento = urls.size;
+        for (let p = 1; p <= maxPagEvento; p++) {
+          const sep = ev.includes('?') ? '&' : '?';
+          const re = await fetchFonte(p > 1 ? `${ev}${sep}${cfg.paginaParam}=${p}` : ev, { semBD });
+          if (!re.html) break;
+          const antes = urls.size;
+          for (const [id, u] of cfg.parse.extrairUrlsDeLote(re.html, tenant.base)) urls.set(id, u);
+          if (debug) console.log(`   [${tenant.fonte}] evento ${ev.slice(-40)} pág ${p}: +${urls.size - antes} (total ${urls.size})`);
+          if (urls.size === antes) break;
+          await sleep(400);
+        }
+        if (!debug) console.log(`   [${tenant.fonte}] evento ${ev.slice(-40)}: +${urls.size - antesEvento}`);
         await sleep(400);
       }
     }
