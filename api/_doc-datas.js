@@ -93,31 +93,38 @@ async function baixar(storagePath) {
 const RE_ANCORA_BEM = /descri[çc][ãa]o\s+do\s+(?:im[óo]vel|bem|lote)|do\s+im[óo]vel\s*:|im[óo]vel\s+objeto|matr[íi]cula\s*n?[º°]?\s*[\d.]{2,}/i;
 const RE_LOGRADOURO = /\b((?:Rua|Avenida|Av\.|Travessa|Alameda|Rodovia|Estrada|Pra[çc]a)\s+[A-ZÀ-Ý][A-Za-zÀ-ÿ0-9'.\- ]{2,48}?)(?=\s*[,;.\n]|\s+n[º°]|\s+\d)/;
 
+/**
+ * ⚠️ DEVOLVE O MOTIVO DA RECUSA, e isso não é conforto: a 1ª medição das guardas deu
+ * **0 de 31**. Zero falso positivo e zero cobertura — e sem saber QUAL guarda barrou, o
+ * próximo passo seria afrouxar no escuro. Cada recusa tem nome, e a validação conta por nome.
+ */
 export function extrairEnderecoDoBem(texto, { cidade } = {}) {
+  const nao = (motivo) => ({ logradouro: null, bairro: null, motivo });
   const t = String(texto || '').replace(/\s+/g, ' ');
   const cid = String(cidade || '').trim();
-  if (t.length < 200 || cid.length < 3) return null;      // guarda 3 exige cidade conhecida
+  if (t.length < 200) return nao('texto_curto');
+  if (cid.length < 3) return nao('sem_cidade_no_acervo');   // guarda 3 fica sem referência
 
   const m = RE_ANCORA_BEM.exec(t);
-  if (!m) return null;
+  if (!m) return nao('sem_ancora_do_bem');
   const cabecalho = t.slice(0, m.index);                   // tudo antes da 1ª âncora
   const janela = t.slice(m.index, m.index + 1400);         // o trecho que descreve o bem
 
   // Guarda 3: a cidade do acervo tem de estar na janela do bem. Comparação sem acento e sem
   // caixa — edital escreve "SAO PAULO", o acervo guarda "São Paulo".
   const norm = (x) => x.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-  if (!norm(janela).includes(norm(cid))) return null;
+  if (!norm(janela).includes(norm(cid))) return nao('cidade_fora_da_janela');
 
   const lg = RE_LOGRADOURO.exec(janela);
-  if (!lg) return null;
+  if (!lg) return nao('sem_logradouro_na_janela');
   const logradouro = lg[1].replace(/\s+/g, ' ').trim();
-  if (logradouro.length < 8) return null;
+  if (logradouro.length < 8) return nao('logradouro_curto');
 
   // Guarda 2: se o mesmo logradouro está no cabeçalho, é do documento — não do bem.
-  if (norm(cabecalho).includes(norm(logradouro))) return null;
+  if (norm(cabecalho).includes(norm(logradouro))) return nao('logradouro_no_cabecalho');
 
   const bai = janela.match(/bairro\s+(?:d[eoa]s?\s+)?([A-Za-zÀ-ÿ'’ -]{3,40}?)\s*(?:[,.;]|\bna\b|\bem\b|\bcidade\b|$)/i);
-  return { logradouro: logradouro.slice(0, 200), bairro: bai ? bai[1].trim().slice(0, 60) : null };
+  return { logradouro: logradouro.slice(0, 200), bairro: bai ? bai[1].trim().slice(0, 60) : null, motivo: null };
 }
 
 export async function enriquecerPeloDocumento(imovelId, atual = {}) {

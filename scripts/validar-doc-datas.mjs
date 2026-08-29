@@ -42,6 +42,7 @@ const stats = { testados: 0, sem_anexo: 0, sem_texto: 0, lidos: 0, com_data: 0, 
 // distintos receberam o mesmo "Avenida Fagundes Filho". Cobertura alta com repetição é o
 // sintoma de estar lendo o cabeçalho do documento, não o bem.
 const enderecos = [];
+const motivosEndereco = {};
 // ⚠️ MOTIVOS SEPARADOS. A 1ª rodada jogou tudo em `sem_texto` e o resultado — 23 de 23 sem
 // texto — parecia "os PDFs são escaneados", quando era um bug meu (a classe PDFParse chamada
 // sem `new`). Um balde só de falhas descreve o sintoma e esconde a causa.
@@ -59,6 +60,7 @@ for (const im of candidatos) {
   if (r.patch.endereco || r.patch.bairro || r.patch.nomecondominio) stats.com_endereco++;
   if (r.patch.descricao) stats.com_descricao++;
   if (r.enderecoBem?.logradouro) enderecos.push({ log: r.enderecoBem.logradouro, cidade: im.cidade, fonte: im.fonte });
+  else if (r.enderecoBem?.motivo) motivosEndereco[r.enderecoBem.motivo] = (motivosEndereco[r.enderecoBem.motivo] || 0) + 1;
   if (exemplos.length < 8 && r.achou) {
     exemplos.push({
       fonte: im.fonte, doc: r.tipo, titulo: String(im.titulo || '').slice(0, 46),
@@ -79,6 +81,7 @@ const repetidos = Object.entries(porLog).filter(([, n]) => n > 1).sort((a, b) =>
 console.log(`\nENDERECO ANCORADO: ${enderecos.length} de ${stats.lidos} lidos (${stats.lidos ? Math.round(100 * enderecos.length / stats.lidos) : 0}%)`);
 console.log(`  logradouros DISTINTOS: ${Object.keys(porLog).length}`);
 console.log(`  REPETIDOS (sinal de estar lendo o cabecalho): ${repetidos.length ? repetidos.map(([l, n]) => `${n}x ${l}`).join(' | ') : 'nenhum'}`);
+console.log(`  RECUSAS por guarda: ${JSON.stringify(motivosEndereco)}`);
 for (const e of enderecos.slice(0, 10)) console.log(`   ${e.fonte} · ${e.cidade || '(sem cidade)'} → ${e.log}`);
 console.log('\nAmostra do que seria preenchido:');
 for (const e of exemplos) console.log(' ', JSON.stringify(e));
