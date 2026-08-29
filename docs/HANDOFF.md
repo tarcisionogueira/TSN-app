@@ -14,8 +14,10 @@ inscrições e os 72 clientes da base são o canal principal.
 
 ### 🔴 PENDÊNCIA VIVA — CONVITE DA BASE ARMADO PARA DOMINGO 30/08
 
-**Combinado com o dono (29/08):** ele testa o e-mail em si mesmo, aprova, e **no domingo o
-convite sai para toda a base**. Na sessão seguinte, SINALIZAR O RESULTADO.
+**Combinado com o dono (29/08):** ele testou, aprovou, e o convite sai **domingo 30/08 às 8h**
+(cron `0 11 * * 0`, 11h UTC) para toda a base. **ARMADO e conferido:**
+`app_config.convite_live_armado = '2026-09-02'`, que casa com a edição que `live_proxima()`
+devolve — logo o cron vai disparar. Na sessão seguinte, SINALIZAR O RESULTADO.
 
 Como conferir, em uma consulta:
 
