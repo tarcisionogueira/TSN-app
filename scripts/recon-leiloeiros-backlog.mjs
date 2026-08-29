@@ -1,3 +1,4 @@
+import { fetchUnlockerContado } from './lib/bd-ledger.mjs';
 /**
  * Recon em LOTE dos leiloeiros do backlog TRT-15 que estão em 0-acervo — classifica a
  * PLATAFORMA/tenant de cada site (white-label? API JSON? CDN conhecido? challenge?) para
@@ -46,7 +47,7 @@ const PLATAFORMAS = [
 
 let usados = 0;
 async function bdFetch(url, timeoutMs = 60000) {
-  const r = await fetch('https://api.brightdata.com/request', {
+  const r = await fetchUnlockerContado({
     method: 'POST',
     headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ zone: ZONE, url, format: 'raw' }),

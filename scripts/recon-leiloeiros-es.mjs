@@ -1,3 +1,4 @@
+import { fetchUnlockerContado } from './lib/bd-ledger.mjs';
 /**
  * RECON dos leiloeiros do ES (lista pública JUCEES, 21/08) — roda em PRODUÇÃO (tem Bright Data).
  *
@@ -68,7 +69,7 @@ const FRAMEWORKS = [
 
 async function bdFetch(url, timeoutMs = 45000) {
   try {
-    const r = await fetch('https://api.brightdata.com/request', {
+    const r = await fetchUnlockerContado({
       method: 'POST', headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ zone: ZONE, url, format: 'raw' }), signal: AbortSignal.timeout(timeoutMs),
     });

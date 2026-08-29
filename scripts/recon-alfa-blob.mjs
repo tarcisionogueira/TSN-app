@@ -1,3 +1,4 @@
+import { fetchUnlockerContado } from './lib/bd-ledger.mjs';
 /**
  * Recon PRECISO do alfaleiloes (Passo 1 do motor: blob-json) — decide o data source ANTES de codar.
  * Dump do conteúdo CRU de cada <script type="…json">, dos `window.__X__=` e dos endpoints de API
@@ -11,7 +12,7 @@ if (!TOKEN || !ZONE) { console.log('⚠️ BRIGHTDATA_API_TOKEN/ZONE ausentes.')
 
 async function bd(url, timeoutMs = 40000) {
   try {
-    const r = await fetch('https://api.brightdata.com/request', {
+    const r = await fetchUnlockerContado({
       method: 'POST', headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ zone: ZONE, url, format: 'raw' }), signal: AbortSignal.timeout(timeoutMs),
     });

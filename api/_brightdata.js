@@ -105,7 +105,7 @@ async function registrarResultado(proposito, ok, devolver) {
 }
 
 /** Chamada crua ao Web Unlocker, já com a cota consumida. Lança ErroBrightData. */
-async function chamarUnlocker(url, { method, headers, timeoutMs, proposito }) {
+async function chamarUnlocker(url, { method, headers, timeoutMs, proposito, extras }) {
   try {
     // headers: a Web Unlocker API (/request) valida `headers` como OBJETO
     // { "Accept": "...", "Origin": "..." } — passar array [{name,value}] devolve
@@ -114,7 +114,13 @@ async function chamarUnlocker(url, { method, headers, timeoutMs, proposito }) {
     const r = await fetch('https://api.brightdata.com/request', {
       method: 'POST',
       headers: { Authorization: `Bearer ${BD_TOKEN}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ zone: BD_ZONE, url, method, format: 'raw', ...(temHeaders ? { headers } : {}) }),
+      // `extras` (29/08): campos adicionais do payload da Web Unlocker que alguns chamadores
+      // precisam (ex.: `body` de POST, `data_format`). Existe para que os scripts de recon —
+      // que montavam o payload à mão e chamavam o endpoint DIRETO, fora do ledger — possam
+      // entrar por esta porta sem perder o que enviavam. Vem por último de propósito: não
+      // sobrescreve `zone`/`url`/`format`, que são a identidade da chamada.
+      body: JSON.stringify({ ...(extras && typeof extras === 'object' ? extras : {}),
+        zone: BD_ZONE, url, method, format: 'raw', ...(temHeaders ? { headers } : {}) }),
       signal: AbortSignal.timeout(timeoutMs),
     });
     // Chegou ao fornecedor (mesmo com status de erro) → foi consumido, não devolve.
@@ -132,14 +138,14 @@ async function chamarUnlocker(url, { method, headers, timeoutMs, proposito }) {
  * Nunca devolve algo que possa ser confundido com "a fonte não tem conteúdo".
  * Use `e.semCota` para separar "o freio de custo agiu" de "a coleta falhou".
  */
-export async function buscarViaBrightData(url, { method = 'GET', headers = null, proposito = 'geral', timeoutMs = 45000, exigirOk = true } = {}) {
+export async function buscarViaBrightData(url, { method = 'GET', headers = null, proposito = 'geral', timeoutMs = 45000, exigirOk = true, extras = null } = {}) {
   if (!brightDataDisponivel()) throw new ErroBrightData('sem_config', 'BRIGHTDATA_API_TOKEN/ZONE ausentes');
   const cota = await consumirCota(proposito);
   if (!cota.permitido) {
     throw new ErroBrightData(cota.motivo, cota.detalhe
       || `propósito ${proposito}: ${cota.usado ?? '?'} usados · total ${cota.usado_total ?? '?'}/${cota.teto ?? TETO}`);
   }
-  const resp = await chamarUnlocker(url, { method, headers, timeoutMs, proposito });
+  const resp = await chamarUnlocker(url, { method, headers, timeoutMs, proposito, extras });
   if (exigirOk && !resp.ok) throw new ErroBrightData('http', `HTTP ${resp.status} em ${url}`);
   return resp;
 }

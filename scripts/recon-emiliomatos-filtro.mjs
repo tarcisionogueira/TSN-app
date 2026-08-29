@@ -9,13 +9,14 @@
  * Env: BRIGHTDATA_API_TOKEN, BRIGHTDATA_ZONE.
  */
 import { BASE, extrairUrlsDeLote, parseDetalhe } from './lib/emiliomatos-parse.mjs';
+import { fetchUnlockerContado } from './lib/bd-ledger.mjs';
 
 const TOKEN = process.env.BRIGHTDATA_API_TOKEN;
 const ZONE = process.env.BRIGHTDATA_ZONE;
 if (!TOKEN || !ZONE) { console.log('⚠️ BRIGHTDATA_API_TOKEN/ZONE ausentes.'); process.exit(1); }
 
 async function bd(url, timeoutMs = 60000) {
-  const r = await fetch('https://api.brightdata.com/request', {
+  const r = await fetchUnlockerContado({
     method: 'POST',
     headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ zone: ZONE, url, format: 'raw' }),

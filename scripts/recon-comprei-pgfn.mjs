@@ -1,3 +1,4 @@
+import { fetchUnlockerContado } from './lib/bd-ledger.mjs';
 /**
  * Recon — comprei.pgfn.gov.br (plataforma FEDERAL de leilões da PGFN). Descoberto via
  * hastaleilao (Flávio Costa), que é só um front-end filtrando vendedor=7509-2 nesta plataforma.
@@ -13,7 +14,7 @@ const HOST = 'https://comprei.pgfn.gov.br';
 
 async function bd(url, { json = false, timeoutMs = 40000 } = {}) {
   try {
-    const r = await fetch('https://api.brightdata.com/request', {
+    const r = await fetchUnlockerContado({
       method: 'POST', headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ zone: ZONE, url, format: 'raw', ...(json ? { headers: { Accept: 'application/json' } } : {}) }),
       signal: AbortSignal.timeout(timeoutMs),

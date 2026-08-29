@@ -1,3 +1,4 @@
+import { fetchUnlockerContado } from './lib/bd-ledger.mjs';
 /**
  * Recon RUNTIME — hastaleilao.com.br (Flávio Costa, Vite SSR). Escolhido pelo probe: R$=31 no
  * HTML CRU, lote em /lote/<ID>/<slug> (agrega TRT-5/TJPE). Aqui: (1) enumera os /lote/ da home
@@ -11,7 +12,7 @@ if (!TOKEN || !ZONE) { console.log('⚠️ BRIGHTDATA_API_TOKEN/ZONE ausentes.')
 
 async function bd(url, timeoutMs = 40000) {
   try {
-    const r = await fetch('https://api.brightdata.com/request', {
+    const r = await fetchUnlockerContado({
       method: 'POST', headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ zone: ZONE, url, format: 'raw' }), signal: AbortSignal.timeout(timeoutMs),
     });

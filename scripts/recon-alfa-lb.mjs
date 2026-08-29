@@ -1,3 +1,4 @@
+import { fetchUnlockerContado } from './lib/bd-ledger.mjs';
 /**
  * Recon combinado (20/08): (A) alfaleiloes — extrai o BLOB JSON embutido e disseca 1 lote p/
  * desenhar o parser; (B) leilaobrasil — conta lotes na home SSR e sonda paginação p/ ESTIMAR o
@@ -9,7 +10,7 @@ if (!TOKEN || !ZONE) { console.log('⚠️ BRIGHTDATA_API_TOKEN/ZONE ausentes.')
 
 async function bd(url, timeoutMs = 40000) {
   try {
-    const r = await fetch('https://api.brightdata.com/request', {
+    const r = await fetchUnlockerContado({
       method: 'POST', headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ zone: ZONE, url, format: 'raw' }), signal: AbortSignal.timeout(timeoutMs),
     });

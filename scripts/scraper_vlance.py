@@ -124,17 +124,78 @@ FORCE_BD = os.environ.get("VLANCE_FORCE_BD", "").lower() in ("1", "true", "sim")
 NO_BD = os.environ.get("VLANCE_NO_BD", "").lower() in ("1", "true", "sim")
 
 
+# ── LEDGER DO BRIGHT DATA (29/08) ────────────────────────────────────────────────────────
+# Este arquivo chamava a Web Unlocker DIRETO, fora do contador. O painel cobrava e o nosso
+# `brightdata_uso` não via — e ele é a base do freio semanal e da conciliação com a fatura.
+# Foi essa cegueira que abriu a distância entre o ledger (~2.549 desde 29/06) e os ~780
+# créditos que o painel mostrava, registrada no CLAUDE.md como pendência sem causa.
+#
+# Não dá para importar `api/_brightdata.js` daqui (é JS), então falamos com as MESMAS RPCs do
+# banco. Mesmo teto, mesma sub-cota, mesmo desfecho — só o idioma muda.
+#
+# FALHA FECHADA, e isso é decisão: sem conseguir reservar cota, NÃO chama. Um contador
+# indisponível tratado como "pode gastar" é exatamente o defeito que o `_brightdata.js`
+# documenta ter escondido 4 semanas de saturação atrás de um check verde.
+SB_URL = os.environ.get("VITE_SUPABASE_URL") or os.environ.get("SUPABASE_URL")
+SB_KEY = os.environ.get("SUPABASE_SERVICE_KEY")
+BD_TETO = int(os.environ.get("BRIGHTDATA_MAX_REQ_SEMANA", "450"))
+BD_PROPOSITO = "vlance"
+
+
+def _rpc(fn, body, timeout=8):
+    if not (SB_URL and SB_KEY):
+        return None
+    try:
+        r = requests.post(
+            f"{SB_URL}/rest/v1/rpc/{fn}",
+            headers={"apikey": SB_KEY, "Authorization": f"Bearer {SB_KEY}",
+                     "Content-Type": "application/json"},
+            json=body, timeout=timeout,
+        )
+        # `.ok` antes do corpo: 4xx/5xx aqui é contador indisponível, não "teto atingido".
+        return r.json() if r.ok else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def bd_reservar():
+    """Reserva atômica ANTES do fetch. None/False = não pode gastar."""
+    j = _rpc("registrar_uso_brightdata", {"p_teto": BD_TETO, "p_proposito": BD_PROPOSITO})
+    if not isinstance(j, dict):
+        print("  ! Bright Data: contador indisponível — NÃO vou gastar às cegas", file=sys.stderr)
+        return False
+    if j.get("permitido") is not True:
+        print(f"  ! Bright Data recusado pelo freio: {j.get('motivo')}", file=sys.stderr)
+        return False
+    return True
+
+
+def bd_desfecho(ok, devolver):
+    """Desfecho REAL. `devolver=True` quando a chamada nem chegou ao fornecedor: o crédito
+    reservado volta, senão o ledger conta gasto que a fatura não tem."""
+    _rpc("registrar_resultado_brightdata",
+         {"p_proposito": BD_PROPOSITO, "p_ok": bool(ok), "p_devolver": bool(devolver)}, timeout=5)
+
+
 def bd_request(url, method="GET", data=None, timeout=60):
+    if not bd_reservar():
+        raise requests.HTTPError("HTTP 429: freio de orçamento do Bright Data (sem cota)")
     payload = {"zone": BD_ZONE, "url": url, "method": method, "format": "raw"}
     if data is not None:
         # A Web Unlocker /request usa o campo "body" (não "data") para o corpo do POST.
         payload["body"] = urlencode(data)
         payload["headers"] = {"Content-Type": "application/x-www-form-urlencoded"}
-    return requests.post(
-        "https://api.brightdata.com/request",
-        headers={"Authorization": f"Bearer {BD_TOKEN}", "Content-Type": "application/json"},
-        json=payload, timeout=timeout,
-    )
+    try:
+        r = requests.post(
+            "https://api.brightdata.com/request",  # padrao-ok: cercado por bd_reservar()/bd_desfecho() — este arquivo É a porta do ledger em Python
+            headers={"Authorization": f"Bearer {BD_TOKEN}", "Content-Type": "application/json"},
+            json=payload, timeout=timeout,
+        )
+    except Exception:  # noqa: BLE001
+        bd_desfecho(False, True)   # não chegou ao fornecedor → devolve o crédito
+        raise
+    bd_desfecho(r.ok, False)
+    return r
 
 
 def _eh_bloqueio_ip(err):

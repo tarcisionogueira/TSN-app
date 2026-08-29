@@ -5,6 +5,7 @@
  * Env: BRIGHTDATA_API_TOKEN, ZONE. LEILAOPRO_TENANT (leffa|oscar), LEILAOPRO_MAX (default 8).
  */
 import { TENANTS, extrairUrlsDeLote, parseDetalhe, montarRow, checarQualidade } from './lib/leilaopro-parse.mjs';
+import { fetchUnlockerContado } from './lib/bd-ledger.mjs';
 
 const TOKEN = process.env.BRIGHTDATA_API_TOKEN;
 const ZONE = process.env.BRIGHTDATA_ZONE;
@@ -16,7 +17,7 @@ if (!tenant) { console.log('tenant inválido'); process.exit(1); }
 
 async function bdFetch(url, timeoutMs = 60000) {
   try {
-    const r = await fetch('https://api.brightdata.com/request', {
+    const r = await fetchUnlockerContado({
       method: 'POST', headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ zone: ZONE, url, format: 'raw' }), signal: AbortSignal.timeout(timeoutMs),
     });

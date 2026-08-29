@@ -1,3 +1,4 @@
+import { fetchUnlockerContado } from './lib/bd-ledger.mjs';
 /**
  * Recon FOCADO no bloco de PREÇOS/PRAÇAS de 1 lote LeilãoPro (não adivinhar preço — lição emiliomatos).
  * Dump do HTML (tags preservadas) ao redor de cada valor e das palavras praça/avaliação/lance.
@@ -10,7 +11,7 @@ const DET = process.env.LEILAOPRO_DET || 'https://www.leffaleiloes.com.br/leilao
 if (!TOKEN || !ZONE) { console.log('⚠️ BRIGHTDATA_API_TOKEN/ZONE ausentes.'); process.exit(1); }
 
 async function bdFetch(url, timeoutMs = 60000) {
-  const r = await fetch('https://api.brightdata.com/request', {
+  const r = await fetchUnlockerContado({
     method: 'POST', headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ zone: ZONE, url, format: 'raw' }), signal: AbortSignal.timeout(timeoutMs),
   });

@@ -1,12 +1,13 @@
 /**
  * DRY-RUN do PARSER de produção do EMILIOMATOS, fora do ledger de cota.
  * Importa a MESMA lib que o scraper grava (lib/emiliomatos-parse.mjs) e roda em N lotes reais
- * via Bright Data DIRETO (api.brightdata.com — não passa pela cota semanal). Não grava nada.
+ * via Bright Data pela porta contada (`lib/bd-ledger.mjs`, propósito `recon`). Não grava nada.
  * Serve para conferir preço/status/campos ANTES de liberar teto e gravar de verdade.
  *
  * Env: BRIGHTDATA_API_TOKEN, BRIGHTDATA_ZONE. [PARSE_N] (default 6).
  */
 import { BASE, extrairUrlsDeLote, parseDetalhe, montarRow, checarQualidade } from './lib/emiliomatos-parse.mjs';
+import { fetchUnlockerContado } from './lib/bd-ledger.mjs';
 
 const TOKEN = process.env.BRIGHTDATA_API_TOKEN;
 const ZONE = process.env.BRIGHTDATA_ZONE;
@@ -14,7 +15,7 @@ const N = parseInt(process.env.PARSE_N || '6', 10);
 if (!TOKEN || !ZONE) { console.log('⚠️ BRIGHTDATA_API_TOKEN/ZONE ausentes.'); process.exit(1); }
 
 async function bd(url, timeoutMs = 60000) {
-  const r = await fetch('https://api.brightdata.com/request', {
+  const r = await fetchUnlockerContado({
     method: 'POST',
     headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ zone: ZONE, url, format: 'raw' }),

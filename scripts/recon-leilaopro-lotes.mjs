@@ -1,3 +1,4 @@
+import { fetchUnlockerContado } from './lib/bd-ledger.mjs';
 /**
  * Recon PROFUNDO LeilãoPro Core (v3) — enumera lotes de imóvel na listagem e disseca 1 detalhe.
  * Padrão de detalhe descoberto: /leilao/<slug>/lote_id/<ID>. Env: BRIGHTDATA_API_TOKEN, ZONE.
@@ -10,7 +11,7 @@ if (!TOKEN || !ZONE) { console.log('⚠️ BRIGHTDATA_API_TOKEN/ZONE ausentes.')
 
 async function bdFetch(url, timeoutMs = 60000) {
   try {
-    const r = await fetch('https://api.brightdata.com/request', {
+    const r = await fetchUnlockerContado({
       method: 'POST', headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ zone: ZONE, url, format: 'raw' }), signal: AbortSignal.timeout(timeoutMs),
     });

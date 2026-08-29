@@ -10,6 +10,7 @@
  * Roda no GitHub Actions (egress liberado). Config por env RECON_SITES (csv).
  */
 import puppeteer from 'puppeteer';
+import { fetchUnlockerContado } from './lib/bd-ledger.mjs';
 
 const BROWSER_ARGS = ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--disable-blink-features=AutomationControlled', '--window-size=1280,900'];
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
@@ -121,7 +122,7 @@ async function reconViaBrightData(nome, cfg) {
   for (const path of cfg.paths) {
     const url = cfg.base + path;
     try {
-      const r = await fetch('https://api.brightdata.com/request', {
+      const r = await fetchUnlockerContado({
         method: 'POST',
         headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ zone: ZONE, url, format: 'raw' }),
@@ -146,7 +147,7 @@ async function reconViaBrightData(nome, cfg) {
 // Busca crua via Bright Data unlocker (retorna {status, html}).
 async function bdFetch(url) {
   const TOKEN = process.env.BRIGHTDATA_API_TOKEN, ZONE = process.env.BRIGHTDATA_ZONE;
-  const r = await fetch('https://api.brightdata.com/request', {
+  const r = await fetchUnlockerContado({
     method: 'POST',
     headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ zone: ZONE, url, format: 'raw' }),

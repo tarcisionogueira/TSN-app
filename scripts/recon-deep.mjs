@@ -1,3 +1,4 @@
+import { fetchUnlockerContado } from './lib/bd-ledger.mjs';
 /**
  * Recon PROFUNDO de páginas específicas (listing + detalhe) de um cluster de leiloeiros —
  * o passo seguinte ao recon-leiloeiros-backlog.mjs (que só classifica a plataforma pela home).
@@ -19,7 +20,7 @@ const URLS = (process.env.DEEP_URLS || '').split(',').map(s => s.trim()).filter(
 
 let usados = 0;
 async function bdFetch(url, timeoutMs = 60000) {
-  const r = await fetch('https://api.brightdata.com/request', {
+  const r = await fetchUnlockerContado({
     method: 'POST',
     headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ zone: ZONE, url, format: 'raw' }),

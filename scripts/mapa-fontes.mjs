@@ -1,3 +1,4 @@
+import { fetchUnlockerContado } from './lib/bd-ledger.mjs';
 /**
  * MAPA DE FONTES (recon consolidado, Bright Data AUTORIZADO pelo dono 20/08) — mapeia o FLUXO
  * de cada família pendente para redesenharmos a arquitetura de captura depois. Para CADA família:
@@ -23,7 +24,7 @@ const FAMILIAS = [
 
 async function bd(url, timeoutMs = 30000) {
   try {
-    const r = await fetch('https://api.brightdata.com/request', {
+    const r = await fetchUnlockerContado({
       method: 'POST', headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ zone: ZONE, url, format: 'raw' }), signal: AbortSignal.timeout(timeoutMs),
     });

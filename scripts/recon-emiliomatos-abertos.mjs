@@ -9,6 +9,7 @@
  * Env: BRIGHTDATA_API_TOKEN, BRIGHTDATA_ZONE. [PAGS] csv (default "1,6,11,15"), [POR_PAG] (default 3).
  */
 import { BASE, extrairUrlsDeLote, parseDetalhe } from './lib/emiliomatos-parse.mjs';
+import { fetchUnlockerContado } from './lib/bd-ledger.mjs';
 
 const TOKEN = process.env.BRIGHTDATA_API_TOKEN;
 const ZONE = process.env.BRIGHTDATA_ZONE;
@@ -17,7 +18,7 @@ const PAGS = (process.env.PAGS || '1,6,11,15').split(',').map(s => parseInt(s, 1
 const POR_PAG = parseInt(process.env.POR_PAG || '3', 10);
 
 async function bd(url, timeoutMs = 60000) {
-  const r = await fetch('https://api.brightdata.com/request', {
+  const r = await fetchUnlockerContado({
     method: 'POST', headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ zone: ZONE, url, format: 'raw' }), signal: AbortSignal.timeout(timeoutMs),
   });

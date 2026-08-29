@@ -1,3 +1,4 @@
+import { fetchUnlockerContado } from './lib/bd-ledger.mjs';
 /**
  * Probe de SSR — escolhe a PRÓXIMA família de leiloeiro fácil (pivô do Nordeste, que é SPA
  * App Router sem API/catálogo scrapeável). Para cada domínio candidato, baixa o HTML CRU (Bright
@@ -16,7 +17,7 @@ const ROTAS = ['/', '/imoveis', '/leiloes', '/leiloes/imoveis', '/busca?tipo=imo
 
 async function bdFetch(url, timeoutMs = 45000) {
   try {
-    const r = await fetch('https://api.brightdata.com/request', {
+    const r = await fetchUnlockerContado({
       method: 'POST', headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ zone: ZONE, url, format: 'raw' }), signal: AbortSignal.timeout(timeoutMs),
     });

@@ -187,6 +187,28 @@ const REGRAS = [
     testar: (linha) => /^\s*await\s+(supabase|sb)\s*\.\s*from\s*\(/.test(linha)
       && /\.\s*(update|insert|upsert)\s*\(/.test(linha),
   },
+  {
+    id: 'brightdata-fora-do-ledger',
+    titulo: 'chamada CRUA à Bright Data — o freio de custo não enxerga, e o painel cobra',
+    // POR QUE (29/08): medido, 22 arquivos chamavam o endpoint cru da Bright Data direto,  // padrao-ok: é a descrição da própria regra
+    //   contra 18 que
+    // passavam por `_brightdata.js`. Ou seja, o teto semanal — que vive em 550/550 — vigiava
+    // MENOS DA METADE de quem gasta. É a causa da distância entre o nosso ledger (~2.549 desde
+    // 29/06) e os ~780 créditos do painel, registrada no CLAUDE.md como pendência sem causa.
+    //
+    // O estrago não é só contábil: o freio existe para impedir que uma coleta nova cale outra
+    // que já funciona. Um chamador invisível fura a fila de todo mundo sem aparecer em lugar
+    // nenhum — e a decisão de "cortar gasto" passa a ser tomada sobre um número que descreve
+    // metade da realidade.
+    //
+    // A porta única é `api/_brightdata.js` (`buscarViaBrightData` / `fetchViaBrightData`), que
+    // faz reserva atômica ANTES do fetch e registra o desfecho REAL depois. Em Python, as
+    // mesmas RPCs do banco — ver `scripts/scraper_vlance.py`.
+    // Exceção legítima (o próprio módulo, ou um teste de conectividade) → // padrao-ok: motivo.
+    // A assinatura é (linha, arquivo, texto, i, linhas) — ver a chamada em `r.testar(...)`.
+    testar: (linha, arquivo) => /api\.brightdata\.com/.test(linha)
+      && !/_brightdata\.js$/.test(String(arquivo || '')),
+  },
 ];
 
 // Regras de WORKFLOW (.github/workflows/*.yml): o defeito mora no YAML, não no JS.
