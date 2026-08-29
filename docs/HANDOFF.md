@@ -4,6 +4,62 @@
 
 ---
 
+## 🔚 29/08 — FECHAMENTO DO DIA (mapa das sessões 14o → 14t)
+
+> O fechamento das sessões 14 → 14n está mais abaixo, no seu lugar. Este cobre o resto do dia.
+
+| # | O que era o problema | Como terminou |
+|---|---|---|
+| **14o** | Card do lance mostrava a praça errada; 7 itens abertos | Praça atual **por data**; triagem dos 7 |
+| **14p** | Rafael pagou assessoria por fora e não havia onde registrar; Matheus atribuído e não promovido | Ciclo de vida da assessoria: contrata → vincula → entrega → **encerra com documento** |
+| **14q** | Funil dizia "criaram conta 71 · tentaram 34" | Contava **navegador**, não pessoa; `tentou` perdia o envio que deu certo; degrau de ativação entrou na tela |
+| **14r** | 54 contas novas → 4 relatórios | 1º relatório automático **construído e descartado pelo dono**; ficou a medição da `/analise` |
+| **14s** | O lote que traz a pessoa some no `/login` | `origem_lote` mede quanto disso acontece; cabeçalho passa a carregar o lote |
+| **14t** | HASTA acusada de regressão | **Parser intacto** — o alarme era o instrumento, 4ª vez; releitura do acervo passa a existir |
+
+### As duas lições do dia que valem mais que os consertos
+1. **A 4ª ocorrência da forma nº 10, e a lição já estava escrita.** `_saude-fonte.mjs` tem desde
+   17/08 um cabeçalho chamado *"POR QUE A REGRESSÃO NÃO PODE OLHAR PARA `total`"* — e a função SQL
+   reescrita hoje de manhã olhava para `total`. **Lição aprendida num arquivo não atravessa
+   sozinha para o outro.**
+2. **Aderência não era o critério** (14r). O ensaio em seco do 1º relatório automático saiu
+   excelente — 34 de 34 clientes com lote, 21 na própria cidade, 0 fora do estado — e o dono
+   recusou com a razão que nenhuma medição alcança: *"o cliente não escolheu o imóvel"*. Nenhum
+   ensaio em seco pega isso; só o dono do negócio.
+
+### 📌 PENDÊNCIAS AO ENTRAR EM 30/08 (esta lista substitui a de "PRÓXIMA SESSÃO (30/08)" abaixo)
+
+**Captura** — `select * from public.fonte_regressao_suspeita();` devolve 4 linhas, todas verdadeiras:
+- 🔴 **VENDASGOV** `zerou` (fonte **paga**) · 🟠 **ALFA · EMILIOMATOS · NORDESTE** `medicao_velha`
+  (201–226 h) — o teto do Bright Data vira **segunda 31/08** e parte disso se resolve sozinha.
+- ✅ **CALIL e VEGAS saíram** da lista. ✅ **HASTA** resolvida (era o instrumento).
+
+**Custo** — `bd_teto_saturado` 550/495, vira 31/08.
+
+**Marketing** — `canal_sem_conversao_apurada` = 1; olhar `action_types_vistos` na resposta do
+`meta-insights-cron` (08h10 UTC).
+
+**Cliente** — dois alertas que **somem sozinhos** e vale saber por quê: `erro_na_tela_do_cliente`
+= 3 (os três são o RLS de `analise_jobs`, 23–25/08, **corrigido em 28/08**) e
+`alerta_acima_do_capital` = 2 (ambos de **24/08**, anteriores ao conserto de 25/08; **zero envios
+depois**). O quarto evento de erro é `/admin` com *statement timeout* — esse é real.
+
+**Agendado** — ⏰ **05/09** (`trig_01DEkuEvHftyhnKecMCaSDDW`): ler `analise_*` e `origem_lote`.
+⚠️ A rotina foi criada **sem conectores** — a sessão que disparar não roda SQL sozinha; ela
+entrega as consultas. Para automatizar de verdade, recriar pela tela de Routines do claude.ai.
+
+**Decisões do dono** — `direitos aquisitivos` entra em `acervo.fracao_ideal`? (16 lotes) ·
+âncora CDC 7 dias para pagamento fora do gateway · equipe marcar upload como
+`matricula_registrada` (senão o encerramento da assessoria não dispara).
+
+**Herdadas** — `/admin` timeout · `/planos` Leaflet · P2/P3/P4 de captura · 1º advogado ·
+`apresentador_foto` · OpenAI Ads · os 3 clientes do 360 · 41% sem triagem.
+
+✅ **Saiu da lista:** backup off-region são (65 arquivos, `ok: true`, longe do teto de 1.000 nos
+últimos 3 dias) — era a preocupação de 14/08 no CLAUDE.md.
+
+---
+
 ## 🗓️ 29/08 (sessão 14t) — RECON DA HASTA: O PARSER ESTÁ INTACTO, O ALARME ERA O INSTRUMENTO (4ª vez)
 
 ### O veredito, em dois números
@@ -85,8 +141,24 @@ na frente do mais velho · inativo fora · desempate estável). **8/8 passam.**
 tivesse entrado ANTES de a baseline passar a aprender de `enumerados`, o piso derivaria de novo —
 exatamente o defeito que o conserto anterior removeu.
 
-**Ciclo do acervo, honesto:** com 40/run e ~13 novos, a HASTA relê ~27/run. 579 lotes levam ~21
-runs — cerca de 3 semanas em cadência diária. É lento, mas é grátis e limitado; antes era zero.
+### E o teto da HASTA já era 600 — o freio nunca foi ele
+`runner-residencial.sh` já passava `HASTA_MAX_LOTES=600`; o **default do scraper era 40**. A
+rodada na mão media outra coisa que a agendada, e foi assim que o teto pareceu ser o problema
+neste recon quando não era. Default alinhado ao uso real (600). Custo de subir: **só tempo** —
+`dom` é Chromium residencial, devolve `via: 'dom'` e nunca toca Bright Data, então o guard
+"releitura nunca paga" corretamente jamais dispara nela.
+
+E o comentário do runner descrevia comportamento inexistente: prometia refresh completo *"sem
+lote novo"*, e como quase toda rodada traz ao menos um lote novo, **o refresh nunca acontecia**.
+Agora acontece — o acervo cicla num run só, não em três semanas.
+
+### HASTA passou a ser a ÚLTIMA da fila (decisão do dono)
+Com ~1 h de rodada, ela empurrava tudo o que vinha depois. O dono pediu "depois da Vlance"; ficou
+**no fim**, porque depois da Vlance ainda vinham o **radar do DJEN** — que acorda pelo caminho
+**pago** se ficar 7 dias sem rodar aqui — e a triagem. Ordem nova:
+`SOLEON → GESTAO → RJ → PECINI → VLANCE → radar DJEN → triagem → HASTA`.
+No fim da fila, rodada longa não custa a ninguém, e a HASTA é a que pode ser cortada com menor
+custo: não tem caminho pago atrás.
 
 ---
 
@@ -1575,7 +1647,7 @@ que derrubaram hipóteses **minhas** (o `{estrito:true}` e a pendência do mappe
 
 ---
 
-## 📌 PENDÊNCIAS PARA A PRÓXIMA SESSÃO (30/08)
+## 📌 PENDÊNCIAS PARA A PRÓXIMA SESSÃO (30/08)  ·  ⚠️ HISTÓRICO — substituída pela lista no TOPO
 
 ### ✅ 1 — MAPPER DA MEGA: **MEDIDO, E NÃO SE MEXE** (resolvido em 29/08)
 
