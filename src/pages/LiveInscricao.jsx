@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { supabase } from '../utils/supabase';
 import { lerMarketing, metaTrack, openaiTrack } from '../utils/marketing';
 import { lerRef } from '../utils/ref';
+import ConvideAmigo from '../components/ConvideAmigo';
 import { validarNome } from '../lib/nome';
 import { validarTelefone, limparTelefone, formatarTelefone } from '../lib/telefone';
 import CidadeAutocomplete from '../components/CidadeAutocomplete';
@@ -330,6 +331,13 @@ export default function LiveInscricao() {
                   Definir minha senha e explorar →
                 </a>
               </div>
+
+              {/* CONVIDE UM AMIGO — aqui, e não noutro lugar, porque este é o instante de maior
+                  disposição para compartilhar: a pessoa acabou de garantir a vaga e ainda está
+                  com o WhatsApp na mão. Fica por ÚLTIMO de propósito: o grupo do WhatsApp é o
+                  passo que não pode ser perdido, e um botão verde de igual peso acima dele
+                  dividiria o clique que mais importa. */}
+              <ConvideAmigo codigo={pronto.codigo_indicacao} aula={{ slug, data_hora: evento.data_hora }} />
             </div>
           ) : (
             <form onSubmit={inscrever}>

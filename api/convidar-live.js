@@ -17,7 +17,7 @@ export const config = { runtime: 'nodejs', maxDuration: 300 };
 
 import { getAuthUser, unauthorized, forbidden, getUserRoleById } from './_auth.js';
 import { enviarEmail } from './_email.js';
-import { carregarEdicao, dispararConvite, montarConvite, TIPO_EMAIL } from './_convite-live.js';
+import { carregarEdicao, dispararConvite, montarConvite, perfilBasico, TIPO_EMAIL } from './_convite-live.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SVC = process.env.SUPABASE_SERVICE_KEY;
@@ -55,9 +55,13 @@ async function handler(req) {
     if (body?.teste === true) {
       const destino = String(user.email || '').trim();
       if (!destino) return json({ error: 'Sua conta não tem e-mail para o teste' }, 400);
+      // Lê o perfil para o teste sair IDÊNTICO ao que o cliente recebe — com o nome e com o
+      // bloco "Quer trazer alguém?". Um teste sem o bloco aprovaria um e-mail que não é o que vai.
+      const eu = await perfilBasico(user.id);
       const html = montarConvite({
         aula, edicao, slug, userId: user.id,
-        nome: user.user_metadata?.nome || user.user_metadata?.full_name || '',
+        nome: eu?.nome || user.user_metadata?.nome || '',
+        codigo: eu?.codigo_indicacao || null,
         conteudo: 'convite-teste',
       });
       const env = await enviarEmail({

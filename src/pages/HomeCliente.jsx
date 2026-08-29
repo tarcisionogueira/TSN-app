@@ -6,6 +6,7 @@ import { supabase } from '../utils/supabase';
 import { lerCotas, janelaLabel } from '../utils/cotaAnalise';
 import TriagemPerfil from '../components/TriagemPerfil';
 import VitrineMaterial from '../components/VitrineMaterial';
+import ConvideAmigo from '../components/ConvideAmigo';
 import { TERMO_PARCEIRO_VERSAO, TERMO_PARCEIRO_PREAMBULO, TERMO_PARCEIRO } from '../components/ConviteParceiro';
 
 // Rótulo da home por plano (usa o role EFETIVO — respeita o modo suporte).
@@ -91,8 +92,12 @@ export default function HomeCliente() {
 
   // Código curto de indicação — busca o existente; se não houver e o usuário já é parceiro,
   // gera sob demanda (RPC idempotente). Deixa o link do card enxuto sem quebrar nada.
+  // ⚠️ SEM O GATE DE PARCEIRO (29/08). Este efeito só rodava para quem já tinha ACEITADO o
+  // termo — 10 de 73 contas — porque o código só servia ao card "Indique e Ganhe". Agora ele
+  // alimenta também o "Convide um amigo", que é para TODO cliente: o dono quis que qualquer
+  // pessoa da base pudesse chamar alguém para a aula.
   useEffect(() => {
-    if (!effectiveUserId || !info.indica || !aceite) return;
+    if (!effectiveUserId) return;
     let vivo = true;
     (async () => {
       const { data } = await supabase.from('perfis').select('codigo_indicacao').eq('id', effectiveUserId).single();
@@ -103,7 +108,24 @@ export default function HomeCliente() {
       if (vivo && cod) setRefCodigo(cod);
     })();
     return () => { vivo = false; };
-  }, [effectiveUserId, info.indica, aceite]);
+  }, [effectiveUserId]);
+
+  // Próxima aula ao vivo — para o convite levar data e cartão de compartilhamento. Vem do banco
+  // (`live_proxima` já calcula a recorrência), nunca fixa no código: o card só aparece quando
+  // existe aula ATIVA e ainda por acontecer. Convidar para uma aula encerrada seria pior que
+  // não convidar — o amigo abriria um convite morto e a indicação queimaria com ele.
+  const [aulaProxima, setAulaProxima] = useState(null);
+  useEffect(() => {
+    let vivo = true;
+    (async () => {
+      // `error` checado: sem isso, "não consegui ler" e "não há aula" ficariam indistinguíveis,
+      // e o card sumiria da tela sem ninguém saber que houve falha.
+      const { data, error } = await supabase.rpc('live_proxima', { p_slug: 'leilao-ao-vivo' });
+      if (error) { console.error('[home] live_proxima', error.message); return; }
+      if (vivo && data?.slug) setAulaProxima(data);
+    })();
+    return () => { vivo = false; };
+  }, []);
 
   const aceitarParceria = async () => {
     if (!concordo || aceitando) return;
@@ -213,6 +235,11 @@ export default function HomeCliente() {
             <strong>Arremate com segurança.</strong> Cada imóvel vem com relatórios de viabilidade e jurídico e, se quiser, você valida a operação com um analista antes do lance, para decidir com confiança.
           </div>
         </div>
+
+        {/* CONVIDE UM AMIGO — para TODO cliente, seja parceiro ou não. Quando há aula marcada o
+            convite é para ela (tem data e cartão de compartilhamento, então converte muito mais);
+            sem aula no calendário, cai no link geral da plataforma. */}
+        <ConvideAmigo codigo={refCodigo} aula={aulaProxima} />
       </div>
 
       {/* Coluna lateral: CONVITE para ser parceiro. Some após o aceite (o parceiro passa a usar o

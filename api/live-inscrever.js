@@ -283,8 +283,25 @@ export default async function handler(req, res) {
     console.error('[live-inscrever] e-mail de confirmação falhou', e?.message);
   }
 
+  // CÓDIGO DE INDICAÇÃO de quem acabou de se inscrever — é o que permite o "Convide um amigo"
+  // aparecer já na tela de confirmação, que é o instante de maior disposição para compartilhar.
+  // Simples LEITURA: desde `codigo_indicacao_para_todos_desde_o_cadastro` o gatilho garante o
+  // código no INSERT do perfil, então não há o que gerar aqui (e o servidor não poderia: a RPC
+  // `gerar_codigo_indicacao` exige `auth.uid()`, que é nulo com a service key).
+  let codigoIndicacao = null;
+  if (userId) {
+    try {
+      const rCod = await sb(`perfis?id=eq.${userId}&select=codigo_indicacao&limit=1`);
+      // `.ok` checado: um 4xx do PostgREST tem corpo JSON válido, e o `.json()` direto viraria
+      // "essa pessoa não tem código" — o card sumiria da tela sem ninguém saber por quê.
+      if (rCod.ok) { const [pc] = await rCod.json().catch(() => []); codigoIndicacao = pc?.codigo_indicacao || null; }
+      else console.error('[live-inscrever] leitura do codigo_indicacao falhou', rCod.status);
+    } catch (e) { console.error('[live-inscrever] codigo_indicacao', e?.message || e); }
+  }
+
   return res.status(200).json({
     ok: true, contaNova, link_grupo: ev.link_grupo || null, titulo: ev.titulo, data_hora: ev.data_hora,
+    codigo_indicacao: codigoIndicacao,
     // O NAVEGADOR RECEBE O ID PRONTO, não a regra para calculá-lo. Pixel e CAPI mandando o
     // mesmo `event_id` fazem o Meta contar UMA conversão em vez de duas; duplicar a fórmula
     // nos dois lados seria criar duas cópias de uma regra que só funciona enquanto forem

@@ -79,7 +79,7 @@ export async function carregarEdicao(slug) {
   return { aula, edicao, assunto };
 }
 
-export function corpoConviteLive({ aula, nome, link }) {
+export function corpoConviteLive({ aula, nome, link, linkAmigo }) {
   const primeiro = nome ? String(nome).split(' ')[0] : '';
   const cor = aula.cor || '#0D63DB';
   const capa = capaEmail(aula.capa_url);
@@ -116,6 +116,12 @@ export function corpoConviteLive({ aula, nome, link }) {
       </a>
     </div>
     <p style="text-align:center;font-size:12px;color:#94a3b8;margin:12px 0 0;">Leva 20 segundos. Você recebe o link da sala por e-mail.</p>
+    ${linkAmigo ? `<div style="margin-top:22px;padding:15px 17px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;">
+      <div style="font-size:14px;font-weight:800;color:#0f172a;margin-bottom:5px;">Quer trazer alguém?</div>
+      <p style="margin:0 0 12px;font-size:13px;color:#3f6212;line-height:1.6;">Leilão é bem mais fácil de entender com companhia. Este link é <strong>seu</strong> — quem entrar por ele fica ligado à sua conta.</p>
+      <a href="${esc(linkAmigo.whatsapp)}" style="display:inline-block;background:#16a34a;color:#fff;text-decoration:none;padding:11px 22px;border-radius:9px;font-weight:800;font-size:14px;">Enviar pelo WhatsApp &rarr;</a>
+      <div style="margin-top:10px;font-size:11.5px;color:#65a30d;word-break:break-all;">${esc(linkAmigo.url)}</div>
+    </div>` : ''}
     ${aula.apresentador ? `<div style="border-top:1px solid #e2e8f0;margin:24px 0 0;padding-top:18px;">
       <p style="margin:0;color:#64748b;font-size:13px;line-height:1.7;">
         <strong style="color:#0f172a;">${esc(aula.apresentador)}</strong>${aula.apresentador_cargo ? `<br>${esc(aula.apresentador_cargo)}` : ''}
@@ -127,9 +133,23 @@ export function corpoConviteLive({ aula, nome, link }) {
 }
 
 /** Monta o e-mail pronto para um destinatário (o `{{UNSUB}}` já resolvido). */
-export function montarConvite({ aula, edicao, slug, userId, nome, conteudo = 'convite-base' }) {
+export function montarConvite({ aula, edicao, slug, userId, nome, codigo, conteudo = 'convite-base' }) {
   const link = linkRastreado(userId, TIPO_EMAIL, `/aula/${slug}?${utmEmail('aula-' + edicao, conteudo)}`);
-  return corpoConviteLive({ aula, nome, link })
+
+  // O LINK QUE A PESSOA VAI COMPARTILHAR É CRU, NÃO RASTREADO — e isso é de propósito. O
+  // rastreador embute `u=<id do usuário em base64>` na URL: passar por ele significaria mandar
+  // o id interno da conta para o WhatsApp de terceiros, e registrar como clique DELA o clique
+  // que na verdade é do amigo. Rastreio serve para medir quem recebeu o e-mail; aqui a URL é
+  // um objeto que vai circular fora dele.
+  let linkAmigo = null;
+  if (codigo) {
+    const url = `${BASE}/aula/${slug}?ref=${encodeURIComponent(codigo)}`;
+    const quando = dataBR(aula.data_hora, { weekday: 'long', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    const msg = `Vou participar de uma aula ao vivo sobre leilão de imóveis, ${quando}. É grátis e dá para assistir de casa. Se quiser ir junto, a inscrição é por aqui: ${url}`;
+    linkAmigo = { url, whatsapp: `https://wa.me/?text=${encodeURIComponent(msg)}` };
+  }
+
+  return corpoConviteLive({ aula, nome, link, linkAmigo })
     .replace('{{UNSUB}}', `${BASE}/api/cancelar-alertas?token=${assinarUnsub(userId || '')}`);
 }
 
@@ -139,7 +159,7 @@ export function montarConvite({ aula, edicao, slug, userId, nome, conteudo = 'co
  * LANÇA quando uma leitura falha; quem chama traduz para 502 em vez de "convidei zero com sucesso".
  */
 export async function dispararConvite({ aula, edicao, assunto, slug, seco = false }) {
-  const perfis = await sbLer(`perfis?select=id,nome&role=in.(${ROLES_CLIENTE.join(',')})&ativo=eq.true&order=id.asc&limit=${CAP}`);
+  const perfis = await sbLer(`perfis?select=id,nome,codigo_indicacao&role=in.(${ROLES_CLIENTE.join(',')})&ativo=eq.true&order=id.asc&limit=${CAP}`);
   if (!perfis.length) return { enviados: 0, destinatarios: 0, motivo: 'sem clientes', edicao, assunto };
 
   // Listas de exclusão buscadas inteiras (são pequenas) — evita montar `in.(...)` gigante na URL.
@@ -176,7 +196,7 @@ export async function dispararConvite({ aula, edicao, assunto, slug, seco = fals
       if (!rIns.ok) return 'falha';
       const [linha] = await rIns.json().catch(() => []);
 
-      const html = montarConvite({ aula, edicao, slug, userId: p.id, nome: p.nome });
+      const html = montarConvite({ aula, edicao, slug, userId: p.id, nome: p.nome, codigo: p.codigo_indicacao });
       const env = await enviarEmail({
         from: FROM, to: emailMap.get(p.id), subject: assunto, html,
         meta: { tipo: TIPO_EMAIL, userId: p.id },
@@ -199,6 +219,13 @@ export async function dispararConvite({ aula, edicao, assunto, slug, seco = fals
   }
 
   return { edicao, assunto, aula: aula.titulo, destinatarios: alvos.length, enviados, falhas, sem_email: semEmail, ja_clamados: jaClamados, ...recorte };
+}
+
+/** Nome e código de indicação de uma pessoa — usado pelo modo TESTE, para o admin ver o
+ *  e-mail exatamente como o cliente vê, inclusive com o bloco "Quer trazer alguém?". */
+export async function perfilBasico(userId) {
+  const [p] = await sbLer(`perfis?id=eq.${userId}&select=nome,codigo_indicacao&limit=1`);
+  return p || null;
 }
 
 /** Leitura de um interruptor em `app_config`. `value` é TEXT, mas parte do acervo foi gravada
