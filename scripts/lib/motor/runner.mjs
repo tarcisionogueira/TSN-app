@@ -19,7 +19,13 @@ import { criarMotorFetch } from './fetch-fonte.mjs';
 import { criarMotorDom } from './fetch-dom.mjs';
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const idFonte = (tenant, id) => `${tenant.fonte.toLowerCase()}_${id}`;
+// `chaveTenant` (29/08): tenants que COMPARTILHAM a mesma `fonte` precisam de id distinto,
+// senão o lote 100 do leiloeiro A sobrescreve o lote 100 do leiloeiro B — em silêncio, porque
+// upsert por `fonte_id` não reclama de colisão, só apaga. É o modelo que o SUPORTE já usa
+// (`sl_<tenant>_<id>`); sem `chaveTenant` o formato antigo continua valendo, intacto.
+const idFonte = (tenant, id) => (tenant.chaveTenant
+  ? `${tenant.fonte.toLowerCase()}_${tenant.chaveTenant}_${id}`
+  : `${tenant.fonte.toLowerCase()}_${id}`);
 
 // Enumera as URLs de lote do catálogo (pagina até MAX_PAGES ou até uma página não trazer nada
 // novo — LeilãoPro é página única; Superbid pagina de verdade). `fetchOk` distingue "a listagem

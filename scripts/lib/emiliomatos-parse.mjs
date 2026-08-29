@@ -153,12 +153,26 @@ export function parseDetalhe(html, url) {
   };
 }
 
-export function montarRow(url, det) {
+/**
+ * `tenant` (29/08): o parser era de UM leiloeiro. A triagem da JUCEMG achou 11 sites rodando
+ * esta MESMA plataforma (Superbid/MBV white-label) sem bloquear o acesso grátis — 11 fontes por
+ * meio dia de trabalho, o melhor retorno por hora do backlog. Sem tenant, tudo continua
+ * exatamente como estava: EMILIOMATOS não muda de `fonte` nem de `fonte_id`, e nenhuma linha do
+ * acervo é reescrita.
+ */
+export function montarRow(url, det, tenant = null) {
   const va = det.valor_avaliacao || 0, vm = det.valor_minimo || 0;
   const id = idDaUrl(url);
+  const fonte = tenant?.fonte || FONTE;
+  const leiloeiro = tenant?.leiloeiro || LEILOEIRO;
+  // O id tem de carregar o tenant quando vários dividem a mesma `fonte` — ver `idFonte` no
+  // runner. Sem isso o lote 100 de um sobrescreveria o lote 100 do outro, sem erro nenhum.
+  const fonteId = tenant?.chaveTenant
+    ? `${fonte.toLowerCase()}_${tenant.chaveTenant}_${id}`
+    : `${fonte.toLowerCase()}_${id}`;
   return {
-    fonte: FONTE, fonte_id: `emiliomatos_${id}`,
-    titulo: det.titulo || `Imóvel ${LEILOEIRO} ${id}`,
+    fonte, fonte_id: fonteId,
+    titulo: det.titulo || `Imóvel ${leiloeiro} ${id}`,
     tipo: inferirTipo(det.titulo || '', url),
     modalidade: det.modalidade,
     cidade: det.cidade || null, estado: det.estado || null,
@@ -166,7 +180,7 @@ export function montarRow(url, det) {
     descricao: det.descricao,
     link_edital: det.link_edital || url, url_lote: url, link_foto: det.link_foto || null,
     numero_matricula: det.numero_matricula, link_matricula: det.link_matricula, anexos: det.anexos,
-    leiloeiro: LEILOEIRO, data_leilao: det.data_leilao || null, forma_pagamento: 'a_vista',
+    leiloeiro, data_leilao: det.data_leilao || null, forma_pagamento: 'a_vista',
     ativo: true,
     viavel: va > 0 ? (1 - vm / va) >= 0.3 : null,
     score_viabilidade: va > 0 ? Math.min(100, Math.round((1 - vm / va) * 150)) : 30,
