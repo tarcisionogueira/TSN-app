@@ -225,11 +225,19 @@ export function parseJSON(text) {
 
 // O agente que aprende com os relatórios SINALIZA anomalias (o gerador achou algo errado
 // nos dados) para a verificação de saúde — sem custo, sem gerar relatório.
-async function registrarAnomalia(tipo, fonte, imovelId, campo, detalhe) {
+/**
+ * `jaResolvido` (29/08): distingue o RASTRO de um conserto do PROBLEMA em aberto.
+ * O invariante `data_edital_recuou_prazo` acusava 3, e os 3 diziam "corrigido pelo documento" —
+ * o sistema leu o edital, viu o acervo errado e arrumou na hora. Eram registros de SUCESSO
+ * sendo contados como pendência. Um painel que acusa o próprio conserto treina o dono a ignorar
+ * o painel, e o custo é esse, não a linha. Só o caso MANTIDO (o edital recuaria o prazo sem
+ * declarar encerramento) é divergência de verdade e continua pedindo olho humano.
+ */
+async function registrarAnomalia(tipo, fonte, imovelId, campo, detalhe, jaResolvido = false) {
   try {
     await sb('rpc/registrar_anomalia_relatorio', {
       method: 'POST',
-      body: JSON.stringify({ p_tipo: tipo, p_fonte: fonte || '', p_imovel_id: String(imovelId || ''), p_campo: campo || '', p_detalhe: detalhe || '' }),
+      body: JSON.stringify({ p_tipo: tipo, p_fonte: fonte || '', p_imovel_id: String(imovelId || ''), p_campo: campo || '', p_detalhe: detalhe || '', p_resolvido: !!jaResolvido }),
     });
   } catch { /* nunca bloqueia o relatório */ }
 }
@@ -2353,7 +2361,9 @@ export default async function handler(req, res) {
           const recuaSemProva = encurtaPrazo(p1.data, imDb.data_leilao) && !p1.fim && !pracaUnica;
           try {
             await registrarAnomalia('data_divergente_edital', fonteDb, imovelId, 'data_leilao',
-              `Acervo dizia ${imDb.data_leilao}; edital diz ${p1.data} — ${recuaSemProva ? 'MANTIDO o acervo (o edital recuaria o prazo sem dizer que é encerramento).' : 'corrigido pelo documento.'}`);
+              `Acervo dizia ${imDb.data_leilao}; edital diz ${p1.data} — ${recuaSemProva ? 'MANTIDO o acervo (o edital recuaria o prazo sem dizer que é encerramento).' : 'corrigido pelo documento.'}`,
+              // corrigido = nada pendente; mantido = divergência de verdade, fica em aberto.
+              !recuaSemProva);
           } catch { /* rastro best-effort */ }
           if (!recuaSemProva) { imDb.data_leilao = p1.data; patchPr.data_leilao = p1.data; }
         }

@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { leilaoEncerrado, pracaMaisDescontada, dataBR } from '../utils/leilaoEncerrado';
+import { leilaoEncerrado, pracaMaisDescontada, dataBR, pracaAtualPorData } from '../utils/leilaoEncerrado';
 import { useIsMobile } from '../utils/useIsMobile';
 import {
   FileText, Loader2, Sparkles, BarChart3, ShieldAlert, TrendingUp,
@@ -2864,11 +2864,37 @@ export default function Analise() {
                   <div style={num}>{vAval>0 ? `R$ ${fmt(vAval)}` : 'Não informada'}</div>
                   <div style={sub}>{vAval>0 ? 'valor que o leilão atribuiu ao imóvel' : 'o leilão não divulgou avaliação; a análise usa o valor de mercado'}</div>
                 </div>
-                <div style={card}>
-                  <div style={rot}>Lance mínimo (praça atual)</div>
-                  <div style={num}>{vArr>0 ? `R$ ${fmt(vArr)}` : '—'}</div>
-                  <div style={sub}>{descAval>0 ? `${fmtPct(descAval)} abaixo da avaliação` : 'ponto de partida do lance'}</div>
-                </div>
+                {/* ⚠️ 29/08 — O CARD MOSTRAVA A PRAÇA MAIS DESCONTADA COM O RÓTULO "PRAÇA ATUAL".
+                    Um número certo com o nome errado — a forma nº 10 do CLAUDE.md dentro da tela
+                    do cliente. As duas praças respondem perguntas diferentes e AMBAS importam:
+                      • atual por data  → por quanto se lança HOJE (é o que este card promete)
+                      • mais descontada → quanto pode render (regra do dono, 07/08: as projeções
+                        do relatório saem sobre a praça mais descontada)
+                    Num lote com 1ª a R$ 340.000 em 05/09 e 2ª a R$ 170.000 em 20/09, hoje se
+                    lança 340 mil e a projeção olha os 170. Por isso o card passa a mostrar a
+                    ATUAL e a DIZER, na mesma caixa, que a análise usou a outra — senão o leitor
+                    vê dois números diferentes na mesma página e conclui que um deles está errado.
+                    `d.valorArrematacao` NÃO muda: ele alimenta ROI/TIR/teto, e mexer nele
+                    reverteria a decisão de 07/08 por um efeito de rótulo. */}
+                {(() => {
+                  const pAtual = pracaAtualPorData(imovelInicial || {});
+                  const vAtual = pAtual.valor || vArr;
+                  const divergem = pAtual.valor > 0 && vArr > 0 && Math.round(pAtual.valor) !== Math.round(vArr);
+                  const descAtual = vAval > 0 && vAtual > 0 ? (1 - vAtual / vAval) * 100 : 0;
+                  const dataFmt = pAtual.data ? String(pAtual.data).slice(0, 10).split('-').reverse().join('/') : null;
+                  const nomePraca = pAtual.temDuas ? (pAtual.n === 2 ? '2ª praça' : '1ª praça') : 'praça única';
+                  return (
+                    <div style={card}>
+                      <div style={rot}>Lance mínimo (praça atual)</div>
+                      <div style={num}>{vAtual>0 ? `R$ ${fmt(vAtual)}` : '—'}</div>
+                      <div style={sub}>
+                        {vAtual>0 ? `${nomePraca}${dataFmt ? ` · ${dataFmt}` : ''}` : 'ponto de partida do lance'}
+                        {descAtual>0 ? ` · ${fmtPct(descAtual)} abaixo da avaliação` : ''}
+                        {divergem ? ` — a análise projeta sobre a praça mais descontada (R$ ${fmt(vArr)})` : ''}
+                      </div>
+                    </div>
+                  );
+                })()}
                 <div style={{ ...card, background:'rgba(167,243,208,0.18)' }}>
                   <div style={rot}>Venda estimada no mercado</div>
                   <div style={{ ...num, color:'#a7f3d0' }}>{sugerido>0 ? `R$ ${fmt(sugerido)}` : '—'}</div>

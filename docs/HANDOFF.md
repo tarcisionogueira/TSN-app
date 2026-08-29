@@ -4,6 +4,56 @@
 
 ---
 
+## 🗓️ 29/08 (sessão 14o) — A PRAÇA DO CARD, E A TRIAGEM DOS 7 ABERTOS
+
+### 🃏 Card "Lance mínimo (praça atual)" — decisão do dono: **praça atual por DATA**
+
+O card mostrava `d.valorArrematacao`, que é a **praça mais descontada** (regra do dono, 07/08,
+para as PROJEÇÕES). Um número certo com o nome errado — a forma nº 10 dentro da tela do cliente.
+
+`pracaAtualPorData()` entra como irmã de `pracaMaisDescontada()`, e as duas respondem perguntas
+diferentes **de propósito**: por quanto se lança HOJE × quanto pode render. Num lote com 1ª a
+R$ 340.000 em 05/09 e 2ª a R$ 170.000 em 20/09, hoje se lança 340 mil e a projeção olha os 170 —
+por isso o card passa a mostrar a atual **e a dizer, na mesma caixa**, que a análise usou a
+outra. Sem essa frase o leitor vê dois números na mesma página e conclui que um está errado.
+
+> ⚠️ `d.valorArrematacao` **não muda**: ele alimenta ROI/TIR/teto. Mexer nele reverteria a
+> decisão de 07/08 por um efeito de rótulo.
+
+Rodado em seco (5 casos): 1ª aberta → 1ª · 1ª vencida → 2ª · praça única → única · sem data →
+1ª · todas vencidas → a ÚLTIMA (o comentário prometia isso e o código devolvia a primeira;
+corrigi o código, não o comentário).
+
+### 🔍 Os 3 invariantes: dois eram rastro de conserto, um era o painel acusando a si mesmo
+
+| invariante | veredito | ação |
+|---|---|---|
+| `erro_na_tela_do_cliente` = 3 | 23–25/08, todos `analise_jobs` RLS — **o bug consertado hoje de manhã** | sai da janela em 01/09 |
+| `alerta_acima_do_capital` = 2 | 24/08, **antes** do conserto de 25/08 | sai da janela em 31/08 |
+| `data_edital_recuou_prazo` = 3 | **falso positivo do próprio painel** | **corrigido** |
+
+**Prova de que o "Solicitar" funciona** (0 erros não provava nada — provava que ninguém clicou):
+vestindo o cliente real no banco (`set local role authenticated` + o `sub` dele no JWT), o
+INSERT em `analise_jobs` **passou** e foi desfeito de propósito. Antes: `violates row-level
+security policy`.
+
+**E o terceiro era o painel contando o próprio conserto.** Os 3 diziam *"corrigido pelo
+documento"*: o sistema leu o edital, viu o acervo errado e arrumou na hora — rastro de SUCESSO
+lido como pendência. A distinção já existia no código (`recuaSemProva`) e não chegava ao banco.
+Agora `registrar_anomalia_relatorio` aceita `p_resolvido`, e só o caso **MANTIDO** (o edital
+recuaria o prazo sem declarar encerramento) fica em aberto.
+
+> Um painel que acusa o próprio conserto treina o dono a ignorar o painel. O custo é esse, não a
+> linha.
+
+### ✅ Sobraram 3 dos 7, e nenhum é trabalho
+
+`bd_teto_saturado` (mede na virada de 31/08) · `canal_sem_conversao_apurada` (zera no cron das
+08h10 UTC) · CEF drenando (~4 dias). **Rafael** e **MARAURZEDO** seguem abertos por decisão, não
+por pendência técnica.
+
+---
+
 ## 🗓️ 29/08 — FECHAMENTO DO DIA (mapa das sessões 14 → 14n)
 
 **36 commits · 59 arquivos · 13 migrações aplicadas.** PR
