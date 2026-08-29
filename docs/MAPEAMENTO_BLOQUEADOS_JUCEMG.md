@@ -47,8 +47,44 @@ fontes varridas toda semana trazendo vazio.
 O **VEGAS** (tenant antigo) rodou na mesma leva e trouxe lote com edital, matrícula e avaliação:
 é o controle que prova que cada `0` é sobre aquele site, não sobre o parser.
 
-Os 12 estão em `TODOS_TENANTS` de `scripts/scraper-soleon.mjs`. **Os 7 SUPERBID seguem pendentes**
-— é a família do precedente ruim e o motor usa outra estrutura de tenant.
+Os 12 estão em `TODOS_TENANTS` de `scripts/scraper-soleon.mjs`.
+
+### 🔴 SUPERBID: 6 de 6 reprovados — e o pior caso não foi o zero
+
+O mesmo rito nos 7 domínios Superbid (6 tenants: `apaleiloes` e `brfleiloes` são o mesmo site):
+
+| | Resultado |
+|---|---|
+| ADRIANOLEIL · ANGELABECHARA | ❌ 0 enumerados `(via grátis)` — *linkam* para o Superbid, não rodam |
+| APABRF | ❌ 0 enumerados **sem** `(via grátis)` — nem chegou a acessar |
+| BHLEILOARIA · FRANCISCODAVID · DENIS | ❌ **75 lotes cada, com os MESMOS ids** |
+
+```
+emiliomatos_125319 · bhleiloaria_125319 · franciscodavid_125319 · denis_125319
+   → todos "Casa A.T. 150 m² - Vila Mariana, Morungaba/SP"
+```
+
+`/busca/segmento/imoveis` num white-label devolve o **catálogo GLOBAL do Superbid**, não o
+acervo do leiloeiro dono do site. Promovê-los teria duplicado **75 lotes × 3 fontes**, com
+`fonte_id` distinto para o MESMO imóvel — e **sem um único erro à vista**.
+
+> **O zero era o caso fácil.** O perigoso foi o tenant que "funcionava": três fontes trazendo
+> 75 lotes cada pareceriam um sucesso de integração no log e no painel de saúde.
+
+### 🚨 O achado de brinde: a fonte EMILIOMATOS, EM PRODUÇÃO, tem o mesmo defeito
+
+O `EMILIOMATOS` enumerou os mesmos 75 lotes com os mesmos ids. **Os lotes gravados sob a fonte
+dele são de outros leiloeiros** — o cliente lê "Emílio Matos Leilões" num imóvel que não é dele.
+
+Não é regressão nova: é como a fonte sempre funcionou. O suporte multi-tenant só deu o
+instrumento para enxergar — sozinha, ela enumerava 75 e nada acusava.
+
+**Cron suspenso** em `.github/workflows/scraper-emiliomatos.yml` (o `workflow_dispatch` fica,
+para o recon). Rodava quartas 10:40 UTC; a próxima seria 02/09. Os 37 lotes que ela gravou
+estão **inativos desde 20/08**, então não há dano ativo no acervo hoje.
+
+**Para religar:** descomentar as duas linhas do `schedule` — depois de um recon achar o caminho
+que lista só o acervo do leiloeiro, como foi feito para VIP e SUPORTE.
 
 ---
 

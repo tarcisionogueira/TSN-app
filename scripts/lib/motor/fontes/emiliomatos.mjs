@@ -27,6 +27,19 @@ import {
 //
 // Só entram com `EMILIOMATOS_CANDIDATOS=1`; o cron de produção não os enxerga. Promover exige
 // mover a linha para `tenants`, à mão, depois da prova.
+// ⛔ RESULTADO DO DRY-RUN (29/08): 6 de 6 REPROVADOS, e o pior caso não foi o zero.
+//   ADRIANOLEIL, ANGELABECHARA  → 0 enumerados (via grátis): linkam para o Superbid, não rodam.
+//   APABRF                      → 0 enumerados SEM "(via grátis)": nem chegou a acessar.
+//   BHLEILOARIA, FRANCISCODAVID, DENIS → 75 lotes cada, com os MESMOS ids do EMILIOMATOS
+//     (bhleiloaria_125319 = franciscodavid_125319 = denis_125319 = emiliomatos_125319,
+//     "Casa A.T. 150 m² - Vila Mariana, Morungaba/SP"). O catálogo `/busca/segmento/imoveis`
+//     de um white-label devolve o acervo GLOBAL do Superbid, não o do leiloeiro dono do site.
+//     Promovê-los teria duplicado 75 lotes × 3 fontes, com fonte_id distinto para o MESMO
+//     imóvel — e sem um único erro à vista.
+//
+// E o achado que veio de brinde: o EMILIOMATOS EM PRODUÇÃO tem o mesmo problema. Cron
+// suspenso em .github/workflows/scraper-emiliomatos.yml até um recon achar o caminho que
+// lista só o acervo do leiloeiro.
 const CANDIDATOS_JUCEMG = [
   { fonte: 'ADRIANOLEIL',    leiloeiro: 'Adriano Apolinário L. de Oliveira', base: 'https://www.adrianoleiloeiro.com.br' },
   { fonte: 'ANGELABECHARA',  leiloeiro: 'Ângela Assis Oliveira Bechara',     base: 'https://www.angelabecharaleiloes.com.br' },

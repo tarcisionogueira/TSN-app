@@ -4,9 +4,25 @@ name: Scraper EMILIOMATOS (Superbid/MBV SSR)
 # /busca/segmento/imoveis?page=N. Site atrás de Cloudflare → Bright Data (respeitando a cota
 # semanal via proposito 'emiliomatos') ou IP residencial. Fluxo recon-first: DEBUG → dry → grava.
 # No cron GRAVA; no dispatch manual é dry-run por padrão (dryrun=0 p/ gravar).
+# ⛔ CRON SUSPENSO EM 29/08 — A FONTE GRAVA LOTE DE OUTRO LEILOEIRO
+#
+# O dry-run multi-tenant (rodado do IP residencial) provou que `/busca/segmento/imoveis` num
+# white-label Superbid devolve o CATÁLOGO GLOBAL da plataforma, e não o acervo do leiloeiro
+# dono do site. Quatro sites distintos enumeraram os MESMOS 75 lotes, com os MESMOS ids:
+#
+#   emiliomatos_125319 · bhleiloaria_125319 · franciscodavid_125319 · denis_125319
+#     → todos "Casa A.T. 150 m² - Vila Mariana, Morungaba/SP"
+#
+# Ou seja: os lotes gravados sob a fonte EMILIOMATOS são de OUTROS leiloeiros. O cliente lê
+# "Emílio Matos Leilões" num imóvel que não é dele. Não é regressão nova — é como a fonte
+# sempre funcionou; o multi-tenant só deu o instrumento para enxergar.
+#
+# O cron fica comentado (o `workflow_dispatch` continua, para o recon) até um recon achar o
+# caminho que lista SÓ o acervo do leiloeiro — o mesmo método que resolveu VIP e SUPORTE.
+# Para religar: descomente as duas linhas abaixo. Reversível de propósito.
 on:
-  schedule:
-    - cron: '40 10 * * 3'   # 1x/semana (quarta), 10:40 UTC — fora do horário dos outros scrapers
+  # schedule:
+  #   - cron: '40 10 * * 3'   # 1x/semana (quarta), 10:40 UTC
   workflow_dispatch:
     inputs:
       debug:
