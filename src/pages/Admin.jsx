@@ -5544,13 +5544,19 @@ function PainelFunilPublico() {
   const n = (v) => Number(v || 0).toLocaleString('pt-BR');
   const pct = (a, b) => (Number(b) > 0 ? `${Math.round((Number(a) / Number(b)) * 100)}%` : '—');
   const d = f?.degraus || {};
+  // TODOS os degraus usam a MESMA base (quem chegou). Até 29/08 "Tentaram criar conta" usava
+  // `foi_ao_cadastro` como base e os outros usavam `visitantes`: 34 pessoas apareciam como
+  // "34%" na mesma coluna em que 99 pessoas apareciam como "4%". Base misturada em coluna
+  // única não é detalhe de formatação — inverte a leitura de qual degrau é o gargalo.
   const degraus = [
     ['Chegaram no site', d.visitantes, null, '#0D63DB'],
     ['Viram o acervo público', d.viu_acervo, d.visitantes, '#0891b2'],
     ['Viram os planos', d.viu_planos, d.visitantes, '#7c3aed'],
     ['Foram ao cadastro', d.foi_ao_cadastro, d.visitantes, '#c026d3'],
-    ['Tentaram criar conta', d.tentou, d.foi_ao_cadastro, '#ea580c'],
+    ['Enviaram o formulário', d.tentou, d.visitantes, '#ea580c'],
     ['Criaram conta', d.virou_conta, d.visitantes, '#059669'],
+    // O degrau que faltava: cadastrar não é usar. É aqui que o funil vaza de verdade.
+    ['Geraram o 1º relatório', d.gerou_relatorio, d.visitantes, '#b45309'],
   ];
 
   return (
@@ -5568,8 +5574,12 @@ function PainelFunilPublico() {
         </div>
       </div>
       <div style={{ fontSize: 12, color: '#64748b', marginBottom: 14, lineHeight: 1.5 }}>
-        Visitante anônimo, sem conta. &quot;Criaram conta&quot; é <strong>piso</strong>: conta quem cadastrou no mesmo
-        navegador da visita — quem trocou de aparelho no meio não aparece.
+        Visitante anônimo, sem conta. Todos os degraus são <strong>% de quem chegou</strong> — mesma base,
+        de cima a baixo. &quot;Criaram conta&quot; é <strong>piso</strong> e conta <strong>pessoa</strong>, não
+        navegador: só entra quem cadastrou no mesmo navegador da visita e cuja conta nasceu nesta janela
+        {typeof d.contas_criadas_total === 'number' ? <> (no total nasceram <strong>{n(d.contas_criadas_total)}</strong> contas no período)</> : null}.
+        &quot;Enviaram o formulário&quot; é o /login inteiro — entrar, cadastrar ou recuperar senha compartilham
+        a mesma página, e quem entra pelo Google não gera envio nenhum.
       </div>
 
       {erro ? (
