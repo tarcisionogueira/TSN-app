@@ -447,12 +447,23 @@ async function processar(browser, item) {
 async function main() {
   // Processa PENDENTES e re-tenta ERROS transitórios (até 4 tentativas) — assim uma
   // falha momentânea (fonte instável) não deixa o lote sem documentos para sempre.
-  const { data: fila } = await supabase.from('documentos_fila')
-    .select('*')
-    .or('status.eq.pendente,and(status.eq.erro,tentativas.lt.4)')
-    .order('criado_em', { ascending: true }).limit(LOTE);
+  // A ORDEM DEIXA DE SER FIFO PURO (29/08). Eram 1.315 pendentes atendidos por ordem de
+  // chegada, enquanto a leitura de documento — que existe para preencher data de quem não tem —
+  // encontrava 137 de 160 candidatos SEM documento nenhum. As duas rotinas trabalhavam em
+  // paralelo em vez de uma alimentar a outra.
+  //
+  // `documentos_fila_proxima` põe na frente o lote ATIVO e SEM DATA, que é o único em que o
+  // documento destrava duas coisas de uma vez: a expiração automática (que é cega sem data) e
+  // o gate de leilão encerrado (que sem data FALHA ABERTO e deixa o cliente gastar cota num
+  // leilão que já aconteceu). Dentro de cada faixa a ordem continua sendo `criado_em`.
+  const { data: fila, error: eFila } = await supabase.rpc('documentos_fila_proxima', { p_limite: LOTE });
+  // `error` checado: fila vazia e fila ilegível levam a ações opostas — uma é "nada a fazer",
+  // a outra é "o worker rodou sem trabalhar e ninguém soube". Sair com código 1 faz o
+  // `if: failure()` do workflow avisar.
+  if (eFila) { console.error('Fila NÃO pôde ser lida:', eFila.message); process.exit(1); }
   if (!fila?.length) { console.log('Fila vazia.'); return; }
-  console.log(`Processando ${fila.length} imóvel(is)...`);
+  const p1 = fila.filter(f => f.prioridade === 1).length;
+  console.log(`Processando ${fila.length} imóvel(is) — ${p1} deles ativos SEM data (prioridade máxima)...`);
 
   const browser = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox', '--disable-setuid-sandbox'] });
   let ok = 0, erros = 0, semDoc = 0;
