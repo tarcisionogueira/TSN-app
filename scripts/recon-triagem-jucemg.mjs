@@ -63,6 +63,24 @@ const ASSINATURAS = [
 ];
 
 const CAMINHOS = ['', '/imoveis', '/lotes/imovel'];   // home + dois palpites baratos
+
+/**
+ * PISTAS: de onde o site carrega script e CSS, o que a meta `generator` declara e o título.
+ * É isso que identifica o FORNECEDOR quando nenhuma assinatura conhecida bate — um
+ * `cdn.plataformaX.com.br` em 20 sites diferentes é uma família nova que vale um parser só.
+ * Sem isso, "DESCONHECIDA" seria um beco: 63 sites e nenhuma informação para agir.
+ */
+function pistasDe(html) {
+  const hosts = new Set();
+  for (const m of html.matchAll(/(?:src|href)=["']https?:\/\/([a-z0-9.-]+)/gi)) {
+    const h = m[1].toLowerCase();
+    if (/google|gstatic|facebook|jquery|bootstrapcdn|cloudflare\.com|fontawesome|jsdelivr|unpkg|youtube|instagram|whatsapp|gtm|doubleclick|hotjar|tawk|recaptcha/.test(h)) continue;
+    hosts.add(h);
+  }
+  const gen = (html.match(/<meta[^>]+name=["']generator["'][^>]+content=["']([^"']{0,80})/i) || [])[1] || '';
+  return [gen && `gen:${gen}`, ...[...hosts].slice(0, 8)].filter(Boolean).join(' ').slice(0, 400);
+}
+const tituloDe = (html) => ((html.match(/<title[^>]*>([^<]{0,150})/i) || [])[1] || '').replace(/\s+/g, ' ').trim();
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 function ehBloqueio(status, html, headers) {
@@ -86,31 +104,42 @@ async function pegar(url) {
 
 async function triar(item) {
   const base = `https://www.${item.dominio}`;
-  let melhor = null, bloqueado = false, erro = null, statusFinal = 0, urlFinal = base, servidor = null;
+  let melhor = null, bloqueado = false, erro = null, servidor = null;
+  let statusHome = 0, urlFinal = base, titulo = '', pistas = '', catalogoOk = null;
 
   for (const c of CAMINHOS) {
-    const r = await pegar(base + c);
-    if (r.erro && !c) { // tenta sem www antes de desistir do domínio
+    let r = await pegar(base + c);
+    if (r.erro) {                       // tenta sem www antes de desistir do caminho
       const r2 = await pegar(`https://${item.dominio}${c}`);
-      if (!r2.erro) Object.assign(r, r2);
+      if (!r2.erro) r = r2;
     }
-    statusFinal = r.status || statusFinal; urlFinal = r.url; servidor = r.servidor || servidor;
+    servidor = r.servidor || servidor;
+
+    // ⚠️ O STATUS DA HOME É GRAVADO SEPARADO DO STATUS DOS CAMINHOS CHUTADOS. Na v1 uma
+    // variável só era sobrescrita a cada caminho, e como quase todo site devolve 404 em
+    // `/lotes/imovel` (um palpite meu, não uma rota do site), a coluna acabava dizendo "404"
+    // sobre sites cuja home respondia 200. O instrumento reportava o meu chute com o nome do
+    // site — a mesma família de defeito que este arquivo existe para não cometer.
+    if (!c) {
+      statusHome = r.status; urlFinal = r.url;
+      if (r.html) { titulo = tituloDe(r.html); pistas = pistasDe(r.html); }
+    } else if (r.status === 200 && !r.erro) {
+      catalogoOk = c;
+    }
+
     if (r.erro) { erro = r.erro; continue; }
     if (ehBloqueio(r.status, r.html, r.headers)) { bloqueado = true; continue; }
-    for (const a of ASSINATURAS) {
-      if (a.re.test(r.html)) { melhor = a; break; }
-    }
-    // Assinatura específica encerra a busca; genérica ainda vale tentar o catálogo.
-    if (melhor?.parser) break;
-    if (!c && r.status === 200) continue;      // sempre tenta ao menos um catálogo
-    if (melhor) break;
+    for (const a of ASSINATURAS) if (a.re.test(r.html)) { melhor = a; break; }
+    if (melhor?.parser) break;          // assinatura específica encerra; genérica segue tentando
   }
 
-  const html0 = ''; // não guardamos HTML: o que interessa é a classificação, não a página
   return {
     dominio: item.dominio,
     leiloeiros: item.leiloeiros,
-    status_http: statusFinal,
+    status_http: statusHome,
+    catalogo_ok: catalogoOk,
+    titulo: titulo.slice(0, 150),
+    pistas,
     url_final: String(urlFinal).slice(0, 300),
     servidor,
     bloqueado,
@@ -118,7 +147,6 @@ async function triar(item) {
     parser_existente: melhor?.parser || null,
     erro,
     medido_em: new Date().toISOString(),
-    _html: html0,
   };
 }
 
@@ -130,8 +158,6 @@ for (let i = 0; i < alvos.length; i += CONC) {
   console.log(`[triagem] ${resultados.length}/${alvos.length}`);
   await sleep(400);
 }
-
-for (const r of resultados) delete r._html;
 
 // GRAVA EM LOTE, e o resultado do upsert é CONFERIDO. Um insert que não grava devolve
 // `error` no supabase-js, mas ignorá-lo produziria um log dizendo "141 triados" com a
