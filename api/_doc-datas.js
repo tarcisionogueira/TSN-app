@@ -26,7 +26,7 @@
  * `enriquecer-datas-cron` levou 23/08 para descobrir na versão dele.
  */
 import { carregarPDFParse } from './_pdf-safe.js';
-import { extrairDatasLeilao } from './enriquecer-lote.js';
+import { extrairDatasLeilao, roteiarDatasPraca } from './enriquecer-lote.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -173,9 +173,15 @@ export async function enriquecerPeloDocumento(imovelId, atual = {}) {
     if (texto.replace(/\s+/g, '').length < 200) { ultimoMotivo = 'sem_camada_de_texto'; continue; }
 
     const patch = {};
-    const { inicio, fim, encerradaEm } = extrairDatasLeilao(texto);
+    const datas = extrairDatasLeilao(texto);
+    const { inicio, encerradaEm } = datas;
     if (inicio && !atual.data_leilao) patch.data_leilao = inicio;
-    if (fim && !atual.data_leilao_2) patch.data_leilao_2 = fim;
+    // ESTE é o caminho que a migração `praca_fim_prazo_real_de_lance.sql` designou para as
+    // colunas de encerramento: *"só são preenchidas quando o DOCUMENTO diz que aquilo é um
+    // encerramento"*. É aqui que o edital é lido — e até agora o encerramento que ele publica
+    // ("...e se encerrará no dia 10/09 às 14:30") era gravado em `data_leilao_2`, a coluna do
+    // INÍCIO da 2ª praça. Daí `praca1_fim`/`praca2_fim` estarem em 1 lote de 30.622.
+    Object.assign(patch, roteiarDatasPraca(datas, atual));
     if (encerradaEm && !atual.data_leilao && !atual.data_leilao_2) patch.data_leilao = encerradaEm;
 
     // ENDEREÇO ANCORADO — APROVADO PELA MEDIÇÃO (29/08) e agora gravado.

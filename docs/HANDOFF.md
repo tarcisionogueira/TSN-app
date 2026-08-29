@@ -4,6 +4,87 @@
 
 ---
 
+## 🗓️ 29/08 (sessão 14f) — P1 FECHADO: `praca1_fim`/`praca2_fim` GANHARAM PRODUTOR
+
+As colunas nasceram em 28/08 para desfazer a conflação que tirou do ar um lote com **13 dias de
+pregão pela frente**. Um dia depois: **1 lote em 30.622** as tinha — o preenchido à mão. Os
+5 arquivos que as citam (`enviar-alertas-cron`, `gerar-analise`, `_leilao-encerrado`,
+`leilaoEncerrado.js`, `ImovelDetalhe.jsx`) eram **todos CONSUMIDORES**.
+
+### 🔎 A causa estava a uma linha, nos três produtores de data
+
+```js
+if (fim && !im.data_leilao_2) patch.data_leilao_2 = fim;   // enriquecer-lote ×2 + _doc-datas
+```
+
+`data_leilao_2` é o **INÍCIO** da 2ª praça. E `datas.fim` vinha de um `CTX_FIM` que casa **duas
+coisas incompatíveis**:
+
+```
+/encerr|término|fim d|final d|limite|até |fechamento    ← ENCERRAMENTO de verdade
+ |2[ªa°]?\s*praça|segunda\s*praça/                      ← ABERTURA da 2ª praça
+```
+
+Um encerramento gravado numa coluna de início — e as colunas criadas para recebê-lo nunca viam
+nada. Não era o produtor faltando: era o produtor **escrevendo no lugar errado**.
+
+### ✅ O que mudou
+
+- `CTX_FIM` separado em **`CTX_ENCERRAMENTO`** e **`CTX_PRACA_2`**; `extrairDatasLeilao` passa a
+  devolver `encerramento` e `praca2` como valores distintos (`fim` fica intacto, para
+  compatibilidade);
+- roteamento numa função só — **`roteiarDatasPraca`** — usada pelos **três** chamadores. A regra
+  em três cópias foi exatamente o que deixou o defeito passar em todas;
+- a resposta do endpoint da CEF passa a relatar o que foi **de fato gravado** (antes anunciava
+  `data_leilao_2` mesmo quando o valor tinha ido para outra coluna — forma nº 10 na própria saída).
+
+> ⚠️ **`data_fim` NÃO muda de valor.** O trigger `trg_data_fim_leilao` já faz
+> `greatest(praca2_fim, praca1_fim, data_leilao_2, data_leilao)`. O prazo continua o mesmo; o que
+> muda é a coluna que o carrega passar a dizer a verdade sobre o que ele é. **É essa propriedade
+> que tornou seguro mexer nisto no acervo inteiro** — o gate do relatório, o cron de desativação
+> e a ordenação da busca leem `data_fim`, e nenhum deles enxerga diferença.
+
+**A qual praça o encerramento pertence** sai da ORDEM, e só quando a ordem sustenta: antes da
+abertura da 2ª fecha a 1ª; a partir dela, fecha a 2ª; sem 2ª praça conhecida, é da praça única.
+**Havendo 2ª praça cuja abertura não se consegue ler, não grava nada** — a regra de 28/08 é
+explícita, praça_fim nunca é deduzida.
+
+### 🧪 11/11, e um dos testes pegou um defeito MEU
+
+A primeira versão do roteador, ao não conseguir situar o encerramento, caía no ramo da 1ª praça e
+**gravava mesmo assim** — dedução, exatamente o que a regra proíbe. O teste
+`2a praca ilegivel -> nao deduz` reprovou e a função ganhou a saída antecipada.
+
+Casos cobertos: a frase do edital da MEGA que originou as colunas · o `Abertura/Fechamento` da
+SUPORTE · `"2ª praça X"` classificado como **abertura** e não encerramento · os três ramos de
+roteamento · a guarda de fim-antes-do-início · não sobrescrever valor existente · e a
+**compatibilidade de `fim`**, que garante `data_fim` intacto.
+
+### 🔒 Trava de PARTIDA (e ela é honesta sobre o que é)
+
+**`praca_fim_sem_produtor`** (Captura/bug, limite 0) acusa enquanto o acervo tiver no máximo o
+lote preenchido à mão, e zera quando o pipeline gravar o segundo. **Não é vigilância contínua** —
+depois que zera não volta sozinha, e isso é deliberado: o defeito que ela pega é o do P1, coluna
+em produção esperando um produtor que ninguém escreveu, estado que durou de 28/08 até hoje sem
+nada acusar. A vigilância contínua já existe em `praca_fim_antes_do_inicio` e
+`praca2_antes_da_praca1`, que pegam o dado incoerente depois que ele começa a entrar.
+
+**Acusa agora (valor 1), de propósito** — é o estado real até o pipeline rodar. Zera quando
+`enriquecer-datas-cron`/`_doc-datas` lerem o primeiro edital que publique encerramento.
+
+### 📌 Observação que NÃO virou mudança (fica para decisão)
+
+`_doc-datas.js` lê **texto de edital** e chama `extrairDatasLeilao(texto)` **sem `{estrito:true}`**
+— mas a âncora estrita existe exatamente para isso, e o comentário dela diz por quê: *"num edital
+a palavra 'data' aparece o tempo todo ('a contar da data do pagamento'), então lá ela não serve de
+âncora"*. Trocar isso mudaria quais datas são extraídas de ~2.900 lotes, então **não mexi sem
+medir** — bundlar essa mudança aqui seria arriscar o prazo do acervo por um palpite.
+
+**Arquivos:** `api/enriquecer-lote.js`, `api/_doc-datas.js`,
+`supabase/migrations/praca_fim_ganha_produtor_e_uma_trava_de_partida.sql` (aplicada).
+
+---
+
 ## 🗓️ 29/08 (sessão 14e) — `conversoes: null` DO META NÃO ERA "NÃO CONVERTEU", ERA "NUNCA PERGUNTAMOS"
 
 100% das linhas do Meta em `marketing_metricas_dia` tinham `conversoes` nulo, contra número

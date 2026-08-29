@@ -92,6 +92,19 @@ const CTX_ANCORA = /leil|pra[cçÇ]|encerr|in[íi]cio|inicio|abertura|t[eé]rmin
 // datas caíam no balde de início: `fim` saía nulo e o prazo para dar lance nunca era gravado.
 // Medido nas 3 páginas amostradas da fonte, todas assim.
 const CTX_FIM    = /encerr|t[eé]rmino|termino|fim d|final d|limite|at[ée] |fechamento|2[ªa°]?\s*pra[cç]a|segunda\s*pra[cç]a/i;
+// ── AS DUAS METADES DO `CTX_FIM`, E POR QUE PRECISAM SER SEPARADAS (29/08) ──────────────
+// `CTX_FIM` casa DUAS coisas que o negócio trata de forma oposta:
+//   · um ENCERRAMENTO de verdade ("encerrará", "término", "fechamento", "até");
+//   · o INÍCIO da 2ª praça ("2ª praça 10/09") — que é uma ABERTURA, não um fim.
+// Como os dois caíam no mesmo balde, `datas.fim` era gravado em `data_leilao_2` — a coluna
+// que, pelo schema, guarda o INÍCIO da 2ª praça. Um encerramento escrito numa coluna de
+// início é a conflação que `praca_fim_prazo_real_de_lance.sql` criou as colunas para
+// desfazer, e é por isso que `praca1_fim`/`praca2_fim` estavam em 1 lote de 30.622: o
+// schema chegou e o produtor não.
+// Separar aqui é o que permite gravar cada valor na coluna certa SEM DEDUZIR nada — a regra
+// da migração é explícita: praça_fim só quando o documento diz que aquilo é encerramento.
+const CTX_ENCERRAMENTO = /encerr|t[eé]rmino|termino|fim d|final d|limite|at[ée] |fechamento/i;
+const CTX_PRACA_2      = /2[ªa°]?\s*pra[cç]a|segunda\s*pra[cç]a/i;
 const CTX_INICIO = /in[íi]cio|inicio|abertura|come[cç]|1[ªa°]?\s*pra[cç]a|primeira\s*pra[cç]a|abre/i;
 
 // Âncora ESTRITA, para ler datas do TEXTO DO EDITAL (não da página do lote): num edital a
@@ -99,15 +112,68 @@ const CTX_INICIO = /in[íi]cio|inicio|abertura|come[cç]|1[ªa°]?\s*pra[cç]a|p
 // serve de âncora — só valem as expressões que falam do ATO do leilão.
 const CTX_ANCORA_ESTRITA = /leil|pra[cçÇ]|encerr|hasta|aliena|licita|t[eé]rmino|termino/i;
 
+/**
+ * Roteia as datas lidas para as colunas CERTAS — o produtor que faltava (29/08).
+ *
+ * Até hoje os dois chamadores faziam `patch.data_leilao_2 = datas.fim`, e `datas.fim` mistura
+ * encerramento com abertura de 2ª praça (ver CTX_ENCERRAMENTO/CTX_PRACA_2). Resultado: um
+ * ENCERRAMENTO gravado na coluna do INÍCIO da 2ª praça, e `praca1_fim`/`praca2_fim` — criadas
+ * em 28/08 justamente para isso — vazias em 30.621 dos 30.622 lotes ativos.
+ *
+ * `data_fim` NÃO muda de valor com esta correção: o trigger `trg_data_fim_leilao` já faz
+ * `greatest(praca2_fim, praca1_fim, data_leilao_2, data_leilao)`. O prazo continua o mesmo —
+ * o que muda é a coluna que o carrega passar a dizer a verdade sobre o que ele é.
+ *
+ * A QUAL praça pertence o encerramento sai da ORDEM, e só quando a ordem sustenta: antes da
+ * abertura da 2ª praça encerra a 1ª; a partir dela, encerra a 2ª. Sem 2ª praça conhecida, o
+ * encerramento é da única praça que existe. Nada é inventado — o documento é que disse que
+ * aquilo é um encerramento, e a migração é explícita: praça_fim nunca é deduzida.
+ *
+ * Nunca sobrescreve valor existente, como todo o resto deste arquivo.
+ */
+export function roteiarDatasPraca(datas, im = {}) {
+  const patch = {};
+  const ms = (v) => { const t = Date.parse(v); return Number.isFinite(t) ? t : null; };
+  if (datas?.praca2 && !im.data_leilao_2) patch.data_leilao_2 = datas.praca2;
+
+  const enc = datas?.encerramento ? ms(datas.encerramento) : null;
+  if (!enc) return patch;
+  const inicioP2 = ms(patch.data_leilao_2 || im.data_leilao_2 || '');
+  const inicioP1 = ms(im.data_leilao ? `${String(im.data_leilao).slice(0, 10)}T00:00:00-03:00` : '')
+                ?? (datas?.inicio ? ms(`${datas.inicio}T00:00:00-03:00`) : null);
+
+  // EXISTE 2ª praça mas não consigo LER a abertura dela → não dá para dizer qual praça este
+  // encerramento fecha, e chutar a 1ª seria dedução (a versão anterior desta função fazia
+  // isso, e o teste pegou). Sem conseguir situar, não grava: coluna vazia é honesta, coluna
+  // preenchida errada não levanta suspeita de ninguém.
+  const haSegundaPraca = !!(patch.data_leilao_2 || im.data_leilao_2 || im.praca2_fim);
+  if (haSegundaPraca && inicioP2 == null) return patch;
+
+  if (inicioP2 != null && enc >= inicioP2) {
+    // Encerramento da 2ª praça: na prática o ÚLTIMO instante em que se aceita lance.
+    if (!im.praca2_fim) patch.praca2_fim = datas.encerramento;
+  } else if (inicioP1 == null || enc >= inicioP1) {
+    // 1ª praça (ou praça única). A guarda `enc >= inicioP1` evita gravar um encerramento
+    // anterior à abertura — o invariante `praca_fim_antes_do_inicio` existe por causa disso,
+    // e alimentar um alarme que acabamos de consertar seria o pior desfecho da mudança.
+    if (!im.praca1_fim) patch.praca1_fim = datas.encerramento;
+  }
+  return patch;
+}
+
 export function extrairDatasLeilao(html, { estrito = false } = {}) {
-  const vazio = { inicio: null, fim: null, encerradaEm: null };
+  const vazio = { inicio: null, fim: null, encerradaEm: null, encerramento: null, praca2: null };
   if (!html) return vazio;
   const ancora = estrito ? CTX_ANCORA_ESTRITA : CTX_ANCORA;
   const txt = html.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ');
   const ontem = Date.now() - 86400000;
   const piso = Date.now() - 400 * 86400000;   // datas passadas ainda úteis (ver `passadas`)
   const limite = Date.now() + 730 * 86400000; // 2 anos: janelas de alienação passam de 1 ano
+  // `fins` continua sendo a UNIÃO (encerramentos + aberturas de 2ª praça) para que `fim` —
+  // já consumido por `data_fim` e pela tela — não mude de comportamento. Os dois baldes novos
+  // são o que permite rotear cada valor para a coluna certa.
   const fins = [], inicios = [], neutros = [], passadas = [];
+  const encerramentos = [], praca2s = [];
   let m;
   RE_DATA_LOTE.lastIndex = 0;
   while ((m = RE_DATA_LOTE.exec(txt))) {
@@ -122,7 +188,12 @@ export function extrairDatasLeilao(html, { estrito = false } = {}) {
     // Passado recente (até ~13 meses) fica guardado à parte: é o que revela que o leilão JÁ
     // ACONTECEU. Não entra nos baldes de início/fim para não contaminar o prazo.
     if (t < ontem) { if (t >= piso) passadas.push(t); continue; }
-    if (CTX_FIM.test(ctx)) fins.push(t);
+    if (CTX_FIM.test(ctx)) {
+      fins.push(t);
+      // Encerramento tem precedência: "1ª praça encerra em X" é um FIM, não uma abertura.
+      if (CTX_ENCERRAMENTO.test(ctx)) encerramentos.push(t);
+      else if (CTX_PRACA_2.test(ctx)) praca2s.push(t);
+    }
     else if (CTX_INICIO.test(ctx)) inicios.push(t);
     else neutros.push(t);
   }
@@ -138,6 +209,7 @@ export function extrairDatasLeilao(html, { estrito = false } = {}) {
     ? dia(Math.max(...passadas)) : null;
 
   if (!fins.length && !inicios.length && !neutros.length) return { ...vazio, encerradaEm };
+
 
   const baseInicio = inicios.length ? inicios : neutros;
   const inicio = baseInicio.length ? dia(Math.min(...baseInicio)) : null;
@@ -166,9 +238,20 @@ export function extrairDatasLeilao(html, { estrito = false } = {}) {
     const todas = [...fins, ...inicios, ...neutros];
     const abre = dia(Math.min(...todas));
     const encerra = iso(Math.max(...todas));
-    return { inicio: abre, fim: encerra.slice(0, 10) > abre ? encerra : null, encerradaEm: null };
+    // `encerramento`/`praca2` saem NULOS aqui de propósito: chegar neste ramo é a prova de
+    // que a janela de 90 caracteres cruzou os rótulos. Alimentar as colunas de praça a partir
+    // de uma classificação que já sabemos errada seria gravar dado ruim numa coluna nova —
+    // pior que deixá-la vazia, porque ninguém desconfia de coluna preenchida.
+    return { inicio: abre, fim: encerra.slice(0, 10) > abre ? encerra : null,
+             encerradaEm: null, encerramento: null, praca2: null };
   }
-  return { inicio, fim, encerradaEm: null };
+  // ENCERRAMENTO só quando o texto DIZ que é encerramento — nunca deduzido de posição.
+  const encerramento = encerramentos.length ? iso(Math.max(...encerramentos)) : null;
+  // INÍCIO da 2ª praça: rótulo explícito, ou a regra que esta função já documenta para duas
+  // datas sem rótulo (a mais tarde é a 2ª praça). É o que `data_leilao_2` sempre recebeu.
+  const praca2 = praca2s.length ? iso(Math.max(...praca2s))
+    : (neutros.length >= 2 ? iso(Math.max(...neutros)) : null);
+  return { inicio, fim, encerradaEm: null, encerramento, praca2 };
 }
 
 // Compatibilidade: quem só quer "a data do lote" continua chamando isto. Devolve o INÍCIO —
@@ -238,13 +321,21 @@ export default async function handler(req, res) {
       res.status(200).json({ ok: true, pulado: ehVendaDireta ? 'cef_venda_direta' : im.data_leilao ? 'cef_tem_data' : 'cef_recente', alterado: false }); return;
     }
     const { html } = await fetchLote(im.url_lote || '');
-    const { inicio: data, fim } = html ? extrairDatasLeilao(html) : { inicio: null, fim: null };
+    const datasCef = html ? extrairDatasLeilao(html)
+      : { inicio: null, fim: null, encerradaEm: null, encerramento: null, praca2: null };
+    const { inicio: data, fim } = datasCef;
     const patch = { enriquecido_em: new Date().toISOString() };
     if (data) patch.data_leilao = data;
-    // 2ª praça da Caixa: é o prazo que vale quando a 1ª não arremata.
-    if (fim && !im.data_leilao_2) patch.data_leilao_2 = fim;
+    // 2ª praça da Caixa e encerramento de praça, cada um na SUA coluna (ver roteiarDatasPraca).
+    Object.assign(patch, roteiarDatasPraca(datasCef, im));
     await sb(`imoveis_leilao?id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(patch) }).catch(() => {});
-    res.status(200).json({ ok: !!(data || fim), pulado: 'cef', alterado: !!(data || fim), data_leilao: data || null, data_leilao_2: fim || null }); return;
+    // Relata o que foi de fato GRAVADO, não o que se supôs: desde o roteamento por praça,
+    // um encerramento vai para `praca2_fim` e anunciar `data_leilao_2` seria descrever uma
+    // escrita que não houve — o instrumento medindo uma coisa e reportando outra (forma 10).
+    const mudou = Object.keys(patch).filter(k => k !== 'enriquecido_em');
+    res.status(200).json({ ok: mudou.length > 0, pulado: 'cef', alterado: mudou.length > 0,
+      data_leilao: patch.data_leilao || null, data_leilao_2: patch.data_leilao_2 || null,
+      praca1_fim: patch.praca1_fim || null, praca2_fim: patch.praca2_fim || null }); return;
   }
   // Ficha (cartório/ofício/comarca) a partir da matrícula em PDF — GRÁTIS e só
   // uma vez por imóvel (marca matricula_scan_em, igual ao cron). Roda mesmo que o
@@ -340,7 +431,7 @@ export default async function handler(req, res) {
   // gravado se ainda faltava — nunca sobrescreve dado bom já existente.
   const datas = precisaData ? extrairDatasLeilao(html) : { inicio: null, fim: null, encerradaEm: null };
   if (datas.inicio && !im.data_leilao) patch.data_leilao = datas.inicio;
-  if (datas.fim && !im.data_leilao_2) patch.data_leilao_2 = datas.fim;
+  Object.assign(patch, roteiarDatasPraca(datas, im));
   // A página só tinha data JÁ PASSADA e o lote não tinha data nenhuma: é um leilão que já
   // aconteceu. Registrar isso é o que faz o gate de leilão encerrado enxergar o lote — sem
   // registrar, ele ficava eternamente "sem data" e continuava oferecendo relatório.
