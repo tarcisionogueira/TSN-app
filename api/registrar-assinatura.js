@@ -31,6 +31,9 @@ const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
 const CORS = { 'Access-Control-Allow-Origin': process.env.APP_ORIGIN || 'https://bidprobrasil.com.br', 'Content-Type': 'application/json' };
 const PLANOS = new Set(['assessorado', 'clube']);
+// 'contrato' NAO entra aqui de proposito: essa origem e escrita por `assinar-contrato.js`,
+// e deixar o admin escolhe-la a mao faria duas coisas diferentes usarem o mesmo rotulo —
+// depois ninguem sabe se a assinatura veio de contrato assinado ou de digitacao.
 const FORMAS = new Set(['externo', 'a_vista', 'parcelado', 'recorrente']);
 const json = (b, s = 200) => new Response(JSON.stringify(b), { status: s, headers: CORS });
 

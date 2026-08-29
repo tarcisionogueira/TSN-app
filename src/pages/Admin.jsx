@@ -1149,7 +1149,7 @@ function UsuariosTab() {
   const [atribUser, setAtribUser] = useState(null);   // usuário recebendo a atribuição de arremate
   // Registro de assinatura contratada FORA do gateway (29/08) — ver api/registrar-assinatura.js
   const [assinUser, setAssinUser] = useState(null);
-  const [assinForm, setAssinForm] = useState({ plano: 'assessorado', forma: 'externo', valor: '', notas: '' });
+  const [assinForm, setAssinForm] = useState({ plano: 'assessorado', forma: 'externo', valor: '', notas: '', imovelId: '' });
   const [assinLoad, setAssinLoad] = useState(false);
   // `promover` (29/08): a atribuição volta a poder promover, mas por ESCOLHA — ver a regra
   // `atribuicao.promove_assessorado` em regra_negocio. Padrão false = regra de 30/07 mantida.
@@ -1523,6 +1523,7 @@ ${hash ? `<h2>Verificação de integridade</h2><div class="kv muted">${esc(hashL
         body: JSON.stringify({
           user_id: assinUser.id, plano_key: assinForm.plano, forma_pagamento: assinForm.forma,
           valor_total: assinForm.valor, notas: assinForm.notas || null,
+          imovel_id: (assinForm.imovelId || '').trim() || null,
         }),
       });
       const data = await res.json();
@@ -1733,7 +1734,7 @@ ${hash ? `<h2>Verificação de integridade</h2><div class="kv muted">${esc(hashL
                               {!['admin','analista','advogado','suporte','consultor'].includes(u.role) && (
                                 <button
                                   style={{ padding: '5px 10px', background: '#ecfdf5', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, color: '#047857', cursor: 'pointer' }}
-                                  onClick={() => { setAssinUser(u); setAssinForm({ plano: 'assessorado', forma: 'externo', valor: '', notas: '' }); }}
+                                  onClick={() => { setAssinUser(u); setAssinForm({ plano: 'assessorado', forma: 'externo', valor: '', notas: '', imovelId: '' }); }}
                                   title="Registrar assessoria/clube contratada fora do gateway (pagamento externo)">
                                   📝 Registrar assessoria
                                 </button>
@@ -2133,12 +2134,23 @@ ${hash ? `<h2>Verificação de integridade</h2><div class="kv muted">${esc(hashL
             <label style={{ fontSize:11, fontWeight:700, color:'#64748b', marginTop:10, display:'block' }}>Valor total pago (R$)</label>
             <input value={assinForm.valor} onChange={e => setAssinForm(p => ({ ...p, valor: e.target.value }))} placeholder="6.000,00" style={S.input} />
 
+            <label style={{ fontSize:11, fontWeight:700, color:'#64748b', marginTop:10, display:'block' }}>Imóvel vinculado (id do acervo — opcional)</label>
+            <input value={assinForm.imovelId} onChange={e => setAssinForm(p => ({ ...p, imovelId: e.target.value }))} placeholder="cole o id do imóvel" style={S.input} />
+            {/* O vínculo não é decoração: é onde a conclusão vai PROCURAR a carta de arrematação
+                e a matrícula registrada. Sem imóvel, a assessoria nunca conclui sozinha — fica
+                ativa até alguém encerrar na mão, e é honesto dizer isso aqui. */}
+            <div style={{ fontSize:10.5, color:'#94a3b8', marginTop:3 }}>
+              Sem imóvel vinculado a assessoria não encerra sozinha (é nele que a carta e a matrícula são procuradas).
+            </div>
+
             <label style={{ fontSize:11, fontWeight:700, color:'#64748b', marginTop:10, display:'block' }}>Notas (como foi fechado)</label>
             <input value={assinForm.notas} onChange={e => setAssinForm(p => ({ ...p, notas: e.target.value }))} placeholder="ex.: Pix em 12/08, acordo por WhatsApp" style={S.input} />
 
             <div style={{ marginTop:14, padding:'10px 12px', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:8, fontSize:11.5, color:'#475569', lineHeight:1.5 }}>
               Fidelidade e prazo de acesso vêm da <b>configuração do plano</b> — não se digitam aqui.
               O cliente é promovido a Assessorado se ainda for explorador.
+              <br />A assessoria <b>termina com a carta de arrematação + a matrícula do registro</b> anexadas
+              ao imóvel vinculado — o prazo é só teto.
               <br /><b>A garantia de 7 dias do CDC não é ancorada</b>: pagamento fora do gateway é decisão comercial sua.
             </div>
 

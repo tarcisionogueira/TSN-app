@@ -237,6 +237,45 @@ export default async function handler(req) {
     }
   } catch { /* promoção é reforço; a assinatura já está válida */ }
 
+  // ── A CONTRATAÇÃO PASSA A CRIAR A ASSINATURA (29/08) ──────────────────────────────────────
+  // A promoção de role acima existe desde 05/08 e resolveu metade do problema: o cliente vira
+  // assessorado. A outra metade ficou aberta um mês — **nada criava a linha em
+  // `plano_assinaturas`**, que é onde moram fidelidade, acesso, valor, imóvel vinculado e o
+  // ciclo de vida da assessoria. A tabela tinha 0 linhas com contrato de assessoria ASSINADO no
+  // banco, e o cliente sumia da lista de assessorados do próprio Admin (que lê essa tabela).
+  //
+  // `registrar_assinatura_manual` é IDEMPOTENTE por plano ativo, então re-assinatura, retentativa
+  // ou backfill não duplicam. `forma_pagamento = 'contrato'` distingue esta origem do registro
+  // manual do admin ('externo') — sem isso, "como esse cliente entrou?" viraria dedução.
+  try {
+    const tierAss = String(contrato.plano_key || '').replace(/_(anual|vista|mensal)$/i, '');
+    if (tierAss === 'assessorado' || tierAss === 'clube') {
+      let uid = null;
+      const pend2 = await sb(`contratos_pendentes?contrato_link_id=eq.${contrato.id}&select=user_id&limit=1`).then(x => x.json()).catch(() => []);
+      uid = pend2?.[0]?.user_id || null;
+      if (!uid && contrato.assinante_email) {
+        const rid2 = await sb('rpc/get_user_id_by_email', { method: 'POST', body: JSON.stringify({ p_email: contrato.assinante_email }) });
+        if (rid2.ok) uid = await rid2.json().catch(() => null);
+      }
+      if (uid) {
+        const ra = await sb('rpc/registrar_assinatura_manual', {
+          method: 'POST',
+          body: JSON.stringify({
+            p_user_id: uid, p_plano_key: tierAss, p_forma_pagamento: 'contrato',
+            // O imóvel vem do próprio contrato quando ele traz um: é o vínculo que o dono pediu
+            // ("poder vincular um imóvel"), e vindo daqui ninguém precisa digitá-lo de novo.
+            p_imovel_id: contrato.arremate_imovel_id || null,
+            p_notas: `contrato ${contrato.id} assinado em ${assinado_em}`,
+            p_inicio: assinado_em,
+          }),
+        });
+        sb('audit_logs', { method: 'POST', headers: { Prefer: 'return=minimal' },
+          body: JSON.stringify({ acao: 'contrato_criou_assinatura', ip, sucesso: ra.ok,
+            detalhes: { contrato_id: contrato.id, user_id: uid, plano: tierAss } }) }).catch(() => {});
+      }
+    }
+  } catch { /* a assinatura do contrato já está válida; isto é o encanamento do plano */ }
+
   // NOTIFICA a cada assinatura (pedido do dono): avisa quem CRIOU o contrato que uma parte
   // assinou e, quando TODAS as partes do grupo assinam, que o contrato está completo. Também
   // registra na linha do tempo (Cliente 360). Tudo best-effort — nunca bloqueia a assinatura.
