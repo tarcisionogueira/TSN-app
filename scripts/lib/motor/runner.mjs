@@ -84,24 +84,95 @@ async function enumerar(fetchFonte, tenant, cfg, { maxPages, debug, semBD }) {
   return { urls: [...urls.values()], fetchOk, via };
 }
 
+// A RELEITURA GASTA A SOBRA DO ORÇAMENTO, E SÓ ELA (29/08).
+// `alvo` era `novos.length ? novos : urls` — tudo-ou-nada. Com a fonte já coletada, um punhado
+// de lotes novos consumia `novos.length` do teto e **o resto do teto era jogado fora**: medido
+// na HASTA, 5 lotes tocados em 36 h contra 584 ativos, os outros 579 com `atualizado_em` de
+// 25/08. O preço que o cliente vê não depende disso (as duas praças já estão gravadas e
+// `valor_minimo_ref` é `least(...)`), mas o lote cujo preço ou data MUDA na fonte nunca se
+// atualiza enquanto houver lote novo aparecendo.
+//
+// A releitura entra DEPOIS dos novos e só até `maxLotes` — o teto declarado não muda, o que
+// muda é não desperdiçar a folga. Duas garantias de custo, nesta ordem:
+//   1. novo vem primeiro, então uma recusa de orçamento custa releitura, nunca lote novo;
+//   2. `pararReleitura` — a releitura é abortada no instante em que um detalhe volta `via: 'bd'`.
+//      **Releitura nunca paga.** Lote novo pode pagar (vale o crédito); relê-lo não vale, ainda
+//      mais com o teto semanal saturado. É decisão MEDIDA por fetch, não adivinhada por fonte:
+//      se a fonte deixar de ser desafiada, a releitura volta sozinha.
+// Ordem da fila: praça próxima primeiro (é onde o dado muda), depois o mais velho — assim o
+// acervo cicla inteiro em tempo limitado em vez de reler sempre os mesmos.
+const DIAS_IMINENTE = 21;
+
+/**
+ * PLANEJA O QUE O RUN VAI BUSCAR — puro, exportado, e é isto que os testes exercitam.
+ * A conta de orçamento é a parte que erra em silêncio (um off-by-one aqui gasta crédito ou
+ * deixa de reler para sempre), então ela sai do laço de I/O e vira função testável em seco.
+ * Devolve `iReleitura` = o índice a partir do qual `alvo` deixa de ser lote novo.
+ */
+export function planejarAlvo({ urls, meta, chaveDe, maxLotes, maxRefresh, agora = Date.now() }) {
+  const novos = urls.filter(u => !meta.has(chaveDe(u)));
+  const limite = agora + DIAS_IMINENTE * 864e5;
+  const conhecidas = urls
+    .filter(u => meta.has(chaveDe(u)))
+    .map((u) => {
+      const m = meta.get(chaveDe(u));
+      return { url: u, id: m.fonte_id, tocado: Date.parse(m.atualizado_em) || 0,
+               fim: m.data_fim ? Date.parse(m.data_fim) : null, ativo: m.ativo !== false };
+    })
+    .filter(c => c.ativo)              // lote já desativado não volta pela releitura
+    .sort((a, b) => {
+      // praça próxima primeiro (é onde o dado muda), depois o mais velho, e `id` só para
+      // desempatar — sem ele a ordem varia entre runs e o acervo nunca cicla inteiro.
+      const ia = a.fim && a.fim <= limite ? 0 : 1;
+      const ib = b.fim && b.fim <= limite ? 0 : 1;
+      if (ia !== ib) return ia - ib;
+      return (a.tocado || 0) - (b.tocado || 0) || (a.id < b.id ? -1 : 1);
+    });
+  const usadosPorNovos = Math.min(novos.length, maxLotes);
+  const folga = maxLotes - usadosPorNovos;
+  const teto = maxRefresh === undefined ? folga : Math.max(0, Math.min(folga, maxRefresh));
+  const releitura = conhecidas.slice(0, teto).map(c => c.url);
+  return {
+    novos, releitura,
+    alvo: [...novos.slice(0, maxLotes), ...releitura],
+    iReleitura: usadosPorNovos,
+  };
+}
+
 async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debug, semBD }) {
   const { urls, fetchOk, via } = await enumerar(fetchFonte, tenant, cfg, { maxPages: cfg.maxPages, debug, semBD });
   console.log(`[${tenant.fonte}] enumerados ${urls.length} lote(s)${via ? ` (via ${via})` : ''}`);
-  const prontos = []; let encerrados = 0, sem = 0, reprov = 0, cotaNegada = 0;
+  const prontos = []; let encerrados = 0, sem = 0, reprov = 0, cotaNegada = 0, relidos = 0;
   if (urls.length) {
     const ids = urls.map(u => idFonte(tenant, cfg.parse.idDaUrl(u)));
-    const existentes = new Set();
+    const meta = new Map();
     for (let i = 0; i < ids.length; i += 200) {
       // padrao-ok: leitura best-effort de dedup; erro → reprocessa lote conhecido (upsert idempotente), nunca corrompe. Mesmo padrão dos scrapers de origem.
-      const { data } = await supabase.from('imoveis_leilao').select('fonte_id').in('fonte_id', ids.slice(i, i + 200));
-      for (const r of data || []) existentes.add(r.fonte_id);
+      const { data } = await supabase.from('imoveis_leilao')
+        .select('fonte_id,atualizado_em,data_fim,ativo').in('fonte_id', ids.slice(i, i + 200));
+      for (const r of data || []) meta.set(r.fonte_id, r);
     }
-    const novos = urls.filter(u => !existentes.has(idFonte(tenant, cfg.parse.idDaUrl(u))));
-    const alvo = (novos.length ? novos : urls).slice(0, maxLotes);
-    console.log(`[${tenant.fonte}] no banco ${existentes.size} · novos ${novos.length} · processando ${alvo.length}`);
+    // Fonte NUNCA coletada (nada no banco): `novos` são todas as urls e não há releitura —
+    // o caminho antigo, intacto.
+    const { novos, releitura, alvo, iReleitura } = planejarAlvo({
+      urls, meta, chaveDe: u => idFonte(tenant, cfg.parse.idDaUrl(u)),
+      maxLotes, maxRefresh: cfg.maxRefresh,
+    });
+    let pararReleitura = false;
+    console.log(`[${tenant.fonte}] no banco ${meta.size} · novos ${novos.length} · releitura ${releitura.length} · processando ${alvo.length}`);
     for (let i = 0; i < alvo.length; i++) {
+      if (pararReleitura && i >= iReleitura) break;
       const url = alvo[i];
       const r = await fetchFonte(url, { semBD });
+      // A releitura é um EXTRA que só existe enquanto for grátis: no primeiro detalhe que vier
+      // pela via paga, para. Sem isto, a folga do orçamento viraria gasto de Bright Data em
+      // lote que já temos — o oposto de "usar a sobra".
+      if (i >= iReleitura && r?.via === 'bd') {
+        pararReleitura = true;
+        console.log(`💰 [${tenant.fonte}] releitura caiu na via paga no ${i - iReleitura + 1}º lote — abortada (releitura nunca paga).`);
+        break;
+      }
+      if (i >= iReleitura) relidos++;
       // O FREIO DE ORÇAMENTO NO MEIO DA COLETA (27/08). O fetch de cada fonte já devolve
       // `semCota: true` quando o teto recusa, e aqui isso era descartado no destructuring
       // `const { html } = …`: a página recusada por ORÇAMENTO virava um `sem++` igual ao de
@@ -126,7 +197,7 @@ async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debu
       await sleep(350);
     }
   }
-  console.log(`[${tenant.fonte}] ${prontos.length} prontos · ${encerrados} encerrados · ${reprov} descartados · ${sem} sem detalhe · ${cotaNegada} sem cota`);
+  console.log(`[${tenant.fonte}] ${prontos.length} prontos (${relidos} por releitura) · ${encerrados} encerrados · ${reprov} descartados · ${sem} sem detalhe · ${cotaNegada} sem cota`);
   // fonteVazia = respondeu mas 0 lotes (não é falha: o leiloeiro só não tem imóveis agora).
   return { prontos, encerrados, fonteVazia: fetchOk && urls.length === 0, enumerados: urls.length, cotaNegada };
 }
