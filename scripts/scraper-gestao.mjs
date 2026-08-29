@@ -23,6 +23,7 @@
  *
  * Env: BRIGHTDATA_API_TOKEN, BRIGHTDATA_ZONE, VITE_SUPABASE_URL, SUPABASE_SERVICE_KEY.
  */
+import './lib/env-runner.mjs';   // carrega ~/.bidpro-runner.env quando rodado na mão
 import { createClient } from '@supabase/supabase-js';
 import { decodificarEntidades } from '../api/_texto-imovel.js';
 // CORRIGIDO (18/08). A nota de 11/08 dizia que o `null` do `fetchViaBrightData` era um

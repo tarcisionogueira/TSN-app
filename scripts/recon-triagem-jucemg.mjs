@@ -24,6 +24,7 @@
  *
  * Env: VITE_SUPABASE_URL, SUPABASE_SERVICE_KEY. Opcionais: TRIAGEM_CONC (6), TRIAGEM_LIMITE.
  */
+import './lib/env-runner.mjs';   // carrega ~/.bidpro-runner.env quando rodado na mão
 import { createClient } from '@supabase/supabase-js';
 import { readFileSync } from 'node:fs';
 import { fetchHeadless, fecharHeadless } from './lib/fetch-residencial.mjs';

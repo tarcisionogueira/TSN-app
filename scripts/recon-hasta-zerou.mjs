@@ -31,28 +31,13 @@
  *   node scripts/recon-hasta-zerou.mjs
  * Env: RECON_ESPERAS (csv de ms, default 3500,8000,15000,25000) · RECON_LOTES (default 3)
  */
-import { readFileSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { join } from 'node:path';
+import './lib/env-runner.mjs';   // carrega ~/.bidpro-runner.env quando rodado na mão
 import { createClient } from '@supabase/supabase-js';
 import { fetchHeadless, fecharHeadless } from './lib/fetch-residencial.mjs';
 import { extrairUrlsDeLote, extrairUrlsDeEvento, parseDetalhe, TENANTS } from './lib/hasta-parse.mjs';
 import cfgHasta from './lib/motor/fontes/hasta.mjs';
 import { textoDe } from './lib/dom-parse-util.mjs';
 
-// O `runner-residencial.sh` carrega o ~/.bidpro-runner.env por nós; rodado NA MÃO, ninguém
-// carrega — e foi assim que a 1ª execução morreu em `supabaseUrl is required` no meio do
-// recon. Um script de diagnóstico que exige ritual de ambiente é um script que vai falhar
-// justamente na hora em que se está com pressa. Ele lê o arquivo sozinho, sem sobrescrever
-// nada que já esteja no ambiente.
-try {
-  for (const linha of readFileSync(join(homedir(), '.bidpro-runner.env'), 'utf8').split('\n')) {
-    const m = linha.match(/^\s*(?:export\s+)?([A-Z0-9_]+)\s*=\s*(.*)$/);
-    if (!m) continue;
-    const valor = m[2].trim().replace(/^(['"])(.*)\1$/, '$2');
-    if (!process.env[m[1]]) process.env[m[1]] = valor;
-  }
-} catch { /* padrao-ok: sem o arquivo seguimos com o ambiente atual — o passo 2 avisa se faltar */ }
 
 const BASE = TENANTS.hasta.base;
 const ESPERAS = (process.env.RECON_ESPERAS || '3500,8000,15000,25000').split(',').map(Number);
@@ -226,11 +211,18 @@ const linha = (rot, r) => `  ${rot.padEnd(38)} ${String(r.bytes).padStart(7)}B �
     console.log(`  🔁 INTERMITENTE: agora enumerou ${enumerou} com a MESMA espera de produção.`);
     console.log(`      AÇÃO: nenhuma no parser. Rode o scraper de novo e confira fonte_saude.`);
   } else if (detalhesOk > 0) {
-    console.log(`  📄 O ACERVO EXISTE, A LISTAGEM É QUE NÃO O MOSTRA (${detalhesOk}/${lotes.length} detalhes abriram).`);
-    console.log(`      A 1ª praça foi em 28/08 e o 1º zero em 29/08: a listagem provavelmente filtra`);
-    console.log(`      por leilão ABERTO e os lotes voltam na 2ª praça (03/09).`);
-    console.log(`      AÇÃO: NÃO mexer no parser. Ver na seção 3 se há caminho/filtro que os liste;`);
-    console.log(`      se não houver, esperar 03/09 e só tratar como regressão se seguir zerado.`);
+    console.log(`  📄 O ACERVO EXISTE, A LISTAGEM POR CATEGORIA É QUE NÃO O MOSTRA (${detalhesOk}/${lotes.length} detalhes abriram).`);
+    console.log(`      AÇÃO: NÃO mexer no parser — o defeito é de ROTA, não de extração.`);
+    // O veredito precisa ler a seção 4, senão ele descreve o mundo de antes do conserto e manda
+    // procurar um caminho que a própria execução já achou — instrumento reportando outra coisa.
+    if (eventos.size) {
+      console.log(`      E a rota já foi verificada nesta mesma execução: '${cfgHasta.catalogo}' publica`);
+      console.log(`      ${eventos.size} evento(s) e o maior devolveu ${maior?.n ?? 0} lote(s) na 1ª página.`);
+      console.log(`      → rode a coleta: HASTA_DRYRUN=0 HASTA_MAX_LOTES=600 node scripts/scraper-hasta.mjs`);
+    } else {
+      console.log(`      Mas '${cfgHasta.catalogo}' NÃO publicou evento nenhum: escolha na seção 3 um caminho`);
+      console.log(`      que tenha listado lote e ajuste 'catalogo' em scripts/lib/motor/fontes/hasta.mjs.`);
+    }
   } else {
     console.log(`  🚫 NEM LISTAGEM NEM DETALHE responderam com conteúdo — é ACESSO, não parser.`);
     console.log(`      AÇÃO: olhar as marcas (challenge/login) acima antes de mexer em qualquer regex.`);

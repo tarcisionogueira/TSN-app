@@ -20,6 +20,7 @@
  *
  * Env: BRIGHTDATA_API_TOKEN, BRIGHTDATA_ZONE, VITE_SUPABASE_URL, SUPABASE_SERVICE_KEY.
  */
+import './lib/env-runner.mjs';   // carrega ~/.bidpro-runner.env quando rodado na mão
 import { createClient } from '@supabase/supabase-js';
 // NOTA (11/08, revista em 17/08): o `null` que `bd()` devolve continua sendo um fallback
 // DELIBERADO (tenta o caminho grátis/residencial; o pago é a segunda chance) — o que mudou é

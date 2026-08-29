@@ -42,12 +42,33 @@ Que a plataforma pagina por `page` não é palpite: o `url_lote` no nosso acervo
 `/item/10729/detalhes?page=20`. O laço para quando uma página não traz id novo, então degrada
 para o comportamento antigo se algum evento ignorar o parâmetro.
 
-### 🔬 Duas suposições viraram medição ANTES da coleta (seção 4 do recon)
+### ✔️ As duas suposições foram CONFIRMADAS na máquina do dono
 
-Suposição escrita em produção é como o defeito volta. O recon agora verifica o que eu configurei:
-**(a)** `/leiloes` publica os eventos? **(b)** o evento pagina com `page` — a pág. 2 traz id
-**novo**? Se (b) falhar, o log manda achar o parâmetro certo **antes** de coletar, em vez de
-deixar entrar 30 de 579.
+```
+(a) /leiloes publica 14 evento(s): ["557","564","561","562","563","565","566","3","11","9","10","14"]
+    /leilao/557/lotes  pág 1 → 30 lote(s)      /leilao/561/lotes  pág 1 → 13 lote(s)
+(b) /leilao/557/lotes · pág1=30 · pág2=30 · ids NOVOS na pág2=30  ✅ pagina de verdade
+```
+
+Suposição escrita em produção é como o defeito volta — por isso a seção 4 do recon verifica o
+que eu configurei, **antes** de qualquer coleta.
+
+### 🧯 O tropeço que virou conserto de raiz: `~/.bidpro-runner.env`
+
+Quem carregava esse arquivo era só o `runner-residencial.sh`. Rodando um script **na mão** —
+que é exatamente o que se faz para investigar — ninguém carrega, e ele morre em
+`Faltam VITE_SUPABASE_URL / SUPABASE_SERVICE_KEY`. Aconteceu **duas vezes na mesma sessão**, as
+duas no meio de um diagnóstico: o recon morreu **depois** de gastar minutos de Chromium, e o
+`scraper-hasta` nem começou, logo após o recon confirmar o conserto.
+
+Ferramenta que exige ritual de ambiente falha justamente na hora da pressa — e o custo não é o
+erro, é a rodada perdida e a dúvida *"será que o conserto não funcionou?"*.
+
+**`scripts/lib/env-runner.mjs`** (import de efeito colateral, uma linha por script) em 12
+scripts: os 9 scrapers do runner, a triagem, o recon e o radar residencial. Contrato estreito,
+rodado em seco: **não sobrescreve variável já presente** (CI e Vercel continuam mandando),
+**arquivo ausente é silêncio** (no Actions ele não existe e está certo), e quem exige credencial
+segue exigindo com a mesma mensagem.
 
 ---
 

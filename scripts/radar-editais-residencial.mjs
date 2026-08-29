@@ -32,6 +32,7 @@
  *   node scripts/radar-editais-residencial.mjs
  * Env opcionais: RADAR_TRIBUNAIS · RADAR_TERMOS · RADAR_RESIDENCIAL_HARD_MS (default 900000)
  */
+import './lib/env-runner.mjs';   // carrega ~/.bidpro-runner.env quando rodado na mão
 import { createClient } from '@supabase/supabase-js';
 import { pullDJEN, construirEhIntegrado, janelaDJEN, transporteDireto } from '../api/radar-editais-cron.js';
 
