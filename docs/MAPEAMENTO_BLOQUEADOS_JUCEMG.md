@@ -83,8 +83,43 @@ instrumento para enxergar — sozinha, ela enumerava 75 e nada acusava.
 para o recon). Rodava quartas 10:40 UTC; a próxima seria 02/09. Os 37 lotes que ela gravou
 estão **inativos desde 20/08**, então não há dano ativo no acervo hoje.
 
-**Para religar:** descomentar as duas linhas do `schedule` — depois de um recon achar o caminho
-que lista só o acervo do leiloeiro, como foi feito para VIP e SUPORTE.
+### 🔬 O RECON RESPONDEU: não existe caminho por leiloeiro
+
+`scripts/recon-emiliomatos-por-leiloeiro.mjs` comparou **54 caminhos** entre
+`emiliomatosleiloes` e `bhleiloaria`. Todo caminho que devolve lote nos dois sites deu
+**100% de sobreposição**:
+
+```
+GLOBAL  /busca/segmento/imoveis · /busca/evento/Leilão · /busca/redeSegmento/corporativo
+        /busca/redeSegmento/bomvalorjudicial · /busca/redeColaborativa/resale · /busca …
+VAZIO   /leiloes · /leiloes/abertos · /nossos-leiloes · /comitente · 12 segmentos
+```
+
+E o nome dos caminhos explica o porquê: **`redeSegmento`, `redeColaborativa`**. O white-label é
+vitrine da **rede Superbid inteira** — o leiloeiro é afiliado que exibe o catálogo dos outros.
+**Não há o que consertar no parser.**
+
+> ⚠️ **A v2 do recon produziu 2 falsos positivos, e o defeito era meu.** Ela marcou
+> `/imoveis-brb-na-ba-df-e-go-36495` e `/imoveis-cnp-em-minas-gerais-36853` como
+> `POR_LEILOEIRO` por sobreposição 0%. Mas os números eram **`0 vs 6`** e **`0 vs 3`**: se o
+> caminho filtrasse pelo leiloeiro, o emiliomatos traria *os lotes dele*, não zero. Zero num
+> lado significa **"o caminho existe num site e não no outro"** — e os slugs terminados em id
+> (`-36495`) denunciam que são **leilões específicos**, não catálogos.
+>
+> Apontar o `catalogo` da fonte para um deles congelaria a coleta num único evento, que acaba.
+> Duas correções: o extrator descarta caminhos com id no fim (URL de lote/evento), e
+> `POR_LEILOEIRO` passa a **exigir lote nos DOIS sites** — disjunção só prova filtro quando
+> ambos têm acervo. O caso `0 vs N` ganhou veredito próprio: **`SO_EM_UM`**.
+>
+> É a forma nº 10 dentro do instrumento que existia para pegá-la: o veredito se chamava "por
+> leiloeiro" e media "presente num site e ausente no outro".
+
+**Decisão: o cron fica suspenso em definitivo** e os 3 white-labels (BHLEILOARIA,
+FRANCISCODAVID, DENIS) estão descartados como fonte por leiloeiro. Reabrir exige que a
+plataforma passe a expor um caminho filtrado — o recon é repetível e responde em minutos.
+
+**Se um dia religar:** descomentar as duas linhas do `schedule`, e só depois de o recon
+apontar um `POR_LEILOEIRO` de verdade (lote nos dois sites, conjuntos disjuntos).
 
 ---
 

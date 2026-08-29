@@ -78,6 +78,14 @@ function caminhosDoHtml(html, base) {
     if (/\.(pdf|jpe?g|png|svg|css|js|ico|webp)$/i.test(h)) continue;
     // Só o que cheira a listagem — o menu tem dezenas de links institucionais.
     if (!/leil|lote|imov|imóv|busca|segmento|catalog|venda/i.test(h)) continue;
+    // ⚠️ FORA: URL de LOTE ou de LEILÃO ESPECÍFICO, não de catálogo (29/08, defeito da v2).
+    // O menu publica os leilões em cartaz (`/imoveis-brb-na-ba-df-e-go-36495`) e lotes soltos
+    // (`/imoveis/apartamento/…-126896`). Sem este filtro eles entram como "caminho candidato"
+    // e produzem o veredito mais enganoso possível: existem num site e não no outro, o que dá
+    // sobreposição 0% — e 0% era lido como POR_LEILOEIRO. Um leilão específico não é o
+    // catálogo do leiloeiro; apontar o `catalogo` da fonte para ele congelaria a coleta num
+    // único evento, que acaba.
+    if (/-\d{4,}$/.test(h)) continue;
     out.add(h.replace(/\/+$/, '') || '/');
   }
   return [...out];
@@ -130,10 +138,19 @@ const jaccard = (a, b) => {
     const tamanhos = conjuntos.map(x => x.ids.size);
     if (tamanhos.every(n => n === 0)) { linhas.push({ caminho: c, veredito: 'VAZIO', detalhe: '0 lotes nos dois — o caminho não lista nada' }); continue; }
     const sim = jaccard(conjuntos[0].ids, conjuntos[1].ids);
+    // ⚠️ POR_LEILOEIRO EXIGE LOTE NOS DOIS SITES. Disjunção só prova filtro quando AMBOS
+    // devolvem acervo: `0 vs 6` não é "cada um traz o seu", é "existe num site e não no
+    // outro" — e sai com sobreposição 0%, idêntica ao caso bom. A v2 marcou dois leilões
+    // específicos como POR_LEILOEIRO exatamente assim, e o veredito teria mandado apontar o
+    // catálogo da fonte para um evento. O nome do veredito precisa medir o que ele diz.
+    const ambosTemLote = tamanhos.every(n => n > 0);
+    const veredito = !ambosTemLote ? 'SO_EM_UM'
+      : (sim >= 0.9 ? 'GLOBAL' : (sim <= 0.1 ? 'POR_LEILOEIRO' : 'PARCIAL'));
     linhas.push({
       caminho: c,
-      veredito: sim >= 0.9 ? 'GLOBAL' : (sim <= 0.1 ? 'POR_LEILOEIRO' : 'PARCIAL'),
-      detalhe: `${tamanhos.join(' vs ')} lotes · sobreposição ${(sim * 100).toFixed(0)}%`,
+      veredito,
+      detalhe: `${tamanhos.join(' vs ')} lotes · sobreposição ${(sim * 100).toFixed(0)}%`
+        + (ambosTemLote ? '' : ' — presente em um site só, não é filtro'),
     });
   }
 
