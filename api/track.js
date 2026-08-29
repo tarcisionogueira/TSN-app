@@ -30,7 +30,14 @@ const KEY = process.env.SUPABASE_SERVICE_KEY;
 //   analise_estado   → o que a tela oferecia na chegada (cada card: livre/plano/cota/encerrado)
 //   analise_gerar    → tentativa e DESFECHO, por tipo de relatório
 //   analise_bloqueio → clicou numa porta fechada, com o motivo dela
-const TIPOS = new Set(['pageview', 'click', 'submit', 'change', 'api_erro', 'api_vazio', 'api_falha_rede', 'pdf_gerado', 'pdf_falha', 'geracao_recuperada', 'limite_sessao', 'erro_ui', 'analise_estado', 'analise_gerar', 'analise_bloqueio']);
+// `origem_lote` (29/08): a página pública do lote manda a pessoa para
+// `/#/login?modo=cadastro&imovel=<id>` — e `Login.jsx` NUNCA leu esse parâmetro (procurado
+// `params.get('imovel')` no src inteiro: zero consumidores). Antes de consertar, medir quanta
+// gente de fato chega assim. Este é o único evento da lista que nasce para o VISITANTE, então
+// tem de entrar também em TIPOS_ANON logo abaixo — sem isso ele seria descartado com 204 e a
+// medição voltaria zero, que é a terceira vez que esta lista deixaria de fora exatamente a
+// página que estava recebendo gente (ver `leiloes`, `leilao` e `live` mais abaixo).
+const TIPOS = new Set(['pageview', 'click', 'submit', 'change', 'api_erro', 'api_vazio', 'api_falha_rede', 'pdf_gerado', 'pdf_falha', 'geracao_recuperada', 'limite_sessao', 'erro_ui', 'analise_estado', 'analise_gerar', 'analise_bloqueio', 'origem_lote']);
 
 // Defesa em profundidade: NUNCA persistir token/segredo no log de atividade, mesmo que um cliente
 // antigo/adulterado mande (ex.: #access_token=... do fluxo implícito, ou um JWT eyJ...). Redige.
@@ -51,7 +58,7 @@ export default async function handler(req, res) {
     // retenção de 30d seguem valendo). Sem isto, quem clicava num link de venda e não
     // cadastrava era invisível — impossível distinguir "ninguém clicou" de "página quebrou".
     const anonId = typeof b.anon_id === 'string' ? (b.anon_id.replace(/[^\w-]/g, '').slice(0, 48) || null) : null;
-    const TIPOS_ANON = new Set(['pageview', 'click', 'submit', 'api_erro', 'api_falha_rede', 'erro_ui']);
+    const TIPOS_ANON = new Set(['pageview', 'click', 'submit', 'api_erro', 'api_falha_rede', 'erro_ui', 'origem_lote']);
     // `leiloes` entrou em 12/08 e é a correção mais cara da lista: são as ~33 mil páginas de
     // acervo público (servidas por /api/publico, FORA do React), o principal ativo de aquisição
     // do site. Sem esta palavra, o evento chegava aqui e era descartado com 204 — silêncio dos
