@@ -50,16 +50,42 @@ janela — e cada um usa o próprio IP residencial, então não há sobrecarga d
    git clone https://github.com/tarcisionogueira/tsn-app.git
    cd tsn-app
    npm ci        # instala tb. o Chromium do puppeteer (headless de GESTAO/RJ)
-   pip3 install requests   # dependência do scraper_vlance.py (Vlance)
+   # Dependência do scraper_vlance.py. Em Debian/Ubuntu recentes o `pip3 install` recusa com
+   # "externally managed environment" (PEP 668) — o jeito limpo é o pacote do sistema:
+   sudo apt install -y python3-requests
+   # (alternativa, se preferir pip: pip3 install --break-system-packages requests)
    ```
-2. **Credenciais** — crie `~/.bidpro-runner.env` e proteja o arquivo (contém a SERVICE KEY):
+   > ⚠️ **Não é bloqueante.** `requests` só é usado pelo Vlance. Sem ela, o runner roda todas as
+   > outras fontes normalmente e só o Vlance falha — dá para validar o resto antes de resolver isto.
+2. **Credenciais** — crie `~/.bidpro-runner.env` e proteja o arquivo (contém a SERVICE KEY).
+   **Use um editor, não copie-e-cole um bloco com placeholder:**
    ```bash
-   cat > ~/.bidpro-runner.env <<'EOF'
-   VITE_SUPABASE_URL=https://zuwfiwokkdytvjixiwac.supabase.co
-   SUPABASE_SERVICE_KEY=<service key — Supabase > Settings > API > service_role>
-   EOF
-   chmod 600 ~/.bidpro-runner.env    # só o seu usuário lê (a service key é sensível)
+   nano ~/.bidpro-runner.env      # ou vim/mcedit
+   chmod 600 ~/.bidpro-runner.env # só o seu usuário lê
    ```
+   Duas linhas, com a **chave de verdade** no lugar do `eyJ…`:
+   ```
+   VITE_SUPABASE_URL=https://zuwfiwokkdytvjixiwac.supabase.co
+   SUPABASE_SERVICE_KEY=eyJhbGciOi…
+   ```
+   Onde pegar: **Supabase → Settings → API → Project API keys → `service_role` → Reveal**. É a
+   que avisa que ignora RLS — **não** a `anon`/`publishable`. É um JWT: começa com `eyJ`.
+
+   > ⚠️ **O erro que já aconteceu (29/08):** o passo trazia
+   > `SUPABASE_SERVICE_KEY=<service key — Supabase > Settings > API > service_role>` dentro de um
+   > heredoc, e o placeholder foi gravado **literalmente**. Como `<` e `>` são redirecionamento no
+   > bash, o `source` do runner quebrava com `syntax error near unexpected token 'newline'` — e a
+   > mensagem apontava para o arquivo de env, não para a causa. Placeholder que parece comando é
+   > armadilha de documentação, não erro de quem executa.
+
+   **Conferir sem imprimir a chave:**
+   ```bash
+   ( set -a; . ~/.bidpro-runner.env; set +a; \
+     echo "URL=${VITE_SUPABASE_URL:-VAZIA} · chave com ${#SUPABASE_SERVICE_KEY} caracteres" )
+   ```
+   Esperado: a URL e algo como **`chave com 200+ caracteres`**. Se der erro de sintaxe ou
+   `chave com 0 caracteres`, o arquivo ainda está com o placeholder.
+
    > Não comite esse arquivo. A **service_role key** dá acesso total ao banco.
 3. **Permissão de execução**: `chmod +x scripts/runner-residencial.sh`
 4. **Teste manual (validação da 1ª rodada)** — rode UMA vez na mão e leia o log:
