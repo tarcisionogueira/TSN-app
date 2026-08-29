@@ -344,7 +344,7 @@
     },
     {
       "path": "/api/convidar-live-cron",
-      "schedule": "0 13 * * 0"
+      "schedule": "0 11 * * 0"
     }
   ]
 }

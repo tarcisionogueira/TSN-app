@@ -337,7 +337,7 @@ export default function LiveInscricao() {
                   com o WhatsApp na mão. Fica por ÚLTIMO de propósito: o grupo do WhatsApp é o
                   passo que não pode ser perdido, e um botão verde de igual peso acima dele
                   dividiria o clique que mais importa. */}
-              <ConvideAmigo codigo={pronto.codigo_indicacao} aula={{ slug, data_hora: evento.data_hora }} />
+              <ConvideAmigo codigo={pronto.codigo_indicacao} aula={{ slug, data_hora: evento.data_hora }} alinhamento="center" />
             </div>
           ) : (
             <form onSubmit={inscrever}>

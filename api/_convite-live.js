@@ -116,13 +116,13 @@ export function corpoConviteLive({ aula, nome, link, linkAmigo }) {
       </a>
     </div>
     <p style="text-align:center;font-size:12px;color:#94a3b8;margin:12px 0 0;">Leva 20 segundos. Você recebe o link da sala por e-mail.</p>
-    ${linkAmigo ? `<div style="margin-top:22px;padding:15px 17px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;">
-      <div style="font-size:14px;font-weight:800;color:#0f172a;margin-bottom:5px;">Quer trazer alguém?</div>
-      <p style="margin:0 0 12px;font-size:13px;color:#3f6212;line-height:1.6;">Leilão é bem mais fácil de entender com companhia. Este link é <strong>seu</strong> — quem entrar por ele fica ligado à sua conta.</p>
-      <a href="${esc(linkAmigo.whatsapp)}" style="display:inline-block;background:#16a34a;color:#fff;text-decoration:none;padding:11px 22px;border-radius:9px;font-weight:800;font-size:14px;">Enviar pelo WhatsApp &rarr;</a>
-      <div style="margin-top:10px;font-size:11.5px;color:#65a30d;word-break:break-all;">${esc(linkAmigo.url)}</div>
+    ${linkAmigo ? `<div style="margin-top:22px;padding:18px 17px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;text-align:center;">
+      <div style="font-size:14px;font-weight:800;color:#0f172a;margin-bottom:6px;">Quer trazer alguém?</div>
+      <p style="margin:0 auto 14px;max-width:360px;font-size:13px;color:#3f6212;line-height:1.6;">Leilão é bem mais fácil de entender com companhia. Este link é <strong>seu</strong> — quem entrar por ele fica ligado à sua conta.</p>
+      <a href="${esc(linkAmigo.whatsapp)}" style="display:inline-block;background:#16a34a;color:#fff;text-decoration:none;padding:12px 26px;border-radius:9px;font-weight:800;font-size:14px;">Enviar pelo WhatsApp &rarr;</a>
+      <div style="margin-top:12px;font-size:11.5px;color:#65a30d;word-break:break-all;">${esc(linkAmigo.url)}</div>
     </div>` : ''}
-    ${aula.apresentador ? `<div style="border-top:1px solid #e2e8f0;margin:24px 0 0;padding-top:18px;">
+    ${aula.apresentador ? `<div style="border-top:1px solid #e2e8f0;margin:24px 0 0;padding-top:18px;text-align:center;">
       <p style="margin:0;color:#64748b;font-size:13px;line-height:1.7;">
         <strong style="color:#0f172a;">${esc(aula.apresentador)}</strong>${aula.apresentador_cargo ? `<br>${esc(aula.apresentador_cargo)}` : ''}
       </p>

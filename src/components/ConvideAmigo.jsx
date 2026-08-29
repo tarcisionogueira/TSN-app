@@ -20,7 +20,7 @@ import React, { useState } from 'react';
  * `codigo_indicacao_para_todos_desde_o_cadastro` todo perfil nasce com código, então este
  * caminho só acontece enquanto a leitura ainda está carregando.
  */
-export default function ConvideAmigo({ codigo, aula, tema = 'claro' }) {
+export default function ConvideAmigo({ codigo, aula, tema = 'claro', alinhamento = 'left' }) {
   const [copiado, setCopiado] = useState(false);
   if (!codigo) return null;
 
@@ -60,11 +60,14 @@ export default function ConvideAmigo({ codigo, aula, tema = 'claro' }) {
   };
 
   return (
-    <div style={{ marginTop: 22, padding: '16px 18px', background: C.fundo, border: `1px solid ${C.borda}`, borderRadius: 14, textAlign: 'left' }}>
+    // O card SEGUE o alinhamento do container em vez de impor o seu: na confirmação da
+    // inscrição tudo é centralizado, na Home tudo é alinhado à esquerda. Fixar um dos dois
+    // deixaria o card torto em uma das telas.
+    <div style={{ marginTop: 22, padding: '16px 18px', background: C.fundo, border: `1px solid ${C.borda}`, borderRadius: 14, textAlign: alinhamento }}>
       <div style={{ fontSize: 15, fontWeight: 800, color: C.titulo, marginBottom: 5 }}>
         Convide um amigo
       </div>
-      <p style={{ fontSize: 13.5, color: C.texto, lineHeight: 1.6, margin: '0 0 13px' }}>
+      <p style={{ fontSize: 13.5, color: C.texto, lineHeight: 1.6, margin: alinhamento === 'center' ? '0 auto 13px' : '0 0 13px', maxWidth: alinhamento === 'center' ? 360 : undefined }}>
         {aula?.slug
           ? 'Leilão é bem mais fácil de entender com alguém junto. Este link é seu — quem entrar por ele fica ligado à sua conta.'
           : 'Este link é seu. Quem criar conta por ele fica ligado à sua, e você participa do que essa pessoa contratar.'}
@@ -73,7 +76,7 @@ export default function ConvideAmigo({ codigo, aula, tema = 'claro' }) {
         style={{ display: 'block', textAlign: 'center', background: '#16a34a', color: '#fff', textDecoration: 'none', padding: '13px', borderRadius: 11, fontWeight: 800, fontSize: 14.5 }}>
         Enviar pelo WhatsApp →
       </a>
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 10, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 10, flexWrap: 'wrap', justifyContent: alinhamento === 'center' ? 'center' : 'flex-start' }}>
         <code style={{ flex: '1 1 180px', minWidth: 0, fontSize: 11.5, color: C.linkTexto, background: C.linkFundo, border: `1px solid ${C.borda}`, borderRadius: 8, padding: '9px 11px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {link.replace(/^https?:\/\/(www\.)?/, '')}
         </code>
