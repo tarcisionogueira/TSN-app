@@ -4,6 +4,69 @@
 
 ---
 
+## 🗓️ 29/08 (sessão 14e) — `conversoes: null` DO META NÃO ERA "NÃO CONVERTEU", ERA "NUNCA PERGUNTAMOS"
+
+100% das linhas do Meta em `marketing_metricas_dia` tinham `conversoes` nulo, contra número
+preenchido no Google. A causa, em `api/meta-insights-cron.js`:
+
+```js
+&fields=campaign_name,spend,clicks,impressions   // ← `actions` nunca foi pedido
+conversoes: null,                                 // ← e o mapper cravava null
+```
+
+**Forma nº 8 ao pé da letra:** *o que não é PEDIDO nunca chega para ser ignorado*. O campo não
+podia ser outra coisa senão nulo, e o CAC/ROAS do Meta ficava sem denominador com a verba rodando.
+
+### 🪤 A armadilha do mapeamento — e por que ela é a forma nº 10 esperando acontecer
+
+No Meta, conversão não é campo: vem em `actions: [{action_type, value}]`, e **as famílias se
+sobrepõem** — `purchase` e `offsite_conversion.fb_pixel_purchase` contam a **MESMA venda**.
+Somar tudo **dobra** o número; somar a família errada dá valor plausível e errado.
+
+Cada família passa a somar **o primeiro `action_type` presente** (agregado primeiro, pixel como
+reserva), nunca dois da mesma. As duas famílias são exatamente os eventos que NÓS mandamos pela
+CAPI (`_meta-capi.js`): **`Lead`** (inscrição na live) e **`Purchase`** (webhook de pagamento) —
+ler outra coisa mediria uma campanha que não é a nossa. Ruído (`landing_page_view`,
+`video_view`) fica de fora.
+
+E `actions` ausente **com o campo pedido** agora vira **`0`**, não `null`: antes o nulo dizia
+"não perguntei"; agora só sobra nulo se a apuração não rodar.
+
+### ⚠️ O antídoto do CLAUDE.md NÃO estava disponível — e o que foi feito no lugar
+
+A regra para ingestão externa é *rodar em seco sobre dado real antes de gravar*. **Não deu**: o
+`META_ADS_TOKEN` vive no painel da Vercel e não no ambiente da sessão, então não há como ver
+quais `action_type` a conta devolve de fato. Em vez de chutar e deixar o chute invisível:
+
+- **`marketing_metricas_dia.conversoes_detalhe`** (jsonb, nova) grava `por_tipo` (TODOS os
+  action_type que vieram) e `usados` (os que entraram na soma). O total fica **conferível contra
+  o Gerenciador de Anúncios** sem reabrir investigação;
+- o cron **loga os action_type distintos** de cada execução e os devolve no JSON de resposta —
+  se aparecer família fora da lista (`onsite_conversion.*`, `omni_purchase`, evento
+  personalizado), ela fica visível de imediato.
+
+**9/9 nos testes**, contra a função REAL (exportada para não testar uma cópia). O caso que mais
+importa: `purchase: 2` + `offsite_conversion.fb_pixel_purchase: 2` → **total 2, não 4**.
+
+### 🔒 A trava
+
+**`canal_sem_conversao_apurada`** (Marketing/bug, limite 0): canal com gasto nos últimos 3 dias e
+**nenhuma** linha com conversão apurada. Pega a classe inteira — campo não pedido, mapper cravando
+null, credencial trocada. Janela de 3 dias porque o cron reescreve os últimos 7: folga para ele já
+ter passado, e curta o bastante para não acusar eternamente o histórico anterior a 22/08, que a
+correção não alcança.
+
+> 📌 **Ele ACUSA agora (valor 1) de propósito** — o Meta gastou R$ 12,47 em 3 dias com zero
+> conversão apurada, que é o estado real até o cron rodar. `meta-insights-cron` roda **08h10 UTC**
+> e reescreve os últimos 7 dias. **Confirmar amanhã que zerou** — é a prova de que a correção
+> funcionou em produção, não só de que o código parece certo. Se continuar em 1, olhar
+> `action_types_vistos` na resposta do cron antes de mexer em qualquer outra coisa.
+
+**Arquivos:** `supabase/migrations/meta_conversoes_saem_do_nulo_e_o_mapeamento_fica_auditavel.sql`
+(aplicada), `api/meta-insights-cron.js`.
+
+---
+
 ## 🗓️ 29/08 (sessão 14d) — A "CORTESIA" NÃO ERA CORTESIA DE CURSO, E A DATA NÃO VENCIA NADA
 
 Fecho da dúvida levantada em 14c. O dono perguntou **onde** essa cortesia é aplicada — se era a
