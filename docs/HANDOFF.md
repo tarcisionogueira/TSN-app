@@ -458,6 +458,26 @@ agora alcança quem está atrás do Cloudflare.
 o passo `[DONO]` pendente em `docs/RUNNER_RESIDENCIAL.md`. Quando rodar, o log já diz quantos
 leiloeiros de MG saíram do balde pago.
 
+### 📊 Mapeamento de viabilidade dos 53 — `docs/MAPEAMENTO_BLOQUEADOS_JUCEMG.md`
+
+Agrupados pelo **mecanismo de bloqueio**, que é o que decide se o residencial resolve:
+
+| Grupo | Sites | Leiloeiros | Prognóstico |
+|---|---|---|---|
+| **Cloudflare** (`just a moment`) | **47** | **51** | ✅ alta confiança |
+| **AWS ELB** (403 sem desafio) | 5 | 5 | ⚠️ outro mecanismo, incerto |
+| **Wordfence** (503) | 1 | 1 | ⚠️ reputação de IP |
+
+**O grupo A não é chute:** GESTAOLEILOES e RJ estavam exatamente neste estado e hoje rodam pelo
+residencial com o **mesmo** `fetch-residencial.mjs`. Mesmo bloqueio, mesmo código que o vence — só
+muda o IP de origem.
+
+⚠️ **Não deu para provar daqui, e a limitação é do ambiente:** o proxy do agente recusa o túnel
+para os 53 domínios **e até para `example.com`** (`ERR_TUNNEL_CONNECTION_FAILED` no Chromium,
+`CONNECT tunnel failed 403` no curl). É a mesma razão de existir do runner: IP de datacenter é o
+que o Cloudflare recusa. **Provado aqui:** Chromium sobe, e quando o headless falha o site
+**permanece bloqueado** em vez de virar 200 vazio.
+
 **Arquivos:** `scripts/recon-triagem-jucemg.mjs`, `scripts/runner-residencial.sh`,
 `docs/RUNNER_RESIDENCIAL.md`, migração
 `praca_fim_antes_do_inicio_deixa_de_supor_que_data_leilao_e_a_1a_praca` (aplicada).
