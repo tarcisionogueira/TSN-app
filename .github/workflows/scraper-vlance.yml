@@ -4,10 +4,14 @@ name: Scraper VLANCE (Bright Data)
 # datacenter (CI/Vercel) e a coleta client-side (navegador do staff) falha por CORS/site. Fallback
 # autorizado pelo dono: RESIDENCIAL primeiro; se falhar, BRIGHT DATA. Este job é o Bright Data —
 # server-side, confiável e verificável — para o VLANCE nunca ficar zerado.
-# Agendado 2x/semana (seg/qui), como as demais fontes grátis, + disparo manual.
+# Agendado 1x/semana (segunda) + disparo manual.
+# ⚠️ NÃO É FONTE GRÁTIS, ao contrário do que esta linha dizia até 29/08: `scraper_vlance.py`
+# chama a Web Unlocker DIRETO (fora do ledger `brightdata_uso`, como o CLAUDE.md registra) —
+# ou seja, o painel cobra por ele e o nosso teto semanal nem enxerga. Por isso desce para 1x,
+# junto das demais fontes pagas.
 on:
   schedule:
-    - cron: '30 12 * * 1,4'   # 2x/semana (seg e qui), 12:30 UTC — após o scraper principal
+    - cron: '30 12 * * 1'   # 1x/semana (segunda), 12:30 UTC — após o scraper principal
   workflow_dispatch:
     inputs:
       dryrun:

@@ -15,8 +15,13 @@ name: Scraper RJ Leilões (Bright Data)
 # Quem quiser inspecionar sem gravar passa dryrun=1 explicitamente.
 on:
   schedule:
+    # 1x POR SEMANA (29/08, decisão do dono: "os que usam bright data coloque para rodar
+    # somente 1x por semana"). Era terça E sexta. A segunda rodada era "rede de segurança se o
+    # residencial não passou" — mas ela custava uma cota inteira toda semana para cobrir um
+    # caso que o monitor de fontes já denuncia (`fonte_regressao_suspeita`), sem gastar nada.
+    # Se a terça falhar, o disparo manual resolve; pagar por uma segunda passada preventiva
+    # toda semana, em uma cota que vive saturada, é o oposto de economia.
     - cron: '0 11 * * 2'   # terça, 11 UTC — fonte PAGA (Bright Data)
-    - cron: '0 11 * * 5'   # sexta, 11 UTC — rede de segurança se o residencial não passou
   workflow_dispatch:
     inputs:
       debug:

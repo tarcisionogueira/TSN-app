@@ -1,0 +1,124 @@
+/**
+ * O DOCUMENTO QUE JÁ É NOSSO RESPONDE ANTES DE PAGAR PARA PERGUNTAR DE NOVO (29/08).
+ *
+ * PEDIDO DO DONO: "salve os documentos no nosso armazenamento e leia os documentos para
+ * extrair datas e endereço e descrição… assim economizamos e aumentamos a eficiência".
+ *
+ * O QUE JÁ EXISTIA, e por isso este arquivo é pequeno:
+ *   · `scripts/captura-documentos.mjs` já baixa edital/matrícula/laudo para o bucket
+ *     `documentos` e registra em `imovel_anexos.storage_path`;
+ *   · `extrairDatasLeilao` (enriquecer-lote) já lê praças de TEXTO;
+ *   · `extrairIdentidadeTexto` (_doc-extracao) já lê logradouro, bairro e condomínio.
+ * O que faltava era LIGAR as duas pontas fora da geração de relatório: até hoje o edital só
+ * era lido quando um cliente pedia uma análise. Para o ACERVO, o `enriquecer-datas-cron` ia
+ * buscar a PÁGINA DO LOTE via Bright Data — pagando por uma informação que já estava no
+ * nosso bucket.
+ *
+ * O TAMANHO DO DESPERDÍCIO, medido em 29/08: **~2.900 lotes ativos sem data completa JÁ TÊM
+ * edital ou matrícula no nosso storage** (LJUD 1.040 · PESTANA 633 · GRUPOLANCE 338 ·
+ * MEGA 233 · SUPERBID 176 · BIASI 122 · TORRES3 86 · ZUK 63 …). Cada um deles era uma
+ * requisição paga por semana, para ler o que já tínhamos.
+ *
+ * ⚠️ SEM CAMADA DE TEXTO NÃO É "SEM DATA". PDF escaneado devolve texto vazio — isso é
+ * "não consegui ler", e quem chama precisa distinguir para cair no caminho pago em vez de
+ * carimbar o lote como visitado. Por isso o retorno separa `lido` de `achou`: fundir os dois
+ * faria o lote sair da fila sem nunca ter sido lido, que é o defeito que o próprio
+ * `enriquecer-datas-cron` levou 23/08 para descobrir na versão dele.
+ */
+import { carregarPDFParse } from './_pdf-safe.js';
+import { extrairDatasLeilao } from './enriquecer-lote.js';
+import { extrairIdentidadeTexto } from './_doc-extracao.js';
+
+const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
+const BUCKET = 'documentos';
+// Edital primeiro: é o documento que traz praça, data e condições. A matrícula tem endereço
+// e ônus, mas raramente a data do leilão; o laudo, a descrição física.
+const PRIORIDADE = ['edital', 'regras_venda', 'regras', 'laudo', 'matricula', 'outro'];
+const MAX_BYTES = Number(process.env.DOC_DATAS_MAX_BYTES || 12 * 1024 * 1024);
+
+const sb = (path, opts = {}) => fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+  ...opts,
+  headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json', ...(opts.headers || {}) },
+  signal: AbortSignal.timeout(15000),
+});
+
+/** Baixa um objeto do nosso bucket. Custo zero — é o nosso Storage, não a internet. */
+async function baixar(storagePath) {
+  const r = await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}/${storagePath.split('/').map(encodeURIComponent).join('/')}`, {
+    headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` },
+    signal: AbortSignal.timeout(30000),
+  });
+  // `.ok` checado: o Storage devolve JSON de erro com 400/404, e um `arrayBuffer()` direto
+  // viraria um "PDF" de 60 bytes que o pdf-parse rejeita — indistinguível de PDF corrompido.
+  if (!r.ok) return null;
+  const buf = Buffer.from(await r.arrayBuffer());
+  return buf.length > 0 && buf.length <= MAX_BYTES ? buf : null;
+}
+
+/**
+ * Lê o melhor documento que temos deste imóvel e extrai o que dá.
+ * Devolve sempre um objeto, nunca lança:
+ *   { lido:boolean, achou:boolean, tipo, patch:{...}, motivo }
+ * `lido:false` = não havia documento OU o PDF não tem camada de texto → quem chama pode
+ * tentar o caminho pago. `lido:true, achou:false` = o documento existe, foi lido e não diz
+ * a data; insistir no pago por este lote costuma ser dinheiro jogado fora.
+ */
+export async function enriquecerPeloDocumento(imovelId, atual = {}) {
+  const vazio = (motivo) => ({ lido: false, achou: false, tipo: null, patch: {}, motivo });
+  if (!SUPABASE_URL || !SERVICE_KEY || !imovelId) return vazio('sem_config');
+
+  let anexos = [];
+  try {
+    const r = await sb(`imovel_anexos?imovel_id=eq.${encodeURIComponent(imovelId)}&storage_path=not.is.null&select=tipo,storage_path&limit=12`);
+    if (!r.ok) return vazio('anexos_erro');
+    anexos = await r.json();
+    if (!Array.isArray(anexos)) return vazio('anexos_corpo');
+  } catch { return vazio('anexos_excecao'); }
+  if (!anexos.length) return vazio('sem_anexo');
+
+  anexos.sort((a, b) => {
+    const ia = PRIORIDADE.indexOf(a.tipo); const ib = PRIORIDADE.indexOf(b.tipo);
+    return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+  });
+
+  const pdfParse = await carregarPDFParse();
+  if (!pdfParse) return vazio('sem_pdf_parse');
+
+  for (const a of anexos.slice(0, 3)) {
+    let texto = '';
+    try {
+      const buf = await baixar(a.storage_path);
+      if (!buf) continue;
+      const out = await pdfParse(buf);
+      texto = String(out?.text || '');
+    } catch { continue; }
+    // Menos de 200 caracteres é PDF escaneado (só imagem). NÃO é "documento sem data".
+    if (texto.replace(/\s+/g, '').length < 200) continue;
+
+    const patch = {};
+    const { inicio, fim, encerradaEm } = extrairDatasLeilao(texto);
+    if (inicio && !atual.data_leilao) patch.data_leilao = inicio;
+    if (fim && !atual.data_leilao_2) patch.data_leilao_2 = fim;
+    if (encerradaEm && !atual.data_leilao && !atual.data_leilao_2) patch.data_leilao = encerradaEm;
+
+    // ENDEREÇO só COMPLEMENTA — nunca sobrescreve o que a coleta trouxe. O logradouro do
+    // edital é o do IMÓVEL na maioria das vezes, mas em edital judicial pode ser o endereço
+    // do cartório ou da vara; sobrescrever um endereço bom por esse seria piorar a ficha em
+    // silêncio, e o pino do mapa é o que o cliente vê.
+    const id = extrairIdentidadeTexto(texto);
+    if (id) {
+      if (id.logradouro && !String(atual.endereco || '').trim()) patch.endereco = id.logradouro.slice(0, 200);
+      if (id.bairro && !String(atual.bairro || '').trim()) patch.bairro = id.bairro.slice(0, 60);
+      if (id.nomeCondominio && !String(atual.nomecondominio || '').trim()) patch.nomecondominio = id.nomeCondominio.slice(0, 120);
+    }
+    // DESCRIÇÃO: só quando não há nenhuma. O trecho é o começo útil do documento, limpo.
+    if (!String(atual.descricao || '').trim()) {
+      const trecho = texto.replace(/\s+/g, ' ').trim().slice(0, 600);
+      if (trecho.length >= 120) patch.descricao = trecho;
+    }
+
+    return { lido: true, achou: Object.keys(patch).length > 0, tipo: a.tipo, patch, motivo: null };
+  }
+  return vazio('sem_camada_de_texto');
+}

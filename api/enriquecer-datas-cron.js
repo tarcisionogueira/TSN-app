@@ -14,10 +14,16 @@ export const config = { runtime: 'nodejs', maxDuration: 120 };
 
 import { isCronAuthorized } from './_auth.js';
 import { fetchLote, extrairDatasLeilao } from './enriquecer-lote.js';
+import { enriquecerPeloDocumento } from './_doc-datas.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
-const LOTE_MAX = parseInt(process.env.ENRIQUECER_DATAS_LOTE || '40', 10); // teto de páginas por execução
+const LOTE_MAX = parseInt(process.env.ENRIQUECER_DATAS_LOTE || '40', 10); // teto de lotes por execução
+// TETO DE REQUISIÇÕES PAGAS POR RUN (29/08). O caminho grátis (ler o nosso documento) não tem
+// teto porque não custa nada; o pago tem. Antes, um run de 40 lotes podia virar 40 requisições
+// Bright Data — e a cota semanal (550) já vive saturada. Com o documento respondendo primeiro,
+// a maioria dos lotes nem chega aqui; este teto garante o pior caso.
+const PAGO_MAX = parseInt(process.env.ENRIQUECER_DATAS_PAGO_MAX || '10', 10);
 
 function sb(path, opts = {}) {
   return fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
@@ -57,10 +63,32 @@ export default async function handler(req, res) {
   }
 
   let comData = 0, comFim = 0, semConteudo = 0, encerrados = 0;
+  let porDoc = 0, docLido = 0, pagos = 0, poupados = 0;
   const agora = new Date().toISOString();
   for (const im of candidatos) {
+    // ── 1º O DOCUMENTO QUE JÁ É NOSSO (custo zero) ───────────────────────────────────────
+    // Pedido do dono (29/08). Em 29/08, ~2.900 lotes ativos sem data completa JÁ TINHAM
+    // edital ou matrícula no bucket `documentos` — e este cron ia buscar a página do lote via
+    // Bright Data para descobrir o que estava guardado em casa.
+    const doc = await enriquecerPeloDocumento(im.id, im);
+    if (doc.lido) docLido++;
+    if (doc.achou) {
+      const patchDoc = { ...doc.patch, enriquecido_em: agora };
+      if (patchDoc.data_leilao) comData++;
+      if (patchDoc.data_leilao_2) comFim++;
+      porDoc++; poupados++;
+      await marcar(im.id, patchDoc);
+      continue;                       // resolvido de graça: nem chega no caminho pago
+    }
+    // Documento LIDO e sem a data: a página do lote raramente dirá mais que o edital, e cada
+    // tentativa custa cota. Carimba para revezar a fila e segue — sem gastar.
+    if (doc.lido) { poupados++; await marcar(im.id, { enriquecido_em: agora }); continue; }
+
+    // ── 2º SÓ ENTÃO O CAMINHO PAGO ───────────────────────────────────────────────────────
+    if (pagos >= PAGO_MAX) continue;  // sem carimbar: quem não foi lido volta na próxima fila
     const alvo = im.url_lote || im.link_edital;
     if (!alvo || !/^https?:\/\//.test(alvo)) continue;
+    pagos++;
     const { html, semCota } = await fetchLote(alvo);
     const patch = { enriquecido_em: agora };
     // RECUSA DE ORÇAMENTO NÃO É VISITA (23/08 — a forma #5 de novo, aqui). O
@@ -92,7 +120,12 @@ export default async function handler(req, res) {
     await marcar(im.id, patch);
   }
 
-  res.status(200).json({ ok: true, processados: candidatos.length, com_data: comData, com_encerramento: comFim, ja_encerrados: encerrados, sem_conteudo: semConteudo });
+  const saida = { processados: candidatos.length, com_data: comData, com_encerramento: comFim,
+                  ja_encerrados: encerrados, sem_conteudo: semConteudo,
+                  resolvidos_pelo_documento: porDoc, documentos_lidos: docLido,
+                  requisicoes_pagas: pagos, requisicoes_poupadas: poupados, teto_pago: PAGO_MAX };
+  console.log('[enriquecer-datas]', JSON.stringify(saida));
+  res.status(200).json({ ok: true, ...saida });
 }
 
 async function marcar(id, patch) {

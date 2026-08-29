@@ -1,0 +1,34 @@
+name: Validar "documento primeiro" (seco, nao grava)
+
+on:
+  workflow_dispatch:
+    inputs:
+      n:
+        description: 'Quantos lotes testar'
+        required: false
+        default: '30'
+      fonte:
+        description: 'Filtrar por fonte (vazio = todas)'
+        required: false
+        default: ''
+
+jobs:
+  validar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci
+      - name: Validar
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          VALIDAR_N: ${{ inputs.n }}
+          VALIDAR_FONTE: ${{ inputs.fonte }}
+        run: node scripts/validar-doc-datas.mjs
+      - name: Falhou
+        if: ${{ failure() || cancelled() }}
+        run: echo "::error::Validacao nao concluiu."
