@@ -4,6 +4,144 @@
 
 ---
 
+## 🗓️ 29/08 (sessão 13d — ENCERRAMENTO) — O CLIENTE 360 ACHOU A PÁGINA QUE A VERBA PAGA
+
+Fechamento do dia a pedido do dono: *"Verifique o cliente 360 antes de encerrarmos para garantir
+que os usuários estejam operando bem"*. O 360 fez o que existe para fazer — **achou um defeito
+que nenhuma varredura de código acharia, e justamente na página que mais custa dinheiro hoje.**
+
+### 🔴 O ACHADO — `/live/leilao-ao-vivo` estourava o timeout do Postgres
+
+```
+erros_cliente · 28/08 22:35 · rota /live/leilao-ao-vivo
+Supabase 500 em "rpc/live_plataforma_numeros": canceling statement due to statement timeout
+```
+
+É a landing que recebe **o tráfego pago do Meta** (R$ 8/dia em duas campanhas) e o destino do
+**convite de domingo para os 72 da base**. `live_plataforma_numeros()` varria `imoveis_leilao`
+inteira — 66.285 linhas — com quatro agregados, dois deles `count(distinct …)`:
+
+```
+Aggregate (actual time=1701.520..1701.522)  Buffers: shared hit=36186
+  -> Index Scan using idx_imoveis_leilao_fonte  (rows=66285)
+Execution Time: 1701.618 ms          ← e isso com o cache QUENTE
+```
+
+**E o front escondia a falha.** `LiveInscricao.jsx` trata a ausência dos números como "visitante
+sem credencial" (há um `padrao-ok` dizendo isso) — então o bloco de prova social (*30.384 lotes ·
+6.154 com 50%+ de desconto · 2.551 cidades*) **simplesmente não aparecia**, sem erro na tela, sem
+nada quebrado à vista. Forma nº 1 do CLAUDE.md — *vazio entregue como resposta* — na página que
+mais cara custa por clique.
+
+**Correção:** número de vitrine não precisa ser vivo. Passou a viver em
+`plataforma_numeros_cache` (uma linha), e quem recalcula é a **varredura horária que já mexe em
+`ativo`** (`desativar-encerrados-cron`, `5 * * * *`) — a mesma que decide o que entra e sai da
+conta, então o número nunca fica mais velho que a própria definição dele.
+
+```
+antes: 1.701,6 ms   ·   depois: 0,97 ms   (mesma resposta, 1.750× mais barata)
+```
+
+`atualizado_em` viaja no payload **de propósito**, e o invariante novo
+**`live_numeros_congelados`** (Infra/bug, folga de 3 h sobre o cron horário) grita se o passo
+parar. Trocar "consulta que estoura" por "cache que envelhece calado" seria só mudar de defeito.
+
+**Arquivos:** `supabase/migrations/live_numeros_em_cache_para_nao_estourar_timeout.sql`,
+`supabase/migrations/qa_invariante_live_numeros_congelados.sql`,
+`api/desativar-encerrados-cron.js`. Migrações **aplicadas** no banco (forma nº 7 respeitada nas
+duas direções: o que foi aplicado está escrito, e o que está escrito foi aplicado).
+
+### 🧹 O ruído que a campanha paga trouxe junto — `iabjs://`
+
+3 das 5 linhas abertas em `erros_cliente` eram `Error invoking postMessage: Java object is gone`,
+com stack **inteiramente** em `iabjs://navigation_performance_logger_android`. É o script que o
+navegador embutido do Instagram/Facebook injeta na nossa página para medir a performance **dele**;
+quando a pessoa sai da aba, o objeto Java do webview morre antes do JS. Não é nosso código e não
+há o que corrigir — mas a verba manda o tráfego POR DENTRO desse navegador, então isso **cresce
+com o investimento** e ocupa a vaga de um erro real na fila. `iabjs://` entrou em `TERCEIROS` de
+`src/utils/reportarErro.js` (guarda conservadora de sempre: só descarta se NENHUM quadro do stack
+for do nosso bundle).
+
+### ✅ O ESTADO EM QUE O DIA FECHA
+
+| Sinal | Valor | Leitura |
+|---|---|---|
+| `auditoria_seguranca()` | **0 crítico / 0 atenção** | íntegro, já com os objetos novos |
+| `erros_cliente` abertos | 5 → **2** | 3 fechados (1 corrigido + 2 ruído de terceiro) |
+| `relatorio_anomalias` abertas | 8 → **6** | as 2 de data verificadas e resolvidas |
+| `qa_invariantes()` em alerta | 4 → **2** | ver abaixo |
+| Convite de domingo | `convite_live_armado = 2026-09-02` | **bate** com `live_proxima()`; `live_convite_envio` ainda em 0 |
+| Tráfego 7d | 1.056 visitantes · 4.586 pageviews | saudável |
+
+**Os 2 invariantes que seguem em alerta são conhecidos e decididos:**
+- `bd_teto_saturado` 550/495 — esperado: os leiloeiros pagos passaram a 1×/semana hoje e os 20
+  scripts de recon entraram no ledger. É o freio funcionando, não regressão.
+- `alerta_acima_do_capital` = 2 — **resíduo, não bug vivo**. Os dois envios são de **24/08 11:01**,
+  anteriores ao conserto de 25/08. Depois dele: **0 violações em 4 rodadas do cron**. Sai sozinho
+  da janela de 7 dias em 31/08.
+
+**Os 2 que foram fechados nesta passagem:**
+- `praca_fim_antes_do_inicio` = 1 → 0. O lote de **Guarulhos** (MEGA, `46cff9af…`) tinha
+  `data_leilao = 10/09` (que é a **2ª** praça) e `praca1_fim = 20/08` na mesma linha. Reorganizado
+  para a forma coerente — 1ª praça 20/08, 2ª praça 10/09 — e conferido em `leilao_ja_encerrado()`:
+  **segue ativo até 10/09**, que é o prazo certo.
+- `data_edital_recuou_prazo` = 2 → 0. As duas anomalias (Guarulhos e `5f38da81…` WEBLEILOES/Osasco)
+  eram divergência **1ª × 2ª praça**, já corrigida no dado. Lidas, verificadas uma a uma e
+  marcadas resolvidas com a justificativa no `detalhe` — anomalia registrada e nunca lida foi o
+  que deixou esse defeito repetir em 25/08 e 28/08.
+
+### 👤 O QUE O 360 DIZ DOS CLIENTES (72 contas: 67 explorador · 4 top2 · 1 assessorado)
+
+- **3 pagantes sem UMA entrega em 14 dias — churn em formação, e é o item mais caro da lista:**
+  `b93b2411…` (top2, assinou 01/07) · `6b35b390…` (assessorado, 06/07) · `37c2d966…` (top2, 06/08).
+  Assinaram e não geraram nenhum relatório mercadológico. Mais barato ver aqui do que na fatura.
+- **29 de 72 (40%) sem perfil de triagem** — é o que faz o e-mail de oportunidade sair genérico.
+- `relatorios_falha_24h: 1` / `7d: 2` — motivo único `relatorio_documental_faltam_docs`
+  ("sem comparáveis"). Falha legítima de insumo, não de código.
+- `erros_invisiveis_7d: 0`.
+
+---
+
+## 📌 PENDÊNCIAS AO ENTRAR NA PRÓXIMA SESSÃO (29/08 → 30/08)
+
+### ⏰ PRIMEIRO DE TUDO — domingo 30/08, 08h (Brasília)
+`convidar-live-cron` (`0 11 * * 0`) dispara o convite da aula para a base e se desarma sozinho.
+**Confira o desfecho:** `select count(*), min(criado_em), max(criado_em) from live_convite_envio;`
+e `select value from app_config where key='convite_live_armado';` (tem de voltar vazio/nulo).
+O e-mail exclui equipe/admin, respeita opt-out e pula quem já está inscrito — então um número
+menor que 72 é **o esperado**, não perda.
+
+### 🔴 P1 — `praca1_fim`/`praca2_fim` existem e NINGUÉM as preenche
+Varredura do acervo: **1 linha em 30.384** tem essas colunas — e é a que eu preenchi na mão em
+28/08. As colunas de intervalo de praça foram criadas para consertar o defeito daquele dia e
+**nenhum coletor as popula**. Enquanto isso, o mapper da MEGA escreve em `data_leilao` a praça
+*vigente* (não a 1ª), que é exatamente a conflação que gerou o alerta de hoje. É a assinatura da
+forma nº 7 pelo avesso: o schema chegou, o produtor não. **É o próximo trabalho de dados.**
+
+### 🟠 P2 — item 4 (datas por documento): 2 alvos mapeados, não implementados
+- **BIASI** — parser de data em `/sale/detail?id=<id real>` (o recon já achou o caminho).
+- **GRUPOLANCE** — idem.
+
+### 🟠 P3 — item 7 (famílias de leiloeiros): 2 frentes abertas
+- **`leiloesjudiciais`** (7 sites) — **nunca foi lido**. Recon pendente do zero.
+- **`suaplataformadeleilao`** (2 sites) — confirmado como família; precisa de parser renderizado
+  (`dom`) para `/busca/#Engine=Start&…&ID_Categoria=55`.
+
+### 🟠 P4 — `emiliomatos`: rodada agendada de 26/08 falhou
+⚠️ **É anterior a qualquer mudança minha** — não confundir com regressão desta semana. Precisa de
+recon próprio.
+
+### 🟡 P5 — herdadas, ainda de pé
+- `/admin` → `rpc/admin_qa_invariantes` estourou timeout em 23/08 (1×). Medido hoje: **2,83 s**
+  com cache quente, contra o limite de 5 s do próprio invariante `qa_invariantes_lenta` — o
+  estouro foi cache frio. Vigiado, não corrigido.
+- `/planos` → `Cannot read properties of undefined (reading '_leaflet_pos')` (1×, 28/08). Leaflet
+  mexendo no container depois do unmount. Uma ocorrência, auto-limitado pelo ErrorBoundary.
+- **Do dono:** cadastrar o primeiro advogado · `apresentador_foto` vazio na página da aula ·
+  OpenAI Ads (evento de conversão `lead_created` + crédito de US$ 100).
+
+---
+
 ## 🗓️ 29/08 (sessão 13c) — ITENS 7 E 9 FECHADOS, E A FORMA Nº 10 APARECEU 5 VEZES
 
 ### ✅ ITEM 9 — endereço do bem: 13% de cobertura, ZERO repetição

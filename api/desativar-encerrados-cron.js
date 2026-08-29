@@ -47,8 +47,23 @@ export default async function handler(req, res) {
     });
     descontos = r2.ok ? await r2.json().catch(() => null) : { erro: (await r2.text().catch(() => '')).slice(0, 200) };
   } catch (e) { descontos = { erro: String(e?.message || e).slice(0, 200) }; }
+  // 29/08: e os NÚMEROS DA VITRINE da aula ao vivo, pelo mesmo motivo — quem muda a conta é esta
+  // varredura, ao ligar/desligar `ativo`. Eles eram calculados na hora e a página do tráfego pago
+  // levava `statement timeout` (1,7 s varrendo 66 mil linhas com dois count(distinct)); agora vive
+  // em `plataforma_numeros_cache`, lido em 1 ms. Se este passo parar, o invariante
+  // `live_numeros_congelados` acusa em 3 h — cache que envelhece calado seria só outro defeito.
+  let numeros = null;
+  try {
+    const r3 = await fetch(`${SUPABASE_URL}/rest/v1/rpc/live_plataforma_numeros_atualizar`, {
+      method: 'POST',
+      headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    numeros = r3.ok ? await r3.json().catch(() => null) : { erro: (await r3.text().catch(() => '')).slice(0, 200) };
+  } catch (e) { numeros = { erro: String(e?.message || e).slice(0, 200) }; }
+
   // Log sempre, inclusive o zero: é o que permite ver que a varredura RODOU num dia sem baixas
   // (silêncio total não distingue "nada a fazer" de "cron parou").
-  console.log('[desativar-encerrados]', JSON.stringify({ desativados, descontos }));
-  res.status(200).json({ ok: true, desativados, descontos_recalculados: descontos });
+  console.log('[desativar-encerrados]', JSON.stringify({ desativados, descontos, numeros }));
+  res.status(200).json({ ok: true, desativados, descontos_recalculados: descontos, numeros_vitrine: numeros });
 }

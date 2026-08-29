@@ -34,9 +34,18 @@ function ehRuido(msg = '') {
 // não temos como corrigir, e ocupava a vaga de um erro que importa.
 // Regra conservadora: só descarta quando o stack é INTEIRAMENTE de terceiro — se algum
 // quadro é do nosso bundle, o erro pode ser nosso e vai para a fila normalmente.
+// 29/08: `iabjs://` entrou na lista pelo mesmo motivo das extensões, mas agora em ESCALA. É o
+// script que o navegador embutido do Instagram/Facebook (in-app browser, Android) injeta na
+// nossa página para medir a própria performance dele — `navigation_performance_logger_android`.
+// Quando a pessoa sai da aba, o objeto Java do webview morre antes do JS e o logger da Meta
+// grita "Java object is gone". Não é nosso código, não é nosso bug, e não há o que corrigir.
+// Passou a importar porque a campanha paga manda o tráfego POR DENTRO desse navegador: 3 das 5
+// linhas abertas em `erros_cliente` no dia 28/08 eram só isso, e a tendência é piorar com a
+// verba subindo — ruído que ocupa a vaga de um erro real na fila de investigação.
 const TERCEIROS = [
   'chrome-extension://', 'moz-extension://', 'safari-web-extension://',
   'googletagmanager.com', 'google-analytics.com', 'connect.facebook.net', 'clarity.ms',
+  'iabjs://',
 ];
 function ehStackDeTerceiro(stack = '') {
   const s = String(stack);
