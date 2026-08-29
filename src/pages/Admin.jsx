@@ -5526,6 +5526,130 @@ function PainelAuditoriaSistema() {
 // FUNIL PÚBLICO — quem AINDA NÃO é cliente. Existe porque o defeito de 12/08 (uma pessoa
 // tentando criar conta cinco vezes e desistindo) só apareceu quando o dono pediu para olhar o
 // Cliente 360 no fim do dia. Achado por acaso não é processo: aqui o funil fica na tela.
+// PRIMEIRO RELATÓRIO DA TRIAGEM — interruptor + ENSAIO EM SECO (29/08).
+// Existe porque a escolha do lote é a parte que pode sair errada em silêncio: um lote plausível
+// e inadequado é indistinguível de um lote certo até alguém olhar. O ensaio roda a MESMA função
+// que o cliente roda (`primeiro_imovel_para_triagem`), que é `stable` e não gera nem cobra nada —
+// o antídoto que pegou, em seco, a vaga de garagem de R$ 2.183 sendo oferecida a quem declarou
+// faixa de R$ 400 mil a 1 milhão.
+function PainelPrimeiroRelatorio() {
+  const [ligado, setLigado] = React.useState(null);
+  const [erro, setErro] = React.useState('');
+  const [clientes, setClientes] = React.useState([]);
+  const [alvo, setAlvo] = React.useState('');
+  const [res, setRes] = React.useState(null);
+  const [testando, setTestando] = React.useState(false);
+
+  React.useEffect(() => {
+    let vivo = true;
+    supabase.from('app_config').select('value').eq('key', 'primeiro_relatorio_auto').maybeSingle()
+      .then(({ data, error }) => {
+        if (!vivo) return;
+        // Interruptor que não pôde ser LIDO não é interruptor desligado: mostrar "off" aqui
+        // faria o admin ligar de novo algo que já está ligado.
+        if (error) { setErro(error.message || 'falha ao ler o interruptor'); return; }
+        setLigado(String(data?.value || 'false') === 'true');
+      });
+    supabase.from('perfis').select('id, nome, email, role, faixa_capital, perfil_investidor, endereco_cidade')
+      .not('perfil_investidor', 'is', null).order('created_at', { ascending: false }).limit(40)
+      .then(({ data, error }) => { if (vivo && !error) setClientes(data || []); });
+    return () => { vivo = false; };
+  }, []);
+
+  const alternar = async () => {
+    const novo = ligado ? 'false' : 'true';
+    const { data, error } = await supabase.from('app_config')
+      .upsert({ key: 'primeiro_relatorio_auto', value: novo }, { onConflict: 'key' }).select('value');
+    // Sem `.select()`, um upsert barrado pela RLS devolve `error: null` e a tela viraria o
+    // botão sem nada ter mudado no banco — o botão que mente.
+    if (error || !data?.length) { setErro(error?.message || 'não foi possível gravar o interruptor'); return; }
+    setErro(''); setLigado(String(data[0].value) === 'true');
+  };
+
+  const testar = async () => {
+    if (!alvo) return;
+    setTestando(true); setRes(null); setErro('');
+    const { data, error } = await supabase.rpc('primeiro_imovel_para_triagem', { p_user_id: alvo });
+    setTestando(false);
+    if (error) { setErro(error.message || 'falha ao consultar'); return; }
+    setRes(data);
+  };
+
+  const c = res?.criterios || {};
+  const brl = (v) => (Number(v) > 0 ? `R$ ${Number(v).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}` : '—');
+
+  return (
+    <div style={S.card}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+        <div>
+          <div style={{ fontSize: 15, fontWeight: 900, color: '#111' }}>Primeiro relatório ao terminar a triagem</div>
+          <div style={{ fontSize: 12, color: '#64748b', marginTop: 3, lineHeight: 1.5 }}>
+            Com isto ligado, quem responde a triagem cai num relatório <strong>já em geração</strong>, escolhido
+            pelo objetivo e pela faixa de capital que acabou de declarar. Consome a amostra grátis dele.
+            <strong> Admin e analista passam mesmo com o interruptor desligado</strong> — é assim que dá para testar antes.
+          </div>
+        </div>
+        <button onClick={alternar} disabled={ligado === null}
+          style={{ padding: '8px 16px', borderRadius: 10, border: 'none', cursor: ligado === null ? 'default' : 'pointer',
+            fontWeight: 800, fontSize: 13, whiteSpace: 'nowrap',
+            background: ligado ? '#059669' : '#e2e8f0', color: ligado ? 'white' : '#475569' }}>
+          {ligado === null ? 'lendo…' : ligado ? 'Ligado — clique para desligar' : 'Desligado — clique para ligar'}
+        </button>
+      </div>
+
+      {erro && (
+        <div style={{ marginTop: 12, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '10px 12px', fontSize: 12.5, color: '#b91c1c' }}>
+          {erro}
+        </div>
+      )}
+
+      <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid #f1f5f9' }}>
+        <div style={{ fontSize: 12.5, fontWeight: 800, color: '#334155', marginBottom: 8 }}>
+          Ensaio em seco — qual lote este cliente receberia (não gera nada, não cobra nada)
+        </div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <select value={alvo} onChange={(e) => { setAlvo(e.target.value); setRes(null); }}
+            style={{ flex: 1, minWidth: 260, padding: '9px 10px', borderRadius: 9, border: '1px solid #e2e8f0', fontSize: 12.5 }}>
+            <option value="">Escolha um cliente que já respondeu a triagem…</option>
+            {clientes.map(u => (
+              <option key={u.id} value={u.id}>
+                {(u.nome || u.email || u.id).slice(0, 40)} · {u.perfil_investidor} · {u.faixa_capital || 'sem faixa'} · {u.endereco_cidade || 'sem cidade'}
+              </option>
+            ))}
+          </select>
+          <button onClick={testar} disabled={!alvo || testando}
+            style={{ padding: '9px 16px', borderRadius: 9, border: 'none', fontWeight: 800, fontSize: 12.5,
+              cursor: (!alvo || testando) ? 'default' : 'pointer', background: alvo ? '#0D63DB' : '#e2e8f0', color: alvo ? 'white' : '#94a3b8' }}>
+            {testando ? 'consultando…' : 'Ver a escolha'}
+          </button>
+        </div>
+
+        {res && (res.encontrou ? (
+          <div style={{ marginTop: 12, border: '1px solid #bbf7d0', background: '#f0fdf4', borderRadius: 12, padding: '12px 14px' }}>
+            <div style={{ fontSize: 13.5, fontWeight: 800, color: '#065f46' }}>{res.titulo || '(sem título)'}</div>
+            <div style={{ fontSize: 12.5, color: '#047857', marginTop: 4, lineHeight: 1.6 }}>
+              {res.tipo} · {res.cidade}/{res.estado} · lance {brl(res.valor)} · avaliação {brl(res.avaliacao)} ·
+              desconto {res.desconto ?? '—'}% · {res.tem_doc ? 'com documento' : 'sem documento anexo'}
+            </div>
+            <div style={{ fontSize: 12, color: '#0f766e', marginTop: 6 }}>Escolhido {res.motivo}.</div>
+            <div style={{ fontSize: 11.5, color: '#64748b', marginTop: 8, lineHeight: 1.6 }}>
+              Critérios aplicados: objetivo <strong>{c.objetivo}</strong> · faixa <strong>{c.faixa || '—'}</strong> ·
+              teto {brl(c.teto)} · piso {Number(c.piso) > 0 ? brl(c.piso) : 'sem piso'} ·
+              desconto mínimo {c.desconto_min ?? 0}% · tipos {(c.tipos || []).join(', ')}
+              {c.relaxou_desconto ? ' · o desconto mínimo teve de ser relaxado' : ''}
+            </div>
+          </div>
+        ) : (
+          <div style={{ marginTop: 12, border: '1px solid #fde68a', background: '#fffbeb', borderRadius: 12, padding: '12px 14px', fontSize: 12.5, color: '#92400e', lineHeight: 1.6 }}>
+            <strong>Nenhum lote seria oferecido</strong> — {res.motivo}. Com isto, a triagem termina como
+            hoje (fecha e pronto): o cliente <strong>não</strong> recebe um lote fora do que declarou.
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function PainelFunilPublico() {
   const [f, setF] = React.useState(null);
   const [erro, setErro] = React.useState(null);
@@ -6313,6 +6437,9 @@ function DashboardTab({ irParaTab }) {
       {/* Quem ainda NÃO é cliente: onde chega, onde para, por quê. Vem antes da cobertura
           porque é o topo do funil — se ninguém entra, o resto não importa. */}
       <PainelFunilPublico />
+
+      {/* O degrau seguinte ao funil: cadastrar não é usar. Interruptor + ensaio em seco. */}
+      <PainelPrimeiroRelatorio />
 
       {/* Cobertura de relatórios & inteligência (o que ocorre no sistema — dado real) */}
       <PainelCoberturaRelatorios />

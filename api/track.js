@@ -24,7 +24,13 @@ const KEY = process.env.SUPABASE_SERVICE_KEY;
 // aviso desde 11/08 justamente para que o 360 não pareça um dia que acaba no meio da tarde —
 // mas ele nunca chegou: ficava de fora daqui e era descartado. O aviso contra o silêncio
 // estava sendo silenciado; corrigido em 14/08 junto com o de cima.
-const TIPOS = new Set(['pageview', 'click', 'submit', 'change', 'api_erro', 'api_vazio', 'api_falha_rede', 'pdf_gerado', 'pdf_falha', 'geracao_recuperada', 'limite_sessao', 'erro_ui']);
+// `analise_*` (29/08): o clique genérico já existia e mostrou que 10 das 16 contas novas que
+// abriram a /analise NUNCA clicaram em Gerar — mas ele não diz QUAL relatório, nem COMO
+// terminou, nem o que a pessoa VIU ao chegar. Sem isso, qualquer mexida na tela é palpite:
+//   analise_estado   → o que a tela oferecia na chegada (cada card: livre/plano/cota/encerrado)
+//   analise_gerar    → tentativa e DESFECHO, por tipo de relatório
+//   analise_bloqueio → clicou numa porta fechada, com o motivo dela
+const TIPOS = new Set(['pageview', 'click', 'submit', 'change', 'api_erro', 'api_vazio', 'api_falha_rede', 'pdf_gerado', 'pdf_falha', 'geracao_recuperada', 'limite_sessao', 'erro_ui', 'analise_estado', 'analise_gerar', 'analise_bloqueio']);
 
 // Defesa em profundidade: NUNCA persistir token/segredo no log de atividade, mesmo que um cliente
 // antigo/adulterado mande (ex.: #access_token=... do fluxo implícito, ou um JWT eyJ...). Redige.

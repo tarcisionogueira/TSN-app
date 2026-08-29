@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { arquivoParaBase64 } from '../utils/arquivo';
 import { reportarErroCliente } from '../utils/reportarErro';
+import { registrarEvento } from '../utils/tracker';
 import { extrairDadosDocumento, extrairDadosDocumentoUrl, gerarParecer } from '../utils/claude';
 import { calcularMetricasCenario, calcularTetoLance, calcularSAC, calcularPrice, calcularVPL, calcularTIR, calcularPayback, calcularMultiplo, fluxoLocacao, TMA_PADRAO, fmt, fmtPct, moedaOuTraco, pctOuTraco, SEM_MEDIDA } from '../utils/calculos';
 import { caixaMatriculaUrl, caixaRegrasVendaUrl } from '../utils/caixa';
@@ -152,7 +153,12 @@ export default function Analise() {
   const paraUserId = location.state?.paraUserId || null;
   // Arremate atribuído com docs → gera os 3 relatórios EM SEQUÊNCIA automaticamente
   // (mercadológico → documental → laudo), lendo os anexos. Só na chegada da atribuição.
+  // `true` = sequência dos 3 (atribuição de arremate). `'mercado'` = SÓ o mercadológico, que é
+  // o caminho do cliente novo vindo da triagem: a documental é de plano pago, e disparar sozinho
+  // algo que ele não pode ter terminaria a boas-vindas num cadeado.
   const autoGerar = location.state?.autoGerar || false;
+  const soMercado = autoGerar === 'mercado';
+  const primeiroRelatorio = !!location.state?.primeiroRelatorio;
   // Modo "inclusão manual de lote": cola URL e/ou anexa edital/matrícula; a IA
   // extrai e libera os relatórios. Vira um botão de opção no menu — ao ativar, a
   // inclusão manual sobe pro topo do centro e a geração de relatórios fica abaixo.
@@ -864,9 +870,18 @@ export default function Analise() {
   const gerarRelMercado = (override = null) => {
     const ov = (override && typeof override === 'object' && !override.nativeEvent && !override.target) ? override : null;
     const dSnap = ov ? { ...d, ...ov } : { ...d };
-    if (analisesBloqueado) { showMsg('Limite de análises atingido.', 'error'); return; }
-    if (!dSnap.endereco && !dSnap.cidade) { showMsg('Imóvel sem endereço/cidade para avaliar o mercado.', 'error'); return; }
-    if (gerandoMercado) return;
+    // A tentativa é registrada ANTES das recusas: sem isto, o clique que morre aqui some do
+    // rastro e a leitura vira "não clicou" — que é a conclusão oposta.
+    registrarEvento('analise_gerar', { alvo: 'mercado', detalhe: 'tentou' });
+    if (analisesBloqueado) {
+      registrarEvento('analise_gerar', { alvo: 'mercado', detalhe: 'recusado: cota' });
+      showMsg('Limite de análises atingido.', 'error'); return;
+    }
+    if (!dSnap.endereco && !dSnap.cidade) {
+      registrarEvento('analise_gerar', { alvo: 'mercado', detalhe: 'recusado: imovel sem endereco/cidade' });
+      showMsg('Imóvel sem endereço/cidade para avaliar o mercado.', 'error'); return;
+    }
+    if (gerandoMercado) { registrarEvento('analise_gerar', { alvo: 'mercado', detalhe: 'ignorado: ja gerando' }); return; }
     const isAVistaSnap = cenario === 'aVista' || dSnap.somenteAVista;
     const metricasSnap = ov ? calcularMetricasCenario(dSnap, dSnap.valorArrematacao || 0, isAVistaSnap) : metricas;
     const tetoSnap = ov ? calcularTetoLance(dSnap, isAVistaSnap, META, dSnap.valorMercado || 0) : teto;
@@ -879,6 +894,7 @@ export default function Analise() {
       nomeCondominio: dSnap.nomeCondominio || '',
     };
     const parecerInputs = { d: dSnap, metricas: metricasSnap, teto: tetoSnap, cenario: isAVistaSnap ? 'À Vista' : 'Alavancado' };
+    registrarEvento('analise_gerar', { alvo: 'mercado', detalhe: 'iniciou no servidor' });
     showMsg('Geração iniciada no servidor, pode até fechar a aba; acompanhe em "Análises" no topo.');
     iniciarAnalise(
       { imovelId: analiseImovelId, titulo: dSnap.nome || dSnap.endereco || imovelInicial?.titulo || 'Imóvel', cidade: dSnap.cidade, estado: dSnap.estado, imovel: imovelInicial || null, paraUserId },
@@ -909,6 +925,7 @@ export default function Analise() {
     if (entry?.status === 'gerando') return;
     if (entry?.status === 'erro' && aplicadoRef.current !== entry.updatedAt) {
       aplicadoRef.current = entry.updatedAt;
+      registrarEvento('analise_gerar', { alvo: 'mercado', detalhe: `falhou: ${String(entry.erro || 'sem motivo').slice(0, 120)}` });
       showMsg(entry.erro || 'Erro ao gerar o relatório mercadológico.', 'error');
       carregarCota(); // ex.: bloqueio por limite/sem-crédito veio do servidor
       return;
@@ -958,6 +975,12 @@ export default function Analise() {
       if (aplicados.length) { setD(p => ({ ...p, ...patch })); setCustosEdital({ aplicados, custos: cst }); }
     }
     carregarCota(); // a geração consumiu cota no servidor, atualiza os contadores
+    // "Concluiu" e "concluiu COM base de mercado" não são a mesma coisa — o relatório de
+    // mercado vazio é exatamente o que virou anomalia hoje. O desfecho registra os dois.
+    registrarEvento('analise_gerar', {
+      alvo: 'mercado',
+      detalhe: Number(r.valorMercado) > 0 ? 'concluiu com base de mercado' : 'concluiu SEM base de mercado',
+    });
     showMsg('Relatório Mercadológico + Viabilidade pronto!');
   }, [analiseEntry?.status, analiseEntry?.updatedAt, analiseImovelId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1159,6 +1182,7 @@ export default function Analise() {
     if (!autoGerar) return;
     const s = autoSeqRef.current;
     if (s.etapa === 0 && !relMercadoGerado && analiseEntry?.status !== 'gerando') { s.etapa = 1; gerarRelMercado(); return; }
+    if (soMercado) return;   // cliente novo vindo da triagem: para no 1º e pronto
     if (s.etapa === 1 && relMercadoGerado && !relDocumentalGerado && !gerandoDocumental && !relDocumentalPreparando) { s.etapa = 2; gerarRelDocumental(true); return; }
     if (s.etapa === 2 && ambosRelatorios && LAUDO_NOVO_ATIVO && !relLaudoGerado && !gerandoLaudo) { s.etapa = 3; gerarRelLaudo(); }
   }, [autoGerar, relMercadoGerado, relDocumentalGerado, relLaudoGerado, gerandoDocumental, gerandoLaudo, relDocumentalPreparando, ambosRelatorios, analiseEntry?.status]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1174,6 +1198,28 @@ export default function Analise() {
     autoHealRef.current = analiseImovelId;
     gerarRelMercado();
   }, [relMercadoIncompleto, gerandoMercado, analisesBloqueado, d?.endereco, d?.cidade, analiseImovelId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // O QUE A TELA OFERECIA NA CHEGADA — um evento por imóvel, por sessão (29/08). Medido: das
+  // 16 contas novas que abriram a /analise em 30 dias, 10 nunca clicaram em Gerar. O clique
+  // genérico do rastreador diz que elas não clicaram; não diz se a porta estava aberta. Sem
+  // este carimbo, "10 não clicaram" tanto pode ser tela confusa quanto três cadeados — e as
+  // duas conclusões pedem correções opostas.
+  const estadoRef = React.useRef(null);
+  useEffect(() => {
+    if (semLimite || !analiseImovelId) return;
+    if (!cotaMercado) return;                       // espera a cota do banco; sem ela o retrato mente
+    if (estadoRef.current === analiseImovelId) return;
+    estadoRef.current = analiseImovelId;
+    const est = (ok, bloqueio) => (ok ? 'pronto' : bloqueio || 'livre');
+    registrarEvento('analise_estado', {
+      alvo: role || '?',
+      detalhe: [
+        `mercado=${est(relMercadoGerado, loteEncerrado.encerrado ? 'encerrado' : analisesBloqueado ? 'cota' : null)}`,
+        `documental=${est(relDocumentalGerado, ROLES_SEM_DOCUMENTAL.includes(role) ? 'plano' : loteEncerrado.encerrado ? 'encerrado' : !relMercadoGerado ? 'sequencia' : null)}`,
+        `cota=${Number(cotaMercado.usado || 0)}/${limiteRole}${cotaMercado.amostra ? ' (amostra)' : ''}`,
+      ].join(';'),
+    });
+  }, [analiseImovelId, cotaMercado, role, relMercadoGerado, relDocumentalGerado, analisesBloqueado, loteEncerrado.encerrado, semLimite, limiteRole]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Reunião com analista → ACOMPANHAMENTO (fluxo real no Caso) ─────────────
   // O agendamento de verdade (escolher analista+horário, o analista dar o parecer
@@ -1434,6 +1480,27 @@ export default function Analise() {
                   Fazer upgrade
                 </button>
           )}
+        </div>
+      )}
+
+      {/* CHEGADA PELA TRIAGEM. Sem esta explicação a pessoa cai numa tela girando sobre um imóvel
+          que ela não escolheu — e a boas-vindas vira estranhamento. Diz de onde veio a escolha,
+          o que está acontecendo, e dá a saída (o lote é um exemplo, não uma recomendação). */}
+      {primeiroRelatorio && (
+        <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:12, padding:'14px 16px', display:'flex', gap:10, alignItems:'flex-start' }}>
+          <Sparkles size={18} color="#0D63DB" style={{ flexShrink:0, marginTop:1 }} />
+          <div style={{ fontSize:12.5, color:'#1e3a8a', lineHeight:1.6 }}>
+            <strong>Seu primeiro relatório já está sendo gerado.</strong> Escolhemos este lote a
+            partir do que você acabou de responder{d.cidade ? <> — {d.cidade}{d.estado ? `/${d.estado}` : ''}, dentro da sua faixa de capital</> : null}.
+            Leva alguns minutos e você pode fechar a aba: ele fica salvo em <strong>Análises</strong>.
+            <div style={{ marginTop:6, color:'#3b5bdb' }}>
+              É um <strong>exemplo do que a plataforma faz</strong>, não uma recomendação de compra —
+              o acervo tem milhares de lotes.{' '}
+              <button onClick={() => nav('/buscar')} style={{ background:'none', border:'none', padding:0, color:'#0D63DB', fontWeight:800, fontSize:12.5, cursor:'pointer', textDecoration:'underline' }}>
+                Buscar outros imóveis
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -1797,12 +1864,12 @@ export default function Analise() {
                     <div style={{ fontSize:12, color:'#64748b', lineHeight:1.6, flex:1 }}>{c.desc}</div>
                     <div style={{ display:'flex', gap:8 }}>
                       {c.planoBloqueado ? (
-                        <button onClick={() => setUpgrade({ tipo:'plano', titulo:c.titulo })}
+                        <button onClick={() => { registrarEvento('analise_bloqueio', { alvo:c.k, detalhe:`plano ${role}` }); setUpgrade({ tipo:'plano', titulo:c.titulo }); }}
                           style={{ flex:1, padding:'10px', background:c.cor, color:'white', border:'none', borderRadius:10, fontWeight:800, fontSize:13, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
                           <Lock size={14}/> Disponível no Investidor Pro
                         </button>
                       ) : c.block ? (
-                        <button onClick={() => setUpgrade({ tipo:'cota', titulo:c.titulo })}
+                        <button onClick={() => { registrarEvento('analise_bloqueio', { alvo:c.k, detalhe:'cota esgotada' }); setUpgrade({ tipo:'cota', titulo:c.titulo }); }}
                           style={{ flex:1, padding:'10px', background:c.cor, color:'white', border:'none', borderRadius:10, fontWeight:800, fontSize:13, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
                           <Lock size={14}/> Limite atingido, fazer upgrade
                         </button>

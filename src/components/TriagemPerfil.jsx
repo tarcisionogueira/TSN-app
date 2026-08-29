@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../utils/supabase';
+import { imovelDaLinha } from '../utils/imovelDaLinha';
 import { Loader2, Target, X, ChevronLeft } from 'lucide-react';
 
 // Triagem do investidor — modal ONE-TIME no 1º acesso do cliente. Define o perfil-base
@@ -55,8 +57,10 @@ const STEPS = [
 const TOTAL = STEPS.length;
 
 export default function TriagemPerfil({ userId }) {
+  const nav = useNavigate();
   const [mostrar, setMostrar] = useState(false);
   const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState('');
   const [step, setStep] = useState(0);
   const [f, setF] = useState({ perfil_investidor: '', faixa_capital: '', forma_pagamento: '', consorcio_interesse: '', experiencia_leilao: '' });
 
@@ -84,14 +88,44 @@ export default function TriagemPerfil({ userId }) {
 
   const salvar = async () => {
     setSalvando(true);
-    await supabase.from('perfis').update({
+    // `.select()` prova o que gravou: um update que a RLS não alcança devolve `error: null` e
+    // zero linhas, e a triagem "salva" que não salvou nada faria a pessoa responder de novo no
+    // próximo acesso — e o primeiro relatório abaixo sairia sobre um perfil vazio.
+    const { data: salvos, error: errPerfil } = await supabase.from('perfis').update({
       perfil_investidor: f.perfil_investidor,
       faixa_capital: f.faixa_capital,
       forma_pagamento: f.forma_pagamento,
       consorcio_interesse: f.consorcio_interesse,
       experiencia_leilao: f.experiencia_leilao,
       triagem_em: new Date().toISOString(),
-    }).eq('id', userId);
+    }).eq('id', userId).select('id');
+    if (errPerfil || !salvos?.length) {
+      setSalvando(false);
+      setErro('Não conseguimos salvar suas respostas agora. Tente de novo em instantes.');
+      return;
+    }
+
+    // O 1º RELATÓRIO NASCE AQUI (regra `ativacao.primeiro_relatorio`). Medido: 37 de 54 contas
+    // novas somem na PRIMEIRA HORA e 47 dos 52 exploradores nunca gastaram uma amostra grátis —
+    // não é o paywall que barra, é que ninguém chega até ele. A pessoa acabou de dizer objetivo
+    // e faixa de capital; em vez de cair num painel vazio, cai num relatório já em geração.
+    // Quem escolhe é o servidor (`primeiro_imovel_para_triagem`), que também guarda o
+    // interruptor: com ele desligado a RPC responde `desligado` e nada muda para o cliente.
+    try {
+      const { data: esc, error: errEsc } = await supabase.rpc('primeiro_imovel_para_triagem');
+      if (!errEsc && esc?.encontrou && esc.imovel_id) {
+        const { data: linha, error: errLote } = await supabase
+          .from('imoveis_leilao').select('*').eq('id', esc.imovel_id).single();
+        // Sem a linha do lote não há para onde levar: fechar o modal em silêncio é o
+        // comportamento antigo, e é melhor que abrir uma /analise sem imóvel.
+        if (!errLote && linha) {
+          setSalvando(false); setMostrar(false);
+          nav('/analise', { state: { imovel: imovelDaLinha(linha), autoGerar: 'mercado', primeiroRelatorio: true } });
+          return;
+        }
+      }
+    } catch { /* escolha do 1º relatório é um EXTRA: falhar aqui não pode desfazer a triagem */ }
+
     setSalvando(false);
     setMostrar(false);
   };
@@ -144,6 +178,12 @@ export default function TriagemPerfil({ userId }) {
             })}
           </div>
         </div>
+
+        {erro && (
+          <div style={{ marginTop: 14, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '10px 12px', fontSize: 12.5, color: '#b91c1c', lineHeight: 1.5 }}>
+            {erro}
+          </div>
+        )}
 
         {/* Navegação */}
         <div style={{ display: 'flex', gap: 10, marginTop: 20, alignItems: 'center' }}>
