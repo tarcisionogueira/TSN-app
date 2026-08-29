@@ -4,6 +4,93 @@
 
 ---
 
+## 🗓️ 29/08 (sessão 14i) — O "403 DO DJEN" NÃO ERA DO DJEN: ERA O FREIO DE CUSTO COM O CRACHÁ DO CNJ
+
+Pedido do dono: *"agora resolve o 403 do radar"*. **Não havia 403 do CNJ para resolver.**
+
+### 🔎 Três medições independentes, todas apontando para o mesmo lugar
+
+1. **`brightdata_uso_proposito_dia` não tem UMA linha de `radar` em 26, 27, 28 e 29/08.** Os
+   quatro dias de "403" são exatamente os dias em que o **Bright Data nunca foi chamado**. As
+   únicas linhas do radar são 24/08 (88) e 25/08 (18) — e nesses dias ele funcionou.
+2. **`brightdata_decisao(450,'radar')` agora:** `permitido: false, motivo: "teto_global"`. A
+   semana fechou **550/550** — a de 17/08 fechou **618/550**.
+3. **`duracao_ms` dos 24 runs falhados ≈ 61 s** = 12 combos × 4,5 s de `sleep` puro
+   (backoff 1,5 s + 3 s). **Nenhum tempo de rede.** Quatro dias de "bloqueio do CNJ" que eram
+   backoff dormindo por uma decisão de orçamento.
+
+E o Bright Data alcança o DJEN sem problema: 25/08 viu **923 itens**, 24/08 viu **5.236**.
+
+### 🧩 A cadeia, em quatro linhas
+
+```js
+const resp = await fetchViaBrightData(url, …);      // null quando a COTA recusa
+const transiente = !resp || …;                       // null vira "transiente" → dorme 4,5 s à toa
+if (!json) { …fetch DIRETO… }                        // caminho que o próprio comentário já sabia dar 403
+if (!json) throw new Error(`HTTP ${ultimoStatus}`);  // e o 403 do datacenter vira o "motivo"
+```
+
+`fetchViaBrightData` devolve **`null` para quatro coisas diferentes** (sem config, teto global,
+sub-cota, erro de rede). Com a cota estourada, o radar dormia, tentava o caminho que sabidamente
+falha, e carimbava a recusa de orçamento com o status do CNJ. **Forma nº 5 e forma nº 10 na mesma
+linha** — o freio entregue como conteúdo, e o instrumento reportando com o nome de outra coisa.
+
+### 🕳️ A trava existia — e o escopo dela era a própria brecha
+
+`brightdata-null-em-coletor` (em `verificar:padroes`) foi criada justamente para isto, depois do
+RJ congelado 12 dias em 11/08. Só que ela testava **`^scripts/scraper-`**, e o coletor com o
+defeito vivo era **`api/radar-editais-cron.js`**. Um coletor não deixa de ser coletor por morar
+em `api/` e se chamar cron.
+
+### ✅ O que mudou
+
+- **`buscarDJEN` migra para `buscarViaBrightData`** (que LANÇA com o motivo), como RJ (11/08) e
+  PECINI/SOLEON (18/08) já tinham feito. `e.semCota` → **aborta o pull inteiro na hora**: não
+  dorme, não tenta direto, não percorre os outros 11 combos. `sem_config` cai no fetch direto;
+  `rede`/`http` seguem com retry, que é o caso para o qual o backoff existe.
+- **O log passa a dizer a verdade:** `SEM COTA Bright Data — pull não tentado (decisão de
+  orçamento, não bloqueio do DJEN)`, e a resposta ganha `sem_cota: true`.
+- **O disjuntor conta tentativas PAGAS, não linhas.** Um run que saiu por sem-cota não gastou
+  nada — contá-lo travaria o dia por causa do freio, que é o defeito ao contrário.
+- **A trava passa a cobrir `api/*-cron.js`.** Testada em seco: arquivo novo importando
+  `fetchViaBrightData` reprova; depois de removido, volta a passar.
+
+### 💡 E o radar volta a coletar sozinho — sem gastar um centavo a mais
+
+A causa da fome era o gasto duplicado consertado na sessão 14h: `soleon 112 + pecini 63 +
+gestao 60 + rj 60 = 295`, **54% do teto**, nas quatro fontes que o residencial coleta de graça.
+Sem elas, a semana fica em `radar 106 + geral 99 + docs 50 = 255 de 550` — **~295 de folga**.
+
+> ⚠️ **NÃO dê `reserva` ao radar sem decidir gastar mais.** Li o `brightdata_decisao` antes de
+> propor, e a reserva **não é uma fatia dos 550: é uma autorização de furar o teto**
+> (`when v_usado_p < v_reserva then v_limite := v_teto + (v_reserva - v_usado_p)`). É por isso
+> que o `rj` (reserva 60) continuou gastando em 26, 27 e 28/08 enquanto todo o resto estava
+> `sem_cota` — e é por isso que a semana de 17/08 fechou **618/550**. Dar 110 ao radar poderia
+> levar uma semana ruim a ~660. **É decisão de orçamento do dono, não de engenharia.**
+
+### ✔️ Conferido, para não trocar um problema por outro
+
+- **`teto_dia = 36` do radar (posto em 25/08 17:48) é suficiente:** o pull bem-sucedido de 25/08
+  custou **18 requests** e viu 923 itens. Os 88 de 24/08 foram **4 runs**, não um pull. Um pull
+  por dia cabe — que é o certo, o DJEN é diário. **Não mexi.**
+- **As cinco recusas de orçamento abortam e as duas falhas reais seguem com retry** — rodado em
+  seco sobre `ErroBrightData`: `teto_global`, `subcota`, `subcota_dia`, `reservado_para_outros`
+  e `cota_indisponivel` → abortam; `rede` e `http` → retry; `sem_config` → fetch direto.
+
+### ⏭️ Conferir na semana de 31/08 (quando a cota vira)
+
+```sql
+select proposito, requests, sucessos from brightdata_uso_proposito
+ where semana = date_trunc('week', now())::date order by requests desc;
+select ran_at, itens_vistos, itens_novos, left(erro,80) from monitor_runs
+ where fonte = 'radar-editais-djen' order by ran_at desc limit 10;
+```
+Verde = `radar` com `itens_vistos > 0` e `erro is null` em pelo menos um run do dia. Se voltar a
+aparecer `SEM COTA`, aí sim a conversa é de orçamento — e agora o log diz isso com todas as letras
+em vez de acusar o CNJ.
+
+---
+
 ## 🗓️ 29/08 (sessão 14h) — SIM, O PAGO E O GRÁTIS RODAVAM NA MESMA FONTE, NO MESMO DIA
 
 Pergunta do dono: *"tem chance de estar rodando nos 2, no residencial e bright data?"*

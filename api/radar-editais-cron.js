@@ -17,7 +17,7 @@ export const config = { runtime: 'nodejs', maxDuration: 300 };
 
 import { isCronAuthorized } from './_auth.js';
 import { createClient } from '@supabase/supabase-js';
-import { fetchViaBrightData, brightDataDisponivel } from './_brightdata.js';
+import { buscarViaBrightData, ErroBrightData, brightDataDisponivel } from './_brightdata.js';
 import { iaGeminiPrimary } from './_claude.js';
 
 const DJEN_BASE = 'https://comunicaapi.pje.jus.br/api/v1/comunicacao';
@@ -246,6 +246,16 @@ async function enriquecerEditaisComIA(supabase, ehIntegrado, t0) {
 // Campos do item DJEN vêm com nomes variados entre versões — pega o 1º que existir.
 const g = (o, ...ks) => { for (const k of ks) { if (o && o[k] != null && o[k] !== '') return o[k]; } return null; };
 
+/**
+ * Marcador para abortar o PULL INTEIRO quando a recusa é de ORÇAMENTO.
+ * Existe porque "não tenho cota" não é uma propriedade deste combo tribunal×termo — é do
+ * sistema. Tentar os outros 11 combos depois dela é gastar 4,5 s de backoff por combo para
+ * receber exatamente a mesma resposta.
+ */
+class SemCotaRadar extends Error {
+  constructor(detalhe) { super(detalhe || 'cota Bright Data esgotada'); this.name = 'SemCotaRadar'; }
+}
+
 async function buscarDJEN(tribunal, termo, ini, fim, t0) {
   const out = [];
   for (let pagina = 1; pagina <= MAX_PAGINAS; pagina++) {
@@ -254,14 +264,45 @@ async function buscarDJEN(tribunal, termo, ini, fim, t0) {
     // O DJEN bloqueia o IP de datacenter da Vercel (403 PERSISTENTE — validado: nem UA nem
     // Origin/Referer de navegador resolvem). Então vai DIRETO no Bright Data (IP residencial),
     // sem gastar ~23s/página em tentativas diretas fadadas ao 403 (economia de tempo E de
-    // requests). A tentativa direta fica só como ÚLTIMO recurso (ex.: cota do BD estourada).
-    let json, ultimoStatus = 0;
-    if (brightDataDisponivel()) {
+    // requests). A tentativa direta fica só como ÚLTIMO recurso (ex.: BD não configurado).
+    //
+    // ─── 29/08: O "403 DO DJEN" ERA O FREIO DE CUSTO USANDO O CRACHÁ DO CNJ ────────────────
+    // Esta função usava `fetchViaBrightData`, que devolve **null** para quatro coisas
+    // diferentes: sem config, teto global, sub-cota e erro de rede. Com a cota estourada:
+    //
+    //   null → `transiente = !resp` → dorme 1,5 s + 3 s → null de novo → cai no fetch DIRETO
+    //        → o DJEN 403 o IP da Vercel (como o comentário acima sempre soube)
+    //        → `throw new Error('HTTP 403')`
+    //
+    // E o log do dia registrava `TRT15/alvará de venda: HTTP 403`, como se o CNJ tivesse nos
+    // bloqueado. Não tinha. **Medido em 26, 27, 28 e 29/08: `brightdata_uso_proposito_dia` não
+    // tem UMA linha de `radar` nesses dias** — o Bright Data nunca foi chamado. E o
+    // `duracao_ms` de todos os 24 runs bate em ~61 s = 12 combos × 4,5 s de `sleep` puro.
+    // Quatro dias de "bloqueio do CNJ" que eram 100% backoff dormindo por uma decisão de
+    // orçamento. É a forma nº 5 e a nº 10 do CLAUDE.md na mesma linha: o freio entregue como
+    // conteúdo, e o instrumento reportando com o nome de outra coisa.
+    //
+    // O conserto é o que o resto da base já fez (RJ 11/08, PECINI e SOLEON 18/08):
+    // `buscarViaBrightData` LANÇA com o motivo, e `e.semCota` separa "o sistema decidiu não
+    // gastar" de "a fonte respondeu errado".
+    let json, ultimoStatus = 0, bdIndisponivel = !brightDataDisponivel();
+    if (!bdIndisponivel) {
       // O DJEN é instável: alguns combos tribunal×termo devolvem 403/5xx MESMO via Bright Data
       // (IP residencial) — mas voltam no retry segundos depois. Então re-tenta com backoff curto
       // (1,5s→3s) antes de desistir da página. 200/404/etc. NÃO re-tenta (resposta definitiva).
       for (let tent = 0; tent <= BD_RETRIES; tent++) {
-        const resp = await fetchViaBrightData(url, { headers: DJEN_HEADERS, proposito: 'radar', timeoutMs: 30000 });
+        let resp = null;
+        try {
+          resp = await buscarViaBrightData(url, { headers: DJEN_HEADERS, proposito: 'radar', timeoutMs: 30000, exigirOk: false });
+        } catch (e) {
+          if (!(e instanceof ErroBrightData)) throw e;
+          // ORÇAMENTO: sobe e aborta o pull inteiro. Não dorme, não tenta direto, não tenta os
+          // outros combos — nada disso mudaria a resposta, e o custo seria só tempo de função.
+          if (e.semCota) throw new SemCotaRadar(e.detalhe || e.message);
+          // `sem_config` também não melhora com retry: cai direto para o último recurso.
+          if (e.motivo === 'sem_config') { bdIndisponivel = true; break; }
+          // `rede`/`http`: falha de verdade, e essa SIM costuma passar no retry.
+        }
         if (resp && resp.ok) { try { json = JSON.parse(await resp.text()); } catch { /* corpo não-JSON */ } break; }
         if (resp) ultimoStatus = resp.status;
         const transiente = !resp || resp.status === 403 || resp.status === 429 || resp.status >= 500;
@@ -269,7 +310,10 @@ async function buscarDJEN(tribunal, termo, ini, fim, t0) {
         await sleep(1500 * (tent + 1)); // 1,5s, depois 3s
       }
     }
-    if (!json) { // ÚLTIMO recurso: tenta direto (normalmente 403, mas cobre BD indisponível/cota)
+    // ÚLTIMO recurso: tenta direto. Só faz sentido quando o Bright Data está INDISPONÍVEL (sem
+    // credencial) — com cota estourada já saímos acima, e era justamente esta tentativa que
+    // fabricava o "403 do DJEN" a partir de uma decisão de orçamento.
+    if (!json && bdIndisponivel) {
       const ctrl = new AbortController();
       const to = setTimeout(() => ctrl.abort(), 20000);
       try {
@@ -331,11 +375,18 @@ async function handler(req) {
       // leitura falha viraria "nenhum run hoje" e o disjuntor nunca abriria.
       if (eHoje) throw new Error(eHoje.message);
       const runs = runsHoje || [];
+      // O disjuntor conta TENTATIVAS PAGAS, não linhas. Um run que saiu por SEM COTA não
+      // chamou o Bright Data (custa uma RPC e < 1 s), então contá-lo travaria o dia inteiro
+      // por causa do freio de custo — o freio virando a razão de não coletar quando a cota
+      // voltasse. Linha de SEM COTA no log é informação (é assim que `fonte_saude` registra as
+      // fontes pagas todo dia), não tentativa gasta.
+      const tentativasPagas = runs.filter((r) => !/^SEM COTA/.test(String(r.erro || ''))
+        && !/^disjuntor/.test(String(r.erro || '')));
       if (runs.some((r) => r.erro == null)) {
         pulouPull = true; motivoPulo = 'pull já obtido hoje';
-      } else if (runs.length >= MAX_TENTATIVAS_DIA) {
+      } else if (tentativasPagas.length >= MAX_TENTATIVAS_DIA) {
         pulouPull = true;
-        motivoPulo = `disjuntor: ${runs.length} tentativa(s) falharam hoje (teto ${MAX_TENTATIVAS_DIA}) — não se paga Bright Data para ouvir o mesmo erro`;
+        motivoPulo = `disjuntor: ${tentativasPagas.length} tentativa(s) paga(s) falharam hoje (teto ${MAX_TENTATIVAS_DIA}) — não se paga Bright Data para ouvir o mesmo erro`;
         // Um registro por dia basta: os runs 3º ao 6º repetiriam a mesma linha e o log viraria
         // ruído — e log ruidoso é o que treina o dono a não ler o log.
         jaRegistrado = runs.some((r) => String(r.erro || '').startsWith('disjuntor'));
@@ -377,11 +428,11 @@ async function handler(req) {
     return false;
   };
 
-  let vistos = 0, novos = 0, descartados = 0, erroGeral = null, enriquecidos = 0, cortadoPorTempo = false;
+  let vistos = 0, novos = 0, descartados = 0, erroGeral = null, enriquecidos = 0, cortadoPorTempo = false, semCota = false;
   if (!pulouPull) {
    try {
     for (const tribunal of TRIBUNAIS) {
-      if (cortadoPorTempo) break;
+      if (cortadoPorTempo || semCota) break;
       for (const termo of TERMOS) {
         // 19/08: o break por HARD_MS só saía do laço de TERMOS (reentrava a cada tribunal) e
         // NÃO setava erroGeral — o run parcial gravava `erro: null` e o gate do dia
@@ -390,7 +441,18 @@ async function handler(req) {
         if (Date.now() - t0 > HARD_MS) { cortadoPorTempo = true; break; }
         let items = [];
         try { items = await buscarDJEN(tribunal, termo, ini, fim, t0); }
-        catch (e) { erroGeral = `${tribunal}/${termo}: ${String(e.message).slice(0, 80)}`; continue; }
+        catch (e) {
+          // ORÇAMENTO ≠ FALHA DA FONTE. Sem cota, o pull inteiro para aqui: os 11 combos
+          // restantes dariam a mesma recusa, e é essa distinção que faltava no log — quatro
+          // dias apareceram como "o CNJ nos bloqueou" quando ninguém tinha chamado o CNJ.
+          if (e instanceof SemCotaRadar) {
+            semCota = true;
+            erroGeral = `SEM COTA Bright Data — pull não tentado (decisão de orçamento, não bloqueio do DJEN): ${String(e.message).slice(0, 90)}`;
+            break;
+          }
+          erroGeral = `${tribunal}/${termo}: ${String(e.message).slice(0, 80)}`;
+          continue;
+        }
         vistos += items.length;
         if (!items.length) continue;
 
@@ -468,7 +530,8 @@ async function handler(req) {
   let iaExtraidos = 0;
   try { iaExtraidos = await enriquecerEditaisComIA(supabase, ehIntegrado, t0); } catch { /* best-effort */ }
 
-  return new Response(JSON.stringify({ ok: true, pull: pulouPull ? `pulado (${motivoPulo || 'já obtido hoje'})` : 'executado', vistos, novos, descartados, enriquecidos, iaExtraidos, erro: erroGeral, janela: [ini, fim], tribunais: TRIBUNAIS }), {
+  const pullDesfecho = pulouPull ? `pulado (${motivoPulo || 'já obtido hoje'})` : (semCota ? 'não tentado (sem cota Bright Data)' : 'executado');
+  return new Response(JSON.stringify({ ok: true, pull: pullDesfecho, sem_cota: semCota, vistos, novos, descartados, enriquecidos, iaExtraidos, erro: erroGeral, janela: [ini, fim], tribunais: TRIBUNAIS }), {
     headers: { 'Content-Type': 'application/json' },
   });
 }
