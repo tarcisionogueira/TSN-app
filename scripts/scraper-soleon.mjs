@@ -40,46 +40,53 @@ import { registrarSaude } from './_saude-fonte.mjs';
 
 // Tenants SOLEON confirmados no recon (23/07). fonte = chave única no acervo/monitor;
 // o baseline auto-aprendido (monitor-fontes-cron) passa a vigiar cada um após alguns runs.
-const TODOS_TENANTS = [
-  { fonte: 'CALIL',   leiloeiro: 'Calil Leilões',    base: 'https://www.calilleiloes.com.br' },
-  { fonte: 'VEGAS',   leiloeiro: 'Vegas Leilões',    base: 'https://www.vegasleiloes.com.br' },
-  { fonte: 'TORRES3', leiloeiro: '3 Torres Leilões', base: 'https://www.3torresleiloes.com.br' },
-];
-// ── CANDIDATOS DA JUCEMG (29/08) — FORA DA PRODUÇÃO ATÉ O DRY-RUN PROVAR ────────────────
-// A triagem residencial destravou os 53 sites bloqueados e classificou 17 como SOLEON pela
-// ASSINATURA DA HOME. Assinatura não é catálogo: em 29/08, 11 sites classificados como
-// Superbid enumeraram ZERO lotes no dry-run — o site LINKAVA para a plataforma sem RODAR o
-// catálogo dela. Subir os 17 direto repetiria o mesmo erro, agora com 17 fontes varridas
-// toda semana trazendo vazio e poluindo log e saúde.
 //
-// Por isso eles ficam numa lista SEPARADA, incluída só com `SOLEON_CANDIDATOS=1`. O cron de
-// produção não os enxerga: promover exige mover a linha para `TODOS_TENANTS`, à mão, depois
-// da prova. `base` vem da URL FINAL medida pela triagem, não do domínio da lista da junta —
-// `agilleiloes.com.br` redireciona para `maraurzedoleilao.com.br`, e usar o domínio da junta
-// buscaria o site errado.
-const CANDIDATOS_JUCEMG = [
-  { fonte: 'MARAURZEDO',  leiloeiro: 'André Fonseca Dias',           base: 'https://www.maraurzedoleilao.com.br' },
-  { fonte: 'AGOSTINHO',   leiloeiro: 'Paulo César Agostinho',        base: 'https://www.agostinholeiloes.com.br' },
-  { fonte: 'ALVESLEIL',   leiloeiro: 'Érica Cristina Alves',         base: 'https://www.alvesleiloes.com.br' },
-  { fonte: 'APICE',       leiloeiro: 'Fábio Prando Fagundes Góes',   base: 'https://www.apiceleiloes.com.br' },
-  { fonte: 'CASAMARTILLO',leiloeiro: 'Casa Martillo Leilões',        base: 'https://www.casamartillo.com.br' },
-  { fonte: 'CLICLEILOES', leiloeiro: 'Schmitz Leiloeiros Oficiais',  base: 'https://www.clicleiloes.com.br' },
-  { fonte: 'DANIELGARCIA',leiloeiro: 'Daniel Elias Garcia',          base: 'https://www.danielgarcialeiloes.com.br' },
-  { fonte: 'FERREIRALEIL',leiloeiro: 'Priscilla Lopes R. Ferreira',  base: 'https://www.ferreiraleiloes.com.br' },
-  { fonte: 'INFINITY',    leiloeiro: 'Carlos Augusto Ribeiro Lima',  base: 'https://www.infinityleiloes.com.br' },
-  { fonte: 'ISAIAS',      leiloeiro: 'Isaías Rosa Ramos Júnior',     base: 'https://www.isaiasleiloes.com.br' },
-  { fonte: 'JOAOEMILIO',  leiloeiro: 'João Emílio de Oliveira Filho',base: 'https://www.joaoemilio.com.br' },
-  { fonte: 'LANCEJA',     leiloeiro: 'Cristiane B. Moraes Lopes',    base: 'https://www.lanceja.com.br' },
-  { fonte: 'LOUCOPORLEIL',leiloeiro: 'Matheus W. de Oliveira Santos',base: 'https://www.leiloarialoucoporleiloes.com.br' },
-  { fonte: 'CERULI',      leiloeiro: 'Flávio Duarte Ceruli',         base: 'https://www.leiloesceruli.com.br' },
-  { fonte: 'PURCENA',     leiloeiro: 'Carla Karine Santos Agostinho',base: 'https://www.purcenaleiloes.com.br' },
-  { fonte: 'TMLEILOES',   leiloeiro: 'Thais Silva Moreira de Sousa', base: 'https://www.tmleiloes.com.br' },
-  { fonte: 'UNIVERSOLEIL',leiloeiro: 'Alexsander Pretti Domingos',   base: 'https://www.universodosleiloes.com.br' },
+// ── OS 12 DA JUCEMG (29/08): PROMOVIDOS PELO DRY-RUN, NÃO PELA ASSINATURA ────────────────
+// A triagem residencial destravou 53 sites que a CI não lia e classificou 17 como SOLEON pela
+// assinatura da HOME. Assinatura não é catálogo — em 29/08, 11 sites classificados como
+// Superbid enumeraram ZERO lotes: linkavam para a plataforma sem RODAR o catálogo dela.
+// Então nenhum entrou aqui sem antes provar `/lotes/imovel` num dry-run (SOLEON_DRYRUN=1,
+// SOLEON_NO_BD=1) rodado do IP residencial do dono. Estes 12 provaram, com o total de lotes
+// que o catálogo devolveu na medição:
+const TODOS_TENANTS = [
+  { fonte: 'CALIL',        leiloeiro: 'Calil Leilões',              base: 'https://www.calilleiloes.com.br' },
+  { fonte: 'VEGAS',        leiloeiro: 'Vegas Leilões',              base: 'https://www.vegasleiloes.com.br' },
+  { fonte: 'TORRES3',      leiloeiro: '3 Torres Leilões',           base: 'https://www.3torresleiloes.com.br' },
+  // ── JUCEMG, aprovados no dry-run de 29/08 (catálogo medido entre parênteses) ──
+  { fonte: 'FERREIRALEIL', leiloeiro: 'Priscilla Lopes R. Ferreira', base: 'https://www.ferreiraleiloes.com.br' },       // 180
+  { fonte: 'JOAOEMILIO',   leiloeiro: 'João Emílio de Oliveira Filho', base: 'https://www.joaoemilio.com.br' },          // 171
+  { fonte: 'DANIELGARCIA', leiloeiro: 'Daniel Elias Garcia',        base: 'https://www.danielgarcialeiloes.com.br' },    //  83
+  { fonte: 'ISAIAS',       leiloeiro: 'Isaías Rosa Ramos Júnior',   base: 'https://www.isaiasleiloes.com.br' },          //  78
+  { fonte: 'APICE',        leiloeiro: 'Fábio Prando Fagundes Góes', base: 'https://www.apiceleiloes.com.br' },           //  47
+  { fonte: 'CERULI',       leiloeiro: 'Flávio Duarte Ceruli',       base: 'https://www.leiloesceruli.com.br' },          //  38
+  { fonte: 'LANCEJA',      leiloeiro: 'Cristiane B. Moraes Lopes',  base: 'https://www.lanceja.com.br' },                //  11
+  { fonte: 'TMLEILOES',    leiloeiro: 'Thais Silva Moreira de Sousa', base: 'https://www.tmleiloes.com.br' },            //  10
+  { fonte: 'PURCENA',      leiloeiro: 'Carla Karine Santos Agostinho', base: 'https://www.purcenaleiloes.com.br' },      //   9
+  { fonte: 'AGOSTINHO',    leiloeiro: 'Paulo César Agostinho',      base: 'https://www.agostinholeiloes.com.br' },       //   6
+  // Acervo mínimo na medição (1 lote), mas o parser LEU e produziu ficha pronta — é acervo
+  // pequeno no momento, não falha de catálogo. O baseline aprendido acompanha daqui.
+  { fonte: 'CASAMARTILLO', leiloeiro: 'Casa Martillo Leilões',      base: 'https://www.casamartillo.com.br' },           //   1
+  { fonte: 'INFINITY',     leiloeiro: 'Carlos Augusto Ribeiro Lima', base: 'https://www.infinityleiloes.com.br' },       //   1
 ];
 
-const POOL = process.env.SOLEON_CANDIDATOS === '1'
-  ? [...TODOS_TENANTS, ...CANDIDATOS_JUCEMG]
-  : TODOS_TENANTS;
+// ── REPROVADOS NO MESMO DRY-RUN — ficam FORA, e o registro é o que impede re-tentar às cegas:
+//   ALVESLEIL     (alvesleiloes.com.br)              0 lotes enumerados via grátis
+//   LOUCOPORLEIL  (leiloarialoucoporleiloes.com.br)  0 lotes enumerados via grátis
+//   UNIVERSOLEIL  (universodosleiloes.com.br)        0 lotes enumerados via grátis
+//   CLICLEILOES   (clicleiloes.com.br)               1 enumerado, 0 prontos (reprovado na qualidade)
+//   MARAURZEDO    (maraurzedoleilao.com.br)          0 enumerados, e `via null` — nem chegou a
+//                 acessar, diferente dos outros zeros. É o site para onde `agilleiloes.com.br`
+//                 redireciona; merece recon próprio antes de qualquer nova tentativa.
+// Os quatro primeiros rodam SOLEON na home mas o catálogo `/lotes/imovel` não devolve nada —
+// exatamente o caso dos 11 Superbid de 29/08. Subi-los custaria pior que nada: fontes varridas
+// toda semana trazendo vazio, poluindo log e saúde com silêncio permanente.
+
+// Mecanismo de CANDIDATOS — reutilizável para a próxima junta (JUCESP, JUCERJA, JUCEES…).
+// Ponha os novos aqui, rode com SOLEON_CANDIDATOS=1 e SOLEON_DRYRUN=1, e só promova para
+// `TODOS_TENANTS` o que provar catálogo. Vazio agora porque a leva da JUCEMG já foi julgada.
+const CANDIDATOS = [];
+
+const POOL = process.env.SOLEON_CANDIDATOS === '1' ? [...TODOS_TENANTS, ...CANDIDATOS] : TODOS_TENANTS;
 const filtro = (process.env.SOLEON_TENANTS || '').split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
 const TENANTS = filtro.length ? POOL.filter(t => filtro.includes(t.fonte)) : POOL;
 

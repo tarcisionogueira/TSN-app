@@ -1,4 +1,4 @@
-# 🗺️ Mapeamento dos 53 bloqueados da JUCEMG — dá para trazer pelo residencial?
+# 🗺️ Os 53 bloqueados da JUCEMG — MEDIDO: dá, e 12 já estão em produção
 
 **53 sites · 57 leiloeiros.** É o resíduo da triagem de 29/08 (141 sites): os que recusaram o
 acesso grátis da CI. Hoje eles entram na conta como *"custa Bright Data"* — e em **51 deles a
@@ -9,6 +9,50 @@ Este documento responde à pergunta do dono — *"conseguimos rodar esses 53 pel
 o que dá para afirmar hoje, e diz explicitamente o que **não** dá.
 
 ---
+
+## ✅ RESULTADO DA MEDIÇÃO (29/08, runner residencial na máquina do dono)
+
+```
+[triagem] DESTRAVADOS pelo residencial: 53 de 53
+[triagem] …e 24 JÁ TÊM PARSER (entram por configuração)
+```
+
+**53 de 53.** Inclusive os 5 do grupo AWS ELB e o do Wordfence, que este documento previa como
+*"incertos"* — **a previsão foi conservadora demais**, e fica registrado: o IP residencial
+resolveu também os mecanismos que não eram Cloudflare.
+
+### E o dry-run separou candidato de fonte real
+
+Os 24 "com parser" eram classificação pela assinatura da **home**. O dry-run do SOLEON
+(`SOLEON_CANDIDATOS=1 SOLEON_DRYRUN=1 SOLEON_NO_BD=1`) mediu o catálogo `/lotes/imovel` de cada
+um dos 17:
+
+| ✅ Aprovados (12) — **~635 imóveis** | catálogo |
+|---|---|
+| FERREIRALEIL · JOAOEMILIO | 180 · 171 |
+| DANIELGARCIA · ISAIAS · APICE · CERULI | 83 · 78 · 47 · 38 |
+| LANCEJA · TMLEILOES · PURCENA · AGOSTINHO | 11 · 10 · 9 · 6 |
+| CASAMARTILLO · INFINITY | 1 · 1 (acervo pequeno, parser leu) |
+
+| ❌ Reprovados (5) | por quê |
+|---|---|
+| ALVESLEIL · LOUCOPORLEIL · UNIVERSOLEIL | **0 lotes enumerados** — home roda SOLEON, catálogo não devolve nada |
+| CLICLEILOES | 1 enumerado, **0 prontos** (reprovado na qualidade) |
+| MARAURZEDO | 0 enumerados **e `via null`** — nem chegou a acessar; é o destino do redirect de `agilleiloes.com.br`, merece recon próprio |
+
+**Os 3 zerados são a prova de que o dry-run valeu**: é exatamente o caso dos 11 Superbid de
+29/08 — o site *menciona* a plataforma sem *rodar* o catálogo dela. Subi-los teria criado três
+fontes varridas toda semana trazendo vazio.
+
+O **VEGAS** (tenant antigo) rodou na mesma leva e trouxe lote com edital, matrícula e avaliação:
+é o controle que prova que cada `0` é sobre aquele site, não sobre o parser.
+
+Os 12 estão em `TODOS_TENANTS` de `scripts/scraper-soleon.mjs`. **Os 7 SUPERBID seguem pendentes**
+— é a família do precedente ruim e o motor usa outra estrutura de tenant.
+
+---
+
+## A previsão original (mantida para conferência)
 
 ## A resposta curta
 
