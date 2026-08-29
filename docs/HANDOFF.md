@@ -64,6 +64,32 @@ armamento, a data deixa de casar e o cron **não** dispara: convite autorizado p
 > armamento com `JSON.stringify` poria aspas em volta da data, a comparação com a edição nunca
 > casaria, e o cron jamais dispararia — sem erro e sem log, no domingo, sem ninguém olhando.
 
+### 🤝 CONVIDE UM AMIGO — o encanamento já existia, faltava a porta
+
+O dono pediu que qualquer cliente da base pudesse chamar um amigo. O caminho estava inteiro e
+testado (`/aula/<slug>?ref=CODIGO` → og-share → landing → `live-inscrever` grava `indicado_por`
++ `indicacao_origem='link_parceiro'`), e a regra do dinheiro **já estava decidida** em
+`regra_negocio`: `comissao.gratis_ganha` — o explorador ganha em todos os fluxos, a trava fica
+no saque. Faltavam duas coisas:
+
+1. o link só existia em `/minha-rede`, e o menu "Indicações" só aparece para quem aceitou o
+   termo de parceria — **10 de 73 contas**;
+2. **63 dos 73 perfis não tinham `codigo_indicacao`** — gerado sob demanda por uma RPC que exige
+   `p_id = auth.uid()`. Quem nunca passou pelas telas que a chamam ficava com o link caindo no
+   **UUID cru**, e o servidor não conseguia gerar (com a service key `auth.uid()` é nulo e a
+   função levanta exceção), então nenhum e-mail podia trazer o link pessoal.
+
+Entrou: gatilho `BEFORE INSERT` em `perfis` + backfill (73 perfis, 73 códigos distintos),
+`src/components/ConvideAmigo.jsx`, card na confirmação da inscrição, card na Home para todo
+cliente, e o link pessoal dentro do e-mail do convite da base.
+
+> ⚠️ **O link que a pessoa COMPARTILHA é cru, não rastreado.** O rastreador embute
+> `u=<id do usuário em base64>` na URL: passar por ele mandaria o id interno da conta para o
+> WhatsApp de terceiros e registraria como clique dela o clique que é do amigo. Só o CTA
+> "Garantir minha vaga", que fica dentro do e-mail, é rastreado.
+
+---
+
 ### 📣 CAMPANHA DO META — no ar, e o que ela vale
 
 `CONV - AULA 02SET - INSCRICAO` (`120249379691430420`) · `BR - ADV+ - AULA 02SET`
