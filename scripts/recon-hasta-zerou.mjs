@@ -31,9 +31,27 @@
  *   node scripts/recon-hasta-zerou.mjs
  * Env: RECON_ESPERAS (csv de ms, default 3500,8000,15000,25000) · RECON_LOTES (default 3)
  */
+import { readFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { createClient } from '@supabase/supabase-js';
 import { fetchHeadless, fecharHeadless } from './lib/fetch-residencial.mjs';
 import { extrairUrlsDeLote, parseDetalhe, TENANTS } from './lib/hasta-parse.mjs';
+import { textoDe } from './lib/dom-parse-util.mjs';
+
+// O `runner-residencial.sh` carrega o ~/.bidpro-runner.env por nós; rodado NA MÃO, ninguém
+// carrega — e foi assim que a 1ª execução morreu em `supabaseUrl is required` no meio do
+// recon. Um script de diagnóstico que exige ritual de ambiente é um script que vai falhar
+// justamente na hora em que se está com pressa. Ele lê o arquivo sozinho, sem sobrescrever
+// nada que já esteja no ambiente.
+try {
+  for (const linha of readFileSync(join(homedir(), '.bidpro-runner.env'), 'utf8').split('\n')) {
+    const m = linha.match(/^\s*(?:export\s+)?([A-Z0-9_]+)\s*=\s*(.*)$/);
+    if (!m) continue;
+    const valor = m[2].trim().replace(/^(['"])(.*)\1$/, '$2');
+    if (!process.env[m[1]]) process.env[m[1]] = valor;
+  }
+} catch { /* padrao-ok: sem o arquivo seguimos com o ambiente atual — o passo 2 avisa se faltar */ }
 
 const BASE = TENANTS.hasta.base;
 const ESPERAS = (process.env.RECON_ESPERAS || '3500,8000,15000,25000').split(',').map(Number);
@@ -51,12 +69,22 @@ const MARCADORES = [
 function radiografia(html) {
   const h = String(html || '');
   const conta = (re) => (h.match(re) || []).length;
+  // A marca sozinha ("vazio_ux") diz que ALGO casou, não O QUE casou — e nesse degrau mora a
+  // diferença entre "o site diz que não há lote nesta praça" e "deu erro". Guardar o TRECHO
+  // transforma o marcador em evidência lida por humano, que é o ponto de um recon.
+  const marcas = [];
+  for (const [nome, re] of MARCADORES) {
+    const m = h.match(re);
+    if (!m) continue;
+    const i = Math.max(0, (m.index || 0) - 60);
+    marcas.push({ nome, trecho: textoDe(h.slice(i, i + 200)).replace(/\s+/g, ' ').trim().slice(0, 120) });
+  }
   return {
     bytes: h.length,
     itens_detalhes: extrairUrlsDeLote(h, BASE).size,       // o que o PARSER DE PRODUÇÃO acha
     item_solto: conta(/\/item\/\d+/g),                      // /item/<id> sem /detalhes
     palavra_lote: conta(/\bLOTE\s*\d/gi),
-    marcas: MARCADORES.filter(([, re]) => re.test(h)).map(([n]) => n),
+    marcas,
   };
 }
 
@@ -77,7 +105,7 @@ function caminhosPublicados(html) {
 
 const linha = (rot, r) => `  ${rot.padEnd(38)} ${String(r.bytes).padStart(7)}B · itens=${String(r.itens_detalhes).padStart(3)}`
   + ` · /item solto=${String(r.item_solto).padStart(3)} · "LOTE n"=${String(r.palavra_lote).padStart(3)}`
-  + (r.marcas.length ? ` · ⚠️ ${r.marcas.join(',')}` : '');
+  + (r.marcas.length ? ` · ⚠️ ${r.marcas.map((m) => m.nome).join(',')}` : '');
 
 (async () => {
   console.log(`🔎 RECON HASTA — por que enumerou 0?\n   base: ${BASE}\n`);
@@ -94,16 +122,36 @@ const linha = (rot, r) => `  ${rot.padEnd(38)} ${String(r.bytes).padStart(7)}B �
     if (!melhorListagem || r.itens_detalhes > melhorListagem.r.itens_detalhes) melhorListagem = { ms, r, html };
   }
 
+  // O QUE A PÁGINA DIZ, em português. A radiografia acima conta links; esta parte lê a tela.
+  // Com 19 KB renderizados e 0 lote, a resposta do site está ESCRITA ali — e ela decide se o
+  // caso é "não há lote nesta praça" (parser intacto) ou outra coisa.
+  if (melhorListagem?.html) {
+    for (const m of melhorListagem.r.marcas) console.log(`  ⚠️ ${m.nome}: "…${m.trecho}…"`);
+    const txt = textoDe(melhorListagem.html).replace(/\s+/g, ' ').trim();
+    console.log(`  📄 texto da listagem (${txt.length} chars): "${txt.slice(0, 700)}"`);
+  }
+
   // ── 2) O ACERVO AINDA EXISTE? Lote que JÁ está no nosso banco. Este é o separador entre
   //       "problema de listagem" e "problema de acesso" — e usa o parser de PRODUÇÃO.
   console.log(`\n2) LOTES CONHECIDOS (do nosso acervo) — a página de detalhe ainda abre?`);
-  const sb = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
-  const { data: lotes, error: eLotes } = await sb.from('imoveis_leilao')
-    .select('url_lote,fonte_id').eq('fonte', 'HASTA').eq('ativo', true)
-    .not('url_lote', 'is', null).order('atualizado_em', { ascending: false }).limit(N_LOTES);
-  if (eLotes) console.log(`  ⚠️ não li o acervo: ${eLotes.message}`);
+  // Este passo depende do banco; os passos 1 e 3 NÃO. Deixá-lo derrubar tudo (foi o que
+  // aconteceu na 1ª execução) joga fora medição já paga em minutos de Chromium.
+  let lotes = [];
+  if (!process.env.VITE_SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) {
+    console.log('  ⚠️ sem VITE_SUPABASE_URL/SUPABASE_SERVICE_KEY (nem no ambiente nem em ~/.bidpro-runner.env)');
+    console.log('     → pulando SÓ este passo; o veredito sai sem o separador listagem×acesso.');
+  } else {
+    try {
+      const sb = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+      const { data, error: eLotes } = await sb.from('imoveis_leilao')
+        .select('url_lote,fonte_id').eq('fonte', 'HASTA').eq('ativo', true)
+        .not('url_lote', 'is', null).order('atualizado_em', { ascending: false }).limit(N_LOTES);
+      if (eLotes) console.log(`  ⚠️ não li o acervo: ${eLotes.message}`);
+      lotes = data || [];
+    } catch (e) { console.log(`  ⚠️ não conectei no banco: ${String(e?.message || e).slice(0, 90)}`); }
+  }
   let detalhesOk = 0;
-  for (const l of lotes || []) {
+  for (const l of lotes) {
     const url = l.url_lote.replace(/\?.*$/, '');   // o `?page=` era da paginação, não do lote
     const html = await fetchHeadless(url, { timeoutMs: 90000, esperaMs: 8000 });
     if (html == null) { console.log(`  ${l.fonte_id}: não consegui ler`); continue; }
@@ -115,7 +163,7 @@ const linha = (rot, r) => `  ${rot.padEnd(38)} ${String(r.bytes).padStart(7)}B �
     // veredito de "site quebrado" fabricado pelo próprio instrumento.
     const ok = !!(d && (d.valor_minimo || d.valor_avaliacao));
     if (ok) detalhesOk++;
-    console.log(`  ${l.fonte_id.padEnd(14)} ${r.bytes}B${r.marcas.length ? ` ⚠️ ${r.marcas.join(',')}` : ''}`
+    console.log(`  ${l.fonte_id.padEnd(14)} ${r.bytes}B${r.marcas.length ? ` ⚠️ ${r.marcas.map((m) => m.nome).join(',')}` : ''}`
       + (d ? ` · mínimo=${d.valor_minimo ?? '—'} · aval=${d.valor_avaliacao ?? '—'}`
            + ` · praça1=${d.data_leilao ?? '—'} · praça2=${d.data_leilao_2 ? String(d.data_leilao_2).slice(0, 10) : '—'}`
            + ` · encerrado=${d.encerrado}` : ' · sem parse'));
@@ -144,7 +192,7 @@ const linha = (rot, r) => `  ${rot.padEnd(38)} ${String(r.bytes).padStart(7)}B �
     console.log(`  🔁 INTERMITENTE: agora enumerou ${enumerou} com a MESMA espera de produção.`);
     console.log(`      AÇÃO: nenhuma no parser. Rode o scraper de novo e confira fonte_saude.`);
   } else if (detalhesOk > 0) {
-    console.log(`  📄 O ACERVO EXISTE, A LISTAGEM É QUE NÃO O MOSTRA (${detalhesOk}/${(lotes || []).length} detalhes abriram).`);
+    console.log(`  📄 O ACERVO EXISTE, A LISTAGEM É QUE NÃO O MOSTRA (${detalhesOk}/${lotes.length} detalhes abriram).`);
     console.log(`      A 1ª praça foi em 28/08 e o 1º zero em 29/08: a listagem provavelmente filtra`);
     console.log(`      por leilão ABERTO e os lotes voltam na 2ª praça (03/09).`);
     console.log(`      AÇÃO: NÃO mexer no parser. Ver na seção 3 se há caminho/filtro que os liste;`);
