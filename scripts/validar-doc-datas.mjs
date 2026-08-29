@@ -25,7 +25,10 @@ const N = Number(process.env.VALIDAR_N || 30);
 const FONTE = (process.env.VALIDAR_FONTE || '').trim();
 
 let q = supabase.from('imoveis_leilao')
-  .select('id,fonte,titulo,endereco,bairro,nomecondominio,descricao,data_leilao,data_leilao_2')
+    // `cidade` e `estado` NO SELECT (29/08): sem eles a guarda 3 do endereço recebia `undefined`
+  // e recusava 31 de 31 por "sem_cidade_no_acervo" — o extrator nunca chegou a ser testado. O
+  // instrumento reprovava a coisa medida por uma falta do próprio instrumento: forma nº 10.
+  .select('id,fonte,titulo,cidade,estado,endereco,bairro,nomecondominio,descricao,data_leilao,data_leilao_2')
   .eq('ativo', true).is('data_leilao', null).not('fonte', 'in', '("CEF","caixa")')
   .limit(N * 4);
 if (FONTE) q = q.eq('fonte', FONTE);
