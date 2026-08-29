@@ -128,19 +128,6 @@ rodar RJ env RJ_HEADLESS=1 RJ_DRYRUN=0 node scripts/scraper-rj.mjs
 # PECINI — Cloudflare (só saía via Web Unlocker pago): Chromium real residencial, sem BD.
 rodar PECINI env PECINI_HEADLESS=1 PECINI_DRYRUN=0 node scripts/scraper-pecini.mjs
 
-# HASTA (hastaleiloes.com.br — comitente CAIXA) — SPA que só renderiza no navegador E bloqueia
-# IP de datacenter; do IP residencial o motor `dom` (Puppeteer) resolve os dois de uma vez.
-# Acervo real ≈ 579 lotes em ~20 páginas (CSV do dono, 21/08): MAX_LOTES=600 cobre o acervo
-# inteiro — e agora esse teto é USADO. Até 29/08 o motor era tudo-ou-nada (`novos.length ? novos
-# : urls`): como quase toda rodada traz ao menos um lote novo, o refresh completo que este
-# comentário prometia **nunca acontecia** — medido, 5 lotes tocados em 36 h contra 584 ativos.
-# Agora a rodada gasta a sobra do teto relendo o acervo (praça próxima primeiro), então ela
-# passa a levar ~40-60 min de verdade. É tempo, não dinheiro: `dom` = Chromium residencial,
-# zero Bright Data. Gate 2x/semana.
-# ⚠️ Se um dia isso atrasar demais o que vem DEPOIS (Vlance, radar), o ajuste é baixar
-# HASTA_MAX_LOTES aqui — não mexer no motor.
-rodar HASTA env HASTA_DRYRUN=0 HASTA_MAX_LOTES=600 node scripts/scraper-hasta.mjs
-
 # Vlance (verdeamarelo/sudeste/capitalvalor) — API JSON que dá 403 em datacenter, mas do IP
 # RESIDENCIAL o fetch DIRETO funciona e é GRÁTIS. VLANCE_NO_BD=1 = 100% residencial (sem Bright
 # Data); se preferir BD como rede de segurança quando a casa também falhar, tire o VLANCE_NO_BD
@@ -194,5 +181,21 @@ node scripts/radar-editais-residencial.mjs \
 # Falha aqui não derruba a rodada: o acervo do dia já entrou nos passos acima.
 env TRIAGEM_HEADLESS=1 TRIAGEM_BLOQUEADOS=1 node scripts/recon-triagem-jucemg.mjs \
   || echo "  (triagem residencial falhou — sem efeito no acervo; roda de novo na próxima janela)"
+
+# ── ÚLTIMA DA FILA: HASTA (é a rodada longa) ────────────────────────────────────────────────
+# HASTA (hastaleiloes.com.br — comitente CAIXA) — SPA que só renderiza no navegador E bloqueia
+# IP de datacenter; do IP residencial o motor `dom` (Puppeteer) resolve os dois de uma vez.
+# Acervo real ≈ 579 lotes em ~20 páginas (CSV do dono, 21/08): MAX_LOTES=600 cobre o acervo
+# inteiro — e agora esse teto é USADO. Até 29/08 o motor era tudo-ou-nada (`novos.length ? novos
+# : urls`): como quase toda rodada traz ao menos um lote novo, o refresh completo que este
+# comentário prometia **nunca acontecia** — medido, 5 lotes tocados em 36 h contra 584 ativos.
+# Agora a rodada gasta a sobra do teto relendo o acervo (praça próxima primeiro), então ela
+# passa a levar ~40-60 min de verdade. É tempo, não dinheiro: `dom` = Chromium residencial,
+# zero Bright Data. Gate 2x/semana.
+# ⚠️ POR ISSO ELA É A ÚLTIMA (29/08, decisão do dono). Rodando ~1 h, ela empurrava tudo o
+# que vinha depois: Vlance, o radar do DJEN (que tem caminho PAGO se ficar 7 dias sem
+# rodar aqui) e a triagem. No fim da fila, uma rodada longa não custa nada a ninguém —
+# e se um dia precisar encurtá-la, o ajuste é baixar HASTA_MAX_LOTES aqui, não mexer no motor.
+rodar HASTA env HASTA_DRYRUN=0 HASTA_MAX_LOTES=600 node scripts/scraper-hasta.mjs
 
 echo "[$(date)] fim."
