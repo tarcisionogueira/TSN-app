@@ -131,8 +131,14 @@ rodar PECINI env PECINI_HEADLESS=1 PECINI_DRYRUN=0 node scripts/scraper-pecini.m
 # HASTA (hastaleiloes.com.br — comitente CAIXA) — SPA que só renderiza no navegador E bloqueia
 # IP de datacenter; do IP residencial o motor `dom` (Puppeteer) resolve os dois de uma vez.
 # Acervo real ≈ 579 lotes em ~20 páginas (CSV do dono, 21/08): MAX_LOTES=600 cobre o acervo
-# inteiro. Rodada com lote NOVO processa só os novos (rápida); sem novo, o runner refresca o
-# acervo completo (~40-60 min — atualiza praça/valor). Gate 2x/semana.
+# inteiro — e agora esse teto é USADO. Até 29/08 o motor era tudo-ou-nada (`novos.length ? novos
+# : urls`): como quase toda rodada traz ao menos um lote novo, o refresh completo que este
+# comentário prometia **nunca acontecia** — medido, 5 lotes tocados em 36 h contra 584 ativos.
+# Agora a rodada gasta a sobra do teto relendo o acervo (praça próxima primeiro), então ela
+# passa a levar ~40-60 min de verdade. É tempo, não dinheiro: `dom` = Chromium residencial,
+# zero Bright Data. Gate 2x/semana.
+# ⚠️ Se um dia isso atrasar demais o que vem DEPOIS (Vlance, radar), o ajuste é baixar
+# HASTA_MAX_LOTES aqui — não mexer no motor.
 rodar HASTA env HASTA_DRYRUN=0 HASTA_MAX_LOTES=600 node scripts/scraper-hasta.mjs
 
 # Vlance (verdeamarelo/sudeste/capitalvalor) — API JSON que dá 403 em datacenter, mas do IP
