@@ -341,6 +341,10 @@
     {
       "path": "/api/adotar-orfaos-cron",
       "schedule": "10 9 * * *"
+    },
+    {
+      "path": "/api/convidar-live-cron",
+      "schedule": "0 13 * * 0"
     }
   ]
 }
