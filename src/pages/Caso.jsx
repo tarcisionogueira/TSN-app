@@ -213,7 +213,7 @@ function DocUploadRow({ tipo, label, anexo, enviando, onArquivo }) {
   );
 }
 
-function AnaliseAutomatica({ casoId, imovelId, relatorioInicial, onConcluido, linkLeilao }) {
+function AnaliseAutomatica({ casoId, imovelId, relatorioInicial, onConcluido, linkLeilao, arrematado }) {
   const [anexos, setAnexos] = useState([]);
   const [enviando, setEnviando] = useState(null);   // 'matricula' | 'edital' | null
   const [gerando, setGerando] = useState(false);
@@ -227,7 +227,11 @@ function AnaliseAutomatica({ casoId, imovelId, relatorioInicial, onConcluido, li
     const { data } = await supabase.from('imovel_anexos')
       .select('id,tipo,nome,url,criado_em')
       .eq('imovel_id', imovelId)
-      .in('tipo', ['matricula', 'edital', 'regras_venda', 'outro']);
+      // `carta_arrematacao` e `matricula_registrada` (29/08): são os DOIS documentos que
+      // encerram a assessoria (`regra_negocio['assessoria.encerramento']`). Sem entrarem aqui,
+      // a tela nunca mostraria que já foram anexados — e o anexo existente apareceria como
+      // faltando, convidando a equipe a subir de novo.
+      .in('tipo', ['matricula', 'edital', 'regras_venda', 'outro', 'carta_arrematacao', 'matricula_registrada']);
     // Re-assina os docs guardados (o url gravado é signed de 1h e expira).
     setAnexos(await assinarAnexos(data || []));
   }, [imovelId]);
@@ -235,7 +239,7 @@ function AnaliseAutomatica({ casoId, imovelId, relatorioInicial, onConcluido, li
   useEffect(() => { carregarAnexos(); }, [carregarAnexos]);
 
   const anexoDe = (tipo) => anexos.find(a => a.tipo === tipo);
-  const extras = anexos.filter(a => !['matricula', 'edital'].includes(a.tipo));
+  const extras = anexos.filter(a => !['matricula', 'edital', 'carta_arrematacao', 'matricula_registrada'].includes(a.tipo));
 
   const enviarArquivo = async (tipo, file) => {
     if (!imovelId) { setErro('Imóvel não vinculado ao caso.'); return; }
@@ -315,6 +319,34 @@ function AnaliseAutomatica({ casoId, imovelId, relatorioInicial, onConcluido, li
         )}
         <DocUploadRow tipo="matricula" label="Matrícula" anexo={anexoDe('matricula')} enviando={enviando} onArquivo={enviarArquivo}/>
         <DocUploadRow tipo="edital" label="Edital" anexo={anexoDe('edital')} enviando={enviando} onArquivo={enviarArquivo}/>
+
+        {/* ── OS DOIS DOCUMENTOS QUE ENCERRAM A ASSESSORIA (29/08) ────────────────────────
+            Regra do dono: "a assessoria termina com a carta da arrematação e matrícula do
+            registro". `concluir_assessorias_entregues()` procura exatamente estes dois tipos,
+            com ARQUIVO legível, no imóvel vinculado à assinatura — anexar por aqui é o que
+            fecha o serviço, e por isso eles precisam de linha própria em vez de virarem
+            "outro documento" (onde o tipo se perde e a conclusão nunca acontece).
+
+            Só aparecem DEPOIS do arremate: antes disso não existem, e oferecer campo para
+            documento que não pode existir ainda é convite a anexar a coisa errada — a
+            matrícula do LEILÃO no lugar da do REGISTRO encerraria a assessoria no dia em que
+            ela começa. */}
+        {arrematado && (
+          <div style={{ borderTop:'1px dashed #e2e8f0', paddingTop:8, marginTop:2 }}>
+            <div style={{ fontSize:11, fontWeight:700, color:'#047857', marginBottom:6 }}>
+              Encerramento da assessoria — os dois juntos concluem o serviço
+            </div>
+            <DocUploadRow tipo="carta_arrematacao" label="Carta de arrematação" anexo={anexoDe('carta_arrematacao')} enviando={enviando} onArquivo={enviarArquivo}/>
+            <div style={{ height:8 }} />
+            <DocUploadRow tipo="matricula_registrada" label="Matrícula do registro (pós-transferência)" anexo={anexoDe('matricula_registrada')} enviando={enviando} onArquivo={enviarArquivo}/>
+            <div style={{ fontSize:10.5, color:'#94a3b8', marginTop:6, lineHeight:1.45 }}>
+              Não é a matrícula do leilão (essa já veio na captura): é a que sai depois de transferido o imóvel.
+              {anexoDe('carta_arrematacao') && anexoDe('matricula_registrada')
+                ? ' Os dois anexados — a assessoria é concluída na próxima rodada do cron.'
+                : ' Enquanto faltar um dos dois, a assessoria segue ativa.'}
+            </div>
+          </div>
+        )}
 
         {/* Documentos adicionais (múltiplos, laudo, ata, regras de venda, etc.) */}
         <div style={{ borderTop:'1px dashed #e2e8f0', paddingTop:8 }}>
@@ -1347,6 +1379,7 @@ export default function Caso() {
                 imovelId={caso.imovel_id}
                 relatorioInicial={getRel('juridica_preliminar')}
                 onConcluido={carregarCaso}
+                arrematado={!!caso.arrematado_em || caso.status_etapa === 'arrematado'}
                 linkLeilao={imovelExtra?.url_lote || imovelInit?.url || null}
               />
             )}
