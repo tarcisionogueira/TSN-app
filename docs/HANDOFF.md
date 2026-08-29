@@ -4,6 +4,114 @@
 
 ---
 
+## 🗓️ 29/08 (sessão 14b) — "PAGANTE SEM ENTREGA" NÃO ERA CHURN: O BOTÃO ESTAVA QUEBRADO
+
+Investigação dos 3 pagantes sem entrega que o 360 apontou. **Nenhum dos três era o que o
+rótulo dizia**, e no meio do caminho apareceu o defeito mais caro encontrado até aqui.
+
+### 🔴 O BOTÃO "SOLICITAR" DO `/caso` NUNCA FUNCIONOU PARA NENHUM CLIENTE
+
+```
+eventos_atividade · tipo=erro_ui · alvo="Solicitar"
+"new row violates row-level security policy for table analise_jobs"
+  6b35b390 (assessorado) · 23/08 22:19 e 24/08 14:18
+  9c35b10e (top2)        · 25/08 13:41
+```
+
+`analise_jobs` tinha **0 linhas em toda a história da tabela.**
+
+**A causa NÃO é a que o erro sugere.** A mensagem acusa a política de INSERT, e ela está
+correta. Medido por impersonação do JWT do cliente, em transação revertida:
+
+| | |
+|---|---|
+| `INSERT` puro | **RLS PASSOU** |
+| `INSERT … ON CONFLICT DO NOTHING RETURNING` | **42501** — o erro do cliente |
+
+É o **RETURNING**. No Postgres, INSERT com RETURNING também aplica as políticas de SELECT — e
+`analise_jobs` era a **única das 8 tabelas do fluxo do caso** sem política de SELECT para
+participante (só `jobs_admin_all`). O `rls_fluxo_caso_analise.sql` criou o INSERT e o par de
+leitura ficou de fora.
+
+> **A ironia é a parte que vale guardar.** O `.select()` que dispara o RETURNING foi
+> acrescentado em **19/08 para corrigir outro bug** (2º clique devolvia `error: null` com zero
+> linhas e queimava cota), obedecendo à forma nº 3 do CLAUDE.md — *"só `.select()` prova o que
+> mudou"*. Estava certo, e foi ele que transformou uma leitura vazia numa escrita impossível.
+> **Provar a escrita exige poder LER de volta.**
+
+**O segundo sintoma estava à vista e calado:** `Caso.jsx:638` lê `analise_jobs` e sem política
+de SELECT a RLS **filtra sem erro** (forma nº 3) — o painel dizia "0 de 4 concluídas" para
+sempre. E um instrumento independente já gritava: `tempo_processo()` reporta **8 casos parados
+em `analise_solicitada`, mediana 29 dias, "nenhum caso passou desta etapa"**. Ninguém passou
+porque o pedido era recusado.
+
+**Cota não foi queimada indevidamente** — em `Caso.jsx` o incremento vem depois do
+`if (error) throw error`. Os 8 casos só precisam que o cliente clique de novo.
+Corrigido, e provado com o mesmo teste: `SOLICITAR: PASSOU` · `PAINEL: 1 job visível`.
+
+### 🕳️ POR QUE FICOU 6 DIAS ESCONDIDO — são dois canais de erro, e só um é vigiado
+
+| Canal | O que carrega | Vigiado? |
+|---|---|---|
+| `erros_cliente` | exceção NÃO tratada / resposta ruim de API | ✅ 360, health-check, ritual |
+| `eventos_atividade` tipo `erro_ui` | erro TRATADO, que virou **mensagem na tela**, com o rótulo do botão | ❌ **ninguém** |
+
+O erro foi capturado pelo `Caso.jsx` e mostrado ao usuário — então caiu no canal sem vigia. O
+360 informava `erros_invisiveis_7d: 0` **enquanto três falhas que o cliente viu com os próprios
+olhos** estavam registradas. A inversão é o ponto: **o canal com menos vigilância é o que tem os
+erros de maior consequência** — o cliente não só foi afetado, ele viu.
+
+Novo invariante **`erro_na_tela_do_cliente`** (Atendimento/bug, limite 0, janela de 7 dias,
+exclui `role='admin'`). Nasce em **3** e se limpa sozinho até 01/09, já que a causa foi corrigida.
+
+### 🔒 A trava geral: escrita client-side sem leitura de volta
+
+Novo invariante **`rls_escreve_sem_ler`** (Infra/bug, limite 0): tabela com RLS em que o usuário
+pode INSERIR e não pode LER. Todo `.insert().select()` nela falha com 42501 e todo `.select()`
+devolve vazio sem erro — as duas metades do mesmo silêncio. O health-check já vigiava o inverso
+("RLS mas SEM escrita do usuário"); faltava este lado, que é o que morde quando o código obedece
+à forma nº 3. Lê **0** (nenhuma outra tabela tem o buraco).
+
+### 👤 E OS TRÊS "PAGANTES SEM ENTREGA"? O rótulo errava em dois
+
+A consulta do ritual mede *"sem linha em `analises_mercado` em 14 dias"* e reporta *"pagante sem
+entrega"* — forma nº 10. O que os três são de verdade:
+
+| | Realidade |
+|---|---|
+| **6b35b390** (assessorado) | **O MAIS ENGAJADO DA BASE** — 438 buscas, ativo 26/08, 17 imóveis vistos, funil completo (2 mercadológicos, 2 documentais, 1 laudo). Não estava sem entrega: **tentou pedir mais duas vezes e o botão recusou.** E **não tem nenhum pagamento** (0 em `mp_pagamentos`, `plano_vencimento` 2027-07-14) — é cortesia/manual, não pagante |
+| **b93b2411** (top2) | **Churn real.** Pagou 01/07 e 01/08 (R$ 99,80). Toda a atividade em 01–05/07; **55 dias parado**, e a próxima cobrança cai ~01/09 |
+| **37c2d966** (top2) | Pagou 06/08, triagem no mesmo dia, 35 buscas, usou o Índice 2×, visitou `/analises` — e **nunca gerou um relatório**. Última atividade 18/08 |
+
+> ⚠️ **Quase reportei uma cobrança em duplicidade que não existe.** `b93b2411` tem duas linhas
+> `approved` com `criado_em` de 01/08 e 02/08. Mas **`criado_em` é quando NÓS gravamos**: dezenas
+> de linhas `terceiro` têm o mesmo timestamp ao segundo — é ingestão em lote. As datas reais em
+> `dados_mp.date_approved` são **01/07 e 01/08**: mensalidade normal. Forma nº 10 outra vez, e só
+> não virou relatório porque a data foi conferida na fonte.
+
+### 🟠 PENDÊNCIA QUE FICA — a âncora dos 7 dias do CDC (decisão do dono)
+
+`b93b2411` é pagante (2 cobranças aprovadas) com **`plano_pago_em` NULO** — o único dos 4
+pagantes reais nessa situação. Essa coluna é a âncora do **art. 49 do CDC**, e
+`garantia-cancelar.js:105` faz `dentro7 = perfil.plano_pago_em && …` → **nulo = reembolso negado**.
+
+A causa é estrutural: em `_webhook-core.js` (linhas 247, 478) e `mp.js:102` o teste é
+`!plano_pago_em && !PAGANTES.includes(role)` — ou seja, **usa "o role já é pagante" como sinônimo
+de "já foi ancorado"**, e os dois não são a mesma coisa. Quem vira pagante por um caminho que não
+grava a âncora nunca mais consegue gravá-la. **Isso está vivo**: o `6b35b390` é `assessorado` de
+cortesia — se ele pagar um dia, cai exatamente nesse buraco.
+
+**Não mexi**: alterar a janela legal de arrependimento pode conceder reembolso não devido ou
+negar devido. Correção sugerida: trocar o proxy de role por "este é o 1º pagamento aprovado do
+usuário". Precisa da decisão do dono, e vale corrigir o dado do `b93b2411` junto (a janela dele
+venceu em 08/07 de qualquer forma — é registro, não reembolso).
+
+**Arquivos:** `supabase/migrations/analise_jobs_o_participante_precisa_LER_o_que_escreveu.sql`,
+`supabase/migrations/qa_invariante_erro_que_o_cliente_viu_na_tela.sql` — ambas **aplicadas**.
+`auditoria_seguranca()` segue **0 crítico / 0 atenção** com a política nova.
+
+---
+
 ## 🗓️ 29/08 (sessão 14) — O INSTRUMENTO DO RITUAL VIA 22 DE 32 FONTES E DIZIA "ÍNTEGRO"
 
 Abertura de sessão com o ritual completo (heartbeat carimbado, 360 · marketing · saúde). O dia
