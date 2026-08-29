@@ -404,6 +404,94 @@ venceu em 08/07 de qualquer forma — é registro, não reembolso).
 
 ---
 
+## 🔚 29/08 — ENCERRAMENTO DA SESSÃO 14 (a–f)
+
+Sessão aberta pelo ritual completo (heartbeat · Cliente 360 · Marketing · Saúde). **7 commits**,
+**6 migrações aplicadas**, **5 invariantes novos**. O fio condutor do dia foi um só: *quase todo
+achado veio de MEDIR o resultado, e quase nenhum apareceria em revisão de código.*
+
+### ✅ O QUE FOI FECHADO
+
+| # | Achado | Como apareceu |
+|---|---|---|
+| a | **`fonte_regressao_suspeita()` via 22 de 32 fontes** e chamava isso de íntegro — gate `mediana >= 20` + zero checagem de idade | rodando o instrumento e conferindo o que ele NÃO retornava |
+| b | **Recusa de orçamento gravada como falha da fonte** (21 linhas; RJ e PECINI ainda vivos) | lendo o `motivo` ao lado do `status` — diziam coisas opostas |
+| c | **O botão "Solicitar" do `/caso` nunca funcionou para NINGUÉM** (`analise_jobs` com 0 linhas na história) | perguntando por que 3 pagantes não tinham entrega |
+| d | **Âncora dos 7 dias do CDC** perdida em 1 dos 4 pagantes; regra em 3 cópias de JS | conferindo `plano_pago_em` × pagamento aprovado |
+| e | **`conversoes: null` do Meta** — o campo `actions` nunca foi pedido à API | comparando canal a canal no painel de marketing |
+| f | **`praca1_fim`/`praca2_fim` sem produtor** — o encerramento era gravado na coluna do início | varrendo quem CITA as colunas: 5 arquivos, todos consumidores |
+
+### 🧭 O QUE ESTE DIA ENSINOU (e vale mais que os consertos)
+
+1. **Três achados eram a mesma pergunta**: *este vazio é resposta, ou é falha que não sabe que
+   falhou?* — (a) fonte sem medição, (c) RLS filtrando sem erro, (e) campo nunca pedido.
+2. **A forma nº 10 apareceu 3× e uma delas quase virou relatório**: eu ia reportar uma cobrança
+   em duplicidade que não existe, porque `mp_pagamentos.criado_em` é quando NÓS gravamos, não
+   quando o cliente pagou. Só não virou porque a data foi conferida em `dados_mp.date_approved`.
+3. **Corrigir a linha sem corrigir o produtor não dura 24 h** — ver o item 1 das pendências.
+4. **Medir derrubou uma hipótese minha**: o `{estrito:true}` no `_doc-datas` parecia óbvio e é
+   estritamente PIOR (6 acertos → 4 em 22 editais reais).
+5. **Um teste pegou um defeito MEU** antes de subir: o roteador de praça, sem conseguir situar o
+   encerramento, gravava mesmo assim — dedução, justo o que a regra proíbe.
+
+### 📊 ESTADO EM QUE O DIA FECHA
+
+| Sinal | Valor |
+|---|---|
+| `auditoria_seguranca()` | **0 crítico / 0 atenção** ✅ |
+| `auditoria_regras_negocio()` | **0 crítico** ✅ (agora com `garantia.ancora_7d` registrada) |
+| Acervo | 30.622 ativos · **29.780 atualizados em 24 h** (97%) ✅ |
+| `erros_cliente` abertos | **2** — os dois do P5, conhecidos |
+| Convite da live | `convite_live_armado = 2026-09-02`, 0 envios (dispara domingo 08h UTC) |
+
+**6 invariantes em alerta, e NENHUM é surpresa** — 3 deles eu criei hoje justamente para acusar:
+
+- `praca_fim_sem_produtor` **1** · `canal_sem_conversao_apurada` **1** · `erro_na_tela_do_cliente` **3**
+  → **os três zeram sozinhos quando os consertos rodarem em produção.** É assim que amanhã se
+  confirma que funcionaram — não relendo o código.
+- `bd_teto_saturado` 550/495 → o freio funcionando; a semana vira **segunda (31/08)**.
+- `alerta_acima_do_capital` 2 → resíduo de 24/08, sai da janela em 31/08.
+- `praca_fim_antes_do_inicio` 1 → **novo, e é o item 1 abaixo.**
+
+---
+
+## 📌 PENDÊNCIAS PARA A PRÓXIMA SESSÃO (30/08)
+
+### 🔴 1 — O MAPPER DA MEGA DESFEZ O CONSERTO DE 28/08 EM MENOS DE 24 H
+```js
+// scripts/scraper-puppeteer.mjs:488
+const dataLeilao = datas.find(d => d >= agora) || datas[0] || null;
+```
+Ele grava a praça **VIGENTE**, não a 1ª. O lote de Guarulhos (`46cff9af`, MEGA) foi reorganizado
+à mão em 28/08 para *1ª praça 20/08 · 2ª praça 10/09*; **hoje às 15:00 a coleta o reescreveu**
+para `data_leilao = 10/09` e `data_leilao_2 = null`, deixando `praca1_fim = 20/08` **antes** da
+abertura — que é o alerta `praca_fim_antes_do_inicio` que apareceu no fecho.
+
+**NÃO consertei a linha de novo**: seria desfeito na próxima coleta, e essa é a lição. O que
+precisa mudar é o mapper — `datas[0]` (a mais cedo) para `data_leilao`, a seguinte para
+`data_leilao_2`. **Mexe na data de 606 lotes**, então exige medir antes: quantos lotes mudam de
+`data_leilao`, e se algum sai/entra do ar por causa disso (`data_fim` é o que decide).
+
+### 🟠 2 — Confirmar que os 3 invariantes novos zeraram
+`meta-insights-cron` roda **08h10 UTC**; se `canal_sem_conversao_apurada` continuar em 1, o
+primeiro lugar a olhar é `action_types_vistos` na resposta do cron.
+
+### 🟠 3 — CALIL e VEGAS: regressão real, só mensurável a partir de **segunda (31/08)**
+CALIL 9 contra piso 18 · VEGAS 2 contra mediana 15. Última medição real de 26/08 — o teto do
+Bright Data recusa desde então. **Medir antes de mexer em parser** (já houve 3 falsos positivos
+desta forma nesta base).
+
+### 🟠 4 — Fontes sem medição: EMILIOMATOS **218 h** · NORDESTE **193 h** · ALFA **193 h**
+Agora aparecem como `medicao_velha` em `fonte_regressao_suspeita()`. NORDESTE está com **0 lotes
+ativos**. VENDASGOV aparece como `zerou`.
+
+### 🟡 5 — Herdadas
+Os 3 pagantes/clientes do 360 (`b93b2411` churn com recobrança ~01/09 · `37c2d966` nunca gerou
+relatório · os 8 casos parados que agora podem clicar "Solicitar") · 41% sem triagem ·
+`/admin` timeout · `/planos` Leaflet · P2/P3/P4 de captura (BIASI, GRUPOLANCE, `leiloesjudiciais`,
+`suaplataformadeleilao`, recon do emiliomatos) · do dono: 1º advogado, `apresentador_foto`,
+OpenAI Ads.
+
 ## 🗓️ 29/08 (sessão 14) — O INSTRUMENTO DO RITUAL VIA 22 DE 32 FONTES E DIZIA "ÍNTEGRO"
 
 Abertura de sessão com o ritual completo (heartbeat carimbado, 360 · marketing · saúde). O dia
