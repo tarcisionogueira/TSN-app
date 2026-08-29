@@ -4,73 +4,68 @@
 
 ---
 
-## 🗓️ 29/08 (sessão 14r) — ADESÃO: O 1º RELATÓRIO NASCE DA TRIAGEM · ⏳ AGUARDANDO APROVAÇÃO DO DONO
+## 🗓️ 29/08 (sessão 14r) — ADESÃO: O ITEM 2 FICOU · O ITEM 1 FOI **DESCARTADO PELO DONO**
 
-> **Estado: DESLIGADO em produção.** O interruptor é `app_config.primeiro_relatorio_auto`
-> (`'false'`). Admin e analista passam mesmo desligado — é o que permite testar antes de ligar.
+### ❌ Item 1 — "o 1º relatório nasce da triagem" — construído e descartado no mesmo dia
+A proposta era: ao terminar a triagem, o cliente cair num relatório **já em geração**, com o lote
+escolhido pelo servidor a partir do objetivo e da faixa de capital que ele acabara de declarar.
+O dono olhou e recusou, com a razão que nenhuma medição minha alcançaria:
 
-### Por que (medido, não suposto — 30 dias)
-| Sinal | Nº |
+> *"o cliente não escolheu o imóvel, viria um imóvel avulso que muito provavelmente não seria do
+> interesse dele"*
+
+**Registrado porque o número enganava para o outro lado.** O ensaio em seco saiu excelente — 34 de
+34 clientes reais com lote, 21 na própria cidade, 0 fora do estado, 34 com documento — e nada
+nele mediria a única coisa que importava: *o lote pode ser o mais aderente do acervo e ainda assim
+ser um lote que a pessoa não pediu*. **Adesão não se compra entregando algo que o cliente não
+escolheu.** É um limite da forma nº 10 que vale guardar: ali o instrumento mede outra coisa e o
+nome denuncia; aqui o instrumento medi**a** exatamente o que dizia — aderência — e aderência não
+era o critério. Nenhum ensaio em seco pega isso; só o dono do negócio.
+
+Removido por inteiro (função `primeiro_imovel_para_triagem`, regra `ativacao.primeiro_relatorio`,
+interruptor `app_config.primeiro_relatorio_auto`, telas e o painel do Admin) — migração
+`primeiro_relatorio_da_triagem_descartado_pelo_dono.sql`. `auditoria_regras_negocio()` = 0 crítico.
+
+**Sobra útil, para quem voltar ao tema:** o gargalo continua onde está. Se a ativação for atacada
+de novo, tem de ser sobre um imóvel **que o cliente escolheu** — o caminho é a Busca, não a
+triagem. Três defeitos que o ensaio em seco pegou e que valem para qualquer seleção futura de
+lote: (a) `order by … desc` põe **NULL primeiro**, então "preferir a mesma cidade" preferia, na
+prática, o lote de lugar desconhecido; (b) ordenar por desconto seleciona o **extremo** do acervo
+— sem piso de faixa, quem declarou "R$ 400 mil a 1 milhão" recebia uma vaga de garagem de 22 m²
+por R$ 2.183, dado correto; (c) `imoveis_leilao.valor_mercado` está preenchido em **6 de 30.618**
+lotes ativos — inútil como filtro de qualidade. O que prediz relatório com conteúdo é **ter geo**
+(comparáveis são por raio): 66 dos 68 relatórios de 120 dias saíram com valor de mercado.
+
+### ✅ Item 2 — a `/analise` passa a registrar o que ninguém sabia (no ar)
+Medido em 30 dias: 54 contas novas, **4 relatórios**; 37 das 54 somem na **primeira hora**;
+**47 dos 52 exploradores nunca gastaram uma amostra grátis** — o paywall não está barrando
+ninguém, ninguém chega até ele. Das 16 contas que abriram a `/analise`, **10 nunca clicaram em
+Gerar**, e as 6 que clicaram somaram **37 cliques para 4 relatórios**.
+
+O clique genérico do rastreador já dizia *isso*. O que ele não diz é **qual** relatório, **como
+terminou**, e **o que a pessoa viu ao chegar** — e "10 não clicaram" tanto pode ser tela confusa
+quanto três cadeados, que pedem correções opostas. Três tipos novos em `api/track.js`:
+
+| Evento | O que grava |
 |---|---|
-| Contas novas | 54 |
-| **Geraram ao menos 1 relatório** | **4** |
-| Sumiram na 1ª hora do cadastro | 37 |
-| Exploradores que **nunca gastaram uma amostra grátis** | **47 de 52** |
-| Abriram `/analise` · clicaram em Gerar | 16 · **6** (37 cliques → 4 relatórios) |
+| `analise_estado` | o que a tela oferecia na chegada, card a card (livre/plano/cota/encerrado/sequência) + cota |
+| `analise_gerar` | tentativa **e desfecho** por tipo — inclusive **"concluiu SEM base de mercado"**, que é o relatório vazio que hoje vira anomalia |
+| `analise_bloqueio` | clicou numa porta fechada, com o motivo dela |
 
-**O paywall não está barrando ninguém** — ninguém chega até ele. A aquisição vai bem
-(2.234 → 45 contas = 2,0% de tráfego frio); a ativação é o buraco.
+A tentativa é registrada **antes** das recusas: sem isso, o clique que morre numa validação some
+do rastro e a leitura vira "não clicou" — a conclusão oposta.
 
-### Item 1 — `primeiro_imovel_para_triagem()`
-Escolhe o lote do primeiro relatório a partir do objetivo e da faixa que a pessoa **acabou de
-declarar**. É `stable`, **não gera e não gasta** — separada da geração de propósito, para poder
-rodar em seco. Delega os tipos/desconto a `intencao_filtro` (regras `busca.intencao_*`) e usa o
-**mesmo teto** de `alerta_acima_do_capital`, **nunca relaxado**. Sem lote sob o teto declarado a
-resposta é `encontrou: false` — não um lote caro para ter o que mostrar. Front: `TriagemPerfil`
-navega para `/analise` com `autoGerar: 'mercado'` (só o mercadológico — a documental é de plano
-pago) e um aviso de chegada que diz de onde veio a escolha e que é exemplo, não recomendação.
-
-**O ensaio em seco pagou por si três vezes** — nada disso apareceria em revisão de código:
-1. **`order by … desc` põe NULL PRIMEIRO.** A preferência por "mesma cidade" estava, na prática,
-   preferindo o lote de lugar **desconhecido** — e o texto dizia "fora do estado do cadastro"
-   sobre um lugar que não conhecíamos. 3 dos 12 primeiros resultados.
-2. **Sem piso de faixa**, quem declarou "R$ 400 mil a 1 milhão" recebia uma **vaga de garagem de
-   22 m² por R$ 2.183** (95% off — dado correto, não erro de parser). Ordenar por desconto
-   seleciona o extremo do acervo.
-3. **`valor_mercado` como filtro de qualidade**: preenchido em **6 de 30.618** lotes ativos. Foi
-   o primeiro critério que tentei e a medição derrubou. O que prediz relatório com conteúdo é
-   **ter geo** (comparáveis são por raio): 66 dos 68 relatórios de 120 dias saíram com mercado.
-
-**Depois dos consertos, 34 clientes reais em seco:** 34/34 com lote, **21 na própria cidade**,
-13 no próprio estado, **0 fora do estado**, 34/34 com documento.
-
-### Item 2 — a `/analise` passa a registrar o que ninguém sabia
-O clique genérico já dizia *que* 10 de 16 não clicaram em Gerar; não diz **qual** relatório,
-**como terminou**, nem **o que a pessoa viu ao chegar** — e "10 não clicaram" tanto pode ser tela
-confusa quanto três cadeados, que pedem correções opostas. Três tipos novos em `api/track.js`:
-`analise_estado` (o que a tela oferecia, card a card), `analise_gerar` (tentativa e desfecho,
-incluindo **"concluiu SEM base de mercado"**) e `analise_bloqueio` (porta fechada + motivo).
-
-### Como testar (o dono)
-1. **Ensaio em seco, sem custo:** Admin → o card **"Primeiro relatório ao terminar a triagem"**,
-   logo abaixo do funil. Escolha um cliente e clique em **Ver a escolha** — mostra o lote, os
-   critérios e o porquê. Não gera nada.
-2. **Fluxo completo na própria conta:** como admin o interruptor não te barra. Limpe
-   `perfis.perfil_investidor` da sua conta (a triagem reaparece), responda, e você cai no
-   relatório sendo gerado. **Consome uma cota da sua conta.**
-3. **Ligar para todos:** o botão verde do mesmo card (grava `app_config.primeiro_relatorio_auto`).
+**Ler em ~1 semana** (é o que decide o próximo passo):
+```sql
+select tipo, alvo, detalhe, count(*) vezes, count(distinct user_id) pessoas
+  from eventos_atividade where tipo like 'analise_%' and criado_em > now() - interval '7 days'
+ group by 1,2,3 order by pessoas desc, vezes desc;
+```
 
 ### De quebra
-`src/utils/imovelDaLinha.js` — o mapeamento linha-do-banco → objeto de tela saiu de dentro do
-`ImovelDetalhe`. O comentário que já vivia lá conta por quê: `select('*')` trazia
-`praca1_fim`/`praca2_fim` e faltava **mapear**, e a tela dava por encerrado um lote em pregão.
-Uma segunda cópia na triagem teria o mesmo destino. E o `update` da triagem ganhou `.select()`:
-sem ele, uma triagem barrada pela RLS "salvava" com `error: null` e zero linhas.
-
-### Ficou para o dono decidir
-`acervo.fracao_ideal` barra "direito creditório" e "nua-propriedade", mas **não** "direitos
-aquisitivos" (16 lotes ativos). Barrei do **primeiro relatório** apenas; mudar o acervo é decisão
-dele, não minha.
+`TriagemPerfil` ganhou `.select()` no update do perfil: sem ele, uma triagem barrada pela RLS
+"salvava" com `error: null` e zero linhas, e a pessoa responderia tudo de novo no acesso seguinte
+sem entender por quê. Agora a tela diz que não salvou.
 
 ---
 

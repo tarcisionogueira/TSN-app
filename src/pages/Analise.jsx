@@ -153,12 +153,7 @@ export default function Analise() {
   const paraUserId = location.state?.paraUserId || null;
   // Arremate atribuído com docs → gera os 3 relatórios EM SEQUÊNCIA automaticamente
   // (mercadológico → documental → laudo), lendo os anexos. Só na chegada da atribuição.
-  // `true` = sequência dos 3 (atribuição de arremate). `'mercado'` = SÓ o mercadológico, que é
-  // o caminho do cliente novo vindo da triagem: a documental é de plano pago, e disparar sozinho
-  // algo que ele não pode ter terminaria a boas-vindas num cadeado.
   const autoGerar = location.state?.autoGerar || false;
-  const soMercado = autoGerar === 'mercado';
-  const primeiroRelatorio = !!location.state?.primeiroRelatorio;
   // Modo "inclusão manual de lote": cola URL e/ou anexa edital/matrícula; a IA
   // extrai e libera os relatórios. Vira um botão de opção no menu — ao ativar, a
   // inclusão manual sobe pro topo do centro e a geração de relatórios fica abaixo.
@@ -1182,7 +1177,6 @@ export default function Analise() {
     if (!autoGerar) return;
     const s = autoSeqRef.current;
     if (s.etapa === 0 && !relMercadoGerado && analiseEntry?.status !== 'gerando') { s.etapa = 1; gerarRelMercado(); return; }
-    if (soMercado) return;   // cliente novo vindo da triagem: para no 1º e pronto
     if (s.etapa === 1 && relMercadoGerado && !relDocumentalGerado && !gerandoDocumental && !relDocumentalPreparando) { s.etapa = 2; gerarRelDocumental(true); return; }
     if (s.etapa === 2 && ambosRelatorios && LAUDO_NOVO_ATIVO && !relLaudoGerado && !gerandoLaudo) { s.etapa = 3; gerarRelLaudo(); }
   }, [autoGerar, relMercadoGerado, relDocumentalGerado, relLaudoGerado, gerandoDocumental, gerandoLaudo, relDocumentalPreparando, ambosRelatorios, analiseEntry?.status]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1480,27 +1474,6 @@ export default function Analise() {
                   Fazer upgrade
                 </button>
           )}
-        </div>
-      )}
-
-      {/* CHEGADA PELA TRIAGEM. Sem esta explicação a pessoa cai numa tela girando sobre um imóvel
-          que ela não escolheu — e a boas-vindas vira estranhamento. Diz de onde veio a escolha,
-          o que está acontecendo, e dá a saída (o lote é um exemplo, não uma recomendação). */}
-      {primeiroRelatorio && (
-        <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:12, padding:'14px 16px', display:'flex', gap:10, alignItems:'flex-start' }}>
-          <Sparkles size={18} color="#0D63DB" style={{ flexShrink:0, marginTop:1 }} />
-          <div style={{ fontSize:12.5, color:'#1e3a8a', lineHeight:1.6 }}>
-            <strong>Seu primeiro relatório já está sendo gerado.</strong> Escolhemos este lote a
-            partir do que você acabou de responder{d.cidade ? <> — {d.cidade}{d.estado ? `/${d.estado}` : ''}, dentro da sua faixa de capital</> : null}.
-            Leva alguns minutos e você pode fechar a aba: ele fica salvo em <strong>Análises</strong>.
-            <div style={{ marginTop:6, color:'#3b5bdb' }}>
-              É um <strong>exemplo do que a plataforma faz</strong>, não uma recomendação de compra —
-              o acervo tem milhares de lotes.{' '}
-              <button onClick={() => nav('/buscar')} style={{ background:'none', border:'none', padding:0, color:'#0D63DB', fontWeight:800, fontSize:12.5, cursor:'pointer', textDecoration:'underline' }}>
-                Buscar outros imóveis
-              </button>
-            </div>
-          </div>
         </div>
       )}
 
