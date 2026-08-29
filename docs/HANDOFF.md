@@ -484,9 +484,82 @@ que o Cloudflare recusa. **Provado aqui:** Chromium sobe, e quando o headless fa
 
 ---
 
-## 🔚 29/08 — ENCERRAMENTO DA SESSÃO 14 (a–g)
+## 🗓️ 29/08 (sessão 14h) — O RUNNER LIGOU: 53 DESTRAVADOS, 12 LEILOEIROS NOVOS, 1 FONTE RETIRADA
 
-Sessão aberta pelo ritual completo (heartbeat · Cliente 360 · Marketing · Saúde). **10 commits**,
+O dono ligou o runner residencial na máquina dele. Três rodadas de medição, **custo R$ 0**.
+
+### ✅ Triagem residencial: 53 de 53 destravaram
+
+Inclusive os 5 do AWS ELB e o do Wordfence, que eu havia previsto como *"incertos"* —
+**previsão conservadora demais**, e fica registrado. **24 com parser pronto** (17 SOLEON, 7 SUPERBID).
+
+### ✅ SOLEON: 12 promovidos, ~635 imóveis — pelo DRY-RUN, não pela assinatura
+
+| Aprovados | catálogo |
+|---|---|
+| FERREIRALEIL 180 · JOAOEMILIO 171 · DANIELGARCIA 83 · ISAIAS 78 | |
+| APICE 47 · CERULI 38 · LANCEJA 11 · TMLEILOES 10 · PURCENA 9 · AGOSTINHO 6 | |
+| CASAMARTILLO 1 · INFINITY 1 (acervo pequeno, parser leu) | |
+
+**5 reprovados** — ALVESLEIL, LOUCOPORLEIL, UNIVERSOLEIL (0 enumerados), CLICLEILOES (1→0
+prontos), MARAURZEDO (0 **e `via null`** — nem acessou). Os zeros **provam que o dry-run valeu**:
+é o caso dos 11 Superbid de 29/08 — o site *menciona* a plataforma sem *rodar* o catálogo.
+
+### 🔴 SUPERBID: 6 de 6 reprovados — e o pior caso não foi o zero
+
+BHLEILOARIA, FRANCISCODAVID e DENIS trouxeram **75 lotes cada, com os MESMOS ids** do
+EMILIOMATOS. `/busca/segmento/imoveis` num white-label devolve o **catálogo global da rede**.
+Promovê-los duplicaria 75 × 3 sob fontes diferentes, **sem um único erro à vista**.
+
+> **O tenant que "funcionava" era mais perigoso que o que zerava.** Três fontes com 75 lotes
+> pareceriam sucesso de integração no log e no painel de saúde.
+
+### 🚨 E o achado que veio de brinde: uma fonte EM PRODUÇÃO gravava lote alheio
+
+O `EMILIOMATOS` tinha o mesmo defeito — os lotes sob o nome dele eram de outros leiloeiros.
+Não é regressão nova: é como sempre funcionou, e **sozinha a fonte enumerava 75 sem nada
+acusar**. Foi o multi-tenant que deu o instrumento; um leiloeiro medido isolado não tem com o
+que ser comparado.
+
+### 🔬 O recon fechou: não existe caminho por leiloeiro
+
+`scripts/recon-emiliomatos-por-leiloeiro.mjs` — **comparação diferencial entre dois
+white-labels**, porque a pergunta não tem resposta olhando um site só. 54 caminhos testados:
+todo caminho com lote nos dois deu **100% de sobreposição**. E o nome deles explica —
+**`redeSegmento`, `redeColaborativa`**: o site é vitrine da **rede**, não do leiloeiro.
+
+> ⚠️ **A v2 do recon produziu 2 falsos positivos, e o defeito era meu.** Marcou
+> `/imoveis-brb-na-ba-df-e-go-36495` como `POR_LEILOEIRO` por sobreposição 0% — mas os números
+> eram **`0 vs 6`**. Se filtrasse pelo leiloeiro, o emiliomatos traria *os lotes dele*, não
+> zero; zero num lado é **"existe num site e não no outro"**. E o slug terminado em id denuncia
+> que é um **leilão específico**, não catálogo — apontar o `catalogo` para ele congelaria a
+> coleta num evento que acaba.
+>
+> Corrigido: o extrator descarta caminhos com id no fim, e `POR_LEILOEIRO` **exige lote nos
+> DOIS sites**. `0 vs N` ganhou veredito próprio, **`SO_EM_UM`**. Era a forma nº 10 dentro do
+> instrumento feito para pegá-la.
+
+**Decisão: cron do EMILIOMATOS suspenso em definitivo**, 3 white-labels descartados. Reabrir
+exige a plataforma expor caminho filtrado — o recon é repetível e responde em minutos.
+
+### 📊 ONDE A COBERTURA FICA
+
+```
+30 fontes com lote ativo hoje (30.614 lotes) · 34 já coletaram alguma vez
++12 SOLEON entram na coleta de 01/09 13:02  →  42 fontes
+−1  EMILIOMATOS retirado (gravava lote alheio)
+```
+
+**Arquivos:** `scripts/scraper-soleon.mjs`, `scripts/lib/motor/fontes/emiliomatos.mjs`,
+`scripts/recon-emiliomatos-por-leiloeiro.mjs` (novo), `scripts/recon-triagem-jucemg.mjs`,
+`scripts/runner-residencial.sh`, `.github/workflows/scraper-emiliomatos.yml`,
+`docs/MAPEAMENTO_BLOQUEADOS_JUCEMG.md`, `docs/RUNNER_RESIDENCIAL.md`.
+
+---
+
+## 🔚 29/08 — ENCERRAMENTO DA SESSÃO 14 (a–h)
+
+Sessão aberta pelo ritual completo (heartbeat · Cliente 360 · Marketing · Saúde). **18 commits**,
 **8 migrações aplicadas**, **5 invariantes novos**. O fio condutor do dia foi um só: *quase todo
 achado veio de MEDIR o resultado, e quase nenhum apareceria em revisão de código* — inclusive dois
 que derrubaram hipóteses **minhas** (o `{estrito:true}` e a pendência do mapper da MEGA).
