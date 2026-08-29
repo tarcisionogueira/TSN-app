@@ -4,6 +4,74 @@
 
 ---
 
+## 🗓️ 29/08 (sessão 13b) — AS 9 MELHORIAS: 6 FEITAS, 1 REPROVADA PELO PRÓPRIO TESTE
+
+Depois da JUCEMG, o dono pediu a lista de melhorias e mandou executar na ordem sugerida.
+
+| # | Melhoria | Estado |
+|---|---|---|
+| 1 | Freio de custo enxerga o gasto inteiro | ✅ **40 de 40 chamadores no ledger** (eram 18) |
+| 2 | Trava do `catch` que engole o motivo | ✅ no ar, 235 na linha de base |
+| 3 | Forma nº 10 no CLAUDE.md | ✅ nomeada, com antídoto |
+| 4 | Data nos 6 parsers | 🔶 **VIP (93) e SUPORTE (92) feitos**; BIASI e GRUPOLANCE com alvo mapeado |
+| 5 | Fila de documentos prioriza quem destrava data | ✅ `documentos_fila_proxima` |
+| 6 | Superbid multi-tenant | ❌ **reprovado pelo dry-run** — ver abaixo |
+| 7 | 3 parsers para 12 leiloeiros (famílias novas) | ⬜ pendente |
+| 8 | Triagem vira motor repetível | ✅ + `docs/TRIAGEM_JUNTAS_COMERCIAIS.md` |
+| 9 | Endereço do documento com âncora no bem | ⬜ pendente (bloqueado por evidência, ver 13) |
+
+### 🔑 A RESPOSTA QUE MUDOU O PLANO — ler edital NÃO é o caminho para data
+
+O dono perguntou se era preciso ler os editais. Medido:
+
+| | |
+|---|---|
+| Lotes em fontes com **100% de data pela coleta** | **4.467** |
+| Lotes sem data | **1.106**, concentrados em 6 fontes |
+| Lotes sem valor | **3** |
+| Lotes sem anexo | **583** |
+
+**Quinze das 21 fontes já entregam data em 100% dos lotes, sem ler um PDF.** E os 1.106 sem
+data não eram parser sutil falhando: **cinco dos seis mapeadores escreviam `data_leilao: null`
+literalmente** — nunca procuraram. Consertar 6 parsers custa menos e acerta mais que ler 2.900
+editais a 26%, e a data da listagem vem estruturada, que é o que dá assertividade.
+
+O edital segue necessário para o que só existe nele: forma de pagamento, ônus, valores da 2ª
+praça e o laudo. A leitura de documento (13) fica como **fallback**, não como via principal.
+
+### 📍 ONDE A DATA MORA EM CADA FONTE (recon de 29/08, 3 rodadas)
+
+- **VIP** ✅ `.anc-date` + `.anc-hour` na listagem. Venda direta não tem o bloco — e é correto.
+- **SUPORTE + WEBLEILÕES** ✅ na PÁGINA DO LOTE, mesma família (`static.suporteleiloes.com.br`),
+  em duas variantes irmãs: `<li class="data-atual">…<small>31/08/2026 às 14h00</small>` e
+  `<li class="data-off"><div class="data-left"><strong>1º Leilão</strong><span>26/08/2026 14:00</span>`.
+  Extração por TEXTO do bloco, não por seletor: um seletor casado com uma variante daria certo
+  em metade dos lotes e `null` na outra, silenciosamente.
+- **BIASI** e **GRUPOLANCE** — alvo real já identificado (`/sale/detail?id=<id real>` e a página
+  do lote), falta a rodada de leitura.
+
+> ⚠️ **NUNCA `new Date("03/09/2026")`.** O JavaScript lê mês 03, dia 09 — trocado em 11 de cada
+> 12 casos e **plausível em todos**. `dataBRparaISO` converte à mão e devolve `null` fora de uma
+> janela de plausibilidade. Data errada é pior que data ausente: expira lote vivo e mantém vivo
+> lote encerrado.
+
+### ❌ O ITEM 6 E O QUE ELE ENSINOU
+
+Os 11 sites classificados como Superbid/MBV **enumeraram ZERO lotes** no dry-run, todos "via
+gratis" — a página respondeu e o catálogo não estava ali. A assinatura da triagem
+(`/busca/segmento/` no HTML) era fraca: um leiloeiro que **linka** para o Superbid carrega esse
+caminho sem **rodar** a plataforma. Confundir "menciona" com "roda" foi a forma nº 10 pela
+terceira vez no dia, agora dentro do meu classificador.
+
+Subir mesmo assim seria pior que nada: 11 tenants varridos toda semana sem trazer lote,
+poluindo log e saúde com vazio permanente. **O que ficou é o que importava:** o suporte a
+multi-tenant (`chaveTenant` no runner e no parser), certo e testado, pronto para a família certa.
+
+> 📌 A rodada AGENDADA do `emiliomatos` de **26/08 também falhou**, antes desta mudança. A fonte
+> pode estar quebrada por conta própria — merece recon separado.
+
+---
+
 ## 🗓️ 29/08 (sessão 13) — O CONVITE QUE ENCHE A AULA NÃO EXISTIA
 
 Fechamos a campanha do Meta e, ao contar o que ela renderia, apareceu o buraco maior: **não
