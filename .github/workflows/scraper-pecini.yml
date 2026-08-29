@@ -11,6 +11,20 @@ on:
     - cron: '0 9 * * 1'   # 1x/semana (seg), 9h UTC — fonte PAGA (Bright Data)
   workflow_dispatch:
     inputs:
+      forcar:
+        # 29/08 — POR QUE ESTE INPUT EXISTE, e por que o freio deixou de ignorar o dispatch:
+        # o `if` deste job era `github.event_name != 'schedule' || pular != '1'`, escrito quando
+        # dispatch significava "um humano clicou". Desde que `api/coleta-oportunista.js` passou a
+        # disparar estes workflows sempre que o staff abre o app (espacamento de 20h), dispatch
+        # virou um evento AUTOMATICO DIARIO — e a condicao antiga fazia o freio de custo nao valer
+        # justamente no caminho que mais roda. Medido: os 4 workflows pagos rodaram por dispatch
+        # TODOS OS DIAS de 08/08 a 29/08, e em 29/08 dispararam as 10:29 UTC (todos `sem_cota`)
+        # sobre as MESMAS fontes que o runner residencial coletou de graca as 13:02.
+        # Agora o freio vale para schedule E para o disparo oportunista; quem clica de proposito
+        # e quer pagar mesmo com acervo fresco passa forcar=1.
+        description: '1 = ignora o freio de frescor (paga Bright Data mesmo com acervo fresco)'
+        required: false
+        default: '0'
       dryrun:
         description: '1 = não grava (só loga o que inseriria) · 0 = grava'
         required: false
@@ -67,8 +81,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
       # REDE DE SEGURANÇA (decisão do dono): este cron pago só roda se o runner
-      # RESIDENCIAL (grátis) não coletou a fonte nos últimos 7 dias. Dispatch manual
-      # ignora o freio (quem clica sabe o que quer).
+      # RESIDENCIAL (grátis) não coletou a fonte nos últimos 7 dias.
+      # ⚠️ O freio vale para o cron E para o disparo oportunista (dispatch sem inputs).
+      # Só `forcar=1` passa por cima — ver o comentário do input, com a medição de 29/08.
       - name: Freio residencial (pula se coletado de casa há < 7 dias)
         id: freio
         env:
@@ -76,7 +91,7 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
         run: node scripts/coleta-recente.mjs PECINI 7 >> "$GITHUB_OUTPUT"
       - name: Scraper Pecini
-        if: github.event_name != 'schedule' || steps.freio.outputs.pular != '1'
+        if: github.event.inputs.forcar == '1' || steps.freio.outputs.pular != '1'
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}

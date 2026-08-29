@@ -303,15 +303,60 @@ async function handler(req) {
   // conseguir; após um sucesso no dia, os runs seguintes SAEM CEDO (quase de graça) → economia
   // + garantia de captura. "Sucesso" = o DJEN respondeu sem erro (mesmo com 0 editais no dia).
   // Bypass manual com ?forcar=1.
+  // ── DISJUNTOR DE TENTATIVAS PAGAS (29/08) ──────────────────────────────────────────────
+  // O gate acima nasceu para OUTAGE TRANSIENTE ("o DJEN cai com frequência"): re-tenta a cada
+  // 4h até um pull dar certo. Mas quando o bloqueio é PERSISTENTE, a mesma regra inverte de
+  // sinal — nenhum run do dia sai com `erro: null`, então TODOS os 6 refazem o pull inteiro, e
+  // cada um paga Bright Data. **Uma fonte que custa MAIS quanto mais falha.**
+  //
+  // Medido: 26, 27, 28 e 29/08 com 6/6 runs em `TRT15/alvará de venda: HTTP 403` e
+  // `itens_vistos = 0` — quatro dias sem um edital, e `radar` é o 2º maior consumidor da cota
+  // (106 requests na semana de 24/08; 88 num único dia, 24/08). Cada run tenta
+  // 2 tribunais × 6 termos, e cada combo re-tenta o Bright Data até BD_RETRIES+1 vezes.
+  //
+  // Duas tentativas cobrem o caso para o qual o gate existe (queda passageira volta em 4h); da
+  // terceira em diante, num dia inteiro de 403, só se paga para ouvir o mesmo não. O disjuntor
+  // vale só para o PULL: o enriquecimento por IA da fila já capturada continua rodando, e o dia
+  // seguinte recomeça do zero (a contagem é do dia).
+  const MAX_TENTATIVAS_DIA = Number(process.env.RADAR_MAX_TENTATIVAS_DIA || 2);
   const forcar = /[?&]forcar=1/.test(req.url || '');
   let pulouPull = false; // pull do DJEN já feito hoje → pula a captura, mas a IA ainda enriquece
+  let motivoPulo = null, jaRegistrado = false;
   if (!forcar) {
     try {
-      const { data: ok } = await supabase.from('monitor_runs')
-        .select('id').eq('fonte', 'radar-editais-djen').is('erro', null)
-        .gte('ran_at', ymd(new Date()) + 'T00:00:00Z').limit(1);
-      if (ok && ok.length) pulouPull = true;
-    } catch { /* se a checagem falhar, roda o pull normalmente */ }
+      const desdeMeiaNoite = ymd(new Date()) + 'T00:00:00Z';
+      const { data: runsHoje, error: eHoje } = await supabase.from('monitor_runs')
+        .select('erro').eq('fonte', 'radar-editais-djen').gte('ran_at', desdeMeiaNoite);
+      // `{ data, error }` do postgrest-js NÃO lança (forma nº 2): sem checar `error`, uma
+      // leitura falha viraria "nenhum run hoje" e o disjuntor nunca abriria.
+      if (eHoje) throw new Error(eHoje.message);
+      const runs = runsHoje || [];
+      if (runs.some((r) => r.erro == null)) {
+        pulouPull = true; motivoPulo = 'pull já obtido hoje';
+      } else if (runs.length >= MAX_TENTATIVAS_DIA) {
+        pulouPull = true;
+        motivoPulo = `disjuntor: ${runs.length} tentativa(s) falharam hoje (teto ${MAX_TENTATIVAS_DIA}) — não se paga Bright Data para ouvir o mesmo erro`;
+        // Um registro por dia basta: os runs 3º ao 6º repetiriam a mesma linha e o log viraria
+        // ruído — e log ruidoso é o que treina o dono a não ler o log.
+        jaRegistrado = runs.some((r) => String(r.erro || '').startsWith('disjuntor'));
+      }
+    } catch { /* se a checagem falhar, roda o pull normalmente (fail-open) */ }
+  }
+
+  // O pulo por DISJUNTOR precisa deixar rastro: um dia inteiro sem edital com o log em branco
+  // é indistinguível de um dia sem publicação. `erro` preenchido mantém o dia como NÃO
+  // resolvido — a contagem já barra novas tentativas, então isso não reabre o gasto.
+  if (motivoPulo && motivoPulo.startsWith('disjuntor') && !jaRegistrado) {
+    try {
+      // Se a gravação falhar, o pior efeito é o dia perder o rastro do pulo; derrubar o cron
+      // por causa do log trocaria um problema barato por um caro (o enriquecimento por IA
+      // abaixo pararia junto).
+      // padrao-ok: log best-effort do disjuntor — nunca pode derrubar o cron
+      await supabase.from('monitor_runs').insert({
+        fonte: 'radar-editais-djen', itens_vistos: 0, itens_novos: 0,
+        duracao_ms: Date.now() - t0, erro: motivoPulo.slice(0, 200),
+      });
+    } catch { /* nunca quebra por causa do log */ }
   }
 
   // Janela deslizante de 3 dias (pega itens carregados com atraso; dedup resolve repetição).
@@ -423,7 +468,7 @@ async function handler(req) {
   let iaExtraidos = 0;
   try { iaExtraidos = await enriquecerEditaisComIA(supabase, ehIntegrado, t0); } catch { /* best-effort */ }
 
-  return new Response(JSON.stringify({ ok: true, pull: pulouPull ? 'pulado (já obtido hoje)' : 'executado', vistos, novos, descartados, enriquecidos, iaExtraidos, erro: erroGeral, janela: [ini, fim], tribunais: TRIBUNAIS }), {
+  return new Response(JSON.stringify({ ok: true, pull: pulouPull ? `pulado (${motivoPulo || 'já obtido hoje'})` : 'executado', vistos, novos, descartados, enriquecidos, iaExtraidos, erro: erroGeral, janela: [ini, fim], tribunais: TRIBUNAIS }), {
     headers: { 'Content-Type': 'application/json' },
   });
 }

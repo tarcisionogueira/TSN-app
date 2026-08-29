@@ -4,6 +4,90 @@
 
 ---
 
+## 🗓️ 29/08 (sessão 14h) — SIM, O PAGO E O GRÁTIS RODAVAM NA MESMA FONTE, NO MESMO DIA
+
+Pergunta do dono: *"tem chance de estar rodando nos 2, no residencial e bright data?"*
+**Resposta medida: sim** — e o dia de hoje é o retrato exato.
+
+| horário (UTC) | quem | o que aconteceu |
+|---|---|---|
+| **10:29** | disparo oportunista → 4 workflows PAGOS | CALIL · VEGAS · TORRES3 · GESTAOLEILOES · RJLEILOES → todos `sem_cota` |
+| **13:02–13:17** | runner residencial | CALIL 11 · VEGAS 37 · TORRES3 37 · GESTAOLEILOES 104 · RJLEILOES 40 · VLANCE 24 — **R$ 0** |
+
+Não custou dinheiro hoje **só porque a cota semanal já estava saturada em 550/550**. Foi o teto
+que segurou, não o desenho. Nas segundas e terças, quando a semana vira e há cota, o mesmo
+disparo gasta de verdade.
+
+### 🔎 A causa: o freio de custo não valia no caminho que mais roda
+
+```yaml
+if: github.event_name != 'schedule' || steps.freio.outputs.pular != '1'
+```
+
+Escrito quando *dispatch* significava "um humano clicou". Só que `api/coleta-oportunista.js`
+dispara esses workflows **toda vez que o staff abre o app** (espaçamento de 20 h) — dispatch
+virou **evento automático diário**, e a condição fazia o freio de frescor **nunca se aplicar a
+ele**. O `coleta_oportunista_claim` também não ajudava: mede TEMPO DESDE O ÚLTIMO DISPARO e nada
+mais — nunca perguntou se o dado já estava no banco.
+
+Medido no histórico do Actions: os 4 workflows pagos rodaram por `workflow_dispatch`
+**todos os dias de 08/08 a 29/08**, e nos dias de cron rodaram **duas vezes**.
+
+**Quanto isso pesa:** na semana de 24/08 (**550/550, saturada**), `soleon 112 + pecini 63 +
+gestao 60 + rj 60` = **295 requests, 54% do teto**, nas quatro fontes que o residencial coleta
+de graça. A semana de 17/08 fechou **618/550 — acima do teto**.
+
+### 🔴 Achado colateral: o radar de editais custa MAIS quanto mais falha
+
+`radar` é o **2º maior consumidor** (106 na semana de 24/08; **88 num único dia**) e está em
+**403 há 4 dias** (26, 27, 28, 29/08 — 6/6 runs, `itens_vistos = 0`,
+`TRT15/alvará de venda: HTTP 403`).
+
+O gate do dia (`.is('erro', null)`) foi feito para **queda passageira**: re-tenta a cada 4 h até
+um pull dar certo. Com bloqueio **persistente**, nenhum run sai sem erro — então **os 6 runs do
+dia refazem o pull inteiro**, cada um pagando Bright Data (2 tribunais × 6 termos, cada combo
+re-tentando até 3×). Quanto pior a fonte, mais cara ela fica.
+
+### ✅ O que mudou
+
+1. **O freio passa a valer no disparo oportunista** (6 workflows: soleon, gestao, rj, pecini,
+   leilaopro, emiliomatos). Novo input `forcar` — `if: github.event.inputs.forcar == '1' ||
+   steps.freio.outputs.pular != '1'`. Cron e disparo oportunista respeitam o frescor; quem clica
+   de propósito e quer pagar mesmo assim passa `forcar=1`.
+   ⚠️ **Mudança de comportamento consciente:** dispatch manual com acervo fresco agora PULA.
+2. **`coleta-oportunista.js` pergunta antes de comprar** — checa o frescor do acervo e só dispara
+   o que está velho. A janela é **4 dias, medida e não estimada**: o gate residencial é de 72 h e
+   o acervo confirma (CALIL e TORRES3 gravaram em 20, 23, 26 e 29/08, de 3 em 3 dias); com limite
+   3 o acervo estaria sempre na borda e qualquer atraso de horas dispararia o pago à toa.
+   O frescor é conferido **antes do claim**, senão o claim carimbaria um disparo que não houve e
+   empurraria o próximo real por mais 20 h. A resposta passa a devolver `frescas[]` — freio que
+   age em silêncio é indistinguível de endpoint quebrado, e foi essa indistinção que deixou o
+   gasto duplo passar.
+3. **Disjuntor no radar** (`RADAR_MAX_TENTATIVAS_DIA`, padrão 2): duas tentativas cobrem a queda
+   passageira para a qual o gate existe; da terceira em diante, num dia inteiro de 403, só se
+   paga para ouvir o mesmo não. Vale **só para o pull** — o enriquecimento por IA da fila já
+   capturada continua rodando, e o dia seguinte recomeça do zero.
+
+### ✔️ Conferido antes de mexer (para não trocar um problema por outro)
+
+- **O sinal de frescor mede o que diz.** Nenhum trigger de `imoveis_leilao` escreve
+  `atualizado_em`, e o acervo confirma: a coluna **só se move em dia de coleta real** (21, 22, 24
+  e 25/08 não aparecem para essas fontes). Se um cron de enriquecimento a renovasse, o freio
+  calaria a coleta paga para sempre — forma nº 10 dentro do próprio freio.
+- **As duas redes de segurança seguem de pé.** Casa parou um ciclo → o pago acorda no 4º dia;
+  parou de vez → o cron semanal roda. E toda leitura falha do freio **dispara** (fail-open): erro
+  de leitura não é "está fresco".
+
+### ⏭️ O que conferir na próxima sessão
+
+- Semana de **31/08** (a cota vira): `brightdata_uso_proposito` deve cair perto de zero em
+  `soleon`/`gestao`/`rj`/`pecini` **enquanto o runner de casa estiver rodando**;
+- `radar`: se continuar em 403, o consumo cai a ~2 tentativas/dia — mas **o 403 em si segue
+  aberto** e é problema à parte (4 dias sem um edital novo);
+- `select proposito, requests, sucessos from brightdata_uso_proposito where semana = date_trunc('week', now())::date;`
+
+---
+
 ## 🗓️ 29/08 (sessão 14f) — P1 FECHADO: `praca1_fim`/`praca2_fim` GANHARAM PRODUTOR
 
 As colunas nasceram em 28/08 para desfazer a conflação que tirou do ar um lote com **13 dias de
