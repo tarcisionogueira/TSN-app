@@ -98,6 +98,43 @@ a cada acesso.
 | **RJ Leilões** | ~120 | runner residencial **headless** (`RJ_HEADLESS=1`) | ✅ **no runner** |
 | **radar / docs** | 250 / 150 | — (autocomplete-geo / download de PDF) | manter (propósito distinto, baixo volume) |
 
+## 🔎 TRIAGEM RESIDENCIAL — trazer os leiloeiros que o Cloudflare esconde (29/08)
+
+O runner deixou de servir só para COLETAR: ele agora também **descobre**, e é assim que os
+leiloeiros de MG entram sem gastar Bright Data.
+
+**O problema medido:** a triagem da JUCEMG classificou 141 sites e deixou **53 como
+`bloqueado`**. Em **51 deles `plataforma` ficou NULA** — e esse null não quer dizer "não roda
+plataforma conhecida": quer dizer que o Cloudflare devolveu *"Just a moment..."* e **o HTML nunca
+foi lido**. São 53 leiloeiros contados como "custa dinheiro" sem que ninguém saiba se já teriam
+parser pronto. Dois já se sabe que sim — `adrianoleiloeiro.com.br` e `angelabecharaleiloes.com.br`,
+ambos **Superbid**, plataforma que já parseamos.
+
+**O que mudou:** `recon-triagem-jucemg.mjs` ganhou duas chaves, e o passo entrou no runner:
+
+| Env | O que faz |
+|---|---|
+| `TRIAGEM_HEADLESS=1` | quando o fetch simples é bloqueado, repete no **Chromium real** (o mesmo `fetch-residencial.mjs` que GESTAO e RJ usam). Nunca por padrão: navegador só entra onde o simples não serviu |
+| `TRIAGEM_BLOQUEADOS=1` | a lista vem do **banco** (`leiloeiro_triagem where bloqueado`), não do JSON — a rodada custa ~53 páginas em vez de 141, e serve **JUCESP/JUCERJA/JUCEES** sem editar nada |
+
+**Bright Data continua fora**, como sempre esteve neste script: descobrir o que existe segue
+custando R$ 0. O que mudou é que o "de graça" agora alcança quem estava atrás do Cloudflare.
+
+**Como ler o resultado:** ao fim da rodada o script imprime `DESTRAVADOS pelo residencial: N de
+53` e, entre eles, **quais já têm parser** — que é a diferença entre *configurar um tenant* e
+*escrever parser novo*. Quem seguir bloqueado mesmo pelo navegador residencial é o resíduo que
+realmente custa dinheiro.
+
+> ⚠️ **Plataforma descoberta NÃO é lote coletado — dry-run antes de subir tenant.** Em 29/08, 11
+> sites classificados como Superbid enumeraram **ZERO** lotes: a assinatura de HTML provava que o
+> site *menciona* a plataforma, não que *roda* o catálogo dela. O script imprime esse aviso ao
+> final de propósito.
+
+**Detalhe de implementação que vale saber:** o passo **não** passa pelo helper `rodar`. Aquele
+gate conclui com **prova de gravação no acervo**, e a triagem grava em `leiloeiro_triagem` — pelo
+`rodar` ela imprimiria *"saiu com sucesso mas NÃO gravou no acervo"* em toda rodada. Alarme falso
+recorrente é o que treina o dono a ignorar o log. Descoberta tem contrato diferente de coleta.
+
 ## 🗺️ Próximos passos para ZERAR o Bright Data
 Praticamente **tudo já está resolvido no código** — falta só ATIVAR o runner residencial:
 1. **[DONO] Subir o runner residencial** (setup acima) — ao rodar, zera **SOLEON** (direto) +

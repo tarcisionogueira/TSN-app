@@ -92,4 +92,28 @@ rodar HASTA env HASTA_DRYRUN=0 HASTA_MAX_LOTES=600 node scripts/scraper-hasta.mj
 # e exporte BRIGHTDATA_API_TOKEN/ZONE no ~/.bidpro-runner.env.
 rodar VLANCE env VLANCE_NO_BD=1 python3 scripts/scraper_vlance.py --supabase --ignorar-robots
 
+# ── TRIAGEM RESIDENCIAL DOS BLOQUEADOS (29/08) ──────────────────────────────────────────────
+# NÃO coleta lote: descobre QUAL PLATAFORMA rodam os sites que recusaram o acesso grátis.
+#
+# A triagem da JUCEMG deixou 53 sites como `bloqueado`, e em 51 deles `plataforma` ficou NULA
+# — o Cloudflare devolveu "Just a moment..." e o HTML nunca foi lido. Ou seja: 53 leiloeiros
+# hoje contados como "custa Bright Data" sem que ninguém saiba se já teriam parser pronto.
+# Dois já se sabe que sim (adrianoleiloeiro e angelabecharaleiloes, ambos Superbid).
+#
+# Daqui — Chromium real, IP de casa — o desafio do Cloudflare cai, e a descoberta continua
+# custando R$ 0. Quem se revelar rodando plataforma que já parseamos entra por CONFIGURAÇÃO
+# (um tenant), não por parser novo. A lista vem do BANCO (só os bloqueados), então a rodada
+# custa ~53 páginas e não 141 — e serve JUCESP/JUCERJA/JUCEES do mesmo jeito, sem editar nada.
+#
+# Sai por último de propósito: é DESCOBERTA, não coleta. Se o Chromium engasgar aqui, o acervo
+# do dia já entrou.
+# NÃO passa pelo `rodar`, e a razão importa: aquele helper conclui com PROVA DE GRAVAÇÃO NO
+# ACERVO (`coleta_gate_concluir_exige_prova.sql`). A triagem grava em `leiloeiro_triagem`, não
+# em `imoveis_leilao` — pelo gate ela imprimiria "saiu com sucesso mas NÃO gravou no acervo"
+# em TODA rodada. Alarme falso recorrente é o que treina o dono a ignorar o log (lição da
+# CREPALDI). Descoberta tem contrato diferente de coleta, então roda direto.
+# Falha aqui não derruba a rodada: o acervo do dia já entrou nos passos acima.
+env TRIAGEM_HEADLESS=1 TRIAGEM_BLOQUEADOS=1 node scripts/recon-triagem-jucemg.mjs \
+  || echo "  (triagem residencial falhou — sem efeito no acervo; roda de novo na próxima janela)"
+
 echo "[$(date)] fim."
