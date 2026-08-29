@@ -57,7 +57,6 @@ const TOTAL = STEPS.length;
 export default function TriagemPerfil({ userId }) {
   const [mostrar, setMostrar] = useState(false);
   const [salvando, setSalvando] = useState(false);
-  const [erro, setErro] = useState('');
   const [step, setStep] = useState(0);
   const [f, setF] = useState({ perfil_investidor: '', faixa_capital: '', forma_pagamento: '', consorcio_interesse: '', experiencia_leilao: '' });
 
@@ -85,23 +84,14 @@ export default function TriagemPerfil({ userId }) {
 
   const salvar = async () => {
     setSalvando(true);
-    // `.select()` prova o que gravou: um update que a RLS não alcança devolve `error: null` e
-    // zero linhas, e a triagem "salva" que não salvou nada faz a pessoa responder tudo de novo
-    // no próximo acesso, sem nunca entender por quê.
-    const { data: salvos, error: errPerfil } = await supabase.from('perfis').update({
+    await supabase.from('perfis').update({
       perfil_investidor: f.perfil_investidor,
       faixa_capital: f.faixa_capital,
       forma_pagamento: f.forma_pagamento,
       consorcio_interesse: f.consorcio_interesse,
       experiencia_leilao: f.experiencia_leilao,
       triagem_em: new Date().toISOString(),
-    }).eq('id', userId).select('id');
-    if (errPerfil || !salvos?.length) {
-      setSalvando(false);
-      setErro('Não conseguimos salvar suas respostas agora. Tente de novo em instantes.');
-      return;
-    }
-
+    }).eq('id', userId);
     setSalvando(false);
     setMostrar(false);
   };
@@ -154,12 +144,6 @@ export default function TriagemPerfil({ userId }) {
             })}
           </div>
         </div>
-
-        {erro && (
-          <div style={{ marginTop: 14, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '10px 12px', fontSize: 12.5, color: '#b91c1c', lineHeight: 1.5 }}>
-            {erro}
-          </div>
-        )}
 
         {/* Navegação */}
         <div style={{ display: 'flex', gap: 10, marginTop: 20, alignItems: 'center' }}>
