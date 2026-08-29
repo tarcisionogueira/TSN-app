@@ -2520,9 +2520,29 @@ function mapAnuncioVIP(a) {
     url_lote: detalhe,
     link_foto: a.foto && /^https?:\/\//.test(a.foto) ? a.foto : null,
     leiloeiro: 'Leilão VIP',
-    data_leilao: null,
+    data_leilao: dataVIP(a.data),
     forma_pagamento: 'a_vista',
   };
+}
+
+/**
+ * dd/mm/aaaa → aaaa-mm-dd, e SÓ isso. Sem `new Date(texto)`: em `03/09/2026` o parser do
+ * JavaScript entende mês 03, dia 09 — a data sairia trocada em 11 de cada 12 casos e
+ * PLAUSÍVEL em todos, que é a pior combinação possível (forma nº 10 do CLAUDE.md).
+ * Fora do formato → null: melhor sem data que com data errada, porque data errada expira lote
+ * vivo e mantém vivo lote encerrado.
+ */
+function dataVIP(txt) {
+  const m = String(txt || '').match(/\b(\d{2})\/(\d{2})\/(\d{4})\b/);
+  if (!m) return null;
+  const [, d, mes, ano] = m;
+  const dd = Number(d), mm = Number(mes), aa = Number(ano);
+  if (mm < 1 || mm > 12 || dd < 1 || dd > 31) return null;
+  // Janela de plausibilidade: praça de 2 anos atrás ou de 3 anos à frente é erro de leitura,
+  // não calendário de leilão.
+  const agora = new Date().getFullYear();
+  if (aa < agora - 2 || aa > agora + 3) return null;
+  return `${ano}-${mes}-${d}`;
 }
 
 async function scraperVIP(browser) {
@@ -2583,6 +2603,15 @@ async function scraperVIP(browser) {
               local: (c.querySelector('.anc-local')?.textContent || '').trim(),
               tipo: (c.querySelector('.anc-type')?.textContent || '').trim(),
               valor: (c.querySelector('.valor-atual')?.textContent || '').trim(),
+              // DATA E HORA DO PREGÃO (29/08). O mapeador escrevia `data_leilao: null` fixo —
+              // nunca procurou —, e por isso os 93 lotes ativos do VIP nunca expiravam por prazo
+              // e o gate de leilão encerrado falhava aberto neles. O recon de 29/08 mostrou a
+              // marcação: `<div class="anc-row-4"><span class="anc-date">03/09/2026</span>
+              // <span class="anc-hour">14:30</span></div>`. Lote de VENDA DIRETA não tem o
+              // bloco — e é correto que não tenha: lá a venda é contínua, sem praça.
+              data: (c.querySelector('.anc-date')?.textContent || '').trim(),
+              hora: (c.querySelector('.anc-hour')?.textContent || '').trim(),
+              rotulo: (c.querySelector('.anc-left-txt')?.textContent || '').replace(/\s+/g, ' ').trim(),
               foto: img ? (img.getAttribute('src') || '') : '',
             });
           });

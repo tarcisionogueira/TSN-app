@@ -21,12 +21,21 @@
  */
 import puppeteer from 'puppeteer';
 
+// ALVOS DA 2ª RODADA (29/08), corrigidos pelo que a 1ª mediu:
+//  · VIP saiu — resolvido: `.anc-date` + `.anc-hour`, parser já corrigido.
+//  · GRUPOLANCE: `/busca?tipo=imoveis` deu 404 — era chute meu. Agora a home, para ler os
+//    caminhos reais do menu antes de adivinhar de novo.
+//  · SUPORTE: `liderleiloes` tem ZERO lotes ativos no acervo — eu escolhi o tenant errado para
+//    procurar marcação. Trocado por `portoleiloes`, que trouxe 12 imóveis hoje.
+//  · WEBLEILOES: a LISTAGEM não tem data mesmo ("Aberto para Lances · 1ª leilão", sem dia).
+//    A data está na página do lote — daí o alvo virar uma oferta concreta.
+//  · BIASI: o cartão que a heurística pegou era o `div.card-lot` interno, que só tem preço.
+//    O scraper já busca `/sale/detail?id=`, então é ESSE retorno que precisa ser inspecionado.
 const ALVOS = [
-  { fonte: 'BIASI',      url: 'https://www.biasileiloes.com.br/lotes/imoveis/pesquisa', espera: 'domcontentloaded' },
-  { fonte: 'VIP',        url: 'https://www.leilaovip.com.br/agenda?segmento=Im%C3%B3veis', espera: 'domcontentloaded' },
-  { fonte: 'WEBLEILOES', url: 'https://www.webleiloes.com.br/busca?categoria=imoveis', espera: 'networkidle2' },
-  { fonte: 'GRUPOLANCE', url: 'https://www.grupolance.com.br/busca?tipo=imoveis', espera: 'domcontentloaded' },
-  { fonte: 'SUPORTE',    url: 'https://www.liderleiloes.com.br/buscador?categoria=2', espera: 'domcontentloaded' },
+  { fonte: 'GRUPOLANCE', url: 'https://www.grupolance.com.br/', espera: 'domcontentloaded', links: true },
+  { fonte: 'SUPORTE',    url: 'https://www.portoleiloes.com.br/buscador?categoria=2', espera: 'domcontentloaded' },
+  { fonte: 'WEBLEILOES', url: 'https://www.webleiloes.com.br/oferta/leilao/imoveis/casas/80/id-1111/casas-336-00m-vila-carrao-sao-paulo-sp', espera: 'networkidle2' },
+  { fonte: 'BIASI',      url: 'https://www.biasileiloes.com.br/sale/detail?id=1', espera: 'domcontentloaded' },
 ];
 
 const RE_DATA = /\b\d{1,2}\s*[\/.-]\s*\d{1,2}\s*[\/.-]\s*\d{2,4}\b|\b\d{1,2}\s+de\s+[a-zç]+\s+de\s+\d{4}\b/gi;
@@ -61,6 +70,12 @@ for (const a of ALVOS) {
       };
     });
 
+    if (a.links) {
+      const menu = await page.evaluate(() => [...document.querySelectorAll('a[href]')]
+        .map(el => `${(el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 40)} → ${el.getAttribute('href')}`)
+        .filter(t => /im[óo]ve|leil|busca|lote|agenda|catalog/i.test(t)).slice(0, 25));
+      console.log(`  LINKS ÚTEIS:\n   ${menu.join('\n   ')}`);
+    }
     console.log(`  cartões candidatos: ${achado.totalCandidatos}`);
     for (const [i, c] of achado.cartoes.entries()) {
       const datas = [...(c.texto.match(RE_DATA) || [])];
