@@ -4,6 +4,54 @@
 
 ---
 
+## 🗓️ 29/08 (sessão 13c) — ITENS 7 E 9 FECHADOS, E A FORMA Nº 10 APARECEU 5 VEZES
+
+### ✅ ITEM 9 — endereço do bem: 13% de cobertura, ZERO repetição
+
+```
+ENDERECO ANCORADO: 4 de 31 lidos (13%) · 4 logradouros DISTINTOS · REPETIDOS: nenhum
+RECUSAS: cidade_fora_da_janela 19 · sem_ancora_do_bem 7 · sem_logradouro_na_janela 1
+  GRUPOLANCE/Mairiporã → Rua Canela e Rua Cajarana · WEBLEILOES/Jundiaí → Rua Pará
+  WEBLEILOES/Bauru → Av. José Vicente Aiello · WEBLEILOES/São Vicente → Rua Frei Gaspar
+```
+
+**Cobertura baixa e precisão alta é a troca certa aqui.** A 1ª tentativa teve 96% de cobertura
+com o MESMO logradouro em 6 lotes distintos: cobertura alta é o *sintoma* de estar lendo o
+cabeçalho, não um mérito. Endereço errado move o pino do mapa e o cliente descobre no dia da
+visita; endereço ausente só deixa a ficha como já estava. **Está gravando**, e só complementa —
+nunca sobrescreve o que a coleta trouxe. A descrição continua fora (o começo do edital é
+cabeçalho jurídico, não descrição do bem).
+
+### ✅ ITEM 7 — a "família nova" `leilao.pro` **é a nossa LEILAOPRO**
+
+O recon abriu o menu do Versalles: **"IMÓVEIS 0 itens → `/leilao/lotes/imoveis`"** — exatamente
+o `catalogo` do parser que já temos. A triagem separou os três numa família nova porque
+classifica por assinatura de HTML e **não abre o catálogo**. Entraram como tenants
+(`ILEILOES`, `LUISLEIL`, `VERSALLES`), não como parser novo.
+
+- **`suaplataformadeleilao`** (andraleiloes + jinkings): **confirmada** — menus idênticos, com
+  catálogo em `/busca/#Engine=Start&…&ID_Categoria=55`. É SPA roteada por hash: precisa do motor
+  `dom` (renderizado), não de fetch simples. Parser novo de verdade, alvo já mapeado.
+- **`leiloesjudiciais`** (7 sites): única das três ainda sem leitura.
+
+### 🚨 A FORMA Nº 10 APARECEU **CINCO VEZES** NUMA SESSÃO — e duas dentro do próprio instrumento
+
+1. `status_http` gravava o status do último caminho CHUTADO, não o da home (34 sites "404");
+2. o cruzamento comparou NOMES DE FONTE e escondeu 7 leiloeiros que já coletavam como tenants;
+3. `catch { continue; }` transformou "chamei `PDFParse` sem `new`" em "PDF escaneado" (23 de 23);
+4. o validador imprimiu "23 de 23 requisições evitadas" com ZERO documentos lidos;
+5. o validador recusou 31 de 31 endereços por `sem_cidade_no_acervo` — **porque a consulta dele
+   não pedia a coluna `cidade`**. O extrator nunca chegou a ser testado.
+
+> **O que salvou a nº 5 foi ter detalhado as recusas POR NOME antes de mexer.** Com o balde único
+> ("0 de 31"), a conclusão teria sido *"a âncora não funciona"* e eu teria afrouxado as guardas —
+> voltando ao extrator que espalhava o endereço do escritório do leiloeiro pelo mapa.
+>
+> **Regra prática que sai daqui:** todo instrumento novo nasce com o motivo da recusa nomeado.
+> Contador agregado descreve o sintoma e esconde a causa.
+
+---
+
 ## 🗓️ 29/08 (sessão 13b) — AS 9 MELHORIAS: 6 FEITAS, 1 REPROVADA PELO PRÓPRIO TESTE
 
 Depois da JUCEMG, o dono pediu a lista de melhorias e mandou executar na ordem sugerida.

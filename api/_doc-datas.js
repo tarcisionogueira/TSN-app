@@ -178,26 +178,33 @@ export async function enriquecerPeloDocumento(imovelId, atual = {}) {
     if (fim && !atual.data_leilao_2) patch.data_leilao_2 = fim;
     if (encerradaEm && !atual.data_leilao && !atual.data_leilao_2) patch.data_leilao = encerradaEm;
 
-    // ENDEREÇO ANCORADO: calculado e DEVOLVIDO, mas ainda fora do `patch` — quem grava é o
-    // chamador, e só depois da validação em seco dizer qual a precisão. Medir antes de gravar
-    // é o que barrou a primeira versão; não vou pular a etapa na segunda.
+    // ENDEREÇO ANCORADO — APROVADO PELA MEDIÇÃO (29/08) e agora gravado.
+    //
+    //   4 de 31 lidos (13%) · 4 logradouros DISTINTOS · REPETIDOS: nenhum
+    //   GRUPOLANCE/Mairiporã → Rua Canela e Rua Cajarana · WEBLEILOES/Jundiaí → Rua Pará ·
+    //   WEBLEILOES/Bauru → Av. José Vicente Aiello · WEBLEILOES/São Vicente → Rua Frei Gaspar
+    //
+    // Cobertura BAIXA e precisão ALTA — e é essa a troca certa aqui. A 1ª tentativa teve 96% de
+    // cobertura com o mesmo logradouro em 6 lotes distintos: cobertura alta é o SINTOMA de
+    // estar lendo o cabeçalho, não um mérito. Endereço errado move o pino do mapa e o cliente
+    // descobre no dia da visita; endereço ausente só deixa a ficha como já estava.
+    //
+    // As recusas confirmam que as guardas estão trabalhando, não travando à toa:
+    // `cidade_fora_da_janela` 19 (edital de vários bens — o trecho lido descreve OUTRO lote),
+    // `sem_ancora_do_bem` 7, `sem_logradouro_na_janela` 1.
     const enderecoBem = extrairEnderecoDoBem(texto, { cidade: atual.cidade });
+    // SÓ COMPLEMENTA: nunca sobrescreve o que a coleta trouxe. A coleta vem da página do lote,
+    // que é a fonte mais direta; o documento entra onde ela não chegou.
+    if (enderecoBem?.logradouro && !String(atual.endereco || '').trim()) {
+      patch.endereco = enderecoBem.logradouro;
+    }
+    if (enderecoBem?.bairro && !String(atual.bairro || '').trim()) {
+      patch.bairro = enderecoBem.bairro;
+    }
 
-    // ⚠️ ENDEREÇO E DESCRIÇÃO **NÃO** SÃO GRAVADOS, e isto é uma decisão MEDIDA, não cautela
-    // teórica. A validação em seco de 29/08 mostrou o extrator acertando 22 de 23 lotes… com o
-    // endereço ERRADO: seis imóveis diferentes — em São Paulo, Porto Alegre, Santos e Penha de
-    // França — receberiam todos "Avenida Fagundes Filho", que é o endereço do ESCRITÓRIO DO
-    // LEILOEIRO no cabeçalho do edital. `extrairIdentidadeTexto` pega o primeiro logradouro do
-    // texto, e num edital o primeiro logradouro é quase sempre o de quem publica, não o do bem.
-    //
-    // Gravar isso teria movido o pino do mapa de 22 dos 23 lotes para o mesmo lugar errado —
-    // um estrago silencioso, exatamente do tipo que o cliente descobre no dia da visita. O
-    // pedido do dono (extrair endereço do documento) só volta com um extrator que ancore o
-    // logradouro no TRECHO DO BEM (após "descrição do imóvel", "matrícula nº"), e validado
-    // contra a cidade que o acervo já conhece.
-    //
-    // A DATA fica, porque a validação a mediu certa: 6 de 23 (26%) — e data errada não passa
-    // pelo filtro de plausibilidade de `extrairDatasLeilao` do mesmo jeito que endereço passa.
+    // ⚠️ A DESCRIÇÃO CONTINUA FORA. O trecho inicial do edital é cabeçalho jurídico (comarca,
+    // processo, partes), não descrição do bem — e a ficha do cliente já mostra o título da
+    // coleta, que é mais limpo. Voltaria só com âncora própria, e o ganho não paga o risco.
 
     return { lido: true, achou: Object.keys(patch).length > 0, tipo: a.tipo, patch, enderecoBem, motivo: null };
   }
