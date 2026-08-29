@@ -4,6 +4,92 @@
 
 ---
 
+## 🗓️ 29/08 (sessão 13) — O CONVITE QUE ENCHE A AULA NÃO EXISTIA
+
+Fechamos a campanha do Meta e, ao contar o que ela renderia, apareceu o buraco maior: **não
+havia caminho nenhum para convidar a base para uma aula.** `/api/anunciar-produto` só sabe
+anunciar curso e eBook; `live-lembrete-cron` só fala com quem JÁ se inscreveu. Ou seja, a peça
+que de fato enche uma live era trabalho manual — enquanto R$ 40 de verba paga rendem 4 a 6
+inscrições e os 72 clientes da base são o canal principal.
+
+### 🔴 PENDÊNCIA VIVA — CONVITE DA BASE ARMADO PARA DOMINGO 30/08
+
+**Combinado com o dono (29/08):** ele testa o e-mail em si mesmo, aprova, e **no domingo o
+convite sai para toda a base**. Na sessão seguinte, SINALIZAR O RESULTADO.
+
+Como conferir, em uma consulta:
+
+```sql
+-- o desfecho do disparo (edicao 2026-09-02)
+select edicao, count(*) filter (where email_ok) as entregues,
+       count(*) filter (where email_ok is false) as falhas,
+       count(*) filter (where email_ok is null) as sem_desfecho, min(criado_em), max(criado_em)
+  from live_convite_envio group by 1 order by 1 desc;
+-- e o que o convite VIROU (o número que importa)
+select coalesce(utm->>'utm_content', origem, '(sem origem)') as veio_de, count(*), max(criado_em)
+  from live_inscricoes where evento_id = (select id from eventos_live where slug='leilao-ao-vivo')
+ group by 1 order by 2 desc;
+-- o armamento: vazio = já disparou e desarmou; com data = ainda vai disparar
+select value from app_config where key = 'convite_live_armado';
+```
+
+**Verde:** `sem_desfecho = 0` e `convite-base` aparecendo em `live_inscricoes`. **Vermelho que
+importa:** `live_convite_envio` vazio no domingo — significa que o cron não disparou (não
+armado, ou a aula foi remarcada e a data deixou de casar), e ninguém teria sido avisado.
+
+### O que entrou
+
+| Peça | O que faz |
+|---|---|
+| `api/_convite-live.js` | Núcleo: template, as 3 exclusões, dedup e claim antes do envio |
+| `api/convidar-live.js` | Botão do admin, em 3 tempos: teste para si · prévia contada · envio |
+| `api/convidar-live-cron.js` | Disparo agendado, **domingos 13h UTC**, só quando ARMADO |
+| `live_convite_envio` | Claim antes do envio, UNIQUE (evento, pessoa, **edição**) |
+| Card em Admin › Live | Colado no link da campanha |
+
+**Três exclusões, e nenhuma é detalhe:** equipe/admin nunca entram (o cron de retenção já nudou
+o próprio dono uma vez) · quem optou por não receber e-mail · **quem já está inscrito** — essa
+pessoa já recebe o lembrete da véspera e do dia, e "garanta sua vaga" para quem já tem vaga é a
+forma mais barata de parecer robô para o cliente que mais se engajou.
+
+**Duas travas, e elas protegem coisas diferentes.** O *armamento*
+(`app_config.convite_live_armado` = a data da edição) decide se a EDIÇÃO foi autorizada; o
+UNIQUE decide se a PESSOA já foi convidada. Sem o armamento o cron mandaria toda semana — para
+quem nunca se inscreve, quatro e-mails de marketing por mês. Sem o UNIQUE, uma execução que
+morresse no meio reenviaria para quem já recebeu. E se a aula for remarcada depois do
+armamento, a data deixa de casar e o cron **não** dispara: convite autorizado para uma data não
+é convite autorizado para outra.
+
+> ⚠️ **A armadilha que quase passou:** `app_config.value` é **TEXT, não jsonb**. Gravar o
+> armamento com `JSON.stringify` poria aspas em volta da data, a comparação com a edição nunca
+> casaria, e o cron jamais dispararia — sem erro e sem log, no domingo, sem ninguém olhando.
+
+### 📣 CAMPANHA DO META — no ar, e o que ela vale
+
+`CONV - AULA 02SET - INSCRICAO` (`120249379691430420`) · `BR - ADV+ - AULA 02SET`
+(`120249379704670420`) · anúncio `REEL-2808-LIVE`. OUTCOME_LEADS, R$ 8/dia, pixel
+`683455009174779`, destino `/aula/leilao-ao-vivo`, semente de 3 públicos quentes com
+Advantage+ expandindo.
+
+**A ativação falhou duas vezes pela API** com `instagram_positions`: o conjunto tinha *página
+inicial do Explorar* sem a seção *Explorar*, combinação que a Meta só rejeita na hora de ativar
+— criar e editar passavam sem reclamar. Resolvido trocando para Posicionamentos Advantage+.
+**Não deu para consertar pela API:** corrigir posicionamento exige reenviar o bloco de
+segmentação INTEIRO, e os IDs dos públicos personalizados adicionados na interface não são
+legíveis pelo conector enquanto o conjunto nunca veiculou. Reescrever sem eles apagaria a parte
+quente da campanha.
+
+**O que o histórico diz, e vale lembrar antes de aumentar verba:** o vídeo anterior trouxe 215
+visitas, 254 cliques, R$ 31,72 e **zero cadastros** (o Google, no mesmo período, trouxe 14). O
+anúncio estático "Casa em Leilão por 65 mil de entrada" fez 121 leads a R$ 6,02, enquanto vídeos
+ficaram entre R$ 10,84 e R$ 43,82. **A live se enche pela base, pelos parceiros e pelo WhatsApp;
+o anúncio é complemento.**
+
+Só UM criativo no ar, de propósito: com ~R$ 40 até quarta a campanha produz 4 a 6 inscrições, e
+dois criativos não produziriam um vencedor — produziriam dois anúncios sem dados.
+
+---
+
 ## 🗓️ 28/08 (sessão 12) — A AGENDA IA ACABAR EM DOIS DIAS, E O CRON DIZIA QUE ESTAVA TUDO BEM
 
 O dono pediu duas coisas simples — "por que esses 7 casos não têm relatório" e "sem advogado, a
