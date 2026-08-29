@@ -24,6 +24,23 @@ if [ -z "${SUPABASE_SERVICE_KEY:-}" ] || [ -z "${VITE_SUPABASE_URL:-}" ]; then
   exit 1
 fi
 
+# ─── INTERPRETADORES NO PATH (29/08, ao entrar no cron) ──────────────────────────────────────
+# O cron NÃO herda o PATH do seu shell: ele roda com algo como /usr/bin:/bin. Node instalado por
+# nvm/fnm/asdf vive em ~/.nvm/versions/... e **desaparece** ali dentro.
+#
+# Por que isto é um `exit` e não um aviso: sem `node`, o `rodar()` abaixo falha logo no
+# `coleta-gate.mjs claim`, o `if` dá falso e a fonte é **PULADA EM SILÊNCIO**. O runner
+# terminaria "sem erros", com zero coleta, exatamente como o RJ que saía com exit 0 em 0,6 s por
+# 12 dias. Rodada que não roda tem que gritar.
+for _bin in node python3; do
+  command -v "$_bin" >/dev/null 2>&1 || {
+    echo "[$(date)] ERRO: '$_bin' não está no PATH ($PATH)." >&2
+    echo "  No cron o PATH é mínimo. Rode 'which $_bin' no seu shell e ponha o diretório na" >&2
+    echo "  linha PATH=... do crontab, ou exporte PATH no ~/.bidpro-runner.env." >&2
+    exit 1
+  }
+done
+
 # (2) Trava de INSTÂNCIA ÚNICA na máquina: se já há um runner rodando, sai sem duplicar.
 exec 9>"$HOME/.bidpro-runner.lock"
 if command -v flock >/dev/null 2>&1; then

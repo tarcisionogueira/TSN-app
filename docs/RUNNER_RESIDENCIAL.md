@@ -94,12 +94,31 @@ janela — e cada um usa o próprio IP residencial, então não há sobrecarga d
    ```
    Esperado: cada fonte (SOLEON, GESTAO, RJ, VLANCE) grava **sem tocar no Bright Data**. Se GESTAO/RJ
    não passarem o Cloudflare de primeira, me mande o `~/bidpro-runner.log` que eu ajusto a espera/heurística.
-5. **Agendar no cron — DIÁRIO** (decisão do dono, 29/08):
+5. **Agendar no cron — DIÁRIO** (decisão do dono, 29/08).
+
+   **Descubra os caminhos reais primeiro** — o cron não tem o seu PATH:
    ```bash
-   crontab -e
-   # adicione (troque /CAMINHO pelo caminho real do repo):
-   0 8 * * *  /CAMINHO/tsn-app/scripts/runner-residencial.sh >> $HOME/bidpro-runner.log 2>&1
+   pwd            # o caminho do repo (ex.: /home/tarcisio/TSN-app)
+   which node python3
    ```
+   Depois `crontab -e`, escolha o editor (**1 = nano**) e cole DENTRO do editor:
+   ```cron
+   SHELL=/bin/bash
+   PATH=/home/SEU_USUARIO/.nvm/versions/node/vXX.X.X/bin:/usr/local/bin:/usr/bin:/bin
+   0 8 * * *  /home/SEU_USUARIO/TSN-app/scripts/runner-residencial.sh >> /home/SEU_USUARIO/bidpro-runner.log 2>&1
+   ```
+   Salvar no nano: `Ctrl+O`, `Enter`, `Ctrl+X`. Conferir: `crontab -l`.
+
+   > ⚠️ **Três erros que já aconteceram aqui, os três silenciosos:**
+   > 1. **Colar antes do editor abrir.** Na 1ª vez, `crontab -e` pergunta qual editor usar; texto
+   >    colado antes disso vai para o *prompt da pergunta*, não para o crontab. Espere o nano abrir.
+   > 2. **Deixar `/CAMINHO` literal** — é placeholder, tem de virar o caminho real.
+   > 3. **Cron com menos de 5 campos.** `0 8 * * *` = minuto hora dia mês dia-da-semana. `* *` não
+   >    é agendamento válido e a linha é recusada inteira.
+   >
+   > O `PATH` não é decoração: node instalado por **nvm/fnm/asdf** vive no seu `$HOME` e **não
+   > existe** no PATH mínimo do cron. Sem ele o runner falharia logo no `coleta-gate` e pularia
+   > tudo **em silêncio** — por isso o script agora checa `node`/`python3` e sai com erro alto.
    > **Rodar todo dia não raspa todo leiloeiro todo dia.** O gate `coleta_cliente_claim` continua
    > segurando cada fonte em 72 h, então os scrapers seguem 2x/semana e a rodada diária é barata.
    > Quem aproveita o dia a dia são os passos **fora do gate**: o **radar de editais** (o DJEN
