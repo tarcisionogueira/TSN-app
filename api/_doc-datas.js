@@ -82,19 +82,32 @@ export async function enriquecerPeloDocumento(imovelId, atual = {}) {
     return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
   });
 
-  const pdfParse = await carregarPDFParse();
-  if (!pdfParse) return vazio('sem_pdf_parse');
+  const PDFParse = await carregarPDFParse();
+  if (!PDFParse) return vazio('sem_pdf_parse');
 
+  let ultimoMotivo = 'sem_camada_de_texto';
   for (const a of anexos.slice(0, 3)) {
     let texto = '';
+    let parser = null;
     try {
       const buf = await baixar(a.storage_path);
-      if (!buf) continue;
-      const out = await pdfParse(buf);
-      texto = String(out?.text || '');
-    } catch { continue; }
+      if (!buf) { ultimoMotivo = 'download_falhou'; continue; }
+      // `carregarPDFParse` devolve a CLASSE `PDFParse`, não uma função — instanciar com `new`
+      // e chamar `getText()` é a única forma. Chamá-la direto lança "Class constructor cannot
+      // be invoked without 'new'", e como isso cai no catch, TODO documento virava "sem camada
+      // de texto". Foi o que a validação em seco mediu: 23 de 23 lotes com documento, zero
+      // lidos. O erro estava no meu código, não nos PDFs.
+      parser = new PDFParse({ data: buf });
+      const res = await parser.getText();
+      texto = String(res?.text || '');
+    } catch (e) {
+      // Engolir a exceção é o que fez o defeito acima passar por "PDF escaneado". O motivo
+      // sobe para quem chama e aparece no log.
+      ultimoMotivo = `erro_parse:${String(e?.message || e).slice(0, 60)}`;
+      continue;
+    } finally { if (parser) await parser.destroy().catch(() => {}); }
     // Menos de 200 caracteres é PDF escaneado (só imagem). NÃO é "documento sem data".
-    if (texto.replace(/\s+/g, '').length < 200) continue;
+    if (texto.replace(/\s+/g, '').length < 200) { ultimoMotivo = 'sem_camada_de_texto'; continue; }
 
     const patch = {};
     const { inicio, fim, encerradaEm } = extrairDatasLeilao(texto);
@@ -120,5 +133,5 @@ export async function enriquecerPeloDocumento(imovelId, atual = {}) {
 
     return { lido: true, achou: Object.keys(patch).length > 0, tipo: a.tipo, patch, motivo: null };
   }
-  return vazio('sem_camada_de_texto');
+  return vazio(ultimoMotivo);
 }

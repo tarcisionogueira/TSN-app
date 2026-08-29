@@ -37,6 +37,10 @@ if (error) { console.error('Leitura do acervo falhou:', error.message); process.
 if (!candidatos?.length) { console.error('Nenhum candidato — nada a validar.'); process.exit(1); }
 
 const stats = { testados: 0, sem_anexo: 0, sem_texto: 0, lidos: 0, com_data: 0, com_endereco: 0, com_descricao: 0 };
+// ⚠️ MOTIVOS SEPARADOS. A 1ª rodada jogou tudo em `sem_texto` e o resultado — 23 de 23 sem
+// texto — parecia "os PDFs são escaneados", quando era um bug meu (a classe PDFParse chamada
+// sem `new`). Um balde só de falhas descreve o sintoma e esconde a causa.
+const motivos = {};
 const exemplos = [];
 
 for (const im of candidatos) {
@@ -44,7 +48,7 @@ for (const im of candidatos) {
   const r = await enriquecerPeloDocumento(im.id, im);
   if (r.motivo === 'sem_anexo') { stats.sem_anexo++; continue; }
   stats.testados++;
-  if (!r.lido) { stats.sem_texto++; continue; }
+  if (!r.lido) { stats.sem_texto++; motivos[r.motivo || '?'] = (motivos[r.motivo || '?'] || 0) + 1; continue; }
   stats.lidos++;
   if (r.patch.data_leilao || r.patch.data_leilao_2) stats.com_data++;
   if (r.patch.endereco || r.patch.bairro || r.patch.nomecondominio) stats.com_endereco++;
@@ -60,6 +64,10 @@ for (const im of candidatos) {
 
 console.log('\n=== VALIDACAO EM SECO — nada foi gravado ===');
 console.log(JSON.stringify(stats, null, 1));
+console.log('Motivos de nao ter lido:', JSON.stringify(motivos, null, 1));
 console.log('\nAmostra do que seria preenchido:');
 for (const e of exemplos) console.log(' ', JSON.stringify(e));
-console.log(`\nRequisicoes Bright Data que este run teria evitado: ${stats.testados} de ${stats.testados} testados`);
+// Só conta como economia o lote que o documento RESOLVEU ou descartou com leitura — não o
+// que falhou na leitura, que ainda vai precisar do caminho pago. Dizer "23 de 23 evitadas"
+// com zero lidos foi o meu próprio número mentindo, na mesma rodada.
+console.log(`\nRequisicoes Bright Data que este run teria evitado: ${stats.lidos} de ${stats.testados} testados`);
