@@ -4,6 +4,60 @@
 
 ---
 
+## 🗓️ 29/08 — FECHAMENTO DO DIA (mapa das sessões 14 → 14n)
+
+**36 commits · 59 arquivos · 13 migrações aplicadas.** PR
+[#339](https://github.com/tarcisionogueira/TSN-app/pull/339). Abaixo o mapa; cada linha tem
+entrada própria com as medições.
+
+### O fio que ligou o dia
+Quase tudo saiu de **medir o resultado**, não de ler código. Três defeitos que nenhuma varredura
+teria achado: o botão "Solicitar" que nunca funcionou para ninguém, o "403 do CNJ" que era o
+freio de custo, e 33 mil documentos guardados que a análise não enxergava.
+
+### Custo — a cota do Bright Data
+| o quê | antes | depois |
+|---|---|---|
+| soleon · pecini · gestao · rj (duplicado com o residencial) | 295/sem | ~0 |
+| radar (era "403 do DJEN") | 106/sem | ~0 (roda de casa) |
+| **teto semanal** | **550/550 saturado** | **~150 de uso real** |
+
+### Captura
+- **fonte_regressao_suspeita** reescrita: via 22 de 32 fontes e dizia "íntegro"
+- **+12 leiloeiros SOLEON** (JUCEMG, ~635 imóveis) · **EMILIOMATOS suspenso** (gravava lote de
+  outro leiloeiro sob o nome dele) · 6 candidatos SUPERBID reprovados
+- **HASTA**: catálogo virou por-leilão; nível 2 do motor + paginação → **579 lotes de volta**
+- **runner residencial** ligado, diário, com guarda de PATH e re-exec no auto-update
+- **fonte vazia** deixou de ser silêncio: vira medição e o monitor julga
+
+### Cliente e dinheiro
+- **`/caso` "Solicitar"**: `analise_jobs` vazia em todo o histórico — nunca funcionou
+- **âncora do CDC**: 1 de 4 pagantes sem direito de arrependimento
+- **conversões do Meta**: nunca foram pedidas à API
+- **relatório dizia "reprovada · ROI −100%"** com mercado em branco — e **cobrava** por isso
+- **atribuição manual**: o botão prometia "tornar Assessorado" e não tornava desde 30/07
+
+### Documentos
+- **12.062 registros publicados** do espelho → judicial 70,5% → **85,9%**
+- **matrícula capturada na hora** quando o link é PDF direto (fim do "preliminar")
+- **CEF no espelho** (5.000 enfileirados de 23.484) — 40,3 GB, **US$ 0,055/mês**
+
+### ⏭️ Aberto para a próxima sessão
+1. **`erro_na_tela_do_cliente` = 3** e **`alerta_acima_do_capital` = 2** e
+   **`data_edital_recuou_prazo` = 3** — anteriores a hoje, não investigados
+2. **`bd_teto_saturado` (550/495)** — a semana em curso já estava saturada; **conferir na virada
+   de 31/08** se os consertos derrubam o consumo como projetado
+3. **`canal_sem_conversao_apurada` = 1** — zera após o `meta-insights-cron` das 08h10 UTC
+4. **Card "Lance mínimo (praça atual)"** (`Analise.jsx:2856`) — segue sem lógica de praça;
+   **espera decisão do dono** (praça atual por data × a de maior desconto)
+5. **Rafael**: assessoria paga por fora ainda sem registro — `plano_assinaturas` não tem produtor
+   em lugar nenhum do código (tabela + tela existem, `insert` não)
+6. **CEF drenando**: ~4 dias. Conferir `documento_espelho` e o invariante
+   `anexo_de_espelho_purgado`
+7. **MARAURZEDO** segue sem recon próprio (`via null`, alvo de redirect)
+
+---
+
 ## 🗓️ 29/08 (sessão 14n) — COBERTURA DOCUMENTAL: O GARGALO NÃO ERA CAPTURA, ERA LIGAÇÃO
 
 Partiu de um relatório sem matrícula. O diagnóstico mudou **duas vezes** no caminho, e as duas
