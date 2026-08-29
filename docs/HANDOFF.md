@@ -4,6 +4,86 @@
 
 ---
 
+## 🗓️ 29/08 (sessão 14n) — COBERTURA DOCUMENTAL: O GARGALO NÃO ERA CAPTURA, ERA LIGAÇÃO
+
+Partiu de um relatório sem matrícula. O diagnóstico mudou **duas vezes** no caminho, e as duas
+correções valem mais que a conclusão inicial.
+
+### 1️⃣ 33 mil documentos já estavam no nosso Storage, invisíveis
+
+`documento_espelho` tinha **33.066 arquivos copiados** (11.869 imóveis, **7.391 matrículas**) e
+era **lido por ninguém**: a análise documental consulta só `imovel_anexos`. O sintoma chegou ao
+cliente como "matrícula não disponível" em cima de um PDF a uma consulta de distância.
+
+O ensaio em seco mudou o desenho **duas vezes**: (a) registrar os 12.089 genéricos gastaria as
+10 vagas do leitor e deixaria a matrícula de fora — o defeito ao contrário; (b) o índice único
+revelou que das 10.173 linhas de matrícula, **6.923 são registro de link esperando o arquivo** —
+então o certo não era inserir, era **PREENCHER**.
+
+**6.324 preenchidos + 5.738 inseridos.** Judicial 70,5% → **85,9%**; extrajudicial 16,1% →
+**31,6%**. E o `espelhar-docs-cron` passa a publicar o que copia, na mesma rodada.
+
+### 2️⃣ O relatório não precisava esperar: o link já era PDF direto
+
+O caminho antigo ENFILEIRAVA (`cef_matricula_fila`, drenada de 30 em 30 min) e entregava
+parecer **preliminar**. Ninguém espera 30 minutos por um relatório.
+
+Medido: as **23.484 matrículas da CEF são PDF direto**, média **1,76 MB** — download de
+segundos. `capturarMatriculaDireta` baixa **na hora**, para qualquer fonte cujo `link_matricula`
+termine em `.pdf`. Valida `%PDF-` nos primeiros bytes (lição de 04/08: 63 KB de HTML salvos como
+edital de 738 KB são PIORES que nada) e **relê o cache** depois de gravar — sem isso o arquivo
+entraria no bucket e o relatório sairia preliminar do mesmo jeito.
+
+### 3️⃣ O custo, medido de verdade
+
+Amostra real de 60 links (só cabeçalho, sem baixar): **média 1,76 MB · mediana 1,84 · p90 3,42 ·
+máx 4,58**. Projeção **40,3 GB** → storage 62,3 → **102,6 GB**.
+
+> Pro inclui **100 GB**, depois **US$ 0,021/GB**. O excedente custa **US$ 0,055/mês**. O alarme
+> do meu próprio medidor exagerou: passar de 100 GB não é precipício, é medidor. E é **platô,
+> não rampa** — a retenção apaga a matrícula de venda direta quando a CEF retira o imóvel.
+
+Duas notas contra mim: a média ficou **menor** que a mediana (sem cauda longa — a cautela que
+escrevi no medidor não se aplicou), e **6 de 60 links não responderam**: ~10% dos links de
+matrícula da CEF podem estar mortos, o que baixaria o total para ~36 GB.
+
+### 4️⃣ O edital da CEF fica de fora, e a razão é um defeito evitado
+
+Os **7.655 links de edital apontam para 19 arquivos**. Espelhar por imóvel = **6,9 GB de
+duplicata**. E "uma cópia, N ponteiros" seria PIOR: a retenção apaga por imóvel, e o primeiro
+lote a expirar levaria o arquivo dos outros 7.654.
+
+### 🩹 Um defeito que eu introduzi hoje e fechei hoje
+
+A publicação preenche `storage_path` nulo; a retenção apaga o arquivo e **anula o
+storage_path**. Sem aviso entre os dois, a limpeza apagava e o cron republicava o mesmo caminho
+4 h depois → ponteiro para objeto inexistente, que **parece** documento. Corrigido nos dois
+pontos de exclusão (`documento_espelho.status = 'purgado'`) + invariante
+`anexo_de_espelho_purgado`, porque o aviso é best-effort e não pode derrubar a limpeza.
+
+### 📊 Onde as fontes ficaram
+
+| fonte | ativos | matrícula legível | teto do que o site publica |
+|---|---|---|---|
+| CEF | 23.484 | 12 → **na fila** (5.000 enfileirados) | 23.484 |
+| ZUK | 450 | **122** | 121 links → **no teto** |
+| GRUPOLANCE | 353 | **319** | 310 links → **no teto** |
+| SUPORTE | 90 | 28 | 45 links (17 na fila) |
+
+ZUK e GRUPOLANCE **não têm o que buscar** — corrige o que eu tinha dito antes ("348 faltando"):
+os outros lotes simplesmente não publicam matrícula.
+
+### ⏭️ Conferir
+
+```sql
+select status, count(*) from documento_espelho group by 1;          -- a fila drena?
+select public.registrar_anexos_do_espelho(0);                        -- deve ser 0/0 (o cron faz)
+select * from public.qa_invariantes() where chave='anexo_de_espelho_purgado';
+```
+A CEF entra ~1.000/rodada × 6 rodadas/dia → **~4 dias** para as 23.484.
+
+---
+
 ## 🗓️ 29/08 (sessão 14m) — HASTA: O CATÁLOGO MUDOU DE FORMA (e o parser está intacto)
 
 O recon residencial fechou o caso. **Não é regressão de parser** — consertá-lo seria o pior
