@@ -94,12 +94,18 @@ janela — e cada um usa o próprio IP residencial, então não há sobrecarga d
    ```
    Esperado: cada fonte (SOLEON, GESTAO, RJ, VLANCE) grava **sem tocar no Bright Data**. Se GESTAO/RJ
    não passarem o Cloudflare de primeira, me mande o `~/bidpro-runner.log` que eu ajusto a espera/heurística.
-5. **Agendar no cron** (seg e qui, 08:00 — casa com o gate de 2x/semana):
+5. **Agendar no cron — DIÁRIO** (decisão do dono, 29/08):
    ```bash
    crontab -e
    # adicione (troque /CAMINHO pelo caminho real do repo):
-   0 8 * * 1,4  /CAMINHO/tsn-app/scripts/runner-residencial.sh >> $HOME/bidpro-runner.log 2>&1
+   0 8 * * *  /CAMINHO/tsn-app/scripts/runner-residencial.sh >> $HOME/bidpro-runner.log 2>&1
    ```
+   > **Rodar todo dia não raspa todo leiloeiro todo dia.** O gate `coleta_cliente_claim` continua
+   > segurando cada fonte em 72 h, então os scrapers seguem 2x/semana e a rodada diária é barata.
+   > Quem aproveita o dia a dia são os passos **fora do gate**: o **radar de editais** (o DJEN
+   > publica diariamente — é o que tira o radar do Bright Data, 106 requests/semana) e a triagem
+   > dos bloqueados. Se preferir manter 2x/semana, use `0 8 * * 1,4` — mas aí o radar perde dias
+   > de edital, e vale deixar o cron da Vercel como está.
 6. **DEPOIS de validar (passo que zera o Bright Data)** — desligar os workflows **pagos** da CI para
    não gastarem BD em paralelo com o runner. Me avise que eu comento os `cron:` de
    `scraper-soleon.yml`, `scraper-gestao.yml`, `scraper-rj.yml`, `scraper-pecini.yml` e
@@ -107,8 +113,24 @@ janela — e cada um usa o próprio IP residencial, então não há sobrecarga d
    grátis (`scraper.yml` CEF e `leiloeiros-puppeteer.yml`) — esses não usam BD e já rodam diários.
 
 O `SOLEON_NO_BD=1` / `*_HEADLESS=1` (já no wrapper) **garantem zero BD**: se o direto/headless falhar,
-pula a página em vez de gastar cota. A frequência é do `cron` + do gate no banco (2x/semana) — não roda
-a cada acesso.
+pula a página em vez de gastar cota. A frequência é do `cron` + do gate no banco (72 h por fonte) — não
+roda a cada acesso.
+
+### Radar de editais (DJEN/CNJ) — migrado para cá em 29/08
+`scripts/radar-editais-residencial.mjs` roda **fora do gate** (grava em `editais_leilao`, não no
+acervo) e usa **fetch direto**: o DJEN bloqueia IP de *datacenter*, e era só por isso que a versão
+da Vercel precisava do Web Unlocker. **A convivência com o cron pago é automática e não depende de
+ninguém avisar ninguém:** o script grava `monitor_runs` com `erro: null` quando o pull passa, e o
+cron da Vercel só libera o Bright Data após **7 dias sem nenhum sucesso**
+(`RADAR_DIAS_REDE_SEGURANCA`). Rodando aqui todo dia, o caminho pago nunca acorda.
+
+Duas propriedades que valem entender:
+- **A janela acompanha o buraco.** 3 dias na rotina diária; depois de uma ausência, `dias sem
+  sucesso + 1` (teto 15). Janela fixa de 3 dias numa passada semanal perderia 4 dias de edital
+  **em silêncio**, com o run saindo verde.
+- **Sair com exit 0 não é sucesso.** Run parcial (corte por tempo) grava com `erro`, e se o
+  `monitor_runs` não gravar o script sai com **3** e diz por quê — se esse registro sumisse, a
+  Vercel concluiria "faz 7 dias que ninguém coleta" e pagaria por um trabalho já feito de graça.
 
 > **Quer as fontes pagas mais frequentes que 2x/semana?** O limite é o gate `coleta_cliente_claim`
 > (hardcoded 2x/sem). Posso relaxar para 3x/sem ou diário e ajustar o cron — recomendo validar em

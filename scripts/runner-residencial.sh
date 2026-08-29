@@ -8,7 +8,13 @@
 #   3) gate no banco (coleta_cliente_claim/concluir): 2x/semana por fonte + trava de 15 min +
 #      coordenação ENTRE MÁQUINAS (duas máquinas/staff nunca raspam a mesma fonte ao mesmo tempo).
 #
-# Setup e roadmap: docs/RUNNER_RESIDENCIAL.md. Agendar 2x/semana via cron (ex.: seg e qui).
+# Setup e roadmap: docs/RUNNER_RESIDENCIAL.md.
+#
+# CADÊNCIA — agendar DIARIAMENTE (decisão do dono, 29/08). E rodar todo dia NÃO significa
+# raspar todo leiloeiro todo dia: o gate `rodar()` continua segurando cada fonte em 72 h, então
+# os scrapers seguem 2x/semana e a rodada diária sai barata. Quem aproveita o dia a dia são os
+# passos que NÃO passam pelo gate — o radar de editais (o DJEN publica todo dia; é isso que
+# tira o radar do Bright Data) e a triagem dos bloqueados.
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
 [ -f "$HOME/.bidpro-runner.env" ] && { set -a; . "$HOME/.bidpro-runner.env"; set +a; }
@@ -91,6 +97,26 @@ rodar HASTA env HASTA_DRYRUN=0 HASTA_MAX_LOTES=600 node scripts/scraper-hasta.mj
 # Data); se preferir BD como rede de segurança quando a casa também falhar, tire o VLANCE_NO_BD
 # e exporte BRIGHTDATA_API_TOKEN/ZONE no ~/.bidpro-runner.env.
 rodar VLANCE env VLANCE_NO_BD=1 python3 scripts/scraper_vlance.py --supabase --ignorar-robots
+
+# ── RADAR DE EDITAIS DO DJEN/CNJ (29/08) ────────────────────────────────────────────────────
+# Migrado do Bright Data para cá por decisão do dono: "vou rodar diariamente, migra o radar;
+# caso fique 7 dias sem rodar no residencial, pode rodar pelo Bright Data".
+#
+# O DJEN bloqueia IP de DATACENTER — o Web Unlocker passava só porque sai por IP residencial.
+# Daqui o IP já é residencial e o intermediário PAGO fica dispensável. Era o 2º maior consumidor
+# da cota (106 requests na semana de 24/08; 88 num único dia).
+#
+# NÃO passa pelo `rodar`, e a razão é a mesma da triagem: aquele helper conclui com PROVA DE
+# GRAVAÇÃO NO ACERVO, e o radar grava em `editais_leilao`, não em `imoveis_leilao` — pelo gate
+# ele imprimiria "saiu com sucesso mas NÃO gravou no acervo" em TODA rodada, e alarme falso
+# recorrente é o que treina o dono a ignorar o log.
+#
+# A convivência com o cron da Vercel é automática: este script grava `monitor_runs` com
+# `erro: null` quando o pull passa, e o freio do cron pago só libera o Bright Data depois de 7
+# dias sem NENHUM sucesso. Rodando aqui todo dia, o caminho pago simplesmente nunca acorda.
+# Falha aqui não derruba a rodada: o acervo do dia já entrou nos passos acima.
+node scripts/radar-editais-residencial.mjs \
+  || echo "  (radar de editais falhou — sem efeito no acervo; a rede de segurança paga entra após 7 dias sem sucesso)"
 
 # ── TRIAGEM RESIDENCIAL DOS BLOQUEADOS (29/08) ──────────────────────────────────────────────
 # NÃO coleta lote: descobre QUAL PLATAFORMA rodam os sites que recusaram o acesso grátis.

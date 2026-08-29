@@ -4,6 +4,89 @@
 
 ---
 
+## 🗓️ 29/08 (sessão 14j) — RADAR MIGRADO PARA O RESIDENCIAL (o 2º maior consumidor sai da cota)
+
+Decisão do dono: *"vou rodar diariamente, migra o radar; caso fique 7 dias sem rodar no
+residencial, pode rodar pelo Bright Data."* Feito.
+
+O DJEN bloqueia **IP de datacenter** — o Web Unlocker passava só porque sai por IP residencial.
+De casa o IP já é residencial e **o intermediário pago é dispensável**. Eram **106 requests/semana**
+(88 num único dia).
+
+### 🧱 Um pull só, dois transportes — e o motivo de não ter dois parsers
+
+A única diferença entre coletar pela Vercel e coletar de casa é o **transporte**. Janela, filtro
+duro (`ehEditalReal`), `parseEdital`, dedup por `djen_id` e upsert agora vivem numa função só,
+**`pullDJEN`**, exportada de `api/radar-editais-cron.js` e usada pelos dois caminhos.
+
+> Escrever um parser próprio no script residencial seria repetir, em escala maior, o defeito que
+> o `roteiarDatasPraca` consertou nesta mesma semana: **a mesma regra em três cópias deixou o bug
+> passar nas três.**
+
+- `transporteBrightData` — Vercel/CI, com retry, `semCota` abortando o pull e fallback direto só
+  quando o BD está *sem credencial*;
+- `transporteDireto` — runner residencial, `fetch` puro, **R$ 0**.
+
+### 🔗 Como os dois convivem — sem carimbo novo e sem ninguém avisar ninguém
+
+`scripts/radar-editais-residencial.mjs` grava `monitor_runs` com a **mesma `fonte`** e
+`origem: 'residencial'`. O cron da Vercel lê o **último run com `erro: null`, de qualquer
+origem**, e só libera o Bright Data depois de `RADAR_DIAS_REDE_SEGURANCA` (**7**) dias sem
+sucesso. **Rodando em casa todo dia, o caminho pago nunca acorda.**
+
+O sinal é o **resultado**, não a execução — mesma virada do `coleta-recente.mjs` em 11/08:
+carimbo de "rodei" mente quando o script sai com exit 0 sem trazer nada; a evidência do
+resultado, não. Por isso `monitor_runs.origem` virou coluna (migração
+`monitor_runs_diz_quem_coletou.sql`, aplicada): *"o residencial rodou?"* precisa ser **dado**, não
+dedução pelo horário — dedução é onde a forma nº 10 começa.
+
+### ⚠️ A armadilha que a rede de segurança semanal criaria, e que foi fechada junto
+
+A janela do DJEN era **fixa em 3 dias**. Numa passada **semanal**, isso perderia **4 dias de
+editais em silêncio**, com o run saindo verde. `janelaDJEN` agora usa `dias sem sucesso + 1`
+(mínimo 3, teto 15, para o custo não explodir depois de uma ausência longa).
+
+### ✅ Ensaio em seco, sobre comportamento (o banco ficou fora com um Proxy que lança se tocado)
+
+| cenário | combos chamados | resultado |
+|---|---|---|
+| transporte devolve vazio | 12 | `vistos 0`, `erro null` — dia sem edital é desfecho normal |
+| transporte lança `SemCotaRadar` | **1** | aborta na hora (antes: 12 combos × 4,5 s = os 61 s de `sleep`) |
+| transporte lança `HTTP 500` | 12 | retry preservado — é para isso que o backoff existe |
+
+`janelaDJEN`: `0 → 3 dias` · `6,2 → 8 dias` · `99 → 15 dias (teto)`.
+
+### 🗓️ O que muda na sua máquina
+
+O cron do runner passa a ser **diário** (`0 8 * * *`). **Rodar todo dia não raspa todo leiloeiro
+todo dia:** o gate `coleta_cliente_claim` segue segurando cada fonte em 72 h, então os scrapers
+continuam 2x/semana e a rodada diária sai barata. Quem aproveita o dia a dia são os passos **fora
+do gate** — o radar e a triagem dos bloqueados.
+
+### 📉 Onde a cota fica
+
+| propósito | antes | depois |
+|---|---|---|
+| soleon · pecini · gestao · rj | 295 | ~0 (sessão 14h) |
+| **radar** | **106** | **~0** (rodando em casa) |
+| geral | 99 | 99 — próximo candidato, acoplamento mais frouxo |
+| docs | 50 | 50 — parcial: já tenta grátis em cascata |
+| certidao | reserva | **fica paga**: está no caminho do laudo, com cliente esperando |
+
+De **550/550 saturado** para ~**150 de uso real**. E a folga não é para gastar: é o que faz o
+`teto_global` deixar de recusar as chamadas que têm cliente do outro lado.
+
+### ⏭️ Conferir depois da 1ª rodada diária
+
+```sql
+select ran_at, origem, itens_vistos, itens_novos, janela_inicio, left(coalesce(erro,'—'),60) erro
+  from monitor_runs where fonte='radar-editais-djen' order by ran_at desc limit 8;
+```
+Verde = linha com `origem='residencial'` e `erro is null`. A partir dela, os 6 runs diários da
+Vercel saem sem gastar nada por 7 dias.
+
+---
+
 ## 🗓️ 29/08 (sessão 14i) — O "403 DO DJEN" NÃO ERA DO DJEN: ERA O FREIO DE CUSTO COM O CRACHÁ DO CNJ
 
 Pedido do dono: *"agora resolve o 403 do radar"*. **Não havia 403 do CNJ para resolver.**
