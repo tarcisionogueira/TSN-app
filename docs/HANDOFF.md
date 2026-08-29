@@ -34,22 +34,32 @@ o parâmetro para mais nada.
 banco): anônimo com imóvel → grava; anônimo sem imóvel → grava; rota não pública → 204;
 tipo inventado → 204.
 
-### ⚠️ Como ler o número quando ele chegar — `com_imovel` é PISO, não total
-O cabeçalho público (`api/publico.js:379-382`) aparece em **todas** as páginas, inclusive na do
-lote, e o botão dele vai para `/#/login?modo=cadastro` **sem** o imóvel. Então quem estava
-olhando um lote e clicou no botão do topo, em vez do que está no corpo da página, cai em
-`sem_imovel`. A intenção real de "vim por causa deste imóvel" é **maior** que o medido — e fazer
-o CTA do topo carregar o lote quando a página é de lote é melhoria óbvia para depois.
+### O cabeçalho passou a carregar o lote (mesma sessão, a pedido do dono)
+O cabeçalho público aparece em **todas** as páginas, inclusive na do lote, e os botões dele iam
+para `/#/login?modo=cadastro` **sem** o imóvel — enquanto o CTA do corpo já levava `&imovel=<id>`.
+Quem estava olhando um apartamento e clicava no botão de cima em vez do de baixo chegava ao
+cadastro indistinguível de quem veio da home, e `com_imovel` nasceria subestimado.
+
+`pagina()` ganhou o parâmetro `imovelId`, preenchido **só** por `paginaImovel` — as outras cinco
+páginas públicas não têm lote e nada muda nelas. Vale para **"Entrar"** também: cliente que já
+tem conta e volta por um lote tem a mesma intenção, e o `modo=` no rastro separa os dois na hora
+de ler. **Continua sendo só medição — nada lê o parâmetro ainda.**
+
+**Verificado renderizando as páginas de verdade** (handler importado, `fetch` stubado, nada foi
+ao banco): página do lote → **6 de 6** links de login com `imovel=`; página de cidade → **0 de 5**.
+Ler o diff não provaria: o cabeçalho é uma template string dentro de outra.
 
 ```sql
--- quantos chegam ao /login com o lote no bolso, e quantos viram conta
-select alvo, count(*) vezes, count(distinct anon_id) pessoas,
+-- quantos chegam ao /login com o lote no bolso, separando cadastro de login, e quantos viram conta
+select alvo,
+       case when detalhe like '%modo=cadastro%' then 'cadastro' else 'login' end as modo,
+       count(*) vezes, count(distinct anon_id) pessoas,
        count(distinct anon_id) filter (
          where exists (select 1 from eventos_atividade v
                         where v.anon_id = e.anon_id and v.user_id is not null)) as viraram_conta
   from eventos_atividade e
  where tipo = 'origem_lote' and criado_em > now() - interval '14 days'
- group by 1;
+ group by 1, 2 order by 1, 2;
 
 -- QUAIS lotes trazem gente (e se o mesmo lote traz mais de uma pessoa)
 select split_part(detalhe, 'imovel=', 2) as imovel_id, count(distinct anon_id) pessoas
@@ -57,6 +67,10 @@ select split_part(detalhe, 'imovel=', 2) as imovel_id, count(distinct anon_id) p
  where tipo = 'origem_lote' and alvo = 'com_imovel' and criado_em > now() - interval '30 days'
  group by 1 order by 2 desc limit 20;
 ```
+
+⚠️ **A série tem um degrau.** O cabeçalho só passou a carregar o lote em 29/08 — evento anterior
+a isso subestima `com_imovel`. Comparar semanas por cima dessa data mede a mudança do link, não a
+mudança do comportamento.
 
 **Só decidir depois de ler.** Se `com_imovel` for uma fração ínfima, o gargalo está antes (o CTA
 do lote não é clicado) e ligar o caminho de volta não muda nada. Se for material, o passo 3–4 da
