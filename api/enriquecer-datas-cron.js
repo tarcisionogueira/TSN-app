@@ -80,9 +80,13 @@ export default async function handler(req, res) {
       await marcar(im.id, patchDoc);
       continue;                       // resolvido de graça: nem chega no caminho pago
     }
-    // Documento LIDO e sem a data: a página do lote raramente dirá mais que o edital, e cada
-    // tentativa custa cota. Carimba para revezar a fila e segue — sem gastar.
-    if (doc.lido) { poupados++; await marcar(im.id, { enriquecido_em: agora }); continue; }
+    // ⚠️ DOCUMENTO LIDO E SEM DATA **NÃO** ENCERRA O LOTE. A primeira versão carimbava e
+    // seguia, "para economizar" — e isso teria CONGELADO 74% dos lotes: a validação mediu que
+    // o edital entrega a data em 6 de 23 casos, então os outros 17 nunca mais teriam sido
+    // tentados por nenhum caminho, ficando sem data para sempre. Economia que produz acervo
+    // mudo não é economia; é o freio de custo entregue como conteúdo (forma nº 5 do
+    // CLAUDE.md). Quem o documento não resolve continua elegível ao caminho pago, limitado
+    // pelo teto por run.
 
     // ── 2º SÓ ENTÃO O CAMINHO PAGO ───────────────────────────────────────────────────────
     if (pagos >= PAGO_MAX) continue;  // sem carimbar: quem não foi lido volta na próxima fila

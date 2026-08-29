@@ -27,7 +27,6 @@
  */
 import { carregarPDFParse } from './_pdf-safe.js';
 import { extrairDatasLeilao } from './enriquecer-lote.js';
-import { extrairIdentidadeTexto } from './_doc-extracao.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -115,21 +114,21 @@ export async function enriquecerPeloDocumento(imovelId, atual = {}) {
     if (fim && !atual.data_leilao_2) patch.data_leilao_2 = fim;
     if (encerradaEm && !atual.data_leilao && !atual.data_leilao_2) patch.data_leilao = encerradaEm;
 
-    // ENDEREÇO só COMPLEMENTA — nunca sobrescreve o que a coleta trouxe. O logradouro do
-    // edital é o do IMÓVEL na maioria das vezes, mas em edital judicial pode ser o endereço
-    // do cartório ou da vara; sobrescrever um endereço bom por esse seria piorar a ficha em
-    // silêncio, e o pino do mapa é o que o cliente vê.
-    const id = extrairIdentidadeTexto(texto);
-    if (id) {
-      if (id.logradouro && !String(atual.endereco || '').trim()) patch.endereco = id.logradouro.slice(0, 200);
-      if (id.bairro && !String(atual.bairro || '').trim()) patch.bairro = id.bairro.slice(0, 60);
-      if (id.nomeCondominio && !String(atual.nomecondominio || '').trim()) patch.nomecondominio = id.nomeCondominio.slice(0, 120);
-    }
-    // DESCRIÇÃO: só quando não há nenhuma. O trecho é o começo útil do documento, limpo.
-    if (!String(atual.descricao || '').trim()) {
-      const trecho = texto.replace(/\s+/g, ' ').trim().slice(0, 600);
-      if (trecho.length >= 120) patch.descricao = trecho;
-    }
+    // ⚠️ ENDEREÇO E DESCRIÇÃO **NÃO** SÃO GRAVADOS, e isto é uma decisão MEDIDA, não cautela
+    // teórica. A validação em seco de 29/08 mostrou o extrator acertando 22 de 23 lotes… com o
+    // endereço ERRADO: seis imóveis diferentes — em São Paulo, Porto Alegre, Santos e Penha de
+    // França — receberiam todos "Avenida Fagundes Filho", que é o endereço do ESCRITÓRIO DO
+    // LEILOEIRO no cabeçalho do edital. `extrairIdentidadeTexto` pega o primeiro logradouro do
+    // texto, e num edital o primeiro logradouro é quase sempre o de quem publica, não o do bem.
+    //
+    // Gravar isso teria movido o pino do mapa de 22 dos 23 lotes para o mesmo lugar errado —
+    // um estrago silencioso, exatamente do tipo que o cliente descobre no dia da visita. O
+    // pedido do dono (extrair endereço do documento) só volta com um extrator que ancore o
+    // logradouro no TRECHO DO BEM (após "descrição do imóvel", "matrícula nº"), e validado
+    // contra a cidade que o acervo já conhece.
+    //
+    // A DATA fica, porque a validação a mediu certa: 6 de 23 (26%) — e data errada não passa
+    // pelo filtro de plausibilidade de `extrairDatasLeilao` do mesmo jeito que endereço passa.
 
     return { lido: true, achou: Object.keys(patch).length > 0, tipo: a.tipo, patch, motivo: null };
   }
