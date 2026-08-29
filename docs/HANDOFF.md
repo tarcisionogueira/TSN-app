@@ -404,11 +404,72 @@ venceu em 08/07 de qualquer forma — é registro, não reembolso).
 
 ---
 
-## 🔚 29/08 — ENCERRAMENTO DA SESSÃO 14 (a–f)
+## 🗓️ 29/08 (sessão 14g) — MEDIR DERRUBOU A PENDÊNCIA 1, E MG ENTRA PELO RESIDENCIAL
 
-Sessão aberta pelo ritual completo (heartbeat · Cliente 360 · Marketing · Saúde). **7 commits**,
-**6 migrações aplicadas**, **5 invariantes novos**. O fio condutor do dia foi um só: *quase todo
-achado veio de MEDIR o resultado, e quase nenhum apareceria em revisão de código.*
+Duas frentes pedidas pelo dono depois do fecho: *"mede o mapper da MEGA antes de mexer"* e
+*"veja a lista de leiloeiros de MG para colocar no residencial e evitar consumir o Bright Data"*.
+
+### 1️⃣ MEGA — a medição reverteu a minha própria pendência
+
+Detalhe completo na **pendência 1** acima (agora marcada como resolvida). Em uma linha: trocar o
+mapper derrubaria `data_fim` de até 606 lotes para o passado, porque **nada segura o prazo** —
+`data_leilao_2` e `valor_minimo_2` estão zerados em 100% da fonte. O defeito real estava no
+**invariante**, que supunha `data_leilao` = abertura da 1ª praça. Corrigido, 1 → 0.
+
+> **A lição que fica:** eu tinha escrito a pendência com a solução junto (*"troque por `datas[0]`"*).
+> A solução estava errada, e só a medição mostrou. **Pendência deve registrar o SINTOMA medido; a
+> cura sai depois de medir, não antes.**
+
+### 2️⃣ Leiloeiros de MG — o gargalo não era coletar, era ENXERGAR
+
+```
+53 sites bloqueados na triagem da JUCEMG · 51 com `plataforma` NULA
+```
+
+E esse null **não** significa "não roda plataforma conhecida": significa que o Cloudflare devolveu
+*"Just a moment..."* e **o HTML nunca foi lido**. São 53 leiloeiros contados como "custa Bright
+Data" sem que se saiba se já teriam parser pronto — **dois já se sabe que sim**
+(`adrianoleiloeiro.com.br` e `angelabecharaleiloes.com.br`, ambos **Superbid**).
+
+`recon-triagem-jucemg.mjs` ganhou duas chaves e o passo entrou no `runner-residencial.sh`:
+
+| Env | O que faz |
+|---|---|
+| `TRIAGEM_HEADLESS=1` | quando o fetch simples é bloqueado, repete no **Chromium real** (`fetch-residencial.mjs`, o mesmo de GESTAO/RJ). **Nunca por padrão** — navegador só entra onde o simples não serviu |
+| `TRIAGEM_BLOQUEADOS=1` | a lista vem do **banco** (`leiloeiro_triagem where bloqueado`): ~53 páginas em vez de 141, e serve **JUCESP/JUCERJA/JUCEES** sem editar nada |
+
+**Bright Data continua fora** — descobrir segue custando R$ 0; o que mudou é que o "de graça"
+agora alcança quem está atrás do Cloudflare.
+
+**Três armadilhas evitadas no caminho** (as três teriam produzido silêncio ou alarme falso):
+- `fetchHeadless` devolvendo `null` **não** vira 200 vazio — senão o site sairia da lista de
+  bloqueados **sem nunca ter sido lido** (forma nº 1), apagando justo quem a rodada existe para
+  recuperar;
+- o passo **não** usa o helper `rodar`: aquele gate conclui com **prova de gravação no ACERVO**, e
+  a triagem grava em `leiloeiro_triagem` — imprimiria *"não gravou no acervo"* em toda rodada;
+- o script mede o **desfecho**, não o esforço: `DESTRAVADOS pelo residencial: N de 53` e, destes,
+  **quantos já têm parser** — a diferença entre configurar um tenant e escrever parser novo.
+
+> ⚠️ **Plataforma descoberta NÃO é lote coletado.** Em 29/08, 11 sites classificados como Superbid
+> enumeraram **ZERO** lotes: a assinatura de HTML provava que o site *menciona* a plataforma, não
+> que *roda* o catálogo. O script imprime esse aviso ao final, de propósito.
+
+**Depende do dono:** isso só roda quando o **runner residencial** estiver ligado — continua sendo
+o passo `[DONO]` pendente em `docs/RUNNER_RESIDENCIAL.md`. Quando rodar, o log já diz quantos
+leiloeiros de MG saíram do balde pago.
+
+**Arquivos:** `scripts/recon-triagem-jucemg.mjs`, `scripts/runner-residencial.sh`,
+`docs/RUNNER_RESIDENCIAL.md`, migração
+`praca_fim_antes_do_inicio_deixa_de_supor_que_data_leilao_e_a_1a_praca` (aplicada).
+
+---
+
+## 🔚 29/08 — ENCERRAMENTO DA SESSÃO 14 (a–g)
+
+Sessão aberta pelo ritual completo (heartbeat · Cliente 360 · Marketing · Saúde). **10 commits**,
+**8 migrações aplicadas**, **5 invariantes novos**. O fio condutor do dia foi um só: *quase todo
+achado veio de MEDIR o resultado, e quase nenhum apareceria em revisão de código* — inclusive dois
+que derrubaram hipóteses **minhas** (o `{estrito:true}` e a pendência do mapper da MEGA).
 
 ### ✅ O QUE FOI FECHADO
 
@@ -444,33 +505,56 @@ achado veio de MEDIR o resultado, e quase nenhum apareceria em revisão de códi
 | `erros_cliente` abertos | **2** — os dois do P5, conhecidos |
 | Convite da live | `convite_live_armado = 2026-09-02`, 0 envios (dispara domingo 08h UTC) |
 
-**6 invariantes em alerta, e NENHUM é surpresa** — 3 deles eu criei hoje justamente para acusar:
+**5 invariantes em alerta, e NENHUM é surpresa** — 3 deles eu criei hoje justamente para acusar:
 
 - `praca_fim_sem_produtor` **1** · `canal_sem_conversao_apurada` **1** · `erro_na_tela_do_cliente` **3**
   → **os três zeram sozinhos quando os consertos rodarem em produção.** É assim que amanhã se
   confirma que funcionaram — não relendo o código.
 - `bd_teto_saturado` 550/495 → o freio funcionando; a semana vira **segunda (31/08)**.
 - `alerta_acima_do_capital` 2 → resíduo de 24/08, sai da janela em 31/08.
-- `praca_fim_antes_do_inicio` 1 → **novo, e é o item 1 abaixo.**
+
+> `praca_fim_antes_do_inicio` chegou a acusar 1 no fecho e **foi resolvido na sessão 14g**: era
+> falso positivo do próprio invariante, não dado ruim. Ver a pendência 1.
 
 ---
 
 ## 📌 PENDÊNCIAS PARA A PRÓXIMA SESSÃO (30/08)
 
-### 🔴 1 — O MAPPER DA MEGA DESFEZ O CONSERTO DE 28/08 EM MENOS DE 24 H
-```js
-// scripts/scraper-puppeteer.mjs:488
-const dataLeilao = datas.find(d => d >= agora) || datas[0] || null;
-```
-Ele grava a praça **VIGENTE**, não a 1ª. O lote de Guarulhos (`46cff9af`, MEGA) foi reorganizado
-à mão em 28/08 para *1ª praça 20/08 · 2ª praça 10/09*; **hoje às 15:00 a coleta o reescreveu**
-para `data_leilao = 10/09` e `data_leilao_2 = null`, deixando `praca1_fim = 20/08` **antes** da
-abertura — que é o alerta `praca_fim_antes_do_inicio` que apareceu no fecho.
+### ✅ 1 — MAPPER DA MEGA: **MEDIDO, E NÃO SE MEXE** (resolvido em 29/08)
 
-**NÃO consertei a linha de novo**: seria desfeito na próxima coleta, e essa é a lição. O que
-precisa mudar é o mapper — `datas[0]` (a mais cedo) para `data_leilao`, a seguinte para
-`data_leilao_2`. **Mexe na data de 606 lotes**, então exige medir antes: quantos lotes mudam de
-`data_leilao`, e se algum sai/entra do ar por causa disso (`data_fim` é o que decide).
+> ⚠️ **Esta pendência foi escrita por mim e a medição a DERRUBOU.** Fica registrada como está
+> para que ninguém a "retome" achando que ficou pela metade.
+
+O que eu tinha proposto: trocar `datas.find(d => d >= agora)` (praça vigente) por `datas[0]`
+(a mais cedo) em `scripts/scraper-puppeteer.mjs:488`. Medido no acervo, **seria ativamente nocivo**:
+
+```
+606 lotes MEGA ativos · 606 com data · data_leilao_2: 0 · valor_minimo_2: 0
+data_fim == data_leilao em 606 de 606 · lotes com data já passada: 0
+```
+
+1. **`valor_minimo_2 = 0`** → o bloco de "praças emparelhadas" **nunca rende 2 praças** na MEGA.
+   Não há matéria-prima nem para a variante que usaria o `titulo` ("1ª Praça"/"2ª Praça").
+2. **`data_fim` acompanha `data_leilao` 1:1 em 100% dos lotes**, sem `data_leilao_2` para segurar
+   nada. Mover a data para a praça mais cedo derrubaria `data_fim` para o passado e o cron
+   **desativaria lote VIVO** — a avaria de 28/08, agora em escala de 606.
+3. **Nenhum lote tem data passada hoje** → a heurística da praça vigente não está produzindo dado
+   quebrado. Ela responde *"quando posso dar lance"*, que é uma pergunta legítima.
+
+**A raiz era o INSTRUMENTO, não o mapper.** `praca_fim_antes_do_inicio` comparava
+`praca1_fim < data_leilao` **supondo que `data_leilao` fosse a abertura da 1ª praça**. Fontes que
+gravam a praça vigente fazem um `praca1_fim` CORRETO parecer anterior à abertura. Era esse o único
+achado do invariante, e era falso. Passa a comparar só quando há **uma praça conhecida**
+(`data_leilao_2` e `praca2_fim` nulos). Dry-run antes de aplicar: **1 → 0**.
+
+> 📌 Isso importa para o produtor que subiu hoje: sem esse conserto, **cada `praca1_fim` novo
+> viraria alarme** conforme a fonte avançasse a data. O falso positivo teria crescido junto com a
+> cobertura — e seria lido como "o produtor novo está gravando errado".
+
+**O que fica em aberto** (menor e diferente do que a pendência dizia): a MEGA não publica a 2ª
+praça de forma que o coletor capture (`valor_minimo_2` zerado em 606). Enquanto isso, `praca2_fim`
+para essa fonte só virá pelo **edital**, via `_doc-datas`. Não é bug do mapper — é limite do que a
+listagem entrega.
 
 ### 🟠 2 — Confirmar que os 3 invariantes novos zeraram
 `meta-insights-cron` roda **08h10 UTC**; se `canal_sem_conversao_apurada` continuar em 1, o
