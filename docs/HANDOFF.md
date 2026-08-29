@@ -4,6 +4,66 @@
 
 ---
 
+## 🗓️ 29/08 (sessão 14s) — O LOTE QUE TRAZ A PESSOA É DESCARTADO NO `/login` (medindo antes de consertar)
+
+### O achado, lendo o código
+`api/publico.js:882,900` — o CTA dentro da página do lote manda para
+`/#/login?modo=cadastro&imovel=<id>`. **`Login.jsx` nunca leu esse parâmetro:** procurado
+`params.get('imovel')` no `src/` inteiro, **zero consumidores**. Quem clicou em *"Criar conta
+grátis e ver a ficha"* naquele apartamento específico cria a conta e cai na Home — o imóvel que
+motivou o cadastro é descartado no caminho.
+
+O mecanismo para resolver **já existe e já foi construído para outra coisa**: `tsn_redirect_produto`
+(sessionStorage) leva a pessoa de volta à página do curso/eBook depois da confirmação do e-mail.
+Mesmo problema, resolvido uma vez, nunca ligado para o lote.
+
+### O que entrou AGORA — só medição, nenhum comportamento
+Evento `origem_lote`, carimbado na montagem do `/login`. Não muda destino, não muda tela, não lê
+o parâmetro para mais nada.
+
+**Duas decisões que valem o comentário que carregam:**
+1. **Carimba sempre — com e sem imóvel.** Registrar só quando o parâmetro existe daria o
+   numerador sem o denominador, e um zero seria indistinguível de "o evento não está subindo".
+   Com as duas metades no mesmo rastro, zero-com-imóvel vira **medição**, não dúvida.
+2. **`origem_lote` entrou em `TIPOS` *e* em `TIPOS_ANON`.** É o único evento dessa família que
+   nasce para o **visitante**, e sem a segunda lista voltaria 204. Seria a **quarta** vez que essa
+   allowlist deixa de fora justamente a página que estava recebendo gente — as três anteriores
+   (`leiloes`, `leilao`, `live`) estão narradas dentro do próprio `api/track.js`.
+
+**Verificado rodando o handler real** (`api/track.js` importado, `fetch` stubado, nada foi ao
+banco): anônimo com imóvel → grava; anônimo sem imóvel → grava; rota não pública → 204;
+tipo inventado → 204.
+
+### ⚠️ Como ler o número quando ele chegar — `com_imovel` é PISO, não total
+O cabeçalho público (`api/publico.js:379-382`) aparece em **todas** as páginas, inclusive na do
+lote, e o botão dele vai para `/#/login?modo=cadastro` **sem** o imóvel. Então quem estava
+olhando um lote e clicou no botão do topo, em vez do que está no corpo da página, cai em
+`sem_imovel`. A intenção real de "vim por causa deste imóvel" é **maior** que o medido — e fazer
+o CTA do topo carregar o lote quando a página é de lote é melhoria óbvia para depois.
+
+```sql
+-- quantos chegam ao /login com o lote no bolso, e quantos viram conta
+select alvo, count(*) vezes, count(distinct anon_id) pessoas,
+       count(distinct anon_id) filter (
+         where exists (select 1 from eventos_atividade v
+                        where v.anon_id = e.anon_id and v.user_id is not null)) as viraram_conta
+  from eventos_atividade e
+ where tipo = 'origem_lote' and criado_em > now() - interval '14 days'
+ group by 1;
+
+-- QUAIS lotes trazem gente (e se o mesmo lote traz mais de uma pessoa)
+select split_part(detalhe, 'imovel=', 2) as imovel_id, count(distinct anon_id) pessoas
+  from eventos_atividade
+ where tipo = 'origem_lote' and alvo = 'com_imovel' and criado_em > now() - interval '30 days'
+ group by 1 order by 2 desc limit 20;
+```
+
+**Só decidir depois de ler.** Se `com_imovel` for uma fração ínfima, o gargalo está antes (o CTA
+do lote não é clicado) e ligar o caminho de volta não muda nada. Se for material, o passo 3–4 da
+sequência (guardar o id e cair na ficha depois do login) é o conserto — e é pequeno.
+
+---
+
 ## 🗓️ 29/08 (sessão 14r) — ADESÃO: O ITEM 2 FICOU · O ITEM 1 FOI **DESCARTADO PELO DONO**
 
 ### ❌ Item 1 — "o 1º relatório nasce da triagem" — construído e descartado no mesmo dia
