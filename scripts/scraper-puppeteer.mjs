@@ -3183,21 +3183,26 @@ async function scraperGrupoLance(browser) {
   return imoveis;
 }
 
+// CONTAGEM NO BANCO, não no JavaScript (30/08). Isto fazia `.select('fonte').eq('ativo', true)`
+// e contava as linhas aqui — só que o PostgREST devolve no MÁXIMO 1.000 linhas por requisição e
+// não havia `.range()`. O painel imprimia as mil primeiras como se fossem o acervo. A prova é
+// aritmética: no relatório que o dono viu, 818+52+40+37+30+9+3+3+2+2+1+1+1+1 = **1.000 exatos**,
+// com a CEF marcada 818 quando tinha 23.484 ativos, e HASTA/LJUD/MEGA/SOLD/GRUPOLANCE ausentes
+// da lista — ausência que se lê como "essa fonte não traz nada".
+// Mesma raiz do `.limit(12)` de 12/08: janela de TRANSPORTE tratada como se fosse o conjunto.
 async function relatorioCapitacao() {
-  const { data } = await supabase
-    .from('imoveis_leilao')
-    .select('fonte')
-    .eq('ativo', true);
-
-  if (!data) return;
-
-  const contagem = {};
-  data.forEach(({ fonte }) => { contagem[fonte] = (contagem[fonte] || 0) + 1; });
-
-  console.log('\n📊 Captação atual por leiloeiro:');
-  Object.entries(contagem).sort((a, b) => b[1] - a[1]).forEach(([fonte, qtd]) => {
-    console.log(`   ${fonte.padEnd(12)} ${qtd.toLocaleString('pt-BR')} imóveis`);
-  });
+  const { data, error } = await supabase.rpc('acervo_por_fonte');
+  // Sem este ramo, falha de leitura viraria um painel vazio — "nenhuma fonte captou nada",
+  // que é a conclusão oposta e igualmente convincente.
+  if (error || !Array.isArray(data)) {
+    console.log(`\n📊 Captação atual por leiloeiro: NÃO FOI POSSÍVEL LER (${error?.message || 'resposta inesperada'}) — isto não é acervo vazio.`);
+    return;
+  }
+  const total = data.reduce((s, r) => s + Number(r.ativos || 0), 0);
+  console.log(`\n📊 Captação atual por leiloeiro (${total.toLocaleString('pt-BR')} ativos):`);
+  for (const { fonte, ativos } of data) {
+    console.log(`   ${String(fonte).padEnd(14)} ${Number(ativos).toLocaleString('pt-BR')} imóveis`);
+  }
   console.log();
 }
 
