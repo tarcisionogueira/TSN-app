@@ -109,7 +109,14 @@ export function capturarMarketing() {
       // `oppref` é o identificador de clique do OpenAI Ads (o gclid deles). O próprio pixel o
       // guarda no cookie `__oppref`; capturamos aqui pelo MESMO motivo do gclid — para o
       // NOSSO banco saber a origem mesmo quando o pixel está bloqueado ou dormente.
-      gclid: get('gclid'), fbclid: get('fbclid'), oppref: get('oppref'),
+      // `gbraid`/`wbraid` (30/08): o Google manda ESTES no lugar do `gclid` quando o clique
+      // vem sem cookie de terceiro (iOS/ATT, app→web, consentimento negado). O tracker já os
+      // gravava em `visita_origem` — 463 visitas em 30 dias, contra 968 com gclid, ou seja
+      // quase 1/3 dos cliques pagos. Este objeto, que é o que alimenta a ATRIBUIÇÃO DO
+      // CADASTRO, nunca os capturou: todo clique de iPhone chegava ao perfil sem origem.
+      // É o mesmo defeito do `fbclid` corrigido em 28/08, na outra metade do sistema.
+      gclid: get('gclid'), gbraid: get('gbraid'), wbraid: get('wbraid'),
+      fbclid: get('fbclid'), oppref: get('oppref'),
       utm_source: get('utm_source'), utm_medium: get('utm_medium'), utm_campaign: get('utm_campaign'),
       utm_content: get('utm_content'), utm_term: get('utm_term'),
     };

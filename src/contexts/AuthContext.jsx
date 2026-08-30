@@ -3,6 +3,7 @@ import { supabase, marcarSimulacao } from '../utils/supabase';
 import { ativarPushAutomatico } from '../utils/push';
 import { salvarRef, lerRef, limparRef } from '../utils/ref';
 import { lerMarketing } from '../utils/marketing';
+import { anonId } from '../utils/tracker';
 import { salvarConvite, lerConvite, limparConvite, lerTermosAceitos, limparTermosAceitos, CHAVE_EQUIPE, CHAVE_CLIENTE, CHAVE_PLANO } from '../utils/convitePendente';
 
 const AuthContext = createContext(null);
@@ -280,7 +281,25 @@ export function AuthProvider({ children }) {
           if (!refPendente) { try { await supabase.rpc('vincular_owner_default'); } catch (_) {} }
           // ATRIBUIÇÃO de marketing (gclid/fbclid/utm) capturada na chegada → grava 1x (first-touch)
           // para casar a captação com a origem paga (Google Ads / Meta).
-          try { const mkt = lerMarketing(); if (mkt) await supabase.rpc('registrar_marketing', { p: mkt }); } catch (_) {}
+          // ATRIBUIÇÃO — TRÊS CONSERTOS DE 30/08, e o do meio é o que mais doía.
+          // (a) `if (mkt)` PULAVA a chamada quando o localStorage não tinha nada (aba anônima,
+          //     storage bloqueado, cadastro em navegador diferente do da chegada). Agora o
+          //     `anon_id` vai junto e o SERVIDOR busca a origem em `visita_origem`, que é o
+          //     caminho saudável: 1.735 visitas em 30 dias, 968 com gclid e 463 com gbraid,
+          //     contra 17 de 53 cadastros com origem. A atribuição deixa de depender do
+          //     caminho mais fraco dos dois.
+          // (b) `supabase.rpc()` devolve `{data, error}` e NÃO LANÇA em não-2xx (forma #2 do
+          //     CLAUDE.md): o try/catch aqui nunca viu uma recusa de RLS nem um 400. Somado ao
+          //     `catch (_) {}`, uma falha de atribuição era literalmente invisível — e
+          //     atribuição perdida não dá erro em lugar nenhum, só some do relatório.
+          // (c) O retorno agora diz o que foi gravado, então dá para separar "não veio de
+          //     anúncio" de "não consegui registrar".
+          try {
+            const mkt = lerMarketing();
+            const { data: rMkt, error: eMkt } = await supabase.rpc('registrar_marketing', { p: mkt || null, p_anon_id: anonId() });
+            if (eMkt) console.warn('[atribuicao] nao registrada:', eMkt.message || eMkt);
+            else if (rMkt && rMkt.ok === false) console.warn('[atribuicao] recusada:', rMkt.motivo);
+          } catch (e) { console.warn('[atribuicao] excecao:', e?.message || e); }
           const convite = lerConvite(CHAVE_CLIENTE);
           if (convite) {
             try { await supabase.rpc('usar_convite', { p_codigo: convite }); } catch (_) {}

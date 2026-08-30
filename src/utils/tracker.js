@@ -60,7 +60,11 @@ function agendar() { if (!timer) timer = setTimeout(flush, 5000); }
 // Identidade ANÔNIMA persistente (localStorage): costura a jornada do visitante SEM conta
 // (links de venda/páginas públicas) e, quando ele cadastra, liga o antes e o depois — o
 // servidor grava anon_id junto do user_id.
-function anonId() {
+// EXPORTADO (30/08): a atribuição do cadastro passou a usar este mesmo id para casar o
+// perfil com a linha de `visita_origem`. Ver `registrar_marketing` — sem a chave compartilhada,
+// os dois sistemas de captura continuariam paralelos e o cadastro seguiria dependendo só do
+// `tsn_mkt`, que é o caminho que vazava.
+export function anonId() {
   try {
     let v = localStorage.getItem('bp_aid');
     if (!v) { v = (crypto.randomUUID?.() || `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 12)}`); localStorage.setItem('bp_aid', v); }
