@@ -131,17 +131,45 @@ por código, o código fica pronto e parado esperando aprovação.** Começar po
 3. **LGPD.** Conteúdo de DM é dado pessoal de terceiro. Definir retenção e finalidade ANTES de
    gravar — a mesma régua que barrou o uso das listas de WhatsApp hoje.
 
-#### 🤔 DECISÕES DO DONO, antes de a sessão começar
-- **Qual conta**: `bidprobrasil` ou `tarcisionogueiraleiloes`? (a segunda tem o público de
-  leilão; a primeira é a marca do produto)
-- **Escopo v1**: só DM, ou também comentário?
-- **O que o bot faz**: qualifica e manda link de cadastro? responde dúvida de leilão? agenda?
-- **Quando entrega para humano** — e para quem, já que ainda não há analista nomeado.
+#### ✅ DECIDIDO PELO DONO (30/08) — a sessão começa com isto fechado
+| Pergunta | Resposta |
+|---|---|
+| **Conta** | **`tarcisionogueiraleiloes`** (o público de leilão está nela, não na marca do produto) |
+| **Escopo v1** | **DM + comentário + reação/resposta de story**, se der |
+| **Persona** | **responde como se fosse ELE**; aprende lendo as respostas que ele mesmo manda |
+| **Destino** | **link da bio**, e idealmente sabendo qual é a **campanha/oferta vigente** |
+| **Humano entra** | **depois do lead preenchido** em live/evento — não antes |
 
-#### 💡 O ATALHO QUE JÁ ESTÁ NO AR
-`set_page_welcome_message` (Windsor/Meta) já é usado por nós e define a saudação automática de
-anúncio click-to-message — **sem revisão de app**. Não é o ManyChat, mas cobre o primeiro toque
-de quem vem de anúncio enquanto a revisão não sai.
+#### 🔑 O QUE ESSAS DECISÕES IMPLICAM, e não é óbvio
+**1. "Aprender com as minhas respostas" é possível — mas só do dia 1 em diante.** O webhook
+entrega `message_echoes`, ou seja, as mensagens enviadas PELA conta, inclusive as digitadas à
+mão por ele no app. Isso é um corpus real do jeito dele. **Mas o histórico de DM não é
+exportável em massa pela API.** Consequência prática na ordem do trabalho: **subir o webhook em
+modo SÓ-ESCUTA o quanto antes**, mesmo antes da Revisão do App, para o corpus encher enquanto a
+burocracia corre. Nas primeiras semanas o bot depende de instrução escrita, não de exemplo.
+
+**2. "Saber a campanha vigente" pede uma tabela, não um prompt fixo.** Algo como
+`ig_campanha_ativa` (oferta, link, data de início/fim, intenção). Assim o bot direciona para a
+aula de 02/09 hoje e para outra coisa em outubro, **sem deploy**. É o mesmo padrão dormente do
+Pixel: o comportamento muda por dado, não por código.
+
+**3. Persona "sou eu" tem uma questão a decidir ANTES de ir ao ar:** se e como sinalizar que a
+resposta é automática. ManyChat e concorrentes operam sem sinalizar, mas **não confirmei a
+política atual da Meta para isso** — é item de verificação na doc, não achismo. Registrado como
+pendência de verificação, não como impedimento.
+
+**4. Comentário e story são webhooks/permissões DIFERENTES de DM.** `instagram_manage_comments`
+para comentário; resposta de story chega como mensagem com referência à story. **A reação (o
+emoji rápido) precisa ser confirmada na doc** — não afirmo que chega como evento. Isso divide o
+v1 em três frentes com prazos de revisão possivelmente diferentes.
+
+#### 💡 O ATALHO QUE EU SUPERVENDI — retirado (30/08)
+`set_page_welcome_message` só vale para anúncio **click-to-message**. As duas campanhas no ar
+(`TRF - SITE - LEILOES`, `CONV - AULA 02SET`) mandam para **site**, não para o Direct — a
+saudação não seria vista por ninguém. E mesmo onde se aplica, ela **não converte**: reduz o
+atrito do "o que eu escrevo?", e depois disso a pessoa cai no inbox. Sem o bot atrás, o ganho
+evapora. **Só vale acompanhado do bot, ou se voltarem as campanhas de Direct** (que existiram:
+R$ 757 em out/2025).
 
 ### ⏳ SE PROVAM SOZINHAS — confira, não conserte
 | Quando | O quê | Verde é |
