@@ -8,7 +8,7 @@
 -- DUPLICADOS DO ACERVO NASCERAM (Igor 06/07, Fabrício 30/08). A trava sem o aviso protege o
 -- banco e produz o comportamento que ela deveria evitar.
 --
--- A NORMALIZAÇÃO AQUI É A MESMA DO ÍNDICE, e tem que ser: `(43) 99196-7056` e `43991967056`
+-- A NORMALIZAÇÃO AQUI É A MESMA DO ÍNDICE, e tem que ser: `(11) 99999-0001` e `11999990001`
 -- são o mesmo número e strings diferentes. Comparar a coluna crua faria a checagem responder
 -- "livre" para um telefone que o índice vai recusar meio segundo depois — o aviso mentiria e
 -- o cadastro quebraria assim mesmo.

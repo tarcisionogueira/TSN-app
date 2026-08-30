@@ -123,7 +123,7 @@ agente humano, e a política sobre sinalizar resposta automática. Não tratar c
 O dono suspeitou de um cadastro duplicado no `/admin`. **Era** — e o rastro levou a mais dois
 achados.
 
-**O duplicado, provado pelo telefone:** `43991967056` idêntico nos dois. Fabrício se inscreveu
+**O duplicado, provado pelo telefone:** o MESMO número nos dois (não transcrito aqui — repositório público). Fabrício se inscreveu
 pela live às 15:31 (`fabricio111x@`, landing `/live/leilao-ao-vivo`) e refez pela home às 15:34
 (`fabriciorodriguezbr@`) — errando o próprio sobrenome ("Rodrigues" com o e-mail "rodriguez").
 **3 min e 16 s.** E não é o primeiro: **Igor Queiroz**, 06/07, mesma assinatura em **18 min**
@@ -155,7 +155,7 @@ sócio). Levantado antes de mexer — **dois dos três já estavam prontos**: e-
 `auth.users`, CPF já tinha três índices únicos. **Só o telefone não tinha nenhum.**
 
 **A normalização é o que faz a trava existir.** O índice é sobre
-`regexp_replace(telefone,'\D','','g')`: `(43) 99196-7056` e `43991967056` são o mesmo número e
+`regexp_replace(telefone,'\D','','g')`: `(11) 99999-0001` e `11999990001` são o mesmo número e
 strings diferentes — um índice na coluna crua deixaria os dois passarem e daria **sensação de
 proteção sem proteger**. Testado no banco: o formatado é recusado contra o não-formatado.
 
@@ -192,6 +192,23 @@ acervo nasceram**. Trava sem aviso protege o banco e produz o comportamento que 
    Este telefone já tem cadastro. Você provavelmente já tem conta aqui — **entrar** ou **recuperar
    a senha**. Se não for você, use outro número."* Os dois são botões que trocam o modo da tela;
    erro/rate-limit **não** libera o botão.
+
+**MEDIDO, não só revisado (30/08).** O banco: um `insert` em `auth.users` com o telefone
+repetido (escrito COM máscara, contra o cadastro que tem SEM) → **23505 em
+`perfis_telefone_unico`**, exatamente a exceção que o Auth achata em "Database error saving new
+user"; e o controle, telefone livre, **passou** — a trava não atrapalha quem é novo. Tudo dentro
+de um bloco que se derruba no fim: **nada foi gravado** (conferido depois: 0 usuários, 0 perfis).
+A tela: `scripts/testes/cadastro-telefone-repetido.mjs`, **12 de 12**, incluindo os dois casos que
+ninguém testa à mão — o **503 da API não rebaixa "duplicado" para "liberado"**, e número
+incompleto nem chega a consultar. A produção não é alcançável daqui (o proxy nega o domínio), por
+isso o teste roda contra o `vite dev` com a rota interceptada devolvendo o que o endpoint devolve.
+
+⚠️ **ACHADO NO CAMINHO — PII em repositório público, corrigido.** Este HANDOFF e as duas migrações
+traziam o telefone REAL do cliente duplicado, em texto puro. O repositório é público; a regra do
+CLAUDE.md fala de segredos, mas **telefone de cliente é pior**: não há o que rotacionar. Trocado
+por número fictício nos 4 pontos. **Continua no histórico do git** — remoção real exigiria
+reescrever a história do repositório, que é decisão do dono. Regra daqui em diante: **nem em doc,
+nem em comentário de migração, nem em constante de teste.**
 
 **Dois consertos que apareceram no caminho, e não eram o pedido:**
 

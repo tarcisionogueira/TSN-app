@@ -11,7 +11,7 @@
 --
 -- ─── A NORMALIZAÇÃO É O QUE FAZ A TRAVA EXISTIR ──────────────────────────────────────────
 -- O índice é sobre `regexp_replace(telefone,'\D','','g')`, não sobre a coluna crua.
--- `(43) 99196-7056` e `43991967056` são o MESMO número e strings DIFERENTES: um índice sobre
+-- `(11) 99999-0001` e `11999990001` são o MESMO número e strings DIFERENTES: um índice sobre
 -- a coluna crua deixaria os dois entrarem e a trava não pegaria nada — daria a sensação de
 -- proteção sem proteger, que é pior que não ter. Testado: com o índice no ar, inserir o
 -- telefone formatado contra o já existente sem formatação é recusado.
