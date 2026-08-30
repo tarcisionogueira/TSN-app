@@ -59,22 +59,47 @@ Forma nº 10 pura, e mesma raiz do `.limit(12)` de 12/08: **janela de TRANSPORTE
 fosse o conjunto**. A contagem foi para o banco (`acervo_por_fonte()`), e o painel passa a
 imprimir o **total** — o número que denuncia truncamento na primeira olhada.
 
-### 📍 Estado ao encerrar 30/08 (00h) — a rodada da HASTA ficou EM ABERTO
-Reiniciada às **00:53:18** com o código novo. Aos **9 minutos** o batimento ainda não havia
-aparecido — dentro da janela esperada (enumeração 5-7 min + lote 25 mais 2-3 min), mas **não
-confirmado**. Nada gravado, `fonte_saude` ainda com a linha de 29/08 20:17, `coleta_cliente`
-ainda em 25/08. **A janela do gate segue aberta**, então a próxima rodada (cron diário) retoma
-sozinha — nada se perde por ter encerrado aqui.
-
-**O que conferir na próxima sessão, em uma consulta:**
-```sql
-select (select ultima_em from coleta_cliente where fonte='HASTA') as janela_fechou_em,
-       (select max(executado_em) from fonte_saude where fonte='HASTA') as ultima_medicao,
-       (select count(*) from imoveis_leilao where fonte='HASTA' and ativo) as ativos,
-       (select count(*) from imoveis_leilao where fonte='HASTA' and atualizado_em > now()-interval '18 hours') as relidos;
+### ✅ FECHOU: a rodada longa da HASTA foi até o fim, e a releitura funcionou
 ```
-`relidos` perto de 592 = a releitura funcionou de ponta a ponta. `relidos` em 8 = a rodada morreu
-antes do laço e o batimento nunca saiu — aí o alvo é a **enumeração**, não o laço de detalhe.
+[HASTA] 584 prontos (584 por releitura) · 0 encerrados · 8 descartados · 0 sem detalhe · 0 sem cota
+✅ [HASTA] 584 imóveis gravados/atualizados · [gate] janela fechada 02:17
+```
+**592 lotes em 70,7 min = 7,2 s/lote.** `0 sem detalhe` e `0 sem cota`: nenhuma navegação falhou —
+**não era travamento, era o tamanho real do trabalho**. O acervo inteiro foi relido num run só,
+contra os 5 lotes em 36 h de antes. O batimento contou de 25 em 25 até `~2 min restantes`.
+
+> 📏 **Calibragem para a próxima vez:** minha 1ª estimativa (40-60 min) estava errada; a revisada
+> (60-100) acertou. Regra prática do motor `dom`: **~7 s por lote**, mais 5-7 min de enumeração.
+
+### 🔎 VENDASGOV: o portal está DE PÉ — sobra a navegação do Puppeteer
+```
+curl https://imoveis.vendasgov.serpro.gov.br/  →  200 · 0,143 s
+```
+Duas hipóteses caem de uma vez: **não é o IP** (o residencial também colheu zero, em 63 s) e
+**não é site fora do ar**. Um portal que responde a raiz em 143 ms e estoura 45 s no
+`domcontentloaded` de `/leilao` aponta para a rota/SPA ou para stall contra navegador headless.
+**Próximo teste (2 comandos, 5 s):**
+```bash
+curl -sS -o /dev/null -w '%{http_code} %{time_total}s\n' https://imoveis.vendasgov.serpro.gov.br/leilao
+curl -sS -o /dev/null -w '%{http_code} %{time_total}s\n' 'https://imoveis.vendasgov.serpro.gov.br/api/public/imoveis?size=1&page=0&sala=leilao'
+```
+404 nas rotas = a SPA mudou de endereço. 200 nas duas = o problema é só o Puppeteer. Timeout no
+`/leilao` com 200 na raiz = stall seletivo, aí é bot detection por rota.
+
+### 🔴 ITEM 1 PARA A PRÓXIMA SESSÃO — o freio de custo virou "fonte zerada" (forma nº 5, de novo)
+```
+RJLEILOES · 30/08 09:41 · total 0 · status FALHOU
+motivo: "falha de acesso: teto_global; queda vs anterior (coletados 0<40)"
+```
+**`teto_global` é o teto do Bright Data** — decisão de ORÇAMENTO, não regressão da fonte. Foi
+gravado como `falhou`; como `fonte_regressao_suspeita()` só ignora `sem_cota`, o RJ passou a
+aparecer como **`zerou`**. É o freio de custo entregue como medição da fonte pela quarta vez
+nesta base (12/08, 18/08, 27/08 e agora).
+
+**A prova de que o caminho certo existe está na linha anterior do mesmo histórico:** em 29/08 às
+10:29 a **mesma** condição (`teto_global`) foi gravada corretamente como `sem_cota`. Existem dois
+caminhos gravando o mesmo evento e só um carimba o status certo — **achar qual é o trabalho.**
+O RJ tem 48 lotes ativos e não perdeu nada: é defeito de ALARME, não de coleta.
 
 ### ⚠️ DECISÃO PENDENTE: quase tudo de 29-30/08 está na BRANCH, não em `main`
 As **migrações já estão em produção** (é um banco só). O **código não** — está em
