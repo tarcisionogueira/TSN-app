@@ -148,6 +148,39 @@ existe desde 28/08 exatamente para isso: roda 09h10 e tem **carência de 24 h**,
 porque preencher no nascimento roubaria a indicação do parceiro. **Nada a fazer** — o Fabrício
 será adotado 24 h após 15:31.
 
+### 📣 A FAIXA DA AULA NA HOME — feito (30/08)
+
+A home não mencionava a aula em lugar nenhum. Quem chegava pelo link exato da campanha caía na
+landing certa (`/#/live/<slug>`) e se inscrevia — **os 2 cadastros que caíram lá se inscreveram**.
+Quem chegava por qualquer outra porta (busca orgânica, link da bio, indicação, o próprio anúncio
+de TRÁFEGO, que é o que mais entrega) não tinha como saber que existe aula.
+
+⚠️ **Esta faixa NÃO é o conserto do diagnóstico errado da seção abaixo** — aquele problema não
+existia. Ela fecha o buraco que sobrou depois de corrigi-lo: a home continua muda para todo mundo
+que não vem pelo link direto.
+
+**`live_em_cartaz()`** (RPC nova, anon) devolve a próxima aula ativa ainda por vir. Três decisões:
+
+- **Qual aula vem do BANCO, não do código.** Fixar `leilao-ao-vivo` no componente faria a faixa
+  anunciar a aula errada — e calada — no dia em que a próxima tiver outro slug.
+- **A data efetiva vem de `live_proxima`, não da coluna.** Evento `recorrencia = 'semanal'` tem
+  `data_hora` congelada na primeira edição; ler a coluna crua anunciaria data morta.
+- **A janela de 2h é o que faz a faixa sumir sozinha.** Sem ela a aula de 02/09 ficaria anunciada
+  para sempre depois de acontecer — o tipo de coisa que ninguém lembra de desligar.
+
+**Medido em transação revertida:** com uma aula mais próxima inserida, ela ganha; com essa mesma
+aula jogada para 3h atrás, volta para a de 02/09. Nada gravado.
+
+**No front (`src/components/FaixaAula.jsx`):** fuso `America/Bahia`, o mesmo de `LiveInscricao` e
+do `live_proxima` — deixar o navegador formatar mostraria 22h para quem está fora do Brasil numa
+aula que começa 19h. `error` da RPC é checado (forma #2): falha **não vira faixa**, mas deixa o
+motivo no console — silêncio transformaria "a RPC quebrou" em "não tem aula". O X guarda a
+dispensa por `slug|data_hora`, então a **edição seguinte reaparece** em vez de herdar o "não quero
+ver" da anterior.
+
+**⚠️ Sabido e não resolvido:** quem já está inscrito continua vendo "Garantir minha vaga". Exigiria
+consulta autenticada por visitante; a landing já trata o caso de quem chega inscrito.
+
 ### 🧭 EU DIAGNOSTIQUEI ERRADO A CAMPANHA DA AULA — e o instrumento era meu (30/08)
 
 **O que eu afirmei:** "20 de 20 visitas da campanha `aula-02set` caíram em `/`; o anúncio manda
