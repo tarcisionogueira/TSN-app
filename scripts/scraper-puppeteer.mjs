@@ -1942,81 +1942,57 @@ function mapImovelVG(it) {
   };
 }
 
-// Rotas da SPA por sala (de /api/salas) — cada uma faz o site chamar
-// /api/public/imoveis?...&sala=... que INTERCEPTAMOS.
-const VG_ROTAS = [
-  { sala: 'leilao', url: `${VG_BASE}/leilao` },
-  { sala: 'concorrencia', url: `${VG_BASE}/concorrencia` },
-  { sala: 'venda', url: `${VG_BASE}/venda` },
-  { sala: 'pai', url: `${VG_BASE}/imoveispublicos` },
-  { sala: 'fundo', url: `${VG_BASE}/fundos` },
-];
+// 30/08 — O PUPPETEER SAIU DAQUI, PORQUE A PREMISSA DELE CAIU.
+// O desenho antigo abria o navegador, interceptava o XHR da SPA e rolava a página, tudo para
+// contornar isto, escrito no cabeçalho da fonte: *"o WAF do SERPRO bloqueia fetch de datacenter
+// (403), então o fetch roda DENTRO da página (TLS de Chrome real)"*. Era verdade **do
+// datacenter**. Do IP residencial, medido pelo dono em 30/08:
+//     GET /                                             → 200 · 0,14 s
+//     GET /leilao                                       → 200 · 0,47 s
+//     GET /api/public/imoveis?size=1&page=0&sala=leilao  → 200 · 0,63 s
+// A API responde direto. E era o navegador que travava: as 5 rotas estouravam
+// `domcontentloaded` em 45 s — site que responde curl em 0,6 s e estola o Chrome headless.
+// Contornar um bloqueio que não existe mais custou 22 min/dia e 15 dias de acervo parado.
+//
+// O parser NÃO muda: `mapImovelVG` é o mesmo. O que muda é só como as páginas chegam.
+const VG_SALAS = ['leilao', 'concorrencia', 'venda', 'pai', 'fundo'];
+const VG_POR_PAGINA = 100;
 
-async function scraperVendasGov(browser) {
-  console.log('  Imóveis da União (VendasGov/SPU) — interceptando o XHR real do site...');
-  const page = await browser.newPage();
+async function scraperVendasGov() {
+  console.log('  Imóveis da União (VendasGov/SPU) — API pública, fetch direto (sem navegador)...');
   const bens = new Map();
-  // INTERCEPTAÇÃO: a SPA chama /api/public/imoveis com a sessão que o WAF aceita.
-  // Forçar o fetch por page.evaluate dava "Failed to fetch" (o WAF/sessão barra o
-  // fetch "manual"); ler a resposta REAL do site é o caminho provado (debug harness).
-  page.on('response', async (resp) => {
-    try {
-      if (!/\/api\/public\/imoveis(\?|$)/i.test(resp.url())) return;
-      const ct = resp.headers()['content-type'] || '';
-      if (!/json/i.test(ct)) return;
-      const j = await resp.json().catch(() => null);
+  for (const sala of VG_SALAS) {
+    const antes = bens.size;
+    for (let page = 0; page < 40; page++) {
+      const url = `${VG_BASE}/api/public/imoveis?size=${VG_POR_PAGINA}&page=${page}`
+        + `&sort=itens.edital.dtCertame,asc&sala=${encodeURIComponent(sala)}`;
+      let r;
+      try {
+        r = await fetch(url, {
+          headers: { 'User-Agent': USER_AGENT, 'Accept-Language': 'pt-BR,pt;q=0.9', Accept: 'application/json' },
+          signal: AbortSignal.timeout(30000),
+        });
+      } catch (e) {
+        // Falha de rede NUNCA vira "a sala está vazia": para esta sala e deixa dito por quê.
+        console.log(`    VendasGov/${sala}: falha de rede na pág ${page} (${String(e.message).slice(0, 60)}) — parando esta sala`);
+        break;
+      }
+      if (!r.ok) {
+        console.log(`    VendasGov/${sala}: HTTP ${r.status} na pág ${page} — parando esta sala`);
+        break;
+      }
+      const j = await r.json().catch(() => null);
       const arr = j && Array.isArray(j.content) ? j.content : null;
-      if (!arr) return;
+      if (!arr) { console.log(`    VendasGov/${sala}: resposta sem \`content\` na pág ${page} — parando esta sala`); break; }
       for (const it of arr) {
         const id = String(it && it.id != null ? it.id : '');
         if (id && !it.vendido && !bens.has(id)) bens.set(id, it);
       }
-    } catch { /* ignore corpo indisponível */ }
-  });
-
-  try {
-    await page.setUserAgent(USER_AGENT);
-    await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
-    // ⚠️ FALHA RÁPIDA (29/08). Medido no log do run de hoje: as CINCO rotas deram
-    // `Navigation timeout of 45000 ms exceeded` e mesmo assim cada uma seguia para a espera
-    // de 6 s e para o laço de rolagem — sobre uma página que nunca carregou. Custo real:
-    // **22 minutos** (15:40 → 16:02) por dia, todo dia, para colher ZERO. E não é tempo
-    // barato: o cabeçalho deste workflow avisa que a rodada é cortada por timeout e que
-    // "as fontes do FIM da lista (SUPORTE, GRUPOLANCE, WEBLEILOES) podem não ter coletado"
-    // — ou seja, os 22 min mortos daqui saíam do orçamento de três fontes que funcionam.
-    // Se a PRIMEIRA rota não navega e nada foi interceptado, o site não está acessível deste
-    // runner: as outras quatro são 18 minutos para confirmar o que a primeira já disse.
-    let rotasSemNavegar = 0;
-    for (const { sala, url } of VG_ROTAS) {
-      const antes = bens.size;
-      let navegou = true;
-      try { await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 }); }
-      catch (e) {
-        navegou = false; rotasSemNavegar++;
-        console.log(`    VendasGov/${sala}: goto FALHOU (${String(e.message).slice(0, 40)})`);
-      }
-      if (!navegou) {
-        // Rolar uma página que não carregou não colhe nada — só queima o relógio.
-        if (rotasSemNavegar === 1 && bens.size === 0) {
-          console.log('    VendasGov: a 1ª rota não carregou e nada foi interceptado — abortando as demais.');
-          console.log('    (o WAF do SERPRO barra datacenter; deste runner o site é inalcançável. Coleta roda no runner RESIDENCIAL.)');
-          break;
-        }
-        continue;
-      }
-      await new Promise(r => setTimeout(r, 6000)); // SPA boota + carrega a 1ª página
-      // Rola para disparar a paginação por scroll (novos XHR interceptados).
-      // Para quando parar de crescer por 3 rolagens seguidas (teto 40).
-      let estavel = 0;
-      for (let s = 0; s < 40 && estavel < 3; s++) {
-        const n0 = bens.size;
-        try { await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)); } catch { /* */ }
-        await new Promise(r => setTimeout(r, 1800));
-        estavel = bens.size > n0 ? 0 : estavel + 1;
-      }
-      console.log(`    VendasGov/${sala}: +${bens.size - antes} (acumulado ${bens.size})`);
+      if (arr.length < VG_POR_PAGINA) break;   // última página
+      await new Promise(res => setTimeout(res, 300));
     }
-  } finally { await page.close().catch(() => {}); }
+    console.log(`    VendasGov/${sala}: +${bens.size - antes} (acumulado ${bens.size})`);
+  }
 
   const seen = new Set();
   const imoveis = [];
@@ -3640,7 +3616,7 @@ async function main() {
     // detalhe renderizada (enriquecerDocumentosLote), igual ao fluxo do Mega.
     if (rodar('VENDASGOV')) try {
       console.log('\n📋 Imóveis da União (VendasGov)...');
-      const imoveis = await scraperVendasGov(browser);
+      const imoveis = await scraperVendasGov();
       // A FOTO já vem da API (capa). NÃO usamos enriquecerDocumentosLote aqui: as
       // páginas de detalhe são SPA (Angular) e vasculharDocumentos não enxerga os PDFs
       // (montados via API) — só gastaria os 8 min do deadline à toa. Edital/laudo do
