@@ -12,7 +12,7 @@
 ### ✅ O QUE PASSOU A EXISTIR HOJE
 | Frente | Estado |
 |---|---|
-| **Motor das 4 análises por IA** | no ar, cron `*/10`, 4 jobs/rodada. 12 relatórios gerados, **3 casos em `analises_prontas`** — os primeiros da história do sistema |
+| **Motor das 4 análises por IA** | no ar, cron `*/30` (baixado de `*/10` a pedido do dono), 4 jobs/rodada. 12 relatórios gerados, **3 casos em `analises_prontas`** — os primeiros da história do sistema |
 | **Atribuição de marketing** | consertada: `gbraid`/`wbraid` + fallback por `anon_id` em `visita_origem`. Os cadastros posteriores ao deploy já chegam com origem |
 | **GESTAO · RJ · PECINI** | fetch puro de casa, Chromium virou rede de segurança |
 | **Google Search Console** | conectado. Revelou: **27 impressões em 12 meses**, acervo fora do Google |
@@ -64,6 +64,28 @@ inscritos e de contas novas, **avaliado DIARIAMENTE**.
 ⚠️ **A campanha da aula NÃO tem data de fim.** Depois de 02/09 ela segue gastando R$ 50/dia
 anunciando aula que já passou — o mesmo defeito que fez a `WORKSHOP-FORM` ser recusada.
 **Pausar ou pôr orçamento vitalício antes de 03/09.**
+
+### 🚫 "USAR O IP DO USUÁRIO PARA GERAR" — AVALIADO E DESCARTADO (30/08)
+
+Pergunta do dono, no contexto de o IP residencial passar de graça onde o datacenter precisa de
+Bright Data pago: *"dá para usar o IP do próprio usuário?"*. **Não dá, e o impedimento é duplo.**
+
+**1. CORS torna impossível, não difícil.** O navegador do cliente não consegue LER a resposta de
+`rjleiloes.com.br` — a política de mesma origem bloqueia, e site de leiloeiro não manda header
+CORS liberando a BidPro. A requisição até sai, mas o JavaScript nunca vê o corpo. Não há
+contorno legítimo: é o mecanismo que existe justamente para impedir um site de usar o navegador
+de quem o visita como ponte para terceiros.
+
+**2. É o padrão de proxy residencial malicioso.** Mesmo se CORS não existisse: usar a conexão do
+cliente para raspar terceiros sem que ele saiba é exatamente o que fazem as extensões banidas de
+"residential proxy". Consequências concretas — o IP DELE entra nas listas de bloqueio do
+leiloeiro; ele não consentiu (LGPD sem base legal); e a coleta passaria a depender de alguém
+estar com a aba aberta.
+
+**O que JÁ resolve o mesmo problema, legitimamente:** o `runner-residencial.sh` roda na máquina
+do DONO — IP residencial dele, com o consentimento dele. Hoje cobre SOLEON, GESTAO, RJ, PECINI,
+VLANCE, VENDASGOV, HASTA, radar DJEN e triagem. **A alavanca real é migrar MAIS fontes para
+lá**, não recrutar o IP de cliente. Foi o que 30/08 provou funcionar com as três primeiras.
 
 ### ⏳ SE PROVAM SOZINHAS — confira, não conserte
 | Quando | O quê | Verde é |

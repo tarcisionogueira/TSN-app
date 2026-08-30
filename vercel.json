@@ -356,7 +356,7 @@
     },
     {
       "path": "/api/processar-analise-jobs-cron",
-      "schedule": "*/10 * * * *"
+      "schedule": "*/30 * * * *"
     }
   ]
 }
