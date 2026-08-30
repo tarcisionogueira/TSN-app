@@ -95,19 +95,31 @@ mesmo escrevi um log condicional silencioso, no dia inteiro dedicado a eliminá-
 - `totalElements` no log — o número que separa "portal vazio" de "consulta cega";
 - 3 dos 5 nomes de `sala` provados errados (vieram das rotas da SPA, não da API).
 
-### 🟡 DECISÃO PEQUENA PARA A PRÓXIMA SESSÃO: o alarme da VENDASGOV
-Ela segue em `fonte_regressao_suspeita()` como **`zerou`** — e agora sabemos que o zero é
-verdadeiro. Duas saídas, e a escolha é do dono:
+### ✅ FEITO — opção (b): segue coletando, e o alarme para de gritar sobre um zero verdadeiro
+Decisão do dono. Saiu **mais barato que a estimativa de meia hora**, porque a máquina já existia:
+a coluna `fonte_saude.enumerados` foi criada em 17/08 com exatamente este significado — *"quantos
+lotes a FONTE LISTA; esse número não depende de quanto já temos"* — e em 29/08 a
+`fonte_regressao_suspeita()` e a `fonte_baseline_aprendida()` passaram a lê-la. **Faltava só
+alguém GRAVAR o campo.**
 
-- **(a) `ativo = false` em `coleta_cliente`** — para de tentar e para de alarmar. **Custo:** no
-  dia em que o SPU publicar edital novo, ninguém percebe.
-- **(b) Deixar coletando** (custa ~1 s por rodada, e pega sozinha o dia em que voltar) **e
-  corrigir o alarme**, para `zerou` não disparar quando a própria fonte declara que não tem
-  inventário. Exige levar o `totalElements` para dentro de `fonte_saude` — hoje ele só existe no
-  log. **É a saída certa**, e é meia hora de trabalho.
+E ninguém gravava: **o `registrarSaude` do `scraper-puppeteer.mjs` descartava `enumerados`.** É
+por isso que as 24 fontes daquele arquivo aparecem todas com `enumerados: null` enquanto as do
+motor preenchem desde 17/08. Agora ele persiste o campo, e a comparação "queda vs anterior" passa
+a usar `enumerados` quando os dois lados têm — espelhando o `usaEnum` de `_saude-fonte.mjs`.
 
-⚠️ Não escolhi sozinho porque as duas têm custo real, e "alarme que se manda ignorar" é
-exatamente o que treina a ignorar alarme — o erro que a CREPALDI já ensinou nesta base.
+**Verificado contra os números reais da baseline**, não por raciocínio: com `enumerados = 1`,
+`zerou` não dispara (exige `total = 0`) e `regressao` também não (exige `n_amostras >= 3` e
+`mediana >= 5`; a VENDASGOV tem 2 e 3).
+
+> ⚠️ **Não esconde coletor quebrado.** Enumerar 300 e aprovar 0 continua virando `status: falhou`
+> e "queda vs anterior". O que muda é só o alarme de **regressão da FONTE**, que responde outra
+> pergunta: *a fonte encolheu?* Se o SPU publicar 300 amanhã, o campo vira 300 e uma queda
+> posterior a zero volta a disparar normalmente.
+
+> 🎁 **Efeito colateral bom:** o conserto vale para **as 24 fontes** do `scraper-puppeteer.mjs`,
+> não só a VENDASGOV. Qualquer uma que passe a reportar quanto a fonte declara ter ganha o alarme
+> medindo a coisa certa. Hoje só a VENDASGOV reporta — as outras seguem com `enumerados: null` e
+> comportamento idêntico ao de antes.
 
 ### 🔴 ITEM 1 PARA A PRÓXIMA SESSÃO — o freio de custo virou "fonte zerada" (forma nº 5, de novo)
 ```
