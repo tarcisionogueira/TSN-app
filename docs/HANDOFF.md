@@ -152,6 +152,40 @@ nada acontecendo). Quem separa as causas é a consulta; o alarme dispara nos doi
    `MinhasAnalises`, `AdvogadoPortal`, `Caso`) aparece em caso onde nada foi solicitado. É o
    instrumento mentindo para o cliente, mas renomear muda o que 4 telas mostram — sua chamada.
 
+### 🛑 O PRODUTO "ANÁLISE" NÃO TEM MOTOR (30/08) — achado ao tentar reprocessar
+
+**Pedido do dono:** reprocessar os casos cujo clique a RLS recusou. **Recusado, e o motivo é o
+achado.** A pergunta antes de inserir a linha foi *"quem consome isto?"* — e a resposta é
+**ninguém**.
+
+Varredura do repositório inteiro: `analise_jobs` tem **UMA** escrita em todo o código, o upsert
+do próprio cliente em `Caso.jsx:824`. Não há rota em `api/`, script, workflow do Actions nem
+botão no admin que mova um job de `aguardando` para `processando` ou `concluido`.
+`Admin.jsx:10943` apenas LÊ, para imprimir "X/4 concluídas" — sob o comentário *"Progresso REAL
+do trabalho da equipe"*, sobre uma tabela que ninguém escreve.
+
+**Por que criar as linhas seria pior que não fazer nada:** a tela do cliente sairia de "0 de 4
+concluídas" para "0 de 4 concluídas" — idêntica — com 4 linhas paradas em `aguardando` para
+sempre. E o `caso_sem_analise_iniciada`, criado horas antes, ficaria **verde** com os dois
+clientes tão desatendidos quanto antes. O alarme satisfeito por uma linha em vez de por trabalho
+entregue: a forma #10 aplicada ao nosso próprio painel.
+
+**Correção de contagem:** são **3 cliques, 2 casos**, 2 clientes — `a82825e0` (assessorado, 2×)
+e `21a59544` (top2, 1×). O texto anterior dizia "3 casos".
+
+**O alarme que teria pego isso** (`job_de_analise_criado_e_nunca_processado.sql`, aplicada):
+`job_analise_sem_motor` — job em `aguardando`/`processando` que passou do `prazo_limite_em`, as
+48 h que o próprio `Caso.jsx` grava no clique. Não inventa limiar: cobra a promessa que o sistema
+já faz ao cliente. Lê **0 hoje** porque a tabela está vazia, e **arma sozinho no primeiro
+clique** — que agora funciona. Par com `caso_sem_analise_iniciada`: aquele pega "ninguém pediu",
+este pega "pediram e ninguém fez". As duas metades do mesmo silêncio, porque o caso sem nenhuma
+linha e o caso com linha nenhuma processada geram a MESMA tela para o cliente.
+
+**🤔 A decisão de verdade, que é de produto e não de código:** os 4 tipos de análise
+(`mercadologica`, `financeira`, `fluxo_caixa`, `juridica_preliminar`) iam ser feitos **por IA ou
+pela equipe**? Nada no repositório responde. Enquanto isso não for decidido, reprocessar é
+encenação — e o botão "Solicitar" está no ar, funcionando, prometendo 48 h.
+
 ### 🧭 As duas lições que esta sessão deixou
 1. **Escalar o trabalho é teste de observabilidade.** A releitura levou a rodada da HASTA de 13
    para 592 lotes, e cinco defeitos de observação apareceram numa noite — nenhum era novo, e
