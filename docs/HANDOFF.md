@@ -4,6 +4,69 @@
 
 ---
 
+## 🗓️ 30/08 (sessão 15) — A PRIMEIRA RODADA LONGA DE VERDADE ACHOU CINCO DEFEITOS DE OBSERVAÇÃO
+
+> Contexto: a releitura do acervo (29/08) levou a rodada da HASTA de 13 lotes para 592. **Nenhum
+> dos cinco achados abaixo é sobre coleta** — todos são sobre *não conseguir enxergar o que está
+> acontecendo*. Rodada curta escondia os cinco; a longa expôs todos em uma noite. O gatilho foi o
+> dono olhando a tela e perguntando três vezes "isso está evoluindo?" — e insistindo quando a
+> primeira resposta foi "deve estar".
+
+### 1. ❌ A hipótese do WAF da VENDASGOV foi REFUTADA pela medição
+Migrei a VENDASGOV para o residencial apostando que o WAF do SERPRO barrava datacenter. **Do IP
+residencial ela também colheu zero**, em 63 s (a falha rápida funcionou — antes eram 22 min):
+```
+VENDASGOV · 30/08 00:53:11 · total 0 · falhou · "total 0<3; valor 0<0.6; uf 0<0.6; link 0<0.9"
+```
+**Não é o IP.** Era o ramo que a própria migração já previa: *"se falhar também na residencial, o
+problema é o site"*. Detalhe do código que reforça: o `goto` usa `waitUntil: 'domcontentloaded'`,
+e estourar isso não é página lenta nem bloqueio de bot (bloqueio devolve *alguma* página) — é a
+**conexão não completando**. **Próximo passo é um `curl` ao portal**, não outra troca de runner.
+
+### 2. A fonte não estava no gate — e seria pulada PARA SEMPRE, em silêncio
+Adicionei `rodar VENDASGOV` ao runner e não registrei a linha em `coleta_cliente`.
+`coleta_cliente_claim` faz `if not found then return false`, e o CLI imprimia **a mesma frase**
+para fonte inexistente e para fonte fora de janela:
+`[gate] VENDASGOV: NÃO é a hora (2x/semana) ou já em curso — pulando`.
+No log isso apareceu no meio de cinco linhas idênticas de fontes saudáveis. Corrigido nos dois
+lados: a linha existe, e o gate passou a distinguir **três** respostas — não registrada (exit 6,
+"seria pulada PARA SEMPRE"), desativada de propósito, e HTTP ruim na RPC (exit 5, *"não consegui
+consultar"* — porque não conseguir perguntar não é a resposta ter sido não; antes, banco fora do
+ar viraria uma rodada inteira "pulando" com cara de saúde).
+
+### 3. Só o `goto` tinha timeout no motor `dom`
+`newPage()`, `setViewport()`, `page.content()` e `page.close()` são chamadas CDP **sem timeout**.
+Se o Chromium encalha, esperam **para sempre** — e o node fica ocioso, que é *exatamente* como
+lentidão se parece com travamento visto de fora. Achado quando o `ps` mostrou `TIME` do node
+congelado em 53 s por 40 segundos seguidos, com 1h06 de rodada. Com 13 lotes quase nunca mordia;
+com 592 um lote encalhado segura tudo. **Teto por lote** = timeout do goto + hidratação + 15 s;
+ao estourar, derruba o Chromium (navegador encalhado não desencalha sozinho).
+**Vale para HASTA, GESTAO, RJ e PECINI — todas usam este motor.**
+
+### 4. O laço não dava sinal de vida
+Nenhum log por lote, e o `upsert` só acontece **depois** do laço — então nem o banco servia de
+sinal. Uma hora de tela imóvel, sem NENHUMA evidência externa de progresso. Agora, a cada 25
+lotes: `[HASTA] 275/592 · 268 prontos · 22.4 min · ~26 min restantes · releitura`.
+
+### 5. 📊 "Captação atual por leiloeiro" parava em 1.000 — e a prova é aritmética
+`relatorioCapitacao()` fazia `.select('fonte').eq('ativo', true)` e contava no JavaScript. O
+PostgREST devolve **no máximo 1.000 linhas** e não havia `.range()`. Somando o painel que o dono
+viu: `818+52+40+37+30+9+3+3+2+2+1+1+1+1` = **1.000 exatos**.
+Real no mesmo instante: **30.616 ativos**, CEF com **23.484** (o painel dizia 818). HASTA (584),
+LJUD, MEGA, SOLD e GRUPOLANCE **nem apareciam** — ficaram fora das mil primeiras linhas e viraram
+**ausência**, que se lê como "essa fonte não traz nada".
+Forma nº 10 pura, e mesma raiz do `.limit(12)` de 12/08: **janela de TRANSPORTE tratada como se
+fosse o conjunto**. A contagem foi para o banco (`acervo_por_fonte()`), e o painel passa a
+imprimir o **total** — o número que denuncia truncamento na primeira olhada.
+
+### 🧭 A lição desta noite
+Os cinco defeitos existiam antes e **nenhum aparecia enquanto a rodada era curta**. Não foram
+achados por varredura de código: foram achados por alguém olhando uma tela parada e se recusando
+a aceitar "deve estar rodando". **Escalar o trabalho é um teste de observabilidade** — e a
+observabilidade falhou em cinco lugares ao mesmo tempo.
+
+---
+
 ## 🗓️ 29/08 (sessão 14u) — VENDASGOV: 15 DIAS COLHENDO ZERO, E 22 MIN/DIA TIRADOS DE QUEM FUNCIONA
 
 ### Não era regressão nova — era invisibilidade
