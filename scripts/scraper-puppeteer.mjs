@@ -2016,6 +2016,13 @@ async function scraperVendasGov() {
         bens.set(id, it);
       }
       recebidos += arr.length;
+      // `totalElements` é o que a API DIZ ter (paginação Spring). É o número que separa "o
+      // portal está vazio" de "a nossa consulta não enxerga o acervo" — duas causas opostas que,
+      // sem ele, aparecem as duas como uma lista curta. Medido em 30/08: a sala `leilao`
+      // devolveu 1 item com `size=100`, e esse item estava vendido.
+      if (page === 0 && Number.isFinite(Number(j?.totalElements))) {
+        console.log(`    VendasGov/${sala}: a API declara ${Number(j.totalElements)} imóvel(is) no total desta sala`);
+      }
       if (arr.length < VG_POR_PAGINA) break;   // última página
       await new Promise(res => setTimeout(res, 300));
     }
