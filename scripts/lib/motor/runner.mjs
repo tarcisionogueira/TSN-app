@@ -160,7 +160,19 @@ async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debu
     });
     let pararReleitura = false;
     console.log(`[${tenant.fonte}] no banco ${meta.size} · novos ${novos.length} · releitura ${releitura.length} · processando ${alvo.length}`);
+    const t0 = Date.now();
     for (let i = 0; i < alvo.length; i++) {
+      // SINAL DE VIDA (30/08). O laço não imprimia NADA por lote. Com 13 lotes isso durava um
+      // minuto e ninguém notava; com 592 são ~50 min de tela imóvel — e tela imóvel é
+      // indistinguível de travamento. Foi a primeira pergunta do dono na primeira rodada longa,
+      // e ele estava certo em perguntar: o upsert só acontece DEPOIS do laço, então nem o banco
+      // servia de sinal de vida. Um processo que trabalha em silêncio por uma hora não é
+      // observável, e não observável é a mesma família de "falha que não sabe que falhou".
+      if (i > 0 && i % 25 === 0) {
+        const min = (Date.now() - t0) / 60000;
+        const resta = Math.round((alvo.length - i) * (min / i));
+        console.log(`   [${tenant.fonte}] ${i}/${alvo.length} · ${prontos.length} prontos · ${min.toFixed(1)} min · ~${resta} min restantes${i >= iReleitura ? ' · releitura' : ''}`);
+      }
       if (pararReleitura && i >= iReleitura) break;
       const url = alvo[i];
       const r = await fetchFonte(url, { semBD });
