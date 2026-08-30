@@ -71,20 +71,36 @@ contra os 5 lotes em 36 h de antes. O batimento contou de 25 em 25 até `~2 min 
 > 📏 **Calibragem para a próxima vez:** minha 1ª estimativa (40-60 min) estava errada; a revisada
 > (60-100) acertou. Regra prática do motor `dom`: **~7 s por lote**, mais 5-7 min de enumeração.
 
-### 🔎 VENDASGOV: o portal está DE PÉ — sobra a navegação do Puppeteer
+### ✅ VENDASGOV: a premissa do scraper caiu, e ele trocou o navegador pela API
+Três medições do dono, do IP residencial, em 30/08:
 ```
-curl https://imoveis.vendasgov.serpro.gov.br/  →  200 · 0,143 s
+GET /                                             → 200 · 0,14 s
+GET /leilao                                       → 200 · 0,47 s
+GET /api/public/imoveis?size=1&page=0&sala=leilao  → 200 · 0,63 s
 ```
-Duas hipóteses caem de uma vez: **não é o IP** (o residencial também colheu zero, em 63 s) e
-**não é site fora do ar**. Um portal que responde a raiz em 143 ms e estoura 45 s no
-`domcontentloaded` de `/leilao` aponta para a rota/SPA ou para stall contra navegador headless.
-**Próximo teste (2 comandos, 5 s):**
-```bash
-curl -sS -o /dev/null -w '%{http_code} %{time_total}s\n' https://imoveis.vendasgov.serpro.gov.br/leilao
-curl -sS -o /dev/null -w '%{http_code} %{time_total}s\n' 'https://imoveis.vendasgov.serpro.gov.br/api/public/imoveis?size=1&page=0&sala=leilao'
-```
-404 nas rotas = a SPA mudou de endereço. 200 nas duas = o problema é só o Puppeteer. Timeout no
-`/leilao` com 200 na raiz = stall seletivo, aí é bot detection por rota.
+O cabeçalho do scraper dizia, com todas as letras: *"o WAF do SERPRO bloqueia fetch de datacenter
+(403), então o fetch roda DENTRO da página (TLS de Chrome real)"*. **Era verdade — do
+datacenter.** Da casa, a API responde direto. E era o **navegador** que travava: as 5 rotas
+estouravam `domcontentloaded` em 45 s num site que responde `curl` em 0,6 s.
+
+**Contornar um bloqueio que não existe mais custou 22 min/dia e 15 dias de acervo parado.**
+
+Some o navegador, a interceptação de XHR, a rolagem e a tabela de rotas da SPA; entra paginação
+direta na API (100/página, timeout de 30 s). **O parser não muda** — `mapImovelVG` é o mesmo; a
+troca é só em COMO as páginas chegam. Falha de rede ou HTTP não-ok param a sala e **dizem por
+quê**, em vez de virar "essa sala está vazia".
+
+> ⚠️ **NÃO VERIFICADO EM EXECUÇÃO** — não alcanço o host deste ambiente (o proxy recusa, e tratar
+> isso como medição seria o defeito que passamos o dia caçando). **Verificação: ~1 min**
+> `SCRAPER_FONTES=VENDASGOV node scripts/scraper-puppeteer.mjs`.
+> Risco limitado: a fonte já colhe ZERO, então o pior desfecho é continuar zero — agora com o
+> motivo escrito no log.
+
+> 🧭 **A lição que vale além da VENDASGOV:** o comentário estava certo **e** desatualizado ao
+> mesmo tempo. Ele descrevia uma restrição do ambiente de então (datacenter) como se fosse
+> propriedade do site. Quando o ambiente mudou (runner residencial, 29/08), a defesa continuou
+> lá — e virou a causa. **Ao migrar uma fonte de runner, reconferir as premissas do coletor, não
+> só o IP.** Vale olhar GESTAO, RJ e PECINI com essa pergunta: elas ainda precisam de navegador?
 
 ### 🔴 ITEM 1 PARA A PRÓXIMA SESSÃO — o freio de custo virou "fonte zerada" (forma nº 5, de novo)
 ```
