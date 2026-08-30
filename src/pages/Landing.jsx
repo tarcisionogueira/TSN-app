@@ -20,14 +20,14 @@ const PERGUNTAS = [
   { q: 'Tem alguma bomba escondida?',      r: 'A IA lê o edital e a matrícula e destaca penhoras, usufruto, indisponibilidade e risco de perda do imóvel.', icon: FileText },
   { q: 'Quanto realmente vale?',           r: 'Comparativos de mercado e a viabilidade calculam o valor real e o desconto efetivo da oportunidade.', icon: BarChart3 },
   { q: 'Quanto vou gastar depois?',        r: 'O relatório lista débitos, IPTU, condomínio e custos de regularização a confirmar antes de arrematar.', icon: TrendingUp },
-  { q: 'Vale a pena entrar nesse leilão?', r: 'O Bid Score traduz tudo numa nota de 0 a 100 e numa recomendação clara: arrematar ou passar.', icon: Gavel },
+  { q: 'Vale a pena entrar nesse leilão?', r: 'O Bid Score traduz tudo numa nota de 0 a 10 e numa recomendação clara: arrematar ou passar.', icon: Gavel },
 ];
 
 // Exemplos de Bid Score (assinatura visual da marca — estilo "Serasa dos leilões").
 const BID_EXEMPLOS = [
-  { nota: 94, cor: '#10b981', bg: '#f0fdf4', emoji: '🟢', t: 'Excelente oportunidade', d: 'Sem ônus relevantes na matrícula. Desconto de 38% sobre o mercado.' },
-  { nota: 73, cor: '#f59e0b', bg: '#fffbeb', emoji: '🟡', t: 'Boa oportunidade',        d: 'Imóvel ocupado, prever custo e prazo de desocupação.' },
-  { nota: 31, cor: '#ef4444', bg: '#fef2f2', emoji: '🔴', t: 'Risco elevado',           d: 'Três processos pendentes e penhora ativa. Recomendação: passar.' },
+  { nota: '9,4', cor: '#10b981', bg: '#f0fdf4', emoji: '🟢', t: 'Excelente oportunidade', d: 'Sem ônus relevantes na matrícula. Desconto de 38% sobre o mercado.' },
+  { nota: '6,4', cor: '#f59e0b', bg: '#fffbeb', emoji: '🟡', t: 'Boa oportunidade',        d: 'Imóvel ocupado, prever custo e prazo de desocupação.' },
+  { nota: '3,1', cor: '#ef4444', bg: '#fef2f2', emoji: '🔴', t: 'Risco elevado',           d: 'Três processos pendentes e penhora ativa. Recomendação: passar.' },
 ];
 
 const PASSOS = [
@@ -69,7 +69,7 @@ const PARA_QUEM = [
 ];
 
 const FAQS = [
-  { q: 'O que é o Bid Score?', r: 'É uma nota de 0 a 100 (🟢🟡🔴) que resume o risco e a oportunidade de cada imóvel, juntando análise jurídica, viabilidade financeira, ocupação e documentação. O relatório Mercadológico + Financeiro (grátis) gera a nota parcial; o relatório Documental + Jurídico (Investidor Pro) completa o Bid Score da operação.' },
+  { q: 'O que é o Bid Score?', r: 'É uma nota de 0 a 10 (🟢🟡🔴) que resume o risco e a oportunidade de cada imóvel, juntando análise jurídica, viabilidade financeira, ocupação e documentação. O relatório Mercadológico + Financeiro (grátis) gera a nota parcial; o relatório Documental + Jurídico (Investidor Pro) completa o Bid Score da operação.' },
   { q: 'Preciso ter experiência em leilões para usar a plataforma?', r: 'Não. A plataforma foi criada para guiar tanto iniciantes quanto investidores experientes. O plano Explorador é gratuito e inclui cursos de formação.' },
   { q: 'A análise da IA substitui um advogado?', r: 'Não substitui. A IA é o primeiro filtro, identifica riscos em segundos e mostra o que merece um estudo mais profundo. A decisão de arrematar deve sempre contar com a validação de um especialista: nos planos com assessoria, a análise jurídica é conduzida pela nossa equipe.' },
   { q: 'As análises por IA são ilimitadas?', r: 'Não. Cada análise consome dados pagos de fontes externas, por isso cada plano inclui uma quantidade definida de relatórios. Se uma fonte estiver instável no momento da solicitação, avisamos e liberamos o relatório assim que possível (em até 24 a 48h), continuando as tentativas.' },
@@ -216,7 +216,7 @@ export default function Landing() {
                 <div style={{ background: 'rgba(52,211,153,0.15)', borderRadius: 10, padding: 8, flexShrink: 0 }}><Sparkles size={17} color="#34d399" /></div>
                 <h3 style={{ fontSize: 15, fontWeight: 800, color: 'white', margin: 0, lineHeight: 1.3 }}>As 5 respostas em um número</h3>
               </div>
-              <p style={{ fontSize: 13, color: '#94a3b8', lineHeight: 1.65, margin: '0 0 14px' }}>O Bid Score reúne tudo numa nota de 0 a 100, o filtro que transforma dúvida em decisão, antes do lance.</p>
+              <p style={{ fontSize: 13, color: '#94a3b8', lineHeight: 1.65, margin: '0 0 14px' }}>O Bid Score reúne tudo numa nota de 0 a 10, o filtro que transforma dúvida em decisão, antes do lance.</p>
               <div style={{ alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 700, color: '#34d399' }}>
                 <Sparkles size={14} /> Incluído em todos os planos
               </div>
@@ -237,7 +237,7 @@ export default function Landing() {
                 Uma nota que responde: <span style={{ background: 'linear-gradient(90deg,#60a5fa,#34d399)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>você compraria este imóvel?</span>
               </h2>
               <p style={{ color: '#94a3b8', fontSize: 15, lineHeight: 1.8, marginBottom: 22 }}>
-                Em vez de 180 páginas de edital e matrícula, a Bid Pro traduz tudo em uma nota de 0 a 100: risco jurídico, viabilidade financeira, ocupação e documentação num só lugar. Como o Serasa dos leilões.
+                Em vez de 180 páginas de edital e matrícula, a Bid Pro traduz tudo em uma nota de 0 a 10: risco jurídico, viabilidade financeira, ocupação e documentação num só lugar. Como o Serasa dos leilões.
               </p>
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 14, padding: '16px 18px' }}>
                 <BadgeCheck size={22} color="#34d399" style={{ flexShrink: 0, marginTop: 1 }} />
