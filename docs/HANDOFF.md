@@ -250,6 +250,46 @@ uma espera"*. Agora o salto só ocorre no `else` (o cliente precisa anexar o PDF
 Ficar no hub é **estritamente mais informativo**: o card já tem estado próprio ("Preparando
 documentos…", borda âmbar, explicação) e o cliente ainda vê os outros dois relatórios.
 
+### 📦 12 jobs criados para os casos parados (30/08) — e 5 casos que NÃO recebem
+
+Com o motor no ar, os casos parados viraram fila. **12 jobs** (3 casos × 4 tipos), `aguardando`,
+prazo de 48 h. Sem cobrar cota: os dois clientes que clicaram foram recusados pelo bug da RLS e
+o `throw` impediu o débito — devolver o relatório é restituição, não consumo novo.
+
+| Caso | Cliente | Situação do lote | Recebeu? |
+|---|---|---|---|
+| `742d87b6` Guarulhos | Rafael (assessorado) | **leilão 31/08 — amanhã** | ✅ |
+| `21a59544` Osasco | Alessandra (top2) | 2ª praça **31/08 — amanhã** · clicou e tomou "não" | ✅ |
+| `a82825e0` Guarulhos | Rafael (assessorado) | judicial, **sem data** · clicou e tomou "não" | ✅ |
+| 5 casos de Carapicuíba/Guarulhos | Alessandra (4) · Rafael (1) | praças de **20/07 a 06/08**, vencidas | ❌ |
+
+**Por que os 5 ficaram de fora, e a regra não é minha:** o produto já recusa gerar relatório de
+lote vencido, na tela (`src/utils/leilaoEncerrado.js`) e no servidor
+(`api/_leilao-encerrado.js`) — *"Leilão encerrado. Como não é mais possível dar lance, novos
+relatórios não são gerados para este lote"*. Criar jobs ali seria pagar IA para produzir um
+parecer que o cliente não pode usar.
+
+⚠️ **`a82825e0` é o caso de borda e foi incluído de propósito.** O lote está `ativo = false`,
+mas **não tem data nenhuma** — e a régua do produto falha ABERTA: sem data confiável, não
+bloqueia. É também um dos dois clientes que clicou e foi recusado pelo nosso defeito.
+
+#### E o invariante que eu criei de manhã ia gritar para sempre
+Depois dos jobs, `caso_sem_analise_iniciada` ainda marcava **5** — os 5 de leilão vencido, que
+**nunca** ganharão job. Alarme que não tem como ficar verde é fabricação de ruído: a mesma lição
+da CREPALDI já escrita no runner, e o motivo de `sem_cota`/`vazio` existirem em
+`_saude-fonte.mjs`. Corrigido (`o_alarme_de_caso_parado_nao_pode_gritar_por_leilao_vencido.sql`)
+espelhando a régua do produto — `greatest` das 5 colunas de data (só a 1ª praça ter vencido é
+NORMAL), venda direta nunca encerra por data, e sem data não encerra.
+
+**Estado agora: `caso_sem_analise_iniciada` = 0 · `job_analise_sem_motor` = 0 · 12 jobs
+`aguardando`.** O cron roda a cada 10 min e pega 2 por vez → os 12 saem em ~1 h.
+**É a primeira execução real do motor: vale conferir.**
+```sql
+select status, count(*) from analise_jobs group by 1;
+select tipo, status, left(erro_msg,120) from analise_jobs order by created_at;
+select caso_id, tipo, versao, length(conteudo_md) from analise_relatorios order by created_at desc;
+```
+
 ### 🧭 As duas lições que esta sessão deixou
 1. **Escalar o trabalho é teste de observabilidade.** A releitura levou a rodada da HASTA de 13
    para 592 lotes, e cinco defeitos de observação apareceram numa noite — nenhum era novo, e
