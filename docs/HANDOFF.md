@@ -4,51 +4,72 @@
 
 ---
 
-## 🚦 COMECE POR AQUI — estado ao encerrar 30/08 12h UTC (sessão 14–15, com ~8 h de intervalo)
+## 🚦 COMECE POR AQUI — estado ao encerrar 30/08 15h UTC (sessão 15)
 
-> A sessão anterior atravessou 29 e 30/08 com uma pausa longa no meio, e **veio compactada**: o
-> ritual de abertura de 30/08 não chegou a rodar. O heartbeat foi carimbado no FIM
-> (`sistema_heartbeat.sessao_claude`, 30/08 12:03, com o motivo escrito lá) — a auditoria paga
-> semanal não precisa disparar por falta de sinal. **Rode o ritual normalmente ao abrir.**
+> Sessão longa. `main` = **`73e29dc1`**, tudo mesclado e no ar. Heartbeat carimbado às 15:00 UTC.
+> **Rode o ritual de abertura normalmente.** As seções abaixo detalham cada frente.
 
-### ✅ Tudo mesclado e no ar
-`main` = **`7a84617`** · PR #339 mesclado (`33ea07c`) · deploy de produção **READY** desde 11:49.
-As migrações já estavam aplicadas antes — o merge alinhou o código ao que o banco já executava.
-**Não há branch pendente:** `claude/bidpro-brasil-handoff-86bg0m` está encerrada, e trabalho novo
-parte de `main` numa branch nova.
+### ✅ O QUE PASSOU A EXISTIR HOJE
+| Frente | Estado |
+|---|---|
+| **Motor das 4 análises por IA** | no ar, cron `*/10`, 4 jobs/rodada. 12 relatórios gerados, **3 casos em `analises_prontas`** — os primeiros da história do sistema |
+| **Atribuição de marketing** | consertada: `gbraid`/`wbraid` + fallback por `anon_id` em `visita_origem`. Os cadastros posteriores ao deploy já chegam com origem |
+| **GESTAO · RJ · PECINI** | fetch puro de casa, Chromium virou rede de segurança |
+| **Google Search Console** | conectado. Revelou: **27 impressões em 12 meses**, acervo fora do Google |
+| **Sitemap** | hubs separados em `/sitemap-hubs.xml`; lotes atrás de `SITEMAP_LOTES=1` |
+| **Campanhas Meta** | aula 02/09 a R$ 50/dia · `TRF - SITE` religada · 3 criativos provados (PAUSADOS) |
 
-### ⏳ Quatro coisas se provam sozinhas — CONFIRA, não conserte
-Nenhuma delas precisa de código. São verificações com data marcada:
+### 🔴 O QUE PRECISA DE VOCÊ — em ordem de prazo
+1. **HOJE/AMANHÃ — aula 02/09.** Os 3 criativos em `120249379704670420` estão **pausados de
+   propósito**: o `creative_id` foi copiado verbatim do workshop de fevereiro e o LINK pode
+   apontar para evento morto. Revisar link/texto e ativar. O Reels é o mais arriscado (veio de
+   campanha de SEGUIDOR, provavelmente sem link).
+2. **HOJE/AMANHÃ — leilões 31/08.** Osasco e Rua José Miguel Ackel têm praça amanhã e os
+   relatórios estão prontos.
+3. **Trocar `ADV+` por `LAL1%`** no ad set da aula. Não dá para fazer por MCP (o conector não
+   expõe `targeting` nem os IDs de público) — é 1 min no Ads Manager.
+4. **Carga retroativa do Meta:** `curl -H "x-cron-secret: $CRON_SECRET"
+   ".../api/meta-insights-cron?desde=2025-10-01"`. ⚠️ **Tudo ou nada** — mês ausente lê como
+   gasto zero.
+5. **Herdadas:** `ADMIN_EMAIL` na Vercel · nomear um analista (rotina semanal cobra as duas).
 
-| Quando | O que olhar | Verde é |
+### ⏳ SE PROVAM SOZINHAS — confira, não conserte
+| Quando | O quê | Verde é |
 |---|---|---|
-| Após o cron das **10h UTC** | `select * from public.fonte_regressao_suspeita();` | **sem RJLEILOES** (o `zerou` era a última linha do código velho) |
-| Após o cron das **10h UTC** | log do `leiloeiros-puppeteer` | SUPORTE, GRUPOLANCE e WEBLEILOES coletando — os **22 min/dia** do VendasGov pararam |
-| **31/08** (vira a semana) | `brightdata_uso_proposito` | queda forte: ~295 dos 550 desta semana eram fonte já migrada pagando em paralelo |
-| **06/09** | `fonte_orcamento_como_falha` em `qa_invariantes()` | de volta a **0** (janela de 7 dias) |
-
-⚠️ **Não silencie nenhum desses alarmes na mão.** Eles têm prazo de validade conhecido e estão
-fazendo o trabalho deles. Reescrever medição histórica para o painel ficar bonito é adulterar o
-registro — a tentação apareceu em 30/08 e foi recusada de propósito.
+| **31/08** | vira a semana do Bright Data | queda forte no `brightdata_uso_proposito` |
+| **01/09** | `erro_na_tela_do_cliente` | **0** (os 3 eventos saem da janela de 7 dias) |
+| **02/09** | `cadastro_sem_origem` | **0** (o único é de 26/08, anterior ao conserto) |
+| **06/09** | `fonte_orcamento_como_falha` | **0** |
+| **4–6 semanas** | Search Console | páginas de CIDADE recebendo impressão. Se seguir zero, o gargalo é AUTORIDADE (backlink), não estrutura — e não sai em código |
 
 ### ⏰ Agendado
-**05/09** (`trig_01DEkuEvHftyhnKecMCaSDDW`): ler `analise_*` e `origem_lote`, que começaram a
-medir em 30/08. As consultas estão na seção da sessão 14s. ⚠️ A rotina foi criada **sem
-conectores** — a sessão que disparar entrega as consultas mas não roda SQL sozinha.
+**05/09** (`trig_01DEkuEvHftyhnKecMCaSDDW`): ler `analise_*` e `origem_lote`. ⚠️ criada **sem
+conectores** — entrega as consultas, não roda SQL.
 
-### 🤔 Esperando decisão do dono (não são bugs)
-1. `direitos aquisitivos` entra em `acervo.fracao_ideal`? (16 lotes ativos; hoje barrado só do 1º relatório)
-2. Âncora dos 7 dias do CDC para pagamento fora do gateway
-3. A equipe precisa marcar upload como `matricula_registrada` — sem isso o encerramento
-   automático da assessoria não dispara
+### 🤔 Decisões do dono, sem prazo
+1. Os **5 casos de leilão vencido** seguem sem relatório de propósito (o produto recusa lote
+   vencido). Incluí-los é pagar IA por parecer inutilizável.
+2. `LEADS - WORKSHOP - FORM` fica pausada — reativar só com criativo novo (o `Video Pablo
+   Marçal`, criativo de terceiro, levava 68% da verba).
+3. `direitos aquisitivos` em `acervo.fracao_ideal` · âncora dos 7 dias do CDC · a equipe marcar
+   upload como `matricula_registrada`.
+4. **Exportar lead de campanha em até 90 dias, sempre** — o Meta apaga depois disso, e foi assim
+   que a lista do workshop (com nome, e-mail, telefone e qualificação) virou irrecuperável.
 
-### 🔭 Aberto, sem urgência
-- **VENDASGOV**: a fonte tem 1 imóvel e ele está **vendido**. O coletor está certo; se o SPU
-  publicar edital novo, `enumerados` reflete e a coleta volta sozinha.
-- **Herdadas**: `/admin` timeout · `/planos` Leaflet · P2/P3/P4 de captura · 1º advogado ·
-  `apresentador_foto` · OpenAI Ads · os 3 clientes do 360 · 41% sem triagem.
-- ~~GESTAO, RJ e PECINI ainda precisam de navegador?~~ — ✅ **medido e resolvido em 30/08**: não
-  precisam. O navegador virou rede de segurança. Ver a seção abaixo.
+### 🧭 A LIÇÃO DESTA SESSÃO: cinco defeitos, e quatro eram do INSTRUMENTO
+Nenhum era código que não roda. Todos eram medida que descreve outra coisa:
+- `incompleto = faltantes.length >= 3` punia o relatório por ser honesto → 10 de 10 em
+  `falha_parcial`, e nenhum caso jamais chegaria a `analises_prontas`;
+- o retry do mercadológico somava VENDA com LOCAÇÃO, e o preço inventado pelo modelo
+  **suprimia** a nova tentativa;
+- a janela de 7 dias fazia o painel dizer "Meta = R$ 40" sobre uma conta com ~R$ 5.500;
+- `caso_sem_analise_iniciada`, criado de manhã, contava caso morto e gritaria para sempre;
+- e o relatório de Osasco ancorou na 1ª praça **vencida** — achado só porque alguém LEU o corpo,
+  não a lista de metadados.
+
+**Duas afirmações minhas foram desmentidas por medição, e ficam registradas:** que o VendasGov
+era bloqueio de WAF (era o navegador), e que as cidades "só existem no sitemap" (sempre estiveram
+linkadas do Header, Footer e Landing — o problema era profundidade, não orfandade).
 
 ### ✅ "Precisa de navegador?" — MEDIDO em 30/08: os três não precisam
 
