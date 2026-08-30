@@ -141,7 +141,17 @@ export function capturarMarketing() {
         else referrer = '';
       }
     } catch { referrer = ''; }
-    const landing = String(window.location.pathname + (window.location.hash || '')).slice(0, 200);
+    // ⚠️ O HASH PODE CARREGAR O TOKEN DE AUTENTICAÇÃO (30/08). O redirect de confirmação de
+    // e-mail do Supabase volta como `/#access_token=eyJhbGciOi...` — e este campo gravava o JWT
+    // (truncado em 200 chars) dentro de `perfis.mkt_landing`. Dois estragos: fragmento de
+    // CREDENCIAL num campo de marketing, e 7 dos 53 cadastros de 30 dias com uma "landing"
+    // única e ilegível que na verdade era `/` — a análise de por onde a pessoa entrou ficava
+    // com 7 categorias de um só elemento.
+    // O hash SÓ é preservado quando é rota do app (`#/algo`); qualquer hash com `=` (formato
+    // de par chave-valor, que é como token e código de OAuth chegam) é descartado.
+    const hashCru = window.location.hash || '';
+    const hashSeguro = /^#\/[^=]*$/.test(hashCru) ? hashCru : '';
+    const landing = String(window.location.pathname + hashSeguro).slice(0, 200);
 
     // A PRECEDÊNCIA IMPORTA, e errar aqui custa a medição da campanha paga:
     //   • Chegou com anúncio → SOBRESCREVE sempre. É a atribuição que o Google Ads precisa

@@ -118,6 +118,36 @@ dono** · destino é o **link da bio** · humano assume **depois do lead preench
 reação de story chega como evento, os nomes exatos dos campos de webhook, o prazo da tag de
 agente humano, e a política sobre sinalizar resposta automática. Não tratar como resolvido.
 
+### 🔎 O "USUÁRIO DUPLICADO" — resolvido, e o que havia atrás (30/08, no fim da sessão)
+
+O dono suspeitou de um cadastro duplicado no `/admin`. **Era** — e o rastro levou a mais dois
+achados.
+
+**O duplicado, provado pelo telefone:** `43991967056` idêntico nos dois. Fabrício se inscreveu
+pela live às 15:31 (`fabricio111x@`, landing `/live/leilao-ao-vivo`) e refez pela home às 15:34
+(`fabriciorodriguezbr@`) — errando o próprio sobrenome ("Rodrigues" com o e-mail "rodriguez").
+**3 min e 16 s.** E não é o primeiro: **Igor Queiroz**, 06/07, mesma assinatura em **18 min**
+(`igorqueirozim@` → `igorqueirozimo@`).
+
+⚠️ **Duplicado com poucos minutos não é distração — é tentativa que falhou.** São 4 de 77
+cadastros (5%) que na verdade são 2 pessoas, e ninguém foi avisado em julho.
+**Feito:** invariante `cadastro_duplicado` (telefone normalizado, janela de 30 dias). Lê **1**
+hoje. **Não deduplica** — fundir conta é decisão do dono e mexe em dado de cliente; ele só faz o
+par parar de ser invisível.
+
+**Achado 2 — JWT dentro de `perfis.mkt_landing`.** O redirect de confirmação de e-mail do
+Supabase volta como `/#access_token=eyJ...`, e `capturarMarketing()` gravava `pathname + hash`.
+Resultado: fragmento de credencial num campo de marketing **e** 7 dos 53 cadastros com uma
+"landing" única e ilegível que era `/` — sete categorias de um elemento cada, que ninguém somava
+à home. **Feito:** `marketing.js` só preserva hash que é ROTA (`#/algo`) e descarta hash com `=`;
+histórico limpo (0 tokens restantes, landings distintas de 14 → **7**).
+
+**Achado 3 — o que PARECIA bug e não era.** `/live/leilao-ao-vivo` produziu 2 de 3 cadastros sem
+`indicado_por`, contra 0 de 50 nas demais landings. Ia "consertar" — e `adotar-orfaos-cron` já
+existe desde 28/08 exatamente para isso: roda 09h10 e tem **carência de 24 h**, deliberada,
+porque preencher no nascimento roubaria a indicação do parceiro. **Nada a fazer** — o Fabrício
+será adotado 24 h após 15:31.
+
 ### ⏳ SE PROVAM SOZINHAS — confira, não conserte
 | Quando | O quê | Verde é |
 |---|---|---|
