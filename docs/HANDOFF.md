@@ -136,20 +136,31 @@ nesta base (12/08, 18/08, 27/08 e agora).
 caminhos gravando o mesmo evento e só um carimba o status certo — **achar qual é o trabalho.**
 O RJ tem 48 lotes ativos e não perdeu nada: é defeito de ALARME, não de coleta.
 
-### ⚠️ DECISÃO PENDENTE: quase tudo de 29-30/08 está na BRANCH, não em `main`
-As **migrações já estão em produção** (é um banco só). O **código não** — está em
-`claude/bidpro-brasil-handoff-86bg0m` (PR #339). O descompasso mais caro:
+### ✅ MESCLADO E NO AR — PR #339 (`33ea07c`), deploy de produção `READY` em 30/08 11:49 UTC
+O descompasso branch × `main` que esta seção registrava **acabou**: 81 commits, 5 checks verdes,
+deploy de produção concluído. Merge commit e não squash, de propósito — as mensagens deste PR são
+a memória de *por que* cada coisa foi feita.
 
-- **`SCRAPER_EXCLUIR: VENDASGOV` e a falha rápida não valem para o cron do GitHub.** Workflow
-  agendado roda a partir da branch **padrão**, então o `leiloeiros-puppeteer.yml` de `main` segue
-  gastando **22 min/dia** numa fonte que colhe zero — tempo que sai de SUPORTE, GRUPOLANCE e
-  WEBLEILOES, as três do fim da lista que o próprio cabeçalho do workflow diz serem as cortadas.
-- O painel do funil em produção já consome a RPC **corrigida** (45/52 em vez de 71/34), mas com
-  a formatação antiga (bases de porcentagem misturadas). Não quebra nada; fica inconsistente.
-- `/analise` sem a instrumentação e `/login` sem o `origem_lote`: **cada dia sem merge é um dia
-  sem medição**, e a leitura está marcada para 05/09.
+**O que passou a valer no exato momento do merge:**
+- **`SCRAPER_EXCLUIR: VENDASGOV` + falha rápida.** Workflow agendado roda da branch **padrão**,
+  então até aqui o cron das 10h UTC seguia gastando **22 min/dia** numa fonte que colhe zero. Esse
+  tempo volta para SUPORTE, GRUPOLANCE e WEBLEILOES — as três do fim da lista que o próprio
+  cabeçalho do workflow diz serem as cortadas por timeout.
+- `analise_estado` / `analise_gerar` / `analise_bloqueio` e `origem_lote` **começam a medir hoje**
+  — a leitura de 05/09 terá dados reais em vez de uma semana perdida.
+- Funil do admin com base única por degrau e o degrau de ativação na tela.
 
-Nada disso é urgente no sentido de "quebrou". É urgente no sentido de "relógio correndo".
+> 🔎 **O merge quase não aconteceu, e o motivo vale a nota:** `verificar:schema` reprovou o PR por
+> `amostra_matriculas_cef()` não existir no banco. **Não era migração esquecida** (a forma nº 7 que
+> a trava caça): é atalho opcional, e o script já tem o caminho alternativo com handler de rejeição
+> escrito para exatamente esse caso — caso 3 da orientação do próprio verificador. E a **primeira**
+> tentativa de marcar falhou: escrevi o motivo em quatro linhas, o `.rpc()` desceu junto e o
+> marcador saiu do alcance. A regra é `marcada(linha) || marcada(linhas[i-1])` — só a própria linha
+> ou a de cima. **Ler a regra custou menos que a segunda tentativa às cegas.**
+
+> ⚠️ **A branch `claude/bidpro-brasil-handoff-86bg0m` está ENCERRADA.** Trabalho novo parte de
+> `main` numa branch nova — não se empilha commit sobre histórico já mesclado.
+
 
 ### 🧭 A lição desta noite
 Os cinco defeitos existiam antes e **nenhum aparecia enquanto a rodada era curta**. Não foram
