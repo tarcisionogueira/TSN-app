@@ -2020,8 +2020,17 @@ async function scraperVendasGov() {
       // portal está vazio" de "a nossa consulta não enxerga o acervo" — duas causas opostas que,
       // sem ele, aparecem as duas como uma lista curta. Medido em 30/08: a sala `leilao`
       // devolveu 1 item com `size=100`, e esse item estava vendido.
-      if (page === 0 && Number.isFinite(Number(j?.totalElements))) {
-        console.log(`    VendasGov/${sala}: a API declara ${Number(j.totalElements)} imóvel(is) no total desta sala`);
+      if (page === 0) {
+        // O `if` anterior só imprimia QUANDO o campo existia — então "a API não manda
+        // totalElements" e "este código não rodou" ficavam indistinguíveis, que é o log
+        // condicional silencioso que este arquivo inteiro existe para não ter. Se o campo
+        // esperado falta, imprime as CHAVES que vieram: o nome certo aparece sozinho.
+        const total = Number(j?.totalElements ?? j?.total ?? j?.totalItems ?? NaN);
+        if (Number.isFinite(total)) {
+          console.log(`    VendasGov/${sala}: a API declara ${total} imóvel(is) no total desta sala`);
+        } else {
+          console.log(`    VendasGov/${sala}: a resposta NÃO traz total — chaves recebidas: ${Object.keys(j || {}).join(', ') || '(nenhuma)'}`);
+        }
       }
       if (arr.length < VG_POR_PAGINA) break;   // última página
       await new Promise(res => setTimeout(res, 300));
