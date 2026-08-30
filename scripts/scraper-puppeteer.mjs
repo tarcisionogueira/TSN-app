@@ -3567,16 +3567,16 @@ async function main() {
     // 2. Superbid (portal 2) — API offers, todas as páginas, somente abertos. O
     // detalhe da oferta (/oferta/{id}) é server-rendered com a seção "Documentação"
     // (edital/matrícula/laudo) → enriquecerDocumentosLote os captura (progressivo).
-    console.log('\n📋 Superbid...');
+    if (rodar('SUPERBID')) console.log('\n📋 Superbid...');
     if (rodar('SUPERBID')) await coletarFonte('SUPERBID', () => scraperSuperbidNet(browser, { portalId: '[2]', fonte: 'SUPERBID', leiloeiro: 'Superbid', prefix: 'sbid', baseSite: 'https://www.superbid.net' }), { enrich: true, enrichCap: 150 });
 
     // 3. Sold (portal 15 — mesma rede Superbid) — API offers, somente abertos.
-    console.log('\n📋 Sold Leilões...');
+    if (rodar('SOLD')) console.log('\n📋 Sold Leilões...');
     if (rodar('SOLD')) await coletarFonte('SOLD', () => scraperSuperbidNet(browser, { portalId: '[15]', fonte: 'SOLD', leiloeiro: 'Sold Leilões', prefix: 'sold', baseSite: 'https://www.sold.com.br' }), { enrich: true, enrichCap: 120 });
 
     // 3b. Sub-portais da rede Superbid (mesma API, portalId diferente). Inventário
     // pequeno mas distinto do portal 2; leiloeiro real vem no campo `store`.
-    console.log('\n📋 Rede Superbid — sub-portais 9 e 21...');
+    if (rodar('SBID9')) console.log('\n📋 Rede Superbid — sub-portais 9 e 21...');
     if (rodar('SBID9'))  await coletarFonte('SBID9',  () => scraperSuperbidNet(browser, { portalId: '[9]',  fonte: 'SBID9',  leiloeiro: 'Rede Superbid', prefix: 'sbid9',  baseSite: 'https://www.superbid.net', storeAsLeiloeiro: true }));
     if (rodar('SBID21')) await coletarFonte('SBID21', () => scraperSuperbidNet(browser, { portalId: '[21]', fonte: 'SBID21', leiloeiro: 'Rede Superbid', prefix: 'sbid21', baseSite: 'https://www.superbid.net', storeAsLeiloeiro: true }));
 
@@ -3586,23 +3586,23 @@ async function main() {
     if (rodar('CREPALDI')) await coletarFonte('CREPALDI', () => scraperSuperbidNet(browser, { stores: '16139', fonte: 'CREPALDI', leiloeiro: 'Crepaldi Leilões', prefix: 'crep', baseSite: 'https://www.crepaldileiloes.com.br' }));
 
     // Leiloaria Smart (Leilofy) — imóveis não-CEF (securitizadoras etc.), DOM parsing.
-    console.log('\n📋 Leiloaria Smart (Leilofy)...');
+    if (rodar('LEILOFY')) console.log('\n📋 Leiloaria Smart (Leilofy)...');
     if (rodar('LEILOFY')) await coletarFonte('LEILOFY', () => scraperLeilofy(browser));
 
     // 4. PortalZuk (Zukerman) — listagem com scroll infinito, somente ativos.
     // A página de detalhe do lote (link_edital) é server-rendered → enrich vasculha
     // edital/matrícula/laudo para as IAs lerem e para o mapa exato (endereço da matrícula).
-    console.log('\n📋 PortalZuk (Zukerman)...');
+    if (rodar('ZUK')) console.log('\n📋 PortalZuk (Zukerman)...');
     if (rodar('ZUK')) await coletarFonte('ZUK', () => scraperPortalZuk(browser), { enrich: true, enrichCap: 120 });
 
     // 5. Sodré Santoro — API search-lots interceptada, somente ativos. Detalhe do
     // lote (/imoveis/lote/{id}) server-rendered → enrich captura edital/matrícula/laudo.
-    console.log('\n📋 Sodré Santoro...');
+    if (rodar('SODRE')) console.log('\n📋 Sodré Santoro...');
     if (rodar('SODRE')) await coletarFonte('SODRE', () => scraperSodre(browser), { enrich: true, enrichCap: 120 });
 
     // 6. Frazão Leilões — server-rendered, lotes por leilão de imóveis. Detalhe
     // server-rendered → enriquecerDocumentosLote captura edital/matrícula/laudo.
-    console.log('\n📋 Frazão Leilões...');
+    if (rodar('FRAZAO')) console.log('\n📋 Frazão Leilões...');
     if (rodar('FRAZAO')) try {
       const imoveis = await scraperFrazao(browser);
       try { await enriquecerDocumentosLote(browser, imoveis, { cap: 120 }); }
@@ -3619,7 +3619,7 @@ async function main() {
     // registrada em fonte_saude (vira a principal). O Bright Data
     // (api/scraper-leiloeiros.js → coletarLJUD) fica de BACKUP, e é poupado quando
     // esta coleta mantém o LJUD fresco — controlando o custo.
-    console.log('\n📋 Leilões Judiciais (portal nacional — navegador)...');
+    if (rodar('LJUD')) console.log('\n📋 Leilões Judiciais (portal nacional — navegador)...');
     if (rodar('LJUD')) {
       const { imoveis, estrategia, validacao } = await coletarComEsteira('LJUD', [
         { nome: 'navegador-getlotes', fn: () => scraperLJUD_navegador(browser, 'get-lotes') },
@@ -3650,7 +3650,7 @@ async function main() {
     // 9. Pestana Leilões — API /api/v2 (leilão → lotes), só imóveis disponíveis.
     // Foto direto do GED; edital direto do documentos[]. Doc-enrich não roda aqui
     // (o edital já vem no JSON). Blindado: nunca derruba o job.
-    console.log('\n📋 Pestana Leilões...');
+    if (rodar('PESTANA')) console.log('\n📋 Pestana Leilões...');
     if (rodar('PESTANA')) try {
       const imoveis = await scraperPestana(browser);
       total += await salvarEFinalizar(imoveis, 'PESTANA');
@@ -3662,7 +3662,7 @@ async function main() {
     // 10. Biasi Leilões — server-rendered (crawler HTML c/ paginação por clique).
     // Foto vem do card; edital/matrícula ficam na página /sale/detail (server-rendered)
     // → enriquecerDocumentosLote as vasculha. Blindado: nunca derruba o job.
-    console.log('\n📋 Biasi Leilões...');
+    if (rodar('BIASI')) console.log('\n📋 Biasi Leilões...');
     if (rodar('BIASI')) try {
       const imoveis = await scraperBiasi(browser);
       try { await enriquecerDocumentosLote(browser, imoveis, { cap: 120 }); }
@@ -3676,7 +3676,7 @@ async function main() {
     // 11. Leilão VIP — server-rendered (agenda → /evento/lotes/{id}). Foto direto do
     // blob Azure; edital/matrícula ficam na página do anúncio → enriquecerDocumentosLote
     // as vasculha. Blindado: nunca derruba o job.
-    console.log('\n📋 Leilão VIP...');
+    if (rodar('VIP')) console.log('\n📋 Leilão VIP...');
     if (rodar('VIP')) try {
       const imoveis = await scraperVIP(browser);
       try { await enriquecerDocumentosLote(browser, imoveis, { cap: 120 }); }
@@ -3690,7 +3690,7 @@ async function main() {
     // 12. Leilotech — plataforma white-label (~20 leiloeiros, GraphQL interceptado).
     // Foto vem do coverImageUrl; edital/matrícula ficam na página do lote →
     // enriquecerDocumentosLote vasculha. Blindado: nunca derruba o job.
-    console.log('\n📋 Leilotech (plataforma white-label)...');
+    if (rodar('LEILOTECH')) console.log('\n📋 Leilotech (plataforma white-label)...');
     if (rodar('LEILOTECH')) try {
       const imoveis = await scraperLeilotech(browser);
       try { await enriquecerDocumentosLote(browser, imoveis, { cap: 120 }); }
@@ -3704,7 +3704,7 @@ async function main() {
     // 13. Suporte Leilões — plataforma white-label server-rendered (/buscador).
     // Foto do static.suporteleiloes; edital/matrícula na página do lote →
     // enriquecerDocumentosLote vasculha. Blindado: nunca derruba o job.
-    console.log('\n📋 Suporte Leilões (plataforma white-label)...');
+    if (rodar('SUPORTE')) console.log('\n📋 Suporte Leilões (plataforma white-label)...');
     if (rodar('SUPORTE')) try {
       const imoveis = await scraperSuporte(browser);
       try { await enriquecerDocumentosLote(browser, imoveis, { cap: 120 }); }
@@ -3718,7 +3718,7 @@ async function main() {
     // 14. Grupo Lance — server-rendered (/imoveis). Foto do CDN; edital/matrícula/laudo
     // na página de detalhe (server-rendered) → enriquecerDocumentosLote vasculha.
     // Blindado: nunca derruba o job.
-    console.log('\n📋 Grupo Lance...');
+    if (rodar('GRUPOLANCE')) console.log('\n📋 Grupo Lance...');
     if (rodar('GRUPOLANCE')) try {
       const imoveis = await scraperGrupoLance(browser);
       try { await enriquecerDocumentosLote(browser, imoveis, { cap: 150 }); }
@@ -3731,7 +3731,7 @@ async function main() {
 
     // 15. WebLeilões — server-rendered (/imoveis, /leiloes). Foto no card; edital/
     // matrícula na página do lote → enriquecerDocumentosLote vasculha. Blindado.
-    console.log('\n📋 WebLeilões...');
+    if (rodar('WEBLEILOES')) console.log('\n📋 WebLeilões...');
     if (rodar('WEBLEILOES')) try {
       const imoveis = await scraperWebLeiloes(browser);
       try { await enriquecerDocumentosLote(browser, imoveis, { cap: 120 }); }
