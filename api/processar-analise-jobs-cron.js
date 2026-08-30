@@ -153,8 +153,19 @@ async function gerar(tipo, caso, im, timeoutMs) {
   const data = await resp.json().catch(() => null);
   const txt = (data?.content || []).map(b => b?.text || '').join('\n');
   const j = lerJSON(txt);
-  if (!j || typeof j.markdown !== 'string') throw new Error(`resposta sem JSON utilizável (${txt.length} chars)`);
-  return j;
+  if (j && typeof j.markdown === 'string') return j;
+  // RESGATE (30/08): a 1ª rodada real perdeu um relatório de 10.595 caracteres aqui. O modelo
+  // escreveu o trabalho inteiro e o JSON não fechou — markdown dentro de string JSON tem aspas,
+  // quebra de linha e barra invertida em abundância, e basta uma escapada errada para o
+  // `JSON.parse` recusar TUDO. Descartar o texto é jogar fora o trabalho pago e ainda queimar
+  // uma tentativa por um erro de FORMATO, não de conteúdo.
+  // Só resgata o que de fato parece relatório: título markdown e corpo substancial. Sem isso,
+  // uma mensagem de desculpa do modelo viraria "relatório".
+  if (/^#{1,3}\s/m.test(txt) && txt.replace(/\s+/g, ' ').length > 1500) {
+    console.log('[analise-job] JSON inválido — resgatando markdown cru', txt.length, 'chars');
+    return { markdown: txt, resumo: null, alertas: [], dados_faltantes: [], __resgatado: true };
+  }
+  throw new Error(`resposta sem JSON utilizável (${txt.length} chars)`);
 }
 
 export async function GET(req) { return handler(req); }
@@ -197,10 +208,19 @@ async function handler(req) {
       if (!im) throw new Error(`lote ${j.imovel_id || '(sem id)'} não está no acervo — sem dados, não há relatório`);
       const out = await gerar(j.tipo, j, im, Math.min(180000, Math.max(60000, restante() - 40000)));
       const faltantes = Array.isArray(out.dados_faltantes) ? out.dados_faltantes.filter(Boolean).map(String) : [];
-      // "Incompleto" é DECLARADO pelo próprio relatório, não adivinhado: quando ele mesmo lista
-      // dado faltante que mudaria a conclusão, o job vira 'falha_parcial' e o caso NÃO avança
-      // de etapa. Meio relatório não marca reunião.
-      const incompleto = faltantes.length >= 3;
+      // ⚠️ AQUI ESTAVA `faltantes.length >= 3`, E ERA UM MEDIDOR INVERTIDO (corrigido 30/08).
+      // O prompt PEDE que o relatório liste o que falta para mudar a conclusão — e todo
+      // relatório honesto lista 8 a 10 itens (matrícula, edital, ocupação, IPTU, condomínio…).
+      // Na 1ª rodada real, 10 de 10 viraram 'falha_parcial': quanto mais minucioso o relatório,
+      // mais "incompleto" ele era declarado. O campo se chamava `incompleto` e media o tamanho
+      // da seção de honestidade — a forma #10 dentro do nosso próprio código.
+      // E o efeito não era cosmético: `concluir_analise_job` só avança o caso com 4 jobs
+      // 'concluido', e 'falha_parcial' nunca conta. NENHUM caso chegaria a 'analises_prontas'.
+      //
+      // Incompleto agora é o que o nome diz: o relatório NÃO SAIU inteiro. A lista de dados
+      // faltantes continua gravada em `secoes_faltando` — ela é informação valiosa para o
+      // cliente, não um defeito do trabalho.
+      const incompleto = String(out.markdown || '').replace(/\s+/g, ' ').length < 1500;
       const cc = await rpc('concluir_analise_job', {
         p_job_id: j.job_id, p_conteudo_md: out.markdown,
         p_conteudo_json: { resumo: out.resumo || null, alertas: out.alertas || [], dados_faltantes: faltantes, lote: im },
