@@ -19,6 +19,84 @@
 | **Sitemap** | hubs separados em `/sitemap-hubs.xml`; lotes atrás de `SITEMAP_LOTES=1` |
 | **Campanhas Meta** | aula 02/09 a R$ 50/dia · `TRF - SITE` religada · 3 criativos provados (PAUSADOS) |
 
+### 📏 LINHA DE BASE PARA COMPARAR AMANHÃ — fechamento de 30/08, 19h40 (SP)
+
+Fotografia tirada a pedido do dono para a **próxima sessão comparar a evolução**. Números
+medidos, não estimados. ⚠️ A janela do dia ainda estava aberta: Meta de 30/08 não entrou em
+`marketing_metricas_dia` (a ingestão roda ~10h50 UTC e traz o dia ANTERIOR), e o Google de
+30/08 estava parcial. **Compare 29/08 com 29/08**, não o parcial com o fechado.
+
+#### CLIENTE 360 — `admin_360_estatisticas()`
+
+| | 30/08 19h40 | verde é |
+|---|---|---|
+| Clientes | **81** (75 explorador · 4 Investidor Pro · 2 assessoria) | cresce |
+| Relatórios | 67 mercado · 19 documental · 3 laudo | cresce |
+| `relatorios_falha_24h` | **0** ✅ | 0 |
+| `relatorios_falha_7d` | 3 | 0 |
+| `erros_invisiveis` 24h / 7d | **0 / 0** ✅ | 0 |
+| `clientes_com_erro` | **3** ⚠️ | 0 |
+| `sem_perfil` | **33 de 81** (41%) | cai |
+| `alerta_incompleto_7d` | 1 (explorador, Juazeiro/BA, 6 achados p/ 12 vagas) | 0 |
+| Funil público 7d | 1.264 visitantes · 5.700 pageviews · 12 erros | cresce |
+| Buscas · lotes vistos | 3.079 · 183 | cresce |
+
+**Rotas mais vistas em 7 dias** (pageviews / visitantes únicos): `/leiloes` 872/653 ·
+`/leiloes/buscar` 827/279 · `/` 682/294 · `/leiloes/sp` 104/79 · `/login` 95/44 ·
+**`/live/leilao-ao-vivo` 88/37** ← a landing da aula recebeu 37 visitantes únicos e converteu 4
+inscritos (≈11%). É o número que a aula de 02/09 vai mover.
+
+**Os 4 erros abertos que o CLIENTE viu** (`clientes_com_erro: 3` vem daqui):
+
+| Quando | Rota | Erro |
+|---|---|---|
+| 23/08 | `/admin` | Supabase 500 em `rpc/admin_qa_invariantes` — *statement timeout* |
+| 28/08 | `/planos` | `Cannot read properties of undefined (reading '_leaflet_pos')` |
+| 29/08 | `/admin` | Supabase 400 em `perfis`: **`column perfis.email does not exist`** |
+| **30/08 16:08** | `/imovel/:id` | `Cannot read properties of undefined (reading 'classList')` |
+
+⚠️ **Dois merecem atenção na próxima sessão.** O de 29/08 é a **forma #6/#7** em estado puro —
+consulta pedindo uma coluna que não existe, e o `{data}` sem `error` transforma isso em tela
+vazia. O de 30/08 é de **hoje**, na página de imóvel, que é tela de cliente e não de admin.
+
+**4 pagantes sem gerar um relatório em 14 dias** — churn em formação, e é o pior recorte:
+
+- Investidor Pro desde **01/07** e desde **06/08**  ·  **2 de 4 assinantes**
+- Assessoria desde **06/07** e desde **15/07**  ·  **os 2 de 2** — nenhum assessorado gerou nada
+
+#### MARKETING
+
+| Canal | Janela | Gasto | Cliques | CPC | Conversões |
+|---|---|---|---|---|---|
+| **Google Ads** | 23–30/08 | R$ 171,96 | 648 | **R$ 0,27** | 6 · R$ 28,66 cada |
+| **Meta Ads** | 24–29/08 | R$ 40,12 | 262 | **R$ 0,15** | — |
+
+⚠️ **O CPC do Google caiu muito** e isso contradiz o que este HANDOFF registrou antes
+(R$ 0,57, de outra janela). Não é conserto nem piora conhecida — **é para conferir amanhã**
+antes de virar conclusão. Meta segue mais barato por clique, agora ~1,8x.
+
+**Funil de atribuição, 14 dias — e aqui houve melhora grande:**
+
+| | 14/08 (registro antigo) | **30/08** |
+|---|---|---|
+| Cliques pagos | 214 | **1.257** |
+| Visitas com `gclid`/`gbraid`/`wbraid` | 19 (9%) | **1.010 (80%)** |
+| Visitas com `utm_term` | **0** ← era a "pendência A do dono" | **1.251** |
+| Visitas totais | 1.735 | 1.683 |
+
+A pendência do `utm_term` **está resolvida** — 1.251 visitas trazem a peça, não só a campanha.
+E a captura de click-id saiu de 9% para 80%: é o efeito do `gbraid`/`wbraid` e da atribuição
+consertada nesta sessão.
+
+#### AULA DE 02/09 — o placar a bater
+
+**4 inscritos**, 2 vindos da campanha. Meta gastou R$ 52,21 na campanha da aula (29 + 30/08),
+o que dá **R$ 26,10 por inscrito atribuído**. A campanha destravou hoje: gastou 16% do
+orçamento em 29/08 e 88% em 30/08.
+
+**O que abrir amanhã, na ordem:** `admin_360_estatisticas()` · os 4 erros acima (sumiram ou
+repetiram?) · os 4 pagantes sem entrega · custo por inscrito da aula · e o CPC do Google.
+
 ### 🔑 QUEM É DONO DE QUÊ — o mapa de contas do Google (30/08)
 
 Descoberto no diagnóstico do login por Google, e ele custou várias telas justamente porque
