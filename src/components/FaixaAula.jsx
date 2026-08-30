@@ -1,4 +1,13 @@
 /**
+ * ⚠️ NÃO ESTÁ MONTADA EM LUGAR NENHUM (decisão do dono, 30/08).
+ *
+ * Esteve na home por algumas horas e saiu: quem chega na home está a um clique de criar conta,
+ * e a faixa puxava essa pessoa para uma aula gratuita — trocava conversão de PRODUTO por
+ * inscrição em evento. O destino da aula nunca foi a home; é a página de LANÇAMENTO, que ainda
+ * não existe. O componente e a RPC `live_em_cartaz` ficam prontos para ela. Se a página de
+ * lançamento nascer sem usar isto, APAGUE os dois — componente sem quem o monte apodrece.
+ */
+/**
  * FaixaAula — a home passa a dizer que existe aula ao vivo.
  *
  * POR QUE EXISTE (30/08). A landing da aula (`/#/live/<slug>`) só era alcançada por quem

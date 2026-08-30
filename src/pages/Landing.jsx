@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import FaixaAula from '../components/FaixaAula.jsx';
 import {
   Search, BarChart3, ShieldCheck, FileText, TrendingUp, Zap,
   ChevronRight, CheckCircle2, Star, Gavel, Users, Lock, Clock,
@@ -109,11 +108,6 @@ export default function Landing() {
 
   return (
     <div style={{ fontFamily: "'Inter', sans-serif", color: '#111111' }}>
-
-      {/* ACIMA DO HERÓI de propósito: a aula tem data e some sozinha depois dela, então
-          disputa atenção por poucos dias e não vale enterrar. Não renderiza nada quando não
-          há aula em cartaz — nem espaço em branco. */}
-      <FaixaAula />
 
       {/* ── HERO ─────────────────────────────────────────────────────── */}
       <section style={{ background: 'linear-gradient(135deg, #080f1a 0%, #0a1f3d 60%, #0d2a50 100%)', padding: '90px 20px 110px', textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
