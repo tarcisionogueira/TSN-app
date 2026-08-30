@@ -47,9 +47,54 @@ conectores** — a sessão que disparar entrega as consultas mas não roda SQL s
   publicar edital novo, `enumerados` reflete e a coleta volta sozinha.
 - **Herdadas**: `/admin` timeout · `/planos` Leaflet · P2/P3/P4 de captura · 1º advogado ·
   `apresentador_foto` · OpenAI Ads · os 3 clientes do 360 · 41% sem triagem.
-- **Pergunta que vale abrir**: GESTAO, RJ e PECINI ainda precisam de navegador? O VendasGov
-  provou que uma premissa de quando a fonte rodava no datacenter pode sobreviver à migração e
-  **virar a causa**. Cada uma que sair do Puppeteer são minutos por rodada de volta.
+- **GESTAO, RJ e PECINI ainda precisam de navegador?** — ⚙️ **agora é medível** (30/08):
+  `npm run precisa-navegador` (`scripts/testes/precisa-navegador.mjs`). Ver a seção abaixo.
+
+### 🧪 "Precisa de navegador?" — instrumentado em 30/08, falta RODAR DE CASA
+
+O VendasGov provou que uma premissa escrita quando a fonte rodava no **datacenter** sobrevive à
+migração e vira a causa. As três carregam a mesma justificativa em comentário — *"está atrás de
+Cloudflare, todo caminho responde 403"* — escrita quando rodavam do GitHub Actions. **O
+Cloudflare decide desafiar pela reputação do IP:** de um IP residencial, muitas vezes não
+desafia. SOLEON e VLANCE já rodam de casa com fetch puro (`*_NO_BD=1`); o navegador nas outras
+três pode ser herança, não necessidade.
+
+**O que o banco já mostra, e que muda o tamanho do prêmio.** As três **continuam consumindo
+Bright Data**: 183 requests na semana de 24/08 (pecini 63 · rj 60 · gestao 60, 100% sucesso).
+Ou seja, os dois caminhos rodam em paralelo — o cron de datacenter (~09h40 UTC) pelo Web
+Unlocker, batendo em `teto_global` quase todo dia, e o runner residencial pelo Chromium. As
+linhas de 29/08 13:06 (GESTAO, 104 lotes) e 13:14 (RJ, 40) são o runner de casa; as de 09:41 e
+10:29, com `sem_cota`/`teto_global`, são o Actions. **Se o fetch puro passar de casa, o ganho não
+é só tempo de Chromium — é tirar essas três da conta paga.**
+
+**Como medir (na máquina residencial, o resultado só vale de casa):**
+```bash
+npm run precisa-navegador              # os 3, fetch puro × navegador, no mesmo minuto
+node scripts/testes/precisa-navegador.mjs rj pecini
+node scripts/testes/precisa-navegador.mjs --so-fetch   # sem Chromium, mais rápido
+```
+Não grava nada: não toca no Supabase, não consome Bright Data, não altera acervo.
+
+**Por que ele não conta "HTTP 200"** (forma #10): o Cloudflare devolve o desafio DENTRO de um
+200 e o back-office do GESTAO devolve stub de 1,5 kB com 200. O placar é **quantos marcadores o
+parser de produção encontraria** — a mesma regex de cada scraper (`/item/{id}/detalhes` na
+listagem do RJ · `/lote/{slug}/{id}/` no sitemap da PECINI · `leilao.php?idLeilao=N` na home dos
+5 domínios do GESTAO, já decodificando windows-1252, que o navegador fazia de graça). Para
+RJ e PECINI ele abre também **uma página de detalhe** descoberta na própria listagem: há site que
+libera a listagem e desafia a interna, e é a interna que o scraper abre centenas de vezes.
+
+⚠️ **`⚪ INDETERMINADO` não é "não precisa".** Quando nem o fetch nem o navegador veem marcador,
+o script recusa a conclusão de propósito — seria a forma #1 outra vez.
+
+**Se der 🟢:** tirar `*_HEADLESS=1` da linha da fonte em `scripts/runner-residencial.sh` e trocar
+`fetchHeadless(...)` por fetch puro no `bd()` do scraper — no GESTAO **mantendo** o
+`TextDecoder('windows-1252')`, senão os acentos viram mojibake e some marcador com acento (seria
+"o site mudou" no lugar de "eu decodifiquei errado").
+
+**Achado de borda, ainda sem conclusão:** a PECINI vem gravando `falhou` com *"nada pronto (10
+sem detalhe, 4 reprovados)"* desde 25/08 — 10 dos alvos com o detalhe não chegando — e **não
+roda desde 27/08 19:02** (3 dias). Pode ser o mesmo portão de detalhe que o script mede, pode ser
+outra coisa. Rodar o script responde metade disso de graça.
 
 ### 🧭 As duas lições que esta sessão deixou
 1. **Escalar o trabalho é teste de observabilidade.** A releitura levou a rodada da HASTA de 13

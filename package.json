@@ -17,7 +17,8 @@
     "prebuild": "node scripts/verificar-padroes-perigosos.mjs && npm run verificar:sintaxe",
     "verificar:responsivo": "node scripts/verificar-responsivo.mjs",
     "verificar:regras": "node scripts/verificar-regras-negocio.mjs",
-    "testar:motor": "node scripts/testes/planejar-alvo.test.mjs"
+    "testar:motor": "node scripts/testes/planejar-alvo.test.mjs",
+    "precisa-navegador": "node scripts/testes/precisa-navegador.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",
