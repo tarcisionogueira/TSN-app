@@ -71,36 +71,34 @@ contra os 5 lotes em 36 h de antes. O batimento contou de 25 em 25 até `~2 min 
 > 📏 **Calibragem para a próxima vez:** minha 1ª estimativa (40-60 min) estava errada; a revisada
 > (60-100) acertou. Regra prática do motor `dom`: **~7 s por lote**, mais 5-7 min de enumeração.
 
-### ✅ VENDASGOV: a premissa do scraper caiu, e ele trocou o navegador pela API
-Três medições do dono, do IP residencial, em 30/08:
+### 🔵 VENDASGOV: o coletor está CERTO — a fonte é que não tem inventário (30/08)
+Quatro rodadas e três hipóteses minhas derrubadas, até o log contar em vez de opinar:
 ```
-GET /                                             → 200 · 0,14 s
-GET /leilao                                       → 200 · 0,47 s
-GET /api/public/imoveis?size=1&page=0&sala=leilao  → 200 · 0,63 s
+VendasGov/leilao: +0 · a API mandou 1 · descartados: 1 vendido(s), 0 sem id, 0 repetido
+VendasGov/venda:  +0 · a API mandou 1 · descartados: 1 vendido(s), 0 sem id, 0 repetido
+concorrencia · pai · fundo: resposta sem `content` — não são salas
 ```
-O cabeçalho do scraper dizia, com todas as letras: *"o WAF do SERPRO bloqueia fetch de datacenter
-(403), então o fetch roda DENTRO da página (TLS de Chrome real)"*. **Era verdade — do
-datacenter.** Da casa, a API responde direto. E era o **navegador** que travava: as 5 rotas
-estouravam `domcontentloaded` em 45 s num site que responde `curl` em 0,6 s.
+**A API devolve 1 item por sala, com `size=100`, e ele está marcado `vendido`.** O filtro
+`!it.vendido` está fazendo exatamente o que deve. Não era o WAF, não era o `sort`, não era o
+User-Agent — **as três hipóteses caíram, uma por rodada.**
 
-**Contornar um bloqueio que não existe mais custou 22 min/dia e 15 dias de acervo parado.**
+**O que de fato mudou (e vale manter):** o Puppeteer saiu (o navegador travava 45 s por rota,
+22 min/dia); a falha ficou rápida; e o coletor passou a **contar cada descarte** em vez de
+imprimir um `+0` mudo. Foi essa contagem que resolveu — *"a API não devolveu nada"* e *"devolveu
+e o filtro jogou tudo fora"* são causas opostas e apareciam idênticas na tela.
 
-Some o navegador, a interceptação de XHR, a rolagem e a tabela de rotas da SPA; entra paginação
-direta na API (100/página, timeout de 30 s). **O parser não muda** — `mapImovelVG` é o mesmo; a
-troca é só em COMO as páginas chegam. Falha de rede ou HTTP não-ok param a sala e **dizem por
-quê**, em vez de virar "essa sala está vazia".
+**Falta UM número para fechar** — `totalElements`, que a paginação Spring já manda e o coletor
+passou a logar (`be347b4`). Ele separa "o portal está vazio" de "a nossa consulta não enxerga o
+acervo":
+- `totalElements: 1` → **a fonte está vazia mesmo.** Encerrar o assunto: `ativo = false` em
+  `coleta_cliente` para parar de alarmar, e revisitar quando o SPU publicar edital novo.
+- `totalElements: 300` → **a consulta é que está cega**, e aí o alvo é o parâmetro `sala`
+  (que já se provou errado em 3 dos 5 nomes) ou algum filtro implícito.
 
-> ⚠️ **NÃO VERIFICADO EM EXECUÇÃO** — não alcanço o host deste ambiente (o proxy recusa, e tratar
-> isso como medição seria o defeito que passamos o dia caçando). **Verificação: ~1 min**
-> `SCRAPER_FONTES=VENDASGOV node scripts/scraper-puppeteer.mjs`.
-> Risco limitado: a fonte já colhe ZERO, então o pior desfecho é continuar zero — agora com o
-> motivo escrito no log.
-
-> 🧭 **A lição que vale além da VENDASGOV:** o comentário estava certo **e** desatualizado ao
-> mesmo tempo. Ele descrevia uma restrição do ambiente de então (datacenter) como se fosse
-> propriedade do site. Quando o ambiente mudou (runner residencial, 29/08), a defesa continuou
-> lá — e virou a causa. **Ao migrar uma fonte de runner, reconferir as premissas do coletor, não
-> só o IP.** Vale olhar GESTAO, RJ e PECINI com essa pergunta: elas ainda precisam de navegador?
+**⚠️ Erro meu registrado:** o commit `32d347e` anunciou três mudanças e entregou uma — o script
+de edição abortou antes de gravar e eu conferi minha intenção, não o arquivo. Passei o dia
+dizendo que *"não conseguir medir não é ter medido"* e não apliquei a mim mesmo. Os commits
+seguintes conferem o arquivo depois de gravar.
 
 ### 🔴 ITEM 1 PARA A PRÓXIMA SESSÃO — o freio de custo virou "fonte zerada" (forma nº 5, de novo)
 ```
