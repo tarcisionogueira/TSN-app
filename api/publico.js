@@ -632,6 +632,18 @@ async function paginaBusca(termo) {
 // ── /leiloes — índice nacional ───────────────────────────────────────────────
 async function paginaBrasil() {
   const dados = await rpc('acervo_uf_contagem');
+  // ÍNDICE DIRETO DE CIDADES (30/08). As cidades JÁ eram linkadas — a partir da página do
+  // estado — então isto não conserta órfão nenhum; conserta PROFUNDIDADE. As cidades de maior
+  // demanda de busca ("leilão de imóveis no Rio de Janeiro") estavam a DOIS cliques da raiz da
+  // seção, atrás de `/leiloes/{uf}`, e num domínio novo o orçamento de rastreamento é pequeno
+  // demais para atravessar isso com folga. As 60 maiores passam a ficar a um clique.
+  // Falha ABERTA: se a RPC cair, a página sai sem o bloco em vez de sair com erro — o índice
+  // por estado, que é o caminho principal, não depende dela.
+  let topCidades = [];
+  try {
+    const t = await rpc('acervo_cidades_top', { p_limite: 60 });
+    if (Array.isArray(t)) topCidades = t.filter((c) => c && c.uf && c.cidade_norm && Number(c.total) > 0);
+  } catch { /* bloco opcional: sem ele a página continua completa */ }
   // A RPC só devolve UF QUE TEM lote hoje — é a pergunta certa para o sitemap e a errada para
   // a pessoa. Quem é da Bahia abre /leiloes, não vê a Bahia na lista e conclui que não
   // cobrimos o estado dele; e o acervo esvazia e enche por UF toda semana, então a lista
@@ -657,6 +669,9 @@ async function paginaBrasil() {
       <ul class="ufs">${ufs.map(([uf, n]) => (n
         ? `<li><a href="${SITE}/leiloes/${uf.toLowerCase()}"><span>${esc(UF_NOME[uf])}</span><span class="n">${n.toLocaleString('pt-BR')}</span></a></li>`
         : `<li class="vazio"><span>${esc(UF_NOME[uf])}</span><span class="n0">sem lote hoje</span></li>`)).join('')}</ul>
+      ${topCidades.length ? `<h2>Cidades com mais imóveis em leilão</h2>
+      <p class="sub">As ${topCidades.length} cidades com maior acervo hoje. Para as demais, escolha o estado acima.</p>
+      <ul class="ufs">${topCidades.map((c) => `<li><a href="${SITE}/leiloes/${String(c.uf).toLowerCase()}/${esc(c.cidade_norm)}"><span>${esc(c.cidade)}/${esc(c.uf)}</span><span class="n">${Number(c.total).toLocaleString('pt-BR')}</span></a></li>`).join('')}</ul>` : ''}
       <div class="faixa">
       <h2>Como funciona a BidPro Brasil</h2>
       <p class="sub">Reunimos os lotes dos leiloeiros e da Caixa num só lugar e entregamos, para cada imóvel, uma análise de mercado, um parecer jurídico e o cálculo de viabilidade do arremate — o que ninguém consegue fazer sozinho antes de dar um lance.

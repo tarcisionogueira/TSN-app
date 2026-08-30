@@ -418,8 +418,18 @@ CIDADE começam a receber impressão. Verde = `/leiloes/{uf}/{cidade}` aparecend
 semanas seguir zero, o gargalo é autoridade, não estrutura — e aí a alavanca é backlink, não
 código.
 
-**Falta, e não é código:** linkar as cidades internamente. Hoje elas só existem no sitemap, e
-página que ninguém linka o Google trata como periférica.
+**⚠️ CORREÇÃO (30/08, mesma sessão):** a frase anterior aqui dizia que "as cidades só existem
+no sitemap, e página que ninguém linka o Google trata como periférica". **Era falsa, e foi
+afirmada sem verificação.** A cadeia sempre esteve linkada: `/leiloes` (linkado do Header, do
+Footer e da Landing) → lista os 27 estados → `/leiloes/{uf}` (`publico.js:695`) → lista as
+cidades com link → `/leiloes/{uf}/{cidade}`. **Nada está órfão.**
+
+O que sobrava era menor e real: **profundidade**. As cidades de maior demanda de busca estavam a
+DOIS cliques da raiz da seção, atrás da página do estado — e num domínio novo o orçamento de
+rastreamento é pequeno demais para atravessar isso com folga. Corrigido: `/leiloes` ganhou o
+bloco **"Cidades com mais imóveis em leilão"** com as 60 maiores (RPC `acervo_cidades_top`),
+levando-as a UM clique. O bloco falha ABERTO — se a RPC cair, a página sai sem ele em vez de
+sair com erro, e o índice por estado (o caminho principal) não depende dela.
 
 #### 🔌 Conectores que faltam (avaliado em 30/08)
 Ligados: Meta Ads (4 contas), Meta Lead Ads, Google Ads, GA4, Instagram (orgânico e público).
