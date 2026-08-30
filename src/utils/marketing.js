@@ -93,6 +93,32 @@ export function valorMenor(reais) {
 const KEY = 'tsn_mkt';
 const JANELA_MS = 90 * 24 * 60 * 60 * 1000;
 
+/**
+ * A ROTA do hash, sem a query — e a diferença entre "sem a query" e "sem o hash" custou caro.
+ *
+ * O app é HashRouter: `/#/live/leilao-ao-vivo` é uma ROTA, não um fragmento decorativo. E o
+ * redirecionamento de `/aula/<slug>` (api/og-share.js) ACRESCENTA as utm DEPOIS do "#", então
+ * a URL que o visitante de campanha carrega é `/#/live/<slug>?utm_source=meta&...`.
+ *
+ * A primeira versão desta trava (30/08, manhã) descartava o hash INTEIRO quando ele continha
+ * "=", para não gravar token de sessão num campo de marketing. Ela cumpria isso e, de quebra,
+ * apagava exatamente a rota de quem vinha de anúncio — porque anúncio é justamente quem chega
+ * com query. O resultado foi um `landing` igual a "/" para o tráfego pago, e eu li isso como
+ * "a campanha manda todo mundo para a home". Não mandava: o instrumento é que não enxergava.
+ * Diagnóstico errado a partir de número plausível é a forma #10 do CLAUDE.md.
+ *
+ * Agora corta a query e mantém a rota. O token do Supabase continua fora porque ele não vem
+ * como rota: chega em `#access_token=…`, sem a barra, e a checagem de formato o rejeita.
+ */
+export function rotaDoHash(hash) {
+  const bruto = String(hash || '');
+  if (!bruto.startsWith('#/')) return '';        // `#access_token=…` morre aqui
+  // `slice(1)` antes do split, porque o "#" inicial TAMBÉM é separador: sem isso o split
+  // devolve string vazia no índice 0 e a função zera toda rota — pego rodando em seco.
+  const rota = '#' + bruto.slice(1).split(/[?&#]/)[0];   // corta query e fragmento extra
+  return /^#\/[A-Za-z0-9/_-]*$/.test(rota) ? rota : '';
+}
+
 export function capturarMarketing() {
   try {
     const qs = new URLSearchParams(window.location.search);
@@ -149,9 +175,7 @@ export function capturarMarketing() {
     // com 7 categorias de um só elemento.
     // O hash SÓ é preservado quando é rota do app (`#/algo`); qualquer hash com `=` (formato
     // de par chave-valor, que é como token e código de OAuth chegam) é descartado.
-    const hashCru = window.location.hash || '';
-    const hashSeguro = /^#\/[^=]*$/.test(hashCru) ? hashCru : '';
-    const landing = String(window.location.pathname + hashSeguro).slice(0, 200);
+    const landing = String(window.location.pathname + rotaDoHash(window.location.hash)).slice(0, 200);
 
     // A PRECEDÊNCIA IMPORTA, e errar aqui custa a medição da campanha paga:
     //   • Chegou com anúncio → SOBRESCREVE sempre. É a atribuição que o Google Ads precisa

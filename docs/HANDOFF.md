@@ -148,6 +148,44 @@ existe desde 28/08 exatamente para isso: roda 09h10 e tem **carência de 24 h**,
 porque preencher no nascimento roubaria a indicação do parceiro. **Nada a fazer** — o Fabrício
 será adotado 24 h após 15:31.
 
+### 🧭 EU DIAGNOSTIQUEI ERRADO A CAMPANHA DA AULA — e o instrumento era meu (30/08)
+
+**O que eu afirmei:** "20 de 20 visitas da campanha `aula-02set` caíram em `/`; o anúncio manda
+todo mundo para a home". **Errado.** O dono abriu o anúncio no painel e a URL de destino já era
+`bidprobrasil.com.br/aula/leilao-ao-vivo` — sempre foi.
+
+**Onde eu errei.** `visita_origem.landing` era gravado como `window.location.pathname` puro
+(`tracker.js`). O app é **HashRouter**: toda rota interna mora depois do `#`, então `/#/live/…`,
+`/#/planos` e `/#/login` viravam todos `/`. Medido: das **1.772 linhas desde 12/08, ZERO tinham
+`#`** e exatamente 1 tinha "live". `landing = '/'` nunca significou "home" — significa **"não
+sei"**, e eu li o não-sei como se fosse resposta. É a **forma #10** do CLAUDE.md, cometida por
+mim no mesmo dia em que a citei ao dono.
+
+**E eu tinha piorado o instrumento horas antes.** A trava anti-token da manhã descartava o hash
+INTEIRO quando ele continha `=`. O redirecionamento de `/aula/<slug>` (`api/og-share.js`)
+acrescenta as utm **depois do `#`** — ou seja, **o tráfego pago é exatamente o que traz `=`**, e
+era exatamente o que a trava apagava. Ela protegia o token e cegava a campanha.
+
+**O instrumento certo existia e dizia a verdade:** `perfis.mkt_landing` mostra
+`/live/leilao-ao-vivo` em 2 dos 3 cadastros vindos da campanha — **e os dois se inscreveram na
+aula**. Escrito por outro caminho (`api/live-inscrever.js`), sobreviveu ao defeito.
+
+**Corrigido:** `rotaDoHash()` em `src/utils/marketing.js`, usada também pelo `tracker.js` —
+corta a query e **mantém a rota**; o token do Supabase continua fora porque chega como
+`#access_token=…`, sem a barra. Travado por `scripts/testes/landing-do-hash.mjs` (10 casos, as
+duas metades juntas). O `split` inicial zerava toda rota (o `#` é separador dele mesmo) — **pego
+rodando em seco**, não em revisão de código, que é o antídoto que a forma #10 pede.
+
+⚠️ **Dado histórico:** `visita_origem.landing` anterior a 30/08 é **irrecuperável** para rota de
+app — nunca teve a informação. Não vale reprocessar, e não vale usar essa coluna para julgar
+destino de campanha em nada anterior a hoje.
+
+**O que ficou de pé do diagnóstico:** o CPM (R$ 82,97 na campanha da aula contra R$ 5,71 na de
+tráfego) e a ausência de data de término — esta já corrigida (`adset_end_time` 02/09 19h). O que
+caiu: o destino errado (item 1) e, com ele, a urgência de trocar a otimização (item 2). Com 3
+cadastros e 2 inscrições em ~R$ 32, o custo por inscrito está em ~R$ 16 e trocar otimização
+**zeraria o aprendizado** de uma campanha de 2 dias que já está convertendo.
+
 ### 🔐 TELEFONE ÚNICO NO CADASTRO — feito (30/08), com uma pendência de tela
 
 Pedido do dono: e-mail, telefone e CPF únicos; **CNPJ não** (a mesma empresa pode ter mais de um

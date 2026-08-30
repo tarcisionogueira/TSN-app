@@ -2,6 +2,7 @@
 // Objetivo: encontrar possíveis falhas (o que o usuário fez antes de um erro). Vale para
 // clientes, parceiros e equipe. Economia: teto por sessão, batch, e só usuários logados.
 import { supabase } from './supabase.js';
+import { rotaDoHash } from './marketing.js';
 
 let fila = [];
 let contador = 0;          // teto por sessão (anti-flood + economia)
@@ -106,7 +107,15 @@ function origemPrimeiroToque() {
           return h && h !== window.location.hostname ? h : null;
         } catch { return null; }
       })(),
-      landing: window.location.pathname || '/',
+      // PATHNAME SOZINHO NÃO DESCREVE ESTE APP (30/08). O app é HashRouter, então toda rota
+      // interna mora depois do "#": gravar só o pathname registrava "/" para `/#/live/<slug>`,
+      // `/#/planos`, `/#/login` — tudo. Medido: das 1.772 linhas de `visita_origem` desde
+      // 12/08, ZERO tinham "#", e exatamente 1 tinha "live". Não era pouca gente chegando na
+      // aula; era a coluna sem vocabulário para dizer onde a pessoa caiu — e "/" não significa
+      // home, significa "não sei". Foi com essa coluna que eu diagnostiquei, errado, que a
+      // campanha da aula mandava todo mundo para a home. `perfis.mkt_landing` sabia a verdade
+      // o tempo todo (`/live/leilao-ao-vivo`), porque é escrito por outro caminho.
+      landing: (window.location.pathname + rotaDoHash(window.location.hash)) || '/',
     };
     if (!Object.entries(o).some(([k, v]) => k !== 'landing' && v)) return null; // nada a atribuir
     localStorage.setItem(LS_ORIGEM, JSON.stringify(o));
