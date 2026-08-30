@@ -46,7 +46,7 @@ import { checarQualidade, normalizarData } from './lib/scraper-core.mjs';
 import { registrarConhecimento, qualidadeColeta } from './lib/conhecimento.mjs';
 // Monitor de fontes: sem esta linha a fonte fica INVISÍVEL ao bug bounty (ver _saude-fonte.mjs).
 import { registrarSaude } from './_saude-fonte.mjs';
-import { fetchHeadless, fecharHeadless } from './lib/fetch-residencial.mjs';
+import { fetchResidencial, fecharHeadless, estatisticaResidencial } from './lib/fetch-residencial.mjs';
 
 // vincoleiloes.com.br: recon 26/07 confirmou o MESMO back-office (leilao.php?idLeilao=N +
 // CDN d335luupugsy2.cloudfront.net) — entra no cluster (dedup global por idLote cuida de sobreposição).
@@ -56,6 +56,7 @@ const DOMINIOS = (process.env.GESTAO_DOMINIOS ||
 const MAX_EVENTOS = Number(process.env.GESTAO_MAX_EVENTOS || 25);
 const DRYRUN = process.env.GESTAO_DRYRUN !== '0';
 const DEBUG = process.env.GESTAO_DEBUG === '1';
+const RESIDENCIAL = process.env.GESTAO_HEADLESS === '1';
 const SB_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_KEY;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -70,9 +71,13 @@ const supabase = createClient(SB_URL, SB_KEY);
 let semCotaVisto = false;
 
 // Busca via Web Unlocker e DECODIFICA windows-1252 (o back-office serve latin1).
-async function bd(url, { timeoutMs = 60000 } = {}) {
-  if (process.env.GESTAO_HEADLESS === '1') {   // runner residencial: Chromium real já decodifica o charset (sem mojibake) e passa Cloudflare, SEM Bright Data
-    return await fetchHeadless(url, { timeoutMs });
+async function bd(url, { timeoutMs = 60000, valido = null } = {}) {
+  if (RESIDENCIAL) {
+    // Runner residencial: fetch puro (decodificando windows-1252 na mão — o Chromium fazia isso
+    // de graça), com o navegador de rede de segurança. `valido` é o marcador que o parser
+    // precisa: sem ele, o stub de 1,5 kB que o back-office devolve bloqueado passaria como
+    // página boa e o fallback nunca dispararia.
+    return await fetchResidencial(url, { timeoutMs, charset: 'windows-1252', valido });
   }
   // `buscarViaBrightData` LANÇA com o motivo em vez de devolver `null` para quatro causas
   // diferentes. Continuamos devolvendo `null` ao chamador — a enumeração por domínio/evento é
@@ -103,8 +108,17 @@ const paginaOk = h => !!h && h.length > 5000 && /lotePadrao|Total de lotes|idLot
 // Home resiliente: tenta o apex e, se vier vazio (apex que redireciona p/ www e o Web Unlocker
 // não segue — caso do vinco), tenta www.<dominio>. Barato: o 2º fetch só dispara quando o 1º falha.
 async function fetchHome(dom) {
-  let h = await bd(`https://${dom}/`);
-  if (!h && !/^www\./i.test(dom)) h = await bd(`https://www.${dom}/`);
+  // O `valido` da home NÃO pode ser "tem idLeilao". Leiloeiro pequeno ENTRE eventos tem home
+  // sadia e zero evento — exigir o link faria o fallback gastar um Chromium à toa e, pior,
+  // devolver `null`, que o chamador imprime como "home não veio". Seria trocar "sem leilão
+  // agora" por "fui bloqueado": as duas ações são opostas, e é a confusão que o `sem_cota`
+  // e o `vazio` já existem para evitar em `_saude-fonte.mjs`.
+  // O que separa home boa de bloqueio é o TAMANHO — o back-office devolve stub ~1,5 kB com
+  // HTTP 200, e o `> 5000` é o mesmo limiar que `paginaOk` já usa neste arquivo (as homes
+  // medidas em 30/08 vieram entre 52 e 434 kB).
+  const naoEhStub = h => h.length > 5000;
+  let h = await bd(`https://${dom}/`, { valido: naoEhStub });
+  if (!h && !/^www\./i.test(dom)) h = await bd(`https://www.${dom}/`, { valido: naoEhStub });
   return h;
 }
 
@@ -277,7 +291,7 @@ function inferirRotulo(txt) {
 
 async function coletarEvento(dominio, idLeilao) {
   const url = `https://${dominio}/leilao.php?idLeilao=${idLeilao}`;
-  const html = await bd(url);
+  const html = await bd(url, { valido: paginaOk });
   if (!paginaOk(html)) return { rows: [], bloqueado: true };
   const cabecalho = decodificarEntidades(html.slice(0, 6000).replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ');
   const ctx = {
@@ -316,7 +330,7 @@ async function debugRecon() {
 async function main() {
   // Bright Data só é exigido no modo pago (CI); no runner RESIDENCIAL (GESTAO_HEADLESS=1)
   // o Chromium real passa o Cloudflare de graça — o guard antigo abortava o modo de casa.
-  if (!brightDataDisponivel() && process.env.GESTAO_HEADLESS !== '1') {
+  if (!brightDataDisponivel() && !RESIDENCIAL) {
     console.error('BRIGHTDATA_API_TOKEN/ZONE ausentes — cluster só acessível via Web Unlocker (ou use GESTAO_HEADLESS=1 num IP residencial). Abortado.');
     process.exit(1);
   }
@@ -390,15 +404,28 @@ async function main() {
   await registrarSaude(supabase, 'GESTAOLEILOES', prontos, 'principal',
     semCotaVisto ? { semCota: true } : undefined);
   await registrarConhecimento(supabase, {
-    fonte: 'GESTAOLEILOES', plataforma: 'GestaoDeLeiloes(PHP)', acesso: 'brightdata', custo: 'pago',
+    // `acesso`/`custo` são o caminho que ESTA execução usou, não o que o scraper sabe fazer:
+    // gravar 'pago' numa coleta residencial é o instrumento reportando outra coisa (forma #10).
+    fonte: 'GESTAOLEILOES', plataforma: 'GestaoDeLeiloes(PHP)',
+    acesso: RESIDENCIAL ? 'residencial' : 'brightdata', custo: RESIDENCIAL ? 'gratis' : 'pago',
     anti_bot: 'cloudflare', enumeracao: 'home_idLeilao→evento_inline', url_lote: '/lote.php?idLote={id}',
     scraper: 'scraper-gestao.mjs', qualidade: qualidadeColeta(prontos),
   });
 }
 
+// Qual caminho serviu esta execução. Sem este número, "o Chromium nunca precisou entrar" e
+// "o Chromium entrou em tudo" ficam idênticos no log — e a segunda é o sinal de que o site
+// endureceu, que é justamente o que a rede de segurança existe para não esconder.
+function logPlacarResidencial(tag) {
+  const p = estatisticaResidencial();
+  if (p.fetch + p.navegador + p.falha === 0) return;   // rodou pelo caminho pago: nada a dizer
+  console.log(`  🏠 [${tag}] caminho residencial: ${p.fetch} por fetch puro · ${p.navegador} pelo Chromium (rede de segurança) · ${p.falha} sem resposta`);
+}
+
 // `process.exit(0)` FIXO apagava o `process.exitCode = 1` que o caminho "nada a gravar"
 // acabara de definir — a coleta falhava e o processo saía verde mesmo assim. Agora o
 // código de saída é o que o main decidiu (0 por padrão, 1 quando não coletou nada).
+
 main()
-  .then(() => fecharHeadless().finally(() => process.exit(process.exitCode || 0)))
-  .catch(e => { console.error(e); fecharHeadless().finally(() => process.exit(1)); });
+  .then(() => { logPlacarResidencial('GESTAO'); return fecharHeadless().finally(() => process.exit(process.exitCode || 0)); })
+  .catch(e => { console.error(e); logPlacarResidencial('GESTAO'); fecharHeadless().finally(() => process.exit(1)); });

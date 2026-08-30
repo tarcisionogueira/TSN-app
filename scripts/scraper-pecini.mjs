@@ -28,7 +28,7 @@ import { createClient } from '@supabase/supabase-js';
 // dentro de um try/catch: o chamador segue vendo `null`, mas o MOTIVO da recusa vira log e o
 // laço para quando o freio de custo diz não, em vez de repetir a recusa lote a lote.
 import { buscarViaBrightData, brightDataDisponivel, ErroBrightData } from '../api/_brightdata.js';
-import { fetchHeadless, fecharHeadless } from './lib/fetch-residencial.mjs';
+import { fetchResidencial, fecharHeadless, estatisticaResidencial } from './lib/fetch-residencial.mjs';
 import { extrairGenerico, extrairData, checarQualidade, extrairAreaM2} from './lib/scraper-core.mjs';
 import { decodificarEntidades } from '../api/_texto-imovel.js';
 import { nomeiaUmDocumento } from '../api/_doc-scan.js';
@@ -42,6 +42,7 @@ const DRYRUN = process.env.PECINI_DRYRUN !== '0'; // default: dry-run (não grav
 const ALVO = ['novos', 'antigos', 'todos'].includes(process.env.PECINI_ALVO) ? process.env.PECINI_ALVO : 'novos';
 const DEBUG = process.env.PECINI_DEBUG === '1';   // dumpa contexto dos R$ p/ achar os rótulos reais
 let debugRestante = Number(process.env.PECINI_DEBUG_N || 3); // primeiros lotes (log enxuto)
+const RESIDENCIAL = process.env.PECINI_HEADLESS === '1';
 const SB_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_KEY;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -54,8 +55,8 @@ const supabase = createClient(SB_URL, SB_KEY);
 let recusaDeCota = null;   // motivo da última recusa do FREIO DE CUSTO (não de rede)
 
 async function bd(url, { proposito = 'pecini', timeoutMs = 45000 } = {}) {
-  if (process.env.PECINI_HEADLESS === '1') {   // runner residencial: Chromium real de IP de casa, SEM Bright Data
-    return await fetchHeadless(url, { timeoutMs });
+  if (RESIDENCIAL) {   // runner residencial: fetch puro, Chromium de rede de segurança
+    return await fetchResidencial(url, { timeoutMs });
   }
   // O `null` daqui segue sendo o fallback deliberado deste arquivo — mas o MOTIVO para de ser
   // adivinhado. `fetchViaBrightData` engolia o ErroBrightData e o laço imprimia
@@ -346,7 +347,7 @@ function montarRow(rec, det) {
 async function main() {
   // Bright Data só no modo pago (CI); no runner RESIDENCIAL (PECINI_HEADLESS=1) o
   // Chromium real de IP de casa dispensa o proxy.
-  if (!brightDataDisponivel() && process.env.PECINI_HEADLESS !== '1') {
+  if (!brightDataDisponivel() && !RESIDENCIAL) {
     console.error('BRIGHTDATA_API_TOKEN/ZONE ausentes — Pecini só é acessível via Web Unlocker (ou use PECINI_HEADLESS=1 num IP residencial). Abortado.');
     process.exit(1);
   }
@@ -502,15 +503,28 @@ async function main() {
   await registrarSaude(supabase, 'PECINI', prontos, 'principal', { enumerados: lotes.length });
   // Auto-aprendizado: registra o que este scraper sabe na base de conhecimento.
   await registrarConhecimento(supabase, {
-    fonte: 'PECINI', plataforma: 'ASP.NET-DefaultClean', acesso: 'brightdata', custo: 'pago',
+    // `acesso`/`custo` são o caminho que ESTA execução usou, não o que o scraper sabe fazer:
+    // gravar 'pago' numa coleta residencial é o instrumento reportando outra coisa (forma #10).
+    fonte: 'PECINI', plataforma: 'ASP.NET-DefaultClean',
+    acesso: RESIDENCIAL ? 'residencial' : 'brightdata', custo: RESIDENCIAL ? 'gratis' : 'pago',
     anti_bot: 'cloudflare', enumeracao: 'sitemap', url_lote: '/lote/{slug}/{id}/',
     scraper: 'scraper-pecini.mjs', qualidade: qualidadeColeta(prontos),
   });
 }
 
+// Qual caminho serviu esta execução. Sem este número, "o Chromium nunca precisou entrar" e
+// "o Chromium entrou em tudo" ficam idênticos no log — e a segunda é o sinal de que o site
+// endureceu, que é justamente o que a rede de segurança existe para não esconder.
+function logPlacarResidencial(tag) {
+  const p = estatisticaResidencial();
+  if (p.fetch + p.navegador + p.falha === 0) return;   // rodou pelo caminho pago: nada a dizer
+  console.log(`  🏠 [${tag}] caminho residencial: ${p.fetch} por fetch puro · ${p.navegador} pelo Chromium (rede de segurança) · ${p.falha} sem resposta`);
+}
+
 // `process.exit(0)` FIXO apagava o `process.exitCode = 1` que o caminho "nada a gravar"
 // acabara de definir — a coleta falhava e o processo saía verde mesmo assim. Agora o
 // código de saída é o que o main decidiu (0 por padrão, 1 quando não coletou nada).
+
 main()
-  .then(() => fecharHeadless().finally(() => process.exit(process.exitCode || 0)))
-  .catch(e => { console.error(e); fecharHeadless().finally(() => process.exit(1)); });
+  .then(() => { logPlacarResidencial('PECINI'); return fecharHeadless().finally(() => process.exit(process.exitCode || 0)); })
+  .catch(e => { console.error(e); logPlacarResidencial('PECINI'); fecharHeadless().finally(() => process.exit(1)); });

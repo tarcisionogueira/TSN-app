@@ -42,7 +42,7 @@ import './lib/env-runner.mjs';   // carrega ~/.bidpro-runner.env quando rodado n
 import { createClient } from '@supabase/supabase-js';
 import { decodificarEntidades } from '../api/_texto-imovel.js';
 import { buscarViaBrightData, brightDataDisponivel, ErroBrightData } from '../api/_brightdata.js';
-import { fetchHeadless, fecharHeadless } from './lib/fetch-residencial.mjs';
+import { fetchResidencial, fecharHeadless, estatisticaResidencial } from './lib/fetch-residencial.mjs';
 import { extrairGenerico, extrairData, checarQualidade } from './lib/scraper-core.mjs';
 import { registrarConhecimento, qualidadeColeta } from './lib/conhecimento.mjs';
 // Monitor de fontes: sem esta linha a fonte fica INVISÍVEL ao bug bounty (ver _saude-fonte.mjs).
@@ -90,12 +90,12 @@ class FalhaDeAcesso extends Error {
  * 12 dias com o workflow verde. Só devolve string quando de fato leu a página.
  */
 async function bd(url, { timeoutMs = 60000 } = {}) {
-  if (HEADLESS) {   // runner residencial: Chromium real (passa Cloudflare de IP residencial), SEM Bright Data
-    const h = await fetchHeadless(url, { timeoutMs });
-    if (DEBUG) console.log(`  headless ${url} → ${h ? h.length + ' bytes' : 'null'}`);
-    // fetchHeadless devolve null tanto para desafio não resolvido quanto para erro de
-    // navegador — os dois são falha de acesso, nenhum é "a página está vazia".
-    if (h == null) throw new FalhaDeAcesso('headless', `Chromium não trouxe ${url}`);
+  if (HEADLESS) {   // runner residencial: fetch puro de IP de casa, Chromium só de rede de segurança
+    const h = await fetchResidencial(url, { timeoutMs });
+    if (DEBUG) console.log(`  residencial ${url} → ${h ? h.length + ' bytes' : 'null'}`);
+    // `null` aqui só sai depois de o fetch E o navegador falharem — os dois são falha de
+    // acesso, nenhum é "a página está vazia".
+    if (h == null) throw new FalhaDeAcesso('residencial', `nem fetch nem Chromium trouxeram ${url}`);
     return h;
   }
   let r;
@@ -486,8 +486,18 @@ async function main() {
  * gate) e, por tabela, o freio de custo que decide se o caminho pago pode rodar.
  * Falha de acesso agora sai 1 e deixa rastro em `fonte_saude`.
  */
+// Qual caminho serviu esta execução. Sem este número, "o Chromium nunca precisou entrar" e
+// "o Chromium entrou em tudo" ficam idênticos no log — e a segunda é o sinal de que o site
+// endureceu, que é justamente o que a rede de segurança existe para não esconder.
+function logPlacarResidencial(tag) {
+  const p = estatisticaResidencial();
+  if (p.fetch + p.navegador + p.falha === 0) return;   // rodou pelo caminho pago: nada a dizer
+  console.log(`  🏠 [${tag}] caminho residencial: ${p.fetch} por fetch puro · ${p.navegador} pelo Chromium (rede de segurança) · ${p.falha} sem resposta`);
+}
+
 main()
   .then(async (r) => {
+    logPlacarResidencial('RJ');
     console.log(`[rj] fim → ${JSON.stringify(r)}`);
     await fecharHeadless();
     process.exit(0);
@@ -509,6 +519,7 @@ main()
             ? `SEM COTA Bright Data (${motivo}) — coleta não tentada (decisão de orçamento, não regressão da fonte)`
             : `falha de acesso: ${motivo}` });
     } catch { /* já estamos no caminho de erro */ }
+    logPlacarResidencial('RJ');
     await fecharHeadless();
     process.exit(1);
   });
