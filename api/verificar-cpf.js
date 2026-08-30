@@ -55,7 +55,7 @@ export default async function handler(req) {
     return new Response(JSON.stringify({ error: 'Muitas tentativas. Aguarde 1 minuto.' }), { status: 429, headers });
   }
 
-  const { cpf, email, produto } = await req.json();
+  const { cpf, email, telefone, produto } = await req.json();
 
   // ── Verificação de email único ──
   // perfis não armazena e-mail; usa a função email_existe (SECURITY DEFINER)
@@ -70,6 +70,22 @@ export default async function handler(req) {
     const existe = await r.json().catch(() => null);
     if (existe === null) return new Response(JSON.stringify({ error: 'Não foi possível verificar agora. Tente novamente.' }), { status: 503, headers });
     return new Response(JSON.stringify({ temConta: existe === true, campo: 'email' }), { status: 200, headers });
+  }
+
+  // ── Verificação de TELEFONE único (30/08) ──
+  // Espelha o ramo do e-mail acima, e existe pelo mesmo motivo prático: sem ele a pessoa só
+  // descobre que o telefone já está cadastrado DEPOIS de mandar o formulário — e como o perfil
+  // nasce no trigger `handle_new_user`, a violação do índice único estoura DENTRO do
+  // `auth.signUp`, que devolve um "Database error saving new user". Mensagem técnica na cara de
+  // quem está tentando entrar é justamente o que faz a pessoa recadastrar com outro e-mail:
+  // foi assim que nasceram os 2 duplicados do acervo (Igor 06/07, Fabrício 30/08).
+  if (telefone && !cpf && !email) {
+    const r = await sb('rpc/telefone_existe', { method: 'POST', body: JSON.stringify({ p_telefone: telefone }) });
+    // `.ok` checado ANTES do corpo: um 4xx/5xx aqui não é "não existe", é "não consegui
+    // verificar" — e rebaixar um para o outro destravaria o cadastro duplicado em silêncio.
+    if (!r?.ok) return new Response(JSON.stringify({ erro: 'indisponivel' }), { status: 503, headers });
+    const existe = await r.json().catch(() => null);
+    return new Response(JSON.stringify({ temConta: existe === true, campo: 'telefone' }), { status: 200, headers });
   }
 
   if (!cpf) return new Response(JSON.stringify({ temConta: false }), { status: 200, headers });

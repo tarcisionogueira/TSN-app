@@ -126,6 +126,7 @@ export default function Login() {
   const [cpfCheck, setCpfCheck] = useState(null); // null | { temConta, temAcesso, role }
   const [cpfChecking, setCpfChecking] = useState(false);
   const [emailDuplicado, setEmailDuplicado] = useState(false);
+  const [telDuplicado, setTelDuplicado] = useState(false);
 
   const [aceite, setAceite] = useState(false);
   // Conta regressiva do cooldown de reenvio (1 tick/s até zerar).
@@ -153,6 +154,26 @@ export default function Login() {
       const data = await res.json();
       setEmailDuplicado(!!data.temConta);
     } catch (_) {}
+  }
+
+  // TELEFONE JÁ CADASTRADO — avisa ANTES de enviar o formulário (30/08).
+  // Sem isto, a violação do índice único acontece dentro do trigger que cria o perfil, e o
+  // `auth.signUp` devolve "Database error saving new user" — mensagem técnica que empurra a
+  // pessoa a tentar de novo com outro e-mail, que é exatamente como os duplicados nasceram.
+  async function checarTelefone(tel) {
+    const limpo = String(tel || '').replace(/\D/g, '');
+    if (limpo.length < 10) { setTelDuplicado(false); return; }
+    try {
+      const res = await apiCall('/api/verificar-cpf', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ telefone: limpo }),
+      });
+      // Mesma regra do e-mail: erro/rate-limit NÃO vira "não duplicado" — isso destravaria o
+      // botão e deixaria passar o cadastro que a trava do banco vai recusar adiante.
+      if (!res.ok) return;
+      const data = await res.json();
+      setTelDuplicado(!!data.temConta);
+    } catch (_) { /* indisponível: mantém o estado, não libera */ }
   }
 
   async function checarCPF(cpf) {
@@ -403,6 +424,16 @@ export default function Login() {
     setLoading(false);
   };
 
+  // O GATE DO BOTÃO E A APARÊNCIA DELE PRECISAM SER A MESMA EXPRESSÃO (30/08). Estavam
+  // separados: `disabled` já contava `emailDuplicado`, mas o `cursor`/`opacity` não — o botão
+  // ficava azul, com cursor de mão, e simplesmente NÃO respondia ao clique. Isso é a inversão
+  // do defeito de 12/08 registrado logo acima do botão: lá ele informava sem impedir; aqui
+  // impedia sem informar, que é a metade pior (o visitante conclui que o site travou). Uma
+  // variável só, usada nos três lugares, e a divergência deixa de ser possível.
+  const cadastroBloqueado = loading || !aceite || !SENHA_FORTE.test(form.senha)
+    || emailDuplicado || telDuplicado
+    || ((produtoParam || planoEscolhido) && cpfCheck?.temConta);
+
   return (
     <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #111111 0%, #1e3a5f 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
       <div style={{ background: 'white', borderRadius: 20, padding: '40px 36px', width: '100%', maxWidth: 420, boxShadow: '0 24px 60px rgba(0,0,0,0.3)' }}>
@@ -609,7 +640,24 @@ export default function Login() {
                 </div>
                 <div>
                   <label style={lbl}>Telefone</label>
-                  <input value={form.telefone} inputMode="numeric" onChange={e => up('telefone', maskTel(e.target.value))} placeholder="(00) 90000-0000" style={inp} />
+                  <input value={form.telefone} inputMode="numeric"
+                    onChange={e => { up('telefone', maskTel(e.target.value)); setTelDuplicado(false); }}
+                    onBlur={e => checarTelefone(e.target.value)}
+                    placeholder="(00) 90000-0000"
+                    style={{ ...inp, borderColor: telDuplicado ? '#dc2626' : undefined }} />
+                  {telDuplicado && (
+                    <div style={{ marginTop: 6, fontSize: 12, color: '#dc2626', fontWeight: 600, lineHeight: 1.5 }}>
+                      ⚠️ Este telefone já tem cadastro. Você provavelmente já tem conta aqui —{' '}
+                      <button type="button" onClick={() => { setModo('login'); setErro(''); }}
+                        style={{ background: 'none', border: 'none', color: '#0D63DB', fontWeight: 700, fontSize: 12, cursor: 'pointer', padding: 0 }}>
+                        entrar
+                      </button>{' '}ou{' '}
+                      <button type="button" onClick={() => { setModo('recuperar'); setErro(''); }}
+                        style={{ background: 'none', border: 'none', color: '#0D63DB', fontWeight: 700, fontSize: 12, cursor: 'pointer', padding: 0 }}>
+                        recuperar a senha
+                      </button>. Se não for você, use outro número.
+                    </div>
+                  )}
                 </div>
               </div>
               <div>
@@ -737,8 +785,8 @@ export default function Login() {
                   DEPOIS da correção, de pessoas diferentes. Agora o clique não acontece
                   enquanto a senha não cumpre a regra, e a lista logo acima diz exatamente o
                   que falta — informar e impedir são coisas diferentes. */}
-              <button type="submit" disabled={loading || !aceite || !SENHA_FORTE.test(form.senha) || emailDuplicado || ((produtoParam || planoEscolhido) && cpfCheck?.temConta)}
-                style={{ width: '100%', padding: '12px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: (loading || !aceite || !SENHA_FORTE.test(form.senha)) ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: (loading || !aceite || !SENHA_FORTE.test(form.senha)) ? 0.6 : 1 }}>
+              <button type="submit" disabled={cadastroBloqueado}
+                style={{ width: '100%', padding: '12px', background: '#0D63DB', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: cadastroBloqueado ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: cadastroBloqueado ? 0.6 : 1 }}>
                 {loading
                   ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Criando conta...</>
                   : planoEscolhido ? 'Criar conta e ir para pagamento →' : 'Criar conta grátis'

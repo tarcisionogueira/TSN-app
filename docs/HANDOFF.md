@@ -164,12 +164,47 @@ a saída foi excluir do índice a SEGUNDA conta de cada par. A PRIMEIRA fica den
 terceira tentativa com o mesmo telefone é barrada. **Fundir as contas segue sendo decisão do
 dono.**
 
-🔴 **PENDÊNCIA PARA A PRÓXIMA SESSÃO — e é a parte que fecha o ciclo.** A violação chega ao front
-como **erro cru de constraint**. Um cliente real com telefone já cadastrado vai ver mensagem
-técnica — que é exatamente o tipo de tela que faz a pessoa tentar de novo com outro e-mail, ou
-seja, **é como o duplicado do Fabrício nasceu.** Sem a mensagem amigável ("esse telefone já tem
-cadastro — entre com o e-mail X ou recupere a senha"), a trava pode até AUMENTAR o problema que
-veio resolver.
+~~🔴 PENDÊNCIA PARA A PRÓXIMA SESSÃO~~ — **fechada no mesmo dia** (abaixo).
+
+### 💬 A MENSAGEM AMIGÁVEL DO TELEFONE DUPLICADO — feito (30/08)
+
+**Por que a trava sozinha pioraria as coisas.** O perfil nasce no trigger `handle_new_user`, então
+a violação do índice estoura **dentro do `auth.signUp`** e o Supabase devolve `"Database error
+saving new user"`. Mensagem técnica em inglês na cara de quem está tentando entrar é *exatamente*
+o tipo de tela que faz a pessoa recadastrar com outro e-mail — **que é como os dois duplicados do
+acervo nasceram**. Trava sem aviso protege o banco e produz o comportamento que deveria evitar.
+
+**Três peças, espelhando o caminho que o e-mail já usava:**
+
+1. **`telefone_existe(text)`** (RPC `stable security definer`) — normaliza para dígitos, **a mesma
+   normalização do índice**. Se comparasse a coluna crua, o aviso responderia "livre" para um
+   número que o índice recusa meio segundo depois: mentiria e quebraria assim mesmo. Só o
+   `service_role` executa — `perfis.telefone` é PII, e uma função aberta ao `anon` que responde
+   sim/não sobre um número é **oráculo de enumeração** (dá para varrer faixas de celular e
+   descobrir quem é cliente). Medido em seco antes de subir: cru→`true`, formatado→`true`,
+   inexistente→`false`, curto→`false`, `null`→`false`. **A migração foi escrita no repo** — ela
+   tinha sido aplicada direto no banco, que é a forma #7b do CLAUDE.md.
+2. **`api/verificar-cpf.js`** — ramo `telefone`, antes do retorno curto de `!cpf`. **`.ok` checado
+   antes do corpo**, e 4xx/5xx vira **503 `indisponivel`**, não `temConta: false`. Rebaixar "não
+   consegui verificar" para "não existe" destravaria em silêncio o cadastro que o banco vai
+   recusar adiante — a forma #1.
+3. **`src/pages/Login.jsx`** — checagem no `onBlur` do telefone, borda vermelha e o texto: *"⚠️
+   Este telefone já tem cadastro. Você provavelmente já tem conta aqui — **entrar** ou **recuperar
+   a senha**. Se não for você, use outro número."* Os dois são botões que trocam o modo da tela;
+   erro/rate-limit **não** libera o botão.
+
+**Dois consertos que apareceram no caminho, e não eram o pedido:**
+
+- **O botão bloqueava sem parecer bloqueado.** `disabled` já contava `emailDuplicado`, mas o
+  `cursor`/`opacity` não — ele ficava azul, com cursor de mão, e simplesmente não respondia ao
+  clique. É a **inversão** do defeito de 12/08 registrado no próprio comentário acima do botão (lá
+  informava sem impedir; aqui impedia sem informar, que é a metade pior: o visitante conclui que o
+  site travou e vai embora). Agora `cadastroBloqueado` é uma variável só, usada nos três lugares.
+- **`traduzErroAuth` ganhou a rede.** O aviso do formulário não cobre tudo — Enter direto no campo,
+  ou dois cadastros no mesmo segundo. `"Database error saving new user"` caía cru na tela porque o
+  tradutor devolve a mensagem original quando não reconhece. Agora tem linha própria, e ela
+  **aponta a causa provável sem afirmar qual campo repetiu**: o Auth achata qualquer exceção do
+  trigger nessa frase única, então dizer "telefone duplicado" com certeza seria inventar.
 
 ### ⏳ SE PROVAM SOZINHAS — confira, não conserte
 | Quando | O quê | Verde é |
