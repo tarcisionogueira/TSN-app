@@ -28,10 +28,11 @@ const sb = createClient(URL_BASE, KEY);
 // Amostra ALEATÓRIA e proporcional por modalidade: matrícula de venda direta e de leilão podem
 // ter tamanhos diferentes, e uma amostra só do primeiro bloco do acervo mediria a ordem de
 // inserção, não o acervo.
-// schema-ok: `amostra_matriculas_cef` é ATALHO OPCIONAL que nunca foi criado — a amostragem
-// aleatória sai igual pelo fallback logo abaixo (consulta direta + embaralhamento). O `.then`
-// de rejeição existe justamente para isso, então a ausência da RPC é caminho previsto e não
-// deriva de migração esquecida. Se um dia ela for criada, o atalho passa a valer sozinho.
+// `amostra_matriculas_cef` é ATALHO OPCIONAL que nunca foi criado: a amostragem sai igual pelo
+// fallback logo abaixo (consulta direta + embaralhamento), e o handler de rejeição do `.then`
+// existe exatamente para esse caso. Não é migração esquecida — é caminho previsto. Se um dia a
+// RPC for criada, o atalho passa a valer sozinho.
+// schema-ok: RPC opcional com fallback direto no próprio arquivo; ausência é caminho previsto
 const { data: lotes, error } = await sb.rpc('amostra_matriculas_cef', { p_n: N })
   .then((r) => r, () => ({ data: null, error: { message: 'rpc ausente' } }));
 let alvos = lotes;
