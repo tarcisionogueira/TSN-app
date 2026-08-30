@@ -19,6 +19,72 @@
 | **Sitemap** | hubs separados em `/sitemap-hubs.xml`; lotes atrás de `SITEMAP_LOTES=1` |
 | **Campanhas Meta** | aula 02/09 a R$ 50/dia · `TRF - SITE` religada · 3 criativos provados (PAUSADOS) |
 
+### 🧹 OS ERROS ABERTOS, RESOLVIDOS ANTES DE ACUMULAR (30/08, fim da sessão)
+
+Pedido do dono: resolver para não empurrar para a próxima sessão. Eram 4; **sobrou 1**, e o que
+sobrou é real. `clientes_com_erro` foi de **3 para 1**.
+
+#### 1. `column perfis.email does not exist` — NUNCA foi erro de cliente
+
+Passei por três buscas antes de olhar a coluna certa: varri o código atual, cinco commits
+anteriores e o histórico do arquivo procurando a query culpada. Não existia. **O campo `url`
+respondeu em um segundo:**
+
+`https://tsn-app-git-claude-bidpro-b-eb61e3-…vercel.app/#/admin` — um deploy de **PREVIEW**.
+
+Ninguém de fora viu. E mesmo assim contou em `clientes_com_erro`, que o Cliente 360 mostra ao
+dono como "clientes com erro". **É a forma #10 dentro do próprio medidor de saúde:** número
+existe, é plausível, e mede outra coisa.
+
+**Conserto na origem** (`src/utils/reportarErro.js`): erro de host que não seja
+`bidprobrasil.com.br` / `www.` **não é mais reportado**. `erros_cliente` responde uma pergunta
+só — *um cliente bateu nisto?* — e preview e localhost nunca foram resposta para ela. Quem testa
+continua vendo o erro no console, que é onde ele serve. Travado por 8 casos, incluindo o
+`bidprobrasil.com.br.evil.com`, que **não** pode passar por parecer com o domínio.
+
+#### 2. e 3. Leaflet mexendo em mapa já desmontado — a MESMA falha, duas rotas
+
+`_leaflet_pos` em `/planos` (28/08) e `classList` em `/imovel/:id` (30/08) têm a mesma pilha:
+`panBy` → `_move`, dentro do bundle do Leaflet.
+
+Duas coisas que essa dupla ensina e valem mais que o conserto:
+
+- **A rota gravada é o DESTINO, não a origem.** `/planos` não tem mapa. O estouro acontece
+  *depois* de a pessoa sair da página do mapa, então o que fica registrado é para onde ela foi.
+  Procurar o bug em `/planos` seria procurar onde ele não está.
+- **`map.remove()` não aborta animação em curso.** Ele desmonta, mas um pan/zoom já rodando
+  continua e estoura num mapa que não existe mais. A API para isso é **`map.stop()`**, e ela
+  faltava nos **três** mapas (`ImovelDetalhe`, `Busca`, `MapaImoveis`).
+
+⚠️ **É a terceira ocorrência desta família** — em 11/08 foi `_leaflet_pos` por `tileerror`
+atrasado. As duas anteriores fecharam buracos de callback NOSSO; esta é do próprio Leaflet.
+
+⚠️ **E é endurecimento, não conserto provado.** Não consegui reproduzir. Marquei as linhas como
+resolvidas porque o `on conflict` de `registrar_erro_cliente` faz `resolvido = excluded.resolvido`
+— **uma reincidência reabre a linha sozinha**. Se voltar, aparece de novo no 360, sem depender de
+alguém lembrar.
+
+#### O que sobrou aberto, e por que fica
+
+`Supabase 500 em rpc/admin_qa_invariantes: canceling statement due to statement timeout`, de
+23/08, no `/admin`. **É real e é nosso** — a função de invariantes estoura o tempo. Só o dono
+vê, então não é urgente, mas não vou marcar resolvido o que não consertei. Fica para a próxima
+sessão: ou a função ganha índice, ou passa a rodar por partes.
+
+### 🔒 PII DE CLIENTE SAIU DO `docs/` (30/08)
+
+O repositório é público e o `docs/` guardava **6 e-mails de pessoas** — 4 de clientes, além do
+gmail pessoal do dono, que **eu mesmo escrevi hoje** no mapa de contas. Todos mascarados; o
+texto continua fazendo sentido (nomes próprios e prefixos de UUID seguem como referência).
+
+⚠️ **A varredura errou duas vezes antes de acertar**, e o erro foi meu: o primeiro filtro
+excluía `@gmail.com` para tirar ruído, e escondeu justamente três endereços reais. **Filtro de
+varredura de PII não pode excluir provedor de e-mail** — é onde a PII mora. A varredura boa é a
+sem filtro nenhum, lendo a lista inteira.
+
+Segue valendo o de manhã: **o histórico do git não foi tocado** (decisão do dono). O que mudou é
+o arquivo que qualquer pessoa lê ao abrir o repositório hoje.
+
 ### 📏 LINHA DE BASE PARA COMPARAR AMANHÃ — fechamento de 30/08, 19h40 (SP)
 
 Fotografia tirada a pedido do dono para a **próxima sessão comparar a evolução**. Números
@@ -35,7 +101,7 @@ medidos, não estimados. ⚠️ A janela do dia ainda estava aberta: Meta de 30/
 | `relatorios_falha_24h` | **0** ✅ | 0 |
 | `relatorios_falha_7d` | 3 | 0 |
 | `erros_invisiveis` 24h / 7d | **0 / 0** ✅ | 0 |
-| `clientes_com_erro` | **3** ⚠️ | 0 |
+| `clientes_com_erro` | 3 na foto → **1 depois dos consertos** desta noite | 0 |
 | `sem_perfil` | **33 de 81** (41%) | cai |
 | `alerta_incompleto_7d` | 1 (explorador, Juazeiro/BA, 6 achados p/ 12 vagas) | 0 |
 | Funil público 7d | 1.264 visitantes · 5.700 pageviews · 12 erros | cresce |
@@ -104,9 +170,9 @@ Descoberto no diagnóstico do login por Google, e ele custou várias telas justa
 
 | Onde | Conta | O que é |
 |---|---|---|
-| **Google Cloud** — projeto `conselheiro` | `cisioaraujo@gmail.com` | é aqui que vive o **cliente OAuth** do "Entrar com Google" |
+| **Google Cloud** — projeto `conselheiro` | conta **pessoal** do dono (`…@gmail.com`) | é aqui que vive o **cliente OAuth** do "Entrar com Google" |
 | Google Cloud — `My First Project` | (mesma) | **vazio, não use** — a Auth Platform nunca foi configurada ali |
-| **Search Console** — `bidprobrasil.com.br` | `tarcisioaraujo@reimob.com.br` **e** `cisioaraujo@gmail.com` | propriedade de **Domínio**, verificada por DNS; as duas contas são proprietárias desde 30/08 |
+| **Search Console** — `bidprobrasil.com.br` | a conta `@reimob.com.br` **e** a pessoal do dono | propriedade de **Domínio**, verificada por DNS; as duas são proprietárias desde 30/08 |
 | Google Ads · GA4 · Search Console (conectores) | `@reimob.com.br` | é a conta dos conectores desta sessão |
 
 ⚠️ **RISCO ABERTO, e ele não é pequeno.** O aplicativo OAuth que **todo cliente usa para entrar**
@@ -4619,7 +4685,7 @@ limite**, e essa tela era o único caminho aberto para estourá-lo. Agora reusa 
 mude no outro.**
 > Dois detalhes que a máscara resolve na ORIGEM: dígito sobrando fica impossível (corte em 11 +
 > `maxLength` do formato), e o **`+55` do autopreenchimento** — sem tirar o 55, um corte cego em
-> 11 dígitos transforma `+55 71 99650-2234` em `(55) 71996-5022`, **o número errado com cara de
+> 11 dígitos transforma `+55 71 99999-0001` em `(55) 71999-9900`, **o número errado com cara de
 > certo**, no campo pelo qual sai o link da sala. `normalizarTelefoneBR` só tira quando o resto
 > sobra com tamanho de telefone, então o DDD 55 (Santa Maria/RS) fica intacto.
 
@@ -5087,9 +5153,9 @@ decisão comercial do dono.)*
 `_email.js` não checava nada antes de enviar; o webhook carimbava `status='bounce'` e ninguém
 lia. Dois endereços que bounçaram em 10/08 receberam mais dois e-mails cada, até 24/08.
 
-⚠️ **A regra ingênua estaria errada em metade dos casos.** `domicianosousa03@gmail.com`
+⚠️ **A regra ingênua estaria errada em metade dos casos.** Um cadastro `…03@gmail.com`
 bounçou em 10 e 12/08 e foi **ENTREGUE em 24/08** (transitório, caixa cheia);
-`triciatoyr@tahoo.com.br` bounçou 3× e tem **zero entregas** (typo de `yahoo`). Três regras:
+Um cadastro com o domínio **`@tahoo.com.br`** (typo de `yahoo`) bounçou 3× e tem **zero entregas**. Três regras:
 permanente suprime na hora · 3 transitórios seguidos sem entrega suprimem · **qualquer
 entrega zera e reativa** (exceto reclamação de spam). Os 5 caminhos foram testados contra o
 histórico real.
@@ -6402,7 +6468,7 @@ Bug bounty de abertura (3 agentes) + pedidos do dono. Migrações aplicadas via 
    `eh_funcao()`. Sem impacto hoje (só o admin existe; helper é superset). Fazer com teste
    quando houver equipe interna real.
 2. **Dono:** atribuir o lead do Antônio ao Fábio em Admin › Comercial.
-3. **Cliente Erik Migliorini** (erik_migli@hotmail.com): 1ª cobrança MP recusada
+3. **Cliente Erik M.** (e-mail no banco, não aqui): 1ª cobrança MP recusada
    `cc_rejected_high_risk` (antifraude do MP, NÃO é saldo nem falha nossa). Mandato vivo →
    recuperação de venda é decisão de comunicação do dono.
 
@@ -6814,7 +6880,7 @@ preencher o formulário de serviços financeiros no Google, com dados idênticos
    propagar semCota) validado em produção. VEGAS idem (09:25). O alerta morre. Hipótese que
    ficou aberta ontem: **confirmada**.
 2. **Recuperação de venda funcionou.** Cron de 13:00 enviou 1 e-mail — para o Romualdo
-   (rcronemberger@gmail.com), status `entregue` 13:00:56. Dedup e anti-spam corretos (1 de 1).
+   (e-mail no banco, não aqui), status `entregue` 13:00:56. Dedup e anti-spam corretos (1 de 1).
 3. **Prova das negativas do Ads — LIMPA.** Gasto em marca de terceiro por dia:
    16/08 R$1,24 · 17/08 R$1,33 · **18/08 R$0,00 · 19/08 R$0,00**. As negativas aplicadas na
    noite de 18/08 zeraram o desperdício no mesmo dia. E o script v2 alimenta
@@ -7987,7 +8053,7 @@ Sessão longa, três frentes. A do meio é a que vale ler inteira.
 
 ### A. O 1º assinante Pro recebeu "bem-vindo" e nunca pagou
 
-`erik_migli@hotmail.com` assinou o Investidor Pro em 16/08. O Mercado Pago mandou "você tem um
+O cliente **Erik M.** assinou o Investidor Pro em 16/08. O Mercado Pago mandou "você tem um
 novo assinante", nós mandamos **"Bem-vindo ao Investidor Pro"** às 11:39:20 — e às 12:01:32 a
 cobrança de R$ 49,90 foi **RECUSADA** (`cc_rejected_high_risk`). `date_approved: null`,
 `net_received_amount: 0`. Zero real entrou. O cliente ficou com dois "parabéns" na caixa de
@@ -14693,7 +14759,7 @@ recebe o 1º e-mail no fim de semana pular a segunda imediata (Charles: próximo
 **E. PESSOAS / MONITORES.**
 1. **Fernando Takashi** (`5dd2c0af…`): virou parceiro e **concluiu o KYC** (documento + selfie, `identidade_validada=true`) — fluxo OK.
 2. **Parceiros com KYC incompleto**: Kaique (só documento, PDF, sem selfie), Álvaro e Jaqueline (nada). O popup os cobra no próximo acesso (condição `parceiro_aceite_em && !identidade_validada && !identidade_pendente`).
-3. **Rafael** (`6b35b390…`, rafael-pereira-13@hotmail.com): monitor de contratação — segue **explorador, sem contrato assessorado**. Re-armado (send_later) p/ re-checar a cada 5h; **não avisar o dono até ativar**. Trigger ativo.
+3. **Rafael** (`6b35b390…`): monitor de contratação — segue **explorador, sem contrato assessorado**. Re-armado (send_later) p/ re-checar a cada 5h; **não avisar o dono até ativar**. Trigger ativo.
 
 **F. FIM DA SESSÃO 21 (indicação, KYC avulso, marketing).**
 1. **Indicação Jéssica → Jaqueline — INVESTIGADA e DECIDIDA (dono: "deixar como está").** A Jéssica cadastrou-se com **`ref_codigo` NULO** (em `auth.users.raw_user_meta_data` E no login) → **nenhuma prova no servidor** de que veio pelo link da Jaqueline; só indício (mesmo sobrenome Fonseca + 45min após o compartilhamento). O dono optou por NÃO reatribuir. Se a Jaqueline confirmar externamente, é um `update perfis.indicado_por` simples (como Arnaldo→Kaique). **Causa-raiz (não é bug de código):** a cadeia de captura está robusta — captura global do `?ref=` no `AuthContext` + `localStorage` 30 dias + trigger `handle_new_user` (aceita código de QUALQUER parceiro) + `vincular_upline` no login (com guarda p/ o `vincular_owner_default` não roubar o slot); link no formato certo (`#/?ref=`). A perda ocorre quando o `?ref=` **não chega ao navegador do cadastro** (clique no in-app do WhatsApp e cadastro no Chrome, outro aparelho, storage limpo) — inerente à atribuição client-side; aí o `vincular_owner_default` atribui o dono (padrão pedido pelo dono). **Melhoria oferecida (não feita):** capturar a indicação **server-side por e-mail** num toque pré-cadastro (SDR/landing) e casar no signup — fecha o buraco cross-device.

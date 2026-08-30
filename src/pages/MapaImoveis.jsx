@@ -240,7 +240,16 @@ export default function MapaImoveis() {
 
     return () => {
       desmontado = true;
+      // `stop()` ANTES de `remove()` (30/08). `remove()` desmonta o mapa, mas NÃO aborta uma
+      // animação de pan/zoom já em curso — e é ela que estoura depois, num mapa que não existe
+      // mais. Assinatura do erro de 30/08 em `/imovel/:id`: `panBy` → `_move` →
+      // `Cannot read properties of undefined (reading 'classList')`, e a de 28/08 chegou
+      // gravada na rota `/planos` porque o estouro acontece DEPOIS de a pessoa sair da página:
+      // a rota registrada é o destino, não a origem. É a terceira ocorrência desta família
+      // (11/08 foi `_leaflet_pos` por `tileerror` atrasado), e as duas anteriores fecharam
+      // buracos de callback nosso — este é do próprio Leaflet, e `stop()` é a API para ele.
       if (leafletMap.current) {
+        try { leafletMap.current.stop(); } catch { /* idem */ }
         leafletMap.current.remove();
         leafletMap.current = null;
         clusterLayer.current = null;

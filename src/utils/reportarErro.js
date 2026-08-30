@@ -55,10 +55,29 @@ function ehStackDeTerceiro(stack = '') {
   return !(origem && s.includes(origem));
 }
 
+// ERRO DE PREVIEW NÃO É ERRO DE CLIENTE (30/08). `erros_cliente` existe para responder uma
+// pergunta só: *um cliente bateu nisto?* Em 29/08 entrou ali um `column perfis.email does not
+// exist` vindo de `tsn-app-git-claude-…vercel.app` — um deploy de PREVIEW, o dono testando uma
+// branch. Ninguém de fora viu, e mesmo assim ele contou em `clientes_com_erro`, que o painel do
+// Cliente 360 mostra como "clientes com erro". O número existia, era plausível, e media outra
+// coisa: a forma #10 do CLAUDE.md, agora dentro do próprio medidor de saúde.
+//
+// Custou caro: a busca pela origem varreu o código atual, cinco commits anteriores e o
+// histórico do arquivo antes de o campo `url` entregar a resposta em um segundo. Filtrar aqui
+// impede que a pergunta se repita.
+//
+// Preview e localhost seguem mostrando o erro no console de quem testa — que é onde ele serve.
+const HOSTS_PRODUCAO = new Set(['bidprobrasil.com.br', 'www.bidprobrasil.com.br']);
+export function ehProducao(href) {   // exportada para scripts/testes/erro-so-de-producao.mjs
+  try { return HOSTS_PRODUCAO.has(new URL(href).hostname); }
+  catch { return false; }   // sem href confiável, não inventa erro de cliente
+}
+
 export async function reportarErroCliente({ msg, stack = '', url } = {}) {
   try {
     if (contador >= TETO || ehRuido(msg) || ehStackDeTerceiro(stack)) return;
     const href = url || (typeof location !== 'undefined' ? location.href : '');
+    if (!ehProducao(href)) return;   // preview/localhost: não é erro que um cliente viu
     const rota = (href.split('#')[1] || (typeof location !== 'undefined' ? location.pathname : '')).split('?')[0];
     // chave de dedup: mensagem + rota, com números/ids neutralizados
     const chave = `${String(msg).slice(0, 120)}|${rota}`.replace(/\d+/g, '#');
