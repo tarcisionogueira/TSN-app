@@ -71,34 +71,43 @@ contra os 5 lotes em 36 h de antes. O batimento contou de 25 em 25 até `~2 min 
 > 📏 **Calibragem para a próxima vez:** minha 1ª estimativa (40-60 min) estava errada; a revisada
 > (60-100) acertou. Regra prática do motor `dom`: **~7 s por lote**, mais 5-7 min de enumeração.
 
-### 🔵 VENDASGOV: o coletor está CERTO — a fonte é que não tem inventário (30/08)
-Quatro rodadas e três hipóteses minhas derrubadas, até o log contar em vez de opinar:
+### ✔️ VENDASGOV: ENCERRADO — a fonte tem 1 imóvel no total, e ele está vendido (30/08)
+Confirmado pelos dois lados, no mesmo minuto:
 ```
-VendasGov/leilao: +0 · a API mandou 1 · descartados: 1 vendido(s), 0 sem id, 0 repetido
-VendasGov/venda:  +0 · a API mandou 1 · descartados: 1 vendido(s), 0 sem id, 0 repetido
-concorrencia · pai · fundo: resposta sem `content` — não são salas
+scraper: VendasGov/leilao: a API declara 1 imóvel(is) no total desta sala
+curl:    "totalElements":1 · "totalPages":1
 ```
-**A API devolve 1 item por sala, com `size=100`, e ele está marcado `vendido`.** O filtro
-`!it.vendido` está fazendo exatamente o que deve. Não era o WAF, não era o `sort`, não era o
-User-Agent — **as três hipóteses caíram, uma por rodada.**
+**Não havia nada para coletar** — nem hoje, nem nos 15 dias anteriores. O coletor está certo e o
+filtro `!it.vendido` está certo: imóvel vendido não entra no acervo. O zero é a resposta
+verdadeira, não uma falha.
 
-**O que de fato mudou (e vale manter):** o Puppeteer saiu (o navegador travava 45 s por rota,
-22 min/dia); a falha ficou rápida; e o coletor passou a **contar cada descarte** em vez de
-imprimir um `+0` mudo. Foi essa contagem que resolveu — *"a API não devolveu nada"* e *"devolveu
-e o filtro jogou tudo fora"* são causas opostas e apareciam idênticas na tela.
+**Quatro hipóteses minhas, quatro derrubadas**, uma por rodada: WAF de datacenter (caiu quando o
+residencial também deu zero) · `sort` obsoleto (caiu quando a contagem mostrou que vinha item) ·
+User-Agent falso (caiu junto) · e um log de total que **não logava quando o campo faltava** — eu
+mesmo escrevi um log condicional silencioso, no dia inteiro dedicado a eliminá-los.
+**O que resolveu não foi acertar a quinta: foi fazer o código CONTAR em vez de eu opinar.**
 
-**Falta UM número para fechar** — `totalElements`, que a paginação Spring já manda e o coletor
-passou a logar (`be347b4`). Ele separa "o portal está vazio" de "a nossa consulta não enxerga o
-acervo":
-- `totalElements: 1` → **a fonte está vazia mesmo.** Encerrar o assunto: `ativo = false` em
-  `coleta_cliente` para parar de alarmar, e revisitar quando o SPU publicar edital novo.
-- `totalElements: 300` → **a consulta é que está cega**, e aí o alvo é o parâmetro `sala`
-  (que já se provou errado em 3 dos 5 nomes) ou algum filtro implícito.
+**O que sobrou de valor, independente do desfecho:**
+- Puppeteer fora (o navegador travava 45 s por rota, **22 min/dia** que saíam de SUPORTE,
+  GRUPOLANCE e WEBLEILOES);
+- falha em ~1 s em vez de 22 min;
+- cada descarte com nome (`vendido` / `sem id` / `repetido` / `sem valor` / `sem UF`);
+- `totalElements` no log — o número que separa "portal vazio" de "consulta cega";
+- 3 dos 5 nomes de `sala` provados errados (vieram das rotas da SPA, não da API).
 
-**⚠️ Erro meu registrado:** o commit `32d347e` anunciou três mudanças e entregou uma — o script
-de edição abortou antes de gravar e eu conferi minha intenção, não o arquivo. Passei o dia
-dizendo que *"não conseguir medir não é ter medido"* e não apliquei a mim mesmo. Os commits
-seguintes conferem o arquivo depois de gravar.
+### 🟡 DECISÃO PEQUENA PARA A PRÓXIMA SESSÃO: o alarme da VENDASGOV
+Ela segue em `fonte_regressao_suspeita()` como **`zerou`** — e agora sabemos que o zero é
+verdadeiro. Duas saídas, e a escolha é do dono:
+
+- **(a) `ativo = false` em `coleta_cliente`** — para de tentar e para de alarmar. **Custo:** no
+  dia em que o SPU publicar edital novo, ninguém percebe.
+- **(b) Deixar coletando** (custa ~1 s por rodada, e pega sozinha o dia em que voltar) **e
+  corrigir o alarme**, para `zerou` não disparar quando a própria fonte declara que não tem
+  inventário. Exige levar o `totalElements` para dentro de `fonte_saude` — hoje ele só existe no
+  log. **É a saída certa**, e é meia hora de trabalho.
+
+⚠️ Não escolhi sozinho porque as duas têm custo real, e "alarme que se manda ignorar" é
+exatamente o que treina a ignorar alarme — o erro que a CREPALDI já ensinou nesta base.
 
 ### 🔴 ITEM 1 PARA A PRÓXIMA SESSÃO — o freio de custo virou "fonte zerada" (forma nº 5, de novo)
 ```
