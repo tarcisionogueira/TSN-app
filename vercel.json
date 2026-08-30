@@ -57,6 +57,10 @@
       "destination": "/api/publico?tipo=imovel&id=:id"
     },
     {
+      "source": "/sitemap-hubs.xml",
+      "destination": "/api/sitemap-leiloes?p=0"
+    },
+    {
       "source": "/sitemap-leiloes.xml",
       "destination": "/api/sitemap-leiloes"
     }

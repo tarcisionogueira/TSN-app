@@ -383,6 +383,44 @@ cara de canal desligado — pior que não ter nada. É tudo ou nada.
 Depois de rodar, o painel passa a mostrar o que hoje só aparece no Windsor: PERFIL IG a
 **R$ 0,17/clique**, `TRF - SITE` a **R$ 0,12** e o Google Ads a **R$ 0,57** lado a lado.
 
+#### 🔍 SEO: o Search Console entrou e o acervo está FORA do Google (30/08)
+Conectado (`searchconsole`, 2 propriedades). Primeiro raio-x, 12 meses: **27 impressões, 3
+cliques, todas na home. Nenhuma página de `/leilao/` apareceu uma vez.** Sitemap com **32.893
+URLs submetidas, baixado pelo Google em 30/08 às 04:02, zero erro — e zero indexada.**
+
+**NÃO HÁ BUG.** Cinco causas testadas e descartadas, uma a uma:
+
+| Hipótese | Verificação | Resultado |
+|---|---|---|
+| robots bloqueando | `public/robots.txt` | `/leilao/` liberado |
+| SPA em hash (Google vê casca) | `vercel.json` | renderizado no SERVIDOR (`api/publico`) |
+| `noindex` na página | `publico.js:127` | `index, follow` |
+| canonical em host diferente | `publico.js:37` × `sitemap-leiloes.js:19` | mesmo `www.` nos dois |
+| lote vencido no mapa | SQL com a régua do produto | **zero** |
+
+Sobra o desfecho padrão de **domínio novo com 30 mil páginas de molde**: o Google descobre e
+escolhe não indexar. Isso não se conserta em código — precisa de autoridade (backlinks) e tempo.
+
+**A parte que ERA nossa, e foi corrigida:** 30.544 páginas de lote (ninguém busca "apartamento
+no condomínio edifício X") afogavam as **2.632 com demanda real** (28 estados + 2.604 cidades —
+~12 lotes por cidade), todas no mesmo índice, num domínio cujo orçamento de rastreamento é
+minúsculo. Agora:
+- **`/sitemap-hubs.xml`** — só o esqueleto, arquivo próprio, declarado primeiro no robots.
+- **`SITEMAP_LOTES=1`** (env, default desligado) devolve os lotes ao índice quando houver
+  autoridade. Religar não exige tocar em código.
+
+⚠️ **Segurar no sitemap NÃO é desindexar.** As páginas de lote seguem `index, follow` e
+linkadas a partir dos hubs — o Google continua livre para rastreá-las. Pôr `noindex` nelas seria
+outra coisa, destrutiva e lenta de reverter, e **não** foi o que se fez.
+
+**Como saber se funcionou** (não existia forma antes de hoje): no Search Console, as páginas de
+CIDADE começam a receber impressão. Verde = `/leiloes/{uf}/{cidade}` aparecendo. Se em 4–6
+semanas seguir zero, o gargalo é autoridade, não estrutura — e aí a alavanca é backlink, não
+código.
+
+**Falta, e não é código:** linkar as cidades internamente. Hoje elas só existem no sitemap, e
+página que ninguém linka o Google trata como periférica.
+
 #### 🔌 Conectores que faltam (avaliado em 30/08)
 Ligados: Meta Ads (4 contas), Meta Lead Ads, Google Ads, GA4, Instagram (orgânico e público).
 **O que falta e vale:** **Google Search Console** — são 31 mil páginas públicas de imóveis e

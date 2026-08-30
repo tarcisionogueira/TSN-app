@@ -11,6 +11,32 @@
  *   /sitemap-leiloes.xml         → índice: aponta para as partes
  *   /sitemap-leiloes.xml?p=1..N  → cada parte com até 5 mil imóveis
  *   parte 0                      → as páginas de estado e de cidade (o esqueleto do site)
+ *   /sitemap-hubs.xml            → SÓ o esqueleto, num arquivo próprio (ver abaixo)
+ *
+ * ─── OS HUBS SAÍRAM DE DENTRO DA PILHA (30/08) ────────────────────────────────────────────
+ * Medido no Search Console, recém-conectado: **27 impressões e 3 cliques em 12 meses**, todas
+ * na home. Nenhuma página de `/leilao/` apareceu uma vez sequer. E não é defeito nosso — cinco
+ * causas foram testadas e descartadas: robots libera, a página é renderizada NO SERVIDOR,
+ * responde `index, follow`, o canonical usa o mesmo host do sitemap, e não há lote vencido no
+ * mapa (a limpeza horária funciona). O sitemap foi baixado pelo Google em 30/08 às 04:02, com
+ * 32.893 URLs submetidas, zero erro — e zero indexada.
+ *
+ * O que sobra é o desfecho padrão de domínio NOVO com 30 mil páginas de molde: o Google
+ * descobre e escolhe não indexar. Mas há uma parte que É nossa, e é esta:
+ *
+ *   30.544 páginas de LOTE ....... ninguém busca "apartamento no condomínio edifício X"
+ *    2.604 páginas de CIDADE ..... "leilão de imóveis em Guarulhos" é busca real
+ *       28 páginas de ESTADO ..... idem
+ *
+ * São ~12 lotes por cidade. As 2.632 URLs com demanda de busca estavam afogadas entre 30.544
+ * sem demanda, todas no mesmo índice — e em domínio novo o orçamento de rastreamento é
+ * minúsculo. `/sitemap-hubs.xml` separa a lista curta que interessa; `SITEMAP_LOTES=1`
+ * devolve os lotes ao índice quando houver autoridade para sustentá-los.
+ *
+ * ⚠️ SEGURAR NO SITEMAP NÃO É DESINDEXAR. As páginas de lote seguem `index, follow` e
+ * linkadas a partir dos hubs — o Google continua livre para rastreá-las. A diferença é parar
+ * de EMPURRAR 30 mil URLs de uma vez. Pôr `noindex` nelas seria outra coisa, destrutiva e
+ * lenta de reverter, e não é o que este ajuste faz.
  */
 export const config = { runtime: 'nodejs', maxDuration: 30 };
 
@@ -18,6 +44,9 @@ const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
 const SITE = 'https://www.bidprobrasil.com.br';
 const POR_PARTE = 5000;
+// Lotes no índice: desligado enquanto o domínio não tem autoridade (ver cabeçalho).
+// `SITEMAP_LOTES=1` na Vercel religa sem tocar no código.
+const LOTES_NO_INDICE = process.env.SITEMAP_LOTES === '1';
 const UFS = ['AC','AL','AM','AP','BA','CE','DF','ES','GO','MA','MG','MS','MT','PA','PB','PE','PI','PR','RJ','RN','RO','RR','RS','SC','SE','SP','TO'];
 
 const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
@@ -49,10 +78,16 @@ export default async function handler(req, res) {
   try {
     // ── Índice ──
     if (p === null) {
-      const total = Number(await rpc('acervo_total_ativos')) || 0;
-      const partes = Math.max(1, Math.ceil(total / POR_PARTE));
       const hoje = new Date().toISOString().slice(0, 10);
-      const itens = ['0', ...Array.from({ length: partes }, (_, i) => String(i + 1))]
+      // A parte 0 (hubs) entra SEMPRE. As partes de lote só com SITEMAP_LOTES=1 — e aí a
+      // contagem de partes é feita, senão nem se gasta a chamada.
+      let numeros = ['0'];
+      if (LOTES_NO_INDICE) {
+        const total = Number(await rpc('acervo_total_ativos')) || 0;
+        const partes = Math.max(1, Math.ceil(total / POR_PARTE));
+        numeros = numeros.concat(Array.from({ length: partes }, (_, i) => String(i + 1)));
+      }
+      const itens = numeros
         .map((n) => `<sitemap><loc>${SITE}/sitemap-leiloes.xml?p=${n}</loc><lastmod>${hoje}</lastmod></sitemap>`).join('');
       return res.status(200).send(`<?xml version="1.0" encoding="UTF-8"?><sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${itens}</sitemapindex>`);
     }

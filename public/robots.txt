@@ -14,5 +14,15 @@ Disallow: /t/
 Disallow: /i/
 Disallow: /p/
 
+# ORDEM IMPORTA POUCO PARA O GOOGLE, MAS A SEPARAÇÃO IMPORTA MUITO (30/08).
+# Com o Search Console conectado, o retrato de 12 meses foi: 32.893 URLs submetidas, ZERO
+# indexadas, 27 impressões — todas na home. Nenhuma página de lote apareceu uma vez. O lado
+# técnico está correto (renderização no servidor, index/follow, canonical no mesmo host, sem
+# lote vencido no mapa): é o desfecho padrão de domínio novo com 30 mil páginas de molde.
+# O que dava para consertar: as 2.632 URLs COM demanda de busca (28 estados + 2.604 cidades)
+# estavam afogadas entre 30.544 de lote individual, que ninguém procura pelo nome. Agora os
+# hubs têm arquivo próprio; os lotes voltam ao índice com SITEMAP_LOTES=1 quando houver
+# autoridade. Eles seguem rastreáveis — o que mudou é parar de empurrar 30 mil de uma vez.
+Sitemap: https://www.bidprobrasil.com.br/sitemap-hubs.xml
 Sitemap: https://www.bidprobrasil.com.br/sitemap.xml
 Sitemap: https://www.bidprobrasil.com.br/sitemap-leiloes.xml
