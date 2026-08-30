@@ -91,85 +91,32 @@ do DONO — IP residencial dele, com o consentimento dele. Hoje cobre SOLEON, GE
 VLANCE, VENDASGOV, HASTA, radar DJEN e triagem. **A alavanca real é migrar MAIS fontes para
 lá**, não recrutar o IP de cliente. Foi o que 30/08 provou funcionar com as três primeiras.
 
-### 🎯 PRÓXIMA SESSÃO COMEÇA AQUI — ManyChat próprio para o Direct do Instagram
+### 🎯 PRÓXIMA SESSÃO COMEÇA AQUI — automação de comunicação no Instagram
 
-Pedido do dono ao encerrar 30/08: *"o que quero começar a montar é o meu ManyChat próprio para
-responder automaticamente quem interagir comigo no Instagram"*. **Nada foi construído** — isto é
-o levantamento para a sessão começar sem descoberta.
+**A especificação completa está em `docs/INSTAGRAM_AUTOMACAO.md`** (escrita em 30/08). Aqui só o
+que a próxima sessão precisa saber para não recomeçar do zero.
 
-#### ⏱️ O CAMINHO CRÍTICO É BUROCRÁTICO, NÃO TÉCNICO
-`instagram_manage_messages` exige **Acesso Avançado**, que exige **Verificação de Negócio +
-Revisão do App** na Meta. Leva **dias a semanas** e não depende de código. **Se a sessão começar
-por código, o código fica pronto e parado esperando aprovação.** Começar por isto:
-1. Conta Instagram **Profissional** vinculada a uma **Página do Facebook** (as duas contas já
-   aparecem no conector `instagram`, então provavelmente já são profissionais — confirmar qual
-   usar: `bidprobrasil` ou `tarcisionogueiraleiloes`).
-2. App em `developers.facebook.com` com produto **Messenger/Instagram**.
-3. Verificação de Negócio (CNPJ, documentos) → Revisão do App pedindo `instagram_basic`,
-   `instagram_manage_messages`, `pages_manage_metadata`.
-4. A Meta pede **vídeo do fluxo funcionando** na revisão — ou seja, precisa de um protótipo em
-   Acesso de Desenvolvimento (que já funciona para contas de teste/admin) ANTES de submeter.
+**ESCOPO CORRIGIDO PELO DONO (30/08):** é automação **DA CONTA**, não da campanha. Responde a
+qualquer interação com `@tarcisionogueiraleiloes`, venha de post orgânico ou impulsionado.
+Impulsionar um post existente não cria canal novo — só aumenta o volume. **Não há acoplamento
+com campanha**; o bot precisa saber a OFERTA vigente, não o anúncio de origem.
 
-#### 🧱 O QUE SE CONSTRÓI (e o que já existe para reaproveitar)
-| Peça | Estado |
-|---|---|
-| `api/instagram-webhook.js` — GET de verificação (`hub.challenge`) + POST de eventos | **novo** |
-| Validação `X-Hub-Signature-256` (HMAC do app secret) | **`api/_webhook-core.js` já faz HMAC** para o Asaas — mesmo padrão |
-| Envio: `POST graph.facebook.com/{versão}/{ig_id}/messages` | **novo** |
-| Token de página long-lived + renovação | **novo** (env, nunca no repo — ele é PÚBLICO) |
-| Estado da conversa por pessoa | **novo** — tabelas `ig_conversas` / `ig_mensagens` |
-| Motor de resposta (regras → IA) | **`_claude.js` já existe**; usar Haiku, não Sonnet: DM é curta e o volume é alto |
-| Painel para o dono ler/assumir | **`chamados` + `chamados_mensagens` já existem** — provável reuso |
+Decidido: conta `tarcisionogueiraleiloes` · DM + comentário + story · persona **é o próprio
+dono** · destino é o **link da bio** · humano assume **depois do lead preenchido** em live/evento.
 
-#### ⚠️ AS TRÊS RESTRIÇÕES QUE DESENHAM O PRODUTO
-1. **Janela de 24 h.** Só se pode responder até 24 h após a última mensagem DA PESSOA. Fora
-   disso, só com tag de agente humano (limitada). **Todo fluxo de nutrição precisa caber em 24 h
-   ou migrar para e-mail/WhatsApp** — e é aqui que ele conecta com o cadastro no BidPro.
-2. **Nem toda interação vira DM.** Comentário em post é outra permissão
-   (`instagram_manage_comments`) e outro webhook. "Responder quem interagir" precisa ser
-   separado em: DM · comentário · menção em story. Decidir o escopo antes de codar.
-3. **LGPD.** Conteúdo de DM é dado pessoal de terceiro. Definir retenção e finalidade ANTES de
-   gravar — a mesma régua que barrou o uso das listas de WhatsApp hoje.
+**As três coisas que mudam a ordem do trabalho:**
+1. **O caminho crítico é burocrático.** Verificação de Negócio + Revisão do App levam dias a
+   semanas, e a Meta **pede vídeo do fluxo funcionando** — então o protótipo vem ANTES da
+   submissão. Começar por código deixa código pronto e parado.
+2. **Subir o webhook em SÓ-ESCUTA cedo.** `message_echoes` captura as respostas que o dono
+   digita à mão, que é o corpus da persona — e **o histórico de DM não é exportável**. Só se
+   aprende do dia 1 em diante, então quanto antes começar, melhor.
+3. **Responder DENTRO do webhook é erro.** A Meta exige 200 rápido e reentrega se demorar; IA
+   leva segundos. Webhook grava e sai, cron responde — mesma separação do motor de análise.
 
-#### ✅ DECIDIDO PELO DONO (30/08) — a sessão começa com isto fechado
-| Pergunta | Resposta |
-|---|---|
-| **Conta** | **`tarcisionogueiraleiloes`** (o público de leilão está nela, não na marca do produto) |
-| **Escopo v1** | **DM + comentário + reação/resposta de story**, se der |
-| **Persona** | **responde como se fosse ELE**; aprende lendo as respostas que ele mesmo manda |
-| **Destino** | **link da bio**, e idealmente sabendo qual é a **campanha/oferta vigente** |
-| **Humano entra** | **depois do lead preenchido** em live/evento — não antes |
-
-#### 🔑 O QUE ESSAS DECISÕES IMPLICAM, e não é óbvio
-**1. "Aprender com as minhas respostas" é possível — mas só do dia 1 em diante.** O webhook
-entrega `message_echoes`, ou seja, as mensagens enviadas PELA conta, inclusive as digitadas à
-mão por ele no app. Isso é um corpus real do jeito dele. **Mas o histórico de DM não é
-exportável em massa pela API.** Consequência prática na ordem do trabalho: **subir o webhook em
-modo SÓ-ESCUTA o quanto antes**, mesmo antes da Revisão do App, para o corpus encher enquanto a
-burocracia corre. Nas primeiras semanas o bot depende de instrução escrita, não de exemplo.
-
-**2. "Saber a campanha vigente" pede uma tabela, não um prompt fixo.** Algo como
-`ig_campanha_ativa` (oferta, link, data de início/fim, intenção). Assim o bot direciona para a
-aula de 02/09 hoje e para outra coisa em outubro, **sem deploy**. É o mesmo padrão dormente do
-Pixel: o comportamento muda por dado, não por código.
-
-**3. Persona "sou eu" tem uma questão a decidir ANTES de ir ao ar:** se e como sinalizar que a
-resposta é automática. ManyChat e concorrentes operam sem sinalizar, mas **não confirmei a
-política atual da Meta para isso** — é item de verificação na doc, não achismo. Registrado como
-pendência de verificação, não como impedimento.
-
-**4. Comentário e story são webhooks/permissões DIFERENTES de DM.** `instagram_manage_comments`
-para comentário; resposta de story chega como mensagem com referência à story. **A reação (o
-emoji rápido) precisa ser confirmada na doc** — não afirmo que chega como evento. Isso divide o
-v1 em três frentes com prazos de revisão possivelmente diferentes.
-
-#### 💡 O ATALHO QUE EU SUPERVENDI — retirado (30/08)
-`set_page_welcome_message` só vale para anúncio **click-to-message**. As duas campanhas no ar
-(`TRF - SITE - LEILOES`, `CONV - AULA 02SET`) mandam para **site**, não para o Direct — a
-saudação não seria vista por ninguém. E mesmo onde se aplica, ela **não converte**: reduz o
-atrito do "o que eu escrevo?", e depois disso a pessoa cai no inbox. Sem o bot atrás, o ganho
-evapora. **Só vale acompanhado do bot, ou se voltarem as campanhas de Direct** (que existiram:
-R$ 757 em out/2025).
+⚠️ O documento marca explicitamente **o que VERIFICAR na doc da Meta** em vez de afirmar: se
+reação de story chega como evento, os nomes exatos dos campos de webhook, o prazo da tag de
+agente humano, e a política sobre sinalizar resposta automática. Não tratar como resolvido.
 
 ### ⏳ SE PROVAM SOZINHAS — confira, não conserte
 | Quando | O quê | Verde é |
