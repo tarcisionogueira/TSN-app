@@ -1968,8 +1968,15 @@ async function scraperVendasGov() {
         + `&sort=itens.edital.dtCertame,asc&sala=${encodeURIComponent(sala)}`;
       let r;
       try {
+        // SEM o User-Agent de Chrome (30/08). O `curl` do dono passou (200 · 0,63 s) mandando
+        // o UA do próprio curl; a 1ª versão desta função mandava o `USER_AGENT` do arquivo, que
+        // é um Chrome de desktop, e colheu zero. É a incoerência que WAF pega: o cabeçalho jura
+        // ser Chrome e o handshake TLS diz Node. Isso reinterpreta o comentário original da
+        // fonte — talvez nunca tenha sido "bloqueia datacenter", e sim "bloqueia quem se diz
+        // Chrome sem ser". O navegador real passava por ser Chrome de verdade; o curl honesto
+        // passa por não fingir. Aqui a gente para de fingir: é um cliente pedindo JSON.
         r = await fetch(url, {
-          headers: { 'User-Agent': USER_AGENT, 'Accept-Language': 'pt-BR,pt;q=0.9', Accept: 'application/json' },
+          headers: { Accept: 'application/json', 'Accept-Language': 'pt-BR,pt;q=0.9' },
           signal: AbortSignal.timeout(30000),
         });
       } catch (e) {
