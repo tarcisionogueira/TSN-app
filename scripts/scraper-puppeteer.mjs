@@ -364,21 +364,38 @@ async function coletarComEsteira(fonte, estrategias) {
 // Registra a saúde da coleta (1 linha por fonte por execução) e compara com a
 // execução anterior para detectar regressão (queda >50% ou zeragem). O alerta
 // por e-mail é disparado pelo cron /api/monitor-fontes-cron, que lê esta tabela.
+// `enumerados` = quanto a FONTE declara ter, independente de quanto nós aprovamos. Este
+// registrarSaude (o do puppeteer) simplesmente DESCARTAVA o campo — por isso as 24 fontes daqui
+// aparecem com `enumerados: null`, enquanto as do motor o preenchem desde 17/08.
+// Isso importa porque `fonte_regressao_suspeita()` e `fonte_baseline_aprendida()` passaram a ler
+// `coalesce(nullif(enumerados,0), total)` (29/08): sem o campo, uma fonte que declara ter 1 lote
+// e aprova 0 (VENDASGOV: o único imóvel está VENDIDO) é acusada de `zerou`, quando o zero é a
+// resposta correta. Com o campo, o alarme para de disparar — e não por complacência: passa a
+// comparar o TAMANHO DA FONTE contra o piso da fonte, que é o que ele sempre quis medir.
+// ⚠️ Isto NÃO esconde coletor quebrado: enumerar 300 e aprovar 0 continua virando `status:
+// falhou` aqui e "queda vs anterior" abaixo. O que muda é só o alarme de REGRESSÃO DA FONTE,
+// que é outra pergunta.
 async function registrarSaude(fonte, imoveis, estrategia, validacao) {
   const m = validacao?.metricas || metricasColeta(imoveis);
+  const enumerados = Number.isFinite(Number(validacao?.enumerados)) ? Number(validacao.enumerados) : null;
   let status = 'ok', motivo = validacao?.motivo || '';
   if (!m.n) status = 'falhou';
   else if (!validacao?.ok) status = 'degradado';
   try {
     const { data: ant } = await supabase.from('fonte_saude')
-      .select('total').eq('fonte', fonte).order('executado_em', { ascending: false }).limit(1).maybeSingle();
-    if (ant && ant.total > 0 && m.n < ant.total * 0.5) {
+      .select('total,enumerados').eq('fonte', fonte).order('executado_em', { ascending: false }).limit(1).maybeSingle();
+    // Compara ENUMERADOS quando os dois lados têm — espelha o `usaEnum` de _saude-fonte.mjs.
+    // Sem isso, a fonte que declara 1 e aprova 0 acusaria "queda" contra o total anterior.
+    const usaEnum = enumerados != null && Number(ant?.enumerados) > 0;
+    const atual = usaEnum ? enumerados : m.n;
+    const anterior = usaEnum ? Number(ant.enumerados) : Number(ant?.total || 0);
+    if (anterior > 0 && atual < anterior * 0.5) {
       if (status === 'ok') status = 'degradado';
-      motivo = [motivo, `queda vs anterior (${m.n}<${ant.total})`].filter(Boolean).join('; ');
-      console.log(`  ⚠️ [${fonte}] REGRESSÃO: caiu de ${ant.total} para ${m.n}`);
+      motivo = [motivo, `queda vs anterior (${usaEnum ? 'listados' : 'coletados'} ${atual}<${anterior})`].filter(Boolean).join('; ');
+      console.log(`  ⚠️ [${fonte}] REGRESSÃO: caiu de ${anterior} para ${atual}`);
     }
     await supabase.from('fonte_saude').insert({
-      fonte, total: m.n, estrategia: estrategia || null,
+      fonte, total: m.n, enumerados, estrategia: estrategia || null,
       uf_pct: m.uf_pct, valor_pct: m.valor_pct, link_pct: m.link_pct, foto_pct: m.foto_pct,
       status, motivo: motivo || null,
     });
@@ -1967,6 +1984,7 @@ const VG_POR_PAGINA = 100;
 async function scraperVendasGov() {
   console.log('  Imóveis da União (VendasGov/SPU) — API pública, fetch direto (sem navegador)...');
   const bens = new Map();
+  let declarados = 0;   // soma dos `totalElements` — quanto a FONTE diz ter, some ou não no acervo
   for (const sala of VG_SALAS) {
     const antes = bens.size;
     let recebidos = 0;
@@ -2027,6 +2045,7 @@ async function scraperVendasGov() {
         // esperado falta, imprime as CHAVES que vieram: o nome certo aparece sozinho.
         const total = Number(j?.totalElements ?? j?.total ?? j?.totalItems ?? NaN);
         if (Number.isFinite(total)) {
+          declarados += total;
           console.log(`    VendasGov/${sala}: a API declara ${total} imóvel(is) no total desta sala`);
         } else {
           console.log(`    VendasGov/${sala}: a resposta NÃO traz total — chaves recebidas: ${Object.keys(j || {}).join(', ') || '(nenhuma)'}`);
@@ -2055,8 +2074,11 @@ async function scraperVendasGov() {
     // separa "a fonte está vazia" de "a nossa regra está errada" — e as duas pedem coisas opostas.
     console.log(`    VendasGov: ${bens.size} colhidos e NENHUM aprovado — ${perdidos.semValor} sem valor, ${perdidos.semUF} sem UF, ${perdidos.repetido} repetidos`);
   }
-  console.log(`    VendasGov: ${imoveis.length} imóveis mapeados (${bens.size} colhidos)`);
-  return imoveis;
+  // Devolve TAMBÉM o que a fonte declara ter — em objeto, não como propriedade pendurada no
+  // array: `imoveis.declarados` sobreviveria a um `.filter()` mas não a um `.map()`, e some em
+  // silêncio quando alguém mexer aqui daqui a três meses.
+  console.log(`    VendasGov: ${imoveis.length} imóveis mapeados (${bens.size} colhidos · a fonte declara ${declarados})`);
+  return { imoveis, declarados };
 }
 
 // ─── PESTANA LEILÕES ──────────────────────────────────────────────────────────
@@ -3669,13 +3691,17 @@ async function main() {
     // detalhe renderizada (enriquecerDocumentosLote), igual ao fluxo do Mega.
     if (rodar('VENDASGOV')) try {
       console.log('\n📋 Imóveis da União (VendasGov)...');
-      const imoveis = await scraperVendasGov();
+      const { imoveis, declarados } = await scraperVendasGov();
       // A FOTO já vem da API (capa). NÃO usamos enriquecerDocumentosLote aqui: as
       // páginas de detalhe são SPA (Angular) e vasculharDocumentos não enxerga os PDFs
       // (montados via API) — só gastaria os 8 min do deadline à toa. Edital/laudo do
       // VendasGov virão por rota própria (API /api/public/editais) como follow-up.
       total += await salvarEFinalizar(imoveis, 'VENDASGOV');
-      await registrarSaude('VENDASGOV', imoveis, 'principal', validarColeta(imoveis, 'VENDASGOV'));
+      // `enumerados` = o que a API DECLARA ter (soma dos `totalElements`). Sem isto, a fonte que
+      // declara 1 lote e aprova 0 porque ele está VENDIDO era acusada de `zerou` — alarme sobre
+      // um zero verdadeiro, que é o que treina a ignorar alarme.
+      await registrarSaude('VENDASGOV', imoveis, 'principal',
+        { ...validarColeta(imoveis, 'VENDASGOV'), enumerados: declarados });
     } catch (e) {
       // Fonte nova nunca pode derrubar o job (as demais já salvaram acima).
       console.log(`  ⚠️ VendasGov falhou (segue sem derrubar o job): ${String(e.message).slice(0, 120)}`);
