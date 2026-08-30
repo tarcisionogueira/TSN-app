@@ -69,7 +69,13 @@ export async function registrarSaude(supabase, fonte, imoveis, estrategia, valid
   // falha de verdade há 10 dias. A ação que resolve cada caso é oposta (liberar orçamento
   // × consertar parser), então o status precisa distinguir os dois.
   // É a forma #5 do CLAUDE.md pela metade: o freio de custo tem que dizer QUAL "não".
-  if (!m.n) status = semCota ? 'sem_cota' : 'falhou';
+  // "RESPONDI E NÃO TENHO LOTE" tem status próprio (29/08) — mesmo princípio do 'sem_cota' de
+  // 16/08: o motivo do zero muda a AÇÃO, então precisa mudar o status. Leiloeiro pequeno entre
+  // dois leilões devolve 0 legitimamente; chamar isso de 'falhou' todo dia é o ruído que treina
+  // o dono a ignorar o painel. **Mas o zero de quem tinha acervo NÃO é vazio** — e quem decide
+  // isso é a comparação com a execução anterior, logo abaixo, que promove para 'degradado'.
+  const vazio = validacao?.vazio === true;
+  if (!m.n) status = semCota ? 'sem_cota' : (vazio ? 'vazio' : 'falhou');
   // COLETA CORTADA PELO ORÇAMENTO NO MEIO (27/08) — o buraco que a correção de 16/08 deixou.
   // Aquela cobria o tudo-ou-nada: `m.n === 0` vira 'sem_cota' em vez de 'falhou'. Mas quando
   // a cota acaba DEPOIS de alguns lotes, `m.n > 0` e a linha saía como 'ok' — com um total
@@ -98,7 +104,10 @@ export async function registrarSaude(supabase, fonte, imoveis, estrategia, valid
     // `cotaNegada` entra junto com `semCota`: comparar um total truncado pelo orçamento
     // contra a execução anterior acusa queda que o leiloeiro não teve.
     if (anterior > 0 && atual < anterior * 0.5 && !semCota && !cotaNegada) {
-      if (status === 'ok') status = 'degradado';
+      // 'vazio' também é promovido: a fonte respondeu 200 com 0 lotes, mas ontem tinha acervo —
+      // isso não é "leiloeiro sem imóvel agora", é a lista chegando vazia. Foi o caso da HASTA
+      // em 29/08 (579 → 0), e sem esta linha o zero entraria como desfecho normal.
+      if (status === 'ok' || status === 'vazio') status = 'degradado';
       motivo = [motivo, `queda vs anterior (${rotulo} ${atual}<${anterior})`].filter(Boolean).join('; ');
       console.log(`  ⚠️ [${fonte}] REGRESSÃO: ${rotulo} caiu de ${anterior} para ${atual}`);
     } else if (cotaNegada && anterior > 0) {

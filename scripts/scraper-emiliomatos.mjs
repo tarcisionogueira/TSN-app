@@ -10,6 +10,7 @@
  *   EMILIOMATOS_DRYRUN (default '1') · EMILIOMATOS_DEBUG ('0') · EMILIOMATOS_NO_BD ('1' força só grátis).
  * Env infra: BRIGHTDATA_API_TOKEN, BRIGHTDATA_ZONE, VITE_SUPABASE_URL, SUPABASE_SERVICE_KEY.
  */
+import './lib/env-runner.mjs';   // carrega ~/.bidpro-runner.env quando rodado na mão
 import { createClient } from '@supabase/supabase-js';
 import { rodarFonte } from './lib/motor/runner.mjs';
 import cfg from './lib/motor/fontes/emiliomatos.mjs';

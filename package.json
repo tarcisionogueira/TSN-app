@@ -16,7 +16,8 @@
     "verificar:sintaxe": "eslint api scripts src --quiet",
     "prebuild": "node scripts/verificar-padroes-perigosos.mjs && npm run verificar:sintaxe",
     "verificar:responsivo": "node scripts/verificar-responsivo.mjs",
-    "verificar:regras": "node scripts/verificar-regras-negocio.mjs"
+    "verificar:regras": "node scripts/verificar-regras-negocio.mjs",
+    "testar:motor": "node scripts/testes/planejar-alvo.test.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",

@@ -50,16 +50,42 @@ janela — e cada um usa o próprio IP residencial, então não há sobrecarga d
    git clone https://github.com/tarcisionogueira/tsn-app.git
    cd tsn-app
    npm ci        # instala tb. o Chromium do puppeteer (headless de GESTAO/RJ)
-   pip3 install requests   # dependência do scraper_vlance.py (Vlance)
+   # Dependência do scraper_vlance.py. Em Debian/Ubuntu recentes o `pip3 install` recusa com
+   # "externally managed environment" (PEP 668) — o jeito limpo é o pacote do sistema:
+   sudo apt install -y python3-requests
+   # (alternativa, se preferir pip: pip3 install --break-system-packages requests)
    ```
-2. **Credenciais** — crie `~/.bidpro-runner.env` e proteja o arquivo (contém a SERVICE KEY):
+   > ⚠️ **Não é bloqueante.** `requests` só é usado pelo Vlance. Sem ela, o runner roda todas as
+   > outras fontes normalmente e só o Vlance falha — dá para validar o resto antes de resolver isto.
+2. **Credenciais** — crie `~/.bidpro-runner.env` e proteja o arquivo (contém a SERVICE KEY).
+   **Use um editor, não copie-e-cole um bloco com placeholder:**
    ```bash
-   cat > ~/.bidpro-runner.env <<'EOF'
-   VITE_SUPABASE_URL=https://zuwfiwokkdytvjixiwac.supabase.co
-   SUPABASE_SERVICE_KEY=<service key — Supabase > Settings > API > service_role>
-   EOF
-   chmod 600 ~/.bidpro-runner.env    # só o seu usuário lê (a service key é sensível)
+   nano ~/.bidpro-runner.env      # ou vim/mcedit
+   chmod 600 ~/.bidpro-runner.env # só o seu usuário lê
    ```
+   Duas linhas, com a **chave de verdade** no lugar do `eyJ…`:
+   ```
+   VITE_SUPABASE_URL=https://zuwfiwokkdytvjixiwac.supabase.co
+   SUPABASE_SERVICE_KEY=eyJhbGciOi…
+   ```
+   Onde pegar: **Supabase → Settings → API → Project API keys → `service_role` → Reveal**. É a
+   que avisa que ignora RLS — **não** a `anon`/`publishable`. É um JWT: começa com `eyJ`.
+
+   > ⚠️ **O erro que já aconteceu (29/08):** o passo trazia
+   > `SUPABASE_SERVICE_KEY=<service key — Supabase > Settings > API > service_role>` dentro de um
+   > heredoc, e o placeholder foi gravado **literalmente**. Como `<` e `>` são redirecionamento no
+   > bash, o `source` do runner quebrava com `syntax error near unexpected token 'newline'` — e a
+   > mensagem apontava para o arquivo de env, não para a causa. Placeholder que parece comando é
+   > armadilha de documentação, não erro de quem executa.
+
+   **Conferir sem imprimir a chave:**
+   ```bash
+   ( set -a; . ~/.bidpro-runner.env; set +a; \
+     echo "URL=${VITE_SUPABASE_URL:-VAZIA} · chave com ${#SUPABASE_SERVICE_KEY} caracteres" )
+   ```
+   Esperado: a URL e algo como **`chave com 200+ caracteres`**. Se der erro de sintaxe ou
+   `chave com 0 caracteres`, o arquivo ainda está com o placeholder.
+
    > Não comite esse arquivo. A **service_role key** dá acesso total ao banco.
 3. **Permissão de execução**: `chmod +x scripts/runner-residencial.sh`
 4. **Teste manual (validação da 1ª rodada)** — rode UMA vez na mão e leia o log:
@@ -68,12 +94,37 @@ janela — e cada um usa o próprio IP residencial, então não há sobrecarga d
    ```
    Esperado: cada fonte (SOLEON, GESTAO, RJ, VLANCE) grava **sem tocar no Bright Data**. Se GESTAO/RJ
    não passarem o Cloudflare de primeira, me mande o `~/bidpro-runner.log` que eu ajusto a espera/heurística.
-5. **Agendar no cron** (seg e qui, 08:00 — casa com o gate de 2x/semana):
+5. **Agendar no cron — DIÁRIO** (decisão do dono, 29/08).
+
+   **Descubra os caminhos reais primeiro** — o cron não tem o seu PATH:
    ```bash
-   crontab -e
-   # adicione (troque /CAMINHO pelo caminho real do repo):
-   0 8 * * 1,4  /CAMINHO/tsn-app/scripts/runner-residencial.sh >> $HOME/bidpro-runner.log 2>&1
+   pwd            # o caminho do repo (ex.: /home/tarcisio/TSN-app)
+   which node python3
    ```
+   Depois `crontab -e`, escolha o editor (**1 = nano**) e cole DENTRO do editor:
+   ```cron
+   SHELL=/bin/bash
+   PATH=/home/SEU_USUARIO/.nvm/versions/node/vXX.X.X/bin:/usr/local/bin:/usr/bin:/bin
+   0 8 * * *  /home/SEU_USUARIO/TSN-app/scripts/runner-residencial.sh >> /home/SEU_USUARIO/bidpro-runner.log 2>&1
+   ```
+   Salvar no nano: `Ctrl+O`, `Enter`, `Ctrl+X`. Conferir: `crontab -l`.
+
+   > ⚠️ **Três erros que já aconteceram aqui, os três silenciosos:**
+   > 1. **Colar antes do editor abrir.** Na 1ª vez, `crontab -e` pergunta qual editor usar; texto
+   >    colado antes disso vai para o *prompt da pergunta*, não para o crontab. Espere o nano abrir.
+   > 2. **Deixar `/CAMINHO` literal** — é placeholder, tem de virar o caminho real.
+   > 3. **Cron com menos de 5 campos.** `0 8 * * *` = minuto hora dia mês dia-da-semana. `* *` não
+   >    é agendamento válido e a linha é recusada inteira.
+   >
+   > O `PATH` não é decoração: node instalado por **nvm/fnm/asdf** vive no seu `$HOME` e **não
+   > existe** no PATH mínimo do cron. Sem ele o runner falharia logo no `coleta-gate` e pularia
+   > tudo **em silêncio** — por isso o script agora checa `node`/`python3` e sai com erro alto.
+   > **Rodar todo dia não raspa todo leiloeiro todo dia.** O gate `coleta_cliente_claim` continua
+   > segurando cada fonte em 72 h, então os scrapers seguem 2x/semana e a rodada diária é barata.
+   > Quem aproveita o dia a dia são os passos **fora do gate**: o **radar de editais** (o DJEN
+   > publica diariamente — é o que tira o radar do Bright Data, 106 requests/semana) e a triagem
+   > dos bloqueados. Se preferir manter 2x/semana, use `0 8 * * 1,4` — mas aí o radar perde dias
+   > de edital, e vale deixar o cron da Vercel como está.
 6. **DEPOIS de validar (passo que zera o Bright Data)** — desligar os workflows **pagos** da CI para
    não gastarem BD em paralelo com o runner. Me avise que eu comento os `cron:` de
    `scraper-soleon.yml`, `scraper-gestao.yml`, `scraper-rj.yml`, `scraper-pecini.yml` e
@@ -81,8 +132,24 @@ janela — e cada um usa o próprio IP residencial, então não há sobrecarga d
    grátis (`scraper.yml` CEF e `leiloeiros-puppeteer.yml`) — esses não usam BD e já rodam diários.
 
 O `SOLEON_NO_BD=1` / `*_HEADLESS=1` (já no wrapper) **garantem zero BD**: se o direto/headless falhar,
-pula a página em vez de gastar cota. A frequência é do `cron` + do gate no banco (2x/semana) — não roda
-a cada acesso.
+pula a página em vez de gastar cota. A frequência é do `cron` + do gate no banco (72 h por fonte) — não
+roda a cada acesso.
+
+### Radar de editais (DJEN/CNJ) — migrado para cá em 29/08
+`scripts/radar-editais-residencial.mjs` roda **fora do gate** (grava em `editais_leilao`, não no
+acervo) e usa **fetch direto**: o DJEN bloqueia IP de *datacenter*, e era só por isso que a versão
+da Vercel precisava do Web Unlocker. **A convivência com o cron pago é automática e não depende de
+ninguém avisar ninguém:** o script grava `monitor_runs` com `erro: null` quando o pull passa, e o
+cron da Vercel só libera o Bright Data após **7 dias sem nenhum sucesso**
+(`RADAR_DIAS_REDE_SEGURANCA`). Rodando aqui todo dia, o caminho pago nunca acorda.
+
+Duas propriedades que valem entender:
+- **A janela acompanha o buraco.** 3 dias na rotina diária; depois de uma ausência, `dias sem
+  sucesso + 1` (teto 15). Janela fixa de 3 dias numa passada semanal perderia 4 dias de edital
+  **em silêncio**, com o run saindo verde.
+- **Sair com exit 0 não é sucesso.** Run parcial (corte por tempo) grava com `erro`, e se o
+  `monitor_runs` não gravar o script sai com **3** e diz por quê — se esse registro sumisse, a
+  Vercel concluiria "faz 7 dias que ninguém coleta" e pagaria por um trabalho já feito de graça.
 
 > **Quer as fontes pagas mais frequentes que 2x/semana?** O limite é o gate `coleta_cliente_claim`
 > (hardcoded 2x/sem). Posso relaxar para 3x/sem ou diário e ajustar o cron — recomendo validar em
@@ -97,6 +164,43 @@ a cada acesso.
 | **GESTAOLEILOES** (granado/vinco/…) | ~150 | runner residencial **headless** (`GESTAO_HEADLESS=1`) | ✅ **no runner** |
 | **RJ Leilões** | ~120 | runner residencial **headless** (`RJ_HEADLESS=1`) | ✅ **no runner** |
 | **radar / docs** | 250 / 150 | — (autocomplete-geo / download de PDF) | manter (propósito distinto, baixo volume) |
+
+## 🔎 TRIAGEM RESIDENCIAL — trazer os leiloeiros que o Cloudflare esconde (29/08)
+
+O runner deixou de servir só para COLETAR: ele agora também **descobre**, e é assim que os
+leiloeiros de MG entram sem gastar Bright Data.
+
+**O problema medido:** a triagem da JUCEMG classificou 141 sites e deixou **53 como
+`bloqueado`**. Em **51 deles `plataforma` ficou NULA** — e esse null não quer dizer "não roda
+plataforma conhecida": quer dizer que o Cloudflare devolveu *"Just a moment..."* e **o HTML nunca
+foi lido**. São 53 leiloeiros contados como "custa dinheiro" sem que ninguém saiba se já teriam
+parser pronto. Dois já se sabe que sim — `adrianoleiloeiro.com.br` e `angelabecharaleiloes.com.br`,
+ambos **Superbid**, plataforma que já parseamos.
+
+**O que mudou:** `recon-triagem-jucemg.mjs` ganhou duas chaves, e o passo entrou no runner:
+
+| Env | O que faz |
+|---|---|
+| `TRIAGEM_HEADLESS=1` | quando o fetch simples é bloqueado, repete no **Chromium real** (o mesmo `fetch-residencial.mjs` que GESTAO e RJ usam). Nunca por padrão: navegador só entra onde o simples não serviu |
+| `TRIAGEM_BLOQUEADOS=1` | a lista vem do **banco** (`leiloeiro_triagem where bloqueado`), não do JSON — a rodada custa ~53 páginas em vez de 141, e serve **JUCESP/JUCERJA/JUCEES** sem editar nada |
+
+**Bright Data continua fora**, como sempre esteve neste script: descobrir o que existe segue
+custando R$ 0. O que mudou é que o "de graça" agora alcança quem estava atrás do Cloudflare.
+
+**Como ler o resultado:** ao fim da rodada o script imprime `DESTRAVADOS pelo residencial: N de
+53` e, entre eles, **quais já têm parser** — que é a diferença entre *configurar um tenant* e
+*escrever parser novo*. Quem seguir bloqueado mesmo pelo navegador residencial é o resíduo que
+realmente custa dinheiro.
+
+> ⚠️ **Plataforma descoberta NÃO é lote coletado — dry-run antes de subir tenant.** Em 29/08, 11
+> sites classificados como Superbid enumeraram **ZERO** lotes: a assinatura de HTML provava que o
+> site *menciona* a plataforma, não que *roda* o catálogo dela. O script imprime esse aviso ao
+> final de propósito.
+
+**Detalhe de implementação que vale saber:** o passo **não** passa pelo helper `rodar`. Aquele
+gate conclui com **prova de gravação no acervo**, e a triagem grava em `leiloeiro_triagem` — pelo
+`rodar` ela imprimiria *"saiu com sucesso mas NÃO gravou no acervo"* em toda rodada. Alarme falso
+recorrente é o que treina o dono a ignorar o log. Descoberta tem contrato diferente de coleta.
 
 ## 🗺️ Próximos passos para ZERAR o Bright Data
 Praticamente **tudo já está resolvido no código** — falta só ATIVAR o runner residencial:

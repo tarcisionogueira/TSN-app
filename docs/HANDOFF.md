@@ -4,6 +4,2011 @@
 
 ---
 
+## 🗓️ 30/08 (sessão 15) — A PRIMEIRA RODADA LONGA DE VERDADE ACHOU CINCO DEFEITOS DE OBSERVAÇÃO
+
+> Contexto: a releitura do acervo (29/08) levou a rodada da HASTA de 13 lotes para 592. **Nenhum
+> dos cinco achados abaixo é sobre coleta** — todos são sobre *não conseguir enxergar o que está
+> acontecendo*. Rodada curta escondia os cinco; a longa expôs todos em uma noite. O gatilho foi o
+> dono olhando a tela e perguntando três vezes "isso está evoluindo?" — e insistindo quando a
+> primeira resposta foi "deve estar".
+
+### 1. ❌ A hipótese do WAF da VENDASGOV foi REFUTADA pela medição
+Migrei a VENDASGOV para o residencial apostando que o WAF do SERPRO barrava datacenter. **Do IP
+residencial ela também colheu zero**, em 63 s (a falha rápida funcionou — antes eram 22 min):
+```
+VENDASGOV · 30/08 00:53:11 · total 0 · falhou · "total 0<3; valor 0<0.6; uf 0<0.6; link 0<0.9"
+```
+**Não é o IP.** Era o ramo que a própria migração já previa: *"se falhar também na residencial, o
+problema é o site"*. Detalhe do código que reforça: o `goto` usa `waitUntil: 'domcontentloaded'`,
+e estourar isso não é página lenta nem bloqueio de bot (bloqueio devolve *alguma* página) — é a
+**conexão não completando**. **Próximo passo é um `curl` ao portal**, não outra troca de runner.
+
+### 2. A fonte não estava no gate — e seria pulada PARA SEMPRE, em silêncio
+Adicionei `rodar VENDASGOV` ao runner e não registrei a linha em `coleta_cliente`.
+`coleta_cliente_claim` faz `if not found then return false`, e o CLI imprimia **a mesma frase**
+para fonte inexistente e para fonte fora de janela:
+`[gate] VENDASGOV: NÃO é a hora (2x/semana) ou já em curso — pulando`.
+No log isso apareceu no meio de cinco linhas idênticas de fontes saudáveis. Corrigido nos dois
+lados: a linha existe, e o gate passou a distinguir **três** respostas — não registrada (exit 6,
+"seria pulada PARA SEMPRE"), desativada de propósito, e HTTP ruim na RPC (exit 5, *"não consegui
+consultar"* — porque não conseguir perguntar não é a resposta ter sido não; antes, banco fora do
+ar viraria uma rodada inteira "pulando" com cara de saúde).
+
+### 3. Só o `goto` tinha timeout no motor `dom`
+`newPage()`, `setViewport()`, `page.content()` e `page.close()` são chamadas CDP **sem timeout**.
+Se o Chromium encalha, esperam **para sempre** — e o node fica ocioso, que é *exatamente* como
+lentidão se parece com travamento visto de fora. Achado quando o `ps` mostrou `TIME` do node
+congelado em 53 s por 40 segundos seguidos, com 1h06 de rodada. Com 13 lotes quase nunca mordia;
+com 592 um lote encalhado segura tudo. **Teto por lote** = timeout do goto + hidratação + 15 s;
+ao estourar, derruba o Chromium (navegador encalhado não desencalha sozinho).
+**Vale para HASTA, GESTAO, RJ e PECINI — todas usam este motor.**
+
+### 4. O laço não dava sinal de vida
+Nenhum log por lote, e o `upsert` só acontece **depois** do laço — então nem o banco servia de
+sinal. Uma hora de tela imóvel, sem NENHUMA evidência externa de progresso. Agora, a cada 25
+lotes: `[HASTA] 275/592 · 268 prontos · 22.4 min · ~26 min restantes · releitura`.
+
+### 5. 📊 "Captação atual por leiloeiro" parava em 1.000 — e a prova é aritmética
+`relatorioCapitacao()` fazia `.select('fonte').eq('ativo', true)` e contava no JavaScript. O
+PostgREST devolve **no máximo 1.000 linhas** e não havia `.range()`. Somando o painel que o dono
+viu: `818+52+40+37+30+9+3+3+2+2+1+1+1+1` = **1.000 exatos**.
+Real no mesmo instante: **30.616 ativos**, CEF com **23.484** (o painel dizia 818). HASTA (584),
+LJUD, MEGA, SOLD e GRUPOLANCE **nem apareciam** — ficaram fora das mil primeiras linhas e viraram
+**ausência**, que se lê como "essa fonte não traz nada".
+Forma nº 10 pura, e mesma raiz do `.limit(12)` de 12/08: **janela de TRANSPORTE tratada como se
+fosse o conjunto**. A contagem foi para o banco (`acervo_por_fonte()`), e o painel passa a
+imprimir o **total** — o número que denuncia truncamento na primeira olhada.
+
+### ✅ FECHOU: a rodada longa da HASTA foi até o fim, e a releitura funcionou
+```
+[HASTA] 584 prontos (584 por releitura) · 0 encerrados · 8 descartados · 0 sem detalhe · 0 sem cota
+✅ [HASTA] 584 imóveis gravados/atualizados · [gate] janela fechada 02:17
+```
+**592 lotes em 70,7 min = 7,2 s/lote.** `0 sem detalhe` e `0 sem cota`: nenhuma navegação falhou —
+**não era travamento, era o tamanho real do trabalho**. O acervo inteiro foi relido num run só,
+contra os 5 lotes em 36 h de antes. O batimento contou de 25 em 25 até `~2 min restantes`.
+
+> 📏 **Calibragem para a próxima vez:** minha 1ª estimativa (40-60 min) estava errada; a revisada
+> (60-100) acertou. Regra prática do motor `dom`: **~7 s por lote**, mais 5-7 min de enumeração.
+
+### ✔️ VENDASGOV: ENCERRADO — a fonte tem 1 imóvel no total, e ele está vendido (30/08)
+Confirmado pelos dois lados, no mesmo minuto:
+```
+scraper: VendasGov/leilao: a API declara 1 imóvel(is) no total desta sala
+curl:    "totalElements":1 · "totalPages":1
+```
+**Não havia nada para coletar** — nem hoje, nem nos 15 dias anteriores. O coletor está certo e o
+filtro `!it.vendido` está certo: imóvel vendido não entra no acervo. O zero é a resposta
+verdadeira, não uma falha.
+
+**Quatro hipóteses minhas, quatro derrubadas**, uma por rodada: WAF de datacenter (caiu quando o
+residencial também deu zero) · `sort` obsoleto (caiu quando a contagem mostrou que vinha item) ·
+User-Agent falso (caiu junto) · e um log de total que **não logava quando o campo faltava** — eu
+mesmo escrevi um log condicional silencioso, no dia inteiro dedicado a eliminá-los.
+**O que resolveu não foi acertar a quinta: foi fazer o código CONTAR em vez de eu opinar.**
+
+**O que sobrou de valor, independente do desfecho:**
+- Puppeteer fora (o navegador travava 45 s por rota, **22 min/dia** que saíam de SUPORTE,
+  GRUPOLANCE e WEBLEILOES);
+- falha em ~1 s em vez de 22 min;
+- cada descarte com nome (`vendido` / `sem id` / `repetido` / `sem valor` / `sem UF`);
+- `totalElements` no log — o número que separa "portal vazio" de "consulta cega";
+- 3 dos 5 nomes de `sala` provados errados (vieram das rotas da SPA, não da API).
+
+### ✅ FEITO — opção (b): segue coletando, e o alarme para de gritar sobre um zero verdadeiro
+Decisão do dono. Saiu **mais barato que a estimativa de meia hora**, porque a máquina já existia:
+a coluna `fonte_saude.enumerados` foi criada em 17/08 com exatamente este significado — *"quantos
+lotes a FONTE LISTA; esse número não depende de quanto já temos"* — e em 29/08 a
+`fonte_regressao_suspeita()` e a `fonte_baseline_aprendida()` passaram a lê-la. **Faltava só
+alguém GRAVAR o campo.**
+
+E ninguém gravava: **o `registrarSaude` do `scraper-puppeteer.mjs` descartava `enumerados`.** É
+por isso que as 24 fontes daquele arquivo aparecem todas com `enumerados: null` enquanto as do
+motor preenchem desde 17/08. Agora ele persiste o campo, e a comparação "queda vs anterior" passa
+a usar `enumerados` quando os dois lados têm — espelhando o `usaEnum` de `_saude-fonte.mjs`.
+
+**Verificado contra os números reais da baseline**, não por raciocínio: com `enumerados = 1`,
+`zerou` não dispara (exige `total = 0`) e `regressao` também não (exige `n_amostras >= 3` e
+`mediana >= 5`; a VENDASGOV tem 2 e 3).
+
+> ⚠️ **Não esconde coletor quebrado.** Enumerar 300 e aprovar 0 continua virando `status: falhou`
+> e "queda vs anterior". O que muda é só o alarme de **regressão da FONTE**, que responde outra
+> pergunta: *a fonte encolheu?* Se o SPU publicar 300 amanhã, o campo vira 300 e uma queda
+> posterior a zero volta a disparar normalmente.
+
+> 🎁 **Efeito colateral bom:** o conserto vale para **as 24 fontes** do `scraper-puppeteer.mjs`,
+> não só a VENDASGOV. Qualquer uma que passe a reportar quanto a fonte declara ter ganha o alarme
+> medindo a coisa certa. Hoje só a VENDASGOV reporta — as outras seguem com `enumerados: null` e
+> comportamento idêntico ao de antes.
+
+### 🔴 ITEM 1 PARA A PRÓXIMA SESSÃO — o freio de custo virou "fonte zerada" (forma nº 5, de novo)
+```
+RJLEILOES · 30/08 09:41 · total 0 · status FALHOU
+motivo: "falha de acesso: teto_global; queda vs anterior (coletados 0<40)"
+```
+**`teto_global` é o teto do Bright Data** — decisão de ORÇAMENTO, não regressão da fonte. Foi
+gravado como `falhou`; como `fonte_regressao_suspeita()` só ignora `sem_cota`, o RJ passou a
+aparecer como **`zerou`**. É o freio de custo entregue como medição da fonte pela quarta vez
+nesta base (12/08, 18/08, 27/08 e agora).
+
+**A prova de que o caminho certo existe está na linha anterior do mesmo histórico:** em 29/08 às
+10:29 a **mesma** condição (`teto_global`) foi gravada corretamente como `sem_cota`. Existem dois
+caminhos gravando o mesmo evento e só um carimba o status certo — **achar qual é o trabalho.**
+O RJ tem 48 lotes ativos e não perdeu nada: é defeito de ALARME, não de coleta.
+
+### ⚠️ DECISÃO PENDENTE: quase tudo de 29-30/08 está na BRANCH, não em `main`
+As **migrações já estão em produção** (é um banco só). O **código não** — está em
+`claude/bidpro-brasil-handoff-86bg0m` (PR #339). O descompasso mais caro:
+
+- **`SCRAPER_EXCLUIR: VENDASGOV` e a falha rápida não valem para o cron do GitHub.** Workflow
+  agendado roda a partir da branch **padrão**, então o `leiloeiros-puppeteer.yml` de `main` segue
+  gastando **22 min/dia** numa fonte que colhe zero — tempo que sai de SUPORTE, GRUPOLANCE e
+  WEBLEILOES, as três do fim da lista que o próprio cabeçalho do workflow diz serem as cortadas.
+- O painel do funil em produção já consome a RPC **corrigida** (45/52 em vez de 71/34), mas com
+  a formatação antiga (bases de porcentagem misturadas). Não quebra nada; fica inconsistente.
+- `/analise` sem a instrumentação e `/login` sem o `origem_lote`: **cada dia sem merge é um dia
+  sem medição**, e a leitura está marcada para 05/09.
+
+Nada disso é urgente no sentido de "quebrou". É urgente no sentido de "relógio correndo".
+
+### 🧭 A lição desta noite
+Os cinco defeitos existiam antes e **nenhum aparecia enquanto a rodada era curta**. Não foram
+achados por varredura de código: foram achados por alguém olhando uma tela parada e se recusando
+a aceitar "deve estar rodando". **Escalar o trabalho é um teste de observabilidade** — e a
+observabilidade falhou em cinco lugares ao mesmo tempo.
+
+---
+
+## 🗓️ 29/08 (sessão 14u) — VENDASGOV: 15 DIAS COLHENDO ZERO, E 22 MIN/DIA TIRADOS DE QUEM FUNCIONA
+
+### Não era regressão nova — era invisibilidade
+`fonte_saude` tem `falhou` com `total 0` **todo dia desde pelo menos 15/08**. Só apareceu agora
+porque a `fonte_regressao_suspeita()` reescrita hoje parou de esconder fonte pequena — é
+literalmente o caso que a reescrita citava ("as duas fontes PAGAS RJLEILOES e VENDASGOV"). O
+acervo inteiro da fonte são **4 lotes**, todos de 09/07, três já inativos.
+
+> 🔧 **Correção de fato:** eu disse hoje, ecoando o CLAUDE.md, que a VENDASGOV é fonte **paga**.
+> **Não é.** Ela roda no workflow `leiloeiros-puppeteer.yml`, cujo próprio cabeçalho diz
+> *"fontes GRÁTIS (puppeteer, 0 Bright Data)"*, e o coletor é puppeteer puro interceptando o XHR
+> do site. O que ela custa é **tempo de runner**, não crédito.
+
+### O log disse o que nenhuma leitura de código diria (job 99117537578)
+```
+VendasGov/leilao:       goto (Navigation timeout of 45000 ms exce)
+VendasGov/concorrencia: goto (Navigation timeout of 45000 ms exce)
+VendasGov/venda:        goto (Navigation timeout of 45000 ms exce)
+VendasGov/pai:          goto (Navigation timeout of 45000 ms exce)
+VendasGov/fundo:        goto (Navigation timeout of 45000 ms exce)
+VendasGov: 0 imóveis mapeados (0 colhidos)
+```
+As **cinco** rotas, só timeout de navegação: a página nunca carrega. Não é o parser, não é a
+interceptação do XHR, não é o mapeamento — **o site é inalcançável desse runner**.
+
+E **15:40 → 16:02 = 22 minutos por dia** para colher zero, porque cada rota seguia para a espera
+de 6 s e para o laço de rolagem **sobre uma página que não carregou**. Esses 22 min não são de
+graça: o cabeçalho do próprio workflow avisa que a rodada é cortada por timeout e que *"as fontes
+do FIM da lista (SUPORTE, GRUPOLANCE, WEBLEILOES) podem não ter coletado"*.
+
+### Três mudanças
+1. **Falha rápida** — rota que não navega não rola página; e se a **primeira** não navega e nada
+   foi interceptado, aborta as outras quatro. **22 min viram ~1.** Vale onde quer que ela rode.
+2. **`SCRAPER_EXCLUIR`** — tirar UMA fonte da rodada sem listar as outras vinte no include.
+   `SCRAPER_FONTES` continua vencendo quando presente (é como se testa a fonte isolada na mão).
+   Verificado **avaliando as três linhas reais do arquivo** (extraídas, não redigitadas): 5/5.
+3. **VENDASGOV sai do GitHub Actions e entra no runner residencial** — mesmo remédio de HASTA,
+   RJ e PECINI. Custo zero (puppeteer local, sem Bright Data).
+
+### ⚠️ O que NÃO está provado
+A hipótese do **WAF do SERPRO barrando datacenter** é a mais provável pelo padrão (as 5 rotas,
+todo dia, só timeout) e o próprio comentário do scraper já dizia que ele bloqueia fetch de
+datacenter com 403 — **mas não deu para provar daqui**: o proxy de saída deste ambiente recusa o
+host, e chamar isso de confirmação seria entregar bloqueio meu como medição da fonte.
+
+**Se estourar timeout TAMBÉM na máquina residencial, o problema não é o IP e sim o site** — e o
+próximo passo é recon da SPA, não outra troca de runner. Com a falha rápida, descobrir isso custa
+~1 min em vez de 22.
+
+---
+
+## 🔚 29/08 — FECHAMENTO DO DIA (mapa das sessões 14o → 14u)
+
+> O fechamento das sessões 14 → 14n está mais abaixo, no seu lugar. Este cobre o resto do dia.
+
+| # | O que era o problema | Como terminou |
+|---|---|---|
+| **14o** | Card do lance mostrava a praça errada; 7 itens abertos | Praça atual **por data**; triagem dos 7 |
+| **14p** | Rafael pagou assessoria por fora e não havia onde registrar; Matheus atribuído e não promovido | Ciclo de vida da assessoria: contrata → vincula → entrega → **encerra com documento** |
+| **14q** | Funil dizia "criaram conta 71 · tentaram 34" | Contava **navegador**, não pessoa; `tentou` perdia o envio que deu certo; degrau de ativação entrou na tela |
+| **14r** | 54 contas novas → 4 relatórios | 1º relatório automático **construído e descartado pelo dono**; ficou a medição da `/analise` |
+| **14s** | O lote que traz a pessoa some no `/login` | `origem_lote` mede quanto disso acontece; cabeçalho passa a carregar o lote |
+| **14t** | HASTA acusada de regressão | **Parser intacto** — o alarme era o instrumento, 4ª vez; releitura do acervo passa a existir |
+| **14u** | VENDASGOV `zerou` | 15 dias colhendo zero e **22 min/dia** tirados de três fontes que funcionam; falha rápida + migração para o residencial |
+
+### As duas lições do dia que valem mais que os consertos
+1. **A 4ª ocorrência da forma nº 10, e a lição já estava escrita.** `_saude-fonte.mjs` tem desde
+   17/08 um cabeçalho chamado *"POR QUE A REGRESSÃO NÃO PODE OLHAR PARA `total`"* — e a função SQL
+   reescrita hoje de manhã olhava para `total`. **Lição aprendida num arquivo não atravessa
+   sozinha para o outro.**
+2. **Aderência não era o critério** (14r). O ensaio em seco do 1º relatório automático saiu
+   excelente — 34 de 34 clientes com lote, 21 na própria cidade, 0 fora do estado — e o dono
+   recusou com a razão que nenhuma medição alcança: *"o cliente não escolheu o imóvel"*. Nenhum
+   ensaio em seco pega isso; só o dono do negócio.
+
+### 📌 PENDÊNCIAS AO ENTRAR EM 30/08 (esta lista substitui a de "PRÓXIMA SESSÃO (30/08)" abaixo)
+
+**Captura** — `select * from public.fonte_regressao_suspeita();` devolve 4 linhas, todas verdadeiras:
+- ✅ **VENDASGOV** tratada na 14u (não é fonte paga — era `puppeteer` grátis; foi para o
+  residencial). **Confirmar na próxima rodada residencial se ela volta a colher.**
+- 🟠 **ALFA · EMILIOMATOS · NORDESTE** `medicao_velha`
+  (201–226 h) — o teto do Bright Data vira **segunda 31/08** e parte disso se resolve sozinha.
+- ✅ **CALIL e VEGAS saíram** da lista. ✅ **HASTA** resolvida (era o instrumento).
+
+**Custo** — `bd_teto_saturado` 550/495, vira 31/08.
+
+**Marketing** — `canal_sem_conversao_apurada` = 1; olhar `action_types_vistos` na resposta do
+`meta-insights-cron` (08h10 UTC).
+
+**Cliente** — dois alertas que **somem sozinhos** e vale saber por quê: `erro_na_tela_do_cliente`
+= 3 (os três são o RLS de `analise_jobs`, 23–25/08, **corrigido em 28/08**) e
+`alerta_acima_do_capital` = 2 (ambos de **24/08**, anteriores ao conserto de 25/08; **zero envios
+depois**). O quarto evento de erro é `/admin` com *statement timeout* — esse é real.
+
+**Agendado** — ⏰ **05/09** (`trig_01DEkuEvHftyhnKecMCaSDDW`): ler `analise_*` e `origem_lote`.
+⚠️ A rotina foi criada **sem conectores** — a sessão que disparar não roda SQL sozinha; ela
+entrega as consultas. Para automatizar de verdade, recriar pela tela de Routines do claude.ai.
+
+**Decisões do dono** — `direitos aquisitivos` entra em `acervo.fracao_ideal`? (16 lotes) ·
+âncora CDC 7 dias para pagamento fora do gateway · equipe marcar upload como
+`matricula_registrada` (senão o encerramento da assessoria não dispara).
+
+**Herdadas** — `/admin` timeout · `/planos` Leaflet · P2/P3/P4 de captura · 1º advogado ·
+`apresentador_foto` · OpenAI Ads · os 3 clientes do 360 · 41% sem triagem.
+
+✅ **Saiu da lista:** backup off-region são (65 arquivos, `ok: true`, longe do teto de 1.000 nos
+últimos 3 dias) — era a preocupação de 14/08 no CLAUDE.md.
+
+---
+
+## 🗓️ 29/08 (sessão 14t) — RECON DA HASTA: O PARSER ESTÁ INTACTO, O ALARME ERA O INSTRUMENTO (4ª vez)
+
+### O veredito, em dois números
+```
+run de 29/08 20:17  →  enumerados: 592   ·   total: 5
+acervo HASTA ativo  →  584 lotes, 579 com 2ª praça em 03/09
+```
+**592 enumerados é MAIS que os 579 conhecidos** — o nível 2 (`/leilao/<id>/lotes`) que entrou
+hoje recuperou a listagem inteira. Os 5 são o **dedup funcionando**: `runner.mjs` processa
+`novos.length ? novos : urls`, e com 579 já no banco sobraram ~13 novos, dos quais 5 passaram na
+qualidade. **`total` = quantos lotes ESTE RUN processou. Não é o tamanho da fonte.**
+
+Não se mexe no parser. Consertar parser são é o pior desfecho possível de um alarme — foi o que
+quase aconteceu com o LEILOFY em 27/08.
+
+### O defeito real: os dois lados da checagem comparavam a grandeza errada
+`fonte_baseline_aprendida()` aprendia o piso a partir de `total`; `fonte_regressao_suspeita()`
+comparava `total` contra esse piso. **Eles só coincidem na PRIMEIRA coleta cheia.** Depois dela,
+todo run saudável de fonte grande parece regressão — o alarme cresce junto com o sucesso da coleta.
+
+É a **quarta vez** nesta base com a mesma assinatura (17/08, 18/08, 27/08 e agora): algo que NÃO é
+medição do tamanho da fonte comparado contra o piso da fonte. E o detalhe que dói: **o lado JS já
+sabia.** `scripts/_saude-fonte.mjs` tem, desde 17/08, um cabeçalho chamado *"`enumerados` — POR
+QUE A REGRESSÃO NÃO PODE OLHAR PARA `total`"*, e usa `enumerados` na comparação dele. A lição
+estava escrita, testada e **não atravessou para o SQL**.
+
+### A correção
+Uma expressão — `coalesce(nullif(enumerados,0), total)` — aplicada nos **dois** lados, para que
+sigam comparáveis. `enumerados` é nulo nas fontes com scraper próprio, e ali o `coalesce` cai em
+`total`: **comportamento inalterado para 24 das 34 fontes**.
+
+⚠️ **Mudar só um dos lados trocaria um erro por outro.** Comparar `enumerados` contra um piso
+aprendido de `total` deixaria a checagem **cega** em toda fonte cujo enumerado é múltiplo do
+processado — hoje: CALIL 81/11 · EMILIOMATOS 240/37 · PECINI 48/4 · TORRES3 180/37 · LEFFA 13/5 ·
+HASTA 592/5.
+
+**Ensaio em seco antes de aplicar** (derivando o corpo do `prosrc` de produção — réplica mediria
+a réplica), confirmado depois:
+```
+antes:  ALFA · EMILIOMATOS · NORDESTE (medicao_velha) · HASTA (regressao) · VENDASGOV (zerou)
+depois: ALFA · EMILIOMATOS · NORDESTE (medicao_velha) ·                     VENDASGOV (zerou)
+```
+Sai exatamente a linha falsa e nenhuma verdadeira. E a checagem ficou **mais estrita**, não mais
+cega: o piso da HASTA subiu de **149 → 290**, porque agora aprende do que a fonte lista.
+
+> ⚠️ **O primeiro ensaio acusou o LEILOFY, e era erro MEU:** usei `p_dias_expiracao = 3` quando o
+> default é **7**, e o desconto de expiração é justamente o que protege o LEILOFY desde 27/08.
+> Parâmetro errado fabrica achado — conferir os defaults faz parte do ensaio.
+
+### ✅ RESOLVIDO no mesmo dia: o acervo antigo passa a ser relido com a SOBRA do orçamento
+`const alvo = (novos.length ? novos : urls).slice(0, maxLotes)` era tudo-ou-nada: com a fonte já
+coletada, um punhado de lotes novos consumia `novos.length` do teto e **o resto do teto era
+jogado fora**. Medido na HASTA: **5 lotes tocados em 36 h contra 584 ativos**, os outros 579 com
+`atualizado_em` de 25/08.
+
+**O teto declarado (`maxLotes`, 40) não muda.** O que muda é não desperdiçar a folga: novos
+primeiro, e a sobra vira releitura do acervo conhecido.
+
+**Duas garantias de custo, nesta ordem:**
+1. **Novo vem primeiro** — uma recusa de orçamento custa releitura, nunca lote novo.
+2. **A releitura aborta no instante em que um detalhe volta `via: 'bd'`.** *Releitura nunca paga.*
+   Lote novo pode pagar (vale o crédito); relê-lo não vale, ainda mais com o teto semanal
+   saturado. É decisão **medida por fetch**, não adivinhada por fonte: se a fonte deixar de ser
+   desafiada, a releitura volta sozinha. `cfg.maxRefresh: 0` desliga por fonte.
+
+Fila da releitura: **praça próxima primeiro** (é onde o dado muda), depois o mais velho, e
+`fonte_id` só para desempatar — sem desempate estável a ordem varia entre runs e o acervo nunca
+cicla inteiro. Lote já inativo não volta.
+
+**A conta virou função pura exportada (`planejarAlvo`) porque é ela que decide gasto:** um
+off-by-one em `iReleitura` faz o guard mirar no lote errado, um erro na `folga` estoura o teto,
+um sort instável relê sempre os mesmos. Nada disso quebra build, aparece em lint ou falha o run —
+sai um número plausível e mais caro. `npm run testar:motor` roda 8 cenários em seco, sem rede e
+sem banco (fonte nunca coletada segue no caminho antigo · sobra vira releitura · novos enchem o
+teto e a releitura zera · teto total nunca ultrapassado · `maxRefresh:0` desliga · praça iminente
+na frente do mais velho · inativo fora · desempate estável). **8/8 passam.**
+
+⚠️ **A ordem dos dois consertos deste dia importa.** A releitura faz `total` subir; se ela
+tivesse entrado ANTES de a baseline passar a aprender de `enumerados`, o piso derivaria de novo —
+exatamente o defeito que o conserto anterior removeu.
+
+### E o teto da HASTA já era 600 — o freio nunca foi ele
+`runner-residencial.sh` já passava `HASTA_MAX_LOTES=600`; o **default do scraper era 40**. A
+rodada na mão media outra coisa que a agendada, e foi assim que o teto pareceu ser o problema
+neste recon quando não era. Default alinhado ao uso real (600). Custo de subir: **só tempo** —
+`dom` é Chromium residencial, devolve `via: 'dom'` e nunca toca Bright Data, então o guard
+"releitura nunca paga" corretamente jamais dispara nela.
+
+E o comentário do runner descrevia comportamento inexistente: prometia refresh completo *"sem
+lote novo"*, e como quase toda rodada traz ao menos um lote novo, **o refresh nunca acontecia**.
+Agora acontece — o acervo cicla num run só, não em três semanas.
+
+### HASTA passou a ser a ÚLTIMA da fila (decisão do dono)
+Com ~1 h de rodada, ela empurrava tudo o que vinha depois. O dono pediu "depois da Vlance"; ficou
+**no fim**, porque depois da Vlance ainda vinham o **radar do DJEN** — que acorda pelo caminho
+**pago** se ficar 7 dias sem rodar aqui — e a triagem. Ordem nova:
+`SOLEON → GESTAO → RJ → PECINI → VLANCE → radar DJEN → triagem → HASTA`.
+No fim da fila, rodada longa não custa a ninguém, e a HASTA é a que pode ser cortada com menor
+custo: não tem caminho pago atrás.
+
+---
+
+## 🗓️ 29/08 (sessão 14s) — O LOTE QUE TRAZ A PESSOA É DESCARTADO NO `/login` (medindo antes de consertar)
+
+### O achado, lendo o código
+`api/publico.js:882,900` — o CTA dentro da página do lote manda para
+`/#/login?modo=cadastro&imovel=<id>`. **`Login.jsx` nunca leu esse parâmetro:** procurado
+`params.get('imovel')` no `src/` inteiro, **zero consumidores**. Quem clicou em *"Criar conta
+grátis e ver a ficha"* naquele apartamento específico cria a conta e cai na Home — o imóvel que
+motivou o cadastro é descartado no caminho.
+
+O mecanismo para resolver **já existe e já foi construído para outra coisa**: `tsn_redirect_produto`
+(sessionStorage) leva a pessoa de volta à página do curso/eBook depois da confirmação do e-mail.
+Mesmo problema, resolvido uma vez, nunca ligado para o lote.
+
+### O que entrou AGORA — só medição, nenhum comportamento
+Evento `origem_lote`, carimbado na montagem do `/login`. Não muda destino, não muda tela, não lê
+o parâmetro para mais nada.
+
+**Duas decisões que valem o comentário que carregam:**
+1. **Carimba sempre — com e sem imóvel.** Registrar só quando o parâmetro existe daria o
+   numerador sem o denominador, e um zero seria indistinguível de "o evento não está subindo".
+   Com as duas metades no mesmo rastro, zero-com-imóvel vira **medição**, não dúvida.
+2. **`origem_lote` entrou em `TIPOS` *e* em `TIPOS_ANON`.** É o único evento dessa família que
+   nasce para o **visitante**, e sem a segunda lista voltaria 204. Seria a **quarta** vez que essa
+   allowlist deixa de fora justamente a página que estava recebendo gente — as três anteriores
+   (`leiloes`, `leilao`, `live`) estão narradas dentro do próprio `api/track.js`.
+
+**Verificado rodando o handler real** (`api/track.js` importado, `fetch` stubado, nada foi ao
+banco): anônimo com imóvel → grava; anônimo sem imóvel → grava; rota não pública → 204;
+tipo inventado → 204.
+
+### O cabeçalho passou a carregar o lote (mesma sessão, a pedido do dono)
+O cabeçalho público aparece em **todas** as páginas, inclusive na do lote, e os botões dele iam
+para `/#/login?modo=cadastro` **sem** o imóvel — enquanto o CTA do corpo já levava `&imovel=<id>`.
+Quem estava olhando um apartamento e clicava no botão de cima em vez do de baixo chegava ao
+cadastro indistinguível de quem veio da home, e `com_imovel` nasceria subestimado.
+
+`pagina()` ganhou o parâmetro `imovelId`, preenchido **só** por `paginaImovel` — as outras cinco
+páginas públicas não têm lote e nada muda nelas. Vale para **"Entrar"** também: cliente que já
+tem conta e volta por um lote tem a mesma intenção, e o `modo=` no rastro separa os dois na hora
+de ler. **Continua sendo só medição — nada lê o parâmetro ainda.**
+
+**Verificado renderizando as páginas de verdade** (handler importado, `fetch` stubado, nada foi
+ao banco): página do lote → **6 de 6** links de login com `imovel=`; página de cidade → **0 de 5**.
+Ler o diff não provaria: o cabeçalho é uma template string dentro de outra.
+
+```sql
+-- quantos chegam ao /login com o lote no bolso, separando cadastro de login, e quantos viram conta
+select alvo,
+       case when detalhe like '%modo=cadastro%' then 'cadastro' else 'login' end as modo,
+       count(*) vezes, count(distinct anon_id) pessoas,
+       count(distinct anon_id) filter (
+         where exists (select 1 from eventos_atividade v
+                        where v.anon_id = e.anon_id and v.user_id is not null)) as viraram_conta
+  from eventos_atividade e
+ where tipo = 'origem_lote' and criado_em > now() - interval '14 days'
+ group by 1, 2 order by 1, 2;
+
+-- QUAIS lotes trazem gente (e se o mesmo lote traz mais de uma pessoa)
+select split_part(detalhe, 'imovel=', 2) as imovel_id, count(distinct anon_id) pessoas
+  from eventos_atividade
+ where tipo = 'origem_lote' and alvo = 'com_imovel' and criado_em > now() - interval '30 days'
+ group by 1 order by 2 desc limit 20;
+```
+
+⚠️ **A série tem um degrau.** O cabeçalho só passou a carregar o lote em 29/08 — evento anterior
+a isso subestima `com_imovel`. Comparar semanas por cima dessa data mede a mudança do link, não a
+mudança do comportamento.
+
+**Só decidir depois de ler.** Se `com_imovel` for uma fração ínfima, o gargalo está antes (o CTA
+do lote não é clicado) e ligar o caminho de volta não muda nada. Se for material, o passo 3–4 da
+sequência (guardar o id e cair na ficha depois do login) é o conserto — e é pequeno.
+
+---
+
+## 🗓️ 29/08 (sessão 14r) — ADESÃO: O ITEM 2 FICOU · O ITEM 1 FOI **DESCARTADO PELO DONO**
+
+### ❌ Item 1 — "o 1º relatório nasce da triagem" — construído e descartado no mesmo dia
+A proposta era: ao terminar a triagem, o cliente cair num relatório **já em geração**, com o lote
+escolhido pelo servidor a partir do objetivo e da faixa de capital que ele acabara de declarar.
+O dono olhou e recusou, com a razão que nenhuma medição minha alcançaria:
+
+> *"o cliente não escolheu o imóvel, viria um imóvel avulso que muito provavelmente não seria do
+> interesse dele"*
+
+**Registrado porque o número enganava para o outro lado.** O ensaio em seco saiu excelente — 34 de
+34 clientes reais com lote, 21 na própria cidade, 0 fora do estado, 34 com documento — e nada
+nele mediria a única coisa que importava: *o lote pode ser o mais aderente do acervo e ainda assim
+ser um lote que a pessoa não pediu*. **Adesão não se compra entregando algo que o cliente não
+escolheu.** É um limite da forma nº 10 que vale guardar: ali o instrumento mede outra coisa e o
+nome denuncia; aqui o instrumento medi**a** exatamente o que dizia — aderência — e aderência não
+era o critério. Nenhum ensaio em seco pega isso; só o dono do negócio.
+
+Removido por inteiro (função `primeiro_imovel_para_triagem`, regra `ativacao.primeiro_relatorio`,
+interruptor `app_config.primeiro_relatorio_auto`, telas e o painel do Admin) — migração
+`primeiro_relatorio_da_triagem_descartado_pelo_dono.sql`. `auditoria_regras_negocio()` = 0 crítico.
+
+**Sobra útil, para quem voltar ao tema:** o gargalo continua onde está. Se a ativação for atacada
+de novo, tem de ser sobre um imóvel **que o cliente escolheu** — o caminho é a Busca, não a
+triagem. Três defeitos que o ensaio em seco pegou e que valem para qualquer seleção futura de
+lote: (a) `order by … desc` põe **NULL primeiro**, então "preferir a mesma cidade" preferia, na
+prática, o lote de lugar desconhecido; (b) ordenar por desconto seleciona o **extremo** do acervo
+— sem piso de faixa, quem declarou "R$ 400 mil a 1 milhão" recebia uma vaga de garagem de 22 m²
+por R$ 2.183, dado correto; (c) `imoveis_leilao.valor_mercado` está preenchido em **6 de 30.618**
+lotes ativos — inútil como filtro de qualidade. O que prediz relatório com conteúdo é **ter geo**
+(comparáveis são por raio): 66 dos 68 relatórios de 120 dias saíram com valor de mercado.
+
+### ✅ Item 2 — a `/analise` passa a registrar o que ninguém sabia (no ar)
+Medido em 30 dias: 54 contas novas, **4 relatórios**; 37 das 54 somem na **primeira hora**;
+**47 dos 52 exploradores nunca gastaram uma amostra grátis** — o paywall não está barrando
+ninguém, ninguém chega até ele. Das 16 contas que abriram a `/analise`, **10 nunca clicaram em
+Gerar**, e as 6 que clicaram somaram **37 cliques para 4 relatórios**.
+
+O clique genérico do rastreador já dizia *isso*. O que ele não diz é **qual** relatório, **como
+terminou**, e **o que a pessoa viu ao chegar** — e "10 não clicaram" tanto pode ser tela confusa
+quanto três cadeados, que pedem correções opostas. Três tipos novos em `api/track.js`:
+
+| Evento | O que grava |
+|---|---|
+| `analise_estado` | o que a tela oferecia na chegada, card a card (livre/plano/cota/encerrado/sequência) + cota |
+| `analise_gerar` | tentativa **e desfecho** por tipo — inclusive **"concluiu SEM base de mercado"**, que é o relatório vazio que hoje vira anomalia |
+| `analise_bloqueio` | clicou numa porta fechada, com o motivo dela |
+
+A tentativa é registrada **antes** das recusas: sem isso, o clique que morre numa validação some
+do rastro e a leitura vira "não clicou" — a conclusão oposta.
+
+**Ler em ~1 semana** (é o que decide o próximo passo):
+```sql
+select tipo, alvo, detalhe, count(*) vezes, count(distinct user_id) pessoas
+  from eventos_atividade where tipo like 'analise_%' and criado_em > now() - interval '7 days'
+ group by 1,2,3 order by pessoas desc, vezes desc;
+```
+
+### Nada mais sobrou desta frente
+O `.select()` que eu tinha posto no update da triagem saiu junto, a pedido do dono:
+`TriagemPerfil.jsx` está **idêntico** ao estado anterior a `d3abe90`. Fica anotado, para quem
+mexer ali um dia, que o update segue sem binding — uma triagem barrada pela RLS "salva" com
+`error: null` e zero linhas, e a pessoa responde tudo de novo no acesso seguinte sem entender
+por quê. Não é achado novo; é a linha de base do arquivo.
+
+---
+
+## 🗓️ 29/08 (sessão 14q) — O FUNIL CONTAVA NAVEGADOR, E O BURACO ESTAVA DEPOIS DELE
+
+### O que o dono viu na tela, e por que os números não fechavam
+`2.234 → 1.699 (76%) → 85 (4%) → 99 (4%) → 34 (34%) → 71 (3%)`.
+**"Criaram conta 71" maior que "Tentaram criar conta 34" é impossível num funil encaixado** — e a
+impossibilidade era o sintoma. Dois instrumentos mediam outra coisa (forma nº 10 do CLAUDE.md):
+
+| Degrau | O que o nome dizia | O que o código media | Valor honesto |
+|---|---|---|---|
+| Criaram conta | pessoas que se cadastraram | `anon_id` distinto que em algum momento apareceu logado | **45** (era 71) |
+| Tentaram criar conta | tentativas de cadastro | `submit` em `/login` **com `user_id is null`** | **52** (era 34) |
+
+- **71 navegadores ↔ 57 pessoas ↔ 52 com conta nascida na janela.** Quem entrou do celular e do
+  desktop contava duas vezes, e **cliente ANTIGO que só fez login entrava como aquisição** — num
+  painel cujo título é "quem ainda **não** é cliente".
+- **`tentou` perdia o envio que DEU CERTO.** O rastreador carimba `user_id` assim que a sessão
+  existe, e o cadastro bem-sucedido *cria* a sessão. O recorte certo é o **conjunto de anônimos da
+  janela**, não o estado do evento.
+- **Base misturada numa coluna só** (`src/pages/Admin.jsx:5552`): esse degrau usava
+  `foi_ao_cadastro` como divisor e todos os outros usavam `visitantes`. Resultado: 34 pessoas
+  impressas como **"34%"** logo abaixo de 99 pessoas impressas como **"4%"**. Não é formatação —
+  inverte a leitura de qual degrau é o gargalo. 34/2.234 = **1,5%**.
+- **O rótulo também mentia:** `/login` hospeda *entrar*, *cadastrar* e *recuperar senha* — o
+  rastreador só grava `alvo: 'FORM'` e não sabe distinguir; e **quem entra pelo Google não gera
+  envio nenhum**. Passou a se chamar "Enviaram o formulário".
+
+### O degrau que faltava — e é onde o negócio realmente vaza
+O funil parava em "criou conta". **Medido em 30 dias: 54 contas novas, 4 geraram relatório (7%).**
+A aquisição está saudável (2.234 → 45 = **2,0%** de visitante para conta, cold traffic); a
+**ativação é o problema**. "Geraram o 1º relatório" entra na tela.
+
+**Funil corrigido (30 d):** `2.236 → 1.701 → 99 → 52 → 45 → 4`  — monótono, mesma base em todos.
+
+**Nada mudou na coleta.** Os três números sempre estiveram no rastro; mudou o que a consulta
+pergunta a ele. Migração `funil_contava_navegador_e_parava_antes_do_buraco.sql` (aplicada).
+
+### Diagnóstico de adesão — o que o rastro mostra depois do cadastro (54 contas / 30 d)
+| Sinal | Nº | Leitura |
+|---|---|---|
+| Responderam a triagem (`faixa_capital`) | 34 | o topo funciona |
+| Receberam e-mail de oportunidade | 46 | a máquina de retenção está entregando |
+| Abriram um imóvel | 32 | chegam ao acervo |
+| **Abriram a tela `/analise`** | **22** | chegaram à porta do produto |
+| **Geraram ao menos 1 relatório** | **4** | **18 pessoas chegaram à porta e saíram sem nada** |
+| Salvaram um filtro | 4 | quase ninguém arma o alerta próprio |
+| Viram `/planos` logados | 15 | |
+| Chegaram ao `/checkout` | 5 | |
+| Viraram pagante | 2 | |
+| **Sumiram na 1ª hora** | **37 de 54** | a sessão de cadastro é única e curta |
+| Voltaram depois de 24 h | 10 | |
+
+**Barreiras de acesso (30 d) — nenhuma é estrutural:** "Email not confirmed" 19 pessoas (7 nunca
+voltaram) é a maior, mas **só 2 contas seguem sem confirmar até hoje** — é transitório, a pessoa
+tenta entrar antes de clicar no link. "Invalid login credentials" 8 (3 perderam). Regra de senha
+3 + "Password is known to be weak" 3 — **6 pessoas barradas pela política de senha, 4 não
+voltaram**, e essa é a única barreira 100% nossa.
+
+**Erro de cliente pagante já resolvido:** `new row violates RLS for "analise_jobs"` (2 pagantes,
+23–25/08, botão "Solicitar" do próprio caso) — a política de INSERT foi criada em **28/08**
+(`rls_fluxo_caso_analise.sql`). Reproduzido hoje sob o JWT do próprio cliente: **passa**. Fechado.
+
+---
+
+## 🗓️ 29/08 (sessão 14p) — A ASSESSORIA GANHOU CICLO DE VIDA (contrata → vincula → entrega → encerra)
+
+### O caso que abriu a frente
+Rafael concluiu uma assessoria (carta de arrematação entregue) e **contratou outra, pagando por
+fora do sistema**. Não havia onde registrar: `plano_assinaturas` tinha tela e **nenhum produtor**.
+E o contrato dele **existia** — feito pelo módulo de contratos (`contratos_link`); minha primeira
+medição olhou a tabela `contratos`, que está morta com 0 linhas, e me fez dizer ao dono que não
+havia contrato. **O dono corrigiu, e estava certo.**
+
+### As quatro portas que passaram a existir
+1. **Contrato assinado promove e vincula** — `api/assinar-contrato.js`: depois da promoção de
+   papel, cria a assinatura com `p_forma_pagamento: 'contrato'` e `p_imovel_id` vindo de
+   `contrato.arremate_imovel_id`. O caminho normal de contratação passa a deixar rastro.
+2. **Pagamento por fora tem onde ser registrado** — `api/registrar-assinatura.js` (novo, edge,
+   admin-only) → `registrar_assinatura_manual`, com campo de imóvel. Botão **"📝 Registrar
+   assessoria"** no Admin. `'contrato'` foi **deliberadamente excluído** de `FORMAS`: essa forma é
+   privativa do fluxo automático, senão o registro manual passa a poder forjar contrato.
+3. **Atribuir arremate promove a assessorado** — `api/atribuir-arremate.js` aceita
+   `promover_assessorado` e chama `rpc/promover_para_assessorado` **com `.ok` checado**; checkbox
+   no modal do Admin e rótulo honesto no botão. Era o caso do Matheus: atribuído manualmente
+   desde 30/07 e nunca promovido — o botão prometia o que não fazia.
+4. **A assessoria termina com DOCUMENTO, não com calendário** — regra do dono: *encerra com a
+   carta de arrematação e a matrícula do registro*. `api/concluir-assessorias-cron.js` (diário,
+   07h40) → `concluir_assessorias_entregues`. `src/pages/Caso.jsx` ganhou o bloco **"Encerramento
+   da assessoria"** com as duas linhas de upload, e `api/upload-anexo.js` passou a tratar
+   `carta_arrematacao` e `matricula_registrada` como **tipos únicos** — sem isso o botão
+   "Substituir" mentia (empilhava em vez de trocar). Índice parcial no banco garante uma por
+   imóvel.
+
+### Regras como dado, não como comentário
+`atribuicao.promove_assessorado` e `assessoria.encerramento` entraram em `regra_negocio` com
+`aplicada_por` preenchido. `auditoria_regras_negocio()` acusou órfã **três vezes** durante o
+trabalho até as funções citarem a chave da regra no próprio corpo — que é exatamente o ponto da
+auditoria.
+
+**⚠️ Operacional:** a equipe precisa marcar o upload como `matricula_registrada` (e não como
+`matricula`) para o encerramento automático disparar.
+
+---
+
+## 🗓️ 29/08 (sessão 14o) — A PRAÇA DO CARD, E A TRIAGEM DOS 7 ABERTOS
+
+### 🃏 Card "Lance mínimo (praça atual)" — decisão do dono: **praça atual por DATA**
+
+O card mostrava `d.valorArrematacao`, que é a **praça mais descontada** (regra do dono, 07/08,
+para as PROJEÇÕES). Um número certo com o nome errado — a forma nº 10 dentro da tela do cliente.
+
+`pracaAtualPorData()` entra como irmã de `pracaMaisDescontada()`, e as duas respondem perguntas
+diferentes **de propósito**: por quanto se lança HOJE × quanto pode render. Num lote com 1ª a
+R$ 340.000 em 05/09 e 2ª a R$ 170.000 em 20/09, hoje se lança 340 mil e a projeção olha os 170 —
+por isso o card passa a mostrar a atual **e a dizer, na mesma caixa**, que a análise usou a
+outra. Sem essa frase o leitor vê dois números na mesma página e conclui que um está errado.
+
+> ⚠️ `d.valorArrematacao` **não muda**: ele alimenta ROI/TIR/teto. Mexer nele reverteria a
+> decisão de 07/08 por um efeito de rótulo.
+
+Rodado em seco (5 casos): 1ª aberta → 1ª · 1ª vencida → 2ª · praça única → única · sem data →
+1ª · todas vencidas → a ÚLTIMA (o comentário prometia isso e o código devolvia a primeira;
+corrigi o código, não o comentário).
+
+### 🔍 Os 3 invariantes: dois eram rastro de conserto, um era o painel acusando a si mesmo
+
+| invariante | veredito | ação |
+|---|---|---|
+| `erro_na_tela_do_cliente` = 3 | 23–25/08, todos `analise_jobs` RLS — **o bug consertado hoje de manhã** | sai da janela em 01/09 |
+| `alerta_acima_do_capital` = 2 | 24/08, **antes** do conserto de 25/08 | sai da janela em 31/08 |
+| `data_edital_recuou_prazo` = 3 | **falso positivo do próprio painel** | **corrigido** |
+
+**Prova de que o "Solicitar" funciona** (0 erros não provava nada — provava que ninguém clicou):
+vestindo o cliente real no banco (`set local role authenticated` + o `sub` dele no JWT), o
+INSERT em `analise_jobs` **passou** e foi desfeito de propósito. Antes: `violates row-level
+security policy`.
+
+**E o terceiro era o painel contando o próprio conserto.** Os 3 diziam *"corrigido pelo
+documento"*: o sistema leu o edital, viu o acervo errado e arrumou na hora — rastro de SUCESSO
+lido como pendência. A distinção já existia no código (`recuaSemProva`) e não chegava ao banco.
+Agora `registrar_anomalia_relatorio` aceita `p_resolvido`, e só o caso **MANTIDO** (o edital
+recuaria o prazo sem declarar encerramento) fica em aberto.
+
+> Um painel que acusa o próprio conserto treina o dono a ignorar o painel. O custo é esse, não a
+> linha.
+
+### ✅ Sobraram 3 dos 7, e nenhum é trabalho
+
+`bd_teto_saturado` (mede na virada de 31/08) · `canal_sem_conversao_apurada` (zera no cron das
+08h10 UTC) · CEF drenando (~4 dias). **Rafael** e **MARAURZEDO** seguem abertos por decisão, não
+por pendência técnica.
+
+---
+
+## 🗓️ 29/08 — FECHAMENTO DO DIA (mapa das sessões 14 → 14n)
+
+**36 commits · 59 arquivos · 13 migrações aplicadas.** PR
+[#339](https://github.com/tarcisionogueira/TSN-app/pull/339). Abaixo o mapa; cada linha tem
+entrada própria com as medições.
+
+### O fio que ligou o dia
+Quase tudo saiu de **medir o resultado**, não de ler código. Três defeitos que nenhuma varredura
+teria achado: o botão "Solicitar" que nunca funcionou para ninguém, o "403 do CNJ" que era o
+freio de custo, e 33 mil documentos guardados que a análise não enxergava.
+
+### Custo — a cota do Bright Data
+| o quê | antes | depois |
+|---|---|---|
+| soleon · pecini · gestao · rj (duplicado com o residencial) | 295/sem | ~0 |
+| radar (era "403 do DJEN") | 106/sem | ~0 (roda de casa) |
+| **teto semanal** | **550/550 saturado** | **~150 de uso real** |
+
+### Captura
+- **fonte_regressao_suspeita** reescrita: via 22 de 32 fontes e dizia "íntegro"
+- **+12 leiloeiros SOLEON** (JUCEMG, ~635 imóveis) · **EMILIOMATOS suspenso** (gravava lote de
+  outro leiloeiro sob o nome dele) · 6 candidatos SUPERBID reprovados
+- **HASTA**: catálogo virou por-leilão; nível 2 do motor + paginação → **579 lotes de volta**
+- **runner residencial** ligado, diário, com guarda de PATH e re-exec no auto-update
+- **fonte vazia** deixou de ser silêncio: vira medição e o monitor julga
+
+### Cliente e dinheiro
+- **`/caso` "Solicitar"**: `analise_jobs` vazia em todo o histórico — nunca funcionou
+- **âncora do CDC**: 1 de 4 pagantes sem direito de arrependimento
+- **conversões do Meta**: nunca foram pedidas à API
+- **relatório dizia "reprovada · ROI −100%"** com mercado em branco — e **cobrava** por isso
+- **atribuição manual**: o botão prometia "tornar Assessorado" e não tornava desde 30/07
+
+### Documentos
+- **12.062 registros publicados** do espelho → judicial 70,5% → **85,9%**
+- **matrícula capturada na hora** quando o link é PDF direto (fim do "preliminar")
+- **CEF no espelho** (5.000 enfileirados de 23.484) — 40,3 GB, **US$ 0,055/mês**
+
+### ⏭️ Aberto para a próxima sessão
+1. **`erro_na_tela_do_cliente` = 3** e **`alerta_acima_do_capital` = 2** e
+   **`data_edital_recuou_prazo` = 3** — anteriores a hoje, não investigados
+2. **`bd_teto_saturado` (550/495)** — a semana em curso já estava saturada; **conferir na virada
+   de 31/08** se os consertos derrubam o consumo como projetado
+3. **`canal_sem_conversao_apurada` = 1** — zera após o `meta-insights-cron` das 08h10 UTC
+4. **Card "Lance mínimo (praça atual)"** (`Analise.jsx:2856`) — segue sem lógica de praça;
+   **espera decisão do dono** (praça atual por data × a de maior desconto)
+5. **Rafael**: assessoria paga por fora ainda sem registro — `plano_assinaturas` não tem produtor
+   em lugar nenhum do código (tabela + tela existem, `insert` não)
+6. **CEF drenando**: ~4 dias. Conferir `documento_espelho` e o invariante
+   `anexo_de_espelho_purgado`
+7. **MARAURZEDO** segue sem recon próprio (`via null`, alvo de redirect)
+
+---
+
+## 🗓️ 29/08 (sessão 14n) — COBERTURA DOCUMENTAL: O GARGALO NÃO ERA CAPTURA, ERA LIGAÇÃO
+
+Partiu de um relatório sem matrícula. O diagnóstico mudou **duas vezes** no caminho, e as duas
+correções valem mais que a conclusão inicial.
+
+### 1️⃣ 33 mil documentos já estavam no nosso Storage, invisíveis
+
+`documento_espelho` tinha **33.066 arquivos copiados** (11.869 imóveis, **7.391 matrículas**) e
+era **lido por ninguém**: a análise documental consulta só `imovel_anexos`. O sintoma chegou ao
+cliente como "matrícula não disponível" em cima de um PDF a uma consulta de distância.
+
+O ensaio em seco mudou o desenho **duas vezes**: (a) registrar os 12.089 genéricos gastaria as
+10 vagas do leitor e deixaria a matrícula de fora — o defeito ao contrário; (b) o índice único
+revelou que das 10.173 linhas de matrícula, **6.923 são registro de link esperando o arquivo** —
+então o certo não era inserir, era **PREENCHER**.
+
+**6.324 preenchidos + 5.738 inseridos.** Judicial 70,5% → **85,9%**; extrajudicial 16,1% →
+**31,6%**. E o `espelhar-docs-cron` passa a publicar o que copia, na mesma rodada.
+
+### 2️⃣ O relatório não precisava esperar: o link já era PDF direto
+
+O caminho antigo ENFILEIRAVA (`cef_matricula_fila`, drenada de 30 em 30 min) e entregava
+parecer **preliminar**. Ninguém espera 30 minutos por um relatório.
+
+Medido: as **23.484 matrículas da CEF são PDF direto**, média **1,76 MB** — download de
+segundos. `capturarMatriculaDireta` baixa **na hora**, para qualquer fonte cujo `link_matricula`
+termine em `.pdf`. Valida `%PDF-` nos primeiros bytes (lição de 04/08: 63 KB de HTML salvos como
+edital de 738 KB são PIORES que nada) e **relê o cache** depois de gravar — sem isso o arquivo
+entraria no bucket e o relatório sairia preliminar do mesmo jeito.
+
+### 3️⃣ O custo, medido de verdade
+
+Amostra real de 60 links (só cabeçalho, sem baixar): **média 1,76 MB · mediana 1,84 · p90 3,42 ·
+máx 4,58**. Projeção **40,3 GB** → storage 62,3 → **102,6 GB**.
+
+> Pro inclui **100 GB**, depois **US$ 0,021/GB**. O excedente custa **US$ 0,055/mês**. O alarme
+> do meu próprio medidor exagerou: passar de 100 GB não é precipício, é medidor. E é **platô,
+> não rampa** — a retenção apaga a matrícula de venda direta quando a CEF retira o imóvel.
+
+Duas notas contra mim: a média ficou **menor** que a mediana (sem cauda longa — a cautela que
+escrevi no medidor não se aplicou), e **6 de 60 links não responderam**: ~10% dos links de
+matrícula da CEF podem estar mortos, o que baixaria o total para ~36 GB.
+
+### 4️⃣ O edital da CEF fica de fora, e a razão é um defeito evitado
+
+Os **7.655 links de edital apontam para 19 arquivos**. Espelhar por imóvel = **6,9 GB de
+duplicata**. E "uma cópia, N ponteiros" seria PIOR: a retenção apaga por imóvel, e o primeiro
+lote a expirar levaria o arquivo dos outros 7.654.
+
+### 🩹 Um defeito que eu introduzi hoje e fechei hoje
+
+A publicação preenche `storage_path` nulo; a retenção apaga o arquivo e **anula o
+storage_path**. Sem aviso entre os dois, a limpeza apagava e o cron republicava o mesmo caminho
+4 h depois → ponteiro para objeto inexistente, que **parece** documento. Corrigido nos dois
+pontos de exclusão (`documento_espelho.status = 'purgado'`) + invariante
+`anexo_de_espelho_purgado`, porque o aviso é best-effort e não pode derrubar a limpeza.
+
+### 📊 Onde as fontes ficaram
+
+| fonte | ativos | matrícula legível | teto do que o site publica |
+|---|---|---|---|
+| CEF | 23.484 | 12 → **na fila** (5.000 enfileirados) | 23.484 |
+| ZUK | 450 | **122** | 121 links → **no teto** |
+| GRUPOLANCE | 353 | **319** | 310 links → **no teto** |
+| SUPORTE | 90 | 28 | 45 links (17 na fila) |
+
+ZUK e GRUPOLANCE **não têm o que buscar** — corrige o que eu tinha dito antes ("348 faltando"):
+os outros lotes simplesmente não publicam matrícula.
+
+### ⏭️ Conferir
+
+```sql
+select status, count(*) from documento_espelho group by 1;          -- a fila drena?
+select public.registrar_anexos_do_espelho(0);                        -- deve ser 0/0 (o cron faz)
+select * from public.qa_invariantes() where chave='anexo_de_espelho_purgado';
+```
+A CEF entra ~1.000/rodada × 6 rodadas/dia → **~4 dias** para as 23.484.
+
+---
+
+## 🗓️ 29/08 (sessão 14m) — HASTA: O CATÁLOGO MUDOU DE FORMA (e o parser está intacto)
+
+O recon residencial fechou o caso. **Não é regressão de parser** — consertá-lo seria o pior
+desfecho, como quase aconteceu com o LEILOFY em 27/08.
+
+### 🔎 As quatro medições
+
+1. **Não é render lento.** `/lotes/imovel` com esperas de 3,5 s → 25 s devolveu
+   `19294B · 19294B · 19295B · 19295B`, **0 lote em todas**. A página *renderiza* (19 KB, sem
+   challenge) e mostra estado vazio.
+2. **O acervo existe — 3/3 lotes conhecidos ABREM** (48 KB, valores lidos):
+   `hasta_10728 · mínimo=237.561,24 · aval=240.000` · `hasta_10727 · mínimo=134.558,90`.
+   Quem não mostra os lotes é a **listagem**.
+3. **`/leilao/557/lotes` devolve 30 lotes** (a paginação de 30/pág) — e **557 é o mesmo leilão
+   do dump original** no cabeçalho de `hasta-parse.mjs`, comitente CAIXA.
+4. **A vitrine por categoria funciona:** `/lotes/diversos` = 13, `/lotes/veiculo` = 0.
+   O que sumiu dela foram **os imóveis**, não a listagem.
+
+**A cronologia amarra:** 1ª praça 28/08, 1º zero 29/08. E nos lotes que ainda abrem a página
+agora mostra **uma só praça, 03/09** (a 2ª) — o site reescreve o lote ao passar a 1ª praça, e é
+aí que ele deixa a vitrine por categoria.
+
+### ✅ O conserto usa máquina que já existia
+
+O motor já tinha **NÍVEL 2** (`extrairUrlsDeEvento`), construído para o NORDESTE: catálogo lista
+EVENTOS, o lote mora dentro. A HASTA passa a usá-lo — `catalogo: '/leiloes'` →
+`/leilao/<id>/lotes`.
+
+> ⚠️ **Apontar direto para `/leilao/557/lotes` seria mais curto e estaria errado.** Leilão
+> ACABA: a coleta pararia sozinha em 03/09 e ninguém saberia. É o mesmo erro que o recon do
+> EMILIOMATOS documentou hoje de manhã.
+
+**E o nível 2 ganhou paginação** — ele lia UMA página por evento, o que bastava para o NORDESTE
+(evento de uma página) e quebraria aqui: 30 de ~579 é **coleta parcial com cara de completa**.
+Que a plataforma pagina por `page` não é palpite: o `url_lote` no nosso acervo é
+`/item/10729/detalhes?page=20`. O laço para quando uma página não traz id novo, então degrada
+para o comportamento antigo se algum evento ignorar o parâmetro.
+
+### ✔️ As duas suposições foram CONFIRMADAS na máquina do dono
+
+```
+(a) /leiloes publica 14 evento(s): ["557","564","561","562","563","565","566","3","11","9","10","14"]
+    /leilao/557/lotes  pág 1 → 30 lote(s)      /leilao/561/lotes  pág 1 → 13 lote(s)
+(b) /leilao/557/lotes · pág1=30 · pág2=30 · ids NOVOS na pág2=30  ✅ pagina de verdade
+```
+
+Suposição escrita em produção é como o defeito volta — por isso a seção 4 do recon verifica o
+que eu configurei, **antes** de qualquer coleta.
+
+### 🧯 O tropeço que virou conserto de raiz: `~/.bidpro-runner.env`
+
+Quem carregava esse arquivo era só o `runner-residencial.sh`. Rodando um script **na mão** —
+que é exatamente o que se faz para investigar — ninguém carrega, e ele morre em
+`Faltam VITE_SUPABASE_URL / SUPABASE_SERVICE_KEY`. Aconteceu **duas vezes na mesma sessão**, as
+duas no meio de um diagnóstico: o recon morreu **depois** de gastar minutos de Chromium, e o
+`scraper-hasta` nem começou, logo após o recon confirmar o conserto.
+
+Ferramenta que exige ritual de ambiente falha justamente na hora da pressa — e o custo não é o
+erro, é a rodada perdida e a dúvida *"será que o conserto não funcionou?"*.
+
+**`scripts/lib/env-runner.mjs`** (import de efeito colateral, uma linha por script) em 12
+scripts: os 9 scrapers do runner, a triagem, o recon e o radar residencial. Contrato estreito,
+rodado em seco: **não sobrescreve variável já presente** (CI e Vercel continuam mandando),
+**arquivo ausente é silêncio** (no Actions ele não existe e está certo), e quem exige credencial
+segue exigindo com a mesma mensagem.
+
+---
+
+## 🗓️ 29/08 (sessão 14l) — O RADAR RODOU DE CASA: 98 EDITAIS POR R$ 0 (migração validada)
+
+```
+[radar-residencial] janela 2026-08-23 → 2026-08-29 (6 dia(s); último sucesso: 2026-08-25T00:03:03)
+[radar-residencial] vistos=2093 novos=98 descartados=1927 duracao=91.4s
+```
+
+**A migração está provada em produção.** O DJEN responde ao IP residencial sem intermediário:
+2.093 itens lidos, **98 editais novos gravados**, 91 s, **zero Bright Data**. E a janela
+auto-alargou para 6 dias sozinha (último sucesso 25/08) — exatamente o mecanismo criado para não
+perder edital numa ausência.
+
+### 🔧 O defeito que a 1ª rodada real revelou: retry só no caminho pago
+
+O run foi carimbado **FALHA** por **um combo em doze** — `TRT15/edital de leilão: fetch failed`,
+erro de **rede**, não do DJEN (o mesmo `fetch failed` apareceu no gate do SOLEON no início da
+rodada: oscilação do link, não do CNJ).
+
+Causa: escrevi `transporteDireto` **sem retry nenhum**, enquanto o caminho pago tinha 2. **A
+assimetria estava no sentido errado** — link doméstico oscila MAIS que datacenter, não menos.
+Consequência se ficasse assim: quase toda rodada de casa teria um combo caindo, o residencial
+**nunca registraria sucesso**, e o Bright Data voltaria a cada 7 dias para refazer de graça o que
+já tinha sido feito.
+
+**Corrigido** (`RADAR_DIRETO_RETRIES`, padrão 2, backoff 1,5 s→3 s — igual ao pago). Rodado em
+seco com `fetch` stubado:
+
+| sequência | resultado | tentativas |
+|---|---|---|
+| rede, rede, 200 | sucesso | 3 |
+| rede sempre | lança `fetch failed` | 3 |
+| **404** | lança `HTTP 404` | **1** — resposta definitiva, não re-tenta |
+| 503, 200 | sucesso | 2 |
+
+Também corrigi a mensagem do runner: ela dizia *"falhou — sem efeito no acervo"* numa rodada que
+**gravou 98 editais**. Instrumento reportando outra coisa (forma nº 10), na minha própria linha.
+
+### 🔴 HASTA: regressão CONFIRMADA, e não é Chromium
+
+`puppeteer ok` na máquina do dono — a hipótese de ambiente **caiu**. E não é o caso LEILOFY
+(leilão que aconteceu e esvaziou o acervo): medido agora,
+
+| ativos | com prazo vencido | desativados 10d | data do leilão | última escrita |
+|---|---|---|---|---|
+| **579** | **0** | 0 | **03/09** (daqui a 5 dias) | 25/08 |
+
+Os 579 lotes estão vivos, com praça **futura**, e a listagem devolve **0**. É regressão de
+captura de verdade. O gate recusou carimbar (`sem_gravacao`), então a janela segue aberta, e com
+a correção da sessão 14k o próximo run grava `degradado` + `queda vs anterior (listados 0<579)`
+em vez de sumir do monitor.
+
+> ⚠️ O recon da HASTA **tem de rodar da máquina residencial** — o site bloqueia datacenter, então
+> nem a CI nem esta sessão conseguem olhar a página.
+
+### ℹ️ Nota de operação: o runner rodou em `8be909fa`, não na versão mais nova
+
+`AVISO: git pull não avançou` (junto com o `fetch failed` do gate do SOLEON = oscilação de rede
+no início). Isso **confirma por outro caminho** o diagnóstico da 14k: desta vez o script já
+começou com o bloco do radar presente, e o radar rodou. Da vez anterior o bloco chegou **durante**
+a execução e foi pulado. A correção do `exec` está em `9ee6b5f` e entra no próximo pull.
+
+---
+
+## 🗓️ 29/08 (sessão 14k) — A AUTO-ATUALIZAÇÃO DO RUNNER PULAVA O PASSO NOVO, EM SILÊNCIO
+
+A 1ª rodada diária do runner rodou, terminou com `fim.` e exit 0 — e **o radar não rodou**. O
+log foi de VLANCE **direto para a triagem**, sem uma linha do radar, nem a mensagem de falha do
+`|| echo`.
+
+### 🔎 A causa: o bash lê o script por POSIÇÃO DE BYTE
+
+O `git pull` da auto-atualização (11/08) reescreve **o arquivo que está sendo executado**. O bash
+lê scripts sob demanda, por offset — quando o arquivo muda, ele continua no **mesmo byte do
+arquivo NOVO**. O commit do dia inseriu ~1 KB no topo (a guarda de PATH) e ~1,3 KB no meio (o
+bloco do radar): o offset caiu depois do radar, e ele foi pulado.
+
+Reproduzido em seco — script que se sobrescreve no meio ou salta bloco ou quebra em linha
+partida:
+
+```
+PASSO 1
+./alvo.sh: line 4: syntax error near unexpected token `)'
+```
+
+> ⚠️ **É o pior formato possível de bug: quanto MAIOR a correção enviada, maior a chance de ela
+> não rodar** — e ela some justamente na rodada que traz o conserto. Latente desde 11/08, só
+> mordeu quando um commit mudou os offsets.
+
+**Conserto:** pull que muda o HEAD faz `exec "$_SELF" "$@"` — relê o arquivo do zero.
+`RUNNER_REEXEC` impede laço; `_SELF` é capturado **antes** do `cd`; o `exec 9>` reabre a trava
+(fecha a antiga, então não conflita consigo mesma). Testado: muda → reinicia **uma** vez e roda o
+corpo; não muda → roda direto, sem reinício.
+
+### 🔴 Achado no mesmo log: fonte vazia não deixava rastro
+
+```
+[HASTA] enumerados 0 lote(s) (via dom)
+[HASTA] sem imóveis no momento — fonte vazia (sem alarme).
+```
+
+A HASTA tinha **579 lotes em 25/08**. E o `fonteVazia` do `motor/runner.mjs` era um `continue`
+que **não registrava nada** — sem linha em `fonte_saude`, o monitor não podia acusar regressão
+(não havia medição), e a fonte só reapareceria **108 h depois** como `medicao_velha`. A pergunta
+de revisão do CLAUDE.md em estado puro: *este vazio é resposta, ou é falha que não sabe que
+falhou?*
+
+**Conserto:** vazio agora **registra**, e quem decide o alarme é `registrarSaude` comparando com
+a execução anterior — mesmo princípio do `sem_cota` de 16/08 (o motivo do zero muda a ação, então
+muda o status). Rodado em seco:
+
+| histórico | status gravado |
+|---|---|
+| sem acervo anterior | `vazio` — leiloeiro pequeno entre leilões, sem ruído |
+| tinha 579 (HASTA) | **`degradado`** · `queda vs anterior (listados 0<579)` |
+
+O gate já tinha feito a parte dele: recusou carimbar (`sem_gravacao`), então a janela da HASTA
+segue aberta.
+
+### ⏭️ Pendência aberta: por que a HASTA enumerou 0
+
+Ainda **não sabemos**. A rodada inteira levou 22 s e a HASTA é o único passo Puppeteer que
+passou pelo gate — as outras (GESTAO/RJ/PECINI) foram puladas por já terem rodado em 28-29/08.
+Duas hipóteses, e a diferença importa: **Chromium/Puppeteer não funcionando na máquina** (aí
+GESTAO/RJ/PECINI quebram junto quando o gate abrir) **ou** mudança no site. Checar com:
+`node -e "import('puppeteer').then(p=>p.launch()).then(b=>b.close()).then(()=>console.log('ok'))"`
+
+---
+
+## 🗓️ 29/08 (sessão 14j) — RADAR MIGRADO PARA O RESIDENCIAL (o 2º maior consumidor sai da cota)
+
+Decisão do dono: *"vou rodar diariamente, migra o radar; caso fique 7 dias sem rodar no
+residencial, pode rodar pelo Bright Data."* Feito.
+
+O DJEN bloqueia **IP de datacenter** — o Web Unlocker passava só porque sai por IP residencial.
+De casa o IP já é residencial e **o intermediário pago é dispensável**. Eram **106 requests/semana**
+(88 num único dia).
+
+### 🧱 Um pull só, dois transportes — e o motivo de não ter dois parsers
+
+A única diferença entre coletar pela Vercel e coletar de casa é o **transporte**. Janela, filtro
+duro (`ehEditalReal`), `parseEdital`, dedup por `djen_id` e upsert agora vivem numa função só,
+**`pullDJEN`**, exportada de `api/radar-editais-cron.js` e usada pelos dois caminhos.
+
+> Escrever um parser próprio no script residencial seria repetir, em escala maior, o defeito que
+> o `roteiarDatasPraca` consertou nesta mesma semana: **a mesma regra em três cópias deixou o bug
+> passar nas três.**
+
+- `transporteBrightData` — Vercel/CI, com retry, `semCota` abortando o pull e fallback direto só
+  quando o BD está *sem credencial*;
+- `transporteDireto` — runner residencial, `fetch` puro, **R$ 0**.
+
+### 🔗 Como os dois convivem — sem carimbo novo e sem ninguém avisar ninguém
+
+`scripts/radar-editais-residencial.mjs` grava `monitor_runs` com a **mesma `fonte`** e
+`origem: 'residencial'`. O cron da Vercel lê o **último run com `erro: null`, de qualquer
+origem**, e só libera o Bright Data depois de `RADAR_DIAS_REDE_SEGURANCA` (**7**) dias sem
+sucesso. **Rodando em casa todo dia, o caminho pago nunca acorda.**
+
+O sinal é o **resultado**, não a execução — mesma virada do `coleta-recente.mjs` em 11/08:
+carimbo de "rodei" mente quando o script sai com exit 0 sem trazer nada; a evidência do
+resultado, não. Por isso `monitor_runs.origem` virou coluna (migração
+`monitor_runs_diz_quem_coletou.sql`, aplicada): *"o residencial rodou?"* precisa ser **dado**, não
+dedução pelo horário — dedução é onde a forma nº 10 começa.
+
+### ⚠️ A armadilha que a rede de segurança semanal criaria, e que foi fechada junto
+
+A janela do DJEN era **fixa em 3 dias**. Numa passada **semanal**, isso perderia **4 dias de
+editais em silêncio**, com o run saindo verde. `janelaDJEN` agora usa `dias sem sucesso + 1`
+(mínimo 3, teto 15, para o custo não explodir depois de uma ausência longa).
+
+### ✅ Ensaio em seco, sobre comportamento (o banco ficou fora com um Proxy que lança se tocado)
+
+| cenário | combos chamados | resultado |
+|---|---|---|
+| transporte devolve vazio | 12 | `vistos 0`, `erro null` — dia sem edital é desfecho normal |
+| transporte lança `SemCotaRadar` | **1** | aborta na hora (antes: 12 combos × 4,5 s = os 61 s de `sleep`) |
+| transporte lança `HTTP 500` | 12 | retry preservado — é para isso que o backoff existe |
+
+`janelaDJEN`: `0 → 3 dias` · `6,2 → 8 dias` · `99 → 15 dias (teto)`.
+
+### 🗓️ O que muda na sua máquina
+
+O cron do runner passa a ser **diário** (`0 8 * * *`). **Rodar todo dia não raspa todo leiloeiro
+todo dia:** o gate `coleta_cliente_claim` segue segurando cada fonte em 72 h, então os scrapers
+continuam 2x/semana e a rodada diária sai barata. Quem aproveita o dia a dia são os passos **fora
+do gate** — o radar e a triagem dos bloqueados.
+
+### 📉 Onde a cota fica
+
+| propósito | antes | depois |
+|---|---|---|
+| soleon · pecini · gestao · rj | 295 | ~0 (sessão 14h) |
+| **radar** | **106** | **~0** (rodando em casa) |
+| geral | 99 | 99 — próximo candidato, acoplamento mais frouxo |
+| docs | 50 | 50 — parcial: já tenta grátis em cascata |
+| certidao | reserva | **fica paga**: está no caminho do laudo, com cliente esperando |
+
+De **550/550 saturado** para ~**150 de uso real**. E a folga não é para gastar: é o que faz o
+`teto_global` deixar de recusar as chamadas que têm cliente do outro lado.
+
+### ⏭️ Conferir depois da 1ª rodada diária
+
+```sql
+select ran_at, origem, itens_vistos, itens_novos, janela_inicio, left(coalesce(erro,'—'),60) erro
+  from monitor_runs where fonte='radar-editais-djen' order by ran_at desc limit 8;
+```
+Verde = linha com `origem='residencial'` e `erro is null`. A partir dela, os 6 runs diários da
+Vercel saem sem gastar nada por 7 dias.
+
+---
+
+## 🗓️ 29/08 (sessão 14i) — O "403 DO DJEN" NÃO ERA DO DJEN: ERA O FREIO DE CUSTO COM O CRACHÁ DO CNJ
+
+Pedido do dono: *"agora resolve o 403 do radar"*. **Não havia 403 do CNJ para resolver.**
+
+### 🔎 Três medições independentes, todas apontando para o mesmo lugar
+
+1. **`brightdata_uso_proposito_dia` não tem UMA linha de `radar` em 26, 27, 28 e 29/08.** Os
+   quatro dias de "403" são exatamente os dias em que o **Bright Data nunca foi chamado**. As
+   únicas linhas do radar são 24/08 (88) e 25/08 (18) — e nesses dias ele funcionou.
+2. **`brightdata_decisao(450,'radar')` agora:** `permitido: false, motivo: "teto_global"`. A
+   semana fechou **550/550** — a de 17/08 fechou **618/550**.
+3. **`duracao_ms` dos 24 runs falhados ≈ 61 s** = 12 combos × 4,5 s de `sleep` puro
+   (backoff 1,5 s + 3 s). **Nenhum tempo de rede.** Quatro dias de "bloqueio do CNJ" que eram
+   backoff dormindo por uma decisão de orçamento.
+
+E o Bright Data alcança o DJEN sem problema: 25/08 viu **923 itens**, 24/08 viu **5.236**.
+
+### 🧩 A cadeia, em quatro linhas
+
+```js
+const resp = await fetchViaBrightData(url, …);      // null quando a COTA recusa
+const transiente = !resp || …;                       // null vira "transiente" → dorme 4,5 s à toa
+if (!json) { …fetch DIRETO… }                        // caminho que o próprio comentário já sabia dar 403
+if (!json) throw new Error(`HTTP ${ultimoStatus}`);  // e o 403 do datacenter vira o "motivo"
+```
+
+`fetchViaBrightData` devolve **`null` para quatro coisas diferentes** (sem config, teto global,
+sub-cota, erro de rede). Com a cota estourada, o radar dormia, tentava o caminho que sabidamente
+falha, e carimbava a recusa de orçamento com o status do CNJ. **Forma nº 5 e forma nº 10 na mesma
+linha** — o freio entregue como conteúdo, e o instrumento reportando com o nome de outra coisa.
+
+### 🕳️ A trava existia — e o escopo dela era a própria brecha
+
+`brightdata-null-em-coletor` (em `verificar:padroes`) foi criada justamente para isto, depois do
+RJ congelado 12 dias em 11/08. Só que ela testava **`^scripts/scraper-`**, e o coletor com o
+defeito vivo era **`api/radar-editais-cron.js`**. Um coletor não deixa de ser coletor por morar
+em `api/` e se chamar cron.
+
+### ✅ O que mudou
+
+- **`buscarDJEN` migra para `buscarViaBrightData`** (que LANÇA com o motivo), como RJ (11/08) e
+  PECINI/SOLEON (18/08) já tinham feito. `e.semCota` → **aborta o pull inteiro na hora**: não
+  dorme, não tenta direto, não percorre os outros 11 combos. `sem_config` cai no fetch direto;
+  `rede`/`http` seguem com retry, que é o caso para o qual o backoff existe.
+- **O log passa a dizer a verdade:** `SEM COTA Bright Data — pull não tentado (decisão de
+  orçamento, não bloqueio do DJEN)`, e a resposta ganha `sem_cota: true`.
+- **O disjuntor conta tentativas PAGAS, não linhas.** Um run que saiu por sem-cota não gastou
+  nada — contá-lo travaria o dia por causa do freio, que é o defeito ao contrário.
+- **A trava passa a cobrir `api/*-cron.js`.** Testada em seco: arquivo novo importando
+  `fetchViaBrightData` reprova; depois de removido, volta a passar.
+
+### 💡 E o radar volta a coletar sozinho — sem gastar um centavo a mais
+
+A causa da fome era o gasto duplicado consertado na sessão 14h: `soleon 112 + pecini 63 +
+gestao 60 + rj 60 = 295`, **54% do teto**, nas quatro fontes que o residencial coleta de graça.
+Sem elas, a semana fica em `radar 106 + geral 99 + docs 50 = 255 de 550` — **~295 de folga**.
+
+> ⚠️ **NÃO dê `reserva` ao radar sem decidir gastar mais.** Li o `brightdata_decisao` antes de
+> propor, e a reserva **não é uma fatia dos 550: é uma autorização de furar o teto**
+> (`when v_usado_p < v_reserva then v_limite := v_teto + (v_reserva - v_usado_p)`). É por isso
+> que o `rj` (reserva 60) continuou gastando em 26, 27 e 28/08 enquanto todo o resto estava
+> `sem_cota` — e é por isso que a semana de 17/08 fechou **618/550**. Dar 110 ao radar poderia
+> levar uma semana ruim a ~660. **É decisão de orçamento do dono, não de engenharia.**
+
+### ✔️ Conferido, para não trocar um problema por outro
+
+- **`teto_dia = 36` do radar (posto em 25/08 17:48) é suficiente:** o pull bem-sucedido de 25/08
+  custou **18 requests** e viu 923 itens. Os 88 de 24/08 foram **4 runs**, não um pull. Um pull
+  por dia cabe — que é o certo, o DJEN é diário. **Não mexi.**
+- **As cinco recusas de orçamento abortam e as duas falhas reais seguem com retry** — rodado em
+  seco sobre `ErroBrightData`: `teto_global`, `subcota`, `subcota_dia`, `reservado_para_outros`
+  e `cota_indisponivel` → abortam; `rede` e `http` → retry; `sem_config` → fetch direto.
+
+### ⏭️ Conferir na semana de 31/08 (quando a cota vira)
+
+```sql
+select proposito, requests, sucessos from brightdata_uso_proposito
+ where semana = date_trunc('week', now())::date order by requests desc;
+select ran_at, itens_vistos, itens_novos, left(erro,80) from monitor_runs
+ where fonte = 'radar-editais-djen' order by ran_at desc limit 10;
+```
+Verde = `radar` com `itens_vistos > 0` e `erro is null` em pelo menos um run do dia. Se voltar a
+aparecer `SEM COTA`, aí sim a conversa é de orçamento — e agora o log diz isso com todas as letras
+em vez de acusar o CNJ.
+
+---
+
+## 🗓️ 29/08 (sessão 14h) — SIM, O PAGO E O GRÁTIS RODAVAM NA MESMA FONTE, NO MESMO DIA
+
+Pergunta do dono: *"tem chance de estar rodando nos 2, no residencial e bright data?"*
+**Resposta medida: sim** — e o dia de hoje é o retrato exato.
+
+| horário (UTC) | quem | o que aconteceu |
+|---|---|---|
+| **10:29** | disparo oportunista → 4 workflows PAGOS | CALIL · VEGAS · TORRES3 · GESTAOLEILOES · RJLEILOES → todos `sem_cota` |
+| **13:02–13:17** | runner residencial | CALIL 11 · VEGAS 37 · TORRES3 37 · GESTAOLEILOES 104 · RJLEILOES 40 · VLANCE 24 — **R$ 0** |
+
+Não custou dinheiro hoje **só porque a cota semanal já estava saturada em 550/550**. Foi o teto
+que segurou, não o desenho. Nas segundas e terças, quando a semana vira e há cota, o mesmo
+disparo gasta de verdade.
+
+### 🔎 A causa: o freio de custo não valia no caminho que mais roda
+
+```yaml
+if: github.event_name != 'schedule' || steps.freio.outputs.pular != '1'
+```
+
+Escrito quando *dispatch* significava "um humano clicou". Só que `api/coleta-oportunista.js`
+dispara esses workflows **toda vez que o staff abre o app** (espaçamento de 20 h) — dispatch
+virou **evento automático diário**, e a condição fazia o freio de frescor **nunca se aplicar a
+ele**. O `coleta_oportunista_claim` também não ajudava: mede TEMPO DESDE O ÚLTIMO DISPARO e nada
+mais — nunca perguntou se o dado já estava no banco.
+
+Medido no histórico do Actions: os 4 workflows pagos rodaram por `workflow_dispatch`
+**todos os dias de 08/08 a 29/08**, e nos dias de cron rodaram **duas vezes**.
+
+**Quanto isso pesa:** na semana de 24/08 (**550/550, saturada**), `soleon 112 + pecini 63 +
+gestao 60 + rj 60` = **295 requests, 54% do teto**, nas quatro fontes que o residencial coleta
+de graça. A semana de 17/08 fechou **618/550 — acima do teto**.
+
+### 🔴 Achado colateral: o radar de editais custa MAIS quanto mais falha
+
+`radar` é o **2º maior consumidor** (106 na semana de 24/08; **88 num único dia**) e está em
+**403 há 4 dias** (26, 27, 28, 29/08 — 6/6 runs, `itens_vistos = 0`,
+`TRT15/alvará de venda: HTTP 403`).
+
+O gate do dia (`.is('erro', null)`) foi feito para **queda passageira**: re-tenta a cada 4 h até
+um pull dar certo. Com bloqueio **persistente**, nenhum run sai sem erro — então **os 6 runs do
+dia refazem o pull inteiro**, cada um pagando Bright Data (2 tribunais × 6 termos, cada combo
+re-tentando até 3×). Quanto pior a fonte, mais cara ela fica.
+
+### ✅ O que mudou
+
+1. **O freio passa a valer no disparo oportunista** (6 workflows: soleon, gestao, rj, pecini,
+   leilaopro, emiliomatos). Novo input `forcar` — `if: github.event.inputs.forcar == '1' ||
+   steps.freio.outputs.pular != '1'`. Cron e disparo oportunista respeitam o frescor; quem clica
+   de propósito e quer pagar mesmo assim passa `forcar=1`.
+   ⚠️ **Mudança de comportamento consciente:** dispatch manual com acervo fresco agora PULA.
+2. **`coleta-oportunista.js` pergunta antes de comprar** — checa o frescor do acervo e só dispara
+   o que está velho. A janela é **4 dias, medida e não estimada**: o gate residencial é de 72 h e
+   o acervo confirma (CALIL e TORRES3 gravaram em 20, 23, 26 e 29/08, de 3 em 3 dias); com limite
+   3 o acervo estaria sempre na borda e qualquer atraso de horas dispararia o pago à toa.
+   O frescor é conferido **antes do claim**, senão o claim carimbaria um disparo que não houve e
+   empurraria o próximo real por mais 20 h. A resposta passa a devolver `frescas[]` — freio que
+   age em silêncio é indistinguível de endpoint quebrado, e foi essa indistinção que deixou o
+   gasto duplo passar.
+3. **Disjuntor no radar** (`RADAR_MAX_TENTATIVAS_DIA`, padrão 2): duas tentativas cobrem a queda
+   passageira para a qual o gate existe; da terceira em diante, num dia inteiro de 403, só se
+   paga para ouvir o mesmo não. Vale **só para o pull** — o enriquecimento por IA da fila já
+   capturada continua rodando, e o dia seguinte recomeça do zero.
+
+### ✔️ Conferido antes de mexer (para não trocar um problema por outro)
+
+- **O sinal de frescor mede o que diz.** Nenhum trigger de `imoveis_leilao` escreve
+  `atualizado_em`, e o acervo confirma: a coluna **só se move em dia de coleta real** (21, 22, 24
+  e 25/08 não aparecem para essas fontes). Se um cron de enriquecimento a renovasse, o freio
+  calaria a coleta paga para sempre — forma nº 10 dentro do próprio freio.
+- **As duas redes de segurança seguem de pé.** Casa parou um ciclo → o pago acorda no 4º dia;
+  parou de vez → o cron semanal roda. E toda leitura falha do freio **dispara** (fail-open): erro
+  de leitura não é "está fresco".
+
+### ⏭️ O que conferir na próxima sessão
+
+- Semana de **31/08** (a cota vira): `brightdata_uso_proposito` deve cair perto de zero em
+  `soleon`/`gestao`/`rj`/`pecini` **enquanto o runner de casa estiver rodando**;
+- `radar`: se continuar em 403, o consumo cai a ~2 tentativas/dia — mas **o 403 em si segue
+  aberto** e é problema à parte (4 dias sem um edital novo);
+- `select proposito, requests, sucessos from brightdata_uso_proposito where semana = date_trunc('week', now())::date;`
+
+---
+
+## 🗓️ 29/08 (sessão 14f) — P1 FECHADO: `praca1_fim`/`praca2_fim` GANHARAM PRODUTOR
+
+As colunas nasceram em 28/08 para desfazer a conflação que tirou do ar um lote com **13 dias de
+pregão pela frente**. Um dia depois: **1 lote em 30.622** as tinha — o preenchido à mão. Os
+5 arquivos que as citam (`enviar-alertas-cron`, `gerar-analise`, `_leilao-encerrado`,
+`leilaoEncerrado.js`, `ImovelDetalhe.jsx`) eram **todos CONSUMIDORES**.
+
+### 🔎 A causa estava a uma linha, nos três produtores de data
+
+```js
+if (fim && !im.data_leilao_2) patch.data_leilao_2 = fim;   // enriquecer-lote ×2 + _doc-datas
+```
+
+`data_leilao_2` é o **INÍCIO** da 2ª praça. E `datas.fim` vinha de um `CTX_FIM` que casa **duas
+coisas incompatíveis**:
+
+```
+/encerr|término|fim d|final d|limite|até |fechamento    ← ENCERRAMENTO de verdade
+ |2[ªa°]?\s*praça|segunda\s*praça/                      ← ABERTURA da 2ª praça
+```
+
+Um encerramento gravado numa coluna de início — e as colunas criadas para recebê-lo nunca viam
+nada. Não era o produtor faltando: era o produtor **escrevendo no lugar errado**.
+
+### ✅ O que mudou
+
+- `CTX_FIM` separado em **`CTX_ENCERRAMENTO`** e **`CTX_PRACA_2`**; `extrairDatasLeilao` passa a
+  devolver `encerramento` e `praca2` como valores distintos (`fim` fica intacto, para
+  compatibilidade);
+- roteamento numa função só — **`roteiarDatasPraca`** — usada pelos **três** chamadores. A regra
+  em três cópias foi exatamente o que deixou o defeito passar em todas;
+- a resposta do endpoint da CEF passa a relatar o que foi **de fato gravado** (antes anunciava
+  `data_leilao_2` mesmo quando o valor tinha ido para outra coluna — forma nº 10 na própria saída).
+
+> ⚠️ **`data_fim` NÃO muda de valor.** O trigger `trg_data_fim_leilao` já faz
+> `greatest(praca2_fim, praca1_fim, data_leilao_2, data_leilao)`. O prazo continua o mesmo; o que
+> muda é a coluna que o carrega passar a dizer a verdade sobre o que ele é. **É essa propriedade
+> que tornou seguro mexer nisto no acervo inteiro** — o gate do relatório, o cron de desativação
+> e a ordenação da busca leem `data_fim`, e nenhum deles enxerga diferença.
+
+**A qual praça o encerramento pertence** sai da ORDEM, e só quando a ordem sustenta: antes da
+abertura da 2ª fecha a 1ª; a partir dela, fecha a 2ª; sem 2ª praça conhecida, é da praça única.
+**Havendo 2ª praça cuja abertura não se consegue ler, não grava nada** — a regra de 28/08 é
+explícita, praça_fim nunca é deduzida.
+
+### 🧪 11/11, e um dos testes pegou um defeito MEU
+
+A primeira versão do roteador, ao não conseguir situar o encerramento, caía no ramo da 1ª praça e
+**gravava mesmo assim** — dedução, exatamente o que a regra proíbe. O teste
+`2a praca ilegivel -> nao deduz` reprovou e a função ganhou a saída antecipada.
+
+Casos cobertos: a frase do edital da MEGA que originou as colunas · o `Abertura/Fechamento` da
+SUPORTE · `"2ª praça X"` classificado como **abertura** e não encerramento · os três ramos de
+roteamento · a guarda de fim-antes-do-início · não sobrescrever valor existente · e a
+**compatibilidade de `fim`**, que garante `data_fim` intacto.
+
+### 🔒 Trava de PARTIDA (e ela é honesta sobre o que é)
+
+**`praca_fim_sem_produtor`** (Captura/bug, limite 0) acusa enquanto o acervo tiver no máximo o
+lote preenchido à mão, e zera quando o pipeline gravar o segundo. **Não é vigilância contínua** —
+depois que zera não volta sozinha, e isso é deliberado: o defeito que ela pega é o do P1, coluna
+em produção esperando um produtor que ninguém escreveu, estado que durou de 28/08 até hoje sem
+nada acusar. A vigilância contínua já existe em `praca_fim_antes_do_inicio` e
+`praca2_antes_da_praca1`, que pegam o dado incoerente depois que ele começa a entrar.
+
+**Acusa agora (valor 1), de propósito** — é o estado real até o pipeline rodar. Zera quando
+`enriquecer-datas-cron`/`_doc-datas` lerem o primeiro edital que publique encerramento.
+
+### 📌 O `{estrito:true}` no `_doc-datas`: MEDIDO E DESCARTADO
+
+`_doc-datas.js` lê texto de edital sem `{estrito:true}`, e a âncora estrita existe exatamente
+para isso — parecia troca óbvia. **Medida em 22 editais REAIS da LJUD** (maior fonte documental,
+1.040 lotes com documento), todos com camada de texto, zero falhas de download:
+
+| | achou início | bate com o acervo |
+|---|---|---|
+| **solto** (atual) | 7/22 | **6** |
+| **estrito** | 5/22 | **4** |
+
+**20 de 22 idênticos.** Os 2 que divergem: nos DOIS o estrito **perdeu** o início que o solto
+achava, e nos dois o solto **batia com o acervo**. O estrito é estritamente PIOR — perde dado e
+não corrige erro nenhum. A razão: ele remove `início|inicio|abertura|data` da âncora, e
+"abertura"/"início" são justamente as palavras que rotulam a data da praça em muitos editais.
+**Não trocado**, e a medição ficou escrita no próprio arquivo para ninguém "consertar" isso depois.
+
+⚠️ **Limite honesto da amostra:** só a LJUD era alcançável — o bucket `documentos` é privado
+(sem service key na sessão) e o proxy do ambiente bloqueia os CDNs dos outros leiloeiros
+(`CONNECT tunnel failed, 403`). Revisitar exige medir em mais de uma fonte.
+
+### ✅ E a medição VALIDOU o produtor de praça recém-escrito
+
+Dos 22 editais, **4 (18%) produziram `encerramento`** — e os quatro caem 7 a 14 dias depois da 1ª
+praça (09/02→09/16 · 09/14→09/21 · 09/11→09/25 · 09/21→10/05), que é o intervalo clássico de 2ª
+praça. Nenhum valor absurdo. É exatamente o insumo que `praca1_fim`/`praca2_fim` precisavam e que
+nenhuma outra via fornece.
+
+E o dado que sustenta a decisão de 29/08 (*"ler edital NÃO é o caminho para data"*) aparece de
+novo: só **7 de 22** editais entregam a data de início, enquanto a listagem da LJUD entrega
+**100%**. O valor do edital aqui é o **encerramento**, não o início.
+
+**Arquivos:** `api/enriquecer-lote.js`, `api/_doc-datas.js`,
+`supabase/migrations/praca_fim_ganha_produtor_e_uma_trava_de_partida.sql` (aplicada).
+
+---
+
+## 🗓️ 29/08 (sessão 14e) — `conversoes: null` DO META NÃO ERA "NÃO CONVERTEU", ERA "NUNCA PERGUNTAMOS"
+
+100% das linhas do Meta em `marketing_metricas_dia` tinham `conversoes` nulo, contra número
+preenchido no Google. A causa, em `api/meta-insights-cron.js`:
+
+```js
+&fields=campaign_name,spend,clicks,impressions   // ← `actions` nunca foi pedido
+conversoes: null,                                 // ← e o mapper cravava null
+```
+
+**Forma nº 8 ao pé da letra:** *o que não é PEDIDO nunca chega para ser ignorado*. O campo não
+podia ser outra coisa senão nulo, e o CAC/ROAS do Meta ficava sem denominador com a verba rodando.
+
+### 🪤 A armadilha do mapeamento — e por que ela é a forma nº 10 esperando acontecer
+
+No Meta, conversão não é campo: vem em `actions: [{action_type, value}]`, e **as famílias se
+sobrepõem** — `purchase` e `offsite_conversion.fb_pixel_purchase` contam a **MESMA venda**.
+Somar tudo **dobra** o número; somar a família errada dá valor plausível e errado.
+
+Cada família passa a somar **o primeiro `action_type` presente** (agregado primeiro, pixel como
+reserva), nunca dois da mesma. As duas famílias são exatamente os eventos que NÓS mandamos pela
+CAPI (`_meta-capi.js`): **`Lead`** (inscrição na live) e **`Purchase`** (webhook de pagamento) —
+ler outra coisa mediria uma campanha que não é a nossa. Ruído (`landing_page_view`,
+`video_view`) fica de fora.
+
+E `actions` ausente **com o campo pedido** agora vira **`0`**, não `null`: antes o nulo dizia
+"não perguntei"; agora só sobra nulo se a apuração não rodar.
+
+### ⚠️ O antídoto do CLAUDE.md NÃO estava disponível — e o que foi feito no lugar
+
+A regra para ingestão externa é *rodar em seco sobre dado real antes de gravar*. **Não deu**: o
+`META_ADS_TOKEN` vive no painel da Vercel e não no ambiente da sessão, então não há como ver
+quais `action_type` a conta devolve de fato. Em vez de chutar e deixar o chute invisível:
+
+- **`marketing_metricas_dia.conversoes_detalhe`** (jsonb, nova) grava `por_tipo` (TODOS os
+  action_type que vieram) e `usados` (os que entraram na soma). O total fica **conferível contra
+  o Gerenciador de Anúncios** sem reabrir investigação;
+- o cron **loga os action_type distintos** de cada execução e os devolve no JSON de resposta —
+  se aparecer família fora da lista (`onsite_conversion.*`, `omni_purchase`, evento
+  personalizado), ela fica visível de imediato.
+
+**9/9 nos testes**, contra a função REAL (exportada para não testar uma cópia). O caso que mais
+importa: `purchase: 2` + `offsite_conversion.fb_pixel_purchase: 2` → **total 2, não 4**.
+
+### 🔒 A trava
+
+**`canal_sem_conversao_apurada`** (Marketing/bug, limite 0): canal com gasto nos últimos 3 dias e
+**nenhuma** linha com conversão apurada. Pega a classe inteira — campo não pedido, mapper cravando
+null, credencial trocada. Janela de 3 dias porque o cron reescreve os últimos 7: folga para ele já
+ter passado, e curta o bastante para não acusar eternamente o histórico anterior a 22/08, que a
+correção não alcança.
+
+> 📌 **Ele ACUSA agora (valor 1) de propósito** — o Meta gastou R$ 12,47 em 3 dias com zero
+> conversão apurada, que é o estado real até o cron rodar. `meta-insights-cron` roda **08h10 UTC**
+> e reescreve os últimos 7 dias. **Confirmar amanhã que zerou** — é a prova de que a correção
+> funcionou em produção, não só de que o código parece certo. Se continuar em 1, olhar
+> `action_types_vistos` na resposta do cron antes de mexer em qualquer outra coisa.
+
+**Arquivos:** `supabase/migrations/meta_conversoes_saem_do_nulo_e_o_mapeamento_fica_auditavel.sql`
+(aplicada), `api/meta-insights-cron.js`.
+
+---
+
+## 🗓️ 29/08 (sessão 14d) — A "CORTESIA" NÃO ERA CORTESIA DE CURSO, E A DATA NÃO VENCIA NADA
+
+Fecho da dúvida levantada em 14c. O dono perguntou **onde** essa cortesia é aplicada — se era a
+do curso (3 meses por curso judicial/extrajudicial) ou a promoção "contrata até fim de setembro".
+Rastreado antes de mexer, e **não era nenhuma das duas**:
+
+| Hipótese | Evidência que a derrubou |
+|---|---|
+| Cortesia de **curso** | O caminho existe (`regra_negocio['produto.concede_plano']` → `conceder_plano_usuario()`) e carimba `plano_ciclo='cortesia'`. Medido: **`cursos` = 0, `compras` = 0, `compras_produtos` = 0** — nunca rodou — e as duas contas estavam com `plano_ciclo='mensal'` |
+| Promoção de **setembro** | As datas são **+365 dias exatos** de concessões feitas em 14/07/2026 e 21/07/2026 |
+
+Eram duas **concessões manuais de 1 ano**. O dono decidiu: **por tempo indeterminado, limpar a
+data nas duas.** Feito.
+
+### 🎯 A data era a forma nº 10 em estado puro
+
+Um campo com nome de regra que ninguém aplica. O cron de vencimento
+(`reconciliar-assinaturas-cron.js`) filtra `plano_ciclo in ('anual','cortesia')` **E**
+`role in ('top2','top2_anual')` — um `assessorado` com ciclo `'mensal'` **não passa em nenhum
+dos dois**. O acesso já era permanente; a data só fazia quem lê o painel acreditar no contrário.
+
+Saiu junto o `plano_ciclo='mensal'`, que descrevia um ciclo de cobrança inexistente (zero
+pagamento, zero mandato) e faria a conta se passar por assinatura paga em qualquer leitura futura.
+
+### ✅ Conferido ANTES: limpar a data não expõe a outro rebaixamento
+
+Trocar um problema por outro seria pior que não mexer. Os três caminhos que rebaixam para
+explorador, e por que nenhum alcança estas contas:
+
+1. `reconciliar-assinaturas-cron:259` — loop de vencimento. Com `plano_vencimento` nulo o `.lt()`
+   nunca casa: a limpeza **reforça** o indeterminado em vez de arriscá-lo.
+2. `garantia-cancelar.js:137` — só por ação do próprio cliente.
+3. `suspenderPlanoDireto` (webhook vencido/chargeback) — exige evento de gateway, e as duas
+   contas não têm `mp_preapproval_id` nem `asaas_id`.
+   (`reconciliar-asaas-cron` só ATIVA — pula quem não é explorador.)
+
+**Alvo por CONDIÇÃO, não por UUID** ("tem vencimento, nunca pagou, sem mandato em gateway"):
+legível num banco recriado e sem fixar identificador de cliente em repo público. Dry-run antes:
+2 linhas, as duas esperadas.
+
+**Estado final:** `6b35b390` segue `assessorado` e `ativo`, agora indeterminado de verdade; os
+**4 pagantes reais ficaram intactos** (âncoras e `plano_ciclo='mensal'` preservados — a condição
+os exclui por terem cobrança aprovada); **nenhuma data decorativa sobrou** na base.
+`auditoria_seguranca()` 0/0 · `auditoria_regras_negocio()` 0 crítico · nenhum invariante novo.
+
+> 📌 Para a próxima sessão: `6b35b390` é concessão manual **indeterminada e intencional** (decisão
+> do dono, 29/08). Não tratar como bug de cobrança nem como pagante — ele aparece em `por_plano`
+> do 360 sem nunca ter pago. Quando o curso for cadastrado, a cortesia de **3 meses por curso**
+> (judicial/extrajudicial) passa pelo caminho próprio, que carimba `plano_ciclo='cortesia'`.
+
+**Arquivos:** `supabase/migrations/concessao_manual_indeterminada_limpa_data_decorativa.sql`
+(aplicada).
+
+---
+
+## 🗓️ 29/08 (sessão 14c) — A ÂNCORA DO CDC TINHA TRÊS CÉREBROS E NENHUM DONO
+
+Fechamento da pendência aberta em 14b, a pedido do dono. `perfis.plano_pago_em` é a âncora do
+**direito de arrependimento (CDC art. 49)**: `garantia-cancelar.js:105` faz
+`dentro7 = plano_pago_em && …`, então **âncora nula = reembolso NEGADO**, sem erro e sem rastro.
+
+### 🔴 O DEFEITO — "role pagante" usado como sinônimo de "já ancorado"
+
+A decisão estava em TRÊS pontos de JS (`ativarPlanoDireto`, `processarConfirmado`,
+`mp.js/ativarRoleInline`), sempre assim:
+
+```js
+if (!plano_pago_em && !PAGANTES.includes(role)) { ancora }
+```
+
+Quem vira pagante por um caminho que **não grava** a âncora (concessão manual, cortesia,
+ativação antiga) ficava preso: **o role pagante passava a bloquear para sempre a gravação que
+faltou.** Medido: **1 dos 4 pagantes reais** (`top2`, cobranças em 01/07 e 01/08, âncora nula).
+E o vetor estava vivo — a conta `assessorado` de cortesia cairia nele no dia em que pagasse.
+
+### ✅ A REGRA FOI PARA O BANCO, COMO CÉREBRO ÚNICO
+
+Não bastava consertar os três `if`. `auditoria_regras_negocio()` termina verificando que
+`solicitar_saque_ledger` delega a `saque_avaliar` — *"voltaram os dois cérebros"*. Regra de
+DINHEIRO com três cópias em JS é a mesma doença que fez *"explorador não saca"* virar letra
+morta em 08/08. Então:
+
+- **`public.garantia_7d_avaliar(uuid)`** — avaliador único, devolve `{ancorar, motivo, regra}`
+  com o **motivo nomeado** (`estreia` · `ja_ancorado` · `promovido_sem_cobranca` ·
+  `pagante_com_historico` · `perfil_nao_encontrado`).
+- **`regra_negocio['garantia.ancora_7d']`** com `aplicada_por = ['garantia_7d_avaliar']` — a
+  regra virou DADO, e o auditor confere sozinho que ela existe e é aplicada.
+- **`api/_ancora-cdc.js`** é só transporte (fetch puro — `mp.js` é Edge e não pode carregar o
+  `@supabase/supabase-js` do `_webhook-core.js`). Os três pontos agora consultam a mesma porta.
+
+**Verificado contra o dado real, nos 5 perfis de role pagante:**
+
+| | decisão |
+|---|---|
+| 4 pagantes já ancorados | `ja_ancorado` → não reancora (renovação não reinicia a janela) |
+| conta de **cortesia** | **`promovido_sem_cobranca` → ancora** — era o buraco vivo |
+
+E os ramos que precisavam continuar valendo: recontratação após cancelar cai em `estreia`
+(o `garantia-cancelar` rebaixa a explorador), então **ganha uma janela nova** — correto, e o
+reembolso em si segue limitado a UMA VEZ POR CPF via `reembolsos_garantia`.
+
+> ⚠️ **"Não consegui checar" não pode virar "pode ancorar".** Falha de rede, HTTP não-2xx ou
+> corpo inesperado devolvem `false` — preserva o comportamento vigente em vez de abrir uma
+> janela de reembolso por causa de um erro transitório. 5/5 nos testes de falha do transporte.
+
+### 🧾 O resíduo corrigido pela data REAL, não por `now()`
+
+O pagante sem âncora foi ancorado em **01/07/2026 21:01:49** — `dados_mp.date_approved` da
+primeira cobrança, que é quando o direito de fato começou. **Não usei `now()`**: isso inventaria
+uma janela de 7 dias vencida há 59 dias. Conferido no dry-run antes de rodar:
+**1 linha, `janela_ja_vencida: true`** — a correção **não concede reembolso nenhum**, só faz o
+registro dizer a verdade (o AdminFinanceiro imprimia "pgto —" para quem pagou duas vezes).
+
+### 🔒 A trava
+
+**`pagante_sem_ancora_cdc`** (Financeiro/**crítico**, limite 0): pagante com cobrança aprovada e
+`plano_pago_em` nulo. Lê **0**. O estado corrompido não volta em silêncio.
+
+**Arquivos:** `supabase/migrations/garantia_7d_um_cerebro_so_e_a_ancora_deixa_de_sumir.sql`
+(aplicada), `api/_ancora-cdc.js` (novo), `api/_webhook-core.js`, `api/mp.js`.
+`auditoria_regras_negocio()` **0 crítico** · `auditoria_seguranca()` **0/0** · build ✅.
+
+---
+
+## 🗓️ 29/08 (sessão 14b) — "PAGANTE SEM ENTREGA" NÃO ERA CHURN: O BOTÃO ESTAVA QUEBRADO
+
+Investigação dos 3 pagantes sem entrega que o 360 apontou. **Nenhum dos três era o que o
+rótulo dizia**, e no meio do caminho apareceu o defeito mais caro encontrado até aqui.
+
+### 🔴 O BOTÃO "SOLICITAR" DO `/caso` NUNCA FUNCIONOU PARA NENHUM CLIENTE
+
+```
+eventos_atividade · tipo=erro_ui · alvo="Solicitar"
+"new row violates row-level security policy for table analise_jobs"
+  6b35b390 (assessorado) · 23/08 22:19 e 24/08 14:18
+  9c35b10e (top2)        · 25/08 13:41
+```
+
+`analise_jobs` tinha **0 linhas em toda a história da tabela.**
+
+**A causa NÃO é a que o erro sugere.** A mensagem acusa a política de INSERT, e ela está
+correta. Medido por impersonação do JWT do cliente, em transação revertida:
+
+| | |
+|---|---|
+| `INSERT` puro | **RLS PASSOU** |
+| `INSERT … ON CONFLICT DO NOTHING RETURNING` | **42501** — o erro do cliente |
+
+É o **RETURNING**. No Postgres, INSERT com RETURNING também aplica as políticas de SELECT — e
+`analise_jobs` era a **única das 8 tabelas do fluxo do caso** sem política de SELECT para
+participante (só `jobs_admin_all`). O `rls_fluxo_caso_analise.sql` criou o INSERT e o par de
+leitura ficou de fora.
+
+> **A ironia é a parte que vale guardar.** O `.select()` que dispara o RETURNING foi
+> acrescentado em **19/08 para corrigir outro bug** (2º clique devolvia `error: null` com zero
+> linhas e queimava cota), obedecendo à forma nº 3 do CLAUDE.md — *"só `.select()` prova o que
+> mudou"*. Estava certo, e foi ele que transformou uma leitura vazia numa escrita impossível.
+> **Provar a escrita exige poder LER de volta.**
+
+**O segundo sintoma estava à vista e calado:** `Caso.jsx:638` lê `analise_jobs` e sem política
+de SELECT a RLS **filtra sem erro** (forma nº 3) — o painel dizia "0 de 4 concluídas" para
+sempre. E um instrumento independente já gritava: `tempo_processo()` reporta **8 casos parados
+em `analise_solicitada`, mediana 29 dias, "nenhum caso passou desta etapa"**. Ninguém passou
+porque o pedido era recusado.
+
+**Cota não foi queimada indevidamente** — em `Caso.jsx` o incremento vem depois do
+`if (error) throw error`. Os 8 casos só precisam que o cliente clique de novo.
+Corrigido, e provado com o mesmo teste: `SOLICITAR: PASSOU` · `PAINEL: 1 job visível`.
+
+### 🕳️ POR QUE FICOU 6 DIAS ESCONDIDO — são dois canais de erro, e só um é vigiado
+
+| Canal | O que carrega | Vigiado? |
+|---|---|---|
+| `erros_cliente` | exceção NÃO tratada / resposta ruim de API | ✅ 360, health-check, ritual |
+| `eventos_atividade` tipo `erro_ui` | erro TRATADO, que virou **mensagem na tela**, com o rótulo do botão | ❌ **ninguém** |
+
+O erro foi capturado pelo `Caso.jsx` e mostrado ao usuário — então caiu no canal sem vigia. O
+360 informava `erros_invisiveis_7d: 0` **enquanto três falhas que o cliente viu com os próprios
+olhos** estavam registradas. A inversão é o ponto: **o canal com menos vigilância é o que tem os
+erros de maior consequência** — o cliente não só foi afetado, ele viu.
+
+Novo invariante **`erro_na_tela_do_cliente`** (Atendimento/bug, limite 0, janela de 7 dias,
+exclui `role='admin'`). Nasce em **3** e se limpa sozinho até 01/09, já que a causa foi corrigida.
+
+### 🔒 A trava geral: escrita client-side sem leitura de volta
+
+Novo invariante **`rls_escreve_sem_ler`** (Infra/bug, limite 0): tabela com RLS em que o usuário
+pode INSERIR e não pode LER. Todo `.insert().select()` nela falha com 42501 e todo `.select()`
+devolve vazio sem erro — as duas metades do mesmo silêncio. O health-check já vigiava o inverso
+("RLS mas SEM escrita do usuário"); faltava este lado, que é o que morde quando o código obedece
+à forma nº 3. Lê **0** (nenhuma outra tabela tem o buraco).
+
+### 👤 E OS TRÊS "PAGANTES SEM ENTREGA"? O rótulo errava em dois
+
+A consulta do ritual mede *"sem linha em `analises_mercado` em 14 dias"* e reporta *"pagante sem
+entrega"* — forma nº 10. O que os três são de verdade:
+
+| | Realidade |
+|---|---|
+| **6b35b390** (assessorado) | **O MAIS ENGAJADO DA BASE** — 438 buscas, ativo 26/08, 17 imóveis vistos, funil completo (2 mercadológicos, 2 documentais, 1 laudo). Não estava sem entrega: **tentou pedir mais duas vezes e o botão recusou.** E **não tem nenhum pagamento** (0 em `mp_pagamentos`, `plano_vencimento` 2027-07-14) — é cortesia/manual, não pagante |
+| **b93b2411** (top2) | **Churn real.** Pagou 01/07 e 01/08 (R$ 99,80). Toda a atividade em 01–05/07; **55 dias parado**, e a próxima cobrança cai ~01/09 |
+| **37c2d966** (top2) | Pagou 06/08, triagem no mesmo dia, 35 buscas, usou o Índice 2×, visitou `/analises` — e **nunca gerou um relatório**. Última atividade 18/08 |
+
+> ⚠️ **Quase reportei uma cobrança em duplicidade que não existe.** `b93b2411` tem duas linhas
+> `approved` com `criado_em` de 01/08 e 02/08. Mas **`criado_em` é quando NÓS gravamos**: dezenas
+> de linhas `terceiro` têm o mesmo timestamp ao segundo — é ingestão em lote. As datas reais em
+> `dados_mp.date_approved` são **01/07 e 01/08**: mensalidade normal. Forma nº 10 outra vez, e só
+> não virou relatório porque a data foi conferida na fonte.
+
+### 🟠 PENDÊNCIA QUE FICA — a âncora dos 7 dias do CDC (decisão do dono)
+
+`b93b2411` é pagante (2 cobranças aprovadas) com **`plano_pago_em` NULO** — o único dos 4
+pagantes reais nessa situação. Essa coluna é a âncora do **art. 49 do CDC**, e
+`garantia-cancelar.js:105` faz `dentro7 = perfil.plano_pago_em && …` → **nulo = reembolso negado**.
+
+A causa é estrutural: em `_webhook-core.js` (linhas 247, 478) e `mp.js:102` o teste é
+`!plano_pago_em && !PAGANTES.includes(role)` — ou seja, **usa "o role já é pagante" como sinônimo
+de "já foi ancorado"**, e os dois não são a mesma coisa. Quem vira pagante por um caminho que não
+grava a âncora nunca mais consegue gravá-la. **Isso está vivo**: o `6b35b390` é `assessorado` de
+cortesia — se ele pagar um dia, cai exatamente nesse buraco.
+
+**Não mexi**: alterar a janela legal de arrependimento pode conceder reembolso não devido ou
+negar devido. Correção sugerida: trocar o proxy de role por "este é o 1º pagamento aprovado do
+usuário". Precisa da decisão do dono, e vale corrigir o dado do `b93b2411` junto (a janela dele
+venceu em 08/07 de qualquer forma — é registro, não reembolso).
+
+**Arquivos:** `supabase/migrations/analise_jobs_o_participante_precisa_LER_o_que_escreveu.sql`,
+`supabase/migrations/qa_invariante_erro_que_o_cliente_viu_na_tela.sql` — ambas **aplicadas**.
+`auditoria_seguranca()` segue **0 crítico / 0 atenção** com a política nova.
+
+---
+
+## 🗓️ 29/08 (sessão 14g) — MEDIR DERRUBOU A PENDÊNCIA 1, E MG ENTRA PELO RESIDENCIAL
+
+Duas frentes pedidas pelo dono depois do fecho: *"mede o mapper da MEGA antes de mexer"* e
+*"veja a lista de leiloeiros de MG para colocar no residencial e evitar consumir o Bright Data"*.
+
+### 1️⃣ MEGA — a medição reverteu a minha própria pendência
+
+Detalhe completo na **pendência 1** acima (agora marcada como resolvida). Em uma linha: trocar o
+mapper derrubaria `data_fim` de até 606 lotes para o passado, porque **nada segura o prazo** —
+`data_leilao_2` e `valor_minimo_2` estão zerados em 100% da fonte. O defeito real estava no
+**invariante**, que supunha `data_leilao` = abertura da 1ª praça. Corrigido, 1 → 0.
+
+> **A lição que fica:** eu tinha escrito a pendência com a solução junto (*"troque por `datas[0]`"*).
+> A solução estava errada, e só a medição mostrou. **Pendência deve registrar o SINTOMA medido; a
+> cura sai depois de medir, não antes.**
+
+### 2️⃣ Leiloeiros de MG — o gargalo não era coletar, era ENXERGAR
+
+```
+53 sites bloqueados na triagem da JUCEMG · 51 com `plataforma` NULA
+```
+
+E esse null **não** significa "não roda plataforma conhecida": significa que o Cloudflare devolveu
+*"Just a moment..."* e **o HTML nunca foi lido**. São 53 leiloeiros contados como "custa Bright
+Data" sem que se saiba se já teriam parser pronto — **dois já se sabe que sim**
+(`adrianoleiloeiro.com.br` e `angelabecharaleiloes.com.br`, ambos **Superbid**).
+
+`recon-triagem-jucemg.mjs` ganhou duas chaves e o passo entrou no `runner-residencial.sh`:
+
+| Env | O que faz |
+|---|---|
+| `TRIAGEM_HEADLESS=1` | quando o fetch simples é bloqueado, repete no **Chromium real** (`fetch-residencial.mjs`, o mesmo de GESTAO/RJ). **Nunca por padrão** — navegador só entra onde o simples não serviu |
+| `TRIAGEM_BLOQUEADOS=1` | a lista vem do **banco** (`leiloeiro_triagem where bloqueado`): ~53 páginas em vez de 141, e serve **JUCESP/JUCERJA/JUCEES** sem editar nada |
+
+**Bright Data continua fora** — descobrir segue custando R$ 0; o que mudou é que o "de graça"
+agora alcança quem está atrás do Cloudflare.
+
+**Três armadilhas evitadas no caminho** (as três teriam produzido silêncio ou alarme falso):
+- `fetchHeadless` devolvendo `null` **não** vira 200 vazio — senão o site sairia da lista de
+  bloqueados **sem nunca ter sido lido** (forma nº 1), apagando justo quem a rodada existe para
+  recuperar;
+- o passo **não** usa o helper `rodar`: aquele gate conclui com **prova de gravação no ACERVO**, e
+  a triagem grava em `leiloeiro_triagem` — imprimiria *"não gravou no acervo"* em toda rodada;
+- o script mede o **desfecho**, não o esforço: `DESTRAVADOS pelo residencial: N de 53` e, destes,
+  **quantos já têm parser** — a diferença entre configurar um tenant e escrever parser novo.
+
+> ⚠️ **Plataforma descoberta NÃO é lote coletado.** Em 29/08, 11 sites classificados como Superbid
+> enumeraram **ZERO** lotes: a assinatura de HTML provava que o site *menciona* a plataforma, não
+> que *roda* o catálogo. O script imprime esse aviso ao final, de propósito.
+
+**Depende do dono:** isso só roda quando o **runner residencial** estiver ligado — continua sendo
+o passo `[DONO]` pendente em `docs/RUNNER_RESIDENCIAL.md`. Quando rodar, o log já diz quantos
+leiloeiros de MG saíram do balde pago.
+
+### 📊 Mapeamento de viabilidade dos 53 — `docs/MAPEAMENTO_BLOQUEADOS_JUCEMG.md`
+
+Agrupados pelo **mecanismo de bloqueio**, que é o que decide se o residencial resolve:
+
+| Grupo | Sites | Leiloeiros | Prognóstico |
+|---|---|---|---|
+| **Cloudflare** (`just a moment`) | **47** | **51** | ✅ alta confiança |
+| **AWS ELB** (403 sem desafio) | 5 | 5 | ⚠️ outro mecanismo, incerto |
+| **Wordfence** (503) | 1 | 1 | ⚠️ reputação de IP |
+
+**O grupo A não é chute:** GESTAOLEILOES e RJ estavam exatamente neste estado e hoje rodam pelo
+residencial com o **mesmo** `fetch-residencial.mjs`. Mesmo bloqueio, mesmo código que o vence — só
+muda o IP de origem.
+
+⚠️ **Não deu para provar daqui, e a limitação é do ambiente:** o proxy do agente recusa o túnel
+para os 53 domínios **e até para `example.com`** (`ERR_TUNNEL_CONNECTION_FAILED` no Chromium,
+`CONNECT tunnel failed 403` no curl). É a mesma razão de existir do runner: IP de datacenter é o
+que o Cloudflare recusa. **Provado aqui:** Chromium sobe, e quando o headless falha o site
+**permanece bloqueado** em vez de virar 200 vazio.
+
+**Arquivos:** `scripts/recon-triagem-jucemg.mjs`, `scripts/runner-residencial.sh`,
+`docs/RUNNER_RESIDENCIAL.md`, migração
+`praca_fim_antes_do_inicio_deixa_de_supor_que_data_leilao_e_a_1a_praca` (aplicada).
+
+---
+
+## 🗓️ 29/08 (sessão 14h) — O RUNNER LIGOU: 53 DESTRAVADOS, 12 LEILOEIROS NOVOS, 1 FONTE RETIRADA
+
+O dono ligou o runner residencial na máquina dele. Três rodadas de medição, **custo R$ 0**.
+
+### ✅ Triagem residencial: 53 de 53 destravaram
+
+Inclusive os 5 do AWS ELB e o do Wordfence, que eu havia previsto como *"incertos"* —
+**previsão conservadora demais**, e fica registrado. **24 com parser pronto** (17 SOLEON, 7 SUPERBID).
+
+### ✅ SOLEON: 12 promovidos, ~635 imóveis — pelo DRY-RUN, não pela assinatura
+
+| Aprovados | catálogo |
+|---|---|
+| FERREIRALEIL 180 · JOAOEMILIO 171 · DANIELGARCIA 83 · ISAIAS 78 | |
+| APICE 47 · CERULI 38 · LANCEJA 11 · TMLEILOES 10 · PURCENA 9 · AGOSTINHO 6 | |
+| CASAMARTILLO 1 · INFINITY 1 (acervo pequeno, parser leu) | |
+
+**5 reprovados** — ALVESLEIL, LOUCOPORLEIL, UNIVERSOLEIL (0 enumerados), CLICLEILOES (1→0
+prontos), MARAURZEDO (0 **e `via null`** — nem acessou). Os zeros **provam que o dry-run valeu**:
+é o caso dos 11 Superbid de 29/08 — o site *menciona* a plataforma sem *rodar* o catálogo.
+
+### 🔴 SUPERBID: 6 de 6 reprovados — e o pior caso não foi o zero
+
+BHLEILOARIA, FRANCISCODAVID e DENIS trouxeram **75 lotes cada, com os MESMOS ids** do
+EMILIOMATOS. `/busca/segmento/imoveis` num white-label devolve o **catálogo global da rede**.
+Promovê-los duplicaria 75 × 3 sob fontes diferentes, **sem um único erro à vista**.
+
+> **O tenant que "funcionava" era mais perigoso que o que zerava.** Três fontes com 75 lotes
+> pareceriam sucesso de integração no log e no painel de saúde.
+
+### 🚨 E o achado que veio de brinde: uma fonte EM PRODUÇÃO gravava lote alheio
+
+O `EMILIOMATOS` tinha o mesmo defeito — os lotes sob o nome dele eram de outros leiloeiros.
+Não é regressão nova: é como sempre funcionou, e **sozinha a fonte enumerava 75 sem nada
+acusar**. Foi o multi-tenant que deu o instrumento; um leiloeiro medido isolado não tem com o
+que ser comparado.
+
+### 🔬 O recon fechou: não existe caminho por leiloeiro
+
+`scripts/recon-emiliomatos-por-leiloeiro.mjs` — **comparação diferencial entre dois
+white-labels**, porque a pergunta não tem resposta olhando um site só. 54 caminhos testados:
+todo caminho com lote nos dois deu **100% de sobreposição**. E o nome deles explica —
+**`redeSegmento`, `redeColaborativa`**: o site é vitrine da **rede**, não do leiloeiro.
+
+> ⚠️ **A v2 do recon produziu 2 falsos positivos, e o defeito era meu.** Marcou
+> `/imoveis-brb-na-ba-df-e-go-36495` como `POR_LEILOEIRO` por sobreposição 0% — mas os números
+> eram **`0 vs 6`**. Se filtrasse pelo leiloeiro, o emiliomatos traria *os lotes dele*, não
+> zero; zero num lado é **"existe num site e não no outro"**. E o slug terminado em id denuncia
+> que é um **leilão específico**, não catálogo — apontar o `catalogo` para ele congelaria a
+> coleta num evento que acaba.
+>
+> Corrigido: o extrator descarta caminhos com id no fim, e `POR_LEILOEIRO` **exige lote nos
+> DOIS sites**. `0 vs N` ganhou veredito próprio, **`SO_EM_UM`**. Era a forma nº 10 dentro do
+> instrumento feito para pegá-la.
+
+**Decisão: cron do EMILIOMATOS suspenso em definitivo**, 3 white-labels descartados. Reabrir
+exige a plataforma expor caminho filtrado — o recon é repetível e responde em minutos.
+
+### 📊 ONDE A COBERTURA FICA
+
+```
+30 fontes com lote ativo hoje (30.614 lotes) · 34 já coletaram alguma vez
++12 SOLEON entram na coleta de 01/09 13:02  →  42 fontes
+−1  EMILIOMATOS retirado (gravava lote alheio)
+```
+
+**Arquivos:** `scripts/scraper-soleon.mjs`, `scripts/lib/motor/fontes/emiliomatos.mjs`,
+`scripts/recon-emiliomatos-por-leiloeiro.mjs` (novo), `scripts/recon-triagem-jucemg.mjs`,
+`scripts/runner-residencial.sh`, `.github/workflows/scraper-emiliomatos.yml`,
+`docs/MAPEAMENTO_BLOQUEADOS_JUCEMG.md`, `docs/RUNNER_RESIDENCIAL.md`.
+
+---
+
+## 🔚 29/08 — ENCERRAMENTO DA SESSÃO 14 (a–h)
+
+Sessão aberta pelo ritual completo (heartbeat · Cliente 360 · Marketing · Saúde). **18 commits**,
+**8 migrações aplicadas**, **5 invariantes novos**. O fio condutor do dia foi um só: *quase todo
+achado veio de MEDIR o resultado, e quase nenhum apareceria em revisão de código* — inclusive dois
+que derrubaram hipóteses **minhas** (o `{estrito:true}` e a pendência do mapper da MEGA).
+
+### ✅ O QUE FOI FECHADO
+
+| # | Achado | Como apareceu |
+|---|---|---|
+| a | **`fonte_regressao_suspeita()` via 22 de 32 fontes** e chamava isso de íntegro — gate `mediana >= 20` + zero checagem de idade | rodando o instrumento e conferindo o que ele NÃO retornava |
+| b | **Recusa de orçamento gravada como falha da fonte** (21 linhas; RJ e PECINI ainda vivos) | lendo o `motivo` ao lado do `status` — diziam coisas opostas |
+| c | **O botão "Solicitar" do `/caso` nunca funcionou para NINGUÉM** (`analise_jobs` com 0 linhas na história) | perguntando por que 3 pagantes não tinham entrega |
+| d | **Âncora dos 7 dias do CDC** perdida em 1 dos 4 pagantes; regra em 3 cópias de JS | conferindo `plano_pago_em` × pagamento aprovado |
+| e | **`conversoes: null` do Meta** — o campo `actions` nunca foi pedido à API | comparando canal a canal no painel de marketing |
+| f | **`praca1_fim`/`praca2_fim` sem produtor** — o encerramento era gravado na coluna do início | varrendo quem CITA as colunas: 5 arquivos, todos consumidores |
+
+### 🧭 O QUE ESTE DIA ENSINOU (e vale mais que os consertos)
+
+1. **Três achados eram a mesma pergunta**: *este vazio é resposta, ou é falha que não sabe que
+   falhou?* — (a) fonte sem medição, (c) RLS filtrando sem erro, (e) campo nunca pedido.
+2. **A forma nº 10 apareceu 3× e uma delas quase virou relatório**: eu ia reportar uma cobrança
+   em duplicidade que não existe, porque `mp_pagamentos.criado_em` é quando NÓS gravamos, não
+   quando o cliente pagou. Só não virou porque a data foi conferida em `dados_mp.date_approved`.
+3. **Corrigir a linha sem corrigir o produtor não dura 24 h** — ver o item 1 das pendências.
+4. **Medir derrubou uma hipótese minha**: o `{estrito:true}` no `_doc-datas` parecia óbvio e é
+   estritamente PIOR (6 acertos → 4 em 22 editais reais).
+5. **Um teste pegou um defeito MEU** antes de subir: o roteador de praça, sem conseguir situar o
+   encerramento, gravava mesmo assim — dedução, justo o que a regra proíbe.
+
+### 📊 ESTADO EM QUE O DIA FECHA
+
+| Sinal | Valor |
+|---|---|
+| `auditoria_seguranca()` | **0 crítico / 0 atenção** ✅ |
+| `auditoria_regras_negocio()` | **0 crítico** ✅ (agora com `garantia.ancora_7d` registrada) |
+| Acervo | 30.622 ativos · **29.780 atualizados em 24 h** (97%) ✅ |
+| `erros_cliente` abertos | **2** — os dois do P5, conhecidos |
+| Convite da live | `convite_live_armado = 2026-09-02`, 0 envios (dispara domingo 08h UTC) |
+
+**5 invariantes em alerta, e NENHUM é surpresa** — 3 deles eu criei hoje justamente para acusar:
+
+- `praca_fim_sem_produtor` **1** · `canal_sem_conversao_apurada` **1** · `erro_na_tela_do_cliente` **3**
+  → **os três zeram sozinhos quando os consertos rodarem em produção.** É assim que amanhã se
+  confirma que funcionaram — não relendo o código.
+- `bd_teto_saturado` 550/495 → o freio funcionando; a semana vira **segunda (31/08)**.
+- `alerta_acima_do_capital` 2 → resíduo de 24/08, sai da janela em 31/08.
+
+> `praca_fim_antes_do_inicio` chegou a acusar 1 no fecho e **foi resolvido na sessão 14g**: era
+> falso positivo do próprio invariante, não dado ruim. Ver a pendência 1.
+
+---
+
+## 📌 PENDÊNCIAS PARA A PRÓXIMA SESSÃO (30/08)  ·  ⚠️ HISTÓRICO — substituída pela lista no TOPO
+
+### ✅ 1 — MAPPER DA MEGA: **MEDIDO, E NÃO SE MEXE** (resolvido em 29/08)
+
+> ⚠️ **Esta pendência foi escrita por mim e a medição a DERRUBOU.** Fica registrada como está
+> para que ninguém a "retome" achando que ficou pela metade.
+
+O que eu tinha proposto: trocar `datas.find(d => d >= agora)` (praça vigente) por `datas[0]`
+(a mais cedo) em `scripts/scraper-puppeteer.mjs:488`. Medido no acervo, **seria ativamente nocivo**:
+
+```
+606 lotes MEGA ativos · 606 com data · data_leilao_2: 0 · valor_minimo_2: 0
+data_fim == data_leilao em 606 de 606 · lotes com data já passada: 0
+```
+
+1. **`valor_minimo_2 = 0`** → o bloco de "praças emparelhadas" **nunca rende 2 praças** na MEGA.
+   Não há matéria-prima nem para a variante que usaria o `titulo` ("1ª Praça"/"2ª Praça").
+2. **`data_fim` acompanha `data_leilao` 1:1 em 100% dos lotes**, sem `data_leilao_2` para segurar
+   nada. Mover a data para a praça mais cedo derrubaria `data_fim` para o passado e o cron
+   **desativaria lote VIVO** — a avaria de 28/08, agora em escala de 606.
+3. **Nenhum lote tem data passada hoje** → a heurística da praça vigente não está produzindo dado
+   quebrado. Ela responde *"quando posso dar lance"*, que é uma pergunta legítima.
+
+**A raiz era o INSTRUMENTO, não o mapper.** `praca_fim_antes_do_inicio` comparava
+`praca1_fim < data_leilao` **supondo que `data_leilao` fosse a abertura da 1ª praça**. Fontes que
+gravam a praça vigente fazem um `praca1_fim` CORRETO parecer anterior à abertura. Era esse o único
+achado do invariante, e era falso. Passa a comparar só quando há **uma praça conhecida**
+(`data_leilao_2` e `praca2_fim` nulos). Dry-run antes de aplicar: **1 → 0**.
+
+> 📌 Isso importa para o produtor que subiu hoje: sem esse conserto, **cada `praca1_fim` novo
+> viraria alarme** conforme a fonte avançasse a data. O falso positivo teria crescido junto com a
+> cobertura — e seria lido como "o produtor novo está gravando errado".
+
+**O que fica em aberto** (menor e diferente do que a pendência dizia): a MEGA não publica a 2ª
+praça de forma que o coletor capture (`valor_minimo_2` zerado em 606). Enquanto isso, `praca2_fim`
+para essa fonte só virá pelo **edital**, via `_doc-datas`. Não é bug do mapper — é limite do que a
+listagem entrega.
+
+### 🟠 2 — Confirmar que os 3 invariantes novos zeraram
+`meta-insights-cron` roda **08h10 UTC**; se `canal_sem_conversao_apurada` continuar em 1, o
+primeiro lugar a olhar é `action_types_vistos` na resposta do cron.
+
+### 🟠 3 — CALIL e VEGAS: regressão real, só mensurável a partir de **segunda (31/08)**
+CALIL 9 contra piso 18 · VEGAS 2 contra mediana 15. Última medição real de 26/08 — o teto do
+Bright Data recusa desde então. **Medir antes de mexer em parser** (já houve 3 falsos positivos
+desta forma nesta base).
+
+### 🟠 4 — Fontes sem medição: EMILIOMATOS **218 h** · NORDESTE **193 h** · ALFA **193 h**
+Agora aparecem como `medicao_velha` em `fonte_regressao_suspeita()`. NORDESTE está com **0 lotes
+ativos**. VENDASGOV aparece como `zerou`.
+
+### 🟡 5 — Herdadas
+Os 3 pagantes/clientes do 360 (`b93b2411` churn com recobrança ~01/09 · `37c2d966` nunca gerou
+relatório · os 8 casos parados que agora podem clicar "Solicitar") · 41% sem triagem ·
+`/admin` timeout · `/planos` Leaflet · P2/P3/P4 de captura (BIASI, GRUPOLANCE, `leiloesjudiciais`,
+`suaplataformadeleilao`, recon do emiliomatos) · do dono: 1º advogado, `apresentador_foto`,
+OpenAI Ads.
+
+## 🗓️ 29/08 (sessão 14) — O INSTRUMENTO DO RITUAL VIA 22 DE 32 FONTES E DIZIA "ÍNTEGRO"
+
+Abertura de sessão com o ritual completo (heartbeat carimbado, 360 · marketing · saúde). O dia
+amanheceu no estado em que 13d fechou — `auditoria_seguranca()` 0/0, deploys READY, acervo com
+97% atualizado em 24 h. O trabalho saiu do item 2 do ritual, e o achado é **sobre o instrumento,
+não sobre os leiloeiros**.
+
+### 🔴 `fonte_regressao_suspeita()` tinha DOIS pontos cegos, e os dois devolvem silêncio
+
+Ela é lida no ritual com a regra *"vazio = íntegro"* e **não tem um único chamador em código** —
+é instrumento de leitura humana, e por isso envelheceu calada. É a **quarta vez** que o
+instrumento é o errado nesta base (17/08, 18/08, 27/08 e agora).
+
+| Ponto cego | O que escondia |
+|---|---|
+| **A — o gate `mediana >= 20`** de `fonte_baseline_aprendida().tem_baseline` | **10 das 32 fontes, PARA SEMPRE.** Leiloeiro pequeno era invisível por ser pequeno, não por estar são. Escondia **VEGAS com 2 lotes contra mediana 15** e as duas fontes PAGAS RJLEILOES e VENDASGOV |
+| **B — nenhuma checagem de IDADE** | A última medição real era comparada com o piso como se fosse de agora. **EMILIOMATOS com 9 dias**, ALFA e NORDESTE com 8 — todas respondendo "sem regressão" a partir de leitura da semana passada |
+
+O B é pior justamente hoje: com o teto do Bright Data saturado (**550/550**), a função pula as
+linhas `sem_cota` — corretamente — e a última medição real **recua um dia a cada dia**, sem nada
+mudar na tela.
+
+> ⚠️ **Correção de rota registrada:** no diagnóstico eu disse que *o monitor* era cego a isso.
+> **Errado** — `monitor-fontes-cron.js` pega frescor em `MAX_IDADE_H = 108`, e ALFA/NORDESTE
+> estavam na assinatura do e-mail de 28/08 como `coleta parada`. O cego era o instrumento SQL do
+> ritual, não o cron. Confirmar antes de acusar vale para o próprio diagnóstico.
+
+**A função reescrita devolve `motivo` nomeado** (`zerou` · `regressao` · `medicao_velha`), porque
+a lição de 13c foi essa: contador agregado descreve o sintoma e esconde a causa. `faltando` agora
+vem **nulo fora de `regressao`** — ali ele sairia negativo e plausível (*"faltando -19"*),
+descrevendo uma comparação que a função se recusa a fazer. Porte virou critério **por ramo**, não
+porteira de entrada. E "não consegui verificar" virou uma **linha**, não um vazio — mesmo
+princípio do `verificar:schema`, que reprova quando não consegue checar.
+
+```
+antes: 1 linha (CALIL)      depois: 6 linhas
+  zerou         VENDASGOV
+  regressao     CALIL (9/18) · VEGAS (2/8, invisível pelo gate)
+  medicao_velha EMILIOMATOS 216h · NORDESTE 191h · ALFA 191h
+```
+
+### 🚨 O PRÉ-REQUISITO — a forma nº 5 ainda viva em dois coletores
+
+Antes de mexer no instrumento apareceu o motivo pelo qual ele **não podia** ganhar um ramo
+`zerou` como estava: **21 linhas de `fonte_saude` gravaram recusa de ORÇAMENTO como
+`status='falhou'`** — e o filtro de `sem_cota`/`parcial_cota` (o conserto de 18/08) era
+contornado por elas, porque diziam `falhou`.
+
+- **`scraper-rj.mjs`** — a classe `FalhaDeAcesso` copiava só o `.motivo` do `ErroBrightData` e
+  **descartava o `.semCota` que ele já calculava**, um frame acima de onde era usado.
+  **8 linhas entre 13/08 e 29/08 (hoje)**, todas com `teto_global` escrito no motivo ao lado de
+  um status que dizia o contrário. Pior: várias ganharam um **`queda vs anterior (coletados 0<5)`
+  FABRICADO** por cima, porque `registrarSaude` comparou um zero de orçamento com a coleta
+  anterior. O conserto de 16/08 em `_saude-fonte.mjs` não alcançou este arquivo — ele monta o
+  objeto de validação por conta própria.
+- **`scraper-pecini.mjs`** — escrevia `sem cota: …` **na prosa do motivo e não no campo**
+  (1 linha, 19/08). É *literalmente* o que o comentário de 16/08 descreve como já corrigido.
+
+Corrigidos os dois na raiz, e o RJ ganhou também o `parcial_cota` que faltava: quando a cota
+corta **no meio**, ele gravava `ok` com um total truncado — que o piso aprendido **absorve**,
+puxando a linha de base para baixo a cada rodada cortada.
+
+**As 21 linhas foram reclassificadas** para `sem_cota` (conferidas uma a uma antes do `update`:
+todas com `total = 0` e o motivo dizendo "orçamento" por extenso, nenhuma ambígua).
+
+### 🔒 A trava contra a reincidência
+
+Consertar dois coletores não impede o terceiro. Novo invariante
+**`fonte_orcamento_como_falha`** (Captura/bug, limite 0, janela de 7 dias) acusa o sintoma no
+rastro do banco: linha `falhou` cujo motivo confessa orçamento. O casamento de prosa fica **aqui**
+— onde o trabalho é acusar a contradição — e **não** dentro da função de regressão, que trocaria
+um instrumento frágil por outro. Lê **0** agora.
+
+**Arquivos:** `supabase/migrations/fonte_regressao_diz_o_motivo_e_enxerga_o_que_nao_mediu.sql`
+(aplicada), `scripts/scraper-rj.mjs`, `scripts/scraper-pecini.mjs`, `CLAUDE.md`.
+Travas: `verificar:padroes` ✅ · `verificar:sintaxe` ✅ · `npm run build` ✅.
+
+### 📋 O QUE FICA PARA A PRÓXIMA SESSÃO (além do que 13d já listou)
+
+1. **CALIL e VEGAS têm regressão de verdade** (9/18 e 2/8) e **não dá para confirmar até
+   segunda**: o teto global recusa os 13 propósitos, e a última medição real das duas é de 26/08.
+   Quando a semana virar (31/08), medir ANTES de mexer em parser.
+2. **EMILIOMATOS 9 dias sem medição** — é o P4 de 13d, agora com número em cima.
+3. **ALFA e NORDESTE, 8 dias** — NORDESTE está com **0 lotes ativos** no acervo.
+4. **`Meta Ads` grava `conversoes: null` em todas as linhas** de `marketing_metricas_dia`
+   enquanto o Google grava número. `null` não é zero: hoje não dá para saber se a verba do Meta
+   comprou alguém.
+5. **Os "7 chamados fechados sem resposta humana" de `tempo_processo()` são 2.** A ingestão de
+   e-mail carimba `autor_tipo='cliente'` em tudo que chega na caixa — 3 dos 8 são **e-mails
+   transacionais NOSSOS** voltando ("A solicitação foi aprovada") e 3 são testes do dono. O
+   instrumento mede *"mensagem rotulada cliente"* e reporta *"o cliente falou"* (forma nº 10).
+   Os 2 reais: o lead de **Consórcio** (16/08) e **"Deu erro no meu relatório"** (06/07).
+
+---
+
 ## 🗓️ 29/08 (sessão 13d — ENCERRAMENTO) — O CLIENTE 360 ACHOU A PÁGINA QUE A VERBA PAGA
 
 Fechamento do dia a pedido do dono: *"Verifique o cliente 360 antes de encerrarmos para garantir

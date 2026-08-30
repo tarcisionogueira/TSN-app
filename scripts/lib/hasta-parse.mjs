@@ -38,6 +38,36 @@ export function extrairUrlsDeLote(html, base) {
 }
 export const idDaUrl = url => (String(url).match(/\/item\/(\d+)\/detalhes/) || [])[1] || null;
 
+/**
+ * NÍVEL 2 do motor — o catálogo da HASTA passou a ser POR LEILÃO (29/08, recon residencial).
+ * ═══════════════════════════════════════════════════════════════════════════════════════════
+ * A listagem por categoria `/lotes/imovel` parou de devolver lote. Medido, não suposto:
+ *   • 4 esperas (3,5s → 25s) devolveram a MESMA página de ~19,3 KB com 0 lote e o texto de
+ *     estado vazio — não é render lento, não é challenge (a página renderiza);
+ *   • os 3 lotes conhecidos do nosso acervo ABREM normalmente (48 KB, valores e praça lidos):
+ *     o acervo existe, quem não o mostra é a listagem;
+ *   • `/leilao/557/lotes` devolve **30 lotes** (a paginação de 30/pág) — e 557 é exatamente o
+ *     leilão do dump original no cabeçalho deste arquivo, comitente CAIXA;
+ *   • `/lotes/diversos` = 13 e `/lotes/veiculo` = 0: a listagem por categoria FUNCIONA, o que
+ *     sumiu dela foram os imóveis.
+ *
+ * Detalhe que amarra a cronologia: a 1ª praça era 28/08 e o 1º zero foi 29/08. Nos lotes que
+ * ainda abrem, a página agora mostra **uma só praça, 03/09** (a 2ª) — o site reescreveu o lote
+ * ao passar a 1ª praça, e é nesse momento que ele sai da vitrine por categoria.
+ *
+ * ⚠️ POR QUE NÃO APONTAR A FONTE PARA `/leilao/557/lotes` E PRONTO: leilão ACABA. Congelar o
+ * catálogo num evento é o erro que o recon do EMILIOMATOS documentou em 29/08 — a coleta
+ * pararia sozinha em 03/09 e ninguém saberia. Enumerar os eventos e entrar em cada um é o que
+ * sobrevive ao próximo leilão.
+ */
+export function extrairUrlsDeEvento(html, base) {
+  const eventos = new Map();
+  for (const m of String(html || '').matchAll(/href=["']([^"']*\/leilao\/(\d+)\/lotes[^"']*)["']/gi)) {
+    try { eventos.set(m[2], new URL(m[1], base).href); } catch { /* skip */ }
+  }
+  return eventos;
+}
+
 const ORD = '[º°o]';   // "1º" no detalhe, "2°" na listagem — e defesa p/ "1o"
 
 export function parseDetalhe(html, url) {

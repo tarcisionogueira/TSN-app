@@ -23,8 +23,32 @@ const rpc = (fn, args) => fetch(`${SB_URL}/rest/v1/rpc/${fn}`, {
 try {
   if (acao === 'claim') {
     const r = await rpc('coleta_cliente_claim', { p_fonte: fonte });
-    const liberado = r.ok && (await r.json().catch(() => false)) === true;
+    // "Não consegui perguntar" não é "a resposta foi não" (29/08). Um HTTP ruim caía na MESMA
+    // frase de fonte fora de janela, e banco fora do ar viraria uma rodada inteira "pulando".
+    if (!r.ok) {
+      console.error(`[gate] ${fonte}: NÃO CONSEGUI CONSULTAR o gate (HTTP ${r.status}) — pulando por precaução, mas isto NÃO é "fora da janela".`);
+      process.exit(5);
+    }
+    const liberado = (await r.json().catch(() => false)) === true;
     if (liberado) { console.log(`[gate] ${fonte}: liberado (é a hora)`); process.exit(0); }
+    // FONTE NÃO REGISTRADA É PULADA PARA SEMPRE, e dizia a mesma coisa que fonte em janela
+    // (29/08, achado no log do dono): `coleta_cliente_claim` faz `if not found then return
+    // false`, então quem esqueceu de inserir a linha vê "NÃO é a hora" todo dia, no meio de
+    // linhas idênticas de fontes saudáveis, e conclui que o gate está trabalhando. Foi o que
+    // aconteceu com a VENDASGOV no mesmo dia em que ela entrou no runner. Uma leitura a mais,
+    // só no caminho da recusa, transforma silêncio permanente em erro visível.
+    const ex = await fetch(`${SB_URL}/rest/v1/coleta_cliente?fonte=eq.${encodeURIComponent(fonte)}&select=fonte,ativo`,
+      { headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` } });
+    const linhas = ex.ok ? await ex.json().catch(() => null) : null;
+    if (Array.isArray(linhas) && linhas.length === 0) {
+      console.error(`[gate] ${fonte}: NÃO EXISTE em coleta_cliente — seria pulada PARA SEMPRE. `
+        + `Registre a fonte (insert em coleta_cliente com fontes_acervo) antes de esperar coleta.`);
+      process.exit(6);
+    }
+    if (Array.isArray(linhas) && linhas.length && linhas[0].ativo === false) {
+      console.log(`[gate] ${fonte}: DESATIVADA em coleta_cliente (ativo=false) — pulando de propósito.`);
+      process.exit(3);
+    }
     console.log(`[gate] ${fonte}: NÃO é a hora (2x/semana) ou já em curso — pulando`);
     process.exit(3);
   } else if (acao === 'concluir') {

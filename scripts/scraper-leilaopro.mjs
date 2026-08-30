@@ -8,6 +8,7 @@
  *   LEILAOPRO_MAX_PAGES (3) · LEILAOPRO_DRYRUN (default '1') · LEILAOPRO_DEBUG ('0').
  * Env infra: BRIGHTDATA_API_TOKEN, BRIGHTDATA_ZONE, VITE_SUPABASE_URL, SUPABASE_SERVICE_KEY.
  */
+import './lib/env-runner.mjs';   // carrega ~/.bidpro-runner.env quando rodado na mão
 import { createClient } from '@supabase/supabase-js';
 import { rodarFonte } from './lib/motor/runner.mjs';
 import cfg, { TENANTS_POR_CHAVE } from './lib/motor/fontes/leilaopro.mjs';

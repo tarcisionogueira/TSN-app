@@ -35,7 +35,13 @@ const TIPOS_ARREMATE = ['auto_arrematacao', 'carta_arrematacao', 'contrato_banco
 const TIPOS_OK     = ['matricula', 'edital', 'regras_venda', ...TIPOS_ARREMATE, 'outro'];
 // Só matrícula/edital são únicos por imóvel (índice parcial). Os demais tipos
 // aceitam vários arquivos — leilões podem ter anexos extras (laudo, ata, etc.).
-const TIPOS_UNICOS = ['matricula', 'edital'];
+// 29/08 — `carta_arrematacao` e `matricula_registrada` entram aqui porque cada imóvel tem UMA
+// de cada, e porque a tela oferece "Substituir" para elas: sem estarem nesta lista o botão
+// prometia trocar e o servidor INSERIA uma segunda linha, deixando duas cartas no mesmo imóvel
+// e a errada podendo ser a primeira que o leitor encontra. São também os dois documentos que
+// encerram a assessoria (`regra_negocio['assessoria.encerramento']`) — duplicata ali é ruído no
+// exato ponto que decide o fim de um serviço pago.
+const TIPOS_UNICOS = ['matricula', 'edital', 'carta_arrematacao', 'matricula_registrada'];
 const MAX_BYTES    = 20 * 1024 * 1024; // 20 MB
 const TIPOS_MIME   = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg'];
 

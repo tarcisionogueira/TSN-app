@@ -26,7 +26,7 @@
  * `enriquecer-datas-cron` levou 23/08 para descobrir na versão dele.
  */
 import { carregarPDFParse } from './_pdf-safe.js';
-import { extrairDatasLeilao } from './enriquecer-lote.js';
+import { extrairDatasLeilao, roteiarDatasPraca } from './enriquecer-lote.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -173,9 +173,32 @@ export async function enriquecerPeloDocumento(imovelId, atual = {}) {
     if (texto.replace(/\s+/g, '').length < 200) { ultimoMotivo = 'sem_camada_de_texto'; continue; }
 
     const patch = {};
-    const { inicio, fim, encerradaEm } = extrairDatasLeilao(texto);
+    // ⚠️ SEM `{estrito:true}` — E ISSO FOI MEDIDO, NÃO ESQUECIDO (29/08).
+    // A âncora ESTRITA existe para texto de edital (o comentário dela diz: num edital a
+    // palavra "data" aparece o tempo todo, "a contar da data do pagamento"), então a troca
+    // parecia óbvia. Medida em 22 editais REAIS da LJUD (a maior fonte documental, 1.040
+    // lotes com documento), todos com camada de texto:
+    //
+    //   20 de 22 IDÊNTICOS entre solto e estrito — a troca quase não muda nada;
+    //   2 DIVERGEM, e nos DOIS o estrito PERDEU o início que o solto achava;
+    //   contra a data do acervo (a listagem da LJUD entrega data em 100% dos lotes):
+    //     solto  → achou início em 7/22, BATE em 6
+    //     estrito→ achou início em 5/22, BATE em 4
+    //
+    // O estrito é estritamente PIOR nesta amostra: perde dado e não corrige nenhum erro. A
+    // razão é que ele remove `início|inicio|abertura|data` da âncora — e "abertura"/"início"
+    // são exatamente as palavras que rotulam a data da praça em muitos editais.
+    // Se for revisitar: mede de novo, em mais de uma fonte. Aqui só a LJUD era alcançável
+    // (o bucket `documentos` é privado e o proxy do ambiente bloqueia os CDNs dos outros).
+    const datas = extrairDatasLeilao(texto);
+    const { inicio, encerradaEm } = datas;
     if (inicio && !atual.data_leilao) patch.data_leilao = inicio;
-    if (fim && !atual.data_leilao_2) patch.data_leilao_2 = fim;
+    // ESTE é o caminho que a migração `praca_fim_prazo_real_de_lance.sql` designou para as
+    // colunas de encerramento: *"só são preenchidas quando o DOCUMENTO diz que aquilo é um
+    // encerramento"*. É aqui que o edital é lido — e até agora o encerramento que ele publica
+    // ("...e se encerrará no dia 10/09 às 14:30") era gravado em `data_leilao_2`, a coluna do
+    // INÍCIO da 2ª praça. Daí `praca1_fim`/`praca2_fim` estarem em 1 lote de 30.622.
+    Object.assign(patch, roteiarDatasPraca(datas, atual));
     if (encerradaEm && !atual.data_leilao && !atual.data_leilao_2) patch.data_leilao = encerradaEm;
 
     // ENDEREÇO ANCORADO — APROVADO PELA MEDIÇÃO (29/08) e agora gravado.

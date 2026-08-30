@@ -17,7 +17,7 @@ export const config = { runtime: 'nodejs', maxDuration: 300 };
 
 import { isCronAuthorized } from './_auth.js';
 import { createClient } from '@supabase/supabase-js';
-import { fetchViaBrightData, brightDataDisponivel } from './_brightdata.js';
+import { buscarViaBrightData, ErroBrightData, brightDataDisponivel } from './_brightdata.js';
 import { iaGeminiPrimary } from './_claude.js';
 
 const DJEN_BASE = 'https://comunicaapi.pje.jus.br/api/v1/comunicacao';
@@ -48,6 +48,15 @@ const DJEN_HEADERS = {
 const MAX_PAGINAS = 8;           // teto por (tribunal×termo): 8×100 = 800 itens
 const HARD_MS = 200000;          // teto do PULL (~200s) — garante fatia p/ a IA depois
 const BD_RETRIES = 2;            // re-tentativas do Bright Data qdo o DJEN dá 403/5xx (instável)
+// RE-TENTATIVAS DO CAMINHO DIRETO (29/08, medido na 1ª rodada residencial de verdade).
+// Eu tinha escrito o `transporteDireto` sem retry NENHUM enquanto o caminho pago tinha 2 — e a
+// assimetria estava no sentido errado: link doméstico oscila MAIS que datacenter, não menos.
+// O resultado apareceu na primeira rodada: `vistos=2093 novos=98` (o pull funcionou e gravou
+// 98 editais) e mesmo assim o run foi carimbado como FALHA por UM combo em 12 —
+// `TRT15/edital de leilão: fetch failed`, erro de rede, não do DJEN. Sem retry, quase toda
+// rodada de casa teria um combo caindo, o residencial NUNCA registraria sucesso e o Bright Data
+// voltaria a cada 7 dias para fazer o que já tinha sido feito de graça.
+const DIRETO_RETRIES = Number(process.env.RADAR_DIRETO_RETRIES || 2);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '')
@@ -246,38 +255,102 @@ async function enriquecerEditaisComIA(supabase, ehIntegrado, t0) {
 // Campos do item DJEN vêm com nomes variados entre versões — pega o 1º que existir.
 const g = (o, ...ks) => { for (const k of ks) { if (o && o[k] != null && o[k] !== '') return o[k]; } return null; };
 
-async function buscarDJEN(tribunal, termo, ini, fim, t0) {
+/**
+ * Marcador para abortar o PULL INTEIRO quando a recusa é de ORÇAMENTO.
+ * Existe porque "não tenho cota" não é uma propriedade deste combo tribunal×termo — é do
+ * sistema. Tentar os outros 11 combos depois dela é gastar 4,5 s de backoff por combo para
+ * receber exatamente a mesma resposta.
+ */
+export class SemCotaRadar extends Error {
+  constructor(detalhe) { super(detalhe || 'cota Bright Data esgotada'); this.name = 'SemCotaRadar'; }
+}
+
+// ─── OS DOIS TRANSPORTES ────────────────────────────────────────────────────────────────────
+// A ÚNICA diferença entre coletar o DJEN pela Vercel e coletar de casa é o transporte. Todo o
+// resto — janela, filtro duro, parser do edital, dedup, upsert — é idêntico, e por isso vive
+// numa função só (`pullDJEN`). Duplicar o parser num script residencial seria repetir o defeito
+// que o `roteiarDatasPraca` consertou em 29/08: a mesma regra em três cópias deixou o bug passar
+// nas três.
+//
+// Cada transporte devolve o JSON da página ou LANÇA. Nenhum devolve `null` — `null` foi
+// exatamente o que transformou "cota estourada" em "HTTP 403 do CNJ" por quatro dias.
+
+/** Vercel/CI: IP de datacenter é barrado pelo DJEN, então vai pelo Bright Data (IP residencial). */
+async function transporteBrightData(url, t0, hardMs) {
+  // O DJEN bloqueia o IP de datacenter da Vercel (403 PERSISTENTE — validado: nem UA nem
+  // Origin/Referer de navegador resolvem). Então vai DIRETO no Bright Data, sem gastar ~23s/página
+  // em tentativas diretas fadadas ao 403. A tentativa direta fica só para BD não configurado.
+  //
+  // ─── 29/08: O "403 DO DJEN" ERA O FREIO DE CUSTO USANDO O CRACHÁ DO CNJ ────────────────
+  // Isto usava `fetchViaBrightData`, que devolve **null** para quatro coisas diferentes: sem
+  // config, teto global, sub-cota e erro de rede. Com a cota estourada:
+  //   null → `transiente = !resp` → dorme 1,5 s + 3 s → null de novo → fetch DIRETO
+  //        → o DJEN 403 o IP da Vercel → `throw new Error('HTTP 403')`
+  // Medido: `brightdata_uso_proposito_dia` não tem UMA linha de `radar` em 26–29/08 (o BD nunca
+  // foi chamado) e o `duracao_ms` dos 24 runs bate em ~61 s = 12 combos × 4,5 s de `sleep` puro.
+  // Forma nº 5 e nº 10 do CLAUDE.md na mesma linha.
+  let json, ultimoStatus = 0, bdIndisponivel = !brightDataDisponivel();
+  if (!bdIndisponivel) {
+    // O DJEN é instável: alguns combos devolvem 403/5xx MESMO via Bright Data, mas voltam no
+    // retry segundos depois. Backoff curto (1,5s→3s). 200/404 NÃO re-tenta (resposta definitiva).
+    for (let tent = 0; tent <= BD_RETRIES; tent++) {
+      let resp = null;
+      try {
+        resp = await buscarViaBrightData(url, { headers: DJEN_HEADERS, proposito: 'radar', timeoutMs: 30000, exigirOk: false });
+      } catch (e) {
+        if (!(e instanceof ErroBrightData)) throw e;
+        // ORÇAMENTO: sobe e aborta o pull inteiro. Não dorme, não tenta direto, não tenta os
+        // outros combos — nada disso mudaria a resposta, e o custo seria só tempo de função.
+        if (e.semCota) throw new SemCotaRadar(e.detalhe || e.message);
+        if (e.motivo === 'sem_config') { bdIndisponivel = true; break; }
+        // `rede`/`http`: falha de verdade, e essa SIM costuma passar no retry.
+      }
+      if (resp && resp.ok) { try { json = JSON.parse(await resp.text()); } catch { /* corpo não-JSON */ } break; }
+      if (resp) ultimoStatus = resp.status;
+      const transiente = !resp || resp.status === 403 || resp.status === 429 || resp.status >= 500;
+      if (!transiente || tent === BD_RETRIES || Date.now() - t0 > hardMs) break;
+      await sleep(1500 * (tent + 1));
+    }
+  }
+  // ÚLTIMO recurso: só faz sentido com o Bright Data INDISPONÍVEL (sem credencial) — com cota
+  // estourada já saímos acima, e era esta tentativa que fabricava o "403 do DJEN".
+  if (!json && bdIndisponivel) json = await transporteDireto(url).catch(() => null);
+  if (!json) throw new Error(`HTTP ${ultimoStatus || 'sem resposta'}`);
+  return json;
+}
+
+/**
+ * Runner RESIDENCIAL: fetch direto, R$ 0. O bloqueio do DJEN é por CLASSE DE IP (datacenter),
+ * não por assinatura de requisição — é exatamente por isso que o Bright Data, que sai por IP
+ * residencial, sempre passou. De casa o IP já é residencial, então o intermediário é dispensável.
+ */
+export async function transporteDireto(url, _t0, _hardMs, tentativas = DIRETO_RETRIES) {
+  let ultimo;
+  for (let tent = 0; tent <= tentativas; tent++) {
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), 30000);
+    let definitivo = false;
+    try {
+      const resp = await fetch(url, { headers: DJEN_HEADERS, signal: ctrl.signal });
+      if (resp.ok) return await resp.json();
+      ultimo = new Error(`HTTP ${resp.status}`);
+      // 4xx que não seja 429 é resposta DEFINITIVA: re-tentar só gasta tempo.
+      definitivo = resp.status < 500 && resp.status !== 429;
+    } catch (e) {
+      ultimo = e;   // rede/timeout/JSON inválido — transiente, vale re-tentar
+    } finally { clearTimeout(to); }
+    if (definitivo || tent === tentativas) break;
+    await sleep(1500 * (tent + 1)); // 1,5s, depois 3s — igual ao caminho pago
+  }
+  throw ultimo || new Error('sem resposta');
+}
+
+async function buscarDJEN(tribunal, termo, ini, fim, t0, transporte, hardMs) {
   const out = [];
   for (let pagina = 1; pagina <= MAX_PAGINAS; pagina++) {
     const url = `${DJEN_BASE}?siglaTribunal=${encodeURIComponent(tribunal)}&texto=${encodeURIComponent(termo)}`
       + `&dataDisponibilizacaoInicio=${ini}&dataDisponibilizacaoFim=${fim}&itensPorPagina=100&pagina=${pagina}`;
-    // O DJEN bloqueia o IP de datacenter da Vercel (403 PERSISTENTE — validado: nem UA nem
-    // Origin/Referer de navegador resolvem). Então vai DIRETO no Bright Data (IP residencial),
-    // sem gastar ~23s/página em tentativas diretas fadadas ao 403 (economia de tempo E de
-    // requests). A tentativa direta fica só como ÚLTIMO recurso (ex.: cota do BD estourada).
-    let json, ultimoStatus = 0;
-    if (brightDataDisponivel()) {
-      // O DJEN é instável: alguns combos tribunal×termo devolvem 403/5xx MESMO via Bright Data
-      // (IP residencial) — mas voltam no retry segundos depois. Então re-tenta com backoff curto
-      // (1,5s→3s) antes de desistir da página. 200/404/etc. NÃO re-tenta (resposta definitiva).
-      for (let tent = 0; tent <= BD_RETRIES; tent++) {
-        const resp = await fetchViaBrightData(url, { headers: DJEN_HEADERS, proposito: 'radar', timeoutMs: 30000 });
-        if (resp && resp.ok) { try { json = JSON.parse(await resp.text()); } catch { /* corpo não-JSON */ } break; }
-        if (resp) ultimoStatus = resp.status;
-        const transiente = !resp || resp.status === 403 || resp.status === 429 || resp.status >= 500;
-        if (!transiente || tent === BD_RETRIES || Date.now() - t0 > HARD_MS) break;
-        await sleep(1500 * (tent + 1)); // 1,5s, depois 3s
-      }
-    }
-    if (!json) { // ÚLTIMO recurso: tenta direto (normalmente 403, mas cobre BD indisponível/cota)
-      const ctrl = new AbortController();
-      const to = setTimeout(() => ctrl.abort(), 20000);
-      try {
-        const resp = await fetch(url, { headers: DJEN_HEADERS, signal: ctrl.signal });
-        if (resp.ok) json = await resp.json(); else ultimoStatus = resp.status;
-      } catch { /* rede/timeout */ } finally { clearTimeout(to); }
-    }
-    if (!json) throw new Error(`HTTP ${ultimoStatus || 'sem resposta'}`);
+    const json = await transporte(url, t0, hardMs);
     const items = json?.items || json?.content || json?.comunicacoes || [];
     if (!items.length) break;
     out.push(...items);
@@ -285,6 +358,138 @@ async function buscarDJEN(tribunal, termo, ini, fim, t0) {
     if (count && pagina * 100 >= count) break;
   }
   return out;
+}
+
+/**
+ * O PULL DO DJEN — um só, para os dois caminhos (Vercel/Bright Data e runner residencial).
+ * A única coisa que varia entre eles é o `transporte`; janela, filtro duro, parser, dedup e
+ * upsert são idênticos. Manter isto numa função só é decisão consciente: em 29/08 o
+ * `roteiarDatasPraca` nasceu porque a MESMA regra em três cópias deixou o defeito passar nas
+ * três, e um radar residencial com parser próprio repetiria o erro em escala maior.
+ *
+ * Não grava `monitor_runs` — quem chama grava, porque a ORIGEM (`vercel` ou `residencial`) é
+ * do chamador e precisa aparecer na linha.
+ */
+export async function pullDJEN({ supabase, ini, fim, ehIntegrado, t0, transporte, hardMs = HARD_MS, tribunais = TRIBUNAIS, termos = TERMOS }) {
+  let vistos = 0, novos = 0, descartados = 0, erroGeral = null, cortadoPorTempo = false, semCota = false;
+ try {
+  for (const tribunal of tribunais) {
+    if (cortadoPorTempo || semCota) break;
+    for (const termo of termos) {
+      // 19/08: o break por HARD_MS só saía do laço de TERMOS (reentrava a cada tribunal) e
+      // NÃO setava erroGeral — o run parcial gravava `erro: null` e o gate do dia
+      // (`.is('erro', null)`) fazia TODOS os runs seguintes pularem o pull: 3 de N
+      // tribunais coletados encerravam a captura do dia inteiro anunciando sucesso.
+      if (Date.now() - t0 > hardMs) { cortadoPorTempo = true; break; }
+      let items = [];
+      try { items = await buscarDJEN(tribunal, termo, ini, fim, t0, transporte, hardMs); }
+      catch (e) {
+        // ORÇAMENTO ≠ FALHA DA FONTE. Sem cota, o pull inteiro para aqui: os 11 combos
+        // restantes dariam a mesma recusa, e é essa distinção que faltava no log — quatro
+        // dias apareceram como "o CNJ nos bloqueou" quando ninguém tinha chamado o CNJ.
+        if (e instanceof SemCotaRadar) {
+          semCota = true;
+          erroGeral = `SEM COTA Bright Data — pull não tentado (decisão de orçamento, não bloqueio do DJEN): ${String(e.message).slice(0, 90)}`;
+          break;
+        }
+        erroGeral = `${tribunal}/${termo}: ${String(e.message).slice(0, 80)}`;
+        continue;
+      }
+      vistos += items.length;
+      if (!items.length) continue;
+
+      // Monta linhas; dedup por djen_id (só insere as inéditas).
+      const linhas = items.map((it) => {
+        const djenId = String(g(it, 'id', 'numeroComunicacao', 'hash', 'idComunicacao') || '');
+        const texto = String(g(it, 'texto', 'inteiroTeor', 'teor', 'conteudo') || '');
+        const tipoDoc = g(it, 'tipoDocumento', 'tipoComunicacao', 'tipo');
+        if (!ehEditalReal(texto, tipoDoc)) return null; // FILTRO DURO: fora despacho/decisão que só cita "leilão"
+        const p = parseEdital(texto);
+        const orgao = g(it, 'nomeOrgao', 'orgao', 'nomeVara');
+        const nomeLeiloeiro = p.leiloeiro_nome;
+        return {
+          djen_id: djenId || null,
+          fonte: 'djen',
+          tribunal: g(it, 'siglaTribunal', 'tribunal') || tribunal,
+          numero_processo: g(it, 'numeroProcesso', 'numero_processo', 'numeroprocessocommascara'),
+          orgao, comarca: orgao, uf: 'SP',
+          classe: g(it, 'nomeClasse', 'classe'),
+          tipo_documento: tipoDoc,
+          data_disponibilizacao: (String(g(it, 'data_disponibilizacao', 'dataDisponibilizacao', 'datadisponibilizacao') || fim)).slice(0, 10),
+          data_praca_1: p.data_praca_1, data_praca_2: p.data_praca_2,
+          leiloeiro_nome: nomeLeiloeiro, leiloeiro_nome_norm: nomeLeiloeiro ? norm(nomeLeiloeiro) : null,
+          leiloeiro_jucesp: p.leiloeiro_jucesp, leilao_plataforma_url: p.leilao_plataforma_url,
+          leiloeiro_integrado: nomeLeiloeiro ? ehIntegrado(nomeLeiloeiro) : false,
+          valor_avaliacao: p.valor_avaliacao, lance_minimo: p.lance_minimo,
+          imovel_matricula: p.imovel_matricula, imovel_area_m2: p.imovel_area_m2,
+          imovel_cidade: p.imovel_cidade, imovel_uf: p.imovel_uf || 'SP', imovel_endereco: p.imovel_endereco,
+          debitos: p.debitos, ocupacao: p.ocupacao, cartorio: p.cartorio,
+          texto_integral: texto.slice(0, 20000),
+          hash_dedup: djenId ? null : norm(`${tribunal}|${g(it, 'numeroProcesso') || ''}|${texto.slice(0, 200)}`),
+          payload: it,
+          status: p.status,
+        };
+      }).filter((r) => r && (r.djen_id || r.hash_dedup));
+      descartados += items.length - linhas.length;
+
+      // Só as inéditas (evita reprocessar): confere djen_id já existentes.
+      const ids = linhas.map((r) => r.djen_id).filter(Boolean);
+      const existentes = new Set();
+      for (let i = 0; i < ids.length; i += 200) {
+        try {
+          const { data } = await supabase.from('editais_leilao').select('djen_id').in('djen_id', ids.slice(i, i + 200));
+          for (const r of data || []) existentes.add(r.djen_id);
+        } catch { /* aditivo */ }
+      }
+      const inserir = linhas.filter((r) => !r.djen_id || !existentes.has(r.djen_id));
+      if (inserir.length) {
+        const { error } = await supabase.from('editais_leilao').upsert(inserir, { onConflict: 'djen_id', ignoreDuplicates: true });
+        if (!error) novos += inserir.length;
+        else erroGeral = `upsert: ${String(error.message).slice(0, 80)}`;
+      }
+    }
+  }
+ } catch (e) {
+  erroGeral = String(e.message).slice(0, 120);
+ }
+  return { vistos, novos, descartados, erroGeral, cortadoPorTempo, semCota };
+}
+
+/**
+ * Leiloeiros que JÁ raspamos (nome normalizado) → marca `leiloeiro_integrado` no edital.
+ * Exportado porque o runner residencial precisa do MESMO critério: se cada caminho decidisse
+ * "integrado" por conta própria, o mesmo edital entraria diferente conforme quem coletou.
+ */
+export async function construirEhIntegrado(supabase) {
+  const integrados = new Set();
+  try {
+    const { data, error } = await supabase.from('imoveis_leilao').select('leiloeiro').eq('ativo', true).not('leiloeiro', 'is', null).limit(5000);
+    if (error) throw new Error(error.message);
+    for (const r of data || []) { const n = norm(r.leiloeiro); if (n.length >= 4) integrados.add(n); }
+  } catch { /* aditivo: sem a lista, nenhum edital sai marcado — pior que isso seria não coletar */ }
+  return (nome) => {
+    const n = norm(nome);
+    if (n.length < 4) return false;
+    for (const i of integrados) { if (i.includes(n) || n.includes(i)) return true; }
+    return false;
+  };
+}
+
+/**
+ * A JANELA DESLIZANTE, e por que ela não é fixa em 3 dias.
+ *
+ * 3 dias cobre a coleta DIÁRIA (pega item carregado com atraso; o dedup resolve a repetição).
+ * Mas o caminho pago virou rede de segurança SEMANAL (decisão do dono, 29/08: "caso fique 7
+ * dias sem rodar no residencial, pode rodar pelo Bright Data") — e uma janela de 3 dias numa
+ * passada semanal **perderia 4 dias de editais em silêncio**, com o run saindo verde.
+ * Então a janela acompanha o buraco real: `dias desde o último sucesso + 1`, nunca menos que 3.
+ * Teto de 15 para o custo não explodir depois de uma ausência longa (cada dia a mais é mais
+ * página por combo) — e a perda além disso é registrada, não escondida.
+ */
+export function janelaDJEN(diasDesdeSucesso, tetoDias = 15) {
+  const dias = Math.min(tetoDias, Math.max(3, Math.ceil(Number(diasDesdeSucesso) || 0) + 1));
+  const hoje = new Date();
+  return { ini: ymd(new Date(hoje.getTime() - dias * 86400000)), fim: ymd(hoje), dias };
 }
 
 export const GET = handler;
@@ -297,112 +502,105 @@ async function handler(req) {
   const t0 = Date.now();
   const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 
-  // ── AUTO-AJUSTE + RESILIÊNCIA (o DJEN cai com frequência) ──────────────────────────────
-  // O cron roda a cada 4h, mas SÓ trabalha até obter um pull BEM-SUCEDIDO do DJEN no dia. Se o
-  // DJEN estiver fora do ar, o run grava o erro e o PRÓXIMO (4h depois) TENTA de novo, até
-  // conseguir; após um sucesso no dia, os runs seguintes SAEM CEDO (quase de graça) → economia
-  // + garantia de captura. "Sucesso" = o DJEN respondeu sem erro (mesmo com 0 editais no dia).
-  // Bypass manual com ?forcar=1.
+  // Bypass manual de todos os freios abaixo: ?forcar=1.
+  // ── FREIO DO CAMINHO PAGO (29/08, decisão do dono) ─────────────────────────────────────
+  // "Vou rodar diariamente [o residencial]; caso fique 7 dias sem rodar no residencial, pode
+  // rodar pelo Bright Data." A captura do DJEN passou a ser do runner de casa (grátis, IP
+  // residencial — `scripts/radar-editais-residencial.mjs`), e ESTE cron virou rede de
+  // segurança SEMANAL, não diária.
+  //
+  // O sinal é o ACERVO DE RUNS, não um carimbo de "rodei": um pull bem-sucedido de QUALQUER
+  // caminho grava `monitor_runs` com `erro: null`, e é isso que conta. Mesma virada que o
+  // `coleta-recente.mjs` fez em 11/08 — carimbo de execução mente quando o script sai com
+  // exit 0 sem ter trazido nada; a evidência do resultado, não.
+  const DIAS_REDE_SEGURANCA = Number(process.env.RADAR_DIAS_REDE_SEGURANCA || 7);
+  const MAX_TENTATIVAS_DIA = Number(process.env.RADAR_MAX_TENTATIVAS_DIA || 2);
   const forcar = /[?&]forcar=1/.test(req.url || '');
-  let pulouPull = false; // pull do DJEN já feito hoje → pula a captura, mas a IA ainda enriquece
+  let pulouPull = false; // pull já resolvido → pula a captura, mas a IA ainda enriquece
+  let motivoPulo = null, jaRegistrado = false;
+  let diasDesdeSucesso = Infinity;
   if (!forcar) {
     try {
-      const { data: ok } = await supabase.from('monitor_runs')
-        .select('id').eq('fonte', 'radar-editais-djen').is('erro', null)
-        .gte('ran_at', ymd(new Date()) + 'T00:00:00Z').limit(1);
-      if (ok && ok.length) pulouPull = true;
-    } catch { /* se a checagem falhar, roda o pull normalmente */ }
+      const { data: ultimoOk, error: eOk } = await supabase.from('monitor_runs')
+        .select('ran_at').eq('fonte', 'radar-editais-djen').is('erro', null)
+        .order('ran_at', { ascending: false }).limit(1);
+      // `{ data, error }` do postgrest-js NÃO lança (forma nº 2): sem checar `error`, uma
+      // leitura falha viraria "nunca houve sucesso" e o cron pago rodaria por engano — o
+      // oposto exato do que este freio existe para fazer.
+      if (eOk) throw new Error(eOk.message);
+      if (ultimoOk?.[0]?.ran_at) diasDesdeSucesso = (Date.now() - Date.parse(ultimoOk[0].ran_at)) / 86400000;
+      if (diasDesdeSucesso < DIAS_REDE_SEGURANCA) {
+        pulouPull = true;
+        motivoPulo = `residencial em dia — último pull bem-sucedido há ${diasDesdeSucesso.toFixed(1)} dia(s), rede de segurança só em ${DIAS_REDE_SEGURANCA}`;
+      }
+    } catch {
+      // FAIL-OPEN: não consegui ler o histórico ≠ "está tudo em dia". Melhor pagar uma coleta
+      // do que ficar sem editais em silêncio — a mesma postura do `coleta-recente.mjs`.
+      diasDesdeSucesso = Infinity;
+    }
   }
 
-  // Janela deslizante de 3 dias (pega itens carregados com atraso; dedup resolve repetição).
-  const hoje = new Date();
-  const ini = ymd(new Date(hoje.getTime() - 3 * 86400000));
-  const fim = ymd(hoje);
-
-  // Leiloeiros que JÁ raspamos (nome normalizado) → marca leiloeiro_integrado.
-  const integrados = new Set();
-  try {
-    const { data } = await supabase.from('imoveis_leilao').select('leiloeiro').eq('ativo', true).not('leiloeiro', 'is', null).limit(5000);
-    for (const r of data || []) { const n = norm(r.leiloeiro); if (n.length >= 4) integrados.add(n); }
-  } catch { /* aditivo */ }
-  const ehIntegrado = (nome) => {
-    const n = norm(nome);
-    if (n.length < 4) return false;
-    for (const i of integrados) { if (i.includes(n) || n.includes(i)) return true; }
-    return false;
-  };
-
-  let vistos = 0, novos = 0, descartados = 0, erroGeral = null, enriquecidos = 0, cortadoPorTempo = false;
-  if (!pulouPull) {
-   try {
-    for (const tribunal of TRIBUNAIS) {
-      if (cortadoPorTempo) break;
-      for (const termo of TERMOS) {
-        // 19/08: o break por HARD_MS só saía do laço de TERMOS (reentrava a cada tribunal) e
-        // NÃO setava erroGeral — o run parcial gravava `erro: null` e o gate do dia
-        // (`.is('erro', null)`) fazia TODOS os runs seguintes pularem o pull: 3 de N
-        // tribunais coletados encerravam a captura do dia inteiro anunciando sucesso.
-        if (Date.now() - t0 > HARD_MS) { cortadoPorTempo = true; break; }
-        let items = [];
-        try { items = await buscarDJEN(tribunal, termo, ini, fim, t0); }
-        catch (e) { erroGeral = `${tribunal}/${termo}: ${String(e.message).slice(0, 80)}`; continue; }
-        vistos += items.length;
-        if (!items.length) continue;
-
-        // Monta linhas; dedup por djen_id (só insere as inéditas).
-        const linhas = items.map((it) => {
-          const djenId = String(g(it, 'id', 'numeroComunicacao', 'hash', 'idComunicacao') || '');
-          const texto = String(g(it, 'texto', 'inteiroTeor', 'teor', 'conteudo') || '');
-          const tipoDoc = g(it, 'tipoDocumento', 'tipoComunicacao', 'tipo');
-          if (!ehEditalReal(texto, tipoDoc)) return null; // FILTRO DURO: fora despacho/decisão que só cita "leilão"
-          const p = parseEdital(texto);
-          const orgao = g(it, 'nomeOrgao', 'orgao', 'nomeVara');
-          const nomeLeiloeiro = p.leiloeiro_nome;
-          return {
-            djen_id: djenId || null,
-            fonte: 'djen',
-            tribunal: g(it, 'siglaTribunal', 'tribunal') || tribunal,
-            numero_processo: g(it, 'numeroProcesso', 'numero_processo', 'numeroprocessocommascara'),
-            orgao, comarca: orgao, uf: 'SP',
-            classe: g(it, 'nomeClasse', 'classe'),
-            tipo_documento: tipoDoc,
-            data_disponibilizacao: (String(g(it, 'data_disponibilizacao', 'dataDisponibilizacao', 'datadisponibilizacao') || fim)).slice(0, 10),
-            data_praca_1: p.data_praca_1, data_praca_2: p.data_praca_2,
-            leiloeiro_nome: nomeLeiloeiro, leiloeiro_nome_norm: nomeLeiloeiro ? norm(nomeLeiloeiro) : null,
-            leiloeiro_jucesp: p.leiloeiro_jucesp, leilao_plataforma_url: p.leilao_plataforma_url,
-            leiloeiro_integrado: nomeLeiloeiro ? ehIntegrado(nomeLeiloeiro) : false,
-            valor_avaliacao: p.valor_avaliacao, lance_minimo: p.lance_minimo,
-            imovel_matricula: p.imovel_matricula, imovel_area_m2: p.imovel_area_m2,
-            imovel_cidade: p.imovel_cidade, imovel_uf: p.imovel_uf || 'SP', imovel_endereco: p.imovel_endereco,
-            debitos: p.debitos, ocupacao: p.ocupacao, cartorio: p.cartorio,
-            texto_integral: texto.slice(0, 20000),
-            hash_dedup: djenId ? null : norm(`${tribunal}|${g(it, 'numeroProcesso') || ''}|${texto.slice(0, 200)}`),
-            payload: it,
-            status: p.status,
-          };
-        }).filter((r) => r && (r.djen_id || r.hash_dedup));
-        descartados += items.length - linhas.length;
-
-        // Só as inéditas (evita reprocessar): confere djen_id já existentes.
-        const ids = linhas.map((r) => r.djen_id).filter(Boolean);
-        const existentes = new Set();
-        for (let i = 0; i < ids.length; i += 200) {
-          try {
-            const { data } = await supabase.from('editais_leilao').select('djen_id').in('djen_id', ids.slice(i, i + 200));
-            for (const r of data || []) existentes.add(r.djen_id);
-          } catch { /* aditivo */ }
-        }
-        const inserir = linhas.filter((r) => !r.djen_id || !existentes.has(r.djen_id));
-        if (inserir.length) {
-          const { error } = await supabase.from('editais_leilao').upsert(inserir, { onConflict: 'djen_id', ignoreDuplicates: true });
-          if (!error) novos += inserir.length;
-          else erroGeral = `upsert: ${String(error.message).slice(0, 80)}`;
-        }
+  // ── DISJUNTOR DE TENTATIVAS PAGAS (29/08) ──────────────────────────────────────────────
+  // Quando o freio acima LIBERA (7+ dias sem sucesso), o gate do dia volta a valer: re-tenta a
+  // cada 4 h até um pull passar. Só que, com bloqueio PERSISTENTE, nenhum run sai sem erro e
+  // TODOS os 6 do dia refazem o pull inteiro pagando Bright Data — **uma fonte que custa MAIS
+  // quanto mais falha**. Medido em 26–29/08: 6/6 runs em 403, `itens_vistos = 0`, e `radar` é o
+  // 2º maior consumidor da cota (88 requests num único dia).
+  //
+  // Duas tentativas cobrem a queda passageira para a qual o gate existe; da terceira em diante
+  // só se paga para ouvir o mesmo não. Vale só para o PULL — a IA da fila já capturada segue.
+  if (!forcar && !pulouPull) {
+    try {
+      const desdeMeiaNoite = ymd(new Date()) + 'T00:00:00Z';
+      const { data: runsHoje, error: eHoje } = await supabase.from('monitor_runs')
+        .select('erro').eq('fonte', 'radar-editais-djen').gte('ran_at', desdeMeiaNoite);
+      if (eHoje) throw new Error(eHoje.message);
+      const runs = runsHoje || [];
+      // O disjuntor conta TENTATIVAS PAGAS, não linhas. Um run que saiu por SEM COTA não
+      // chamou o Bright Data (custa uma RPC e < 1 s), então contá-lo travaria o dia inteiro
+      // por causa do freio de custo — o freio virando a razão de não coletar quando a cota
+      // voltasse. Linha de SEM COTA no log é informação (é assim que `fonte_saude` registra as
+      // fontes pagas todo dia), não tentativa gasta.
+      const tentativasPagas = runs.filter((r) => !/^SEM COTA/.test(String(r.erro || ''))
+        && !/^disjuntor/.test(String(r.erro || '')));
+      if (tentativasPagas.length >= MAX_TENTATIVAS_DIA) {
+        pulouPull = true;
+        motivoPulo = `disjuntor: ${tentativasPagas.length} tentativa(s) paga(s) falharam hoje (teto ${MAX_TENTATIVAS_DIA}) — não se paga Bright Data para ouvir o mesmo erro`;
+        // Um registro por dia basta: os runs 3º ao 6º repetiriam a mesma linha e o log viraria
+        // ruído — e log ruidoso é o que treina o dono a não ler o log.
+        jaRegistrado = runs.some((r) => String(r.erro || '').startsWith('disjuntor'));
       }
-    }
-   } catch (e) {
-    erroGeral = String(e.message).slice(0, 120);
-   }
+    } catch { /* se a checagem falhar, roda o pull normalmente (fail-open) */ }
+  }
+
+  // O pulo por DISJUNTOR precisa deixar rastro: um dia inteiro sem edital com o log em branco
+  // é indistinguível de um dia sem publicação. `erro` preenchido mantém o dia como NÃO
+  // resolvido — a contagem já barra novas tentativas, então isso não reabre o gasto.
+  // O pulo por FREIO não grava nada, de propósito: ali o sucesso do residencial JÁ está no log,
+  // e uma linha por run apagaria o sinal que o próprio freio lê.
+  if (motivoPulo && motivoPulo.startsWith('disjuntor') && !jaRegistrado) {
+    try {
+      // Se a gravação falhar, o pior efeito é o dia perder o rastro do pulo; derrubar o cron
+      // por causa do log trocaria um problema barato por um caro (o enriquecimento por IA
+      // abaixo pararia junto).
+      // padrao-ok: log best-effort do disjuntor — nunca pode derrubar o cron
+      await supabase.from('monitor_runs').insert({
+        fonte: 'radar-editais-djen', itens_vistos: 0, itens_novos: 0, origem: 'vercel',
+        duracao_ms: Date.now() - t0, erro: motivoPulo.slice(0, 200),
+      });
+    } catch { /* nunca quebra por causa do log */ }
+  }
+
+  // A janela ACOMPANHA O BURACO: numa rede de segurança semanal, 3 dias fixos perderiam 4 dias
+  // de editais em silêncio, com o run saindo verde. Ver `janelaDJEN`.
+  const { ini, fim } = janelaDJEN(diasDesdeSucesso === Infinity ? 15 : diasDesdeSucesso);
+  const ehIntegrado = await construirEhIntegrado(supabase);
+
+  let vistos = 0, novos = 0, descartados = 0, erroGeral = null, enriquecidos = 0, cortadoPorTempo = false, semCota = false;
+  if (!pulouPull) {
+    ({ vistos, novos, descartados, erroGeral, cortadoPorTempo, semCota } = await pullDJEN({
+      supabase, ini, fim, ehIntegrado, t0, transporte: transporteBrightData,
+    }));
 
     // INGESTÃO: usa os editais p/ preencher avaliação faltante do acervo (chave forte: lance ==
     // valor mínimo do lote). Conservador; nunca sobrescreve avaliação existente. Aditivo.
@@ -410,7 +608,7 @@ async function handler(req) {
 
     try {
       await supabase.from('monitor_runs').insert({
-        fonte: 'radar-editais-djen', janela_inicio: ini, janela_fim: fim,
+        fonte: 'radar-editais-djen', janela_inicio: ini, janela_fim: fim, origem: 'vercel',
         itens_vistos: vistos, itens_novos: novos, duracao_ms: Date.now() - t0,
         // Run parcial não é sucesso: registrado como erro para o gate do dia re-tentar.
         erro: erroGeral || (cortadoPorTempo ? 'corte_por_tempo (run parcial — repuxar)' : null),
@@ -423,7 +621,8 @@ async function handler(req) {
   let iaExtraidos = 0;
   try { iaExtraidos = await enriquecerEditaisComIA(supabase, ehIntegrado, t0); } catch { /* best-effort */ }
 
-  return new Response(JSON.stringify({ ok: true, pull: pulouPull ? 'pulado (já obtido hoje)' : 'executado', vistos, novos, descartados, enriquecidos, iaExtraidos, erro: erroGeral, janela: [ini, fim], tribunais: TRIBUNAIS }), {
+  const pullDesfecho = pulouPull ? `pulado (${motivoPulo || 'já resolvido'})` : (semCota ? 'não tentado (sem cota Bright Data)' : 'executado');
+  return new Response(JSON.stringify({ ok: true, pull: pullDesfecho, sem_cota: semCota, vistos, novos, descartados, enriquecidos, iaExtraidos, erro: erroGeral, janela: [ini, fim], tribunais: TRIBUNAIS }), {
     headers: { 'Content-Type': 'application/json' },
   });
 }

@@ -23,6 +23,7 @@ import { cpfDoRegistro } from './_cpf.js';
 import { enviarPurchaseCapi, purchaseEventId } from './_meta-capi.js';
 import { enviarConversaoOffline, googleAdsAtivo } from './_google-ads.js';
 import { enviarEmail } from './_email.js';
+import { deveAncorarGarantia } from './_ancora-cdc.js';
 
 // Normaliza o plano para a BASE (top2/clube/assessorado) — o event_id do Purchase precisa
 // bater com o do navegador, que usa a mesma base (sem sufixo _anual/_vista/_mensal).
@@ -241,10 +242,13 @@ export async function ativarPlanoDireto({ userId, planoKey, gateway, cobranca = 
   // agendamento. Deixá-lo pendurado faria o cron seguir convidando para uma troca que já
   // aconteceu — e o cliente receberia e-mail pedindo para ativar o plano que ele já tem.
   upd.plano_agendado = null;
-  // Garantia de 7 dias: âncora só na 1ª assinatura (role atual não-pagante e sem
-  // âncora). Renovação recorrente NÃO reinicia a janela; resubscrição após cancelar
-  // (que zera plano_pago_em) inicia uma nova.
-  if (!atual?.plano_pago_em && !PAGANTES.includes(atual?.role)) {
+  // Garantia de 7 dias (CDC art. 49). A decisão mora em `_ancora-cdc.js` — era escrita
+  // aqui, em processarConfirmado e no mp.js, sempre como `!PAGANTES.includes(role)`, que
+  // usa "o role já é pagante" como sinônimo de "já foi ancorado". Não são a mesma coisa:
+  // quem vira pagante por um caminho que não grava a âncora ficava impedido para sempre
+  // de gravá-la, e perdia o direito legal em silêncio. Renovação segue não reiniciando a
+  // janela; recontratação após cancelar (que rebaixa a explorador) segue ganhando uma nova.
+  if (await deveAncorarGarantia(userId)) {
     upd.plano_pago_em = new Date().toISOString();
   }
   const { error } = await supabase.from('perfis').update(upd).eq('id', userId);
@@ -469,13 +473,14 @@ export async function processarConfirmado({ valor, descricao, email, gatewayCust
     update.role = roleAposPagamento(cliente.role, candidato) ?? mapeado.role;
     if (cliente.role_anterior && cliente.inadimplente_desde) update.role_anterior = null;
     // Garantia de 7 dias (CDC art. 49): ancora plano_pago_em na 1ª ativação paga —
-    // MESMO critério do ativarPlanoDireto. Sem isto, quem paga via Asaas ou plano ANUAL
-    // avulso (ambos caem NESTE caminho, não no ativarPlanoDireto) ficava com
-    // plano_pago_em=null e tinha o reembolso de 7 dias NEGADO indevidamente
-    // (garantia-cancelar.js: dentro7 = null → reembolso:false). Renovação/reativação
-    // (já pagante OU já ancorado) não reinicia a janela.
-    const PAGANTES = ['top2', 'assessorado', 'clube', 'top2_anual', 'assessorado_anual', 'clube_anual'];
-    if (!cliente.plano_pago_em && !PAGANTES.includes(cliente.role)) {
+    // MESMO critério do ativarPlanoDireto, agora com a regra única em `_ancora-cdc.js`.
+    // Sem isto, quem paga via Asaas ou plano ANUAL avulso (ambos caem NESTE caminho, não
+    // no ativarPlanoDireto) ficava com plano_pago_em=null e tinha o reembolso de 7 dias
+    // NEGADO indevidamente (garantia-cancelar.js: dentro7 = null → reembolso:false).
+    // Renovação (âncora já gravada, ou pagante COM pagamento anterior) não reinicia a
+    // janela; conta promovida sem cobrança que passa a pagar ganha a dela, que era o
+    // buraco de 29/08.
+    if (await deveAncorarGarantia(cliente.id)) {
       update.plano_pago_em = new Date().toISOString();
     }
     // Grava o CICLO do pagamento (mensal/anual). Antes só o mp.js mensal gravava 'mensal'

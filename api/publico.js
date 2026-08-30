@@ -90,7 +90,17 @@ async function rpc(nome, corpo = {}) {
 // ── Casca HTML. Uma só, para todas as páginas ────────────────────────────────
 // Sem framework e sem JS de aplicação: a página tem que estar PRONTA no HTML que o
 // servidor devolve. Se depender de JS para aparecer, volta ao problema de origem.
-function pagina({ titulo, desc, canonical, corpo, jsonld, indexar = true, migalha = [], hero = '' }) {
+function pagina({ titulo, desc, canonical, corpo, jsonld, indexar = true, migalha = [], hero = '', imovelId = '' }) {
+  // O LOTE VIAJA NO CABEÇALHO (29/08). Os botões do topo aparecem em TODA página pública,
+  // inclusive na do lote, e iam para `/#/login?modo=cadastro` sem o imóvel — enquanto o CTA
+  // do corpo já levava `&imovel=<id>`. Quem estava olhando um apartamento e clicava no botão
+  // de cima em vez do de baixo chegava ao cadastro indistinguível de quem veio da home.
+  // Vale para "Entrar" também: cliente que já tem conta e volta por um lote tem a MESMA
+  // intenção — e `modo=` no rastro separa os dois quando for hora de ler.
+  // Hoje isto só melhora a MEDIÇÃO (`origem_lote` em api/track.js): nada ainda lê o parâmetro.
+  const qs = imovelId ? `&imovel=${encodeURIComponent(imovelId)}` : '';
+  const urlCadastro = `${SITE}/#/login?modo=cadastro${qs}`;
+  const urlEntrar = imovelId ? `${SITE}/#/login?imovel=${encodeURIComponent(imovelId)}` : `${SITE}/#/login`;
   const migHtml = migalha.length ? migalha.map((m, i) => (m.url ? `<a href="${esc(m.url)}">${esc(m.nome)}</a>` : esc(m.nome)) + (i < migalha.length - 1 ? ' › ' : '')).join('') : '';
   return `<!doctype html><html lang="pt-BR"><head>
 <meta charset="utf-8"/>
@@ -376,10 +386,10 @@ footer .in{max-width:1080px;margin:0 auto}
     <a href="${SITE}/#/calculadora">Calculadora</a>
     <a class="ativo" href="${SITE}/leiloes">Buscar Leilões</a>
     <a href="${SITE}/#/planos">Planos</a>
-    <a class="entrar" href="${SITE}/#/login">Entrar</a>
-    <a class="cta" href="${SITE}/#/login?modo=cadastro">Criar conta grátis</a>
+    <a class="entrar" href="${esc(urlEntrar)}">Entrar</a>
+    <a class="cta" href="${esc(urlCadastro)}">Criar conta grátis</a>
   </nav>
-  <a class="cta cta-mob" href="${SITE}/#/login?modo=cadastro">Criar conta grátis</a>
+  <a class="cta cta-mob" href="${esc(urlCadastro)}">Criar conta grátis</a>
   <details class="menu-mob">
     <summary aria-label="Abrir menu" role="button">&#9776;</summary>
     <div class="drop">
@@ -387,7 +397,7 @@ footer .in{max-width:1080px;margin:0 auto}
       <a href="${SITE}/#/calculadora">Calculadora</a>
       <a class="ativo" href="${SITE}/leiloes">Buscar Leilões</a>
       <a href="${SITE}/#/planos">Planos</a>
-      <a href="${SITE}/#/login">Entrar</a>
+      <a href="${esc(urlEntrar)}">Entrar</a>
     </div>
   </details>
 </div></header>
@@ -783,6 +793,9 @@ async function paginaImovel(id) {
   const ehCaixa = /caixa|cef/i.test(fonteRaw);
   const fonteLabel = ehCaixa ? 'CAIXA' : (fonteRaw ? fonteRaw.toUpperCase().slice(0, 18) : '');
   return pagina({
+    // A ÚNICA das seis páginas públicas que tem um lote: é aqui, e só aqui, que os botões do
+    // topo passam a levar o imóvel junto. Nas outras `imovelId` fica vazio e nada muda.
+    imovelId: im.id,
     // TÍTULO PRECISA SER ÚNICO (08/08 — resposta ao "Cópia, o Google e o usuário selecionaram
     // uma página canônica diferente" do Search Console). Medido no acervo: 1.000 lotes ativos
     // com o título EXATAMENTE igual ("Apartamento — SANTA CRUZ RIO DE JANEIRO RJ"), 479 com

@@ -38,6 +38,7 @@
  *
  * Env: BRIGHTDATA_API_TOKEN, BRIGHTDATA_ZONE, VITE_SUPABASE_URL, SUPABASE_SERVICE_KEY.
  */
+import './lib/env-runner.mjs';   // carrega ~/.bidpro-runner.env quando rodado na mão
 import { createClient } from '@supabase/supabase-js';
 import { decodificarEntidades } from '../api/_texto-imovel.js';
 import { buscarViaBrightData, brightDataDisponivel, ErroBrightData } from '../api/_brightdata.js';
@@ -60,9 +61,27 @@ const num = s => parseFloat(String(s || '').replace(/[^\d.,]/g, '').replace(/\./
 if (!SB_URL || !SB_KEY) { console.error('Faltam VITE_SUPABASE_URL / SUPABASE_SERVICE_KEY'); process.exit(1); }
 const supabase = createClient(SB_URL, SB_KEY);
 
-/** Falha de ACESSO à fonte (não é "a fonte não tem lote"). Sempre sai com código ≠ 0. */
+/**
+ * Falha de ACESSO à fonte (não é "a fonte não tem lote"). Sempre sai com código ≠ 0.
+ *
+ * CARREGA O `semCota` (29/08). O `ErroBrightData` já sabe distinguir "o orçamento disse
+ * não" de "a fonte respondeu errado" — e esta classe descartava essa distinção ao copiar
+ * só o `motivo`. Um frame acima, o `.catch()` do `main()` montava a validação sem o campo,
+ * e `registrarSaude` gravava `status='falhou'`. Resultado medido: **8 linhas de RJLEILOES
+ * entre 13/08 e 29/08 acusando a fonte por uma recusa de ORÇAMENTO** — com o `motivo`
+ * dizendo `teto_global` por extenso, ao lado de um status que dizia o contrário.
+ *
+ * É a forma #5 do CLAUDE.md, e a correção de 16/08 em `_saude-fonte.mjs` não alcançou
+ * este arquivo porque ele constrói o objeto de validação por conta própria. A ação que
+ * cada caso pede é oposta — liberar cota × consertar parser —, então a informação tem de
+ * chegar no CAMPO que o monitor lê, não só no texto que ninguém consulta.
+ */
 class FalhaDeAcesso extends Error {
-  constructor(motivo, detalhe) { super(detalhe ? `${motivo}: ${detalhe}` : motivo); this.motivo = motivo; }
+  constructor(motivo, detalhe, semCota = false) {
+    super(detalhe ? `${motivo}: ${detalhe}` : motivo);
+    this.motivo = motivo;
+    this.semCota = semCota === true;
+  }
 }
 
 /**
@@ -83,7 +102,8 @@ async function bd(url, { timeoutMs = 60000 } = {}) {
   try {
     r = await buscarViaBrightData(url, { proposito: 'rj', timeoutMs, exigirOk: false });
   } catch (e) {
-    if (e instanceof ErroBrightData) throw new FalhaDeAcesso(e.motivo, e.detalhe || e.message);
+    // `e.semCota` viaja junto: sem ele, teto_global/subcota chegam ao monitor como quebra da fonte.
+    if (e instanceof ErroBrightData) throw new FalhaDeAcesso(e.motivo, e.detalhe || e.message, e.semCota);
     throw e;
   }
   const body = await r.text().catch(() => null);
@@ -374,8 +394,14 @@ async function main() {
   // 2) Detalhe de cada lote alvo.
   const prontos = [];
   let sem = 0, reprov = 0;
+  // Recusa do FREIO DE CUSTO (não de rede) e quantos lotes ficaram POR BUSCAR por causa
+  // dela. Os dois alimentam `registrarSaude`: sem cota nenhuma → 'sem_cota'; cota que
+  // cortou no meio → 'parcial_cota'. Ver o comentário do `parcial_cota` em _saude-fonte.mjs:
+  // um total truncado pelo orçamento não mede a fonte, e ia parar no piso aprendido.
+  let recusaDeCota = null, cotaNegada = 0;
   const motivosFalha = new Map();
-  for (const url of alvo) {
+  for (let i = 0; i < alvo.length; i++) {
+    const url = alvo[i];
     let html;
     try {
       html = await bd(url, { timeoutMs: 90000 });
@@ -388,7 +414,13 @@ async function main() {
       // recebeu o "não" do freio. Para aqui e reporta o que conseguiu. `e.semCota` é o
       // catálogo ÚNICO (em _brightdata.js) — a lista enumerada aqui era a cópia que não
       // recebia motivo novo: `subcota_dia` (rateio de 18/08) já teria ficado de fora.
-      if (e.semCota) break;
+      if (e.semCota) {
+        recusaDeCota = m;
+        // Este lote também não foi buscado: conta a partir dele, não do seguinte.
+        cotaNegada = alvo.length - i;
+        console.log(`  ⛔ PAROU POR COTA (${m}): ${cotaNegada} lote(s) ficaram para a próxima rodada.`);
+        break;
+      }
       continue;
     }
     const row = montarRow(url, parseDetalhe(html, url));
@@ -402,8 +434,13 @@ async function main() {
   console.log(`\nResumo: ${prontos.length} prontos · ${reprov} descartados · ${sem} sem detalhe${resumoFalhas ? ` (${resumoFalhas})` : ''}.`);
 
   // Nada pronto E houve falha de acesso → NÃO é "a fonte está vazia", é coleta quebrada.
+  // Salvo quando quem disse não foi o ORÇAMENTO: aí a fonte nunca chegou a ser lida, e
+  // `semCota` viaja no erro para o `.catch()` gravar 'sem_cota' em vez de acusar o parser.
   if (!prontos.length && sem > 0) {
-    throw new FalhaDeAcesso('detalhes_inacessiveis', `${sem} lote(s) sem detalhe (${resumoFalhas})`);
+    throw new FalhaDeAcesso(
+      recusaDeCota || 'detalhes_inacessiveis',
+      `${sem} lote(s) sem detalhe (${resumoFalhas})`,
+      !!recusaDeCota);
   }
   if (!prontos.length) {
     await registrarSaude(supabase, 'RJLEILOES', [], 'principal',
@@ -423,8 +460,15 @@ async function main() {
   console.log(`✅ ${prontos.length} imóveis RJ Leilões gravados/atualizados.`);
   // SAÚDE DA FONTE (08/08): entra no monitor de regressão junto das demais. Antes esta fonte
   // não escrevia em `fonte_saude`, então nunca ganhava piso aprendido e uma quebra passaria batido.
+  // `cotaNegada` > 0 → 'parcial_cota': coletou alguma coisa, mas o total mede até onde o
+  // dinheiro deu, não o acervo do leiloeiro. Sem isto a linha saía 'ok' com um número
+  // truncado que o piso aprendido ABSORVE, puxando a linha de base para baixo a cada
+  // rodada cortada — a mesma armadilha que o `parcial_cota` fechou nos outros coletores.
   await registrarSaude(supabase, 'RJLEILOES', prontos, 'principal',
-    enumeracaoCompleta ? undefined : { ok: false, motivo: 'enumeração incompleta (paginação interrompida)' });
+    (enumeracaoCompleta && !cotaNegada)
+      ? undefined
+      : { ok: enumeracaoCompleta, cotaNegada,
+          motivo: enumeracaoCompleta ? '' : 'enumeração incompleta (paginação interrompida)' });
   // Auto-aprendizado: registra o que este scraper sabe na base de conhecimento.
   await registrarConhecimento(supabase, {
     fonte: 'RJLEILOES', plataforma: 'SOLEON', acesso: HEADLESS ? 'residencial' : 'brightdata',
@@ -450,13 +494,20 @@ main()
   })
   .catch(async (e) => {
     const motivo = e?.motivo || 'erro';
-    console.error(`[rj] FALHA (${motivo}): ${e?.message || e}`);
+    const semCota = e?.semCota === true;
+    console.error(`[rj] ${semCota ? 'SEM COTA' : 'FALHA'} (${motivo}): ${e?.message || e}`);
     if (!(e instanceof FalhaDeAcesso)) console.error(e);
     // Marca a falha no monitor. Sem isto, uma fonte que para de responder simplesmente
     // some do radar: `fonte_saude` fica sem linha nova e o acervo encolhe em silêncio.
+    // `semCota` grava 'sem_cota' em vez de 'falhou' — a fonte não foi consultada, então
+    // não há o que acusar nela. O exit 1 FICA nos dois casos: "não coletei" é verdade em
+    // ambos, e sair com 0 seria o check verde sobre acervo parado de 11/08.
     try {
       await registrarSaude(supabase, 'RJLEILOES', [], 'principal',
-        { ok: false, metricas: { n: 0, uf_pct: 0, valor_pct: 0, link_pct: 0, foto_pct: 0 }, motivo: `falha de acesso: ${motivo}` });
+        { ok: false, semCota, metricas: { n: 0, uf_pct: 0, valor_pct: 0, link_pct: 0, foto_pct: 0 },
+          motivo: semCota
+            ? `SEM COTA Bright Data (${motivo}) — coleta não tentada (decisão de orçamento, não regressão da fonte)`
+            : `falha de acesso: ${motivo}` });
     } catch { /* já estamos no caminho de erro */ }
     await fecharHeadless();
     process.exit(1);

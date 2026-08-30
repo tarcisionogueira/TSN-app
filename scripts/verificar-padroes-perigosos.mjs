@@ -405,7 +405,14 @@ const REGRAS_ARQUIVO = [
     // `buscarViaBrightData`, que lança com o motivo; `null` é aceitável só em fallback
     // (tento o pago, não deu, sigo pelo grátis) — e aí marque com // padrao-ok:.
     // Só o IMPORT conta — citar o nome num comentário (como o histórico logo acima) não é uso.
-    testar: (texto, rel) => /^scripts\/scraper-/.test(rel)
+    //
+    // 29/08 — O ESCOPO ERA A PRÓPRIA BRECHA. A regra só olhava `scripts/scraper-*`, e o coletor
+    // que tinha o defeito vivo era `api/radar-editais-cron.js`: com a cota estourada, o `null`
+    // virava backoff de 4,5 s por combo e depois um fetch direto que o DJEN 403 — quatro dias
+    // de log dizendo "o CNJ nos bloqueou" com o Bright Data nunca chamado. Um coletor não deixa
+    // de ser coletor por morar em `api/` e se chamar cron. Fallback legítimo (tento o pago, não
+    // deu, sigo pelo grátis) continua permitido em qualquer outro arquivo de `api/`.
+    testar: (texto, rel) => (/^scripts\/scraper-/.test(rel) || /^api\/[a-z0-9-]+-cron\.js$/.test(rel))
       && /^\s*import[\s\S]{0,200}?\bfetchViaBrightData\b[\s\S]{0,200}?from\s*['"]/m.test(texto),
   },
   {

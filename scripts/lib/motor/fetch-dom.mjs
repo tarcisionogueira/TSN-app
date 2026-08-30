@@ -54,16 +54,36 @@ export function criarMotorDom({ esperaMs = 2500, timeoutMs = 45000 } = {}) {
     }
   }
 
+  // TETO POR LOTE — o único `timeout` daqui era o do `goto` (30/08). `newPage()`,
+  // `setViewport`, `page.content()` e `page.close()` são chamadas CDP SEM timeout: se o
+  // Chromium encalha, elas esperam PARA SEMPRE, e o node fica ocioso enquanto isso. Achado
+  // quando a 1ª rodada longa da HASTA passou de 1 h e o `ps` mostrou o `TIME` do node
+  // congelado em 53 s — travamento e lentidão têm exatamente a mesma aparência de fora.
+  // Com 13 lotes por rodada isso quase nunca mordia; com 592 (a releitura entrou em 29/08)
+  // um único lote encalhado segura a rodada inteira e ninguém sabe por quê.
+  // Chromium encalhado não desencalha sozinho: derruba o navegador para o próximo nascer limpo.
+  const TETO_LOTE = timeoutMs + esperaMs + 15000;
+  async function navegarComTeto(url) {
+    let t = null;
+    const estouro = new Promise((res) => { t = setTimeout(() => res({ __travou: true }), TETO_LOTE); });
+    const r = await Promise.race([navegar(url), estouro]);
+    clearTimeout(t);
+    if (!r?.__travou) return r;
+    console.error(`   [dom] TRAVOU em ${url} (> ${Math.round(TETO_LOTE / 1000)}s sem responder) — derrubando o Chromium.`);
+    await browser?.close().catch(() => {}); browser = null;
+    return { html: null, via: 'dom-travou' };
+  }
+
   // UM retry para falha transitória (timeout de navegação, navegador caído). Sem isso, um
   // único timeout no meio da paginação encerrava a enumeração inteira: no DRY-RUN de 21/08
   // do HASTA, a página 10 estourou 45s e a listagem parou em 270 dos ~579 lotes. HTTP ≥400
   // é resposta DEFINITIVA (não transitória) e não é retentado.
   async function fetchFonte(url) {   // 2º arg (opts do contrato) não se aplica ao dom
-    const r1 = await navegar(url);
+    const r1 = await navegarComTeto(url);
     if (r1.html || r1.definitivo) return { html: r1.html, via: r1.via };
     await new Promise(r => setTimeout(r, 2000));
     console.error(`   [dom] retentando ${url}`);
-    const r2 = await navegar(url);
+    const r2 = await navegarComTeto(url);
     return { html: r2.html, via: r2.via };
   }
 

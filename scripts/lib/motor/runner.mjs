@@ -55,12 +55,28 @@ async function enumerar(fetchFonte, tenant, cfg, { maxPages, debug, semBD }) {
       const eventos = [...cfg.parse.extrairUrlsDeEvento(r0.html, tenant.base).values()]
         .slice(0, cfg.maxEventos ?? 12);
       if (debug) console.log(`   [${tenant.fonte}] nível 2: ${eventos.length} evento(s)`);
+      // ⚠️ O EVENTO TAMBÉM PAGINA (29/08). Isto lia UMA página por evento — o que bastava para o
+      // NORDESTE, cujo evento cabe numa página. A HASTA quebrou essa premissa: o leilão 557 tem
+      // ~579 lotes a 30/pág, e uma página só traria 30 — **coleta parcial com cara de completa**,
+      // que é justamente o desfecho que o `fonte_saude` acusaria como regressão sem haver
+      // regressão nenhuma. Que a plataforma pagina por `page` não é palpite: o `url_lote` que já
+      // temos no acervo é `/item/10729/detalhes?page=20`, ou seja, o link veio da página 20.
+      // O laço para sozinho quando uma página não traz id novo — então, se algum evento ignorar
+      // o parâmetro, ele degrada para o comportamento antigo (1 página) em vez de repetir à toa.
+      const maxPagEvento = cfg.maxPagesEvento ?? cfg.maxPages ?? 3;
       for (const ev of eventos) {
-        const re = await fetchFonte(ev, { semBD });
-        if (!re.html) continue;
-        const antes = urls.size;
-        for (const [id, u] of cfg.parse.extrairUrlsDeLote(re.html, tenant.base)) urls.set(id, u);
-        if (debug) console.log(`   [${tenant.fonte}] evento ${ev.slice(-60)}: +${urls.size - antes}`);
+        const antesEvento = urls.size;
+        for (let p = 1; p <= maxPagEvento; p++) {
+          const sep = ev.includes('?') ? '&' : '?';
+          const re = await fetchFonte(p > 1 ? `${ev}${sep}${cfg.paginaParam}=${p}` : ev, { semBD });
+          if (!re.html) break;
+          const antes = urls.size;
+          for (const [id, u] of cfg.parse.extrairUrlsDeLote(re.html, tenant.base)) urls.set(id, u);
+          if (debug) console.log(`   [${tenant.fonte}] evento ${ev.slice(-40)} pág ${p}: +${urls.size - antes} (total ${urls.size})`);
+          if (urls.size === antes) break;
+          await sleep(400);
+        }
+        if (!debug) console.log(`   [${tenant.fonte}] evento ${ev.slice(-40)}: +${urls.size - antesEvento}`);
         await sleep(400);
       }
     }
@@ -68,24 +84,107 @@ async function enumerar(fetchFonte, tenant, cfg, { maxPages, debug, semBD }) {
   return { urls: [...urls.values()], fetchOk, via };
 }
 
+// A RELEITURA GASTA A SOBRA DO ORÇAMENTO, E SÓ ELA (29/08).
+// `alvo` era `novos.length ? novos : urls` — tudo-ou-nada. Com a fonte já coletada, um punhado
+// de lotes novos consumia `novos.length` do teto e **o resto do teto era jogado fora**: medido
+// na HASTA, 5 lotes tocados em 36 h contra 584 ativos, os outros 579 com `atualizado_em` de
+// 25/08. O preço que o cliente vê não depende disso (as duas praças já estão gravadas e
+// `valor_minimo_ref` é `least(...)`), mas o lote cujo preço ou data MUDA na fonte nunca se
+// atualiza enquanto houver lote novo aparecendo.
+//
+// A releitura entra DEPOIS dos novos e só até `maxLotes` — o teto declarado não muda, o que
+// muda é não desperdiçar a folga. Duas garantias de custo, nesta ordem:
+//   1. novo vem primeiro, então uma recusa de orçamento custa releitura, nunca lote novo;
+//   2. `pararReleitura` — a releitura é abortada no instante em que um detalhe volta `via: 'bd'`.
+//      **Releitura nunca paga.** Lote novo pode pagar (vale o crédito); relê-lo não vale, ainda
+//      mais com o teto semanal saturado. É decisão MEDIDA por fetch, não adivinhada por fonte:
+//      se a fonte deixar de ser desafiada, a releitura volta sozinha.
+// Ordem da fila: praça próxima primeiro (é onde o dado muda), depois o mais velho — assim o
+// acervo cicla inteiro em tempo limitado em vez de reler sempre os mesmos.
+const DIAS_IMINENTE = 21;
+
+/**
+ * PLANEJA O QUE O RUN VAI BUSCAR — puro, exportado, e é isto que os testes exercitam.
+ * A conta de orçamento é a parte que erra em silêncio (um off-by-one aqui gasta crédito ou
+ * deixa de reler para sempre), então ela sai do laço de I/O e vira função testável em seco.
+ * Devolve `iReleitura` = o índice a partir do qual `alvo` deixa de ser lote novo.
+ */
+export function planejarAlvo({ urls, meta, chaveDe, maxLotes, maxRefresh, agora = Date.now() }) {
+  const novos = urls.filter(u => !meta.has(chaveDe(u)));
+  const limite = agora + DIAS_IMINENTE * 864e5;
+  const conhecidas = urls
+    .filter(u => meta.has(chaveDe(u)))
+    .map((u) => {
+      const m = meta.get(chaveDe(u));
+      return { url: u, id: m.fonte_id, tocado: Date.parse(m.atualizado_em) || 0,
+               fim: m.data_fim ? Date.parse(m.data_fim) : null, ativo: m.ativo !== false };
+    })
+    .filter(c => c.ativo)              // lote já desativado não volta pela releitura
+    .sort((a, b) => {
+      // praça próxima primeiro (é onde o dado muda), depois o mais velho, e `id` só para
+      // desempatar — sem ele a ordem varia entre runs e o acervo nunca cicla inteiro.
+      const ia = a.fim && a.fim <= limite ? 0 : 1;
+      const ib = b.fim && b.fim <= limite ? 0 : 1;
+      if (ia !== ib) return ia - ib;
+      return (a.tocado || 0) - (b.tocado || 0) || (a.id < b.id ? -1 : 1);
+    });
+  const usadosPorNovos = Math.min(novos.length, maxLotes);
+  const folga = maxLotes - usadosPorNovos;
+  const teto = maxRefresh === undefined ? folga : Math.max(0, Math.min(folga, maxRefresh));
+  const releitura = conhecidas.slice(0, teto).map(c => c.url);
+  return {
+    novos, releitura,
+    alvo: [...novos.slice(0, maxLotes), ...releitura],
+    iReleitura: usadosPorNovos,
+  };
+}
+
 async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debug, semBD }) {
   const { urls, fetchOk, via } = await enumerar(fetchFonte, tenant, cfg, { maxPages: cfg.maxPages, debug, semBD });
   console.log(`[${tenant.fonte}] enumerados ${urls.length} lote(s)${via ? ` (via ${via})` : ''}`);
-  const prontos = []; let encerrados = 0, sem = 0, reprov = 0, cotaNegada = 0;
+  const prontos = []; let encerrados = 0, sem = 0, reprov = 0, cotaNegada = 0, relidos = 0;
   if (urls.length) {
     const ids = urls.map(u => idFonte(tenant, cfg.parse.idDaUrl(u)));
-    const existentes = new Set();
+    const meta = new Map();
     for (let i = 0; i < ids.length; i += 200) {
       // padrao-ok: leitura best-effort de dedup; erro → reprocessa lote conhecido (upsert idempotente), nunca corrompe. Mesmo padrão dos scrapers de origem.
-      const { data } = await supabase.from('imoveis_leilao').select('fonte_id').in('fonte_id', ids.slice(i, i + 200));
-      for (const r of data || []) existentes.add(r.fonte_id);
+      const { data } = await supabase.from('imoveis_leilao')
+        .select('fonte_id,atualizado_em,data_fim,ativo').in('fonte_id', ids.slice(i, i + 200));
+      for (const r of data || []) meta.set(r.fonte_id, r);
     }
-    const novos = urls.filter(u => !existentes.has(idFonte(tenant, cfg.parse.idDaUrl(u))));
-    const alvo = (novos.length ? novos : urls).slice(0, maxLotes);
-    console.log(`[${tenant.fonte}] no banco ${existentes.size} · novos ${novos.length} · processando ${alvo.length}`);
+    // Fonte NUNCA coletada (nada no banco): `novos` são todas as urls e não há releitura —
+    // o caminho antigo, intacto.
+    const { novos, releitura, alvo, iReleitura } = planejarAlvo({
+      urls, meta, chaveDe: u => idFonte(tenant, cfg.parse.idDaUrl(u)),
+      maxLotes, maxRefresh: cfg.maxRefresh,
+    });
+    let pararReleitura = false;
+    console.log(`[${tenant.fonte}] no banco ${meta.size} · novos ${novos.length} · releitura ${releitura.length} · processando ${alvo.length}`);
+    const t0 = Date.now();
     for (let i = 0; i < alvo.length; i++) {
+      // SINAL DE VIDA (30/08). O laço não imprimia NADA por lote. Com 13 lotes isso durava um
+      // minuto e ninguém notava; com 592 são ~50 min de tela imóvel — e tela imóvel é
+      // indistinguível de travamento. Foi a primeira pergunta do dono na primeira rodada longa,
+      // e ele estava certo em perguntar: o upsert só acontece DEPOIS do laço, então nem o banco
+      // servia de sinal de vida. Um processo que trabalha em silêncio por uma hora não é
+      // observável, e não observável é a mesma família de "falha que não sabe que falhou".
+      if (i > 0 && i % 25 === 0) {
+        const min = (Date.now() - t0) / 60000;
+        const resta = Math.round((alvo.length - i) * (min / i));
+        console.log(`   [${tenant.fonte}] ${i}/${alvo.length} · ${prontos.length} prontos · ${min.toFixed(1)} min · ~${resta} min restantes${i >= iReleitura ? ' · releitura' : ''}`);
+      }
+      if (pararReleitura && i >= iReleitura) break;
       const url = alvo[i];
       const r = await fetchFonte(url, { semBD });
+      // A releitura é um EXTRA que só existe enquanto for grátis: no primeiro detalhe que vier
+      // pela via paga, para. Sem isto, a folga do orçamento viraria gasto de Bright Data em
+      // lote que já temos — o oposto de "usar a sobra".
+      if (i >= iReleitura && r?.via === 'bd') {
+        pararReleitura = true;
+        console.log(`💰 [${tenant.fonte}] releitura caiu na via paga no ${i - iReleitura + 1}º lote — abortada (releitura nunca paga).`);
+        break;
+      }
+      if (i >= iReleitura) relidos++;
       // O FREIO DE ORÇAMENTO NO MEIO DA COLETA (27/08). O fetch de cada fonte já devolve
       // `semCota: true` quando o teto recusa, e aqui isso era descartado no destructuring
       // `const { html } = …`: a página recusada por ORÇAMENTO virava um `sem++` igual ao de
@@ -110,7 +209,7 @@ async function coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debu
       await sleep(350);
     }
   }
-  console.log(`[${tenant.fonte}] ${prontos.length} prontos · ${encerrados} encerrados · ${reprov} descartados · ${sem} sem detalhe · ${cotaNegada} sem cota`);
+  console.log(`[${tenant.fonte}] ${prontos.length} prontos (${relidos} por releitura) · ${encerrados} encerrados · ${reprov} descartados · ${sem} sem detalhe · ${cotaNegada} sem cota`);
   // fonteVazia = respondeu mas 0 lotes (não é falha: o leiloeiro só não tem imóveis agora).
   return { prontos, encerrados, fonteVazia: fetchOk && urls.length === 0, enumerados: urls.length, cotaNegada };
 }
@@ -135,7 +234,25 @@ export async function rodarFonte(cfg, opts) {
     const { prontos, encerrados, fonteVazia, enumerados, cotaNegada } = await coletarTenant(supabase, fetchFonte, tenant, cfg, { maxLotes, debug, semBD });
 
     if (!prontos.length) {
-      if (fonteVazia) { console.log(`[${tenant.fonte}] sem imóveis no momento — fonte vazia (sem alarme).`); continue; }
+      // ⚠️ 29/08 — FONTE VAZIA PRECISA VIRAR LINHA, NÃO SILÊNCIO. Isto era um `continue` que
+      // NÃO registrava nada, e o efeito foi medido no dia: a HASTA enumerou 0 lotes (tinha 579
+      // em 25/08), imprimiu "sem alarme" e **não deixou registro nenhum em `fonte_saude`** — o
+      // monitor não podia acusar regressão porque não havia medição, e a fonte só reapareceria
+      // 108 h depois como `medicao_velha`. É a pergunta de revisão do CLAUDE.md em estado puro:
+      // *este vazio é resposta, ou é falha que não sabe que falhou?*
+      // Quem responde não é este `if` — é `registrarSaude`, comparando com a execução anterior:
+      // sem histórico de acervo fica 'vazio' (leiloeiro pequeno entre leilões, sem ruído); com
+      // acervo anterior vira 'degradado' com "queda vs anterior". O mesmo conserto que o
+      // `fonte_regressao_suspeita` recebeu em 29/08: "não consegui verificar" é uma LINHA.
+      if (fonteVazia) {
+        console.log(`[${tenant.fonte}] respondeu e enumerou 0 lote(s) — registrando a medição.`);
+        await registrarSaude(supabase, tenant.fonte, [], cfg.chave, {
+          ok: false, vazio: true, enumerados: 0,
+          metricas: { n: 0, uf_pct: 0, valor_pct: 0, link_pct: 0, foto_pct: 0 },
+          motivo: 'respondeu 200 e enumerou 0 lote(s)',
+        });
+        continue;
+      }
       await registrarSaude(supabase, tenant.fonte, [], cfg.chave, {
         ok: false, semCota: estado.semCota || cotaNegada > 0, cotaNegada, enumerados,
         metricas: { n: 0, uf_pct: 0, valor_pct: 0, link_pct: 0, foto_pct: 0 },

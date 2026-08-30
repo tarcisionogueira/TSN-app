@@ -6,6 +6,7 @@
  * Env: ALFA_MAX_LOTES (40) · ALFA_MAX_PAGES (2) · ALFA_DRYRUN (default '1') · ALFA_DEBUG.
  * Env infra: VITE_SUPABASE_URL, SUPABASE_SERVICE_KEY.
  */
+import './lib/env-runner.mjs';   // carrega ~/.bidpro-runner.env quando rodado na mão
 import { createClient } from '@supabase/supabase-js';
 import { rodarFonte } from './lib/motor/runner.mjs';
 import cfg from './lib/motor/fontes/alfaleiloes.mjs';

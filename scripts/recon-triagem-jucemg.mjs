@@ -24,8 +24,10 @@
  *
  * Env: VITE_SUPABASE_URL, SUPABASE_SERVICE_KEY. Opcionais: TRIAGEM_CONC (6), TRIAGEM_LIMITE.
  */
+import './lib/env-runner.mjs';   // carrega ~/.bidpro-runner.env quando rodado na mão
 import { createClient } from '@supabase/supabase-js';
 import { readFileSync } from 'node:fs';
+import { fetchHeadless, fecharHeadless } from './lib/fetch-residencial.mjs';
 
 const SB_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -35,6 +37,24 @@ const supabase = createClient(SB_URL, SB_KEY);
 const CONC = Number(process.env.TRIAGEM_CONC || 6);
 const LIMITE = Number(process.env.TRIAGEM_LIMITE || 0);
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36';
+
+// ── MODO RESIDENCIAL: LER O QUE O CLOUDFLARE RECUSOU, DE GRAÇA (29/08) ─────────────────────
+// A triagem da JUCEMG deixou **53 sites como `bloqueado`** — 51 deles com `plataforma: null`,
+// e o null aqui NÃO quer dizer "não roda plataforma conhecida": quer dizer que o Cloudflare
+// devolveu "Just a moment..." e o HTML nunca foi lido. São 53 leiloeiros que hoje entram na
+// conta como "custa Bright Data" sem que ninguém saiba se dois deles já teriam parser pronto
+// (dois JÁ SE SABE que sim: adrianoleiloeiro e angelabecharaleiloes, ambos Superbid).
+//
+// O runner residencial existe exatamente para isso — Chromium real, IP de casa, ZERO cota
+// paga. Com `TRIAGEM_HEADLESS=1` o `pegar()` cai no navegador quando o fetch simples é
+// bloqueado; com `TRIAGEM_BLOQUEADOS=1` a lista vem do BANCO (os que já falharam), em vez do
+// JSON — então a rodada custa 53 páginas e não 141, e serve QUALQUER junta, não só a de MG.
+//
+// ⚠️ Continua valendo a regra do arquivo: Bright Data NÃO é chamado aqui em hipótese nenhuma.
+// Descobrir o que existe segue sendo de graça; o que muda é que agora o "de graça" alcança
+// quem estava atrás do Cloudflare.
+const HEADLESS = process.env.TRIAGEM_HEADLESS === '1';
+const SO_BLOQUEADOS = process.env.TRIAGEM_BLOQUEADOS === '1';
 
 // ── MOTOR REPETÍVEL, NÃO SCRIPT DE UMA VEZ (item 8, 29/08) ──────────────────────────────────
 // Classificar os 141 sites da JUCEMG levou 2 minutos e custou zero. O mesmo script serve
@@ -46,8 +66,22 @@ const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
 // e `scripts/dados/` guarda um por junta. O extrator do PDF vive em `docs/` como receita —
 // juntas publicam a lista em PDF com fonte de CMap próprio, que precisa ser decodificado.
 const ARQUIVO = process.env.TRIAGEM_LISTA || './dados/jucemg-dominios.json';
-const lista = JSON.parse(readFileSync(new URL(ARQUIVO, import.meta.url), 'utf8'));
-console.log(`[triagem] lista: ${ARQUIVO} · ${lista.length} domínio(s)`);
+let lista;
+if (SO_BLOQUEADOS) {
+  // A lista vem do BANCO: exatamente quem já foi medido e recusou o acesso grátis. Reprocessar
+  // os 141 do JSON gastaria Chromium em 88 sites que o fetch simples já lê bem.
+  const { data, error } = await supabase.from('leiloeiro_triagem')
+    .select('dominio, leiloeiros').eq('bloqueado', true).order('dominio');
+  // `error` conferido: sem isto uma falha de leitura viraria "lista vazia" e o script diria
+  // "0 domínios · concluído" — sucesso relatado sobre nada feito.
+  if (error) { console.error('[triagem] leitura dos bloqueados falhou:', error.message); process.exit(1); }
+  lista = (data || []).map(r => ({ dominio: r.dominio, leiloeiros: r.leiloeiros || [] }));
+  if (!lista.length) { console.log('[triagem] nenhum site bloqueado pendente — nada a fazer.'); process.exit(0); }
+  console.log(`[triagem] BLOQUEADOS do banco · ${lista.length} domínio(s)${HEADLESS ? ' · via Chromium residencial' : ''}`);
+} else {
+  lista = JSON.parse(readFileSync(new URL(ARQUIVO, import.meta.url), 'utf8'));
+  console.log(`[triagem] lista: ${ARQUIVO} · ${lista.length} domínio(s)`);
+}
 const alvos = LIMITE ? lista.slice(0, LIMITE) : lista;
 
 /**
@@ -104,13 +138,27 @@ function ehBloqueio(status, html, headers) {
 async function pegar(url) {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 20000);
+  let r0;
   try {
     const r = await fetch(url, { headers: { 'User-Agent': UA, 'Accept-Language': 'pt-BR,pt;q=0.9' }, redirect: 'follow', signal: ctrl.signal });
     const html = (await r.text()).slice(0, 400000);
-    return { status: r.status, html, url: r.url, headers: r.headers, servidor: r.headers.get('server') || null };
+    r0 = { status: r.status, html, url: r.url, headers: r.headers, servidor: r.headers.get('server') || null };
   } catch (e) {
-    return { status: 0, html: '', url, headers: new Headers(), erro: String(e?.message || e).slice(0, 120) };
+    r0 = { status: 0, html: '', url, headers: new Headers(), erro: String(e?.message || e).slice(0, 120) };
   } finally { clearTimeout(t); }
+
+  // O navegador só entra QUANDO O SIMPLES NÃO SERVIU — nunca por padrão. Chromium custa
+  // segundos por página; gastá-lo em site que responde 200 ao fetch seria trocar uma rodada
+  // de 2 minutos por uma de meia hora sem ganhar informação nenhuma.
+  if (!HEADLESS || !(r0.erro || ehBloqueio(r0.status, r0.html, r0.headers))) return r0;
+  const html = await fetchHeadless(url, { timeoutMs: 45000 });
+  // `null` do headless é "não consegui", NÃO "a página está vazia" — devolve o resultado do
+  // fetch simples (que já carrega o 403/erro) em vez de fabricar um 200 vazio. Fundir os dois
+  // faria o site sair da lista de bloqueados sem nunca ter sido lido: a forma nº 1 do CLAUDE.md,
+  // e aqui ela apagaria justamente os leiloeiros que esta rodada existe para recuperar.
+  if (html == null) return { ...r0, headlessTentou: true };
+  return { status: 200, html: html.slice(0, 400000), url, headers: new Headers(),
+           servidor: r0.servidor, headlessTentou: true, viaHeadless: true };
 }
 
 async function triar(item) {
@@ -183,3 +231,24 @@ for (const r of resultados) {
 }
 console.log('[triagem] resumo', JSON.stringify(porPlat, null, 1));
 console.log('[triagem] com parser pronto:', resultados.filter(r => r.parser_existente).length);
+
+// ── O QUE ESTA RODADA RECUPEROU ──────────────────────────────────────────────────────────
+// Medir o desfecho, não só o esforço: "53 sites visitados" não diz se algum saiu do balde
+// pago. O que interessa é quantos DEIXARAM de estar bloqueados e, destes, quantos já têm
+// parser — que é a diferença entre "configurar um tenant" e "escrever parser novo".
+if (SO_BLOQUEADOS) {
+  const destravados = resultados.filter(r => !r.bloqueado);
+  const comParser = destravados.filter(r => r.parser_existente);
+  console.log(`[triagem] DESTRAVADOS pelo residencial: ${destravados.length} de ${resultados.length}`);
+  if (comParser.length) {
+    console.log(`[triagem] …e ${comParser.length} JÁ TÊM PARSER (entram por configuração):`);
+    for (const r of comParser) console.log(`           ${r.dominio} → ${r.plataforma} (${r.parser_existente})`);
+  }
+  const aindaPagos = resultados.filter(r => r.bloqueado);
+  if (aindaPagos.length) console.log(`[triagem] seguem exigindo Bright Data: ${aindaPagos.length}`);
+  // ⚠️ Plataforma descoberta NÃO é lote coletado. Antes de subir tenant, dry-run: em 29/08
+  // 11 sites classificados como Superbid enumeraram ZERO lotes ("menciona" ≠ "roda").
+  console.log('[triagem] ⚠️ antes de subir tenant: DRY-RUN. Assinatura de HTML não prova catálogo.');
+}
+
+await fecharHeadless();

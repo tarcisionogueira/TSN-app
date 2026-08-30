@@ -1147,7 +1147,13 @@ function UsuariosTab() {
   const [auditoriaData, setAuditoriaData] = useState(null);
   const [auditoriaLoading, setAuditoriaLoading] = useState(false);
   const [atribUser, setAtribUser] = useState(null);   // usuário recebendo a atribuição de arremate
-  const [atribForm, setAtribForm] = useState({ endereco: '', valor: '', tipo: 'extrajudicial', cidade: '', estado: '', numero_processo: '' });
+  // Registro de assinatura contratada FORA do gateway (29/08) — ver api/registrar-assinatura.js
+  const [assinUser, setAssinUser] = useState(null);
+  const [assinForm, setAssinForm] = useState({ plano: 'assessorado', forma: 'externo', valor: '', notas: '', imovelId: '' });
+  const [assinLoad, setAssinLoad] = useState(false);
+  // `promover` (29/08): a atribuição volta a poder promover, mas por ESCOLHA — ver a regra
+  // `atribuicao.promove_assessorado` em regra_negocio. Padrão false = regra de 30/07 mantida.
+  const [atribForm, setAtribForm] = useState({ endereco: '', valor: '', tipo: 'extrajudicial', cidade: '', estado: '', numero_processo: '', promover: false });
   const [atribExtraindo, setAtribExtraindo] = useState('');   // '' | 'lendo' | 'ok' | 'erro'
   const [atribDocs, setAtribDocs] = useState([]);             // [{ nome, status }] dos anexos lidos
   const atribFilesRef = useRef([]);                           // File[] p/ persistir no imóvel-âncora
@@ -1504,19 +1510,53 @@ ${hash ? `<h2>Verificação de integridade</h2><div class="kv muted">${esc(hashL
     loadAuditoria(u.id);
   }
 
-  // Atribui um arremate ao usuário: cria o caso (arrematado) e o promove a Assessorado.
+  // Registra uma assessoria/clube contratada FORA do gateway. A tabela `plano_assinaturas` e
+  // a tela que a lista existiam desde sempre — o que faltava era o produtor (nenhum insert em
+  // lugar nenhum do código, 0 linhas). Sem isto o cliente aparecia "Assessoria · PAGO" pelo
+  // role, com 0 pagamentos e 0 contratos, e sumia da lista de assessorados.
+  async function registrarAssinatura() {
+    if (!assinUser) return;
+    setAssinLoad(true);
+    try {
+      const res = await apiCall('/api/registrar-assinatura', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: assinUser.id, plano_key: assinForm.plano, forma_pagamento: assinForm.forma,
+          valor_total: assinForm.valor, notas: assinForm.notas || null,
+          imovel_id: (assinForm.imovelId || '').trim() || null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Falha ao registrar');
+      // A tela mostra o que o BANCO devolveu, não o que ela pediu: `criada:false` significa que
+      // já havia assinatura ativa (idempotência), e dizer "registrado" ali seria mentir.
+      if (data.role) setUsers(users.map(u => u.id === assinUser.id ? { ...u, role: data.role } : u));
+      alert(data.criada
+        ? `Assinatura registrada (${assinForm.plano}, ${assinForm.forma}).`
+          + `${data.fidelidade_meses ? ` Fidelidade ${data.fidelidade_meses} meses.` : ''}`
+          + `\n\n${data.aviso_garantia || ''}`
+        : `Este cliente JÁ tinha assinatura ativa deste plano — nada foi duplicado.`);
+      setAssinUser(null);
+    } catch (e) {
+      alert(`Não registrei: ${e.message}`);
+    } finally { setAssinLoad(false); }
+  }
+
+  // Atribui um arremate ao usuário: cria o caso (arrematado) e, SE o admin marcar a caixa,
+  // promove a Assessorado. Sem a marcação vale a regra de 30/07 (nada de role/cotas).
   async function atribuirArremate() {
     if (!atribUser) return;
     setAtribLoad(true);
     try {
       const res = await apiCall('/api/atribuir-arremate', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: atribUser.id, imovel_endereco: atribForm.endereco, imovel_valor: atribForm.valor, tipo_leilao: atribForm.tipo, cidade: atribForm.cidade || null, estado: atribForm.estado || null, numero_processo: atribForm.numero_processo || null, valor_avaliacao: atribForm.valor_avaliacao || null }),
+        body: JSON.stringify({ user_id: atribUser.id, imovel_endereco: atribForm.endereco, imovel_valor: atribForm.valor, tipo_leilao: atribForm.tipo, cidade: atribForm.cidade || null, estado: atribForm.estado || null, numero_processo: atribForm.numero_processo || null, valor_avaliacao: atribForm.valor_avaliacao || null, promover_assessorado: !!atribForm.promover }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Falha ao atribuir');
-      // Regra do dono (30/07): atribuição manual NÃO muda role/cotas — o servidor
-      // devolve o role real (inalterado); o acesso ao caso vem do vínculo (RLS).
+      // O servidor devolve o role REAL depois da operação (promovido ou não) — nunca o que a
+      // tela supôs. Se a promoção falhar, vem `aviso` e o role antigo: a tela tem que mostrar o
+      // banco, não a intenção.
       if (data.role) setUsers(users.map(u => u.id === atribUser.id ? { ...u, role: data.role } : u));
       const casoId = data.caso_id;
       const imovelId = data.imovel_id;   // imóvel-âncora: chave dos anexos e dos 3 relatórios
@@ -1686,9 +1726,17 @@ ${hash ? `<h2>Verificação de integridade</h2><div class="kv muted">${esc(hashL
                               {u.role !== 'assessorado' && (
                                 <button
                                   style={{ padding: '5px 10px', background: '#fef9c3', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, color: '#a16207', cursor: 'pointer' }}
-                                  onClick={() => { setAtribUser(u); setAtribForm({ endereco: '', valor: '', tipo: 'extrajudicial', cidade: '', estado: '', numero_processo: '' }); setAtribExtraindo(''); setAtribDocs([]); atribFilesRef.current = []; }}
+                                  onClick={() => { setAtribUser(u); setAtribForm({ endereco: '', valor: '', tipo: 'extrajudicial', cidade: '', estado: '', numero_processo: '', promover: false }); setAtribExtraindo(''); setAtribDocs([]); atribFilesRef.current = []; }}
                                   title="Atribuir uma arrematação a este usuário e torná-lo Assessorado (habilita o acompanhamento e os lançamentos)">
                                   🏷 Atribuir arremate
+                                </button>
+                              )}
+                              {!['admin','analista','advogado','suporte','consultor'].includes(u.role) && (
+                                <button
+                                  style={{ padding: '5px 10px', background: '#ecfdf5', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, color: '#047857', cursor: 'pointer' }}
+                                  onClick={() => { setAssinUser(u); setAssinForm({ plano: 'assessorado', forma: 'externo', valor: '', notas: '', imovelId: '' }); }}
+                                  title="Registrar assessoria/clube contratada fora do gateway (pagamento externo)">
+                                  📝 Registrar assessoria
                                 </button>
                               )}
                               {['advogado','analista','consultor'].includes(u.role) && (
@@ -1755,10 +1803,24 @@ ${hash ? `<h2>Verificação de integridade</h2><div class="kv muted">${esc(hashL
                 <input value={atribForm.valor} onChange={e => setAtribForm(p => ({ ...p, valor: e.target.value }))} placeholder="0,00" style={S.input} />
               </div>
             </div>
+            {/* 29/08 — O RÓTULO DO BOTÃO DIZIA "Atribuir e tornar Assessorado" E NÃO TORNAVA:
+                a promoção foi removida em 30/07 e o texto ficou. Foi essa promessa que fez o
+                dono esperar um cliente assessorado que continuava explorador. Agora quem decide
+                é a caixa, e o botão diz o que vai acontecer. */}
+            {atribUser?.role === 'explorador' && (
+              <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginTop: 16, padding: '10px 12px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, cursor: 'pointer' }}>
+                <input type="checkbox" checked={!!atribForm.promover} onChange={e => setAtribForm(p => ({ ...p, promover: e.target.checked }))} style={{ marginTop: 2 }} />
+                <span style={{ fontSize: 12, color: '#78350f', lineHeight: 1.45 }}>
+                  <b>Promover para Assessorado</b> — marque quando o cliente <b>contratou de fato</b>.
+                  Deixe desmarcado na atribuição de <b>estudo</b> (alimentar a IA com uma arrematação
+                  real): promover dá as cotas do plano sem cobrança.
+                </span>
+              </label>
+            )}
             <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
               <button onClick={() => setAtribUser(null)} style={{ flex: 1, padding: '10px', border: '1px solid #e2e8f0', borderRadius: 8, background: 'white', color: '#64748b', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
               <button onClick={atribuirArremate} disabled={atribLoad} style={{ flex: 2, padding: '10px', background: atribLoad ? '#cbd5e1' : '#a16207', color: 'white', border: 'none', borderRadius: 8, fontWeight: 800, fontSize: 13, cursor: atribLoad ? 'default' : 'pointer' }}>
-                {atribLoad ? 'Atribuindo…' : 'Atribuir e tornar Assessorado'}
+                {atribLoad ? 'Atribuindo…' : (atribForm.promover && atribUser?.role === 'explorador' ? 'Atribuir e promover a Assessorado' : 'Atribuir arremate')}
               </button>
             </div>
           </div>
@@ -2043,6 +2105,61 @@ ${hash ? `<h2>Verificação de integridade</h2><div class="kv muted">${esc(hashL
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal — Registrar assessoria contratada FORA do gateway (29/08) */}
+      {assinUser && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:2000, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}
+          onClick={e => { if (e.target === e.currentTarget) setAssinUser(null); }}>
+          <div style={{ background:'#fff', borderRadius:16, padding:26, width:'100%', maxWidth:480 }}>
+            <div style={{ fontSize:16, fontWeight:800, color:'#111', marginBottom:2 }}>📝 Registrar assessoria</div>
+            <div style={{ fontSize:12, color:'#64748b', marginBottom:16 }}>{assinUser.nome || assinUser.cpf || assinUser.id}</div>
+
+            <label style={{ fontSize:11, fontWeight:700, color:'#64748b' }}>Plano</label>
+            <select value={assinForm.plano} onChange={e => setAssinForm(p => ({ ...p, plano: e.target.value }))} style={S.input}>
+              <option value="assessorado">Assessoria</option>
+              <option value="clube">Leilão Club</option>
+            </select>
+
+            <label style={{ fontSize:11, fontWeight:700, color:'#64748b', marginTop:10, display:'block' }}>Forma de pagamento</label>
+            <select value={assinForm.forma} onChange={e => setAssinForm(p => ({ ...p, forma: e.target.value }))} style={S.input}>
+              <option value="externo">Externo (fora do sistema)</option>
+              <option value="a_vista">À vista</option>
+              <option value="parcelado">Parcelado</option>
+              <option value="recorrente">Recorrente</option>
+            </select>
+
+            <label style={{ fontSize:11, fontWeight:700, color:'#64748b', marginTop:10, display:'block' }}>Valor total pago (R$)</label>
+            <input value={assinForm.valor} onChange={e => setAssinForm(p => ({ ...p, valor: e.target.value }))} placeholder="6.000,00" style={S.input} />
+
+            <label style={{ fontSize:11, fontWeight:700, color:'#64748b', marginTop:10, display:'block' }}>Imóvel vinculado (id do acervo — opcional)</label>
+            <input value={assinForm.imovelId} onChange={e => setAssinForm(p => ({ ...p, imovelId: e.target.value }))} placeholder="cole o id do imóvel" style={S.input} />
+            {/* O vínculo não é decoração: é onde a conclusão vai PROCURAR a carta de arrematação
+                e a matrícula registrada. Sem imóvel, a assessoria nunca conclui sozinha — fica
+                ativa até alguém encerrar na mão, e é honesto dizer isso aqui. */}
+            <div style={{ fontSize:10.5, color:'#94a3b8', marginTop:3 }}>
+              Sem imóvel vinculado a assessoria não encerra sozinha (é nele que a carta e a matrícula são procuradas).
+            </div>
+
+            <label style={{ fontSize:11, fontWeight:700, color:'#64748b', marginTop:10, display:'block' }}>Notas (como foi fechado)</label>
+            <input value={assinForm.notas} onChange={e => setAssinForm(p => ({ ...p, notas: e.target.value }))} placeholder="ex.: Pix em 12/08, acordo por WhatsApp" style={S.input} />
+
+            <div style={{ marginTop:14, padding:'10px 12px', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:8, fontSize:11.5, color:'#475569', lineHeight:1.5 }}>
+              Fidelidade e prazo de acesso vêm da <b>configuração do plano</b> — não se digitam aqui.
+              O cliente é promovido a Assessorado se ainda for explorador.
+              <br />A assessoria <b>termina com a carta de arrematação + a matrícula do registro</b> anexadas
+              ao imóvel vinculado — o prazo é só teto.
+              <br /><b>A garantia de 7 dias do CDC não é ancorada</b>: pagamento fora do gateway é decisão comercial sua.
+            </div>
+
+            <div style={{ display:'flex', gap:10, marginTop:16 }}>
+              <button onClick={() => setAssinUser(null)} style={{ flex:1, padding:'10px', border:'1px solid #e2e8f0', borderRadius:8, background:'white', color:'#64748b', fontWeight:700, fontSize:13, cursor:'pointer' }}>Cancelar</button>
+              <button onClick={registrarAssinatura} disabled={assinLoad} style={{ flex:2, padding:'10px', background: assinLoad ? '#cbd5e1' : '#047857', color:'white', border:'none', borderRadius:8, fontWeight:800, fontSize:13, cursor: assinLoad ? 'default' : 'pointer' }}>
+                {assinLoad ? 'Registrando…' : 'Registrar assinatura'}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -5427,13 +5544,19 @@ function PainelFunilPublico() {
   const n = (v) => Number(v || 0).toLocaleString('pt-BR');
   const pct = (a, b) => (Number(b) > 0 ? `${Math.round((Number(a) / Number(b)) * 100)}%` : '—');
   const d = f?.degraus || {};
+  // TODOS os degraus usam a MESMA base (quem chegou). Até 29/08 "Tentaram criar conta" usava
+  // `foi_ao_cadastro` como base e os outros usavam `visitantes`: 34 pessoas apareciam como
+  // "34%" na mesma coluna em que 99 pessoas apareciam como "4%". Base misturada em coluna
+  // única não é detalhe de formatação — inverte a leitura de qual degrau é o gargalo.
   const degraus = [
     ['Chegaram no site', d.visitantes, null, '#0D63DB'],
     ['Viram o acervo público', d.viu_acervo, d.visitantes, '#0891b2'],
     ['Viram os planos', d.viu_planos, d.visitantes, '#7c3aed'],
     ['Foram ao cadastro', d.foi_ao_cadastro, d.visitantes, '#c026d3'],
-    ['Tentaram criar conta', d.tentou, d.foi_ao_cadastro, '#ea580c'],
+    ['Enviaram o formulário', d.tentou, d.visitantes, '#ea580c'],
     ['Criaram conta', d.virou_conta, d.visitantes, '#059669'],
+    // O degrau que faltava: cadastrar não é usar. É aqui que o funil vaza de verdade.
+    ['Geraram o 1º relatório', d.gerou_relatorio, d.visitantes, '#b45309'],
   ];
 
   return (
@@ -5451,8 +5574,12 @@ function PainelFunilPublico() {
         </div>
       </div>
       <div style={{ fontSize: 12, color: '#64748b', marginBottom: 14, lineHeight: 1.5 }}>
-        Visitante anônimo, sem conta. &quot;Criaram conta&quot; é <strong>piso</strong>: conta quem cadastrou no mesmo
-        navegador da visita — quem trocou de aparelho no meio não aparece.
+        Visitante anônimo, sem conta. Todos os degraus são <strong>% de quem chegou</strong> — mesma base,
+        de cima a baixo. &quot;Criaram conta&quot; é <strong>piso</strong> e conta <strong>pessoa</strong>, não
+        navegador: só entra quem cadastrou no mesmo navegador da visita e cuja conta nasceu nesta janela
+        {typeof d.contas_criadas_total === 'number' ? <> (no total nasceram <strong>{n(d.contas_criadas_total)}</strong> contas no período)</> : null}.
+        &quot;Enviaram o formulário&quot; é o /login inteiro — entrar, cadastrar ou recuperar senha compartilham
+        a mesma página, e quem entra pelo Google não gera envio nenhum.
       </div>
 
       {erro ? (

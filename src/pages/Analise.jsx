@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { leilaoEncerrado, pracaMaisDescontada, dataBR } from '../utils/leilaoEncerrado';
+import { leilaoEncerrado, pracaMaisDescontada, dataBR, pracaAtualPorData } from '../utils/leilaoEncerrado';
 import { useIsMobile } from '../utils/useIsMobile';
 import {
   FileText, Loader2, Sparkles, BarChart3, ShieldAlert, TrendingUp,
@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { arquivoParaBase64 } from '../utils/arquivo';
 import { reportarErroCliente } from '../utils/reportarErro';
+import { registrarEvento } from '../utils/tracker';
 import { extrairDadosDocumento, extrairDadosDocumentoUrl, gerarParecer } from '../utils/claude';
 import { calcularMetricasCenario, calcularTetoLance, calcularSAC, calcularPrice, calcularVPL, calcularTIR, calcularPayback, calcularMultiplo, fluxoLocacao, TMA_PADRAO, fmt, fmtPct, moedaOuTraco, pctOuTraco, SEM_MEDIDA } from '../utils/calculos';
 import { caixaMatriculaUrl, caixaRegrasVendaUrl } from '../utils/caixa';
@@ -516,9 +517,21 @@ export default function Analise() {
   const isViavel = isUsoProprio ? true : metricas.roi >= META;
   // Pesquisa de mercado veio VAZIA (fonte instável no momento): sem valor de mercado o
   // ROI daria "-100%/reprovada" — enganoso. Nesse caso mostramos "não estimado".
-  const mercadoSemDados = !(Number(d.valorMercado) > 0)
-    && !(Number(mercado?.precoMedioM2) > 0)
-    && (((mercado?.nivel1?.vendas?.length || 0) + (mercado?.nivel2?.vendas?.length || 0)) === 0);
+  //
+  // ⚠️ 29/08 — A GUARDA EXISTIA E NÃO PEGAVA, porque exigia TRÊS coisas ao mesmo tempo:
+  //     !(valorMercado>0) && !(precoMedioM2>0) && (comparáveis === 0)
+  // Bastava a pesquisa devolver UM comparável, ou um preço/m² que não virou valor final, para
+  // `mercadoSemDados` ficar FALSO — e aí o cliente lia **"Operação reprovada, retorno
+  // insuficiente · ROI −100%"** na mesma linha em que "Desconto vs. mercado" mostrava "—",
+  // porque aquela célula testa só `d.valorMercado>0`. **A mesma página julgava o mesmo fato de
+  // duas maneiras, e a versão frouxa era a que assinava o veredito para o cliente.**
+  // Medido em 29/08 num relatório real (APARTAMENTO — SÃO PAULO/SP, aval. R$ 340.000):
+  // venda estimada vazia, desconto "—", e mesmo assim "reprovada" com ROI −100%.
+  //
+  // O teste certo é UM só, e é o da grandeza que origina tudo: ROI, TIR, desconto e teto de
+  // lance são todos derivados de `valorMercado`. Sem ele, nenhum desses números existe —
+  // independentemente de quantos comparáveis a pesquisa tenha listado.
+  const mercadoSemDados = !(Number(d.valorMercado) > 0);
   const riscosBloqueantes = (d.riscos||[]).filter(r => r.tipo === 'bloqueante');
 
   // ─── Cenários de disputa (relatório mercadológico) ─────────────────────────
@@ -852,9 +865,18 @@ export default function Analise() {
   const gerarRelMercado = (override = null) => {
     const ov = (override && typeof override === 'object' && !override.nativeEvent && !override.target) ? override : null;
     const dSnap = ov ? { ...d, ...ov } : { ...d };
-    if (analisesBloqueado) { showMsg('Limite de análises atingido.', 'error'); return; }
-    if (!dSnap.endereco && !dSnap.cidade) { showMsg('Imóvel sem endereço/cidade para avaliar o mercado.', 'error'); return; }
-    if (gerandoMercado) return;
+    // A tentativa é registrada ANTES das recusas: sem isto, o clique que morre aqui some do
+    // rastro e a leitura vira "não clicou" — que é a conclusão oposta.
+    registrarEvento('analise_gerar', { alvo: 'mercado', detalhe: 'tentou' });
+    if (analisesBloqueado) {
+      registrarEvento('analise_gerar', { alvo: 'mercado', detalhe: 'recusado: cota' });
+      showMsg('Limite de análises atingido.', 'error'); return;
+    }
+    if (!dSnap.endereco && !dSnap.cidade) {
+      registrarEvento('analise_gerar', { alvo: 'mercado', detalhe: 'recusado: imovel sem endereco/cidade' });
+      showMsg('Imóvel sem endereço/cidade para avaliar o mercado.', 'error'); return;
+    }
+    if (gerandoMercado) { registrarEvento('analise_gerar', { alvo: 'mercado', detalhe: 'ignorado: ja gerando' }); return; }
     const isAVistaSnap = cenario === 'aVista' || dSnap.somenteAVista;
     const metricasSnap = ov ? calcularMetricasCenario(dSnap, dSnap.valorArrematacao || 0, isAVistaSnap) : metricas;
     const tetoSnap = ov ? calcularTetoLance(dSnap, isAVistaSnap, META, dSnap.valorMercado || 0) : teto;
@@ -867,6 +889,7 @@ export default function Analise() {
       nomeCondominio: dSnap.nomeCondominio || '',
     };
     const parecerInputs = { d: dSnap, metricas: metricasSnap, teto: tetoSnap, cenario: isAVistaSnap ? 'À Vista' : 'Alavancado' };
+    registrarEvento('analise_gerar', { alvo: 'mercado', detalhe: 'iniciou no servidor' });
     showMsg('Geração iniciada no servidor, pode até fechar a aba; acompanhe em "Análises" no topo.');
     iniciarAnalise(
       { imovelId: analiseImovelId, titulo: dSnap.nome || dSnap.endereco || imovelInicial?.titulo || 'Imóvel', cidade: dSnap.cidade, estado: dSnap.estado, imovel: imovelInicial || null, paraUserId },
@@ -897,6 +920,7 @@ export default function Analise() {
     if (entry?.status === 'gerando') return;
     if (entry?.status === 'erro' && aplicadoRef.current !== entry.updatedAt) {
       aplicadoRef.current = entry.updatedAt;
+      registrarEvento('analise_gerar', { alvo: 'mercado', detalhe: `falhou: ${String(entry.erro || 'sem motivo').slice(0, 120)}` });
       showMsg(entry.erro || 'Erro ao gerar o relatório mercadológico.', 'error');
       carregarCota(); // ex.: bloqueio por limite/sem-crédito veio do servidor
       return;
@@ -946,6 +970,12 @@ export default function Analise() {
       if (aplicados.length) { setD(p => ({ ...p, ...patch })); setCustosEdital({ aplicados, custos: cst }); }
     }
     carregarCota(); // a geração consumiu cota no servidor, atualiza os contadores
+    // "Concluiu" e "concluiu COM base de mercado" não são a mesma coisa — o relatório de
+    // mercado vazio é exatamente o que virou anomalia hoje. O desfecho registra os dois.
+    registrarEvento('analise_gerar', {
+      alvo: 'mercado',
+      detalhe: Number(r.valorMercado) > 0 ? 'concluiu com base de mercado' : 'concluiu SEM base de mercado',
+    });
     showMsg('Relatório Mercadológico + Viabilidade pronto!');
   }, [analiseEntry?.status, analiseEntry?.updatedAt, analiseImovelId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1162,6 +1192,28 @@ export default function Analise() {
     autoHealRef.current = analiseImovelId;
     gerarRelMercado();
   }, [relMercadoIncompleto, gerandoMercado, analisesBloqueado, d?.endereco, d?.cidade, analiseImovelId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // O QUE A TELA OFERECIA NA CHEGADA — um evento por imóvel, por sessão (29/08). Medido: das
+  // 16 contas novas que abriram a /analise em 30 dias, 10 nunca clicaram em Gerar. O clique
+  // genérico do rastreador diz que elas não clicaram; não diz se a porta estava aberta. Sem
+  // este carimbo, "10 não clicaram" tanto pode ser tela confusa quanto três cadeados — e as
+  // duas conclusões pedem correções opostas.
+  const estadoRef = React.useRef(null);
+  useEffect(() => {
+    if (semLimite || !analiseImovelId) return;
+    if (!cotaMercado) return;                       // espera a cota do banco; sem ela o retrato mente
+    if (estadoRef.current === analiseImovelId) return;
+    estadoRef.current = analiseImovelId;
+    const est = (ok, bloqueio) => (ok ? 'pronto' : bloqueio || 'livre');
+    registrarEvento('analise_estado', {
+      alvo: role || '?',
+      detalhe: [
+        `mercado=${est(relMercadoGerado, loteEncerrado.encerrado ? 'encerrado' : analisesBloqueado ? 'cota' : null)}`,
+        `documental=${est(relDocumentalGerado, ROLES_SEM_DOCUMENTAL.includes(role) ? 'plano' : loteEncerrado.encerrado ? 'encerrado' : !relMercadoGerado ? 'sequencia' : null)}`,
+        `cota=${Number(cotaMercado.usado || 0)}/${limiteRole}${cotaMercado.amostra ? ' (amostra)' : ''}`,
+      ].join(';'),
+    });
+  }, [analiseImovelId, cotaMercado, role, relMercadoGerado, relDocumentalGerado, analisesBloqueado, loteEncerrado.encerrado, semLimite, limiteRole]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Reunião com analista → ACOMPANHAMENTO (fluxo real no Caso) ─────────────
   // O agendamento de verdade (escolher analista+horário, o analista dar o parecer
@@ -1785,12 +1837,12 @@ export default function Analise() {
                     <div style={{ fontSize:12, color:'#64748b', lineHeight:1.6, flex:1 }}>{c.desc}</div>
                     <div style={{ display:'flex', gap:8 }}>
                       {c.planoBloqueado ? (
-                        <button onClick={() => setUpgrade({ tipo:'plano', titulo:c.titulo })}
+                        <button onClick={() => { registrarEvento('analise_bloqueio', { alvo:c.k, detalhe:`plano ${role}` }); setUpgrade({ tipo:'plano', titulo:c.titulo }); }}
                           style={{ flex:1, padding:'10px', background:c.cor, color:'white', border:'none', borderRadius:10, fontWeight:800, fontSize:13, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
                           <Lock size={14}/> Disponível no Investidor Pro
                         </button>
                       ) : c.block ? (
-                        <button onClick={() => setUpgrade({ tipo:'cota', titulo:c.titulo })}
+                        <button onClick={() => { registrarEvento('analise_bloqueio', { alvo:c.k, detalhe:'cota esgotada' }); setUpgrade({ tipo:'cota', titulo:c.titulo }); }}
                           style={{ flex:1, padding:'10px', background:c.cor, color:'white', border:'none', borderRadius:10, fontWeight:800, fontSize:13, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
                           <Lock size={14}/> Limite atingido, fazer upgrade
                         </button>
@@ -2852,11 +2904,37 @@ export default function Analise() {
                   <div style={num}>{vAval>0 ? `R$ ${fmt(vAval)}` : 'Não informada'}</div>
                   <div style={sub}>{vAval>0 ? 'valor que o leilão atribuiu ao imóvel' : 'o leilão não divulgou avaliação; a análise usa o valor de mercado'}</div>
                 </div>
-                <div style={card}>
-                  <div style={rot}>Lance mínimo (praça atual)</div>
-                  <div style={num}>{vArr>0 ? `R$ ${fmt(vArr)}` : '—'}</div>
-                  <div style={sub}>{descAval>0 ? `${fmtPct(descAval)} abaixo da avaliação` : 'ponto de partida do lance'}</div>
-                </div>
+                {/* ⚠️ 29/08 — O CARD MOSTRAVA A PRAÇA MAIS DESCONTADA COM O RÓTULO "PRAÇA ATUAL".
+                    Um número certo com o nome errado — a forma nº 10 do CLAUDE.md dentro da tela
+                    do cliente. As duas praças respondem perguntas diferentes e AMBAS importam:
+                      • atual por data  → por quanto se lança HOJE (é o que este card promete)
+                      • mais descontada → quanto pode render (regra do dono, 07/08: as projeções
+                        do relatório saem sobre a praça mais descontada)
+                    Num lote com 1ª a R$ 340.000 em 05/09 e 2ª a R$ 170.000 em 20/09, hoje se
+                    lança 340 mil e a projeção olha os 170. Por isso o card passa a mostrar a
+                    ATUAL e a DIZER, na mesma caixa, que a análise usou a outra — senão o leitor
+                    vê dois números diferentes na mesma página e conclui que um deles está errado.
+                    `d.valorArrematacao` NÃO muda: ele alimenta ROI/TIR/teto, e mexer nele
+                    reverteria a decisão de 07/08 por um efeito de rótulo. */}
+                {(() => {
+                  const pAtual = pracaAtualPorData(imovelInicial || {});
+                  const vAtual = pAtual.valor || vArr;
+                  const divergem = pAtual.valor > 0 && vArr > 0 && Math.round(pAtual.valor) !== Math.round(vArr);
+                  const descAtual = vAval > 0 && vAtual > 0 ? (1 - vAtual / vAval) * 100 : 0;
+                  const dataFmt = pAtual.data ? String(pAtual.data).slice(0, 10).split('-').reverse().join('/') : null;
+                  const nomePraca = pAtual.temDuas ? (pAtual.n === 2 ? '2ª praça' : '1ª praça') : 'praça única';
+                  return (
+                    <div style={card}>
+                      <div style={rot}>Lance mínimo (praça atual)</div>
+                      <div style={num}>{vAtual>0 ? `R$ ${fmt(vAtual)}` : '—'}</div>
+                      <div style={sub}>
+                        {vAtual>0 ? `${nomePraca}${dataFmt ? ` · ${dataFmt}` : ''}` : 'ponto de partida do lance'}
+                        {descAtual>0 ? ` · ${fmtPct(descAtual)} abaixo da avaliação` : ''}
+                        {divergem ? ` — a análise projeta sobre a praça mais descontada (R$ ${fmt(vArr)})` : ''}
+                      </div>
+                    </div>
+                  );
+                })()}
                 <div style={{ ...card, background:'rgba(167,243,208,0.18)' }}>
                   <div style={rot}>Venda estimada no mercado</div>
                   <div style={{ ...num, color:'#a7f3d0' }}>{sugerido>0 ? `R$ ${fmt(sugerido)}` : '—'}</div>

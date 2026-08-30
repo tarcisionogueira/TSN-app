@@ -1,0 +1,172 @@
+/**
+ * RECON — existe um caminho que lista SÓ o acervo do leiloeiro? (29/08)
+ * ═══════════════════════════════════════════════════════════════════════════════════════
+ * POR QUE EXISTE: o dry-run multi-tenant provou que `/busca/segmento/imoveis` num white-label
+ * Superbid devolve o CATÁLOGO GLOBAL da plataforma. Quatro sites distintos enumeraram os
+ * MESMOS 75 lotes, com os MESMOS ids:
+ *
+ *   emiliomatos_125319 · bhleiloaria_125319 · franciscodavid_125319 · denis_125319
+ *     → todos "Casa A.T. 150 m² - Vila Mariana, Morungaba/SP"
+ *
+ * Isso derrubou 3 candidatos E revelou que a fonte EMILIOMATOS, em produção, gravava lote de
+ * outro leiloeiro sob o nome dela. O cron está suspenso até este recon achar o caminho certo.
+ *
+ * ─── O INSTRUMENTO: COMPARAÇÃO DIFERENCIAL, NÃO INSPEÇÃO ────────────────────────────────
+ * Um recon que só olha um site não consegue distinguir "catálogo do leiloeiro" de "catálogo
+ * global" — foi exatamente assim que o defeito sobreviveu: sozinho, o EMILIOMATOS enumerava
+ * 75 lotes e nada parecia errado. Um número plausível medindo outra coisa é a forma nº 10.
+ *
+ * A pergunta só tem resposta com DOIS sites: um caminho serve se, e somente se, devolver
+ * conjuntos DIFERENTES em white-labels diferentes. Igualdade prova que é global; diferença
+ * prova que filtra por leiloeiro. Nenhuma leitura de HTML substitui essa comparação.
+ *
+ * ⚠️ Por isso o veredito é sobre o PAR de sites, nunca sobre um só. Um caminho que devolve
+ * 0 em ambos não é "filtra bem": é "não existe" — e sai marcado como tal, não como sucesso.
+ *
+ * ─── CUSTO ZERO, POR DECISÃO ────────────────────────────────────────────────────────────
+ * Roda pelo Chromium RESIDENCIAL (o mesmo `fetch-residencial.mjs` de GESTAO/RJ/triagem), não
+ * pelo Bright Data. Os recons anteriores deste leiloeiro usavam BD "fora da cota", e o teto
+ * semanal fechou 29/08 saturado em 550/550. Descobrir continua custando R$ 0.
+ *
+ * USO (da máquina residencial, com ~/.bidpro-runner.env carregado):
+ *   node scripts/recon-emiliomatos-por-leiloeiro.mjs
+ * Env opcionais: RECON_MAX_CAMINHOS (0 = todos) · RECON_ESPERA_MS (7000) · RECON_SITES (csv)
+ */
+import { fetchHeadless, fecharHeadless } from './lib/fetch-residencial.mjs';
+import { extrairUrlsDeLote } from './lib/emiliomatos-parse.mjs';
+
+// Dois white-labels da MESMA plataforma. O par é o instrumento: o que for igual nos dois é
+// global. `bhleiloaria` foi escolhido por ser um dos três que enumeraram os 75 idênticos.
+const SITES = (process.env.RECON_SITES
+  ? process.env.RECON_SITES.split(',').map(s => s.trim()).filter(Boolean)
+  : ['https://emiliomatosleiloes.com.br', 'https://bhleiloaria.com.br']);
+
+// 0 = TODOS. O default 12 truncou a 1ª rodada (29/08): o HTML publicava 54 caminhos e só 12
+// foram testados — "nenhum separou" sobre 12 de 54 é conclusão sobre a amostra, não sobre o
+// site. Custo de testar tudo é Chromium residencial: minutos, R$ 0.
+const MAX_CAMINHOS = Number(process.env.RECON_MAX_CAMINHOS ?? 0);
+
+// A SPA renderiza a lista por JS. Na 1ª rodada o recon leu 3 lotes onde o dry-run lê 75 —
+// esperou pouco. Amostra pequena não invalida a comparação (3 iguais nos dois sites já é
+// sinal), mas deixa margem para um caminho parecer vazio só por não ter renderizado a tempo.
+const ESPERA_MS = Number(process.env.RECON_ESPERA_MS || 7000);
+
+// Palpites conhecidos da família Superbid/MBV. Entram DEPOIS dos caminhos que o próprio site
+// publica — o menu do site é evidência, o palpite é só rede de segurança.
+const PALPITES = [
+  '/busca/segmento/imoveis',          // o atual — esperado: IGUAL nos dois (é o defeito)
+  '/leiloes',
+  '/leiloes/abertos',
+  '/nossos-leiloes',
+  '/busca/leiloeiro',
+  '/comitente',
+];
+
+const norm = (b) => b.replace(/\/+$/, '');
+
+/** Caminhos internos que o próprio site publica no HTML (menu/nav). Evidência > palpite. */
+function caminhosDoHtml(html, base) {
+  const host = new URL(base).host.replace(/^www\./, '');
+  const out = new Set();
+  for (const m of String(html).matchAll(/href=["']([^"'#?]+)["']/gi)) {
+    let h = m[1];
+    if (/^https?:\/\//i.test(h)) {
+      try { const u = new URL(h); if (u.host.replace(/^www\./, '') !== host) continue; h = u.pathname; }
+      catch { continue; }
+    }
+    if (!h.startsWith('/') || h.length < 2) continue;
+    if (/\.(pdf|jpe?g|png|svg|css|js|ico|webp)$/i.test(h)) continue;
+    // Só o que cheira a listagem — o menu tem dezenas de links institucionais.
+    if (!/leil|lote|imov|imóv|busca|segmento|catalog|venda/i.test(h)) continue;
+    // ⚠️ FORA: URL de LOTE ou de LEILÃO ESPECÍFICO, não de catálogo (29/08, defeito da v2).
+    // O menu publica os leilões em cartaz (`/imoveis-brb-na-ba-df-e-go-36495`) e lotes soltos
+    // (`/imoveis/apartamento/…-126896`). Sem este filtro eles entram como "caminho candidato"
+    // e produzem o veredito mais enganoso possível: existem num site e não no outro, o que dá
+    // sobreposição 0% — e 0% era lido como POR_LEILOEIRO. Um leilão específico não é o
+    // catálogo do leiloeiro; apontar o `catalogo` da fonte para ele congelaria a coleta num
+    // único evento, que acaba.
+    if (/-\d{4,}$/.test(h)) continue;
+    out.add(h.replace(/\/+$/, '') || '/');
+  }
+  return [...out];
+}
+
+/** Ids de lote que um caminho devolve NAQUELE site. `null` = não consegui ler (≠ vazio). */
+async function idsDoCaminho(base, caminho) {
+  const html = await fetchHeadless(`${norm(base)}${caminho}`, { timeoutMs: 60000, esperaMs: ESPERA_MS });
+  // `null` do headless é "não consegui", não "está vazio". Fundir os dois faria um caminho
+  // inacessível parecer um filtro perfeito (0 lotes) — a forma nº 1, aqui capaz de mandar
+  // alguém integrar um caminho que nunca respondeu.
+  if (html == null) return null;
+  try { return new Set([...extrairUrlsDeLote(html, norm(base)).keys()].map(String)); }
+  catch { return new Set(); }
+}
+
+const jaccard = (a, b) => {
+  if (!a.size && !b.size) return 1;
+  let inter = 0; for (const x of a) if (b.has(x)) inter++;
+  return inter / (a.size + b.size - inter);
+};
+
+(async () => {
+  console.log(`🔎 RECON por leiloeiro · sites: ${SITES.join(' × ')}\n`);
+
+  // 1) O que cada site PUBLICA como caminho de listagem.
+  const publicados = new Set();
+  for (const base of SITES) {
+    const home = await fetchHeadless(norm(base), { timeoutMs: 60000, esperaMs: ESPERA_MS });
+    if (home == null) { console.log(`  ⚠️ ${base} — home não carregou (nada a concluir sobre ele)`); continue; }
+    const cs = caminhosDoHtml(home, base);
+    console.log(`  ${base} → ${cs.length} caminho(s) candidato(s) no HTML: ${JSON.stringify(cs.slice(0, 10))}`);
+    for (const c of cs) publicados.add(c);
+  }
+
+  const todos = [...new Set([...publicados, ...PALPITES])];
+  const candidatos = MAX_CAMINHOS > 0 ? todos.slice(0, MAX_CAMINHOS) : todos;
+  if (MAX_CAMINHOS > 0 && todos.length > MAX_CAMINHOS) {
+    console.log(`  ⚠️ TRUNCADO: ${todos.length} candidatos, testando ${MAX_CAMINHOS}. Rode com RECON_MAX_CAMINHOS=0 para todos.`);
+  }
+  console.log(`\n📋 testando ${candidatos.length} caminho(s) nos ${SITES.length} sites…\n`);
+
+  // 2) O TESTE: mesmo caminho, sites diferentes. Igual = global. Diferente = filtra.
+  const linhas = [];
+  for (const c of candidatos) {
+    const conjuntos = [];
+    for (const base of SITES) conjuntos.push({ base, ids: await idsDoCaminho(base, c) });
+    const ilegivel = conjuntos.filter(x => x.ids === null).map(x => new URL(x.base).host);
+    if (ilegivel.length) { linhas.push({ caminho: c, veredito: 'NAO_LIDO', detalhe: `sem leitura em: ${ilegivel.join(', ')}` }); continue; }
+    const tamanhos = conjuntos.map(x => x.ids.size);
+    if (tamanhos.every(n => n === 0)) { linhas.push({ caminho: c, veredito: 'VAZIO', detalhe: '0 lotes nos dois — o caminho não lista nada' }); continue; }
+    const sim = jaccard(conjuntos[0].ids, conjuntos[1].ids);
+    // ⚠️ POR_LEILOEIRO EXIGE LOTE NOS DOIS SITES. Disjunção só prova filtro quando AMBOS
+    // devolvem acervo: `0 vs 6` não é "cada um traz o seu", é "existe num site e não no
+    // outro" — e sai com sobreposição 0%, idêntica ao caso bom. A v2 marcou dois leilões
+    // específicos como POR_LEILOEIRO exatamente assim, e o veredito teria mandado apontar o
+    // catálogo da fonte para um evento. O nome do veredito precisa medir o que ele diz.
+    const ambosTemLote = tamanhos.every(n => n > 0);
+    const veredito = !ambosTemLote ? 'SO_EM_UM'
+      : (sim >= 0.9 ? 'GLOBAL' : (sim <= 0.1 ? 'POR_LEILOEIRO' : 'PARCIAL'));
+    linhas.push({
+      caminho: c,
+      veredito,
+      detalhe: `${tamanhos.join(' vs ')} lotes · sobreposição ${(sim * 100).toFixed(0)}%`
+        + (ambosTemLote ? '' : ' — presente em um site só, não é filtro'),
+    });
+  }
+
+  console.log('RESULTADO\n');
+  for (const l of linhas) console.log(`  ${l.veredito.padEnd(14)} ${l.caminho.padEnd(34)} ${l.detalhe}`);
+
+  const bons = linhas.filter(l => l.veredito === 'POR_LEILOEIRO' || l.veredito === 'PARCIAL');
+  console.log(bons.length
+    ? `\n✅ CANDIDATO(S) A CATÁLOGO DO LEILOEIRO: ${bons.map(b => b.caminho).join(', ')}`
+      + '\n   Próximo passo: apontar `catalogo` da fonte para ele e rodar DRY-RUN nos dois sites —'
+      + '\n   sobreposição baixa é indício, lote conferido na página do leiloeiro é a prova.'
+    : `\n❌ NENHUM dos ${candidatos.length} caminhos separou os acervos — todos devolvem o catálogo`
+      + '\n   global (ou não listam nada). O EMILIOMATOS deve seguir com o cron SUSPENSO: sem um'
+      + '\n   caminho que filtre, qualquer coleta grava lote de outro leiloeiro sob o nome dele.'
+      + '\n   Se `redeSegmento` aparece entre os caminhos, é indício forte de que o white-label é'
+      + '\n   vitrine da REDE, e não do leiloeiro — nesse caso não há o que consertar no parser.');
+
+  await fecharHeadless();
+})().catch(async (e) => { console.error(e); await fecharHeadless(); process.exit(1); });

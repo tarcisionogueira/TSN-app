@@ -111,6 +111,8 @@ const progInicial = () => ({
 // nas re-gerações e no laudo de viabilidade — economiza Bright Data. A retenção
 // (5d sem reunião / 30d com reunião / permanente se arrematou) é do cron.
 const BUCKET = 'documentos';
+// UA de navegador: a Caixa responde 403 a cliente sem UA reconhecivel.
+const UA_NAVEGADOR = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
 const isUuid = (s) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s || '');
 function storage(path, opts = {}) {
   return fetch(`${SUPABASE_URL}/storage/v1/${path}`, {
@@ -137,6 +139,52 @@ function tipoDoRotulo(rotulo) {
   if (r.includes('escritura') || r.includes('lavratura')) return 'escritura';
   return null; // anexos genéricos não entram no cache por tipo
 }
+/**
+ * CAPTURA SÍNCRONA da matrícula quando o link já é PDF DIRETO (29/08).
+ * ═══════════════════════════════════════════════════════════════════════════════════════════
+ * POR QUE EXISTE: o dono gerou um relatório e leu "matrícula não disponível". O caminho antigo
+ * ENFILEIRAVA (`cef_matricula_fila`) e seguia — e a fila é drenada por um GitHub Action a cada
+ * 30 minutos. Ninguém espera 30 minutos por um relatório: o cliente recebia um parecer
+ * PRELIMINAR e o documento chegava depois, para uma tela que ele já tinha fechado.
+ *
+ * E a espera nunca foi necessária: medido em 29/08, **as 23.484 matrículas da CEF são PDF
+ * DIRETO** (`venda-imoveis.caixa.gov.br/editais/matricula/<UF>/<id>.pdf`), com média de
+ * **1,76 MB** — um download de segundos. A fila existia para o caso que precisa de navegador;
+ * usá-la para um arquivo estático era pagar latência de lote por um trabalho instantâneo.
+ *
+ * Vale para QUALQUER fonte cujo `link_matricula` termine em .pdf, não só a CEF.
+ *
+ * ⚠️ VALIDA QUE É PDF DE VERDADE (`%PDF` nos primeiros bytes). A lição de 04/08: quando a
+ * resposta era uma página de erro, o sistema salvava 63 KB de HTML como se fosse o edital de
+ * 738 KB — e "documento" desses é PIOR que nenhum, porque o relatório parece ter o que não tem.
+ * Aqui um HTML de erro seria salvo como matrícula ilegível e o gate a daria por cumprida.
+ */
+async function capturarMatriculaDireta(imovelId, row, cache) {
+  const url = String(row?.link_matricula || '');
+  if (!/^https?:\/\//i.test(url) || !/\.pdf(\?|#|$)/i.test(url)) return null;
+  if (cache?.matricula?.storage_path) return null;            // já temos arquivo: nada a fazer
+  try {
+    const r = await fetch(url, {
+      headers: { 'User-Agent': UA_NAVEGADOR, Accept: 'application/pdf,*/*' },
+      signal: AbortSignal.timeout(25000),
+    });
+    if (!r.ok) return null;
+    const buf = Buffer.from(await r.arrayBuffer());
+    // 20 MB é o teto do `salvarDocBucket`; 5 KB corta página de erro travestida de arquivo.
+    if (buf.length < 5000 || buf.length > 20 * 1024 * 1024) return null;
+    if (buf.subarray(0, 5).toString('latin1') !== '%PDF-') return null;   // ver o aviso acima
+    const b64 = buf.toString('base64');
+    await salvarDocBucket(imovelId, 'matricula', 'Matricula', url, b64, row?.data_leilao);
+    console.log(`[documental] matrícula capturada na hora (${Math.round(buf.length / 1024)} KB) — ${imovelId}`);
+    return { kind: 'pdf', base64: b64 };
+  } catch (e) {
+    // Sem `throw`: falhar aqui só significa seguir pelo caminho antigo (fila + preliminar),
+    // que continua existindo. O motivo fica no log para não virar "sumiu sem explicação".
+    console.log(`[documental] captura direta da matrícula falhou (${String(e?.message || e).slice(0, 60)}) — segue pela fila`);
+    return null;
+  }
+}
+
 // Documentos já ARMAZENADOS deste imóvel (manual do analista ou cache anterior).
 async function mapaCache(imovelId) {
   try {
@@ -850,7 +898,18 @@ export default async function handler(req, res) {
 
     // Cache-first: documentos já armazenados deste imóvel (poupa Bright Data).
     const podeCache = isUuid(String(imovelId));
-    const cache = podeCache ? await mapaCache(String(imovelId)) : {};
+    let cache = podeCache ? await mapaCache(String(imovelId)) : {};
+
+    // ── CAPTURA A MATRÍCULA NA HORA, se o link for PDF direto e ainda não tivermos o arquivo.
+    // Antes daqui, este caso só ENFILEIRAVA e o cliente recebia parecer preliminar; a fila é
+    // drenada de 30 em 30 min. Ver o cabeçalho de `capturarMatriculaDireta`.
+    if (podeCache && !cache?.matricula?.storage_path) {
+      const capt = await capturarMatriculaDireta(String(imovelId), row, cache);
+      // Re-lê o cache: o `salvarDocBucket` acabou de gravar, e é o cache que alimenta o GATE
+      // de "tem matrícula?" logo abaixo. Sem reler, o documento entraria no bucket e o
+      // relatório sairia preliminar do mesmo jeito — o defeito consertado pela metade.
+      if (capt) cache = await mapaCache(String(imovelId));
+    }
     // Tipos que JÁ temos guardados no bucket ANTES desta geração — usado para o
     // aprendizado persistente (se tínhamos o arquivo mas a leitura voltou 0, é bug
     // de leitura, não "doc ainda não capturado").

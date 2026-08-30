@@ -43,6 +43,26 @@ export default function Login() {
   const [refCodigo] = useState(() => refParam || lerRef());
 
   const conviteEquipeParam = params.get('convite_equipe') || '';
+  // O LOTE QUE TROUXE A PESSOA — hoje só MEDIDO, não usado (29/08).
+  // `api/publico.js` manda `/#/login?modo=cadastro&imovel=<id>` da página do lote, e esta tela
+  // nunca leu o parâmetro: quem clicou em "Criar conta grátis e ver a ficha" naquele apartamento
+  // específico cria a conta e cai na Home. Antes de ligar o caminho de volta, medir quanta gente
+  // chega assim — dimensionar no escuro é como se escolhe a correção errada.
+  const imovelParam = params.get('imovel') || '';
+
+  // Carimba a chegada SEMPRE, com imóvel e sem imóvel. Registrar só quando o parâmetro existe
+  // daria o numerador sem o denominador — e, pior, um zero seria indistinguível de "o evento não
+  // está subindo". Com as duas metades no mesmo rastro, zero-com-imóvel é uma medição, não uma
+  // dúvida. Uma vez por montagem: a tela re-renderiza a cada tecla do formulário.
+  const chegadaRef = React.useRef(false);
+  useEffect(() => {
+    if (chegadaRef.current) return;
+    chegadaRef.current = true;
+    registrarEvento('origem_lote', {
+      alvo: imovelParam ? 'com_imovel' : 'sem_imovel',
+      detalhe: `modo=${modoParam || 'login'}${imovelParam ? `;imovel=${imovelParam}` : ''}`,
+    });
+  }, [imovelParam, modoParam]);
 
   // Persiste o ref e convite em sessionStorage
   useEffect(() => {

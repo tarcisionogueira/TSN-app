@@ -225,11 +225,19 @@ export function parseJSON(text) {
 
 // O agente que aprende com os relatórios SINALIZA anomalias (o gerador achou algo errado
 // nos dados) para a verificação de saúde — sem custo, sem gerar relatório.
-async function registrarAnomalia(tipo, fonte, imovelId, campo, detalhe) {
+/**
+ * `jaResolvido` (29/08): distingue o RASTRO de um conserto do PROBLEMA em aberto.
+ * O invariante `data_edital_recuou_prazo` acusava 3, e os 3 diziam "corrigido pelo documento" —
+ * o sistema leu o edital, viu o acervo errado e arrumou na hora. Eram registros de SUCESSO
+ * sendo contados como pendência. Um painel que acusa o próprio conserto treina o dono a ignorar
+ * o painel, e o custo é esse, não a linha. Só o caso MANTIDO (o edital recuaria o prazo sem
+ * declarar encerramento) é divergência de verdade e continua pedindo olho humano.
+ */
+async function registrarAnomalia(tipo, fonte, imovelId, campo, detalhe, jaResolvido = false) {
   try {
     await sb('rpc/registrar_anomalia_relatorio', {
       method: 'POST',
-      body: JSON.stringify({ p_tipo: tipo, p_fonte: fonte || '', p_imovel_id: String(imovelId || ''), p_campo: campo || '', p_detalhe: detalhe || '' }),
+      body: JSON.stringify({ p_tipo: tipo, p_fonte: fonte || '', p_imovel_id: String(imovelId || ''), p_campo: campo || '', p_detalhe: detalhe || '', p_resolvido: !!jaResolvido }),
     });
   } catch { /* nunca bloqueia o relatório */ }
 }
@@ -2353,7 +2361,9 @@ export default async function handler(req, res) {
           const recuaSemProva = encurtaPrazo(p1.data, imDb.data_leilao) && !p1.fim && !pracaUnica;
           try {
             await registrarAnomalia('data_divergente_edital', fonteDb, imovelId, 'data_leilao',
-              `Acervo dizia ${imDb.data_leilao}; edital diz ${p1.data} — ${recuaSemProva ? 'MANTIDO o acervo (o edital recuaria o prazo sem dizer que é encerramento).' : 'corrigido pelo documento.'}`);
+              `Acervo dizia ${imDb.data_leilao}; edital diz ${p1.data} — ${recuaSemProva ? 'MANTIDO o acervo (o edital recuaria o prazo sem dizer que é encerramento).' : 'corrigido pelo documento.'}`,
+              // corrigido = nada pendente; mantido = divergência de verdade, fica em aberto.
+              !recuaSemProva);
           } catch { /* rastro best-effort */ }
           if (!recuaSemProva) { imDb.data_leilao = p1.data; patchPr.data_leilao = p1.data; }
         }
@@ -2882,10 +2892,25 @@ COMO USAR (obrigatório): dedique um parágrafo aos CUSTOS DA OPERAÇÃO segundo
       // Serve para (a) o front mostrar "não estimado" e o servidor NÃO cobrar cota, e (b) o
       // self-heal (regenerar-relatorios-cron) re-tentar com orçamento fresco por até 48h. Uma
       // pesquisa que se PREENCHE numa próxima tentativa limpa o flag e para de ser re-tentada.
-      const mercadoVazio = !reaproveitado
-        && !(Number(valorMercado) > 0)
-        && !(Number(mercado?.precoMedioM2) > 0)
-        && (((mercado?.nivel1?.vendas?.length || 0) + (mercado?.nivel2?.vendas?.length || 0)) === 0);
+      //
+      // ⚠️ 29/08 — A CONDIÇÃO EXIGIA TRÊS COISAS, E POR ISSO QUASE NUNCA ERA VERDADE.
+      // Bastava a pesquisa devolver UM comparável (ou um preço/m² que não virou valor final)
+      // para `mercadoVazio` ficar FALSO com `valorMercado = 0`. E aqui isso não é só cosmético,
+      // porque este flag decide DINHEIRO e CONSERTO:
+      //   • `if (cobrarCredito && !mercadoVazio …)` → **o cliente é cobrado** por um relatório
+      //     que não estimou mercado;
+      //   • o self-heal (`regenerar-relatorios-cron`) só re-tenta o que está marcado como vazio
+      //     → o auto-conserto ficava desligado **exatamente no caso que ele existe para curar**.
+      // Medido: das 66 análises com resultado, **2 têm `valorMercado = 0` e as duas gravaram
+      // `mercadoVazio: false`** — uma delas com `precoMedioM2 > 0`. Foi a que o dono abriu e leu
+      // "Operação reprovada, retorno insuficiente · ROI −100%" com a venda estimada em branco.
+      //
+      // O teste certo é UM só, o da grandeza que origina tudo: valorMercado. ROI, TIR, desconto
+      // e teto de lance são todos derivados dele — sem ele nenhum desses números existe, tenha a
+      // pesquisa listado 0 ou 40 comparáveis. `src/pages/Analise.jsx` carregava a MESMA condição
+      // em cópia e foi corrigido junto: regra duplicada é como o defeito sobrevive nos dois lados
+      // (a lição do `roteiarDatasPraca`, 29/08).
+      const mercadoVazio = !reaproveitado && !(Number(valorMercado) > 0);
       // valorAvaliacao: fecha o loop servidor→tela — o valor confirmado no edital (garantir
       // Valores/extrato) chegava ao BANCO mas nunca voltava ao card já aberto ("Não informada").
       // ── NOTA METODOLÓGICA (pedido do dono, 06/08) ───────────────────────────────────────

@@ -364,21 +364,38 @@ async function coletarComEsteira(fonte, estrategias) {
 // Registra a saúde da coleta (1 linha por fonte por execução) e compara com a
 // execução anterior para detectar regressão (queda >50% ou zeragem). O alerta
 // por e-mail é disparado pelo cron /api/monitor-fontes-cron, que lê esta tabela.
+// `enumerados` = quanto a FONTE declara ter, independente de quanto nós aprovamos. Este
+// registrarSaude (o do puppeteer) simplesmente DESCARTAVA o campo — por isso as 24 fontes daqui
+// aparecem com `enumerados: null`, enquanto as do motor o preenchem desde 17/08.
+// Isso importa porque `fonte_regressao_suspeita()` e `fonte_baseline_aprendida()` passaram a ler
+// `coalesce(nullif(enumerados,0), total)` (29/08): sem o campo, uma fonte que declara ter 1 lote
+// e aprova 0 (VENDASGOV: o único imóvel está VENDIDO) é acusada de `zerou`, quando o zero é a
+// resposta correta. Com o campo, o alarme para de disparar — e não por complacência: passa a
+// comparar o TAMANHO DA FONTE contra o piso da fonte, que é o que ele sempre quis medir.
+// ⚠️ Isto NÃO esconde coletor quebrado: enumerar 300 e aprovar 0 continua virando `status:
+// falhou` aqui e "queda vs anterior" abaixo. O que muda é só o alarme de REGRESSÃO DA FONTE,
+// que é outra pergunta.
 async function registrarSaude(fonte, imoveis, estrategia, validacao) {
   const m = validacao?.metricas || metricasColeta(imoveis);
+  const enumerados = Number.isFinite(Number(validacao?.enumerados)) ? Number(validacao.enumerados) : null;
   let status = 'ok', motivo = validacao?.motivo || '';
   if (!m.n) status = 'falhou';
   else if (!validacao?.ok) status = 'degradado';
   try {
     const { data: ant } = await supabase.from('fonte_saude')
-      .select('total').eq('fonte', fonte).order('executado_em', { ascending: false }).limit(1).maybeSingle();
-    if (ant && ant.total > 0 && m.n < ant.total * 0.5) {
+      .select('total,enumerados').eq('fonte', fonte).order('executado_em', { ascending: false }).limit(1).maybeSingle();
+    // Compara ENUMERADOS quando os dois lados têm — espelha o `usaEnum` de _saude-fonte.mjs.
+    // Sem isso, a fonte que declara 1 e aprova 0 acusaria "queda" contra o total anterior.
+    const usaEnum = enumerados != null && Number(ant?.enumerados) > 0;
+    const atual = usaEnum ? enumerados : m.n;
+    const anterior = usaEnum ? Number(ant.enumerados) : Number(ant?.total || 0);
+    if (anterior > 0 && atual < anterior * 0.5) {
       if (status === 'ok') status = 'degradado';
-      motivo = [motivo, `queda vs anterior (${m.n}<${ant.total})`].filter(Boolean).join('; ');
-      console.log(`  ⚠️ [${fonte}] REGRESSÃO: caiu de ${ant.total} para ${m.n}`);
+      motivo = [motivo, `queda vs anterior (${usaEnum ? 'listados' : 'coletados'} ${atual}<${anterior})`].filter(Boolean).join('; ');
+      console.log(`  ⚠️ [${fonte}] REGRESSÃO: caiu de ${anterior} para ${atual}`);
     }
     await supabase.from('fonte_saude').insert({
-      fonte, total: m.n, estrategia: estrategia || null,
+      fonte, total: m.n, enumerados, estrategia: estrategia || null,
       uf_pct: m.uf_pct, valor_pct: m.valor_pct, link_pct: m.link_pct, foto_pct: m.foto_pct,
       status, motivo: motivo || null,
     });
@@ -1884,10 +1901,16 @@ async function scraperLJUD_navegador(browser, endpoint) {
 
 // ─── VENDASGOV — Imóveis da União (SPU / SERPRO) ──────────────────────────────
 // Portal público do governo federal (imoveis.vendasgov.serpro.gov.br) sobre uma
-// API REST pública. Estrutura confirmada por captura real (debug_fetch): a lista é
-//   GET /api/public/imoveis?size=&page=&sort=itens.edital.dtCertame,asc&sala={subtipo}
-// (dá 500 SEM params). O WAF do SERPRO bloqueia fetch de datacenter (403), então o
-// fetch roda DENTRO da página (TLS de Chrome real) — mesma tática do LJUD. Inventário
+// API REST pública:
+//   GET /api/public/imoveis?size=&page=&sala={subtipo}
+// ⚠️ ESTE CABEÇALHO ESTAVA DESATUALIZADO E FOI CAUSA, NÃO SÓ DOCUMENTAÇÃO (30/08).
+// Ele dizia que a lista leva `sort=itens.edital.dtCertame,asc` e que *"o WAF do SERPRO bloqueia
+// fetch de datacenter (403), então o fetch roda DENTRO da página (TLS de Chrome real)"*. As duas
+// coisas eram verdade quando foram escritas e deixaram de ser: do IP residencial a API responde
+// a `curl` em 0,6 s, e o `sort` aponta para um campo que pode não existir mais. O coletor foi
+// construído para contornar um bloqueio que não se aplica mais aqui — e era o contorno que
+// travava. Comentário que descreve uma restrição do AMBIENTE como se fosse propriedade do SITE
+// envelhece mal: ao migrar uma fonte de runner, reconferir a premissa, não só o IP. Inventário
 // EXCLUSIVO (imóveis públicos da União/INSS/fundos), não duplica os leiloeiros.
 const VG_BASE = 'https://imoveis.vendasgov.serpro.gov.br';
 
@@ -1942,69 +1965,120 @@ function mapImovelVG(it) {
   };
 }
 
-// Rotas da SPA por sala (de /api/salas) — cada uma faz o site chamar
-// /api/public/imoveis?...&sala=... que INTERCEPTAMOS.
-const VG_ROTAS = [
-  { sala: 'leilao', url: `${VG_BASE}/leilao` },
-  { sala: 'concorrencia', url: `${VG_BASE}/concorrencia` },
-  { sala: 'venda', url: `${VG_BASE}/venda` },
-  { sala: 'pai', url: `${VG_BASE}/imoveispublicos` },
-  { sala: 'fundo', url: `${VG_BASE}/fundos` },
-];
+// 30/08 — O PUPPETEER SAIU DAQUI, PORQUE A PREMISSA DELE CAIU.
+// O desenho antigo abria o navegador, interceptava o XHR da SPA e rolava a página, tudo para
+// contornar isto, escrito no cabeçalho da fonte: *"o WAF do SERPRO bloqueia fetch de datacenter
+// (403), então o fetch roda DENTRO da página (TLS de Chrome real)"*. Era verdade **do
+// datacenter**. Do IP residencial, medido pelo dono em 30/08:
+//     GET /                                             → 200 · 0,14 s
+//     GET /leilao                                       → 200 · 0,47 s
+//     GET /api/public/imoveis?size=1&page=0&sala=leilao  → 200 · 0,63 s
+// A API responde direto. E era o navegador que travava: as 5 rotas estouravam
+// `domcontentloaded` em 45 s — site que responde curl em 0,6 s e estola o Chrome headless.
+// Contornar um bloqueio que não existe mais custou 22 min/dia e 15 dias de acervo parado.
+//
+// O parser NÃO muda: `mapImovelVG` é o mesmo. O que muda é só como as páginas chegam.
+const VG_SALAS = ['leilao', 'concorrencia', 'venda', 'pai', 'fundo'];
+const VG_POR_PAGINA = 100;
 
-async function scraperVendasGov(browser) {
-  console.log('  Imóveis da União (VendasGov/SPU) — interceptando o XHR real do site...');
-  const page = await browser.newPage();
+async function scraperVendasGov() {
+  console.log('  Imóveis da União (VendasGov/SPU) — API pública, fetch direto (sem navegador)...');
   const bens = new Map();
-  // INTERCEPTAÇÃO: a SPA chama /api/public/imoveis com a sessão que o WAF aceita.
-  // Forçar o fetch por page.evaluate dava "Failed to fetch" (o WAF/sessão barra o
-  // fetch "manual"); ler a resposta REAL do site é o caminho provado (debug harness).
-  page.on('response', async (resp) => {
-    try {
-      if (!/\/api\/public\/imoveis(\?|$)/i.test(resp.url())) return;
-      const ct = resp.headers()['content-type'] || '';
-      if (!/json/i.test(ct)) return;
-      const j = await resp.json().catch(() => null);
+  let declarados = 0;   // soma dos `totalElements` — quanto a FONTE diz ter, some ou não no acervo
+  for (const sala of VG_SALAS) {
+    const antes = bens.size;
+    let recebidos = 0;
+    const descarte = { semId: 0, vendido: 0, repetido: 0 };
+    for (let page = 0; page < 40; page++) {
+      // SEM `sort` (30/08): `itens.edital.dtCertame` veio do comentário antigo da fonte e o
+      // campo pode não existir mais. Ordenar não serve para nada aqui, e parâmetro obsoleto em
+      // API que não reclama é filtro silencioso vestido de resposta legítima.
+      const url = `${VG_BASE}/api/public/imoveis?size=${VG_POR_PAGINA}&page=${page}`
+        + `&sala=${encodeURIComponent(sala)}`;
+      let r;
+      try {
+        // SEM o User-Agent de Chrome (30/08). O `curl` do dono passou (200 · 0,63 s) mandando
+        // o UA do próprio curl; a 1ª versão desta função mandava o `USER_AGENT` do arquivo, que
+        // é um Chrome de desktop, e colheu zero. É a incoerência que WAF pega: o cabeçalho jura
+        // ser Chrome e o handshake TLS diz Node. Isso reinterpreta o comentário original da
+        // fonte — talvez nunca tenha sido "bloqueia datacenter", e sim "bloqueia quem se diz
+        // Chrome sem ser". O navegador real passava por ser Chrome de verdade; o curl honesto
+        // passa por não fingir. Aqui a gente para de fingir: é um cliente pedindo JSON.
+        r = await fetch(url, {
+          headers: { Accept: 'application/json', 'Accept-Language': 'pt-BR,pt;q=0.9' },
+          signal: AbortSignal.timeout(30000),
+        });
+      } catch (e) {
+        // Falha de rede NUNCA vira "a sala está vazia": para esta sala e deixa dito por quê.
+        console.log(`    VendasGov/${sala}: falha de rede na pág ${page} (${String(e.message).slice(0, 60)}) — parando esta sala`);
+        break;
+      }
+      if (!r.ok) {
+        console.log(`    VendasGov/${sala}: HTTP ${r.status} na pág ${page} — parando esta sala`);
+        break;
+      }
+      const j = await r.json().catch(() => null);
       const arr = j && Array.isArray(j.content) ? j.content : null;
-      if (!arr) return;
+      if (!arr) { console.log(`    VendasGov/${sala}: resposta sem \`content\` na pág ${page} — sala provavelmente inexistente`); break; }
+      // `content: []` na página 0 é resposta VÁLIDA e vazia — coisa diferente de sala
+      // inexistente, e diferente de erro. Sem esta linha as duas apareciam como um `+0`
+      // mudo, e foi isso que escondeu por uma rodada que o problema era o `sort`.
+      if (page === 0 && arr.length === 0) console.log(`    VendasGov/${sala}: respondeu 200 com content VAZIO — a sala existe e não trouxe lote`);
+      // CONTA CADA DESCARTE. `+0` sem motivo custou duas rodadas: "a API não devolveu nada" e
+      // "devolveu e o filtro jogou tudo fora" são causas opostas e apareciam iguais na tela.
       for (const it of arr) {
         const id = String(it && it.id != null ? it.id : '');
-        if (id && !it.vendido && !bens.has(id)) bens.set(id, it);
+        if (!id) { descarte.semId++; continue; }
+        if (it.vendido) { descarte.vendido++; continue; }
+        if (bens.has(id)) { descarte.repetido++; continue; }
+        bens.set(id, it);
       }
-    } catch { /* ignore corpo indisponível */ }
-  });
-
-  try {
-    await page.setUserAgent(USER_AGENT);
-    await page.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9' });
-    for (const { sala, url } of VG_ROTAS) {
-      const antes = bens.size;
-      try { await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 }); }
-      catch (e) { console.log(`    VendasGov/${sala}: goto (${String(e.message).slice(0, 35)})`); }
-      await new Promise(r => setTimeout(r, 6000)); // SPA boota + carrega a 1ª página
-      // Rola para disparar a paginação por scroll (novos XHR interceptados).
-      // Para quando parar de crescer por 3 rolagens seguidas (teto 40).
-      let estavel = 0;
-      for (let s = 0; s < 40 && estavel < 3; s++) {
-        const n0 = bens.size;
-        try { await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)); } catch { /* */ }
-        await new Promise(r => setTimeout(r, 1800));
-        estavel = bens.size > n0 ? 0 : estavel + 1;
+      recebidos += arr.length;
+      // `totalElements` é o que a API DIZ ter (paginação Spring). É o número que separa "o
+      // portal está vazio" de "a nossa consulta não enxerga o acervo" — duas causas opostas que,
+      // sem ele, aparecem as duas como uma lista curta. Medido em 30/08: a sala `leilao`
+      // devolveu 1 item com `size=100`, e esse item estava vendido.
+      if (page === 0) {
+        // O `if` anterior só imprimia QUANDO o campo existia — então "a API não manda
+        // totalElements" e "este código não rodou" ficavam indistinguíveis, que é o log
+        // condicional silencioso que este arquivo inteiro existe para não ter. Se o campo
+        // esperado falta, imprime as CHAVES que vieram: o nome certo aparece sozinho.
+        const total = Number(j?.totalElements ?? j?.total ?? j?.totalItems ?? NaN);
+        if (Number.isFinite(total)) {
+          declarados += total;
+          console.log(`    VendasGov/${sala}: a API declara ${total} imóvel(is) no total desta sala`);
+        } else {
+          console.log(`    VendasGov/${sala}: a resposta NÃO traz total — chaves recebidas: ${Object.keys(j || {}).join(', ') || '(nenhuma)'}`);
+        }
       }
-      console.log(`    VendasGov/${sala}: +${bens.size - antes} (acumulado ${bens.size})`);
+      if (arr.length < VG_POR_PAGINA) break;   // última página
+      await new Promise(res => setTimeout(res, 300));
     }
-  } finally { await page.close().catch(() => {}); }
+    console.log(`    VendasGov/${sala}: +${bens.size - antes} (acumulado ${bens.size}) · a API mandou ${recebidos}`
+      + (recebidos ? ` · descartados: ${descarte.vendido} vendido(s), ${descarte.semId} sem id, ${descarte.repetido} repetido(s)` : ''));
+  }
 
   const seen = new Set();
   const imoveis = [];
+  const perdidos = { semValor: 0, semUF: 0, repetido: 0 };
   for (const it of bens.values()) {
     const row = mapImovelVG(it);
-    if (!row.valor_minimo || !row.estado || seen.has(row.fonte_id)) continue;
+    if (!row.valor_minimo) { perdidos.semValor++; continue; }
+    if (!row.estado) { perdidos.semUF++; continue; }
+    if (seen.has(row.fonte_id)) { perdidos.repetido++; continue; }
     seen.add(row.fonte_id);
     imoveis.push(row);
   }
-  console.log(`    VendasGov: ${imoveis.length} imóveis mapeados (${bens.size} colhidos)`);
-  return imoveis;
+  if (bens.size && !imoveis.length) {
+    // Colheu e mapeou zero: o transporte funcionou e o FILTRO derrubou tudo. Dizer isso é o que
+    // separa "a fonte está vazia" de "a nossa regra está errada" — e as duas pedem coisas opostas.
+    console.log(`    VendasGov: ${bens.size} colhidos e NENHUM aprovado — ${perdidos.semValor} sem valor, ${perdidos.semUF} sem UF, ${perdidos.repetido} repetidos`);
+  }
+  // Devolve TAMBÉM o que a fonte declara ter — em objeto, não como propriedade pendurada no
+  // array: `imoveis.declarados` sobreviveria a um `.filter()` mas não a um `.map()`, e some em
+  // silêncio quando alguém mexer aqui daqui a três meses.
+  console.log(`    VendasGov: ${imoveis.length} imóveis mapeados (${bens.size} colhidos · a fonte declara ${declarados})`);
+  return { imoveis, declarados };
 }
 
 // ─── PESTANA LEILÕES ──────────────────────────────────────────────────────────
@@ -3160,21 +3234,26 @@ async function scraperGrupoLance(browser) {
   return imoveis;
 }
 
+// CONTAGEM NO BANCO, não no JavaScript (30/08). Isto fazia `.select('fonte').eq('ativo', true)`
+// e contava as linhas aqui — só que o PostgREST devolve no MÁXIMO 1.000 linhas por requisição e
+// não havia `.range()`. O painel imprimia as mil primeiras como se fossem o acervo. A prova é
+// aritmética: no relatório que o dono viu, 818+52+40+37+30+9+3+3+2+2+1+1+1+1 = **1.000 exatos**,
+// com a CEF marcada 818 quando tinha 23.484 ativos, e HASTA/LJUD/MEGA/SOLD/GRUPOLANCE ausentes
+// da lista — ausência que se lê como "essa fonte não traz nada".
+// Mesma raiz do `.limit(12)` de 12/08: janela de TRANSPORTE tratada como se fosse o conjunto.
 async function relatorioCapitacao() {
-  const { data } = await supabase
-    .from('imoveis_leilao')
-    .select('fonte')
-    .eq('ativo', true);
-
-  if (!data) return;
-
-  const contagem = {};
-  data.forEach(({ fonte }) => { contagem[fonte] = (contagem[fonte] || 0) + 1; });
-
-  console.log('\n📊 Captação atual por leiloeiro:');
-  Object.entries(contagem).sort((a, b) => b[1] - a[1]).forEach(([fonte, qtd]) => {
-    console.log(`   ${fonte.padEnd(12)} ${qtd.toLocaleString('pt-BR')} imóveis`);
-  });
+  const { data, error } = await supabase.rpc('acervo_por_fonte');
+  // Sem este ramo, falha de leitura viraria um painel vazio — "nenhuma fonte captou nada",
+  // que é a conclusão oposta e igualmente convincente.
+  if (error || !Array.isArray(data)) {
+    console.log(`\n📊 Captação atual por leiloeiro: NÃO FOI POSSÍVEL LER (${error?.message || 'resposta inesperada'}) — isto não é acervo vazio.`);
+    return;
+  }
+  const total = data.reduce((s, r) => s + Number(r.ativos || 0), 0);
+  console.log(`\n📊 Captação atual por leiloeiro (${total.toLocaleString('pt-BR')} ativos):`);
+  for (const { fonte, ativos } of data) {
+    console.log(`   ${String(fonte).padEnd(14)} ${Number(ativos).toLocaleString('pt-BR')} imóveis`);
+  }
   console.log();
 }
 
@@ -3494,8 +3573,13 @@ async function main() {
   // Filtro opcional de fontes (env SCRAPER_FONTES="VENDASGOV" ou "MEGA,SOLD").
   // Vazio = roda todas. Útil para testar/reprocessar uma fonte isolada sem re-scrapear tudo.
   const ONLY = String(process.env.SCRAPER_FONTES || '').toUpperCase().split(',').map(s => s.trim()).filter(Boolean);
-  const rodar = (f) => !ONLY.length || ONLY.includes(f);
+  // SCRAPER_EXCLUIR (29/08): tirar UMA fonte da rodada sem ter de listar as outras vinte no
+  // include — foi o que a VENDASGOV pediu ao migrar para o residencial. `SCRAPER_FONTES` continua
+  // vencendo quando presente (rodar só ela na mão é justamente como se testa a migração).
+  const EXCLUIR = String(process.env.SCRAPER_EXCLUIR || '').toUpperCase().split(',').map(s => s.trim()).filter(Boolean);
+  const rodar = (f) => (ONLY.length ? ONLY.includes(f) : !EXCLUIR.includes(f));
   if (ONLY.length) console.log(`⚙️  SCRAPER_FONTES ativo — rodando apenas: ${ONLY.join(', ')}\n`);
+  if (!ONLY.length && EXCLUIR.length) console.log(`⚙️  SCRAPER_EXCLUIR ativo — fora desta rodada: ${EXCLUIR.join(', ')}\n`);
 
   // Modo descoberta da Leiloaria Smart (Leilofy): mapeia a API e encerra.
   if (rodar('LEILOFY_RECON')) {
@@ -3539,16 +3623,16 @@ async function main() {
     // 2. Superbid (portal 2) — API offers, todas as páginas, somente abertos. O
     // detalhe da oferta (/oferta/{id}) é server-rendered com a seção "Documentação"
     // (edital/matrícula/laudo) → enriquecerDocumentosLote os captura (progressivo).
-    console.log('\n📋 Superbid...');
+    if (rodar('SUPERBID')) console.log('\n📋 Superbid...');
     if (rodar('SUPERBID')) await coletarFonte('SUPERBID', () => scraperSuperbidNet(browser, { portalId: '[2]', fonte: 'SUPERBID', leiloeiro: 'Superbid', prefix: 'sbid', baseSite: 'https://www.superbid.net' }), { enrich: true, enrichCap: 150 });
 
     // 3. Sold (portal 15 — mesma rede Superbid) — API offers, somente abertos.
-    console.log('\n📋 Sold Leilões...');
+    if (rodar('SOLD')) console.log('\n📋 Sold Leilões...');
     if (rodar('SOLD')) await coletarFonte('SOLD', () => scraperSuperbidNet(browser, { portalId: '[15]', fonte: 'SOLD', leiloeiro: 'Sold Leilões', prefix: 'sold', baseSite: 'https://www.sold.com.br' }), { enrich: true, enrichCap: 120 });
 
     // 3b. Sub-portais da rede Superbid (mesma API, portalId diferente). Inventário
     // pequeno mas distinto do portal 2; leiloeiro real vem no campo `store`.
-    console.log('\n📋 Rede Superbid — sub-portais 9 e 21...');
+    if (rodar('SBID9')) console.log('\n📋 Rede Superbid — sub-portais 9 e 21...');
     if (rodar('SBID9'))  await coletarFonte('SBID9',  () => scraperSuperbidNet(browser, { portalId: '[9]',  fonte: 'SBID9',  leiloeiro: 'Rede Superbid', prefix: 'sbid9',  baseSite: 'https://www.superbid.net', storeAsLeiloeiro: true }));
     if (rodar('SBID21')) await coletarFonte('SBID21', () => scraperSuperbidNet(browser, { portalId: '[21]', fonte: 'SBID21', leiloeiro: 'Rede Superbid', prefix: 'sbid21', baseSite: 'https://www.superbid.net', storeAsLeiloeiro: true }));
 
@@ -3558,23 +3642,23 @@ async function main() {
     if (rodar('CREPALDI')) await coletarFonte('CREPALDI', () => scraperSuperbidNet(browser, { stores: '16139', fonte: 'CREPALDI', leiloeiro: 'Crepaldi Leilões', prefix: 'crep', baseSite: 'https://www.crepaldileiloes.com.br' }));
 
     // Leiloaria Smart (Leilofy) — imóveis não-CEF (securitizadoras etc.), DOM parsing.
-    console.log('\n📋 Leiloaria Smart (Leilofy)...');
+    if (rodar('LEILOFY')) console.log('\n📋 Leiloaria Smart (Leilofy)...');
     if (rodar('LEILOFY')) await coletarFonte('LEILOFY', () => scraperLeilofy(browser));
 
     // 4. PortalZuk (Zukerman) — listagem com scroll infinito, somente ativos.
     // A página de detalhe do lote (link_edital) é server-rendered → enrich vasculha
     // edital/matrícula/laudo para as IAs lerem e para o mapa exato (endereço da matrícula).
-    console.log('\n📋 PortalZuk (Zukerman)...');
+    if (rodar('ZUK')) console.log('\n📋 PortalZuk (Zukerman)...');
     if (rodar('ZUK')) await coletarFonte('ZUK', () => scraperPortalZuk(browser), { enrich: true, enrichCap: 120 });
 
     // 5. Sodré Santoro — API search-lots interceptada, somente ativos. Detalhe do
     // lote (/imoveis/lote/{id}) server-rendered → enrich captura edital/matrícula/laudo.
-    console.log('\n📋 Sodré Santoro...');
+    if (rodar('SODRE')) console.log('\n📋 Sodré Santoro...');
     if (rodar('SODRE')) await coletarFonte('SODRE', () => scraperSodre(browser), { enrich: true, enrichCap: 120 });
 
     // 6. Frazão Leilões — server-rendered, lotes por leilão de imóveis. Detalhe
     // server-rendered → enriquecerDocumentosLote captura edital/matrícula/laudo.
-    console.log('\n📋 Frazão Leilões...');
+    if (rodar('FRAZAO')) console.log('\n📋 Frazão Leilões...');
     if (rodar('FRAZAO')) try {
       const imoveis = await scraperFrazao(browser);
       try { await enriquecerDocumentosLote(browser, imoveis, { cap: 120 }); }
@@ -3591,7 +3675,7 @@ async function main() {
     // registrada em fonte_saude (vira a principal). O Bright Data
     // (api/scraper-leiloeiros.js → coletarLJUD) fica de BACKUP, e é poupado quando
     // esta coleta mantém o LJUD fresco — controlando o custo.
-    console.log('\n📋 Leilões Judiciais (portal nacional — navegador)...');
+    if (rodar('LJUD')) console.log('\n📋 Leilões Judiciais (portal nacional — navegador)...');
     if (rodar('LJUD')) {
       const { imoveis, estrategia, validacao } = await coletarComEsteira('LJUD', [
         { nome: 'navegador-getlotes', fn: () => scraperLJUD_navegador(browser, 'get-lotes') },
@@ -3605,15 +3689,19 @@ async function main() {
     // EXCLUSIVO (não duplica leiloeiros). Captura multi-rota de documentos: a foto
     // (capa) vem direto da API; edital/laudo/matrícula são vasculhados na página de
     // detalhe renderizada (enriquecerDocumentosLote), igual ao fluxo do Mega.
-    console.log('\n📋 Imóveis da União (VendasGov)...');
     if (rodar('VENDASGOV')) try {
-      const imoveis = await scraperVendasGov(browser);
+      console.log('\n📋 Imóveis da União (VendasGov)...');
+      const { imoveis, declarados } = await scraperVendasGov();
       // A FOTO já vem da API (capa). NÃO usamos enriquecerDocumentosLote aqui: as
       // páginas de detalhe são SPA (Angular) e vasculharDocumentos não enxerga os PDFs
       // (montados via API) — só gastaria os 8 min do deadline à toa. Edital/laudo do
       // VendasGov virão por rota própria (API /api/public/editais) como follow-up.
       total += await salvarEFinalizar(imoveis, 'VENDASGOV');
-      await registrarSaude('VENDASGOV', imoveis, 'principal', validarColeta(imoveis, 'VENDASGOV'));
+      // `enumerados` = o que a API DECLARA ter (soma dos `totalElements`). Sem isto, a fonte que
+      // declara 1 lote e aprova 0 porque ele está VENDIDO era acusada de `zerou` — alarme sobre
+      // um zero verdadeiro, que é o que treina a ignorar alarme.
+      await registrarSaude('VENDASGOV', imoveis, 'principal',
+        { ...validarColeta(imoveis, 'VENDASGOV'), enumerados: declarados });
     } catch (e) {
       // Fonte nova nunca pode derrubar o job (as demais já salvaram acima).
       console.log(`  ⚠️ VendasGov falhou (segue sem derrubar o job): ${String(e.message).slice(0, 120)}`);
@@ -3622,7 +3710,7 @@ async function main() {
     // 9. Pestana Leilões — API /api/v2 (leilão → lotes), só imóveis disponíveis.
     // Foto direto do GED; edital direto do documentos[]. Doc-enrich não roda aqui
     // (o edital já vem no JSON). Blindado: nunca derruba o job.
-    console.log('\n📋 Pestana Leilões...');
+    if (rodar('PESTANA')) console.log('\n📋 Pestana Leilões...');
     if (rodar('PESTANA')) try {
       const imoveis = await scraperPestana(browser);
       total += await salvarEFinalizar(imoveis, 'PESTANA');
@@ -3634,7 +3722,7 @@ async function main() {
     // 10. Biasi Leilões — server-rendered (crawler HTML c/ paginação por clique).
     // Foto vem do card; edital/matrícula ficam na página /sale/detail (server-rendered)
     // → enriquecerDocumentosLote as vasculha. Blindado: nunca derruba o job.
-    console.log('\n📋 Biasi Leilões...');
+    if (rodar('BIASI')) console.log('\n📋 Biasi Leilões...');
     if (rodar('BIASI')) try {
       const imoveis = await scraperBiasi(browser);
       try { await enriquecerDocumentosLote(browser, imoveis, { cap: 120 }); }
@@ -3648,7 +3736,7 @@ async function main() {
     // 11. Leilão VIP — server-rendered (agenda → /evento/lotes/{id}). Foto direto do
     // blob Azure; edital/matrícula ficam na página do anúncio → enriquecerDocumentosLote
     // as vasculha. Blindado: nunca derruba o job.
-    console.log('\n📋 Leilão VIP...');
+    if (rodar('VIP')) console.log('\n📋 Leilão VIP...');
     if (rodar('VIP')) try {
       const imoveis = await scraperVIP(browser);
       try { await enriquecerDocumentosLote(browser, imoveis, { cap: 120 }); }
@@ -3662,7 +3750,7 @@ async function main() {
     // 12. Leilotech — plataforma white-label (~20 leiloeiros, GraphQL interceptado).
     // Foto vem do coverImageUrl; edital/matrícula ficam na página do lote →
     // enriquecerDocumentosLote vasculha. Blindado: nunca derruba o job.
-    console.log('\n📋 Leilotech (plataforma white-label)...');
+    if (rodar('LEILOTECH')) console.log('\n📋 Leilotech (plataforma white-label)...');
     if (rodar('LEILOTECH')) try {
       const imoveis = await scraperLeilotech(browser);
       try { await enriquecerDocumentosLote(browser, imoveis, { cap: 120 }); }
@@ -3676,7 +3764,7 @@ async function main() {
     // 13. Suporte Leilões — plataforma white-label server-rendered (/buscador).
     // Foto do static.suporteleiloes; edital/matrícula na página do lote →
     // enriquecerDocumentosLote vasculha. Blindado: nunca derruba o job.
-    console.log('\n📋 Suporte Leilões (plataforma white-label)...');
+    if (rodar('SUPORTE')) console.log('\n📋 Suporte Leilões (plataforma white-label)...');
     if (rodar('SUPORTE')) try {
       const imoveis = await scraperSuporte(browser);
       try { await enriquecerDocumentosLote(browser, imoveis, { cap: 120 }); }
@@ -3690,7 +3778,7 @@ async function main() {
     // 14. Grupo Lance — server-rendered (/imoveis). Foto do CDN; edital/matrícula/laudo
     // na página de detalhe (server-rendered) → enriquecerDocumentosLote vasculha.
     // Blindado: nunca derruba o job.
-    console.log('\n📋 Grupo Lance...');
+    if (rodar('GRUPOLANCE')) console.log('\n📋 Grupo Lance...');
     if (rodar('GRUPOLANCE')) try {
       const imoveis = await scraperGrupoLance(browser);
       try { await enriquecerDocumentosLote(browser, imoveis, { cap: 150 }); }
@@ -3703,7 +3791,7 @@ async function main() {
 
     // 15. WebLeilões — server-rendered (/imoveis, /leiloes). Foto no card; edital/
     // matrícula na página do lote → enriquecerDocumentosLote vasculha. Blindado.
-    console.log('\n📋 WebLeilões...');
+    if (rodar('WEBLEILOES')) console.log('\n📋 WebLeilões...');
     if (rodar('WEBLEILOES')) try {
       const imoveis = await scraperWebLeiloes(browser);
       try { await enriquecerDocumentosLote(browser, imoveis, { cap: 120 }); }
