@@ -32,6 +32,10 @@
    ".../api/meta-insights-cron?desde=2025-10-01"`. ⚠️ **Tudo ou nada** — mês ausente lê como
    gasto zero.
 5. **Herdadas:** `ADMIN_EMAIL` na Vercel · nomear um analista (rotina semanal cobra as duas).
+6. **Mini-PC residencial sempre ligado** — o dono vai avaliar (não montar agora, ele sinaliza).
+   Objetivo declarado: **zerar o Bright Data e mantê-lo como BACKUP** para quando o runner ficar
+   3 a 5 dias sem rodar. ⚠️ Tem de ser IP RESIDENCIAL: VPS (mesmo pago) é datacenter e recria o
+   bloqueio — foi por isso que a opção de servidor virtual foi descartada em 30/08.
 
 ### 💰 CUSTO OPERACIONAL — o que mudou em 30/08 (medido, não estimado)
 
@@ -86,6 +90,58 @@ estar com a aba aberta.
 do DONO — IP residencial dele, com o consentimento dele. Hoje cobre SOLEON, GESTAO, RJ, PECINI,
 VLANCE, VENDASGOV, HASTA, radar DJEN e triagem. **A alavanca real é migrar MAIS fontes para
 lá**, não recrutar o IP de cliente. Foi o que 30/08 provou funcionar com as três primeiras.
+
+### 🎯 PRÓXIMA SESSÃO COMEÇA AQUI — ManyChat próprio para o Direct do Instagram
+
+Pedido do dono ao encerrar 30/08: *"o que quero começar a montar é o meu ManyChat próprio para
+responder automaticamente quem interagir comigo no Instagram"*. **Nada foi construído** — isto é
+o levantamento para a sessão começar sem descoberta.
+
+#### ⏱️ O CAMINHO CRÍTICO É BUROCRÁTICO, NÃO TÉCNICO
+`instagram_manage_messages` exige **Acesso Avançado**, que exige **Verificação de Negócio +
+Revisão do App** na Meta. Leva **dias a semanas** e não depende de código. **Se a sessão começar
+por código, o código fica pronto e parado esperando aprovação.** Começar por isto:
+1. Conta Instagram **Profissional** vinculada a uma **Página do Facebook** (as duas contas já
+   aparecem no conector `instagram`, então provavelmente já são profissionais — confirmar qual
+   usar: `bidprobrasil` ou `tarcisionogueiraleiloes`).
+2. App em `developers.facebook.com` com produto **Messenger/Instagram**.
+3. Verificação de Negócio (CNPJ, documentos) → Revisão do App pedindo `instagram_basic`,
+   `instagram_manage_messages`, `pages_manage_metadata`.
+4. A Meta pede **vídeo do fluxo funcionando** na revisão — ou seja, precisa de um protótipo em
+   Acesso de Desenvolvimento (que já funciona para contas de teste/admin) ANTES de submeter.
+
+#### 🧱 O QUE SE CONSTRÓI (e o que já existe para reaproveitar)
+| Peça | Estado |
+|---|---|
+| `api/instagram-webhook.js` — GET de verificação (`hub.challenge`) + POST de eventos | **novo** |
+| Validação `X-Hub-Signature-256` (HMAC do app secret) | **`api/_webhook-core.js` já faz HMAC** para o Asaas — mesmo padrão |
+| Envio: `POST graph.facebook.com/{versão}/{ig_id}/messages` | **novo** |
+| Token de página long-lived + renovação | **novo** (env, nunca no repo — ele é PÚBLICO) |
+| Estado da conversa por pessoa | **novo** — tabelas `ig_conversas` / `ig_mensagens` |
+| Motor de resposta (regras → IA) | **`_claude.js` já existe**; usar Haiku, não Sonnet: DM é curta e o volume é alto |
+| Painel para o dono ler/assumir | **`chamados` + `chamados_mensagens` já existem** — provável reuso |
+
+#### ⚠️ AS TRÊS RESTRIÇÕES QUE DESENHAM O PRODUTO
+1. **Janela de 24 h.** Só se pode responder até 24 h após a última mensagem DA PESSOA. Fora
+   disso, só com tag de agente humano (limitada). **Todo fluxo de nutrição precisa caber em 24 h
+   ou migrar para e-mail/WhatsApp** — e é aqui que ele conecta com o cadastro no BidPro.
+2. **Nem toda interação vira DM.** Comentário em post é outra permissão
+   (`instagram_manage_comments`) e outro webhook. "Responder quem interagir" precisa ser
+   separado em: DM · comentário · menção em story. Decidir o escopo antes de codar.
+3. **LGPD.** Conteúdo de DM é dado pessoal de terceiro. Definir retenção e finalidade ANTES de
+   gravar — a mesma régua que barrou o uso das listas de WhatsApp hoje.
+
+#### 🤔 DECISÕES DO DONO, antes de a sessão começar
+- **Qual conta**: `bidprobrasil` ou `tarcisionogueiraleiloes`? (a segunda tem o público de
+  leilão; a primeira é a marca do produto)
+- **Escopo v1**: só DM, ou também comentário?
+- **O que o bot faz**: qualifica e manda link de cadastro? responde dúvida de leilão? agenda?
+- **Quando entrega para humano** — e para quem, já que ainda não há analista nomeado.
+
+#### 💡 O ATALHO QUE JÁ ESTÁ NO AR
+`set_page_welcome_message` (Windsor/Meta) já é usado por nós e define a saudação automática de
+anúncio click-to-message — **sem revisão de app**. Não é o ManyChat, mas cobre o primeiro toque
+de quem vem de anúncio enquanto a revisão não sai.
 
 ### ⏳ SE PROVAM SOZINHAS — confira, não conserte
 | Quando | O quê | Verde é |
