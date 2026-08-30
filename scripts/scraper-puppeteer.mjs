@@ -1884,10 +1884,16 @@ async function scraperLJUD_navegador(browser, endpoint) {
 
 // ─── VENDASGOV — Imóveis da União (SPU / SERPRO) ──────────────────────────────
 // Portal público do governo federal (imoveis.vendasgov.serpro.gov.br) sobre uma
-// API REST pública. Estrutura confirmada por captura real (debug_fetch): a lista é
-//   GET /api/public/imoveis?size=&page=&sort=itens.edital.dtCertame,asc&sala={subtipo}
-// (dá 500 SEM params). O WAF do SERPRO bloqueia fetch de datacenter (403), então o
-// fetch roda DENTRO da página (TLS de Chrome real) — mesma tática do LJUD. Inventário
+// API REST pública:
+//   GET /api/public/imoveis?size=&page=&sala={subtipo}
+// ⚠️ ESTE CABEÇALHO ESTAVA DESATUALIZADO E FOI CAUSA, NÃO SÓ DOCUMENTAÇÃO (30/08).
+// Ele dizia que a lista leva `sort=itens.edital.dtCertame,asc` e que *"o WAF do SERPRO bloqueia
+// fetch de datacenter (403), então o fetch roda DENTRO da página (TLS de Chrome real)"*. As duas
+// coisas eram verdade quando foram escritas e deixaram de ser: do IP residencial a API responde
+// a `curl` em 0,6 s, e o `sort` aponta para um campo que pode não existir mais. O coletor foi
+// construído para contornar um bloqueio que não se aplica mais aqui — e era o contorno que
+// travava. Comentário que descreve uma restrição do AMBIENTE como se fosse propriedade do SITE
+// envelhece mal: ao migrar uma fonte de runner, reconferir a premissa, não só o IP. Inventário
 // EXCLUSIVO (imóveis públicos da União/INSS/fundos), não duplica os leiloeiros.
 const VG_BASE = 'https://imoveis.vendasgov.serpro.gov.br';
 
@@ -1963,9 +1969,14 @@ async function scraperVendasGov() {
   const bens = new Map();
   for (const sala of VG_SALAS) {
     const antes = bens.size;
+    let recebidos = 0;
+    const descarte = { semId: 0, vendido: 0, repetido: 0 };
     for (let page = 0; page < 40; page++) {
+      // SEM `sort` (30/08): `itens.edital.dtCertame` veio do comentário antigo da fonte e o
+      // campo pode não existir mais. Ordenar não serve para nada aqui, e parâmetro obsoleto em
+      // API que não reclama é filtro silencioso vestido de resposta legítima.
       const url = `${VG_BASE}/api/public/imoveis?size=${VG_POR_PAGINA}&page=${page}`
-        + `&sort=itens.edital.dtCertame,asc&sala=${encodeURIComponent(sala)}`;
+        + `&sala=${encodeURIComponent(sala)}`;
       let r;
       try {
         // SEM o User-Agent de Chrome (30/08). O `curl` do dono passou (200 · 0,63 s) mandando
@@ -1995,23 +2006,38 @@ async function scraperVendasGov() {
       // inexistente, e diferente de erro. Sem esta linha as duas apareciam como um `+0`
       // mudo, e foi isso que escondeu por uma rodada que o problema era o `sort`.
       if (page === 0 && arr.length === 0) console.log(`    VendasGov/${sala}: respondeu 200 com content VAZIO — a sala existe e não trouxe lote`);
+      // CONTA CADA DESCARTE. `+0` sem motivo custou duas rodadas: "a API não devolveu nada" e
+      // "devolveu e o filtro jogou tudo fora" são causas opostas e apareciam iguais na tela.
       for (const it of arr) {
         const id = String(it && it.id != null ? it.id : '');
-        if (id && !it.vendido && !bens.has(id)) bens.set(id, it);
+        if (!id) { descarte.semId++; continue; }
+        if (it.vendido) { descarte.vendido++; continue; }
+        if (bens.has(id)) { descarte.repetido++; continue; }
+        bens.set(id, it);
       }
+      recebidos += arr.length;
       if (arr.length < VG_POR_PAGINA) break;   // última página
       await new Promise(res => setTimeout(res, 300));
     }
-    console.log(`    VendasGov/${sala}: +${bens.size - antes} (acumulado ${bens.size})`);
+    console.log(`    VendasGov/${sala}: +${bens.size - antes} (acumulado ${bens.size}) · a API mandou ${recebidos}`
+      + (recebidos ? ` · descartados: ${descarte.vendido} vendido(s), ${descarte.semId} sem id, ${descarte.repetido} repetido(s)` : ''));
   }
 
   const seen = new Set();
   const imoveis = [];
+  const perdidos = { semValor: 0, semUF: 0, repetido: 0 };
   for (const it of bens.values()) {
     const row = mapImovelVG(it);
-    if (!row.valor_minimo || !row.estado || seen.has(row.fonte_id)) continue;
+    if (!row.valor_minimo) { perdidos.semValor++; continue; }
+    if (!row.estado) { perdidos.semUF++; continue; }
+    if (seen.has(row.fonte_id)) { perdidos.repetido++; continue; }
     seen.add(row.fonte_id);
     imoveis.push(row);
+  }
+  if (bens.size && !imoveis.length) {
+    // Colheu e mapeou zero: o transporte funcionou e o FILTRO derrubou tudo. Dizer isso é o que
+    // separa "a fonte está vazia" de "a nossa regra está errada" — e as duas pedem coisas opostas.
+    console.log(`    VendasGov: ${bens.size} colhidos e NENHUM aprovado — ${perdidos.semValor} sem valor, ${perdidos.semUF} sem UF, ${perdidos.repetido} repetidos`);
   }
   console.log(`    VendasGov: ${imoveis.length} imóveis mapeados (${bens.size} colhidos)`);
   return imoveis;
