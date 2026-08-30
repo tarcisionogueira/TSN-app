@@ -282,7 +282,18 @@ espelhando a régua do produto — `greatest` das 5 colunas de data (só a 1ª p
 NORMAL), venda direta nunca encerra por data, e sem data não encerra.
 
 **Estado agora: `caso_sem_analise_iniciada` = 0 · `job_analise_sem_motor` = 0 · 12 jobs
-`aguardando`.** O cron roda a cada 10 min e pega 2 por vez → os 12 saem em ~1 h.
+`aguardando`.** O cron roda a cada 10 min e pega **4** por vez → os 12 saem em ~30 min.
+
+⚠️ **Subir de 2 para 4 exigiu um conserto antes** (`devolver_job_sem_queimar_tentativa.sql`).
+`reivindicar` incrementa `tentativas` no CLAIM — tem de ser assim, é a reserva atômica que
+impede duas invocações do cron de pegarem o mesmo job. Mas o worker tem teto de 280 s e cada
+geração leva 60–90 s: com 4 por rodada, o 3º e o 4º são devolvidos ROTINEIRAMENTE por falta de
+orçamento. Pelo caminho antigo isso chamava `falhar_analise_job`, que mantinha o incremento e
+ainda aplicava backoff — com `max_tentativas = 3`, um job morreria em `falha` **sem a IA ter
+sido chamada nenhuma vez**, com `erro_msg` descrevendo a NOSSA agenda. Mesma distinção do
+`sem_cota` na captura (forma #5): "não" por decisão de orçamento não conta como falha do
+trabalho. `devolver_analise_job` desfaz o claim e devolve o job inteiro à fila.
+Testado em transação revertida: claim → devolver volta a `aguardando`, `tentativas: 0`, sem backoff.
 **É a primeira execução real do motor: vale conferir.**
 ```sql
 select status, count(*) from analise_jobs group by 1;

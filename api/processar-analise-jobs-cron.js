@@ -41,7 +41,7 @@ const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
 const CLAUDE_KEY   = process.env.CLAUDE_KEY || process.env.ANTHROPIC_API_KEY;
 const MODEL        = 'claude-sonnet-4-6';
-const POR_RODADA   = Number(process.env.ANALISE_JOBS_POR_RODADA || 2);
+const POR_RODADA   = Number(process.env.ANALISE_JOBS_POR_RODADA || 4);
 const HARD_MS      = 280000;   // < maxDuration 300s; deixa folga p/ gravar o desfecho
 
 const sb = (path, opts = {}) => fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
@@ -182,7 +182,13 @@ async function handler(req) {
     // Nunca INICIA uma geração que não caberia antes do corte da Vercel: um job morto no meio
     // fica em 'processando' e só volta à fila 20 min depois. Devolver à fila agora é mais barato.
     if (restante() < 70000) {
-      await rpc('falhar_analise_job', { p_job_id: j.job_id, p_erro: 'sem orçamento de tempo nesta rodada — devolvido à fila' });
+      // DEVOLVER, não FALHAR. `reivindicar` incrementa `tentativas` no claim (a reserva atômica
+      // que impede duas invocações de pegarem o mesmo job); usar `falhar_analise_job` aqui
+      // manteria esse incremento e ainda aplicaria backoff — e com 4 por rodada o 3º e o 4º são
+      // devolvidos ROTINEIRAMENTE, então um job morreria em 'falha' sem a IA ter sido chamada
+      // uma vez. O "não" veio da NOSSA agenda, não do job: mesma distinção que o `sem_cota` faz
+      // na captura. `devolver_analise_job` desfaz o claim e devolve o job inteiro à fila.
+      await rpc('devolver_analise_job', { p_job_id: j.job_id });
       desfechos.push({ job: j.job_id, tipo: j.tipo, desfecho: 'devolvido_sem_tempo' });
       continue;
     }
