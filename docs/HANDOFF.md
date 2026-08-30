@@ -301,6 +301,72 @@ select tipo, status, left(erro_msg,120) from analise_jobs order by created_at;
 select caso_id, tipo, versao, length(conteudo_md) from analise_relatorios order by created_at desc;
 ```
 
+### 📣 MARKETING E AQUISIÇÃO — o que foi medido e mexido em 30/08 (tarde)
+
+#### O estado que ninguém tinha olhado
+R$ 765 em 30 dias (Google R$ 725,58 · Meta R$ 40,12), 1.533 cliques, **nenhum pagante
+atribuído a anúncio**. Com 32% de atribuição não dava para dizer se a campanha funciona — daí
+o conserto da atribuição vir ANTES de qualquer ajuste de público.
+
+#### ⚠️ O painel do BidPro vê uma fração do que existe
+`marketing_metricas_dia` só ingere desde 24/08 para o Meta. O histórico REAL está na conta
+`CA - Tacísio Nogueira Leilões` (id `702903610061448`) e é grande:
+
+| Campanha | Período | Gasto | Cliques | R$/clique |
+|---|---|---|---|---|
+| `[PD] LEADS - WORKSHOP - FORM` | fev–abr | R$ 1.205 | 2.276 | 0,53 |
+| `[PD] LEADS - WORKSHOP - SITE` | fev–mar | R$ 1.030 | 2.937 | 0,35 |
+| `[PD] TRFG - PERFIL IG - (SEGUIDOR)` | out–mai | ~R$ 3.240 | ~19.100 | **0,17** |
+| `TRF - SITE - LEILOES - AGO26` | ago | R$ 31,92 | 256 | **0,12** |
+| Google Ads (hoje) | ago | R$ 725,58 | 1.271 | 0,57 |
+
+**O Google Ads é o canal mais caro que ele tem, por 3 a 5×.** Ler isto pelo painel do BidPro
+era impossível — outra instância de instrumento que mede menos do que o nome sugere.
+
+#### 🔑 DESCOBERTAS QUE MUDAM DECISÕES JÁ TOMADAS
+1. **O LAL1% JÁ EXISTE.** Os ad sets de fevereiro dizem `Listas + LAL1%`. A análise da manhã
+   concluiu que não dava para criar público semelhante com 77 usuários — e a conclusão estava
+   certa para a base do BidPro e **errada para a conta de anúncios**, que tem lookalike treinado
+   desde fevereiro. Não é construir, é reusar.
+2. **Meta apaga lead com 90 dias.** A lista do workshop (campanha de FORMULÁRIO, com nome,
+   e-mail, telefone e perguntas de qualificação) **não é mais recuperável pela API** — abril
+   passou da janela e `facebook_leads` volta vazio em todas as contas. Se houver CSV baixado na
+   época ou CRM, é ali que ela vive. **Regra para o futuro: exportar lead de campanha em até 90
+   dias, sempre.**
+3. **A transcrição de grupo de WhatsApp não é lista de contatos.** Export `_chat.txt` traz NOME
+   SALVO, não telefone, para quem já está na agenda. E o ambiente bloqueia a extração — se for
+   necessário, é do lado do dono.
+
+#### O que foi EXECUTADO na conta de anúncios (tudo reversível)
+- `CONV - AULA 02SET - INSCRICAO` (`120249379691430420`) → **orçamento diário R$ 50,00**.
+  Ela já estava ACTIVE: o problema era entrega (233 impressões), não estar desligada. CTR 5,6%
+  com R$ 1,13/clique — criativo bom, verba sufocada. ⚠️ O orçamento é de CAMPANHA
+  (`adset_daily_budget` nulo) — mexer no ad set seria o nível errado.
+- `TRF - SITE - LEILOES - AGO26` (`120249319895060420`) → **religada** (R$ 8/dia, R$ 0,12/clique).
+- **3 criativos provados criados no ad set da aula, PAUSADOS de propósito:**
+  `120249396814460420` (Estático 2, R$ 727,90) · `120249396815940420` (Estático 3, R$ 265,15) ·
+  `120249396825990420` (Reels, 3.336 cliques a R$ 0,17).
+
+⚠️ **POR QUE OS TRÊS NASCERAM PAUSADOS:** o `creative_id` é copiado VERBATIM, e esses criativos
+foram feitos para o workshop de fevereiro — texto e **link** podem apontar para a página de um
+evento morto. O Reels é o mais arriscado dos três: veio de campanha de SEGUIDOR, então os
+R$ 0,17/clique foram para *ir ao perfil*, não para *se inscrever*, e ele provavelmente não tem
+link nenhum. **Ativar sem revisar o link é gastar sem inscrever.**
+
+#### ❌ O que NÃO deu para fazer, e por quê
+**Trocar `ADV+` por `LAL1%` no ad set da aula.** O conector expõe `creative_id` e `ad_id`, mas
+**não expõe `targeting` nem `custom_audiences`**. Faltam duas coisas não-legíveis: o ID do
+público (LAL1% é rótulo, não identificador) e o targeting atual — e `update_adset` SUBSTITUI o
+objeto inteiro, então chutar apagaria idade, geografia e posicionamento numa campanha a 3 dias
+do evento. É trabalho de 1 minuto no Ads Manager.
+
+#### 🤔 Pendências do dono
+1. Revisar texto/link dos 3 criativos e ativar (ou mandar a URL de inscrição da aula — daí o
+   `update_ad_creative` + `enable_ad` fazem por aqui).
+2. Trocar ADV+ por LAL1% no ad set `120249379704670420`.
+3. Reativar `LEADS - WORKSHOP - FORM` só com criativo novo — ela segue pausada de propósito
+   (o `Video Pablo Marçal`, criativo de terceiro, levava 68% da verba dela).
+
 ### 🧭 As duas lições que esta sessão deixou
 1. **Escalar o trabalho é teste de observabilidade.** A releitura levou a rodada da HASTA de 13
    para 592 lotes, e cinco defeitos de observação apareceram numa noite — nenhum era novo, e
