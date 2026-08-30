@@ -19,6 +19,66 @@
 | **Sitemap** | hubs separados em `/sitemap-hubs.xml`; lotes atrás de `SITEMAP_LOTES=1` |
 | **Campanhas Meta** | aula 02/09 a R$ 50/dia · `TRF - SITE` religada · 3 criativos provados (PAUSADOS) |
 
+### 🔑 QUEM É DONO DE QUÊ — o mapa de contas do Google (30/08)
+
+Descoberto no diagnóstico do login por Google, e ele custou várias telas justamente porque
+**nada disso estava escrito em lugar nenhum**:
+
+| Onde | Conta | O que é |
+|---|---|---|
+| **Google Cloud** — projeto `conselheiro` | `cisioaraujo@gmail.com` | é aqui que vive o **cliente OAuth** do "Entrar com Google" |
+| Google Cloud — `My First Project` | (mesma) | **vazio, não use** — a Auth Platform nunca foi configurada ali |
+| **Search Console** — `bidprobrasil.com.br` | `tarcisioaraujo@reimob.com.br` **e** `cisioaraujo@gmail.com` | propriedade de **Domínio**, verificada por DNS; as duas contas são proprietárias desde 30/08 |
+| Google Ads · GA4 · Search Console (conectores) | `@reimob.com.br` | é a conta dos conectores desta sessão |
+
+⚠️ **RISCO ABERTO, e ele não é pequeno.** O aplicativo OAuth que **todo cliente usa para entrar**
+está num projeto do Cloud da **conta pessoal** do dono (`@gmail.com`), não da empresa. Perder o
+acesso a esse gmail é perder o login do produto — 21 contas hoje e todas as futuras. Mover o
+projeto para uma conta da empresa é trabalho a fazer, **depois da aula de 02/09**: mexer na
+titularidade de um projeto com cliente OAuth em produção não é coisa de véspera de lançamento.
+
+### 🪧 A TELA DO GOOGLE MOSTRAVA O ENDEREÇO DO SERVIDOR — resolvido (30/08)
+
+O login por Google exibia `zuwfiwokkdytvjixiwac.supabase.co` no lugar do nome do produto.
+
+**Três hipóteses minhas, as três erradas** — vale registrar porque quem for reinvestigar vai
+percorrer as mesmas:
+1. *"O campo Nome do app está vazio"* — **não estava**, já era "BidPro Brasil".
+2. *"As URLs de política e termos usam `#` e o Google não consegue ler"* — **não foi apontado**.
+3. *"O domínio `…supabase.co` como domínio autorizado não tem como ser comprovado"* — **também
+   não foi apontado**. Continua lá e não incomoda; não mexa nele, ele sustenta a URI de
+   redirecionamento do cliente OAuth.
+
+**A causa real, que só apareceu clicando em "Ver problemas":** a marca não estava verificada
+porque a home `https://bidprobrasil.com.br` não constava como propriedade da conta que detém o
+projeto do Cloud. Nome preenchido sem marca verificada = o Google ignora o nome e mostra o host.
+
+**Como foi resolvido, na ordem:**
+1. Descobrir a conta certa (o `client_id` do OAuth começa com o **número do projeto** — dá para
+   ler na URL da própria tela de login e usar na busca de projetos do Cloud).
+2. Delegar posse **não era possível**: a propriedade é de **Domínio**, verificada por DNS, e esse
+   tipo não aceita proprietário delegado. A tela nem mostra o campo.
+3. Novo TXT no DNS para a conta do gmail, **ao lado do existente** — dois
+   `google-site-verification` no apex convivem. Apagar o antigo derrubaria a posse da
+   `@reimob.com.br` e o conector de Search Console desta sessão.
+4. `Branding → Ver problemas → "Corrigi os problemas"` → depois **`Publicar branding`**.
+
+⚠️ **O passo 4 tem prazo e quase passou batido:** verificar não basta. A tela avisa
+*"Publique antes que o resultado verificado expire, em 7 dias"* — sem o clique em **Publicar
+branding**, a verificação caduca e o trabalho todo é refeito.
+
+**O que NÃO mudou:** a linha `zuwfiwokkdytvjixiwac.supabase.co` continua na tela de
+consentimento. Ela vem do host da URL de callback e só sai com o **Custom Domain do Supabase**
+(add-on pago), que trocaria para `auth.bidprobrasil.com.br`. Fica como melhoria, não urgência.
+
+**Lição de método, para o próximo caso do gênero:** eu transcrevi o token de verificação a
+partir do print e entreguei **truncado e com um caractere trocado** (`l` minúsculo lido como `I`
+maiúsculo) — o campo do diálogo cortava o valor na largura. O dono colou o certo pelo botão
+COPIAR e não se perdeu; se tivesse digitado do meu texto, a verificação falharia e nós dois
+iríamos procurar defeito onde não havia. **Token, hash e chave não se transcrevem de imagem.**
+O que funcionou foi **consultar o DNS de dentro da sessão** (UDP porta 53 passa, mesmo com o
+proxy bloqueando HTTPS para o domínio) e conferir nos três resolvedores antes de clicar.
+
 ### 🔴 O QUE PRECISA DE VOCÊ — em ordem de prazo
 1. **HOJE/AMANHÃ — aula 02/09.** Os 3 criativos em `120249379704670420` estão **pausados de
    propósito**: o `creative_id` foi copiado verbatim do workshop de fevereiro e o LINK pode
@@ -31,8 +91,11 @@
 4. **Carga retroativa do Meta:** `curl -H "x-cron-secret: $CRON_SECRET"
    ".../api/meta-insights-cron?desde=2025-10-01"`. ⚠️ **Tudo ou nada** — mês ausente lê como
    gasto zero.
-5. **Herdadas:** `ADMIN_EMAIL` na Vercel · nomear um analista (rotina semanal cobra as duas).
-6. **Mini-PC residencial sempre ligado** — o dono vai avaliar (não montar agora, ele sinaliza).
+5. **DEPOIS DE 02/09 — tirar o cliente OAuth da conta pessoal.** O "Entrar com Google" de
+   todos os clientes vive num projeto do Cloud do `@gmail.com` do dono. Perder esse gmail é
+   perder o login do produto. Não é para mexer antes da aula (ver a seção do mapa de contas).
+6. **Herdadas:** `ADMIN_EMAIL` na Vercel · nomear um analista (rotina semanal cobra as duas).
+7. **Mini-PC residencial sempre ligado** — o dono vai avaliar (não montar agora, ele sinaliza).
    Objetivo declarado: **zerar o Bright Data e mantê-lo como BACKUP** para quando o runner ficar
    3 a 5 dias sem rodar. ⚠️ Tem de ser IP RESIDENCIAL: VPS (mesmo pago) é datacenter e recria o
    bloqueio — foi por isso que a opção de servidor virtual foi descartada em 30/08.
