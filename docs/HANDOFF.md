@@ -106,6 +106,52 @@ frequência) libera cota para as fontes que **só** têm caminho pago.
 reprovados)"* desde 25/08 e **não roda desde 27/08 19:02**. O detalhe abriu no fetch puro em
 76 ms, então o portão não parece ser bloqueio — o próximo run residencial diz se era isso.
 
+### 🩺 `erro_na_tela_do_cliente` — resolvido, e o que apareceu atrás dele (30/08)
+
+**O alarme:** 3 eventos `erro_ui`, dois pagantes, botão "Solicitar" do `/caso`, 23–25/08:
+*"new row violates row-level security policy for table analise_jobs"*.
+
+**Está corrigido, e isto é medição, não leitura de política.** A migração
+`analise_jobs_o_participante_precisa_LER_o_que_escreveu` (29/08) criou a política de SELECT que
+faltava — `INSERT ... RETURNING` aplica as políticas de SELECT, e era isso que recusava. Hoje o
+insert foi refeito **como o próprio cliente** (`set local request.jwt.claims`), em transação
+revertida, e **passou**. `rls_escreve_sem_ler` = 0: nenhuma outra tabela tem o defeito.
+
+⚠️ **Os 3 eventos continuam contando até 01/09** — a janela do invariante é de 7 dias e
+`eventos_atividade` não tem coluna de resolução. **Não apague as linhas.** Elas são o registro
+de que dois clientes tomaram "não"; reescrever medição histórica para o painel ficar verde é a
+mesma tentação recusada em 30/08 no caso do RJ.
+
+**O que apareceu atrás, e não se resolve sozinho:** **8 dos 10 casos do sistema** estão em
+`analise_solicitada` com **zero job**, e `analise_jobs` tem 0 linhas em toda a história.
+
+**A correção de leitura que quase passou batido (forma #10):** `analise_solicitada` é o **DEFAULT
+da coluna** `casos.status_etapa`, gravado no nascimento do caso (`Caso.jsx:653`). O rótulo diz
+"Análise Solicitada"; o que ele mede é "caso aberto". A diferença muda a ação:
+
+| Grupo | Quantos | Causa | Conserta com |
+|---|---|---|---|
+| Clicou e o banco recusou (23–25/08) | **3** | bug de RLS | ✅ já corrigido |
+| **Nunca clicou** (22/07 – 07/08) | **5** | adesão | ❌ nada em código — até **39 dias** parados |
+
+A sessão de 29/08 leu o `tempo_processo()` ("8 parados, mediana 29 dias") como se os 8 fossem
+recusa. Vale para 3. O instrumento estava certo; a leitura emprestou a causa dos 3 aos outros 5.
+
+**Fechado o buraco:** invariante novo `caso_sem_analise_iniciada` (migração
+`caso_aberto_que_nunca_virou_trabalho.sql`, aplicada) — caso aberto há 7+ dias sem NENHUM job.
+Lê **6** agora. Ele conta os dois grupos juntos de propósito: quem nunca clicou não deixa
+`erro_ui`, não deixa linha em `erros_cliente`, não deixa nada — o silêncio é idêntico ao de um
+sistema saudável sem casos, e para o negócio os dois são o mesmo fato (pagante com caso aberto e
+nada acontecendo). Quem separa as causas é a consulta; o alarme dispara nos dois.
+
+**🤔 Duas decisões suas, não executei:**
+1. **Os 8 casos parados.** Os 3 recusados podem ser reprocessados; os 5 sem clique precisam de
+   contato. As duas coisas mexem com cliente real (e-mail) ou geram custo de IA — não são minhas
+   para disparar.
+2. **O rótulo "Análise Solicitada" na tela do cliente** (`STATUS_ETAPA_LABEL`, `HomeCliente`,
+   `MinhasAnalises`, `AdvogadoPortal`, `Caso`) aparece em caso onde nada foi solicitado. É o
+   instrumento mentindo para o cliente, mas renomear muda o que 4 telas mostram — sua chamada.
+
 ### 🧭 As duas lições que esta sessão deixou
 1. **Escalar o trabalho é teste de observabilidade.** A releitura levou a rodada da HASTA de 13
    para 592 lotes, e cinco defeitos de observação apareceram numa noite — nenhum era novo, e
