@@ -360,6 +360,37 @@ público (LAL1% é rótulo, não identificador) e o targeting atual — e `updat
 objeto inteiro, então chutar apagaria idade, geografia e posicionamento numa campanha a 3 dias
 do evento. É trabalho de 1 minuto no Ads Manager.
 
+#### ⚙️ A INGESTÃO DO META TINHA JANELA DE 7 DIAS FIXOS (corrigido 30/08)
+`api/meta-insights-cron.js` fazia `desde = now - 7 dias`, sem forma de pedir outra coisa. Por
+isso `marketing_metricas_dia` "começa" em 24/08 para o Meta: é quando o cron entrou no ar, e
+cada execução só olha uma semana atrás. **A conta configurada está CERTA** — os nomes de
+campanha batem com `702903610061448`; o buraco era só a janela.
+
+Agora aceita `?desde=AAAA-MM-DD` (e `?ate=`), com teto de 400 dias, e o teto de páginas sobe de
+10 para 60 quando há `desde` — carga retroativa gera 1 linha por campanha por DIA, e manter 10
+páginas faria o backfill sair com `ok:true` e metade do período (o defeito de paginação de 19/08
+voltando pela porta da janela).
+
+**A CARGA AINDA NÃO FOI RODADA.** Ela precisa de um `x-cron-secret`, que esta sessão não tem:
+```
+curl -H "x-cron-secret: $CRON_SECRET" \
+  "https://www.bidprobrasil.com.br/api/meta-insights-cron?desde=2025-10-01"
+```
+⚠️ **Não faça carga PARCIAL.** `marketing_metricas_dia` não tem estado de "não medido": mês
+ausente lê como gasto ZERO. Carregar fevereiro e parar deixaria uma cratera de março a julho com
+cara de canal desligado — pior que não ter nada. É tudo ou nada.
+
+Depois de rodar, o painel passa a mostrar o que hoje só aparece no Windsor: PERFIL IG a
+**R$ 0,17/clique**, `TRF - SITE` a **R$ 0,12** e o Google Ads a **R$ 0,57** lado a lado.
+
+#### 🔌 Conectores que faltam (avaliado em 30/08)
+Ligados: Meta Ads (4 contas), Meta Lead Ads, Google Ads, GA4, Instagram (orgânico e público).
+**O que falta e vale:** **Google Search Console** — são 31 mil páginas públicas de imóveis e
+ZERO medição de busca orgânica. Só ele diz quais páginas o Google indexou, qual consulta traz
+gente de graça e onde já se ranqueia (o que é o mapa de onde PARAR de pagar R$ 0,57/clique).
+Depois dele: Google Sheets (listas de lead), Facebook Organic (a página, o IG já está).
+⚠️ Nenhum conector novo resolve o gargalo acima — aquilo é ingestão interna, não fonte que falta.
+
 #### 🤔 Pendências do dono
 1. Revisar texto/link dos 3 criativos e ativar (ou mandar a URL de inscrição da aula — daí o
    `update_ad_creative` + `enable_ad` fazem por aqui).

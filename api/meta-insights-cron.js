@@ -85,9 +85,32 @@ export default async function handler(req, res) {
   if (!token || !conta) return res.status(200).json({ skipped: 'dormente', dica: 'Defina META_ADS_TOKEN e META_AD_ACCOUNT_ID no Vercel.' });
   if (!conta.startsWith('act_')) conta = `act_${conta}`;
 
-  const ate = new Date();
-  const desde = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  // JANELA CONFIGURÁVEL (30/08) — antes eram 7 dias FIXOS, sem forma de pedir outra coisa.
+  // O efeito: `marketing_metricas_dia` "começa" no dia em que o cron entrou no ar (24/08 para o
+  // Meta), e todo o histórico da conta fica invisível ao painel do BidPro. Medido em 30/08: a
+  // conta tinha ~R$ 5.500 e ~25 mil cliques desde outubro/2025 — incluindo tráfego a R$ 0,12 e
+  // R$ 0,17 por clique — enquanto o painel mostrava R$ 40 de Meta e dava a entender que o canal
+  // era irrelevante. A comparação que importa (o Google Ads custa R$ 0,57/clique, 3 a 5× mais)
+  // era impossível de fazer pela tela.
+  //
+  // `?desde=AAAA-MM-DD` e `?ate=AAAA-MM-DD` permitem a carga retroativa; sem eles, o
+  // comportamento diário de sempre (7 dias). Teto de 400 dias porque o upsert é por
+  // (data, canal, campanha) e uma janela absurda só multiplica páginas sem trazer dado novo.
+  const q = (k) => {
+    const v = req.query?.[k];
+    const s2 = String(Array.isArray(v) ? v[0] : (v || '')).trim();
+    return /^\d{4}-\d{2}-\d{2}$/.test(s2) ? s2 : null;
+  };
   const fmt = (d) => d.toISOString().slice(0, 10);
+  const qAte = q('ate'); const qDesde = q('desde');
+  const ate = qAte ? new Date(`${qAte}T12:00:00Z`) : new Date();
+  let desde = qDesde ? new Date(`${qDesde}T12:00:00Z`) : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const TETO_DIAS = 400;
+  if ((ate - desde) / 86400000 > TETO_DIAS) desde = new Date(ate.getTime() - TETO_DIAS * 86400000);
+  // Carga retroativa gera MUITO mais linha que a diária (1 linha por campanha por dia), então o
+  // teto de páginas acompanha a janela — senão o backfill sai com `ok:true` e metade do período,
+  // que é o defeito de paginação já corrigido aqui em 19/08 voltando pela porta da janela.
+  const maxPaginas = qDesde ? 60 : 10;
 
   try {
     // 19/08: `limit=200` sem seguir `paging.next` — 7 dias × campanhas passa de 200 e o
@@ -98,7 +121,7 @@ export default async function handler(req, res) {
       `&fields=campaign_name,spend,clicks,impressions,actions&limit=200` +
       `&access_token=${encodeURIComponent(token)}`;
     const dados = [];
-    for (let pagina = 0; pagina < 10 && url; pagina++) {
+    for (let pagina = 0; pagina < maxPaginas && url; pagina++) {
       const r = await fetch(url, { signal: AbortSignal.timeout(15000) });
       const body = await r.json().catch(() => ({}));
       if (!r.ok) {
