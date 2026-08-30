@@ -33,6 +33,38 @@
    gasto zero.
 5. **Herdadas:** `ADMIN_EMAIL` na Vercel · nomear um analista (rotina semanal cobra as duas).
 
+### 💰 CUSTO OPERACIONAL — o que mudou em 30/08 (medido, não estimado)
+
+Pergunta do dono ao encerrar: *"o que passou a gerar custo POR USO?"*. Medido em
+`uso_integracoes` e `brightdata_uso_proposito` no mesmo dia:
+
+**BRIGHT DATA NÃO SUBIU.** `pecini 63 · gestao 60 · rj 60` na semana de 24/08 — idênticos ao
+que já era. Vêm do cron de DATACENTER, que não foi tocado. O runner residencial passou a tentar
+fetch puro primeiro e só cai no Chromium (grátis), então a tendência é **cair**.
+
+**Duas coisas passaram a custar por uso:**
+
+| Item | Custo | Quando dispara |
+|---|---|---|
+| **Motor das 4 análises** (NOVO) | ~US$ 0,055 = **R$ 0,30/relatório**, **R$ 1,20/caso** | só quando o cliente clica em Solicitar |
+| **2ª passada do mercadológico** | ~+US$ 0,14 quando dispara | quando a 1ª traz **< 4 vendas** — eram **5 de 67** relatórios (~7,5%) |
+
+⚠️ **A 2ª passada é um aumento silencioso, e é bom saber disso.** Antes o retry só existia com
+ZERO amostras — que nunca aconteceu em 67 relatórios. Agora ele persegue 4 comparáveis de
+VENDA, então ~7,5% dos relatórios fazem uma busca a mais. É o preço de não precisar reprocessar
+(que custava o dobro, mais o retrabalho do cliente), mas é preço.
+
+**O custo de IA do dia inteiro foi US$ 1,53** (Claude US$ 1,37 em 25 chamadas + Gemini US$ 0,16
+em 37). O motor foi ~US$ 0,88 disso — 12 relatórios reais e a regeração de Osasco.
+
+**Mídia (decisão do dono, aprovada em 30/08):** R$ 50/dia na campanha da aula 02/09 + R$ 8/dia
+na `TRF - SITE - LEILOES` = **R$ 58/dia**. É tráfego deliberado, para medir evolução de
+inscritos e de contas novas, **avaliado DIARIAMENTE**.
+
+⚠️ **A campanha da aula NÃO tem data de fim.** Depois de 02/09 ela segue gastando R$ 50/dia
+anunciando aula que já passou — o mesmo defeito que fez a `WORKSHOP-FORM` ser recusada.
+**Pausar ou pôr orçamento vitalício antes de 03/09.**
+
 ### ⏳ SE PROVAM SOZINHAS — confira, não conserte
 | Quando | O quê | Verde é |
 |---|---|---|
