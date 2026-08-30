@@ -4,6 +4,66 @@
 
 ---
 
+## 🚦 COMECE POR AQUI — estado ao encerrar 30/08 12h UTC (sessão 14–15, com ~8 h de intervalo)
+
+> A sessão anterior atravessou 29 e 30/08 com uma pausa longa no meio, e **veio compactada**: o
+> ritual de abertura de 30/08 não chegou a rodar. O heartbeat foi carimbado no FIM
+> (`sistema_heartbeat.sessao_claude`, 30/08 12:03, com o motivo escrito lá) — a auditoria paga
+> semanal não precisa disparar por falta de sinal. **Rode o ritual normalmente ao abrir.**
+
+### ✅ Tudo mesclado e no ar
+`main` = **`7a84617`** · PR #339 mesclado (`33ea07c`) · deploy de produção **READY** desde 11:49.
+As migrações já estavam aplicadas antes — o merge alinhou o código ao que o banco já executava.
+**Não há branch pendente:** `claude/bidpro-brasil-handoff-86bg0m` está encerrada, e trabalho novo
+parte de `main` numa branch nova.
+
+### ⏳ Quatro coisas se provam sozinhas — CONFIRA, não conserte
+Nenhuma delas precisa de código. São verificações com data marcada:
+
+| Quando | O que olhar | Verde é |
+|---|---|---|
+| Após o cron das **10h UTC** | `select * from public.fonte_regressao_suspeita();` | **sem RJLEILOES** (o `zerou` era a última linha do código velho) |
+| Após o cron das **10h UTC** | log do `leiloeiros-puppeteer` | SUPORTE, GRUPOLANCE e WEBLEILOES coletando — os **22 min/dia** do VendasGov pararam |
+| **31/08** (vira a semana) | `brightdata_uso_proposito` | queda forte: ~295 dos 550 desta semana eram fonte já migrada pagando em paralelo |
+| **06/09** | `fonte_orcamento_como_falha` em `qa_invariantes()` | de volta a **0** (janela de 7 dias) |
+
+⚠️ **Não silencie nenhum desses alarmes na mão.** Eles têm prazo de validade conhecido e estão
+fazendo o trabalho deles. Reescrever medição histórica para o painel ficar bonito é adulterar o
+registro — a tentação apareceu em 30/08 e foi recusada de propósito.
+
+### ⏰ Agendado
+**05/09** (`trig_01DEkuEvHftyhnKecMCaSDDW`): ler `analise_*` e `origem_lote`, que começaram a
+medir em 30/08. As consultas estão na seção da sessão 14s. ⚠️ A rotina foi criada **sem
+conectores** — a sessão que disparar entrega as consultas mas não roda SQL sozinha.
+
+### 🤔 Esperando decisão do dono (não são bugs)
+1. `direitos aquisitivos` entra em `acervo.fracao_ideal`? (16 lotes ativos; hoje barrado só do 1º relatório)
+2. Âncora dos 7 dias do CDC para pagamento fora do gateway
+3. A equipe precisa marcar upload como `matricula_registrada` — sem isso o encerramento
+   automático da assessoria não dispara
+
+### 🔭 Aberto, sem urgência
+- **VENDASGOV**: a fonte tem 1 imóvel e ele está **vendido**. O coletor está certo; se o SPU
+  publicar edital novo, `enumerados` reflete e a coleta volta sozinha.
+- **Herdadas**: `/admin` timeout · `/planos` Leaflet · P2/P3/P4 de captura · 1º advogado ·
+  `apresentador_foto` · OpenAI Ads · os 3 clientes do 360 · 41% sem triagem.
+- **Pergunta que vale abrir**: GESTAO, RJ e PECINI ainda precisam de navegador? O VendasGov
+  provou que uma premissa de quando a fonte rodava no datacenter pode sobreviver à migração e
+  **virar a causa**. Cada uma que sair do Puppeteer são minutos por rodada de volta.
+
+### 🧭 As duas lições que esta sessão deixou
+1. **Escalar o trabalho é teste de observabilidade.** A releitura levou a rodada da HASTA de 13
+   para 592 lotes, e cinco defeitos de observação apareceram numa noite — nenhum era novo, e
+   nenhum aparecia enquanto a rodada era curta. Foram achados por alguém olhando uma tela parada
+   e **não aceitando "deve estar rodando"**.
+2. **Comentário que descreve o AMBIENTE como se fosse propriedade do SITE envelhece mal.** O
+   cabeçalho do VendasGov dizia que o WAF bloqueia datacenter — verdade quando escrita, e falsa
+   depois da migração para o residencial. O coletor inteiro existia para contornar um bloqueio
+   que já não se aplicava, e era o contorno que travava. **Ao migrar uma fonte de runner,
+   reconferir as premissas do coletor, não só o IP.**
+
+---
+
 ## 🗓️ 30/08 (sessão 15) — A PRIMEIRA RODADA LONGA DE VERDADE ACHOU CINCO DEFEITOS DE OBSERVAÇÃO
 
 > Contexto: a releitura do acervo (29/08) levou a rodada da HASTA de 13 lotes para 592. **Nenhum
