@@ -1074,7 +1074,16 @@ export default function Analise() {
     if (r.precisaDocumentos) {
       setParecerDocumental(r);
       setDocMsg(r.motivo || 'Anexe a matrícula e o edital (PDF) para gerar a análise documental.');
-      setRelSel('documental');
+      // O `setRelSel('documental')` ficava AQUI, antes do if — e arrancava o cliente do hub
+      // mesmo quando não havia nada para ele fazer (30/08, relatado pelo dono: "ao gerar o
+      // documental deve ficar na tela de análises, não redirecionar para uma tela de gerando").
+      // Quando a captura automática está buscando os PDFs, o salto leva a um SPINNER: o
+      // princípio já escrito na linha do laudo é "o salto leva a uma ação, não a uma espera".
+      // O hub já mostra tudo o que a tela dedicada mostraria — o card tem estado próprio
+      // ("Preparando documentos…", borda âmbar, explicação embaixo) — então ficar é
+      // estritamente mais informativo: o cliente vê o documental progredindo E os outros dois
+      // relatórios. O salto continua nos casos em que ele PRECISA anexar (o `else` abaixo, e o
+      // pré-check que roda antes de chamar o servidor): ali a tela é onde se envia o PDF.
       // Leiloeiro integrado baixando os documentos → re-gera sozinho (até ~2 min).
       // SÓ faz o poll quando a captura é REAL (emCaptura) E a linha é RECENTE (dentro da
       // janela de captura ~3 min). Sem a trava de frescor, reabrir um relatório ANTIGO
@@ -1090,6 +1099,7 @@ export default function Analise() {
       } else {
         setPreparandoDocs(false);
         capturaPollRef.current.n = 0;
+        setRelSel('documental');   // agora SIM: aqui o cliente tem de anexar o PDF — a tela é a ação
         showMsg(r.motivo || 'Anexe a matrícula e o edital para gerar a análise.', 'error');
       }
       return;

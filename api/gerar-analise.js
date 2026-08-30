@@ -1987,11 +1987,98 @@ export default async function handler(req, res) {
       let compar = daBase || await buscarEtapa({ prompt: promptA, sistema: sysComp, msBudget: Math.min(135000, restante() - RESERVA_PARECER - 90000), webUses: maxWebA });
       if (daBase) console.log('[modo-base]', JSON.stringify({ imovel: String(imovelId), ...daBase.__modoBase, tipo: segCache }));
       const semAmostrasA = (m) => (((m?.nivel1?.vendas?.length || 0) + (m?.nivel1?.locacoes?.length || 0) + (m?.nivel2?.vendas?.length || 0) + (m?.nivel2?.locacoes?.length || 0)) === 0) && !(Number(m?.consolidado?.precoMedioM2) > 0);
-      // Re-tenta se (vazio OU falhou) E ainda há orçamento. Falhou → 1 busca (quase sempre conclui e
-      // dá um R$/m² de referência); vazio-mas-concluiu (praça fina) → ≤3 buscas. A ampla já foi a 1ª.
-      if (!daBase && (compar.__falhou || semAmostrasA(compar)) && restante() > RESERVA_PARECER + 55000) {
+
+      // ═══ O RETRY OLHAVA "ZERO DE QUALQUER COISA"; QUEM PRECIFICA É VENDA (30/08) ═══════════
+      // Relatado pelo dono: "às vezes não traz amostras suficientes para precificação, e ao
+      // reprocessar consegue — não deve ser necessário reprocessar". Medido nos 67 relatórios
+      // dos últimos 60 dias: 5 saíram com MENOS DE 4 comparáveis de VENDA, e nos cinco o
+      // `__diag` traz `stop: "STOP"` — o modelo terminou limpo e simplesmente trouxe pouco.
+      // Não era timeout, não era truncagem, não era orçamento: era o PORTÃO.
+      //
+      //   São Paulo ............ 2 vendas, 0 locações → precificado a R$ 1.670/m²
+      //   Santana de Parnaíba .. 1 venda,  4 locações → R$ 6.568/m²
+      //   Itapevi .............. 2 vendas, 0 locações · Campo Grande 2 · Itapipoca 3
+      //
+      // Duas falhas somadas no `semAmostrasA`, e cada uma sozinha já bastaria:
+      //  (a) soma VENDA com LOCAÇÃO. Santana tinha 1 venda e 4 locações: o total dava 5, longe
+      //      de zero, e o retry não disparava — mas locação não precifica venda.
+      //  (b) `&& !(precoMedioM2 > 0)` faz o NÚMERO QUE O MODELO ESCREVEU suprimir a nova
+      //      tentativa. Nos 5 casos o preço veio preenchido. Quanto mais fina a base, mais
+      //      confiante o modelo, MENOS chance de tentar de novo — o gate invertido.
+      //
+      // O ALVO NÃO É INVENTADO. `avaliarMercado` (_valor-mercado.js) descarta o que não é
+      // comparável (o próprio lote, anúncio sem preço, fora do raio, outlier) e só substitui o
+      // número da IA com `MIN_P_SUBSTITUIR = 3` amostras USADAS. Perseguir 4 BRUTAS é o que
+      // sobrevive aos descartes e chega às 3 — abaixo disso o relatório sai com o número da IA
+      // e o aviso de base fina, que é exatamente o que o cliente reclamou.
+      const MIN_VENDAS_ALVO = 4;
+      const contarVendas = (m) => (m?.nivel1?.vendas?.length || 0) + (m?.nivel2?.vendas?.length || 0);
+
+      // FUNDIR, NUNCA SUBSTITUIR. O retry antigo fazia `compar = await buscarEtapa(...)`: se a
+      // segunda passada voltasse MAIS POBRE que a primeira, o cliente perdia o que já tinha —
+      // uma "melhoria" que podia piorar. Com união deduplicada, um segundo clique só pode
+      // somar. É isso que faz o UM clique ser assertivo: o resultado é monotônico.
+      const chaveAmostra = (x) => {
+        const u = String(x?.url || '').trim().toLowerCase().replace(/[?#].*$/, '');
+        if (u) return `u:${u}`;
+        const end = String(x?.endereco || x?.condominio || x?.bairro || '').trim().toLowerCase();
+        const val = Number(x?.valor ?? x?.valorMensal) || 0;
+        const m2 = Number(x?.m2) || 0;
+        return `d:${end}|${val}|${m2}`;
+      };
+      const unir = (a, b) => {
+        const vistos = new Set();
+        const saida = [];
+        for (const x of [...(Array.isArray(a) ? a : []), ...(Array.isArray(b) ? b : [])]) {
+          if (!x || typeof x !== 'object') continue;
+          const k = chaveAmostra(x);
+          if (vistos.has(k)) continue;
+          vistos.add(k);
+          saida.push(x);
+        }
+        return saida;
+      };
+      const fundirMercado = (base, extra) => {
+        if (!extra || extra.__falhou) return base;
+        // O objeto de MAIOR base manda nos campos escalares (descrição, consolidado): trocar o
+        // consolidado por um derivado de menos amostras seria desfazer a fusão no campo que a
+        // capa lê. As LISTAS são sempre a união.
+        const maior = contarVendas(extra) > contarVendas(base) ? extra : base;
+        const fundido = { ...base, ...maior };
+        for (const nv of ['nivel1', 'nivel2']) {
+          if (!base?.[nv] && !extra?.[nv]) continue;
+          fundido[nv] = {
+            ...(base?.[nv] || {}), ...(maior?.[nv] || {}),
+            vendas: unir(base?.[nv]?.vendas, extra?.[nv]?.vendas),
+            locacoes: unir(base?.[nv]?.locacoes, extra?.[nv]?.locacoes),
+          };
+        }
+        fundido.__diagSegundaPassada = extra.__diag || null;
+        return fundido;
+      };
+
+      // Re-tenta se (falhou OU vazio OU vendas abaixo do alvo) E ainda há orçamento. Falhou → 1
+      // busca (quase sempre conclui e dá um R$/m² de referência); os outros dois → ≤3 buscas.
+      const vendas1 = contarVendas(compar);
+      if (!daBase && (compar.__falhou || semAmostrasA(compar) || vendas1 < MIN_VENDAS_ALVO) && restante() > RESERVA_PARECER + 55000) {
         const usos = compar.__falhou ? 1 : Math.min(maxWebA, 3);
-        compar = await buscarEtapa({ prompt: promptA, sistema: sysComp, msBudget: Math.min(100000, restante() - RESERVA_PARECER - 30000), webUses: usos });
+        // A segunda passada precisa saber o que a primeira já trouxe, senão ela repete os mesmos
+        // anúncios e a união não soma nada — gastar a busca para redescobrir o que já se tem é o
+        // mesmo que não tentar. Locação é dito explicitamente porque a 1ª passada às vezes volta
+        // cheia de aluguel e vazia de venda (Santana: 1 × 4).
+        const jaTem = [...(compar?.nivel1?.vendas || []), ...(compar?.nivel2?.vendas || [])]
+          .map(v => String(v?.endereco || v?.condominio || v?.bairro || '').trim()).filter(Boolean).slice(0, 8);
+        const reforco = compar.__falhou ? '' : `
+
+SEGUNDA PASSADA — FOCO EXCLUSIVO EM VENDA. A primeira busca trouxe ${vendas1} comparável(is) de VENDA, e a precificação exige pelo menos ${MIN_VENDAS_ALVO}. Traga anúncios NOVOS de VENDA do mesmo tipo (${mercadoInputs.tipoImovel}), priorizando a MENOR distância. Locação não substitui venda aqui: se só houver aluguel, devolva vendas vazias em vez de preencher com locação.${jaTem.length ? `
+JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
+        const segunda = await buscarEtapa({ prompt: promptA + reforco, sistema: sysComp, msBudget: Math.min(100000, restante() - RESERVA_PARECER - 30000), webUses: usos });
+        // Falha total na 1ª → não há o que fundir. Nos demais, união: o resultado nunca encolhe.
+        compar = compar.__falhou ? segunda : fundirMercado(compar, segunda);
+        // Sem este rastro, "a 2ª passada resolveu" e "a 2ª passada não achou nada" ficam
+        // idênticos no banco — e a pergunta do dono ("parou de precisar reprocessar?") só se
+        // responde comparando as duas.
+        if (!compar.__falhou) compar.__diagVendas = { primeira: vendas1, final: contarVendas(compar), alvo: MIN_VENDAS_ALVO, buscas2: usos };
       }
       // Monta o `mercado` a partir da Etapa A (mesmos campos derivados de antes). Se a A FALHOU
       // (abort/timeout — não "vazio de verdade"), vira TRANSITÓRIO (__instavel): o Índice BidPro/

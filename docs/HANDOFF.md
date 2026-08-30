@@ -186,6 +186,70 @@ linha e o caso com linha nenhuma processada geram a MESMA tela para o cliente.
 pela equipe**? Nada no repositório responde. Enquanto isso não for decidido, reprocessar é
 encenação — e o botão "Solicitar" está no ar, funcionando, prometendo 48 h.
 
+### ⚙️ TRÊS FRENTES DE 30/08 (tarde) — motor da análise, assertividade do mercadológico, hub
+
+#### 1. O MOTOR EXISTE (decisão do dono: "será por IA")
+`api/processar-analise-jobs-cron.js` + migração `o_motor_da_analise_reivindica_e_prova.sql`,
+cron `*/10 * * * *`. Gera os 4 tipos (`mercadologica`, `financeira`, `fluxo_caixa`,
+`juridica_preliminar`) com Claude, grava em `analise_relatorios` e move o caso para
+`analises_prontas` quando os 4 concluem.
+
+**As garantias moram no BANCO, não no worker** — o arquivo JS é só o braço:
+- `reivindicar_analise_jobs` — `for update skip locked`. O cron da Vercel pode sobrepor
+  execuções; sem a trava do Postgres, duas invocações geram o MESMO relatório duas vezes.
+  Também **retoma job órfão** (`processando` há 20+ min = worker que morreu), senão um timeout
+  trava a fila para sempre em silêncio.
+- `concluir_analise_job` — **só carimba `concluido` se o INSERT produziu linha**, e recusa
+  conteúdo com menos de 200 caracteres. Mesma regra do `coleta_cliente_concluir`. Sem ela o
+  estrago seria "4 de 4 concluídas" sobre nada.
+- `falhar_analise_job` — backoff quadrático (10/40/90 min) e `falha` definitiva ao esgotar
+  `max_tentativas`: a exaustão não vira silêncio.
+
+**Testado de ponta a ponta em transação revertida:** conteúdo curto recusado · 4 relatórios
+gravados · 4 jobs concluídos · caso avançando para `analises_prontas` · segunda chamada de
+`reivindicar` pegando jobs DIFERENTES.
+
+⚠️ **O worker NÃO cobra cota** (`Caso.jsx` já debitou no clique; re-tentativa é conserto nosso)
+e **NÃO faz busca web** — comparáveis são trabalho do `/api/gerar-analise`, que tem grounding,
+cache de praça e a conta determinística. Duplicar ali seria uma segunda fonte de verdade para o
+mesmo número. E **lote fora do acervo FALHA o job** em vez de gerar relatório genérico.
+
+#### 2. "ÀS VEZES NÃO TRAZ AMOSTRAS SUFICIENTES, E AO REPROCESSAR CONSEGUE"
+**Medido, e não era a hipótese óbvia.** Nos 67 relatórios dos últimos 60 dias, 5 saíram com
+menos de 4 comparáveis de VENDA — e nos cinco o `__diag` traz `stop: "STOP"`: **o modelo
+terminou limpo e simplesmente trouxe pouco**. Não era timeout, truncagem nem orçamento de
+tempo. Era o portão do retry:
+
+| Cidade | vendas | o que o gate somava | preço que saiu |
+|---|---|---|---|
+| São Paulo | **2** | 2 | R$ 1.670/m² |
+| Santana de Parnaíba | **1** | 5 (1 venda + 4 locações) | R$ 6.568/m² |
+| Itapevi 2 · Campo Grande 2 · Itapipoca 3 | | | |
+
+Duas falhas somadas em `semAmostrasA`, cada uma bastando sozinha: **(a)** somava VENDA com
+LOCAÇÃO — locação não precifica venda; **(b)** `&& !(precoMedioM2 > 0)` fazia **o número que o
+modelo escreveu suprimir a nova tentativa** — quanto mais fina a base, mais confiante o modelo,
+menos chance de tentar de novo. Gate invertido.
+
+**O alvo não é inventado:** `avaliarMercado` só substitui o número da IA com
+`MIN_P_SUBSTITUIR = 3` amostras *usadas* (depois de descartar o próprio lote, anúncio sem preço,
+fora do raio, outlier). Perseguir **4 brutas** é o que sobrevive aos descartes.
+
+**E a segunda passada agora FUNDE em vez de substituir.** O retry antigo fazia
+`compar = await buscarEtapa(...)`: se a 2ª volta mais pobre, o cliente PERDIA o que já tinha —
+uma melhoria que podia piorar. Com união deduplicada o resultado é monotônico, que é o que faz
+um clique só ser assertivo. A 2ª passada recebe a lista do que já veio (senão redescobre o
+mesmo) e é instruída a não preencher venda com locação. `__diagVendas` grava primeira × final —
+sem ele, "a 2ª resolveu" e "a 2ª não achou nada" ficariam idênticos no banco.
+
+#### 3. O DOCUMENTAL PARA DE ARRANCAR O CLIENTE DO HUB
+`setRelSel('documental')` estava **antes** do `if`, então saltava para a tela dedicada mesmo
+quando não havia nada a fazer — e, com a captura automática buscando os PDFs, o salto levava a
+um SPINNER. O princípio já estava escrito na linha do laudo: *"o salto leva a uma ação, não a
+uma espera"*. Agora o salto só ocorre no `else` (o cliente precisa anexar o PDF) e no pré-check.
+Ficar no hub é **estritamente mais informativo**: o card já tem estado próprio ("Preparando
+documentos…", borda âmbar, explicação) e o cliente ainda vê os outros dois relatórios.
+
 ### 🧭 As duas lições que esta sessão deixou
 1. **Escalar o trabalho é teste de observabilidade.** A releitura levou a rodada da HASTA de 13
    para 592 lotes, e cinco defeitos de observação apareceram numa noite — nenhum era novo, e
