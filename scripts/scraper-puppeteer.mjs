@@ -1990,7 +1990,11 @@ async function scraperVendasGov() {
       }
       const j = await r.json().catch(() => null);
       const arr = j && Array.isArray(j.content) ? j.content : null;
-      if (!arr) { console.log(`    VendasGov/${sala}: resposta sem \`content\` na pág ${page} — parando esta sala`); break; }
+      if (!arr) { console.log(`    VendasGov/${sala}: resposta sem \`content\` na pág ${page} — sala provavelmente inexistente`); break; }
+      // `content: []` na página 0 é resposta VÁLIDA e vazia — coisa diferente de sala
+      // inexistente, e diferente de erro. Sem esta linha as duas apareciam como um `+0`
+      // mudo, e foi isso que escondeu por uma rodada que o problema era o `sort`.
+      if (page === 0 && arr.length === 0) console.log(`    VendasGov/${sala}: respondeu 200 com content VAZIO — a sala existe e não trouxe lote`);
       for (const it of arr) {
         const id = String(it && it.id != null ? it.id : '');
         if (id && !it.vendido && !bens.has(id)) bens.set(id, it);
