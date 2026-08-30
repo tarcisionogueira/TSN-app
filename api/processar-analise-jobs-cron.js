@@ -56,7 +56,8 @@ const brl = (v) => Number(v) > 0 ? Number(v).toLocaleString('pt-BR', { style: 'c
 async function fichaDoImovel(imovelId) {
   if (!imovelId) return null;
   const r = await sb(`imoveis_leilao?id=eq.${encodeURIComponent(imovelId)}&select=titulo,cidade,estado,bairro,`
-    + `endereco,tipo,area_m2,valor_minimo,valor_avaliacao,desconto_percentual,data_leilao,modalidade,fonte,url_lote,link_edital&limit=1`);
+    + `endereco,tipo,area_m2,valor_minimo,valor_avaliacao,desconto_percentual,data_leilao,data_leilao_2,`
+    + `data_fim,praca1_fim,praca2_fim,modalidade,fonte,url_lote,link_edital&limit=1`);
   // `.ok` ANTES do corpo: um 4xx aqui devolveria `[]` no `.json()` e "não consegui ler o
   // acervo" viraria "o lote não existe" — causas opostas com a mesma aparência (forma #1).
   if (!r.ok) throw new Error(`acervo HTTP ${r.status}`);
@@ -109,7 +110,19 @@ function montarPrompt(tipo, caso, im) {
     `Avaliação: ${brl(im.valor_avaliacao) || '(não informada)'}`,
     Number(im.desconto_percentual) > 0 ? `Desconto sobre a avaliação: ${im.desconto_percentual}%` : null,
     `Modalidade: ${im.modalidade || caso.tipo_leilao || '(não informada)'}`,
-    `Data do leilão: ${im.data_leilao || '(não informada)'}`,
+    // AS DUAS PRAÇAS, NÃO SÓ A PRIMEIRA (30/08). Ler o relatório de Osasco pegou isto: o
+    // cabeçalho saiu "Data: 26/08/2026" — a 1ª praça, JÁ VENCIDA — enquanto a 2ª, que é a
+    // que ainda aceita lance, é 31/08. O prompt só recebia `data_leilao`. Para quem decide
+    // hoje, a praça viva é o campo mais decisivo da página, e o relatório ancorava no passado.
+    // A régua é a mesma do produto (`src/utils/leilaoEncerrado.js`): a praça que vale é a
+    // MAIS FUTURA, e só a 1ª ter passado é normal — é quando a 2ª, mais barata, interessa.
+    `Datas do leilão — 1ª praça: ${im.data_leilao || '(não informada)'}`
+      + `${im.data_leilao_2 ? ` · 2ª praça: ${String(im.data_leilao_2).slice(0, 10)}` : ''}`
+      + `${im.praca1_fim ? ` · fim da 1ª: ${String(im.praca1_fim).slice(0, 10)}` : ''}`
+      + `${im.praca2_fim ? ` · fim da 2ª: ${String(im.praca2_fim).slice(0, 10)}` : ''}`
+      + `${im.data_fim ? ` · encerramento: ${String(im.data_fim).slice(0, 10)}` : ''}`
+      + `. A praça que AINDA ACEITA LANCE é a de data mais futura — ancore a análise nela, `
+      + `nunca numa praça já vencida.`,
     `Fonte: ${im.fonte || '(não informada)'}`,
   ].filter(Boolean).join('\n');
 
