@@ -148,6 +148,29 @@ existe desde 28/08 exatamente para isso: roda 09h10 e tem **carência de 24 h**,
 porque preencher no nascimento roubaria a indicação do parceiro. **Nada a fazer** — o Fabrício
 será adotado 24 h após 15:31.
 
+### 🔐 TELEFONE ÚNICO NO CADASTRO — feito (30/08), com uma pendência de tela
+
+Pedido do dono: e-mail, telefone e CPF únicos; **CNPJ não** (a mesma empresa pode ter mais de um
+sócio). Levantado antes de mexer — **dois dos três já estavam prontos**: e-mail é único em
+`auth.users`, CPF já tinha três índices únicos. **Só o telefone não tinha nenhum.**
+
+**A normalização é o que faz a trava existir.** O índice é sobre
+`regexp_replace(telefone,'\D','','g')`: `(43) 99196-7056` e `43991967056` são o mesmo número e
+strings diferentes — um índice na coluna crua deixaria os dois passarem e daria **sensação de
+proteção sem proteger**. Testado no banco: o formatado é recusado contra o não-formatado.
+
+**Os 2 pares existentes não foram apagados.** Um índice único não seria nem criado com eles ali;
+a saída foi excluir do índice a SEGUNDA conta de cada par. A PRIMEIRA fica dentro, então uma
+terceira tentativa com o mesmo telefone é barrada. **Fundir as contas segue sendo decisão do
+dono.**
+
+🔴 **PENDÊNCIA PARA A PRÓXIMA SESSÃO — e é a parte que fecha o ciclo.** A violação chega ao front
+como **erro cru de constraint**. Um cliente real com telefone já cadastrado vai ver mensagem
+técnica — que é exatamente o tipo de tela que faz a pessoa tentar de novo com outro e-mail, ou
+seja, **é como o duplicado do Fabrício nasceu.** Sem a mensagem amigável ("esse telefone já tem
+cadastro — entre com o e-mail X ou recupere a senha"), a trava pode até AUMENTAR o problema que
+veio resolver.
+
 ### ⏳ SE PROVAM SOZINHAS — confira, não conserte
 | Quando | O quê | Verde é |
 |---|---|---|
