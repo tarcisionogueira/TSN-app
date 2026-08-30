@@ -121,20 +121,37 @@ a usar `enumerados` quando os dois lados têm — espelhando o `usaEnum` de `_sa
 > medindo a coisa certa. Hoje só a VENDASGOV reporta — as outras seguem com `enumerados: null` e
 > comportamento idêntico ao de antes.
 
-### 🔴 ITEM 1 PARA A PRÓXIMA SESSÃO — o freio de custo virou "fonte zerada" (forma nº 5, de novo)
+### ✅ RESOLVIDO — o `teto_global` do RJ: o conserto já existia, faltava chegar em produção
+**Investigado em 30/08 e a conclusão é que não há código a mudar.** A linha suspeita:
 ```
 RJLEILOES · 30/08 09:41 · total 0 · status FALHOU
 motivo: "falha de acesso: teto_global; queda vs anterior (coletados 0<40)"
 ```
-**`teto_global` é o teto do Bright Data** — decisão de ORÇAMENTO, não regressão da fonte. Foi
-gravado como `falhou`; como `fonte_regressao_suspeita()` só ignora `sem_cota`, o RJ passou a
-aparecer como **`zerou`**. É o freio de custo entregue como medição da fonte pela quarta vez
-nesta base (12/08, 18/08, 27/08 e agora).
+A causa está na versão que rodou, não na lógica. O cron do GitHub roda da branch **padrão**, e o
+`main` daquele momento era `c156f56` (29/08 09:33). Nele, o `.catch()` final do `scraper-rj.mjs`
+monta a validação como `{ ok, metricas, motivo }` — **sem `semCota`**. Undefined vira falso, e
+`_saude-fonte.mjs` grava `'falhou'`. O conserto (`e462e08`, 29/08) chegou a `main` só às **11:49
+de 30/08**, com o merge do PR #339. **Aquela linha é o último artefato do código antigo.**
 
-**A prova de que o caminho certo existe está na linha anterior do mesmo histórico:** em 29/08 às
-10:29 a **mesma** condição (`teto_global`) foi gravada corretamente como `sem_cota`. Existem dois
-caminhos gravando o mesmo evento e só um carimba o status certo — **achar qual é o trabalho.**
-O RJ tem 48 lotes ativos e não perdeu nada: é defeito de ALARME, não de coleta.
+> 🔁 É a MESMA raiz dos 22 min/dia do VendasGov: conserto pronto na branch, cron rodando do
+> `main`. Um merge resolveu os dois.
+
+**Os outros scrapers não têm o furo** — `scraper-gestao`, `scraper-pecini` e `scraper-soleon` já
+carregam `semCota` no objeto de validação. Era só o `.catch()` final do RJ.
+
+**Os dois alarmes residuais expiram sozinhos — e por isso NÃO se mexe na linha:**
+- `fonte_orcamento_como_falha` = 1: a função tem **janela de 7 dias**, então zera em **06/09**.
+- `fonte_regressao_suspeita()` mostra RJLEILOES como `zerou` porque lê a **última** linha que não
+  seja `sem_cota`/`parcial_cota`. O próximo run do RJ escreve linha nova e o alarme sai — ~24 h.
+
+> ⚠️ **A tentação era corrigir a linha no banco para calar o alarme. Seria o erro.** O invariante
+> está fazendo exatamente o trabalho dele: acusar até o conserto rodar em produção — é o mesmo
+> desenho declarado no PR #339 (*"três nascem acusando, de propósito"*). Reescrever uma medição
+> histórica para deixar o painel bonito é adulterar o registro, não consertar o sistema. **O
+> alarme tem prazo de validade conhecido; a medição não se reescreve.**
+
+**O que confirma, sem reler código:** depois do próximo run do RJ, `fonte_regressao_suspeita()`
+não deve trazer RJLEILOES; e em 06/09 `fonte_orcamento_como_falha` volta a 0.
 
 ### ✅ MESCLADO E NO AR — PR #339 (`33ea07c`), deploy de produção `READY` em 30/08 11:49 UTC
 O descompasso branch × `main` que esta seção registrava **acabou**: 81 commits, 5 checks verdes,
