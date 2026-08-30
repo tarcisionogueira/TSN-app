@@ -59,6 +59,38 @@ Forma nº 10 pura, e mesma raiz do `.limit(12)` de 12/08: **janela de TRANSPORTE
 fosse o conjunto**. A contagem foi para o banco (`acervo_por_fonte()`), e o painel passa a
 imprimir o **total** — o número que denuncia truncamento na primeira olhada.
 
+### 📍 Estado ao encerrar 30/08 (00h) — a rodada da HASTA ficou EM ABERTO
+Reiniciada às **00:53:18** com o código novo. Aos **9 minutos** o batimento ainda não havia
+aparecido — dentro da janela esperada (enumeração 5-7 min + lote 25 mais 2-3 min), mas **não
+confirmado**. Nada gravado, `fonte_saude` ainda com a linha de 29/08 20:17, `coleta_cliente`
+ainda em 25/08. **A janela do gate segue aberta**, então a próxima rodada (cron diário) retoma
+sozinha — nada se perde por ter encerrado aqui.
+
+**O que conferir na próxima sessão, em uma consulta:**
+```sql
+select (select ultima_em from coleta_cliente where fonte='HASTA') as janela_fechou_em,
+       (select max(executado_em) from fonte_saude where fonte='HASTA') as ultima_medicao,
+       (select count(*) from imoveis_leilao where fonte='HASTA' and ativo) as ativos,
+       (select count(*) from imoveis_leilao where fonte='HASTA' and atualizado_em > now()-interval '18 hours') as relidos;
+```
+`relidos` perto de 592 = a releitura funcionou de ponta a ponta. `relidos` em 8 = a rodada morreu
+antes do laço e o batimento nunca saiu — aí o alvo é a **enumeração**, não o laço de detalhe.
+
+### ⚠️ DECISÃO PENDENTE: quase tudo de 29-30/08 está na BRANCH, não em `main`
+As **migrações já estão em produção** (é um banco só). O **código não** — está em
+`claude/bidpro-brasil-handoff-86bg0m` (PR #339). O descompasso mais caro:
+
+- **`SCRAPER_EXCLUIR: VENDASGOV` e a falha rápida não valem para o cron do GitHub.** Workflow
+  agendado roda a partir da branch **padrão**, então o `leiloeiros-puppeteer.yml` de `main` segue
+  gastando **22 min/dia** numa fonte que colhe zero — tempo que sai de SUPORTE, GRUPOLANCE e
+  WEBLEILOES, as três do fim da lista que o próprio cabeçalho do workflow diz serem as cortadas.
+- O painel do funil em produção já consome a RPC **corrigida** (45/52 em vez de 71/34), mas com
+  a formatação antiga (bases de porcentagem misturadas). Não quebra nada; fica inconsistente.
+- `/analise` sem a instrumentação e `/login` sem o `origem_lote`: **cada dia sem merge é um dia
+  sem medição**, e a leitura está marcada para 05/09.
+
+Nada disso é urgente no sentido de "quebrou". É urgente no sentido de "relógio correndo".
+
 ### 🧭 A lição desta noite
 Os cinco defeitos existiam antes e **nenhum aparecia enquanto a rodada era curta**. Não foram
 achados por varredura de código: foram achados por alguém olhando uma tela parada e se recusando
