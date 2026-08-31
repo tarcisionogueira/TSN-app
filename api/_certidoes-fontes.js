@@ -1,4 +1,25 @@
 /**
+ * ⚠️ DESLIGADO EM 31/08 — NENHUM CHAMADOR EM PRODUÇÃO. Leia antes de reativar.
+ *
+ * `gerar-documental.js` deixou de chamar este módulo porque ele NUNCA entregou uma certidão, e
+ * o motivo de cada fonte é estrutural, não uma indisponibilidade passageira:
+ *
+ *   • Receita → `ReceitaWS HTTP 404`. A ReceitaWS serve **CNPJ**; `/v1/cpf/{doc}` não existe.
+ *     Como o executado de leilão judicial normalmente é PESSOA FÍSICA, o 404 é garantido.
+ *   • PGFN    → `Timeout`. `regularize.pgfn.gov.br` exige login gov.br; não há API aberta.
+ *   • FGTS    → `Timeout`. A CRF da Caixa exige captcha.
+ *
+ * MEDIDO no dia: 19 documentais concluídos, ZERO com o bloco preenchido; e a rodada que
+ * produziu o diagnóstico gastou 2 créditos PAGOS do Bright Data (`brightdata_uso_proposito`,
+ * proposito 'certidao': 2 requests, 2 sucessos de rede, 0 certidões) para devolver nada.
+ * Pior, o checklist marcava `status: 'feito'` sempre que existisse um `resumo` — então a tela
+ * exibia o chip verde "conectado" ao lado do texto dizendo que nada pôde ser consultado.
+ *
+ * PARA REATIVAR de forma que funcione, o caminho é uma API PAGA de certidões (que resolve o
+ * captcha e devolve o PDF oficial). É decisão de custo, não de código. O código abaixo fica
+ * como ponto de partida: a estrutura de retorno e a agregação já distinguem "limpo",
+ * "irregular" e "não consultado", que é a parte difícil de acertar.
+ *
  * _certidoes-fontes.js — consultas fiscais PÚBLICAS (sem certificado digital) do
  * CPF/CNPJ do executado/proprietário, para compor o laudo jurídico automático.
  * Reusado pelo endpoint /api/certidoes (manual) e pelo laudo (gerar-documental).

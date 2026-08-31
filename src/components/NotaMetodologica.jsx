@@ -86,8 +86,12 @@ export function frasesDocumental(res) {
   const c = md?.consultas;
   if (c?.cnj) f.push(`Consulta processual no DataJud/CNJ${c.cnj.porNome ? ' pelo nome da parte' : ''}: ${c.cnj.total} processo(s) localizado(s)${(c.cnj.tribunais || []).length ? ` em ${c.cnj.tribunais.join(', ')}` : ''}.`);
   if (c?.djen) f.push('Andamentos verificados no DJEN/Comunica CNJ.');
-  if (c?.certidoesFiscais) f.push(`Certidões fiscais consultadas automaticamente (Receita Federal, PGFN e FGTS): ${c.certidoesFiscais}.`);
-  f.push('CNDT, CNIB e cartórios de protesto não são consultados automaticamente (exigem portal com captcha ou acesso pago) e constam como diligência do jurídico.');
+  // CERTIDÕES FISCAIS ENTRARAM NESTA LISTA EM 31/08. Elas eram anunciadas como "consultadas
+  // automaticamente" e nunca foram: a ReceitaWS não tem endpoint de CPF (404 garantido para
+  // executado pessoa física), a PGFN exige login gov.br e a CRF da Caixa exige captcha.
+  // Prometer consulta que não acontece é pior do que dizer que ela é manual — o cliente
+  // acreditaria numa checagem inexistente para decidir lance.
+  f.push('Receita Federal, PGFN, FGTS, CNDT, CNIB e cartórios de protesto não são consultados automaticamente (exigem login, captcha ou acesso pago) e constam como diligência do jurídico.');
   const af = md?.antifraude;
   if (af) {
     f.push(lista([

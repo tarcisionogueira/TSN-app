@@ -19,7 +19,6 @@ import { custoRespostaClaude, registrarCustoGeracao } from './_uso.js';
 import { buscarProcessosCNJ } from './_cnj.js';
 import { aprenderNaEmissao, vicioRegen } from './_aprendizado.js';
 import { consultarComunicaDJEN } from './_laudo-fontes.js';
-import { consultarCertidoesFiscais } from './_certidoes-fontes.js';
 import { geocodificarCascata, coordValida, rankNivel } from './_geo.js';
 import { cacheGravar } from './_doc-extracao.js';
 import { carregarPDFParse } from './_pdf-safe.js';
@@ -84,9 +83,8 @@ const PROG_LABELS = {
   documentos: 'Reunindo edital, matrícula e anexos',
   processo: 'Consulta do processo no CNJ',
   parecer: 'Leitura jurídica dos documentos',
-  certidoes: 'Certidões fiscais do executado',
 };
-const PROG_ORDEM = ['documentos', 'processo', 'parecer', 'certidoes'];
+const PROG_ORDEM = ['documentos', 'processo', 'parecer'];
 async function marcarProgresso(imovelId, ownerId, prog) {
   try {
     if (!ownerId || !imovelId) return;
@@ -102,7 +100,7 @@ async function marcarProgresso(imovelId, ownerId, prog) {
 }
 const progInicial = () => ({
   documentos: { status: 'gerando', n: null }, processo: { status: 'pendente', n: null },
-  parecer: { status: 'pendente', n: null }, certidoes: { status: 'pendente', n: null },
+  parecer: { status: 'pendente', n: null },
 });
 
 // ── Cache de documentos no bucket privado `documentos` ──────────────────────
@@ -1444,7 +1442,6 @@ export default async function handler(req, res) {
     let fontesTxt = '', fontesExternas = null;
     // A leitura jurídica (IA) terminou; o que vem agora são as consultas fiscais.
     prog.parecer = { status: 'concluido', n: null };
-    prog.certidoes = { status: docOk ? 'gerando' : 'pulado', n: null };
     await flush();
     try {
       // CONSULTAS AUTOMÁTICAS = só as que o sistema traz SOZINHO e de GRAÇA (decisão do dono):
@@ -1453,19 +1450,27 @@ export default async function handler(req, res) {
       // (Bright Data) + captcha, não saem sozinhos e ficavam "pendentes/diligência" para sempre;
       // saíram da lista E da apresentação. A indisponibilidade/penhora relevante continua vindo da
       // leitura da MATRÍCULA pela IA (grátis), sem consulta paga.
-      const [djen, cert] = await Promise.all([
-        procFontes ? consultarComunicaDJEN(procFontes).catch(() => null) : null,
-        docOk ? consultarCertidoesFiscais(execDoc).catch(() => null) : null,
-      ]);
-      fontesExternas = { djen, certidoes: cert };
-      if (prog.certidoes.status === 'gerando') {
-        // `n` = quantas certidões voltaram com resposta. Zero com a etapa CONCLUÍDA é uma
-        // informação legítima ("consultei, não veio nada"); é diferente de 'pulado'.
-        const nCert = cert && typeof cert === 'object'
-          ? Object.values(cert).filter(v => v && typeof v === 'object').length : null;
-        prog.certidoes = { status: 'concluido', n: nCert };
-        await flush();
-      }
+      // ⚠️ CERTIDÕES FISCAIS SAÍRAM DAQUI EM 31/08 — MEDIDO, não suposto (decisão do dono:
+      // "gerar as certidões desde que seja de forma automática; caso não possa, melhor remover
+      // o tópico"). Elas não saem sozinhas, e cada uma falha por um motivo ESTRUTURAL:
+      //
+      //   • Receita  → `ReceitaWS HTTP 404`. A ReceitaWS serve **CNPJ**; `/v1/cpf/{doc}` não
+      //     existe. Como o executado de leilão judicial normalmente é PESSOA FÍSICA, o 404 é
+      //     garantido — não é indisponibilidade, é endereço que nunca existiu.
+      //   • PGFN    → `Timeout`. `regularize.pgfn.gov.br` exige login gov.br; não há API aberta.
+      //   • FGTS    → `Timeout`. A CRF da Caixa exige captcha.
+      //
+      // Os dois últimos ainda caíam no Bright Data (`fetchDiretoOuBD`) e QUEIMAVAM 2 créditos
+      // PAGOS por documental para devolver nada — medido em `brightdata_uso_proposito`
+      // (proposito 'certidao': 2 requests, 2 sucessos de rede, 0 certidões). E em 19 documentais
+      // concluídos, NENHUM chegou a ter o bloco preenchido.
+      //
+      // É o mesmo critério que já tirou CNDT/CNIB/CENPROT do checklist logo abaixo. Reativar só
+      // faz sentido por uma API PAGA de certidões (que resolve captcha e devolve o PDF) — e aí
+      // é decisão de custo, não de código. `api/_certidoes-fontes.js` fica no repo com o
+      // diagnóstico registrado para quem for retomar.
+      const djen = procFontes ? await consultarComunicaDJEN(procFontes).catch(() => null) : null;
+      fontesExternas = { djen, certidoes: null };
       // Comprovantes: gera um comprovante PRÓPRIO (estático, sem script) de cada fonte
       // e guarda só a URL (a prova que o cliente abre). Nunca deixa o HTML cru no result
       // nem linka o portal ao vivo (era a causa da "tela de digitação").
@@ -1483,21 +1488,24 @@ export default async function handler(req, res) {
       }
       const linhas = [];
       if (djen?.ok) linhas.push(`• Andamentos (DJEN/Comunica CNJ): ${djen.resumo}`);
-      if (cert?.resumo) linhas.push(`• Certidões fiscais (Receita/PGFN/FGTS): ${cert.resumo}`);
+      // A linha das certidões fiscais saiu junto com a consulta (31/08). Em seu lugar, a
+      // DILIGÊNCIA — que é o que de fato precisa acontecer e não acontecia sozinho.
+      linhas.push('• Certidões fiscais (Receita Federal, PGFN e FGTS): NÃO são emitidas automaticamente '
+        + '(os portais exigem login gov.br ou captcha). Diligência do jurídico antes do lance — '
+        + 'a CND conjunta Receita/PGFN sai em servicos.receita.fazenda.gov.br e a CRF do FGTS em consultas.caixa.gov.br.');
       if (!docOk) {
         // Diligência ACIONÁVEL: diz ONDE obter a matrícula com a qualificação (CPF).
         const fc = row?.ficha_cef || {};
         const ondeObter = (fc.oficio || fc.comarca || fc.matricula)
           ? ` Obtenha a matrícula atualizada${fc.oficio ? ` no ${String(fc.oficio).replace(/^0+/, '') || fc.oficio}º Ofício de Registro de Imóveis` : ''}${fc.comarca ? ` da comarca de ${fc.comarca}` : ''}${fc.matricula ? `, matrícula nº ${fc.matricula}` : ''} — ela traz o CPF/CNPJ do proprietário/executado.`
           : ' Obtenha a matrícula atualizada no Cartório de Registro de Imóveis com a qualificação completa das partes (CPF/CNPJ).';
-        linhas.push(`• CPF/CNPJ do executado/proprietário não localizado nos documentos${execNome ? ` (parte identificada: ${execNome})` : ''} — certidões fiscais por documento não realizadas.${ondeObter}`);
+        linhas.push(`• CPF/CNPJ do executado/proprietário não localizado nos documentos${execNome ? ` (parte identificada: ${execNome})` : ''} — sem ele o jurídico não consegue emitir as certidões por documento.${ondeObter}`);
       }
-      if (linhas.length) fontesTxt = `\n\n§ SEÇÃO: CERTIDÕES E FONTES EXTERNAS\n\n${linhas.join('\n')}\n\nConsultas públicas automáticas — confirme em certidão oficial atualizada antes do lance.`;
+      if (linhas.length) fontesTxt = `\n\n§ SEÇÃO: CERTIDÕES E FONTES EXTERNAS\n\n${linhas.join('\n')}\n\nO que o sistema consulta sozinho está marcado como tal; o restante é diligência do jurídico. Confirme em certidão oficial atualizada antes do lance.`;
     } catch {
       // Fontes externas nunca derrubam o laudo — mas a etapa não pode ficar girando para
       // sempre na tela do cliente. 'erro' aqui é honesto: a consulta não completou, e o
       // relatório sai assim mesmo. Deixar em 'gerando' seria o spinner eterno de novo.
-      if (prog.certidoes.status === 'gerando') { prog.certidoes = { status: 'erro', n: null }; await flush(); }
     }
 
     // Checklist de evolução: o que já foi consultado e o que ficou PENDENTE (fonte
@@ -1536,10 +1544,11 @@ export default async function handler(req, res) {
       stItem('Andamentos processuais (DJEN/Comunica CNJ)', fx.djen, 'Sem nº de processo para consultar.', 'comunica.pje.jus.br (Comunica CNJ) com o nº do processo'),
       // CNDT / CNIB / CENPROT removidos do checklist automático (portal pago + captcha, não saem
       // sozinhos) — não faz sentido mostrar como consulta do sistema. Ficam a cargo do jurídico.
-      { label: 'Certidões fiscais (Receita/PGFN/FGTS)',
-        status: fx.certidoes?.resumo ? 'feito' : (docOk ? 'pendente' : 'na'),
-        detalhe: fx.certidoes?.resumo || (docOk ? 'Aguardando as fontes fiscais.' : 'Sem CPF/CNPJ do executado nos documentos.'),
-        comprovante: fx.certidoes?.comprovanteUrl || null },
+      // Certidões fiscais (Receita/PGFN/FGTS) removidas em 31/08 pelo MESMO critério das três
+      // acima — ver o bloco de consultas. O chip da tela lia `status: 'feito'` sempre que
+      // existisse um `resumo`, então o cabeçalho saía "conectado" (verde) ao lado do texto
+      // dizendo que nenhuma fonte pôde ser consultada: a presença da STRING reportada como
+      // conexão bem-sucedida.
     ];
     const pendencias = checklist.filter(c => c.status === 'pendente').length;
 
