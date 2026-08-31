@@ -279,6 +279,51 @@ sem mudar nada, e só reler `pg_proc.proacl` provou.** Corrigido para
 `from public, anon, authenticated`; o ACL agora lê `{postgres=X/postgres,service_role=X/postgres}`
 e `auditoria_seguranca()` fecha em **0 / 0**.
 
+### 📣 A CAMPANHA DA AULA: a causa do CPM de R$ 96 estava na SEGMENTAÇÃO (31/08, fim do dia)
+
+**Medido, não inferido, lendo a configuração real da conta `702903610061448` (BRL):**
+
+| | `TRF - SITE - LEILOES` | `CONV - AULA 02SET` |
+|---|---|---|
+| objetivo | `LINK_CLICKS` | `OUTCOME_LEADS` |
+| público | **aberto** BR 25-65, Advantage | **3 listas de retargeting** |
+| 7 dias | R$ 40,91 · 7.650 impr · 364 cliques · CPC R$ 0,11 | R$ 108,11 · 1.037 impr · 44 cliques · CPC R$ 2,43 |
+
+As três listas são `[PD] Engajamento - 14D`, `Lista_Leads_Quentes_Tarcísio` e
+`[PD] LP WS Leilao - 15D`. **É daí que vem o CPM de R$ 96**: o Meta pagando caro para bater
+repetidamente nas mesmas poucas milhares de pessoas. O criativo não é o problema — o CTR das
+duas campanhas é praticamente igual (4,3% × 4,6%).
+
+**O funil detalhado** (`conversoes_detalhe`, que eu não tinha olhado antes):
+**834 impressões → 361 viram o vídeo → 22 cliques NO LINK → 14 carregaram a página → 2 inscritos.**
+Três coisas só aparecem aí: (a) o CPC real do link é **R$ 3,64**, não R$ 2,22 — os "36 cliques"
+cobrados incluem curtida e expandir post, e cliques no link foram 22; (b) **36% dos cliques não
+viraram visita**; (c) a página converte **14%**, que para captura é bom. O gargalo é entrega,
+não criativo nem landing.
+
+**O QUE FOI FEITO (decisão do dono, R$ 40/dia e pausar a CONV):**
+- `CONV - AULA 02SET` (`120249379691430420`) → **PAUSADA**. Conferido na releitura:
+  `campaign_status: PAUSED`. (O adset dentro dela ainda lê `ACTIVE` — campanha pausada não
+  entrega, isso é normal e não é gasto.)
+- Conjunto novo **`BR - ABERTO - AULA 02SET`** (`120249418573490420`) dentro da TRF: R$ 40/dia,
+  `LOWEST_COST_WITHOUT_CAP`, `LINK_CLICKS`, segmentação aberta copiada do conjunto irmão.
+- Anúncio `120249418576270420` reaproveitando o criativo `951052481356950` (REEL-2808-LIVE).
+
+⚠️ **DUAS RESSALVAS QUE FICAM REGISTRADAS, porque nenhuma delas é "deu certo":**
+
+1. **Não consegui repontar o link para `/aula/leilao-ao-vivo`.** O criativo REEL-2808-LIVE
+   **não tem `object_story_spec`** (é criativo dinâmico/Advantage+), e a API recusa editar
+   conteúdo nesse tipo. Ele continua apontando para a rota com `#`, que navegador in-app às
+   vezes corta — foi o que produziu o inscrito com `landing: "/"` (caiu na HOME). É provável
+   que seja parte dos 36% perdidos entre clique e visita. **Conserto é manual no gerenciador,
+   ~2 min:** duplicar o anúncio e trocar a URL de destino.
+2. **A criação NÃO FOI CONFIRMADA por releitura.** A API de relatório só devolve linha depois
+   que há entrega, e o conjunto nasceu com zero impressão. As ações responderam "criado/ativado
+   com sucesso" — mas isso é confirmação da ESCRITA, não prova da entrega, e é exatamente a
+   distinção que mordeu duas vezes hoje (os dois `revoke` que "funcionaram" sem revogar nada).
+   **Check-in agendado para 01/09 09h30 BRT** para conferir se entregou e comparar o CPM novo
+   contra os R$ 96 — é esse número que valida ou derruba a tese da segmentação.
+
 ### 🧭 A LIÇÃO DA TARDE (e um erro meu de sequência)
 
 **Erro meu, registrado:** pedi ao dono que regerasse o relatório e mesclasse quase ao mesmo
