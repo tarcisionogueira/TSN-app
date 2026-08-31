@@ -139,8 +139,27 @@ export function roteiarDatasPraca(datas, im = {}) {
   const enc = datas?.encerramento ? ms(datas.encerramento) : null;
   if (!enc) return patch;
   const inicioP2 = ms(patch.data_leilao_2 || im.data_leilao_2 || '');
-  const inicioP1 = ms(im.data_leilao ? `${String(im.data_leilao).slice(0, 10)}T00:00:00-03:00` : '')
-                ?? (datas?.inicio ? ms(`${datas.inicio}T00:00:00-03:00`) : null);
+  // A ABERTURA É O INSTANTE, NÃO O DIA (31/08). Isto fazia `slice(0, 10)` e cravava
+  // `T00:00:00-03:00`: a guarda `enc >= inicioP1` comparava o encerramento contra a
+  // MEIA-NOITE do dia do leilão, e chamava isso de "depois da abertura".
+  //
+  // Medido em 31/08, os dois únicos lotes do LJUD com `praca1_fim` preenchido — e os dois
+  // errados, que é o placar inteiro: um leilão que abre 13:28 recebeu encerramento 13:00
+  // (28 min ANTES), e outro que abre 09:16 recebeu 00:00 (9 h antes). Os dois passaram a
+  // guarda porque 13:00 e 00:00 são, ambos, "depois da meia-noite". O invariante
+  // `praca_fim_antes_do_inicio` pegou o desfecho; a guarda que devia ter impedido mediu
+  // outra coisa e reportou com o nome de abertura — a forma #10.
+  //
+  // `data_leilao` é TEXT e vem nas DUAS formas: ISO completo (`2026-09-17T13:28:00-03:00`)
+  // e data seca (`2026-09-03`). Só a segunda precisa da meia-noite construída — e ela
+  // precisa MESMO, porque `Date.parse('2026-09-03')` assume UTC e recua para 21:00 do dia
+  // anterior em BRT, afrouxando a guarda justamente onde ela deveria apertar.
+  const inicioBRT = (v) => {
+    const s = String(v || '');
+    if (!s) return null;
+    return /T\d{2}:\d{2}/.test(s) ? ms(s) : ms(`${s.slice(0, 10)}T00:00:00-03:00`);
+  };
+  const inicioP1 = inicioBRT(im.data_leilao) ?? inicioBRT(datas?.inicio);
 
   // EXISTE 2ª praça mas não consigo LER a abertura dela → não dá para dizer qual praça este
   // encerramento fecha, e chutar a 1ª seria dedução (a versão anterior desta função fazia

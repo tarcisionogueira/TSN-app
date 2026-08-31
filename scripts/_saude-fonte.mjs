@@ -54,12 +54,52 @@ export function metricasColeta(imoveis) {
  * o que de fato regride quando o site muda: listagem que cai de 40 URLs para 1 é regressão de
  * verdade. Quando presente nos dois lados, é ele que decide.
  */
+/**
+ * Os motivos que significam "o ORÇAMENTO disse não" — o catálogo do `ErroBrightData`
+ * (api/_brightdata.js) mais os textos que os coletores escrevem à mão. Palavra inteira,
+ * nunca `includes` solto: `http` ou `detalhes_inacessiveis` não podem casar por acidente.
+ */
+const MOTIVOS_ORCAMENTO = /\b(teto_global|subcota_dia|subcota|reservado_para_outros|cota_indisponivel|sem[ _]cota)\b/i;
+
+/**
+ * O motivo NOMEIA uma recusa de orçamento? Rede de segurança para quando a flag `semCota`
+ * se perde no caminho — ver o comentário de `semCotaEfetivo` em `registrarSaude`.
+ */
+export function motivoEhOrcamento(motivo) {
+  return MOTIVOS_ORCAMENTO.test(String(motivo || ''));
+}
+
 export async function registrarSaude(supabase, fonte, imoveis, estrategia, validacao) {
   const m = validacao?.metricas || metricasColeta(imoveis || []);
-  const semCota = validacao?.semCota === true;
+  // REDE DE SEGURANÇA (31/08): a flag booleana é a fonte primária, o TEXTO é o desempate.
+  //
+  // Por que precisa das duas. A flag atravessa uma cadeia longa e frágil — `ErroBrightData`
+  // → `FalhaDeAcesso` → `throw` → `.catch()` do `main()` — e cada coletor reconstrói essa
+  // cadeia por conta própria (é exatamente por isso que a correção de 16/08 aqui não
+  // alcançou o `scraper-rj.mjs`, que monta o objeto de validação sozinho: 8 linhas de
+  // RJLEILOES acusaram a fonte por uma recusa de ORÇAMENTO). Perder um argumento em UM dos
+  // ~15 coletores é o bastante para a forma #5 voltar, e ela volta calada.
+  //
+  // Medido em 31/08: RJLEILOES gravou `status='falhou'` com o motivo dizendo `teto_global`
+  // por extenso — o freio de custo entregue ao monitor como quebra da fonte, que manda
+  // consertar um parser intacto. A causa foi descompasso branch × main (o workflow roda em
+  // `main` e o conserto ainda estava na branch), mas a lição é a de sempre: a classificação
+  // acontece num lugar SÓ, então é aqui que ela tem de ser à prova de flag perdida.
+  const semCotaFlag = validacao?.semCota === true;
+  const flagPerdida = !semCotaFlag && motivoEhOrcamento(validacao?.motivo);
+  const semCota = semCotaFlag || flagPerdida;
+  if (flagPerdida) {
+    // Avisa alto: o conserto de verdade é no coletor que perdeu a flag. Esta linha é o
+    // rastro que diz QUAL coletor procurar — sem ela, a rede de segurança esconde o furo.
+    console.log(`  ⚠️ [${fonte}] motivo diz recusa de ORÇAMENTO mas veio sem \`semCota\` — `
+      + `tratando como 'sem_cota'. CONSERTE o coletor que perdeu a flag.`);
+  }
   // Quantos lotes ficaram POR BUSCAR porque o teto de orçamento recusou NO MEIO da coleta.
   const cotaNegada = Number(validacao?.cotaNegada) || 0;
   let status = 'ok', motivo = validacao?.motivo || '';
+  // O rastro fica NA LINHA, não só no log do runner: quem for investigar a fonte amanhã lê
+  // a tabela, não o console de ontem.
+  if (flagPerdida) motivo = [motivo, 'classificado como orçamento pelo motivo (flag `semCota` ausente no coletor)'].filter(Boolean).join('; ');
   // "NÃO TENTEI" NÃO É "FALHOU" (16/08). O `semCota` já era honrado no teste de regressão
   // logo abaixo e no texto do `motivo` — mas o STATUS, que é o campo que o monitor, os
   // painéis e `fonte_baseline_aprendida()` de fato leem, continuava gravando 'falhou'.

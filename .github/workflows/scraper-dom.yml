@@ -9,7 +9,13 @@ name: Scraper DOM (Passo 2) — alfa/hasta/nordeste
 # Para GRAVAR: dispatch com gravar=1 (só depois do merge/decisão do dono).
 on:
   push:
-    branches: [ 'claude/handoff-bidpro-brasil-verificacoes-7h3pat' ]
+    # PADRÃO, não nome fixo (31/08). Estava travado em
+    # `claude/handoff-bidpro-brasil-verificacoes-7h3pat` — uma branch de sessão que já não
+    # existe. Um gatilho apontando para branch morta não dá erro: o workflow simplesmente
+    # nunca roda, e a validação do Passo 2 some sem ninguém notar (ALFA e NORDESTE ficaram
+    # 10 dias sem UMA medição, e quem acusou foi `fonte_regressao_suspeita`, não o CI).
+    # Nome de branch de sessão é efêmero por definição; o padrão sobrevive à próxima.
+    branches: [ 'claude/**' ]
     paths:
       - 'scripts/lib/motor/**'
       - 'scripts/lib/alfa-parse.mjs'
