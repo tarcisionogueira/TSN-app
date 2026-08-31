@@ -400,14 +400,23 @@ async function handler(req) {
     problemas.push({ fonte: 'QA', tipo: 'medicao de pinos genericos falhou', detalhe: String(e?.message || e) });
   }
 
-  let msInv = null, invOk = false;
+  let msInv = null, msServidor = null, invOk = false;
   try {
     const t0 = Date.now();
-    const { data: inv, error: eInv } = await supabase.rpc('qa_invariantes');
+    // `qa_invariantes_medido` devolve os MESMOS invariantes mais o custo do painel
+    // cronometrado DENTRO do banco. Os dois numeros existem porque eles respondem
+    // perguntas diferentes, e ate 31/08 so havia um: a rodada gravou 7.109 ms e o
+    // painel, medido no servidor, custava 3.1 s — ~4 s eram o PERCURSO (handshake,
+    // pooler, PostgREST, volta). O invariante chamava os 7,1 s de "painel lento", e
+    // quem fosse agir otimizaria invariante deixando intacta a metade maior.
+    const { data: inv, error: eInv } = await supabase.rpc('qa_invariantes_medido');
     msInv = Date.now() - t0;
+    // Vem repetido em todas as linhas (e o mesmo valor); ler a primeira basta.
+    const bruto = inv?.[0]?.ms_servidor;
+    msServidor = Number.isFinite(Number(bruto)) ? Number(bruto) : null;
     if (eInv) {
       problemas.push({ fonte: 'QA', tipo: 'invariantes NAO avaliados',
-        detalhe: `falha ao ler qa_invariantes apos ${msInv}ms: ${eInv.message}. As assercoes de corretude nao rodaram nesta rodada — silencio aqui NAO significa acervo sao.` });
+        detalhe: `falha ao ler qa_invariantes_medido apos ${msInv}ms: ${eInv.message}. As assercoes de corretude nao rodaram nesta rodada — silencio aqui NAO significa acervo sao.` });
     } else {
       invOk = true;
       for (const i of inv || []) {
@@ -420,13 +429,24 @@ async function handler(req) {
     problemas.push({ fonte: 'QA', tipo: 'invariantes NAO avaliados',
       detalhe: `excecao ao ler qa_invariantes: ${String(e?.message || e)}` });
   }
-  // A medicao alimenta o invariante `qa_invariantes_lenta` (limite 5.000ms = 62% do teto de
-  // 8s), que acusa a aproximacao ANTES de virar 500 na tela. Sem medicao ha 3+ dias ele
-  // devolve 9999 e acusa tambem — "nao consegui checar" reprova, nao aprova.
+  // A medicao alimenta o invariante `qa_invariantes_lenta`, que acusa a aproximacao ANTES de
+  // virar 500 na tela. Sem medicao ha 3+ dias ele devolve 9999 e acusa tambem — "nao consegui
+  // checar" reprova, nao aprova.
+  //
+  // DOIS numeros, de proposito (31/08):
+  //   `ms`          ponta a ponta — e o que arrisca estourar o teto de 8s do PostgREST.
+  //   `ms_servidor` custo do painel em si — e o que se otimiza mexendo em invariante.
+  // O invariante julga `coalesce(ms_servidor, ms)`, entao com a medicao nova ele fala do
+  // PAINEL; sem ela (linhas anteriores a 31/08) cai no comportamento antigo em vez de cegar.
+  // `ms_servidor` nulo aqui NAO e detalhe: significa que a RPC nova nao respondeu como o
+  // esperado, e ai o invariante volta a medir painel+rede junto — por isso deixa rastro.
   if (msInv !== null) {
+    if (invOk && msServidor === null) {
+      console.error('[qa] qa_invariantes_medido nao devolveu ms_servidor — o invariante volta a medir painel+rede junto');
+    }
     const { error: eMedida } = await supabase
       .from('qa_invariantes_execucao')
-      .insert({ ms: msInv, ok: invOk });
+      .insert({ ms: msInv, ok: invOk, ms_servidor: msServidor });
     if (eMedida) console.error('[qa] nao gravou a duracao dos invariantes:', eMedida.message);
   }
 
