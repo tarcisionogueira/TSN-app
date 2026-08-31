@@ -335,6 +335,13 @@ export default function ConviteEquipe() {
   const [concluido, setConcluido] = useState(false);
   const [precisaConfirmarEmail, setPrecisaConfirmarEmail] = useState(false);
   const [erroPasso, setErroPasso] = useState('');
+  // PENDÊNCIAS QUE NÃO BLOQUEIAM O CADASTRO MAS PRECISAM SER VISÍVEIS (31/08). A tela final
+  // anunciava "Bem-vindo à equipe como {papel}" mesmo quando o papel NÃO foi aplicado e/ou o
+  // KYC se perdeu — os dois casos só deixavam um `console.warn`, que nenhum cadastrando lê.
+  // O próprio arquivo já tratava assim a falha do contrato operacional (o `alert` do bloco de
+  // contrato): "não bloqueia o cadastro, mas a ausência tem que ser VISÍVEL para alguém correr
+  // atrás". Aqui a lista leva isso para a tela de conclusão, ao lado do papel.
+  const [avisosPos, setAvisosPos] = useState([]);
 
   // CONSULTOR + usuário logado: descobre o que FALTA para completar o cadastro do role e os
   // requisitos de parceiro (nome completo, telefone, cidade/UF, CPF) — o convite pede só o que
@@ -616,7 +623,11 @@ export default function ConviteEquipe() {
             validado_em: new Date().toISOString(),
           },
         });
-        if (eKyc || rKyc?.ok === false) console.warn('[convite-equipe] KYC não salvo:', eKyc?.message || rKyc?.erro);
+        if (eKyc || rKyc?.ok === false) {
+          console.warn('[convite-equipe] KYC não salvo:', eKyc?.message || rKyc?.erro);
+          // KYC perdido só reaparece pedindo TUDO de novo à pessoa — ela precisa saber agora.
+          setAvisosPos((v) => [...v, 'Suas fotos de verificação (KYC) não foram salvas. Avise o administrador — elas serão solicitadas novamente antes de você poder sacar.']);
+        }
       }
 
       if (signUpData?.user?.id) {
@@ -627,11 +638,17 @@ export default function ConviteEquipe() {
         // para o AuthContext resgatar. Antes a resposta era ignorada e a tela dava sucesso
         // como se o papel tivesse sido aplicado — a pessoa entrava como explorador (05/08).
         if (signUpData?.session) {
-          const { data: rEq } = await supabase.rpc('usar_convite_equipe', {
+          // `error` DESTRUTURADO (31/08): sem ele, um 400/RLS deixava `rEq` indefinido, o teste
+          // `rEq?.ok === false` dava falso e NEM o console.warn saía — sucesso completo sobre
+          // um papel que não foi aplicado. Forma #2 no último passo do cadastro.
+          const { data: rEq, error: eEq } = await supabase.rpc('usar_convite_equipe', {
             p_token: token,
             p_user_id: signUpData.user.id,
           });
-          if (rEq?.ok === false) console.warn('[convite-equipe] resgate:', rEq?.erro);
+          if (eEq || rEq?.ok === false) {
+            console.warn('[convite-equipe] resgate:', eEq?.message || rEq?.erro);
+            setAvisosPos((v) => [...v, `Sua conta foi criada, mas o acesso de ${cfg.label} ainda NÃO foi aplicado (${eEq?.message || rEq?.erro || 'falha no resgate do convite'}). Avise o administrador antes de iniciar atendimentos.`]);
+          }
         } else {
           salvarConvite(CHAVE_EQUIPE, token);
         }
@@ -679,12 +696,25 @@ export default function ConviteEquipe() {
         <CheckCircle2 size={64} color="#10b981" style={{ margin: '0 auto 20px' }} />
         <h1 style={{ fontSize: 28, fontWeight: 900, color: 'white', margin: '0 0 12px' }}>Cadastro concluído!</h1>
         <p style={{ color: '#94a3b8', fontSize: 15, lineHeight: 1.7, marginBottom: 32 }}>
-          Bem-vindo à equipe BidPro Brasil como <strong style={{ color: 'white' }}>{cfg.label}</strong>.<br />
+          {avisosPos.length === 0
+            ? <>Bem-vindo à equipe BidPro Brasil como <strong style={{ color: 'white' }}>{cfg.label}</strong>.<br /></>
+            : <>Sua conta foi criada.<br /></>}
           Seu cadastro foi concluído. Faça login para acessar a plataforma.
           {precisaConfirmarEmail && (
             <><br /><span style={{ fontSize: 13, color: '#94a3b8' }}>Verifique também seu e-mail para confirmar o acesso.</span></>
           )}
         </p>
+        {/* O que ficou PENDENTE. Anunciar o papel quando ele não foi aplicado é dizer à pessoa
+            que ela é uma coisa que o sistema não sabe que ela é — e ela só descobre ao tentar
+            trabalhar. Com aviso, ela procura o administrador hoje. */}
+        {avisosPos.length > 0 && (
+          <div style={{ textAlign: 'left', background: '#7c2d12', border: '1px solid #ea580c', borderRadius: 12, padding: '14px 16px', marginBottom: 28 }}>
+            <div style={{ fontSize: 13, fontWeight: 800, color: '#fed7aa', marginBottom: 8 }}>⚠️ Pendências deste cadastro</div>
+            {avisosPos.map((a, i) => (
+              <div key={i} style={{ fontSize: 13, color: '#ffedd5', lineHeight: 1.6, marginTop: i ? 8 : 0 }}>• {a}</div>
+            ))}
+          </div>
+        )}
         <button onClick={() => nav('/login')}
           style={{ padding: '14px 32px', background: cfg.cor, color: 'white', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 16, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
           Ir para Login <ArrowRight size={16} />

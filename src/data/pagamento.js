@@ -100,6 +100,39 @@ export function normalizarFormaPagamento(raw) {
   return 'a_vista';
 }
 
+/**
+ * O lote SÓ aceita pagamento à vista? (31/08)
+ *
+ * POR QUE EXISTE. `hipotecado` NÃO é um ônus nesta base — é uma FORMA DE PAGAMENTO, e ela é
+ * parcelável. Quem grava é o gatilho `default_forma_pagamento_judicial`, que marca TODO lote
+ * judicial como `hipotecado`; e o filtro da Busca descreve o valor por extenso: *"Parcelamento
+ * no leilão judicial (art. 895 do CPC), com o imóvel hipotecado ao juízo até quitar"*.
+ *
+ * O DEFEITO que este helper fecha (achado do dono, no print de um apartamento no Itaim Bibi):
+ * duas telas decidiam à vista com `!pagamento.includes('financiado')` — `Analise.jsx` (a
+ * projeção) e `Busca.jsx` (o que ela passa para a análise). Nenhuma das duas conhecia
+ * `hipotecado`, então **todo lote judicial era tratado como só-à-vista**: o cenário parcelado
+ * ficava DESABILITADO na tela e capital necessário, custo mensal, ROI e teto de lance saíam
+ * sobre a premissa errada. Medido em 31/08: **2.081 lotes ativos**, e os 2.081 são judiciais.
+ *
+ * O servidor já estava certo (`gerar-analise.js` só aceita o literal `'a_vista'`) e
+ * `_auditoria-relatorio.js` até audita a contradição "parcelável × somenteAVista" — era só o
+ * cliente que discordava.
+ *
+ * É a mesma família do achado de 15/08 (132 lotes com parcelamento no título gravados como
+ * `a_vista`): o acervo dizia parcelável e a tela decidia à vista sozinha. Aqui a regra vive num
+ * lugar só, porque regra duplicada é como o defeito sobrevive nos dois lados.
+ *
+ * `null`/desconhecido NÃO trava o cenário parcelado: "não sabemos" nunca pode virar restrição.
+ *
+ * @param {string[]|string|null} formas valor(es) de `forma_pagamento` do lote
+ */
+export function soAceitaAVista(formas) {
+  const lista = (Array.isArray(formas) ? formas : [formas]).filter(Boolean).map((v) => String(v).toLowerCase());
+  if (!lista.length) return false;                 // sem informação não restringe
+  return !lista.some((v) => v === 'financiado' || v === 'hipotecado');
+}
+
 // ─── Display badge ─────────────────────────────────────────────────────────────
 export function pagamentoBadge(valor) {
   if (!valor) return null;

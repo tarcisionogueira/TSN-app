@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { saveBuscaRecente, loadImoveis, saveImoveis, generateId } from '../utils/storage';
 import { buscarCidadesEstado, buscarTodasCidades, RAIOS_KM } from '../data/cidades';
-import { PAGAMENTO_LABEL, PAGAMENTO_FILTRO_DB, pagamentoParaCanon, pagamentoBadge } from '../data/pagamento';
+import { PAGAMENTO_LABEL, PAGAMENTO_FILTRO_DB, pagamentoParaCanon, pagamentoBadge, soAceitaAVista } from '../data/pagamento';
 import { supabase } from '../utils/supabase';
 import { apiCall } from '../utils/apiCall';
 import { parseDataLocal } from '../utils/format';
@@ -1146,7 +1146,20 @@ export default function Busca() {
     setFiltrosSalvos(p => p.filter(f => f.id !== id));
   }
 
+  // CORRIDA ENTRE BUSCAS (31/08). `buscarPagina` é disparada por filtro, página e ordenação, e
+  // não tinha guarda NENHUMA — o mapa (`vivoMapa`) e a cota (`vivo`) já tinham a sua. Duas
+  // buscas em sequência rápida (trocar filtro, paginar, reordenar) resolvem fora de ordem: a
+  // resposta da PRIMEIRA chega depois e sobrescreve `resultados`, `totalResultados` e
+  // `distancias` da segunda. O cliente fica vendo o resultado de um filtro que já mudou, com a
+  // tela dizendo o filtro novo — nada pisca, nada dá erro, e o número exibido é plausível.
+  //
+  // Bilhete por chamada: só a busca MAIS RECENTE escreve na tela. As antigas resolvem e são
+  // descartadas.
+  const buscaSeqRef = React.useRef(0);
+
   const buscarPagina = async (paginaAlvo, filtrosAtivos, sortAtivo, centro = centroRaio, raioAtivoBusca = raioAtivo, raioKmBusca = raioKmAtivo, cidadesRaio = null) => {
+    const seq = ++buscaSeqRef.current;
+    const atual = () => seq === buscaSeqRef.current;
     setErro(''); setLoading(true); setBuscaFeita(true); setResultados([]);
 
     const buildQuery = (base) => {
@@ -1258,6 +1271,7 @@ export default function Busca() {
             scoreLocalizacao: im.score_localizacao ?? null,
           };
         });
+        if (!atual()) return;   // busca antiga: outra já assumiu a tela
         setDistancias(novasDistancias);
         setResultados(mapeados);
         setLoading(false);
@@ -1279,6 +1293,7 @@ export default function Busca() {
         dbData = data;
         dbError = error;
         totalBusca = count || 0; // valor REAL desta busca (o estado totalResultados é assíncrono → stale no log)
+        if (!atual()) return;   // busca antiga: não publica contagem por cima da atual
         setTotalResultados(totalBusca);
       }
 
@@ -1342,6 +1357,7 @@ export default function Busca() {
         scoreLocalizacao: im.score_localizacao ?? null,
       })) : [];
 
+      if (!atual()) return;   // idem para a lista
       setDistancias({});
       setResultados(mapeados);
 
@@ -1371,10 +1387,10 @@ export default function Busca() {
         } catch (_) {}
       }
     } catch (e) {
-      setErro('Erro na busca. Tente novamente.');
-      console.error(e);
+      // Erro de uma busca ANTIGA não pode aparecer sobre a atual (nem apagar o loading dela).
+      if (atual()) { setErro('Erro na busca. Tente novamente.'); console.error(e); }
     }
-    setLoading(false);
+    if (atual()) setLoading(false);
   };
 
   const buscar = async () => {
@@ -1444,7 +1460,7 @@ export default function Busca() {
         // Era 3% aqui e 5% no relatório: o mesmo imóvel nascia com um custo e era analisado
         // com outro. A régua única vive em src/lib/rentabilidade.js.
         itbiPercentual: ITBI_REGISTRO_PCT,
-        somenteAVista: !im.pagamento?.includes('financiado'),
+        somenteAVista: soAceitaAVista(im.pagamento),   // `hipotecado` é PARCELÁVEL (art. 895) — ver data/pagamento.js
         prazoMeses: 360, cetAnual: 12, sinalPercentual: 5, prazoVendaMeses: 12,
       };
       saveImoveis([...imoveis, novo]);

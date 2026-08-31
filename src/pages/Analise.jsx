@@ -31,6 +31,7 @@ import { scoreBidPro, scoreLabel } from '../utils/score';
 import { apiCall } from '../utils/apiCall';
 import NotaMetodologica from '../components/NotaMetodologica';
 import { COMISSAO_LEILOEIRO_PCT, ITBI_REGISTRO_PCT } from '../lib/rentabilidade';
+import { soAceitaAVista } from '../data/pagamento.js';
 
 // Rótulos do tipo de ocupação no Raio-X jurídico (Fase 1).
 const OCUP_LABEL_A = {
@@ -228,7 +229,7 @@ export default function Analise() {
       // `a_vista`. Agora, qualquer indício de parcelamento lido no DOCUMENTO ou no anúncio
       // (`doc_fatos.pagamento`) destrava o cenário — o acervo deixa de ter a última palavra
       // contra o que o próprio leiloeiro publicou.
-      somenteAVista: !imovelInicial.pagamento?.includes('financiado')
+      somenteAVista: soAceitaAVista(imovelInicial.pagamento)
         && !(Number(imovelInicial.docFatos?.pagamento?.parcelas) >= 2
           || Number(imovelInicial.docFatos?.pagamento?.sinalPct) > 0
           || imovelInicial.docFatos?.pagamento?.financiavel === true),

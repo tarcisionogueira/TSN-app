@@ -300,10 +300,28 @@ export function AuthProvider({ children }) {
             if (eMkt) console.warn('[atribuicao] nao registrada:', eMkt.message || eMkt);
             else if (rMkt && rMkt.ok === false) console.warn('[atribuicao] recusada:', rMkt.motivo);
           } catch (e) { console.warn('[atribuicao] excecao:', e?.message || e); }
+          // INDICAÇÃO DE CLIENTE — o mesmo tratamento que o convite de EQUIPE ganhou em 05/08
+          // (bloco logo abaixo) e que este nunca recebeu (31/08).
+          //
+          // Estava assim: `try { await supabase.rpc('usar_convite', …) } catch (_) {}` seguido de
+          // `limparConvite()` INCONDICIONAL. Dois defeitos somados:
+          //   • `supabase.rpc` devolve `{data, error}` e NÃO LANÇA em não-2xx (forma #2), então o
+          //     `catch` nunca disparava e o `error` nunca era lido;
+          //   • o código do convite era APAGADO de qualquer jeito. Rede fora do ar, RPC
+          //     indisponível, RLS — a indicação sumia sem rastro e sem segunda chance, e o
+          //     parceiro que trouxe o cliente simplesmente não recebia.
+          //
+          // `usar_convite` devolve BOOLEANO: `true` vinculou; `false` é recusa DEFINITIVA
+          // (código inexistente/inativo, ou auto-indicação). Os dois são desfecho — descartam o
+          // código. Só `error` é transitório, e aí o código FICA para a próxima sessão tentar.
           const convite = lerConvite(CHAVE_CLIENTE);
           if (convite) {
-            try { await supabase.rpc('usar_convite', { p_codigo: convite }); } catch (_) {}
-            limparConvite(CHAVE_CLIENTE);
+            try {
+              const { data: rConv, error: eConv } = await supabase.rpc('usar_convite', { p_codigo: convite });
+              if (!eConv) limparConvite(CHAVE_CLIENTE);   // vinculou (true) ou recusa definitiva (false)
+              else console.warn('[convite] resgate adiado (código preservado):', eConv.message || eConv);
+              if (!eConv && rConv === false) console.warn('[convite] código recusado:', convite);
+            } catch (e) { console.warn('[convite] resgate adiado (exceção):', e?.message || e); }
           }
           // CONVITE DE EQUIPE — o token só é descartado quando o resgate teve DESFECHO
           // (05/08). Antes o removeItem era incondicional: falha de rede, RPC fora do ar ou
