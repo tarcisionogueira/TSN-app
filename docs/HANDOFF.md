@@ -4,6 +4,162 @@
 
 ---
 
+## 🚦 COMECE POR AQUI — estado ao encerrar 31/08 13h30 UTC (sessão 16)
+
+> Branch `claude/handoff-bidpro-brasil-checks-l89025` = **`9c8d7b5`**, empurrada. Heartbeat às 09:52.
+> **Placar do dia:** invariantes em alerta **7 → 5** · segurança **1 atenção → 0** · erros de
+> cliente abertos **1 → 0** · fontes em regressão **4 → 3** · regras de negócio 0 crítico.
+
+### 🔴 O PAINEL DE CORRETUDE ESTAVA MORTO HÁ 6 DIAS — e o vigia dele dizia que estava ótimo
+
+O achado mais grave da sessão, e ele **não apareceu em nenhum alarme**: apareceu por ler a
+tabela `qa_invariantes_execucao`, que tinha **`ok = false` nas quatro últimas rodadas**. A
+última vez que os 73 invariantes de fato rodaram pelo monitor foi **25/08**.
+
+Reproduzido com `set local role service_role`:
+
+```
+ERROR 42501: permission denied for table users
+CONTEXT: SQL function "qa_invariantes" statement 1
+```
+
+`qa_invariantes()` é SECURITY INVOKER **de propósito** (o monitor e o health-check a chamam
+direto como `service_role` — está escrito em `qa_invariantes_restaura_search_path.sql`). Mas o
+invariante `nome_fontes_divergentes`, acrescentado em 18/08, lê `auth.users`, e `service_role`
+não tem SELECT lá. A falha é na **primeira instrução**: nenhum dos 73 rodava.
+
+⚠️ **Por que ninguém viu:** a aba `/admin` usa `admin_qa_invariantes()`, que é SECURITY DEFINER
+de `postgres` e **enxerga** `auth.users`. A tela do dono continuou correta o tempo todo. Só o
+caminho automático — o que roda sozinho e é a razão de existir do painel — estava morto.
+
+**Conserto:** helper SECURITY DEFINER (`qa_invariante_nome_fontes_divergentes`), o mesmo padrão
+que ~15 outros invariantes já usam. **Não** demos SELECT em `auth.users` para `service_role`:
+ampliar privilégio na tabela mais sensível do banco para consertar um painel sai caro demais.
+
+**REGRA NOVA:** invariante que leia fora de `public` — `auth.*` em especial — tem de entrar por
+helper SECURITY DEFINER. `qa_invariantes` roda como `service_role` no caminho que importa, e
+`service_role` não enxerga `auth`.
+
+### 🪞 E O VIGIA QUE ESCONDEU ISSO — a forma #10 dentro do próprio vigia
+
+`qa_invariantes_lenta` existe **desde 25/08 exatamente para o painel não parar em silêncio**.
+Ele lia a coluna `ms` da última execução e comparava com 5.000. Só que `ms` é cronometrado em
+volta da chamada, dê ela certo ou errado — e **uma chamada que falha volta em 167 ms**. O vigia
+leu 167, comparou com 5.000, e respondeu **`ok`**.
+
+A coluna `ok` estava lá, gravada corretamente, e o invariante **não a consultava**. Custo real
+medido hoje, server-side: **3.093 ms** — 15× o que o vigia reportava.
+
+Agora rodada que FALHOU reprova (9999), igual medição velha. O título passou a nomear as três
+condições, senão o dono lê 9999 e entende "está lento" quando o fato é "não rodou".
+
+⚠️ **Ele está em alerta agora, e isso é o conserto funcionando** — a última rodada GRAVADA é a
+de 29/08, que falhou. Apaga sozinho quando o monitor (≈15h UTC) gravar a primeira bem-sucedida.
+**Não gravei uma linha à mão para deixar verde:** o sistema é que tem de se provar.
+
+### 💰 RECUSA DE ORÇAMENTO GRAVADA COMO FALHA DA FONTE — a forma #5, 4ª volta
+
+RJLEILOES aparecia como `zerou` com o `motivo` dizendo `teto_global` **por extenso**. Causa:
+**descompasso branch × main** — o workflow roda em `main` e o conserto do `semCota` (`d9d2398`,
+30/08 01h03) ainda estava na branch às 09h41. Hoje `main` == branch, então a linha específica
+não se repete.
+
+**Mas a causa profunda é estrutural, e essa fica:** a flag atravessa `ErroBrightData` →
+`FalhaDeAcesso` → `throw` → `.catch()` do `main()`, e **cada um dos ~15 coletores reconstrói
+essa cadeia por conta própria**. Perder um argumento em UM deles basta, e volta calada. Como a
+classificação acontece **num lugar só**, `registrarSaude` passa a desempatar pelo TEXTO do
+motivo quando a flag se perde — e avisa alto qual coletor consertar, para a rede de segurança
+não virar mordaça. `npm run testar:orcamento` trava 24 casos, incluindo os que **não** podem
+casar (`"cotacao"` contém `"cota"`).
+
+Linha 1192 de `fonte_saude` reclassificada. O alarme falso do RJ sumiu.
+
+### 📅 ENCERRAMENTO DE PRAÇA ANTES DA ABERTURA — a guarda media o DIA, não a hora
+
+`roteiarDatasPraca` tem guarda explícita (`enc >= inicioP1`) cujo comentário diz, com todas as
+letras, que existe para não gravar encerramento anterior à abertura. **Ela não evitava:**
+`inicioP1` era `data_leilao.slice(0,10) + 'T00:00:00-03:00'` — a **meia-noite** do dia. Qualquer
+encerramento no dia certo passava por "depois da abertura".
+
+Placar medido: **2 de 2** — os únicos lotes do LJUD com `praca1_fim`, os dois inválidos (abre
+13:28 / encerra 13:00; abre 09:16 / encerra 00:00). Data seca continua ganhando a meia-noite
+construída — sem ela `Date.parse('2026-09-03')` assume UTC e **afrouxa** a guarda em 3 h.
+`npm run testar:praca-fim`, 7 casos. As 2 linhas foram corrigidas (`data_fim` recalculado pelo
+gatilho, prazo preservado).
+
+### 📊 O VIGIA DA INGESTÃO DE MARKETING SE CHAMAVA "GOOGLE ADS" E MEDIA TODOS OS CANAIS
+
+`mkt_ingestao_atrasada` fazia `max(data)` **sem `where canal`**. Como o Meta grava cedo (08h10
+medido) e o Google chega ~10h50, **enquanto o Meta escrever todo dia o vigia diz `ok`** — ainda
+que o Google esteja parado há semanas. Agora mede por canal, com piso de 10 dias para canal
+desligado de propósito não acusar para sempre.
+
+### 🔒 SEGURANÇA: 1 atenção → 0, e um revoke que "funcionou" sem revogar nada
+
+`live_em_cartaz` é leitura pública por desenho (serve a home pré-login, sem PII) → entrou na
+allowlist ao lado de `live_proxima`. `registrar_marketing` exige sessão e nada faz para anon →
+o grant desnecessário foi **revogado**, não documentado. Allowlist é registro de "isto é público
+de propósito"; enchê-la de função que só não é perigosa por acidente ensina a confiar menos nela.
+
+⚠️ **`revoke ... from anon` NÃO bastou, e só medir depois mostrou.** A ACL era
+`{=X/postgres,...}` — o `=X` sem papel à esquerda é **PUBLIC**, o default do Postgres para toda
+função nova, e `anon` herda dele. O revoke nominal saiu e o privilégio ficou. É a forma #3 em
+roupa de permissão: a operação não deu erro, e só reler a ACL provou o que mudou.
+
+⚠️ **NÃO consertado, e fica registrado:** `registrar_marketing(p, p_anon_id)` aceita o `anon_id`
+de quem chama e copia a atribuição daquela `visita_origem` para o perfil. Um cliente logado pode
+reivindicar o gclid de outro visitante. **Não vaza dado** (o retorno devolve só booleanos), o
+efeito é sujar a ATRIBUIÇÃO. É inerente ao desenho — o `anon_id` É a identidade pré-login. Vale
+saber que o número de origem é falsificável; não vale redesenhar sem decisão do dono.
+
+### 🔁 O QUE ESTAVA CERTO E EU CONFIRMEI (para ninguém reabrir)
+
+- **RLS do "Solicitar"**: o assessorado de 06/07 na lista de "pagantes sem entrega" **tentou
+  duas vezes** (23 e 24/08) e tomou `new row violates RLS policy for analise_jobs`. Não era
+  desinteresse, era botão quebrado. **Já corrigido em 30/08** (`rls_fluxo_caso_analise.sql`);
+  testei a política sob a identidade dele e passa. Os 12 jobs foram semeados, 3 casos em
+  `analises_prontas`. O alerta `erro_na_tela_do_cliente` é rescaldo dos 7 dias.
+- **Alerta acima do capital**: as 2 violações são de 24/08, **anteriores** ao conserto de 25/08.
+  Confirmado com **479 alertas enviados em 7 dias e ZERO violações** desde então.
+- **`statement timeout` do `/admin`** (23/08): resolvido em 25/08 (11,7 s → 3,1 s medidos hoje).
+  Marcado como resolvido — agora com um vigia que de fato vigia.
+- **CPC do Google** (a pendência que 30/08 mandou conferir): **é tendência real, não artefato.**
+  R$ 1,61 → 1,47 → **0,41 → 0,26** em 4 semanas, com gasto estável e conversão NÃO diluída
+  (0,9% nas duas últimas). Custo por conversão caiu de R$ 45,58 para **R$ 28,93**.
+
+### 🟡 O QUE FICA ABERTO
+
+1. **HASTA — 579 lotes, 208 cidades, TODOS com data 03/09. Prazo: depois de amanhã.**
+   Não confirmei e **não carimbei como verificado** — o site bloqueia IP de datacenter (HTTP
+   000) e esta sessão não tem credencial do Bright Data. O que o código diz **enfraquece** a
+   hipótese de bug: o parser lê a data **por lote**, do detalhe (`Data 1º Leilão: …`), e
+   `data_leilao_2` nulo em todos é consistente com lotes de 2 praças cuja praça VIVA é 03/09 —
+   o padrão de carteira CEF. Só há **uma** coleta na história (30/08), então não há histórico
+   para comparar. **É um olhar de 30 segundos no site.** Se confirmar, o invariante tem a saída
+   própria: gravar em `fonte_data_uniforme_verificada`. Se a data estiver errada, 579 lotes
+   expiram em massa dia 04.
+2. **Bright Data saturou 2 semanas seguidas** (618/550 em 17/08, **550/550** em 24/08). É o que
+   seca EMILIOMATOS/NORDESTE/ALFA. Semana nova zerada e o freio responde `permitido` nos 13
+   propósitos. Decisão do dono: subir o teto (custa) ou migrar mais fontes para o residencial.
+3. **ALFA e NORDESTE não têm coleta automática NENHUMA.** `scraper-dom.yml` não tem `schedule` e
+   o gatilho de `push` apontava para uma branch de sessão morta — **consertei o gatilho** (agora
+   `claude/**`), mas **não liguei agendamento com gravação**: o próprio arquivo diz "só depois do
+   merge/decisão do dono". Impacto pequeno hoje (NORDESTE e EMILIOMATOS com **0 lotes ativos**,
+   ALFA com 8). **Decisão sua.**
+4. `cadastro_duplicado` (1) e `cadastro_sem_origem` (1 — cadastro de 26/08 sem `mkt_capturado_em`).
+
+### 🔴 O QUE PRECISA DE VOCÊ — em ordem de prazo
+1. **HOJE — aula 02/09.** A campanha `CONV - AULA 02SET` gastou **R$ 80,04 por 36 cliques
+   (CPC R$ 2,22 — 8× as outras)** e está em **4 inscritos, nenhum novo desde 30/08 16h43**.
+   Os 3 criativos pausados são o que pode destravar. Custo por inscrito atribuído subiu de
+   R$ 26,10 para **R$ 40,02**.
+2. **HOJE — HASTA** (item 1 acima, 30 segundos).
+3. **ANTES DE 03/09 — pausar a campanha da aula**, que não tem data de fim.
+4. Herdadas de 30/08: trocar `ADV+` por `LAL1%` · carga retroativa do Meta · **tirar o cliente
+   OAuth da conta pessoal do dono (depois de 02/09)** · `ADMIN_EMAIL` na Vercel.
+
+---
+
 ## 🚦 COMECE POR AQUI — estado ao encerrar 30/08 15h UTC (sessão 15)
 
 > Sessão longa. `main` = **`73e29dc1`**, tudo mesclado e no ar. Heartbeat carimbado às 15:00 UTC.
