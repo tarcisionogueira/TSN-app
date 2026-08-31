@@ -24,6 +24,7 @@
     "testar:certidoes": "node scripts/testes/certidao-indisponivel-nao-e-certidao-limpa.mjs",
     "testar:pagamento": "node scripts/testes/hipotecado-e-parcelavel-nao-a-vista.mjs",
     "testar:reforco": "node scripts/testes/reforco-so-fala-com-quem-nao-respondeu.mjs",
+    "testar:destino": "node scripts/testes/quem-pagou-para-ver-a-aula-nao-cai-na-home.mjs",
     "precisa-navegador": "node scripts/testes/precisa-navegador.mjs"
   },
   "dependencies": {

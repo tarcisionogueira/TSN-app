@@ -10,6 +10,7 @@ import { vigiarAtualizacaoDoApp } from './utils/swAtualizacao.js'
 import { reportarErroCliente, instalarCapturaErros, ehErroDeChunk, recarregarPorChunkStale, recarregarComGuarda, houveChunkRecente, mostrarAvisoPreso } from './utils/reportarErro.js'
 import { instalarTracker } from './utils/tracker.js'
 import { initMetaPixel, initOpenAIPixel, capturarMarketing } from './utils/marketing.js'
+import { resgatarDestinoDaCampanha } from './utils/destinoDaCampanha.js'
 
 // Registra o service worker em produção e VIGIA atualização: sem isso o PWA instalado
 // segue rodando a versão que baixou (fechar e reabrir NÃO busca versão nova — ver
@@ -33,6 +34,12 @@ instalarTracker();
 initMetaPixel();
 initOpenAIPixel();
 capturarMarketing();
+
+// DEPOIS de capturar a atribuição, e não antes: o resgate pode trocar a URL, e a origem tem de
+// estar guardada quando isso acontecer. Medido em 31/08: 22 das 33 visitas pagas da aula caíam
+// na HOME porque o navegador embutido do Instagram corta o que vem depois do "#". Ver
+// `utils/destinoDaCampanha.js`.
+resgatarDestinoDaCampanha();
 
 class RootErrorBoundary extends React.Component {
   constructor(props) { super(props); this.state = { error: null, chunk: false }; }
