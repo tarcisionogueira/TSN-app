@@ -68,10 +68,11 @@ curto (5–8 linhas) antes de seguir:
    > problema) **continua ligado e deve continuar**. A auditoria do Claude
    > (`auditoria-claude.yml`, ~R$ 43-59) é a que só roda com 7+ dias sem sessão.
 
-   > **1c. CLIENTE 360 · MARKETING · SAÚDE DO SISTEMA — as três telas do negócio** (pedido do
-   > dono, 14/08). Custo zero, mesma regra do 1b: ler o banco não custa nada. As três respondem
-   > perguntas que nenhuma varredura de código responde — *o cliente está sendo servido? o
-   > dinheiro do anúncio está virando gente? o que roda sozinho ainda roda?*
+   > **1c. CLIENTE 360 · MARKETING · SAÚDE · PROCESSO · DIAGNÓSTICO — as telas do negócio**
+   > (pedido do dono, 14/08; ampliado em 15/08 e 31/08). Custo zero, mesma regra do 1b: ler o
+   > banco não custa nada. Todas respondem perguntas que nenhuma varredura de código responde —
+   > *o cliente está sendo servido? o dinheiro do anúncio está virando gente? o que roda sozinho
+   > ainda roda? onde o processo para? o diagnóstico ainda separa um imóvel do outro?*
    >
    > **(a) CLIENTE 360 — o cliente está recebendo o que pagou?**
    > ```sql
@@ -147,6 +148,33 @@ curto (5–8 linhas) antes de seguir:
    > **não pode filtrar** a conta — o único chamado em que um cliente escreveu foi encerrado 9
    > dias depois sem ninguém responder; filtrar por status apaga justamente o caso pior.
    > **Fechar não é responder, e bot não é SLA.**
+   >
+   > **(e) O DIAGNÓSTICO AINDA DISCRIMINA? — `select * from public.documental_distribuicao();`**
+   > (31/08). Custo zero. Cruza os dois eixos do documental: **risco** (o que a documentação
+   > prova) × **confiança** (quanto do necessário foi lido). Verde = `OK: esta discriminando`.
+   >
+   > **Por que existe:** os dois eixos nasceram separados porque **19 de 19 relatórios saíam
+   > "amarelo"** — duas travas no código fechavam as duas saídas (vermelho exigia bloqueante, e
+   > havia 0 em 177 riscos; verde era rebaixado por risco não confirmado, e 55% dos riscos vinham
+   > `constaNaDoc: false`). Consertar a régua **não prova que ela voltou a medir**: se os próximos
+   > saírem todos `amarelo · confiança alta`, a discriminação continua travada, só que num ponto
+   > diferente — e aí o suspeito passa a ser o teto de confiança do servidor, não mais as travas
+   > de risco. Sem esta consulta, isso é invisível: cada relatório, sozinho, parece plausível.
+   >
+   > **Duas leituras que enganam se você não souber:**
+   > - **`AMOSTRA INSUFICIENTE (min. 5)` não é defeito, é a função dizendo que não sabe.** Ela
+   >   se recusa a dar veredito abaixo de 5 porque a primeira versão, com n=1, imprimiu
+   >   `TRAVADO: uma saída só — não classifica`: plausível e errado, já que **um relatório só
+   >   pode ocupar uma célula**. O número media "quantos relatórios existem" e reportava com o
+   >   nome de "quanto a régua discrimina" — a **forma #10** cometida dentro do próprio
+   >   instrumento de verificação.
+   > - **A linha `LEGADO` fica fora da conta de propósito.** Relatório anterior a 31/08 tem
+   >   `confianca` nula; contá-lo inventaria uma distribuição que nunca existiu — e como os
+   >   legados são todos "amarelo", enviesaria o veredito **na direção exata do defeito que se
+   >   está medindo**.
+   >
+   > No `detalhe` de cada célula: `riscos` alto com `confirmados` baixo é sintoma de **acervo
+   > documental fraco** (a confiança deveria estar caindo), não de imóvel arriscado.
 2. **Captura — bug bounty dos leiloeiros (AUTO-APRENDIDO)**: o monitor APRENDE o "normal" de
    cada leiloeiro do próprio histórico (`fonte_baseline_aprendida()` = mín. dos runs saudáveis
    × 0,65) e alerta quando o último scrape cai abaixo — **auto-calibra os ATUAIS e ONBOARDA os
