@@ -4,11 +4,19 @@
 
 ---
 
-## 🚦 COMECE POR AQUI — estado ao encerrar 31/08 13h30 UTC (sessão 16)
+## 🚦 COMECE POR AQUI — estado ao encerrar 31/08 17h UTC (sessão 16)
 
-> Branch `claude/handoff-bidpro-brasil-checks-l89025` = **`9c8d7b5`**, empurrada. Heartbeat às 09:52.
+> Branch `claude/handoff-bidpro-brasil-checks-l89025` = **`3eecb93`**, empurrada, e **`main` está
+> no mesmo commit** (todos os merges do dia foram fast-forward). Heartbeat às 09:52.
 > **Placar do dia:** invariantes em alerta **7 → 5** · segurança **1 atenção → 0** · erros de
-> cliente abertos **1 → 0** · fontes em regressão **4 → 3** · regras de negócio 0 crítico.
+> cliente abertos **1 → 0** · fontes em regressão **4 → 3** · regras de negócio 0 crítico ·
+> **12 bugs do QA fechados** (2 de dinheiro, 5 P0, 5 P1/P2).
+>
+> A sessão teve **duas metades bem diferentes**. De manhã, o ritual de abertura — e o que ele
+> achou está nos blocos logo abaixo. À tarde, uma cadeia de *investigar → consertar → mesclar →
+> conferir* puxada por prints do dono, que está a partir de **"A TARDE"**. As duas metades têm a
+> mesma assinatura: **quase nada apareceu em varredura de código; tudo apareceu medindo o
+> resultado.**
 
 ### 🔴 O PAINEL DE CORRETUDE ESTAVA MORTO HÁ 6 DIAS — e o vigia dele dizia que estava ótimo
 
@@ -112,6 +120,180 @@ reivindicar o gclid de outro visitante. **Não vaza dado** (o retorno devolve s�
 efeito é sujar a ATRIBUIÇÃO. É inerente ao desenho — o `anon_id` É a identidade pré-login. Vale
 saber que o número de origem é falsificável; não vale redesenhar sem decisão do dono.
 
+---
+
+## 🌇 A TARDE — 12 bugs do QA, e o relatório que não separava um imóvel do outro
+
+> Ordem dos commits: `59c3680` → `aad8388` → `2593329` → `ee6e8f8` → `3c97042` → `da34cf2` →
+> `232f6f5` → `d62a70f` → `26be54d` → `e908f47` → `3eecb93`. Todos em `main`.
+
+### 🕵️ MODO SUPORTE MOSTRAVA O E-MAIL DO ADMIN NA FICHA DO CLIENTE (`59c3680`)
+
+Achado do dono, num print: ao entrar em modo suporte na conta de um cliente, o e-mail exibido
+era **o dele**. A ficha caía no `user` da sessão quando o e-mail do impersonado não tinha
+carregado — o fallback parecia defensivo e era o pior desfecho possível: **a tela dizia, com
+cara de dado, que o cliente é o admin**. Quem estivesse conferindo um chamado leria o e-mail
+errado e agiria sobre ele.
+
+`src/utils/identidadeVisivel.js` passa a ser o lugar único: `emailVisivel(impersonate, user)`
+devolve `EMAIL_NAO_CARREGADO` — um marcador visível — em vez de cair no espectador. **Em modo
+suporte, "não sei" nunca pode virar "é você".** `npm run testar:suporte` trava 6 casos.
+
+### 💸 OS DOIS BUGS DE DINHEIRO (`aad8388`)
+
+**(1) Relatório cobrado sem valor de mercado.** `gerar-analise.js` tinha um `!reaproveitado &&`
+sobrando na condição de `mercadoVazio`: a variável que deveria medir **o resultado** media
+"resultado vazio *e* não veio de cache". Relatório reaproveitado saía sem valor de mercado, sem
+disparar o vazio — e a cota era cobrada. Pior, o auto-conserto relia **o mesmo cache ruim**;
+agora existe `semCache` (só no cron) para ele de fato buscar de novo.
+
+**(2) Saque recusado depois de pago.** `api/saque.js` usava `Prefer: return=minimal` nas ações
+de `pagar` e `recusar`: o `update` filtrado por status não alcançava linha nenhuma e voltava
+**200 com `error: null`** — a forma #3 em cima de dinheiro. O admin recusava um saque **já pago**
+e a tela confirmava. Agora as duas ações contam linhas afetadas e devolvem **409 nomeando o
+status atual**, com aviso explícito quando já está PAGO (aí o caminho é estorno, não recusa).
+
+### 🧯 OS 5 P0 RESTANTES DO QA (`2593329`)
+
+Todos da mesma família — **erro entregue como resposta**, ou **dado do imóvel anterior**:
+
+- **Busca**: `dbError` era engolido; agora **lança** e deixa rastro (`registrarEvento('api_erro')`).
+  Ganhou também `buscaSeqRef`: resposta lenta de uma busca antiga sobrescrevia a nova.
+- **ImovelDetalhe**: `{ data }` sem `error` (forma #2) + corrida de navegação. Sem a flag
+  `vigente`, trocar de imóvel rápido deixava **o imóvel anterior na tela** com a URL do novo.
+- **Convide um amigo / HomeCliente**: o card dependia de dois carregamentos independentes e
+  **trocava o link debaixo do dedo** — quem copiasse na janela do meio levava o link genérico
+  `/#/?ref=…` em vez do `/aula/<slug>?ref=…`, e robô de preview não lê nada depois do `#`.
+  Esqueleto reserva o espaço; `aulaResolvida` separa "terminei de procurar" de "achei".
+- **gerar-documental**: `persistidoNestaRodada` — um timeout **depois** de salvar sobrescrevia
+  um laudo bom com `status:'erro'`.
+
+### 🏦 "HIPOTECADO" É FORMA DE PAGAMENTO PARCELÁVEL, E A PROJEÇÃO DIZIA À VISTA (`ee6e8f8`)
+
+Print do dono: um apartamento no Itaim Bibi classificado **hipotecado**, com projeção financeira
+**à vista**. `hipotecado` **não é ônus nesta base** — é o valor que o gatilho
+`default_forma_pagamento_judicial` grava em todo lote judicial, e o próprio filtro da Busca o
+descreve como *"parcelamento no leilão judicial (art. 895 do CPC), com o imóvel hipotecado ao
+juízo até quitar"*.
+
+Duas telas decidiam à vista com `!pagamento.includes('financiado')` — `Analise.jsx` e
+`Busca.jsx`. Nenhuma conhecia `hipotecado`. **Medido: 2.081 lotes ativos, e os 2.081 são
+judiciais** — ou seja, o cenário parcelado ficava desabilitado no acervo judicial inteiro, e
+capital necessário, custo mensal, ROI e teto de lance saíam todos sobre a premissa errada.
+
+O servidor já estava certo (`gerar-analise.js` só aceita o literal `'a_vista'`) e
+`_auditoria-relatorio.js` até auditava a contradição — **era só o cliente que discordava**. A
+regra agora vive num lugar só: `soAceitaAVista()` em `src/data/pagamento.js`, com `null` nunca
+restringindo. `npm run testar:pagamento` trava 11 casos.
+
+### 📆 A PRAÇA É UM PAR — o relatório juntou o lance da 1ª com a data da 2ª (`3c97042`)
+
+Saía "lance mínimo R$ X, leilão em D" com **X da 1ª praça e D da 2ª**. Cada número, sozinho,
+estava no edital; o par não existia em lugar nenhum. É a forma #10 outra vez: valor plausível,
+descrevendo outra coisa. `aplicarExtracao` passou a exigir que valor e data **venham da mesma
+praça**.
+
+### 📜 O EDITAL MANDA NOS DOIS SENTIDOS (`da34cf2`, `232f6f5`)
+
+Primeira tentativa minha: deixar o edital **só destravar** o parcelamento, nunca travar. O dono
+corrigiu, e a correção é a regra do negócio: *"as regras podem mudar de edital para edital, mesmo
+em judicial ou extrajudicial — sempre devem ser verificadas as regras de pagamento, datas,
+valores e débitos"*. O edital voltou a ser **autoridade nos dois sentidos**; é seguro porque o
+prompt novo só devolve `somenteAVista: true` diante de **proibição expressa**, não de silêncio.
+
+O extrator ganhou `parcelamento { aceita, entradaPct, parcelas, correcao, base }`; na ausência de
+edital, o padrão é o **art. 895 do CPC** (≥25% de entrada, ≤30 meses) e o relatório **diz de onde
+veio cada número** (`origemCondicoesPagamento` na tela, `fraseCondicoesPagamento()` na nota
+metodológica). Premissa legal e premissa do edital deixam de se parecer.
+
+### 🧾 CERTIDÕES FISCAIS SAÍRAM DO RELATÓRIO — elas nunca foram consultadas (`d62a70f`)
+
+O dono perguntou por que a situação fiscal não fora consultada. Resposta medida: **em 19
+documentais, nenhuma vez funcionou** — e cada tentativa **queimava 2 créditos pagos** do Bright
+Data. O tópico aparecia no relatório como se tivesse sido verificado.
+
+Levantei preço e cobertura de APIs de certidão e discutimos a finalidade. Conclusão do dono: para
+um diagnóstico **preliminar**, os processos que constam da matrícula e a consulta de CPF/CNPJ já
+bastam; certidão paga é etapa de due diligence, não de triagem. O tópico saiu inteiro — chamada,
+passo de progresso e item do checklist. **O teste `testar:certidoes` (5 casos) ficou**, como
+guarda: se alguém reintroduzir a consulta, "indisponível" não pode voltar a virar "limpo".
+
+⚠️ Esse teste, na primeira versão, **reprovou o código correto**: eu tratei 404 como "limpo" nas
+três fontes, mas na ReceitaWS 404 é **falha** (`!res.ok`) — só 200 com `situacao: 'Regular'` é
+limpo. Consertei o stub, não o código, e deixei a explicação dentro do próprio teste.
+
+### 🟡 19 DE 19 RELATÓRIOS SAÍAM "AMARELO" — o código fechava as duas saídas (`26be54d`)
+
+O dono perguntou por que **todo** documental saía amarelo. Não era o modelo: eram **duas travas
+no código**, e juntas elas fechavam as duas portas.
+
+- **Vermelho** exigia risco `bloqueante`. Medido no acervo: **0 bloqueantes em 177 riscos.**
+- **Verde** era rebaixado por risco não confirmado. Medido: **55% dos riscos vinham
+  `constaNaDoc: false`.**
+
+Sobrava uma saída só. Um relatório que sempre responde a mesma coisa **não é conservador, é
+mudo** — e nenhum deles, isolado, parecia errado.
+
+Aprovada e implementada a **separação de dois eixos**:
+
+- **RISCO** = o que a documentação **prova** (bloqueante, ou alerta com `constaNaDoc: true`).
+- **CONFIANÇA** = quanto do necessário foi **lido**, com teto no servidor: `baixa` se faltar
+  matrícula ou edital; `media` se o processo não foi confirmado ou >50% dos riscos vierem não
+  confirmados; senão `alta`. **O modelo pode declarar menos que o teto, nunca mais.**
+
+O score jurídico passou a pesar `alertasConfirmados × 4` e `pendencias × 1`, com teto por
+confiança (baixa 60 · média 75 · alta 100). **Acervo documental fraco agora derruba a
+confiança, não o risco** — que é o que o cliente precisa distinguir.
+
+Documental do Itaim Bibi regerado: **`amarelo · confiança alta`, 8 riscos com 7 confirmados**. Eu
+havia previsto "confiança média" e **errei**: o processo foi localizado desta vez (`cnj_total: 1`
+— tjsp/trf3/stj) e 4 documentos foram lidos, então `alta` estava certo. Eu tinha assumido o
+corpus antigo, não os dados deste lote.
+
+### 📊 O VIGIA DA REGRA NOVA — `documental_distribuicao()` (`e908f47`, `3eecb93`)
+
+Consertar a régua **não prova que ela voltou a medir**. Se os próximos saírem todos
+`amarelo · confiança alta`, a discriminação continua travada, só que num ponto diferente — e o
+suspeito passa a ser o **teto de confiança do servidor**, não mais as travas de risco. A função
+cruza os dois eixos e dá veredito (`TRAVADO` · `SATURANDO` · `OK: esta discriminando`). Entrou
+no ritual de abertura do CLAUDE.md como **1c (e)**, custo zero.
+
+Virou **função e não consulta colada no doc** pela lição de 27/08: consulta em documento não é
+testada e envelhece calada.
+
+⚠️ **A primeira versão tinha a forma #10 dentro do próprio instrumento de verificação.** Com
+n=1 ela imprimiu `TRAVADO: uma saída só — não classifica`: plausível e **errado**, porque um
+relatório só pode ocupar uma célula. O número media "quantos relatórios existem" e reportava com
+o nome de "quanto a régua discrimina". Peguei rodando em seco antes de entregar; agora há
+**amostra mínima de 5**, e abaixo disso ela diz que não sabe. Os **18 relatórios legados**
+(anteriores à regra, `confianca` nula) ficam **fora da conta** em linha própria: são todos
+"amarelo" e enviesariam o veredito na direção exata do defeito que se está medindo.
+
+⚠️ **E o segundo `revoke` que não revogou nada — espelho do de manhã.** O bloco de segurança
+acima conta que `revoke ... from anon` não bastou porque o grant estava no **PUBLIC**. Aqui foi o
+inverso: escrevi `revoke ... from public` e o ACL continuou trazendo `anon` e `authenticated`,
+porque o Supabase concede EXECUTE a esses papéis **por default privilege** em toda função nova de
+`public`, e grant em ROLE não sai por revoke do PUBLIC. Uma `SECURITY DEFINER` que atravessa RLS
+de propósito ficou aberta ao anônimo por alguns minutos. **Nas duas vezes o comando "funcionou"
+sem mudar nada, e só reler `pg_proc.proacl` provou.** Corrigido para
+`from public, anon, authenticated`; o ACL agora lê `{postgres=X/postgres,service_role=X/postgres}`
+e `auditoria_seguranca()` fecha em **0 / 0**.
+
+### 🧭 A LIÇÃO DA TARDE (e um erro meu de sequência)
+
+**Erro meu, registrado:** pedi ao dono que regerasse o relatório e mesclasse quase ao mesmo
+tempo. O clique dele às **15:07** veio **35 minutos antes** do deploy ficar `READY` (15:42) —
+então o **código velho rodou**, e passamos os dois analisando um resultado que não era do
+conserto. Quando a verificação depende de deploy, **a ordem é: mesclar → confirmar READY →
+pedir para regerar.**
+
+O fio que costura os 12 bugs: **nenhum deles quebrava**. Todos devolviam algo plausível — o
+e-mail de alguém, um relatório amarelo, uma projeção à vista, um par praça/valor, um "sem
+certidão". A pergunta do CLAUDE.md continua sendo a que paga: *este vazio é resposta, ou é falha
+que não sabe que falhou?* — e a irmã dela, a forma #10: *este número mede o que o nome dele diz?*
+
+---
+
 ### 🔁 O QUE ESTAVA CERTO E EU CONFIRMEI (para ninguém reabrir)
 
 - **RLS do "Solicitar"**: o assessorado de 06/07 na lista de "pagantes sem entrega" **tentou
@@ -147,6 +329,11 @@ saber que o número de origem é falsificável; não vale redesenhar sem decisã
    merge/decisão do dono". Impacto pequeno hoje (NORDESTE e EMILIOMATOS com **0 lotes ativos**,
    ALFA com 8). **Decisão sua.**
 4. `cadastro_duplicado` (1) e `cadastro_sem_origem` (1 — cadastro de 26/08 sem `mkt_capturado_em`).
+5. **A distribuição risco × confiança está com amostra 1.** `documental_distribuicao()` se recusa
+   a dar veredito abaixo de 5 relatórios sob a regra nova — hoje há **1** (`amarelo · confiança
+   alta`) mais 18 legados fora da conta. **Não é pendência de conserto, é de observação:** a
+   partir do 5º documental, se continuar tudo em `amarelo · alta`, a régua travou de novo e o
+   suspeito é o teto de confiança do servidor. Roda no ritual de abertura (CLAUDE.md 1c-e).
 
 ### 🔴 O QUE PRECISA DE VOCÊ — em ordem de prazo
 1. **HOJE — aula 02/09.** A campanha `CONV - AULA 02SET` gastou **R$ 80,04 por 36 cliques
@@ -157,6 +344,10 @@ saber que o número de origem é falsificável; não vale redesenhar sem decisã
 3. **ANTES DE 03/09 — pausar a campanha da aula**, que não tem data de fim.
 4. Herdadas de 30/08: trocar `ADV+` por `LAL1%` · carga retroativa do Meta · **tirar o cliente
    OAuth da conta pessoal do dono (depois de 02/09)** · `ADMIN_EMAIL` na Vercel.
+5. **SEM PRESSA — gerar ~4 documentais de lotes DIFERENTES entre si** (um com matrícula e edital
+   completos, um sem edital, um com processo em aberto). É o que fecha a amostra de 5 e permite
+   ao `documental_distribuicao()` dizer se a régua nova discrimina. Gerar 4 do mesmo perfil
+   enche a amostra sem responder a pergunta.
 
 ---
 
