@@ -82,9 +82,42 @@ export async function consultarCertidoesFiscais(documento) {
   if (pgfn?.ok && pgfn.regular === false) alertas.push('Dívida Ativa da União (PGFN) IRREGULAR');
   if (fgts?.ok && fgts.regular === false) alertas.push('FGTS irregular');
   if (receita?.ok && receita.regular === false) alertas.push(`Situação ${receita.tipo?.toUpperCase()} na Receita: ${receita.situacao}`);
+
+  // "NÃO CONSEGUI CONSULTAR" NÃO É "ESTÁ LIMPO" (31/08) — forma #1 do CLAUDE.md, e das piores,
+  // porque o destino é um parecer JURÍDICO que o cliente lê antes de dar lance.
+  //
+  // `alertas` só enche quando a fonte respondeu E disse irregular (`X.ok && X.regular === false`).
+  // Cada consulta aqui devolve `{ ok: false, indisponivel: true }` em timeout ou HTTP de erro —
+  // então **as três fontes fora do ar produziam `alertas` vazio**, e o resumo saía
+  // "Certidões fiscais sem apontamentos (Receita/PGFN/FGTS)". Silêncio de rede entregue como
+  // certidão negativa, com o nome das três fontes junto para dar credibilidade.
+  //
+  // O consumidor é `NotaMetodologica.jsx:89`, que imprime a frase como "Certidões fiscais
+  // consultadas automaticamente (…): {resumo}" — ou seja, afirmava consulta que não houve.
+  //
+  // Agora o resumo distingue os três desfechos, e `conclusivo`/`indisponiveis` ficam
+  // estruturados para quem quiser decidir em cima disso sem parsear texto.
+  const fontes = [{ nome: 'Receita', r: receita }, { nome: 'PGFN', r: pgfn }, { nome: 'FGTS', r: fgts }];
+  const mudas = fontes.filter((f) => !f.r?.ok).map((f) => f.nome);
+  const responderam = fontes.filter((f) => f.r?.ok).map((f) => f.nome);
+  const ressalva = mudas.length ? ` · NÃO consultadas: ${mudas.join(', ')} (fonte indisponível — consultar manualmente)` : '';
+  let resumo;
+  if (alertas.length) {
+    resumo = `⚠️ ${alertas.join('; ')}${ressalva}`;
+  } else if (!responderam.length) {
+    resumo = '⚠️ NENHUMA das 3 certidões fiscais pôde ser consultada (Receita/PGFN/FGTS estão indisponíveis). '
+      + 'Isto NÃO significa ausência de apontamentos — significa ausência de informação. Consultar manualmente antes de decidir.';
+  } else if (mudas.length) {
+    resumo = `Sem apontamentos em ${responderam.join('/')}${ressalva}`;
+  } else {
+    resumo = 'Certidões fiscais sem apontamentos (Receita/PGFN/FGTS)';
+  }
+
   return {
     documento: doc,
-    resumo: alertas.length ? `⚠️ ${alertas.join('; ')}` : 'Certidões fiscais sem apontamentos (Receita/PGFN/FGTS)',
+    resumo,
+    conclusivo: mudas.length === 0,   // as 3 responderam
+    indisponiveis: mudas,
     receita, pgfn, fgts, alertas,
   };
 }

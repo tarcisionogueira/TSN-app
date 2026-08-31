@@ -1282,6 +1282,25 @@ export default function Busca() {
         setTotalResultados(totalBusca);
       }
 
+      // ERRO DA CONSULTA NÃO É "NÃO ACHEI NADA" (31/08) — forma #2 do CLAUDE.md.
+      // `dbError` era capturado e só servia para `mapeados` sair `[]`: qualquer 400, recusa de
+      // RLS ou timeout virava a tela "Nenhum resultado" para um cliente PAGANTE, sem mensagem,
+      // sem log e sem nada a investigar depois. O `{data, error}` do postgrest-js não lança, e é
+      // exatamente essa a armadilha — "não consegui ler" saindo com a cara de "não existe".
+      //
+      // O conserto certo já estava NESTE arquivo, no caminho do mapa (`erroPins`, ~linha 343):
+      // avisa na tela e deixa rastro em `api_erro`. Faltava replicar na LISTA, que é o que o
+      // cliente realmente lê. A tela já estava pronta para isso — o bloco "Nenhum resultado"
+      // tem `&& !erro`, então basta o erro existir para o vazio falso sumir.
+      //
+      // `throw` (em vez de tratar aqui) de propósito: o `catch` do fim já faz `setErro` e
+      // `console.error`, e o `setLoading(false)` vive FORA dele — um `return` aqui deixaria a
+      // busca girando para sempre.
+      if (dbError) {
+        registrarEvento('api_erro', { alvo: 'busca_lista', detalhe: String(dbError.message || dbError.code || 'erro').slice(0, 120) });
+        throw new Error(`consulta da lista falhou: ${dbError.message || dbError.code || 'erro desconhecido'}`);
+      }
+
       let mapeados = (!dbError && dbData) ? dbData.map(im => ({
         id: im.id,
         titulo: im.titulo,

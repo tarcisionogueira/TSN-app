@@ -816,9 +816,31 @@ export default function ImovelDetalhe() {
     if (!id) { nav('/buscar'); return; }
     // Navegou para outro imóvel (ex.: card de similares) → recarrega do zero.
     if (!imovel || imovel.id !== id) { setLoading(true); setImgIdx(0); setAnexosDocs([]); setMatAviso(false); setMatModal(null); }
+    // O IMÓVEL ANTERIOR NÃO PODE FICAR NA TELA DO IMÓVEL NOVO (31/08). Dois furos aqui:
+    //
+    // (a) `{ data }` sem `error` — forma #2 do CLAUDE.md. O postgrest-js NÃO lança em não-2xx,
+    //     então 400/RLS/timeout chegavam como `data: null` e o código só fazia `return`. Só que
+    //     `imovel` é `useState(loc.state?.imovel)`, inicializado UMA vez no mount: navegando de
+    //     /imovel/A para /imovel/B (card de similares) ele CONTINUA sendo A até o fetch de B dar
+    //     certo. Falhou o fetch → a tela segue exibindo A sob a URL de B, com os botões de
+    //     **Edital e Matrícula apontando para os documentos do imóvel errado**. Num produto de
+    //     leilão, abrir o edital de outro lote é o pior desfecho possível.
+    //
+    // (b) Corrida: A → B em sequência rápida deixa a resposta de A chegar DEPOIS da de B e
+    //     sobrescrever a tela. `vigente` descarta resposta de um id que já saiu — é o mesmo
+    //     idioma (`vivo`) que o efeito da cota, logo acima, já usa neste arquivo.
+    let vigente = true;
     supabase.from('imoveis_leilao').select('*').eq('id', id).single()
-      .then(({ data }) => {
-        if (!data) { if (!imovel) nav('/buscar'); return; }
+      .then(({ data, error }) => {
+        if (!vigente) return;   // resposta de um imóvel que já não está na tela
+        if (error || !data) {
+          // Mesmo imóvel já pintado pelo state da busca: manter é correto (é ELE, só sem anexos).
+          if (imovel && imovel.id === id) return;
+          console.error('[imovel] não carregou', id, error?.message || error || 'sem linha');
+          setImovel(null);   // nunca deixar o ANTERIOR ocupando o lugar deste
+          nav('/buscar');
+          return;
+        }
         setImovel({
           id: data.id, titulo: data.titulo, tipo: data.tipo, modalidade: data.modalidade,
           estado: data.estado, cidade: data.cidade, bairro: data.bairro, endereco: data.endereco,
@@ -850,7 +872,8 @@ export default function ImovelDetalhe() {
           docFatos: data.doc_fatos || null, docFatosEm: data.doc_fatos_em || null,
         });
       })
-      .finally(() => setLoading(false));
+      .finally(() => { if (vigente) setLoading(false); });
+    return () => { vigente = false; };
   }, [id]);
 
   // On-demand: ao abrir o imóvel, tenta MELHORAR a precisão da localização na

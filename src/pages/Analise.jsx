@@ -196,13 +196,17 @@ export default function Analise() {
   // recusava gerar (sem cobrar cota), mas esta tela seguia oferecendo os três botões: o cliente
   // clicava, esperava, e só então tomava o "não". Achado do dono em 07/08, no lote de Guarulhos.
   const loteEncerrado = leilaoEncerrado(imovelInicial);
-  // O lance que abre o formulário é o da praça MAIS DESCONTADA ainda disponível — não o
-  // `valor_minimo` cru, que é a 1ª praça (a mais cara) sempre que o lote tem duas. Era daí que
-  // saíam as projeções que o dono viu na apresentação, feitas sobre a praça mais PRÓXIMA.
-  const pracaAlvo = pracaMaisDescontada(imovelInicial);
-
-  const [d, setD] = useState(() => {
-    if (imovelInicial) return {
+  // SEMENTE DO FORMULÁRIO A PARTIR DO IMÓVEL (extraída em 31/08 para poder ser REUSADA).
+  // Era o corpo do inicializador de `useState`, que roda UMA ÚNICA VEZ no mount — ver o efeito
+  // de re-semeadura logo abaixo do `useState` para o porquê.
+  const sementeDoImovel = (im) => {
+    if (!im) return { ...VAZIO, id: generateId() };
+    // O lance que abre o formulário é o da praça MAIS DESCONTADA ainda disponível — não o
+    // `valor_minimo` cru, que é a 1ª praça (a mais cara) sempre que o lote tem duas. Era daí que
+    // saíam as projeções que o dono viu na apresentação, feitas sobre a praça mais PRÓXIMA.
+    const pracaAlvo = pracaMaisDescontada(im);
+    const imovelInicial = im;   // mantém o corpo abaixo idêntico ao original
+    return {
       // `id` é o id LOCAL do portfólio (`tsn_…`), gerado sempre — inclusive para lote vindo do
       // acervo. Guardar o uuid REAL à parte (10/08): sem ele, quem seguisse do portfólio para
       // "Arrematei" gravava o `tsn_…` em `arrematados.imovel_id`, e esse id não casa com
@@ -232,8 +236,9 @@ export default function Analise() {
       // Demais: 5% (editável — alguns leiloeiros cobram mais). Confirmar no edital.
       taxaLeiloeiroPercentual: /venda[_ ]?direta|licitac/i.test(imovelInicial.modalidade||'') ? 0 : 5,
     };
-    return { ...VAZIO, id: generateId() };
-  });
+  };
+
+  const [d, setD] = useState(() => sementeDoImovel(imovelInicial));
 
   const [textoDoc, setTextoDoc] = useState('');
   const [textoMatricula, setTextoMatricula] = useState('');
@@ -906,6 +911,50 @@ export default function Analise() {
   // Custos lidos NO EDITAL que o sistema aplicou sozinho na projeção (comissão, taxa
   // administrativa, IPTU, condomínio) — a tela precisa dizer o que mudou e por quê.
   const [custosEdital, setCustosEdital] = useState(null);
+
+  // TROCAR DE IMÓVEL NA MESMA ROTA TEM DE ZERAR A TELA (31/08).
+  //
+  // `d` nasce de `useState(() => sementeDoImovel(imovelInicial))` — inicializador LAZY, que roda
+  // uma única vez, no mount. Quando o cliente vai de um imóvel para outro SEM desmontar a página
+  // (é o que o toast "Ver relatório" faz: navega para `/analise` com um `location.state.imovel`
+  // novo), `imovelInicial` e `analiseImovelId` mudam e `d` NÃO — ele continua com o imóvel
+  // anterior inteiro: avaliação, nome, endereço, área e lance.
+  //
+  // O sintoma reportado foi a AVALIAÇÃO do imóvel anterior aparecendo sob o relatório novo, e a
+  // guarda da linha ~939 fecha o cerco por engano: `Number(p.valorAvaliacao) > 0 ? p : …` existe
+  // para "nunca sobrescrever o que o usuário digitou", mas não distingue um valor DIGITADO de um
+  // valor HERDADO de outro imóvel — então ela protege justamente o dado errado.
+  //
+  // A raiz é mais larga que a avaliação: se só ela fosse corrigida, nome, endereço, área e lance
+  // seguiriam do imóvel anterior e a projeção inteira (ROI, teto de lance, capital) sairia sobre
+  // a premissa errada — pior que o sintoma original, porque plausível.
+  //
+  // `imovelIdAcervo` é o desempate exato: ele guarda de QUAL imóvel do acervo esta ficha veio.
+  // Diferente do `analiseImovelId` atual → tudo o que está na tela pertence a outro lote e é
+  // re-semeado. Igual → nada é tocado, e a edição do usuário fica intacta.
+  useEffect(() => {
+    const idNovo = imovelInicial?.id;
+    if (!idNovo) return;
+    setD((prev) => (prev.imovelIdAcervo === idNovo ? prev : sementeDoImovel(imovelInicial)));
+  }, [imovelInicial?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Conteúdo DERIVADO do imóvel anterior — some junto, pelo mesmo motivo. `aplicadoRef` volta a
+  // null para que o resultado do imóvel novo seja aplicado: ele guarda o `updatedAt` já aplicado
+  // e, sem zerar, um relatório novo com o mesmo carimbo seria descartado como "já aplicado".
+  const idAcervoRef = React.useRef(imovelInicial?.id || null);
+  useEffect(() => {
+    const idNovo = imovelInicial?.id;
+    if (!idNovo || idAcervoRef.current === idNovo) return;
+    idAcervoRef.current = idNovo;
+    aplicadoRef.current = null;
+    setMercado(null);
+    setParecer('');
+    setCorrecoesMercado(null);
+    setCustosEdital(null);
+    setTextoDoc('');
+    setTextoMatricula('');
+    setUrlEdital(imovelInicial?.linkEdital || '');
+  }, [imovelInicial?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   // Reidrata o aviso a partir do que o documental GRAVOU (analises_mercado.correcoes_sugeridas).
   // Sem isto o alerta só existia na resposta HTTP daquela geração: recarregar a página — ou
   // fechar a aba durante o documental — fazia a divergência (cidade/metragem errada no

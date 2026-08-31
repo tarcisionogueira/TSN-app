@@ -812,6 +812,19 @@ export default async function handler(req, res) {
   // presa em 'gerando' (mesmo problema que travou o mercadológico do Igor).
   const DEADLINE_MS = 285000;
   const prazo = new Promise((_, rej) => setTimeout(() => rej(new Error('tempo_limite')), DEADLINE_MS));
+  // O QUE **ESTA** RODADA JÁ GRAVOU COMO 'concluida' (31/08).
+  //
+  // `tinhaRelatorioBom` olha o estado ANTES da rodada, e por isso não cobre o buraco: o laudo
+  // é persistido na linha ~1757 e ainda restam ~250 linhas DENTRO do mesmo `try` (log, custo,
+  // débito de crédito, detecção de impacto) — tudo sob o `Promise.race` do `prazo`. Se o
+  // deadline de 285s estourar aí, ou qualquer desses passos lançar, o `catch` roda; e numa
+  // PRIMEIRA geração `tinhaRelatorioBom` é `false`, então ele grava `status: 'erro'` POR CIMA
+  // do laudo bom que acabou de ser salvo. O cliente perde um relatório que já existia e estava
+  // correto — por causa do rabo, não da análise.
+  //
+  // A pergunta que o `catch` precisava saber responder não é "havia relatório antes?", e sim
+  // "eu já entreguei alguma coisa nesta rodada?".
+  let persistidoNestaRodada = null;
   try {
     const result = await Promise.race([prazo, (async () => {
     // 1) Reúne os documentos. ORDEM IMPORTA: os arquivos JÁ GUARDADos no nosso storage
@@ -1078,6 +1091,7 @@ export default async function handler(req, res) {
       // final — sem gastar IA à toa).
       { const _pres = await preservarSeBom(semDocs.faltando); if (_pres) return _pres; }
       await upsertDoc({ ...base, status: 'concluida', erro: null, result: semDocs, regen_motivo: emCaptura ? 'matricula_nao_lida' : null });
+      persistidoNestaRodada = semDocs;
       await logAtividade(ownerId, 'relatorio_documental_faltam_docs', String(semDocs.motivo || '').slice(0, 180), { imovel_id: String(imovelId), faltando: semDocs.faltando });
       // APRENDIZADO PERSISTENTE (sobrevive à regeração, que sobrescreve o result):
       // se TÍNHAMOS o(s) documento(s) no bucket e a leitura voltou 0, é falha de
@@ -1674,6 +1688,7 @@ export default async function handler(req, res) {
       // final — sem gastar IA à toa).
       { const _pres = await preservarSeBom(semDocs.faltando); if (_pres) return _pres; }
       await upsertDoc({ ...base, status: 'concluida', erro: null, result: semDocs, regen_motivo: emCaptura ? 'matricula_nao_lida' : null });
+      persistidoNestaRodada = semDocs;
       await logAtividade(ownerId, 'relatorio_documental_faltam_docs', String(semDocs.motivo || '').slice(0, 180), { imovel_id: String(imovelId), faltando: semDocs.faltando });
       // APRENDIZADO PERSISTENTE (sobrevive à regeração, que sobrescreve o result):
       // se TÍNHAMOS o(s) documento(s) no bucket e a leitura voltou 0, é falha de
@@ -1755,6 +1770,7 @@ export default async function handler(req, res) {
       modalidade_indefinida: !im.modalidade,
     };
     await upsertDoc({ ...base, status: 'concluida', erro: null, result, regen_motivo: vicioRegen(qualDoc), regen_em: new Date().toISOString() });
+    persistidoNestaRodada = result;
     await logAtividade(ownerId, 'relatorio_documental_ok', `Documental concluído (risco ${result.nivelRisco || '?'})`, { imovel_id: String(imovelId), nivelRisco: result.nivelRisco, alertasAntifraude: (result.antifraude?.alertas || []).length });
     // CUSTO REAL desta geração (ver _uso.js). O documental é o mais caro dos três — lê PDF
     // por visão —, e é justamente o que o agregado diário escondia ao se somar ao
@@ -2018,12 +2034,21 @@ export default async function handler(req, res) {
     // Alinha com o gêmeo `gerar-analise.js:2603`, que já fazia isto. Rebaixar para 'erro' com um
     // `result` BOM ainda na linha deixava o cliente vendo estado de falha sobre um relatório que
     // ele tem, e fazia a próxima geração contar como NOVA (o `jaFeita` filtra por 'concluida').
-    if (tinhaRelatorioBom) {
+    // ORDEM IMPORTA: o que ESTA rodada entregou vem primeiro (31/08). O laudo é gravado na
+    // linha ~1773 e ainda restam ~250 linhas dentro do `try`, sob o `Promise.race` do deadline
+    // — estourar ali NÃO desfaz o relatório que o cliente já tem. Antes desta guarda, uma
+    // primeira geração (sem `tinhaRelatorioBom`) tinha o laudo bom sobrescrito por
+    // `status: 'erro'`: o defeito destruía dado em vez de só reportar mal.
+    if (persistidoNestaRodada) {
+      await upsertDoc({ ...base, status: 'concluida', erro: `pos_salvamento_falhou: ${String(msg).slice(0, 160)}`, result: persistidoNestaRodada });
+    } else if (tinhaRelatorioBom) {
       await upsertDoc({ ...base, status: 'concluida', erro: `regeracao_falhou: ${String(msg).slice(0, 160)}`, result: resultadoAnterior });
     } else {
       await upsertDoc({ ...base, status: 'erro', erro: msg });
     }
-    await logAtividade(ownerId, 'relatorio_documental_erro', msg.slice(0, 180), { imovel_id: String(imovelId), timeout, restaurouAnterior: !!tinhaRelatorioBom });
+    // `preservouDestaRodada` no rastro: sem ele, "erro" e "erro depois de entregar" ficam
+    // indistinguíveis no log — e são coisas diferentes para quem investiga.
+    await logAtividade(ownerId, 'relatorio_documental_erro', msg.slice(0, 180), { imovel_id: String(imovelId), timeout, restaurouAnterior: !!tinhaRelatorioBom, preservouDestaRodada: !!persistidoNestaRodada });
     // Estorna a cota consumida (não cobra por análise que falhou).
     if (cota && cota.ok && cota.tipo) {
       try { await sb('rpc/estornar_documental_por', { method: 'POST', body: JSON.stringify({ p_user_id: user.id, p_tipo: cota.tipo }) }); } catch { /* estorno best-effort */ }
