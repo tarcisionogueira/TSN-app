@@ -324,6 +324,44 @@ não criativo nem landing.
    **Check-in agendado para 01/09 09h30 BRT** para conferir se entregou e comparar o CPM novo
    contra os R$ 96 — é esse número que valida ou derruba a tese da segmentação.
 
+### 🕳️ DOIS TERÇOS DO TRÁFEGO PAGO DA AULA CAÍAM NA HOME (31/08, à noite)
+
+Medido em `visita_origem`, sobre **todo** o tráfego pago da aula:
+
+| destino | visitas |
+|---|---|
+| **CAIU NA HOME** | **22** |
+| chegou na página da aula | 11 |
+
+Do lado do Meta o funil já mostrava a ferida sem explicar a causa (22 cliques no link → 14
+*landing page view* → 2 inscritos). **A causa é o `#`.** A rota real é `/#/live/<slug>`, e o que
+vem depois do `#` é FRAGMENTO: não vai ao servidor e não sobrevive a toda cadeia de
+redirecionamento. O navegador embutido do Instagram entrega a URL sem ele, e o que sobra é
+`https://bidprobrasil.com.br/?utm…` — a home, com os UTMs intactos. **É a mesma pegadinha de
+28/08 nos cartões de preview** (`api/og-share` existe por causa dela), agora do lado do clique.
+
+**Conserto: `src/utils/destinoDaCampanha.js`** — quem chega na raiz com `utm_campaign` começando
+em `aula-` é levado à página da aula, **com a query string junto**. O conserto é aqui e não no
+anúncio porque os dois somam: trocar a URL do anúncio conserta o anúncio novo; isto conserta o
+tráfego **que já está no ar**, campanhas antigas, links repassados por terceiros e qualquer app
+que corte o fragmento no futuro — e não depende de ninguém abrir o gerenciador.
+
+Três decisões que o teste (`npm run testar:destino`, 24 casos) trava:
+- **Só age na raiz.** Redirecionar quem já escolheu rota seria sequestro de navegação, e
+  aconteceria justamente com quem chegou pelo link certo.
+- **A query string vai junto.** Sem ela o `fbclid` e os UTMs se perdem no salto, e o tráfego
+  pago passaria a chegar na aula **sem origem** — trocaríamos perda de conversão por perda de
+  medição, com o número parecendo ótimo. Forma #10 esperando acontecer.
+- **Campanha desconhecida não redireciona.** Ficar na home é ruim; mandar para uma rota que não
+  existe é pior. A regra casa por PREFIXO, então `aula-09set` já cai nela sem mexer no código
+  (o slug é estável entre edições — `live_rolar_recorrentes()` avança só `data_hora`).
+
+⚠️ **O que NÃO foi possível: duplicar o anúncio e trocar a URL pela API.** O criativo
+REEL-2808-LIVE **não tem `object_story_spec`** (é dinâmico/Advantage+) e a API recusa editar
+conteúdo nesse tipo; e construir um criativo novo exige um `page_id` que o conector Windsor não
+expõe. **Não chutei o page_id** — publicar anúncio sob a página errada é pior que não publicar.
+Com o resgate acima no ar, a troca de URL virou opcional: o desfecho é o mesmo.
+
 ### 🧭 A LIÇÃO DA TARDE (e um erro meu de sequência)
 
 **Erro meu, registrado:** pedi ao dono que regerasse o relatório e mesclasse quase ao mesmo
