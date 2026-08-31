@@ -155,6 +155,13 @@ export default async function handler(req, res) {
           body: JSON.stringify({
             imovelId: r.imovel_id, paraUserId: r.user_id, titulo: r.titulo, cidade: r.cidade, estado: r.estado,
             imovel: r.imovel || null, mercadoInputs: r.inputs.mercadoInputs, parecerInputs: r.inputs.parecerInputs,
+            // PESQUISA NOVA, não o cache (31/08). Este branch existe para curar `mercadoVazio`, e
+            // a causa pode ser a PRÓPRIA pesquisa reaproveitada — uma que tem amostras (por isso
+            // passa no filtro de `mercadoRecente`) mas cuja consolidação não fecha valor para
+            // este tipo de imóvel. Reaproveitá-la de novo devolve o mesmo zero, de graça e sem
+            // erro, nas quatro tentativas. Auto-conserto que roda sem consertar é pior que
+            // nenhum: ocupa o lugar do alarme.
+            semCache: true,
           }),
           signal: AbortSignal.timeout(9000),
         }).catch(() => {});

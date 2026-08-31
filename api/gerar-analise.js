@@ -1882,7 +1882,13 @@ export default async function handler(req, res) {
     // então reaproveitar o cache antigo deixaria o valor VAZIO. Nesses tipos, se o cache não
     // for type-aware, IGNORAMOS e refazemos a busca (recalcula com o método do tipo).
     let mercado, reaproveitado = false;
-    const recente = await mercadoRecente(String(imovelId));
+    // `semCache` (31/08): o self-heal do MERCADO VAZIO pede pesquisa NOVA. Sem isto ele
+    // reaproveitaria a MESMA pesquisa que não fechou valor e devolveria o mesmo zero — quatro
+    // vezes, até bater o teto de `MAX_VAZIO`. Ficaria de graça (reúso não paga web search) e
+    // não daria erro, e é justamente esse o problema: um auto-conserto que roda, não conserta e
+    // não reclama. Só o cron liga (`isCron`); cliente nenhum pode forçar busca paga.
+    const semCache = isCron && body.semCache === true;
+    const recente = semCache ? null : await mercadoRecente(String(imovelId));
     const baseReuso = baseAvaliacaoPorTipo(mercadoInputs.tipoImovel || imovel?.tipo);
     const cacheTypeAware = (c) => !!(c?.consolidado?.baseCalculo) || Number(c?.consolidado?.valorEstimadoImovel) > 0;
     const reusoValido = recente && (cacheTypeAware(recente.mercado) || ['residencial', 'comercial', 'industrial'].includes(baseReuso));
@@ -2997,7 +3003,22 @@ COMO USAR (obrigatório): dedique um parágrafo aos CUSTOS DA OPERAÇÃO segundo
       // pesquisa listado 0 ou 40 comparáveis. `src/pages/Analise.jsx` carregava a MESMA condição
       // em cópia e foi corrigido junto: regra duplicada é como o defeito sobrevive nos dois lados
       // (a lição do `roteiarDatasPraca`, 29/08).
-      const mercadoVazio = !reaproveitado && !(Number(valorMercado) > 0);
+      // ⚠️ 31/08 — O `!reaproveitado` SOBROU e CONTRADIZIA o parágrafo acima. O texto de 29/08
+      // conclui, com todas as letras, que "o teste certo é UM só, o da grandeza que origina
+      // tudo: valorMercado" — e a linha seguia exigindo DUAS coisas. Efeito: relatório vindo do
+      // CACHE com `valorMercado = 0` saía `mercadoVazio: false`, ou seja, **cobrado do cliente**
+      // e fora do self-heal, que é a combinação exata que a correção de 29/08 veio matar.
+      //
+      // Não é hipotético, e também não é o que o cache barra: `mercadoRecente` (linha ~1055) só
+      // recusa pesquisa com ZERO amostra E sem `precoMedioM2`. Ter amostra NÃO implica ter valor
+      // final — é literalmente o caso descrito acima ("bastava a pesquisa devolver UM comparável
+      // para `mercadoVazio` ficar FALSO com `valorMercado = 0`"). Uma pesquisa com amostras cuja
+      // consolidação não fecha valor para ESTE tipo de imóvel reaproveita, sai zerada e cobra.
+      //
+      // Medido em 31/08, antes de mexer: 66 análises concluídas · 2 reaproveitadas (as duas COM
+      // valor) · 2 sem `valorMercado` (nenhuma reaproveitada) → **0 ocorrências**. O defeito
+      // estava latente, não ativo. Consertado antes de cobrar alguém, não depois.
+      const mercadoVazio = !(Number(valorMercado) > 0);
       // valorAvaliacao: fecha o loop servidor→tela — o valor confirmado no edital (garantir
       // Valores/extrato) chegava ao BANCO mas nunca voltava ao card já aberto ("Não informada").
       // ── NOTA METODOLÓGICA (pedido do dono, 06/08) ───────────────────────────────────────

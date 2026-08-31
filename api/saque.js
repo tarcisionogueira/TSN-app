@@ -33,6 +33,27 @@ async function db(path, opts = {}) {
   return { ok: res.ok, status: res.status, data };
 }
 
+/**
+ * Explica um PATCH de saque que não alcançou linha nenhuma (31/08).
+ *
+ * "Não consegui" sem dizer QUAL é o estado atual só troca um silêncio por outro — e aqui o
+ * estado é a informação que decide a ação do admin: `sacado` significa que **o dinheiro já
+ * saiu** e o problema agora é de estorno, não de fila; `cancelado` significa que alguém já
+ * recusou; e sumir do banco é outro caso ainda. Ler a linha custa uma consulta e evita que o
+ * admin tente de novo achando que foi falha de rede.
+ */
+async function conflitoSaque(id, acao) {
+  const atual = (await db(`saldo_lancamentos?id=eq.${id}&select=id,status,pago_em`)).data?.[0];
+  if (!atual) return { error: `Lançamento ${id} não existe.`, status_atual: null, acao };
+  const alerta = atual.status === 'sacado'
+    ? ' ATENÇÃO: já consta como PAGO' + (atual.pago_em ? ` em ${atual.pago_em}` : '') + ' — o dinheiro já saiu. Trate como estorno, não como fila.'
+    : '';
+  return {
+    error: `Não foi possível ${acao}: o lançamento não está mais em "solicitado" (agora: "${atual.status}").${alerta}`,
+    status_atual: atual.status, pago_em: atual.pago_em || null, acao,
+  };
+}
+
 // Chama uma função RPC do Postgres (service_role).
 async function rpc(fn, args) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
@@ -313,17 +334,30 @@ export default async function handler(req) {
       const patch = { status: 'sacado', pago_em: new Date().toISOString(), pago_por: user.id };
       if (body.comprovante_url) patch.comprovante_url = String(body.comprovante_url).slice(0, 2000);
       if (body.descricao) patch.comprovante_desc = String(body.descricao).slice(0, 500);
+      // PROVA DO QUE MUDOU (31/08) — forma #3 do CLAUDE.md, aqui em cima de DINHEIRO.
+      // Estas duas ações sobrescreviam o `return=representation` que o helper `db` já traz por
+      // padrão (linha 29) e pediam `return=minimal`: abriam mão da prova de propósito. Um PATCH
+      // filtrado por `status=eq.solicitado` que não alcança NENHUMA linha é 204 com sucesso —
+      // `r.ok` é true e nada mudou.
+      //
+      // No `pagar` o SELECT logo acima cobre o caso comum, mas continua sendo TOCTOU: se outro
+      // admin pagar entre a leitura e a escrita, esta chamada responde "ok" sem gravar, e o
+      // `comprovante_url` que veio no corpo some sem aviso.
+      // No `recusar` não havia checagem NENHUMA: dava para **"recusar com sucesso" um saque já
+      // PAGO** — a tela dizia recusado, e o dinheiro já tinha saído. Nenhum log, nenhum erro.
       const r = await db(`saldo_lancamentos?id=eq.${id}&status=eq.solicitado`, {
-        method: 'PATCH', body: JSON.stringify(patch), headers: { Prefer: 'return=minimal' },
+        method: 'PATCH', body: JSON.stringify(patch),
       });
       if (!r.ok) return json({ error: 'Erro ao marcar pago' }, 500);
+      if (!Array.isArray(r.data) || r.data.length !== 1) return json(await conflitoSaque(id, 'pagar'), 409);
       return json({ ok: true });
     }
     if (acao === 'recusar') {
       const r = await db(`saldo_lancamentos?id=eq.${id}&status=eq.solicitado`, {
-        method: 'PATCH', body: JSON.stringify({ status: 'cancelado' }), headers: { Prefer: 'return=minimal' },
+        method: 'PATCH', body: JSON.stringify({ status: 'cancelado' }),
       });
       if (!r.ok) return json({ error: 'Erro ao recusar' }, 500);
+      if (!Array.isArray(r.data) || r.data.length !== 1) return json(await conflitoSaque(id, 'recusar'), 409);
       return json({ ok: true });
     }
     return json({ error: 'acao inválida' }, 400);
