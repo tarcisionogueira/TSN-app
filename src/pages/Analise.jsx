@@ -2142,6 +2142,19 @@ export default function Analise() {
                     Risco {parecerDocumental.nivelRisco}
                   </span>
                 )}
+                {/* CONFIANÇA — o segundo eixo (31/08). "Risco" diz o que foi ENCONTRADO;
+                    "confiança" diz quanto deu para VERIFICAR. Antes os dois viviam no mesmo
+                    rótulo e o resultado era 19 de 19 relatórios "amarelo": um lote limpo mal
+                    verificado ficava indistinguível de um lote com problema. Só aparece quando
+                    NÃO é alta — confiança alta é o esperado e não precisa ocupar espaço. */}
+                {parecerDocumental.confianca && parecerDocumental.confianca !== 'alta' && (
+                  <span title={parecerDocumental.confiancaMotivo || ''}
+                    style={{ fontSize:11, fontWeight:800, padding:'3px 9px', borderRadius:20,
+                      background: parecerDocumental.confianca==='baixa'?'#e0e7ff':'#f1f5f9',
+                      color: parecerDocumental.confianca==='baixa'?'#3730a3':'#475569' }}>
+                    Confiança {parecerDocumental.confianca}
+                  </span>
+                )}
               </div>
 
               {/* BidScore (0 a 10): potencial de oportunidade, com a camada jurídica

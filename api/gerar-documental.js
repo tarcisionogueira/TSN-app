@@ -575,6 +575,11 @@ CLASSIFICAÇÃO DE RISCO — REGRAS ESTRITAS (evite alarmismo; leilão de imóve
   com o agente financeiro ANTES do lance. Em alienação fiduciária levada a leilão JUDICIAL,
   explique também que pode estar sendo alienado o DIREITO DO DEVEDOR FIDUCIANTE, e não a
   propriedade plena — quem arremata entra no lugar do devedor, com o saldo em aberto.
+DOIS EIXOS SEPARADOS — LEIA ANTES DE CLASSIFICAR (regra de 31/08):
+- "nivelRisco" responde SÓ: **o que eu ENCONTREI nos documentos é grave?** Considere APENAS achados com constaNaDoc=true ou confirmados por consulta externa (CNJ/DJEN). O que você NÃO conseguiu verificar NÃO entra aqui — nem para piorar, nem para melhorar.
+- "confianca" responde a outra pergunta: **quanto do checklist eu consegui de fato verificar?** "alta" = documentos legíveis e processo confirmado; "media" = faltou confirmar itens relevantes; "baixa" = faltou documento essencial (matrícula/edital) ou o processo não pôde ser checado.
+- POR QUE ISSO IMPORTA: medido em 31/08, 55% dos riscos emitidos eram "não foi possível verificar" e não achado — e isso empurrava TODO relatório para "amarelo". Dezenove de dezenove saíram amarelos, o que impede o cliente de distinguir um lote limpo de um lote problemático. Diligência pendente é informação sobre A ANÁLISE, não sobre o IMÓVEL.
+- Um lote sem nenhum achado, mas com pouca coisa verificada, é "verde" com "confianca":"baixa" — NUNCA "amarelo". Dizer amarelo ali é atribuir ao imóvel um defeito que você não encontrou.
 - AUSÊNCIA DE INFORMAÇÃO NÃO É RISCO BLOQUEANTE. Quando um dado não consta nos documentos, é DILIGÊNCIA PENDENTE — severidade "informativo" (no máximo "alerta"), NUNCA "bloqueante". Falta de documento é "a confirmar", não "operação inviável".
 - ITENS COMUNS E ESPERADOS EM LEILÃO, que a LEI resolve e NÃO impedem a arrematação (classifique "informativo" ou "alerta", sempre com a nota legal — jamais "bloqueante"):
   • Penhora/execução que originou o leilão: é o que levou o bem à hasta; baixada com a arrematação.
@@ -611,6 +616,8 @@ Retorne APENAS este JSON (sem markdown). IMPORTANTE: emita os campos NA ORDEM AB
   "parecer": "Parecer documental/jurídico em português formal, texto simples (sem markdown/asteriscos e SEM travessão '—'; use vírgula, ponto ou dois-pontos, pois o travessão dá cara de texto de IA), estruturado com '§ SEÇÃO:'. LINGUAGEM PARA LEIGO (obrigatório): escreva para QUALQUER pessoa sem formação jurídica entender; frases curtas e, sempre que usar um termo técnico inevitável (ex.: propter rem, usufruto, penhora, hipoteca, alienação fiduciária, imissão de posse, indisponibilidade), explique em 3 a 6 palavras entre parênteses o que significa. FORMATO CHECKLIST (obrigatório — o relatório é a RESPOSTA do checklist jurídico de arrematação, item a item, NÃO um texto corrido): em cada seção, responda CADA item do checklist iniciando a linha com o RÓTULO do item seguido de dois-pontos e a resposta objetiva, e DISCORRA em 1 a 3 frases o que aquilo significa e o impacto para o arrematante. Se o dado não constar nos documentos, responda 'não consta na documentação analisada' e diga ONDE confirmar (nunca invente). Use EXATAMENTE estas seções e rótulos: § SEÇÃO: 1. IDENTIFICAÇÃO BÁSICA (Nº do Processo: ...; Vara/Tribunal: ...; Partes (Exequente vs. Executado): ...; Nº da Matrícula: ...; Nº do Edital: ...); § SEÇÃO: 2. ANÁLISE DAS REGRAS (EDITAL) (Forma de Pagamento: à vista/parcelado, prazos e condições; Comissão do Leiloeiro: percentual e prazo; Estado de Ocupação (declarado no edital): ...; Venda Ad Corpus: sim/não e o que significa; Responsabilidade por Débitos: arrematante assume os propter rem OU são sub-rogados no preço, citando o texto do edital); § SEÇÃO: 3. ANÁLISE DA PROPRIEDADE (MATRÍCULA) (Titularidade: o executado é o proprietário atual da matrícula?; Penhoras Concorrentes: outras penhoras (trabalhista/fiscal) com preferência de crédito?; Hipotecas/Alienação Fiduciária: há credor fiduciário/hipotecário e ele foi intimado?; Gravames Sérios: indisponibilidade, inalienabilidade, usufruto, locação com cláusula de vigência?; Descrição do Imóvel: área/vagas conferem com laudo e edital?); § SEÇÃO: 4. ANÁLISE PROCESSUAL (RISCO DE ANULAÇÃO)${temProc ? ' (com base no CNJ consultado)' : ''} (Citação do Executado: válida?; Intimação sobre o Leilão: o executado foi intimado?; Intimação do Cônjuge: quando o regime de bens exigir; Recursos Pendentes: embargos/agravo/ação anulatória que afetem o leilão?; Efeito Suspensivo: há decisão suspendendo o leilão?; Atualização da Avaliação: risco de 'preço vil'?; Preço Mínimo: a 2ª praça respeita o mínimo legal, art. 891 CPC?; em leilão extrajudicial da Lei 9.514, informe se há AÇÃO do ex-mutuário contra o credor); § SEÇÃO: 5. ANÁLISE DE CUSTOS E RESPONSABILIDADES (Débitos de IPTU e Condomínio: valor e de quem é a responsabilidade após a arrematação; Hierarquia de Pagamento: em sub-rogação, o valor cobre o credor principal E os propter rem?; Custos e Prazo de Desocupação: se ocupado, estimativa de tempo/custo da imissão na posse); § SEÇÃO: 6. PARECER FINAL DO JURÍDICO (Pontos de Atenção (Red Flags): vícios que podem gerar nulidade; Nível de Risco da Operação: Baixo/Médio/Alto; Ações Pós-Arremate Requeridas: ex. baixa de penhoras, mandado de imissão na posse; Recomendação: RECOMENDO a arrematação / RECOMENDO com ressalvas / NÃO RECOMENDO, com a justificativa objetiva). As certidões recomendadas vão no campo 'raioX.certidoesRecomendadas' (renderizadas ao final do relatório), não repita a lista dentro do parecer.",
   "riscos": [{"categoria":"","descricao":"","severidade":"bloqueante|alerta|informativo","constaNaDoc":true}],
   "nivelRisco": "verde|amarelo|vermelho",
+  "confianca": "alta|media|baixa",
+  "confiancaMotivo": "1 frase dizendo O QUE faltou verificar (vazio quando confianca=alta)",
   "documentosAnalisados": { "matricula": false, "edital": false, "laudo": false, "_obs": "marque TRUE apenas o documento que você DE FATO leu no conteúdo anexado: matrícula = certidão do registro de imóveis (cadeia dominial, registros R-/Av-); edital = edital/regulamento do leilão (condições, praças, comissão) OU, em venda direta, as regras da venda; laudo = laudo de avaliação. Não marque true por inferência — só se o documento estava entre os anexos lidos." },
   "lacunas": ["dados que NÃO constam na documentação e onde confirmar"],
   "raioX": {
@@ -1243,7 +1250,20 @@ export default async function handler(req, res) {
         if (ausente || rotineiro.test(txt)) r.severidade = 'alerta';
       }
       // Coerência: sem bloqueante real, não classifica como "vermelho".
-      if (!parsed.riscos.some(r => r?.severidade === 'bloqueante') && parsed.nivelRisco === 'vermelho') {
+      // TRAVA CONTRA "VERMELHO POR FALTA DE INFORMAÇÃO" — reescrita em 31/08.
+      //
+      // Era: `vermelho` só sobrevivia se houvesse algum risco 'bloqueante'. Só que o prompt
+      // (com razão) instrui em cinco lugares a NUNCA usar 'bloqueante' fora de um caso concreto
+      // e comprovado — e o resultado medido foi ZERO bloqueantes em 177 riscos. Com isso
+      // `vermelho` virou inalcançável, e junto com a trava do `verde` (mais abaixo) o veredito
+      // ficou preso em 'amarelo' nos 19 relatórios já emitidos.
+      //
+      // A trava continua existindo, porque o que ela evita é real: vermelho nascido de "não
+      // consegui verificar". Mas agora o critério é o CERTO — exige achado CONFIRMADO no
+      // documento, não um rótulo específico. Diligência pendente vai para `confianca`.
+      const temAchadoConfirmado = (parsed.riscos || []).some(r =>
+        r?.severidade === 'bloqueante' || (r?.severidade === 'alerta' && r?.constaNaDoc === true));
+      if (!temAchadoConfirmado && parsed.nivelRisco === 'vermelho') {
         parsed.nivelRisco = 'amarelo';
       }
     }
@@ -1726,7 +1746,47 @@ export default async function handler(req, res) {
     const processualNaoConfirmado = !cnj
       || cnj.parecer?.nivel === 'nao_verificado'
       || (cnj.total === 0 && (/judicial/i.test(String(im?.modalidade || '')) || cnj.parecer?.motivo === 'nao_localizado'));
-    const nivelRiscoFinal = (nivelBruto === 'verde' && processualNaoConfirmado) ? 'amarelo' : nivelBruto;
+
+    // ── RISCO × CONFIANÇA: DOIS EIXOS (31/08, decisão do dono) ────────────────────────────
+    //
+    // Era: `verde` + processo não confirmado → rebaixado para `amarelo`. Somado à trava do
+    // `vermelho` (que exigia um 'bloqueante' que o prompt manda nunca emitir), o veredito
+    // ficou preso: **19 de 19 relatórios saíram 'amarelo'**. Verde bloqueado por cima,
+    // vermelho por baixo. Um classificador com uma saída só não classifica — o cliente abria
+    // dois lotes diferentes e lia a mesma conclusão.
+    //
+    // A intenção da trava era boa e continua valendo: não dizer "verde, pode ir" sobre um lote
+    // cujo processo ninguém checou. O erro era o CANAL. "Não consegui verificar" é informação
+    // sobre a ANÁLISE, não sobre o IMÓVEL — atribuí-la ao nível de risco carimba no lote um
+    // defeito que não foi encontrado. É a mesma forma que apareceu o dia inteiro: ausência de
+    // informação entregue como conteúdo; aqui ela não falsificava um número, saturava o
+    // veredito.
+    //
+    // Agora o risco diz o que foi ACHADO e a confiança diz quanto foi VERIFICADO. Um lote sem
+    // achados e pouco verificado sai "verde · confiança baixa", que é honesto e acionável —
+    // e distinguível do lote que tem problema de verdade.
+    const nivelRiscoFinal = nivelBruto;
+
+    // Confiança: a palavra do modelo é o ponto de partida, mas o SERVIDOR tem o desempate,
+    // porque ele sabe coisas que o modelo não sabe (se o CNJ respondeu, quais documentos
+    // foram lidos). Nunca sobe a confiança declarada — só desce.
+    const riscosNaoConfirmados = (rlist || []).filter(r => r?.constaNaDoc === false).length;
+    const totalRiscos = (rlist || []).length;
+    const faltaDocEssencial = !(lidos || []).some(l => l.tipo === 'matricula')
+      || !(lidos || []).some(l => l.tipo === 'edital' || l.tipo === 'regras_venda');
+    const ordemConf = { alta: 3, media: 2, baixa: 1 };
+    const declarada = ['alta', 'media', 'baixa'].includes(parsed.confianca) ? parsed.confianca : 'media';
+    // Teto do servidor: falta documento essencial → no máximo 'baixa'; processo não confirmado
+    // ou maioria dos riscos sem lastro documental → no máximo 'media'.
+    const tetoServidor = faltaDocEssencial ? 'baixa'
+      : (processualNaoConfirmado || (totalRiscos > 0 && riscosNaoConfirmados / totalRiscos > 0.5)) ? 'media'
+      : 'alta';
+    const confiancaFinal = ordemConf[declarada] <= ordemConf[tetoServidor] ? declarada : tetoServidor;
+    const confiancaMotivoFinal = String(parsed.confiancaMotivo || '').trim()
+      || (faltaDocEssencial ? 'Faltou documento essencial (matrícula ou edital) para a análise completa.'
+        : processualNaoConfirmado ? 'O processo não pôde ser confirmado no DataJud/CNJ.'
+        : riscosNaoConfirmados > 0 ? `${riscosNaoConfirmados} de ${totalRiscos} pontos dependem de diligência para confirmar.`
+        : '');
 
     const result = {
       extracao: parsed.extracao || null,
@@ -1742,6 +1802,8 @@ export default async function handler(req, res) {
       // documentação — e verde aqui vale 85 pontos no score jurídico e é lido como "pode dar
       // lance". Sem consulta processual confirmada, o teto é amarelo.
       nivelRisco: nivelRiscoFinal,
+      confianca: confiancaFinal,
+      confiancaMotivo: confiancaMotivoFinal,
       diligenciaPendente: !docOk,
       preliminar,
       parecer: parecerBase + fontesTxt + AVISO_DOCUMENTAL,
@@ -1812,11 +1874,23 @@ export default async function handler(req, res) {
     // só o fluxo staff gravava). Deriva 0–100 do nível de risco + severidade dos
     // riscos encontrados. score_financeiro já é preenchido por backfill determinístico.
     try {
+      // A MESMA SEPARAÇÃO CHEGA AO SCORE (31/08). Este número alimenta o ranking da BUSCA, e
+      // ele contava todo `alerta` igual — inclusive os que dizem "não foi possível verificar".
+      // Medido: 55% dos riscos emitidos eram diligência pendente, não achado. Com 4 pontos de
+      // desconto cada, um lote LIMPO mas pouco verificado afundava no ranking junto com um lote
+      // problemático, e o cliente não tinha como distinguir os dois nem pela ordem.
+      //
+      // Achado confirmado no documento pesa cheio; pendência de diligência pesa 1 ponto (ela
+      // existe, dá trabalho, mas não é defeito do imóvel). E confiança baixa não vira desconto:
+      // vira TETO — não faz sentido cravar 85 de score sobre uma análise que viu pouco.
       const risc = Array.isArray(result.riscos) ? result.riscos : [];
       const bloqueantes = risc.filter(r => r?.severidade === 'bloqueante').length;
-      const alertas     = risc.filter(r => r?.severidade === 'alerta').length;
+      const alertasConfirmados = risc.filter(r => r?.severidade === 'alerta' && r?.constaNaDoc === true).length;
+      const pendencias         = risc.filter(r => r?.severidade === 'alerta' && r?.constaNaDoc !== true).length;
       const baseJur = result.nivelRisco === 'verde' ? 85 : result.nivelRisco === 'vermelho' ? 30 : 55;
-      const scoreJuridico = Math.max(0, Math.min(100, Math.round(baseJur - bloqueantes * 10 - alertas * 4)));
+      const bruto = baseJur - bloqueantes * 10 - alertasConfirmados * 4 - pendencias * 1;
+      const tetoConf = result.confianca === 'baixa' ? 60 : result.confianca === 'media' ? 75 : 100;
+      const scoreJuridico = Math.max(0, Math.min(100, Math.round(Math.min(bruto, tetoConf))));
       await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}`, {
         method: 'PATCH', headers: { Prefer: 'return=minimal' },
         body: JSON.stringify({ score_juridico: scoreJuridico, score_calculado_em: new Date().toISOString() }),
