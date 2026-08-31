@@ -346,6 +346,14 @@ anúncio porque os dois somam: trocar a URL do anúncio conserta o anúncio novo
 tráfego **que já está no ar**, campanhas antigas, links repassados por terceiros e qualquer app
 que corte o fragmento no futuro — e não depende de ninguém abrir o gerenciador.
 
+✅ **CONFIRMADO EM PRODUÇÃO, no celular** (31/08, 18h50 BRT): o dono abriu
+`bidprobrasil.com.br/?utm_campaign=aula-02set` no telefone e caiu na página de inscrição da
+aula. Vale registrar **como** essa confirmação veio, porque ela não podia vir de mim: a política
+de rede deste ambiente bloqueia `bidprobrasil.com.br` e a URL do deployment é protegida por SSO,
+então daqui só dava para provar `readyState: READY` + alias apontando para o domínio — o que é
+o build pronto, não a página servida. Teste no aparelho real fechou a lacuna, e no aparelho que
+importa: celular é onde o navegador embutido corta o fragmento.
+
 Três decisões que o teste (`npm run testar:destino`, 24 casos) trava:
 - **Só age na raiz.** Redirecionar quem já escolheu rota seria sequestro de navegação, e
   aconteceria justamente com quem chegou pelo link certo.
