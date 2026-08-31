@@ -624,6 +624,29 @@ export default function Analise() {
     if (!ext) return;
     setD(p => ({
       ...p, ...ext,
+      // ── DUAS REGRAS QUE O `...ext` CRU VIOLAVA (31/08) ────────────────────────────────
+      // Este helper é o caminho de TODAS as extrações (URL do edital, texto, PDF e a leitura
+      // automática do link do lote), e o spread deixava qualquer campo devolvido pela IA
+      // sobrescrever o que veio do acervo, sem par e sem regra.
+      //
+      // 1) A PRAÇA É UM PAR — data E lance andam juntos. Medido no apartamento do Itaim Bibi
+      //    (print do dono): a leitura trouxe a data da 2ª praça (09/09) e NÃO trouxe o lance
+      //    dela, então a data avançou e o valor ficou nos R$ 418.648,84 da 1ª, que já passara.
+      //    O relatório saiu "praça atual · 09/09/2026 · R$ 418.648,84 · 50% abaixo" enquanto o
+      //    acervo dizia R$ 400.000 e 52% — R$ 18.648 a mais no preço de entrada e o desconto
+      //    subestimado. Os dois números existem e são plausíveis; só pertencem a praças
+      //    diferentes. Sem o lance da praça nova, a data não avança: um par velho e coerente
+      //    descreve um leilão que existiu, um par misto não descreve leilão nenhum.
+      ...(ext.dataLeilao && !ext.valorArrematacao && Number(p.valorArrematacao) > 0
+        ? { dataLeilao: p.dataLeilao }
+        : {}),
+      // 2) O EDITAL DESTRAVA O PARCELADO, NUNCA TRANCA. O leitor devolveu `aVista: true` para
+      //    um lote judicial cujos próprios anexos incluem "Modelo de Proposta Parcelada"; com
+      //    o spread, esse `true` removia o cenário financiado por cima do acervo, que já dizia
+      //    `hipotecado` (parcelável por art. 895 CPC). Errar para "parcelável" só mantém a
+      //    opção na tela e quem decide é o cliente; errar para "à vista" APAGA uma opção que o
+      //    leiloeiro oferece. Mesma direção da regra de 15/08.
+      ...(p.somenteAVista === false ? { somenteAVista: false } : {}),
       valorMercado: ext.valorMercado || (ext.valorAvaliacao ? ext.valorAvaliacao * 1.15 : p.valorMercado),
       riscos: ext.riscos ? ext.riscos.map(r => ({
         id: Date.now() + Math.random(), texto: r, tipo:
@@ -793,9 +816,33 @@ export default function Analise() {
             condominioMensal: ext.condominioMensal ?? p.condominioMensal,
             laudemio: ext.laudemio ?? p.laudemio, foreiro: ext.foreiro ?? p.foreiro,
             taxaLeiloeiroPercentual: ext.taxaLeiloeiroPercentual || p.taxaLeiloeiroPercentual,
-            somenteAVista: ext.somenteAVista ?? p.somenteAVista,
+            // O EDITAL PODE DESTRAVAR O PARCELADO, NUNCA TRANCAR (31/08) — é a regra de 15/08
+            // ("o acervo deixa de ter a última palavra contra o que o próprio leiloeiro
+            // publicou") aplicada na direção certa. O leitor devolveu `aVista: true` para um
+            // lote judicial cujos PRÓPRIOS anexos incluem "Modelo de Proposta Parcelada" — e,
+            // com `??`, esse `true` trancava o cenário financiado por cima do acervo, que já
+            // dizia `hipotecado` (= parcelável, art. 895 CPC). Uma leitura de PDF que erra para
+            // "à vista" não pode remover uma opção que o leiloeiro oferece; errar para
+            // "parcelável" só mantém o cenário disponível, e quem decide é o cliente.
+            somenteAVista: p.somenteAVista === false ? false : (ext.somenteAVista ?? p.somenteAVista),
             origem: ext.origem || p.origem, leiloeiro: ext.leiloeiro || p.leiloeiro,
-            dataLeilao: ext.dataLeilao || p.dataLeilao,
+            // A PRAÇA É UM PAR — data E lance andam juntos (31/08).
+            //
+            // Cada campo era fundido com `||` por conta própria, e isso PARTE a praça ao meio.
+            // Medido no apartamento do Itaim Bibi (print do dono): o leitor trouxe
+            // `dataLeilao` da 2ª praça (09/09) e NÃO trouxe o lance dela, então a data avançou
+            // e o valor ficou nos R$ 418.648,84 da 1ª praça — que já tinha passado. O relatório
+            // saiu "praça atual · 09/09/2026 · R$ 418.648,84 · 50% abaixo", enquanto o acervo
+            // dizia R$ 400.000 e 52%: R$ 18.648 a mais no preço de entrada, e o desconto
+            // subestimado. Nada disso dá erro — os dois números existem e são plausíveis, só
+            // pertencem a praças diferentes. É a forma #9 (cortes independentes cruzados
+            // depois) em cima de uma única entidade.
+            //
+            // Sem o lance da praça nova, a data NÃO avança: um par velho e coerente descreve um
+            // leilão que existiu; um par misto não descreve leilão nenhum.
+            ...(ext.dataLeilao && !ext.valorArrematacao && Number(p.valorArrematacao) > 0
+              ? {}
+              : { dataLeilao: ext.dataLeilao || p.dataLeilao }),
             riscos: ext.riscos?.length ? ext.riscos.map(r => ({ id: Date.now()+Math.random(), texto: r, tipo: r.toLowerCase().includes('usufruto')||r.toLowerCase().includes('bloqueio')||r.toLowerCase().includes('impedimento') ? 'bloqueante' : 'alerta' })) : p.riscos,
             observacoes: ext.observacoes || p.observacoes,
           }));
