@@ -180,6 +180,8 @@ export async function extrairDadosDocumentoUrl(url) {
 function getInstrucaoExtracao() {
   return `Analise o documento e IDENTIFIQUE seu tipo. Extraia os dados estruturados do IMÓVEL objeto do leilão/arrematação.
 
+REGRA CRÍTICA sobre PAGAMENTO PARCELADO: leilão JUDICIAL admite arrematação parcelada por lei (art. 895 do CPC: entrada mínima de 25% e saldo em até 30 meses, com o imóvel hipotecado ao juízo até a quitação). Muitos editais também anexam "proposta parcelada". Procure ATIVAMENTE essas condições e preencha "parcelamento"; a hipoteca ao juízo que garante esse parcelamento NÃO é um ônus do imóvel e não entra em "riscos". Só marque "somenteAVista": true quando o documento VEDAR o parcelamento de forma expressa.
+
 REGRA CRÍTICA sobre o ENDEREÇO: "endereco"/"cidade"/"estado"/"cep" devem ser SEMPRE o endereço do IMÓVEL (o bem descrito na matrícula/edital), NUNCA o endereço de uma pessoa. Se o documento for PESSOAL e NÃO descrever o imóvel — comprovante de endereço, conta de luz/água, boleto, RG/CPF, procuração, comprovante de pagamento — deixe endereco/cidade/estado/cep VAZIOS (esse endereço é da pessoa, não do imóvel). Só preencha o endereço quando ele vier da descrição do IMÓVEL na matrícula, no edital ou no laudo.
 
 Retorne APENAS JSON:
@@ -202,11 +204,12 @@ Retorne APENAS JSON:
   "laudemio": número (se houver, senão 0),
   "foreiro": número (se houver, senão 0),
   "taxaLeiloeiroPercentual": número,
-  "somenteAVista": boolean,
+  "somenteAVista": boolean — true SOMENTE se o documento AFIRMAR que o pagamento é exclusivamente à vista. Na dúvida, ou se o documento não falar de forma de pagamento, retorne false: "não diz" não é "só à vista".
+  "parcelamento": { "aceita": boolean, "entradaPct": número ou null, "parcelas": número ou null (quantidade de meses), "correcao": "texto curto do índice/juros, ou null", "base": "art_895_cpc|proposta_parcelada|financiamento_bancario|outro|null" } ou null se o documento não tratar do assunto,
   "origem": "judicial|extrajudicial",
   "leiloeiro": "nome",
   "dataLeilao": "DD/MM/AAAA",
-  "riscos": ["liste todos os gravames, ônus, pendências, usufrutos, hipotecas, penhoras, etc encontrados no texto"],
+  "riscos": ["gravames, ônus, pendências, usufrutos, penhoras e HIPOTECAS DE TERCEIROS que recaem sobre o imóvel. NÃO inclua aqui a hipoteca em favor do JUÍZO que garante o parcelamento da própria arrematação (art. 895 do CPC) — essa é a FORMA DE PAGAMENTO, não um ônus herdado, e vai em \"parcelamento\""],
   "observacoes": "outras informações relevantes"
 }`;
 }

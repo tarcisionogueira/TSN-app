@@ -20,9 +20,8 @@ import React, { useState } from 'react';
  * `codigo_indicacao_para_todos_desde_o_cadastro` todo perfil nasce com código, então este
  * caminho só acontece enquanto a leitura ainda está carregando.
  */
-export default function ConvideAmigo({ codigo, aula, tema = 'claro', alinhamento = 'left' }) {
+export default function ConvideAmigo({ codigo, aula, tema = 'claro', alinhamento = 'left', carregando = false }) {
   const [copiado, setCopiado] = useState(false);
-  if (!codigo) return null;
 
   const origem = window.location.origin;
   // Rota SEM "#" quando há aula: robô de preview (WhatsApp, Instagram, Telegram) não lê nada
@@ -58,6 +57,34 @@ export default function ConvideAmigo({ codigo, aula, tema = 'claro', alinhamento
     setCopiado(true);
     setTimeout(() => setCopiado(false), 2000);
   };
+
+  // ESQUELETO ENQUANTO CARREGA — e ele existe por um motivo que não é estético (31/08).
+  //
+  // O card dependia de DOIS carregamentos independentes na Home: `codigo` e `aula`. Sem
+  // `codigo` a função devolvia `null`, então a tela pintava SEM o card e ele entrava depois,
+  // empurrando o layout; e como `aula` chega por outra consulta, o card já visível TROCAVA de
+  // conteúdo quando ela caía — texto, mensagem do WhatsApp e link, os três. Era isso que o
+  // dono via piscando.
+  //
+  // O prejuízo real está na janela do meio: sem `aula`, o link é `/#/?ref=…`, e com `aula` é
+  // `/aula/<slug>?ref=…`. Quem copiasse ou mandasse pelo WhatsApp nesses instantes levava o
+  // link GENÉRICO — o mesmo que o comentário do topo deste arquivo descarta, porque robô de
+  // preview não lê nada depois do "#" e o amigo receberia o cartão do site no lugar do convite
+  // com hora marcada. Um card que muda debaixo do dedo entrega o link errado sem avisar.
+  //
+  // Reservar o espaço com a MESMA caixa resolve os dois: nada se desloca e nada é copiável
+  // antes de estar certo.
+  if (carregando || !codigo) {
+    return (
+      <div aria-busy="true" style={{ marginTop: 22, padding: '16px 18px', background: C.fundo, border: `1px solid ${C.borda}`, borderRadius: 14, textAlign: alinhamento }}>
+        <div style={{ height: 18, width: 150, background: C.borda, borderRadius: 6, marginBottom: 9, opacity: 0.7, display: alinhamento === 'center' ? 'inline-block' : 'block' }} />
+        <div style={{ height: 13, background: C.borda, borderRadius: 5, marginBottom: 6, opacity: 0.45 }} />
+        <div style={{ height: 13, width: '70%', background: C.borda, borderRadius: 5, marginBottom: 13, opacity: 0.45, display: alinhamento === 'center' ? 'inline-block' : 'block' }} />
+        <div style={{ height: 45, background: C.borda, borderRadius: 11, opacity: 0.55 }} />
+        <div style={{ height: 36, background: C.borda, borderRadius: 8, marginTop: 10, opacity: 0.35 }} />
+      </div>
+    );
+  }
 
   return (
     // O card SEGUE o alinhamento do container em vez de impor o seu: na confirmação da

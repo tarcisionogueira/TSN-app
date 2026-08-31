@@ -115,14 +115,22 @@ export default function HomeCliente() {
   // existe aula ATIVA e ainda por acontecer. Convidar para uma aula encerrada seria pior que
   // não convidar — o amigo abriria um convite morto e a indicação queimaria com ele.
   const [aulaProxima, setAulaProxima] = useState(null);
+  // "TERMINOU DE PROCURAR" é diferente de "achou" (31/08). O card de convite muda de link
+  // conforme haja aula, então ele precisa esperar a BUSCA acabar — e `aulaProxima` continua
+  // `null` tanto durante a consulta quanto quando não há aula nenhuma. Sem este sinal, os dois
+  // estados ficam indistinguíveis e o card publica o link genérico antes da hora.
+  const [aulaResolvida, setAulaResolvida] = useState(false);
   useEffect(() => {
     let vivo = true;
     (async () => {
       // `error` checado: sem isso, "não consegui ler" e "não há aula" ficariam indistinguíveis,
       // e o card sumiria da tela sem ninguém saber que houve falha.
       const { data, error } = await supabase.rpc('live_proxima', { p_slug: 'leilao-ao-vivo' });
-      if (error) { console.error('[home] live_proxima', error.message); return; }
+      if (error) { console.error('[home] live_proxima', error.message); if (vivo) setAulaResolvida(true); return; }
       if (vivo && data?.slug) setAulaProxima(data);
+      // Resolvida em QUALQUER desfecho — inclusive erro e "não há aula". O card não pode ficar
+      // preso no esqueleto porque a consulta falhou.
+      if (vivo) setAulaResolvida(true);
     })();
     return () => { vivo = false; };
   }, []);
@@ -239,7 +247,7 @@ export default function HomeCliente() {
         {/* CONVIDE UM AMIGO — para TODO cliente, seja parceiro ou não. Quando há aula marcada o
             convite é para ela (tem data e cartão de compartilhamento, então converte muito mais);
             sem aula no calendário, cai no link geral da plataforma. */}
-        <ConvideAmigo codigo={refCodigo} aula={aulaProxima} />
+        <ConvideAmigo codigo={refCodigo} aula={aulaProxima} carregando={!refCodigo || !aulaResolvida} />
       </div>
 
       {/* Coluna lateral: CONVITE para ser parceiro. Some após o aceite (o parceiro passa a usar o

@@ -236,6 +236,17 @@ export default function Analise() {
       // Venda direta e Licitação (Caixa) normalmente NÃO têm leiloeiro → sem taxa.
       // Demais: 5% (editável — alguns leiloeiros cobram mais). Confirmar no edital.
       taxaLeiloeiroPercentual: /venda[_ ]?direta|licitac/i.test(imovelInicial.modalidade||'') ? 0 : 5,
+      // PADRÃO LEGAL DO LOTE JUDICIAL (31/08). O parcelado do VAZIO — 5% de entrada em 360
+      // meses — é financiamento BANCÁRIO, e num leilão judicial esse produto não existe: o que
+      // existe é o art. 895 do CPC (entrada mínima de 25%, saldo em até 30 meses, imóvel
+      // hipotecado ao juízo até quitar). Deixar o default bancário fazia o cenário parcelado
+      // sair plausível e errado — parcela pequena, payback longo e capital de entrada
+      // subestimado em 20 pontos. Quando o edital trouxer as condições reais, `aplicarExtracao`
+      // sobrescreve estes números; até lá, o piso da LEI descreve melhor o negócio do que um
+      // financiamento de 30 anos que ninguém vai conseguir.
+      ...(String(imovelInicial.modalidade || '').toLowerCase() === 'judicial'
+        ? { sinalPercentual: 25, prazoMeses: 30 }
+        : {}),
     };
   };
 
@@ -647,6 +658,18 @@ export default function Analise() {
       //    opção na tela e quem decide é o cliente; errar para "à vista" APAGA uma opção que o
       //    leiloeiro oferece. Mesma direção da regra de 15/08.
       ...(p.somenteAVista === false ? { somenteAVista: false } : {}),
+      // 3) OS TERMOS DO PARCELAMENTO LIDOS NO EDITAL ENTRAM NA PROJEÇÃO (31/08). Antes o leitor
+      //    devolvia só `somenteAVista` — um booleano sem condição nenhuma —, então mesmo com o
+      //    cenário parcelado disponível a conta usava os DEFAULTS de financiamento bancário
+      //    (5% de entrada, 360 meses). Para um lote judicial isso descreve outro produto: o
+      //    art. 895 do CPC pede entrada mínima de 25% e saldo em até 30 meses, o que muda
+      //    capital de entrada, parcela e payback. Campo em branco é preenchido; o que o usuário
+      //    já ajustou é respeitado.
+      ...(ext.parcelamento?.aceita ? { somenteAVista: false } : {}),
+      ...(Number(ext.parcelamento?.entradaPct) > 0 && !(Number(p.sinalPercentual) > 0 && p.sinalPercentual !== VAZIO.sinalPercentual)
+        ? { sinalPercentual: Number(ext.parcelamento.entradaPct) } : {}),
+      ...(Number(ext.parcelamento?.parcelas) > 0 && p.prazoMeses === VAZIO.prazoMeses
+        ? { prazoMeses: Number(ext.parcelamento.parcelas) } : {}),
       valorMercado: ext.valorMercado || (ext.valorAvaliacao ? ext.valorAvaliacao * 1.15 : p.valorMercado),
       riscos: ext.riscos ? ext.riscos.map(r => ({
         id: Date.now() + Math.random(), texto: r, tipo:
