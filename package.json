@@ -23,6 +23,7 @@
     "testar:suporte": "node scripts/testes/modo-suporte-nao-mostra-o-admin.mjs",
     "testar:certidoes": "node scripts/testes/certidao-indisponivel-nao-e-certidao-limpa.mjs",
     "testar:pagamento": "node scripts/testes/hipotecado-e-parcelavel-nao-a-vista.mjs",
+    "testar:reforco": "node scripts/testes/reforco-so-fala-com-quem-nao-respondeu.mjs",
     "precisa-navegador": "node scripts/testes/precisa-navegador.mjs"
   },
   "dependencies": {
