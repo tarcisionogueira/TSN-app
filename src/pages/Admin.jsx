@@ -1274,7 +1274,11 @@ function UsuariosTab() {
   };
 
   const verComo = (u) => {
-    iniciarSuporte({ id: u.id, nome: u.nome || u.cpf, role: u.role || 'explorador' });
+    // `email` VIAJA JUNTO (31/08). `perfis` não tem coluna de e-mail — ele só existe em
+    // `auth.users` —, então a tela de cliente não tinha de onde lê-lo pelo caminho do
+    // `effectiveUserId` e caía na SESSÃO, mostrando o e-mail do ADMIN na ficha do cliente.
+    // `admin_busca_usuarios` já devolve `u.email`; era esta carga que o descartava.
+    iniciarSuporte({ id: u.id, nome: u.nome || u.cpf, role: u.role || 'explorador', email: u.email || null });
     navSup('/'); // entra na Home por plano do cliente (não mais no Portfólio antigo)
   };
 

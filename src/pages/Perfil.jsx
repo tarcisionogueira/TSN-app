@@ -14,6 +14,7 @@ import ContinuarNoCelular from '../components/ContinuarNoCelular';
 import CapturaCamera from '../components/CapturaCamera';
 import { usePlanos } from '../contexts/PlanosContext';
 import { PLANOS as PLANOS_STATIC } from '../data/cursos';
+import { emailVisivel } from '../utils/identidadeVisivel.js';
 
 // Ordem hierárquica dos planos compráveis (para o quadro de upgrade/downgrade).
 const ORDEM_PLANOS = ['explorador', 'top2', 'assessorado', 'clube'];
@@ -1396,7 +1397,7 @@ export default function Perfil() {
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
               <div style={{ ...fieldStyle, flex: 1, minWidth: 200 }}>
                 <label style={labelStyle}>E-mail</label>
-                <input type="email" value={user?.email || ''} readOnly
+                <input type="email" value={emailVisivel(impersonate, user)} readOnly
                   style={{ ...inputStyle, background: '#f8fafc', color: '#94a3b8', cursor: 'not-allowed' }} />
               </div>
               <div style={{ ...fieldStyle, flex: 1, minWidth: 160 }}>

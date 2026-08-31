@@ -20,6 +20,7 @@
     "testar:motor": "node scripts/testes/planejar-alvo.test.mjs",
     "testar:orcamento": "node scripts/testes/orcamento-nao-e-falha-da-fonte.mjs",
     "testar:praca-fim": "node scripts/testes/praca-fim-nunca-antes-da-abertura.mjs",
+    "testar:suporte": "node scripts/testes/modo-suporte-nao-mostra-o-admin.mjs",
     "precisa-navegador": "node scripts/testes/precisa-navegador.mjs"
   },
   "dependencies": {
