@@ -135,7 +135,36 @@ const RESSALVA = 'Este material tem caráter informativo e de apoio à decisão.
  * Rodapé renderizado. `tipo`: 'mercadologico' | 'documental' | 'laudo' | 'indice'.
  * `dados`: o result (ou a região, no índice). Nunca quebra: sem metodologia, mostra a ressalva.
  */
-export default function NotaMetodologica({ tipo, dados, extra, compacto = false }) {
+/**
+ * CONDIÇÕES DE PAGAMENTO — e, sobretudo, DE ONDE ELAS VIERAM (31/08, pedido do dono:
+ * "as regras podem mudar de edital para edital, mesmo em judicial ou extrajudicial").
+ *
+ * A projeção parcelada usa entrada e prazo. Esses números podem vir do EDITAL daquele leilão,
+ * do piso legal do art. 895 (aplicado por o lote ser judicial, sem ninguém ter lido o edital),
+ * ou do default do sistema. Os três produzem uma parcela igualmente convincente na tela — e é
+ * exatamente por isso que a procedência precisa estar escrita. Número sem procedência é
+ * premissa com cara de fato apurado, e o cliente decide lance em cima dele.
+ */
+function fraseCondicoesPagamento(cp) {
+  if (!cp) return '';
+  const ent = Number(cp.sinalPercentual) > 0 ? `entrada de ${String(cp.sinalPercentual).replace('.', ',')}%` : null;
+  const pz = Number(cp.prazoMeses) > 0 ? `saldo em até ${cp.prazoMeses} meses` : null;
+  const termos = [ent, pz].filter(Boolean).join(' e ');
+  if (cp.somenteAVista) {
+    return cp.origem === 'edital_veda'
+      ? 'Condições de pagamento: o edital deste leilão VEDA expressamente o parcelamento — a projeção considera pagamento à vista.'
+      : 'Condições de pagamento: à vista, conforme o cadastro do lote; o edital não foi lido nesta emissão para confirmar se há parcelamento disponível.';
+  }
+  if (cp.origem === 'edital') {
+    return `Condições de pagamento LIDAS NO EDITAL deste leilão${termos ? `: ${termos}` : ''}. Confira no documento antes de dar lance.`;
+  }
+  if (cp.origem === 'padrao_legal') {
+    return `Condições de pagamento NÃO confirmadas no edital: a projeção parcelada usa o piso legal do art. 895 do CPC para leilão judicial${termos ? ` (${termos})` : ''}, com o imóvel hipotecado ao juízo até a quitação. O edital deste leilão pode ser mais restritivo — confirme antes de dar lance.`;
+  }
+  return `Condições de pagamento NÃO confirmadas em documento${termos ? `: a projeção parcelada usa ${termos}, premissa do sistema` : ''}. Confirme no edital antes de dar lance.`;
+}
+
+export default function NotaMetodologica({ tipo, dados, extra, compacto = false, condicoesPagamento = null }) {
   let frases = [];
   try {
     if (tipo === 'mercadologico') frases = frasesMercadologico(dados?.mercado || dados, dados?.divergenciaArea || extra);
@@ -150,14 +179,14 @@ export default function NotaMetodologica({ tipo, dados, extra, compacto = false 
         Metodologia e ressalvas
       </div>
       <p style={{ fontSize: 9.5, lineHeight: 1.55, color: cor, margin: 0, textAlign: 'justify' }}>
-        {frases.join(' ')} {RESSALVA}
+        {frases.join(' ')} {fraseCondicoesPagamento(condicoesPagamento)} {RESSALVA}
       </p>
     </div>
   );
 }
 
 /** Mesma nota em TEXTO puro — para o PDF, que monta HTML por string. */
-export function notaMetodologicaTexto(tipo, dados, extra) {
+export function notaMetodologicaTexto(tipo, dados, extra, condicoesPagamento = null) {
   let frases = [];
   try {
     if (tipo === 'mercadologico') frases = frasesMercadologico(dados?.mercado || dados, dados?.divergenciaArea || extra);
@@ -165,5 +194,5 @@ export function notaMetodologicaTexto(tipo, dados, extra) {
     else if (tipo === 'laudo') frases = frasesLaudo(dados);
     else if (tipo === 'indice') frases = frasesIndice(dados, extra);
   } catch { frases = []; }
-  return `${frases.join(' ')} ${RESSALVA}`;
+  return `${frases.join(' ')} ${fraseCondicoesPagamento(condicoesPagamento)} ${RESSALVA}`;
 }

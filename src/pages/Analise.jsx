@@ -43,6 +43,11 @@ const VAZIO = {
   id: '', nome: '', tipo: 'apartamento', endereco: '', cidade: '', estado: '', cep: '',
   nomeCondominio: '', objetivoCompra: 'investimento', status: 'analise', origem: 'extrajudicial',
   somenteAVista: false, tabelaAmortizacao: 'sac', leiloeiro: '', dataLeilao: '',
+  // DE ONDE VIERAM AS CONDIÇÕES DE PAGAMENTO (31/08). 'edital' e 'edital_veda' = lidas no
+  // documento daquele leilão; 'padrao_legal' = piso do art. 895 aplicado por ser judicial, sem
+  // leitura; '' = default do sistema. As condições MUDAM de edital para edital, então dizer o
+  // número sem dizer a procedência é oferecer uma premissa com cara de fato apurado.
+  origemCondicoesPagamento: '',
   taxaLeiloeiroPercentual: 5, honorariosPercentual: 10, taxaAdministrativaPercentual: 0, despesasAdministrativas: 0,
   valorAvaliacao: 0, valorArrematacao: 0,
   areaM2: 0, areaTerrenoM2: 0, valorMercado: 0, valorLocacao: 0,
@@ -245,7 +250,7 @@ export default function Analise() {
       // sobrescreve estes números; até lá, o piso da LEI descreve melhor o negócio do que um
       // financiamento de 30 anos que ninguém vai conseguir.
       ...(String(imovelInicial.modalidade || '').toLowerCase() === 'judicial'
-        ? { sinalPercentual: 25, prazoMeses: 30 }
+        ? { sinalPercentual: 25, prazoMeses: 30, origemCondicoesPagamento: 'padrao_legal' }
         : {}),
     };
   };
@@ -651,13 +656,28 @@ export default function Analise() {
       ...(ext.dataLeilao && !ext.valorArrematacao && Number(p.valorArrematacao) > 0
         ? { dataLeilao: p.dataLeilao }
         : {}),
-      // 2) O EDITAL DESTRAVA O PARCELADO, NUNCA TRANCA. O leitor devolveu `aVista: true` para
-      //    um lote judicial cujos próprios anexos incluem "Modelo de Proposta Parcelada"; com
-      //    o spread, esse `true` removia o cenário financiado por cima do acervo, que já dizia
-      //    `hipotecado` (parcelável por art. 895 CPC). Errar para "parcelável" só mantém a
-      //    opção na tela e quem decide é o cliente; errar para "à vista" APAGA uma opção que o
-      //    leiloeiro oferece. Mesma direção da regra de 15/08.
-      ...(p.somenteAVista === false ? { somenteAVista: false } : {}),
+      // 2) O EDITAL MANDA — INCLUSIVE PARA TRANCAR (revisto em 31/08, correção do dono).
+      //
+      //    A 1ª versão desta regra deixava o edital apenas DESTRAVAR o parcelado, nunca
+      //    trancar. Isso protegia contra uma leitura ruim, mas embutia uma premissa errada:
+      //    **as condições mudam de edital para edital, em judicial e em extrajudicial**. Um
+      //    edital que veda o parcelamento é a regra daquele leilão, e ignorá-lo mostraria ao
+      //    cliente um cenário que ele não pode contratar — o mesmo tipo de erro, na direção
+      //    oposta.
+      //
+      //    O que torna seguro obedecer agora é a instrução nova do extrator: `somenteAVista`
+      //    só volta `true` quando o documento VEDA o parcelamento de forma EXPRESSA; silêncio
+      //    volta `false`. Ou seja, `true` deixou de significar "não achei" e passou a
+      //    significar "achei a proibição". Sem essa mudança no prompt, obedecer seria repetir
+      //    o caso do Itaim Bibi, em que o leitor devolveu `aVista: true` para um lote com
+      //    "Modelo de Proposta Parcelada" nos próprios anexos.
+      //
+      //    Hierarquia: edital explícito > acervo/lei. Silêncio do edital não derruba o acervo.
+      ...(ext.somenteAVista === true
+        ? { somenteAVista: true, origemCondicoesPagamento: 'edital_veda' }
+        : ext.parcelamento?.aceita === true
+          ? { somenteAVista: false, origemCondicoesPagamento: 'edital' }
+          : {}),
       // 3) OS TERMOS DO PARCELAMENTO LIDOS NO EDITAL ENTRAM NA PROJEÇÃO (31/08). Antes o leitor
       //    devolvia só `somenteAVista` — um booleano sem condição nenhuma —, então mesmo com o
       //    cenário parcelado disponível a conta usava os DEFAULTS de financiamento bancário
@@ -665,7 +685,6 @@ export default function Analise() {
       //    art. 895 do CPC pede entrada mínima de 25% e saldo em até 30 meses, o que muda
       //    capital de entrada, parcela e payback. Campo em branco é preenchido; o que o usuário
       //    já ajustou é respeitado.
-      ...(ext.parcelamento?.aceita ? { somenteAVista: false } : {}),
       ...(Number(ext.parcelamento?.entradaPct) > 0 && !(Number(p.sinalPercentual) > 0 && p.sinalPercentual !== VAZIO.sinalPercentual)
         ? { sinalPercentual: Number(ext.parcelamento.entradaPct) } : {}),
       ...(Number(ext.parcelamento?.parcelas) > 0 && p.prazoMeses === VAZIO.prazoMeses
@@ -847,7 +866,15 @@ export default function Analise() {
             // dizia `hipotecado` (= parcelável, art. 895 CPC). Uma leitura de PDF que erra para
             // "à vista" não pode remover uma opção que o leiloeiro oferece; errar para
             // "parcelável" só mantém o cenário disponível, e quem decide é o cliente.
-            somenteAVista: p.somenteAVista === false ? false : (ext.somenteAVista ?? p.somenteAVista),
+            // Mesma hierarquia do `aplicarExtracao`: edital explícito manda nos dois sentidos,
+            // silêncio preserva o que o acervo/lei já dizia. Ver o bloco (2) daquele helper.
+            ...(ext.somenteAVista === true
+              ? { somenteAVista: true, origemCondicoesPagamento: 'edital_veda' }
+              : ext.parcelamento?.aceita === true
+                ? { somenteAVista: false, origemCondicoesPagamento: 'edital' }
+                : {}),
+            ...(Number(ext.parcelamento?.entradaPct) > 0 ? { sinalPercentual: Number(ext.parcelamento.entradaPct) } : {}),
+            ...(Number(ext.parcelamento?.parcelas) > 0 ? { prazoMeses: Number(ext.parcelamento.parcelas) } : {}),
             origem: ext.origem || p.origem, leiloeiro: ext.leiloeiro || p.leiloeiro,
             // A PRAÇA É UM PAR — data E lance andam juntos (31/08).
             //
@@ -4152,7 +4179,7 @@ export default function Analise() {
           análise no rodapé, para resguardo do que sustenta o parecer. Montada dos FATOS desta
           geração (origem dos comparáveis, período, área que prevaleceu, documento lido), não
           de texto fixo: rodapé que repete a mesma frase em todo relatório não resguarda nada. */}
-      <NotaMetodologica tipo="mercadologico" dados={analiseEntry?.result || { mercado }} />
+      <NotaMetodologica tipo="mercadologico" dados={analiseEntry?.result || { mercado }} condicoesPagamento={{ somenteAVista: d.somenteAVista, sinalPercentual: d.sinalPercentual, prazoMeses: d.prazoMeses, origem: d.origemCondicoesPagamento }} />
 
       {/* ── PRÓXIMO PASSO: A ANÁLISE DOCUMENTAL (28/08, pedido do dono) ──────────────────
           O mercadológico responde QUANTO vale e a que preço fecha a conta. Ele não responde
