@@ -138,6 +138,21 @@ Windsor; as duas contas já são profissionais — o item 1 do caminho crítico 
 > Leilões`. **Recarregar o painel ANTES de trabalhar nele**, senão a próxima sessão revisa
 > cinco contas onde havia uma.
 >
+> **✅ MEDIDO/CONFIRMADO PELO DONO (01/09): só o `bidprobrasil.com.br` recebe tráfego pago.**
+> O `reimob.com.br` (domínio de e-mail dele) NÃO recebe. Então a lista de domínios confiáveis
+> é de **UM domínio** — e é melhor assim: lista longa "por via das dúvidas" devolve a brecha
+> que o alerta descreve. Formato: domínio registrável (`bidprobrasil.com.br`), que cobre o
+> `www.` e subdomínios como filhos.
+>
+> ⚠️ **Domínio VERIFICADO não é domínio CONFIÁVEL** — são duas listas. Verificado prova posse
+> (e o BidPro quase certamente já está, por causa do `conversion_domain` e do Search Console);
+> confiável é o que autoriza pular revisão. Se o painel pedir verificação antes, ela vem antes.
+>
+> **Consequência a esperar:** anúncio para qualquer outro domínio passa a exigir revisão — é
+> a tranca funcionando, não defeito. Se um dia anunciar para checkout externo ou encurtador,
+> a saída é ADICIONAR o domínio, nunca desligar a proteção. O ManyChat não é afetado (manda
+> link em DM, não em anúncio) e o Click-to-Message não aponta para domínio nenhum.
+>
 > **O que sobra são as duas trancas do MESMO risco:** a Meta publica anúncio parecido com um já
 > aprovado sem revisão nova, então quem entrasse na conta poderia veicular para um domínio
 > próprio. **Domínio confiável** limita PARA ONDE o anúncio manda; **usuário confiável** limita
