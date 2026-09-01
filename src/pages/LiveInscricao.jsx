@@ -16,7 +16,6 @@ const FONTE = "'Sora', system-ui, -apple-system, sans-serif";
 // devolvido pela inscrição: variável VITE_ é compilada no bundle, então trocar o número
 // exigiria um deploy novo — numa página de campanha isso é número errado no ar. A env var
 // segue valendo para eventos sem número próprio (e é a mesma que o chat de suporte usa).
-const WHATSAPP_PADRAO = String(import.meta.env.VITE_WHATSAPP_NUMERO || '').replace(/\D/g, '');
 
 // Cookie `_fbp`, escrito pelo próprio Meta Pixel. Vai junto da inscrição para o Lead do
 // servidor poder casar o mesmo navegador — sem ele o evento chega, mas casa com menos gente.
@@ -206,10 +205,6 @@ export default function LiveInscricao() {
     .toLocaleDateString('pt-BR', { timeZone: 'America/Bahia', weekday: 'long' })
     .replace('-feira', '');
 
-  // O número do evento manda; a env var é só o padrão. Sem nenhum dos dois o botão não
-  // aparece — melhor não ter o botão do que ter um wa.me/ para lugar nenhum.
-  const whatsappDireto = pronto?.whatsapp_direto || WHATSAPP_PADRAO || '';
-
   const Bloco = ({ v, l }) => (
     <div style={{ textAlign: 'center', minWidth: 62 }}>
       <div style={{ fontSize: 30, fontWeight: 900, color: '#fff', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
@@ -290,26 +285,17 @@ export default function LiveInscricao() {
                 </>
               )}
 
-              {/* ── ABRIR CONVERSA DIRETA ────────────────────────────────────
-                  Botão que faz a PESSOA mandar mensagem, e não o contrário. É essa direção
-                  que abre a janela de conversa do WhatsApp: quem escreve primeiro é ela, e a
-                  partir daí dá para responder sem depender de modelo aprovado.
-                  Complementa o grupo em vez de substituí-lo — o grupo aquece o conjunto, a
-                  conversa individual é onde uma venda de ticket alto se fecha. */}
-              {whatsappDireto && (
-                <div style={{ marginTop: 16 }}>
-                  <a href={`https://wa.me/${whatsappDireto}?text=${encodeURIComponent(
-                        `Oi! Acabei de me inscrever na aula de ${diaSemanaCurto} sobre leilão.` +
-                        `${form.cidade ? ` Sou de ${form.cidade}.` : ''} Pode me avisar por aqui quando começar?`)}`}
-                    target="_blank" rel="noopener noreferrer"
-                    style={{ display: 'block', textAlign: 'center', background: '#fff', color: '#166534', border: '2px solid #16a34a', textDecoration: 'none', padding: '13px', borderRadius: 12, fontWeight: 800, fontSize: 14.5 }}>
-                    Falar comigo no WhatsApp →
-                  </a>
-                  <p style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', margin: '8px 0 0', lineHeight: 1.5 }}>
-                    Prefere falar direto comigo em vez do grupo? É por aqui.
-                  </p>
-                </div>
-              )}
+              {/* ── POR QUE NÃO HÁ UM SEGUNDO BOTÃO VERDE AQUI (01/09) ───────
+                  Existia um "Falar comigo no WhatsApp" logo abaixo do grupo, com a ideia de
+                  abrir conversa individual. Foi REMOVIDO a pedido do dono, e a razão vale
+                  ficar escrita para ninguém recolocar sem pensar: dois botões verdes,
+                  colados, com o mesmo peso visual, dividem exatamente o clique que não pode
+                  ser perdido. O grupo é onde sai o link da sala e o lembrete — quem cai na
+                  conversa individual em vez do grupo depende de alguém responder um a um
+                  para não perder a aula.
+                  O mesmo raciocínio já governa a ordem do resto desta tela: "explorar a
+                  plataforma" e "convide um amigo" ficam abaixo, com contorno e não
+                  preenchidos, para não competirem com o verde. */}
 
               {/* ── ENQUANTO A AULA NÃO CHEGA ────────────────────────────────
                   A conta já foi criada na inscrição — só falta a pessoa saber disso e usar.
