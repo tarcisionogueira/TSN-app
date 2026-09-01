@@ -161,6 +161,33 @@ Windsor; as duas contas já são profissionais — o item 1 do caminho crítico 
 > a saída é ADICIONAR o domínio, nunca desligar a proteção. O ManyChat não é afetado (manda
 > link em DM, não em anúncio) e o Click-to-Message não aponta para domínio nenhum.
 >
+> ### 🎯 01/09 — A VERIFICAÇÃO DA EMPRESA ESTÁ A UM CLIQUE, E COM TUDO CERTO
+> A Central de Segurança tem o card **"Verificação da empresa"** pronto, e ele confirma a
+> correção de hoje de manhã: entidade **"Verificação para Reimob Imobiliária"** (a empresa
+> certa — NÃO a Nogueira, que criaria o descasamento que reprovou o Google até 16/08), caso de
+> uso já selecionado como **"O app exige acesso a permissões no Meta for Developers"** — que é
+> literalmente o caso do ManyChat — e status **"Qualificada para verificação"** com botão
+> **"Iniciar verificação"**.
+>
+> **É O GARGALO DE SEMANAS DA FASE 1.** Enquanto não rodar, o bot só fala com 25 contas de
+> teste. Todo o resto corre em paralelo; este não. Documentos: CNPJ da Reimob + contrato
+> social com o dono como sócio.
+>
+> ### 📊 O PAINEL ATUALIZA — e é isso que condena as 4 contas
+> **"5 contas sem aprovação" virou "4"**: a proteção salva na `CA - Tacísio` registrou em
+> minutos. Logo o painel **não está defasado**. E o outro número **não mexeu**: "4 contas
+> inativas" segue 4. **Quarta evidência** de que o encerramento não completou — e a mais forte,
+> porque agora existe prova de que uma mudança recente aparece.
+> Sobram **DOIS alertas, e são as mesmas 4 contas.** Fechar resolve os dois.
+>
+> ✅ **"Who's required to turn on Passkeys?" = "No one"** — o dono NÃO ligou. Correto. Manter
+> até existir o app autenticador (ver o "não faça" abaixo).
+> 🔎 **"0 de 3 pessoas" continuou 3 mesmo com o Igor removido.** Como o painel demonstrou que
+> atualiza, a terceira é provavelmente a **Nanda Oliveira** (contada por ter acesso à Página,
+> sem estar no portfólio). Mistério fechado, sem urgência.
+> ℹ️ Card **"Administrador secundário adicionado" ✓**: a segunda conta do dono serve de resgate
+> se ele perder acesso à primeira. É o lado bom das "duas portas com a mesma chave".
+>
 > ### 🔐 01/09 — FECHAMENTO DA CENTRAL DE SEGURANÇA (leia este bloco primeiro)
 >
 > **FEITO E CONFIRMADO:** Felipe removido (3 fontes) · Igor Queiroz **removido de Parceiros**
