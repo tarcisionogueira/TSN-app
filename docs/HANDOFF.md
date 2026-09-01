@@ -191,7 +191,25 @@ Windsor; as duas contas já são profissionais — o item 1 do caminho crítico 
 > conta for comprometida, não confiança na pessoa):** ela precisa mesmo de `finance` +
 > `full_control`, ou `basic_access` + aprovadora basta?
 >
-> 🔓 **PENDENTE E AGORA SEGURO: ligar "Exigir autenticação de dois fatores".** O card aparece
+> ✅ **2FA OBRIGATÓRIO LIGADO** (cadeado verde, escopo "Todos", **0 de 3 pendentes**). A ordem
+> funcionou: esperar todo mundo ter 2FA antes de exigir evitou trancar o dono junto.
+>
+> 🔎 **"0 de 3 pessoas" — SÃO TRÊS, e só conhecemos DUAS** (dono + Fernanda). **Segunda
+> confirmação em minutos de que o export da Central de Segurança NÃO É INVENTÁRIO de acesso.**
+> Suspeitos já registrados aqui, os dois com pendência aberta: **Igor Queiroz** ("já removido
+> da conta de anúncios — falta confirmar em *Usuários → Parceiros*"; removido de uma conta
+> não é removido do portfólio) e **Nanda Oliveira** ("acesso à Página `tarcisionogueiraleiloes`
+> sem estar no portfólio"). Caminho: botão **"Analisar o acesso das pessoas"**, na própria
+> tela do card de 2FA. **PENDENTE.**
+>
+> 🛑 **NÃO LIGAR O "Passkey Management" AINDA** (card logo abaixo, cadeado vermelho aberto — o
+> painel empurra para fechá-lo). Exigir passkey torna PERMANENTE exatamente o fluxo que
+> bloqueou o dono **duas vezes em 01/09**: Chrome pede passkey → Windows sem autenticador
+> local → janela exigindo chave USB inexistente. Hoje foi contornável; com a exigência ligada,
+> deixa de ser. **Ordem certa:** app autenticador + PIN do Windows Hello PRIMEIRO, cadeado
+> depois — a mesma lógica que fez o 2FA obrigatório fechar sem drama.
+>
+> _(anterior, já resolvido:)_ **PENDENTE E AGORA SEGURO: ligar "Exigir autenticação de dois fatores".** O card aparece
 > com cadeado aberto. O risco que eu mesmo levantei (trancar o dono junto) **acabou**: o painel
 > diz `0 usuários sem 2FA` e `0 sem passkey`. Ligar agora não tranca ninguém.
 >
