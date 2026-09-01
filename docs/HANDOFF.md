@@ -4,7 +4,111 @@
 
 ---
 
-## 🚦 COMECE POR AQUI — estado ao encerrar 01/09 (sessão 17)
+## 🚦 COMECE POR AQUI — estado em 01/09 14h UTC (sessão 18)
+
+> `main` = **`1a94a3b`**, em produção (deploy READY). Heartbeat às **14:00 UTC**.
+> Segurança **0/0** · regras de negócio **0 crítico** · `auditoria_uso` **0 gaps** · KYC 0 ·
+> 0 chamado de cliente sem resposta · 0 fonte no ponto cego · backup ok (66 arquivos, 49
+> iguais — varredura completa). `verificar:padroes` ✓ · `verificar:sintaxe` ✓ ·
+> `verificar:schema` verde no CI às 13:35 UTC.
+
+### ✅ A PENDÊNCIA DO META FOI EXECUTADA (era a primeira linha da sessão 17)
+
+**`BR - ABERTO - AULA 02SET` (`120249418573490420`) está PAUSADO**, via `pause_adset` do
+Windsor, com autorização do dono nesta sessão. Reversível por `enable_adset`.
+
+Ele tinha gasto **R$ 22,51 (31/08) + R$ 26,51 (01/09) = R$ 49,02 por 655 cliques e ZERO
+inscrito** — e hoje comia **87% do orçamento** da campanha de tráfego do site, deixando
+R$ 3,74 para o conjunto que roda a **CPC R$ 0,11**. Pausar servia aos DOIS objetivos que o
+dono nomeou (máximo de gente na live; em segundo, tráfego para o sistema), porque ele não
+entregava o primeiro e sabotava o segundo.
+
+`CONV - AULA 02SET` **continua pausado e assim deve ficar** — confirmado por medição: zero
+gasto hoje. Não religar.
+
+### 🔴 O QUE AINDA PODE ENCHER A LIVE DE AMANHÃ — 3 fatos medidos
+
+A aula é **02/09 22:00 UTC** com **4 inscritos** (2 `meta`, 1 sem origem, 1 `direto`), e o
+último entrou em **30/08**: nem o conjunto ABERTO nem o CONV trouxeram UM inscrito desde
+então, com R$ 90+ gastos. O que sobra é a base, e ela está subusada:
+
+1. **17 exploradores ativos NUNCA receberam o convite** — 16 deles criaram conta *depois* de
+   30/08, o dia em que `convidar-live-cron` disparou 74 e **se desarmou sozinho**.
+   `app_config.convite_live_armado` está **vazio**. Rearmar é 1 comando (ou o botão
+   "Convidar a base por e-mail" no `/admin`), e o cron roda às **11h UTC** — ou seja, a
+   última janela útil é a rodada de amanhã de manhã:
+   ```sql
+   insert into app_config (key, value) values ('convite_live_armado', '2026-09-02')
+     on conflict (key) do update set value = excluded.value;
+   ```
+2. **A fila de WhatsApp NUNCA foi usada: `whatsapp_disparo_log` tem ZERO linhas.** A tela
+   existe desde 30/08, tem botão no `/admin` desde então, e mensagem por segmento (pagante ×
+   não-pagante). São **90 dos 92 perfis com telefone**. É o único canal que alcança quem
+   ignorou o e-mail, e é 1 clique por pessoa.
+3. **Os lembretes ainda NÃO saíram, e isso está certo.** `live_lembretes` está vazia porque a
+   etapa `vespera` abre 30h–12h antes: para a aula das 22h UTC de 02/09, a primeira rodada
+   elegível é **hoje às 16h UTC**. Não é defeito — é o relógio. Só confirme depois das 16h.
+
+### 📲 MANYCHAT PRÓPRIO — o passo 1 SUBIU (só-escuta)
+
+Ver `docs/INSTAGRAM_AUTOMACAO.md`, que foi corrigido com o que se mediu. Resumo:
+
+| Peça | Estado |
+|---|---|
+| `ig_conversas` · `ig_mensagens` · `ig_oferta_vigente` · `ig_webhook_recebido` | **aplicadas** — RLS ligada, 0 políticas, escrita revogada de anon/authenticated, `service_role` intacto |
+| `api/instagram-webhook.js` | **no ar, dormente** por falta de `IG_APP_SECRET` (recusa em vez de aceitar) |
+| `ig_limpar_antigas()` no `limpar-eventos-cron` | retenção LGPD **como mecanismo**: 180 dias de mensagem, 30 de log |
+| `npm run testar:instagram` | **28/28** |
+
+**`IG_USER_ID` de `tarcisionogueiraleiloes` = `17841400563334157`** (medido no conector
+Windsor; as duas contas já são profissionais — o item 1 do caminho crítico estava feito).
+
+**Duas coisas dependem SÓ de você, e a segunda é o caminho longo:**
+- Criar `IG_APP_SECRET` e `IG_VERIFY_TOKEN` na Vercel (ver `docs/ENVS_VERCEL.md`). Confira
+  com `GET /api/instagram-webhook` → `{ configurado: true }`.
+- **Verificação de Negócio no Meta** (NOGUEIRA EMPREENDIMENTOS) — que é a **pendência #9
+  desta lista, aberta desde 26/08**, e que agora está no caminho crítico de duas coisas:
+  destrava a remoção do Felipe Scarafiz (#5) **e** é pré-requisito do App Review do bot.
+  Sem ela, o webhook só fala com as 25 contas de teste. Nada de código destrava isso.
+
+**Correção de fato na spec:** existem DOIS caminhos de integração. O documento só conhecia o
+**Facebook Login** (exige Página, permissões `instagram_manage_*`); o **Instagram Login**
+dispensa a Página e usa `instagram_business_*`. Decidir qual **antes** de criar o app —
+pedir permissão do conjunto errado reprova a submissão inteira.
+
+### ⚠️ O PLACAR DE INVARIANTES ESTAVA ERRADO NO TOPO DESTE DOCUMENTO
+
+A sessão 17 projetou "5 → 4 → 3". Medido agora: **5 em alerta**, porque entrou um que não
+estava na lista — **`lote_sem_area_nem_matricula` = 471 (limite 400)**, gap de captura.
+
+E o `qa_invariantes_lenta` = 7109 merece a leitura certa: a **última linha gravada é de
+31/08 15:03**, *anterior* ao commit `bf92b5d` que criou o `ms_servidor`. Conferido:
+**`ms_servidor` é nulo nas 6 linhas**, o invariante cai no `coalesce` e julga **painel +
+rede** — exatamente o que o título dele diz que não faz. A rodada de hoje (15h UTC) é a
+**primeira** que grava o número do servidor. Só depois dela dá para afirmar se o painel está
+lento ou se são os ~4 s de percurso.
+
+### 🧭 CAPTURA — 5 linhas em `fonte_regressao_suspeita()`, e os motivos pedem coisas diferentes
+
+- **LEILOFY `regressao`**: 17 lotes contra piso 37 (mediana 74), `expirados_recentes = 1`.
+  **Não é o falso positivo de 25/08**: conferi as datas e os 17 estão espalhados de 01/09 a
+  28/09 — não houve praça que esvaziasse o acervo. Candidato real a ofensiva de recon.
+- **4 fontes `medicao_velha`**: EMILIOMATOS **289 h**, NORDESTE **264 h**, ALFA **264 h**,
+  LEFFA **113 h**. Não é "está bem", é "não consigo verificar".
+
+### 📋 O resto do ritual
+
+`relatorios_falha_24h` = **1** (`relatorio_parecer_vazio` · "sem comparáveis", Santana de
+Parnaíba) e `erros_invisiveis_24h` = **1** (`gerar-analise`) — os dois deveriam ser 0.
+`tempo_processo()`: **7 chamados fechados sem NENHUMA resposta humana** (pior 9,2 dias).
+`documental_distribuicao()`: segue **AMOSTRA INSUFICIENTE** (1 relatório pós-regra).
+Health-check: **4 tabelas** com RLS sem escrita do usuário (eram 6 — `curso_acesso` e
+`whatsapp_disparo_log` saíram com o revoke de hoje mais cedo). Bright Data: subcota diária de
+`docs` esgotada (25/25) — é o freio funcionando, não falha de fonte.
+
+---
+
+## 🏁 01/09 (sessão 17) — encerramento
 
 > `main` = **`3c19797`**, em produção (deploy da Vercel a partir do push). Branch
 > `claude/handoff-bidpro-brasil-checks-m6ekcz` no mesmo commit. Heartbeat às 09:53.

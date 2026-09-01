@@ -1,7 +1,40 @@
 # Automação de comunicação — Instagram `@tarcisionogueiraleiloes`
 
 > Especificação levantada em **30/08/2026** para a sessão seguinte começar sem descoberta.
-> **Nada foi construído ainda.** Decisões do dono já fechadas estão marcadas ✅.
+> Decisões do dono já fechadas estão marcadas ✅.
+>
+> ## 🟢 ATUALIZAÇÃO 01/09 — o passo 1 SUBIU. O que já existe, medido:
+>
+> | Peça | Estado |
+> |---|---|
+> | `ig_conversas` · `ig_mensagens` · `ig_oferta_vigente` | **criadas e aplicadas** (RLS ligada, 0 políticas, escrita revogada de anon/authenticated) |
+> | `ig_webhook_recebido` | **nova, não estava na spec** — ver §6.4 abaixo |
+> | `api/instagram-webhook.js` (GET challenge + POST com HMAC, grava e sai) | **no ar, dormente** por falta de `IG_APP_SECRET` |
+> | `public.ig_limpar_antigas()` + chamada no `limpar-eventos-cron` | **retenção LGPD virou mecanismo** (180 dias de mensagem, 30 de log) |
+> | `npm run testar:instagram` | **28/28** — echo, story, colisão de id e assinatura |
+> | `IG_USER_ID` de `tarcisionogueiraleiloes` | **`17841400563334157`** (item 1 do §2 está feito: já é conta profissional) |
+>
+> **O que falta é seu, no painel da Meta, e é o caminho longo (§2):** criar o app, a
+> **Verificação de Negócio** (que é a pendência #9 do HANDOFF, aberta desde 26/08) e o App
+> Review. Nada de código destrava isso.
+>
+> ### ⚠️ DUAS CORREÇÕES DE FATO NESTA SPEC (conferidas na documentação, não de memória)
+>
+> **(a) O §2 conhece só UM dos dois caminhos.** A lista de permissões dele
+> (`instagram_basic`, `instagram_manage_messages`, `instagram_manage_comments`,
+> `pages_show_list`, `pages_manage_metadata`) é do **Instagram API com Facebook Login**, que
+> exige a Página do Facebook vinculada. Existe o **Instagram API com Instagram Login**
+> (*Business Login*), cujas permissões são `instagram_business_basic`,
+> `instagram_business_manage_messages` e `instagram_business_manage_comments` — e que
+> **dispensa a Página**. Os nomes antigos sem o `business_` foram descontinuados nesse
+> caminho. **Decidir qual antes de criar o app**: a escolha muda as permissões pedidas, e
+> pedir do conjunto errado reprova a submissão inteira.
+>
+> **(b) A tag de agente humano é para HUMANO, não para o bot.** O §7.1 pergunta o prazo: são
+> **7 dias** — mas a Meta a restringe a mensagem **enviada por pessoa**, audita o uso e pode
+> revogar. Automação dentro desses 7 dias é uso indevido. Ou seja: **o bot vive dentro das
+> 24 h; os 7 dias são para o dono assumir na mão.** Isso reforça o §7.1 em vez de afrouxá-lo —
+> todo fluxo automático precisa caber em 24 h ou migrar de canal.
 
 ---
 
@@ -156,3 +189,39 @@ Sem isto, "o bot está respondendo" e "o bot está convertendo" viram a mesma fr
 - quantas o dono precisou assumir na mão (se for alto, a persona ainda não está pronta)
 - **invariante:** conversa com mensagem da pessoa sem resposta há mais de 24 h — o equivalente,
   aqui, do `job_analise_sem_motor`
+
+
+---
+
+## 6.4 `ig_webhook_recebido` — a PROVA de que a escuta escutou (acrescentada em 01/09)
+
+Não estava na spec, e é a peça que faltava para o §10 poder responder qualquer coisa.
+
+`recebido_em` · `campos[]` · `gravadas` · `nao_reconhecidos` · `bruto` (jsonb) · `erro`
+
+**Por que existe:** um webhook que recebe um formato que não conhece, devolve 200 e não grava
+nada fica **idêntico, por fora, a um webhook que ninguém está chamando**. Nos dois casos
+`ig_mensagens` fica vazia e nada dá erro. Semanas depois, na hora de treinar, o corpus estaria
+vazio e as duas causas seriam indistinguíveis — e a diferença entre elas é enorme (uma é
+configuração no painel, a outra é parser). É a forma de falha nº 1 do `CLAUDE.md` aplicada à
+escuta. `bruto` só é preenchido quando `nao_reconhecidos > 0`: guardar sempre seria estocar DM
+em dobro, sem finalidade — e finalidade é o que a LGPD cobra.
+
+**A consulta que responde "a escuta está viva?":**
+```sql
+select max(recebido_em) as ultima_entrega, sum(gravadas) as mensagens,
+       sum(nao_reconhecidos) as nao_entendidas
+  from ig_webhook_recebido where recebido_em > now() - interval '7 days';
+-- nenhuma linha  = ninguém está chamando (painel da Meta não configurado)
+-- linhas com gravadas=0 e nao_entendidas>0 = está chamando e o parser não entende: leia `bruto`
+```
+
+## 7.5 O que a v1 DELIBERADAMENTE não guarda
+
+`read`, `delivery` e `reaction` chegam pelo mesmo `messaging[]` e são descartados sem contar
+como "não reconhecidos" — são eventos que esta versão escolhe não guardar, não formatos que
+ela não entendeu. Misturar as duas categorias faria o alarme do §6.4 disparar todo dia por
+funcionamento normal, e alarme que sempre toca é alarme desligado.
+
+**Mensagem só com anexo (foto, áudio) É gravada**, com `texto` nulo: ela não serve de corpus,
+mas é contato — move a janela de 24 h. Descartá-la faria o bot concluir que a pessoa nunca falou.
