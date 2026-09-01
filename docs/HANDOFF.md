@@ -4,10 +4,15 @@
 
 ---
 
-## 🚦 COMECE POR AQUI — estado ao encerrar 31/08 17h UTC (sessão 16)
+## 🚦 COMECE POR AQUI — estado ao encerrar 31/08 22h BRT (sessão 16)
 
-> Branch `claude/handoff-bidpro-brasil-checks-l89025` = **`3eecb93`**, empurrada, e **`main` está
+> Branch `claude/handoff-bidpro-brasil-checks-l89025` = **`8755e87`**, empurrada, e **`main` está
 > no mesmo commit** (todos os merges do dia foram fast-forward). Heartbeat às 09:52.
+>
+> **A aula é QUARTA 02/09 às 19h.** O que está de pé para ela: conjunto aberto na TRF a R$ 40/dia,
+> resgate do `#` no ar e testado no celular, reforço por e-mail por comportamento (52 já saíram),
+> convite diário, e a fila de WhatsApp em `/admin/whatsapp` — **o dono vai fazer os 27 na manhã de
+> 01/09**. Dois check-ins agendados para 01/09 09h e 09h30 BRT.
 > **Placar do dia:** invariantes em alerta **7 → 5** · segurança **1 atenção → 0** · erros de
 > cliente abertos **1 → 0** · fontes em regressão **4 → 3** · regras de negócio 0 crítico ·
 > **12 bugs do QA fechados** (2 de dinheiro, 5 P0, 5 P1/P2).
@@ -426,6 +431,101 @@ que não sabe que falhou?* — e a irmã dela, a forma #10: *este número mede o
    partir do 5º documental, se continuar tudo em `amarelo · alta`, a régua travou de novo e o
    suspeito é o teto de confiança do servidor. Roda no ritual de abertura (CLAUDE.md 1c-e).
 
+### 🌙 A NOITE — o funil da aula montado inteiro (31/08, 19h→22h BRT)
+
+**Encerramento medido:** acervo **30.119 ativos** · invariantes em alerta **5** · segurança
+**0/0** · regras de negócio **0 crítico** · fontes suspeitas **3** · erros de cliente abertos **1**
+· inscritos na aula **4**.
+
+**Cliente 360:** 88 clientes (82 explorador · 4 Investidor Pro · 2 Assessoria) ·
+`clientes_com_erro: 0` · `relatorios_falha_24h: 0` · `erros_invisiveis_24h: 0` ·
+relatórios no total: 67 mercadológicos, 19 documentais, 3 laudos · **34 de 88 sem triagem
+respondida** (é o que faz o e-mail de oportunidade sair genérico) · funil público 7d: **1.593
+visitantes**, `/live/leilao-ao-vivo` com **134**.
+
+⚠️ **`alerta_incompleto_7d: 3`** — três clientes com alerta pedindo 12 vagas e recebendo 1, 1 e 6,
+em **Palmas/TO, Tucumã/PA e Juazeiro/BA**, já com raio de 200 km. Não é bug: é **cobertura de
+acervo no interior**. Fica registrado porque é decisão de captura, não de código.
+
+#### O que passou a existir
+
+| entrega | onde |
+|---|---|
+| **Resgate do `#`** — 2/3 do tráfego pago caía na home | `src/utils/destinoDaCampanha.js` · testado no celular pelo dono |
+| **Reforço do convite por comportamento** | `api/live-reforco-cron.js` · **52 e-mails saíram às 19h**, 52 entregues |
+| **Convite diário** (era só domingo, para aula de quarta) | `vercel.json` |
+| **Fila de WhatsApp assistida** | `/admin/whatsapp` + botão no `/admin` |
+| **Mensagem de WhatsApp por segmento** | `api/admin-whatsapp-fila.js` |
+| **Liberação de módulo por prazo + piso de data** | `curso_modulos` · editor de curso |
+| Confirmação da live com **um** botão verde | `src/pages/LiveInscricao.jsx` |
+
+#### O que foi mudado na conta de anúncios
+
+- `CONV - AULA 02SET`: **pausada**, e o orçamento caiu de **R$ 50 → R$ 5,21/dia** (mínimo que a
+  Meta aceita; zero não existe). Exposição 10× menor se alguém reativar sem olhar.
+- Conjunto **`BR - ABERTO - AULA 02SET`** na TRF: R$ 40/dia, público aberto. Entregou
+  **2.025 impressões por R$ 8,82 → CPM R$ 4,36, CPC R$ 0,12**, contra **CPM R$ 115 / CPC R$ 2,60**
+  da campanha antiga. **A tese da segmentação estava certa: 26× mais barato por impressão.**
+- Dois anúncios novos a partir dos reels de 31/08. **O Meta recusou promover o post orgânico do
+  Instagram** ("o vídeo deve ser carregado no Facebook"), inclusive depois de carregar o vídeo como
+  asset — então foram criativos novos, o que **perde as curtidas e comentários do post**. O
+  `page_id` (`2396932637002359`, Reimob Imobiliária) veio de print do dono; eu **não chutei** entre
+  as duas páginas que o conector lista.
+
+⚠️ **O ORÇAMENTO NÃO ERA R$ 120.** O dono leu a coluna "Orçamento" repetida nas três linhas de
+anúncio e entendeu R$ 40 cada. **No Meta o orçamento é do CONJUNTO**: os três anúncios da aula
+dividem **um** R$ 40/dia. Total saindo na conta: R$ 48/dia (R$ 40 aula + R$ 8 o reel de venda
+direta).
+
+#### 🔴 O gargalo mudou de lugar, e isso é o mais importante daqui
+
+Com o `#` consertado, **40 visitas chegaram na página da aula e ZERO caíram na home** (era 22 de
+33). Mas: **~50 visitantes anônimos e nenhuma inscrição.**
+
+Eu cheguei a chamar isso de "quebra" e **estava errado** — o teste do dono no celular inscreveu
+normalmente, e o rastreador registrou `click "Quero participar"` + `submit FORM`. O tracker
+**não registra digitação em campo de formulário**, então "0 clicks" significa "ninguém apertou o
+botão", que é o que tráfego frio faz. **Não aumente a verba**: R$ 40/dia ao CPM de R$ 4,36 já
+compra ~9.000 impressões/dia, e dobrar compraria o dobro de nada. O que falta é conversão.
+
+#### O dado que reescreveu a mensagem
+
+**73 das 76 pessoas não-pagantes da fila criaram conta e NUNCA rodaram uma análise** — e só 18
+estão sem atividade há 30 dias. Elas não sumiram; nunca chegaram ao valor. Por isso a mensagem
+deixou de convidar para *ver uma ferramenta* e passou a prometer *uma decisão* — e a linha
+pessoal (*"você se cadastrou e ainda não rodou nenhuma análise"*) **só sai para quem de fato não
+rodou**, porque as outras três provariam o contrário do que a frase pretende.
+
+#### 🐛 ACHADO NÃO CONSERTADO: pageview gravado em DUPLICIDADE
+
+Descoberto ao investigar o funil: **todo `pageview` entra duas vezes**, com milissegundos de
+diferença (visto em `eventos_atividade`, ex.: `00:10:52.722` e `00:10:52.761`). **Toda métrica de
+pageview do sistema está inflada em 2×** — inclusive o `pageviews_7d: 7259` do Cliente 360, que na
+prática é ~3.600. Não afeta as análises desta sessão, que usaram **pessoas distintas** e não
+pageviews. **Não consertei** por causa da aula; é a primeira coisa a olhar depois.
+
+#### E o script do reel
+
+Revisado antes da gravação. O erro que não podia ir ao ar: *"parcelado direto com o banco, sem
+juros"*. `Hipotecado` nesta base é o **art. 895 do CPC** — parcelamento com o **juízo**, entrada
+mínima de **25%**, até **30 meses**, parcelas **corrigidas**, e atraso faz **perder as parcelas
+pagas** + multa, com o imóvel voltando a leilão. "A única regra é não perder a data" é o oposto
+disso, e num vídeo de leiloeiro isso é grave.
+
+⚠️ **"Mais de 30 mil imóveis" está no limite:** eram 30.314 quando conferi e **30.119 ao encerrar**.
+Continua verdade, com margem de 0,4%. Se o número cair de 30 mil, o reel perene passa a mentir —
+**vale reconferir antes de subir a peça.**
+
+⚠️ **O único curso cadastrado é "Comece aqui — BidPro Brasil", com 2 vídeos de ambientação.** Não
+existe curso de leilão pago no sistema. Se ele for anunciado na aula, precisa ser criado.
+
+#### O erro de cliente aberto (1) é meu
+
+`vite:preloadError PRESO (recarga bloqueada pelo anti-loop)`, uma ocorrência, 18h59 BRT — no meio
+dos **seis deploys de produção** que fiz na mesma tarde. É o chunk velho do PWA apontando para um
+arquivo que o deploy novo removeu, e o sistema **fez o que devia**: bloqueou o laço de recarga e
+mostrou o aviso. Não é defeito novo; é o preço de publicar muitas vezes com gente na página.
+
 ### 🔒 COMBINADO PARA DEPOIS DA AULA — fechar o `video_url` público de `aulas_admin`
 
 **Acordado com o dono em 01/09; agendado para 03/09 09h BRT** (`trig_01XQrLcXLqssNeASvcNNx8Bv`).
@@ -467,7 +567,12 @@ o risco que a espera existe para evitar.
 3. **ANTES DE 03/09 — pausar a campanha da aula**, que não tem data de fim.
 4. Herdadas de 30/08: trocar `ADV+` por `LAL1%` · carga retroativa do Meta · **tirar o cliente
    OAuth da conta pessoal do dono (depois de 02/09)** · `ADMIN_EMAIL` na Vercel.
-5. **SEM PRESSA — gerar ~4 documentais de lotes DIFERENTES entre si** (um com matrícula e edital
+5. **MANHÃ DE 01/09 — os 27 WhatsApps** em `/admin/whatsapp` (6 pagantes + 21 que abriram o
+   e-mail). Pelo COMPUTADOR, com WhatsApp Web logado: no celular são 27 trocas de app. A etapa
+   `prova` do e-mail dispara às 9h para esses mesmos 21 — os dois toques no mesmo dia são de
+   propósito.
+6. **ANTES DE SUBIR O REEL — reconferir "mais de 30 mil imóveis"** (30.119 ao encerrar 31/08).
+7. **SEM PRESSA — gerar ~4 documentais de lotes DIFERENTES entre si** (um com matrícula e edital
    completos, um sem edital, um com processo em aberto). É o que fecha a amostra de 5 e permite
    ao `documental_distribuicao()` dizer se a régua nova discrimina. Gerar 4 do mesmo perfil
    enche a amostra sem responder a pergunta.
