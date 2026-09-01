@@ -25,6 +25,7 @@
     "testar:pagamento": "node scripts/testes/hipotecado-e-parcelavel-nao-a-vista.mjs",
     "testar:reforco": "node scripts/testes/reforco-so-fala-com-quem-nao-respondeu.mjs",
     "testar:destino": "node scripts/testes/quem-pagou-para-ver-a-aula-nao-cai-na-home.mjs",
+    "testar:pageview": "node scripts/testes/pageview-nao-conta-a-mesma-navegacao-duas-vezes.mjs",
     "precisa-navegador": "node scripts/testes/precisa-navegador.mjs"
   },
   "dependencies": {

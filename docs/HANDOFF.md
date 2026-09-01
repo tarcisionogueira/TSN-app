@@ -496,13 +496,41 @@ deixou de convidar para *ver uma ferramenta* e passou a prometer *uma decisão* 
 pessoal (*"você se cadastrou e ainda não rodou nenhuma análise"*) **só sai para quem de fato não
 rodou**, porque as outras três provariam o contrário do que a frase pretende.
 
-#### 🐛 ACHADO NÃO CONSERTADO: pageview gravado em DUPLICIDADE
+#### 🐛 PAGEVIEW EM DUPLICIDADE — achado, MEDIDO (que desmentiu meu diagnóstico) e consertado
 
-Descoberto ao investigar o funil: **todo `pageview` entra duas vezes**, com milissegundos de
-diferença (visto em `eventos_atividade`, ex.: `00:10:52.722` e `00:10:52.761`). **Toda métrica de
-pageview do sistema está inflada em 2×** — inclusive o `pageviews_7d: 7259` do Cliente 360, que na
-prática é ~3.600. Não afeta as análises desta sessão, que usaram **pessoas distintas** e não
-pageviews. **Não consertei** por causa da aula; é a primeira coisa a olhar depois.
+Descoberto ao investigar o funil, ao ver o mesmo `pageview` duas vezes com dezenas de
+milissegundos de diferença. **Eu escrevi aqui que "todo pageview entra duas vezes" e que tudo
+estava inflado em 2×. Medir desmentiu.**
+
+| rota | pageviews (3 dias) | duplicata |
+|---|---|---|
+| `/` | 576 | **47%** |
+| `/live/leilao-ao-vivo` | 316 | **47%** |
+| `/login` | 62 | 31% |
+| `/buscar` | 75 | 17% |
+| `/leiloes`, `/leiloes/buscar`, `/admin`, `/leiloes/<uf>/<cidade>`… | 1.400+ | **0%** |
+
+**Dobra só nas rotas com `#` do app; as páginas de SEO não dobram** — elas são documento novo a
+cada acesso e passam só pelo `pv()` inicial. No total: **494 duplicatas em 4.793 pageviews ≈ 10%
+de inflação global**, e ~2× nas rotas do app. Ou seja: o `pageviews_7d: 7259` do Cliente 360 é
+cerca de **6.500**, não os ~3.600 que eu havia escrito. Generalizei de uma amostra de uma página
+para o sistema inteiro — a forma #10, cometida por mim no próprio relatório.
+
+**A causa:** `HashRouter`. Navegar chama `history.pushState` (que o tracker patcheia) **e** muda o
+hash, o que faz o navegador emitir `hashchange` (que o tracker escuta). Uma navegação, dois
+registros.
+
+**O conserto não podia ser remover um dos caminhos:** `pushState` sozinho perde o clique num
+`<a href="#/x">` (muda o hash sem passar por pushState) e o contrário perde navegação que não mexe
+no hash. Os dois ficam; o que passou a existir é uma trava de **1000 ms para a mesma rota** —
+janela escolhida pela medição (a mediana entre a duplicata e o original é **29 ms**, e os 150
+pares entre 1 s e 5 s são re-navegação de gente, que continua contando).
+
+`npm run testar:pageview` trava 13 casos, metade deles justamente contra o risco oposto: uma
+trava rígida demais viraria subcontagem, que é pior porque **some** em vez de inflar.
+
+**A deriva histórica fica no banco como está.** Reescrever evento passado para arrumar gráfico é
+pior que ter o gráfico torto e sabido — a partir de 01/09 o número é limpo, antes disso não.
 
 #### E o script do reel
 

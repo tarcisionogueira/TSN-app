@@ -146,7 +146,37 @@ export function instalarTracker() {
   window.__trackerOn = true;
 
   // Pageview no load + em toda navegação SPA (patch de pushState/replaceState + popstate/hashchange).
-  const pv = () => registrarEvento('pageview', { alvo: rotaAtual() });
+  //
+  // ⚠️ OS DOIS CAMINHOS DISPARAM NA MESMA NAVEGAÇÃO — e é isso que dobrava o número (01/09).
+  // Este app usa `HashRouter`: navegar chama `history.pushState` (patch abaixo → pv) E muda o
+  // hash, o que faz o navegador emitir `hashchange` (listener abaixo → pv de novo). Dois
+  // registros para uma navegação só, com dezenas de milissegundos entre eles.
+  //
+  // MEDIDO em 3 dias antes de consertar, e o número desmentiu a primeira suspeita: NÃO era
+  // "todo pageview dobrado". Dobra nas rotas com `#` do app — `/` e `/live/<slug>` a 47%,
+  // `/login` a 31% — e NÃO dobra nas páginas de SEO (`/leiloes/*`, 0%), que são documento
+  // novo a cada acesso e por isso passam só pelo `pv()` inicial. No total: 494 duplicatas em
+  // 4.793 pageviews, ~10% de inflação global e ~2× nas rotas do app.
+  //
+  // NÃO DÁ PARA SÓ REMOVER UM DOS CAMINHOS: `pushState` sem `hashchange` perde o clique num
+  // `<a href="#/x">` (que muda o hash sem passar por pushState), e o contrário perde navegação
+  // que não mexe no hash. Os dois precisam continuar; o que não pode é contar duas vezes.
+  //
+  // A JANELA VEM DA MEDIÇÃO: a mediana entre a duplicata e o original é de 29 ms. 1000 ms é
+  // folgado para a duplicata e curto para a navegação real — os 150 pares entre 1 s e 5 s do
+  // mesmo período são re-navegação de gente, e continuam sendo contados.
+  //
+  // Só o REGISTRO é descartado. A deriva histórica (anterior a 01/09) fica no banco como está:
+  // reescrever evento passado para "arrumar" gráfico é pior que ter o gráfico torto e sabido.
+  const JANELA_PV_MS = 1000;
+  let ultimaPagina = { rota: null, em: 0 };
+  const pv = () => {
+    const rota = rotaAtual();
+    const agora = Date.now();
+    if (rota === ultimaPagina.rota && agora - ultimaPagina.em < JANELA_PV_MS) return;
+    ultimaPagina = { rota, em: agora };
+    registrarEvento('pageview', { alvo: rota });
+  };
   pv();
   try {
     const _ps = history.pushState; history.pushState = function (...a) { const r = _ps.apply(this, a); pv(); return r; };
