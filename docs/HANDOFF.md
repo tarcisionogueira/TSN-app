@@ -100,8 +100,33 @@ Windsor; as duas contas já são profissionais — o item 1 do caminho crítico 
 > invadido por senha. **Só ligar DEPOIS de ter o segundo método na conta do dono** — senão
 > tranca os dois juntos.
 >
-> **✅ 01/09, mais tarde: o dono REMOVEU TODAS AS PERMISSÕES do Felipe** (a remoção da pessoa
-> em si seguiu bloqueada). Isso rebaixa o item de crítico para residual — o que fazia dele o
+> **✅ 01/09 — FELIPE SCARAFIZ REMOVIDO. Item fechado.** E a hipótese se confirmou: a Meta
+> bloqueia a remoção de quem ainda tem ativos atribuídos. Tirar as permissões primeiro foi o
+> que destravou — **essa é a ordem certa**, e é o que estava faltando nas duas tentativas
+> anteriores, não a chave USB. Saem com ele os dois alertas que eram a mesma pessoa
+> (`1 usuário inativo` e `e-mail público`).
+>
+> ⚠️ **O que NÃO sai com a remoção: o papel de `developer`.** Ele vive em
+> `developers.facebook.com` → app → Funções, não no Gerenciador de Negócios. **Conferir app
+> por app antes de criar o app do ManyChat**, que nasce nessa mesma superfície. Único resíduo
+> deste item.
+>
+> **✅ AS 4 CONTAS DE ANÚNCIOS INATIVAS PODEM SER FECHADAS — medido, não suposto.**
+> `casas em condominio popular` e `imoveis alto padrão` estão no conector Windsor e têm **ZERO
+> linhas em 2 anos**; `reimob 1` e `reimob 2` nem estão conectadas. O aviso anterior ("cuidado,
+> duas alimentam o Windsor") era prudente e virou desnecessário: **não há o que exportar.**
+>
+> ⚠️ **O vazio foi validado com CONTROLE**, e é por isso que dá para confiar nele: a MESMA
+> consulta, nas mesmas colunas e período, trouxe 203 linhas de `CA - Tacísio Nogueira Leilões`
+> e `Tarcisio Araujo`. Sem esse controle, "zero linhas" seria indistinguível de consulta
+> quebrada — a pergunta de revisão de 10/08 aplicada a uma decisão de fechar conta.
+>
+> **Única checagem antes de fechar:** público personalizado pertence à CONTA DE ANÚNCIOS e vai
+> junto (pixel pertence ao portfólio e sobrevive). Se alguma tiver lista de retargeting em uso,
+> compartilhar com a `CA - Tacísio Nogueira Leilões` antes.
+>
+> _(histórico: a remoção da pessoa ficou bloqueada em duas tentativas; o dono tirou todas as
+> permissões primeiro e aí ela passou.)_ Isso rebaixa o item de crítico para residual — o que fazia dele o
 > mais urgente era `finance` + `full_control` numa caixa de Hotmail abandonada, e isso saiu.
 >
 > ⚠️ **MAS "tirei as permissões" precisa ser MEDIDO, não suposto — e há 3 lugares que a tela
