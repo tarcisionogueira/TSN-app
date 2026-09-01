@@ -10,7 +10,7 @@
  * anúncios. Então a mecânica é ASSISTIDA de propósito: a máquina escolhe a ordem, escreve o
  * texto e guarda a prova; o envio é humano.
  *
- * O QUE ELE ENTREGA, E É O QUE FALTAVA: ordem (pagante → quem abriu o e-mail → o resto),
+ * O QUE ELE ENTREGA, E É O QUE FALTAVA: ordem (cliente → parceiro → quem abriu o e-mail),
  * texto já personalizado com nome e cidade, e o registro de quem já foi — que é o que permite
  * parar aos 12 e retomar sem duplicar. Mensagem repetida no WhatsApp custa mais caro que
  * mensagem nenhuma.
@@ -55,92 +55,117 @@ export function quandoPorExtenso(dataHora, agora = Date.now()) {
 }
 
 /**
- * AS MENSAGENS. Duas, e não uma — porque a mesma frase não serve para quem paga e para quem
- * nunca usou. Mandar "venha conhecer" para um assinante do Investidor Pro queima a única
- * conversa que se vai ter com ele na semana.
+ * AS MENSAGENS, UMA POR PÚBLICO. E o público vem do BANCO, não de uma lista aqui.
+ * ═══════════════════════════════════════════════════════════════════════════════════════
+ * ⚠️ TRÊS DEFEITOS EMPILHADOS FORAM CONSERTADOS AQUI EM 01/09, e nenhum dava erro:
  *
- * A LINHA QUE FAZ A MENSAGEM FUNCIONAR É A QUE PRECISA SER VERDADE. "Você se cadastrou e ainda
- * não rodou nenhuma análise" é o que prova que não é disparo em massa — e medido em 01/09, vale
- * para 73 das 76 pessoas não-pagantes da fila. Para as OUTRAS TRÊS ela seria falsa, e uma frase
- * falsa sobre a conta da própria pessoa prova exatamente o contrário do que pretende. Por isso
- * a fila devolve `nunca_analisou` e o texto se adapta em vez de generalizar.
+ *  1. **O assessorado recebeu que era "assinante do Investidor Pro".** A mensagem de pagante
+ *     tinha o nome do plano CHUMBADO no texto, e "pagante" é `top2` OU `assessorado` OU
+ *     `clube`. Um booleano não carrega QUAL.
  *
- * SEM PREÇO E SEM OFERTA, de propósito: o convite serve para levar à aula, e é a AULA que vende.
- * Preço no convite transforma conversa em anúncio e derruba a resposta.
+ *  2. **"Antes de abrir para o resto"** — uma assinante respondeu perguntando *"Quem é o
+ *     resto?"*. A frase não tinha referente e precisava de alguém embaixo para elogiar quem
+ *     lia. Trocada pelo fato: *"quis te chamar pessoalmente"* é o que de fato acontece.
  *
- * O PEDIDO NO MEIO ("me diga a cidade e a faixa") não é enfeite: quem responde uma pergunta já
- * entrou na conversa, o dono chega na aula com casos reais para analisar, e a resposta TRIA —
- * quem escreve "R$ 300 mil em Curitiba" é conversa de assessoria, não de plano mensal.
+ *  3. **E o que ninguém tinha visto: só existiam DOIS textos, para NOVE roles.** `consultor`,
+ *     `analista` e `advogado` não são excluídos da fila (só `admin` é) e recebiam a mensagem
+ *     de quem se cadastrou e nunca rodou uma análise. Para um Advogado Parceiro isso não é
+ *     impreciso — é errado sobre a relação que ele tem com a empresa, e a mensagem inteira
+ *     existe para provar o contrário. `top1` caía no mesmo lugar.
+ *
+ * ─── POR QUE O PÚBLICO NÃO É UMA LISTA NESTE ARQUIVO ─────────────────────────────────
+ * Porque já foi, e a lista apodreceu sem ninguém perceber: `whatsapp_fila_live` classificava
+ * como pagante `top2_anual`, `assessorado_anual` e `clube_anual` — **três valores que o CHECK
+ * de `perfis.role` não admite e que o banco recusaria no insert**. Três testes que liam como
+ * cobertura e não cobriam nada. Agora `planos_config.publico` e `.tratamento` são a fonte:
+ * plano novo entra classificado, e plano SEM classificação cai no neutro explicitamente, em
+ * vez de ser agrupado no palpite mais próximo.
+ *
+ * ─── A REGRA QUE VALE PARA OS QUATRO TEXTOS ──────────────────────────────────────────
+ * **Toda frase que afirma algo sobre a pessoa tem de ser verdade, e some quando não for.**
+ * Vale para o plano (`tratamento`), para a relação (`publico`) e para o histórico
+ * (`nuncaAnalisou`). Perder a linha pessoal custa menos do que afirmar errado — porque é
+ * justamente essa linha que prova que a mensagem não é disparo em massa, e errada ela prova
+ * o contrário com mais força do que se não existisse.
+ *
+ * SEM PREÇO E SEM OFERTA, de propósito: o convite leva à aula, e é a AULA que vende. Preço no
+ * convite transforma conversa em anúncio e derruba a resposta.
+ *
+ * O PEDIDO NO MEIO não é enfeite: quem responde uma pergunta já entrou na conversa, o dono
+ * chega na aula com casos reais, e a resposta TRIA — "R$ 300 mil em Curitiba" é conversa de
+ * assessoria, não de plano mensal.
  *
  * O link fica sozinho na última linha para o WhatsApp montar o cartão de prévia (`/aula/<slug>`
  * é servida por `api/og-share` com título, data e capa).
  */
-/**
- * ⚠️ "ANTES DE ABRIR PARA O RESTO" SAIU — 01/09, feedback de uma assinante do Investidor Pro.
- * Ela respondeu ao convite com três palavras: **"Quem é o resto?"**
- *
- * A frase existia para provar prioridade, e provou outra coisa. Dois defeitos, e o segundo é
- * o grave: (a) "o resto" não tem referente — quem lê não sabe se é a base, o público, ou ela
- * própria numa segunda leva; (b) ela **divide o mundo em dois e nomeia só um dos lados**, o
- * que num assunto de patrimônio e renda soa como clube com porta, não como atendimento. E o
- * pior: para provar deferência, a frase precisou de alguém para diminuir.
- *
- * A correção NÃO foi abrandar a exclusividade — foi trocá-la pelo fato. "Quis te chamar
- * pessoalmente" é literalmente o que está acontecendo (o dono manda um a um, com o texto na
- * tela dele), prova a mesma coisa que "antes do resto" pretendia provar, e não precisa de
- * ninguém embaixo para funcionar. **Uma frase que só é elogiosa por comparação está pedindo
- * a pergunta que a Neuma fez.**
- *
- * O NOME DO PLANO É DADO, NÃO LITERAL NO TEXTO — correção anterior, de mais cedo em 01/09.
- * A mensagem de pagante dizia "Você é assinante do Investidor Pro" para TODO mundo com
- * prioridade 1 — e prioridade 1 inclui `top2`, `assessorado` e `clube`. O Matheus, que é
- * ASSESSORADO, recebeu que era assinante de um plano que não tem. Um booleano não carrega
- * QUAL plano, e a RPC `whatsapp_fila_live` já devolvia `role` o tempo todo; o JS é que não lia.
- *
- * `assessorado` não é assinatura: é cliente de assessoria. Por isso a linha dele não fala em
- * "assinante", e sim no que ele de fato é.
- *
- * Agora são SINTAGMAS e não frases inteiras, para caberem dentro de "Como você é ___". Frase
- * fechada não compõe: era o que forçava o "então" e a oração seguinte, de onde "o resto" saiu.
- */
-const LINHA_PLANO = {
-  top2:        'assinante do Investidor Pro',
-  clube:       'membro do Leilão Club',
-  assessorado: 'cliente da assessoria',
-};
 
-export function montarMensagem({ nome, cidade, uf, quando, link, pagante, nuncaAnalisou, role }) {
+// O miolo é o mesmo nos quatro textos, e é isso que a pessoa precisa saber para decidir se
+// vale a hora dela. Ficar repetido nas quatro cópias garantiria que uma delas envelhecesse.
+const O_QUE_ACONTECE = 'eu vou analisar imóveis de leilão ao vivo — leitura da matrícula e do '
+  + 'edital na tela, risco e margem, até a conta final';
+
+export function montarMensagem({ nome, cidade, uf, quando, link, publico, tratamento, nuncaAnalisou }) {
   const primeiro = String(nome || '').trim().split(/\s+/)[0] || '';
   const ola = primeiro ? `Oi, ${primeiro}!` : 'Oi!';
   const onde = cidade ? `${cidade}${uf ? `/${uf}` : ''}` : null;
   const Q = quando.charAt(0).toUpperCase() + quando.slice(1);
+  // `tratamento` vazio com `publico` preenchido é possível: plano novo cadastrado sem a frase.
+  // Aí a abertura perde o "Como você é ___" e mantém o resto — nunca "Como você é undefined".
+  const trato = String(tratamento || '').trim();
+  const como = trato ? `Como você é ${trato}, ` : '';
+  const linhas = (...ls) => ls.filter((l) => l !== null).join('\n');
 
-  if (pagante) {
-    // Sem `role` reconhecido, o convite continua sendo pessoal — mas NÃO afirma plano nenhum.
-    // Perder a linha do plano custa menos do que dizer ao cliente algo errado sobre a conta
-    // dele, que é o oposto do que a frase pretende provar.
-    const linha = LINHA_PLANO[role];
-    const abre = linha
-      ? `Como você é ${linha}, quis te chamar pessoalmente:`
-      : 'Quis te chamar pessoalmente:';
-    return [
+  // ─── CLIENTE — quem paga. Investidor Pro, Assessoria, Leilão Club ───────────────────
+  if (publico === 'cliente') {
+    return linhas(
       `${ola} Aqui é o Tarcísio.`,
       '',
-      `${abre} ${quando}, eu vou analisar imóveis de leilão ao vivo — da leitura da matrícula até a conta final, com o risco e a margem de cada caso.`,
+      `${como}${como ? 'q' : 'Q'}uis te chamar pessoalmente: ${quando}, ${O_QUE_ACONTECE}.`,
       '',
       'Se quiser, me diga a cidade e a faixa que você tem em vista. Levo o *seu* caso para a aula e faço a análise com você.',
       '',
       link,
-    ].join('\n');
+    );
   }
 
-  // Só entra quando é verdade. Sem ela, a mensagem abre direto no convite — perde a linha
-  // pessoal, mas não afirma nada errado sobre a conta de quem está lendo.
-  const abertura = nuncaAnalisou
+  // ─── PARCEIRO — consultor e advogado. Ele não compra: ele TRAZ e ATENDE quem compra ──
+  // O convite dele é de PAR, não de lead. Mandar "venha conhecer a plataforma" para um
+  // advogado parceiro é dizer que não se sabe quem ele é — e ele sabe que sabemos.
+  if (publico === 'parceiro') {
+    return linhas(
+      `${ola} Aqui é o Tarcísio.`,
+      '',
+      `${como}${como ? 'q' : 'Q'}ueria te chamar: ${quando}, ${O_QUE_ACONTECE}.`,
+      '',
+      'Vale pelos dois lados: dá para acompanhar como eu monto a análise, e o convite serve para quem você atende e ainda está começando a olhar leilão.',
+      '',
+      link,
+    );
+  }
+
+  // ─── EQUIPE — interno. Já conhece o roteiro; o que ele pode fazer é trazer caso ──────
+  if (publico === 'equipe') {
+    return linhas(
+      `${ola} Aqui é o Tarcísio.`,
+      '',
+      `${como || 'Você '}já conhece o roteiro, mas o aviso vale: ${quando}, ${O_QUE_ACONTECE}.`,
+      '',
+      'Se algum cliente seu tem um caso que valha mostrar na tela, me manda que eu levo para a aula.',
+      '',
+      link,
+    );
+  }
+
+  // ─── GRATUITO e NEUTRO ───────────────────────────────────────────────────────────────
+  // A linha do histórico só entra quando é verdade, e só para quem é do plano gratuito:
+  // afirmar "você criou a conta e não rodou análise" a alguém de público desconhecido seria
+  // repetir, do outro lado, o erro que criou esta função.
+  const contaNova = publico === 'gratuito' && nuncaAnalisou;
+  const abertura = contaNova
     ? `Vi que você criou a sua conta e ainda não chegou a rodar uma análise. ${Q}, eu faço isso ao vivo:`
     : `${Q}, eu vou abrir a plataforma ao vivo:`;
 
-  return [
+  return linhas(
     `${ola} Aqui é o Tarcísio, da BidPro Brasil.`,
     '',
     // "onde é prejuízo" virou "quando o melhor negócio é não dar o lance": mesma honestidade,
@@ -150,10 +175,10 @@ export function montarMensagem({ nome, cidade, uf, quando, link, pagante, nuncaA
     '',
     onde
       ? `Se quiser, me diga se ainda procura em ${onde} e a faixa que você tem em vista, que eu levo o seu caso e analiso na hora.`
-      : `Se quiser, me diga a sua cidade e a faixa que você tem em vista, que eu levo o seu caso e analiso na hora.`,
+      : 'Se quiser, me diga a sua cidade e a faixa que você tem em vista, que eu levo o seu caso e analiso na hora.',
     '',
     `A participação é gratuita. Sua vaga: ${link}`,
-  ].join('\n');
+  );
 }
 
 export default async function handler(req, res) {
@@ -206,15 +231,19 @@ export default async function handler(req, res) {
   const quando = quandoPorExtenso(evento.data_hora);
   const fila = (Array.isArray(bruto) ? bruto : []).map((p) => {
     const link = `${BASE}/aula/${evento.slug}?utm_source=whatsapp&utm_medium=direct&utm_campaign=aula-${edicao}&utm_content=fila-admin`;
+    // ⚠️ `publico` e `tratamento` vêm da RPC (de `planos_config`), NÃO são derivados aqui de
+    // `prioridade`. Derivar reconstruiria a lista chumbada que apodreceu — e foi exatamente
+    // `pagante: p.prioridade === 1` que fez o assessorado ser chamado de assinante do
+    // Investidor Pro: a prioridade sabe QUE ele paga, e não O QUE ele assinou.
     const texto = montarMensagem({
       nome: p.nome, cidade: p.cidade, uf: p.uf, quando, link,
-      pagante: p.prioridade === 1,
+      publico: p.publico,
+      tratamento: p.tratamento,
       nuncaAnalisou: p.nunca_analisou === true,
-      role: p.role,
     });
     return {
       user_id: p.user_id, nome: p.nome, cidade: p.cidade, uf: p.uf,
-      motivo: p.motivo, prioridade: p.prioridade,
+      motivo: p.motivo, prioridade: p.prioridade, publico: p.publico ?? null,
       wa: `https://wa.me/${p.telefone_wa}?text=${encodeURIComponent(texto)}`,
       texto,
     };

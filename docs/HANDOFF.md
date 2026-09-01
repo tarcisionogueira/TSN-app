@@ -1530,6 +1530,59 @@ do DONO — IP residencial dele, com o consentimento dele. Hoje cobre SOLEON, GE
 VLANCE, VENDASGOV, HASTA, radar DJEN e triagem. **A alavanca real é migrar MAIS fontes para
 lá**, não recrutar o IP de cliente. Foi o que 30/08 provou funcionar com as três primeiras.
 
+### 📣 01/09 — QUATRO DEFEITOS NO MESMO TEXTO, NUM DIA. E o quarto atingiu 64 de 66 pessoas.
+
+O dono pediu: *"revise todas as respostas, elas não iniciam automaticamente para cada tipo de
+usuário com a sua classificação do role"*. A revisão achou mais do que o pedido.
+
+| # | Defeito | Quem atingiu | Como apareceu |
+|---|---|---|---|
+| 1 | Nome do plano chumbado no texto | 2 assessorados | o cliente avisou |
+| 2 | "antes de abrir para o resto" | todos os pagantes | a cliente perguntou *"Quem é o resto?"* |
+| 3 | Dois textos para NOVE roles | consultor · analista · advogado · top1 | **ninguém** — nenhum deles está na base hoje |
+| 4 | `nunca_analisou` nunca devolvido pela RPC | **64 de 66 da fila** | **ninguém** |
+
+**O nº 4 é o mais instrutivo do dia.** `api/admin-whatsapp-fila.js` monta a mensagem com
+`nuncaAnalisou: p.nunca_analisou === true`. A RPC **nunca devolveu essa coluna**.
+`undefined === true` é `false` — sem erro, sem 400, sem aviso: só o ramo genérico, sempre. A
+linha pessoal do explorador (*"Vi que você criou a sua conta e ainda não chegou a rodar uma
+análise"*) — que o próprio arquivo documenta como **a linha que faz a mensagem funcionar** —
+nunca apareceu em mensagem nenhuma. Medido na fila viva: **64 das 66 pessoas** tinham
+`nunca_analisou = true`.
+
+> ⚠️ **Nenhuma trava pegaria, e vale entender por quê.** `verificar:schema` confere TABELAS e
+> COLUNAS DE DATA em `.from('x')`. Isto é uma **chave lida do retorno de uma RPC** — contrato
+> entre função e cliente que nenhuma trava inspeciona. Em SQL, ler coluna inexistente é erro;
+> em JS é `undefined`. **O acoplamento atravessa a fronteira exatamente onde o erro deixa de
+> existir**, e do outro lado o valor falsy escolhe o ramo plausível.
+
+**O nº 3 tem um detalhe que merece registro:** `whatsapp_fila_live` classificava como pagante
+`top2_anual`, `assessorado_anual` e `clube_anual` — **três valores que o CHECK de `perfis.role`
+não admite** (`admin · explorador · top1 · top2 · assessorado · clube · consultor · analista ·
+advogado`). O banco recusaria o insert. Três testes que **liam como cobertura e não cobriam
+nada**. Foi assim que a lista apodreceu: lista chumbada não é conferida contra coisa nenhuma.
+
+**A correção estrutural: o público virou DADO.** `planos_config` ganhou `publico`
+(`cliente · parceiro · equipe · gratuito`, ou NULO) e `tratamento` (*"assinante do Investidor
+Pro"*). A fila lê de lá por `left join` — plano novo entra classificado; role sem plano (hoje
+`top1`) cai no **neutro explícito** em vez de ser agrupado no palpite mais próximo; e `left`
+e não `join` porque `join` o faria **sumir da fila**, que é a falha nº 1 desta base.
+
+**Agora são cinco textos, um por público:** cliente (chamado pessoalmente, com o nome do plano
+dele) · parceiro (tratado como par: *"o convite serve para quem você atende"*, nunca *"venha
+conhecer a plataforma"*) · equipe · gratuito (com a linha pessoal, que agora **funciona**) ·
+neutro. E a prioridade da fila mudou junto: **parceiro subiu para a faixa 2** — ele não compra,
+mas traz quem compra, e estava no fundo junto de quem nunca abriu um e-mail.
+
+**Controle rodado antes de trocar a regra:** a classificação nova reproduz a antiga em
+**100% da base real** (0 divergências em 96 perfis) — ela só passa a cobrir o que a antiga não
+cobria. `testar:whatsapp` foi de 24 para **97 asserções**, cobrindo os 8 roles reais.
+
+⚠️ **E um erro meu no próprio teste, corrigido antes de commitar** (o segundo do dia): a
+asserção *"diz o que vai acontecer"* listava três frases exatas e reprovou o texto do
+explorador, que diz a mesma coisa com outras palavras. A régua media a **redação** e reportava
+com o nome de **conteúdo** — forma nº 10, de novo dentro da verificação.
+
 ### ✉️ 01/09 — "QUEM É O RESTO?" — o segundo defeito do convite, e este veio pela boca da cliente
 
 Uma assinante do **Investidor Pro** respondeu ao convite de WhatsApp com três palavras
