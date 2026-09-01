@@ -18,6 +18,26 @@
 > **Verificação de Negócio** (que é a pendência #9 do HANDOFF, aberta desde 26/08) e o App
 > Review. Nada de código destrava isso.
 >
+> ### 📐 O CAMINHO COMPLETO ESTÁ PUBLICADO
+> **https://claude.ai/code/artifact/50654eca-3504-4c1c-b03e-8025dab1d3b7** — as três janelas da
+> Meta, a escada alugado→próprio, as 5 fases com portão de saída medível, como a IA aprende com
+> as respostas do dono, e as regras que protegem a conta.
+>
+> **Medido em 01/09, e fecha a pendência #3 do HANDOFF (aberta desde 26/08):**
+> `@tarcisionogueiraleiloes` **9.730 seguidores · 632 posts** · `@bidprobrasil` **2.938 · 53**.
+>
+> ⚠️ **A leitura de COMENTÁRIOS está bloqueada por permissão** no conector Windsor
+> (*"Application does not have permission for this action. Reconnect it as an Instagram
+> Professional account"*). Isso importa mais do que parece: DM antiga **não é exportável**, mas
+> comentário **é** — reconectar a conta pode devolver um corpus histórico de 632 posts de
+> respostas escritas pelo próprio dono. É a diferença entre partir do zero e partir de centenas
+> de exemplos.
+>
+> ⚠️ **Private Reply é a ÚNICA forma sancionada de mandar a primeira DM** para quem não
+> escreveu: **7 dias a contar do comentário** (não de quando o webhook viu) e **UMA por
+> comentário, para sempre**. Um "te chamei no direct" queima o tiro único — a private reply tem
+> que carregar a resposta E o pedido.
+
 > ### ⚠️ DUAS CORREÇÕES DE FATO NESTA SPEC (conferidas na documentação, não de memória)
 >
 > **(a) O §2 conhece só UM dos dois caminhos.** A lista de permissões dele
