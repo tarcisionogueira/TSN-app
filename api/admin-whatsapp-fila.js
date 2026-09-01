@@ -40,13 +40,17 @@ const diaNoFuso = (d) => new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 
  * lembrete documenta: numa aula às 19h, "faltam 20 horas" cai às 23h do dia anterior, e
  * "amanhã" ali está certo, mas às 6h da manhã do próprio dia estaria errado.
  */
-function quandoPorExtenso(dataHora, agora = Date.now()) {
+export function quandoPorExtenso(dataHora, agora = Date.now()) {
   const alvo = new Date(dataHora);
   const dias = Math.round((Date.parse(`${diaNoFuso(alvo)}T00:00:00Z`) - Date.parse(`${diaNoFuso(new Date(agora))}T00:00:00Z`)) / 86400000);
-  const hora = alvo.toLocaleTimeString('pt-BR', { timeZone: TZ, hour: '2-digit', minute: '2-digit' });
+  const hhmm = alvo.toLocaleTimeString('pt-BR', { timeZone: TZ, hour: '2-digit', minute: '2-digit' });
+  // "19:00" é como se escreve um horário em formulário; "19h" é como se escreve num convite.
+  // O minuto só aparece quando existe — "19h30" é informação, "19h00" é ruído.
+  const [hh, mm] = hhmm.split(':');
+  const hora = mm === '00' ? `${Number(hh)}h` : `${Number(hh)}h${mm}`;
   const semana = alvo.toLocaleDateString('pt-BR', { timeZone: TZ, weekday: 'long' }).replace('-feira', '');
-  if (dias === 0) return `hoje às ${hora}`;
-  if (dias === 1) return `amanhã (${semana}) às ${hora}`;
+  if (dias === 0) return `hoje, às ${hora}`;
+  if (dias === 1) return `amanhã (${semana}), às ${hora}`;
   return `na ${semana}, às ${hora}`;
 }
 
@@ -64,7 +68,7 @@ function quandoPorExtenso(dataHora, agora = Date.now()) {
  * SEM PREÇO E SEM OFERTA, de propósito: o convite serve para levar à aula, e é a AULA que vende.
  * Preço no convite transforma conversa em anúncio e derruba a resposta.
  *
- * O PEDIDO NO MEIO ("me diz a cidade e a faixa") não é enfeite: quem responde uma pergunta já
+ * O PEDIDO NO MEIO ("me diga a cidade e a faixa") não é enfeite: quem responde uma pergunta já
  * entrou na conversa, o dono chega na aula com casos reais para analisar, e a resposta TRIA —
  * quem escreve "R$ 300 mil em Curitiba" é conversa de assessoria, não de plano mensal.
  *
@@ -72,26 +76,37 @@ function quandoPorExtenso(dataHora, agora = Date.now()) {
  * é servida por `api/og-share` com título, data e capa).
  */
 /**
- * O NOME DO PLANO É DADO, NÃO LITERAL NO TEXTO — e essa é a correção de 01/09.
+ * ⚠️ "ANTES DE ABRIR PARA O RESTO" SAIU — 01/09, feedback de uma assinante do Investidor Pro.
+ * Ela respondeu ao convite com três palavras: **"Quem é o resto?"**
  *
- * O que quebrou, em produção, com o dono enviando: a mensagem de pagante dizia "Você é
- * assinante do Investidor Pro" para TODO mundo com prioridade 1 — e prioridade 1 inclui
- * `top2`, `assessorado` e `clube`. O Matheus, que é ASSESSORADO, recebeu que era assinante
- * de um plano que ele não tem.
+ * A frase existia para provar prioridade, e provou outra coisa. Dois defeitos, e o segundo é
+ * o grave: (a) "o resto" não tem referente — quem lê não sabe se é a base, o público, ou ela
+ * própria numa segunda leva; (b) ela **divide o mundo em dois e nomeia só um dos lados**, o
+ * que num assunto de patrimônio e renda soa como clube com porta, não como atendimento. E o
+ * pior: para provar deferência, a frase precisou de alguém para diminuir.
  *
- * É a falha que este próprio arquivo já documenta duas seções acima ("a linha que faz a
- * mensagem funcionar é a que precisa ser VERDADE"), cometida na outra metade da função: lá o
- * cuidado foi todo com o não-pagante (`nunca_analisou`), e o pagante ganhou uma frase fixa.
- * Um booleano não carrega QUAL plano — e a RPC `whatsapp_fila_live` já devolvia `role` o
- * tempo todo; o JS é que não lia.
+ * A correção NÃO foi abrandar a exclusividade — foi trocá-la pelo fato. "Quis te chamar
+ * pessoalmente" é literalmente o que está acontecendo (o dono manda um a um, com o texto na
+ * tela dele), prova a mesma coisa que "antes do resto" pretendia provar, e não precisa de
+ * ninguém embaixo para funcionar. **Uma frase que só é elogiosa por comparação está pedindo
+ * a pergunta que a Neuma fez.**
+ *
+ * O NOME DO PLANO É DADO, NÃO LITERAL NO TEXTO — correção anterior, de mais cedo em 01/09.
+ * A mensagem de pagante dizia "Você é assinante do Investidor Pro" para TODO mundo com
+ * prioridade 1 — e prioridade 1 inclui `top2`, `assessorado` e `clube`. O Matheus, que é
+ * ASSESSORADO, recebeu que era assinante de um plano que não tem. Um booleano não carrega
+ * QUAL plano, e a RPC `whatsapp_fila_live` já devolvia `role` o tempo todo; o JS é que não lia.
  *
  * `assessorado` não é assinatura: é cliente de assessoria. Por isso a linha dele não fala em
  * "assinante", e sim no que ele de fato é.
+ *
+ * Agora são SINTAGMAS e não frases inteiras, para caberem dentro de "Como você é ___". Frase
+ * fechada não compõe: era o que forçava o "então" e a oração seguinte, de onde "o resto" saiu.
  */
 const LINHA_PLANO = {
-  top2:        'Você é assinante do Investidor Pro',
-  clube:       'Você é membro do Leilão Club',
-  assessorado: 'Você é cliente da assessoria',
+  top2:        'assinante do Investidor Pro',
+  clube:       'membro do Leilão Club',
+  assessorado: 'cliente da assessoria',
 };
 
 export function montarMensagem({ nome, cidade, uf, quando, link, pagante, nuncaAnalisou, role }) {
@@ -101,19 +116,19 @@ export function montarMensagem({ nome, cidade, uf, quando, link, pagante, nuncaA
   const Q = quando.charAt(0).toUpperCase() + quando.slice(1);
 
   if (pagante) {
-    // Sem `role` reconhecido, o convite continua sendo de prioridade — mas NÃO afirma plano
-    // nenhum. Perder a linha pessoal custa menos do que dizer ao cliente algo errado sobre a
-    // conta dele, que é o oposto do que a frase pretende provar.
+    // Sem `role` reconhecido, o convite continua sendo pessoal — mas NÃO afirma plano nenhum.
+    // Perder a linha do plano custa menos do que dizer ao cliente algo errado sobre a conta
+    // dele, que é o oposto do que a frase pretende provar.
     const linha = LINHA_PLANO[role];
     const abre = linha
-      ? `${linha}, então quero te chamar antes de abrir para o resto:`
-      : 'Quero te chamar antes de abrir para o resto:';
+      ? `Como você é ${linha}, quis te chamar pessoalmente:`
+      : 'Quis te chamar pessoalmente:';
     return [
       `${ola} Aqui é o Tarcísio.`,
       '',
-      `${abre} ${quando} eu vou analisar imóveis de leilão ao vivo, da matrícula até a conta final.`,
+      `${abre} ${quando}, eu vou analisar imóveis de leilão ao vivo — da leitura da matrícula até a conta final, com o risco e a margem de cada caso.`,
       '',
-      `Me manda a cidade e a faixa de valor que você quer investir que eu levo o *seu* caso para a aula e analiso com você assistindo.`,
+      'Se quiser, me diga a cidade e a faixa que você tem em vista. Levo o *seu* caso para a aula e faço a análise com você.',
       '',
       link,
     ].join('\n');
@@ -122,19 +137,22 @@ export function montarMensagem({ nome, cidade, uf, quando, link, pagante, nuncaA
   // Só entra quando é verdade. Sem ela, a mensagem abre direto no convite — perde a linha
   // pessoal, mas não afirma nada errado sobre a conta de quem está lendo.
   const abertura = nuncaAnalisou
-    ? `Vi que você se cadastrou e ainda não chegou a rodar nenhuma análise. ${Q} eu vou fazer isso ao vivo:`
-    : `${Q} eu vou abrir a plataforma ao vivo:`;
+    ? `Vi que você criou a sua conta e ainda não chegou a rodar uma análise. ${Q}, eu faço isso ao vivo:`
+    : `${Q}, eu vou abrir a plataforma ao vivo:`;
 
   return [
     `${ola} Aqui é o Tarcísio, da BidPro Brasil.`,
     '',
-    `${abertura} pego imóveis de leilão reais, leio a matrícula e o edital na tela e faço a conta até o fim — quanto o imóvel sai de verdade, quanto dá para revender e onde é prejuízo.`,
+    // "onde é prejuízo" virou "quando o melhor negócio é não dar o lance": mesma honestidade,
+    // e a segunda posiciona critério em vez de perda. Quem constrói patrimônio compra a
+    // disciplina de não arrematar tanto quanto a de arrematar.
+    `${abertura} escolho imóveis de leilão reais, leio a matrícula e o edital na tela e levo a conta até o fim — o custo real de arrematação, a margem na revenda e os casos em que o melhor negócio é não dar o lance.`,
     '',
     onde
-      ? `Me diz se você procura em ${onde} mesmo e a faixa que pensa em investir, que eu levo o seu caso e analiso na hora.`
-      : `Me diz a sua cidade e a faixa que você pensa em investir, que eu levo o seu caso e analiso na hora.`,
+      ? `Se quiser, me diga se ainda procura em ${onde} e a faixa que você tem em vista, que eu levo o seu caso e analiso na hora.`
+      : `Se quiser, me diga a sua cidade e a faixa que você tem em vista, que eu levo o seu caso e analiso na hora.`,
     '',
-    `É gratuito. Sua vaga: ${link}`,
+    `A participação é gratuita. Sua vaga: ${link}`,
   ].join('\n');
 }
 

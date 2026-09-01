@@ -1530,6 +1530,47 @@ do DONO — IP residencial dele, com o consentimento dele. Hoje cobre SOLEON, GE
 VLANCE, VENDASGOV, HASTA, radar DJEN e triagem. **A alavanca real é migrar MAIS fontes para
 lá**, não recrutar o IP de cliente. Foi o que 30/08 provou funcionar com as três primeiras.
 
+### ✉️ 01/09 — "QUEM É O RESTO?" — o segundo defeito do convite, e este veio pela boca da cliente
+
+Uma assinante do **Investidor Pro** respondeu ao convite de WhatsApp com três palavras
+escritas por cima do print: **"Quem é o resto?"**. A frase era *"quero te chamar antes de
+abrir para o resto"*.
+
+**Ela existia para provar deferência e provou outra coisa.** Dois defeitos, e o segundo é o
+grave: (a) "o resto" **não tem referente** — quem lê não sabe se é a base, o público ou ela
+própria numa segunda leva; (b) a construção **divide o mundo em dois e nomeia só um dos
+lados**. Para elogiar quem lê, ela precisou de alguém embaixo. Num assunto de patrimônio e
+renda, isso lê como porta de clube, não como atendimento.
+
+**A correção não foi abrandar a exclusividade — foi trocá-la pelo fato.** *"Como você é
+assinante do Investidor Pro, quis te chamar pessoalmente"* é literalmente o que está
+acontecendo (o dono manda um a um, com o texto na tela dele), prova a mesma coisa que "antes
+do resto" pretendia provar, e **não precisa de ninguém embaixo para funcionar**.
+
+> **A regra que fica:** uma frase que só é elogiosa *por comparação* está pedindo a pergunta
+> que a Neuma fez. `npm run testar:whatsapp` agora reprova qualquer agrupamento anônimo de
+> terceiros ("o resto", "os outros", "os demais", "todo mundo", "a galera", "o pessoal", "a
+> massa") em **todas as sete** variações da mensagem — e, no mesmo bloco, exige que a prova de
+> que não é disparo em massa continue de pé, para não trocar um defeito por outro.
+
+Outras correções de tom no mesmo texto: `19:00` → **`19h`** (com o minuto aparecendo só quando
+existe — "19h30"); *"onde é prejuízo"* → **"os casos em que o melhor negócio é não dar o
+lance"** (mesma honestidade, e a segunda posiciona critério em vez de perda); *"Me manda"* →
+*"Se quiser, me diga"*; *"É gratuito"* → *"A participação é gratuita"*.
+
+⚠️ **E um erro meu, dentro do próprio teste, corrigido antes de commitar:** a primeira versão
+da asserção "o horário não sai como 19:00" rodava o regex sobre a mensagem montada a partir de
+`BASE.quando` — uma string escrita **no próprio arquivo de teste**. Ela teria passado mudando
+só o fixture, com a função intacta: o instrumento media o que era mais fácil de coletar e
+reportava com o nome de outra coisa (**forma nº 10**, cometida dentro da verificação). Agora o
+alvo é `quandoPorExtenso()`, com data real, e o par véspera/próprio-dia trava também a conta de
+calendário. **42/42.**
+
+Este é o **segundo** defeito deste mesmo texto no mesmo dia — o primeiro foi o Matheus,
+assessorado, recebendo que era "assinante do Investidor Pro". Os dois têm a mesma raiz: **uma
+frase fixa afirmando algo sobre a pessoa que a lê.** A primeira afirmava um plano; a segunda,
+uma posição na fila.
+
 ### 🎯 PRÓXIMA SESSÃO COMEÇA AQUI — automação de comunicação no Instagram
 
 > **01/09 — A FASE 2 ESTÁ COMPLETA ATÉ O PAINEL. Falta o envio (que depende da Meta).**
