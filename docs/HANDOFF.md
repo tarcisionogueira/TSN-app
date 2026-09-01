@@ -66,9 +66,48 @@ Windsor; as duas contas já são profissionais — o item 1 do caminho crítico 
 **Duas coisas dependem SÓ de você, e a segunda é o caminho longo:**
 - Criar `IG_APP_SECRET` e `IG_VERIFY_TOKEN` na Vercel (ver `docs/ENVS_VERCEL.md`). Confira
   com `GET /api/instagram-webhook` → `{ configurado: true }`.
-- **Verificação de Negócio no Meta** (NOGUEIRA EMPREENDIMENTOS) — que é a **pendência #9
+- **Verificação de Negócio no Meta** — ⚠️ **CORRIGIDO EM 01/09: é com a REIMOB, não com a
+  NOGUEIRA.** O portfólio é **Reimob Imobiliária**, a Reimob **tem CNPJ próprio** e o dono
+  **é sócio** (o contrato social já prova o vínculo). O registro de 26/08 mandava verificar
+  com NOGUEIRA EMPREENDIMENTOS "para evitar o descasamento que reprovou o Google" — e isso
+  **criaria** o descasamento em vez de evitá-lo, porque a entidade do portfólio é outra.
+  Não confundir com a **Verificação do ANUNCIANTE** ("quem pagou por este anúncio"), que é
+  processo separado e tem de casar com **quem paga os anúncios** — conferir de quem é a
+  forma de pagamento da conta `702903610061448` antes de submeter aquela. Era a **pendência #9
   desta lista, aberta desde 26/08**, e que agora está no caminho crítico de duas coisas:
-  destrava a remoção do Felipe Scarafiz (#5) **e** é pré-requisito do App Review do bot.
+  é pré-requisito do App Review do bot.
+
+> ### 🔑 A "chave USB" do Felipe NÃO era chave, e não era dele (medido em 01/09, com print)
+> A tela de bloqueio diz **"Tarcisio Araujo · Facebook"**: é a identidade do DONO que está
+> sendo confirmada. **Remover alguém nunca pede o 2FA de quem está sendo removido** — a
+> hipótese de 26/08 ("a Meta pede chave de segurança USB") lia o sintoma do Windows como se
+> fosse exigência da Meta, e mandou procurar um objeto que não existe.
+>
+> O que a Meta pede é uma **passkey** (*"bloqueio de tela, impressão digital ou reconhecimento
+> facial"*). Quem virou isso em "insira a chave na porta USB" foi o **Windows**: sem Windows
+> Hello configurado, ele não tem autenticador local para oferecer e cai no último recurso.
+>
+> **Caminho curto: fazer pelo CELULAR** (a passkey está onde tem digital/Face ID) — Gerenciador
+> de Negócios no navegador do celular → Configurações do Negócio → Usuários → Pessoas → Remover.
+> No PC: cancelar a janela do Windows e procurar "Tentar outra forma"; configurar PIN do Windows
+> Hello; ligar o Bluetooth (é o que faz aparecer "usar meu telefone").
+>
+> **Causa de fundo:** a conta do dono tem **um método de 2FA só**, preso a um aparelho.
+> Cadastrar um app autenticador + guardar códigos de recuperação é o que impede a terceira vez.
+>
+> ⚠️ **Mitigação enquanto o Felipe não sai:** Central de Segurança → **"Exigir autenticação de
+> dois fatores"** para todos do portfólio. Neutraliza o cenário do Hotmail abandonado ser
+> invadido por senha. **Só ligar DEPOIS de ter o segundo método na conta do dono** — senão
+> tranca os dois juntos.
+>
+> **O que o arquivo da Central de Segurança mostrou (01/09):** Felipe Scarafiz
+> (`61581234802963`, `felipe.ribeirao@hotmail.com`) com **`finance` + `full_control` +
+> `developer` + `basic_access`**, inativo há 90+ dias. Os alertas "1 usuário inativo" e
+> "e-mail público" são **a mesma pessoa**. As 4 contas inativas: `casas em condominio popular`
+> (1600582163429909), `imoveis alto padrão` (297385444752245), `reimob 1` (384496232510742),
+> `reimob 2` (2795568987342648) — ⚠️ **as duas primeiras alimentam o conector Windsor**;
+> fechá-las remove o histórico delas do painel. A conta que veicula (`702903610061448`) **não**
+> está na lista de inativas.
   Sem ela, o webhook só fala com as 25 contas de teste. Nada de código destrava isso.
 
 **Correção de fato na spec:** existem DOIS caminhos de integração. O documento só conhecia o
