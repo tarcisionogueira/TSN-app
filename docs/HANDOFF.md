@@ -64,6 +64,29 @@ criativo bom. **CPM e CPC medem o que o anúncio CUSTA, não o que ele COMPRA** 
 Resultado: 1º campo de **y=815 → y=683** no iPhone SE, e o card passou a aparecer na 1ª tela.
 Regra única `ehRotaDeCampanha()` em `src/utils/rotaCampanha.js` serve `Header` e `PwaInstall`.
 
+**Virou teste permanente: `npm run testar:landing-aula`** (`scripts/testes/landing-da-aula.mjs`,
+13/13, celular 390×844). Cobre os três desfechos que se confundem — evento válido → formulário
+na 1ª tela (medido agora: **y=589**); sem evento → "inscrições fechadas" **sem** botão de tentar
+de novo; RPC com erro → "não conseguimos carregar" **com** o botão. Os dois últimos são
+diagnósticos opostos e é a página de campanha que paga a diferença. Também trava o CTA fixo nos
+dois sentidos: some com o formulário à vista, aparece rolando para longe dele.
+
+⚠️ **Duas armadilhas de TESTE que quase reprovaram código são, as duas neste arquivo:**
+
+1. **Ordem das rotas no Playwright.** Ele casa da ÚLTIMA registrada para a primeira, então um
+   catch-all registrado DEPOIS da rota específica vence, devolve `null` para `live_proxima`, e a
+   página faz o certo — tela de inscrições fechadas. Eu cheguei a essa tela num rascunho e quase
+   avisei o dono de que a LP estava fora do ar. O teste agora usa **um handler só, com despacho
+   por URL, e CONTA as interceptações**: se `live_proxima` não aparecer ele sai com código 2 e se
+   declara **inválido**, em vez de tratar "não consegui medir" como "está tudo bem".
+2. **`isVisible()` não é "está na tela".** O regex curto `/Garantir minha vaga/` casava com o
+   botão da chamada final — que existe sempre, lá embaixo — e o Playwright aprovava. O teste
+   reprovava o CTA fixo com o CTA fixo funcionando. Rótulo completo (`· é gratuito`) resolve.
+
+**Conferido do lado do banco, como papel `anon`:** `live_proxima('leilao-ao-vivo')` devolve o
+evento de 02/09 22:00 UTC, `live_inscritos` = 4, `live_plataforma_numeros` responde. A LP está sã
+nos dois lados — o que falta é o conjunto pendente de pausar.
+
 ### 📏 COMO MEDIR A EVOLUÇÃO — `intervencao` + `lp_aula_funil()`
 
 ```sql

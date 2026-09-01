@@ -27,6 +27,7 @@
     "testar:destino": "node scripts/testes/quem-pagou-para-ver-a-aula-nao-cai-na-home.mjs",
     "testar:pageview": "node scripts/testes/pageview-nao-conta-a-mesma-navegacao-duas-vezes.mjs",
     "testar:cidade-titulo": "node scripts/testes/cidade-do-titulo-nao-pode-ser-o-titulo.mjs",
+    "testar:landing-aula": "node scripts/testes/landing-da-aula.mjs",
     "precisa-navegador": "node scripts/testes/precisa-navegador.mjs"
   },
   "dependencies": {
