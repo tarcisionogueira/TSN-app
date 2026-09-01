@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '../utils/supabase';
 import { lerMarketing, metaTrack, openaiTrack } from '../utils/marketing';
@@ -81,6 +81,19 @@ export default function LiveInscricao() {
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState('');
   const [pronto, setPronto] = useState(null);
+  // ── CTA FIXO: por que existe (01/09) ────────────────────────────────────────────────
+  // Medido renderizando a página, não estimado. O botão "Quero participar" fica ABAIXO da
+  // dobra em TODOS os tamanhos testados — iPhone SE 375x667: y=1047 (380px abaixo);
+  // iPhone 14 390x844: y=943; desktop 1280x800: y=964. Tirar o menu do site já subiu tudo
+  // 63px e não resolveu: com quatro campos, o botão não cabe na primeira tela de um
+  // celular pequeno, e comprimir o herói até caber destruiria a promessa que faz a pessoa
+  // querer se inscrever.
+  //
+  // Então a saída não é subir o botão, é ter UM sempre visível. Ele aparece só quando o
+  // formulário está FORA de vista — enquanto o formulário está na tela, dois botões
+  // dividiriam o mesmo clique (a lição do segundo botão verde, 31/08).
+  const formRef = useRef(null);
+  const [formVisivel, setFormVisivel] = useState(true);
 
   useEffect(() => {
     let cancelado = false;
@@ -108,6 +121,37 @@ export default function LiveInscricao() {
   }, [slug]);
 
   const contagem = useContagem(evento?.data_hora);
+
+  // IntersectionObserver e não `scroll`: o listener de rolagem dispara dezenas de vezes por
+  // segundo no celular e é justamente onde a página de campanha não pode gastar. Sem suporte
+  // ao observer (navegador antigo), `formVisivel` fica `true` e o CTA fixo simplesmente não
+  // aparece — a página segue igual ao que era, nunca pior.
+  useEffect(() => {
+    const el = formRef.current;
+    if (!el || typeof IntersectionObserver === 'undefined') return undefined;
+    const obs = new IntersectionObserver(
+      ([e]) => setFormVisivel(e.isIntersecting),
+      // SEM rootMargin, e isso foi medido, não escolhido por gosto. Com uma margem negativa
+      // embaixo existe uma faixa de rolagem em que o card já apareceu MAS ainda não conta
+      // como visível — e aí a barra, que é `position:fixed`, cobre justamente o topo do
+      // formulário para onde ela manda a pessoa ir. `paddingBottom` não resolve: reserva
+      // espaço no FIM da página, não no meio. Com a margem zerada os dois nunca coexistem:
+      // a barra só existe enquanto o card está inteiramente fora da tela — que é onde ela
+      // tem trabalho a fazer, já que abaixo do formulário há ~4,9 telas de página.
+      undefined,
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [evento, pronto]);
+
+  function irParaOForm() {
+    const el = formRef.current;
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    // Foca o primeiro campo depois da rolagem. Sem o foco, quem clica chega até o
+    // formulário e ainda precisa de um segundo toque para começar a escrever.
+    setTimeout(() => { try { el.querySelector('input')?.focus({ preventScroll: true }); } catch { /* nao trava a rolagem */ } }, 420);
+  }
 
   async function inscrever(e) {
     e.preventDefault();
@@ -206,7 +250,10 @@ export default function LiveInscricao() {
     .replace('-feira', '');
 
   const Bloco = ({ v, l }) => (
-    <div style={{ textAlign: 'center', minWidth: 62 }}>
+    // minWidth 54 (era 62): a 375px de largura os quatro blocos com gap 14 somavam 378px
+    // contra 331px úteis, e o contador quebrava em DUAS linhas — "01 10 16" em cima e
+    // "26 SEG" embaixo. Fica feio e, pior, come ~60px de altura logo acima do formulário.
+    <div style={{ textAlign: 'center', minWidth: 54 }}>
       <div style={{ fontSize: 30, fontWeight: 900, color: '#fff', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
         {String(v).padStart(2, '0')}
       </div>
@@ -224,7 +271,11 @@ export default function LiveInscricao() {
   ];
 
   return (
-    <div style={{ minHeight: '100vh', background: NAVY, color: '#EAF0F8', fontFamily: FONTE }}>
+    // `paddingBottom` quando a barra está no ar: ela é `position:fixed` e, sem reservar a
+    // altura dela, tapa o que estiver embaixo — inclusive o título "Garanta a sua vaga" do
+    // próprio formulário, que é justamente para onde ela manda a pessoa ir.
+    <div style={{ minHeight: '100vh', background: NAVY, color: '#EAF0F8', fontFamily: FONTE,
+      paddingBottom: (!pronto && !formVisivel) ? 92 : 0 }}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&display=swap');`}</style>
 
       {/* ── HERO, centralizado ────────────────────────────────────────────────
@@ -250,7 +301,7 @@ export default function LiveInscricao() {
         </div>
 
         {contagem && !contagem.comecou && (
-          <div style={{ display: 'flex', gap: 14, marginTop: 28, padding: '18px 22px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 14, justifyContent: 'center', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 10, marginTop: 24, padding: '16px 12px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 14, justifyContent: 'center', flexWrap: 'wrap' }}>
             <Bloco v={contagem.dias} l="dias" /><Bloco v={contagem.horas} l="horas" />
             <Bloco v={contagem.min} l="min" /><Bloco v={contagem.seg} l="seg" />
           </div>
@@ -263,7 +314,7 @@ export default function LiveInscricao() {
       </div>
 
       {/* ── FORMULÁRIO, centralizado logo abaixo da promessa ─────────────────── */}
-      <div style={{ maxWidth: 470, margin: '32px auto 0', padding: '0 22px' }}>
+      <div ref={formRef} style={{ maxWidth: 470, margin: '32px auto 0', padding: '0 22px' }}>
         <div style={{ background: '#fff', color: '#0f172a', borderRadius: 18, padding: '28px 26px', boxShadow: '0 14px 50px rgba(0,0,0,0.35)' }}>
           {pronto ? (
             <div style={{ textAlign: 'center' }}>
@@ -381,6 +432,26 @@ export default function LiveInscricao() {
           )}
         </div>
       </div>
+
+      {/* ── CTA FIXO ──────────────────────────────────────────────────────────
+          Some quando o formulário está à vista (não competir com ele) e quando a inscrição
+          já aconteceu (`pronto`) — depois de inscrito, o botão que importa é o do grupo do
+          WhatsApp. O rótulo é DIFERENTE do botão do formulário de propósito: assim
+          `lp_aula_funil` consegue separar quem clicou por aqui de quem clicou lá embaixo,
+          em vez de somar os dois num número que não distingue os caminhos. */}
+      {!pronto && !formVisivel && (
+        <div style={{ position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 1000,
+          padding: '12px 16px calc(12px + env(safe-area-inset-bottom))',
+          background: 'rgba(9,20,38,0.94)', backdropFilter: 'blur(8px)',
+          borderTop: '1px solid rgba(255,255,255,0.12)' }}>
+          <button type="button" onClick={irParaOForm}
+            style={{ display: 'block', width: '100%', maxWidth: 440, margin: '0 auto', padding: '15px',
+              background: AZUL, color: '#fff', border: 'none', borderRadius: 12,
+              fontWeight: 800, fontSize: 16, cursor: 'pointer', fontFamily: 'inherit' }}>
+            Garantir minha vaga · é gratuito
+          </button>
+        </div>
+      )}
 
       {/* ── COMO VAI FUNCIONAR ────────────────────────────────────────────────
           A numeração aqui é informação, não enfeite: a aula acontece nesta ordem. */}
