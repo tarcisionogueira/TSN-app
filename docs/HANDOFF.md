@@ -161,6 +161,50 @@ Windsor; as duas contas já são profissionais — o item 1 do caminho crítico 
 > a saída é ADICIONAR o domínio, nunca desligar a proteção. O ManyChat não é afetado (manda
 > link em DM, não em anúncio) e o Click-to-Message não aponta para domínio nenhum.
 >
+> ### 🔐 01/09 — FECHAMENTO DA CENTRAL DE SEGURANÇA (leia este bloco primeiro)
+>
+> **FEITO E CONFIRMADO:** Felipe removido (3 fontes) · Igor Queiroz **removido de Parceiros**
+> (pendência aberta desde 26/08) · domínio confiável `bidprobrasil.com.br` **+ `www.`** ·
+> proteção **personalizada** na conta que veicula, com teto diário **E** total · **2FA
+> obrigatório ligado** (escopo "Todos").
+>
+> **QUEM TEM ACESSO — medido em Usuários → Pessoas, que é a fonte real:**
+> o portfólio tem **2 pessoas, e as duas são o dono**: `@bidprobrasil` (Instagram) e
+> `tarcisioaraujo@reimob.com.br` (Facebook), **ambas com Acesso total / Tudo**.
+> ⚠️ **Duas portas com a mesma chave mestra:** se qualquer uma for comprometida, o invasor
+> herda o portfólio inteiro, finanças incluídas. **A conferir:** a conta do Instagram precisa
+> mesmo de "Tudo", ou existe para publicar/responder e um papel menor bastaria?
+>
+> ✅ **FERNANDA (`mamededois`): a pergunta de menor privilégio JÁ ESTÁ RESPONDIDA, e bem.**
+> Eu tinha perguntado se ela precisava de `finance` + `full_control`. Ela **não tem nenhum dos
+> dois** — não está no portfólio; o acesso dela é no nível da CONTA DE ANÚNCIOS, o mínimo para
+> aprovar anúncio. Nada a mudar. (E o Peer Approval segue valendo: existe um segundo aprovador.)
+>
+> 🛑 **DOIS "NÃO FAÇA", os dois contra o que o painel empurra:**
+> 1. **Não ligar o "Passkey Management"** antes do app autenticador + PIN do Windows Hello —
+>    cimentaria o bloqueio que custou duas tentativas em 01/09.
+> 2. **Não clicar em "Adicionar pessoa" no banner da Nanda Oliveira.** A Meta oferece como
+>    conveniência de gestão, mas **AUMENTA** o alcance dela: hoje ela só tem a Página. A
+>    pendência real é revisar/remover o acesso à Página, não promovê-la ao portfólio.
+>
+> ⚠️ **SOBRA UM ITEM, e ele resolve os DOIS alertas restantes: as 4 contas de anúncios.**
+> "5 contas sem aprovação" menos a configurada = as 4 inativas; "4 contas inativas" = as
+> mesmas. **Três evidências de que o encerramento não completou** (export ainda lista, painel
+> ainda conta 4 e 5, e elas ainda aparecem no seletor de conta). Ler o STATUS em Configurações
+> do Negócio → Contas → Contas de anúncios. Suspeita: cobrança pendente segurando.
+>
+> 📏 **MEDIÇÃO PENDENTE, barata:** o card de 2FA dizia "0 de **3** pessoas" e Pessoas mostra
+> **2**. Com o Igor fora, se virar "0 de 2" ele era o terceiro e a conta fecha; se continuar 3,
+> o terceiro é a Nanda. **Medir, não prever** — a previsão anterior ("5 contas viram 1") foi
+> medida e estava errada.
+>
+> 🧭 **A LIÇÃO QUE FICA, maior que o item:** o arquivo da Central de Segurança **não é
+> inventário de acesso**. Ele lista quem tem sinal de risco reconhecido (inativo, e-mail
+> público). A Fernanda nunca apareceu nele; o Igor nunca apareceu nele; a Nanda nunca apareceu
+> nele. Para saber quem entra, as fontes são **Usuários → Pessoas** E **Usuários → Parceiros**,
+> lidas por inteiro. Tratar o export como "a lista de quem tem acesso" é a forma de falha
+> nº 10: um número certo, com o nome de outra coisa.
+>
 > ### 🟢 01/09 — CENTRAL DE SEGURANÇA, PLACAR CONFIRMADO NO PAINEL ("Ação concluída")
 > ✅ domínio confiável adicionado (`bidprobrasil.com.br` **+ `www.`** — as duas formas, porque
 > os anúncios apontam para o `www.` e não se sabia se o casamento é por host ou domínio-pai;
