@@ -4,7 +4,117 @@
 
 ---
 
-## 🚦 COMECE POR AQUI — estado ao encerrar 31/08 22h BRT (sessão 16)
+## 🚦 COMECE POR AQUI — estado ao encerrar 01/09 (sessão 17)
+
+> `main` = **`3c19797`**, em produção (deploy da Vercel a partir do push). Branch
+> `claude/handoff-bidpro-brasil-checks-m6ekcz` no mesmo commit. Heartbeat às 09:53.
+>
+> **A AULA É AMANHÃ, QUARTA 02/09 às 19h, com 4 inscritos.** Leia o bloco da campanha antes
+> de qualquer outra coisa: há **uma ação pendente no painel do Meta que eu não consegui
+> executar** (o classificador de permissões desta sessão bloqueou a escrita), e ela está
+> custando dinheiro a cada hora.
+>
+> **Placar:** invariantes em alerta **5 → 1** (o que sobra se apaga sozinho na rodada de
+> hoje) · segurança **0/0** · `auditoria_uso` **0 gaps** · regras de negócio 0 crítico ·
+> cidade-lixo no acervo **350 → 0**.
+
+### 🔴 PENDÊNCIA DO DONO, NO META — pausar UM conjunto
+
+**`BR - ABERTO - AULA 02SET` (id `120249418573490420`)**, dentro da campanha
+`TRF - SITE - LEILOES - AGO26`. Medido: **R$ 43,76 · 545 cliques · ZERO inscritos**, e ele
+ainda comia **~2/3 do orçamento diário da campanha de tráfego do site** (01/09: R$ 21,32 para
+a aula contra R$ 2,91 para o site, que roda a CPC R$ 0,12).
+
+**NÃO religue o `CONV - AULA 02SET`** (está PAUSED e deve ficar). Eu tinha recomendado isso e
+os números me corrigiram: CPM 50 → 106 → **131** em três dias, CTR caindo 4,98% → 3,45%,
+alcance despencando com gasto subindo (30/08 R$ 59,55 alcançou 522 pessoas; 31/08 R$ 41,77
+alcançou 284). Ele queimou 3 listas de retargeting pequenas. Os R$ 54,76/inscrito são a
+MÉDIA; o custo **marginal** do último dia foi R$ 41,77 por zero inscrito.
+
+### 📉 A LP NÃO ESTAVA QUEBRADA — o problema era o que estava sendo COMPRADO
+
+A comparação que fecha o caso, mesma peça e mesma página, só o objetivo mudou:
+
+| REEL-2808-LIVE | pessoas | clicaram | inscreveram |
+|---|---|---|---|
+| comprado como `OUTCOME_LEADS` | 28 | 2 | **2 (7,1%)** |
+| comprado como `LINK_CLICKS` | 54 | 0 | **0** |
+
+E 381 pessoas do conjunto LINK_CLICKS com **zero** cliques no CTA. Se a taxa fosse a mesma,
+a chance de sair 0 em 381 é ~1 em 1 trilhão — não é azar de amostra. A peça `IG-0109-MUDONOME`
+fez **CTR de 14,3% no feed do Facebook e 37,8% no Threads** (as outras: 3,9–7%) e converteu
+zero em 316 visitas: CTR alto com engajamento zero é assinatura de clique sem intenção, não de
+criativo bom. **CPM e CPC medem o que o anúncio CUSTA, não o que ele COMPRA** — a conclusão de
+31/08 ("26× mais barato por impressão") estava certa sobre preço e foi lida como eficiência.
+
+### ✅ O QUE SUBIU NA LP (medido renderizando a página, não estimado)
+
+1. A LP montava **a barra de navegação inteira do site** — 6 saídas acima da promessa. O
+   comentário dentro de `LiveInscricao.jsx` afirma que não há menu; não havia *no arquivo
+   dele*. Vinha do `MainLayout` (`<Route path="*">`). Defeito da composição.
+2. Banner de instalar o PWA suprimido na rota. Medido por UA: aparece no **iOS Safari** e
+   **não** nos navegadores internos de Facebook/Instagram — pega uma fatia, não tudo.
+3. Contador compactado (não cabia em uma linha a 375px).
+4. **CTA fixo** enquanto o formulário está fora de vista. O botão ficava abaixo da dobra nos
+   três tamanhos, e há ~4,9 telas abaixo do formulário que não tinham CTA nenhum.
+
+Resultado: 1º campo de **y=815 → y=683** no iPhone SE, e o card passou a aparecer na 1ª tela.
+Regra única `ehRotaDeCampanha()` em `src/utils/rotaCampanha.js` serve `Header` e `PwaInstall`.
+
+### 📏 COMO MEDIR A EVOLUÇÃO — `intervencao` + `lp_aula_funil()`
+
+```sql
+select * from public.lp_aula_funil('2026-09-01T11:35:14Z'::timestamptz, now());
+select chave, jsonb_pretty(baseline), mudanca from public.intervencao;
+```
+**Linha de base congelada (48h até 01/09 11h35 UTC):** 431 pessoas · 606 pageviews ·
+7 interagiram (**1,62%**) · 3 clicaram no CTA (**0,70%**) · 2 inscrições (**0,46%**).
+O antes e o depois saem da MESMA função de propósito — número anotado em documento faria o
+"depois" ser medido por outra régua, e a comparação viraria a forma #10 com nome de evolução.
+
+### 🧭 OS ALERTAS DO RITUAL, e o que eles escondiam
+
+- **`fonte_data_leilao_uniforme` acusava o HASTA, não o BIASI.** Três fontes têm "100+ lotes e
+  ≤2 datas" e era fácil consertar a errada. A allowlist fixava a 1ª praça (28/08); o leilão
+  aconteceu e a fonte foi para 03/09 — data que a própria evidência de 25/08 já nomeava.
+- **E o BIASI tinha um defeito maior que nenhum alarme via:** o **título inteiro no campo
+  `cidade`**, em 88% do acervo. `sem_cidade` mede cidade VAZIA; aqui vinha cheia (forma #10).
+  Conserto em `api/_cidade-do-titulo.js`: o maior sufixo antes de "/UF" que seja **município
+  real** daquela UF. **7% → 99%**, 248 bairros recuperados, 350 linhas corrigidas.
+- **RLS:** as 6 tabelas que o health-check acusava há 3 rodadas são só-do-servidor. **Revoguei
+  a escrita em vez de allowlistar** — elas tinham o default do Supabase (anon E authenticated
+  com DELETE/INSERT/UPDATE/TRUNCATE) e só a RLS segurava. SELECT intacto (o Admin lê os
+  inscritos). Conferido depois: cliente comum lê 0 linhas, admin vê os 4 inscritos.
+- **`qa_invariantes_lenta`** se apaga sozinho: o painel custa 3,05–3,24 s (teto 5 s) e o
+  conserto de 31/08 já está no ar. **Ia remover duas CTEs mortas creditando ~1 s de ganho —
+  medido, CTE não referenciada NÃO roda (3,6 ms × 1.139 ms). O ganho não existia.**
+- `cadastro_duplicado` e `cadastro_sem_origem` são fatos do mundo, não bugs: um inscrito da
+  aula criou 2ª conta 3 min depois com outro e-mail, e 2 cadastros nunca confirmaram e-mail.
+  **Ia renomear `cadastro_sem_origem` com base em 2 linhas; medido em 90 dias, 28 dos 31 sem
+  captura LOGARAM — a hipótese estava errada e não mexi.**
+
+### 🕳️ PONTOS CEGOS ENCONTRADOS E **NÃO** CONSERTADOS (ficam para a próxima)
+
+- **`cidade_socio` está sem "São Caetano/PE"** (IBGE 2610905). As duas listas de municípios
+  afirmam 5.571 e **não são o mesmo conjunto**. Os invariantes `socio_*` vigiam COLUNAS de
+  cada linha, não QUAIS linhas existem — nenhum cobre roster.
+- **`mkt_reconciliar_gclid()` e `qa_invariantes_atribuicao_perdida()` só olham `gclid`** —
+  cegos para Meta. Medido: **614 visitas em 14 dias só com `fbclid`**. Hoje não perde ninguém
+  (nenhum dos 42 perfis sem origem tem ponte com `visita_origem`), mas o nome do invariante
+  promete "atribuição paga" e entrega só Google.
+- **GESTAOLEILOES: 104 lotes ativos com `data_leilao` NULL nos 104** e 0% de documento. O
+  invariante de data uniforme filtra `data_leilao is not null` e nunca o vê.
+- **VENDASGOV falha há 45 dias** (último `ok` em 17/07). Sem baseline saudável,
+  `fonte_regressao_suspeita()` também não o enxerga. Fonte paga.
+- **4 de 4 inscritos da aula nunca logaram** na conta que a inscrição cria. O fluxo "definir
+  minha senha" tem 0/4 de adesão.
+- **5 casos de clientes pagantes parados 40 dias** em `analise_solicitada` com 0 jobs — resíduo
+  do botão "Solicitar" que a RLS recusava (consertado em 29/08). Eles precisam clicar de novo,
+  e ninguém avisou.
+
+---
+
+## 🗄️ ARQUIVO — estado ao encerrar 31/08 22h BRT (sessão 16)
 
 > Branch `claude/handoff-bidpro-brasil-checks-l89025` = **`8755e87`**, empurrada, e **`main` está
 > no mesmo commit** (todos os merges do dia foram fast-forward). Heartbeat às 09:52.
