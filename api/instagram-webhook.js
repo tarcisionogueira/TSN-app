@@ -34,8 +34,27 @@ export const config = { runtime: 'edge' };
 
 const SB  = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SVC = process.env.SUPABASE_SERVICE_KEY;
-const APP_SECRET   = process.env.IG_APP_SECRET;
 const VERIFY_TOKEN = process.env.IG_VERIFY_TOKEN;
+
+// ⚠️ DUAS CHAVES, E NINGUÉM DIZ QUAL ASSINA (01/09, achado ao configurar o app).
+// O painel da Meta expõe DOIS segredos para o mesmo app: a "Chave secreta do app"
+// (Configurações → Básico) e a "Chave secreta do app do Instagram", que fica na página de
+// configuração da API do Instagram e pertence a um id DIFERENTE. A doc não é explícita sobre
+// qual delas assina o `X-Hub-Signature-256` no caminho do Instagram Login.
+//
+// POR QUE ISSO NÃO PODE SER RESOLVIDO NO CHUTE: o GET de verificação usa só o verify token, e
+// PASSA de qualquer jeito. Se a chave estiver errada, o que quebra é o POST — 401 em toda
+// entrega, para sempre, e o sintoma no banco é ZERO LINHAS. Que é exatamente o mesmo sintoma
+// de "ninguém mandou mensagem". Duas causas opostas, um sintoma só: a forma de falha nº 1.
+//
+// A saída é aceitar QUALQUER UMA das duas e REGISTRAR qual bateu. Não afrouxa nada — as duas
+// são nossas e igualmente protegidas —, e transforma uma dúvida de documentação numa medição.
+// Quando o log disser qual é, a outra sai.
+const SEGREDOS = [
+  ['IG_APP_SECRET', process.env.IG_APP_SECRET],
+  ['IG_APP_SECRET_INSTAGRAM', process.env.IG_APP_SECRET_INSTAGRAM],
+].filter(([, v]) => !!v);
+const APP_SECRET = SEGREDOS.length ? SEGREDOS[0][1] : undefined;
 
 function json(body, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -72,17 +91,35 @@ function igual(a, b) {
   return dif === 0;
 }
 
-export async function assinaturaConfere(bytes, header, segredoTeste) {
-  const segredo = segredoTeste || APP_SECRET;
-  if (!segredo || !header) return false;
-  const m = /^sha256=([0-9a-f]{64})$/i.exec(String(header).trim());
-  if (!m) return false;
+async function bate(bytes, hexEsperado, segredo) {
   const chave = await crypto.subtle.importKey(
     'raw', new TextEncoder().encode(segredo), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'],
   );
   const sig = await crypto.subtle.sign('HMAC', chave, bytes);
   const hex = Array.from(new Uint8Array(sig)).map((b) => b.toString(16).padStart(2, '0')).join('');
-  return igual(hex, m[1].toLowerCase());
+  return igual(hex, hexEsperado);
+}
+
+/**
+ * Devolve o NOME da chave que fechou a assinatura, ou null. Nome e não booleano de propósito:
+ * é ele que responde "qual das duas a Meta usa?", e essa resposta só existe em produção.
+ * `segredoTeste` mantém o teste automatizado independente do ambiente.
+ */
+export async function qualChaveAssina(bytes, header, segredoTeste) {
+  if (!header) return null;
+  const m = /^sha256=([0-9a-f]{64})$/i.exec(String(header).trim());
+  if (!m) return null;
+  const esperado = m[1].toLowerCase();
+  const candidatas = segredoTeste ? [['teste', segredoTeste]] : SEGREDOS;
+  for (const [nome, segredo] of candidatas) {
+    if (await bate(bytes, esperado, segredo)) return nome;
+  }
+  return null;
+}
+
+// Mantido com o mesmo nome e o mesmo contrato booleano: é o que o teste e o handler usam.
+export async function assinaturaConfere(bytes, header, segredoTeste) {
+  return (await qualChaveAssina(bytes, header, segredoTeste)) !== null;
 }
 
 // ─── LEITURA DO EVENTO ───────────────────────────────────────────────────────────────
@@ -158,7 +195,23 @@ export default async function handler(req) {
     }
     // Sem 'hub.mode' é alguém abrindo a URL no navegador — responde o estado, sem segredo.
     if (!q.get('hub.mode')) {
-      return json({ ok: true, service: 'instagram-webhook', modo: 'so-escuta', configurado: !!(APP_SECRET && VERIFY_TOKEN && SB && SVC) });
+      // ⚠️ ANTES ISTO ERA UM BOOLEANO SÓ, para QUATRO condições — e em 01/09 isso me fez mandar
+      // o dono mexer nas marcações de ambiente quando o problema era outro (o redeploy ainda
+      // estava em BUILDING). O instrumento não sabia dizer QUAL, e eu preenchi a lacuna com o
+      // palpite mais provável. Agora ele diz. NOMES, nunca valores: a resposta é pública, e os
+      // nomes já estão no repositório (que é público); os valores não podem estar em lugar nenhum.
+      const falta = [
+        ['IG_APP_SECRET (ou IG_APP_SECRET_INSTAGRAM)', SEGREDOS.length > 0],
+        ['IG_VERIFY_TOKEN', !!VERIFY_TOKEN],
+        ['SUPABASE_URL', !!SB],
+        ['SUPABASE_SERVICE_KEY', !!SVC],
+      ].filter(([, ok]) => !ok).map(([nome]) => nome);
+      return json({
+        ok: true, service: 'instagram-webhook', modo: 'so-escuta',
+        configurado: falta.length === 0,
+        falta,
+        chaves_de_assinatura: SEGREDOS.map(([nome]) => nome),
+      });
     }
     return new Response('forbidden', { status: 403 });
   }
@@ -174,10 +227,15 @@ export default async function handler(req) {
   }
 
   const bytes = await req.arrayBuffer();
-  if (!(await assinaturaConfere(bytes, req.headers.get('x-hub-signature-256')))) {
-    console.warn('[ig] assinatura inválida ou ausente');
+  const chaveQueAssinou = await qualChaveAssina(bytes, req.headers.get('x-hub-signature-256'));
+  if (!chaveQueAssinou) {
+    // O log diz QUANTAS chaves foram tentadas: "inválida" com uma chave configurada e
+    // "inválida" com duas são diagnósticos diferentes, e sem esse número os dois se parecem.
+    console.warn(`[ig] assinatura não fecha com nenhuma das ${SEGREDOS.length} chave(s) configurada(s)`);
     return json({ error: 'Não autorizado' }, 401);
   }
+  // É ESTE log que responde a pergunta da doc. Some da versão seguinte, junto com a chave perdedora.
+  console.log('[ig] assinatura fechou com', chaveQueAssinou);
 
   let corpo = null;
   try {

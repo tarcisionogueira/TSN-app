@@ -23,7 +23,7 @@
  *
  * Mais a assinatura, que é a única coisa aqui que separa a Meta de qualquer um com a URL.
  */
-import { lerMensagem, lerComentario, assinaturaConfere, carimbo } from '../../api/instagram-webhook.js';
+import { lerMensagem, lerComentario, assinaturaConfere, qualChaveAssina, carimbo } from '../../api/instagram-webhook.js';
 
 const SEGREDO = 'segredo-de-teste-nao-e-o-de-producao';
 let ok = 0, falhas = 0;
@@ -144,8 +144,23 @@ checa('sha1 (formato antigo) é recusado', !(await assinaturaConfere(corpo, `sha
 // pode passar por "está tudo bem" — é a regra do verificador de schema, aplicada aqui.
 checa('sem segredo configurado, recusa (não aceita)', !(await assinaturaConfere(corpo, `sha256=${hex}`, undefined)));
 
+console.log('\n── 6. Qual chave assinou: NOME, não booleano ──');
+// A Meta expõe DOIS segredos para o mesmo app (o do app e o "do app do Instagram", com id
+// próprio) e a doc não diz qual assina o webhook no caminho do Instagram Login. Chutar sairia
+// caro do jeito mais silencioso possível: o GET de verificação passa só com o verify token, e
+// o que quebraria é o POST — 401 em toda entrega, zero linhas no banco, sintoma idêntico ao de
+// "ninguém mandou mensagem". Por isso o webhook aceita qualquer uma das duas e REGISTRA qual
+// fechou; quando a produção responder, a perdedora sai.
+checa('devolve o NOME da chave que fecha', (await qualChaveAssina(corpo, `sha256=${hex}`, SEGREDO)) === 'teste');
+checa('chave errada devolve null, não string vazia', (await qualChaveAssina(corpo, `sha256=${hex}`, 'outro')) === null);
+checa('sem header devolve null', (await qualChaveAssina(corpo, null, SEGREDO)) === null);
+checa('corpo adulterado devolve null', (await qualChaveAssina(adulterado, `sha256=${hex}`, SEGREDO)) === null);
+// O booleano antigo continua valendo — é o contrato que o handler e o resto do teste usam.
+checa('o booleano concorda com o nome', (await assinaturaConfere(corpo, `sha256=${hex}`, SEGREDO))
+  === ((await qualChaveAssina(corpo, `sha256=${hex}`, SEGREDO)) !== null));
+
 console.log(`\n${falhas === 0 ? '✓' : '✗'} ${ok}/${ok + falhas} asserções`);
-if (ok + falhas < 41) {
+if (ok + falhas < 46) {
   console.error('TESTE INVÁLIDO: rodou menos asserções do que este arquivo declara — algo não foi executado.');
   process.exit(2);
 }
