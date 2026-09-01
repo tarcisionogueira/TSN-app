@@ -120,7 +120,7 @@ const PLANOS_ACESSO = [
 function defaultCurso() {
   return { titulo: '', subtitulo: '', descricao: '', capa_url: '', cor: AZUL, nivel: 'Iniciante', categoria: 'Fundamentos', preco: '', gratuito: false, destaque: false, onboarding: false, comissao_pct: 30, planos_gratis: [], concede_plano: '', concede_meses: 6, bonus_produtos: [], upsell_produtos: [], bump_produtos: [], oferta_abre_em: '', oferta_fecha_em: '', oferta_preco: '', downsell_tipo: '', downsell_plano: 'top2', downsell_titulo: '', downsell_texto: '', modulos: [] };
 }
-function defaultModulo(idx) { return { _key: String(Date.now() + idx), titulo: '', aulas: [] }; }
+function defaultModulo(idx) { return { _key: String(Date.now() + idx), titulo: '', aulas: [], libera_apos_dias: 0, libera_em: null }; }
 function defaultAula() { return { _key: String(Date.now() + Math.random()), titulo: '', duracao: '', video_url: '', descricao: '', gratis: false, materiais: [] }; }
 
 // Upload de mídia da Área de Membros para o STORAGE do Supabase (substitui os links do
@@ -294,10 +294,23 @@ function CursosTab() {
 
   async function openEdit(c) {
     const { data: aulas } = await supabase.from('aulas_admin').select('*').eq('curso_id', c.id).order('ordem');
+    // Regras de liberação do curso, indexadas pelo NOME do módulo — que é a chave que
+    // `aulas_admin.modulo` e `curso_modulos.modulo` compartilham. Erro aqui não impede editar
+    // o curso: sem as regras os campos abrem no padrão (aberto), que é o comportamento de
+    // antes — mas fica no console, senão o admin salvaria por cima achando que não havia regra.
+    const { data: regras, error: errRegras } = await supabase
+      .from('curso_modulos').select('modulo, libera_apos_dias, libera_em').eq('curso_id', c.id);
+    if (errRegras) console.error('[curso] nao li as regras de liberacao:', errRegras.message);
+    const regraDe = Object.fromEntries((regras || []).map(r => [r.modulo, r]));
+
     const modulosMap = {};
     (aulas || []).forEach((a, i) => {
       const mod = a.modulo || 'Módulo 1';
-      if (!modulosMap[mod]) modulosMap[mod] = { _key: mod + i, titulo: mod, aulas: [] };
+      if (!modulosMap[mod]) modulosMap[mod] = {
+        _key: mod + i, titulo: mod, aulas: [],
+        libera_apos_dias: regraDe[mod]?.libera_apos_dias ?? 0,
+        libera_em: regraDe[mod]?.libera_em || null,
+      };
       modulosMap[mod].aulas.push({ _key: a.id, titulo: a.titulo || '', duracao: a.duracao || '', video_url: a.video_url || '', descricao: a.descricao || '', gratis: a.gratis || false, materiais: Array.isArray(a.materiais) ? a.materiais : [] });
     });
     // O banco guarda timestamptz; o <input type="datetime-local"> só aceita
@@ -435,6 +448,36 @@ function CursosTab() {
       }
       if (novas.length) {
         const { error } = await supabase.from('aulas_admin').insert(novas);
+        if (error) throw error;
+      }
+
+      // REGRAS DE LIBERAÇÃO. Gravadas DEPOIS das aulas porque a chave é o nome do módulo, e
+      // ele pode ter sido renomeado agora. Apaga o que não existe mais e regrava o resto —
+      // com `.select()`, que é a única forma de saber se o delete alcançou alguma linha.
+      const nomesModulos = (modulos || []).map((m, mi) => m.titulo || `Módulo ${mi + 1}`);
+      // A query é montada em partes porque o `.not(...)` só entra quando há módulo a
+      // preservar — mesmo formato do delete de `aulas_admin` logo acima.
+      // padrao-ok: o .select('id') existe, duas linhas abaixo, e o error é conferido lá.
+      let delReg = supabase.from('curso_modulos').delete().eq('curso_id', cursoId);
+      if (nomesModulos.length) delReg = delReg.not('modulo', 'in', `(${nomesModulos.map(n => `"${n.replace(/"/g, '')}"`).join(',')})`);
+      const { error: errDelReg } = await delReg.select('id');
+      if (errDelReg) throw errDelReg;
+
+      // Só grava linha para módulo que TEM regra. Módulo sem regra não vira linha com zeros:
+      // ausência significa "aberto", e escrever o padrão encheria a tabela de ruído que
+      // depois ninguém sabe se é intenção ou sobra.
+      const comRegra = (modulos || [])
+        .map((m, mi) => ({
+          curso_id: cursoId,
+          modulo: m.titulo || `Módulo ${mi + 1}`,
+          libera_apos_dias: Number(m.libera_apos_dias) || 0,
+          libera_em: m.libera_em || null,
+          atualizado_em: new Date().toISOString(),
+        }))
+        .filter(r => r.libera_apos_dias > 0 || r.libera_em);
+      if (comRegra.length) {
+        const { error } = await supabase.from('curso_modulos')
+          .upsert(comRegra, { onConflict: 'curso_id,modulo' }).select('id');
         if (error) throw error;
       }
 
@@ -762,6 +805,32 @@ function CursosTab() {
                       style={{ ...S.btn('outline'), padding: '6px 10px', opacity: mi === form.modulos.length - 1 ? 0.35 : 1, cursor: mi === form.modulos.length - 1 ? 'not-allowed' : 'pointer' }}
                       onClick={() => moverModulo(mi, 1)}>▼</button>
                     <button style={S.btn('danger')} onClick={() => removeModulo(m._key)}>✕</button>
+                  </div>
+
+                  {/* LIBERAÇÃO — dois controles, e o módulo só abre quando os DOIS passaram.
+                      "Após X dias" dá RITMO (conta a partir de quando o aluno começa o curso),
+                      mas sozinho não protege um lançamento: um aluno que entra hoje abriria o
+                      módulo 3 em 7 dias, gravado ou não. "Não antes de" é o piso que segura
+                      isso. Só a data faria todo mundo receber tudo de uma vez no dia. Ver
+                      `liberacao_de_modulo_por_prazo_com_piso_de_data.sql`. */}
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px 10px' }}>
+                    <span style={{ fontSize: 11.5, fontWeight: 800, color: '#475569' }}>Liberar</span>
+                    <label style={{ fontSize: 11.5, color: '#64748b', display: 'flex', alignItems: 'center', gap: 5 }}>
+                      após
+                      <input type="number" min="0" max="3650" style={{ ...S.input, width: 64, padding: '5px 7px' }}
+                        value={m.libera_apos_dias ?? 0}
+                        onChange={e => updateModulo(m._key, 'libera_apos_dias', e.target.value === '' ? 0 : Math.max(0, Number(e.target.value)))} />
+                      dias do início do aluno
+                    </label>
+                    <label style={{ fontSize: 11.5, color: '#64748b', display: 'flex', alignItems: 'center', gap: 5 }}>
+                      e não antes de
+                      <input type="date" style={{ ...S.input, width: 148, padding: '5px 7px' }}
+                        value={m.libera_em || ''}
+                        onChange={e => updateModulo(m._key, 'libera_em', e.target.value || null)} />
+                    </label>
+                    <span style={{ fontSize: 11, color: '#94a3b8' }}>
+                      {(!m.libera_apos_dias && !m.libera_em) ? 'aberto desde o primeiro dia' : 'vale o que vencer por último'}
+                    </span>
                   </div>
 
                   {m.aulas.map((a, ai) => (

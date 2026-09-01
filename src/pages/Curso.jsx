@@ -42,6 +42,23 @@ function podeAssistir(licao, plano, comprouAvulso = false, planosGratis = [], cu
   return false;
 }
 
+/**
+ * "Abre em 3 dias" / "abre em 20/09" — a escolha entre as duas formas não é estética: perto,
+ * o aluno pensa em dias; longe, em data. E abaixo de 1 dia a contagem em dias imprimiria
+ * "abre em 0 dias", que soa como defeito. Sem data conhecida, some a frase em vez de mentir.
+ */
+function abreQuando(iso) {
+  if (!iso) return 'em breve';
+  const alvo = new Date(iso).getTime();
+  if (Number.isNaN(alvo)) return 'em breve';
+  const horas = (alvo - Date.now()) / 3600000;
+  if (horas <= 0) return 'em instantes';
+  if (horas < 24) return `em ${Math.max(1, Math.round(horas))}h`;
+  const dias = Math.ceil(horas / 24);
+  if (dias <= 14) return `em ${dias} dia${dias > 1 ? 's' : ''}`;
+  return `em ${new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}`;
+}
+
 export default function Curso() {
   const { id } = useParams();
   const nav = useNavigate();
@@ -68,12 +85,30 @@ export default function Curso() {
         const m = a.modulo || 'Módulo 1';
         (modMap[m] = modMap[m] || []).push({ id: a.id, titulo: a.titulo || '', duracao: a.duracao || '', gratis: !!a.gratis, descricao: a.descricao || '', video_url: a.video_url || '', materiais: Array.isArray(a.materiais) ? a.materiais : [] });
       });
+      // LIBERAÇÃO POR MÓDULO. Quem decide é o SERVIDOR: a RPC carimba o início do aluno na
+      // primeira chamada e devolve, por módulo, se já abriu e quando abre. Calcular isso aqui
+      // exigiria a data de início no cliente — e ela não existe até alguém carimbá-la.
+      //
+      // Erro NÃO tranca o curso. Um aluno pagante barrado por falha de leitura é pior do que
+      // um módulo aberto cedo demais; então o padrão é liberado, e a falha vai para o console.
+      // (`liberacao` fica null e o mapa abaixo devolve `undefined`, que a tela lê como aberto.)
+      let liberacao = null;
+      try {
+        const { data: libs, error: errLib } = await supabase.rpc('curso_modulos_liberacao', { p_curso: id });
+        if (errLib) throw errLib;
+        liberacao = Object.fromEntries((libs || []).map(l => [l.modulo, l]));
+      } catch (e) { console.error('[curso] nao li a liberacao dos modulos:', e?.message || e); }
+
       setCursoDb({
         id: c.id, titulo: c.titulo, subtitulo: c.subtitulo || '', descricao: c.descricao || '',
         capa_url: c.capa_url || '', cor: c.cor || '#0D63DB',
         aulas: (as || []).length, preco: Number(c.preco || 0), gratuito: !!c.gratuito,
         planos_gratis: Array.isArray(c.planos_gratis) ? c.planos_gratis : [],
-        modulos: Object.entries(modMap).map(([titulo, licoes]) => ({ titulo, licoes })),
+        modulos: Object.entries(modMap).map(([titulo, licoes]) => ({
+          titulo, licoes,
+          bloqueado: liberacao ? liberacao[titulo]?.liberado === false : false,
+          abreEm: liberacao?.[titulo]?.abre_em || null,
+        })),
       });
       setCarregandoCurso(false);
     })();
@@ -283,9 +318,21 @@ export default function Curso() {
                   </div>
                   <div style={{ fontSize:12, fontWeight:700, color:'#111111', lineHeight:1.3 }}>{mod.titulo.replace(`Módulo ${mi+1} — `, '')}</div>
                 </div>
-                {modulosAbertos[mi] ? <ChevronUp size={14} color="#94a3b8"/> : <ChevronDown size={14} color="#94a3b8"/>}
+                {mod.bloqueado
+                  ? <span style={{ fontSize:11, fontWeight:800, color:'#b45309', background:'#fffbeb', border:'1px solid #fde68a', borderRadius:20, padding:'3px 9px', whiteSpace:'nowrap' }}>
+                      {abreQuando(mod.abreEm)}
+                    </span>
+                  : (modulosAbertos[mi] ? <ChevronUp size={14} color="#94a3b8"/> : <ChevronDown size={14} color="#94a3b8"/>)}
               </button>
-              {modulosAbertos[mi] && mod.licoes.map((lic) => {
+              {/* MÓDULO AINDA FECHADO: diz QUANDO abre, e não só que está fechado. Cadeado sem
+                  data é o que faz o aluno escrever para o suporte perguntando se quebrou. */}
+              {modulosAbertos[mi] && mod.bloqueado && (
+                <div style={{ padding:'14px 16px', background:'#fffbeb', borderBottom:'1px solid #f1f5f9', fontSize:12.5, color:'#92400e', lineHeight:1.6 }}>
+                  Este módulo abre <strong>{abreQuando(mod.abreEm)}</strong>. As aulas vão aparecer aqui
+                  automaticamente — não precisa fazer nada.
+                </div>
+              )}
+              {modulosAbertos[mi] && !mod.bloqueado && mod.licoes.map((lic) => {
                 const ativa = licaoAtiva?.id === lic.id;
                 const feita = progresso[lic.id];
                 const pode = podeAssistir(lic, plano, comprouAvulso, curso?.planos_gratis, curso?.gratuito);
