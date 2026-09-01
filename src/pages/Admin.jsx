@@ -11478,6 +11478,24 @@ function LiveTab() {
         )}
       </div>
 
+      {/* WHATSAPP — o canal de quem NÃO abre e-mail, e por isso fica logo abaixo do convite:
+          é a mesma decisão (divulgar esta edição), tomada para o público que o e-mail não
+          alcança. O link leva à fila; a fila é que decide a ordem e guarda quem já foi.
+          NÃO é disparo: a tela abre o WhatsApp com o texto pronto e quem envia é o operador. */}
+      <div style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:12, padding:'14px 16px', marginBottom:16 }}>
+        <label style={S.label}>Convidar por WhatsApp, um a um</label>
+        <div style={{ fontSize:11.5, color:'#64748b', lineHeight:1.6, marginBottom:10 }}>
+          Para quem <strong>não abre e-mail</strong>. A fila já vem ordenada (pagante → quem abriu
+          o e-mail → o resto), com a mensagem escrita e o registro de quem já recebeu, então dá
+          para parar no meio e retomar. <strong>Não envia sozinho</strong>: cada clique abre o
+          WhatsApp com o texto pronto e você aperta enviar.
+        </div>
+        <a href="#/admin/whatsapp"
+          style={{ display:'inline-block', padding:'9px 15px', background:'#16a34a', color:'#fff', textDecoration:'none', borderRadius:8, fontWeight:700, fontSize:13 }}>
+          Abrir a fila do WhatsApp →
+        </a>
+      </div>
+
       {/* CAPA DA AULA — a imagem do cartão de compartilhamento. O campo não existia em lugar
           nenhum desta tela: `eventos_live.capa_url` estava na tabela e não tinha por onde ser
           preenchido, então o cartão caía sempre na imagem genérica do site. Mesmo componente
