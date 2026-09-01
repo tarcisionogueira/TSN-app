@@ -71,17 +71,47 @@ function quandoPorExtenso(dataHora, agora = Date.now()) {
  * O link fica sozinho na última linha para o WhatsApp montar o cartão de prévia (`/aula/<slug>`
  * é servida por `api/og-share` com título, data e capa).
  */
-function montarMensagem({ nome, cidade, uf, quando, link, pagante, nuncaAnalisou }) {
+/**
+ * O NOME DO PLANO É DADO, NÃO LITERAL NO TEXTO — e essa é a correção de 01/09.
+ *
+ * O que quebrou, em produção, com o dono enviando: a mensagem de pagante dizia "Você é
+ * assinante do Investidor Pro" para TODO mundo com prioridade 1 — e prioridade 1 inclui
+ * `top2`, `assessorado` e `clube`. O Matheus, que é ASSESSORADO, recebeu que era assinante
+ * de um plano que ele não tem.
+ *
+ * É a falha que este próprio arquivo já documenta duas seções acima ("a linha que faz a
+ * mensagem funcionar é a que precisa ser VERDADE"), cometida na outra metade da função: lá o
+ * cuidado foi todo com o não-pagante (`nunca_analisou`), e o pagante ganhou uma frase fixa.
+ * Um booleano não carrega QUAL plano — e a RPC `whatsapp_fila_live` já devolvia `role` o
+ * tempo todo; o JS é que não lia.
+ *
+ * `assessorado` não é assinatura: é cliente de assessoria. Por isso a linha dele não fala em
+ * "assinante", e sim no que ele de fato é.
+ */
+const LINHA_PLANO = {
+  top2:        'Você é assinante do Investidor Pro',
+  clube:       'Você é membro do Leilão Club',
+  assessorado: 'Você é cliente da assessoria',
+};
+
+export function montarMensagem({ nome, cidade, uf, quando, link, pagante, nuncaAnalisou, role }) {
   const primeiro = String(nome || '').trim().split(/\s+/)[0] || '';
   const ola = primeiro ? `Oi, ${primeiro}!` : 'Oi!';
   const onde = cidade ? `${cidade}${uf ? `/${uf}` : ''}` : null;
   const Q = quando.charAt(0).toUpperCase() + quando.slice(1);
 
   if (pagante) {
+    // Sem `role` reconhecido, o convite continua sendo de prioridade — mas NÃO afirma plano
+    // nenhum. Perder a linha pessoal custa menos do que dizer ao cliente algo errado sobre a
+    // conta dele, que é o oposto do que a frase pretende provar.
+    const linha = LINHA_PLANO[role];
+    const abre = linha
+      ? `${linha}, então quero te chamar antes de abrir para o resto:`
+      : 'Quero te chamar antes de abrir para o resto:';
     return [
       `${ola} Aqui é o Tarcísio.`,
       '',
-      `Você é assinante do Investidor Pro, então quero te chamar antes de abrir para o resto: ${quando} eu vou analisar imóveis de leilão ao vivo, da matrícula até a conta final.`,
+      `${abre} ${quando} eu vou analisar imóveis de leilão ao vivo, da matrícula até a conta final.`,
       '',
       `Me manda a cidade e a faixa de valor que você quer investir que eu levo o *seu* caso para a aula e analiso com você assistindo.`,
       '',
@@ -162,6 +192,7 @@ export default async function handler(req, res) {
       nome: p.nome, cidade: p.cidade, uf: p.uf, quando, link,
       pagante: p.prioridade === 1,
       nuncaAnalisou: p.nunca_analisou === true,
+      role: p.role,
     });
     return {
       user_id: p.user_id, nome: p.nome, cidade: p.cidade, uf: p.uf,
