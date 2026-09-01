@@ -111,7 +111,26 @@ Windsor; as duas contas já são profissionais — o item 1 do caminho crítico 
 > por app antes de criar o app do ManyChat**, que nasce nessa mesma superfície. Único resíduo
 > deste item.
 >
-> **✅ 01/09 — AS 4 CONTAS INATIVAS FORAM FECHADAS pelo dono.** Com isso, **3 dos 4 alertas**
+> **✅ CONFIRMADO POR MEDIÇÃO (export das 16h51 × o das 15h26): o Felipe SAIU.** As abas
+> `PublicEmailUsers` e `InactiveUsers` **não existem mais** no arquivo novo — não ficaram
+> vazias, sumiram. Os dois alertas que eram a mesma pessoa estão fechados de fato.
+>
+> ⚠️ **MAS AS 4 CONTAS CONTINUAM LISTADAS, IDÊNTICAS**, mesmo o dono tendo fechado as quatro.
+> **E o próprio arquivo derruba a explicação fácil:** "o relatório está defasado" não se
+> sustenta, porque o Felipe foi removido ANTES das contas e sumiu deste mesmo export. O
+> arquivo é o seu próprio controle — mesma lição do vazio do Windsor, aplicada de novo.
+>
+> **Duas explicações vivas, e elas pedem ações diferentes:** (a) o encerramento não completou
+> (a Meta segura fechamento com cobrança pendente; ou o clique foi "desativar" e não
+> "encerrar"); (b) o alerta mede POSSE e não estado — a aba se chama
+> `InactiveOwnedAdAccounts`, "contas inativas **que pertencem a você**", e conta encerrada
+> continua pertencendo. Se for (b), **este item nunca zera fechando conta**.
+>
+> **A checagem que separa:** Configurações do Negócio → Contas → Contas de anúncios, e ler o
+> STATUS de cada uma. "Encerrada" = caso (b), item resolvido apesar do arquivo. Ativa ou
+> "encerramento pendente" = caso (a), falta terminar. **PENDENTE.**
+>
+> _(o dono relatou ter fechado as 4:)_ **01/09 — AS 4 CONTAS INATIVAS FORAM FECHADAS pelo dono.** Com isso, **3 dos 4 alertas**
 > da Central de Segurança estão resolvidos (Felipe fechou dois; as contas, o terceiro).
 >
 > ⚠️ **O alerta "5 contas de anúncios sem aprovação de semelhantes" encolheu sozinho:** 4 das
