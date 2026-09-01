@@ -133,10 +133,18 @@ Windsor; as duas contas já são profissionais — o item 1 do caminho crítico 
 > _(o dono relatou ter fechado as 4:)_ **01/09 — AS 4 CONTAS INATIVAS FORAM FECHADAS pelo dono.** Com isso, **3 dos 4 alertas**
 > da Central de Segurança estão resolvidos (Felipe fechou dois; as contas, o terceiro).
 >
-> ⚠️ **O alerta "5 contas de anúncios sem aprovação de semelhantes" encolheu sozinho:** 4 das
-> 5 eram justamente as que acabaram de ser fechadas. Sobra **uma** — a `CA - Tacísio Nogueira
-> Leilões`. **Recarregar o painel ANTES de trabalhar nele**, senão a próxima sessão revisa
-> cinco contas onde havia uma.
+> ❌ **PREVISÃO MINHA, MEDIDA E ERRADA (corrigida 01/09):** eu escrevi que o alerta "5 contas
+> sem aprovação de semelhantes" teria encolhido sozinho para 1, porque 4 das 5 eram as
+> fechadas. **O painel continua dizendo 5.** E o de "4 contas inativas" continua dizendo 4.
+> Nenhum dos dois números mexeu com o fechamento.
+>
+> ⚠️ **E corrijo também o raciocínio do "o arquivo é seu próprio controle".** Eu usei o
+> sumiço do Felipe no export para descartar a hipótese de defasagem — mas **ele foi removido
+> ANTES de as contas serem fechadas**. Uma mudança antiga ter propagado não prova que a
+> recente já teria. A hipótese de atraso segue viva, e ela muda a ação: se for atraso,
+> espera-se; se não for, termina-se o encerramento.
+>
+> **Só o item do Felipe mudou no painel**, confirmado por duas fontes (arquivo + tela).
 >
 > **✅ MEDIDO/CONFIRMADO PELO DONO (01/09): só o `bidprobrasil.com.br` recebe tráfego pago.**
 > O `reimob.com.br` (domínio de e-mail dele) NÃO recebe. Então a lista de domínios confiáveis
