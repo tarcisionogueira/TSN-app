@@ -161,6 +161,34 @@ Windsor; as duas contas já são profissionais — o item 1 do caminho crítico 
 > a saída é ADICIONAR o domínio, nunca desligar a proteção. O ManyChat não é afetado (manda
 > link em DM, não em anúncio) e o Click-to-Message não aponta para domínio nenhum.
 >
+> ### ⏳ 01/09 — VERIFICAÇÃO DA EMPRESA **SUBMETIDA E EM ANÁLISE** (até 48h)
+> "Confirmação de identidade em andamento. Normalmente analisamos suas informações em até 48
+> horas." **O gargalo da Fase 1 saiu do papel — o relógio está correndo.**
+> ⚠️ **Correção de prazo a favor:** eu vinha dizendo "semanas". A Meta diz **48h** para a etapa
+> de IDENTIDADE. Se a verificação da empresa inteira sai junto, só a notificação dirá.
+>
+> **Caminho usado: VERIFICAÇÃO DE IDENTIDADE (documento), não telefone.** As três outras opções
+> (ligação, SMS, WhatsApp) mandavam o código para `+55 75 3508-1477`, que é o fixo da
+> **contabilidade** — indisponível. Documento é a única que não depende de terceiro.
+>
+> **Identidade selecionada:** a grafia `T******* D* S**** N******* D* ARA***` = TARCISIO **DE
+> SOUZA** NOGUEIRA DE ARAUJO, que bate token a token com o contrato social e com a CNH. A outra
+> opção do registro (`D******`, 7 letras onde caberia "De Souza") é grafia divergente e não
+> casaria com o documento enviado.
+>
+> 🖼️ **A CNH precisou ser REGERADA — e como fazer de novo se precisar.** O upload exige
+> **≥ 1500×1000 px** e a foto do dono reprovou. Solução: o `Tarcisio CNH-e.pdf.pdf` do Drive é
+> a CNH-e com **texto VETORIAL** (444 chars) — re-renderizar o PDF em 300 dpi dá
+> **2481×3508 px** com nome/CPF/registro genuinamente nítidos, não interpolados. Isso é
+> diferente de esticar foto pequena. (Ressalva: as 3 imagens embutidas do cartão têm 963×680
+> na origem e ficam ~2,5× ampliadas; o que a análise lê é o vetor.) Comando: `pymupdf` →
+> `doc[0].get_pixmap(dpi=300).save(...)`.
+>
+> 📞 **PENDÊNCIA NOVA, para não travar a próxima:** o telefone público da Nogueira na Receita é
+> o da contabilidade. O da Reimob também (`(75) 2101-2999`, `contasinfo@contasnet.com.br`).
+> **Todo desafio de identidade externo — Meta, Google, banco, cartório — bate lá primeiro.**
+> Pedir à contabilidade que atualize o telefone da Nogueira para um do dono.
+>
 > ### ❌➡️✅ 01/09, FINAL — A VERIFICAÇÃO É COM A **NOGUEIRA**, NÃO COM A REIMOB
 > **Eu errei duas vezes hoje neste ponto e a segunda correção é a que vale.** De manhã escrevi
 > aqui "a verificação é com a REIMOB, não com a NOGUEIRA" — corrigindo um registro de 26/08 que
