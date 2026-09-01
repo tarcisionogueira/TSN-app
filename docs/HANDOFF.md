@@ -14,8 +14,11 @@
 > executar** (o classificador de permissões desta sessão bloqueou a escrita), e ela está
 > custando dinheiro a cada hora.
 >
-> **Placar:** invariantes em alerta **5 → 1** (o que sobra se apaga sozinho na rodada de
-> hoje) · segurança **0/0** · `auditoria_uso` **0 gaps** · regras de negócio 0 crítico ·
+> **Placar:** invariantes em alerta **5 → 4** agora, e **3** depois da rodada do monitor de
+> hoje (~15h UTC), que apaga o `qa_invariantes_lenta`. Os 3 que sobram — `cadastro_duplicado`,
+> `cadastro_sem_origem` e `erro_na_tela_do_cliente` — **não são defeito de código**: são fatos
+> do mundo que o painel está reportando corretamente (ver o bloco dos alertas). ·
+> segurança **0/0** · `auditoria_uso` **0 gaps** · regras de negócio 0 crítico ·
 > cidade-lixo no acervo **350 → 0**.
 
 ### 🔴 PENDÊNCIA DO DONO, NO META — pausar UM conjunto
