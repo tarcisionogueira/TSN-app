@@ -23,7 +23,7 @@
  *
  * Mais a assinatura, que é a única coisa aqui que separa a Meta de qualquer um com a URL.
  */
-import { lerMensagem, lerComentario, assinaturaConfere } from '../../api/instagram-webhook.js';
+import { lerMensagem, lerComentario, assinaturaConfere, carimbo } from '../../api/instagram-webhook.js';
 
 const SEGREDO = 'segredo-de-teste-nao-e-o-de-producao';
 let ok = 0, falhas = 0;
@@ -85,6 +85,38 @@ checa('comentário guarda o username', com?.username === 'fulana');
 checa('comentário sem autor devolve null', lerComentario({ value: { id: 'x', text: 'y' } }) === null);
 checa('comentário sem id devolve null', lerComentario({ value: { from: { id: ELA } } }) === null);
 
+console.log('\n── 4b. Segundos × milissegundos: errar por 1000x nao da erro, quebra a FILA ──');
+
+// A Meta manda `entry.time` em SEGUNDOS e `messaging[].timestamp` em MILISSEGUNDOS, no mesmo
+// payload. Um comentario carimbado em 1970 nasce com a janela de 7 dias vencida ha decadas e
+// some do atendimento; um carimbado no futuro nunca vence e entope a fila para sempre.
+const SEG = Math.floor(Date.parse('2026-09-01T12:00:00Z') / 1000);
+const MS  = Date.parse('2026-09-01T12:00:00Z');
+checa('segundos viram a data certa', carimbo(SEG) === '2026-09-01T12:00:00.000Z', String(carimbo(SEG)));
+checa('milissegundos viram a MESMA data', carimbo(MS) === '2026-09-01T12:00:00.000Z', String(carimbo(MS)));
+checa('segundos e milissegundos concordam', carimbo(SEG) === carimbo(MS));
+checa('string numerica tambem serve', carimbo(String(MS)) === carimbo(MS));
+checa('zero e recusado', carimbo(0) === null);
+checa('negativo e recusado', carimbo(-1) === null);
+checa('nulo e recusado', carimbo(null) === null);
+checa('texto e recusado', carimbo('ontem') === null);
+checa('data anterior a 2001 e recusada (lixo, nao evento)', carimbo(100) === null);
+checa('data absurda no futuro e recusada', carimbo(99999999999999) === null);
+
+const evComData = lerMensagem({
+  sender: { id: ELA }, recipient: { id: NOS }, timestamp: MS,
+  message: { mid: 'm_ts', text: 'oi' },
+});
+checa('mensagem carrega o carimbo da Meta', evComData?.ocorrido_em === '2026-09-01T12:00:00.000Z');
+const evSemData = lerMensagem({ sender: { id: ELA }, recipient: { id: NOS }, message: { mid: 'm_ts2', text: 'oi' } });
+// Nulo NAO e defeito: a fila cai em `criado_em` e assume o pior. Inventar `now()` aqui seria
+// dar prazo que nao existe — exatamente o erro que o carimbo veio impedir.
+checa('sem carimbo devolve null (a fila assume o pior)', evSemData?.ocorrido_em === null);
+const comComData = lerComentario({ field: 'comments', value: { id: 'x1', text: 'oi', from: { id: ELA }, created_time: SEG } });
+checa('comentario usa created_time', comComData?.ocorrido_em === '2026-09-01T12:00:00.000Z');
+const comSemData = lerComentario({ field: 'comments', value: { id: 'x2', text: 'oi', from: { id: ELA } } }, SEG);
+checa('comentario sem created_time cai no entry.time', comSemData?.ocorrido_em === '2026-09-01T12:00:00.000Z');
+
 console.log('\n── 5. Assinatura: só a Meta entra ──');
 
 const corpo = new TextEncoder().encode(JSON.stringify({ object: 'instagram', entry: [{ id: NOS }] }));
@@ -113,7 +145,7 @@ checa('sha1 (formato antigo) é recusado', !(await assinaturaConfere(corpo, `sha
 checa('sem segredo configurado, recusa (não aceita)', !(await assinaturaConfere(corpo, `sha256=${hex}`, undefined)));
 
 console.log(`\n${falhas === 0 ? '✓' : '✗'} ${ok}/${ok + falhas} asserções`);
-if (ok + falhas < 25) {
+if (ok + falhas < 41) {
   console.error('TESTE INVÁLIDO: rodou menos asserções do que este arquivo declara — algo não foi executado.');
   process.exit(2);
 }

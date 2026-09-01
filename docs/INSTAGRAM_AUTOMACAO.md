@@ -18,6 +18,41 @@
 > **Verificação de Negócio** (que é a pendência #9 do HANDOFF, aberta desde 26/08) e o App
 > Review. Nada de código destrava isso.
 >
+> ### ⚙️ FASE 2 COMEÇOU — a fila e o classificador estão no ar (dormentes)
+>
+> | Peça | Estado |
+> |---|---|
+> | `ig_fila_resposta()` — fila por **VENCIMENTO**, não por chegada | aplicada e medida |
+> | `ig_janela_a_queimar()` — quantos estão a <6 h (DM) / <24 h (comentário) de perder | aplicada |
+> | `ig_classe` (9 classes) · `ig_persona` (v1-partida) | aplicadas, **todas `autonomo=false`** |
+> | `ig_mensagens.ocorrido_em` + `carimbo()` no webhook | aplicada |
+> | `api/_ig-motor.js` — classificar · redigir · **decidir** | escrito, não envia nada |
+> | `npm run testar:ig-motor` **42/42** · `testar:instagram` **42/42** | verde |
+>
+> **O que a fila faz que uma fila comum não faz** (medido em transação com rollback):
+> três DMs seguidas da mesma pessoa viram **uma** linha (uma janela, uma resposta); uma DM
+> com 4 h restantes passa **à frente** de outra com 23 h; dois comentários **não** colapsam,
+> porque cada um tem a sua private reply única; conversa que o dono assumiu **sai** da fila;
+> e item vencido volta **como linha** com `expirado=true` — esconder "não deu tempo" seria a
+> mesma falha que devolver vazio para o que não se conseguiu medir.
+>
+> **Três travas, e todas precisam passar para uma resposta sair sozinha:** a classe é
+> autônoma (dado, muda sem deploy) · a confiança passou de 0,7 (senão vira `outro`) · o texto
+> não bate em `ig_persona.nunca_dizer` (trava **mecânica**, com remoção de acento — "lucro
+> garantído" não pode passar por um `includes` ingênuo). A persona é checada **antes** da
+> autonomia de propósito: senão um texto que promete lucro sairia com motivo
+> "classe_nao_autonoma", e o dono nunca saberia o que o modelo escreveu.
+>
+> ⚠️ **`ocorrido_em` existe porque a Meta mistura segundos e milissegundos no mesmo payload**
+> (`entry.time` em s, `messaging[].timestamp` em ms). Errar por 1000× não dá erro: carimba o
+> comentário em 1970 (nasce vencido e some do atendimento) ou no futuro (nunca vence e entope
+> a fila). `carimbo()` desempata por grandeza e devolve `null` para o implausível — e null é
+> tratado assumindo o pior, nunca `now()`.
+>
+> ⚠️ **Modelo: `claude-opus-5` nas duas chamadas.** A spec dizia "usar Haiku" — isso é decisão
+> de CUSTO, e custo é do dono. Fica em `MODELO_CLASSE`/`MODELO_REDACAO`, para trocar com
+> número na mão em vez de por suposição.
+
 > ### 📐 O CAMINHO COMPLETO ESTÁ PUBLICADO
 > **https://claude.ai/code/artifact/50654eca-3504-4c1c-b03e-8025dab1d3b7** — as três janelas da
 > Meta, a escada alugado→próprio, as 5 fases com portão de saída medível, como a IA aprende com

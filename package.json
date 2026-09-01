@@ -29,6 +29,7 @@
     "testar:cidade-titulo": "node scripts/testes/cidade-do-titulo-nao-pode-ser-o-titulo.mjs",
     "testar:landing-aula": "node scripts/testes/landing-da-aula.mjs",
     "testar:instagram": "node scripts/testes/instagram-webhook-nao-envenena-o-corpus.mjs",
+    "testar:ig-motor": "node scripts/testes/ig-motor-decide-antes-de-escrever.mjs",
     "precisa-navegador": "node scripts/testes/precisa-navegador.mjs"
   },
   "dependencies": {

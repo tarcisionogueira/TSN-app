@@ -93,6 +93,23 @@ export async function assinaturaConfere(bytes, header, segredoTeste) {
 // Meta devolve por `message_echoes`) o `sender.id` é a NOSSA conta — usar ele criaria uma
 // conversa do dono com ele mesmo e jogaria todas as respostas dele numa linha só. No echo a
 // pessoa é `recipient.id`.
+// ⚠️ A META MISTURA SEGUNDOS E MILISSEGUNDOS NO MESMO PAYLOAD: `entry.time` e
+// `value.created_time` vêm em SEGUNDOS, `messaging[].timestamp` vem em MILISSEGUNDOS.
+// Errar por 1000× não dá erro nenhum — produz uma data em 1970 ou no ano 56000, e é a FILA
+// que paga: um comentário carimbado em 1970 nasce com a janela de 7 dias vencida há
+// décadas e some do atendimento; um carimbado no futuro nunca vence e trava a fila para
+// sempre. Por isso o desempate é por GRANDEZA, e o que não for plausível vira null — que a
+// fila trata caindo em `criado_em` e assumindo o pior.
+const MS_2001 = 978307200000;                    // 2001-01-01: qualquer coisa antes é lixo
+const MS_2100 = 4102444800000;
+export function carimbo(valor) {
+  const n = Number(valor);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  const ms = n < 1e11 ? n * 1000 : n;            // < 1e11 só cabe em segundos
+  if (ms < MS_2001 || ms > MS_2100) return null;
+  return new Date(ms).toISOString();
+}
+
 export function lerMensagem(ev) {
   const msg = ev?.message;
   if (!msg?.mid) return null;                       // read/delivery/reaction: sem mensagem
@@ -110,10 +127,11 @@ export function lerMensagem(ev) {
     // quem enviar pelo bot grava a linha ANTES, e o echo dela bate no UNIQUE e é ignorado.
     autor: echo ? 'dono' : 'pessoa',
     texto: typeof msg.text === 'string' ? msg.text : null,
+    ocorrido_em: carimbo(ev?.timestamp),   // messaging[]: MILISSEGUNDOS
   };
 }
 
-export function lerComentario(ch) {
+export function lerComentario(ch, entryTime) {
   const v = ch?.value;
   if (!v?.id || !v?.from?.id) return null;
   return {
@@ -124,6 +142,10 @@ export function lerComentario(ch) {
     autor: 'pessoa',
     texto: typeof v.text === 'string' ? v.text : null,
     username: typeof v.from.username === 'string' ? v.from.username : null,
+    // `created_time` do comentário quando vem; senão o `entry.time` da entrega. Os dois em
+    // SEGUNDOS. O prazo de 7 dias conta do comentário, e uma reentrega da Meta dias depois
+    // reiniciaria o relógio se isto viesse de `now()`.
+    ocorrido_em: carimbo(v.created_time) || carimbo(entryTime),
   };
 }
 
@@ -188,7 +210,7 @@ export default async function handler(req) {
     for (const ch of Array.isArray(entry?.changes) ? entry.changes : []) {
       campos.add(String(ch?.field || 'desconhecido'));
       if (ch?.field !== 'comments') { naoReconhecidos++; continue; }
-      const linha = lerComentario(ch);
+      const linha = lerComentario(ch, entry?.time);
       if (!linha) { naoReconhecidos++; continue; }
       if (linha.username) usernames.set(linha.ig_user_id, linha.username);
       const { username, ...semUsername } = linha;
