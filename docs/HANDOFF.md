@@ -1532,6 +1532,43 @@ lá**, não recrutar o IP de cliente. Foi o que 30/08 provou funcionar com as tr
 
 ### 🎯 PRÓXIMA SESSÃO COMEÇA AQUI — automação de comunicação no Instagram
 
+> **01/09 — A FASE 2 ESTÁ COMPLETA ATÉ O PAINEL. Falta o envio (que depende da Meta).**
+> `/admin/instagram` (link na aba **Marketing** do admin) lê `ig_rascunho` na ordem da fila —
+> **vencimento, não chegada** — com a pergunta que originou cada rascunho, o prazo restante e
+> **o motivo de não ter saído sozinho**. Endpoint: `api/admin-ig-caixa.js`.
+>
+> ⚠️ **A tela não envia, e o botão diz isso** ("Copiar e marcar enviado"). Quem responde é o
+> dono, no app.
+>
+> **O detalhe que faz a régua de promoção valer alguma coisa:** o que é gravado em
+> `texto_enviado` é o texto da CAIXA DE EDIÇÃO no instante do clique, nunca o `texto_sugerido`.
+> Se fosse o sugerido, os dois campos seriam idênticos **por construção**, a taxa daria 100%
+> desde o primeiro caso, e a régua promoveria classes a responder sozinhas a partir de uma
+> medição que só mediu a si mesma — a forma de falha nº 10 plantada dentro do instrumento de
+> verificação. Daí o fluxo pedido na tela: **editar aqui, depois copiar**. E se a cópia falhar
+> (o navegador pode recusar o clipboard), a marcação **não acontece** — registrar "enviei isto"
+> sobre um texto que nem chegou à área de transferência seria inventar o dado que a régua lê.
+>
+> **Coluna nova, `descartado_em`** (migração `ig_caixa_o_descarte_tambem_e_medicao.sql`),
+> porque as duas alternativas mentem: deixar pendente para sempre faz a caixa nunca esvaziar e
+> o dono parar de usar (foi assim que `whatsapp_disparo_log` ficou zerado), e carimbar
+> `enviado_em` faria quem contasse `enviado_em` depois receber um número plausível e errado
+> sobre quantas respostas saíram. O descarte também **mede o que a régua não alcança**: uma
+> classe cujos rascunhos são todos descartados não aparece em `ig_taxa_sem_edicao()` como
+> reprovada — aparece como AUSENTE, indistinguível de "ninguém perguntou isso ainda".
+>
+> **Ensaio em seco sobre dado real, em transação com rollback, todas as asserções passaram:**
+> `sem_edicao = 9` de 10 quando um foi realmente editado e outro diferia só em espaço em branco
+> (→ PODE VIRAR AUTONOMA); AMOSTRA INSUFICIENTE numa classe com 2; a régua somou 12 enviados
+> sem contar os 3 pendentes nem os 2 descartados; `ig_caixa_resumo()` devolveu 3/10/2. A
+> constraint `ig_rascunho_desfecho_unico` foi verificada devolvendo `check_violation`.
+>
+> **O que continua bloqueado em você, e não em código:** a escuta segue **dormente** (0
+> entregas em `ig_webhook_recebido`) até o app da Meta existir e `IG_APP_SECRET` /
+> `IG_VERIFY_TOKEN` estarem na Vercel. Sem isso a caixa fica vazia — e a tela diz isso com
+> todas as letras, para "ninguém escreveu" não passar por "não estou escutando".
+
+
 **A especificação completa está em `docs/INSTAGRAM_AUTOMACAO.md`** (escrita em 30/08). Aqui só o
 que a próxima sessão precisa saber para não recomeçar do zero.
 

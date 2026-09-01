@@ -44,6 +44,42 @@
 > havia o que fazer" × "não deu tempo" levam a decisões opostas. Falha de IA também não some:
 > vira rascunho com `motivo: falha_motor: <erro>`, visível no painel.
 >
+> ### 🖥️ FASE 2, PEÇA 3 — o PAINEL: `/admin/instagram` (link na aba Marketing)
+> `api/admin-ig-caixa.js` + `src/pages/CaixaInstagram.jsx` + `ig_caixa_resumo()`.
+> Lê `ig_rascunho` na ordem da fila (**vencimento**, não chegada), mostra a pergunta que
+> originou cada rascunho, o prazo restante e **o motivo de não ter saído sozinho**.
+>
+> ⚠️ **A TELA NÃO ENVIA, e isso está escrito nela.** O botão chama "Copiar e marcar enviado".
+> Enquanto a Meta não liberar a permissão, quem responde é o dono, no app.
+>
+> **O detalhe que faz a régua valer alguma coisa:** o que vai para `texto_enviado` é o texto
+> da CAIXA DE EDIÇÃO no instante do clique, nunca o `texto_sugerido`. Se fosse o sugerido, os
+> dois campos seriam idênticos por construção, a taxa daria 100% desde o primeiro caso, e a
+> régua promoveria classes a partir de uma medição que só mediu a si mesma (forma nº 10,
+> plantada dentro do próprio instrumento). Por isso o fluxo pedido na tela é **editar aqui,
+> depois copiar** — e se a cópia falhar, a marcação **não acontece**.
+>
+> **O terceiro desfecho virou coluna: `descartado_em` / `descartado_motivo`.** Sem ela,
+> "descartado" só teria duas representações e as duas mentem: deixar pendente para sempre (a
+> caixa nunca esvazia e o dono para de usar — foi assim que `whatsapp_disparo_log` ficou
+> zerado) ou carimbar `enviado_em` (a régua ignoraria a linha, mas quem contasse `enviado_em`
+> depois receberia um número plausível e errado sobre quantas respostas saíram). E o descarte
+> **mede o que a régua não alcança**: classe cujos rascunhos são todos descartados não aparece
+> em `ig_taxa_sem_edicao()` como reprovada — aparece como AUSENTE, indistinguível de
+> "ninguém perguntou isso ainda". Constraint `ig_rascunho_desfecho_unico` impede a linha que
+> é as duas coisas (**verificada**: `check_violation` no insert de teste).
+>
+> **Ensaio em seco sobre dado real, em transação com rollback — todas as asserções passaram:**
+> 10 enviados na classe `quer_link` com 1 realmente editado e 1 diferindo só em espaço →
+> `sem_edicao = 9` e **PODE VIRAR AUTONOMA**; classe `preco` com 2 → **AMOSTRA INSUFICIENTE**;
+> a régua somou **12** enviados (não contou os 3 pendentes nem os 2 descartados);
+> `ig_caixa_resumo()` devolveu 3/10/2; e o filtro da caixa trouxe exatamente os 3 pendentes.
+>
+> Ações da tela: copiar+marcar · descartar · **assumir a conversa** (`ig_conversas.estado =
+> 'humano'`, que a própria fila respeita) · dar baixa em spam e janela perdida. Todo desfecho
+> marca a mensagem de origem como `respondida` — e se ESSE passo falhar, a tela avisa que o
+> item pode reaparecer, em vez de deixar o dono achar que a tela repete rascunho sozinha.
+>
 > ### ⚙️ FASE 2 COMEÇOU — a fila e o classificador estão no ar (dormentes)
 >
 > | Peça | Estado |
