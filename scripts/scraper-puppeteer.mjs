@@ -11,6 +11,9 @@ import puppeteer from 'puppeteer';
 import { vasculharDocumentos, chaveDocCanonica } from '../api/_doc-scan.js';
 import { ehFracaoIdeal, extrairAreaM2 } from './lib/scraper-core.mjs';
 import MUNICIPIOS from '../api/_municipios.js';
+// A cidade sai do título CONFERIDA contra o município real (o defeito do BIASI, 01/09):
+// 88% do acervo tinha o TÍTULO INTEIRO no campo cidade. Regra única em api/_cidade-do-titulo.js.
+import { cidadeBairroDoTitulo } from '../api/_cidade-do-titulo.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -2298,9 +2301,7 @@ const BIASI_BASE = 'https://www.biasileiloes.com.br';
 
 function mapLoteBiasi(l) {
   const title = String(l.title || '').replace(/\s+/g, ' ').trim();
-  let cidade = '', uf = '';
-  const m = title.match(/([A-Za-zÀ-ÿ'.\- ]{2,40})\/([A-Z]{2})\b/); // "… - Cidade/UF"
-  if (m) { cidade = m[1].trim(); uf = m[2]; }
+  const { cidade, uf, bairro } = cidadeBairroDoTitulo(title);
   const valor = parseBRL(l.price || '');
   const foto = l.img && /^https?:\/\//.test(l.img) ? l.img : null;
   const detalhe = `${BIASI_BASE}/sale/detail?id=${l.id}`;
@@ -2312,7 +2313,7 @@ function mapLoteBiasi(l) {
     modalidade: 'extrajudicial',
     estado: /^[A-Z]{2}$/.test(uf) ? uf : '',
     cidade: cidade ? toTitleCase(cidade) : '',
-    bairro: '',
+    bairro: bairro ? toTitleCase(bairro) : '',
     endereco: '',
     valor_avaliacao: 0,
     valor_minimo: valor,
