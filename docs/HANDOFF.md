@@ -161,6 +161,48 @@ Windsor; as duas contas já são profissionais — o item 1 do caminho crítico 
 > a saída é ADICIONAR o domínio, nunca desligar a proteção. O ManyChat não é afetado (manda
 > link em DM, não em anúncio) e o Click-to-Message não aponta para domínio nenhum.
 >
+> ### 🟢 01/09 — CENTRAL DE SEGURANÇA, PLACAR CONFIRMADO NO PAINEL ("Ação concluída")
+> ✅ domínio confiável adicionado (`bidprobrasil.com.br` **+ `www.`** — as duas formas, porque
+> os anúncios apontam para o `www.` e não se sabia se o casamento é por host ou domínio-pai;
+> errar ali travaria a veiculação inteira) · ✅ `0 usuários inativos` (Felipe, **terceira fonte
+> independente**) · ✅ `0 usuários com e-mail público` · ✅ `0 sem 2FA` · ✅ `0 sem passkey` ·
+> ✅ `0 com possível malware` · ✅ `0 linha de crédito com atividade suspeita`.
+> Proteção da conta de anúncios **salva na `CA - Tacísio Nogueira Leilões`**: personalizada,
+> com teto diário **E** total.
+>
+> ⚠️ **OS DOIS CAMPOS DE TETO, não só o diário:** com apenas o diário ligado, um anúncio que
+> use orçamento TOTAL escapa da checagem inteira. Teto que cobre metade dos caminhos não é
+> teto. Números ancorados no medido: 7 dias entre R$ 3,77 e R$ 74,90/dia, pico histórico
+> R$ 228 (fev/26) → diário R$ 150, total R$ 1.000.
+>
+> 🔎 **"Aprovação de semelhantes" é tradução ERRADA de "Peer Approval"** (o modal em inglês
+> revela). *Peer* = par/colega, não público semelhante. Ler como "aprovação por outra pessoa"
+> faz os dois alertas ficarem coerentes: domínio confiável define PARA ONDE o anúncio pode
+> apontar sem revisão; usuário confiável define QUEM aprova o que cai fora.
+>
+> 👤 **DESCOBERTA: existe uma SEGUNDA administradora — `mamededois` = Fernanda, esposa do
+> dono.** Ela **não aparecia em lugar nenhum** do arquivo da Central de Segurança, e o motivo
+> importa: **aquele export lista só usuário INATIVO e e-mail PÚBLICO — não é um inventário de
+> quem tem acesso.** A ferramenta mostra os problemas que ela reconhece. Um administrador
+> ativo com e-mail normal é invisível para ela. Para saber quem tem acesso, a fonte é
+> Configurações do Negócio → Usuários → Pessoas, lida por inteiro.
+> **Efeito positivo:** com uma segunda pessoa real, o Peer Approval deixa de degenerar (não é
+> mais o dono aprovando a si mesmo). **A conferir, pela régua do Felipe (raio de alcance se a
+> conta for comprometida, não confiança na pessoa):** ela precisa mesmo de `finance` +
+> `full_control`, ou `basic_access` + aprovadora basta?
+>
+> 🔓 **PENDENTE E AGORA SEGURO: ligar "Exigir autenticação de dois fatores".** O card aparece
+> com cadeado aberto. O risco que eu mesmo levantei (trancar o dono junto) **acabou**: o painel
+> diz `0 usuários sem 2FA` e `0 sem passkey`. Ligar agora não tranca ninguém.
+>
+> 🎯 **O QUE SOBRA CONVERGE NUM PONTO SÓ: as mesmas 4 contas.** "5 contas sem aprovação" menos
+> a que foi configurada = as 4 inativas; "4 contas inativas" = as mesmas. **Fechar as quatro
+> resolve os dois alertas restantes.** E já são TRÊS evidências de que o encerramento não
+> completou: o export ainda as lista, o painel ainda conta 4 e 5, e elas ainda aparecem
+> selecionáveis no seletor de conta de anúncios. Próximo passo único: ler o STATUS em
+> Configurações do Negócio → Contas → Contas de anúncios (suspeita mais provável: cobrança
+> pendente segurando o encerramento).
+
 > **O que sobra são as duas trancas do MESMO risco:** a Meta publica anúncio parecido com um já
 > aprovado sem revisão nova, então quem entrasse na conta poderia veicular para um domínio
 > próprio. **Domínio confiável** limita PARA ONDE o anúncio manda; **usuário confiável** limita
