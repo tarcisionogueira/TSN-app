@@ -161,6 +161,50 @@ Windsor; as duas contas já são profissionais — o item 1 do caminho crítico 
 > a saída é ADICIONAR o domínio, nunca desligar a proteção. O ManyChat não é afetado (manda
 > link em DM, não em anúncio) e o Click-to-Message não aponta para domínio nenhum.
 >
+> ### ❌➡️✅ 01/09, FINAL — A VERIFICAÇÃO É COM A **NOGUEIRA**, NÃO COM A REIMOB
+> **Eu errei duas vezes hoje neste ponto e a segunda correção é a que vale.** De manhã escrevi
+> aqui "a verificação é com a REIMOB, não com a NOGUEIRA" — corrigindo um registro de 26/08 que
+> dizia o contrário. **A minha correção estava errada**, e o que a derrubou foi olhar quem
+> OPERA o produto, coisa que eu não tinha feito:
+>
+> `src/components/Footer.jsx` e `src/utils/termos.js` declaram, no rodapé do site e nos Termos
+> que **todo cliente aceita**: *"plataforma operada por **Nogueira Empreendimentos LTDA (CNPJ
+> 02.311.492/0001-61)**"*. O `bidprobrasil.com.br` é juridicamente da Nogueira. Verificar como
+> Reimob e declarar esse site criaria o descasamento que já reprovou o Google — só que criado
+> por mim. **O nome do portfólio ("Reimob Imobiliária") é rótulo de exibição, não entidade.**
+>
+> **DADOS SUBMETIDOS (fonte: contrato social consolidado JUCEB de 31/03/2025,
+> `Contrato social_compressed.pdf` no Drive):**
+> | Campo | Valor |
+> |---|---|
+> | Tipo | **Empresa privada** (LTDA = a "LLC" da descrição; LTDA unipessoal continua privada, **não** "Empresa individual") |
+> | CNPJ | `02.311.492/0001-61` · NIRE `29201924689` |
+> | Nome empresarial | `NOGUEIRA EMPREENDIMENTOS LTDA` |
+> | Nome comercial alternativo | `BidPro Brasil` (amarra a razão social à marca do site) |
+> | Endereço | `Rua Barra Avenida, SN` · compl. `Conj. Barra do Mendes - Mangabeira` · Feira de Santana/BA · CEP `44056-536` |
+> | Site | `https://www.bidprobrasil.com.br` |
+>
+> ✅ **TRÊS FONTES CONCORDAM no endereço:** contrato social (03/2025), rodapé do site, e a
+> verificação do Google que **foi aceita**. Era exatamente para isso que o comentário do
+> `Footer.jsx` dizia *"o site precisa dizer a mesma coisa que os documentos, letra por letra"*.
+>
+> 💪 **Prova de autoridade mais forte do que se supunha:** o contrato de 31/03/2025 mostra a
+> saída da sócia Neuma e deixa **Tarcísio com 15.000 de 15.000 quotas e administração
+> ISOLADA** — quotista único e administrador, não apenas "sócio".
+>
+> ⚠️ **PLANO B se a busca da Receita não casar:** o contrato de 31/03/2025 **mudou o nome** —
+> a empresa se chamava `CLUBE CONSELHEIRO PROMOÇÃO DE VENDAS, COMÉRCIO E SERVIÇOS LTDA` (mesmo
+> CNPJ). Se o cadastro estiver defasado, tentar o nome antigo, ou o NIRE `29201924689`.
+>
+> 📞 **O telefone NÃO é o do cartão CNPJ** — lá está `(75) 2101-2999` com e-mail
+> `contasinfo@contasnet.com.br`, que é a **contabilidade**. Este campo é DESAFIO (recebe código),
+> não campo de correspondência: usar o do documento manda o SMS para o escritório contábil.
+> Foi usado o celular do dono.
+>
+> ℹ️ **A Reimob existe e é dele também** (`REIMOB CONSULTORIA IMOBILIARIA LTDA - ME`, CNPJ
+> `26.747.851/0001-96`, fantasia `REIMOB IMOBILIARIA`, natureza 206-2). Só não é a operadora
+> do BidPro. Cartão CNPJ dela no Drive é de **2017** — desatualizado, se um dia precisar.
+>
 > ### 🎯 01/09 — A VERIFICAÇÃO DA EMPRESA ESTÁ A UM CLIQUE, E COM TUDO CERTO
 > A Central de Segurança tem o card **"Verificação da empresa"** pronto, e ele confirma a
 > correção de hoje de manhã: entidade **"Verificação para Reimob Imobiliária"** (a empresa
