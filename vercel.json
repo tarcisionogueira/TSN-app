@@ -361,6 +361,10 @@
     {
       "path": "/api/processar-analise-jobs-cron",
       "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/instagram-responder-cron",
+      "schedule": "*/20 * * * *"
     }
   ]
 }

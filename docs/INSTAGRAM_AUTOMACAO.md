@@ -18,6 +18,32 @@
 > **Verificação de Negócio** (que é a pendência #9 do HANDOFF, aberta desde 26/08) e o App
 > Review. Nada de código destrava isso.
 >
+> ### 🔗 FASE 2, PEÇA 2 — a espinha ligada: FILA → MOTOR → RASCUNHO
+> `api/instagram-responder-cron.js` (a cada 20 min) + `ig_rascunho` + `ig_taxa_sem_edicao()`.
+> **Ele NÃO envia nada** — o envio é a peça seguinte. Enquanto ela não existe, o pior desfecho
+> possível é um rascunho errado numa tabela, não uma mensagem errada num cliente.
+>
+> **Por que `ig_rascunho` é tabela própria, e não campo em `ig_mensagens`:** (a) `ig_mensagens`
+> é o CORPUS DE TREINO — rascunho que ninguém enviou não é exemplo de nada, e gravado ali com
+> `autor='bot'` seria indistinguível de mensagem enviada; (b) **a régua de promoção só existe
+> se os dois textos coexistirem** — "8 de 10 enviados sem editar" exige comparar o sugerido com
+> o que de fato saiu. Um campo só apagaria a diferença que a régua mede.
+>
+> **Medido em transação com rollback, e os quatro casos passaram:** 1 enviado sem editar
+> devolve **AMOSTRA INSUFICIENTE (1 de 10)** — mostra o 100% e recusa o veredito, senão uma
+> classe seria promovida por acidente; 8 de 10 (um deles diferindo **só em espaços**, que não é
+> edição de conteúdo) → PODE VIRAR AUTONOMA; 7 de 10 → AINDA NAO; rascunho não enviado não
+> aparece, porque não há o que comparar.
+>
+> **Dois freios de custo que medem coisas diferentes:** `TETO_ITENS` (25/rodada, protege a
+> fatura) e o **CLAIM** (`mid_origem` UNIQUE — duas rodadas sobrepostas não pagam duas vezes
+> pela mesma mensagem; o pré-filtro em JS evita a chamada de IA, o UNIQUE é a rede embaixo).
+>
+> ⚠️ **Item com janela EXPIRADA não gasta IA e não some:** vira linha com `acao='perdido'`.
+> Sem isso, janela queimada sairia da fila em silêncio e o sistema pareceria em dia — e "não
+> havia o que fazer" × "não deu tempo" levam a decisões opostas. Falha de IA também não some:
+> vira rascunho com `motivo: falha_motor: <erro>`, visível no painel.
+>
 > ### ⚙️ FASE 2 COMEÇOU — a fila e o classificador estão no ar (dormentes)
 >
 > | Peça | Estado |
