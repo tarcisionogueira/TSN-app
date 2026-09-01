@@ -51,23 +51,60 @@ function quandoPorExtenso(dataHora, agora = Date.now()) {
 }
 
 /**
- * A MENSAGEM. Curta de propósito: WhatsApp não é e-mail, e texto longo de remetente que a
- * pessoa não tem salvo é lido como spam antes de ser lido como convite. Três coisas e só:
- * quem fala, o que é, e o link.
+ * AS MENSAGENS. Duas, e não uma — porque a mesma frase não serve para quem paga e para quem
+ * nunca usou. Mandar "venha conhecer" para um assinante do Investidor Pro queima a única
+ * conversa que se vai ter com ele na semana.
  *
- * A cidade entra quando existe porque é a única frase que prova que não é disparo em massa —
- * e é exatamente o que a aula promete fazer ao vivo. Sem cidade, a frase some inteira em vez
- * de virar "imóveis em ." — a mesma regra do "Olá, !" do cron do lembrete.
+ * A LINHA QUE FAZ A MENSAGEM FUNCIONAR É A QUE PRECISA SER VERDADE. "Você se cadastrou e ainda
+ * não rodou nenhuma análise" é o que prova que não é disparo em massa — e medido em 01/09, vale
+ * para 73 das 76 pessoas não-pagantes da fila. Para as OUTRAS TRÊS ela seria falsa, e uma frase
+ * falsa sobre a conta da própria pessoa prova exatamente o contrário do que pretende. Por isso
+ * a fila devolve `nunca_analisou` e o texto se adapta em vez de generalizar.
+ *
+ * SEM PREÇO E SEM OFERTA, de propósito: o convite serve para levar à aula, e é a AULA que vende.
+ * Preço no convite transforma conversa em anúncio e derruba a resposta.
+ *
+ * O PEDIDO NO MEIO ("me diz a cidade e a faixa") não é enfeite: quem responde uma pergunta já
+ * entrou na conversa, o dono chega na aula com casos reais para analisar, e a resposta TRIA —
+ * quem escreve "R$ 300 mil em Curitiba" é conversa de assessoria, não de plano mensal.
+ *
+ * O link fica sozinho na última linha para o WhatsApp montar o cartão de prévia (`/aula/<slug>`
+ * é servida por `api/og-share` com título, data e capa).
  */
-function montarMensagem({ nome, cidade, uf, quando, link }) {
+function montarMensagem({ nome, cidade, uf, quando, link, pagante, nuncaAnalisou }) {
   const primeiro = String(nome || '').trim().split(/\s+/)[0] || '';
-  const ondeMora = cidade ? ` Se quiser, eu procuro em ${cidade}${uf ? `/${uf}` : ''} e mostro na hora.` : '';
+  const ola = primeiro ? `Oi, ${primeiro}!` : 'Oi!';
+  const onde = cidade ? `${cidade}${uf ? `/${uf}` : ''}` : null;
+  const Q = quando.charAt(0).toUpperCase() + quando.slice(1);
+
+  if (pagante) {
+    return [
+      `${ola} Aqui é o Tarcísio.`,
+      '',
+      `Você é assinante do Investidor Pro, então quero te chamar antes de abrir para o resto: ${quando} eu vou analisar imóveis de leilão ao vivo, da matrícula até a conta final.`,
+      '',
+      `Me manda a cidade e a faixa de valor que você quer investir que eu levo o *seu* caso para a aula e analiso com você assistindo.`,
+      '',
+      link,
+    ].join('\n');
+  }
+
+  // Só entra quando é verdade. Sem ela, a mensagem abre direto no convite — perde a linha
+  // pessoal, mas não afirma nada errado sobre a conta de quem está lendo.
+  const abertura = nuncaAnalisou
+    ? `Vi que você se cadastrou e ainda não chegou a rodar nenhuma análise. ${Q} eu vou fazer isso ao vivo:`
+    : `${Q} eu vou abrir a plataforma ao vivo:`;
+
   return [
-    `${primeiro ? `Oi, ${primeiro}!` : 'Oi!'} Aqui é o Tarcísio, da BidPro Brasil.`,
+    `${ola} Aqui é o Tarcísio, da BidPro Brasil.`,
     '',
-    `${quando.charAt(0).toUpperCase() + quando.slice(1)} eu vou abrir a plataforma ao vivo e garimpar imóveis de leilão na hora para quem estiver no chat.${ondeMora}`,
+    `${abertura} pego imóveis de leilão reais, leio a matrícula e o edital na tela e faço a conta até o fim — quanto o imóvel sai de verdade, quanto dá para revender e onde é prejuízo.`,
     '',
-    `É gratuito e dá para assistir de casa. Sua vaga é por aqui: ${link}`,
+    onde
+      ? `Me diz se você procura em ${onde} mesmo e a faixa que pensa em investir, que eu levo o seu caso e analiso na hora.`
+      : `Me diz a sua cidade e a faixa que você pensa em investir, que eu levo o seu caso e analiso na hora.`,
+    '',
+    `É gratuito. Sua vaga: ${link}`,
   ].join('\n');
 }
 
@@ -121,7 +158,11 @@ export default async function handler(req, res) {
   const quando = quandoPorExtenso(evento.data_hora);
   const fila = (Array.isArray(bruto) ? bruto : []).map((p) => {
     const link = `${BASE}/aula/${evento.slug}?utm_source=whatsapp&utm_medium=direct&utm_campaign=aula-${edicao}&utm_content=fila-admin`;
-    const texto = montarMensagem({ nome: p.nome, cidade: p.cidade, uf: p.uf, quando, link });
+    const texto = montarMensagem({
+      nome: p.nome, cidade: p.cidade, uf: p.uf, quando, link,
+      pagante: p.prioridade === 1,
+      nuncaAnalisou: p.nunca_analisou === true,
+    });
     return {
       user_id: p.user_id, nome: p.nome, cidade: p.cidade, uf: p.uf,
       motivo: p.motivo, prioridade: p.prioridade,
