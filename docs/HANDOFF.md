@@ -161,6 +161,23 @@ Windsor; as duas contas já são profissionais — o item 1 do caminho crítico 
 > a saída é ADICIONAR o domínio, nunca desligar a proteção. O ManyChat não é afetado (manda
 > link em DM, não em anúncio) e o Click-to-Message não aponta para domínio nenhum.
 >
+> ### ✅ 01/09 — CONTAS ENCERRADAS DE FATO. Sobra **UM** alerta, e ele é das contas fechadas.
+> A tarefa em segundo plano completou: o alerta **"4 contas de anúncios inativas" SUMIU**.
+> Sobra só "4 contas sem aprovação de semelhantes" — e são as MESMAS quatro, agora encerradas.
+> Conta fechada não veicula, então não há risco real por trás dele; tende a limpar sozinho.
+> *(As 4 continuarem aparecendo no seletor de conta é esperado: conta encerrada permanece
+> visível para consulta de histórico.)*
+>
+> ✅ **`CA - Tacísio Nogueira Leilões` conferida na tela de detalhe:** proteção personalizada,
+> teto diário R$ 150 **e** total R$ 1.000 marcados, aprovadores **Tarcisio + mamededois**.
+>
+> 🪤 **ARMADILHA DE UI, que me custou um falso alarme:** a LISTA do seletor mostra
+> `"0 aprovadores de c…"` — **texto truncado** — para todas as contas, inclusive a que tem
+> aprovadores configurados. Eu li o resumo cortado como se fosse medição e avisei o dono de um
+> problema que não existia. **A fonte é a tela de detalhe da conta, não a linha da lista.**
+> É a forma nº 10 cometida por mim, e pela terceira vez no dia o antídoto foi o mesmo: abrir o
+> dado em vez de deduzir do resumo.
+>
 > ### 🧹 01/09 — AS 4 CONTAS: ENCERRAMENTO ENFILEIRADO. Mistério resolvido, e a minha
 > ### hipótese estava errada.
 > O diálogo de fechamento devolveu: *"A ação iniciada para esta tarefa será concluída **em
