@@ -161,6 +161,29 @@ Windsor; as duas contas já são profissionais — o item 1 do caminho crítico 
 > a saída é ADICIONAR o domínio, nunca desligar a proteção. O ManyChat não é afetado (manda
 > link em DM, não em anúncio) e o Click-to-Message não aponta para domínio nenhum.
 >
+> ### 🧹 01/09 — AS 4 CONTAS: ENCERRAMENTO ENFILEIRADO. Mistério resolvido, e a minha
+> ### hipótese estava errada.
+> O diálogo de fechamento devolveu: *"A ação iniciada para esta tarefa será concluída **em
+> segundo plano**, mas pode levar algum tempo. Você receberá uma notificação."*
+>
+> **É ISSO que explica a primeira tentativa** — não "cobrança pendente segurando o
+> encerramento", que foi o que eu supus quatro vezes hoje. É tarefa **assíncrona**: roda
+> depois, não confirma na tela, e da primeira vez não completou. As quatro reapareceram
+> selecionáveis com os mesmos IDs, o que fecha a dúvida das 3 (depois 4) evidências.
+>
+> ⚠️ **NÃO DAR COMO FEITO.** Confirmar por um dos três: recarregar a Central de Segurança,
+> reexportar o arquivo, ou Configurações do Negócio → Contas de anúncios. **Se voltarem a
+> aparecer, a tarefa falhou de novo em silêncio** — e aí é caso de suporte, não de repetir.
+> Reversível: "para reativar as contas, acesse a aba ad accounts nas configurações da empresa".
+>
+> ✅ **Fechar as 4 resolve OS DOIS alertas restantes** ("4 contas inativas" e "4 contas sem
+> aprovação de semelhantes" são o mesmo conjunto). Com isso a Central de Segurança fica limpa.
+>
+> 💡 **Confirmado no diálogo, e encerra uma preocupação minha:** *"você não pode veicular novos
+> anúncios com ela, mas **ainda pode ver a atividade anterior e o desempenho**"*. Eu tinha
+> pedido para decidir o que exportar antes de fechar as duas ligadas ao Windsor; a medição já
+> mostrara zero linhas, e agora a Meta confirma que histórico não se perde de todo modo.
+>
 > ### ⏳ 01/09 — VERIFICAÇÃO DA EMPRESA **SUBMETIDA E EM ANÁLISE** (até 48h)
 > "Confirmação de identidade em andamento. Normalmente analisamos suas informações em até 48
 > horas." **O gargalo da Fase 1 saiu do papel — o relógio está correndo.**
