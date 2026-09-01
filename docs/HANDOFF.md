@@ -426,6 +426,38 @@ que não sabe que falhou?* — e a irmã dela, a forma #10: *este número mede o
    partir do 5º documental, se continuar tudo em `amarelo · alta`, a régua travou de novo e o
    suspeito é o teto de confiança do servidor. Roda no ritual de abertura (CLAUDE.md 1c-e).
 
+### 🔒 COMBINADO PARA DEPOIS DA AULA — fechar o `video_url` público de `aulas_admin`
+
+**Acordado com o dono em 01/09; agendado para 03/09 09h BRT** (`trig_01XQrLcXLqssNeASvcNNx8Bv`).
+
+`aulas_admin` tem policy `"Leitura publica aulas" (SELECT true)`, e isso **inclui `video_url`**.
+Logo, a liberação de módulo que subiu em 01/09 é hoje **apenas de interface**: quem abre o
+devtools lista as URLs de vídeo de qualquer módulo, liberado ou não, pagante ou não. Para o
+caso de uso desta semana isso não atrapalha — módulo não gravado não tem vídeo a vazar — mas
+segurar conteúdo já gravado exige descer a trava para o banco.
+
+**O desenho já avaliado — é GRANT DE COLUNA, não RLS de linha** (RLS é por linha e não
+resolveria): `revoke select (video_url) on aulas_admin from anon, authenticated`, mantendo o
+catálogo público (título, módulo, duração, grátis) que as telas de loja precisam; e uma RPC
+`aula_video(p_aula)` SECURITY DEFINER que devolve a URL só quando **plano** e **módulo
+liberado** valem para o chamador.
+
+⚠️ **O trabalho real é portar `podeAssistir(...)` para o servidor** — a regra de acesso por
+plano vive hoje só no cliente. É a parte que precisa estar certa.
+
+**O levantamento já está feito: apenas CINCO arquivos leem `aulas_admin`.**
+
+| arquivo | colunas | precisa do vídeo? |
+|---|---|---|
+| `src/pages/Curso.jsx` | `*` | **sim** — é o player |
+| `src/components/BoasVindasModal.jsx` | `id, titulo, video_url, modulo` | **sim** |
+| `src/pages/Membros.jsx` | `*` | conferir — parece só catálogo |
+| `src/pages/ProdutoPublico.jsx` | `titulo, modulo, duracao, gratis` | não |
+| `src/pages/Admin.jsx` | admin tem policy própria | segue igual |
+
+**Não fazer antes da aula acontecer.** Mexer na leitura de curso na véspera de um lançamento é
+o risco que a espera existe para evitar.
+
 ### 🔴 O QUE PRECISA DE VOCÊ — em ordem de prazo
 1. **HOJE — aula 02/09.** A campanha `CONV - AULA 02SET` gastou **R$ 80,04 por 36 cliques
    (CPC R$ 2,22 — 8× as outras)** e está em **4 inscritos, nenhum novo desde 30/08 16h43**.
