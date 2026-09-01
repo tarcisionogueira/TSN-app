@@ -4012,6 +4012,56 @@ Travas: `verificar:padroes` ✅ · `verificar:sintaxe` ✅ · `npm run build` �
 
 ---
 
+## ✅ 01/09 16h UTC — CONFIRMAÇÃO DO LEMBRETE (fecha o item 3 do bloco acima) + O QUE O CONVITE RENDEU
+
+O bloco de 14h dizia *"os lembretes ainda NÃO saíram, e isso está certo… só confirme depois das
+16h"*. Confirmado, e com uma medição a mais sobre o convite de domingo.
+
+**Lembrete de véspera: saiu.** `live-lembrete-cron`, etapa `vespera`, **16:01 UTC (13:01 BRT)**.
+4 destinatários (todos os inscritos), **4 entregues, 0 falha** — `live_lembretes` e `emails_log`
+batem linha a linha. A etapa `agora` sai em 02/09 às 17h e 18h BRT.
+
+**Convite de 30/08: entregou perfeito e rendeu ZERO — e isso foi verificado, não suposto.**
+
+```
+live_convite_envio: 74 reservados  ·  emails_log 'convite_live': 73 entregues + 1 SUPRIMIDO
+```
+
+O gate de supressão barrou 1 endereço corretamente. O que não veio foi resultado, e três
+instrumentos independentes dizem a mesma coisa:
+
+| instrumento | mede | resultado |
+|---|---|---|
+| `atividade_log` evento `email_clique` | clique no botão do e-mail | **0** desde 30/08 |
+| `visita_origem` com `utm_source='email'` | visita que chegou pelo link | **0** |
+| `live_inscricoes.utm` | inscrição atribuída ao e-mail | **0** |
+
+⚠️ **O rastreador foi testado ANTES de concluir**, porque "ninguém clicou" e "o medidor morreu"
+são indistinguíveis por fora — a forma nº 10 esperando acontecer. `atividade_log` tem 8 cliques
+históricos, **o último em 29/08 00:23**: o instrumento estava vivo na véspera do envio. E
+`linkRastreado` não caiu no fallback de link direto (caminho `/aula/…` é interno, SECRET existe
+em produção). Conclusão sustentada: **73 e-mails entregues, nenhum clique.**
+
+Isso reforça o diagnóstico das 14h — **o e-mail frio para a base não é o canal**. Os 2 únicos
+inscritos desde domingo vieram os dois do Meta, e a fila de WhatsApp (90 dos 92 perfis com
+telefone, `whatsapp_disparo_log` ainda em ZERO) segue como o canal não testado.
+
+**A correção do timeout de 29/08 se sustentou sob tráfego real:** zero ocorrência de
+`/live/leilao-ao-vivo` em `erros_cliente` sob **529 visitas** de primeiro toque da campanha, e o
+`plataforma_numeros_cache` sendo reescrito de hora em hora (acervo 30.384 → 29.789).
+
+### 🐛 Três achados novos nesta passagem (nenhum bloqueia a aula)
+
+- **`relatorio_parecer_vazio` em 01/09 10:04** — cliente recebeu entrega incompleta: mercado
+  calculado (R$ 393.615) e **sem parecer**, motivo `This operation was aborted` em **1 tentativa**.
+  Entrega parcial é pior que falha limpa; vale rever o número de tentativas antes de desistir.
+- **`_leaflet_pos` migrou para `/imovel/:id`** (2×, 01/09) — mesma família do achado de `/planos`
+  em 28/08 (Leaflet mexendo no container depois do unmount). Deixou de ser ocorrência isolada.
+- `vite:preloadError PRESO` 1× em 31/08 — o teto de recarga estourou para alguém. A pessoa foi
+  avisada pelo cartaz de 27/08, não ficou no spinner.
+
+---
+
 ## 🗓️ 29/08 (sessão 13d — ENCERRAMENTO) — O CLIENTE 360 ACHOU A PÁGINA QUE A VERBA PAGA
 
 Fechamento do dia a pedido do dono: *"Verifique o cliente 360 antes de encerrarmos para garantir
