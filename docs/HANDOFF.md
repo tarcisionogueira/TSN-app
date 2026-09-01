@@ -100,6 +100,31 @@ Windsor; as duas contas já são profissionais — o item 1 do caminho crítico 
 > invadido por senha. **Só ligar DEPOIS de ter o segundo método na conta do dono** — senão
 > tranca os dois juntos.
 >
+> **✅ 01/09, mais tarde: o dono REMOVEU TODAS AS PERMISSÕES do Felipe** (a remoção da pessoa
+> em si seguiu bloqueada). Isso rebaixa o item de crítico para residual — o que fazia dele o
+> mais urgente era `finance` + `full_control` numa caixa de Hotmail abandonada, e isso saiu.
+>
+> ⚠️ **MAS "tirei as permissões" precisa ser MEDIDO, não suposto — e há 3 lugares que a tela
+> de Pessoas não alcança:**
+> - **`developer` é papel de APP**, mora em `developers.facebook.com` → app → Funções, e não
+>   sai pelo Gerenciador de Negócios. **É a mesma superfície onde o app do ManyChat vai
+>   nascer** — conferir app por app antes de criar o novo.
+> - **Usuários → Parceiros** (acesso concedido a outra empresa não aparece em Pessoas; já
+>   havia um "falta confirmar" sobre o Igor Queiroz aqui).
+> - **Usuários do sistema** (tokens de integração sobrevivem à saída da pessoa).
+> - E dentro de Pessoas, a aba de **ativos atribuídos** do perfil dele (contas, páginas,
+>   pixels, catálogos são atribuições individuais).
+>
+> **Como conferir:** baixar de novo o arquivo da Central de Segurança e comparar. Se
+> `InactiveUsers` voltar vazia, saiu. Se vier igual, ainda falta distinguir "não saiu" de
+> "relatório defasado" — e as duas pedem ações diferentes.
+>
+> 💡 **Por que a remoção pode destravar agora:** a Meta costuma bloquear a remoção de quem
+> ainda tem ativos atribuídos. Tirar os acessos primeiro é a ordem certa — vale retentar.
+>
+> ⚠️ **O passkey NÃO foi resolvido, só contornado.** Ele volta na criação do app, na
+> Verificação de Negócio e em qualquer mudança sensível — **três vezes só na Fase 1**.
+>
 > **O que o arquivo da Central de Segurança mostrou (01/09):** Felipe Scarafiz
 > (`61581234802963`, `felipe.ribeirao@hotmail.com`) com **`finance` + `full_control` +
 > `developer` + `basic_access`**, inativo há 90+ dias. Os alertas "1 usuário inativo" e
