@@ -111,7 +111,22 @@ Windsor; as duas contas já são profissionais — o item 1 do caminho crítico 
 > por app antes de criar o app do ManyChat**, que nasce nessa mesma superfície. Único resíduo
 > deste item.
 >
-> **✅ AS 4 CONTAS DE ANÚNCIOS INATIVAS PODEM SER FECHADAS — medido, não suposto.**
+> **✅ 01/09 — AS 4 CONTAS INATIVAS FORAM FECHADAS pelo dono.** Com isso, **3 dos 4 alertas**
+> da Central de Segurança estão resolvidos (Felipe fechou dois; as contas, o terceiro).
+>
+> ⚠️ **O alerta "5 contas de anúncios sem aprovação de semelhantes" encolheu sozinho:** 4 das
+> 5 eram justamente as que acabaram de ser fechadas. Sobra **uma** — a `CA - Tacísio Nogueira
+> Leilões`. **Recarregar o painel ANTES de trabalhar nele**, senão a próxima sessão revisa
+> cinco contas onde havia uma.
+>
+> **O que sobra são as duas trancas do MESMO risco:** a Meta publica anúncio parecido com um já
+> aprovado sem revisão nova, então quem entrasse na conta poderia veicular para um domínio
+> próprio. **Domínio confiável** limita PARA ONDE o anúncio manda; **usuário confiável** limita
+> QUEM publica sem revisão. Começar pelo domínio (`bidprobrasil.com.br`, provavelmente já
+> verificado por causa do `conversion_domain`): é uma ação só e vale para o portfólio inteiro.
+>
+> _(medição que liberou o fechamento, mantida para referência:)_
+> **AS 4 CONTAS DE ANÚNCIOS INATIVAS PODIAM SER FECHADAS — medido, não suposto.**
 > `casas em condominio popular` e `imoveis alto padrão` estão no conector Windsor e têm **ZERO
 > linhas em 2 anos**; `reimob 1` e `reimob 2` nem estão conectadas. O aviso anterior ("cuidado,
 > duas alimentam o Windsor") era prudente e virou desnecessário: **não há o que exportar.**
