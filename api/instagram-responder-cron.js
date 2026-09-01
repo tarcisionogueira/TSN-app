@@ -78,7 +78,13 @@ export default async function handler(req, res) {
     const [classes, personas, ofertas] = await Promise.all([
       sb('ig_classe?select=chave,titulo,instrucao,autonomo&ativo=is.true'),
       sb('ig_persona?select=instrucao,nunca_dizer,versao&ativo=is.true&order=criado_em.desc&limit=1'),
-      sb('ig_oferta_vigente?select=titulo,link,intencao&ativo=is.true&order=inicio.desc&limit=1'),
+      // ⚠️ O `fim` PRECISA ENTRAR NO FILTRO, e não entrava. A tabela tem a coluna desde o
+      // primeiro dia e ninguém a lia: uma oferta vencida continuaria sendo a "vigente", e o
+      // redator mandaria gente se inscrever numa aula que já aconteceu — com link, hora e
+      // confiança. Oferta vencida é PIOR que oferta nenhuma: sem oferta o prompt manda
+      // explicitamente não inventar evento; com uma vencida, ele acha que está certo.
+      sb('ig_oferta_vigente?select=titulo,link,intencao&ativo=is.true'
+        + `&or=(fim.is.null,fim.gt.${new Date().toISOString()})&order=inicio.desc&limit=1`),
     ]);
     const persona = personas?.[0] || null;
     const oferta = ofertas?.[0] || null;
