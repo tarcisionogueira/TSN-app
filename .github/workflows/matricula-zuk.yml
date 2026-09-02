@@ -39,5 +39,5 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           ZUK_EMAIL: ${{ secrets.ZUK_EMAIL }}
           ZUK_SENHA: ${{ secrets.ZUK_SENHA }}
-          ZUK_MATRICULA_LOTE: ${{ github.event.inputs.lote || '20' }}
+          ZUK_MATRICULA_LOTE: ${{ github.event.inputs.lote || '60' }}   # 02/09: era 20 (80/dia, 100% de acerto) e a fila dos nunca-checados não zerava
         run: node scripts/captura-matricula-zuk.mjs
