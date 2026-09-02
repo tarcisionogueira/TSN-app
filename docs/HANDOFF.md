@@ -296,6 +296,56 @@ consulta — irmão do P0 (7) de 31/08, endpoint só de admin). Os dois valem 10
 `gerar-documental.js:2137` (o conserto de 31/08 preservou o laudo mas manteve o estorno) e o
 `certidoes.js:165` (arquivo irmão que o conserto não tocou).
 
+### 🧾 02/09, 23h UTC — A TELA DE PRODUTOS DO /admin: 4 PEDIDOS DO DONO, TODOS MEDIDOS
+
+**1. O eBOOK NUNCA SALVOU — e a tela dizia "Tudo salvo".** `ebooks_admin` **não tinha a
+coluna `desconto_vista_pct`** (as irmãs `planos_config` e `cursos_admin` têm). O
+`salvarTudo` manda o mesmo payload para as três, o PostgREST devolvia **400** e o código
+descartava o `error` do postgrest-js — que não lança em não-2xx. O `dirtyIds` era limpo para
+todos e o banner verde aparecia. **A prova estava no nosso próprio rastro**: `erros_cliente`,
+rota `/admin`, 02/09 **16:23 UTC**, *"Could not find the 'desconto_vista_pct' column of
+'ebooks_admin' in the schema cache"* — **1 minuto antes** do `atualizado_em` do plano que
+salvou no mesmo clique. Forma **#7** (migração que nunca chegou ao banco) dentro da forma
+**#2** (erro engolido).
+- Migração `ebooks_admin_desconto_vista_pct.sql` — **aplicada e no repo**.
+- `salvarTudo` reescrito: cada linha responde por si, `.select()` prova o que mudou (RLS que
+  filtra tudo devolve `error` nulo e zero linhas — forma **#3**), **só sai do amarelo o que o
+  banco confirmou**, e o que falhou aparece com nome e motivo numa faixa vermelha.
+
+**2. O preço do plano não chegava na tela de Planos.** `Planos.jsx` buscava o `planos_config`
+**uma vez, no mount** (`deps []`). Quem deixa a página aberta numa aba, muda o preço no admin
+em outra e volta, **não remonta nada**: a tela segue com o valor da primeira leitura, sem erro
+e sem sinal — só F5 resolvia. O `PlanosContext` já resolve isso (re-busca por rota e por
+`visibilitychange`, e o admin invalida o cache ao salvar), mas a tela não o usava. Agora usa,
+com o fetch local como rede para o primeiro paint.
+
+**3. Coluna CONTRATO fora da tabela de Produtos** (decisão do dono: os termos de aceite já
+cobrem). Saiu junto o `ContratoModal` desta tela — **262 linhas que já estavam mortas**, nada
+chamava `setContratoAberto` desde que a criação passou para a tela de Contratos, que segue
+intacta e é o lugar de criar, atribuir e assinar.
+
+**4. As taxas de gateway deixaram de ser digitadas — e a que estava lá era 0%.**
+`config_financeira.taxa_credito_pct` era um número datilografado no /admin que a tela de
+Comissões usava como fato. Medido hoje: **`mp` = 0,000%** (o gateway PRINCIPAL, o único com
+venda) e `asaas` = 2,490% (o que não tem venda nenhuma). Ou seja, a comissão líquida vinha
+calculada **sem custo de gateway**, e ninguém via.
+- A taxa real **sempre esteve no banco**: `mp_pagamentos.dados_mp->fee_details`, por pagamento.
+- Nova RPC `admin_taxas_gateway(p_dias)` (migração no repo, `SECURITY DEFINER` + `eh_admin()`,
+  `anon` sem execute). Medido em 365 dias: **2,4850%** — R$ 7,44 sobre R$ 299,40, em **6 de 7**
+  pagamentos aprovados.
+- **Três cuidados que um `sum(fee)/sum(valor)` não teria:** só `fee_payer='collector'` é custo
+  nosso (a do `payer`, tipo IOF, é do cliente); `origem='terceiro'` são despesas do cartão do
+  dono na mesma conta MP e não são venda; e o **denominador** é só o bruto **medido** — incluir
+  o pagamento sem `fee_details` daria um percentual menor com cara de medição (forma **#10**).
+  Por isso `sem_detalhe` aparece na tela: é o pedaço sobre o qual o número **não** fala.
+- `/admin` mostra o quadro em **leitura**; o DRE (`/admin/financeiro`) ganhou o bloco *"Custo de
+  gateway — o que a maquininha reteve"*; e a coluna *Taxa crédito* das Comissões passa a usar o
+  percentual medido, com **"—"** quando não há medição, em vez de um número inventado.
+
+⚠️ **O que NÃO foi feito:** `verificar:schema` não rodou aqui (falta `SUPABASE_SERVICE_KEY` no
+sandbox — a trava se recusa a aprovar sem medir, que é o comportamento certo). Conferi à mão
+pelo MCP que toda coluna e RPC tocada existe; o CI roda a trava de verdade no push.
+
 ### ✅ 02/09, 19h UTC — TUDO ACIMA ESTÁ EM PRODUÇÃO
 
 `main` = **`ff8d0f1`**, deploy **READY** (19:04 UTC). Os 4 commits da sessão foram para a

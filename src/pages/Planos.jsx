@@ -5,6 +5,7 @@ import { supabase } from '../utils/supabase';
 import { PLANOS as PLANOS_STATIC } from '../data/cursos';
 import { useAuth } from '../contexts/AuthContext';
 import { fetchPlanosComConfig } from '../utils/planosConfig';
+import { usePlanos } from '../contexts/PlanosContext';
 import { salvarRef } from '../utils/ref';
 
 // FAQs montados com os valores reais do planos_config (evita valores fixos
@@ -22,7 +23,17 @@ const buildFAQS = ({ precoMesLabel, mesAnualLabel, anoLabel, economiaPctLabel })
 export default function Planos() {
   const nav = useNavigate();
   const { user, role, effectiveUserId } = useAuth();
+  // 02/09 — POR QUE O PREÇO NÃO CHEGAVA AQUI DEPOIS DE MUDAR NO /admin.
+  // Esta tela buscava o planos_config UMA vez, no mount (deps []). Quem deixa a página
+  // aberta numa aba, muda o preço no admin em outra e volta, não remonta nada: a tela
+  // segue exibindo o valor que leu na primeira vez, sem erro e sem sinal — só um F5
+  // resolvia. O PlanosContext já sabe disso: ele re-busca a cada navegação de rota e
+  // quando a aba volta a ficar visível, e o admin invalida o cache dele ao salvar.
+  // O fetch local fica como REDE (primeiro paint e rota aberta direto), e o contexto
+  // manda quando chega.
+  const planosCtx = usePlanos();
   const [PLANOS, setPLANOS] = useState(PLANOS_STATIC);
+  useEffect(() => { if (planosCtx) setPLANOS(planosCtx); }, [planosCtx]);
   const [faqAberto, setFaqAberto] = useState(null);
   const [periodo, setPeriodo] = useState('mensal');
   const [dv, setDv] = useState({ open: false, nome: '', email: user?.email || '', tel: '', msg: '', enviando: false, ok: false, erro: '' });

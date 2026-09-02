@@ -51,7 +51,14 @@ export default function Comissoes() {
   const [nf, setNf] = useState(null);   // { exigido, enviando, status, motivo }
   const [naoGanhaNovas, setNaoGanhaNovas] = useState(false); // sem plano pago em dia: pode sacar o acumulado, mas não ganha novas comissões
 
-  const [cfinConfig, setCfinConfig] = useState({});  // config financeira por gateway
+  const [cfinConfig, setCfinConfig] = useState({});  // prazo/antecipação por gateway
+  // 02/09: a taxa de crédito deixou de vir de `config_financeira` (número digitado no
+  // /admin). Vinha ZERADA para o Mercado Pago — o gateway principal e o único com venda —
+  // então esta tela mostrava "comissão líquida = comissão bruta" e o custo do gateway
+  // simplesmente não existia no cálculo. Agora sai de `admin_taxas_gateway`, que mede o
+  // que o MP reteve em cada pagamento aprovado. Sem medição, a coluna mostra "—": não há
+  // percentual plausível a inventar.
+  const [taxaReal, setTaxaReal] = useState({});      // gateway → pct efetivo medido
 
   // "sexta, 18/07" a partir do ISO devolvido pela API (calculado no fuso Bahia no servidor).
   const fmtLiberacao = (iso) => {
@@ -68,6 +75,12 @@ export default function Comissoes() {
       supabase.from('config_financeira').select('*'),
       apiCall('/api/saque'),
     ]);
+    supabase.rpc('admin_taxas_gateway', { p_dias: 90 }).then(({ data, error }) => {
+      if (error || !data?.gateways) return;   // sem permissão (parceiro comum) → coluna "—"
+      const m = {};
+      for (const g of data.gateways) m[g.gateway] = g.pct_efetivo == null ? null : Number(g.pct_efetivo);
+      setTaxaReal(m);
+    });
     setComissoes(c || []);
     // MODO SUPORTE: as comissões acima já são as do parceiro visto (alvoId). Mas o saldo e o
     // saque vêm de /api/saque, que usa o TOKEN do admin — seria o saldo do admin. Não exibimos
@@ -420,7 +433,11 @@ export default function Comissoes() {
                       // config_financeira usa a chave 'mp' para o Mercado Pago.
                       const cfgKey = gw === 'asaas' ? 'asaas' : 'mp';
                       const cfg = cfinConfig[cfgKey] || {};
-                      const taxaCredito = Number(cfg.taxa_credito_pct || 0);
+                      // A chave da MEDIÇÃO é o nome do gateway ('mercadopago'), não o
+                      // apelido de config_financeira ('mp').
+                      const medida = taxaReal[gw === 'asaas' ? 'asaas' : 'mercadopago'];
+                      const temMedida = medida != null;
+                      const taxaCredito = temMedida ? medida : 0;
                       const taxaAntecip = cfg.antecipacao_ativa ? Number(cfg.antecipacao_pct_mes || 0) : 0;
                       const prazo = cfg.prazo_recebimento_dias || (gw === 'asaas' ? 32 : 30);
 
@@ -442,7 +459,7 @@ export default function Comissoes() {
                           <td style={{ padding: '8px 10px', color: '#64748b', whiteSpace: 'nowrap' }}>{Number(c.percentual).toFixed(2)}%</td>
                           <td style={{ padding: '8px 10px', fontWeight: 600, color: '#111111', whiteSpace: 'nowrap' }}>{fmt(comissaoBruta)}</td>
                           <td style={{ padding: '8px 10px', color: taxaCredito > 0 ? '#ef4444' : '#94a3b8', whiteSpace: 'nowrap' }}>
-                            {taxaCredito > 0 ? `−${fmt(descontoCredito)} (${taxaCredito}%)` : '—'}
+                            {taxaCredito > 0 ? `−${fmt(descontoCredito)} (${taxaCredito.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}% medido)` : '—'}
                           </td>
                           <td style={{ padding: '8px 10px', color: cfg.antecipacao_ativa ? '#d97706' : '#94a3b8', whiteSpace: 'nowrap' }}>
                             {cfg.antecipacao_ativa ? `−${fmt(descontoAntecip)} (${taxaAntecip}%/mês)` : '—'}
