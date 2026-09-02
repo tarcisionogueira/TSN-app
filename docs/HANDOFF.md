@@ -226,6 +226,76 @@ selecionado" da barra de controles e a função `irParaAnalise`. `npm run build`
   navegação do site capturado como documento pela captura genérica. Não bloqueia nada, mas
   aparece como "documento do leiloeiro" na tela. Fica para a próxima.
 
+### 🧨 02/09, 18h UTC — MEGA J126875 (`46cff9af…`): o EDITAL DESATUALIZADO venceu o SITE VIVO
+
+O dono mandou o print: o site da Mega diz **1ª praça 20/08 (encerrada) por R$ 265.984,50 ·
+2ª praça 10/09 por R$ 159.590,70**; o BidPro dizia *"1ª praça R$ 159.590,70 a partir de
+17/08"*, *"2ª praça R$ 137.000 · 20/08"*, e o relatório do cliente (28/08) projetou ROE de
+160 % sobre um lance de R$ 137.000 **que não existe**. Rastro no banco: às 18:02 UTC de hoje
+`relatorio_anomalias` gravou *"Acervo dizia 2026-09-10T14:30; edital diz 2026-08-17 —
+corrigido pelo documento"*. O scraper estava certo. Duas regras de `api/gerar-analise.js`
+erraram no mesmo lote:
+
+1. **Valores.** O PDF do edital é de 16/07 e avalia em **R$ 228.333,33** (60 % = R$ 137.000).
+   O leiloeiro já publica a avaliação **atualizada pela tabela do TJ** (R$ 265.984,50 → 2ª
+   praça R$ 159.590,70). A trava de 28/08 só barrava *2ª praça acima da avaliação*; 137.000 <
+   265.984 passou, preencheu `valor_minimo_2` (vazio, porque a 1ª praça já tinha encerrado no
+   card), virou `valor_minimo_ref` (coluna gerada, `LEAST`) e foi manchete, filtro, alerta e
+   relatório. **Régua nova:** se a avaliação (ou 1ª praça) declarada no edital diverge da do
+   leiloeiro em mais de 2 %, os VALORES do edital são de outra base (desatualizado ou de
+   outro lote) e não gravam; a anomalia diz isso por extenso.
+2. **Datas.** O "recuo sem prova" de 28/08 só segurava quando o edital NÃO declarava
+   encerramento. Aqui declarava (*"1ª praça de 17/08 a 20/08"*), então a data de INÍCIO
+   já passada (17/08) sobrescreveu a praça VIGENTE do site (2ª, encerra 10/09). **Régua
+   nova:** data de início já passada nunca corrige uma data futura que o leiloeiro publica
+   agora — documento é estático, site é vivo. Ville de Lyon (23/08) segue coberto: a praça
+   única de 25/08 ainda estava no futuro quando corrigiu.
+
+**Lote corrigido no banco** (`data_leilao` 10/09 14:30, `valor_minimo_2`/`data_leilao_2`
+nulos → `valor_minimo_ref` = 159.590,70; `praca1_fim` 20/08 e `praca2_fim` 10/09 já estavam
+certos). ⚠️ **O relatório do cliente (`92c713f3…`, 28/08) continua com R$ 137.000 até ser
+regenerado** — mesma decisão do ZUK acima. Raio da explosão medido: `data_divergente_edital`
+em 7 dias = MEGA 4 · WEBLEILOES 1 · ZUK 1 (o ZUK foi MANTIDO); `valor_minimo_2 < valor_minimo`
+com 2ª praça passada = **só este lote**.
+
+**Questão de semântica que fica para o dono:** `data_leilao_2` recebe o INÍCIO da 2ª praça
+(decisão de 28/08) e a tela imprime *"2ª praça · 20/08"* como se fosse a data do lance; o
+que o cliente precisa é o **encerramento** (`praca2_fim`, 10/09). Ou a tela passa a mostrar
+`praca2_fim` quando existe, ou a coluna muda de significado — não os dois ao mesmo tempo.
+
+### 🧪 BUG BOUNTY — RODADA 1 (3 lentes · 15 achados · 11 confirmados por revisor cético)
+
+Lentes: `mudancas-recentes` · `rpc-contrato` · `qa-p0-recheck`. Cada achado passou por UM
+revisor cético com 3 lentes (código · histórico · impacto), com acesso read-only ao banco.
+As outras 11 lentes **não rodaram**: o teto de uso da conta bateu de novo no fim da rodada
+(reset **22:10 UTC**). Nada abaixo foi corrigido ainda — é a fila da próxima sessão.
+
+| Sev | Onde | O quê (confirmado) |
+|---|---|---|
+| **P1** | `api/enviar-alertas-cron.js:745` | Linhas de `buscar_por_raio_v2` entram no pool **sem** `valor_minimo_ref`/`praca1_fim`/`praca2_fim`/`data_fim`/`data_leilao_2` (a RPC não devolve). O e-mail de alerta mostra a praça cara e `encerradoPorDatas` descarta lote em 2ª praça. Fix: estender o RETURNS TABLE da RPC (migração + aplicar) e projetar as colunas. |
+| **P1** | `api/live-inscrever.js:97` | Confirmação lê `eventos_live.data_hora` CRU; entre o fim da aula e `oferta_fecha_em` (03/09 00:00 → 06/09 03:00 UTC) o e-mail "Sua vaga está garantida" sai com a data **passada** enquanto a LP vende 09/09. `admin-whatsapp-fila.js:199` idem ("nenhuma aula futura"). Fix: ler por `live_proxima(slug)` como já fazem `_convite-live.js` e `live-criar-sala.js`. |
+| **P1** | `api/convidar-live-cron.js:56` | O cron se DESARMA após o 1º envio e responde `ok:true, motivo:'não armado'` para sempre — o cabeçalho de `live-reforco-cron.js` diz que o agendamento diário resolveu o buraco, e não resolveu (é o que deixou 25 exploradores sem convite hoje). Fix: manter armado até a edição passar. |
+| **P1** | `api/_convite-live.js:167` | Evento semanal reusa o `evento_id`: quem se inscreveu na edição N fica **em silêncio total** na N+1 (nem convite, reforço, WhatsApp ou lembrete — todos filtram por `evento_id` só; o UNIQUE de `live_lembretes` também não tem edição). Fix: coluna `edicao` em `live_inscricoes` e `live_lembretes`. |
+| P2 | `api/gerar-documental.js:2137` | No ramo `persistidoNestaRodada` (laudo salvo, pós-salvamento estourou) ainda **estorna a cota**, loga `relatorio_documental_erro` e responde 504/500: relatório entregue de graça e contado como falha. Fix: evento próprio, sem estorno, 200 com aviso. |
+| P2 | `src/pages/ConviteEquipe.jsx:626` | `salvar_kyc_equipe` devolve **boolean**; a tela testa `rKyc?.ok === false` → `false` nunca dispara o aviso. Atenuante medido: anon não tem EXECUTE, então o fluxo sem sessão nem chega lá. |
+| P2 | `api/instagram-webhook.js:294` | Janela de 24 h contada de `now()` do servidor, não do carimbo da Meta; reentrega reabre a janela (upsert de `ig_conversas` antes do insert com ignore-duplicates). |
+| P2 | `api/instagram-webhook.js:290` | Upsert manda `username: null` em toda DM e apaga o username aprendido no comentário (merge-duplicates). Fix: só incluir a chave quando houver valor. |
+| P2 | `api/admin-ig-caixa.js:205` | Desfecho marca `respondida` só no `mid` do rascunho; as DMs anteriores da mesma pessoa voltam à fila e viram rascunhos novos. |
+| P2 | `api/instagram-responder-cron.js:65` | Fila lida com `limit 50` e filtrada em JS por "já tem rascunho": 50 vencidos sem baixa travam a entrada de mensagens novas. Latente (escuta dormente). |
+| P2 | `api/live-reforco-cron.js:157` | Assunto do reforço infere o DIA da semana a partir da HORA (`'19:00'` → "quarta"). Latente enquanto só houver aula de quarta. |
+
+**Refutado (1):** `instagram-webhook.js:270` — o payload do botão Testar da Meta vem em
+`changes[].field='messages'` e é descartado de propósito (HANDOFF de 02/09); "consertar"
+gravaria um usuário falso `12334` no corpus. **Sem veredito (2, limite de sessão):**
+`src/pages/Busca.jsx:1217` (busca por raio sem o guard `atual()` no `!resp.ok` e no
+`setTotalResultados` — o próprio arquivo já usa o idioma nas linhas 1296/1360/1393) e
+`api/certidoes.js:165` (404 da PGFN/FGTS vira "sem débitos" e o parecer verde cita FGTS sem
+consulta — irmão do P0 (7) de 31/08, endpoint só de admin). Os dois valem 10 minutos cada.
+
+**Reconferência dos 7 P0 do QA de 31/08:** 5 dos 7 não aparecem mais no código; sobraram o
+`gerar-documental.js:2137` (o conserto de 31/08 preservou o laudo mas manteve o estorno) e o
+`certidoes.js:165` (arquivo irmão que o conserto não tocou).
+
 ---
 
 ## 🚦 COMECE POR AQUI — estado em 01/09 14h UTC (sessão 18)
