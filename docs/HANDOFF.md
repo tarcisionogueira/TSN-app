@@ -296,6 +296,34 @@ consulta — irmão do P0 (7) de 31/08, endpoint só de admin). Os dois valem 10
 `gerar-documental.js:2137` (o conserto de 31/08 preservou o laudo mas manteve o estorno) e o
 `certidoes.js:165` (arquivo irmão que o conserto não tocou).
 
+### ✅ 02/09, 19h UTC — TUDO ACIMA ESTÁ EM PRODUÇÃO
+
+`main` = **`ff8d0f1`**, deploy **READY** (19:04 UTC). Os 4 commits da sessão foram para a
+`main` por fast-forward, com autorização do dono. `npm run build` ✓ (travas `verificar:padroes`
+e `verificar:sintaxe` passaram no `prebuild`).
+
+### 🕳️ ACHADO DE PASSAGEM, NÃO INVESTIGADO — lote com praça FUTURA e `ativo = false`
+
+Ao conferir o lote da ZUK depois do conserto, ele apareceu **`ativo = false`** com
+`praca1_fim` em **16/09** e `leilao_ja_encerrado() = false`. Não é caso isolado, e é a única
+medição feita:
+
+| Recorte | Linhas |
+|---|---|
+| ZUK inativos com praça futura | **858** |
+| ZUK inativos já encerrados (o normal) | 2.679 |
+| Todas as fontes: inativos com praça futura, mexidos nos últimos 7 dias | **1.759** |
+
+**NÃO tratar como bug ainda.** Lote sai da listagem do leiloeiro por motivos legítimos
+(vendido, suspenso, retirado) e o scraper desativa quem sumiu — o número acima é compatível
+com isso. O que ele NÃO responde: se algum deles sumiu por falha de coleta (scroll infinito
+que trouxe menos, página que falhou) e o acervo perdeu lote vivo em silêncio. **Como
+separar:** pegar 5 dos 858 e abrir a URL no site do leiloeiro (o sandbox não tem saída para
+esses hosts; precisa do runner ou do navegador do dono). Se o lote ainda estiver lá, é
+regressão de captura invisível para o monitor de fontes — que mede VOLUME coletado, não lote
+perdido. `suprimido_motivo` está nulo nos dois casos, ou seja, hoje não há como distinguir
+"desativado porque sumiu" de "desativado por engano" olhando só o banco.
+
 ---
 
 ## 🚦 COMECE POR AQUI — estado em 01/09 14h UTC (sessão 18)
