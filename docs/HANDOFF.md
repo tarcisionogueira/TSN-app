@@ -4,6 +4,196 @@
 
 ---
 
+## 🚦 COMECE POR AQUI — estado em 02/09 12h30 UTC (sessão 19, abertura com Fable 5.1 + ultracode)
+
+> `main` = **`da042fa`**, em produção (deploy READY 00:58 UTC). Heartbeat às **12:17 UTC**.
+> Segurança **0/0** · regras de negócio **0 crítico** · KYC 0 · 0 chamado de cliente sem
+> resposta · 0 fonte no ponto cego · backup ok (66 arquivos, 16 novos, 50 iguais) · CI
+> verde (`Padrões perigosos` e `Deriva código × banco` no `7b2bad4`, 23:54 UTC) · os 30
+> últimos runs de scraper/captura no GitHub: todos `success`.
+> **O "deploy falho" das 19:02 UTC de 01/09** (e-mail da Vercel, `f7e473d`) foi *"An
+> unexpected error occurred when running this build"* DEPOIS de `Build Completed` — erro
+> transitório da Vercel, não do código; o deploy seguinte (19:04, `7dbd24d`) saiu READY.
+
+### 🔴 O QUE PRECISA DE VOCÊ HOJE — a aula é às 22:00 UTC (19h BRT)
+
+1. **25 de 93 exploradores ativos NUNCA receberam o convite** (`emails_log.tipo =
+   'convite_live'`: 76 enviados). O cron das **11h UTC já passou** com
+   `convite_live_armado` **vazio**, e a próxima rodada é 03/09 — depois da aula. **O único
+   caminho hoje é o botão "Convidar a base por e-mail" no `/admin`.** (Rearmar por SQL agora
+   não envia nada hoje.)
+2. **WhatsApp saiu do zero:** 24 disparos em 01/09 (`whatsapp_disparo_log`). Faltam os que
+   não abriram e-mail — a fila em `/admin/whatsapp` continua sendo 1 clique por pessoa.
+3. **Inscritos: 4** (último em 30/08). Lembrete `vespera` **saiu para os 4** (`live_lembretes`
+   = 4 · `emails_log` `live_lembrete_vespera` = 4). Reforços já enviados: 52 `assunto` + 23
+   `prova`. `live_proxima('leilao-ao-vivo')` devolve o evento de 02/09 22:00 UTC — LP sã.
+4. **Meta:** `BR - ABERTO - AULA 02SET` segue pausado (Meta 02/09 até 12h: R$ 0,39 · 7
+   cliques). Google 01/09: R$ 25,99 · 197 cliques · **4 conversões**; Meta 01/09: R$ 37,04 ·
+   528 cliques · 0 conversões.
+
+### 💳 E-MAILS DOS 7 DIAS QUE PEDEM AÇÃO (Gmail lido por inteiro, 3 páginas)
+
+| Quem | O quê | Por que importa |
+|---|---|---|
+| **Google Cloud** (01 e 02/09) | conta de faturamento `0134FB-CA5299-81DA09` vencida/pagamento inválido; "My First Project" **corre risco de suspensão**; "alguns serviços já podem estar afetados" | se é o projeto da chave de **Geocoding** (`uso_integracoes.provedor='google_geocode'`) ou do **OAuth/Ads** (`GOOGLE_OAUTH_*`, `GOOGLE_ADS_*`), a suspensão derruba geocode e a ingestão de marketing. **Conferir em console.cloud.google.com/billing.** |
+| **Google Workspace** (01/09) | pagamento de `reimob.com.br` **recusado** (Mastercard •9666, "saldo insuficiente"); "serviço continuará disponível por um breve período" | é a caixa do dono: alertas do BidPro continuam saindo, mas ninguém os lê |
+| **Mercado Pago** (01/09) | chave Pix `+55 71 99650-2234` **excluída** (reivindicação venceu em 14 dias) | se era a chave de recebimento da conta MP do BidPro, cadastrar outra |
+| **Meta for Developers** (02/09 00:16 UTC) | app `BidPro - Atendimento` mudou para **modo publicado** | `ig_webhook_recebido` tem **2 linhas e as DUAS são o teste do console** (sender `12334`, `random_mid`) — DM/comentário real ainda não chega; continua o item 1 da lista do Instagram |
+| **Cajado de Menezes Advogados** (31/08) | as **duas análises jurídicas** dos imóveis de Guarulhos chegaram (threads "Avaliação de imóvel em leilão" 1 e 2; leilões 01/09 e 08/09) | insumo do caso do dono |
+| **Cartórios de Protesto / cenprot** (28/08 ×2, 01/09 ×2) | "Quite sua pendência" | conferir se há protesto real no CNPJ/CPF, ou se é golpe por e-mail |
+| **Rotina Claude — bug bounty mensal** (01/09) | rodou **headless sem Supabase e sem rede**: não mediu nada; diff do comentário do BIASI não pôde ser pushado (403); `BASELINE_CAPTURA_LEILOEIROS.md` parado em 18/07 | a rotina precisa de conector Supabase + rede liberada, senão só relê histórico |
+| **Rotina Claude — QA semanal** (31/08) | 7 P0 propostos (cache reaproveitado com `valorMercado` nulo cobrado; erro do Supabase na busca sem raio virando "Nenhum resultado"; saque PATCH sem conferir linhas; etc.) | a sessão 16 corrigiu "12 bugs do QA"; reconferidos um a um pelo bug bounty desta sessão (abaixo) |
+| **Rotina Claude — pendências do dono** (31/08) | `ADMIN_EMAIL` na Vercel · nomear analista | seguem abertas |
+| **OpenAI Ads** (29/08) | conta de anunciante **não aprovada** | decisão de canal |
+| **Search Console** (30/08) | `cisioaraujo@gmail.com` adicionado como proprietário de `bidprobrasil.com.br` | confirmar que foi você (mapa de contas do Google, 30/08) |
+
+### 📋 O RITUAL — números de 02/09 12h UTC (tudo medido, nada estimado)
+
+- **erros_cliente (14 d, não resolvidos): 2.** Leaflet `e._leaflet_pos` em `/imovel/:id` ×2
+  (01/09 14:29, iPhone) — mesma família de `/planos` 28/08 e `classList` 30/08: **mapa
+  desmontado no meio da animação de zoom** (4 ocorrências em 5 dias, 3 rotas). E
+  `vite:preloadError PRESO` na home 31/08 21:59 (chunk antigo após deploy; o anti-loop
+  segurou, como devia).
+- **relatorio_anomalias: 11** não resolvidas — 5 `relatorio_incoerente` (2 `sem_parecer`,
+  1 `sem_valor_mercado`, 2 `pagamento_contradiz_documento` de 15 e 17/08 ainda abertas),
+  3 `avaliacao_ausente`, 1 `avaliacao_incoerente` (LJUD, 46×), 1 `mercado_area_incoerente`
+  (WEBLEILOES), 1 `valor_praca_incoerente` (MEGA).
+- **Cliente 360:** `clientes_com_erro` **1** · `relatorios_falha_24h` **0** (7 d: 4) ·
+  `erros_invisiveis_24h` 0 (7 d: 1 — `gerar-analise` 01/09 10:26, *"This operation was
+  aborted"* na redação do parecer do imóvel `adcdc801`, que também tomou 502 em
+  `/api/proximidades-imovel` três vezes) · `sem_perfil` 38/99 · **pagante sem entrega: os
+  mesmos 4 de 6** de ontem. Relatórios: mercado 67 · documental 18 · laudo 3. Funil 7 d:
+  8.840 pageviews · 2.250 visitantes · `/live/leilao-ao-vivo` 764 pv / 556 visitantes.
+- **Marketing 14 d:** 2.670 cliques pagos · 1.329 visitas com `gclid` (**50 %**) · 2.285 com
+  `utm_term` · 2.731 visitas. Cadastros 30 d: **45 sem origem** · 24 google · 3 meta ·
+  1 instagram · 1 chatgpt.com. Ingestão em dia (02/09 já tem linha parcial dos dois canais).
+- **Health-check 06:03 UTC:** 0 erros, 3 avisos (as 11 anomalias; o Leaflet ×2; 1 relatório
+  sem parecer em 24 h).
+- **`qa_invariantes()`: 6 em alerta.** `cadastro_duplicado` 1 · **`cadastro_sem_origem` 3**
+  (a tabela "se provam sozinhas" dizia que zeraria em 02/09 — **não zerou**: são 3 cadastros
+  dos últimos 7 dias sem origem nenhuma) · `erro_na_tela_do_cliente` 2 (LP da aula,
+  *"Não conseguimos carregar esta página"*, 01/09 01:46 e 08:22 UTC — o ramo de RPC com
+  erro, o que o teste `testar:landing-aula` chama de diagnóstico oposto ao de "inscrições
+  fechadas") · **`qa_invariantes_lenta` 9999** (a rodada de 01/09 15:00 **FALHOU**: 8.202 ms,
+  *canceling statement due to statement timeout*; `ms_servidor` é nulo nas 8 linhas de
+  `qa_invariantes_execucao` — **nenhuma rodada bem-sucedida depois do `bf92b5d`**, a de hoje
+  15h UTC é a primeira prova) · `lote_sem_area_nem_matricula` **401/400** (BIASI 164,
+  SUPERBID 70, RJLEILOES 40) · `praca_fim_antes_do_inicio` 1 (ZUK `zuk_37078-231202`:
+  `praca1_fim` 31/08 13:10 < `data_leilao` 21/09 — é o caso "campo avançou para a praça
+  vigente" que a guarda só cobre quando `data_leilao_2` existe; aqui `data_leilao_2` é nulo.
+  **Falso positivo da régua, não do dado** — a 1ª praça já encerrou e o scraper avançou.)
+- **`tempo_processo()`:** 7 chamados fechados sem resposta humana (pior 9,2 d) · 5 casos em
+  `analise_solicitada` há **40,8 d** (mediana) · 2 em `arrematado` há 46 d.
+- **`documental_distribuicao()`:** AMOSTRA INSUFICIENTE (1 pós-regra · 17 legado) — igual.
+- **`fonte_regressao_suspeita()`: 6 linhas.** **SBID21 `zerou`** (0 vs piso 18, `status =
+  falhou`, 01/09 14:53 — é o achado mais duro) · **LEILOFY `regressao`** (18 vs piso 37,
+  `faltando` 16, cinco medições seguidas em 15→18: não é praça esvaziando) · EMILIOMATOS
+  `medicao_velha` **311 h** (última medição real 20/08; 26 e 29/08 foram `sem_cota`) ·
+  NORDESTE 287 h · ALFA 287 h · LEFFA 136 h.
+- **Bright Data, semana de 31/08 (3º dia): 185 requests.** `geral` **100/100 — subcota
+  ESGOTADA na quarta-feira** (`brightdata_decisao` → `permitido: false`; consumidor:
+  `api/enriquecer-lote.js`); `docs` 55/150 · `vlance` 26/60 · `certidao` 4/120; `sucessos +
+  falhas_rede ≈ requests` em todos. `enriquecer-datas-cron`: *"sem cota — run interrompido
+  sem carimbar os restantes"* **11× desde 23/08** (é o freio funcionando, mas todo dia).
+- **Inventário documental:** GESTAOLEILOES **0 %** (104 lotes), SBID9 0 % (33), VLANCE 0 %
+  (22), FERREIRALEIL 8 % (39), SUPERBID 78 % (1.336). Resto ≥ 94 %.
+- **Vercel runtime, 7 dias (22 grupos):** **`cnj-monitor-cron` para em 25 s TODO DIA**
+  (10:01 UTC, `runtime: edge`, *"did not return an initial response within 25s"* — 7 em 7
+  dias: o monitor do CNJ **não roda de fato**, e ninguém vê porque o cron "executa") ·
+  `financeiro-extrato` diário 08:25: Asaas **403 `insufficient_permission`** em `/transfers`
+  e MP `/balance` 403 (chave sem permissão de saque; já registrado em 13/08, HANDOFF
+  l. 13092 — segue gerando 2 erros por dia) · `processar-analise-jobs-cron` **timeout 300 s**
+  (01/09 19:01) e 2 jobs *"resposta sem JSON utilizável"* (30/08) · `limpar-fotos-orfas-cron`
+  RPC statement timeout (31/08) · `live_plataforma_numeros` statement timeout visto por um
+  cliente (28/08) · 3 erros do navegador embutido do Facebook (`Java object is gone`) — ruído
+  do IAB, não nosso.
+- **Supabase advisors (lidos por inteiro):** segurança **224** — 91 funções SECURITY
+  DEFINER executáveis por `authenticated`, **26 por `anon`**, 15 com `search_path` mutável
+  (`preservar_area_e_avaliacao`, `imovel_barrar_fracao_ideal`…), 2 extensões em `public`
+  (`cube`, `earthdistance`), 90 tabelas com RLS sem política (quase todas `_bkp_*`).
+  Performance **569** — **490 `multiple_permissive_policies`**, 3 `auth_rls_initplan`
+  (`onr_protocolos`, `live_inscricoes`, `analise_jobs`), 54 índices nunca usados, 15 FKs sem
+  índice. ⚠️ `auditoria_seguranca()` dá 0/0 porque as 26 definer-anon estão na **allowlist**
+  — vale reler a lista uma vez, não confiar no zero.
+
+### 🔎 SBID21 "zerou" — medido no log do scraper e no banco: **zero REAL, e o piso é de julho**
+
+Log do run `33520744159` (01/09 14:53 UTC): *"Rede Superbid — API offers (portal [21], somente
+abertos)… 0 offers abertas coletadas"* → a API **respondeu** (não é 403/timeout), respondeu
+zero. No banco, `fonte = 'SBID21'` tem **39 linhas na vida toda**: 37 de julho (praças 15–31/07)
+e 2 de 31/08 (praça 31/08) — todas inativas porque a praça passou. O "caiu de 36 para 0" do
+alerta compara com os 36 *offers* do run de 31/08, dos quais só 2 viraram linha SBID21 (o resto
+é dedup com o portal principal, `storeAsLeiloeiro`). **Parser intacto; não consertar.** O que
+está errado é a régua: (a) o scraper carimba `falhou` quando a API responde 0 (`0 < 5`) —
+deveria ser `vazio`; (b) o piso aprendido (18) vem das 34 amostras de julho, quando o sub-portal
+tinha leilão. Mesma assinatura do LEILOFY de 25/08 e da HASTA de 29/08 (forma nº 10, 5ª vez).
+
+⚠️ **Recon vivo NÃO roda desta sessão**: egress para `leilofy.com.br` e `superbid.net` devolve
+`000` (bloqueado). LEILOFY (18 vs piso 37, praças de 02/09 a 05/10 — não é praça esvaziando)
+fica para uma sessão com rede ou para a Rotina mensal com Bright Data.
+
+### 📈 ESCALA (item 5 do ritual) — o que o rastro desta manhã diz
+
+Sinais de teto de banco, todos em 7 dias: `qa_invariantes_medido` **8,2 s → statement
+timeout** (01/09); `live_plataforma_numeros` timeout visto por cliente (28/08);
+`limpar_fotos_orfas` RPC timeout (31/08); `processar-analise-jobs-cron` **300 s**;
+`cnj-monitor-cron` 25 s (edge) todo dia. Pendências já registradas e ainda abertas:
+**490 `multiple_permissive_policies`** (deferido, precisa de passe com teste de RLS por
+papel), Auth com 10 conexões absolutas (resolve ao subir o compute), Upstash para rate limit
+global. Nada disso bloqueia hoje (99 clientes); tudo isso bloqueia a 10 mil.
+
+### 🧪 BUG BOUNTY DO CÓDIGO (item 6) + OFENSIVA DE SEGURANÇA (item 4) — **NÃO RODOU**
+
+Montei a varredura como 14 caçadores (pré-login · telas do produto · telas de dinheiro ·
+admin/equipe · geradores · dinheiro em `api/` · crons · mudanças desde 26/08 · contrato
+JS×RPC · deriva código×banco · 3 lentes ofensivas · reconferência dos 7 P0 do QA de 31/08),
+cada achado passando por um cético com 3 lentes (código · histórico · impacto), todos com
+acesso read-only ao banco. Numa máquina de 4 CPUs o orquestrador só roda 2 agentes por
+workflow, então dividi em 4 workflows paralelos (8 agentes). **Os 14 caçadores morreram
+todos no mesmo instante, com a mesma mensagem: `You've hit your session limit · resets
+5:10pm (UTC)`** — ~2,1 milhões de tokens de subagentes consumidos sem nenhum achado gravado
+(nenhum chegou a devolver JSON). Não é defeito do código nem da base: é o teto de uso da
+conta, e 14 agentes de leitura profunda em paralelo o esgotam em ~6 minutos.
+
+**Para não refazer:** o script está em `docs/WORKFLOW_BUG_BOUNTY_ABERTURA.md` (com os `args`
+de cada um dos 4 workflows). Rodar **depois das 17:10 UTC**, de preferência 1 workflow por
+vez (3–4 lentes), para não bater no teto de novo. Sem ele, os itens 4 e 6 do ritual ficam
+**em aberto nesta abertura** — e os 7 P0 do QA de 31/08 seguem sem reconferência
+independente (a sessão 16 diz ter corrigido 12; ninguém mediu de fora).
+
+### 🎯 PRÓXIMA SESSÃO — o que fazer, em ordem
+
+1. **DONO, HOJE:** botão "Convidar a base por e-mail" no `/admin` (25 exploradores sem convite);
+   `console.cloud.google.com/billing` (conta `0134FB-CA5299-81DA09` vencida); pagamento do
+   Google Workspace; chave Pix do Mercado Pago; `ADMIN_EMAIL` na Vercel; nomear analista.
+2. **Depois das 17:10 UTC:** rodar o bug bounty (script acima), 1 workflow por vez.
+3. **Consertos de código com evidência já medida (fazer com Opus):**
+   - `api/cnj-monitor-cron.js`: `runtime: 'edge'` para em 25 s **todo dia** — o monitor do
+     CNJ não completa desde pelo menos 27/08. Migrar para Node com `maxDuration` ou responder
+     cedo e trabalhar depois (mesma separação do motor de análise).
+   - Régua de captura: API que **responde zero** (`0 offers abertas`) tem que sair `vazio`,
+     não `falhou`; e `fonte_baseline_aprendida()` de sub-portal que teve leilão em julho e
+     nada desde então não pode virar piso perpétuo (SBID21).
+   - `praca_fim_antes_do_inicio`: a guarda de "campo avançou para a praça vigente" só vale
+     com `data_leilao_2` preenchido; ZUK grava só a vigente (`data_leilao_2` nulo) e cai no
+     falso positivo. Estender a guarda para `praca1_fim < now()`.
+   - Leaflet: 4 erros em 5 dias (`_leaflet_pos`/`classList` em `/imovel/:id` e `/planos`) —
+     mapa desmontado durante `_onZoomTransitionEnd`; `map.remove()` no cleanup antes de o
+     componente sair.
+   - `qa_invariantes_lenta`: se a rodada de hoje 15h UTC gravar `ms_servidor`, ler o número;
+     se vier nulo de novo ou timeout, o painel (não a rede) passou de 8 s e precisa de
+     `statement_timeout` próprio ou de dividir a função.
+   - Bright Data `geral` 100/100 na quarta: `api/enriquecer-lote.js` come a subcota inteira
+     em 3 dias, e `enriquecer-datas-cron` para "sem carimbar os restantes" todo dia desde
+     23/08 — decidir teto ou prioridade, não deixar o freio virar rotina.
+   - `financeiro-extrato`: 2 erros 403/dia (Asaas sem permissão de saque · MP balance) desde
+     08/08 — ou trocar a chave, ou parar de chamar o que a chave não pode.
+4. **Fatos do mundo que pedem gente, não código:** 4 pagantes sem relatório em 14 dias ·
+   5 casos parados 40 dias em `analise_solicitada` · 3 cadastros de 7 dias sem origem ·
+   7 chamados fechados sem resposta humana.
+
+---
+
 ## 🚦 COMECE POR AQUI — estado em 01/09 14h UTC (sessão 18)
 
 > `main` = **`1a94a3b`**, em produção (deploy READY). Heartbeat às **14:00 UTC**.
