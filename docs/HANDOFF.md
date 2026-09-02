@@ -1530,6 +1530,127 @@ do DONO — IP residencial dele, com o consentimento dele. Hoje cobre SOLEON, GE
 VLANCE, VENDASGOV, HASTA, radar DJEN e triagem. **A alavanca real é migrar MAIS fontes para
 lá**, não recrutar o IP de cliente. Foi o que 30/08 provou funcionar com as três primeiras.
 
+## 🛑 ONDE PARAMOS — 01/09, fim da noite. LEIA ISTO PRIMEIRO.
+
+### 📸 INSTAGRAM: a escuta está CONFIGURADA e PROVADA, mas a Meta ainda não emite evento real
+
+**O que foi feito hoje, e está tudo verde:**
+
+| Etapa | Estado |
+|---|---|
+| App `BidPro - Atendimento` criado (id `1533306125147104`) | ✅ |
+| Caso de uso **Gerenciar mensagens e conteúdo no Instagram** (só ele) | ✅ |
+| Portfólio **Reimob Imobiliária** (o da verificação em curso) | ✅ |
+| Permissões `instagram_business_basic/manage_comments/manage_messages` | ✅ |
+| Webhook verificado · campos assinados (`messages`, `comments`, +extras) | ✅ |
+| Conta como **Testador do Instagram**, convite ACEITO no app | ✅ |
+| Conta conectada, id `17841400563334157` **confere** | ✅ |
+| **Assinatura do webhook da conta: Ativado** | ✅ |
+| **App PUBLICADO** (política + termos + exclusão + categoria) | ✅ |
+| `IG_APP_SECRET` · `IG_VERIFY_TOKEN` · `IG_APP_SECRET_INSTAGRAM` na Vercel | ✅ |
+
+**Cadeia provada ponta a ponta** (teste do console, 00:48 UTC): Meta entrega → HTTPS chega →
+assinatura fecha → parser roda → linha gravada em `ig_webhook_recebido` com o payload cru.
+
+> ### 🔑 O ACHADO QUE VALEU A NOITE: **quem assina é a chave DO APP DO INSTAGRAM**
+> A Meta expõe **dois** segredos para o mesmo app: a "Chave secreta do app"
+> (Configurações → Básico, id `1533306125147104`) e a **"Chave secreta do app do Instagram"**
+> (página da API do Instagram, id `911295054971510`). A documentação não diz qual assina o
+> `X-Hub-Signature-256`. **É a segunda** — `IG_APP_SECRET_INSTAGRAM`.
+>
+> **Por que isso quase custou dias:** o GET de verificação usa só o verify token e **passa de
+> qualquer jeito**. Com a chave errada, o que quebra é o POST — 401 em toda entrega, para
+> sempre — e o sintoma no banco é **zero linhas**, idêntico a "ninguém mandou mensagem". Duas
+> causas opostas, um sintoma só: a forma de falha nº 1, na porta de entrada do sistema.
+>
+> O que resolveu foi ter feito o webhook **aceitar as duas e registrar qual fechou**. O log
+> imprimiu `[ig] assinatura não fecha com nenhuma das 1 chave(s)` — e foi a **contagem**, não
+> o nome, que denunciou a segunda chave faltando. Instrumento que diz "quantas tentei" vale
+> mais do que instrumento que diz "falhou".
+>
+> ⚠️ **Limpeza pendente:** hoje o webhook aceita as duas. Depois de algumas entregas reais
+> confirmando `IG_APP_SECRET_INSTAGRAM`, **remover `IG_APP_SECRET` da lista** em
+> `api/instagram-webhook.js` e a variável da Vercel.
+
+**⛔ O QUE FALTA, E É ONDE PARAMOS:** o teste sintético do console chega; **DM e comentário
+reais não geram POST nenhum**. Medido nos logs da Vercel: entre 00:48 e 00:50 UTC, zero POSTs
+além do teste. Não é assinatura, não é URL, não é publicação — tudo isso está provado.
+
+**Duas coisas ainda não verificadas, e são as suspeitas na ordem:**
+1. **A assinatura da conta pode não estar ativa de verdade no servidor da Meta.** O toggle do
+   item 2 mostra "Ativado", mas a tela mostra estado, não confirma chamada. **Desligar e ligar
+   de novo** força a reassinatura. Se não resolver, chamar `POST /{ig-user-id}/subscribed_apps`
+   direto pela Graph API e **ler a resposta** — aí a Meta diz por escrito se aceitou.
+2. **O interruptor dentro do app do Instagram** (só no celular, não existe na web):
+   Configurações e privacidade → Mensagens e respostas de story → **Controles de mensagens** →
+   rolar até o fim → algo como **"Permitir acesso a mensagens"**. Se estiver desligado, nenhuma
+   ferramenta externa recebe DM — e **nada no painel de desenvolvedor denuncia isso**.
+   ⚠️ Esta hipótese explica a DM, **mas não o comentário**. Por isso a (1) vem primeiro.
+3. A **Caixa de Entrada de alertas** do app tinha badge `1` — não foi lida. Pode nomear a causa.
+
+**Detalhe que economiza tempo amanhã:** o payload do teste do console vem em
+`entry[].changes[].field="messages"` — formato **genérico do console**, não o de uma DM real
+(que é `entry[].messaging[]`). Por isso ele gravou `nao_reconhecidos: 1` e `gravadas: 0`, e
+**isso é o desfecho correto**. Quando a primeira DM real chegar, o payload cru guardado dirá se
+o parser está certo; se vier em `changes`, é ajuste de dez minutos.
+
+**Também feito hoje, de passagem:** `ig_oferta_vigente` ganhou a primeira linha (a aula de
+02/09, com `fim` na hora da aula + 2h) e o motor passou a **respeitar o vencimento** — ele lia
+só `ativo=true` e mandaria gente para uma aula que já aconteceu, com link e confiança. Oferta
+vencida é pior que oferta nenhuma: sem oferta o prompt manda não inventar evento; com uma
+vencida, o modelo não tem como saber que está errado.
+
+### 📊 CLIENTE 360 — 01/09, 22h. **NÃO está verde.**
+
+`select public.admin_360_estatisticas();`
+
+| Indicador | Valor | Leitura |
+|---|---|---|
+| `clientes_com_erro` | **1** | verde é 0 |
+| `relatorios_falha_24h` | **1** | verde é 0 |
+| `relatorios_falha_7d` | 4 | |
+| `erros_invisiveis_24h` | 1 (`gerar-analise`) | erro que o cliente tomou sem ver |
+| `erros_abertos_total` | 2 | |
+| `sem_perfil` | **37 de 98 (38%)** | triagem não respondida → e-mail de oportunidade sai genérico |
+| `alerta_incompleto_7d` | 3 clientes | raio de 200 km e só 1 imóvel encontrado (TO, PA) |
+| Funil público 7d | 8.859 pageviews · 2.243 visitantes | `/live/leilao-ao-vivo`: 763 pv / 556 visitantes |
+
+A falha de 24h é `relatorio_parecer_vazio` com motivo **"sem comparáveis"** (Santana de
+Parnaíba). Não é bug de código — é limite de dado; mas **chegou ao cliente como parecer vazio**,
+e isso é decisão de produto, não de infraestrutura: ou o relatório diz que não há comparável, ou
+não deveria sair.
+
+> ⚠️ **PAGANTE SEM ENTREGA — 4 dos 6.** Assinaram e **não geraram um relatório em 14 dias**:
+> `top2` de 01/07 · `assessorado` de 06/07 · `assessorado` de 15/07 · `top2` de 06/08.
+> É churn em formação, e é mais barato ver aqui do que na fatura. **Ação para amanhã.**
+
+### 📣 MARKETING — 01/09. A pendência de atribuição do dono **está resolvida**.
+
+| Medida (14 dias) | 14/08 | **01/09** |
+|---|---|---|
+| Cliques pagos | 214 | **2.069** |
+| Visitas com `gclid` | **19** | **1.314** |
+| Visitas com `utm_term` | **0** ← pendência A | **2.246** |
+| Visitas totais | — | 2.689 |
+| Gasto | — | **R$ 472,12** |
+
+**A razão que importa saiu de 9% para 63%** (1.314 de 2.069). O resto é perda estrutural
+esperada — navegador embutido, cookie limpo, outro aparelho. E `utm_term`, que era **zero**,
+hoje vem em 2.246 visitas: a pendência A do dono está encerrada.
+
+**Cadastros por origem (30 dias):** `(sem origem)` **44** · google **24** · meta **3** ·
+instagram **1** · chatgpt.com **1**.
+
+> ⚠️ **Os 44 sem origem são a próxima pergunta, não um erro.** A atribuição de VISITA está
+> ótima (63%); a de CADASTRO não acompanhou. Ou o `perfis.mkt_*` não está sendo gravado no
+> cadastro para quem veio com origem, ou esses 44 são orgânicos/diretos de verdade. **Isso se
+> mede cruzando `visita_origem` × `perfis` pelo dispositivo — não se resolve por opinião.**
+
+**Meta Ads × Google Ads:** o Meta gasta menos e clica muito mais (31/08: R$ 32,64 → 360
+cliques), mas **quase toda conversão registrada é do Google** (31/08: 3; 29/08: 2). Uma linha
+do Meta em 30/08 destoa: **R$ 59,55 para 28 cliques** (R$ 2,13/clique contra ~R$ 0,10 das
+outras) — vale olhar qual conjunto é esse.
+
 ### 📣 01/09 — QUATRO DEFEITOS NO MESMO TEXTO, NUM DIA. E o quarto atingiu 64 de 66 pessoas.
 
 O dono pediu: *"revise todas as respostas, elas não iniciam automaticamente para cada tipo de
