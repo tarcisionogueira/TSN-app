@@ -1141,14 +1141,19 @@ async function enriquecerDatasZuk(browser, imoveis) {
       // Mesma visita: captura área e ocupação do texto do lote (grátis) — o Zuk
       // não traz área na listagem, só na página interna.
       const ext = extrairDaDescricao(txt);
-      // ÁREA: o Zuk mostra "Metragem total" E "Metragem útil". Para preço/m² usar a
-      // ÚTIL (privativa) — a total infla a área e SUBESTIMA o R$/m², o que fazia o
-      // relatório de mercado SUPERESTIMAR o valor (usava a total). Cai p/ total, e só
-      // então para a área genérica da descrição.
-      const utilTxt  = (txt.match(/metragem\s*[úu]til[^\d]*([\d.,]+)\s*m/i) || [])[1];
+      // ÁREA: o Zuk mostra "Metragem total" E a útil — que o site rotula "Metragem
+      // PRIVATIVA" (medido em 02/09 no lote Z37106: total 124,04 · privativa 54,55). O
+      // regex só aceitava "útil", então caía na TOTAL, e o relatório de mercado saiu com
+      // R$ 12.718/m² × 124,04 m² = R$ 1,58 mi num apartamento de 54,55 m² (2,3× o valor).
+      // Para preço/m² usar a PRIVATIVA/útil; cai p/ total, e só então para a área genérica.
+      // E a privativa SOBRESCREVE uma área já gravada: os 480 lotes ZUK entraram com a
+      // total antes deste conserto, e `!im.area_m2` os deixaria errados para sempre.
+      const utilTxt  = (txt.match(/metragem\s*(?:[úu]til|privativa)[^\d]*([\d.,]+)\s*m/i) || [])[1];
       const totalTxt = (txt.match(/metragem\s*total[^\d]*([\d.,]+)\s*m/i) || [])[1];
-      const areaZuk = utilTxt ? parseBRL(utilTxt) : (totalTxt ? parseBRL(totalTxt) : (ext.area_m2 || 0));
-      if (areaZuk && !im.area_m2) im.area_m2 = areaZuk;
+      const areaUtil = utilTxt ? parseBRL(utilTxt) : 0;
+      const areaZuk = areaUtil || (totalTxt ? parseBRL(totalTxt) : (ext.area_m2 || 0));
+      if (areaUtil > 0 && areaUtil !== Number(im.area_m2 || 0)) im.area_m2 = areaUtil;
+      else if (areaZuk && !im.area_m2) im.area_m2 = areaZuk;
       if (ext.ocupacao && !im.ocupacao) im.ocupacao = ext.ocupacao;
       // EDITAL PDF real (recon 18/07): na ZUK o link_edital é a PÁGINA do lote, não o
       // PDF. O <a> "Edital de venda" aponta p/ o PDF em documentacaoleilao.portalzuk;

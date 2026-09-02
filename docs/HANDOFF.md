@@ -192,6 +192,40 @@ independente (a sessão 16 diz ter corrigido 12; ninguém mediu de fora).
    5 casos parados 40 dias em `analise_solicitada` · 3 cadastros de 7 dias sem origem ·
    7 chamados fechados sem resposta humana.
 
+### 🛠️ 02/09, 17h UTC — DOIS PEDIDOS DO DONO, MEDIDOS E CONSERTADOS NESTA BRANCH
+
+**(1) O botão "Analisar" do card da busca SAIU.** `src/pages/Busca.jsx` mandava direto para
+`/caso` com o lote no `state`, sem o cliente ter aberto a página do imóvel — e dava erro (o
+rastro do `/caso` em `eventos_atividade` é *"new row violates row-level security policy for
+table analise_jobs"*, 23–25/08). Decisão do dono: o card leva **só** para a página do imóvel
+("Ver o imóvel →", agora o único botão), e a análise é pedida de lá. Saiu também o "Analisar
+selecionado" da barra de controles e a função `irParaAnalise`. `npm run build` ✓.
+
+**(2) ZUK Z37106 (Rua Paula Ney, 690 — `7a021348…`): área errada E sem matrícula.**
+- **Área:** o site mostra *Metragem total 124,04 m²* e *Metragem **privativa** 54,55 m²*. O
+  regex do scraper (`scripts/scraper-puppeteer.mjs`, re-visita "PortalZuk datas") só aceitava
+  "metragem **útil**" → caía na TOTAL. O mercadológico do cliente saiu com **R$ 12.718/m² ×
+  124,04 m² = R$ 1.577.563** (o correto, sobre 54,55 m², é ~R$ 694 mil — **2,3×**), e o
+  próprio relatório avisa "não confirmada na matrícula", porque não há matrícula. Conserto:
+  regex aceita `privativa`, e a privativa **sobrescreve** a área já gravada (o `!im.area_m2`
+  deixaria os 480 lotes ZUK errados para sempre — todos entraram com a total). O lote foi
+  corrigido no banco agora (`area_m2 = 54.55`); os outros se corrigem na re-visita diária.
+  ⚠️ **O relatório de mercado desse cliente continua com o número errado até ser
+  regenerado** — decisão do dono (regerar sem cobrar cota).
+- **Matrícula:** ZUK **tem** o PDF ("Matrícula do imóvel", login-gated). O lote tinha
+  `matricula_checada_em = NULL` — **nunca entrou na fila**. Medido no log do run
+  `33655809471` (16:35 UTC): `ZUK_MATRICULA_LOTE: 20`, **20 salvas · 0 sem · 0 erro** —
+  acerto de 100 %, mas 20 × 4 rodadas = **80/dia**, e entre os nunca-checados a ordem era a
+  do `id`. Fila: 480 ativos · 291 com matrícula · 189 sem (109 checados sem doc, **80 nunca
+  checados**). Conserto: teto **60** por rodada (`.github/workflows/matricula-zuk.yml`, ~4,5 s
+  por lote) e **praça mais próxima primeiro** entre os nunca-checados
+  (`scripts/captura-matricula-zuk.mjs`). O Z37106 (praça 16/09) entra na rodada das
+  **22:15 UTC** de hoje — depois de `main` receber este commit.
+- **Sujeira que apareceu de passagem:** o lote tem um anexo `tipo = proposta` chamado
+  *"Imóveis Recebendo Proposta…"* apontando para `…/recebendo-proposta?order=l` — link de
+  navegação do site capturado como documento pela captura genérica. Não bloqueia nada, mas
+  aparece como "documento do leiloeiro" na tela. Fica para a próxima.
+
 ---
 
 ## 🚦 COMECE POR AQUI — estado em 01/09 14h UTC (sessão 18)

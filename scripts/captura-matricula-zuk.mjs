@@ -56,6 +56,10 @@ async function main() {
     .not('link_edital', 'is', null)
     .or(`matricula_checada_em.is.null,matricula_checada_em.lt.${cutoff}`)
     .order('matricula_checada_em', { nullsFirst: true, ascending: true })
+    // 02/09: entre os NUNCA checados a ordem era a do id (aleatória na prática) e, com o
+    // teto de 20 por rodada, o lote Z37106 (praça 16/09, cliente já com mercadológico)
+    // ficava atrás de 80 outros. Praça mais próxima primeiro: é quem o cliente vai abrir.
+    .order('data_leilao', { ascending: true, nullsFirst: false })
     .order('id', { ascending: true })
     .limit(LOTE);
   if (error) { console.error('Erro ao ler lotes:', error.message); process.exit(1); }
