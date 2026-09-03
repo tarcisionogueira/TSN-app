@@ -36,6 +36,28 @@ const sb = (path, init = {}) => fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
 const diaNoFuso = (d) => new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
 
 /**
+ * A AULA VIVA entre as ativas: a mais próxima que ainda não passou.
+ *
+ * Pura e exportada de propósito — é a regra que o defeito de 03/09 violava, e regra que não
+ * se pode rodar em seco volta a apodrecer calada. Recebe o que `live_proxima` já resolveu
+ * (nunca a coluna `data_hora`) e devolve UMA aula, ou `null` quando nenhuma está viva.
+ *
+ * A JANELA DE 2h é a mesma da `live_proxima`: quem abre às 19h05 vê "começando agora", e a
+ * fila de WhatsApp precisa continuar valendo durante a aula. Depois dela, o evento só some
+ * daqui se NÃO for recorrente — no recorrente a própria RPC já devolveu a semana seguinte.
+ */
+export function escolherAulaViva(proximas, agora = Date.now()) {
+  let viva = null;
+  for (const aula of Array.isArray(proximas) ? proximas : []) {
+    const quando = Date.parse(aula?.data_hora);
+    if (!Number.isFinite(quando)) continue;
+    if (quando < agora - 2 * 3600000) continue;
+    if (!viva || quando < Date.parse(viva.data_hora)) viva = aula;
+  }
+  return viva;
+}
+
+/**
  * "hoje" / "amanhã" é conta de CALENDÁRIO, não de horas — a mesma armadilha que o cron do
  * lembrete documenta: numa aula às 19h, "faltam 20 horas" cai às 23h do dia anterior, e
  * "amanhã" ali está certo, mas às 6h da manhã do próprio dia estaria errado.
@@ -194,11 +216,29 @@ export default async function handler(req, res) {
   const [perfil] = await rPerfil.json();
   if (perfil?.role !== 'admin') return res.status(403).json({ error: 'Apenas admin' });
 
-  // A aula VIVA: a mesma que a landing e os crons enxergam (`data_hora` é a próxima
-  // ocorrência concreta, mesmo num evento recorrente).
-  const rEv = await sb(`eventos_live?ativo=eq.true&data_hora=gt.${new Date().toISOString()}&select=id,slug,titulo,data_hora&order=data_hora.asc&limit=1`);
+  // A aula VIVA: a mesma que a landing e os crons enxergam.
+  // ⚠️ O COMENTÁRIO QUE ESTAVA AQUI ERA FALSO, e o filtro em cima dele custou a semana (03/09).
+  // Dizia que `data_hora` "é a próxima ocorrência concreta, mesmo num evento recorrente" — não
+  // é: a coluna guarda a ocorrência ANTERIOR até `live_rolar_recorrentes()` avançá-la, e ela só
+  // avança depois de `oferta_fecha_em`, não depois da aula. Com a aula de 02/09 já passada e a
+  // oferta aberta até 06/09, o filtro `data_hora > agora` devolvia ZERO evento e esta tela
+  // respondia "nenhuma aula futura ativa" — a fila de WhatsApp ficava vazia exatamente nos
+  // quatro dias em que ela existe para ser usada, sem erro nenhum na tela. Quem resolve a
+  // recorrência é `live_proxima`, a mesma RPC de `_convite-live.js` e `live-criar-sala.js`.
+  const rEv = await sb('eventos_live?ativo=eq.true&select=slug&order=data_hora.asc');
   if (!rEv.ok) return res.status(502).json({ error: 'evento_ilegivel', detalhe: await rEv.text() });
-  const [evento] = await rEv.json();
+  const ativos = await rEv.json().catch(() => null);
+  if (!Array.isArray(ativos)) return res.status(502).json({ error: 'evento_ilegivel', detalhe: 'corpo inesperado em eventos_live' });
+  const proximas = [];
+  for (const linha of ativos) {
+    const rP = await sb('rpc/live_proxima', { method: 'POST', body: JSON.stringify({ p_slug: linha.slug }) });
+    // Falha de leitura NÃO pode virar "não há aula": os dois desfechos pintam a mesma tela
+    // vazia, e só um deles significa que alguém precisa olhar o log.
+    if (!rP.ok) return res.status(502).json({ error: 'evento_ilegivel', detalhe: await rP.text() });
+    const prox = await rP.json().catch(() => null);
+    if (prox?.data_hora) proximas.push(prox);
+  }
+  const evento = escolherAulaViva(proximas);
   if (!evento) return res.status(200).json({ evento: null, fila: [], motivo: 'nenhuma aula futura ativa' });
 
   const edicao = diaNoFuso(new Date(evento.data_hora));

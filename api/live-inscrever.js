@@ -94,10 +94,29 @@ export default async function handler(req, res) {
   if (cidade.length < 2) return res.status(400).json({ error: 'Informe a sua cidade.' });
 
   // O evento tem de existir e estar ativo — nunca confiar no que a tela mandou.
+  // `.ok` conferido À PARTE: leitura que FALHOU e aula que NÃO EXISTE levam a respostas
+  // opostas. O `evRes.ok ? … : []` que estava aqui transformava um 5xx do PostgREST em
+  // "esta aula não está com inscrições abertas" — o inscrito lia que não há aula e não
+  // voltava mais, num dia em que a aula existia.
   const evRes = await sb(`eventos_live?slug=eq.${encodeURIComponent(slug)}&ativo=eq.true&select=id,titulo,data_hora,link_grupo,whatsapp_direto,vagas_max`);
-  const evs = evRes.ok ? await evRes.json().catch(() => []) : [];
+  if (!evRes.ok) return res.status(502).json({ error: 'Não conseguimos abrir a inscrição agora. Tente de novo em instantes.' });
+  const evs = await evRes.json().catch(() => []);
   const ev = Array.isArray(evs) && evs[0];
   if (!ev) return res.status(404).json({ error: 'Esta aula não está com inscrições abertas.' });
+
+  // A DATA VEM DE `live_proxima`, NUNCA DA COLUNA (03/09).
+  // `eventos_live.data_hora` guarda a ocorrência ANTERIOR até `live_rolar_recorrentes()`
+  // avançar a coluna — e ela só avança depois de `oferta_fecha_em`, não depois da aula.
+  // No intervalo entre as duas coisas (02/09 22h → 06/09 03h, quatro dias) a coluna aponta
+  // para uma aula que JÁ ACONTECEU, e o e-mail de confirmação — a primeira coisa que o
+  // inscrito lê do produto — dizia "sua vaga está garantida … 02 de setembro". A landing
+  // (`LiveInscricao.jsx:106`), o convite (`_convite-live.js:70`) e a sala
+  // (`live-criar-sala.js:54`) já liam pela RPC; era esta rota que mantinha a segunda verdade.
+  const proxRes = await sb('rpc/live_proxima', { method: 'POST', body: JSON.stringify({ p_slug: slug }) });
+  if (!proxRes.ok) return res.status(502).json({ error: 'Não conseguimos abrir a inscrição agora. Tente de novo em instantes.' });
+  const prox = await proxRes.json().catch(() => null);
+  if (!prox?.data_hora) return res.status(404).json({ error: 'Esta aula não está com inscrições abertas.' });
+  ev.data_hora = prox.data_hora;
 
   // Vagas: contar ANTES de criar conta. A checagem é best-effort contra corrida (duas
   // inscrições simultâneas na última vaga passam), e isso é deliberado — recusar alguém

@@ -180,10 +180,15 @@ export default async function handler(req, res) {
     // abertura — o e-mail que explica o que tem dentro — ficou QUEIMADA para ele, e nunca
     // chegará no dia em que a oferta realmente abrir. Com a campanha ligada, isso queimaria
     // a melhor peça da sequência para cada novo inscrito, um a um.
-    // `data_hora` é a data da próxima ocorrência e NÃO é rolada por nenhum job (a
-    // recorrência semanal só vira RRULE no Google Agenda) — então, passada a aula, a
-    // condição fica verdadeira até alguém marcar a próxima, que é o comportamento certo:
-    // aula nova, ciclo novo.
+    // ⚠️ ESTE COMENTÁRIO DIZIA QUE `data_hora` "NÃO é rolada por nenhum job" — FALSO, e a
+    // mesma frase falsa em `admin-whatsapp-fila.js` custou a fila de WhatsApp de uma semana
+    // (03/09). `live_rolar_recorrentes()` avança a coluna, e `live-lembrete-cron.js:178`
+    // chama a função todo dia. O que salva a conta AQUI é a condição da própria RPC: ela só
+    // rola depois de `oferta_fecha_em`, ou seja, depois que o ciclo de venda desta edição
+    // acabou — exatamente quando esta sequência já não tem mais o que enviar. Então a
+    // leitura CRUA é correta neste arquivo, e é o único lugar em que é: aqui se quer a aula
+    // que PASSOU (para saber que ela terminou), não a próxima. Quem quer a próxima usa
+    // `live_proxima`.
     const fimDaAula = ev.data_hora
       ? new Date(ev.data_hora).getTime() + (Number(ev.duracao_min) || 90) * 60000
       : null;
