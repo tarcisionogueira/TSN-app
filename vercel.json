@@ -216,7 +216,7 @@
     },
     {
       "path": "/api/monitor-fontes-cron",
-      "schedule": "0 15 * * *"
+      "schedule": "10 15 * * *"
     },
     {
       "path": "/api/laudo-retry-cron",

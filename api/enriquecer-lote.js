@@ -37,7 +37,13 @@ function sb(path, opts = {}) {
 // em vez de ser pulado inteiro. Sem isto, um teto por rodada só poderia ser aplicado
 // contando TODAS as tentativas (inclusive as que teriam resolvido de graça via direto),
 // jogando fora acervo que não custava nada.
-export async function fetchLote(url, { semBrightData = false } = {}) {
+// `proposito` (03/09): 'geral' (default) é a subcota dos CRONS de fundo
+// (enriquecer-datas-cron.js, enriquecer-backfill-cron.js — nenhum dos dois passa este
+// parâmetro, então continuam caindo aqui sem mudança). O handler on-demand deste MESMO
+// arquivo (quando o cliente abre a tela do imóvel) passa 'geral_cliente' explicitamente —
+// subcota irmã, separada em 03/09 para o cliente nunca ficar sem enriquecimento por causa
+// do backlog dos crons de fundo (ver brightdata_separa_geral_cliente_do_geral_cron.sql).
+export async function fetchLote(url, { semBrightData = false, proposito = 'geral' } = {}) {
   // Anti-SSRF: URL vinda do banco (url_lote/link_edital) — nunca alcança rede interna/metadados.
   if (!hostExternoSeguro(url)) return { html: '', finalUrl: url, via: 'bloqueado' };
   const h = { 'User-Agent': UA, Accept: 'text/html,application/xhtml+xml,*/*;q=0.8', 'Accept-Language': 'pt-BR,pt;q=0.9' };
@@ -53,7 +59,7 @@ export async function fetchLote(url, { semBrightData = false } = {}) {
   // resolvida. A recusa de ORÇAMENTO carimbava o lote como visitado (enriquecido_em) e o
   // jogava para o fim da fila. Agora ela chega NOMEADA (`semCota: true`) ao chamador.
   try {
-    const bd = await buscarViaBrightData(url, { proposito: 'geral' });
+    const bd = await buscarViaBrightData(url, { proposito });
     const text = await bd.text().catch(() => '');
     if (text) return { html: text, finalUrl: url, via: 'brightdata' };
   } catch (e) {
@@ -347,7 +353,7 @@ export default async function handler(req, res) {
     if (ehVendaDireta || im.data_leilao || (recente && !forcar)) {
       res.status(200).json({ ok: true, pulado: ehVendaDireta ? 'cef_venda_direta' : im.data_leilao ? 'cef_tem_data' : 'cef_recente', alterado: false }); return;
     }
-    const { html } = await fetchLote(im.url_lote || '');
+    const { html } = await fetchLote(im.url_lote || '', { proposito: 'geral_cliente' });
     const datasCef = html ? extrairDatasLeilao(html)
       : { inicio: null, fim: null, encerradaEm: null, encerramento: null, praca2: null };
     const { inicio: data, fim } = datasCef;
@@ -428,7 +434,7 @@ export default async function handler(req, res) {
     res.status(200).json({ ok: true, pulado: 'sem_url', alterado: false }); return;
   }
 
-  const { html, finalUrl, via } = await fetchLote(alvo);
+  const { html, finalUrl, via } = await fetchLote(alvo, { proposito: 'geral_cliente' });
   if (!html) {
     // Marca a tentativa para não martelar a fonte a cada abertura.
     await sb(`imoveis_leilao?id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ enriquecido_em: new Date().toISOString() }) }).catch(() => {});

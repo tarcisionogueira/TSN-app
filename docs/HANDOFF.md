@@ -4,6 +4,33 @@
 
 ---
 
+## 📋 SESSÃO 22 · PARTE 10 (03/09, fim de tarde) — AS DUAS DECISÕES DO BLOCO 3, RESOLVIDAS
+
+Pedido do dono: "trata as duas decisões: reagenda o cron e separa a cota."
+
+1. **`monitor-fontes-cron` reagendado.** Era `0 15 * * *` (15:00 UTC) — exatamente o minuto em
+   que `geocodificar` (`0 * * * *`) também dispara, com `desativar-encerrados-cron`
+   (`5 * * * *`) chegando 5 min depois; os três mexem em `imoveis_leilao`, a mesma tabela que
+   `qa_invariantes()` varre pesado. Passou para `10 15 * * *` (15:10 UTC) — conferido contra
+   TODOS os schedules de `vercel.json` que o minuto 10 não colide com nenhuma cron horária/
+   sub-horária (0, 5, 15, 20, 30, 40, 45 já estavam ocupados por outras crons recorrentes).
+   Não mexi na lógica nem no work_mem já aplicado na Parte 9 — só o horário.
+2. **Subcota `geral` do Bright Data separada em duas.** Antes: uma só subcota (100/semana)
+   compartilhada pelos crons de fundo (`enriquecer-datas-cron.js`, `enriquecer-backfill-cron.js`)
+   E pelo enriquecimento on-demand (`enriquecer-lote.js`, quando o cliente abre um imóvel) — os
+   crons podiam esgotar tudo antes do cliente nunca chegar a pedir. Agora:
+   `geral` (crons de fundo) = teto 40/semana, `teto_dia` 7; `geral_cliente` (on-demand) = teto
+   60/semana, `teto_dia` 10 — **soma continua 100, nada de orçamento novo**, só a parede entre
+   os dois lados. `fetchLote()` (`api/enriquecer-lote.js`) ganhou o parâmetro `proposito`
+   (default `'geral'` — os dois crons não passam nada, continuam intocados); as DUAS chamadas
+   dentro do `handler()` on-demand deste mesmo arquivo passam `proposito: 'geral_cliente'`
+   explicitamente. Prioridade dada ao cliente (60 > 40) porque é a experiência ao vivo; os
+   crons de fundo não têm cliente esperando na hora.
+
+Build central rodado depois de tudo: limpo, `Nenhum padrão perigoso NOVO`.
+
+---
+
 ## 📋 SESSÃO 22 · PARTE 9 (03/09, fim de tarde) — BLOCO 3 FECHADO: 5 ACHADOS DE INFRA (workflow com 5 agentes em paralelo)
 
 Rodado via Workflow (5 agentes independentes, um por achado — cada um investigou com dado real
