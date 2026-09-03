@@ -3189,7 +3189,7 @@ export default function Analise() {
                 <div style={{ display:'flex', gap:14, flexWrap:'wrap', marginBottom: ce.formaPagamento ? 8 : 0 }}>
                   {pr.map(p => (
                     <div key={p.n} style={{ fontSize:13, color:'#0c4a6e' }}>
-                      <strong>{p.n}ª praça:</strong> {p.valor > 0 ? `R$ ${fmt(p.valor)}` : 'valor no edital'}{p.data ? ` · ${dataBr(p.data)}` : ''}
+                      <strong>{p.n}ª praça:</strong> {p.valor > 0 ? `R$ ${fmt(p.valor)}` : (ce.valoresDesatualizados ? 'valor desatualizado no documento — use o lance mínimo do anúncio' : 'valor no edital')}{p.data ? ` · ${dataBr(p.data)}` : ''}
                     </div>
                   ))}
                 </div>

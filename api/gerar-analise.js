@@ -223,6 +223,18 @@ export function parseJSON(text) {
   return null;
 }
 
+// TRAVA DE COERÊNCIA entre a avaliação do EDITAL (documento estático) e a avaliação ATUAL
+// do anúncio (`avalDb` — o leiloeiro pode republicar com valor atualizado, ex.: tabela do TJ).
+// Divergência >2% = o PDF é de outra base (desatualizado ou de outro lote): os VALORES dele
+// não podem ser gravados nem exibidos — só a DATA continua confiável (tem validação própria).
+// Extraída para função pura testável (achado do dono, 03/09, lote MEGA J126875): a trava já
+// existia para a COLUNA do banco, mas o relatório e o prompt do parecer não a respeitavam —
+// ver `mercado.condicoesEdital` mais abaixo.
+export function editalValoresBatem({ avalDb, extratoAvaliacao, p1Valor }) {
+  const refEd = (Number(extratoAvaliacao) || 0) || (Number(p1Valor) || 0);
+  return !(Number(avalDb) > 0) || !(refEd > 0) || Math.abs(refEd - Number(avalDb)) / Number(avalDb) <= 0.02;
+}
+
 // O agente que aprende com os relatórios SINALIZA anomalias (o gerador achou algo errado
 // nos dados) para a verificação de saúde — sem custo, sem gerar relatório.
 /**
@@ -2376,31 +2388,37 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
       const pracasEd = extratoDoc.pracas || [];
       const p1 = pracasEd.find(p => p.n === 1);
       const p2 = pracasEd.find(p => p.n === 2);
+      // TRAVA DE COERÊNCIA ANTES DE GRAVAR O VALOR (28/08). O único teste era `p2.valor !==
+      // valor_minimo`, e por isso entrou R$ 136.999,99 num lote avaliado em R$ 267.052,71 —
+      // 60% de R$ 228.333,33, uma avaliação que não é a deste imóvel. O erro só apareceu na
+      // tela porque o preço do site é `least()` entre as praças: valor errado PARA BAIXO
+      // sempre vira a manchete, o filtro de busca e o selo de desconto. O viés é o ponto —
+      // um erro para cima seria ignorado em silêncio, um para baixo é sempre visível.
+      // A defesa principal está no extrator (o percentual declarado no edital vence o "R$"
+      // solto); aqui fica a rede: 2ª praça acima da avaliação é impossível.
+      // 02/09 (MEGA J126875): a trava acima NÃO pega o edital DESATUALIZADO. O edital
+      // (PDF de 16/07) avaliava em R$ 228.333,33 (60% = R$ 137.000); o leiloeiro já
+      // publicava a avaliação atualizada pela tabela do TJ (R$ 265.984,50 → 2ª praça
+      // R$ 159.590,70). 137.000 < 265.984 passou, virou `valor_minimo_ref` (LEAST) e foi
+      // manchete, filtro de busca, alerta e relatório com um lance que não existe mais.
+      // A régua: se o edital declara uma avaliação (ou 1ª praça) que NÃO bate com a do
+      // leiloeiro (>2%), os VALORES dele são de outra base (desatualizado ou de outro
+      // lote) — não gravam. As datas têm regra própria, logo abaixo.
+      const valoresBatem = editalValoresBatem({ avalDb, extratoAvaliacao: extratoDoc.avaliacao, p1Valor: p1?.valor });
+      // 03/09 (MESMO LOTE, achado do dono ao regenerar): a trava acima protegia a COLUNA do
+      // banco (valor_minimo_2 nunca recebia o R$ 136.999,99 errado), mas `mercado.condicoesEdital
+      // .pracas` — o que o RELATÓRIO mostra e o que vai no PROMPT do parecer como "fonte de
+      // verdade" (linha ~2939) — seguia recebendo os MESMOS valores incoerentes sem filtro. O
+      // cliente via "Lance mínimo R$ 159.590,70" no topo da ficha e "1ª praça R$ 228.333,00 · 2ª
+      // praça R$ 137.000,00" no corpo do relatório: três números, nenhum deles conciliado com os
+      // outros dois. `valoresBatem` agora gate os DOIS destinos (grava E exibe), não só o banco.
       if (imDb) {
         const patchPr = {};
-        // TRAVA DE COERÊNCIA ANTES DE GRAVAR O VALOR (28/08). O único teste era `p2.valor !==
-        // valor_minimo`, e por isso entrou R$ 136.999,99 num lote avaliado em R$ 267.052,71 —
-        // 60% de R$ 228.333,33, uma avaliação que não é a deste imóvel. O erro só apareceu na
-        // tela porque o preço do site é `least()` entre as praças: valor errado PARA BAIXO
-        // sempre vira a manchete, o filtro de busca e o selo de desconto. O viés é o ponto —
-        // um erro para cima seria ignorado em silêncio, um para baixo é sempre visível.
-        // A defesa principal está no extrator (o percentual declarado no edital vence o "R$"
-        // solto); aqui fica a rede: 2ª praça acima da avaliação é impossível.
-        // 02/09 (MEGA J126875): a trava acima NÃO pega o edital DESATUALIZADO. O edital
-        // (PDF de 16/07) avaliava em R$ 228.333,33 (60% = R$ 137.000); o leiloeiro já
-        // publicava a avaliação atualizada pela tabela do TJ (R$ 265.984,50 → 2ª praça
-        // R$ 159.590,70). 137.000 < 265.984 passou, virou `valor_minimo_ref` (LEAST) e foi
-        // manchete, filtro de busca, alerta e relatório com um lance que não existe mais.
-        // A régua: se o edital declara uma avaliação (ou 1ª praça) que NÃO bate com a do
-        // leiloeiro (>2%), os VALORES dele são de outra base (desatualizado ou de outro
-        // lote) — não gravam. As datas têm regra própria, logo abaixo.
-        const refEd = (Number(extratoDoc.avaliacao) || 0) || (Number(p1?.valor) || 0);
-        const valoresBatem = !(avalDb > 0) || !(refEd > 0) || Math.abs(refEd - avalDb) / avalDb <= 0.02;
         const p2Coerente = p2?.valor > 0 && (!(avalDb > 0) || p2.valor <= avalDb) && valoresBatem;
         if (p2?.valor > 0 && !p2Coerente) {
           try { await registrarAnomalia('valor_praca_incoerente', fonteDb, imovelId, 'valor_minimo_2', valoresBatem
             ? `Edital deu 2ª praça R$ ${p2.valor} contra avaliação R$ ${avalDb} — descartado.`
-            : `Edital avalia em R$ ${refEd} e o leiloeiro em R$ ${avalDb} (>2%): os valores do edital são de outra base (desatualizado ou de outro lote) — 2ª praça R$ ${p2.valor} descartada.`); } catch { /* rastro best-effort */ }
+            : `Edital avalia em R$ ${(Number(extratoDoc.avaliacao) || 0) || (Number(p1?.valor) || 0)} e o leiloeiro em R$ ${avalDb} (>2%): os valores do edital são de outra base (desatualizado ou de outro lote) — 2ª praça R$ ${p2.valor} descartada.`); } catch { /* rastro best-effort */ }
         }
         if (!(Number(imDb.valor_minimo_2) > 0) && p2Coerente && p2.valor !== (Number(imDb.valor_minimo) || 0)) {
           imDb.valor_minimo_2 = p2.valor; patchPr.valor_minimo_2 = p2.valor;
@@ -2498,11 +2516,17 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
         }
       }
       // Vai no result (dentro de mercado): o front/PDF mostram e o parecer cita.
+      // `valoresBatem` (calculado acima, achado do dono 03/09): quando o edital é de outra base
+      // (desatualizado ou de outro lote), os VALORES não vão pro relatório nem pro prompt do
+      // parecer — só a data continua (tem validação própria, mais abaixo). Sem isto o cliente
+      // via um "lance mínimo" no topo e uma tabela de praças com número diferente no corpo do
+      // mesmo relatório, e o parecer citava o número velho como "fonte de verdade".
       mercado.condicoesEdital = {
-        pracas: pracasEd,
+        pracas: valoresBatem ? pracasEd : pracasEd.map(p => ({ ...p, valor: null })),
+        valoresDesatualizados: !valoresBatem,
         datas: extratoDoc.datas || null,
         formaPagamento: extratoDoc.formaPagamento || null,
-        avaliacao: aEd || null,
+        avaliacao: valoresBatem ? (aEd || null) : null,
         fonte: extratoDoc.fonteUrl || null,
         // REGRAS ESTRUTURADAS p/ projeção de fluxo de caixa (05/08): à vista?, parcelas,
         // sinal/caução, comissão do leiloeiro, prazo de pagamento, financiável/FGTS.
@@ -2940,7 +2964,13 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
           const ce = mercado.condicoesEdital;
           const linhas = (ce.pracas || []).filter(p => p.valor > 0 || p.data)
             .map(p => `${p.n}ª praça: ${p.valor > 0 ? `R$ ${Math.round(p.valor).toLocaleString('pt-BR')}` : 'valor não localizado'}${p.data ? ` em ${String(p.data).split('-').reverse().join('/')}` : ''}`);
-          conteudoParecer += `\n\nCONDIÇÕES LIDAS NO EDITAL DO LOTE (fonte de verdade; use nos cenários de lance e indique a melhor entrada):\n${linhas.join(' · ') || 'praças não localizadas'}${ce.formaPagamento ? `\nPagamento segundo o edital: ${ce.formaPagamento}` : ''}${ce.avaliacao ? `\nAvaliação no edital: R$ ${Math.round(ce.avaliacao).toLocaleString('pt-BR')}` : ''}`;
+          // valoresDesatualizados (03/09, achado do dono): o PDF é de outra base (avaliação do
+          // edital diverge >2% da avaliação atual do anúncio) — os valores já vieram null em
+          // `linhas`; aqui só a INSTRUÇÃO muda, para o parecer não tratar a AUSÊNCIA de valor
+          // como "não achei" e sim como "documento desatualizado, use o lance mínimo do anúncio".
+          const avisoDesatualizado = ce.valoresDesatualizados
+            ? '\nATENÇÃO: os VALORES deste edital são de outra base (documento desatualizado ou avaliação já republicada pelo leiloeiro) e foram descartados — use exclusivamente o(s) valor(es) de lance mínimo do anúncio atual (fornecidos acima) para os cenários e a manchete. As DATAS acima seguem confiáveis.' : '';
+          conteudoParecer += `\n\nCONDIÇÕES LIDAS NO EDITAL DO LOTE (fonte de verdade; use nos cenários de lance e indique a melhor entrada):\n${linhas.join(' · ') || 'praças não localizadas'}${avisoDesatualizado}${ce.formaPagamento ? `\nPagamento segundo o edital: ${ce.formaPagamento}` : ''}${ce.avaliacao ? `\nAvaliação no edital: R$ ${Math.round(ce.avaliacao).toLocaleString('pt-BR')}` : ''}`;
           // CUSTOS DECLARADOS NO DOCUMENTO × os que sustentaram as projeções (06/08). A
           // comissão do leiloeiro MUDA de edital para edital e a taxa administrativa às
           // vezes nem é mencionada na página do lote: quando o documento diz um número
