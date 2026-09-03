@@ -208,6 +208,11 @@ async function handler(req) {
           const payerId = sub.payer_id || sub.payer?.id;
           if (!payerId) continue;
           const ativo = await mpGet(`/preapproval/search?payer_id=${encodeURIComponent(payerId)}&status=authorized&limit=1`);
+          // mpGet devolve null em falha (429/5xx/timeout) — `ativo?.results?.length` vira
+          // undefined (falsy) e o `continue` de baixo NÃO disparava, deixando o rebaixamento
+          // seguir às cegas para quem pode muito bem ter assinatura ativa (bug bounty 03/09).
+          // Mesmo princípio fail-closed já usado 100 linhas acima (pagos === null → continue).
+          if (ativo === null) { console.error('[reconciliar] verificação de assinatura ativa falhou para', payerId, '— não rebaixa às cegas'); continue; }
           if (ativo?.results?.length) continue;
           // ...NEM quem tem o plano vivo por OUTRA via (bug bounty #9): re-assinou no Asaas
           // ou pagou o Pro ANUAL avulso (sem recorrência). Sem isto, o cron rebaixava todo

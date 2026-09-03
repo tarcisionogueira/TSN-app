@@ -248,7 +248,7 @@ export async function ativarPlanoDireto({ userId, planoKey, gateway, cobranca = 
   // quem vira pagante por um caminho que não grava a âncora ficava impedido para sempre
   // de gravá-la, e perdia o direito legal em silêncio. Renovação segue não reiniciando a
   // janela; recontratação após cancelar (que rebaixa a explorador) segue ganhando uma nova.
-  if (await deveAncorarGarantia(userId)) {
+  if (await deveAncorarGarantia(userId, cobranca?.gatewayPaymentId)) {
     upd.plano_pago_em = new Date().toISOString();
   }
   const { error } = await supabase.from('perfis').update(upd).eq('id', userId);
@@ -480,7 +480,7 @@ export async function processarConfirmado({ valor, descricao, email, gatewayCust
     // Renovação (âncora já gravada, ou pagante COM pagamento anterior) não reinicia a
     // janela; conta promovida sem cobrança que passa a pagar ganha a dela, que era o
     // buraco de 29/08.
-    if (await deveAncorarGarantia(cliente.id)) {
+    if (await deveAncorarGarantia(cliente.id, gatewayPaymentId)) {
       update.plano_pago_em = new Date().toISOString();
     }
     // Grava o CICLO do pagamento (mensal/anual). Antes só o mp.js mensal gravava 'mensal'

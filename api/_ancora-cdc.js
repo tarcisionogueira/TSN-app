@@ -42,9 +42,13 @@ const SB_KEY = (process.env.SUPABASE_SERVICE_KEY || '').trim();
  * `fetch` puro de propósito: `mp.js` roda em Edge runtime e não pode carregar o
  * `@supabase/supabase-js` do `_webhook-core.js`.
  * @param {string} userId
+ * @param {string} [excluirGatewayPaymentId] - o pagamento EM CURSO (o que disparou esta
+ *   própria ativação). O webhook já espelha esse pagamento em mp_pagamentos ANTES de
+ *   decidir a âncora — sem excluí-lo, a função via seu próprio gatilho como "histórico"
+ *   e nunca ancorava quem vira pagante por um caminho sem âncora prévia (bug bounty 03/09).
  * @returns {Promise<boolean>}
  */
-export async function deveAncorarGarantia(userId) {
+export async function deveAncorarGarantia(userId, excluirGatewayPaymentId) {
   if (!userId || !SB_URL || !SB_KEY) return false;
   try {
     const r = await fetch(`${SB_URL}/rest/v1/rpc/garantia_7d_avaliar`, {
@@ -53,7 +57,10 @@ export async function deveAncorarGarantia(userId) {
         apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ p_user_id: userId }),
+      body: JSON.stringify({
+        p_user_id: userId,
+        ...(excluirGatewayPaymentId ? { p_excluir_mp_payment_id: String(excluirGatewayPaymentId) } : {}),
+      }),
     });
     // `.ok` conferido: um não-2xx com corpo JSON seria lido como decisão válida —
     // "não consegui" fundido com "a resposta é não" é a forma nº 2 do CLAUDE.md.

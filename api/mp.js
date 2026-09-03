@@ -102,7 +102,7 @@ async function ativarRoleInline(userId, planoKey, mpId) {
     // Regra única em `_ancora-cdc.js` (ver o comentário lá): `PAGANTES.includes(role)`
     // não é sinônimo de "já ancorado", e tratá-lo como tal negava o reembolso de 7 dias
     // a quem virou pagante por um caminho que não gravou a âncora.
-    jaAncorado = !(await deveAncorarGarantia(userId));
+    jaAncorado = !(await deveAncorarGarantia(userId, mpId));
     temAncoraVenc = !!perfil?.plano_vencimento;
   } catch { /* sem leitura, segue com planoBaseKey (comportamento antigo) */ }
   // ANUAL: ancora a vigência de 12m na 1ª ativação (sem âncora ainda). Renovação real vem

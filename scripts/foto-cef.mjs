@@ -74,14 +74,18 @@ async function uploadFoto(imgUrl, fonteId) {
 
 async function limparFotosExpiradas() {
   const noventa = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
-  const { data } = await supabase
+  // `imoveis_leilao` não tem coluna `arrematado` (esse conceito vive em analises_mercado/
+  // analises_documental/analises_laudo/arrematados) — o filtro devolvia 400 do PostgREST,
+  // e sem checar `error` isso virava "nenhuma foto expirada" em toda execução (bug bounty
+  // 03/09). `ativo=false` + idade de `atualizado_em` já cobrem "fora do acervo há 90 dias".
+  const { data, error } = await supabase
     .from('imoveis_leilao')
     .select('fonte_id, link_foto')
     .eq('fonte', 'CEF')
     .eq('ativo', false)
-    .eq('arrematado', false)
     .lt('atualizado_em', noventa)
     .not('link_foto', 'is', null);
+  if (error) { console.error('limparFotosExpiradas falhou:', error.message); return; }
 
   if (!data?.length) return;
 
