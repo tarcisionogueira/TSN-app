@@ -103,8 +103,8 @@ export default async function handler(req) {
         desconto_percentual: desconto,
         area_m2:         lote.area_m2         ? Number(lote.area_m2)         : null,
         data_leilao:     lote.data_leilao ? String(lote.data_leilao).slice(0, 40) : null,
-        // Normaliza ao conjunto canônico (venda_direta/licitacao_aberta/judicial/
-        // extrajudicial) — parceiro pode mandar "Judicial"/"Leilão Extrajudicial" cru.
+        // Normaliza ao conjunto canônico (venda_direta/venda_online/licitacao_aberta/
+        // judicial/extrajudicial) — parceiro pode mandar "Judicial"/"Leilão Extrajudicial" cru.
         modalidade:      normalizarModalidade(lote.modalidade),
         url_lote:        lote.url_lote ? String(lote.url_lote).slice(0, 1000) : null,
         descricao:       lote.descricao ? String(lote.descricao).slice(0, 5000) : null,

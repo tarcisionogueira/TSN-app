@@ -1157,7 +1157,7 @@ export default function Analise() {
     //   captura automática buscar (mostra "preparando", sem pedir ao cliente).
     // • falta algo e NÃO dá pra baixar sozinho → pede o documento AGORA, sem gastar a
     //   análise nem fazer o cliente esperar o servidor só para então pedir o anexo.
-    const ehVendaDiretaDoc = /venda_direta/i.test(String(imovelInicial?.modalidade || ''));
+    const ehVendaDiretaDoc = /venda_(direta|online)/i.test(String(imovelInicial?.modalidade || ''));
     const temMatriculaDoc = !!(urlMatricula || textoMatricula.trim());
     const temEditalDoc = !!(ehArq(imovelInicial?.linkEdital) || urlRegras || urlEdital.trim() || textoDoc.trim()
       || docsLeiloeiro.some(x => x.tipo === 'edital' || x.tipo === 'regras'));
@@ -1712,10 +1712,10 @@ export default function Analise() {
             <div style={{ fontSize:11, fontWeight:800, color:'#94a3b8', textTransform:'uppercase', letterSpacing:1, marginBottom:10 }}>Documentos do leiloeiro</div>
             {(() => {
               const docMap = { edital:'Edital', matricula:'Matrícula', regras_venda:'Regra de venda online', laudo:'Laudo de Avaliação' };
-              // Só os tópicos pertinentes à modalidade: venda direta tem "regra de
-              // venda online" (não edital de leilão); leilão judicial/extrajudicial
-              // tem edital. Matrícula vale em todos.
-              const isVendaDireta = (imovelInicial?.modalidade || '') === 'venda_direta';
+              // Só os tópicos pertinentes à modalidade: venda direta/venda online têm
+              // "regra de venda online" (não edital de leilão) — mesmo PDF padrão da Caixa
+              // para as duas; leilão judicial/extrajudicial tem edital. Matrícula vale em todos.
+              const isVendaDireta = /^venda_(direta|online)$/.test(imovelInicial?.modalidade || '');
               // Anexos capturados pelo scraper/on-demand (imoveis_leilao.anexos) —
               // fonte do Laudo de Avaliação e demais docs além do que o usuário subiu.
               const anexosScrape = Array.isArray(imovelInicial?.anexos) ? imovelInicial.anexos : [];

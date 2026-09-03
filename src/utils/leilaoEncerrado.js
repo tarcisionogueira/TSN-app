@@ -9,10 +9,11 @@
  *
  * As duas cautelas que fazem esta regra não errar para o outro lado:
  *
- * 1) VENDA DIRETA NÃO TEM LEILÃO. Na Caixa, venda direta é venda contínua: 15.516 lotes não têm
- *    data nenhuma e 1.674 carregam uma data velha que a CEF nunca atualiza. Tratar essa data
- *    como "praça vencida" bloquearia 1.674 imóveis que estão à venda hoje. Venda direta nunca
- *    encerra por data — só sai do acervo quando some da fonte.
+ * 1) VENDA DIRETA/VENDA ONLINE NÃO TÊM LEILÃO. Na Caixa nenhuma das duas tem edital de praça
+ *    (mesmo documento padrão de regras) — 15.516 lotes não têm data nenhuma e 1.674 carregam
+ *    uma data velha que a CEF nunca atualiza. Tratar essa data como "praça vencida" bloquearia
+ *    1.674 imóveis que estão à venda hoje. Nenhuma das duas encerra por data — só sai do
+ *    acervo quando some da fonte.
  *
  * 2) SEGUNDA PRAÇA. Só a 1ª praça ter passado é NORMAL (é quando a 2ª, mais barata, interessa).
  *    Encerrado = a MAIS FUTURA de todas as datas conhecidas já passou.
@@ -40,7 +41,7 @@ function limite(v) {
   return { fim, dia };
 }
 
-const ehVendaDireta = (m) => /venda[_\s-]?direta/i.test(String(m || ''));
+const ehVendaDireta = (m) => /venda[_\s-]?(direta|online)/i.test(String(m || ''));
 
 /**
  * @param {object} im imóvel (aceita as duas convenções de nome usadas no app)

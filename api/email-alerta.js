@@ -49,8 +49,8 @@ function gerarEmailHTML(userName, imoveis, filtros, filtroDesc, unsubToken, base
     sala: 'Sala Comercial', vaga: 'Vaga', imovel: 'Imóvel',
   };
   const MODAL_LABEL = {
-    primeiro_leilao: '1ª Praça', segundo_leilao: '2ª Praça',
-    venda_direta: 'Venda Direta', licitacao_aberta: 'Licitação Aberta',
+    primeiro_leilao: '1ª Praça', segundo_leilao: '2ª Praça', praca_unica: 'Praça Única',
+    venda_direta: 'Venda Direta', venda_online: 'Venda Online', licitacao_aberta: 'Licitação Aberta',
     judicial: 'Judicial', extrajudicial: 'Extrajudicial',
   };
   const PGTO_LABEL = {

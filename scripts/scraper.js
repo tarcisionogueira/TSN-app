@@ -220,15 +220,23 @@ function formaPagamentoCEF(descricao, modalidade, financiamento) {
 }
 
 // Normaliza a modalidade de venda da Caixa para os valores usados no app.
-// CRÍTICO: 'venda_direta' isenta o imóvel da exigência de data no fluxo.
-function normalizarModalidadeCEF(modalidade) {
+// A CLASSIFICAÇÃO SEGUE O RÓTULO EXATO DO LEILOEIRO (pedido do dono, 03/09): a Caixa usa
+// "Venda Direta" e "Venda Online" como DUAS coisas diferentes na própria página do lote —
+// venda direta é compra imediata, sem prazo; venda online tem um prazo/contador de
+// encerramento publicado pela Caixa. Empilhar as duas em 'venda_direta' fazia a ficha do
+// imóvel mostrar "Venda Direta" para um lote que a própria Caixa anuncia como "Venda Online"
+// (achado do dono com print — Tambore/Santana de Parnaíba). Mesmo raciocínio para "praça
+// única", que é um leilão datado e não pode virar sinônimo de 1ª praça.
+// CRÍTICO: 'venda_direta' e 'venda_online' isentam o imóvel da exigência de data no fluxo
+// (nenhuma das duas tem edital de leilão — ver `ehVendaSemPraca` abaixo).
+export function normalizarModalidadeCEF(modalidade) {
   const m = (modalidade || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-  // Vendas sem data (contínuas): venda direta, venda online → tratadas como venda_direta
-  if (m.includes('venda') && (m.includes('direta') || m.includes('online'))) return 'venda_direta';
+  if (m.includes('venda') && m.includes('online')) return 'venda_online';
+  if (m.includes('venda') && m.includes('direta')) return 'venda_direta';
   if (m.includes('licitac')) return 'licitacao_aberta';
+  if (m.includes('unica') && m.includes('praca')) return 'praca_unica';
   if (/(^|[^\d])1.{0,3}(leil|praca)/.test(m) || m.includes('primeiro')) return 'primeiro_leilao';
   if (/(^|[^\d])2.{0,3}(leil|praca)/.test(m) || m.includes('segundo')) return 'segundo_leilao';
-  if (m.includes('unica') && m.includes('praca')) return 'primeiro_leilao'; // praça única é datada
   // Leilão/praça genérico da Caixa é EXTRAJUDICIAL (SFI/alienação fiduciária, Lei 9.514).
   // A Caixa NUNCA vende em modalidade judicial — antes isto virava 'judicial' por engano
   // e classificava ~4,5 mil lotes errado (o "executado" é o ex-mutuário, não há processo).
@@ -321,9 +329,11 @@ async function scraperCEFcsv(uf) {
       const valorAval = sanitizarAval(parseBRNumber(m.valor_avaliacao), valorMin);
       if (!m.id || valorMin <= 0) return null;
 
-      // Modalidade normalizada (venda_direta, 1ª/2ª praça, licitação, judicial...)
+      // Modalidade normalizada (venda_direta, venda_online, 1ª/2ª praça, praça única,
+      // licitação, judicial...) — rótulo de EXIBIÇÃO diferencia venda_direta/venda_online,
+      // mas as duas são "sem praça" (nenhum edital de leilão) para fins de documento e data.
       const modalidadeNorm = normalizarModalidadeCEF(m.modalidade);
-      const ehVendaDireta = modalidadeNorm === 'venda_direta';
+      const ehVendaSemPraca = modalidadeNorm === 'venda_direta' || modalidadeNorm === 'venda_online';
       // Forma de pagamento: a Caixa NÃO tem coluna de financiamento no CSV —
       // a info está no texto da descrição. Escaneia descrição + modalidade.
       const formaPagamento = formaPagamentoCEF(m.descricao_csv, m.modalidade, m.financiamento);
@@ -377,8 +387,8 @@ async function scraperCEFcsv(uf) {
         // `trg_preservar_link_edital` (migration preservar_link_edital_pdf.sql): PDF de
         // edital conquistado nunca retrocede para página/nulo. Não remover o gatilho sem
         // mudar isto aqui — e a página do lote segue disponível em `url_lote`.
-        link_edital: ehVendaDireta ? null : linkDetalhe,
-        link_regras_venda: ehVendaDireta ? linkDetalhe : null,
+        link_edital: ehVendaSemPraca ? null : linkDetalhe,
+        link_regras_venda: ehVendaSemPraca ? linkDetalhe : null,
         link_matricula: linkMatricula,
         url_lote: linkDetalhe,
         link_foto: fotoUrl,
@@ -1808,7 +1818,13 @@ async function main() {
   }
 }
 
-main().catch(err => {
-  console.error('Erro fatal:', err);
-  process.exit(1);
-});
+// Guarda de entrypoint: só roda o scraping quando o arquivo é EXECUTADO diretamente
+// (`node scripts/scraper.js`, o comando do workflow). Sem isto, IMPORTAR uma função pura
+// deste arquivo (ex.: normalizarModalidadeCEF, num teste) disparava o scraper inteiro
+// como efeito colateral do import — fetch de todas as UFs da Caixa e escrita no banco.
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main().catch(err => {
+    console.error('Erro fatal:', err);
+    process.exit(1);
+  });
+}

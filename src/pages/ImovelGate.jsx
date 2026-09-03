@@ -69,7 +69,7 @@ export default function ImovelGate() {
     const m = t.match(/^(\d{4})-(\d{2})-(\d{2})/);
     return m ? `${m[3]}/${m[2]}/${m[1]}` : t.slice(0, 40);
   };
-  const MODALIDADE_LABEL = { judicial: 'Leilão judicial', extrajudicial: 'Leilão extrajudicial', licitacao_aberta: 'Licitação aberta', venda_direta: 'Venda direta' };
+  const MODALIDADE_LABEL = { judicial: 'Leilão judicial', extrajudicial: 'Leilão extrajudicial', licitacao_aberta: 'Licitação aberta', venda_direta: 'Venda direta', venda_online: 'Venda online', primeiro_leilao: '1ª praça', segundo_leilao: '2ª praça', praca_unica: 'Praça única' };
   const fichaFatos = [
     ['Tipo', TIPO_LABEL[String(im.tipo || '').toLowerCase()] || null],
     ['Área', Number(im.area_m2) > 0 ? `${Math.round(im.area_m2)} m²` : null],

@@ -898,7 +898,7 @@ export default function ImovelDetalhe() {
   useEffect(() => {
     if (!imovel?.id) return;
     const isCef = imovel.fonte === 'CEF' || imovel.fonte === 'caixa';
-    const isVendaDireta = /venda[_ ]?direta/i.test(imovel.modalidade || '');
+    const isVendaDireta = /venda[_ ]?(direta|online)/i.test(imovel.modalidade || '');
     // Leiloeiro: busca DOCUMENTOS enquanto não tiver (não trava por enriquecidoEm —
     // uma tentativa que falhou não pode esconder os docs para sempre). CEF: busca a
     // DATA do leilão/licitação (fica na página do imóvel, não no CSV) quando ainda
@@ -1162,11 +1162,14 @@ export default function ImovelDetalhe() {
   const paginaLeiloeiroUrl = (ehUrl(imovel.urlLote) ? imovel.urlLote : null)
     || (((imovel.fonte === 'CEF' || /caixa/i.test(imovel.fonte || '')) && String(imovel.fonteId || '').replace(/\D/g, ''))
       ? `https://venda-imoveis.caixa.gov.br/sistema/detalhe-imovel.asp?hdnimovel=${String(imovel.fonteId || '').replace(/\D/g, '')}` : null);
-  // Venda direta → "Regras de venda online"; leilão → "Edital". MAS só rotulamos
+  // Venda direta/venda online → "Regras de venda online"; leilão → "Edital". As duas
+  // modalidades usam o MESMO documento padrão da Caixa (caixaRegrasVendaUrl — o PDF
+  // literalmente se chama "Regras da Venda Online" e vale para as duas); só o RÓTULO de
+  // exibição do badge/modalidade diverge entre elas (ver MODAL_LABEL). MAS só rotulamos
   // como o documento quando o link é um ARQUIVO de verdade. Quando é apenas a
   // página do anúncio no portal (detalhe-imovel.asp = mesmo destino do url_lote),
   // o botão na prática abre o site do leiloeiro → rótulo honesto "Acessar leiloeiro".
-  const isVendaDireta = (imovel.modalidade || '') === 'venda_direta';
+  const isVendaDireta = /^venda_(direta|online)$/.test(imovel.modalidade || '');
   // Venda direta da Caixa: o ARQUIVO de regras é o PDF padrão da Caixa (o link
   // azul "?" do portal). Preferimos ele — é o documento de fato, não a página.
   const caixaRegras = isVendaDireta ? caixaRegrasVendaUrl({ fonte: imovel.fonte }) : null;

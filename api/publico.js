@@ -51,7 +51,7 @@ const dataBR = (s) => { const t = String(s || '').trim(); if (!t) return null;
 // ISO puro (YYYY-MM-DD) para a contagem regressiva no navegador — só quando a data da praça
 // vem em formato reconhecível. Sem isto, o "encerra em N dias" viraria conta sobre texto solto.
 const isoData = (s) => { const m = String(s || '').trim().match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? `${m[1]}-${m[2]}-${m[3]}` : null; };
-const MODALIDADE_LABEL = { judicial: 'Leilão judicial', extrajudicial: 'Leilão extrajudicial', licitacao_aberta: 'Licitação aberta', venda_direta: 'Venda direta' };
+const MODALIDADE_LABEL = { judicial: 'Leilão judicial', extrajudicial: 'Leilão extrajudicial', licitacao_aberta: 'Licitação aberta', venda_direta: 'Venda direta', venda_online: 'Venda online', primeiro_leilao: '1ª praça', segundo_leilao: '2ª praça', praca_unica: 'Praça única' };
 const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
 const slug = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 70);
 
@@ -529,7 +529,7 @@ ${corpo}
 }
 
 // Rótulo curto de modalidade p/ o chip (o label longo fica na ficha do imóvel).
-const MODAL_CURTO = { judicial: 'Judicial', extrajudicial: 'Extrajudicial', licitacao_aberta: 'Licitação', venda_direta: 'Venda direta' };
+const MODAL_CURTO = { judicial: 'Judicial', extrajudicial: 'Extrajudicial', licitacao_aberta: 'Licitação', venda_direta: 'Venda direta', venda_online: 'Venda online', primeiro_leilao: '1ª praça', segundo_leilao: '2ª praça', praca_unica: 'Praça única' };
 
 function cardImovel(im) {
   const t = TIPO_LABEL[String(im.tipo || '').toLowerCase()] || 'Imóvel';

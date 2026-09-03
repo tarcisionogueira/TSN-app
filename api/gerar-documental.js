@@ -1021,7 +1021,7 @@ export default async function handler(req, res) {
     // Se faltar QUALQUER uma, NÃO geramos o laudo (que sairia inconclusivo, "não
     // identifiquei o CPF/não li o documento"): pedimos/obtemos APENAS a(s) que falta(m).
     // Falta de leitura é diligência pendente, não risco jurídico.
-    const ehVendaDiretaSem = /venda_direta/i.test(String(row?.modalidade || ''));
+    const ehVendaDiretaSem = /venda_(direta|online)/i.test(String(row?.modalidade || ''));
     const tipoLido = (l) => l.tipo || tipoDoRotulo(l.rotulo);
     const temMatriculaPre = !!body?.textoMatricula || lidos.some(l => tipoLido(l) === 'matricula');
     // Em venda direta o "edital" é o documento de REGRAS DA VENDA; nos demais, o edital.
@@ -1650,7 +1650,7 @@ export default async function handler(req, res) {
     // IA (documentosAnalisados) — que reconhece o doc mesmo quando o tipo do anexo
     // ficou 'outro' (URL opaca, ex.: SUPERBID) — combinada com o tipo já classificado.
     const da = parsed.documentosAnalisados || {};
-    const isVendaDiretaDoc = /venda_direta/i.test(String(row?.modalidade || ''));
+    const isVendaDiretaDoc = /venda_(direta|online)/i.test(String(row?.modalidade || ''));
     const ehCaixaFonteDoc = /caixa|cef/i.test(row?.fonte || '');
     const leuMatriculaFinal = !!da.matricula || leuMatricula;
     // CAIXA VENDA ONLINE: o documento que rege a compra é a "REGRA DE VENDA ONLINE" PADRONIZADA

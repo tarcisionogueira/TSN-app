@@ -331,10 +331,11 @@ export default async function handler(req, res) {
 
   // CEF: os LINKS de documento são determinísticos (não precisa vasculhar), MAS a
   // DATA do leilão/licitação fica na PÁGINA do imóvel (não vem no CSV em massa).
-  // Busca a data on-demand p/ o cliente se planejar. Venda direta é contínua (sem
-  // data). Throttle de 12h e nunca sobrescreve data já existente.
+  // Busca a data on-demand p/ o cliente se planejar. Venda direta/venda online são
+  // contínuas (sem edital de leilão — mesmo documento padrão da Caixa para as duas).
+  // Throttle de 12h e nunca sobrescreve data já existente.
   if (im.fonte === 'CEF' || im.fonte === 'caixa') {
-    const ehVendaDireta = /venda[_ ]?direta/i.test(im.modalidade || '');
+    const ehVendaDireta = /venda[_ ]?(direta|online)/i.test(im.modalidade || '');
     const recente = im.enriquecido_em && (Date.now() - new Date(im.enriquecido_em).getTime() < 12 * 3600 * 1000);
     if (ehVendaDireta || im.data_leilao || (recente && !forcar)) {
       res.status(200).json({ ok: true, pulado: ehVendaDireta ? 'cef_venda_direta' : im.data_leilao ? 'cef_tem_data' : 'cef_recente', alterado: false }); return;
@@ -374,7 +375,7 @@ export default async function handler(req, res) {
   // matrícula/edital/regras PARA SEMPRE. Agora: só pula de vez quando já achou algo;
   // se ainda não tem doc, tenta de novo após 12h (throttle p/ não martelar a fonte).
   const temDocs = !!(im.link_matricula || im.link_regras_venda || (Array.isArray(im.anexos) && im.anexos.length));
-  const ehVendaDireta = /venda[_ ]?direta/i.test(im.modalidade || '');
+  const ehVendaDireta = /venda[_ ]?(direta|online)/i.test(im.modalidade || '');
   // Falta data quando não temos o início OU não temos o ENCERRAMENTO. O segundo caso era
   // invisível antes: o lote com data de início parecia "completo" e nunca era revisitado, então
   // o prazo real (que é o que decide o lance) nunca chegava a ser capturado.

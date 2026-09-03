@@ -39,7 +39,7 @@ const ROLES_SITE   = ['explorador','top2','assessorado','clube','consultor','ana
 const ROLES_ANALISE = ['top2','assessorado','clube','analista','advogado','admin'];
 
 function fmtData(d, modalidade) {
-  if (!d) return modalidade === 'venda_direta' ? 'Venda Direta' : 'A confirmar no edital';
+  if (!d) return modalidade === 'venda_direta' ? 'Venda Direta' : modalidade === 'venda_online' ? 'Venda Online' : 'A confirmar no edital';
   const dt = parseDataLocal(d); // fuso-safe: data-only não pode virar o dia anterior
   if (!dt) return d;
   return dt.toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit', year:'2-digit' });
@@ -137,7 +137,7 @@ const CIDADES_TEMPORADA = [
   // PARQUES / NATUREZA / AVENTURA
   'fozdoiguacu','bonito','brotas','socorro','altoparaisodegoias','capitolio','lencois','barreirinhas','jijocadejericoacoara',
 ];
-const MODAL_LABEL = { primeiro_leilao:'1ª Praça', segundo_leilao:'2ª Praça', venda_direta:'Venda Direta', licitacao_aberta:'Licitação Aberta', judicial:'Judicial', extrajudicial:'Extrajudicial' };
+const MODAL_LABEL = { primeiro_leilao:'1ª Praça', segundo_leilao:'2ª Praça', praca_unica:'Praça Única', venda_direta:'Venda Direta', venda_online:'Venda Online', licitacao_aberta:'Licitação Aberta', judicial:'Judicial', extrajudicial:'Extrajudicial' };
 
 /**
  * COLUNAS QUE A BUSCA REALMENTE USA (11/08). Antes era `select('*')`.

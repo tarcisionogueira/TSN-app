@@ -4,7 +4,9 @@
 export const MODAL_LABEL = {
   primeiro_leilao: '1ª Praça',
   segundo_leilao: '2ª Praça',
+  praca_unica: 'Praça Única',
   venda_direta: 'Venda Direta',
+  venda_online: 'Venda Online',
   licitacao_aberta: 'Licitação Aberta',
   judicial: 'Judicial',
   extrajudicial: 'Extrajudicial',
@@ -28,6 +30,7 @@ export function fmtData(d, modalidade) {
     // Caixa a data existe, mas no EDITAL (não vem no CSV em massa) — então rotulamos
     // com clareza em vez de "Sem data".
     if (modalidade === 'venda_direta') return 'Venda Direta';
+    if (modalidade === 'venda_online') return 'Venda Online';
     if (modalidade === 'licitacao_aberta') return 'Prazo no edital';
     return 'A confirmar no edital';
   }
@@ -41,6 +44,8 @@ export function fmtData(d, modalidade) {
 export function explicacaoData(modalidade) {
   if (modalidade === 'venda_direta')
     return 'Venda direta é compra contínua — não tem data de leilão. Fica disponível enquanto estiver listada no acervo da Caixa.';
+  if (modalidade === 'venda_online')
+    return 'Venda online tem prazo de encerramento definido pela Caixa, mas sem pregão — o prazo consta nas regras de venda publicadas pelo leiloeiro.';
   if (modalidade === 'licitacao_aberta')
     return 'Nesta licitação a data/prazo para envio das propostas consta no edital (a lista em massa da Caixa não traz esse campo).';
   return 'A data do leilão será confirmada no edital do lote.';
