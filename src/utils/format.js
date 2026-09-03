@@ -53,3 +53,21 @@ export function explicacaoData(modalidade) {
 
 export const fmtBRL = (v) =>
   v ? 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';
+
+// JUDICIAL POR VENDA DIRETA (pedido do dono, 03/09) — achado na PESTANA: 9 lotes cujo texto
+// diz, com todas as letras, "Alienação Judicial Por Venda Direta" (alienação por iniciativa
+// particular, art. 880 CPC — venda negociada DENTRO de um processo judicial, sem pregão) e que
+// hoje aparecem só como "Judicial" no badge. Continuam `modalidade='judicial'` no banco DE
+// PROPÓSITO: é natureza jurídica real, e mudar o valor apagaria o risco processual que
+// `api/calcular-score.js`, `api/processar-analise.js` e o CPC 895 de `Calculadora.jsx` tratam
+// como judicial (a venda ser "direta" não elimina o risco de embargo/recurso do processo — só
+// tira o pregão competitivo). Este helper é PURAMENTE de exibição: enriquece o RÓTULO do badge
+// sem tocar em score, filtro de pagamento ou qualquer gate funcional.
+const RE_JUDICIAL_VENDA_DIRETA = /judicial[^.]{0,20}venda[\s_-]?direta/i;
+export function ehJudicialVendaDireta(modalidade, texto) {
+  return modalidade === 'judicial' && RE_JUDICIAL_VENDA_DIRETA.test(String(texto || ''));
+}
+export function modalidadeLabelDetalhado(modalidade, texto) {
+  const base = MODAL_LABEL[modalidade] || modalidade;
+  return ehJudicialVendaDireta(modalidade, texto) ? `${base} · Venda Direta` : base;
+}

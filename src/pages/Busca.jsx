@@ -12,7 +12,7 @@ import { buscarCidadesEstado, buscarTodasCidades, RAIOS_KM } from '../data/cidad
 import { PAGAMENTO_LABEL, PAGAMENTO_FILTRO_DB, pagamentoParaCanon, pagamentoBadge, soAceitaAVista } from '../data/pagamento';
 import { supabase } from '../utils/supabase';
 import { apiCall } from '../utils/apiCall';
-import { parseDataLocal } from '../utils/format';
+import { parseDataLocal, modalidadeLabelDetalhado } from '../utils/format';
 import { useAuth } from '../contexts/AuthContext';
 import { lerCotas, janelaLabel } from '../utils/cotaAnalise';
 import { useIsMobile } from '../utils/useIsMobile';
@@ -137,7 +137,6 @@ const CIDADES_TEMPORADA = [
   // PARQUES / NATUREZA / AVENTURA
   'fozdoiguacu','bonito','brotas','socorro','altoparaisodegoias','capitolio','lencois','barreirinhas','jijocadejericoacoara',
 ];
-const MODAL_LABEL = { primeiro_leilao:'1ª Praça', segundo_leilao:'2ª Praça', praca_unica:'Praça Única', venda_direta:'Venda Direta', venda_online:'Venda Online', licitacao_aberta:'Licitação Aberta', judicial:'Judicial', extrajudicial:'Extrajudicial' };
 
 /**
  * COLUNAS QUE A BUSCA REALMENTE USA (11/08). Antes era `select('*')`.
@@ -2214,7 +2213,7 @@ export default function Busca() {
                     <div style={{ display:'flex', gap:4, flexWrap:'wrap' }}>
                       {im.tipo && <span style={{ fontSize:9, fontWeight:700, background:'#f1f5f9', color:'#475569', padding:'1px 6px', borderRadius:8 }}>{TIPO_LABEL[im.tipo]||im.tipo}</span>}
                       <span style={{ fontSize:9, fontWeight:700, padding:'1px 6px', borderRadius:8, background:modalColor.bg, color:modalColor.color }}>
-                        {MODAL_LABEL[im.modalidade] || im.modalidade || 'Leilão'}
+                        {im.modalidade ? modalidadeLabelDetalhado(im.modalidade, im.descricao) : 'Leilão'}
                       </span>
                       {im.fracionado && <span style={{ fontSize:9, fontWeight:800, background:'#fef3c7', color:'#92400e', padding:'1px 6px', borderRadius:8 }}>⚠ Fração</span>}
                     </div>

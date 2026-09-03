@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
 import { apiCall } from '../utils/apiCall';
 import ScoreRisco from '../components/ScoreRisco';
-import { fmtBRL, fmtData, MODAL_LABEL, explicacaoData } from '../utils/format';
+import { fmtBRL, fmtData, explicacaoData, modalidadeLabelDetalhado } from '../utils/format';
 import { scoreBidPro, scoreLabel } from '../utils/score';
 import { leilaoEncerrado, pracaMaisDescontada, dataBR } from '../utils/leilaoEncerrado';
 import { caixaMatriculaUrl, caixaRegrasVendaUrl } from '../utils/caixa';
@@ -1294,7 +1294,7 @@ export default function ImovelDetalhe() {
               )}
               <div style={{ position: 'absolute', top: 16, left: 16, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 {imovel.tipo && <span style={{ background: '#111111', color: 'white', fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 20 }}>{TIPO_LABEL[imovel.tipo] || imovel.tipo}</span>}
-                {imovel.modalidade && <span style={{ background: '#084BA6', color: 'white', fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 20 }}>{MODAL_LABEL[imovel.modalidade] || imovel.modalidade}</span>}
+                {imovel.modalidade && <span style={{ background: '#084BA6', color: 'white', fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 20 }}>{modalidadeLabelDetalhado(imovel.modalidade, imovel.descricao)}</span>}
               </div>
               {desc > 0 && (
                 <div style={{ position: 'absolute', top: 16, right: 16, background: descBg, color: descColor, fontWeight: 900, fontSize: 18, padding: '6px 12px', borderRadius: 10, lineHeight: 1 }}>
@@ -2014,7 +2014,7 @@ export default function ImovelDetalhe() {
               <div style={{ fontSize: 13, fontWeight: 700, color: '#64748b', marginBottom: 14, textTransform: 'uppercase', letterSpacing: 1 }}>Resumo</div>
               {[
                 { label: 'Tipo', value: TIPO_LABEL[imovel.tipo] || imovel.tipo },
-                { label: 'Modalidade', value: MODAL_LABEL[imovel.modalidade] || imovel.modalidade },
+                { label: 'Modalidade', value: modalidadeLabelDetalhado(imovel.modalidade, imovel.descricao) },
                 { label: 'Cidade/UF', value: imovel.cidade ? `${imovel.cidade}/${imovel.estado}` : imovel.estado },
                 // A ÁREA DO ANÚNCIO E A DA MATRÍCULA NA MESMA TELA (15/08, pedido do dono).
                 // O bloco de documentação logo acima já exibe "Área privativa (matrícula)"
