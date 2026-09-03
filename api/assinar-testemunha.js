@@ -79,8 +79,13 @@ export default async function handler(req) {
   try {
     const titulo = contrato.titulo || 'Contrato';
     if (contrato.criado_por) {
-      const p = await sb(`perfis?id=eq.${encodeURIComponent(contrato.criado_por)}&select=email,nome`).then(x => x.json()).catch(() => []);
-      const email = p?.[0]?.email || null;
+      // O e-mail vive em auth.users, NÃO em perfis (perfis não tem coluna email) — o select
+      // antigo falhava silencioso (400 do PostgREST → catch → []) e o aviso nunca saía.
+      // Mesmo conserto já aplicado em assinar-contrato.js (bug bounty 03/09).
+      const au = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${encodeURIComponent(contrato.criado_por)}`, {
+        headers: { apikey: SVC, Authorization: `Bearer ${SVC}` },
+      }).then(x => (x.ok ? x.json() : null)).catch(() => null);
+      const email = au?.email || null;
       if (email) {
         // Origin é do cliente — link de e-mail sai sempre do domínio do servidor (ver assinar-contrato).
         const origin = process.env.APP_ORIGIN || 'https://bidprobrasil.com.br';

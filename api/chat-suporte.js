@@ -2,6 +2,7 @@ export const config = { runtime: 'edge' };
 
 import { getAuthUser, unauthorized } from './_auth.js';
 import { iaGeminiPrimary } from './_claude.js';
+import { checkRateLimit, rateLimitedResponse } from './_rate-limit.js';
 
 const SYSTEM = `Você é o assistente virtual de suporte da BidPro Brasil, plataforma especializada em análise de imóveis em leilão judicial e extrajudicial no Brasil.
 
@@ -100,6 +101,12 @@ export default async function handler(req) {
   // Requer usuário autenticado para evitar consumo indevido da API Claude
   const authUser = await getAuthUser(req);
   if (!authUser?.id) return unauthorized('Faça login para usar o suporte.');
+
+  // Rate limit por usuário (bug bounty 03/09): todo outro endpoint que chama IA
+  // (cnj-chat.js, claude.js) já limita antes de gastar tokens; este ficou de fora —
+  // qualquer conta autenticada, inclusive o plano gratuito, podia chamar sem limite.
+  const rl = await checkRateLimit(`chat-suporte:${authUser.id}`, 20, 60_000);
+  if (!rl.ok) return rateLimitedResponse(rl.resetAt);
 
   const apiKey = process.env.CLAUDE_KEY;
   if (!apiKey) return new Response(JSON.stringify({ error: 'CLAUDE_KEY not configured' }), {

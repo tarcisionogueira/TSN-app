@@ -160,6 +160,11 @@ function tipoDoRotulo(rotulo) {
 async function capturarMatriculaDireta(imovelId, row, cache) {
   const url = String(row?.link_matricula || '');
   if (!/^https?:\/\//i.test(url) || !/\.pdf(\?|#|$)/i.test(url)) return null;
+  // Anti-SSRF: a URL vem do banco (link_matricula, gravado por 29 fontes/scrapers a partir
+  // de HTML de terceiro) e é buscada pelo servidor — mesma classe de risco que já motivou
+  // hostExternoSeguro nas linhas 445/463 deste arquivo. Bug bounty 03/09: esta função nova
+  // (29/08) ficou de fora da checagem.
+  if (!hostExternoSeguro(url)) return null;
   if (cache?.matricula?.storage_path) return null;            // já temos arquivo: nada a fazer
   try {
     const r = await fetch(url, {
