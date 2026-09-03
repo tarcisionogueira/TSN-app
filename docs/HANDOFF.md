@@ -4,6 +4,90 @@
 
 ---
 
+## 🛰️ SESSÃO 20 · PARTE 2 (03/09, 12h UTC) — PNAJ, E O RADAR DE EDITAIS QUE MEDIA OUTRA COISA
+
+> Pergunta do dono: *"estamos integrados com o PNAJ, para não ficar tão dependentes de leiloeiros?"*
+
+### A resposta: não, e hoje **não dá** — mas o caminho já existe e estava com três defeitos
+
+**PNAJ = zero ocorrências no repositório.** E não é falha nossa: o **Provimento CN-CNJ nº 255,
+de 19/08/2026** (duas semanas atrás) criou a PNAJ — que será o ambiente **exclusivo** dos
+leilões judiciais eletrônicos —, mas a obrigatoriedade está **condicionada a homologação do
+CNJ + 120 dias**, e essa homologação **ainda não ocorreu**. Não há API, não há base, não há o
+que integrar. É item de vigilância.
+
+**✅ Rotina criada:** `PNAJ — vigia a homologação do CNJ (semanal)`, `trig_01LS8dGkBoe8xym7poZaRMcu`,
+segundas 12h UTC, com push + e-mail. ⚠️ Ela roda **sem conectores MCP** (o aviso veio na
+criação) — o prompt já diz isso e proíbe tratar "não consegui checar" como "nada mudou", que é
+exatamente o que aconteceu com a rotina mensal de bug bounty em 01/09.
+
+### O que temos de verdade, e o que estava quebrado nele
+
+| Fonte | Estado |
+|---|---|
+| **CNJ DataJud** (`api/_cnj.js`) | integrado — metadados e movimentos **processuais**, não traz lote |
+| **DJEN / API Comunica** (`api/radar-editais-cron.js`) | **já construído e rodando: 477 editais** (TJSP 302 · TRT15 175, de 20/07 a 31/08), custo **R$ 0** |
+| **PNAJ** | não existe ainda |
+
+**O DJEN é nacional, e `RADAR_TRIBUNAIS` já é variável de ambiente** (default `TJSP,TRT15`) —
+abrir para o Brasil é **configuração, não código**. Mas antes disso, três coisas medidas:
+
+#### 1. ⚠️ O cron NÃO estava parado — meu primeiro diagnóstico estava errado
+Ele rodou hoje 08:02 UTC e respondeu 200. Desde 29/08 (decisão sua) ele é **rede de segurança
+semanal**: só paga Bright Data após 7 dias sem pull bem-sucedido. **Quem parou foi o runner
+RESIDENCIAL**, último sucesso em **01/09 01:01**. O desenho está certo; o buraco é que o pulo
+por freio **não grava nada, de propósito** — então `monitor_runs` fica em branco por até 7 dias
+e **nenhum dos 4 invariantes que citam "edital" vigia o pipeline** (todos falam do documento do
+lote). Um radar mudo era indistinguível de uma semana sem publicação.
+**Consertado:** invariante `radar_editais_sem_pull` (dias desde o último pull OK, de qualquer
+origem; 9999 se nunca houve; limite 2). Já lê **2 — exatamente no limite**: vira alerta amanhã
+se o residencial não rodar. **Ação sua: rodar `scripts/radar-editais-residencial.mjs`.**
+
+#### 2. `leiloeiro_integrado` = false em **477 de 477**, e era falso
+`construirEhIntegrado` montava a lista com `.select('leiloeiro').eq('ativo',true).limit(5000)`
+**sem `order`**, sobre 29.875 linhas ativas onde **76% são da Caixa**. Medida a amostra REAL das
+5.000: **4.570 são "Caixa Econômica Federal"** e sobram **30 dos 106 leiloeiros**. O campo
+passou a medir *"estava nas primeiras 5.000 linhas"* — forma nº 9 desaguando na nº 10. O
+**backlog de "leiloeiro a integrar", que é a razão de o Radar existir, estava cego.**
+**Consertado:** RPC `leiloeiros_do_acervo()` (106 nomes distintos, nada a truncar) + o `catch`
+vazio agora preserva o motivo. **Acervo re-marcado: 35 editais passaram a "integrado".**
+
+#### 3. `imovel_uf` aceitava qualquer par de letras
+A validação era `/^[A-Za-z]{2}$/` — formato, não conteúdo (forma nº 8). **89 editais com estado
+impossível**: ME (41), CR (31), AN, CG, LA, LO, DO, CL, AI, DI, CB, MF, VW. E o insert gravava
+`p.imovel_uf || 'SP'`: **aberto para o país, todo edital do TJBA sem UF parseada viraria São
+Paulo.** Consertado nos três pontos (parse, ramo da IA, insert), `uf` do edital passa a sair da
+sigla do tribunal, e as 89 linhas viraram nulo. `npm run testar:uf-edital` — **30 asserções**,
+incluindo a prova de que a régua antiga aprovaria os 13 valores sujos.
+
+### 📋 O QUE FALTA NO CAMINHO "DEPENDER MENOS DE LEILOEIRO"
+
+**Bloqueia abrir para o Brasil:**
+1. **Parse do leiloeiro é o gargalo:** **356 de 477 (75%) sem nome**, e parte do que vem é
+   frase, não nome — `"devera providenciar"`, `"e imediatamente divulgados online"`,
+   `"ja foi realizada na pessoa de otavio lauro sodre santoro"`. Sem nome não há casamento, e
+   sem casamento o Radar não vira esteira de aquisição.
+2. **Ruído alto:** 163 de 477 (**34%**) classificados `nao_edital` e 76 (**16%**) `erro_parse`.
+   Multiplicar por 27 tribunais multiplica isso e o custo de IA por edital.
+3. **TRT15 falha com frequência** (`HTTP 403`, `fetch failed` recorrentes em `monitor_runs`).
+4. **Cobertura DJEN × DEJESP nunca foi validada** — o próprio `docs/RADAR_EDITAIS_CNJ.md`
+   previa 2–4 semanas de validação empírica, e não há registro de que tenha sido feita.
+
+**Dívida do que foi consertado hoje:**
+5. **`leiloeiro_integrado` é boolean e não sabe dizer "não sei".** Quando a lista falha, o campo
+   grava `false` — a mesma confusão entre "conferi e não é" e "não consegui conferir". Tri-state
+   (nulo) seria o certo; hoje o motivo só aparece na resposta HTTP e no `console.error`.
+6. **Não há invariante para "editais com nome de leiloeiro e nenhum integrado"** — a re-marcação
+   resolveu o passado; a regressão futura volta a ser silenciosa.
+
+**O projeto de verdade (não é conserto):**
+7. **Edital não vira LOTE.** Hoje `editais_leilao` só alimenta `editais_enriquecer_acervo`
+   (preenche avaliação faltante). Para o acervo deixar de depender de leiloeiro, o edital
+   precisa virar imóvel pesquisável em `imoveis_leilao` — com endereço, praças, valores e foto.
+   É o passo que muda o negócio, e é o maior dos itens desta lista.
+
+---
+
 ## ✅ SESSÃO 20 (03/09, 10h–11h UTC) — BLOCO 1 DA FILA ZERADO. A aula de 09/09 está de pé.
 
 > `main` = **`4d3fc22`** · segurança **0/0** · regras de negócio **0 crítico** · KYC 0 · 0 chamado
