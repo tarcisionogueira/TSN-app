@@ -264,15 +264,20 @@ function SecaoEscritorio() {
 function SecaoCasos({ user, alvoId, nav }) {
   const [casos, setCasos] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [erro, setErro] = useState(false);
   useEffect(() => {
     (async () => {
-      const { data } = await supabase.from('casos').select('id,imovel_endereco,status_etapa,tipo_leilao,juridico_enviado_em,created_at')
+      // `error` checado (bug bounty 03/09): sem isto, uma falha transitória de leitura virava
+      // "nenhum caso recebido" — indistinguível de um advogado que de fato não tem casos, numa
+      // fila que lida com prazo judicial.
+      const { data, error } = await supabase.from('casos').select('id,imovel_endereco,status_etapa,tipo_leilao,juridico_enviado_em,created_at')
         .eq('advogado_id', alvoId || user.id).order('juridico_enviado_em', { ascending: false, nullsFirst: false });
-      setCasos(data || []); setLoading(false);
+      setErro(!!error); setCasos(data || []); setLoading(false);
     })();
   }, [user?.id]);
 
   if (loading) return <div style={{ padding: 30, textAlign: 'center' }}><Loader2 size={20} color="#7c3aed" style={{ animation: 'spin 1s linear infinite' }} /></div>;
+  if (erro) return <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 14, padding: 40, textAlign: 'center', color: '#b91c1c', fontSize: 14 }}>Não foi possível carregar seus casos agora. Recarregue a página em instantes.</div>;
   if (!casos.length) return <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 14, padding: 40, textAlign: 'center', color: '#94a3b8', fontSize: 14 }}>Nenhum caso recebido ainda. Você é avisado por e-mail quando um caso é encaminhado.</div>;
 
   return (

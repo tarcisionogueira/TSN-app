@@ -385,6 +385,11 @@ export default function Analise() {
   const [arrematadoSinalizado, setArrematadoSinalizado] = useState(false);
   const [sinalizandoArremate, setSinalizandoArremate] = useState(false);
   const sinalizarArremate = async () => {
+    // MODO SUPORTE é só visualização: /api/sinalizar-arremate usa o token REAL (do admin em
+    // suporte, não do cliente visto — impersonate nunca troca a sessão do Supabase Auth) e
+    // registraria o arremate na conta do ADMIN, não do cliente. Mesmo guard de solicitarAnalista
+    // (bug bounty 03/09 — este botão tinha ficado de fora da varredura anterior).
+    if (impersonate) { showMsg('No modo suporte a conta é só para visualização — saia do suporte para agir como você mesmo.', 'error'); return; }
     if (arrematadoSinalizado || sinalizandoArremate) return;
     const raw = window.prompt(`Confirme o arremate de "${d.nome || imovelInicial?.titulo || 'este imóvel'}".\n\nPor quanto você arrematou? (somente números inteiros em reais, ex: 250000)`);
     if (raw == null) return; // cancelou

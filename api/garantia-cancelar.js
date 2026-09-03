@@ -16,6 +16,7 @@ export const config = { runtime: 'nodejs', maxDuration: 30 };
 import { getUser } from './_auth.js';
 import { enviarEmail } from './_email.js';
 import { hashCpf, cpfDoRegistro } from './_cpf.js';
+import { alertarErro } from './_error-alert.js';
 
 const SB_URL = (process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '').trim();
 const SB_KEY = (process.env.SUPABASE_SERVICE_KEY || '').trim();
@@ -132,10 +133,24 @@ export default async function handler(req, res) {
     // 2) Rebaixa AGORA + zera a âncora (a garantia foi exercida). Limpa também a âncora de
     //    ciclo anual (M2 — simetria com processarVencido) para não deixar plano_ciclo='anual'
     //    órfão que marcar-posse/reconciliar leriam como "Pro anual vigente".
-    await sb(`perfis?id=eq.${user.id}`, {
+    // O reembolso de 100% já foi decidido (podeReembolso) — dinheiro sai de qualquer forma.
+    // Se ESTE rebaixamento falhar (rede/timeout/PostgREST), o cliente reembolsado continuaria
+    // com role pago para sempre, sem NADA detectar (bug bounty 03/09; simetria com
+    // processarVencido em _webhook-core.js, que resolve o mesmo risco lançando erro para o
+    // webhook reentregar — aqui não há reentrega, então a rede de segurança é alertar +
+    // marcar a linha para o admin resolver manualmente).
+    const rDowngrade = await sb(`perfis?id=eq.${user.id}`, {
       method: 'PATCH', headers: { Prefer: 'return=minimal' },
       body: JSON.stringify({ role: 'explorador', role_anterior: null, plano_pago_em: null, plano_ciclo: null, plano_vencimento: null, ciclo_agendado: null }),
-    }).catch(() => {});
+    }).catch(() => null);
+    const rebaixamentoConfirmado = !!rDowngrade && rDowngrade.ok;
+    if (!rebaixamentoConfirmado) {
+      alertarErro({
+        rota: '/api/garantia-cancelar',
+        erro: `Rebaixamento a explorador FALHOU após reembolso de 100% já decidido — cliente pode continuar com role pago (${rolePagante}) sem ter pago por isso. Resolver manualmente.`,
+        extra: { user_id: user.id, role: rolePagante, http_status: rDowngrade?.status ?? null },
+      });
+    }
 
     // 2.1) Cancela os contratos de assessoria VIVOS do usuário — senão o gate de "1
     //      assessoria por vez" (assessoria-status) veria o contrato eternamente e travaria
@@ -163,7 +178,7 @@ export default async function handler(req, res) {
     // 3) Registra o pedido de reembolso (canal auditável p/ o admin executar o estorno).
     await sb('reembolsos_garantia', {
       method: 'POST', headers: { Prefer: 'return=minimal' },
-      body: JSON.stringify({ user_id: user.id, nome: perfil.nome || null, email, plano: rolePagante, valor_ref: valorRef, gateway, status: 'solicitado', motivo: 'Garantia de 7 dias (CDC art. 49)', cpf_hash: cpfHash }),
+      body: JSON.stringify({ user_id: user.id, nome: perfil.nome || null, email, plano: rolePagante, valor_ref: valorRef, gateway, status: 'solicitado', motivo: 'Garantia de 7 dias (CDC art. 49)', cpf_hash: cpfHash, rebaixamento_confirmado: rebaixamentoConfirmado }),
     }).catch(() => {});
 
     // 4) E-mails (cliente + admin). Não bloqueiam a resposta.

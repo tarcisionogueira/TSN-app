@@ -349,7 +349,15 @@ export default function MinhasAnalises() {
                   <Trophy size={13} /> {sinalizando === a.imovelId ? 'Enviando…' : 'Arrematei'}
                 </button>
                 )}
-                <button onClick={(e) => { e.stopPropagation(); if (window.confirm('Remover esta análise? Os relatórios mercadológico, documental e laudo deste imóvel serão apagados e não há como desfazer.')) { setLista(prev => (prev || []).filter(r => r.imovelId !== a.imovelId)); Promise.resolve(remover(a.imovelId)).then(carregarLista); } }} title="Remover" style={{ background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer', fontSize: 20, lineHeight: 1, padding: 4, flexShrink: 0 }}>×</button>
+                <button onClick={(e) => {
+                  e.stopPropagation();
+                  // Mesmo guard de sinalizarArremate (linha 140): em modo suporte o delete roda com
+                  // a sessão REAL do admin, e a RLS (auth.uid() = user_id) descarta o delete em
+                  // silêncio — a tela removia o card como se tivesse apagado, e nada mudava no banco
+                  // (bug bounty 03/09; card reaparecia ao recarregar a lista).
+                  if (impersonate) { window.alert('No modo suporte a conta é só para visualização. Saia do suporte para remover em seu próprio nome.'); return; }
+                  if (window.confirm('Remover esta análise? Os relatórios mercadológico, documental e laudo deste imóvel serão apagados e não há como desfazer.')) { setLista(prev => (prev || []).filter(r => r.imovelId !== a.imovelId)); Promise.resolve(remover(a.imovelId)).then(carregarLista); }
+                }} title="Remover" style={{ background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer', fontSize: 20, lineHeight: 1, padding: 4, flexShrink: 0 }}>×</button>
               </div>
             );
           })}

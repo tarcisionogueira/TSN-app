@@ -96,14 +96,21 @@ export default async function handler(req) {
   // ── Busca perfil pelo CPF ──
   // Preferência: pelo hash determinístico (não expõe o CPF cru na query).
   // Fallback: pelo texto claro, para perfis ainda não migrados (backfill em curso).
+  // `.ok` checado ANTES do corpo, mesmo padrão dos ramos de e-mail/telefone acima (bug bounty
+  // 03/09 — este ramo tinha ficado de fora): um erro do PostgREST devolve {code,message}
+  // (objeto, não array), `!Array.isArray(perfis)` dá true nas duas tentativas, e cairia em
+  // "temConta:false" com HTTP 200 — indistinguível de CPF realmente sem conta, e desarmaria
+  // o gate que impede recompra/recadastro de quem já tem plano/produto.
   let perfis = [];
   const cpfHash = await hashCpf(cpfLimpo).catch(() => null);
   if (cpfHash) {
     const rh = await sb(`perfis?cpf_hash=eq.${cpfHash}&select=id,role`);
+    if (!rh.ok) return new Response(JSON.stringify({ erro: 'indisponivel' }), { status: 503, headers });
     perfis = await rh.json().catch(() => []);
   }
   if (!Array.isArray(perfis) || !perfis.length) {
     const r = await sb(`perfis?cpf=eq.${cpfLimpo}&select=id,role`);
+    if (!r.ok) return new Response(JSON.stringify({ erro: 'indisponivel' }), { status: 503, headers });
     perfis = await r.json().catch(() => []);
   }
   if (!Array.isArray(perfis) || !perfis.length) {
@@ -135,7 +142,11 @@ export default async function handler(req) {
   if (produto.tipo === 'curso' || produto.tipo === 'ebook') {
     const tabela = produto.tipo === 'curso' ? 'cursos_admin' : 'ebooks_admin';
     const rp = await sb(`${tabela}?id=eq.${encodeURIComponent(produto.id)}&select=preco`);
-    const [prod] = await rp.json();
+    // `.ok` checado antes do corpo (bug bounty 03/09): sem isto, um erro do PostgREST
+    // devolve um objeto (não array) e `const [prod] = ...` sobre não-iterável derrubava o
+    // handler com TypeError em vez de responder 503.
+    if (!rp.ok) return new Response(JSON.stringify({ erro: 'indisponivel' }), { status: 503, headers });
+    const [prod] = await rp.json().catch(() => []);
     const preco = Number(prod?.preco || 0);
     const ehBeneficio = preco === 0;
 
@@ -149,7 +160,10 @@ export default async function handler(req) {
       return new Response(JSON.stringify({ temConta: true, temAcesso, ehBeneficio: true }), { status: 200, headers });
     } else {
       const rc = await sb(`compras_produtos?user_id=eq.${encodeURIComponent(userId)}&produto_tipo=eq.${encodeURIComponent(produto.tipo)}&produto_id=eq.${encodeURIComponent(produto.id)}&status=eq.ativo&select=id`);
-      const compras = await rc.json();
+      // Falha de leitura NÃO é "não comprou" — um cliente que já comprou receberia
+      // temAcesso:false durante uma falha transitória (bug bounty 03/09).
+      if (!rc.ok) return new Response(JSON.stringify({ erro: 'indisponivel' }), { status: 503, headers });
+      const compras = await rc.json().catch(() => []);
       const jaComprou = Array.isArray(compras) && compras.length > 0;
       return new Response(
         JSON.stringify({ temConta: true, temAcesso: jaComprou, ehBeneficio: false, produtoPago: true }),
