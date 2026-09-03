@@ -4,6 +4,101 @@
 
 ---
 
+## 📣 REVISÃO DA CAMPANHA (03/09, 01h UTC) — NÃO FALTOU TRÁFEGO. FALTOU A PÁGINA CONVERTER.
+
+> **O número que reorganiza tudo: 521 visitas na LP da aula em 7 dias — 475 delas só em
+> 01/09 — e 5 inscritos no total do período. Conversão da landing ≈ 0,6%.** Uma LP de
+> captura razoável faz 20–40%. Gastamos **R$ 160,30** em anúncios de aula para **2 inscritos
+> atribuídos** (R$ 80,15 cada). O gargalo não é o quanto se compra de clique.
+
+### 🔴 O CRIATIVO QUE COMEU O DIA MAIS IMPORTANTE — e não falava da aula
+
+`IG-0109-MUDONOME` é um post institucional (**a conta mudou de nome**) que estava apontando
+para a **LP de inscrição da aula**. O resultado é a assinatura clássica de descasamento entre
+promessa e destino: **CTR altíssimo, conversão zero**.
+
+| Anúncio (27/08–02/09) | Gasto | Cliques | CPC | CTR | Inscritos |
+|---|---|---|---|---|---|
+| **IG-0109-MUDONOME · TRF ABERTO** | R$ 34,55 | **560** | R$ 0,06 | **12–19%** | **0** |
+| REEL-2808-LIVE · CONV/ADV+ | R$ 109,53 | 45 | R$ 2,43 | 3,4–5,0% | **2** |
+| REEL-2808-LIVE · TRF ABERTO | R$ 11,12 | 93 | R$ 0,12 | 3,9–9,1% | 0 |
+| IG-3108-VAGA · TRF ABERTO | R$ 5,10 | 36 | R$ 0,14 | 4,6–7,2% | 0 |
+| REEL-2408-PASSO-A-PASSO (evergreen, não é da aula) | R$ 30,01 | 321 | R$ 0,09 | 4,0–5,8% | — |
+
+Em **01/09**, véspera da aula, o MUDONOME sozinho levou **424 cliques** (R$ 26,94) e o banco
+confirma o outro lado: `utm_content = IG-0109-MUDONOME` → **423 visitas**, e daquele dia saiu
+**zero** inscrição. Curiosidade não é intenção: quem clica em "mudei de nome" não quer se
+inscrever numa aula.
+
+**✅ RESOLVIDO AGORA (configuração, reversível):** `pause_ad` no
+`IG-0109-MUDONOME - TRF ABERTO` (`ad_id 120249419403910420`). O conjunto já estava pausado,
+então **isto não muda gasto hoje** — é defensivo: com CTR de 12% contra 3–5% dos outros, ao
+religar o conjunto para 09/09 o algoritmo escolheria ele de novo. Reverter:
+`enable_ad` com o mesmo id.
+
+### ⚠️ NÃO RELIGUE NADA COMO ESTÁ — os criativos anunciam 02/09
+
+Estado da conta `702903610061448` neste momento:
+
+| Campanha | Conjunto | Anúncio | Estado |
+|---|---|---|---|
+| `CONV - AULA 02SET - INSCRICAO` **PAUSED** | `BR - ADV+ - AULA 02SET` **ACTIVE** | `REEL-2808-LIVE` **ACTIVE** | só a campanha segura |
+| `TRF - SITE - LEILOES - AGO26` **ACTIVE** | `BR - ABERTO - AULA 02SET` **PAUSED** | `REEL-2808-LIVE - TRF`, `IG-3108-VAGA - TRF` ACTIVE · `IG-0109-MUDONOME` **PAUSED (hoje)** | conjunto segura |
+| `TRF - SITE - LEILOES - AGO26` **ACTIVE** | `BR - 25-60 - ABERTO` **ACTIVE** | `REEL-2408-PASSO-A-PASSO` ACTIVE | **rodando** (evergreen, R$ ~9/dia, CPC R$ 0,09) |
+
+⚠️ Ligar a campanha `CONV` publica **na hora** um anúncio que diz **02 de setembro**. Todo
+criativo de aula precisa ser **refeito com 09/09** antes de qualquer religamento.
+
+### 🎯 PÚBLICO-ALVO E SEMELHANTE — e por que LAL ainda NÃO é o caminho
+
+**A pendência antiga do HANDOFF ("trocar ADV+ por LAL 1%") não é executável hoje, e o motivo
+é tamanho de base:** um lookalike precisa de ~100 pessoas no mínimo (e rende de verdade com
+1.000+). Temos **5 inscritos** e **99 perfis**. Um LAL sobre 5 pessoas é ruído com nome de
+público.
+
+O que a medição diz sobre os três públicos testados:
+
+- **`BR - ADV+ - AULA 02SET`** (Advantage+, a Meta escolhe) — caro (CPC R$ 2,43) e entregou
+  pouco (45 cliques em 3 dias), mas foi o **único que converteu: 2 de 2 inscritos pagos**.
+- **`BR - ABERTO - AULA 02SET`** (sem segmentação) — CPC R$ 0,06–0,14, **689 cliques, zero
+  inscrição**. Volume desqualificado.
+- **`BR - 25-60 - ABERTO`** (evergreen) — CPC R$ 0,09, não é de aula, segue rodando.
+
+⚠️ **Ressalva honesta:** 2 conversões em 45 cliques é amostra minúscula. O ADV+ não está
+*provado* melhor — ele é o único com sinal, e o aberto é o único com prova de que não
+converte. **Ordem sugerida:** ADV+ com criativo certo → junta base → só então LAL.
+
+**A base que JÁ existe e não está sendo usada:** 521 visitantes da LP em 7 dias e 832 visitas
+com `fbclid`. Isso dá **retargeting** (público de site, 7–30 dias), que é o que faz sentido
+com esse volume — e é mais barato que prospecção fria.
+
+### 🔬 O QUE FICA EM ABERTO, E EU NÃO CONSIGO MEDIR DAQUI
+
+A conversão de 0,6% é **fato medido**. A **causa na LP não está estabelecida** — o sandbox não
+alcança o site (o proxy recusa `bidprobrasil.com.br`), então não abri a página. O que existe
+de indício: `erro_na_tela_do_cliente` = **2**, ambos em `/live/leilao-ao-vivo` no dia **01/09**
+(01:46 e 08:22 UTC), com *"Não conseguimos carregar esta página"* — o ramo de RPC com erro,
+justamente no dia das 475 visitas. **Dois registros não provam falha em massa**, mas é a
+primeira coisa a checar amanhã, abrindo a LP no celular como um anúncio abre.
+
+### 📋 PARA AMANHÃ — em ordem
+
+1. **Abrir a LP como o anúncio abre** (celular, link do anúncio) e medir o funil real:
+   quantos veem o formulário, quantos enviam. Sem isso, trocar criativo é apostar.
+2. **Criativo novo com data 09/09** — base é o `REEL-2808-LIVE`, que foi o único que
+   converteu. O que ele precisa dizer: dia, hora, e **o que a pessoa leva** (um relatório de
+   viabilidade gerado ao vivo no imóvel dela).
+3. **Nunca mais** apontar criativo institucional para LP de inscrição — o MUDONOME custou
+   R$ 34,55 e o dia mais importante da campanha.
+4. **Ligar retargeting** dos 521 visitantes da LP (7–30 dias) — é a única "audiência
+   própria" com volume hoje.
+5. **Google:** `Pesquisa — Leilão de Imóveis (BR)` está ENABLED, ~R$ 22/dia, 165–197
+   cliques/dia, e **não aponta para a aula** (cai na busca do site). Está saudável assim;
+   **não misturar** com a aula. As "conversões" dele (0–4/dia) são cadastro na plataforma,
+   não inscrição na live — não confundir os dois números.
+
+---
+
 ## 🎯 FILA DE 03/09 — AS PENDÊNCIAS, EM ORDEM DE ATAQUE ("amanhã zeramos isso")
 
 > Estado ao fechar 03/09 00h20 UTC: `main` = **`33dce2b`** (deploy READY) · segurança **0/0**
