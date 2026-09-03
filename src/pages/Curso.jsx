@@ -79,11 +79,16 @@ export default function Curso() {
     (async () => {
       const { data: c } = await supabase.from('cursos_admin').select('*').eq('id', id).eq('ativo', true).single();
       if (!c) { setCarregandoCurso(false); return; }
-      const { data: as } = await supabase.from('aulas_admin').select('*').eq('curso_id', id).order('ordem');
+      // SEM `select('*')` e sem `video_url` (03/09): a coluna saiu da leitura pública, então
+      // `*` passaria a falhar por permissão e derrubaria a tela inteira. O catálogo vem aqui;
+      // o vídeo vem da RPC `aula_video`, no play, depois de o servidor conferir plano e
+      // liberação do módulo.
+      const { data: as } = await supabase.from('aulas_admin')
+        .select('id, curso_id, modulo, titulo, descricao, duracao, gratis, ordem, materiais').eq('curso_id', id).order('ordem');
       const modMap = {};
       (as || []).forEach(a => {
         const m = a.modulo || 'Módulo 1';
-        (modMap[m] = modMap[m] || []).push({ id: a.id, titulo: a.titulo || '', duracao: a.duracao || '', gratis: !!a.gratis, descricao: a.descricao || '', video_url: a.video_url || '', materiais: Array.isArray(a.materiais) ? a.materiais : [] });
+        (modMap[m] = modMap[m] || []).push({ id: a.id, titulo: a.titulo || '', duracao: a.duracao || '', gratis: !!a.gratis, descricao: a.descricao || '', materiais: Array.isArray(a.materiais) ? a.materiais : [] });
       });
       // LIBERAÇÃO POR MÓDULO. Quem decide é o SERVIDOR: a RPC carimba o início do aluno na
       // primeira chamada e devolve, por módulo, se já abriu e quando abre. Calcular isso aqui
@@ -118,6 +123,10 @@ export default function Curso() {
   const [progresso, setProgresso] = useState(getProgressoLocal());
   const [loadingProgresso, setLoadingProgresso] = useState(false);
   const [licaoAtiva, setLicaoAtiva] = useState(null);
+  // O VÍDEO NÃO VEM MAIS COM O CATÁLOGO (03/09). `aulas_admin.video_url` saiu da leitura
+  // pública, e quem entrega a URL é a RPC `aula_video`, que confere plano E liberação do
+  // módulo no SERVIDOR. Antes disso a trava era só de tela: bastava abrir o devtools.
+  const [video, setVideo] = useState({ url: '', motivo: null, carregando: false });
   const [modulosAbertos, setModulosAbertos] = useState({ 0: true });
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [comprouAvulso, setComprouAvulso] = useState(false);
@@ -194,6 +203,30 @@ export default function Curso() {
   // aba aberta e foi almoçar. Progresso de vídeo que não pode ser medido não deve ser
   // inventado: quem declara que assistiu é a pessoa, no botão.
 
+  // Busca a URL ao trocar de aula. `vivo` cancela a resposta atrasada: trocar de aula rápido
+  // faria a resposta da anterior chegar depois e pintar o vídeo ERRADO no player da nova — o
+  // mesmo tipo de corrida que já mordeu a Busca e o ImovelDetalhe.
+  useEffect(() => {
+    if (!licaoAtiva?.id) { setVideo({ url: '', motivo: null, carregando: false }); return undefined; }
+    let vivo = true;
+    setVideo({ url: '', motivo: null, carregando: true });
+    (async () => {
+      try {
+        const { data, error } = await supabase.rpc('aula_video', { p_aula: licaoAtiva.id });
+        if (error) throw error;
+        const r = Array.isArray(data) ? data[0] : data;
+        if (vivo) setVideo({ url: r?.video_url || '', motivo: r?.motivo || null, abre_em: r?.abre_em || null, carregando: false });
+      } catch (e) {
+        // Falha de LEITURA não é "sem acesso": o motivo fica nulo e a tela mostra a capa
+        // neutra, não a mensagem de bloqueio. Dizer "você não tem acesso" por causa de uma
+        // falha de rede acusa o aluno de algo que não é verdade.
+        console.error('[curso] nao consegui buscar o video da aula:', e?.message || e);
+        if (vivo) setVideo({ url: '', motivo: null, carregando: false });
+      }
+    })();
+    return () => { vivo = false; };
+  }, [licaoAtiva?.id]);
+
   if (!curso && carregandoCurso) {
     return (
       <div style={{ maxWidth:800, margin:'120px auto', textAlign:'center', padding:20, color:'#94a3b8' }}>
@@ -215,6 +248,7 @@ export default function Curso() {
   }
 
   const podeVer = licaoAtiva ? podeAssistir(licaoAtiva, plano, comprouAvulso, curso?.planos_gratis, curso?.gratuito) : false;
+
 
   // `feito=false` DESMARCA. Marcar por engano acontece; sem volta, a pessoa fica com o curso
   // dado por completo sem ter assistido — e o pop-up de boas-vindas, que lê este mesmo
@@ -394,9 +428,9 @@ export default function Curso() {
                     Ao TERMINAR, marca a aula como assistida sozinha (o player avisa o fim por
                     postMessage — ver PlayerVideo.jsx). O botão manual continua ali para quem o
                     provedor não reporta ou para quem assistiu por fora. */}
-                {videoEmbed(licaoAtiva.video_url) ? (
+                {videoEmbed(video.url) ? (
                   <PlayerVideo
-                    url={licaoAtiva.video_url}
+                    url={video.url}
                     titulo={licaoAtiva.titulo}
                     onFim={() => { if (!progresso[licaoAtiva.id]) marcarConcluida(licaoAtiva.id); }}
                   />
@@ -407,7 +441,18 @@ export default function Curso() {
                     <div style={{ position:'relative' }}><CapaCurso curso={curso} tamanho={84} raio={18}/></div>
                     <div style={{ position:'relative', textAlign:'center' }}>
                       <div style={{ fontSize:16, fontWeight:700, color:'white', marginBottom:6 }}>{licaoAtiva.titulo}</div>
-                      <div style={{ fontSize:12, color:'#94a3b8' }}>Vídeo em breve</div>
+                      {/* A LEGENDA DIZ QUAL É O CASO, e não um "em breve" genérico: "ainda
+                          carregando", "o módulo abre depois" e "esta aula não tem vídeo" pedem
+                          coisas diferentes de quem está olhando. `motivo` nulo (falha de
+                          leitura) cai no texto neutro — culpar o acesso do aluno por um erro de
+                          rede seria acusá-lo de algo que não é verdade. */}
+                      <div style={{ fontSize:12, color:'#94a3b8' }}>
+                        {video.carregando ? 'Carregando…'
+                          : video.motivo === 'modulo_nao_liberado'
+                            ? `Este módulo abre ${abreQuando(video.abre_em)}`
+                          : video.motivo === 'sem_acesso' ? 'Disponível no seu plano superior'
+                          : 'Vídeo em breve'}
+                      </div>
                     </div>
                   </div>
                 )}
