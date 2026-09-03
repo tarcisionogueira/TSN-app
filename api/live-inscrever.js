@@ -26,6 +26,7 @@ export const config = { runtime: 'nodejs' };
 import { checkRateLimit } from './_rate-limit.js';
 import { enviarEmail } from './_email.js';
 import { erroNome, normalizarNome } from './_nome.js';
+import { edicaoDe } from './_live-edicao.js';
 import { erroTelefone, limparTelefone, normalizarTelefoneBR } from './_telefone.js';
 import { enviarLeadCapi, leadEventId, capiAtivo } from './_meta-capi.js';
 
@@ -117,12 +118,20 @@ export default async function handler(req, res) {
   const prox = await proxRes.json().catch(() => null);
   if (!prox?.data_hora) return res.status(404).json({ error: 'Esta aula não está com inscrições abertas.' });
   ev.data_hora = prox.data_hora;
+  // A EDIÇÃO é a chave que separa uma semana da outra. `live_inscricoes` ganhou a coluna em
+  // 03/09 e o gatilho `live_edicao_preencher` a garante mesmo se ninguém mandar — mandar
+  // explicitamente aqui é o que deixa a intenção legível no lugar onde ela é decidida.
+  const edicao = edicaoDe(prox.data_hora);
 
   // Vagas: contar ANTES de criar conta. A checagem é best-effort contra corrida (duas
   // inscrições simultâneas na última vaga passam), e isso é deliberado — recusar alguém
   // por causa de um empate custa mais do que uma vaga a mais na sala.
   if (ev.vagas_max) {
-    const cRes = await sb(`live_inscricoes?evento_id=eq.${ev.id}&select=id`, { headers: { Prefer: 'count=exact' } });
+    // POR EDIÇÃO (03/09): sem o filtro, a contagem soma TODAS as semanas e a sala fecharia
+    // por causa de gente que assistiu no mês passado. Hoje `vagas_max` é nulo e o ramo nem
+    // roda — é justamente por isso que o erro passaria despercebido até o dia em que alguém
+    // preenchesse o campo, e aí recusaria inscrito com a sala vazia.
+    const cRes = await sb(`live_inscricoes?evento_id=eq.${ev.id}&edicao=eq.${edicao}&select=id`, { headers: { Prefer: 'count=exact' } });
     const total = Number(String(cRes.headers.get('content-range') || '').split('/')[1] || 0);
     if (total >= ev.vagas_max) return res.status(409).json({ error: 'As vagas para esta aula se esgotaram.' });
   }
@@ -212,13 +221,16 @@ export default async function handler(req, res) {
   }
 
   // ── A inscrição ────────────────────────────────────────────────────────────
-  // `merge-duplicates` sobre (evento_id, email): reenviar o formulário atualiza os dados
-  // em vez de estourar erro na cara de quem só clicou duas vezes.
-  const insRes = await sb('live_inscricoes?on_conflict=evento_id,email', {
+  // `merge-duplicates` sobre (evento_id, email, edicao): reenviar o formulário atualiza os
+  // dados em vez de estourar erro na cara de quem só clicou duas vezes. A `edicao` entrou na
+  // chave em 03/09 — sem ela, a MESMA pessoa não conseguia se inscrever na aula da semana
+  // seguinte: o upsert encontrava a linha antiga e apenas a atualizava, então a inscrição de
+  // 09/09 "dava certo" sem existir, e ela não entrava em nenhuma lista da nova edição.
+  const insRes = await sb('live_inscricoes?on_conflict=evento_id,email,edicao', {
     method: 'POST',
     headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
     body: JSON.stringify({
-      evento_id: ev.id, user_id: userId, nome, email, whatsapp, cidade: cidade || null, uf: uf || null,
+      evento_id: ev.id, edicao, user_id: userId, nome, email, whatsapp, cidade: cidade || null, uf: uf || null,
       origem: String(b.origem || utm.utm_source || utm.referrer || '').slice(0, 200) || null,
       utm,
     }),

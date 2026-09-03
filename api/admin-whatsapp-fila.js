@@ -22,6 +22,7 @@
 export const config = { runtime: 'nodejs' };
 
 import { getUser } from './_auth.js';
+import { edicaoDe } from './_live-edicao.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -33,7 +34,10 @@ const sb = (path, init = {}) => fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
   headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json', ...(init.headers || {}) },
 });
 
-const diaNoFuso = (d) => new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+// A EDIÇÃO vem de `_live-edicao.js` — havia três cópias desta mesma regra no `api/`, e regra
+// copiada só funciona enquanto as cópias forem idênticas. `diaNoFuso` fica como nome local
+// porque é o que `quandoPorExtenso` usa para contar CALENDÁRIO (hoje/amanhã), não edição.
+const diaNoFuso = (d) => edicaoDe(d);
 
 /**
  * A AULA VIVA entre as ativas: a mais próxima que ainda não passou.
@@ -241,7 +245,7 @@ export default async function handler(req, res) {
   const evento = escolherAulaViva(proximas);
   if (!evento) return res.status(200).json({ evento: null, fila: [], motivo: 'nenhuma aula futura ativa' });
 
-  const edicao = diaNoFuso(new Date(evento.data_hora));
+  const edicao = edicaoDe(evento.data_hora);
 
   if (req.method === 'POST') {
     const userId = String(req.body?.user_id || '');

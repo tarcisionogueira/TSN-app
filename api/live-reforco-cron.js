@@ -34,12 +34,20 @@
  * edições de e-mail. Quem não abriu nem o convite nem o reforço de segunda não recebe uma
  * terceira — silêncio ali é resposta, não etapa faltando.
  *
- * QUEM NUNCA FOI CONVIDADO NÃO É CASO DESTE ARQUIVO. Contas criadas depois do disparo de
- * domingo não precisam de reforço, precisam do CONVITE — e o buraco era o `convidar-live-cron`
+ * QUEM NUNCA FOI CONVIDADO NÃO É CASO DESTE ARQUIVO. Contas criadas depois do primeiro
+ * disparo não precisam de reforço, precisam do CONVITE — e o buraco era o `convidar-live-cron`
  * rodar só aos domingos (`0 11 * * 0`) para uma aula de quarta: quem entrava de segunda a
- * quarta ficava de fora, toda semana. Eram 8 pessoas na edição de 02/09. Resolvido passando
- * aquele cron para DIÁRIO — o UNIQUE (evento_id, user_id, edicao) já impedia o convite duplo,
- * então diário só alcança quem ainda não foi alcançado.
+ * quarta ficava de fora, toda semana.
+ *
+ * ⚠️ ESTE PARÁGRAFO DIZIA "resolvido passando aquele cron para DIÁRIO" — e o cron É diário
+ * desde então, mas o conserto NÃO funcionou, e por um segundo motivo que ninguém tinha visto
+ * (medido em 03/09): o `convidar-live-cron` DESARMAVA logo após o primeiro envio, então as
+ * rodadas dos dias seguintes respondiam `ok:true, motivo:'não armado'` e não olhavam para
+ * ninguém. Os 74 convites da edição de 02/09 saíram todos numa janela de 14 SEGUNDOS em
+ * 30/08, e as 21 pessoas que se cadastraram entre 30/08 e a aula NUNCA foram convidadas.
+ * Um cron diário que se autodesliga na primeira rodada é um cron semanal com outro nome —
+ * e o log dizia "ok" as duas coisas. Corrigido no `convidar-live-cron`: ele agora fica
+ * armado até a edição passar, e o UNIQUE (evento_id, user_id, edicao) é que impede o duplo.
  *
  * SECO: `?seco=1` conta quem receberia e NÃO envia nada. É como se confere antes de tocar em
  * ~70 caixas de entrada de uma vez.
@@ -120,6 +128,17 @@ export function corpoReforco(etapa, { nome, ev, link, agora = Date.now() }) {
     timeZone: TZ, weekday: 'long', day: '2-digit', month: 'long', hour: '2-digit', minute: '2-digit',
   });
   const hora = new Date(ev.data_hora).toLocaleTimeString('pt-BR', { timeZone: TZ, hour: '2-digit', minute: '2-digit' });
+  // O DIA DA SEMANA VEM DA DATA, NÃO DA HORA (03/09). O assunto do reforço 'prova' dizia
+  // `hora === '19:00' ? 'quarta às 19h'` — deduzia a QUARTA a partir das 19h. Enquanto toda
+  // aula for quarta às 19h o texto sai certo por coincidência, e é isso que torna o defeito
+  // caro: ele não aparece em teste nenhum até o dia em que a aula mudar de dia, e aí o
+  // e-mail marca uma quarta que não existe. Duas grandezas diferentes com o mesmo valor
+  // aparente é a forma nº 10 do CLAUDE.md — o número mede o que foi fácil de coletar.
+  const diaSemana = new Date(ev.data_hora).toLocaleDateString('pt-BR', { timeZone: TZ, weekday: 'long' }).replace('-feira', '');
+  // "19h" num convite, "19h30" quando o minuto existe — "19h00" é ruído (mesma régua de
+  // `quandoPorExtenso` em admin-whatsapp-fila.js).
+  const [hh, mm] = hora.split(':');
+  const horaCurta = mm === '00' ? `${Number(hh)}h` : `${Number(hh)}h${mm}`;
   // Horas restantes só viram texto na etapa 'ultima', e mesmo lá em forma de DIA/HORA: contar
   // "faltam 11 horas" num e-mail que pode ser lido 40 min depois é prometer precisão falsa.
   const horasRestantes = (new Date(ev.data_hora).getTime() - agora) / 3600000;
@@ -154,7 +173,7 @@ export function corpoReforco(etapa, { nome, ev, link, agora = Date.now() }) {
     // parou. Convidar de novo não acrescenta — o que falta é saber o que, exatamente, ela leva
     // dali. Por isso a peça é uma pauta, não um convite.
     return {
-      subject: `O que a gente vai fazer, na prática, ${hora === '19:00' ? 'quarta às 19h' : `em ${quando}`}`,
+      subject: `O que a gente vai fazer, na prática, ${diaSemana} às ${horaCurta}`,
       html: moldura(`
         <p style="font-size:15px">${esc(saudacao)}</p>
         <p style="font-size:14px;line-height:1.7">Você viu o convite da aula e talvez tenha ficado a dúvida do que ela é, na prática. É isto, na ordem:</p>

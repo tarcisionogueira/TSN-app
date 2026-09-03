@@ -30,6 +30,7 @@
  * é exportada de `admin-whatsapp-fila.js` justamente para poder rodar em seco aqui.
  */
 import { escolherAulaViva, quandoPorExtenso } from '../../api/admin-whatsapp-fila.js';
+import { edicaoDe, FUSO_AULA } from '../../api/_live-edicao.js';
 
 let ok = 0, falhas = 0;
 const checa = (nome, cond, extra) => {
@@ -96,11 +97,39 @@ checa('a data certa NÃO diz hoje nem amanhã', !/^(hoje|amanhã)/.test(comCerta
 // é aqui que o silêncio vai custar caro.
 checa('o texto é o MESMO nas duas quartas — não era ele o defeito', comCerta === comCrua, [comCerta, comCrua]);
 
+console.log('\nA EDIÇÃO — a chave que separa uma semana da outra');
+// A unidade é a DATA LOCAL da ocorrência, porque o evento semanal reusa o mesmo `evento_id`.
+checa('a edição da aula de 09/09 é 2026-09-09', edicaoDe(RECORRENCIA) === '2026-09-09', edicaoDe(RECORRENCIA));
+checa('a edição da coluna crua é 2026-09-02', edicaoDe(COLUNA_CRUA) === '2026-09-02', edicaoDe(COLUNA_CRUA));
+checa('as duas edições são DIFERENTES — é isso que reinclui o lead', edicaoDe(RECORRENCIA) !== edicaoDe(COLUNA_CRUA));
+checa('sai no formato que o Postgres aceita em `date`', /^\d{4}-\d{2}-\d{2}$/.test(edicaoDe(RECORRENCIA)));
+
+// ⚠️ O FUSO É O PONTO. `data_hora` é timestamptz e a aula das 19h de Salvador é 22:00Z — três
+// horas antes da virada do dia em UTC. Formatar em UTC jogaria a edição para o dia SEGUINTE em
+// qualquer aula depois das 21h local, e a chave de dedup do dia errado libera um segundo envio
+// para a mesma pessoa. Uma aula às 21h30 local (00:30Z do dia seguinte) é o caso que prova.
+checa('o fuso é o da aula, não UTC', FUSO_AULA === 'America/Bahia', FUSO_AULA);
+checa('aula 21h30 local NÃO vira o dia seguinte', edicaoDe('2026-09-10T00:30:00Z') === '2026-09-09',
+  edicaoDe('2026-09-10T00:30:00Z'));
+checa('e em UTC viraria — o teste vale porque os dois diferem',
+  new Date('2026-09-10T00:30:00Z').toISOString().slice(0, 10) === '2026-09-10');
+
+console.log('\nO DESARME DO CONVITE — por EDIÇÃO, nunca por rodada');
+// A regra de `convidar-live-cron.js`: comparar duas datas `YYYY-MM-DD` como TEXTO só é
+// legítimo porque nesse formato a ordem alfabética é a cronológica. Se um dia a edição virar
+// "09/09/2026", esta comparação passa a mentir em silêncio — daí a asserção.
+const passou = (armado, atual) => armado < atual;
+checa('edição vencida → desarma', passou('2026-09-02', '2026-09-09'));
+checa('edição corrente → NÃO desarma (é o conserto: segue armado a semana toda)',
+  !passou('2026-09-09', '2026-09-09'));
+checa('armado para o futuro → NÃO desarma', !passou('2026-09-16', '2026-09-09'));
+checa('a virada de ano não inverte a ordem', passou('2026-12-30', '2027-01-06'));
+
 console.log(`\n${falhas === 0 ? '✓' : '✗'} ${ok}/${ok + falhas} asserções`);
 // Piso de asserções: um `import` que resolvesse para um módulo sem `escolherAulaViva` deixaria
 // tudo "passar" com zero verificações — sucesso por ausência de medição, que é exatamente o
 // defeito que este arquivo existe para pegar.
-if (ok + falhas < 16) {
+if (ok + falhas < 28) {
   console.error('TESTE INVÁLIDO: rodou menos asserções do que este arquivo declara.');
   process.exit(2);
 }
