@@ -315,7 +315,7 @@ no painel seria cometer, no conserto, o defeito que ele veio consertar. A RPC ga
 | # | Item | Por quê |
 |---|---|---|
 | 2 | Ruído: 34% `nao_edital` | **Não é defeito** — é o filtro duro trabalhando. Cortar exigiria mexer nos `RADAR_TERMOS`, e o rendimento por termo só se mede abrindo os tribunais. |
-| 2b | 16% `erro_parse` | Deve cair com o re-parse; **a medição só existe depois do cron das 16h UTC**. |
+| 2b | 16% `erro_parse` | **Medido pós-cron das 16h UTC (03/09):** `erro_parse` caiu de 76 para 58 (-18); `leiloeiro_nome` preenchido subiu de 121 para 172 (+51); `leiloeiro_integrado` quase dobrou (35→66). Do alvo de 128 editais sem nome que citam "leiloeir" no texto, o re-parse resolveu 51 (≈40% de acerto real) — **77 continuam sem nome** (`alvo_restante`), então a rodada ajudou mas não esgotou a fila; pode precisar de mais uma passada ou de olhar os 77 que sobraram. |
 | 4 | Cobertura DJEN × DEJESP | O proxy do sandbox bloqueia `*.pje.jus.br` e o site do TJSP. Precisa rodar de fora. |
 | 7 | **Edital virar LOTE** | É projeto, não conserto: exige decidir o que é "imóvel pesquisável" a partir de um edital sem foto e sem geocodificação. **É o item que muda o negócio.** |
 | — | Abrir `RADAR_TRIBUNAIS` | Deliberadamente NÃO fiz: aumenta compute e IA por edital. Com os consertos acima, agora é seguro fazer por etapas — sugiro 4–5 estados primeiro, medindo rendimento e ruído por UF antes de ir a 27. |
