@@ -66,9 +66,20 @@ async function asaas(path) {
   const r = await fetch(`${ASAAS_URL}${path}`, { headers: { access_token: ASAAS_KEY }, signal: AbortSignal.timeout(20000) });
   if (!r.ok) {
     const corpo = await r.text().catch(() => '');
-    console.error('[financeiro] asaas', path, r.status, corpo.slice(0, 300));
     let code = `http_${r.status}`;
     try { code = JSON.parse(corpo)?.errors?.[0]?.code || code; } catch { /* padrao-ok: corpo não-JSON cai no código genérico acima */ }
+    // LACUNA DECLARADA ≠ PANE, e o console.error abaixo é quem NÃO sabia disso (03/09). O
+    // chamador já trata `insufficient_permission` em `/transfers` como decisão nossa (ver
+    // `semPermissaoSaque` mais abaixo) — mas o log disparava ANTES dessa classificação, todo
+    // dia, e era isto que o painel de runtime da Vercel contava como "2 erros/dia desde 08/08"
+    // (o outro erro é o 403 do MP em `/balance`, tratado logo abaixo em mp()). O cron
+    // `conciliacao-sync-cron` (25 8 * * *, 1x/dia) chama este endpoint — cada rodada bate os
+    // dois. Rebaixa só ESTA combinação; qualquer OUTRO código do Asaas continua console.error.
+    if (code === 'insufficient_permission') {
+      console.warn('[financeiro] asaas', path, r.status, code, '(lacuna declarada, não falha — ver comentário)');
+    } else {
+      console.error('[financeiro] asaas', path, r.status, corpo.slice(0, 300));
+    }
     return { ok: false, data: null, code };
   }
   return { ok: true, data: await r.json().catch(() => null), code: null };
@@ -76,7 +87,22 @@ async function asaas(path) {
 async function mp(path) {
   if (!MP_TOKEN) return null;
   const r = await fetch(`https://api.mercadopago.com${path}`, { headers: { Authorization: `Bearer ${MP_TOKEN}` }, signal: AbortSignal.timeout(20000) });
-  if (!r.ok) { console.error('[financeiro] mp', path, r.status); return null; }
+  if (!r.ok) {
+    // MESMO CUIDADO do asaas() acima (03/09): o 403 em `/mercadopago_account/balance` é
+    // endpoint NÃO documentado do MP, sabidamente pode não estar liberado para a conta — o
+    // chamador já trata isso como não-fatal (`saldo_indisponivel`, não derruba `completo`; ver
+    // comentário grande logo abaixo, no chamador). Antes deste ajuste, o console.error disparava
+    // igual para este caso já-conhecido e para uma falha real (ex.: `/v1/payments/search` ou
+    // `/users/me`), e o painel de runtime da Vercel não distinguia os dois. Rebaixa só ESTA
+    // combinação (403 + endpoint de saldo); qualquer OUTRO endpoint/status do MP continua
+    // console.error — ali um 403 É falha real (ver `busca.falhou` e `!me` mais abaixo).
+    if (r.status === 403 && path.includes('/mercadopago_account/balance')) {
+      console.warn('[financeiro] mp', path, r.status, '(permissão/escopo do token — ver comentário no chamador)');
+    } else {
+      console.error('[financeiro] mp', path, r.status);
+    }
+    return null;
+  }
   return r.json().catch(() => null);
 }
 

@@ -1,0 +1,24 @@
+-- =====================================================================================
+-- RATEIO DIÁRIO DA SUB-COTA `geral` DO BRIGHT DATA (item 5, 03/09)
+--
+-- O MESMO SINTOMA que levou ao rateio de `docs` em 18/08 ("a sub-cota semanal de docs
+-- (150) foi consumida INTEIRA na segunda-feira") aconteceu com `geral` (teto 100/semana):
+-- medido em `brightdata_uso_proposito_dia`, a sub-cota `geral` levou 72 requisições NUM
+-- SÓ DIA (24/08, segunda) e 46+54=100/100 já na TERÇA (31/08→01/09) — a semana inteira
+-- gasta em 2 dos 7 dias, sem sobrar nada para o resto (inclusive para o
+-- `enriquecer-datas-cron`, que respeita corretamente seu próprio teto de 10/run, e para
+-- o enriquecimento on-demand ao cliente abrir um imóvel — `enriquecer-lote.js`).
+--
+-- Mecanismo já existe desde `brightdata_rateio_diario_da_subcota.sql` (18/08), que
+-- documenta explicitamente a extensão para outro propósito como um simples UPDATE.
+-- NÃO aumenta gasto: só reparte o MESMO teto semanal (100) ao longo da semana, em vez de
+-- deixar os 2 primeiros dias esgotarem tudo. Mesma proporção usada em `docs`
+-- (teto_dia = teto/6, arredondado): 100/6 ≈ 16,67 → 17.
+--
+-- Complementa (não substitui) o teto de requisições por execução aplicado no mesmo dia em
+-- `api/enriquecer-backfill-cron.js` (o cron que chamava fetchLote/BD para até 40 lotes por
+-- rodada, sem nenhum teto próprio — ao contrário do `enriquecer-datas-cron.js`, que já
+-- tinha PAGO_MAX=10 desde 29/08).
+-- =====================================================================================
+
+update public.brightdata_reserva set teto_dia = 17 where proposito = 'geral';

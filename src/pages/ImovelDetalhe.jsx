@@ -104,7 +104,22 @@ function MiniMapa({ lat, lng, pontos, nivel }) {
     const timers = [];
     import('leaflet').then(({ default: L }) => {
       if (cancel || !ref.current || mapRef.current) return;
-      const map = L.map(ref.current, { scrollWheelZoom: false, attributionControl: false }).setView([lat, lng], zoomBase);
+      // `zoomAnimation: false` — 4 NOVAS ocorrências deste bug em 5 dias (28/08 a 02/09,
+      // confirmadas em erros_cliente) mostraram que o `map.stop()` da limpeza abaixo NÃO
+      // basta: ele só cancela o `_panAnim` (arraste/`flyTo`). A animação de ZOOM do Leaflet
+      // é outro mecanismo, com um `setTimeout(_onZoomTransitionEnd, 250)` disparado dentro do
+      // PRÓPRIO leaflet-src.js (fallback pro Webkit não disparar 'transitionend' — ver
+      // Leaflet#3689) que a lib NUNCA cancela nem no `stop()` nem no `remove()`. Se o
+      // componente desmonta (troca de imóvel) DENTRO desses 250ms, o timer dispara depois:
+      // `_onZoomTransitionEnd` só devolve cedo se `_animatingZoom` já estiver falso (não está
+      // — nada limpa essa flag), então segue até `_move` → `_getNewPixelOrigin` →
+      // `_getMapPanePos` → `getPosition(this._mapPane)`, e `this._mapPane` já foi apagado pelo
+      // `remove()` → `undefined._leaflet_pos`, o estouro exato do erro em produção. Nenhuma
+      // flag "cancelado" no NOSSO componente intercepta isso: quem chama o callback é um
+      // timer do Leaflet, não uma Promise ou closure nossa. Desligar a animação de zoom nesta
+      // mini-prévia (260px, já sem scrollWheelZoom) elimina o mecanismo inteiro — zoom passa a
+      // trocar na hora, sem transição, e sem nada pendente para estourar depois do unmount.
+      const map = L.map(ref.current, { scrollWheelZoom: false, attributionControl: false, zoomAnimation: false }).setView([lat, lng], zoomBase);
       // Basemap com FALLBACK automático: o tile.openstreetmap.org BLOQUEIA tráfego
       // de app em produção (mapa em branco) — por isso usamos CARTO e, se ele também
       // acumular erros de tile (bloqueio), o mapa cai sozinho para o Esri.
@@ -203,7 +218,29 @@ function MiniMapa({ lat, lng, pontos, nivel }) {
       // a rota registrada é o destino, não a origem. É a terceira ocorrência desta família
       // (11/08 foi `_leaflet_pos` por `tileerror` atrasado), e as duas anteriores fecharam
       // buracos de callback nosso — este é do próprio Leaflet, e `stop()` é a API para ele.
-      if (mapRef.current) { try { mapRef.current.stop(); } catch { /* mapa sem animação em curso */ } mapRef.current.remove(); mapRef.current = null; }
+      //
+      // 03/09 — ESTE `stop()` NÃO COBRIA A ANIMAÇÃO DE ZOOM, e o erro voltou (2 vezes em
+      // 01/09, 1 vez em 02/09, mesma assinatura `_onZoomTransitionEnd`→`_move`→`_leaflet_pos`
+      // de 11/08 — confirmado em erros_cliente, todas em `/imovel/:id`, DEPOIS deste fix de
+      // 30/08 estar em produção). Causa: `stop()`/`remove()` só chamam `_stop()` internamente,
+      // que cancela `_panAnim`/`_flyToFrame` — NUNCA a flag `_animatingZoom` nem o
+      // `setTimeout(_onZoomTransitionEnd, 250)` que `_animateZoom` agenda (fallback do próprio
+      // Leaflet pro Webkit não disparar `transitionend`, ver Leaflet#3689). Esse timer é
+      // disparado pela lib 250ms depois, direto em `this`, sem passar por nenhum callback
+      // nosso — nenhuma flag "cancelado" do componente o intercepta. Se ele cai DEPOIS do
+      // `remove()` (que já apagou `this._mapPane`), `_onZoomTransitionEnd` segue até `_move` →
+      // `_getMapPanePos` → `getPosition(undefined)` → o estouro. A correção de raiz foi
+      // desligar a animação de zoom na criação do mapa (`zoomAnimation: false`, acima) — isso
+      // impede o Leaflet de agendar o timer. Mantemos `_animatingZoom = false` aqui como
+      // cinto-e-suspensório: se algum caminho ainda a deixar `true` (ex.: versão futura da
+      // lib), o próprio guard do Leaflet (`if (!this._animatingZoom) return;`) já corta o
+      // callback antes de tocar no mapa removido.
+      if (mapRef.current) {
+        try { mapRef.current._animatingZoom = false; } catch { /* propriedade interna do Leaflet, best-effort */ }
+        try { mapRef.current.stop(); } catch { /* mapa sem animação em curso */ }
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
     };
   }, [lat, lng]); // eslint-disable-line react-hooks/exhaustive-deps
 

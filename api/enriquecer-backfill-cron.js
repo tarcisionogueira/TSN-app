@@ -17,6 +17,27 @@ import { extrairAreaM2, extrairDescricaoDoCorpo } from './_texto-imovel.js';
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
 const LOTE_MAX = parseInt(process.env.ENRIQUECER_BACKFILL_LOTE || '40', 10); // 30–50/execução
+// TETO DE REQUISIÇÕES PAGAS POR RUN (03/09) — o mesmo problema que `enriquecer-datas-cron.js`
+// recebeu em 29/08 e este cron irmão nunca recebeu, embora chame a MESMA `fetchLote` (mesmo
+// propósito `geral`, teto semanal 100). Sem teto aqui, uma única execução podia tentar até
+// LOTE_MAX (40) URLs — cada uma podendo cair no Bright Data quando o fetch direto falha — e
+// isso SOZINHO já explica boa parte do sintoma: medido em `brightdata_uso_proposito_dia`, a
+// sub-cota `geral` levou 72 requisições NUM SÓ DIA (24/08, segunda) e 46+54=100/100 já na
+// TERÇA (31/08→01/09) — a semana inteira gasta em 2 dos 7 dias, sem sobrar nada para o resto,
+// inclusive para o `enriquecer-datas-cron` (que respeita corretamente seu próprio teto de
+// 10/run) e para o enriquecimento on-demand (`enriquecer-lote.js`, ao cliente abrir um imóvel).
+// Backlog não é o problema (22.139 candidatos elegíveis medidos em 03/09 — este teto não reduz
+// cobertura no total, só reparte entre execuções, como o `enriquecer-datas-cron` já faz).
+//
+// CONTA SÓ O QUE REALMENTE FOI AO BRIGHT DATA (`via === 'brightdata'`), não toda tentativa de
+// `fetchLote` — diferente do cron irmão, este NÃO tem o filtro `enriquecerPeloDocumento` que
+// já poda a maioria dos candidatos antes de chegar aqui; copiar o padrão dele ao pé da letra
+// (contar toda chamada, inclusive as que resolvem de graça via fetch direto) reduziria o
+// próprio backfill GRÁTIS a ~`PAGO_MAX`/dia contra um backlog de 22 mil — pior que o problema
+// que este teto veio resolver. Uma vez esgotado, os candidatos restantes da rodada ainda
+// tentam o caminho direto (`semBrightData`, ver `enriquecer-lote.js`) — só não escalam para o
+// pago.
+const PAGO_MAX = parseInt(process.env.ENRIQUECER_BACKFILL_PAGO_MAX || '10', 10);
 
 function sb(path, opts = {}) {
   return fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
@@ -82,14 +103,19 @@ export default async function handler(req, res) {
   }
   const lista = pool.slice(0, LOTE_MAX);
 
-  let comData = 0, comFim = 0, semConteudo = 0, prioridade = 0, comArea = 0, comTexto = 0;
+  let comData = 0, comFim = 0, semConteudo = 0, prioridade = 0, comArea = 0, comTexto = 0, pagos = 0;
   const agora = new Date().toISOString();
   for (const im of lista) {
     if (cidadeSet.has(String(im.cidade || '').toLowerCase())) prioridade++;
     const alvo = im.url_lote || im.link_edital;
+    const temAlvo = !!(alvo && /^https?:\/\//.test(alvo));
     const patch = { enriquecido_em: agora };
-    if (alvo && /^https?:\/\//.test(alvo)) {
-      const { html, semCota } = await fetchLote(alvo);
+    if (temAlvo) {
+      // Uma vez esgotado o teto PAGO do run, ainda tenta o fetch direto (grátis) — só não
+      // escalona mais para o Bright Data. `pagos` só sobe quando `via==='brightdata'` de
+      // verdade, então quem resolve de graça continua contando ilimitado.
+      const { html, via, semCota } = await fetchLote(alvo, { semBrightData: pagos >= PAGO_MAX });
+      if (via === 'brightdata') pagos++;
       // 19/08: recusa de ORÇAMENTO não é visita — carimbar `enriquecido_em` aqui jogava o
       // lote para o fim da fila sem nunca tê-lo lido (forma #5). Sem cota, para o run
       // inteiro sem carimbar ninguém: o freio vale para todos os próximos também.
@@ -111,12 +137,13 @@ export default async function handler(req, res) {
         }
       } else {
         semConteudo++;
-        // Vazio recorrente = teto do Bright Data atingido → para de martelar.
+        // Vazio recorrente = teto do Bright Data atingido (ou já esgotado o PAGO_MAX desta
+        // rodada, ver `semBrightData` acima, e o direto também não resolveu) → para de martelar.
         if (semConteudo >= 5) { await marcar(im.id, patch); break; }
       }
     }
     await marcar(im.id, patch);
   }
 
-  res.status(200).json({ ok: true, processados: lista.length, com_data: comData, com_encerramento: comFim, com_area: comArea, com_texto: comTexto, sem_conteudo: semConteudo, de_cidades_de_usuarios: prioridade });
+  res.status(200).json({ ok: true, processados: lista.length, com_data: comData, com_encerramento: comFim, com_area: comArea, com_texto: comTexto, sem_conteudo: semConteudo, de_cidades_de_usuarios: prioridade, requisicoes_pagas: pagos, teto_pago: PAGO_MAX });
 }

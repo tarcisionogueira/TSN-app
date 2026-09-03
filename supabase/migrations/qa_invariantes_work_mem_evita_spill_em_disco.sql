@@ -1,0 +1,25 @@
+-- ITEM 2 (03/09) — qa_invariantes_lenta acusando 9999 (rodada 02/09 falhou em 8176ms,
+-- estatement timeout; ms_servidor nulo nas ultimas 8 execucoes ate a de hoje 15:01, que
+-- saiu ok=true mas com ms_servidor=7075, acima do teto de 5000ms do proprio invariante).
+--
+-- MEDIDO (nao adivinhado): rodando `explain (analyze, buffers)` em CADA bloco da funcao,
+-- separadamente, o UNICO ponto que grava em disco (`temp read=641 written=604`, que bate
+-- EXATAMENTE com o que a chamada inteira da funcao mostra) e o `foto_repetida_como_lote`:
+-- `group by fonte, link_foto` sobre as ~27,4 mil linhas ativas, mais a window function
+-- por cima, forcam um Sort/GroupAggregate cujo working set (~2,6 MB) passa do `work_mem`
+-- do projeto (3.500 kB — configuracao global do plano, nao mexida aqui) e o Postgres
+-- derrama a ordenacao em disco ("Sort Method: external merge  Disk: 2648kB").
+--
+-- Os outros blocos pesados (selo_documento_dessincronizado ~1,28s chamando
+-- calc_tem_edital_doc/calc_tem_matricula_doc por linha ativa; leilao_vencido_ativo ~0,52s
+-- chamando leilao_ja_encerrado por linha) sao caros por DESENHO — verificam TODAS as
+-- linhas ativas de proposito (e a auditoria de 03/09 confirmou 0 divergencias: o gatilho
+-- que eles vigiam continua sincronizado) — nao ha indice que reduza isso sem enfraquecer
+-- o invariante, e reescrever pra evitar a chamada de funcao duplicaria a logica-fonte
+-- (risco de divergencia, o proprio defeito que esses invariantes existem pra pegar).
+-- Encurtar SO o que e desperdicio real (o spill em disco), sem tocar timeout nem logica.
+--
+-- Por que so nesta funcao (SET por-funcao, nao GUC global): work_mem maior por conexao
+-- custa RAM em TODA query dessa sessao, nao so nesta. Escopar em `qa_invariantes()` evita
+-- subir o custo de memoria do projeto inteiro por causa de UM invariante que roda 1-2x/dia.
+alter function public.qa_invariantes() set work_mem = '16MB';

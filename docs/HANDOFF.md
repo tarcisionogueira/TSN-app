@@ -4,6 +4,72 @@
 
 ---
 
+## 📋 SESSÃO 22 · PARTE 9 (03/09, fim de tarde) — BLOCO 3 FECHADO: 5 ACHADOS DE INFRA (workflow com 5 agentes em paralelo)
+
+Rodado via Workflow (5 agentes independentes, um por achado — cada um investigou com dado real
+antes de corrigir). Todos os 5 confirmados como reais; nenhum já estava corrigido.
+
+1. **`api/cnj-monitor-cron.js` estourava 25s todo dia** — `runtime: 'edge'` com `maxDuration: 300`
+   no código, mas Edge Functions na Vercel têm teto real de ~25s que `maxDuration` NÃO estende
+   (só vale para Node.js serverless). Confirmado: era a ÚNICA cron de ~50 em `api/` ainda em
+   edge — as demais já são `nodejs`. Trocado para `runtime: 'nodejs'` + exports nomeados
+   `GET`/`POST` (o contrato que os outros ~20 crons `nodejs` deste repo já usam — `export
+   default` sozinho seria chamado como `(req,res)` em Node e o `Response` devolvido nunca
+   chegaria ao cliente).
+2. **`qa_invariantes_lenta` = 9999** — medido com `explain (analyze, buffers)` bloco a bloco: o
+   único ponto que derrama em disco é `foto_repetida_como_lote` (working-set ~2,6MB > work_mem
+   do plano, 3.500kB). Aplicado `alter function qa_invariantes() set work_mem = '16MB'` (escopado
+   só nesta função, não é GUC global). O spill some (confirmado antes/depois), mas o custo-base
+   (~3,2-3,6s com cache quente e zero concorrência, já visto em 7,1-7,2s sob carga real) segue
+   perto do teto real de 8s (`statement_timeout` da role `authenticator` — não os 5000ms do
+   invariante). Os dois blocos mais caros (`selo_documento_dessincronizado` ~1,28s,
+   `leilao_vencido_ativo` ~0,52s) são caros POR DESENHO (varrem toda linha ativa de propósito;
+   0 divergências encontradas — o gate que vigiam continua são) e o agente deliberadamente não
+   mexeu neles. **Decisão em aberto, não tomada sozinha**: (a) reescrever as ~7-8 varreduras
+   separadas de `imoveis_leilao where ativo` numa passada só (ganho maior, risco maior numa
+   função de 500+ linhas), ou (b) só afastar o horário do `monitor-fontes-cron` (hoje 15h UTC)
+   dos crons `geocodificar` (a cada hora, minuto 0) e `desativar-encerrados-cron` (minuto 5) —
+   os três mexem em `imoveis_leilao` no mesmo minuto, correlação medida mas não comprovada como
+   causa. Por ora, só o fix seguro (work_mem) foi aplicado.
+3. **`financeiro-extrato.js`: 2 erros/dia desde 08/08** — os `console.error` do Asaas
+   (`insufficient_permission` em `/transfers`) e do MP (403 em `/balance`) disparavam ANTES da
+   classificação de negócio que já existia (`semPermissaoSaque`, `saldo_indisponivel`) — o
+   código já tratava os dois como lacuna declarada, só o LOG não sabia disso. Rebaixados para
+   `console.warn` SÓ nessas duas combinações exatas; qualquer outro erro do Asaas/MP continua
+   `console.error`. Confirmado: quem chama 1x/dia é `conciliacao-sync-cron` (8h25 UTC).
+4. **Leaflet `_leaflet_pos`/`classList`** — 4 ocorrências reais confirmadas em `erros_cliente`
+   (11/08, 01/09 ×2, 02/09 — todas em `/imovel/:id`, uma registrada como `/planos` por ser SPA:
+   o usuário já tinha navegado quando o timer tardio disparou). O fix de 30/08 (`stop()` antes
+   do `remove()`) resolveu a família do `_panAnim` (arraste) mas NUNCA cobriu a animação de
+   ZOOM: o Leaflet agenda um `setTimeout(_onZoomTransitionEnd, 250)` (workaround do próprio
+   Leaflet pro Webkit, Leaflet#3689) que nem `stop()` nem `remove()` cancelam — se o componente
+   desmonta dentro desses 250ms, o timer dispara sobre um `_mapPane` já apagado. Corrigido na
+   raiz com `zoomAnimation: false` na criação do mapa (o mecanismo do timer nem chega a ser
+   agendado) + `_animatingZoom = false` no cleanup como reforço. **Achado, não corrigido**:
+   `MapaImoveis.jsx` (linha 177) e `Busca.jsx` (linha 375) têm mapas Leaflet próprios com o
+   MESMO padrão de cleanup copiado (stop+remove, sem `zoomAnimation:false`) — mesma
+   vulnerabilidade latente, sem ocorrência confirmada ainda. Fica como item de follow-up.
+5. **Bright Data: subcota `geral` 100/100 esgotada toda semana em 2 dos 7 dias** —
+   `enriquecer-lote.js` (on-demand, cliente abrindo imóvel) já tentava o fetch direto antes do
+   Bright Data desde 19/08; não era o vilão. O vilão real: `enriquecer-backfill-cron.js` (cron
+   irmão de `enriquecer-datas-cron.js`, mesma subcota) NUNCA recebeu o teto de requisições pagas
+   por rodada que o `enriquecer-datas-cron.js` ganhou em 29/08 — até 40 lotes/dia sem freio
+   nenhum. Corrigido: `PAGO_MAX=10` (mesmo valor do irmão, mas contando só `via==='brightdata'`,
+   não toda tentativa — o backfill não tem o filtro grátis que o irmão tem, copiar a régua ao
+   pé da letra capava o próprio backfill sem necessidade). `fetchLote()` ganhou o parâmetro
+   `semBrightData` para permitir "só tente o caminho grátis" sem pular o lote inteiro. Também
+   ligado o rateio diário (`teto_dia=17`, mesma proporção já usada em `docs` desde 18/08) para
+   `geral` — nenhum aumento de teto, só reparte ao longo da semana. **Decisão em aberto**: mesmo
+   com os crons de fundo limitados, tráfego on-demand real de clientes JÁ disputa a mesma
+   subcota (medido: 72 reqs num único dia 24/08, acima do teto teórico dos crons daquele
+   período) — separar uma fatia própria da subcota `geral` para o on-demand do cliente (para
+   ele nunca ficar sem enriquecimento por causa dos crons de fundo) é uma escolha de
+   PRIORIDADE, não de orçamento (o total de 100/semana não muda), e não foi decidida sozinha.
+
+Build central rodado depois de tudo: limpo, `Nenhum padrão perigoso NOVO`.
+
+---
+
 ## 📋 SESSÃO 22 · PARTE 8 (03/09, fim de tarde) — "BLINDAGEM": ERRO DE VALOR/ÁREA RECORRENTE EM 6 SCRAPERS
 
 Pedido do dono, com print do WEBLEILOES (imóvel Cotia/SP): "isso é crítico e está recorrente…

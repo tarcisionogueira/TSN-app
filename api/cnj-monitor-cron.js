@@ -5,11 +5,23 @@
  * e atualiza o snapshot. Importante: o DataJud não é tempo real — a novidade
  * aparece com o atraso da base + este intervalo (1x/dia).
  */
-export const config = { runtime: 'edge', maxDuration: 300 };
+// Runtime Node.js (não Edge): Vercel Edge Functions têm teto real de ~25s que o
+// "maxDuration" do código NÃO estende (maxDuration alto só vale para Node.js serverless
+// functions). Em edge, este cron respondia 200 mas estourava o teto da plataforma antes
+// de terminar de reconsultar os processos — o monitoramento "rodava" sem rodar de fato.
+export const config = { runtime: 'nodejs', maxDuration: 300 };
 
 import { isCronAuthorized } from './_auth.js';
 import { buscarProcessosCNJ } from './_cnj.js';
 import { classificarDesfecho, registrarDesfechoJuridico } from './_arremate-aprendizado.js';
+
+// Exports nomeados (GET/POST) em vez de `export default`: é isso que faz a função
+// Node.js da Vercel ser invocada no contrato Web-padrão (Request → Response), igual a
+// todo outro cron `nodejs` deste repo (ver alertas-publicos-cron.js, enviar-alertas-cron.js).
+// Um `export default handler(req)` sozinho em runtime nodejs seria chamado como (req, res)
+// — o handler devolveria um Response que nunca seria escrito na resposta HTTP real.
+export const GET = handler;
+export const POST = handler;
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -62,7 +74,7 @@ async function avisarCaso(mon, texto) {
     body: { chamado_id: ch.id, autor_tipo: 'sistema', autor_nome: 'Monitor CNJ', conteudo: texto, anexos: [] } });
 }
 
-export default async function handler(req) {
+async function handler(req) {
   if (!isCronAuthorized(req)) return new Response('Unauthorized', { status: 401 });
 
   const monitores = await (await sb(`processos_monitorados?ativo=eq.true&select=*&order=ultima_checagem.asc.nullsfirst&limit=40`)).json();

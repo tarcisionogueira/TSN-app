@@ -31,7 +31,13 @@ function sb(path, opts = {}) {
 }
 
 // fetch direto; se 403/erro → Bright Data (desbloqueia fontes que barram o servidor).
-export async function fetchLote(url) {
+// `semBrightData` (03/09): permite ao chamador pedir SÓ o caminho grátis — usado por crons
+// batch que já esgotaram o teto de requisições PAGAS da própria rodada (ver
+// `enriquecer-backfill-cron.js`), para que o item ainda tente o fetch direto (custo zero)
+// em vez de ser pulado inteiro. Sem isto, um teto por rodada só poderia ser aplicado
+// contando TODAS as tentativas (inclusive as que teriam resolvido de graça via direto),
+// jogando fora acervo que não custava nada.
+export async function fetchLote(url, { semBrightData = false } = {}) {
   // Anti-SSRF: URL vinda do banco (url_lote/link_edital) — nunca alcança rede interna/metadados.
   if (!hostExternoSeguro(url)) return { html: '', finalUrl: url, via: 'bloqueado' };
   const h = { 'User-Agent': UA, Accept: 'text/html,application/xhtml+xml,*/*;q=0.8', 'Accept-Language': 'pt-BR,pt;q=0.9' };
@@ -41,6 +47,7 @@ export async function fetchLote(url) {
     const text = await resp.text().catch(() => '');
     if (text && text.length > 500) return { html: text, finalUrl: resp.url || url, via: 'direct' };
   }
+  if (semBrightData) return { html: '', finalUrl: url, via: 'fail' };
   // 19/08: era o `fetchViaBrightData` LEGADO, que devolve null tanto para "teto de cota"
   // quanto para "página vazia" — a forma #5 que o próprio _brightdata.js documenta como
   // resolvida. A recusa de ORÇAMENTO carimbava o lote como visitado (enriquecido_em) e o
