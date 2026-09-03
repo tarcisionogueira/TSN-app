@@ -4,6 +4,38 @@
 
 ---
 
+## 📋 SESSÃO 22 · PARTE 13 (03/09, à noite) — VARREDURA GERAL: 1 REGRESSÃO DE SEGURANÇA ACHADA E CORRIGIDA
+
+Pedido do dono: "vamos ver as próximas pendências gerais". Rodada de custo zero (heartbeat,
+`auditoria_seguranca`, `auditoria_regras_negocio`, `admin_360_estatisticas`,
+`fonte_regressao_suspeita`, `erros_cliente`).
+
+1. **Regressão real achada: `meu_nivel` voltou a ser executável por `anon`.** Já tinha sido
+   endurecida numa sessão anterior (`rpc_meu_nivel_revogar_anon.sql`); esta sessão fez
+   DROP+CREATE para acrescentar o parâmetro `p_uid` (visão da equipe sobre outro parceiro) —
+   criar a função DE NOVO reseta os grants para o padrão do Postgres (EXECUTE a PUBLIC). Sem
+   risco real de vazamento (a função exige `auth.uid()` e devolve `sem_sessao` para anon),
+   mas é exatamente o tipo de regressão silenciosa que `auditoria_seguranca()` existe para
+   pegar — e pegou. Reaplicado o hardening na assinatura nova; de carona, bloqueei
+   `qa_invariante_editais_cruzamento_cego()` (nunca tinha sido revogada, ninguém no frontend
+   chama). `auditoria_seguranca()`: volta a **0 crítico / 0 atenção**. Commit `699c8c9`.
+2. **`fonte_regressao_suspeita()` confirma o fix do LEILOFY**: já não aparece mais na lista.
+   Restam os 6 já conhecidos e categorizados (SBID21 zerou-real, HASTA/EMILIOMATOS/
+   NORDESTE/ALFA/LEFFA medição velha — sem mudança desde a PARTE 12).
+3. **`auditoria_regras_negocio()`: 0 crítico.** Limpo.
+4. **Cliente 360**: `clientes_com_erro: 3`, `relatorios_falha_24h: 1`, `relatorios_falha_7d: 5`,
+   `alerta_incompleto_7d: 4` (achado NOVO — 4 exploradores com poucos imóveis encontrados no
+   alerta, ex.: 1 de 12 vagas em Palmas/TO e Tucumã/PA). Investigado por amostra: parece
+   escassez real de acervo nessas cidades pequenas, não bug — não persegui mais fundo por
+   falta de sinal de defeito de código.
+5. **`erros_cliente` (14 d): 7 abertos.** Leaflet `_leaflet_pos` (Bloco 3, corrigido 19:31 UTC
+   hoje) sem ocorrência nova desde o fix — cedo para confirmar, mas sinal bom. `/checkout
+   Failed to fetch` ×5: é **1 usuário só**, recorrente ao longo de um mês (06/08→03/09), não
+   5 usuários hoje — assinatura de ambiente local (rede/extensão), não indício de gateway de
+   pagamento fora do ar. Resto é ruído de extensão de navegador (MetaMask/Firefox reader).
+
+---
+
 ## 📋 SESSÃO 22 · PARTE 12 (03/09, à noite) — BLOCO 4: LEILOFY CONSERTADO, suprimido_motivo PASSA A SER PREENCHIDO, E O QUE SOBRA PARA VOCÊ
 
 Pedido do dono: "faça sozinho o que conseguir, e me dê o que precisa de mim com o passo a
