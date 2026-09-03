@@ -19,13 +19,20 @@ import { isCronAuthorized } from './_auth.js';
 import { createClient } from '@supabase/supabase-js';
 import { buscarViaBrightData, ErroBrightData, brightDataDisponivel } from './_brightdata.js';
 import { iaGeminiPrimary } from './_claude.js';
+import { hostExternoSeguro, fetchExternoSeguro } from './_allowed-hosts.js';
 
 const DJEN_BASE = 'https://comunicaapi.pje.jus.br/api/v1/comunicacao';
-// Tribunais monitorados — CONFIGURÁVEL por env RADAR_TRIBUNAIS (Item 5: "todos os estados").
-// Default = SP (validar primeiro). Para abrir p/ o Brasil, setar a env, ex.:
+// Tribunais monitorados — CONFIGURÁVEL por env RADAR_TRIBUNAIS.
+// ⚠️ ABERTO PARA MG, PR, ES em 03/09 (pedido do dono), escolhidos pelo cruzamento medido
+// nesta mesma sessão: acervo ativo por estado tinha RJ 8.976 · SP 4.630 · GO 4.547 muito à
+// frente, enquanto os CLIENTES moram em SP (46) · MG (9) · PR (9) · ES (8) · RJ (8) — ou
+// seja, RJ e GO já têm cobertura grande (abrir lá é sobretudo duplicata), e MG/PR/ES têm
+// cliente e pouco acervo — é onde o mesmo custo de captura rende mais. Os pré-requisitos
+// (combo≠run, UF validada, sem default 'SP', dedup por matrícula/cidade) foram resolvidos
+// antes de abrir. Para o Brasil inteiro, ex.:
 //   TJSP,TJRJ,TJMG,TJRS,TJPR,TJSC,TJBA,TJGO,TJDFT,TJPE,TJCE,TJES,TJMT,TJMS,TJPA,TJMA,TJPB,
 //   TJRN,TJAL,TJSE,TJPI,TJAM,TJRO,TJAC,TJAP,TJRR,TJTO,TRT1,TRT2,TRT15 ... (DJEN é nacional).
-const TRIBUNAIS = (process.env.RADAR_TRIBUNAIS || 'TJSP,TRT15').split(',').map(s => s.trim()).filter(Boolean);
+const TRIBUNAIS = (process.env.RADAR_TRIBUNAIS || 'TJSP,TRT15,TJMG,TJPR,TJES').split(',').map(s => s.trim()).filter(Boolean);
 // Termos jurídicos que referenciam LEILÃO/VENDA de imóvel no DJEN. CONFIGURÁVEL por env
 // RADAR_TERMOS (o agente de captura/monitor APRENDE o rendimento de cada termo — quantos viram
 // edital REAL vs ruído — e liga/desliga termos sem deploy; ver docs/RADAR_EDITAIS_CNJ.md).
@@ -84,7 +91,20 @@ export const ufDoTribunal = (sigla) => ufValida(String(sigla || '').replace(/^TJ
 // pega um FRAGMENTO de frase do edital ("para os encargos de avaliação e leilão", "a
 // publicação do edital na forma do art", "inviável", "credenciado"…). Guard forte.
 const NOME_BLOQ = /(edital|públic|public|encargo|comiss|avalia|necessidade|d[ée]bito|trabalhist|\bforma\b|artigo|\bart\b|invi[áa]vel|credenciad|oficial|cadastrad|nomead|portal|auxiliar|processo|im[óo]vel|penhora|arremat|hasta|pra[çc]a|leil[ãa]o|expe[çc]a|intima|despach|senten|ju[íi]z|\bvara\b|autos|partes|advogad|requerid|exequ|execut|\bfls\b|plat[ao]|apura|imputa|realizada|\bbem\b|\bfato\b)/i;
-const CIDADE_BLOQ = /(cpf|cnpj|ltda|\bs\/?a\b|\bcri\b|cart[óo]rio|registro|of[íi]cio|expe[çc]a|matr[íi]cula|processo|edital|comarca|\bvara\b|\bforo\b)/i;
+// ⚠️ AMPLIADO (03/09), depois de medir as "cidades" dos 87 editais elegíveis para virar lote:
+// "Detran", "IBAPE", "OAB", "INTIME", "TRATANDO", "Justiça do Estado de São Paulo TJ",
+// "Portal de Auxiliares da Justiça do TJ", "Tabela Prática do TJ", "Vistos. CADASTRE",
+// "SECRETARIA CONJUNTA DE ARARAQUARA" — a mesma regex `cidadeUf` que serve para achar
+// "Cidade/UF" morde texto institucional que só PARECE "Nome/UF" na superfície. É a mesma
+// família de defeito do leiloeiro (`NOME_BLOQ`), só que aqui o dano é maior: uma cidade
+// inventada vira um LOTE na vitrine, com endereço que não existe em lugar nenhum.
+const CIDADE_BLOQ = /(cpf|cnpj|ltda|\bs\/?a\b|\bcri\b|cart[óo]rio|registro|of[íi]cio|expe[çc]a|matr[íi]cula|processo|edital|comarca|\bvara\b|\bforo\b|detran|ibape|\boab\b|intime|tratando|divis[ãa]o|secretaria|justi[çc]a|tribunal|\btj\b|portal|auxiliares?|tabela|\bvistos\b|cadastre|execu[çc][ãa]o)/i;
+// Prefixo institucional que PRECEDE uma cidade real ("Município de Mogi das Cruzes",
+// "Imóveis de Santa Cruz do Rio Pardo") — o mesmo texto aparece nos DOIS formatos no
+// acervo (com e sem o prefixo) porque o edital cita a cidade mais de uma vez. Remover o
+// prefixo RECUPERA a cidade real em vez de descartá-la; sem isto a mesma cidade contava
+// como "boa" numa menção e "lixo" na outra, e a segunda derrubava o edital sem necessidade.
+const CIDADE_PREFIXO = /^(munic[íi]pio\s+de|im[óo]veis\s+de|comarca\s+de)\s+/i;
 const CONECTORES = new Set(['da', 'de', 'do', 'dos', 'das', 'e', 'di', 'del', 'la']);
 function tituloNome(s) {
   return String(s).toLowerCase().split(' ').filter(Boolean)
@@ -172,8 +192,9 @@ export function extrairLeiloeiro(texto) {
   return null;
 }
 
-function cidadeValida(s) {
-  const c = String(s || '').replace(/\s+/g, ' ').trim();
+export function cidadeValida(s) {
+  let c = String(s || '').replace(/\s+/g, ' ').trim();
+  c = c.replace(CIDADE_PREFIXO, '').trim();
   if (c.length < 3 || c.length > 40) return null;
   if (/\d/.test(c)) return null;
   if (CIDADE_BLOQ.test(c)) return null;
@@ -667,6 +688,95 @@ export function janelaDJEN(diasDesdeSucesso, tetoDias = 15) {
  * não couber nesta rodada vem na próxima, porque a condição de entrada (`leiloeiro_nome is
  * null`) some quando o item é resolvido.
  */
+/**
+ * ITEM 4 DO PEDIDO DO DONO (03/09): "no edital tem o link do leiloeiro, com isso vamos ter
+ * o acesso ao leiloeiro e conectar com ele para pegar os documentos caso não estejam já
+ * disponibilizados."
+ * ═══════════════════════════════════════════════════════════════════════════════════════
+ * MELHOR ESFORÇO GENÉRICO, e é preciso dizer isso com todas as letras: isto não é um
+ * scraper por leiloeiro (como `scripts/scraper-puppeteer.mjs`, que tem código dedicado por
+ * site). É um fetch simples + regex sobre HTML — funciona em sites que renderizam o link do
+ * documento no HTML estático, e NÃO funciona em sites que só desenham o link via JavaScript
+ * (SPA). A taxa de acerto real só se mede rodando; não prometo aqui.
+ *
+ * Usa `fetchExternoSeguro`/`hostExternoSeguro` — a MESMA proteção anti-SSRF que
+ * `gerar-analise.js`, `gerar-documental.js` e `enriquecer-lote.js` já usam para alcançar
+ * documento em site de leiloeiro (não a allowlist exata de `hostPermitido`, que é para
+ * outro propósito — servir documento AO CLIENTE por `baixar-doc.js`/`fetch-url.js`).
+ */
+export async function descobrirDocumentosNoSite(url) {
+  if (!hostExternoSeguro(url)) return null;
+  let html;
+  try {
+    const r = await fetchExternoSeguro(url, {
+      headers: { 'User-Agent': UA, 'Accept-Language': 'pt-BR,pt;q=0.9' },
+      signal: AbortSignal.timeout(12000),
+    });
+    if (!r.ok) return null;
+    html = await r.text();
+  } catch { return null; }
+  // Teto de tamanho: não processa página gigante (custo de regex + memória à toa).
+  if (!html || html.length > 2_000_000) return null;
+
+  const links = [...html.matchAll(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]{0,120}?)<\/a>/gi)]
+    .map(([, href, texto]) => ({ href, texto: texto.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() }));
+
+  const acha = (re) => {
+    const cand = links.find((l) => re.test(l.href) || re.test(l.texto));
+    if (!cand) return null;
+    try {
+      const abs = new URL(cand.href, url).toString();
+      // O achado também passa pelo MESMO anti-SSRF — um <a href> na página de um leiloeiro
+      // pode apontar pra qualquer lugar, inclusive rede interna se a página for hostil/mal
+      // configurada. Nunca devolve um link que a checagem de destino não aprove.
+      return hostExternoSeguro(abs) ? abs : null;
+    } catch { return null; }
+  };
+  const matricula = acha(/matr[íi]cula/i);
+  const edital = acha(/\bedital\b/i);
+  if (!matricula && !edital) return null;
+  return { matricula, edital };
+}
+
+/**
+ * Percorre os lotes nascidos do Radar (`fonte='EDITAL_DJEN'`) que ainda não têm documento e
+ * têm `url_lote` (o link do leiloeiro que veio do edital) para tentar achar matrícula/edital
+ * no site. Negative-cache PRÓPRIO (`doc_descoberta_em`/`doc_descoberta_tentativas`) — não
+ * reaproveita `matricula_checada_em`/`matricula_scan_em`, que já significam outra coisa em
+ * outros pipelines (ver comentário da coluna na migração).
+ */
+async function buscarDocumentosPendentes(supabase, teto = 15) {
+  const limite = new Date(Date.now() - 3 * 86400000).toISOString();
+  const { data, error } = await supabase.from('imoveis_leilao')
+    .select('id, url_lote, link_matricula, link_edital, doc_descoberta_tentativas')
+    .eq('fonte', 'EDITAL_DJEN').eq('ativo', true)
+    .or('tem_matricula_doc.eq.false,tem_edital_doc.eq.false')
+    .not('url_lote', 'is', null)
+    .or(`doc_descoberta_em.is.null,doc_descoberta_em.lt.${limite}`)
+    .order('doc_descoberta_em', { ascending: true, nullsFirst: true })
+    .limit(teto);
+  if (error) return { erro: error.message.slice(0, 120), tentados: 0, achados: 0 };
+
+  let tentados = 0, achados = 0;
+  for (const im of data || []) {
+    tentados++;
+    const doc = await descobrirDocumentosNoSite(im.url_lote).catch(() => null);
+    const patch = {
+      doc_descoberta_em: new Date().toISOString(),
+      doc_descoberta_tentativas: (im.doc_descoberta_tentativas || 0) + 1,
+    };
+    if (doc?.matricula && !im.link_matricula) patch.link_matricula = doc.matricula;
+    if (doc?.edital && !im.link_edital) patch.link_edital = doc.edital;
+    if (doc?.matricula || doc?.edital) achados++;
+    // `.select()` prova que a gravação alcançou a linha — sem isso, "achei o documento" e
+    // "não gravei" ficariam indistinguíveis, e o lote seguiria sem doc pra sempre.
+    const { data: upd, error: eUpd } = await supabase.from('imoveis_leilao')
+      .update(patch).eq('id', im.id).select('id');
+    if (eUpd || !upd?.length) console.error('[radar-editais] doc_descoberta não gravou', im.id, eUpd?.message);
+  }
+  return { tentados, achados };
+}
+
 async function reparsarLeiloeirosPendentes(supabase, ehIntegrado, teto = 300) {
   const { data, error } = await supabase.from('editais_leilao')
     .select('id, status, texto_integral')
@@ -840,6 +950,26 @@ async function handler(req) {
   let iaExtraidos = 0;
   try { iaExtraidos = await enriquecerEditaisComIA(supabase, ehIntegrado, t0); } catch { /* best-effort */ }
 
+  // EDITAL VIRA LOTE (03/09, pedido do dono). Roda SEMPRE, depois do re-parse (o parser novo
+  // de leiloeiro pode ter acabado de destravar um edital que estava sem identificação) e
+  // depois do enriquecimento por IA (que preenche cidade/uf/valor em editais que a regex
+  // sozinha não pegou) — nessa ordem, cada passo alimenta o seguinte. `editais_promover_pendentes`
+  // faz o dedup pelo que temos (matrícula forte, cidade+valor/data médio) e nunca cria lote
+  // com foto. Best-effort: uma falha aqui não pode derrubar o cron que já coletou.
+  let promocao = null;
+  try {
+    const { data, error } = await supabase.rpc('editais_promover_pendentes');
+    if (error) throw new Error(error.message);
+    promocao = data;
+  } catch (e) { promocao = { erro: String(e?.message || e).slice(0, 120) }; console.error('[radar-editais] promoção não rodou', promocao.erro); }
+
+  // BUSCA DE DOCUMENTO NO SITE DO LEILOEIRO (item 4 do pedido). Melhor esforço genérico —
+  // ver o comentário de `descobrirDocumentosNoSite`. Roda por último e com teto pequeno: é
+  // rede de verdade (fetch no site de terceiro), então o custo por rodada fica baixo mesmo
+  // que a lista de pendentes cresça.
+  let buscaDocs = null;
+  try { buscaDocs = await buscarDocumentosPendentes(supabase); } catch (e) { buscaDocs = { erro: String(e?.message || e).slice(0, 120) }; }
+
   const pullDesfecho = pulouPull ? `pulado (${motivoPulo || 'já resolvido'})` : (semCota ? 'não tentado (sem cota Bright Data)' : 'executado');
   // A SAÚDE DA LISTA DE LEILOEIROS SAI NA RESPOSTA, e NÃO em `monitor_runs.erro` — de propósito.
   // O freio da rede de segurança lê `erro is null` para decidir se paga Bright Data; marcar
@@ -848,7 +978,7 @@ async function handler(req) {
   // foi assim que `sem_cota` já virou "a fonte não tem nada" uma vez (forma nº 5).
   const listaLeiloeiros = { tamanho: ehIntegrado.tamanhoDaLista, erro: ehIntegrado.erro || null };
   if (ehIntegrado.erro) console.error('[radar-editais] cruzamento CEGO nesta rodada:', ehIntegrado.erro);
-  return new Response(JSON.stringify({ ok: true, pull: pullDesfecho, sem_cota: semCota, vistos, novos, descartados, enriquecidos, iaExtraidos, erro: erroGeral, aviso: avisoParcial, combos: { ok: combosOk, falha: combosFalha }, lista_leiloeiros: listaLeiloeiros, reparse, janela: [ini, fim], tribunais: TRIBUNAIS }), {
+  return new Response(JSON.stringify({ ok: true, pull: pullDesfecho, sem_cota: semCota, vistos, novos, descartados, enriquecidos, iaExtraidos, erro: erroGeral, aviso: avisoParcial, combos: { ok: combosOk, falha: combosFalha }, lista_leiloeiros: listaLeiloeiros, reparse, promocao, busca_docs: buscaDocs, janela: [ini, fim], tribunais: TRIBUNAIS }), {
     headers: { 'Content-Type': 'application/json' },
   });
 }

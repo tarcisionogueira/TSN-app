@@ -34,7 +34,9 @@
     "precisa-navegador": "node scripts/testes/precisa-navegador.mjs",
     "testar:data-aula": "node scripts/testes/a-data-da-aula-vem-da-recorrencia.mjs",
     "testar:uf-edital": "node scripts/testes/uf-de-edital-e-uf-de-verdade.mjs",
-    "testar:leiloeiro": "node scripts/testes/o-nome-do-leiloeiro-nao-e-a-frase-em-volta.mjs"
+    "testar:leiloeiro": "node scripts/testes/o-nome-do-leiloeiro-nao-e-a-frase-em-volta.mjs",
+    "testar:cidade-edital": "node scripts/testes/a-cidade-do-edital-nao-e-texto-institucional.mjs",
+    "testar:doc-leiloeiro": "node scripts/testes/documento-do-leiloeiro-so-vem-de-host-seguro.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",

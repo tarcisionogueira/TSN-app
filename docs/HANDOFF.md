@@ -4,6 +4,87 @@
 
 ---
 
+## 🏗️ SESSÃO 20 · PARTE 4 (03/09, 13h30 UTC) — O EDITAL VIRA LOTE
+
+> Pedido do dono, quatro frases: abrir MG/PR/ES · liberar lote sem foto mas reforçar
+> matrícula+edital pra análise · verificar duplicidade com o que temos · usar o link do
+> leiloeiro no edital pra buscar documento que falte.
+
+### ✅ Tribunais abertos: TJSP, TRT15, TJMG, TJPR, TJES
+Default de `RADAR_TRIBUNAIS` em código (não env var — fica no histórico do git, revisável).
+
+### ✅ Edital vira lote — `editais_promover_pendentes()`, chamada a cada rodada do cron
+
+**A dedup não podia ser por `numero_processo`** (medido antes de escrever uma linha:
+preenchido em 2 de 4.630 lotes de SP). A chave real dos dois lados é a **matrícula**: 138
+dos 238 editais processados têm `imovel_matricula`; o acervo tem `numero_matricula` em 1.235
+lotes — pequeno, mas confiável (é o registro do cartório, não palpite).
+
+**Duas confianças, nunca uma decisão binária:**
+- **Forte** (matrícula normalizada bate, mesmo estado) → **liga** ao lote existente, nunca
+  cria segundo. Enriquece só as lacunas (nunca sobrescreve o que já existe).
+- **Média** (mesma cidade + valor a até 10% OU praça a até 10 dias) → **cria** o lote (nunca
+  fica de fora) e marca `duplicata_suspeita_de` pra revisão. Decisão deliberada: um falso
+  negativo aqui apaga um imóvel real da vitrine em silêncio, pra sempre — pior que um falso
+  positivo, que só pede um olhar humano depois.
+
+**Rodada real (não ensaio) em produção:** 71 avaliados · 33 lotes novos · 6 ligados ao
+acervo (1 a um lote real do TORRES3 por matrícula; **5 ligados a OUTRO edital da MESMA
+praça dentro do mesmo lote de 500** — o dedup pegou reanúncios do mesmo processo, não só
+duplicata contra o acervo antigo) · 32 suspeitas marcadas para revisão · 167 sem
+identificação mínima (ficam pra próxima rodada, se o parser evoluir).
+
+**Sem foto, de propósito.** `tem_matricula_doc`/`tem_edital_doc` são colunas GERADAS por
+trigger a partir de `link_matricula`/`link_edital`/`anexos` — como o Radar não tem esses
+links ainda, nascem `false`. `gerar-analise.js` **já** degrada honestamente quando faltam
+(anomalia `avaliacao_ausente` em vez de inventar) — não precisou gate novo. `fonte =
+'EDITAL_DJEN'` é o marcador; `admin_radar_editais()` agora expõe `lotes_sem_documento` no
+painel — visibilidade sempre que a aba abre, não alarme de fundo (é trabalho esperado, não
+defeito).
+
+### ⚠️ Achado no meio do caminho: a "cidade" de 12 editais era texto institucional
+Ensaiando a promoção contra dados reais: "Detran", "IBAPE", "OAB", "TRATANDO", "Justiça do
+Estado de São Paulo TJ", "Portal de Auxiliares da Justiça do TJ" — a mesma regex que acha
+"Cidade/UF" no texto mordia texto institucional que só PARECE esse formato (a mesma família
+do `NOME_BLOQ` do leiloeiro, consertado hoje mais cedo). Sem consertar, a promoção criaria
+lotes em cidades que não existem. `CIDADE_BLOQ` ampliado + `CIDADE_PREFIXO` recupera cidade
+real atrás de prefixo ("Município de Mogi das Cruzes" → "Mogi das Cruzes"). Acervo já
+capturado limpo na mesma migração. `npm run testar:cidade-edital` — 28 asserções com os
+valores reais medidos. Uma sobra ambígua ("Guaçu" sozinho, sem confirmação de que é lugar)
+foi desativada por segurança em vez de mantida como palpite.
+
+### ✅ Item 4 — busca de documento no site do leiloeiro: `descobrirDocumentosNoSite()`
+**Melhor esforço genérico**, dito com todas as letras: fetch + regex sobre HTML estático,
+não scraper dedicado por site. Funciona em sites que renderizam o link no HTML; não funciona
+em SPA (link desenhado só por JavaScript). Usa `fetchExternoSeguro`/`hostExternoSeguro` — a
+MESMA proteção anti-SSRF que `gerar-analise.js`/`gerar-documental.js` já usam pra alcançar
+documento de leiloeiro (não a allowlist exata de `hostPermitido`, que é pra outro propósito).
+Roda a cada 4h, teto de 15 lotes/rodada, negative-cache próprio (`doc_descoberta_em`/
+`doc_descoberta_tentativas` — colunas NOVAS, não reaproveitam `matricula_checada_em`/
+`matricula_scan_em`, que já significam outra coisa em outros pipelines). Hoje só **6 dos 53**
+lotes têm `url_lote` preenchido (o `leilao_plataforma_url` do edital é raro: 38 de 477 no
+total) — a taxa de acerto real só se mede rodando. `npm run testar:doc-leiloeiro` — 11
+asserções, incluindo prova de que o guard anti-SSRF barra ANTES de qualquer fetch.
+
+### 📋 Estado depois da rodada
+Segurança **0 crítico** · regras de negócio **0 crítico** · **53 lotes ativos** de
+`EDITAL_DJEN`, todos sem foto, todos sem documento (esperado — item 4 ainda não rodou em
+produção). Único invariante novo em alerta: `fonte_cega_no_monitor` = 1 — a fonte
+`EDITAL_DJEN` acabou de nascer e o monitor de fontes AUTO-APRENDE baseline pra fonte nova
+sem precisar de configuração (desenho já documentado neste HANDOFF); deve resolver sozinho
+em 1–2 dias, não é para hardcodar nada.
+
+### ⏭️ Não fiz, e por quê
+- **Não abri para o Brasil inteiro** — só MG/PR/ES, como pedido. Mais estados = mais
+  compute/IA por edital; decisão de gasto é do dono.
+- **Não toquei nos 32 `suspeitas_duplicidade_para_revisar`** — ficam para revisão humana no
+  painel, de propósito (é a escolha "não decide sozinho quando a confiança é média").
+  Consultar: `select * from editais_leilao where duplicata_suspeita_de is not null;`
+- **Não geocodifiquei os 53 lotes novos na hora** — o cron `geocodificar` (hourly) já cobre
+  ativo sem lat/long; não precisava de mecanismo novo.
+
+---
+
 ## 🔧 SESSÃO 20 · PARTE 3 (03/09, 12h30 UTC) — A FILA DO RADAR, RESOLVIDA ATÉ ONDE DAVA SOZINHO
 
 > Dois dos meus próprios diagnósticos foram corrigidos pela medição. Fica registrado porque a
