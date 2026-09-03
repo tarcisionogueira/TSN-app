@@ -4,6 +4,76 @@
 
 ---
 
+## 📋 SESSÃO 22 · PARTE 12 (03/09, à noite) — BLOCO 4: LEILOFY CONSERTADO, suprimido_motivo PASSA A SER PREENCHIDO, E O QUE SOBRA PARA VOCÊ
+
+Pedido do dono: "faça sozinho o que conseguir, e me dê o que precisa de mim com o passo a
+passo detalhado". Nesta parte: dois consertos reais confirmados com dado de produção, mais o
+levantamento preciso do que só o dono resolve.
+
+1. **LEILOFY descartava 57 de 75 lotes — causa raiz achada e corrigida, confirmado 60/60.**
+   `mapLoteLeilofy()` só reconhecia "Primeira praça:"/"Segunda praça:"; a amostra do recon
+   (ver item 3) mostrou que **6 de 8 lotes de hoje vêm em "Praça Única"**, rótulo que a regex
+   não cobria — `valor_minimo` saía 0 e o lote era descartado em silêncio. Adicionado
+   fallback: sem "Primeira praça", tenta "Praça Única" (mesma convenção de quando falta a 2ª
+   praça — o valor único vale como avaliação E lance). Testado offline contra os textos reais
+   do recon antes de aplicar; rodada avulsa (`workflow_dispatch`, `fontes=LEILOFY`) confirmou
+   **60 de 60 imóveis mapeados** (antes: 18 de 75). Commit `ee5cb57`.
+2. **`suprimido_motivo` era só para o gêmeo HASTA×CEF — agora cobre a maioria do acervo.**
+   0 de 2892 lotes ZUK inativos com praça futura tinham motivo registrado; o banco não
+   distinguia "a fonte tirou do ar" de "nós falhamos em coletar" para nenhuma fonte fora
+   CEF/HASTA. Dois pontos gravam agora: o sweep de `salvarEFinalizar()` (MEGA/SUPERBID/
+   LJUD/GRUPOLANCE/ZUK/BIASI/PESTANA) grava `'sumiu_da_fonte'` ao desativar, e o upsert de
+   cada rodada limpa o motivo (`suprimido_motivo=null`) no mesmo ponto que já reativa o lote;
+   `desativar_leiloes_encerrados()` (cron horário, todas as fontes) grava `'praca_vencida'`.
+   **Achado ao implementar:** o trigger `trg_preservar_supressao_gemeo` prenderia em
+   `ativo=false` PARA SEMPRE qualquer lote com um motivo novo assim que voltasse a ser
+   coletado (a regra "motivo não-nulo → não reativa" foi pensada só para `'gemeo_hasta'`, mas
+   valia para qualquer motivo) — corrigido para checar especificamente `= 'gemeo_hasta'`.
+   Confirmado com a mesma rodada avulsa do item 1: `leilofy_1817/1743/1766` desativados hoje
+   já saíram com `suprimido_motivo='sumiu_da_fonte'`. Commit `7fbc8eb`.
+3. **`reconLeilofy()` ganhou amostragem de vários lotes** (era só o 1º) — foi o instrumento
+   que revelou a variação de rótulo do item 1. Diagnóstico reaproveitável para o próximo caso
+   parecido. Commit `8254122`.
+4. **Correção operacional:** um dispatch anterior (`workflow_dispatch` sem `fontes`, que
+   dispararia a rodada completa de ~85 min à toa) foi cancelado a tempo (`run 33803434974`,
+   1 min de vida) antes de gastar Actions/Bright Data — ver decisão abaixo.
+5. **HASTA — o código já está pronto, falta o dono manter a máquina ligada.**
+   `scripts/runner-residencial.sh:211` já roda `scraper-hasta.mjs` com gravação real. Último
+   sucesso real: **30/08** (584 lotes) — 4 dias sem medição nova hoje. Não é bug de código;
+   é o runner residencial parado ou o cron da máquina do dono não ter disparado.
+6. **EMILIOMATOS segue deliberadamente suspenso** (29/08) — catálogo multi-tenant do
+   white-label Superbid, precisa de um filtro por leiloeiro que ainda não existe. Confirmado
+   que o cron continua comentado (`workflow_dispatch` disponível só para recon). Não é
+   "esquecido"; é decisão de arquitetura pendente, não uma correção de bug.
+7. **`praca_fim_antes_do_inicio` = 3 (limite 0) — investigado, achado real, SEM fix aplicado
+   de propósito.** Os 6+ lotes ativos (todos MEGA, 1 WEBLEILOES, 1 GRUPOLANCE) têm
+   `praca1_fim` (fim da 1ª praça, no passado) < `data_leilao` — mas `data_leilao` nestas
+   fontes é um campo que o scraper **atualiza para refletir a praça CORRENTE** (avança de 1ª
+   para 2ª conforme o leilão evolui), enquanto `praca1_fim`/`praca2_fim` vêm de um
+   enriquecimento separado (`enriquecer-lote.js`) que não é re-executado quando `data_leilao`
+   muda. Ou seja: **pode ser o invariante comparando contra o campo errado** (deveria
+   comparar contra a ABERTURA original, não contra o valor atual de `data_leilao`), não um
+   dado corrompido — mas mexer nisso sem confirmar a intenção original do invariante
+   (`qa_invariantes_praca_intervalo.sql`, 28/08) arrisca abafar um alarme real ou soltar um
+   nunca calibrado. **Fica para o dono decidir/confirmar antes de eu tocar.**
+8. **2 referências do HANDOFF não localizadas no banco:** `pagamento_contradiz_documento`
+   (tipo não existe mais em `relatorio_anomalias` — hoje os tipos abertos são
+   `relatorio_incoerente`/`data_divergente_edital`/`valor_praca_incoerente`, todos já
+   **"MANTIDO o acervo"/"descartada"** pela própria trava de segurança, ou seja, já
+   neutralizados, só não marcados `resolvido`) e os fonte_id `Z37106`/`J126875` (não existem
+   mais no acervo atual — provavelmente já rotacionados/desativados). Não persegui mais
+   fundo: sem o código exato de onde vieram, seria montar hipótese sobre hipótese.
+9. **Bloco 5 reconferido nesta sessão (dado fresco, não o de 02/09):**
+   `ADMIN_EMAIL` **ainda não está em** `docs/ENVS_VERCEL.md`; `perfis where role='analista'`
+   = **0** (ninguém nomeado ainda); **4 pagantes estabelecidos sem relatório em 14 dias**
+   (mais 1 assinante de hoje, que não deve contar — sem histórico ainda); `ig_webhook_recebido`
+   continua em **2 linhas, ambas de 02/09, ambas o teste do console** (Instagram real: 0).
+   Google Cloud/Workspace/Mercado Pago não são verificáveis por aqui (painéis externos).
+
+Build central limpo em cada commit desta parte.
+
+---
+
 ## 📋 SESSÃO 22 · PARTE 11 (03/09, à noite) — BLOCO 4: PESTANA E CEF INVESTIGADOS
 
 Pedido do dono: os 2 achados mais urgentes do Bloco 4 (novos desde a manhã).
