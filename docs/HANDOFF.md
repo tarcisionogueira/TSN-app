@@ -4,6 +4,105 @@
 
 ---
 
+## 🎯 FILA DE 03/09 — AS PENDÊNCIAS, EM ORDEM DE ATAQUE ("amanhã zeramos isso")
+
+> Estado ao fechar 03/09 00h20 UTC: `main` = **`33dce2b`** (deploy READY) · segurança **0/0**
+> · `verificar:schema` **verde no CI** nos dois commits de hoje · 16 anomalias de relatório
+> · 6 erros de cliente abertos (14 d) · 6 invariantes em alerta · 6 fontes suspeitas.
+> **Nada abaixo foi corrigido** — é a fila, com file:line e a causa já medida.
+
+### 📌 DECISÃO DO DONO (03/09), e ela muda o conserto nº 2 da live
+> **"Cada lead faz parte. Não é para ficar mudo até que se torne pagante."**
+>
+> Ou seja: quem se inscreveu numa edição **continua** recebendo convite, reforço e WhatsApp
+> das próximas. O critério de exclusão não é *"já se inscreveu alguma vez"* — é **"já está
+> inscrito NA edição corrente"**. Quem virou pagante também não some: muda o TEXTO (a fila
+> já tem 5 textos por público, `planos_config.publico`), não a presença na lista.
+>
+> ⚠️ Isso **inverte** a leitura que eu tinha escrito na varredura ("dar edição à inscrição
+> para excluir corretamente"): a edição serve para **reincluir**, não para excluir melhor.
+
+### 🔴 BLOCO 1 — A LIVE (próxima edição **09/09 22:00 UTC**, 5 inscritos). É o que tem relógio.
+
+| # | Onde | O quê | Prazo |
+|---|---|---|---|
+| 1 | `api/live-inscrever.js:97` (+ `api/admin-whatsapp-fila.js:199`) | Lê `eventos_live.data_hora` CRU. `live_rolar_recorrentes()` só rola a coluna depois de `oferta_fecha_em` (**06/09 03:00 UTC**), então **de ontem até lá** quem se inscreve vê 09/09 na página e recebe e-mail *"sua vaga está garantida … 02 de setembro"*. **Está acontecendo agora.** Fix: ler por `live_proxima(slug)`, como `_convite-live.js:70` e `live-criar-sala.js:54` já fazem | **HOJE** |
+| 2 | `api/_convite-live.js:167` · `live_reforco_alvos` · `whatsapp_fila_live` · `live-lembrete-cron.js:210` | Todas as exclusões de "já inscrito" filtram só por `evento_id`, e o evento semanal **reusa o mesmo id**: os 5 de 02/09 ficam mudos em 09/09. Pela decisão acima, o conserto é **coluna `edicao`** em `live_inscricoes` (e no UNIQUE de `live_lembretes`) e comparar com a edição CORRENTE — o lead volta para a lista | antes de 09/09 |
+| 3 | `api/convidar-live-cron.js:56` | Grava `convite_live_armado=''` após o 1º envio e responde `ok:true, motivo:'não armado'` para sempre. Foi o que deixou **25 exploradores sem convite** em 02/09, e repete toda semana. Fix: manter armado até a edição passar. ⚠️ Corrigir junto o cabeçalho de `live-reforco-cron.js:37-42`, que documenta um mecanismo que não existe | antes de 09/09 |
+| 4 | `api/live-reforco-cron.js:157` | Assunto do reforço deduz o DIA da semana pela HORA (`'19:00'` → "quarta"). Latente só enquanto toda aula for quarta | junto |
+
+### 🟠 BLOCO 2 — DINHEIRO E ENTREGA (achados confirmados por revisor cético)
+
+- **`api/enviar-alertas-cron.js:745` (P1)** — linhas de `buscar_por_raio_v2` entram no pool
+  **sem** `valor_minimo_ref`/`praca1_fim`/`praca2_fim`/`data_fim`/`data_leilao_2` (a RPC não
+  devolve). O e-mail de alerta **mostra a praça cara** e `encerradoPorDatas` **descarta lote
+  em 2ª praça**. Fix: estender o `RETURNS TABLE` da RPC (migração + aplicar) e projetar.
+- **`api/gerar-documental.js:2137` (P2)** — no ramo `persistidoNestaRodada` o laudo fica
+  `concluida` mas o catch **estorna a cota**, loga `relatorio_documental_erro` e responde
+  504/500: relatório entregue **de graça** e contado como falha no Cliente 360.
+- **`api/certidoes.js:165` (P2, sem veredito)** — 404 da PGFN/FGTS vira *"sem débitos"* e o
+  parecer verde cita FGTS sem consulta. Irmão do P0 (7) de 31/08; endpoint só de admin.
+- **`src/pages/ConviteEquipe.jsx:626` (P2)** — `salvar_kyc_equipe` devolve **boolean** e a
+  tela testa `rKyc?.ok === false`: recusa passa como salvo. Atenuado (anon não tem EXECUTE).
+- **`src/pages/Busca.jsx:1217` (P2, sem veredito)** — busca por raio sem o guard `atual()`
+  no `!resp.ok` e no `setTotalResultados`; o próprio arquivo já usa o idioma nas linhas
+  1296/1360/1393.
+
+### 🟡 BLOCO 3 — O QUE FALHA SOZINHO TODO DIA (infra)
+
+- **`api/cnj-monitor-cron.js`** — `runtime: 'edge'` estoura os **25 s TODO DIA** (7 em 7
+  dias). O monitor do CNJ **não roda de fato** e o cron "executa". Fix: Node com
+  `maxDuration`, ou responder cedo e trabalhar depois (como o motor de análise).
+- **`qa_invariantes_lenta` = 9999** — a rodada de 02/09 15:02 **falhou** (8.176 ms, statement
+  timeout) e `ms_servidor` é nulo nas 8 execuções: **nenhuma rodada boa desde o `bf92b5d`**.
+  A de hoje 15h UTC é a primeira prova real.
+- **`financeiro-extrato`** — 2 erros/dia desde 08/08: Asaas `insufficient_permission` em
+  `/transfers` e MP `/balance` 403. Ou troca a chave, ou para de chamar o que ela não pode.
+- **Leaflet** — `_leaflet_pos`/`classList` em `/imovel/:id` e `/planos`: 4 ocorrências em 5
+  dias. Mapa desmontado durante a animação de zoom; falta `map.remove()` no cleanup.
+- **Bright Data** — subcota `geral` **100/100 esgotada na quarta** (`api/enriquecer-lote.js`
+  come tudo) e `enriquecer-datas-cron` para *"sem carimbar os restantes"* todo dia desde 23/08.
+
+### 🟢 BLOCO 4 — CAPTURA E DADO
+
+- **6 fontes suspeitas:** SBID21 `zerou` (**é zero real** — a API devolveu 0 abertos; a régua
+  é que precisa distinguir "vazio" de "falhou"), LEILOFY `regressao` real, e EMILIOMATOS ·
+  NORDESTE · ALFA · LEFFA em `medicao_velha`.
+- **`praca_fim_antes_do_inicio` = 2** e **`data_edital_recuou_prazo` = 2** — subiram hoje;
+  conferir se são as linhas que mexi (ZUK/MEGA) ou casos novos. A guarda só vale quando
+  `data_leilao_2` existe; ZUK grava só a praça vigente.
+- **858 lotes ZUK inativos com praça FUTURA** (1.759 em todas as fontes em 7 dias), com
+  `leilao_ja_encerrado()` = false e `suprimido_motivo` nulo. Hoje o banco **não distingue**
+  "saiu da listagem do leiloeiro" de "desativado por falha de coleta".
+- **16 anomalias de relatório abertas**, 2 delas `pagamento_contradiz_documento` de 15 e 17/08.
+- **2 relatórios com número errado no acervo corrigido** (ZUK Z37106 e MEGA J126875) —
+  **decisão do dono**: regenerar sem cobrar cota, ou deixar.
+
+### 🔵 BLOCO 5 — PRECISA DE VOCÊ (não tem código)
+
+1. **Google Cloud** — faturamento `0134FB-CA5299-81DA09` vencido, projeto sob risco de
+   suspensão (pode derrubar geocode e a ingestão de marketing).
+2. **Google Workspace** — pagamento recusado; é a caixa que recebe os alertas do sistema.
+3. **Mercado Pago** — chave Pix excluída (prazo de validação venceu).
+4. **`ADMIN_EMAIL` na Vercel** + **nomear um analista** — abertos desde 15/08.
+5. **4 pagantes sem UM relatório em 14 dias** — churn em formação.
+6. **Instagram** — a escuta segue dormente (0 entrega real). Item 1: desligar/religar a
+   assinatura da conta e ler a resposta de `POST /{ig-user-id}/subscribed_apps`.
+
+### ⚪ BLOCO 6 — O BUG BOUNTY QUE NÃO RODOU INTEIRO
+
+**11 das 14 lentes ficaram de fora** (teto de uso da conta): pré-login · telas do produto ·
+telas de dinheiro · admin/equipe · geradores · dinheiro em `api/` · crons · deriva de schema
+· 3 lentes ofensivas de segurança. Script pronto em `docs/WORKFLOW_BUG_BOUNTY_ABERTURA.md`
+(rodar **1 workflow por vez**, 3–4 lentes). Com isso, **o item 4 do ritual — a ofensiva de
+segurança — segue em aberto** nesta abertura.
+
+**Dívida menor, registrada para não virar surpresa:** `cursos_admin`/`ebooks_admin` não têm
+coluna `preco_vista` (o campo em R$ da tela vira % na gravação, com erro de centavos); e o
+anexo `tipo='proposta'` do ZUK é link de navegação capturado como documento.
+
+---
+
 ## 🚦 COMECE POR AQUI — estado em 02/09 12h30 UTC (sessão 19, abertura com Fable 5.1 + ultracode)
 
 > `main` = **`da042fa`**, em produção (deploy READY 00:58 UTC). Heartbeat às **12:17 UTC**.
