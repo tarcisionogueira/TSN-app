@@ -11108,9 +11108,14 @@ function LiveTab() {
     setProx(p || null);
     // A lista de inscritos é o produto desta tela. Falha aqui NÃO pode virar "ninguém se
     // inscreveu": é a diferença entre uma aula vazia e um erro de leitura.
-    const { data: ins, error: eIns } = await supabase.from('live_inscricoes')
-      .select('nome, email, whatsapp, cidade, uf, origem, criado_em').eq('evento_id', data?.id || '00000000-0000-0000-0000-000000000000')
-      .order('criado_em', { ascending: false });
+    // POR EDIÇÃO (03/09, decisão do dono): sem o filtro, esta lista soma TODAS as semanas —
+    // depois de algumas edições vira número cumulativo com cara de "quem se inscreveu para a
+    // PRÓXIMA aula". `p.edicao` vem pronta de `live_proxima` (mesma fonte da data), então não
+    // se recalcula a fórmula da edição aqui — foi copiar essa conta que causou o defeito de 03/09.
+    let qIns = supabase.from('live_inscricoes')
+      .select('nome, email, whatsapp, cidade, uf, origem, criado_em').eq('evento_id', data?.id || '00000000-0000-0000-0000-000000000000');
+    if (p?.edicao) qIns = qIns.eq('edicao', p.edicao);
+    const { data: ins, error: eIns } = await qIns.order('criado_em', { ascending: false });
     if (eIns) setErro('Inscrições não carregaram: ' + eIns.message);
     else setInscritos(ins || []);
     // Catálogo para escolher o que a aula vende. É esse vínculo que o remarketing usa
@@ -11488,8 +11493,12 @@ function LiveTab() {
       </div>
 
       <h4 style={{ fontSize:15, fontWeight:800, margin:'22px 0 10px' }}>
-        Inscritos <span style={{ color:'#0D63DB' }}>({inscritos.length})</span>
+        Inscritos nesta edição <span style={{ color:'#0D63DB' }}>({inscritos.length})</span>
       </h4>
+      <div style={{ fontSize:11.5, color:'#94a3b8', margin:'-6px 0 10px' }}>
+        Só a edição de {prox?.data_hora ? new Date(prox.data_hora).toLocaleDateString('pt-BR') : 'hoje'} — quem se
+        inscreveu em edições passadas continua recebendo convite e lembrete, mas não soma aqui.
+      </div>
       {inscritos.length === 0 ? (
         <div style={{ fontSize:13.5, color:'#64748b' }}>Ninguém ainda. Divulgue o link acima.</div>
       ) : (

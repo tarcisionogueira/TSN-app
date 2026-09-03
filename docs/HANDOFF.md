@@ -4,6 +4,36 @@
 
 ---
 
+## 📋 SESSÃO 22 · PARTE 6 (03/09, fim de tarde) — BLOCO 1 FECHADO: A CONTAGEM DA LIVE SEPARA DE VERDADE "COMUNICAÇÃO" DE "NOVOS INSCRITOS"
+
+Os 4 itens originais do Bloco 1 (data lida da coluna crua, exclusão só por `evento_id`, cron que
+desarmava, assunto que deduzia o dia pela hora) **já tinham sido corrigidos na SESSÃO 20** (linha
+548 acima) — conferido por `git log` antes de mexer, para não reabrir o que já estava fechado.
+
+O que faltava era uma decisão nova do dono, hoje: **"quem se inscreveu na 1ª edição e não virou
+pagante, e todos os assinantes, devem continuar recebendo a comunicação — mas a CONTAGEM de
+novos inscritos da próxima live não pode somar as edições passadas."** Ou seja, dois números que
+pareciam a mesma coisa e não são: a **lista de e-mail/WhatsApp** (cumulativa, todo mundo que já
+passou por qualquer edição, sem exclusão por ter virado ou não pagante) e a **contagem de
+interesse** (reseta a cada edição nova).
+
+- O 1º já estava correto (`_convite-live.js`, `live_reforco_alvos`, `whatsapp_fila_live` filtram
+  a EXCLUSÃO por `edicao`, não o público-base — `ROLES_CLIENTE`/`cliente` já inclui `explorador`
+  e todos os planos pagos).
+- O 2º não estava: `live_inscritos(slug)` (prova social da landing) e o painel `/admin` (aba
+  Live → "Inscritos") contavam TODAS as edições desde sempre — era o item já sinalizado em
+  "Decisões deliberadas de NÃO mexer" (linha ~639) como "decidir antes disso". Hoje foi decidido.
+  - `live_proxima()` passa a devolver também `edicao` pronta (mesma fórmula do gatilho
+    `live_edicao_preencher`, para não copiar a conta pela 4ª vez).
+  - `live_inscritos(slug)` filtra por `edicao = live_proxima(slug)->>'edicao'`.
+  - `/admin` (`LiveTab`) filtra a mesma lista por `p.edicao` e o rótulo virou "Inscritos nesta
+    edição", com a data por extenso — evita o admin ler o número cumulativo como "olha quanta
+    gente se inscreveu para a próxima".
+  - Testado direto no banco: 5 inscrições existentes são todas de 02/09; `live_inscritos()` para
+    09/09 volta **0** (antes voltaria 5, herdado da edição anterior).
+
+---
+
 ## 📋 SESSÃO 22 · PARTE 5 (03/09, fim de tarde) — MESMO PADRÃO DA PARTE 4, AGORA EM "MEUS INDICADOS"
 
 Pedido do dono: "Estou no modo suporte, entrando pelo Jean, e ainda assim na tela de indicações
