@@ -108,9 +108,14 @@ function CardComercial() {
 }
 
 export default function MinhaRede() {
-  const { user, effectiveUserId, effectiveRole } = useAuth();
+  const { user, effectiveUserId, effectiveRole, impersonate } = useAuth();
   const isAdmin = effectiveRole === 'admin';
   const uid = effectiveUserId || user?.id;
+  // MODO SUPORTE (03/09): entrar vendo outro parceiro (Jean, etc.) tem que trazer A REDE DELE,
+  // não a de quem está logado. `rootId` é a busca manual do PRÓPRIO admin nesta tela (ver
+  // abaixo) — continua tendo prioridade se o admin usar a busca ativamente; fora isso, o alvo
+  // do modo suporte é quem entra por padrão.
+  const emSuporte = !!impersonate;
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [codigo, setCodigo] = useState('');
@@ -178,18 +183,22 @@ export default function MinhaRede() {
   const carregar = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await supabase.rpc('minha_rede', rootId ? { p_root: rootId } : {});
+      // rootId (busca manual do admin nesta tela) tem prioridade; senão, em modo suporte, a
+      // rede é a do parceiro visto (uid já é effectiveUserId — ver useAuth acima).
+      const alvo = rootId || (emSuporte ? uid : null);
+      const { data } = await supabase.rpc('minha_rede', alvo ? { p_root: alvo } : {});
       setRows(Array.isArray(data) ? data : []);
     } catch { setRows([]); }
     setLoading(false);
-  }, [rootId]);
+  }, [rootId, emSuporte, uid]);
   useEffect(() => { carregar(); }, [carregar]);
 
-  // Nível + saldo + PJ (só do próprio usuário logado — não muda com a busca do admin)
+  // Nível + saldo + PJ do parceiro (o logado, ou o visto em modo suporte — nunca muda com a
+  // busca manual do admin acima, que é outra funcionalidade).
   const carregarMeu = useCallback(async () => {
     if (!uid) return;
     try {
-      const { data: n } = await supabase.rpc('meu_nivel');
+      const { data: n } = await supabase.rpc('meu_nivel', emSuporte ? { p_uid: uid } : {});
       setNivel(n && n.ok ? n : null);
     } catch { setNivel(null); }
     try {
@@ -199,7 +208,7 @@ export default function MinhaRede() {
       // não tem saldo a sacar" — indistinguível de um parceiro sem comissão. Pior: com
       // `faltando` vazio, nem o aviso de cadastro pendente aparecia, então a tela ficava
       // coerente e ERRADA. É o mesmo padrão do "relatório vazio".
-      const res = await apiCall('/api/saque');
+      const res = await apiCall(emSuporte ? `/api/saque?ver_como=${encodeURIComponent(uid)}` : '/api/saque');
       if (!res.ok) throw new Error(`saque ${res.status}`);
       const sq = await res.json();
       setErroSaldo('');
@@ -244,7 +253,7 @@ export default function MinhaRede() {
       if (errEv) { console.error('[MinhaRede] leitura da aula falhou:', errEv.message); setAula(null); }
       else setAula(ev || null);
     } catch (e) { console.error('[MinhaRede] leitura da aula lancou:', e?.message); setAula(null); }
-  }, [uid]);
+  }, [uid, emSuporte]);
   useEffect(() => { carregarMeu(); }, [carregarMeu]);
 
   const buscarParceiro = async (q) => {

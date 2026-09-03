@@ -4,6 +4,36 @@
 
 ---
 
+## 📋 SESSÃO 22 · PARTE 5 (03/09, fim de tarde) — MESMO PADRÃO DA PARTE 4, AGORA EM "MEUS INDICADOS"
+
+Pedido do dono: "Estou no modo suporte, entrando pelo Jean, e ainda assim na tela de indicações
+aparecem todas as pessoas da sistema." Terceira ocorrência do mesmo defeito da Parte 4 (defesa
+antiga contra vazamento virou "não busca certo"), desta vez em `MinhaRede.jsx` — três chamadas
+da mesma tela, todas presas à sessão de quem chama:
+
+- **`minha_rede()`** — só aceitava `p_root` de quem passasse `is_admin()`; um analista em modo
+  suporte caía no fallback `v_root := v_uid` (a PRÓPRIA rede do analista). Gate trocado para
+  `is_equipe()` (mesmo padrão do resto do modo suporte) — `supabase/migrations/
+  modo_suporte_minha_rede_permite_analista.sql`.
+- **`meu_nivel()`** — não tinha NENHUM parâmetro, 100% travado em `auth.uid()`. Precisou
+  `drop function` + recriar com `p_uid uuid default null` (CREATE OR REPLACE não permite
+  adicionar parâmetro — criaria uma segunda função e a chamada sem argumento, que é a normal,
+  nunca pegaria a nova lógica). Sem dependentes (conferido via `pg_depend` antes de dropar) —
+  `supabase/migrations/modo_suporte_meu_nivel_aceita_p_uid.sql`.
+- **`/api/saque`** — mesmo fix da Parte 4 (`?ver_como=`), só que esta tela tinha sua PRÓPRIA
+  chamada, separada da de `Perfil.jsx`/`Comissoes.jsx`.
+
+`MinhaRede.jsx` passou a importar `impersonate` de `useAuth()` e computar `emSuporte`; as três
+chamadas usam o alvo certo sem mexer na busca manual do admin (`rootId`, funcionalidade
+diferente — o admin escolhendo ver a rede de QUALQUER parceiro pelo nome, ativa mesmo fora do
+modo suporte).
+
+**Pergunta do dono, respondida**: Jean **já aceitou o termo de parceiro** —
+`perfis.parceiro_aceite_em = 2026-08-06 15:02:20`. Não há bloqueio pendente; a comissão dele
+ficar disponível está correta.
+
+---
+
 ## 📋 SESSÃO 22 · PARTE 4 (03/09) — MODO SUPORTE DESISTIA DE MOSTRAR SALDO E E-MAIL
 
 Pedido do dono: "no modo suporte é para eu conseguir ver as informações assim como se fosse o

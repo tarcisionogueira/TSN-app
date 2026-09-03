@@ -73,7 +73,7 @@ export default function Comissoes() {
       supabase.from('comissoes').select('*').eq('beneficiario_id', alvoId).order('created_at', { ascending: false }),
       supabase.from('perfis').select('chave_pix').eq('id', alvoId).maybeSingle(),
       supabase.from('config_financeira').select('*'),
-      apiCall('/api/saque'),
+      apiCall(suporte ? `/api/saque?ver_como=${encodeURIComponent(alvoId)}` : '/api/saque'),
     ]);
     supabase.rpc('admin_taxas_gateway', { p_dias: 90 }).then(({ data, error }) => {
       if (error || !data?.gateways) return;   // sem permissão (parceiro comum) → coluna "—"
@@ -82,14 +82,10 @@ export default function Comissoes() {
       setTaxaReal(m);
     });
     setComissoes(c || []);
-    // MODO SUPORTE: as comissões acima já são as do parceiro visto (alvoId). Mas o saldo e o
-    // saque vêm de /api/saque, que usa o TOKEN do admin — seria o saldo do admin. Não exibimos
-    // (evita Frankenstein) e o painel de saque fica oculto; a lista de comissões dele aparece.
-    if (suporte) {
-      setErroSaldo('Modo suporte — visualização apenas. Saldo e saque só aparecem na conta do próprio parceiro; as comissões abaixo são as dele.');
-      setLoading(false);
-      return;
-    }
+    // MODO SUPORTE (03/09): /api/saque agora aceita `?ver_como=<uid>` (admin/analista-only,
+    // só leitura) e devolve o saldo do PARCEIRO VISTO, não mais o do admin — antes disto o
+    // saldo escondia o painel inteiro para não misturar os dois ("evita Frankenstein"); agora
+    // o mesmo parser abaixo já resolve certo, sem precisar de um caminho separado.
     try {
       // Mesmo motivo do MinhaRede: `apiCall` não lança em erro HTTP, então sem checar `.ok` um
       // 401/500 virava saldo R$ 0,00 e extrato vazio — a tela dizia, com toda a calma, que o
