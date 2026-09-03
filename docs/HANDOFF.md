@@ -37,6 +37,33 @@ Teste novo: `npm run testar:modalidade-cef` (12 asserções, caso real do print)
 guarda de entrypoint (`import.meta.url`) — sem ela, importar a função para teste disparava
 o scraping inteiro (fetch de todas as UFs + escrita no banco) como efeito colateral do import.
 
+**Backfill do resíduo (mesmo dia):** o re-scrape corrige só quem REAPARECE no CSV do dia — 427
+lotes ativos (14 estados) não vieram no CSV de hoje nem no de ontem e ficariam com o rótulo
+errado até reaparecerem numa rodada futura (ou até os 90 dias de graça antes de desativar por
+obsolescência). Como `descricao` já grava o texto cru da modalidade (`m.modalidade` é o primeiro
+pedaço, antes do primeiro " — "), rodei um UPDATE único aplicando a MESMA regra já testada
+(`modalidade='venda_online' where modalidade='venda_direta' and descricao ~* '^venda\s*(direta\s*)?online'`)
+— 427/427 confirmados, resíduo zerado. Não é um patch ad-hoc: é o código já testado, aplicado a
+dado que já estava gravado.
+
+**Achado #2 na mesma varredura — PESTANA Leilões (RS):** 9 lotes ativos com o texto "Alienação
+Judicial Por Venda Direta" (alienação por iniciativa particular, art. 880 CPC — venda negociada
+DENTRO de um processo judicial, sem pregão) apareciam só como "Judicial". Levantei todos os
+lugares que testam `modalidade === 'judicial'` por igualdade exata antes de decidir o que fazer:
+o parcelamento CPC 895 inteiro de `Calculadora.jsx`, o desconto de score jurídico de
+`processar-analise.js`/`calcular-score.js`, e o filtro de pagamento hipotecado de
+`Busca.jsx`/`enviar-alertas-cron.js` — todos precisam continuar valendo para esses lotes, porque
+"por venda direta" tira o pregão competitivo mas NÃO tira o risco processual (embargo/recurso)
+que essas travas tratam como judicial. **Decisão: `modalidade` continua `'judicial'` no banco.**
+Fix é só de exibição — `ehJudicialVendaDireta`/`modalidadeLabelDetalhado` (`src/utils/format.js`)
+compõem "Judicial · Venda Direta" no badge (`ImovelDetalhe.jsx`/`Busca.jsx`) quando o texto do
+leiloeiro confirma, sem tocar em nenhum gate funcional. Teste:
+`npm run testar:judicial-venda-direta` (10 asserções).
+
+Varredura do resto do acervo (58 outras fontes, ~7 mil lotes ativos): nenhum valor de
+`modalidade` fora do conjunto canônico e nenhum outro título/descrição contradizendo o rótulo
+gravado — os dois achados acima foram os únicos.
+
 ---
 
 ## 📋 SESSÃO 21 (03/09, 14h UTC) — TRÊS PEDIDOS DIRETOS DO DONO
