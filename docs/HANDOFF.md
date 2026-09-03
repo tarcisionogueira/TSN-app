@@ -307,6 +307,14 @@ o buraco de 21 pessoas da edição passada.
   com *"cada lead faz parte"*.
 - **`live_inscritos(slug)`** conta TODAS as edições. Hoje são 5 e não engana; depois de algumas
   semanas vira número cumulativo apresentado como "inscritos nesta aula". **Decidir antes disso.**
+- ⚠️ **`live_inscricoes.compareceu` NUNCA é escrito** (03/09, check-in pós-aula). A coluna existe
+  desde a migração `eventos_live.sql` com o comentário *"preenchido depois da aula"*, e **nenhum
+  código do repositório a preenche** — `grep compareceu api/ src/ supabase/ scripts/` devolve só a
+  linha da migração. Consequência: a aula de 02/09 aconteceu e **o sistema não sabe quem foi**, e
+  quem consultar a coluna lê **`0 compareceram`** como se fosse medição de presença — ausência
+  entregue como resposta, a forma da casa. Enquanto ninguém preencher, o único dado de presença
+  está com o dono. **Não inventei conserto**: marcar presença exige decidir a fonte (a sala do
+  Daily, um clique no link, uma marcação manual no `/admin`), e isso é decisão do dono.
 - **`og-share.js`** NÃO mente (degrada para *"toda quarta, às 19h"* quando a data passou), mas
   poderia dizer **09/09** usando `live_proxima`. É conversão perdida no cartão que é repassado.
 - **`live-lembrete-cron`** lê `data_hora` crua e só funciona porque `live_rolar_recorrentes()`
