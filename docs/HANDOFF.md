@@ -4,6 +4,42 @@
 
 ---
 
+## 📋 SESSÃO 22 · PARTE 3 (03/09, fim de tarde) — DOIS ACHADOS NO MESMO FLUXO: PRAÇA + COMISSÃO
+
+**1. `derivarPracasDoAnuncio` nunca rodava.** Achado do dono ao regenerar de novo o relatório
+de Guarulhos: as praças continuavam saindo "valor desatualizado", nunca "[estimado: ...]".
+Causa boba e cara: a query que lê `imDb` em `api/gerar-analise.js` nunca selecionava a coluna
+`modalidade` — `imDb.modalidade` chegava sempre `undefined`, e a guarda de escopo da função
+(`modalidade !== 'judicial'`) barrava a derivação antes mesmo de calcular. Bônus: o mesmo
+`imDb.modalidade` já era usado (também sempre `undefined`) por `pagamentoAprender`/
+`pagamentoPrior` — o aprendizado de forma de pagamento por leiloeiro×modalidade vinha
+misturando tudo num balde `''` compartilhado. Uma linha resolve os dois. Fix aplicado e no ar.
+
+**2. Explorador que indica não via a comissão que já tinha ganhado.** Jean (role='explorador')
+indicou o Airton, que virou `top2` hoje e gerou comissão de rede real (R$ 12,48, `disponivel`)
+— e o painel do Jean mostrava nada. Duas causas:
+- O R$ 12,48 foi creditado ao BENEFICIÁRIO ERRADO: o webhook do pagamento do Airton rodou às
+  12:47:09, ANTES da troca `indicado_por` (Airton→Jean) feita mais cedo nesta sessão, e usou a
+  adoção padrão do dono. Corrigido via UPDATE direto (mesmo evento, mesmo timestamp — sem
+  ambiguidade) em `saldo_lancamentos.id=16` e `comissoes.id=f6f0e142...`.
+- Mesmo corrigido o beneficiário, o saldo continuava INVISÍVEL: a view `saldo_usuarios` nunca
+  incluiu `'explorador'` na lista de papéis — de uma época em que só quem pagava indicava. A
+  regra já tinha mudado em 08/08 ("Explorador indica, mas só saca sendo pagante"), e
+  `api/saque.js` já aplica essa trava por conta própria (`podeReceber()`, independente da
+  view) — incluir `'explorador'` só destrava a VISIBILIDADE, não o saque. Importa porque é
+  MARKETING: ver "você já tem R$ 12,48" é o gatilho que faz o explorador indicar mais gente —
+  e é o que alimenta `saldo_avisos_pendentes()` (cron desta mesma sessão): sem o explorador na
+  view, ele nunca seria nem candidato ao e-mail. Jean já é candidato assim que o cron rodar de
+  novo, sem código a mais. Conferido antes de aplicar: nenhum OUTRO explorador tinha saldo
+  represado (só o Jean).
+
+⚠️ **Nota para quem for conferir pelo /admin em "modo suporte":** `Perfil.jsx` deliberadamente
+NÃO busca o saldo quando `emSuporte` (achado antigo: vazava o saldo do PRÓPRIO admin como se
+fosse do cliente). Então ver o saldo do Jean de verdade exige olhar pela conta dele mesmo, ou
+pelo painel agregado do admin (`saldo_usuarios` via `/api/saque` como admin).
+
+---
+
 ## 📋 SESSÃO 22 · PARTE 2 (03/09, ainda mais tarde) — EDITAL DESATUALIZADO NÃO VIRA MANCHETE
 
 **Achado do dono:** regerando o relatório de um apto em Guarulhos/SP (MEGA J126875, o MESMO
