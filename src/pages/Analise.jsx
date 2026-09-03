@@ -3190,6 +3190,11 @@ export default function Analise() {
                   {pr.map(p => (
                     <div key={p.n} style={{ fontSize:13, color:'#0c4a6e' }}>
                       <strong>{p.n}ª praça:</strong> {p.valor > 0 ? `R$ ${fmt(p.valor)}` : (ce.valoresDesatualizados ? 'valor desatualizado no documento — use o lance mínimo do anúncio' : 'valor no edital')}{p.data ? ` · ${dataBr(p.data)}` : ''}
+                      {/* `estimado` (03/09): o PDF está desatualizado, mas o valor foi CRUZADO com o
+                          anúncio atual (avaliação/lance mínimo vigentes) em vez de só descartado —
+                          rótulo deixa claro que não é uma leitura literal do documento. */}
+                      {p.estimado === 'avaliacao_atual' && <span style={{ fontSize:11, color:'#64748b' }}> (estimado: avaliação atual, mínimo legal)</span>}
+                      {p.estimado === 'anuncio_atual' && <span style={{ fontSize:11, color:'#64748b' }}> (estimado: lance mínimo do anúncio)</span>}
                     </div>
                   ))}
                 </div>

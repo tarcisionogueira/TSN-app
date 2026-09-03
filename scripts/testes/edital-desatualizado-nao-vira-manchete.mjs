@@ -19,8 +19,17 @@
  * `mercado.condicoesEdital` (replicada aqui porque a lógica de mascaramento vive inline no
  * handler, não extraída — testar a função pura + a fórmula da máscara cobre o comportamento
  * real sem precisar simular toda a geração de análise, que depende de IA/rede/banco).
+ *
+ * PARTE 2 (mesmo dia, pedido do dono ao ver o resultado: "se fazemos scraper do leiloeiro,
+ * temos mais fontes pra cruzar as informações" em vez de só descartar o valor do PDF velho).
+ * `derivarPracasDoAnuncio` cruza com o que o ANÚNCIO ATUAL já confirma: praça 1 = avaliação
+ * atual (art. 891 CPC), praça 2 = lance mínimo atual do site. Validado (medido, não suposto)
+ * contra 5 lotes judiciais reais da MEGA em 03/09: em todos, valor_minimo/valor_avaliacao
+ * ATUAIS batem — com precisão de centavo — na MESMA razão que o edital velho tinha entre suas
+ * duas praças (50% ou 60%, sempre redondo). O contra-exemplo (Itapema, extrajudicial, razão
+ * 25%) prova que o escopo tem que ficar travado em `modalidade === 'judicial'`.
  */
-import { editalValoresBatem } from '../../api/gerar-analise.js';
+import { editalValoresBatem, derivarPracasDoAnuncio } from '../../api/gerar-analise.js';
 
 let ok = 0, falhas = 0;
 const checa = (nome, cond, extra) => {
@@ -73,8 +82,39 @@ checa('sem avaliação atual do anúncio (avalDb=0) — nada para comparar, pass
 checa('sem nenhuma referência do edital (nem avaliação nem 1ª praça) — nada para comparar, passa (batem)',
   editalValoresBatem({ avalDb: 265984.50, extratoAvaliacao: null, p1Valor: null }) === true);
 
+console.log('\nDERIVAR DO ANÚNCIO ATUAL — 5 lotes judiciais REAIS da MEGA (medidos em 03/09)');
+const P1 = { data: '2026-08-17', fim: '2026-08-20' };
+const P2 = { data: '2026-08-20', fim: '2026-09-10' };
+const casosReais = [
+  // [titulo, avalDb (scraped atual), valorMinimo (scraped atual), razão esperada]
+  ['Guarulhos/SP — J126875',      265984.50, 159590.70, 0.60],
+  ['Vila Olímpia/SP',             614649.94, 307324.97, 0.50],
+  ['Itaim Bibi/SP',               837297.66, 418648.84, 0.50],
+  ['Santa Cecília/SP',            293964.86, 176378.91, 0.60],
+  ['Vila Andrade/SP',            1287073.40, 772244.03, 0.60],
+];
+for (const [titulo, avalDb, valorMinimo, razao] of casosReais) {
+  const d = derivarPracasDoAnuncio({ modalidade: 'judicial', avalDb, valorMinimo, valorMinimo2: null, p1: P1, p2: P2 });
+  checa(`${titulo}: praça 1 = avaliação atual (R$ ${avalDb})`,
+    d[0].valor === avalDb && d[0].estimado === 'avaliacao_atual' && d[0].data === P1.data);
+  checa(`${titulo}: praça 2 = lance mínimo atual (R$ ${valorMinimo}, razão ${razao * 100}% da avaliação)`,
+    d[1].valor === valorMinimo && d[1].estimado === 'anuncio_atual' && Math.abs(valorMinimo / avalDb - razao) < 0.001);
+}
+
+console.log('\nESCOPO ESTREITO — não pode vazar para fora do que foi validado');
+checa('extrajudicial NÃO deriva (Itapema, 19/08: razão real é 25%, não 50/60% — inventaria número errado)',
+  derivarPracasDoAnuncio({ modalidade: 'extrajudicial', avalDb: 1102059.26, valorMinimo: 278814.15, valorMinimo2: null, p1: P1, p2: P2 }) === null);
+checa('sem avaliação atual confirmada (avalDb=0) — não deriva, nada para cruzar',
+  derivarPracasDoAnuncio({ modalidade: 'judicial', avalDb: 0, valorMinimo: 159590.70, valorMinimo2: null, p1: P1, p2: P2 }) === null);
+checa('edital com praça única (sem p2) — não inventa uma 2ª praça que o documento nunca mostrou',
+  derivarPracasDoAnuncio({ modalidade: 'judicial', avalDb: 265984.50, valorMinimo: 159590.70, valorMinimo2: null, p1: P1, p2: null }) === null);
+checa('ainda na janela da 1ª praça (lance mínimo atual == avaliação, 2ª praça ainda não tem valor próprio) — praça 2 fica sem valor, não inventa',
+  derivarPracasDoAnuncio({ modalidade: 'judicial', avalDb: 265984.50, valorMinimo: 265984.50, valorMinimo2: null, p1: P1, p2: P2 })[1].valor === null);
+checa('valor_minimo_2 já populado (o card do leiloeiro emparelhou as 2 praças) — usa ele direto, sem estimar',
+  derivarPracasDoAnuncio({ modalidade: 'judicial', avalDb: 600000, valorMinimo: 400000, valorMinimo2: 300000, p1: P1, p2: P2 })[1].valor === 300000);
+
 console.log(`\n${falhas === 0 ? '✓' : '✗'} ${ok}/${ok + falhas} asserções`);
-if (ok + falhas < 10) {
+if (ok + falhas < 25) {
   console.error('TESTE INVÁLIDO: rodou menos asserções do que este arquivo declara.');
   process.exit(2);
 }

@@ -235,6 +235,38 @@ export function editalValoresBatem({ avalDb, extratoAvaliacao, p1Valor }) {
   return !(Number(avalDb) > 0) || !(refEd > 0) || Math.abs(refEd - Number(avalDb)) / Number(avalDb) <= 0.02;
 }
 
+// DERIVA praça 1/praça 2 do que JÁ TEMOS quando o edital está desatualizado (achado do dono,
+// 03/09: "se fazemos scraper do leiloeiro, temos mais fontes pra cruzar as informações" — em
+// vez de só descartar o PDF velho, cruza com o que o próprio anúncio ATUAL já confirma).
+//
+// VALIDADO contra 5 lotes judiciais reais da MEGA (03/09): em TODOS, `valor_minimo` (scraped,
+// ATUAL) / `valor_avaliacao` (scraped, ATUAL) bate — com precisão de centavo — na MESMA razão
+// que o edital (velho) tinha entre suas duas praças: 50% ou 60%, sempre um número redondo,
+// nunca ruído de captura. Não é coincidência: PRAÇA 1 = AVALIAÇÃO é o piso legal do art. 891 do
+// CPC — o mesmo invariante que `editalValoresBatem` já usa para decidir se o edital bate. Um
+// edital "desatualizado" tem avaliação errada, mas a REGRA (praça 1 = avaliação, praça 2 = X%
+// dela) continua valendo — só a fonte do número muda: usa o anúncio ATUAL, não o PDF parado.
+//
+// ESCOPO ESTREITO DE PROPÓSITO: só `modalidade === 'judicial'` (o extrajudicial/SFI não segue o
+// art. 891 — o contra-exemplo de Itapema, 19/08, tem razão de 25%, não 50/60%: aplicar aqui
+// inventaria um número plausível e ERRADO) e só quando o PRÓPRIO edital já mostrava DUAS praças
+// (a estrutura existe; só o valor envelheceu) — não inventa uma 2ª praça que o documento nunca
+// disse existir.
+export function derivarPracasDoAnuncio({ modalidade, avalDb, valorMinimo, valorMinimo2, p1, p2 }) {
+  if (modalidade !== 'judicial' || !(Number(avalDb) > 0) || !p1 || !p2) return null;
+  const vm = Number(valorMinimo) || 0;
+  const vm2 = Number(valorMinimo2) || 0;
+  // Praça 2 do ANÚNCIO ATUAL: prefere valor_minimo_2 (quando o card do leiloeiro já emparelhou
+  // as duas praças); senão valor_minimo, mas SÓ quando ele é claramente MENOR que a avaliação —
+  // igual a ela significa que ainda estamos na janela da 1ª praça, e a 2ª ainda não tem valor
+  // publicado (mostrar um valor aqui seria inventar o que o leiloeiro ainda não decidiu).
+  const p2ValorAtual = vm2 > 0 ? vm2 : (vm > 0 && vm < Number(avalDb) ? vm : null);
+  return [
+    { n: 1, data: p1.data, fim: p1.fim, valor: Number(avalDb), estimado: 'avaliacao_atual' },
+    { n: 2, data: p2.data, fim: p2.fim, valor: p2ValorAtual, estimado: p2ValorAtual ? 'anuncio_atual' : null },
+  ];
+}
+
 // O agente que aprende com os relatórios SINALIZA anomalias (o gerador achou algo errado
 // nos dados) para a verificação de saúde — sem custo, sem gerar relatório.
 /**
@@ -2521,8 +2553,13 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
       // parecer — só a data continua (tem validação própria, mais abaixo). Sem isto o cliente
       // via um "lance mínimo" no topo e uma tabela de praças com número diferente no corpo do
       // mesmo relatório, e o parecer citava o número velho como "fonte de verdade".
+      // Antes de desistir do valor, tenta DERIVAR do que o próprio anúncio já confirma
+      // (`derivarPracasDoAnuncio` — ver comentário na função, mesmo achado do dono 03/09).
+      const pracasDerivadas = valoresBatem ? null : derivarPracasDoAnuncio({
+        modalidade: imDb?.modalidade, avalDb, valorMinimo: imDb?.valor_minimo, valorMinimo2: imDb?.valor_minimo_2, p1, p2,
+      });
       mercado.condicoesEdital = {
-        pracas: valoresBatem ? pracasEd : pracasEd.map(p => ({ ...p, valor: null })),
+        pracas: valoresBatem ? pracasEd : (pracasDerivadas || pracasEd.map(p => ({ ...p, valor: null }))),
         valoresDesatualizados: !valoresBatem,
         datas: extratoDoc.datas || null,
         formaPagamento: extratoDoc.formaPagamento || null,
@@ -2962,14 +2999,23 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
         // praça real (valores/datas) e cita o pagamento do DOCUMENTO, não suposição.
         if (mercado.condicoesEdital) {
           const ce = mercado.condicoesEdital;
+          // `estimado` (03/09, derivarPracasDoAnuncio): quando o valor não veio do PDF mas foi
+          // CRUZADO com o anúncio atual (praça 1 = avaliação atual, art. 891 CPC; praça 2 = lance
+          // mínimo atual do site), o rótulo diz de onde veio — não é "lido no edital", é calculado.
+          const rotuloOrigem = { avaliacao_atual: ' [estimado: avaliação atual, mínimo legal art. 891 CPC]', anuncio_atual: ' [estimado: lance mínimo do anúncio atual]' };
           const linhas = (ce.pracas || []).filter(p => p.valor > 0 || p.data)
-            .map(p => `${p.n}ª praça: ${p.valor > 0 ? `R$ ${Math.round(p.valor).toLocaleString('pt-BR')}` : 'valor não localizado'}${p.data ? ` em ${String(p.data).split('-').reverse().join('/')}` : ''}`);
+            .map(p => `${p.n}ª praça: ${p.valor > 0 ? `R$ ${Math.round(p.valor).toLocaleString('pt-BR')}${rotuloOrigem[p.estimado] || ''}` : 'valor desatualizado no documento'}${p.data ? ` em ${String(p.data).split('-').reverse().join('/')}` : ''}`);
           // valoresDesatualizados (03/09, achado do dono): o PDF é de outra base (avaliação do
-          // edital diverge >2% da avaliação atual do anúncio) — os valores já vieram null em
-          // `linhas`; aqui só a INSTRUÇÃO muda, para o parecer não tratar a AUSÊNCIA de valor
-          // como "não achei" e sim como "documento desatualizado, use o lance mínimo do anúncio".
-          const avisoDesatualizado = ce.valoresDesatualizados
-            ? '\nATENÇÃO: os VALORES deste edital são de outra base (documento desatualizado ou avaliação já republicada pelo leiloeiro) e foram descartados — use exclusivamente o(s) valor(es) de lance mínimo do anúncio atual (fornecidos acima) para os cenários e a manchete. As DATAS acima seguem confiáveis.' : '';
+          // edital diverge >2% da avaliação atual do anúncio). Quando NENHUMA praça foi
+          // derivada (fora do escopo de derivarPracasDoAnuncio — ex.: extrajudicial, ou só 1
+          // praça no edital), os valores vieram null e o aviso pede pra usar o lance mínimo do
+          // anúncio; quando alguma praça FOI derivada e citada acima com "[estimado: ...]", o
+          // aviso muda — os números já estão na linha, só reforça a origem.
+          const algumaEstimada = (ce.pracas || []).some(p => p.estimado);
+          const avisoDesatualizado = !ce.valoresDesatualizados ? ''
+            : algumaEstimada
+              ? '\nOBSERVAÇÃO: o PDF do edital está desatualizado (avaliação diverge da atual) — os valores acima marcados "[estimado]" foram calculados a partir do anúncio atual, não lidos do documento. Cite-os como estimativa, não como "valor do edital".'
+              : '\nATENÇÃO: os VALORES deste edital são de outra base (documento desatualizado ou avaliação já republicada pelo leiloeiro) e foram descartados — use exclusivamente o(s) valor(es) de lance mínimo do anúncio atual (fornecidos acima) para os cenários e a manchete. As DATAS acima seguem confiáveis.';
           conteudoParecer += `\n\nCONDIÇÕES LIDAS NO EDITAL DO LOTE (fonte de verdade; use nos cenários de lance e indique a melhor entrada):\n${linhas.join(' · ') || 'praças não localizadas'}${avisoDesatualizado}${ce.formaPagamento ? `\nPagamento segundo o edital: ${ce.formaPagamento}` : ''}${ce.avaliacao ? `\nAvaliação no edital: R$ ${Math.round(ce.avaliacao).toLocaleString('pt-BR')}` : ''}`;
           // CUSTOS DECLARADOS NO DOCUMENTO × os que sustentaram as projeções (06/08). A
           // comissão do leiloeiro MUDA de edital para edital e a taxa administrativa às
