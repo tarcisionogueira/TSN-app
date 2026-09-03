@@ -4,7 +4,34 @@
 
 ---
 
-## 📋 SESSÃO 22 (03/09, mais tarde) — MODALIDADE CEF: VENDA DIRETA ≠ VENDA ONLINE
+## 📋 SESSÃO 22 · PARTE 2 (03/09, ainda mais tarde) — EDITAL DESATUALIZADO NÃO VIRA MANCHETE
+
+**Achado do dono:** regerando o relatório de um apto em Guarulhos/SP (MEGA J126875, o MESMO
+lote de duas outras histórias registradas em 02/09), a ficha mostrava "Lance mínimo
+R$ 159.590,70" no topo e o corpo do relatório citava "1ª praça R$ 228.333,00 · 2ª praça
+R$ 137.000,00" — três números, nenhum conciliado com os outros dois.
+
+**Causa:** já existia uma trava de coerência (`api/gerar-analise.js`, 28/08 + reforçada em
+02/09 exatamente para este lote — o PDF do edital de 16/07 avalia em R$ 228.333,33; o
+leiloeiro já republicou com a avaliação atualizada da tabela do TJ, R$ 265.984,50) que
+IMPEDIA gravar o valor errado na coluna `valor_minimo_2`. Mas ela só protegia o BANCO —
+`mercado.condicoesEdital.pracas` (o que o relatório mostra E o que o prompt do parecer da IA
+recebe rotulado como "fonte de verdade") seguia recebendo os valores incoerentes sem filtro.
+
+**Fix:** `editalValoresBatem` extraída como função pura testável e agora gate os DOIS
+destinos. Edital de outra base → `pracas[].valor` vira null (a DATA continua, tem validação
+própria), `avaliacao` some do relatório, o prompt do parecer ganha aviso explícito ("use o
+lance mínimo do anúncio atual"), e a tela troca "valor no edital" por "valor desatualizado no
+documento". Teste: `npm run testar:edital-desatualizado` (10 asserções).
+
+**Pendência real, sem solução automática:** o relatório JÁ GERADO deste lote (14:46 UTC, antes
+do fix) continua com os números velhos até o cliente clicar "Gerar novamente" — status
+`concluida` não bate nenhum gatilho do `regenerar-relatorios-cron` (só cobre erro/vazio/parecer
+vazio), e forçar regeneração pelo servidor exigiria a sessão do usuário.
+
+---
+
+## 📋 SESSÃO 22 · PARTE 1 (03/09, mais tarde) — MODALIDADE CEF: VENDA DIRETA ≠ VENDA ONLINE
 
 **Achado do dono, com print:** um imóvel CEF em Santana de Parnaíba/SP (Rua Morisot) anunciado
 pela própria Caixa como **"Venda Online"** (com contador de encerramento na página do lote)
