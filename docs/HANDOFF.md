@@ -27,7 +27,30 @@ documento". Teste: `npm run testar:edital-desatualizado` (10 asserções).
 **Pendência real, sem solução automática:** o relatório JÁ GERADO deste lote (14:46 UTC, antes
 do fix) continua com os números velhos até o cliente clicar "Gerar novamente" — status
 `concluida` não bate nenhum gatilho do `regenerar-relatorios-cron` (só cobre erro/vazio/parecer
-vazio), e forçar regeneração pelo servidor exigiria a sessão do usuário.
+vazio), e forçar regeneração pelo servidor exigiria a sessão do usuário. (Confirmado: regerado
+às 15:28 UTC já saiu com `pracas[].valor: null` e `valoresDesatualizados: true` — o fix bateu
+certo no banco; o dono só via a versão velha porque a aba não tinha recarregado.)
+
+### PARTE 2b (mesmo dia) — em vez de só descartar, CRUZA com o anúncio atual
+
+**Pedido do dono, vendo o resultado:** "se fazemos uso da ia para ler os documentos, não
+entendo como não consegue extrair as informações para classificar. como fazemos scraper do
+leiloeiro temos mais fontes que conseguimos cruzar as informações." Ele tinha razão — descartar
+era honesto mas incompleto quando dava pra responder sozinho.
+
+`derivarPracasDoAnuncio` (mesmo arquivo): quando o edital está desatualizado, cruza com o que o
+PRÓPRIO ANÚNCIO já confirma, sem depender do PDF — **praça 1 = avaliação atual** (art. 891 CPC,
+o piso legal da 1ª praça) e **praça 2 = lance mínimo atual do site**. Validado (medido, não
+suposto) contra 5 lotes judiciais reais da MEGA: em TODOS, `valor_minimo`/`valor_avaliacao`
+(scraped, atuais) batem — com precisão de centavo — na MESMA razão que o edital velho tinha
+entre suas duas praças (50% ou 60%, sempre redondo, nunca ruído de captura). Escopo travado em
+`modalidade === 'judicial'` (o contra-exemplo Itapema, extrajudicial, tem razão real 25% — o
+art. 891 não se aplica lá, e aplicar teria inventado um número plausível e errado) e só quando
+o edital já mostrava DUAS praças (não inventa uma 2ª praça que o documento nunca disse existir).
+
+Quando a derivação funciona, o valor aparece com o rótulo "(estimado: avaliação atual/lance
+mínimo do anúncio)" — deixa claro que não é leitura literal do PDF. Teste:
+`npm run testar:edital-desatualizado`, agora com 25 asserções.
 
 ---
 
