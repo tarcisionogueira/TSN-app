@@ -4,6 +4,82 @@
 
 ---
 
+## 📋 SESSÃO 22 · PARTE 14 (03/09, à noite) — BLOCO 6: BUG BOUNTY COMPLETO (11 lentes que faltavam), 15 achados confirmados e corrigidos
+
+Pedido do dono: "pode rodar" (as 11 lentes do bug bounty mensal que tinham ficado de fora
+por teto de uso, 3 já haviam rodado antes). Rodado em 3 workflows sequenciais (script
+`docs/WORKFLOW_BUG_BOUNTY_ABERTURA.md`), cada achado passado por um segundo agente cético
+(código + histórico + impacto em produção) antes de qualquer fix. **15 achados confirmados,
+0 refutados, todos corrigidos e no ar.**
+
+### Batch 1 — pré-login, telas de análise, comercial, admin (6 achados — commit `0fee949`)
+- **P0** `api/garantia-cancelar.js` — rebaixamento a Explorador na garantia de 7 dias não
+  verificava sucesso do PATCH; se falhasse, cliente reembolsado 100% continuava pagante
+  para sempre, sem nada detectar. Agora checa `resp.ok`, alerta (`_error-alert.js`) e grava
+  `reembolsos_garantia.rebaixamento_confirmado` (coluna nova).
+- **P0** `src/pages/Analise.jsx` — "Arrematei este imóvel" (`sinalizarArremate`) sem o guard
+  de `impersonate` que os irmãos do mesmo endpoint já tinham; em modo suporte gravaria o
+  arremate na conta do ADMIN, não do cliente.
+- **P1** `src/pages/MinhasAnalises.jsx` — botão "Remover" análise sem o mesmo guard; em
+  suporte a RLS descartava o delete em silêncio e a tela mostrava como removido.
+- **P1** `api/verificar-cpf.js` — ramo de CPF sem checar `.ok` (só e-mail/telefone tinham
+  o conserto); falha transitória virava "temConta:false" com HTTP 200.
+- **P2** `api/verificar-cpf.js` — ramo de curso/ebook com o mesmo padrão sem `.ok`.
+- **P2** `src/pages/AdvogadoPortal.jsx` — `SecaoCasos` lia `casos` sem checar `error`.
+
+### Batch 2 — geradores, dinheiro, crons, deriva de schema (3 achados — commit `7e3bdb3`)
+- **P0** Âncora do CDC (garantia de 7 dias) contaminada pelo próprio pagamento que a
+  dispara: `garantia_7d_avaliar()` via o pagamento EM CURSO como "histórico" e nunca
+  ancorava quem virasse pagante sem cobrança prévia. Corrigido com parâmetro novo que
+  exclui o pagamento em curso do `EXISTS`. **Efeito colateral achado ao aplicar**: o
+  `CREATE OR REPLACE` com parâmetro novo criou um SEGUNDO overload (a função antiga de 1
+  argumento continuava com o bug, e o objeto novo nasceu com `EXECUTE` liberado a `anon` —
+  mesma classe da regressão de `meu_nivel` da Parte 13); corrigido: overload antigo
+  dropado, `anon`/`public` revogados do sobrevivente.
+- **P0** `api/reconciliar-assinaturas-cron.js` — se a checagem no MP de "assinatura ativa
+  por outro mandato" falhasse, o cron seguia e rebaixava o cliente às cegas. Corrigido para
+  não rebaixar quando a verificação falha (mesmo padrão fail-closed já usado no arquivo).
+- **P2** `scripts/foto-cef.mjs` — filtrava por `imoveis_leilao.arrematado`, coluna que não
+  existe; `{data}` sem `error` virava "nenhuma foto expirada" sempre.
+
+### Batch 3 — segurança ofensiva: auth, injeção, RLS (6 achados — commit `db0cebc`)
+- **P0** `api/gerar-documental.js` — `capturarMatriculaDireta()` (29/08) fazia fetch de
+  `link_matricula` sem NENHUMA checagem anti-SSRF (23.282 imóveis ativos no padrão
+  vulnerável, 29 fontes distintas). Corrigido com `hostExternoSeguro()`.
+- **P0** bucket `arrematacoes` (storage) — policies sem escopo de dono; qualquer
+  autenticado lia/escrevia documentos de QUALQUER cliente via Storage direto. Recriadas
+  escopadas por dono/equipe (mesmo padrão do bucket `documentos`, corrigido antes).
+- **P0** bucket `imoveis-fotos` (storage) — policies de INSERT/UPDATE sem `TO service_role`
+  (Postgres as abria para `public`): qualquer visitante não-logado podia sobrescrever fotos
+  no bucket público (61.208 arquivos reais). Corrigidas.
+- **P0** RPC `atividade_navegacao` — SECURITY DEFINER concedida a `authenticated` sem
+  NENHUM gate de dono/admin; qualquer autenticado lia a navegação de qualquer outro
+  usuário. Replicado o gate da função irmã `atividade_usuario`. Verificado simulando o
+  contexto real do PostgREST (`set local request.jwt.claims`): acesso cruzado → 0 linhas.
+- **P2** `api/assinar-testemunha.js` — mesmo bug de `perfis.email` (coluna inexistente) já
+  corrigido em `assinar-contrato.js`, replicado aqui.
+- **P2** `api/geocodificar-imovel.js` — checava host da URL inicial mas seguia redirect
+  sem revalidar; trocado por `fetchExternoSeguro`.
+- **P2** `api/chat-suporte.js` — endpoint de IA sem rate limit (único entre os que chamam
+  IA); adicionado `checkRateLimit` por usuário.
+
+**Não mexido (P2, risco já aceito/documentado pelo próprio projeto):** `api/baixar-doc.js`
+(SSRF residual por redirect — "allowlist estrita + auth, risco baixo" já registrado no
+HANDOFF); `Laudo de Viabilidade sem cota` (achado da Parte anterior a esta, decisão
+deliberada de 20/08 documentada).
+
+### O crítico de completude apontou (não rodado ainda — próxima rodada)
+Áreas sem lente dedicada: portal do leiloeiro/parceiro (auth de terceiro), assinatura de
+contrato/link público (expiração de token?), LGPD (exclui de TODAS as tabelas com FK?),
+cluster jurídico/processo, chamados/suporte, proxies com URL externa (`img-proxy.js`/
+`fetch-url.js`/`anexo-url.js`/`doc-url.js` — usam `_allowed-hosts.js` de verdade?),
+cluster Índice, ONR, push, ingestão de marketing. Padrão não caçado: forma 10 (rodar as
+próprias funções de diagnóstico contra dado real e conferir se o nome bate com o cálculo).
+
+Build central limpo em cada commit; `auditoria_seguranca()` confirmada 0/0 depois de tudo.
+
+---
+
 ## 📋 SESSÃO 22 · PARTE 13 (03/09, à noite) — VARREDURA GERAL: 1 REGRESSÃO DE SEGURANÇA ACHADA E CORRIGIDA
 
 Pedido do dono: "vamos ver as próximas pendências gerais". Rodada de custo zero (heartbeat,
@@ -1171,13 +1247,17 @@ primeira coisa a checar amanhã, abrindo a LP no celular como um anúncio abre.
 6. **Instagram** — a escuta segue dormente (0 entrega real). Item 1: desligar/religar a
    assinatura da conta e ler a resposta de `POST /{ig-user-id}/subscribed_apps`.
 
-### ⚪ BLOCO 6 — O BUG BOUNTY QUE NÃO RODOU INTEIRO
+### ⚪ BLOCO 6 — BUG BOUNTY: ✅ COMPLETO (03/09, à noite — ver PARTE 14)
 
-**11 das 14 lentes ficaram de fora** (teto de uso da conta): pré-login · telas do produto ·
-telas de dinheiro · admin/equipe · geradores · dinheiro em `api/` · crons · deriva de schema
-· 3 lentes ofensivas de segurança. Script pronto em `docs/WORKFLOW_BUG_BOUNTY_ABERTURA.md`
-(rodar **1 workflow por vez**, 3–4 lentes). Com isso, **o item 4 do ritual — a ofensiva de
-segurança — segue em aberto** nesta abertura.
+As 14 lentes rodaram (3 antes + 11 na PARTE 14, em 3 workflows sequenciais): pré-login ·
+telas do produto · telas de dinheiro · admin/equipe · geradores · dinheiro em `api/` ·
+crons · deriva de schema · 3 lentes ofensivas de segurança · mudanças recentes ·
+contrato RPC · recheck do QA. **15 achados confirmados, 0 refutados, todos corrigidos**
+(ver PARTE 14 para a lista — 6 P0 de segurança, entre eles SSRF real e 2 buckets de
+Storage sem escopo de dono). O item 4 do ritual (ofensiva de segurança) está cumprido.
+O crítico de completude apontou áreas ainda sem lente dedicada (portal do leiloeiro,
+LGPD, cluster jurídico, proxies de URL) — candidatas à PRÓXIMA rodada mensal, não uma
+pendência desta.
 
 **Dívida menor, registrada para não virar surpresa:** `cursos_admin`/`ebooks_admin` não têm
 coluna `preco_vista` (o campo em R$ da tela vira % na gravação, com erro de centavos); e o
