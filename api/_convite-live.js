@@ -26,6 +26,7 @@
 import { enviarEmail } from './_email.js';
 import { assinarUnsub } from './cancelar-alertas.js';
 import { emailsDoLote, capaEmail } from './_produto-email.js';
+import { FUSO_AULA, edicaoDe } from './_live-edicao.js';
 import { linkRastreado } from './_link-email.js';
 import { utmEmail } from './_utm.js';
 import { escapeHtml } from './_sanitize.js';
@@ -56,10 +57,8 @@ async function sbLer(path) {
   return linhas;
 }
 
-const FUSO = 'America/Bahia';
+const FUSO = FUSO_AULA;
 const dataBR = (iso, opts) => new Date(iso).toLocaleString('pt-BR', { timeZone: FUSO, ...opts });
-/** A EDIÇÃO é a data local da aula — a mesma unidade que o cliente enxerga no convite. */
-const edicaoDe = (iso) => new Date(iso).toLocaleDateString('en-CA', { timeZone: FUSO });
 
 /**
  * Carrega a próxima edição da aula. A data vem de `live_proxima`, a MESMA função que a landing
@@ -164,7 +163,12 @@ export async function dispararConvite({ aula, edicao, assunto, slug, seco = fals
 
   // Listas de exclusão buscadas inteiras (são pequenas) — evita montar `in.(...)` gigante na URL.
   const optOut = new Set((await sbLer('alertas_email?ativo=eq.false&select=user_id')).map((o) => o.user_id));
-  const inscritos = new Set((await sbLer(`live_inscricoes?evento_id=eq.${aula.id}&select=user_id`)).map((i) => i.user_id).filter(Boolean));
+  // ⚠️ FILTRADO POR EDIÇÃO (03/09), e a decisão é do dono: "cada lead faz parte, não é para
+  // ficar mudo até que se torne pagante". O evento semanal reusa o mesmo `id`, então sem
+  // `edicao` esta linha excluiria PARA SEMPRE quem se inscreveu uma vez — os 5 de 02/09
+  // ficariam sem convite em 09/09, 16/09, e assim por diante. A edição serve para REINCLUIR
+  // o lead na lista da próxima aula, não para excluí-lo melhor.
+  const inscritos = new Set((await sbLer(`live_inscricoes?evento_id=eq.${aula.id}&edicao=eq.${edicao}&select=user_id`)).map((i) => i.user_id).filter(Boolean));
   const jaConvidados = new Set((await sbLer(`live_convite_envio?evento_id=eq.${aula.id}&edicao=eq.${edicao}&select=user_id`)).map((c) => c.user_id));
 
   const alvos = perfis.filter((p) => !optOut.has(p.id) && !inscritos.has(p.id) && !jaConvidados.has(p.id));

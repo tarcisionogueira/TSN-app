@@ -9,6 +9,20 @@ import { AlertTriangle, Info } from 'lucide-react';
 
 const fmt = (v) => Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+// Card do painel — subiu para o escopo do módulo em 02/09 para que o quadro de taxas de
+// gateway (TaxasGateway, abaixo) use o MESMO card do resto do financeiro em vez de uma
+// cópia que envelheceria sozinha.
+const Card = ({ titulo, valor, cor, sub, tag }) => (
+  <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '16px 18px', flex: '1 1 200px', minWidth: 180 }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b' }}>{titulo}</div>
+      {tag && <span style={{ fontSize: 9.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.4, color: tag === 'real' ? '#059669' : '#0D63DB', background: tag === 'real' ? '#f0fdf4' : '#eff6ff', borderRadius: 999, padding: '1px 7px' }}>{tag === 'real' ? 'realizado' : 'projeção'}</span>}
+    </div>
+    <div style={{ fontSize: 22, fontWeight: 900, color: cor || '#111', marginTop: 6 }}>{valor}</div>
+    {sub && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{sub}</div>}
+  </div>
+);
+
 // ── Assinaturas — taxonomia (igual à do Mercado Pago), calculada de `perfis`.
 // Em dia: pagamento aprovado / vigente. Em atraso: tentativas de cobrança rolando
 // (inadimplente há poucos dias). Vencida: tentativas esgotadas. Cancelada: conta
@@ -436,17 +450,6 @@ export function SinteseFinanceira() {
   const maxSerie = Math.max(1, ...serie.map(s => Number(s.mensalidades || 0) + Number(s.vendas || 0)));
   const semDados = serie.every(s => (Number(s.mensalidades || 0) + Number(s.vendas || 0)) === 0);
 
-  const Card = ({ titulo, valor, cor, sub, tag }) => (
-    <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '16px 18px', flex: '1 1 200px', minWidth: 180 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-        <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b' }}>{titulo}</div>
-        {tag && <span style={{ fontSize: 9.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.4, color: tag === 'real' ? '#059669' : '#0D63DB', background: tag === 'real' ? '#f0fdf4' : '#eff6ff', borderRadius: 999, padding: '1px 7px' }}>{tag === 'real' ? 'realizado' : 'projeção'}</span>}
-      </div>
-      <div style={{ fontSize: 22, fontWeight: 900, color: cor || '#111', marginTop: 6 }}>{valor}</div>
-      {sub && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{sub}</div>}
-    </div>
-  );
-
   return (
     <div>
       <div style={{ fontSize: 13, fontWeight: 800, color: '#334155', marginBottom: 10 }}>Situação atual — dinheiro que entrou e saiu</div>
@@ -461,6 +464,8 @@ export function SinteseFinanceira() {
         <Card titulo="A pagar (fila de saque)" valor={`R$ ${fmt(m.a_pagar)}`} cor="#d97706" tag="real" sub="Solicitações aguardando" />
         <Card titulo="Comissões acumuladas" valor={`R$ ${fmt(d.saldo_a_pagar_total)}`} cor="#334155" tag="real" sub="Saldo de todos os parceiros" />
       </div>
+
+      <TaxasGateway />
 
       <div style={{ fontSize: 13, fontWeight: 800, color: '#334155', marginBottom: 10 }}>Projeção — cenário se todos efetivarem</div>
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 22 }}>
@@ -495,6 +500,55 @@ export function SinteseFinanceira() {
         {semDados && <div style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 10 }}>Sem dados ainda — enche conforme os pagamentos entram (webhook) e o backfill semanal roda.</div>}
       </div>
     </div>
+  );
+}
+
+// TAXAS DE GATEWAY (02/09, pedido do dono: "não é para ser editável, mas sim numa tela do
+// DRE termos essa informação de quanto estamos pagando em taxas"). O número vem do próprio
+// pagamento — `mp_pagamentos.dados_mp->fee_details` com `fee_payer='collector'` —, nunca de
+// um percentual digitado. O que estava configurado à mão no /admin dizia 0% para o Mercado
+// Pago, que é o gateway principal e o único com venda: o custo do gateway não aparecia em
+// lugar nenhum. `sem_detalhe` fica visível de propósito: é o pedaço sobre o qual a medição
+// NÃO fala, e escondê-lo faria o percentual parecer mais completo do que é.
+function TaxasGateway() {
+  const [d, setD] = useState(null);
+  useEffect(() => {
+    supabase.rpc('admin_taxas_gateway', { p_dias: 90 })
+      .then(({ data, error }) => setD(error ? { erro: error.message } : data));
+  }, []);
+
+  if (d === null) return null;
+  if (d.erro) return (
+    <div style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', borderRadius: 12, padding: '14px 18px', marginBottom: 22, fontSize: 12.5 }}>
+      Taxas de gateway: não consegui apurar — {d.erro}
+    </div>
+  );
+
+  const mp = (d.gateways || []).find(g => g.gateway === 'mercadopago') || {};
+  const temMedida = mp.pct_efetivo != null;
+
+  return (
+    <>
+      <div style={{ fontSize: 13, fontWeight: 800, color: '#334155', marginBottom: 10 }}>
+        Custo de gateway — o que a maquininha reteve (últimos {d.dias} dias)
+      </div>
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 8 }}>
+        <Card titulo="Taxa efetiva (Mercado Pago)"
+          valor={temMedida ? `${Number(mp.pct_efetivo).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%` : '—'}
+          cor={temMedida ? '#dc2626' : '#94a3b8'} tag="real"
+          sub={temMedida ? `medida em ${mp.com_detalhe} pagamento(s)` : 'nenhum pagamento com detalhe de taxa'} />
+        <Card titulo="Taxas pagas no período" valor={`R$ ${fmt(mp.taxa_total)}`} cor="#dc2626" tag="real"
+          sub={`sobre R$ ${fmt(mp.bruto_medido)} medidos`} />
+        <Card titulo="Recebido bruto" valor={`R$ ${fmt(mp.bruto)}`} cor="#059669" tag="real"
+          sub={`${mp.pagamentos || 0} pagamento(s) aprovado(s)`} />
+      </div>
+      <div style={{ fontSize: 11.5, color: '#94a3b8', marginBottom: 22 }}>
+        {Number(mp.sem_detalhe) > 0
+          ? <>⚠️ {mp.sem_detalhe} pagamento(s) aprovado(s) ainda sem o detalhe da taxa no payload do Mercado Pago. Eles entram no bruto, mas ficam FORA do percentual — incluí-los faria a taxa parecer menor do que é.</>
+          : 'Todos os pagamentos do período trouxeram o detalhe da taxa.'}
+        {' '}Asaas é o gateway de backup e não tem venda registrada localmente; o extrato dele é lido pela API na aba Fluxo de caixa.
+      </div>
+    </>
   );
 }
 

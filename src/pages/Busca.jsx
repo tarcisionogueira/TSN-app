@@ -1429,10 +1429,6 @@ export default function Busca() {
     buscarPagina(alvo, filtros, sortBy, centro, raioAtivo, raioKmAtivo, cidadesNaArea);
   };
 
-  const irParaAnalise = (im) => {
-    nav('/caso', { state: { imovel: im } });
-  };
-
   const marcarArrematado = (im) => {
     const imoveis = loadImoveis();
     const existente = imoveis.find(i => i.id === im.id);
@@ -2018,13 +2014,6 @@ export default function Busca() {
                 <option value="valor_desc">Maior valor primeiro</option>
                 <option value="data_asc">Encerra em breve</option>
               </select>
-              {selecionados.length>0 && (
-                <button onClick={()=>irParaAnalise(resultados.find(r=>r.id===selecionados[0]))}
-                  title="Abre o lote marcado na Análise, já com os dados do leilão preenchidos."
-                  style={{ padding:'7px 14px', background:'#10b981', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', display:'flex', alignItems:'center', gap:6 }}>
-                  <ArrowRight size={13}/> Analisar selecionado
-                </button>
-              )}
               <button onClick={() => buscarPagina(pagina, filtros, sortBy, centroRaio, raioAtivo, raioKmAtivo)}
                 title="Refaz a busca com os mesmos filtros — o acervo muda ao longo do dia."
                 style={{ padding:'7px 12px', background:'#f1f5f9', border:'1px solid #e2e8f0', borderRadius:8, fontSize:12, fontWeight:700, color:'#475569', cursor:'pointer', display:'flex', alignItems:'center', gap:5 }}>
@@ -2315,19 +2304,13 @@ export default function Busca() {
 
                   {/* Botões */}
                   <div style={{ display:'flex', gap:6, padding:'8px 12px', borderTop:'1px solid #f1f5f9', background:'#fafafa' }}>
+                    {/* 02/09 — decisão do dono: o card leva SÓ para a página do imóvel. O botão
+                        "Analisar" pulava direto para o /caso (sem o cliente ter visto o lote) e
+                        dava erro; o fluxo é: Ver → página do imóvel → pedir a análise de lá. */}
                     <button onClick={e=>{ e.stopPropagation(); nav('/imovel/'+im.id, { state: { imovel: im } }); }}
-                      style={{ flex:1, padding:'8px 4px', background:'white', color:'#334155', border:'1px solid #e2e8f0', borderRadius:8, fontSize:11, fontWeight:700, cursor:'pointer' }}>
-                      Ver →
+                      style={{ flex:1, padding:'8px 4px', background:'#0D63DB', color:'white', border:'none', borderRadius:8, fontSize:11, fontWeight:700, cursor:'pointer' }}>
+                      Ver o imóvel →
                     </button>
-                    {canAnalise
-                      ? <button onClick={e=>{ e.stopPropagation(); irParaAnalise(im); }}
-                          style={{ flex:2, padding:'8px 4px', background:'#0D63DB', color:'white', border:'none', borderRadius:8, fontSize:11, fontWeight:700, cursor:'pointer' }}>
-                          📊 Analisar
-                        </button>
-                      : <span style={{ flex:2, padding:'8px 4px', background:'#f8fafc', color:'#cbd5e1', border:'1px solid #e2e8f0', borderRadius:8, fontSize:11, fontWeight:700, cursor:'not-allowed', display:'flex', alignItems:'center', justifyContent:'center' }}>
-                          🔒 Analisar
-                        </span>
-                    }
                   </div>
                 </div>
               );

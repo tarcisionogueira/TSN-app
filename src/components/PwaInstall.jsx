@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
+import { ehRotaDeCampanha } from '../utils/rotaCampanha';
 
 // Banner de instalação do PWA (Etapa 1). Aparece só quando faz sentido:
 //  • Android/Chrome/Edge: captura o evento `beforeinstallprompt` e mostra "Instalar app"
@@ -25,6 +27,7 @@ function ehIOS() {
 }
 
 export default function PwaInstall() {
+  const loc = useLocation();
   const [prompt, setPrompt] = useState(null); // evento beforeinstallprompt (Android/desktop)
   const [iosAberto, setIosAberto] = useState(false);
   const [visivel, setVisivel] = useState(false);
@@ -68,6 +71,15 @@ export default function PwaInstall() {
     };
   }, []);
 
+  // 01/09 — NÃO NA LANDING DE CAMPANHA. O banner é `position:fixed` com z-index 9999 e um
+  // botão AZUL: numa página cujo único trabalho é converter, ele vira o elemento mais
+  // destacado da tela, disputando com o CTA de inscrição. Medido: aparece no iOS Safari e
+  // NÃO nos navegadores internos do Facebook e do Instagram — atinge uma fatia do tráfego
+  // pago, não todo ele. Mesmo assim não há motivo para oferecer instalar app a quem ainda
+  // não se inscreveu. O `useEffect` acima continua rodando de propósito: o evento
+  // `beforeinstallprompt` precisa ser capturado mesmo aqui, senão ele se perde para o
+  // resto da sessão e o item "Instalar app" do menu deixaria de funcionar depois.
+  if (ehRotaDeCampanha(loc.pathname)) return null;
   if (!visivel) return null;
 
   const dispensar = () => {

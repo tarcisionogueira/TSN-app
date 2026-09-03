@@ -4,7 +4,1427 @@
 
 ---
 
-## 🚦 COMECE POR AQUI — estado ao encerrar 31/08 22h BRT (sessão 16)
+## 🛰️ SESSÃO 20 · PARTE 2 (03/09, 12h UTC) — PNAJ, E O RADAR DE EDITAIS QUE MEDIA OUTRA COISA
+
+> Pergunta do dono: *"estamos integrados com o PNAJ, para não ficar tão dependentes de leiloeiros?"*
+
+### A resposta: não, e hoje **não dá** — mas o caminho já existe e estava com três defeitos
+
+**PNAJ = zero ocorrências no repositório.** E não é falha nossa: o **Provimento CN-CNJ nº 255,
+de 19/08/2026** (duas semanas atrás) criou a PNAJ — que será o ambiente **exclusivo** dos
+leilões judiciais eletrônicos —, mas a obrigatoriedade está **condicionada a homologação do
+CNJ + 120 dias**, e essa homologação **ainda não ocorreu**. Não há API, não há base, não há o
+que integrar. É item de vigilância.
+
+**✅ Rotina criada:** `PNAJ — vigia a homologação do CNJ (semanal)`, `trig_01LS8dGkBoe8xym7poZaRMcu`,
+segundas 12h UTC, com push + e-mail. ⚠️ Ela roda **sem conectores MCP** (o aviso veio na
+criação) — o prompt já diz isso e proíbe tratar "não consegui checar" como "nada mudou", que é
+exatamente o que aconteceu com a rotina mensal de bug bounty em 01/09.
+
+### O que temos de verdade, e o que estava quebrado nele
+
+| Fonte | Estado |
+|---|---|
+| **CNJ DataJud** (`api/_cnj.js`) | integrado — metadados e movimentos **processuais**, não traz lote |
+| **DJEN / API Comunica** (`api/radar-editais-cron.js`) | **já construído e rodando: 477 editais** (TJSP 302 · TRT15 175, de 20/07 a 31/08), custo **R$ 0** |
+| **PNAJ** | não existe ainda |
+
+**O DJEN é nacional, e `RADAR_TRIBUNAIS` já é variável de ambiente** (default `TJSP,TRT15`) —
+abrir para o Brasil é **configuração, não código**. Mas antes disso, três coisas medidas:
+
+#### 1. ⚠️ O cron NÃO estava parado — meu primeiro diagnóstico estava errado
+Ele rodou hoje 08:02 UTC e respondeu 200. Desde 29/08 (decisão sua) ele é **rede de segurança
+semanal**: só paga Bright Data após 7 dias sem pull bem-sucedido. **Quem parou foi o runner
+RESIDENCIAL**, último sucesso em **01/09 01:01**. O desenho está certo; o buraco é que o pulo
+por freio **não grava nada, de propósito** — então `monitor_runs` fica em branco por até 7 dias
+e **nenhum dos 4 invariantes que citam "edital" vigia o pipeline** (todos falam do documento do
+lote). Um radar mudo era indistinguível de uma semana sem publicação.
+**Consertado:** invariante `radar_editais_sem_pull` (dias desde o último pull OK, de qualquer
+origem; 9999 se nunca houve; limite 2). Já lê **2 — exatamente no limite**: vira alerta amanhã
+se o residencial não rodar. **Ação sua: rodar `scripts/radar-editais-residencial.mjs`.**
+
+#### 2. `leiloeiro_integrado` = false em **477 de 477**, e era falso
+`construirEhIntegrado` montava a lista com `.select('leiloeiro').eq('ativo',true).limit(5000)`
+**sem `order`**, sobre 29.875 linhas ativas onde **76% são da Caixa**. Medida a amostra REAL das
+5.000: **4.570 são "Caixa Econômica Federal"** e sobram **30 dos 106 leiloeiros**. O campo
+passou a medir *"estava nas primeiras 5.000 linhas"* — forma nº 9 desaguando na nº 10. O
+**backlog de "leiloeiro a integrar", que é a razão de o Radar existir, estava cego.**
+**Consertado:** RPC `leiloeiros_do_acervo()` (106 nomes distintos, nada a truncar) + o `catch`
+vazio agora preserva o motivo. **Acervo re-marcado: 35 editais passaram a "integrado".**
+
+#### 3. `imovel_uf` aceitava qualquer par de letras
+A validação era `/^[A-Za-z]{2}$/` — formato, não conteúdo (forma nº 8). **89 editais com estado
+impossível**: ME (41), CR (31), AN, CG, LA, LO, DO, CL, AI, DI, CB, MF, VW. E o insert gravava
+`p.imovel_uf || 'SP'`: **aberto para o país, todo edital do TJBA sem UF parseada viraria São
+Paulo.** Consertado nos três pontos (parse, ramo da IA, insert), `uf` do edital passa a sair da
+sigla do tribunal, e as 89 linhas viraram nulo. `npm run testar:uf-edital` — **30 asserções**,
+incluindo a prova de que a régua antiga aprovaria os 13 valores sujos.
+
+### 📋 O QUE FALTA NO CAMINHO "DEPENDER MENOS DE LEILOEIRO"
+
+**Bloqueia abrir para o Brasil:**
+1. **Parse do leiloeiro é o gargalo:** **356 de 477 (75%) sem nome**, e parte do que vem é
+   frase, não nome — `"devera providenciar"`, `"e imediatamente divulgados online"`,
+   `"ja foi realizada na pessoa de otavio lauro sodre santoro"`. Sem nome não há casamento, e
+   sem casamento o Radar não vira esteira de aquisição.
+2. **Ruído alto:** 163 de 477 (**34%**) classificados `nao_edital` e 76 (**16%**) `erro_parse`.
+   Multiplicar por 27 tribunais multiplica isso e o custo de IA por edital.
+3. **TRT15 falha com frequência** (`HTTP 403`, `fetch failed` recorrentes em `monitor_runs`).
+4. **Cobertura DJEN × DEJESP nunca foi validada** — o próprio `docs/RADAR_EDITAIS_CNJ.md`
+   previa 2–4 semanas de validação empírica, e não há registro de que tenha sido feita.
+
+**Dívida do que foi consertado hoje:**
+5. **`leiloeiro_integrado` é boolean e não sabe dizer "não sei".** Quando a lista falha, o campo
+   grava `false` — a mesma confusão entre "conferi e não é" e "não consegui conferir". Tri-state
+   (nulo) seria o certo; hoje o motivo só aparece na resposta HTTP e no `console.error`.
+6. **Não há invariante para "editais com nome de leiloeiro e nenhum integrado"** — a re-marcação
+   resolveu o passado; a regressão futura volta a ser silenciosa.
+
+**O projeto de verdade (não é conserto):**
+7. **Edital não vira LOTE.** Hoje `editais_leilao` só alimenta `editais_enriquecer_acervo`
+   (preenche avaliação faltante). Para o acervo deixar de depender de leiloeiro, o edital
+   precisa virar imóvel pesquisável em `imoveis_leilao` — com endereço, praças, valores e foto.
+   É o passo que muda o negócio, e é o maior dos itens desta lista.
+
+---
+
+## ✅ SESSÃO 20 (03/09, 10h–11h UTC) — BLOCO 1 DA FILA ZERADO. A aula de 09/09 está de pé.
+
+> `main` = **`4d3fc22`** · segurança **0/0** · regras de negócio **0 crítico** · KYC 0 · 0 chamado
+> de cliente sem resposta · 0 fonte no ponto cego · backup **ok** (67 arq., 17 novos, 50 iguais —
+> **não está no teto**, o alerta de 14/08 não voltou). Heartbeat às **09:58 UTC**.
+> Migração aplicada: **parte A** (`edicao_na_inscricao_parte_a_…`). **Parte B pendente** — ver abaixo.
+
+### 🔴 O QUE ESTAVA ACONTECENDO AGORA, e ninguém veria: a data da aula tinha DUAS verdades
+
+```
+eventos_live.data_hora  = 02/09 22:00 UTC   ← a coluna CRUA (aula que já passou)
+live_proxima(...)       = 09/09 22:00 UTC   ← a verdade
+oferta_fecha_em         = 06/09 03:00 UTC   ← só depois disso o banco rola a coluna
+```
+
+`live_rolar_recorrentes()` avança a coluna **depois de `oferta_fecha_em`, não depois da aula** —
+são **quatro dias** apontando para o passado. Nesse intervalo:
+
+1. **`api/live-inscrever.js`** mandava *"sua vaga está garantida … 02 de setembro"* — o primeiro
+   e-mail que o inscrito lê do produto, com a data de uma aula morta.
+2. **`api/admin-whatsapp-fila.js`** filtrava `data_hora > agora`, não achava evento e respondia
+   *"nenhuma aula futura ativa"*: **a fila de WhatsApp estava VAZIA** nos dias em que ela serve.
+   Sem erro na tela, sem linha no log. **Este segundo sintoma não estava no handoff anterior.**
+   E o comentário em cima do filtro **afirmava o contrário do que o banco faz** — documentação
+   errada fecha a investigação antes de começar. A mesma frase falsa estava em
+   `lancamento-remarketing-cron.js` (lá a leitura crua É correta: quer-se a aula que passou).
+
+### 🔴 E o que já tinha custado a edição de 02/09 — a medição contradiz o diagnóstico anterior
+
+O handoff dizia *"25 exploradores nunca receberam o convite"*. O rastro do banco diz **por quê**,
+e não é o que se supunha:
+
+```
+74 convites, TODOS em 30/08 11:00:09–11:00:23   (uma rodada de 14 SEGUNDOS)
+21 elegíveis NUNCA convidados, criados entre 30/08 15:34 e 02/09 10:25
+ 6 criados depois da aula · 5 já inscritos · 0 sem e-mail
+```
+
+Não foi o e-mail que falhou. **`convidar-live-cron` desarmava logo após o primeiro envio**, e as
+rodadas diárias seguintes respondiam `ok:true, motivo:'não armado'` sem olhar para ninguém. *Um
+cron diário que se autodesliga na primeira rodada é um cron semanal com outro nome* — e o
+cabeçalho de `live-reforco-cron.js` documentava o conserto *"passamos para diário"* como se
+tivesse funcionado. **Quem se cadastra na semana da aula é justamente quem o anúncio acabou de
+trazer**: o lead mais quente da base foi o que ficou de fora.
+
+### ✅ Os 4 itens do BLOCO 1, corrigidos e medidos
+
+| # | O que era | O que passou a ser | Prova |
+|---|---|---|---|
+| 1 | data lida da coluna crua em 2 rotas | `live_proxima` nas duas; `evRes.ok ? … : []` (5xx virando "aula não aberta") vira 502 | `main` **`8d39b51`** READY em produção |
+| 2 | exclusão de "já inscrito" só por `evento_id` | coluna **`edicao`** em `live_inscricoes` e `live_lembretes` + gatilho + filtro em `live_reforco_alvos`, `whatsapp_fila_live`, `_convite-live.js` | convite de 09/09 alcança **106**; a regra antiga descartaria **5** em silêncio |
+| 3 | desarme por RODADA | desarme por **EDIÇÃO** (só quando ela fica para trás); o duplo é impedido pelo UNIQUE por pessoa/edição | fila de WhatsApp de 09/09: **104 pessoas, os 5 de 02/09 incluídos** |
+| 4 | assunto deduzia a QUARTA a partir das 19h | dia da semana vem da DATA | `npm run testar:data-aula` — **28 asserções** |
+
+**Decisão do dono aplicada ao pé da letra:** *"cada lead faz parte"*. A edição **reinclui**, não
+exclui melhor — quem se inscreveu em 02/09 volta para todas as listas de 09/09.
+
+### ✅ A migração, nas duas partes — AMBAS APLICADAS
+
+**Por que foi partida em duas, e a ordem importava:** o código velho fazia upsert com
+`on_conflict=evento_id,email`. Derrubar essa chave ANTES do deploy faria toda inscrição no
+intervalo tomar 400 — que a rota devolve ao cliente como *"não conseguimos concluir a sua
+inscrição"*. Então a parte A só ADICIONOU (coluna, gatilho, chaves novas, backfill, filtro por
+edição nas duas RPCs) e a parte B, aplicada **depois de o `4d3fc22` estar READY**, derrubou as
+chaves velhas e fechou as colunas em `NOT NULL`. A parte B **recusa rodar** se a A não tiver
+passado ou se sobrar linha sem edição — "não consegui conferir" não passa por "está tudo certo".
+
+**Prova, em ensaio com rollback:** inserir a MESMA `(evento_id, email)` de uma inscrição de
+02/09 agora cria linha própria em **09/09** — antes o upsert só atualizava a antiga e respondia
+200 sem criar inscrição nenhuma na nova edição. Estado final: chaves vigentes
+`live_inscricoes_evento_email_edicao_key` e `live_lembretes_evento_email_etapa_edicao_key`,
+`edicao` **NOT NULL** nas duas tabelas.
+
+### ⏭️ O QUE FAZER ANTES DE 09/09 (não tem código — é o ato do dono)
+
+**Armar o convite da edição:** o cron está diário e agora fica armado a semana toda, mas ele só
+dispara com a autorização explícita:
+```sql
+insert into app_config (key, value) values ('convite_live_armado', '2026-09-09')
+  on conflict (key) do update set value = excluded.value;
+```
+Hoje `convite_live_armado` está **vazio**. Com ele armado, a rodada das 11h UTC alcança as
+**106 pessoas** e volta a alcançar, todo dia, quem se cadastrar até a aula — que é exatamente
+o buraco de 21 pessoas da edição passada.
+
+### 📝 Decisões deliberadas de NÃO mexer (para não virar surpresa)
+
+- **`lancamento_publico`** (remarketing pós-aula) segue sem filtro de edição: o dedup dela é por
+  etapa e **para sempre**, então filtrar mudaria quem recebe. Mais inclusivo = a decisão do dono.
+- **`live_sala`** segue sem filtro: inscrito de uma edição entra na sala da seguinte — coerente
+  com *"cada lead faz parte"*.
+- **`live_inscritos(slug)`** conta TODAS as edições. Hoje são 5 e não engana; depois de algumas
+  semanas vira número cumulativo apresentado como "inscritos nesta aula". **Decidir antes disso.**
+- **`og-share.js`** NÃO mente (degrada para *"toda quarta, às 19h"* quando a data passou), mas
+  poderia dizer **09/09** usando `live_proxima`. É conversão perdida no cartão que é repassado.
+- **`live-lembrete-cron`** lê `data_hora` crua e só funciona porque `live_rolar_recorrentes()`
+  roda antes, e o roll acontece quando `oferta_fecha_em` vence. **Se alguém marcar
+  `oferta_fecha_em` PARA DEPOIS da próxima aula, o lembrete não sai** — e nada acusa.
+- **12 dos 20 testes em `scripts/testes/` rodam sem NENHUMA dependência** (o novo incluído) e
+  **nenhum está no CI**. `verificar-padroes.yml` roda sem `npm ci` de propósito: caberiam ali.
+
+---
+
+## 📣 REVISÃO DA CAMPANHA (03/09, 01h UTC) — NÃO FALTOU TRÁFEGO. FALTOU A PÁGINA CONVERTER.
+
+> **O número que reorganiza tudo: 521 visitas na LP da aula em 7 dias — 475 delas só em
+> 01/09 — e 5 inscritos no total do período. Conversão da landing ≈ 0,6%.** Uma LP de
+> captura razoável faz 20–40%. Gastamos **R$ 160,30** em anúncios de aula para **2 inscritos
+> atribuídos** (R$ 80,15 cada). O gargalo não é o quanto se compra de clique.
+
+### 🔴 O CRIATIVO QUE COMEU O DIA MAIS IMPORTANTE — e não falava da aula
+
+`IG-0109-MUDONOME` é um post institucional (**a conta mudou de nome**) que estava apontando
+para a **LP de inscrição da aula**. O resultado é a assinatura clássica de descasamento entre
+promessa e destino: **CTR altíssimo, conversão zero**.
+
+| Anúncio (27/08–02/09) | Gasto | Cliques | CPC | CTR | Inscritos |
+|---|---|---|---|---|---|
+| **IG-0109-MUDONOME · TRF ABERTO** | R$ 34,55 | **560** | R$ 0,06 | **12–19%** | **0** |
+| REEL-2808-LIVE · CONV/ADV+ | R$ 109,53 | 45 | R$ 2,43 | 3,4–5,0% | **2** |
+| REEL-2808-LIVE · TRF ABERTO | R$ 11,12 | 93 | R$ 0,12 | 3,9–9,1% | 0 |
+| IG-3108-VAGA · TRF ABERTO | R$ 5,10 | 36 | R$ 0,14 | 4,6–7,2% | 0 |
+| REEL-2408-PASSO-A-PASSO (evergreen, não é da aula) | R$ 30,01 | 321 | R$ 0,09 | 4,0–5,8% | — |
+
+Em **01/09**, véspera da aula, o MUDONOME sozinho levou **424 cliques** (R$ 26,94) e o banco
+confirma o outro lado: `utm_content = IG-0109-MUDONOME` → **423 visitas**, e daquele dia saiu
+**zero** inscrição. Curiosidade não é intenção: quem clica em "mudei de nome" não quer se
+inscrever numa aula.
+
+**✅ RESOLVIDO AGORA (configuração, reversível):** `pause_ad` no
+`IG-0109-MUDONOME - TRF ABERTO` (`ad_id 120249419403910420`). O conjunto já estava pausado,
+então **isto não muda gasto hoje** — é defensivo: com CTR de 12% contra 3–5% dos outros, ao
+religar o conjunto para 09/09 o algoritmo escolheria ele de novo. Reverter:
+`enable_ad` com o mesmo id.
+
+### ⚠️ NÃO RELIGUE NADA COMO ESTÁ — os criativos anunciam 02/09
+
+Estado da conta `702903610061448` neste momento:
+
+| Campanha | Conjunto | Anúncio | Estado |
+|---|---|---|---|
+| `CONV - AULA 02SET - INSCRICAO` **PAUSED** | `BR - ADV+ - AULA 02SET` **ACTIVE** | `REEL-2808-LIVE` **ACTIVE** | só a campanha segura |
+| `TRF - SITE - LEILOES - AGO26` **ACTIVE** | `BR - ABERTO - AULA 02SET` **PAUSED** | `REEL-2808-LIVE - TRF`, `IG-3108-VAGA - TRF` ACTIVE · `IG-0109-MUDONOME` **PAUSED (hoje)** | conjunto segura |
+| `TRF - SITE - LEILOES - AGO26` **ACTIVE** | `BR - 25-60 - ABERTO` **ACTIVE** | `REEL-2408-PASSO-A-PASSO` ACTIVE | **rodando** (evergreen, R$ ~9/dia, CPC R$ 0,09) |
+
+⚠️ Ligar a campanha `CONV` publica **na hora** um anúncio que diz **02 de setembro**. Todo
+criativo de aula precisa ser **refeito com 09/09** antes de qualquer religamento.
+
+### 🎯 PÚBLICO-ALVO E SEMELHANTE — e por que LAL ainda NÃO é o caminho
+
+**A pendência antiga do HANDOFF ("trocar ADV+ por LAL 1%") não é executável hoje, e o motivo
+é tamanho de base:** um lookalike precisa de ~100 pessoas no mínimo (e rende de verdade com
+1.000+). Temos **5 inscritos** e **99 perfis**. Um LAL sobre 5 pessoas é ruído com nome de
+público.
+
+O que a medição diz sobre os três públicos testados:
+
+- **`BR - ADV+ - AULA 02SET`** (Advantage+, a Meta escolhe) — caro (CPC R$ 2,43) e entregou
+  pouco (45 cliques em 3 dias), mas foi o **único que converteu: 2 de 2 inscritos pagos**.
+- **`BR - ABERTO - AULA 02SET`** (sem segmentação) — CPC R$ 0,06–0,14, **689 cliques, zero
+  inscrição**. Volume desqualificado.
+- **`BR - 25-60 - ABERTO`** (evergreen) — CPC R$ 0,09, não é de aula, segue rodando.
+
+⚠️ **Ressalva honesta:** 2 conversões em 45 cliques é amostra minúscula. O ADV+ não está
+*provado* melhor — ele é o único com sinal, e o aberto é o único com prova de que não
+converte. **Ordem sugerida:** ADV+ com criativo certo → junta base → só então LAL.
+
+**A base que JÁ existe e não está sendo usada:** 521 visitantes da LP em 7 dias e 832 visitas
+com `fbclid`. Isso dá **retargeting** (público de site, 7–30 dias), que é o que faz sentido
+com esse volume — e é mais barato que prospecção fria.
+
+### 🔬 O QUE FICA EM ABERTO, E EU NÃO CONSIGO MEDIR DAQUI
+
+A conversão de 0,6% é **fato medido**. A **causa na LP não está estabelecida** — o sandbox não
+alcança o site (o proxy recusa `bidprobrasil.com.br`), então não abri a página. O que existe
+de indício: `erro_na_tela_do_cliente` = **2**, ambos em `/live/leilao-ao-vivo` no dia **01/09**
+(01:46 e 08:22 UTC), com *"Não conseguimos carregar esta página"* — o ramo de RPC com erro,
+justamente no dia das 475 visitas. **Dois registros não provam falha em massa**, mas é a
+primeira coisa a checar amanhã, abrindo a LP no celular como um anúncio abre.
+
+### 📋 PARA AMANHÃ — em ordem
+
+1. **Abrir a LP como o anúncio abre** (celular, link do anúncio) e medir o funil real:
+   quantos veem o formulário, quantos enviam. Sem isso, trocar criativo é apostar.
+2. **Criativo novo com data 09/09** — base é o `REEL-2808-LIVE`, que foi o único que
+   converteu. O que ele precisa dizer: dia, hora, e **o que a pessoa leva** (um relatório de
+   viabilidade gerado ao vivo no imóvel dela).
+3. **Nunca mais** apontar criativo institucional para LP de inscrição — o MUDONOME custou
+   R$ 34,55 e o dia mais importante da campanha.
+4. **Ligar retargeting** dos 521 visitantes da LP (7–30 dias) — é a única "audiência
+   própria" com volume hoje.
+5. **Google:** `Pesquisa — Leilão de Imóveis (BR)` está ENABLED, ~R$ 22/dia, 165–197
+   cliques/dia, e **não aponta para a aula** (cai na busca do site). Está saudável assim;
+   **não misturar** com a aula. As "conversões" dele (0–4/dia) são cadastro na plataforma,
+   não inscrição na live — não confundir os dois números.
+
+---
+
+## 🎯 FILA DE 03/09 — AS PENDÊNCIAS, EM ORDEM DE ATAQUE ("amanhã zeramos isso")
+
+> Estado ao fechar 03/09 00h20 UTC: `main` = **`33dce2b`** (deploy READY) · segurança **0/0**
+> · `verificar:schema` **verde no CI** nos dois commits de hoje · 16 anomalias de relatório
+> · 6 erros de cliente abertos (14 d) · 6 invariantes em alerta · 6 fontes suspeitas.
+> **Nada abaixo foi corrigido** — é a fila, com file:line e a causa já medida.
+
+### 📌 DECISÃO DO DONO (03/09), e ela muda o conserto nº 2 da live
+> **"Cada lead faz parte. Não é para ficar mudo até que se torne pagante."**
+>
+> Ou seja: quem se inscreveu numa edição **continua** recebendo convite, reforço e WhatsApp
+> das próximas. O critério de exclusão não é *"já se inscreveu alguma vez"* — é **"já está
+> inscrito NA edição corrente"**. Quem virou pagante também não some: muda o TEXTO (a fila
+> já tem 5 textos por público, `planos_config.publico`), não a presença na lista.
+>
+> ⚠️ Isso **inverte** a leitura que eu tinha escrito na varredura ("dar edição à inscrição
+> para excluir corretamente"): a edição serve para **reincluir**, não para excluir melhor.
+
+### 🔴 BLOCO 1 — A LIVE (próxima edição **09/09 22:00 UTC**, 5 inscritos). É o que tem relógio.
+
+| # | Onde | O quê | Prazo |
+|---|---|---|---|
+| 1 | `api/live-inscrever.js:97` (+ `api/admin-whatsapp-fila.js:199`) | Lê `eventos_live.data_hora` CRU. `live_rolar_recorrentes()` só rola a coluna depois de `oferta_fecha_em` (**06/09 03:00 UTC**), então **de ontem até lá** quem se inscreve vê 09/09 na página e recebe e-mail *"sua vaga está garantida … 02 de setembro"*. **Está acontecendo agora.** Fix: ler por `live_proxima(slug)`, como `_convite-live.js:70` e `live-criar-sala.js:54` já fazem | **HOJE** |
+| 2 | `api/_convite-live.js:167` · `live_reforco_alvos` · `whatsapp_fila_live` · `live-lembrete-cron.js:210` | Todas as exclusões de "já inscrito" filtram só por `evento_id`, e o evento semanal **reusa o mesmo id**: os 5 de 02/09 ficam mudos em 09/09. Pela decisão acima, o conserto é **coluna `edicao`** em `live_inscricoes` (e no UNIQUE de `live_lembretes`) e comparar com a edição CORRENTE — o lead volta para a lista | antes de 09/09 |
+| 3 | `api/convidar-live-cron.js:56` | Grava `convite_live_armado=''` após o 1º envio e responde `ok:true, motivo:'não armado'` para sempre. Foi o que deixou **25 exploradores sem convite** em 02/09, e repete toda semana. Fix: manter armado até a edição passar. ⚠️ Corrigir junto o cabeçalho de `live-reforco-cron.js:37-42`, que documenta um mecanismo que não existe | antes de 09/09 |
+| 4 | `api/live-reforco-cron.js:157` | Assunto do reforço deduz o DIA da semana pela HORA (`'19:00'` → "quarta"). Latente só enquanto toda aula for quarta | junto |
+
+### 🟠 BLOCO 2 — DINHEIRO E ENTREGA (achados confirmados por revisor cético)
+
+- **`api/enviar-alertas-cron.js:745` (P1)** — linhas de `buscar_por_raio_v2` entram no pool
+  **sem** `valor_minimo_ref`/`praca1_fim`/`praca2_fim`/`data_fim`/`data_leilao_2` (a RPC não
+  devolve). O e-mail de alerta **mostra a praça cara** e `encerradoPorDatas` **descarta lote
+  em 2ª praça**. Fix: estender o `RETURNS TABLE` da RPC (migração + aplicar) e projetar.
+- **`api/gerar-documental.js:2137` (P2)** — no ramo `persistidoNestaRodada` o laudo fica
+  `concluida` mas o catch **estorna a cota**, loga `relatorio_documental_erro` e responde
+  504/500: relatório entregue **de graça** e contado como falha no Cliente 360.
+- **`api/certidoes.js:165` (P2, sem veredito)** — 404 da PGFN/FGTS vira *"sem débitos"* e o
+  parecer verde cita FGTS sem consulta. Irmão do P0 (7) de 31/08; endpoint só de admin.
+- **`src/pages/ConviteEquipe.jsx:626` (P2)** — `salvar_kyc_equipe` devolve **boolean** e a
+  tela testa `rKyc?.ok === false`: recusa passa como salvo. Atenuado (anon não tem EXECUTE).
+- **`src/pages/Busca.jsx:1217` (P2, sem veredito)** — busca por raio sem o guard `atual()`
+  no `!resp.ok` e no `setTotalResultados`; o próprio arquivo já usa o idioma nas linhas
+  1296/1360/1393.
+
+### 🟡 BLOCO 3 — O QUE FALHA SOZINHO TODO DIA (infra)
+
+- **`api/cnj-monitor-cron.js`** — `runtime: 'edge'` estoura os **25 s TODO DIA** (7 em 7
+  dias). O monitor do CNJ **não roda de fato** e o cron "executa". Fix: Node com
+  `maxDuration`, ou responder cedo e trabalhar depois (como o motor de análise).
+- **`qa_invariantes_lenta` = 9999** — a rodada de 02/09 15:02 **falhou** (8.176 ms, statement
+  timeout) e `ms_servidor` é nulo nas 8 execuções: **nenhuma rodada boa desde o `bf92b5d`**.
+  A de hoje 15h UTC é a primeira prova real.
+- **`financeiro-extrato`** — 2 erros/dia desde 08/08: Asaas `insufficient_permission` em
+  `/transfers` e MP `/balance` 403. Ou troca a chave, ou para de chamar o que ela não pode.
+- **Leaflet** — `_leaflet_pos`/`classList` em `/imovel/:id` e `/planos`: 4 ocorrências em 5
+  dias. Mapa desmontado durante a animação de zoom; falta `map.remove()` no cleanup.
+- **Bright Data** — subcota `geral` **100/100 esgotada na quarta** (`api/enriquecer-lote.js`
+  come tudo) e `enriquecer-datas-cron` para *"sem carimbar os restantes"* todo dia desde 23/08.
+
+### 🟢 BLOCO 4 — CAPTURA E DADO
+
+- **6 fontes suspeitas:** SBID21 `zerou` (**é zero real** — a API devolveu 0 abertos; a régua
+  é que precisa distinguir "vazio" de "falhou"), LEILOFY `regressao` real, e EMILIOMATOS ·
+  NORDESTE · ALFA · LEFFA em `medicao_velha`.
+- **`praca_fim_antes_do_inicio` = 2** e **`data_edital_recuou_prazo` = 2** — subiram hoje;
+  conferir se são as linhas que mexi (ZUK/MEGA) ou casos novos. A guarda só vale quando
+  `data_leilao_2` existe; ZUK grava só a praça vigente.
+- **858 lotes ZUK inativos com praça FUTURA** (1.759 em todas as fontes em 7 dias), com
+  `leilao_ja_encerrado()` = false e `suprimido_motivo` nulo. Hoje o banco **não distingue**
+  "saiu da listagem do leiloeiro" de "desativado por falha de coleta".
+- **16 anomalias de relatório abertas**, 2 delas `pagamento_contradiz_documento` de 15 e 17/08.
+- **2 relatórios com número errado no acervo corrigido** (ZUK Z37106 e MEGA J126875) —
+  **decisão do dono**: regenerar sem cobrar cota, ou deixar.
+
+### 🔵 BLOCO 5 — PRECISA DE VOCÊ (não tem código)
+
+1. **Google Cloud** — faturamento `0134FB-CA5299-81DA09` vencido, projeto sob risco de
+   suspensão (pode derrubar geocode e a ingestão de marketing).
+2. **Google Workspace** — pagamento recusado; é a caixa que recebe os alertas do sistema.
+3. **Mercado Pago** — chave Pix excluída (prazo de validação venceu).
+4. **`ADMIN_EMAIL` na Vercel** + **nomear um analista** — abertos desde 15/08.
+5. **4 pagantes sem UM relatório em 14 dias** — churn em formação.
+6. **Instagram** — a escuta segue dormente (0 entrega real). Item 1: desligar/religar a
+   assinatura da conta e ler a resposta de `POST /{ig-user-id}/subscribed_apps`.
+
+### ⚪ BLOCO 6 — O BUG BOUNTY QUE NÃO RODOU INTEIRO
+
+**11 das 14 lentes ficaram de fora** (teto de uso da conta): pré-login · telas do produto ·
+telas de dinheiro · admin/equipe · geradores · dinheiro em `api/` · crons · deriva de schema
+· 3 lentes ofensivas de segurança. Script pronto em `docs/WORKFLOW_BUG_BOUNTY_ABERTURA.md`
+(rodar **1 workflow por vez**, 3–4 lentes). Com isso, **o item 4 do ritual — a ofensiva de
+segurança — segue em aberto** nesta abertura.
+
+**Dívida menor, registrada para não virar surpresa:** `cursos_admin`/`ebooks_admin` não têm
+coluna `preco_vista` (o campo em R$ da tela vira % na gravação, com erro de centavos); e o
+anexo `tipo='proposta'` do ZUK é link de navegação capturado como documento.
+
+---
+
+## 🚦 COMECE POR AQUI — estado em 02/09 12h30 UTC (sessão 19, abertura com Fable 5.1 + ultracode)
+
+> `main` = **`da042fa`**, em produção (deploy READY 00:58 UTC). Heartbeat às **12:17 UTC**.
+> Segurança **0/0** · regras de negócio **0 crítico** · KYC 0 · 0 chamado de cliente sem
+> resposta · 0 fonte no ponto cego · backup ok (66 arquivos, 16 novos, 50 iguais) · CI
+> verde (`Padrões perigosos` e `Deriva código × banco` no `7b2bad4`, 23:54 UTC) · os 30
+> últimos runs de scraper/captura no GitHub: todos `success`.
+> **O "deploy falho" das 19:02 UTC de 01/09** (e-mail da Vercel, `f7e473d`) foi *"An
+> unexpected error occurred when running this build"* DEPOIS de `Build Completed` — erro
+> transitório da Vercel, não do código; o deploy seguinte (19:04, `7dbd24d`) saiu READY.
+
+### 🔴 O QUE PRECISA DE VOCÊ HOJE — a aula é às 22:00 UTC (19h BRT)
+
+1. **25 de 93 exploradores ativos NUNCA receberam o convite** (`emails_log.tipo =
+   'convite_live'`: 76 enviados). O cron das **11h UTC já passou** com
+   `convite_live_armado` **vazio**, e a próxima rodada é 03/09 — depois da aula. **O único
+   caminho hoje é o botão "Convidar a base por e-mail" no `/admin`.** (Rearmar por SQL agora
+   não envia nada hoje.)
+2. **WhatsApp saiu do zero:** 24 disparos em 01/09 (`whatsapp_disparo_log`). Faltam os que
+   não abriram e-mail — a fila em `/admin/whatsapp` continua sendo 1 clique por pessoa.
+3. **Inscritos: 4** (último em 30/08). Lembrete `vespera` **saiu para os 4** (`live_lembretes`
+   = 4 · `emails_log` `live_lembrete_vespera` = 4). Reforços já enviados: 52 `assunto` + 23
+   `prova`. `live_proxima('leilao-ao-vivo')` devolve o evento de 02/09 22:00 UTC — LP sã.
+4. **Meta:** `BR - ABERTO - AULA 02SET` segue pausado (Meta 02/09 até 12h: R$ 0,39 · 7
+   cliques). Google 01/09: R$ 25,99 · 197 cliques · **4 conversões**; Meta 01/09: R$ 37,04 ·
+   528 cliques · 0 conversões.
+
+### 💳 E-MAILS DOS 7 DIAS QUE PEDEM AÇÃO (Gmail lido por inteiro, 3 páginas)
+
+| Quem | O quê | Por que importa |
+|---|---|---|
+| **Google Cloud** (01 e 02/09) | conta de faturamento `0134FB-CA5299-81DA09` vencida/pagamento inválido; "My First Project" **corre risco de suspensão**; "alguns serviços já podem estar afetados" | se é o projeto da chave de **Geocoding** (`uso_integracoes.provedor='google_geocode'`) ou do **OAuth/Ads** (`GOOGLE_OAUTH_*`, `GOOGLE_ADS_*`), a suspensão derruba geocode e a ingestão de marketing. **Conferir em console.cloud.google.com/billing.** |
+| **Google Workspace** (01/09) | pagamento de `reimob.com.br` **recusado** (Mastercard •9666, "saldo insuficiente"); "serviço continuará disponível por um breve período" | é a caixa do dono: alertas do BidPro continuam saindo, mas ninguém os lê |
+| **Mercado Pago** (01/09) | chave Pix `+55 71 99650-2234` **excluída** (reivindicação venceu em 14 dias) | se era a chave de recebimento da conta MP do BidPro, cadastrar outra |
+| **Meta for Developers** (02/09 00:16 UTC) | app `BidPro - Atendimento` mudou para **modo publicado** | `ig_webhook_recebido` tem **2 linhas e as DUAS são o teste do console** (sender `12334`, `random_mid`) — DM/comentário real ainda não chega; continua o item 1 da lista do Instagram |
+| **Cajado de Menezes Advogados** (31/08) | as **duas análises jurídicas** dos imóveis de Guarulhos chegaram (threads "Avaliação de imóvel em leilão" 1 e 2; leilões 01/09 e 08/09) | insumo do caso do dono |
+| **Cartórios de Protesto / cenprot** (28/08 ×2, 01/09 ×2) | "Quite sua pendência" | conferir se há protesto real no CNPJ/CPF, ou se é golpe por e-mail |
+| **Rotina Claude — bug bounty mensal** (01/09) | rodou **headless sem Supabase e sem rede**: não mediu nada; diff do comentário do BIASI não pôde ser pushado (403); `BASELINE_CAPTURA_LEILOEIROS.md` parado em 18/07 | a rotina precisa de conector Supabase + rede liberada, senão só relê histórico |
+| **Rotina Claude — QA semanal** (31/08) | 7 P0 propostos (cache reaproveitado com `valorMercado` nulo cobrado; erro do Supabase na busca sem raio virando "Nenhum resultado"; saque PATCH sem conferir linhas; etc.) | a sessão 16 corrigiu "12 bugs do QA"; reconferidos um a um pelo bug bounty desta sessão (abaixo) |
+| **Rotina Claude — pendências do dono** (31/08) | `ADMIN_EMAIL` na Vercel · nomear analista | seguem abertas |
+| **OpenAI Ads** (29/08) | conta de anunciante **não aprovada** | decisão de canal |
+| **Search Console** (30/08) | `cisioaraujo@gmail.com` adicionado como proprietário de `bidprobrasil.com.br` | confirmar que foi você (mapa de contas do Google, 30/08) |
+
+### 📋 O RITUAL — números de 02/09 12h UTC (tudo medido, nada estimado)
+
+- **erros_cliente (14 d, não resolvidos): 2.** Leaflet `e._leaflet_pos` em `/imovel/:id` ×2
+  (01/09 14:29, iPhone) — mesma família de `/planos` 28/08 e `classList` 30/08: **mapa
+  desmontado no meio da animação de zoom** (4 ocorrências em 5 dias, 3 rotas). E
+  `vite:preloadError PRESO` na home 31/08 21:59 (chunk antigo após deploy; o anti-loop
+  segurou, como devia).
+- **relatorio_anomalias: 11** não resolvidas — 5 `relatorio_incoerente` (2 `sem_parecer`,
+  1 `sem_valor_mercado`, 2 `pagamento_contradiz_documento` de 15 e 17/08 ainda abertas),
+  3 `avaliacao_ausente`, 1 `avaliacao_incoerente` (LJUD, 46×), 1 `mercado_area_incoerente`
+  (WEBLEILOES), 1 `valor_praca_incoerente` (MEGA).
+- **Cliente 360:** `clientes_com_erro` **1** · `relatorios_falha_24h` **0** (7 d: 4) ·
+  `erros_invisiveis_24h` 0 (7 d: 1 — `gerar-analise` 01/09 10:26, *"This operation was
+  aborted"* na redação do parecer do imóvel `adcdc801`, que também tomou 502 em
+  `/api/proximidades-imovel` três vezes) · `sem_perfil` 38/99 · **pagante sem entrega: os
+  mesmos 4 de 6** de ontem. Relatórios: mercado 67 · documental 18 · laudo 3. Funil 7 d:
+  8.840 pageviews · 2.250 visitantes · `/live/leilao-ao-vivo` 764 pv / 556 visitantes.
+- **Marketing 14 d:** 2.670 cliques pagos · 1.329 visitas com `gclid` (**50 %**) · 2.285 com
+  `utm_term` · 2.731 visitas. Cadastros 30 d: **45 sem origem** · 24 google · 3 meta ·
+  1 instagram · 1 chatgpt.com. Ingestão em dia (02/09 já tem linha parcial dos dois canais).
+- **Health-check 06:03 UTC:** 0 erros, 3 avisos (as 11 anomalias; o Leaflet ×2; 1 relatório
+  sem parecer em 24 h).
+- **`qa_invariantes()`: 6 em alerta.** `cadastro_duplicado` 1 · **`cadastro_sem_origem` 3**
+  (a tabela "se provam sozinhas" dizia que zeraria em 02/09 — **não zerou**: são 3 cadastros
+  dos últimos 7 dias sem origem nenhuma) · `erro_na_tela_do_cliente` 2 (LP da aula,
+  *"Não conseguimos carregar esta página"*, 01/09 01:46 e 08:22 UTC — o ramo de RPC com
+  erro, o que o teste `testar:landing-aula` chama de diagnóstico oposto ao de "inscrições
+  fechadas") · **`qa_invariantes_lenta` 9999** (a rodada de 01/09 15:00 **FALHOU**: 8.202 ms,
+  *canceling statement due to statement timeout*; `ms_servidor` é nulo nas 8 linhas de
+  `qa_invariantes_execucao` — **nenhuma rodada bem-sucedida depois do `bf92b5d`**, a de hoje
+  15h UTC é a primeira prova) · `lote_sem_area_nem_matricula` **401/400** (BIASI 164,
+  SUPERBID 70, RJLEILOES 40) · `praca_fim_antes_do_inicio` 1 (ZUK `zuk_37078-231202`:
+  `praca1_fim` 31/08 13:10 < `data_leilao` 21/09 — é o caso "campo avançou para a praça
+  vigente" que a guarda só cobre quando `data_leilao_2` existe; aqui `data_leilao_2` é nulo.
+  **Falso positivo da régua, não do dado** — a 1ª praça já encerrou e o scraper avançou.)
+- **`tempo_processo()`:** 7 chamados fechados sem resposta humana (pior 9,2 d) · 5 casos em
+  `analise_solicitada` há **40,8 d** (mediana) · 2 em `arrematado` há 46 d.
+- **`documental_distribuicao()`:** AMOSTRA INSUFICIENTE (1 pós-regra · 17 legado) — igual.
+- **`fonte_regressao_suspeita()`: 6 linhas.** **SBID21 `zerou`** (0 vs piso 18, `status =
+  falhou`, 01/09 14:53 — é o achado mais duro) · **LEILOFY `regressao`** (18 vs piso 37,
+  `faltando` 16, cinco medições seguidas em 15→18: não é praça esvaziando) · EMILIOMATOS
+  `medicao_velha` **311 h** (última medição real 20/08; 26 e 29/08 foram `sem_cota`) ·
+  NORDESTE 287 h · ALFA 287 h · LEFFA 136 h.
+- **Bright Data, semana de 31/08 (3º dia): 185 requests.** `geral` **100/100 — subcota
+  ESGOTADA na quarta-feira** (`brightdata_decisao` → `permitido: false`; consumidor:
+  `api/enriquecer-lote.js`); `docs` 55/150 · `vlance` 26/60 · `certidao` 4/120; `sucessos +
+  falhas_rede ≈ requests` em todos. `enriquecer-datas-cron`: *"sem cota — run interrompido
+  sem carimbar os restantes"* **11× desde 23/08** (é o freio funcionando, mas todo dia).
+- **Inventário documental:** GESTAOLEILOES **0 %** (104 lotes), SBID9 0 % (33), VLANCE 0 %
+  (22), FERREIRALEIL 8 % (39), SUPERBID 78 % (1.336). Resto ≥ 94 %.
+- **Vercel runtime, 7 dias (22 grupos):** **`cnj-monitor-cron` para em 25 s TODO DIA**
+  (10:01 UTC, `runtime: edge`, *"did not return an initial response within 25s"* — 7 em 7
+  dias: o monitor do CNJ **não roda de fato**, e ninguém vê porque o cron "executa") ·
+  `financeiro-extrato` diário 08:25: Asaas **403 `insufficient_permission`** em `/transfers`
+  e MP `/balance` 403 (chave sem permissão de saque; já registrado em 13/08, HANDOFF
+  l. 13092 — segue gerando 2 erros por dia) · `processar-analise-jobs-cron` **timeout 300 s**
+  (01/09 19:01) e 2 jobs *"resposta sem JSON utilizável"* (30/08) · `limpar-fotos-orfas-cron`
+  RPC statement timeout (31/08) · `live_plataforma_numeros` statement timeout visto por um
+  cliente (28/08) · 3 erros do navegador embutido do Facebook (`Java object is gone`) — ruído
+  do IAB, não nosso.
+- **Supabase advisors (lidos por inteiro):** segurança **224** — 91 funções SECURITY
+  DEFINER executáveis por `authenticated`, **26 por `anon`**, 15 com `search_path` mutável
+  (`preservar_area_e_avaliacao`, `imovel_barrar_fracao_ideal`…), 2 extensões em `public`
+  (`cube`, `earthdistance`), 90 tabelas com RLS sem política (quase todas `_bkp_*`).
+  Performance **569** — **490 `multiple_permissive_policies`**, 3 `auth_rls_initplan`
+  (`onr_protocolos`, `live_inscricoes`, `analise_jobs`), 54 índices nunca usados, 15 FKs sem
+  índice. ⚠️ `auditoria_seguranca()` dá 0/0 porque as 26 definer-anon estão na **allowlist**
+  — vale reler a lista uma vez, não confiar no zero.
+
+### 🔎 SBID21 "zerou" — medido no log do scraper e no banco: **zero REAL, e o piso é de julho**
+
+Log do run `33520744159` (01/09 14:53 UTC): *"Rede Superbid — API offers (portal [21], somente
+abertos)… 0 offers abertas coletadas"* → a API **respondeu** (não é 403/timeout), respondeu
+zero. No banco, `fonte = 'SBID21'` tem **39 linhas na vida toda**: 37 de julho (praças 15–31/07)
+e 2 de 31/08 (praça 31/08) — todas inativas porque a praça passou. O "caiu de 36 para 0" do
+alerta compara com os 36 *offers* do run de 31/08, dos quais só 2 viraram linha SBID21 (o resto
+é dedup com o portal principal, `storeAsLeiloeiro`). **Parser intacto; não consertar.** O que
+está errado é a régua: (a) o scraper carimba `falhou` quando a API responde 0 (`0 < 5`) —
+deveria ser `vazio`; (b) o piso aprendido (18) vem das 34 amostras de julho, quando o sub-portal
+tinha leilão. Mesma assinatura do LEILOFY de 25/08 e da HASTA de 29/08 (forma nº 10, 5ª vez).
+
+⚠️ **Recon vivo NÃO roda desta sessão**: egress para `leilofy.com.br` e `superbid.net` devolve
+`000` (bloqueado). LEILOFY (18 vs piso 37, praças de 02/09 a 05/10 — não é praça esvaziando)
+fica para uma sessão com rede ou para a Rotina mensal com Bright Data.
+
+### 📈 ESCALA (item 5 do ritual) — o que o rastro desta manhã diz
+
+Sinais de teto de banco, todos em 7 dias: `qa_invariantes_medido` **8,2 s → statement
+timeout** (01/09); `live_plataforma_numeros` timeout visto por cliente (28/08);
+`limpar_fotos_orfas` RPC timeout (31/08); `processar-analise-jobs-cron` **300 s**;
+`cnj-monitor-cron` 25 s (edge) todo dia. Pendências já registradas e ainda abertas:
+**490 `multiple_permissive_policies`** (deferido, precisa de passe com teste de RLS por
+papel), Auth com 10 conexões absolutas (resolve ao subir o compute), Upstash para rate limit
+global. Nada disso bloqueia hoje (99 clientes); tudo isso bloqueia a 10 mil.
+
+### 🧪 BUG BOUNTY DO CÓDIGO (item 6) + OFENSIVA DE SEGURANÇA (item 4) — **NÃO RODOU**
+
+Montei a varredura como 14 caçadores (pré-login · telas do produto · telas de dinheiro ·
+admin/equipe · geradores · dinheiro em `api/` · crons · mudanças desde 26/08 · contrato
+JS×RPC · deriva código×banco · 3 lentes ofensivas · reconferência dos 7 P0 do QA de 31/08),
+cada achado passando por um cético com 3 lentes (código · histórico · impacto), todos com
+acesso read-only ao banco. Numa máquina de 4 CPUs o orquestrador só roda 2 agentes por
+workflow, então dividi em 4 workflows paralelos (8 agentes). **Os 14 caçadores morreram
+todos no mesmo instante, com a mesma mensagem: `You've hit your session limit · resets
+5:10pm (UTC)`** — ~2,1 milhões de tokens de subagentes consumidos sem nenhum achado gravado
+(nenhum chegou a devolver JSON). Não é defeito do código nem da base: é o teto de uso da
+conta, e 14 agentes de leitura profunda em paralelo o esgotam em ~6 minutos.
+
+**Para não refazer:** o script está em `docs/WORKFLOW_BUG_BOUNTY_ABERTURA.md` (com os `args`
+de cada um dos 4 workflows). Rodar **depois das 17:10 UTC**, de preferência 1 workflow por
+vez (3–4 lentes), para não bater no teto de novo. Sem ele, os itens 4 e 6 do ritual ficam
+**em aberto nesta abertura** — e os 7 P0 do QA de 31/08 seguem sem reconferência
+independente (a sessão 16 diz ter corrigido 12; ninguém mediu de fora).
+
+### 🎯 PRÓXIMA SESSÃO — o que fazer, em ordem
+
+1. **DONO, HOJE:** botão "Convidar a base por e-mail" no `/admin` (25 exploradores sem convite);
+   `console.cloud.google.com/billing` (conta `0134FB-CA5299-81DA09` vencida); pagamento do
+   Google Workspace; chave Pix do Mercado Pago; `ADMIN_EMAIL` na Vercel; nomear analista.
+2. **Depois das 17:10 UTC:** rodar o bug bounty (script acima), 1 workflow por vez.
+3. **Consertos de código com evidência já medida (fazer com Opus):**
+   - `api/cnj-monitor-cron.js`: `runtime: 'edge'` para em 25 s **todo dia** — o monitor do
+     CNJ não completa desde pelo menos 27/08. Migrar para Node com `maxDuration` ou responder
+     cedo e trabalhar depois (mesma separação do motor de análise).
+   - Régua de captura: API que **responde zero** (`0 offers abertas`) tem que sair `vazio`,
+     não `falhou`; e `fonte_baseline_aprendida()` de sub-portal que teve leilão em julho e
+     nada desde então não pode virar piso perpétuo (SBID21).
+   - `praca_fim_antes_do_inicio`: a guarda de "campo avançou para a praça vigente" só vale
+     com `data_leilao_2` preenchido; ZUK grava só a vigente (`data_leilao_2` nulo) e cai no
+     falso positivo. Estender a guarda para `praca1_fim < now()`.
+   - Leaflet: 4 erros em 5 dias (`_leaflet_pos`/`classList` em `/imovel/:id` e `/planos`) —
+     mapa desmontado durante `_onZoomTransitionEnd`; `map.remove()` no cleanup antes de o
+     componente sair.
+   - `qa_invariantes_lenta`: se a rodada de hoje 15h UTC gravar `ms_servidor`, ler o número;
+     se vier nulo de novo ou timeout, o painel (não a rede) passou de 8 s e precisa de
+     `statement_timeout` próprio ou de dividir a função.
+   - Bright Data `geral` 100/100 na quarta: `api/enriquecer-lote.js` come a subcota inteira
+     em 3 dias, e `enriquecer-datas-cron` para "sem carimbar os restantes" todo dia desde
+     23/08 — decidir teto ou prioridade, não deixar o freio virar rotina.
+   - `financeiro-extrato`: 2 erros 403/dia (Asaas sem permissão de saque · MP balance) desde
+     08/08 — ou trocar a chave, ou parar de chamar o que a chave não pode.
+4. **Fatos do mundo que pedem gente, não código:** 4 pagantes sem relatório em 14 dias ·
+   5 casos parados 40 dias em `analise_solicitada` · 3 cadastros de 7 dias sem origem ·
+   7 chamados fechados sem resposta humana.
+
+### 🛠️ 02/09, 17h UTC — DOIS PEDIDOS DO DONO, MEDIDOS E CONSERTADOS NESTA BRANCH
+
+**(1) O botão "Analisar" do card da busca SAIU.** `src/pages/Busca.jsx` mandava direto para
+`/caso` com o lote no `state`, sem o cliente ter aberto a página do imóvel — e dava erro (o
+rastro do `/caso` em `eventos_atividade` é *"new row violates row-level security policy for
+table analise_jobs"*, 23–25/08). Decisão do dono: o card leva **só** para a página do imóvel
+("Ver o imóvel →", agora o único botão), e a análise é pedida de lá. Saiu também o "Analisar
+selecionado" da barra de controles e a função `irParaAnalise`. `npm run build` ✓.
+
+**(2) ZUK Z37106 (Rua Paula Ney, 690 — `7a021348…`): área errada E sem matrícula.**
+- **Área:** o site mostra *Metragem total 124,04 m²* e *Metragem **privativa** 54,55 m²*. O
+  regex do scraper (`scripts/scraper-puppeteer.mjs`, re-visita "PortalZuk datas") só aceitava
+  "metragem **útil**" → caía na TOTAL. O mercadológico do cliente saiu com **R$ 12.718/m² ×
+  124,04 m² = R$ 1.577.563** (o correto, sobre 54,55 m², é ~R$ 694 mil — **2,3×**), e o
+  próprio relatório avisa "não confirmada na matrícula", porque não há matrícula. Conserto:
+  regex aceita `privativa`, e a privativa **sobrescreve** a área já gravada (o `!im.area_m2`
+  deixaria os 480 lotes ZUK errados para sempre — todos entraram com a total). O lote foi
+  corrigido no banco agora (`area_m2 = 54.55`); os outros se corrigem na re-visita diária.
+  ⚠️ **O relatório de mercado desse cliente continua com o número errado até ser
+  regenerado** — decisão do dono (regerar sem cobrar cota).
+- **Matrícula:** ZUK **tem** o PDF ("Matrícula do imóvel", login-gated). O lote tinha
+  `matricula_checada_em = NULL` — **nunca entrou na fila**. Medido no log do run
+  `33655809471` (16:35 UTC): `ZUK_MATRICULA_LOTE: 20`, **20 salvas · 0 sem · 0 erro** —
+  acerto de 100 %, mas 20 × 4 rodadas = **80/dia**, e entre os nunca-checados a ordem era a
+  do `id`. Fila: 480 ativos · 291 com matrícula · 189 sem (109 checados sem doc, **80 nunca
+  checados**). Conserto: teto **60** por rodada (`.github/workflows/matricula-zuk.yml`, ~4,5 s
+  por lote) e **praça mais próxima primeiro** entre os nunca-checados
+  (`scripts/captura-matricula-zuk.mjs`). O Z37106 (praça 16/09) entra na rodada das
+  **22:15 UTC** de hoje — depois de `main` receber este commit.
+- **Sujeira que apareceu de passagem:** o lote tem um anexo `tipo = proposta` chamado
+  *"Imóveis Recebendo Proposta…"* apontando para `…/recebendo-proposta?order=l` — link de
+  navegação do site capturado como documento pela captura genérica. Não bloqueia nada, mas
+  aparece como "documento do leiloeiro" na tela. Fica para a próxima.
+
+### 🧨 02/09, 18h UTC — MEGA J126875 (`46cff9af…`): o EDITAL DESATUALIZADO venceu o SITE VIVO
+
+O dono mandou o print: o site da Mega diz **1ª praça 20/08 (encerrada) por R$ 265.984,50 ·
+2ª praça 10/09 por R$ 159.590,70**; o BidPro dizia *"1ª praça R$ 159.590,70 a partir de
+17/08"*, *"2ª praça R$ 137.000 · 20/08"*, e o relatório do cliente (28/08) projetou ROE de
+160 % sobre um lance de R$ 137.000 **que não existe**. Rastro no banco: às 18:02 UTC de hoje
+`relatorio_anomalias` gravou *"Acervo dizia 2026-09-10T14:30; edital diz 2026-08-17 —
+corrigido pelo documento"*. O scraper estava certo. Duas regras de `api/gerar-analise.js`
+erraram no mesmo lote:
+
+1. **Valores.** O PDF do edital é de 16/07 e avalia em **R$ 228.333,33** (60 % = R$ 137.000).
+   O leiloeiro já publica a avaliação **atualizada pela tabela do TJ** (R$ 265.984,50 → 2ª
+   praça R$ 159.590,70). A trava de 28/08 só barrava *2ª praça acima da avaliação*; 137.000 <
+   265.984 passou, preencheu `valor_minimo_2` (vazio, porque a 1ª praça já tinha encerrado no
+   card), virou `valor_minimo_ref` (coluna gerada, `LEAST`) e foi manchete, filtro, alerta e
+   relatório. **Régua nova:** se a avaliação (ou 1ª praça) declarada no edital diverge da do
+   leiloeiro em mais de 2 %, os VALORES do edital são de outra base (desatualizado ou de
+   outro lote) e não gravam; a anomalia diz isso por extenso.
+2. **Datas.** O "recuo sem prova" de 28/08 só segurava quando o edital NÃO declarava
+   encerramento. Aqui declarava (*"1ª praça de 17/08 a 20/08"*), então a data de INÍCIO
+   já passada (17/08) sobrescreveu a praça VIGENTE do site (2ª, encerra 10/09). **Régua
+   nova:** data de início já passada nunca corrige uma data futura que o leiloeiro publica
+   agora — documento é estático, site é vivo. Ville de Lyon (23/08) segue coberto: a praça
+   única de 25/08 ainda estava no futuro quando corrigiu.
+
+**Lote corrigido no banco** (`data_leilao` 10/09 14:30, `valor_minimo_2`/`data_leilao_2`
+nulos → `valor_minimo_ref` = 159.590,70; `praca1_fim` 20/08 e `praca2_fim` 10/09 já estavam
+certos). ⚠️ **O relatório do cliente (`92c713f3…`, 28/08) continua com R$ 137.000 até ser
+regenerado** — mesma decisão do ZUK acima. Raio da explosão medido: `data_divergente_edital`
+em 7 dias = MEGA 4 · WEBLEILOES 1 · ZUK 1 (o ZUK foi MANTIDO); `valor_minimo_2 < valor_minimo`
+com 2ª praça passada = **só este lote**.
+
+**Questão de semântica que fica para o dono:** `data_leilao_2` recebe o INÍCIO da 2ª praça
+(decisão de 28/08) e a tela imprime *"2ª praça · 20/08"* como se fosse a data do lance; o
+que o cliente precisa é o **encerramento** (`praca2_fim`, 10/09). Ou a tela passa a mostrar
+`praca2_fim` quando existe, ou a coluna muda de significado — não os dois ao mesmo tempo.
+
+### 🧪 BUG BOUNTY — RODADA 1 (3 lentes · 15 achados · 11 confirmados por revisor cético)
+
+Lentes: `mudancas-recentes` · `rpc-contrato` · `qa-p0-recheck`. Cada achado passou por UM
+revisor cético com 3 lentes (código · histórico · impacto), com acesso read-only ao banco.
+As outras 11 lentes **não rodaram**: o teto de uso da conta bateu de novo no fim da rodada
+(reset **22:10 UTC**). Nada abaixo foi corrigido ainda — é a fila da próxima sessão.
+
+| Sev | Onde | O quê (confirmado) |
+|---|---|---|
+| **P1** | `api/enviar-alertas-cron.js:745` | Linhas de `buscar_por_raio_v2` entram no pool **sem** `valor_minimo_ref`/`praca1_fim`/`praca2_fim`/`data_fim`/`data_leilao_2` (a RPC não devolve). O e-mail de alerta mostra a praça cara e `encerradoPorDatas` descarta lote em 2ª praça. Fix: estender o RETURNS TABLE da RPC (migração + aplicar) e projetar as colunas. |
+| **P1** | `api/live-inscrever.js:97` | Confirmação lê `eventos_live.data_hora` CRU; entre o fim da aula e `oferta_fecha_em` (03/09 00:00 → 06/09 03:00 UTC) o e-mail "Sua vaga está garantida" sai com a data **passada** enquanto a LP vende 09/09. `admin-whatsapp-fila.js:199` idem ("nenhuma aula futura"). Fix: ler por `live_proxima(slug)` como já fazem `_convite-live.js` e `live-criar-sala.js`. |
+| **P1** | `api/convidar-live-cron.js:56` | O cron se DESARMA após o 1º envio e responde `ok:true, motivo:'não armado'` para sempre — o cabeçalho de `live-reforco-cron.js` diz que o agendamento diário resolveu o buraco, e não resolveu (é o que deixou 25 exploradores sem convite hoje). Fix: manter armado até a edição passar. |
+| **P1** | `api/_convite-live.js:167` | Evento semanal reusa o `evento_id`: quem se inscreveu na edição N fica **em silêncio total** na N+1 (nem convite, reforço, WhatsApp ou lembrete — todos filtram por `evento_id` só; o UNIQUE de `live_lembretes` também não tem edição). Fix: coluna `edicao` em `live_inscricoes` e `live_lembretes`. |
+| P2 | `api/gerar-documental.js:2137` | No ramo `persistidoNestaRodada` (laudo salvo, pós-salvamento estourou) ainda **estorna a cota**, loga `relatorio_documental_erro` e responde 504/500: relatório entregue de graça e contado como falha. Fix: evento próprio, sem estorno, 200 com aviso. |
+| P2 | `src/pages/ConviteEquipe.jsx:626` | `salvar_kyc_equipe` devolve **boolean**; a tela testa `rKyc?.ok === false` → `false` nunca dispara o aviso. Atenuante medido: anon não tem EXECUTE, então o fluxo sem sessão nem chega lá. |
+| P2 | `api/instagram-webhook.js:294` | Janela de 24 h contada de `now()` do servidor, não do carimbo da Meta; reentrega reabre a janela (upsert de `ig_conversas` antes do insert com ignore-duplicates). |
+| P2 | `api/instagram-webhook.js:290` | Upsert manda `username: null` em toda DM e apaga o username aprendido no comentário (merge-duplicates). Fix: só incluir a chave quando houver valor. |
+| P2 | `api/admin-ig-caixa.js:205` | Desfecho marca `respondida` só no `mid` do rascunho; as DMs anteriores da mesma pessoa voltam à fila e viram rascunhos novos. |
+| P2 | `api/instagram-responder-cron.js:65` | Fila lida com `limit 50` e filtrada em JS por "já tem rascunho": 50 vencidos sem baixa travam a entrada de mensagens novas. Latente (escuta dormente). |
+| P2 | `api/live-reforco-cron.js:157` | Assunto do reforço infere o DIA da semana a partir da HORA (`'19:00'` → "quarta"). Latente enquanto só houver aula de quarta. |
+
+**Refutado (1):** `instagram-webhook.js:270` — o payload do botão Testar da Meta vem em
+`changes[].field='messages'` e é descartado de propósito (HANDOFF de 02/09); "consertar"
+gravaria um usuário falso `12334` no corpus. **Sem veredito (2, limite de sessão):**
+`src/pages/Busca.jsx:1217` (busca por raio sem o guard `atual()` no `!resp.ok` e no
+`setTotalResultados` — o próprio arquivo já usa o idioma nas linhas 1296/1360/1393) e
+`api/certidoes.js:165` (404 da PGFN/FGTS vira "sem débitos" e o parecer verde cita FGTS sem
+consulta — irmão do P0 (7) de 31/08, endpoint só de admin). Os dois valem 10 minutos cada.
+
+**Reconferência dos 7 P0 do QA de 31/08:** 5 dos 7 não aparecem mais no código; sobraram o
+`gerar-documental.js:2137` (o conserto de 31/08 preservou o laudo mas manteve o estorno) e o
+`certidoes.js:165` (arquivo irmão que o conserto não tocou).
+
+### 🧾 02/09, 23h UTC — A TELA DE PRODUTOS DO /admin: 4 PEDIDOS DO DONO, TODOS MEDIDOS
+
+**1. O eBOOK NUNCA SALVOU — e a tela dizia "Tudo salvo".** `ebooks_admin` **não tinha a
+coluna `desconto_vista_pct`** (as irmãs `planos_config` e `cursos_admin` têm). O
+`salvarTudo` manda o mesmo payload para as três, o PostgREST devolvia **400** e o código
+descartava o `error` do postgrest-js — que não lança em não-2xx. O `dirtyIds` era limpo para
+todos e o banner verde aparecia. **A prova estava no nosso próprio rastro**: `erros_cliente`,
+rota `/admin`, 02/09 **16:23 UTC**, *"Could not find the 'desconto_vista_pct' column of
+'ebooks_admin' in the schema cache"* — **1 minuto antes** do `atualizado_em` do plano que
+salvou no mesmo clique. Forma **#7** (migração que nunca chegou ao banco) dentro da forma
+**#2** (erro engolido).
+- Migração `ebooks_admin_desconto_vista_pct.sql` — **aplicada e no repo**.
+- `salvarTudo` reescrito: cada linha responde por si, `.select()` prova o que mudou (RLS que
+  filtra tudo devolve `error` nulo e zero linhas — forma **#3**), **só sai do amarelo o que o
+  banco confirmou**, e o que falhou aparece com nome e motivo numa faixa vermelha.
+
+**2. O preço do plano não chegava na tela de Planos.** `Planos.jsx` buscava o `planos_config`
+**uma vez, no mount** (`deps []`). Quem deixa a página aberta numa aba, muda o preço no admin
+em outra e volta, **não remonta nada**: a tela segue com o valor da primeira leitura, sem erro
+e sem sinal — só F5 resolvia. O `PlanosContext` já resolve isso (re-busca por rota e por
+`visibilitychange`, e o admin invalida o cache ao salvar), mas a tela não o usava. Agora usa,
+com o fetch local como rede para o primeiro paint.
+
+**3. Coluna CONTRATO fora da tabela de Produtos** (decisão do dono: os termos de aceite já
+cobrem). Saiu junto o `ContratoModal` desta tela — **262 linhas que já estavam mortas**, nada
+chamava `setContratoAberto` desde que a criação passou para a tela de Contratos, que segue
+intacta e é o lugar de criar, atribuir e assinar.
+
+**4. As taxas de gateway deixaram de ser digitadas — e a que estava lá era 0%.**
+`config_financeira.taxa_credito_pct` era um número datilografado no /admin que a tela de
+Comissões usava como fato. Medido hoje: **`mp` = 0,000%** (o gateway PRINCIPAL, o único com
+venda) e `asaas` = 2,490% (o que não tem venda nenhuma). Ou seja, a comissão líquida vinha
+calculada **sem custo de gateway**, e ninguém via.
+- A taxa real **sempre esteve no banco**: `mp_pagamentos.dados_mp->fee_details`, por pagamento.
+- Nova RPC `admin_taxas_gateway(p_dias)` (migração no repo, `SECURITY DEFINER` + `eh_admin()`,
+  `anon` sem execute). Medido em 365 dias: **2,4850%** — R$ 7,44 sobre R$ 299,40, em **6 de 7**
+  pagamentos aprovados.
+- **Três cuidados que um `sum(fee)/sum(valor)` não teria:** só `fee_payer='collector'` é custo
+  nosso (a do `payer`, tipo IOF, é do cliente); `origem='terceiro'` são despesas do cartão do
+  dono na mesma conta MP e não são venda; e o **denominador** é só o bruto **medido** — incluir
+  o pagamento sem `fee_details` daria um percentual menor com cara de medição (forma **#10**).
+  Por isso `sem_detalhe` aparece na tela: é o pedaço sobre o qual o número **não** fala.
+- `/admin` mostra o quadro em **leitura**; o DRE (`/admin/financeiro`) ganhou o bloco *"Custo de
+  gateway — o que a maquininha reteve"*; e a coluna *Taxa crédito* das Comissões passa a usar o
+  percentual medido, com **"—"** quando não há medição, em vez de um número inventado.
+
+⚠️ **O que NÃO foi feito:** `verificar:schema` não rodou aqui (falta `SUPABASE_SERVICE_KEY` no
+sandbox — a trava se recusa a aprovar sem medir, que é o comportamento certo). Conferi à mão
+pelo MCP que toda coluna e RPC tocada existe; o CI roda a trava de verdade no push.
+
+### 💰 03/09, 00h UTC — O PREÇO À VISTA, O eBOOK "GRÁTIS" QUE O SERVIDOR COBRAVA, E A VITRINE QUE NÃO RELIA
+
+**1. R$ 4.999,80 onde o dono queria R$ 5.000,00 — o derivado vencia o explícito.**
+`desconto_vista_pct` era `numeric(5,2)`. Para R$ 5.000 sobre R$ 6.000 o desconto é
+16,666…%, o banco truncava para **16,67**, e `calcVista()` (em `utils/planosConfig.js`)
+**recalculava o valor a partir do percentual**, ignorando o `preco_vista` gravado — que
+estava lá, com o valor certo (`5000.00004`). Nenhum percentual de casas finitas fecha 5.000
+sobre 6.000: o caminho estava invertido.
+- `preco_vista` passa a ser a **fonte** (o cliente paga um VALOR); o % vira rótulo derivado
+  **do valor**, então a tela nunca anuncia um desconto diferente do que será cobrado.
+- Coluna do pct: `numeric(5,2)` → **`numeric(7,4)`** nas três tabelas; `preco_vista` →
+  `numeric(12,2)` (dinheiro tem 2 casas; o `5000.00004` era resto de ponto flutuante).
+- Na tela de Produtos a coluna virou **"À vista (% ou R$)"**: dois campos sincronizados —
+  digitar o valor é o caminho exato, digitar o % continua funcionando.
+- **Aplicado:** assessoria **R$ 5.000,00** e clube **R$ 50.000,00** à vista (pct 16,6667).
+
+**2. O eBook que a vitrine dava de graça e o servidor cobrava.** "Lucre Antes de Arrematar"
+estava com `preco = 49,90` **e** `gratuito = true`. A RPC de entitlement
+`obter_arquivo_ebook` **já decide pelo preço** (`if coalesce(preco,0) = 0 then libera`); a
+vitrine de `/membros` (`acessoMaterial`) olhava a **flag** antes do preço. O card anunciava
+**"Grátis"** e o servidor recusava o arquivo a quem não tem plano — **promessa que o backend
+não cumpre**, pior do que um rótulo errado. E a tela de Produtos nem expõe essa flag: não
+havia como o dono desfazer por lá.
+- O **preço manda** nas duas pontas: `acessoMaterial` só diz "Grátis" quando não há preço, e
+  o salvamento sincroniza `gratuito = !(preco > 0)` para curso e eBook.
+- Linhas existentes acertadas na migração (1 eBook; 0 cursos).
+
+**3. A vitrine de /membros não relia.** Mesmo defeito do `/planos` de ontem: catálogo
+buscado uma vez no mount. Mudar o preço no admin em outra aba e voltar não remontava nada.
+Agora ela recarrega no `visibilitychange` — o mesmo mecanismo que o `PlanosContext` já usava
+para os planos, aplicado a cursos e eBooks.
+
+⚠️ **O que fica para depois:** `cursos_admin` e `ebooks_admin` **não têm** coluna
+`preco_vista` — para eles o campo em R$ da tela é convertido em % na gravação (2 casas de
+erro possível em centavos). Só vale criar a coluna quando alguma tela de oferta passar a
+vender curso/eBook à vista; hoje nenhuma vende, e criar dado sem consumidor é inventar
+número.
+
+### ✅ 02/09, 19h UTC — TUDO ACIMA ESTÁ EM PRODUÇÃO
+
+`main` = **`ff8d0f1`**, deploy **READY** (19:04 UTC). Os 4 commits da sessão foram para a
+`main` por fast-forward, com autorização do dono. `npm run build` ✓ (travas `verificar:padroes`
+e `verificar:sintaxe` passaram no `prebuild`).
+
+### 🕳️ ACHADO DE PASSAGEM, NÃO INVESTIGADO — lote com praça FUTURA e `ativo = false`
+
+Ao conferir o lote da ZUK depois do conserto, ele apareceu **`ativo = false`** com
+`praca1_fim` em **16/09** e `leilao_ja_encerrado() = false`. Não é caso isolado, e é a única
+medição feita:
+
+| Recorte | Linhas |
+|---|---|
+| ZUK inativos com praça futura | **858** |
+| ZUK inativos já encerrados (o normal) | 2.679 |
+| Todas as fontes: inativos com praça futura, mexidos nos últimos 7 dias | **1.759** |
+
+**NÃO tratar como bug ainda.** Lote sai da listagem do leiloeiro por motivos legítimos
+(vendido, suspenso, retirado) e o scraper desativa quem sumiu — o número acima é compatível
+com isso. O que ele NÃO responde: se algum deles sumiu por falha de coleta (scroll infinito
+que trouxe menos, página que falhou) e o acervo perdeu lote vivo em silêncio. **Como
+separar:** pegar 5 dos 858 e abrir a URL no site do leiloeiro (o sandbox não tem saída para
+esses hosts; precisa do runner ou do navegador do dono). Se o lote ainda estiver lá, é
+regressão de captura invisível para o monitor de fontes — que mede VOLUME coletado, não lote
+perdido. `suprimido_motivo` está nulo nos dois casos, ou seja, hoje não há como distinguir
+"desativado porque sumiu" de "desativado por engano" olhando só o banco.
+
+---
+
+## 🚦 COMECE POR AQUI — estado em 01/09 14h UTC (sessão 18)
+
+> `main` = **`1a94a3b`**, em produção (deploy READY). Heartbeat às **14:00 UTC**.
+> Segurança **0/0** · regras de negócio **0 crítico** · `auditoria_uso` **0 gaps** · KYC 0 ·
+> 0 chamado de cliente sem resposta · 0 fonte no ponto cego · backup ok (66 arquivos, 49
+> iguais — varredura completa). `verificar:padroes` ✓ · `verificar:sintaxe` ✓ ·
+> `verificar:schema` verde no CI às 13:35 UTC.
+
+### ✅ A PENDÊNCIA DO META FOI EXECUTADA (era a primeira linha da sessão 17)
+
+**`BR - ABERTO - AULA 02SET` (`120249418573490420`) está PAUSADO**, via `pause_adset` do
+Windsor, com autorização do dono nesta sessão. Reversível por `enable_adset`.
+
+Ele tinha gasto **R$ 22,51 (31/08) + R$ 26,51 (01/09) = R$ 49,02 por 655 cliques e ZERO
+inscrito** — e hoje comia **87% do orçamento** da campanha de tráfego do site, deixando
+R$ 3,74 para o conjunto que roda a **CPC R$ 0,11**. Pausar servia aos DOIS objetivos que o
+dono nomeou (máximo de gente na live; em segundo, tráfego para o sistema), porque ele não
+entregava o primeiro e sabotava o segundo.
+
+`CONV - AULA 02SET` **continua pausado e assim deve ficar** — confirmado por medição: zero
+gasto hoje. Não religar.
+
+### 🔴 O QUE AINDA PODE ENCHER A LIVE DE AMANHÃ — 3 fatos medidos
+
+A aula é **02/09 22:00 UTC** com **4 inscritos** (2 `meta`, 1 sem origem, 1 `direto`), e o
+último entrou em **30/08**: nem o conjunto ABERTO nem o CONV trouxeram UM inscrito desde
+então, com R$ 90+ gastos. O que sobra é a base, e ela está subusada:
+
+1. **17 exploradores ativos NUNCA receberam o convite** — 16 deles criaram conta *depois* de
+   30/08, o dia em que `convidar-live-cron` disparou 74 e **se desarmou sozinho**.
+   `app_config.convite_live_armado` está **vazio**. Rearmar é 1 comando (ou o botão
+   "Convidar a base por e-mail" no `/admin`), e o cron roda às **11h UTC** — ou seja, a
+   última janela útil é a rodada de amanhã de manhã:
+   ```sql
+   insert into app_config (key, value) values ('convite_live_armado', '2026-09-02')
+     on conflict (key) do update set value = excluded.value;
+   ```
+2. **A fila de WhatsApp NUNCA foi usada: `whatsapp_disparo_log` tem ZERO linhas.** A tela
+   existe desde 30/08, tem botão no `/admin` desde então, e mensagem por segmento (pagante ×
+   não-pagante). São **90 dos 92 perfis com telefone**. É o único canal que alcança quem
+   ignorou o e-mail, e é 1 clique por pessoa.
+3. **Os lembretes ainda NÃO saíram, e isso está certo.** `live_lembretes` está vazia porque a
+   etapa `vespera` abre 30h–12h antes: para a aula das 22h UTC de 02/09, a primeira rodada
+   elegível é **hoje às 16h UTC**. Não é defeito — é o relógio. Só confirme depois das 16h.
+
+### 📲 MANYCHAT PRÓPRIO — o passo 1 SUBIU (só-escuta)
+
+Ver `docs/INSTAGRAM_AUTOMACAO.md`, que foi corrigido com o que se mediu. Resumo:
+
+| Peça | Estado |
+|---|---|
+| `ig_conversas` · `ig_mensagens` · `ig_oferta_vigente` · `ig_webhook_recebido` | **aplicadas** — RLS ligada, 0 políticas, escrita revogada de anon/authenticated, `service_role` intacto |
+| `api/instagram-webhook.js` | **no ar, dormente** por falta de `IG_APP_SECRET` (recusa em vez de aceitar) |
+| `ig_limpar_antigas()` no `limpar-eventos-cron` | retenção LGPD **como mecanismo**: 180 dias de mensagem, 30 de log |
+| `npm run testar:instagram` | **28/28** |
+
+**`IG_USER_ID` de `tarcisionogueiraleiloes` = `17841400563334157`** (medido no conector
+Windsor; as duas contas já são profissionais — o item 1 do caminho crítico estava feito).
+
+**Duas coisas dependem SÓ de você, e a segunda é o caminho longo:**
+- Criar `IG_APP_SECRET` e `IG_VERIFY_TOKEN` na Vercel (ver `docs/ENVS_VERCEL.md`). Confira
+  com `GET /api/instagram-webhook` → `{ configurado: true }`.
+- **Verificação de Negócio no Meta** — ⚠️ **CORRIGIDO EM 01/09: é com a REIMOB, não com a
+  NOGUEIRA.** O portfólio é **Reimob Imobiliária**, a Reimob **tem CNPJ próprio** e o dono
+  **é sócio** (o contrato social já prova o vínculo). O registro de 26/08 mandava verificar
+  com NOGUEIRA EMPREENDIMENTOS "para evitar o descasamento que reprovou o Google" — e isso
+  **criaria** o descasamento em vez de evitá-lo, porque a entidade do portfólio é outra.
+  Não confundir com a **Verificação do ANUNCIANTE** ("quem pagou por este anúncio"), que é
+  processo separado e tem de casar com **quem paga os anúncios** — conferir de quem é a
+  forma de pagamento da conta `702903610061448` antes de submeter aquela. Era a **pendência #9
+  desta lista, aberta desde 26/08**, e que agora está no caminho crítico de duas coisas:
+  é pré-requisito do App Review do bot.
+
+> ### 🔑 A "chave USB" do Felipe NÃO era chave, e não era dele (medido em 01/09, com print)
+> A tela de bloqueio diz **"Tarcisio Araujo · Facebook"**: é a identidade do DONO que está
+> sendo confirmada. **Remover alguém nunca pede o 2FA de quem está sendo removido** — a
+> hipótese de 26/08 ("a Meta pede chave de segurança USB") lia o sintoma do Windows como se
+> fosse exigência da Meta, e mandou procurar um objeto que não existe.
+>
+> O que a Meta pede é uma **passkey** (*"bloqueio de tela, impressão digital ou reconhecimento
+> facial"*). Quem virou isso em "insira a chave na porta USB" foi o **Windows**: sem Windows
+> Hello configurado, ele não tem autenticador local para oferecer e cai no último recurso.
+>
+> **Caminho curto: fazer pelo CELULAR** (a passkey está onde tem digital/Face ID) — Gerenciador
+> de Negócios no navegador do celular → Configurações do Negócio → Usuários → Pessoas → Remover.
+> No PC: cancelar a janela do Windows e procurar "Tentar outra forma"; configurar PIN do Windows
+> Hello; ligar o Bluetooth (é o que faz aparecer "usar meu telefone").
+>
+> **Causa de fundo:** a conta do dono tem **um método de 2FA só**, preso a um aparelho.
+> Cadastrar um app autenticador + guardar códigos de recuperação é o que impede a terceira vez.
+>
+> ⚠️ **Mitigação enquanto o Felipe não sai:** Central de Segurança → **"Exigir autenticação de
+> dois fatores"** para todos do portfólio. Neutraliza o cenário do Hotmail abandonado ser
+> invadido por senha. **Só ligar DEPOIS de ter o segundo método na conta do dono** — senão
+> tranca os dois juntos.
+>
+> **✅ 01/09 — FELIPE SCARAFIZ REMOVIDO. Item fechado.** E a hipótese se confirmou: a Meta
+> bloqueia a remoção de quem ainda tem ativos atribuídos. Tirar as permissões primeiro foi o
+> que destravou — **essa é a ordem certa**, e é o que estava faltando nas duas tentativas
+> anteriores, não a chave USB. Saem com ele os dois alertas que eram a mesma pessoa
+> (`1 usuário inativo` e `e-mail público`).
+>
+> ⚠️ **O que NÃO sai com a remoção: o papel de `developer`.** Ele vive em
+> `developers.facebook.com` → app → Funções, não no Gerenciador de Negócios. **Conferir app
+> por app antes de criar o app do ManyChat**, que nasce nessa mesma superfície. Único resíduo
+> deste item.
+>
+> **✅ CONFIRMADO POR MEDIÇÃO (export das 16h51 × o das 15h26): o Felipe SAIU.** As abas
+> `PublicEmailUsers` e `InactiveUsers` **não existem mais** no arquivo novo — não ficaram
+> vazias, sumiram. Os dois alertas que eram a mesma pessoa estão fechados de fato.
+>
+> ⚠️ **MAS AS 4 CONTAS CONTINUAM LISTADAS, IDÊNTICAS**, mesmo o dono tendo fechado as quatro.
+> **E o próprio arquivo derruba a explicação fácil:** "o relatório está defasado" não se
+> sustenta, porque o Felipe foi removido ANTES das contas e sumiu deste mesmo export. O
+> arquivo é o seu próprio controle — mesma lição do vazio do Windsor, aplicada de novo.
+>
+> **Duas explicações vivas, e elas pedem ações diferentes:** (a) o encerramento não completou
+> (a Meta segura fechamento com cobrança pendente; ou o clique foi "desativar" e não
+> "encerrar"); (b) o alerta mede POSSE e não estado — a aba se chama
+> `InactiveOwnedAdAccounts`, "contas inativas **que pertencem a você**", e conta encerrada
+> continua pertencendo. Se for (b), **este item nunca zera fechando conta**.
+>
+> **A checagem que separa:** Configurações do Negócio → Contas → Contas de anúncios, e ler o
+> STATUS de cada uma. "Encerrada" = caso (b), item resolvido apesar do arquivo. Ativa ou
+> "encerramento pendente" = caso (a), falta terminar. **PENDENTE.**
+>
+> _(o dono relatou ter fechado as 4:)_ **01/09 — AS 4 CONTAS INATIVAS FORAM FECHADAS pelo dono.** Com isso, **3 dos 4 alertas**
+> da Central de Segurança estão resolvidos (Felipe fechou dois; as contas, o terceiro).
+>
+> ❌ **PREVISÃO MINHA, MEDIDA E ERRADA (corrigida 01/09):** eu escrevi que o alerta "5 contas
+> sem aprovação de semelhantes" teria encolhido sozinho para 1, porque 4 das 5 eram as
+> fechadas. **O painel continua dizendo 5.** E o de "4 contas inativas" continua dizendo 4.
+> Nenhum dos dois números mexeu com o fechamento.
+>
+> ⚠️ **E corrijo também o raciocínio do "o arquivo é seu próprio controle".** Eu usei o
+> sumiço do Felipe no export para descartar a hipótese de defasagem — mas **ele foi removido
+> ANTES de as contas serem fechadas**. Uma mudança antiga ter propagado não prova que a
+> recente já teria. A hipótese de atraso segue viva, e ela muda a ação: se for atraso,
+> espera-se; se não for, termina-se o encerramento.
+>
+> **Só o item do Felipe mudou no painel**, confirmado por duas fontes (arquivo + tela).
+>
+> **✅ MEDIDO/CONFIRMADO PELO DONO (01/09): só o `bidprobrasil.com.br` recebe tráfego pago.**
+> O `reimob.com.br` (domínio de e-mail dele) NÃO recebe. Então a lista de domínios confiáveis
+> é de **UM domínio** — e é melhor assim: lista longa "por via das dúvidas" devolve a brecha
+> que o alerta descreve. Formato: domínio registrável (`bidprobrasil.com.br`), que cobre o
+> `www.` e subdomínios como filhos.
+>
+> ⚠️ **Domínio VERIFICADO não é domínio CONFIÁVEL** — são duas listas. Verificado prova posse
+> (e o BidPro quase certamente já está, por causa do `conversion_domain` e do Search Console);
+> confiável é o que autoriza pular revisão. Se o painel pedir verificação antes, ela vem antes.
+>
+> **Consequência a esperar:** anúncio para qualquer outro domínio passa a exigir revisão — é
+> a tranca funcionando, não defeito. Se um dia anunciar para checkout externo ou encurtador,
+> a saída é ADICIONAR o domínio, nunca desligar a proteção. O ManyChat não é afetado (manda
+> link em DM, não em anúncio) e o Click-to-Message não aponta para domínio nenhum.
+>
+> ### ✅ 01/09 — CONTAS ENCERRADAS DE FATO. Sobra **UM** alerta, e ele é das contas fechadas.
+> A tarefa em segundo plano completou: o alerta **"4 contas de anúncios inativas" SUMIU**.
+> Sobra só "4 contas sem aprovação de semelhantes" — e são as MESMAS quatro, agora encerradas.
+> Conta fechada não veicula, então não há risco real por trás dele; tende a limpar sozinho.
+> *(As 4 continuarem aparecendo no seletor de conta é esperado: conta encerrada permanece
+> visível para consulta de histórico.)*
+>
+> ✅ **`CA - Tacísio Nogueira Leilões` conferida na tela de detalhe:** proteção personalizada,
+> teto diário R$ 150 **e** total R$ 1.000 marcados, aprovadores **Tarcisio + mamededois**.
+>
+> 🪤 **ARMADILHA DE UI, que me custou um falso alarme:** a LISTA do seletor mostra
+> `"0 aprovadores de c…"` — **texto truncado** — para todas as contas, inclusive a que tem
+> aprovadores configurados. Eu li o resumo cortado como se fosse medição e avisei o dono de um
+> problema que não existia. **A fonte é a tela de detalhe da conta, não a linha da lista.**
+> É a forma nº 10 cometida por mim, e pela terceira vez no dia o antídoto foi o mesmo: abrir o
+> dado em vez de deduzir do resumo.
+>
+> ### 🧹 01/09 — AS 4 CONTAS: ENCERRAMENTO ENFILEIRADO. Mistério resolvido, e a minha
+> ### hipótese estava errada.
+> O diálogo de fechamento devolveu: *"A ação iniciada para esta tarefa será concluída **em
+> segundo plano**, mas pode levar algum tempo. Você receberá uma notificação."*
+>
+> **É ISSO que explica a primeira tentativa** — não "cobrança pendente segurando o
+> encerramento", que foi o que eu supus quatro vezes hoje. É tarefa **assíncrona**: roda
+> depois, não confirma na tela, e da primeira vez não completou. As quatro reapareceram
+> selecionáveis com os mesmos IDs, o que fecha a dúvida das 3 (depois 4) evidências.
+>
+> ⚠️ **NÃO DAR COMO FEITO.** Confirmar por um dos três: recarregar a Central de Segurança,
+> reexportar o arquivo, ou Configurações do Negócio → Contas de anúncios. **Se voltarem a
+> aparecer, a tarefa falhou de novo em silêncio** — e aí é caso de suporte, não de repetir.
+> Reversível: "para reativar as contas, acesse a aba ad accounts nas configurações da empresa".
+>
+> ✅ **Fechar as 4 resolve OS DOIS alertas restantes** ("4 contas inativas" e "4 contas sem
+> aprovação de semelhantes" são o mesmo conjunto). Com isso a Central de Segurança fica limpa.
+>
+> 💡 **Confirmado no diálogo, e encerra uma preocupação minha:** *"você não pode veicular novos
+> anúncios com ela, mas **ainda pode ver a atividade anterior e o desempenho**"*. Eu tinha
+> pedido para decidir o que exportar antes de fechar as duas ligadas ao Windsor; a medição já
+> mostrara zero linhas, e agora a Meta confirma que histórico não se perde de todo modo.
+>
+> ### ⏳ 01/09 — VERIFICAÇÃO DA EMPRESA **SUBMETIDA E EM ANÁLISE** (até 48h)
+> "Confirmação de identidade em andamento. Normalmente analisamos suas informações em até 48
+> horas." **O gargalo da Fase 1 saiu do papel — o relógio está correndo.**
+> ⚠️ **Correção de prazo a favor:** eu vinha dizendo "semanas". A Meta diz **48h** para a etapa
+> de IDENTIDADE. Se a verificação da empresa inteira sai junto, só a notificação dirá.
+>
+> **Caminho usado: VERIFICAÇÃO DE IDENTIDADE (documento), não telefone.** As três outras opções
+> (ligação, SMS, WhatsApp) mandavam o código para `+55 75 3508-1477`, que é o fixo da
+> **contabilidade** — indisponível. Documento é a única que não depende de terceiro.
+>
+> **Identidade selecionada:** a grafia `T******* D* S**** N******* D* ARA***` = TARCISIO **DE
+> SOUZA** NOGUEIRA DE ARAUJO, que bate token a token com o contrato social e com a CNH. A outra
+> opção do registro (`D******`, 7 letras onde caberia "De Souza") é grafia divergente e não
+> casaria com o documento enviado.
+>
+> 🖼️ **A CNH precisou ser REGERADA — e como fazer de novo se precisar.** O upload exige
+> **≥ 1500×1000 px** e a foto do dono reprovou. Solução: o `Tarcisio CNH-e.pdf.pdf` do Drive é
+> a CNH-e com **texto VETORIAL** (444 chars) — re-renderizar o PDF em 300 dpi dá
+> **2481×3508 px** com nome/CPF/registro genuinamente nítidos, não interpolados. Isso é
+> diferente de esticar foto pequena. (Ressalva: as 3 imagens embutidas do cartão têm 963×680
+> na origem e ficam ~2,5× ampliadas; o que a análise lê é o vetor.) Comando: `pymupdf` →
+> `doc[0].get_pixmap(dpi=300).save(...)`.
+>
+> 📞 **PENDÊNCIA NOVA, para não travar a próxima:** o telefone público da Nogueira na Receita é
+> o da contabilidade. O da Reimob também (`(75) 2101-2999`, `contasinfo@contasnet.com.br`).
+> **Todo desafio de identidade externo — Meta, Google, banco, cartório — bate lá primeiro.**
+> Pedir à contabilidade que atualize o telefone da Nogueira para um do dono.
+>
+> ### ❌➡️✅ 01/09, FINAL — A VERIFICAÇÃO É COM A **NOGUEIRA**, NÃO COM A REIMOB
+> **Eu errei duas vezes hoje neste ponto e a segunda correção é a que vale.** De manhã escrevi
+> aqui "a verificação é com a REIMOB, não com a NOGUEIRA" — corrigindo um registro de 26/08 que
+> dizia o contrário. **A minha correção estava errada**, e o que a derrubou foi olhar quem
+> OPERA o produto, coisa que eu não tinha feito:
+>
+> `src/components/Footer.jsx` e `src/utils/termos.js` declaram, no rodapé do site e nos Termos
+> que **todo cliente aceita**: *"plataforma operada por **Nogueira Empreendimentos LTDA (CNPJ
+> 02.311.492/0001-61)**"*. O `bidprobrasil.com.br` é juridicamente da Nogueira. Verificar como
+> Reimob e declarar esse site criaria o descasamento que já reprovou o Google — só que criado
+> por mim. **O nome do portfólio ("Reimob Imobiliária") é rótulo de exibição, não entidade.**
+>
+> **DADOS SUBMETIDOS (fonte: contrato social consolidado JUCEB de 31/03/2025,
+> `Contrato social_compressed.pdf` no Drive):**
+> | Campo | Valor |
+> |---|---|
+> | Tipo | **Empresa privada** (LTDA = a "LLC" da descrição; LTDA unipessoal continua privada, **não** "Empresa individual") |
+> | CNPJ | `02.311.492/0001-61` · NIRE `29201924689` |
+> | Nome empresarial | `NOGUEIRA EMPREENDIMENTOS LTDA` |
+> | Nome comercial alternativo | `BidPro Brasil` (amarra a razão social à marca do site) |
+> | Endereço | `Rua Barra Avenida, SN` · compl. `Conj. Barra do Mendes - Mangabeira` · Feira de Santana/BA · CEP `44056-536` |
+> | Site | `https://www.bidprobrasil.com.br` |
+>
+> ✅ **TRÊS FONTES CONCORDAM no endereço:** contrato social (03/2025), rodapé do site, e a
+> verificação do Google que **foi aceita**. Era exatamente para isso que o comentário do
+> `Footer.jsx` dizia *"o site precisa dizer a mesma coisa que os documentos, letra por letra"*.
+>
+> 💪 **Prova de autoridade mais forte do que se supunha:** o contrato de 31/03/2025 mostra a
+> saída da sócia Neuma e deixa **Tarcísio com 15.000 de 15.000 quotas e administração
+> ISOLADA** — quotista único e administrador, não apenas "sócio".
+>
+> ⚠️ **PLANO B se a busca da Receita não casar:** o contrato de 31/03/2025 **mudou o nome** —
+> a empresa se chamava `CLUBE CONSELHEIRO PROMOÇÃO DE VENDAS, COMÉRCIO E SERVIÇOS LTDA` (mesmo
+> CNPJ). Se o cadastro estiver defasado, tentar o nome antigo, ou o NIRE `29201924689`.
+>
+> 📞 **O telefone NÃO é o do cartão CNPJ** — lá está `(75) 2101-2999` com e-mail
+> `contasinfo@contasnet.com.br`, que é a **contabilidade**. Este campo é DESAFIO (recebe código),
+> não campo de correspondência: usar o do documento manda o SMS para o escritório contábil.
+> Foi usado o celular do dono.
+>
+> ℹ️ **A Reimob existe e é dele também** (`REIMOB CONSULTORIA IMOBILIARIA LTDA - ME`, CNPJ
+> `26.747.851/0001-96`, fantasia `REIMOB IMOBILIARIA`, natureza 206-2). Só não é a operadora
+> do BidPro. Cartão CNPJ dela no Drive é de **2017** — desatualizado, se um dia precisar.
+>
+> ### 🎯 01/09 — A VERIFICAÇÃO DA EMPRESA ESTÁ A UM CLIQUE, E COM TUDO CERTO
+> A Central de Segurança tem o card **"Verificação da empresa"** pronto, e ele confirma a
+> correção de hoje de manhã: entidade **"Verificação para Reimob Imobiliária"** (a empresa
+> certa — NÃO a Nogueira, que criaria o descasamento que reprovou o Google até 16/08), caso de
+> uso já selecionado como **"O app exige acesso a permissões no Meta for Developers"** — que é
+> literalmente o caso do ManyChat — e status **"Qualificada para verificação"** com botão
+> **"Iniciar verificação"**.
+>
+> **É O GARGALO DE SEMANAS DA FASE 1.** Enquanto não rodar, o bot só fala com 25 contas de
+> teste. Todo o resto corre em paralelo; este não. Documentos: CNPJ da Reimob + contrato
+> social com o dono como sócio.
+>
+> ### 📊 O PAINEL ATUALIZA — e é isso que condena as 4 contas
+> **"5 contas sem aprovação" virou "4"**: a proteção salva na `CA - Tacísio` registrou em
+> minutos. Logo o painel **não está defasado**. E o outro número **não mexeu**: "4 contas
+> inativas" segue 4. **Quarta evidência** de que o encerramento não completou — e a mais forte,
+> porque agora existe prova de que uma mudança recente aparece.
+> Sobram **DOIS alertas, e são as mesmas 4 contas.** Fechar resolve os dois.
+>
+> ✅ **"Who's required to turn on Passkeys?" = "No one"** — o dono NÃO ligou. Correto. Manter
+> até existir o app autenticador (ver o "não faça" abaixo).
+> 🔎 **"0 de 3 pessoas" continuou 3 mesmo com o Igor removido.** Como o painel demonstrou que
+> atualiza, a terceira é provavelmente a **Nanda Oliveira** (contada por ter acesso à Página,
+> sem estar no portfólio). Mistério fechado, sem urgência.
+> ℹ️ Card **"Administrador secundário adicionado" ✓**: a segunda conta do dono serve de resgate
+> se ele perder acesso à primeira. É o lado bom das "duas portas com a mesma chave".
+>
+> ### 🔐 01/09 — FECHAMENTO DA CENTRAL DE SEGURANÇA (leia este bloco primeiro)
+>
+> **FEITO E CONFIRMADO:** Felipe removido (3 fontes) · Igor Queiroz **removido de Parceiros**
+> (pendência aberta desde 26/08) · domínio confiável `bidprobrasil.com.br` **+ `www.`** ·
+> proteção **personalizada** na conta que veicula, com teto diário **E** total · **2FA
+> obrigatório ligado** (escopo "Todos").
+>
+> **QUEM TEM ACESSO — medido em Usuários → Pessoas, que é a fonte real:**
+> o portfólio tem **2 pessoas, e as duas são o dono**: `@bidprobrasil` (Instagram) e
+> `tarcisioaraujo@reimob.com.br` (Facebook), **ambas com Acesso total / Tudo**.
+> ⚠️ **Duas portas com a mesma chave mestra:** se qualquer uma for comprometida, o invasor
+> herda o portfólio inteiro, finanças incluídas. **A conferir:** a conta do Instagram precisa
+> mesmo de "Tudo", ou existe para publicar/responder e um papel menor bastaria?
+>
+> ✅ **FERNANDA (`mamededois`): a pergunta de menor privilégio JÁ ESTÁ RESPONDIDA, e bem.**
+> Eu tinha perguntado se ela precisava de `finance` + `full_control`. Ela **não tem nenhum dos
+> dois** — não está no portfólio; o acesso dela é no nível da CONTA DE ANÚNCIOS, o mínimo para
+> aprovar anúncio. Nada a mudar. (E o Peer Approval segue valendo: existe um segundo aprovador.)
+>
+> 🛑 **DOIS "NÃO FAÇA", os dois contra o que o painel empurra:**
+> 1. **Não ligar o "Passkey Management"** antes do app autenticador + PIN do Windows Hello —
+>    cimentaria o bloqueio que custou duas tentativas em 01/09.
+> 2. **Não clicar em "Adicionar pessoa" no banner da Nanda Oliveira.** A Meta oferece como
+>    conveniência de gestão, mas **AUMENTA** o alcance dela: hoje ela só tem a Página. A
+>    pendência real é revisar/remover o acesso à Página, não promovê-la ao portfólio.
+>
+> ⚠️ **SOBRA UM ITEM, e ele resolve os DOIS alertas restantes: as 4 contas de anúncios.**
+> "5 contas sem aprovação" menos a configurada = as 4 inativas; "4 contas inativas" = as
+> mesmas. **Três evidências de que o encerramento não completou** (export ainda lista, painel
+> ainda conta 4 e 5, e elas ainda aparecem no seletor de conta). Ler o STATUS em Configurações
+> do Negócio → Contas → Contas de anúncios. Suspeita: cobrança pendente segurando.
+>
+> 📏 **MEDIÇÃO PENDENTE, barata:** o card de 2FA dizia "0 de **3** pessoas" e Pessoas mostra
+> **2**. Com o Igor fora, se virar "0 de 2" ele era o terceiro e a conta fecha; se continuar 3,
+> o terceiro é a Nanda. **Medir, não prever** — a previsão anterior ("5 contas viram 1") foi
+> medida e estava errada.
+>
+> 🧭 **A LIÇÃO QUE FICA, maior que o item:** o arquivo da Central de Segurança **não é
+> inventário de acesso**. Ele lista quem tem sinal de risco reconhecido (inativo, e-mail
+> público). A Fernanda nunca apareceu nele; o Igor nunca apareceu nele; a Nanda nunca apareceu
+> nele. Para saber quem entra, as fontes são **Usuários → Pessoas** E **Usuários → Parceiros**,
+> lidas por inteiro. Tratar o export como "a lista de quem tem acesso" é a forma de falha
+> nº 10: um número certo, com o nome de outra coisa.
+>
+> ### 🟢 01/09 — CENTRAL DE SEGURANÇA, PLACAR CONFIRMADO NO PAINEL ("Ação concluída")
+> ✅ domínio confiável adicionado (`bidprobrasil.com.br` **+ `www.`** — as duas formas, porque
+> os anúncios apontam para o `www.` e não se sabia se o casamento é por host ou domínio-pai;
+> errar ali travaria a veiculação inteira) · ✅ `0 usuários inativos` (Felipe, **terceira fonte
+> independente**) · ✅ `0 usuários com e-mail público` · ✅ `0 sem 2FA` · ✅ `0 sem passkey` ·
+> ✅ `0 com possível malware` · ✅ `0 linha de crédito com atividade suspeita`.
+> Proteção da conta de anúncios **salva na `CA - Tacísio Nogueira Leilões`**: personalizada,
+> com teto diário **E** total.
+>
+> ⚠️ **OS DOIS CAMPOS DE TETO, não só o diário:** com apenas o diário ligado, um anúncio que
+> use orçamento TOTAL escapa da checagem inteira. Teto que cobre metade dos caminhos não é
+> teto. Números ancorados no medido: 7 dias entre R$ 3,77 e R$ 74,90/dia, pico histórico
+> R$ 228 (fev/26) → diário R$ 150, total R$ 1.000.
+>
+> 🔎 **"Aprovação de semelhantes" é tradução ERRADA de "Peer Approval"** (o modal em inglês
+> revela). *Peer* = par/colega, não público semelhante. Ler como "aprovação por outra pessoa"
+> faz os dois alertas ficarem coerentes: domínio confiável define PARA ONDE o anúncio pode
+> apontar sem revisão; usuário confiável define QUEM aprova o que cai fora.
+>
+> 👤 **DESCOBERTA: existe uma SEGUNDA administradora — `mamededois` = Fernanda, esposa do
+> dono.** Ela **não aparecia em lugar nenhum** do arquivo da Central de Segurança, e o motivo
+> importa: **aquele export lista só usuário INATIVO e e-mail PÚBLICO — não é um inventário de
+> quem tem acesso.** A ferramenta mostra os problemas que ela reconhece. Um administrador
+> ativo com e-mail normal é invisível para ela. Para saber quem tem acesso, a fonte é
+> Configurações do Negócio → Usuários → Pessoas, lida por inteiro.
+> **Efeito positivo:** com uma segunda pessoa real, o Peer Approval deixa de degenerar (não é
+> mais o dono aprovando a si mesmo). **A conferir, pela régua do Felipe (raio de alcance se a
+> conta for comprometida, não confiança na pessoa):** ela precisa mesmo de `finance` +
+> `full_control`, ou `basic_access` + aprovadora basta?
+>
+> ✅ **2FA OBRIGATÓRIO LIGADO** (cadeado verde, escopo "Todos", **0 de 3 pendentes**). A ordem
+> funcionou: esperar todo mundo ter 2FA antes de exigir evitou trancar o dono junto.
+>
+> 🔎 **"0 de 3 pessoas" — SÃO TRÊS, e só conhecemos DUAS** (dono + Fernanda). **Segunda
+> confirmação em minutos de que o export da Central de Segurança NÃO É INVENTÁRIO de acesso.**
+> Suspeitos já registrados aqui, os dois com pendência aberta: **Igor Queiroz** ("já removido
+> da conta de anúncios — falta confirmar em *Usuários → Parceiros*"; removido de uma conta
+> não é removido do portfólio) e **Nanda Oliveira** ("acesso à Página `tarcisionogueiraleiloes`
+> sem estar no portfólio"). Caminho: botão **"Analisar o acesso das pessoas"**, na própria
+> tela do card de 2FA. **PENDENTE.**
+>
+> 🛑 **NÃO LIGAR O "Passkey Management" AINDA** (card logo abaixo, cadeado vermelho aberto — o
+> painel empurra para fechá-lo). Exigir passkey torna PERMANENTE exatamente o fluxo que
+> bloqueou o dono **duas vezes em 01/09**: Chrome pede passkey → Windows sem autenticador
+> local → janela exigindo chave USB inexistente. Hoje foi contornável; com a exigência ligada,
+> deixa de ser. **Ordem certa:** app autenticador + PIN do Windows Hello PRIMEIRO, cadeado
+> depois — a mesma lógica que fez o 2FA obrigatório fechar sem drama.
+>
+> _(anterior, já resolvido:)_ **PENDENTE E AGORA SEGURO: ligar "Exigir autenticação de dois fatores".** O card aparece
+> com cadeado aberto. O risco que eu mesmo levantei (trancar o dono junto) **acabou**: o painel
+> diz `0 usuários sem 2FA` e `0 sem passkey`. Ligar agora não tranca ninguém.
+>
+> 🎯 **O QUE SOBRA CONVERGE NUM PONTO SÓ: as mesmas 4 contas.** "5 contas sem aprovação" menos
+> a que foi configurada = as 4 inativas; "4 contas inativas" = as mesmas. **Fechar as quatro
+> resolve os dois alertas restantes.** E já são TRÊS evidências de que o encerramento não
+> completou: o export ainda as lista, o painel ainda conta 4 e 5, e elas ainda aparecem
+> selecionáveis no seletor de conta de anúncios. Próximo passo único: ler o STATUS em
+> Configurações do Negócio → Contas → Contas de anúncios (suspeita mais provável: cobrança
+> pendente segurando o encerramento).
+
+> **O que sobra são as duas trancas do MESMO risco:** a Meta publica anúncio parecido com um já
+> aprovado sem revisão nova, então quem entrasse na conta poderia veicular para um domínio
+> próprio. **Domínio confiável** limita PARA ONDE o anúncio manda; **usuário confiável** limita
+> QUEM publica sem revisão. Começar pelo domínio (`bidprobrasil.com.br`, provavelmente já
+> verificado por causa do `conversion_domain`): é uma ação só e vale para o portfólio inteiro.
+>
+> _(medição que liberou o fechamento, mantida para referência:)_
+> **AS 4 CONTAS DE ANÚNCIOS INATIVAS PODIAM SER FECHADAS — medido, não suposto.**
+> `casas em condominio popular` e `imoveis alto padrão` estão no conector Windsor e têm **ZERO
+> linhas em 2 anos**; `reimob 1` e `reimob 2` nem estão conectadas. O aviso anterior ("cuidado,
+> duas alimentam o Windsor") era prudente e virou desnecessário: **não há o que exportar.**
+>
+> ⚠️ **O vazio foi validado com CONTROLE**, e é por isso que dá para confiar nele: a MESMA
+> consulta, nas mesmas colunas e período, trouxe 203 linhas de `CA - Tacísio Nogueira Leilões`
+> e `Tarcisio Araujo`. Sem esse controle, "zero linhas" seria indistinguível de consulta
+> quebrada — a pergunta de revisão de 10/08 aplicada a uma decisão de fechar conta.
+>
+> **Única checagem antes de fechar:** público personalizado pertence à CONTA DE ANÚNCIOS e vai
+> junto (pixel pertence ao portfólio e sobrevive). Se alguma tiver lista de retargeting em uso,
+> compartilhar com a `CA - Tacísio Nogueira Leilões` antes.
+>
+> _(histórico: a remoção da pessoa ficou bloqueada em duas tentativas; o dono tirou todas as
+> permissões primeiro e aí ela passou.)_ Isso rebaixa o item de crítico para residual — o que fazia dele o
+> mais urgente era `finance` + `full_control` numa caixa de Hotmail abandonada, e isso saiu.
+>
+> ⚠️ **MAS "tirei as permissões" precisa ser MEDIDO, não suposto — e há 3 lugares que a tela
+> de Pessoas não alcança:**
+> - **`developer` é papel de APP**, mora em `developers.facebook.com` → app → Funções, e não
+>   sai pelo Gerenciador de Negócios. **É a mesma superfície onde o app do ManyChat vai
+>   nascer** — conferir app por app antes de criar o novo.
+> - **Usuários → Parceiros** (acesso concedido a outra empresa não aparece em Pessoas; já
+>   havia um "falta confirmar" sobre o Igor Queiroz aqui).
+> - **Usuários do sistema** (tokens de integração sobrevivem à saída da pessoa).
+> - E dentro de Pessoas, a aba de **ativos atribuídos** do perfil dele (contas, páginas,
+>   pixels, catálogos são atribuições individuais).
+>
+> **Como conferir:** baixar de novo o arquivo da Central de Segurança e comparar. Se
+> `InactiveUsers` voltar vazia, saiu. Se vier igual, ainda falta distinguir "não saiu" de
+> "relatório defasado" — e as duas pedem ações diferentes.
+>
+> 💡 **Por que a remoção pode destravar agora:** a Meta costuma bloquear a remoção de quem
+> ainda tem ativos atribuídos. Tirar os acessos primeiro é a ordem certa — vale retentar.
+>
+> ⚠️ **O passkey NÃO foi resolvido, só contornado.** Ele volta na criação do app, na
+> Verificação de Negócio e em qualquer mudança sensível — **três vezes só na Fase 1**.
+>
+> **O que o arquivo da Central de Segurança mostrou (01/09):** Felipe Scarafiz
+> (`61581234802963`, `felipe.ribeirao@hotmail.com`) com **`finance` + `full_control` +
+> `developer` + `basic_access`**, inativo há 90+ dias. Os alertas "1 usuário inativo" e
+> "e-mail público" são **a mesma pessoa**. As 4 contas inativas: `casas em condominio popular`
+> (1600582163429909), `imoveis alto padrão` (297385444752245), `reimob 1` (384496232510742),
+> `reimob 2` (2795568987342648) — ⚠️ **as duas primeiras alimentam o conector Windsor**;
+> fechá-las remove o histórico delas do painel. A conta que veicula (`702903610061448`) **não**
+> está na lista de inativas.
+  Sem ela, o webhook só fala com as 25 contas de teste. Nada de código destrava isso.
+
+**Correção de fato na spec:** existem DOIS caminhos de integração. O documento só conhecia o
+**Facebook Login** (exige Página, permissões `instagram_manage_*`); o **Instagram Login**
+dispensa a Página e usa `instagram_business_*`. Decidir qual **antes** de criar o app —
+pedir permissão do conjunto errado reprova a submissão inteira.
+
+### ⚠️ O PLACAR DE INVARIANTES ESTAVA ERRADO NO TOPO DESTE DOCUMENTO
+
+A sessão 17 projetou "5 → 4 → 3". Medido agora: **5 em alerta**, porque entrou um que não
+estava na lista — **`lote_sem_area_nem_matricula` = 471 (limite 400)**, gap de captura.
+
+E o `qa_invariantes_lenta` = 7109 merece a leitura certa: a **última linha gravada é de
+31/08 15:03**, *anterior* ao commit `bf92b5d` que criou o `ms_servidor`. Conferido:
+**`ms_servidor` é nulo nas 6 linhas**, o invariante cai no `coalesce` e julga **painel +
+rede** — exatamente o que o título dele diz que não faz. A rodada de hoje (15h UTC) é a
+**primeira** que grava o número do servidor. Só depois dela dá para afirmar se o painel está
+lento ou se são os ~4 s de percurso.
+
+### 🧭 CAPTURA — 5 linhas em `fonte_regressao_suspeita()`, e os motivos pedem coisas diferentes
+
+- **LEILOFY `regressao`**: 17 lotes contra piso 37 (mediana 74), `expirados_recentes = 1`.
+  **Não é o falso positivo de 25/08**: conferi as datas e os 17 estão espalhados de 01/09 a
+  28/09 — não houve praça que esvaziasse o acervo. Candidato real a ofensiva de recon.
+- **4 fontes `medicao_velha`**: EMILIOMATOS **289 h**, NORDESTE **264 h**, ALFA **264 h**,
+  LEFFA **113 h**. Não é "está bem", é "não consigo verificar".
+
+### 📋 O resto do ritual
+
+`relatorios_falha_24h` = **1** (`relatorio_parecer_vazio` · "sem comparáveis", Santana de
+Parnaíba) e `erros_invisiveis_24h` = **1** (`gerar-analise`) — os dois deveriam ser 0.
+`tempo_processo()`: **7 chamados fechados sem NENHUMA resposta humana** (pior 9,2 dias).
+`documental_distribuicao()`: segue **AMOSTRA INSUFICIENTE** (1 relatório pós-regra).
+Health-check: **4 tabelas** com RLS sem escrita do usuário (eram 6 — `curso_acesso` e
+`whatsapp_disparo_log` saíram com o revoke de hoje mais cedo). Bright Data: subcota diária de
+`docs` esgotada (25/25) — é o freio funcionando, não falha de fonte.
+
+---
+
+## 🏁 01/09 (sessão 17) — encerramento
+
+> `main` = **`3c19797`**, em produção (deploy da Vercel a partir do push). Branch
+> `claude/handoff-bidpro-brasil-checks-m6ekcz` no mesmo commit. Heartbeat às 09:53.
+>
+> **A AULA É AMANHÃ, QUARTA 02/09 às 19h, com 4 inscritos.** Leia o bloco da campanha antes
+> de qualquer outra coisa: há **uma ação pendente no painel do Meta que eu não consegui
+> executar** (o classificador de permissões desta sessão bloqueou a escrita), e ela está
+> custando dinheiro a cada hora.
+>
+> **Placar:** invariantes em alerta **5 → 4** agora, e **3** depois da rodada do monitor de
+> hoje (~15h UTC), que apaga o `qa_invariantes_lenta`. Os 3 que sobram — `cadastro_duplicado`,
+> `cadastro_sem_origem` e `erro_na_tela_do_cliente` — **não são defeito de código**: são fatos
+> do mundo que o painel está reportando corretamente (ver o bloco dos alertas). ·
+> segurança **0/0** · `auditoria_uso` **0 gaps** · regras de negócio 0 crítico ·
+> cidade-lixo no acervo **350 → 0**.
+
+### 🔴 PENDÊNCIA DO DONO, NO META — pausar UM conjunto
+
+**`BR - ABERTO - AULA 02SET` (id `120249418573490420`)**, dentro da campanha
+`TRF - SITE - LEILOES - AGO26`. Medido: **R$ 43,76 · 545 cliques · ZERO inscritos**, e ele
+ainda comia **~2/3 do orçamento diário da campanha de tráfego do site** (01/09: R$ 21,32 para
+a aula contra R$ 2,91 para o site, que roda a CPC R$ 0,12).
+
+**NÃO religue o `CONV - AULA 02SET`** (está PAUSED e deve ficar). Eu tinha recomendado isso e
+os números me corrigiram: CPM 50 → 106 → **131** em três dias, CTR caindo 4,98% → 3,45%,
+alcance despencando com gasto subindo (30/08 R$ 59,55 alcançou 522 pessoas; 31/08 R$ 41,77
+alcançou 284). Ele queimou 3 listas de retargeting pequenas. Os R$ 54,76/inscrito são a
+MÉDIA; o custo **marginal** do último dia foi R$ 41,77 por zero inscrito.
+
+### 📉 A LP NÃO ESTAVA QUEBRADA — o problema era o que estava sendo COMPRADO
+
+A comparação que fecha o caso, mesma peça e mesma página, só o objetivo mudou:
+
+| REEL-2808-LIVE | pessoas | clicaram | inscreveram |
+|---|---|---|---|
+| comprado como `OUTCOME_LEADS` | 28 | 2 | **2 (7,1%)** |
+| comprado como `LINK_CLICKS` | 54 | 0 | **0** |
+
+E 381 pessoas do conjunto LINK_CLICKS com **zero** cliques no CTA. Se a taxa fosse a mesma,
+a chance de sair 0 em 381 é ~1 em 1 trilhão — não é azar de amostra. A peça `IG-0109-MUDONOME`
+fez **CTR de 14,3% no feed do Facebook e 37,8% no Threads** (as outras: 3,9–7%) e converteu
+zero em 316 visitas: CTR alto com engajamento zero é assinatura de clique sem intenção, não de
+criativo bom. **CPM e CPC medem o que o anúncio CUSTA, não o que ele COMPRA** — a conclusão de
+31/08 ("26× mais barato por impressão") estava certa sobre preço e foi lida como eficiência.
+
+### ✅ O QUE SUBIU NA LP (medido renderizando a página, não estimado)
+
+1. A LP montava **a barra de navegação inteira do site** — 6 saídas acima da promessa. O
+   comentário dentro de `LiveInscricao.jsx` afirma que não há menu; não havia *no arquivo
+   dele*. Vinha do `MainLayout` (`<Route path="*">`). Defeito da composição.
+2. Banner de instalar o PWA suprimido na rota. Medido por UA: aparece no **iOS Safari** e
+   **não** nos navegadores internos de Facebook/Instagram — pega uma fatia, não tudo.
+3. Contador compactado (não cabia em uma linha a 375px).
+4. **CTA fixo** enquanto o formulário está fora de vista. O botão ficava abaixo da dobra nos
+   três tamanhos, e há ~4,9 telas abaixo do formulário que não tinham CTA nenhum.
+
+Resultado: 1º campo de **y=815 → y=683** no iPhone SE, e o card passou a aparecer na 1ª tela.
+Regra única `ehRotaDeCampanha()` em `src/utils/rotaCampanha.js` serve `Header` e `PwaInstall`.
+
+**Virou teste permanente: `npm run testar:landing-aula`** (`scripts/testes/landing-da-aula.mjs`,
+13/13, celular 390×844). Cobre os três desfechos que se confundem — evento válido → formulário
+na 1ª tela (medido agora: **y=589**); sem evento → "inscrições fechadas" **sem** botão de tentar
+de novo; RPC com erro → "não conseguimos carregar" **com** o botão. Os dois últimos são
+diagnósticos opostos e é a página de campanha que paga a diferença. Também trava o CTA fixo nos
+dois sentidos: some com o formulário à vista, aparece rolando para longe dele.
+
+⚠️ **Duas armadilhas de TESTE que quase reprovaram código são, as duas neste arquivo:**
+
+1. **Ordem das rotas no Playwright.** Ele casa da ÚLTIMA registrada para a primeira, então um
+   catch-all registrado DEPOIS da rota específica vence, devolve `null` para `live_proxima`, e a
+   página faz o certo — tela de inscrições fechadas. Eu cheguei a essa tela num rascunho e quase
+   avisei o dono de que a LP estava fora do ar. O teste agora usa **um handler só, com despacho
+   por URL, e CONTA as interceptações**: se `live_proxima` não aparecer ele sai com código 2 e se
+   declara **inválido**, em vez de tratar "não consegui medir" como "está tudo bem".
+2. **`isVisible()` não é "está na tela".** O regex curto `/Garantir minha vaga/` casava com o
+   botão da chamada final — que existe sempre, lá embaixo — e o Playwright aprovava. O teste
+   reprovava o CTA fixo com o CTA fixo funcionando. Rótulo completo (`· é gratuito`) resolve.
+
+**Conferido do lado do banco, como papel `anon`:** `live_proxima('leilao-ao-vivo')` devolve o
+evento de 02/09 22:00 UTC, `live_inscritos` = 4, `live_plataforma_numeros` responde. A LP está sã
+nos dois lados — o que falta é o conjunto pendente de pausar.
+
+### 📏 COMO MEDIR A EVOLUÇÃO — `intervencao` + `lp_aula_funil()`
+
+```sql
+select * from public.lp_aula_funil('2026-09-01T11:35:14Z'::timestamptz, now());
+select chave, jsonb_pretty(baseline), mudanca from public.intervencao;
+```
+**Linha de base congelada (48h até 01/09 11h35 UTC):** 431 pessoas · 606 pageviews ·
+7 interagiram (**1,62%**) · 3 clicaram no CTA (**0,70%**) · 2 inscrições (**0,46%**).
+O antes e o depois saem da MESMA função de propósito — número anotado em documento faria o
+"depois" ser medido por outra régua, e a comparação viraria a forma #10 com nome de evolução.
+
+### 🧭 OS ALERTAS DO RITUAL, e o que eles escondiam
+
+- **`fonte_data_leilao_uniforme` acusava o HASTA, não o BIASI.** Três fontes têm "100+ lotes e
+  ≤2 datas" e era fácil consertar a errada. A allowlist fixava a 1ª praça (28/08); o leilão
+  aconteceu e a fonte foi para 03/09 — data que a própria evidência de 25/08 já nomeava.
+- **E o BIASI tinha um defeito maior que nenhum alarme via:** o **título inteiro no campo
+  `cidade`**, em 88% do acervo. `sem_cidade` mede cidade VAZIA; aqui vinha cheia (forma #10).
+  Conserto em `api/_cidade-do-titulo.js`: o maior sufixo antes de "/UF" que seja **município
+  real** daquela UF. **7% → 99%**, 248 bairros recuperados, 350 linhas corrigidas.
+- **RLS:** as 6 tabelas que o health-check acusava há 3 rodadas são só-do-servidor. **Revoguei
+  a escrita em vez de allowlistar** — elas tinham o default do Supabase (anon E authenticated
+  com DELETE/INSERT/UPDATE/TRUNCATE) e só a RLS segurava. SELECT intacto (o Admin lê os
+  inscritos). Conferido depois: cliente comum lê 0 linhas, admin vê os 4 inscritos.
+- **`qa_invariantes_lenta`** se apaga sozinho: o painel custa 3,05–3,24 s (teto 5 s) e o
+  conserto de 31/08 já está no ar. **Ia remover duas CTEs mortas creditando ~1 s de ganho —
+  medido, CTE não referenciada NÃO roda (3,6 ms × 1.139 ms). O ganho não existia.**
+- `cadastro_duplicado` e `cadastro_sem_origem` são fatos do mundo, não bugs: um inscrito da
+  aula criou 2ª conta 3 min depois com outro e-mail, e 2 cadastros nunca confirmaram e-mail.
+  **Ia renomear `cadastro_sem_origem` com base em 2 linhas; medido em 90 dias, 28 dos 31 sem
+  captura LOGARAM — a hipótese estava errada e não mexi.**
+
+### 🕳️ PONTOS CEGOS ENCONTRADOS E **NÃO** CONSERTADOS (ficam para a próxima)
+
+- **`cidade_socio` está sem "São Caetano/PE"** (IBGE 2610905). As duas listas de municípios
+  afirmam 5.571 e **não são o mesmo conjunto**. Os invariantes `socio_*` vigiam COLUNAS de
+  cada linha, não QUAIS linhas existem — nenhum cobre roster.
+- **`mkt_reconciliar_gclid()` e `qa_invariantes_atribuicao_perdida()` só olham `gclid`** —
+  cegos para Meta. Medido: **614 visitas em 14 dias só com `fbclid`**. Hoje não perde ninguém
+  (nenhum dos 42 perfis sem origem tem ponte com `visita_origem`), mas o nome do invariante
+  promete "atribuição paga" e entrega só Google.
+- **GESTAOLEILOES: 104 lotes ativos com `data_leilao` NULL nos 104** e 0% de documento. O
+  invariante de data uniforme filtra `data_leilao is not null` e nunca o vê.
+- **VENDASGOV falha há 45 dias** (último `ok` em 17/07). Sem baseline saudável,
+  `fonte_regressao_suspeita()` também não o enxerga. Fonte paga.
+- **4 de 4 inscritos da aula nunca logaram** na conta que a inscrição cria. O fluxo "definir
+  minha senha" tem 0/4 de adesão.
+- **5 casos de clientes pagantes parados 40 dias** em `analise_solicitada` com 0 jobs — resíduo
+  do botão "Solicitar" que a RLS recusava (consertado em 29/08). Eles precisam clicar de novo,
+  e ninguém avisou.
+
+---
+
+## 🗄️ ARQUIVO — estado ao encerrar 31/08 22h BRT (sessão 16)
 
 > Branch `claude/handoff-bidpro-brasil-checks-l89025` = **`8755e87`**, empurrada, e **`main` está
 > no mesmo commit** (todos os merges do dia foram fast-forward). Heartbeat às 09:52.
@@ -901,7 +2321,259 @@ do DONO — IP residencial dele, com o consentimento dele. Hoje cobre SOLEON, GE
 VLANCE, VENDASGOV, HASTA, radar DJEN e triagem. **A alavanca real é migrar MAIS fontes para
 lá**, não recrutar o IP de cliente. Foi o que 30/08 provou funcionar com as três primeiras.
 
+## 🛑 ONDE PARAMOS — 01/09, fim da noite. LEIA ISTO PRIMEIRO.
+
+### 📸 INSTAGRAM: a escuta está CONFIGURADA e PROVADA, mas a Meta ainda não emite evento real
+
+**O que foi feito hoje, e está tudo verde:**
+
+| Etapa | Estado |
+|---|---|
+| App `BidPro - Atendimento` criado (id `1533306125147104`) | ✅ |
+| Caso de uso **Gerenciar mensagens e conteúdo no Instagram** (só ele) | ✅ |
+| Portfólio **Reimob Imobiliária** (o da verificação em curso) | ✅ |
+| Permissões `instagram_business_basic/manage_comments/manage_messages` | ✅ |
+| Webhook verificado · campos assinados (`messages`, `comments`, +extras) | ✅ |
+| Conta como **Testador do Instagram**, convite ACEITO no app | ✅ |
+| Conta conectada, id `17841400563334157` **confere** | ✅ |
+| **Assinatura do webhook da conta: Ativado** | ✅ |
+| **App PUBLICADO** (política + termos + exclusão + categoria) | ✅ |
+| `IG_APP_SECRET` · `IG_VERIFY_TOKEN` · `IG_APP_SECRET_INSTAGRAM` na Vercel | ✅ |
+
+**Cadeia provada ponta a ponta** (teste do console, 00:48 UTC): Meta entrega → HTTPS chega →
+assinatura fecha → parser roda → linha gravada em `ig_webhook_recebido` com o payload cru.
+
+> ### 🔑 O ACHADO QUE VALEU A NOITE: **quem assina é a chave DO APP DO INSTAGRAM**
+> A Meta expõe **dois** segredos para o mesmo app: a "Chave secreta do app"
+> (Configurações → Básico, id `1533306125147104`) e a **"Chave secreta do app do Instagram"**
+> (página da API do Instagram, id `911295054971510`). A documentação não diz qual assina o
+> `X-Hub-Signature-256`. **É a segunda** — `IG_APP_SECRET_INSTAGRAM`.
+>
+> **Por que isso quase custou dias:** o GET de verificação usa só o verify token e **passa de
+> qualquer jeito**. Com a chave errada, o que quebra é o POST — 401 em toda entrega, para
+> sempre — e o sintoma no banco é **zero linhas**, idêntico a "ninguém mandou mensagem". Duas
+> causas opostas, um sintoma só: a forma de falha nº 1, na porta de entrada do sistema.
+>
+> O que resolveu foi ter feito o webhook **aceitar as duas e registrar qual fechou**. O log
+> imprimiu `[ig] assinatura não fecha com nenhuma das 1 chave(s)` — e foi a **contagem**, não
+> o nome, que denunciou a segunda chave faltando. Instrumento que diz "quantas tentei" vale
+> mais do que instrumento que diz "falhou".
+>
+> ⚠️ **Limpeza pendente:** hoje o webhook aceita as duas. Depois de algumas entregas reais
+> confirmando `IG_APP_SECRET_INSTAGRAM`, **remover `IG_APP_SECRET` da lista** em
+> `api/instagram-webhook.js` e a variável da Vercel.
+
+**⛔ O QUE FALTA, E É ONDE PARAMOS:** o teste sintético do console chega; **DM e comentário
+reais não geram POST nenhum**. Medido nos logs da Vercel: entre 00:48 e 00:50 UTC, zero POSTs
+além do teste. Não é assinatura, não é URL, não é publicação — tudo isso está provado.
+
+**Duas coisas ainda não verificadas, e são as suspeitas na ordem:**
+1. **A assinatura da conta pode não estar ativa de verdade no servidor da Meta.** O toggle do
+   item 2 mostra "Ativado", mas a tela mostra estado, não confirma chamada. **Desligar e ligar
+   de novo** força a reassinatura. Se não resolver, chamar `POST /{ig-user-id}/subscribed_apps`
+   direto pela Graph API e **ler a resposta** — aí a Meta diz por escrito se aceitou.
+2. **O interruptor dentro do app do Instagram** (só no celular, não existe na web):
+   Configurações e privacidade → Mensagens e respostas de story → **Controles de mensagens** →
+   rolar até o fim → algo como **"Permitir acesso a mensagens"**. Se estiver desligado, nenhuma
+   ferramenta externa recebe DM — e **nada no painel de desenvolvedor denuncia isso**.
+   ⚠️ Esta hipótese explica a DM, **mas não o comentário**. Por isso a (1) vem primeiro.
+3. A **Caixa de Entrada de alertas** do app tinha badge `1` — não foi lida. Pode nomear a causa.
+
+**Detalhe que economiza tempo amanhã:** o payload do teste do console vem em
+`entry[].changes[].field="messages"` — formato **genérico do console**, não o de uma DM real
+(que é `entry[].messaging[]`). Por isso ele gravou `nao_reconhecidos: 1` e `gravadas: 0`, e
+**isso é o desfecho correto**. Quando a primeira DM real chegar, o payload cru guardado dirá se
+o parser está certo; se vier em `changes`, é ajuste de dez minutos.
+
+**Também feito hoje, de passagem:** `ig_oferta_vigente` ganhou a primeira linha (a aula de
+02/09, com `fim` na hora da aula + 2h) e o motor passou a **respeitar o vencimento** — ele lia
+só `ativo=true` e mandaria gente para uma aula que já aconteceu, com link e confiança. Oferta
+vencida é pior que oferta nenhuma: sem oferta o prompt manda não inventar evento; com uma
+vencida, o modelo não tem como saber que está errado.
+
+### 📊 CLIENTE 360 — 01/09, 22h. **NÃO está verde.**
+
+`select public.admin_360_estatisticas();`
+
+| Indicador | Valor | Leitura |
+|---|---|---|
+| `clientes_com_erro` | **1** | verde é 0 |
+| `relatorios_falha_24h` | **1** | verde é 0 |
+| `relatorios_falha_7d` | 4 | |
+| `erros_invisiveis_24h` | 1 (`gerar-analise`) | erro que o cliente tomou sem ver |
+| `erros_abertos_total` | 2 | |
+| `sem_perfil` | **37 de 98 (38%)** | triagem não respondida → e-mail de oportunidade sai genérico |
+| `alerta_incompleto_7d` | 3 clientes | raio de 200 km e só 1 imóvel encontrado (TO, PA) |
+| Funil público 7d | 8.859 pageviews · 2.243 visitantes | `/live/leilao-ao-vivo`: 763 pv / 556 visitantes |
+
+A falha de 24h é `relatorio_parecer_vazio` com motivo **"sem comparáveis"** (Santana de
+Parnaíba). Não é bug de código — é limite de dado; mas **chegou ao cliente como parecer vazio**,
+e isso é decisão de produto, não de infraestrutura: ou o relatório diz que não há comparável, ou
+não deveria sair.
+
+> ⚠️ **PAGANTE SEM ENTREGA — 4 dos 6.** Assinaram e **não geraram um relatório em 14 dias**:
+> `top2` de 01/07 · `assessorado` de 06/07 · `assessorado` de 15/07 · `top2` de 06/08.
+> É churn em formação, e é mais barato ver aqui do que na fatura. **Ação para amanhã.**
+
+### 📣 MARKETING — 01/09. A pendência de atribuição do dono **está resolvida**.
+
+| Medida (14 dias) | 14/08 | **01/09** |
+|---|---|---|
+| Cliques pagos | 214 | **2.069** |
+| Visitas com `gclid` | **19** | **1.314** |
+| Visitas com `utm_term` | **0** ← pendência A | **2.246** |
+| Visitas totais | — | 2.689 |
+| Gasto | — | **R$ 472,12** |
+
+**A razão que importa saiu de 9% para 63%** (1.314 de 2.069). O resto é perda estrutural
+esperada — navegador embutido, cookie limpo, outro aparelho. E `utm_term`, que era **zero**,
+hoje vem em 2.246 visitas: a pendência A do dono está encerrada.
+
+**Cadastros por origem (30 dias):** `(sem origem)` **44** · google **24** · meta **3** ·
+instagram **1** · chatgpt.com **1**.
+
+> ⚠️ **Os 44 sem origem são a próxima pergunta, não um erro.** A atribuição de VISITA está
+> ótima (63%); a de CADASTRO não acompanhou. Ou o `perfis.mkt_*` não está sendo gravado no
+> cadastro para quem veio com origem, ou esses 44 são orgânicos/diretos de verdade. **Isso se
+> mede cruzando `visita_origem` × `perfis` pelo dispositivo — não se resolve por opinião.**
+
+**Meta Ads × Google Ads:** o Meta gasta menos e clica muito mais (31/08: R$ 32,64 → 360
+cliques), mas **quase toda conversão registrada é do Google** (31/08: 3; 29/08: 2). Uma linha
+do Meta em 30/08 destoa: **R$ 59,55 para 28 cliques** (R$ 2,13/clique contra ~R$ 0,10 das
+outras) — vale olhar qual conjunto é esse.
+
+### 📣 01/09 — QUATRO DEFEITOS NO MESMO TEXTO, NUM DIA. E o quarto atingiu 64 de 66 pessoas.
+
+O dono pediu: *"revise todas as respostas, elas não iniciam automaticamente para cada tipo de
+usuário com a sua classificação do role"*. A revisão achou mais do que o pedido.
+
+| # | Defeito | Quem atingiu | Como apareceu |
+|---|---|---|---|
+| 1 | Nome do plano chumbado no texto | 2 assessorados | o cliente avisou |
+| 2 | "antes de abrir para o resto" | todos os pagantes | a cliente perguntou *"Quem é o resto?"* |
+| 3 | Dois textos para NOVE roles | consultor · analista · advogado · top1 | **ninguém** — nenhum deles está na base hoje |
+| 4 | `nunca_analisou` nunca devolvido pela RPC | **64 de 66 da fila** | **ninguém** |
+
+**O nº 4 é o mais instrutivo do dia.** `api/admin-whatsapp-fila.js` monta a mensagem com
+`nuncaAnalisou: p.nunca_analisou === true`. A RPC **nunca devolveu essa coluna**.
+`undefined === true` é `false` — sem erro, sem 400, sem aviso: só o ramo genérico, sempre. A
+linha pessoal do explorador (*"Vi que você criou a sua conta e ainda não chegou a rodar uma
+análise"*) — que o próprio arquivo documenta como **a linha que faz a mensagem funcionar** —
+nunca apareceu em mensagem nenhuma. Medido na fila viva: **64 das 66 pessoas** tinham
+`nunca_analisou = true`.
+
+> ⚠️ **Nenhuma trava pegaria, e vale entender por quê.** `verificar:schema` confere TABELAS e
+> COLUNAS DE DATA em `.from('x')`. Isto é uma **chave lida do retorno de uma RPC** — contrato
+> entre função e cliente que nenhuma trava inspeciona. Em SQL, ler coluna inexistente é erro;
+> em JS é `undefined`. **O acoplamento atravessa a fronteira exatamente onde o erro deixa de
+> existir**, e do outro lado o valor falsy escolhe o ramo plausível.
+
+**O nº 3 tem um detalhe que merece registro:** `whatsapp_fila_live` classificava como pagante
+`top2_anual`, `assessorado_anual` e `clube_anual` — **três valores que o CHECK de `perfis.role`
+não admite** (`admin · explorador · top1 · top2 · assessorado · clube · consultor · analista ·
+advogado`). O banco recusaria o insert. Três testes que **liam como cobertura e não cobriam
+nada**. Foi assim que a lista apodreceu: lista chumbada não é conferida contra coisa nenhuma.
+
+**A correção estrutural: o público virou DADO.** `planos_config` ganhou `publico`
+(`cliente · parceiro · equipe · gratuito`, ou NULO) e `tratamento` (*"assinante do Investidor
+Pro"*). A fila lê de lá por `left join` — plano novo entra classificado; role sem plano (hoje
+`top1`) cai no **neutro explícito** em vez de ser agrupado no palpite mais próximo; e `left`
+e não `join` porque `join` o faria **sumir da fila**, que é a falha nº 1 desta base.
+
+**Agora são cinco textos, um por público:** cliente (chamado pessoalmente, com o nome do plano
+dele) · parceiro (tratado como par: *"o convite serve para quem você atende"*, nunca *"venha
+conhecer a plataforma"*) · equipe · gratuito (com a linha pessoal, que agora **funciona**) ·
+neutro. E a prioridade da fila mudou junto: **parceiro subiu para a faixa 2** — ele não compra,
+mas traz quem compra, e estava no fundo junto de quem nunca abriu um e-mail.
+
+**Controle rodado antes de trocar a regra:** a classificação nova reproduz a antiga em
+**100% da base real** (0 divergências em 96 perfis) — ela só passa a cobrir o que a antiga não
+cobria. `testar:whatsapp` foi de 24 para **97 asserções**, cobrindo os 8 roles reais.
+
+⚠️ **E um erro meu no próprio teste, corrigido antes de commitar** (o segundo do dia): a
+asserção *"diz o que vai acontecer"* listava três frases exatas e reprovou o texto do
+explorador, que diz a mesma coisa com outras palavras. A régua media a **redação** e reportava
+com o nome de **conteúdo** — forma nº 10, de novo dentro da verificação.
+
+### ✉️ 01/09 — "QUEM É O RESTO?" — o segundo defeito do convite, e este veio pela boca da cliente
+
+Uma assinante do **Investidor Pro** respondeu ao convite de WhatsApp com três palavras
+escritas por cima do print: **"Quem é o resto?"**. A frase era *"quero te chamar antes de
+abrir para o resto"*.
+
+**Ela existia para provar deferência e provou outra coisa.** Dois defeitos, e o segundo é o
+grave: (a) "o resto" **não tem referente** — quem lê não sabe se é a base, o público ou ela
+própria numa segunda leva; (b) a construção **divide o mundo em dois e nomeia só um dos
+lados**. Para elogiar quem lê, ela precisou de alguém embaixo. Num assunto de patrimônio e
+renda, isso lê como porta de clube, não como atendimento.
+
+**A correção não foi abrandar a exclusividade — foi trocá-la pelo fato.** *"Como você é
+assinante do Investidor Pro, quis te chamar pessoalmente"* é literalmente o que está
+acontecendo (o dono manda um a um, com o texto na tela dele), prova a mesma coisa que "antes
+do resto" pretendia provar, e **não precisa de ninguém embaixo para funcionar**.
+
+> **A regra que fica:** uma frase que só é elogiosa *por comparação* está pedindo a pergunta
+> que a Neuma fez. `npm run testar:whatsapp` agora reprova qualquer agrupamento anônimo de
+> terceiros ("o resto", "os outros", "os demais", "todo mundo", "a galera", "o pessoal", "a
+> massa") em **todas as sete** variações da mensagem — e, no mesmo bloco, exige que a prova de
+> que não é disparo em massa continue de pé, para não trocar um defeito por outro.
+
+Outras correções de tom no mesmo texto: `19:00` → **`19h`** (com o minuto aparecendo só quando
+existe — "19h30"); *"onde é prejuízo"* → **"os casos em que o melhor negócio é não dar o
+lance"** (mesma honestidade, e a segunda posiciona critério em vez de perda); *"Me manda"* →
+*"Se quiser, me diga"*; *"É gratuito"* → *"A participação é gratuita"*.
+
+⚠️ **E um erro meu, dentro do próprio teste, corrigido antes de commitar:** a primeira versão
+da asserção "o horário não sai como 19:00" rodava o regex sobre a mensagem montada a partir de
+`BASE.quando` — uma string escrita **no próprio arquivo de teste**. Ela teria passado mudando
+só o fixture, com a função intacta: o instrumento media o que era mais fácil de coletar e
+reportava com o nome de outra coisa (**forma nº 10**, cometida dentro da verificação). Agora o
+alvo é `quandoPorExtenso()`, com data real, e o par véspera/próprio-dia trava também a conta de
+calendário. **42/42.**
+
+Este é o **segundo** defeito deste mesmo texto no mesmo dia — o primeiro foi o Matheus,
+assessorado, recebendo que era "assinante do Investidor Pro". Os dois têm a mesma raiz: **uma
+frase fixa afirmando algo sobre a pessoa que a lê.** A primeira afirmava um plano; a segunda,
+uma posição na fila.
+
 ### 🎯 PRÓXIMA SESSÃO COMEÇA AQUI — automação de comunicação no Instagram
+
+> **01/09 — A FASE 2 ESTÁ COMPLETA ATÉ O PAINEL. Falta o envio (que depende da Meta).**
+> `/admin/instagram` (link na aba **Marketing** do admin) lê `ig_rascunho` na ordem da fila —
+> **vencimento, não chegada** — com a pergunta que originou cada rascunho, o prazo restante e
+> **o motivo de não ter saído sozinho**. Endpoint: `api/admin-ig-caixa.js`.
+>
+> ⚠️ **A tela não envia, e o botão diz isso** ("Copiar e marcar enviado"). Quem responde é o
+> dono, no app.
+>
+> **O detalhe que faz a régua de promoção valer alguma coisa:** o que é gravado em
+> `texto_enviado` é o texto da CAIXA DE EDIÇÃO no instante do clique, nunca o `texto_sugerido`.
+> Se fosse o sugerido, os dois campos seriam idênticos **por construção**, a taxa daria 100%
+> desde o primeiro caso, e a régua promoveria classes a responder sozinhas a partir de uma
+> medição que só mediu a si mesma — a forma de falha nº 10 plantada dentro do instrumento de
+> verificação. Daí o fluxo pedido na tela: **editar aqui, depois copiar**. E se a cópia falhar
+> (o navegador pode recusar o clipboard), a marcação **não acontece** — registrar "enviei isto"
+> sobre um texto que nem chegou à área de transferência seria inventar o dado que a régua lê.
+>
+> **Coluna nova, `descartado_em`** (migração `ig_caixa_o_descarte_tambem_e_medicao.sql`),
+> porque as duas alternativas mentem: deixar pendente para sempre faz a caixa nunca esvaziar e
+> o dono parar de usar (foi assim que `whatsapp_disparo_log` ficou zerado), e carimbar
+> `enviado_em` faria quem contasse `enviado_em` depois receber um número plausível e errado
+> sobre quantas respostas saíram. O descarte também **mede o que a régua não alcança**: uma
+> classe cujos rascunhos são todos descartados não aparece em `ig_taxa_sem_edicao()` como
+> reprovada — aparece como AUSENTE, indistinguível de "ninguém perguntou isso ainda".
+>
+> **Ensaio em seco sobre dado real, em transação com rollback, todas as asserções passaram:**
+> `sem_edicao = 9` de 10 quando um foi realmente editado e outro diferia só em espaço em branco
+> (→ PODE VIRAR AUTONOMA); AMOSTRA INSUFICIENTE numa classe com 2; a régua somou 12 enviados
+> sem contar os 3 pendentes nem os 2 descartados; `ig_caixa_resumo()` devolveu 3/10/2. A
+> constraint `ig_rascunho_desfecho_unico` foi verificada devolvendo `check_violation`.
+>
+> **O que continua bloqueado em você, e não em código:** a escuta segue **dormente** (0
+> entregas em `ig_webhook_recebido`) até o app da Meta existir e `IG_APP_SECRET` /
+> `IG_VERIFY_TOKEN` estarem na Vercel. Sem isso a caixa fica vazia — e a tela diz isso com
+> todas as letras, para "ninguém escreveu" não passar por "não estou escutando".
+
 
 **A especificação completa está em `docs/INSTAGRAM_AUTOMACAO.md`** (escrita em 30/08). Aqui só o
 que a próxima sessão precisa saber para não recomeçar do zero.
@@ -3581,6 +5253,56 @@ Travas: `verificar:padroes` ✅ · `verificar:sintaxe` ✅ · `npm run build` �
    transacionais NOSSOS** voltando ("A solicitação foi aprovada") e 3 são testes do dono. O
    instrumento mede *"mensagem rotulada cliente"* e reporta *"o cliente falou"* (forma nº 10).
    Os 2 reais: o lead de **Consórcio** (16/08) e **"Deu erro no meu relatório"** (06/07).
+
+---
+
+## ✅ 01/09 16h UTC — CONFIRMAÇÃO DO LEMBRETE (fecha o item 3 do bloco acima) + O QUE O CONVITE RENDEU
+
+O bloco de 14h dizia *"os lembretes ainda NÃO saíram, e isso está certo… só confirme depois das
+16h"*. Confirmado, e com uma medição a mais sobre o convite de domingo.
+
+**Lembrete de véspera: saiu.** `live-lembrete-cron`, etapa `vespera`, **16:01 UTC (13:01 BRT)**.
+4 destinatários (todos os inscritos), **4 entregues, 0 falha** — `live_lembretes` e `emails_log`
+batem linha a linha. A etapa `agora` sai em 02/09 às 17h e 18h BRT.
+
+**Convite de 30/08: entregou perfeito e rendeu ZERO — e isso foi verificado, não suposto.**
+
+```
+live_convite_envio: 74 reservados  ·  emails_log 'convite_live': 73 entregues + 1 SUPRIMIDO
+```
+
+O gate de supressão barrou 1 endereço corretamente. O que não veio foi resultado, e três
+instrumentos independentes dizem a mesma coisa:
+
+| instrumento | mede | resultado |
+|---|---|---|
+| `atividade_log` evento `email_clique` | clique no botão do e-mail | **0** desde 30/08 |
+| `visita_origem` com `utm_source='email'` | visita que chegou pelo link | **0** |
+| `live_inscricoes.utm` | inscrição atribuída ao e-mail | **0** |
+
+⚠️ **O rastreador foi testado ANTES de concluir**, porque "ninguém clicou" e "o medidor morreu"
+são indistinguíveis por fora — a forma nº 10 esperando acontecer. `atividade_log` tem 8 cliques
+históricos, **o último em 29/08 00:23**: o instrumento estava vivo na véspera do envio. E
+`linkRastreado` não caiu no fallback de link direto (caminho `/aula/…` é interno, SECRET existe
+em produção). Conclusão sustentada: **73 e-mails entregues, nenhum clique.**
+
+Isso reforça o diagnóstico das 14h — **o e-mail frio para a base não é o canal**. Os 2 únicos
+inscritos desde domingo vieram os dois do Meta, e a fila de WhatsApp (90 dos 92 perfis com
+telefone, `whatsapp_disparo_log` ainda em ZERO) segue como o canal não testado.
+
+**A correção do timeout de 29/08 se sustentou sob tráfego real:** zero ocorrência de
+`/live/leilao-ao-vivo` em `erros_cliente` sob **529 visitas** de primeiro toque da campanha, e o
+`plataforma_numeros_cache` sendo reescrito de hora em hora (acervo 30.384 → 29.789).
+
+### 🐛 Três achados novos nesta passagem (nenhum bloqueia a aula)
+
+- **`relatorio_parecer_vazio` em 01/09 10:04** — cliente recebeu entrega incompleta: mercado
+  calculado (R$ 393.615) e **sem parecer**, motivo `This operation was aborted` em **1 tentativa**.
+  Entrega parcial é pior que falha limpa; vale rever o número de tentativas antes de desistir.
+- **`_leaflet_pos` migrou para `/imovel/:id`** (2×, 01/09) — mesma família do achado de `/planos`
+  em 28/08 (Leaflet mexendo no container depois do unmount). Deixou de ser ocorrência isolada.
+- `vite:preloadError PRESO` 1× em 31/08 — o teto de recarga estourou para alguém. A pessoa foi
+  avisada pelo cartaz de 27/08, não ficou no spinner.
 
 ---
 

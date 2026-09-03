@@ -62,6 +62,24 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '')
   .toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
+// AS 27 UFs, E POR QUE UMA LISTA E NÃO UM REGEX (03/09).
+// A validação era `/^[A-Za-z]{2}$/`: ela conferia o FORMATO e chamava isso de UF. Passaram 89
+// editais com estado impossível — ME (41), CR (31), AN, CG, LA, LO, DO, CL, AI, DI, CB, MF, VW
+// —, todos fragmentos de frase que a regex de "Cidade/UF" mordeu ("...ME", "...CR"). Enquanto
+// o radar era só de SP isso era ruído; ao abrir para o Brasil, `imovel_uf` vira O filtro por
+// estado, e um filtro sujo é pior que filtro nenhum — ele RESPONDE. É a forma nº 8 do
+// CLAUDE.md: contar não-nulos (ou casar um formato) não é validar.
+const UFS = new Set(['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB',
+  'PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO']);
+/** A UF, ou `null`. Nulo é a resposta honesta ("não sei de que estado é"); "ME" é uma
+ *  afirmação falsa que um filtro por estado obedeceria. */
+export const ufValida = (v) => { const u = String(v || '').trim().toUpperCase(); return UFS.has(u) ? u : null; };
+
+// A UF do TRIBUNAL, deduzida da sigla — usada como a UF do EDITAL (a comarca), nunca como a do
+// imóvel. Um TJ estadual carrega a UF no nome; TRT e TRF não são mapeáveis assim e ficam nulos,
+// que é melhor do que chutar.
+export const ufDoTribunal = (sigla) => ufValida(String(sigla || '').replace(/^TJ/i, '').slice(0, 2));
+
 // Palavras que NUNCA aparecem num nome próprio de leiloeiro, mas aparecem quando a regex/IA
 // pega um FRAGMENTO de frase do edital ("para os encargos de avaliação e leilão", "a
 // publicação do edital na forma do art", "inviável", "credenciado"…). Guard forte.
@@ -141,7 +159,7 @@ function parseEdital(texto) {
     ocupacao, cartorio, debitos,
     imovel_endereco: endereco ? endereco.replace(/\s+/g, ' ').trim().slice(0, 200) : null,
     imovel_cidade: cidadeLimpa,
-    imovel_uf: cidadeUf ? cidadeUf[2] : null,
+    imovel_uf: cidadeUf ? ufValida(cidadeUf[2]) : null,
     status: parsedAlgo ? 'processado' : 'erro_parse',
   };
 }
@@ -238,7 +256,7 @@ async function enriquecerEditaisComIA(supabase, ehIntegrado, t0) {
       if (out.imovel_matricula) upd.imovel_matricula = String(out.imovel_matricula).slice(0, 40);
       if (out.imovel_endereco) upd.imovel_endereco = String(out.imovel_endereco).slice(0, 200);
       { const cid = cidadeValida(out.imovel_cidade); if (cid) upd.imovel_cidade = cid; else if (out.imovel_cidade) upd.imovel_cidade = null; }
-      if (out.imovel_uf && /^[A-Za-z]{2}$/.test(out.imovel_uf)) upd.imovel_uf = String(out.imovel_uf).toUpperCase();
+      { const uf = ufValida(out.imovel_uf); if (uf) upd.imovel_uf = uf; else if (out.imovel_uf) upd.imovel_uf = null; }
       if (out.ocupacao === 'ocupado' || out.ocupacao === 'desocupado') upd.ocupacao = out.ocupacao;
       upd.status = 'processado';
     }
@@ -412,7 +430,7 @@ export async function pullDJEN({ supabase, ini, fim, ehIntegrado, t0, transporte
           fonte: 'djen',
           tribunal: g(it, 'siglaTribunal', 'tribunal') || tribunal,
           numero_processo: g(it, 'numeroProcesso', 'numero_processo', 'numeroprocessocommascara'),
-          orgao, comarca: orgao, uf: 'SP',
+          orgao, comarca: orgao, uf: ufDoTribunal(g(it, 'siglaTribunal', 'tribunal') || tribunal),
           classe: g(it, 'nomeClasse', 'classe'),
           tipo_documento: tipoDoc,
           data_disponibilizacao: (String(g(it, 'data_disponibilizacao', 'dataDisponibilizacao', 'datadisponibilizacao') || fim)).slice(0, 10),
@@ -422,7 +440,10 @@ export async function pullDJEN({ supabase, ini, fim, ehIntegrado, t0, transporte
           leiloeiro_integrado: nomeLeiloeiro ? ehIntegrado(nomeLeiloeiro) : false,
           valor_avaliacao: p.valor_avaliacao, lance_minimo: p.lance_minimo,
           imovel_matricula: p.imovel_matricula, imovel_area_m2: p.imovel_area_m2,
-          imovel_cidade: p.imovel_cidade, imovel_uf: p.imovel_uf || 'SP', imovel_endereco: p.imovel_endereco,
+          // ⚠️ ERA `p.imovel_uf || 'SP'` (03/09). Com o radar só em SP o default era invisível;
+          // com `RADAR_TRIBUNAIS` aberto para o Brasil, todo edital do TJBA ou do TJMG cujo
+          // parse não achasse a UF entraria como SÃO PAULO — dado inventado com cara de dado.
+          imovel_cidade: p.imovel_cidade, imovel_uf: p.imovel_uf, imovel_endereco: p.imovel_endereco,
           debitos: p.debitos, ocupacao: p.ocupacao, cartorio: p.cartorio,
           texto_integral: texto.slice(0, 20000),
           hash_dedup: djenId ? null : norm(`${tribunal}|${g(it, 'numeroProcesso') || ''}|${texto.slice(0, 200)}`),
@@ -462,17 +483,44 @@ export async function pullDJEN({ supabase, ini, fim, ehIntegrado, t0, transporte
  */
 export async function construirEhIntegrado(supabase) {
   const integrados = new Set();
+  let falhou = null;
   try {
-    const { data, error } = await supabase.from('imoveis_leilao').select('leiloeiro').eq('ativo', true).not('leiloeiro', 'is', null).limit(5000);
+    // ⚠️ ERA `.from('imoveis_leilao').select('leiloeiro').eq('ativo',true).limit(5000)`, SEM
+    // `order` — e o campo `leiloeiro_integrado` passou a medir outra coisa (03/09).
+    // `imoveis_leilao` tem 29.875 linhas ativas e **76% são da Caixa**. Medida a amostra REAL
+    // dessas 5.000 primeiras: **4.570 são "Caixa Econômica Federal"** e sobram **30 dos 106
+    // leiloeiros**. A lista de integrados nascia com 72% faltando, e o resultado era
+    // `leiloeiro_integrado = false` em 477 de 477 editais — inclusive para leiloeiro que a
+    // gente raspa todo dia. É a forma nº 9 do CLAUDE.md (janela de cache virando janela de
+    // dados) desaguando na nº 10 (o número mede o truncamento e se chama "integração").
+    // Rodando a MESMA regra sobre o acervo completo: 35 dos 121 editais com nome casam.
+    //
+    // A RPC devolve os nomes DISTINTOS (106 linhas): não há o que truncar, e o critério fica
+    // auditável no banco em vez de depender de quantas linhas couberam.
+    const { data, error } = await supabase.rpc('leiloeiros_do_acervo');
     if (error) throw new Error(error.message);
-    for (const r of data || []) { const n = norm(r.leiloeiro); if (n.length >= 4) integrados.add(n); }
-  } catch { /* aditivo: sem a lista, nenhum edital sai marcado — pior que isso seria não coletar */ }
-  return (nome) => {
+    if (!Array.isArray(data)) throw new Error('leiloeiros_do_acervo devolveu corpo inesperado');
+    for (const r of data) { const n = norm(r.leiloeiro); if (n.length >= 4) integrados.add(n); }
+    // Lista vazia NÃO é "nenhum leiloeiro integrado": é leitura que não trouxe nada. Com o
+    // acervo em 40 fontes ativas, zero só acontece se algo quebrou.
+    if (!integrados.size) throw new Error('lista de leiloeiros veio vazia');
+  } catch (e) {
+    // ⚠️ ESTE CATCH ERA VAZIO, e o comentário dele já admitia o defeito ("sem a lista, nenhum
+    // edital sai marcado"): falha de leitura virava "não integrado" para todo mundo, calada.
+    // Agora o motivo sobrevive — quem chama grava em `monitor_runs.erro` (ver `ehIntegradoErro`).
+    falhou = String(e?.message || e).slice(0, 120);
+    console.error('[radar-editais] lista de leiloeiros NÃO construída:', falhou);
+  }
+  const fn = (nome) => {
     const n = norm(nome);
     if (n.length < 4) return false;
     for (const i of integrados) { if (i.includes(n) || n.includes(i)) return true; }
     return false;
   };
+  // O chamador precisa distinguir "conferi e não é integrado" de "não consegui conferir".
+  fn.erro = falhou;
+  fn.tamanhoDaLista = integrados.size;
+  return fn;
 }
 
 /**
@@ -622,7 +670,14 @@ async function handler(req) {
   try { iaExtraidos = await enriquecerEditaisComIA(supabase, ehIntegrado, t0); } catch { /* best-effort */ }
 
   const pullDesfecho = pulouPull ? `pulado (${motivoPulo || 'já resolvido'})` : (semCota ? 'não tentado (sem cota Bright Data)' : 'executado');
-  return new Response(JSON.stringify({ ok: true, pull: pullDesfecho, sem_cota: semCota, vistos, novos, descartados, enriquecidos, iaExtraidos, erro: erroGeral, janela: [ini, fim], tribunais: TRIBUNAIS }), {
+  // A SAÚDE DA LISTA DE LEILOEIROS SAI NA RESPOSTA, e NÃO em `monitor_runs.erro` — de propósito.
+  // O freio da rede de segurança lê `erro is null` para decidir se paga Bright Data; marcar
+  // erro aqui faria uma falha do CRUZAMENTO cancelar um pull que deu certo, e o caminho pago
+  // seria acionado por engano. Duas coisas diferentes não podem compartilhar o mesmo sinal —
+  // foi assim que `sem_cota` já virou "a fonte não tem nada" uma vez (forma nº 5).
+  const listaLeiloeiros = { tamanho: ehIntegrado.tamanhoDaLista, erro: ehIntegrado.erro || null };
+  if (ehIntegrado.erro) console.error('[radar-editais] cruzamento CEGO nesta rodada:', ehIntegrado.erro);
+  return new Response(JSON.stringify({ ok: true, pull: pullDesfecho, sem_cota: semCota, vistos, novos, descartados, enriquecidos, iaExtraidos, erro: erroGeral, lista_leiloeiros: listaLeiloeiros, janela: [ini, fim], tribunais: TRIBUNAIS }), {
     headers: { 'Content-Type': 'application/json' },
   });
 }

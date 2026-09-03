@@ -26,7 +26,14 @@
     "testar:reforco": "node scripts/testes/reforco-so-fala-com-quem-nao-respondeu.mjs",
     "testar:destino": "node scripts/testes/quem-pagou-para-ver-a-aula-nao-cai-na-home.mjs",
     "testar:pageview": "node scripts/testes/pageview-nao-conta-a-mesma-navegacao-duas-vezes.mjs",
-    "precisa-navegador": "node scripts/testes/precisa-navegador.mjs"
+    "testar:cidade-titulo": "node scripts/testes/cidade-do-titulo-nao-pode-ser-o-titulo.mjs",
+    "testar:landing-aula": "node scripts/testes/landing-da-aula.mjs",
+    "testar:instagram": "node scripts/testes/instagram-webhook-nao-envenena-o-corpus.mjs",
+    "testar:ig-motor": "node scripts/testes/ig-motor-decide-antes-de-escrever.mjs",
+    "testar:whatsapp": "node scripts/testes/whatsapp-nao-inventa-plano-do-cliente.mjs",
+    "precisa-navegador": "node scripts/testes/precisa-navegador.mjs",
+    "testar:data-aula": "node scripts/testes/a-data-da-aula-vem-da-recorrencia.mjs",
+    "testar:uf-edital": "node scripts/testes/uf-de-edital-e-uf-de-verdade.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",

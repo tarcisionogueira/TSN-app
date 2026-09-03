@@ -5,6 +5,7 @@ import TourGuiado, { TOUR_KEY_EXPORT as TOUR_KEY } from './TourGuiado';
 import AnalisesMenu from './AnalisesMenu';
 import { useAuth } from '../contexts/AuthContext';
 import { chatDisponivelPara } from '../utils/chatDisponivel';
+import { ehRotaDeCampanha } from '../utils/rotaCampanha';
 import { usePlanos } from '../contexts/PlanosContext';
 import { supabase } from '../utils/supabase';
 
@@ -138,6 +139,14 @@ const ROLE_LABELS_STATIC = {
 export default function Header() {
   const nav = useNavigate();
   const loc = useLocation();
+  // ROTA DE CAMPANHA NÃO TEM MENU (01/09). A landing da aula cai no `MainLayout` (a rota
+  // curinga) e por isso herdava a barra inteira do site: logo, Home, Calculadora, Buscar
+  // Leilões, Planos, Entrar e o hamburger — seis saídas acima da promessa, numa página cujo
+  // clique foi pago. O próprio `LiveInscricao.jsx` diz em comentário que não há menu ali;
+  // não havia, no arquivo dele. O menu vinha da composição, que é onde revisão não olha.
+  // Antes dos hooks abaixo NÃO dá para sair (ordem dos hooks), então o retorno vem logo
+  // após os três primeiros, que são estáveis em qualquer rota.
+  const rotaDeCampanha = ehRotaDeCampanha(loc.pathname);
   const { user, role, effectiveRole, effectiveUserId, loading, impersonate, encerrarSuporte, roleSimulado, simularRole, nome: nomePerfil } = useAuth();
   // Contador de não lidas do chat, para o item de MENU do celular. Vem por EVENTO do
   // ChatSuporte, que já consulta `suporte_respostas_nao_lidas` — não é uma segunda consulta nem
@@ -300,6 +309,11 @@ export default function Header() {
   // usuário visualizado — o banner laranja é quem lembra que é a equipe navegando).
   const nomeUsuario = impersonate?.nome || nomePerfil || user?.user_metadata?.nome || user?.email?.split('@')[0] || 'Usuário';
   const roleEtiqueta = impersonate ? (impersonate.role || 'explorador') : role;
+
+  // Sai DEPOIS de todos os hooks — antes deles o React quebraria a ordem entre renders.
+  // Custo: os hooks acima rodam à toa numa rota de campanha; benefício: a regra fica numa
+  // linha só e não há um segundo caminho de montagem para alguém esquecer de atualizar.
+  if (rotaDeCampanha) return null;
 
   return (
     <header style={{ position: 'sticky', top: 0, zIndex: 1100, background: '#111111', paddingTop: 'env(safe-area-inset-top)' }}>

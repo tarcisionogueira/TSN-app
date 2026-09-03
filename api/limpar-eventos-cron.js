@@ -49,7 +49,30 @@ async function handler(req) {
     }
     const completo = ini >= corte;
     if (!completo) console.warn(`[limpar-eventos] parou no orçamento de tempo em ${ini.toISOString()} — continua amanhã (${apagados} apagados hoje)`);
-    return new Response(JSON.stringify({ ok: true, apagados, fatias, completo, corte: corte.toISOString() }), { headers: { 'Content-Type': 'application/json' } });
+
+    // ─── RETENÇÃO DO ACERVO DE INSTAGRAM (LGPD) ──────────────────────────────────────
+    // Conteúdo de DM é dado pessoal de TERCEIRO, que nunca teve conta aqui. A spec
+    // (docs/INSTAGRAM_AUTOMACAO.md §7.3) manda definir retenção ANTES de gravar, e este
+    // é o lugar em que ela vira mecanismo: um cron que já roda 1×/dia, em vez de uma
+    // promessa dependente de alguém lembrar.
+    //
+    // NÃO derruba a limpeza principal se falhar — são retenções independentes, e perder a
+    // do clickstream por causa da do Instagram trocaria um problema por outro. Mas também
+    // não some: vai no corpo da resposta, que é o que o health-check lê.
+    let instagram = null;
+    try {
+      const rIg = await fetch(`${SB}/rest/v1/rpc/ig_limpar_antigas`, {
+        method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
+        body: '{}', signal: AbortSignal.timeout(15000),
+      });
+      if (!rIg.ok) throw new Error(`HTTP ${rIg.status}`);
+      instagram = await rIg.json();
+    } catch (e) {
+      instagram = { erro: String(e?.message || e) };
+      console.error('[limpar-eventos] retenção do Instagram falhou:', instagram.erro);
+    }
+
+    return new Response(JSON.stringify({ ok: true, apagados, fatias, completo, corte: corte.toISOString(), instagram }), { headers: { 'Content-Type': 'application/json' } });
   } catch (e) {
     return new Response(JSON.stringify({ error: e.message, apagados }), { status: 500 });
   }

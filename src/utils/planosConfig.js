@@ -4,12 +4,25 @@ import { PLANOS } from '../data/cursos';
 const fmt = (v, decimais = 2) =>
   `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: decimais, maximumFractionDigits: decimais })}`;
 
-/** Calcula preco_vista a partir do desconto % ou retorna o valor salvo no DB. */
+/**
+ * Valor à vista do plano. O QUE O CLIENTE PAGA É UM VALOR, NÃO UM PERCENTUAL.
+ *
+ * 02/09: esta função fazia o contrário — quando havia `desconto_vista_pct`, recalculava o
+ * valor a partir dele e IGNORAVA o `preco_vista` gravado. Como o percentual era
+ * numeric(5,2), 16,666…% virava 16,67 no banco e a tela imprimia R$ 4.999,80 num plano
+ * cujo valor à vista gravado era R$ 5.000,00. O derivado vencia o explícito, e nenhum
+ * percentual com casas finitas fecha 5.000 sobre 6.000.
+ *
+ * Agora o valor gravado manda; o percentual só entra quando não há valor (linha antiga,
+ * ou curso/ebook, que não têm a coluna) e serve de rótulo ("16,67% off").
+ */
 function calcVista(cfg) {
+  const vista = Number(cfg.preco_vista);
+  if (Number.isFinite(vista) && vista > 0) return vista;
   if (cfg.desconto_vista_pct > 0) {
     return Number(cfg.preco) * (1 - Number(cfg.desconto_vista_pct) / 100);
   }
-  return cfg.preco_vista ?? null;
+  return null;
 }
 
 /**
@@ -44,7 +57,7 @@ export async function fetchPlanosComConfig() {
       precoMensalAnualLabel: anual ? fmt(anual / 12) : null,
       precoVista: vista,
       precoVistaLabel: vista ? fmt(vista) : null,
-      desconto_vista_pct: cfg.desconto_vista_pct ?? 0,
+      desconto_vista_pct: (preco > 0 && vista && vista < preco) ? (1 - vista / preco) * 100 : (cfg.desconto_vista_pct ?? 0),
       comissao_pct: cfg.comissao_pct ?? 0,
       cobrar: cfg.cobrar,
       ativo: cfg.ativo,
@@ -58,8 +71,9 @@ export async function fetchPlanosComConfig() {
       periodicidade: (['assessorado', 'clube'].includes(cfg.plano_key) && vista)
         ? `/mês · 12 meses · ou ${fmt(vista)} à vista`
         : base.periodicidade,
+      // O % exibido é derivado do valor que será cobrado — não da coluna, que é arredondada.
       precoVistaLabel2: vista
-        ? `${fmt(vista)} à vista (${cfg.desconto_vista_pct > 0 ? Number(cfg.desconto_vista_pct).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '% off' : 'à vista'})`
+        ? `${fmt(vista)} à vista (${preco > 0 && vista < preco ? ((1 - vista / preco) * 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '% off' : 'à vista'})`
         : null,
     };
   });

@@ -75,3 +75,25 @@ diagnóstico. E o rastro de todo Lead real fica em:
 ```sql
 select detalhe, criado_em from eventos_atividade where tipo='meta_lead' order by criado_em desc limit 5;
 ```
+
+## ⛔ AINDA NÃO CRIADAS — Instagram / ManyChat próprio (01/09)
+
+O código de `api/instagram-webhook.js` está no ar e **dormente por ausência destas duas**: sem
+`IG_APP_SECRET` ele responde 500 e recusa a entrega, em vez de aceitar sem validar assinatura.
+Criar as duas na Vercel (Production + Preview + Development) é o que liga a escuta.
+
+| Nome | Para quê |
+|---|---|
+| `IG_APP_SECRET` | Valida `X-Hub-Signature-256` de cada entrega da Meta. É o **App Secret** do app em `developers.facebook.com` |
+| `IG_VERIFY_TOKEN` | String inventada por você. Responde o `hub.challenge` na verificação do webhook — o mesmo valor é digitado no painel da Meta ao cadastrar a URL |
+
+Previstas para as etapas seguintes (ainda sem código que as leia):
+
+| Nome | Para quê |
+|---|---|
+| `IG_PAGE_TOKEN` | Token long-lived para **ENVIAR** mensagens (Send API) |
+| `IG_USER_ID` | Id da conta profissional. **Já medido: `17841400563334157`** (`tarcisionogueiraleiloes`) |
+| `IG_BOT_ATIVO` | `1`/`0` — mata a resposta automática sem deploy. **Não governa a escuta**, de propósito |
+
+**Como conferir se a escuta está configurada, sem segredo nenhum:**
+`GET /api/instagram-webhook` devolve `{ configurado: true|false }`.

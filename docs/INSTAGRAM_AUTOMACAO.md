@@ -1,7 +1,157 @@
 # Automação de comunicação — Instagram `@tarcisionogueiraleiloes`
 
 > Especificação levantada em **30/08/2026** para a sessão seguinte começar sem descoberta.
-> **Nada foi construído ainda.** Decisões do dono já fechadas estão marcadas ✅.
+> Decisões do dono já fechadas estão marcadas ✅.
+>
+> ## 🟢 ATUALIZAÇÃO 01/09 — o passo 1 SUBIU. O que já existe, medido:
+>
+> | Peça | Estado |
+> |---|---|
+> | `ig_conversas` · `ig_mensagens` · `ig_oferta_vigente` | **criadas e aplicadas** (RLS ligada, 0 políticas, escrita revogada de anon/authenticated) |
+> | `ig_webhook_recebido` | **nova, não estava na spec** — ver §6.4 abaixo |
+> | `api/instagram-webhook.js` (GET challenge + POST com HMAC, grava e sai) | **no ar, dormente** por falta de `IG_APP_SECRET` |
+> | `public.ig_limpar_antigas()` + chamada no `limpar-eventos-cron` | **retenção LGPD virou mecanismo** (180 dias de mensagem, 30 de log) |
+> | `npm run testar:instagram` | **28/28** — echo, story, colisão de id e assinatura |
+> | `IG_USER_ID` de `tarcisionogueiraleiloes` | **`17841400563334157`** (item 1 do §2 está feito: já é conta profissional) |
+>
+> **O que falta é seu, no painel da Meta, e é o caminho longo (§2):** criar o app, a
+> **Verificação de Negócio** (que é a pendência #9 do HANDOFF, aberta desde 26/08) e o App
+> Review. Nada de código destrava isso.
+>
+> ### 🔗 FASE 2, PEÇA 2 — a espinha ligada: FILA → MOTOR → RASCUNHO
+> `api/instagram-responder-cron.js` (a cada 20 min) + `ig_rascunho` + `ig_taxa_sem_edicao()`.
+> **Ele NÃO envia nada** — o envio é a peça seguinte. Enquanto ela não existe, o pior desfecho
+> possível é um rascunho errado numa tabela, não uma mensagem errada num cliente.
+>
+> **Por que `ig_rascunho` é tabela própria, e não campo em `ig_mensagens`:** (a) `ig_mensagens`
+> é o CORPUS DE TREINO — rascunho que ninguém enviou não é exemplo de nada, e gravado ali com
+> `autor='bot'` seria indistinguível de mensagem enviada; (b) **a régua de promoção só existe
+> se os dois textos coexistirem** — "8 de 10 enviados sem editar" exige comparar o sugerido com
+> o que de fato saiu. Um campo só apagaria a diferença que a régua mede.
+>
+> **Medido em transação com rollback, e os quatro casos passaram:** 1 enviado sem editar
+> devolve **AMOSTRA INSUFICIENTE (1 de 10)** — mostra o 100% e recusa o veredito, senão uma
+> classe seria promovida por acidente; 8 de 10 (um deles diferindo **só em espaços**, que não é
+> edição de conteúdo) → PODE VIRAR AUTONOMA; 7 de 10 → AINDA NAO; rascunho não enviado não
+> aparece, porque não há o que comparar.
+>
+> **Dois freios de custo que medem coisas diferentes:** `TETO_ITENS` (25/rodada, protege a
+> fatura) e o **CLAIM** (`mid_origem` UNIQUE — duas rodadas sobrepostas não pagam duas vezes
+> pela mesma mensagem; o pré-filtro em JS evita a chamada de IA, o UNIQUE é a rede embaixo).
+>
+> ⚠️ **Item com janela EXPIRADA não gasta IA e não some:** vira linha com `acao='perdido'`.
+> Sem isso, janela queimada sairia da fila em silêncio e o sistema pareceria em dia — e "não
+> havia o que fazer" × "não deu tempo" levam a decisões opostas. Falha de IA também não some:
+> vira rascunho com `motivo: falha_motor: <erro>`, visível no painel.
+>
+> ### 🖥️ FASE 2, PEÇA 3 — o PAINEL: `/admin/instagram` (link na aba Marketing)
+> `api/admin-ig-caixa.js` + `src/pages/CaixaInstagram.jsx` + `ig_caixa_resumo()`.
+> Lê `ig_rascunho` na ordem da fila (**vencimento**, não chegada), mostra a pergunta que
+> originou cada rascunho, o prazo restante e **o motivo de não ter saído sozinho**.
+>
+> ⚠️ **A TELA NÃO ENVIA, e isso está escrito nela.** O botão chama "Copiar e marcar enviado".
+> Enquanto a Meta não liberar a permissão, quem responde é o dono, no app.
+>
+> **O detalhe que faz a régua valer alguma coisa:** o que vai para `texto_enviado` é o texto
+> da CAIXA DE EDIÇÃO no instante do clique, nunca o `texto_sugerido`. Se fosse o sugerido, os
+> dois campos seriam idênticos por construção, a taxa daria 100% desde o primeiro caso, e a
+> régua promoveria classes a partir de uma medição que só mediu a si mesma (forma nº 10,
+> plantada dentro do próprio instrumento). Por isso o fluxo pedido na tela é **editar aqui,
+> depois copiar** — e se a cópia falhar, a marcação **não acontece**.
+>
+> **O terceiro desfecho virou coluna: `descartado_em` / `descartado_motivo`.** Sem ela,
+> "descartado" só teria duas representações e as duas mentem: deixar pendente para sempre (a
+> caixa nunca esvazia e o dono para de usar — foi assim que `whatsapp_disparo_log` ficou
+> zerado) ou carimbar `enviado_em` (a régua ignoraria a linha, mas quem contasse `enviado_em`
+> depois receberia um número plausível e errado sobre quantas respostas saíram). E o descarte
+> **mede o que a régua não alcança**: classe cujos rascunhos são todos descartados não aparece
+> em `ig_taxa_sem_edicao()` como reprovada — aparece como AUSENTE, indistinguível de
+> "ninguém perguntou isso ainda". Constraint `ig_rascunho_desfecho_unico` impede a linha que
+> é as duas coisas (**verificada**: `check_violation` no insert de teste).
+>
+> **Ensaio em seco sobre dado real, em transação com rollback — todas as asserções passaram:**
+> 10 enviados na classe `quer_link` com 1 realmente editado e 1 diferindo só em espaço →
+> `sem_edicao = 9` e **PODE VIRAR AUTONOMA**; classe `preco` com 2 → **AMOSTRA INSUFICIENTE**;
+> a régua somou **12** enviados (não contou os 3 pendentes nem os 2 descartados);
+> `ig_caixa_resumo()` devolveu 3/10/2; e o filtro da caixa trouxe exatamente os 3 pendentes.
+>
+> Ações da tela: copiar+marcar · descartar · **assumir a conversa** (`ig_conversas.estado =
+> 'humano'`, que a própria fila respeita) · dar baixa em spam e janela perdida. Todo desfecho
+> marca a mensagem de origem como `respondida` — e se ESSE passo falhar, a tela avisa que o
+> item pode reaparecer, em vez de deixar o dono achar que a tela repete rascunho sozinha.
+>
+> ### ⚙️ FASE 2 COMEÇOU — a fila e o classificador estão no ar (dormentes)
+>
+> | Peça | Estado |
+> |---|---|
+> | `ig_fila_resposta()` — fila por **VENCIMENTO**, não por chegada | aplicada e medida |
+> | `ig_janela_a_queimar()` — quantos estão a <6 h (DM) / <24 h (comentário) de perder | aplicada |
+> | `ig_classe` (9 classes) · `ig_persona` (v1-partida) | aplicadas, **todas `autonomo=false`** |
+> | `ig_mensagens.ocorrido_em` + `carimbo()` no webhook | aplicada |
+> | `api/_ig-motor.js` — classificar · redigir · **decidir** | escrito, não envia nada |
+> | `npm run testar:ig-motor` **42/42** · `testar:instagram` **42/42** | verde |
+>
+> **O que a fila faz que uma fila comum não faz** (medido em transação com rollback):
+> três DMs seguidas da mesma pessoa viram **uma** linha (uma janela, uma resposta); uma DM
+> com 4 h restantes passa **à frente** de outra com 23 h; dois comentários **não** colapsam,
+> porque cada um tem a sua private reply única; conversa que o dono assumiu **sai** da fila;
+> e item vencido volta **como linha** com `expirado=true` — esconder "não deu tempo" seria a
+> mesma falha que devolver vazio para o que não se conseguiu medir.
+>
+> **Três travas, e todas precisam passar para uma resposta sair sozinha:** a classe é
+> autônoma (dado, muda sem deploy) · a confiança passou de 0,7 (senão vira `outro`) · o texto
+> não bate em `ig_persona.nunca_dizer` (trava **mecânica**, com remoção de acento — "lucro
+> garantído" não pode passar por um `includes` ingênuo). A persona é checada **antes** da
+> autonomia de propósito: senão um texto que promete lucro sairia com motivo
+> "classe_nao_autonoma", e o dono nunca saberia o que o modelo escreveu.
+>
+> ⚠️ **`ocorrido_em` existe porque a Meta mistura segundos e milissegundos no mesmo payload**
+> (`entry.time` em s, `messaging[].timestamp` em ms). Errar por 1000× não dá erro: carimba o
+> comentário em 1970 (nasce vencido e some do atendimento) ou no futuro (nunca vence e entope
+> a fila). `carimbo()` desempata por grandeza e devolve `null` para o implausível — e null é
+> tratado assumindo o pior, nunca `now()`.
+>
+> ⚠️ **Modelo: `claude-opus-5` nas duas chamadas.** A spec dizia "usar Haiku" — isso é decisão
+> de CUSTO, e custo é do dono. Fica em `MODELO_CLASSE`/`MODELO_REDACAO`, para trocar com
+> número na mão em vez de por suposição.
+
+> ### 📐 O CAMINHO COMPLETO ESTÁ PUBLICADO
+> **https://claude.ai/code/artifact/50654eca-3504-4c1c-b03e-8025dab1d3b7** — as três janelas da
+> Meta, a escada alugado→próprio, as 5 fases com portão de saída medível, como a IA aprende com
+> as respostas do dono, e as regras que protegem a conta.
+>
+> **Medido em 01/09, e fecha a pendência #3 do HANDOFF (aberta desde 26/08):**
+> `@tarcisionogueiraleiloes` **9.730 seguidores · 632 posts** · `@bidprobrasil` **2.938 · 53**.
+>
+> ⚠️ **A leitura de COMENTÁRIOS está bloqueada por permissão** no conector Windsor
+> (*"Application does not have permission for this action. Reconnect it as an Instagram
+> Professional account"*). Isso importa mais do que parece: DM antiga **não é exportável**, mas
+> comentário **é** — reconectar a conta pode devolver um corpus histórico de 632 posts de
+> respostas escritas pelo próprio dono. É a diferença entre partir do zero e partir de centenas
+> de exemplos.
+>
+> ⚠️ **Private Reply é a ÚNICA forma sancionada de mandar a primeira DM** para quem não
+> escreveu: **7 dias a contar do comentário** (não de quando o webhook viu) e **UMA por
+> comentário, para sempre**. Um "te chamei no direct" queima o tiro único — a private reply tem
+> que carregar a resposta E o pedido.
+
+> ### ⚠️ DUAS CORREÇÕES DE FATO NESTA SPEC (conferidas na documentação, não de memória)
+>
+> **(a) O §2 conhece só UM dos dois caminhos.** A lista de permissões dele
+> (`instagram_basic`, `instagram_manage_messages`, `instagram_manage_comments`,
+> `pages_show_list`, `pages_manage_metadata`) é do **Instagram API com Facebook Login**, que
+> exige a Página do Facebook vinculada. Existe o **Instagram API com Instagram Login**
+> (*Business Login*), cujas permissões são `instagram_business_basic`,
+> `instagram_business_manage_messages` e `instagram_business_manage_comments` — e que
+> **dispensa a Página**. Os nomes antigos sem o `business_` foram descontinuados nesse
+> caminho. **Decidir qual antes de criar o app**: a escolha muda as permissões pedidas, e
+> pedir do conjunto errado reprova a submissão inteira.
+>
+> **(b) A tag de agente humano é para HUMANO, não para o bot.** O §7.1 pergunta o prazo: são
+> **7 dias** — mas a Meta a restringe a mensagem **enviada por pessoa**, audita o uso e pode
+> revogar. Automação dentro desses 7 dias é uso indevido. Ou seja: **o bot vive dentro das
+> 24 h; os 7 dias são para o dono assumir na mão.** Isso reforça o §7.1 em vez de afrouxá-lo —
+> todo fluxo automático precisa caber em 24 h ou migrar de canal.
 
 ---
 
@@ -156,3 +306,39 @@ Sem isto, "o bot está respondendo" e "o bot está convertendo" viram a mesma fr
 - quantas o dono precisou assumir na mão (se for alto, a persona ainda não está pronta)
 - **invariante:** conversa com mensagem da pessoa sem resposta há mais de 24 h — o equivalente,
   aqui, do `job_analise_sem_motor`
+
+
+---
+
+## 6.4 `ig_webhook_recebido` — a PROVA de que a escuta escutou (acrescentada em 01/09)
+
+Não estava na spec, e é a peça que faltava para o §10 poder responder qualquer coisa.
+
+`recebido_em` · `campos[]` · `gravadas` · `nao_reconhecidos` · `bruto` (jsonb) · `erro`
+
+**Por que existe:** um webhook que recebe um formato que não conhece, devolve 200 e não grava
+nada fica **idêntico, por fora, a um webhook que ninguém está chamando**. Nos dois casos
+`ig_mensagens` fica vazia e nada dá erro. Semanas depois, na hora de treinar, o corpus estaria
+vazio e as duas causas seriam indistinguíveis — e a diferença entre elas é enorme (uma é
+configuração no painel, a outra é parser). É a forma de falha nº 1 do `CLAUDE.md` aplicada à
+escuta. `bruto` só é preenchido quando `nao_reconhecidos > 0`: guardar sempre seria estocar DM
+em dobro, sem finalidade — e finalidade é o que a LGPD cobra.
+
+**A consulta que responde "a escuta está viva?":**
+```sql
+select max(recebido_em) as ultima_entrega, sum(gravadas) as mensagens,
+       sum(nao_reconhecidos) as nao_entendidas
+  from ig_webhook_recebido where recebido_em > now() - interval '7 days';
+-- nenhuma linha  = ninguém está chamando (painel da Meta não configurado)
+-- linhas com gravadas=0 e nao_entendidas>0 = está chamando e o parser não entende: leia `bruto`
+```
+
+## 7.5 O que a v1 DELIBERADAMENTE não guarda
+
+`read`, `delivery` e `reaction` chegam pelo mesmo `messaging[]` e são descartados sem contar
+como "não reconhecidos" — são eventos que esta versão escolhe não guardar, não formatos que
+ela não entendeu. Misturar as duas categorias faria o alarme do §6.4 disparar todo dia por
+funcionamento normal, e alarme que sempre toca é alarme desligado.
+
+**Mensagem só com anexo (foto, áudio) É gravada**, com `texto` nulo: ela não serve de corpus,
+mas é contato — move a janela de 24 h. Descartá-la faria o bot concluir que a pessoa nunca falou.

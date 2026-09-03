@@ -2333,268 +2333,10 @@ function descricaoContratoPlano(key, cfg) {
   return DESCRICOES_PADRAO[key] || '';
 }
 
-function ContratoModal({ chave, planos, onClose }) {
-  const planosCfg = usePlanos(); // preços/termos ao vivo do planos_config (fonte única do valor)
-  // chave: 'assessorado' | 'curso:uuid:titulo' | 'ebook:uuid:titulo'
-  const partes = chave.split(':');
-  const isProduto = partes[0] === 'curso' || partes[0] === 'ebook';
-  const produtoTitulo = isProduto ? partes.slice(2).join(':') : null;
-  const planoObj = isProduto ? null : planos.find(p => p.plano_key === chave);
-  const nomeContrato = isProduto
-    ? `${partes[0] === 'curso' ? 'Curso' : 'eBook'} — ${produtoTitulo}`
-    : planoObj?.nome || chave;
-  const descPadrao = isProduto
-    ? `Contrato de aquisição: ${nomeContrato}. Produto digital disponível na plataforma BidPro Brasil. Acesso individual e intransferível. Valor conforme acordado.`
-    : descricaoContratoPlano(chave, planosCfg?.[chave]);
-
-  // Etapas: 'dados' | 'gerando' | 'revisar' | 'aprovado'
-  const [etapa, setEtapa] = useState('dados');
-  const [contratoExistente, setContratoExistente] = useState(null); // contrato já salvo
-  const [loadingExistente, setLoadingExistente] = useState(true);
-
-  const [desc, setDesc] = useState(descPadrao);
-
-  // Conteúdo gerado / editável
-  const [conteudo, setConteudo] = useState('');
-  const [editando, setEditando] = useState(false);
-  const [instrucaoIA, setInstrucaoIA] = useState('');
-  const [reescrevendo, setReescrevendo] = useState(false);
-
-  // Link final
-  const [linkGerado, setLinkGerado] = useState('');
-  const [copiado, setCopiado] = useState(false);
-  const [salvando, setSalvando] = useState(false);
-
-  // Carrega contrato existente para este produto/plano (se houver)
-  useEffect(() => {
-    const tituloBase = `Contrato — ${nomeContrato}`;
-    supabase.from('contratos_link')
-      .select('*').ilike('titulo', `${tituloBase}%`)
-      .neq('status', 'cancelado').order('criado_em', { ascending: false }).limit(1)
-      .then(({ data }) => {
-        if (data?.length) {
-          setContratoExistente(data[0]);
-          setConteudo(data[0].conteudo || '');
-          setEtapa('aprovado');
-        }
-        setLoadingExistente(false);
-      });
-  }, [chave]);
-
-  async function gerarComIA() {
-    setEtapa('gerando');
-    try {
-      const descFull = desc;
-      const r = await apiCall('/api/gerar-contrato', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ titulo: `Contrato — ${nomeContrato}`, tipo: 'servico', descricao: descFull, arquivos: [] }),
-      });
-      const d = await r.json();
-      if (d.conteudo) { setConteudo(d.conteudo); setEtapa('revisar'); }
-      else { alert(d.error || 'Erro ao gerar.'); setEtapa('dados'); }
-    } catch { alert('Erro de conexão.'); setEtapa('dados'); }
-  }
-
-  async function reescreverComIA() {
-    if (!instrucaoIA.trim()) return;
-    setReescrevendo(true);
-    try {
-      const r = await apiCall('/api/gerar-contrato', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          titulo: `Contrato — ${nomeContrato}`,
-          tipo: 'servico',
-          descricao: `Revise o contrato abaixo conforme a instrução: "${instrucaoIA}"\n\nCONTRATO ATUAL:\n${conteudo}`,
-          arquivos: [],
-        }),
-      });
-      const d = await r.json();
-      if (d.conteudo) { setConteudo(d.conteudo); setInstrucaoIA(''); }
-      else alert(d.error || 'Erro ao reescrever.');
-    } catch { alert('Erro de conexão.'); }
-    setReescrevendo(false);
-  }
-
-  async function aprovar() {
-    if (!conteudo.trim()) return;
-    setSalvando(true);
-    try {
-      const tituloFinal = `Contrato — ${nomeContrato}`;
-      let saved;
-      if (contratoExistente) {
-        const { data } = await supabase.from('contratos_link')
-          .update({ conteudo, titulo: tituloFinal, status: 'pendente' })
-          .eq('id', contratoExistente.id).select().single();
-        saved = data;
-      } else {
-        const { data } = await supabase.from('contratos_link')
-          .insert({ titulo: tituloFinal, tipo_contrato: 'servico', conteudo, status: 'pendente',
-            criado_por: (await supabase.auth.getUser()).data?.user?.id })
-          .select().single();
-        saved = data;
-      }
-      if (saved) {
-        setContratoExistente(saved);
-        const base = window.location.href.split('#')[0];
-        setLinkGerado(`${base}#/c/${saved.token}`);
-        setEtapa('aprovado');
-      }
-    } catch { alert('Erro ao salvar contrato.'); }
-    setSalvando(false);
-  }
-
-  const inp = { border:'1px solid #e2e8f0', borderRadius:8, fontSize:13, padding:'9px 12px', width:'100%', boxSizing:'border-box', fontFamily:'inherit', color:'#111111' };
-
-  if (loadingExistente) return (
-    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center' }}>
-      <div style={{ background:'white', borderRadius:16, padding:32, fontSize:14, color:'#64748b' }}>Carregando…</div>
-    </div>
-  );
-
-  return (
-    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.55)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}
-      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div style={{ background:'white', borderRadius:18, width:'100%', maxWidth:660, maxHeight:'92vh', overflowY:'auto', display:'flex', flexDirection:'column' }}>
-
-        {/* Cabeçalho */}
-        <div style={{ padding:'24px 28px 16px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
-          <div>
-            <div style={{ fontWeight:900, fontSize:16, color:'#111111' }}>📄 {nomeContrato}</div>
-            <div style={{ fontSize:12, color:'#64748b', marginTop:2 }}>
-              {etapa === 'dados' && 'Preencha os dados para gerar o contrato com IA'}
-              {etapa === 'gerando' && 'Gerando contrato com inteligência artificial…'}
-              {etapa === 'revisar' && 'Revise, edite e aprove antes de enviar ao cliente'}
-              {etapa === 'aprovado' && (contratoExistente?.status === 'assinado' ? '✅ Assinado pelo cliente' : '✅ Contrato aprovado — link disponível para envio')}
-            </div>
-          </div>
-          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:22, cursor:'pointer', color:'#94a3b8', lineHeight:1 }}>✕</button>
-        </div>
-
-        <div style={{ padding:'24px 28px', flex:1 }}>
-
-          {/* ETAPA: dados */}
-          {etapa === 'dados' && (
-            <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
-              <div>
-                <label style={{ fontSize:11, fontWeight:700, color:'#374151', display:'block', marginBottom:4 }}>ESCOPO / CONDIÇÕES DO CONTRATO</label>
-                <textarea value={desc} onChange={e=>setDesc(e.target.value)} rows={5} style={{ ...inp, resize:'vertical' }} />
-                <div style={{ fontSize:11, color:'#94a3b8', marginTop:3 }}>Pré-preenchido conforme o produto. Ajuste se necessário antes de gerar.</div>
-              </div>
-              <div style={{ display:'flex', gap:10, marginTop:6 }}>
-                <button onClick={onClose} style={{ flex:1, padding:'11px', background:'#f1f5f9', color:'#374151', border:'none', borderRadius:10, fontWeight:700, cursor:'pointer' }}>Cancelar</button>
-                <button onClick={gerarComIA} style={{ flex:2, padding:'11px', background:'#0D63DB', color:'white', border:'none', borderRadius:10, fontWeight:800, cursor:'pointer' }}>
-                  🤖 Gerar contrato com IA →
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* ETAPA: gerando */}
-          {etapa === 'gerando' && (
-            <div style={{ textAlign:'center', padding:'40px 0' }}>
-              <div style={{ fontSize:40, marginBottom:16 }}>⏳</div>
-              <div style={{ fontWeight:700, fontSize:15, color:'#111111', marginBottom:8 }}>Elaborando o contrato…</div>
-              <div style={{ fontSize:13, color:'#64748b' }}>A IA está redigindo as cláusulas. Aguarde alguns segundos.</div>
-            </div>
-          )}
-
-          {/* ETAPA: revisar */}
-          {etapa === 'revisar' && (
-            <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
-              {/* Toolbar edição */}
-              <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-                <span style={{ fontSize:12, fontWeight:700, color:'#475569' }}>CONTRATO GERADO</span>
-                <button onClick={() => setEditando(e=>!e)}
-                  style={{ marginLeft:'auto', padding:'5px 12px', background:editando?'#fef3c7':'#f1f5f9', color:editando?'#92400e':'#374151', border:`1px solid ${editando?'#fcd34d':'#e2e8f0'}`, borderRadius:7, fontWeight:700, fontSize:12, cursor:'pointer' }}>
-                  {editando ? '✏️ Editando' : '✏️ Editar'}
-                </button>
-              </div>
-
-              {editando ? (
-                <textarea value={conteudo} onChange={e=>setConteudo(e.target.value)} rows={16}
-                  style={{ ...inp, resize:'vertical', fontSize:12, lineHeight:1.7 }} />
-              ) : (
-                <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:10, padding:'16px 18px', fontSize:13, lineHeight:1.8, color:'#111111', whiteSpace:'pre-wrap', maxHeight:340, overflowY:'auto' }}>
-                  {conteudo}
-                </div>
-              )}
-
-              {/* Instrução para IA reescrever */}
-              <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:10, padding:'14px 16px' }}>
-                <div style={{ fontSize:11, fontWeight:800, color:'#084BA6', marginBottom:8 }}>🤖 Pedir alteração à IA</div>
-                <div style={{ display:'flex', gap:8 }}>
-                  <input value={instrucaoIA} onChange={e=>setInstrucaoIA(e.target.value)}
-                    placeholder="Ex: Adicione cláusula de confidencialidade · Ajuste o prazo para 6 meses"
-                    style={{ ...inp, flex:1 }} onKeyDown={e=>e.key==='Enter'&&reescreverComIA()} />
-                  <button onClick={reescreverComIA} disabled={reescrevendo || !instrucaoIA.trim()}
-                    style={{ padding:'9px 16px', background:'#0D63DB', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', whiteSpace:'nowrap', opacity:reescrevendo?0.7:1 }}>
-                    {reescrevendo ? '…' : 'Aplicar'}
-                  </button>
-                </div>
-              </div>
-
-              <div style={{ display:'flex', gap:10 }}>
-                <button onClick={() => setEtapa('dados')} style={{ flex:1, padding:'11px', background:'#f1f5f9', color:'#374151', border:'none', borderRadius:10, fontWeight:700, cursor:'pointer' }}>← Voltar</button>
-                <button onClick={aprovar} disabled={salvando}
-                  style={{ flex:2, padding:'11px', background:'#10b981', color:'white', border:'none', borderRadius:10, fontWeight:800, cursor:'pointer', opacity:salvando?0.7:1 }}>
-                  {salvando ? 'Salvando…' : '✅ Aprovar e gerar link →'}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* ETAPA: aprovado */}
-          {etapa === 'aprovado' && (
-            <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
-              {/* Status badge */}
-              <div style={{ display:'flex', gap:10, alignItems:'center', flexWrap:'wrap' }}>
-                {contratoExistente?.status === 'assinado' ? (
-                  <span style={{ background:'#dcfce7', color:'#166534', padding:'4px 12px', borderRadius:20, fontWeight:700, fontSize:12 }}>✅ Assinado em {contratoExistente.assinado_em ? new Date(contratoExistente.assinado_em).toLocaleDateString('pt-BR') : '—'}</span>
-                ) : (
-                  <span style={{ background:'#fef9c3', color:'#92400e', padding:'4px 12px', borderRadius:20, fontWeight:700, fontSize:12 }}>⏳ Aguardando assinatura</span>
-                )}
-                <button onClick={() => { setEditando(false); setEtapa('revisar'); }}
-                  style={{ marginLeft:'auto', padding:'5px 12px', background:'#f1f5f9', color:'#374151', border:'1px solid #e2e8f0', borderRadius:7, fontWeight:700, fontSize:12, cursor:'pointer' }}>
-                  ✏️ Editar contrato
-                </button>
-              </div>
-
-              {/* Preview do conteúdo */}
-              <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:10, padding:'16px 18px', fontSize:13, lineHeight:1.8, color:'#111111', whiteSpace:'pre-wrap', maxHeight:260, overflowY:'auto' }}>
-                {conteudo || contratoExistente?.conteudo || '—'}
-              </div>
-
-              {/* Link */}
-              {(linkGerado || contratoExistente?.token) && (
-                <div>
-                  <div style={{ fontSize:11, fontWeight:700, color:'#374151', marginBottom:6 }}>LINK PARA O CLIENTE ASSINAR</div>
-                  <div style={{ display:'flex', gap:8 }}>
-                    <div style={{ flex:1, background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:8, padding:'9px 12px', fontSize:12, color:'#0D63DB', wordBreak:'break-all' }}>
-                      {linkGerado || `${window.location.href.split('#')[0]}#/c/${contratoExistente?.token}`}
-                    </div>
-                    <button onClick={() => { const l = linkGerado || `${window.location.href.split('#')[0]}#/c/${contratoExistente?.token}`; navigator.clipboard.writeText(l); setCopiado(true); setTimeout(()=>setCopiado(false),2000); }}
-                      style={{ padding:'9px 14px', background:copiado?'#10b981':'#0D63DB', color:'white', border:'none', borderRadius:8, fontWeight:700, fontSize:12, cursor:'pointer', whiteSpace:'nowrap' }}>
-                      {copiado ? '✓ Copiado' : '📋 Copiar'}
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Novo contrato para outro cliente */}
-              <button onClick={() => { setContratoExistente(null); setConteudo(''); setLinkGerado(''); setEtapa('dados'); }}
-                style={{ padding:'10px', background:'#f8fafc', color:'#374151', border:'1px solid #e2e8f0', borderRadius:10, fontWeight:700, fontSize:13, cursor:'pointer' }}>
-                + Gerar para outro cliente
-              </button>
-            </div>
-          )}
-
-        </div>
-      </div>
-    </div>
-  );
-}
+// 02/09: o modal de contrato desta tela foi removido junto com a coluna CONTRATO da
+// tabela de Produtos (decisão do dono: os termos de aceite já cobrem o produto). Ele já
+// estava morto — nada chamava setContratoAberto desde que a criação passou para a tela
+// de Contratos, que segue sendo o lugar de criar, atribuir e assinar.
 
 function ConfigTab() {
   const [email, setEmail] = useState(() => localStorage.getItem(FEEDBACK_KEY) || DEFAULT_FEEDBACK_EMAIL);
@@ -2604,32 +2346,19 @@ function ConfigTab() {
   const [dirtyIds, setDirtyIds] = useState(new Set());
   const [salvandoTudo, setSalvandoTudo] = useState(false);
   const [tudoSalvo, setTudoSalvo] = useState(false);
-  const [contratoAberto, setContratoAberto] = useState(null);
-  // Contratos ATRIBUÍDOS por produto (só exibir/visualizar aqui; a criação é na
-  // tela de Contratos). Mapa: 'plano:<key>' | '<tipo>:<id>' → { token, status, titulo }.
-  const [contratosAtrib, setContratosAtrib] = useState({});
-  useEffect(() => {
-    supabase.from('contratos_link')
-      .select('plano_key, produto_tipo, produto_id, token, status, titulo, criado_em')
-      .not('status', 'eq', 'cancelado')
-      .order('criado_em', { ascending: false })
-      .then(({ data }) => {
-        const m = {};
-        for (const c of (data || [])) {
-          const chave = c.plano_key ? `plano:${c.plano_key}` : (c.produto_tipo && c.produto_id ? `${c.produto_tipo}:${c.produto_id}` : null);
-          if (chave && !m[chave]) m[chave] = { token: c.token, status: c.status, titulo: c.titulo };
-        }
-        setContratosAtrib(m);
-      });
-  }, []);
-  // planos kept for ContratoModal compatibility
+  const [erroSalvar, setErroSalvar] = useState('');
+  // 02/09: a coluna CONTRATO saiu desta tabela (decisão do dono — os termos de aceite
+  // já cobrem o produto). A tela de Contratos segue sendo o lugar de criar e atribuir.
   const [planos, setPlanos] = useState([]);
   const [planosLoading, setPlanosLoading] = useState(true);
   const [planosSaved, setPlanosSaved] = useState({});
   const [planosErr, setPlanosErr] = useState('');
   const [comissoesExpanded, setComissoesExpanded] = useState({});
-  const [cfin, setCfin] = useState({});   // config_financeira por gateway
-  const [cfinSaved, setCfinSaved] = useState({});
+  // 02/09: a taxa do gateway deixou de ser digitada. `admin_taxas_gateway` apura o que o
+  // Mercado Pago REALMENTE reteve em cada pagamento aprovado (dados_mp->fee_details com
+  // fee_payer='collector'), e o percentual sai só sobre os pagamentos que trouxeram o
+  // detalhe — dividir pelo bruto inteiro daria um número menor e com cara de medição.
+  const [taxasReais, setTaxasReais] = useState(null);
   const [honorarios, setHonorarios] = useState({ total_pct: 10, admin_pct: 4.5, advogado_pct: 5.0, analista_pct: 0.5, consultor_pct: 0 });
   const [honorariosSaved, setHonorariosSaved] = useState(false);
   const [honorariosErr, setHonorariosErr] = useState('');
@@ -2656,14 +2385,8 @@ function ConfigTab() {
         else setPlanosErr('Erro ao carregar planos. Rode o SQL schema_planos_config.sql no Supabase.');
         setPlanosLoading(false);
       });
-    supabase.from('config_financeira').select('*')
-      .then(({ data }) => {
-        if (data) {
-          const m = {};
-          data.forEach(r => { m[r.gateway] = r; });
-          setCfin(m);
-        }
-      });
+    supabase.rpc('admin_taxas_gateway', { p_dias: 90 })
+      .then(({ data, error }) => setTaxasReais(error ? { erro: error.message } : data));
     supabase.from('config_honorarios').select('*').eq('id', 1).maybeSingle()
       .then(({ data }) => { if (data) setHonorarios(data); });
     // Carrega config de fidelidade para assessorado e clube
@@ -2704,26 +2427,8 @@ function ConfigTab() {
       });
   }, []);
 
-  function updateCfin(gateway, field, value) {
-    setCfin(prev => ({ ...prev, [gateway]: { ...(prev[gateway] || { gateway }), [field]: value } }));
-  }
-
-  async function salvarCfin(gateway) {
-    const r = cfin[gateway] || { gateway };
-    const { error } = await supabase.from('config_financeira').upsert({
-      gateway,
-      taxa_credito_pct:      Number(r.taxa_credito_pct) || 0,
-      taxa_debito_pct:       Number(r.taxa_debito_pct) || 0,
-      antecipacao_ativa:     r.antecipacao_ativa || false,
-      antecipacao_pct_mes:   Number(r.antecipacao_pct_mes) || 0,
-      prazo_recebimento_dias: Number(r.prazo_recebimento_dias) || 30,
-      atualizado_em: new Date().toISOString(),
-    });
-    if (!error) {
-      setCfinSaved(prev => ({ ...prev, [gateway]: true }));
-      setTimeout(() => setCfinSaved(prev => ({ ...prev, [gateway]: false })), 2000);
-    }
-  }
+  // Formata número do banco (vem string no jsonb) para o quadro de taxas.
+  const fmtNum = (v) => Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   async function salvarHonorarios() {
     setHonorariosErr('');
@@ -2833,29 +2538,31 @@ function ConfigTab() {
             assinatura: p.assinatura ?? p.cobrar ?? false,
             ativo: p.ativo ?? true,
             comissao_pct: p.comissao_pct ?? 0,
-            requer_contrato: p.requer_contrato ?? false,
             _raw: p,
           })),
           ...cursosData.map(c => ({
             _tipo: 'curso', _id: c.id,
             nome: c.titulo,
             preco: c.preco ?? 0,
+            // curso/ebook não têm coluna de valor à vista: o campo em R$ nasce do %.
+            preco_vista: (Number(c.preco) > 0 && Number(c.desconto_vista_pct) > 0)
+              ? Math.round(Number(c.preco) * (1 - Number(c.desconto_vista_pct) / 100) * 100) / 100 : null,
             desconto_vista_pct: c.desconto_vista_pct ?? 0,
             assinatura: c.assinatura ?? false,
             ativo: c.ativo ?? true,
             comissao_pct: c.comissao_pct ?? 0,
-            requer_contrato: c.requer_contrato ?? false,
             _raw: c,
           })),
           ...ebooksData.map(e => ({
             _tipo: 'ebook', _id: e.id,
             nome: e.titulo,
             preco: e.preco ?? 0,
+            preco_vista: (Number(e.preco) > 0 && Number(e.desconto_vista_pct) > 0)
+              ? Math.round(Number(e.preco) * (1 - Number(e.desconto_vista_pct) / 100) * 100) / 100 : null,
             desconto_vista_pct: e.desconto_vista_pct ?? 0,
             assinatura: e.assinatura ?? false,
             ativo: e.ativo ?? true,
             comissao_pct: e.comissao_pct ?? 0,
-            requer_contrato: false,
             _raw: e,
           })),
         ];
@@ -2869,56 +2576,96 @@ function ConfigTab() {
     loadAll();
   }, []);
 
+  // Valor à vista efetivo de uma linha: o campo em R$ quando o dono o preencheu, senão o
+  // derivado do %. Um só lugar decide, para a tela e o salvamento nunca discordarem.
+  const vistaDaLinha = (r) => {
+    const preco = Number(r.preco) || 0;
+    const emReais = Number(r.preco_vista);
+    if (Number.isFinite(emReais) && emReais > 0) return emReais;
+    const pct = Number(r.desconto_vista_pct) || 0;
+    return pct > 0 && preco > 0 ? preco * (1 - pct / 100) : 0;
+  };
+
   function updateRow(id, tipo, field, value) {
     setRows(prev => prev.map(r => (r._id === id && r._tipo === tipo) ? { ...r, [field]: value } : r));
     setDirtyIds(prev => new Set([...prev, `${tipo}:${id}`]));
   }
 
+  // 02/09 — ESTE SALVAMENTO MENTIA. Os três `update` descartavam o `error` do
+  // postgrest-js (que NÃO lança em não-2xx), e o `dirtyIds` era limpo para todos:
+  // a tela dizia "Tudo salvo" sobre uma linha que o banco recusou. O ebook batia em
+  // 400 — `ebooks_admin` não tinha `desconto_vista_pct` (rastro em erros_cliente,
+  // 02/09 16:23 UTC) — e NENHUM ebook salvou desde que a coluna passou a ser enviada.
+  // Agora: cada linha responde por si (só a que gravou sai do dirty), o `.select()`
+  // prova o que mudou (RLS que filtra tudo devolve error nulo e zero linhas — forma
+  // nº 3), e o que falhou aparece com nome e motivo em vez de sumir.
   async function salvarTudo() {
     setSalvandoTudo(true);
+    setErroSalvar('');
+    const dirtyRows = rows.filter(r => dirtyIds.has(`${r._tipo}:${r._id}`));
+    const falhas = [];
+    const ok = [];
+
+    const gravar = async (p) => {
+      const chave = `${p._tipo}:${p._id}`;
+      const preco = Number(p.preco) || 0;
+      // O VALOR à vista é a fonte; o % é o rótulo derivado dele. Digitar 5.000 sobre 6.000
+      // grava 5.000 exatos e um pct de 16,6667 — pelo caminho inverso, nenhum percentual
+      // com casas finitas fecha esse valor (era o R$ 4.999,80 que aparecia na tela).
+      const vista = vistaDaLinha(p);
+      const pct = (preco > 0 && vista > 0 && vista < preco)
+        ? Math.round((1 - vista / preco) * 100 * 10000) / 10000   // numeric(7,4)
+        : 0;
+      const comum = {
+        preco,
+        desconto_vista_pct: pct,
+        assinatura: p.assinatura,
+        ativo: p.ativo,
+      };
+      let q;
+      if (p._tipo === 'plano') {
+        q = supabase.from('planos_config').update({
+          ...comum,
+          preco_vista: pct > 0 ? Math.round(vista * 100) / 100 : null,
+          cobrar: p.assinatura,
+          atualizado_em: new Date().toISOString(),
+        }).eq('plano_key', p._id);
+      } else if (p._tipo === 'curso') {
+        // `gratuito` acompanha o preço: é o critério que o servidor usa para liberar o
+        // arquivo (obter_arquivo_ebook) e o que a vitrine de /membros passou a ler.
+        q = supabase.from('cursos_admin').update({ ...comum, gratuito: !(preco > 0) }).eq('id', p._id);
+      } else {
+        q = supabase.from('ebooks_admin').update({ ...comum, gratuito: !(preco > 0) }).eq('id', p._id);
+      }
+      const { data, error } = await q.select('*');
+      if (error) { falhas.push({ chave, nome: p.nome, motivo: error.message }); return; }
+      if (!data || data.length === 0) {
+        falhas.push({ chave, nome: p.nome, motivo: 'o banco não alterou nenhuma linha (permissão ou registro inexistente)' });
+        return;
+      }
+      ok.push(chave);
+    };
+
     try {
-      const dirtyRows = rows.filter(r => dirtyIds.has(`${r._tipo}:${r._id}`));
-      await Promise.all(dirtyRows.map(async p => {
-        if (p._tipo === 'plano') {
-          const vistaCalc = Number(p.desconto_vista_pct) > 0
-            ? Number(p.preco) * (1 - Number(p.desconto_vista_pct) / 100)
-            : (p.preco_vista ?? null);
-          await supabase.from('planos_config').update({
-            preco: Number(p.preco) || 0,
-            desconto_vista_pct: Number(p.desconto_vista_pct) || 0,
-            preco_vista: vistaCalc,
-            cobrar: p.assinatura,
-            assinatura: p.assinatura,
-            ativo: p.ativo,
-            requer_contrato: p.requer_contrato,
-            atualizado_em: new Date().toISOString(),
-          }).eq('plano_key', p._id);
-        } else if (p._tipo === 'curso') {
-          await supabase.from('cursos_admin').update({
-            preco: Number(p.preco) || 0,
-            desconto_vista_pct: Number(p.desconto_vista_pct) || 0,
-            assinatura: p.assinatura,
-            ativo: p.ativo,
-            requer_contrato: p.requer_contrato,
-          }).eq('id', p._id);
-        } else if (p._tipo === 'ebook') {
-          await supabase.from('ebooks_admin').update({
-            preco: Number(p.preco) || 0,
-            desconto_vista_pct: Number(p.desconto_vista_pct) || 0,
-            assinatura: p.assinatura,
-            ativo: p.ativo,
-          }).eq('id', p._id);
-        }
-      }));
-      setDirtyIds(new Set());
-      PlanosProvider.invalidate(); // força re-fetch em todas as telas
+      await Promise.all(dirtyRows.map(gravar));
+    } catch (err) {
+      falhas.push({ chave: '*', nome: 'conexão', motivo: err.message });
+    }
+
+    // Só sai do "não salvo" o que o banco confirmou: o resto continua amarelo na tela.
+    setDirtyIds(prev => {
+      const n = new Set(prev);
+      ok.forEach(k => n.delete(k));
+      return n;
+    });
+    PlanosProvider.invalidate(); // força re-fetch nas telas públicas
+    if (falhas.length) {
+      setErroSalvar(falhas.map(f => `${f.nome}: ${f.motivo}`).join(' · '));
+    } else {
       setTudoSalvo(true);
       setTimeout(() => setTudoSalvo(false), 2500);
-    } catch (err) {
-      alert('Erro ao salvar: ' + err.message);
-    } finally {
-      setSalvandoTudo(false);
     }
+    setSalvandoTudo(false);
   }
 
   function salvarEmail() {
@@ -2967,7 +2714,7 @@ function ConfigTab() {
 
   const fmtPreco = (v) => v != null ? `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—';
   const fmtBRL = v => v != null ? `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—';
-  const COLS = '2fr 110px 140px 90px 70px 90px';
+  const COLS = '2fr 110px 200px 90px 70px';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -2975,10 +2722,15 @@ function ConfigTab() {
 
       {/* Tabela unificada */}
       <div style={S.card}>
-        <p style={S.subTitle}>Produtos — Preços, Assinatura e Contratos</p>
+        <p style={S.subTitle}>Produtos — Preços e Assinatura</p>
         <p style={{ fontSize: 13, color: '#64748b', marginBottom: 16 }}>
           Planos, cursos e eBooks unificados. "Assinatura" = cobrança recorrente; desmarcado = venda única parcelável em 12×. Preço à vista calculado automaticamente pelo desconto %.
         </p>
+        {erroSalvar && (
+          <div style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontSize: 12.5, fontWeight: 600 }}>
+            Não salvou: {erroSalvar}. A linha continua marcada em amarelo — o valor antigo é o que vale.
+          </div>
+        )}
 
         {loadingRows ? (
           <div style={{ color: '#94a3b8', fontSize: 13, padding: 20 }}>Carregando...</div>
@@ -2986,14 +2738,14 @@ function ConfigTab() {
           <div style={{ overflowX: 'auto' }}>
             {/* Header */}
             <div style={{ display: 'grid', gridTemplateColumns: COLS, gap: 8, padding: '6px 8px', borderBottom: '2px solid #e2e8f0', minWidth: 700 }}>
-              {['Produto', 'Valor R$', 'Desc. à vista %', 'Assinatura', 'Ativo', 'Contrato'].map(h => (
+              {['Produto', 'Valor R$', 'À vista (% ou R$)', 'Assinatura', 'Ativo'].map(h => (
                 <div key={h} style={{ fontSize: 10, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: 0.5 }}>{h}</div>
               ))}
             </div>
 
             {rows.map(r => {
               const pct = Number(r.desconto_vista_pct || 0);
-              const vistaCalc = pct > 0 ? Number(r.preco) * (1 - pct / 100) : null;
+              const vistaEfetiva = vistaDaLinha(r);
               const temVista = !r.assinatura && Number(r.preco) > 0;
               const isDirtyRow = dirtyIds.has(`${r._tipo}:${r._id}`);
               const tipoBadge = r._tipo === 'plano'
@@ -3029,17 +2781,38 @@ function ConfigTab() {
                     )}
                   </div>
 
-                  {/* Col 3: Desc. à vista % */}
+                  {/* Col 3: à vista — % OU valor. Digitar o VALOR é o caminho exato: nenhum
+                      percentual com casas finitas fecha R$ 5.000 sobre R$ 6.000, e era daí
+                      que saía o R$ 4.999,80 na tela. O outro campo acompanha. */}
                   <div>
                     {temVista ? (
                       <>
-                        <input type="number" min="0" max="100" step="0.5"
-                          value={pct}
-                          onChange={e => updateRow(r._id, r._tipo, 'desconto_vista_pct', e.target.value)}
-                          style={{ ...S.input, padding: '6px 8px', fontSize: 13, width: '100%' }} />
-                        {pct > 0 && (
+                        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                          <input type="number" min="0" max="100" step="0.0001"
+                            title="Desconto % — o valor ao lado acompanha"
+                            value={pct === 0 ? '' : Number(Number(pct).toFixed(4))}
+                            placeholder="%"
+                            onChange={e => {
+                              const novoPct = Number(e.target.value) || 0;
+                              updateRow(r._id, r._tipo, 'desconto_vista_pct', e.target.value);
+                              updateRow(r._id, r._tipo, 'preco_vista',
+                                novoPct > 0 ? Math.round(Number(r.preco) * (1 - novoPct / 100) * 100) / 100 : null);
+                            }}
+                            style={{ ...S.input, padding: '6px 8px', fontSize: 13, width: 78 }} />
+                          <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 700 }}>%</span>
+                          <InputBRL value={vistaEfetiva || ''}
+                            onChange={v => {
+                              const novoVista = Number(v) || 0;
+                              updateRow(r._id, r._tipo, 'preco_vista', novoVista > 0 ? novoVista : null);
+                              updateRow(r._id, r._tipo, 'desconto_vista_pct',
+                                novoVista > 0 && Number(r.preco) > 0
+                                  ? Math.round((1 - novoVista / Number(r.preco)) * 100 * 10000) / 10000 : 0);
+                            }}
+                            style={{ ...S.input, padding: '6px 8px', fontSize: 13, width: 104 }} />
+                        </div>
+                        {vistaEfetiva > 0 && (
                           <div style={{ fontSize: 10, color: '#059669', marginTop: 3, fontWeight: 600 }}>
-                            {fmtBRL(vistaCalc)} à vista
+                            {fmtBRL(vistaEfetiva)} à vista · economia de {fmtBRL(Number(r.preco) - vistaEfetiva)}
                           </div>
                         )}
                       </>
@@ -3065,24 +2838,6 @@ function ConfigTab() {
                       style={{ width: 18, height: 18, cursor: 'pointer', accentColor: '#10b981' }} />
                   </div>
 
-                  {/* Col 6: Contrato — só EXIBE/VISUALIZA o contrato atribuído pela
-                      tela de Contratos (a criação não acontece mais aqui). */}
-                  <div>
-                    {(() => {
-                      const chave = r._tipo === 'plano' ? `plano:${r._id}` : `${r._tipo}:${r._id}`;
-                      const ct = contratosAtrib[chave];
-                      if (ct) {
-                        return (
-                          <a href={`/#/c/${ct.token}`} target="_blank" rel="noreferrer"
-                            title={ct.titulo || 'Ver contrato atribuído'}
-                            style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '6px 10px', background: '#f0fdf4', color: '#15803d', border: '1px solid #86efac', borderRadius: 8, fontWeight: 700, fontSize: 11, cursor: 'pointer', width: '100%', textDecoration: 'none' }}>
-                            ✓ Ver contrato
-                          </a>
-                        );
-                      }
-                      return <span style={{ display: 'inline-block', padding: '6px 10px', fontSize: 11, color: '#94a3b8', fontWeight: 600, textAlign: 'center', width: '100%' }}>Sem contrato</span>;
-                    })()}
-                  </div>
                 </div>
               );
             })}
@@ -3090,13 +2845,6 @@ function ConfigTab() {
         )}
       </div>
 
-      {contratoAberto && (
-        <ContratoModal
-          chave={contratoAberto}
-          planos={planos}
-          onClose={() => setContratoAberto(null)}
-        />
-      )}
 
       {/* Botão flutuante de salvar */}
       {(isDirty || tudoSalvo) && (
@@ -3384,85 +3132,43 @@ function ConfigTab() {
         )}
       </div>
 
-      {/* Taxas Financeiras por Gateway */}
+      {/* Taxas de gateway — MEDIDAS, não digitadas (02/09, pedido do dono) */}
       <div style={S.card}>
-        <p style={S.subTitle}>Taxas Financeiras por Gateway</p>
+        <p style={S.subTitle}>Taxas de gateway — o que pagamos de verdade</p>
         <p style={{ fontSize: 13, color: '#64748b', marginBottom: 16 }}>
-          Configure as taxas cobradas por cada gateway. Usadas para exibir o breakdown financeiro no analítico de comissões.
-          <br/>As taxas reais do seu contrato devem ser verificadas diretamente nos painéis Asaas e Mercado Pago.
+          Este quadro é de <b>leitura</b>. A taxa sai do próprio pagamento: o Mercado Pago
+          devolve, em cada cobrança aprovada, quanto reteve — e é isso que aparece aqui, não um
+          percentual digitado. O detalhamento por mês fica no <a href="/#/admin/financeiro" style={{ color: '#0D63DB', fontWeight: 700 }}>financeiro</a>.
         </p>
-        {['asaas', 'mercadopago'].map(gw => {
-          const r = cfin[gw] || {};
-          const gwLabel = gw === 'mercadopago' ? 'Mercado Pago' : 'Asaas';
-          const prazoPadrao = gw === 'mercadopago' ? 0 : 32;
-          return (
-            <div key={gw} style={{ background: '#f8fafc', borderRadius: 10, padding: '14px 16px', marginBottom: 12 }}>
-              <div style={{ fontWeight: 700, fontSize: 13, color: '#111111', marginBottom: 12 }}>{gwLabel}</div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 14 }}>
-                <div>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: '#475569', marginBottom: 4 }}>TAXA CRÉDITO (MDR) %</div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <input type="number" step="0.001" min="0" max="10" value={r.taxa_credito_pct ?? 2.49}
-                      onChange={e => updateCfin(gw, 'taxa_credito_pct', e.target.value)}
-                      style={{ ...S.input, padding: '6px 8px', fontSize: 13, width: 80 }} />
-                    <span style={{ fontSize: 12, color: '#64748b' }}>%</span>
-                  </div>
-                  <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>ex: 2,49%</div>
-                </div>
-                <div>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: '#475569', marginBottom: 4 }}>TAXA DÉBITO (MDR) %</div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <input type="number" step="0.001" min="0" max="10" value={r.taxa_debito_pct ?? 0}
-                      onChange={e => updateCfin(gw, 'taxa_debito_pct', e.target.value)}
-                      style={{ ...S.input, padding: '6px 8px', fontSize: 13, width: 80 }} />
-                    <span style={{ fontSize: 12, color: '#64748b' }}>%</span>
-                  </div>
-                </div>
-                <div>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: '#475569', marginBottom: 4 }}>PRAZO PADRÃO (D+X)</div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <span style={{ fontSize: 12, color: '#64748b' }}>D+</span>
-                    <input type="number" step="1" min="1" max="60" value={r.prazo_recebimento_dias ?? prazoPadrao}
-                      onChange={e => updateCfin(gw, 'prazo_recebimento_dias', e.target.value)}
-                      style={{ ...S.input, padding: '6px 8px', fontSize: 13, width: 60 }} />
-                    <span style={{ fontSize: 12, color: '#64748b' }}>dias</span>
-                  </div>
-                  <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>{gw === 'mercadopago' ? 'crédito D+0 a D+14' : 'padrão D+32'}</div>
-                </div>
-                <div>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: '#475569', marginBottom: 4 }}>ANTECIPAÇÃO HABILITADA</div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}>
-                    <input type="checkbox" checked={r.antecipacao_ativa || false}
-                      onChange={e => updateCfin(gw, 'antecipacao_ativa', e.target.checked)}
-                      style={{ width: 18, height: 18, cursor: 'pointer', accentColor: '#0D63DB' }} />
-                    <span style={{ fontSize: 12, color: '#334155' }}>Ativa</span>
-                  </div>
-                </div>
-                {r.antecipacao_ativa && (
-                  <div>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: '#475569', marginBottom: 4 }}>TAXA ANTECIPAÇÃO % / MÊS</div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <input type="number" step="0.01" min="0" max="5" value={r.antecipacao_pct_mes ?? 1.25}
-                        onChange={e => updateCfin(gw, 'antecipacao_pct_mes', e.target.value)}
-                        style={{ ...S.input, padding: '6px 8px', fontSize: 13, width: 80 }} />
-                      <span style={{ fontSize: 12, color: '#64748b' }}>% a.m.</span>
-                    </div>
-                    <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>
-                      {gw === 'asaas' ? 'Asaas: a partir 1,25% a.m.' : 'Varia por contrato Stone'}
-                    </div>
-                  </div>
+        {taxasReais === null && <div style={{ fontSize: 12.5, color: '#94a3b8' }}>Apurando…</div>}
+        {taxasReais?.erro && (
+          <div style={{ fontSize: 12.5, color: '#b91c1c', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '10px 14px' }}>
+            Não consegui apurar: {taxasReais.erro}
+          </div>
+        )}
+        {taxasReais?.gateways?.map(g => (
+          <div key={g.gateway} style={{ background: '#f8fafc', borderRadius: 10, padding: '14px 16px', marginBottom: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+              <div style={{ fontWeight: 700, fontSize: 13, color: '#111111' }}>{g.rotulo}</div>
+              <div style={{ fontSize: 22, fontWeight: 900, color: g.pct_efetivo == null ? '#94a3b8' : '#111111' }}>
+                {g.pct_efetivo == null ? '—' : `${Number(g.pct_efetivo).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`}
+              </div>
+              <div style={{ fontSize: 11.5, color: '#64748b' }}>taxa efetiva medida</div>
+            </div>
+            {g.pct_efetivo != null ? (
+              <div style={{ fontSize: 11.5, color: '#475569', marginTop: 6 }}>
+                R$ {fmtNum(g.taxa_total)} retidos sobre R$ {fmtNum(g.bruto_medido)} em {g.com_detalhe} pagamento(s) aprovado(s) nos últimos {taxasReais.dias} dias.
+                {Number(g.sem_detalhe) > 0 && (
+                  <> {' '}<span style={{ color: '#b45309', fontWeight: 700 }}>{g.sem_detalhe} pagamento(s) ainda sem o detalhe da taxa</span> — fora desta conta, para o percentual não sair menor do que é.</>
                 )}
               </div>
-              <button onClick={() => salvarCfin(gw)}
-                style={{ marginTop: 14, padding: '7px 18px', background: cfinSaved[gw] ? '#10b981' : '#0D63DB', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
-                {cfinSaved[gw] ? '✓ Salvo' : `Salvar ${gwLabel}`}
-              </button>
-            </div>
-          );
-        })}
+            ) : (
+              <div style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 6 }}>{g.nota || 'Sem pagamento medido no período.'}</div>
+            )}
+          </div>
+        ))}
         <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
-          Asaas: crédito D+32 · antecipação a partir de 1,25% ao mês · recebe em até 2 dias úteis · sem IOF<br/>
-          Mercado Pago: crédito D+0 a D+14 conforme configuração da conta · rendimento CDI no saldo da conta
+          Prazo de recebimento (informativo): Asaas crédito D+32 · Mercado Pago D+0 a D+14 conforme a conta.
         </div>
       </div>
 
@@ -10318,6 +10024,24 @@ function MarketingTab() {
           <button style={S.btn('outline')} onClick={carregar}>↻ Atualizar dados</button>
           <button style={S.btn('primary')} onClick={exportarCSV}>⬇ Exportar Relatório</button>
         </div>
+      </div>
+
+      {/* INSTAGRAM — a caixa de rascunhos. Fica aqui, e não numa aba própria, porque é o mesmo
+          assunto desta tela: de onde vem gente. A diferença é que este canal responde de volta,
+          então o que se administra não é gasto, é conversa. A tela NÃO envia: ela sugere, você
+          edita, copia e responde no app — e é o registro do que você mandou que mede quando uma
+          classe de pergunta pode passar a ser respondida sozinha. */}
+      <div style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:12, padding:'14px 16px', marginBottom:16 }}>
+        <div style={{ fontWeight:800, fontSize:14, color:'#111111', marginBottom:6 }}>Caixa do Instagram</div>
+        <div style={{ fontSize:11.5, color:'#64748b', lineHeight:1.6, marginBottom:10 }}>
+          Comentário, story e direct viram rascunho de resposta, em ordem de <strong>vencimento da
+          janela</strong> (a resposta privada a um comentário é tiro único e vale 7 dias; o direct,
+          24 h). <strong>Não envia sozinho</strong>: você edita, copia e responde no app.
+        </div>
+        <a href="#/admin/instagram"
+          style={{ display:'inline-block', padding:'9px 15px', background:'#0D63DB', color:'#fff', textDecoration:'none', borderRadius:8, fontWeight:700, fontSize:13 }}>
+          Abrir a caixa do Instagram →
+        </a>
       </div>
 
       {/* Filtro de tempo */}

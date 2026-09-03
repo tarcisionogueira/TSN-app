@@ -88,7 +88,11 @@ export default function DisparoWhatsApp() {
   const pendentes = dados.fila.filter((p) => !enviados.has(p.user_id));
   const proximo = pendentes[0];
   const feitos = dados.fila.length - pendentes.length;
-  const CORES = { 1: '#166534', 2: '#1d4ed8', 3: '#64748b' };
+  // Cinco faixas desde 01/09, não três: cliente · parceiro · abriu o e-mail · equipe · o resto.
+  // O fallback importa — sem ele, uma faixa nova sairia com cor `undefined`, que o navegador
+  // desenha como preto e o operador lê como uma quarta categoria que não existe.
+  const CORES = { 1: '#166534', 2: '#0d63db', 3: '#1d4ed8', 4: '#7c3aed', 5: '#64748b' };
+  const cor = (p) => CORES[p] || '#64748b';
 
   return (
     <div style={{ maxWidth: 720, margin: '0 auto', padding: '24px 18px 60px', fontFamily: 'system-ui, sans-serif', color: '#0f172a' }}>
@@ -127,7 +131,7 @@ export default function DisparoWhatsApp() {
 
       {proximo ? (
         <div style={{ border: '2px solid #16a34a', borderRadius: 14, padding: 16, marginBottom: 22, background: '#f0fdf4' }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: CORES[proximo.prioridade], textTransform: 'uppercase', letterSpacing: 0.4 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: cor(proximo.prioridade), textTransform: 'uppercase', letterSpacing: 0.4 }}>
             Próximo · {proximo.motivo}
           </div>
           <div style={{ fontSize: 18, fontWeight: 800, margin: '4px 0 2px' }}>{proximo.nome}</div>
@@ -152,7 +156,7 @@ export default function DisparoWhatsApp() {
         // comprime até sumir atrás da tarja de prioridade — e esta tela vai ser usada no
         // celular, que é onde o WhatsApp está.
         <div key={p.user_id} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '9px 2px', borderBottom: '1px solid #f1f5f9', opacity: i === 0 ? 1 : 0.75 }}>
-          <span style={{ fontSize: 11, fontWeight: 800, color: CORES[p.prioridade], minWidth: 108 }}>{p.motivo}</span>
+          <span style={{ fontSize: 11, fontWeight: 800, color: cor(p.prioridade), minWidth: 108 }}>{p.motivo}</span>
           <span style={{ fontSize: 13.5, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.nome}</span>
           <span style={{ fontSize: 12, color: '#94a3b8' }}>{p.cidade || '—'}</span>
         </div>

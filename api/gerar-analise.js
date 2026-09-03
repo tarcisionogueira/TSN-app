@@ -2386,9 +2386,21 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
         // um erro para cima seria ignorado em silêncio, um para baixo é sempre visível.
         // A defesa principal está no extrator (o percentual declarado no edital vence o "R$"
         // solto); aqui fica a rede: 2ª praça acima da avaliação é impossível.
-        const p2Coerente = p2?.valor > 0 && (!(avalDb > 0) || p2.valor <= avalDb);
+        // 02/09 (MEGA J126875): a trava acima NÃO pega o edital DESATUALIZADO. O edital
+        // (PDF de 16/07) avaliava em R$ 228.333,33 (60% = R$ 137.000); o leiloeiro já
+        // publicava a avaliação atualizada pela tabela do TJ (R$ 265.984,50 → 2ª praça
+        // R$ 159.590,70). 137.000 < 265.984 passou, virou `valor_minimo_ref` (LEAST) e foi
+        // manchete, filtro de busca, alerta e relatório com um lance que não existe mais.
+        // A régua: se o edital declara uma avaliação (ou 1ª praça) que NÃO bate com a do
+        // leiloeiro (>2%), os VALORES dele são de outra base (desatualizado ou de outro
+        // lote) — não gravam. As datas têm regra própria, logo abaixo.
+        const refEd = (Number(extratoDoc.avaliacao) || 0) || (Number(p1?.valor) || 0);
+        const valoresBatem = !(avalDb > 0) || !(refEd > 0) || Math.abs(refEd - avalDb) / avalDb <= 0.02;
+        const p2Coerente = p2?.valor > 0 && (!(avalDb > 0) || p2.valor <= avalDb) && valoresBatem;
         if (p2?.valor > 0 && !p2Coerente) {
-          try { await registrarAnomalia('valor_praca_incoerente', fonteDb, imovelId, 'valor_minimo_2', `Edital deu 2ª praça R$ ${p2.valor} contra avaliação R$ ${avalDb} — descartado.`); } catch { /* rastro best-effort */ }
+          try { await registrarAnomalia('valor_praca_incoerente', fonteDb, imovelId, 'valor_minimo_2', valoresBatem
+            ? `Edital deu 2ª praça R$ ${p2.valor} contra avaliação R$ ${avalDb} — descartado.`
+            : `Edital avalia em R$ ${refEd} e o leiloeiro em R$ ${avalDb} (>2%): os valores do edital são de outra base (desatualizado ou de outro lote) — 2ª praça R$ ${p2.valor} descartada.`); } catch { /* rastro best-effort */ }
         }
         if (!(Number(imDb.valor_minimo_2) > 0) && p2Coerente && p2.valor !== (Number(imDb.valor_minimo) || 0)) {
           imDb.valor_minimo_2 = p2.valor; patchPr.valor_minimo_2 = p2.valor;
@@ -2450,18 +2462,27 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
           const a = Date.parse(novaData), b = Date.parse(atual);
           return Number.isFinite(a) && Number.isFinite(b) && a < b;
         };
+        // 02/09 (MEGA J126875, o mesmo lote): `p1.fim` existia (20/08) e por isso o "recuo
+        // sem prova" não segurou — o edital dizia "1ª praça de 17/08 a 20/08" e o acervo
+        // carregava a praça VIGENTE (2ª, encerra 10/09). Data de início JÁ PASSADA não pode
+        // ser a correção de uma data FUTURA que o leiloeiro publica agora: o documento é
+        // estático, o site é vivo. Ville de Lyon (23/08) segue coberto — lá a praça única
+        // (25/08) ainda estava no futuro quando corrigiu o teto da plataforma (24/09).
+        const jaPassou = (d) => { const t = Date.parse(d); return Number.isFinite(t) && t < Date.now() - DIA_MS; };
+        const acervoNoFuturo = (d) => { const t = Date.parse(d); return Number.isFinite(t) && t > Date.now(); };
         if (p1?.data && imDb.data_leilao && divergeDoAcervo(p1.data, imDb.data_leilao)) {
-          const recuaSemProva = encurtaPrazo(p1.data, imDb.data_leilao) && !p1.fim && !pracaUnica;
+          const pracaVencida = jaPassou(p1.data) && acervoNoFuturo(imDb.data_leilao);
+          const recuaSemProva = (encurtaPrazo(p1.data, imDb.data_leilao) && !p1.fim && !pracaUnica) || pracaVencida;
           try {
             await registrarAnomalia('data_divergente_edital', fonteDb, imovelId, 'data_leilao',
-              `Acervo dizia ${imDb.data_leilao}; edital diz ${p1.data} — ${recuaSemProva ? 'MANTIDO o acervo (o edital recuaria o prazo sem dizer que é encerramento).' : 'corrigido pelo documento.'}`,
+              `Acervo dizia ${imDb.data_leilao}; edital diz ${p1.data} — ${recuaSemProva ? (pracaVencida ? 'MANTIDO o acervo (o edital aponta praça já encerrada; o leiloeiro publica data futura).' : 'MANTIDO o acervo (o edital recuaria o prazo sem dizer que é encerramento).') : 'corrigido pelo documento.'}`,
               // corrigido = nada pendente; mantido = divergência de verdade, fica em aberto.
               !recuaSemProva);
           } catch { /* rastro best-effort */ }
           if (!recuaSemProva) { imDb.data_leilao = p1.data; patchPr.data_leilao = p1.data; }
         }
         if (p2?.data && imDb.data_leilao_2 && divergeDoAcervo(p2.data, imDb.data_leilao_2)) {
-          const recuaSemProva = encurtaPrazo(p2.data, imDb.data_leilao_2) && !p2.fim;
+          const recuaSemProva = (encurtaPrazo(p2.data, imDb.data_leilao_2) && !p2.fim) || (jaPassou(p2.data) && acervoNoFuturo(imDb.data_leilao_2));
           if (!recuaSemProva) { imDb.data_leilao_2 = p2.data; patchPr.data_leilao_2 = p2.data; }
           else {
             try { await registrarAnomalia('data_divergente_edital', fonteDb, imovelId, 'data_leilao_2', `Acervo dizia ${imDb.data_leilao_2}; edital diz ${p2.data} — MANTIDO o acervo (recuo sem encerramento declarado).`); } catch { /* rastro best-effort */ }

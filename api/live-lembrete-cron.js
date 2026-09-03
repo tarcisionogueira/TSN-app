@@ -43,6 +43,7 @@
  * cron nunca mais teria o que fazer, porque ele só olha aula no FUTURO.
  */
 import { isCronAuthorized } from './_auth.js';
+import { edicaoDe } from './_live-edicao.js';
 import { createClient } from '@supabase/supabase-js';
 import { enviarEmail } from './_email.js';
 
@@ -209,15 +210,21 @@ export default async function handler(req, res) {
     const etapa = etapaPor(horas);
     if (!etapa) { porEvento.push({ slug: ev.slug, horas: Math.round(horas * 10) / 10, etapa: null }); continue; }
 
+    // A EDIÇÃO desta ocorrência (03/09). O evento semanal reusa o mesmo `id`, então sem ela
+    // as duas consultas abaixo misturam semanas: os inscritos viriam de TODAS as edições, e
+    // o dedup do lembrete de 09/09 bateria no lembrete já enviado em 02/09 — quem ESTÁ
+    // inscrito ficaria sem o link da sala, e o cron sairia verde tendo mandado zero e-mail.
+    const edicao = edicaoDe(ev.data_hora);
+
     const { data: inscritos, error: eIns } = await supabase.from('live_inscricoes')
-      .select('id, nome, email, user_id').eq('evento_id', ev.id);
+      .select('id, nome, email, user_id').eq('evento_id', ev.id).eq('edicao', edicao);
     if (eIns) return res.status(500).json({ error: 'inscritos_ilegiveis', evento: ev.slug, detalhe: eIns.message });
 
     // Dedup. `error` checado e ABORTA: se esta leitura virasse lista vazia, o cron
     // concluiria "ninguém recebeu ainda" e reenviaria para a lista inteira — de hora em
     // hora, durante toda a janela. Melhor não mandar nesta rodada do que mandar de novo.
     const { data: jaEnviados, error: eDedup } = await supabase.from('live_lembretes')
-      .select('email').eq('evento_id', ev.id).eq('etapa', etapa);
+      .select('email').eq('evento_id', ev.id).eq('etapa', etapa).eq('edicao', edicao);
     if (eDedup) return res.status(500).json({ error: 'dedup_ilegivel', evento: ev.slug, detalhe: eDedup.message });
     const bloqueados = new Set((jaEnviados || []).map(r => String(r.email || '').toLowerCase()));
 
@@ -226,12 +233,12 @@ export default async function handler(req, res) {
       const email = String(i.email || '').toLowerCase();
       if (!email || bloqueados.has(email)) continue;
       if (fila.some(f => f.email === email && f.eventoId === ev.id)) continue;
-      fila.push({ eventoId: ev.id, inscricaoId: i.id, userId: i.user_id || null, email, nome: i.nome, etapa, ev });
+      fila.push({ eventoId: ev.id, edicao, inscricaoId: i.id, userId: i.user_id || null, email, nome: i.nome, etapa, ev });
       aptos++;
     }
     porEvento.push({
       slug: ev.slug, horas: Math.round(horas * 10) / 10, etapa,
-      inscritos: (inscritos || []).length, ja_enviados: bloqueados.size, aptos,
+      edicao, inscritos: (inscritos || []).length, ja_enviados: bloqueados.size, aptos,
       // Um lembrete cuja graça é o link da sala, mandado sem link de sala, é meio lembrete.
       // Fica no retorno para aparecer no log em vez de virar surpresa no dia.
       sem_link_sala: !ev.link_sala || undefined,
@@ -255,7 +262,7 @@ export default async function handler(req, res) {
     // rodada — é para isso que a janela é larga.
     if (r && r.ok !== false) {
       const { error: eGrava } = await supabase.from('live_lembretes').insert({
-        evento_id: item.eventoId, email: item.email, etapa: item.etapa, inscricao_id: item.inscricaoId,
+        evento_id: item.eventoId, edicao: item.edicao, email: item.email, etapa: item.etapa, inscricao_id: item.inscricaoId,
       });
       // O e-mail já saiu e não volta. Se a prova não gravou, a próxima rodada repete —
       // então isto tem de GRITAR no log, não passar batido.
