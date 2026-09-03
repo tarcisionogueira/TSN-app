@@ -179,6 +179,10 @@ async function salvarImoveis(imoveis, fonte) {
       area_m2: areaM2,
       url_lote: urlLote,
       ativo: true, // coletado agora ⇒ está ativo (reativa lotes que voltaram)
+      // Limpa qualquer motivo de supressão anterior (ex.: 'sumiu_da_fonte' de uma rodada em que
+      // o lote ficou de fora) — ele voltou a aparecer na fonte, então o motivo velho não vale
+      // mais. Nunca toca fonte CEF/HASTA (não passam por este coletor — ver salvarEFinalizar).
+      suprimido_motivo: null,
       viavel: temPar ? (1 - vMin / vAval) >= 0.3 : null,
       score_viabilidade: temPar ? Math.min(100, Math.round((1 - vMin / vAval) * 150)) : 30,
       desconto_percentual: temPar ? Math.round((1 - vMin / vAval) * 100) : null,
@@ -272,9 +276,13 @@ async function salvarEFinalizar(imoveis, fonte) {
     console.error(`  🛑 ${fonte}: sweep PULADO — gravou ${salvos} de ${esperados}. Desativar aqui aposentaria lote por falha nossa.`);
   }
   if (salvos > 50 && gravouTudo) {
+    // suprimido_motivo: registra POR QUE saiu de circulação — sumiu desta coleta (delisted,
+    // vendido antes da praça, etc.). Sem isto o banco não distinguia "a fonte tirou do ar" de
+    // "nós falhamos em coletar" para NENHUM lote destas fontes (0 de 2892 preenchidos no ZUK,
+    // medido em 03/09). Nunca atinge CEF/HASTA (fora deste coletor — ver reconciliar_gemeos_hasta_cef).
     const { error, count } = await supabase
       .from('imoveis_leilao')
-      .update({ ativo: false }, { count: 'exact' })
+      .update({ ativo: false, suprimido_motivo: 'sumiu_da_fonte' }, { count: 'exact' })
       .eq('fonte', fonte)
       .eq('ativo', true)
       .lt('atualizado_em', runStart);
