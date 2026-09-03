@@ -84,6 +84,12 @@ function extrairPracasCEF(txt) {
   };
 }
 
+// Mesma exclusão usada dentro de extrairLinkEdital() (que roda NO NAVEGADOR, via
+// page.evaluate, e por isso precisa da sua própria cópia — closures não atravessam
+// esse limite). Esta cópia roda em Node, no worker(), para decidir se o link_edital
+// ATUAL já é confiável antes de sobrescrever.
+const ehMatriculaPdf = (u) => /\/editais\/matricula\//i.test(u || '') || /matr[íi]cula[^/]*\.pdf/i.test(u || '');
+
 // Extrai a URL do "Baixar edital e anexos". O controle da Caixa NÃO é um <a href>
 // simples (diagnóstico: âncoras com pdf/edital no href = []); vem via onclick (ex.:
 // window.open('/editais/...pdf')) ou action de <form>. Esta função RODA NO NAVEGADOR
@@ -94,8 +100,15 @@ function extrairPracasCEF(txt) {
 function extrairLinkEdital() {
   try {
     const abs = (u) => { if (!u) return null; try { return new URL(u.trim(), location.href).href; } catch { return null; } };
-    // parece link de edital/PDF de fato?
-    const bom = (u) => !!u && /(\/editais?\/|\.pdf(\?|#|$)|edital[^/"']*\.(?:pdf|asp)|\.asp\?[^"'\s]*edital)/i.test(u);
+    // parece link de edital/PDF de fato? EXCLUI matrícula (03/09, achado do bloco 4):
+    // a Caixa às vezes rotula o botão de download com "edital"/"anexo" mesmo quando o
+    // link é o PDF da MATRÍCULA (/editais/matricula/<UF>/<n>.pdf — a mesma URL que
+    // scraper.js já calcula para link_matricula). Sem esta exclusão, este script gravava
+    // o mesmo PDF em link_edital: o botão "Edital" abria a matrícula (190 lotes ativos em
+    // 03/09). Mesmo padrão já usado em backfill-edital-cef.mjs (EXCLUI) e na função do
+    // banco eh_edital_pdf() — só faltava aqui.
+    const ehMatriculaPdf = (u) => /\/editais\/matricula\//i.test(u) || /matr[íi]cula[^/]*\.pdf/i.test(u);
+    const bom = (u) => !!u && !ehMatriculaPdf(u) && /(\/editais?\/|\.pdf(\?|#|$)|edital[^/"']*\.(?:pdf|asp)|\.asp\?[^"'\s]*edital)/i.test(u);
     // extrai a 1ª URL de dentro de um trecho de JS (onclick), ex.: window.open('...').
     const urlDeJS = (s) => {
       if (!s) return null;
@@ -298,7 +311,11 @@ async function main() {
           // detalhe). Antes a condição era `!im.link_edital` — e como o CEF já vem
           // com link_edital = página de detalhe, NUNCA gravava o PDF (0/32k). Agora
           // sobrescreve quando o atual não é um edital real.
-          const jaTemEditalReal = /\/editais\//i.test(im.link_edital || '');
+          // EXCLUI matrícula (03/09): um link_edital que hoje é o PDF da matrícula (achado
+          // antigo desta mesma classe de bug) não conta como "edital real" — sem isto, este
+          // registro nunca seria retentado por este script (retry acontece no
+          // backfill-edital-cef.mjs, mas alinhar os dois evita a mesma régua com dois pesos).
+          const jaTemEditalReal = /\/editais\//i.test(im.link_edital || '') && !ehMatriculaPdf(im.link_edital || '');
           if (ed?.url && !jaTemEditalReal) {
             patch.link_edital = ed.url;
           } else if (!ed?.url && !jaTemEditalReal && amostrasEdital < 5) {

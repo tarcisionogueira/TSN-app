@@ -4,6 +4,37 @@
 
 ---
 
+## 📋 SESSÃO 22 · PARTE 11 (03/09, à noite) — BLOCO 4: PESTANA E CEF INVESTIGADOS
+
+Pedido do dono: os 2 achados mais urgentes do Bloco 4 (novos desde a manhã).
+
+1. **PESTANA "zerou" — era transitório, confirmado com o log real do GitHub Actions.** A
+   rodada das 15h UTC (run `33765851924`) mostra: `page.goto()` estourou 45s, e as 3
+   retentativas de `/api/v2/leilao` (já existentes desde 12/08, mesmo defeito de então)
+   falharam todas — provável instabilidade transitória de rede entre o runner e o site, não
+   mudança de estrutura. **O guard de segurança (`≤50 → pulando desativação`) funcionou**: os
+   992 imóveis do dia anterior continuaram ativos e visíveis para o cliente — não houve
+   catálogo vazio em produção. Disparei uma rodada avulsa só da PESTANA
+   (`workflow_dispatch`, `fontes=PESTANA`) para confirmar recuperação sem esperar o cron de
+   amanhã: **996 imóveis mapeados, 992 ativos ao final — recuperou sozinha**, exatamente como
+   em 12/08. Nenhum código mudou; `fonte_regressao_suspeita()` já não lista mais a PESTANA.
+2. **CEF: botão "Edital" abrindo a Matrícula em 197 imóveis — causa raiz achada e corrigida.**
+   `scripts/enriquecer-datas-cef.mjs` (roda a cada HORA) tem uma função
+   `extrairLinkEdital()` que lê o botão "Baixar edital e anexos" da página de detalhe da
+   Caixa — mas para alguns imóveis esse botão aponta para o PDF da MATRÍCULA
+   (`/editais/matricula/<UF>/<N>.pdf`, a mesma URL que `scraper.js` já calcula
+   separadamente para `link_matricula`). As outras DUAS defesas que já existiam contra
+   exatamente este padrão (`backfill-edital-cef.mjs`'s `EXCLUI` e a função do banco
+   `eh_edital_pdf()`) excluem esse padrão — só faltava aqui, no terceiro escritor. Corrigido:
+   `bom()` (o validador de candidato) e `jaTemEditalReal` (o guard "já tem, não sobrescreve")
+   agora aplicam a MESMA exclusão. 197 registros ativos corrigidos no banco (`link_edital`
+   voltou a `null` — honesto, e elegível para o backfill diário achar o edital de verdade).
+   Invariante `edital_eq_matricula`: `0/8`, confirmado depois do fix.
+
+Build central limpo depois de tudo.
+
+---
+
 ## 📋 SESSÃO 22 · PARTE 10 (03/09, fim de tarde) — AS DUAS DECISÕES DO BLOCO 3, RESOLVIDAS
 
 Pedido do dono: "trata as duas decisões: reagenda o cron e separa a cota."
