@@ -4,6 +4,23 @@
 
 ---
 
+## 📋 SESSÃO 22 · PARTE 4 (03/09) — MODO SUPORTE DESISTIA DE MOSTRAR SALDO E E-MAIL
+
+Pedido do dono: "no modo suporte é para eu conseguir ver as informações assim como se fosse o
+usuário." Mesmo padrão nos dois achados: uma defesa antiga contra vazamento (achado de 31/08 e
+anterior) virou "não busca o dado", em vez de "busca o dado certo".
+
+- **Saldo**: `/api/saque` (GET básico) lia pela sessão de quem chama — em suporte, devolvia o
+  saldo do PRÓPRIO ADMIN, e o frontend só desistia de pedir. Agora aceita `?ver_como=<uid>`,
+  admin/analista-only, só no GET (nunca em POST/PATCH — pedir saque ou pagar/recusar continuam
+  amarrados à sessão real ou a `?id=` explícito).
+- **E-mail**: só 1 dos 3 fluxos que abrem modo suporte carregava `email` no objeto
+  `impersonate`. Em vez de corrigir os 3 (e o próximo que nascer), `Perfil.jsx` busca sozinho
+  quando falta — `/api/admin-usuario-360?email_de=<uid>` (endpoint novo, admin/analista-only,
+  GoTrue admin API direto, sem passar pela RPC pesada `admin_usuario_360`).
+
+---
+
 ## 📋 SESSÃO 22 · PARTE 3 (03/09, fim de tarde) — DOIS ACHADOS NO MESMO FLUXO: PRAÇA + COMISSÃO
 
 **1. `derivarPracasDoAnuncio` nunca rodava.** Achado do dono ao regenerar de novo o relatório
