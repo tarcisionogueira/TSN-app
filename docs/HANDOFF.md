@@ -71,6 +71,62 @@ no painel seria cometer, no conserto, o defeito que ele veio consertar. A RPC ga
 | 4 | Cobertura DJEN × DEJESP | O proxy do sandbox bloqueia `*.pje.jus.br` e o site do TJSP. Precisa rodar de fora. |
 | 7 | **Edital virar LOTE** | É projeto, não conserto: exige decidir o que é "imóvel pesquisável" a partir de um edital sem foto e sem geocodificação. **É o item que muda o negócio.** |
 | — | Abrir `RADAR_TRIBUNAIS` | Deliberadamente NÃO fiz: aumenta compute e IA por edital. Com os consertos acima, agora é seguro fazer por etapas — sugiro 4–5 estados primeiro, medindo rendimento e ruído por UF antes de ir a 27. |
+## 🔒 SESSÃO 16 · DÍVIDA QUITADA (03/09, 12h UTC) — O VÍDEO SAIU DO CATÁLOGO PÚBLICO
+
+> Tarefa combinada com o dono em **01/09**, para ser feita **depois da aula de 02/09**.
+> A aula aconteceu; conferido antes de mexer, como o próprio lembrete exigia. `main` = `5ca4db0`.
+
+**O que estava aberto.** `aulas_admin` tinha `SELECT true` para todo mundo — **e isso incluía
+`video_url`**. A liberação de módulo que subiu em 01/09 era, por isso, **apenas de interface**:
+bastava abrir o devtools para listar a URL de qualquer aula, de qualquer módulo, pagante ou não.
+
+**Não é RLS — é GRANT DE COLUNA.** RLS é por LINHA, e a linha tem de continuar pública: o
+catálogo (título, módulo, duração, grátis) alimenta a loja, a landing e a área de membros. O que
+precisava sair era **uma coluna**.
+
+A regra de acesso desceu do cliente para o servidor: `aula_pode_assistir()` é o porte fiel de
+`podeAssistir()` de `Curso.jsx`, e `aula_video()` só entrega a URL depois de conferir **plano E
+liberação do módulo** — devolvendo o **motivo** junto, porque *sem acesso*, *módulo abre depois*
+e *aula sem vídeo* mandam o aluno fazer coisas diferentes.
+
+### ⚠️ TRÊS ERROS MEUS QUE SÓ A MEDIÇÃO PEGOU — os três antes de chegar ao cliente
+
+1. **Supus tipos pelo nome.** `planos_gratis` é `text[]` (não jsonb) e `compras_produtos.produto_id`
+   é `uuid` (não text). O banco recusou as duas. Forma #6.
+2. **`= any (select …)` é semântica de LINHAS**, não de array — o Postgres recusou `text = text[]`.
+   Referenciar a **coluna** dentro de um `EXISTS` devolve a semântica certa.
+3. **O `revoke select (video_url)` bloqueou `anon` e NÃO bloqueou `authenticated`.** Este detinha
+   `SELECT` na **tabela inteira**, e em Postgres grant de tabela cobre toda coluna, presente e
+   futura — revogar uma coluna de quem tem a tabela é **no-op silencioso**.
+
+> **É a TERCEIRA vez em três dias que a mesma família morde:** revoke de `anon` com o grant no
+> PUBLIC (31/08) · revoke do PUBLIC com o grant em papel (31/08) · agora coluna × tabela. A
+> assinatura é sempre a mesma: **o comando "funciona", não muda nada, e só reler o ACL prova.**
+> O conserto trocou o grant de tabela por grants de coluna **explícitos** — lista fechada de
+> propósito, para que coluna nova nasça invisível em vez de vazar sozinha.
+
+**Uma diferença deliberada no porte:** o `PLANOS_PAGOS` do cliente **não inclui** `top2_anual`,
+`assessorado_anual` nem `clube_anual`. Hoje ninguém usa esses papéis (explorador 101 · top2 4 ·
+assessorado 2 · admin 1), então o furo dorme — mas no dia do primeiro assinante **anual** ele
+seria barrado do curso que pagou. No cliente era cadeado indevido na tela; no servidor seria
+recusa de vídeo. **Os `_anual` entraram.**
+
+**O cliente foi atualizado junto, e precisava ser:** `Curso.jsx` e `Membros.jsx` usavam
+`select('*')`, que passaria a **falhar por permissão** e derrubaria as duas telas. Agora leem
+colunas explícitas; o vídeo vem por RPC no play, com guarda de corrida para a resposta atrasada
+não pintar o vídeo da aula anterior. **Falha de leitura não vira "sem acesso"** — cai na capa
+neutra, porque acusar o aluno de não ter acesso por causa de um erro de rede é acusá-lo de algo
+falso.
+
+**Provado, não suposto:** `anon` e `authenticated` bloqueados no `video_url` · catálogo ainda
+legível · `materiais` ainda legível para `authenticated` · a RPC devolve `ok` para explorador em
+curso gratuito, `ok` para pagante, `modulo_nao_liberado` com módulo travado até 01/12, e
+`sem_sessao` para anônimo. Regras de ensaio apagadas depois.
+
+**De brinde, o achado de segurança do dia:** `qa_invariante_radar_editais_sem_pull` (criada
+depois de terça, não por mim) nasceu **SECURITY DEFINER executável por `anon`** — único achado
+de `auditoria_seguranca()`. Fechada no mesmo formato do irmão corrigido em 31/08.
+**`auditoria_seguranca()`: 0 crítico / 0 atenção.**
 
 ---
 

@@ -38,6 +38,7 @@ export default function BoasVindasModal() {
   const [aulas, setAulas] = useState([]);
   const [idx, setIdx] = useState(0);
   const [aberto, setAberto] = useState(false);
+  const [videoUrl, setVideoUrl] = useState('');
   const [salvando, setSalvando] = useState(false);
 
   // PRÉVIA PARA A EQUIPE: `?boasvindas=previa` na URL abre o pop-up mesmo para admin/analista,
@@ -65,11 +66,16 @@ export default function BoasVindasModal() {
       if (eC || !c || cancelado) { if (eC) console.warn('[boas-vindas] curso:', eC.message); return; }
 
       const [{ data: as, error: eA }, { data: prog }] = await Promise.all([
-        supabase.from('aulas_admin').select('id, titulo, video_url, modulo').eq('curso_id', c.id).order('ordem'),
+        // Sem `video_url` (03/09): a coluna saiu da leitura pública. Aqui só se PRECISA saber
+        // quais aulas existem; a URL de cada uma vem da RPC, abaixo.
+        supabase.from('aulas_admin').select('id, titulo, modulo').eq('curso_id', c.id).order('ordem'),
         supabase.from('aula_progresso').select('aula_id, concluida').eq('user_id', effectiveUserId || user.id).eq('curso_id', c.id),
       ]);
       if (eA || cancelado) return;
-      const lista = (as || []).filter((a) => String(a.video_url || '').trim());
+      // O FILTRO POR `video_url` SAIU (03/09), porque a coluna saiu do catálogo. Ele existia
+      // para não abrir o pop-up numa aula sem vídeo; agora quem responde isso é a RPC, e a
+      // consequência é tratada onde ela aparece: sem URL, o pop-up não abre (ver abaixo).
+      const lista = as || [];
       if (!lista.length) return;
 
       const feitas = new Set((prog || []).filter((p) => p.concluida).map((p) => p.aula_id));
@@ -106,9 +112,32 @@ export default function BoasVindasModal() {
     else { sessionStorage.setItem(DISPENSA_KEY, '1'); setAberto(false); }
   }, [salvando, curso, aulas, idx, user, previa]);
 
+  // A URL DO VÍDEO VEM DA RPC (03/09), não do catálogo: `aulas_admin.video_url` saiu da
+  // leitura pública e quem a entrega é `aula_video`, depois de conferir plano e liberação do
+  // módulo no servidor. Enquanto ela não responde, ou se vier vazia, o pop-up NÃO abre —
+  // modal de boas-vindas com player vazio é pior que modal nenhum.
+  useEffect(() => {
+    const id = aulas[idx]?.id;
+    if (!id) { setVideoUrl(''); return undefined; }
+    let vivo = true;
+    setVideoUrl('');
+    (async () => {
+      try {
+        const { data, error } = await supabase.rpc('aula_video', { p_aula: id });
+        if (error) throw error;
+        const r = Array.isArray(data) ? data[0] : data;
+        if (vivo) setVideoUrl(r?.video_url || '');
+      } catch (e) {
+        console.warn('[boas-vindas] video:', e?.message || e);
+        if (vivo) setVideoUrl('');
+      }
+    })();
+    return () => { vivo = false; };
+  }, [aulas, idx]);
+
   // FILA DE MODAIS (15/08): a condição de aparecer continua sendo a daqui; a fila só decide
   // QUANDO. Ver src/utils/filaModais.js.
-  const minhaVez = useVezDoModal('boas-vindas', !!(aberto && curso && aulas.length));
+  const minhaVez = useVezDoModal('boas-vindas', !!(aberto && curso && aulas.length && videoUrl));
   if (!minhaVez) return null;
 
   const aula = aulas[idx];
@@ -140,7 +169,7 @@ export default function BoasVindasModal() {
         {/* Player — ao TERMINAR, marca sozinho e já passa para o próximo vídeo. É o que o
             dono pediu: "ao concluir o vídeo, marcar como assistido automaticamente". O botão
             continua ali para quem pular ou para o caso de o provedor não reportar o fim. */}
-        <PlayerVideo url={aula.video_url} titulo={aula.titulo} onFim={concluirEAvancar} />
+        <PlayerVideo url={videoUrl} titulo={aula.titulo} onFim={concluirEAvancar} />
 
         <DicaAudioIOS style={{ margin: '12px 20px 0' }} />
 

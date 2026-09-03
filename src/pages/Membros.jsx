@@ -131,7 +131,11 @@ export default function Membros() {
     async function fetchData() {
       try {
       const { data: cs } = await supabase.from('cursos_admin').select('*').eq('ativo', true).order('ordem');
-      const { data: as } = await supabase.from('aulas_admin').select('*').order('ordem');
+      // Colunas explícitas, sem `video_url` (03/09): a área de membros monta CATÁLOGO — nunca
+      // tocou o vídeo — e `select('*')` passaria a falhar por permissão desde que a coluna saiu
+      // da leitura pública.
+      const { data: as } = await supabase.from('aulas_admin')
+        .select('id, curso_id, modulo, titulo, descricao, duracao, gratis, ordem, materiais').order('ordem');
       // Defesa em profundidade: além de ativo=true, exige o ARQUIVO do ebook — um registro
       // legado ativado antes da trava de rascunho (caso "só capa" de 30/07) não aparece na
       // loja mesmo que o flag esteja errado no banco.
@@ -143,7 +147,7 @@ export default function Membros() {
         aulasC.forEach(a => {
           const mod = a.modulo || 'Módulo 1';
           if (!modulosMap[mod]) modulosMap[mod] = { titulo: mod, licoes: [] };
-          modulosMap[mod].licoes.push({ id: a.id, titulo: a.titulo, descricao: a.descricao, video_url: a.video_url, duracao: a.duracao, gratis: a.gratis });
+          modulosMap[mod].licoes.push({ id: a.id, titulo: a.titulo, descricao: a.descricao, duracao: a.duracao, gratis: a.gratis });
         });
         return { ...c, bg: c.cor + '20', modulos: Object.values(modulosMap), aulas: aulasC.length };
       });
