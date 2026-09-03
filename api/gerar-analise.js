@@ -2294,7 +2294,7 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
     let avalDb = 0, fonteDb = '', areaFonte = 'informada';
     let imDb = null; // reusado depois para semear/ler o Índice BidPro da microrregião
     try {
-      [imDb] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=fonte,valor_avaliacao,valor_minimo,valor_minimo_2,data_leilao,data_leilao_2,area_m2,ficha_juridica,cidade_norm,estado,bairro,latitude,longitude,tem_matricula_doc&limit=1`)).json();
+      [imDb] = await (await sb(`imoveis_leilao?id=eq.${encodeURIComponent(String(imovelId))}&select=fonte,modalidade,valor_avaliacao,valor_minimo,valor_minimo_2,data_leilao,data_leilao_2,area_m2,ficha_juridica,cidade_norm,estado,bairro,latitude,longitude,tem_matricula_doc&limit=1`)).json();
       const n = Number(imDb?.valor_avaliacao) || 0;
       const vminDb = Number(imDb?.valor_minimo) || 0;
       const sentinela = [999999999, 99999999, 9999999999, 111111111, 123456789].includes(n);
