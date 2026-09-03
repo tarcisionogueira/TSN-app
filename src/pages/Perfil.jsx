@@ -460,6 +460,12 @@ export default function Perfil() {
   const temComissao = ROLES_COM_COMISSAO.includes(effectiveRole) || ROLES_PAGOS_CLIENTE.includes(effectiveRole);
   const ehParceiro = ROLES_PAGOS_CLIENTE.includes(effectiveRole); // cliente pagante → vê o relatório da rede
   const [relRede, setRelRede] = useState(null); // relatório do Programa de Parceiros (rede multinível)
+  // E-mail do cliente visto no modo suporte, quando `impersonate` chegou sem ele (03/09): dois
+  // dos três fluxos que abrem o modo suporte (atribuir arremate, abrir ficha do caso) nunca
+  // carregam `email` no objeto — só o fluxo de busca de usuário (`verComo`) carrega. Em vez de
+  // corrigir os N pontos de entrada (e o próximo que nascer), a TELA que precisa do dado busca
+  // sozinha, uma vez, por um lookup leve e admin-only (ver /api/admin-usuario-360?email_de=).
+  const [emailResolvidoSuporte, setEmailResolvidoSuporte] = useState(null);
   const [saldoSaque, setSaldoSaque] = useState(null);
   const [valorSaque, setValorSaque] = useState('');
   const [showSaqueForm, setShowSaqueForm] = useState(false);
@@ -491,11 +497,13 @@ export default function Perfil() {
   };
 
   const carregarSaldo = async () => {
-    // No modo suporte NÃO buscamos o saldo: /api/saque usa a SESSÃO do admin e devolveria o
-    // saldo DO ADMIN como se fosse o do cliente (foi o "R$ 74,88" que aparecia no suporte).
-    if (emSuporte) return;
+    // MODO SUPORTE (03/09): antes desistíamos de buscar (a sessão do admin devolvia o saldo
+    // DELE — "R$ 74,88 aparecendo no suporte"). Agora `/api/saque` aceita `?ver_como=<uid>`,
+    // autorizado só para admin/analista, e devolve o saldo do CLIENTE visto — ver o comentário
+    // no handler. Modo suporte é só leitura; nunca chamamos POST/PATCH com este uid.
     try {
-      const res = await apiCall('/api/saque');
+      const url = emSuporte ? `/api/saque?ver_como=${encodeURIComponent(uid)}` : '/api/saque';
+      const res = await apiCall(url);
       const data = await res.json();
       if (res.ok) {
         setSaldoSaque(Number(data.saldo || 0));
@@ -537,6 +545,21 @@ export default function Perfil() {
     carregarSaldo();
     carregarPJ();
   }, [temComissao, uid]); // eslint-disable-line
+
+  // Ver "identidadeVisivel.js" no topo: e-mail do cliente é a única coisa que `impersonate`
+  // pode chegar sem carregar. Busca uma vez, só quando falta e só em modo suporte.
+  useEffect(() => {
+    if (!emSuporte || !uid || impersonate?.email || emailResolvidoSuporte) return;
+    let cancelado = false;
+    (async () => {
+      try {
+        const res = await apiCall(`/api/admin-usuario-360?email_de=${encodeURIComponent(uid)}`);
+        const data = await res.json();
+        if (!cancelado && res.ok && data?.email) setEmailResolvidoSuporte(data.email);
+      } catch { /* ignora — fica o marcador "não carregado" */ }
+    })();
+    return () => { cancelado = true; };
+  }, [emSuporte, uid]); // eslint-disable-line
 
   // Relatório do Programa de Parceiros (rede multinível) — sintético + analítico.
   useEffect(() => {
@@ -1397,7 +1420,7 @@ export default function Perfil() {
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
               <div style={{ ...fieldStyle, flex: 1, minWidth: 200 }}>
                 <label style={labelStyle}>E-mail</label>
-                <input type="email" value={emailVisivel(impersonate, user)} readOnly
+                <input type="email" value={emailVisivel(emailResolvidoSuporte ? { ...impersonate, email: emailResolvidoSuporte } : impersonate, user)} readOnly
                   style={{ ...inputStyle, background: '#f8fafc', color: '#94a3b8', cursor: 'not-allowed' }} />
               </div>
               <div style={{ ...fieldStyle, flex: 1, minWidth: 160 }}>

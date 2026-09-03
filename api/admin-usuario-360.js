@@ -3,9 +3,10 @@ import { getUser, getUserRoleById, unauthorized, forbidden } from './_auth.js';
 import { hashCpf } from './_cpf.js';
 
 // Fase B — Monitoramento 360º do cliente (só admin/analista).
-//   GET /api/admin-usuario-360?q=termo       → busca por nome/e-mail/telefone/CPF
-//                                              (q vazio = lista geral, mais recentes)
-//   GET /api/admin-usuario-360?user_id=uuid  → retrato 360º do usuário
+//   GET /api/admin-usuario-360?q=termo         → busca por nome/e-mail/telefone/CPF
+//                                                (q vazio = lista geral, mais recentes)
+//   GET /api/admin-usuario-360?user_id=uuid    → retrato 360º do usuário
+//   GET /api/admin-usuario-360?email_de=uuid   → só o e-mail (lookup leve, ver abaixo)
 // Usa as funções SECURITY DEFINER admin_busca_usuarios/admin_usuario_360 via
 // service_role — não afrouxa RLS das tabelas de análise.
 const CORS = { 'Access-Control-Allow-Origin': process.env.APP_ORIGIN || 'https://bidprobrasil.com.br' };
@@ -57,6 +58,28 @@ export default async function handler(req) {
   const acesso = (params.get('acesso') || '').trim() || null;   // acessando | nao_acessando
   const janela = Math.min(365, Math.max(1, parseInt(params.get('janela') || '14', 10) || 14));
   const stats = params.get('stats');                             // ?stats=1 → estatísticas
+  const emailDe = params.get('email_de');
+
+  // MODO SUPORTE PRECISA DO E-MAIL, MAS NÃO DO RETRATO INTEIRO (03/09). `?user_id=` chama
+  // `admin_usuario_360` — pesado (atividade, navegação, aceites, até 2 mil linhas por seção).
+  // O e-mail sozinho não justifica esse custo: só a Tela de Perfil, quando o `impersonate`
+  // chegou sem e-mail (entrada por um fluxo que não o carregava — atribuir arremate, abrir
+  // ficha do caso), pede este lookup mínimo. GoTrue admin API direto (mesmo padrão de
+  // api/saldo-disponivel-aviso-cron.js), sem passar pela RPC pesada.
+  if (emailDe) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(emailDe)) {
+      return new Response(JSON.stringify({ error: 'email_de inválido' }), { status: 400, headers: { 'Content-Type': 'application/json', ...CORS } });
+    }
+    try {
+      const r = await fetch(`${SB}/auth/v1/admin/users/${emailDe}`, { headers: { apikey: KEY, Authorization: `Bearer ${KEY}` } });
+      if (!r.ok) return new Response(JSON.stringify({ email: null }), { status: 200, headers: { 'Content-Type': 'application/json', ...CORS } });
+      const u = await r.json();
+      return new Response(JSON.stringify({ email: u?.email || null }), { status: 200, headers: { 'Content-Type': 'application/json', ...CORS } });
+    } catch (e) {
+      console.error('[admin-usuario-360] email_de falhou:', e?.message || e);
+      return new Response(JSON.stringify({ email: null }), { status: 200, headers: { 'Content-Type': 'application/json', ...CORS } });
+    }
+  }
 
   let data;
   if (stats) {

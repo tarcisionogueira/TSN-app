@@ -124,6 +124,18 @@ export default async function handler(req) {
   const url = new URL(req.url);
   const role = await roleFor(user.id);
 
+  // MODO SUPORTE (só leitura): admin/analista pode ver o saldo/extrato de OUTRO usuário via
+  // ?ver_como=<uid> — só no GET básico (nunca em POST/PATCH: pedir saque sempre age sobre
+  // quem está autenticado; pagar/recusar já exige admin explícito por ?id=). Achado do dono
+  // (03/09): sem isto, o painel de suporte simplesmente DESISTIA de buscar o saldo, porque a
+  // sessão do admin sempre respondia com o PRÓPRIO saldo dele ("R$ 74,88 aparecendo no
+  // suporte" — bug antigo). A defesa certa é resolver o ALVO explicitamente e checar o papel
+  // de quem pede, não parar de mostrar o dado.
+  const verComoId = req.method === 'GET' ? url.searchParams.get('ver_como') : null;
+  if (verComoId && role !== 'admin' && role !== 'analista') return forbidden();
+  const alvoId = verComoId || user.id;
+  const alvoRole = verComoId ? await roleFor(alvoId) : role;
+
   // ── GET ─────────────────────────────────────────────────────────────────
   if (req.method === 'GET') {
     if (url.searchParams.get('todos') === '1') {
@@ -171,8 +183,8 @@ export default async function handler(req) {
       const totalRepasse = linhas.reduce((s, l) => s + (l.repasse > 0 ? l.repasse : 0), 0);
       return json({ user_id: uid, linhas, total_repasse: totalRepasse });
     }
-    const saldo = await saldoDe(user.id);
-    const extrato = (await db(`saldo_lancamentos?user_id=eq.${user.id}&order=criado_em.desc&limit=200&select=*`)).data || [];
+    const saldo = await saldoDe(alvoId);
+    const extrato = (await db(`saldo_lancamentos?user_id=eq.${alvoId}&order=criado_em.desc&limit=200&select=*`)).data || [];
 
     // UM CÉREBRO SÓ (08/08). Esta tela costumava calcular os pré-requisitos por conta
     // própria, "espelhando" a RPC. Espelho não é a coisa: foi exatamente assim que a regra
@@ -180,12 +192,12 @@ export default async function handler(req) {
     // avisava por `podeReceber()` e o banco decidia por outro caminho, que não bloqueava
     // ninguém. Agora quem responde é `saque_avaliar`, a MESMA função que a RPC obedece e
     // que a auditoria confere. Passamos valor 0 = "o que você diria antes de eu pedir".
-    const av = (await rpc('saque_avaliar', { p_user_id: user.id, p_valor: 0 })).data || {};
-    const perfil = (await db(`perfis?id=eq.${user.id}&select=pj_revalidacao_motivo`)).data?.[0] || {};
+    const av = (await rpc('saque_avaliar', { p_user_id: alvoId, p_valor: 0 })).data || {};
+    const perfil = (await db(`perfis?id=eq.${alvoId}&select=pj_revalidacao_motivo`)).data?.[0] || {};
 
     // Flag INFORMATIVO (não bloqueia): quem não está em plano pago não GANHA comissões
     // novas — mas o parceiro GRÁTIS agora ganha (regra comissao.gratis_ganha).
-    const naoGanhaNovas = !podeReceber(role) && role !== 'explorador';
+    const naoGanhaNovas = !podeReceber(alvoRole) && alvoRole !== 'explorador';
     return json({ saldo, extrato, proxima_liberacao: proximaLiberacao().toISOString(),
       nao_ganha_novas: naoGanhaNovas,
       pj_pendente: !!av.pj_pendente, pj_revalidar: !!av.pj_revalidar,
