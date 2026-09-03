@@ -291,6 +291,10 @@
       "schedule": "30 6 * * *"
     },
     {
+      "path": "/api/saldo-disponivel-aviso-cron",
+      "schedule": "0 12 * * *"
+    },
+    {
       "path": "/api/ativacao-nudge-cron",
       "schedule": "0 12 * * *"
     },

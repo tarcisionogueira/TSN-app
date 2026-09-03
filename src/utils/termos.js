@@ -24,9 +24,14 @@ export const TERMOS_VERSAO = '3.3';
 // global da plataforma). v3.1 (30/07/2026, pedido do dono): honorários de êxito ganham
 // MÍNIMO de R$ 7.000; Leilão Club redefinido como MENTORIA + ASSESSORIA (todas as regras
 // da assessoria se aplicam; assessoria inclusa limitada a 1 imóvel/mês).
-// (Mantidas em 3.1: o que mudou na 3.2 foi o termo de RE-ACEITE da plataforma, não o texto
-// destas famílias. Quem contratar assessoria/clube segue aceitando o 3.1 vigente delas.)
-const VERSAO_FAMILIA = { assessorado: '3.1', clube: '3.1' };
+// (Mantidas em 3.1: o que mudou na 3.2 base foi o termo de RE-ACEITE da plataforma, não o
+// texto destas famílias. Quem contratar assessoria/clube seguia aceitando o 3.1 delas.)
+// assessorado/clube → 3.2 (03/09/2026, pedido do dono): pagamento — inclusive honorários de
+// êxito — passa a ser EXCLUSIVAMENTE pelos meios da Plataforma; pagar por fora passa a ser
+// quebra contratual por tentativa de extravio de valores, eximindo a empresa da continuidade
+// do fluxo de arrematação. Mesma cláusula entrou no contrato formal (TEMPLATE_ASSESSORADO/
+// TEMPLATE_CLUBE em api/auto-contrato.js) e neste termo de ciência (item 7, acima).
+const VERSAO_FAMILIA = { assessorado: '3.2', clube: '3.2' };
 
 // ─── REGISTRO CENTRAL POR PRODUTO/SERVIÇO (pedido do dono, 30/07) ────────────────
 // Cada produto tem TÍTULO amigável (auditoria/comprovante/360) e TERMO próprio
@@ -132,7 +137,7 @@ export function termoDoProduto(key, { nome, valorLabel, modelo, inclui } = {}) {
     c.push('7. ACESSO IMEDIATO A CONTEÚDO DIGITAL. Solicito o acesso imediato ao conteúdo, antes do fim do prazo de arrependimento. Estou ciente de que, exercido o arrependimento no prazo legal, o estorno será integral; contudo, o consumo substancial do conteúdo no período poderá ser considerado na apuração de uso de má-fé do direito.');
   }
   if (base.honorarios) {
-    c.push('7. HONORÁRIOS DE ÊXITO. Estou ciente de que, em caso de arrematação bem-sucedida com apoio da assessoria, incidem 10% (dez por cento) de honorários de êxito sobre o valor da arrematação, observado o HONORÁRIO MÍNIMO de R$ 7.000,00 (sete mil reais) sempre que o valor apurado pelo percentual resultar inferior a esse montante, conforme contrato de prestação de serviços.');
+    c.push('7. HONORÁRIOS DE ÊXITO. Estou ciente de que, em caso de arrematação bem-sucedida com apoio da assessoria, incidem 10% (dez por cento) de honorários de êxito sobre o valor da arrematação, observado o HONORÁRIO MÍNIMO de R$ 7.000,00 (sete mil reais) sempre que o valor apurado pelo percentual resultar inferior a esse montante, conforme contrato de prestação de serviços. Estou ciente e concordo que TODOS os pagamentos devidos nesta contratação — inclusive os honorários de êxito — devem ser processados EXCLUSIVAMENTE pelos meios de pagamento disponibilizados na Plataforma; o pagamento de qualquer valor por fora da Plataforma, por qualquer meio informal, configura quebra contratual por tentativa de extravio de valores e exime a BidPro Brasil de qualquer responsabilidade sobre a continuidade das etapas subsequentes do fluxo de arrematação, sem prejuízo da exigibilidade integral dos valores devidos.');
   }
   // 8. Conta pessoal + PI
   c.push('8. CONTA PESSOAL E PROPRIEDADE INTELECTUAL. O acesso é pessoal e intransferível; o compartilhamento de credenciais ou a revenda de conteúdo autoriza a suspensão da conta. Relatórios, análises, cursos, ebooks, marcas e software são protegidos por direitos autorais e de propriedade intelectual, sendo vedadas reprodução, distribuição ou uso comercial sem autorização escrita, ressalvado o uso do relatório pelo próprio contratante na negociação do imóvel analisado.');

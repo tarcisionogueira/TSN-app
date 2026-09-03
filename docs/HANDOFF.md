@@ -4,6 +4,61 @@
 
 ---
 
+## 📋 SESSÃO 21 (03/09, 14h UTC) — TRÊS PEDIDOS DIRETOS DO DONO
+
+### ✅ 1. Comissionamento do Airton redirecionado para o Jean
+`perfis.indicado_por` do Airton do Carmo Cezar (id `15e91205…`) trocado de "adoção padrão do
+dono" (órfão auto-adotado, `indicacao_origem='link_parceiro'`) para Jean Augusto Sandoval
+Clemente (`indicacao_origem='manual'`). **Conferido antes de mexer:** Jean tem
+`parceiro_aceite_em` (aceitou o Programa em 06/08), está ativo e adimplente — elegível. Airton
+entrou hoje e **zero arrematações** — `_honorarios.js` lê `indicado_por` no MOMENTO do êxito
+("arremates já distribuídos nunca são recalculados"), então não há nada retroativo a corrigir:
+a troca garante o comissionamento de qualquer êxito futuro, de forma limpa.
+
+### ✅ 2. Aviso por e-mail de saldo disponível para saque
+Regra nova em `regra_negocio` (`saldo.aviso_disponivel`, `aplicada_por: [saldo_avisos_pendentes]`
+— a auditoria confere que a função existe e cita a chave). Cron novo,
+`api/saldo-disponivel-aviso-cron.js`, 1x/dia (12h UTC).
+
+**A armadilha achada no ensaio, antes de aplicar:** a primeira versão comparava o saldo de
+hoje contra um snapshot gravado só quando o e-mail SAÍA — e isso quebra no primeiro SAQUE
+PARCIAL. Simulado: saldo R$ 99,84 → avisa → saque de R$ 50 → chega comissão nova de R$ 10
+(saldo vira R$ 59,84, **abaixo** do pico de R$ 99,84) — a versão ingênua nunca mais avisaria
+esse usuário, porque o snapshot ficava preso no pico antigo, e R$ 10 de dinheiro genuinamente
+novo ficaria escondido para sempre. Corrigido com DUAS funções: `saldo_avisos_pendentes()`
+só lê (decide quem avisar); `saldo_avisos_sincronizar()` roda no FIM de toda rodada, para
+TODO MUNDO — não só quem foi avisado —, e é isso que evita a catraca: o snapshot acompanha o
+saldo pra cima e pra baixo. Os 5 cenários do ensaio (estado real, sem mudança, saque parcial,
+comissão nova abaixo do pico, regra desligada) todos corretos antes de aplicar em produção.
+
+Sem teto mínimo de valor — o pedido foi "todo usuário que tiver", ao pé da letra.
+
+### ✅ 3. Termos: pagamento exclusivo pela plataforma, sob pena de quebra contratual
+Adicionado em **dois documentos**, achados ao investigar (o pedido citava "os termos", e há
+mais de um lugar onde eles vivem):
+
+- **O contrato formal** — `TEMPLATE_ASSESSORADO` (cláusulas 3.7/3.8, novas) e `TEMPLATE_CLUBE`
+  (parágrafo novo na Cláusula 3ª) em `api/auto-contrato.js`. **Este é o texto REAL**: descobri
+  que `templateAssessorado()` em `api/_contratos-templates.js` é **código morto** (nunca
+  importado em lugar nenhum) — editar ali não teria efeito algum nos próximos contratos.
+- **O termo de ciência do checkout** — `termoDoProduto()` em `src/utils/termos.js`, item 7
+  (HONORÁRIOS DE ÊXITO), que é o texto que **todo** comprador self-service de assessoria/clube
+  vê e aceita. `VERSAO_FAMILIA.assessorado/clube` subiu de 3.1 → 3.2, seguindo a convenção já
+  documentada no próprio arquivo ("ao mudar o texto, incremente a versão").
+
+**Aplica só às próximas contratações, do jeito que o sistema já funciona** (nenhum mecanismo
+novo precisou ser construído): `contratos_link.conteudo` grava um retrato CONGELADO do texto
+no momento da assinatura — quem já assinou não é afetado; e o bump de versão do termo de
+ciência só troca o que é gravado no PRÓXIMO aceite, sem forçar re-aceite de quem já é cliente
+(comportamento documentado e preexistente em `versaoTermoProduto`).
+
+**Não registrei como `regra_negocio`** — é texto contratual fixo, não uma configuração que uma
+função lê e decide; forçar isso na tabela faria a auditoria acusar "regra sem aplicador real"
+(ela audita `pg_proc`, não texto). ⚠️ Redação não passou por revisão jurídica — mesma ressalva
+que já existe em `TERMOS_VERSAO` desde a v3.3.
+
+---
+
 ## 🏗️ SESSÃO 20 · PARTE 4 (03/09, 13h30 UTC) — O EDITAL VIRA LOTE
 
 > Pedido do dono, quatro frases: abrir MG/PR/ES · liberar lote sem foto mas reforçar
