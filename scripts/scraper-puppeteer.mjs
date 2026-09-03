@@ -3510,8 +3510,15 @@ function mapLoteLeilofy(raw, id) {
   // Math.min pegava o incremento). 1ª ocorrência de "Primeira/Segunda praça" = ESTE lote.
   let avaliacao = parseBRL(q(/Primeira\s+pra[çc]a[\s\S]{0,80}?R\$\s*([\d.]+,\d{2})/i));
   const praca2  = parseBRL(q(/Segunda\s+pra[çc]a[\s\S]{0,80}?R\$\s*([\d.]+,\d{2})/i));
-  // Lance mínimo (piso) = 2ª praça (condicional); sem 2ª praça, cai na 1ª (avaliação). Sem os
-  // rótulos do detalhe → 0 (honesto; a matrícula/edital preenche depois). NUNCA o Math.min global.
+  // PRAÇA ÚNICA (sem 1ª/2ª) — rótulo alternativo confirmado no recon de 03/09: 6 dos 8 lotes
+  // amostrados vinham como "Praça Única: <data> R$ <valor>", zero como "Primeira praça". Sem
+  // este fallback, avaliação E lance saíam 0 para todo lote de praça única → descartado
+  // silenciosamente (57 de 75 na coleta do dia). Mesma convenção de quando falta a 2ª praça:
+  // o valor único vale como avaliação e como lance (desconto 0%, honesto — não há 2º valor).
+  if (!avaliacao) avaliacao = parseBRL(q(/Pra[çc]a\s+[uú]nica[\s\S]{0,80}?R\$\s*([\d.]+,\d{2})/i));
+  // Lance mínimo (piso) = 2ª praça (condicional); sem 2ª praça, cai na 1ª/única (avaliação).
+  // Sem os rótulos do detalhe → 0 (honesto; a matrícula/edital preenche depois). NUNCA o
+  // Math.min global.
   let lance = praca2 || avaliacao;
   const localizacao = q(/Localiza[çc][ãa]o\s*\n\s*([^\n]+)/i);
   const tipoTxt = q(/Tipo:\s*([^\n]+)/i);
