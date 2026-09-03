@@ -472,6 +472,18 @@ export async function pullDJEN({ supabase, ini, fim, ehIntegrado, t0, transporte
   // rodada cai a quase zero — este conserto é pré-requisito de abrir `RADAR_TRIBUNAIS`.
   let combosOk = 0, combosFalha = 0;
   const avisos = [];
+  // RENDIMENTO POR COMBO (03/09). O cabeçalho deste arquivo diz que "o agente APRENDE o
+  // rendimento de cada termo — quantos viram edital REAL vs ruído"; era ASPIRACIONAL: nada no
+  // código media isso, e o termo que achou cada edital nem era gravado. Terceira documentação
+  // de mecanismo inexistente encontrada hoje.
+  //
+  // ⚠️ E A MÉTRICA ÓBVIA SERIA ENVIESADA. Gravar "qual termo achou este edital" dá crédito
+  // sempre ao termo que roda PRIMEIRO no laço, porque o dedup por `djen_id` descarta as
+  // descobertas seguintes: 'edital de leilão' abriria a lista todo dia e pareceria o melhor
+  // termo do mundo. O que NÃO tem esse viés é a razão do próprio combo — quantos itens ele
+  // trouxe e quantos passaram no filtro duro —, porque as duas contagens acontecem antes de
+  // qualquer dedup. É essa que fica gravada.
+  const porCombo = [];
  try {
   for (const tribunal of tribunais) {
     if (cortadoPorTempo || semCota) break;
@@ -498,6 +510,8 @@ export async function pullDJEN({ supabase, ini, fim, ehIntegrado, t0, transporte
       }
       combosOk++;
       vistos += items.length;
+      const comboAtual = { tribunal, termo, vistos: items.length, reais: 0 };
+      porCombo.push(comboAtual);
       if (!items.length) continue;
 
       // Monta linhas; dedup por djen_id (só insere as inéditas).
@@ -535,6 +549,8 @@ export async function pullDJEN({ supabase, ini, fim, ehIntegrado, t0, transporte
           status: p.status,
         };
       }).filter((r) => r && (r.djen_id || r.hash_dedup));
+      // ANTES do dedup: é isso que torna a razão comparável entre termos.
+      comboAtual.reais = linhas.length;
       descartados += items.length - linhas.length;
 
       // Só as inéditas (evita reprocessar): confere djen_id já existentes.
@@ -567,7 +583,7 @@ export async function pullDJEN({ supabase, ini, fim, ehIntegrado, t0, transporte
   const avisoParcial = (combosFalha > 0 && combosOk > 0)
     ? `parcial: ${combosOk} de ${combosOk + combosFalha} combos ok — ${avisos.slice(0, 3).join(' · ')}`
     : null;
-  return { vistos, novos, descartados, erroGeral, avisoParcial, combosOk, combosFalha, cortadoPorTempo, semCota };
+  return { vistos, novos, descartados, erroGeral, avisoParcial, combosOk, combosFalha, porCombo, cortadoPorTempo, semCota };
 }
 
 /**
@@ -786,9 +802,9 @@ async function handler(req) {
   const ehIntegrado = await construirEhIntegrado(supabase);
 
   let vistos = 0, novos = 0, descartados = 0, erroGeral = null, enriquecidos = 0, cortadoPorTempo = false, semCota = false;
-  let avisoParcial = null, combosOk = 0, combosFalha = 0;
+  let avisoParcial = null, combosOk = 0, combosFalha = 0, porCombo = null;
   if (!pulouPull) {
-    ({ vistos, novos, descartados, erroGeral, avisoParcial, combosOk, combosFalha, cortadoPorTempo, semCota } = await pullDJEN({
+    ({ vistos, novos, descartados, erroGeral, avisoParcial, combosOk, combosFalha, porCombo, cortadoPorTempo, semCota } = await pullDJEN({
       supabase, ini, fim, ehIntegrado, t0, transporte: transporteBrightData,
     }));
 
@@ -805,6 +821,7 @@ async function handler(req) {
         // AVISO, não erro — ver o comentário em `pullDJEN`.
         erro: erroGeral || (cortadoPorTempo ? 'corte_por_tempo (run parcial — repuxar)' : null),
         aviso: avisoParcial,
+        por_combo: porCombo && porCombo.length ? porCombo : null,
       });
     } catch { /* nunca quebra por causa do log */ }
   }

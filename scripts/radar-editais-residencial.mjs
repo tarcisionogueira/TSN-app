@@ -97,6 +97,7 @@ const { error: eLog } = await supabase.from('monitor_runs').insert({
   janela_inicio: ini, janela_fim: fim,
   itens_vistos: r.vistos, itens_novos: r.novos, duracao_ms: Date.now() - t0, erro,
   aviso: r.avisoParcial || null,
+  por_combo: (r.porCombo && r.porCombo.length) ? r.porCombo : null,
 });
 // Este insert NÃO é best-effort, e a diferença importa: é ele que o freio do caminho pago lê.
 // Se ele falhar em silêncio, o cron da Vercel conclui "faz 7 dias que ninguém coleta" e paga

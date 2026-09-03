@@ -92,3 +92,37 @@ begin
   novo := alvo || E',\n     (''editais_cruzamento_cego'',''Edital com leiloeiro nomeado que nao pode ser cruzado com o acervo'',''Captura'',''bug'',\n       public.qa_invariante_editais_cruzamento_cego(), 0)';
   execute replace(d, alvo, novo);
 end $do$;
+
+-- ── 3. O RENDIMENTO POR COMBO, que o cabeçalho do radar dizia existir e não existia ────
+-- `api/radar-editais-cron.js` afirma que "o agente APRENDE o rendimento de cada termo". Era
+-- aspiracional. Sem esse número, escolher os `RADAR_TERMOS` ao abrir para 27 tribunais é
+-- chute caro — 34% do que entra hoje já é classificado `nao_edital`.
+--
+-- ⚠️ E a métrica óbvia seria enviesada: uma coluna `termo` em `editais_leilao` daria crédito
+-- sempre ao termo que roda PRIMEIRO no laço, porque o dedup por `djen_id` descarta as
+-- descobertas seguintes. O que não tem esse viés é a razão DENTRO do combo — vistos e
+-- aprovados no filtro duro, ambos contados antes de qualquer dedup.
+alter table public.monitor_runs add column if not exists por_combo jsonb;
+
+comment on column public.monitor_runs.por_combo is
+  'Rendimento por (tribunal x termo) na rodada: [{tribunal, termo, vistos, reais}]. `reais` contado ANTES do dedup.';
+
+create or replace function public.radar_rendimento_por_termo(p_dias integer default 30)
+returns table(termo text, tribunal text, rodadas bigint, vistos bigint, reais bigint, precisao_pct numeric)
+language sql stable security definer set search_path to 'public'
+as $fn$
+  select c->>'termo', c->>'tribunal',
+         count(*)::bigint,
+         sum((c->>'vistos')::bigint),
+         sum((c->>'reais')::bigint),
+         case when sum((c->>'vistos')::bigint) > 0
+              then round(100.0 * sum((c->>'reais')::bigint) / sum((c->>'vistos')::bigint), 1)
+              else null end
+    from public.monitor_runs m, lateral jsonb_array_elements(m.por_combo) c
+   where m.fonte = 'radar-editais-djen'
+     and m.ran_at > now() - make_interval(days => greatest(1, p_dias))
+   group by 1, 2
+   order by 6 desc nulls last, 4 desc;
+$fn$;
+revoke all on function public.radar_rendimento_por_termo(integer) from public, anon;
+grant execute on function public.radar_rendimento_por_termo(integer) to service_role, authenticated;
