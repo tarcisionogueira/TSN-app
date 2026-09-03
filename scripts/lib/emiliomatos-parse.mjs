@@ -124,7 +124,11 @@ export function parseDetalhe(html, url) {
   const modalidade = /(?<!extra)judicial/i.test(txt) ? 'judicial'
     : /extrajudicial/i.test(txt) ? 'extrajudicial'
     : /venda\s*direta/i.test(txt) ? 'venda_direta' : 'extrajudicial';
-  const area = num((txt.match(/([\d.]+,\d{2}|\d+)\s*m[²2]\b/i) || [])[1]);
+  // ACHADO DO BLOCO 3 (03/09): mesmo defeito de scraper-soleon.mjs/scraper-rj.mjs (código da
+  // mesma origem) — `[\d.]+,\d{2}` exige decimal colado, e o fallback `\d+` (sem ponto) casava
+  // só os últimos 3 dígitos de um número com milhar. Padrão correto: 1-3 dígitos + grupos de
+  // milhar de 3 dígitos, decimal opcional.
+  const area = num((txt.match(/(\d{1,3}(?:\.\d{3})*(?:,\d{1,2})?)\s*m[²2]\b/i) || [])[1]);
   const { cidade, estado } = cidadeUF(txt, base.titulo || '', base.descricao || '');
   const mat = (txt.match(/matr[íi]cula[^\d]{0,20}([\d.\-\/]{2,})/i) || [])[1] || null;
 

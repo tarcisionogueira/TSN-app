@@ -229,8 +229,12 @@ function parseCard(card, ctx) {
   }
   // Matrícula: aceita "MATRÍCULA: 44034" e "Matrícula 101339 do 6º CRI" (venda direta, sem ":").
   const matricula = (txt.match(/matr[íi]cula[:\s]*n?[ºo°.]?\s*(\d[\d.\-\/]{2,})/i) || [])[1] || null;
-  const area = num((txt.match(/([\d.]+,\d{2}|\d+(?:,\d+)?)\s*M2?\s*DE\s*[ÁA]REA\s*(?:PRIVATIVA|TOTAL|ÚTIL|UTIL|CONSTRU)/i) || [])[1])
-    || num((txt.match(/([\d.]+,\d{2}|\d+)\s*m²/i) || [])[1]);
+  // ACHADO DO BLOCO 3 (03/09): `[\d.]+,\d{2}` exige decimal colado; sem ele, o fallback
+  // (`\d+`/`\d+(?:,\d+)?`) não aceita ponto de milhar e casava só os últimos 3 dígitos de um
+  // número maior ("1.813" → 813) — mesmo defeito achado em WEBLEILOES/SOLEON/RJLEILOES.
+  // Padrão correto: 1-3 dígitos + grupos de milhar de 3 dígitos, decimal opcional.
+  const area = num((txt.match(/(\d{1,3}(?:\.\d{3})*(?:,\d{1,2})?)\s*M2?\s*DE\s*[ÁA]REA\s*(?:PRIVATIVA|TOTAL|ÚTIL|UTIL|CONSTRU)/i) || [])[1])
+    || num((txt.match(/(\d{1,3}(?:\.\d{3})*(?:,\d{1,2})?)\s*m²/i) || [])[1]);
 
   // Modalidade: venda direta explícita; SFI/Caixa = extrajudicial; senão heurística.
   const modalidade = card.vendaDireta || /venda\s*direta/i.test(txt) ? 'venda_direta'

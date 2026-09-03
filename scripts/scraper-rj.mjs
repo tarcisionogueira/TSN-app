@@ -221,7 +221,11 @@ function parseDetalhe(html, url) {
   const modalidade = /(?<!extra)judicial/i.test(txt) ? 'judicial'
     : /extrajudicial/i.test(txt) ? 'extrajudicial'
     : /venda\s*direta/i.test(txt) ? 'venda_direta' : 'extrajudicial';
-  const area = num((txt.match(/([\d.]+,\d{2}|\d+)\s*m²/i) || [])[1]);
+  // ACHADO DO BLOCO 3 (03/09): mesmo defeito do scraper-soleon.mjs (código copiado da mesma
+  // origem) — `[\d.]+,\d{2}` exige decimal colado, e sem ele o fallback `\d+` (sem ponto)
+  // casava só os últimos 3 dígitos de um número com milhar ("1.440" → 440, confirmado na
+  // base). Padrão correto: 1-3 dígitos + grupos de milhar de 3 dígitos, decimal opcional.
+  const area = num((txt.match(/(\d{1,3}(?:\.\d{3})*(?:,\d{1,2})?)\s*m²/i) || [])[1]);
   // cidade/UF: padrão "CIDADE/UF" no título/endereço (ex.: "ARACAJU/SE"). Sem hífen na
   // classe p/ não capturar o nome da rua antes do " - CIDADE/UF".
   const loc = ((base.titulo || '') + ' ' + txt).match(/([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'. ]{1,30})\/([A-Z]{2})\b/);

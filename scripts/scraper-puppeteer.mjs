@@ -2502,8 +2502,13 @@ function mapLoteWebLeiloes(l) {
     : (/\bextrajudicial\b/i.test(l.texto || '') ? 'extrajudicial'
     : (/\bjudicial\b/i.test(l.texto || '') ? 'judicial' : 'extrajudicial'));
   const foto = l.img && /^https?:\/\//.test(l.img) ? l.img : null;
-  const am = String(l.alt || '').match(/(\d{1,3}(?:[.,]\d{1,2})?)\s*m²/);
-  const area = am ? parseFloat(am[1].replace('.', '').replace(',', '.')) : 0;
+  // ACHADO DO BLOCO 3 (03/09): `\d{1,3}` só permite UM grupo de milhar — "22.677,54 m²"
+  // (rural grande) casava só "677,54 m²", perdendo o "22." na frente e reportando 677 m²
+  // para um lote de 22.677 m² (33x menor). O padrão certo já existe e é usado em todo o
+  // resto do sistema (`extrairAreaM2` em api/_texto-imovel.js): 1-3 dígitos + grupos de
+  // milhar de EXATAMENTE 3 dígitos, decimal opcional.
+  const am = String(l.alt || '').match(/(\d{1,3}(?:\.\d{3})*(?:,\d{1,2})?)\s*m²/);
+  const area = am ? parseFloat(am[1].replace(/\./g, '').replace(',', '.')) : 0;
   const titulo = (String(l.alt || '').replace(/\s+/g, ' ').trim() || `${toTitleCase(catUrl)}${cidade ? ' em ' + cidade : ''}`).slice(0, 180);
   return {
     fonte: 'WEBLEILOES', fonte_id: `webleiloes_${l.id}`,
@@ -3280,6 +3285,25 @@ function extrairAvaliacaoHtml(html) {
   return null;
 }
 
+// PREÇO AO VIVO da página do LOTE (03/09, achado do bloco 3 — WEBLEILOES). A "venda direta"
+// deste site é lance vivo ("Valor atual" / "Incremento mínimo" / "Ver histórico de lances"),
+// e o card da LISTAGEM pode divergir do que o comprador vê na hora de dar lance: um caso
+// confirmado mostrava R$ 1.561.083,14 na listagem (== avaliação/2, o que a fórmula de
+// `mapLoteWebLeiloes` produz a partir do badge "50%") contra R$ 780.541,57 na página do lote,
+// no MESMO dia da coleta. Ancorado em "valor atual"/"lance mínimo"/"lance inicial" — o rótulo
+// que o site usa varia por tipo de oferta (leilão vs venda direta).
+function extrairValorAtualWebLeiloesHtml(html) {
+  if (!html) return null;
+  const txt = html.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ');
+  const re = /(?:valor\s*atual|lance\s*m[ií]nimo|lance\s*inicial)[^R$\d]{0,18}R?\$?\s*(\d{1,3}(?:\.\d{3})+,\d{2}|\d+,\d{2})/gi;
+  let m;
+  while ((m = re.exec(txt))) {
+    const v = parseFloat(m[1].replace(/\./g, '').replace(',', '.'));
+    if (v && v >= 1000 && v < 100000000) return v;
+  }
+  return null;
+}
+
 // Enriquecimento GENÉRICO de documentos por lote (serve para QUALQUER leiloeiro).
 // Roda no NAVEGADOR REAL (renderiza JS), então captura Edital / Matrícula / Laudo
 // de Avaliação / Modelo de Proposta que o fetch simples do on-demand não enxerga
@@ -3328,7 +3352,11 @@ async function enriquecerDocumentosLote(browser, imoveis, { cap = 150, deadlineM
     // ela quem empurrou o invariante lote_sem_area_nem_matricula de 404→558. A área mora
     // no MESMO detalhe renderizado dos docs/avaliação.
     const faltaArea = !(Number(im.area_m2) > 0);
-    return !jaTemDocs || faltaAval || faltaArea;
+    // WEBLEILOES venda-direta (03/09): revisita MESMO com tudo preenchido, para reconferir o
+    // preço na fonte — ver extrairValorAtualWebLeiloesHtml. Só 10 lotes ativos hoje; folga
+    // grande dentro do cap.
+    const reconferirPreco = im.fonte === 'WEBLEILOES' && im.modalidade === 'venda_direta';
+    return !jaTemDocs || faltaAval || faltaArea || reconferirPreco;
   }).slice(0, cap);
   if (!alvos.length) return 0;
 
@@ -3344,6 +3372,18 @@ async function enriquecerDocumentosLote(browser, imoveis, { cap = 150, deadlineM
       try {
         await page.goto(url, { waitUntil: 'networkidle2', timeout: 20000 });
         const html = await page.content(); // DOM RENDERIZADO (docs montados por JS aparecem aqui)
+        // WEBLEILOES venda-direta: o preço da LISTAGEM pode estar desatualizado frente ao lance
+        // vivo do lote (achado de 03/09). Sobrescreve com o valor autoritativo da página; a
+        // avaliação anterior era DERIVADA desse mesmo preço (valor/(1-desc%)), então zera para
+        // o bloco abaixo (`faltaAval`) capturar a avaliação de verdade neste MESMO HTML.
+        if (im.fonte === 'WEBLEILOES' && im.modalidade === 'venda_direta') {
+          const vAtual = extrairValorAtualWebLeiloesHtml(html);
+          if (vAtual && vAtual > 0 && vAtual !== Number(im.valor_minimo)) {
+            console.log(`    [WEBLEILOES] preço da listagem divergia do lote (${im.fonte_id}): ${im.valor_minimo} → ${vAtual}`);
+            im.valor_minimo = vAtual;
+            im.valor_avaliacao = 0;
+          }
+        }
         // AVALIAÇÃO do detalhe renderizado (o card da listagem não traz em GL/SODRE/
         // BIASI/VIP/SUPORTE): mesma regex ancorada em "avaliação" do on-demand
         // (api/enriquecer-lote.js). Guards anti mis-read: > mínimo e <= 10x o mínimo.

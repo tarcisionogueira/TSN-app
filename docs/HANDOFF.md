@@ -4,6 +4,44 @@
 
 ---
 
+## 📋 SESSÃO 22 · PARTE 8 (03/09, fim de tarde) — "BLINDAGEM": ERRO DE VALOR/ÁREA RECORRENTE EM 6 SCRAPERS
+
+Pedido do dono, com print do WEBLEILOES (imóvel Cotia/SP): "isso é crítico e está recorrente…
+montar uma blindagem." Dois defeitos INDEPENDENTES no mesmo imóvel, e a investigação do
+segundo puxou um terceiro, bem maior:
+
+1. **Preço do lote (WEBLEILOES venda-direta) divergia entre a listagem e a página do lote.**
+   A listagem trazia R$ 1.561.083,14 (== avaliação/2 — a própria fórmula de desconto do
+   mapper); a página do lote, ao vivo, mostrava "Valor atual R$ 780.541,57" (confirmado pelo
+   dono). `enriquecerDocumentosLote` já visita a página do lote (para documentos) mas nunca
+   reconferia PREÇO — e o filtro `alvos` nem revisitava um lote que "já tinha tudo". Corrigido:
+   revisita SEMPRE os `venda_direta` do WEBLEILOES (só 10 ativos, folga grande no cap de 120) e
+   sobrescreve o preço com o valor autoritativo da página (`extrairValorAtualWebLeiloesHtml`,
+   ancorado em "valor atual"/"lance mínimo"/"lance inicial"). A avaliação antiga (derivada do
+   preço errado) é zerada para a extração já existente (`extrairAvaliacaoHtml`) recapturar a
+   de verdade no MESMO detalhe.
+2. **Área do mesmo imóvel: 677,54 m² gravados, real 22.677,54 m² — 33x menor.** A regex
+   `\d{1,3}(?:[.,]\d{1,2})?\s*m²` só permite UM grupo de milhar (`{1,3}` = no máximo 3 dígitos
+   antes de "m²"), então "22.677,54 m²" só casava o pedaço final. **Confirmado em MAIS 5
+   fontes com a MESMA assinatura** (regex de área que exige decimal colado e cai num fallback
+   sem ponto de milhar): `scraper-soleon.mjs` (CALIL/VEGAS/FERREIRALEIL/TMLEILOES/PURCENA — 5
+   leiloeiros na mesma plataforma Soleon), `scraper-rj.mjs` (RJLEILOES, código da mesma
+   origem), `scraper-gestao.mjs` (GESTAOLEILOES) e `lib/emiliomatos-parse.mjs` (EMILIOMATOS).
+   Todos corrigidos para o padrão certo (1-3 dígitos + grupos de milhar de 3 + decimal
+   opcional) — o mesmo já usado em `extrairAreaM2` (api/_texto-imovel.js), que nunca teve o
+   defeito. **22 registros ativos corrigidos no banco** (1 preço+área do WEBLEILOES/Cotia + 8
+   áreas do WEBLEILOES + 13 áreas das outras 5 fontes), todos conferidos contra o próprio
+   título/descrição antes da correção.
+3. **A blindagem em si:** novo invariante `area_truncada_no_milhar` em `qa_invariantes()` —
+   acusa quando a área gravada é EXATAMENTE o resto de milhar de um número maior citado no
+   título/descrição (ex.: gravou 813, texto diz "1.813m²"). Desenhado para NÃO acusar o caso
+   legítimo "casa 179m² com terreno 5.084m²" (dois números diferentes por desenho — comprovei
+   contra o acervo antes de instalar). `select * from qa_invariantes() where chave =
+   'area_truncada_no_milhar';` → `valor: 0` hoje; qualquer scraper (novo ou velho) que
+   reintroduzir este defeito passa a aparecer aqui.
+
+---
+
 ## 📋 SESSÃO 22 · PARTE 7 (03/09, fim de tarde) — BLOCO 2 FECHADO: 5 ACHADOS DE DINHEIRO/ENTREGA
 
 Todos os 5 itens do Bloco 2 da fila (revisor cético) confirmados por leitura direta do código

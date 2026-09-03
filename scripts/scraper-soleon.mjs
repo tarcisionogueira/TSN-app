@@ -210,7 +210,13 @@ function parseDetalhe(html, url) {
   const modalidade = /(?<!extra)judicial/i.test(txt) ? 'judicial'
     : /extrajudicial/i.test(txt) ? 'extrajudicial'
     : /venda\s*direta/i.test(txt) ? 'venda_direta' : 'extrajudicial';
-  const area = num((txt.match(/([\d.]+,\d{2}|\d+)\s*m²/i) || [])[1]);
+  // ACHADO DO BLOCO 3 (03/09): `[\d.]+,\d{2}` exige DECIMAL colado ("1.813,00"), e "1.813M²"
+  // (sem decimal) caía no fallback `\d+` — que não aceita ponto, então casava só "813",
+  // perdendo o "1." e reportando 1/33 da área real (confirmado em CALIL, VEGAS, FERREIRALEIL,
+  // PURCENA, TMLEILOES — os 5 tenants desta plataforma Soleon). Padrão correto: 1-3 dígitos +
+  // grupos de milhar de 3 dígitos, decimal opcional — o mesmo já usado em `extrairAreaM2`
+  // (api/_texto-imovel.js) e no mapper do WEBLEILOES.
+  const area = num((txt.match(/(\d{1,3}(?:\.\d{3})*(?:,\d{1,2})?)\s*m²/i) || [])[1]);
   const { cidade, estado } = cidadeUF(txt, base.titulo || '');
   const mat = (txt.match(/matr[íi]cula[^\d]{0,20}([\d.\-\/]{2,})/i) || [])[1] || null;
 
