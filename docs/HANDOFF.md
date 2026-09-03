@@ -4,6 +4,41 @@
 
 ---
 
+## 📋 SESSÃO 22 (03/09, mais tarde) — MODALIDADE CEF: VENDA DIRETA ≠ VENDA ONLINE
+
+**Achado do dono, com print:** um imóvel CEF em Santana de Parnaíba/SP (Rua Morisot) anunciado
+pela própria Caixa como **"Venda Online"** (com contador de encerramento na página do lote)
+aparecia na ficha do BidPro como **"Venda Direta"**. Pedido: "a classificação deve ser de
+acordo como está no leiloeiro que o disponibiliza. seja venda direta, venda online, 1 praça,
+2 praça, praça única ou qualquer que seja."
+
+**Causa:** `normalizarModalidadeCEF` em `scripts/scraper.js` (a fonte REAL do acervo CEF — cron
+diário 9h UTC via GitHub Actions; `api/scraper-caixa.js` é o scraper antigo de índice fixo, já
+substituído e não está mais em nenhum cron/trigger, confirmado ao investigar) empilhava as duas
+de propósito em `'venda_direta'`. Mesma correção para "praça única", que virava sinônimo de
+"1ª praça".
+
+**O que mudou:** duas modalidades novas no conjunto canônico — `venda_online` e `praca_unica`.
+**O que NÃO mudou (de propósito):** venda_direta e venda_online continuam tratadas como a MESMA
+coisa para exigência de documento (as duas usam o PDF padrão "Regras da Venda Online" da Caixa
+— `caixaRegrasVendaUrl`) e de data no fluxo (nenhuma tem edital de praça) — só o RÓTULO de
+exibição diverge. Atualizados os pontos que decidem isso (`api/enriquecer-lote.js`,
+`src/utils/leilaoEncerrado.js`, `src/pages/Analise.jsx`, `src/pages/ImovelDetalhe.jsx`,
+`api/gerar-documental.js`) e os mapas de rótulo (`format.js`/`Busca.jsx`/`ImovelGate.jsx`/
+`publico.js`/`email-alerta.js`, que de quebra ganharam 1ª/2ª praça onde faltava rótulo).
+
+**Autocorreção em produção:** o upsert diário do scraper (`onConflict: 'fonte,fonte_id'`)
+reescreve `modalidade` de TODO o acervo CEF ativo a cada rodada — sem precisar de backfill
+manual. Disparado um re-scrape manual (`workflow_dispatch` do `scraper.yml`) na hora do
+conserto, em vez de esperar a rodada de amanhã.
+
+Teste novo: `npm run testar:modalidade-cef` (12 asserções, caso real do print).
+`normalizarModalidadeCEF` foi exportado para ser testável, e `scripts/scraper.js` ganhou
+guarda de entrypoint (`import.meta.url`) — sem ela, importar a função para teste disparava
+o scraping inteiro (fetch de todas as UFs + escrita no banco) como efeito colateral do import.
+
+---
+
 ## 📋 SESSÃO 21 (03/09, 14h UTC) — TRÊS PEDIDOS DIRETOS DO DONO
 
 ### ✅ 1. Comissionamento do Airton redirecionado para o Jean
