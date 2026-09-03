@@ -29,8 +29,15 @@ function podeAssistir(licao, planAtual) {
 }
 
 // Selo de acesso/preço no estilo "vitrine" (Amazon): grátis, incluso no plano, ou preço.
+//
+// 02/09 — O PREÇO MANDA, E A RAZÃO É QUE O SERVIDOR JÁ DECIDE ASSIM. A RPC de entitlement
+// `obter_arquivo_ebook` libera o arquivo com `if coalesce(preco,0) = 0`; esta vitrine olhava
+// a flag `gratuito` ANTES do preço. O "Lucre Antes de Arrematar" estava com preço 49,90 e
+// `gratuito = true`: o card anunciava "Grátis" e o servidor recusava o arquivo a quem não
+// tinha plano — promessa que o backend não cumpre, pior do que um rótulo errado. As duas
+// pontas passam a ler o mesmo critério, e mudar o preço na tela de Produtos basta.
 function acessoMaterial(m, plano) {
-  if (m.gratuito) return { txt: 'Grátis', cor: '#059669', bg: '#dcfce7' };
+  if (m.gratuito && !(Number(m.preco) > 0)) return { txt: 'Grátis', cor: '#059669', bg: '#dcfce7' };
   const incluso = m.assinatura || (Array.isArray(m.planos_gratis) && m.planos_gratis.includes(plano));
   if (incluso) return { txt: 'Incluso no seu plano', cor: '#0D63DB', bg: '#eff6ff' };
   const preco = Number(m.preco) || 0;
@@ -145,11 +152,21 @@ export default function Membros() {
       setEbooks(es || []);
       } finally { setCarregando(false); }
     }
-    fetchData();
-    // Preços dos planos AO VIVO do admin (planos_config).
-    fetchPlanosComConfig().then(setPlanos).catch(() => {});
-    supabase.from('planos_config').select('preco').eq('plano_key', 'pacote').maybeSingle()
-      .then(({ data }) => { if (data && data.preco != null) setPrecoPacote(Number(data.preco)); }).catch(() => {});
+    const recarregar = () => {
+      fetchData();
+      // Preços dos planos AO VIVO do admin (planos_config).
+      fetchPlanosComConfig().then(setPlanos).catch(() => {});
+      supabase.from('planos_config').select('preco').eq('plano_key', 'pacote').maybeSingle()
+        .then(({ data }) => { if (data && data.preco != null) setPrecoPacote(Number(data.preco)); }).catch(() => {});
+    };
+    recarregar();
+    // 02/09 — A VITRINE RELÊ QUANDO A ABA VOLTA. O catálogo era buscado uma vez, no mount:
+    // quem muda o preço no /admin numa aba e volta para esta não remonta nada, e o card
+    // segue com o valor antigo, sem erro e sem sinal — só F5 resolvia. É o mesmo mecanismo
+    // que o PlanosContext já usa para os planos, aplicado aqui a cursos e eBooks.
+    const aoVoltar = () => { if (!document.hidden) recarregar(); };
+    document.addEventListener('visibilitychange', aoVoltar);
+    return () => document.removeEventListener('visibilitychange', aoVoltar);
   }, []);
 
   // EVOLUÇÃO DA LEITURA dos eBooks. Sem isto o progresso que o leitor conta só existiria

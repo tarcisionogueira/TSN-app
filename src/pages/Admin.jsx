@@ -2544,6 +2544,9 @@ function ConfigTab() {
             _tipo: 'curso', _id: c.id,
             nome: c.titulo,
             preco: c.preco ?? 0,
+            // curso/ebook não têm coluna de valor à vista: o campo em R$ nasce do %.
+            preco_vista: (Number(c.preco) > 0 && Number(c.desconto_vista_pct) > 0)
+              ? Math.round(Number(c.preco) * (1 - Number(c.desconto_vista_pct) / 100) * 100) / 100 : null,
             desconto_vista_pct: c.desconto_vista_pct ?? 0,
             assinatura: c.assinatura ?? false,
             ativo: c.ativo ?? true,
@@ -2554,6 +2557,8 @@ function ConfigTab() {
             _tipo: 'ebook', _id: e.id,
             nome: e.titulo,
             preco: e.preco ?? 0,
+            preco_vista: (Number(e.preco) > 0 && Number(e.desconto_vista_pct) > 0)
+              ? Math.round(Number(e.preco) * (1 - Number(e.desconto_vista_pct) / 100) * 100) / 100 : null,
             desconto_vista_pct: e.desconto_vista_pct ?? 0,
             assinatura: e.assinatura ?? false,
             ativo: e.ativo ?? true,
@@ -2570,6 +2575,16 @@ function ConfigTab() {
     }
     loadAll();
   }, []);
+
+  // Valor à vista efetivo de uma linha: o campo em R$ quando o dono o preencheu, senão o
+  // derivado do %. Um só lugar decide, para a tela e o salvamento nunca discordarem.
+  const vistaDaLinha = (r) => {
+    const preco = Number(r.preco) || 0;
+    const emReais = Number(r.preco_vista);
+    if (Number.isFinite(emReais) && emReais > 0) return emReais;
+    const pct = Number(r.desconto_vista_pct) || 0;
+    return pct > 0 && preco > 0 ? preco * (1 - pct / 100) : 0;
+  };
 
   function updateRow(id, tipo, field, value) {
     setRows(prev => prev.map(r => (r._id === id && r._tipo === tipo) ? { ...r, [field]: value } : r));
@@ -2593,27 +2608,34 @@ function ConfigTab() {
 
     const gravar = async (p) => {
       const chave = `${p._tipo}:${p._id}`;
+      const preco = Number(p.preco) || 0;
+      // O VALOR à vista é a fonte; o % é o rótulo derivado dele. Digitar 5.000 sobre 6.000
+      // grava 5.000 exatos e um pct de 16,6667 — pelo caminho inverso, nenhum percentual
+      // com casas finitas fecha esse valor (era o R$ 4.999,80 que aparecia na tela).
+      const vista = vistaDaLinha(p);
+      const pct = (preco > 0 && vista > 0 && vista < preco)
+        ? Math.round((1 - vista / preco) * 100 * 10000) / 10000   // numeric(7,4)
+        : 0;
       const comum = {
-        preco: Number(p.preco) || 0,
-        desconto_vista_pct: Number(p.desconto_vista_pct) || 0,
+        preco,
+        desconto_vista_pct: pct,
         assinatura: p.assinatura,
         ativo: p.ativo,
       };
       let q;
       if (p._tipo === 'plano') {
-        const vistaCalc = Number(p.desconto_vista_pct) > 0
-          ? Number(p.preco) * (1 - Number(p.desconto_vista_pct) / 100)
-          : (p.preco_vista ?? null);
         q = supabase.from('planos_config').update({
           ...comum,
-          preco_vista: vistaCalc,
+          preco_vista: pct > 0 ? Math.round(vista * 100) / 100 : null,
           cobrar: p.assinatura,
           atualizado_em: new Date().toISOString(),
         }).eq('plano_key', p._id);
       } else if (p._tipo === 'curso') {
-        q = supabase.from('cursos_admin').update(comum).eq('id', p._id);
+        // `gratuito` acompanha o preço: é o critério que o servidor usa para liberar o
+        // arquivo (obter_arquivo_ebook) e o que a vitrine de /membros passou a ler.
+        q = supabase.from('cursos_admin').update({ ...comum, gratuito: !(preco > 0) }).eq('id', p._id);
       } else {
-        q = supabase.from('ebooks_admin').update(comum).eq('id', p._id);
+        q = supabase.from('ebooks_admin').update({ ...comum, gratuito: !(preco > 0) }).eq('id', p._id);
       }
       const { data, error } = await q.select('*');
       if (error) { falhas.push({ chave, nome: p.nome, motivo: error.message }); return; }
@@ -2692,7 +2714,7 @@ function ConfigTab() {
 
   const fmtPreco = (v) => v != null ? `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—';
   const fmtBRL = v => v != null ? `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—';
-  const COLS = '2fr 110px 140px 90px 70px';
+  const COLS = '2fr 110px 200px 90px 70px';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -2716,14 +2738,14 @@ function ConfigTab() {
           <div style={{ overflowX: 'auto' }}>
             {/* Header */}
             <div style={{ display: 'grid', gridTemplateColumns: COLS, gap: 8, padding: '6px 8px', borderBottom: '2px solid #e2e8f0', minWidth: 700 }}>
-              {['Produto', 'Valor R$', 'Desc. à vista %', 'Assinatura', 'Ativo'].map(h => (
+              {['Produto', 'Valor R$', 'À vista (% ou R$)', 'Assinatura', 'Ativo'].map(h => (
                 <div key={h} style={{ fontSize: 10, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: 0.5 }}>{h}</div>
               ))}
             </div>
 
             {rows.map(r => {
               const pct = Number(r.desconto_vista_pct || 0);
-              const vistaCalc = pct > 0 ? Number(r.preco) * (1 - pct / 100) : null;
+              const vistaEfetiva = vistaDaLinha(r);
               const temVista = !r.assinatura && Number(r.preco) > 0;
               const isDirtyRow = dirtyIds.has(`${r._tipo}:${r._id}`);
               const tipoBadge = r._tipo === 'plano'
@@ -2759,17 +2781,38 @@ function ConfigTab() {
                     )}
                   </div>
 
-                  {/* Col 3: Desc. à vista % */}
+                  {/* Col 3: à vista — % OU valor. Digitar o VALOR é o caminho exato: nenhum
+                      percentual com casas finitas fecha R$ 5.000 sobre R$ 6.000, e era daí
+                      que saía o R$ 4.999,80 na tela. O outro campo acompanha. */}
                   <div>
                     {temVista ? (
                       <>
-                        <input type="number" min="0" max="100" step="0.5"
-                          value={pct}
-                          onChange={e => updateRow(r._id, r._tipo, 'desconto_vista_pct', e.target.value)}
-                          style={{ ...S.input, padding: '6px 8px', fontSize: 13, width: '100%' }} />
-                        {pct > 0 && (
+                        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                          <input type="number" min="0" max="100" step="0.0001"
+                            title="Desconto % — o valor ao lado acompanha"
+                            value={pct === 0 ? '' : Number(Number(pct).toFixed(4))}
+                            placeholder="%"
+                            onChange={e => {
+                              const novoPct = Number(e.target.value) || 0;
+                              updateRow(r._id, r._tipo, 'desconto_vista_pct', e.target.value);
+                              updateRow(r._id, r._tipo, 'preco_vista',
+                                novoPct > 0 ? Math.round(Number(r.preco) * (1 - novoPct / 100) * 100) / 100 : null);
+                            }}
+                            style={{ ...S.input, padding: '6px 8px', fontSize: 13, width: 78 }} />
+                          <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 700 }}>%</span>
+                          <InputBRL value={vistaEfetiva || ''}
+                            onChange={v => {
+                              const novoVista = Number(v) || 0;
+                              updateRow(r._id, r._tipo, 'preco_vista', novoVista > 0 ? novoVista : null);
+                              updateRow(r._id, r._tipo, 'desconto_vista_pct',
+                                novoVista > 0 && Number(r.preco) > 0
+                                  ? Math.round((1 - novoVista / Number(r.preco)) * 100 * 10000) / 10000 : 0);
+                            }}
+                            style={{ ...S.input, padding: '6px 8px', fontSize: 13, width: 104 }} />
+                        </div>
+                        {vistaEfetiva > 0 && (
                           <div style={{ fontSize: 10, color: '#059669', marginTop: 3, fontWeight: 600 }}>
-                            {fmtBRL(vistaCalc)} à vista
+                            {fmtBRL(vistaEfetiva)} à vista · economia de {fmtBRL(Number(r.preco) - vistaEfetiva)}
                           </div>
                         )}
                       </>

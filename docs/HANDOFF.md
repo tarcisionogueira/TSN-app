@@ -346,6 +346,44 @@ calculada **sem custo de gateway**, e ninguém via.
 sandbox — a trava se recusa a aprovar sem medir, que é o comportamento certo). Conferi à mão
 pelo MCP que toda coluna e RPC tocada existe; o CI roda a trava de verdade no push.
 
+### 💰 03/09, 00h UTC — O PREÇO À VISTA, O eBOOK "GRÁTIS" QUE O SERVIDOR COBRAVA, E A VITRINE QUE NÃO RELIA
+
+**1. R$ 4.999,80 onde o dono queria R$ 5.000,00 — o derivado vencia o explícito.**
+`desconto_vista_pct` era `numeric(5,2)`. Para R$ 5.000 sobre R$ 6.000 o desconto é
+16,666…%, o banco truncava para **16,67**, e `calcVista()` (em `utils/planosConfig.js`)
+**recalculava o valor a partir do percentual**, ignorando o `preco_vista` gravado — que
+estava lá, com o valor certo (`5000.00004`). Nenhum percentual de casas finitas fecha 5.000
+sobre 6.000: o caminho estava invertido.
+- `preco_vista` passa a ser a **fonte** (o cliente paga um VALOR); o % vira rótulo derivado
+  **do valor**, então a tela nunca anuncia um desconto diferente do que será cobrado.
+- Coluna do pct: `numeric(5,2)` → **`numeric(7,4)`** nas três tabelas; `preco_vista` →
+  `numeric(12,2)` (dinheiro tem 2 casas; o `5000.00004` era resto de ponto flutuante).
+- Na tela de Produtos a coluna virou **"À vista (% ou R$)"**: dois campos sincronizados —
+  digitar o valor é o caminho exato, digitar o % continua funcionando.
+- **Aplicado:** assessoria **R$ 5.000,00** e clube **R$ 50.000,00** à vista (pct 16,6667).
+
+**2. O eBook que a vitrine dava de graça e o servidor cobrava.** "Lucre Antes de Arrematar"
+estava com `preco = 49,90` **e** `gratuito = true`. A RPC de entitlement
+`obter_arquivo_ebook` **já decide pelo preço** (`if coalesce(preco,0) = 0 then libera`); a
+vitrine de `/membros` (`acessoMaterial`) olhava a **flag** antes do preço. O card anunciava
+**"Grátis"** e o servidor recusava o arquivo a quem não tem plano — **promessa que o backend
+não cumpre**, pior do que um rótulo errado. E a tela de Produtos nem expõe essa flag: não
+havia como o dono desfazer por lá.
+- O **preço manda** nas duas pontas: `acessoMaterial` só diz "Grátis" quando não há preço, e
+  o salvamento sincroniza `gratuito = !(preco > 0)` para curso e eBook.
+- Linhas existentes acertadas na migração (1 eBook; 0 cursos).
+
+**3. A vitrine de /membros não relia.** Mesmo defeito do `/planos` de ontem: catálogo
+buscado uma vez no mount. Mudar o preço no admin em outra aba e voltar não remontava nada.
+Agora ela recarrega no `visibilitychange` — o mesmo mecanismo que o `PlanosContext` já usava
+para os planos, aplicado a cursos e eBooks.
+
+⚠️ **O que fica para depois:** `cursos_admin` e `ebooks_admin` **não têm** coluna
+`preco_vista` — para eles o campo em R$ da tela é convertido em % na gravação (2 casas de
+erro possível em centavos). Só vale criar a coluna quando alguma tela de oferta passar a
+vender curso/eBook à vista; hoje nenhuma vende, e criar dado sem consumidor é inventar
+número.
+
 ### ✅ 02/09, 19h UTC — TUDO ACIMA ESTÁ EM PRODUÇÃO
 
 `main` = **`ff8d0f1`**, deploy **READY** (19:04 UTC). Os 4 commits da sessão foram para a
