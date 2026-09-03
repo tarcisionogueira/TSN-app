@@ -4,6 +4,109 @@
 
 ---
 
+## ✅ SESSÃO 20 (03/09, 10h–11h UTC) — BLOCO 1 DA FILA ZERADO. A aula de 09/09 está de pé.
+
+> `main` = **`4d3fc22`** · segurança **0/0** · regras de negócio **0 crítico** · KYC 0 · 0 chamado
+> de cliente sem resposta · 0 fonte no ponto cego · backup **ok** (67 arq., 17 novos, 50 iguais —
+> **não está no teto**, o alerta de 14/08 não voltou). Heartbeat às **09:58 UTC**.
+> Migração aplicada: **parte A** (`edicao_na_inscricao_parte_a_…`). **Parte B pendente** — ver abaixo.
+
+### 🔴 O QUE ESTAVA ACONTECENDO AGORA, e ninguém veria: a data da aula tinha DUAS verdades
+
+```
+eventos_live.data_hora  = 02/09 22:00 UTC   ← a coluna CRUA (aula que já passou)
+live_proxima(...)       = 09/09 22:00 UTC   ← a verdade
+oferta_fecha_em         = 06/09 03:00 UTC   ← só depois disso o banco rola a coluna
+```
+
+`live_rolar_recorrentes()` avança a coluna **depois de `oferta_fecha_em`, não depois da aula** —
+são **quatro dias** apontando para o passado. Nesse intervalo:
+
+1. **`api/live-inscrever.js`** mandava *"sua vaga está garantida … 02 de setembro"* — o primeiro
+   e-mail que o inscrito lê do produto, com a data de uma aula morta.
+2. **`api/admin-whatsapp-fila.js`** filtrava `data_hora > agora`, não achava evento e respondia
+   *"nenhuma aula futura ativa"*: **a fila de WhatsApp estava VAZIA** nos dias em que ela serve.
+   Sem erro na tela, sem linha no log. **Este segundo sintoma não estava no handoff anterior.**
+   E o comentário em cima do filtro **afirmava o contrário do que o banco faz** — documentação
+   errada fecha a investigação antes de começar. A mesma frase falsa estava em
+   `lancamento-remarketing-cron.js` (lá a leitura crua É correta: quer-se a aula que passou).
+
+### 🔴 E o que já tinha custado a edição de 02/09 — a medição contradiz o diagnóstico anterior
+
+O handoff dizia *"25 exploradores nunca receberam o convite"*. O rastro do banco diz **por quê**,
+e não é o que se supunha:
+
+```
+74 convites, TODOS em 30/08 11:00:09–11:00:23   (uma rodada de 14 SEGUNDOS)
+21 elegíveis NUNCA convidados, criados entre 30/08 15:34 e 02/09 10:25
+ 6 criados depois da aula · 5 já inscritos · 0 sem e-mail
+```
+
+Não foi o e-mail que falhou. **`convidar-live-cron` desarmava logo após o primeiro envio**, e as
+rodadas diárias seguintes respondiam `ok:true, motivo:'não armado'` sem olhar para ninguém. *Um
+cron diário que se autodesliga na primeira rodada é um cron semanal com outro nome* — e o
+cabeçalho de `live-reforco-cron.js` documentava o conserto *"passamos para diário"* como se
+tivesse funcionado. **Quem se cadastra na semana da aula é justamente quem o anúncio acabou de
+trazer**: o lead mais quente da base foi o que ficou de fora.
+
+### ✅ Os 4 itens do BLOCO 1, corrigidos e medidos
+
+| # | O que era | O que passou a ser | Prova |
+|---|---|---|---|
+| 1 | data lida da coluna crua em 2 rotas | `live_proxima` nas duas; `evRes.ok ? … : []` (5xx virando "aula não aberta") vira 502 | `main` **`8d39b51`** READY em produção |
+| 2 | exclusão de "já inscrito" só por `evento_id` | coluna **`edicao`** em `live_inscricoes` e `live_lembretes` + gatilho + filtro em `live_reforco_alvos`, `whatsapp_fila_live`, `_convite-live.js` | convite de 09/09 alcança **106**; a regra antiga descartaria **5** em silêncio |
+| 3 | desarme por RODADA | desarme por **EDIÇÃO** (só quando ela fica para trás); o duplo é impedido pelo UNIQUE por pessoa/edição | fila de WhatsApp de 09/09: **104 pessoas, os 5 de 02/09 incluídos** |
+| 4 | assunto deduzia a QUARTA a partir das 19h | dia da semana vem da DATA | `npm run testar:data-aula` — **28 asserções** |
+
+**Decisão do dono aplicada ao pé da letra:** *"cada lead faz parte"*. A edição **reinclui**, não
+exclui melhor — quem se inscreveu em 02/09 volta para todas as listas de 09/09.
+
+### ✅ A migração, nas duas partes — AMBAS APLICADAS
+
+**Por que foi partida em duas, e a ordem importava:** o código velho fazia upsert com
+`on_conflict=evento_id,email`. Derrubar essa chave ANTES do deploy faria toda inscrição no
+intervalo tomar 400 — que a rota devolve ao cliente como *"não conseguimos concluir a sua
+inscrição"*. Então a parte A só ADICIONOU (coluna, gatilho, chaves novas, backfill, filtro por
+edição nas duas RPCs) e a parte B, aplicada **depois de o `4d3fc22` estar READY**, derrubou as
+chaves velhas e fechou as colunas em `NOT NULL`. A parte B **recusa rodar** se a A não tiver
+passado ou se sobrar linha sem edição — "não consegui conferir" não passa por "está tudo certo".
+
+**Prova, em ensaio com rollback:** inserir a MESMA `(evento_id, email)` de uma inscrição de
+02/09 agora cria linha própria em **09/09** — antes o upsert só atualizava a antiga e respondia
+200 sem criar inscrição nenhuma na nova edição. Estado final: chaves vigentes
+`live_inscricoes_evento_email_edicao_key` e `live_lembretes_evento_email_etapa_edicao_key`,
+`edicao` **NOT NULL** nas duas tabelas.
+
+### ⏭️ O QUE FAZER ANTES DE 09/09 (não tem código — é o ato do dono)
+
+**Armar o convite da edição:** o cron está diário e agora fica armado a semana toda, mas ele só
+dispara com a autorização explícita:
+```sql
+insert into app_config (key, value) values ('convite_live_armado', '2026-09-09')
+  on conflict (key) do update set value = excluded.value;
+```
+Hoje `convite_live_armado` está **vazio**. Com ele armado, a rodada das 11h UTC alcança as
+**106 pessoas** e volta a alcançar, todo dia, quem se cadastrar até a aula — que é exatamente
+o buraco de 21 pessoas da edição passada.
+
+### 📝 Decisões deliberadas de NÃO mexer (para não virar surpresa)
+
+- **`lancamento_publico`** (remarketing pós-aula) segue sem filtro de edição: o dedup dela é por
+  etapa e **para sempre**, então filtrar mudaria quem recebe. Mais inclusivo = a decisão do dono.
+- **`live_sala`** segue sem filtro: inscrito de uma edição entra na sala da seguinte — coerente
+  com *"cada lead faz parte"*.
+- **`live_inscritos(slug)`** conta TODAS as edições. Hoje são 5 e não engana; depois de algumas
+  semanas vira número cumulativo apresentado como "inscritos nesta aula". **Decidir antes disso.**
+- **`og-share.js`** NÃO mente (degrada para *"toda quarta, às 19h"* quando a data passou), mas
+  poderia dizer **09/09** usando `live_proxima`. É conversão perdida no cartão que é repassado.
+- **`live-lembrete-cron`** lê `data_hora` crua e só funciona porque `live_rolar_recorrentes()`
+  roda antes, e o roll acontece quando `oferta_fecha_em` vence. **Se alguém marcar
+  `oferta_fecha_em` PARA DEPOIS da próxima aula, o lembrete não sai** — e nada acusa.
+- **12 dos 20 testes em `scripts/testes/` rodam sem NENHUMA dependência** (o novo incluído) e
+  **nenhum está no CI**. `verificar-padroes.yml` roda sem `npm ci` de propósito: caberiam ali.
+
+---
+
 ## 📣 REVISÃO DA CAMPANHA (03/09, 01h UTC) — NÃO FALTOU TRÁFEGO. FALTOU A PÁGINA CONVERTER.
 
 > **O número que reorganiza tudo: 521 visitas na LP da aula em 7 dias — 475 delas só em
