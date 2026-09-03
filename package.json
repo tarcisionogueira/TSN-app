@@ -33,7 +33,8 @@
     "testar:whatsapp": "node scripts/testes/whatsapp-nao-inventa-plano-do-cliente.mjs",
     "precisa-navegador": "node scripts/testes/precisa-navegador.mjs",
     "testar:data-aula": "node scripts/testes/a-data-da-aula-vem-da-recorrencia.mjs",
-    "testar:uf-edital": "node scripts/testes/uf-de-edital-e-uf-de-verdade.mjs"
+    "testar:uf-edital": "node scripts/testes/uf-de-edital-e-uf-de-verdade.mjs",
+    "testar:leiloeiro": "node scripts/testes/o-nome-do-leiloeiro-nao-e-a-frase-em-volta.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",

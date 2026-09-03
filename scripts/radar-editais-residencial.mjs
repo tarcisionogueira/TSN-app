@@ -83,11 +83,20 @@ const r = await pullDJEN({ supabase, ini, fim, ehIntegrado, t0, transporte: tran
 // Run PARCIAL não é sucesso — grava com `erro` para que o dia siga em aberto e o freio do
 // caminho pago continue contando. Foi o conserto de 19/08: um corte por tempo gravava
 // `erro: null` e encerrava a captura do dia inteiro anunciando sucesso.
+// ⚠️ COMBO QUE CAI NÃO É RUN QUE FALHA (03/09). Esta linha era `r.erroGeral` puro, e o
+// `erroGeral` do `pullDJEN` era sobrescrito por QUALQUER combo com problema. Resultado medido:
+// o run de 29/08 18:53 trouxe 98 editais novos, viu 2.093 itens, e foi carimbado FALHA por
+// causa de um `fetch failed` em `TRT15/edital de leilão` — 1 de 12. Como é ESTE insert que o
+// freio do caminho pago lê, o efeito era o pior possível: o residencial coletava de graça, o
+// log dizia que não, e o Bright Data era chamado para refazer. Agora `pullDJEN` separa os dois
+// — falha total vira `erro`, falha parcial vira `aviso` —, e link doméstico oscilando deixa de
+// apagar uma coleta que funcionou.
 const erro = r.erroGeral || (r.cortadoPorTempo ? 'corte_por_tempo (run parcial — repuxar)' : null);
 const { error: eLog } = await supabase.from('monitor_runs').insert({
   fonte: 'radar-editais-djen', origem: 'residencial',
   janela_inicio: ini, janela_fim: fim,
   itens_vistos: r.vistos, itens_novos: r.novos, duracao_ms: Date.now() - t0, erro,
+  aviso: r.avisoParcial || null,
 });
 // Este insert NÃO é best-effort, e a diferença importa: é ele que o freio do caminho pago lê.
 // Se ele falhar em silêncio, o cron da Vercel conclui "faz 7 dias que ninguém coleta" e paga

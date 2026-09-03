@@ -4,6 +4,76 @@
 
 ---
 
+## 🔧 SESSÃO 20 · PARTE 3 (03/09, 12h30 UTC) — A FILA DO RADAR, RESOLVIDA ATÉ ONDE DAVA SOZINHO
+
+> Dois dos meus próprios diagnósticos foram corrigidos pela medição. Fica registrado porque a
+> conclusão errada custa mais que o defeito: ela manda consertar o que está são.
+
+### ✅ Item 1 — parse do leiloeiro. E o "75% sem nome" media outra coisa
+
+```
+356 sem nome
+├─ 192 (54%)  o texto NEM CITA "leiloeiro"  → não é falha de parse, é ausência real
+└─ 164        cita, e o parse não pegou
+   ├─  36     `nao_edital` (o filtro duro já descartou)
+   └─ 128     ALVO REAL
+```
+Contar nulos misturava *"o parser errou"* com *"o edital não nomeia ninguém"* — duas coisas
+que pedem ações opostas. O teto realista é **230 de 314 editais reais**, não 477.
+
+A regex única (`leiloeir[ao]…(NOME)(?:,|\.|\s+JUCESP)`) quebrava em quatro formas reais:
+o `(o)` de `Leiloeira(o)`, o `nomeada(o)` no meio, o **hífen antes do JUCESP** (`- JUCESP` não
+casa com `\s+JUCESP`) e o parêntese/aspa. Trocada por **preâmbulo → janela → validador**.
+Backfill automático: o cron re-parseia até 300 pendentes por rodada, de graça (regex sobre
+texto já guardado — zero rede, zero IA), e a fila se esgota sozinha.
+
+⚠️ **O teste pegou um defeito meu na primeira rodada:** a versão nova esqueceu a exigência de
+INICIAL MAIÚSCULA. Meu próprio comentário dizia que ela era o guard, mas `nomeLeiloeiroValido`
+nunca a teve — quem exigia era a regex antiga. Sem o guard saíram quatro frases com cara de
+nome próprio, porque `tituloNome` capitaliza no fim: *"Perante Este Tribunal"*, *"Informou A
+Ocorrência de Lance Vencedor"*. É o defeito mais caro possível: passaria numa revisão.
+`npm run testar:leiloeiro` — **25 asserções, todas com trechos reais do banco**.
+
+### ✅ Item 3 — os erros do TRT15 já estavam resolvidos, e eu li errado
+
+```
+80 HTTP 403  → TODOS de origem=null (o caminho Vercel ANTIGO), último 30/08 00:04
+ 2 fetch failed → residencial, oscilação de link doméstico
+```
+O 403 é o WAF do DJEN recusando IP de datacenter — **exatamente o que a migração para o runner
+residencial (29/08) resolveu**. Não voltou desde então. Não havia o que consertar.
+
+**Mas a medição expôs um problema real e ainda vivo:** o run de 29/08 18:53 trouxe **98 editais
+novos, viu 2.093 itens — e foi carimbado FALHA** porque 1 combo em 12 caiu. Como é esse
+`monitor_runs.erro` que o freio da rede de segurança lê, o efeito era o pior possível: o
+residencial coletava de graça, o log dizia que não, e o **Bright Data era chamado para
+refazer**. E, desde hoje, isso também faria o invariante novo gritar sobre um pipeline são.
+**Com 27 tribunais, os 12+ combos passarem todos numa rodada é quase impossível — este conserto
+é pré-requisito de abrir `RADAR_TRIBUNAIS`.** Agora falha total vira `erro` e falha parcial vira
+`monitor_runs.aviso`, coluna nova que fica FORA do sinal que o freio lê.
+
+### ✅ Itens 5 e 6 — o campo que não sabia dizer "não sei"
+
+`leiloeiro_integrado` virou **tri-state**: `true` casa · `false` conferido e não casa · `null`
+**não consegui conferir**. E o tri-state só é seguro porque os consumidores mudaram junto —
+`count(*) filter (where not leiloeiro_integrado)` **não conta NULL**, então a linha sumiria das
+duas contagens e a soma deixaria de bater com o total, em silêncio. Introduzir o nulo sem tocar
+no painel seria cometer, no conserto, o defeito que ele veio consertar. A RPC ganhou
+`nao_conferidos` e `sem_leiloeiro`; o badge do `/admin` ganhou o terceiro estado; e o invariante
+**`editais_cruzamento_cego`** (limite 0) vigia a regressão que antes era invisível.
+
+### ⏳ O que NÃO deu para fazer sozinho, e por quê
+
+| # | Item | Por quê |
+|---|---|---|
+| 2 | Ruído: 34% `nao_edital` | **Não é defeito** — é o filtro duro trabalhando. Cortar exigiria mexer nos `RADAR_TERMOS`, e o rendimento por termo só se mede abrindo os tribunais. |
+| 2b | 16% `erro_parse` | Deve cair com o re-parse; **a medição só existe depois do cron das 16h UTC**. |
+| 4 | Cobertura DJEN × DEJESP | O proxy do sandbox bloqueia `*.pje.jus.br` e o site do TJSP. Precisa rodar de fora. |
+| 7 | **Edital virar LOTE** | É projeto, não conserto: exige decidir o que é "imóvel pesquisável" a partir de um edital sem foto e sem geocodificação. **É o item que muda o negócio.** |
+| — | Abrir `RADAR_TRIBUNAIS` | Deliberadamente NÃO fiz: aumenta compute e IA por edital. Com os consertos acima, agora é seguro fazer por etapas — sugiro 4–5 estados primeiro, medindo rendimento e ruído por UF antes de ir a 27. |
+
+---
+
 ## 🛰️ SESSÃO 20 · PARTE 2 (03/09, 12h UTC) — PNAJ, E O RADAR DE EDITAIS QUE MEDIA OUTRA COISA
 
 > Pergunta do dono: *"estamos integrados com o PNAJ, para não ficar tão dependentes de leiloeiros?"*

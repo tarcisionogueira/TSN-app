@@ -10943,9 +10943,15 @@ function RadarEditaisTab() {
                   <td title={e.orgao || e.comarca || ''} style={{ padding:'8px 10px', maxWidth:170, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{e.orgao || e.comarca || '—'}</td>
                   <td style={{ padding:'8px 10px' }}>
                     {e.leiloeiro_nome || <span style={{ color:'#94a3b8' }}>—</span>}{' '}
-                    {e.leiloeiro_nome && (e.leiloeiro_integrado
+                    {/* TRÊS estados desde 03/09, não dois: `null` é "não consegui conferir" e
+                        NÃO pode aparecer como "integrar" — a etiqueta amarela manda alguém
+                        integrar um leiloeiro que talvez já esteja no acervo. Ver o invariante
+                        `editais_cruzamento_cego`. */}
+                    {e.leiloeiro_nome && (e.leiloeiro_integrado === true
                       ? <span style={{ fontSize:10, background:'#dcfce7', color:'#166534', padding:'1px 6px', borderRadius:6 }}>integrado</span>
-                      : <span style={{ fontSize:10, background:'#fef3c7', color:'#92400e', padding:'1px 6px', borderRadius:6 }}>integrar</span>)}
+                      : e.leiloeiro_integrado === false
+                      ? <span style={{ fontSize:10, background:'#fef3c7', color:'#92400e', padding:'1px 6px', borderRadius:6 }}>integrar</span>
+                      : <span title="a lista de leiloeiros do acervo não pôde ser lida nesta rodada" style={{ fontSize:10, background:'#e2e8f0', color:'#475569', padding:'1px 6px', borderRadius:6 }}>não conferido</span>)}
                   </td>
                   <td style={{ padding:'8px 10px', whiteSpace:'nowrap' }}>{e.numero_processo || '—'}</td>
                   <td style={{ padding:'8px 10px', whiteSpace:'nowrap' }}>{dt(e.data_praca_1)}</td>

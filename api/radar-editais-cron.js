@@ -101,6 +101,77 @@ function nomeLeiloeiroValido(s) {
   if (NOME_BLOQ.test(nome)) return null;                       // é fragmento de frase, não nome
   return tituloNome(nome).slice(0, 120);
 }
+/**
+ * O NOME DO LEILOEIRO — preâmbulo + janela + validador, em vez de uma regex só (03/09).
+ * ═══════════════════════════════════════════════════════════════════════════════════════
+ * A versão anterior era uma regex única que tentava fazer as três coisas de uma vez:
+ *   /leiloeir[ao]\s*(?:oficial|público)?\s*[:\-]?\s*(NOME)(?:,|\.|\s+JUCESP|…)/
+ * e falhava em 128 editais REAIS — medidos, não estimados: de 314 editais de verdade no
+ * acervo, 212 estavam sem nome, e em 128 deles o texto CITA o leiloeiro. Os outros 84 não
+ * citam nome nenhum, e para esses não há o que consertar (a distinção importa: "o parse
+ * falhou" e "o edital não nomeia ninguém" são coisas diferentes que se parecem numa contagem
+ * de nulos — forma nº 10).
+ *
+ * OS QUATRO JEITOS QUE O DJEN ESCREVE, e por que cada um quebrava:
+ *   • "Leiloeira(o) Oficial nomeada(o) MARCOS ROBERTO TORRES," — 11 ocorrências, o maior
+ *     bloco. Os `(o)` e o `nomeada(o)` não estavam previstos entre a palavra e o nome.
+ *   • "leiloeiro Gilson Keniti Inumaru - JUCESP nº 762/2007" — o terminador era `\s+JUCESP`,
+ *     mas aqui vem `- JUCESP`; e como `-` não entra na classe do nome, o match morria.
+ *   • "Leiloeiro: VICTOR ALBERTO SEVERINO FRAZÃO - Endereço Eletrônico" — mesmo hífen.
+ *   • "leiloeiro(a) CASSIA NEGRETE NUNES BALBINO," e "leiloeira oficial \"Hugo Alexandre
+ *     Pedro Além - Jucesp 935" — o `(a)` e a aspa.
+ *
+ * A TROCA: em vez de uma expressão que precisa acertar preâmbulo, nome e terminador ao mesmo
+ * tempo, três passos com uma responsabilidade cada — o preâmbulo é consumido, a janela é
+ * cortada no primeiro delimitador forte, e quem julga se aquilo é um nome continua sendo
+ * `nomeLeiloeiroValido`. Regex que faz três coisas quebra nas três.
+ *
+ * ⚠️ A EXIGÊNCIA DE INICIAL MAIÚSCULA É O QUE SEGURA O FALSO POSITIVO, e por isso ela não é
+ * cosmética: "leiloeiro oficial credenciado perante este Tribunal", "leiloeiro a ser nomeado
+ * por este juízo", "leiloeira informou o recebimento" e "leiloeiro (art. 883, do CPC)" todos
+ * morrem aqui, antes mesmo do `NOME_BLOQ` — o que vem depois da palavra é minúsculo ou
+ * pontuação. Afrouxar isso troca 128 acertos por centenas de frases com nome de gente.
+ */
+const RE_PREAMBULO = new RegExp(
+  'leiloeir[ao]' +
+  '(?:\\([ao]\\))?' +                                   // leiloeiro(a)
+  '(?:\\s+(?:p[uú]blic[ao]|oficial|judicial|nomead[ao]|designad[ao]|credenciad[ao])(?:\\([ao]\\))?)*' +
+  '(?:\\s+o\\([ao]\\))?' +                              // "o(a)"
+  '(?:\\s+sr[ao]?\\.?(?:\\([ao]\\))?\\.?)?' +          // "Sr.", "Sra.", "Sr(a)"
+  "\\s*[:\\-–\"“']?\\s*", 'i');
+/** Delimitador FORTE: onde o nome termina, em qualquer uma das formas vistas no DJEN. */
+const RE_CORTE = /[,.;:()"“”'\/\n\-–—0-9]|\s\be-?mail\b|\s\bendere[çc]o\b|\s\bjucesp\b|\s\binscrit|\s\bmatr[íi]cula\b/i;
+
+export function extrairLeiloeiro(texto) {
+  const t = String(texto || '');
+  // Percorre TODAS as menções, não só a primeira: o edital costuma citar a função antes de
+  // nomear a pessoa ("nomeio leiloeiro oficial o(a) Sr(a) FULANO"), e parar na primeira
+  // ocorrência devolvia a frase em vez do nome.
+  const re = /leiloeir[ao]/gi;
+  let m;
+  while ((m = re.exec(t)) !== null) {
+    const resto = t.slice(m.index);
+    const pre = resto.match(RE_PREAMBULO);
+    if (!pre || pre.index !== 0) continue;
+    const janela = resto.slice(pre[0].length, pre[0].length + 80).replace(/\s+/g, ' ');
+    const corte = janela.search(RE_CORTE);
+    const cand = (corte >= 0 ? janela.slice(0, corte) : janela).trim();
+    // ⚠️ A INICIAL MAIÚSCULA É CHECADA AQUI, e a primeira versão desta função esqueceu.
+    // O comentário acima já dizia que ela é o guard — mas `nomeLeiloeiroValido` NUNCA exigiu
+    // maiúscula (ele confere tamanho, nº de palavras, dígitos e `NOME_BLOQ`, e só então
+    // capitaliza); quem exigia era a regex antiga, no `[A-ZÀ-Ý]` que abria o grupo de captura.
+    // Ao trocar a regex pela janela, o guard foi junto e o teste devolveu quatro frases com
+    // cara de nome: "Perante Este Tribunal", "Informou A Ocorrência de Lance Vencedor",
+    // "Sobre A Manutenção do Certame Designado", "Informou O Recebimento de Cinco Propostas".
+    // `tituloNome` capitaliza no fim, então o lixo SAI parecendo nome próprio — é o defeito
+    // mais caro possível aqui, porque passa despercebido na revisão.
+    if (!/^[A-ZÀ-Ý]/.test(cand)) continue;
+    const nome = nomeLeiloeiroValido(cand);
+    if (nome) return nome;
+  }
+  return null;
+}
+
 function cidadeValida(s) {
   const c = String(s || '').replace(/\s+/g, ' ').trim();
   if (c.length < 3 || c.length > 40) return null;
@@ -131,7 +202,7 @@ function parseDataBR(s) {
 function parseEdital(texto) {
   const t = String(texto || '');
   const pega = (re) => { const m = t.match(re); return m ? (m[1] || '').replace(/\s+/g, ' ').trim() : null; };
-  const leiloeiro = pega(/leiloeir[ao]\s*(?:oficial|p[uú]blic[ao])?\s*[:\-]?\s*([A-ZÀ-Ý][A-Za-zÀ-ÿ.\s]{4,60}?)(?:,|\.|\s+JUCESP|\s+inscrit|\s+matr[íi]cula|\n)/i);
+  const leiloeiro = extrairLeiloeiro(t);
   const jucesp = pega(/JUCESP[^\dA-Za-z]{0,6}(?:n[ºo.]?\s*)?([\d./-]{2,12})/i);
   const av = pega(/avalia[çc][ãa]o[^\dR]{0,25}R\$\s*([\d.]+,\d{2})/i);
   const lance = pega(/(?:lance|valor)\s+m[íi]nimo[^\dR]{0,25}R\$\s*([\d.]+,\d{2})/i);
@@ -247,7 +318,7 @@ async function enriquecerEditaisComIA(supabase, ehIntegrado, t0) {
       const nomeReal = nomeLeiloeiroValido(out.leiloeiro_nome);
       upd.leiloeiro_nome = nomeReal;
       upd.leiloeiro_nome_norm = nomeReal ? norm(nomeReal) : null;
-      upd.leiloeiro_integrado = nomeReal ? ehIntegrado(nomeReal) : false;
+      upd.leiloeiro_integrado = nomeReal ? ehIntegrado(nomeReal) : false; // null quando o cruzamento está cego
       if (numOk(out.valor_avaliacao)) upd.valor_avaliacao = out.valor_avaliacao;
       if (numOk(out.lance_minimo)) upd.lance_minimo = out.lance_minimo;
       if (numOk(out.area_m2)) upd.imovel_area_m2 = out.area_m2;
@@ -390,6 +461,17 @@ async function buscarDJEN(tribunal, termo, ini, fim, t0, transporte, hardMs) {
  */
 export async function pullDJEN({ supabase, ini, fim, ehIntegrado, t0, transporte, hardMs = HARD_MS, tribunais = TRIBUNAIS, termos = TERMOS }) {
   let vistos = 0, novos = 0, descartados = 0, erroGeral = null, cortadoPorTempo = false, semCota = false;
+  // COMBO ≠ RUN (03/09). Um combo (tribunal × termo) que cai NÃO é o pull falhando: são 12
+  // chamadas independentes, e a janela deslizante recupera na rodada seguinte o que uma delas
+  // perdeu. Medido: o run de 29/08 18:53 trouxe 98 editais novos e viu 2.093 itens — e foi
+  // carimbado FALHA porque `TRT15/edital de leilão` deu `fetch failed`. Consequências, as
+  // duas silenciosas: o freio da rede de segurança lê `erro is null` e concluía "o residencial
+  // nunca teve sucesso", chamando o Bright Data para refazer o que já tinha sido feito de
+  // graça; e o invariante `radar_editais_sem_pull` (criado hoje) passaria a gritar sobre um
+  // pipeline saudável. Com 27 tribunais, a chance de os 12+ combos passarem todos numa mesma
+  // rodada cai a quase zero — este conserto é pré-requisito de abrir `RADAR_TRIBUNAIS`.
+  let combosOk = 0, combosFalha = 0;
+  const avisos = [];
  try {
   for (const tribunal of tribunais) {
     if (cortadoPorTempo || semCota) break;
@@ -410,9 +492,11 @@ export async function pullDJEN({ supabase, ini, fim, ehIntegrado, t0, transporte
           erroGeral = `SEM COTA Bright Data — pull não tentado (decisão de orçamento, não bloqueio do DJEN): ${String(e.message).slice(0, 90)}`;
           break;
         }
-        erroGeral = `${tribunal}/${termo}: ${String(e.message).slice(0, 80)}`;
+        combosFalha++;
+        avisos.push(`${tribunal}/${termo}: ${String(e.message).slice(0, 60)}`);
         continue;
       }
+      combosOk++;
       vistos += items.length;
       if (!items.length) continue;
 
@@ -437,7 +521,7 @@ export async function pullDJEN({ supabase, ini, fim, ehIntegrado, t0, transporte
           data_praca_1: p.data_praca_1, data_praca_2: p.data_praca_2,
           leiloeiro_nome: nomeLeiloeiro, leiloeiro_nome_norm: nomeLeiloeiro ? norm(nomeLeiloeiro) : null,
           leiloeiro_jucesp: p.leiloeiro_jucesp, leilao_plataforma_url: p.leilao_plataforma_url,
-          leiloeiro_integrado: nomeLeiloeiro ? ehIntegrado(nomeLeiloeiro) : false,
+          leiloeiro_integrado: nomeLeiloeiro ? ehIntegrado(nomeLeiloeiro) : false, // null quando o cruzamento está cego
           valor_avaliacao: p.valor_avaliacao, lance_minimo: p.lance_minimo,
           imovel_matricula: p.imovel_matricula, imovel_area_m2: p.imovel_area_m2,
           // ⚠️ ERA `p.imovel_uf || 'SP'` (03/09). Com o radar só em SP o default era invisível;
@@ -473,7 +557,17 @@ export async function pullDJEN({ supabase, ini, fim, ehIntegrado, t0, transporte
  } catch (e) {
   erroGeral = String(e.message).slice(0, 120);
  }
-  return { vistos, novos, descartados, erroGeral, cortadoPorTempo, semCota };
+  // O VEREDITO DO RUN. Falha total (nenhum combo respondeu) é erro; falha parcial é AVISO —
+  // e o aviso não pode virar `erro`, senão volta a reprovar um pull que funcionou. `semCota` e
+  // corte por tempo continuam sendo erro: ali o pull não completou por decisão nossa, e o
+  // gate do dia precisa re-tentar.
+  if (!erroGeral && combosFalha > 0) {
+    if (combosOk === 0) erroGeral = `nenhum combo respondeu (${combosFalha}): ${avisos[0] || 'sem detalhe'}`;
+  }
+  const avisoParcial = (combosFalha > 0 && combosOk > 0)
+    ? `parcial: ${combosOk} de ${combosOk + combosFalha} combos ok — ${avisos.slice(0, 3).join(' · ')}`
+    : null;
+  return { vistos, novos, descartados, erroGeral, avisoParcial, combosOk, combosFalha, cortadoPorTempo, semCota };
 }
 
 /**
@@ -512,6 +606,11 @@ export async function construirEhIntegrado(supabase) {
     console.error('[radar-editais] lista de leiloeiros NÃO construída:', falhou);
   }
   const fn = (nome) => {
+    // ⚠️ TRI-STATE (03/09). `null` = "não consegui conferir", e é diferente de `false`
+    // = "conferi e não casa". Enquanto a coluna era boolean com default false, uma falha ao
+    // montar a lista marcava TODO edital como "leiloeiro a integrar" — inclusive gente que a
+    // gente raspa todo dia — e o backlog de aquisição passava a mentir sem dar erro.
+    if (falhou) return null;
     const n = norm(nome);
     if (n.length < 4) return false;
     for (const i of integrados) { if (i.includes(n) || n.includes(i)) return true; }
@@ -538,6 +637,48 @@ export function janelaDJEN(diasDesdeSucesso, tetoDias = 15) {
   const dias = Math.min(tetoDias, Math.max(3, Math.ceil(Number(diasDesdeSucesso) || 0) + 1));
   const hoje = new Date();
   return { ini: ymd(new Date(hoje.getTime() - dias * 86400000)), fim: ymd(hoje), dias };
+}
+
+/**
+ * RE-PARSE dos editais que ficaram sem leiloeiro, com a régua nova.
+ *
+ * De graça: regex sobre `texto_integral` que já está no banco — nenhuma chamada de rede,
+ * nenhum token de IA. E é uma FILA que se esgota: cada rodada corrige o que consegue, e
+ * quando não sobrar edital sem nome a consulta volta vazia.
+ *
+ * O `.limit()` aqui NÃO é o caso da forma nº 9 do CLAUDE.md (janela de cache virando janela
+ * de dados): nada aqui é CRUZADO com outra leitura truncada — é um lote de trabalho, e o que
+ * não couber nesta rodada vem na próxima, porque a condição de entrada (`leiloeiro_nome is
+ * null`) some quando o item é resolvido.
+ */
+async function reparsarLeiloeirosPendentes(supabase, ehIntegrado, teto = 300) {
+  const { data, error } = await supabase.from('editais_leilao')
+    .select('id, status, texto_integral')
+    .is('leiloeiro_nome', null)
+    .in('status', ['processado', 'erro_parse'])   // `nao_edital` fica de fora: é ruído da busca
+    .not('texto_integral', 'is', null)
+    .limit(teto);
+  // Leitura que falhou NÃO pode virar "não havia o que corrigir": os dois desfechos são
+  // `corrigidos: 0` e levam a conclusões opostas sobre o parser.
+  if (error) return { erro: error.message.slice(0, 120), vistos: 0, corrigidos: 0 };
+
+  let corrigidos = 0, falhasGravacao = 0;
+  for (const e of data || []) {
+    const nome = extrairLeiloeiro(e.texto_integral);
+    if (!nome) continue;
+    const upd = {
+      leiloeiro_nome: nome,
+      leiloeiro_nome_norm: norm(nome),
+      leiloeiro_integrado: ehIntegrado(nome),
+      atualizado_em: new Date().toISOString(),
+    };
+    // Achar o leiloeiro É extrair algo útil: quem estava em `erro_parse` deixou de estar.
+    if (e.status === 'erro_parse') upd.status = 'processado';
+    const { error: eUpd } = await supabase.from('editais_leilao').update(upd).eq('id', e.id);
+    if (eUpd) { falhasGravacao++; console.error('[radar-editais] re-parse não gravou', e.id, eUpd.message); continue; }
+    corrigidos++;
+  }
+  return { vistos: (data || []).length, corrigidos, falhas_gravacao: falhasGravacao || undefined };
 }
 
 export const GET = handler;
@@ -645,8 +786,9 @@ async function handler(req) {
   const ehIntegrado = await construirEhIntegrado(supabase);
 
   let vistos = 0, novos = 0, descartados = 0, erroGeral = null, enriquecidos = 0, cortadoPorTempo = false, semCota = false;
+  let avisoParcial = null, combosOk = 0, combosFalha = 0;
   if (!pulouPull) {
-    ({ vistos, novos, descartados, erroGeral, cortadoPorTempo, semCota } = await pullDJEN({
+    ({ vistos, novos, descartados, erroGeral, avisoParcial, combosOk, combosFalha, cortadoPorTempo, semCota } = await pullDJEN({
       supabase, ini, fim, ehIntegrado, t0, transporte: transporteBrightData,
     }));
 
@@ -658,11 +800,23 @@ async function handler(req) {
       await supabase.from('monitor_runs').insert({
         fonte: 'radar-editais-djen', janela_inicio: ini, janela_fim: fim, origem: 'vercel',
         itens_vistos: vistos, itens_novos: novos, duracao_ms: Date.now() - t0,
-        // Run parcial não é sucesso: registrado como erro para o gate do dia re-tentar.
+        // Run CORTADO POR TEMPO não é sucesso: ali o pull não terminou de varrer a janela, e o
+        // gate do dia precisa re-tentar. Já um combo que caiu com os outros respondendo é
+        // AVISO, não erro — ver o comentário em `pullDJEN`.
         erro: erroGeral || (cortadoPorTempo ? 'corte_por_tempo (run parcial — repuxar)' : null),
+        aviso: avisoParcial,
       });
     } catch { /* nunca quebra por causa do log */ }
   }
+
+  // RE-PARSE DO ACERVO com a régua nova de leiloeiro (03/09). Roda SEMPRE, é de graça (regex
+  // sobre texto já guardado — zero rede, zero IA) e se esgota sozinho: quando não sobrar
+  // edital sem nome, a consulta volta vazia e o passo custa uma leitura. Sem isto o conserto
+  // do parser só valeria para editais FUTUROS e os 477 já capturados seguiriam sem leiloeiro
+  // — que é justamente o acervo sobre o qual o backlog de aquisição decide.
+  let reparse = null;
+  try { reparse = await reparsarLeiloeirosPendentes(supabase, ehIntegrado); }
+  catch (e) { reparse = { erro: String(e?.message || e).slice(0, 120) }; console.error('[radar-editais] re-parse falhou', reparse.erro); }
 
   // ENRIQUECIMENTO POR IA — roda SEMPRE (mesmo com o pull pulado), best-effort, capado e
   // time-boxed: drena a fila de editais reais ainda não extraídos, a cada 4h, barato.
@@ -677,7 +831,7 @@ async function handler(req) {
   // foi assim que `sem_cota` já virou "a fonte não tem nada" uma vez (forma nº 5).
   const listaLeiloeiros = { tamanho: ehIntegrado.tamanhoDaLista, erro: ehIntegrado.erro || null };
   if (ehIntegrado.erro) console.error('[radar-editais] cruzamento CEGO nesta rodada:', ehIntegrado.erro);
-  return new Response(JSON.stringify({ ok: true, pull: pullDesfecho, sem_cota: semCota, vistos, novos, descartados, enriquecidos, iaExtraidos, erro: erroGeral, lista_leiloeiros: listaLeiloeiros, janela: [ini, fim], tribunais: TRIBUNAIS }), {
+  return new Response(JSON.stringify({ ok: true, pull: pullDesfecho, sem_cota: semCota, vistos, novos, descartados, enriquecidos, iaExtraidos, erro: erroGeral, aviso: avisoParcial, combos: { ok: combosOk, falha: combosFalha }, lista_leiloeiros: listaLeiloeiros, reparse, janela: [ini, fim], tribunais: TRIBUNAIS }), {
     headers: { 'Content-Type': 'application/json' },
   });
 }
