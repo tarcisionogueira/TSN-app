@@ -3456,21 +3456,24 @@ async function reconLeilofy(browser) {
     console.log(`[RECON] listagem: ${listing.total} ids. amostra: ${JSON.stringify(listing.ids)}`);
     console.log(`[RECON] card HTML: ${listing.cardHTML}`);
 
-    // 2) DETALHE: primeiro imóvel — innerText + links de documentos + imagens.
-    const firstId = String(listing.ids[0] || '').replace('/imovel/', '');
-    if (firstId) {
-      console.log(`\n[RECON] goto /imovel/${firstId}`);
-      await page.goto(`https://leiloariasmart.com.br/imovel/${firstId}`, { waitUntil: 'networkidle2', timeout: 45000 });
-      await sleep(4000);
-      const det = await page.evaluate(() => {
-        const text = (document.body?.innerText || '').replace(/\n{2,}/g, '\n').slice(0, 4000);
-        const docs = Array.from(document.querySelectorAll('a[href]')).map(a => a.getAttribute('href')).filter(h => h && /\.pdf|edital|matricula|matrícula|documento|laudo|anexo/i.test(h));
-        const imgs = Array.from(document.querySelectorAll('img')).map(i => i.getAttribute('src') || i.getAttribute('data-src')).filter(Boolean).filter(s => !/logo|icon|avatar/i.test(s)).slice(0, 6);
-        return { text, docs: [...new Set(docs)].slice(0, 20), imgs };
-      });
-      console.log(`[RECON] detalhe innerText:\n${det.text}`);
-      console.log(`[RECON] detalhe docs: ${JSON.stringify(det.docs)}`);
-      console.log(`[RECON] detalhe imgs: ${JSON.stringify(det.imgs)}`);
+    // 2) DETALHE: amostra de vários imóveis (não só o 1º) — só o trecho de preço, para
+    // achar a VARIAÇÃO de fraseado entre lotes (a 1ª rodada só olhou 1 lote e ele bateu
+    // com o rótulo esperado; não explica por que 57 de 75 saem sem preço em produção).
+    const amostraIds = listing.ids.slice(0, 8).map(h => String(h).replace('/imovel/', '')).filter(Boolean);
+    for (const id of amostraIds) {
+      try {
+        console.log(`\n[RECON] goto /imovel/${id}`);
+        await page.goto(`https://leiloariasmart.com.br/imovel/${id}`, { waitUntil: 'networkidle2', timeout: 45000 });
+        await sleep(4000);
+        const det = await page.evaluate(() => {
+          const text = document.body?.innerText || '';
+          // Trecho ao redor de "praça" (±120 chars) — é o que o mapper usa para achar o preço.
+          const m = text.match(/[\s\S]{0,40}pra[çc]a[\s\S]{0,120}/i);
+          const temMarcador = /valor de avalia|lance est[áa] fixado|Documentos do lote/i.test(text);
+          return { trechoPreco: m ? m[0].replace(/\n+/g, ' | ') : '(nenhuma ocorrência de "praça" no texto)', temMarcador, tamanhoTexto: text.length };
+        });
+        console.log(`[RECON] /imovel/${id} marcador=${det.temMarcador} tamanho=${det.tamanhoTexto} :: ${det.trechoPreco}`);
+      } catch (e) { console.log(`[RECON] /imovel/${id} falhou: ${String(e.message).slice(0, 100)}`); }
     }
   } catch (e) { console.log(`[RECON] falhou: ${String(e.message).slice(0, 120)}`); }
   console.log(`\n[RECON] ${apis.size} endpoint(s) JSON: ${[...apis.keys()].filter(u => !/jivosite|youtube/.test(u)).join(' | ') || '(nenhum relevante)'}`);
