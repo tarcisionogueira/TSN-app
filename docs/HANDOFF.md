@@ -4,6 +4,47 @@
 
 ---
 
+## 📋 SESSÃO 22 · PARTE 7 (03/09, fim de tarde) — BLOCO 2 FECHADO: 5 ACHADOS DE DINHEIRO/ENTREGA
+
+Todos os 5 itens do Bloco 2 da fila (revisor cético) confirmados por leitura direta do código
+(nenhum já estava corrigido, ao contrário do Bloco 1) e corrigidos:
+
+1. **P1 — `buscar_por_raio_v2` não devolvia `valor_minimo_ref`/`praca1_fim`/`praca2_fim`/
+   `data_fim`/`data_leilao_2`.** A migração de 28/08 (`preco_canonico_no_raio_e_no_alerta.sql`)
+   só corrigiu o FILTRO (`valor_min`/`valor_max` comparando com `valor_minimo_ref`), nunca a
+   PROJEÇÃO — as 5 colunas existiam em `filtrados` (via `i.*`) e nunca chegavam ao `SELECT`
+   final. Efeito medido: `api/enviar-alertas-cron.js` usa a MESMA função `encerradoPorDatas` e
+   o MESMO fallback `valor_minimo_ref ?? valor_minimo` para linhas vindas do raio e da REST —
+   sem as colunas, o e-mail mostrava a praça CARA e `encerradoPorDatas` só via `data_leilao`
+   (1ª praça), descartando lote em 2ª praça ainda válida como "encerrado". Testado no banco:
+   lote com `valor_minimo` R$ 214.596 e `valor_minimo_ref` R$ 189.241 (2ª praça) agora sai
+   correto na função; antes da migração o campo simplesmente não existia na resposta.
+2. **P2 — `gerar-documental.js`: laudo `concluida` e o catch cobrava de novo.** Quando o laudo
+   já tinha sido gravado com sucesso (`persistidoNestaRodada`) e só um enriquecimento
+   best-effort estourava DEPOIS (sob o `Promise.race` do prazo), o catch estornava a cota,
+   logava `relatorio_documental_erro` (poluindo o Cliente 360) e respondia 500/504 — o cliente
+   via "falhou" sobre um relatório que já tinha, de graça teria sido cobrado o estorno da cota
+   que ele já usou com sucesso. Agora esse ramo responde 200 com o resultado e loga um tipo
+   próprio (`relatorio_documental_pos_salvamento_falhou`), sem estornar.
+3. **P2 — `certidoes.js`: 404 da PGFN/FGTS virava "sem débito".** As duas consultas tratavam
+   HTTP 404 como confirmação de regularidade (`ok:true, regular:true`) — um 404 só diz "não
+   encontrei o documento na base", não "confirmei que está limpo". Agora 404 volta
+   `ok:false, indisponivel:true`. Bônus: o parecer "verde" exigia só `rf.ok && pgfn.ok` — o
+   FGTS podia ter falhado (404, timeout, captcha) e o texto ainda dizia "nenhum débito
+   identificado ... FGTS". Acrescentei `&& fgts?.ok` ao gate verde.
+4. **P2 — `ConviteEquipe.jsx`: recusa do KYC passava como salvo.** `salvar_kyc_equipe` devolve
+   BOOLEAN puro (`return found`), e a tela testava `rKyc?.ok === false` — nunca verdadeiro
+   (booleano não tem `.ok`). Corrigido para `rKyc !== true`. Atenuado desde sempre porque
+   `anon` não tem EXECUTE nesta função — só o cadastro AUTO-CONFIRMADO (já com sessão) chegava
+   à recusa silenciosa.
+5. **P2 — `Busca.jsx`: modo raio sem o guard `atual()`.** O caminho normal (linha ~1295) já
+   confere `atual()` antes de publicar total/erro; o caminho do raio publicava `setErro` (no
+   `!resp.ok`) e `setTotalResultados` sem essa checagem — uma resposta atrasada de uma busca
+   JÁ TROCADA podia sobrescrever o estado da busca atual. Acrescentados os dois guards que
+   faltavam, no mesmo idioma do resto do arquivo.
+
+---
+
 ## 📋 SESSÃO 22 · PARTE 6 (03/09, fim de tarde) — BLOCO 1 FECHADO: A CONTAGEM DA LIVE SEPARA DE VERDADE "COMUNICAÇÃO" DE "NOVOS INSCRITOS"
 
 Os 4 itens originais do Bloco 1 (data lida da coluna crua, exclusão só por `evento_id`, cron que

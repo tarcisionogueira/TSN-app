@@ -1215,6 +1215,11 @@ export default function Busca() {
         });
         if (!resp.ok) {
           const err = await resp.json().catch(() => ({}));
+          // GUARD FALTANTE (03/09, achado do bloco 2): sem `atual()`, uma resposta de erro de
+          // uma busca ANTIGA (filtro já trocado, outra busca em andamento) sobrescrevia `erro`
+          // e derrubava o loading da busca ATUAL — o mesmo idioma que já existe mais abaixo
+          // (linhas 1295, 1360, 1393) faltava exatamente aqui, no caminho do raio.
+          if (!atual()) return;
           setErro(err.error || 'Erro na busca por raio. Tente novamente.');
           setLoading(false);
           return;
@@ -1224,6 +1229,7 @@ export default function Busca() {
         const offset = (paginaAlvo - 1) * POR_PAGINA;
         // Estima total: quando página cheia → há ao menos mais uma; quando parcial → sabemos o exato
         const totalEst = apiData.total ?? (offset + dados.length + (dados.length === POR_PAGINA ? 1 : 0));
+        if (!atual()) return;   // busca antiga: não publica contagem por cima da atual
         setTotalResultados(totalEst);
 
         const novasDistancias = {};

@@ -2122,17 +2122,28 @@ export default async function handler(req, res) {
     // — estourar ali NÃO desfaz o relatório que o cliente já tem. Antes desta guarda, uma
     // primeira geração (sem `tinhaRelatorioBom`) tinha o laudo bom sobrescrito por
     // `status: 'erro'`: o defeito destruía dado em vez de só reportar mal.
+    //
+    // ENTREGUE, SÓ O PÓS-SALVAMENTO FALHOU (03/09, achado do bloco 2): `persistidoNestaRodada`
+    // já foi gravado como 'concluida' com um resultado BOM — o que estourou depois é
+    // enriquecimento best-effort (correção de área/mercado) sob o prazo. Tratar isto como falha
+    // (como o ramo abaixo fazia) cobrava DUAS vezes o cliente errado: estornava a cota de uma
+    // análise que ele RECEBEU, registrava `relatorio_documental_erro` — poluindo o Cliente 360
+    // com uma falha que não houve do lado dele — e devolvia 500/504 sobre um laudo que já
+    // existe (a tela só descobriria a verdade recarregando). É o oposto do "vazio entregue como
+    // resposta" do CLAUDE.md: aqui é ERRO entregue sobre um SUCESSO. Sai cedo, como sucesso.
     if (persistidoNestaRodada) {
       await upsertDoc({ ...base, status: 'concluida', erro: `pos_salvamento_falhou: ${String(msg).slice(0, 160)}`, result: persistidoNestaRodada });
-    } else if (tinhaRelatorioBom) {
+      await logAtividade(ownerId, 'relatorio_documental_pos_salvamento_falhou', msg.slice(0, 180), { imovel_id: String(imovelId), timeout });
+      return res.status(200).json({ ok: true, result: persistidoNestaRodada });
+    }
+    if (tinhaRelatorioBom) {
       await upsertDoc({ ...base, status: 'concluida', erro: `regeracao_falhou: ${String(msg).slice(0, 160)}`, result: resultadoAnterior });
     } else {
       await upsertDoc({ ...base, status: 'erro', erro: msg });
     }
-    // `preservouDestaRodada` no rastro: sem ele, "erro" e "erro depois de entregar" ficam
-    // indistinguíveis no log — e são coisas diferentes para quem investiga.
-    await logAtividade(ownerId, 'relatorio_documental_erro', msg.slice(0, 180), { imovel_id: String(imovelId), timeout, restaurouAnterior: !!tinhaRelatorioBom, preservouDestaRodada: !!persistidoNestaRodada });
-    // Estorna a cota consumida (não cobra por análise que falhou).
+    await logAtividade(ownerId, 'relatorio_documental_erro', msg.slice(0, 180), { imovel_id: String(imovelId), timeout, restaurouAnterior: !!tinhaRelatorioBom });
+    // Estorna a cota consumida (não cobra por análise que falhou de verdade — o caso "entregue,
+    // só o pós-salvamento falhou" já retornou acima e nunca chega aqui).
     if (cota && cota.ok && cota.tipo) {
       try { await sb('rpc/estornar_documental_por', { method: 'POST', body: JSON.stringify({ p_user_id: user.id, p_tipo: cota.tipo }) }); } catch { /* estorno best-effort */ }
     }

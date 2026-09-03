@@ -623,8 +623,13 @@ export default function ConviteEquipe() {
             validado_em: new Date().toISOString(),
           },
         });
-        if (eKyc || rKyc?.ok === false) {
-          console.warn('[convite-equipe] KYC não salvo:', eKyc?.message || rKyc?.erro);
+        // `salvar_kyc_equipe` devolve BOOLEAN (`return found`), não `{ok,erro}` — testar
+        // `rKyc?.ok === false` nunca é verdadeiro (booleano não tem `.ok`), então uma recusa
+        // real (convite já tinha kyc_fotos, token inválido, convite desativado) passava como
+        // "salvo" (03/09, achado do bloco 2). Atenuado porque `anon` não tem EXECUTE — só o
+        // caminho de cadastro AUTO-CONFIRMADO (já com sessão) chegava a essa recusa silenciosa.
+        if (eKyc || rKyc !== true) {
+          console.warn('[convite-equipe] KYC não salvo:', eKyc?.message || (rKyc === false ? 'convite sem gravação disponível (token inválido, inativo ou já com KYC)' : 'resposta inesperada'));
           // KYC perdido só reaparece pedindo TUDO de novo à pessoa — ela precisa saber agora.
           setAvisosPos((v) => [...v, 'Suas fotos de verificação (KYC) não foram salvas. Avise o administrador — elas serão solicitadas novamente antes de você poder sacar.']);
         }

@@ -74,7 +74,13 @@ async function consultarDividaAtiva(documento) {
       headers: { Accept: 'application/json' },
       signal: AbortSignal.timeout(10000),
     });
-    if (res.status === 404) return { ok: true, regular: true, situacao: 'Sem débitos na Dívida Ativa', fonte: 'PGFN' };
+    // 404 NÃO É "SEM DÉBITO" (03/09, achado do bloco 2): a PGFN devolve 404 tanto para quem
+    // não tem débito quanto para documento não localizado na base, endpoint reformulado ou
+    // instabilidade do próprio serviço — o corpo da resposta não distingue os casos. Tratar
+    // como "regular: true" transformava "não consegui confirmar" em certeza jurídica; é o
+    // mesmo defeito do P0 de 31/08 (nota fiscal/documento inexistente virando "sem débitos"),
+    // agora do lado da consulta em vez da leitura de documento.
+    if (res.status === 404) return { ok: false, indisponivel: true, erro: 'PGFN não localizou o documento (404) — não confirma regularidade; consulte em regularize.pgfn.gov.br', fonte: 'PGFN' };
     if (!res.ok) return { ok: false, erro: `PGFN HTTP ${res.status}` };
     const data = await res.json();
     return {
@@ -98,7 +104,9 @@ async function consultarFGTS(documento) {
       headers: { Accept: 'application/json', 'User-Agent': 'Mozilla/5.0' },
       signal: AbortSignal.timeout(8000),
     });
-    if (res.status === 404) return { ok: true, regular: true, situacao: 'Sem débito FGTS', fonte: 'CEF / FGTS' };
+    // Mesmo achado do PGFN acima: 404 é "não localizado", não "sem débito". O parecer só pode
+    // dizer que consultou o FGTS quando `fgts.ok` for verdadeiro de fato.
+    if (res.status === 404) return { ok: false, indisponivel: true, erro: 'FGTS não localizou o documento (404) — não confirma regularidade; consulte em caixa.gov.br/fgts' };
     if (!res.ok) return { ok: false, indisponivel: true, erro: `FGTS HTTP ${res.status} — consulte manualmente em caixa.gov.br` };
     const data = await res.json();
     return {
@@ -162,7 +170,11 @@ function gerarParecerCertidoes(rf, pgfn, fgts) {
   if (pgfn?.ok && !pgfn.regular) problemas.push(`Débito na Dívida Ativa da União (PGFN)`);
   if (fgts?.ok && !fgts.regular && !fgts.indisponivel) problemas.push(`Irregularidade FGTS`);
 
-  if (problemas.length === 0 && rf?.ok && pgfn?.ok) {
+  // VERDE exige as TRÊS fontes CONFIRMADAS, não só as que "não geraram problema" (03/09). O
+  // gate antigo só pedia rf.ok && pgfn.ok: se o FGTS falhasse (404, timeout, bloqueio de
+  // captcha) o parecer saía verde citando "nenhum débito identificado ... FGTS" sem ter
+  // consultado o FGTS de verdade — silêncio da fonte virando certeza no parecer.
+  if (problemas.length === 0 && rf?.ok && pgfn?.ok && fgts?.ok) {
     return { nivel: 'verde', texto: 'Situação fiscal regular. Nenhum débito identificado na Receita Federal, Dívida Ativa ou FGTS.' };
   }
   if (problemas.length > 0) {
