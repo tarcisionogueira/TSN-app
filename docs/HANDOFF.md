@@ -4,6 +4,28 @@
 
 ---
 
+## 📋 SESSÃO 22 · PARTE 17 (04/09) — CONVITE DA LIVE: TÍTULO NA VOZ DA MARCA, SEM TRAVESSÃO, COM LINK PARA A LANDING COMPLETA
+
+**Pedido do dono**, revisando o widget da PARTE 15 num celular: três ajustes.
+
+1. **Título estava em primeira pessoa** ("Como eu encontro e avalio um imóvel de leilão, ao
+   vivo" — vindo direto de `prox.titulo`, o `eventos_live.titulo` real). Esse "eu" faz sentido
+   na landing dedicada (`/#/live/:slug`), onde ao lado tem foto e bio do apresentador. Aqui,
+   dentro do acervo aberto, quem fala é a BidPro Brasil — um "eu" solto soa como a marca
+   falando na primeira pessoa. Trocado por um título FIXO na voz da marca: "Avaliação de
+   imóvel de leilão ao vivo, feita por especialista" (não depende mais de `prox.titulo`).
+2. **Travessão/middot no meio do texto** ("horário de Brasília · toda semana — mostramos
+   como...") removidos; frase reescrita com ponto e parênteses.
+3. **Pergunta do dono**: como apresentar algo "mais discreto" quando a landing dedicada tem
+   um botão cheio (bio, vídeo, prova social)? Resposta aplicada: o widget continua enxuto — é
+   isso que converte rápido dentro do acervo — mas ganhou um link discreto abaixo do
+   formulário ("Ver todos os detalhes da aula →") apontando para a landing completa
+   (`/#/live/leilao-ao-vivo`, confirmada pública em `App.jsx:390`, sem `PrivateRoute`).
+
+`npm run build` passou. Sem migração.
+
+---
+
 ## 📋 SESSÃO 22 · PARTE 16 (04/09) — LISTA DE CIDADES SAI DO CORPO DE /leiloes, VAI PARA O RODAPÉ
 
 **Pedido do dono**, revisando a tela de `/leiloes` (a mesma sessão da PARTE 15): a seção

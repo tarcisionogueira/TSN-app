@@ -397,6 +397,8 @@ footer .in{max-width:1080px;margin:0 auto}
 .convite-live button{padding:12px 22px;border:none;border-radius:10px;background:var(--azul);color:#fff;font-weight:800;font-size:14.5px;cursor:pointer;font-family:inherit;white-space:nowrap}
 .convite-live button:hover{background:var(--azul-fundo)}
 .convite-live-obs{font-size:12px;color:var(--cinza);margin:0}
+.convite-live-mais{font-size:12.5px;margin:8px 0 0}
+.convite-live-mais a{font-weight:700}
 .convite-live-erro{background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;font-size:13px;font-weight:600;padding:10px 14px;border-radius:10px;margin:0 0 14px}
 .convite-live-ok{display:flex;align-items:flex-start;gap:10px}
 .convite-live-ok .ic{font-size:26px;line-height:1}
@@ -661,10 +663,17 @@ function caixaConviteLive(prox, estado) {
       </div>
     </div>`;
   }
+  const semanal = prox.recorrencia === 'semanal';
+  // O TÍTULO NÃO É `prox.titulo` (04/09, pedido do dono). `eventos_live.titulo` foi escrito em
+  // primeira pessoa ("Como eu encontro e avalio...") para a landing dedicada, onde quem fala é
+  // o apresentador (`_apresentador*`, bio, foto). Aqui quem fala é a BidPro Brasil — um "eu"
+  // solto, sem rosto ao lado, soa como a marca falando na primeira pessoa. Título fixo, na voz
+  // da marca; o nome do especialista mora na apresentação completa (link abaixo).
+  const linkAula = `${SITE}/#/live/${esc(prox.slug || 'leilao-ao-vivo')}`;
   return `<div class="convite-live" id="convite-live">
     <div class="convite-live-tag">🔴 Ao vivo e gratuito</div>
-    <div class="convite-live-t">${esc(prox.titulo || 'Análise de leilão ao vivo, do zero')}</div>
-    <div class="convite-live-s">${esc(quando)}, horário de Brasília${prox.recorrencia === 'semanal' ? ' · toda semana' : ''} — mostramos como avaliar um imóvel de leilão na prática, com perguntas ao vivo. Inscreva-se e ganhe também uma conta grátis na plataforma.</div>
+    <div class="convite-live-t">Avaliação de imóvel de leilão ao vivo, feita por especialista</div>
+    <div class="convite-live-s">${esc(quando)} (horário de Brasília). ${semanal ? 'Toda semana, um' : 'Um'} especialista avalia um imóvel de leilão na prática, ao vivo, e responde perguntas na hora. Inscreva-se e ganhe também uma conta grátis na plataforma.</div>
     ${estado === 'erro' ? `<div class="convite-live-erro">Não conseguimos concluir sua inscrição. Confira nome, WhatsApp e e-mail e tente de novo.</div>` : ''}
     <form method="POST" action="${SITE}/api/live-inscrever">
       <input type="hidden" name="slug" value="leilao-ao-vivo"/>
@@ -675,6 +684,10 @@ function caixaConviteLive(prox, estado) {
       <button type="submit">Quero participar — é grátis</button>
     </form>
     <p class="convite-live-obs">Vaga gratuita. Ao se inscrever, você também ganha uma conta na plataforma para acompanhar os leilões.</p>
+    <!-- Link discreto para a landing completa (bio do especialista, vídeo, prova social) — o
+         widget fica enxuto de propósito (converte mais rápido), e quem quer mais contexto antes
+         de decidir tem para onde ir, sem competir com o botão principal acima. -->
+    <p class="convite-live-mais"><a href="${linkAula}">Ver todos os detalhes da aula →</a></p>
   </div>`;
 }
 
