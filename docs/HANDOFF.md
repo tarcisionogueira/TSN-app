@@ -4,6 +4,54 @@
 
 ---
 
+## 📋 SESSÃO 23 · PARTE 12 (04/09) — LEITOR DE E-BOOK: PAGINAÇÃO REAL (CSS multi-coluna) + menu de capítulos + fonte Literata
+
+**Pedido do dono, testando com o livro real**: (a) tirar o campo de anexar PDF da modal
+"Editar eBook" pra quem já usa capítulos — não fazia sentido pedir os dois formatos; (b)
+trocar a rolagem contínua do leitor por PAGINAÇÃO de verdade, como um livro — "passador
+de páginas", com o número de páginas **flutuante** (varia com o tamanho da tela, não é
+fixo) — e um menu pra navegar entre capítulos; (c) escolher uma fonte boa pra leitura.
+
+**(a)** `Admin.jsx` (`EbooksTab`, modal de edição): o bloco de upload de PDF só aparece
+quando `form.tipo_conteudo !== 'estruturado'`; para e-book estruturado, mostra um aviso
+apontando pro botão "📖 Capítulos" em vez do campo de arquivo.
+
+**(b)** `LeitorEstruturado.jsx` reescrito — trocou rolagem vertical por paginação via
+**CSS multi-coluna** (a mesma técnica usada por leitores de EPUB): a área de leitura tem
+largura/altura FIXAS com `overflow:hidden`; o texto por dentro vira uma coluna CSS
+(`column-width` = a largura da própria área, `column-fill: auto`) — o navegador quebra
+sozinho em quantas "páginas" forem necessárias, sem nenhum JS medindo texto palavra por
+palavra. Virar página é só um `translateX` deslizando por essa fita de colunas; total de
+páginas de um capítulo = `scrollWidth ÷ largura de uma página` — recalculado (via
+`ResizeObserver` + `useLayoutEffect`) toda vez que o capítulo, a fonte, ou o espaço
+disponível mudam, então o número de páginas É flutuante por natureza, exatamente como
+pedido. Toque no terço esquerdo/direito da tela vira página (gesto padrão de e-reader,
+igual ao `LeitorPaginado`); toque no meio esconde/mostra a interface. Botão de menu (☰)
+abre uma lista lateral com todos os capítulos pra pular direto, sem precisar avançar um
+por um. Ao voltar da primeira página de um capítulo para o anterior, pousa na ÚLTIMA
+página dele (não na primeira) — precisa saber quantas páginas esse capítulo tem, o que só
+se sabe DEPOIS de renderizá-lo; resolvido com uma ref-flag (`irParaUltimaPaginaRef`) que o
+efeito de paginação consome assim que termina de medir.
+
+⚠️ **Bug pego e corrigido antes de subir, não em produção**: a primeira versão calculava
+a altura da "página" a partir de `clientHeight` do container sem descontar o padding que
+reserva espaço pras barras de cima/baixo (que são `position:absolute`, de propósito, pra
+esconder/mostrar sem re-paginar o livro a cada toque) — `clientHeight` JÁ inclui esse
+padding, então a "página" saía mais alta que a área realmente livre e entraria por baixo
+das barras. Corrigido medindo com `getComputedStyle` e descontando o padding resolvido
+(calc()+env(safe-area) já calculados pelo navegador) antes de qualquer conta.
+
+**(c)** Fonte trocada para **Literata** (Google Fonts) — serifada desenhada
+especificamente para leitura longa em tela (mesmo propósito da Bookerly do Kindle),
+cobertura completa de acentuação PT-BR. Carregada sob demanda (só quem abre o leitor
+baixa — `fonts.googleapis.com`/`fonts.gstatic.com` já estão na CSP do projeto, mesmo
+mecanismo que o `index.html` já usa pra Inter), com fallback pra Georgia/serif enquanto
+carrega ou se falhar.
+
+**Não verificado nesta sessão**: sem acesso a navegador aqui, a paginação CSS não foi
+vista rodando de verdade — só raciocinada e revisada linha a linha (incluindo o bug do
+padding, achado nessa revisão). Testar com o livro real antes de considerar fechado.
+
 ## 📋 SESSÃO 23 · PARTE 11 (04/09) — EDITOR DE E-BOOK: RASCUNHO LOCAL (evita refazer a divisão de capítulos do zero)
 
 **Achado do dono, testando com o livro real "Lucre Antes de Arrematar" minutos depois do

@@ -1176,14 +1176,21 @@ function EbooksTab() {
                 </div>
               </div>
             </div>
-            <div style={{ marginBottom: 14 }}>
-              <label style={S.label}>Arquivo do eBook (PDF) — anexado e armazenado no sistema; abre no leitor estilo Kindle</label>
-              <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-                <UploadMidia kind="pdf" onDone={url => setForm({ ...form, arquivo_url: url })} />
-                {form.arquivo_url && <span style={{ fontSize: 12, color: '#059669', fontWeight: 700 }}>✓ arquivo anexado</span>}
-                {form.arquivo_url && <button type="button" onClick={() => setForm({ ...form, arquivo_url: '' })} style={{ ...S.btn('outline'), padding: '6px 10px', fontSize: 11 }}>Remover</button>}
+            {form.tipo_conteudo === 'estruturado' ? (
+              <div style={{ marginBottom: 14, background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '9px 12px', fontSize: 12, color: '#084BA6' }}>
+                📖 Este eBook usa capítulos (formato estruturado, feito a partir de um .docx) — não usa arquivo PDF.
+                Gerencie título, texto e divisão de capítulos pelo botão "📖 Capítulos" na lista.
               </div>
-            </div>
+            ) : (
+              <div style={{ marginBottom: 14 }}>
+                <label style={S.label}>Arquivo do eBook (PDF) — anexado e armazenado no sistema; abre no leitor estilo Kindle</label>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <UploadMidia kind="pdf" onDone={url => setForm({ ...form, arquivo_url: url })} />
+                  {form.arquivo_url && <span style={{ fontSize: 12, color: '#059669', fontWeight: 700 }}>✓ arquivo anexado</span>}
+                  {form.arquivo_url && <button type="button" onClick={() => setForm({ ...form, arquivo_url: '' })} style={{ ...S.btn('outline'), padding: '6px 10px', fontSize: 11 }}>Remover</button>}
+                </div>
+              </div>
+            )}
             <div style={{ marginBottom: 14 }}>
               {/* Destaque alimenta DUAS coisas: a faixa de vitrine na home do cliente e a
                   ordem da divulgação quinzenal (destaque primeiro). */}
