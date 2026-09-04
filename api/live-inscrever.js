@@ -57,12 +57,27 @@ function senhaAleatoria() {
 }
 
 export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Método não permitido' });
-  if (!SUPABASE_URL || !SERVICE_KEY) return res.status(500).json({ error: 'Configuração ausente' });
+  // O convite no acervo aberto (api/publico.js, /leiloes) é HTML puro — sem JS de
+  // aplicação, de propósito (é página de SEO). Um <form method="POST"> comum chega aqui
+  // com Content-Type x-www-form-urlencoded; a landing dedicada (LiveInscricao.jsx) chama
+  // via fetch com application/json. `saida()` é o ÚNICO lugar que decide o formato da
+  // resposta — todo `return res.status(...).json(...)` abaixo vira `return saida(...)`,
+  // preservando exatamente a mesma lógica/mensagens; só a ENTREGA muda por origem.
+  const ct = String(req.headers['content-type'] || '');
+  const isFormPost = /^(application\/x-www-form-urlencoded|multipart\/form-data)/i.test(ct);
+  function saida(status, payload) {
+    if (!isFormPost) return res.status(status).json(payload);
+    const destino = (status >= 200 && status < 300) ? '/leiloes?inscrito=1#convite-live' : '/leiloes?live_erro=1#convite-live';
+    res.writeHead(302, { Location: destino });
+    return res.end();
+  }
+
+  if (req.method !== 'POST') return saida(405, { error: 'Método não permitido' });
+  if (!SUPABASE_URL || !SERVICE_KEY) return saida(500, { error: 'Configuração ausente' });
 
   const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || 'sem-ip';
   const rl = await checkRateLimit(`live:${ip}`, 8, 600);
-  if (!rl.ok) return res.status(429).json({ error: 'Muitas tentativas. Tente novamente em alguns minutos.' });
+  if (!rl.ok) return saida(429, { error: 'Muitas tentativas. Tente novamente em alguns minutos.' });
 
   const b = req.body || {};
   const slug     = String(b.slug || '').trim().slice(0, 80);
@@ -80,19 +95,22 @@ export default async function handler(req, res) {
   const uf       = String(b.uf || '').trim().toUpperCase().slice(0, 2);
   const utm      = (b.utm && typeof b.utm === 'object') ? b.utm : {};
 
-  if (!slug) return res.status(400).json({ error: 'Evento não informado.' });
+  if (!slug) return saida(400, { error: 'Evento não informado.' });
   const eNome = erroNome(nome);
-  if (eNome) return res.status(400).json({ error: eNome });
-  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.status(400).json({ error: 'E-mail inválido.' });
+  if (eNome) return saida(400, { error: eNome });
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return saida(400, { error: 'E-mail inválido.' });
   // `erroTelefone` deixa passar o VAZIO por contrato (obrigatoriedade é decisão de quem
   // chama). Aqui o WhatsApp é o canal de contato direto e o do grupo, então o vazio é
   // checado à parte. (Desde 28/08 o LEMBRETE e o link da sala saem por e-mail, no
   // `live-lembrete-cron` — antes disso esta linha dizia que saíam pelo WhatsApp, o que
   // descrevia uma intenção e não um mecanismo: não havia cron nenhum enviando.)
-  if (!limparTelefone(whatsapp)) return res.status(400).json({ error: 'Informe o seu WhatsApp com DDD.' });
+  if (!limparTelefone(whatsapp)) return saida(400, { error: 'Informe o seu WhatsApp com DDD.' });
   const eTel = erroTelefone(whatsapp);
-  if (eTel) return res.status(400).json({ error: eTel });
-  if (cidade.length < 2) return res.status(400).json({ error: 'Informe a sua cidade.' });
+  if (eTel) return saida(400, { error: eTel });
+  // Cidade é obrigatória só na landing dedicada (pede o campo, usa pra buscar ao vivo na
+  // aula). O convite do acervo aberto (form puro) é de propósito mais enxuto — 3 campos,
+  // sem cidade — e cidade vazia já é aceita mais abaixo (grava null, sem quebrar nada).
+  if (!isFormPost && cidade.length < 2) return saida(400, { error: 'Informe a sua cidade.' });
 
   // O evento tem de existir e estar ativo — nunca confiar no que a tela mandou.
   // `.ok` conferido À PARTE: leitura que FALHOU e aula que NÃO EXISTE levam a respostas
@@ -100,10 +118,10 @@ export default async function handler(req, res) {
   // "esta aula não está com inscrições abertas" — o inscrito lia que não há aula e não
   // voltava mais, num dia em que a aula existia.
   const evRes = await sb(`eventos_live?slug=eq.${encodeURIComponent(slug)}&ativo=eq.true&select=id,titulo,data_hora,link_grupo,whatsapp_direto,vagas_max`);
-  if (!evRes.ok) return res.status(502).json({ error: 'Não conseguimos abrir a inscrição agora. Tente de novo em instantes.' });
+  if (!evRes.ok) return saida(502, { error: 'Não conseguimos abrir a inscrição agora. Tente de novo em instantes.' });
   const evs = await evRes.json().catch(() => []);
   const ev = Array.isArray(evs) && evs[0];
-  if (!ev) return res.status(404).json({ error: 'Esta aula não está com inscrições abertas.' });
+  if (!ev) return saida(404, { error: 'Esta aula não está com inscrições abertas.' });
 
   // A DATA VEM DE `live_proxima`, NUNCA DA COLUNA (03/09).
   // `eventos_live.data_hora` guarda a ocorrência ANTERIOR até `live_rolar_recorrentes()`
@@ -114,9 +132,9 @@ export default async function handler(req, res) {
   // (`LiveInscricao.jsx:106`), o convite (`_convite-live.js:70`) e a sala
   // (`live-criar-sala.js:54`) já liam pela RPC; era esta rota que mantinha a segunda verdade.
   const proxRes = await sb('rpc/live_proxima', { method: 'POST', body: JSON.stringify({ p_slug: slug }) });
-  if (!proxRes.ok) return res.status(502).json({ error: 'Não conseguimos abrir a inscrição agora. Tente de novo em instantes.' });
+  if (!proxRes.ok) return saida(502, { error: 'Não conseguimos abrir a inscrição agora. Tente de novo em instantes.' });
   const prox = await proxRes.json().catch(() => null);
-  if (!prox?.data_hora) return res.status(404).json({ error: 'Esta aula não está com inscrições abertas.' });
+  if (!prox?.data_hora) return saida(404, { error: 'Esta aula não está com inscrições abertas.' });
   ev.data_hora = prox.data_hora;
   // A EDIÇÃO é a chave que separa uma semana da outra. `live_inscricoes` ganhou a coluna em
   // 03/09 e o gatilho `live_edicao_preencher` a garante mesmo se ninguém mandar — mandar
@@ -133,7 +151,7 @@ export default async function handler(req, res) {
     // preenchesse o campo, e aí recusaria inscrito com a sala vazia.
     const cRes = await sb(`live_inscricoes?evento_id=eq.${ev.id}&edicao=eq.${edicao}&select=id`, { headers: { Prefer: 'count=exact' } });
     const total = Number(String(cRes.headers.get('content-range') || '').split('/')[1] || 0);
-    if (total >= ev.vagas_max) return res.status(409).json({ error: 'As vagas para esta aula se esgotaram.' });
+    if (total >= ev.vagas_max) return saida(409, { error: 'As vagas para esta aula se esgotaram.' });
   }
 
   // ── A conta ────────────────────────────────────────────────────────────────
@@ -240,7 +258,7 @@ export default async function handler(req, res) {
   if (!insRes.ok) {
     const det = await insRes.text().catch(() => '');
     console.error('[live-inscrever] inscrição NÃO gravada', insRes.status, det.slice(0, 300));
-    return res.status(500).json({ error: 'Não conseguimos concluir a sua inscrição. Tente de novo em instantes.' });
+    return saida(500, { error: 'Não conseguimos concluir a sua inscrição. Tente de novo em instantes.' });
   }
 
   // ── Meta: evento Lead ──────────────────────────────────────────────────────
@@ -330,7 +348,7 @@ export default async function handler(req, res) {
     } catch (e) { console.error('[live-inscrever] codigo_indicacao', e?.message || e); }
   }
 
-  return res.status(200).json({
+  return saida(200, {
     ok: true, contaNova, link_grupo: ev.link_grupo || null, titulo: ev.titulo, data_hora: ev.data_hora,
     codigo_indicacao: codigoIndicacao,
     // O NAVEGADOR RECEBE O ID PRONTO, não a regra para calculá-lo. Pixel e CAPI mandando o

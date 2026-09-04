@@ -4,6 +4,58 @@
 
 ---
 
+## 📋 SESSÃO 22 · PARTE 15 (04/09) — CONVITE PARA A AULA AO VIVO DENTRO DO ACERVO ABERTO (/leiloes)
+
+**Pedido do dono**, depois da análise de tráfego de 03/09 (Raio-X do Tráfego): a campanha de
+Google Ads manda 51% de todo o tráfego pago para `/leiloes` (índice nacional, server-rendered
+— ver o cabeçalho de `api/publico.js`), e quase ninguém dali vira inscrito na aula ao vivo.
+Em vez de mexer na campanha do Meta (isso ficou para a reunião de amanhã com o Ralf), o dono
+pediu para aproveitar **o mesmo clique pago para duas coisas**: convidar para a aula E já
+converter em assinante — coisa que `api/live-inscrever.js` já faz sozinho (uma inscrição cria
+conta `explorador` automaticamente quando o e-mail é novo).
+
+**Onde:** um bloco fixo (`caixaConviteLive`) logo abaixo do hero de `/leiloes` — antes da lista
+de estados, para não brigar com o conteúdo que o Google indexa. Só nesta página (decisão do
+dono: escopo restrito ao índice nacional, não nas páginas de UF/cidade/imóvel).
+
+**Como funciona, sem adicionar JS de aplicação** (a página é HTML puro de propósito — ver o
+cabeçalho do arquivo):
+- `paginaBrasil()` busca a próxima edição via `rpc('live_proxima', {p_slug:'leilao-ao-vivo'})`
+  — a MESMA fonte que `LiveInscricao.jsx` usa, nunca a coluna crua (foi divergir isso entre
+  telas que causou o defeito de 03/09 registrado em `api/_live-edicao.js`).
+- O bloco é um `<form method="POST" action="/api/live-inscrever">` comum, com 3 campos visíveis
+  (nome, WhatsApp, e-mail) + `slug` e `origem=acervo_aberto_leiloes` ocultos — dá para saber
+  depois quantos assinantes vieram por aqui, separado da landing dedicada.
+- `api/live-inscrever.js` ganhou um branch por `Content-Type`: a landing continua chamando via
+  `fetch()`/JSON (resposta inalterada); um `<form>` puro chega com
+  `x-www-form-urlencoded`/`multipart` e a MESMA rota responde com um `302` para
+  `/leiloes?inscrito=1#convite-live` (sucesso) ou `?live_erro=1#convite-live` (erro) — toda a
+  lógica de negócio (validação, contagem de vagas, criação de conta, e-mail, CAPI) é a mesma,
+  só a ENTREGA da resposta muda. `paginaBrasil()` lê esses dois parâmetros e troca o formulário
+  por uma confirmação, ou mostra o formulário de novo com um aviso de erro.
+- Validação da cidade (obrigatória na landing dedicada) ficou condicional a `!isFormPost`: o
+  widget do acervo aberto foi desenhado sem esse campo (decisão do dono), e a landing continua
+  como estava.
+
+**Falha aberta, como o resto da página**: se `live_proxima` cair ou o evento ficar `ativo=false`,
+`caixaConviteLive` devolve string vazia e o índice de estados — o caminho principal da página —
+sai intacto.
+
+**Verificado**: `rpc/live_proxima('leilao-ao-vivo')` ao vivo devolve a próxima edição real
+(09/09, 19h de Bahia, "Como eu encontro e avalio um imóvel de leilão, ao vivo") com exatamente
+os campos que o widget usa (`titulo`, `data_hora`, `recorrencia`). `npm run build` passou (o
+prebuild roda `verificar:sintaxe`, que pegou e corrigiu um crase solta num comentário dentro do
+template da casca HTML — `` `saida()` `` fechava a string mais cedo do que devia).
+
+**Sem migração**: `live_inscricoes`/`perfis` já aceitam os três campos coletados; nenhuma coluna
+nova.
+
+**Pendente de negócio (não é código)**: medir depois de alguns dias quantas inscrições saem
+com `origem=acervo_aberto_leiloes` — se o volume for baixo, o próximo passo é considerar o
+mesmo bloco nas páginas de UF/cidade (mais tráfego orgânico, mas fora do escopo desta rodada).
+
+---
+
 ## 📋 SESSÃO 22 · PARTE 14 (03/09, à noite) — BLOCO 6: BUG BOUNTY COMPLETO (11 lentes que faltavam), 15 achados confirmados e corrigidos
 
 Pedido do dono: "pode rodar" (as 11 lentes do bug bounty mensal que tinham ficado de fora

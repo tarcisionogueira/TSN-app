@@ -371,6 +371,27 @@ footer .in{max-width:1080px;margin:0 auto}
 .avise button:hover{background:var(--azul-fundo)}
 .avise button:disabled{opacity:.6;cursor:default}
 .avise-ok{font-size:13px;font-weight:600;margin:10px 0 0;color:#15803d}
+/* ── CONVITE PARA A AULA AO VIVO (04/09, pedido do dono: aproveitar o MESMO tráfego pago do
+   índice nacional para duas coisas — inscrição na aula e conta na plataforma, já que
+   api/live-inscrever.js já faz as duas de uma vez). Card no mesmo padrão visual do ímã
+   .avise (gradiente azul claro), com um selo vermelho para destacar que é evento com hora
+   marcada. Form PURO — POST direto para api/live-inscrever.js, que devolve um redirect
+   (?inscrito=1 / ?live_erro=1) em vez de JSON quando detecta Content-Type de formulário
+   (ver o helper saida() de lá). Sem JS: funciona no robô e no celular mais simples. */
+.convite-live{background:linear-gradient(180deg,#eff6ff,#fff);border:1px solid #bfdbfe;border-radius:18px;padding:24px;margin:0 0 30px}
+.convite-live-tag{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:800;color:#fff;background:#dc2626;padding:4px 11px;border-radius:999px;letter-spacing:.3px;text-transform:uppercase;margin-bottom:10px}
+.convite-live-t{font-size:19px;font-weight:800;margin:0 0 6px;font-family:'League Spartan','League Spartan Fallback','Inter',sans-serif}
+.convite-live-s{font-size:14px;color:#334155;margin:0 0 16px;line-height:1.55;max-width:640px}
+.convite-live form{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 10px}
+.convite-live input{flex:1;min-width:180px;padding:12px 14px;border:1px solid var(--linha);border-radius:10px;font-size:16px;font-family:inherit;color:inherit;background:#fff}
+.convite-live input:focus{outline:2px solid var(--azul);outline-offset:1px}
+.convite-live button{padding:12px 22px;border:none;border-radius:10px;background:var(--azul);color:#fff;font-weight:800;font-size:14.5px;cursor:pointer;font-family:inherit;white-space:nowrap}
+.convite-live button:hover{background:var(--azul-fundo)}
+.convite-live-obs{font-size:12px;color:var(--cinza);margin:0}
+.convite-live-erro{background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;font-size:13px;font-weight:600;padding:10px 14px;border-radius:10px;margin:0 0 14px}
+.convite-live-ok{display:flex;align-items:flex-start;gap:10px}
+.convite-live-ok .ic{font-size:26px;line-height:1}
+@media(max-width:560px){.convite-live{padding:18px}.convite-live-t{font-size:17px}.convite-live form{flex-direction:column}}
 </style>
 </head><body>
 <header><div class="in">
@@ -605,6 +626,48 @@ function caixaAviseMe(cidade, uf) {
   </div>`;
 }
 
+// Convite para a aula ao vivo (04/09) — o índice nacional é onde a campanha de Google Ads
+// concentra 51% de todo o tráfego pago (ver docs/HANDOFF.md, análise de 03/09); este bloco
+// deixa a MESMA visita render duas coisas: inscrição na aula e conta na plataforma (as duas
+// já nascem juntas em api/live-inscrever.js). Falha ABERTA: sem `prox` (RPC fora do ar, ou
+// evento sem `ativo=true`) o bloco não aparece — o índice de estados, caminho principal
+// desta página, nunca depende dele. `estado` chega do redirect do próprio POST: 'ok'
+// (inscrito agora) | 'erro' | null (formulário normal).
+function caixaConviteLive(prox, estado) {
+  if (!prox?.data_hora) return '';
+  // MESMA REGRA de `LiveInscricao.jsx`/`live-inscrever.js`: a data vem de `live_proxima`,
+  // nunca de uma coluna crua, e sempre no fuso `America/Bahia` — foi divergir isso entre
+  // telas que produziu o defeito de 03/09 (duas datas diferentes para a mesma aula).
+  const quando = new Date(prox.data_hora).toLocaleString('pt-BR', {
+    timeZone: 'America/Bahia', weekday: 'long', day: '2-digit', month: 'long', hour: '2-digit', minute: '2-digit',
+  });
+  if (estado === 'ok') {
+    return `<div class="convite-live" id="convite-live">
+      <div class="convite-live-tag">✅ Inscrição confirmada</div>
+      <div class="convite-live-ok">
+        <span class="ic">🎉</span>
+        <div><div class="convite-live-t">Você está na lista!</div>
+        <div class="convite-live-s" style="margin-bottom:0">Os detalhes de acesso chegam no seu e-mail e WhatsApp antes da aula, com um lembrete no dia anterior. Aproveite e já dê uma olhada no acervo abaixo.</div></div>
+      </div>
+    </div>`;
+  }
+  return `<div class="convite-live" id="convite-live">
+    <div class="convite-live-tag">🔴 Ao vivo e gratuito</div>
+    <div class="convite-live-t">${esc(prox.titulo || 'Análise de leilão ao vivo, do zero')}</div>
+    <div class="convite-live-s">${esc(quando)}, horário de Brasília${prox.recorrencia === 'semanal' ? ' · toda semana' : ''} — mostramos como avaliar um imóvel de leilão na prática, com perguntas ao vivo. Inscreva-se e ganhe também uma conta grátis na plataforma.</div>
+    ${estado === 'erro' ? `<div class="convite-live-erro">Não conseguimos concluir sua inscrição. Confira nome, WhatsApp e e-mail e tente de novo.</div>` : ''}
+    <form method="POST" action="${SITE}/api/live-inscrever">
+      <input type="hidden" name="slug" value="leilao-ao-vivo"/>
+      <input type="hidden" name="origem" value="acervo_aberto_leiloes"/>
+      <input type="text" name="nome" placeholder="Seu nome" aria-label="Seu nome" required maxlength="120"/>
+      <input type="tel" name="whatsapp" placeholder="WhatsApp com DDD" aria-label="Seu WhatsApp" required maxlength="20"/>
+      <input type="email" name="email" placeholder="Seu e-mail" aria-label="Seu e-mail" required maxlength="160"/>
+      <button type="submit">Quero participar — é grátis</button>
+    </form>
+    <p class="convite-live-obs">Vaga gratuita. Ao se inscrever, você também ganha uma conta na plataforma para acompanhar os leilões.</p>
+  </div>`;
+}
+
 // ── /leiloes/buscar?cidade= ──────────────────────────────────────────────────
 async function paginaBusca(termo) {
   const q = String(termo || '').trim().slice(0, 60);
@@ -630,8 +693,12 @@ async function paginaBusca(termo) {
 }
 
 // ── /leiloes — índice nacional ───────────────────────────────────────────────
-async function paginaBrasil() {
+async function paginaBrasil(estadoConvite = null) {
   const dados = await rpc('acervo_uf_contagem');
+  // Próxima edição da aula ao vivo, para o convite logo abaixo do hero. `rpc()` já devolve
+  // `null` em qualquer falha (RPC fora do ar, evento inativo) — `caixaConviteLive` trata o
+  // `null` como "sem bloco", então esta página nunca fica refém da aula existir.
+  const prox = await rpc('live_proxima', { p_slug: 'leilao-ao-vivo' });
   // ÍNDICE DIRETO DE CIDADES (30/08). As cidades JÁ eram linkadas — a partir da página do
   // estado — então isto não conserta órfão nenhum; conserta PROFUNDIDADE. As cidades de maior
   // demanda de busca ("leilão de imóveis no Rio de Janeiro") estavam a DOIS cliques da raiz da
@@ -665,7 +732,8 @@ async function paginaBrasil() {
     hero: `<h1>Imóveis em <span class="destaque">leilão</span> no Brasil</h1>
       <p class="sub">${total.toLocaleString('pt-BR')} imóveis de leilão judicial e extrajudicial acompanhados hoje, em ${comLote} ${comLote === 1 ? 'estado' : 'estados'}. Comece pela sua cidade.</p>
       ${caixaBuscaHero('', 'Não sabe o nome exato? Escolha o estado logo abaixo.')}`,
-    corpo: `<h2>Escolha o estado</h2>
+    corpo: `${caixaConviteLive(prox, estadoConvite)}
+      <h2>Escolha o estado</h2>
       <ul class="ufs">${ufs.map(([uf, n]) => (n
         ? `<li><a href="${SITE}/leiloes/${uf.toLowerCase()}"><span>${esc(UF_NOME[uf])}</span><span class="n">${n.toLocaleString('pt-BR')}</span></a></li>`
         : `<li class="vazio"><span>${esc(UF_NOME[uf])}</span><span class="n0">sem lote hoje</span></li>`)).join('')}</ul>
@@ -1004,7 +1072,9 @@ export default async function handler(req, res) {
       if (!UFS.includes(uf)) return res.status(404).send('Estado não encontrado.');
       html = await paginaUF(uf);
     } else {
-      html = await paginaBrasil();
+      const estadoConvite = u.searchParams.get('inscrito') === '1' ? 'ok'
+        : u.searchParams.get('live_erro') === '1' ? 'erro' : null;
+      html = await paginaBrasil(estadoConvite);
     }
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     // Cache na borda: estas páginas são iguais para todo mundo e o acervo muda por dia,
