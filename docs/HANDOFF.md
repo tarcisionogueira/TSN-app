@@ -130,6 +130,39 @@ anteriores/contemporâneas ao fix já em produção.
 
 ---
 
+## 📋 SESSÃO 23 · PARTE 4 (04/09) — COBERTURA DOCUMENTAL 0%: 3 CAUSAS DIFERENTES, SÓ DOCUMENTADAS (sem código)
+
+Investigados GESTAOLEILOES/EDITAL_DJEN/SBID9/VLANCE/FERREIRALEIL (0-5% de documento no acervo).
+Nenhum é o MESMO problema — cada um tem causa própria, confirmada com dado real, não suposição:
+
+- **EDITAL_DJEN**: já é DECISÃO DELIBERADA do dono (03/09, migração
+  `edital_vira_lote_sem_foto_com_matricula_e_dedup_pelo_que_temos.sql`) — lote nasce sem foto/documento
+  DE PROPÓSITO ("reforça a necessidade"), com painel próprio (`admin_radar_editais()`) mostrando
+  `lotes_sem_documento` como trabalho pendente esperado, não defeito. Nada a fazer.
+- **FERREIRALEIL** (rede SOLEON): confirmado com amostra real (4 lotes ativos) que o parser de anexos
+  do `scripts/scraper-soleon.mjs` **funciona** (mesmo código que serve CALIL/VEGAS/3TORRES) — só não
+  encontra `<a href>` de PDF porque **este site especificamente não publica documento nenhum** na página
+  do lote (`anexos: []`, `link_edital` cai no próprio `url_lote`). `numero_matricula` sai certo do texto.
+  Não é bug — é limitação do site de origem, sem contramedida grátis conhecida.
+- **GESTAOLEILOES**: `scripts/scraper-gestao.mjs` **nunca implementou** a descoberta de anexos/PDF que o
+  `scraper-soleon.mjs` irmão já tem — só grava `numero_matricula` (texto) e um `link_edital` genérico
+  (página de listagem, não PDF). `url_lote` está 100% populado (104/104 ativos), a lacuna é código
+  faltando, não link. **Não implementei agora**: exigiria portar a lógica do SOLEON sem poder validar
+  contra o HTML ao vivo (egress deste ambiente bloqueia o domínio) — mesmo cuidado de "não conserto no
+  escuro" desta sessão. Fica como candidato real para uma sessão com acesso à rede.
+- **VLANCE**: nem chega a ter URL de lote — `url_lote`/`link_edital` são a HOME/listagem do site
+  (`verdeamareloleiloes.com.br`, `capitalvalorleiloes.com.br`), repetidos entre "lotes" diferentes. A
+  coleta client-side (`api/coleta-cliente.js`) nunca visita a página do lote individual — documento
+  nunca esteve no escopo dela. Achado novo, não investigado a fundo (redesenho maior, fora do escopo
+  de hoje).
+- **SBID9** (contexto, já sabido): login-gated, já documentado em `leiloeiro_conhecimento`.
+
+Documentado (`docs_status`/`docs_estrategia`) em `leiloeiro_conhecimento` para FERREIRALEIL e
+GESTAOLEILOES via `documenta_gap_documental_gestao_ferreiraleil.sql` — mesmo padrão já usado para
+SBID9/21, pra não repetir esta investigação do zero numa próxima sessão.
+
+---
+
 ## 📋 SESSÃO 22 · PARTE 20 (04/09, encerramento) — RESUMO DO DIA E PENDÊNCIAS PARA A PRÓXIMA SESSÃO
 
 **Resumo do que foi feito hoje** (detalhe completo em cada PARTE abaixo, 15 a 19):
