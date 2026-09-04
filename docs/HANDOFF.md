@@ -4,6 +4,28 @@
 
 ---
 
+## 📋 SESSÃO 23 · PARTE 5 (04/09) — META × GOOGLE ADS: RESUMO + PAUSADA A CAMPANHA "TRF - SITE" DO META
+
+**Pedido do dono**: resumo de como Meta e Google Ads estão indo, de onde vêm os clientes, e brechas de
+rastreabilidade. Números de 30 dias (Meta só tem 14d de histórico — campanha mais nova): **Google Ads**
+R$725,95 gastos, 2.134 cliques, 20 conversões, R$36,30/conversão. **Meta Ads** R$232,52, 1.400 cliques,
+2 conversões, **R$116,26/conversão** — CPC mais barato (R$0,17 vs R$0,34) mas converte 6× pior por clique.
+Origem dos cadastros (30d, ~90 total): **60% sem origem nenhuma** (54) — conferido que não é rótulo
+errado (só 1 dos 54 tinha `fbclid` escondido; os outros 53 não carregam nem UTM nem gclid nem fbclid,
+tráfego genuinamente não seguro por nenhum dos dois sistemas). Segunda brecha: taxa de clique-pago→visita-
+rastreada é **89% no Google** (`gclid`/`gbraid`/`wbraid`) contra **65% no Meta** (`fbclid`) — Meta perde
+proporcionalmente mais clique no caminho até o site. Infra de rastreio em si está correta (`fbclid` já
+tem coluna própria em `visita_origem` e `perfis.mkt_fbclid` — não falta capacidade de medir).
+
+**Decisão do dono**: pausar só a campanha do Meta (`TRF - SITE - LEILOES - AGO26`, id
+`120249319895060420`, objetivo cliques-no-link) **agora, sem esperar a reunião de amanhã com o Ralf**
+— manter o Google rodando (`Pesquisa — Leilão de Imóveis (BR)`, id `24089433745`), que é o canal
+saudável. Pausada via Windsor.ai (`pause_campaign`), confirmado sucesso. Reversível a qualquer momento
+via `enable_campaign` no mesmo id. A outra campanha do Meta (`CONV - AULA 02SET - INSCRICAO`) já estava
+pausada desde antes desta sessão — nenhuma ação nela.
+
+---
+
 ## 📋 SESSÃO 23 · PARTE 1 (04/09) — RITUAL DE ABERTURA; SBID21 E RADAR DE EDITAIS RE-CONFIRMADOS (sem mudança de código)
 
 **Ritual de abertura**: heartbeat registrado; saúde do sistema + marketing checados (Supabase/Vercel/GitHub
