@@ -4,6 +4,32 @@
 
 ---
 
+## 📋 SESSÃO 23 · PARTE 9 (04/09) — GOOGLE ADS: TROCA DE ESTRATÉGIA DE LANCE PARA MIRAR CADASTRO/ASSINATURA, NÃO TRÁFEGO
+
+**Direção do dono**: verba mínima só pra engajamento no Instagram (já em andamento, feito pelo
+próprio dono via app — ver Parte 7); o resto da verba vai pro Google, que converte melhor. E o
+objetivo real não é fluxo de visita no site — é **cadastro e contratação de plano pago**.
+
+**Achado:** a campanha `24089433745` estava configurada com lance `TARGET_SPEND` ("Maximizar
+cliques") — otimiza pra volume de clique/visita, não pro resultado que o dono quer. Os R$30/dia
+da Parte 8 estariam comprando mais tráfego, não necessariamente mais cadastro.
+
+**Confirmado com o dono antes de trocar** (pra não cair na forma nº 10 do topo deste arquivo —
+medir/otimizar uma coisa e chamar de outra): a conversão que o Google Ads conta nessa campanha
+É cadastro/assinatura de verdade, não um proxy fraco (clique, visita). Só com essa confirmação
+a troca de estratégia faz sentido.
+
+**Ação:** `set_campaign_bidding_strategy` (Windsor.ai) → `maximize_conversions`, com
+`target_cpa_micros = 20_000_000` (CPA-alvo de R$20, calculado a partir do custo médio real dos
+últimos 13 dias: R$309,31 gastos / 15 conversões ≈ R$20,62 — arredondado pra baixo, valor
+confirmado com o dono, não escolhido sozinho). Confirmado pela API: "Campaign 24089433745
+bidding strategy set to 'maximize_conversions' successfully."
+
+**Ressalva para próxima sessão:** volume de conversão é limítrofe pro Smart Bidding (~15 em 13
+dias, ~34/mês) — pode ficar instável/com aprendizado lento nos primeiros dias. Acompanhar
+`conversoes` e `gasto` em `marketing_metricas_dia` (canal = `'Google Ads'`, atenção ao nome
+exato) na próxima sessão antes de qualquer nova mudança de lance.
+
 ## 📋 SESSÃO 23 · PARTE 8 (04/09) — ORÇAMENTO DIÁRIO DO GOOGLE ADS: R$23,79 (média real) → R$30/dia
 
 **Pedido do dono**: saber se subir a verba diária mudaria as projeções, antes de decidir.
