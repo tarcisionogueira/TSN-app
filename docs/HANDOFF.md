@@ -4,6 +4,42 @@
 
 ---
 
+## 📋 SESSÃO 23 · PARTE 1 (04/09) — RITUAL DE ABERTURA; SBID21 E RADAR DE EDITAIS RE-CONFIRMADOS (sem mudança de código)
+
+**Ritual de abertura**: heartbeat registrado; saúde do sistema + marketing checados (Supabase/Vercel/GitHub
+Actions); Gmail revisado. Achados novos: `qa_invariantes()` com 9 alertas que o e-mail de Health Check não
+cobre (destaque: `qa_invariantes_lenta` — o próprio painel de invariantes lento; `cadastro_barrado` 9/7d;
+`radar_editais_sem_pull`). **Auditoria de segurança mensal (Routine) falhou 2× em 03/09** — sessão automática
+sem repo nem MCP Supabase/Vercel anexados (trigger `trig_01Kn52PCv9y7pkd5tkdeKkj5` sem `sources`/conectores
+configurados); `update_trigger` não permite corrigir isso, só recriar o trigger resolveria. Deploys Vercel
+(últimos 20, todos READY) e CI "Deriva código × banco" (últimos 5 runs, `success`) saudáveis.
+
+**SBID21 "zerou" — RE-CONFIRMADO como já diagnosticado (01/08 e 01/09 desta mesma base de HANDOFF), não é
+regressão nova.** `fonte_saude` mostra 36-39 `ok` de 25 a 31/08 e `falhou` (total=0) desde 01/09 — mas o log
+do scraper (run `33520744159`, 01/09 14:53 UTC) já confirmou a API respondendo HTTP 200/0 ofertas (não é
+erro/timeout), e `imoveis_leilao` só tem 39 linhas SBID21 na vida toda (37 de julho + 2 de 31/08), todas com
+praça encerrada. Parser intacto — mantida a decisão anterior de não consertar. A pendência de régua já
+registrada (rotular como `vazio` em vez de `falhou` quando a API responde 0; e `fonte_baseline_aprendida()`
+não devia fixar piso perpétuo num sub-portal de baixíssimo volume) segue como polimento de baixo risco, não
+como bug — não implementada agora para não mexer em `scraperSuperbidNet`/`metricasColeta` (compartilhada por
+SBID9/SUPERBID/SOLD) sem necessidade.
+
+**Radar de Editais (DJEN) — gap é OPERACIONAL, não código.** `monitor_runs` não tem NENHUMA linha
+(`fonte='radar-editais-djen'`) desde `2026-09-01T01:01` (`origem='residencial'`) — 3 dias sem pull, qualquer
+que seja a origem. O freio pago (`DIAS_REDE_SEGURANCA=7` em `api/radar-editais-cron.js`) só libera a coleta
+Bright Data depois de 7 dias sem sucesso, e por desenho **não grava nada** enquanto o freio segura (para não
+poluir o próprio sinal que ele lê) — daí o "silêncio" no banco parecer mais grave do que é. O dono se
+comprometeu (29/08) a rodar `scripts/radar-editais-residencial.mjs` diariamente e parou há 3 dias (últimas
+rodadas: 29/08, 30/08, 31/08, 01/09). `qa_invariantes.radar_editais_sem_pull` (limite 2 dias) está fazendo
+exatamente o papel de aviso antecipado ANTES do freio pago de 7 dias — calibração correta, não mudar. Nenhum
+código a alterar; a ação é do dono (rodar o residencial) ou aguardar o auto-fallback pago em ~4 dias (dispara
+sozinho no cron `0 */4 * * *`), ou forçar agora via `.github/workflows/radar-forcado.yml` (paga Bright Data
+na hora).
+
+Sem mudança de código nesta sessão — investigação + esta entrada de documentação apenas.
+
+---
+
 ## 📋 SESSÃO 22 · PARTE 20 (04/09, encerramento) — RESUMO DO DIA E PENDÊNCIAS PARA A PRÓXIMA SESSÃO
 
 **Resumo do que foi feito hoje** (detalhe completo em cada PARTE abaixo, 15 a 19):
