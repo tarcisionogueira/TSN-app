@@ -1015,6 +1015,7 @@ function PlanosGratisSelector({ valor, onChange }) {
 }
 
 function EbooksTab() {
+  const navEbook = useNavigate();
   const [ebooks, setEbooks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState(null);
@@ -1058,19 +1059,25 @@ function EbooksTab() {
   }
 
   // COMPLETUDE p/ publicar um EBOOK: título + descrição + capa + arquivo (PDF). Incompleto = rascunho.
+  // eBook estruturado (docx → capítulos, ver AdminEbookEditor) não usa arquivo_url — a
+  // exigência de capítulo salvo é checada à parte em toggleAtivo, contra ebook_capitulos.
   function faltamCamposEbook(f) {
     const faltam = [];
     if (!String(f?.titulo || '').trim()) faltam.push('título');
     if (!String(f?.descricao || '').trim()) faltam.push('descrição');
     if (!String(f?.capa_url || '').trim()) faltam.push('capa');
-    if (!String(f?.arquivo_url || '').trim()) faltam.push('arquivo (PDF)');
+    if (f?.tipo_conteudo !== 'estruturado' && !String(f?.arquivo_url || '').trim()) faltam.push('arquivo (PDF)');
     return faltam;
   }
   async function toggleAtivo(id, ativo) {
     if (!ativo) { // vai PUBLICAR → checa completude no banco
       try {
-        const { data: e } = await supabase.from('ebooks_admin').select('titulo,descricao,capa_url,arquivo_url').eq('id', id).single();
+        const { data: e } = await supabase.from('ebooks_admin').select('titulo,descricao,capa_url,arquivo_url,tipo_conteudo').eq('id', id).single();
         const faltam = faltamCamposEbook(e);
+        if (e?.tipo_conteudo === 'estruturado') {
+          const { count } = await supabase.from('ebook_capitulos').select('id', { count: 'exact', head: true }).eq('ebook_id', id);
+          if (!count) faltam.push('ao menos um capítulo (use "📖 Capítulos")');
+        }
         if (faltam.length) return alert(`Não é possível publicar: faltam ${faltam.join(', ')}. Complete o cadastro e tente de novo.`);
       } catch { /* fail-open */ }
     }
@@ -1129,6 +1136,7 @@ function EbooksTab() {
                       <td style={S.td}>
                         <div style={{ display: 'flex', gap: 6 }}>
                           <button style={S.btn('outline')} onClick={() => openEdit(e)}>Editar</button>
+                          <button style={S.btn('outline')} onClick={() => navEbook(`/admin/ebook-editor/${e.id}`)} title="Subir .docx, ajustar e editar capítulos">📖 Capítulos</button>
                           <button style={S.btn('outline')} onClick={() => toggleAtivo(e.id, e.ativo)}>{e.ativo ? 'Desativar' : 'Ativar'}</button>
                           {e.ativo && <button style={S.btn('outline')} disabled={anunciando === e.id} onClick={() => anunciar(e)} title="Enviar e-mail de apresentação para os clientes">{anunciando === e.id ? 'Enviando…' : '📣 Anunciar'}</button>}
                           <button style={S.btn('danger')} onClick={() => deleteEbook(e.id)}>Deletar</button>

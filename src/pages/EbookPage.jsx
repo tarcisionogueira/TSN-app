@@ -6,6 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { driveImage, driveId, drivePreview, driveDownload } from '../utils/driveUrl';
 import PdfReader from '../components/PdfReader';
 import LeitorPaginado from '../components/LeitorPaginado';
+import LeitorEstruturado from '../components/LeitorEstruturado';
 
 export default function EbookPage() {
   const { id } = useParams();
@@ -20,21 +21,31 @@ export default function EbookPage() {
   const [comprouAvulso, setComprouAvulso] = useState(false);
   const [arquivoUrl, setArquivoUrl] = useState(null);
   const [leitor, setLeitor] = useState(false);   // leitor paginado em tela cheia
+  const [capitulos, setCapitulos] = useState(null);       // null = ainda não buscado/sem acesso
+  const [leitorEstruturado, setLeitorEstruturado] = useState(false);
 
   useEffect(() => {
     if (!id) return;
     // Metadados só — NUNCA arquivo_url (vem por RPC de entitlement abaixo).
-    supabase.from('ebooks_admin').select('id, titulo, descricao, capa_url, gratuito, ativo, preco, comissao_pct, assinatura, planos_gratis, criado_em').eq('id', id).single()
+    supabase.from('ebooks_admin').select('id, titulo, descricao, capa_url, gratuito, ativo, preco, comissao_pct, assinatura, planos_gratis, criado_em, tipo_conteudo').eq('id', id).single()
       // RASCUNHO não é público: eBook inativo (incompleto) não abre pela URL (só no painel admin).
       .then(({ data }) => { setEbook(data && data.ativo ? data : null); setLoading(false); });
   }, [id]);
 
   // A URL do arquivo vem SÓ da RPC de entitlement server-side (obter_arquivo_ebook):
   // devolve a URL apenas se grátis / plano / compra ativa. Fecha o vazamento de
-  // arquivo_url do ebook pago pela leitura pública de ebooks_admin.
+  // arquivo_url do ebook pago pela leitura pública de ebooks_admin. Pulado pra eBook em
+  // formato estruturado (usa obter_capitulos_ebook abaixo, não tem arquivo_url).
   useEffect(() => {
-    if (!id || !ebook) return;
+    if (!id || !ebook || ebook.tipo_conteudo === 'estruturado') return;
     supabase.rpc('obter_arquivo_ebook', { p_id: id }).then(({ data }) => setArquivoUrl(data || null));
+  }, [id, ebook, user, comprouAvulso]);
+
+  // eBook em formato ESTRUTURADO (docx → capítulos, ver AdminEbookEditor): mesmo gate de
+  // entitlement, mas devolve os capítulos já prontos pro LeitorEstruturado em vez de uma URL.
+  useEffect(() => {
+    if (!id || !ebook || ebook.tipo_conteudo !== 'estruturado') return;
+    supabase.rpc('obter_capitulos_ebook', { p_id: id }).then(({ data }) => setCapitulos(Array.isArray(data) ? data : null));
   }, [id, ebook, user, comprouAvulso]);
 
   // Verifica compra avulsa para ebooks pagos
@@ -69,6 +80,11 @@ export default function EbookPage() {
   // O leitor paginado desenha os BYTES do PDF (pdf.js) — precisa de CORS. O Storage assinado
   // permite; o link de compartilhamento do Drive não, e por isso o Drive segue no /preview.
   const podeLeitorPaginado = isPdf && !isDrive && !!pdfUrl;
+  // Formato estruturado: só libera o botão "Ler" quando a RPC já respondeu (capitulos !==
+  // null). Enquanto está em voo, tratar como "sem acesso ainda" evitaria clicar no meio do
+  // carregamento e cair no fallback de texto puro em vez do leitor certo.
+  const aguardandoCapitulos = ebook?.tipo_conteudo === 'estruturado' && capitulos === null;
+  const podeLeitorEstruturado = ebook?.tipo_conteudo === 'estruturado' && Array.isArray(capitulos) && capitulos.length > 0;
 
   if (loading) return (
     <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#111111', color:'#94a3b8' }}>
@@ -89,6 +105,17 @@ export default function EbookPage() {
       <LeitorPaginado
         url={pdfUrl} titulo={ebook.titulo} baixarUrl={baixarUrl}
         onClose={() => setLeitor(false)}
+        itemId={ebook.id} itemTipo="ebook"
+        supabase={supabase} userId={user?.id}
+      />
+    );
+  }
+
+  if (leitorEstruturado && podeLeitorEstruturado) {
+    return (
+      <LeitorEstruturado
+        capitulos={capitulos} titulo={ebook.titulo}
+        onClose={() => setLeitorEstruturado(false)}
         itemId={ebook.id} itemTipo="ebook"
         supabase={supabase} userId={user?.id}
       />
@@ -136,11 +163,13 @@ export default function EbookPage() {
 
               {podeAcessar ? (
                 <div style={{ display:'flex', gap:12, flexWrap:'wrap' }}>
-                  {(pdfUrl || ebook.descricao) && (
-                    <button onClick={() => (podeLeitorPaginado ? setLeitor(true) : setReading(true))}
-                      style={{ flex:1, minWidth:140, padding:'13px 24px', background:'#0D63DB', color:'white', border:'none', borderRadius:10, fontWeight:700, fontSize:15, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
+                  {(pdfUrl || ebook.descricao || podeLeitorEstruturado || aguardandoCapitulos) && (
+                    <button
+                      disabled={aguardandoCapitulos}
+                      onClick={() => (podeLeitorPaginado ? setLeitor(true) : podeLeitorEstruturado ? setLeitorEstruturado(true) : setReading(true))}
+                      style={{ flex:1, minWidth:140, padding:'13px 24px', background:'#0D63DB', color:'white', border:'none', borderRadius:10, fontWeight:700, fontSize:15, cursor: aguardandoCapitulos ? 'default' : 'pointer', opacity: aguardandoCapitulos ? 0.6 : 1, display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
                       <BookOpen size={18}/>
-                      {podeLeitorPaginado ? 'Ler' : isPdf ? 'Ler PDF no app' : 'Ler'}
+                      {aguardandoCapitulos ? 'Carregando…' : (podeLeitorPaginado || podeLeitorEstruturado) ? 'Ler' : isPdf ? 'Ler PDF no app' : 'Ler'}
                     </button>
                   )}
                   {pdfUrl && (

@@ -48,6 +48,7 @@ const Curso = lazy(() => import('./pages/Curso'));
 const Planos = lazy(() => import('./pages/Planos'));
 const Alavancagem = lazy(() => import('./pages/Alavancagem'));
 const AdminChargebacks = lazy(() => import('./pages/AdminChargebacks'));
+const AdminEbookEditor = lazy(() => import('./pages/AdminEbookEditor'));
 const DisparoWhatsApp = lazy(() => import('./pages/DisparoWhatsApp.jsx'));
 const CaixaInstagram = lazy(() => import('./pages/CaixaInstagram.jsx'));
 const Login = lazy(() => import('./pages/Login'));
@@ -400,6 +401,7 @@ function MainLayout() {
               MLM abrange clientes pagantes, não só equipe). A página é escopada ao user.id. */}
           <Route path="/comissoes" element={<PrivateRoute><Comissoes /></PrivateRoute>} />
           <Route path="/admin/chargebacks" element={<PrivateRoute roles={['admin']}><AdminChargebacks /></PrivateRoute>} />
+          <Route path="/admin/ebook-editor/:id" element={<PrivateRoute roles={['admin']}><AdminEbookEditor /></PrivateRoute>} />
           <Route path="/admin/whatsapp" element={<PrivateRoute roles={['admin']}><DisparoWhatsApp /></PrivateRoute>} />
           <Route path="/admin/instagram" element={<PrivateRoute roles={['admin']}><CaixaInstagram /></PrivateRoute>} />
           <Route path="/atendimento" element={<PrivateRoute><AtendimentoRota /></PrivateRoute>} />

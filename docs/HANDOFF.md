@@ -4,6 +4,83 @@
 
 ---
 
+## 📋 SESSÃO 23 · PARTE 10 (04/09) — EDITOR DE E-BOOK ESTILO KDP (docx → capítulos → leitor responsivo)
+
+**Pedido do dono**: hoje a loja de e-book só aceita PDF pronto, sem editor. Ele quer subir
+um `.docx` já escrito, o sistema detectar capítulos automaticamente (com ajuste manual),
+editar o texto por capítulo, e ler com fonte responsiva de verdade (não zoom de imagem em
+PDF) — estilo KDP da Amazon. **MVP aditivo**: e-books PDF existentes não mudam em nada;
+o fluxo novo só vale para e-books futuros. Plano completo em modo de planejamento, aprovado
+pelo dono antes de codar (3 perguntas: MVP enxuto sem rich text, PDFs existentes ficam como
+estão, construir agora).
+
+**O que foi construído:**
+- Migração `ebook_capitulos_formato_estruturado.sql`: coluna `ebooks_admin.tipo_conteudo`
+  (`'pdf'` default / `'estruturado'`), tabela `ebook_capitulos` (RLS fechada — só admin, ZERO
+  policy de leitura pública, de propósito), `ebook_tem_acesso()` (entitlement compartilhado,
+  extraído da regra que já existia em `obter_arquivo_ebook`), `obter_capitulos_ebook()` (RPC
+  de leitura, anon+authenticated) e `salvar_capitulos_ebook()` (RPC de gravação atômica,
+  só admin — delete+insert dos capítulos + flip de `tipo_conteudo` numa transação só).
+- `src/utils/parseDocx.js`: parsing client-side via `mammoth` (import dinâmico — só carrega
+  quando o admin sobe um arquivo). `styleMap` cobre Heading 1/2 em inglês E as variantes
+  PT-BR do Word (Título 1/2), senão um .docx feito em português pode não detectar capítulo
+  nenhum. `agruparBlocos()`/`blocosParaCapitulos()` fazem o agrupamento (texto antes do 1º
+  título vira "Introdução" — nunca descarta conteúdo em silêncio).
+- `src/pages/AdminEbookEditor.jsx` (rota `/admin/ebook-editor/:id`, admin-only): upload →
+  ajuste manual (mesclar/dividir/renomear capítulo, sobre uma lista plana de blocos com flag
+  `ehTitulo`) → editor de texto simples por capítulo → salvar. Botão "📖 Capítulos" novo em
+  `EbooksTab` (`Admin.jsx`).
+- `src/components/LeitorEstruturado.jsx`: irmão do `LeitorPaginado` (mesmo chrome — 3 temas,
+  mesma chave de tema no localStorage, barra de progresso), mas navega por CAPÍTULO e
+  renderiza texto real com `whiteSpace:pre-wrap` (reflow de verdade, fonte 13-26px) em vez de
+  canvas. Sem gesto de toque lateral pra virar capítulo (capítulo estoura a tela quase
+  sempre — brigaria com o scroll de leitura); navegação só por botão explícito.
+- `EbookPage.jsx`: ramo novo de leitura pro formato estruturado, 100% aditivo — nenhum dos 3
+  ramos existentes (leitor paginado PDF, iframe Drive, fallback texto) foi alterado. Botão
+  "Ler" fica desabilitado enquanto a RPC de capítulos ainda está em voo (evita cair no
+  fallback errado no instante entre o metadado carregar e a RPC responder).
+
+**Testado ponta a ponta com dado real** (não só lido o código): criado e-book de teste
+pago, `salvar_capitulos_ebook` como admin real (2 capítulos) → confirmado `tipo_conteudo`
+virou `'estruturado'` e os capítulos gravados em ordem. `obter_capitulos_ebook`: explorador
+sem compra → `null`; com uma linha real em `compras_produtos` (inserida e depois removida)
+→ capítulos liberados; admin → liberado. Regressão: `obter_arquivo_ebook` num e-book PDF
+pago existente, mesmo usuário sem compra → `null`, idêntico ao comportamento de antes da
+migração. Dados de teste todos removidos ao final (nada ficou no banco).
+
+**Achado de segurança durante a verificação (corrigido na hora, não deixado pra depois):**
+`select public.auditoria_seguranca()` acusou `salvar_capitulos_ebook` executável por
+`anon` — mesmo com `revoke all ... from public` na função. Causa: **neste projeto, função
+NOVA em `public` recebe grant DIRETO pra `anon`/`authenticated`/`service_role` no momento
+da criação** (privilégio default do projeto) — revogar só de `public` não alcança esse
+grant direto pros papéis. `ebook_tem_acesso()` já tinha sido escrita revogando
+explicitamente `from public, anon, authenticated` e saiu correta de primeira; foi
+comparando as duas que a causa apareceu. Migração de correção
+(`ebook_capitulos_fecha_grant_anon_e_allowlist_auditoria.sql`) revogou explicitamente de
+`anon` e adicionou `obter_capitulos_ebook` na allowlist de leitura pública do auditor
+(mesmo motivo de `obter_arquivo_ebook`: e-book gratuito precisa ser legível por quem ainda
+não tem conta). **Nenhuma ação indevida era possível mesmo com o grant solto** — a função
+checa role admin internamente e dá `raise exception` — mas o grant devia refletir o mínimo
+necessário, não só depender do check interno. `auditoria_seguranca()` voltou a `0/0`.
+
+⚠️ **Regra pra próximas migrações que criam função nova:** `revoke all on function X from
+public;` sozinho NÃO tranca a função neste projeto — sempre listar
+`from public, anon, authenticated` explicitamente (ou `anon, authenticated, service_role`,
+conforme o caso) antes de conceder de volta só a quem deve ter acesso.
+
+**Fora de escopo, declarado no plano:** migrar e-books PDF existentes; rich text/imagem
+inline no editor (fase 2, quando o dono pedir); reordenar capítulos fora da ordem do
+documento original; restaurar posição fina de scroll ao retomar leitura (retoma só no
+capítulo certo, sempre do topo); corrigir o gap equivalente de `arquivo_url` legível por
+`authenticated` sem RPC (achado lateral do plano, não desta correção — decisão do dono).
+
+**Não verificado nesta sessão:** `npm run verificar:schema` não rodou (faltam credenciais
+Supabase no ambiente) — compensado por verificação manual direta das tabelas/colunas/RPCs
+contra o schema real via `execute_sql`/`list_tables`, mas vale rodar o script de verdade
+(CI já roda diário) pra fechar o ciclo. Não testado em navegador real (sem acesso a browser
+nesta sessão) — recomendo o dono testar upload de um `.docx` real antes de divulgar a
+funcionalidade.
+
 ## 📋 SESSÃO 23 · PARTE 9 (04/09) — GOOGLE ADS: TROCA DE ESTRATÉGIA DE LANCE PARA MIRAR CADASTRO/ASSINATURA, NÃO TRÁFEGO
 
 **Direção do dono**: verba mínima só pra engajamento no Instagram (já em andamento, feito pelo
