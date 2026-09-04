@@ -4,6 +4,44 @@
 
 ---
 
+## 📋 SESSÃO 23 · PARTE 6 (04/09) — CAMPANHA DE ENGAJAMENTO NO AR PARA @tarcisionogueiraleiloes (R$10/dia, 7 dias)
+
+**Pedido do dono**: impulsionar o Reel de maior audiência orgânica do perfil pessoal
+(@tarcisionogueiraleiloes, "O novo luxo é ninguém saber o que está acontecendo na sua vida!", 5.262
+curtidas) — R$10/dia por 7 dias, CTA "Visitar perfil", pra trazer seguidores.
+
+**Achado 1 — o post original não pode ser anunciado.** `boost_post` E `create_ad` (dois mecanismos
+distintos da API) recusaram o MESMO post (`media_id 17896781682596014`) com o erro genérico "esse post
+não pode ser turbinado" (subcode 2446187) — confirmado 2x que é restrição de CONTEÚDO da Meta nesse
+post específico (não é bug de configuração: outros posts do mesmo perfil, na mesma conta de anúncios,
+já rodaram como anúncio sem problema — ver `TRF-SITE-LEILOES-AGO26` com `REEL-2408-PASSO-A-PASSO`,
+`IG-3108-VAGA`, `IG-0109-MUDONOME`). Não é áudio (dono confirmou: é ele falando, sem trilha).
+
+**Contorno que funcionou:** baixei o vídeo (`media_url` do post) e subi como arquivo NOVO via
+`create_ad_video` (id `1060367439733288`) — um asset de vídeo independente do post original, sem
+carregar a mesma restrição. Anúncio construído em cima desse vídeo novo, não do post.
+
+**Achado 2 — a chamada "Visitar perfil" exige um caminho específico.** Pra objetivo Engajamento +
+otimização `PROFILE_AND_PAGE_ENGAGEMENT`, a Meta só aceita `VISIT_PROFILE`/`VIEW_INSTAGRAM_PROFILE` como
+CTA — mas o parâmetro simplificado `call_to_action_type` do conector (Windsor.ai) tem uma lista fixa
+que NÃO inclui essas duas opções (rejeita antes de chegar na Meta). Contorno: montar o `creative` como
+`object_story_spec` completo (com `call_to_action.type` dentro do JSON livre), que não passa pela
+validação restrita do atalho — funcionou de primeira.
+
+**Estrutura final, ativa:**
+- Campanha `120249473324390420` "Engajamento - Perfil @tarcisionogueiraleiloes" (OUTCOME_ENGAGEMENT)
+- Conjunto `120249473328880420` "Impulso Reel - Visitas ao Perfil" — R$10/dia, Brasil, termina 11/09
+- Anúncio `120249473515260420` "AD-Reel-ONovoLuxo-Impulso" — vídeo novo + CTA Visitar Perfil →
+  `instagram.com/tarcisionogueiraleiloes`
+
+Reversível a qualquer momento: `pause_campaign`/`pause_adset`/`pause_ad` no id acima. Sobrou um conjunto
+órfão de uma tentativa anterior (`120249473503600420`, "Engajamento c/ pagina") — ficou pausado, sem
+anúncio dentro, inofensivo; pode ser ignorado ou removido manualmente no Gerenciador quando o bug de UI
+("Invalid request #1") que a conta estava mostrando se resolver sozinho (confirmado ser bug temporário
+do lado da Meta — conta `ACTIVE`, sem teto de gasto batido, e a API funcionou o tempo todo).
+
+---
+
 ## 📋 SESSÃO 23 · PARTE 5 (04/09) — META × GOOGLE ADS: RESUMO + PAUSADA A CAMPANHA "TRF - SITE" DO META
 
 **Pedido do dono**: resumo de como Meta e Google Ads estão indo, de onde vêm os clientes, e brechas de
