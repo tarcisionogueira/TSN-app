@@ -24,6 +24,27 @@ const ST = {
   label: { fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 4, display: 'block' },
 };
 
+// RASCUNHO local (04/09): antes disto, sair da tela de ajuste/edição sem clicar "Salvar
+// capítulos" perdia TUDO — blocos/capítulos viviam só em state do React, então voltar
+// forçava re-upload do .docx e refazer a divisão inteira do zero (achado do dono
+// testando com um livro real). Persiste em localStorage (é rascunho de trabalho do
+// admin, não dado de cliente — não precisa de servidor) e oferece retomar ao reabrir a
+// mesma tela, em vez de sobrescrever ou descartar em silêncio.
+const chaveRascunho = (ebookId) => `tsn_ebook_rascunho_${ebookId}`;
+
+function lerRascunho(ebookId) {
+  try {
+    const bruto = localStorage.getItem(chaveRascunho(ebookId));
+    return bruto ? JSON.parse(bruto) : null;
+  } catch { return null; }
+}
+function gravarRascunho(ebookId, dados) {
+  try { localStorage.setItem(chaveRascunho(ebookId), JSON.stringify({ ...dados, salvoEm: new Date().toISOString() })); } catch { /* cota cheia */ }
+}
+function limparRascunho(ebookId) {
+  try { localStorage.removeItem(chaveRascunho(ebookId)); } catch { /* noop */ }
+}
+
 function subirDocxOriginal(file, ebookId) {
   const path = `ebooks-docx/${ebookId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.docx`;
   return supabase.storage.from('documentos').upload(path, file, { upsert: false, contentType: file.type || 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' })
@@ -58,9 +79,13 @@ export default function AdminEbookEditor() {
   const [capSelecionado, setCapSelecionado] = useState(0);
   const [salvando, setSalvando] = useState(false);
 
+  const [rascunhoEncontrado, setRascunhoEncontrado] = useState(null); // draft lido, aguardando decisão do admin
+  const [pronto, setPronto] = useState(false); // só depois de resolver o rascunho é que o auto-save pode começar
+
   const carregar = useCallback(async () => {
     setCarregando(true);
     setErroCarga('');
+    setPronto(false);
     const [{ data: e, error: e1 }, { data: caps, error: e2 }] = await Promise.all([
       supabase.from('ebooks_admin').select('id,titulo,tipo_conteudo,docx_storage_path').eq('id', id).single(),
       supabase.from('ebook_capitulos').select('ordem,titulo,conteudo_texto').eq('ebook_id', id).order('ordem'),
@@ -69,6 +94,14 @@ export default function AdminEbookEditor() {
     if (e2) { setErroCarga('Erro ao carregar capítulos: ' + e2.message); setCarregando(false); return; }
     setEbook(e);
     setDocxPath(e?.docx_storage_path || null);
+    const draft = lerRascunho(id);
+    if (draft && (draft.modo === 'ajuste' || draft.modo === 'editor')) {
+      // Não aplica sozinho — pergunta, pra nunca sobrescrever o banco em silêncio nem
+      // descartar o rascunho sem o admin decidir.
+      setRascunhoEncontrado(draft);
+      setCarregando(false);
+      return;
+    }
     if (Array.isArray(caps) && caps.length > 0) {
       setCapitulos(caps.map((c) => ({ ordem: c.ordem, titulo: c.titulo, conteudo_texto: c.conteudo_texto })));
       setModo('editor');
@@ -76,9 +109,38 @@ export default function AdminEbookEditor() {
       setModo('upload');
     }
     setCarregando(false);
+    setPronto(true);
   }, [id]);
 
   useEffect(() => { carregar(); }, [carregar]);
+
+  function continuarRascunho() {
+    const d = rascunhoEncontrado;
+    if (!d) return;
+    setBlocos(Array.isArray(d.blocos) ? d.blocos : []);
+    setAvisosDocx(Array.isArray(d.avisosDocx) ? d.avisosDocx : []);
+    setDocxPath(d.docxPath || null);
+    setCapitulos(Array.isArray(d.capitulos) ? d.capitulos : []);
+    setCapSelecionado(Number.isInteger(d.capSelecionado) ? d.capSelecionado : 0);
+    setModo(d.modo);
+    setRascunhoEncontrado(null);
+    setPronto(true);
+  }
+  function descartarRascunho() {
+    limparRascunho(id);
+    setRascunhoEncontrado(null);
+    carregar();
+  }
+
+  // Auto-save do rascunho — só depois de resolvida a decisão acima (senão sobrescreveria
+  // o rascunho salvo com o state vazio do carregamento inicial, perdendo-o de vez).
+  useEffect(() => {
+    if (!pronto || (modo !== 'ajuste' && modo !== 'editor')) return;
+    const t = setTimeout(() => {
+      gravarRascunho(id, { modo, blocos, avisosDocx, docxPath, capitulos, capSelecionado });
+    }, 500);
+    return () => clearTimeout(t);
+  }, [pronto, id, modo, blocos, avisosDocx, docxPath, capitulos, capSelecionado]);
 
   async function aoEscolherArquivo(file) {
     if (!file) return;
@@ -98,6 +160,7 @@ export default function AdminEbookEditor() {
       setAvisosDocx(avisos);
       setExpandido(null);
       setModo('ajuste');
+      setPronto(true);
       subirDocxOriginal(file, id).then((path) => { if (path) setDocxPath(path); });
     } catch (e) {
       alert('Não consegui ler esse .docx: ' + (e?.message || 'arquivo corrompido ou em formato inesperado.'));
@@ -141,6 +204,7 @@ export default function AdminEbookEditor() {
     });
     setSalvando(false);
     if (error) { alert('Erro ao salvar: ' + error.message); return; }
+    limparRascunho(id); // já está no banco — o rascunho local vira lixo, não recuperação
     alert('Capítulos salvos. Volte à aba eBooks para publicar (Ativar) quando estiver pronto.');
     nav('/admin');
   }
@@ -150,6 +214,26 @@ export default function AdminEbookEditor() {
   }
   if (erroCarga) {
     return <div style={ST.page}><div style={ST.body}><div style={ST.card}><p style={{ color: '#dc2626' }}>{erroCarga}</p><button style={ST.btn('outline')} onClick={() => nav('/admin')}>← Voltar</button></div></div></div>;
+  }
+
+  if (rascunhoEncontrado) {
+    const quando = new Date(rascunhoEncontrado.salvoEm).toLocaleString('pt-BR');
+    const faseLabel = rascunhoEncontrado.modo === 'ajuste' ? 'ajuste de capítulos' : 'edição de texto dos capítulos';
+    return (
+      <div style={ST.page}><div style={ST.body}>
+        <div style={ST.card}>
+          <h3 style={{ marginTop: 0 }}>Encontramos um rascunho não salvo</h3>
+          <p style={{ color: '#64748b', fontSize: 14, lineHeight: 1.6 }}>
+            Você estava na fase de <strong>{faseLabel}</strong> deste eBook, salvo automaticamente em {quando},
+            e ainda não tinha clicado em "Salvar capítulos". Quer continuar de onde parou, ou descartar e recarregar do zero?
+          </p>
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 16 }}>
+            <button style={ST.btn('outline')} onClick={descartarRascunho}>Descartar e recarregar</button>
+            <button style={ST.btn('primary')} onClick={continuarRascunho}>Continuar de onde parei</button>
+          </div>
+        </div>
+      </div></div>
+    );
   }
 
   return (

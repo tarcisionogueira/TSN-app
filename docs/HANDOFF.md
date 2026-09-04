@@ -4,6 +4,28 @@
 
 ---
 
+## 📋 SESSÃO 23 · PARTE 11 (04/09) — EDITOR DE E-BOOK: RASCUNHO LOCAL (evita refazer a divisão de capítulos do zero)
+
+**Achado do dono, testando com o livro real "Lucre Antes de Arrematar" minutos depois do
+deploy da Parte 10**: sair da tela de ajuste/edição de capítulos (mesmo sem querer) e
+voltar forçava re-upload do `.docx` e refazer a divisão inteira — `blocos`/`capitulos`
+viviam só em `state` do React, sem persistência nenhuma até o clique em "Salvar
+capítulos". Achado em produção, em uso real, não em teste sintético.
+
+**Correção**: `AdminEbookEditor.jsx` grava automaticamente (debounce 500ms) o estado da
+fase de ajuste OU de edição em `localStorage` (`tsn_ebook_rascunho_<id>` — é rascunho de
+trabalho do admin, não dado de cliente, não precisa de servidor/schema novo). Ao reabrir
+a tela do mesmo e-book, se houver rascunho não salvo, a tela PERGUNTA antes de agir
+("Continuar de onde parei" / "Descartar e recarregar") — nunca aplica sozinho (evitaria
+sobrescrever o banco em silêncio) nem descarta sem avisar (era exatamente a queixa).
+Rascunho é limpo automaticamente assim que "Salvar capítulos" completa com sucesso (a
+partir daí o banco é que manda).
+
+**Guard-rail explícito no código**: o auto-save só liga depois que a decisão
+continuar/descartar é resolvida (`pronto=true`) — sem isso, o efeito de auto-save
+rodaria com o state vazio do carregamento inicial e sobrescreveria o rascunho salvo
+ANTES do admin poder decidir, perdendo-o de vez.
+
 ## 📋 SESSÃO 23 · PARTE 10 (04/09) — EDITOR DE E-BOOK ESTILO KDP (docx → capítulos → leitor responsivo)
 
 **Pedido do dono**: hoje a loja de e-book só aceita PDF pronto, sem editor. Ele quer subir
