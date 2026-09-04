@@ -4,6 +4,31 @@
 
 ---
 
+## 📋 SESSÃO 23 · PARTE 8 (04/09) — ORÇAMENTO DIÁRIO DO GOOGLE ADS: R$23,79 (média real) → R$30/dia
+
+**Pedido do dono**: saber se subir a verba diária mudaria as projeções, antes de decidir.
+
+**Evidência usada (não achismo):** campo `search_budget_lost_impression_share` da campanha
+`24089433745` ("Pesquisa — Leilão de Imóveis (BR)", conta `475-979-5747`), 14 dias — é o
+indicador que a própria Google usa pra dizer "% de leilões elegíveis perdidos por falta de
+orçamento" (diferente de perda por lance/qualidade, `search_rank_lost_impression_share`).
+Média do período: **~53% perdido por orçamento** (pico de 90% em 25/08, mínimo de 6% em
+26/08 — dia de maior gasto real, R$43,81). Ou seja, mais da metade do tempo a campanha
+tinha demanda elegível e não conseguiu competir só por falta de verba — sinal direto de
+que aumentar o teto deveria trazer mais cliques reais, não só mais gasto.
+
+**Ressalva registrada ao dono:** existe um SEGUNDO teto que dinheiro não resolve —
+`search_impression_share` (fatia do total de buscas elegíveis que de fato aparecemos)
+ficou entre 10-24% o período inteiro, mesmo nos dias com pouca perda por orçamento. Subir
+pra R$30/dia deve recuperar boa parte da perda por orçamento (maioria dos dias), mas não
+destrava o teto de posição/lance — não é a alavanca pra isso.
+
+**Ação (confirmada pelo dono):** `set_campaign_budget` via Windsor.ai — orçamento diário da
+campanha `24089433745` alterado de ~R$23,79/dia (média real observada) para **R$30,00/dia**
+(30.000.000 micros). Confirmado pela API: "Campaign 24089433745 daily budget set to
+30000000 micros successfully." Reversível a qualquer momento com a mesma ação
+(`set_campaign_budget`, `budget_type: daily`, outro valor em micros).
+
 ## 📋 SESSÃO 23 · PARTE 7 (04/09) — CAMPANHA DA PARTE 6 PAUSADA: DONO CONSEGUIU TURBINAR PELO APP
 
 **O que aconteceu:** logo depois da Parte 6 ir ao ar, o dono conseguiu impulsionar o MESMO Reel
