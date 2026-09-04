@@ -4,7 +4,27 @@
 
 ---
 
-## 📋 SESSÃO 23 · PARTE 6 (04/09) — CAMPANHA DE ENGAJAMENTO NO AR PARA @tarcisionogueiraleiloes (R$10/dia, 7 dias)
+## 📋 SESSÃO 23 · PARTE 7 (04/09) — CAMPANHA DA PARTE 6 PAUSADA: DONO CONSEGUIU TURBINAR PELO APP
+
+**O que aconteceu:** logo depois da Parte 6 ir ao ar, o dono conseguiu impulsionar o MESMO Reel
+direto pelo botão "Turbinar" do app do Instagram/Meta — o caminho nativo, sem o contorno de
+re-upload de vídeo que a API exigiu. Perguntei (confirmado pelo dono) que era o mesmo Reel e o
+mesmo objetivo (crescer seguidores) — rodar as duas juntas dobraria o gasto pelo mesmo público.
+
+**Ação:** pausei os 3 níveis da campanha construída via API/Windsor nesta sessão —
+`pause_campaign`/`pause_adset`/`pause_ad` em `120249473324390420` / `120249473328880420` /
+`120249473515260420` — todos confirmados pausados. Gasto foi mínimo/perto de zero (pausada no
+mesmo dia em que entrou no ar). A campanha feita pelo dono via app continua ativa normalmente,
+fora do escopo desta sessão (não foi criada por API, não tenho os IDs dela).
+
+**Nota para investigar, se repetir:** o app conseguiu turbinar o post ORIGINAL onde a API (dois
+mecanismos, `boost_post` e `create_ad`) recusou com erro de conteúdo (subcode 2446187, ver Parte
+6). Isso sugere que a restrição pode não ser bloqueio de conteúdo de verdade, e sim alguma
+diferença entre como o app monta o anúncio nativamente vs. como a API/Windsor monta (ex.: o app
+pode usar um objetivo/otimização diferente por trás). Não investigado a fundo — não é bug do
+nosso código, é comportamento da API da Meta.
+
+## 📋 SESSÃO 23 · PARTE 6 (04/09) — CAMPANHA DE ENGAJAMENTO NO AR PARA @tarcisionogueiraleiloes (R$10/dia, 7 dias) — PAUSADA NA PARTE 7
 
 **Pedido do dono**: impulsionar o Reel de maior audiência orgânica do perfil pessoal
 (@tarcisionogueiraleiloes, "O novo luxo é ninguém saber o que está acontecendo na sua vida!", 5.262
