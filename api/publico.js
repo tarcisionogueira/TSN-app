@@ -663,17 +663,21 @@ function caixaConviteLive(prox, estado) {
       </div>
     </div>`;
   }
-  const semanal = prox.recorrencia === 'semanal';
   // O TÍTULO NÃO É `prox.titulo` (04/09, pedido do dono). `eventos_live.titulo` foi escrito em
   // primeira pessoa ("Como eu encontro e avalio...") para a landing dedicada, onde quem fala é
   // o apresentador (`_apresentador*`, bio, foto). Aqui quem fala é a BidPro Brasil — um "eu"
   // solto, sem rosto ao lado, soa como a marca falando na primeira pessoa. Título fixo, na voz
-  // da marca; o nome do especialista mora na apresentação completa (link abaixo).
+  // da marca (infinitivo, sem "eu"); o nome do especialista mora na apresentação completa
+  // (link abaixo). Revisado de novo em 04/09 (2ª rodada): "Avaliação... feita por especialista"
+  // ainda lia como o mesmo tom de antes — trocado para o infinitivo que o dono sugeriu.
   const linkAula = `${SITE}/#/live/${esc(prox.slug || 'leilao-ao-vivo')}`;
   return `<div class="convite-live" id="convite-live">
     <div class="convite-live-tag">🔴 Ao vivo e gratuito</div>
-    <div class="convite-live-t">Avaliação de imóvel de leilão ao vivo, feita por especialista</div>
-    <div class="convite-live-s">${esc(quando)} (horário de Brasília). ${semanal ? 'Toda semana, um' : 'Um'} especialista avalia um imóvel de leilão na prática, ao vivo, e responde perguntas na hora. Inscreva-se e ganhe também uma conta grátis na plataforma.</div>
+    <div class="convite-live-t">Como encontrar e avaliar um imóvel de leilão, ao vivo, com um especialista</div>
+    <!-- Sem a recorrência ("toda semana") de propósito (pedido do dono, 2ª rodada): citar a
+         data específica junto com "toda semana" derruba a urgência — soa como algo que dá
+         para pegar quando quiser. Cada edição fica só com a SUA data, como um evento único. -->
+    <div class="convite-live-s">Nesta ${esc(quando)} (horário de Brasília), um especialista avalia um imóvel de leilão na prática, ao vivo, e responde perguntas na hora. Inscreva-se e ganhe também uma conta grátis na plataforma.</div>
     ${estado === 'erro' ? `<div class="convite-live-erro">Não conseguimos concluir sua inscrição. Confira nome, WhatsApp e e-mail e tente de novo.</div>` : ''}
     <form method="POST" action="${SITE}/api/live-inscrever">
       <input type="hidden" name="slug" value="leilao-ao-vivo"/>

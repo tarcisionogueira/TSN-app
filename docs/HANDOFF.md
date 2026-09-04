@@ -4,6 +4,27 @@
 
 ---
 
+## 📋 SESSÃO 22 · PARTE 18 (04/09) — CONVITE DA LIVE: 2ª RODADA (título ainda soava "eu"; recorrência tirava a urgência)
+
+Dono revisou de novo, direto no celular, depois do deploy da PARTE 17.
+
+1. **Título ainda incomodava** — mesmo já sem `prox.titulo`, "Avaliação de imóvel de leilão ao
+   vivo, feita por especialista" ainda lia perto demais do tom "eu avalio" original (na visão
+   do dono; o print que ele mandou, por sinal, ainda estava com o CDN/celular servindo a versão
+   ANTERIOR à PARTE 17 — confirmei o servidor já respondendo o texto certo via
+   `mcp__Vercel__web_fetch_vercel_url` antes de mexer de novo, para não perseguir cache). Pedido
+   dele: framing ativo/infinitivo — "avaliar um imóvel", "como encontrar", "ir avaliar".
+   Título final: **"Como encontrar e avaliar um imóvel de leilão, ao vivo, com um especialista"**
+   — reaproveita a estrutura do `eventos_live.titulo` original, só tirando o "eu".
+2. **A recorrência matava a urgência**: o subtítulo citava a data específica (09/09) e, na
+   frase seguinte, "toda semana" — dizer as duas coisas juntas sinaliza "pode assistir quando
+   quiser", o oposto de escassez. Removida a menção a recorrência do texto visível; cada
+   edição aparece só com a SUA data ("Nesta quarta-feira, 09 de setembro às 19:00...").
+
+`npm run build` passou. Sem migração.
+
+---
+
 ## 📋 SESSÃO 22 · PARTE 17 (04/09) — CONVITE DA LIVE: TÍTULO NA VOZ DA MARCA, SEM TRAVESSÃO, COM LINK PARA A LANDING COMPLETA
 
 **Pedido do dono**, revisando o widget da PARTE 15 num celular: três ajustes.
