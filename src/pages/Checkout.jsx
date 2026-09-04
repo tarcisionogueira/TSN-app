@@ -1688,6 +1688,7 @@ export default function Checkout() {
               assinatura
               onPago={() => confirmarPagamento()}
               onCancelar={() => setShowPagamento(false)}
+              onGatewayBloqueado={pagarAsaas}
             />
           ) : (
             <>

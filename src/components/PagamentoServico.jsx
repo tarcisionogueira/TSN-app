@@ -313,7 +313,7 @@ function PagamentoPIX({ servico, onConfirmado, onVoltar }) {
 // assinatura=true → cria uma assinatura recorrente TRANSPARENTE (preapproval do MP)
 // via /api/mp; sem parcelas (cobrança mensal do valor cheio). Caso contrário, é o
 // pagamento único via /api/mp-checkout (parcelável).
-function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false }) {
+function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false, onGatewayBloqueado = null }) {
   const { user } = useAuth();
   const [parcelas, setParcelas] = useState(1);
   const [form, setForm] = useState({ numero: '', nome: '', validade: '', cvv: '' });
@@ -341,10 +341,18 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false }
     setProcessando(true);
     try {
       if (!window.MercadoPago) {
+        // Mesmo padrao de src/pages/Checkout.jsx (assinarComCadastro, 18/08): sdk.mercadopago.com
+        // e um dos hosts que bloqueador de anuncio/extensao de privacidade mais barra, e o Event
+        // bruto do onerror nao tem .message - sem isso o catch caia no generico "Erro ao
+        // processar pagamento" sem dizer o motivo nem dar saida (achado 04/09, ver catch abaixo).
         await new Promise((resolve, reject) => {
           const s = document.createElement('script');
           s.src = 'https://sdk.mercadopago.com/js/v2';
-          s.onload = resolve; s.onerror = reject;
+          s.onload = resolve;
+          s.onerror = () => reject(Object.assign(
+            new Error('Nao conseguimos carregar o componente de cartao (ele costuma ser barrado por bloqueador de anuncios ou extensao de privacidade).'),
+            { sdkBloqueado: true },
+          ));
           document.head.appendChild(s);
         });
       }
@@ -436,7 +444,19 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false }
       }
       setErro('Pagamento não aprovado. Verifique os dados ou tente outro cartão.');
     } catch (e) {
-      setErro(e.message || 'Erro ao processar pagamento.');
+      // Achado 04/09: mesma classe de falha do assinarComCadastro (Checkout.jsx) - SDK barrado
+      // ou createCardToken bloqueado (adblock/privacidade) -, so que aqui a assinatura nao tem
+      // Pix como alternativa (so cartao) nem fallback automatico. Um usuario real (user_id
+      // 60aaf3fc...) tentou de 06/08 a 03/09 e sempre recebeu "Failed to fetch" cru, sem saber
+      // o motivo nem ter saida. Detecta o mesmo padrao e, havendo onGatewayBloqueado (so passado
+      // no fluxo de assinatura por Checkout.jsx), troca para Asaas - seguro porque nada foi
+      // cobrado ainda neste ponto (sem risco de duplo-mandato).
+      const m = String(e?.message || '');
+      const bloqueado = e?.sdkBloqueado || /failed to fetch|load failed|networkerror|net::err|fetch/i.test(m);
+      if (bloqueado && assinatura && onGatewayBloqueado) { onGatewayBloqueado(); return; }
+      setErro(bloqueado
+        ? 'Não conseguimos processar o cartão (ele costuma ser barrado por bloqueador de anúncios ou extensão de privacidade). Desative para este site e tente de novo.'
+        : (m || 'Erro ao processar pagamento.'));
     } finally {
       setProcessando(false);
     }
@@ -526,7 +546,7 @@ function PagamentoCartao({ servico, onConfirmado, onVoltar, assinatura = false }
 /* ── Componente principal ── */
 // assinatura=true → somente cartão (Investidor Pro, Leilão Club recorrente)
 // assinatura=false (padrão) → escolha entre PIX (sem taxa) e cartão
-export default function PagamentoServico({ servico, onPago, onCancelar, assinatura = false, soCartao = false, soPix = false }) {
+export default function PagamentoServico({ servico, onPago, onCancelar, assinatura = false, soCartao = false, soPix = false, onGatewayBloqueado = null }) {
   // soCartao: fluxos cujo pagamento PRECISA carregar metadata (ex.: recarga de crédito,
   // confirmada por metadata.proposito) — só cartão.
   // soPix: fluxo que é PIX por definição (ex.: Investidor Pro ANUIDADE à vista — cartão é a
@@ -567,6 +587,7 @@ export default function PagamentoServico({ servico, onPago, onCancelar, assinatu
           assinatura={assinatura}
           onConfirmado={onPago}
           onVoltar={(assinatura || soCartao) ? onCancelar : () => setMetodo(null)}
+          onGatewayBloqueado={onGatewayBloqueado}
         />
       )}
     </div>

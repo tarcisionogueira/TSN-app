@@ -94,6 +94,42 @@ banco + commitada).
 
 ---
 
+## 📋 SESSÃO 23 · PARTE 3 (04/09) — ASSINATURA TOP2 SEM SAÍDA QUANDO O CARTÃO É BARRADO (1 FIX); ERRO DE MAPA JÁ ESTAVA CORRIGIDO
+
+**🔧 `PagamentoServico.jsx` (assinatura) tinha o MESMO "beco sem saída" que `assinarComCadastro` já
+tinha corrigido — 1 fix aplicado.** Investigando "Failed to fetch" em `/checkout` (erros_cliente):
+não são 5 falhas de ontem, é **1 usuário real (user_id `60aaf3fc...`) tentando assinar o Top2 mensal
+repetidamente de 06/08 a 03/09 — quase um mês** — sempre com o mesmo erro cru, sem saber o motivo.
+Causa raiz: existem DOIS lugares que carregam o SDK do Mercado Pago e tokenizam cartão — o de visitante
+novo (`assinarComCadastro`, Checkout.jsx) ganhou em 18/08 e 20/08 mensagem clara sobre bloqueador de
+anúncio + fallback automático para Asaas quando `sdk.mercadopago.com` ou o `createCardToken` é barrado.
+O de **cliente logado assinando/mudando de plano** (`PagamentoCartao`, dentro de
+`src/components/PagamentoServico.jsx`, usado por `<PagamentoServico assinatura .../>` no Top2 mensal)
+**nunca recebeu o mesmo tratamento** — e, diferente do pagamento avulso (que tem Pix como alternativa),
+assinatura só oferece cartão (`Somente cartão de crédito` na tela). Ou seja, pra esse cliente logado
+não havia NENHUMA saída quando o cartão é bloqueado.
+
+Corrigido: `PagamentoCartao` ganhou o mesmo `sdkBloqueado`/mensagem clara no `onerror`, e o `catch`
+agora detecta o mesmo padrão (`failed to fetch|load failed|networkerror|net::err|fetch`) e, só quando
+`assinatura` é true e o pai passa `onGatewayBloqueado`, troca para Asaas — **reaproveitando `pagarAsaas()`
+que já existe em Checkout.jsx** (mesma função que o fluxo por link já usa), em vez de duplicar lógica de
+gateway pela 3ª vez. Seguro: nada é cobrado até esse ponto (sem risco de duplo-mandato), e o `linkPagamento`
+que `pagarAsaas` seta já tem prioridade no render (`linkPagamento ? ... : showPagamento && ...`), então a
+troca de tela é automática. Fio conectado só no ponto de uso do Top2 (`onGatewayBloqueado={pagarAsaas}`);
+assessoria/Clube (que já têm Pix como alternativa) não foram tocados.
+
+**🗺️ Erro de mapa Leaflet (`_leaflet_pos`) em `/imovel/:id` — JÁ estava corrigido, achado de sessão
+anterior.** O `MiniMapa` (ImovelDetalhe.jsx) já tem `zoomAnimation: false` no construtor do mapa +
+limpeza defensiva (`_animatingZoom = false`, `stop()`, `remove()`) — comentário datado descreve
+exatamente esta causa (o `setTimeout(_onZoomTransitionEnd, 250)` que o próprio Leaflet agenda e nunca
+cancela, disparando depois do componente desmontar ao trocar de imóvel) e cita as mesmas 4 ocorrências
+de 28/08-02/09 que apareceram em `erros_cliente`. Nada a mudar — as linhas em `erros_cliente` são
+anteriores/contemporâneas ao fix já em produção.
+
+`npm run build` passou. Sem migração (mudança só em `src/`).
+
+---
+
 ## 📋 SESSÃO 22 · PARTE 20 (04/09, encerramento) — RESUMO DO DIA E PENDÊNCIAS PARA A PRÓXIMA SESSÃO
 
 **Resumo do que foi feito hoje** (detalhe completo em cada PARTE abaixo, 15 a 19):
