@@ -4,6 +4,46 @@
 
 ---
 
+## 📋 SESSÃO 22 · PARTE 19 (04/09) — POR QUE O CONTADOR DE /leiloes CAIU DE ~32K PARA ~26K (real, e não é bug — mas achou um buraco de verdade)
+
+**Pergunta do dono**: o contador de imóveis no topo de `/leiloes` está oscilando muito (32.000
+→ 26.000). Investigação completa, com números reais:
+
+1. **O contador está certo.** `count(*) from imoveis_leilao where ativo=true` = 26.635, batendo
+   com o que a página mostra. Não é bug de exibição.
+2. **A queda é real e concentrada quase toda na CEF** (Caixa) — de longe a maior fonte
+   (20.062 de 26.635 lotes ativos, 75% do acervo inteiro). Histórico de `fonte_metricas_hist`:
+   CEF ficou estável em ~23.300-23.850 de 22/08 a 02/09, e caiu para ~20.088 em 09/03.
+3. **Causa raiz**: o cron `limpar-imoveis-stale-cron` (rota `desativar_imoveis_cef_vencidos`,
+   05h UTC) foi adicionado ao repositório em **31/08** — antes disso não existia varredura
+   confiável por-estado para a CEF. Ele desativou 7.274 lotes nos últimos 3 dias; a maioria
+   (5.805) foi **criada em meados de junho** e nunca mais teve `atualizado_em` tocado — ou
+   seja, sumiram do CSV da Caixa há cerca de 90 dias, e só agora um cron recém-criado os
+   alcançou. **Confirmado que não é falha de coleta**: `fonte_saude` mostra a CEF rodando
+   `status: 'ok'` todo dia nesse período, com total estável/crescente (25.687→26.981) — o
+   scraper está encontrando o CSV normalmente, só que esses 7.274 fonte_id específicos não
+   estão mais nele. Restam só 378 lotes "candidatos" à próxima rodada (contra os 7.274 já
+   processados) — não deve haver outro tombo do mesmo tamanho amanhã.
+4. **O que era invisível até agora, e ficou de graça no meio da investigação**: as 7.274
+   desativações da CEF saíram todas com `suprimido_motivo` NULO — o mesmo buraco que a
+   correção de 12/08 fechou para o scraper dos leiloeiros (`scraper-puppeteer.mjs`), mas CEF
+   é uma fonte separada (CSV, não Puppeteer) com sua própria RPC de limpeza
+   (`desativar_imoveis_cef_vencidos`), que ficou de fora daquela correção. Uma TERCEIRA
+   varredura (`desativar_imoveis_leiloeiro_stale`, a mais nova, com piso aprendido por fonte)
+   tinha o mesmo buraco.
+
+**Corrigido** (`cef_leiloeiro_stale_grava_suprimido_motivo.sql`): as três funções passam a
+gravar `suprimido_motivo='sumiu_da_fonte'` ao desativar; `reativar_imoveis_cef` (a única porta
+de reativação da CEF, já que o upsert do `scraper.js` não toca `ativo` de propósito) passa a
+limpar o motivo de volta para `null`. Grants conferidos: as três mantiveram a assinatura
+idêntica (mesmos parâmetros), então `CREATE OR REPLACE` não resetou permissão nenhuma — sem o
+footgun de overload que pegou `meu_nivel`/`garantia_7d_avaliar` antes nesta sessão (aqueles
+ADICIONARAM parâmetro; aqui não). Efeito prático: da próxima vez que o acervo oscilar,
+`select suprimido_motivo, count(*) from imoveis_leilao where fonte='CEF' and not ativo group by 1;`
+responde em segundos, em vez de precisar reconstruir esta investigação inteira.
+
+---
+
 ## 📋 SESSÃO 22 · PARTE 18 (04/09) — CONVITE DA LIVE: 2ª RODADA (título ainda soava "eu"; recorrência tirava a urgência)
 
 Dono revisou de novo, direto no celular, depois do deploy da PARTE 17.
