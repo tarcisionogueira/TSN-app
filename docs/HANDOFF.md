@@ -4,6 +4,51 @@
 
 ---
 
+## 📋 SESSÃO 22 · PARTE 20 (04/09, encerramento) — RESUMO DO DIA E PENDÊNCIAS PARA A PRÓXIMA SESSÃO
+
+**Resumo do que foi feito hoje** (detalhe completo em cada PARTE abaixo, 15 a 19):
+
+- **PARTE 15** — Estruturado o convite para a aula ao vivo dentro do acervo aberto (`/leiloes`,
+  índice nacional): bloco fixo abaixo do hero, com a próxima edição via `live_proxima`, e um
+  `<form>` puro (nome+WhatsApp+e-mail) direto para `api/live-inscrever.js`, que ganhou um
+  branch por `Content-Type` para responder com redirect em vez de JSON quando vem de formulário
+  puro — sem duplicar nenhuma validação/lógica de negócio. Objetivo: o mesmo clique pago do
+  Google Ads (51% do tráfego) agora converte em inscrição na aula E conta na plataforma.
+- **PARTE 16** — A lista de 60 cidades saiu do corpo visível (era recurso de SEO, não de
+  navegação) e foi para o rodapé, discreta — sem perder o atalho de indexação.
+- **PARTE 17 e 18** — Duas rodadas de revisão do dono, no celular: título trocado de primeira
+  pessoa ("como eu avalio") para infinitivo na voz da marca ("Como encontrar e avaliar... com
+  um especialista"), travessão removido do texto de apoio, recorrência ("toda semana") tirada
+  para não derrubar a sensação de escassez, e um link discreto para a landing completa
+  adicionado. Nas duas rodadas o print do dono estava mostrando uma versão em cache — vale
+  lembrar: **pedir refresh forçado antes de reportar "não mudou"** economiza uma rodada.
+- **PARTE 19** — Investigado por que o contador de `/leiloes` caiu de ~32k para ~26k: real,
+  concentrado na CEF (75% do acervo), causado por um cron de limpeza novo (31/08) alcançando um
+  backlog de ~90 dias de lotes que já tinham sumido do CSV da Caixa. Não é bug de coleta. De
+  bônus, fechado um buraco de `suprimido_motivo` (nulo) em duas RPCs de limpeza que tinham
+  ficado de fora da correção de 12/08.
+
+**Pendências para a próxima sessão** (nesta ordem de prioridade):
+
+1. **🔴 Reunião com o Ralf (amanhã)** — repassar tela a tela as campanhas do Meta Ads para
+   entender os números e decidir o que fazer com a campanha `CONV - AULA 02SET - INSCRICAO`
+   (campaign_id `120249379691430420`), que está **PAUSADA** desde antes desta sessão. Nenhuma
+   ação foi tomada nela — dono pediu explicitamente para adiar até depois dessa conversa. Ao
+   retomar, perguntar o que saiu da reunião antes de sugerir qualquer mudança na campanha.
+2. **Continuar a revisão tela a tela de `/leiloes`** — paramos logo depois do widget de convite
+   e da lista de cidades no rodapé (PARTE 15/16). Faltam: a seção "Escolha o estado" (grid de
+   UF), a faixa "Como funciona a BidPro Brasil" e o rodapé. Pedir o print da próxima tela para
+   retomar exatamente de onde parou — o dono estava indo seção por seção, de cima para baixo.
+3. **Decisão em aberto, não urgente**: se o widget de convite (Nome+WhatsApp+E-mail) deve se
+   estender às páginas de UF/cidade também, ou ficar só no índice nacional — adiada até dar para
+   medir o volume real de inscrições com `origem=acervo_aberto_leiloes` (alguns dias de dado).
+4. **Conferir se o acervo da CEF estabilizou**: restam ~378 lotes "candidatos" à próxima
+   limpeza (bem menor que os 7.274 já processados em 03-04/09) — não deveria haver outro tombo
+   do mesmo tamanho, mas vale um `select count(*) from imoveis_leilao where fonte='CEF' and ativo=true;`
+   de conferência no início da próxima sessão.
+
+---
+
 ## 📋 SESSÃO 22 · PARTE 19 (04/09) — POR QUE O CONTADOR DE /leiloes CAIU DE ~32K PARA ~26K (real, e não é bug — mas achou um buraco de verdade)
 
 **Pergunta do dono**: o contador de imóveis no topo de `/leiloes` está oscilando muito (32.000
