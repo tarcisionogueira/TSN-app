@@ -4,6 +4,30 @@
 
 ---
 
+## 📋 SESSÃO 22 · PARTE 16 (04/09) — LISTA DE CIDADES SAI DO CORPO DE /leiloes, VAI PARA O RODAPÉ
+
+**Pedido do dono**, revisando a tela de `/leiloes` (a mesma sessão da PARTE 15): a seção
+"Cidades com mais imóveis em leilão" (grade de 60 cidades, abaixo da lista de estados) não
+ajuda o visitante — ele já tem dois caminhos melhores: escolher o estado, ou digitar a cidade
+na busca do topo. Antes de remover, expliquei o contexto que o código já registrava: esse
+bloco foi criado em 30/08 como recurso de **SEO puro** (profundidade de rastreamento — as 60
+cidades de maior demanda ficam a 1 clique da home em vez de 2, atrás de `/leiloes/{uf}`).
+Perguntado como proceder, o dono escolheu **remover da tela e preservar o link no rodapé**
+(a opção que mantém o benefício de indexação sem competir visualmente).
+
+**O que mudou** (`api/publico.js`):
+- `pagina()` ganhou o parâmetro `rodapeCidades` (default vazio), renderizado dentro do
+  `<footer>` compartilhado — só `paginaBrasil()` o preenche; as demais páginas não mudam.
+- O bloco de cidades some do `corpo` de `paginaBrasil()`. Os MESMOS 60 links (mesma consulta,
+  `acervo_cidades_top`) agora saem como uma linha discreta no rodapé (`.rodape-cidades`,
+  12px, cor `var(--cinza)`), ainda como `<a>` reais — o Google continua encontrando essas
+  páginas de cidade em 1 clique; só o visitante deixa de ver a grade.
+
+**Sem migração, sem mudança de rota** — é só onde o mesmo HTML é impresso. `npm run build`
+passou (lint + sintaxe + padrões perigosos).
+
+---
+
 ## 📋 SESSÃO 22 · PARTE 15 (04/09) — CONVITE PARA A AULA AO VIVO DENTRO DO ACERVO ABERTO (/leiloes)
 
 **Pedido do dono**, depois da análise de tráfego de 03/09 (Raio-X do Tráfego): a campanha de

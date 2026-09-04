@@ -90,7 +90,7 @@ async function rpc(nome, corpo = {}) {
 // ── Casca HTML. Uma só, para todas as páginas ────────────────────────────────
 // Sem framework e sem JS de aplicação: a página tem que estar PRONTA no HTML que o
 // servidor devolve. Se depender de JS para aparecer, volta ao problema de origem.
-function pagina({ titulo, desc, canonical, corpo, jsonld, indexar = true, migalha = [], hero = '', imovelId = '' }) {
+function pagina({ titulo, desc, canonical, corpo, jsonld, indexar = true, migalha = [], hero = '', imovelId = '', rodapeCidades = '' }) {
   // O LOTE VIAJA NO CABEÇALHO (29/08). Os botões do topo aparecem em TODA página pública,
   // inclusive na do lote, e iam para `/#/login?modo=cadastro` sem o imóvel — enquanto o CTA
   // do corpo já levava `&imovel=<id>`. Quem estava olhando um apartamento e clicava no botão
@@ -304,6 +304,15 @@ h2{font-size:20px;font-weight:800;margin:32px 0 12px}
 .trava .obs{font-size:12.5px;color:var(--cinza);margin:12px 0 0}
 footer{border-top:1px solid var(--linha);padding:26px 20px;color:var(--cinza);font-size:12.5px;background:#fff}
 footer .in{max-width:1080px;margin:0 auto}
+/* Cidades de maior acervo (04/09, pedido do dono): a lista deixou de aparecer no corpo — o
+   visitante já tem os dois caminhos que ele descreveu (escolher o estado, ou digitar a
+   cidade na busca do topo). Os MESMOS links seguem existindo, discretos, aqui no rodapé:
+   é o que preserva o motivo original do bloco (30/08) — profundidade de rastreamento para o
+   Google chegar às páginas de cidade em 1 clique — sem competir visualmente com a tela. */
+.rodape-cidades{margin:14px 0 0;line-height:1.9}
+.rodape-cidades .rot{color:#94a3b8}
+.rodape-cidades a{color:var(--cinza);white-space:nowrap}
+.rodape-cidades a:hover{color:var(--azul)}
 /* O app é claro em toda tela; a página pública seguia o tema do sistema e ficava escura para
    metade das pessoas — duas caras para a mesma marca. Mantém-se clara, como o resto. */
 /* ── URGÊNCIA: contagem regressiva. Preenchida por um script mínimo no rodapé, para não ser
@@ -434,6 +443,7 @@ ${corpo}
   <p><strong>BidPro Brasil</strong> — leilões de imóveis com análise de viabilidade, parecer jurídico e assessoria para arrematar com segurança.
   Também escrito como <em>Bid Pro Brasil</em>.</p>
   <p><a href="${SITE}/leiloes">Imóveis em leilão por estado</a> · <a href="${SITE}/#/planos">Planos</a> · <a href="${SITE}/#/termos">Termos</a> · <a href="${SITE}/#/privacidade">Privacidade</a></p>
+  ${rodapeCidades}
 </div></footer>
 <!-- URGÊNCIA: preenche os selos de contagem regressiva (.prazo-badge[data-prazo]) no cliente.
      Fica fora do HTML servido de propósito (o cache da borda é de hora, a contagem é de dia);
@@ -729,6 +739,10 @@ async function paginaBrasil(estadoConvite = null) {
     desc: `${total.toLocaleString('pt-BR')} imóveis em leilão judicial e extrajudicial em ${comLote} estados. Veja lance mínimo, avaliação e desconto — e analise a viabilidade antes de arrematar.`,
     canonical: `${SITE}/leiloes`,
     migalha: [{ nome: 'Início', url: `${SITE}/` }, { nome: 'Imóveis em leilão' }],
+    // Mesmos links de sempre (as 60 cidades de maior acervo), só que fora do corpo visível —
+    // ver o comentário da classe .rodape-cidades: preserva o atalho de rastreamento do Google
+    // sem competir com o estado/busca, que são os dois caminhos que a pessoa de fato usa.
+    rodapeCidades: topCidades.length ? `<p class="rodape-cidades"><span class="rot">Cidades com mais imóveis em leilão:</span> ${topCidades.map((c) => `<a href="${SITE}/leiloes/${String(c.uf).toLowerCase()}/${esc(c.cidade_norm)}">${esc(c.cidade)}/${esc(c.uf)}</a>`).join(' · ')}</p>` : '',
     hero: `<h1>Imóveis em <span class="destaque">leilão</span> no Brasil</h1>
       <p class="sub">${total.toLocaleString('pt-BR')} imóveis de leilão judicial e extrajudicial acompanhados hoje, em ${comLote} ${comLote === 1 ? 'estado' : 'estados'}. Comece pela sua cidade.</p>
       ${caixaBuscaHero('', 'Não sabe o nome exato? Escolha o estado logo abaixo.')}`,
@@ -737,9 +751,6 @@ async function paginaBrasil(estadoConvite = null) {
       <ul class="ufs">${ufs.map(([uf, n]) => (n
         ? `<li><a href="${SITE}/leiloes/${uf.toLowerCase()}"><span>${esc(UF_NOME[uf])}</span><span class="n">${n.toLocaleString('pt-BR')}</span></a></li>`
         : `<li class="vazio"><span>${esc(UF_NOME[uf])}</span><span class="n0">sem lote hoje</span></li>`)).join('')}</ul>
-      ${topCidades.length ? `<h2>Cidades com mais imóveis em leilão</h2>
-      <p class="sub">As ${topCidades.length} cidades com maior acervo hoje. Para as demais, escolha o estado acima.</p>
-      <ul class="ufs">${topCidades.map((c) => `<li><a href="${SITE}/leiloes/${String(c.uf).toLowerCase()}/${esc(c.cidade_norm)}"><span>${esc(c.cidade)}/${esc(c.uf)}</span><span class="n">${Number(c.total).toLocaleString('pt-BR')}</span></a></li>`).join('')}</ul>` : ''}
       <div class="faixa">
       <h2>Como funciona a BidPro Brasil</h2>
       <p class="sub">Reunimos os lotes dos leiloeiros e da Caixa num só lugar e entregamos, para cada imóvel, uma análise de mercado, um parecer jurídico e o cálculo de viabilidade do arremate — o que ninguém consegue fazer sozinho antes de dar um lance.
