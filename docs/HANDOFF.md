@@ -40,6 +40,60 @@ Sem mudança de código nesta sessão — investigação + esta entrada de docum
 
 ---
 
+## 📋 SESSÃO 23 · PARTE 2 (04/09) — OS 9 ALERTAS DE `qa_invariantes()` INVESTIGADOS UM A UM; 1 FIX APLICADO
+
+Pedido do dono: retomar as pendências do ritual, começando pela de maior complexidade. Investigados os
+9 alertas que `qa_invariantes()` mostrava (fora `radar_editais_sem_pull`, já fechado na PARTE 1).
+
+**🔧 `qa_invariantes_lenta` (7075ms, teto 5000) — 1 fix aplicado, mas NÃO totalmente resolvido.**
+`qa_invariantes_execucao` mostrava 09-01 e 09-02 com `ok=false` a 8176/8202ms — **já estourou o teto de
+8s do PostgREST 2x esta semana**, não é só "lento", é risco real de queda do painel. Achado: as CTEs
+`vias_ativas`/`coord_multivia` (calculam `via_normalizada(endereco)` para TODO imóvel ativo com lat/long)
+não são referenciadas por NENHUM dos ~50 invariantes da lista — computação morta, mesmo padrão do
+`pino_generico_como_rua` (que já foi migrado para cache externo por ser caro demais ao vivo, mas essas
+duas CTEs ficaram para trás). Removidas via `qa_invariantes_remove_ctes_mortas_vias_ativas.sql` (aplicada
++ commitada). Medido antes/depois: **~8,6s → ~7,4s** (real, mas modesto). Perfilei 9 sub-checks
+individualmente depois (rls_escreve_sem_ler 57ms, area_truncada_no_milhar 528ms, nome_fontes_divergentes
+5ms, anexo_de_espelho_purgado 33ms, editais_cruzamento_cego 2,7ms, job_analise_sem_motor +
+caso_sem_analise_iniciada 140ms, canal_sem_conversao_apurada 2,9ms, cadeia analises_datadas 43ms,
+valor_diverge_do_titulo 79ms) — **nenhum isolado passa de ~530ms**. Conclusão: são **~50 checks pequenos
+somando ~7s**, não um gargalo único: não dá para "consertar de vez" com mais um patch pontual sem
+perfilar o resto (~40 checks não testados) ou parar de computar tudo ao vivo a cada chamada. Ainda perto
+do teto — pode voltar a falhar.
+
+**Os outros 7, investigados e SEM mudança de código** (achados reais, mas nenhum é bug a corrigir):
+- **`fonte_cega_no_monitor`** (EDITAL_DJEN) — confirmado: EDITAL_DJEN vem do Radar de Editais
+  (`api/radar-editais-cron.js`), que grava saúde em `monitor_runs`, não em `fonte_saude`. O invariante não
+  conhece essa trilha alternativa — não é ponto cego real, é instrumento que não olha no lugar certo.
+- **`praca_fim_antes_do_inicio`** (3: GRUPOLANCE, ZUK, WEBLEILOES) — **GRUPOLANCE e ZUK são a MESMA classe
+  já conhecida do MEGA** (guia do dono, PARTE 12: fonte grava a praça VIGENTE — `datas.find(d => d >=
+  agora)`, código compartilhado por MEGA/SUPERBID/LJUD/GRUPOLANCE/ZUK/BIASI/PESTANA — e quando avança sem
+  popular `data_leilao_2` o guard do invariante não reconhece o padrão). Já registrado como pendência
+  aberta (ZUK) desde sessão anterior; não reescrevi o guard agora por falta de certeza sobre como
+  distinguir com segurança "avançou pra vigente" de "data errada de verdade" sem gerar falso-negativo novo
+  — mesmo cuidado do "não conserto no escuro" de cima. **WEBLEILOES não usa esse coletor compartilhado**
+  (scraper próprio, `scraperWebLeiloes`) — não achei onde ele grava `data_leilao`/`praca1_fim` no código
+  visto; fica como possível causa DIFERENTE, não investigada a fundo (só 1 lote).
+- **`data_edital_recuou_prazo`** (4: 3 MEGA + 1 ZUK) — todas as 4 linhas em `relatorio_anomalias` mostram
+  `detalhe` = "MANTIDO o acervo (o edital aponta praça já encerrada)": o sistema JÁ defende corretamente
+  em todos os casos, só nunca marca `resolvido=true`. Vira ruído (soma nas "20 anomalias" do Health Check)
+  sem ser bug — é o leiloeiro (majoritariamente MEGA) republicando edital antigo, não erro nosso.
+- **`cadastro_barrado`** (9/7d, limite 7) — todas as 9 ocorrências são rejeição LEGÍTIMA (senha fraca via
+  checagem padrão do Supabase Auth, ou "digite nome e sobrenome"), só que **6 delas são o MESMO
+  `anon_id` tentando 6 vezes em 2 minutos** — o invariante conta evento, não pessoa, então 1 usuário
+  frustrado infla o número sem representar 6 cadastros recusados de verdade.
+- **`cadastro_duplicado`** (1) — confirmado: "Fabrício Rodriguez"/"Fabrício Rodrigues", mesmo telefone, 3
+  min de diferença, ambos `explorador` (grátis) — sinal de 1º cadastro que pareceu não ter concluído, sem
+  dado corrompido.
+- **`cadastro_sem_origem`** e **`sem_cidade`** (31/30) — mesma pauta de marketing/captura já registrada na
+  PARTE 1 (58% dos cadastros de 30d sem origem; 31 lotes sem cidade espalhados por 8 fontes, nenhuma
+  dominando — ruído de baseline, não regressão de uma fonte).
+
+`npm run build` passou. Migração nova: `qa_invariantes_remove_ctes_mortas_vias_ativas.sql` (aplicada no
+banco + commitada).
+
+---
+
 ## 📋 SESSÃO 22 · PARTE 20 (04/09, encerramento) — RESUMO DO DIA E PENDÊNCIAS PARA A PRÓXIMA SESSÃO
 
 **Resumo do que foi feito hoje** (detalhe completo em cada PARTE abaixo, 15 a 19):
