@@ -4,6 +4,48 @@
 
 ---
 
+## 📋 SESSÃO 23 · PARTE 18 (05/09) — FECHAMENTO DO DIA: RESUMO (PARTES 13-17) + PENDÊNCIAS PRA PRÓXIMA SESSÃO
+
+**Resumo do que saiu hoje**, todo no editor/leitor de e-book estruturado (`LeitorEstruturado.jsx`,
+`AdminEbookEditor.jsx`, `parseDocx.js`), a partir de prints reais do dono testando no celular:
+- **PARTE 13**: vazamento de página vizinha nos cantos (recorte do tamanho errado).
+- **PARTE 14**: parágrafos viravam parede de texto (dependia de whitespace sobrevivendo a corte
+  de coluna CSS) → parágrafos reais (`<p>` com margem), recuo, justificado, hifenização.
+- **PARTE 15**: capa/ficha/aviso/sumário interno do livro "Lucre Antes de Arrematar" estavam
+  todos grudados num capítulo "Introdução" só (dado corrigido direto no banco) + suporte a
+  subtítulo (Heading 3 do Word, marcador `## ` no texto) pros tópicos numerados dentro de cada
+  capítulo, que antes achatavam junto do corpo.
+- **PARTE 16**: ajuste fino a pedido do dono — capa/aviso voltam a ser parágrafos (com subtítulo)
+  dentro de UM capítulo, não mais 3 entradas separadas no menu ☰.
+- **PARTE 17**: tela de editor (`/admin/ebook-editor`) não era responsiva no celular (layout
+  flex de largura fixa) — corrigido com `useIsMobile()` — e ganhou 3 ações pra revisar a
+  separação de capítulos já salva sem precisar reprocessar o `.docx` do zero: mesclar com o
+  anterior, dividir aqui (por posição do cursor), excluir capítulo.
+
+**Ideia registrada, NÃO iniciada — dono achou interessante, viabilizar depois**: página
+pública (fora da área de membros) funcionando como e-commerce de cursos/e-books, pra aparecer
+em resultado de busca do Google como os prints que o dono trouxe (carrossel de produtos com
+preço/loja). Dois pontos levantados na conversa, importantes pra quem retomar:
+1. **Trava técnica de hoje**: o site usa `HashRouter` — nenhuma rota do app (`/#/...`) é vista
+   pelo Google, só o `index.html` genérico. Pré-requisito técnico, antes de qualquer coisa: página
+   pública **server-side** por produto (mesmo padrão já usado em `api/og-share.js` pro preview de
+   link do WhatsApp), com `Checkout.jsx` já sabendo vender pra visitante não-cadastrado.
+2. **O que os prints do dono mostravam é Google SHOPPING** (o 2º print tinha "Patrocinados" —
+   anúncio pago, não ranqueamento orgânico) — exige conta no Google Merchant Center + feed de
+   produtos, com regras de elegibilidade próprias pra bens digitais (e-book/curso online) que
+   **ainda não foram conferidas**. Se quiser destaque igual ao "Patrocinado", é campanha paga
+   nova (Shopping/Performance Max), gasto recorrente — não é entregável único de engenharia.
+   **Próximo passo, quando for viabilizar**: confirmar elegibilidade de digital goods no
+   Merchant Center antes de prometer prazo, e decidir escopo (só e-books, só cursos, ou os dois).
+
+**Pendência que o dono pediu pra registrar, sem ter sido discutida nesta sessão — retomar na
+próxima**: **ManyChat próprio** e **WhatsApp Business**. Contexto já existe no HANDOFF de sessões
+anteriores (buscar "ManyChat" no documento): há um plano de lançamento publicado
+(`https://claude.ai/code/artifact/c6a748dc-e7cf-40d2-a44a-f9c2d72479f6`, oferta + cronograma de
+5 semanas + fluxos anti-bloqueio) e um gargalo de verificação do Meta for Developers que travava
+o bot em 25 contas — **conferir se esse status mudou** antes de continuar dele em vez de repetir
+diagnóstico já feito.
+
 ## 📋 SESSÃO 23 · PARTE 17 (05/09) — EDITOR DE E-BOOK: NÃO RESPONSIVO NO CELULAR + FALTAVA REVER SEPARAÇÃO SEM REPROCESSAR
 
 **Achado do dono, print real do celular**: `AdminEbookEditor.jsx` (tela `/admin/ebook-editor/:id`,
