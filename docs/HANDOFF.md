@@ -4,6 +4,47 @@
 
 ---
 
+## 📋 SESSÃO 23 · PARTE 15 (05/09) — LEITOR DE E-BOOK: CAPA/FICHA/AVISO/SUMÁRIO GRUDADOS NA INTRODUÇÃO + SUBTÓPICOS (H3) SEM DESTAQUE
+
+**Achado do dono, com 4 prints reais** depois da PARTE 14: sumário "vindo cortado no meio
+da página", avisos importantes e tópicos relevantes "amontoados", sem página dedicada.
+
+**Causa raiz nº 1 (dados, só do livro "Lucre Antes de Arrematar")**: a detecção
+automática de capítulos agrupa TUDO antes do primeiro Heading 1/2 num único capítulo
+"Introdução" — e neste `.docx` isso incluía capa (título+autor, repetidos 2x), ficha
+técnica/direitos autorais, o aviso legal E o **Sumário interno completo do livro**
+(60+ linhas "Título␉Página", com números de página do PDF original). Os 4 prints do
+dono eram todos esse mesmo capítulo — nenhum mostrava conteúdo real de capítulo. Corrigido
+**direto no banco** (`ebook_capitulos`, ebook `8d5b67de-b451-43aa-9c8d-7480dc02599d`):
+texto verbatim (nada reescrito) redistribuído em "Capa e Direitos Autorais" → "Aviso
+Importante" → "Introdução" (só o texto real) → capítulos 1-6 → Conclusão (10 no total,
+eram 8). **O Sumário interno foi removido, de propósito** — é redundante com o menu ☰
+que o próprio leitor já tem, e os números de página do livro impresso nunca vão bater
+com a paginação flutuante do leitor (recalculada por fonte/tela): mantê-lo seria
+mostrar uma numeração permanentemente errada.
+
+**Causa raiz nº 2 (código, afeta TODO capítulo do livro)**: `docxParaBlocos` só
+reconhecia Heading 1/2 como `ehTitulo`; um Heading 3 do Word (os subtópicos numerados
+dentro de cada capítulo, ex. "1. A regra dos 20%...") virava texto comum, sem destaque
+— achatado junto do corpo do parágrafo, igual a qualquer frase. **Correção**:
+`ehSubtitulo` novo (h3), com as variantes PT-BR ("Título 3"/"Titulo 3") no `styleMap`,
+mesmo motivo do Título 1/2 já corrigido. Sem migração de banco: o parágrafo grava com
+prefixo `"## "` (convenção leve, só no texto) e `LeitorEstruturado.jsx` reconhece o
+prefixo pra renderizar como subtítulo (negrito, sem justificar/recuar, nunca sozinho no
+fim de página). Tela de ajuste (`AdminEbookEditor.jsx`) marca `[subtítulo]` nos
+parágrafos detectados, pra o admin ver o que vai acontecer antes de salvar.
+
+Como o `.docx` original já tinha sido processado ANTES desta correção existir, os
+capítulos já salvos não têm o marcador retroativamente (achatar já tinha acontecido no
+parse, antes de chegar ao banco — reescrever isso à mão, sem o parser real, seria
+arriscado demais pra fazer por SQL). Em vez disso: `AdminEbookEditor.jsx` ganhou o botão
+**"🔄 Reprocessar do arquivo original"** (baixa o `.docx` salvo no Storage e roda de novo
+pela função corrigida, caindo na tela de ajuste) — disponível pra este livro e qualquer
+outro reprocessamento futuro. Usá-lo REFAZ a divisão do zero (a separação da capa feita
+por SQL nesta sessão seria substituída pela mesma divisão manual de novo, na tela de
+ajuste) — por isso não é automático, é opção do dono quando quiser o destaque de
+subtítulo também nos capítulos 1-6/Conclusão.
+
 ## 📋 SESSÃO 23 · PARTE 14 (05/09) — LEITOR DE E-BOOK: PARÁGRAFO SEM SEPARAÇÃO REAL VIRAVA "PAREDE DE TEXTO"
 
 **Achado do dono, testando de novo depois da PARTE 13** (a correção do vazamento de

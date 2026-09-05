@@ -16,13 +16,19 @@ const STYLE_MAP = [
   "p[style-name='Título 2'] => h2:fresh",
   "p[style-name='Titulo 1'] => h1:fresh",
   "p[style-name='Titulo 2'] => h2:fresh",
+  // Heading 3 já mapeia por padrão do mammoth (docx em inglês); só as variantes PT-BR
+  // precisam de entrada explícita, mesmo motivo do Título 1/2 acima.
+  "p[style-name='Título 3'] => h3:fresh",
+  "p[style-name='Titulo 3'] => h3:fresh",
 ];
 
 /**
  * Converte um arquivo .docx num array de blocos (um por parágrafo/heading, na ordem
  * do documento). `ehTitulo` marca headings nível 1/2 (candidatos a início de capítulo).
+ * `ehSubtitulo` marca heading nível 3 (subtópico DENTRO do capítulo — nunca cria
+ * fronteira nova, só ganha destaque visual no editor/leitor).
  * @param {File} file
- * @returns {Promise<{blocos: {id:number, ehTitulo:boolean, texto:string}[], avisos:string[]}>}
+ * @returns {Promise<{blocos: {id:number, ehTitulo:boolean, ehSubtitulo:boolean, texto:string}[], avisos:string[]}>}
  */
 export async function docxParaBlocos(file) {
   const mammoth = (await import('mammoth')).default;
@@ -34,10 +40,11 @@ export async function docxParaBlocos(file) {
     .map((el, i) => {
       const tag = el.tagName.toLowerCase();
       const ehTitulo = tag === 'h1' || tag === 'h2';
+      const ehSubtitulo = tag === 'h3';
       const texto = (tag === 'ul' || tag === 'ol')
         ? Array.from(el.querySelectorAll('li')).map((li) => `- ${li.textContent.trim()}`).join('\n')
         : el.textContent.trim();
-      return { id: i, ehTitulo, texto };
+      return { id: i, ehTitulo, ehSubtitulo, texto };
     })
     .filter((b) => b.texto); // descarta parágrafos vazios (linhas em branco do Word)
 
@@ -72,9 +79,15 @@ export function agruparBlocos(blocos) {
   return grupos;
 }
 
+// Marcador de subtítulo dentro do texto plano do capítulo: `conteudo_texto` é uma coluna
+// TEXT só (sem schema pra blocos), então em vez de migrar o banco pra guardar
+// `ehSubtitulo` por parágrafo, o parágrafo vira "## texto" — convenção leve (estilo
+// Markdown), sem custo de migração, e o leitor/editor só precisam reconhecer o prefixo.
+export const PREFIXO_SUBTITULO = '## ';
+
 /**
  * Agrupa blocos em capítulos finais, prontos pra `salvar_capitulos_ebook`.
- * @param {{id:number, ehTitulo:boolean, texto:string}[]} blocos
+ * @param {{id:number, ehTitulo:boolean, ehSubtitulo:boolean, texto:string}[]} blocos
  * @returns {{ordem:number, titulo:string, conteudo_texto:string}[]}
  */
 export function blocosParaCapitulos(blocos) {
@@ -82,6 +95,9 @@ export function blocosParaCapitulos(blocos) {
   return agruparBlocos(blocos).map((g, i) => ({
     ordem: i + 1,
     titulo: g.titulo,
-    conteudo_texto: g.blocoIds.map((id) => porId.get(id).texto).join('\n\n'),
+    conteudo_texto: g.blocoIds.map((id) => {
+      const b = porId.get(id);
+      return b.ehSubtitulo ? `${PREFIXO_SUBTITULO}${b.texto}` : b.texto;
+    }).join('\n\n'),
   }));
 }

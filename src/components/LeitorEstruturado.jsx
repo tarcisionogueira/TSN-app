@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { X, Minus, Plus, Sun, Moon, ChevronLeft, ChevronRight, Menu } from 'lucide-react';
+import { PREFIXO_SUBTITULO } from '../utils/parseDocx';
 
 /**
  * LEITOR DE eBOOK EM FORMATO ESTRUTURADO (docx → capítulos) — irmão do LeitorPaginado
@@ -269,13 +270,27 @@ export default function LeitorEstruturado({
                 hyphens: 'auto', WebkitHyphens: 'auto', msHyphens: 'auto',
               }}>
                 <h2 style={{ fontSize: fontSize + 6, fontWeight: 700, margin: '0 0 28px', textAlign: 'left', breakAfter: 'avoid' }}>{cap.titulo}</h2>
-                {paragrafos.map((p, i) => (
-                  <p key={i} style={{
-                    margin: i === paragrafos.length - 1 ? 0 : '0 0 1em',
-                    textIndent: (i === 0 || p.startsWith('- ')) ? 0 : '1.4em',
-                    textAlign: 'justify', whiteSpace: 'pre-line',
-                  }}>{p}</p>
-                ))}
+                {paragrafos.map((p, i) => {
+                  const ultimo = i === paragrafos.length - 1;
+                  if (p.startsWith(PREFIXO_SUBTITULO)) {
+                    // Subtítulo (Heading 3 do Word) — mesmo nível de destaque de um título de
+                    // seção dentro do capítulo, nunca corpo de texto: sem justificar/recuar, e
+                    // "breakAfter:avoid" pra nunca ficar sozinho na última linha de uma página.
+                    return (
+                      <p key={i} style={{
+                        margin: i === 0 ? '0 0 0.8em' : `1.4em 0 ${ultimo ? 0 : '0.8em'}`,
+                        fontWeight: 700, textAlign: 'left', breakAfter: 'avoid', whiteSpace: 'pre-line',
+                      }}>{p.slice(PREFIXO_SUBTITULO.length)}</p>
+                    );
+                  }
+                  return (
+                    <p key={i} style={{
+                      margin: ultimo ? 0 : '0 0 1em',
+                      textIndent: (i === 0 || p.startsWith('- ')) ? 0 : '1.4em',
+                      textAlign: 'justify', whiteSpace: 'pre-line',
+                    }}>{p}</p>
+                  );
+                })}
               </div>
             </div>
           </div>

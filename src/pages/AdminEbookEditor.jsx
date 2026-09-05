@@ -142,6 +142,29 @@ export default function AdminEbookEditor() {
     return () => clearTimeout(t);
   }, [pronto, id, modo, blocos, avisosDocx, docxPath, capitulos, capSelecionado]);
 
+  async function reprocessarDoOriginal() {
+    if (!docxPath) return;
+    if (!window.confirm('Isso vai reler o arquivo .docx original do zero e recriar a divisão de capítulos — qualquer texto editado depois do último upload será substituído nesta tela (o banco só muda de fato quando você clicar em "Salvar capítulos" de novo, no final). Continuar?')) return;
+    setEnviandoArquivo(true);
+    try {
+      const { data, error } = await supabase.storage.from('documentos').download(docxPath);
+      if (error) throw error;
+      const { blocos: novosBlocos, avisos } = await docxParaBlocos(data);
+      if (!novosBlocos.length) {
+        alert('Não consegui extrair texto do arquivo original.');
+        setEnviandoArquivo(false);
+        return;
+      }
+      setBlocos(novosBlocos);
+      setAvisosDocx(avisos);
+      setExpandido(null);
+      setModo('ajuste');
+    } catch (e) {
+      alert('Não consegui reler o arquivo original: ' + (e?.message || 'erro desconhecido.'));
+    }
+    setEnviandoArquivo(false);
+  }
+
   async function aoEscolherArquivo(file) {
     if (!file) return;
     if (!/\.docx$/i.test(file.name)) {
@@ -298,12 +321,18 @@ export default function AdminEbookEditor() {
                   {expandido === gi && (
                     <div style={{ marginTop: 10, borderTop: '1px dashed #e2e8f0', paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
                       {g.blocoIds.length === 0 && <span style={{ fontSize: 12, color: '#94a3b8' }}>(sem parágrafos)</span>}
-                      {g.blocoIds.map((bid) => (
-                        <div key={bid} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 13 }}>
-                          <button style={{ ...ST.btn('outline'), padding: '3px 8px', fontSize: 11, flexShrink: 0 }} onClick={() => dividirAqui(bid)}>Dividir aqui</button>
-                          <span style={{ color: '#334155' }}>{porId.get(bid)?.texto}</span>
-                        </div>
-                      ))}
+                      {g.blocoIds.map((bid) => {
+                        const bloco = porId.get(bid);
+                        return (
+                          <div key={bid} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 13 }}>
+                            <button style={{ ...ST.btn('outline'), padding: '3px 8px', fontSize: 11, flexShrink: 0 }} onClick={() => dividirAqui(bid)}>Dividir aqui</button>
+                            <span style={{ color: '#334155' }}>
+                              {bloco?.ehSubtitulo && <b style={{ color: '#0D63DB', fontSize: 11, marginRight: 6 }}>[subtítulo]</b>}
+                              {bloco?.texto}
+                            </span>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -329,6 +358,16 @@ export default function AdminEbookEditor() {
                   </button>
                 </div>
               ))}
+              {docxPath && (
+                <button
+                  style={{ ...ST.btn('outline'), width: '100%', marginTop: 8, fontSize: 11, padding: '6px 8px' }}
+                  disabled={enviandoArquivo}
+                  title="Relê o .docx original do zero — útil para trazer melhorias de detecção de capítulos/subtítulos feitas depois do upload"
+                  onClick={reprocessarDoOriginal}
+                >
+                  {enviandoArquivo ? 'Lendo…' : '🔄 Reprocessar do arquivo original'}
+                </button>
+              )}
             </div>
             <div style={{ ...ST.card, flex: 1 }}>
               {capitulos[capSelecionado] && (
