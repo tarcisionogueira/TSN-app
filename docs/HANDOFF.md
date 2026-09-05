@@ -57,6 +57,58 @@ composição provável de tentativas repetidas do mesmo `anon_id` já vista na S
 
 ---
 
+## 📋 SESSÃO 24 · PARTE 2 (05/09) — LP DA AULA: COMPARATIVO COM CONCORRENTE (BIDHERO) + 3 ADITIVOS + FUNIL FECHADO
+
+**Pedido do dono**: comparar `/live/:slug` com a LP de um concorrente direto (BidHero,
+webinar.bidhero.com.br, 9 prints do funil dele) e ver o que agregar — cotou até mudar a
+estratégia pra "cair direto no WhatsApp, sem formulário", como o concorrente faz.
+
+**Antes de mexer, fechei uma medição que estava em aberto desde 01/09** (`intervencao`,
+chave `aula-02set-trafego-e-lp` — rodei a MESMA função `lp_aula_funil` que o registro já
+apontava, não uma consulta nova): tráfego pro `/live` caiu de 431 pessoas/48h pra 113
+pessoas/96h desde que a verba foi pro Google Ads (Sessão 23 Partes 5-9) — amostra baixa
+demais agora (1 clique/1 form/2 inscrições) pra julgar a LP isolada. **O achado que
+segue de pé, e que pesa mais que qualquer ajuste de página**: a MESMA peça, na MESMA LP,
+convertia 2/28 comprada como objetivo *Leads* e 0/54 como *Cliques no link* — o gargalo já
+medido é a compra de mídia, não o formulário. Por isso **recomendei NÃO copiar** o "direto
+pro WhatsApp" do concorrente — além de não haver evidência de que o formulário (3-4 campos,
+"20 segundos") seja o problema, ele derrubaria conta-criada-na-inscrição, `cidade` (usada pra
+personalizar a busca ao vivo), o `lead_event_id` do Meta CAPI e o vínculo de indicação
+`ref` — tudo isso só faz sentido porque o produto é self-service, diferente do funil dele
+(mentoria de ticket alto, onde "entrar no grupo" É a etapa de venda).
+
+**3 aditivos implementados em `LiveInscricao.jsx`** (dono pediu explicitamente SEM o gate de
+capital mínimo do concorrente — "isso não é pra quem tem R$5 mil" encolheria o topo de funil
+da BidPro, que atende faixa mais ampla que a mentoria dele):
+1. **"Isso é pra você se" / "O que você não vai ver"** — qualifica por intenção/dor, não por
+   dinheiro. A ressalva "leilão não é isento de risco" é coerente com o resto do produto
+   (mesma honestidade do ScoreRisco/documental), não é só copy de venda.
+2. **"Provas reais"** — seção nova, data-driven (`eventos_live.depoimentos`, mesmo princípio
+   aditivo de `imagens`: array vazio = seção some). Migração
+   `live_depoimentos_reais_na_lp.sql` criou a coluna e atualizou `live_proxima()` pra
+   devolvê-la. Populados 2 casos reais que o dono mandou por print de WhatsApp (nome
+   abreviado + local, sem foto nem WhatsApp do cliente — decisão de privacidade minha, dono
+   pode trocar por nome completo se já tiver consentimento pra isso): Matheus A. (Alagoinhas/BA,
+   marcado **"Em andamento"** de propósito — aquisição R$72mil+R$20mil reforma, projeção de
+   revenda R$160mil/margem R$68mil, ainda não fechada) e Rafael S. (marcado "Arrematado" —
+   lance vencedor R$112.949,63 após disputa, 4 lances registrados). **Mais casos virão por
+   print** — é só eu atualizar o array via SQL, sem deploy novo.
+3. **"Restam N vagas"** — usa `eventos_live.vagas_max`, campo que já existia na tabela desde
+   sempre e nunca tinha sido lido em NENHUMA tela (nem a pública, nem o admin). Fica dormente
+   (não aparece) enquanto `vagas_max` for null — ao contrário do "vagas limitadas" do
+   concorrente, que é texto solto sem teto nenhum por trás, aqui só liga quando existir um
+   limite real. **Hoje está null**: se o dono quiser essa faixa no ar, só falta escolher um
+   número (não decidi sozinho) — não há UI de admin pra isso ainda (nem pra `vagas_max`,
+   nem pra editar `depoimentos`; os dois vivem só via SQL direto por enquanto, mesmo caminho
+   que `imagens` já segue hoje).
+
+**Não implementado, fora de escopo desta rodada**: bloco de autoridade em estatística
+("+N arremates, +X anos") — precisa dos números reais do dono, que ainda não vieram; se
+quiser, é só mandar. Build (`npm run build`) passou limpo — `node_modules` estava vazio
+neste ambiente (sessão nova), rodei `npm install` antes.
+
+---
+
 ## 📋 SESSÃO 23 · PARTE 18 (05/09) — FECHAMENTO DO DIA: RESUMO (PARTES 13-17) + PENDÊNCIAS PRA PRÓXIMA SESSÃO
 
 **Resumo do que saiu hoje**, todo no editor/leitor de e-book estruturado (`LeitorEstruturado.jsx`,
