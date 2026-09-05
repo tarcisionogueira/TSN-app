@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { X, Minus, Plus, Sun, Moon, ChevronLeft, ChevronRight, Menu } from 'lucide-react';
 
 /**
@@ -57,6 +57,16 @@ export default function LeitorEstruturado({
   const [tamanho, setTamanho] = useState({ w: 800, h: 600 });
   const cor = TEMAS[tema] || TEMAS.sepia;
   const total = capitulos.length;
+  const cap = capitulos[capituloIdx];
+
+  // Parágrafos de verdade (margem entre eles), não uma tira de texto com "\n\n" solto:
+  // dentro de coluna CSS (paginação), o espaço de uma linha em branco pode ser engolido
+  // bem no topo de uma página nova (é a mesma classe de bug do vazamento de canto — só
+  // aparece testando em página real, não em revisão de código). Margem de bloco não some.
+  const paragrafos = useMemo(
+    () => (cap?.conteudo_texto || '').split(/\n{2,}/).filter(Boolean),
+    [cap?.conteudo_texto],
+  );
 
   const viewportRef = useRef(null);
   const colunaRef = useRef(null);
@@ -199,7 +209,6 @@ export default function LeitorEstruturado({
 
   const pctCapitulo = total ? Math.round(((capituloIdx + 1) / total) * 100) : 0;
   const btn = { background: 'none', border: 'none', color: cor.ui, cursor: 'pointer', display: 'flex', alignItems: 'center', padding: 6 };
-  const cap = capitulos[capituloIdx];
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 4000, background: cor.fundo, display: 'flex', flexDirection: 'column', overscrollBehavior: 'contain', transition: 'background .25s' }}>
@@ -252,14 +261,21 @@ export default function LeitorEstruturado({
           // foi exatamente o que o dono viu (letras cortadas nos dois cantos).
           <div style={{ width: larguraPagina + PAD_H * 2, height: alturaPagina + PAD_V * 2, position: 'relative', background: cor.papel, borderRadius: 6, boxShadow: '0 10px 40px rgba(0,0,0,0.35)' }}>
             <div style={{ position: 'absolute', top: PAD_V, left: PAD_H, width: larguraPagina, height: alturaPagina, overflow: 'hidden' }}>
-              <div ref={colunaRef} style={{
+              <div ref={colunaRef} lang="pt-BR" style={{
                 width: larguraPagina, height: alturaPagina,
                 columnWidth: larguraPagina, columnGap: 0, columnFill: 'auto',
                 transform: `translateX(-${paginaAtual * larguraPagina}px)`, transition: 'transform .3s ease',
-                fontSize, color: cor.texto, lineHeight: 1.7, fontFamily: FONTE_LEITURA, whiteSpace: 'pre-wrap',
+                fontSize, color: cor.texto, lineHeight: 1.7, fontFamily: FONTE_LEITURA,
+                hyphens: 'auto', WebkitHyphens: 'auto', msHyphens: 'auto',
               }}>
-                <h2 style={{ fontSize: fontSize + 6, fontWeight: 700, margin: '0 0 18px', breakAfter: 'avoid' }}>{cap.titulo}</h2>
-                {cap.conteudo_texto}
+                <h2 style={{ fontSize: fontSize + 6, fontWeight: 700, margin: '0 0 28px', textAlign: 'left', breakAfter: 'avoid' }}>{cap.titulo}</h2>
+                {paragrafos.map((p, i) => (
+                  <p key={i} style={{
+                    margin: i === paragrafos.length - 1 ? 0 : '0 0 1em',
+                    textIndent: (i === 0 || p.startsWith('- ')) ? 0 : '1.4em',
+                    textAlign: 'justify', whiteSpace: 'pre-line',
+                  }}>{p}</p>
+                ))}
               </div>
             </div>
           </div>

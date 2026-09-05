@@ -4,6 +4,34 @@
 
 ---
 
+## 📋 SESSÃO 23 · PARTE 14 (05/09) — LEITOR DE E-BOOK: PARÁGRAFO SEM SEPARAÇÃO REAL VIRAVA "PAREDE DE TEXTO"
+
+**Achado do dono, testando de novo depois da PARTE 13** (a correção do vazamento de
+canto já estava em produção): a leitura ficou "amontoada", organização das páginas não
+agradável — sintoma diferente do vazamento, mesmo componente.
+
+**Causa raiz**: `conteudo_texto` do capítulo era jogado inteiro como UM texto contínuo
+(`{cap.conteudo_texto}`), contando só com `"\n\n"` + `white-space:pre-wrap` para abrir
+espaço entre parágrafos. Dentro de paginação por coluna CSS, esse espaço em branco pode
+ser engolido bem no topo de uma página nova (fragmentação de coluna não preserva
+whitespace do mesmo jeito no meio do fluxo e na borda de um corte) — a mesma classe de
+bug da PARTE 13: só aparece testando em página real com conteúdo real, invisível em
+revisão de código. Somado a isso, não havia recuo de parágrafo (indent) nem
+justificação — o texto corria em bloco único, sem os sinais visuais que um livro usa
+pra separar ideias.
+
+**Correção** (`LeitorEstruturado.jsx`): o conteúdo passa a ser dividido em parágrafos de
+verdade (`split(/\n{2,}/)`, memoizado) e cada um vira um `<p>` com `margin-bottom`
+explícita — espaçamento que não depende de whitespace sobrevivendo a um corte de coluna.
+Primeiro parágrafo do capítulo (e blocos de lista, que começam com `"- "`) sem recuo;
+parágrafos seguintes com `text-indent` (convenção tipográfica de livro: o título já
+sinaliza o início, recuo sinaliza continuação). Texto justificado
+(`text-align:justify`) com hifenização (`hyphens:auto` + `lang="pt-BR"`) para o bloco
+ficar limpo como um livro publicado, sem "rios" de espaço em branco. Título do capítulo
+ganhou um pouco mais de respiro (`margin-bottom` 18px → 28px). Geometria da página
+(`PAD_H`/`PAD_V`/`LARGURA_MAX`) não mudou — o pedido era sobre a tipografia do
+parágrafo, não sobre o tamanho da página.
+
 ## 📋 SESSÃO 23 · PARTE 13 (04-05/09) — PAGINAÇÃO: recorte errado deixava a página vizinha vazar nos cantos
 
 **Achado do dono, testando no celular** (print real): letras da página anterior E da
