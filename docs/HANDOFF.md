@@ -4,6 +4,59 @@
 
 ---
 
+## 📋 SESSÃO 24 · PARTE 1 (05/09) — RITUAL DE ABERTURA: HASTA "ZEROU" RECONTEXTUALIZADO; RJLEILOES "REGRESSÃO" ERA MÉTRICA ERRADA; 3 ERROS JÁ CORRIGIDOS MARCADOS RESOLVIDOS
+
+**Ritual de abertura**: heartbeat registrado; `erros_cliente`/`relatorio_anomalias`/KYC/pontos-cegos/Bright
+Data/cobertura documental (1b), `fonte_regressao_suspeita`, `auditoria_regras_negocio` (0 crítico),
+`auditoria_seguranca` (0/0), `qa_invariantes` (10 alertas, todos já catalogados em sessões anteriores —
+nenhum novo), Cliente 360, `tempo_processo`, `documental_distribuicao`, health-check e backup (íntegros,
+`arquivos_iguais` não-zero) checados. CI "Deriva código × banco": últimos 5 runs `success`.
+
+**🔍 HASTA "zerou" de novo (0 lotes em 3 medições, 04/09 13h→05/09 01h) — desta vez o dado do banco
+aponta para expiração legítima, não regressão.** `imoveis_leilao` mostra os 584 lotes do último
+scrape bem-sucedido (30/08) com `data_leilao`/`data_fim` UNIFORMES em 2026-09-03 (um único evento de
+leilão, já encerrado há 2 dias) — e nenhuma linha foi tocada (`atualizado_em`) desde 30/08. Ou seja:
+o zero é consistente com "o leilão aconteceu e a próxima coleta ainda não achou o próximo evento", o
+mesmo padrão do falso-positivo LEILOFY já documentado. Diferença do primeiro "zerou" (29/08, que se
+autocorrigiu em 6h): desta vez não houve recuperação nas 12h entre as duas últimas medições. **Não
+dá para confirmar sem acessar o site** (egress deste ambiente bloqueia `hastaleiloes.com.br`,
+confirmado via WebFetch) — existe recon PRONTO pra isso desde 29/08 (`scripts/recon-hasta-zerou.mjs`,
+precisa rodar da máquina residencial do dono) que separa as 4 hipóteses (render lento / intermitente /
+listagem filtra por praça aberta mas detalhe ainda abre / acesso bloqueado). **Ação pendente do
+dono**: rodar o recon; se ele confirmar "listagem sem praça aberta", parser está intacto e só falta a
+Hasta publicar o próximo lote.
+
+**🔍 RJLEILOES "regressão" (1 vs piso 6) era a MÉTRICA ERRADA, não o acervo — achado sobre o PRÓPRIO
+monitor.** `fonte_regressao_suspeita()` compara `fonte_saude.total`, e esse campo é **quanto a coleta
+ACHOU NAQUELE RUN** (`registrarSaude(sb, 'RJLEILOES', prontos, …)` em `scraper-rj.mjs:471` —
+`prontos` é só o lote desta execução), não o total ativo no banco. Conferido direto: `imoveis_leilao`
+tem **75 lotes ATIVOS** de RJLEILOES agora, com praças de 13/07 até 16/10 — acervo saudável, bem mais
+alto que qualquer "total" já visto em `fonte_saude` (máx. histórico: 40). Para uma fonte incremental
+como esta (paga, cadência semanal — `scraper-rj.yml`, terça 11h UTC, último sucesso 01/09), comparar
+o RENDIMENTO de um run isolado contra um piso aprendido do próprio rendimento é a forma nº 10 do topo
+deste arquivo: mede uma coisa (achou pouco HOJE) e reporta com o nome de outra (acervo regrediu).
+**Não mexi na função agora** — HASTA usa esse mesmo `total` para enumeração quase completa do
+catálogo (piso real ali FAZ sentido), então calibrar por fonte exige cuidado para não destravar o
+alerta que protege a HASTA. Fica registrado para quem for ajustar `fonte_regressao_suspeita()`:
+separar fontes "enumera tudo" de fontes "incremental" antes de aplicar piso sobre o mesmo campo.
+
+**✅ `erro_na_tela_do_cliente` (2, 7d) — investigado, baixa urgência.** As duas ocorrências são do
+mesmo dia (01/09, 6h de diferença), `/live/leilao-ao-vivo`, visitante anônimo, tela de retry genérica
+("falha momentânea de conexão nossa — a aula continua de pé"). Sem recorrência nos 4 dias seguintes.
+
+**✅ Cliente 360 `clientes_com_erro: 3` — os 3 já estavam corrigidos, só faltava marcar resolvido.**
+Conferido linha a linha contra o HANDOFF: user `60aaf3fc…` (`/checkout`, "Failed to fetch") é
+exatamente o caso que a Sessão 23 Parte 3 corrigiu (fallback Asaas no `PagamentoCartao`); os outros
+dois (`_leaflet_pos` em `/imovel/:id`) são o bug do Leaflet que a mesma Parte 3 confirmou já corrigido
+em sessão anterior. `update erros_cliente set resolvido=true` nos 3 (por `user_id`+`rota`+`msg`) —
+sem mudança de código, só higiene do painel para não reacusar o que já foi resolvido.
+
+Sem código alterado nesta sessão além do UPDATE de dados acima. `qa_invariantes.cadastro_barrado`
+subiu de 9→13 em 7 dias (limite 7) — não investigado agora (fora do pedido desta sessão), mesma
+composição provável de tentativas repetidas do mesmo `anon_id` já vista na Sessão 23 Parte 2.
+
+---
+
 ## 📋 SESSÃO 23 · PARTE 18 (05/09) — FECHAMENTO DO DIA: RESUMO (PARTES 13-17) + PENDÊNCIAS PRA PRÓXIMA SESSÃO
 
 **Resumo do que saiu hoje**, todo no editor/leitor de e-book estruturado (`LeitorEstruturado.jsx`,
