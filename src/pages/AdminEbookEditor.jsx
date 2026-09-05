@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../utils/supabase';
-import { docxParaBlocos, blocosParaCapitulos, agruparBlocos } from '../utils/parseDocx';
+import { docxParaBlocos, blocosParaCapitulos, agruparBlocos, PREFIXO_SUBTITULO } from '../utils/parseDocx';
+import { useIsMobile } from '../utils/useIsMobile';
 
 // Editor de e-book em formato ESTRUTURADO (docx → capítulos), estilo KDP: admin sobe um
 // .docx, o sistema detecta capítulos pelos títulos do Word, o admin ajusta fronteiras
@@ -11,7 +12,7 @@ import { docxParaBlocos, blocosParaCapitulos, agruparBlocos } from '../utils/par
 
 const ST = {
   page: { minHeight: '100vh', background: '#f1f5f9', fontFamily: "'Inter', sans-serif" },
-  header: { background: '#111111', color: '#fff', padding: '16px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' },
+  header: { background: '#111111', color: '#fff', padding: '16px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 },
   body: { padding: '24px 20px', maxWidth: 1000, margin: '0 auto' },
   card: { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: 20, marginBottom: 16 },
   btn: (variant = 'primary') => ({
@@ -63,6 +64,8 @@ function subirDocxOriginal(file, ebookId) {
 export default function AdminEbookEditor() {
   const { id } = useParams();
   const nav = useNavigate();
+  const mobile = useIsMobile();
+  const textareaRef = useRef(null);
 
   const [carregando, setCarregando] = useState(true);
   const [erroCarga, setErroCarga] = useState('');
@@ -218,6 +221,50 @@ export default function AdminEbookEditor() {
     setCapitulos((prev) => prev.map((c, i) => (i === idx ? { ...c, conteudo_texto } : c)));
   }
 
+  // Revisar a separação já salva SEM precisar reprocessar o .docx do zero (que descarta
+  // qualquer edição de texto feita depois do upload). Título do capítulo mesclado/excluído
+  // nunca é descartado em silêncio: vira subtítulo (mesmo marcador "## " da PARTE 15) dentro
+  // do capítulo que absorve o texto.
+  function mesclarComCapituloAnterior(idx) {
+    if (idx <= 0) return;
+    setCapitulos((prev) => {
+      const anterior = prev[idx - 1];
+      const atual = prev[idx];
+      const cabecalho = atual.titulo ? `${PREFIXO_SUBTITULO}${atual.titulo}\n\n` : '';
+      const mesclado = { ...anterior, conteudo_texto: `${anterior.conteudo_texto}\n\n${cabecalho}${atual.conteudo_texto}` };
+      return prev.slice(0, idx - 1).concat([mesclado], prev.slice(idx + 1));
+    });
+    setCapSelecionado(idx - 1);
+  }
+
+  function dividirCapituloAqui(idx) {
+    const el = textareaRef.current;
+    const cap = capitulos[idx];
+    if (!el || !cap) return;
+    const pos = el.selectionStart;
+    if (pos == null || pos <= 0 || pos >= cap.conteudo_texto.length) {
+      alert('Clique no texto, no ponto exato onde o novo capítulo deve começar, e só então clique em "Dividir aqui".');
+      return;
+    }
+    const antes = cap.conteudo_texto.slice(0, pos).replace(/\s+$/, '');
+    const depois = cap.conteudo_texto.slice(pos).replace(/^\s+/, '');
+    if (!antes || !depois) { alert('Não sobrou texto de um dos dois lados do cursor.'); return; }
+    setCapitulos((prev) => {
+      const novo = [...prev];
+      novo[idx] = { ...cap, conteudo_texto: antes };
+      novo.splice(idx + 1, 0, { ordem: 0, titulo: 'Novo capítulo', conteudo_texto: depois });
+      return novo;
+    });
+    setCapSelecionado(idx + 1);
+  }
+
+  function excluirCapitulo(idx) {
+    const titulo = capitulos[idx]?.titulo || '(sem título)';
+    if (!window.confirm(`Excluir o capítulo "${titulo}"? Só afeta esta tela — o banco só muda quando você clicar em "Salvar capítulos".`)) return;
+    setCapitulos((prev) => prev.filter((_, i) => i !== idx));
+    setCapSelecionado((s) => Math.max(0, s >= idx ? s - 1 : s));
+  }
+
   async function salvarTudo() {
     if (!capitulos.length) { alert('Não há capítulos pra salvar.'); return; }
     setSalvando(true);
@@ -345,8 +392,8 @@ export default function AdminEbookEditor() {
         )}
 
         {modo === 'editor' && (
-          <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
-            <div style={{ ...ST.card, width: 280, flexShrink: 0, maxHeight: '70vh', overflowY: 'auto' }}>
+          <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexDirection: mobile ? 'column' : 'row' }}>
+            <div style={{ ...ST.card, width: mobile ? '100%' : 280, boxSizing: 'border-box', flexShrink: 0, maxHeight: mobile ? 220 : '70vh', overflowY: 'auto' }}>
               <h4 style={{ marginTop: 0, fontSize: 14 }}>Capítulos ({capitulos.length})</h4>
               {capitulos.map((c, i) => (
                 <div key={i} style={{ marginBottom: 8 }}>
@@ -369,7 +416,7 @@ export default function AdminEbookEditor() {
                 </button>
               )}
             </div>
-            <div style={{ ...ST.card, flex: 1 }}>
+            <div style={{ ...ST.card, flex: 1, width: mobile ? '100%' : 'auto', boxSizing: 'border-box' }}>
               {capitulos[capSelecionado] && (
                 <>
                   <label style={ST.label}>Título do capítulo</label>
@@ -378,12 +425,40 @@ export default function AdminEbookEditor() {
                     value={capitulos[capSelecionado].titulo}
                     onChange={(e) => editarTituloCapitulo(capSelecionado, e.target.value)}
                   />
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+                    <button
+                      style={{ ...ST.btn('outline'), padding: '6px 10px', fontSize: 12 }}
+                      disabled={capSelecionado === 0}
+                      title="Junta este capítulo com o anterior — o título deste vira subtítulo dentro do capítulo mesclado"
+                      onClick={() => mesclarComCapituloAnterior(capSelecionado)}
+                    >
+                      ⬆ Mesclar com o anterior
+                    </button>
+                    <button
+                      style={{ ...ST.btn('danger'), padding: '6px 10px', fontSize: 12 }}
+                      disabled={capitulos.length <= 1}
+                      title="Remove este capítulo da lista (só nesta tela — o banco só muda ao clicar em Salvar capítulos)"
+                      onClick={() => excluirCapitulo(capSelecionado)}
+                    >
+                      🗑 Excluir capítulo
+                    </button>
+                  </div>
                   <label style={ST.label}>Texto</label>
                   <textarea
-                    style={{ ...ST.input, height: '50vh', resize: 'vertical', lineHeight: 1.6, fontFamily: 'inherit' }}
+                    ref={textareaRef}
+                    style={{ ...ST.input, height: mobile ? '35vh' : '50vh', resize: 'vertical', lineHeight: 1.6, fontFamily: 'inherit' }}
                     value={capitulos[capSelecionado].conteudo_texto}
                     onChange={(e) => editarConteudoCapitulo(capSelecionado, e.target.value)}
                   />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 8 }}>
+                    <button
+                      style={{ ...ST.btn('outline'), padding: '6px 10px', fontSize: 12 }}
+                      onClick={() => dividirCapituloAqui(capSelecionado)}
+                    >
+                      ✂ Dividir aqui
+                    </button>
+                    <span style={{ fontSize: 11.5, color: '#94a3b8' }}>Clique no texto acima, no ponto onde o novo capítulo deve começar, e só então clique em "Dividir aqui".</span>
+                  </div>
                 </>
               )}
               <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>

@@ -4,6 +4,37 @@
 
 ---
 
+## 📋 SESSÃO 23 · PARTE 17 (05/09) — EDITOR DE E-BOOK: NÃO RESPONSIVO NO CELULAR + FALTAVA REVER SEPARAÇÃO SEM REPROCESSAR
+
+**Achado do dono, print real do celular**: `AdminEbookEditor.jsx` (tela `/admin/ebook-editor/:id`,
+modo "editor") usava `display:flex` de largura fixa (sidebar 280px + coluna principal
+`flex:1`) sem nunca empilhar — no celular o texto vinha cortado ("Arremat", "investic",
+"intelige"), card de conteúdo espremido pra fora da tela. Pedido junto: precisa de um jeito
+de **revisar a separação de capítulos** sem precisar reprocessar o arquivo inteiro (o
+🔄 Reprocessar da PARTE 15 descarta toda edição de texto feita depois do upload — é
+destrutivo demais só pra corrigir uma fronteira errada).
+
+**Responsividade**: reaproveitado `useIsMobile()` (`src/utils/useIsMobile.js`, já usado em
+~20 outras telas do app — nenhum hook novo). Abaixo de 768px o layout empilha
+(`flexDirection:'column'`, sidebar e card principal a 100% de largura, `boxSizing:
+'border-box'` pra nunca estourar a viewport). Verificado com uma página HTML estática
+espelhando os estilos exatos do componente + Playwright (`playwright-core` apontando pro
+Chromium já pré-instalado do ambiente) em 390px (celular) e 1280px (desktop): **zero
+overflow horizontal nos dois** — não foi possível logar como admin contra o Supabase de
+produção só pra tirar print da tela real, então a validação foi por réplica de estilo,
+não pela tela autenticada.
+
+**Revisar separação sem reprocessar** — 3 ações novas em `modo === 'editor'`, todas só em
+memória até "Salvar capítulos" (nunca tocam o banco sozinhas):
+- **⬆ Mesclar com o anterior**: junta o capítulo atual ao anterior; o título do que foi
+  absorvido vira **subtítulo** (mesmo marcador `## ` da PARTE 15) dentro do texto
+  mesclado — nunca desaparece em silêncio.
+- **✂ Dividir aqui**: usa a posição do cursor **dentro da própria textarea**
+  (`selectionStart`) pra cortar o texto em dois capítulos — sem UI nova de seleção, só
+  clicar no ponto certo do texto e apertar o botão.
+- **🗑 Excluir capítulo**: remove da lista (com confirmação) — é o caminho agora pra
+  descartar de vez algo como o Sumário interno da PARTE 15, sem precisar de SQL direto.
+
 ## 📋 SESSÃO 23 · PARTE 16 (05/09) — AJUSTE FINO, A PEDIDO DO DONO: CAPA/AVISO VOLTAM A SER PARÁGRAFOS
 
 Depois da PARTE 15 (capa/aviso/introdução viraram 3 capítulos separados, visíveis no
