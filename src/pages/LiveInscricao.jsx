@@ -249,6 +249,15 @@ export default function LiveInscricao() {
     .toLocaleDateString('pt-BR', { timeZone: 'America/Bahia', weekday: 'long' })
     .replace('-feira', '');
 
+  // VAGAS REAIS, não fabricadas (05/09). `vagas_max` já existia na tabela e nunca foi lido
+  // em lugar nenhum do front — fica null enquanto ninguém definir um teto, e a faixa abaixo
+  // simplesmente não aparece (mesmo princípio de `numeros`/`imagens`: sem dado, sem seção).
+  // NÃO copiamos a escassez do concorrente ("vagas limitadas") porque ali é texto solto sem
+  // teto nenhum por trás — aqui só mostra quando existe um limite de verdade.
+  const vagasRestantes = typeof evento.vagas_max === 'number'
+    ? Math.max(0, evento.vagas_max - (typeof inscritos === 'number' ? inscritos : 0))
+    : null;
+
   const Bloco = ({ v, l }) => (
     // minWidth 54 (era 62): a 375px de largura os quatro blocos com gap 14 somavam 378px
     // contra 331px úteis, e o contador quebrava em DUAS linhas — "01 10 16" em cima e
@@ -268,6 +277,25 @@ export default function LiveInscricao() {
     { t: 'Busca ao vivo', d: 'Abro a plataforma e procuro na sua frente, com os filtros que eu uso de verdade.' },
     { t: 'Laudo gerado na hora', d: 'Escolhemos um imóvel e a IA monta o relatório de viabilidade ali, do zero.' },
     { t: 'O lance máximo', d: 'Como calcular o teto que preserva a sua margem — e por que quase todo mundo erra aqui.' },
+  ];
+
+  // ── QUALIFICAÇÃO (05/09) ──────────────────────────────────────────────
+  // Adicionado depois de comparar com a LP de um concorrente: ele filtra por capital mínimo
+  // (R$85 mil) antes de deixar entrar — decisão do dono foi NÃO copiar isso (encolheria o
+  // topo de funil, já que a BidPro atende faixa mais ampla que a mentoria de ticket alto
+  // dele). Fica só a qualificação por INTENÇÃO/dor, sem gate de dinheiro nenhum.
+  const QUALIFICA = [
+    'Você quer começar a investir em leilão de imóveis, mas não sabe por onde procurar oportunidade real.',
+    'Você já perdeu tempo olhando edital sem saber se o imóvel tinha risco jurídico ou estava ocupado.',
+    'Você quer usar tecnologia para encontrar e avaliar imóveis, em vez de garimpar site por site.',
+  ];
+  // O último item é ressalva, não frase de efeito: dizer que leilão "não é isento de risco"
+  // é coerente com o resto do produto (é a mesma honestidade do ScoreRisco e da documental) —
+  // prometer lucro garantido é o tipo de promessa que esta base inteira evita fazer.
+  const NAO_VAI_VER = [
+    'Um curso teórico de leilão, sem aplicação prática.',
+    'Você virando especialista em edital e matrícula da noite para o dia.',
+    'Promessa de lucro garantido — leilão é oportunidade real, não é isento de risco.',
   ];
 
   return (
@@ -299,6 +327,11 @@ export default function LiveInscricao() {
           Horário de Brasília · {evento.duracao_min || 90} minutos
           {typeof inscritos === 'number' && inscritos >= 5 && ` · ${inscritos} inscritos`}
         </div>
+        {vagasRestantes !== null && vagasRestantes > 0 && (
+          <div style={{ display: 'inline-block', marginTop: 12, background: `${cor}1F`, border: `1px solid ${cor}55`, color: cor, fontSize: 12.5, fontWeight: 700, padding: '6px 14px', borderRadius: 30 }}>
+            Restam {vagasRestantes} {vagasRestantes === 1 ? 'vaga' : 'vagas'} para esta turma
+          </div>
+        )}
 
         {contagem && !contagem.comecou && (
           <div style={{ display: 'flex', gap: 10, marginTop: 24, padding: '16px 12px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 14, justifyContent: 'center', flexWrap: 'wrap' }}>
@@ -474,6 +507,77 @@ export default function LiveInscricao() {
           ))}
         </div>
       </div>
+
+      {/* ── QUALIFICAÇÃO (05/09) ─────────────────────────────────────────────
+          "Isso é pra você se" + "o que você não vai ver": ajuda quem está rolando a página
+          (ainda não decidiu) a se reconhecer na promessa — e reduz no-show de quem se
+          inscreveria sem ser bem o público. Fica DEPOIS de "como vai funcionar" porque só
+          faz sentido qualificar depois que a pessoa já sabe do que se trata. */}
+      <div style={{ maxWidth: 900, margin: '58px auto 0', padding: '0 22px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 18 }}>
+          <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.09)', borderRadius: 14, padding: '24px 22px' }}>
+            <div style={{ fontSize: 11.5, fontWeight: 700, color: '#4ADE80', textTransform: 'uppercase', letterSpacing: 1.4, marginBottom: 14 }}>
+              Isso é pra você se
+            </div>
+            {QUALIFICA.map((q, i) => (
+              <div key={i} style={{ display: 'flex', gap: 10, marginBottom: i < QUALIFICA.length - 1 ? 12 : 0 }}>
+                <span style={{ color: '#4ADE80', fontWeight: 800, flexShrink: 0 }}>✓</span>
+                <span style={{ fontSize: 14, color: '#D9E3F0', lineHeight: 1.55 }}>{q}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.09)', borderRadius: 14, padding: '24px 22px' }}>
+            <div style={{ fontSize: 11.5, fontWeight: 700, color: '#F87171', textTransform: 'uppercase', letterSpacing: 1.4, marginBottom: 14 }}>
+              O que você não vai ver nessa aula
+            </div>
+            {NAO_VAI_VER.map((n, i) => (
+              <div key={i} style={{ display: 'flex', gap: 10, marginBottom: i < NAO_VAI_VER.length - 1 ? 12 : 0 }}>
+                <span style={{ color: '#F87171', fontWeight: 800, flexShrink: 0 }}>×</span>
+                <span style={{ fontSize: 14, color: '#D9E3F0', lineHeight: 1.55 }}>{n}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* ── PROVAS REAIS (05/09) ──────────────────────────────────────────────
+          `evento.depoimentos` — mesmo princípio de `imagens`: array vazio, seção some. Casos
+          reais, citados como o cliente escreveu (sem inventar número). Um caso "Em andamento"
+          é rotulado como projeção, não como resultado fechado — dizer que já virou lucro
+          antes da revenda acontecer seria a forma nº 10 (medir uma coisa, reportar outra). */}
+      {Array.isArray(evento.depoimentos) && evento.depoimentos.length > 0 && (
+        <div style={{ maxWidth: 820, margin: '58px auto 0', padding: '0 22px' }}>
+          <div style={{ textAlign: 'center', marginBottom: 28 }}>
+            <div style={{ fontSize: 11.5, fontWeight: 700, color: cor, textTransform: 'uppercase', letterSpacing: 1.6, marginBottom: 10 }}>Provas reais</div>
+            <h2 style={{ fontSize: 'clamp(23px,3.4vw,31px)', fontWeight: 800, margin: 0, color: '#fff', letterSpacing: '-0.02em' }}>
+              Direto de quem já está usando
+            </h2>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 18 }}>
+            {evento.depoimentos.map((d, i) => (
+              <div key={i} style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.09)', borderRadius: 14, padding: '22px 20px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12, gap: 10 }}>
+                  <div>
+                    <div style={{ fontSize: 15.5, fontWeight: 700, color: '#fff' }}>{d.nome}</div>
+                    {d.local && <div style={{ fontSize: 12.5, color: '#8FA5BE' }}>{d.local}</div>}
+                  </div>
+                  {d.tag && (
+                    <span style={{ fontSize: 10.5, fontWeight: 700, color: cor, border: `1px solid ${cor}55`, background: `${cor}1A`, borderRadius: 20, padding: '4px 10px', whiteSpace: 'nowrap', textTransform: 'uppercase', letterSpacing: 0.6 }}>
+                      {d.tag}
+                    </span>
+                  )}
+                </div>
+                {d.resultado && (
+                  <div style={{ fontSize: 14, color: '#fff', fontWeight: 600, lineHeight: 1.6, marginBottom: 10 }}>{d.resultado}</div>
+                )}
+                {d.texto && (
+                  <p style={{ fontSize: 13.5, color: '#A7B9CE', lineHeight: 1.65, margin: 0, fontStyle: 'italic' }}>“{d.texto}”</p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ── TELAS DO SISTEMA ──────────────────────────────────────────────────
           Só aparece quando há imagens cadastradas. Uma seção "veja a plataforma" com
