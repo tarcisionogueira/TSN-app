@@ -4,6 +4,24 @@
 
 ---
 
+## 📋 SESSÃO 23 · PARTE 16 (05/09) — AJUSTE FINO, A PEDIDO DO DONO: CAPA/AVISO VOLTAM A SER PARÁGRAFOS
+
+Depois da PARTE 15 (capa/aviso/introdução viraram 3 capítulos separados, visíveis no
+menu ☰), o dono pediu pra "manter a organização" de um jeito mais enxuto — perguntei
+(ambíguo: podia ser sobre outros e-books, ou sobre os subtítulos H3) e a resposta foi
+específica: juntar os três de volta, mas como **parágrafos dentro de UM capítulo só**,
+não mais três entradas no menu.
+
+**Ajuste (direto no banco, mesmo ebook `8d5b67de-b451-43aa-9c8d-7480dc02599d`, texto
+verbatim)**: "Capa e Direitos Autorais" + "Aviso Importante" + "Introdução" voltam a
+ser um único capítulo "Introdução" — mas agora usando o marcador de subtítulo da
+PARTE 15 (`## `) pra separar visualmente "Aviso Importante" e "Introdução — Onde o
+Tijolo Encontra a Liberdade" dentro do texto corrido, em vez de depender de capítulos
+separados pra dar organização. Menu volta a ter 8 entradas (era o número original,
+antes de qualquer mudança desta sessão): Introdução → Capítulo 1 → ... → Conclusão.
+O Sumário interno continua removido (motivo inalterado: redundante com o menu ☰,
+paginação do livro impresso nunca bateria com a paginação flutuante do leitor).
+
 ## 📋 SESSÃO 23 · PARTE 15 (05/09) — LEITOR DE E-BOOK: CAPA/FICHA/AVISO/SUMÁRIO GRUDADOS NA INTRODUÇÃO + SUBTÓPICOS (H3) SEM DESTAQUE
 
 **Achado do dono, com 4 prints reais** depois da PARTE 14: sumário "vindo cortado no meio
