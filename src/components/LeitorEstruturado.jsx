@@ -244,16 +244,23 @@ export default function LeitorEstruturado({
         cursor: 'pointer', userSelect: 'none',
       }}>
         {cap && larguraPagina > 0 && (
-          <div style={{ width: larguraPagina + PAD_H * 2, height: alturaPagina + PAD_V * 2, overflow: 'hidden', position: 'relative', background: cor.papel, borderRadius: 6, boxShadow: '0 10px 40px rgba(0,0,0,0.35)' }}>
-            <div ref={colunaRef} style={{
-              position: 'absolute', top: PAD_V, left: PAD_H,
-              width: larguraPagina, height: alturaPagina,
-              columnWidth: larguraPagina, columnGap: 0, columnFill: 'auto',
-              transform: `translateX(-${paginaAtual * larguraPagina}px)`, transition: 'transform .3s ease',
-              fontSize, color: cor.texto, lineHeight: 1.7, fontFamily: FONTE_LEITURA, whiteSpace: 'pre-wrap',
-            }}>
-              <h2 style={{ fontSize: fontSize + 6, fontWeight: 700, margin: '0 0 18px', breakAfter: 'avoid' }}>{cap.titulo}</h2>
-              {cap.conteudo_texto}
+          // 3 camadas de propósito: a de fora é só moldura (fundo/sombra, do tamanho da
+          // página + margem); a do meio é o RECORTE (overflow:hidden) — largura/altura
+          // EXATAS de uma página de conteúdo, sem sobrar nem faltar um pixel; só dentro
+          // dela é que o texto (colunaRef) desliza. Com o recorte do tamanho errado
+          // (maior que a página), sobra fresta pra aparecer a borda da página vizinha —
+          // foi exatamente o que o dono viu (letras cortadas nos dois cantos).
+          <div style={{ width: larguraPagina + PAD_H * 2, height: alturaPagina + PAD_V * 2, position: 'relative', background: cor.papel, borderRadius: 6, boxShadow: '0 10px 40px rgba(0,0,0,0.35)' }}>
+            <div style={{ position: 'absolute', top: PAD_V, left: PAD_H, width: larguraPagina, height: alturaPagina, overflow: 'hidden' }}>
+              <div ref={colunaRef} style={{
+                width: larguraPagina, height: alturaPagina,
+                columnWidth: larguraPagina, columnGap: 0, columnFill: 'auto',
+                transform: `translateX(-${paginaAtual * larguraPagina}px)`, transition: 'transform .3s ease',
+                fontSize, color: cor.texto, lineHeight: 1.7, fontFamily: FONTE_LEITURA, whiteSpace: 'pre-wrap',
+              }}>
+                <h2 style={{ fontSize: fontSize + 6, fontWeight: 700, margin: '0 0 18px', breakAfter: 'avoid' }}>{cap.titulo}</h2>
+                {cap.conteudo_texto}
+              </div>
             </div>
           </div>
         )}

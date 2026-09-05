@@ -4,6 +4,28 @@
 
 ---
 
+## 📋 SESSÃO 23 · PARTE 13 (04-05/09) — PAGINAÇÃO: recorte errado deixava a página vizinha vazar nos cantos
+
+**Achado do dono, testando no celular** (print real): letras da página anterior E da
+próxima apareciam cortadas nos dois cantos da tela, atrapalhando a leitura — cor da
+página, fonte e zoom aprovados, só a moldura de recorte estava errada.
+
+**Causa raiz**: `LeitorEstruturado.jsx` tinha só DUAS camadas — a caixa externa
+(`overflow:hidden`, tamanho = página + margem `PAD_H/PAD_V`) e o `colunaRef` (multi-
+coluna) posicionado `left:PAD_H` DENTRO dela. Como o recorte (`overflow:hidden`) estava
+na caixa EXTERNA (maior, incluindo a margem) em vez de estar exatamente do tamanho de
+UMA página de conteúdo, sobrava uma fresta de `PAD_H`/`PAD_V` pixels de cada lado por
+onde a coluna vizinha (a página anterior à esquerda, a próxima à direita — o mecanismo
+de paginação CSS deixa as colunas adjacentes fisicamente coladas, só escondidas pelo
+recorte) aparecia.
+
+**Correção**: 3 camadas em vez de 2 — moldura externa (fundo/sombra, tamanho página+
+margem) → **recorte** (`overflow:hidden`, tamanho EXATO de uma página de conteúdo, sem
+sobrar 1px) → `colunaRef` (o texto que desliza) por dentro do recorte. Regra geral pra
+paginação CSS multi-coluna: o elemento com `overflow:hidden` tem que ter a MESMA largura
+declarada em `column-width` — qualquer diferença vira fresta de vazamento da coluna
+vizinha.
+
 ## 📋 SESSÃO 23 · PARTE 12 (04/09) — LEITOR DE E-BOOK: PAGINAÇÃO REAL (CSS multi-coluna) + menu de capítulos + fonte Literata
 
 **Pedido do dono, testando com o livro real**: (a) tirar o campo de anexar PDF da modal
