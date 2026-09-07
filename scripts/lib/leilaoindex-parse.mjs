@@ -48,8 +48,6 @@ function primeiraLinhaInfo(linhas) {
   return null;
 }
 
-let _dumpsRestantes = 2; // DEBUG (07/09, temporário): ver diagnostico-leilaoindex-cidade.mjs
-
 export function parseDetalhe(html, url) {
   const txt = textoDe(html);
   const linhas = textoComLinhas(html).split('\n');
@@ -69,13 +67,6 @@ export function parseDetalhe(html, url) {
   const bare = !info ? cidadeUFBare(txt) : { cidade: null, estado: null };
   const cidade = info?.cidade || bare.cidade;
   const estado = info?.estado || bare.estado;
-  // DEBUG (07/09, temporário — remover após diagnosticar): 3ª rodada mostrou cidade/estado
-  // NULL em 9 de 9 amostras mesmo com o fallback. Dump das primeiras linhas reais pra ver o
-  // formato de verdade em vez de continuar chutando regex às cegas.
-  if (!cidade && _dumpsRestantes > 0) {
-    _dumpsRestantes--;
-    console.log(`[DEBUG-CIDADE] ${url}\n  linhas[0..14]=${JSON.stringify(linhas.slice(0, 15))}\n  txt[0..400]=${JSON.stringify(txt.slice(0, 400))}`);
-  }
   const area = extrairArea(info?.descCurta || '', txt.slice(0, 500));
   const modalidade = /extrajudicial/i.test(txt) ? 'extrajudicial' : /judicial/i.test(txt) ? 'judicial' : 'extrajudicial';
   const mat = (txt.match(/matr[íi]cula\s*(?:n[º°.]?\s*)?([\d.]{3,})/i) || [])[1] || null;

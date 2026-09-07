@@ -48,21 +48,18 @@ export function parseDetalhe(html, url) {
   let avaliacao = avalExplicita || primeira;
   let minimo = ultima || avaliacao;
   if (!avaliacao) avaliacao = minimo;
-  // GUARDA (07/09): a home mistura "leilões" de imóvel com veículo sob a MESMA URL
-  // /leilao/<slug> ("fiatpalio-weekend-ex" entrou na 1ª rodada real com avaliação de
-  // R$13.337 — carro, não imóvel). Sem nenhuma palavra de imóvel no corpo, o valor não é de
-  // um imóvel; zera pra o checarQualidade descartar (mesmo caminho dos pacotes multi-imóvel).
-  const reImovel = /matr[íi]cula|im[óo]vel|terreno|apartamento|\bcasa\b|\b[áa]rea\b|\bm[²2]\b|rural|sobrado/i;
-  const bateuImovel = reImovel.test(txt);
-  if (!bateuImovel) {
+  // GUARDA (07/09, reescrita depois de dado real): a home mistura "leilões" de imóvel com
+  // veículo sob a MESMA URL /leilao/<slug> ("fiatpalio-weekend-ex" com avaliação de
+  // R$13.337 — carro, não imóvel). 1ª versão testava AUSÊNCIA de palavra de imóvel no corpo
+  // inteiro — mas o dump real do fiatpalio mostrou "bateu=Rural" vindo de um FILTRO DE
+  // CATEGORIA fixo na barra lateral ("Eletrônicos Imóveis Imóveis comerciais Imóveis
+  // residenciais Máquinas Móveis Rural Veículos Estado UF AC - Acre..."), presente em TODA
+  // página do site, item ou não — a guarda nunca disparava de verdade, pra nenhum slug.
+  // Troca de estratégia: sinal POSITIVO de veículo (placa/renavam/chassi/combustível/km) —
+  // esses termos não aparecem num filtro de categoria genérico, só na ficha real do bem.
+  // Pacote multi-imóvel continua caindo por outro caminho (nenhum valor único de avaliação).
+  if (/\bplaca\b|\brenavam\b|\bchassi\b|combust[íi]vel|quilometragem|\bkm\s*rodados?\b/i.test(txt)) {
     avaliacao = 0; minimo = 0;
-  } else if (slug === 'fiatpalio-weekend-ex') {
-    // DEBUG (07/09, temporário — remover após diagnosticar): a guarda deveria ter zerado
-    // este slug (carro) na 3ª rodada e não zerou. Dump de qual palavra bateu e onde, pra
-    // achar a contaminação real em vez de chutar outra regex às cegas.
-    const m = txt.match(reImovel);
-    const pos = m ? m.index : -1;
-    console.log(`[DEBUG-VEICULO] ${url}\n  bateu="${m?.[0]}" pos=${pos}\n  contexto=${JSON.stringify(txt.slice(Math.max(0, pos - 80), pos + 80))}`);
   }
 
   const titulo = tituloDeSlug(slug);

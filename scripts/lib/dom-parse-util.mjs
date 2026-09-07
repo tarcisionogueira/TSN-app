@@ -122,9 +122,16 @@ const RE_TIPO_NAO_CIDADE = /^(Im[óo]vel|Direitos?|Rural|Urbano|Apartamento|Casa
 // pode ter conector interno minúsculo ("Rio de Janeiro/RJ" — mesma lição da
 // `cidadeUFDeSlug`: se o regex não aceitar "de/do/da" DENTRO do nome, corta a cidade no
 // meio). `desde` permite pular um preâmbulo (menu, breadcrumb) antes de procurar.
+const RE_CIDADE_UF_BARE = /\b([A-ZÀ-Ÿ][A-Za-zÀ-ÿ]+(?:\s(?:d[aeo]s?|e|[A-ZÀ-Ÿ][A-Za-zÀ-ÿ]+)){0,3})\/([A-Z]{2})\b/;
 export function cidadeUFBare(txt, desde = 0) {
-  const alvo = String(txt || '').slice(desde, desde + 1800);
-  const m = alvo.match(/\b([A-ZÀ-Ÿ][A-Za-zÀ-ÿ]+(?:\s(?:d[aeo]s?|e|[A-ZÀ-Ÿ][A-Za-zÀ-ÿ]+)){0,3})\/([A-Z]{2})\b/);
+  const texto = String(txt || '');
+  // Janela curta primeiro (rápido, evita casar algo errado num texto grande) — mas alguns
+  // sites (RIGOLONLEILOES etc.) abrem com um banner de cookies ("Centro de preferências de
+  // privacidade... Cookies essenciais... Cookies de publicidade...") que sozinho passa de
+  // 1800 chars, empurrando a Cidade/UF real pra fora da janela inteira (achado 07/09, dump
+  // real: 0 de 9 lotes de 3 tenants achavam cidade — o texto todo era banner). Sem fallback
+  // pro texto inteiro, o preâmbulo "vence" e a função nunca alcança o conteúdo de verdade.
+  const m = texto.slice(desde, desde + 1800).match(RE_CIDADE_UF_BARE) || texto.slice(desde).match(RE_CIDADE_UF_BARE);
   if (!m) return { cidade: null, estado: null };
   const palavras = m[1].split(/\s+/);
   while (palavras.length > 1 && RE_TIPO_NAO_CIDADE.test(palavras[0])) palavras.shift();
