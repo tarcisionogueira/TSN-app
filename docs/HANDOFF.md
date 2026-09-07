@@ -4,6 +4,42 @@
 
 ---
 
+## 📋 SESSÃO 24 · PARTE 7 (07/09) — CAPA DE EBOOK EM BRANCO: A GARANTIA "NUNCA DEIXA CAIXA BRANCA" TINHA UM BURACO REAL
+
+**Achado do dono**: print do "Lucre Antes de Arrematar" (R$49,90) na Área de Membros — capa em
+branco, progresso de leitura funcionando normal ("13% lido · pág. 1 de 8"). "A foto foi
+devidamente anexada do ebook. E não está aparecendo."
+
+**Descartado, em ordem, com evidência de banco/config (não só leitura de código)**:
+- `capa_url` não é link do Google Drive (hipótese inicial, natural dado que `driveUrl.js`
+  existe por causa exatamente desse histórico de capa quebrada) — é
+  `storage/v1/object/public/membros-capas/...`, Supabase Storage direto.
+- Objeto existe: 239.566 bytes, `mimetype: image/jpeg` (`storage.objects`).
+- Bucket `membros-capas`: `public = true` (`storage.buckets`).
+- CSP (`vercel.json`) libera `img-src ... https: http:` sem restrição de domínio.
+- Service worker (`public/sw.js` linha 47) ignora explicitamente qualquer cross-origin —
+  Supabase nunca passa pelo cache dele.
+- Egress bloqueado para o domínio do Supabase nesta sessão (`EGRESS_BLOCKED` tanto no
+  WebFetch quanto no curl via proxy) — não deu pra baixar o arquivo e confirmar byte a byte,
+  mas todo o resto (metadado, bucket, CSP, SW) está saudável.
+
+**Causa mais provável, dada a eliminação acima**: upload que chegou truncado/corrompido no
+Storage — o arquivo fica com metadado válido (tamanho, mimetype) mas não decodifica como
+imagem de verdade. Nesse caso o `<img onError>` do `EbookCapa` (Membros.jsx) **não dispara** —
+o pedido HTTP teve sucesso (200), só o decode de pixel falhou, e nem todo navegador trata isso
+como "erro" de `<img>`. A garantia do próprio comentário do componente ("nunca deixa caixa
+branca") tinha esse buraco desde sempre; só não tinha aparecido ainda.
+
+**Fix**: `onLoad` checando `e.currentTarget.naturalWidth === 0` como segundo gatilho de
+fallback, ao lado do `onError` — pega o caso "sucesso de rede, decode furado" que o onError
+sozinho nunca cobriu. Aplicado em `EbookCapa` (Membros.jsx) **e** nos 4 pontos equivalentes de
+`EbookPage.jsx`, que não tinham NENHUMA proteção (nem onError) — mesmo padrão, exposição maior.
+
+**Ainda pendente com o dono**: reenviar a capa desse ebook específico pelo Admin (upload novo
+gera path novo — `Date.now()+random` — sem risco de colidir com o arquivo problemático atual).
+Sem acesso de rede ao Storage nesta sessão, não deu pra confirmar os bytes antes OU depois do
+fix — só o dono, abrindo o app de verdade, consegue fechar esse último passo.
+
 ## 📋 SESSÃO 23 · PARTE 18 (05/09) — FECHAMENTO DO DIA: RESUMO (PARTES 13-17) + PENDÊNCIAS PRA PRÓXIMA SESSÃO
 
 **Resumo do que saiu hoje**, todo no editor/leitor de e-book estruturado (`LeitorEstruturado.jsx`,

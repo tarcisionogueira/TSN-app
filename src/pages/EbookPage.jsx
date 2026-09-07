@@ -23,6 +23,13 @@ export default function EbookPage() {
   const [leitor, setLeitor] = useState(false);   // leitor paginado em tela cheia
   const [capitulos, setCapitulos] = useState(null);       // null = ainda não buscado/sem acesso
   const [leitorEstruturado, setLeitorEstruturado] = useState(false);
+  // Capa quebrada (URL 200 mas não decodifica — upload corrompido/truncado): onError sozinho não
+  // pega esse caso (a requisição teve sucesso). Um estado só pro ebook inteiro, já que as 4
+  // exibições da capa nesta tela apontam pro mesmo capa_url.
+  const [capaQuebrada, setCapaQuebrada] = useState(false);
+  const capaOk = ebook?.capa_url && !capaQuebrada;
+  const onErroCapa = () => setCapaQuebrada(true);
+  const onCargaCapa = (e) => { if (!e.currentTarget.naturalWidth) setCapaQuebrada(true); };
 
   useEffect(() => {
     if (!id) return;
@@ -141,8 +148,9 @@ export default function EbookPage() {
           <div style={{ background:'white', borderRadius:20, boxShadow:'0 4px 24px rgba(0,0,0,0.08)', overflow:'hidden' }}>
             {/* Banner/capa */}
             <div style={{ background:'linear-gradient(135deg,#1e1b4b,#111111)', padding:'40px 24px', display:'flex', flexDirection:'column', alignItems:'center', gap:20 }}>
-              {ebook.capa_url ? (
+              {capaOk ? (
                 <img src={driveImage(ebook.capa_url)} alt={ebook.titulo}
+                  onError={onErroCapa} onLoad={onCargaCapa}
                   style={{ maxWidth:200, borderRadius:10, boxShadow:'0 16px 48px rgba(0,0,0,0.4)' }}/>
               ) : (
                 <div style={{ width:160, height:220, borderRadius:10, background:'linear-gradient(135deg,#6366f1,#4f46e5)', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:12, boxShadow:'0 16px 48px rgba(0,0,0,0.4)' }}>
@@ -246,8 +254,9 @@ export default function EbookPage() {
         /* PDF — header compacto + iframe full-width */
         <div>
           <div style={{ background: dark ? '#111' : '#fffdf7', padding:'16px 24px', display:'flex', alignItems:'center', gap:16, borderBottom:`1px solid ${dark?'#333':'#e2e8f0'}` }}>
-            {ebook.capa_url ? (
+            {capaOk ? (
               <img src={driveImage(ebook.capa_url)} alt={ebook.titulo}
+                onError={onErroCapa} onLoad={onCargaCapa}
                 style={{ height:56, borderRadius:6, boxShadow:'0 4px 12px rgba(0,0,0,0.2)', flexShrink:0 }}/>
             ) : (
               <div style={{ width:40, height:56, borderRadius:6, background:'linear-gradient(135deg,#6366f1,#4f46e5)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, color:'white', fontSize:20, fontWeight:900 }}>
@@ -277,8 +286,9 @@ export default function EbookPage() {
       ) : pdfUrl ? (
         /* Não é PDF — mostra preview e botão download */
         <div style={{ maxWidth:720, margin:'0 auto', padding:'48px 24px 80px', textAlign:'center' }}>
-          {ebook.capa_url && (
+          {capaOk && (
             <img src={driveImage(ebook.capa_url)} alt={ebook.titulo}
+              onError={onErroCapa} onLoad={onCargaCapa}
               style={{ maxHeight:340, maxWidth:240, borderRadius:8, boxShadow:`0 12px 40px rgba(0,0,0,${dark?0.6:0.25})`, display:'block', margin:'0 auto 28px' }}/>
           )}
           <h2 style={{ fontSize:22, fontWeight:800, color: texto, margin:'0 0 16px' }}>{ebook.titulo}</h2>
@@ -292,8 +302,9 @@ export default function EbookPage() {
         /* Sem arquivo — exibe texto/descrição */
         <div style={{ maxWidth:720, margin:'0 auto', padding:'48px 24px 80px' }}>
           <div style={{ textAlign:'center', marginBottom:52 }}>
-            {ebook.capa_url && (
+            {capaOk && (
               <img src={driveImage(ebook.capa_url)} alt={ebook.titulo}
+                onError={onErroCapa} onLoad={onCargaCapa}
                 style={{ maxHeight:340, maxWidth:240, borderRadius:8, boxShadow:`0 12px 40px rgba(0,0,0,${dark?0.6:0.25})`, display:'block', margin:'0 auto 28px' }}/>
             )}
             <h1 style={{ fontSize:28, fontWeight:700, color: texto, margin:'0 0 8px', letterSpacing:'-0.5px', lineHeight:1.3 }}>{ebook.titulo}</h1>
