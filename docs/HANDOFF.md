@@ -4,6 +4,75 @@
 
 ---
 
+## 📋 SESSÃO 24 · PARTE 8 (07/09) — 8 CANDIDATOS DJEN EM PRODUÇÃO: CRON DIÁRIO + docs_status=integrado; GLOBOLEILOES FICA DE FORA (SITE VIROU SPA)
+
+**Pedido do dono**: "Resolva todos para no final colocarmos em produção" (continuação da Parte
+6) e, depois de reportado o bug do ebook (Parte 7), "Pode fazer e colocar tudo em produção" —
+autorização explícita para o rollout completo.
+
+**O que foi corrigido nesta parte, cada um com dado real de CI antes de fechar (nenhum fix às
+cegas)**:
+1. **RIGOLONLEILOES/GIORDANOLEILOES/THAISTEIXEIRA (cidade/UF nula em 9/9 amostras)** — o
+   banner de consentimento de cookies ("Centro de preferências de privacidade...") sozinho
+   passa de 1800 chars, empurrando a Cidade/UF real pra fora da janela de busca do
+   `cidadeUFBare`. Fix: fallback pro texto inteiro quando a janela curta não acha nada.
+2. **ALBERTOMACEDOLEILOES (veículo `fiatpalio-weekend-ex` driblando a guarda)** — a guarda por
+   AUSÊNCIA de palavra de imóvel nunca disparava de verdade: "Rural"/"Imóveis" vêm de um
+   filtro de categoria fixo na barra lateral, presente em TODA página do site, item ou não.
+   Fix: trocado por sinal POSITIVO de veículo (placa/renavam/chassi/combustível/km) — termo
+   que só aparece na ficha real de um veículo.
+3. **RIGOLON/GIORDANO de novo (cidade preenchida mas CONTAMINADA)** — depois do fix 1, cidade
+   virou não-nula mas vinha colada a chrome do site ("Fechar Home Jales" em vez de "Jales") OU
+   ao próprio título do leilão em CAIXA ALTA ("REGIÃO EM RIBEIRÃO PRETO" — mesma armadilha de
+   maiúscula do "Em", só que "Região" não estava na lista de descarte). Fix: `Fechar`, `Home`,
+   `Regi[ãa]o` somados a `RE_TIPO_NAO_CIDADE` (dom-parse-util.mjs, compartilhado por
+   leilaoindex/rocha/simon).
+4. **LEJE (mesma classe, achado na validação do fix 3)** — "Vídeo Outros Lotes Resende" em vez
+   de "Resende" (aba + link colados). `Vídeo`/`Outros` somados à mesma lista; `Lote` virou
+   `Lotes?` pro plural.
+5. **GLOBOLEILOES (0 lotes em TODA rodada real, isolada ou não)** — 3 diagnósticos
+   independentes (dump de HTML cru, varredura de todos os 44 hrefs internos, dispatch isolado
+   sem disputa de recurso) descartaram timeout e resource-contention e confirmaram: **o site
+   migrou pra uma SPA Inertia.js** (Laravel+Inertia+React) desde o recon original — HTML real
+   e completo (396KB, domínio certo, sem bloqueio) mas ZERO link de lote no documento; os
+   hrefs são só bundles `/build/assets/*.js` do Vite (`inertia-vendor-*.js` confirma). Os
+   dados agora vêm como JSON embutido (`data-page`) que o React monta no cliente — não é
+   ajuste de regex, é parser novo. **Decisão: fica FORA do cron de produção** (mesmo
+   tratamento do HASTA), documentado em `leiloeiro_conhecimento.observacao` e no cabeçalho do
+   próprio `globo-parse.mjs`, pra não repetir a investigação. Continua rodando no `push` como
+   sinalizador — se o site voltar a ser HTML simples, o próximo push acusa sozinho.
+
+**PRODUÇÃO — o que mudou em `scraper-dom.yml`**: nenhuma fonte deste workflow (nem as 3
+antigas ALFA/HASTA/NORDESTE) tinha cron de produção — só rodavam em dry-run no push ou por
+dispatch manual (alguém lembrar de clicar `gravar=1`). Adicionado `schedule: cron: '0 8 * * *'`
+(diário, antes do `scraper.yml`/CEF às 9h) que GRAVA de verdade sozinho. `env.DRYRUN_PADRAO` /
+`env.RODA_TUDO` calculados uma vez no nível do job (schedule OU dispatch com `gravar=1` →
+grava; push → sempre dry-run) e referenciados por cada fonte — evita repetir a mesma expressão
+9x. HASTA e GLOBOLEILOES ficam de fora do agendamento (datacenter bloqueado / site virou SPA,
+respectivamente) — só HASTA por dispatch manual residencial, GLOBOLEILOES só valida no push.
+Notify-on-failure adicionado (mesmo padrão do `scraper.yml`/CEF), com `failure() || cancelled()`
+— lição já documentada sobre alerta que não cobre timeout/cancelamento.
+
+**Banco**: `docs_status='integrado'` pras 8 fontes prontas (JELEILOES, RIGOLONLEILOES,
+GIORDANOLEILOES, THAISTEIXEIRA, ROCHALEILOES, ALBERTOMACEDOLEILOES, SIMONLEILOES, LEJE).
+GLOBOLEILOES fica `'candidato'`, observação atualizada com o achado da SPA.
+
+**Validação final (commit `519878f`, run completo dos 9, log de 622 linhas lido por inteiro)**:
+zero `[dom] falha`/`[dom] HTTP`/stack trace em qualquer fonte. Resumo por fonte:
+JELEILOES 37 prontos·3 descartados · RIGOLONLEILOES 19·2 · GIORDANOLEILOES 39·1 · THAISTEIXEIRA
+28·0 · ROCHALEILOES 13·1 (+2 encerrados) · ALBERTOMACEDOLEILOES 2·10 (guarda de veículo
+funcionando — descartados subiu de 9→10) · SIMONLEILOES 12·0 · LEJE 5·0. GLOBOLEILOES: 0
+lotes, "vazio", sem erro (esperado).
+
+**Achado FORA de escopo, sinalizado mas não mexido**: NORDESTE (fonte pré-existente, não faz
+parte do lote do DJEN) regrediu de 21→0 lotes nesta mesma rodada (`degradado`). Não investigado
+agora — não foi tocado por nenhum commit desta sessão; fica registrado pra quem for olhar.
+
+**KRONLEILOES e JONASLEILOEIRO/FERNANDOLEILOEIRO seguem fora, como já documentado (Partes 5/6)**:
+Kron por baixo volume (3 imóveis) frente ao esforço de adaptar o padrão Superbid; os outros
+dois por precisarem de Bright Data Web Unlocker mais forte ou IP residencial — decisão do dono,
+não investigação de código.
+
 ## 📋 SESSÃO 24 · PARTE 7 (07/09) — CAPA DE EBOOK EM BRANCO: A GARANTIA "NUNCA DEIXA CAIXA BRANCA" TINHA UM BURACO REAL
 
 **Achado do dono**: print do "Lucre Antes de Arrematar" (R$49,90) na Área de Membros — capa em
@@ -39,6 +108,349 @@ sozinho nunca cobriu. Aplicado em `EbookCapa` (Membros.jsx) **e** nos 4 pontos e
 gera path novo — `Date.now()+random` — sem risco de colidir com o arquivo problemático atual).
 Sem acesso de rede ao Storage nesta sessão, não deu pra confirmar os bytes antes OU depois do
 fix — só o dono, abrindo o app de verdade, consegue fechar esse último passo.
+
+## 📋 SESSÃO 24 · PARTE 6 (07/09) — JELEILOES: PARSER CERTO, SITE COM RATE-LIMIT (NÃO PRONTO); FIX CIDADE-DO-SLUG (ALFA/HASTA/NORDESTE); MAPA DE PLATAFORMA DOS OUTROS 8+1 CANDIDATOS DO DJEN
+
+**Contexto**: continuação do pedido do dono de 05/09 ("Faça a sequencialmente todos eles de
+acordo com o volume de lotes em leilão") — os 13 leiloeiros achados via cruzamento de edital
+do DJEN e ainda não integrados (PARTE 5). Esta sessão não teve acesso de rede direto (mesma
+limitação já documentada); todo recon abaixo rodou via `recon-novos-leiloeiros.yml` no
+GitHub Actions (egress real) — nenhum parser foi escrito sem antes ver dado real.
+
+**1. JELEILOES (14 editais, 13 já promovidos — maior taxa de promoção do lote de 13) — PARSER
+CERTO, SITE COM RATE-LIMIT POR RAJADA — NÃO ESTÁ PRONTO.** Recon achou algo que a hipótese inicial (tratar como mais um
+tenant do SUPORTE, igual SUEDPETER/LIDER) teria acertado pela METADE: `stats.suporteleiloes
+.com.br/ping` respondeu `clientId:"jeleiloes.com.br"` e a foto/PDF do lote vêm de
+`static.suporteleiloes.com.br/jeleiloescombr/...` — É a mesma infra. Mas `/buscador
+?categoria=2` (o catálogo do template antigo) dá 404 aqui; o catálogo real é `/imoveis?page=N`,
+um front-end mais novo da mesma plataforma. Forçar como tenant de `SUPORTE_TENANTS`
+(scraper-puppeteer.mjs) teria dado ZERO lotes silencioso — os seletores (`article.lote-main`,
+`.strong-cod`) não existem nesse template — e um zero por seletor errado é indistinguível de
+"sem imóvel hoje" sem abrir o HTML, exatamente a forma nº 10 do topo deste documento.
+
+Escrito como parser dedicado: `scripts/lib/jeleiloes-parse.mjs` + `scripts/lib/motor/fontes
+/jeleiloes.mjs` + `scripts/scraper-jeleiloes.mjs` (fonte `dom`, custo zero). Achados que
+moldaram o parser:
+- **Detalhe do lote é TABELA** (Lote | Tipo do Bem | Valor de Avaliação | Lance Inicial - 2ª
+  Praça/Hasta | Valor Débito | Lance Atual | Status), não rótulo solto tipo ALFA ("Valor da
+  Avaliação: R$ X"). `valorPorRotulo` (janela de 40 chars) não alcançaria o valor — os
+  cabeçalhos das OUTRAS colunas ficam no meio. `linhaTabelaLote` lê `<tr>/<td>` de verdade
+  (o motor `dom` entrega `page.content()`, não `innerText`), com janela larga (400 chars)
+  como rede de segurança se um tenant futuro não renderizar `<table>`.
+- **Edital/matrícula são PDF de nome opaco** (`sl-bem-<n>-hash.pdf`, sem "edital"/"matricula"
+  na URL) — a classificação usada em todo lugar (`anexosDeHtml`, por URL) não serviria; o
+  rótulo mora no TEXTO do link ("VISUALIZAR EDITAL"/"VISUALIZAR MATRÍCULA"). `anexosJE` local
+  classifica por texto do `<a>`, não pela URL.
+- URL do lote tem DUAS formas: `/oferta/leilao/imoveis/<cat>/<id>/id-<id2>/<slug>` e
+  `/ofertas/leilao/imoveis/<cat>/<id>/<id2>/<slug>` (plural, sem "id-") — as duas capturadas.
+- Testado localmente contra HTML reconstruído com o texto REAL do recon (não é prova de rede,
+  mas prova a lógica): avaliação R$ 2.262.226,53 / lance R$ 1.696.669,90 / matrícula 511 /
+  modalidade judicial / anexos classificados corretamente / foto certa (ignorando ícone do
+  template) — todos batendo com o que o recon mostrou.
+- `npm run build` limpo; `testar:leiloeiro` (25/25) e `testar:doc-leiloeiro` (11/11) intactos.
+
+**⚠️ A RODADA REAL (automática, via `scraper-dom.yml` no push) confirmou a lógica E achou um
+problema novo — os dois ao mesmo tempo.** Página 1 de `/imoveis` enumerou **20 lotes reais com
+URL válida** (prova que `extrairUrlsDeLote` está certo). Mas a página 2 (`?page=2`) **E** o
+fetch de detalhe do 1º lote voltaram **HTTP 403** — na MESMA sessão do Puppeteer, poucos
+segundos depois da página 1 ter dado 200. Não é bloqueio de IP de datacenter (todo recon
+isolado anterior, 1 request por job do GitHub Actions, sempre deu 200 — inclusive o dump do
+MESMO lote que agora fica 403 dentro do scraper): é sensível a **RAJADA** — 2ª+ requisição em
+sequência rápida na mesma sessão apanha. O motor `dom` (fetch-dom.mjs) trata HTTP ≥400 como
+resposta DEFINITIVA (não re-tenta) por desenho — correto pra 404/403 de verdade, errado pra um
+rate-limit transitório como este. **NÃO ligar cron nem marcar `integrado` até resolver**: falta
+testar se um espaçamento maior entre requisições evita o 403, ou se precisa cair pro Bright
+Data Web Unlocker (como HASTA) — nenhuma das duas foi tentada ainda.
+
+**2. FIX INCIDENTAL — `cidadeUFDeSlug` cortava cidade composta no conector INTERNO ao nome
+(afeta ALFA/HASTA/NORDESTE também, não só JELEILOES).** Construindo o parser, o slug real
+`imovel-c-10-alq-em-nova-america-da-colina-pr` saía com `cidade: "Colina"` — o `.*` guloso
+antes de `(?:em|de|do|da|no|na)` pega o ÚLTIMO conector da string, e "Nova América da Colina"
+(município real do Paraná) **tem um "da" dentro do próprio nome**. Não é caso hipotético — é
+a mesma ambiguidade de qualquer cidade composta com conector embutido ("Conceição do Mato
+Dentro", "Santo Antônio de Jesus"). **Cidade errada (não nula) é pior que nula**: passa no
+filtro de qualidade e chega ao geocode/relatório com localização errada, sem nenhum sinal de
+alerta — só apareceria numa auditoria como esta, nunca em teste de sintaxe ou build.
+
+Fix em `scripts/lib/dom-parse-util.mjs`: tenta `em/no/na` primeiro (raríssimo aparecer DENTRO
+de um nome de cidade brasileiro — quase sempre é o separador tipo→cidade), só cai pra
+`de/do/da` se não achar. Novo teste `npm run testar:cidade-slug` trava os dois casos (o novo E
+o que a ALFA já tinha corrigido em 21/08 — "leilao-de-fazenda-em-manhumirim-mg" → "Manhumirim",
+não "Fazenda Em Manhumirim"). Sem teste dedicado anterior para esta função — os 3 sites que a
+usam (ALFA/HASTA/NORDESTE) validam via `scraper-dom.yml` (dry-run automático no push), que
+rodou limpo com o fix aplicado.
+
+**3. MAPA DE PLATAFORMA dos outros 8 candidatos verificados nesta sessão** (recon via Actions,
+`leiloeiro_conhecimento.observacao` de cada um tem o achado completo — aqui só o resumo pra
+priorizar o próximo passo):
+
+| Fonte | Editais | Achado | Próximo passo |
+|---|---|---|---|
+| JONASLEILOEIRO | 5 | Cloudflare 403 em TODOS os 6 paths (não só home) | Precisa Bright Data Web Unlocker ou IP residencial antes de qualquer parser |
+| RIGOLONLEILOES | 3 | Plataforma "leilao/index" — catálogo `/leilao/index/imoveis`, lote `/leilao/index/leilao_id/<id>/lote/<id2>` | **Mesma plataforma do GIORDANOLEILOES** (fingerprint de URL idêntico) — 1 parser serve os dois |
+| GIORDANOLEILOES | 3 | Idêntico ao Rigolon (confirmado, não suposição) | Idem — construir junto com Rigolon. THAISTEIXEIRA (42 editais, #1 em volume) ainda não testado mas é candidato a ser a MESMA família — testar `/leilao/index/imoveis` nele antes de tratar como site à parte |
+| VMLEILOES | 4 | HTTP 200, lotes reais em `/lote/<id>/<slug>`, mas `/imoveis` 404; página de erro linka `leilotech.com.br` | Checar se é a plataforma "LeiloTech" já mapeada em `MAPA_QUALIDADE` (scraper-puppeteer.mjs) antes de tratar como 100% novo |
+| SIMONLEILOES | 3 | HTTP 200, catálogo real é `/leiloes/imoveis` (fora dos paths padrão testados) | Recon dedicado do catálogo/paginação |
+| ALBERTOMACEDOLEILOES | 3 | HTTP 200, mas home só lista LEILÕES (evento), não LOTES | Recon de 1 página `/leilao/<slug>` pra achar o padrão de URL do lote |
+| GLOBOLEILOES | 3 | HTTP 200, estrutura mais limpa dos 8 (`<article>` com URL de lote completa já na home) | Bom candidato a próxima integração isolada — sem bloqueio conhecido |
+| ROCHALEILOES | 2 | HTTP 200, `/imoveis` responde com os MESMOS cards da home (possível alias, não filtro) | Confirmar se filtra antes de assumir |
+| **THAISTEIXEIRA** | **42** | Testado `/leilao/index/imoveis` (o path do Rigolon/Giordano): HTTP 200 mas só chrome do site, ZERO card, zero "avalia". **Hipótese de mesma plataforma NÃO confirmada por este path.** Achado à parte: leiloeira oficial em 4 juntas (JUCEMG/JUCESP/JUCEAC/JUCER) — explica o volume | Recon dedicado (home + outros paths) antes de qualquer parser. Comparar o hash do bucket S3 (`906de634c48fb7d34136160b4c353ae4`) com o que Rigolon/Giordano usam antes de descartar de vez a família compartilhada |
+
+**Faltam testar**: KRONLEILOES (13) e LEJE (7) — não couberam nesta rodada de recon (o lote já
+bateu perto do teto de 15 min do workflow).
+
+**Ordem sugerida daqui pra frente**: (1) **JELEILOES primeiro** — testar se espaçar as
+requisições evita o 403 por rajada (ou cair pro Bright Data) antes de qualquer outra coisa,
+já tem parser pronto só faltando isso; (2) GLOBOLEILOES (sem bloqueio, estrutura limpa,
+melhor custo/benefício dos que faltam); (3) recon dedicado de THAISTEIXEIRA (maior volume,
+mas a família compartilhada não confirmou de primeira) e KRONLEILOES/LEJE (ainda sem recon
+nenhum). FERNANDOLEILOEIRO e JONASLEILOEIRO ficam por último — os dois exigem Bright Data Web
+Unlocker antes de qualquer parser, custo que os outros não têm.
+
+---
+
+## 📋 SESSÃO 24 · PARTE 1 (05/09) — RITUAL DE ABERTURA: HASTA "ZEROU" RECONTEXTUALIZADO; RJLEILOES "REGRESSÃO" ERA MÉTRICA ERRADA; 3 ERROS JÁ CORRIGIDOS MARCADOS RESOLVIDOS
+
+**Ritual de abertura**: heartbeat registrado; `erros_cliente`/`relatorio_anomalias`/KYC/pontos-cegos/Bright
+Data/cobertura documental (1b), `fonte_regressao_suspeita`, `auditoria_regras_negocio` (0 crítico),
+`auditoria_seguranca` (0/0), `qa_invariantes` (10 alertas, todos já catalogados em sessões anteriores —
+nenhum novo), Cliente 360, `tempo_processo`, `documental_distribuicao`, health-check e backup (íntegros,
+`arquivos_iguais` não-zero) checados. CI "Deriva código × banco": últimos 5 runs `success`.
+
+**🔍 HASTA "zerou" de novo (0 lotes em 3 medições, 04/09 13h→05/09 01h) — desta vez o dado do banco
+aponta para expiração legítima, não regressão.** `imoveis_leilao` mostra os 584 lotes do último
+scrape bem-sucedido (30/08) com `data_leilao`/`data_fim` UNIFORMES em 2026-09-03 (um único evento de
+leilão, já encerrado há 2 dias) — e nenhuma linha foi tocada (`atualizado_em`) desde 30/08. Ou seja:
+o zero é consistente com "o leilão aconteceu e a próxima coleta ainda não achou o próximo evento", o
+mesmo padrão do falso-positivo LEILOFY já documentado. Diferença do primeiro "zerou" (29/08, que se
+autocorrigiu em 6h): desta vez não houve recuperação nas 12h entre as duas últimas medições. **Não
+dá para confirmar sem acessar o site** (egress deste ambiente bloqueia `hastaleiloes.com.br`,
+confirmado via WebFetch) — existe recon PRONTO pra isso desde 29/08 (`scripts/recon-hasta-zerou.mjs`,
+precisa rodar da máquina residencial do dono) que separa as 4 hipóteses (render lento / intermitente /
+listagem filtra por praça aberta mas detalhe ainda abre / acesso bloqueado). **Ação pendente do
+dono**: rodar o recon; se ele confirmar "listagem sem praça aberta", parser está intacto e só falta a
+Hasta publicar o próximo lote.
+
+**🔍 RJLEILOES "regressão" (1 vs piso 6) era a MÉTRICA ERRADA, não o acervo — achado sobre o PRÓPRIO
+monitor.** `fonte_regressao_suspeita()` compara `fonte_saude.total`, e esse campo é **quanto a coleta
+ACHOU NAQUELE RUN** (`registrarSaude(sb, 'RJLEILOES', prontos, …)` em `scraper-rj.mjs:471` —
+`prontos` é só o lote desta execução), não o total ativo no banco. Conferido direto: `imoveis_leilao`
+tem **75 lotes ATIVOS** de RJLEILOES agora, com praças de 13/07 até 16/10 — acervo saudável, bem mais
+alto que qualquer "total" já visto em `fonte_saude` (máx. histórico: 40). Para uma fonte incremental
+como esta (paga, cadência semanal — `scraper-rj.yml`, terça 11h UTC, último sucesso 01/09), comparar
+o RENDIMENTO de um run isolado contra um piso aprendido do próprio rendimento é a forma nº 10 do topo
+deste arquivo: mede uma coisa (achou pouco HOJE) e reporta com o nome de outra (acervo regrediu).
+**Não mexi na função agora** — HASTA usa esse mesmo `total` para enumeração quase completa do
+catálogo (piso real ali FAZ sentido), então calibrar por fonte exige cuidado para não destravar o
+alerta que protege a HASTA. Fica registrado para quem for ajustar `fonte_regressao_suspeita()`:
+separar fontes "enumera tudo" de fontes "incremental" antes de aplicar piso sobre o mesmo campo.
+
+**✅ `erro_na_tela_do_cliente` (2, 7d) — investigado, baixa urgência.** As duas ocorrências são do
+mesmo dia (01/09, 6h de diferença), `/live/leilao-ao-vivo`, visitante anônimo, tela de retry genérica
+("falha momentânea de conexão nossa — a aula continua de pé"). Sem recorrência nos 4 dias seguintes.
+
+**✅ Cliente 360 `clientes_com_erro: 3` — os 3 já estavam corrigidos, só faltava marcar resolvido.**
+Conferido linha a linha contra o HANDOFF: user `60aaf3fc…` (`/checkout`, "Failed to fetch") é
+exatamente o caso que a Sessão 23 Parte 3 corrigiu (fallback Asaas no `PagamentoCartao`); os outros
+dois (`_leaflet_pos` em `/imovel/:id`) são o bug do Leaflet que a mesma Parte 3 confirmou já corrigido
+em sessão anterior. `update erros_cliente set resolvido=true` nos 3 (por `user_id`+`rota`+`msg`) —
+sem mudança de código, só higiene do painel para não reacusar o que já foi resolvido.
+
+Sem código alterado nesta sessão além do UPDATE de dados acima. `qa_invariantes.cadastro_barrado`
+subiu de 9→13 em 7 dias (limite 7) — não investigado agora (fora do pedido desta sessão), mesma
+composição provável de tentativas repetidas do mesmo `anon_id` já vista na Sessão 23 Parte 2.
+
+---
+
+## 📋 SESSÃO 24 · PARTE 2 (05/09) — LP DA AULA: COMPARATIVO COM CONCORRENTE (BIDHERO) + 3 ADITIVOS + FUNIL FECHADO
+
+**Pedido do dono**: comparar `/live/:slug` com a LP de um concorrente direto (BidHero,
+webinar.bidhero.com.br, 9 prints do funil dele) e ver o que agregar — cotou até mudar a
+estratégia pra "cair direto no WhatsApp, sem formulário", como o concorrente faz.
+
+**Antes de mexer, fechei uma medição que estava em aberto desde 01/09** (`intervencao`,
+chave `aula-02set-trafego-e-lp` — rodei a MESMA função `lp_aula_funil` que o registro já
+apontava, não uma consulta nova): tráfego pro `/live` caiu de 431 pessoas/48h pra 113
+pessoas/96h desde que a verba foi pro Google Ads (Sessão 23 Partes 5-9) — amostra baixa
+demais agora (1 clique/1 form/2 inscrições) pra julgar a LP isolada. **O achado que
+segue de pé, e que pesa mais que qualquer ajuste de página**: a MESMA peça, na MESMA LP,
+convertia 2/28 comprada como objetivo *Leads* e 0/54 como *Cliques no link* — o gargalo já
+medido é a compra de mídia, não o formulário. Por isso **recomendei NÃO copiar** o "direto
+pro WhatsApp" do concorrente — além de não haver evidência de que o formulário (3-4 campos,
+"20 segundos") seja o problema, ele derrubaria conta-criada-na-inscrição, `cidade` (usada pra
+personalizar a busca ao vivo), o `lead_event_id` do Meta CAPI e o vínculo de indicação
+`ref` — tudo isso só faz sentido porque o produto é self-service, diferente do funil dele
+(mentoria de ticket alto, onde "entrar no grupo" É a etapa de venda).
+
+**3 aditivos implementados em `LiveInscricao.jsx`** (dono pediu explicitamente SEM o gate de
+capital mínimo do concorrente — "isso não é pra quem tem R$5 mil" encolheria o topo de funil
+da BidPro, que atende faixa mais ampla que a mentoria dele):
+1. **"Isso é pra você se" / "O que você não vai ver"** — qualifica por intenção/dor, não por
+   dinheiro. A ressalva "leilão não é isento de risco" é coerente com o resto do produto
+   (mesma honestidade do ScoreRisco/documental), não é só copy de venda.
+2. **"Provas reais"** — seção nova, data-driven (`eventos_live.depoimentos`, mesmo princípio
+   aditivo de `imagens`: array vazio = seção some). Migração
+   `live_depoimentos_reais_na_lp.sql` criou a coluna e atualizou `live_proxima()` pra
+   devolvê-la. Populados 2 casos reais que o dono mandou por print de WhatsApp (nome
+   abreviado + local, sem foto nem WhatsApp do cliente — decisão de privacidade minha, dono
+   pode trocar por nome completo se já tiver consentimento pra isso): Matheus A. (Alagoinhas/BA,
+   marcado **"Em andamento"** de propósito — aquisição R$72mil+R$20mil reforma, projeção de
+   revenda R$160mil/margem R$68mil, ainda não fechada) e Rafael S. (marcado "Arrematado" —
+   lance vencedor R$112.949,63 após disputa, 4 lances registrados). **Mais casos virão por
+   print** — é só eu atualizar o array via SQL, sem deploy novo.
+3. **"Restam N vagas"** — usa `eventos_live.vagas_max`, campo que já existia na tabela desde
+   sempre e nunca tinha sido lido em NENHUMA tela (nem a pública, nem o admin). Fica dormente
+   (não aparece) enquanto `vagas_max` for null — ao contrário do "vagas limitadas" do
+   concorrente, que é texto solto sem teto nenhum por trás, aqui só liga quando existir um
+   limite real. **Hoje está null**: se o dono quiser essa faixa no ar, só falta escolher um
+   número (não decidi sozinho) — não há UI de admin pra isso ainda (nem pra `vagas_max`,
+   nem pra editar `depoimentos`; os dois vivem só via SQL direto por enquanto, mesmo caminho
+   que `imagens` já segue hoje).
+
+**Não implementado, fora de escopo desta rodada**: bloco de autoridade em estatística
+("+N arremates, +X anos") — precisa dos números reais do dono, que ainda não vieram; se
+quiser, é só mandar. Build (`npm run build`) passou limpo — `node_modules` estava vazio
+neste ambiente (sessão nova), rodei `npm install` antes.
+
+---
+
+## 📋 SESSÃO 24 · PARTE 3 (05/09) — FECHA O PENDENTE DA PARTE 2: BULLETS DE AUTORIDADE DO APRESENTADOR
+
+A Parte 2 tinha deixado em aberto o bloco de estatística de autoridade por falta dos números
+reais. O dono mandou: **+R$70 milhões em operações**, **+300 imóveis vendidos** (modelo:
+arrematava área, fracionava o solo, vendia por unidade pra dar volume) e 3 casos de
+fracionamento (terreno de custo × nº de casas × preço unitário de venda).
+
+**Implementado** — `apresentador_destaques` (jsonb, novo campo em `eventos_live`, mesmo
+padrão aditivo de `imagens`/`depoimentos`; `live_proxima()` atualizada pra devolvê-lo):
+bullets ao lado da bio em prosa no card "Quem apresenta". Nos 3 casos, calculei o total de
+vendas (área × nº de casas × preço unitário) e **escrevi sempre como "em vendas", nunca como
+"lucro"** — o custo de construção não foi informado, e chamar receita bruta de lucro seria
+exatamente a forma nº 10 do topo deste arquivo (medir uma coisa, reportar com o nome de
+outra), cometida bem no meio de uma seção que existe para provar credibilidade. Os 3:
+R$115mil→29 casas de R$180mil (R$5,2mi em vendas) · R$355mil→26 casas de R$220mil (R$5,7mi)
+· R$156mil→30 casas de R$170mil (R$5,1mi). Build ok, commit `ef1d53d`.
+
+**Estado agora da LP da aula, depois de Partes 2+3**: qualificação sem gate de capital,
+provas reais de cliente (2, mais chegando por print), vagas reais (dormente, sem
+`vagas_max` definido) e autoridade do apresentador em bullets — os 4 aditivos do
+comparativo com o concorrente estão completos.
+
+---
+
+## 📋 SESSÃO 24 · PARTE 4 (05/09) — LINHA DE PROVA NO /LEILOES + O SITE DO LEILOEIRO DO DJEN SEM "HTTPS://"
+
+**Linha de prova no widget de `/leiloes`** (`api/publico.js`, `caixaConviteLive`): pedido do
+dono "sem exagerar no visual" — uma linha só (✓ + texto), puxando `apresentador_destaques[0]`
+via `live_proxima` (mesmo dado da Parte 3, sem copiar/duplicar). O widget continua enxuto por
+decisão já registrada no próprio arquivo (conversão mais rápida; a prova completa fica atrás
+do link "Ver todos os detalhes da aula"). ⚠️ Achado próprio nesta implementação: usei crase
+dentro de um comentário dentro de uma template literal delimitada por crase — fechou a string
+mais cedo e `verificar:sintaxe` pegou antes do build. Lição: **nunca usar crase em comentário
+dentro de arquivo que gera HTML via template literal** (`api/publico.js`, `api/og-share.js` e
+afins) — usa aspas simples ou nada.
+
+**O site do leiloeiro dos editais do DJEN — achado a partir de um imóvel real do dono**
+(Alameda Rio Negro — Barueri/SP, `c172bf60-b705-486e-91e1-0e4e68017748`, fonte
+`EDITAL_DJEN`): sem foto, sem anexo, sem botão "Ir ao leiloeiro". Confirmado que **não é bug
+de renderização** — o botão só aparece com `url_lote` preenchido (`ImovelDetalhe.jsx:2003`), e
+aqui estava nulo. Isso já era decisão deliberada do dono (03/09,
+`edital_vira_lote_sem_foto_com_matricula_e_dedup_pelo_que_temos.sql`): lote nasce sem
+documento DE PROPÓSITO, pra "reforçar a necessidade" — painel `admin_radar_editais()` existe
+exatamente pra mostrar esse trabalho pendente.
+
+**O que o dono pediu (capturar quem é o leiloeiro, validar se já é integrado, pelo menos o
+site, idealmente os anexos) JÁ EXISTIA, construído em 03/09** — `extrairLeiloeiro()` (parser
+de 3 estágios), `leiloeiro_integrado` (flag + `construirEhIntegrado()`), `url_lote` alimentado
+por `leilao_plataforma_url` na promoção (`editais_promover_pendentes()`), e o cron de
+descoberta de documento (`descobrirDocumentosNoSite`, a cada 6h) que só passa a agir QUANDO
+`url_lote` existe. **O gargalo real, achado agora**: `parseEdital()` só reconhecia URL com
+`https://` na frente — mas o DJEN escreve quase sempre **"NO SITE WWW.NOME.COM.BR" sem
+protocolo nenhum**. Medido antes de mexer (772 editais): 83 já tinham
+`leilao_plataforma_url`, **178 tinham "www.\*.com.br" no texto sem tê-lo extraído** — o
+gargalo era este padrão, não falta de dado. Amostra dos 40 domínios mais frequentes conferida
+um a um: **zero falso positivo** (só nome de leiloeiro/leilão — edital judicial não cita site
+alheio à toa), então o padrão entrou sem âncora extra.
+
+**Feito**: regex nova em `parseEdital()` (`api/radar-editais-cron.js`) pega o padrão sem
+protocolo daqui pra frente; migração `backfill_leilao_plataforma_url_www_sem_protocolo.sql`
+resolveu o que já estava no banco — 178 `editais_leilao` atualizados, e **24→81** dos 168
+lotes ativos de EDITAL_DJEN passam a ter site do leiloeiro (inclusive o imóvel que o dono
+reportou, agora com `url_lote = 'https://leje.com.br'`). Não precisei escrever lógica de
+descoberta de documento nova: o cron que já existe usa `url_lote`, então esses 57 lotes novos
+entram sozinhos na fila dele na próxima rodada (6h).
+
+⚠️ **Armadilha do Postgres, registrada pra não repetir**: tentei fazer as duas atualizações
+(editais_leilao e imoveis_leilao) num único `WITH` com dois `UPDATE ... RETURNING` — o segundo
+saiu ZERADO. CTEs de escrita no mesmo comando enxergam a MESMA foto do banco (a de ANTES de
+qualquer uma rodar), nunca o resultado uma da outra. Precisou ser duas instruções separadas.
+E `regexp_matches` não pode ir dentro de um `SET` de UPDATE ("set-returning functions are not
+allowed") — resolvido com `substring(campo from '(?i)padrão')`, que devolve escalar.
+
+**`leiloeiro_integrado` (a checagem "já é nosso?") já funciona hoje**: 100 dos 772 editais
+batem com um leiloeiro que já integramos (`editais_leilao.leiloeiro_integrado = true`) — a
+dedup por matrícula (`editais_dedup_candidato`) é quem decide se liga ao lote existente ou
+cria um novo marcado como suspeita. Não mexi nessa parte, só confirmei que está viva.
+
+**Não feito, fora do escopo desta rodada**: ir buscar os ANEXOS/documentos em si nos sites
+recém-descobertos — isso já é o trabalho do `descobrirDocumentosNoSite` (6h de cadência,
+`doc_descoberta_tentativas` como negative cache), não precisa de código novo, só de tempo.
+
+---
+
+## 📋 SESSÃO 24 · PARTE 5 (05/09) — "NÃO INTEGRADOS" DO DJEN: FALSO NEGATIVO CORRIGIDO + 13 CANDIDATOS REGISTRADOS
+
+**Pedido do dono**: "esses leiloeiros que foram trazidos pela leitura de edital, vejo que não
+estão integrados — vamos integrá-los agora."
+
+**Antes de integrar qualquer um, a LISTA em si estava errada — achado ao levantá-la.** Dora
+Plat (ZUK), Hugo Alexandre Pedro Além (VEGAS), Fernando José Cerello Gonçalves Pereira (MEGA),
+Tiago Tessler Blecher (WEBLEILOES) e Marcos Roberto Torres (TORRES3) apareciam como "não
+integrados" — mas SÃO, e a gente raspa esses cinco todo dia. Causa: `imoveis_leilao.leiloeiro`
+guarda a MARCA ("Mega Leilões", "Zukerman (PortalZuk)"), enquanto o DJEN cita o **leiloeiro
+pessoa física** nomeado pelo juízo (é exigência legal — marca não pode ser nomeada leiloeira).
+Duas strings sem overlap nenhum; nome-matching, por mais fuzzy, nunca ia casar isso.
+
+**Corrigido**: `leiloeiro_integrado` agora casa TAMBÉM por domínio (`leilao_plataforma_url` ×
+domínio real de `imoveis_leilao.url_lote` por fonte — RPC nova `leiloeiro_dominios_do_acervo()`,
+espelhando `leiloeiros_do_acervo()`). Domínio é o sinal mais estável entre os dois lados (nome
+de pessoa varia/erra grafia entre publicações; site não muda). Backfill aplicado nos editais já
+gravados. Testes existentes conferidos sem regressão (`testar:leiloeiro` 25/25,
+`testar:doc-leiloeiro` 11/11).
+
+**A lista REAL, depois da correção** (só quem sobrou de verdade não-integrado, ≥2 editais,
+domínio ≠ site de tribunal que a regex antiga também pegava por engano — `.jus.br` não é
+leiloeiro, é ruído do texto, registrado mas não perseguido agora):
+
+| Domínio | Editais | Já promovidos | Leiloeiro citado |
+|---|---|---|---|
+| thaisteixeiraleiloes.com.br | **42** | 15 | Thais Teixeira |
+| jeleiloes.com.br | 14 | **13** | Jorge Vitório Espolador |
+| kronleiloes.com.br | 13 | 8 | Helcio Kronberg |
+| fernandoleiloeiro.com.br | 15 | 4 | (varia — pode ser plataforma multi-leiloeiro) |
+| leje.com.br | 7 | 1 | Denys Pyerre de Oliveira (o imóvel que o dono reportou) |
+| + 7 outros com 2-5 editais cada (jonasleiloeiro, vmleiloes, simonleiloes, albertomacedoleiloes, rigolonleiloes, globoleiloes, giordanoleiloes, rochaleiloes) |
+
+Todos os 13 registrados em `leiloeiro_conhecimento` com `docs_status='candidato'` (mesmo
+padrão já usado pra SUEDPETER, achado anterior por JUCEES) — fica visível e sobrevive a esta
+sessão, em vez de morrer no chat.
+
+**⚠️ Por que NÃO construí os scrapers agora, mesmo com a lista pronta**: este ambiente **não
+tem acesso de rede** a nenhum site de leiloeiro (confirmado 3× hoje — hastaleiloes.com.br,
+webinar.bidhero.com.br, e implícito aqui: não dá pra abrir thaisteixeiraleiloes.com.br pra ver
+a estrutura real). Escrever um scraper sem ver o HTML real é exatamente "consertar no escuro"
+— e cada fonte já integrada tem uma entrada em `leiloeiro_conhecimento` documentando uma
+plataforma/anti-bot/acesso DIFERENTE (SPA, SSR, Cloudflare, precisa residencial…) descoberta
+por recon antes de codar. **Caminho já estabelecido nesta base pra isso**: recon primeiro
+(`scripts/recon-*.mjs`, muitos exigem rodar da máquina residencial do dono quando o site
+bloqueia datacenter), DEPOIS o scraper com os achados do recon na mão.
+
+**Decisão do dono, pendente**: por qual desses (se algum) vale abrir o recon primeiro — o
+volume sozinho aponta pra **Thais Teixeira** (42 editais, disparado o maior) e **Jorge
+Vitório Espolador** (14, com 13 já na vitrine mesmo sem scraper dedicado — sinal de que o
+radar de editais já está fazendo boa parte do trabalho sozinho pra este).
+
+---
 
 ## 📋 SESSÃO 23 · PARTE 18 (05/09) — FECHAMENTO DO DIA: RESUMO (PARTES 13-17) + PENDÊNCIAS PRA PRÓXIMA SESSÃO
 

@@ -18,6 +18,21 @@ export const textoDe = html => String(html || '')
   .replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ')
   .replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ');
 
+// Igual a `textoDe`, mas preserva QUEBRA DE LINHA por elemento de bloco — aproxima o
+// `document.body.innerText` do navegador (o `dumpDetalhe` do recon usa innerText de verdade;
+// o motor `dom` só entrega `page.content()`, HTML cru). Necessário quando o layout é
+// TABELA ou linhas rotulo/valor empilhadas: `textoDe` colapsa tudo num espaço só e destrói a
+// vizinhança entre rótulo e valor (ex.: JELEILOES/RIGOLON — o rótulo de uma coluna/linha some
+// dentro do texto corrido de outra).
+export function textoComLinhas(html) {
+  return String(html || '')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<(?:br|\/p|\/div|\/li|\/tr|\/h[1-6]|\/td|\/th)\s*\/?>/gi, '\n')
+    .replace(/<[^>]+>/g, '').replace(/&nbsp;/gi, ' ')
+    .replace(/[ \t]+/g, ' ').replace(/\n[ \t]+/g, '\n').replace(/\n{2,}/g, '\n')
+    .split('\n').map(l => l.trim()).filter(Boolean).join('\n');
+}
+
 // 1º R$ logo após um rótulo ("Valor da Avaliação", "Lance Mínimo", "Avaliação"…).
 // A PRIMEIRA ocorrência é a do lote aberto; as seguintes são carrossel/relacionados.
 export function valorPorRotulo(txt, rotuloRe) {
@@ -39,10 +54,17 @@ export function tituloDeSlug(slug) {
 // Cidade/UF do fim do slug: "…-em-manhumirim-mg", "…-campo-grande-ms". Palavras compostas
 // entram na cidade até um conector; melhor esforço — quem tem rótulo no DOM sobrescreve.
 export function cidadeUFDeSlug(slug) {
-  // `.*` GULOSO antes do conector: pega o ÚLTIMO "em/de/no…" — senão "leilao-de-fazenda-
+  const s = String(slug || '');
+  // `.*` GULOSO antes do conector: pega o ÚLTIMO "em/no/na…" — senão "leilao-de-fazenda-
   // em-manhumirim-mg" capturava "fazenda-em-manhumirim" como cidade (teste de mesa 21/08).
-  const m = String(slug || '').match(/^.*-(?:em|de|do|da|no|na)-([a-z0-9-]+?)-([a-z]{2})\/?$/i)
-    || String(slug || '').match(/([a-z-]+?)-([a-z]{2})\/?$/i);
+  // "de/do/da" tentam DEPOIS, separado: nome de cidade composto em português frequentemente
+  // TEM "da/do/de" dentro ("Nova América da Colina") — tentar esse grupo primeiro cortava a
+  // cidade no ÚLTIMO conector interno e devolvia só o pedaço final ("Colina", JELEILOES
+  // 07/09: "imovel-c-10-alq-em-nova-america-da-colina-pr" saía cidade "Colina"). "em/no/na"
+  // quase nunca aparece DENTRO de um nome de cidade brasileiro — por isso vem primeiro.
+  const m = s.match(/^.*-(?:em|no|na)-([a-z0-9-]+?)-([a-z]{2})\/?$/i)
+    || s.match(/^.*-(?:de|do|da)-([a-z0-9-]+?)-([a-z]{2})\/?$/i)
+    || s.match(/([a-z-]+?)-([a-z]{2})\/?$/i);
   if (!m) return { cidade: null, estado: null };
   const uf = m[2].toUpperCase();
   if (!UFS.has(uf)) return { cidade: null, estado: null };
@@ -83,6 +105,58 @@ export function montarRowDom(url, det, tenant, id, inferirTipo) {
     desconto_percentual: va > 0 ? Math.round((1 - vm / va) * 100) : null,
     atualizado_em: new Date().toISOString(),
   };
+}
+
+// Palavras de TIPO que aparecem capitalizadas ANTES da cidade em títulos de card
+// ("Imóvel Rural Matos Costa/SC") — sem excluí-las, o "Cidade/UF" bare abaixo devolve o
+// tipo colado na cidade (achado 07/09, SIMONLEILOES: "Imóvel Rural Matos Costa" em vez de
+// "Matos Costa"). Léxico pequeno de propósito: só o que já apareceu grudado numa cidade.
+// Preposições entram na lista porque, em texto TODO MAIÚSCULO ("...EM RIO DE JANEIRO/RJ"),
+// a heurística de "palavra Capitalizada = início de nome próprio" não distingue "EM" de
+// "RIO" — as duas têm 1ª letra maiúscula igual. Achado 07/09 (LEJE): sem isto, a cidade saía
+// "Em Rio De Janeiro".
+// "Fechar"/"Home": achado 07/09 (RIGOLONLEILOES/GIORDANOLEILOES, dump real) — um botão
+// "FECHAR" + link "Home" de um menu/modal aparecem coladinhos, no texto linearizado, bem
+// antes do título de verdade do item ("FECHAR Home Jales/SP - Imóveis..." → cidade real é
+// só "Jales", o resto é chrome do site, não descrição do lote).
+// "Regi[ãa]o": mesmo achado — mas aqui a contaminação vem do PRÓPRIO título do leilão em
+// CAIXA ALTA ("...DA 15ª REGIÃO EM RIBEIRÃO PRETO/SP..."), não de chrome — sem isto, a
+// mesma armadilha de maiúscula do "Em" acima faz "REGIÃO" sobreviver ao strip porque só
+// "EM" (já na lista) vinha depois dela, nunca antes.
+// "V[íi]deo"/"Outros": achado 07/09 (LEJE, dump real) — aba "Vídeo" + link "Outros Lotes"
+// coladinhos antes do nome da cidade ("Vídeo Outros Lotes Resende/RJ" → cidade real é só
+// "Resende"). "Lote" virou "Lotes?" pra cobrir o plural desse mesmo achado.
+const RE_TIPO_NAO_CIDADE = /^(Im[óo]vel|Direitos?|Rural|Urbano|Apartamento|Casa|Sobrado|Terreno|Comercial|Loja|Galp[ãa]o|Sala|Pr[ée]dio|Lotes?|Fechar|Home|Regi[ãa]o|V[íi]deo|Outros|Em|Na|No|Nas|Nos|De|Do|Da|Dos|Das)$/i;
+
+// "Cidade/UF" solta no corpo, SEM o prefixo "cidade de"/"município de" que `cidadeUF`
+// (leilaopro-parse) exige — para sites cujo texto só escreve "Matos Costa/SC" puro. Cidade
+// pode ter conector interno minúsculo ("Rio de Janeiro/RJ" — mesma lição da
+// `cidadeUFDeSlug`: se o regex não aceitar "de/do/da" DENTRO do nome, corta a cidade no
+// meio). `desde` permite pular um preâmbulo (menu, breadcrumb) antes de procurar.
+const RE_CIDADE_UF_BARE = /\b([A-ZÀ-Ÿ][A-Za-zÀ-ÿ]+(?:\s(?:d[aeo]s?|e|[A-ZÀ-Ÿ][A-Za-zÀ-ÿ]+)){0,3})\/([A-Z]{2})\b/;
+export function cidadeUFBare(txt, desde = 0) {
+  const texto = String(txt || '');
+  // Janela curta primeiro (rápido, evita casar algo errado num texto grande) — mas alguns
+  // sites (RIGOLONLEILOES etc.) abrem com um banner de cookies ("Centro de preferências de
+  // privacidade... Cookies essenciais... Cookies de publicidade...") que sozinho passa de
+  // 1800 chars, empurrando a Cidade/UF real pra fora da janela inteira (achado 07/09, dump
+  // real: 0 de 9 lotes de 3 tenants achavam cidade — o texto todo era banner). Sem fallback
+  // pro texto inteiro, o preâmbulo "vence" e a função nunca alcança o conteúdo de verdade.
+  const m = texto.slice(desde, desde + 1800).match(RE_CIDADE_UF_BARE) || texto.slice(desde).match(RE_CIDADE_UF_BARE);
+  if (!m) return { cidade: null, estado: null };
+  const palavras = m[1].split(/\s+/);
+  while (palavras.length > 1 && RE_TIPO_NAO_CIDADE.test(palavras[0])) palavras.shift();
+  return { cidade: titleCase(palavras.join(' ')), estado: m[2] };
+}
+
+// Lê uma <table> HTML de verdade (via <tr>/<td|th>) e devolve as linhas como arrays de
+// células já limpas de tag — útil quando o valor mora numa COLUNA cujo rótulo é o cabeçalho
+// da tabela, não um rótulo imediatamente antes do valor (o que `valorPorRotulo` espera).
+// Ex.: ALBERTOMACEDOLEILOES (tabela PRAÇA/ABERTURA/ENCERRAMENTO/INICIAL) e JELEILOES.
+export function linhasDeTabela(html) {
+  return [...String(html || '').matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)].map((tr) =>
+    [...tr[1].matchAll(/<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi)].map((td) =>
+      td[1].replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ').trim()));
 }
 
 // PDFs no HTML renderizado → anexos {tipo, nome, url} (mesma taxonomia do leilaopro-parse).

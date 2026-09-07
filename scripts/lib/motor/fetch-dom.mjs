@@ -15,7 +15,7 @@ import puppeteer from 'puppeteer';
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36';
 
-export function criarMotorDom({ esperaMs = 2500, timeoutMs = 45000 } = {}) {
+export function criarMotorDom({ esperaMs = 2500, timeoutMs = 45000, delayAntesMs = 0, isolarSessao = false } = {}) {
   const estado = { semCota: false };   // dom não usa Bright Data; campo existe pelo contrato
   let browser = null;
 
@@ -24,10 +24,31 @@ export function criarMotorDom({ esperaMs = 2500, timeoutMs = 45000 } = {}) {
     return browser;
   }
 
+  // ISOLAMENTO DE SESSÃO (07/09, JELEILOES): default false — nenhum comportamento muda pra
+  // ALFA/HASTA/NORDESTE, que reusam UMA página/contexto pra todas as navegações (mais rápido).
+  // JELEILOES precisou disto porque o espaçamento sozinho (`delayAntesMs`, 5s) NÃO bastou — a
+  // 2ª+ requisição da mesma sessão continuou 403 mesmo com 5s de intervalo. Ou seja, não é
+  // rajada por TEMPO: é a SESSÃO (cookie/fingerprint do browser) sendo marcada depois da 1ª
+  // navegação. Com `isolarSessao`, cada `navegar()` abre um BrowserContext (incógnito) NOVO —
+  // cada requisição volta a parecer "a primeira" da sessão, e o contexto é fechado no fim.
+  async function novaPagina() {
+    const b = await garantir();
+    if (!isolarSessao) return { page: await b.newPage(), contexto: null };
+    const contexto = await b.createBrowserContext();
+    return { page: await contexto.newPage(), contexto };
+  }
+
+  // ESPAÇAMENTO ANTES de cada navegação (default 0 — nenhum comportamento muda pra
+  // ALFA/HASTA/NORDESTE). Existe pro JELEILOES (07/09): a 1ª requisição da sessão sempre dá
+  // 200, a 2ª+ EM SEGUIDA já dá 403 — rate-limit por RAJADA da infra Suporte Leilões, não
+  // bloqueio de IP (todo recon isolado, 1 request por job, deu 200). `esperaMs` só espera
+  // DEPOIS de carregar (hidratação); isto espera ANTES, entre o fim de uma navegação e o
+  // início da próxima.
   async function navegar(url) {
-    let page = null;
+    let page = null, contexto = null;
     try {
-      page = await (await garantir()).newPage();
+      if (delayAntesMs) await new Promise(r => setTimeout(r, delayAntesMs));
+      ({ page, contexto } = await novaPagina());
       await page.setUserAgent(UA);
       await page.setViewport({ width: 1366, height: 900 });
       const resp = await page.goto(url, { waitUntil: 'networkidle2', timeout: timeoutMs });
@@ -51,6 +72,7 @@ export function criarMotorDom({ esperaMs = 2500, timeoutMs = 45000 } = {}) {
       return { html: null, via: 'dom-falha' };
     } finally {
       if (page) await page.close().catch(() => {});
+      if (contexto) await contexto.close().catch(() => {});
     }
   }
 

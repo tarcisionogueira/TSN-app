@@ -27,6 +27,7 @@
     "testar:destino": "node scripts/testes/quem-pagou-para-ver-a-aula-nao-cai-na-home.mjs",
     "testar:pageview": "node scripts/testes/pageview-nao-conta-a-mesma-navegacao-duas-vezes.mjs",
     "testar:cidade-titulo": "node scripts/testes/cidade-do-titulo-nao-pode-ser-o-titulo.mjs",
+    "testar:cidade-slug": "node scripts/testes/cidade-do-slug-nao-para-no-conector-interno.mjs",
     "testar:landing-aula": "node scripts/testes/landing-da-aula.mjs",
     "testar:instagram": "node scripts/testes/instagram-webhook-nao-envenena-o-corpus.mjs",
     "testar:ig-motor": "node scripts/testes/ig-motor-decide-antes-de-escrever.mjs",

@@ -15,20 +15,41 @@ import { fetchUnlockerContado } from './lib/bd-ledger.mjs';
 const BROWSER_ARGS = ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--disable-blink-features=AutomationControlled', '--window-size=1280,900'];
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
+// Caminhos comuns de listagem de imóveis em plataformas de leilão — mesmo conjunto genérico
+// usado nos três sites originais, reaproveitado tal e qual para os candidatos novos.
+const PATHS_PADRAO = ['/', '/imoveis', '/lotes/imoveis', '/busca?categoria=imoveis', '/categoria/imoveis', '/leiloes'];
+
 const SITES = {
   PECINI: {
     base: 'https://www.pecinileiloes.com.br',
-    // caminhos comuns de listagem de imóveis em plataformas de leilão
-    paths: ['/', '/imoveis', '/lotes/imoveis', '/busca?categoria=imoveis', '/categoria/imoveis', '/leiloes'],
+    paths: PATHS_PADRAO,
   },
   WEBLEILOES: {
     base: 'https://www.webleiloes.com.br',
-    paths: ['/', '/imoveis', '/lotes/imoveis', '/busca?categoria=imoveis', '/categoria/imoveis', '/leiloes'],
+    paths: PATHS_PADRAO,
   },
   RJLEILOES: {
     base: 'https://www.rjleiloes.com.br',
     paths: ['/', '/imoveis', '/lotes/imoveis', '/busca?categoria=imoveis', '/categoria/imoveis', '/leiloes', '/lotes', '/imovel', '/pesquisa?tipo=imovel'],
   },
+  // ── CANDIDATOS NOVOS (05/09) — achados por cruzamento de editais do DJEN, ainda sem
+  // scraper (leiloeiro_conhecimento.docs_status='candidato'). Mesmos caminhos genéricos dos
+  // três de cima: nenhum dos 13 foi visitado ainda, então não há ainda pista de estrutura
+  // própria — é exatamente o que este recon existe para descobrir. Ordem = volume de editais
+  // no DJEN (maior primeiro), pedido do dono.
+  THAISTEIXEIRA: { base: 'https://thaisteixeiraleiloes.com.br', paths: PATHS_PADRAO },
+  FERNANDOLEILOEIRO: { base: 'https://fernandoleiloeiro.com.br', paths: PATHS_PADRAO },
+  JELEILOES: { base: 'https://jeleiloes.com.br', paths: PATHS_PADRAO },
+  KRONLEILOES: { base: 'https://kronleiloes.com.br', paths: PATHS_PADRAO },
+  LEJE: { base: 'https://leje.com.br', paths: PATHS_PADRAO },
+  JONASLEILOEIRO: { base: 'https://jonasleiloeiro.com.br', paths: PATHS_PADRAO },
+  VMLEILOES: { base: 'https://vmleiloes.com.br', paths: PATHS_PADRAO },
+  SIMONLEILOES: { base: 'https://simonleiloes.com.br', paths: PATHS_PADRAO },
+  ALBERTOMACEDOLEILOES: { base: 'https://albertomacedoleiloes.com.br', paths: PATHS_PADRAO },
+  RIGOLONLEILOES: { base: 'https://rigolonleiloes.com.br', paths: PATHS_PADRAO },
+  GLOBOLEILOES: { base: 'https://globoleiloes.com.br', paths: PATHS_PADRAO },
+  GIORDANOLEILOES: { base: 'https://giordanoleiloes.com.br', paths: PATHS_PADRAO },
+  ROCHALEILOES: { base: 'https://rochaleiloes.com.br', paths: PATHS_PADRAO },
 };
 
 const alvo = String(process.env.RECON_SITES || 'PECINI,WEBLEILOES').toUpperCase().split(',').map(s => s.trim()).filter(Boolean);
@@ -243,9 +264,71 @@ async function reconPeciniProfundo(cfg) {
   } catch (e) { console.log(`── LOTE ${alvoLote} → ERRO: ${String(e.message).slice(0, 100)}`); }
 }
 
+// ── DUMP DE DETALHE (05/09) — round 2, depois do recon genérico já ter achado a listagem.
+// Objetivo único: ver o TEXTO RENDERIZADO de uma página de lote de verdade, pros RÓTULOS
+// (avaliação/lance mínimo/praça/matrícula) — sem isso, escrever parseDetalhe() seria
+// adivinhar rótulo, e é exatamente essa classe de erro que os parsers de origem (ver
+// alfa-parse.mjs) evitam com valorPorRotulo() sobre texto REAL, não suposto.
+async function dumpDetalhe(browser, url, esperaMs = 4000) {
+  console.log(`\n\n══════════════════ DUMP DETALHE — ${url} ══════════════════`);
+  const page = await browser.newPage();
+  await page.setUserAgent(UA);
+  await page.setViewport({ width: 1280, height: 900 });
+  try {
+    const resp = await page.goto(url, { waitUntil: 'networkidle2', timeout: 45000 });
+    console.log(`   HTTP ${resp ? resp.status() : '?'}`);
+    await new Promise(r => setTimeout(r, esperaMs));
+    const texto = await page.evaluate(() => document.body.innerText || '');
+    const limpo = texto.replace(/\n{2,}/g, '\n');
+    console.log(`   texto renderizado (${texto.length} chars) — INÍCIO:\n${limpo.slice(0, 2500)}`);
+    // JANELA em volta do 1º "avalia*"/"lance"/"praça" (05/09) — em página com sidebar de
+    // filtros grande (comitentes, categorias), o preço fica LONGE do início, e um slice(0,N)
+    // cego corta antes de chegar lá (foi exatamente o que aconteceu com JELEILOES na 1ª
+    // tentativa). Busca pelo RÓTULO em vez de confiar na posição.
+    const m = limpo.match(/avalia|lance\s*m[íi]nimo|1[ªa]?\s*pra[çc]a/i);
+    if (m && m.index > 2500) {
+      const ini = Math.max(0, m.index - 200);
+      console.log(`   texto renderizado — JANELA EM VOLTA DE "${m[0]}" (pos ${m.index}):\n${limpo.slice(ini, ini + 2500)}`);
+    } else if (!m) {
+      console.log('   ⚠️ nenhuma ocorrência de avalia*/lance mínimo/1ª praça no texto inteiro.');
+    }
+    // JANELA em volta do 1º VALOR "R$ X,XX" de verdade (07/09) — achado na GLOBOLEILOES: o
+    // 1º "avalia" da página é um RÓTULO DE ABA ("Edital | Débito Exequendo | Avaliação |
+    // Matrícula"), sem valor por perto — cai no `m.index > 2500` acima (falso: o índice É
+    // pequeno) e a busca por RÓTULO nunca mostra a janela onde o preço de verdade mora. Isto
+    // busca o NÚMERO em si, não a palavra, então acha o preço mesmo quando o rótulo mais
+    // próximo dele não é nenhum dos três — ou quando o rótulo aparece cedo mas isolado do valor.
+    const mv = limpo.match(/R\$\s*[\d.]+,\d{2}/);
+    if (mv) {
+      const ini = Math.max(0, mv.index - 300);
+      console.log(`   texto renderizado — JANELA EM VOLTA DO 1º VALOR "${mv[0]}" (pos ${mv.index}):\n${limpo.slice(ini, ini + 1200)}`);
+    } else {
+      console.log('   ⚠️ nenhum valor "R$ X,XX" em lugar nenhum do texto renderizado.');
+    }
+    const html = await page.content();
+    console.log(`   html length: ${html.length}`);
+    // Anexos/docs — mesmo tipo de sinal que anexosDeHtml() dos parsers de origem procura.
+    const docs = [...new Set((html.match(/href=["']([^"']+\.pdf[^"']*)["']/gi) || []).map(s => (s.match(/href=["']([^"']+)["']/i) || [])[1]))];
+    if (docs.length) console.log(`   PDFs no HTML: ${JSON.stringify(docs.slice(0, 8))}`);
+    const fotos = [...new Set((html.match(/<img[^>]+src=["']([^"']+)["']/gi) || []).map(s => (s.match(/src=["']([^"']+)["']/i) || [])[1]).filter(u => /jpe?g|png|webp/i.test(u)))];
+    if (fotos.length) console.log(`   imagens candidatas: ${JSON.stringify(fotos.slice(0, 6))}`);
+  } catch (e) {
+    console.log(`   ERRO: ${String(e.message).slice(0, 150)}`);
+  } finally {
+    await page.close();
+  }
+}
+
+// URLs de detalhe conhecidas (achadas no round 1) — CSV via env DUMP_URLS, pra não precisar
+// editar o script de novo a cada rodada.
+const dumpUrls = String(process.env.DUMP_URLS || '').split(',').map(s => s.trim()).filter(Boolean);
+
 (async () => {
   const browser = await puppeteer.launch({ headless: 'new', args: BROWSER_ARGS });
   try {
+    for (const url of dumpUrls) {
+      try { await dumpDetalhe(browser, url); } catch (e) { console.log(`Dump ${url} falhou: ${e.message}`); }
+    }
     for (const nome of alvo) {
       const cfg = SITES[nome];
       if (!cfg) { console.log(`Site desconhecido: ${nome}`); continue; }
@@ -255,6 +338,11 @@ async function reconPeciniProfundo(cfg) {
       if (nome === 'PECINI') {
         try { await reconViaBrightData(nome, cfg); } catch (e) { console.log(`Recon ${nome} (BD) falhou: ${e.message}`); }
         try { await reconPeciniProfundo(cfg); } catch (e) { console.log(`Recon ${nome} PROFUNDO falhou: ${e.message}`); }
+      }
+      // JONASLEILOEIRO e FERNANDOLEILOEIRO (07/09): 100% Cloudflare no Puppeteer (403 "Just a
+      // moment..." em TODOS os paths padrão) — mesmo sintoma do Pecini, mesmo remédio.
+      if (nome === 'JONASLEILOEIRO' || nome === 'FERNANDOLEILOEIRO') {
+        try { await reconViaBrightData(nome, cfg); } catch (e) { console.log(`Recon ${nome} (BD) falhou: ${e.message}`); }
       }
     }
   } finally {
