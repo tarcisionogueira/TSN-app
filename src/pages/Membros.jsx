@@ -69,13 +69,20 @@ function EbookCover({ titulo }) {
 
 // Capa do ebook: imagem quando há capa_url VÁLIDA; se faltar OU a imagem falhar (URL quebrada —
 // ex.: um PDF enviado por engano no campo da capa), cai no EbookCover (nunca deixa caixa branca).
+// `onLoad` confere `naturalWidth`: um arquivo corrompido/truncado no upload pode responder 200
+// com o mimetype certo e ainda assim não decodificar como imagem — nesse caso o navegador NÃO
+// dispara `onError` (a requisição teve sucesso), só teria disparado o `onError` para falha de
+// rede/HTTP. Achado real (07/09): "Lucre Antes de Arrematar" com capa 100% presente e pública no
+// Storage (239KB, mimetype image/jpeg) e mesmo assim caixa branca — sem este check, o defeito
+// não tinha como se auto-corrigir.
 function EbookCapa({ capa, titulo }) {
   const [erro, setErro] = useState(false);
   if (!capa || erro) return <EbookCover titulo={titulo} />;
   return (
     <img src={driveImage(capa)} alt={titulo}
       style={{ width:'100%', height:'100%', objectFit:'cover', display:'block', background:'#f1f5f9' }}
-      onError={() => setErro(true)} />
+      onError={() => setErro(true)}
+      onLoad={(e) => { if (!e.currentTarget.naturalWidth) setErro(true); }} />
   );
 }
 
