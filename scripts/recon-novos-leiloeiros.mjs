@@ -264,9 +264,46 @@ async function reconPeciniProfundo(cfg) {
   } catch (e) { console.log(`── LOTE ${alvoLote} → ERRO: ${String(e.message).slice(0, 100)}`); }
 }
 
+// ── DUMP DE DETALHE (05/09) — round 2, depois do recon genérico já ter achado a listagem.
+// Objetivo único: ver o TEXTO RENDERIZADO de uma página de lote de verdade, pros RÓTULOS
+// (avaliação/lance mínimo/praça/matrícula) — sem isso, escrever parseDetalhe() seria
+// adivinhar rótulo, e é exatamente essa classe de erro que os parsers de origem (ver
+// alfa-parse.mjs) evitam com valorPorRotulo() sobre texto REAL, não suposto.
+async function dumpDetalhe(browser, url, esperaMs = 4000) {
+  console.log(`\n\n══════════════════ DUMP DETALHE — ${url} ══════════════════`);
+  const page = await browser.newPage();
+  await page.setUserAgent(UA);
+  await page.setViewport({ width: 1280, height: 900 });
+  try {
+    const resp = await page.goto(url, { waitUntil: 'networkidle2', timeout: 45000 });
+    console.log(`   HTTP ${resp ? resp.status() : '?'}`);
+    await new Promise(r => setTimeout(r, esperaMs));
+    const texto = await page.evaluate(() => document.body.innerText || '');
+    console.log(`   texto renderizado (${texto.length} chars):\n${texto.replace(/\n{2,}/g, '\n').slice(0, 4000)}`);
+    const html = await page.content();
+    console.log(`   html length: ${html.length}`);
+    // Anexos/docs — mesmo tipo de sinal que anexosDeHtml() dos parsers de origem procura.
+    const docs = [...new Set((html.match(/href=["']([^"']+\.pdf[^"']*)["']/gi) || []).map(s => (s.match(/href=["']([^"']+)["']/i) || [])[1]))];
+    if (docs.length) console.log(`   PDFs no HTML: ${JSON.stringify(docs.slice(0, 8))}`);
+    const fotos = [...new Set((html.match(/<img[^>]+src=["']([^"']+)["']/gi) || []).map(s => (s.match(/src=["']([^"']+)["']/i) || [])[1]).filter(u => /jpe?g|png|webp/i.test(u)))];
+    if (fotos.length) console.log(`   imagens candidatas: ${JSON.stringify(fotos.slice(0, 6))}`);
+  } catch (e) {
+    console.log(`   ERRO: ${String(e.message).slice(0, 150)}`);
+  } finally {
+    await page.close();
+  }
+}
+
+// URLs de detalhe conhecidas (achadas no round 1) — CSV via env DUMP_URLS, pra não precisar
+// editar o script de novo a cada rodada.
+const dumpUrls = String(process.env.DUMP_URLS || '').split(',').map(s => s.trim()).filter(Boolean);
+
 (async () => {
   const browser = await puppeteer.launch({ headless: 'new', args: BROWSER_ARGS });
   try {
+    for (const url of dumpUrls) {
+      try { await dumpDetalhe(browser, url); } catch (e) { console.log(`Dump ${url} falhou: ${e.message}`); }
+    }
     for (const nome of alvo) {
       const cfg = SITES[nome];
       if (!cfg) { console.log(`Site desconhecido: ${nome}`); continue; }
