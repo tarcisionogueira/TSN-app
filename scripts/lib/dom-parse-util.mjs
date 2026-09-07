@@ -123,7 +123,10 @@ export function montarRowDom(url, det, tenant, id, inferirTipo) {
 // CAIXA ALTA ("...DA 15ª REGIÃO EM RIBEIRÃO PRETO/SP..."), não de chrome — sem isto, a
 // mesma armadilha de maiúscula do "Em" acima faz "REGIÃO" sobreviver ao strip porque só
 // "EM" (já na lista) vinha depois dela, nunca antes.
-const RE_TIPO_NAO_CIDADE = /^(Im[óo]vel|Direitos?|Rural|Urbano|Apartamento|Casa|Sobrado|Terreno|Comercial|Loja|Galp[ãa]o|Sala|Pr[ée]dio|Lote|Fechar|Home|Regi[ãa]o|Em|Na|No|Nas|Nos|De|Do|Da|Dos|Das)$/i;
+// "V[íi]deo"/"Outros": achado 07/09 (LEJE, dump real) — aba "Vídeo" + link "Outros Lotes"
+// coladinhos antes do nome da cidade ("Vídeo Outros Lotes Resende/RJ" → cidade real é só
+// "Resende"). "Lote" virou "Lotes?" pra cobrir o plural desse mesmo achado.
+const RE_TIPO_NAO_CIDADE = /^(Im[óo]vel|Direitos?|Rural|Urbano|Apartamento|Casa|Sobrado|Terreno|Comercial|Loja|Galp[ãa]o|Sala|Pr[ée]dio|Lotes?|Fechar|Home|Regi[ãa]o|V[íi]deo|Outros|Em|Na|No|Nas|Nos|De|Do|Da|Dos|Das)$/i;
 
 // "Cidade/UF" solta no corpo, SEM o prefixo "cidade de"/"município de" que `cidadeUF`
 // (leilaopro-parse) exige — para sites cujo texto só escreve "Matos Costa/SC" puro. Cidade
