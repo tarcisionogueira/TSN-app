@@ -48,6 +48,13 @@ export function parseDetalhe(html, url) {
   let avaliacao = avalExplicita || primeira;
   let minimo = ultima || avaliacao;
   if (!avaliacao) avaliacao = minimo;
+  // GUARDA (07/09): a home mistura "leilões" de imóvel com veículo sob a MESMA URL
+  // /leilao/<slug> ("fiatpalio-weekend-ex" entrou na 1ª rodada real com avaliação de
+  // R$13.337 — carro, não imóvel). Sem nenhuma palavra de imóvel no corpo, o valor não é de
+  // um imóvel; zera pra o checarQualidade descartar (mesmo caminho dos pacotes multi-imóvel).
+  if (!/matr[íi]cula|im[óo]vel|terreno|apartamento|\bcasa\b|\b[áa]rea\b|\bm[²2]\b|rural|sobrado/i.test(txt)) {
+    avaliacao = 0; minimo = 0;
+  }
 
   const titulo = tituloDeSlug(slug);
   const { cidade, estado } = cidadeUF(titulo || '', txt.slice(0, 1500));

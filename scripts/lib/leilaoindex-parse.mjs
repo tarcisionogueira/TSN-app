@@ -18,7 +18,7 @@
  * `textoDe` colapsaria tudo num espaço só e destruiria essa estrutura).
  */
 import { inferirTipo, extrairArea, proximaData, checarQualidade } from './leilaopro-parse.mjs';
-import { valorPorRotulo, textoDe, textoComLinhas, anexosDeHtml, montarRowDom } from './dom-parse-util.mjs';
+import { valorPorRotulo, textoDe, textoComLinhas, anexosDeHtml, montarRowDom, cidadeUFBare } from './dom-parse-util.mjs';
 
 export const TENANTS = {
   rigolon: { fonte: 'RIGOLONLEILOES', leiloeiro: 'Rigolon Leilões', base: 'https://rigolonleiloes.com.br' },
@@ -61,13 +61,19 @@ export function parseDetalhe(html, url) {
   const titulo = info
     ? `${info.tipoBem} - ${info.descCurta} - ${info.cidade}/${info.estado}`.slice(0, 180)
     : null;
+  // FALLBACK (07/09): a 1ª rodada real mostrou que o formato "Tipo - Desc - Cidade/UF" numa
+  // única linha é raro — a amostra que validou o parser era mais limpa que o comum. Sem
+  // fallback, TODOS os lotes saíam sem cidade/UF (79 lotes reais na 1ª rodada, 0 com cidade).
+  const bare = !info ? cidadeUFBare(txt) : { cidade: null, estado: null };
+  const cidade = info?.cidade || bare.cidade;
+  const estado = info?.estado || bare.estado;
   const area = extrairArea(info?.descCurta || '', txt.slice(0, 500));
   const modalidade = /extrajudicial/i.test(txt) ? 'extrajudicial' : /judicial/i.test(txt) ? 'judicial' : 'extrajudicial';
   const mat = (txt.match(/matr[íi]cula\s*(?:n[º°.]?\s*)?([\d.]{3,})/i) || [])[1] || null;
   const docs = anexosDeHtml(html, url);
 
   return {
-    titulo, cidade: info?.cidade || null, estado: info?.estado || null,
+    titulo, cidade, estado,
     valor_avaliacao: avaliacao, valor_minimo: minimo,
     modalidade, area_m2: area,
     descricao: info?.descCurta ? info.descCurta.slice(0, 500) : null,

@@ -19,7 +19,7 @@
  * usado em outras fontes — por isso o regex próprio em vez de reusar cidadeUFDeSlug/cidadeUF.
  */
 import { inferirTipo, extrairArea, proximaData, checarQualidade } from './leilaopro-parse.mjs';
-import { valorPorRotulo, textoDe, textoComLinhas, titleCase, anexosDeHtml, montarRowDom } from './dom-parse-util.mjs';
+import { valorPorRotulo, textoDe, textoComLinhas, titleCase, anexosDeHtml, montarRowDom, cidadeUFBare } from './dom-parse-util.mjs';
 
 export const TENANTS = {
   rocha: { fonte: 'ROCHALEILOES', leiloeiro: 'Rocha Leilões', base: 'https://rochaleiloes.com.br' },
@@ -45,7 +45,13 @@ function cidadeUFDoTexto(linhas) {
 export function parseDetalhe(html, url) {
   const txt = textoDe(html);
   const linhas = textoComLinhas(html).split('\n');
-  const { cidade, estado } = cidadeUFDoTexto(linhas);
+  // FALLBACK (07/09): a 1ª rodada real mostrou "CIDADE - UF" maiúscula como linha isolada
+  // não é universal — 3 de 3 lotes da amostra vieram sem cidade. `cidadeUFBare` (formato
+  // "Cidade/UF", com conector interno) pega o que a linha isolada não pegou.
+  const doTexto = cidadeUFDoTexto(linhas);
+  const bare = (!doTexto.cidade) ? cidadeUFBare(txt) : { cidade: null, estado: null };
+  const cidade = doTexto.cidade || bare.cidade;
+  const estado = doTexto.estado || bare.estado;
 
   const retirado = /\bLOTE\s+RETIRADO\b/i.test(txt);
   let avaliacao = valorPorRotulo(txt, /Avalia[çc][ãa]o/i);
