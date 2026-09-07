@@ -18,6 +18,21 @@ export const textoDe = html => String(html || '')
   .replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ')
   .replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ');
 
+// Igual a `textoDe`, mas preserva QUEBRA DE LINHA por elemento de bloco — aproxima o
+// `document.body.innerText` do navegador (o `dumpDetalhe` do recon usa innerText de verdade;
+// o motor `dom` só entrega `page.content()`, HTML cru). Necessário quando o layout é
+// TABELA ou linhas rotulo/valor empilhadas: `textoDe` colapsa tudo num espaço só e destrói a
+// vizinhança entre rótulo e valor (ex.: JELEILOES/RIGOLON — o rótulo de uma coluna/linha some
+// dentro do texto corrido de outra).
+export function textoComLinhas(html) {
+  return String(html || '')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<(?:br|\/p|\/div|\/li|\/tr|\/h[1-6]|\/td|\/th)\s*\/?>/gi, '\n')
+    .replace(/<[^>]+>/g, '').replace(/&nbsp;/gi, ' ')
+    .replace(/[ \t]+/g, ' ').replace(/\n[ \t]+/g, '\n').replace(/\n{2,}/g, '\n')
+    .split('\n').map(l => l.trim()).filter(Boolean).join('\n');
+}
+
 // 1º R$ logo após um rótulo ("Valor da Avaliação", "Lance Mínimo", "Avaliação"…).
 // A PRIMEIRA ocorrência é a do lote aberto; as seguintes são carrossel/relacionados.
 export function valorPorRotulo(txt, rotuloRe) {
@@ -90,6 +105,16 @@ export function montarRowDom(url, det, tenant, id, inferirTipo) {
     desconto_percentual: va > 0 ? Math.round((1 - vm / va) * 100) : null,
     atualizado_em: new Date().toISOString(),
   };
+}
+
+// Lê uma <table> HTML de verdade (via <tr>/<td|th>) e devolve as linhas como arrays de
+// células já limpas de tag — útil quando o valor mora numa COLUNA cujo rótulo é o cabeçalho
+// da tabela, não um rótulo imediatamente antes do valor (o que `valorPorRotulo` espera).
+// Ex.: ALBERTOMACEDOLEILOES (tabela PRAÇA/ABERTURA/ENCERRAMENTO/INICIAL) e JELEILOES.
+export function linhasDeTabela(html) {
+  return [...String(html || '').matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)].map((tr) =>
+    [...tr[1].matchAll(/<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi)].map((td) =>
+      td[1].replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ').trim()));
 }
 
 // PDFs no HTML renderizado → anexos {tipo, nome, url} (mesma taxonomia do leilaopro-parse).

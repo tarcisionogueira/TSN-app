@@ -22,16 +22,24 @@ on:
       - 'scripts/lib/hasta-parse.mjs'
       - 'scripts/lib/nordeste-parse.mjs'
       - 'scripts/lib/jeleiloes-parse.mjs'
+      - 'scripts/lib/leilaoindex-parse.mjs'
+      - 'scripts/lib/rocha-parse.mjs'
+      - 'scripts/lib/albertomacedo-parse.mjs'
+      - 'scripts/lib/simon-parse.mjs'
       - 'scripts/lib/dom-parse-util.mjs'
       - 'scripts/scraper-alfa.mjs'
       - 'scripts/scraper-hasta.mjs'
       - 'scripts/scraper-nordeste.mjs'
       - 'scripts/scraper-jeleiloes.mjs'
+      - 'scripts/scraper-leilaoindex.mjs'
+      - 'scripts/scraper-rocha.mjs'
+      - 'scripts/scraper-albertomacedo.mjs'
+      - 'scripts/scraper-simon.mjs'
       - '.github/workflows/scraper-dom.yml'
   workflow_dispatch:
     inputs:
       fontes:
-        description: 'csv: alfa,hasta,nordeste,jeleiloes (hasta so funciona de IP residencial — de datacenter falha sempre)'
+        description: 'csv: alfa,hasta,nordeste,jeleiloes,leilaoindex,rocha,albertomacedo,simon (hasta so funciona de IP residencial — de datacenter falha sempre)'
         required: false
         default: 'alfa,nordeste'
       gravar:
@@ -91,3 +99,35 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           JELEILOES_DRYRUN: ${{ github.event.inputs.gravar == '1' && '0' || '1' }}
         run: node scripts/scraper-jeleiloes.mjs
+
+      - name: Leilaoindex
+        if: ${{ !cancelled() && (github.event_name == 'push' || contains(github.event.inputs.fontes, 'leilaoindex')) }}
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          LEILAOINDEX_DRYRUN: ${{ github.event.inputs.gravar == '1' && '0' || '1' }}
+        run: node scripts/scraper-leilaoindex.mjs
+
+      - name: Rocha
+        if: ${{ !cancelled() && (github.event_name == 'push' || contains(github.event.inputs.fontes, 'rocha')) }}
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          ROCHA_DRYRUN: ${{ github.event.inputs.gravar == '1' && '0' || '1' }}
+        run: node scripts/scraper-rocha.mjs
+
+      - name: Albertomacedo
+        if: ${{ !cancelled() && (github.event_name == 'push' || contains(github.event.inputs.fontes, 'albertomacedo')) }}
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          ALBERTOMACEDO_DRYRUN: ${{ github.event.inputs.gravar == '1' && '0' || '1' }}
+        run: node scripts/scraper-albertomacedo.mjs
+
+      - name: Simon
+        if: ${{ !cancelled() && (github.event_name == 'push' || contains(github.event.inputs.fontes, 'simon')) }}
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          SIMON_DRYRUN: ${{ github.event.inputs.gravar == '1' && '0' || '1' }}
+        run: node scripts/scraper-simon.mjs
