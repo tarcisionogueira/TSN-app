@@ -13,10 +13,12 @@ export const TENANTS_POR_CHAVE = TENANTS;
 export default {
   chave: 'jeleiloes',
   fetch: 'dom',
-  // delayAntesMs 5000: recon real (07/09) confirmou a página 1 dando 200 e a 2ª+ requisição
-  // da MESMA sessão, poucos segundos depois, dando 403 — rate-limit por rajada da infra
-  // Suporte Leilões (não IP de datacenter: todo recon isolado, 1 request por job, deu 200).
-  dom: { esperaMs: 3000, delayAntesMs: 5000 },
+  // 07/09: 1ª tentativa (só delayAntesMs=5000) NÃO resolveu — a 2ª+ requisição da mesma
+  // sessão continuou 403 mesmo com 5s de espaço. Não é rajada por TEMPO, é a SESSÃO sendo
+  // marcada após a 1ª navegação. `isolarSessao` abre um BrowserContext novo por requisição
+  // (cada uma volta a parecer "a primeira"); delayAntesMs baixo (1s) só por educação, não
+  // é mais a defesa principal.
+  dom: { esperaMs: 3000, delayAntesMs: 1000, isolarSessao: true },
   catalogo: '/imoveis',
   paginaParam: 'page',
   maxPages: 10,
