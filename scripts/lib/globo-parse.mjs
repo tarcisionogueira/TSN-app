@@ -20,10 +20,23 @@ export const TENANTS = {
   globo: { fonte: 'GLOBOLEILOES', leiloeiro: 'Globo Leilões', base: 'https://globoleiloes.com.br' },
 };
 
+let _dumpFeito = false; // DEBUG (07/09, temporário): ver comentário abaixo, enumerados=0
+
 export function extrairUrlsDeLote(html, base) {
   const urls = new Map();
   for (const m of String(html || '').matchAll(/href=["']([^"']*\/leiloes\/lote-\d+-[a-z0-9-]+\/(\d+))\/?["']/gi)) {
     try { urls.set(m[2], new URL(m[1], base).href); } catch { /* skip */ }
+  }
+  // DEBUG (07/09, temporário — remover após diagnosticar): todo run do scraper de verdade
+  // acha 0 lotes, mesmo isolado (sem disputa de recurso com outras fontes) e sem timeout —
+  // mas o recon isolado original tinha visto 27 <article> com URL de lote real. Ou o HTML que
+  // o motor recebe vem vazio/diferente do que o recon viu, ou o site mudou o padrão de URL.
+  // Dump condicional: só dispara quando dá zero, e só 1x (a home só é buscada 1x por run).
+  if (!urls.size && !_dumpFeito) {
+    _dumpFeito = true;
+    const h = String(html || '');
+    const temPalavraLote = /\/leiloes\/lote-/i.test(h);
+    console.log(`[DEBUG-GLOBO-VAZIO] html.length=${h.length} · contem "/leiloes/lote-"? ${temPalavraLote} · trecho[0..500]=${JSON.stringify(h.slice(0, 500))}`);
   }
   return urls;
 }
