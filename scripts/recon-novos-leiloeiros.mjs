@@ -292,6 +292,19 @@ async function dumpDetalhe(browser, url, esperaMs = 4000) {
     } else if (!m) {
       console.log('   ⚠️ nenhuma ocorrência de avalia*/lance mínimo/1ª praça no texto inteiro.');
     }
+    // JANELA em volta do 1º VALOR "R$ X,XX" de verdade (07/09) — achado na GLOBOLEILOES: o
+    // 1º "avalia" da página é um RÓTULO DE ABA ("Edital | Débito Exequendo | Avaliação |
+    // Matrícula"), sem valor por perto — cai no `m.index > 2500` acima (falso: o índice É
+    // pequeno) e a busca por RÓTULO nunca mostra a janela onde o preço de verdade mora. Isto
+    // busca o NÚMERO em si, não a palavra, então acha o preço mesmo quando o rótulo mais
+    // próximo dele não é nenhum dos três — ou quando o rótulo aparece cedo mas isolado do valor.
+    const mv = limpo.match(/R\$\s*[\d.]+,\d{2}/);
+    if (mv) {
+      const ini = Math.max(0, mv.index - 300);
+      console.log(`   texto renderizado — JANELA EM VOLTA DO 1º VALOR "${mv[0]}" (pos ${mv.index}):\n${limpo.slice(ini, ini + 1200)}`);
+    } else {
+      console.log('   ⚠️ nenhum valor "R$ X,XX" em lugar nenhum do texto renderizado.');
+    }
     const html = await page.content();
     console.log(`   html length: ${html.length}`);
     // Anexos/docs — mesmo tipo de sinal que anexosDeHtml() dos parsers de origem procura.
