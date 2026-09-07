@@ -14,7 +14,7 @@
  * avaliação=mínimo se não achar (honesto, não inventa desconto).
  */
 import { inferirTipo, extrairArea, proximaData, checarQualidade } from './leilaopro-parse.mjs';
-import { num, plaus, textoDe, tituloDeSlug, anexosDeHtml, montarRowDom } from './dom-parse-util.mjs';
+import { num, plaus, textoDe, tituloDeSlug, anexosDeHtml, montarRowDom, cidadeUFBare } from './dom-parse-util.mjs';
 
 export const TENANTS = {
   simon: { fonte: 'SIMONLEILOES', leiloeiro: 'Simon Leilões', base: 'https://simonleiloes.com.br' },
@@ -28,13 +28,6 @@ export function extrairUrlsDeLote(html, base) {
   return urls;
 }
 export const idDaUrl = url => (String(url).match(/\/lotes\/([a-z0-9-]+)/i) || [])[1] || null;
-
-// "Matos Costa/SC" solto no corpo — sem o prefixo "cidade de"/"município de" que `cidadeUF`
-// (leilaopro-parse) exige, por isso um regex bare próprio.
-function cidadeUFBare(txt) {
-  const m = String(txt || '').slice(0, 2000).match(/\b([A-ZÀ-Ÿ][A-Za-zÀ-ÿ]+(?:\s[A-ZÀ-Ÿ][A-Za-zÀ-ÿ]+){0,3})\/([A-Z]{2})\b/);
-  return m ? { cidade: m[1].trim(), estado: m[2] } : { cidade: null, estado: null };
-}
 
 export function parseDetalhe(html, url) {
   const txt = textoDe(html);

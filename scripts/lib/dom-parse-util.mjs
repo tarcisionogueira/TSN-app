@@ -107,6 +107,30 @@ export function montarRowDom(url, det, tenant, id, inferirTipo) {
   };
 }
 
+// Palavras de TIPO que aparecem capitalizadas ANTES da cidade em títulos de card
+// ("Imóvel Rural Matos Costa/SC") — sem excluí-las, o "Cidade/UF" bare abaixo devolve o
+// tipo colado na cidade (achado 07/09, SIMONLEILOES: "Imóvel Rural Matos Costa" em vez de
+// "Matos Costa"). Léxico pequeno de propósito: só o que já apareceu grudado numa cidade.
+// Preposições entram na lista porque, em texto TODO MAIÚSCULO ("...EM RIO DE JANEIRO/RJ"),
+// a heurística de "palavra Capitalizada = início de nome próprio" não distingue "EM" de
+// "RIO" — as duas têm 1ª letra maiúscula igual. Achado 07/09 (LEJE): sem isto, a cidade saía
+// "Em Rio De Janeiro".
+const RE_TIPO_NAO_CIDADE = /^(Im[óo]vel|Direitos?|Rural|Urbano|Apartamento|Casa|Sobrado|Terreno|Comercial|Loja|Galp[ãa]o|Sala|Pr[ée]dio|Lote|Em|Na|No|Nas|Nos|De|Do|Da|Dos|Das)$/i;
+
+// "Cidade/UF" solta no corpo, SEM o prefixo "cidade de"/"município de" que `cidadeUF`
+// (leilaopro-parse) exige — para sites cujo texto só escreve "Matos Costa/SC" puro. Cidade
+// pode ter conector interno minúsculo ("Rio de Janeiro/RJ" — mesma lição da
+// `cidadeUFDeSlug`: se o regex não aceitar "de/do/da" DENTRO do nome, corta a cidade no
+// meio). `desde` permite pular um preâmbulo (menu, breadcrumb) antes de procurar.
+export function cidadeUFBare(txt, desde = 0) {
+  const alvo = String(txt || '').slice(desde, desde + 1800);
+  const m = alvo.match(/\b([A-ZÀ-Ÿ][A-Za-zÀ-ÿ]+(?:\s(?:d[aeo]s?|e|[A-ZÀ-Ÿ][A-Za-zÀ-ÿ]+)){0,3})\/([A-Z]{2})\b/);
+  if (!m) return { cidade: null, estado: null };
+  const palavras = m[1].split(/\s+/);
+  while (palavras.length > 1 && RE_TIPO_NAO_CIDADE.test(palavras[0])) palavras.shift();
+  return { cidade: titleCase(palavras.join(' ')), estado: m[2] };
+}
+
 // Lê uma <table> HTML de verdade (via <tr>/<td|th>) e devolve as linhas como arrays de
 // células já limpas de tag — útil quando o valor mora numa COLUNA cujo rótulo é o cabeçalho
 // da tabela, não um rótulo imediatamente antes do valor (o que `valorPorRotulo` espera).

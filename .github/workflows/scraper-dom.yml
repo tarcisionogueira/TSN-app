@@ -27,6 +27,7 @@ on:
       - 'scripts/lib/albertomacedo-parse.mjs'
       - 'scripts/lib/simon-parse.mjs'
       - 'scripts/lib/globo-parse.mjs'
+      - 'scripts/lib/leje-parse.mjs'
       - 'scripts/lib/dom-parse-util.mjs'
       - 'scripts/scraper-alfa.mjs'
       - 'scripts/scraper-hasta.mjs'
@@ -37,11 +38,12 @@ on:
       - 'scripts/scraper-albertomacedo.mjs'
       - 'scripts/scraper-simon.mjs'
       - 'scripts/scraper-globo.mjs'
+      - 'scripts/scraper-leje.mjs'
       - '.github/workflows/scraper-dom.yml'
   workflow_dispatch:
     inputs:
       fontes:
-        description: 'csv: alfa,hasta,nordeste,jeleiloes,leilaoindex,rocha,albertomacedo,simon,globo (hasta so funciona de IP residencial — de datacenter falha sempre)'
+        description: 'csv: alfa,hasta,nordeste,jeleiloes,leilaoindex,rocha,albertomacedo,simon,globo,leje (hasta so funciona de IP residencial — de datacenter falha sempre)'
         required: false
         default: 'alfa,nordeste'
       gravar:
@@ -141,3 +143,11 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           GLOBO_DRYRUN: ${{ github.event.inputs.gravar == '1' && '0' || '1' }}
         run: node scripts/scraper-globo.mjs
+
+      - name: Leje
+        if: ${{ !cancelled() && (github.event_name == 'push' || contains(github.event.inputs.fontes, 'leje')) }}
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          LEJE_DRYRUN: ${{ github.event.inputs.gravar == '1' && '0' || '1' }}
+        run: node scripts/scraper-leje.mjs
