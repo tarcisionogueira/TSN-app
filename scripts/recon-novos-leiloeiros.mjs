@@ -279,7 +279,19 @@ async function dumpDetalhe(browser, url, esperaMs = 4000) {
     console.log(`   HTTP ${resp ? resp.status() : '?'}`);
     await new Promise(r => setTimeout(r, esperaMs));
     const texto = await page.evaluate(() => document.body.innerText || '');
-    console.log(`   texto renderizado (${texto.length} chars):\n${texto.replace(/\n{2,}/g, '\n').slice(0, 4000)}`);
+    const limpo = texto.replace(/\n{2,}/g, '\n');
+    console.log(`   texto renderizado (${texto.length} chars) — INÍCIO:\n${limpo.slice(0, 2500)}`);
+    // JANELA em volta do 1º "avalia*"/"lance"/"praça" (05/09) — em página com sidebar de
+    // filtros grande (comitentes, categorias), o preço fica LONGE do início, e um slice(0,N)
+    // cego corta antes de chegar lá (foi exatamente o que aconteceu com JELEILOES na 1ª
+    // tentativa). Busca pelo RÓTULO em vez de confiar na posição.
+    const m = limpo.match(/avalia|lance\s*m[íi]nimo|1[ªa]?\s*pra[çc]a/i);
+    if (m && m.index > 2500) {
+      const ini = Math.max(0, m.index - 200);
+      console.log(`   texto renderizado — JANELA EM VOLTA DE "${m[0]}" (pos ${m.index}):\n${limpo.slice(ini, ini + 2500)}`);
+    } else if (!m) {
+      console.log('   ⚠️ nenhuma ocorrência de avalia*/lance mínimo/1ª praça no texto inteiro.');
+    }
     const html = await page.content();
     console.log(`   html length: ${html.length}`);
     // Anexos/docs — mesmo tipo de sinal que anexosDeHtml() dos parsers de origem procura.
