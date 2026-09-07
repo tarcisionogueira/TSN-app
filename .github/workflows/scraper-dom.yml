@@ -1,13 +1,20 @@
-name: Scraper DOM (Passo 2) — alfa/hasta/nordeste
+name: Scraper DOM (Passo 2) — alfa/hasta/nordeste + candidatos DJEN
 
 # Fontes `dom` do motor fetch × parse (Puppeteer no runner, 0 Bright Data). O push na
-# branch de trabalho roda alfa+nordeste em DRY-RUN (validação do Passo 2 — não grava).
-# HASTA NÃO roda no push: o site bloqueia IP de datacenter, então daqui ele SEMPRE
-# falha — e o DRY-RUN grava fonte_saude 'falhou/0', ruído que engana o monitor de
-# baseline (aconteceu em 21/08 19:27 UTC, no meio da 1ª carga residencial de verdade).
-# HASTA é do runner RESIDENCIAL; no dispatch manual segue disponível para quem pedir.
-# Para GRAVAR: dispatch com gravar=1 (só depois do merge/decisão do dono).
+# branch de trabalho roda TODAS as fontes (exceto HASTA) em DRY-RUN (validação — não
+# grava). HASTA NÃO roda no push nem no agendamento: o site bloqueia IP de datacenter,
+# então daqui ele SEMPRE falha — e gravar fonte_saude 'falhou/0' é ruído que engana o
+# monitor de baseline (aconteceu em 21/08 19:27 UTC, no meio da 1ª carga residencial de
+# verdade). HASTA é do runner RESIDENCIAL; segue disponível só no dispatch manual.
+#
+# PRODUÇÃO (07/09): `schedule` abaixo GRAVA de verdade, sozinho, todo dia — sem isto,
+# nenhuma destas fontes escrevia no banco a não ser por dispatch manual (alguém lembrar
+# de clicar com gravar=1). `env.GRAVA`/`env.RODA_TUDO` no nível do job calculam a regra
+# UMA VEZ (schedule OU dispatch com gravar=1 → grava; push → sempre dry-run) — cada fonte
+# só referencia `env.*`, pra não repetir a mesma expressão 9x e arriscar errar uma.
 on:
+  schedule:
+    - cron: '0 8 * * *'  # diário, 8h UTC (antes do scraper.yml/CEF às 9h — sem disputar runner)
   push:
     # PADRÃO, não nome fixo (31/08). Estava travado em
     # `claude/handoff-bidpro-brasil-verificacoes-7h3pat` — uma branch de sessão que já não
@@ -47,7 +54,7 @@ on:
         required: false
         default: 'alfa,nordeste'
       gravar:
-        description: '1 = grava no banco (default DRY-RUN)'
+        description: '1 = grava no banco (default DRY-RUN; agendado sempre grava)'
         required: false
         default: '0'
 
@@ -55,6 +62,9 @@ jobs:
   scraper-dom:
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    env:
+      GRAVA: ${{ (github.event_name == 'schedule' || github.event.inputs.gravar == '1') && '0' || '1' }}
+      RODA_TUDO: ${{ github.event_name == 'push' || github.event_name == 'schedule' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -73,11 +83,11 @@ jobs:
             libpango-1.0-0 libcairo2 libatspi2.0-0 libgtk-3-0
 
       - name: Alfa
-        if: ${{ github.event_name == 'push' || contains(github.event.inputs.fontes, 'alfa') }}
+        if: ${{ env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'alfa') }}
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          ALFA_DRYRUN: ${{ github.event.inputs.gravar == '1' && '0' || '1' }}
+          ALFA_DRYRUN: ${{ env.GRAVA }}
         run: node scripts/scraper-alfa.mjs
 
       - name: Hasta
@@ -89,65 +99,81 @@ jobs:
         run: node scripts/scraper-hasta.mjs
 
       - name: Nordeste
-        if: ${{ !cancelled() && (github.event_name == 'push' || contains(github.event.inputs.fontes, 'nordeste')) }}
+        if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'nordeste')) }}
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          NORDESTE_DRYRUN: ${{ github.event.inputs.gravar == '1' && '0' || '1' }}
+          NORDESTE_DRYRUN: ${{ env.GRAVA }}
         run: node scripts/scraper-nordeste.mjs
 
       - name: Jeleiloes
-        if: ${{ !cancelled() && (github.event_name == 'push' || contains(github.event.inputs.fontes, 'jeleiloes')) }}
+        if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'jeleiloes')) }}
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          JELEILOES_DRYRUN: ${{ github.event.inputs.gravar == '1' && '0' || '1' }}
+          JELEILOES_DRYRUN: ${{ env.GRAVA }}
         run: node scripts/scraper-jeleiloes.mjs
 
       - name: Leilaoindex
-        if: ${{ !cancelled() && (github.event_name == 'push' || contains(github.event.inputs.fontes, 'leilaoindex')) }}
+        if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'leilaoindex')) }}
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          LEILAOINDEX_DRYRUN: ${{ github.event.inputs.gravar == '1' && '0' || '1' }}
+          LEILAOINDEX_DRYRUN: ${{ env.GRAVA }}
         run: node scripts/scraper-leilaoindex.mjs
 
       - name: Rocha
-        if: ${{ !cancelled() && (github.event_name == 'push' || contains(github.event.inputs.fontes, 'rocha')) }}
+        if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'rocha')) }}
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          ROCHA_DRYRUN: ${{ github.event.inputs.gravar == '1' && '0' || '1' }}
+          ROCHA_DRYRUN: ${{ env.GRAVA }}
         run: node scripts/scraper-rocha.mjs
 
       - name: Albertomacedo
-        if: ${{ !cancelled() && (github.event_name == 'push' || contains(github.event.inputs.fontes, 'albertomacedo')) }}
+        if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'albertomacedo')) }}
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          ALBERTOMACEDO_DRYRUN: ${{ github.event.inputs.gravar == '1' && '0' || '1' }}
+          ALBERTOMACEDO_DRYRUN: ${{ env.GRAVA }}
         run: node scripts/scraper-albertomacedo.mjs
 
       - name: Simon
-        if: ${{ !cancelled() && (github.event_name == 'push' || contains(github.event.inputs.fontes, 'simon')) }}
+        if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'simon')) }}
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          SIMON_DRYRUN: ${{ github.event.inputs.gravar == '1' && '0' || '1' }}
+          SIMON_DRYRUN: ${{ env.GRAVA }}
         run: node scripts/scraper-simon.mjs
 
       - name: Globo
-        if: ${{ !cancelled() && (github.event_name == 'push' || contains(github.event.inputs.fontes, 'globo')) }}
+        if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'globo')) }}
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          GLOBO_DRYRUN: ${{ github.event.inputs.gravar == '1' && '0' || '1' }}
+          GLOBO_DRYRUN: ${{ env.GRAVA }}
         run: node scripts/scraper-globo.mjs
 
       - name: Leje
-        if: ${{ !cancelled() && (github.event_name == 'push' || contains(github.event.inputs.fontes, 'leje')) }}
+        if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'leje')) }}
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          LEJE_DRYRUN: ${{ github.event.inputs.gravar == '1' && '0' || '1' }}
+          LEJE_DRYRUN: ${{ env.GRAVA }}
         run: node scripts/scraper-leje.mjs
+
+      - name: Notify on failure
+        # `cancelled()` também: estourar o timeout-minutes não é `failure()` pro GitHub, e sem
+        # isto uma rodada agendada cortada no meio termina sem aviso nenhum (mesma lição já
+        # documentada em scraper.yml/CEF — silêncio de 3 dias de coleta truncada).
+        if: ${{ github.event_name == 'schedule' && (failure() || cancelled()) }}
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          curl -s -X POST "${APP_BASE_URL:-https://bidprobrasil.com.br}/api/notify-scraper" \
+            -H "x-cron-secret: ${CRON_SECRET}" \
+            -H "Content-Type: application/json" \
+            -d '{"tipo":"Scraper DOM","etapa":"'"$JOB_STATUS"'","run_id":"'$GITHUB_RUN_ID'","run_url":"https://github.com/'$GITHUB_REPOSITORY'/actions/runs/'$GITHUB_RUN_ID'"}' || true
+        continue-on-error: true
