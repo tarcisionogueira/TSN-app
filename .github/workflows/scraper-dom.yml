@@ -9,7 +9,7 @@ name: Scraper DOM (Passo 2) — alfa/hasta/nordeste + candidatos DJEN
 #
 # PRODUÇÃO (07/09): `schedule` abaixo GRAVA de verdade, sozinho, todo dia — sem isto,
 # nenhuma destas fontes escrevia no banco a não ser por dispatch manual (alguém lembrar
-# de clicar com gravar=1). `env.GRAVA`/`env.RODA_TUDO` no nível do job calculam a regra
+# de clicar com gravar=1). `env.DRYRUN_PADRAO`/`env.RODA_TUDO` no nível do job calculam a regra
 # UMA VEZ (schedule OU dispatch com gravar=1 → grava; push → sempre dry-run) — cada fonte
 # só referencia `env.*`, pra não repetir a mesma expressão 9x e arriscar errar uma.
 on:
@@ -63,7 +63,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     env:
-      GRAVA: ${{ (github.event_name == 'schedule' || github.event.inputs.gravar == '1') && '0' || '1' }}
+      # Nome pelo EFEITO no _DRYRUN de cada fonte (1=dry-run, 0=grava) — não pelo gatilho.
+      # (achado 07/09, revisão externa: "GRAVA" antes chamava 1 de "grava", exatamente o
+      # oposto do que o valor faz — funcionava certo, só confundia quem lesse depois.)
+      DRYRUN_PADRAO: ${{ (github.event_name == 'schedule' || github.event.inputs.gravar == '1') && '0' || '1' }}
       RODA_TUDO: ${{ github.event_name == 'push' || github.event_name == 'schedule' }}
     steps:
       - name: Checkout
@@ -87,7 +90,7 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          ALFA_DRYRUN: ${{ env.GRAVA }}
+          ALFA_DRYRUN: ${{ env.DRYRUN_PADRAO }}
         run: node scripts/scraper-alfa.mjs
 
       - name: Hasta
@@ -103,7 +106,7 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          NORDESTE_DRYRUN: ${{ env.GRAVA }}
+          NORDESTE_DRYRUN: ${{ env.DRYRUN_PADRAO }}
         run: node scripts/scraper-nordeste.mjs
 
       - name: Jeleiloes
@@ -111,7 +114,7 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          JELEILOES_DRYRUN: ${{ env.GRAVA }}
+          JELEILOES_DRYRUN: ${{ env.DRYRUN_PADRAO }}
         run: node scripts/scraper-jeleiloes.mjs
 
       - name: Leilaoindex
@@ -119,7 +122,7 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          LEILAOINDEX_DRYRUN: ${{ env.GRAVA }}
+          LEILAOINDEX_DRYRUN: ${{ env.DRYRUN_PADRAO }}
         run: node scripts/scraper-leilaoindex.mjs
 
       - name: Rocha
@@ -127,7 +130,7 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          ROCHA_DRYRUN: ${{ env.GRAVA }}
+          ROCHA_DRYRUN: ${{ env.DRYRUN_PADRAO }}
         run: node scripts/scraper-rocha.mjs
 
       - name: Albertomacedo
@@ -135,7 +138,7 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          ALBERTOMACEDO_DRYRUN: ${{ env.GRAVA }}
+          ALBERTOMACEDO_DRYRUN: ${{ env.DRYRUN_PADRAO }}
         run: node scripts/scraper-albertomacedo.mjs
 
       - name: Simon
@@ -143,7 +146,7 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          SIMON_DRYRUN: ${{ env.GRAVA }}
+          SIMON_DRYRUN: ${{ env.DRYRUN_PADRAO }}
         run: node scripts/scraper-simon.mjs
 
       - name: Globo
@@ -151,7 +154,7 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          GLOBO_DRYRUN: ${{ env.GRAVA }}
+          GLOBO_DRYRUN: ${{ env.DRYRUN_PADRAO }}
         run: node scripts/scraper-globo.mjs
 
       - name: Leje
@@ -159,7 +162,7 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          LEJE_DRYRUN: ${{ env.GRAVA }}
+          LEJE_DRYRUN: ${{ env.DRYRUN_PADRAO }}
         run: node scripts/scraper-leje.mjs
 
       - name: Notify on failure
