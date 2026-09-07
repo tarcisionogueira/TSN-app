@@ -109,6 +109,30 @@ neste ambiente (sessão nova), rodei `npm install` antes.
 
 ---
 
+## 📋 SESSÃO 24 · PARTE 3 (05/09) — FECHA O PENDENTE DA PARTE 2: BULLETS DE AUTORIDADE DO APRESENTADOR
+
+A Parte 2 tinha deixado em aberto o bloco de estatística de autoridade por falta dos números
+reais. O dono mandou: **+R$70 milhões em operações**, **+300 imóveis vendidos** (modelo:
+arrematava área, fracionava o solo, vendia por unidade pra dar volume) e 3 casos de
+fracionamento (terreno de custo × nº de casas × preço unitário de venda).
+
+**Implementado** — `apresentador_destaques` (jsonb, novo campo em `eventos_live`, mesmo
+padrão aditivo de `imagens`/`depoimentos`; `live_proxima()` atualizada pra devolvê-lo):
+bullets ao lado da bio em prosa no card "Quem apresenta". Nos 3 casos, calculei o total de
+vendas (área × nº de casas × preço unitário) e **escrevi sempre como "em vendas", nunca como
+"lucro"** — o custo de construção não foi informado, e chamar receita bruta de lucro seria
+exatamente a forma nº 10 do topo deste arquivo (medir uma coisa, reportar com o nome de
+outra), cometida bem no meio de uma seção que existe para provar credibilidade. Os 3:
+R$115mil→29 casas de R$180mil (R$5,2mi em vendas) · R$355mil→26 casas de R$220mil (R$5,7mi)
+· R$156mil→30 casas de R$170mil (R$5,1mi). Build ok, commit `ef1d53d`.
+
+**Estado agora da LP da aula, depois de Partes 2+3**: qualificação sem gate de capital,
+provas reais de cliente (2, mais chegando por print), vagas reais (dormente, sem
+`vagas_max` definido) e autoridade do apresentador em bullets — os 4 aditivos do
+comparativo com o concorrente estão completos.
+
+---
+
 ## 📋 SESSÃO 23 · PARTE 18 (05/09) — FECHAMENTO DO DIA: RESUMO (PARTES 13-17) + PENDÊNCIAS PRA PRÓXIMA SESSÃO
 
 **Resumo do que saiu hoje**, todo no editor/leitor de e-book estruturado (`LeitorEstruturado.jsx`,
