@@ -652,6 +652,20 @@ export default function LiveInscricao() {
                     {evento.apresentador_bio}
                   </p>
                 )}
+                {/* DESTAQUES (05/09) — bullets curtos ao lado da bio em prosa. Números do
+                    próprio apresentador (não do acervo da plataforma — esse é o bloco
+                    `numeros` logo abaixo), por isso vêm de `apresentador_destaques` e não
+                    são calculados: são o histórico dele, ele quem informa. */}
+                {Array.isArray(evento.apresentador_destaques) && evento.apresentador_destaques.length > 0 && (
+                  <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 9 }}>
+                    {evento.apresentador_destaques.map((d, i) => (
+                      <div key={i} style={{ display: 'flex', gap: 9 }}>
+                        <span style={{ color: LATAO, fontWeight: 800, flexShrink: 0 }}>→</span>
+                        <span style={{ fontSize: 14, color: '#D9E3F0', lineHeight: 1.55 }}>{d}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 
