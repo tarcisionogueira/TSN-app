@@ -48,8 +48,6 @@ function primeiraLinhaInfo(linhas) {
   return null;
 }
 
-let _dumpsRestantes = 3; // DEBUG (07/09, temporário): ver comentário abaixo, em cidade contaminada
-
 export function parseDetalhe(html, url) {
   const txt = textoDe(html);
   const linhas = textoComLinhas(html).split('\n');
@@ -67,17 +65,6 @@ export function parseDetalhe(html, url) {
   // única linha é raro — a amostra que validou o parser era mais limpa que o comum. Sem
   // fallback, TODOS os lotes saíam sem cidade/UF (79 lotes reais na 1ª rodada, 0 com cidade).
   const bare = !info ? cidadeUFBare(txt) : { cidade: null, estado: null };
-  // DEBUG (07/09, temporário — remover após diagnosticar): 4ª rodada real mostrou cidade
-  // preenchida mas CONTAMINADA com prefixo de chrome do site em RIGOLON/GIORDANO ("Fechar
-  // Home Jales" em vez de "Jales", "Região em Ribeirão Preto" em vez de "Ribeirão Preto") —
-  // THAISTEIXEIRA/ROCHA/SIMON saíram limpos com o mesmo fallback. Dump do texto ao redor do
-  // match de verdade pra entender a estrutura antes de mexer na lista de descarte às cegas.
-  if (bare.cidade && /^(Fechar|Home|Regi[ãa]o)\b/i.test(bare.cidade) && _dumpsRestantes > 0) {
-    _dumpsRestantes--;
-    const m = txt.match(/\b([A-ZÀ-Ÿ][A-Za-zÀ-ÿ]+(?:\s(?:d[aeo]s?|e|[A-ZÀ-Ÿ][A-Za-zÀ-ÿ]+)){0,3})\/([A-Z]{2})\b/);
-    const pos = m ? m.index : -1;
-    console.log(`[DEBUG-CIDADE-CONTAMINADA] ${url}\n  bare=${JSON.stringify(bare)}\n  contexto=${JSON.stringify(txt.slice(Math.max(0, pos - 300), pos + 100))}`);
-  }
   const cidade = info?.cidade || bare.cidade;
   const estado = info?.estado || bare.estado;
   const area = extrairArea(info?.descCurta || '', txt.slice(0, 500));

@@ -115,7 +115,15 @@ export function montarRowDom(url, det, tenant, id, inferirTipo) {
 // a heurística de "palavra Capitalizada = início de nome próprio" não distingue "EM" de
 // "RIO" — as duas têm 1ª letra maiúscula igual. Achado 07/09 (LEJE): sem isto, a cidade saía
 // "Em Rio De Janeiro".
-const RE_TIPO_NAO_CIDADE = /^(Im[óo]vel|Direitos?|Rural|Urbano|Apartamento|Casa|Sobrado|Terreno|Comercial|Loja|Galp[ãa]o|Sala|Pr[ée]dio|Lote|Em|Na|No|Nas|Nos|De|Do|Da|Dos|Das)$/i;
+// "Fechar"/"Home": achado 07/09 (RIGOLONLEILOES/GIORDANOLEILOES, dump real) — um botão
+// "FECHAR" + link "Home" de um menu/modal aparecem coladinhos, no texto linearizado, bem
+// antes do título de verdade do item ("FECHAR Home Jales/SP - Imóveis..." → cidade real é
+// só "Jales", o resto é chrome do site, não descrição do lote).
+// "Regi[ãa]o": mesmo achado — mas aqui a contaminação vem do PRÓPRIO título do leilão em
+// CAIXA ALTA ("...DA 15ª REGIÃO EM RIBEIRÃO PRETO/SP..."), não de chrome — sem isto, a
+// mesma armadilha de maiúscula do "Em" acima faz "REGIÃO" sobreviver ao strip porque só
+// "EM" (já na lista) vinha depois dela, nunca antes.
+const RE_TIPO_NAO_CIDADE = /^(Im[óo]vel|Direitos?|Rural|Urbano|Apartamento|Casa|Sobrado|Terreno|Comercial|Loja|Galp[ãa]o|Sala|Pr[ée]dio|Lote|Fechar|Home|Regi[ãa]o|Em|Na|No|Nas|Nos|De|Do|Da|Dos|Das)$/i;
 
 // "Cidade/UF" solta no corpo, SEM o prefixo "cidade de"/"município de" que `cidadeUF`
 // (leilaopro-parse) exige — para sites cujo texto só escreve "Matos Costa/SC" puro. Cidade
