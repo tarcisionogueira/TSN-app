@@ -4,6 +4,75 @@
 
 ---
 
+## 📋 SESSÃO 24 · PARTE 8 (07/09) — 8 CANDIDATOS DJEN EM PRODUÇÃO: CRON DIÁRIO + docs_status=integrado; GLOBOLEILOES FICA DE FORA (SITE VIROU SPA)
+
+**Pedido do dono**: "Resolva todos para no final colocarmos em produção" (continuação da Parte
+6) e, depois de reportado o bug do ebook (Parte 7), "Pode fazer e colocar tudo em produção" —
+autorização explícita para o rollout completo.
+
+**O que foi corrigido nesta parte, cada um com dado real de CI antes de fechar (nenhum fix às
+cegas)**:
+1. **RIGOLONLEILOES/GIORDANOLEILOES/THAISTEIXEIRA (cidade/UF nula em 9/9 amostras)** — o
+   banner de consentimento de cookies ("Centro de preferências de privacidade...") sozinho
+   passa de 1800 chars, empurrando a Cidade/UF real pra fora da janela de busca do
+   `cidadeUFBare`. Fix: fallback pro texto inteiro quando a janela curta não acha nada.
+2. **ALBERTOMACEDOLEILOES (veículo `fiatpalio-weekend-ex` driblando a guarda)** — a guarda por
+   AUSÊNCIA de palavra de imóvel nunca disparava de verdade: "Rural"/"Imóveis" vêm de um
+   filtro de categoria fixo na barra lateral, presente em TODA página do site, item ou não.
+   Fix: trocado por sinal POSITIVO de veículo (placa/renavam/chassi/combustível/km) — termo
+   que só aparece na ficha real de um veículo.
+3. **RIGOLON/GIORDANO de novo (cidade preenchida mas CONTAMINADA)** — depois do fix 1, cidade
+   virou não-nula mas vinha colada a chrome do site ("Fechar Home Jales" em vez de "Jales") OU
+   ao próprio título do leilão em CAIXA ALTA ("REGIÃO EM RIBEIRÃO PRETO" — mesma armadilha de
+   maiúscula do "Em", só que "Região" não estava na lista de descarte). Fix: `Fechar`, `Home`,
+   `Regi[ãa]o` somados a `RE_TIPO_NAO_CIDADE` (dom-parse-util.mjs, compartilhado por
+   leilaoindex/rocha/simon).
+4. **LEJE (mesma classe, achado na validação do fix 3)** — "Vídeo Outros Lotes Resende" em vez
+   de "Resende" (aba + link colados). `Vídeo`/`Outros` somados à mesma lista; `Lote` virou
+   `Lotes?` pro plural.
+5. **GLOBOLEILOES (0 lotes em TODA rodada real, isolada ou não)** — 3 diagnósticos
+   independentes (dump de HTML cru, varredura de todos os 44 hrefs internos, dispatch isolado
+   sem disputa de recurso) descartaram timeout e resource-contention e confirmaram: **o site
+   migrou pra uma SPA Inertia.js** (Laravel+Inertia+React) desde o recon original — HTML real
+   e completo (396KB, domínio certo, sem bloqueio) mas ZERO link de lote no documento; os
+   hrefs são só bundles `/build/assets/*.js` do Vite (`inertia-vendor-*.js` confirma). Os
+   dados agora vêm como JSON embutido (`data-page`) que o React monta no cliente — não é
+   ajuste de regex, é parser novo. **Decisão: fica FORA do cron de produção** (mesmo
+   tratamento do HASTA), documentado em `leiloeiro_conhecimento.observacao` e no cabeçalho do
+   próprio `globo-parse.mjs`, pra não repetir a investigação. Continua rodando no `push` como
+   sinalizador — se o site voltar a ser HTML simples, o próximo push acusa sozinho.
+
+**PRODUÇÃO — o que mudou em `scraper-dom.yml`**: nenhuma fonte deste workflow (nem as 3
+antigas ALFA/HASTA/NORDESTE) tinha cron de produção — só rodavam em dry-run no push ou por
+dispatch manual (alguém lembrar de clicar `gravar=1`). Adicionado `schedule: cron: '0 8 * * *'`
+(diário, antes do `scraper.yml`/CEF às 9h) que GRAVA de verdade sozinho. `env.DRYRUN_PADRAO` /
+`env.RODA_TUDO` calculados uma vez no nível do job (schedule OU dispatch com `gravar=1` →
+grava; push → sempre dry-run) e referenciados por cada fonte — evita repetir a mesma expressão
+9x. HASTA e GLOBOLEILOES ficam de fora do agendamento (datacenter bloqueado / site virou SPA,
+respectivamente) — só HASTA por dispatch manual residencial, GLOBOLEILOES só valida no push.
+Notify-on-failure adicionado (mesmo padrão do `scraper.yml`/CEF), com `failure() || cancelled()`
+— lição já documentada sobre alerta que não cobre timeout/cancelamento.
+
+**Banco**: `docs_status='integrado'` pras 8 fontes prontas (JELEILOES, RIGOLONLEILOES,
+GIORDANOLEILOES, THAISTEIXEIRA, ROCHALEILOES, ALBERTOMACEDOLEILOES, SIMONLEILOES, LEJE).
+GLOBOLEILOES fica `'candidato'`, observação atualizada com o achado da SPA.
+
+**Validação final (commit `519878f`, run completo dos 9, log de 622 linhas lido por inteiro)**:
+zero `[dom] falha`/`[dom] HTTP`/stack trace em qualquer fonte. Resumo por fonte:
+JELEILOES 37 prontos·3 descartados · RIGOLONLEILOES 19·2 · GIORDANOLEILOES 39·1 · THAISTEIXEIRA
+28·0 · ROCHALEILOES 13·1 (+2 encerrados) · ALBERTOMACEDOLEILOES 2·10 (guarda de veículo
+funcionando — descartados subiu de 9→10) · SIMONLEILOES 12·0 · LEJE 5·0. GLOBOLEILOES: 0
+lotes, "vazio", sem erro (esperado).
+
+**Achado FORA de escopo, sinalizado mas não mexido**: NORDESTE (fonte pré-existente, não faz
+parte do lote do DJEN) regrediu de 21→0 lotes nesta mesma rodada (`degradado`). Não investigado
+agora — não foi tocado por nenhum commit desta sessão; fica registrado pra quem for olhar.
+
+**KRONLEILOES e JONASLEILOEIRO/FERNANDOLEILOEIRO seguem fora, como já documentado (Partes 5/6)**:
+Kron por baixo volume (3 imóveis) frente ao esforço de adaptar o padrão Superbid; os outros
+dois por precisarem de Bright Data Web Unlocker mais forte ou IP residencial — decisão do dono,
+não investigação de código.
+
 ## 📋 SESSÃO 24 · PARTE 7 (07/09) — CAPA DE EBOOK EM BRANCO: A GARANTIA "NUNCA DEIXA CAIXA BRANCA" TINHA UM BURACO REAL
 
 **Achado do dono**: print do "Lucre Antes de Arrematar" (R$49,90) na Área de Membros — capa em
