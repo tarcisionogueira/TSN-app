@@ -133,6 +133,66 @@ comparativo com o concorrente estão completos.
 
 ---
 
+## 📋 SESSÃO 24 · PARTE 4 (05/09) — LINHA DE PROVA NO /LEILOES + O SITE DO LEILOEIRO DO DJEN SEM "HTTPS://"
+
+**Linha de prova no widget de `/leiloes`** (`api/publico.js`, `caixaConviteLive`): pedido do
+dono "sem exagerar no visual" — uma linha só (✓ + texto), puxando `apresentador_destaques[0]`
+via `live_proxima` (mesmo dado da Parte 3, sem copiar/duplicar). O widget continua enxuto por
+decisão já registrada no próprio arquivo (conversão mais rápida; a prova completa fica atrás
+do link "Ver todos os detalhes da aula"). ⚠️ Achado próprio nesta implementação: usei crase
+dentro de um comentário dentro de uma template literal delimitada por crase — fechou a string
+mais cedo e `verificar:sintaxe` pegou antes do build. Lição: **nunca usar crase em comentário
+dentro de arquivo que gera HTML via template literal** (`api/publico.js`, `api/og-share.js` e
+afins) — usa aspas simples ou nada.
+
+**O site do leiloeiro dos editais do DJEN — achado a partir de um imóvel real do dono**
+(Alameda Rio Negro — Barueri/SP, `c172bf60-b705-486e-91e1-0e4e68017748`, fonte
+`EDITAL_DJEN`): sem foto, sem anexo, sem botão "Ir ao leiloeiro". Confirmado que **não é bug
+de renderização** — o botão só aparece com `url_lote` preenchido (`ImovelDetalhe.jsx:2003`), e
+aqui estava nulo. Isso já era decisão deliberada do dono (03/09,
+`edital_vira_lote_sem_foto_com_matricula_e_dedup_pelo_que_temos.sql`): lote nasce sem
+documento DE PROPÓSITO, pra "reforçar a necessidade" — painel `admin_radar_editais()` existe
+exatamente pra mostrar esse trabalho pendente.
+
+**O que o dono pediu (capturar quem é o leiloeiro, validar se já é integrado, pelo menos o
+site, idealmente os anexos) JÁ EXISTIA, construído em 03/09** — `extrairLeiloeiro()` (parser
+de 3 estágios), `leiloeiro_integrado` (flag + `construirEhIntegrado()`), `url_lote` alimentado
+por `leilao_plataforma_url` na promoção (`editais_promover_pendentes()`), e o cron de
+descoberta de documento (`descobrirDocumentosNoSite`, a cada 6h) que só passa a agir QUANDO
+`url_lote` existe. **O gargalo real, achado agora**: `parseEdital()` só reconhecia URL com
+`https://` na frente — mas o DJEN escreve quase sempre **"NO SITE WWW.NOME.COM.BR" sem
+protocolo nenhum**. Medido antes de mexer (772 editais): 83 já tinham
+`leilao_plataforma_url`, **178 tinham "www.\*.com.br" no texto sem tê-lo extraído** — o
+gargalo era este padrão, não falta de dado. Amostra dos 40 domínios mais frequentes conferida
+um a um: **zero falso positivo** (só nome de leiloeiro/leilão — edital judicial não cita site
+alheio à toa), então o padrão entrou sem âncora extra.
+
+**Feito**: regex nova em `parseEdital()` (`api/radar-editais-cron.js`) pega o padrão sem
+protocolo daqui pra frente; migração `backfill_leilao_plataforma_url_www_sem_protocolo.sql`
+resolveu o que já estava no banco — 178 `editais_leilao` atualizados, e **24→81** dos 168
+lotes ativos de EDITAL_DJEN passam a ter site do leiloeiro (inclusive o imóvel que o dono
+reportou, agora com `url_lote = 'https://leje.com.br'`). Não precisei escrever lógica de
+descoberta de documento nova: o cron que já existe usa `url_lote`, então esses 57 lotes novos
+entram sozinhos na fila dele na próxima rodada (6h).
+
+⚠️ **Armadilha do Postgres, registrada pra não repetir**: tentei fazer as duas atualizações
+(editais_leilao e imoveis_leilao) num único `WITH` com dois `UPDATE ... RETURNING` — o segundo
+saiu ZERADO. CTEs de escrita no mesmo comando enxergam a MESMA foto do banco (a de ANTES de
+qualquer uma rodar), nunca o resultado uma da outra. Precisou ser duas instruções separadas.
+E `regexp_matches` não pode ir dentro de um `SET` de UPDATE ("set-returning functions are not
+allowed") — resolvido com `substring(campo from '(?i)padrão')`, que devolve escalar.
+
+**`leiloeiro_integrado` (a checagem "já é nosso?") já funciona hoje**: 100 dos 772 editais
+batem com um leiloeiro que já integramos (`editais_leilao.leiloeiro_integrado = true`) — a
+dedup por matrícula (`editais_dedup_candidato`) é quem decide se liga ao lote existente ou
+cria um novo marcado como suspeita. Não mexi nessa parte, só confirmei que está viva.
+
+**Não feito, fora do escopo desta rodada**: ir buscar os ANEXOS/documentos em si nos sites
+recém-descobertos — isso já é o trabalho do `descobrirDocumentosNoSite` (6h de cadência,
+`doc_descoberta_tentativas` como negative cache), não precisa de código novo, só de tempo.
+
+---
+
 ## 📋 SESSÃO 23 · PARTE 18 (05/09) — FECHAMENTO DO DIA: RESUMO (PARTES 13-17) + PENDÊNCIAS PRA PRÓXIMA SESSÃO
 
 **Resumo do que saiu hoje**, todo no editor/leitor de e-book estruturado (`LeitorEstruturado.jsx`,
