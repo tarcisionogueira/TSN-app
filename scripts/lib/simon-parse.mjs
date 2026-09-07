@@ -46,6 +46,12 @@ export function parseDetalhe(html, url) {
   // nesta plataforma (o recon não alcançou essa parte da página).
   const minimoRe = /Lance\s*inicial[^]{0,300}?R\$\s*([\d.]+,\d{2})/i;
   let minimo = plaus(num((txt.match(minimoRe) || [])[1]));
+  // GUARDA (07/09, achado na 1ª rodada real): janela de 300 chars é larga o bastante pra
+  // pular do fim da avaliação deste lote e pegar um "Lance inicial" de OUTRO lugar da página
+  // (carrossel de relacionados, FAQ). Sintoma visto: mínimo MAIOR que avaliação (desconto
+  // negativo) — fisicamente impossível num leilão de deságio. Nesse caso o valor não é
+  // confiável; cai pra avaliação (nunca inventa um número, só descarta o que não bate).
+  if (minimo && avaliacao && minimo > avaliacao) minimo = avaliacao;
   if (!minimo) minimo = avaliacao;
   if (!avaliacao) avaliacao = minimo;
 
