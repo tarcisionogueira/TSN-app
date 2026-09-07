@@ -397,6 +397,7 @@ footer .in{max-width:1080px;margin:0 auto}
 .convite-live button{padding:12px 22px;border:none;border-radius:10px;background:var(--azul);color:#fff;font-weight:800;font-size:14.5px;cursor:pointer;font-family:inherit;white-space:nowrap}
 .convite-live button:hover{background:var(--azul-fundo)}
 .convite-live-obs{font-size:12px;color:var(--cinza);margin:0}
+.convite-live-prova{font-size:12.5px;font-weight:700;color:#166534;margin:0 0 14px;display:flex;align-items:center;gap:6px}
 .convite-live-mais{font-size:12.5px;margin:8px 0 0}
 .convite-live-mais a{font-weight:700}
 .convite-live-erro{background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;font-size:13px;font-weight:600;padding:10px 14px;border-radius:10px;margin:0 0 14px}
@@ -678,6 +679,12 @@ function caixaConviteLive(prox, estado) {
          data específica junto com "toda semana" derruba a urgência — soa como algo que dá
          para pegar quando quiser. Cada edição fica só com a SUA data, como um evento único. -->
     <div class="convite-live-s">Nesta ${esc(quando)} (horário de Brasília), um especialista avalia um imóvel de leilão na prática, ao vivo, e responde perguntas na hora. Inscreva-se e ganhe também uma conta grátis na plataforma.</div>
+    <!-- Linha única de prova (05/09, pedido do dono: "sem exagerar no visual"). Puxa o
+         PRIMEIRO item de apresentador_destaques (mesmo array que alimenta a landing
+         completa via live_proxima — sem cópia, sem duplicar dado) em vez de texto fixo:
+         se o número mudar lá, muda aqui sozinho. Widget continua enxuto de propósito
+         (ver comentário de caixaConviteLive) — só isto, não a lista inteira. -->
+    ${prox.apresentador_destaques?.[0] ? `<div class="convite-live-prova">✓ ${esc(prox.apresentador_destaques[0])}</div>` : ''}
     ${estado === 'erro' ? `<div class="convite-live-erro">Não conseguimos concluir sua inscrição. Confira nome, WhatsApp e e-mail e tente de novo.</div>` : ''}
     <form method="POST" action="${SITE}/api/live-inscrever">
       <input type="hidden" name="slug" value="leilao-ao-vivo"/>
