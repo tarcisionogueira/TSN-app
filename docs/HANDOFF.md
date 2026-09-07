@@ -4,6 +4,106 @@
 
 ---
 
+## 📋 SESSÃO 24 · PARTE 6 (07/09) — JELEILOES: PARSER CERTO, SITE COM RATE-LIMIT (NÃO PRONTO); FIX CIDADE-DO-SLUG (ALFA/HASTA/NORDESTE); MAPA DE PLATAFORMA DOS OUTROS 8+1 CANDIDATOS DO DJEN
+
+**Contexto**: continuação do pedido do dono de 05/09 ("Faça a sequencialmente todos eles de
+acordo com o volume de lotes em leilão") — os 13 leiloeiros achados via cruzamento de edital
+do DJEN e ainda não integrados (PARTE 5). Esta sessão não teve acesso de rede direto (mesma
+limitação já documentada); todo recon abaixo rodou via `recon-novos-leiloeiros.yml` no
+GitHub Actions (egress real) — nenhum parser foi escrito sem antes ver dado real.
+
+**1. JELEILOES (14 editais, 13 já promovidos — maior taxa de promoção do lote de 13) — PARSER
+CERTO, SITE COM RATE-LIMIT POR RAJADA — NÃO ESTÁ PRONTO.** Recon achou algo que a hipótese inicial (tratar como mais um
+tenant do SUPORTE, igual SUEDPETER/LIDER) teria acertado pela METADE: `stats.suporteleiloes
+.com.br/ping` respondeu `clientId:"jeleiloes.com.br"` e a foto/PDF do lote vêm de
+`static.suporteleiloes.com.br/jeleiloescombr/...` — É a mesma infra. Mas `/buscador
+?categoria=2` (o catálogo do template antigo) dá 404 aqui; o catálogo real é `/imoveis?page=N`,
+um front-end mais novo da mesma plataforma. Forçar como tenant de `SUPORTE_TENANTS`
+(scraper-puppeteer.mjs) teria dado ZERO lotes silencioso — os seletores (`article.lote-main`,
+`.strong-cod`) não existem nesse template — e um zero por seletor errado é indistinguível de
+"sem imóvel hoje" sem abrir o HTML, exatamente a forma nº 10 do topo deste documento.
+
+Escrito como parser dedicado: `scripts/lib/jeleiloes-parse.mjs` + `scripts/lib/motor/fontes
+/jeleiloes.mjs` + `scripts/scraper-jeleiloes.mjs` (fonte `dom`, custo zero). Achados que
+moldaram o parser:
+- **Detalhe do lote é TABELA** (Lote | Tipo do Bem | Valor de Avaliação | Lance Inicial - 2ª
+  Praça/Hasta | Valor Débito | Lance Atual | Status), não rótulo solto tipo ALFA ("Valor da
+  Avaliação: R$ X"). `valorPorRotulo` (janela de 40 chars) não alcançaria o valor — os
+  cabeçalhos das OUTRAS colunas ficam no meio. `linhaTabelaLote` lê `<tr>/<td>` de verdade
+  (o motor `dom` entrega `page.content()`, não `innerText`), com janela larga (400 chars)
+  como rede de segurança se um tenant futuro não renderizar `<table>`.
+- **Edital/matrícula são PDF de nome opaco** (`sl-bem-<n>-hash.pdf`, sem "edital"/"matricula"
+  na URL) — a classificação usada em todo lugar (`anexosDeHtml`, por URL) não serviria; o
+  rótulo mora no TEXTO do link ("VISUALIZAR EDITAL"/"VISUALIZAR MATRÍCULA"). `anexosJE` local
+  classifica por texto do `<a>`, não pela URL.
+- URL do lote tem DUAS formas: `/oferta/leilao/imoveis/<cat>/<id>/id-<id2>/<slug>` e
+  `/ofertas/leilao/imoveis/<cat>/<id>/<id2>/<slug>` (plural, sem "id-") — as duas capturadas.
+- Testado localmente contra HTML reconstruído com o texto REAL do recon (não é prova de rede,
+  mas prova a lógica): avaliação R$ 2.262.226,53 / lance R$ 1.696.669,90 / matrícula 511 /
+  modalidade judicial / anexos classificados corretamente / foto certa (ignorando ícone do
+  template) — todos batendo com o que o recon mostrou.
+- `npm run build` limpo; `testar:leiloeiro` (25/25) e `testar:doc-leiloeiro` (11/11) intactos.
+
+**⚠️ A RODADA REAL (automática, via `scraper-dom.yml` no push) confirmou a lógica E achou um
+problema novo — os dois ao mesmo tempo.** Página 1 de `/imoveis` enumerou **20 lotes reais com
+URL válida** (prova que `extrairUrlsDeLote` está certo). Mas a página 2 (`?page=2`) **E** o
+fetch de detalhe do 1º lote voltaram **HTTP 403** — na MESMA sessão do Puppeteer, poucos
+segundos depois da página 1 ter dado 200. Não é bloqueio de IP de datacenter (todo recon
+isolado anterior, 1 request por job do GitHub Actions, sempre deu 200 — inclusive o dump do
+MESMO lote que agora fica 403 dentro do scraper): é sensível a **RAJADA** — 2ª+ requisição em
+sequência rápida na mesma sessão apanha. O motor `dom` (fetch-dom.mjs) trata HTTP ≥400 como
+resposta DEFINITIVA (não re-tenta) por desenho — correto pra 404/403 de verdade, errado pra um
+rate-limit transitório como este. **NÃO ligar cron nem marcar `integrado` até resolver**: falta
+testar se um espaçamento maior entre requisições evita o 403, ou se precisa cair pro Bright
+Data Web Unlocker (como HASTA) — nenhuma das duas foi tentada ainda.
+
+**2. FIX INCIDENTAL — `cidadeUFDeSlug` cortava cidade composta no conector INTERNO ao nome
+(afeta ALFA/HASTA/NORDESTE também, não só JELEILOES).** Construindo o parser, o slug real
+`imovel-c-10-alq-em-nova-america-da-colina-pr` saía com `cidade: "Colina"` — o `.*` guloso
+antes de `(?:em|de|do|da|no|na)` pega o ÚLTIMO conector da string, e "Nova América da Colina"
+(município real do Paraná) **tem um "da" dentro do próprio nome**. Não é caso hipotético — é
+a mesma ambiguidade de qualquer cidade composta com conector embutido ("Conceição do Mato
+Dentro", "Santo Antônio de Jesus"). **Cidade errada (não nula) é pior que nula**: passa no
+filtro de qualidade e chega ao geocode/relatório com localização errada, sem nenhum sinal de
+alerta — só apareceria numa auditoria como esta, nunca em teste de sintaxe ou build.
+
+Fix em `scripts/lib/dom-parse-util.mjs`: tenta `em/no/na` primeiro (raríssimo aparecer DENTRO
+de um nome de cidade brasileiro — quase sempre é o separador tipo→cidade), só cai pra
+`de/do/da` se não achar. Novo teste `npm run testar:cidade-slug` trava os dois casos (o novo E
+o que a ALFA já tinha corrigido em 21/08 — "leilao-de-fazenda-em-manhumirim-mg" → "Manhumirim",
+não "Fazenda Em Manhumirim"). Sem teste dedicado anterior para esta função — os 3 sites que a
+usam (ALFA/HASTA/NORDESTE) validam via `scraper-dom.yml` (dry-run automático no push), que
+rodou limpo com o fix aplicado.
+
+**3. MAPA DE PLATAFORMA dos outros 8 candidatos verificados nesta sessão** (recon via Actions,
+`leiloeiro_conhecimento.observacao` de cada um tem o achado completo — aqui só o resumo pra
+priorizar o próximo passo):
+
+| Fonte | Editais | Achado | Próximo passo |
+|---|---|---|---|
+| JONASLEILOEIRO | 5 | Cloudflare 403 em TODOS os 6 paths (não só home) | Precisa Bright Data Web Unlocker ou IP residencial antes de qualquer parser |
+| RIGOLONLEILOES | 3 | Plataforma "leilao/index" — catálogo `/leilao/index/imoveis`, lote `/leilao/index/leilao_id/<id>/lote/<id2>` | **Mesma plataforma do GIORDANOLEILOES** (fingerprint de URL idêntico) — 1 parser serve os dois |
+| GIORDANOLEILOES | 3 | Idêntico ao Rigolon (confirmado, não suposição) | Idem — construir junto com Rigolon. THAISTEIXEIRA (42 editais, #1 em volume) ainda não testado mas é candidato a ser a MESMA família — testar `/leilao/index/imoveis` nele antes de tratar como site à parte |
+| VMLEILOES | 4 | HTTP 200, lotes reais em `/lote/<id>/<slug>`, mas `/imoveis` 404; página de erro linka `leilotech.com.br` | Checar se é a plataforma "LeiloTech" já mapeada em `MAPA_QUALIDADE` (scraper-puppeteer.mjs) antes de tratar como 100% novo |
+| SIMONLEILOES | 3 | HTTP 200, catálogo real é `/leiloes/imoveis` (fora dos paths padrão testados) | Recon dedicado do catálogo/paginação |
+| ALBERTOMACEDOLEILOES | 3 | HTTP 200, mas home só lista LEILÕES (evento), não LOTES | Recon de 1 página `/leilao/<slug>` pra achar o padrão de URL do lote |
+| GLOBOLEILOES | 3 | HTTP 200, estrutura mais limpa dos 8 (`<article>` com URL de lote completa já na home) | Bom candidato a próxima integração isolada — sem bloqueio conhecido |
+| ROCHALEILOES | 2 | HTTP 200, `/imoveis` responde com os MESMOS cards da home (possível alias, não filtro) | Confirmar se filtra antes de assumir |
+| **THAISTEIXEIRA** | **42** | Testado `/leilao/index/imoveis` (o path do Rigolon/Giordano): HTTP 200 mas só chrome do site, ZERO card, zero "avalia". **Hipótese de mesma plataforma NÃO confirmada por este path.** Achado à parte: leiloeira oficial em 4 juntas (JUCEMG/JUCESP/JUCEAC/JUCER) — explica o volume | Recon dedicado (home + outros paths) antes de qualquer parser. Comparar o hash do bucket S3 (`906de634c48fb7d34136160b4c353ae4`) com o que Rigolon/Giordano usam antes de descartar de vez a família compartilhada |
+
+**Faltam testar**: KRONLEILOES (13) e LEJE (7) — não couberam nesta rodada de recon (o lote já
+bateu perto do teto de 15 min do workflow).
+
+**Ordem sugerida daqui pra frente**: (1) **JELEILOES primeiro** — testar se espaçar as
+requisições evita o 403 por rajada (ou cair pro Bright Data) antes de qualquer outra coisa,
+já tem parser pronto só faltando isso; (2) GLOBOLEILOES (sem bloqueio, estrutura limpa,
+melhor custo/benefício dos que faltam); (3) recon dedicado de THAISTEIXEIRA (maior volume,
+mas a família compartilhada não confirmou de primeira) e KRONLEILOES/LEJE (ainda sem recon
+nenhum). FERNANDOLEILOEIRO e JONASLEILOEIRO ficam por último — os dois exigem Bright Data Web
+Unlocker antes de qualquer parser, custo que os outros não têm.
+
+---
+
 ## 📋 SESSÃO 24 · PARTE 1 (05/09) — RITUAL DE ABERTURA: HASTA "ZEROU" RECONTEXTUALIZADO; RJLEILOES "REGRESSÃO" ERA MÉTRICA ERRADA; 3 ERROS JÁ CORRIGIDOS MARCADOS RESOLVIDOS
 
 **Ritual de abertura**: heartbeat registrado; `erros_cliente`/`relatorio_anomalias`/KYC/pontos-cegos/Bright
