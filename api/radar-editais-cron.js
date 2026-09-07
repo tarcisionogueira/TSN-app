@@ -230,7 +230,15 @@ function parseEdital(texto) {
   const praca1 = pega(/(?:1[ªa]?|primeir[ao])\s*(?:pra[çc]a|leil[ãa]o|data)[^\d]{0,40}(\d{1,2}\/\d{1,2}\/\d{2,4})/i);
   const praca2 = pega(/(?:2[ªa]?|segund[ao])\s*(?:pra[çc]a|leil[ãa]o|data)[^\d]{0,40}(\d{1,2}\/\d{1,2}\/\d{2,4})/i);
   const matricula = pega(/matr[íi]cula\s*(?:n[ºo.]?\s*)?([\d.\-]{3,15})/i);
-  const plataforma = pega(/https?:\/\/([a-z0-9.\-]+\.(?:com|net|br)[^\s"'<>)]*)/i);
+  // O DJEN quase nunca escreve "https://" — o padrão real é "SITE WWW.NOME.COM.BR" (ou até
+  // "WWW.NOME.COM.BR" maiúsculo, sem protocolo). A regex acima só pegava o caso raro; achado
+  // 05/09 medindo direto contra o acervo: 178 editais reais tinham "www.*.com.br" no texto e
+  // ZERO tinham `leilao_plataforma_url` — o gargalo era este, não falta de dado. Validado
+  // contra amostra de 40 domínios distintos extraídos: zero falso positivo (só nomes de
+  // leiloeiro/leilão — o tipo de texto formal do DJEN não cita site alheio à toa).
+  const plataformaWww = pega(/\bwww\.([a-z0-9][a-z0-9.\-]*\.com\.br)\b/i);
+  const plataforma = pega(/https?:\/\/([a-z0-9.\-]+\.(?:com|net|br)[^\s"'<>)]*)/i)
+    || (plataformaWww ? plataformaWww.toLowerCase() : null);
   // Info ADICIONAL do edital (o DJEN não traz a certidão da matrícula, mas o edital descreve
   // o imóvel/ônus): área, ocupação, cartório (CRI), débitos, endereço, cidade/UF.
   const area = pega(/[áa]rea\s*(?:total|constru[íi]da|privativa|do\s+terreno|de)?\s*[:\-]?\s*([\d.]+,\d{2})\s*m/i);
