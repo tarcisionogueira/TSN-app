@@ -34,4 +34,11 @@ jobs:
           DUMP_URLS: ${{ github.event.inputs.dump_urls || '' }}
           BRIGHTDATA_API_TOKEN: ${{ secrets.BRIGHTDATA_API_TOKEN }}
           BRIGHTDATA_ZONE: ${{ secrets.BRIGHTDATA_ZONE }}
+          # A Web Unlocker (fetchUnlockerContado/bd-ledger.mjs) checa cota via RPC no Supabase
+          # ANTES de chamar o Bright Data de verdade — sem isto, TODA chamada falha com
+          # "brightdata:cota_indisponivel — sem credencial do Supabase" mesmo com token/zone
+          # certos (achado 07/09: JONASLEILOEIRO/FERNANDOLEILOEIRO via BD, 12/12 tentativas
+          # falharam assim, nenhuma chegou a testar o unlocker de verdade).
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
         run: node scripts/recon-novos-leiloeiros.mjs
