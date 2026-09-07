@@ -90,5 +90,4 @@ jobs:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           JELEILOES_DRYRUN: ${{ github.event.inputs.gravar == '1' && '0' || '1' }}
-          JELEILOES_DEBUG: '1'
         run: node scripts/scraper-jeleiloes.mjs
