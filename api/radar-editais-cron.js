@@ -218,6 +218,13 @@ function parseDataBR(s) {
   return isNaN(dt.getTime()) ? null : dt.toISOString();
 }
 
+// Domínio nu de uma URL (sem protocolo/www), pra casar contra leiloeiro_dominios_do_acervo()
+// — MESMA extração que a migração faz em SQL; mudar um lado sem o outro descasa os dois.
+function dominioDe(url) {
+  const m = String(url || '').match(/^https?:\/\/(?:www\.)?([^/]+)/i);
+  return m ? m[1].toLowerCase() : null;
+}
+
 // Extrai o que der do texto do edital (regex conservador; o texto integral fica guardado
 // p/ refinar/plugar IA depois). Falha de parse NÃO descarta o edital (status='erro_parse').
 function parseEdital(texto) {
@@ -564,7 +571,11 @@ export async function pullDJEN({ supabase, ini, fim, ehIntegrado, t0, transporte
           data_praca_1: p.data_praca_1, data_praca_2: p.data_praca_2,
           leiloeiro_nome: nomeLeiloeiro, leiloeiro_nome_norm: nomeLeiloeiro ? norm(nomeLeiloeiro) : null,
           leiloeiro_jucesp: p.leiloeiro_jucesp, leilao_plataforma_url: p.leilao_plataforma_url,
-          leiloeiro_integrado: nomeLeiloeiro ? ehIntegrado(nomeLeiloeiro) : false, // null quando o cruzamento está cego
+          // Nome OU domínio bastam pra valer a pena perguntar — antes só nome, e um edital
+          // sem nome extraído mas com site batendo (ex.: "leiloeiro(a)" não reconhecido, mas
+          // "www.megaleiloes.com.br" sim) saía marcado `false` por default, sem checar nada.
+          leiloeiro_integrado: (nomeLeiloeiro || p.leilao_plataforma_url)
+            ? ehIntegrado(nomeLeiloeiro, dominioDe(p.leilao_plataforma_url)) : false, // null quando o cruzamento está cego
           valor_avaliacao: p.valor_avaliacao, lance_minimo: p.lance_minimo,
           imovel_matricula: p.imovel_matricula, imovel_area_m2: p.imovel_area_m2,
           // ⚠️ ERA `p.imovel_uf || 'SP'` (03/09). Com o radar só em SP o default era invisível;
@@ -622,6 +633,18 @@ export async function pullDJEN({ supabase, ini, fim, ehIntegrado, t0, transporte
  */
 export async function construirEhIntegrado(supabase) {
   const integrados = new Set();
+  // DOMÍNIO, além de nome (05/09). Achado revisando "não integrados": Dora Plat (ZUK), Hugo
+  // Alexandre Pedro Além (VEGAS), Fernando José Cerello Gonçalves Pereira (MEGA), Tiago
+  // Tessler Blecher (WEBLEILOES), Marcos Roberto Torres (TORRES3) — TODOS já integrados,
+  // marcados como não. Não é bug de matching: `imoveis_leilao.leiloeiro` guarda a MARCA
+  // ("Mega Leilões"), o DJEN cita o LEILOEIRO PESSOA FÍSICA nomeado pelo juízo (exigência
+  // legal — marca não pode ser nomeada leiloeira). Nome-matching nunca vai casar essas duas
+  // strings, por mais fuzzy que seja; domínio do site é o sinal que É igual dos dois lados.
+  const dominios = new Set();
+  try {
+    const { data: dd } = await supabase.rpc('leiloeiro_dominios_do_acervo');
+    for (const r of dd || []) { if (r.dominio) dominios.add(r.dominio); }
+  } catch { /* domínio é sinal ADICIONAL — falha aqui não derruba o nome, que segue valendo */ }
   let falhou = null;
   try {
     // ⚠️ ERA `.from('imoveis_leilao').select('leiloeiro').eq('ativo',true).limit(5000)`, SEM
@@ -650,12 +673,15 @@ export async function construirEhIntegrado(supabase) {
     falhou = String(e?.message || e).slice(0, 120);
     console.error('[radar-editais] lista de leiloeiros NÃO construída:', falhou);
   }
-  const fn = (nome) => {
+  const fn = (nome, dominio) => {
     // ⚠️ TRI-STATE (03/09). `null` = "não consegui conferir", e é diferente de `false`
     // = "conferi e não casa". Enquanto a coluna era boolean com default false, uma falha ao
     // montar a lista marcava TODO edital como "leiloeiro a integrar" — inclusive gente que a
     // gente raspa todo dia — e o backlog de aquisição passava a mentir sem dar erro.
     if (falhou) return null;
+    // Domínio primeiro: é o sinal mais confiável (ver comentário de construirEhIntegrado) e
+    // não depende da lista de nomes ter carregado.
+    if (dominio && dominios.has(String(dominio).toLowerCase())) return true;
     const n = norm(nome);
     if (n.length < 4) return false;
     for (const i of integrados) { if (i.includes(n) || n.includes(i)) return true; }
@@ -787,7 +813,7 @@ async function buscarDocumentosPendentes(supabase, teto = 15) {
 
 async function reparsarLeiloeirosPendentes(supabase, ehIntegrado, teto = 300) {
   const { data, error } = await supabase.from('editais_leilao')
-    .select('id, status, texto_integral')
+    .select('id, status, texto_integral, leilao_plataforma_url')
     .is('leiloeiro_nome', null)
     .in('status', ['processado', 'erro_parse'])   // `nao_edital` fica de fora: é ruído da busca
     .not('texto_integral', 'is', null)
@@ -803,7 +829,10 @@ async function reparsarLeiloeirosPendentes(supabase, ehIntegrado, teto = 300) {
     const upd = {
       leiloeiro_nome: nome,
       leiloeiro_nome_norm: norm(nome),
-      leiloeiro_integrado: ehIntegrado(nome),
+      // Domínio junto do nome (05/09) — mesma razão do outro call site: sem isso, um edital
+      // com site batendo mas nome só encontrado agora podia regredir de true (do backfill por
+      // domínio) pra false, sobrescrevendo com um sinal mais fraco.
+      leiloeiro_integrado: ehIntegrado(nome, dominioDe(e.leilao_plataforma_url)),
       atualizado_em: new Date().toISOString(),
     };
     // Achar o leiloeiro É extrair algo útil: quem estava em `erro_parse` deixou de estar.
