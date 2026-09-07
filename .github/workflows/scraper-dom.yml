@@ -150,7 +150,10 @@ jobs:
         run: node scripts/scraper-simon.mjs
 
       - name: Globo
-        if: ${{ !cancelled() && (env.RODA_TUDO == 'true' || contains(github.event.inputs.fontes, 'globo')) }}
+        # NÃO entra em env.RODA_TUDO (07/09): site virou SPA Inertia.js, 0 lotes sempre —
+        # ver globo-parse.mjs. Continua rodando no PUSH (sinaliza sozinho se/quando o site
+        # mudar de novo) mas fica fora do `schedule` de produção até ter parser novo.
+        if: ${{ !cancelled() && (github.event_name == 'push' || contains(github.event.inputs.fontes, 'globo')) }}
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}

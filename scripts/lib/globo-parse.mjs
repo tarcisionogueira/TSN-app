@@ -1,17 +1,23 @@
 /**
- * Parser puro — GLOBOLEILOES (globoleiloes.com.br). Fonte `dom`, plataforma própria (recon
- * 07/09). Catálogo confirmado real na home (`<article>` com URL de lote já completa,
- * `/leiloes?category=X&subcategory=Y` como filtro). Detalhe confirmado real (lote 2623,
- * Guaratinguetá/SP):
- *   • "Lote 1 - SP - Guaratinguetá - Residencial Santa Bárbara | Terreno / Lote - 379m²"
- *   • "50% de desconto" (badge no topo — é o desconto da 2ª praça, não um rótulo solto de valor)
- *   • "Valor de avaliação atualizado: R$ 242.119,30 (agosto/2026)."
- *   • Regra do site, no corpo do edital: "...na 2ª Praça, aquele que oferecer lance igual ou
- *     superior a 50% do valor da avaliação atualizado" — CONFIRMA que o badge de desconto é a
- *     regra da 2ª praça, não um evento pontual deste lote. `valor_minimo` é CALCULADO a partir
- *     do desconto anunciado (não inventado: é a própria regra do leiloeiro aplicada ao próprio
- *     valor de avaliação do leiloeiro).
- *   • PDFs reais em CloudFront (nomes opacos, tipo por TEXTO da aba/link, não pela URL).
+ * Parser puro — GLOBOLEILOES (globoleiloes.com.br). Fonte `dom`. ⚠️ NÃO INTEGRADO (07/09) —
+ * mantido só como registro do que já foi descartado, pra não repetir a investigação.
+ *
+ * Recon original (antes deste parser) viu 27 <article> com URL de lote real
+ * (`/leiloes/lote-<n>-<slug>/<id>`) e um detalhe real (lote 2623, Guaratinguetá/SP —
+ * "Lote 1 - SP - Guaratinguetá..." · badge "50% de desconto" = regra da 2ª praça, não evento
+ * pontual · PDFs reais em CloudFront). Parser escrito em cima disso, validado localmente.
+ *
+ * **Toda rodada real (3 independentes: embutida na sequência de 9 fontes, isolada via
+ * dispatch, e duas rodadas de dump dedicado) deu 0 lotes — o site MUDOU DE PLATAFORMA entre
+ * o recon e agora.** Dump confirmou: HTML real e completo (396KB, domínio certo pelo
+ * Facebook Pixel, sem bloqueio/captcha) mas **zero** ocorrência de "/leiloes/lote-" no
+ * documento inteiro; varredura de TODOS os 44 hrefs internos não achou nenhum com "lote" no
+ * path — são só bundles `/build/assets/*.js` do Vite, incluindo `inertia-vendor-*.js`. **O
+ * site virou uma SPA Inertia.js (Laravel+Inertia+React)**: os lotes não existem mais como
+ * `<a href>` no HTML — Inertia entrega os dados como JSON embutido num `data-page="{...}"` no
+ * div raiz, e o React monta os links no cliente a partir daí. Recon/parser NOVOS, mirando o
+ * payload JSON (não mais regex de href), são necessários — não é ajuste de regex, é reconstruir
+ * do zero. Fora do cron de produção até isso ser feito.
  */
 import { inferirTipo, extrairArea, proximaData, checarQualidade } from './leilaopro-parse.mjs';
 import { num, plaus, textoDe, textoComLinhas, montarRowDom } from './dom-parse-util.mjs';
@@ -20,27 +26,10 @@ export const TENANTS = {
   globo: { fonte: 'GLOBOLEILOES', leiloeiro: 'Globo Leilões', base: 'https://globoleiloes.com.br' },
 };
 
-let _dumpFeito = false; // DEBUG (07/09, temporário): ver comentário abaixo, enumerados=0
-
 export function extrairUrlsDeLote(html, base) {
   const urls = new Map();
   for (const m of String(html || '').matchAll(/href=["']([^"']*\/leiloes\/lote-\d+-[a-z0-9-]+\/(\d+))\/?["']/gi)) {
     try { urls.set(m[2], new URL(m[1], base).href); } catch { /* skip */ }
-  }
-  // DEBUG (07/09, temporário — remover após diagnosticar): 1ª rodada de dump confirmou HTML
-  // real e completo (396KB, domínio certo, sem bloqueio) mas SEM NENHUMA ocorrência de
-  // "/leiloes/lote-" no documento inteiro — o site mudou o padrão de URL desde o recon
-  // original. Esta 2ª rodada varre TODOS os hrefs internos (relativos) pra achar o padrão
-  // atual, em vez de continuar chutando uma palavra-chave por vez.
-  if (!urls.size && !_dumpFeito) {
-    _dumpFeito = true;
-    const h = String(html || '');
-    const hrefs = new Set();
-    for (const m of h.matchAll(/href=["'](\/[^"'#][^"']{0,80})["']/gi)) hrefs.add(m[1]);
-    const comLote = [...hrefs].filter((u) => /lote/i.test(u));
-    console.log(`[DEBUG-GLOBO-HREFS] html.length=${h.length} · hrefs internos únicos=${hrefs.size} · com "lote" no path=${comLote.length}`);
-    console.log(`[DEBUG-GLOBO-HREFS] amostra (30): ${JSON.stringify([...hrefs].slice(0, 30))}`);
-    if (comLote.length) console.log(`[DEBUG-GLOBO-HREFS] com "lote": ${JSON.stringify(comLote.slice(0, 15))}`);
   }
   return urls;
 }
