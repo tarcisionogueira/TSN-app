@@ -655,15 +655,24 @@ export default function LiveInscricao() {
                 {/* DESTAQUES (05/09) — bullets curtos ao lado da bio em prosa. Números do
                     próprio apresentador (não do acervo da plataforma — esse é o bloco
                     `numeros` logo abaixo), por isso vêm de `apresentador_destaques` e não
-                    são calculados: são o histórico dele, ele quem informa. */}
+                    são calculados: são o histórico dele, ele quem informa.
+                    RÓTULO ADICIONADO (05/09, achado do dono testando): sem título, os bullets
+                    liam como continuação da bio e passavam despercebidos — mesmo problema de
+                    achar que "sem erro" é "sem problema". Rótulo no mesmo padrão das outras
+                    seções (COMO VAI FUNCIONAR, PROVAS REAIS) resolve. */}
                 {Array.isArray(evento.apresentador_destaques) && evento.apresentador_destaques.length > 0 && (
-                  <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 9 }}>
-                    {evento.apresentador_destaques.map((d, i) => (
-                      <div key={i} style={{ display: 'flex', gap: 9 }}>
-                        <span style={{ color: LATAO, fontWeight: 800, flexShrink: 0 }}>→</span>
-                        <span style={{ fontSize: 14, color: '#D9E3F0', lineHeight: 1.55 }}>{d}</span>
-                      </div>
-                    ))}
+                  <div style={{ marginTop: 20, paddingTop: 18, borderTop: '1px solid rgba(255,255,255,0.10)' }}>
+                    <div style={{ fontSize: 11.5, fontWeight: 700, color: cor, textTransform: 'uppercase', letterSpacing: 1.6, marginBottom: 12 }}>
+                      Em números
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+                      {evento.apresentador_destaques.map((d, i) => (
+                        <div key={i} style={{ display: 'flex', gap: 9 }}>
+                          <span style={{ color: LATAO, fontWeight: 800, flexShrink: 0 }}>→</span>
+                          <span style={{ fontSize: 14, color: '#D9E3F0', lineHeight: 1.55 }}>{d}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
