@@ -27,16 +27,20 @@ export function extrairUrlsDeLote(html, base) {
   for (const m of String(html || '').matchAll(/href=["']([^"']*\/leiloes\/lote-\d+-[a-z0-9-]+\/(\d+))\/?["']/gi)) {
     try { urls.set(m[2], new URL(m[1], base).href); } catch { /* skip */ }
   }
-  // DEBUG (07/09, temporário — remover após diagnosticar): todo run do scraper de verdade
-  // acha 0 lotes, mesmo isolado (sem disputa de recurso com outras fontes) e sem timeout —
-  // mas o recon isolado original tinha visto 27 <article> com URL de lote real. Ou o HTML que
-  // o motor recebe vem vazio/diferente do que o recon viu, ou o site mudou o padrão de URL.
-  // Dump condicional: só dispara quando dá zero, e só 1x (a home só é buscada 1x por run).
+  // DEBUG (07/09, temporário — remover após diagnosticar): 1ª rodada de dump confirmou HTML
+  // real e completo (396KB, domínio certo, sem bloqueio) mas SEM NENHUMA ocorrência de
+  // "/leiloes/lote-" no documento inteiro — o site mudou o padrão de URL desde o recon
+  // original. Esta 2ª rodada varre TODOS os hrefs internos (relativos) pra achar o padrão
+  // atual, em vez de continuar chutando uma palavra-chave por vez.
   if (!urls.size && !_dumpFeito) {
     _dumpFeito = true;
     const h = String(html || '');
-    const temPalavraLote = /\/leiloes\/lote-/i.test(h);
-    console.log(`[DEBUG-GLOBO-VAZIO] html.length=${h.length} · contem "/leiloes/lote-"? ${temPalavraLote} · trecho[0..500]=${JSON.stringify(h.slice(0, 500))}`);
+    const hrefs = new Set();
+    for (const m of h.matchAll(/href=["'](\/[^"'#][^"']{0,80})["']/gi)) hrefs.add(m[1]);
+    const comLote = [...hrefs].filter((u) => /lote/i.test(u));
+    console.log(`[DEBUG-GLOBO-HREFS] html.length=${h.length} · hrefs internos únicos=${hrefs.size} · com "lote" no path=${comLote.length}`);
+    console.log(`[DEBUG-GLOBO-HREFS] amostra (30): ${JSON.stringify([...hrefs].slice(0, 30))}`);
+    if (comLote.length) console.log(`[DEBUG-GLOBO-HREFS] com "lote": ${JSON.stringify(comLote.slice(0, 15))}`);
   }
   return urls;
 }
