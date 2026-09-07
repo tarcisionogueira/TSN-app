@@ -39,10 +39,17 @@ export function tituloDeSlug(slug) {
 // Cidade/UF do fim do slug: "…-em-manhumirim-mg", "…-campo-grande-ms". Palavras compostas
 // entram na cidade até um conector; melhor esforço — quem tem rótulo no DOM sobrescreve.
 export function cidadeUFDeSlug(slug) {
-  // `.*` GULOSO antes do conector: pega o ÚLTIMO "em/de/no…" — senão "leilao-de-fazenda-
+  const s = String(slug || '');
+  // `.*` GULOSO antes do conector: pega o ÚLTIMO "em/no/na…" — senão "leilao-de-fazenda-
   // em-manhumirim-mg" capturava "fazenda-em-manhumirim" como cidade (teste de mesa 21/08).
-  const m = String(slug || '').match(/^.*-(?:em|de|do|da|no|na)-([a-z0-9-]+?)-([a-z]{2})\/?$/i)
-    || String(slug || '').match(/([a-z-]+?)-([a-z]{2})\/?$/i);
+  // "de/do/da" tentam DEPOIS, separado: nome de cidade composto em português frequentemente
+  // TEM "da/do/de" dentro ("Nova América da Colina") — tentar esse grupo primeiro cortava a
+  // cidade no ÚLTIMO conector interno e devolvia só o pedaço final ("Colina", JELEILOES
+  // 07/09: "imovel-c-10-alq-em-nova-america-da-colina-pr" saía cidade "Colina"). "em/no/na"
+  // quase nunca aparece DENTRO de um nome de cidade brasileiro — por isso vem primeiro.
+  const m = s.match(/^.*-(?:em|no|na)-([a-z0-9-]+?)-([a-z]{2})\/?$/i)
+    || s.match(/^.*-(?:de|do|da)-([a-z0-9-]+?)-([a-z]{2})\/?$/i)
+    || s.match(/([a-z-]+?)-([a-z]{2})\/?$/i);
   if (!m) return { cidade: null, estado: null };
   const uf = m[2].toUpperCase();
   if (!UFS.has(uf)) return { cidade: null, estado: null };

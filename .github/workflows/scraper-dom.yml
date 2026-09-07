@@ -21,15 +21,17 @@ on:
       - 'scripts/lib/alfa-parse.mjs'
       - 'scripts/lib/hasta-parse.mjs'
       - 'scripts/lib/nordeste-parse.mjs'
+      - 'scripts/lib/jeleiloes-parse.mjs'
       - 'scripts/lib/dom-parse-util.mjs'
       - 'scripts/scraper-alfa.mjs'
       - 'scripts/scraper-hasta.mjs'
       - 'scripts/scraper-nordeste.mjs'
+      - 'scripts/scraper-jeleiloes.mjs'
       - '.github/workflows/scraper-dom.yml'
   workflow_dispatch:
     inputs:
       fontes:
-        description: 'csv: alfa,hasta,nordeste (hasta so funciona de IP residencial — de datacenter falha sempre)'
+        description: 'csv: alfa,hasta,nordeste,jeleiloes (hasta so funciona de IP residencial — de datacenter falha sempre)'
         required: false
         default: 'alfa,nordeste'
       gravar:
@@ -81,3 +83,12 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           NORDESTE_DRYRUN: ${{ github.event.inputs.gravar == '1' && '0' || '1' }}
         run: node scripts/scraper-nordeste.mjs
+
+      - name: Jeleiloes
+        if: ${{ !cancelled() && (github.event_name == 'push' || contains(github.event.inputs.fontes, 'jeleiloes')) }}
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          JELEILOES_DRYRUN: ${{ github.event.inputs.gravar == '1' && '0' || '1' }}
+          JELEILOES_DEBUG: '1'
+        run: node scripts/scraper-jeleiloes.mjs
