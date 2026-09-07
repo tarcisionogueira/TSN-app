@@ -15,20 +15,41 @@ import { fetchUnlockerContado } from './lib/bd-ledger.mjs';
 const BROWSER_ARGS = ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--disable-blink-features=AutomationControlled', '--window-size=1280,900'];
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
+// Caminhos comuns de listagem de imóveis em plataformas de leilão — mesmo conjunto genérico
+// usado nos três sites originais, reaproveitado tal e qual para os candidatos novos.
+const PATHS_PADRAO = ['/', '/imoveis', '/lotes/imoveis', '/busca?categoria=imoveis', '/categoria/imoveis', '/leiloes'];
+
 const SITES = {
   PECINI: {
     base: 'https://www.pecinileiloes.com.br',
-    // caminhos comuns de listagem de imóveis em plataformas de leilão
-    paths: ['/', '/imoveis', '/lotes/imoveis', '/busca?categoria=imoveis', '/categoria/imoveis', '/leiloes'],
+    paths: PATHS_PADRAO,
   },
   WEBLEILOES: {
     base: 'https://www.webleiloes.com.br',
-    paths: ['/', '/imoveis', '/lotes/imoveis', '/busca?categoria=imoveis', '/categoria/imoveis', '/leiloes'],
+    paths: PATHS_PADRAO,
   },
   RJLEILOES: {
     base: 'https://www.rjleiloes.com.br',
     paths: ['/', '/imoveis', '/lotes/imoveis', '/busca?categoria=imoveis', '/categoria/imoveis', '/leiloes', '/lotes', '/imovel', '/pesquisa?tipo=imovel'],
   },
+  // ── CANDIDATOS NOVOS (05/09) — achados por cruzamento de editais do DJEN, ainda sem
+  // scraper (leiloeiro_conhecimento.docs_status='candidato'). Mesmos caminhos genéricos dos
+  // três de cima: nenhum dos 13 foi visitado ainda, então não há ainda pista de estrutura
+  // própria — é exatamente o que este recon existe para descobrir. Ordem = volume de editais
+  // no DJEN (maior primeiro), pedido do dono.
+  THAISTEIXEIRA: { base: 'https://thaisteixeiraleiloes.com.br', paths: PATHS_PADRAO },
+  FERNANDOLEILOEIRO: { base: 'https://fernandoleiloeiro.com.br', paths: PATHS_PADRAO },
+  JELEILOES: { base: 'https://jeleiloes.com.br', paths: PATHS_PADRAO },
+  KRONLEILOES: { base: 'https://kronleiloes.com.br', paths: PATHS_PADRAO },
+  LEJE: { base: 'https://leje.com.br', paths: PATHS_PADRAO },
+  JONASLEILOEIRO: { base: 'https://jonasleiloeiro.com.br', paths: PATHS_PADRAO },
+  VMLEILOES: { base: 'https://vmleiloes.com.br', paths: PATHS_PADRAO },
+  SIMONLEILOES: { base: 'https://simonleiloes.com.br', paths: PATHS_PADRAO },
+  ALBERTOMACEDOLEILOES: { base: 'https://albertomacedoleiloes.com.br', paths: PATHS_PADRAO },
+  RIGOLONLEILOES: { base: 'https://rigolonleiloes.com.br', paths: PATHS_PADRAO },
+  GLOBOLEILOES: { base: 'https://globoleiloes.com.br', paths: PATHS_PADRAO },
+  GIORDANOLEILOES: { base: 'https://giordanoleiloes.com.br', paths: PATHS_PADRAO },
+  ROCHALEILOES: { base: 'https://rochaleiloes.com.br', paths: PATHS_PADRAO },
 };
 
 const alvo = String(process.env.RECON_SITES || 'PECINI,WEBLEILOES').toUpperCase().split(',').map(s => s.trim()).filter(Boolean);
