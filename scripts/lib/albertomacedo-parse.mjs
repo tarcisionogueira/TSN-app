@@ -52,8 +52,17 @@ export function parseDetalhe(html, url) {
   // /leilao/<slug> ("fiatpalio-weekend-ex" entrou na 1ª rodada real com avaliação de
   // R$13.337 — carro, não imóvel). Sem nenhuma palavra de imóvel no corpo, o valor não é de
   // um imóvel; zera pra o checarQualidade descartar (mesmo caminho dos pacotes multi-imóvel).
-  if (!/matr[íi]cula|im[óo]vel|terreno|apartamento|\bcasa\b|\b[áa]rea\b|\bm[²2]\b|rural|sobrado/i.test(txt)) {
+  const reImovel = /matr[íi]cula|im[óo]vel|terreno|apartamento|\bcasa\b|\b[áa]rea\b|\bm[²2]\b|rural|sobrado/i;
+  const bateuImovel = reImovel.test(txt);
+  if (!bateuImovel) {
     avaliacao = 0; minimo = 0;
+  } else if (slug === 'fiatpalio-weekend-ex') {
+    // DEBUG (07/09, temporário — remover após diagnosticar): a guarda deveria ter zerado
+    // este slug (carro) na 3ª rodada e não zerou. Dump de qual palavra bateu e onde, pra
+    // achar a contaminação real em vez de chutar outra regex às cegas.
+    const m = txt.match(reImovel);
+    const pos = m ? m.index : -1;
+    console.log(`[DEBUG-VEICULO] ${url}\n  bateu="${m?.[0]}" pos=${pos}\n  contexto=${JSON.stringify(txt.slice(Math.max(0, pos - 80), pos + 80))}`);
   }
 
   const titulo = tituloDeSlug(slug);
