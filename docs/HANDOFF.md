@@ -193,6 +193,60 @@ recém-descobertos — isso já é o trabalho do `descobrirDocumentosNoSite` (6h
 
 ---
 
+## 📋 SESSÃO 24 · PARTE 5 (05/09) — "NÃO INTEGRADOS" DO DJEN: FALSO NEGATIVO CORRIGIDO + 13 CANDIDATOS REGISTRADOS
+
+**Pedido do dono**: "esses leiloeiros que foram trazidos pela leitura de edital, vejo que não
+estão integrados — vamos integrá-los agora."
+
+**Antes de integrar qualquer um, a LISTA em si estava errada — achado ao levantá-la.** Dora
+Plat (ZUK), Hugo Alexandre Pedro Além (VEGAS), Fernando José Cerello Gonçalves Pereira (MEGA),
+Tiago Tessler Blecher (WEBLEILOES) e Marcos Roberto Torres (TORRES3) apareciam como "não
+integrados" — mas SÃO, e a gente raspa esses cinco todo dia. Causa: `imoveis_leilao.leiloeiro`
+guarda a MARCA ("Mega Leilões", "Zukerman (PortalZuk)"), enquanto o DJEN cita o **leiloeiro
+pessoa física** nomeado pelo juízo (é exigência legal — marca não pode ser nomeada leiloeira).
+Duas strings sem overlap nenhum; nome-matching, por mais fuzzy, nunca ia casar isso.
+
+**Corrigido**: `leiloeiro_integrado` agora casa TAMBÉM por domínio (`leilao_plataforma_url` ×
+domínio real de `imoveis_leilao.url_lote` por fonte — RPC nova `leiloeiro_dominios_do_acervo()`,
+espelhando `leiloeiros_do_acervo()`). Domínio é o sinal mais estável entre os dois lados (nome
+de pessoa varia/erra grafia entre publicações; site não muda). Backfill aplicado nos editais já
+gravados. Testes existentes conferidos sem regressão (`testar:leiloeiro` 25/25,
+`testar:doc-leiloeiro` 11/11).
+
+**A lista REAL, depois da correção** (só quem sobrou de verdade não-integrado, ≥2 editais,
+domínio ≠ site de tribunal que a regex antiga também pegava por engano — `.jus.br` não é
+leiloeiro, é ruído do texto, registrado mas não perseguido agora):
+
+| Domínio | Editais | Já promovidos | Leiloeiro citado |
+|---|---|---|---|
+| thaisteixeiraleiloes.com.br | **42** | 15 | Thais Teixeira |
+| jeleiloes.com.br | 14 | **13** | Jorge Vitório Espolador |
+| kronleiloes.com.br | 13 | 8 | Helcio Kronberg |
+| fernandoleiloeiro.com.br | 15 | 4 | (varia — pode ser plataforma multi-leiloeiro) |
+| leje.com.br | 7 | 1 | Denys Pyerre de Oliveira (o imóvel que o dono reportou) |
+| + 7 outros com 2-5 editais cada (jonasleiloeiro, vmleiloes, simonleiloes, albertomacedoleiloes, rigolonleiloes, globoleiloes, giordanoleiloes, rochaleiloes) |
+
+Todos os 13 registrados em `leiloeiro_conhecimento` com `docs_status='candidato'` (mesmo
+padrão já usado pra SUEDPETER, achado anterior por JUCEES) — fica visível e sobrevive a esta
+sessão, em vez de morrer no chat.
+
+**⚠️ Por que NÃO construí os scrapers agora, mesmo com a lista pronta**: este ambiente **não
+tem acesso de rede** a nenhum site de leiloeiro (confirmado 3× hoje — hastaleiloes.com.br,
+webinar.bidhero.com.br, e implícito aqui: não dá pra abrir thaisteixeiraleiloes.com.br pra ver
+a estrutura real). Escrever um scraper sem ver o HTML real é exatamente "consertar no escuro"
+— e cada fonte já integrada tem uma entrada em `leiloeiro_conhecimento` documentando uma
+plataforma/anti-bot/acesso DIFERENTE (SPA, SSR, Cloudflare, precisa residencial…) descoberta
+por recon antes de codar. **Caminho já estabelecido nesta base pra isso**: recon primeiro
+(`scripts/recon-*.mjs`, muitos exigem rodar da máquina residencial do dono quando o site
+bloqueia datacenter), DEPOIS o scraper com os achados do recon na mão.
+
+**Decisão do dono, pendente**: por qual desses (se algum) vale abrir o recon primeiro — o
+volume sozinho aponta pra **Thais Teixeira** (42 editais, disparado o maior) e **Jorge
+Vitório Espolador** (14, com 13 já na vitrine mesmo sem scraper dedicado — sinal de que o
+radar de editais já está fazendo boa parte do trabalho sozinho pra este).
+
+---
+
 ## 📋 SESSÃO 23 · PARTE 18 (05/09) — FECHAMENTO DO DIA: RESUMO (PARTES 13-17) + PENDÊNCIAS PRA PRÓXIMA SESSÃO
 
 **Resumo do que saiu hoje**, todo no editor/leitor de e-book estruturado (`LeitorEstruturado.jsx`,
