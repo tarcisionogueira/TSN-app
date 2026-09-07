@@ -11315,6 +11315,23 @@ function LiveTab() {
         </a>
       </div>
 
+      {/* MENSAGENS DO GRUPO — aquecimento diário do grupo (não é a fila 1-a-1 acima). Gera
+          convite/case/educação/enquete/urgência/follow-up com dado real da própria aula
+          (depoimento cadastrado, vagas, destaque do apresentador) — zero IA, zero número
+          inventado (ver api/_mensagens-grupo.js). Também não posta sozinha: copiar e colar. */}
+      <div style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:12, padding:'14px 16px', marginBottom:16 }}>
+        <label style={S.label}>Mensagens do grupo — aquecimento diário</label>
+        <div style={{ fontSize:11.5, color:'#64748b', lineHeight:1.6, marginBottom:10 }}>
+          Convite, case de sucesso (com depoimento real), educação jurídica, enquete, escalada
+          de urgência pré-live e follow-up — cada um usando só dado real desta aula.{' '}
+          <strong>Também não posta sozinho</strong>: gera o texto, você copia e cola no grupo.
+        </div>
+        <a href="#/admin/mensagens-grupo"
+          style={{ display:'inline-block', padding:'9px 15px', background:'#0D63DB', color:'#fff', textDecoration:'none', borderRadius:8, fontWeight:700, fontSize:13 }}>
+          Abrir o gerador de mensagens →
+        </a>
+      </div>
+
       {/* CAPA DA AULA — a imagem do cartão de compartilhamento. O campo não existia em lugar
           nenhum desta tela: `eventos_live.capa_url` estava na tabela e não tinha por onde ser
           preenchido, então o cartão caía sempre na imagem genérica do site. Mesmo componente
