@@ -102,6 +102,15 @@ function pagina({ titulo, desc, canonical, corpo, jsonld, indexar = true, migalh
   const urlCadastro = `${SITE}/#/login?modo=cadastro${qs}`;
   const urlEntrar = imovelId ? `${SITE}/#/login?imovel=${encodeURIComponent(imovelId)}` : `${SITE}/#/login`;
   const migHtml = migalha.length ? migalha.map((m, i) => (m.url ? `<a href="${esc(m.url)}">${esc(m.nome)}</a>` : esc(m.nome)) + (i < migalha.length - 1 ? ' › ' : '')).join('') : '';
+  const ld = (obj) => `<script type="application/ld+json">${JSON.stringify(obj).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029')}</script>`;
+  // BreadcrumbList (08/09): a trilha `migalha` já existe em toda página pública (é o que
+  // monta `migHtml`, a trilha visível, logo acima) — isto só marca o MESMO dado como
+  // schema.org, sem inventar nada novo. Última posição nunca tem `url` no `migalha` (é a
+  // própria página), então também não entra `item` nela — é o formato que o Google recomenda.
+  const breadcrumbLd = migalha.length > 1 ? {
+    '@context': 'https://schema.org', '@type': 'BreadcrumbList',
+    itemListElement: migalha.map((m, i) => ({ '@type': 'ListItem', position: i + 1, name: m.nome, ...(m.url ? { item: m.url } : {}) })),
+  } : null;
   return `<!doctype html><html lang="pt-BR"><head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -135,7 +144,7 @@ function pagina({ titulo, desc, canonical, corpo, jsonld, indexar = true, migalh
 <meta property="og:image" content="${SITE}/og-image.jpg"/>
 <meta property="og:locale" content="pt_BR"/>
 <meta name="twitter:card" content="summary_large_image"/>
-${jsonld ? `<script type="application/ld+json">${JSON.stringify(jsonld).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029')}</script>` : ''}
+${jsonld ? ld(jsonld) : ''}${breadcrumbLd ? ld(breadcrumbLd) : ''}
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet">
 <!-- League Spartan (títulos) AUTO-HOSPEDADA + fallback com métricas casadas: sem FOUT/pulo
