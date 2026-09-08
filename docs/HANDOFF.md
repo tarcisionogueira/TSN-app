@@ -4,6 +4,47 @@
 
 ---
 
+## 📋 SESSÃO 24 · PARTE 15 (08/09) — MANYCHAT PRÓPRIO GANHA ENVIO DE VERDADE (SEND API), PRA VIABILIZAR O VÍDEO DA ANÁLISE DO APP
+
+**Contexto**: a Parte 14 fechou a dúvida de que o gargalo é o App Review, mas apontou um
+problema novo — a Caixa do Instagram (`/admin/instagram`) só REGISTRAVA que o dono respondeu
+no app (copiar e colar), nunca enviou nada de fato. Sem envio de verdade não dá pra gravar o
+vídeo de demonstração que a Análise do App exige (fluxo ponta a ponta). Dono escolheu construir
+o envio agora (opção "a") em vez de submeter com uma demo só de recebimento (opção "b").
+
+**O que entrou**:
+- `api/_instagram-envio.js` (novo) — chama a Send API do Instagram
+  (`graph.instagram.com/v21.0/{IG_USER_ID}/messages`). DM usa `recipient.id`; comentário
+  responde por PRIVATE REPLY via `recipient.comment_id` (tirando o prefixo interno `c_` que só
+  o nosso `mid` usa — a Meta não conhece esse namespace). `.ok` é checado ANTES de ler o corpo
+  (a Graph API devolve JSON de erro também em 4xx/5xx — a forma nº 1 do topo deste documento,
+  agora do lado de fora da nossa infra) e só considera sucesso com `message_id` confirmado —
+  nunca carimba envio sobre um 200 vazio.
+- `api/admin-ig-caixa.js` — nova ação `'enviar'` em POST: chama a Send API ANTES de gravar
+  `enviado_em`/`texto_enviado`, então um envio recusado pela Meta nunca marca como enviado (o
+  rascunho continua na caixa pra tentar de novo). `envio_disponivel` (true só com
+  `IG_USER_ID`/`IG_PAGE_TOKEN` configurados na Vercel) volta no GET pra tela decidir se oferece
+  o botão. O fluxo antigo (`'enviado'` = "copiei e colei no app") continua existindo como
+  fallback pra quando a API não está configurada ou falha.
+- `src/pages/CaixaInstagram.jsx` — botão azul "Enviar agora" (só aparece quando
+  `envio_disponivel`), manda exatamente o texto que está na caixa (mesmo princípio do texto que
+  já vale pra régua de promoção — é o editado, não o sugerido). Banner de aviso no topo virou
+  condicional: com envio disponível, deixa de dizer "esta tela não envia".
+- `scripts/testes/instagram-envio-nao-manda-pra-alvo-errado.mjs` (novo, 17 asserções) — monta
+  corpo de DM/comentário, tira o prefixo `c_`, rejeita texto vazio/campo vazio, tipo desconhecido
+  nunca vira envio às cegas, e `envioConfigurado()` nas 4 combinações dos dois segredos.
+
+**Pendente com o dono**: gerar o `IG_PAGE_TOKEN` no painel da Meta (Passo 2, "Gerar token") —
+até lá `envio_disponivel` fica `false` e o botão continua escondido, sem quebrar nada, mas o
+vídeo de demonstração ainda não é gravável. Depois de confirmar um envio real funcionando,
+falta só gravar o vídeo e clicar "Ir para Análise do app".
+
+⚠️ **Sem confirmação contra tráfego real ainda** (sessão sem token válido no momento em que isto
+foi escrito) — `GRAPH_VERSION` e o formato exato do corpo merecem conferência contra a
+documentação viva da Meta antes do 1º envio de verdade, mesma régua que `docs/INSTAGRAM_AUTOMACAO.md` §8 já pede pro resto do projeto.
+
+---
+
 ## 📋 SESSÃO 24 · PARTE 14 (08/09) — MANYCHAT PRÓPRIO: 4 BUGS P2 CORRIGIDOS + CONFIRMADO (AO VIVO, 2 TESTES) QUE O GARGALO É O APP REVIEW
 
 **Pedido do dono**: retomar o ManyChat próprio (dormente desde 02/09). Ritual: corrigir os 4
