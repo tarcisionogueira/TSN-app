@@ -4,6 +4,81 @@
 
 ---
 
+## 📋 SESSÃO 24 · PARTE 13 (08/09) — CORREÇÃO DA PARTE 12: 3 DE 4 "FONTES ZERADAS" NÃO ERAM BUG + 2 RESOLVIDAS DE VERDADE
+
+**Pedido do dono**: "Resolva todos eles da forma mais eficiente e segura possível."
+
+**⚠️ AUTOCRÍTICA PRIMEIRO — a Parte 12 errou ao caracterizar SATO/EMILIOMATOS/SBID21 como
+"regressão silenciosa" só por medir "dias desde a última linha no banco", sem checar a
+configuração REAL de cada workflow antes de escrever. É exatamente a forma nº 10 deste
+documento ("o instrumento mede uma coisa e reporta com o nome de outra") — cometida por
+mim, na mesma sessão que descreve o padrão. Corrigido com evidência real, uma por uma:
+
+- **SATO** — NÃO estava quebrado. O workflow é `workflow_dispatch`-only, NUNCA teve cron
+  (a própria Parte 12 disse "embora rode no cron normalmente" — falso, não existe cron até
+  hoje). Os 40 dias sem dado eram porque ninguém clicava, não regressão. Dry-run ao vivo
+  hoje: **114 leilões enumerados, 24 prontos, zero erro**, dado real (endereço, valor, tipo).
+- **EMILIOMATOS** — NÃO é regressão nem mistério: `.github/workflows/scraper-emiliomatos.yml`
+  tem, no próprio arquivo, "⛔ CRON SUSPENSO EM 29/08 — A FONTE GRAVA LOTE DE OUTRO
+  LEILOEIRO" — recon anterior já provou que o white-label Superbid devolve o CATÁLOGO
+  GLOBAL da rede, não o acervo do leiloeiro dono do site (4 domínios diferentes
+  devolvendo os MESMOS 75 lotes). O cron foi desligado de propósito, decisão certa
+  (melhor suspenso que servindo lote errado ao cliente) — resolver de verdade exigiria
+  recon pago (Bright Data, o site é Cloudflare) atrás de um parâmetro de filtro por
+  vendedor que pode nem existir. Não mexido — ficaria bom demais pra ser rápido e seguro
+  ao mesmo tempo.
+- **SBID21** — NÃO é bug. Já tinha sido diagnosticado (01/08, re-confirmado 01/09 e 04/09,
+  tudo já no histórico deste HANDOFF): é **zero real** — o portal genuinamente não tem
+  lote de imóvel ativo desde então, e a única pendência é o `fonte_baseline_aprendida()`
+  ter aprendido o piso num pico de julho que não volta mais, então continua "acusando"
+  uma fonte vazia pra sempre. Não mexido — é ajuste fino de monitor, baixo risco só se
+  feito com calma (histórico deste arquivo mostra 3+ rewrites da régua de baseline, cada
+  um consertando um ponto cego e arriscando abrir outro).
+- **SUEDPETER** — não estava na lista de "zeradas", mas também estava com status errado:
+  `leiloeiro_conhecimento` dizia `docs_status='candidato'` (nunca integrado), só que o
+  código já roda `suedpeterleiloes.com.br` como tenant de `SUPORTE` desde 21/08. Falso
+  negativo pela mesma causa do VMLEILOES (Parte 12): comparar por nome de fonte individual
+  quando o dado real vive sob o `fonte` guarda-chuva do tenant. **Corrigido**: `docs_status`
+  atualizado pra `integrado`.
+
+**O único dos 4 que era bug de verdade — NORDESTE — corrigido de fato**: o acervo dessa
+fonte vem de varas FEDERAIS/CRIMINAIS, que leiloam qualquer bem apreendido, não só imóvel.
+Recon ao vivo achou 2 veículos (carro, caminhão) numa amostra de 3 "prontos", um com
+desconto de -9035% (valor de campo de veículo lido como se fosse avaliação de imóvel).
+`inferirTipo()`/`checarQualidade()` não filtram por tipo de bem. Corrigido com o MESMO
+detector já usado em `albertomacedo-parse.mjs` pra essa exata classe de contaminação:
+bate palavra-chave de veículo (placa, renavam, chassi, veículo, caminhão…) → zera o
+valor → `checarQualidade()` descarta a linha. Commit `4dac881`. Re-validação ao vivo
+(novo dry-run disparado após o fix) ainda em andamento no momento deste registro — o
+resultado, quando chegar, entra como adendo desta mesma Parte em vez de nova Parte.
+
+**Ações tomadas, todas em produção:**
+1. `leiloeiro_conhecimento.docs_status` corrigido: SUEDPETER e SATO → `integrado`.
+2. `scripts/lib/nordeste-parse.mjs` — filtro de veículo (commit `4dac881`).
+3. `.github/workflows/scraper-sato.yml` — promovido a cron diário (9h30 UTC), validado ao
+   vivo antes de promover. Fonte grátis (API pública JSON), sem Bright Data. Commit `caa859a`.
+
+**O que CONTINUA genuinamente pendente, sem mudança (nenhum destes é "fácil e seguro" o
+bastante pra resolver às cegas nesta sessão):**
+- **FERNANDOLEILOEIRO / JONASLEILOEIRO / KRONLEILOES** — Cloudflare, decisão de custo do
+  dono (tier pago ou IP residencial). Sem essa decisão, não avança.
+- **GLOBOLEILOES** — site virou SPA (Inertia.js); resolver exige reescrever o parser do
+  zero mirando o payload JSON novo — projeto próprio, não ajuste pontual.
+- **EMILIOMATOS** — ver acima: suspenso de propósito, resolver exige recon pago sem
+  garantia de sucesso.
+- **CREPALDI, APABRF** — nunca sequer pesquisados (sem plataforma identificada). Recon do
+  zero é trabalho real, não deve ser apressado.
+- **Cobertura de documento** (GESTAOLEILOES 0% de 123 ativos, SBID9/VLANCE/LEJE 0%,
+  PURCENA 13%, FERREIRALEIL 39%) — conferido o caso do GESTAOLEILOES a fundo:
+  `scraper-gestao.mjs` já grava `link_edital` (a página do evento), mas a plataforma não
+  expõe matrícula em PDF — é limitação real do site, não lacuna do scraper. Os outros 5
+  não foram auditados com esse nível de detalhe ainda; cada um precisa da mesma
+  investigação bem específica, não um fix genérico.
+
+*Branch: `claude/bidpro-brasil-initial-checks-j20won` == `main` (commit `9376cac`).*
+
+---
+
 ## 📋 SESSÃO 24 · PARTE 12 (08/09) — INVENTÁRIO DE LEILOEIRO (INTEGRAÇÃO × DOCUMENTO) + CORTE DE 600 CHARS NO EDITAL_DJEN
 
 **Pedido do dono**: "Ainda há leiloeiro que não estamos integrados e trazendo os documentos.
