@@ -168,6 +168,35 @@ export function lerMensagem(ev) {
   };
 }
 
+/**
+ * Agrupa as linhas de um lote por pessoa, para o upsert em `ig_conversas`. Duas correções
+ * aqui (achado 08/09, P2 do bug bounty de 01/09 — nenhuma das duas dava erro, as duas
+ * envenenavam o corpus em silêncio):
+ * (a) `username` só entra no objeto quando há valor NESTA rodada. `merge-duplicates` faz
+ *     UPDATE em toda chave presente no payload — incluir `username: null` sempre (como
+ *     antes) apagava, em toda DM, o username aprendido num comentário de rodada anterior.
+ * (b) `ultima_msg_deles_em` usa o horário REAL da mensagem (`ocorrido_em`, já corrigido por
+ *     `carimbo()`), não `now()` do servidor. Com `now()`, uma REENTREGA da Meta de uma
+ *     mensagem antiga reabria a janela de 24h como se a pessoa tivesse acabado de escrever.
+ *     Sem timestamp plausível, cai para `agora` (mesmo comportamento de antes — nunca pior).
+ *     Com mais de uma mensagem RECEBIDA da mesma pessoa no lote, fica com a mais recente das
+ *     reais — comparação de string funciona porque as duas vêm de `toISOString()`.
+ */
+export function agruparPorPessoa(linhas, usernames, agora) {
+  const porPessoa = new Map();
+  for (const l of linhas) {
+    const nome = usernames.get(l.ig_user_id);
+    const atual = porPessoa.get(l.ig_user_id)
+      || (nome ? { ig_user_id: l.ig_user_id, username: nome } : { ig_user_id: l.ig_user_id });
+    if (l.direcao === 'recebida') {
+      const quando = l.ocorrido_em || agora;
+      if (!atual.ultima_msg_deles_em || quando > atual.ultima_msg_deles_em) atual.ultima_msg_deles_em = quando;
+    }
+    porPessoa.set(l.ig_user_id, atual);
+  }
+  return [...porPessoa.values()].map((c) => ({ ...c, atualizado_em: agora }));
+}
+
 export function lerComentario(ch, entryTime) {
   const v = ch?.value;
   if (!v?.id || !v?.from?.id) return null;
@@ -285,19 +314,15 @@ export default async function handler(req) {
   try {
     if (linhas.length) {
       const agora = new Date().toISOString();
-      const porPessoa = new Map();
-      for (const l of linhas) {
-        const atual = porPessoa.get(l.ig_user_id) || { ig_user_id: l.ig_user_id, username: usernames.get(l.ig_user_id) || null };
-        // Só mensagem RECEBIDA move a janela de 24h. Echo nosso não reabre janela nenhuma —
-        // tratar echo como contato reabriria a janela toda vez que o dono respondesse, e o
-        // bot passaria a "poder" responder fora do prazo que a Meta concede.
-        if (l.direcao === 'recebida') atual.ultima_msg_deles_em = agora;
-        porPessoa.set(l.ig_user_id, atual);
-      }
+      // Só mensagem RECEBIDA move a janela de 24h — echo nosso não reabre janela nenhuma
+      // (tratar echo como contato reabriria a janela toda vez que o dono respondesse, e o bot
+      // passaria a "poder" responder fora do prazo que a Meta concede). A lógica de
+      // agrupamento e as duas correções de 08/09 vivem em `agruparPorPessoa` (testável em
+      // isolamento, mesmo padrão de `lerMensagem`/`carimbo` neste arquivo).
       // `merge-duplicates` mantém `primeiro_contato_em` da linha existente para as colunas que
       // não vão no payload, e atualiza as que vão.
       const conversas = await sb('POST', 'ig_conversas?on_conflict=ig_user_id',
-        [...porPessoa.values()].map((c) => ({ ...c, atualizado_em: agora })),
+        agruparPorPessoa(linhas, usernames, agora),
         'return=minimal,resolution=merge-duplicates');
       void conversas;
 

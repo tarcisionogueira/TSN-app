@@ -45,6 +45,18 @@ const listaIn = (vals) => vals
   .map((v) => `"${v}"`)
   .join(',');
 
+/**
+ * A query que dá baixa em TODA mensagem não respondida da pessoa, no mesmo canal do
+ * rascunho (achado 08/09, P2 do bug bounty de 01/09 — exportada pra ser testável em
+ * isolamento, sem precisar montar um request HTTP inteiro). Ver o comentário no chamador
+ * pra o raciocínio completo: a fila colapsa várias DMs seguidas numa linha só, então dar
+ * baixa em só o `mid_origem` deixava as anteriores voltarem à fila como rascunho duplicado.
+ */
+export function filtroLimparFila(linha) {
+  return `ig_mensagens?ig_user_id=eq.${encodeURIComponent(linha.ig_user_id)}&origem=eq.${encodeURIComponent(linha.origem)}`
+    + '&direcao=eq.recebida&respondida=eq.false';
+}
+
 export default async function handler(req, res) {
   const user = await getUser(req);
   if (!user) return res.status(401).json({ error: 'Não autenticado' });
@@ -202,7 +214,15 @@ async function desfecho(req, res, user) {
   // voltaria amanhã, o cron gastaria IA de novo (o claim é por `mid_origem`, e o rascunho
   // antigo já existe — então nem gastaria, mas `ig_janela_a_queimar()` seguiria alarmando
   // sobre um prazo que o dono já decidiu não usar).
-  const rMsg = await sb(`ig_mensagens?mid=eq.${encodeURIComponent(linha.mid_origem)}`, {
+  //
+  // MARCA TODA MENSAGEM NÃO RESPONDIDA desta pessoa NO MESMO CANAL, não só o `mid_origem`
+  // deste rascunho (achado 08/09, P2 do bug bounty de 01/09). A fila colapsa várias DMs
+  // seguidas da mesma pessoa numa linha só ("uma janela, uma resposta" — spec do ManyChat
+  // próprio); marcar só o mid mais recente deixava as anteriores com `respondida=false`,
+  // elas voltavam à fila sozinhas e geravam rascunho duplicado pra quem o dono já respondeu.
+  // Filtra por `origem` porque comentário e DM são canais separados (cada comentário tem sua
+  // própria private reply, de tiro único) — responder uma DM não pode dar baixa num comentário.
+  const rMsg = await sb(filtroLimparFila(linha), {
     method: 'PATCH',
     headers: { Prefer: 'return=representation' },
     body: JSON.stringify({ respondida: true }),

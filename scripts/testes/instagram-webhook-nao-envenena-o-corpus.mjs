@@ -23,7 +23,7 @@
  *
  * Mais a assinatura, que é a única coisa aqui que separa a Meta de qualquer um com a URL.
  */
-import { lerMensagem, lerComentario, assinaturaConfere, qualChaveAssina, carimbo } from '../../api/instagram-webhook.js';
+import { lerMensagem, lerComentario, assinaturaConfere, qualChaveAssina, carimbo, agruparPorPessoa } from '../../api/instagram-webhook.js';
 
 const SEGREDO = 'segredo-de-teste-nao-e-o-de-producao';
 let ok = 0, falhas = 0;
@@ -117,6 +117,75 @@ checa('comentario usa created_time', comComData?.ocorrido_em === '2026-09-01T12:
 const comSemData = lerComentario({ field: 'comments', value: { id: 'x2', text: 'oi', from: { id: ELA } } }, SEG);
 checa('comentario sem created_time cai no entry.time', comSemData?.ocorrido_em === '2026-09-01T12:00:00.000Z');
 
+console.log('\n── 4c. agruparPorPessoa: dois bugs P2 do bug bounty de 01/09, corrigidos em 08/09 ──');
+
+// Bug 1: `username: null` sempre, mesmo sem valor nesta rodada — `merge-duplicates` faz
+// UPDATE em toda chave presente no payload, então isso apagava, em toda DM, o username
+// aprendido num COMENTÁRIO de uma rodada anterior (usernames só vêm de comentário, nunca de DM).
+{
+  const semUsername = new Map(); // simula um lote que é só DM — ninguém comentou nesta rodada
+  const [pessoa] = agruparPorPessoa(
+    [{ ig_user_id: ELA, direcao: 'recebida', ocorrido_em: null }],
+    semUsername, '2026-09-08T10:00:00.000Z',
+  );
+  checa('sem username nesta rodada → a CHAVE nem existe no objeto (nunca null explícito)',
+    !('username' in pessoa), JSON.stringify(pessoa));
+
+  const comUsername = new Map([[ELA, 'fulana']]);
+  const [pessoaComNome] = agruparPorPessoa(
+    [{ ig_user_id: ELA, direcao: 'recebida', ocorrido_em: null }],
+    comUsername, '2026-09-08T10:00:00.000Z',
+  );
+  checa('com username nesta rodada → entra normalmente', pessoaComNome.username === 'fulana', JSON.stringify(pessoaComNome));
+}
+
+// Bug 2: `ultima_msg_deles_em` usava `now()` do servidor, não o horário REAL da mensagem —
+// uma reentrega da Meta de uma mensagem antiga reabriria a janela de 24h como se a pessoa
+// tivesse acabado de escrever.
+{
+  const agora = '2026-09-08T10:00:00.000Z';
+  const antiga = '2026-01-01T00:00:00.000Z'; // simula reentrega tardia de mensagem velha
+  const [pessoa] = agruparPorPessoa(
+    [{ ig_user_id: ELA, direcao: 'recebida', ocorrido_em: antiga }],
+    new Map(), agora,
+  );
+  checa('usa o horário REAL da mensagem, não now() do servidor',
+    pessoa.ultima_msg_deles_em === antiga, pessoa.ultima_msg_deles_em);
+
+  const [semCarimbo] = agruparPorPessoa(
+    [{ ig_user_id: ELA, direcao: 'recebida', ocorrido_em: null }],
+    new Map(), agora,
+  );
+  checa('sem carimbo plausível → cai pra agora (nunca pior que o comportamento antigo)',
+    semCarimbo.ultima_msg_deles_em === agora, semCarimbo.ultima_msg_deles_em);
+
+  const recente = '2026-09-08T09:00:00.000Z';
+  const [duasMensagens] = agruparPorPessoa(
+    [
+      { ig_user_id: ELA, direcao: 'recebida', ocorrido_em: antiga },
+      { ig_user_id: ELA, direcao: 'recebida', ocorrido_em: recente },
+    ],
+    new Map(), agora,
+  );
+  checa('duas mensagens recebidas no lote → fica com a MAIS RECENTE das reais',
+    duasMensagens.ultima_msg_deles_em === recente, duasMensagens.ultima_msg_deles_em);
+
+  const [comEcho] = agruparPorPessoa(
+    [
+      { ig_user_id: ELA, direcao: 'recebida', ocorrido_em: antiga },
+      { ig_user_id: ELA, direcao: 'enviada', ocorrido_em: recente }, // echo do dono
+    ],
+    new Map(), agora,
+  );
+  checa('echo (enviada) NUNCA move a janela — só "recebida" conta',
+    comEcho.ultima_msg_deles_em === antiga, comEcho.ultima_msg_deles_em);
+}
+
+checa('atualizado_em sempre presente, é o mesmo `agora` passado', (() => {
+  const [p] = agruparPorPessoa([{ ig_user_id: ELA, direcao: 'enviada', ocorrido_em: null }], new Map(), '2026-09-08T10:00:00.000Z');
+  return p.atualizado_em === '2026-09-08T10:00:00.000Z';
+})());
+
 console.log('\n── 5. Assinatura: só a Meta entra ──');
 
 const corpo = new TextEncoder().encode(JSON.stringify({ object: 'instagram', entry: [{ id: NOS }] }));
@@ -160,7 +229,7 @@ checa('o booleano concorda com o nome', (await assinaturaConfere(corpo, `sha256=
   === ((await qualChaveAssina(corpo, `sha256=${hex}`, SEGREDO)) !== null));
 
 console.log(`\n${falhas === 0 ? '✓' : '✗'} ${ok}/${ok + falhas} asserções`);
-if (ok + falhas < 46) {
+if (ok + falhas < 52) {
   console.error('TESTE INVÁLIDO: rodou menos asserções do que este arquivo declara — algo não foi executado.');
   process.exit(2);
 }

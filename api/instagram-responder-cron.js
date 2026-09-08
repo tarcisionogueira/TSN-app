@@ -62,7 +62,14 @@ export default async function handler(req, res) {
   const resumo = { lidos: 0, ja_tinham_rascunho: 0, gravados: 0, por_acao: {}, erros: [] };
 
   try {
-    const fila = (await rpc('ig_fila_resposta', { limite: TETO_ITENS * 2 })) || [];
+    // Buscar só TETO_ITENS*2 fazia sentido enquanto a fila de revisão do dono tinha pouca
+    // coisa parada — mas se os itens mais perto de vencer (a fila ordena por VENCIMENTO) já
+    // têm rascunho pendente de revisão, `jaTem` (abaixo) filtra a busca INTEIRA e mensagem
+    // nova nunca chega a ser lida (achado 08/09, P2 do bug bounty de 01/09 — latente,
+    // silencioso: o cron reportaria `gravados: 0` sem erro nenhum). Buscar é leitura barata —
+    // não gasta IA; só o loop mais abaixo gasta, e ele continua limitado por TETO_ITENS.
+    // Ampliado bastante pra sobreviver a uma fila de revisão grande sem perder mensagem nova.
+    const fila = (await rpc('ig_fila_resposta', { limite: TETO_ITENS * 8 })) || [];
     resumo.lidos = fila.length;
     // Fila vazia é resposta legítima aqui (a escuta pode estar dormente). O que NÃO pode
     // passar por vazio é falha de leitura — e ela lança lá em cima, não chega neste ponto.
