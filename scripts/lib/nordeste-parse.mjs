@@ -77,33 +77,19 @@ export function parseDetalhe(html, url) {
   let minimo = plaus(num(m2?.[1])) || plaus(num(m1?.[1])) || avaliacao;
   if (!avaliacao) avaliacao = minimo;
 
-  // NÃO É IMÓVEL (08/09) — o acervo do NORDESTE vem de varas federais/criminais, que
-  // leiloam qualquer bem apreendido, não só imóvel. Achado em recon ao vivo: de 3 lotes
-  // "prontos" numa amostra, 2 eram carro/caminhão ("Veiculo Vwgol...", "Caminhao
-  // Volvofh..."), um deles com desconto de -9035% (valor de campo de veículo lido como
-  // se fosse avaliação/lance de imóvel). `inferirTipo()`/`checarQualidade()` não filtram
-  // por tipo de bem — mesmo detector já usado em ALBERTOMACEDO para essa MESMA classe de
-  // contaminação: zera o valor para `checarQualidade` descartar a linha (sem valor, sem
-  // lote), em vez de inventar uma categoria "veículo" nova.
-  //
-  // ⚠️ 1ª versão testava contra `txt` (corpo inteiro da página) e zerou os 7 de 7 lotes
-  // de uma rodada ao vivo — inclusive um terreno de verdade ("Lotes 6x20m..."). A causa:
-  // a página do site tem menu/rodapé com as categorias do leiloeiro (Imóveis, Veículos,
-  // Outros) em TODA página, imóvel ou não — bater contra `txt` pega o menu, não o lote.
-  // O slug É o lugar certo: é onde o "Veiculo"/"Caminhao" apareceu de fato na amostra, e é
-  // só desse lote, nunca chrome compartilhado.
-  //
-  // ⚠️ 2ª rodada de validação (após corrigir p/ `slug`) achou um 3º item que a lista de
-  // palavras não cobria: "Sucata Aproveitavel Com Motor Inservivel de Honda...Cg Titan"
-  // (moto sucateada) — sem "veiculo"/"caminhao"/"motocicleta" no slug, passava batido.
-  // Lista ampliada com o que apareceu de fato; não é exaustiva (o acervo é de vara
-  // criminal, mistura qualquer bem apreendido) — é o mesmo espírito do ALBERTOMACEDO:
-  // amplia quando o dado real mostrar outro caso, não tenta adivinhar todos de uma vez.
-  if (/\bplaca\b|\brenavam\b|\bchassi\b|\bsucata\b|ve[íi]culo|caminh[ãa]o|motocicleta|\bmoto\b/i.test(slug)) {
-    avaliacao = 0; minimo = 0;
-  }
-
   const { estado, area, cidade } = doSlug(slug);
+
+  // NÃO É IMÓVEL (08/09) — o acervo do NORDESTE vem de varas federais/criminais, que
+  // leiloam qualquer bem apreendido: 3 rodadas de validação ao vivo acharam veículo
+  // ("Veiculo Vwgol..."), sucata de moto ("Sucata...Honda Cg Titan") E maquinário
+  // ("Equipamentos Industriais") na MESMA amostra pequena de 7 lotes — 3 categorias
+  // diferentes de bem não-imóvel, sinal de que o acervo real desta fonte é bem mais
+  // misto do que só "alguns veículos". Uma lista de palavras PROIBIDAS vira caça ao
+  // gambá: sempre falta a próxima categoria (aconteceu 2x seguidas aqui). Trocado por
+  // uma lista de palavras PERMITIDAS — só passa quem tem sinal de imóvel de verdade no
+  // slug (tipo ou medida de área/terreno), critério mais estreito e mais estável.
+  const ehImovel = area > 0 || /imov|casa|apartamento|terreno|lote|galp[ãa]o|ch[áa]cara|s[íi]tio|fazenda|pr[ée]dio|sobrado|kitnet|cobertura|comercial|residencial|\d+\s*x\s*\d+\s*m?\b/i.test(slug);
+  if (!ehImovel) { avaliacao = 0; minimo = 0; }
   const datas = datasPorExtenso(txt).sort((a, b) => a - b);
   const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
   const fut = datas.find(d => d >= hoje) || datas[datas.length - 1] || null;
