@@ -76,16 +76,28 @@ diagnóstico. E o rastro de todo Lead real fica em:
 select detalhe, criado_em from eventos_atividade where tipo='meta_lead' order by criado_em desc limit 5;
 ```
 
-## ⛔ AINDA NÃO CRIADAS — Instagram / ManyChat próprio (01/09)
+## ✅ CRIADAS — Instagram / ManyChat próprio (confirmado por print do painel, 08/09)
 
-O código de `api/instagram-webhook.js` está no ar e **dormente por ausência destas duas**: sem
-`IG_APP_SECRET` ele responde 500 e recusa a entrega, em vez de aceitar sem validar assinatura.
-Criar as duas na Vercel (Production + Preview + Development) é o que liga a escuta.
+`IG_APP_SECRET`, `IG_APP_SECRET_INSTAGRAM` e `IG_VERIFY_TOKEN` **existem em Production**
+(print do dono, 08/09) — o registro de 01/09 abaixo estava desatualizado, ninguém tinha
+voltado aqui pra corrigir depois de criá-las. `api/instagram-webhook.js` deveria estar
+`configurado: true` agora (checar com `GET /api/instagram-webhook`).
+
+⚠️ **O print mostrava só escopo "Production"**, não "All Environments" — se algum dia for
+testar o webhook a partir de uma Preview deployment, confirmar se as 3 têm Preview/Development
+marcados também. Pra produção (que é a única URL que a Meta chama de verdade) não importa.
+
+⚠️ **Env var configurada ≠ tráfego real chegando.** Mesmo com as 3 no ar, `ig_webhook_recebido`
+não tem NENHUMA entrega real (só 2 pings do botão "Testar" da Meta, ambos de 02/09) — o que
+aponta pro próximo gargalo, que é de painel da Meta, não de código: **Acesso de
+Desenvolvimento só entrega webhook de contas de TESTE/admin do app; tráfego de gente de fora
+só chega depois do App Review aprovar Acesso Avançado** (§2 de `docs/INSTAGRAM_AUTOMACAO.md`).
+Verificar o status da Verificação de Negócio e do App Review antes de supor outra causa.
 
 | Nome | Para quê |
 |---|---|
-| `IG_APP_SECRET` | Valida `X-Hub-Signature-256` de cada entrega da Meta. É o **App Secret** do app em `developers.facebook.com` |
-| `IG_VERIFY_TOKEN` | String inventada por você. Responde o `hub.challenge` na verificação do webhook — o mesmo valor é digitado no painel da Meta ao cadastrar a URL |
+| `IG_APP_SECRET` / `IG_APP_SECRET_INSTAGRAM` | Valida `X-Hub-Signature-256` de cada entrega da Meta — o webhook aceita qualquer uma das duas e loga qual fechou (ver comentário em `api/instagram-webhook.js`) |
+| `IG_VERIFY_TOKEN` | Responde o `hub.challenge` na verificação do webhook — o mesmo valor digitado no painel da Meta ao cadastrar a URL |
 
 Previstas para as etapas seguintes (ainda sem código que as leia):
 
