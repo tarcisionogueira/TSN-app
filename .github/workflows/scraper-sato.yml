@@ -1,9 +1,13 @@
 name: Scraper SATO
 
-# SATO Leilões via API pública JSON (Round 35). Dispatch-only até validar (padrão
-# recon-first do repo): 1º run em DRY-RUN pela CI; gravação exige dryrun=0. Depois
-# de validado, decidir cron ou entrada no runner residencial.
+# SATO Leilões via API pública JSON (Round 35). Validado em 08/09 (dry-run ao vivo: 114
+# leilões enumerados, 24 prontos, imóveis reais, zero erro) — os 40 dias sem dado novo
+# desde 30/07 eram só o `workflow_dispatch`-only sem ninguém clicar, não uma fonte quebrada.
+# Promovido a cron diário: é API pública JSON (sem Bright Data, sem anti-bot), risco/custo
+# baixo o bastante pra não precisar do runner residencial.
 on:
+  schedule:
+    - cron: '30 9 * * *'   # diário — depois do CEF (9h) e antes do leiloeiros-puppeteer (10h)
   workflow_dispatch:
     inputs:
       dryrun:
@@ -14,11 +18,20 @@ on:
         description: 'Máx. de páginas da API (15 leilões/página)'
         required: false
         default: '30'
+      debug:
+        description: '1 = log verboso (amostra de linhas)'
+        required: false
+        default: '0'
 
 jobs:
   sato:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      # Agendado sempre grava; dispatch manual respeita o input (default dry-run) — mesmo
+      # padrão de env.DRYRUN_PADRAO já usado em scraper-dom.yml (07/09), calculado uma vez
+      # no nível do job pra não repetir a mesma expressão em cada step.
+      DRYRUN_PADRAO: ${{ (github.event_name == 'schedule') && '0' || (github.event.inputs.dryrun || '1') }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -32,7 +45,23 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          SATO_DRYRUN: ${{ github.event.inputs.dryrun || '1' }}
+          SATO_DRYRUN: ${{ env.DRYRUN_PADRAO }}
           SATO_MAX_PAGES: ${{ github.event.inputs.max_pages || '30' }}
-          SATO_DEBUG: '1'
+          SATO_DEBUG: ${{ github.event.inputs.debug || '0' }}
         run: node scripts/scraper-sato.mjs
+
+      # `cancelled()` junto com `failure()`: mesmo padrão dos outros crons (ver
+      # leiloeiros-puppeteer.yml) — estourar o timeout não é `failure()` pro GitHub.
+      - name: Notify on failure
+        if: failure() || cancelled()
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
+          JOB_STATUS: ${{ job.status }}
+          MOTIVO: "${{ job.status == 'cancelled' && 'Timeout ou cancelamento no scraper SATO.' || 'Erro na execucao do scraper SATO.' }}"
+        run: |
+          curl -s -X POST "${APP_BASE_URL:-https://bidprobrasil.com.br}/api/notify-scraper" \
+            -H "x-cron-secret: ${CRON_SECRET}" \
+            -H "Content-Type: application/json" \
+            -d '{"tipo":"Scraper SATO","etapa":"'"$JOB_STATUS"'","mensagem":"'"$MOTIVO"'","run_id":"'$GITHUB_RUN_ID'","run_url":"https://github.com/'$GITHUB_REPOSITORY'/actions/runs/'$GITHUB_RUN_ID'"}' || true
+        continue-on-error: true
