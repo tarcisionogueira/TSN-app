@@ -4,6 +4,60 @@
 
 ---
 
+## 📋 SESSÃO 24 · PARTE 14 (08/09) — MANYCHAT PRÓPRIO: 4 BUGS P2 CORRIGIDOS + CONFIRMADO (AO VIVO, 2 TESTES) QUE O GARGALO É O APP REVIEW
+
+**Pedido do dono**: retomar o ManyChat próprio (dormente desde 02/09). Ritual: corrigir os 4
+P2 do bug bounty de 01/09 (nunca corrigidos) e diagnosticar por que zero tráfego real chegava.
+
+**1. Os 4 P2 corrigidos** (todos latentes — nenhum dava erro, todos envenenariam o corpus ou
+travariam a fila assim que o tráfego real começasse):
+- `api/instagram-webhook.js` — upsert de conversa mandava `username: null` em toda DM
+  (merge-duplicates faz UPDATE em toda chave presente, apagando username aprendido num
+  comentário anterior) e carimbava a janela de 24h com `now()` do servidor em vez do horário
+  real da Meta (reentrega tardia reabriria a janela). As duas correções viraram
+  `agruparPorPessoa()`, exportada e testada em isolamento.
+- `api/admin-ig-caixa.js` — desfecho só marcava `respondida=true` no `mid_origem` de UM
+  rascunho; como a fila colapsa várias DMs seguidas da mesma pessoa numa linha só, as
+  anteriores ficavam paradas e voltavam como rascunho duplicado. `filtroLimparFila()` agora dá
+  baixa em toda mensagem não respondida da pessoa NO MESMO CANAL (comentário ≠ DM).
+- `api/instagram-responder-cron.js` — fila buscava só 50 itens; um backlog de 50+ rascunhos
+  parados sem baixa cegava o cron pra mensagem nova (`gravados: 0` sem erro). Ampliado pra 200.
+- Testes: `testar:instagram` 54/54 (+7) · novo `testar:ig-caixa` 7/7 (arquivo nunca tinha teste).
+
+**2. `docs/ENVS_VERCEL.md` corrigido** — dizia `IG_APP_SECRET`/`IG_VERIFY_TOKEN` "ainda não
+criadas" desde 01/09; print do dono mostrou as 3 (+ `IG_APP_SECRET_INSTAGRAM`) em Production.
+Confirmado ao vivo via `GET /api/instagram-webhook` (usando `mcp__Vercel__web_fetch_vercel_url`
+pra contornar o egress bloqueado do sandbox pro domínio): `configurado: true, falta: []`.
+
+**3. ⚠️ O ACHADO QUE FECHA A DÚVIDA: a escuta está 100% pronta e ainda assim zero tráfego real
+chega — o gargalo é comprovadamente o App Review, não configuração nossa.** Prints do painel
+`developers.facebook.com` (app "BidPro - Atendimento", id `1533306125147104`; app do Instagram
+"BidPro - Atendimento-IG", id `911295054971510`) mostraram: as 3 permissões adicionadas ✅,
+webhook configurado ✅ (URL certa, campos `messages`/`comments` **Assinado**), conta
+`tarcisionogueiraleiloes` conectada — mas o passo "5. Concluir a análise do app" **não feito**,
+com uma nota da própria Meta: *"Você pode pular esta etapa se desenvolve apenas para suas
+próprias empresas no Instagram."* Como o BidPro é exatamente esse caso, cabia dúvida se o App
+Review era mesmo necessário.
+
+**Testado ao vivo, 2 rodadas, ambas negativas** (medido, não deduzido — `ig_webhook_recebido`
+conferido no banco logo depois de cada teste):
+1. `@bidprobrasil` (conta do próprio dono, acesso total no portfólio empresarial, mas nunca
+   confirmada como testadora do APP especificamente) comentou num post de
+   `@tarcisionogueiraleiloes` → **zero linhas** em `ig_webhook_recebido`.
+2. Uma conta **genuinamente sem vínculo** com o portfólio/app comentou no mesmo post →
+   **zero linhas** de novo.
+
+**Conclusão**: a isenção "pule se for só pra sua própria empresa" não cobre receber interação
+de público real — ela deve se referir a outra parte do fluxo (possivelmente o login da empresa
+do passo 4). Infra confirmada correta nos dois lados (config Meta + código); o único passo que
+falta é submeter a Análise do App (exige o vídeo do fluxo funcionando, per §2 de
+`docs/INSTAGRAM_AUTOMACAO.md`) — e isso é 100% ação do dono no painel da Meta, não há mais
+nada de código ou configuração daqui que destrave isso.
+
+**Pendente com o dono**: clicar "Ir para Análise do app" e preparar o vídeo de demonstração.
+
+---
+
 ## 📋 SESSÃO 24 · PARTE 13 (08/09) — CORREÇÃO DA PARTE 12: 3 DE 4 "FONTES ZERADAS" NÃO ERAM BUG + 2 RESOLVIDAS DE VERDADE
 
 **Pedido do dono**: "Resolva todos eles da forma mais eficiente e segura possível."
