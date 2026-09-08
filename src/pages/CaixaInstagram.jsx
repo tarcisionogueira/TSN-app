@@ -2,10 +2,12 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { apiCall } from '../utils/apiCall';
 
 /**
- * CAIXA DE RASCUNHOS DO INSTAGRAM — o dono lê, edita, copia e registra.
+ * CAIXA DE RASCUNHOS DO INSTAGRAM — o dono lê, edita e responde.
  *
- * ⚠️ ELA NÃO ENVIA, E ISSO ESTÁ ESCRITO NA TELA. Enquanto a Meta não liberar a permissão de
- * envio, quem responde é ele, no app. O botão chama "Copiar e marcar", não "Enviar".
+ * 08/09 — GANHOU ENVIO DE VERDADE. Quando `envio_disponivel` vem `true` (IG_USER_ID/
+ * IG_PAGE_TOKEN configurados na Vercel), aparece "Enviar agora" — manda pela Send API de
+ * verdade. Sem isso configurado (ou se o envio falhar), o fluxo antigo continua de pé:
+ * "Copiar e marcar enviado" só REGISTRA que você respondeu no app, na mão.
  *
  * ─── O TEXTO QUE VAI PARA A MEDIÇÃO É O DESTA CAIXA, NÃO O SUGERIDO ──────────────────
  * A régua de promoção ("a classe vira autônoma quando 8 de 10 rascunhos saem sem edição")
@@ -65,7 +67,9 @@ export default function CaixaInstagram() {
         method: 'POST', body: JSON.stringify({ acao, id: item.id, ...extra }),
       });
       const j = await r.json().catch(() => ({}));
-      if (!r.ok || j?.error) throw new Error(j?.error || `HTTP ${r.status}`);
+      // O erro de envio pela API vem em `detalhe`/`motivo` (ver admin-ig-caixa.js) — mostrar só
+      // `j.error` (ex.: "envio_falhou") deixaria o motivo real (o que a Meta respondeu) invisível.
+      if (!r.ok || j?.error) throw new Error([j?.error, j?.motivo, j?.detalhe].filter(Boolean).join(' — ') || `HTTP ${r.status}`);
       setResolvidos((s) => new Set(s).add(item.id));
       // O desfecho valeu (a régua já leu), mas se a mensagem não saiu da fila o item volta
       // amanhã. Dizer isso agora evita que a tela pareça repetir rascunho sem motivo.
@@ -96,6 +100,12 @@ export default function CaixaInstagram() {
     await registrar(item, 'enviado', { texto });
   }
 
+  async function enviarAgora(item) {
+    const texto = (textos[item.id] || '').trim();
+    if (!texto) { setErro('A caixa está vazia — não há o que enviar.'); return; }
+    await registrar(item, 'enviar', { texto });
+  }
+
   async function mudarEstado(item, estado) {
     setOcupado(item.id);
     try {
@@ -123,9 +133,9 @@ export default function CaixaInstagram() {
     <div style={{ maxWidth: 760, margin: '0 auto', padding: '24px 18px 60px', fontFamily: 'system-ui, sans-serif', color: '#0f172a' }}>
       <h1 style={{ fontSize: 22, fontWeight: 800, margin: '0 0 4px' }}>Caixa do Instagram</h1>
       <p style={{ fontSize: 13, color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 9, padding: '10px 12px', lineHeight: 1.6, margin: '10px 0 0' }}>
-        Esta tela <strong>não envia</strong>. Ela sugere, você <strong>edita aqui</strong> até ficar como vai
-        mandar, copia e responde no app. Edite <em>antes</em> de copiar: é o texto desta caixa que vira a
-        medição de quando uma classe pode passar a responder sozinha.
+        {dados?.envio_disponivel
+          ? <>Ela sugere, você <strong>edita aqui</strong> até ficar como vai mandar, e <strong>"Enviar agora" manda de verdade</strong> pela API. Edite <em>antes</em> de enviar: é o texto desta caixa que vira a medição de quando uma classe pode passar a responder sozinha.</>
+          : <>Esta tela <strong>ainda não envia</strong> (falta configurar o envio na Vercel). Ela sugere, você <strong>edita aqui</strong> até ficar como vai mandar, copia e responde no app. Edite <em>antes</em> de copiar: é o texto desta caixa que vira a medição de quando uma classe pode passar a responder sozinha.</>}
       </p>
 
       {erro && (
@@ -216,6 +226,12 @@ export default function CaixaInstagram() {
           )}
 
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+            {it.texto_sugerido && dados?.envio_disponivel && (
+              <button onClick={() => enviarAgora(it)} disabled={ocupado === it.id}
+                style={{ ...B, flex: 1, minWidth: 200, background: ocupado === it.id ? '#cbd5e1' : '#0D63DB', color: '#fff', border: 'none', padding: 13, fontSize: 15, fontWeight: 800 }}>
+                {ocupado === it.id ? 'Enviando…' : 'Enviar agora →'}
+              </button>
+            )}
             {it.texto_sugerido && (
               <button onClick={() => copiarEMarcar(it)} disabled={ocupado === it.id}
                 style={{ ...B, flex: 1, minWidth: 200, background: ocupado === it.id ? '#cbd5e1' : '#16a34a', color: '#fff', border: 'none', padding: 13, fontSize: 15, fontWeight: 800 }}>

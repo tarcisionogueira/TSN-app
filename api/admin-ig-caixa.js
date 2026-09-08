@@ -2,11 +2,14 @@
  * GET  /api/admin-ig-caixa  → os rascunhos pendentes, em ordem de VENCIMENTO, com contexto
  * POST /api/admin-ig-caixa  → o desfecho de um rascunho, ou o estado de uma conversa
  *
- * ⚠️ ESTA TELA NÃO ENVIA NADA PELO INSTAGRAM, e isso está escrito nela. Enquanto
- * `_ig-envio.js` não existe (e enquanto a Meta não liberar a permissão), quem responde é o
- * dono, no app, com o texto copiado daqui. "Marcar como enviado" é REGISTRO, não envio —
- * exatamente como a fila de WhatsApp, e pelo mesmo motivo: uma tela que dissesse "enviando"
- * e só copiasse texto seria a mentira mais cara possível.
+ * ⚠️ 08/09 — GANHOU ENVIO DE VERDADE (ação 'enviar', via `_instagram-envio.js`), mas só por
+ * clique EXPLÍCITO do admin nesta tela — nunca autônomo. `IG_BOT_ATIVO` continua sendo o
+ * interruptor de resposta AUTOMÁTICA (que não existe ainda). O fluxo antigo ('enviado' =
+ * "copiei e colei no app, só registrando") CONTINUA existindo — é o fallback pra quando o
+ * envio pela API não está configurado (`IG_USER_ID`/`IG_PAGE_TOKEN` ausentes) ou falha.
+ * "Marcar como enviado" nesse caso é REGISTRO, não envio — exatamente como a fila de
+ * WhatsApp, e pelo mesmo motivo: uma tela que dissesse "enviando" sem ter enviado seria a
+ * mentira mais cara possível.
  *
  * ─── POR QUE O REGISTRO IMPORTA MAIS DO QUE PARECE ───────────────────────────────────
  * A régua de promoção é "a classe vira autônoma quando o dono envia o rascunho SEM EDITAR em
@@ -24,6 +27,7 @@
 export const config = { runtime: 'nodejs' };
 
 import { getUser } from './_auth.js';
+import { envioConfigurado, enviarDM, enviarPrivateReply } from './_instagram-envio.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -147,6 +151,10 @@ async function caixa(res) {
     truncado: rascunhos.length >= TETO_PENDENTES,
     resumo: await opcional(rResumo, 'resumo'),
     regua: await opcional(rRegua, 'régua'),
+    // A tela só oferece o botão "Enviar agora" quando isto é true — sem IG_USER_ID/
+    // IG_PAGE_TOKEN configurados na Vercel, mostrar o botão seria prometer um envio que vai
+    // falhar toda vez.
+    envio_disponivel: envioConfigurado(),
   });
 }
 
@@ -182,7 +190,31 @@ async function desfecho(req, res, user) {
   if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'id invalido' });
 
   const patch = { };
-  if (acao === 'enviado') {
+  if (acao === 'enviar') {
+    const texto = String(corpo.texto ?? '').trim();
+    if (!texto) return res.status(400).json({ error: 'texto vazio' });
+    if (!envioConfigurado()) return res.status(409).json({ error: 'envio_nao_configurado', detalhe: 'IG_USER_ID/IG_PAGE_TOKEN ausentes na Vercel' });
+
+    // Busca o alvo ANTES de chamar a Send API, mas sem travar a linha ainda — quem trava de
+    // verdade é o PATCH condicional lá embaixo (`enviado_em is null`). Um envio que FALHA não
+    // pode ter "gasto" o desfecho: o rascunho precisa continuar na caixa pra tentar de novo.
+    const rAlvo = await sb(`ig_rascunho?id=eq.${id}&enviado_em=is.null&descartado_em=is.null&select=ig_user_id,origem,mid_origem`);
+    if (!rAlvo.ok) return res.status(502).json({ error: 'rascunho_ilegivel', detalhe: await rAlvo.text() });
+    const [alvo] = await rAlvo.json().catch(() => []);
+    if (!alvo) return res.status(409).json({ error: 'ja_teve_desfecho' });
+
+    // Comentário responde por PRIVATE REPLY (recipient.comment_id); DM e story pelo mesmo
+    // endpoint com recipient.id — ver o cabeçalho de _instagram-envio.js.
+    const envio = alvo.origem === 'comentario'
+      ? await enviarPrivateReply(alvo.mid_origem, texto)
+      : await enviarDM(alvo.ig_user_id, texto);
+    // NUNCA carimba enviado_em sobre um envio que a Meta recusou — a forma nº 5 do topo do
+    // HANDOFF (freio/erro devolvido como se fosse sucesso), agora do lado de fora da nossa infra.
+    if (!envio.ok) return res.status(502).json({ error: 'envio_falhou', motivo: envio.erro, detalhe: envio.detalhe || null });
+
+    patch.enviado_em = new Date().toISOString();
+    patch.texto_enviado = texto;
+  } else if (acao === 'enviado') {
     const texto = String(corpo.texto ?? '').trim();
     // Sem texto não há o que medir, e gravar `texto_enviado` vazio faria a régua comparar a
     // sugestão com o nada — 0% de igualdade, "a persona não presta", medindo o formulário.
@@ -240,5 +272,5 @@ async function desfecho(req, res, user) {
   // `fila_limpa` volta para a tela: o desfecho VALEU (é o que a régua lê), mas se a mensagem
   // não saiu da fila o dono verá o item de novo amanhã, e precisa saber por quê — senão vira
   // "esta tela repete rascunho" e ele para de usar.
-  return res.status(200).json({ ok: true, acao, fila_limpa: filaLimpa });
+  return res.status(200).json({ ok: true, acao, fila_limpa: filaLimpa, enviado_via_api: acao === 'enviar' });
 }
