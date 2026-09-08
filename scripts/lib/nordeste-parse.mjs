@@ -77,6 +77,18 @@ export function parseDetalhe(html, url) {
   let minimo = plaus(num(m2?.[1])) || plaus(num(m1?.[1])) || avaliacao;
   if (!avaliacao) avaliacao = minimo;
 
+  // NÃO É IMÓVEL (08/09) — o acervo do NORDESTE vem de varas federais/criminais, que
+  // leiloam qualquer bem apreendido, não só imóvel. Achado em recon ao vivo: de 3 lotes
+  // "prontos" numa amostra, 2 eram carro/caminhão ("Veiculo Vwgol...", "Caminhao
+  // Volvofh..."), um deles com desconto de -9035% (valor de campo de veículo lido como
+  // se fosse avaliação/lance de imóvel). `inferirTipo()`/`checarQualidade()` não filtram
+  // por tipo de bem — mesmo detector já usado em ALBERTOMACEDO para essa MESMA classe de
+  // contaminação: zera o valor para `checarQualidade` descartar a linha (sem valor, sem
+  // lote), em vez de inventar uma categoria "veículo" nova.
+  if (/\bplaca\b|\brenavam\b|\bchassi\b|combust[íi]vel|quilometragem|\bkm\s*rodados?\b|\bve[íi]culo\b|\bcaminh[ãa]o\b|\bmotocicleta\b/i.test(txt + ' ' + slug)) {
+    avaliacao = 0; minimo = 0;
+  }
+
   const { estado, area, cidade } = doSlug(slug);
   const datas = datasPorExtenso(txt).sort((a, b) => a - b);
   const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
