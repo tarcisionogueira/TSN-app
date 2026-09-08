@@ -83,6 +83,23 @@ pra topo de funil, sem evento de conversão esperado) ou lacuna de rastreamento 
 cabem no dado, e só quem decide a estratégia de mídia sabe qual é. Registrado pra o dono avaliar,
 não corrigido às cegas.
 
+**⚠️ FECHADO ainda no mesmo dia (dono pediu conferência direta nas plataformas via Windsor.ai)**:
+a leitura acima ("vale conferência") tinha resposta simples — **não era lacuna de rastreamento**.
+Das 24 campanhas do Meta nos últimos 30 dias, 23 estão `PAUSED`; as duas que geraram o gasto sem
+conversão ("TRF - SITE - LEILOES - AGO26", R$124 · "CONV - AULA 02SET - INSCRICAO", R$109) são
+campanhas DATADAS (agosto e a aula de 02/09, ambas já passadas) e **já estão pausadas agora** —
+o gasto é histórico de campanha encerrada, não vazamento de campanha viva. Só 1 segue `ACTIVE`:
+impulsionamento de post do Instagram, R$19,32/30d, engajamento (não é funil de conversão).
+
+**Google Ads, achado novo com ação sugerida**: única campanha ativa ("Pesquisa — Leilão de
+Imóveis (BR)") está com `campaign_primary_status: LIMITED` / `campaign_primary_status_reasons:
+BUDGET_CONSTRAINED` — diagnóstico do PRÓPRIO Google, não inferência minha. CTR 11,53% (ótimo pra
+busca), CPC médio R$0,32 (barato), 24 conversões/30d — campanha comprovadamente eficiente. Mas
+`search_impression_share` é só 16,05%: `search_budget_lost_impression_share` 44,99% +
+`search_rank_lost_impression_share` 31,78% — quase metade do alcance elegível perdido só por
+teto de orçamento. Recomendação de menor risco: aumentar o orçamento diário. Não executado —
+é decisão de verba do dono, reportado e não mexido às cegas.
+
 **Pendências que seguem em aberto, sem ação nova hoje** (só reconfirmadas/documentadas):
 KRONLEILOES / JONASLEILOEIRO / FERNANDOLEILOEIRO (decisão do dono, Partes 5/6/8);
 `live_inscricoes.compareceu` nunca escrito (03/09, reconfirmado nesta Parte 9);
