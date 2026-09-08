@@ -120,32 +120,61 @@ export function montarFollowup({ titulo, link }) {
 }
 
 // ─── OPORTUNIDADE — imóvel real do acervo, mesmo link que o botão Compartilhar usa ─────────
-// `imovel` vem de `imoveis_leilao` (api/admin-mensagens-grupo.js busca a lista real) — mesmas
-// colunas que api/og-share.js já usa no cartão de `/i/:id`, pedido do dono 08/09 ("mandar
-// oportunidades compartilhando os imóveis como já temos essa função"). O link SEM hash gera o
-// preview com FOTO sozinho no WhatsApp — o texto aqui só complementa (lance/desconto/praça),
-// nunca repete o que a foto/título do cartão já mostra. Nenhum número é calculado aqui: lance,
-// avaliação e desconto vêm prontos do acervo, igual ao og-share.
+// `imovel` vem de `imoveis_leilao` (api/admin-mensagens-grupo.js busca a lista real, priorizando
+// quem tem praça marcada) — mesmas colunas que api/og-share.js já usa no cartão de `/i/:id`,
+// pedido do dono 08/09 ("mandar oportunidades compartilhando os imóveis como já temos essa
+// função"). O link SEM hash gera o preview com FOTO sozinho no WhatsApp; o TEXTO do chat é o
+// que a pessoa lê por inteiro (o WhatsApp corta a descrição do cartão em 1-2 linhas), então o
+// texto aqui é a versão completa — nada é calculado ou afirmado além do que já está no acervo.
+//
+// 2ª rodada (08/09, pedido do dono: "mais atratividade, sensualidade comercial" + dizer o TIPO
+// de leilão): `modalidade` é campo REAL de `imoveis_leilao` (judicial/extrajudicial/venda_
+// direta/venda_online) — o rótulo só TRADUZ o valor pra português, não afirma prazo/risco/
+// procedimento (isso é papel do parecer jurídico, revisado por admin). A diferença em R$ é só
+// avaliação − lance, a mesma subtração que o relatório de viabilidade já mostra.
+const RUBRICA_MODALIDADE = {
+  judicial: 'LEILÃO JUDICIAL',
+  extrajudicial: 'LEILÃO EXTRAJUDICIAL',
+  venda_direta: 'VENDA DIRETA',
+  venda_online: 'VENDA ONLINE',
+};
 export function montarOportunidade({ imovel, link }) {
   const titulo = String(imovel?.titulo || '').trim();
   const l = String(link || '').trim();
   if (!titulo || !l) return null;
+
+  const tipoBruto = String(imovel?.tipo || '').trim();
+  const tipoLabel = tipoBruto ? tipoBruto.charAt(0).toUpperCase() + tipoBruto.slice(1) : 'Imóvel';
   const onde = [imovel?.bairro, imovel?.cidade].filter(Boolean).join(', ');
   const local = onde ? `${onde}${imovel?.estado ? '/' + imovel.estado : ''}` : (imovel?.cidade || null);
-  const lance = Number(imovel?.valor_minimo) > 0
-    ? `Lance a partir de R$ ${Math.round(Number(imovel.valor_minimo)).toLocaleString('pt-BR')}`
-    : null;
+  const cabecalho = local ? `${tipoLabel} em ${local}` : tipoLabel;
+
+  const rubrica = RUBRICA_MODALIDADE[String(imovel?.modalidade || '').trim()] || null;
+
+  const avalNum = Number(imovel?.valor_avaliacao) || 0;
+  const lanceNum = Number(imovel?.valor_minimo) || 0;
+  const avaliacao = avalNum > 0 ? `Avaliação: R$ ${Math.round(avalNum).toLocaleString('pt-BR')}` : null;
+  const lance = lanceNum > 0 ? `Lance inicial: R$ ${Math.round(lanceNum).toLocaleString('pt-BR')}` : null;
   const desconto = Math.round(Number(imovel?.desconto_percentual) || 0);
+  const diferenca = (avalNum > lanceNum && lanceNum > 0) ? avalNum - lanceNum : 0;
+  const linhaDesconto = desconto > 0
+    ? `→ ${desconto}% abaixo da avaliação${diferenca > 0 ? ` (R$ ${Math.round(diferenca).toLocaleString('pt-BR')} de diferença)` : ''}`
+    : null;
+
   const praca = String(imovel?.data_leilao || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
-  const dataPraca = praca ? `Praça em ${praca[3]}/${praca[2]}/${praca[1]}` : null;
+  const dataPraca = praca ? `📅 Praça em ${praca[3]}/${praca[2]}/${praca[1]}` : null;
+
   return linhas(
-    '🏠 OPORTUNIDADE NO ACERVO',
+    rubrica ? `🔨 OPORTUNIDADE REAL — ${rubrica}` : '🔨 OPORTUNIDADE REAL NO ACERVO',
     '',
-    local,
+    cabecalho,
+    '',
+    avaliacao,
     lance,
-    desconto > 0 ? `${desconto}% abaixo da avaliação` : null,
+    linhaDesconto,
     dataPraca,
     '',
+    'Confira a ficha completa deste imóvel:',
     l,
   );
 }

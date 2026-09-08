@@ -73,18 +73,29 @@ function linkDaAula(slug, edicao, tipo) {
 }
 
 // Candidatos reais pro tipo "oportunidade" (08/09) — MESMAS colunas que api/og-share.js já
-// lê pro cartão de `/i/:id` (nenhuma leitura nova, só reaproveitada). Só ativos, com foto (o
-// link vale pela FOTO no preview do WhatsApp) e desconto real de pelo menos 30% — o admin
-// ainda escolhe qual mostrar no dropdown, isto só evita catar manualmente no Admin.
+// lê pro cartão de `/i/:id` (mais tipo/modalidade, novos na 2ª rodada — pedido do dono pra
+// dizer o TIPO de leilão no texto). Só ativos, com foto (o link vale pela FOTO no preview do
+// WhatsApp) e desconto real de pelo menos 30% — o admin ainda escolhe qual mostrar no
+// dropdown, isto só evita catar manualmente no Admin.
+//
+// PRIORIZA quem tem `data_leilao` marcada (08/09, achado testando com dado real: os 10
+// maiores descontos eram TODOS CEF em piso de praças repetidas, sem data nenhuma — desconto
+// gigante sem praça marcada soa menos crível e não cria urgência de verdade). Preenche o
+// resto até 10 com quem não tem data só se faltar candidato — nunca deixa a lista vazia.
 async function buscarOportunidades() {
-  const r = await sb(
-    'imoveis_leilao?ativo=eq.true&link_foto=not.is.null&desconto_percentual=gte.30' +
-    '&select=id,titulo,cidade,estado,bairro,valor_minimo,valor_avaliacao,desconto_percentual,data_leilao,link_foto' +
-    '&order=desconto_percentual.desc&limit=10'
-  );
-  if (!r.ok) { console.error('[mensagens-grupo] nao consegui ler oportunidades:', await r.text()); return []; }
-  const rows = await r.json().catch(() => null);
-  return Array.isArray(rows) ? rows : [];
+  const base = 'imoveis_leilao?ativo=eq.true&link_foto=not.is.null&desconto_percentual=gte.30' +
+    '&select=id,titulo,tipo,modalidade,cidade,estado,bairro,valor_minimo,valor_avaliacao,desconto_percentual,data_leilao,link_foto';
+
+  const rComData = await sb(`${base}&data_leilao=not.is.null&order=desconto_percentual.desc&limit=10`);
+  if (!rComData.ok) { console.error('[mensagens-grupo] nao consegui ler oportunidades (com praca):', await rComData.text()); return []; }
+  const comData = await rComData.json().catch(() => null);
+  const lista = Array.isArray(comData) ? comData : [];
+  if (lista.length >= 10) return lista;
+
+  const rSemData = await sb(`${base}&data_leilao=is.null&order=desconto_percentual.desc&limit=${10 - lista.length}`);
+  if (!rSemData.ok) { console.error('[mensagens-grupo] nao consegui ler oportunidades (sem praca):', await rSemData.text()); return lista; }
+  const semData = await rSemData.json().catch(() => null);
+  return lista.concat(Array.isArray(semData) ? semData : []);
 }
 
 function linkDoImovel(id, edicao) {

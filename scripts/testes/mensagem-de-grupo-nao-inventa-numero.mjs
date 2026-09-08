@@ -73,18 +73,32 @@ console.log('\nCONVITE — omite a linha de destaque quando nenhum é passado, n
 
 console.log('\nOPORTUNIDADE — imóvel real do acervo, nunca calcula ou completa número sozinho');
 {
+  // valores assimétricos DE PROPÓSITO (lance ≠ diferença) — se o teste usasse 50% exato, lance
+  // e (avaliação−lance) dariam o MESMO número por coincidência e não provariam nada sozinhos.
   const imovel = {
-    titulo: 'Apartamento em leilão', cidade: 'Goiânia', estado: 'GO', bairro: null,
-    valor_minimo: 248883.05, valor_avaliacao: 497766.10, desconto_percentual: 50,
+    titulo: 'Apartamento em leilão', tipo: 'apartamento', modalidade: 'extrajudicial',
+    cidade: 'Goiânia', estado: 'GO', bairro: null,
+    valor_minimo: 300000, valor_avaliacao: 497766.10, desconto_percentual: 40,
     data_leilao: '2026-09-14T15:00:00-03:00',
   };
   const r = montarOportunidade({ imovel, link: 'https://x/i/abc123' });
-  checa('cidade/UF reais aparecem', r?.includes('Goiânia/GO'), r);
-  checa('lance real aparece formatado (não recalculado)', r?.includes('248.883'), r);
-  checa('desconto real aparece (vem pronto do acervo)', r?.includes('50%'), r);
+  checa('tipo + cidade/UF reais aparecem no cabeçalho (tipo capitalizado)', r?.includes('Apartamento em Goiânia/GO'), r);
+  checa('modalidade real vira rubrica (LEILÃO EXTRAJUDICIAL)', r?.includes('LEILÃO EXTRAJUDICIAL'), r);
+  checa('avaliação real aparece formatada', r?.includes('497.766'), r);
+  checa('lance real aparece formatado (não recalculado)', r?.includes('300.000'), r);
+  checa('desconto real aparece (vem pronto do acervo, não recalculado)', r?.includes('40%'), r);
+  checa('diferença em R$ é avaliação − lance (197.766), não repete o lance',
+    r?.includes(`R$ ${Math.round(497766.10 - 300000).toLocaleString('pt-BR')}`) && !r.includes('R$ 300.000 de diferença'), r);
   checa('data da praça formatada dd/mm/aaaa', r?.includes('14/09/2026'), r);
   checa('link do imóvel aparece', r?.includes('https://x/i/abc123'), r);
 }
+checa('modalidade desconhecida/ausente → cabeçalho genérico, não inventa rubrica',
+  (() => {
+    const r = montarOportunidade({ imovel: { titulo: 'Casa', cidade: 'X' }, link: 'https://x' });
+    return r?.includes('OPORTUNIDADE REAL NO ACERVO') && !r.includes('LEILÃO');
+  })());
+checa('sem tipo → cabeçalho cai pra "Imóvel", nunca fica em branco',
+  montarOportunidade({ imovel: { titulo: 'Casa', cidade: 'X' }, link: 'https://x' })?.includes('Imóvel em X'));
 checa('sem título → null (não inventa nome de imóvel)',
   montarOportunidade({ imovel: { cidade: 'X' }, link: 'https://x' }) === null);
 checa('sem link → null', montarOportunidade({ imovel: { titulo: 'Casa' }, link: '' }) === null);
@@ -111,7 +125,7 @@ checa('dispatcher chega no formatador certo (oportunidade)',
   montarMensagemGrupo('oportunidade', { imovel: { titulo: 'Casa' }, link: 'https://x' })?.includes('https://x'));
 
 console.log(`\n${falhas === 0 ? '✓' : '✗'} ${ok}/${ok + falhas} asserções`);
-if (ok + falhas < 29) {
+if (ok + falhas < 34) {
   console.error('TESTE INVÁLIDO: rodou menos asserções do que este arquivo declara.');
   process.exit(2);
 }

@@ -193,7 +193,8 @@ export default function GeradorMensagensGrupo() {
             <select value={imovelIndex} onChange={(e) => setImovelIndex(Number(e.target.value))} style={S.input}>
               {dados.oportunidades.map((im, i) => (
                 <option key={i} value={i}>
-                  {String(im.titulo || 'Imóvel').slice(0, 60)} — {im.cidade}/{im.estado} — {Math.round(im.desconto_percentual)}% off
+                  {im.tipo ? `${im.tipo} · ` : ''}{im.cidade}/{im.estado} — {Math.round(im.desconto_percentual)}% off
+                  {im.data_leilao ? '' : ' · sem praça marcada'}
                 </option>
               ))}
             </select>
