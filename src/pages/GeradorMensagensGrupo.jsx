@@ -23,6 +23,7 @@ const TIPOS = [
   { valor: 'urgencia', rotulo: '⏰ Urgência pré-live', desc: 'Escalada por estágio (2h, 1h, 30min, sala aberta).' },
   { valor: 'followup', rotulo: '👋 Follow-up pós-live', desc: 'Convite pra plataforma depois da aula.' },
   { valor: 'oportunidade', rotulo: '🏠 Oportunidade real', desc: 'Um imóvel real do acervo — o link já mostra foto, cidade e preço no WhatsApp.' },
+  { valor: 'loja', rotulo: '📚 Cursos e ebooks', desc: 'Convite pra loja de conteúdo — sem escolher curso específico, a loja já mostra tudo com preço real.' },
 ];
 
 const ESTAGIOS = [
@@ -81,6 +82,7 @@ export default function GeradorMensagensGrupo() {
       urgencia: { estagio },
       followup: {},
       oportunidade: { imovel_index: imovelIndex },
+      loja: {},
     }[tipo];
     try {
       const r = await apiCall('/api/admin-mensagens-grupo', { method: 'POST', body: JSON.stringify({ tipo, dados: extras }) });

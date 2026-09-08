@@ -164,6 +164,10 @@ export function montarOportunidade({ imovel, link }) {
   const praca = String(imovel?.data_leilao || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
   const dataPraca = praca ? `📅 Praça em ${praca[3]}/${praca[2]}/${praca[1]}` : null;
 
+  // 3ª rodada (08/09, pedido do dono): NADA de header gritando "assine agora" — isso soou
+  // chamativo de forma negativa numa versão anterior (testada só como rascunho, nunca foi ao
+  // ar). O pitch do Investidor Pro vira uma DEIXA no final, depois do link, só citando que o
+  // relatório completo existe — a oportunidade real continua sendo o assunto principal.
   return linhas(
     rubrica ? `🔨 OPORTUNIDADE REAL — ${rubrica}` : '🔨 OPORTUNIDADE REAL NO ACERVO',
     '',
@@ -174,12 +178,33 @@ export function montarOportunidade({ imovel, link }) {
     linhaDesconto,
     dataPraca,
     '',
-    'Confira a ficha completa deste imóvel:',
+    'Veja a ficha completa (grátis):',
+    l,
+    '',
+    'Quer saber se esse desconto vira lucro de verdade? O relatório de viabilidade financeira e a análise jurídica completa desse imóvel ficam liberados na assinatura Investidor Pro.',
+  );
+}
+
+// ─── LOJA — convite pra loja de cursos/ebooks, SEM escolher um específico ─────────────────
+// Pedido do dono (08/09): "não é pra criar um aleatório que não existe" — cursos e ebooks já
+// têm loja de verdade (`/membros`, o mesmo catálogo de `src/data/cursos.js`, com preço e
+// programa reais na própria página). Nomear um curso aqui e ter que mantê-lo em dia (ou pior,
+// sortear um) é o risco que essa mensagem evita: não cita título, preço nem quantidade — só
+// aponta pra loja, que está sempre certa porque É a fonte, não uma cópia dela.
+export function montarConteudo({ link }) {
+  const l = String(link || '').trim();
+  if (!l) return null;
+  return linhas(
+    '📚 CURSOS E EBOOKS NA PLATAFORMA',
+    '',
+    'Da introdução gratuita ao avançado de gestão de carteira — tem conteúdo pra cada etapa da sua jornada como investidor de leilão, sempre com preço e programa reais na própria página.',
+    '',
+    'Dá uma olhada:',
     l,
   );
 }
 
-export const TIPOS_VALIDOS = ['convite', 'case', 'educacao', 'enquete', 'urgencia', 'followup', 'oportunidade'];
+export const TIPOS_VALIDOS = ['convite', 'case', 'educacao', 'enquete', 'urgencia', 'followup', 'oportunidade', 'loja'];
 
 export function montarMensagemGrupo(tipo, dados) {
   switch (tipo) {
@@ -190,6 +215,7 @@ export function montarMensagemGrupo(tipo, dados) {
     case 'urgencia': return montarUrgencia(dados);
     case 'followup': return montarFollowup(dados);
     case 'oportunidade': return montarOportunidade(dados);
+    case 'loja': return montarConteudo(dados);
     default: return null;
   }
 }

@@ -10,7 +10,7 @@
  */
 import {
   montarConvite, montarCase, montarEducacao, montarEnquete, montarUrgencia, montarFollowup,
-  montarOportunidade, montarMensagemGrupo,
+  montarOportunidade, montarConteudo, montarMensagemGrupo,
 } from '../../api/_mensagens-grupo.js';
 
 let ok = 0, falhas = 0;
@@ -91,6 +91,11 @@ console.log('\nOPORTUNIDADE — imóvel real do acervo, nunca calcula ou complet
     r?.includes(`R$ ${Math.round(497766.10 - 300000).toLocaleString('pt-BR')}`) && !r.includes('R$ 300.000 de diferença'), r);
   checa('data da praça formatada dd/mm/aaaa', r?.includes('14/09/2026'), r);
   checa('link do imóvel aparece', r?.includes('https://x/i/abc123'), r);
+  // 08/09 (3ª rodada): deixa sobre o Investidor Pro no FINAL, nunca como header gritando.
+  checa('deixa do Investidor Pro aparece, mas depois do link (no final)',
+    r?.includes('Investidor Pro') && r.indexOf('Investidor Pro') > r.indexOf('https://x/i/abc123'), r);
+  checa('nunca vira header chamativo tipo "ASSINE AGORA" ou "DESTRAVE"',
+    !/assine agora|destrave/i.test(r || ''), r);
 }
 checa('modalidade desconhecida/ausente → cabeçalho genérico, não inventa rubrica',
   (() => {
@@ -103,6 +108,19 @@ checa('sem título → null (não inventa nome de imóvel)',
   montarOportunidade({ imovel: { cidade: 'X' }, link: 'https://x' }) === null);
 checa('sem link → null', montarOportunidade({ imovel: { titulo: 'Casa' }, link: '' }) === null);
 checa('sem imóvel nenhum → null', montarOportunidade({ imovel: null, link: 'https://x' }) === null);
+
+console.log('\nLOJA — convite pra loja de conteúdo, nunca cita curso/preço específico');
+{
+  const r = montarConteudo({ link: 'https://x/membros' });
+  checa('link da loja aparece', r?.includes('https://x/membros'), r);
+  // 08/09, achado do dono: "não é pra criar um aleatório que não existe" — nenhum título de
+  // curso, preço ou "R$" pode aparecer aqui; quem tem essa informação é a página real.
+  checa('nunca cita preço (a loja real é quem mostra isso)', !r?.includes('R$'), r);
+  checa('nunca nomeia um curso específico (evita rotação/aleatório que a página já resolve)',
+    !/destravando leilões|leilão seguro|olho do perito|radiografia do imóvel|arte do lance|portfólio lucrativo/i.test(r || ''), r);
+}
+checa('sem link → null', montarConteudo({ link: '' }) === null);
+checa('sem nada → null', montarConteudo({}) === null);
 
 console.log('\nENQUETE — precisa de pergunta + pelo menos 2 opções pra ser enquete de verdade');
 checa('1 opção só → null', montarEnquete({ pergunta: 'Qual?', opcoes: ['Só uma'] }) === null);
@@ -123,9 +141,11 @@ checa('dispatcher chega no formatador certo (convite)',
   montarMensagemGrupo('convite', { titulo: 'X', quando: 'hoje, às 19h', link: 'https://x' })?.includes('X'));
 checa('dispatcher chega no formatador certo (oportunidade)',
   montarMensagemGrupo('oportunidade', { imovel: { titulo: 'Casa' }, link: 'https://x' })?.includes('https://x'));
+checa('dispatcher chega no formatador certo (loja)',
+  montarMensagemGrupo('loja', { link: 'https://x/membros' })?.includes('https://x/membros'));
 
 console.log(`\n${falhas === 0 ? '✓' : '✗'} ${ok}/${ok + falhas} asserções`);
-if (ok + falhas < 34) {
+if (ok + falhas < 41) {
   console.error('TESTE INVÁLIDO: rodou menos asserções do que este arquivo declara.');
   process.exit(2);
 }

@@ -102,6 +102,13 @@ function linkDoImovel(id, edicao) {
   return `${BASE}/i/${id}?utm_source=whatsapp&utm_medium=group&utm_campaign=aula-${edicao}&utm_content=grupo-oportunidade`;
 }
 
+// A loja É `/membros` (mesmo catálogo real de CURSOS/EBOOKS) — sem rota própria de preview
+// (og-share.js não conhece `/membros`, e não precisa: não é UM item pra mostrar foto, é o
+// catálogo inteiro). Hash normal mesmo, `capturarMarketing` lê UTM antes ou depois do `#`.
+function linkLoja(edicao) {
+  return `${BASE}/#/membros?utm_source=whatsapp&utm_medium=group&utm_campaign=aula-${edicao}&utm_content=grupo-loja`;
+}
+
 export default async function handler(req, res) {
   const user = await getUser(req);
   if (!user) return res.status(401).json({ error: 'Não autenticado' });
@@ -140,6 +147,8 @@ export default async function handler(req, res) {
     } else if (tipo === 'oportunidade') {
       const imovel = oportunidades[Number(extras.imovel_index)] || null;
       dados = { imovel, link: imovel ? linkDoImovel(imovel.id, evento.edicao) : null };
+    } else if (tipo === 'loja') {
+      dados = { link: linkLoja(evento.edicao) };
     }
 
     const texto = montarMensagemGrupo(tipo, dados);
