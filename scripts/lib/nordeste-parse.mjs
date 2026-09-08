@@ -77,19 +77,19 @@ export function parseDetalhe(html, url) {
   let minimo = plaus(num(m2?.[1])) || plaus(num(m1?.[1])) || avaliacao;
   if (!avaliacao) avaliacao = minimo;
 
-  // NÃO É IMÓVEL (08/09) — o acervo do NORDESTE vem de varas federais/criminais, que
-  // leiloam qualquer bem apreendido, não só imóvel. Achado em recon ao vivo: de 3 lotes
-  // "prontos" numa amostra, 2 eram carro/caminhão ("Veiculo Vwgol...", "Caminhao
-  // Volvofh..."), um deles com desconto de -9035% (valor de campo de veículo lido como
-  // se fosse avaliação/lance de imóvel). `inferirTipo()`/`checarQualidade()` não filtram
-  // por tipo de bem — mesmo detector já usado em ALBERTOMACEDO para essa MESMA classe de
-  // contaminação: zera o valor para `checarQualidade` descartar a linha (sem valor, sem
-  // lote), em vez de inventar uma categoria "veículo" nova.
-  if (/\bplaca\b|\brenavam\b|\bchassi\b|combust[íi]vel|quilometragem|\bkm\s*rodados?\b|\bve[íi]culo\b|\bcaminh[ãa]o\b|\bmotocicleta\b/i.test(txt + ' ' + slug)) {
-    avaliacao = 0; minimo = 0;
-  }
-
   const { estado, area, cidade } = doSlug(slug);
+
+  // NÃO É IMÓVEL (08/09) — o acervo do NORDESTE vem de varas federais/criminais, que
+  // leiloam qualquer bem apreendido: 3 rodadas de validação ao vivo acharam veículo
+  // ("Veiculo Vwgol..."), sucata de moto ("Sucata...Honda Cg Titan") E maquinário
+  // ("Equipamentos Industriais") na MESMA amostra pequena de 7 lotes — 3 categorias
+  // diferentes de bem não-imóvel, sinal de que o acervo real desta fonte é bem mais
+  // misto do que só "alguns veículos". Uma lista de palavras PROIBIDAS vira caça ao
+  // gambá: sempre falta a próxima categoria (aconteceu 2x seguidas aqui). Trocado por
+  // uma lista de palavras PERMITIDAS — só passa quem tem sinal de imóvel de verdade no
+  // slug (tipo ou medida de área/terreno), critério mais estreito e mais estável.
+  const ehImovel = area > 0 || /imov|casa|apartamento|terreno|lote|galp[ãa]o|ch[áa]cara|s[íi]tio|fazenda|pr[ée]dio|sobrado|kitnet|cobertura|comercial|residencial|\d+\s*x\s*\d+\s*m?\b/i.test(slug);
+  if (!ehImovel) { avaliacao = 0; minimo = 0; }
   const datas = datasPorExtenso(txt).sort((a, b) => a - b);
   const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
   const fut = datas.find(d => d >= hoje) || datas[datas.length - 1] || null;
