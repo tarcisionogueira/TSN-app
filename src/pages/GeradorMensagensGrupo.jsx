@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { apiCall } from '../utils/apiCall';
+import { formatarPreco } from '../data/cursos';
 
 /**
  * GERADOR DE MENSAGENS DO GRUPO — aquecimento diário do grupo de WhatsApp da aula ao vivo.
@@ -23,7 +24,9 @@ const TIPOS = [
   { valor: 'urgencia', rotulo: '⏰ Urgência pré-live', desc: 'Escalada por estágio (2h, 1h, 30min, sala aberta).' },
   { valor: 'followup', rotulo: '👋 Follow-up pós-live', desc: 'Convite pra plataforma depois da aula.' },
   { valor: 'oportunidade', rotulo: '🏠 Oportunidade real', desc: 'Um imóvel real do acervo — o link já mostra foto, cidade e preço no WhatsApp.' },
-  { valor: 'loja', rotulo: '📚 Cursos e ebooks', desc: 'Convite pra loja de conteúdo — sem escolher curso específico, a loja já mostra tudo com preço real.' },
+  { valor: 'curso', rotulo: '🎓 Curso pago', desc: 'Um curso real cadastrado e ativo em cursos_admin, com preço de verdade.' },
+  { valor: 'assessoria', rotulo: '🤝 Assessoria', desc: 'Plano Assessoria (dado real de PLANOS.assessorado) — leva pro checkout.' },
+  { valor: 'assinatura', rotulo: '📊 Investidor Pro', desc: 'Plano Investidor Pro (dado real de PLANOS.top2) — leva pro checkout.' },
 ];
 
 const ESTAGIOS = [
@@ -54,6 +57,7 @@ export default function GeradorMensagensGrupo() {
   const [destaqueIndex, setDestaqueIndex] = useState(0);
   const [depoimentoIndex, setDepoimentoIndex] = useState(0);
   const [imovelIndex, setImovelIndex] = useState(0);
+  const [cursoIndex, setCursoIndex] = useState(0);
   const [mito, setMito] = useState('');
   const [verdade, setVerdade] = useState('');
   const [pergunta, setPergunta] = useState('Qual tipo de imóvel faz mais sentido pra você agora?');
@@ -82,7 +86,9 @@ export default function GeradorMensagensGrupo() {
       urgencia: { estagio },
       followup: {},
       oportunidade: { imovel_index: imovelIndex },
-      loja: {},
+      curso: { curso_index: cursoIndex },
+      assessoria: {},
+      assinatura: {},
     }[tipo];
     try {
       const r = await apiCall('/api/admin-mensagens-grupo', { method: 'POST', body: JSON.stringify({ tipo, dados: extras }) });
@@ -202,6 +208,21 @@ export default function GeradorMensagensGrupo() {
             </select>
           ) : (
             <div style={{ fontSize: 13, color: '#b45309' }}>Nenhum imóvel com desconto ≥30% e foto no acervo agora.</div>
+          )}
+        </div>
+      )}
+
+      {tipo === 'curso' && (
+        <div style={S.caixa}>
+          <label style={S.label}>Curso pago (cadastrado e ativo em cursos_admin)</label>
+          {dados.cursos_pagos?.length > 0 ? (
+            <select value={cursoIndex} onChange={(e) => setCursoIndex(Number(e.target.value))} style={S.input}>
+              {dados.cursos_pagos.map((c, i) => (
+                <option key={i} value={i}>{c.titulo} — {formatarPreco(c.preco)}</option>
+              ))}
+            </select>
+          ) : (
+            <div style={{ fontSize: 13, color: '#b45309' }}>Nenhum curso pago ativo em cursos_admin ainda — cadastre e ative um em Admin → Ebooks/Cursos pra esta opção aparecer.</div>
           )}
         </div>
       )}

@@ -102,11 +102,31 @@ function linkDoImovel(id, edicao) {
   return `${BASE}/i/${id}?utm_source=whatsapp&utm_medium=group&utm_campaign=aula-${edicao}&utm_content=grupo-oportunidade`;
 }
 
-// A loja É `/membros` (mesmo catálogo real de CURSOS/EBOOKS) — sem rota própria de preview
-// (og-share.js não conhece `/membros`, e não precisa: não é UM item pra mostrar foto, é o
-// catálogo inteiro). Hash normal mesmo, `capturarMarketing` lê UTM antes ou depois do `#`.
-function linkLoja(edicao) {
-  return `${BASE}/#/membros?utm_source=whatsapp&utm_medium=group&utm_campaign=aula-${edicao}&utm_content=grupo-loja`;
+// `/p/curso/:id` (og-share.js) só tem preview rico pros cursos do array ESTÁTICO — os de
+// `cursos_admin` cairiam no cartão genérico ali (gap conhecido, fora do escopo desta
+// mensagem). Vai direto pro hash: carrega o curso CERTO, só sem foto no preview do WhatsApp.
+function linkCurso(id, edicao) {
+  return `${BASE}/#/p/curso/${id}?utm_source=whatsapp&utm_medium=group&utm_campaign=aula-${edicao}&utm_content=grupo-curso`;
+}
+
+// Mesma rota pública que `Planos.jsx` usa pra compartilhar cada plano (`compartilharPlano`) —
+// `/checkout` é público e apresenta o plano + cadastro/pagamento inline pra quem não tem conta.
+function linkPlano(chave, edicao, tipo) {
+  return `${BASE}/#/checkout?plano=${chave}&utm_source=whatsapp&utm_medium=group&utm_campaign=aula-${edicao}&utm_content=grupo-${tipo}`;
+}
+
+// Candidatos reais pro tipo "curso" — só o que o admin CADASTROU e ATIVOU em `cursos_admin`
+// com preço de verdade (pago). Hoje pode devolver lista vazia (achado do dono, 08/09: só
+// existe 1 curso ativo e é grátis) — o formatador já sabe devolver `null` nesse caso.
+async function buscarCursosPagos() {
+  const r = await sb(
+    'cursos_admin?ativo=eq.true&gratuito=eq.false&preco=gt.0' +
+    '&select=id,titulo,subtitulo,descricao,emoji,nivel,categoria,preco' +
+    '&order=destaque.desc,ordem.asc&limit=10'
+  );
+  if (!r.ok) { console.error('[mensagens-grupo] nao consegui ler cursos_admin:', await r.text()); return []; }
+  const rows = await r.json().catch(() => null);
+  return Array.isArray(rows) ? rows : [];
 }
 
 export default async function handler(req, res) {
@@ -123,6 +143,7 @@ export default async function handler(req, res) {
   if (!evento) return res.status(200).json({ evento: null, motivo: 'nenhuma aula futura ativa' });
 
   const oportunidades = await buscarOportunidades();
+  const cursosPagos = await buscarCursosPagos();
 
   if (req.method === 'POST') {
     const tipo = String(req.body?.tipo || '');
@@ -147,8 +168,13 @@ export default async function handler(req, res) {
     } else if (tipo === 'oportunidade') {
       const imovel = oportunidades[Number(extras.imovel_index)] || null;
       dados = { imovel, link: imovel ? linkDoImovel(imovel.id, evento.edicao) : null };
-    } else if (tipo === 'loja') {
-      dados = { link: linkLoja(evento.edicao) };
+    } else if (tipo === 'curso') {
+      const curso = cursosPagos[Number(extras.curso_index)] || null;
+      dados = { curso, link: curso ? linkCurso(curso.id, evento.edicao) : null };
+    } else if (tipo === 'assessoria') {
+      dados = { link: linkPlano('assessorado', evento.edicao, 'assessoria') };
+    } else if (tipo === 'assinatura') {
+      dados = { link: linkPlano('top2', evento.edicao, 'assinatura') };
     }
 
     const texto = montarMensagemGrupo(tipo, dados);
@@ -178,6 +204,7 @@ export default async function handler(req, res) {
       vagas_max: evento.vagas_max, depoimentos: evento.depoimentos, apresentador_destaques: evento.apresentador_destaques,
     },
     oportunidades,
+    cursos_pagos: cursosPagos,
     geradas_hoje: geradasHoje,
   });
 }

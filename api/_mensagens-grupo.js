@@ -15,8 +15,10 @@
  *
  * `npm run testar:mensagem-grupo` cobre os invariantes de cada função.
  */
+import { PLANOS, formatarPreco } from '../src/data/cursos.js';
 
 const linhas = (...ls) => ls.filter((l) => l !== null && l !== undefined).join('\n');
+const RECURSOS_MOSTRADOS = 4; // top N da lista real de `recursos` — a completa é longa demais pra WhatsApp
 
 // ─── CONVITE — motivação/preview, usa o que já existe em eventos_live ──────────────────────
 // NUNCA pede pra "garantir vaga" (08/09, achado do dono): quem lê isto já está DENTRO do
@@ -185,26 +187,84 @@ export function montarOportunidade({ imovel, link }) {
   );
 }
 
-// ─── LOJA — convite pra loja de cursos/ebooks, SEM escolher um específico ─────────────────
-// Pedido do dono (08/09): "não é pra criar um aleatório que não existe" — cursos e ebooks já
-// têm loja de verdade (`/membros`, o mesmo catálogo de `src/data/cursos.js`, com preço e
-// programa reais na própria página). Nomear um curso aqui e ter que mantê-lo em dia (ou pior,
-// sortear um) é o risco que essa mensagem evita: não cita título, preço nem quantidade — só
-// aponta pra loja, que está sempre certa porque É a fonte, não uma cópia dela.
-export function montarConteudo({ link }) {
+// ─── CURSO PAGO — vem de `cursos_admin` (o cadastro REAL do admin), não do array estático ──
+// Correção do dono (08/09): a 1ª versão desta mensagem citava conteúdo do array estático
+// `src/data/cursos.js`/CURSOS — que a própria tela de Membros NÃO usa mais (ela lê
+// `cursos_admin` direto). "Não é pra criar um aleatório que não existe": o catálogo que
+// vale é o que o admin efetivamente CADASTROU e ATIVOU ali, hoje pode ter zero cursos pagos
+// prontos — e aí esta função devolve `null` como qualquer outra sem dado suficiente, nunca
+// inventa um curso pra preencher a mensagem.
+export function montarCurso({ curso, link }) {
+  const titulo = String(curso?.titulo || '').trim();
   const l = String(link || '').trim();
-  if (!l) return null;
+  const preco = Number(curso?.preco) || 0;
+  if (!titulo || !l || preco <= 0) return null; // "pago" sem preço real cadastrado não anuncia
+  const emoji = String(curso?.emoji || '').trim() || '🎓';
+  const subtitulo = String(curso?.subtitulo || '').trim();
+  const descBruta = String(curso?.descricao || '').trim();
+  const descricao = descBruta.length > 220 ? `${descBruta.slice(0, 220).trim()}…` : descBruta;
+  const nivel = String(curso?.nivel || '').trim();
   return linhas(
-    '📚 CURSOS E EBOOKS NA PLATAFORMA',
+    `${emoji} CURSO DISPONÍVEL`,
     '',
-    'Da introdução gratuita ao avançado de gestão de carteira — tem conteúdo pra cada etapa da sua jornada como investidor de leilão, sempre com preço e programa reais na própria página.',
+    titulo,
+    subtitulo || null,
     '',
-    'Dá uma olhada:',
+    descricao || null,
+    '',
+    nivel ? `Nível: ${nivel}` : null,
+    `💰 ${formatarPreco(preco)}`,
+    '',
+    'Conheça o curso:',
     l,
   );
 }
 
-export const TIPOS_VALIDOS = ['convite', 'case', 'educacao', 'enquete', 'urgencia', 'followup', 'oportunidade', 'loja'];
+// ─── ASSESSORIA — dado real de PLANOS.assessorado (a mesma fonte que a tela de Planos usa) ─
+export function montarAssessoria({ link }) {
+  const l = String(link || '').trim();
+  if (!l) return null;
+  const p = PLANOS.assessorado;
+  const recursos = (p.recursos || []).slice(0, RECURSOS_MOSTRADOS);
+  const preco = `${p.precoLabel}${p.precoVistaLabel ? ` (${p.precoVistaLabel} à vista)` : ''} ${p.periodicidade || ''}`.trim();
+  // `p.honorarios` já vem com o "+" (ex.: "+10% de honorários..."), então NÃO prefixa outro —
+  // o teste real pegou "por arrematação + +10%..." antes deste ajuste (sinal duplicado).
+  return linhas(
+    `🤝 ${String(p.nome || 'Assessoria').toUpperCase()} BIDPRO BRASIL`,
+    '',
+    p.descricao || null,
+    '',
+    ...recursos,
+    '',
+    `💰 ${preco}${p.honorarios ? ` ${p.honorarios}` : ''}`,
+    '',
+    'Veja como funciona:',
+    l,
+  );
+}
+
+// ─── ASSINATURA (Investidor Pro) — dado real de PLANOS.top2 ────────────────────────────────
+export function montarAssinatura({ link }) {
+  const l = String(link || '').trim();
+  if (!l) return null;
+  const p = PLANOS.top2;
+  const recursos = (p.recursos || []).slice(0, RECURSOS_MOSTRADOS);
+  const preco = `${p.precoLabel}${p.periodicidade || ''}${p.precoMensalAnualLabel ? ` (${p.precoMensalAnualLabel}/mês no plano anual)` : ''}`;
+  return linhas(
+    `📊 ${String(p.nome || 'Investidor Pro').toUpperCase()}`,
+    '',
+    p.descricao || null,
+    '',
+    ...recursos,
+    '',
+    `💰 ${preco}`,
+    '',
+    'Conheça o plano:',
+    l,
+  );
+}
+
+export const TIPOS_VALIDOS = ['convite', 'case', 'educacao', 'enquete', 'urgencia', 'followup', 'oportunidade', 'curso', 'assessoria', 'assinatura'];
 
 export function montarMensagemGrupo(tipo, dados) {
   switch (tipo) {
@@ -215,7 +275,9 @@ export function montarMensagemGrupo(tipo, dados) {
     case 'urgencia': return montarUrgencia(dados);
     case 'followup': return montarFollowup(dados);
     case 'oportunidade': return montarOportunidade(dados);
-    case 'loja': return montarConteudo(dados);
+    case 'curso': return montarCurso(dados);
+    case 'assessoria': return montarAssessoria(dados);
+    case 'assinatura': return montarAssinatura(dados);
     default: return null;
   }
 }

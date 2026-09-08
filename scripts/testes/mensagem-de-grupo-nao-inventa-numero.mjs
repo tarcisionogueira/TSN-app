@@ -10,7 +10,7 @@
  */
 import {
   montarConvite, montarCase, montarEducacao, montarEnquete, montarUrgencia, montarFollowup,
-  montarOportunidade, montarConteudo, montarMensagemGrupo,
+  montarOportunidade, montarCurso, montarAssessoria, montarAssinatura, montarMensagemGrupo,
 } from '../../api/_mensagens-grupo.js';
 
 let ok = 0, falhas = 0;
@@ -109,18 +109,47 @@ checa('sem título → null (não inventa nome de imóvel)',
 checa('sem link → null', montarOportunidade({ imovel: { titulo: 'Casa' }, link: '' }) === null);
 checa('sem imóvel nenhum → null', montarOportunidade({ imovel: null, link: 'https://x' }) === null);
 
-console.log('\nLOJA — convite pra loja de conteúdo, nunca cita curso/preço específico');
+console.log('\nCURSO PAGO — vem de cursos_admin (cadastro real), nunca do array estático');
 {
-  const r = montarConteudo({ link: 'https://x/membros' });
-  checa('link da loja aparece', r?.includes('https://x/membros'), r);
-  // 08/09, achado do dono: "não é pra criar um aleatório que não existe" — nenhum título de
-  // curso, preço ou "R$" pode aparecer aqui; quem tem essa informação é a página real.
-  checa('nunca cita preço (a loja real é quem mostra isso)', !r?.includes('R$'), r);
-  checa('nunca nomeia um curso específico (evita rotação/aleatório que a página já resolve)',
-    !/destravando leilões|leilão seguro|olho do perito|radiografia do imóvel|arte do lance|portfólio lucrativo/i.test(r || ''), r);
+  // fixture no formato de uma linha REAL de cursos_admin (não o array estático CURSOS)
+  const curso = {
+    titulo: 'Radiografia do Edital', subtitulo: 'Leia edital e matrícula como um advogado',
+    descricao: 'Curso cadastrado pelo admin em cursos_admin.', emoji: '📋', nivel: 'Intermediário',
+    preco: 147,
+  };
+  const r = montarCurso({ curso, link: 'https://x/p/curso/abc' });
+  checa('título real do curso aparece', r?.includes('Radiografia do Edital'), r);
+  checa('preço real formatado aparece (formatarPreco, mesma função da tela de Planos)', r?.includes('R$ 147,00'), r);
+  checa('nível aparece', r?.includes('Intermediário'), r);
+  checa('link aparece', r?.includes('https://x/p/curso/abc'), r);
 }
-checa('sem link → null', montarConteudo({ link: '' }) === null);
-checa('sem nada → null', montarConteudo({}) === null);
+checa('preço 0 (curso "pago" sem preço real cadastrado) → null, não anuncia',
+  montarCurso({ curso: { titulo: 'X', preco: 0 }, link: 'https://x' }) === null);
+checa('sem preço nenhum → null', montarCurso({ curso: { titulo: 'X' }, link: 'https://x' }) === null);
+checa('sem título → null', montarCurso({ curso: { preco: 100 }, link: 'https://x' }) === null);
+checa('sem link → null', montarCurso({ curso: { titulo: 'X', preco: 100 }, link: '' }) === null);
+
+console.log('\nASSESSORIA — dado real de PLANOS.assessorado (mesma fonte da tela de Planos)');
+{
+  const r = montarAssessoria({ link: 'https://x/checkout?plano=assessorado' });
+  checa('preço real (R$ 6.000,00) aparece', r?.includes('R$ 6.000,00'), r);
+  checa('preço à vista real (R$ 4.800,00) aparece', r?.includes('R$ 4.800,00'), r);
+  checa('honorários reais aparecem (não inventa outro %)', r?.includes('10% de honorários'), r);
+  checa('link aparece', r?.includes('https://x/checkout?plano=assessorado'), r);
+  checa('nunca vira header chamativo tipo "CONTRATE AGORA"', !/contrate agora|assine agora/i.test(r || ''), r);
+}
+checa('sem link → null', montarAssessoria({ link: '' }) === null);
+
+console.log('\nASSINATURA (Investidor Pro) — dado real de PLANOS.top2');
+{
+  const r = montarAssinatura({ link: 'https://x/checkout?plano=top2' });
+  checa('nome real do plano aparece', r?.includes('INVESTIDOR PRO'), r);
+  checa('preço mensal real (R$ 49,90) aparece', r?.includes('R$ 49,90'), r);
+  checa('preço anual real (R$ 37,49/mês) aparece', r?.includes('R$ 37,49'), r);
+  checa('link aparece', r?.includes('https://x/checkout?plano=top2'), r);
+  checa('nunca vira header chamativo tipo "DESTRAVE"/"ASSINE AGORA"', !/destrave|assine agora/i.test(r || ''), r);
+}
+checa('sem link → null', montarAssinatura({ link: '' }) === null);
 
 console.log('\nENQUETE — precisa de pergunta + pelo menos 2 opções pra ser enquete de verdade');
 checa('1 opção só → null', montarEnquete({ pergunta: 'Qual?', opcoes: ['Só uma'] }) === null);
@@ -141,11 +170,15 @@ checa('dispatcher chega no formatador certo (convite)',
   montarMensagemGrupo('convite', { titulo: 'X', quando: 'hoje, às 19h', link: 'https://x' })?.includes('X'));
 checa('dispatcher chega no formatador certo (oportunidade)',
   montarMensagemGrupo('oportunidade', { imovel: { titulo: 'Casa' }, link: 'https://x' })?.includes('https://x'));
-checa('dispatcher chega no formatador certo (loja)',
-  montarMensagemGrupo('loja', { link: 'https://x/membros' })?.includes('https://x/membros'));
+checa('dispatcher chega no formatador certo (curso)',
+  montarMensagemGrupo('curso', { curso: { titulo: 'X', preco: 100 }, link: 'https://x' })?.includes('https://x'));
+checa('dispatcher chega no formatador certo (assessoria)',
+  montarMensagemGrupo('assessoria', { link: 'https://x' })?.includes('https://x'));
+checa('dispatcher chega no formatador certo (assinatura)',
+  montarMensagemGrupo('assinatura', { link: 'https://x' })?.includes('https://x'));
 
 console.log(`\n${falhas === 0 ? '✓' : '✗'} ${ok}/${ok + falhas} asserções`);
-if (ok + falhas < 41) {
+if (ok + falhas < 56) {
   console.error('TESTE INVÁLIDO: rodou menos asserções do que este arquivo declara.');
   process.exit(2);
 }
