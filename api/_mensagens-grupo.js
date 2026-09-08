@@ -19,6 +19,11 @@
 const linhas = (...ls) => ls.filter((l) => l !== null && l !== undefined).join('\n');
 
 // ─── CONVITE — motivação/preview, usa o que já existe em eventos_live ──────────────────────
+// NUNCA pede pra "garantir vaga" (08/09, achado do dono): quem lê isto já está DENTRO do
+// grupo, e a única porta de entrada do grupo é a confirmação em `/aula/:slug`
+// (LiveInscricao.jsx: "é ali que entra o grupo") — ou seja, 100% de quem recebe esta
+// mensagem já garantiu a vaga dele. Pedir de novo é ruído. O CTA vira convite pra INDICAR,
+// que é a única ação que ainda faz sentido pra quem já confirmou.
 export function montarConvite({ titulo, quando, destaque, link }) {
   const t = String(titulo || '').trim();
   const l = String(link || '').trim();
@@ -29,7 +34,7 @@ export function montarConvite({ titulo, quando, destaque, link }) {
     `*${t}*`,
     destaque ? `\n💡 ${String(destaque).trim()}` : null,
     '',
-    'Participação gratuita — garanta sua vaga:',
+    'Sua vaga já está garantida — chama quem você conhece que ainda não confirmou:',
     l,
   );
 }
@@ -91,11 +96,13 @@ export function montarUrgencia({ titulo, quando, estagio, vagasMax, link }) {
   const l = String(link || '').trim();
   const cab = CABECALHOS_URGENCIA[estagio];
   if (!t || !l || !quando || !cab) return null;
-  const vaga = Number.isFinite(vagasMax) && vagasMax > 0 ? `Vagas limitadas: ${vagasMax}.` : null;
+  // Mesmo raciocínio do convite: quem está no grupo já garantiu a vaga dele. "Vagas" aqui
+  // é sobre quem AINDA VAI ser chamado, não sobre quem já está lendo.
+  const vaga = Number.isFinite(vagasMax) && vagasMax > 0 ? `Vagas para convidar: ${vagasMax}.` : null;
   if (estagio === 't-10min') {
     return linhas(cab, '', `A aula já pode ser acessada — começamos ${quando}.`, '', `*${t}*`, '', l);
   }
-  return linhas(cab, '', `A aula é ${quando}:`, '', `*${t}*`, '', vaga, `Garanta sua vaga: ${l}`);
+  return linhas(cab, '', `A aula é ${quando}:`, '', `*${t}*`, '', vaga, `Sua vaga já está garantida — chama quem ainda não confirmou: ${l}`);
 }
 
 // ─── FOLLOW-UP PÓS-LIVE — sem prazo de replay inventado, só o convite pra plataforma ───────
@@ -112,7 +119,38 @@ export function montarFollowup({ titulo, link }) {
   );
 }
 
-export const TIPOS_VALIDOS = ['convite', 'case', 'educacao', 'enquete', 'urgencia', 'followup'];
+// ─── OPORTUNIDADE — imóvel real do acervo, mesmo link que o botão Compartilhar usa ─────────
+// `imovel` vem de `imoveis_leilao` (api/admin-mensagens-grupo.js busca a lista real) — mesmas
+// colunas que api/og-share.js já usa no cartão de `/i/:id`, pedido do dono 08/09 ("mandar
+// oportunidades compartilhando os imóveis como já temos essa função"). O link SEM hash gera o
+// preview com FOTO sozinho no WhatsApp — o texto aqui só complementa (lance/desconto/praça),
+// nunca repete o que a foto/título do cartão já mostra. Nenhum número é calculado aqui: lance,
+// avaliação e desconto vêm prontos do acervo, igual ao og-share.
+export function montarOportunidade({ imovel, link }) {
+  const titulo = String(imovel?.titulo || '').trim();
+  const l = String(link || '').trim();
+  if (!titulo || !l) return null;
+  const onde = [imovel?.bairro, imovel?.cidade].filter(Boolean).join(', ');
+  const local = onde ? `${onde}${imovel?.estado ? '/' + imovel.estado : ''}` : (imovel?.cidade || null);
+  const lance = Number(imovel?.valor_minimo) > 0
+    ? `Lance a partir de R$ ${Math.round(Number(imovel.valor_minimo)).toLocaleString('pt-BR')}`
+    : null;
+  const desconto = Math.round(Number(imovel?.desconto_percentual) || 0);
+  const praca = String(imovel?.data_leilao || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  const dataPraca = praca ? `Praça em ${praca[3]}/${praca[2]}/${praca[1]}` : null;
+  return linhas(
+    '🏠 OPORTUNIDADE NO ACERVO',
+    '',
+    local,
+    lance,
+    desconto > 0 ? `${desconto}% abaixo da avaliação` : null,
+    dataPraca,
+    '',
+    l,
+  );
+}
+
+export const TIPOS_VALIDOS = ['convite', 'case', 'educacao', 'enquete', 'urgencia', 'followup', 'oportunidade'];
 
 export function montarMensagemGrupo(tipo, dados) {
   switch (tipo) {
@@ -122,6 +160,7 @@ export function montarMensagemGrupo(tipo, dados) {
     case 'enquete': return montarEnquete(dados);
     case 'urgencia': return montarUrgencia(dados);
     case 'followup': return montarFollowup(dados);
+    case 'oportunidade': return montarOportunidade(dados);
     default: return null;
   }
 }

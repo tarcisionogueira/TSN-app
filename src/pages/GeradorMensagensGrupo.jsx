@@ -22,6 +22,7 @@ const TIPOS = [
   { valor: 'enquete', rotulo: '📊 Enquete', desc: 'Pergunta + até 4 opções.' },
   { valor: 'urgencia', rotulo: '⏰ Urgência pré-live', desc: 'Escalada por estágio (2h, 1h, 30min, sala aberta).' },
   { valor: 'followup', rotulo: '👋 Follow-up pós-live', desc: 'Convite pra plataforma depois da aula.' },
+  { valor: 'oportunidade', rotulo: '🏠 Oportunidade real', desc: 'Um imóvel real do acervo — o link já mostra foto, cidade e preço no WhatsApp.' },
 ];
 
 const ESTAGIOS = [
@@ -51,6 +52,7 @@ export default function GeradorMensagensGrupo() {
   // (ex.: mito de uma pergunta indo pra dentro de uma enquete de outra).
   const [destaqueIndex, setDestaqueIndex] = useState(0);
   const [depoimentoIndex, setDepoimentoIndex] = useState(0);
+  const [imovelIndex, setImovelIndex] = useState(0);
   const [mito, setMito] = useState('');
   const [verdade, setVerdade] = useState('');
   const [pergunta, setPergunta] = useState('Qual tipo de imóvel faz mais sentido pra você agora?');
@@ -78,6 +80,7 @@ export default function GeradorMensagensGrupo() {
       enquete: { pergunta, opcoes },
       urgencia: { estagio },
       followup: {},
+      oportunidade: { imovel_index: imovelIndex },
     }[tipo];
     try {
       const r = await apiCall('/api/admin-mensagens-grupo', { method: 'POST', body: JSON.stringify({ tipo, dados: extras }) });
@@ -180,6 +183,23 @@ export default function GeradorMensagensGrupo() {
             <input key={i} value={o} onChange={(e) => setOpcoes((arr) => arr.map((v, j) => (j === i ? e.target.value : v)))}
               style={{ ...S.input, marginBottom: 6 }} />
           ))}
+        </div>
+      )}
+
+      {tipo === 'oportunidade' && (
+        <div style={S.caixa}>
+          <label style={S.label}>Imóvel do acervo</label>
+          {dados.oportunidades?.length > 0 ? (
+            <select value={imovelIndex} onChange={(e) => setImovelIndex(Number(e.target.value))} style={S.input}>
+              {dados.oportunidades.map((im, i) => (
+                <option key={i} value={i}>
+                  {String(im.titulo || 'Imóvel').slice(0, 60)} — {im.cidade}/{im.estado} — {Math.round(im.desconto_percentual)}% off
+                </option>
+              ))}
+            </select>
+          ) : (
+            <div style={{ fontSize: 13, color: '#b45309' }}>Nenhum imóvel com desconto ≥30% e foto no acervo agora.</div>
+          )}
         </div>
       )}
 

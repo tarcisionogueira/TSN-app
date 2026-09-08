@@ -1,6 +1,7 @@
 /**
  * GET  /api/admin-mensagens-grupo  → dado real da aula viva (título, quando, depoimentos,
- *                                     destaques do apresentador, vagas) + o que já foi gerado
+ *                                     destaques do apresentador, vagas), a lista de imóveis
+ *                                     reais candidatos a "oportunidade" + o que já foi gerado
  *                                     hoje (evita gerar/postar a mesma coisa duas vezes).
  * POST /api/admin-mensagens-grupo  → gera o texto de UM tipo de mensagem { tipo, ...extras } e
  *                                     grava em `mensagens_grupo_log`.
@@ -71,6 +72,25 @@ function linkDaAula(slug, edicao, tipo) {
   return `${BASE}/aula/${slug}?utm_source=whatsapp&utm_medium=group&utm_campaign=aula-${edicao}&utm_content=grupo-${tipo}`;
 }
 
+// Candidatos reais pro tipo "oportunidade" (08/09) — MESMAS colunas que api/og-share.js já
+// lê pro cartão de `/i/:id` (nenhuma leitura nova, só reaproveitada). Só ativos, com foto (o
+// link vale pela FOTO no preview do WhatsApp) e desconto real de pelo menos 30% — o admin
+// ainda escolhe qual mostrar no dropdown, isto só evita catar manualmente no Admin.
+async function buscarOportunidades() {
+  const r = await sb(
+    'imoveis_leilao?ativo=eq.true&link_foto=not.is.null&desconto_percentual=gte.30' +
+    '&select=id,titulo,cidade,estado,bairro,valor_minimo,valor_avaliacao,desconto_percentual,data_leilao,link_foto' +
+    '&order=desconto_percentual.desc&limit=10'
+  );
+  if (!r.ok) { console.error('[mensagens-grupo] nao consegui ler oportunidades:', await r.text()); return []; }
+  const rows = await r.json().catch(() => null);
+  return Array.isArray(rows) ? rows : [];
+}
+
+function linkDoImovel(id, edicao) {
+  return `${BASE}/i/${id}?utm_source=whatsapp&utm_medium=group&utm_campaign=aula-${edicao}&utm_content=grupo-oportunidade`;
+}
+
 export default async function handler(req, res) {
   const user = await getUser(req);
   if (!user) return res.status(401).json({ error: 'Não autenticado' });
@@ -83,6 +103,8 @@ export default async function handler(req, res) {
   const { evento, erro } = await buscarAulaViva();
   if (erro) return res.status(erro.status).json(erro.body);
   if (!evento) return res.status(200).json({ evento: null, motivo: 'nenhuma aula futura ativa' });
+
+  const oportunidades = await buscarOportunidades();
 
   if (req.method === 'POST') {
     const tipo = String(req.body?.tipo || '');
@@ -104,6 +126,9 @@ export default async function handler(req, res) {
       dados = { titulo: evento.titulo, quando: evento.quando, estagio: extras.estagio, vagasMax: evento.vagas_max, link };
     } else if (tipo === 'followup') {
       dados = { titulo: evento.titulo, link };
+    } else if (tipo === 'oportunidade') {
+      const imovel = oportunidades[Number(extras.imovel_index)] || null;
+      dados = { imovel, link: imovel ? linkDoImovel(imovel.id, evento.edicao) : null };
     }
 
     const texto = montarMensagemGrupo(tipo, dados);
@@ -132,6 +157,7 @@ export default async function handler(req, res) {
       slug: evento.slug, titulo: evento.titulo, quando: evento.quando, edicao: evento.edicao,
       vagas_max: evento.vagas_max, depoimentos: evento.depoimentos, apresentador_destaques: evento.apresentador_destaques,
     },
+    oportunidades,
     geradas_hoje: geradasHoje,
   });
 }

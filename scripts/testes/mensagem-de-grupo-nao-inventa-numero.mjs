@@ -10,7 +10,7 @@
  */
 import {
   montarConvite, montarCase, montarEducacao, montarEnquete, montarUrgencia, montarFollowup,
-  montarMensagemGrupo,
+  montarOportunidade, montarMensagemGrupo,
 } from '../../api/_mensagens-grupo.js';
 
 let ok = 0, falhas = 0;
@@ -54,6 +54,9 @@ console.log('\nURGÊNCIA PRÉ-LIVE — vagas só aparecem quando o evento tem te
   checa('estágio desconhecido → null (não inventa um estágio genérico)',
     montarUrgencia({ ...base, estagio: 't-3dias' }) === null);
   checa('sem link → null', montarUrgencia({ ...base, estagio: 't-2h', link: '' }) === null);
+  // 08/09: quem lê já confirmou vaga (só entra no grupo confirmando) — pedir de novo é ruído.
+  checa('nunca pede "garanta sua vaga" pra quem já tá dentro', !comVaga?.toLowerCase().includes('garanta sua vaga'), comVaga);
+  checa('CTA vira indicação, não registro', comVaga?.includes('chama quem ainda não confirmou'), comVaga);
 }
 
 console.log('\nCONVITE — omite a linha de destaque quando nenhum é passado, nunca "undefined"');
@@ -63,7 +66,29 @@ console.log('\nCONVITE — omite a linha de destaque quando nenhum é passado, n
   checa('sem destaque → sem "undefined" em lugar nenhum', !semDestaque?.includes('undefined'), semDestaque);
   const comDestaque = montarConvite({ ...base, destaque: 'Mais de R$ 70 milhões em operações conduzidas.' });
   checa('com destaque → aparece literal', comDestaque?.includes('R$ 70 milhões'), comDestaque);
+  // 08/09, achado do dono: mensagem de grupo não pode convidar quem já está dentro do grupo.
+  checa('nunca pede "garanta sua vaga" pra quem já tá dentro', !semDestaque?.toLowerCase().includes('garanta sua vaga'), semDestaque);
+  checa('CTA vira indicação, não registro', semDestaque?.includes('chama quem você conhece'), semDestaque);
 }
+
+console.log('\nOPORTUNIDADE — imóvel real do acervo, nunca calcula ou completa número sozinho');
+{
+  const imovel = {
+    titulo: 'Apartamento em leilão', cidade: 'Goiânia', estado: 'GO', bairro: null,
+    valor_minimo: 248883.05, valor_avaliacao: 497766.10, desconto_percentual: 50,
+    data_leilao: '2026-09-14T15:00:00-03:00',
+  };
+  const r = montarOportunidade({ imovel, link: 'https://x/i/abc123' });
+  checa('cidade/UF reais aparecem', r?.includes('Goiânia/GO'), r);
+  checa('lance real aparece formatado (não recalculado)', r?.includes('248.883'), r);
+  checa('desconto real aparece (vem pronto do acervo)', r?.includes('50%'), r);
+  checa('data da praça formatada dd/mm/aaaa', r?.includes('14/09/2026'), r);
+  checa('link do imóvel aparece', r?.includes('https://x/i/abc123'), r);
+}
+checa('sem título → null (não inventa nome de imóvel)',
+  montarOportunidade({ imovel: { cidade: 'X' }, link: 'https://x' }) === null);
+checa('sem link → null', montarOportunidade({ imovel: { titulo: 'Casa' }, link: '' }) === null);
+checa('sem imóvel nenhum → null', montarOportunidade({ imovel: null, link: 'https://x' }) === null);
 
 console.log('\nENQUETE — precisa de pergunta + pelo menos 2 opções pra ser enquete de verdade');
 checa('1 opção só → null', montarEnquete({ pergunta: 'Qual?', opcoes: ['Só uma'] }) === null);
@@ -82,9 +107,11 @@ console.log('\nDISPATCHER — tipo desconhecido não quebra, devolve null');
 checa('tipo inexistente → null', montarMensagemGrupo('tipo-que-nao-existe', {}) === null);
 checa('dispatcher chega no formatador certo (convite)',
   montarMensagemGrupo('convite', { titulo: 'X', quando: 'hoje, às 19h', link: 'https://x' })?.includes('X'));
+checa('dispatcher chega no formatador certo (oportunidade)',
+  montarMensagemGrupo('oportunidade', { imovel: { titulo: 'Casa' }, link: 'https://x' })?.includes('https://x'));
 
 console.log(`\n${falhas === 0 ? '✓' : '✗'} ${ok}/${ok + falhas} asserções`);
-if (ok + falhas < 18) {
+if (ok + falhas < 29) {
   console.error('TESTE INVÁLIDO: rodou menos asserções do que este arquivo declara.');
   process.exit(2);
 }
