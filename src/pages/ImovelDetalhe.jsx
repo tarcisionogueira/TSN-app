@@ -2133,7 +2133,15 @@ export default function ImovelDetalhe() {
           .kv-rot { min-width: 0 !important; }
           .kv-linha { flex-wrap: wrap !important; }
           .detalhe-page { overflow-x: hidden; }
-          .detalhe-grid { grid-template-columns: 1fr !important; }
+          /* 1fr sozinho NÃO É zero (08/09, relato do dono com foto: título, chips de
+             proximidade e cards "semelhantes" cortados juntos na mesma borda). Uma track de
+             grid em 1fr mantém o mínimo automático igual ao min-content do que está dentro
+             dela — então conteúdo que não quebra (ex.: imovel.titulo bruto do leiloeiro)
+             força essa única coluna a ficar mais larga que a tela. Como .detalhe-page só tem
+             overflow-x:hidden (linha acima), o resultado não é rolagem — é corte silencioso.
+             minmax(0, 1fr) é o mesmo 1fr quando cabe, e só difere quando NÃO cabe — aí
+             encolhe em vez de estourar. */
+          .detalhe-grid { grid-template-columns: minmax(0, 1fr) !important; }
           .detalhe-sidebar { position: static !important; }
           .detalhe-page { padding-bottom: 96px !important; }
           /* Altura da barra fixa, publicada para o resto do app. O botão flutuante de voltar e
