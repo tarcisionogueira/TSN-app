@@ -85,7 +85,14 @@ export function parseDetalhe(html, url) {
   // por tipo de bem — mesmo detector já usado em ALBERTOMACEDO para essa MESMA classe de
   // contaminação: zera o valor para `checarQualidade` descartar a linha (sem valor, sem
   // lote), em vez de inventar uma categoria "veículo" nova.
-  if (/\bplaca\b|\brenavam\b|\bchassi\b|combust[íi]vel|quilometragem|\bkm\s*rodados?\b|\bve[íi]culo\b|\bcaminh[ãa]o\b|\bmotocicleta\b/i.test(txt + ' ' + slug)) {
+  //
+  // ⚠️ 1ª versão testava contra `txt` (corpo inteiro da página) e zerou os 7 de 7 lotes
+  // de uma rodada ao vivo — inclusive um terreno de verdade ("Lotes 6x20m..."). A causa:
+  // a página do site tem menu/rodapé com as categorias do leiloeiro (Imóveis, Veículos,
+  // Outros) em TODA página, imóvel ou não — bater contra `txt` pega o menu, não o lote.
+  // O slug É o lugar certo: é onde o "Veiculo"/"Caminhao" apareceu de fato na amostra, e é
+  // só desse lote, nunca chrome compartilhado.
+  if (/\bplaca\b|\brenavam\b|\bchassi\b|ve[íi]culo|caminh[ãa]o|motocicleta/i.test(slug)) {
     avaliacao = 0; minimo = 0;
   }
 
