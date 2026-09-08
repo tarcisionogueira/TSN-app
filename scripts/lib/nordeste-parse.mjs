@@ -92,7 +92,14 @@ export function parseDetalhe(html, url) {
   // Outros) em TODA página, imóvel ou não — bater contra `txt` pega o menu, não o lote.
   // O slug É o lugar certo: é onde o "Veiculo"/"Caminhao" apareceu de fato na amostra, e é
   // só desse lote, nunca chrome compartilhado.
-  if (/\bplaca\b|\brenavam\b|\bchassi\b|ve[íi]culo|caminh[ãa]o|motocicleta/i.test(slug)) {
+  //
+  // ⚠️ 2ª rodada de validação (após corrigir p/ `slug`) achou um 3º item que a lista de
+  // palavras não cobria: "Sucata Aproveitavel Com Motor Inservivel de Honda...Cg Titan"
+  // (moto sucateada) — sem "veiculo"/"caminhao"/"motocicleta" no slug, passava batido.
+  // Lista ampliada com o que apareceu de fato; não é exaustiva (o acervo é de vara
+  // criminal, mistura qualquer bem apreendido) — é o mesmo espírito do ALBERTOMACEDO:
+  // amplia quando o dado real mostrar outro caso, não tenta adivinhar todos de uma vez.
+  if (/\bplaca\b|\brenavam\b|\bchassi\b|\bsucata\b|ve[íi]culo|caminh[ãa]o|motocicleta|\bmoto\b/i.test(slug)) {
     avaliacao = 0; minimo = 0;
   }
 
