@@ -932,6 +932,11 @@ async function paginaImovel(id) {
     // inventar texto: são dados reais que já estão na página.
     titulo: [
       im.titulo || `${t} em leilão`,
+      // Gancho de CTR (08/09): pct já é calculado acima para o badge visual da ficha —
+      // aqui só reaproveita o mesmo número real, sem inventar nada. Só a partir de 15%
+      // para não virar ruído em desconto pequeno. Aditivo: não troca nem remove nenhum
+      // dos campos abaixo, então a garantia de título único (comentário acima) continua.
+      pct >= 15 ? `${pct}% abaixo da avaliação` : null,
       im.area_m2 > 0 ? `${Math.round(im.area_m2)} m²` : null,
       lance ? `lance ${lance}` : null,
       `lote ${String(im.fonte_id || im.id).slice(-8)}`,
