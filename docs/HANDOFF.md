@@ -4,6 +4,92 @@
 
 ---
 
+## 📋 SESSÃO 24 · PARTE 9 (07/09) — GERADOR DE MENSAGENS DO GRUPO + FECHAMENTO DO DIA (CLIENTE 360 / MARKETING)
+
+**Pedido do dono**: revisar 4 documentos trazidos de outra conversa (estratégia de aquecimento
+de grupo de WhatsApp, modelo de leilão de carros adaptado pra imóveis — 180 pessoas, aula
+quartas 19h) e ver o que já dava pra implantar na tela do comercial.
+
+**Mapeamento ANTES de construir** (2 agentes, escopo puramente de leitura): o `/comercial` de
+hoje é funil de LEAD individual (consórcio/home equity), não aquecimento de GRUPO — os dois
+não se confundem. Mas achou infra pronta pra reaproveitar: `eventos_live` já é objeto de
+"lançamento" completo (apresentador, depoimentos curados, oferta com prazo); `live_reforco_alvos()`
+já é motor de reengajamento por comportamento (só que pra e-mail); e **zero envio automático
+existe em WhatsApp ou Instagram** — os dois terminam de propósito numa tela de copiar-e-colar
+(`DisparoWhatsApp.jsx`, `CaixaInstagram.jsx`; ver comentário de 01/09 em `admin-whatsapp-fila.js`:
+"não há como disparar WhatsApp a partir do navegador... a mecânica é ASSISTIDA de propósito").
+A promessa central dos documentos (IA posta sozinha no grupo) exigiria WhatsApp Business API —
+já mapeada em `docs/PLANO_WHATSAPP_META_MONITORAMENTO.md` como "Fase D — Inexistente. Greenfield."
+**Achado à parte que os documentos não sabiam**: `live_inscricoes.compareceu` nunca é escrito por
+nenhum código — qualquer "% de presença" que uma estratégia de engajamento queira medir, hoje,
+leria sempre zero (já documentado antes, 03/09; só reconfirmado aqui).
+
+**Escolhido para construir agora** (dono escolheu entre 4 opções): gerador de mensagens no Admin,
+zero infra nova de envio.
+
+**Construído — `Admin → Aula ao vivo → "Abrir o gerador de mensagens"` (`/admin/mensagens-grupo`)**:
+- `api/_mensagens-grupo.js` — 6 formatadores puros (convite, case de sucesso, educação jurídica,
+  enquete, urgência pré-live por estágio, follow-up), **zero chamada de IA de propósito**: o pior
+  caso aqui é educação jurídica errada postada pra 180 pessoas de uma vez, dano real, não só
+  conteúdo ruim. Cada função só reorganiza dado que JÁ foi dado como verdadeiro — depoimento real
+  de `eventos_live.depoimentos` (curado à mão pelo dono), mito/verdade escrito pelo próprio admin,
+  vagas/título/data reais do evento — e devolve `null` (nunca texto pela metade) quando falta dado.
+  Mesmo raciocínio que já rege `montarMensagem` (admin-whatsapp-fila.js, também zero IA).
+- `npm run testar:mensagem-grupo` (21 asserções) — trava os invariantes "nunca inventa": case usa
+  o resultado literal do depoimento, urgência nunca mostra vaga sem teto real, educação nunca
+  soma fato além do mito/verdade dados, convite nunca vaza "undefined".
+- `api/admin-mensagens-grupo.js` — acha a aula viva reusando `escolherAulaViva`/`quandoPorExtenso`
+  de `admin-whatsapp-fila.js` (nunca duplica a regra), grava cada geração em `mensagens_grupo_log`
+  (trilha append-only, mesmo desenho de `sdr_lead_eventos`/`whatsapp_disparo_log` — evita gerar/
+  postar a mesma mensagem duas vezes sem perceber).
+- `src/pages/GeradorMensagensGrupo.jsx` — mesma mecânica assistida: gera o texto, admin copia e
+  cola no grupo. Não posta sozinha.
+- Migração `mensagens_grupo_log.sql` aplicada (RLS admin-only).
+
+Build + `testar:mensagem-grupo` (21/21) + `testar:data-aula` (28/28, regressão dos helpers
+reaproveitados) + `verificar:padroes` limpos. Mergeado em `main`, deploy `01ad710` confirmado
+`READY`/`production` na Vercel.
+
+---
+
+## 🏁 FECHAMENTO DO DIA 07/09 — CLIENTE 360 + MARKETING (ritual de fechamento, pedido do dono)
+
+**CLIENTE 360** (`admin_360_estatisticas()`): verde no critério principal —
+`clientes_com_erro: 0`, `relatorios_falha_24h: 0`. `sem_perfil: 52` (triagem não respondida,
+já um número grande sobre 128 clientes totais — pesa no e-mail de oportunidade genérico, como
+já documentado). `alerta_incompleto_7d: 6`, todos `explorador` com busca de raio devolvendo
+menos imóveis que as vagas contratadas — plausível/baixa urgência (escassez real de estoque na
+região, não necessariamente bug), mas fica registrado.
+
+**Achado acionável**: 4 pagantes sem NENHUM relatório gerado em 14 dias —
+`top2` desde 01/07, `assessorado` desde 06/07, `assessorado` desde 15/07 (os 3 já passaram de
+2 meses sem uso — candidatos reais a contato de retenção) e `top2` desde 03/09 (só 5 dias,
+ainda dentro do normal, não é alarme ainda). **"Pagante que não gerou nada é churn em
+formação" já é a frase que abre esta seção do CLAUDE.md — os 3 de julho são exatamente esse caso.**
+
+**MARKETING** (14 dias, `marketing_metricas_dia` + `visita_origem` + `perfis`): o funil de
+atribuição está bem mais saudável que o baseline documentado de 14/08 —
+`com_utm_term`: 2710/3116 visitas (~87%, longe do "0 = pendência A" registrado antes) e
+`gclid` capturado em ~51% dos cliques pagos (1648/3231 — o baseline de 14/08 era ~9%,
+214 cliques × 19 visitas). Gasto total ~R$577 em 13 dias (Google ~R$334, Meta ~R$243).
+
+**Achado que vale conferência, não classificado como bug (fora do meu escopo decidir)**:
+**Meta Ads registrou `conversoes = 0` nas 16 linhas dos últimos 13 dias** (100% das linhas),
+enquanto o Google Ads (gasto parecido) registrou 17 conversões no mesmo período. Bate com outro
+sinal: dos 94 cadastros atribuídos nos últimos 30 dias, só 3 vêm do Meta (`mkt_utm_source`),
+apesar de ~1.520 cliques pagos no canal — e 56 dos 94 cadastros (a maior fatia, maior que todas
+as origens somadas) não têm origem nenhuma gravada. Pode ser objetivo de campanha (Meta configurado
+pra topo de funil, sem evento de conversão esperado) ou lacuna de rastreamento — as duas leituras
+cabem no dado, e só quem decide a estratégia de mídia sabe qual é. Registrado pra o dono avaliar,
+não corrigido às cegas.
+
+**Pendências que seguem em aberto, sem ação nova hoje** (só reconfirmadas/documentadas):
+KRONLEILOES / JONASLEILOEIRO / FERNANDOLEILOEIRO (decisão do dono, Partes 5/6/8);
+`live_inscricoes.compareceu` nunca escrito (03/09, reconfirmado nesta Parte 9);
+reenvio da capa do ebook "Lucre Antes de Arrematar" pelo Admin (Parte 7).
+
+---
+
 ## 📋 SESSÃO 24 · PARTE 8 (07/09) — 8 CANDIDATOS DJEN EM PRODUÇÃO: CRON DIÁRIO + docs_status=integrado; GLOBOLEILOES FICA DE FORA (SITE VIROU SPA)
 
 **Pedido do dono**: "Resolva todos para no final colocarmos em produção" (continuação da Parte
