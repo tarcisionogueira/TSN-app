@@ -4,6 +4,73 @@
 
 ---
 
+## 📋 SESSÃO 24 · PARTE 12 (08/09) — INVENTÁRIO DE LEILOEIRO (INTEGRAÇÃO × DOCUMENTO) + CORTE DE 600 CHARS NO EDITAL_DJEN
+
+**Pedido do dono**: "Ainda há leiloeiro que não estamos integrados e trazendo os documentos.
+Verifique." — motivado pela mesma foto da Parte 11 (ficha com descrição cortada).
+
+**1. Bug real encontrado e CORRIGIDO, ligado direto à foto do dono**: a descrição daquele
+imóvel vinha de `fonte='EDITAL_DJEN'` e estava com **exatamente 600 caracteres**, cortada no
+meio da palavra ("...possa inter.") — por isso "Data do leilão: A confirmar no edital": o
+texto foi cortado ANTES de chegar à data. Causa: `editais_promover_pendentes()` gravava
+`left(e.texto_integral, 600)`. Medido nos 772 editais com texto: **mediana 6.230 caracteres,
+p90 18.000** — o corte de 600 descartava a maior parte do conteúdo em praticamente TODO
+edital, e como a publicação do DJEN sempre começa pela qualificação das partes antes de
+anunciar a data da praça, é sistematicamente a parte mais útil que sumia. Corrigido para
+gravar o `texto_integral` inteiro (já limitado a 20.000 na ingestão — a exibição pública já
+tem seu próprio corte de 1.200 chars, que é onde esse tipo de limite pertence, não na
+gravação). **Backfill aplicado nos 172 lotes EDITAL_DJEN já promovidos** (só os que ainda
+estavam ≤600 chars) — o lote da foto foi de 600 para 3.584 caracteres. Migração
+`edital_descricao_sem_corte_em_600.sql`, aplicada em produção via `apply_migration`.
+Commit `b0480ff`.
+
+**2. Inventário de COBERTURA DE DOCUMENTO por fonte** (`link_matricula`/`anexos`, só ativos,
+fontes com ≥5 lotes) — **0% de documento**: `EDITAL_DJEN` (172 ativos — por natureza, ainda
+não tem estratégia de documento, só o texto do DJEN), `GESTAOLEILOES` (123 — fonte grande e
+saudável em volume, mas zero documento), `SBID9` (34), `VLANCE` (21), `LEJE` (5). **Parcial**:
+`PURCENA` (8, 13%), `FERREIRALEIL` (76, 39%). Da metade pra cima, cobertura é boa a total
+(`SUPERBID` 78%, `SUPORTE`/`LEILOTECH` 91%, `LJUD` 96%, `RJLEILOES` 99%, o resto 100%).
+Nenhuma correção aplicada aqui — é trabalho de estratégia de documento por fonte, não um bug
+isolado; registrado para priorização do dono.
+
+**3. Inventário de INTEGRAÇÃO** (`leiloeiro_conhecimento` × o que tem lote ativo hoje):
+
+   **a) Sem scraper, decisão pendente (sem mudança desde as Partes 5/6/8)**: FERNANDOLEILOEIRO,
+   JONASLEILOEIRO, KRONLEILOES (Cloudflare/anti-bot) · GLOBOLEILOES (site virou SPA, excluído)
+   · SUEDPETER (candidato pesquisado — plataforma identificada como white-label do SUPORTE —
+   mas scraper nunca escrito) · CREPALDI, APABRF (nunca sequer pesquisados).
+
+   **b) ⚠️ NOVO — tinham scraper E cron ativos, e estão ZERADOS há semanas** (isto não é
+   "não integrado", é regressão silenciosa — mesma família de bug que o GLOBOLEILOES e o
+   `fonte_regressao_suspeita()` existem para pegar, só que estas 4 escaparam por serem
+   pequenas/já sem lote e não aparecerem em `where ativo`):
+   - `SATO` — 0 ativos, sem dado novo desde **30/07** (40 dias), embora `scraper-sato.yml`
+     rode no cron normalmente.
+   - `EMILIOMATOS` — 0 ativos, sem dado novo desde **20/08** (19 dias) — já tinha sido
+     flagrado como `medicao_velha` em 29/08 (9 dias de atraso na época) e **piorou**, não foi
+     resolvido.
+   - `NORDESTE` — 0 ativos, sem dado novo desde **21/08** (18 dias), embora rode todo dia no
+     mesmo `scraper-dom.yml` desta sessão. Plataforma é Next.js App Router (RSC) — mesma
+     família estrutural do problema que tirou o GLOBOLEILOES do ar.
+   - `SBID21` — 0 ativos desde pelo menos **01/08** (~5 semanas). O comentário do próprio
+     `debug-leiloeiros.mjs:320` já registrava em 01/08: "SBID21 caiu a 0 em 2 runs seguidos;
+     SBID9 segue ok com a MESMA [plataforma]" — comparação direta com a irmã saudável prova
+     que é regressão da fonte, não falta de leilão.
+
+   Nenhuma das 4 foi investigada a fundo nesta sessão (cada uma precisaria do mesmo recon com
+   dump ao vivo que resolveu o GLOBOLEILOES — não é ajuste de 1 linha às cegas). Registradas
+   para a próxima rodada de "bug bounty dos leiloeiros".
+
+   **c) Falso negativo, não é gap real**: `VMLEILOES` aparecia como "não integrado" só por
+   comparação ingênua de nome de fonte — na verdade já roda como tenant dentro de
+   `LEILOTECH_TENANTS` (`scripts/scraper-puppeteer.mjs:2739`), e `fonte='LEILOTECH'` está
+   saudável (77 ativos, atualizado hoje). Mesma classe de falso-negativo que a forma nº 10
+   do topo deste documento já descreve (cruzar por nome de fonte esconde tenant multi-fonte).
+
+*Branch: `claude/bidpro-brasil-initial-checks-j20won` == `main`.*
+
+---
+
 ## 📋 SESSÃO 24 · PARTE 11 (08/09) — TÍTULO DO LOTE (SEO) + TELA ESTOURANDO NO PWA MOBILE
 
 **Pedido do dono**: "Faça todos sequencialmente" (os itens priorizados da Parte 10) + "veja
