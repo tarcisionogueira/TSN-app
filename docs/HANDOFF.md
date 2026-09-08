@@ -4,6 +4,70 @@
 
 ---
 
+## 📋 SESSÃO 24 · PARTE 10 (08/09) — AUDITORIA DE SEO COM DADO REAL (SEARCH CONSOLE) + BREADCRUMBLIST
+
+**Pedido do dono**: "Verifique se conseguimos melhorar o rankeamento do SEO."
+
+**Método**: nada de opinião genérica — dado real do Search Console
+(`sc-domain:bidprobrasil.com.br`, via MCP Windsor.ai) dos últimos 90 dias, cruzado com
+auditoria de código (agente Explore, 47 leituras) de `api/publico.js`, `index.html`,
+`vercel.json`, `vite.config.js`.
+
+**O que os números dizem:**
+- Impressões foram de ~1-5/dia até 03/08 para a casa de centenas/dia a partir de 04/08
+  (103 no primeiro dia, chegando a 992 em 17/08) — a camada de SEO server-side
+  (`api/publico.js`, criada 02/08) está funcionando e crescendo.
+- 4.858 páginas distintas tiveram impressão em 90 dias: 4.089 são `/leilao/:id/:slug`
+  (posição média **8,0**), 767 são `/leiloes/:uf/:cidade` (posição média **15,4** — pior).
+- **Achado central**: as páginas de cidade/estado — as que deveriam capturar busca
+  genérica de maior volume ("leilão de imóveis campinas") — rankeiam PIOR que as páginas
+  de imóvel individual que o próprio sitemap hoje deixa de fora de propósito (ver
+  `SITEMAP_LOTES` em `api/sitemap-leiloes.js:49`, decisão de 30/08 pra não afogar os hubs).
+  Ex.: `/leiloes/pb/campinagrande` na posição 37; "leilao campinas" na posição 48,5;
+  "leilao de imoveis brasilia" na posição 51,3. 9 dias é cedo pra saber se excluir os
+  lotes do sitemap já ajudou os hubs — vale reconferir em 3-4 semanas.
+- CTR geral baixo (593 clique / 13.304 impressão = 4,5%) e casos de posição BOA com ZERO
+  clique (ex.: posição 4,2 com 137 impressões, 0 clique) — sintoma de snippet (title)
+  fraco, não de posição.
+
+**Causa técnica confirmada no código** (não é conjectura): o app React é 100% CSR com
+`HashRouter` — tudo depois de `#` é invisível pro Google (`api/publico.js:8-12`, comentário
+do próprio dev de 02/08). A camada indexável de verdade é só `api/publico.js` (HTML
+server-rendered à mão, sem framework), roteada por `rewrites` no `vercel.json`. Confirmado:
+zero `react-helmet`, zero `document.title` dinâmico no SPA — as ~60 páginas do produto
+logado herdam o `<title>` estático do `index.html`.
+
+**Feito nesta sessão (risco zero, aditivo)**:
+- `BreadcrumbList` (schema.org) em toda página pública — reaproveita o array `migalha`
+  que já existia só pro breadcrumb visual (`api/publico.js`, função `pagina()`). Zero
+  mudança em title/canonical/indexação. Commit `f59edeb` (main: `edc3a23`).
+
+**NÃO mexido — pendente decisão do dono, por ordem de impacto/risco:**
+1. **Título do lote polui com `lote {8 chars}`** (`api/publico.js:924-929`) — sufixo
+   existe DE PROPÓSITO (fix de 08/08: 1.000 lotes com título idêntico, aviso de "cópia" no
+   Search Console). Tirar sem outra garantia de unicidade reabre o problema que ele
+   resolveu. Provável maior alavanca de CTR (títulos longos, sem gancho de desconto na
+   frente) — precisa de redesenho cuidadoso, não edição rápida: toca ~33 mil páginas já
+   indexadas.
+2. **JSON-LD do lote usa `Product`, não `RealEstateListing`** — o próprio código já
+   documenta isso como pendência (`api/publico.js:1052-1055`) e já registra por que NÃO
+   trocar às cegas: afeta 33 mil páginas enviadas. Segue como está.
+3. **`SITEMAP_LOTES` desligado por padrão** — decisão de 30/08 (30.544 lotes afogavam 2.632
+   hubs, zero indexado em 12 meses). Dado de hoje mostra hub pior que lote mesmo assim —
+   vale reavaliar em 3-4 semanas com mais histórico, não mudar agora.
+4. **Zero conteúdo editorial/blog** — nenhuma página informacional (ex. "como funciona
+   leilão de imóvel"). Maior lacuna de topo-de-funil, mas é investimento de conteúdo, não
+   fix técnico — decisão de escopo do dono.
+5. **URL do lote usa UUID de 36 caracteres** (`/leilao/{uuid}/{slug}`) — o slug é
+   decorativo, quem identifica é o UUID. Pior pra CTR que slug curto, mas mudar exige
+   redirect de toda URL já indexada — estrutural, não é fix isolado.
+6. Achado à parte, NÃO é SEO: `vercel.json:74` usa CORS `Access-Control-Allow-Origin:
+   https://bidprobrasil.com.br` (sem www) enquanto canonical/OG/sitemap usam sempre
+   `https://www.bidprobrasil.com.br` (com www). Não quebra nada hoje (chamada same-origin
+   não passa por CORS); registrado por inconsistência, sem urgência.
+
+---
+
 ## 📋 SESSÃO 24 · PARTE 9 (07/09) — GERADOR DE MENSAGENS DO GRUPO + FECHAMENTO DO DIA (CLIENTE 360 / MARKETING)
 
 **Pedido do dono**: revisar 4 documentos trazidos de outra conversa (estratégia de aquecimento
