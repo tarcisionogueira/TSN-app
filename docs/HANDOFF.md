@@ -48,13 +48,37 @@ desconto de -9035% (valor de campo de veículo lido como se fosse avaliação de
 `inferirTipo()`/`checarQualidade()` não filtram por tipo de bem. Corrigido com o MESMO
 detector já usado em `albertomacedo-parse.mjs` pra essa exata classe de contaminação:
 bate palavra-chave de veículo (placa, renavam, chassi, veículo, caminhão…) → zera o
-valor → `checarQualidade()` descarta a linha. Commit `4dac881`. Re-validação ao vivo
-(novo dry-run disparado após o fix) ainda em andamento no momento deste registro — o
-resultado, quando chegar, entra como adendo desta mesma Parte em vez de nova Parte.
+valor → `checarQualidade()` descarta a linha.
+
+**⚠️ Mas a validação ao vivo levou 4 rodadas até fechar de verdade — registrado por
+inteiro, é dado real sobre quão misto é o acervo desta fonte, não vergonha a esconder:**
+1. `4dac881` — 1ª versão testava a palavra-chave contra `txt` (corpo INTEIRO da página
+   renderizada). Rodada ao vivo: **0 de 7 prontos** — zerou até um terreno de verdade
+   ("Lotes 6x20m..."). Causa: a página tem o menu de categorias do site (Imóveis,
+   Veículos, Outros) em TODA página, imóvel ou não — bater contra `txt` pega o menu.
+2. `0461dfe` — corrigido para testar só o `slug` (onde "Veiculo"/"Caminhao" apareceram de
+   fato). Rodada ao vivo: **5 de 7 prontos**, os 2 carros/caminhão corretamente fora.
+3. `f3578fb` — a AMOSTRA dos 5 "prontos" (não só a contagem) mostrou um 3º item que a
+   lista de palavras não cobria: "Sucata Aproveitavel Com Motor Inservivel de
+   Honda...Cg Titan" (moto sucateada, nome de modelo em vez de categoria genérica).
+   Ampliado com "sucata"/"moto". Rodada ao vivo: **4 de 7 prontos**.
+4. `119e65d` — a amostra dos 4 "prontos" mostrou uma 4ª categoria não prevista:
+   "Equipamentos Industriais" (maquinário, com desconto de -60% sem sentido). Três
+   categorias diferentes de bem não-imóvel na MESMA amostra pequena de 7 itens provou que
+   uma lista de palavras PROIBIDAS vira caça ao gambá contra um acervo de vara
+   federal/criminal (leiloa qualquer bem apreendido). Trocado por lista de palavras
+   PERMITIDAS: só passa quem tem sinal real de imóvel no slug (tipo — imóvel, casa,
+   apartamento, terreno, lote, galpão, chácara, sítio, fazenda, prédio, sobrado, kitnet,
+   cobertura, comercial, residencial — ou medida tipo NxNm). Rodada ao vivo final:
+   **2 de 7 prontos** — exatamente os 2 itens já confirmados imóvel de verdade ("Lotes
+   6x20m Itabaianhase" e "Imóvel Residencial Lot Encontro das Aguas..."), os outros 5
+   (2 veículos, 1 moto sucateada, 1 maquinário, 1 nunca visto na amostra) corretamente
+   descartados. **Fechado.**
 
 **Ações tomadas, todas em produção:**
 1. `leiloeiro_conhecimento.docs_status` corrigido: SUEDPETER e SATO → `integrado`.
-2. `scripts/lib/nordeste-parse.mjs` — filtro de veículo (commit `4dac881`).
+2. `scripts/lib/nordeste-parse.mjs` — filtro de imóvel por lista permitida, 4 commits
+   (`4dac881`, `0461dfe`, `f3578fb`, `119e65d`), validado ao vivo na 4ª versão.
 3. `.github/workflows/scraper-sato.yml` — promovido a cron diário (9h30 UTC), validado ao
    vivo antes de promover. Fonte grátis (API pública JSON), sem Bright Data. Commit `caa859a`.
 
@@ -75,7 +99,7 @@ bastante pra resolver às cegas nesta sessão):**
   não foram auditados com esse nível de detalhe ainda; cada um precisa da mesma
   investigação bem específica, não um fix genérico.
 
-*Branch: `claude/bidpro-brasil-initial-checks-j20won` == `main` (commit `9376cac`).*
+*Branch: `claude/bidpro-brasil-initial-checks-j20won` == `main` (commit final a registrar no merge desta Parte).*
 
 ---
 
