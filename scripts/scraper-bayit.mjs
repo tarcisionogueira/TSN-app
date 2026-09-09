@@ -101,6 +101,11 @@ function parseFeed(xml) {
       .map((m) => ({ startDate: campo(m[1], 'start_date'), rate: rateTexto(campo(m[1], 'rate')) }));
     const fotos = [...bloco.matchAll(/<image>\s*<url>([\s\S]*?)<\/url>\s*<\/image>/gi)]
       .map((m) => decodificarEntidades(m[1]).trim()).filter(Boolean);
+    // <image><url>...</url></image> (foto) usa a MESMA tag <url> do lote — sem remover os
+    // blocos de imagem antes, campo(bloco,'url') pega a 1ª ocorrência (a foto), não a
+    // página do lote. Achado ao vivo: 84/84 listings zerados no filtro de categoria porque
+    // "url" nunca batia com /lote/<cidade>-<uf>/<id>/ — era sempre um link de .jpg.
+    const blocoSemFotos = bloco.replace(/<image>[\s\S]*?<\/image>/gi, '');
     return {
       id: campo(bloco, 'home_listing_id'),
       nome: campo(bloco, 'name'),
@@ -111,7 +116,7 @@ function parseFeed(xml) {
       lon: campo(bloco, 'longitude'),
       bairro: campo(bloco, 'neighborhood'),
       price: precoTexto(campo(bloco, 'price')),
-      url: campo(bloco, 'url'),
+      url: campo(blocoSemFotos, 'url'),
       fotos,
       pracas,
     };
