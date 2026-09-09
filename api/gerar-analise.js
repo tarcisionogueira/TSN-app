@@ -1990,6 +1990,7 @@ export default async function handler(req, res) {
       // amostras" em cidade grande era a resposta ser cortada, não o nº de buscas). { __falhou } em
       // abort/timeout/erro → o chamador decide re-tentar ou tratar como transitório (self-heal).
       const RESERVA_PARECER = 55000; // guarda p/ o parecer + a escrita final
+      let motivoGemini = null; // por que o motor primário caiu — segue junto do resultado do fallback
       const buscarEtapa = async ({ prompt, sistema, msBudget, webUses, pauseCap = 8, minReserva = RESERVA_PARECER + 12000 }) => {
         // MOTOR PRIMÁRIO: Gemini (Google Search grounding). Aceita se devolveu JSON útil (mais que
         // só __diag); se falhar/vier vazio, CAI para o Claude web_search abaixo (fallback seguro).
@@ -2005,6 +2006,17 @@ export default async function handler(req, res) {
             : 'Priorize as buscas que trazem comparáveis do MESMO tipo e da MENOR distância.'}`;
           const g = await buscarGeminiGrounding({ prompt: prompt + teto, sistema, timeoutMs: Math.min(115000, Math.max(30000, msBudget)) });
           if (g && !g.__falhou && Object.keys(g).some((k) => k !== '__diag')) return g;
+          // O MOTIVO DA QUEDA DO MOTOR PRIMÁRIO NÃO PODE SER DESCARTADO (09/09).
+          // `groundingGemini` devolve o motivo real (`HTTP 429: ...`, `sem GEMINI_API_KEY`,
+          // `gemini exc: ...`) e esta linha o jogava fora ao cair no Claude. Resultado medido
+          // hoje: o grounding do Gemini fez ZERO chamadas (contra 2 a 33 por dia desde 31/08,
+          // a última em 08/09 14:50) e TODO relatório passou a cair no Claude web_search, que
+          // é o caminho que o cabeçalho de _grounding.js já documenta como abortando por
+          // timeout. 17 de 17 eventos de relatório hoje trouxeram "This operation was aborted"
+          // — contra 0 em 62 eventos nos 13 dias anteriores. Passamos o dia lendo o sintoma do
+          // fallback porque a causa morria aqui.
+          motivoGemini = g?.__erroApi || 'gemini devolveu vazio';
+          console.log('[gemini-grounding-falhou]', JSON.stringify({ motivo: motivoGemini, imovel: String(imovelId) }));
         }
         try {
           const messages = [{ role: 'user', content: prompt }];
@@ -2022,9 +2034,9 @@ export default async function handler(req, res) {
           const txt = extractText(data);
           const parsed = parseJSON(txt) || {};
           // Diagnóstico PERSISTIDO (fica no result mesmo quando vazio) p/ validar o fluxo pelo banco.
-          parsed.__diag = { stop: stop || null, blocos: Array.isArray(data?.content) ? data.content.length : 0, textoLen: txt.length, out_tokens: data?.usage?.output_tokens || 0, buscas: webUses, continuou: cont };
+          parsed.__diag = { stop: stop || null, blocos: Array.isArray(data?.content) ? data.content.length : 0, textoLen: txt.length, out_tokens: data?.usage?.output_tokens || 0, buscas: webUses, continuou: cont, geminiErro: motivoGemini };
           return parsed;
-        } catch (e) { return { __falhou: true, __erroApi: String(e?.message || e || '').slice(0, 120) }; }
+        } catch (e) { return { __falhou: true, __erroApi: String(e?.message || e || '').slice(0, 120), __geminiErro: motivoGemini }; }
       };
 
       // ── ETAPA A — COMPARÁVEIS (ESSENCIAL): venda + locação (níveis 1/2) + valor consolidado ──
@@ -2055,6 +2067,9 @@ export default async function handler(req, res) {
       let compar = daBase || await buscarEtapa({ prompt: promptA, sistema: sysComp, msBudget: diagBusca.orcamentoA, webUses: maxWebA });
       diagBusca.gastoA = Date.now() - tBuscaA;
       diagBusca.falhouA = !!compar?.__falhou;
+      // A razão pela qual o Claude foi acionado. Sem isto, "o Claude abortou" é tudo o que
+      // sobra no banco, e a pergunta "por que não foi o Gemini?" fica sem rastro.
+      diagBusca.geminiErro = compar?.__geminiErro || compar?.__diag?.geminiErro || motivoGemini || null;
       if (daBase) console.log('[modo-base]', JSON.stringify({ imovel: String(imovelId), ...daBase.__modoBase, tipo: segCache }));
       const semAmostrasA = (m) => (((m?.nivel1?.vendas?.length || 0) + (m?.nivel1?.locacoes?.length || 0) + (m?.nivel2?.vendas?.length || 0) + (m?.nivel2?.locacoes?.length || 0)) === 0) && !(Number(m?.consolidado?.precoMedioM2) > 0);
 
