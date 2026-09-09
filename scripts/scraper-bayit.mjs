@@ -293,6 +293,22 @@ async function main() {
   const itens = parseFeed(feedXml);
   console.log(`Feed: ${itens.length} <listing> no total.`);
 
+  // MODO BUSCA (09/09) — diagnóstico pontual: "por que o imóvel X não aparece / aparece
+  // errado?" sem rodar o pipeline inteiro. BAYIT_BUSCAR=<termo> filtra por nome (contém,
+  // case-insensitive) e imprime o item CRU do feed + se ele passaria no filtro de
+  // categoria — reusa parseFeed/slugCidadeUf de verdade, não é grep de texto solto.
+  if (process.env.BAYIT_BUSCAR) {
+    const termo = process.env.BAYIT_BUSCAR.toLowerCase();
+    const achados = itens.filter((it) => (it.nome || '').toLowerCase().includes(termo));
+    console.log(`\n🔎 BUSCA "${process.env.BAYIT_BUSCAR}": ${achados.length} achado(s) no feed AO VIVO.`);
+    for (const it of achados) {
+      const su = slugCidadeUf(it.url);
+      console.log(JSON.stringify({ ...it, passaFiltroCategoria: !!su, slugDetectado: su }, null, 2));
+    }
+    if (!achados.length) console.log('  (nenhum item do feed atual tem esse nome — não é filtro nosso: ou saiu do site, ou nunca existiu com esse nome)');
+    return;
+  }
+
   // DIAGNÓSTICO (09/09, pedido do dono): a foto é link externo direto — carrega no NAVEGADOR
   // do cliente, não passa pelo Bright Data. Cloudflare bloqueia a NAVEGAÇÃO do site (HTML);
   // não sabíamos se também bloqueia o CDN de imagem. fetch() PURO (sem Bright Data, sem

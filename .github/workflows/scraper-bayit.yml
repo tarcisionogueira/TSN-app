@@ -22,6 +22,10 @@ on:
         description: 'Máx. de páginas de detalhe (matrícula/edital) visitadas por execução'
         required: false
         default: '200'
+      buscar:
+        description: 'Diagnóstico: busca por nome no feed AO VIVO e sai (não roda o pipeline). Vazio = desligado.'
+        required: false
+        default: ''
 
 jobs:
   scraper-bayit:
@@ -45,4 +49,5 @@ jobs:
           BRIGHTDATA_MAX_REQ_SEMANA: ${{ secrets.BRIGHTDATA_MAX_REQ_SEMANA }}
           BAYIT_DRYRUN: ${{ github.event.inputs.dryrun || '0' }}
           BAYIT_ENRICH_CAP: ${{ github.event.inputs.enrich_cap || '200' }}
+          BAYIT_BUSCAR: ${{ github.event.inputs.buscar || '' }}
         run: node scripts/scraper-bayit.mjs
