@@ -10043,15 +10043,17 @@ function MarketingTab() {
 
       {/* INSTAGRAM — a caixa de rascunhos. Fica aqui, e não numa aba própria, porque é o mesmo
           assunto desta tela: de onde vem gente. A diferença é que este canal responde de volta,
-          então o que se administra não é gasto, é conversa. A tela NÃO envia: ela sugere, você
-          edita, copia e responde no app — e é o registro do que você mandou que mede quando uma
-          classe de pergunta pode passar a ser respondida sozinha. */}
+          então o que se administra não é gasto, é conversa. A tela sugere, você sempre edita —
+          o envio sai pela Send API quando configurado (`_instagram-envio.js`), ou você copia e
+          responde no app quando não está — e é o texto que você mandou (editado, não o
+          sugerido) que mede quando uma classe de pergunta pode passar a ser respondida sozinha. */}
       <div style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:12, padding:'14px 16px', marginBottom:16 }}>
         <div style={{ fontWeight:800, fontSize:14, color:'#111111', marginBottom:6 }}>Caixa do Instagram</div>
         <div style={{ fontSize:11.5, color:'#64748b', lineHeight:1.6, marginBottom:10 }}>
           Comentário, story e direct viram rascunho de resposta, em ordem de <strong>vencimento da
           janela</strong> (a resposta privada a um comentário é tiro único e vale 7 dias; o direct,
-          24 h). <strong>Não envia sozinho</strong>: você edita, copia e responde no app.
+          24 h). Você sempre edita antes — o envio sai direto pela API quando configurado, ou você
+          copia e responde no app quando não está.
         </div>
         <a href="#/admin/instagram"
           style={{ display:'inline-block', padding:'9px 15px', background:'#0D63DB', color:'#fff', textDecoration:'none', borderRadius:8, fontWeight:700, fontSize:13 }}>
