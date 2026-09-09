@@ -18,8 +18,17 @@
  *
  * SEGURANÇA DE CUSTO (cada request = 1 Bright Data, proposito 'gestao' → sub-cota + teto):
  *   - GESTAO_MAX_EVENTOS (default 25): teto de eventos/execução.
+ *   - GESTAO_DOC_CAP (default 30): teto de lotes/execução pra busca de documento (item 8
+ *     abaixo) — 1 request Bright Data por lote, à parte do teto de eventos.
  *   - GESTAO_DRYRUN (default '1'): NÃO grava — parseia e loga o que inseriria.
  *   - GESTAO_DEBUG (default '0'): dumpa enumeração + 1 evento parseado.
+ *
+ * 09/09: item 8 — parseCard() só lia matrícula em TEXTO (nº solto, sem link) e link_edital
+ * sempre apontava pra página do EVENTO (placeholder repetido pra todos os lotes do mesmo
+ * leilão) — link_matricula/anexos ficavam null em 100% dos casos, mesmo a página do LOTE
+ * (url_lote, sempre populada) nunca sendo visitada. enriquecerDocumentos() fecha esse gap
+ * visitando url_lote pra um subconjunto (GESTAO_DOC_CAP) dos lotes sem documento, com o
+ * MESMO padrão de scan de `<a href>` que scraper-soleon.mjs já usa.
  *
  * Env: BRIGHTDATA_API_TOKEN, BRIGHTDATA_ZONE, VITE_SUPABASE_URL, SUPABASE_SERVICE_KEY.
  */
@@ -54,6 +63,7 @@ const DOMINIOS = (process.env.GESTAO_DOMINIOS ||
   'granadoleiloes.com.br,lancenoleilao.com.br,extrajustleiloes.com.br,lancetotal.com.br,vincoleiloes.com.br')
   .split(',').map(s => s.trim()).filter(Boolean);
 const MAX_EVENTOS = Number(process.env.GESTAO_MAX_EVENTOS || 25);
+const DOC_CAP = Number(process.env.GESTAO_DOC_CAP || 30);
 const DRYRUN = process.env.GESTAO_DRYRUN !== '0';
 const DEBUG = process.env.GESTAO_DEBUG === '1';
 const RESIDENCIAL = process.env.GESTAO_HEADLESS === '1';
@@ -293,6 +303,50 @@ function inferirRotulo(txt) {
   return m ? m[1].toUpperCase() : 'IMÓVEL';
 }
 
+// Escaneia <a href> da página do LOTE por link .pdf ou rótulo edital/matrícula/laudo —
+// MESMO padrão de scraper-soleon.mjs (parseDetalhe). Precisa do HTML CRU (não do `txt`
+// sem tags que parseCard usa pros outros campos): o link mora no atributo href.
+function extrairDocsDoHtml(html, urlBase) {
+  const docs = [];
+  for (const m of html.matchAll(/<a[^>]+href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)) {
+    const href = m[1];
+    const label = decodificarEntidades((m[2] || '').replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();
+    if (/\.pdf(\?|#|$)/i.test(href) || /edital|matr[íi]cula|laudo/i.test(label)) {
+      let abs; try { abs = new URL(href, urlBase).href; } catch { continue; }
+      docs.push({ url: abs, label: label.slice(0, 60) });
+    }
+  }
+  const findDoc = re => (docs.find(d => re.test(d.label) || re.test(d.url)) || {}).url || null;
+  const anexos = docs.map(d => ({
+    tipo: /matr[íi]cula/i.test(d.label + d.url) ? 'matricula' : (/edital/i.test(d.label + d.url) ? 'edital' : (/laudo/i.test(d.label + d.url) ? 'laudo' : 'outro')),
+    nome: (d.label || 'Documento').slice(0, 80),
+    url: d.url,
+  }));
+  return { link_edital: findDoc(/edital/i), link_matricula: findDoc(/matr[íi]cula/i), anexos };
+}
+
+// Visita url_lote (página do LOTE, já populada mas nunca usada) pra um subconjunto dos
+// lotes SEM documento — cap pequeno de propósito (GESTAO_DOC_CAP, default 30): é 1 request
+// Bright Data por lote, contra o MESMO teto semanal que CALIL/VEGAS/RJLEILOES dependem.
+// Mesmo espírito do enrichCap que scraper-puppeteer.mjs já usa pra SUPERBID/SOLD/ZUK/SODRE.
+async function enriquecerDocumentos(rows) {
+  const alvo = rows.filter(r => !(r.anexos && r.anexos.length)).slice(0, DOC_CAP);
+  if (!alvo.length) return;
+  console.log(`\n📄 Buscando documento na página do lote (${alvo.length}/${rows.length} sem doc, cap ${DOC_CAP})...`);
+  let achados = 0;
+  for (const row of alvo) {
+    const html = await bd(row.url_lote, { valido: h => !!h && h.length > 500 });
+    if (html) {
+      const doc = extrairDocsDoHtml(html, row.url_lote);
+      if (doc.link_matricula) row.link_matricula = doc.link_matricula;
+      if (doc.link_edital) row.link_edital = doc.link_edital; // substitui o placeholder do evento
+      if (doc.anexos.length) { row.anexos = doc.anexos; achados++; }
+    }
+    await sleep(400);
+  }
+  console.log(`  ${achados}/${alvo.length} lote(s) com documento encontrado.`);
+}
+
 async function coletarEvento(dominio, idLeilao) {
   const url = `https://${dominio}/leilao.php?idLeilao=${idLeilao}`;
   const html = await bd(url, { valido: paginaOk });
@@ -396,6 +450,9 @@ async function main() {
     console.log('\nPara gravar, rode com GESTAO_DRYRUN=0.');
     return;
   }
+  // Depois do DRYRUN de propósito: busca de documento gasta Bright Data por lote, e não
+  // faz sentido pagar isso numa execução que não vai gravar nada mesmo.
+  await enriquecerDocumentos(prontos);
   const { error } = await supabase.from('imoveis_leilao').upsert(prontos, { onConflict: 'fonte_id', ignoreDuplicates: false });
   if (error) { console.error('erro ao gravar:', error.message); process.exit(1); }
   console.log(`✅ ${prontos.length} imóveis do cluster Gestão de Leilões gravados/atualizados.`);

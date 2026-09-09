@@ -35,6 +35,10 @@ on:
         description: 'Máx. de eventos (leilao.php) por execução'
         required: false
         default: '25'
+      doc_cap:
+        description: 'Máx. de lotes/execução pra buscar documento (edital/matrícula) na página do lote'
+        required: false
+        default: '30'
       dominios:
         description: 'csv de domínios (vazio = padrão do cluster)'
         required: false
@@ -74,5 +78,6 @@ jobs:
           GESTAO_DEBUG: ${{ github.event.inputs.debug || '0' }}
           GESTAO_DRYRUN: ${{ github.event.inputs.dryrun || '0' }}
           GESTAO_MAX_EVENTOS: ${{ github.event.inputs.max_eventos || '25' }}
+          GESTAO_DOC_CAP: ${{ github.event.inputs.doc_cap || '30' }}
           GESTAO_DOMINIOS: ${{ github.event.inputs.dominios || '' }}
         run: node scripts/scraper-gestao.mjs
