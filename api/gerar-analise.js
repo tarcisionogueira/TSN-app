@@ -3394,8 +3394,13 @@ COMO USAR (obrigatório): dedique um parágrafo aos CUSTOS DA OPERAÇÃO segundo
         : semParecer
           ? `Entrega incompleta: mercado OK${valorMercado ? ` (R$ ${Math.round(valorMercado).toLocaleString('pt-BR')})` : ''} mas SEM parecer — motivo: ${dp?.erro || dp?.erroSetup || 'desconhecido'}${dp?.tentativas ? ` (${dp.tentativas} tentativa(s))` : ''}`
           : `Mercado estimado por ${fonte}${valorMercado ? ` — R$ ${Math.round(valorMercado).toLocaleString('pt-BR')}` : ''}`;
+      // O DIAGNÓSTICO DA BUSCA TAMBÉM VALE QUANDO O RELATÓRIO CONCLUI (09/09).
+      // Ele só ia no caminho de ERRO — e o caso mais comum não é erro: é o relatório que SAI,
+      // pelo Índice, porque a busca ao vivo caiu. Nesse caminho o motivo (403 do Gemini, aborto
+      // do Claude) ficava sem rastro, e a pergunta "a chave nova funcionou?" não tinha resposta
+      // no banco: `fonte: indice_bidpro` diz o QUE aconteceu, nunca o PORQUÊ.
       await logAtividade(ownerId, evento, detalhe,
-        { imovelId: String(imovelId), cidade: cidade || null, fonte, comparaveis: nComp, valorMercado: valorMercado || null, erroApi: m.__erroApi || null, parecerDiag: dp, reaproveitado: !!result.reaproveitado, ator: user.id });
+        { imovelId: String(imovelId), cidade: cidade || null, fonte, comparaveis: nComp, valorMercado: valorMercado || null, erroApi: m.__erroApi || null, geminiErro: m.__diagBusca?.geminiErro || null, diagBusca: m.__diagBusca || null, parecerDiag: dp, reaproveitado: !!result.reaproveitado, ator: user.id });
       // CUSTO REAL desta geração (uma linha por relatório). Sem isto, "quanto custa um
       // mercadológico" só saía por inferência do agregado diário — que num dia com
       // documentais junto mistura os dois. `ok:false` na entrega incompleta: o gasto de
