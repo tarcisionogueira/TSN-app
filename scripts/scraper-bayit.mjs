@@ -24,12 +24,26 @@
  * GESTAO_HEADLESS em scraper-gestao.mjs/fetch-residencial.mjs) também passa do Cloudflare
  * aqui. Se passar, migra pra lá e este arquivo para de gastar cota paga.
  *
+ * FOTO — ACHADO AO VIVO (09/09): teste de hotlink puro (sem Bright Data, sem Referer —
+ * exatamente o que o <img> do nosso front faz) devolveu HTTP 403. O Cloudflare do Bayit
+ * bloqueia o CDN de imagem, não só a navegação — o link cru do feed NÃO carrega pro
+ * visitante. Decisão (dono: "resolva da forma mais eficiente e segura"): re-hospeda só a
+ * CAPA (link_foto — é a única foto que qualquer tela hoje exibe) no bucket `imoveis-fotos`,
+ * mesmo padrão já usado pra CEF (garantirFotoCapa). A GALERIA completa (`fotos`) continua
+ * como link externo, sem re-hospedar — não existe UI de galeria ainda pra exibi-la, então
+ * pagar Bright Data por foto que ninguém vê é gasto especulativo; a lista fica pronta pra
+ * quando a galeria for construída (reusa garantirFotoCapa nela também).
+ *
  * SEGURANÇA DE CUSTO: proposito 'bayit' tem sub-cota própria em brightdata_reserva (teto
- * 100/semana) — não compete pelo orçamento geral compartilhado com CALIL/VEGAS/GESTAO.
+ * 200/semana, subiu de 100 — o backfill de hoje sozinho consome ~80 só de detalhe +
+ * ~80 de capa). Não compete pelo orçamento geral compartilhado com CALIL/VEGAS/GESTAO.
  *   - BAYIT_ENRICH_CAP (default 200): teto de páginas de detalhe visitadas/execução.
  *     Catálogo é pequeno (~84 <listing> em 09/09) — o default cobre o acervo inteiro numa
  *     rodada só. Numa cron recorrente futura, considerar baixar (só quem falta doc).
- *   - BAYIT_DRYRUN (default '1'): NÃO grava — parseia e loga o que inseriria.
+ *   - garantirFotoCapa() checa o bucket ANTES de gastar Bright Data — listing já
+ *     re-hospedado (mesmo fonte_id) não paga de novo em rodadas futuras.
+ *   - BAYIT_DRYRUN (default '1'): NÃO grava — parseia e loga o que inseriria (não
+ *     re-hospeda foto em dry-run, mesmo motivo de não gastar cota à toa do scraper-gestao.mjs).
  *
  * Env: BRIGHTDATA_API_TOKEN, BRIGHTDATA_ZONE, VITE_SUPABASE_URL, SUPABASE_SERVICE_KEY.
  */
@@ -48,6 +62,7 @@ const DRYRUN = process.env.BAYIT_DRYRUN !== '0';
 const ENRICH_CAP = Number(process.env.BAYIT_ENRICH_CAP || 200);
 const SB_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_KEY;
+const BUCKET_FOTOS = 'imoveis-fotos';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 if (!SB_URL || !SB_KEY) { console.error('Faltam VITE_SUPABASE_URL / SUPABASE_SERVICE_KEY'); process.exit(1); }
@@ -69,6 +84,20 @@ async function bd(url, { timeoutMs = 45000 } = {}) {
     if (!(e instanceof ErroBrightData)) throw e; // erro de verdade não vira "página vazia"
     if (e.semCota) semCotaVisto = true;
     console.error(`  [bd] ${url}: ${e.message}`);
+    return null;
+  }
+}
+
+// Binário (foto) — mesmo caminho pago do bd(), mas sem forçar .text() (corromperia o JPEG).
+async function bdBinario(url, { timeoutMs = 45000 } = {}) {
+  try {
+    const r = await buscarViaBrightData(url, { proposito: 'bayit', timeoutMs, exigirOk: false });
+    if (!r || !r.ok) return null;
+    return { buffer: Buffer.from(await r.arrayBuffer()), contentType: r.headers.get('content-type') || null };
+  } catch (e) {
+    if (!(e instanceof ErroBrightData)) throw e;
+    if (e.semCota) semCotaVisto = true;
+    console.error(`  [bd-foto] ${url}: ${e.message}`);
     return null;
   }
 }
@@ -143,6 +172,34 @@ function inferirTipo(txt = '') {
   return 'outros';
 }
 
+function extensaoDaUrl(url) {
+  const m = String(url || '').match(/\.(jpe?g|png|webp)(?:[?#]|$)/i);
+  return m ? m[1].toLowerCase().replace('jpeg', 'jpg') : 'jpg';
+}
+
+// Re-hospeda a CAPA no bucket imoveis-fotos (mesmo padrão de scripts/foto-cef.mjs) — o
+// hotlink cru devolve 403 (Cloudflare protege o CDN de imagem do Bayit, não só a
+// navegação; confirmado ao vivo em 09/09). `existentes` é o Set de paths já no bucket
+// (listado 1x no início do run, de graça) — listing já re-hospedado não paga Bright Data
+// de novo. Falha em qualquer etapa cai pro link externo original (best-effort: nunca some
+// a foto por causa de um erro de upload; só fica sujeita ao mesmo 403 de antes).
+async function garantirFotoCapa(fotoUrl, fonteId, existentes) {
+  if (!fotoUrl) return fotoUrl;
+  const path = `bayit/${fonteId}.${extensaoDaUrl(fotoUrl)}`;
+  if (existentes.has(path)) {
+    return supabase.storage.from(BUCKET_FOTOS).getPublicUrl(path).data.publicUrl;
+  }
+  const baixado = await bdBinario(fotoUrl);
+  if (!baixado || baixado.buffer.length < 500) return fotoUrl;
+  const { error } = await supabase.storage.from(BUCKET_FOTOS).upload(path, baixado.buffer, {
+    contentType: baixado.contentType || `image/${extensaoDaUrl(fotoUrl) === 'jpg' ? 'jpeg' : extensaoDaUrl(fotoUrl)}`,
+    upsert: true,
+  });
+  if (error) { console.error(`  [foto] upload ${path} falhou: ${error.message}`); return fotoUrl; }
+  existentes.add(path);
+  return supabase.storage.from(BUCKET_FOTOS).getPublicUrl(path).data.publicUrl;
+}
+
 // O site monta alguns links de "Baixar Boleto/Depósito Comissão" com template TrimPath
 // client-side (${rowLancamento.ID_Financeiro_Lancamento}, {if ...}{else}...{/if}) — como só
 // buscamos o HTML cru (sem executar o JS que resolve o template), esses "documentos" são
@@ -188,6 +245,16 @@ async function enriquecerDetalhe(urlLote, fotoAtual) {
 
 async function main() {
   console.log(`BAYIT ${DRYRUN ? '(DRY-RUN — não grava)' : '(GRAVANDO)'} · cap enriquecimento ${ENRICH_CAP}`);
+
+  // Listagem do bucket é de graça (Storage, não Bright Data) — feita 1x aqui pra
+  // garantirFotoCapa() não pagar de novo por capa já re-hospedada em rodada anterior.
+  const fotosExistentes = new Set();
+  if (!DRYRUN) {
+    try {
+      const { data, error } = await supabase.storage.from(BUCKET_FOTOS).list('bayit', { limit: 1000 });
+      if (!error) for (const f of data || []) fotosExistentes.add(`bayit/${f.name}`);
+    } catch { /* segue sem cache — pior caso é re-hospedar o que já existia */ }
+  }
 
   const feedXml = await bd(`${BASE}/sitemap.xml`);
   if (!feedXml) {
@@ -253,9 +320,10 @@ async function main() {
       anexos: null,
       url_lote: it.url,
       link_foto: it.fotos[0] || null,
-      // Galeria completa (não só a capa) — link externo direto, não re-hospedado (ver
-      // leiloeiro_conhecimento: só CEF re-hospeda foto), então trazer todas não custa
-      // storage nosso, só a linha. Pedido do dono, 09/09.
+      // Galeria completa (não só a capa) — fica como link externo (não re-hospedada; só a
+      // capa é, ver garantirFotoCapa abaixo). Sem UI de galeria ainda pra exibir mais de 1
+      // foto — re-hospedar a galeria inteira hoje seria gasto especulativo. Pedido do
+      // dono, 09/09.
       fotos: it.fotos.length ? it.fotos : null,
       leiloeiro: 'Portal Bayit',
       data_leilao: dataLeilao,
@@ -276,6 +344,9 @@ async function main() {
       row = { ...row, ...Object.fromEntries(Object.entries(det).filter(([, v]) => v != null)) };
       await sleep(400);
     }
+    // Re-hospeda a CAPA (não em DRY-RUN — ver cabeçalho do arquivo: não gasta Bright Data
+    // com foto de uma linha que não vai nem ser gravada).
+    if (!DRYRUN) row.link_foto = await garantirFotoCapa(row.link_foto, row.fonte_id, fotosExistentes);
     rows.push(row);
   }
 
