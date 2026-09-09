@@ -36,6 +36,7 @@
     "testar:ig-backfill": "node scripts/testes/backfill-comentario-so-grava-resposta-do-dono.mjs",
     "testar:whatsapp": "node scripts/testes/whatsapp-nao-inventa-plano-do-cliente.mjs",
     "testar:niveis": "node scripts/testes/mercadologico-tres-niveis.mjs",
+    "testar:indice": "node scripts/testes/indice-de-estado-nao-precifica-lote.mjs",
     "testar:assessoria": "node scripts/testes/assessoria-so-para-investidor-pro.mjs",
     "testar:entrega": "node scripts/testes/toast-so-anuncia-relatorio-entregue.mjs",
     "testar:mensagem-grupo": "node scripts/testes/mensagem-de-grupo-nao-inventa-numero.mjs",

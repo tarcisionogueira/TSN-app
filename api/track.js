@@ -37,7 +37,13 @@ const KEY = process.env.SUPABASE_SERVICE_KEY;
 // tem de entrar também em TIPOS_ANON logo abaixo — sem isso ele seria descartado com 204 e a
 // medição voltaria zero, que é a terceira vez que esta lista deixaria de fora exatamente a
 // página que estava recebendo gente (ver `leiloes`, `leilao` e `live` mais abaixo).
-const TIPOS = new Set(['pageview', 'click', 'submit', 'change', 'api_erro', 'api_vazio', 'api_falha_rede', 'pdf_gerado', 'pdf_falha', 'geracao_recuperada', 'limite_sessao', 'erro_ui', 'analise_estado', 'analise_gerar', 'analise_bloqueio', 'origem_lote']);
+// `sessao_expirada` (09/09): 401 numa rota autenticada, ou seja, o servidor não reconheceu a
+// sessão. É o ÚNICO tipo isento da exigência de rota pública lá embaixo, e por um motivo que já
+// mordeu esta lista três vezes com outros nomes: quem toma 401 está, por definição, sem sessão
+// — então o filtro de anônimo o descartaria com 204 exatamente nas rotas privadas onde ele é a
+// informação. O clique em "Gerar relatório" que não gerou nada e não deixou linha no banco não
+// aparecia em lugar nenhum: nem em `analises_mercado`, nem aqui.
+const TIPOS = new Set(['pageview', 'click', 'submit', 'change', 'api_erro', 'api_vazio', 'api_falha_rede', 'pdf_gerado', 'pdf_falha', 'geracao_recuperada', 'limite_sessao', 'erro_ui', 'analise_estado', 'analise_gerar', 'analise_bloqueio', 'origem_lote', 'sessao_expirada']);
 
 // Defesa em profundidade: NUNCA persistir token/segredo no log de atividade, mesmo que um cliente
 // antigo/adulterado mande (ex.: #access_token=... do fluxo implícito, ou um JWT eyJ...). Redige.
@@ -58,7 +64,9 @@ export default async function handler(req, res) {
     // retenção de 30d seguem valendo). Sem isto, quem clicava num link de venda e não
     // cadastrava era invisível — impossível distinguir "ninguém clicou" de "página quebrou".
     const anonId = typeof b.anon_id === 'string' ? (b.anon_id.replace(/[^\w-]/g, '').slice(0, 48) || null) : null;
-    const TIPOS_ANON = new Set(['pageview', 'click', 'submit', 'api_erro', 'api_falha_rede', 'erro_ui', 'origem_lote']);
+    const TIPOS_ANON = new Set(['pageview', 'click', 'submit', 'api_erro', 'api_falha_rede', 'erro_ui', 'origem_lote', 'sessao_expirada']);
+    // Isento da porteira de rota pública — ver o comentário de `sessao_expirada` lá em cima.
+    const SEM_EXIGIR_ROTA_PUBLICA = new Set(['sessao_expirada']);
     // `leiloes` entrou em 12/08 e é a correção mais cara da lista: são as ~33 mil páginas de
     // acervo público (servidas por /api/publico, FORA do React), o principal ativo de aquisição
     // do site. Sem esta palavra, o evento chegava aqui e era descartado com 204 — silêncio dos
@@ -86,7 +94,8 @@ export default async function handler(req, res) {
     let lista = eventos;
     if (!userId) {
       if (!anonId) { res.status(204).end(); return; }
-      lista = eventos.filter((e) => e && TIPOS_ANON.has(e.tipo) && ROTA_PUBLICA.test(String(e.rota || ''))).slice(0, 12);
+      lista = eventos.filter((e) => e && TIPOS_ANON.has(e.tipo)
+        && (SEM_EXIGIR_ROTA_PUBLICA.has(e.tipo) || ROTA_PUBLICA.test(String(e.rota || '')))).slice(0, 12);
       if (!lista.length) { res.status(204).end(); return; }
     }
 

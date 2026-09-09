@@ -25,6 +25,7 @@ import { pagamentoPrior, pagamentoAprender } from './_doc-extracao.js';
 // "MÉTRICAS RECALCULADAS NO SERVIDOR" no parecer) — parecer e tela param de divergir.
 import { calcularMetricasCenario, calcularTetoLance } from '../src/utils/calculos.js';
 import { NIVEIS, vendasDe, locacoesDe, totalAmostrasDe, MIN_AMOSTRAS_ANTES_DO_NIVEL3 } from '../src/lib/niveis-mercado.js';
+import { indicePrecifica, indiceApenasContexto, rotuloNivelIndice } from '../src/lib/indice-precifica.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -2879,7 +2880,13 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
     // Índice como referência, DEIXANDO EXPLÍCITO no relatório ("por falta de comparativo ativo,
     // usamos o Índice"). Terreno usa m² de terreno; rural fica fora (régua de hectare no relatório).
     const indiceVenda = Number(mercado.indiceBidPro?.venda_m2) || 0;
-    if (!(valorMercado > 0) && !(precoM2 > 0) && indiceVenda > 0 && areaSeg > 0 && segIdx !== 'rural') {
+    // ...MAS SÓ QUANDO O ÍNDICE TEM ESCOPO PARA PRECIFICAR ESTE LOTE (09/09). Nível `estado`/`uf`
+    // é média de um estado inteiro: em 09/09 os mesmos R$ 3.900–4.200/m² de MG precificaram um
+    // apto de Belo Horizonte 48% ABAIXO da avaliação e uma casa de São Joaquim de Bicas 145%
+    // ACIMA, com 17 e 15 amostras. A regra mora em src/lib/indice-precifica.js (a MESMA que a
+    // tela usa) — ver lá o porquê do allowlist. Sem valor de mercado, `mercadoVazio` fica true:
+    // a cota é ESTORNADA e ninguém paga por uma estimativa que o dado não sustenta.
+    if (!(valorMercado > 0) && !(precoM2 > 0) && indicePrecifica(mercado.indiceBidPro) && areaSeg > 0 && segIdx !== 'rural') {
       valorMercado = Math.round(indiceVenda * areaSeg * 0.9); // haircut conservador (asking → fechamento)
       mercado.precoMedioM2 = indiceVenda;
       const aluIdx = Number(mercado.indiceBidPro?.aluguel_m2) || 0;
@@ -2917,6 +2924,19 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
       }
     }
 
+    // ÍNDICE AMPLO: some do PREÇO, não do relatório. Continua visível como faixa de referência
+    // da região, com o escopo e o nº de amostras à vista — o cliente precisa saber que existe
+    // uma referência e por que ela não vira o valor dele. Marcado para a tela e para o parecer.
+    if (!(valorMercado > 0) && !(precoM2 > 0) && indiceApenasContexto(mercado.indiceBidPro) && segIdx !== 'rural') {
+      const nvRot = rotuloNivelIndice(mercado.indiceBidPro?.nivel);
+      const nIdx = Number(mercado.indiceBidPro?.n_amostras) || 0;
+      mercado.indiceAmploNaoPrecifica = {
+        nivel: mercado.indiceBidPro?.nivel || null, rotulo: nvRot,
+        venda_m2: Math.round(indiceVenda), n_amostras: nIdx, uf: String(estado || imDb?.estado || '').toUpperCase() || null,
+      };
+      mercado.comentario = `Não encontramos anúncios comparáveis ATIVOS de ${{ apartamento: 'apartamento', casa: 'casa', terreno: 'terreno', comercial: 'imóvel comercial' }[segIdx] || segIdx} para ${mercadoInputs.cidade || 'esta localidade'} no momento, e a única referência disponível do Índice BidPro está em nível ${nvRot}${nIdx ? ` (${nIdx} amostra${nIdx === 1 ? '' : 's'} em todo o estado)` : ''}. Uma média de estado não distingue um bairro de capital de uma cidade pequena, então NÃO a usamos para estimar o valor deste imóvel — seria um número plausível medindo outra coisa. Ela fica registrada apenas como faixa de referência ampla (R$ ${Math.round(indiceVenda).toLocaleString('pt-BR')}/m²). Assim que houver comparável ativo ou base própria da cidade, o relatório sai com valor.`;
+    }
+
     // "NÃO SE REPITA" (incidente BH 28/07): busca web INSTÁVEL (timeout/abort) E o Índice NÃO
     // cobriu (sem valor) NÃO pode virar um relatório em BRANCO salvo como 'concluida' — o cliente
     // via um relatório vazio e o self-heal de TIMEOUT nem pegava (status errado). Aqui usamos o
@@ -2934,7 +2954,10 @@ JÁ TENHO (não repita): ${jaTem.join(' · ')}` : ''}`;
       // cobertura, não há segunda fonte, e "tente de novo" vira convite a repetir a mesma falha
       // — o terreno de Guarapari/ES foi clicado NOVE vezes em 09/09 com esse texto na tela,
       // enquanto o Índice tinha zero amostra de terreno no estado inteiro.
-      e.semIndice = !(Number(mercado.indiceBidPro?.venda_m2) > 0);
+      // "Tem índice" aqui significa "tem índice QUE PRECIFICA". Um índice de nível estado é a
+      // mesma promessa vazia do terreno de Guarapari citado acima: convida a clicar de novo
+      // numa segunda fonte que nunca vai cobrir este lote.
+      e.semIndice = !indicePrecifica(mercado.indiceBidPro);
       e.segmento = segIdx || null;
       throw e;
     }

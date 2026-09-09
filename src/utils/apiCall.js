@@ -5,7 +5,7 @@ import { registrarEvento } from './tracker.js';
  * Wrapper para fetch das APIs internas.
  * Injeta automaticamente o token de autenticação do usuário logado.
  */
-export async function apiCall(path, options = {}) {
+export async function apiCall(path, options = {}, _jaRenovou = false) {
   const { data: { session } } = await supabase.auth.getSession();
   const token = session?.access_token;
 
@@ -46,6 +46,45 @@ export async function apiCall(path, options = {}) {
       new Error('Não conseguimos falar com o servidor. Verifique sua conexão e, se você usa bloqueador de anúncios ou extensões de privacidade, desative para este site e tente de novo.'),
       { cause: e, falhaDeRede: true },
     );
+  }
+  // 401 = O SERVIDOR NÃO RECONHECEU A SESSÃO — e isso vinha chegando ao cliente como "nada
+  // aconteceu" (09/09). O token do Supabase tem validade curta: numa aba aberta há horas,
+  // `getSession()` devolve o que está guardado e o servidor recusa. O clique em "Gerar
+  // relatório" virava um 401, o corpo dizia só "Não autorizado", e nenhuma linha era criada no
+  // banco — do lado de cá, um botão que não faz nada; do lado de lá, nenhum rastro de que
+  // alguém tentou. Aqui a sessão é RENOVADA uma vez e a chamada repetida; só se ainda assim
+  // falhar é que desistimos, e aí com uma frase que diz o que fazer em vez de um jargão.
+  // Uma tentativa só, de propósito: 401 em cadeia com re-tentativa em cadeia é laço infinito.
+  let motivoRenovacao = '';
+  if (res.status === 401 && !_jaRenovou) {
+    let renovou = false;
+    try {
+      // `{ data, error }`: o supabase-js NÃO lança em falha de renovação. Ler só `data` fundiria
+      // "não havia sessão para renovar" com "o refresh foi recusado" — e o motivo é o que diz se
+      // a pessoa precisa entrar de novo ou se o problema é nosso.
+      const { data, error } = await supabase.auth.refreshSession();
+      renovou = !!data?.session?.access_token;
+      if (!renovou) motivoRenovacao = String(error?.message || 'sem sessao guardada').slice(0, 60);
+    } catch (e) {
+      motivoRenovacao = String(e?.message || e).slice(0, 60);
+    }
+    if (renovou) return apiCall(path, options, true);
+  }
+  if (res.status === 401) {
+    // O EVENTO PRECISA SOBREVIVER À MORTE DA SESSÃO. `api_erro` de quem não está autenticado é
+    // descartado pelo /api/track fora das rotas públicas — ou seja, a única falha que a gente
+    // mais precisa ver é justamente a que o coletor se recusa a gravar. `sessao_expirada` é
+    // aceito sem exigir rota pública, por isso existe como tipo próprio.
+    try { registrarEvento('sessao_expirada', { alvo: rota, detalhe: `HTTP 401 tinhaToken=${token ? 1 : 0} retentado=${_jaRenovou ? 1 : 0}${motivoRenovacao ? ` renovacao=${motivoRenovacao}` : ''}` }); } catch { /* ignora */ }
+    let doServidor = '';
+    try { const b = await res.clone().json(); doServidor = String(b?.error || ''); } catch { /* corpo não-JSON */ }
+    const generico = !doServidor || /^n[ãa]o autorizado$/i.test(doServidor) || /^acesso negado$/i.test(doServidor);
+    return new Response(JSON.stringify({
+      error: generico
+        ? 'Sua sessão expirou. Entre na sua conta de novo e repita a ação — nada foi cobrado.'
+        : doServidor,
+      sessaoExpirada: true,
+    }), { status: 401, headers: { 'Content-Type': 'application/json' } });
   }
   // Diagnóstico (Cliente 360): registra falhas de API sem alterar o retorno.
   if (!res.ok) {

@@ -3811,6 +3811,29 @@ export default function Analise() {
                       14 da Praia da Costa — a orla — e nenhuma do bairro dele. "Nível cidade"
                       era rótulo honesto e insuficiente. Aqui a tela diz QUAIS bairros formaram a
                       média e quanto o número se afasta da avaliação do próprio lote. */}
+                  {/* ÍNDICE DE ESTADO NÃO PRECIFICA (09/09, achado do dono: "valor deu muito
+                      fora"). No mesmo dia, os mesmos R$ 3.900–4.200/m² de MG saíram 48% ABAIXO
+                      da avaliação num apto de BH e 145% ACIMA numa casa de São Joaquim de Bicas
+                      — 17 e 15 amostras para o estado inteiro. O servidor parou de transformar
+                      isso em valor de mercado (src/lib/indice-precifica.js); aqui a tela diz
+                      POR QUE não há valor, em vez de deixar o vazio parecer defeito. */}
+                  {mercado.indiceAmploNaoPrecifica && (
+                    <div style={{ padding:'11px 14px', borderRadius:10, background:'#fff7ed', border:'1px solid #fdba74' }}>
+                      <div style={{ fontSize:12, fontWeight:800, color:'#9a3412', marginBottom:5 }}>
+                        Sem valor de mercado: a única referência é ampla demais
+                      </div>
+                      <div style={{ fontSize:11.5, color:'#7c2d12', lineHeight:1.6 }}>
+                        Não achamos anúncio comparável ativo agora, e o Índice BidPro só tem cobertura em
+                        nível <strong>{mercado.indiceAmploNaoPrecifica.rotulo}</strong>
+                        {Number(mercado.indiceAmploNaoPrecifica.n_amostras) > 0
+                          ? ` (${mercado.indiceAmploNaoPrecifica.n_amostras} amostra${mercado.indiceAmploNaoPrecifica.n_amostras === 1 ? '' : 's'}${mercado.indiceAmploNaoPrecifica.uf ? ` em todo o ${mercado.indiceAmploNaoPrecifica.uf}` : ''})`
+                          : ''} — R$ {fmt(mercado.indiceAmploNaoPrecifica.venda_m2)}/m². Uma média de estado não separa
+                        um bairro de capital de uma cidade pequena, então <strong>não a usamos como valor deste imóvel</strong>:
+                        sairia um número plausível medindo outra coisa, e é dele que o teto de lance e o ROI seriam calculados.
+                        Fica só como faixa de referência da região. <strong>Você não foi cobrado por este relatório.</strong>
+                      </div>
+                    </div>
+                  )}
                   {(mercado.indiceOutrosBairros || mercado.divergenciaAvaliacao) && (
                     <div style={{ padding:'11px 14px', borderRadius:10, background:'#fff7ed', border:'1px solid #fdba74' }}>
                       <div style={{ fontSize:12, fontWeight:800, color:'#9a3412', marginBottom:5 }}>
