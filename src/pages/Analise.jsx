@@ -31,6 +31,7 @@ import { scoreBidPro, scoreLabel } from '../utils/score';
 import { apiCall } from '../utils/apiCall';
 import NotaMetodologica from '../components/NotaMetodologica';
 import { COMISSAO_LEILOEIRO_PCT, ITBI_REGISTRO_PCT } from '../lib/rentabilidade';
+import { faltaNoRelatorio, relatorioEntregue } from '../lib/entrega-relatorio';
 import { soAceitaAVista } from '../data/pagamento.js';
 
 // Rótulos do tipo de ocupação no Raio-X jurídico (Fase 1).
@@ -408,7 +409,7 @@ export default function Analise() {
   const docEntry = getDocumental(analiseImovelId);
   const laudoEntry = getLaudo(analiseImovelId);
   const gerandoLaudo = laudoEntry?.status === 'gerando';
-  const relLaudoGerado = laudoEntry?.status === 'concluida' && !laudoEntry?.result?.precisaRelatorios;
+  const relLaudoGerado = relatorioEntregue('laudo', laudoEntry);
   const gerandoMercado = analiseEntry?.status === 'gerando';
   // Documental também roda em SEGUNDO PLANO no servidor (/api/gerar-documental):
   // o "gerando"/"pronto" derivam do contexto (persistente, vale entre devices).
@@ -424,9 +425,10 @@ export default function Analise() {
   // não saiu nada". O servidor marca `parecerPendente`; aqui a tela fica HONESTA (banner) e
   // dispara UMA regeração automática (sem custo — o imóvel já tem relatório, isNovo=false),
   // fechando a janela que antes só o self-heal do cron fechava, horas depois.
-  const relMercadoIncompleto = relMercadoGerado
-    && !analiseEntry?.result?.mercadoVazio
-    && (analiseEntry?.result?.parecerPendente === true || !(analiseEntry?.result?.parecer || '').trim());
+  // A regra saiu daqui para src/lib/entrega-relatorio.js em 09/09: o toast tinha a MESMA regra
+  // escrita de outro jeito e divergiu (anunciava "Pronto!" no estado que esta linha chama de
+  // incompleto). Duas cópias da mesma regra é uma cópia demais.
+  const relMercadoIncompleto = faltaNoRelatorio('mercado', analiseEntry) === 'parecer';
   // "concluida" com precisaDocumentos NÃO é pronto — ainda está capturando/faltando
   // documentos. Separar os dois estados evita a incoerência "Pronto na lista / abre
   // Preparando ainda" (o mesmo status precisa valer em TODA a tela).
@@ -448,7 +450,7 @@ export default function Analise() {
     && (Date.now() - new Date(docEntry.updatedAt).getTime()) < CAPTURA_MAX_MS;
   // Estado TERMINAL e acionável: a busca automática não trouxe edital/matrícula.
   const relDocumentalFaltamDocs = docPrecisaDocs && !relDocumentalPreparando;
-  const relDocumentalGerado = docEntry?.status === 'concluida' && !docEntry?.result?.precisaDocumentos;
+  const relDocumentalGerado = relatorioEntregue('documental', docEntry);
   // A janela acima é calculada no render; sem isto o card só sairia de "Preparando…"
   // no próximo re-render (o usuário via o spinner girar além do prazo). Agenda o
   // re-render para o instante em que a janela expira.

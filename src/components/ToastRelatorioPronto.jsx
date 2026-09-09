@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CheckCircle2, X, BarChart3, FileText, ClipboardCheck } from 'lucide-react';
 import { useAnalises } from '../contexts/AnalisesContext';
+import { relatorioEntregue } from '../lib/entrega-relatorio';
 
 // Toast (canto superior direito) de "relatório pronto" — pedido do dono: como a geração roda em
 // background (você pode fechar a aba), quando ela CONCLUI aparece este aviso com "Ver" e "Fechar".
@@ -19,19 +20,13 @@ export default function ToastRelatorioPronto() {
   const [toasts, setToasts] = useState([]);
   const prev = useRef(null); // Map(key -> status); null = ainda não inicializado
 
-  // "CONCLUÍDA" NÃO É SINÔNIMO DE PRONTO (achado do dono, 07/08 — Cotia).
-  // O documental grava status 'concluida' com `precisaDocumentos: true` enquanto a captura
-  // automática ainda está baixando matrícula/edital, e a tela re-tenta a cada 25s. Como o
-  // toast olhava só o status, cada ciclo virava um "Pronto!" — o dono recebeu a notificação
-  // várias vezes com o relatório ainda incompleto. O laudo tem o mesmo estado intermediário
-  // (`precisaRelatorios`). Aqui o gate passa a ser a ENTREGA, não o status.
-  const entregue = (tipo, a) => {
-    if (a?.status !== 'concluida') return false;
-    const r = a.result || {};
-    if (tipo === 'documental') return !r.precisaDocumentos;
-    if (tipo === 'laudo') return !r.precisaRelatorios;
-    return true;
-  };
+  // "CONCLUÍDA" NÃO É SINÔNIMO DE PRONTO (07/08 — Cotia; de novo em 09/09 — Vila Velha).
+  // A regra de entrega mora em src/lib/entrega-relatorio.js e é a MESMA que a tela usa. Ela
+  // estava aqui, duplicada, com um `return true` no fim: 'documental' e 'laudo' tinham gate e
+  // 'mercado' passava direto — então um relatório gravado como 'concluida' com o parecer vazio
+  // (estado que o servidor cria de propósito) era anunciado como pronto enquanto a tela, olhando
+  // a mesma linha, mostrava o banner de incompleto e disparava outra geração.
+  const entregue = relatorioEntregue;
 
   useEffect(() => {
     const listas = { mercado: analises, documental: documentais, laudo: laudos };
