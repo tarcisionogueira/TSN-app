@@ -4,6 +4,87 @@
 
 ---
 
+## 🐛 SESSÃO 24 · PARTE 22 (09/09) — BAYIT: CIDADE VINHA DO SLUG DE MARKETING, NÃO DO MUNICÍPIO — 13 IMÓVEIS INVISÍVEIS NA BUSCA (+ VALIDAÇÕES + HASTA ZERADO)
+
+**Pedido do dono, com print do site**: imóvel de Alphaville/Tamboré (R$72,8 milhões, o de maior
+valor do acervo BAYIT) "não veio no leiloeiro que foi integrado agora" — e "será que há mais
+imóveis que não vieram nos leiloeiros?". Investigação em duas frentes.
+
+**1) O imóvel NÃO estava faltando na coleta — estava invisível na BUSCA.** `bayit_694` sempre
+esteve no banco (`ativo=true`, anexos ok, valor batendo com o site) desde o backfill original.
+O bug: `slugCidadeUf()` tira cidade/UF da URL do lote (`/lote/<slug>-sp/<id>/`), e a URL deste
+lote é `/lote/alphaville-sp/694/` — mas **Alphaville não é município**, é distrito que atravessa
+Santana de Parnaíba e Barueri. `cidade='Alphaville'` não bate com NENHUM município real, e a
+busca por cidade (`Busca.jsx`) filtra por igualdade exata contra `cidade_norm`, alimentada pelo
+autocomplete que consulta a API oficial do IBGE (`CidadeAutocomplete.jsx`) — **"Alphaville" nem
+aparece pra digitar**. O imóvel de R$72,8 milhões ficava permanentemente fora de qualquer busca
+por cidade, mesmo 100% correto no banco.
+
+**Puxando o fio, achou-se um padrão sistêmico**: Bayit usa o BAIRRO na URL sempre que o bairro é
+mais "vendável" que o município — e isso é comum sobretudo dentro da capital paulista. Query dos
+78 `cidade` distintos do BAYIT achou **12 outros** casos do mesmo defeito, todos bairros de São
+Paulo virando "cidade" própria: Lapa, Aclimação, Vila Bela, Santo Amaro, Centro, Perdizes, Itaim
+Bibi, Ipiranga, Butantã (×2) — e um caso pior que os outros, **Tremembé**: não é só invisível,
+está ERRADO — "Tremembé" também é o nome de um município de verdade a ~150 km de distância (Vale
+do Paraíba), então o lote (que é bairro de São Paulo) aparentava estar numa cidade que não é a
+dele. 13 de 78 (17%) tinham esse defeito.
+
+**Fix na raiz + fix nos dados**: o feed já traz o endereço completo (`addr1`) com o MUNICÍPIO
+verdadeiro por extenso ("...Santana de Parnaíba - SP, 06543-165") — só não era usado. Nova
+`cidadeUfDoEndereco()` em `scraper-bayit.mjs` extrai cidade/UF do endereço (mais confiável que o
+slug de marketing da URL) e passa a ser a fonte preferencial; cai pro slug só quando o endereço
+não bate no formato esperado (nunca pior que hoje). Testado contra amostras reais (inclusive o
+caso "Ananindeua", que já funcionava, pra confirmar zero regressão) antes de subir. As 13 linhas
+já gravadas foram corrigidas direto via UPDATE (o `endereco` já estava no banco — **corrigir os
+dados existentes não precisou de Bright Data**, só leitura do que já tínhamos). Restam ~31 casos
+só de acento/maiúscula (ex.: "Hortolandia"→"Hortolândia") que NÃO afetam busca (`cidade_norm` já
+bate) — cosméticos, não corrigidos agora (sem efeito funcional, prioridade baixa).
+
+**Achado incidental, direto de uma investigação de custo**: um `BAYIT_DRYRUN=1` simples (sem
+filtro nenhum) gastou a cota Bright Data da semana inteira do propósito `bayit` tentando
+reprocessar os 78 candidatos — inclusive os 75 já bons — só pra "prever" o que mudaria. Causa: a
+consulta que monta a lista de "já enriquecido" (pra pular do loop pago) estava atrás de
+`if (!DRYRUN)`, por engano — ela é Supabase, de graça, mas ao pular em dry-run o loop de
+enriquecimento (esse sim pago) reprocessava tudo. Mesmo defeito que `scraper-gestao.mjs` já
+resolvia (enriquecimento só DEPOIS do corte de dry-run); agora `scraper-bayit.mjs` segue o mesmo
+padrão. Preview e execução real processam exatamente o mesmo conjunto agora.
+
+**2) "Será que há mais imóveis faltando?" — SIM, achado bem mais sério, não relacionado ao BAYIT.**
+`select * from public.fonte_regressao_suspeita();` (a função que já existe pra isso) acusou:
+```
+HASTA — motivo='zerou' — 0 ativos vs mediana aprendida 579 (piso 290)
+```
+HASTA vinha de 584 imóveis em 30/08, começou a enumerar ZERO em 04/09 (HTTP 200, mas 0 lotes —
+"respondeu mas não achou nada", não é bloqueio) e não é medida há mais de 4 dias. Como ninguém
+alimenta a fonte há 9 dias, o acervo foi murchando pela expiração normal (auto-limpeza de leilão
+vencido): já caiu de 584 pra **5 ativos restantes** — em poucos dias mais vira zero de verdade.
+**Não é o mesmo problema do BAYIT nem foi causado por nada desta sessão.** Confirmado que NÃO é
+falha geral do runner residencial: TODAS as outras fontes `dom-puppeteer`/`residencial` (PECINI,
+RJLEILOES, ALFA, GIORDANOLEILOES etc.) rodaram normalmente há 22h — só a HASTA parou. Já existe
+um recon pronto pra isso (`scripts/recon-hasta-zerou.mjs`, escrito numa sessão anterior,
+separando "render lento" × "listagem mudou de filtro" × "acesso bloqueado" × "rota mudou") —
+**mas ele só roda na máquina RESIDENCIAL do dono** (precisa de IP de casa; daqui, GitHub
+Actions/Bright Data, não dá pra reproduzir o mesmo teste). `recon-hasta.mjs` (o outro recon,
+esse sim dispatchável por GitHub Actions) mira o domínio ERRADO (`hastaleilao.com.br`, singular
+— pré-correção de 21/08) e não deve ser usado; não foi rodado. **Ação pendente do dono**: rodar
+`node scripts/recon-hasta-zerou.mjs` na máquina residencial pra saber se é "listagem filtra por
+praça aberta" (parser intacto) ou algo mais sério.
+
+**3) Validação dos fixes pendentes (pedido do dono: "zerar tudo")** — todos confirmados em run
+real, não só por leitura de código:
+- **SBID9/SBID21** (`{enrich:true}`, Parte 19): rodado via Puppeteer (grátis, 0 Bright Data) —
+  **34/34 e 1/1 imóveis ativos com documento (100%)**, era 0% antes.
+- **SUPERBID** (já tinha o enrich de antes): conferido de passagem — **1199/1199 (100%)**.
+- **GESTAOLEILOES** (`extrairDocsDoHtml`, Parte 19): rodado via Bright Data, amostra pequena
+  (1 domínio, 2 eventos, cap 8 — orçamento apertado) — **1/1 lote testado achou documento**,
+  mecanismo confirmado funcional; cobertura ampla nos outros 4 domínios do cluster ainda não
+  medida (fica pra quando o orçamento semanal resetar ou o dono pedir).
+- `leiloeiro_conhecimento.docs_status` de SBID9/SBID21/SUPERBID/GESTAOLEILOES atualizado pra
+  `ok` (estava `esperado`/`nao_implementado`, obsoleto desde os fixes — `registrarConhecimento()`
+  não toca esse campo, por isso ficava parado).
+
+---
+
 ## 🐛 SESSÃO 24 · PARTE 21 (09/09) — BAYIT: FILTRO DE TEMPLATE ERA LOCAL AO SCRAPER, NÃO PROTEGIA O ENRIQUECIMENTO SOB DEMANDA
 
 **Achado do dono, ao vivo**: "acabei de acessar um imóvel na Serra do Sol, chácara Serra do
