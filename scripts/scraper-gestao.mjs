@@ -246,8 +246,17 @@ function parseCard(card, ctx) {
   const area = num((txt.match(/(\d{1,3}(?:\.\d{3})*(?:,\d{1,2})?)\s*M2?\s*DE\s*[ÁA]REA\s*(?:PRIVATIVA|TOTAL|ÚTIL|UTIL|CONSTRU)/i) || [])[1])
     || num((txt.match(/(\d{1,3}(?:\.\d{3})*(?:,\d{1,2})?)\s*m²/i) || [])[1]);
 
-  // Modalidade: venda direta explícita; SFI/Caixa = extrajudicial; senão heurística.
-  const modalidade = card.vendaDireta || /venda\s*direta/i.test(txt) ? 'venda_direta'
+  // Modalidade: venda direta explícita (card.vendaDireta vem da URL do site — loteVendaDireta.php
+  // vs lote.php, sinal estrutural confiável) OU heurística de texto; SFI/Caixa = extrajudicial.
+  //
+  // GATE DE PRAÇA (09/09, achado no BAYIT — mesma classe de defeito, regra literal do dono:
+  // praça com data ⇒ nunca venda direta): a checagem de texto solto (`/venda\s*direta/i.test(txt)`)
+  // não tinha proteção — bastava a palavra aparecer em QUALQUER lugar do card pra sobrepor um
+  // lote com praça de verdade. card.vendaDireta continua incondicional (é estrutural, não texto);
+  // só o fallback textual passa a exigir ausência de valor de praça rotulado (inicial/2ª praça/
+  // venda 1º ou 2º leilão) — os mesmos valores já extraídos acima pra avaliação/mínimo.
+  const temPracaValor = inicial > 0 || praca2 > 0 || dVenda1 > 0 || dVenda2 > 0;
+  const modalidade = card.vendaDireta || (!temPracaValor && /venda\s*direta/i.test(txt)) ? 'venda_direta'
     : /(?<!extra)judicial/i.test(txt) ? 'judicial'
     : 'extrajudicial';
 

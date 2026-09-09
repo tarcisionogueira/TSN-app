@@ -121,9 +121,13 @@ export function parseDetalhe(html, url) {
   const valor_avaliacao = aval || (ofUnq.length ? Math.max(...ofUnq) : 0);
   const valor_minimo = ofUnq.length ? Math.min(...ofUnq) : (aval || 0);
 
+  // GATE DE PRAÇA (09/09, mesmo achado do BAYIT: praça com data ⇒ nunca venda direta, regra
+  // literal do dono). ofUnq (ofertas/lances rotulados, já extraídos acima) é o sinal — achar
+  // um valor de oferta/lance inicial é a assinatura de praça formal, incompatível com venda direta.
+  const temPraca = ofUnq.length > 0;
   const modalidade = /(?<!extra)judicial/i.test(txt) ? 'judicial'
     : /extrajudicial/i.test(txt) ? 'extrajudicial'
-    : /venda\s*direta/i.test(txt) ? 'venda_direta' : 'extrajudicial';
+    : (!temPraca && /venda\s*direta/i.test(txt)) ? 'venda_direta' : 'extrajudicial';
   // ACHADO DO BLOCO 3 (03/09): mesmo defeito de scraper-soleon.mjs/scraper-rj.mjs (código da
   // mesma origem) — `[\d.]+,\d{2}` exige decimal colado, e o fallback `\d+` (sem ponto) casava
   // só os últimos 3 dígitos de um número com milhar. Padrão correto: 1-3 dígitos + grupos de

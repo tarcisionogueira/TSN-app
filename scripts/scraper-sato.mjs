@@ -123,9 +123,15 @@ function extrairArea(titulo = '') {
   return 0;
 }
 
+// GATE DE PRAÇA (09/09, mesmo achado do BAYIT: praça com data ⇒ nunca venda direta, regra
+// literal do dono). l.venda_direta === '1' é sinal ESTRUTURAL do próprio site (mantém
+// incondicional); só o fallback de texto solto passa a exigir ausência de data de leilão
+// (dataLeilao(l), já usada abaixo pra montar a linha) — praça datada não pode virar venda
+// direta só porque a palavra apareceu no título/descrição.
 function modalidadeDe(l) {
   const t = `${l.titulo || ''} ${l.descricao || ''}`;
-  if (l.venda_direta === '1' || Number(l.venda_direta) === 1 || /venda\s*direta/i.test(t)) return 'venda_direta';
+  const temPraca = !!dataLeilao(l);
+  if (l.venda_direta === '1' || Number(l.venda_direta) === 1 || (!temPraca && /venda\s*direta/i.test(t))) return 'venda_direta';
   if (/aliena[çc][ãa]o\s+fiduci[áa]ria|extrajudicial/i.test(t)) return 'extrajudicial';
   if (/judicial/i.test(t)) return 'judicial';
   return 'extrajudicial';

@@ -157,9 +157,13 @@ export function parseDetalhe(html, url) {
   let minimo = plaus(p2?.valor || 0) || avaliacao;
   if (!avaliacao && minimo) avaliacao = minimo;
 
+  // GATE DE PRAÇA (09/09, mesmo achado do BAYIT: praça com data ⇒ nunca venda direta, regra
+  // literal do dono). p1/p2 (lance do 1º/2º leilão, já extraídos acima) são o sinal — achar
+  // um valor de leilão numerado é a assinatura de praça formal, incompatível com venda direta.
+  const temPraca = !!(p1 || p2);
   const modalidade = /processo\s*n|\bju[íi]z\b|judicial/i.test(txt) && !/extrajudicial/i.test(txt) ? 'judicial'
     : /extrajudicial/i.test(txt) ? 'extrajudicial'
-    : /venda\s*direta/i.test(txt) ? 'venda_direta' : 'extrajudicial';
+    : (!temPraca && /venda\s*direta/i.test(txt)) ? 'venda_direta' : 'extrajudicial';
   const area = extrairArea(titulo, descricao) || extrairArea(txt.slice(0, 400));
   const { cidade, estado } = cidadeUF(titulo, descricao);
   const mat = (txt.match(/matr[íi]cula\s*(?:n[º°.]?\s*)?([\d.]{4,})/i) || [])[1] || null;

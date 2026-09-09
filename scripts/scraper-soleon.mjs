@@ -207,9 +207,16 @@ function parseDetalhe(html, url) {
     valorMinimo = semAval.length ? Math.min(...semAval) : avaliacao;
   }
 
+  // GATE DE PRAÇA (09/09, achado real em APICE — tenant desta plataforma: 2 lotes com
+  // data_leilao preenchida saíam "venda_direta" pelo mesmo defeito do BAYIT — texto solto
+  // decidindo sem checar se há praça datada). Regra literal do dono: praça com data ⇒ nunca
+  // venda direta (venda direta é compra imediata, sem prazo, só cadastro no leiloeiro/
+  // comitente). `extrairData` já é o extrator de data ANCORADO em leilão/praça (scraper-
+  // core.mjs) — reaproveitado aqui como sinal, calculado 1x, e de novo no retorno.
+  const dataLeilaoDetectada = base.data_leilao || extrairData(html);
   const modalidade = /(?<!extra)judicial/i.test(txt) ? 'judicial'
     : /extrajudicial/i.test(txt) ? 'extrajudicial'
-    : /venda\s*direta/i.test(txt) ? 'venda_direta' : 'extrajudicial';
+    : (!dataLeilaoDetectada && /venda\s*direta/i.test(txt)) ? 'venda_direta' : 'extrajudicial';
   // ACHADO DO BLOCO 3 (03/09): `[\d.]+,\d{2}` exige DECIMAL colado ("1.813,00"), e "1.813M²"
   // (sem decimal) caía no fallback `\d+` — que não aceita ponto, então casava só "813",
   // perdendo o "1." e reportando 1/33 da área real (confirmado em CALIL, VEGAS, FERREIRALEIL,
@@ -238,7 +245,7 @@ function parseDetalhe(html, url) {
     valor_avaliacao: avaliacao, valor_minimo: valorMinimo,
     modalidade, area_m2: area,
     descricao: (base.descricao || '').slice(0, 500) || null,
-    data_leilao: base.data_leilao || extrairData(html),
+    data_leilao: dataLeilaoDetectada,
     numero_matricula: mat,
     link_edital: findDoc(/edital/i), link_matricula: findDoc(/matr[íi]cula/i),
     anexos,

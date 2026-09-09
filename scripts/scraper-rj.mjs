@@ -218,9 +218,13 @@ function parseDetalhe(html, url) {
     valorMinimo = semAval.length ? Math.min(...semAval) : avaliacao;
   }
 
+  // GATE DE PRAÇA (09/09, mesmo achado do BAYIT/SOLEON): praça com data ⇒ nunca venda direta
+  // (regra literal do dono — venda direta é compra imediata, sem prazo, só cadastro no
+  // leiloeiro/comitente). `extrairData` é o extrator ANCORADO em leilão/praça (scraper-core.mjs).
+  const dataLeilaoDetectada = base.data_leilao || extrairData(html);
   const modalidade = /(?<!extra)judicial/i.test(txt) ? 'judicial'
     : /extrajudicial/i.test(txt) ? 'extrajudicial'
-    : /venda\s*direta/i.test(txt) ? 'venda_direta' : 'extrajudicial';
+    : (!dataLeilaoDetectada && /venda\s*direta/i.test(txt)) ? 'venda_direta' : 'extrajudicial';
   // ACHADO DO BLOCO 3 (03/09): mesmo defeito do scraper-soleon.mjs (código copiado da mesma
   // origem) — `[\d.]+,\d{2}` exige decimal colado, e sem ele o fallback `\d+` (sem ponto)
   // casava só os últimos 3 dígitos de um número com milhar ("1.440" → 440, confirmado na
@@ -261,7 +265,7 @@ function parseDetalhe(html, url) {
     modalidade,
     area_m2: area,
     descricao: (base.descricao || '').slice(0, 500) || null,
-    data_leilao: base.data_leilao || extrairData(html),
+    data_leilao: dataLeilaoDetectada,
     numero_matricula: mat,
     link_edital: findDoc(/edital/i) || doTipo('edital'),
     link_matricula: findDoc(/matr[íi]cula/i) || doTipo('matricula'),

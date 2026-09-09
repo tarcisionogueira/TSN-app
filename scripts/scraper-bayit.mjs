@@ -244,7 +244,7 @@ async function garantirFotoCapa(fotoUrl, fonteId, existentes) {
 // (o PATCH daquele endpoint só grava `enriquecido_em`, nunca `atualizado_em`, por isso a
 // corrupção não aparecia no timestamp). Agora vasculharDocumentos() já devolve limpo pra
 // QUALQUER chamador — nada a filtrar de novo aqui.
-async function enriquecerDetalhe(urlLote, fotoAtual, nPracas = 0) {
+async function enriquecerDetalhe(urlLote, fotoAtual, nPracasComData = 0) {
   const html = await bd(urlLote);
   if (!html) return {};
   const docs = vasculharDocumentos(html, urlLote, fotoAtual);
@@ -255,12 +255,24 @@ async function enriquecerDetalhe(urlLote, fotoAtual, nPracas = 0) {
   // NAVEGAÇÃO/FILTRO genérico ("Judiciais Extrajudiciais Venda Direta…", "Tipo de leilão…
   // Judicial Extrajudicial Particular Venda direta") que lista TODAS as modalidades como
   // OPÇÕES DE FILTRO — não a modalidade DESTE lote — e aparece em toda página do site,
-  // contaminando qualquer busca de texto solto. 77 dos 78 imóveis BAYIT saíam "venda_direta"
-  // por causa disso, incluindo lotes com 1ª E 2ª praça (a assinatura estrutural de leilão
-  // formal, não venda direta — o feed já traz `pracas`, dado estruturado e confiável, ao
-  // contrário do texto). 2+ praças com datas distintas decide sozinho; só cai pro texto
-  // (mesmo assim contaminado, mas é o que existe) quando há praça única — ambíguo de verdade.
-  const modalidade = nPracas >= 2 ? 'extrajudicial'
+  // contaminando qualquer busca de texto solto (inclusive a checagem de "judicial": o menu
+  // usa "Judicial" no singular num dos blocos, então também cola nela). 77 dos 78 imóveis
+  // BAYIT saíam "venda_direta" por causa disso, incluindo lotes com praça — a assinatura
+  // estrutural de leilão formal, não venda direta (o feed já traz `pracas`, dado estruturado
+  // e confiável, ao contrário do texto).
+  //
+  // CORREÇÃO (09/09, 2ª rodada — pedido literal do dono): "se há praças com datas, não há
+  // venda direta. Venda direta eu compro na hora, bastando me cadastrar no leiloeiro ou
+  // comitente vendedor" — ou seja, QUALQUER praça com data (não só 2+) já descarta venda
+  // direta; não é caso ambíguo. A 1ª correção só cobria nPracas>=2 (o caso do print) e deixava
+  // 35/60 lotes ativos ainda errados: praça ÚNICA com data caía no texto contaminado. Como o
+  // texto está contaminado nos dois sentidos (judicial E venda direta vêm do mesmo menu), não
+  // há sinal de texto confiável pra distinguir judicial/extrajudicial aqui — mantém o default
+  // seguro 'extrajudicial' já usado no resto do repo pra leilão/praça genérico sem rótulo
+  // exato do leiloeiro (ver api/_modalidade.js). Só cai pro texto quando não há NENHUMA praça
+  // com data (aí sim pode ser venda direta de verdade, ou o texto ao menos não é o único sinal
+  // disponível).
+  const modalidade = nPracasComData >= 1 ? 'extrajudicial'
     : /venda\s*direta/i.test(txt) ? 'venda_direta'
     : /(?<!extra)judicial/i.test(txt) ? 'judicial'
     : 'extrajudicial';
@@ -477,7 +489,8 @@ async function main() {
 
     if (enriquecidos < ENRICH_CAP) {
       enriquecidos++;
-      const det = await enriquecerDetalhe(it.url, row.link_foto, it.pracas.length);
+      const nPracasComData = it.pracas.filter((p) => p.startDate).length;
+      const det = await enriquecerDetalhe(it.url, row.link_foto, nPracasComData);
       row = { ...row, ...Object.fromEntries(Object.entries(det).filter(([, v]) => v != null)) };
       await sleep(400);
     }
