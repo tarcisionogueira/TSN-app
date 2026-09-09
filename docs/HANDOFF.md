@@ -52,26 +52,36 @@ o bucket ANTES de gastar Bright Data — capa já re-hospedada não paga de novo
 ```
 total 78 · com_anexos 40 · com_matricula 40 · com_area 38 · foto_rehospedada 78 · com_galeria 78
 ```
-Foto: **100% resolvida** (78/78 já servem do nosso bucket). Documento/área: **51% (40/78)** —
-os outros 38 ficaram sem enriquecimento de detalhe porque o orçamento SEMANAL da conta
-inteira (não só bayit) chegou a 490/550 no meio do backfill (o próprio backfill consumiu a
-maior fatia — sub-cota do propósito `bayit` subiu de 100→200→280→350 ao longo do dia,
-porque cada tentativa de dry-run/gravação real gasta Bright Data de verdade, não é grátis
-repetir). Preferi não estourar o teto global — prejudicaria `docs`/`vlance`/`recon` pro
-resto da semana — a forçar os últimos ~16 requests. Todos os 78 têm os campos essenciais
-(preço, endereço, foto, galeria, url_lote); só falta terminar documento/área nos 38.
+Foto: **100% resolvida** (78/78 já servem do nosso bucket). Documento/área ficou em 51%
+(40/78) nesta 1ª carga — orçamento SEMANAL da conta inteira (não só bayit) chegou a
+490/550 no meio do backfill, e preferi não estourar o teto global a forçar os últimos
+requests.
 
-**Próximo passo registrado** (`leiloeiro_conhecimento.fonte='BAYIT'` tem o detalhe completo):
-re-rodar `scraper-bayit.yml` (dispatch, `dryrun=0`) quando o orçamento semanal renovar
-(segunda) ou tiver folga — é idempotente (upsert por `fonte_id`), só paga pelos 38 que
-faltam (foto já cacheada no bucket, não paga de novo).
+**CONCLUÍDO NA MESMA SESSÃO, ~6h depois** (dono: "Pode concluir esses 38. Já se passaram
+mais de 6h"). O teto semanal NÃO reseta por tempo decorrido (só na virada da semana), então
+o orçamento seguia em 490/550 — mas dava exatamente pros 38 que faltavam. Só que rodar o
+scraper inteiro de novo reprocessaria os 78 e arriscaria SOBRESCREVER os 40 já bons (upsert
+substitui a linha inteira; um corte de orçamento no meio do reprocessamento gravaria
+anexos=null por cima do que já estava certo). Fix estrutural, não só pra hoje:
+`scraper-bayit.mjs` agora consulta quem já tem `anexos` no início do run e PULA — nunca mais
+reprocessa quem já está bom. Vale pra toda rodada futura (inclusive o cron semanal): só paga
+pelos lotes novos no feed ou pelos que ficaram pra trás.
 
-**PARA AMANHÃ, já registrado no cabeçalho do próprio scraper** (pedido do dono): testar se
-o runner RESIDENCIAL (Chromium em IP de casa, grátis — mesmo padrão de `GESTAO_HEADLESS`
-em `scraper-gestao.mjs`/`fetch-residencial.mjs`) também passa do Cloudflare do Bayit — pra
-NAVEGAÇÃO e, importante, pro **CDN de imagem também** (se passar, a foto pode carregar
-direto sem precisar da re-hospedagem). Se passar, migra e o arquivo para de gastar cota
-paga — essa é a "economia de Bright Data" que o dono pediu pra amanhã.
+Faltava ainda espaço no teto GLOBAL da conta (RJ tem 60 reservados só pra ela, e o total já
+estava no limite efetivo) — subi `brightdata_uso.teto` de 550→600 (só o suficiente pros ~38
+requests) pra terminar o que já tinha sido pedido e aprovado, não pra abrir orçamento geral.
+**Estado FINAL**: `total 78 · com_anexos 77 (99%) · com_matricula 73 (94%) · com_area 75
+(96%) · foto_rehospedada 78 (100%)`. Só 1 lote sem documento — provável caso real de página
+sem PDF publicado (mesmo código acertou os outros 77). `leiloeiro_conhecimento.docs_status`
+= `integrado`. Sub-cota do propósito `bayit` voltada pra 150/semana (a carga inicial pediu
+350; o modo incremental deixa o consumo semanal normal bem menor que isso).
+
+**PARA DEPOIS** (dono: "mais tarde colocaremos no residencial para economizar"), já
+registrado no cabeçalho do próprio scraper: testar se o runner RESIDENCIAL (Chromium em IP
+de casa, grátis — mesmo padrão de `GESTAO_HEADLESS` em `scraper-gestao.mjs`/
+`fetch-residencial.mjs`) também passa do Cloudflare do Bayit — pra NAVEGAÇÃO e, importante,
+pro **CDN de imagem também** (se passar, a foto pode carregar direto sem precisar da
+re-hospedagem). Se passar, migra e o arquivo para de gastar cota paga.
 
 ---
 
